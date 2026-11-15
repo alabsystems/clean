@@ -121,14 +121,22 @@ fn test_collect_implemented_by_attribute() {
     ctx.collect_attributes(
         &name,
         &[clean_parser::Attribute::ImplementedBy(
-            "fast_fn".to_string(),
+            clean_parser::SurfaceName::generated_path("fast_fn"),
         )],
     );
 
+    // Collected as written, with its scope; resolved and validated only when
+    // applied (`crate::tests_implemented_by_validation` covers what apply
+    // refuses).
     let collected = ctx.take_implemented_by();
     assert_eq!(collected.len(), 1);
-    assert_eq!(collected[0].0, name);
-    assert_eq!(collected[0].1, "fast_fn");
+    assert_eq!(collected[0].decl, name);
+    assert_eq!(collected[0].written.to_string(), "fast_fn");
+    assert_eq!(
+        collected[0].site,
+        crate::declared_here::AttributeSite::Declaration
+    );
+    assert!(collected[0].not_yet_declared.is_empty());
 }
 
 #[test]
@@ -279,7 +287,11 @@ fn test_e2e_derive_handler_registration_and_use() {
         .expect("Marker should have a derive handler");
     assert_eq!(handlers, &[Name::from_string("deriveMarker")]);
     assert!(
-        env.get_const(&Name::from_string("instMarkerBox")).is_some(),
+        env.get_const(&crate::derive::source_handler_instance_name(
+            &Name::anon().str("Marker"),
+            &Name::anon().str("Box"),
+        ))
+        .is_some(),
         "Box deriving Marker should register an instance"
     );
 }
@@ -305,7 +317,10 @@ fn test_user_repr_derive_handler_is_not_replaced_by_builtin_materialization() {
     }
 
     let instance = env
-        .get_const(&Name::from_string("instReprCustomReprTarget"))
+        .get_const(&crate::derive::source_handler_instance_name(
+            &Name::anon().str("Repr"),
+            &Name::anon().str("CustomReprTarget"),
+        ))
         .and_then(|info| info.value.as_ref())
         .expect("custom Repr instance should be registered");
     assert!(

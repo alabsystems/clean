@@ -20,16 +20,8 @@ fn test_theory_lemma_euf_congruent_single_arg() {
 
     // Register f as a unary function
     let f_name = "fvar_10";
-    let f_a = terms.mk_app(
-        ay_core::Symbol::Named(f_name.to_string()),
-        vec![a],
-        Sort::Int,
-    );
-    let f_b = terms.mk_app(
-        ay_core::Symbol::Named(f_name.to_string()),
-        vec![b],
-        Sort::Int,
-    );
+    let f_a = terms.mk_app(ay_core::Symbol::Named(f_name.into()), vec![a], Sort::Int);
+    let f_b = terms.mk_app(ay_core::Symbol::Named(f_name.into()), vec![b], Sort::Int);
     let f_expr = Expr::fvar(FVarId::new(10));
     let int_to_int = Expr::pi(
         clean_kernel::BinderInfo::Default,
@@ -78,12 +70,12 @@ fn test_theory_lemma_euf_congruent_two_args() {
     // Register f as a binary function
     let f_name = "fvar_10";
     let f_a1a2 = terms.mk_app(
-        ay_core::Symbol::Named(f_name.to_string()),
+        ay_core::Symbol::Named(f_name.into()),
         vec![a1, a2],
         Sort::Int,
     );
     let f_b1b2 = terms.mk_app(
-        ay_core::Symbol::Named(f_name.to_string()),
+        ay_core::Symbol::Named(f_name.into()),
         vec![b1, b2],
         Sort::Int,
     );
@@ -140,12 +132,12 @@ fn test_theory_lemma_euf_congruent_three_args() {
     // Register f as a ternary function: Int → Int → Int → Int
     let f_name = "fvar_10";
     let f_a = terms.mk_app(
-        ay_core::Symbol::Named(f_name.to_string()),
+        ay_core::Symbol::Named(f_name.into()),
         vec![a1, a2, a3],
         Sort::Int,
     );
     let f_b = terms.mk_app(
-        ay_core::Symbol::Named(f_name.to_string()),
+        ay_core::Symbol::Named(f_name.into()),
         vec![b1, b2, b3],
         Sort::Int,
     );
@@ -202,16 +194,8 @@ fn test_theory_lemma_euf_congruent_pred_single_arg() {
 
     // Register P as a predicate (Int → Bool)
     let p_name = "fvar_10";
-    let p_a = terms.mk_app(
-        ay_core::Symbol::Named(p_name.to_string()),
-        vec![a],
-        Sort::Bool,
-    );
-    let p_b = terms.mk_app(
-        ay_core::Symbol::Named(p_name.to_string()),
-        vec![b],
-        Sort::Bool,
-    );
+    let p_a = terms.mk_app(ay_core::Symbol::Named(p_name.into()), vec![a], Sort::Bool);
+    let p_b = terms.mk_app(ay_core::Symbol::Named(p_name.into()), vec![b], Sort::Bool);
     let int_ty = Expr::const_(Name::from_string("Int"), vec![]);
     let prop_ty = Expr::sort(clean_kernel::Level::zero());
     let p_ty = Expr::pi(clean_kernel::BinderInfo::Default, int_ty, prop_ty);
@@ -270,12 +254,12 @@ fn test_theory_lemma_euf_congruent_pred_two_args() {
     // Register P as a binary predicate: Int → Int → Prop
     let p_name = "fvar_10";
     let p_a = terms.mk_app(
-        ay_core::Symbol::Named(p_name.to_string()),
+        ay_core::Symbol::Named(p_name.into()),
         vec![a1, a2],
         Sort::Bool,
     );
     let p_b = terms.mk_app(
-        ay_core::Symbol::Named(p_name.to_string()),
+        ay_core::Symbol::Named(p_name.into()),
         vec![b1, b2],
         Sort::Bool,
     );

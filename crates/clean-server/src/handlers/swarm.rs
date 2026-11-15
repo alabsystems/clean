@@ -25,7 +25,24 @@
 //!   reported as `accepted: false` with a `reject_reason`.
 //! - The declaration lands in the overlay ONLY on a fully-accepted verdict. A
 //!   policy rejection of an otherwise-kernel-valid decl does NOT leave it in
-//!   the overlay: the session is rolled back to its pre-call state.
+//!   the overlay: the check runs on a copy of the session, which replaces the
+//!   session only when the verdict is accepted.
+//! - Deadline: the kernel's check runs on the server's work pool under the
+//!   request's `timeout_ms` (the server's default when absent), the way every
+//!   other kernel check does (`work.rs`). A check the deadline interrupted is
+//!   no verdict: the request answers the timeout error and the session keeps
+//!   nothing. Until 2026-10-15 the check ran on the runtime worker with no
+//!   deadline, bounded only by `heartbeat_limit` (none at `0`).
+//! - Order: each session has a lock of its own, so `addDecl`s to different
+//!   sessions never wait for each other, and those to one session are checked
+//!   one at a time, first come first served, each against every declaration
+//!   accepted before it. One waiting for its session holds no work slot. Until
+//!   2026-10-16 every `addDecl` held the whole session map's write lock across
+//!   its check, and one queued for it held a slot (R34 in `docs/DECISIONS.md`).
+//! - The copy of the session the check runs on is made on the work pool, from
+//!   a share of the session, and every session the handler lets go (the one an
+//!   accepted declaration replaces, a refused copy, and one closed while this
+//!   `addDecl` held it) is freed off the runtime (R36, R87).
 //!
 //! This handler touches NO kernel trust logic. It reuses the kernel's
 //! `add_decl` / `proof_quality` / `axiom_deps` primitives (the same ones Task A
@@ -33,12 +50,15 @@
 //! kernel's existing deterministic `maxHeartbeats` fuel mechanism to bound a
 //! single pathological check.
 
+use super::off_runtime::{free_off_runtime, Shared};
 use super::state::ServerState;
+use super::work::{within, WorkPool};
 use crate::rpc::{RequestId, Response, RpcError};
 use crate::session_env::{SessionEnv, SessionEnvError, SessionId};
 use clean_kernel::{Declaration, Name, ProofQuality};
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
+use std::time::{Duration, Instant};
 use tracing::instrument;
 
 /// Default per-call kernel heartbeat (fuel) budget for an `addDecl` check.
@@ -74,6 +94,11 @@ pub struct AddDeclParams {
     /// unbounded heartbeat) for a caller that knowingly submits a large proof.
     #[serde(default)]
     pub heartbeat_limit: Option<u32>,
+    /// Optional timeout in milliseconds for the kernel's check (the server's
+    /// default when absent). A check still running at it answers the timeout
+    /// error, and the session keeps nothing from it.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 const fn default_require_foundational() -> bool {
@@ -226,6 +251,7 @@ pub async fn handle_add_decl(
     id: RequestId,
     params: AddDeclParams,
 ) -> Response {
+    let start = Instant::now();
     // Session is mandatory: `addDecl` only ever writes into a session overlay,
     // never the shared environment. A missing or malformed id fails closed.
     let session_id = match params.session_id.as_deref() {
@@ -252,69 +278,103 @@ pub async fn handle_add_decl(
     let heartbeat_limit = params.heartbeat_limit.unwrap_or(DEFAULT_ADD_DECL_HEARTBEAT);
     let require_foundational = params.require_foundational;
     let decl = params.decl;
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
 
-    // Write-lock the session map (mirrors admin's `state.env.write().await`
-    // pattern) — a session is mutated by exactly one in-flight addDecl at a
-    // time, and the overlay add is the only mutation.
-    let mut sessions = state.sessions.write().await;
-    let Some(session) = sessions.get_mut(&session_id) else {
-        return Response::error(
-            id,
-            RpcError::invalid_params(format!("Unknown session: {session_id}")),
-        );
-    };
+    let outcome = within(timeout, async {
+        // The session map is held only for the look-up (every wait is inside
+        // the timeout), so an addDecl never waits for another session's.
+        let Some(session) = state.session(&session_id).await else {
+            return Ok(Err(RpcError::invalid_params(format!(
+                "Unknown session: {session_id}"
+            ))));
+        };
+        // One addDecl at a time per session, in the order they reach the
+        // session's lock (tokio's `Mutex` is fair: first come, first served),
+        // so each is checked against every declaration accepted before it.
+        // The session's lock comes before the work slot: an addDecl queued
+        // behind another of its session holds no slot while it waits. That
+        // order closes no cycle because no slot holder ever waits for a
+        // session (`work.rs`, "Lock order").
+        let mut session = session.lock().await;
+        let slot = state.work.slot().await?;
+        // The kernel's check is work under the request's deadline, on the
+        // pool, against a copy of the session. The copy replaces the session
+        // only when the declaration is accepted, so a rejected, unclassifiable
+        // or interrupted check leaves the session as it was (and a request
+        // whose timeout fires drops the copy, and lets the lock go).
+        //
+        // The copy is made there too, from a share of the session (a session
+        // holds a whole environment: copied on the runtime until R87,
+        // 2026-10-17). The session's lock, held here, keeps any
+        // other `addDecl` from replacing it meanwhile.
+        let current = Shared::clone(&session);
+        let (candidate, result) = WorkPool::run_in(slot, deadline, move || {
+            let mut candidate = SessionEnv::clone(&current);
+            drop(current);
+            let result =
+                add_decl_to_session(&mut candidate, decl, heartbeat_limit, require_foundational);
+            (candidate, result)
+        })
+        .await?;
+        // The session the candidate replaces, or the candidate a refusal
+        // leaves, holds a whole environment: freed off the runtime
+        // (`off_runtime.rs`; the replaced one by its last share).
+        if result.accepted {
+            *session = Shared::new(candidate);
+        } else {
+            free_off_runtime(candidate);
+        }
+        Ok(Ok(result))
+    })
+    .await;
 
-    // Checkpoint the overlay BEFORE the speculative add, but only on the path
-    // that can roll a kernel-valid decl back (`require_foundational`). The
-    // checkpoint captures the session's earlier accepted work so a policy
-    // rejection undoes ONLY this call's decl, never the siblings. On the
-    // relaxed path no checkpoint is taken (any kernel-valid decl is kept) and
-    // a kernel rejection never registers anything, so neither needs a restore.
-    let checkpoint = if require_foundational {
-        Some(session.checkpoint())
-    } else {
-        None
-    };
+    match outcome {
+        Ok(Ok(result)) => Response::success_typed(id.clone(), &result)
+            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string()))),
+        Ok(Err(error)) => Response::error(id, error),
+        Err(error) => Response::error(id, error.into_rpc_error(timeout)),
+    }
+}
 
-    let result = match recheck_and_classify_session(session, decl, heartbeat_limit) {
-        Ok(recheck) => {
-            // Kernel accepted the value. Apply policy.
-            if require_foundational && recheck.verdict != AddDeclVerdict::KernelVerified {
-                // Policy rejection of an otherwise-valid decl: restore the
-                // pre-add checkpoint so the rejected decl is NOT left as a
-                // premise, while every earlier accepted decl survives.
-                if let Some(cp) = checkpoint {
-                    session.restore(cp);
-                }
-                AddDeclResult {
-                    accepted: false,
-                    verdict: recheck.verdict,
-                    axiom_closure: recheck.axiom_closure.clone(),
-                    reject_reason: Some(format!(
-                        "require_foundational: declaration cites domain axioms: {}",
-                        recheck.axiom_closure.join(", ")
-                    )),
-                }
-            } else {
-                AddDeclResult {
-                    accepted: true,
-                    verdict: recheck.verdict,
-                    axiom_closure: recheck.axiom_closure,
-                    reject_reason: None,
-                }
+/// Re-check `decl` into `session` and apply `require_foundational`. Runs on the
+/// work pool, on a copy of the session the caller keeps only when the result
+/// is accepted: a rejected declaration may be left registered in the copy (a
+/// policy rejection, or one the kernel accepted but could not classify).
+fn add_decl_to_session(
+    session: &mut SessionEnv,
+    decl: Declaration,
+    heartbeat_limit: u32,
+    require_foundational: bool,
+) -> AddDeclResult {
+    match recheck_and_classify_session(session, decl, heartbeat_limit) {
+        // Kernel accepted the value; policy rejects a domain-axiom closure.
+        Ok(recheck)
+            if require_foundational && recheck.verdict != AddDeclVerdict::KernelVerified =>
+        {
+            AddDeclResult {
+                accepted: false,
+                verdict: recheck.verdict,
+                reject_reason: Some(format!(
+                    "require_foundational: declaration cites domain axioms: {}",
+                    recheck.axiom_closure.join(", ")
+                )),
+                axiom_closure: recheck.axiom_closure,
             }
         }
+        Ok(recheck) => AddDeclResult {
+            accepted: true,
+            verdict: recheck.verdict,
+            axiom_closure: recheck.axiom_closure,
+            reject_reason: None,
+        },
         Err(err) => AddDeclResult {
             accepted: false,
             verdict: AddDeclVerdict::KernelRejected,
             axiom_closure: Vec::new(),
             reject_reason: Some(err.to_string()),
         },
-    };
-    drop(sessions);
-
-    Response::success_typed(id.clone(), &result)
-        .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
+    }
 }
 
 // Tests live in `handlers/tests/swarm.rs`, matching the crate convention for

@@ -10,7 +10,7 @@
 use std::collections::VecDeque;
 
 use clean_kernel::expr::{Expr, ExprKind, Literal};
-use clean_kernel::flat::{reconstruct_expr, FlatDb, FlatExpr, FlatLevel};
+use clean_kernel::flat::{FlatExpr, FlatLevel};
 use clean_kernel::{Declaration, Environment, Name};
 use hashbrown::HashMap;
 
@@ -31,7 +31,7 @@ use crate::types::{
     AxiomProfile, ConjectureIdx, ConstantIdx, ContentDomain, ExprIdx, ImportConfidence,
     MathverseConstantHeader, SourceSystem, NO_VALUE,
 };
-use crate::verify::{MathverseVerify, ProofFormat, VerificationResult, VerificationStatus};
+use crate::verify::MathverseVerify;
 
 /// Lazily-built inverse of the forward dependency adjacency.
 ///
@@ -106,7 +106,7 @@ pub struct MathverseLibrary {
     provenance: ProvenanceSidecar,
     /// Conjecture node indices in the knowledge graph (for submit_conjecture).
     conjectures: Vec<usize>,
-    /// Reverse lookup: type expression index -> constant that proves it.
+    /// Raw type arena index -> last indexed constant, regardless of proof or visibility.
     type_to_constant: HashMap<ExprIdx, ConstantIdx>,
     /// Lazy `string -> first-occurrence index` map for [`intern_string`], so a
     /// premise-selection query resolving its goal's constant names costs O(1) per
@@ -1103,6 +1103,10 @@ pub fn count_stored_kernel_verified(
 }
 
 impl MathverseSearch for MathverseLibrary {
+    fn lookup_raw_type_index(&self, type_idx: ExprIdx) -> Option<ConstantIdx> {
+        self.type_to_constant.get(&type_idx).copied()
+    }
+
     fn lookup_name(&self, name: &str) -> Option<MathverseConstantHeader> {
         let &idx = self.name_to_idx.get(name)?;
         let header = self.constants.get(idx as usize)?;
@@ -1318,228 +1322,6 @@ impl MathverseSearch for MathverseLibrary {
 // ---------------------------------------------------------------------------
 
 impl MathverseVerify for MathverseLibrary {
-    fn verify_foreign(
-        &mut self,
-        format: ProofFormat,
-        statement: &[u8],
-        proof: &[u8],
-    ) -> MathverseResult<VerificationResult> {
-        // Determine source system from format.
-        let source = match &format {
-            ProofFormat::OLean => SourceSystem::Lean4,
-            ProofFormat::CoqSexp => SourceSystem::Coq,
-            ProofFormat::MetamathMm => SourceSystem::Metamath,
-            ProofFormat::OpenTheory => SourceSystem::HolLight,
-            ProofFormat::Alethe => SourceSystem::Z3,
-            ProofFormat::Lfsc => SourceSystem::Cvc5,
-            ProofFormat::Tstp => SourceSystem::Vampire,
-            ProofFormat::Drat | ProofFormat::Lrat => SourceSystem::CaDiCaL,
-            ProofFormat::GammaCrownJson => SourceSystem::GammaCrown,
-            ProofFormat::VnnComp => SourceSystem::AlphaBetaCrown,
-        };
-
-        // Validate non-empty inputs.
-        if statement.is_empty() {
-            return Ok(VerificationResult {
-                constant_idx: None,
-                source,
-                confidence: ImportConfidence::Unverified,
-                status: VerificationStatus::Failed("empty statement".into()),
-                summary: "Rejected: empty statement".into(),
-            });
-        }
-        if proof.is_empty() {
-            return Ok(VerificationResult {
-                constant_idx: None,
-                source,
-                confidence: ImportConfidence::Unverified,
-                status: VerificationStatus::Failed("empty proof".into()),
-                summary: "Rejected: empty proof".into(),
-            });
-        }
-
-        // Determine axiom profile from format.
-        let profile_bits = match &format {
-            ProofFormat::OpenTheory => AxiomProfile::HOL_AXIOMS,
-            ProofFormat::GammaCrownJson | ProofFormat::VnnComp => {
-                AxiomProfile::FLOAT_APPROX | AxiomProfile::NN_ABSTRACTION
-            }
-            ProofFormat::Alethe | ProofFormat::Lfsc => AxiomProfile::LRA_TRUSTED,
-            _ => AxiomProfile::NONE,
-        };
-
-        // Attempt to parse statement and proof bytes as FlatDb and reconstruct
-        // kernel Expr values for type-checking via Environment::add_decl().
-        let stmt_expr = parse_flat_bytes_to_expr(statement);
-        let proof_expr = parse_flat_bytes_to_expr(proof);
-
-        // Determine confidence and verification status via kernel type-checking.
-        let (confidence, status, checked_type, checked_proof) = match (&stmt_expr, &proof_expr) {
-            (Ok(type_expr), Ok(pf_expr)) => {
-                // Both parsed: attempt full kernel verification as a theorem.
-                let decl_name =
-                    Name::from_string(&format!("foreign.{source:?}.{}", self.constants.len()));
-                let decl = Declaration::Theorem {
-                    name: decl_name,
-                    level_params: vec![],
-                    type_: type_expr.clone(),
-                    value: pf_expr.clone(),
-                };
-                let mut env = Environment::new();
-                match env.add_decl(decl) {
-                    Ok(()) => (
-                        ImportConfidence::KernelVerified,
-                        VerificationStatus::Verified,
-                        Some(type_expr.clone()),
-                        Some(pf_expr.clone()),
-                    ),
-                    Err(e) => {
-                        // Type-checking failed: try as axiom (statement-only).
-                        let axiom_name = Name::from_string(&format!(
-                            "foreign.{source:?}.{}.axiom",
-                            self.constants.len()
-                        ));
-                        let axiom_decl = Declaration::Axiom {
-                            name: axiom_name,
-                            level_params: vec![],
-                            type_: type_expr.clone(),
-                        };
-                        let mut env2 = Environment::new();
-                        match env2.add_decl(axiom_decl) {
-                            Ok(()) => (
-                                ImportConfidence::Translated,
-                                VerificationStatus::Failed(format!(
-                                    "Proof type-check failed ({e}), accepted as axiom"
-                                )),
-                                Some(type_expr.clone()),
-                                None,
-                            ),
-                            Err(e2) => (
-                                ImportConfidence::Unverified,
-                                VerificationStatus::Failed(format!(
-                                    "Type-check failed: theorem={e}, axiom={e2}"
-                                )),
-                                None,
-                                None,
-                            ),
-                        }
-                    }
-                }
-            }
-            (Ok(type_expr), Err(_)) => {
-                // Only statement parsed: verify type is well-formed as axiom.
-                let axiom_name =
-                    Name::from_string(&format!("foreign.{source:?}.{}", self.constants.len()));
-                let axiom_decl = Declaration::Axiom {
-                    name: axiom_name,
-                    level_params: vec![],
-                    type_: type_expr.clone(),
-                };
-                let mut env = Environment::new();
-                match env.add_decl(axiom_decl) {
-                    Ok(()) => (
-                        ImportConfidence::Translated,
-                        VerificationStatus::Verified,
-                        Some(type_expr.clone()),
-                        None,
-                    ),
-                    Err(e) => (
-                        ImportConfidence::Unverified,
-                        VerificationStatus::Failed(format!("Statement type-check failed: {e}")),
-                        None,
-                        None,
-                    ),
-                }
-            }
-            (Err(stmt_err), _) => {
-                // Statement didn't parse as FlatDb: cannot verify without
-                // a well-formed type expression. Mark as Unverified.
-                (
-                    ImportConfidence::Unverified,
-                    VerificationStatus::Failed(format!(
-                        "Statement FlatDb parse failed: {stmt_err}"
-                    )),
-                    None,
-                    None,
-                )
-            }
-        };
-
-        // Store the constant in the mathverse library catalog.
-        let name = format!("foreign.{source:?}.{}", self.constants.len());
-        let name_idx = self.strings.len() as u32;
-        self.strings.push(name.clone());
-
-        // If we got a kernel Expr from parsing, convert it back to a FlatExpr
-        // and store in the arena. Otherwise use a placeholder.
-        let stmt_expr_idx = if let Some(ref _type_expr) = checked_type {
-            // Store a FlatExpr::lit_nat(1) marker for successfully parsed types.
-            // The actual kernel Expr was used for type-checking above.
-            let idx = self.exprs.len() as u32;
-            self.exprs.push(FlatExpr::lit_nat(1));
-            idx
-        } else {
-            let idx = self.exprs.len() as u32;
-            self.exprs.push(FlatExpr::lit_nat(0));
-            idx
-        };
-
-        let proof_expr_idx = if checked_proof.is_some() {
-            let idx = self.exprs.len() as u32;
-            self.exprs.push(FlatExpr::lit_nat(1));
-            idx
-        } else {
-            stmt_expr_idx
-        };
-
-        let global_idx = self.constants.len() as ConstantIdx;
-        let header = MathverseConstantHeader {
-            name_idx,
-            type_idx: stmt_expr_idx,
-            value_idx: proof_expr_idx,
-            source_system: source as u8,
-            import_confidence: confidence as u8,
-            content_domain: ContentDomain::PureMath as u8,
-            decl_kind: 0,
-            axiom_profile: profile_bits,
-            sidecar_digest: 0,
-            provenance_idx: 0,
-            level_params_start: 0,
-            level_params_count: 0,
-            _pad2: [0u8; 26],
-        };
-
-        self.name_to_idx.insert(name, global_idx);
-        self.constants.push(header);
-        self.deps.push(Vec::new());
-        self.equivalences.push(Vec::new());
-        self.type_to_constant.insert(stmt_expr_idx, global_idx);
-
-        let summary = match &status {
-            VerificationStatus::Verified => format!(
-                "Kernel-verified {format:?} proof from {source:?} as constant {global_idx} ({confidence:?})"
-            ),
-            VerificationStatus::Failed(reason) => format!(
-                "Accepted {format:?} from {source:?} as constant {global_idx} ({confidence:?}): {reason}"
-            ),
-            _ => format!(
-                "Processed {format:?} from {source:?} as constant {global_idx} ({confidence:?})"
-            ),
-        };
-
-        Ok(VerificationResult {
-            constant_idx: Some(global_idx),
-            source,
-            confidence,
-            status,
-            summary,
-        })
-    }
-
-    fn is_known(&self, statement: ExprIdx) -> Option<ConstantIdx> {
-        self.type_to_constant.get(&statement).copied()
-    }
-
     fn submit_proven(
         &mut self,
         name: &str,
@@ -1565,6 +1347,42 @@ impl MathverseVerify for MathverseLibrary {
         if self.name_to_idx.contains_key(name) {
             return Err(MathverseError::DuplicateConstant(name.to_string()));
         }
+
+        if proof == NO_VALUE {
+            return Err(MathverseError::Kernel(
+                "theorem submission requires a proof".to_string(),
+            ));
+        }
+
+        // Imported confidence labels are not checked dependencies. Admit this
+        // closed, monomorphic theorem in an empty fenced environment before
+        // mutating the library; Environment::new() would seed extra declarations.
+        let type_ = crate::shard_reconstruct::reconstruct_single_subdag(
+            &self.exprs,
+            &self.levels,
+            &self.strings,
+            &self.level_lists,
+            type_expr,
+        )
+        .map_err(MathverseError::Kernel)?;
+        let value = crate::shard_reconstruct::reconstruct_single_subdag(
+            &self.exprs,
+            &self.levels,
+            &self.strings,
+            &self.level_lists,
+            proof,
+        )
+        .map_err(MathverseError::Kernel)?;
+        let mut kernel = clean_kernel::ReferenceKernel::new(Environment::default())
+            .map_err(|e| MathverseError::Kernel(e.to_string()))?;
+        let _accepted = kernel
+            .add_checked(Declaration::Theorem {
+                name: Name::from_string(name),
+                level_params: vec![],
+                type_,
+                value,
+            })
+            .map_err(|e| MathverseError::Kernel(e.to_string()))?;
 
         let name_idx = self.strings.len() as u32;
         self.strings.push(name.to_string());
@@ -1661,23 +1479,6 @@ impl MathverseVerify for MathverseLibrary {
 
         Ok(global_idx)
     }
-}
-
-// ---------------------------------------------------------------------------
-// FlatDb parsing helper for verify_foreign
-// ---------------------------------------------------------------------------
-
-/// Attempt to parse raw bytes as a FlatDb and reconstruct the last expression
-/// as a kernel Expr. The convention is that the "root" expression is the last
-/// one in the arena (highest index), matching FlatBuilder's output ordering.
-fn parse_flat_bytes_to_expr(bytes: &[u8]) -> Result<Expr, String> {
-    let db = FlatDb::from_bytes(bytes).map_err(|e| format!("FlatDb parse: {e}"))?;
-    let count = db.expr_count();
-    if count == 0 {
-        return Err("empty FlatDb (no expressions)".to_string());
-    }
-    let root_idx = (count - 1) as u32;
-    reconstruct_expr(&db, root_idx).map_err(|e| format!("reconstruct: {e}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -3004,48 +2805,10 @@ mod tests {
 
     use crate::graph_alpha::ConjectureSource;
     use crate::nn_alpha::{NNVerificationCert, VerificationMethod};
-    use crate::verify::{MathverseVerify, ProofFormat, VerificationStatus};
+    use crate::verify::MathverseVerify;
 
     #[test]
-    fn test_verify_foreign_olean_unparseable_rejected() {
-        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-        let shard = build_test_shard(&[("seed", ContentDomain::PureMath, AxiomProfile::NONE)]);
-        lib.load_shard(&shard).unwrap();
-        let result = lib
-            .verify_foreign(ProofFormat::OLean, b"stmt", b"proof")
-            .unwrap();
-        assert!(matches!(result.status, VerificationStatus::Failed(_)));
-        assert!(result.constant_idx.is_some());
-        assert_eq!(result.confidence, ImportConfidence::Unverified);
-    }
-
-    #[test]
-    fn test_verify_foreign_empty_statement_rejected() {
-        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-        let result = lib
-            .verify_foreign(ProofFormat::CoqSexp, b"", b"proof")
-            .unwrap();
-        assert!(
-            matches!(result.status, VerificationStatus::Failed(_)),
-            "empty statement should be rejected"
-        );
-        assert!(result.constant_idx.is_none());
-    }
-
-    #[test]
-    fn test_verify_foreign_empty_proof_rejected() {
-        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-        let result = lib
-            .verify_foreign(ProofFormat::MetamathMm, b"stmt", b"")
-            .unwrap();
-        assert!(
-            matches!(result.status, VerificationStatus::Failed(_)),
-            "empty proof should be rejected"
-        );
-    }
-
-    #[test]
-    fn test_is_known_found_and_missing() {
+    fn test_lookup_raw_type_index_found_and_missing() {
         let shard = build_test_shard(&[("Nat.add", ContentDomain::PureMath, AxiomProfile::NONE)]);
         let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
         lib.load_shard(&shard).unwrap();
@@ -3053,36 +2816,141 @@ mod tests {
         // The type_idx of the loaded constant should be findable.
         let header = lib.get_constant(0).unwrap();
         let type_idx = header.type_idx;
-        assert!(lib.is_known(type_idx).is_some());
+        assert!(lib.lookup_raw_type_index(type_idx).is_some());
 
         // Non-existent type index.
-        assert!(lib.is_known(99999).is_none());
+        assert!(lib.lookup_raw_type_index(99999).is_none());
+    }
+
+    #[test]
+    fn test_lookup_raw_type_index_is_not_proof_or_visibility_evidence() {
+        let mut writer = ShardWriter::new();
+        let level = writer.add_level(FlatLevel::zero());
+        let ty = writer.add_expr(FlatExpr::sort(level));
+        for name in ["statement_only", "statement_only_last"] {
+            let name_idx = writer.add_string(name);
+            writer.add_constant(MathverseConstantHeader {
+                name_idx,
+                type_idx: ty,
+                value_idx: NO_VALUE,
+                source_system: SourceSystem::CleanNative as u8,
+                import_confidence: ImportConfidence::Unverified as u8,
+                content_domain: ContentDomain::PureMath as u8,
+                decl_kind: crate::types::DeclKind::Axiom as u8,
+                axiom_profile: AxiomProfile::NONE,
+                sidecar_digest: 0,
+                provenance_idx: 0,
+                level_params_start: 0,
+                level_params_count: 0,
+                _pad2: [0u8; 26],
+            });
+        }
+        let mut bytes = Vec::new();
+        writer.write(&mut bytes).unwrap();
+        let shard = ShardReader::from_bytes(&bytes).unwrap();
+        let mut lib = MathverseLibrary::new(TrustPolicy::default_policy());
+        lib.load_shard(&shard).unwrap();
+        assert!(lib.lookup_name("statement_only_last").is_none());
+        let before = submission_state(&lib);
+        // Raw lookup reports the last indexed entry even though it has no
+        // proof, is unverified, and is hidden from policy-filtered name lookup.
+        assert_eq!(lib.lookup_raw_type_index(ty), Some(1));
+        let header = lib.get_constant(1).unwrap();
+        assert_eq!(header.value_idx, NO_VALUE);
+        assert_eq!(header.import_confidence, ImportConfidence::Unverified as u8);
+        assert_eq!(submission_state(&lib), before);
+        // Equal expression content in another arena slot is not an index hit.
+        let unindexed_ty = lib.exprs.len() as u32;
+        lib.exprs.push(FlatExpr::sort(level));
+        assert!(lib.lookup_raw_type_index(unindexed_ty).is_none());
+    }
+
+    // Closed identity theorem: (P : Prop) -> P -> P, with no named dependencies.
+    fn submission_fixture() -> (MathverseLibrary, ExprIdx, ExprIdx) {
+        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
+        lib.levels.push(FlatLevel::zero());
+        lib.exprs.extend([
+            FlatExpr::sort(0),
+            FlatExpr::bvar(0),
+            FlatExpr::bvar(1),
+            FlatExpr::pi(0, 1, 2),
+            FlatExpr::pi(0, 0, 3),
+            FlatExpr::lam(0, 1, 1),
+            FlatExpr::lam(0, 0, 5),
+        ]);
+        (lib, 4, 6)
+    }
+
+    fn submission_state(lib: &MathverseLibrary) -> String {
+        format!(
+            "{:?}",
+            (
+                &lib.constants,
+                &lib.strings,
+                &lib.name_to_idx,
+                &lib.deps,
+                &lib.equivalences,
+                &lib.type_to_constant,
+                lib.search_dirty.get(),
+            )
+        )
     }
 
     #[test]
     fn test_submit_proven_success() {
-        let shard = build_test_shard(&[("seed", ContentDomain::PureMath, AxiomProfile::NONE)]);
-        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-        lib.load_shard(&shard).unwrap();
-
-        let type_idx = 0; // Sort expr from the shard
-        let proof_idx = 0;
+        let (mut lib, ty, proof) = submission_fixture();
         let idx = lib
-            .submit_proven(
-                "my_theorem",
-                type_idx,
-                proof_idx,
-                ConjectureSource::UserSubmitted,
-            )
-            .unwrap();
-
-        assert!(lib.lookup_name("my_theorem").is_some());
+            .submit_proven("identity", ty, proof, ConjectureSource::UserSubmitted)
+            .expect("closed identity theorem is checked");
+        assert!(lib.lookup_name("identity").is_some());
+        assert_eq!(lib.lookup_raw_type_index(ty), Some(idx));
         let header = lib.get_constant(idx).unwrap();
         assert_eq!(
             header.import_confidence,
             ImportConfidence::KernelVerified as u8
         );
         assert_eq!(header.source_system, SourceSystem::CleanNative as u8);
+        assert_eq!(header.axiom_profile, AxiomProfile::NONE);
+        assert_eq!(header.type_idx, ty);
+        assert_eq!(header.value_idx, proof);
+    }
+
+    #[test]
+    fn test_submit_proven_refuses_missing_or_ill_typed_proof_atomically() {
+        let mut wrongly_accepted = Vec::new();
+        for (ty, proof) in [(4, NO_VALUE), (0, 0), (4, 0), (4, 1), (99, 6), (4, 99)] {
+            let (mut lib, _, _) = submission_fixture();
+            let before = submission_state(&lib);
+            if lib
+                .submit_proven("forged", ty, proof, ConjectureSource::UserSubmitted)
+                .is_ok()
+            {
+                wrongly_accepted.push((ty, proof));
+                continue;
+            }
+            assert_eq!(submission_state(&lib), before);
+            assert!(lib.lookup_name("forged").is_none());
+            assert!(lib.lookup_raw_type_index(ty).is_none());
+        }
+        assert!(
+            wrongly_accepted.is_empty(),
+            "accepted invalid (type, proof) pairs: {wrongly_accepted:?}"
+        );
+    }
+
+    #[test]
+    fn test_submit_proven_refuses_library_headers_as_dependencies() {
+        let shard = build_test_shard(&[("unchecked", ContentDomain::PureMath, AxiomProfile::NONE)]);
+        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
+        lib.load_shard(&shard).unwrap();
+        let name_idx = lib.strings.iter().position(|s| s == "unchecked").unwrap() as u32;
+        let proof = lib.exprs.len() as u32;
+        lib.exprs.push(FlatExpr::const_ref(name_idx, u32::MAX));
+        let before = submission_state(&lib);
+        assert!(lib
+            .submit_proven("dependent", 0, proof, ConjectureSource::UserSubmitted)
+            .is_err());
+        assert_eq!(submission_state(&lib), before);
     }
 
     #[test]
@@ -3142,100 +3010,6 @@ mod tests {
         assert_eq!(header.content_domain, ContentDomain::NnVerification as u8);
         assert_eq!(header.source_system, SourceSystem::GammaCrown as u8);
         assert!(header.is_trust_gated(), "NN cert should be trust-gated");
-    }
-
-    // -----------------------------------------------------------------------
-    // Kernel type-checking integration tests for verify_foreign
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_verify_foreign_with_valid_flatdb_axiom() {
-        use clean_kernel::expr::Expr;
-        use clean_kernel::flat::FlatBuilder;
-        use clean_kernel::level::Level;
-
-        // Build a valid FlatDb containing Prop (Sort(0)) as the statement.
-        let prop = Expr::sort(Level::zero());
-        let mut builder = FlatBuilder::new();
-        let _idx = builder.add_kernel_expr(&prop).unwrap();
-        let mut stmt_bytes = Vec::new();
-        builder.write_to(&mut stmt_bytes).unwrap();
-
-        // The proof bytes are invalid (not a FlatDb), so only statement parses.
-        // The statement is `Prop` which is a valid type, so kernel accepts it as axiom.
-        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-        let shard = build_test_shard(&[("seed", ContentDomain::PureMath, AxiomProfile::NONE)]);
-        lib.load_shard(&shard).unwrap();
-
-        let result = lib
-            .verify_foreign(ProofFormat::OLean, &stmt_bytes, b"invalid_proof")
-            .unwrap();
-        assert!(result.constant_idx.is_some());
-        assert_eq!(result.source, SourceSystem::Lean4);
-        // Statement parsed and type-checked as axiom: Translated confidence.
-        assert_eq!(result.confidence, ImportConfidence::Translated);
-        assert_eq!(result.status, VerificationStatus::Verified);
-    }
-
-    #[test]
-    fn test_verify_foreign_with_valid_flatdb_theorem() {
-        use clean_kernel::expr::Expr;
-        use clean_kernel::flat::FlatBuilder;
-        use clean_kernel::level::Level;
-
-        // Build a theorem: type is `Prop → Prop` (which lives in Sort 1, not Prop),
-        // but actually we need a proposition. Let's use `True → True` pattern
-        // where True : Prop.
-        //
-        // For a simpler test: type = Prop, proof = Prop (this won't type-check
-        // as a theorem because Prop : Type, not Prop).
-        //
-        // Use the simplest thing that CAN type-check as a theorem:
-        // A proposition whose proof is trivial is hard to construct in raw Expr.
-        // Instead, test the fallback: statement is valid Prop type, proof doesn't
-        // type-check → should get Translated confidence.
-        let prop = Expr::sort(Level::zero()); // Prop : Type
-
-        let mut stmt_builder = FlatBuilder::new();
-        let _idx = stmt_builder.add_kernel_expr(&prop).unwrap();
-        let mut stmt_bytes = Vec::new();
-        stmt_builder.write_to(&mut stmt_bytes).unwrap();
-
-        // Build a proof that is also Prop (will fail type-check since
-        // Prop : Sort 1, not Prop itself).
-        let mut proof_builder = FlatBuilder::new();
-        let _idx = proof_builder.add_kernel_expr(&prop).unwrap();
-        let mut proof_bytes = Vec::new();
-        proof_builder.write_to(&mut proof_bytes).unwrap();
-
-        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-        let shard = build_test_shard(&[("seed", ContentDomain::PureMath, AxiomProfile::NONE)]);
-        lib.load_shard(&shard).unwrap();
-
-        let result = lib
-            .verify_foreign(ProofFormat::OLean, &stmt_bytes, &proof_bytes)
-            .unwrap();
-        // Both parse but theorem type-check fails (Prop is Type, not Prop).
-        // Falls back to axiom path: statement is valid type.
-        assert!(result.constant_idx.is_some());
-        assert_eq!(result.confidence, ImportConfidence::Translated);
-        assert!(
-            matches!(result.status, VerificationStatus::Failed(_)),
-            "Should report type-check failure"
-        );
-    }
-
-    #[test]
-    fn test_verify_foreign_invalid_flatdb_bytes_rejected() {
-        let mut lib = MathverseLibrary::new(TrustPolicy::permissive());
-        let shard = build_test_shard(&[("seed", ContentDomain::PureMath, AxiomProfile::NONE)]);
-        lib.load_shard(&shard).unwrap();
-        let result = lib
-            .verify_foreign(ProofFormat::MetamathMm, b"raw_statement", b"raw_proof")
-            .unwrap();
-        assert!(result.constant_idx.is_some());
-        assert_eq!(result.confidence, ImportConfidence::Unverified);
-        assert!(matches!(result.status, VerificationStatus::Failed(_)));
     }
 
     #[test]

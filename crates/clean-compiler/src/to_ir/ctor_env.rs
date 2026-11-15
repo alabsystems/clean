@@ -8,7 +8,7 @@
 //! from kernel `ConstructorVal` data for use during IR conversion.
 
 use super::state::CtorMeta;
-use super::types::expr_to_ir_type;
+use super::types::ctor_field_ir_type;
 use crate::error::CompilerError;
 use crate::ir::IRType;
 use clean_kernel::{ConstructorVal, Expr, ExprKind};
@@ -28,7 +28,7 @@ fn extract_field_ir_types(ctor_type: &Expr, num_params: u32) -> Result<Vec<IRTyp
 
     while let ExprKind::Pi(_, domain, codomain) = current.kind() {
         if arg_idx >= num_params {
-            types.push(expr_to_ir_type(domain)?);
+            types.push(ctor_field_ir_type(domain)?);
         }
         arg_idx += 1;
         current = (**codomain).clone();
@@ -98,8 +98,19 @@ pub fn build_ctor_env(
 ) -> Result<(HashMap<Name, CtorMeta>, HashMap<Name, CtorMeta>), CompilerError> {
     let mut ctor_env = HashMap::with_capacity(ctors.len());
     let mut inductive_env = HashMap::with_capacity(ctors.len());
-    for ctor in ctors {
-        let field_types = extract_field_ir_types(&ctor.type_, ctor.num_params)?;
+    // Callers hand over `Environment::constructors()`, a hash-map iteration, so
+    // WHICH constructor a refusal names used to vary from run to run while the
+    // refusal did not. Walk them in name order, and name the constructor.
+    let mut ordered: Vec<&&ConstructorVal> = ctors.iter().collect();
+    ordered.sort_by_cached_key(|ctor| ctor.name.to_string());
+    for ctor in ordered {
+        let field_types =
+            extract_field_ir_types(&ctor.type_, ctor.num_params).map_err(|error| match error {
+                CompilerError::UnsupportedIrType { expr } => CompilerError::UnsupportedIrType {
+                    expr: format!("{expr} (a field of constructor {})", ctor.name),
+                },
+                other => other,
+            })?;
         let num_scalars = field_types.iter().filter(|t| t.is_scalar()).count() as u32;
         let num_objects = field_types.iter().filter(|t| t.is_rc_type()).count() as u32;
         let meta = CtorMeta {

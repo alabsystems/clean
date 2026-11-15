@@ -13,7 +13,7 @@
 use super::FVarIdAllocator;
 use crate::lcnf::{Alt, Arg, Cases, Code, FunDecl, LetDecl, LetValue};
 use crate::rc::pseudo_op;
-use crate::to_ir::types::expr_to_ir_type;
+use crate::to_ir::types::ctor_field_ir_type;
 use clean_kernel::{Environment, Expr, ExprKind, FVarId, Name};
 use std::collections::HashSet;
 
@@ -187,7 +187,7 @@ struct CtorLayout {
 
 /// Extract constructor layout from Environment.
 ///
-/// Uses `strip_pi` to walk the constructor's Pi-type and `expr_to_ir_type`
+/// Uses `strip_pi` to walk the constructor's Pi-type and `ctor_field_ir_type`
 /// to classify each field as object or scalar. Returns `None` if the
 /// constructor is not found in the environment.
 fn get_ctor_layout(name: &Name, env: &Environment) -> Option<CtorLayout> {
@@ -199,7 +199,9 @@ fn get_ctor_layout(name: &Name, env: &Environment) -> Option<CtorLayout> {
     for _ in 0..ctor_val.num_fields {
         match current.kind() {
             ExprKind::Pi(_, domain, body) => {
-                let ir_type = expr_to_ir_type(domain).ok()?;
+                // The constructor-field classification `build_ctor_env` uses,
+                // so a reuse decision reads the layout the producer built.
+                let ir_type = ctor_field_ir_type(domain).ok()?;
                 if ir_type.is_scalar() {
                     scalar_size += ir_type.scalar_byte_size();
                 } else if ir_type.is_object() {

@@ -34,13 +34,14 @@ pub(super) fn eval_conv_goal(
     tacs: &[SurfaceTactic],
 ) -> Result<(), TacticError> {
     // Clone all data from the current goal upfront to release the borrow on `ps`.
-    let (old_target, local_ctx, goal_meta_id, goal_tag) = {
+    let (old_target, local_ctx, goal_meta_id, goal_tag, case_binders) = {
         let goal = ps.current_goal().ok_or(TacticError::NoGoals)?;
         (
             goal.target.clone(),
             goal.local_ctx.clone(),
             goal.meta_id,
             goal.tag.clone(),
+            goal.case_binders.clone(),
         )
     };
 
@@ -61,6 +62,7 @@ pub(super) fn eval_conv_goal(
         target: old_target.clone(),
         local_ctx: local_ctx.clone(),
         tag: goal_tag.clone(),
+        case_binders,
     };
 
     // Multi-focus `conv => congr` path (#2477 Phase 4): recombine per-focus

@@ -226,8 +226,8 @@ pub(crate) fn find_independent_stmts(dep_info: &DependencyInfo) -> Vec<Vec<usize
     }
     let mut groups: Vec<Vec<usize>> = Vec::new();
     let mut grp: Vec<usize> = vec![0];
-    for i in 1..n {
-        if dep_info.deps[i].iter().any(|d| grp.contains(d)) {
+    for (i, deps) in dep_info.deps.iter().enumerate().skip(1) {
+        if deps.iter().any(|d| grp.contains(d)) {
             groups.push(std::mem::take(&mut grp));
         }
         grp.push(i);

@@ -100,7 +100,19 @@ fn evalir_scratchpad_candidates_elaborate() {
         match result {
             Ok(()) => {
                 passed += 1;
-                eprintln!("evalir scratchpad PASS  [{idx}] {secs:8.3}s {name}");
+                // The declared name is the token after `def` / `inductive`. Its kernel axiom
+                // closure is printed, so "kernel-checked and axiom-free" is read off the run
+                // rather than inferred from PASS (an elaborated term may still cite an axiom).
+                let declared = source.split_whitespace().nth(1).unwrap_or("");
+                let mut axioms: Vec<String> = spec
+                    .env()
+                    .axiom_deps(&clean_kernel::Name::from_string(declared))
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|n| n.to_string())
+                    .collect();
+                axioms.sort();
+                eprintln!("evalir scratchpad PASS  [{idx}] {secs:8.3}s {name}  axioms={axioms:?}");
             }
             Err(e) => {
                 eprintln!("evalir scratchpad FAIL  [{idx}] {secs:8.3}s {name}\n    {e}");

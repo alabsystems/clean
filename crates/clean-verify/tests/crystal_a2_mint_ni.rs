@@ -39,8 +39,7 @@
 use clean_verify::ir_mint::{self, SelfFunc, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -256,21 +255,21 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("(functy.97)"),
-        "the emitted body must still carry signature index 97; if it does not, the artifact \
+        FIXTURE.contains("(functy.85)"),
+        "the emitted body must still carry signature index 85; if it does not, the artifact \
          was re-interned and this table needs a one-line REVIEWED re-pin"
     );
     assert!(
-        ir_mint::IR_NI_TAGS.contains("\"functy\": 97"),
+        ir_mint::IR_NI_TAGS.contains("\"functy\": 85"),
         "and the committed table must record it"
     );
     assert!(
-        FIXTURE.contains("bb0(%0: struct.323):"),
-        "the receiver is struct.323 BY VALUE — NodeId, not its unchained twin ExtensionIdx \
+        FIXTURE.contains("bb0(%0: struct.210):"),
+        "the receiver is struct.210 BY VALUE — NodeId, not its unchained twin ExtensionIdx \
          (struct.848)"
     );
     assert!(
-        ir_mint::IR_NI_TAGS.contains("\"crate_id\": 323"),
+        ir_mint::IR_NI_TAGS.contains("\"crate_id\": 210"),
         "and the committed table pins that id in its interface-only struct row"
     );
 }
@@ -312,10 +311,10 @@ fn m10_the_committed_fixture_projects_under_its_pinned_interface() {
 fn m10_the_interface_pins_bite() {
     let t = tags();
     for (from, to, slot) in [
-        ("bb0(%0: struct.323):", "bb0(%0: ptr):", "parameter"),
-        ("bb0(%0: struct.323):", "bb0(%0: struct.848):", "parameter"),
+        ("bb0(%0: struct.210):", "bb0(%0: ptr):", "parameter"),
+        ("bb0(%0: struct.210):", "bb0(%0: struct.848):", "parameter"),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.97)", "(functy.98)", "signature index"),
+        ("(functy.85)", "(functy.86)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");

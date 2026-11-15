@@ -6,6 +6,7 @@
 /// Verify soundness-critical properties for all inputs up to a bound.
 ///
 /// Run with: cargo kani --features kani -p clean-kernel --harness <harness_name>
+/// STOCK EXCEPTION (Trust lacks kani; measured `targo kani` -> `error: no such command`; kani drives its own pinned nightly).
 use super::*;
 use crate::expr::BinderInfo;
 use std::sync::Arc;

@@ -119,28 +119,33 @@ fn test_spec_check_uses_cert_verified_path() {
 }
 
 #[test]
-fn test_micro_checker_detects_type_disagreement() {
-    use clean_kernel::micro::cross_validate_with_micro;
-
-    let env = Environment::new();
-    let tc = TypeChecker::with_mode(&env, env.mode());
-
-    let type_expr = Expr::type_();
-    let (correct_ty, cert) = tc
-        .infer_type_with_cert(&type_expr)
-        .expect("Type should type-check");
-
-    let ok_result = cross_validate_with_micro(&type_expr, &correct_ty, &cert);
-    assert!(
-        ok_result.is_ok(),
-        "Correct type should not produce Err, got {ok_result:?}"
-    );
-
-    let wrong_ty = Expr::const_(clean_kernel::Name::from_string("Bool"), vec![]);
-    let bad_result = cross_validate_with_micro(&type_expr, &wrong_ty, &cert);
-    if let Ok(true) = &bad_result {
-        panic!("Micro-checker should NOT confirm wrong type (Bool) for Type expr");
-    }
+fn test_spec_check_rejects_wrong_universe_mutant() {
+    // These source terms use only foundation types. Build the existing checked
+    // dependency-scoped specification instead of rechecking the Full bundle's
+    // unrelated mathematics; the production validator and environment mode stay
+    // exactly the same.
+    let spec = run_with_stack(|| Specification::new_eval_ir_spec().expect("checked foundation"));
+    let validator = CrossValidator::new(&spec);
+    assert!(matches!(
+        validator.run_spec_infer("Type"),
+        SpecResult::TypeInferred(_)
+    ));
+    assert!(matches!(
+        validator.run_spec_infer("fun (A : Type) (x : A) => x"),
+        SpecResult::TypeInferred(_)
+    ));
+    assert!(matches!(
+        validator.run_spec_infer("x"),
+        SpecResult::Error(_)
+    ));
+    assert!(matches!(
+        validator.run_spec_check("Type", "Type 1"),
+        SpecResult::TypeChecked
+    ));
+    assert!(matches!(
+        validator.run_spec_check("Type", "Type"),
+        SpecResult::Error(_)
+    ));
 }
 
 #[test]

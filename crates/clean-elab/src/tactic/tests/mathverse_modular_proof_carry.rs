@@ -39,14 +39,16 @@ fn test_mathverse_parity_theorem_bridge_avoids_trusted_axioms() {
         Expr::const_(Name::from_string("False"), vec![]),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".into(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_even".into(),
+                name: clean_parser::SurfaceName::generated_path("h_even"),
                 ty: Expr::app(
                     Expr::const_(Name::from_string("Even"), vec![]),
                     Expr::fvar(n_fvar),
@@ -54,8 +56,9 @@ fn test_mathverse_parity_theorem_bridge_avoids_trusted_axioms() {
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_odd".into(),
+                name: clean_parser::SurfaceName::generated_path("h_odd"),
                 ty: Expr::app(
                     Expr::const_(Name::from_string("Odd"), vec![]),
                     Expr::fvar(n_fvar),
@@ -108,20 +111,23 @@ fn test_mathverse_divisibility_negation_avoids_trusted_axioms() {
         Expr::const_(Name::from_string("False"), vec![]),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".into(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_divides".into(),
+                name: clean_parser::SurfaceName::generated_path("h_divides"),
                 ty: dvd_three_n.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_not_divides".into(),
+                name: clean_parser::SurfaceName::generated_path("h_not_divides"),
                 ty: Expr::app(Expr::const_(Name::from_string("Not"), vec![]), dvd_three_n),
                 value: None,
             },

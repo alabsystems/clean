@@ -287,124 +287,124 @@ pub fn prop_valued_const(name: &Name, applied: usize, env: &Environment) -> bool
 pub(crate) mod special_names {
     use clean_kernel::Name;
 
-    pub fn decidable_is_true() -> Name {
+    pub(crate) fn decidable_is_true() -> Name {
         Name::from_string("Decidable.isTrue")
     }
-    pub fn decidable_is_false() -> Name {
+    pub(crate) fn decidable_is_false() -> Name {
         Name::from_string("Decidable.isFalse")
     }
-    pub fn decidable_decide() -> Name {
+    pub(crate) fn decidable_decide() -> Name {
         Name::from_string("Decidable.decide")
     }
-    pub fn quot_mk() -> Name {
+    pub(crate) fn quot_mk() -> Name {
         Name::from_string("Quot.mk")
     }
-    pub fn quot_lc_inv() -> Name {
+    pub(crate) fn quot_lc_inv() -> Name {
         Name::from_string("Quot.lcInv")
     }
-    pub fn nat_succ() -> Name {
+    pub(crate) fn nat_succ() -> Name {
         Name::from_string("Nat.succ")
     }
-    pub fn nat_add() -> Name {
+    pub(crate) fn nat_add() -> Name {
         Name::from_string("Nat.add")
     }
-    pub fn bool_true() -> Name {
+    pub(crate) fn bool_true() -> Name {
         Name::from_string("Bool.true")
     }
-    pub fn bool_false() -> Name {
+    pub(crate) fn bool_false() -> Name {
         Name::from_string("Bool.false")
     }
-    pub fn bool_() -> Name {
+    pub(crate) fn bool_() -> Name {
         Name::from_string("Bool")
     }
-    pub fn decidable_() -> Name {
+    pub(crate) fn decidable_() -> Name {
         Name::from_string("Decidable")
     }
-    pub fn nat_zero() -> Name {
+    pub(crate) fn nat_zero() -> Name {
         Name::from_string("Nat.zero")
     }
-    pub fn nat_() -> Name {
+    pub(crate) fn nat_() -> Name {
         Name::from_string("Nat")
     }
-    pub fn nat_dec_eq() -> Name {
+    pub(crate) fn nat_dec_eq() -> Name {
         Name::from_string("Nat.decEq")
     }
-    pub fn nat_sub() -> Name {
+    pub(crate) fn nat_sub() -> Name {
         Name::from_string("Nat.sub")
     }
-    pub fn int_() -> Name {
+    pub(crate) fn int_() -> Name {
         Name::from_string("Int")
     }
-    pub fn int_of_nat() -> Name {
+    pub(crate) fn int_of_nat() -> Name {
         Name::from_string("Int.ofNat")
     }
-    pub fn int_dec_lt() -> Name {
+    pub(crate) fn int_dec_lt() -> Name {
         Name::from_string("Int.decLt")
     }
-    pub fn int_nat_abs() -> Name {
+    pub(crate) fn int_nat_abs() -> Name {
         Name::from_string("Int.natAbs")
     }
-    pub fn int_neg_succ() -> Name {
+    pub(crate) fn int_neg_succ() -> Name {
         Name::from_string("Int.negSucc")
     }
-    pub fn uint8_() -> Name {
+    pub(crate) fn uint8_() -> Name {
         Name::from_string("UInt8")
     }
-    pub fn uint16_() -> Name {
+    pub(crate) fn uint16_() -> Name {
         Name::from_string("UInt16")
     }
-    pub fn uint32_() -> Name {
+    pub(crate) fn uint32_() -> Name {
         Name::from_string("UInt32")
     }
-    pub fn uint64_() -> Name {
+    pub(crate) fn uint64_() -> Name {
         Name::from_string("UInt64")
     }
-    pub fn uint8_to_bit_vec() -> Name {
+    pub(crate) fn uint8_to_bit_vec() -> Name {
         Name::from_string("UInt8.toBitVec")
     }
-    pub fn uint16_to_bit_vec() -> Name {
+    pub(crate) fn uint16_to_bit_vec() -> Name {
         Name::from_string("UInt16.toBitVec")
     }
-    pub fn uint32_to_bit_vec() -> Name {
+    pub(crate) fn uint32_to_bit_vec() -> Name {
         Name::from_string("UInt32.toBitVec")
     }
-    pub fn uint64_to_bit_vec() -> Name {
+    pub(crate) fn uint64_to_bit_vec() -> Name {
         Name::from_string("UInt64.toBitVec")
     }
-    pub fn array_() -> Name {
+    pub(crate) fn array_() -> Name {
         Name::from_string("Array")
     }
-    pub fn array_to_list() -> Name {
+    pub(crate) fn array_to_list() -> Name {
         Name::from_string("Array.toList")
     }
-    pub fn string_() -> Name {
+    pub(crate) fn string_() -> Name {
         Name::from_string("String")
     }
-    pub fn string_to_list() -> Name {
+    pub(crate) fn string_to_list() -> Name {
         Name::from_string("String.toList")
     }
-    pub fn byte_array_() -> Name {
+    pub(crate) fn byte_array_() -> Name {
         Name::from_string("ByteArray")
     }
-    pub fn byte_array_data() -> Name {
+    pub(crate) fn byte_array_data() -> Name {
         Name::from_string("ByteArray.data")
     }
-    pub fn float_array_() -> Name {
+    pub(crate) fn float_array_() -> Name {
         Name::from_string("FloatArray")
     }
-    pub fn float_array_data() -> Name {
+    pub(crate) fn float_array_data() -> Name {
         Name::from_string("FloatArray.data")
     }
-    pub fn thunk_() -> Name {
+    pub(crate) fn thunk_() -> Name {
         Name::from_string("Thunk")
     }
-    pub fn thunk_get() -> Name {
+    pub(crate) fn thunk_get() -> Name {
         Name::from_string("Thunk.get")
     }
-    pub fn task_() -> Name {
+    pub(crate) fn task_() -> Name {
         Name::from_string("Task")
     }
-    pub fn task_get() -> Name {
+    pub(crate) fn task_get() -> Name {
         Name::from_string("Task.get")
     }
 }

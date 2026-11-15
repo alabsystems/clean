@@ -30,6 +30,7 @@ fn test_explicit_registration_warning_is_not_duplicated() {
             trusted_arith_count: 0,
             trusted_ay_count: 0,
         },
+        via: Vec::new(),
     };
 
     let result = merge_registration_sorry_warning(surface, Some(&report), "myDef", (0, 40));
@@ -59,6 +60,7 @@ fn test_synthetic_registration_warning_uses_declaration_span() {
             trusted_arith_count: 0,
             trusted_ay_count: 0,
         },
+        via: Vec::new(),
     };
 
     let result = merge_registration_sorry_warning(surface, Some(&report), "myThm", (0, 50));
@@ -109,6 +111,7 @@ fn test_synthetic_registration_warning_overrides_surface_warning() {
             trusted_arith_count: 0,
             trusted_ay_count: 0,
         },
+        via: Vec::new(),
     };
 
     let result = merge_registration_sorry_warning(surface, Some(&report), "myDef", (0, 40));
@@ -154,6 +157,7 @@ fn test_explicit_registration_warning_fallback_when_no_surface_incomplete() {
             trusted_arith_count: 0,
             trusted_ay_count: 0,
         },
+        via: Vec::new(),
     };
 
     let result = merge_registration_sorry_warning(surface, Some(&report), "myLemma", (0, 60));
@@ -230,6 +234,7 @@ fn test_generate_all_diagnostics_includes_warning() {
             related: Vec::new(),
         }],
         declarations: vec![],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });

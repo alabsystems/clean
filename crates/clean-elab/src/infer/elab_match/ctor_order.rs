@@ -12,7 +12,10 @@ impl<'a> ElabCtx<'a> {
     /// definitional equality alone — there is nothing left that could later
     /// unify it with a different value.
     fn is_ground_index(expr: &Expr) -> bool {
-        !expr.has_fvar_quick() && !expr.has_expr_mvar_quick() && !expr.has_loose_bvars_quick()
+        // `has_fvar_quick` already covers elaborator metas (bit-63 FVars);
+        // the meta scan states it (G46: `has_expr_mvar_quick` is constant
+        // false and short-circuits nothing here).
+        !expr.has_fvar_quick() && !MetaState::expr_has_meta(expr) && !expr.has_loose_bvars_quick()
     }
 
     /// The head *constructor* of `expr` (after WHNF) together with the name of
@@ -133,7 +136,7 @@ impl<'a> ElabCtx<'a> {
         for _ in 0..num_fields {
             if let ExprKind::Pi(_, domain, codomain) = ctor_ty.kind() {
                 let dom = Self::open_field_type_with_fvars(domain, &field_fvars);
-                let fvar = self.push_local("_idx_field".to_string(), dom);
+                let fvar = self.push_local(SurfaceName::unspellable("_idx_field", 0), dom);
                 field_fvars.push(fvar);
                 ctor_ty = codomain.instantiate(&Expr::fvar(fvar));
             } else {
@@ -245,8 +248,12 @@ impl<'a> ElabCtx<'a> {
     /// or the index head is not a registered constructor's inductive.
     ///
     /// For `Vec α (Nat.succ n)` this returns `(Nat.succ n, "Nat")`.
-    fn single_index_value(&self, scrutinee_ty: &Expr, type_name: &str) -> Option<(Expr, Name)> {
-        let ind = self.env.get_inductive(&Name::from_string(type_name))?;
+    fn single_index_value(
+        &self,
+        scrutinee_ty: &Expr,
+        type_name: &SurfaceName,
+    ) -> Option<(Expr, Name)> {
+        let ind = self.env.get_inductive(type_name.name())?;
         if ind.num_indices != 1 {
             return None;
         }
@@ -286,14 +293,10 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn match_omits_index_impossible_ctor(
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
     ) -> bool {
-        let Some(ind_info) = self
-            .env
-            .get_inductive(&Name::from_string(type_name))
-            .cloned()
-        else {
+        let Some(ind_info) = self.env.get_inductive(type_name.name()).cloned() else {
             return false;
         };
         // A catch-all arm covers every constructor: nothing is omitted.
@@ -309,8 +312,7 @@ impl<'a> ElabCtx<'a> {
         for ctor_name in &ind_info.constructor_names {
             let covered = arms.iter().any(|arm| {
                 self.top_level_ctor_target_name(type_name, &arm.pattern)
-                    .as_deref()
-                    .map(Name::from_string)
+                    .map(SurfaceName::into_name)
                     .as_ref()
                     == Some(ctor_name)
             });
@@ -365,7 +367,7 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn build_index_discriminating_motive_body(
         &mut self,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
         branch_ty: &Expr,
     ) -> Result<Option<(Expr, Level)>, ElabError> {
         self.with_optional_temporary_local_scope(|this| {
@@ -384,7 +386,7 @@ impl<'a> ElabCtx<'a> {
     fn build_index_discriminating_motive_body_probe(
         &mut self,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
         branch_ty: &Expr,
     ) -> Option<(Expr, Level)> {
         let (index_val, index_ind) = self.single_index_value(scrutinee_ty, type_name)?;
@@ -400,7 +402,7 @@ impl<'a> ElabCtx<'a> {
         if ind_info.num_indices != 0 {
             return None;
         }
-        let rec_name = Name::from_string(&format!("{index_ind}.rec"));
+        let rec_name = index_ind.clone().str("rec");
         let rec_val = self.env.get_recursor(&rec_name).cloned()?;
         self.authenticate_recursor_cached(&rec_name).ok()?;
         // Native single-motive recursor in the standard layout only.
@@ -611,8 +613,12 @@ impl<'a> ElabCtx<'a> {
         // `Vec α Nat.zero`, inhabited by `Vec.nil`. Compute that per-arm type and
         // take its default value, keeping the term axiom-free.
         if self.match_dependent_motive.is_some() {
-            let arm_ty =
-                self.dependent_arm_branch_ty(branch_ty, &ctor_name.to_string(), scrutinee_ty, &[])?;
+            let arm_ty = self.dependent_arm_branch_ty(
+                branch_ty,
+                &SurfaceName::from_name(ctor_name.clone()),
+                scrutinee_ty,
+                &[],
+            )?;
             if let Some(default) = self.try_default_value_of_type(&arm_ty)? {
                 let body = wrap_with_extra_params(default, extra_param_info);
                 return self
@@ -685,21 +691,23 @@ impl<'a> ElabCtx<'a> {
 
     pub(in crate::infer) fn top_level_ctor_target_name(
         &self,
-        type_name: &str,
+        type_name: &SurfaceName,
         pattern: &SurfacePattern,
-    ) -> Option<String> {
+    ) -> Option<SurfaceName> {
         match pattern {
             SurfacePattern::Ctor(ctor_name, _) => {
                 Some(self.ctor_pattern_full_name(ctor_name, type_name))
             }
-            SurfacePattern::Lit(SurfaceLit::Nat(0)) => Some(format!("{type_name}.zero")),
+            SurfacePattern::Lit(SurfaceLit::Nat(0)) => {
+                Some(type_name.append(&SurfaceName::generated_path("zero")))
+            }
             SurfacePattern::Lit(SurfaceLit::Nat(_)) | SurfacePattern::NumeralAdd(_, _) => {
-                Some(format!("{type_name}.succ"))
+                Some(type_name.append(&SurfaceName::generated_path("succ")))
             }
             SurfacePattern::Var(name) => {
                 self.resolve_ctor_name(name, type_name).filter(|full_ctor| {
                     self.env
-                        .get_constructor(&Name::from_string(full_ctor))
+                        .get_constructor(full_ctor.name())
                         .is_some_and(|info| info.num_fields == 0)
                 })
             }
@@ -720,17 +728,17 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Returns `None` for any shape outside this envelope so the caller defers to
     /// the legacy chain.
-    fn ctor_dispatch_arm_field_pats(
+    pub(super) fn ctor_dispatch_arm_field_pats(
         &mut self,
         ctor_name: &Name,
         pattern: &SurfacePattern,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Option<Vec<SurfacePattern>>, ElabError> {
-        let ctor_name_str = ctor_name.to_string();
+        let ctor_surface = SurfaceName::from_name(ctor_name.clone());
         match pattern {
             SurfacePattern::Ctor(pat_ctor, subs) => {
                 let full_ctor = self.ctor_pattern_full_name(pat_ctor, type_name);
-                if full_ctor != ctor_name_str {
+                if full_ctor != ctor_surface {
                     return Ok(None);
                 }
                 let normalized: Vec<SurfacePattern> = subs
@@ -745,7 +753,7 @@ impl<'a> ElabCtx<'a> {
                 .map(Some)
             }
             SurfacePattern::Lit(SurfaceLit::Nat(k)) if *k > 0 => {
-                if ctor_name_str != format!("{type_name}.succ") {
+                if ctor_surface != type_name.append(&SurfaceName::generated_path("succ")) {
                     return Ok(None);
                 }
                 Ok(match desugar_nonzero_nat_lit(*k) {
@@ -754,7 +762,7 @@ impl<'a> ElabCtx<'a> {
                 })
             }
             SurfacePattern::NumeralAdd(inner, k) if *k > 0 => {
-                if ctor_name_str != format!("{type_name}.succ") {
+                if ctor_surface != type_name.append(&SurfaceName::generated_path("succ")) {
                     return Ok(None);
                 }
                 Ok(match desugar_nat_numeral_add_pattern(inner, *k) {
@@ -795,9 +803,10 @@ impl<'a> ElabCtx<'a> {
             }
             _ => {
                 return Err(ElabError::InternalInvariant(format!(
-                    "constructor value `{ctor_name}` cannot recover its {} universe levels from scrutinee `{scrutinee_ty:?}`",
+                    "constructor value `{ctor_name}` cannot recover its {} universe levels from scrutinee `{}`",
                     ctor_info.level_params.len()
-                )));
+                ,
+                crate::error_render::term(&scrutinee_ty))));
             }
         };
 
@@ -805,9 +814,10 @@ impl<'a> ElabCtx<'a> {
         let params = self.extract_type_args(&scrutinee_ty, ctor_info.num_params);
         if params.len() != ctor_info.num_params as usize {
             return Err(ElabError::InternalInvariant(format!(
-                "constructor value `{ctor_name}` cannot recover its {} parameters from scrutinee `{scrutinee_ty:?}`",
+                "constructor value `{ctor_name}` cannot recover its {} parameters from scrutinee `{}`",
                 ctor_info.num_params
-            )));
+            ,
+                crate::error_render::term(&scrutinee_ty))));
         }
         for param in params {
             value = Expr::app(value, param);
@@ -821,6 +831,8 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn compile_ctor_catch_all_alt(
         &mut self,
+        shared: &mut SharedCatchAlls,
+        whole_minor: bool,
         ctor_name: &Name,
         arm: &clean_parser::SurfaceMatchArm,
         arm_idx: usize,
@@ -828,6 +840,33 @@ impl<'a> ElabCtx<'a> {
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
     ) -> Result<Option<Expr>, ElabError> {
+        if self.match_dependent_motive.is_none() {
+            // Constant motive: every constructor's minor has the expected
+            // type `branch_ty`, so the right-hand side is elaborated once per
+            // `match` and shared (G76, `shared_alt.rs`).
+            let binder = match &arm.pattern {
+                SurfacePattern::Wildcard => None,
+                SurfacePattern::Var(name) => Some(name),
+                _ => return Ok(None),
+            };
+            let body = self
+                .shared_catch_all_body(
+                    shared,
+                    arm,
+                    arm_idx,
+                    binder,
+                    scrutinee_ty,
+                    branch_ty,
+                    extra_param_info,
+                    whole_minor,
+                )?
+                .minor_body(binder.is_some());
+            return match binder {
+                None => self.wrap_ctor_fallback_alt(body, ctor_name, scrutinee_ty),
+                Some(name) => self.named_catch_all_minor(ctor_name, name, body, scrutinee_ty),
+            }
+            .map(Some);
+        }
         match &arm.pattern {
             SurfacePattern::Wildcard => {
                 if self.match_dependent_motive.is_some() {
@@ -843,8 +882,12 @@ impl<'a> ElabCtx<'a> {
                         let prior_fvars: Vec<FVarId> =
                             field_fvars.iter().map(|(f, _)| *f).collect();
                         let field_ty = Self::open_field_type_with_fvars(field_ty, &prior_fvars);
-                        let fvar =
-                            self.push_local(format!("_match_ctor_field_{idx}"), field_ty.clone());
+                        let fvar = self.push_local(
+                            SurfaceName::from_name(
+                                Name::anon().str("_match_ctor_field").num(idx as u64),
+                            ),
+                            field_ty.clone(),
+                        );
                         field_fvars.push((fvar, field_ty));
                     }
                     let field_ids = field_fvars
@@ -884,8 +927,12 @@ impl<'a> ElabCtx<'a> {
                     // `open_field_type_with_fvars`).
                     let prior_fvars: Vec<FVarId> = field_fvars.iter().map(|(f, _)| *f).collect();
                     let field_ty = Self::open_field_type_with_fvars(field_ty, &prior_fvars);
-                    let fvar =
-                        self.push_local(format!("_match_ctor_field_{idx}"), field_ty.clone());
+                    let fvar = self.push_local(
+                        SurfaceName::from_name(
+                            Name::anon().str("_match_ctor_field").num(idx as u64),
+                        ),
+                        field_ty.clone(),
+                    );
                     field_fvars.push((fvar, field_ty));
                 }
 
@@ -906,7 +953,7 @@ impl<'a> ElabCtx<'a> {
                 let arm_body = wrap_with_extra_params(arm_body, extra_param_info);
                 self.pop_local();
                 let mut result = Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     scrutinee_ty.clone(),
                     ctor_value,
                     arm_body.abstract_fvar(alias_fvar),
@@ -943,10 +990,15 @@ impl<'a> ElabCtx<'a> {
     /// Returns `Ok(None)` (defer to the legacy chain) whenever the arm shapes
     /// fall outside the conservative envelope handled here, so working single-
     /// arm / wildcard-catch-all shapes keep their existing lowering byte-for-byte.
+    ///
+    /// `alts[i]` is the source index of the alternative `rows[i]` came from.
+    /// `Err(ElabError::RedundantAlternative)` when the field tree never selects
+    /// some row: Lean refuses that match, so the caller must not fall back.
     fn compile_ctor_field_column_split(
         &mut self,
         ctor_name: &Name,
         rows: &[(Vec<SurfacePattern>, SurfaceExpr)],
+        alts: &[usize],
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -959,6 +1011,7 @@ impl<'a> ElabCtx<'a> {
             this.compile_ctor_field_column_split_inner(
                 ctor_name,
                 rows,
+                alts,
                 scrutinee_ty,
                 branch_ty,
                 extra_param_info,
@@ -970,6 +1023,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         ctor_name: &Name,
         rows: &[(Vec<SurfacePattern>, SurfaceExpr)],
+        alts: &[usize],
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -1000,31 +1054,74 @@ impl<'a> ElabCtx<'a> {
                 field_tys.len()
             )));
         }
-        let mut field_bindings: Vec<(FVarId, Expr, String)> = Vec::with_capacity(num_fields);
+        let mut field_bindings: Vec<(FVarId, Expr, SurfaceName)> = Vec::with_capacity(num_fields);
         for (idx, field_ty) in field_tys.into_iter().enumerate() {
             let prior_fvars: Vec<FVarId> = field_bindings.iter().map(|(f, _, _)| *f).collect();
             let field_ty = Self::open_field_type_with_fvars(&field_ty, &prior_fvars);
-            let name = format!("__csplit_{salt}_{idx}");
+            let name = SurfaceName::from_name(
+                Name::anon().str(format!("__csplit_{salt}")).num(idx as u64),
+            );
             let fvar = self.push_local(name.clone(), field_ty.clone());
             field_bindings.push((fvar, field_ty, name));
         }
 
-        let field_names: Vec<String> = field_bindings.iter().map(|(_, _, n)| n.clone()).collect();
+        let field_names: Vec<SurfaceName> =
+            field_bindings.iter().map(|(_, _, n)| n.clone()).collect();
         let column_tys: Vec<Expr> = field_bindings.iter().map(|(_, ty, _)| ty.clone()).collect();
+
+        // Under a DEPENDENT motive the minor of `ctor f₀ … fₙ` has the type
+        // `R[scrutinee := ctor f₀ … fₙ]`, not the shared `branch_ty` — the same
+        // per-arm type `elaborate_ctor_arm` computes. The field match below is
+        // elaborated against it, and because it mentions the field locals that
+        // match builds its own dependent motive over them, as Lean's match
+        // compiler does. Elaborating against the unrefined `branch_ty` built a
+        // minor the kernel refused: `| ⟨⟨x⟩, h⟩ => …` against a codomain that
+        // mentions the discriminant (`∀ h₁ h₂ : Unique α, h₁ = h₂`, Mathlib
+        // `Unique.subsingleton_unique'`) gave "expected … (fun x1 => fvar = x1
+        // → …) (Unique.mk x f), got … (fun x1 : Inhabited α => fvar = fvar →
+        // …) x". A constant motive gets `branch_ty` back unchanged.
+        //
+        // The field match abstracts only the field it splits on. When a LATER
+        // field's type mentions that field (`uniq : ∀ a, a = default` after
+        // `toInhabited`), its dependent motive would also have to generalize
+        // the later field, which the match elaborator does not do; the term is
+        // then ill-typed. So under a dependent motive the finished column is
+        // checked STRICTLY below, and a refusal hands the constructor back to
+        // the legacy chain, whose constant motive over the refined arm type is
+        // well-typed whenever the body does not need the inner refinement.
+        let dependent_motive = self.match_dependent_motive.is_some();
+        let field_ids: Vec<FVarId> = field_bindings.iter().map(|(f, _, _)| *f).collect();
+        let arm_ty = self.dependent_arm_branch_ty(
+            branch_ty,
+            &SurfaceName::from_name(ctor_name.clone()),
+            scrutinee_ty,
+            &field_ids,
+        )?;
+        let branch_ty = &arm_ty;
 
         // Build the nested surface match tree over the field columns and
         // elaborate it against `branch_ty` with the field locals in scope. Pop
         // the field locals on every exit path.
         let lowered = (|| -> Result<Option<Expr>, ElabError> {
-            let rows_vec: Vec<(Vec<SurfacePattern>, Vec<(String, String)>, SurfaceExpr)> = rows
+            let rows_vec: Vec<ColumnSplitRow> = rows
                 .iter()
-                .map(|(pats, body)| (pats.clone(), Vec::new(), body.clone()))
+                .enumerate()
+                .map(|(origin, (pats, body))| (pats.clone(), Vec::new(), body.clone(), origin))
                 .collect();
+            let mut reach = RowReach::new(rows_vec.len());
             let Some(surface) =
-                self.build_column_split_surface(&field_names, &column_tys, &rows_vec)?
+                self.build_column_split_surface(&field_names, &column_tys, &rows_vec, &mut reach)?
             else {
                 return Ok(None);
             };
+            // Every row here names `ctor_name` at the top, so one the field
+            // tree never selects is selected by no value at all.
+            if let Some(row) = reach.first_unreached() {
+                return Err(redundant_alternative(
+                    &format!("the match on `{}`", ctor_info.inductive_name),
+                    alts.get(row).copied().unwrap_or(row),
+                ));
+            }
             let saved_expected = self.current_expected_type.clone();
             self.set_expected_type(Some(branch_ty.clone()));
             let body = self.elaborate_with_expected_type(&surface, Some(branch_ty.clone()));
@@ -1036,7 +1133,11 @@ impl<'a> ElabCtx<'a> {
             // function result and used to escape this speculative lane as if it
             // had `branch_ty`. Authenticate the completed column before it is
             // abstracted into the outer constructor minor.
-            let actual_ty = self.infer_type(&body)?;
+            let actual_ty = if dependent_motive {
+                self.infer_type_full(&body)?
+            } else {
+                self.infer_type(&body)?
+            };
             if !self.is_def_eq(&actual_ty, branch_ty) {
                 return Err(ElabError::TypeMismatch {
                     expected: format!("complete column-split branch of type {branch_ty}"),
@@ -1085,32 +1186,36 @@ impl<'a> ElabCtx<'a> {
     ///   and recurses with those field columns (and their types) prepended to the
     ///   remaining columns. A genuine binder (`Var` naming no constructor, or
     ///   `_`) is a catch-all that joins every constructor group AND forms a
-    ///   trailing default arm; a named binder records a pending `let`.
+    ///   trailing default arm; a named binder records a pending `let`. An
+    ///   as-pattern records its alias for the original column and classifies
+    ///   its inner pattern, so the alias does not change constructor coverage.
     ///
     /// Returns `None` for any first sub-pattern shape outside this envelope
-    /// (as-patterns, or-patterns, inaccessible, q-patterns, …), so the caller
+    /// (or-patterns, inaccessible, q-patterns, …), so the caller
     /// defers to the legacy path rather than misbuild.
-    fn build_column_split_surface(
+    ///
+    /// `reach` records the row (its `origin`) each leaf selects, and a column
+    /// split with no arm for some value (`RowReach`): a row no leaf selects is
+    /// one Lean refuses as a "redundant alternative", which the caller reports.
+    pub(super) fn build_column_split_surface(
         &mut self,
-        field_names: &[String],
+        field_names: &[SurfaceName],
         column_tys: &[Expr],
-        rows: &[(Vec<SurfacePattern>, Vec<(String, String)>, SurfaceExpr)],
+        rows: &[ColumnSplitRow],
+        reach: &mut RowReach,
     ) -> Result<Option<SurfaceExpr>, ElabError> {
         use clean_parser::{Span, SurfaceMatchArm};
 
         let Some((col, rest_fields)) = field_names.split_first() else {
             // No columns left: the first (earliest source) row wins; wrap its
             // body in the pending `let` bindings (outermost binding first).
-            let Some((_, binds, body)) = rows.first() else {
+            let Some((_, binds, body, origin)) = rows.first() else {
                 return Ok(None);
             };
+            reach.reach(*origin);
             let mut result = body.clone();
             for (name, value_ident) in binds.iter().rev() {
-                result = SurfaceExpr::let_expr(
-                    name.clone(),
-                    SurfaceExpr::ident(value_ident.clone()),
-                    result,
-                );
+                result = typed_let(name.clone(), typed_ident(value_ident.clone()), result);
             }
             return Ok(Some(result));
         };
@@ -1127,15 +1232,15 @@ impl<'a> ElabCtx<'a> {
         // (`true`, `Option.none`, …) dispatches as a constructor, not a binder.
         // A `Var` that names no constructor is a genuine binder — `Binder(name)`.
         enum Head {
-            Ctor(String, Vec<SurfacePattern>),
-            Binder(Option<String>),
+            Ctor(SurfaceName, Vec<SurfacePattern>),
+            Binder(Option<SurfaceName>),
         }
         let classify = |this: &mut Self, pat: &SurfacePattern| -> Option<Head> {
             match pat {
                 SurfacePattern::Wildcard => Some(Head::Binder(None)),
                 SurfacePattern::Var(name) => {
                     match col_type_name
-                        .as_deref()
+                        .as_ref()
                         .and_then(|tn| this.resolve_ctor_name(name, tn))
                     {
                         Some(full_ctor) => Some(Head::Ctor(full_ctor, vec![])),
@@ -1149,13 +1254,13 @@ impl<'a> ElabCtx<'a> {
                     // and downstream metadata lookups (`compute_ctor_field_types`
                     // on `group.ctor`) require the fully-qualified `Option.some`.
                     let full = col_type_name
-                        .as_deref()
+                        .as_ref()
                         .and_then(|tn| this.resolve_ctor_name(name, tn))
                         .unwrap_or_else(|| name.clone());
                     Some(Head::Ctor(full, subs.clone()))
                 }
                 SurfacePattern::Lit(SurfaceLit::Nat(0)) => {
-                    Some(Head::Ctor("Nat.zero".to_string(), vec![]))
+                    Some(Head::Ctor(SurfaceName::generated_path("Nat.zero"), vec![]))
                 }
                 SurfacePattern::Lit(SurfaceLit::Nat(k)) => match desugar_nonzero_nat_lit(*k) {
                     SurfacePattern::Ctor(name, subs) => Some(Head::Ctor(name, subs)),
@@ -1176,7 +1281,7 @@ impl<'a> ElabCtx<'a> {
 
         // A row after its first column has been consumed. `binds` carries any new
         // pending `let` from a binder column (a named binder binds `col`).
-        type SplitRow = (Vec<SurfacePattern>, Vec<(String, String)>, SurfaceExpr);
+        type SplitRow = ColumnSplitRow;
 
         // Classify every row's first sub-pattern ONCE, preserving source order.
         //
@@ -1196,14 +1301,24 @@ impl<'a> ElabCtx<'a> {
         // Maranget's S(c, P) specialization — the first matching row wins and
         // later overlapping rows only cover the residual.
         let mut classified: Vec<(Head, SplitRow)> = Vec::with_capacity(rows.len());
-        for (pats, binds, body) in rows {
+        for (pats, binds, body, origin) in rows {
             let Some((first, rest_pats)) = pats.split_first() else {
                 return Ok(None);
             };
+            // Aliases bind the whole column, before specializing any constructor
+            // fields. Keep them on this row only: another matching row must not
+            // inherit its aliases, and wrapping an inner pattern never makes a
+            // constructor-specific row into a catch-all.
+            let mut first = first;
+            let mut binds = binds.clone();
+            while let SurfacePattern::As(name, inner) = first {
+                binds.push((name.clone(), col.clone()));
+                first = inner;
+            }
             let Some(head) = classify(self, first) else {
                 return Ok(None);
             };
-            classified.push((head, (rest_pats.to_vec(), binds.clone(), body.clone())));
+            classified.push((head, (rest_pats.to_vec(), binds, body.clone(), *origin)));
         }
 
         // Constructor groups in first-seen order (short-name keyed, one
@@ -1212,17 +1327,13 @@ impl<'a> ElabCtx<'a> {
         // mutually-exclusive constructor patterns — only row order within each
         // group's specialized matrix matters.
         struct Group {
-            ctor: String,
+            ctor: SurfaceName,
             arity: usize,
         }
         let mut groups: Vec<Group> = Vec::new();
         for (head, _) in &classified {
             if let Head::Ctor(name, subs) = head {
-                let short = name.rsplit('.').next().unwrap_or(name);
-                match groups
-                    .iter()
-                    .find(|g| g.ctor.rsplit('.').next().unwrap_or(&g.ctor) == short)
-                {
+                match groups.iter().find(|g| g.ctor == *name) {
                     Some(g) if g.arity == subs.len() => {}
                     Some(_) => return Ok(None),
                     None => groups.push(Group {
@@ -1235,23 +1346,25 @@ impl<'a> ElabCtx<'a> {
 
         // Extend a binder row's pending `let`s with this column's binding (a
         // named binder binds `col`; a wildcard binds nothing).
-        let binder_row_binds = |name: &Option<String>, binds: &[(String, String)]| {
-            let mut binds = binds.to_vec();
-            if let Some(name) = name {
-                binds.push((name.clone(), col.clone()));
-            }
-            binds
-        };
+        let binder_row_binds =
+            |name: &Option<SurfaceName>, binds: &[(SurfaceName, SurfaceName)]| {
+                let mut binds = binds.to_vec();
+                if let Some(name) = name {
+                    binds.push((name.clone(), col.clone()));
+                }
+                binds
+            };
 
         // Default-arm rows: the rows whose first sub-pattern is a genuine
         // binder, in source order (Maranget's default matrix D(P)).
         let catch_all_rows: Vec<SplitRow> = classified
             .iter()
-            .filter_map(|(head, (rest_pats, binds, body))| match head {
+            .filter_map(|(head, (rest_pats, binds, body, origin))| match head {
                 Head::Binder(name) => Some((
                     rest_pats.clone(),
                     binder_row_binds(name, binds),
                     body.clone(),
+                    *origin,
                 )),
                 Head::Ctor(_, _) => None,
             })
@@ -1259,8 +1372,9 @@ impl<'a> ElabCtx<'a> {
 
         let mut arms: Vec<SurfaceMatchArm> = Vec::with_capacity(groups.len() + 1);
         for group in &groups {
-            let group_short = group.ctor.rsplit('.').next().unwrap_or(&group.ctor);
-            let sub_names: Vec<String> = (0..group.arity).map(|j| format!("{col}__f{j}")).collect();
+            let sub_names: Vec<SurfaceName> = (0..group.arity)
+                .map(|j| col.append(&SurfaceName::from_name(Name::anon().str(format!("__f{j}")))))
+                .collect();
             let arm_pattern = SurfacePattern::Ctor(
                 group.ctor.clone(),
                 sub_names
@@ -1278,25 +1392,27 @@ impl<'a> ElabCtx<'a> {
             // priority.
             let next_rows: Vec<SplitRow> = classified
                 .iter()
-                .filter_map(|(head, (rest_pats, binds, body))| match head {
-                    Head::Ctor(name, subs)
-                        if name.rsplit('.').next().unwrap_or(name) == group_short =>
-                    {
+                .filter_map(|(head, (rest_pats, binds, body, origin))| match head {
+                    Head::Ctor(name, subs) if name == &group.ctor => {
                         let mut row_pats = subs.clone();
                         row_pats.extend_from_slice(rest_pats);
-                        Some((row_pats, binds.clone(), body.clone()))
+                        Some((row_pats, binds.clone(), body.clone(), *origin))
                     }
                     Head::Ctor(_, _) => None,
                     Head::Binder(name) => {
                         let mut row_pats = vec![SurfacePattern::Wildcard; group.arity];
                         row_pats.extend_from_slice(rest_pats);
-                        Some((row_pats, binder_row_binds(name, binds), body.clone()))
+                        Some((
+                            row_pats,
+                            binder_row_binds(name, binds),
+                            body.clone(),
+                            *origin,
+                        ))
                     }
                 })
                 .collect();
             // The constructor's field types become the new leading column types.
-            let group_ctor_ty =
-                self.compute_ctor_field_types(&Name::from_string(&group.ctor), col_ty)?;
+            let group_ctor_ty = self.compute_ctor_field_types(group.ctor.name(), col_ty)?;
             if group_ctor_ty.len() != group.arity {
                 return Ok(None);
             }
@@ -1305,7 +1421,7 @@ impl<'a> ElabCtx<'a> {
             let mut next_tys = group_ctor_ty;
             next_tys.extend_from_slice(rest_tys);
             let Some(inner) =
-                self.build_column_split_surface(&next_fields, &next_tys, &next_rows)?
+                self.build_column_split_surface(&next_fields, &next_tys, &next_rows, reach)?
             else {
                 return Ok(None);
             };
@@ -1325,9 +1441,20 @@ impl<'a> ElabCtx<'a> {
         // a `cons` pattern), the remaining columns must still discriminate every
         // row, so the whole catch-all matrix is threaded forward in source order.
         // Each row's binder for `col` was already recorded as a pending `let`.
-        if !catch_all_rows.is_empty() {
+        //
+        // Not when the groups already name EVERY constructor of the column's
+        // type (a complete signature, `super::signature`): no value reaches
+        // the default, every catch-all row is already inside each group, and
+        // the default's own rows can form a partial match (`| _, .top => … |
+        // .top, _ => … | .interval .., .interval .. => …` left `match y with
+        // | .top => …` under it), which refused the whole `match`.
+        let signature_complete = col_type_name.as_ref().is_some_and(|col_type| {
+            complete_signature_inductive(self.env, groups.iter().map(|g| g.ctor.name()))
+                .is_some_and(|inductive| inductive == *col_type.name())
+        });
+        if !catch_all_rows.is_empty() && !signature_complete {
             let Some(inner) =
-                self.build_column_split_surface(rest_fields, rest_tys, &catch_all_rows)?
+                self.build_column_split_surface(rest_fields, rest_tys, &catch_all_rows, reach)?
             else {
                 return Ok(None);
             };
@@ -1336,6 +1463,9 @@ impl<'a> ElabCtx<'a> {
                 pattern: SurfacePattern::Wildcard,
                 body: inner,
             });
+        } else if !signature_complete {
+            // Some constructor of the column has neither an arm nor a default.
+            reach.mark_partial();
         }
 
         if arms.is_empty() {
@@ -1345,7 +1475,7 @@ impl<'a> ElabCtx<'a> {
         Ok(Some(SurfaceExpr::Match(
             Span::dummy(),
             None,
-            Box::new(SurfaceExpr::ident(col.clone())),
+            Box::new(typed_ident(col.clone())),
             arms,
         )))
     }
@@ -1353,14 +1483,15 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn compile_ctor_dispatch_alt_chain(
         &mut self,
+        shared: &mut SharedCatchAlls,
         ctor_name: &Name,
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
     ) -> Result<Option<Expr>, ElabError> {
-        let ctor_name_str = ctor_name.to_string();
+        let ctor_surface = SurfaceName::from_name(ctor_name.clone());
         let mut relevant = Vec::new();
 
         for (arm_idx, arm) in arms.iter().enumerate() {
@@ -1374,11 +1505,11 @@ impl<'a> ElabCtx<'a> {
                     let resolved = self.resolve_ctor_name(name, type_name);
                     let nullary_ctor = resolved.filter(|full_ctor| {
                         self.env
-                            .get_constructor(&Name::from_string(full_ctor))
+                            .get_constructor(full_ctor.name())
                             .is_some_and(|info| info.num_fields == 0)
                     });
                     if let Some(full_ctor) = nullary_ctor {
-                        if full_ctor == ctor_name_str {
+                        if full_ctor == ctor_surface {
                             relevant.push((arm_idx, normalized, false));
                             break;
                         }
@@ -1393,7 +1524,7 @@ impl<'a> ElabCtx<'a> {
                     else {
                         return Ok(None);
                     };
-                    if full_ctor == ctor_name_str {
+                    if full_ctor == ctor_surface {
                         relevant.push((arm_idx, normalized, false));
                     }
                 }
@@ -1449,6 +1580,7 @@ impl<'a> ElabCtx<'a> {
             .iter()
             .map(|(_, arm, _)| arm.body.clone())
             .collect();
+        let relevant_alts: Vec<usize> = relevant.iter().map(|(idx, _, _)| *idx).collect();
         if !has_catch_all {
             let mut split_rows = Some(Vec::with_capacity(relevant_patterns.len()));
             for (pat, body) in relevant_patterns.iter().zip(relevant_bodies.iter()) {
@@ -1469,49 +1601,44 @@ impl<'a> ElabCtx<'a> {
                 // that resolves to a constructor of that field's type — e.g.
                 // `true`/`false` on a `Bool` field). Otherwise the legacy chain is
                 // already correct and byte-for-byte cheaper.
-                let field_type_names: Vec<Option<String>> = self
-                    .compute_ctor_field_types(ctor_name, scrutinee_ty)?
-                    .iter()
-                    .map(|ft| self.get_type_name(ft).ok())
-                    .collect();
-                let has_dispatch_field = rows.iter().any(|(sub_pats, _)| {
-                    sub_pats.iter().enumerate().any(|(idx, p)| match p {
-                        SurfacePattern::Ctor(_, _)
-                        | SurfacePattern::Lit(_)
-                        | SurfacePattern::NumeralAdd(_, _) => true,
-                        SurfacePattern::Var(name) => field_type_names
-                            .get(idx)
-                            .and_then(|tn| tn.as_deref())
-                            .and_then(|tn| self.resolve_ctor_name(name, tn))
-                            .is_some(),
-                        _ => false,
-                    })
-                });
-                if has_dispatch_field {
+                if self.ctor_field_rows_dispatch(ctor_name, &rows, scrutinee_ty)? {
                     // Swallow a split-elaboration error: the legacy chain below is
                     // still a valid (kernel-checked) result, so a failed rescue
                     // must never turn a working decl into a hard error. The split
                     // helper is a full local/meta/level transaction, so fallback
-                    // begins from the exact entry state.
-                    if let Ok(Some(split)) = self.compile_ctor_field_column_split(
+                    // begins from the exact entry state. A redundant alternative
+                    // is not a failed rescue but Lean's refusal of the match: the
+                    // chain would compile it and drop the alternative's body.
+                    // A split is refused only for a sorry the compiler minted
+                    // (synthetic). A user-written `sorry` arm is the program
+                    // itself: it stays in the term for the audit to report,
+                    // as Lean keeps it, rather than sending every arm to the
+                    // chain, which checks them against the unrefined goal.
+                    match self.compile_ctor_field_column_split(
                         ctor_name,
                         &rows,
+                        &relevant_alts,
                         scrutinee_ty,
                         branch_ty,
                         extra_param_info,
                     ) {
-                        if !split.has_sorry() {
-                            return Ok(Some(split));
-                        }
+                        Ok(Some(split)) if !split.has_synthetic_sorry() => return Ok(Some(split)),
+                        Err(err @ ElabError::RedundantAlternative { .. }) => return Err(err),
+                        _ => {}
                     }
                 }
             }
         }
 
         let mut compiled = None;
+        // The catch-all IS this constructor's minor (no arm of its own to fall
+        // back from), so the minor may name a shared `let` (G76).
+        let whole_minor = relevant.len() == 1;
         for (arm_idx, arm, catch_all) in relevant.into_iter().rev() {
             let alt = if catch_all {
                 let Some(alt) = self.compile_ctor_catch_all_alt(
+                    shared,
+                    whole_minor,
                     ctor_name,
                     &arm,
                     arm_idx,
@@ -1611,15 +1738,19 @@ impl<'a> ElabCtx<'a> {
         Ok(compiled)
     }
 
+    /// The minors in constructor order, and the `let` bindings of shared
+    /// right-hand sides they name (G76, `shared_alt.rs`): the caller brings
+    /// those into scope with `push_shared_alt_bindings` before it assembles the
+    /// eliminator and closes it with `bind_shared_alts`.
     #[allow(clippy::too_many_arguments)]
     pub(in crate::infer) fn try_build_ctor_ordered_match_alts(
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
-    ) -> Result<Option<Vec<Expr>>, ElabError> {
+    ) -> Result<Option<(Vec<Expr>, Vec<SharedAltBinding>)>, ElabError> {
         self.with_optional_temporary_local_scope(|this| {
             this.try_build_ctor_ordered_match_alts_inner(
                 arms,
@@ -1657,7 +1788,7 @@ impl<'a> ElabCtx<'a> {
     fn reject_duplicate_ctor_targets(
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<(), ElabError> {
         // ONLY for the all-nullary, single-discriminant shape.
         //
@@ -1682,7 +1813,7 @@ impl<'a> ElabCtx<'a> {
             return Ok(());
         }
 
-        let mut seen: Vec<String> = Vec::new();
+        let mut seen: Vec<SurfaceName> = Vec::new();
         for arm in arms {
             let Some(target) = self.top_level_ctor_target_name(type_name, &arm.pattern) else {
                 continue;
@@ -1702,21 +1833,28 @@ impl<'a> ElabCtx<'a> {
     fn try_build_ctor_ordered_match_alts_inner(
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
-    ) -> Result<Option<Vec<Expr>>, ElabError> {
+    ) -> Result<Option<(Vec<Expr>, Vec<SharedAltBinding>)>, ElabError> {
         self.reject_duplicate_ctor_targets(arms, type_name)?;
 
-        let ind_name = Name::from_string(type_name);
+        let ind_name = type_name.name().clone();
         let Some(ind_info) = self.env.get_inductive(&ind_name).cloned() else {
             return Ok(None);
         };
 
         let mut ordered = Vec::with_capacity(ind_info.constructor_names.len());
+        // A catch-all's right-hand side is elaborated once for the whole walk
+        // (G76): per constructor it used to be elaborated again, exponential
+        // in the depth of nested catch-all matches.
+        let mut shared = SharedCatchAlls::with_whole_minor_counts(
+            self.catch_all_whole_minor_counts(arms, type_name, &ind_info.constructor_names),
+        );
         for ctor_name in &ind_info.constructor_names {
             let Some(alt) = self.compile_ctor_dispatch_alt_chain(
+                &mut shared,
                 ctor_name,
                 arms,
                 type_name,
@@ -1730,7 +1868,41 @@ impl<'a> ElabCtx<'a> {
             ordered.push(alt);
         }
 
-        Ok(Some(ordered))
+        let bindings = shared.into_bindings(&ordered);
+        Ok(Some((ordered, bindings)))
+    }
+
+    /// For the first catch-all alternative: how many constructors it is the
+    /// whole minor of — those no earlier alternative names at the top level.
+    /// Only sizes the `let` decision of `shared_alt.rs`; a miscount changes
+    /// the shape of the term, never its meaning.
+    fn catch_all_whole_minor_counts(
+        &self,
+        arms: &[clean_parser::SurfaceMatchArm],
+        type_name: &SurfaceName,
+        constructors: &[Name],
+    ) -> Vec<(usize, usize)> {
+        let mut named: Vec<SurfaceName> = Vec::new();
+        for (arm_idx, arm) in arms.iter().enumerate() {
+            let catch_all = match &arm.pattern {
+                SurfacePattern::Wildcard => true,
+                SurfacePattern::Var(_) => self
+                    .top_level_ctor_target_name(type_name, &arm.pattern)
+                    .is_none(),
+                _ => false,
+            };
+            if catch_all {
+                let count = constructors
+                    .iter()
+                    .filter(|ctor| !named.contains(&SurfaceName::from_name((*ctor).clone())))
+                    .count();
+                return vec![(arm_idx, count)];
+            }
+            if let Some(target) = self.top_level_ctor_target_name(type_name, &arm.pattern) {
+                named.push(target);
+            }
+        }
+        Vec::new()
     }
 
     /// `use_rec` analogue of [`Self::try_build_ctor_ordered_match_alts`].
@@ -1779,7 +1951,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
         ind_info: &clean_kernel::InductiveVal,
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -1802,7 +1974,7 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        let rec_name = Name::from_string(&format!("{type_name}.rec"));
+        let rec_name = type_name.name().clone().str("rec");
         let Some(rec_val) = self.env.get_recursor(&rec_name).cloned() else {
             return Ok(None);
         };
@@ -1889,7 +2061,8 @@ impl<'a> ElabCtx<'a> {
             // so instantiating with any well-typed placeholder of `minor_ty`
             // leaves the rest of the telescope unchanged. We instantiate the Pi
             // with a fresh fvar of the minor's type to step past it.
-            let placeholder = self.push_local("_minor".to_string(), minor_ty.clone());
+            let placeholder =
+                self.push_local(SurfaceName::unspellable("_minor", 0), minor_ty.clone());
             tele = minor_cod.instantiate(&Expr::fvar(placeholder));
             self.pop_local();
         }
@@ -1923,7 +2096,7 @@ impl<'a> ElabCtx<'a> {
         expected: &Expr,
         recursive_fields: &[bool],
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         ind_info: &clean_kernel::InductiveVal,
         _scrutinee_ty: &Expr,
         _branch_ty: &Expr,
@@ -1944,7 +2117,7 @@ impl<'a> ElabCtx<'a> {
         let aux_arm: Option<clean_parser::SurfaceMatchArm> = if is_primary {
             None
         } else {
-            self.resolve_nested_mutual_aux_arm(ctor_name)
+            self.resolve_nested_mutual_aux_arm(ctor_name, ind_info)
         };
 
         // Resolve which arm (if any) covers this constructor, and the trailing
@@ -1966,14 +2139,24 @@ impl<'a> ElabCtx<'a> {
         // names the field binders `t`/`rest`, so the IH for each recursive field
         // is keyed by those names and a sibling self-call `Tree.size t` /
         // `Tree.sizeList rest` rewrites to it).
+        // First arm in source order wins: a constructor arm AFTER a catch-all
+        // is unreachable (see `try_build_ctor_ordered_rec_alts_inner`), and
+        // must lend neither its body nor its field names.
+        let position = |chosen: &clean_parser::SurfaceMatchArm| {
+            arms.iter().position(|a| std::ptr::eq(a, chosen))
+        };
+        let concrete_arm = match (concrete_arm, catch_all_arm) {
+            (Some(concrete), Some(catch_all)) if position(catch_all) < position(concrete) => None,
+            (concrete, _) => concrete,
+        };
         let pattern_source = aux_arm.as_ref().or(concrete_arm);
-        let field_var_names: Option<Vec<String>> =
+        let field_var_names: Option<Vec<Option<SurfaceName>>> =
             pattern_source.and_then(|arm| match &arm.pattern {
                 SurfacePattern::Ctor(_, sub_pats) => Some(
                     (0..num_fields)
                         .map(|i| match sub_pats.get(i) {
-                            Some(SurfacePattern::Var(n)) => n.clone(),
-                            _ => format!("_field_{i}"),
+                            Some(SurfacePattern::Var(n)) => Some(n.clone()),
+                            _ => None,
                         })
                         .collect(),
                 ),
@@ -1985,7 +2168,7 @@ impl<'a> ElabCtx<'a> {
         // dependent domain against the binders already pushed. The first
         // `num_fields` binders are fields; the remainder are IHs in field order.
         let mut binders: Vec<(FVarId, Expr)> = Vec::new();
-        let mut ih_map: HashMap<String, FVarId> = HashMap::new();
+        let mut ih_map: HashMap<FVarId, FVarId> = HashMap::new();
         let mut first_ih_fvar: Option<FVarId> = None;
         let recursive_field_positions: Vec<usize> = recursive_fields
             .iter()
@@ -2013,30 +2196,39 @@ impl<'a> ElabCtx<'a> {
             let name = if binder_idx < num_fields {
                 field_var_names
                     .as_ref()
-                    .and_then(|ns| ns.get(binder_idx).cloned())
-                    .unwrap_or_else(|| format!("_field_{binder_idx}"))
+                    .and_then(|ns| ns.get(binder_idx).cloned().flatten())
+                    .unwrap_or_else(|| {
+                        SurfaceName::from_name(Name::anon().str("_field").num(binder_idx as u64))
+                    })
             } else {
                 // IH binder: the (binder_idx - num_fields)-th recursive field.
                 let ih_pos = binder_idx - num_fields;
                 let field_pos = recursive_field_positions.get(ih_pos).copied();
                 let fname = field_pos
-                    .and_then(|fp| field_var_names.as_ref().and_then(|ns| ns.get(fp).cloned()))
-                    .unwrap_or_else(|| format!("_ih_{ih_pos}"));
-                format!("ih_{fname}")
+                    .and_then(|fp| {
+                        field_var_names
+                            .as_ref()
+                            .and_then(|ns| ns.get(fp).cloned().flatten())
+                    })
+                    .unwrap_or_else(|| {
+                        SurfaceName::from_name(Name::anon().str(format!("_ih_{ih_pos}")))
+                    });
+                generated_prefixed_name("ih_", &fname)
             };
             let fvar = self.push_local(name.clone(), dom.clone());
 
             if binder_idx >= num_fields {
-                // Register this IH for self-call rewriting, keyed by the field's
-                // pattern-variable name (matches `elaborate_rec_arm`'s ih_map).
+                // Key the IH by the captured field, not a shadowable name.
                 let ih_pos = binder_idx - num_fields;
                 if let Some(field_pos) = recursive_field_positions.get(ih_pos).copied() {
                     if let Some(fname) = field_var_names
                         .as_ref()
-                        .and_then(|ns| ns.get(field_pos).cloned())
+                        .and_then(|ns| ns.get(field_pos).cloned().flatten())
                     {
-                        if fname != "_" && !fname.starts_with("_field_") {
-                            ih_map.insert(fname, fvar);
+                        if !fname.is_unescaped_component("_") {
+                            if let Some((field, _)) = binders.get(field_pos) {
+                                ih_map.insert(*field, fvar);
+                            }
                         }
                     }
                 }
@@ -2128,9 +2320,10 @@ impl<'a> ElabCtx<'a> {
     /// carry the right short names. Returns a clone (no borrow held across the
     /// caller's mutable binder loop). `None` when no aux-arm source is installed,
     /// the constructor is not from the matching mirror, or no arm matches.
-    fn resolve_nested_mutual_aux_arm(
+    pub(super) fn resolve_nested_mutual_aux_arm(
         &self,
         aux_ctor: &Name,
+        primary: &clean_kernel::InductiveVal,
     ) -> Option<clean_parser::SurfaceMatchArm> {
         let aux = self.nested_mutual_aux_arms.as_ref()?;
         // The aux ctor must belong to the fold's container. Pre-B0-B5 that was a
@@ -2138,22 +2331,25 @@ impl<'a> ElabCtx<'a> {
         // (ed84e7d64) the aux is erased and re-keyed to the REAL container, so the
         // aux ctors are `List.nil`/`List.cons` (penultimate segment `List`). Accept
         // either form so the sibling arm still resolves for the fused fold.
-        let ctor_str = aux_ctor.to_string();
-        let mut segs = ctor_str.rsplit('.');
-        let ctor_short = segs.next()?.to_string();
-        let mirror_seg = segs.next()?; // pre-restore `_List`, restored `List`
-        if mirror_seg != format!("_{}", aux.container_short) && mirror_seg != aux.container_short {
+        let aux_ctor = SurfaceName::from_name(aux_ctor.clone());
+        let ctor_short = aux_ctor.last_component();
+        let aux_owner = aux_ctor.parent();
+        let mirror_seg = aux_owner.last_component();
+        let container = aux.container_name.last_component();
+        let restored_container = aux_owner == aux.container_name;
+        let legacy_mirror = mirror_seg == generated_prefixed_name("_", &container)
+            && primary.all_names.contains(aux_owner.parent().name());
+        if !restored_container && !legacy_mirror {
             return None;
         }
-        // Find the sibling arm whose pattern's constructor short name matches.
+        // Resolve the actual container constructor first, then compare its
+        // exact final component to the authenticated mirror constructor.
         aux.arms
             .iter()
             .find(|arm| match &arm.pattern {
-                SurfacePattern::Ctor(pat_ctor, _) => pat_ctor
-                    .rsplit('.')
-                    .next()
-                    .map(|s| s.eq_ignore_ascii_case(&ctor_short))
-                    .unwrap_or(false),
+                SurfacePattern::Ctor(pat_ctor, _) => self
+                    .resolve_ctor_name(pat_ctor, &aux.container_name)
+                    .is_some_and(|resolved| resolved.last_component() == ctor_short),
                 _ => false,
             })
             .cloned()
@@ -2166,28 +2362,20 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         ctor_name: &Name,
         arms: &'b [clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Option<&'b clean_parser::SurfaceMatchArm> {
-        let ctor_short = ctor_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or_default()
-            .to_string();
         for arm in arms {
             match &arm.pattern {
                 SurfacePattern::Ctor(pat_ctor, _) => {
                     let target = self.ctor_pattern_full_name(pat_ctor, type_name);
-                    if target == ctor_name.to_string()
-                        || target.rsplit('.').next() == Some(ctor_short.as_str())
-                    {
+                    if target.name() == ctor_name {
                         return Some(arm);
                     }
                 }
                 SurfacePattern::Var(name)
                     if self
                         .resolve_ctor_name(name, type_name)
-                        .map(|c| c == ctor_name.to_string())
+                        .map(|c| c.name() == ctor_name)
                         .unwrap_or(false) =>
                 {
                     return Some(arm);
@@ -2199,27 +2387,18 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Non-`&mut self` constructor-name resolution for use inside closures.
-    fn resolve_ctor_name_const(&self, name: &str, type_name: &str) -> Option<String> {
-        // `resolve_ctor_name` takes `&mut self`; replicate its read-only effect
-        // by checking the env for a constructor with this short name in scope.
-        let candidate = format!("{type_name}.{name}");
-        if self
-            .env
-            .get_constructor(&Name::from_string(&candidate))
-            .is_some()
-        {
-            return Some(candidate);
-        }
-        if self.env.get_constructor(&Name::from_string(name)).is_some() {
-            return Some(name.to_string());
-        }
-        None
+    fn resolve_ctor_name_const(
+        &self,
+        name: &SurfaceName,
+        type_name: &SurfaceName,
+    ) -> Option<SurfaceName> {
+        self.resolve_ctor_name(name, type_name)
     }
 
     pub(in crate::infer) fn try_build_ctor_ordered_rec_alts(
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -2238,12 +2417,62 @@ impl<'a> ElabCtx<'a> {
     fn try_build_ctor_ordered_rec_alts_inner(
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
     ) -> Result<Option<Vec<Expr>>, ElabError> {
-        let ind_name = Name::from_string(type_name);
+        // On `Nat`, `n + k` and a literal `k` ARE constructor patterns
+        // (`Nat.succ`ᵏ n, `Nat.succ`ᵏ 0). Left in their surface spelling they
+        // sent the match to the source-order loop below, which lays the arms
+        // out as minors in the order WRITTEN: `| x+1 => … | _ => …` put the
+        // `succ` arm in the `zero` slot and the kernel refused the definition
+        // (Lean 4.8.0 accepts it). Read them as the constructors they denote,
+        // so the constructor-ordered builder places each arm by constructor.
+        //
+        // Only when no arm is redundant. Lean 4.8.0 refuses a match with an
+        // unreachable alternative (`| x+1 => … | 0 => … | _ => …`), and so
+        // does Clean, naming it: the source-order loop used to fail those by
+        // accident, in the kernel or as a garbled type mismatch ("expected
+        // valid type, got Expected function type"), and this reading must not
+        // start admitting them.
+        let nat_arms: Vec<clean_parser::SurfaceMatchArm>;
+        let arms = if type_name.name() == &Name::from_string("Nat")
+            && arms.iter().any(|arm| {
+                matches!(
+                    arm.pattern,
+                    SurfacePattern::NumeralAdd(..) | SurfacePattern::Lit(SurfaceLit::Nat(_))
+                )
+            }) {
+            nat_arms = arms
+                .iter()
+                .map(|arm| clean_parser::SurfaceMatchArm {
+                    span: arm.span,
+                    pattern: match &arm.pattern {
+                        SurfacePattern::NumeralAdd(..) => {
+                            normalize_nested_nat_numeral_add_pattern(&arm.pattern)
+                        }
+                        SurfacePattern::Lit(SurfaceLit::Nat(0)) => SurfacePattern::Ctor(
+                            SurfaceName::generated_path("Nat.zero"),
+                            Vec::new(),
+                        ),
+                        SurfacePattern::Lit(SurfaceLit::Nat(k)) => desugar_nonzero_nat_lit(*k),
+                        other => other.clone(),
+                    },
+                    body: arm.body.clone(),
+                })
+                .collect();
+            match nat_arm_cover(&nat_arms) {
+                NatArmCover::Redundant(alt) => {
+                    return Err(redundant_alternative("the match on `Nat`", alt));
+                }
+                NatArmCover::Unread => arms,
+                NatArmCover::EveryArmReached => &nat_arms[..],
+            }
+        } else {
+            arms
+        };
+        let ind_name = type_name.name().clone();
         let Some(ind_info) = self.env.get_inductive(&ind_name).cloned() else {
             return Ok(None);
         };
@@ -2264,7 +2493,7 @@ impl<'a> ElabCtx<'a> {
         // varying-parameter motive (#1386) folds extra Pis into every minor
         // conclusion, which the telescope walk does not yet account for, so that
         // shape still defers to the legacy loop.
-        let rec_name = Name::from_string(&format!("{type_name}.rec"));
+        let rec_name = type_name.name().clone().str("rec");
         let is_multi_motive = self
             .env
             .get_recursor(&rec_name)
@@ -2329,7 +2558,7 @@ impl<'a> ElabCtx<'a> {
             );
         }
 
-        let rec_name = Name::from_string(&format!("{type_name}.rec"));
+        let rec_name = type_name.name().clone().str("rec");
 
         // Recursor rule metadata is authoritative for the IH telescope. Validate
         // every constructor before elaborating any arm: discovering a missing or
@@ -2360,27 +2589,19 @@ impl<'a> ElabCtx<'a> {
 
         let mut ordered = Vec::with_capacity(ind_info.constructor_names.len());
         for (ctor_name, recursive_fields) in &ctor_recursive_fields {
-            // Number of recursive fields = number of IH binders this minor
-            // premise must carry, read from the prevalidated genuine rule.
-            let ih_count = recursive_fields.iter().filter(|&&b| b).count();
-
-            // Find the arm handling this constructor (concrete match wins over a
-            // catch-all; the first concrete or first catch-all in source order).
-            let ctor_short = ctor_name
-                .to_string()
-                .rsplit('.')
-                .next()
-                .unwrap_or_default()
-                .to_string();
+            // Find the arm handling this constructor: the FIRST arm in source
+            // order that covers it, a catch-all included. An arm naming the
+            // constructor AFTER a catch-all is unreachable (Lean reports it as a
+            // redundant alternative); letting it win made `| x => x + 1 |
+            // Nat.succ k => g k + 10` reduce `g 2` to `21` where the source (and
+            // the non-recursive lowering) gives `3` (measured 2026-09-25).
             let mut concrete: Option<(usize, &clean_parser::SurfaceMatchArm)> = None;
             let mut catch_all: Option<(usize, &clean_parser::SurfaceMatchArm)> = None;
             for (arm_idx, arm) in arms.iter().enumerate() {
                 match &arm.pattern {
                     SurfacePattern::Ctor(pat_ctor, _) => {
                         let target = self.ctor_pattern_full_name(pat_ctor, type_name);
-                        if target == ctor_name.to_string()
-                            || target.rsplit('.').next() == Some(ctor_short.as_str())
-                        {
+                        if target.name() == ctor_name {
                             if concrete.is_none() {
                                 concrete = Some((arm_idx, arm));
                             }
@@ -2390,7 +2611,7 @@ impl<'a> ElabCtx<'a> {
                     SurfacePattern::Var(name)
                         if self
                             .resolve_ctor_name(name, type_name)
-                            .map(|c| c == ctor_name.to_string())
+                            .map(|c| c.name() == ctor_name)
                             .unwrap_or(false) =>
                     {
                         if concrete.is_none() {
@@ -2400,9 +2621,7 @@ impl<'a> ElabCtx<'a> {
                     }
                     SurfacePattern::Wildcard | SurfacePattern::Var(_) if catch_all.is_none() => {
                         catch_all = Some((arm_idx, arm));
-                        // Keep scanning: an explicit later arm could still name
-                        // this constructor before the catch-all applies. (Lean
-                        // forbids that, but be defensive.)
+                        break;
                     }
                     SurfacePattern::Wildcard | SurfacePattern::Var(_) => {}
                     _ => {}
@@ -2414,16 +2633,16 @@ impl<'a> ElabCtx<'a> {
                 // field + IH binder structure, routing the recursive call(s) in
                 // the body through the induction hypotheses.
                 match &arm.pattern {
-                    SurfacePattern::Var(name) => {
-                        // Nullary constructor named by a bare identifier alias:
-                        // a plain value, no field/IH binders.
-                        self.elaborate_var_arm(
-                            name,
-                            arm,
-                            arm_idx,
-                            type_name,
+                    SurfacePattern::Var(_) => {
+                        // Even a nullary rule must specialize the current
+                        // major/index references in its source body.
+                        self.elaborate_rec_arm(
+                            &SurfaceName::from_name(ctor_name.clone()),
+                            &[],
+                            &arm.body,
                             scrutinee_ty,
                             branch_ty,
+                            arm_idx,
                             extra_param_info,
                         )?
                     }
@@ -2434,53 +2653,45 @@ impl<'a> ElabCtx<'a> {
                             &full_ctor,
                             sub_pats,
                         )?;
-                        if normalized_sub_pats.is_empty() {
-                            // Nullary constructor: plain value, no field/IH binders.
-                            let arm_ty = self.dependent_arm_branch_ty(
-                                branch_ty,
-                                &full_ctor,
-                                scrutinee_ty,
-                                &[],
-                            )?;
-                            let arm_body =
-                                self.elaborate_with_expected_type(&arm.body, Some(arm_ty.clone()))?;
-                            wrap_with_extra_params(arm_body, extra_param_info)
-                        } else {
-                            self.elaborate_rec_arm(
-                                &full_ctor,
-                                &normalized_sub_pats,
-                                &arm.body,
-                                scrutinee_ty,
-                                branch_ty,
-                                arm_idx,
-                                extra_param_info,
-                            )?
-                        }
+                        self.elaborate_rec_arm(
+                            &full_ctor,
+                            &normalized_sub_pats,
+                            &arm.body,
+                            scrutinee_ty,
+                            branch_ty,
+                            arm_idx,
+                            extra_param_info,
+                        )?
                     }
                     _ => return Ok(None),
                 }
             } else if let Some((arm_idx, arm)) = catch_all {
-                // Catch-all for this constructor: build the body (a plain
-                // `branch_ty` value) and wrap it with the constructor's field
-                // lambdas followed by `ih_count` induction-hypothesis lambdas,
-                // so the minor premise arity matches what `T.rec` expects.
-                let Some(body) = self.compile_ctor_catch_all_alt(
-                    ctor_name,
-                    arm,
-                    arm_idx,
+                // A catch-all is still a real recursive minor: use the same
+                // constructor specialization and field/IH telescope as an
+                // explicitly named arm, including nullary rules.
+                let body = if let SurfacePattern::Var(alias) = &arm.pattern {
+                    let major_name = self
+                        .recursive_def_ctx
+                        .as_ref()
+                        .map(|ctx| ctx.decreasing_arg_name.clone())
+                        .ok_or(ElabError::CannotInfer)?;
+                    wrap_alias_surface_body(
+                        alias,
+                        SurfaceExpr::Ident(clean_parser::Span::dummy(), major_name),
+                        &arm.body,
+                    )
+                } else {
+                    arm.body.clone()
+                };
+                self.elaborate_rec_arm(
+                    &SurfaceName::from_name(ctor_name.clone()),
+                    &vec![SurfacePattern::Wildcard; recursive_fields.len()],
+                    &body,
                     scrutinee_ty,
                     branch_ty,
+                    arm_idx,
                     extra_param_info,
                 )?
-                else {
-                    return Ok(None);
-                };
-                let mut alt = body;
-                for _ in 0..ih_count {
-                    let ih_ty = generalize_with_extra_params(branch_ty.clone(), extra_param_info);
-                    alt = Expr::lam(BinderInfo::Default, ih_ty, alt);
-                }
-                alt
             } else {
                 // No arm covers this constructor and there is no catch-all:
                 // non-exhaustive. Defer to the legacy loop / error path.
@@ -2514,7 +2725,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
         ind_info: &clean_kernel::InductiveVal,
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -2525,7 +2736,7 @@ impl<'a> ElabCtx<'a> {
         if ind_info.all_names.len() > 1 || ind_info.is_nested {
             return Ok(None);
         }
-        let rec_name = Name::from_string(&format!("{type_name}.rec"));
+        let rec_name = type_name.name().clone().str("rec");
         let Some(rec_val) = self.env.get_recursor(&rec_name).cloned() else {
             return Ok(None);
         };
@@ -2557,7 +2768,7 @@ impl<'a> ElabCtx<'a> {
         // targets (a concrete `Ctor`/nullary alias) or whether it is a genuine
         // catch-all (covers every constructor). Anything else → defer.
         enum ArmTarget {
-            Ctor(String),
+            Ctor(SurfaceName),
             CatchAll,
         }
         let mut arm_targets: Vec<ArmTarget> = Vec::with_capacity(arms.len());
@@ -2579,9 +2790,6 @@ impl<'a> ElabCtx<'a> {
 
         let mut ordered = Vec::with_capacity(ind_info.constructor_names.len());
         for (ctor_name, recursive_fields) in &ctor_recursive_fields {
-            let ctor_str = ctor_name.to_string();
-            let ctor_short = ctor_str.rsplit('.').next().unwrap_or_default();
-
             // Collect the arms covering this constructor, in source (priority)
             // order: every arm whose target is this ctor, plus catch-alls (which
             // cover it). Stop at the first catch-all — later arms are unreachable
@@ -2590,8 +2798,7 @@ impl<'a> ElabCtx<'a> {
             for (idx, (arm, target)) in arms.iter().zip(arm_targets.iter()).enumerate() {
                 match target {
                     ArmTarget::Ctor(full) => {
-                        let matches_ctor =
-                            full == &ctor_str || full.rsplit('.').next() == Some(ctor_short);
+                        let matches_ctor = full.name() == ctor_name;
                         if matches_ctor {
                             covering.push((idx, arm, false));
                         }
@@ -2608,67 +2815,162 @@ impl<'a> ElabCtx<'a> {
                 return Ok(None);
             }
 
-            // Fold the covering arms into one minor, lowest-priority first so each
-            // higher-priority arm's nested dispatch falls back to the already-built
-            // minor for the same constructor.
-            let mut compiled: Option<Expr> = None;
-            for (arm_idx, arm, is_catch_all) in covering.into_iter().rev() {
-                let alt = if is_catch_all {
-                    // A genuine catch-all minor: build the body (which may itself
-                    // recurse — it needs the IH too) wrapped in the constructor's
-                    // field binders followed by `ih_count` IH binders, exactly as
-                    // a `T.rec` minor premise expects. `elaborate_rec_arm` over a
-                    // freshly synthesized all-wildcard sub-pattern installs the IHs
-                    // and routes a self-call on the recursive field to them.
-                    let wildcard_pats = vec![SurfacePattern::Wildcard; recursive_fields.len()];
-                    self.elaborate_rec_arm(
-                        &ctor_str,
-                        &wildcard_pats,
-                        &arm.body,
+            // Several arms may cover this constructor through different field
+            // sub-patterns. The fallback chain compiles them unless the cover is
+            // exhaustive only JOINTLY (its last arm is itself partial); the field
+            // decision tree is then the rescue (`rec_column_split`). Where the
+            // rescue applies, the chain runs as a transaction so the rescue starts
+            // from the entry state; a chain that succeeds keeps its term.
+            // Reading the rows is pure; a shape it cannot read only means there
+            // is no rescue, never a new failure ahead of the chain.
+            let split_rows = self
+                .nested_head_rec_split_rows(ctor_name, &covering, type_name, scrutinee_ty)
+                .ok()
+                .flatten();
+            // The field tree over those rows decides, whichever lowering
+            // compiles the minor, whether some arm is selected by no value
+            // (Lean 4.8.0: "redundant alternative" — the chain would compile it
+            // and never run it) and whether the cover is exhaustive.
+            let split_reach = match &split_rows {
+                Some((rows, _)) => self
+                    .rec_ctor_field_split_reach(ctor_name, rows, scrutinee_ty)
+                    .ok()
+                    .flatten(),
+                None => None,
+            };
+            if let (Some(reach), Some((_, alts))) = (&split_reach, &split_rows) {
+                if let Some(row) = reach.first_unreached() {
+                    return Err(redundant_alternative(
+                        &format!("the match on `{type_name}`"),
+                        alts[row],
+                    ));
+                }
+            }
+            let chain = if split_rows.is_some() {
+                self.with_optional_temporary_local_scope(|this| {
+                    this.fold_nested_head_rec_chain(
+                        ctor_name,
+                        recursive_fields.len(),
+                        &covering,
+                        type_name,
                         scrutinee_ty,
                         branch_ty,
-                        arm_idx,
                         extra_param_info,
-                    )?
-                } else {
-                    let SurfacePattern::Ctor(pat_ctor, sub_pats) = &arm.pattern else {
-                        return Ok(None);
-                    };
-                    let full_ctor = self.ctor_pattern_full_name(pat_ctor, type_name);
-                    let normalized_sub_pats = self.expand_implicit_ctor_field_patterns(
-                        "match arm pattern",
-                        &full_ctor,
-                        sub_pats,
-                    )?;
-                    if normalized_sub_pats.is_empty() {
-                        // Nullary constructor: plain value, no field/IH binders.
-                        let arm_ty =
-                            self.dependent_arm_branch_ty(branch_ty, &full_ctor, scrutinee_ty, &[])?;
-                        let arm_body =
-                            self.elaborate_with_expected_type(&arm.body, Some(arm_ty.clone()))?;
-                        wrap_with_extra_params(arm_body, extra_param_info)
-                    } else {
-                        self.elaborate_rec_arm_with_fallback(
-                            &full_ctor,
-                            &normalized_sub_pats,
-                            &arm.body,
-                            scrutinee_ty,
-                            branch_ty,
-                            arm_idx,
-                            extra_param_info,
-                            compiled.as_ref(),
-                        )?
+                    )
+                })
+            } else {
+                self.fold_nested_head_rec_chain(
+                    ctor_name,
+                    recursive_fields.len(),
+                    &covering,
+                    type_name,
+                    scrutinee_ty,
+                    branch_ty,
+                    extra_param_info,
+                )
+            };
+            let alt = match (chain, split_rows) {
+                (Ok(Some(alt)), _) => alt,
+                (Ok(None), _) => return Ok(None),
+                (Err(chain_err), None) => return Err(chain_err),
+                (Err(chain_err), Some((rows, alts))) => {
+                    match self.compile_rec_ctor_field_column_split(
+                        ctor_name,
+                        &rows,
+                        alts[0],
+                        scrutinee_ty,
+                        branch_ty,
+                        extra_param_info,
+                    ) {
+                        Ok(Some(split)) => split,
+                        // The tree covers every value, so its failure is an
+                        // arm's own (a body that does not typecheck), which
+                        // the chain would misreport as a missing constructor.
+                        Err(tree_err)
+                            if split_reach.as_ref().is_some_and(RowReach::is_exhaustive) =>
+                        {
+                            return Err(tree_err)
+                        }
+                        // A genuinely partial cover fails the tree too; the
+                        // chain's diagnostic names the missing constructor.
+                        Ok(None) | Err(_) => return Err(chain_err),
                     }
-                };
-                compiled = Some(alt);
-            }
-
-            let Some(alt) = compiled else {
-                return Ok(None);
+                }
             };
             ordered.push(alt);
         }
 
         Ok(Some(ordered))
+    }
+}
+
+/// What the arms of a `Nat` match (constructor-spelled: `Nat.zero`,
+/// `Nat.succ p`, variable, wildcard) reach.
+enum NatArmCover {
+    /// Every arm is the first match for some value.
+    EveryArmReached,
+    /// Arm `.0` (0-based) is the first match for no value: every case it
+    /// covers is fully covered by earlier arms.
+    Redundant(usize),
+    /// Some arm has a shape this reading does not classify; the paths that
+    /// read the arms as written decide.
+    Unread,
+}
+
+/// Which arm of a `Nat` match, if any, no value reaches. A `Nat.succ` arm whose
+/// field is not a variable covers `succ` only partly, so a later arm under it
+/// is never called redundant on its account: a reported arm is always
+/// redundant, though two partial arms over the same values go unreported.
+fn nat_arm_cover(arms: &[clean_parser::SurfaceMatchArm]) -> NatArmCover {
+    let (mut zero, mut succ) = (false, false);
+    for (idx, arm) in arms.iter().enumerate() {
+        let (covers_zero, covers_succ, full) = match &arm.pattern {
+            SurfacePattern::Var(_) | SurfacePattern::Wildcard => (true, true, true),
+            SurfacePattern::Ctor(name, subs)
+                if subs.is_empty() && name.name().to_string() == "Nat.zero" =>
+            {
+                (true, false, true)
+            }
+            SurfacePattern::Ctor(name, subs)
+                if subs.len() == 1 && name.name().to_string() == "Nat.succ" =>
+            {
+                (
+                    false,
+                    true,
+                    matches!(subs[0], SurfacePattern::Var(_) | SurfacePattern::Wildcard),
+                )
+            }
+            // Anything else is left to the paths that read it as written.
+            _ => return NatArmCover::Unread,
+        };
+        if (!covers_zero || zero) && (!covers_succ || succ) {
+            // Classify the rest before reporting: an unread arm anywhere
+            // leaves the match to the paths that read it as written.
+            return if arms[idx + 1..]
+                .iter()
+                .all(|arm| nat_arm_is_read(&arm.pattern))
+            {
+                NatArmCover::Redundant(idx)
+            } else {
+                NatArmCover::Unread
+            };
+        }
+        if full {
+            zero |= covers_zero;
+            succ |= covers_succ;
+        }
+    }
+    NatArmCover::EveryArmReached
+}
+
+/// Whether [`nat_arm_cover`] classifies `pattern`.
+fn nat_arm_is_read(pattern: &SurfacePattern) -> bool {
+    match pattern {
+        SurfacePattern::Var(_) | SurfacePattern::Wildcard => true,
+        SurfacePattern::Ctor(name, subs) => {
+            (subs.is_empty() && name.name().to_string() == "Nat.zero")
+                || (subs.len() == 1 && name.name().to_string() == "Nat.succ")
+        }
+        _ => false,
     }
 }

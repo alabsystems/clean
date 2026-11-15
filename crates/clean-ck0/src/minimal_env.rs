@@ -20,8 +20,16 @@ use crate::validate::{
 /// recursor names.
 #[derive(Debug, Default, Clone)]
 pub struct MinimalEnv {
+    /// Read-only base of a temporary export admission overlay; never nested.
+    admission_base: Option<std::sync::Arc<MinimalEnv>>,
     consts: std::collections::HashMap<Name, u32>,
+    /// Private lowering symbols are never names the wire input may reference.
+    #[cfg(feature = "export")]
+    export_hidden: std::collections::HashSet<Name>,
+    /// None preserves the host API; Some explicitly licenses individual folds.
+    native_nat_folds: Option<std::collections::HashSet<Name>>,
     types: std::collections::HashMap<Name, Term>,
+    string_literal_view: bool,
     defs: std::collections::HashMap<Name, ConstDef>,
     inductives: std::collections::HashMap<Name, bool>,
     quots: std::collections::HashMap<Name, QuotKind>,
@@ -44,7 +52,8 @@ pub struct MinimalEnv {
     ind_ctors: std::collections::HashMap<Name, Vec<(Name, Term)>>,
     /// M3: full admitted-mutual records, keyed by EACH block type name (so a
     /// member name resolves the whole block for the idempotency check).
-    admitted_mutuals: std::collections::HashMap<Name, crate::mutual::AdmittedMutual>,
+    admitted_mutuals:
+        std::collections::HashMap<Name, std::sync::Arc<crate::mutual::AdmittedMutual>>,
 }
 
 impl MinimalEnv {
@@ -52,6 +61,49 @@ impl MinimalEnv {
     #[must_use]
     pub fn new() -> Self {
         Self::default()
+    }
+
+    #[cfg(feature = "export")]
+    pub(crate) fn restrict_native_nat_folds(&mut self) {
+        self.native_nat_folds = Some(std::collections::HashSet::new());
+    }
+
+    #[cfg(feature = "export")]
+    pub(crate) fn license_native_nat(&mut self, name: Name) {
+        if let Some(allowed) = &mut self.native_nat_folds {
+            allowed.insert(name);
+        }
+    }
+
+    #[cfg(feature = "export")]
+    pub(crate) fn license_string_literal_view(&mut self) {
+        self.string_literal_view = true;
+    }
+
+    #[cfg(feature = "export")]
+    pub(crate) fn hide_from_export(&mut self, name: Name) {
+        self.export_hidden.insert(name);
+    }
+
+    #[cfg(feature = "export")]
+    pub(crate) fn hidden_from_export(&self, name: &Name) -> bool {
+        self.export_hidden.contains(name)
+            || self
+                .admission_base
+                .as_deref()
+                .is_some_and(|base| base.hidden_from_export(name))
+    }
+
+    #[cfg(feature = "export")]
+    pub(crate) fn recursor_export_alias(&mut self, alias: Name, owner: &Name) -> Option<()> {
+        if self.consts.contains_key(&alias) {
+            return None;
+        }
+        let levels = self.consts.get(&owner.str("rec")).copied()?;
+        self.consts.insert(alias.clone(), levels);
+        self.recursors.insert(alias.clone());
+        self.rec_name_to_ind.insert(alias, owner.clone());
+        Some(())
     }
 
     /// Register a constant with `num_level_params`.
@@ -197,42 +249,80 @@ impl MinimalEnv {
 }
 
 impl Env for MinimalEnv {
+    fn string_literal_view(&self) -> bool {
+        self.string_literal_view
+    }
+
+    fn native_nat_allowed(&self, name: &Name) -> bool {
+        match &self.native_nat_folds {
+            None => true,
+            Some(allowed) => allowed.contains(name),
+        }
+    }
+
     fn num_level_params(&self, name: &Name) -> Option<u32> {
-        self.consts.get(name).copied()
+        self.consts
+            .get(name)
+            .copied()
+            .or_else(|| self.admission_base.as_deref()?.num_level_params(name))
     }
     fn inductive_large_elim(&self, name: &Name) -> Option<bool> {
-        self.inductives.get(name).copied()
+        self.inductives
+            .get(name)
+            .copied()
+            .or_else(|| self.admission_base.as_deref()?.inductive_large_elim(name))
     }
     fn const_def(&self, name: &Name) -> Option<ConstDef> {
-        self.defs.get(name).cloned()
+        self.defs
+            .get(name)
+            .cloned()
+            .or_else(|| self.admission_base.as_deref()?.const_def(name))
     }
     fn const_type(&self, name: &Name) -> Option<Term> {
-        self.types.get(name).cloned()
+        self.types
+            .get(name)
+            .cloned()
+            .or_else(|| self.admission_base.as_deref()?.const_type(name))
     }
     fn quot_kind(&self, name: &Name) -> Option<QuotKind> {
-        self.quots.get(name).copied()
+        self.quots
+            .get(name)
+            .copied()
+            .or_else(|| self.admission_base.as_deref()?.quot_kind(name))
     }
     fn is_recursor(&self, name: &Name) -> bool {
         self.recursors.contains(name)
+            || self
+                .admission_base
+                .as_deref()
+                .is_some_and(|base| base.is_recursor(name))
     }
     fn recursor_inductive(&self, name: &Name) -> Option<Name> {
-        if !self.recursors.contains(name) {
-            return None;
-        }
-        self.rec_name_to_ind.get(name).cloned()
+        self.rec_name_to_ind
+            .get(name)
+            .cloned()
+            .or_else(|| self.admission_base.as_deref()?.recursor_inductive(name))
     }
     fn constructor_arity(&self, name: &Name) -> Option<ConstructorArity> {
-        self.ctors.get(name).copied()
+        self.ctors
+            .get(name)
+            .copied()
+            .or_else(|| self.admission_base.as_deref()?.constructor_arity(name))
     }
     fn structure_info(&self, struct_name: &Name) -> Option<StructureInfo> {
-        self.structs.get(struct_name).cloned()
+        self.structs
+            .get(struct_name)
+            .cloned()
+            .or_else(|| self.admission_base.as_deref()?.structure_info(struct_name))
     }
     fn recursor_type(&self, name: &Name) -> Option<Term> {
         let ind = self.rec_name_to_ind.get(name).unwrap_or(name);
         if let Some(a) = self.admitted_inductives.get(ind) {
             return Some(a.recursor.type_.clone());
         }
-        let m = self.admitted_mutuals.get(ind)?;
+        let Some(m) = self.admitted_mutuals.get(ind) else {
+            return self.admission_base.as_deref()?.recursor_type(ind);
+        };
         m.recursors
             .iter()
             .find(|r| r.inductive == *ind)
@@ -243,7 +333,9 @@ impl Env for MinimalEnv {
         if let Some(a) = self.admitted_inductives.get(ind) {
             return Some(a.recursor.rules.clone());
         }
-        let m = self.admitted_mutuals.get(ind)?;
+        let Some(m) = self.admitted_mutuals.get(ind) else {
+            return self.admission_base.as_deref()?.recursor_rules(ind);
+        };
         m.recursors
             .iter()
             .find(|r| r.inductive == *ind)
@@ -262,7 +354,9 @@ impl Env for MinimalEnv {
         }
         // Mutual-block recursor shape: find the recursor among the block whose
         // `inductive` is `ind`.
-        let m = self.admitted_mutuals.get(ind)?;
+        let Some(m) = self.admitted_mutuals.get(ind) else {
+            return self.admission_base.as_deref()?.recursor_shape(ind);
+        };
         let rec = m.recursors.iter().find(|r| r.inductive == *ind)?;
         Some(RecursorShape {
             num_params: rec.num_params,
@@ -274,181 +368,36 @@ impl Env for MinimalEnv {
     }
 
     fn inductive_num_params(&self, name: &Name) -> Option<u32> {
-        self.ind_num_params.get(name).copied()
+        self.ind_num_params
+            .get(name)
+            .copied()
+            .or_else(|| self.admission_base.as_deref()?.inductive_num_params(name))
+    }
+
+    fn inductive_family(&self, name: &Name) -> Option<Vec<Name>> {
+        if let Some(block) = self.admitted_mutuals.get(name) {
+            let members = block.block.decls.iter().map(|d| d.name.clone());
+            #[cfg(feature = "export")]
+            let members = members.filter(|n| !self.hidden_from_export(n));
+            return Some(members.collect());
+        }
+        if let Some(base) = self.admission_base.as_deref() {
+            if let Some(family) = base.inductive_family(name) {
+                return Some(family);
+            }
+        }
+        self.inductive_num_params(name).map(|_| vec![name.clone()])
     }
 
     fn inductive_constructors(&self, name: &Name) -> Option<Vec<(Name, Term)>> {
-        self.ind_ctors.get(name).cloned()
+        self.ind_ctors
+            .get(name)
+            .cloned()
+            .or_else(|| self.admission_base.as_deref()?.inductive_constructors(name))
     }
 }
 
-impl crate::inductive::MutableEnv for MinimalEnv {
-    fn has_inductive(&self, name: &Name) -> bool {
-        self.admitted_inductives.contains_key(name) || self.admitted_mutuals.contains_key(name)
-    }
+mod admission;
 
-    fn admitted(&self, name: &Name) -> Option<crate::inductive::AdmittedInductive> {
-        self.admitted_inductives.get(name).cloned()
-    }
-
-    fn admitted_mutual_decl(&self, name: &Name) -> Option<crate::inductive::InductiveDecl> {
-        if let Some(a) = self.admitted_inductives.get(name) {
-            return Some(a.decl.clone());
-        }
-        let m = self.admitted_mutuals.get(name)?;
-        m.block.decls.iter().find(|d| d.name == *name).cloned()
-    }
-
-    fn commit_inductive(&mut self, admitted: crate::inductive::AdmittedInductive) {
-        let decl = &admitted.decl;
-        // Register the inductive type former.
-        self.consts.insert(decl.name.clone(), decl.num_level_params);
-        self.types.insert(decl.name.clone(), decl.type_.clone());
-        self.inductives
-            .insert(decl.name.clone(), admitted.large_elim);
-        // M3: container metadata so a singly-admitted inductive can later be a
-        // nesting container (e.g. List nested inside RoseTree).
-        self.ind_num_params
-            .insert(decl.name.clone(), decl.num_params);
-        self.ind_ctors.insert(
-            decl.name.clone(),
-            decl.constructors
-                .iter()
-                .map(|c| (c.name.clone(), c.type_.clone()))
-                .collect(),
-        );
-        // Register constructors (type + param/field arity).
-        for ctor in &decl.constructors {
-            let arity = crate::inductive::count_pi(&ctor.type_);
-            let num_fields = arity.saturating_sub(decl.num_params);
-            self.consts.insert(ctor.name.clone(), decl.num_level_params);
-            self.types.insert(ctor.name.clone(), ctor.type_.clone());
-            self.ctors.insert(
-                ctor.name.clone(),
-                ConstructorArity {
-                    num_params: decl.num_params,
-                    num_fields,
-                },
-            );
-        }
-        // Single-constructor inductive → also a structure (for proj/structure-η)
-        // ONLY when it is a genuine η-structure: 1 ctor, NO indices, NON-recursive
-        // (so `mk (proj t) ≡ t`). An indexed or recursive single-ctor inductive
-        // (e.g. `Eq`, or a recursive record) is NOT η-eligible — registering it
-        // would make structure-η a false-accept. Fail-closed: gate before insert.
-        if decl.constructors.len() == 1 {
-            let ctor = &decl.constructors[0];
-            let arity = crate::inductive::count_pi(&ctor.type_);
-            let num_fields = arity.saturating_sub(decl.num_params);
-            if crate::inductive::is_eta_structure(
-                &ctor.type_,
-                decl.num_params,
-                admitted.recursor.num_indices,
-                decl.constructors.len(),
-                std::slice::from_ref(&decl.name),
-            ) {
-                self.structs.insert(
-                    decl.name.clone(),
-                    StructureInfo {
-                        ctor: ctor.name.clone(),
-                        num_params: decl.num_params,
-                        num_fields,
-                    },
-                );
-            }
-        }
-        // Register the recursor: name → inductive map, level-param count, and
-        // mark it as a recursor.
-        let rec = &admitted.recursor;
-        self.consts.insert(rec.name.clone(), rec.num_level_params);
-        self.recursors.insert(rec.name.clone());
-        self.rec_name_to_ind
-            .insert(rec.name.clone(), decl.name.clone());
-        self.admitted_inductives.insert(decl.name.clone(), admitted);
-    }
-}
-
-impl crate::mutual::MutableMutualEnv for MinimalEnv {
-    fn commit_mutual(&mut self, admitted: crate::mutual::AdmittedMutual) {
-        let np = admitted.block.num_params();
-        let nlp = admitted.block.num_level_params();
-        // The whole block is the recursion "family": a single-ctor member is an
-        // η-structure only if NONE of its fields mention ANY block member (a
-        // cross-member recursive field is just as non-projectable as a self-
-        // recursive one).
-        let family: Vec<Name> = admitted
-            .block
-            .decls
-            .iter()
-            .map(|d| d.name.clone())
-            .collect();
-        // Register every block type former + constructors + container metadata.
-        for d in &admitted.block.decls {
-            self.consts.insert(d.name.clone(), nlp);
-            self.types.insert(d.name.clone(), d.type_.clone());
-            self.inductives.insert(d.name.clone(), admitted.large_elim);
-            self.ind_num_params.insert(d.name.clone(), np);
-            self.ind_ctors.insert(
-                d.name.clone(),
-                d.constructors
-                    .iter()
-                    .map(|c| (c.name.clone(), c.type_.clone()))
-                    .collect(),
-            );
-            for ctor in &d.constructors {
-                let arity = crate::inductive::count_pi(&ctor.type_);
-                let num_fields = arity.saturating_sub(np);
-                self.consts.insert(ctor.name.clone(), nlp);
-                self.types.insert(ctor.name.clone(), ctor.type_.clone());
-                self.ctors.insert(
-                    ctor.name.clone(),
-                    ConstructorArity {
-                        num_params: np,
-                        num_fields,
-                    },
-                );
-            }
-            // η-structure gate (mutual): 1 ctor, NO indices, NON-recursive across
-            // the whole block. `num_indices` comes from this member's derived
-            // recursor; a missing recursor (should not happen) fails the gate.
-            if d.constructors.len() == 1 {
-                let ctor = &d.constructors[0];
-                let arity = crate::inductive::count_pi(&ctor.type_);
-                let num_fields = arity.saturating_sub(np);
-                let num_indices = admitted
-                    .recursors
-                    .iter()
-                    .find(|r| r.inductive == d.name)
-                    .map_or(u32::MAX, |r| r.num_indices);
-                if crate::inductive::is_eta_structure(
-                    &ctor.type_,
-                    np,
-                    num_indices,
-                    d.constructors.len(),
-                    &family,
-                ) {
-                    self.structs.insert(
-                        d.name.clone(),
-                        StructureInfo {
-                            ctor: ctor.name.clone(),
-                            num_params: np,
-                            num_fields,
-                        },
-                    );
-                }
-            }
-        }
-        // Register each derived recursor: name → inductive map, level count.
-        for rec in &admitted.recursors {
-            self.consts.insert(rec.name.clone(), rec.num_level_params);
-            self.recursors.insert(rec.name.clone());
-            self.rec_name_to_ind
-                .insert(rec.name.clone(), rec.inductive.clone());
-        }
-        // Key the block record by EACH member name.
-        for d in &admitted.block.decls {
-            self.admitted_mutuals
-                .insert(d.name.clone(), admitted.clone());
-        }
-    }
-}
+#[cfg(feature = "export")]
+mod overlay;

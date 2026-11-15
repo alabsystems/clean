@@ -12,7 +12,7 @@ use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
-use std::sync::mpsc;
+use std::sync::{mpsc, OnceLock};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -54,17 +54,21 @@ fn clean_binary() -> PathBuf {
 
 fn build_clean_binary() -> PathBuf {
     let root = workspace_root();
-    let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
+    // `$CARGO` is targo, which refuses a lane-less `build`: select the lane.
+    let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("targo"));
     let status = Command::new(cargo)
-        .args(["build", "--quiet", "-p", "clean", "--bin", "clean"])
+        .args(["--unverified", "build", "--quiet"])
+        .args(["-p", "clean", "--bin", "clean"])
         .current_dir(&root)
         .env("CARGO_TERM_COLOR", "never")
         .status()
         .expect("cargo build -p clean --bin clean should start");
     assert!(status.success(), "failed to build clean binary: {status}");
 
-    let binary = root
-        .join("target")
+    // The nested build inherits CARGO_TARGET_DIR (a relative one is under `root`).
+    let target_dir =
+        env::var_os("CARGO_TARGET_DIR").map_or_else(|| root.join("target"), |dir| root.join(dir));
+    let binary = target_dir
         .join("debug")
         .join(format!("clean{}", env::consts::EXE_SUFFIX));
     assert!(
@@ -75,11 +79,19 @@ fn build_clean_binary() -> PathBuf {
     binary
 }
 
+/// The launch token every test server here requires, and every `clean`
+/// subprocess presents (`CLEAN_SERVER_TOKEN`).
+fn test_launch_token() -> &'static clean_server::LaunchToken {
+    static TOKEN: OnceLock<clean_server::LaunchToken> = OnceLock::new();
+    TOKEN.get_or_init(|| clean_server::LaunchToken::generate().expect("test launch token"))
+}
+
 fn run_clean(args: &[&str]) -> Output {
     Command::new(clean_binary())
         .args(args)
         .current_dir(workspace_root())
         .env("CARGO_TERM_COLOR", "never")
+        .env("CLEAN_SERVER_TOKEN", test_launch_token().as_str())
         .output()
         .unwrap_or_else(|err| panic!("failed to run clean {args:?}: {err}"))
 }
@@ -89,7 +101,8 @@ fn run_clean_with_env(args: &[&str], envs: &[(&str, &str)]) -> Output {
     command
         .args(args)
         .current_dir(workspace_root())
-        .env("CARGO_TERM_COLOR", "never");
+        .env("CARGO_TERM_COLOR", "never")
+        .env("CLEAN_SERVER_TOKEN", test_launch_token().as_str());
     for (name, value) in envs {
         command.env(name, value);
     }
@@ -161,6 +174,11 @@ impl Drop for CleanServer {
 }
 
 fn start_clean_server() -> CleanServer {
+    // The prelude is built before the server thread starts, so the address
+    // wait below times the server's start alone: a debug prelude build is
+    // ~8.5 s on an idle machine, and inside the window it ran out under load.
+    let initial_env =
+        clean_kernel::Environment::try_with_prelude().expect("test server prelude environment");
     let (addr_tx, addr_rx) = mpsc::channel();
     let (stop_tx, stop_rx) = mpsc::channel();
     let thread = std::thread::spawn(move || {
@@ -169,12 +187,10 @@ fn start_clean_server() -> CleanServer {
             .build()
             .expect("test server runtime");
         runtime.block_on(async move {
-            let mut config =
-                clean_server::ServerConfig::new().with_addr("127.0.0.1:0".parse().unwrap());
-            config.initial_env = Some(
-                clean_kernel::Environment::try_with_prelude()
-                    .expect("test server prelude environment"),
-            );
+            let mut config = clean_server::ServerConfig::new()
+                .with_addr("127.0.0.1:0".parse().unwrap())
+                .with_launch_token(test_launch_token().clone());
+            config.initial_env = Some(initial_env);
             let handle = clean_server::serve(config)
                 .await
                 .expect("start test server");
@@ -208,16 +224,33 @@ fn wait_for_server(addr: &str) {
     panic!("clean server at {addr} did not become ready");
 }
 
-fn rpc_server_info(addr: &str) -> std::io::Result<()> {
+/// `serverInfo`'s answer line, on a connection that presented the test token.
+fn rpc_server_info_line(addr: &str) -> std::io::Result<String> {
     let mut stream = TcpStream::connect(addr)?;
     stream.set_read_timeout(Some(Duration::from_secs(1)))?;
     stream.set_write_timeout(Some(Duration::from_secs(1)))?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    writeln!(
+        stream,
+        r#"{{"jsonrpc":"2.0","method":"authenticate","params":{{"token":"{}"}},"id":0}}"#,
+        test_launch_token().as_str()
+    )?;
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    if !line.contains(r#""authenticated":true"#) {
+        return Err(std::io::Error::other(line));
+    }
     writeln!(
         stream,
         r#"{{"jsonrpc":"2.0","method":"serverInfo","id":1}}"#
     )?;
-    let mut line = String::new();
-    BufReader::new(stream).read_line(&mut line)?;
+    line.clear();
+    reader.read_line(&mut line)?;
+    Ok(line)
+}
+
+fn rpc_server_info(addr: &str) -> std::io::Result<()> {
+    let line = rpc_server_info_line(addr)?;
     if line.contains(r#""result""#) {
         Ok(())
     } else {
@@ -226,15 +259,7 @@ fn rpc_server_info(addr: &str) -> std::io::Result<()> {
 }
 
 fn rpc_server_methods(addr: &str) -> std::io::Result<Vec<String>> {
-    let mut stream = TcpStream::connect(addr)?;
-    stream.set_read_timeout(Some(Duration::from_secs(1)))?;
-    stream.set_write_timeout(Some(Duration::from_secs(1)))?;
-    writeln!(
-        stream,
-        r#"{{"jsonrpc":"2.0","method":"serverInfo","id":1}}"#
-    )?;
-    let mut line = String::new();
-    BufReader::new(stream).read_line(&mut line)?;
+    let line = rpc_server_info_line(addr)?;
     let response: Value = serde_json::from_str(&line).map_err(std::io::Error::other)?;
     let methods = response["result"]["methods"]
         .as_array()
@@ -3794,6 +3819,117 @@ fn math_proof_state_followups_for_open_obligation_fail_closed_with_bridge_report
         "--json",
     ]);
     assert_proof_state_bridge_report(&extract, "extract", state, "checked proof state");
+}
+
+/// The CLI presents the launch token before its request, and a server that
+/// refuses the token answers nothing else: the report names the refusal.
+#[test]
+fn math_proof_state_reports_a_server_that_refuses_its_launch_token() {
+    let server = start_clean_server();
+    let wrong = "0".repeat(64);
+    let args = [
+        "math",
+        "proof-state",
+        "snapshot",
+        "--state",
+        "ps_trust_boundary_probe",
+        "--server",
+        server.addr.as_str(),
+        "--json",
+    ];
+    let output = run_clean_with_env(&args, &[("CLEAN_SERVER_TOKEN", wrong.as_str())]);
+    assert!(
+        !output.status.success(),
+        "clean {args:?} succeeded with a token the server never issued\nstdout:\n{}",
+        String::from_utf8_lossy(&output.stdout)
+    );
+    let report = parse_json(&args, &output);
+    assert_eq!(report["status"], "blocked-server-rpc-error", "{report}");
+    assert_eq!(
+        report["detail"],
+        format!(
+            "persistent proof-state server `{addr}` rejected `getProofState`: math command \
+             failed closed: proof-state server `{addr}` refused the launch token: unauthorized: \
+             the token presented is not this server's launch token",
+            addr = server.addr
+        ),
+        "{report}"
+    );
+}
+
+/// Who connected to `listener` (which does not block) and the first line it
+/// sent, or `None` when nobody connected.
+fn first_line_accepted(listener: &std::net::TcpListener) -> Option<String> {
+    match listener.accept() {
+        Ok((stream, from)) => {
+            stream.set_nonblocking(false).expect("a blocking stream");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("read timeout");
+            let mut first = String::new();
+            let _ = BufReader::new(stream).read_line(&mut first);
+            Some(format!("{from} sent {first:?}"))
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::WouldBlock => None,
+        Err(err) => panic!("accepting a connection: {err}"),
+    }
+}
+
+/// `--server localhost:<port>` connects to `127.0.0.1:<port>`, the one address
+/// `clean server` binds. A resolver asked for `localhost` answers `::1` first
+/// on macOS, and any local user can listen on `[::1]:<port>` beside the
+/// server, so a client that let the resolver choose sent its first message,
+/// the launch token, to that listener. The listener here stands for another
+/// user's; the token is a wrong one, so the real server's refusal shows which
+/// address the CLI reached.
+#[test]
+fn math_proof_state_localhost_server_connects_to_127_0_0_1_not_to_ipv6_loopback() {
+    let server = start_clean_server();
+    let port = server
+        .addr
+        .rsplit_once(':')
+        .and_then(|(_, port)| port.parse::<u16>().ok())
+        .expect("the test server's port");
+    let listener = std::net::TcpListener::bind((std::net::Ipv6Addr::LOCALHOST, port))
+        .unwrap_or_else(|err| {
+            panic!(
+                "this test listens on [::1]:{port}, beside the server on 127.0.0.1:{port}, as \
+                 another user could: {err}"
+            )
+        });
+    listener
+        .set_nonblocking(true)
+        .expect("a listener that does not block");
+    let wrong = "0".repeat(64);
+    let localhost = format!("localhost:{port}");
+    let args = [
+        "math",
+        "proof-state",
+        "snapshot",
+        "--state",
+        "ps_trust_boundary_probe",
+        "--server",
+        localhost.as_str(),
+        "--json",
+    ];
+    let output = run_clean_with_env(&args, &[("CLEAN_SERVER_TOKEN", wrong.as_str())]);
+    assert_eq!(
+        first_line_accepted(&listener),
+        None,
+        "clean {args:?} connected to the listener on [::1]:{port}, not to the server on \
+         127.0.0.1:{port}"
+    );
+    let report = parse_json(&args, &output);
+    assert_eq!(report["status"], "blocked-server-rpc-error", "{report}");
+    assert_eq!(
+        report["detail"],
+        format!(
+            "persistent proof-state server `{localhost}` rejected `getProofState`: math command \
+             failed closed: proof-state server `127.0.0.1:{port}` refused the launch token: \
+             unauthorized: the token presented is not this server's launch token"
+        ),
+        "{report}"
+    );
 }
 
 #[test]

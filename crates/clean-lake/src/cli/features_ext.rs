@@ -73,7 +73,8 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
         path: &["lake", "script", "doc"],
         summary: "Show documentation for a named script",
         description: "Prints a script's recorded documentation and body. The only documentation \
-                      spelling read is a `doc := \"...\"` field inside a `script <name> where` block \
+                      spelling read is a `doc := \"...\"` field inside ANY script block form — \
+                      `script <name> where`, `script <name> do`, and `script <name> := ...` alike \
                       — a Lean `/-- ... -/` docstring above the declaration is NOT captured and \
                       reports \"No documentation available\". Subject to the same lookup limit as \
                       `lake script run`: the current lakefile only, not scripts inherited from \
@@ -93,10 +94,13 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "cache", "get"],
         summary: "Report the configured build cache (no remote fetch yet)",
-        description: "Reports the configured cache locations. It does NOT fetch anything: when the \
-                      project declares a cache executable this prints the `clean lake exe cache get` \
-                      invocation to run, and otherwise reports that no cache is configured. Remote \
-                      fetch is not implemented.",
+        description: "Reports the configured cache locations. It does NOT fetch anything — remote \
+                      fetch is not implemented — and it takes exactly one of three branches. If the \
+                      project declares a `cache` executable, it prints the `clean lake exe cache \
+                      get` invocation for you to run. Otherwise, if `.lake/cache` or `.lake/cloud` \
+                      exists it reports each one's entry count (the usual outcome once `clean lake \
+                      cache put` has run, since that creates `.lake/cache`). If neither exists it \
+                      reports that no cache is configured and names the two ways to set one up.",
         category: Category::Build,
         stability: Stability::Building,
         examples: &[Example {
@@ -130,8 +134,10 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "cache", "add"],
         summary: "Add files to the local build cache",
-        description: "Registers specific files (or every built `.olean` if none are listed) with the \
-                      local cache index so they become eligible for subsequent `lake cache put` uploads.",
+        description: "Copies specific files (or every built `.olean` if none are listed) directly \
+                      into `.lake/cache`, flat, by file name — there is no cache index. `lake cache \
+                      put` does NOT read what `add` placed: it rescans the build tree itself, so \
+                      `add` is for hand-staging files `put`'s scan would not pick up.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[
@@ -153,9 +159,16 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["lake", "lint"],
         summary: "Run configured linters on the project",
-        description: "Invokes every linter declared for the project (or a single target by name) and \
-                      reports findings. Does not fix anything; run `lake check-lint` to preview results \
-                      without modifying state.",
+        description: "Runs Clean's BUILT-IN source lints over the project's library targets (or a \
+                      single target by name) and reports findings — the lakefile grammar has no \
+                      declared-linter concept, so project-declared linters are neither discovered \
+                      nor run. Scope: every module of each library (its `globs` when it sets \
+                      them, which replace its roots as in Lake; otherwise its roots and their \
+                      submodules) and every workspace module they import; the count is printed. The \
+                      lint is syntactic: nothing is elaborated or kernel-checked, so a clean lint \
+                      credits no declaration (`lake check-build` checks them). Does not fix \
+                      anything. `lake check-lint` does NOT preview these results: it only \
+                      verifies the targets elaborate.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[Example {
@@ -182,7 +195,7 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
         stability: Stability::Usable,
         examples: &[Example {
             cmd: "clean lake check-build",
-            what: "report whether every target builds (artifacts are still written)",
+            what: "report whether every target builds (a scratch dir is used and deleted; the project's .lake/build is untouched)",
         }],
         see_also: &["lake build", "lake check-test", "lake check-lint"],
         references: COMMON_REFS,
@@ -216,7 +229,8 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
         description: "Resolves the library targets that `lake lint` would run over and verifies they \
                       ELABORATE (a check-only build), then lists them. It does not run linter \
                       analyses and produces no lint diagnostics — use `lake lint` for those. An \
-                      unknown `--target` name is refused rather than reported as zero targets.",
+                      unknown target name (the optional positional argument — there is no \
+                      `--target` flag) is refused rather than reported as zero targets.",
         category: Category::Build,
         stability: Stability::Usable,
         examples: &[Example {
@@ -272,8 +286,12 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
         summary: "Reservoir publish — DECLARED, NOT IMPLEMENTED",
         description: "Intended to publish the current build artifacts to Reservoir (the Lean \
                       package registry). NOT IMPLEMENTED: the command validates that a build \
-                      directory exists and then fails with an explicit \"not yet implemented\" \
-                      error (tracked as #421). `--dry-run` does not print an upload plan.",
+                      directory exists, collects the artifact list, and then fails with \
+                      \"Reservoir upload is not implemented (TODO #421)\" — stating that this is \
+                      not a configuration problem, because the Reservoir API is undocumented and \
+                      there is no endpoint or credential format to set up. `--dry-run` DOES print \
+                      the plan: it lists every artifact that would be sent and exits 0. A build \
+                      directory with no artifacts also exits 0, reporting that it found none.",
         category: Category::Build,
         stability: Stability::Building,
         examples: &[Example {
@@ -288,18 +306,23 @@ pub(super) const FEATURES_EXT: &[FeatureDescriptor] = &[
     },
     FeatureDescriptor {
         path: &["lake", "verify-fresh"],
-        summary: "Verify built .olean artifacts are content-fresh vs their .lean source",
-        description: "Cake's content-hash freshness check: for each --module, compares the \
-                      source's `import` lines against the imports recorded in the built \
-                      `.olean` (stale iff the source declares an import the .olean lacks — a \
-                      module was added but not rebuilt). Reports a per-module verdict plus a \
-                      reproducible env_digest and exits non-zero on any stale module. Run it \
-                      before graduating from an imported environment.",
+        summary: "Verify built .olean artifacts are exactly what their current source builds to",
+        description: "Two fail-closed checks per --module. (1) Cake's import signature: \
+                      stale iff the source declares an import the built `.olean` lacks. (2) \
+                      Fresh-build digest: the module and its in-project dependencies are \
+                      rebuilt from source into a scratch directory (the project's own build \
+                      directory is neither read nor written) and the artifact on disk — \
+                      `.olean`, `.olean.server`, `.olean.private` — must be byte-identical to \
+                      that build. A rewritten or stale artifact is a DIGEST MISMATCH; an \
+                      artifact `clean lake build` did not write (another producer's header \
+                      git hash) cannot be reproduced and is reported as such. Exits non-zero \
+                      unless every module passes both. Default search path: \
+                      `.lake/build/lib/lean`, then `.lake/build/lib`.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[Example {
-            cmd: "clean lake verify-fresh --source-root crown-proofs/lean --module Crownproof",
-            what: "check the project's olean tree is fresh",
+            cmd: "clean lake verify-fresh --source-root . --module K1Lib",
+            what: "check a clean-built module's artifact against a fresh build of its source",
         }],
         see_also: &["lake build"],
         references: COMMON_REFS,

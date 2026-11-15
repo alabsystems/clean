@@ -4,8 +4,9 @@
 
 //! Navigation and code intelligence: hover, definition, references, rename, completion, symbols.
 
+use super::source_mask::SourceMask;
 use super::{CleanBackend, DefinitionInfo};
-use crate::document::{CommandKind, ElaboratedDecl, ElaboratedDocument};
+use crate::document::{CommandKind, Document, ElaboratedDecl, ElaboratedDocument};
 use clean_parser::lexer::{Lexer, TokenKind};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -118,12 +119,14 @@ impl CleanBackend {
                     val,
                     ..
                 } => {
-                    let type_str = Self::find_elaborated_decl(elab, &name, span.start, span.end)?
-                        .type_str
-                        .as_str();
+                    let type_str =
+                        Self::find_elaborated_decl(elab, name.name(), span.start, span.end)?
+                            .type_str
+                            .as_str();
                     let hint_offset =
                         Self::find_result_type_hint_offset(&text, span.start, val.span().start);
                     let position = doc.offset_to_position(hint_offset);
+                    let source_name = name.source_spelling()?;
 
                     Self::range_contains_position(range, position).then(|| InlayHint {
                         position,
@@ -137,7 +140,7 @@ impl CleanBackend {
                         // can lazily upgrade the tooltip to a full signature.
                         data: InlayHintData {
                             uri: uri.to_string(),
-                            name: name.clone(),
+                            name: source_name,
                         }
                         .to_value(),
                     })
@@ -171,7 +174,14 @@ impl CleanBackend {
         let Some(elab) = &doc.elaborated else {
             return hint;
         };
-        let Some(decl) = elab.declarations.iter().find(|decl| decl.name == data.name) else {
+        let Ok(identity) = clean_parser::parse_name(&data.name) else {
+            return hint;
+        };
+        let Some(decl) = elab
+            .declarations
+            .iter()
+            .find(|decl| &decl.identity == identity.name())
+        else {
             return hint;
         };
 
@@ -207,7 +217,14 @@ impl CleanBackend {
         let Some(elab) = &doc.elaborated else {
             return item;
         };
-        let Some(decl) = elab.declarations.iter().find(|decl| decl.name == data.name) else {
+        let Ok(identity) = clean_parser::parse_name(&data.name) else {
+            return item;
+        };
+        let Some(decl) = elab
+            .declarations
+            .iter()
+            .find(|decl| &decl.identity == identity.name())
+        else {
             return item;
         };
 
@@ -221,12 +238,12 @@ impl CleanBackend {
 
     fn find_elaborated_decl<'a>(
         elab: &'a ElaboratedDocument,
-        name: &str,
+        name: &clean_kernel::Name,
         start: usize,
         end: usize,
     ) -> Option<&'a ElaboratedDecl> {
         elab.declarations.iter().find(|decl| {
-            decl.name == name && Self::ranges_overlap_offsets(start, end, decl.start, decl.end)
+            &decl.identity == name && Self::ranges_overlap_offsets(start, end, decl.start, decl.end)
         })
     }
 
@@ -335,53 +352,83 @@ impl CleanBackend {
     }
 
     /// Find all references to a name across all documents
-    pub(crate) fn find_references(&self, name: &str, include_definition: bool) -> Vec<Location> {
-        let mut references = Vec::new();
+    /// Whole-identifier occurrences of `name` in ONE open document, excluding
+    /// comments and string literals.
+    ///
+    /// Split out of `find_references` so `document_highlights_at` — which is
+    /// document-local by protocol contract — does not have to scan, and build a
+    /// code mask for, every other open document and then throw the results
+    /// away. That was already wasteful and the mask made it worse.
+    fn references_in_document(
+        &self,
+        uri: &Url,
+        doc: &Document,
+        name: &str,
+        include_definition: bool,
+        out: &mut Vec<Location>,
+    ) {
+        let text = doc.text();
 
-        for doc_entry in self.documents.iter() {
-            let uri = doc_entry.key();
-            let doc = doc_entry.value();
-            let text = doc.text();
+        // Which bytes are CODE. Identifier boundaries alone accept the
+        // occurrence in `-- myLemma is the interesting one` and in
+        // `"myLemma"`, and `create_rename_edits` turns every accepted
+        // occurrence into an edit — so without this, rename rewrites the
+        // user's comments and string literals. `source_mask.rs` has the
+        // exact scope, including why character literals are deliberately
+        // not masked.
+        let mask = SourceMask::new(&text);
 
-            // Simple text search for the identifier
-            let mut search_pos = 0;
-            while let Some(found_pos) = text[search_pos..].find(name) {
-                let abs_pos = search_pos + found_pos;
+        // Simple text search for the identifier
+        let mut search_pos = 0;
+        while let Some(found_pos) = text[search_pos..].find(name) {
+            let abs_pos = search_pos + found_pos;
 
-                // Check if this is a whole identifier match
-                let is_start_boundary =
-                    abs_pos == 0 || !Self::has_identifier_char_before(&text, abs_pos);
-                let end_pos = abs_pos + name.len();
-                let is_end_boundary =
-                    end_pos >= text.len() || !Self::has_identifier_char_after(&text, end_pos);
+            // Check if this is a whole identifier match
+            let is_start_boundary =
+                abs_pos == 0 || !Self::has_identifier_char_before(&text, abs_pos);
+            let end_pos = abs_pos + name.len();
+            let is_end_boundary =
+                end_pos >= text.len() || !Self::has_identifier_char_after(&text, end_pos);
 
-                if is_start_boundary && is_end_boundary {
-                    let start = doc.offset_to_position(abs_pos);
-                    let end = doc.offset_to_position(end_pos);
+            if is_start_boundary && is_end_boundary && mask.span_is_code(abs_pos, end_pos) {
+                let start = doc.offset_to_position(abs_pos);
+                let end = doc.offset_to_position(end_pos);
 
-                    // Skip definition if not including it
-                    if !include_definition {
-                        if let Some(def_info) = self.definitions.get(name) {
-                            if &def_info.uri == uri && def_info.name_start == abs_pos {
-                                search_pos = end_pos;
-                                continue;
-                            }
+                // Skip definition if not including it
+                if !include_definition {
+                    if let Some(def_info) = self.definitions.get(name) {
+                        if &def_info.uri == uri && def_info.name_start == abs_pos {
+                            search_pos = end_pos;
+                            continue;
                         }
                     }
-
-                    references.push(Location {
-                        uri: uri.clone(),
-                        range: Range { start, end },
-                    });
                 }
 
-                let Some(next_char) = text[abs_pos..].chars().next() else {
-                    break;
-                };
-                search_pos = abs_pos + next_char.len_utf8();
+                out.push(Location {
+                    uri: uri.clone(),
+                    range: Range { start, end },
+                });
             }
-        }
 
+            let Some(next_char) = text[abs_pos..].chars().next() else {
+                break;
+            };
+            search_pos = abs_pos + next_char.len_utf8();
+        }
+    }
+
+    /// Whole-identifier occurrences of `name` across every open document.
+    pub(crate) fn find_references(&self, name: &str, include_definition: bool) -> Vec<Location> {
+        let mut references = Vec::new();
+        for doc_entry in self.documents.iter() {
+            self.references_in_document(
+                doc_entry.key(),
+                doc_entry.value(),
+                name,
+                include_definition,
+                &mut references,
+            );
+        }
         references
     }
 
@@ -400,10 +447,13 @@ impl CleanBackend {
     ) -> Option<Vec<DocumentHighlight>> {
         let name = self.get_identifier_at(uri, position)?;
 
-        let highlights: Vec<DocumentHighlight> = self
-            .find_references(&name, true)
+        let mut locations = Vec::new();
+        {
+            let doc = self.documents.get(uri)?;
+            self.references_in_document(uri, doc.value(), &name, true, &mut locations);
+        }
+        let highlights: Vec<DocumentHighlight> = locations
             .into_iter()
-            .filter(|loc| &loc.uri == uri)
             .map(|loc| DocumentHighlight {
                 range: loc.range,
                 kind: Some(DocumentHighlightKind::TEXT),
@@ -448,7 +498,8 @@ impl CleanBackend {
         let def_info = self.definitions.get(name)?;
         let doc = self.documents.get(&def_info.uri)?;
         let elab = doc.elaborated.as_ref()?;
-        Self::find_elaborated_decl(elab, name, def_info.start, def_info.end)
+        let identity = clean_parser::parse_name(name).ok()?;
+        Self::find_elaborated_decl(elab, identity.name(), def_info.start, def_info.end)
             .map(|decl| decl.type_str.clone())
     }
 
@@ -505,6 +556,16 @@ impl CleanBackend {
         let text = doc.text();
         let offset = doc.position_to_offset(position);
         let (start, end) = Self::identifier_span_at(&text, offset)?;
+
+        // Refuse a rename anchored in a comment or a string literal. Without
+        // this the three surfaces disagree: `prepareRename` would offer the
+        // rename, and `create_rename_edits` — which now consults the same mask
+        // — would return no edit for the position the user was actually
+        // pointing at. Returning `None` is the protocol's way of saying "not
+        // renameable here", and editors surface it as such.
+        if !SourceMask::new(&text).span_is_code(start, end) {
+            return None;
+        }
 
         let start_pos = doc.offset_to_position(start);
         let end_pos = doc.offset_to_position(end);
@@ -676,6 +737,7 @@ impl CleanBackend {
     }
 
     fn get_signature_display_detail(&self, uri: &Url, name: &str) -> Option<String> {
+        let identity = clean_parser::parse_name(name).ok()?;
         let doc = self.documents.get(uri)?;
         let text = doc.text();
         let decls = clean_parser::parse_file_with_tactics(&text, &self.tactic_patterns).ok()?;
@@ -687,12 +749,10 @@ impl CleanBackend {
                 }
                 | clean_parser::SurfaceDecl::Theorem { name, ty, .. }
                 | clean_parser::SurfaceDecl::Axiom { name, ty, .. }
-                | clean_parser::SurfaceDecl::Opaque { name, ty, .. } => {
-                    (name.as_str(), ty.as_ref())
-                }
+                | clean_parser::SurfaceDecl::Opaque { name, ty, .. } => (name.name(), ty.as_ref()),
                 _ => return None,
             };
-            if decl_name != name {
+            if decl_name != identity.name() {
                 return None;
             }
 
@@ -915,7 +975,7 @@ impl CleanBackend {
     /// Returns `None` for unnamed/structural decls that should not appear in the
     /// outline (imports, `open`, anonymous `example`, bare `end`, ...).
     fn surface_decl_to_symbol(
-        doc: &crate::document::Document,
+        doc: &Document,
         text: &str,
         decl: &clean_parser::SurfaceDecl,
     ) -> Option<DocumentSymbol> {
@@ -978,12 +1038,15 @@ impl CleanBackend {
 
     /// Build a child [`DocumentSymbol`] for a single structure/class field.
     fn structure_field_to_symbol(
-        doc: &crate::document::Document,
+        doc: &Document,
         text: &str,
         field: &clean_parser::SurfaceField,
     ) -> DocumentSymbol {
         let start = field.span.start;
-        let name_span = Self::name_span_offsets(text, start, &field.name);
+        let label = field.name.source_spelling();
+        let name_span = label
+            .as_ref()
+            .and_then(|name| Self::name_span_offsets(text, start, name));
         let end = name_span.map_or(field.span.end, |(_, name_end)| field.span.end.max(name_end));
         let range = Range {
             start: doc.offset_to_position(start),
@@ -999,7 +1062,7 @@ impl CleanBackend {
 
         #[allow(deprecated)]
         DocumentSymbol {
-            name: field.name.clone(),
+            name: label.unwrap_or_else(|| format!("{:?}", field.name.name())),
             detail: None,
             kind: SymbolKind::FIELD,
             tags: None,

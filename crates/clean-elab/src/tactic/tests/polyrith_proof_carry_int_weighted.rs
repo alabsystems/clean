@@ -63,14 +63,16 @@ fn setup_two_hyp_int_state(goal_lhs: Expr, goal_rhs: Expr) -> ProofState {
         make_eq(int.clone(), goal_lhs, goal_rhs),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(int.clone(), int_var("a"), int_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(int, int_var("c"), int_var("d")),
                 value: None,
             },
@@ -132,8 +134,14 @@ fn test_polyrith_two_hyp_weighted_int_cert_pipeline_commuted_goal_e2e() {
 
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(2, 1)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(2, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
         ],
         verified: true,
         explanation: "two-hyp weighted Int commuted goal".to_string(),
@@ -165,8 +173,14 @@ fn test_polyrith_two_hyp_negative_weighted_int_cert_pipeline_commuted_goal_e2e()
 
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(-2, 1)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(-2, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
         ],
         verified: true,
         explanation: "two-hyp negative weighted Int commuted goal".to_string(),

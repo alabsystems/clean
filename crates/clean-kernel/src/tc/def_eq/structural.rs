@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::expr::{Expr, ExprKind};
-use crate::tc::reduction::string_lit_to_constructor;
+use crate::tc::branch_sharing_recursor_app::RecursorLayout;
 use crate::tc::TypeChecker;
 
 impl<'env> TypeChecker<'env> {
@@ -22,7 +22,8 @@ impl<'env> TypeChecker<'env> {
             }
             (ExprKind::App(_f1, _a1), ExprKind::App(_f2, _a2)) => {
                 // Branch-sharing optimization (#3402): flatten application spines
-                // and compare left-to-right. When multiple case-split branches
+                // and compare left-to-right, except that saturated registered
+                // recursors check their major before their minors. When branches
                 // share a common prefix (e.g., 49 branches with identical first
                 // 4 monadic binds), the spine comparison checks the shared prefix
                 // once — subsequent branches find those subexpressions in the
@@ -71,12 +72,13 @@ impl<'env> TypeChecker<'env> {
     }
 
     /// Compare two App expressions by flattening their application spines and
-    /// comparing arguments left-to-right.
+    /// comparing arguments left-to-right, except for saturated recursors.
     ///
     /// For `f a₁ a₂ ... aₙ` vs `g b₁ b₂ ... bₘ`:
     /// 1. If n != m, return false (mismatched arities cannot be structurally equal)
     /// 2. Check `is_def_eq(f, g)` -- the function heads
-    /// 3. Check `is_def_eq(aᵢ, bᵢ)` for i = 1..n, left-to-right
+    /// 3. Check every `is_def_eq(aᵢ, bᵢ)`; saturated registered recursors use
+    ///    major-before-minors layout order, all others use left-to-right order.
     ///
     /// The left-to-right ordering is the key optimization for branch sharing
     /// (#3402): when multiple case-split branches share a common prefix of
@@ -86,9 +88,9 @@ impl<'env> TypeChecker<'env> {
     ///
     /// When the branch-sharing cache is available and both sides share a Const
     /// function head (common in case splits like `semBinOp` with 49 branches),
-    /// uses `branch_sharing_compare` for each argument pair. This proactively
-    /// pre-caches no-delta WHNF results for subexpressions, so that later
-    /// spine comparisons on different branches find the shared prefix in O(1).
+    /// uses `branch_sharing_compare` for each argument pair. This reuses exact
+    /// verified pairs and demanded no-delta WHNF results; it does not prewalk
+    /// irrelevant descendants of the shared prefix.
     ///
     /// For semBinOp with 49 branches sharing 4 monadic binds as prefix:
     /// - Branch 1: full comparison of 4 prefix args + divergent suffix
@@ -114,12 +116,42 @@ impl<'env> TypeChecker<'env> {
         }
 
         // When the branch-sharing cache is available and both heads are the
-        // same Const, use branch_sharing_compare for arguments. This pre-caches
-        // no-delta WHNF results so subsequent spine comparisons (from other
-        // case-split branches sharing the same function head) get O(1) cache
-        // hits on the shared prefix arguments. (#3402)
+        // same Const, use branch_sharing_compare for arguments. Subsequent
+        // case-split branches reuse exact verified pairs and demanded no-delta
+        // WHNF results without eager subtree normalization. (#3402)
         let use_branch_cache =
             self.branch_sharing_cache.is_some() && self.heads_are_same_const(a_head, b_head);
+
+        // A failed early recursor-congruence attempt defers to reduction. If the
+        // final terms are still recursor applications, retry their congruence in
+        // the same major-before-minors order. The ordinary left-to-right order
+        // would revisit recursive branches before the major that already failed
+        // to match, potentially expanding one branch per literal fuel unit.
+        //
+        // SOUNDNESS: this only reorders the existing conjunction of argument
+        // comparisons, with the same callback for every pair. All supplied
+        // arguments, including extras, remain required. Partial applications use
+        // the ordinary path. No earlier failure is remembered: these are the
+        // final terms after delta/projection reduction, and the caller retains
+        // its eta and remaining fallback paths when this attempt fails.
+        if let (ExprKind::Const(a_name, _), ExprKind::Const(b_name, _)) =
+            (a_head.kind(), b_head.kind())
+        {
+            if a_name == b_name {
+                if let Some(recursor) = self.env.get_recursor(a_name) {
+                    let layout = RecursorLayout::new(recursor);
+                    if let Some(mut indices) = layout.comparison_indices(a_args.len()) {
+                        return indices.all(|i| {
+                            if use_branch_cache {
+                                self.branch_sharing_compare(a_args[i], b_args[i])
+                            } else {
+                                self.is_def_eq_impl(a_args[i], b_args[i])
+                            }
+                        });
+                    }
+                }
+            }
+        }
 
         // Compare arguments left-to-right. The left-to-right order ensures
         // shared prefix arguments (common monadic binds) are checked first,
@@ -145,8 +177,8 @@ impl<'env> TypeChecker<'env> {
     ///
     /// Used to detect case-split patterns where multiple branches share the
     /// same function head (e.g., `semBinOp` applied to different arguments).
-    /// When true, spine comparison benefits from pre-caching shared prefix
-    /// arguments in the branch-sharing cache.
+    /// When true, spine comparison can reuse demand-populated shared-prefix
+    /// entries in the branch-sharing cache.
     pub(in crate::tc) fn heads_are_same_const(&self, a_head: &Expr, b_head: &Expr) -> bool {
         if let (ExprKind::Const(n1, _), ExprKind::Const(n2, _)) = (a_head.kind(), b_head.kind()) {
             n1 == n2
@@ -161,11 +193,16 @@ impl<'env> TypeChecker<'env> {
 
     /// Structure eta for definitional equality — Lean 4's exact algorithm.
     ///
-    /// Lean 4 parity (`type_checker.cpp:786-811` `try_eta_struct_core(t, s)`):
+    /// Lean 4 parity (`type_checker.cpp` `try_eta_struct_core(t, s)`):
     /// structure eta fires ONLY when `t` is literally a saturated constructor
-    /// application of a structure-like inductive. `s` (the other side, of the
-    /// same structure type) is then compared FIELDWISE via projections:
-    /// `Proj i s =?= t.field_i`. When neither side is a constructor
+    /// application of a structure-like inductive. The other side `s` must then
+    /// (1) have the same structure inductive at its type head, (2) have an
+    /// inferred type DEF-EQ to `t`'s inferred type (`is_def_eq(infer_type(t),
+    /// infer_type(s))`, which compares the structure PARAMETERS, not just the
+    /// head), and (3) match FIELDWISE via projections `Proj i s =?= t.field_i`.
+    /// The full-type check (2) is soundness-critical: a shared head inductive
+    /// with mismatched parameters (`S a` vs `S b`, `a ≠ b`) must NOT eta-unify
+    /// even when the fields coincide. When neither side is a constructor
     /// application, Lean returns false and lets the outer machinery (lazy
     /// delta at the enclosing comparison) find the reduction path.
     ///
@@ -209,6 +246,25 @@ impl<'env> TypeChecker<'env> {
             return false;
         };
         if *s_ind != ctor.inductive_name {
+            return false;
+        }
+        // SOUNDNESS (2026-09-25): the two sides' FULL inferred types must be
+        // def-eq — a shared head inductive is NOT enough. Lean's
+        // `try_eta_struct_core` checks `is_def_eq(infer_type(t), infer_type(s))`
+        // BEFORE comparing fields (verified against upstream). Without it, a
+        // constructor `S.mk a fields : S a` is wrongly identified with `s : S b`
+        // for distinct PARAMETERS `a ≠ b` whenever the fields happen to match
+        // (e.g. a subsingleton/`Unit` field): the head check passes, the
+        // parameters `a`/`b` are never compared, and eta over-accepts across two
+        // distinct structure types. Infer `t`'s type and require both def-eq.
+        // See docs/issues/2026-09-25-kernel-monad-hook-soundness.md.
+        let Some(t_type) = self
+            .try_infer_type_quick(t)
+            .or_else(|| self.infer_type_infer_only(t).ok())
+        else {
+            return false;
+        };
+        if !self.is_def_eq_impl(&t_type, &s_type) {
             return false;
         }
         // Fieldwise: Proj i s =?= t.field_i (Lean 4 type_checker.cpp:805-809).
@@ -267,10 +323,17 @@ impl<'env> TypeChecker<'env> {
         if !matches!(s.get_app_fn().kind(), ExprKind::Const(..)) {
             return false;
         }
+        // AUTHORITY: the expansion is the literal's meaning only over the
+        // canonical `String.ofList`/`Char.ofNat` (`env/native_fold_authority.rs`);
+        // over a user's `Char.ofNat := fun _ => 'z'` two distinct literals would
+        // expand to one term.
+        if !self.string_literal_admitted() {
+            return false;
+        }
         // Lower the literal to `String.ofList (List.cons (Char.ofNat …) …)` and
         // fully reduce it (delta-unfolding `String.ofList` to `String.mk` and
         // resolving the nested list/char applications) using the shared whnf.
-        let expanded = string_lit_to_constructor(str_val);
+        let expanded = self.expand_admitted_string_literal(str_val);
         let expanded_whnf = self.whnf_impl(&expanded);
         self.is_def_eq_impl(&expanded_whnf, s)
     }

@@ -88,7 +88,7 @@ fn elab_fixture(file: &str) -> Vec<(String, Result<(), String>)> {
             }
             Err(error) => {
                 let name = crate::preprocess_ext::decl_name(decl)
-                    .map_or_else(|| format!("<decl {}>", verdicts.len()), str::to_string);
+                    .map_or_else(|| format!("<decl {}>", verdicts.len()), ToString::to_string);
                 verdicts.push((name, Err(format!("{error:?}"))));
             }
         }

@@ -68,7 +68,13 @@ pub(super) const FEATURES_CORE: &[FeatureDescriptor] = &[
         path: &["lake", "new"],
         summary: "Create a new Lake project in a fresh directory",
         description: "Scaffolds a new project directory containing `lakefile.lean`, `lean-toolchain`, \
-                      and either a library or executable skeleton depending on `--lib`/`--exe`.",
+                      and either a library or executable skeleton depending on `--lib`/`--exe`. \
+                      The `lean-toolchain` reads `clean`. elan resolves that name to a toolchain \
+                      linked with `elan toolchain link clean <dir>`, and otherwise to a Lean \
+                      release named `clean`, which does not exist, so `lean` or `lake` run \
+                      through elan in the project fails loudly instead of running a Lean \
+                      toolchain. Clean's own `lean` front door, `clean lean`, reads `clean` as \
+                      Clean's pin.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[
@@ -111,7 +117,9 @@ pub(super) const FEATURES_CORE: &[FeatureDescriptor] = &[
         path: &["lake", "init"],
         summary: "Initialize Lake in the current directory",
         description: "Adds `lakefile.lean` and `lean-toolchain` to the current directory, preserving \
-                      existing sources. The optional positional name overrides the inferred package name.",
+                      existing sources. The optional positional name overrides the inferred package name. \
+                      The `lean-toolchain` reads `clean`, as `clean lake new` writes it, so elan \
+                      in the project fails loudly instead of running a Lean toolchain.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[
@@ -174,7 +182,17 @@ pub(super) const FEATURES_CORE: &[FeatureDescriptor] = &[
         path: &["lake", "env"],
         summary: "Show the project's build environment",
         description: "Prints the toolchain, resolved search paths, and other variables the Lake build \
-                      would export for sub-processes. Useful for debugging dependency resolution.",
+                      would export for sub-processes. Useful for debugging dependency resolution. \
+                      With a trailing command (`clean lake env <cmd> <args>`) it runs that command \
+                      in the project directory, adding those variables to the inherited \
+                      environment when the directory holds a Lake workspace. A Lean toolchain \
+                      program is refused by name before anything is spawned: `lean`, `lake`, \
+                      `leanchecker`, `leanexport`, `lean4export`, `leanc`, `leanir`, \
+                      `leanmake` and `leanpkg`, matched on the basename wherever the program \
+                      lives. It could run real Lean or a stale reroute rather than Clean, and \
+                      each refusal names the Clean verb to use instead (`clean lean`, \
+                      `clean lake <verb>`, `clean olean replay`, `clean run`, \
+                      `clean compile`). A wrapper such as `sh -c` is run as given.",
         category: Category::Build,
         stability: Stability::V1,
         examples: &[Example {

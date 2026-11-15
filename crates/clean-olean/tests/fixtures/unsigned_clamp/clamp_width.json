@@ -1,0 +1,2679 @@
+{
+  "schema_version": 8,
+  "producer": "TrustIr",
+  "input": {
+    "RustMir": {
+      "body_digest": {
+        "algorithm": "Sha256",
+        "bytes": [
+          185,
+          254,
+          207,
+          133,
+          188,
+          158,
+          144,
+          129,
+          123,
+          85,
+          67,
+          101,
+          138,
+          199,
+          204,
+          169,
+          6,
+          72,
+          5,
+          190,
+          149,
+          240,
+          101,
+          25,
+          126,
+          220,
+          23,
+          75,
+          183,
+          153,
+          241,
+          238
+        ]
+      }
+    }
+  },
+  "provenance": {
+    "producer_version": "0.12.0",
+    "source_language": "Rust",
+    "source_languages": [
+      "Rust",
+      "TrustIr"
+    ],
+    "source_digest": {
+      "algorithm": "Sha256",
+      "bytes": [
+        185,
+        254,
+        207,
+        133,
+        188,
+        158,
+        144,
+        129,
+        123,
+        85,
+        67,
+        101,
+        138,
+        199,
+        204,
+        169,
+        6,
+        72,
+        5,
+        190,
+        149,
+        240,
+        101,
+        25,
+        126,
+        220,
+        23,
+        75,
+        183,
+        153,
+        241,
+        238
+      ]
+    },
+    "toolchain": [
+      {
+        "name": "TrustIr",
+        "version": "0.12.0",
+        "revision": "native-request-schema-v1"
+      }
+    ]
+  },
+  "serialization": {
+    "schema_version": 8,
+    "canonical_order": true,
+    "sort_unordered_sets": true,
+    "messagepack_named_fields": true,
+    "unknown_fields": "Reject"
+  },
+  "diagnostics": {
+    "level": "Info",
+    "include_source_spans": true,
+    "include_lineage": true,
+    "emit_counterexamples": true,
+    "emit_unsat_cores": true,
+    "emit_proof_traces": false,
+    "max_counterexamples": 1
+  },
+  "trust_ir_module_digest": {
+    "algorithm": "Sha256",
+    "bytes": [
+      6,
+      57,
+      241,
+      21,
+      1,
+      47,
+      1,
+      250,
+      6,
+      162,
+      124,
+      56,
+      39,
+      131,
+      136,
+      35,
+      96,
+      249,
+      255,
+      27,
+      199,
+      182,
+      108,
+      79,
+      241,
+      187,
+      86,
+      34,
+      235,
+      214,
+      121,
+      196
+    ]
+  },
+  "compiler_facts": {
+    "monomorphizations": [
+      {
+        "id": 0,
+        "source_item": "clamp_width",
+        "symbol": "clamp_width",
+        "generic_args": [],
+        "function": 0,
+        "stable_digest": {
+          "algorithm": "Sha256",
+          "bytes": [
+            237,
+            121,
+            38,
+            190,
+            122,
+            132,
+            98,
+            203,
+            209,
+            117,
+            86,
+            29,
+            14,
+            71,
+            216,
+            202,
+            7,
+            73,
+            249,
+            139,
+            194,
+            230,
+            240,
+            97,
+            157,
+            240,
+            225,
+            141,
+            126,
+            52,
+            6,
+            29
+          ]
+        }
+      }
+    ],
+    "obligation_sources": [
+      {
+        "obligation": 0,
+        "public_obligation_id": "obligation:trust_intbound__clamp_width:postcondition:0",
+        "function": 0,
+        "span": {
+          "file": 0,
+          "line": 821,
+          "col": 17
+        },
+        "assertion_id": 80047416,
+        "cause": "Postcondition",
+        "monomorphization": 0,
+        "facts": [
+          {
+            "Monomorphization": 0
+          }
+        ]
+      },
+      {
+        "obligation": 1,
+        "public_obligation_id": "obligation:trust_intbound__clamp_width:postcondition:1",
+        "function": 0,
+        "span": {
+          "file": 0,
+          "line": 821,
+          "col": 38
+        },
+        "assertion_id": 2187797407,
+        "cause": "Postcondition",
+        "monomorphization": 0,
+        "facts": [
+          {
+            "Monomorphization": 0
+          }
+        ]
+      },
+      {
+        "obligation": 2,
+        "public_obligation_id": "vc:trust_intbound__clamp_width:postcondition:0",
+        "function": 0,
+        "span": {
+          "file": 0,
+          "line": 824,
+          "col": 15
+        },
+        "assertion_id": 1641295294,
+        "cause": "Panic",
+        "monomorphization": 0,
+        "facts": [
+          {
+            "Monomorphization": 0
+          }
+        ]
+      },
+      {
+        "obligation": 3,
+        "public_obligation_id": "vc:trust_intbound__clamp_width:postcondition:1",
+        "function": 0,
+        "span": {
+          "file": 0,
+          "line": 826,
+          "col": 4
+        },
+        "assertion_id": 1897094689,
+        "cause": "Panic",
+        "monomorphization": 0,
+        "facts": [
+          {
+            "Monomorphization": 0
+          }
+        ]
+      },
+      {
+        "obligation": 4,
+        "public_obligation_id": "vc:trust_intbound__clamp_width:postcondition:2",
+        "function": 0,
+        "span": {
+          "file": 0,
+          "line": 824,
+          "col": 15
+        },
+        "assertion_id": 1348137619,
+        "cause": "Panic",
+        "monomorphization": 0,
+        "facts": [
+          {
+            "Monomorphization": 0
+          }
+        ]
+      },
+      {
+        "obligation": 5,
+        "public_obligation_id": "vc:trust_intbound__clamp_width:postcondition:3",
+        "function": 0,
+        "span": {
+          "file": 0,
+          "line": 826,
+          "col": 4
+        },
+        "assertion_id": 2837673296,
+        "cause": "Panic",
+        "monomorphization": 0,
+        "facts": [
+          {
+            "Monomorphization": 0
+          }
+        ]
+      },
+      {
+        "obligation": 6,
+        "public_obligation_id": "vc:trust_intbound__clamp_width:trust_mc_default_function:0",
+        "function": 0,
+        "span": {
+          "file": 0,
+          "line": 112,
+          "col": 12
+        },
+        "assertion_id": 3028269887,
+        "cause": "Panic",
+        "monomorphization": 0,
+        "facts": [
+          {
+            "Monomorphization": 0
+          }
+        ]
+      }
+    ]
+  },
+  "module": {
+    "name": "trust_intbound::clamp_width",
+    "functions": [
+      {
+        "id": 0,
+        "name": "clamp_width",
+        "ty": 0,
+        "entry": 0,
+        "blocks": [
+          {
+            "id": 0,
+            "params": [
+              [
+                0,
+                "U32"
+              ]
+            ],
+            "body": [
+              {
+                "inst": {
+                  "Alloca": {
+                    "ty": "U32",
+                    "count": null,
+                    "align": null
+                  }
+                },
+                "results": [
+                  3
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Const": {
+                    "ty": "U32",
+                    "value": {
+                      "Int": 0
+                    }
+                  }
+                },
+                "results": [
+                  4
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "ICmp": {
+                    "op": "Uge",
+                    "ty": "U32",
+                    "lhs": 0,
+                    "rhs": 4
+                  }
+                },
+                "results": [
+                  5
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Const": {
+                    "ty": "U32",
+                    "value": {
+                      "Int": 4294967295
+                    }
+                  }
+                },
+                "results": [
+                  6
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "ICmp": {
+                    "op": "Ule",
+                    "ty": "U32",
+                    "lhs": 0,
+                    "rhs": 6
+                  }
+                },
+                "results": [
+                  7
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Const": {
+                    "ty": "Bool",
+                    "value": {
+                      "Bool": false
+                    }
+                  }
+                },
+                "results": [
+                  8
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Select": {
+                    "ty": "Bool",
+                    "cond": 5,
+                    "then_val": 7,
+                    "else_val": 8
+                  }
+                },
+                "results": [
+                  9
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Assume": {
+                    "cond": 9
+                  }
+                },
+                "results": [],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Const": {
+                    "ty": "U32",
+                    "value": {
+                      "Int": 64
+                    }
+                  }
+                },
+                "results": [
+                  11
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "ICmp": {
+                    "op": "Ugt",
+                    "ty": "U32",
+                    "lhs": 0,
+                    "rhs": 11
+                  }
+                },
+                "results": [
+                  10
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Const": {
+                    "ty": "Bool",
+                    "value": {
+                      "Bool": false
+                    }
+                  }
+                },
+                "results": [
+                  12
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "ICmp": {
+                    "op": "Eq",
+                    "ty": "Bool",
+                    "lhs": 10,
+                    "rhs": 12
+                  }
+                },
+                "results": [
+                  13
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "CondBr": {
+                    "cond": 13,
+                    "then_target": 2,
+                    "then_args": [],
+                    "else_target": 1,
+                    "else_args": []
+                  }
+                },
+                "results": [],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              }
+            ]
+          },
+          {
+            "id": 1,
+            "params": [],
+            "body": [
+              {
+                "inst": {
+                  "Const": {
+                    "ty": "U32",
+                    "value": {
+                      "Int": 64
+                    }
+                  }
+                },
+                "results": [
+                  14
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Copy": {
+                    "ty": "U32",
+                    "operand": 14
+                  }
+                },
+                "results": [
+                  15
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Store": {
+                    "ty": "U32",
+                    "ptr": 3,
+                    "value": 15,
+                    "volatile": false,
+                    "align": null
+                  }
+                },
+                "results": [],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Br": {
+                    "target": 3,
+                    "args": []
+                  }
+                },
+                "results": [],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              }
+            ]
+          },
+          {
+            "id": 2,
+            "params": [],
+            "body": [
+              {
+                "inst": {
+                  "Copy": {
+                    "ty": "U32",
+                    "operand": 0
+                  }
+                },
+                "results": [
+                  16
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Store": {
+                    "ty": "U32",
+                    "ptr": 3,
+                    "value": 16,
+                    "volatile": false,
+                    "align": null
+                  }
+                },
+                "results": [],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Br": {
+                    "target": 3,
+                    "args": []
+                  }
+                },
+                "results": [],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              }
+            ]
+          },
+          {
+            "id": 3,
+            "params": [],
+            "body": [
+              {
+                "inst": {
+                  "Load": {
+                    "ty": "U32",
+                    "ptr": 3,
+                    "volatile": false,
+                    "align": null
+                  }
+                },
+                "results": [
+                  17
+                ],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              },
+              {
+                "inst": {
+                  "Return": {
+                    "values": [
+                      17
+                    ]
+                  }
+                },
+                "results": [],
+                "proofs": [],
+                "span": null,
+                "proof_context": null
+              }
+            ]
+          }
+        ],
+        "proofs": [
+          "Pure"
+        ],
+        "calling_conv": "C",
+        "linkage": "External",
+        "attrs": {
+          "readonly": false,
+          "readnone": false,
+          "inlinehint": false,
+          "cold": false,
+          "params": [],
+          "naked": false,
+          "target_features": []
+        },
+        "summary": null,
+        "producer": "TrustIr",
+        "value_names": null,
+        "scopes": null,
+        "source_provenance": null,
+        "body_gate": null,
+        "display_path": null,
+        "section": null,
+        "visibility": "Default"
+      }
+    ],
+    "structs": [],
+    "enums": [],
+    "records": [],
+    "closure_types": [],
+    "globals": [],
+    "func_types": [
+      {
+        "params": [
+          "U32"
+        ],
+        "returns": [
+          "U32"
+        ],
+        "is_vararg": false
+      }
+    ],
+    "types": [
+      "U8"
+    ],
+    "proof_obligations": [
+      {
+        "id": 0,
+        "kind": "Postcondition",
+        "status": "Pending",
+        "description": "prove ensures contract (public verifier obligation obligation:trust_intbound__clamp_width:postcondition:0)",
+        "formula": {
+          "schema": "trust_wp.trust-formula.v1",
+          "payload": "{\"schema\":\"trust_wp.trust-formula.v1\",\"variables\":[{\"name\":\"_0\",\"sort\":\"int\"}],\"body\":{\"op\":\"le\",\"lhs\":{\"var\":\"_0\"},\"rhs\":{\"int\":64}}}",
+          "smtlib": null,
+          "sort": null,
+          "bindings": [
+            [
+              "_0",
+              {
+                "sort": {
+                  "BitVec": 32
+                },
+                "place": {
+                  "ResultSlot": {
+                    "index": 0
+                  }
+                }
+              }
+            ]
+          ]
+        },
+        "function": 0,
+        "source": {
+          "source_id": "trust-contract:trust_intbound::clamp_width:ensures:0",
+          "assertion_id": "trust-assertion:trust-contract:trust_intbound::clamp_width:ensures:0",
+          "range": {
+            "file": 0,
+            "start_line": 821,
+            "start_col": 17,
+            "end_line": 821,
+            "end_col": 29
+          },
+          "public": {
+            "obligation_id": "obligation:trust_intbound__clamp_width:postcondition:0",
+            "semantic_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                194,
+                88,
+                31,
+                29,
+                234,
+                130,
+                192,
+                19,
+                112,
+                77,
+                127,
+                30,
+                39,
+                236,
+                51,
+                10,
+                220,
+                13,
+                168,
+                234,
+                161,
+                44,
+                198,
+                177,
+                50,
+                196,
+                159,
+                81,
+                33,
+                154,
+                158,
+                65
+              ]
+            }
+          }
+        },
+        "site": null
+      },
+      {
+        "id": 1,
+        "kind": "Postcondition",
+        "status": "Pending",
+        "description": "prove ensures contract (public verifier obligation obligation:trust_intbound__clamp_width:postcondition:1)",
+        "formula": {
+          "schema": "trust_wp.trust-formula.v1",
+          "payload": "{\"schema\":\"trust_wp.trust-formula.v1\",\"variables\":[{\"name\":\"_0\",\"sort\":\"int\"},{\"name\":\"w\",\"sort\":\"int\"}],\"body\":{\"op\":\"le\",\"lhs\":{\"var\":\"_0\"},\"rhs\":{\"var\":\"w\"}}}",
+          "smtlib": null,
+          "sort": null,
+          "bindings": [
+            [
+              "_0",
+              {
+                "sort": {
+                  "BitVec": 32
+                },
+                "place": {
+                  "ResultSlot": {
+                    "index": 0
+                  }
+                }
+              }
+            ],
+            [
+              "w",
+              {
+                "sort": {
+                  "BitVec": 32
+                },
+                "place": {
+                  "Param": {
+                    "index": 0
+                  }
+                }
+              }
+            ]
+          ]
+        },
+        "function": 0,
+        "source": {
+          "source_id": "trust-contract:trust_intbound::clamp_width:ensures:1",
+          "assertion_id": "trust-assertion:trust-contract:trust_intbound::clamp_width:ensures:1",
+          "range": {
+            "file": 0,
+            "start_line": 821,
+            "start_col": 38,
+            "end_line": 821,
+            "end_col": 49
+          },
+          "public": {
+            "obligation_id": "obligation:trust_intbound__clamp_width:postcondition:1",
+            "semantic_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                157,
+                196,
+                130,
+                252,
+                153,
+                49,
+                27,
+                55,
+                65,
+                152,
+                166,
+                178,
+                160,
+                115,
+                65,
+                232,
+                91,
+                153,
+                254,
+                62,
+                33,
+                165,
+                193,
+                114,
+                115,
+                51,
+                56,
+                12,
+                17,
+                177,
+                26,
+                140
+              ]
+            }
+          }
+        },
+        "site": null
+      },
+      {
+        "id": 2,
+        "kind": "PanicFreedom",
+        "status": "Pending",
+        "description": "postcondition (public verifier obligation vc:trust_intbound__clamp_width:postcondition:0)",
+        "formula": {
+          "schema": "trust.spec-predicate.v1",
+          "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s1_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+          "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (> w 64) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s1_0| 64) (and (= |_0#s1_0| 64) (not (<= |_0#s1_0| 64)))))))))",
+          "sort": "Bool"
+        },
+        "function": 0,
+        "source": {
+          "source_id": "contract:trust-mc-typed-chc-public:7420f8bd2c97f3d74f1414f7c730da984249970272a393c0c317479ea627040f",
+          "assertion_id": "trust-assertion:contract:trust-mc-typed-chc-public:7420f8bd2c97f3d74f1414f7c730da984249970272a393c0c317479ea627040f",
+          "range": {
+            "file": 0,
+            "start_line": 824,
+            "start_col": 15,
+            "end_line": 824,
+            "end_col": 17
+          },
+          "public": {
+            "obligation_id": "vc:trust_intbound__clamp_width:postcondition:0",
+            "semantic_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                67,
+                203,
+                103,
+                137,
+                218,
+                102,
+                253,
+                221,
+                66,
+                66,
+                55,
+                36,
+                194,
+                184,
+                55,
+                123,
+                224,
+                81,
+                36,
+                171,
+                159,
+                1,
+                94,
+                212,
+                233,
+                255,
+                43,
+                219,
+                192,
+                139,
+                124,
+                57
+              ]
+            }
+          }
+        },
+        "site": null
+      },
+      {
+        "id": 3,
+        "kind": "PanicFreedom",
+        "status": "Pending",
+        "description": "postcondition (public verifier obligation vc:trust_intbound__clamp_width:postcondition:1)",
+        "formula": {
+          "schema": "trust.spec-predicate.v1",
+          "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s2_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+          "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (not (> w 64)) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s2_0| w) (and (= |_0#s2_0| w) (not (<= |_0#s2_0| 64)))))))))",
+          "sort": "Bool"
+        },
+        "function": 0,
+        "source": {
+          "source_id": "contract:trust-mc-typed-chc-public:8827298c09904850fd8bfec7e81b7ecd205195a4b01458772a131563df1c5243",
+          "assertion_id": "trust-assertion:contract:trust-mc-typed-chc-public:8827298c09904850fd8bfec7e81b7ecd205195a4b01458772a131563df1c5243",
+          "range": {
+            "file": 0,
+            "start_line": 826,
+            "start_col": 4,
+            "end_line": 826,
+            "end_col": 5
+          },
+          "public": {
+            "obligation_id": "vc:trust_intbound__clamp_width:postcondition:1",
+            "semantic_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                252,
+                121,
+                28,
+                84,
+                159,
+                89,
+                80,
+                67,
+                242,
+                83,
+                16,
+                77,
+                163,
+                22,
+                161,
+                163,
+                155,
+                103,
+                211,
+                220,
+                18,
+                60,
+                78,
+                88,
+                160,
+                213,
+                166,
+                122,
+                221,
+                52,
+                254,
+                2
+              ]
+            }
+          }
+        },
+        "site": null
+      },
+      {
+        "id": 4,
+        "kind": "PanicFreedom",
+        "status": "Pending",
+        "description": "postcondition (public verifier obligation vc:trust_intbound__clamp_width:postcondition:2)",
+        "formula": {
+          "schema": "trust.spec-predicate.v1",
+          "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s1_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+          "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (> w 64) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s1_0| 64) (and (= |_0#s1_0| 64) (not (<= |_0#s1_0| w)))))))))",
+          "sort": "Bool"
+        },
+        "function": 0,
+        "source": {
+          "source_id": "contract:trust-mc-typed-chc-public:d2a44e2e16658662b120f847c816e370ca5b7bd9e843fc9a9d580965bd622189",
+          "assertion_id": "trust-assertion:contract:trust-mc-typed-chc-public:d2a44e2e16658662b120f847c816e370ca5b7bd9e843fc9a9d580965bd622189",
+          "range": {
+            "file": 0,
+            "start_line": 824,
+            "start_col": 15,
+            "end_line": 824,
+            "end_col": 17
+          },
+          "public": {
+            "obligation_id": "vc:trust_intbound__clamp_width:postcondition:2",
+            "semantic_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                193,
+                154,
+                232,
+                215,
+                179,
+                165,
+                88,
+                106,
+                139,
+                195,
+                57,
+                200,
+                31,
+                202,
+                123,
+                229,
+                204,
+                91,
+                207,
+                219,
+                203,
+                10,
+                14,
+                150,
+                209,
+                16,
+                152,
+                189,
+                113,
+                5,
+                95,
+                140
+              ]
+            }
+          }
+        },
+        "site": null
+      },
+      {
+        "id": 5,
+        "kind": "PanicFreedom",
+        "status": "Pending",
+        "description": "postcondition (public verifier obligation vc:trust_intbound__clamp_width:postcondition:3)",
+        "formula": {
+          "schema": "trust.spec-predicate.v1",
+          "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s2_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+          "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (not (> w 64)) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s2_0| w) (and (= |_0#s2_0| w) (not (<= |_0#s2_0| w)))))))))",
+          "sort": "Bool"
+        },
+        "function": 0,
+        "source": {
+          "source_id": "contract:trust-mc-typed-chc-public:8d8af5a4db06e6fd109c531e6325dbd8586bb2bfed16eb1f35fbf9dd954721e7",
+          "assertion_id": "trust-assertion:contract:trust-mc-typed-chc-public:8d8af5a4db06e6fd109c531e6325dbd8586bb2bfed16eb1f35fbf9dd954721e7",
+          "range": {
+            "file": 0,
+            "start_line": 826,
+            "start_col": 4,
+            "end_line": 826,
+            "end_col": 5
+          },
+          "public": {
+            "obligation_id": "vc:trust_intbound__clamp_width:postcondition:3",
+            "semantic_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                142,
+                191,
+                3,
+                23,
+                175,
+                210,
+                9,
+                143,
+                172,
+                22,
+                23,
+                3,
+                123,
+                179,
+                120,
+                48,
+                63,
+                241,
+                231,
+                27,
+                150,
+                64,
+                89,
+                98,
+                86,
+                191,
+                210,
+                83,
+                62,
+                158,
+                125,
+                169
+              ]
+            }
+          }
+        },
+        "site": null
+      },
+      {
+        "id": 6,
+        "kind": "PanicFreedom",
+        "status": "Pending",
+        "description": "default trust-mc typed CHC function admission (public verifier obligation vc:trust_intbound__clamp_width:trust_mc_default_function:0)",
+        "formula": {
+          "schema": "trust.spec-predicate.v1",
+          "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":false}},\"root_sort\":\"bool\"}",
+          "smtlib": "false",
+          "sort": "Bool"
+        },
+        "function": 0,
+        "source": {
+          "source_id": "vc:trust_intbound__clamp_width:trust_mc_default_function:0",
+          "assertion_id": "trust-assertion:vc:trust_intbound__clamp_width:trust_mc_default_function:0",
+          "range": {
+            "file": 0,
+            "start_line": 112,
+            "start_col": 12,
+            "end_line": 114,
+            "end_col": 25
+          },
+          "public": {
+            "obligation_id": "vc:trust_intbound__clamp_width:trust_mc_default_function:0",
+            "semantic_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                247,
+                116,
+                106,
+                68,
+                243,
+                132,
+                82,
+                82,
+                126,
+                209,
+                86,
+                200,
+                209,
+                165,
+                187,
+                233,
+                96,
+                237,
+                32,
+                97,
+                120,
+                65,
+                76,
+                48,
+                145,
+                244,
+                185,
+                47,
+                90,
+                37,
+                244,
+                173
+              ]
+            }
+          }
+        },
+        "site": null
+      }
+    ],
+    "proof_certificates": [],
+    "target_info": {
+      "triple": "aarch64-apple-darwin",
+      "pointer_size": 8,
+      "endianness": "Little",
+      "abi": null,
+      "struct_passing": "Unclassified"
+    },
+    "files": [
+      "crates/trust-intbound/src/lib.rs"
+    ],
+    "obligation_diagnostics": [],
+    "spec_modules": [],
+    "universes": [],
+    "predicates": [],
+    "global_asm": [],
+    "imports": [],
+    "tuple_layouts": [],
+    "completeness": null,
+    "drop_glue": []
+  },
+  "lineage": {
+    "schema_version": 2,
+    "nodes": [
+      {
+        "id": 0,
+        "transform": {
+          "stage": "TrustIrLowering",
+          "name": "rustc-mir-to-trust_ir",
+          "producer": "TrustIr",
+          "version": "native-request-schema-v1"
+        },
+        "source_module": {
+          "algorithm": "Sha256",
+          "bytes": [
+            185,
+            254,
+            207,
+            133,
+            188,
+            158,
+            144,
+            129,
+            123,
+            85,
+            67,
+            101,
+            138,
+            199,
+            204,
+            169,
+            6,
+            72,
+            5,
+            190,
+            149,
+            240,
+            101,
+            25,
+            126,
+            220,
+            23,
+            75,
+            183,
+            153,
+            241,
+            238
+          ]
+        },
+        "target_module": {
+          "algorithm": "Sha256",
+          "bytes": [
+            6,
+            57,
+            241,
+            21,
+            1,
+            47,
+            1,
+            250,
+            6,
+            162,
+            124,
+            56,
+            39,
+            131,
+            136,
+            35,
+            96,
+            249,
+            255,
+            27,
+            199,
+            182,
+            108,
+            79,
+            241,
+            187,
+            86,
+            34,
+            235,
+            214,
+            121,
+            196
+          ]
+        },
+        "obligations": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "certificates": [],
+        "replay": {
+          "engine": "Trust.native-admission",
+          "invocation": "trust-ir-bridge emit-native-verification-bundle --trust_mc-admission-contract trust-mc-native-admission-contract-v1",
+          "transcript_digest": {
+            "algorithm": "Sha256",
+            "bytes": [
+              144,
+              219,
+              227,
+              26,
+              226,
+              90,
+              88,
+              102,
+              22,
+              173,
+              148,
+              74,
+              94,
+              200,
+              62,
+              194,
+              202,
+              83,
+              242,
+              40,
+              71,
+              48,
+              72,
+              79,
+              216,
+              240,
+              157,
+              158,
+              205,
+              107,
+              15,
+              28
+            ]
+          }
+        }
+      }
+    ],
+    "roots": [
+      0
+    ]
+  },
+  "requests": [
+    {
+      "TrustMc": {
+        "id": 0,
+        "mode": "Chc",
+        "function": 0,
+        "obligations": [
+          0
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "memory_model": "TrustIrPlaces",
+          "arithmetic_model": "FixedWidthBitvectors",
+          "bmc": {
+            "unwind_limit": 1,
+            "unwinding_assertions": true
+          },
+          "chc": {
+            "engine": "Spacer",
+            "invariant_source": "TrustIrProofObligations",
+            "pdr": {
+              "enabled": false,
+              "generalization": "Cubes"
+            },
+            "emit_horn_clauses": true
+          },
+          "slicing": "ObligationBackwardSlice"
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustMc",
+          "expected_verifier": {
+            "name": "trust_mc",
+            "version": "trust-mc-native-admission-contract-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "ay"
+            }
+          ],
+          "replay": {
+            "engine": "trust_mc",
+            "invocation": "trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                168,
+                143,
+                131,
+                63,
+                252,
+                232,
+                199,
+                227,
+                121,
+                196,
+                231,
+                128,
+                84,
+                233,
+                151,
+                13,
+                164,
+                90,
+                62,
+                95,
+                61,
+                214,
+                29,
+                240,
+                233,
+                251,
+                48,
+                48,
+                87,
+                143,
+                152,
+                211
+              ]
+            }
+          },
+          "replay_context": {
+            "atoms": [
+              {
+                "id": 0,
+                "kind": "Assertion",
+                "formula": {
+                  "schema": "trust_wp.trust-formula.v1",
+                  "payload": "{\"schema\":\"trust_wp.trust-formula.v1\",\"variables\":[{\"name\":\"_0\",\"sort\":\"int\"}],\"body\":{\"op\":\"le\",\"lhs\":{\"var\":\"_0\"},\"rhs\":{\"int\":64}}}",
+                  "smtlib": null,
+                  "sort": null,
+                  "bindings": [
+                    [
+                      "_0",
+                      {
+                        "sort": {
+                          "BitVec": 32
+                        },
+                        "place": {
+                          "ResultSlot": {
+                            "index": 0
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                "payload_digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    202,
+                    178,
+                    51,
+                    188,
+                    56,
+                    145,
+                    108,
+                    69,
+                    163,
+                    9,
+                    247,
+                    161,
+                    1,
+                    195,
+                    177,
+                    214,
+                    80,
+                    214,
+                    31,
+                    107,
+                    86,
+                    2,
+                    37,
+                    234,
+                    76,
+                    240,
+                    182,
+                    73,
+                    208,
+                    71,
+                    163,
+                    11
+                  ]
+                },
+                "obligation": 0,
+                "assertion_id": 80047416,
+                "span": {
+                  "file": 0,
+                  "line": 821,
+                  "col": 17
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "TrustMc": {
+        "id": 1,
+        "mode": "Chc",
+        "function": 0,
+        "obligations": [
+          1
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "memory_model": "TrustIrPlaces",
+          "arithmetic_model": "FixedWidthBitvectors",
+          "bmc": {
+            "unwind_limit": 1,
+            "unwinding_assertions": true
+          },
+          "chc": {
+            "engine": "Spacer",
+            "invariant_source": "TrustIrProofObligations",
+            "pdr": {
+              "enabled": false,
+              "generalization": "Cubes"
+            },
+            "emit_horn_clauses": true
+          },
+          "slicing": "ObligationBackwardSlice"
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustMc",
+          "expected_verifier": {
+            "name": "trust_mc",
+            "version": "trust-mc-native-admission-contract-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "ay"
+            }
+          ],
+          "replay": {
+            "engine": "trust_mc",
+            "invocation": "trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                123,
+                59,
+                211,
+                54,
+                169,
+                49,
+                247,
+                81,
+                29,
+                240,
+                5,
+                189,
+                252,
+                43,
+                4,
+                192,
+                254,
+                195,
+                27,
+                203,
+                50,
+                180,
+                168,
+                231,
+                244,
+                215,
+                101,
+                28,
+                176,
+                33,
+                32,
+                83
+              ]
+            }
+          },
+          "replay_context": {
+            "atoms": [
+              {
+                "id": 0,
+                "kind": "Assertion",
+                "formula": {
+                  "schema": "trust_wp.trust-formula.v1",
+                  "payload": "{\"schema\":\"trust_wp.trust-formula.v1\",\"variables\":[{\"name\":\"_0\",\"sort\":\"int\"},{\"name\":\"w\",\"sort\":\"int\"}],\"body\":{\"op\":\"le\",\"lhs\":{\"var\":\"_0\"},\"rhs\":{\"var\":\"w\"}}}",
+                  "smtlib": null,
+                  "sort": null,
+                  "bindings": [
+                    [
+                      "_0",
+                      {
+                        "sort": {
+                          "BitVec": 32
+                        },
+                        "place": {
+                          "ResultSlot": {
+                            "index": 0
+                          }
+                        }
+                      }
+                    ],
+                    [
+                      "w",
+                      {
+                        "sort": {
+                          "BitVec": 32
+                        },
+                        "place": {
+                          "Param": {
+                            "index": 0
+                          }
+                        }
+                      }
+                    ]
+                  ]
+                },
+                "payload_digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    16,
+                    0,
+                    42,
+                    181,
+                    149,
+                    231,
+                    150,
+                    147,
+                    22,
+                    44,
+                    74,
+                    56,
+                    234,
+                    211,
+                    17,
+                    98,
+                    175,
+                    216,
+                    220,
+                    34,
+                    134,
+                    83,
+                    168,
+                    219,
+                    187,
+                    23,
+                    182,
+                    35,
+                    117,
+                    177,
+                    211,
+                    56
+                  ]
+                },
+                "obligation": 1,
+                "assertion_id": 2187797407,
+                "span": {
+                  "file": 0,
+                  "line": 821,
+                  "col": 38
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "TrustMc": {
+        "id": 2,
+        "mode": "Chc",
+        "function": 0,
+        "obligations": [
+          2
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "memory_model": "TrustIrPlaces",
+          "arithmetic_model": "FixedWidthBitvectors",
+          "bmc": {
+            "unwind_limit": 1,
+            "unwinding_assertions": true
+          },
+          "chc": {
+            "engine": "Spacer",
+            "invariant_source": "TrustIrProofObligations",
+            "pdr": {
+              "enabled": false,
+              "generalization": "Cubes"
+            },
+            "emit_horn_clauses": true
+          },
+          "slicing": "ObligationBackwardSlice"
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustMc",
+          "expected_verifier": {
+            "name": "trust_mc",
+            "version": "trust-mc-native-admission-contract-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "ay"
+            }
+          ],
+          "replay": {
+            "engine": "trust_mc",
+            "invocation": "trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                17,
+                20,
+                64,
+                72,
+                86,
+                225,
+                166,
+                176,
+                205,
+                147,
+                70,
+                239,
+                245,
+                225,
+                173,
+                36,
+                213,
+                198,
+                45,
+                232,
+                117,
+                154,
+                95,
+                115,
+                242,
+                54,
+                6,
+                240,
+                51,
+                82,
+                113,
+                36
+              ]
+            }
+          },
+          "replay_context": {
+            "atoms": [
+              {
+                "id": 0,
+                "kind": "Assertion",
+                "formula": {
+                  "schema": "trust.spec-predicate.v1",
+                  "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s1_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+                  "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (> w 64) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s1_0| 64) (and (= |_0#s1_0| 64) (not (<= |_0#s1_0| 64)))))))))",
+                  "sort": "Bool"
+                },
+                "payload_digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    46,
+                    17,
+                    192,
+                    237,
+                    174,
+                    165,
+                    42,
+                    120,
+                    188,
+                    120,
+                    239,
+                    145,
+                    150,
+                    147,
+                    128,
+                    197,
+                    225,
+                    160,
+                    206,
+                    226,
+                    71,
+                    61,
+                    226,
+                    119,
+                    122,
+                    188,
+                    38,
+                    116,
+                    251,
+                    58,
+                    88,
+                    198
+                  ]
+                },
+                "obligation": 2,
+                "assertion_id": 1641295294,
+                "span": {
+                  "file": 0,
+                  "line": 824,
+                  "col": 15
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "TrustMc": {
+        "id": 3,
+        "mode": "Chc",
+        "function": 0,
+        "obligations": [
+          3
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "memory_model": "TrustIrPlaces",
+          "arithmetic_model": "FixedWidthBitvectors",
+          "bmc": {
+            "unwind_limit": 1,
+            "unwinding_assertions": true
+          },
+          "chc": {
+            "engine": "Spacer",
+            "invariant_source": "TrustIrProofObligations",
+            "pdr": {
+              "enabled": false,
+              "generalization": "Cubes"
+            },
+            "emit_horn_clauses": true
+          },
+          "slicing": "ObligationBackwardSlice"
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustMc",
+          "expected_verifier": {
+            "name": "trust_mc",
+            "version": "trust-mc-native-admission-contract-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "ay"
+            }
+          ],
+          "replay": {
+            "engine": "trust_mc",
+            "invocation": "trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                142,
+                53,
+                152,
+                7,
+                41,
+                54,
+                63,
+                144,
+                33,
+                105,
+                254,
+                63,
+                236,
+                220,
+                20,
+                129,
+                31,
+                108,
+                29,
+                85,
+                124,
+                237,
+                130,
+                199,
+                28,
+                180,
+                172,
+                162,
+                214,
+                207,
+                11,
+                139
+              ]
+            }
+          },
+          "replay_context": {
+            "atoms": [
+              {
+                "id": 0,
+                "kind": "Assertion",
+                "formula": {
+                  "schema": "trust.spec-predicate.v1",
+                  "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s2_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+                  "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (not (> w 64)) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s2_0| w) (and (= |_0#s2_0| w) (not (<= |_0#s2_0| 64)))))))))",
+                  "sort": "Bool"
+                },
+                "payload_digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    198,
+                    18,
+                    224,
+                    239,
+                    118,
+                    185,
+                    64,
+                    215,
+                    85,
+                    255,
+                    193,
+                    179,
+                    146,
+                    21,
+                    207,
+                    125,
+                    32,
+                    123,
+                    249,
+                    160,
+                    90,
+                    244,
+                    106,
+                    99,
+                    67,
+                    42,
+                    35,
+                    52,
+                    252,
+                    43,
+                    206,
+                    48
+                  ]
+                },
+                "obligation": 3,
+                "assertion_id": 1897094689,
+                "span": {
+                  "file": 0,
+                  "line": 826,
+                  "col": 4
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "TrustMc": {
+        "id": 4,
+        "mode": "Chc",
+        "function": 0,
+        "obligations": [
+          4
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "memory_model": "TrustIrPlaces",
+          "arithmetic_model": "FixedWidthBitvectors",
+          "bmc": {
+            "unwind_limit": 1,
+            "unwinding_assertions": true
+          },
+          "chc": {
+            "engine": "Spacer",
+            "invariant_source": "TrustIrProofObligations",
+            "pdr": {
+              "enabled": false,
+              "generalization": "Cubes"
+            },
+            "emit_horn_clauses": true
+          },
+          "slicing": "ObligationBackwardSlice"
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustMc",
+          "expected_verifier": {
+            "name": "trust_mc",
+            "version": "trust-mc-native-admission-contract-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "ay"
+            }
+          ],
+          "replay": {
+            "engine": "trust_mc",
+            "invocation": "trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                46,
+                3,
+                246,
+                250,
+                142,
+                199,
+                184,
+                170,
+                11,
+                188,
+                63,
+                201,
+                137,
+                122,
+                234,
+                135,
+                59,
+                34,
+                51,
+                147,
+                83,
+                111,
+                90,
+                183,
+                14,
+                233,
+                6,
+                39,
+                45,
+                144,
+                78,
+                212
+              ]
+            }
+          },
+          "replay_context": {
+            "atoms": [
+              {
+                "id": 0,
+                "kind": "Assertion",
+                "formula": {
+                  "schema": "trust.spec-predicate.v1",
+                  "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s1_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s1_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+                  "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (<= 0 |_0#s1_0|) (<= |_0#s1_0| 4294967295)) (and (> w 64) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s1_0| 64) (and (= |_0#s1_0| 64) (not (<= |_0#s1_0| w)))))))))",
+                  "sort": "Bool"
+                },
+                "payload_digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    73,
+                    23,
+                    62,
+                    143,
+                    75,
+                    139,
+                    194,
+                    7,
+                    75,
+                    187,
+                    118,
+                    193,
+                    20,
+                    181,
+                    28,
+                    9,
+                    210,
+                    44,
+                    163,
+                    119,
+                    9,
+                    232,
+                    251,
+                    52,
+                    38,
+                    120,
+                    87,
+                    105,
+                    147,
+                    234,
+                    66,
+                    231
+                  ]
+                },
+                "obligation": 4,
+                "assertion_id": 1348137619,
+                "span": {
+                  "file": 0,
+                  "line": 824,
+                  "col": 15
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "TrustMc": {
+        "id": 5,
+        "mode": "Chc",
+        "function": 0,
+        "obligations": [
+          5
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "memory_model": "TrustIrPlaces",
+          "arithmetic_model": "FixedWidthBitvectors",
+          "bmc": {
+            "unwind_limit": 1,
+            "unwinding_assertions": true
+          },
+          "chc": {
+            "engine": "Spacer",
+            "invariant_source": "TrustIrProofObligations",
+            "pdr": {
+              "enabled": false,
+              "generalization": "Cubes"
+            },
+            "emit_horn_clauses": true
+          },
+          "slicing": "ObligationBackwardSlice"
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustMc",
+          "expected_verifier": {
+            "name": "trust_mc",
+            "version": "trust-mc-native-admission-contract-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "ay"
+            }
+          ],
+          "replay": {
+            "engine": "trust_mc",
+            "invocation": "trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                158,
+                255,
+                12,
+                167,
+                82,
+                80,
+                146,
+                30,
+                205,
+                129,
+                150,
+                238,
+                242,
+                168,
+                147,
+                70,
+                211,
+                225,
+                127,
+                174,
+                38,
+                26,
+                202,
+                129,
+                208,
+                202,
+                62,
+                209,
+                158,
+                193,
+                186,
+                86
+              ]
+            }
+          },
+          "replay_context": {
+            "atoms": [
+              {
+                "id": 0,
+                "kind": "Assertion",
+                "formula": {
+                  "schema": "trust.spec-predicate.v1",
+                  "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":true}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"ge\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"0\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"4294967295\"}}}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"variable\",\"name\":\"_2\"}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"gt\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"int_literal\",\"value\":\"64\"}}}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"and\",\"lhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"eq\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}},\"rhs\":{\"sort\":\"bool\",\"kind\":{\"node\":\"unary\",\"op\":\"not\",\"expr\":{\"sort\":\"bool\",\"kind\":{\"node\":\"binary\",\"op\":\"le\",\"lhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"_0#s2_0\"}},\"rhs\":{\"sort\":\"int\",\"kind\":{\"node\":\"variable\",\"name\":\"w\"}}}}}}}}}}}}}}}}}}}},\"root_sort\":\"bool\",\"variables\":[{\"name\":\"_0#s2_0\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"_2\",\"sort\":\"bool\",\"origin\":{\"origin\":\"inferred\"}},{\"name\":\"w\",\"sort\":\"int\",\"origin\":{\"origin\":\"inferred\"}}]}",
+                  "smtlib": "(and (and (>= w 0) (<= w 4294967295)) (and true (= _2 (> w 64)) (and (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (<= 0 |_0#s2_0|) (<= |_0#s2_0| 4294967295)) (and (not (> w 64)) (and (>= w 0) (<= w 4294967295)) (and (= _2 (> w 64)) (and (= |_0#s2_0| w) (and (= |_0#s2_0| w) (not (<= |_0#s2_0| w)))))))))",
+                  "sort": "Bool"
+                },
+                "payload_digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    249,
+                    110,
+                    155,
+                    252,
+                    178,
+                    77,
+                    249,
+                    6,
+                    201,
+                    22,
+                    109,
+                    198,
+                    134,
+                    12,
+                    190,
+                    226,
+                    216,
+                    212,
+                    35,
+                    174,
+                    238,
+                    217,
+                    98,
+                    85,
+                    167,
+                    1,
+                    246,
+                    198,
+                    243,
+                    252,
+                    253,
+                    188
+                  ]
+                },
+                "obligation": 5,
+                "assertion_id": 2837673296,
+                "span": {
+                  "file": 0,
+                  "line": 826,
+                  "col": 4
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "TrustMc": {
+        "id": 6,
+        "mode": "Chc",
+        "function": 0,
+        "obligations": [
+          6
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "memory_model": "TrustIrPlaces",
+          "arithmetic_model": "FixedWidthBitvectors",
+          "bmc": {
+            "unwind_limit": 1,
+            "unwinding_assertions": true
+          },
+          "chc": {
+            "engine": "Spacer",
+            "invariant_source": "TrustIrProofObligations",
+            "pdr": {
+              "enabled": false,
+              "generalization": "Cubes"
+            },
+            "emit_horn_clauses": true
+          },
+          "slicing": "ObligationBackwardSlice"
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustMc",
+          "expected_verifier": {
+            "name": "trust_mc",
+            "version": "trust-mc-native-admission-contract-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "ay"
+            }
+          ],
+          "replay": {
+            "engine": "trust_mc",
+            "invocation": "trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                139,
+                83,
+                194,
+                156,
+                14,
+                57,
+                46,
+                222,
+                10,
+                44,
+                32,
+                242,
+                63,
+                116,
+                108,
+                98,
+                99,
+                14,
+                20,
+                117,
+                80,
+                205,
+                183,
+                90,
+                167,
+                87,
+                213,
+                224,
+                124,
+                51,
+                4,
+                189
+              ]
+            }
+          },
+          "replay_context": {
+            "atoms": [
+              {
+                "id": 0,
+                "kind": "Assertion",
+                "formula": {
+                  "schema": "trust.spec-predicate.v1",
+                  "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":false}},\"root_sort\":\"bool\"}",
+                  "smtlib": "false",
+                  "sort": "Bool"
+                },
+                "payload_digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    5,
+                    193,
+                    223,
+                    13,
+                    65,
+                    93,
+                    40,
+                    10,
+                    89,
+                    175,
+                    68,
+                    70,
+                    28,
+                    10,
+                    214,
+                    181,
+                    61,
+                    135,
+                    73,
+                    53,
+                    158,
+                    213,
+                    243,
+                    77,
+                    208,
+                    37,
+                    49,
+                    15,
+                    21,
+                    111,
+                    139,
+                    57
+                  ]
+                },
+                "obligation": 6,
+                "assertion_id": 3028269887,
+                "span": {
+                  "file": 0,
+                  "line": 112,
+                  "col": 12
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "TrustWp": {
+        "id": 7,
+        "mode": "WeakestPrecondition",
+        "function": 0,
+        "obligations": [
+          0
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "heap_model": "RustBorrowGraph",
+          "loop_strategy": "RequireInvariants",
+          "frame_policy": "BorrowRegions",
+          "panic_semantics": "PanicFreeRequired",
+          "max_abduced_preconditions": 8,
+          "emit_verification_conditions": true
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustWp",
+          "expected_verifier": {
+            "name": "trust_wp",
+            "version": "trust-wp-trust-ir-body-wp-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "trust-wp-core.native-pure-replay",
+              "version": "trust_wp.native-pure-replay.v1"
+            }
+          ],
+          "replay": {
+            "engine": "trust_wp",
+            "invocation": "replay_trust_ir_body_contracts",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                213,
+                158,
+                216,
+                89,
+                218,
+                107,
+                110,
+                34,
+                108,
+                120,
+                236,
+                34,
+                226,
+                234,
+                108,
+                110,
+                9,
+                117,
+                229,
+                193,
+                194,
+                101,
+                214,
+                15,
+                127,
+                113,
+                138,
+                36,
+                126,
+                221,
+                129,
+                0
+              ]
+            }
+          }
+        }
+      }
+    },
+    {
+      "TrustWp": {
+        "id": 8,
+        "mode": "WeakestPrecondition",
+        "function": 0,
+        "obligations": [
+          1
+        ],
+        "lineage_roots": [
+          0
+        ],
+        "options": {
+          "heap_model": "RustBorrowGraph",
+          "loop_strategy": "RequireInvariants",
+          "frame_policy": "BorrowRegions",
+          "panic_semantics": "PanicFreeRequired",
+          "max_abduced_preconditions": 8,
+          "emit_verification_conditions": true
+        },
+        "diagnostics": {
+          "level": "Info",
+          "include_source_spans": true,
+          "include_lineage": true,
+          "emit_counterexamples": true,
+          "emit_unsat_cores": true,
+          "emit_proof_traces": false,
+          "max_counterexamples": 1
+        },
+        "provenance": {
+          "verifier_suite": "TrustWp",
+          "expected_verifier": {
+            "name": "trust_wp",
+            "version": "trust-wp-trust-ir-body-wp-v1",
+            "revision": "native-request-schema-v1"
+          },
+          "solvers": [
+            {
+              "name": "trust-wp-core.native-pure-replay",
+              "version": "trust_wp.native-pure-replay.v1"
+            }
+          ],
+          "replay": {
+            "engine": "trust_wp",
+            "invocation": "replay_trust_ir_body_contracts",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                142,
+                24,
+                196,
+                204,
+                161,
+                246,
+                150,
+                194,
+                209,
+                172,
+                179,
+                26,
+                198,
+                117,
+                115,
+                238,
+                124,
+                117,
+                232,
+                251,
+                14,
+                16,
+                209,
+                130,
+                62,
+                23,
+                17,
+                127,
+                144,
+                216,
+                117,
+                181
+              ]
+            }
+          }
+        }
+      }
+    }
+  ]
+}

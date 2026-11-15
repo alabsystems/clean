@@ -1632,11 +1632,13 @@ theorem eval_snd_fst (a b c : Ty) (p : Tm (Ty.prod a b)) (q : Tm c) :
 -- ============================================================================
 
 -- `n <= succ n`: one application of the `Nat.le.step` constructor to reflexivity.
--- `Nat.le.refl n : Nat.le n n`, then `Nat.le.step n n .. : Nat.le n (Nat.succ n)`.
+-- `@Nat.le.refl n : Nat.le n n`, then `@Nat.le.step n n .. : Nat.le n (Nat.succ n)`.
+-- The constructors' `n`/`m` are implicit (`Nat.le.step : ∀ {n m}, ..`), so the
+-- positional spelling needs `@`, as in Lean.
 -- Pure constructors of `Nat.le`, so the axiom closure is empty by construction
 -- (the same shape the kernel's own `Nat.lt_succ_self` uses).
 theorem nle_succ_self (n : Nat) : Nat.le n (Nat.succ n) :=
-  Nat.le.step n n (Nat.le.refl n)
+  @Nat.le.step n n (@Nat.le.refl n)
 
 -- `n < succ n`: `Nat.lt n (Nat.succ n)` is `def`-reducible to
 -- `Nat.le (Nat.succ n) (Nat.succ n)`, witnessed by `Nat.le_refl (Nat.succ n)`
@@ -1649,14 +1651,14 @@ theorem nlt_succ_self (n : Nat) : Nat.lt n (Nat.succ n) :=
 --     so the goal is `Nat.le a a`, witnessed by `Nat.le_refl a`.
 --   Step `b = succ k` with `ih : Nat.le a (Nat.add a k)`: `Nat.add a (succ k)`
 --     reduces (iota) to `Nat.succ (Nat.add a k)`, so the goal is
---     `Nat.le a (Nat.succ (Nat.add a k))`, exactly `Nat.le.step a (Nat.add a k) ih`.
+--     `Nat.le a (Nat.succ (Nat.add a k))`, exactly `@Nat.le.step a (Nat.add a k) ih`.
 -- (`Nat.add x n` recurses on its 2nd arg: `add x 0 = x`, `add x (succ k) =
 -- succ (add x k)`, so each iota reduction lands on the constructor's index.) No axioms.
 theorem nadd_le_left (a b : Nat) : Nat.le a (Nat.add a b) :=
   @Nat.rec
     (fun k => Nat.le a (Nat.add a k))
     (Nat.le_refl a)
-    (fun k ih => Nat.le.step a (Nat.add a k) ih)
+    (fun k ih => @Nat.le.step a (Nat.add a k) ih)
     b
 
 end TrustCore
@@ -1912,4 +1914,22 @@ fn trustcore_metatheorems_are_proven_down_to_the_foundational_axioms() {
     ] {
         assert_proven_to_foundations(&env, thm);
     }
+}
+
+/// Negative control for the `@` spellings in `nle_succ_self` and
+/// `nadd_le_left`: `Nat.le.step`'s `n`/`m` are implicit, so passing them
+/// positionally without `@` is ill-typed. Lean v4.8.0, v4.30.0-rc2 and
+/// v4.36.0-rc2 all refuse it ("application type mismatch: argument `n` has
+/// type `Nat` but is expected to have type `Nat.le ?n ?m`"), so Clean must too.
+#[test]
+fn nat_le_step_positional_implicits_without_at_are_refused() {
+    let err = elaborate_module(
+        "theorem nle_succ_self_bad (n : Nat) : Nat.le n (Nat.succ n) :=\n  \
+         Nat.le.step n n (@Nat.le.refl n)\n",
+    )
+    .expect_err("an explicit `Nat` must not fill `Nat.le.step`'s implicit binders");
+    assert!(
+        err.contains("Type mismatch") && err.contains("Nat.le"),
+        "the refusal must be the argument-type mismatch Lean reports, got: {err}"
+    );
 }

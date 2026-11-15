@@ -1,0 +1,57 @@
+{
+ "schema": "clean.crystal.revalidation_at_head/v1",
+ "lane": "r4sweep",
+ "measured_utc": "2026-10-18T06:28:27Z",
+ "what_this_is": "The control an AT-HEAD revalidation record needs (scripts/crystal_chain_revalidation.py --at-head --control-record), taken because the committed measurement driver moved after the newest live dump: scripts/trust_ir_build.sh changed in 44b8ecded (2026-10-08, the codegen ratchet pinned to one compiler), one day after data/crystal_chain_revalidation_2026-10-07_047ebd051.json, and crystal_a1_lineage's freshness::enum_tag_stage2 test has been red on that since. The question this answers: does the driver committed now, run by the rebaseline's own compiler at the rebaseline's own rev, reproduce that rebaseline's artifacts?",
+ "headline": "MATCH on all three artifacts. At 047ebd051, with scripts/trust_ir_build.sh and scripts/trust_ir_axes.py as committed at the round-4 red sweep's head and the rebaseline's own trustc and driver, clean_kernel.trust-ir.bin, clean_kernel.trust-ir.txt and clean_kernel.coverage.json are byte-identical to data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json's digests. The driver change moved no emitted byte.",
+ "producer": {
+  "rebuilt_from_trust_rev": "321aaeda75478038420d97830f14724c33c8dc39",
+  "what": "NOT rebuilt: the aterm package toolchain trust/9192 (trustc 1.99.0-dev 321aaeda7 2026-09-17), an immutable package-store install with its own sysroot, the same bytes the 2026-10-07 rebaseline was measured with. The key keeps the minter's name; its value is that toolchain's commit (the -vV commit-hash).",
+  "trustc_sha256": "6c513314d5c99778345a2c2a60feef521b2ece2952149095bc9beded93b1206e",
+  "librustc_driver_sha256": "13997326c927b73e5768c42844564d18d7828ab83be55112a8ca62ebc98f446f"
+ },
+ "control": {
+  "what": "dump clean at 047ebd0512cd5b1fd9146edb8506a182b09de2ec -- the rev the fixtures were cut from -- with the committed measurement driver",
+  "driver": {
+   "scripts/trust_ir_build.sh": "5ba30fa76082d6877bb2236e5e13ac4f1cd7610b63aef8955637ee8d12ce3348",
+   "scripts/trust_ir_axes.py": "0fced0e3e1507a3fffdae5b64e568825044f3ddf92d0fe2d01e28b7722b736f0",
+   "rebaseline_measured_with_trust_ir_build_sh": "05ad4c7973545496f8aefa22ec361a9b64470c9c41314801f849ab31090d8315"
+  },
+  "recipe": "TRUST_STAGE1_BIN=<aterm pkg store/trust/9192>/bin TRUSTC=<same>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> scripts/trust_ir_build.sh --print-only, at 047ebd051 with the two driver files above copied in",
+  "bar": "docs/CRYSTAL_STATUS.md section 7(a3): 'prove the control IS the previous census's compiler by reproducing its recorded coverage.json / trust-ir digests BYTE FOR BYTE'",
+  "clean_kernel.trust-ir.bin": {
+   "got": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+   "lane18_recorded": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+   "verdict": "MATCH"
+  },
+  "clean_kernel.trust-ir.txt": {
+   "got": "d3eee57ad5d17a4e1e4dff3127abf24b99994961a2c6b8fa40b3c4678f1a8292",
+   "lane18_recorded": "d3eee57ad5d17a4e1e4dff3127abf24b99994961a2c6b8fa40b3c4678f1a8292",
+   "verdict": "MATCH"
+  },
+  "clean_kernel.coverage.json": {
+   "got": "5e16957b863616f5ca6bd099d3511c0f9caaaa9f03530a5c9d7ae9cf5be52932",
+   "lane18_recorded": "5e16957b863616f5ca6bd099d3511c0f9caaaa9f03530a5c9d7ae9cf5be52932",
+   "verdict": "MATCH"
+  },
+  "bodies": 15128,
+  "verdict": "CONTROL PROVED on the emitted IR and on the coverage digest; the lane18_recorded keys hold the 2026-10-07 rebaseline's digests (the key name is the minter's)."
+ },
+ "subject": {
+  "clean_rev": "bba5da779e479b3d1e607f74f052d60f4f3d3c3c",
+  "clean_rev_note": "the round-4 red sweep's head over origin/main 482b8ab21; crates/clean-kernel is byte-identical to origin/main's",
+  "how": "scripts/trust_ir_build.sh in ratchet mode with TRUST_STAGE1_BIN=<aterm pkg store/trust/9192>/bin TRUST_IR_BUILD_DUMP=<dump>. The ratchet reported its own reds (markers_exact_nonvacuous 104 -> 103, markers_lines_total 601 -> 595) after the dump was published; the dump is the one --print-only writes.",
+  "clean_kernel.trust-ir.bin": "11cc5bc5dae3cc005f86f3672ee395d32132d576cb479b53901cc1e470a5eb36",
+  "clean_kernel.trust-ir.txt": "1a169e3fda5de7de02388b157481b025d61625943ddee50a729637ea94b67ab1",
+  "clean_kernel.coverage.json": "149f765e37abe0566115e39655e0686bd7d4ecca0f9769c828f7f8e37665e877",
+  "bodies": 15368,
+  "control_bodies": 15128,
+  "fixtures_compared": 21,
+  "freshness_report": "data/crystal_fixture_freshness_2026-10-18_r4sweep.json",
+  "verdict": "FRESH -- no chained body's instructions have moved: 20 fixtures NUMBERING-ONLY, 1 IDENTICAL, 0 STRUCTURAL"
+ },
+ "what_this_does_NOT_do": [
+  "It rewrites no fixture and no historical record, and it does not rebaseline: the fixtures stay cut at 047ebd051.",
+  "It does not answer the whole-crate marker-axis red of the codegen ratchet; that is the ratchet's own question."
+ ]
+}

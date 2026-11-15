@@ -48,22 +48,32 @@ mod decidable_eq_parametric;
 mod decidable_eq_parametric_multi;
 mod decidable_eq_parametric_recursive;
 mod decidable_eq_recursive;
+#[cfg(test)]
+mod failure_tests;
 mod hashable;
 mod inductive;
 mod inductive_ext;
+mod inhabited_nonempty;
+#[cfg(test)]
+mod inhabited_nonempty_tests;
 mod nested_detect;
 mod ord_parametric;
 mod ord_parametric_recursive;
+#[cfg(test)]
+mod repr_compound_tests;
 mod structure;
 mod structure_ext;
+#[cfg(test)]
+mod typed_tests;
+mod witness_folders;
 
 use super::{DerivedInstance, ElabCtx};
-use crate::derive::instance_name;
+use crate::derive::{builtin_class, source_handler_instance_name};
 use crate::derive_handlers::user_derive_handler_shape;
 use crate::ElabError;
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
-use clean_parser::{SurfaceBinder, SurfaceCtor, SurfaceField};
+use clean_parser::{SurfaceBinder, SurfaceCtor, SurfaceField, SurfaceName};
 
 /// Extract the universe level from a type expression.
 ///
@@ -149,6 +159,71 @@ struct OpenHandlerBinder {
 
 /// Derive handlers for structures and inductives
 impl<'a> ElabCtx<'a> {
+    /// Reuse actual source name resolution, including namespace and `_root_`
+    /// semantics, without synthesizing auto-implicit term binders. A local or
+    /// metaprogram value cannot select a class. If the bare environment omits
+    /// a builtin class, its exact finite handler key still reaches the existing
+    /// generator; this is dispatch, not registration or kernel admission.
+    pub(super) fn resolve_derive_class(
+        &mut self,
+        source: &SurfaceName,
+    ) -> Result<SurfaceName, ElabError> {
+        if source.is_relative_constructor() {
+            return Err(ElabError::Unsupported {
+                feature: format!("relative constructor `{source}` is not a derive class"),
+            });
+        }
+        if self.meta_value_bindings.contains_key(source) {
+            return Err(ElabError::Unsupported {
+                feature: format!("metaprogram value `{source}` is not a derive class name"),
+            });
+        }
+        // elab_ident owns namespace/alias/privacy precedence. The alternate
+        // read-only resolver does not yet share all of those rules. Suppress
+        // only its header auto-implicit branch and restore the flag on either
+        // Result path before examining the resolution outcome.
+        let was_in_term_body = self.in_term_body;
+        self.in_term_body = true;
+        let resolved = self.elab_ident(source);
+        self.in_term_body = was_in_term_body;
+        match resolved {
+            Ok(resolved) => match resolved.kind() {
+                ExprKind::Const(name, _) => Ok(SurfaceName::from_name(name.clone())),
+                _ => Err(ElabError::Unsupported {
+                    feature: format!(
+                        "derive class `{source}` must resolve to an exact global constant"
+                    ),
+                }),
+            },
+            Err(error) => {
+                let root = source.qualify_under(&SurfaceName::default());
+                if matches!(
+                    &error,
+                    ElabError::UnknownIdent(_)
+                        | ElabError::UnknownIdentWithSuggestions { .. }
+                        | ElabError::UnknownIdentDeferred { .. }
+                ) && builtin_class(root.name()).is_some()
+                    && self.env.get_const(root.name()).is_none()
+                {
+                    Ok(root)
+                } else if matches!(
+                    &error,
+                    ElabError::UnknownIdent(_)
+                        | ElabError::UnknownIdentWithSuggestions { .. }
+                        | ElabError::UnknownIdentDeferred { .. }
+                ) {
+                    Err(ElabError::Unsupported {
+                        feature: format!(
+                            "no available derive handler for unresolved class `{source}`: {error}"
+                        ),
+                    })
+                } else {
+                    Err(error)
+                }
+            }
+        }
+    }
+
     // =========================================================================
     // Structure derive handlers
     // =========================================================================
@@ -157,18 +232,18 @@ impl<'a> ElabCtx<'a> {
     pub(super) fn generate_derived_instances(
         &mut self,
         struct_name: &Name,
-        _universe_params: &[String],
+        _universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         fields: &[SurfaceField],
         struct_ty: &Expr,
-        deriving: &[String],
+        deriving: &[SurfaceName],
     ) -> Result<Vec<DerivedInstance>, ElabError> {
         use super::elab_types::collect_level_params;
 
         let mut instances = Vec::new();
 
         // Collect field names for deriving handlers
-        let field_names: Vec<Name> = fields.iter().map(|f| Name::from_string(&f.name)).collect();
+        let field_names: Vec<Name> = fields.iter().map(|f| f.name.name().clone()).collect();
 
         // For monomorphic types (no type parameters), extract the concrete
         // universe level so we can replace spurious Level::Param values.
@@ -190,7 +265,9 @@ impl<'a> ElabCtx<'a> {
         // collapsed — so we only concretize when the result sort is param-free.
         let concrete_level = extract_sort_level(struct_ty).filter(|l| !l.has_params());
 
-        for class_name in deriving {
+        for authored_class in deriving {
+            let resolved_class = self.resolve_derive_class(authored_class)?;
+            let class_name = &resolved_class;
             if let Some(mut instance) =
                 self.derive_instance(struct_name, binders, fields, &field_names, class_name)?
             {
@@ -217,9 +294,9 @@ impl<'a> ElabCtx<'a> {
                     concretize_monomorphic_instance(&mut instance, &level);
                 }
 
-                crate::derive::admit_generated_instance(
+                crate::derive::admit_generated_instance_typed(
                     self.env,
-                    class_name,
+                    class_name.name(),
                     &struct_name.to_string(),
                     &instance.name,
                     &instance.ty,
@@ -244,12 +321,16 @@ impl<'a> ElabCtx<'a> {
     /// solves it against `result_sort`. Returns `None` when the class isn't a
     /// recognizable single-param class, leaving the caller to fall back to the
     /// raw result sort (the historical monomorphic behavior).
-    fn class_concretize_level(&self, class_name: &str, result_sort: &Level) -> Option<Level> {
-        let name = Name::from_string(class_name);
-        let class_ty = if let Some(ind) = self.env.get_inductive(&name) {
+    fn class_concretize_level(
+        &self,
+        class_name: &SurfaceName,
+        result_sort: &Level,
+    ) -> Option<Level> {
+        let name = class_name.name();
+        let class_ty = if let Some(ind) = self.env.get_inductive(name) {
             ind.type_.clone()
         } else {
-            self.env.get_const(&name)?.type_.clone()
+            self.env.get_const(name)?.type_.clone()
         };
         // First Pi domain = the class parameter; its sort level is the template.
         let ExprKind::Pi(_, domain, _) = class_ty.kind() else {
@@ -281,36 +362,36 @@ impl<'a> ElabCtx<'a> {
         binders: &[SurfaceBinder],
         fields: &[SurfaceField],
         field_names: &[Name],
-        class_name: &str,
+        class_name: &SurfaceName,
     ) -> Result<Option<DerivedInstance>, ElabError> {
         if let Some(instance) = self.try_user_defined_handler(struct_name, binders, class_name)? {
             return Ok(Some(instance));
         }
 
-        let builtin = match class_name {
-            "BEq" => Some(self.derive_beq(struct_name, binders, fields, field_names)?),
-            "Repr" if self.class_exists_in_env("Repr") => {
+        let builtin = match builtin_class(class_name.name()) {
+            Some("BEq") => Some(self.derive_beq(struct_name, binders, fields, field_names)?),
+            Some("Repr") if self.class_exists_in_env("Repr") => {
                 Some(self.derive_repr(struct_name, binders, fields)?)
             }
-            "Hashable" if self.class_exists_in_env("Hashable") => {
+            Some("Hashable") if self.class_exists_in_env("Hashable") => {
                 Some(self.derive_hashable(struct_name, binders, fields)?)
             }
-            "Inhabited" => Some(self.derive_inhabited(struct_name, binders, fields)?),
-            "DecidableEq" => {
+            Some("Inhabited") => Some(self.derive_inhabited(struct_name, binders, fields)?),
+            Some("DecidableEq") => {
                 Some(self.derive_decidable_eq(struct_name, binders, fields, field_names)?)
             }
-            "Ord" => Some(self.derive_ord(struct_name, binders, fields, field_names)),
-            "Nonempty" if binders.is_empty() && fields.is_empty() => {
+            Some("Ord") => Some(self.derive_ord(struct_name, binders, fields, field_names)),
+            Some("Nonempty") if binders.is_empty() && fields.is_empty() => {
                 Some(self.derive_nonempty(struct_name, binders, fields))
             }
-            "Nonempty" => {
+            Some("Nonempty") => {
                 return Err(ElabError::Unsupported {
                     feature: format!(
                         "deriving Nonempty for `{struct_name}` requires a closed nullary constructor"
                     ),
                 });
             }
-            "ToString" | "Functor" | "Foldable" | "Traversable" => {
+            Some("ToString" | "Functor" | "Foldable" | "Traversable") => {
                 return Err(ElabError::Unsupported {
                     feature: format!(
                         "deriving {class_name} for `{struct_name}` has no authenticated structural implementation"
@@ -350,11 +431,11 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         registered_candidate: &clean_kernel::Environment,
         ind_name: &Name,
-        _universe_params: &[String],
+        _universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ctors: &[SurfaceCtor],
         ind_ty: &Expr,
-        deriving: &[String],
+        deriving: &[SurfaceName],
     ) -> Result<Vec<DerivedInstance>, ElabError> {
         use super::elab_types::collect_level_params;
 
@@ -363,7 +444,11 @@ impl<'a> ElabCtx<'a> {
         // Collect constructor names
         let ctor_names: Vec<Name> = ctors
             .iter()
-            .map(|c| Name::from_string(&format!("{}.{}", ind_name, c.name)))
+            .map(|c| {
+                SurfaceName::from_name(ind_name.clone())
+                    .append(&c.name)
+                    .into_name()
+            })
             .collect();
 
         // For monomorphic inductives, extract concrete universe level.
@@ -373,7 +458,9 @@ impl<'a> ElabCtx<'a> {
         // their params (result sort contains `Level::Param`).
         let concrete_level = extract_sort_level(ind_ty).filter(|l| !l.has_params());
 
-        for class_name in deriving {
+        for authored_class in deriving {
+            let resolved_class = self.resolve_derive_class(authored_class)?;
+            let class_name = &resolved_class;
             if let Some(mut instance) = self.derive_instance_inductive(
                 registered_candidate,
                 ind_name,
@@ -395,9 +482,9 @@ impl<'a> ElabCtx<'a> {
                     concretize_monomorphic_instance(&mut instance, &level);
                 }
 
-                crate::derive::admit_generated_instance(
+                crate::derive::admit_generated_instance_typed(
                     self.env,
-                    class_name,
+                    class_name.name(),
                     &ind_name.to_string(),
                     &instance.name,
                     &instance.ty,
@@ -422,15 +509,15 @@ impl<'a> ElabCtx<'a> {
         binders: &[SurfaceBinder],
         ctors: &[SurfaceCtor],
         ctor_names: &[Name],
-        class_name: &str,
+        class_name: &SurfaceName,
     ) -> Result<Option<DerivedInstance>, ElabError> {
         if let Some(instance) = self.try_user_defined_handler(ind_name, binders, class_name)? {
             return Ok(Some(instance));
         }
 
-        let builtin = match class_name {
-            "BEq" => Some(self.derive_beq_inductive(ind_name, binders, ctors, ctor_names)?),
-            "Repr" if self.class_exists_in_env("Repr") => {
+        let builtin = match builtin_class(class_name.name()) {
+            Some("BEq") => Some(self.derive_beq_inductive(ind_name, binders, ctors, ctor_names)?),
+            Some("Repr") if self.class_exists_in_env("Repr") => {
                 let bootstrap = self.derive_repr_inductive(ind_name, binders, ctors, ctor_names)?;
                 Some(crate::derive::materialize_inductive_repr(
                     registered_candidate,
@@ -438,31 +525,23 @@ impl<'a> ElabCtx<'a> {
                     &bootstrap,
                 )?)
             }
-            "Hashable" if self.class_exists_in_env("Hashable") => {
+            Some("Hashable") if self.class_exists_in_env("Hashable") => {
                 Some(self.derive_hashable_inductive(ind_name, binders, ctors, ctor_names)?)
             }
-            "Inhabited" => {
-                Some(self.derive_inhabited_inductive(ind_name, binders, ctors, ctor_names)?)
+            // Lean 4.8.0's handler: the first constructor whose fields are
+            // all inhabited (`inhabited_nonempty.rs`, G43).
+            Some("Inhabited") => {
+                Some(self.derive_inhabited_inductive_lean(registered_candidate, ind_name)?)
             }
-            "DecidableEq" => {
+            Some("DecidableEq") => {
                 Some(self.derive_decidable_eq_inductive(ind_name, binders, ctors, ctor_names)?)
             }
-            "Ord" => Some(self.derive_ord_inductive(ind_name, binders, ctors, ctor_names)?),
-            "Nonempty"
-                if binders.is_empty()
-                    && !ctor_names.is_empty()
-                    && decidable_eq_enum::all_ctors_nullary(ctors) =>
-            {
-                self.derive_nonempty_inductive(ind_name, binders, ctors, ctor_names)
+            Some("Ord") => Some(self.derive_ord_inductive(ind_name, binders, ctors, ctor_names)?),
+            // Lean 4.8.0's handler (`inhabited_nonempty.rs`, G55).
+            Some("Nonempty") => {
+                Some(self.derive_nonempty_inductive_lean(registered_candidate, ind_name)?)
             }
-            "Nonempty" => {
-                return Err(ElabError::Unsupported {
-                    feature: format!(
-                        "deriving Nonempty for `{ind_name}` requires a monomorphic inductive with a closed nullary constructor"
-                    ),
-                });
-            }
-            "ToString" | "Functor" | "Foldable" | "Traversable" => {
+            Some("ToString" | "Functor" | "Foldable" | "Traversable") => {
                 return Err(ElabError::Unsupported {
                     feature: format!(
                         "deriving {class_name} for `{ind_name}` has no authenticated structural implementation"
@@ -692,9 +771,9 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         type_name: &Name,
         binders: &[SurfaceBinder],
-        class_name: &str,
+        class_name: &SurfaceName,
     ) -> Result<Option<DerivedInstance>, ElabError> {
-        let class = Name::from_string(class_name);
+        let class = class_name.name().clone();
         let Some(handler_names) = self.env.get_derive_handlers(&class) else {
             return Ok(None);
         };
@@ -767,7 +846,7 @@ impl<'a> ElabCtx<'a> {
             }
 
             return Ok(Some(DerivedInstance {
-                name: instance_name(class_name, type_name),
+                name: source_handler_instance_name(&class, type_name),
                 class_name: class,
                 ty: instance_ty,
                 val: instance_val,

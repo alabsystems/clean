@@ -1,9 +1,9 @@
+; synthetic: SYNTHETIC MODULE -- authored for the W2a semdiff lane
+; synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2a).
+; synthetic: No compiler emitted this body; its registered Clean twin is
+; synthetic: ir_w2a_sel_module (eval_ir_w2a_synth.rs). Do not add it to any
+; synthetic: emitted-fixture census.
 fn @synth::select_probe(functy.910) {
-    ; #synthetic: SYNTHETIC MODULE -- authored for the W2a semdiff lane
-    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2a).
-    ; #synthetic: No compiler emitted this body; its registered Clean twin is
-    ; #synthetic: ir_w2a_sel_module (eval_ir_w2a_synth.rs). Do not add it to any
-    ; #synthetic: emitted-fixture census.
 bb0(%0: bool, %1: u32, %2: u32):
     %3 = select u32 %0, %1, %2
     ret %3

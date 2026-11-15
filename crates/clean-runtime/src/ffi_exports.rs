@@ -215,6 +215,12 @@ pub const EXPORTED_FUNCTIONS: &[ExportedFn] = &[
     },
     // ── String operations ────────────────────────────────────────────
     ExportedFn {
+        name: "clean_mk_string_from_bytes",
+        fixed_arity: 2,
+        variadic: false,
+        description: "Copy an explicit UTF-8 byte length, including embedded NULs",
+    },
+    ExportedFn {
         name: "clean_mk_string",
         fixed_arity: 1,
         variadic: false,

@@ -27,9 +27,17 @@
 
 use std::collections::{HashMap, HashSet};
 
+mod typed_names;
+#[cfg(test)]
+mod typed_tests;
+pub(crate) use typed_names::{builtin_class, builtin_instance_name, source_handler_instance_name};
+
 use clean_kernel::{
-    is_foundational_axiom, BinderInfo, ConstantKind, Declaration, Environment, Expr, ExprKind,
-    InductiveVal, Name,
+    BinderInfo, ConstantKind, Declaration, Environment, Expr, ExprKind, InductiveVal, Name,
+};
+use clean_parser::{
+    Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceLit, SurfaceMatchArm, SurfaceName,
+    SurfacePattern,
 };
 
 /// Errors that can occur during derive handler execution.
@@ -68,6 +76,15 @@ pub enum DeriveError {
 /// invokes this helper before publishing the elaboration result.  No mutation
 /// reaches the real environment, and user-defined derive handlers never pass
 /// through this built-in-only path.
+///
+/// A NULLARY constructor renders as its name, which is the text Lean prints
+/// for it at precedence 0. A constructor WITH fields renders through the
+/// opaque `Clean.Repr.render value prec` (clean-kernel
+/// `data_typeclasses_repr_compound`): the name alone dropped the arguments, so
+/// `repr (T.mk 1) = repr (T.mk 2) := rfl` checked and `clean run` printed
+/// `T.mk` where Lean 4.30 prints `T.mk 1`, at exit 0. Through the opaque the
+/// equation is refused and the native build refuses the program
+/// (`native-opaque-placeholder`), both of which Lean-false outcomes were not.
 pub(crate) fn materialize_inductive_repr(
     env: &Environment,
     parent_name: &Name,
@@ -93,33 +110,78 @@ pub(crate) fn materialize_inductive_repr(
             }
             _ => {
                 return Err(crate::ElabError::InternalInvariant(format!(
-                    "derived Repr instance `{}` has malformed class head: {:?}",
-                    inst.name, inst.ty
+                    "derived Repr instance `{}` has malformed class head: {}",
+                    inst.name,
+                    crate::error_render::term(&inst.ty)
                 )));
             }
         },
         _ => {
             return Err(crate::ElabError::InternalInvariant(format!(
-                "derived Repr instance `{}` has malformed type: {:?}",
-                inst.name, inst.ty
+                "derived Repr instance `{}` has malformed type: {}",
+                inst.name,
+                crate::error_render::term(&inst.ty)
             )));
         }
     };
 
-    let mut source = format!("fun (value : {parent_name}) (_prec : Nat) => match value with");
+    let span = Span::dummy();
+    let value = SurfaceName::generated_path("value");
+    let prec = SurfaceName::generated_path("prec");
+    let mut arms = Vec::new();
     for ctor_name in &ind.constructor_names {
         let ctor = env.get_constructor(ctor_name).ok_or_else(|| {
             crate::ElabError::InternalInvariant(format!(
                 "registered inductive `{parent_name}` is missing constructor metadata for `{ctor_name}`"
             ))
         })?;
-        let ellipsis = if ctor.num_fields == 0 { "" } else { " .." };
-        let rendered_name = format!("{:?}", ctor_name.to_string());
-        source.push_str(&format!(" | {ctor_name}{ellipsis} => {rendered_name}"));
+        let (fields, body) = if ctor.num_fields == 0 {
+            (
+                vec![],
+                SurfaceExpr::Lit(span, SurfaceLit::String(ctor_name.to_string())),
+            )
+        } else {
+            let render = SurfaceExpr::Ident(span, SurfaceName::global_path("Clean.Repr.render"));
+            let args = [value.clone(), prec.clone()]
+                .into_iter()
+                .map(|name| clean_parser::SurfaceArg::positional(SurfaceExpr::Ident(span, name)))
+                .collect();
+            (
+                vec![SurfacePattern::Ellipsis],
+                SurfaceExpr::App(span, Box::new(render), args),
+            )
+        };
+        arms.push(SurfaceMatchArm {
+            span,
+            pattern: SurfacePattern::Ctor(SurfaceName::from_name(ctor_name.clone()), fields),
+            body,
+        });
     }
 
-    let surface = clean_parser::parse_expr(&source)
-        .map_err(|error| crate::ElabError::ParseError(error.to_string()))?;
+    let surface = SurfaceExpr::Lambda(
+        span,
+        vec![
+            SurfaceBinder::new_typed(
+                value.clone(),
+                Some(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::from_name(parent_name.clone()),
+                )),
+                SurfaceBinderInfo::Explicit,
+            ),
+            SurfaceBinder::new_typed(
+                prec,
+                Some(SurfaceExpr::Ident(span, SurfaceName::generated_path("Nat"))),
+                SurfaceBinderInfo::Explicit,
+            ),
+        ],
+        Box::new(SurfaceExpr::Match(
+            span,
+            None,
+            Box::new(SurfaceExpr::Ident(span, value)),
+            arms,
+        )),
+    );
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let string_ty = Expr::const_(Name::from_string("String"), vec![]);
     let repr_fn_ty = Expr::pi(
@@ -157,6 +219,54 @@ pub(crate) fn admit_generated_instance(
     type_: &Expr,
     value: &Expr,
 ) -> Result<(), DeriveError> {
+    let class = clean_parser::parse_name(class_name).map_err(|_| {
+        admission_error(
+            class_name,
+            ind_name,
+            "derive class has no exact source name",
+        )
+    })?;
+    admit_generated_instance_with_class(
+        env,
+        class_name,
+        ind_name,
+        class.name(),
+        decl_name,
+        type_,
+        value,
+    )
+}
+
+/// Source-facing admission uses the exact resolved class identity, not a
+/// diagnostic rendering that could alias another registered handler.
+pub(crate) fn admit_generated_instance_typed(
+    env: &Environment,
+    class: &Name,
+    target_label: &str,
+    decl_name: &Name,
+    type_: &Expr,
+    value: &Expr,
+) -> Result<(), DeriveError> {
+    admit_generated_instance_with_class(
+        env,
+        &class.to_string(),
+        target_label,
+        class,
+        decl_name,
+        type_,
+        value,
+    )
+}
+
+fn admit_generated_instance_with_class(
+    env: &Environment,
+    class_name: &str,
+    ind_name: &str,
+    class: &Name,
+    decl_name: &Name,
+    type_: &Expr,
+    value: &Expr,
+) -> Result<(), DeriveError> {
     if decl_name.is_anon() {
         return Err(admission_error(
             class_name,
@@ -167,7 +277,7 @@ pub(crate) fn admit_generated_instance(
 
     admit_generated_expr_shape(class_name, ind_name, "instance type", type_)?;
     admit_generated_expr_shape(class_name, ind_name, "instance value", value)?;
-    let allowed_handler_axioms = registered_handler_axiom_authority(env, class_name, value);
+    let allowed_handler_axioms = registered_handler_axiom_authority_for_class(env, class, value);
     admit_generated_constant_closure(
         env,
         class_name,
@@ -189,15 +299,14 @@ pub(crate) fn admit_generated_instance(
 /// axiom is admitted: the handler must be registered for this class and occur
 /// directly in the generated value, and `sorryAx`/`trusted*` remain forbidden
 /// independently below.
-fn registered_handler_axiom_authority(
+fn registered_handler_axiom_authority_for_class(
     env: &Environment,
-    class_name: &str,
+    class: &Name,
     value: &Expr,
 ) -> HashSet<Name> {
     let mut direct = HashSet::new();
     value.collect_constants_into(&mut direct);
-    let class = Name::from_string(class_name);
-    let Some(handlers) = env.get_derive_handlers(&class) else {
+    let Some(handlers) = env.get_derive_handlers(class) else {
         return HashSet::new();
     };
 
@@ -227,7 +336,9 @@ fn admit_generated_expr_shape(
 ) -> Result<(), DeriveError> {
     let defect = if expr.has_sorry() {
         Some("contains `sorry`/`sorryAx`")
-    } else if expr.has_expr_mvar_quick() {
+    } else if crate::unify::MetaState::expr_has_meta(expr) {
+        // A real scan (G46): `has_expr_mvar_quick` is constant false for
+        // elaborator metas, which then fell through to "free variable".
         Some("contains an unresolved expression metavariable")
     } else if expr.has_level_mvar_quick() {
         Some("contains an unresolved universe metavariable")
@@ -324,7 +435,7 @@ fn admit_generated_constant_closure(
             ));
         };
         if info.kind == ConstantKind::Axiom
-            && !is_foundational_axiom(&constant)
+            && !env.is_canonical_foundational_axiom(&constant)
             && !allowed_handler_axioms.contains(&constant)
         {
             return Err(admission_error(
@@ -402,6 +513,26 @@ pub(crate) fn admit_registered_generated_instance(
     ind_name: &str,
     decl_name: &Name,
 ) -> Result<(), DeriveError> {
+    let class = clean_parser::parse_name(class_name).map_err(|_| {
+        admission_error(
+            class_name,
+            ind_name,
+            "derive class has no exact source name",
+        )
+    })?;
+    admit_registered_generated_instance_typed(env, class.name(), ind_name, decl_name)
+}
+
+/// Re-audit with the exact resolved class. The parent label is diagnostics only;
+/// the actual registered declaration, type, value, and class remain typed.
+pub(crate) fn admit_registered_generated_instance_typed(
+    env: &Environment,
+    class: &Name,
+    ind_name: &str,
+    decl_name: &Name,
+) -> Result<(), DeriveError> {
+    let class_label = class.to_string();
+    let class_name = class_label.as_str();
     let Some(info) = env.get_const(decl_name) else {
         return Err(admission_error(
             class_name,
@@ -437,7 +568,7 @@ pub(crate) fn admit_registered_generated_instance(
         &info.type_,
     )?;
     admit_generated_expr_shape(class_name, ind_name, "registered instance value", value)?;
-    let allowed_handler_axioms = registered_handler_axiom_authority(env, class_name, value);
+    let allowed_handler_axioms = registered_handler_axiom_authority_for_class(env, class, value);
     admit_generated_constant_closure(
         env,
         class_name,
@@ -457,7 +588,10 @@ pub(crate) fn admit_registered_generated_instance(
     };
     let unexpected_deps: HashSet<Name> = deps
         .into_iter()
-        .filter(|name| !is_foundational_axiom(name) && !allowed_handler_axioms.contains(name))
+        // `axiom_deps` already drops only the kernel's CANONICAL foundations;
+        // re-filtering by name would re-admit an axiom that merely shares a
+        // foundational name.
+        .filter(|name| !allowed_handler_axioms.contains(name))
         .collect();
     if unexpected_deps.is_empty() {
         return Ok(());
@@ -617,5 +751,5 @@ impl std::fmt::Debug for DeriveRegistry {
 ///
 /// Follows Lean 4's naming convention for auto-derived instances.
 pub(crate) fn instance_name(class_name: &str, type_name: &Name) -> Name {
-    Name::from_string(&format!("inst{class_name}{}", type_name))
+    typed_names::legacy_builtin_instance_name(class_name, type_name)
 }

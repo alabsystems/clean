@@ -1,0 +1,3 @@
+[workspace]
+members = ["carcara", "carcara-macros", "test-generator", "soundness"]
+resolver = "2"

@@ -96,8 +96,9 @@ fn state_with_hyps(env: Environment, hyps: &[(&str, Expr)]) -> ProofState {
         .iter()
         .enumerate()
         .map(|(index, (name, ty))| LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(index as u64),
-            name: (*name).to_string(),
+            name: clean_parser::SurfaceName::component(*name, false),
             ty: ty.clone(),
             value: None,
         })
@@ -371,7 +372,7 @@ fn test_simp_local_lemma_shadowing_env_constant_is_not_given_its_premises() {
     let goal = goal_of(&state);
     let config = SimpConfig {
         only: true,
-        extra_lemmas: vec!["h".to_string()],
+        extra_lemmas: vec![clean_parser::SurfaceName::generated_path("h")],
         ..SimpConfig::new()
     };
     let lemmas = collect_simp_lemmas(&state, &config);

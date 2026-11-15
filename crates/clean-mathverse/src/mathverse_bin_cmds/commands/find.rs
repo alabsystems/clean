@@ -335,11 +335,13 @@ fn print_find_usage() {
     eprintln!("       mathverse find --cross-system <name>            Cross-system equivalents");
     eprintln!("       mathverse find --domain <domain>                Domain filter");
     eprintln!("       mathverse find --system <system>                Source system filter");
-    eprintln!("       mathverse find --tags                           List all known tags");
+    eprintln!(
+        "       mathverse find --tags                           List known tags with counts (first --limit)"
+    );
     eprintln!();
     eprintln!("Options:");
     eprintln!("  --semantic         Use BM25 engine with math abbreviation expansion");
-    eprintln!("  --limit <N>        Max results (default: 20)");
+    eprintln!("  --limit <N>        Max results, also caps --tags (default: 20)");
     eprintln!("  --format <fmt>     Output format: table (default), json");
 }
 

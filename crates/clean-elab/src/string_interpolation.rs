@@ -8,7 +8,8 @@
 //!
 //! - `s!"Hello {name}"` → `String.append "Hello " (toString name)`
 //! - `f!"x = {x}"` → `Format.append (Format.text "x = ") (format x)`
-//! - `m!"error: {msg}"` → `MessageData.ofFormat (Format.append (Format.text "error: ") (format msg))`
+//! - `m!"error: {msg}"` → `((Lean.ToMessageData.toMessageData "error: " ++ Lean.ToMessageData.toMessageData msg) : Lean.MessageData)`
+//!   (Lean's own `m!` macro, `Lean/Message.lean`)
 //!
 //! The parser stores these as `SurfaceExpr::InterpolatedStr { kind, parts }` where
 //! parts are `InterpolationPart::Literal(String)` or `InterpolationPart::Expr(SurfaceExpr)`.
@@ -48,7 +49,9 @@ use clean_parser::InterpolatedStringKind;
 /// - Parts are joined with `Format.append`
 ///
 /// ## `m!` (MessageData interpolation)
-/// - Same as `f!` desugaring, then wrapped in `MessageData.ofFormat`
+/// - Every chunk, literal or `{e}`, becomes `Lean.ToMessageData.toMessageData chunk`; empty
+///   literals are skipped; chunks are joined left-associatively with `++` and
+///   the whole is ascribed `Lean.MessageData` (Lean's `m!` macro)
 ///
 /// # Examples
 ///
@@ -63,7 +66,7 @@ use clean_parser::InterpolatedStringKind;
 ///         (String.append " = " (toString c))))
 ///
 /// m!"{msg}" →
-///   MessageData.ofFormat (format msg)
+///   (Lean.ToMessageData.toMessageData msg : Lean.MessageData)
 /// ```
 ///
 /// # REQUIRES

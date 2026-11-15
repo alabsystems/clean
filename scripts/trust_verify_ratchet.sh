@@ -47,7 +47,23 @@ fail_code() { local code="$1"; shift; echo "RATCHET FAIL: $*" >&2; exit "$code";
 # checkout layout into the gate. Explicit configuration is authoritative and
 # invalid explicit paths fail closed. Otherwise prefer a `trustc` already on
 # host stage1 in a colocated Trust checkout (binding the gate to the source
-# beside Clean), then a unique staged build, and finally `trustc` on PATH.
+# beside Clean), then a unique staged build, then the toolchain
+# `rust-toolchain.toml` PINS, and finally `trustc` on PATH.
+#
+# The pinned-toolchain step (added 2026-09-15) exists because `trustc` is put
+# on PATH by an interactive rc block, and a shell that did not source it (the
+# context `scripts/local_gate.sh` and the pre-push hook can run in) found no
+# compiler at all. It asks `trustc` first, then rustup's linked `trust`
+# toolchain -- never a stock one (owner directive 2026-09-28).
+locate_pinned_toolchain_bin() {
+  local sysroot
+  sysroot="$(trustc --print sysroot 2>/dev/null)" \
+    || sysroot="$(rustup run trust trustc --print sysroot 2>/dev/null)" \
+    || return 1
+  [[ -n "$sysroot" && -x "$sysroot/bin/trustc" ]] || return 1
+  printf '%s\n' "$(cd "$sysroot/bin" && pwd -P)"
+}
+
 locate_stage1_bin() {
   local configured="${TRUST_STAGE1_BIN:-}"
   local trustc="${TRUSTC:-}"
@@ -74,7 +90,7 @@ locate_stage1_bin() {
     return 0
   fi
 
-  host="$(rustc -vV 2>/dev/null | sed -n 's/^host: //p' | head -1 || true)"
+  host="$(trustc -vV 2>/dev/null | sed -n 's/^host: //p' | head -1 || true)"
   for root in \
     "${TRUST_REPO_ROOT:-}" \
     "$REPO/../.." \
@@ -100,6 +116,10 @@ locate_stage1_bin() {
 
   if [[ -n "$found" ]]; then
     printf '%s\n' "$found"
+    return 0
+  fi
+  if candidate="$(locate_pinned_toolchain_bin)" && [[ -n "$candidate" ]]; then
+    printf '%s\n' "$candidate"
     return 0
   fi
   if candidate="$(command -v trustc 2>/dev/null)" && [[ -x "$candidate" ]]; then
@@ -342,10 +362,21 @@ run_soundness() {
 
 run_coverage() {
   echo "== COVERAGE ratchet: re-verifying clean-kernel (heavy) =="
+  # NOT YET PORTED TO TARGO -- refuses rather than measure nothing (2026-09-28).
+  # This lane drove a bare `cargo build` with RUSTFLAGS=-Ztrust-verify-target=
+  # clean_kernel -Ztrust-verify-output=human and parses that run's per-function
+  # `note: Trust verification: N proved, ...` notes. Bare cargo is not the
+  # driver (owner directive 2026-09-28: ALab builds with Trust), and the
+  # verified lane `targo trust build --allow-l0-gaps` prints a different
+  # verdict format (`Level 0 summary:` notes and a `Gate:` line; measured on a
+  # probe crate with trustc 321aaeda7) and ignores a RUSTFLAGS policy. Porting
+  # needs the parser here and in scripts/trust_verify_coverage_diff.py moved to
+  # that format and data/trust_verify_function_baseline.json re-anchored with
+  # --update on a completed run. The --soundness lane is unaffected.
+  fail "the coverage ratchet is not yet ported to \`targo trust build --allow-l0-gaps\` (see the comment in run_coverage); refusing rather than run a stock cargo"
   local ceiling; ceiling=$(grep -oE '"current_ceiling": [0-9]+' "$RATCHET" | grep -oE '[0-9]+')
   local log="$SCRATCH/kverify.log"
-  RUSTC_BOOTSTRAP=1 RUSTFLAGS="-Ztrust-verify-target=clean_kernel -Ztrust-verify-output=human" \
-    cargo build --locked --manifest-path "$REPO/Cargo.toml" -p clean-kernel --lib >"$log" 2>&1
+  targo trust build --allow-l0-gaps --locked --manifest-path "$REPO/Cargo.toml" -p clean-kernel --lib >"$log" 2>&1
   local cargo_rc=$?
   # A COMPLETE verification build exits 0 (Level-0 warning mode). A terminated
   # (SIGTERM=143, e.g. contention/OOM) or errored build did NOT cover every

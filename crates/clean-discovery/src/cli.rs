@@ -41,7 +41,9 @@ pub struct DiscoverArgs {
     #[arg(long, default_value_t = 5)]
     pub max_c: u64,
 
-    /// Number of threads (omit for rayon default).
+    /// Accepted and IGNORED: `clean discover` verifies candidates
+    /// sequentially (`ExhaustiveSearch::run`), so this sets no thread count.
+    /// Kept so existing invocations keep working
     #[arg(long)]
     pub threads: Option<usize>,
 

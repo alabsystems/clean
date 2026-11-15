@@ -162,8 +162,9 @@ fn test_field_simp_div_eq_div_refl_assumption_path_preserves_proof_chain() {
         field_div(x.clone(), y.clone()),
     );
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "hy".to_string(),
+        name: clean_parser::SurfaceName::generated_path("hy"),
         ty: field_ne_zero(&carrier, y.clone(), &zero),
         value: None,
     }];

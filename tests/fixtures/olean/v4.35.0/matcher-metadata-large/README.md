@@ -1,0 +1,7 @@
+# Genuine v4.35.0 large matcher metadata
+
+The official compiler produced this module in OWN native original 81428. Both official profiles' version, compile and API-inspect commands exited0; the verified native archive is `$HOME/clean-owned-matcher-oracle-archives/large-20261110-attempt1`, index SHA256 `07c8e369e60c95bf7188de514f04bf56f2c1592d045b5305215d97401fa79d6e`. `native-receipts.json` retains exact source/tool/log/process identities and the lean35 input/output hashes. `oracle.stdout` is exact native output; `oracle.json` only wraps its four JSON rows in an array and changes whitespace.
+
+Two54-alternative matchers have23 overlap-map keys,32 buckets, a genuine chain collision (keys1 and33),705 links, and a largest53-node tree of depth8. The equation variant declares two discriminant equations. The disjoint32-arm match has an empty overlap map; the ordinary function named `ordinary.match_1` is genuinely absent from the matcher registry. HashMap enumeration is retained verbatim; the reader regression sorts its expected logical overlap rows before comparing its canonical representation. It additionally compares every stored map/list/tree field against the genuine API data. Graphs are never manufactured.
+
+This is producer/reader fixture coverage, not kernel replay, proofs, a complete wire-layout census or whole-version parity. All shared official toolchain inputs stayed read only and matched through the native archive.

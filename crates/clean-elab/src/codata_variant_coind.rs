@@ -57,8 +57,24 @@
 //! declarations on first use. It is therefore OPT-IN, via `deriving Coind`.
 //! A codata that does not ask pays nothing (`codata_seed.rs`
 //! `test_coind_section_is_not_in_the_core_seed`).
+//!
+//! **No shape in VC-1's envelope is refused here.** An earlier version
+//! refused a constructor with several recursive arguments where one was an
+//! indexed family, on the grounds that the shape had no worked precedent.
+//! Measured, that shape was always fine, and the refusal was hiding two
+//! unrelated generator bugs in far more ordinary shapes — a lone constructor
+//! whose first argument is recursive (`| C : T → T`), and a payload after a
+//! child (`| C : T A → A → T A`). Both are fixed; see
+//! `designs/2026-08-28-variant-codata-surface.md` §12 for the mechanisms and
+//! for the one exotic residue that IS still refused by name. The lesson is
+//! recorded there too: when a generator fails on a shape, map the
+//! neighbouring shapes before theorising about the one in front of you.
 
-use crate::codata_cmd::{arrow, at_app, ident, lam, mk_def, mk_theorem, plain_app, punit_ty};
+use crate::codata_cmd::GlobalPath;
+use crate::codata_cmd::{
+    affix_name, arrow, at_app, child_name, ident, lam, mentions, mk_def, mk_theorem, plain_app,
+    punit_ty, punit_ty_p, surface_binder, type_u, CodataIdentifier,
+};
 use crate::codata_variant::unsupported;
 use crate::codata_variant_generate::{binder, ctor_binders, ctor_call, eq, lam_one, lam_typed};
 use crate::codata_variant_plan::{
@@ -66,7 +82,7 @@ use crate::codata_variant_plan::{
 };
 use crate::ElabError;
 use clean_parser::{
-    Span, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr, UniverseExpr,
+    Span, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr, SurfaceName, UniverseExpr,
 };
 
 /// `Prop`, as a sort.
@@ -75,10 +91,10 @@ fn prop_universe() -> SurfaceExpr {
 }
 
 /// An implicit binder `{name : ty}`.
-fn implicit(name: &str, ty: SurfaceExpr) -> SurfaceBinder {
+fn implicit(name: impl CodataIdentifier, ty: SurfaceExpr) -> SurfaceBinder {
     SurfaceBinder {
         ty: Some(Box::new(ty)),
-        ..SurfaceBinder::new(name, None, SurfaceBinderInfo::Implicit)
+        ..surface_binder(name, None, SurfaceBinderInfo::Implicit)
     }
 }
 
@@ -95,27 +111,27 @@ fn pi(binders: Vec<SurfaceBinder>, body: SurfaceExpr) -> SurfaceExpr {
 /// already-generated terms. Seeding a separate mint with the earlier names
 /// marked used gets freshness without touching them.
 struct CoindNames {
-    idx: String,
-    lhs: String,
-    rhs: String,
-    heq: String,
-    pos: String,
-    m1: String,
-    m2: String,
-    rel: String,
-    hyp: String,
-    val: String,
-    e1: String,
-    e2: String,
-    scrut: String,
-    hh: String,
-    hc: String,
+    idx: SurfaceName,
+    lhs: SurfaceName,
+    rhs: SurfaceName,
+    heq: SurfaceName,
+    pos: SurfaceName,
+    m1: SurfaceName,
+    m2: SurfaceName,
+    rel: SurfaceName,
+    hyp: SurfaceName,
+    val: SurfaceName,
+    e1: SurfaceName,
+    e2: SurfaceName,
+    scrut: SurfaceName,
+    hh: SurfaceName,
+    hc: SurfaceName,
 }
 
 impl CoindNames {
     fn mint(shape: &VariantShape<'_>) -> Self {
         let g = &shape.gen_names;
-        let mut used: Vec<String> = shape.binders.iter().map(|b| b.name.clone()).collect();
+        let mut used: Vec<SurfaceName> = shape.binders.iter().map(|b| b.name.clone()).collect();
         for c in &shape.ctors {
             used.push(c.shape_var.clone());
             used.extend(c.occupied_names());
@@ -134,10 +150,10 @@ impl CoindNames {
         ]);
         used.extend(g.scruts.iter().cloned());
         let mut mint = |base: &str| {
-            let mut candidate = base.to_string();
+            let mut candidate = SurfaceName::component(base, false);
             let mut i = 0usize;
             while used.contains(&candidate) {
-                candidate = format!("{base}{i}");
+                candidate = SurfaceName::component(format!("{base}{i}"), false);
                 i += 1;
             }
             used.push(candidate.clone());
@@ -166,7 +182,10 @@ impl CoindNames {
 /// The three descriptor applications every statement in this module is
 /// phrased against, plus the parameter list they are built from.
 struct Desc {
-    name: String,
+    name: SurfaceName,
+    /// The declared universe parameter, so every pinned level in this tier
+    /// (`PUnit` indices, `Type` in `T.sumCases`) is spelled against it.
+    poly: Option<SurfaceName>,
     params: Vec<SurfaceExpr>,
     shape_f: SurfaceExpr,
     pos_f: SurfaceExpr,
@@ -183,10 +202,11 @@ impl Desc {
             .map(|b| ident(&b.name))
             .collect::<Vec<_>>();
         Desc {
-            name: name.to_string(),
-            shape_f: plain_app(&format!("{name}.shapeF"), params.clone()),
-            pos_f: plain_app(&format!("{name}.posF"), params.clone()),
-            tgt_f: plain_app(&format!("{name}.tgtF"), params.clone()),
+            name: name.clone(),
+            poly: shape.poly.cloned(),
+            shape_f: plain_app(child_name(name, "shapeF"), params.clone()),
+            pos_f: plain_app(child_name(name, "posF"), params.clone()),
+            tgt_f: plain_app(child_name(name, "tgtF"), params.clone()),
             self_ty: plain_app(name, params.clone()),
             params,
         }
@@ -194,16 +214,16 @@ impl Desc {
 
     /// `T.<suffix> ps extra…` — one of the generated family's members, applied
     /// to the codata parameters and then to `extra`.
-    fn member(&self, suffix: &str, extra: Vec<SurfaceExpr>) -> SurfaceExpr {
+    fn member(&self, suffix: &'static str, extra: Vec<SurfaceExpr>) -> SurfaceExpr {
         let mut args = self.params.clone();
         args.extend(extra);
-        plain_app(&format!("{}.{suffix}", self.name), args)
+        plain_app(child_name(&self.name, suffix), args)
     }
 
     /// `Codata.IMIntl (T.shapeF ps) (T.posF ps) (T.tgtF ps) j`
     fn imintl(&self, j: SurfaceExpr) -> SurfaceExpr {
         plain_app(
-            "Codata.IMIntl",
+            GlobalPath("Codata.IMIntl"),
             vec![
                 self.shape_f.clone(),
                 self.pos_f.clone(),
@@ -216,9 +236,9 @@ impl Desc {
     /// `@Codata.IMhead PUnit.{1} (shapeF) (posF) (tgtF) j v`
     fn imhead(&self, j: SurfaceExpr, v: SurfaceExpr) -> SurfaceExpr {
         at_app(
-            "Codata.IMhead",
+            GlobalPath("Codata.IMhead"),
             vec![
-                punit_ty(),
+                punit_ty_p(self.poly.as_ref()),
                 self.shape_f.clone(),
                 self.pos_f.clone(),
                 self.tgt_f.clone(),
@@ -231,9 +251,9 @@ impl Desc {
     /// `@Codata.IMchild PUnit.{1} (shapeF) (posF) (tgtF) j v b`
     fn imchild(&self, j: SurfaceExpr, v: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
         at_app(
-            "Codata.IMchild",
+            GlobalPath("Codata.IMchild"),
             vec![
-                punit_ty(),
+                punit_ty_p(self.poly.as_ref()),
                 self.shape_f.clone(),
                 self.pos_f.clone(),
                 self.tgt_f.clone(),
@@ -247,7 +267,7 @@ impl Desc {
     /// `@Codata.it_congr PUnit.{1} … j l h e b` / `@Codata.icastB …`.
     fn congr_like(
         &self,
-        which: &str,
+        which: &'static str,
         j: SurfaceExpr,
         l: SurfaceExpr,
         h: SurfaceExpr,
@@ -257,7 +277,7 @@ impl Desc {
         at_app(
             which,
             vec![
-                punit_ty(),
+                punit_ty_p(self.poly.as_ref()),
                 self.shape_f.clone(),
                 self.pos_f.clone(),
                 self.tgt_f.clone(),
@@ -302,52 +322,43 @@ enum PosShape<'a, 'b> {
     Fold(Vec<&'a ChildPlan<'b>>),
 }
 
-/// Classify, refusing loudly outside the probed envelope.
-fn classify<'a, 'b>(
-    shape_name: &str,
-    ctor: &'a VariantCtorPlan<'b>,
-) -> Result<PosShape<'a, 'b>, ElabError> {
+/// Classify. Every shape VC-1 admits is buildable — there is no refusal here
+/// any more, and the one that used to sit here named the wrong shape entirely
+/// (see `designs/2026-08-28-variant-codata-surface.md` §12).
+fn classify<'a, 'b>(ctor: &'a VariantCtorPlan<'b>) -> PosShape<'a, 'b> {
     let children: Vec<&ChildPlan<'_>> = ctor.children().collect();
     match children.len() {
-        0 => Ok(PosShape::Empty),
-        1 => Ok(PosShape::Single(children[0])),
-        _ => {
-            if let Some(c) = children.iter().find(|c| c.family.is_some()) {
-                return Err(unsupported(format!(
-                    "variant codata `{shape_name}`: `deriving Coind` does not support \
-                     constructor `{}` — it has {} recursive arguments and `{}` is an \
-                     INDEXED family, so the position type is a Sum with a dependent \
-                     summand. MEASURED, not assumed (§12): the eta half GENERALIZES to \
-                     this shape — dependent branch binder and all, computation pins \
-                     included — but the N-ary case tower does not. The refusal sits here, \
-                     covering both, rather than silently emitting a tier whose `cases` is \
-                     missing. A named gap, not a silent one: the definitional tier \
-                     (VC-3/4/5) still works for this constructor — drop `deriving Coind`",
-                    ctor.name,
-                    children.len(),
-                    c.arg_name
-                )));
-            }
-            Ok(PosShape::Fold(children))
-        }
+        0 => PosShape::Empty,
+        1 => PosShape::Single(children[0]),
+        _ => PosShape::Fold(children),
     }
 }
 
 /// The name of a constructor's `i`-th child extractor.
-fn extractor_name(shape_name: &str, ctor: &VariantCtorPlan<'_>, i: usize, m: usize) -> String {
+fn extractor_name(
+    shape_name: &SurfaceName,
+    ctor: &VariantCtorPlan<'_>,
+    i: usize,
+    m: usize,
+) -> SurfaceName {
     if m == 1 {
-        format!("{shape_name}.{}Child", ctor.name)
+        shape_name.append(&affix_name(ctor.name, "", "Child"))
     } else {
-        format!("{shape_name}.{}Child{i}", ctor.name)
+        shape_name.append(&affix_name(ctor.name, "", &format!("Child{i}")))
     }
 }
 
 /// The wrapper-vocabulary child law's name for position `i`.
-fn wchild_name(shape_name: &str, ctor: &VariantCtorPlan<'_>, i: usize, m: usize) -> String {
+fn wchild_name(
+    shape_name: &SurfaceName,
+    ctor: &VariantCtorPlan<'_>,
+    i: usize,
+    m: usize,
+) -> SurfaceName {
     if m <= 1 {
-        format!("{shape_name}.wchild_{}", ctor.name)
+        shape_name.append(&affix_name(ctor.name, "wchild_", ""))
     } else {
-        format!("{shape_name}.wchild_{}_{i}", ctor.name)
+        shape_name.append(&affix_name(ctor.name, "wchild_", &format!("_{i}")))
     }
 }
 
@@ -360,7 +371,7 @@ pub(crate) fn generate(shape: &VariantShape<'_>) -> Result<Vec<SurfaceDecl>, Ela
     for (k, ctor) in shape.ctors.iter().enumerate() {
         out.extend(per_ctor(shape, &d, &n, k, ctor)?);
     }
-    out.extend(cases_tower(shape, &d, &n));
+    out.extend(cases_tower(shape, &d, &n)?);
     Ok(out)
 }
 
@@ -369,7 +380,7 @@ pub(crate) fn generate(shape: &VariantShape<'_>) -> Result<Vec<SurfaceDecl>, Ela
 /// `@Codata.IMchild` spelling, and the `Eq.rec` motives would not align.
 fn wrappers(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<SurfaceDecl> {
     let name = shape.name;
-    let unit = ident("PUnit.unit");
+    let unit = ident(GlobalPath("PUnit.unit"));
     let x = ident(&n.lhs);
 
     let child = {
@@ -377,7 +388,7 @@ fn wrappers(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<SurfaceDe
         bs.push(binder(&n.lhs, d.self_ty.clone()));
         bs.push(binder(&n.pos, d.pos_at(unit.clone(), d.head_of(x.clone()))));
         mk_def(
-            format!("{name}.child"),
+            child_name(name, "child"),
             bs,
             d.self_ty.clone(),
             d.imchild(unit.clone(), x.clone(), ident(&n.pos)),
@@ -392,7 +403,7 @@ fn wrappers(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<SurfaceDe
         bs.push(binder(&n.heq, eq(ident(&n.m1), ident(&n.m2))));
         bs.push(binder(&n.pos, d.pos_at(unit.clone(), ident(&n.m2))));
         mk_def(
-            format!("{name}.cast"),
+            child_name(name, "cast"),
             bs,
             d.pos_at(unit.clone(), ident(&n.m1)),
             plain_app(
@@ -402,7 +413,7 @@ fn wrappers(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<SurfaceDe
                         "congrArg",
                         vec![
                             d.member("posF", vec![unit.clone()]),
-                            plain_app("Eq.symm", vec![ident(&n.heq)]),
+                            plain_app(GlobalPath("Eq.symm"), vec![ident(&n.heq)]),
                         ],
                     ),
                     ident(&n.pos),
@@ -422,7 +433,7 @@ fn wrappers(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<SurfaceDe
 /// laws below.
 fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<SurfaceDecl> {
     let name = shape.name;
-    let unit = ident("PUnit.unit");
+    let unit = ident(GlobalPath("PUnit.unit"));
     let (j, x, y) = (ident(&n.idx), ident(&n.lhs), ident(&n.rhs));
     let hx = d.imhead(j.clone(), x.clone());
     let hy = d.imhead(j.clone(), y.clone());
@@ -466,7 +477,7 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
             d.imchild(j.clone(), y.clone(), b),
         );
         let body = plain_app(
-            "And",
+            GlobalPath("And"),
             vec![
                 eq(hx.clone(), hy.clone()),
                 pi(
@@ -476,10 +487,10 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
             ],
         );
         mk_def(
-            format!("{name}.ExtQ"),
+            child_name(name, "ExtQ"),
             shape.binders.to_vec(),
             pi(
-                vec![binder(&n.idx, punit_ty())],
+                vec![binder(&n.idx, punit_ty_p(d.poly.as_ref()))],
                 arrow(
                     d.imintl(j.clone()),
                     arrow(d.imintl(j.clone()), prop_universe()),
@@ -488,9 +499,9 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
             SurfaceExpr::Lambda(
                 Span::dummy(),
                 vec![
-                    SurfaceBinder::new(&n.idx, None, SurfaceBinderInfo::Explicit),
-                    SurfaceBinder::new(&n.lhs, None, SurfaceBinderInfo::Explicit),
-                    SurfaceBinder::new(&n.rhs, None, SurfaceBinderInfo::Explicit),
+                    surface_binder(&n.idx, None, SurfaceBinderInfo::Explicit),
+                    surface_binder(&n.lhs, None, SurfaceBinderInfo::Explicit),
+                    surface_binder(&n.rhs, None, SurfaceBinderInfo::Explicit),
                 ],
                 Box::new(body),
             ),
@@ -500,17 +511,17 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
     let ext_q_app = |a: SurfaceExpr, b: SurfaceExpr, c: SurfaceExpr| {
         let mut args = d.params.clone();
         args.extend([a, b, c]);
-        plain_app(&format!("{name}.ExtQ"), args)
+        plain_app(child_name(name, "ExtQ"), args)
     };
-    let ext_q_partial = || plain_app(&format!("{name}.ExtQ"), d.params.clone());
+    let ext_q_partial = || plain_app(child_name(name, "ExtQ"), d.params.clone());
 
     // T.ExtQ_hhead : ∀ j m1 m2, ExtQ j m1 m2 → IMhead j m1 = IMhead j m2
     let ext_q_hhead = mk_theorem(
-        format!("{name}.ExtQ_hhead"),
+        child_name(name, "ExtQ_hhead"),
         shape.binders.to_vec(),
         pi(
             vec![
-                binder(&n.idx, punit_ty()),
+                binder(&n.idx, punit_ty_p(d.poly.as_ref())),
                 binder(&n.m1, d.imintl(j.clone())),
                 binder(&n.m2, d.imintl(j.clone())),
             ],
@@ -523,20 +534,25 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
             ),
         ),
         lam(
-            &["_", "_", "_", &n.rel],
-            plain_app("And.left", vec![ident(&n.rel)]),
+            &[
+                SurfaceName::generated_path("_"),
+                SurfaceName::generated_path("_"),
+                SurfaceName::generated_path("_"),
+                n.rel.clone(),
+            ],
+            plain_app(GlobalPath("And.left"), vec![ident(&n.rel)]),
         ),
     );
 
     // T.ExtQ_of_eq : x = y → ExtQ j x y
     let ext_q_of_eq = {
         let mut bs = shape.binders.to_vec();
-        bs.push(implicit(&n.idx, punit_ty()));
+        bs.push(implicit(&n.idx, punit_ty_p(d.poly.as_ref())));
         bs.push(implicit(&n.lhs, d.imintl(j.clone())));
         bs.push(implicit(&n.rhs, d.imintl(j.clone())));
         bs.push(binder(&n.hyp, eq(x.clone(), y.clone())));
         mk_theorem(
-            format!("{name}.ExtQ_of_eq"),
+            child_name(name, "ExtQ_of_eq"),
             bs,
             ext_q_app(j.clone(), x.clone(), y.clone()),
             at_app(
@@ -545,12 +561,15 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
                     d.imintl(j.clone()),
                     x.clone(),
                     lam(
-                        &[&n.val, "_"],
+                        &[n.val.clone(), SurfaceName::generated_path("_")],
                         ext_q_app(j.clone(), x.clone(), ident(&n.val)),
                     ),
                     plain_app(
-                        "And.intro",
-                        vec![ident("rfl"), lam(&["_", "_"], ident("rfl"))],
+                        GlobalPath("And.intro"),
+                        vec![
+                            ident(GlobalPath("rfl")),
+                            lam(&["_", "_"], ident(GlobalPath("rfl"))),
+                        ],
                     ),
                     y.clone(),
                     ident(&n.hyp),
@@ -573,7 +592,7 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
         let e = ident(&n.heq);
         let b = ident(&n.pos);
         mk_theorem(
-            format!("{name}.ext_unwrap"),
+            child_name(name, "ext_unwrap"),
             bs,
             eq(
                 plain_app(
@@ -603,7 +622,7 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
                 ),
                 d.child_of(x.clone(), d.cast_of(e, b)),
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         )
     };
 
@@ -618,13 +637,13 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
         bs.push(binder(&n.e2, eq(hxu.clone(), hyu.clone())));
         bs.push(binder(&n.pos, d.pos_at(unit.clone(), hyu.clone())));
         mk_theorem(
-            format!("{name}.ch_cast_irrel"),
+            child_name(name, "ch_cast_irrel"),
             bs,
             eq(
                 d.child_of(x.clone(), d.cast_of(ident(&n.e1), ident(&n.pos))),
                 d.child_of(x.clone(), d.cast_of(ident(&n.e2), ident(&n.pos))),
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         )
     };
 
@@ -644,8 +663,8 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
                 ),
             ),
         ));
-        let hhead_partial = plain_app(&format!("{name}.ExtQ_hhead"), d.params.clone());
-        let of_eq_partial = plain_app(&format!("{name}.ExtQ_of_eq"), d.params.clone());
+        let hhead_partial = plain_app(child_name(name, "ExtQ_hhead"), d.params.clone());
+        let of_eq_partial = plain_app(child_name(name, "ExtQ_of_eq"), d.params.clone());
         // hchild is supplied INLINE. Naming it and reapplying does not
         // typecheck: the relation's children clause is ∀-quantified over the
         // head proof, so the argument must be built where that proof is bound
@@ -653,16 +672,16 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
         let hchild = SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new(&n.idx, None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(&n.m1, None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(&n.m2, None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(&n.rel, None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(&n.pos, None, SurfaceBinderInfo::Explicit),
+                surface_binder(&n.idx, None, SurfaceBinderInfo::Explicit),
+                surface_binder(&n.m1, None, SurfaceBinderInfo::Explicit),
+                surface_binder(&n.m2, None, SurfaceBinderInfo::Explicit),
+                surface_binder(&n.rel, None, SurfaceBinderInfo::Explicit),
+                surface_binder(&n.pos, None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(plain_app_expr(
                 of_eq_partial,
                 vec![plain_app(
-                    "And.right",
+                    GlobalPath("And.right"),
                     vec![
                         ident(&n.rel),
                         plain_app_expr(
@@ -677,14 +696,14 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
         let e = ident(&n.heq);
         let b = ident(&n.pos);
         let witness = plain_app(
-            "And.intro",
+            GlobalPath("And.intro"),
             vec![
                 e.clone(),
                 SurfaceExpr::Lambda(
                     Span::dummy(),
                     vec![
-                        SurfaceBinder::new(&n.e1, None, SurfaceBinderInfo::Explicit),
-                        SurfaceBinder::new(&n.pos, None, SurfaceBinderInfo::Explicit),
+                        surface_binder(&n.e1, None, SurfaceBinderInfo::Explicit),
+                        surface_binder(&n.pos, None, SurfaceBinderInfo::Explicit),
                     ],
                     Box::new(plain_app(
                         "Eq.trans",
@@ -692,7 +711,7 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
                             {
                                 let mut a = d.params.clone();
                                 a.extend([x.clone(), y.clone(), ident(&n.e1), b.clone()]);
-                                plain_app(&format!("{name}.ext_unwrap"), a)
+                                plain_app(child_name(name, "ext_unwrap"), a)
                             },
                             plain_app(
                                 "Eq.trans",
@@ -706,7 +725,7 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
                                             e.clone(),
                                             b.clone(),
                                         ]);
-                                        plain_app(&format!("{name}.ch_cast_irrel"), a)
+                                        plain_app(child_name(name, "ch_cast_irrel"), a)
                                     },
                                     plain_app(&n.hc, vec![b.clone()]),
                                 ],
@@ -717,13 +736,13 @@ fn extensionality(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Sur
             ],
         );
         mk_theorem(
-            format!("{name}.ext"),
+            child_name(name, "ext"),
             bs,
             eq(x.clone(), y.clone()),
             at_app(
                 "Codata.iM_coind",
                 vec![
-                    punit_ty(),
+                    punit_ty_p(d.poly.as_ref()),
                     d.shape_f.clone(),
                     d.pos_f.clone(),
                     d.tgt_f.clone(),
@@ -772,8 +791,8 @@ fn per_ctor(
     ctor: &VariantCtorPlan<'_>,
 ) -> Result<Vec<SurfaceDecl>, ElabError> {
     let name = shape.name;
-    let class = classify(name, ctor)?;
-    let unit = ident("PUnit.unit");
+    let class = classify(ctor);
+    let unit = ident(GlobalPath("PUnit.unit"));
     let x = ident(&n.lhs);
     let tag = shape.tag(k, ctor.payload_value());
     let hh = ident(&n.hh);
@@ -847,7 +866,7 @@ fn per_ctor(
             }
         }
     }
-    let rebuilt = plain_app(&format!("{name}.{}", ctor.name), rebuilt_args);
+    let rebuilt = plain_app(name.append(ctor.name), rebuilt_args);
 
     // Wrapper-vocabulary child laws for THIS constructor, over the rebuilt
     // value — the eta proof's children clause is discharged with these.
@@ -874,7 +893,7 @@ fn per_ctor(
             law,
             bs,
             eq(d.child_of(rebuilt.clone(), pos), rhs),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
@@ -891,7 +910,7 @@ fn per_ctor(
         a.extend(payload_binders.iter().map(|b| ident(&b.name)));
         a.push(hh.clone());
         a.extend(extra);
-        plain_app(&wchild_name(name, ctor, i, m), a)
+        plain_app(wchild_name(name, ctor, i, m), a)
     };
     let hc = match &class {
         PosShape::Empty => lam_typed(
@@ -907,30 +926,43 @@ fn per_ctor(
                 Some(_) => vec![ident(&n.pos)],
                 None => Vec::new(),
             };
-            lam_one(&n.pos, plain_app("Eq.symm", vec![wchild_ref(0, arg)]))
+            lam_one(
+                &n.pos,
+                plain_app(GlobalPath("Eq.symm"), vec![wchild_ref(0, arg)]),
+            )
         }
-        PosShape::Fold(cs) => lam_one(
-            &n.pos,
-            sum_rec_tower(
-                cs.len(),
-                0,
-                &n.scrut,
-                &obligation,
-                &|i| plain_app("Eq.symm", vec![wchild_ref(i, Vec::new())]),
-                ident(&n.pos),
-            ),
-        ),
+        PosShape::Fold(cs) => {
+            let doms: Vec<SurfaceExpr> = cs.iter().map(|c| c.domain_in_args()).collect();
+            let families: Vec<bool> = cs.iter().map(|c| c.family.is_some()).collect();
+            lam_one(
+                &n.pos,
+                sum_rec_tower(
+                    &doms,
+                    &families,
+                    0,
+                    &n.scrut,
+                    &obligation,
+                    &|i, at| {
+                        plain_app(
+                            GlobalPath("Eq.symm"),
+                            vec![wchild_ref(i, at.into_iter().collect())],
+                        )
+                    },
+                    ident(&n.pos),
+                ),
+            )
+        }
     };
 
     // The eta law itself.
     out.push(mk_theorem(
-        format!("{name}.{}_eta", ctor.name),
+        name.append(&affix_name(ctor.name, "", "_eta")),
         eta_binders.clone(),
         eq(x.clone(), rebuilt.clone()),
         {
             let mut a = d.params.clone();
             a.extend([x.clone(), rebuilt.clone(), hh.clone(), hc]);
-            plain_app(&format!("{name}.ext"), a)
+            plain_app(child_name(name, "ext"), a)
         },
     ));
 
@@ -943,8 +975,8 @@ fn per_ctor(
         let mut call = d.params.clone();
         call.push(ctor_call(name, ctor, &d.params));
         call.extend(payload_binders.iter().map(|b| ident(&b.name)));
-        call.push(ident("rfl"));
-        let applied = plain_app(&extractor_name(name, ctor, i, m), call);
+        call.push(ident(GlobalPath("rfl")));
+        let applied = plain_app(extractor_name(name, ctor, i, m), call);
         let (lhs, rhs, bs) = match &c.family {
             Some(f) => {
                 let mut bs = bs;
@@ -958,26 +990,20 @@ fn per_ctor(
             None => (applied, ident(&c.arg_name), bs),
         };
         out.push(mk_theorem(
-            format!("{}_compute", extractor_name(name, ctor, i, m)),
+            affix_name(&extractor_name(name, ctor, i, m), "", "_compute"),
             bs,
             eq(lhs, rhs),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
     Ok(out)
 }
 
-/// The right-nested `Sum` of `count` copies of `PUnit.{1}` — the position
-/// type of an all-bare k-fold constructor, and of each of its tails.
-fn punit_sum(count: usize) -> SurfaceExpr {
-    nest_right("Sum", vec![punit_ty(); count]).unwrap_or_else(punit_ty)
-}
-
 /// Re-inject a value sitting at nesting depth `offset` back into the full
 /// position type: `Sum.inr` applied `offset` times.
 fn wrap_inr(offset: usize, v: SurfaceExpr) -> SurfaceExpr {
-    (0..offset).fold(v, |e, _| plain_app("Sum.inr", vec![e]))
+    (0..offset).fold(v, |e, _| plain_app(GlobalPath("Sum.inr"), vec![e]))
 }
 
 /// The dependent `Sum.rec` tower discharging an all-bare k-fold position's
@@ -994,40 +1020,72 @@ fn wrap_inr(offset: usize, v: SurfaceExpr) -> SurfaceExpr {
 /// alternative, which also checks but is dead weight
 /// (`designs/2026-08-28-variant-codata-surface.md` §9).
 fn sum_rec_tower(
-    m: usize,
+    doms: &[SurfaceExpr],
+    families: &[bool],
     offset: usize,
-    scrut_base: &str,
+    scrut_base: &SurfaceName,
     obligation: &dyn Fn(SurfaceExpr) -> SurfaceExpr,
-    branch: &dyn Fn(usize) -> SurfaceExpr,
+    branch: &dyn Fn(usize, Option<SurfaceExpr>) -> SurfaceExpr,
     scrut: SurfaceExpr,
 ) -> SurfaceExpr {
+    let m = doms.len();
     if offset + 1 == m {
-        // Last summand: the tail type is that child's own position, and the
-        // scrutinee IS it.
-        return branch(offset);
+        return branch(offset, families[offset].then(|| scrut.clone()));
     }
-    let z = format!("{scrut_base}{offset}");
-    let tail = format!("{scrut_base}t{offset}");
-    let tail_ty = punit_sum(m - offset - 1);
+    let z = affix_name(scrut_base, "", &format!("{offset}"));
+    let tail = affix_name(scrut_base, "", &format!("t{offset}"));
+    let here = affix_name(scrut_base, "", &format!("a{offset}"));
+    let tail_ty = dom_sum(&doms[offset + 1..]);
     at_app(
-        "Sum.rec",
+        GlobalPath("Sum.rec"),
         vec![
-            punit_ty(),
+            doms[offset].clone(),
             tail_ty.clone(),
             lam_typed(
                 &z,
-                punit_sum(m - offset),
+                dom_sum(&doms[offset..]),
                 obligation(wrap_inr(offset, ident(&z))),
             ),
-            lam(&["_"], branch(offset)),
+            // A bare child's binder is a `PUnit` nothing reads; an indexed
+            // family's is the index its child law is stated at, so it must be
+            // bound and passed on rather than discarded.
+            if families[offset] {
+                lam_typed(
+                    &here,
+                    doms[offset].clone(),
+                    branch(offset, Some(ident(&here))),
+                )
+            } else {
+                lam(&["_"], branch(offset, None))
+            },
             lam_typed(
                 &tail,
                 tail_ty,
-                sum_rec_tower(m, offset + 1, scrut_base, obligation, branch, ident(&tail)),
+                sum_rec_tower(
+                    doms,
+                    families,
+                    offset + 1,
+                    scrut_base,
+                    obligation,
+                    branch,
+                    ident(&tail),
+                ),
             ),
             scrut,
         ],
     )
+}
+
+/// The right-nested `Sum` of a child-domain list.
+///
+/// Callers always pass a non-empty slice (a k-fold constructor has at least
+/// two children), so the fallback is unreachable; it is spelled `PUnit.{1}`
+/// rather than threaded through `poly` on that ground alone. If a caller ever
+/// does pass an empty slice under `codata T.{u}`, the level would be wrong —
+/// hence the debug assertion.
+fn dom_sum(doms: &[SurfaceExpr]) -> SurfaceExpr {
+    debug_assert!(!doms.is_empty(), "dom_sum: empty domain list");
+    nest_right(GlobalPath("Sum"), doms.to_vec()).unwrap_or_else(punit_ty)
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -1052,7 +1110,7 @@ fn tail_ty(shape: &VariantShape<'_>, d: usize) -> SurfaceExpr {
     // `d` always indexes a real constructor, so `parts` is never empty and
     // `nest_right` never returns `None`; `punit_ty` is an unreachable
     // fallback kept only to avoid a panic path.
-    nest_right("Sum", parts).unwrap_or_else(punit_ty)
+    nest_right(GlobalPath("Sum"), parts).unwrap_or_else(|| punit_ty_p(shape.poly))
 }
 
 /// `Or.inr`ᵏ (`Or.inl` …) — inject a disjunct into the right-nested `Or`.
@@ -1061,21 +1119,80 @@ fn inject_or(k: usize, n: usize, v: SurfaceExpr) -> SurfaceExpr {
         return v;
     }
     if k == 0 {
-        return plain_app("Or.inl", vec![v]);
+        return plain_app(GlobalPath("Or.inl"), vec![v]);
     }
-    plain_app("Or.inr", vec![inject_or(k - 1, n - 1, v)])
+    plain_app(GlobalPath("Or.inr"), vec![inject_or(k - 1, n - 1, v)])
 }
 
-/// One constructor argument's TYPE, as the `∃` over it must spell it.
-fn arg_ty(a: &crate::codata_variant_plan::ArgPlan<'_>, self_ty: &SurfaceExpr) -> SurfaceExpr {
+/// The BINDER of an existentially quantified constructor argument, at
+/// quantification level `i`: its name and its type.
+///
+/// Existential binders take the plan's ALTERNATE names, never the
+/// constructor's primary argument names, and that is a correctness fix, not
+/// cosmetics. The proof of `T.cases_Cₖ_innerᵢ` places the witnesses for the
+/// arguments BEFORE `i` inside these binders, and a witness is an extractor
+/// application carrying every payload binder of the enclosing lemma. If the
+/// existential rebinds a payload under its primary name it CAPTURES that
+/// payload inside the witness: the extractor then receives the bound
+/// variable where the lemma's binder was meant, and `hh`'s type no longer
+/// matches. That is what made every constructor with a payload AFTER a child
+/// fail (`| C : T A → A → T A`), as an `fvar` mismatch two indices wide.
+///
+/// Renaming forces an indexed family's domain to be re-spelled to match.
+/// `FamilyPlan` carries `source` (primary names) and `in_alt` (alternate),
+/// and which is in scope depends on whether the payloads that domain
+/// mentions are themselves existentially bound here (`>= i`, alternate) or
+/// bound by the enclosing lemma (`< i`, primary). A domain mentioning
+/// payloads on BOTH sides has no single correct spelling; it is refused by
+/// name rather than mis-spelled.
+fn ex_binder(
+    shape_name: &SurfaceName,
+    ctor: &VariantCtorPlan<'_>,
+    j: usize,
+    i: usize,
+    self_ty: &SurfaceExpr,
+) -> Result<(SurfaceName, SurfaceExpr), ElabError> {
     use crate::codata_variant_plan::ArgPlan;
-    match a {
+    let name = ctor.args[j].alt_name().clone();
+    let ty = match &ctor.args[j] {
         ArgPlan::Payload(p) => p.ty.clone(),
         ArgPlan::Child(c) => match &c.family {
-            Some(f) => arrow(f.source.clone(), self_ty.clone()),
             None => self_ty.clone(),
+            Some(f) => {
+                let (mut lemma_bound, mut ex_bound) = (false, false);
+                for (k, a) in ctor.args.iter().enumerate() {
+                    if let ArgPlan::Payload(pp) = a {
+                        if mentions(f.source, &pp.arg_name) {
+                            if k < i {
+                                lemma_bound = true;
+                            } else {
+                                ex_bound = true;
+                            }
+                        }
+                    }
+                }
+                if lemma_bound && ex_bound {
+                    return Err(unsupported(format!(
+                        "variant codata `{shape_name}`: `deriving Coind` cannot state the \
+                         case tower for constructor `{}` — the domain of `{}` mentions \
+                         payloads on both sides of the quantifier split, so it has no \
+                         single correct spelling (some are bound by the lemma, some by \
+                         the existential). Reorder the constructor so its payloads \
+                         precede its recursive arguments, or drop `deriving Coind`",
+                        ctor.name,
+                        ctor.args[j].arg_name()
+                    )));
+                }
+                let dom = if ex_bound {
+                    f.in_alt.clone()
+                } else {
+                    f.source.clone()
+                };
+                arrow(dom, self_ty.clone())
+            }
         },
-    }
+    };
+    Ok((name, ty))
 }
 
 /// The witness for argument `i`: a payload is its own bound binder, a child
@@ -1102,36 +1219,45 @@ fn arg_witness(
             call.push(ident(&n.lhs));
             call.extend(payload_binders.iter().map(|b| ident(&b.name)));
             call.push(ident(&n.hh));
-            plain_app(&extractor_name(shape.name, ctor, ci, m), call)
+            plain_app(extractor_name(shape.name, ctor, ci, m), call)
         }
     }
 }
 
 /// `T.CasesP`, `T.sumCases`, the per-constructor `T.cases_Cₖ` (with the
 /// hoisted inner existentials each needs), and `T.cases` itself.
-fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<SurfaceDecl> {
+fn cases_tower(
+    shape: &VariantShape<'_>,
+    d: &Desc,
+    n: &CoindNames,
+) -> Result<Vec<SurfaceDecl>, ElabError> {
     let name = shape.name;
     let nctors = shape.ctors.len();
     let x = ident(&n.lhs);
     let mut out: Vec<SurfaceDecl> = Vec::new();
 
     // ── T.CasesP: the n-way disjunction of existentials.
-    let disjunct = |ctor: &VariantCtorPlan<'_>| {
-        let mut body = eq(x.clone(), ctor_call(name, ctor, &d.params));
-        for a in ctor.args.iter().rev() {
-            body = plain_app(
-                "Exists",
-                vec![lam_typed(a.arg_name(), arg_ty(a, &d.self_ty), body)],
-            );
+    let disjunct = |ctor: &VariantCtorPlan<'_>| -> Result<SurfaceExpr, ElabError> {
+        let mut applied = d.params.clone();
+        applied.extend(ctor.args.iter().map(|a| ident(a.alt_name())));
+        let mut body = eq(x.clone(), plain_app(name.append(ctor.name), applied));
+        for j in (0..ctor.args.len()).rev() {
+            let (bn, bt) = ex_binder(name, ctor, j, 0, &d.self_ty)?;
+            body = plain_app(GlobalPath("Exists"), vec![lam_typed(&bn, bt, body)]);
         }
-        body
+        Ok(body)
     };
-    let cases_p_body = nest_right("Or", shape.ctors.iter().map(disjunct).collect::<Vec<_>>())
-        .unwrap_or_else(|| ident("True"));
+    let disjuncts = shape
+        .ctors
+        .iter()
+        .map(disjunct)
+        .collect::<Result<Vec<_>, _>>()?;
+    let cases_p_body =
+        nest_right(GlobalPath("Or"), disjuncts).unwrap_or_else(|| ident(GlobalPath("True")));
     let mut cp_binders = shape.binders.to_vec();
     cp_binders.push(binder(&n.lhs, d.self_ty.clone()));
     out.push(mk_def(
-        format!("{name}.CasesP"),
+        child_name(name, "CasesP"),
         cp_binders,
         prop_universe(),
         cases_p_body,
@@ -1147,17 +1273,23 @@ fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Surfac
     // analysis that remembers its scrutinee.
     if nctors > 1 {
         let (bx, by, bv, bc, bl, br) = ("X", "Y", "v", "C", "hl", "hr");
-        let sum_xy = plain_app("Sum", vec![ident(bx), ident(by)]);
+        let sum_xy = plain_app(GlobalPath("Sum"), vec![ident(bx), ident(by)]);
         out.push(mk_theorem(
-            format!("{name}.sumCases"),
-            vec![implicit(bx, ident("Type")), implicit(by, ident("Type"))],
+            child_name(name, "sumCases"),
+            vec![
+                implicit(bx, type_u(d.poly.as_ref())),
+                implicit(by, type_u(d.poly.as_ref())),
+            ],
             pi(
                 vec![binder(bv, sum_xy.clone()), binder(bc, prop_universe())],
                 arrow(
                     pi(
                         vec![binder("xa", ident(bx))],
                         arrow(
-                            eq(ident(bv), plain_app("Sum.inl", vec![ident("xa")])),
+                            eq(
+                                ident(bv),
+                                plain_app(GlobalPath("Sum.inl"), vec![ident("xa")]),
+                            ),
                             ident(bc),
                         ),
                     ),
@@ -1165,7 +1297,10 @@ fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Surfac
                         pi(
                             vec![binder("ya", ident(by))],
                             arrow(
-                                eq(ident(bv), plain_app("Sum.inr", vec![ident("ya")])),
+                                eq(
+                                    ident(bv),
+                                    plain_app(GlobalPath("Sum.inr"), vec![ident("ya")]),
+                                ),
                                 ident(bc),
                             ),
                         ),
@@ -1176,7 +1311,7 @@ fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Surfac
             lam(
                 &[bv, bc, bl, br],
                 at_app(
-                    "Sum.rec",
+                    GlobalPath("Sum.rec"),
                     vec![
                         ident(bx),
                         ident(by),
@@ -1185,18 +1320,24 @@ fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Surfac
                             &["xa", "he"],
                             plain_app(
                                 bl,
-                                vec![ident("xa"), plain_app("Eq.symm", vec![ident("he")])],
+                                vec![
+                                    ident("xa"),
+                                    plain_app(GlobalPath("Eq.symm"), vec![ident("he")]),
+                                ],
                             ),
                         ),
                         lam(
                             &["ya", "he"],
                             plain_app(
                                 br,
-                                vec![ident("ya"), plain_app("Eq.symm", vec![ident("he")])],
+                                vec![
+                                    ident("ya"),
+                                    plain_app(GlobalPath("Eq.symm"), vec![ident("he")]),
+                                ],
                             ),
                         ),
                         ident(bv),
-                        ident("rfl"),
+                        ident(GlobalPath("rfl")),
                     ],
                 ),
             ),
@@ -1220,59 +1361,89 @@ fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Surfac
             &n.hh,
             eq(d.head_of(x.clone()), shape.tag(k, ctor.payload_value())),
         ));
-        let call_lemma = |suffix: &str| {
+        let call_lemma = |suffix: &SurfaceName| {
             let mut a = d.params.clone();
             a.push(x.clone());
             a.extend(payload_binders.iter().map(|b| ident(&b.name)));
             a.push(ident(&n.hh));
-            plain_app(&format!("{name}.{suffix}"), a)
+            plain_app(name.append(suffix), a)
         };
         let witnesses: Vec<SurfaceExpr> = (0..ctor.args.len())
             .map(|i| arg_witness(shape, d, n, ctor, &payload_binders, i))
             .collect();
-        let eta = call_lemma(&format!("{}_eta", ctor.name));
+        let eta = call_lemma(&affix_name(ctor.name, "", "_eta"));
 
         // `∃ a_i … a_{m-1}, x = Cₖ w₀ … w_{i-1} a_i …` — the statement of
         // the level-`i` inner lemma.
-        let inner_stmt = |i: usize| {
+        // The PREDICATE of the level-`i` existential: `fun aᵢ => ∃ aᵢ₊₁ …,
+        // x = Cₖ w₀ … wᵢ₋₁ aᵢ …`. Factored out of the statement because the
+        // proof needs it too — see the `@Exists.intro` note below.
+        let inner_pred = |i: usize| -> Result<SurfaceExpr, ElabError> {
             let mut applied = d.params.clone();
             for (j, a) in ctor.args.iter().enumerate() {
                 applied.push(if j < i {
                     witnesses[j].clone()
                 } else {
-                    ident(a.arg_name())
+                    ident(a.alt_name())
                 });
             }
-            let mut body = eq(
-                x.clone(),
-                plain_app(&format!("{name}.{}", ctor.name), applied),
-            );
-            for a in ctor.args[i..].iter().rev() {
-                body = plain_app(
-                    "Exists",
-                    vec![lam_typed(a.arg_name(), arg_ty(a, &d.self_ty), body)],
-                );
+            let mut body = eq(x.clone(), plain_app(name.append(ctor.name), applied));
+            for j in ((i + 1)..ctor.args.len()).rev() {
+                let (bn, bt) = ex_binder(name, ctor, j, i, &d.self_ty)?;
+                body = plain_app(GlobalPath("Exists"), vec![lam_typed(&bn, bt, body)]);
             }
-            body
+            let (bn, bt) = ex_binder(name, ctor, i, i, &d.self_ty)?;
+            Ok(lam_typed(&bn, bt, body))
         };
+        let inner_stmt = |i: usize| -> Result<SurfaceExpr, ElabError> {
+            Ok(plain_app(GlobalPath("Exists"), vec![inner_pred(i)?]))
+        };
+
+        // `Exists.intro` with its implicits SPELLED, never inferred.
+        //
+        // `Exists.intro : {α} → {p : α → Prop} → (w : α) → p w → Exists p`.
+        // Leaving `p` implicit works only when the elaborator can propagate
+        // the expected type before checking the arguments. Here it often
+        // cannot: the goal sits behind the `T.CasesP` definition, and the
+        // witness is a compound extractor application rather than a plain
+        // local — so `?p w` is not a Miller pattern, positional decomposition
+        // assigns `?p := @Exists α`, and the elaboration dies on `Lam` vs
+        // `App` with a poisoned metavariable.
+        //
+        // MEASURED, and it is not the exotic shape it looks like: the trigger
+        // is a single-constructor codata whose FIRST argument is recursive.
+        // Multi-constructor codata escaped only by accident — `inject_or`
+        // wraps the disjunct in `Or.inl`, whose own implicit pins the shape
+        // before `Exists.intro` is reached. `codata T where | C : T → T` is
+        // the minimal case, and it is about as ordinary as a codata gets.
+        let exists_intro =
+            |i: usize, w: SurfaceExpr, h: SurfaceExpr| -> Result<SurfaceExpr, ElabError> {
+                let (_, ty) = ex_binder(name, ctor, i, i, &d.self_ty)?;
+                Ok(at_app(
+                    GlobalPath("Exists.intro"),
+                    vec![ty, inner_pred(i)?, w, h],
+                ))
+            };
 
         let m = ctor.args.len();
         for i in (1..m).rev() {
             let proof = if i + 1 == m {
-                plain_app("Exists.intro", vec![witnesses[i].clone(), eta.clone()])
+                exists_intro(i, witnesses[i].clone(), eta.clone())?
             } else {
-                plain_app(
-                    "Exists.intro",
-                    vec![
-                        witnesses[i].clone(),
-                        call_lemma(&format!("cases_{}_inner{}", ctor.name, i + 1)),
-                    ],
-                )
+                exists_intro(
+                    i,
+                    witnesses[i].clone(),
+                    call_lemma(&affix_name(
+                        ctor.name,
+                        "cases_",
+                        &format!("_inner{}", i + 1),
+                    )),
+                )?
             };
             out.push(mk_theorem(
-                format!("{name}.cases_{}_inner{i}", ctor.name),
+                name.append(&affix_name(ctor.name, "cases_", &format!("_inner{i}"))),
                 lemma_binders.clone(),
-                inner_stmt(i),
+                inner_stmt(i)?,
                 proof,
             ));
         }
@@ -1280,18 +1451,16 @@ fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Surfac
         let payload = if m == 0 {
             eta.clone()
         } else if m == 1 {
-            plain_app("Exists.intro", vec![witnesses[0].clone(), eta.clone()])
+            exists_intro(0, witnesses[0].clone(), eta.clone())?
         } else {
-            plain_app(
-                "Exists.intro",
-                vec![
-                    witnesses[0].clone(),
-                    call_lemma(&format!("cases_{}_inner1", ctor.name)),
-                ],
-            )
+            exists_intro(
+                0,
+                witnesses[0].clone(),
+                call_lemma(&affix_name(ctor.name, "cases_", "_inner1")),
+            )?
         };
         out.push(mk_theorem(
-            format!("{name}.cases_{}", ctor.name),
+            name.append(&affix_name(ctor.name, "cases_", "")),
             lemma_binders,
             cases_p_at(x.clone()),
             inject_or(k, nctors, payload),
@@ -1312,18 +1481,21 @@ fn cases_tower(shape: &VariantShape<'_>, d: &Desc, n: &CoindNames) -> Vec<Surfac
             (0..ctor.payload_count())
                 .map(|i| projection_path_of(&d.head_of(x.clone()), i, ctor.payload_count())),
         );
-        a.push(ident("rfl"));
-        plain_app(&format!("{name}.cases_{}", shape.ctors[0].name), a)
+        a.push(ident(GlobalPath("rfl")));
+        plain_app(
+            name.append(&affix_name(shape.ctors[0].name, "cases_", "")),
+            a,
+        )
     } else {
         dispatch(shape, d, n, 0, d.head_of(x.clone()), &[], &goal)
     };
     out.push(mk_theorem(
-        format!("{name}.cases"),
+        child_name(name, "cases"),
         cases_binders,
         goal,
         body,
     ));
-    out
+    Ok(out)
 }
 
 /// The projection chain recovering payload `i` of `k` from an EXPRESSION
@@ -1362,7 +1534,7 @@ fn fold_head_eq(shape: &VariantShape<'_>, chain: &[SurfaceExpr], leaf: SurfaceEx
                             "zw",
                             inner.clone(),
                             at_app(
-                                "Sum.inr",
+                                GlobalPath("Sum.inr"),
                                 vec![
                                     shape.ctors[depth].payload_ty.clone(),
                                     inner.clone(),
@@ -1406,11 +1578,11 @@ fn dispatch(
 ) -> SurfaceExpr {
     let name = shape.name;
     let nctors = shape.ctors.len();
-    let pname = format!("{}{level}", n.scrut);
-    let sname = format!("{}s{level}", n.scrut);
-    let hname = format!("{}h{level}", n.scrut);
+    let pname = affix_name(&n.scrut, "", &format!("{level}"));
+    let sname = affix_name(&n.scrut, "", &format!("s{level}"));
+    let hname = affix_name(&n.scrut, "", &format!("h{level}"));
 
-    let leaf = |k: usize, p: &str, upto: &[SurfaceExpr]| {
+    let leaf = |k: usize, p: &SurfaceName, upto: &[SurfaceExpr]| {
         let ctor = &shape.ctors[k];
         let mut a = d.params.clone();
         a.push(ident(&n.lhs));
@@ -1419,7 +1591,7 @@ fn dispatch(
                 .map(|i| projection_path_of(&ident(p), i, ctor.payload_count())),
         );
         a.push(fold_head_eq(shape, upto, ident(&hname)));
-        plain_app(&format!("{name}.cases_{}", ctor.name), a)
+        plain_app(name.append(&affix_name(ctor.name, "cases_", "")), a)
     };
 
     let inl_branch = lam(&[&pname, &hname], leaf(level, &pname, chain));
@@ -1436,7 +1608,7 @@ fn dispatch(
         lam(&[&sname, &hname], inner)
     };
     plain_app(
-        &format!("{name}.sumCases"),
+        child_name(name, "sumCases"),
         vec![scrut, goal.clone(), inl_branch, inr_branch],
     )
 }

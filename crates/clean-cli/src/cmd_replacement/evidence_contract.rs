@@ -32,7 +32,81 @@ pub(crate) enum EvidenceContract {
     JsonReport { schema_version: &'static str },
     /// A prose document (Markdown / text). Must not be blank.
     Document,
+    /// An artifact whose PRODUCER does not measure the row's claim --
+    /// hard-coded, stub-only or emit-only evidence. However well-formed the
+    /// file is, it cannot back a row: the row reads `unknown`, never `green`.
+    /// `why` says what the artifact actually is; `would_mint` names what would
+    /// produce real evidence, so the downgrade is actionable rather than a
+    /// verdict nobody can discharge.
+    Vacuous {
+        why: &'static str,
+        would_mint: &'static str,
+    },
+    /// A JSON report contract that NO command in the tree produces yet. Real
+    /// content is validated exactly as `JsonReport { schema_version }`, but the
+    /// `{"stub": true}` placeholder standing at the path is VACUOUS rather than
+    /// late -- nothing will replace it until a producer exists -- so the row
+    /// reads `unknown`, and `would_mint` names the producer that would change
+    /// that. Unlike `Vacuous`, a real report minted later backs the row with no
+    /// contract change: what is vacuous here is the placeholder, not the path.
+    Unproduced {
+        schema_version: &'static str,
+        would_mint: &'static str,
+    },
 }
+
+#[cfg(test)]
+impl EvidenceContract {
+    /// The `schema_version` a real artifact at this path must carry, for the
+    /// contracts that validate one. Test-only: it is how
+    /// `evidence_contract_agrees_with_validate_report_kinds` compares both
+    /// JSON-validating contracts against `validate-report`'s schema pin.
+    pub(crate) fn json_schema(self) -> Option<&'static str> {
+        match self {
+            Self::JsonReport { schema_version } | Self::Unproduced { schema_version, .. } => {
+                Some(schema_version)
+            }
+            Self::Document | Self::Vacuous { .. } => None,
+        }
+    }
+}
+
+/// The tactic-parity count artifact, measured 2026-09-24 (lean4-replacement
+/// audit, tactics pillar, re-measured before this change): every one of its
+/// 56 rows reads `"matched": true`, and that value is a LITERAL -- `matched:
+/// true` sits in the production source of `generated_cases.rs` (five sites),
+/// `generated_cases_ext.rs` (two) and `tactic_rows.rs` (one); every
+/// `lean4_fixture` is a label string such as
+/// `generated:lean4-simp-representative`, and pinned Lean is never run. The
+/// artifact itself says `full_lean4_corpus_coverage_claimed: false`. It
+/// scored the `tactic-parity` row GREEN in `clean replacement status
+/// --informational` all the same.
+pub(crate) const TACTIC_PARITY_COUNTS_VACUOUS: EvidenceContract = EvidenceContract::Vacuous {
+    why: "every row's `matched: true` is a literal in cmd_replacement/generated_cases*.rs and \
+          tactic_rows.rs, every `lean4_fixture` is a label string, and pinned Lean is never run",
+    would_mint: "a differential tactic battery whose every expectation the pinned Lean \
+                 v4.30.0-rc2 produced, weighted by Mathlib tactic usage; no command mints one \
+                 yet (reports/tactic-parity-full-corpus.json, the artifact `clean replacement \
+                 tactic-parity validate-full-corpus` checks, is itself a stub)",
+};
+
+/// The LSP/infoview parity report, measured 2026-09-25 before this change: the
+/// file is the 15-byte `{"stub": true}` placeholder, and nothing in the tree
+/// WRITES a `clean-lsp-infoview-parity-v1` report -- `git grep` finds that
+/// schema only in two validators (`clean replacement validate-report` and
+/// `crates/clean-lsp/src/report_validation.rs`, whose tests all skip on the
+/// stub and pin that they do). The row was never Green (it is declared
+/// `PendingEvidence`), but "pending" promised evidence that no command can
+/// mint, so it reads `unknown` now, naming the harness that would mint it.
+pub(crate) const LSP_INFOVIEW_PARITY_UNPRODUCED: EvidenceContract = EvidenceContract::Unproduced {
+    schema_version: "clean-lsp-infoview-parity-v1",
+    would_mint: "a harness that drives `clean lsp` over a recorded vscode-lean4 session \
+                 (initialize, didOpen, hover, plainGoal, getInteractiveGoals) beside pinned \
+                 Lean v4.30.0-rc2's server and writes that report with its measured rows \
+                 (docs/plans/AUDIT_PILLARS_2026-08-10.md sizes it); `clean replacement \
+                 validate-report --kind lsp-infoview` then checks it and this row reads its \
+                 real state",
+};
 
 /// The declared contract for an evidence path, or `None` when the path has
 /// never been declared. `None` is fail-closed: an undeclared artifact cannot
@@ -45,7 +119,7 @@ pub(crate) fn evidence_contract_for(path: &str) -> Option<EvidenceContract> {
         }
         "reports/deny-sorry-launch-evidence.json" => json("clean-deny-sorry-launch-evidence-v1"),
         "reports/axiom-audit-launch-evidence.json" => json("clean-axiom-audit-launch-evidence-v1"),
-        "reports/tactic-parity-counts.json" => json("clean-tactic-parity-count-artifact-v1"),
+        "reports/tactic-parity-counts.json" => Some(TACTIC_PARITY_COUNTS_VACUOUS),
         "reports/strict-solver-fragment-dashboard.json" => {
             json("clean-strict-solver-fragment-dashboard-v1")
         }
@@ -53,9 +127,10 @@ pub(crate) fn evidence_contract_for(path: &str) -> Option<EvidenceContract> {
         "reports/mathverse-replay-replacement.json" => {
             json("clean-mathverse-replay-replacement-v1")
         }
-        "reports/lsp-infoview-parity.json" => json("clean-lsp-infoview-parity-v1"),
+        "reports/lsp-infoview-parity.json" => Some(LSP_INFOVIEW_PARITY_UNPRODUCED),
         "reports/lake-replacement-smoke.json" => json("clean-lake-replacement-smoke-v1"),
         "reports/compile-runtime-smoke.json" => json("clean-compile-runtime-smoke-v1"),
+        "reports/native-exec-battery.json" => json("clean-native-exec-battery-v1"),
         "reports/rust-first-tooling.json" => json("clean-rust-first-tooling-evidence-v1"),
         // The benchmark publication artifact predates the `clean-*-v1` naming
         // convention and pins an integer `schema_version`; compared by value.
@@ -111,7 +186,34 @@ pub(crate) fn validate_evidence_artifact(path: &str, contents: &str) -> Result<(
         EvidenceContract::JsonReport { schema_version } => {
             validate_json_evidence(contents, schema_version)
         }
+        EvidenceContract::Vacuous { why, would_mint } => Err(vacuous_detail(why, would_mint)),
+        EvidenceContract::Unproduced {
+            schema_version,
+            would_mint,
+        } => {
+            if is_stub_evidence(contents) {
+                Err(unproduced_stub_detail(schema_version, would_mint))
+            } else {
+                validate_json_evidence(contents, schema_version)
+            }
+        }
     }
+}
+
+/// The one sentence a VACUOUS artifact carries into the scorecard.
+pub(crate) fn vacuous_detail(why: &str, would_mint: &str) -> String {
+    format!("VACUOUS -- {why}; real evidence would be {would_mint}")
+}
+
+/// The VACUOUS sentence for the placeholder standing at an `Unproduced` path.
+pub(crate) fn unproduced_stub_detail(schema_version: &str, would_mint: &str) -> String {
+    vacuous_detail(
+        &format!(
+            "the artifact is the `{{\"stub\": true}}` placeholder and no command in the tree \
+             produces a {schema_version} report"
+        ),
+        would_mint,
+    )
 }
 
 fn validate_json_evidence(contents: &str, expected_schema: &str) -> Result<(), String> {
@@ -219,6 +321,7 @@ pub(crate) fn assess_evidence_in_root(root: &Path, evidence_artifact: &str) -> E
         EvidenceState::Missing,
         EvidenceState::Invalid,
         EvidenceState::Stub,
+        EvidenceState::Vacuous,
     ]
     .into_iter()
     .find(|worst| artifacts.iter().any(|artifact| artifact.state == *worst))
@@ -236,6 +339,16 @@ fn assess_one_artifact(root: &Path, declared: &str) -> EvidenceArtifactResolutio
         detail,
     };
 
+    // A VACUOUS path is decided by what PRODUCES it, not by what it contains:
+    // no content at that path -- the committed file, a perfectly shaped report,
+    // or nothing at all -- can back a row until the contract changes.
+    if let Some(EvidenceContract::Vacuous { why, would_mint }) = evidence_contract_for(declared) {
+        return resolution(
+            EvidenceState::Vacuous,
+            Some(vacuous_detail(why, would_mint)),
+        );
+    }
+
     let contents = match fs::read_to_string(&resolved) {
         Ok(contents) => contents,
         Err(error) if error.kind() == io::ErrorKind::NotFound => {
@@ -247,6 +360,19 @@ fn assess_one_artifact(root: &Path, declared: &str) -> EvidenceArtifactResolutio
     };
 
     if is_stub_evidence(&contents) {
+        // A placeholder where no producer exists is not evidence that is late:
+        // nothing will ever replace it, so it reads VACUOUS, naming the
+        // producer that would (`EvidenceContract::Unproduced`).
+        if let Some(EvidenceContract::Unproduced {
+            schema_version,
+            would_mint,
+        }) = evidence_contract_for(declared)
+        {
+            return resolution(
+                EvidenceState::Vacuous,
+                Some(unproduced_stub_detail(schema_version, would_mint)),
+            );
+        }
         return resolution(
             EvidenceState::Stub,
             Some("`{\"stub\": true}` placeholder".to_owned()),

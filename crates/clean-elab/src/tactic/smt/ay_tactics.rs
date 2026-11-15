@@ -26,6 +26,8 @@ use super::decide::decide;
 #[cfg(feature = "ay-smt")]
 use super::decide::validate_proof_term;
 #[cfg(feature = "ay-smt")]
+use super::prepare_integer_ops::prepare_smt_integer_expr;
+#[cfg(feature = "ay-smt")]
 use super::selected_proof::{
     accept_selected_direct_proof, choose_selected_proof, SelectedDirectProof, SelectedProofChoice,
 };
@@ -213,6 +215,33 @@ pub(super) fn select_verified_ay_proof(
 }
 
 #[cfg(feature = "ay-smt")]
+pub(super) fn register_goal_fvars(
+    state: &ProofState,
+    goal: &Goal,
+    backend: &mut SmtSolver,
+    tactic_name: &str,
+) -> Result<(), TacticError> {
+    backend.reserve_context_fvar_ids(&goal.local_ctx);
+    let mut term_locals = Vec::new();
+    for decl in &goal.local_ctx {
+        let ty = state.metas.instantiate(&decl.ty);
+        let sort = state.infer_type_strict(goal, &ty)?;
+        // A proof of a proposition is asserted through the hypothesis-aware
+        // path below, which retains its original proof variable. Registering
+        // that proof as an SMT scalar would confuse a proof with a term.
+        if !sort.is_prop() {
+            term_locals.push(decl.clone());
+        }
+    }
+    backend
+        .register_fvars_from_context(&term_locals, &state.metas)
+        .map_err(|error| TacticError::SmtFailed {
+            tactic: tactic_name.to_string(),
+            detail: format!("Ay registration error: {error}"),
+        })
+}
+
+#[cfg(feature = "ay-smt")]
 pub(super) fn assert_goal_hypotheses_with_drop_count(
     state: &ProofState,
     goal: &Goal,
@@ -221,19 +250,24 @@ pub(super) fn assert_goal_hypotheses_with_drop_count(
     let mut dropped_hypotheses = 0u32;
     for decl in &goal.local_ctx {
         let hyp_ty = state.metas.instantiate(&decl.ty);
-        if !hyp_ty.is_sort()
-            && backend
-                .translate_and_assert_hypothesis(decl.fvar, &hyp_ty)
-                .is_err()
-        {
-            dropped_hypotheses += 1;
+        if !hyp_ty.is_sort() {
+            let asserted = prepare_smt_integer_expr(state, goal, &hyp_ty)
+                .map_err(|error| error.to_string())
+                .and_then(|prepared| {
+                    backend
+                        .translate_and_assert_hypothesis(decl.fvar, &prepared)
+                        .map_err(|error| error.to_string())
+                });
+            if asserted.is_err() {
+                dropped_hypotheses += 1;
+            }
         }
     }
     dropped_hypotheses
 }
 
 #[cfg(feature = "ay-smt")]
-fn run_ay_tactic(
+pub(super) fn run_ay_tactic(
     state: &mut ProofState,
     config: &AyConfig,
     logic: AyLogic,
@@ -241,14 +275,15 @@ fn run_ay_tactic(
 ) -> Result<(), TacticError> {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = state.metas.instantiate(&goal.target);
+    let prepared_target = prepare_smt_integer_expr(state, &goal, &target).map_err(|error| {
+        TacticError::SmtFailed {
+            tactic: tactic_name.to_string(),
+            detail: format!("Ay integer input preparation error: {error}"),
+        }
+    })?;
 
     let mut backend = create_smt_backend(config, logic);
-    backend
-        .register_fvars_from_context(&goal.local_ctx, &state.metas)
-        .map_err(|e| TacticError::SmtFailed {
-            tactic: tactic_name.to_string(),
-            detail: format!("Ay registration error: {e:?}"),
-        })?;
+    register_goal_fvars(state, &goal, &mut backend, tactic_name)?;
 
     let dropped_hypotheses = assert_goal_hypotheses_with_drop_count(state, &goal, &mut backend);
     if dropped_hypotheses > 0 {
@@ -259,7 +294,7 @@ fn run_ay_tactic(
         );
     }
 
-    match backend.prove(&target) {
+    match backend.prove(&prepared_target) {
         Ok(outcome) if outcome.proved => {
             if config.is_verbose() {
                 if let Some(verification) = outcome.solver_verification() {
@@ -280,12 +315,13 @@ fn run_ay_tactic(
             let proof_term = select_verified_ay_proof(
                 state,
                 &goal,
-                &target,
+                &prepared_target,
                 tactic_name,
                 outcome.into_direct_proof(),
                 config.verify_policy(),
                 logic,
             )?;
+            let proof_term = validate_proof_term(state, &goal, &proof_term, &target)?;
             state.close_goal(&goal, proof_term)?;
             Ok(())
         }

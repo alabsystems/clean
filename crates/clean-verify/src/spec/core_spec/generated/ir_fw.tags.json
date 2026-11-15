@@ -10,7 +10,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
-  "functy": 489,
+  "functy": 460,
   "functy_note": "Pinned VERBATIM and re-pinned under review; read the notes in ir_h2.tags.json. Reader A's 2026-08-21 laneREG dump says 486 with the instruction text byte-identical -- the recorded whole-crate drift class. The pin compares reader B's header against the FIXTURE-ERA 489; reader A's value is RECORDED in ir_fw.mint.json, NEVER COMPARED.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
@@ -20,7 +20,7 @@
     "index": 0,
     "ssa": 0,
     "ty": "struct#0",
-    "observed_ty": "struct.1017",
+    "observed_ty": "struct.815",
     "rust_type": "flat::types::FlatFlags",
     "note": "`self`, BY VALUE. Its field-0 payload is OR-ed with the other's."
    },
@@ -29,7 +29,7 @@
     "index": 1,
     "ssa": 1,
     "ty": "struct#0",
-    "observed_ty": "struct.1017",
+    "observed_ty": "struct.815",
     "rust_type": "flat::types::FlatFlags",
     "note": "`other`, BY VALUE, the SAME canonical struct -- and the same canonical index the body's const/insertfield name, which is what says the rebuilt result IS the parameter type."
    }
@@ -47,7 +47,7 @@
  "structs": [
   {
    "canonical": 0,
-   "crate_id": 1017,
+   "crate_id": 815,
    "alias": "ir_fw_tflags",
    "rust_type": "flat::types::FlatFlags",
    "observed_crate_id_by_producer": {

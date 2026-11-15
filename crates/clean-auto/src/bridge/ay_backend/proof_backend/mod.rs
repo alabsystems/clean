@@ -9,11 +9,13 @@ mod execution;
 mod verification;
 
 #[cfg(test)]
+mod carcara_surface_d7;
+#[cfg(test)]
 mod test_support;
 #[cfg(test)]
 mod tier_one_refusal_contract;
 
-use super::{AyBackendConfig, AyError, AyLogic};
+use super::{AyBackendConfig, AyError, AyLogic, AyUnknownReason};
 use ay::executor::Executor;
 use ay_core::quote_symbol;
 use std::fmt;
@@ -43,6 +45,12 @@ pub enum VerifyError {
     #[cfg(feature = "carcara-verify")]
     #[error("carcara error: {0}")]
     CarcaraError(String),
+
+    /// Carcara stopped at the caller's deadline before the check ended: the proof is not
+    /// accepted (see `verify_alethe_proof_until`).
+    #[cfg(feature = "carcara-verify")]
+    #[error("carcara stopped at its deadline: {0}")]
+    CarcaraDeadline(String),
 }
 
 impl From<VerifyError> for AyError {
@@ -59,6 +67,10 @@ impl From<VerifyError> for AyError {
             #[cfg(feature = "carcara-verify")]
             VerifyError::CarcaraError(message) => {
                 Self::VerificationFailed(format!("Carcara verification error: {message}"))
+            }
+            #[cfg(feature = "carcara-verify")]
+            VerifyError::CarcaraDeadline(message) => {
+                Self::VerificationFailed(format!("Carcara stopped at its deadline: {message}"))
             }
         }
     }
@@ -178,9 +190,26 @@ pub enum AyProofResult {
         /// Proof quality metrics from ay-proof native checker (if available)
         quality: Option<AyProofQuality>,
     },
-    /// The solver could not determine satisfiability
-    Unknown,
+    /// The solver could not determine satisfiability, for the reason ay gave.
+    Unknown {
+        /// Why the solve ended undecided, as ay reported it. Its `Display` is
+        /// ay's own token: `resourceout` when a deterministic count was spent
+        /// (the `:rlimit` effort, or an allowance of ay's own), `timeout` when
+        /// the `:timeout` backstop lapsed, `memout`, `incomplete`, and so on.
+        /// [`AyUnknownReason::Unknown`] when ay gave no specific reason.
+        reason: AyUnknownReason,
+        /// ay's sentence beside the reason (its `unknown.detail` statistic),
+        /// when it recorded one: which ceiling tripped, or which arm of a
+        /// soundness gate fired.
+        detail: Option<String>,
+    },
 }
+
+/// The script line [`AyProofBackend::push`] adds.
+const PUSH_MARKER: &str = "(push 1)";
+
+/// The script line [`AyProofBackend::pop`] adds.
+const POP_MARKER: &str = "(pop 1)";
 
 /// Ay backend with proof extraction support.
 /// Uses ay's `Executor` for proof production (Alethe format).
@@ -269,7 +298,7 @@ impl AyProofBackend {
     ///
     /// The returned name is properly quoted for SMT-LIB use if the name_hint
     /// contains reserved words or special characters.
-    pub fn fresh_real(&mut self, name_hint: &str) -> String {
+    pub(crate) fn fresh_real(&mut self, name_hint: &str) -> String {
         self.fresh_var(name_hint, "Real")
     }
 
@@ -296,13 +325,27 @@ impl AyProofBackend {
     }
 
     /// Push a new scope for incremental solving
+    ///
+    /// Under a tier-1 proof profile, a check whose native proof check is incomplete falls back to
+    /// Carcara, which reads a script as one query and refuses `push`/`pop`
+    /// (`third-party/carcara/DOWNSTREAM.md`, fix 37). Such a check is refused with
+    /// `VerificationFailed` before Carcara is invoked; a complete native check is unaffected.
     pub fn push(&mut self) {
-        self.assertions.push("(push 1)".to_string());
+        self.assertions.push(PUSH_MARKER.to_string());
     }
 
     /// Pop the most recent scope
+    ///
+    /// See [`Self::push`] for what a tier-1 proof profile does with a script that uses scopes.
     pub fn pop(&mut self) {
-        self.assertions.push("(pop 1)".to_string());
+        self.assertions.push(POP_MARKER.to_string());
+    }
+
+    /// Whether the script uses `push` or `pop` (see [`Self::push`]).
+    pub(super) fn uses_scopes(&self) -> bool {
+        self.assertions
+            .iter()
+            .any(|command| command == PUSH_MARKER || command == POP_MARKER)
     }
 
     /// Check whether the configured proof profile accepts the current logic.

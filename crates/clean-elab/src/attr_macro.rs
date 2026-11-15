@@ -75,7 +75,7 @@ pub enum AttrMacroResult {
     /// Register a C-export binding.
     RegisterExport { export_name: String },
     /// Register an implementation override.
-    RegisterImplementedBy { impl_name: String },
+    RegisterImplementedBy { impl_name: Name },
     /// Register the declaration as deprecated.
     RegisterDeprecated { message: Option<String> },
     /// Register the declaration as a coercion.
@@ -295,6 +295,7 @@ pub(crate) fn attr_name(attr: &Attribute) -> &str {
         Attribute::Ext => "ext",
         Attribute::Refl => "refl",
         Attribute::Symm => "symm",
+        Attribute::Grind(_) => "grind",
         Attribute::Reducible => "reducible",
         Attribute::Semireducible => "semireducible",
         Attribute::Irreducible => "irreducible",
@@ -317,6 +318,10 @@ pub(crate) fn attr_name(attr: &Attribute) -> &str {
         Attribute::InstancePriority(_) => "instance",
         Attribute::DefaultInstance { .. } => "default_instance",
         Attribute::Aesop(_) => "aesop",
+        // The macro registry has no `local` entry, as before: the scoped
+        // registration is done by `collect_attributes`.
+        Attribute::Local(_) => "local",
+        Attribute::Scoped(_) => "scoped",
         Attribute::Unknown(name) => name.as_str(),
     }
 }

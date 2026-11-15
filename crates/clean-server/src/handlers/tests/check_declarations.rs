@@ -246,3 +246,73 @@ async fn test_check_rejects_declaration_with_trailing_garbage() {
         result.errors
     );
 }
+
+/// A module-system spelling pinned Lean refuses (plan item
+/// `formats-module-spelling-refusals`) carries Lean's position, and the
+/// check result reports it as the error's line and column: the ones its
+/// message prints (1-based line, 0-based codepoint column), the convention
+/// `ParseError::UnexpectedToken`'s position already reaches the result in.
+#[tokio::test]
+async fn test_check_reports_the_position_of_a_module_syntax_refusal() {
+    let state = ServerState::new();
+    let params = CheckParams {
+        code: "private section".to_string(),
+        timeout_ms: None,
+    };
+
+    let response = handle_check(&state, RequestId::Number(1), params).await;
+    assert!(
+        response.error.is_none(),
+        "a refused spelling is a check result, not an RPC error: {:?}",
+        response.error
+    );
+    let result: CheckResult = serde_json::from_value(response.result.unwrap()).unwrap();
+    assert!(!result.valid, "pinned Lean refuses `private section`");
+    match result.errors.as_slice() {
+        [error] => {
+            assert_eq!(
+                error.message,
+                "1:7: error: unexpected token 'section'; expected 'abbrev', 'axiom', \
+                 'builtin_initialize', 'class', 'coinductive', 'def', 'example', 'inductive', \
+                 'initialize', 'instance', 'opaque', 'structure', 'syntax' or 'theorem'"
+            );
+            assert_eq!((error.line, error.column), (Some(1), Some(7)));
+        }
+        other => panic!("expected one error, got {other:?}"),
+    }
+}
+
+/// The same refusal inside a `namespace` body: the block that meets it
+/// latches it and stops, and `parse_decl_with_tactics_exact` used to return
+/// the block, so the check reported `trailing input after declaration:
+/// Section` at the keyword. Pinned Lean v4.30.0-rc2's first message on this
+/// source is the refusal's (measured 2026-10-28).
+#[tokio::test]
+async fn test_check_reports_a_module_syntax_refusal_inside_a_namespace() {
+    let state = ServerState::new();
+    let params = CheckParams {
+        code: "namespace Foo\nprivate section\nend Foo".to_string(),
+        timeout_ms: None,
+    };
+
+    let response = handle_check(&state, RequestId::Number(1), params).await;
+    assert!(
+        response.error.is_none(),
+        "a refused spelling is a check result, not an RPC error: {:?}",
+        response.error
+    );
+    let result: CheckResult = serde_json::from_value(response.result.unwrap()).unwrap();
+    assert!(!result.valid, "pinned Lean refuses `private section`");
+    match result.errors.as_slice() {
+        [error] => {
+            assert_eq!(
+                error.message,
+                "2:7: error: unexpected token 'section'; expected 'abbrev', 'axiom', \
+                 'builtin_initialize', 'class', 'coinductive', 'def', 'example', 'inductive', \
+                 'initialize', 'instance', 'opaque', 'structure', 'syntax' or 'theorem'"
+            );
+            assert_eq!((error.line, error.column), (Some(2), Some(7)));
+        }
+        other => panic!("expected one error, got {other:?}"),
+    }
+}

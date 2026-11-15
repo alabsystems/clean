@@ -108,6 +108,20 @@
 #     SRCELAB_GATE=artifact-ok          --check-artifact only: the ratchet
 #                                       artifact agrees with the pinned slice
 #
+# Two of those reasons are about the CORPUS rather than about this repo:
+#
+#     skipped:corpus-mismatch   the Mathlib checkout found here is not the one
+#                               the ratchet was armed against, so the measured
+#                               counts are not comparable to the baselines. The
+#                               report is still written -- the measurement is
+#                               real, it simply is not evidence ABOUT the
+#                               baselines -- and the run enforces nothing.
+#     failed:corpus-unpinned    the ratchet is armed but records no corpus
+#                               identity at all, so nothing can establish what
+#                               its baselines are counts OF. That was this
+#                               gate's state until 2026-09-15 and it is a
+#                               defect, not a deferral.
+#
 # Set SRCELAB_GATE_VERDICT_FILE=<path> to also write that line to a file.
 # Set SRCELAB_GATE_REQUIRE_MEASURED=1 to make every skip a FAILURE instead
 # (mandatory for any run whose result will be published).
@@ -160,7 +174,35 @@
 #                                            Clean-check-report-v1 JSON from a
 #                                            captured stdout file and print the
 #                                            parsed counters (no verdict line;
-#                                            exit 2 = no JSON, 3 = wrong schema)
+#                                            exit 2 = no JSON, 3 = wrong schema
+#                                            or a malformed counter, 5 = the
+#                                            report's verdicts do not account
+#                                            for every declaration it counted)
+#
+#   scripts/source_elab_gate.sh --decl-diff <baseline-report> <measured-report>
+#                                            CHEAP: the per-declaration guard below
+#                                            between two committed dated reports,
+#                                            with the ratchet's ledger applied.
+#                                            Verdict decl-diff-ok or
+#                                            failed:decl-regression.
+#   scripts/source_elab_gate.sh --update --rebase-perf "<why>"
+#                                            arm past a performance regression the
+#                                            owner ACCEPTS; the reason is recorded
+#                                            in `perf_rebases`.
+#
+# ## Per-declaration guard and performance leg (2026-09-24)
+#
+# A per-file COUNT cannot see a row that starts failing while another starts
+# passing (4020124a1: Logic/Basic 221 -> 224 while `dite_dite_comm` broke).
+# Every measured run now diffs its failing rows, by declaration, against the
+# armed_commit's dated report and fails `failed:decl-regression` on a newly
+# failing row unless `decl_regression_ledger` lists it with an owner and an
+# expiry -- scripts/srcelab_decl_guard.py, which also keys anonymous instances
+# by line instead of one shared `[anonymous]`. And every run records, per file,
+# `import_s` / `elab_s` (the check report's `timing` block) and `max_rss_bytes`
+# (/usr/bin/time), and fails `failed:perf-regression` beyond a tolerance of the
+# armed `perf_baseline` (`failed:perf-unmeasured` when an armed metric could
+# not be read) -- scripts/srcelab_perf.py.
 #
 # ## Environment
 #
@@ -254,7 +296,41 @@ PINNEDSLICE
 # srcelab_parse <captured-stdout-file>: extract the trailing pretty-printed
 # Clean-check-report-v1 object (defensive against any leading non-JSON lines)
 # and print the counters this gate consumes as a single JSON line.
-# Exit 2 = no JSON object found; 3 = JSON present but not Clean-check-report-v1.
+# Exit 2 = no JSON object found; 3 = JSON present but not Clean-check-report-v1
+# (or a counter that is not a non-negative integer); 5 = the report's own
+# verdicts do not account for every declaration it counted.
+#
+# `diverged_count` IS A COUNTER THIS GATE CONSUMES, and until 2026-08-30 it was
+# dropped on the floor. `clean check` grew a THIRD verdict at 60e8747e7: a
+# declaration that spends its whole per-declaration budget is `diverged` —
+# neither refuted nor proved, so deliberately folded into neither
+# `failed_count` nor `success_count` (crates/clean-cli/src/cmd_core.rs
+# `finalize_check_run`). This function predates that verdict and emitted only
+# {decl_count, success_count, failed_count, ...}, so a report with diverged
+# declarations parsed to counters that silently fail to add up: nothing in the
+# artifact said where the missing declarations went. That is the shape this
+# repo's doctrine forbids — UNKNOWN is never rounded up, and an artifact that
+# looks complete and is not is worse than one that admits a hole.
+#
+# THE INVARIANT IS ONE-SIDED, and that is measured, not assumed:
+#
+#   success_count + failed_count + diverged_count  >=  decl_count
+#
+# * LESS THAN is a hard refusal (exit 5). Declarations were counted and given
+#   no verdict at all; every published rate over that denominator would be
+#   unexplainable from the artifact.
+# * GREATER THAN is legitimate and explained. File-level parser-recovery
+#   diagnostics are pushed into the report's `errors` (hence into
+#   `failed_count`) but are not declarations, so they are absent from
+#   `decl_count` — crates/clean-cli/src/cmd_core.rs, the `report.diagnostics`
+#   loop right after `parse_file_seeded`. Measured 2026-08-30 across every
+#   checked-in report row that carries `per_error_class` (the field that makes
+#   the check possible at all): in 37 of 37 rows the excess equals the
+#   parser-recovery diagnostic count EXACTLY. No row in the whole
+#   reports/source-elab/ history has ever gone the other way.
+#
+# Exit 5, not 4: `--parse-report` returns this function's status directly, and
+# 4 is already the gate's own `errored` exit.
 srcelab_parse() {
   python3 - "$1" <<'PY'
 import json
@@ -268,15 +344,61 @@ try:
     obj, _ = json.JSONDecoder().raw_decode(data[i:])
 except ValueError:
     sys.exit(2)
-if obj.get("schema_version") != "Clean-check-report-v1":
+# v1: the committed dated artifacts; v2 (2026-09-28): `trust_summary.sorry_axioms`
+# is the closure census, not the minted-term count (cmd_core.rs), so a v1 and a
+# v2 `sorry_axioms` are different quantities -- re-measure before comparing.
+if obj.get("schema_version") not in ("Clean-check-report-v1", "Clean-check-report-v2"):
     sys.exit(3)
+
+
+def count(src, name):
+    """A counter, or exit 3. A malformed count is a schema violation, not a 0.
+
+    Defaulting a junk value to 0 is how a gate reads `"decl_count": null` as a
+    file with nothing in it and calls that a pass.
+    """
+    v = src.get(name, 0)
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        print(
+            "srcelab_parse: {} is {!r}, expected a non-negative integer".format(name, v),
+            file=sys.stderr,
+        )
+        sys.exit(3)
+    return v
+
+
 ts = obj.get("trust_summary") or {}
+decl_count = count(obj, "decl_count")
+success_count = count(obj, "success_count")
+failed_count = count(obj, "failed_count")
+# ABSENT means 0 here, and that is a reading rather than a guess: a report
+# minted before the `diverged` verdict landed (60e8747e7) came from a binary
+# with no per-declaration budget, which had no way to diverge. The accounting
+# check below is what makes the reading safe — if declarations really did go
+# missing, an absent field cannot hide them.
+diverged_count = count(obj, "diverged_count")
+accounted_count = success_count + failed_count + diverged_count
+if accounted_count < decl_count:
+    print(
+        "srcelab_parse: {} declarations counted but only {} accounted for "
+        "(success {} + failed {} + diverged {}) — {} declaration(s) carry no "
+        "verdict at all. Refusing to report counts that do not add up.".format(
+            decl_count, accounted_count, success_count, failed_count,
+            diverged_count, decl_count - accounted_count,
+        ),
+        file=sys.stderr,
+    )
+    sys.exit(5)
 print(json.dumps({
-    "decl_count": obj.get("decl_count", 0),
-    "success_count": obj.get("success_count", 0),
-    "failed_count": obj.get("failed_count", 0),
-    "sorry_axioms": ts.get("sorry_axioms", 0),
-    "kernel_check_failures": ts.get("kernel_check_failures", 0),
+    "decl_count": decl_count,
+    "success_count": success_count,
+    "failed_count": failed_count,
+    "diverged_count": diverged_count,
+    # The sum the invariant above is stated over, carried so a reader of the
+    # dated report alone can check it without re-deriving it.
+    "accounted_count": accounted_count,
+    "sorry_axioms": count(ts, "sorry_axioms"),
+    "kernel_check_failures": count(ts, "kernel_check_failures"),
     "status": obj.get("status", "unknown"),
 }))
 PY
@@ -285,6 +407,17 @@ PY
 UPDATE=0
 PARSE_REPORT=""
 CHECK_ARTIFACT=0
+# --repin-corpus "<why>": move the ratchet's corpus pin as a deliberate,
+# reasoned act. Without it `--update` REFUSES to arm on a corpus other than the
+# pinned one -- otherwise the corpus pin would be self-laundering in exactly the
+# way data/spine_scoreboard.json's generator was (2026-09-14): measure on a
+# corpus where the slice happens to score higher, --update, and the baselines
+# rise on evidence the pinned corpus never produced. A mint that can move its
+# own basis checks nothing.
+REPIN_CORPUS=""
+DECL_DIFF_BASE=""
+DECL_DIFF_MEAS=""
+REBASE_PERF=""
 JOBS="${SRCELAB_GATE_JOBS:-1}"
 # Per-file wall budget, seconds. 0 disables (the pre-2026-08-24 behaviour, which
 # could wedge the row forever -- see errored()).
@@ -308,6 +441,25 @@ while [ $# -gt 0 ]; do
       ;;
     --jobs=*) JOBS="${1#--jobs=}" ;;
     --check-artifact) CHECK_ARTIFACT=1 ;;
+    --repin-corpus)
+      shift
+      [ $# -gt 0 ] || { echo "--repin-corpus needs a reason argument" >&2; exit 2; }
+      REPIN_CORPUS="$1"
+      ;;
+    --repin-corpus=*) REPIN_CORPUS="${1#--repin-corpus=}" ;;
+    --decl-diff)
+      shift
+      [ $# -ge 2 ] || { echo "--decl-diff needs <baseline-report> <measured-report>" >&2; exit 2; }
+      DECL_DIFF_BASE="$1"
+      shift
+      DECL_DIFF_MEAS="$1"
+      ;;
+    --rebase-perf)
+      shift
+      [ $# -gt 0 ] || { echo "--rebase-perf needs a reason argument" >&2; exit 2; }
+      REBASE_PERF="$1"
+      ;;
+    --rebase-perf=*) REBASE_PERF="${1#--rebase-perf=}" ;;
     --parse-report)
       shift
       [ $# -gt 0 ] || { echo "--parse-report needs a file argument" >&2; exit 2; }
@@ -331,6 +483,22 @@ if [ -n "$PARSE_REPORT" ]; then
   exit $?
 fi
 
+# --- --decl-diff: the per-declaration guard between two dated reports -------
+# The same function the measured run applies to its own report (finalize,
+# below), exposed so a guard verdict can be replayed from committed evidence
+# without a binary or a corpus: re-running the 4020124a1 arming against the
+# 0093eeb47 report must fail and name `dite_dite_comm`.
+if [ -n "$DECL_DIFF_BASE" ]; then
+  command -v python3 >/dev/null 2>&1 || fail no-python3 "python3 is required for --decl-diff"
+  python3 scripts/srcelab_decl_guard.py --baseline "$DECL_DIFF_BASE" \
+    --measured "$DECL_DIFF_MEAS" --ratchet "$RATCHET"
+  case $? in
+    0) verdict decl-diff-ok; exit 0 ;;
+    1) fail decl-regression "a declaration that did not fail in $DECL_DIFF_BASE fails in $DECL_DIFF_MEAS and no decl_regression_ledger entry covers it (NEW-FAIL rows above)" ;;
+    *) fail decl-diff-error "scripts/srcelab_decl_guard.py could not compare $DECL_DIFF_BASE and $DECL_DIFF_MEAS" ;;
+  esac
+fi
+
 # --- --check-artifact: the CHEAP leg (no binary, no corpus, no measurement)
 #
 # WHY IT IS SEPARATE. The measurement above is hours long, so it can only be a
@@ -347,8 +515,10 @@ if [ "$CHECK_ARTIFACT" = 1 ]; then
   pinned_plan > "${TMPDIR:-/tmp}/srcelab_pinned.$$"
   SRCELAB_RATCHET_PATH="$RATCHET" SRCELAB_PINNED_FILE="${TMPDIR:-/tmp}/srcelab_pinned.$$" \
   python3 - <<'ARTIFACT'
+import datetime as _date
 import json
 import os
+import re
 import sys
 
 ratchet_path = os.environ["SRCELAB_RATCHET_PATH"]
@@ -404,10 +574,152 @@ for key, cap in pinned:
         if entry.get("cap_lines") != int(cap):
             problems.append("{}: cap_lines is {!r}, the pinned slice caps at {}".format(key, entry.get("cap_lines"), cap))
 
+# AUDIT r15 (adjudicated non-material, taken as free hardening): `armed` is a
+# MASTER SWITCH -- every check below is conditioned on it -- and `--check-artifact`
+# read it without ever asserting it. One `"armed": false` disabled the
+# zero-baseline check, the armed_commit provenance check and the report binding,
+# and this mode still printed `SRCELAB_GATE=artifact-ok`. The full-mode selftest
+# suite does assert it (scripts/test_source_elab_gate.sh), but that suite is
+# GATE-FULL-ONLY while this mode is IN_HOOK, so the hook had no cover. Disarming
+# is now an explicit, owned, dated act.
+if not armed:
+    _dis = d.get("disarmed_because")
+    if not isinstance(_dis, dict) or not str(_dis.get("owner") or "").strip() \
+            or not re.match(r"^\d{4}-\d{2}-\d{2}$", str(_dis.get("expires") or "")) \
+            or not str(_dis.get("reason") or "").strip():
+        problems.append(
+            "the ratchet is DISARMED (`armed: false`), which switches off every check "
+            "below it -- the zero-baseline rule, the armed_commit provenance and the "
+            "report binding. If that is deliberate, say so in `disarmed_because` "
+            "{owner, expires: YYYY-MM-DD, reason}; a master switch may not be flipped "
+            "silently."
+        )
+    elif str(_dis.get("expires")) < _date.date.today().isoformat():
+        problems.append(
+            "the ratchet is DISARMED and its `disarmed_because` account EXPIRED on "
+            "{} (owner {}) -- re-arm it or renew the account in review.".format(
+                _dis.get("expires"), _dis.get("owner"))
+        )
+
 if armed and not d.get("armed_commit"):
     problems.append("armed ratchet has no `armed_commit` — an armed baseline with no provenance")
+elif armed:
+    # AUDIT r8 M1: `armed_commit` was checked for PRESENCE and never for
+    # RESOLVABILITY, and the report binding below is a filename GLOB -- so a
+    # baseline armed at a lane's pre-rebase HEAD bound itself to a report
+    # named after the same unrecoverable sha and printed `artifact-ok`. A
+    # provenance field that nobody can check out is not provenance. Reachable
+    # from a ref, not merely present in the object database (the pre-rebase
+    # commit survives locally until gc — same lesson as the provenance-anchor
+    # gate's r8 M6).
+    import subprocess as _sp
+    _c = d.get("armed_commit")
+    _r = _sp.run(["git", "rev-parse", "--verify", "--quiet", _c + "^{commit}"],
+                 capture_output=True, text=True)
+    _reachable = False
+    if _r.returncode == 0:
+        # audit r9 M-2: shareable namespaces only -- refs/lane/*, refs/claude/*
+        # and refs/stash keep a pre-rebase commit alive locally and nowhere else
+        _ref = _sp.run(["git", "for-each-ref", "--contains", _r.stdout.strip(),
+                        "--count", "1", "--format", "%(refname)",
+                        "refs/remotes/", "refs/tags/"],
+                       capture_output=True, text=True)
+        _reachable = _ref.returncode == 0 and bool(_ref.stdout.strip())
+    if not _reachable:
+        # A SANCTIONED SITE IS NEVER A BLANKET. The exception must name THIS
+        # sha, carry an owner, an expiry and a discharge, and it expires: a
+        # later re-arm at a DIFFERENT unrecoverable sha refuses again, and so
+        # does this one once the date passes. That is an account of a known
+        # unrecoverable baseline, not a licence to keep minting them.
+        _w = d.get("armed_commit_unrecoverable_exception") or {}
+
+        def _valid_future_date(v):
+            """AUDIT r9 M-5: `expires` was compared as a raw STRING, so `TBD`,
+            `never`, `9999`, or the accident-shaped single-digit-month typo
+            `2026-9-01` all sorted above today's ISO date and made a DATED
+            bypass permanent while still reading as dated. Two siblings in this
+            repo already validate dates (check_hook_coverage.py,
+            check_script_selftests.sh), so this was an omission, not a
+            convention."""
+            import datetime as _dt
+            import re as _re
+            if not _re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(v or "")):
+                return False
+            try:
+                _d = _dt.date.fromisoformat(str(v))
+            except ValueError:
+                return False
+            _today = _dt.date.today()
+            # A well-formed but far-future date (9999-12-31) is a valid date
+            # and an effectively PERMANENT bypass. An exception is a dated
+            # account, so it gets a horizon: at most 180 days, renewed
+            # deliberately and visibly, never minted once and forgotten.
+            return _today < _d <= _today + _dt.timedelta(days=180)
+        _ok_w = (
+            _w.get("armed_commit") == _c
+            and str(_w.get("owner") or "").strip()
+            and str(_w.get("discharge") or "").strip()
+            and _valid_future_date(_w.get("expires"))
+        )
+        if _ok_w:
+            print("  SRCELAB artifact: WARNING — armed_commit {!r} is unrecoverable "
+                  "(reachable from no ref). Accounted exception, owner {}, expires {}; "
+                  "discharge: {}".format(_c, _w.get("owner"), _w.get("expires"),
+                                         _w.get("discharge")))
+        else:
+            problems.append(
+                "armed_commit {!r} resolves to no commit reachable from any ref — the "
+                "measurement tree is unrecoverable, so the baselines it pins cannot be "
+                "re-derived by anyone. Re-measure and re-arm at a committed sha (or push "
+                "the lane commit); do NOT annotate this away. An accounted, expiring "
+                "exception naming THIS sha, an owner and a discharge may be recorded in "
+                "`armed_commit_unrecoverable_exception`.".format(_c))
 if armed and not d.get("last_updated"):
     problems.append("armed ratchet has no `last_updated`")
+
+# THE CORPUS PIN IS PART OF THE ARTIFACT, and this cheap leg is where it is
+# guarded -- the measuring run is hours long and detached, so a ratchet whose
+# corpus identity was deleted or blanked would otherwise go unchecked between
+# full runs. Identity is (rev, toolchain); `dir` is provenance and is never
+# compared, because two boxes mount the same corpus at different paths and two
+# different corpora share a directory name.
+_corpus = d.get("corpus")
+if armed:
+    if not isinstance(_corpus, dict):
+        problems.append(
+            "armed ratchet has no `corpus` pin — its baselines are per-file counts, "
+            "and without the Mathlib rev they are counts of nothing identifiable. "
+            "(Until 2026-09-15 the corpus was recorded only in the `notes` prose, "
+            "where no code read it, and a run against a DIFFERENT Mathlib duly "
+            "reported failed:ratchet-regression.)")
+    else:
+        for _f in ("rev", "toolchain"):
+            if not str(_corpus.get(_f) or "").strip():
+                problems.append("armed ratchet `corpus.{}` is empty".format(_f))
+        # An UNRECOVERABLE corpus rev is surfaced on every run, not left in the
+        # JSON. Same severity and same shape as the armed_commit warning above:
+        # it is a statement of fact about provenance, not a refusal, because
+        # reddening here would block every pusher over a condition none of them
+        # caused. Measured 2026-09-15: the armed corpus rev is not a commit in
+        # upstream mathlib4 at all, so BOTH anchors of that measurement -- the
+        # Clean sha and the Mathlib rev -- are gone and nothing about it is
+        # reproducible. The pin still DISCRIMINATES (a foreign corpus skips
+        # corpus-mismatch instead of reporting a bogus regression); it simply
+        # cannot be satisfied.
+        _unrec = _corpus.get("rev_unrecoverable")
+        if isinstance(_unrec, dict):
+            print("  SRCELAB artifact: WARNING — corpus rev {!r} is UNRECOVERABLE "
+                  "({}): {} Re-arming on a corpus whose revision resolves is an OWNER "
+                  "act; see the pin's `remedy_and_whose`.".format(
+                      str(_corpus.get("rev") or "")[:14],
+                      _unrec.get("measured", "undated"),
+                      str(_unrec.get("consequence") or "").split(".")[0] + "."))
+        _rev = str(_corpus.get("rev") or "").strip()
+        if _rev and len(_rev) < 7:
+            problems.append(
+                "armed ratchet `corpus.rev` is {!r} — too short to identify a commit; "
+                "a prefix that short matches many corpora and re-opens the hole it "
+                "closes".format(_rev))
 
 # BASELINES ARE BOUND TO THEIR EVIDENCE. `--update` writes them from a measured
 # run, but nothing stopped a later hand edit from typing a number the reports
@@ -424,7 +736,17 @@ if armed and armed_commit:
     matches = sorted(_glob.glob("reports/source-elab/srcelab-*-g{}.json".format(armed_commit)))
     if matches:
         report_path = matches[-1]
+if armed and armed_commit and not report_path:
+    problems.append(
+        "armed at {} but no reports/source-elab/srcelab-*-g{}.json is checked in — "
+        "the baselines are bound to nothing (audit r8 M1: this was a NOTE that "
+        "passed, which is a one-token disarm of the evidence binding)".format(
+            armed_commit, armed_commit))
 if report_path:
+    # Bound BEFORE the try: the corpus binding below tests `rep`, and on the
+    # unreadable-report path it would otherwise raise NameError -- turning a
+    # reported problem into a crash.
+    rep = None
     try:
         with open(report_path, encoding="utf-8") as f:
             rep = json.load(f)
@@ -446,10 +768,61 @@ if report_path:
                     "{}: {}={!r} but {} says {}={!r} — a baseline must equal its "
                     "evidence".format(key, field, entry[field], report_path,
                                       rep_field, r.get(rep_field)))
+        # The performance baseline is bound the same way (2026-09-24): every
+        # armed metric must equal the armed_commit report's measurement of it.
+        for _m, _v in (entry.get("perf_baseline") or {}).items():
+            if _v != r.get(_m):
+                problems.append(
+                    "{}: perf_baseline.{}={!r} but {} measured {!r} — a baseline "
+                    "must equal its evidence".format(key, _m, _v, report_path, r.get(_m)))
+    # A baseline must equal its evidence -- and so must the corpus the evidence
+    # was measured on. A report written before 2026-09-15 carries no corpus
+    # block; that absence is STATED rather than passed over silently, because
+    # "no corpus recorded" and "corpus agrees" are exactly the two things this
+    # whole mechanism exists to stop anyone conflating.
+    if isinstance(_corpus, dict) and isinstance(rep, dict):
+        _rc = rep.get("corpus")
+        if not isinstance(_rc, dict):
+            print("  SRCELAB artifact: NOTE the armed_commit report {} predates corpus "
+                  "recording (2026-09-15), so the pin {!r} is NOT bound to it."
+                  .format(report_path, str(_corpus.get("rev") or "")[:12]))
+        else:
+            for _f in ("rev", "toolchain"):
+                _p, _r = str(_corpus.get(_f) or "").strip(), str(_rc.get(_f) or "").strip()
+                _ok = (_p.lower().startswith(_r.lower()) or _r.lower().startswith(_p.lower())) \
+                    if (_f == "rev" and len(_p) >= 7 and len(_r) >= 7) else (_p == _r)
+                if not _ok:
+                    problems.append(
+                        "corpus.{}={!r} but the armed_commit report {} measured {!r} — "
+                        "the pin must equal the corpus its evidence was measured on"
+                        .format(_f, _p, report_path, _r))
 elif armed:
     print("  SRCELAB artifact: NOTE no reports/source-elab/srcelab-*-g{}.json "
           "next to the ratchet, so baselines are NOT bound to a committed "
           "measurement here.".format(armed_commit or "<unset>"))
+
+# The per-declaration guard's accepted-regression ledger is part of the
+# artifact: an entry is a dated, owned account, never a blanket.
+sys.path.insert(0, "scripts")
+import srcelab_decl_guard as _dg  # noqa: E402
+import srcelab_perf as _perf  # noqa: E402
+problems.extend(_dg.validate_ledger(d, pinned_keys))
+# The performance half is part of the artifact too: a tolerance wide enough to
+# be an off switch, or a baseline that is not a positive measurement, is
+# refused; and an armed ratchet whose files carry NO perf_baseline is said out
+# loud, because until the next `--update` the perf leg enforces nothing.
+problems.extend(_perf.validate_artifact(d))
+_perf_armed = _perf.armed_files(d)
+if armed and not _perf_armed:
+    print("  SRCELAB artifact: NOTE the performance leg is UNARMED -- no pinned file "
+          "carries a perf_baseline, so import_s / elab_s / max_rss_bytes are recorded "
+          "and NOT enforced until the next `--update` arms them from its measurement.")
+elif armed and len(_perf_armed) != len(pinned_keys):
+    problems.append(
+        "the performance leg is armed for {} of {} pinned files ({}) -- a partial "
+        "arming leaves the rest unguarded; re-arm with --update".format(
+            len(_perf_armed), len(pinned_keys),
+            ", ".join(sorted(set(pinned_keys) - set(_perf_armed)))))
 
 if problems:
     for p in problems:
@@ -484,14 +857,87 @@ if [ -n "${CLEAN_MATHLIB_DIR:-}" ]; then
     skip no-corpus "CLEAN_MATHLIB_DIR=$CLEAN_MATHLIB_DIR has no .lake/build/lib/lean (explicit env var is authoritative; not falling back)"
   fi
 else
-  for c in data/raw/mathlib4 $HOME/mathlib4-*; do
+  # $HOME, not a literal home. This glob read `$HOME/mathlib4-*`
+  # until 2026-09-15, so on every box but one the fallback could not match
+  # and the gate skipped `no-corpus` for a reason that had nothing to do
+  # with whether a corpus was there. Identical behaviour on the box it was
+  # written for; working discovery everywhere else.
+  for c in data/raw/mathlib4 "$HOME"/mathlib4-*; do
     [ -d "$c/.lake/build/lib/lean" ] || continue
     ML="$c"
     break
   done
-  [ -n "$ML" ] || skip no-corpus "no Mathlib checkout (set CLEAN_MATHLIB_DIR, or provide data/raw/mathlib4 or $HOME/mathlib4-* with .lake/build)"
+  [ -n "$ML" ] || skip no-corpus "no Mathlib checkout (set CLEAN_MATHLIB_DIR, or provide data/raw/mathlib4 or \$HOME/mathlib4-* with .lake/build)"
 fi
 MLLIB="$ML/.lake/build/lib/lean"
+
+# (2b) CORPUS IDENTITY -- WHAT THE COUNTS ARE COUNTS *OF*.
+#
+# This ratchet compares per-file success counts against armed baselines. Those
+# counts are only comparable against the SAME Mathlib: a different corpus has
+# different declarations in the same five paths, so a delta measures the corpus
+# and not the elaborator. Until 2026-09-15 nothing in this gate recorded which
+# corpus it measured. `lean-toolchain` was read (below) only to BUILD a path,
+# the report carried no corpus field, and data/source_elab_ratchet.json pinned
+# none -- so whichever checkout the discovery glob happened to find silently
+# became the basis.
+#
+# That is not hypothetical, and it fired the day the discovery glob was fixed.
+# The ratchet's own `notes` prose records its corpus -- "mathlib4 v4.30.0-rc2 @
+# 43ad0e9d2e14" -- in a field no code reads. Measured on this box the same day:
+# $HOME/mathlib4-pinned is 8f9d9cff6bd728b17a24e163c9402775d9e6a365 on
+# leanprover/lean4:v4.28.0, and 43ad0e9d2e14 is not a commit in that clone at
+# all, so it is a different history rather than a different checkout state. The
+# five per-file deltas that produced SRCELAB_GATE=failed:ratchet-regression
+# were therefore a cross-corpus comparison reported as a code regression.
+#
+# Identity is (rev, toolchain), never the PATH: two directories with the same
+# name are not the same corpus and the same corpus moves between boxes.
+CORPUS_REV="$(git -C "$ML" rev-parse HEAD 2>/dev/null || true)"
+CORPUS_TOOLCHAIN=""
+[ -f "$ML/lean-toolchain" ] && CORPUS_TOOLCHAIN="$(tr -d " \t\r\n" < "$ML/lean-toolchain")"
+
+# FAIL FAST. The authoritative corpus check is in the finalize step below, where
+# it can write the report before deciding; but reaching it costs the whole
+# measurement -- 32m44s when this was first measured, hours at --jobs 1 -- and
+# on the suite it holds a heavy_gate reservation for all of it. A gate that
+# spends half an hour to report that it measured the wrong corpus is a bad gate
+# even when its verdict is right, so the same comparison runs here, before any
+# `clean check` is spawned. This is a pre-flight, not the authority: it is
+# deliberately skipped when a re-pin is being performed (the measurement is then
+# the point), and the finalize check still renders the verdict.
+if [ "$UPDATE" != 1 ] || [ -z "$REPIN_CORPUS" ]; then
+  SRCELAB_RATCHET_PATH="$RATCHET" SRCELAB_CORPUS_REV="$CORPUS_REV" \
+  SRCELAB_CORPUS_TOOLCHAIN="$CORPUS_TOOLCHAIN" python3 - <<'PREFLIGHT'
+import json, os, sys
+try:
+    d = json.load(open(os.environ["SRCELAB_RATCHET_PATH"], encoding="utf-8"))
+except (OSError, ValueError):
+    sys.exit(0)          # the finalize step reports a broken ratchet properly
+if not d.get("armed"):
+    sys.exit(0)
+pin = d.get("corpus")
+if not isinstance(pin, dict):
+    sys.exit(0)          # corpus-unpinned is a FAILURE, rendered by finalize
+pr, pt = str(pin.get("rev") or "").strip(), str(pin.get("toolchain") or "").strip()
+mr = (os.environ.get("SRCELAB_CORPUS_REV") or "").strip()
+mt = (os.environ.get("SRCELAB_CORPUS_TOOLCHAIN") or "").strip()
+if not pr or not pt:
+    sys.exit(0)
+rev_ok = len(pr) >= 7 and len(mr) >= 7 and (
+    pr.lower().startswith(mr.lower()) or mr.lower().startswith(pr.lower()))
+if rev_ok and mt == pt:
+    sys.exit(0)
+print("  CORPUS MISMATCH (pre-flight): baselines were armed against rev={!r} "
+      "toolchain={!r}; this box has rev={!r} toolchain={!r}. Counts across two "
+      "Mathlib checkouts are not comparable, so NOTHING was measured -- refused "
+      "before spending the measurement rather than after.".format(
+          pr, pt, mr or "<no git rev>", mt or "<no lean-toolchain>"), file=sys.stderr)
+sys.exit(6)
+PREFLIGHT
+  prc=$?
+  [ "$prc" -ne 6 ] || skip corpus-mismatch "the Mathlib checkout here is not the one the ratchet was armed against (see stderr) — refused before measuring"
+fi
 
 # LEAN_PATH: Mathlib lib + the pinned toolchain core + every Lake package lib
 # (same composition as scripts/kv_ratchet_gate.sh, so the check path's olean
@@ -574,6 +1020,19 @@ _running() {
   echo "$_n"
 }
 
+# PEAK RSS, for the performance leg: the binary cannot read its own without
+# `unsafe` FFI, so each check runs under /usr/bin/time (macOS `-l`, bytes;
+# GNU `-v`, kbytes), writing to its own file so the check's streams are
+# untouched. Absent time(1) the RSS is recorded as unavailable, never as 0.
+TIME_BIN=""
+TIME_FLAG=""
+if [ -x /usr/bin/time ]; then
+  case "$(uname -s)" in
+    Darwin) TIME_BIN=/usr/bin/time; TIME_FLAG=-l ;;
+    *) /usr/bin/time -v true >/dev/null 2>&1 && { TIME_BIN=/usr/bin/time; TIME_FLAG=-v; } ;;
+  esac
+fi
+
 idx=0
 while IFS='|' read -r key src cap rel; do
   [ -n "$key" ] || continue
@@ -586,7 +1045,12 @@ while IFS='|' read -r key src cap rel; do
     # deadline over it. `timeout(1)` is not on macOS base, and a bare `wait`
     # here is exactly the wedge this replaces.
     # shellcheck disable=SC2086
-    "$CLEAN_BIN" $INVOCATION "$src" > "$OUT/$idx.stdout" 2> "$OUT/$idx.stderr" &
+    if [ -n "$TIME_BIN" ]; then
+      "$TIME_BIN" "$TIME_FLAG" -o "$OUT/$idx.time" "$CLEAN_BIN" $INVOCATION "$src" \
+        > "$OUT/$idx.stdout" 2> "$OUT/$idx.stderr" &
+    else
+      "$CLEAN_BIN" $INVOCATION "$src" > "$OUT/$idx.stdout" 2> "$OUT/$idx.stderr" &
+    fi
     _cp=$!
     _spent=0
     while kill -0 "$_cp" 2>/dev/null; do
@@ -594,11 +1058,14 @@ while IFS='|' read -r key src cap rel; do
         # TERM first so the child can flush the partial report it has already
         # printed -- that partial output is the evidence the keep-dir phase
         # below preserves, and it is most wanted precisely when a file wedges.
+        # The check may be a CHILD of time(1), which does not forward signals.
+        pkill -TERM -P "$_cp" 2>/dev/null
         kill -TERM "$_cp" 2>/dev/null
         _grace=0
         while kill -0 "$_cp" 2>/dev/null && [ "$_grace" -lt 15 ]; do
           sleep 1; _grace=$((_grace + 1))
         done
+        pkill -KILL -P "$_cp" 2>/dev/null
         kill -KILL "$_cp" 2>/dev/null
         date +%s > "$OUT/$idx.end"
         printf '%s\n' "$_spent" > "$OUT/$idx.timeout"
@@ -653,8 +1120,17 @@ while IFS='|' read -r key src cap rel; do
   # Nonzero exit is EXPECTED whenever failed_count > 0 (`clean check` bails
   # "check failed" after printing the JSON report); the gate's failure signal
   # is a MISSING/unparseable report (crash, OOM-kill, panic), never rc alone.
-  if ! PARSED="$(srcelab_parse "$OUT/$jdx.stdout")"; then
-    echo "  no Clean-check-report-v1 JSON from $key (clean check exit $rc); stderr tail:" >&2
+  #
+  # srcelab_parse's own statuses are kept DISTINCT here. Folding its exit 5
+  # (declarations counted with no verdict) into check-no-report would report a
+  # present, well-formed, arithmetically broken report as an absent one — the
+  # wrong defect, pointing the next reader at the wrong half of the pipeline.
+  PARSED="$(srcelab_parse "$OUT/$jdx.stdout")"
+  prc=$?
+  if [ "$prc" -eq 5 ]; then
+    fail check-unaccounted-decls "the Clean-check-report-v1 report for $key counts more declarations than its verdicts account for (see the srcelab_parse line above); success+failed+diverged < decl_count means declarations were examined and given no verdict, so no rate over that denominator is publishable"
+  elif [ "$prc" -ne 0 ]; then
+    echo "  no Clean-check-report-v1 JSON from $key (clean check exit $rc, srcelab_parse exit $prc); stderr tail:" >&2
     tail -5 "$OUT/$jdx.stderr" >&2
     fail check-no-report "clean check produced no parseable JSON report for $key"
   fi
@@ -664,9 +1140,13 @@ while IFS='|' read -r key src cap rel; do
   SRCELAB_REC_OUT="$OUT/results.ndjson" SRCELAB_REC_KEY="$key" SRCELAB_REC_PATH="$rel" \
   SRCELAB_REC_CAP="$cap" SRCELAB_REC_RC="$rc" SRCELAB_REC_PARSED="$PARSED" \
   SRCELAB_REC_WALL="$wall" SRCELAB_REC_CLASSES="$OUT/$jdx.classes.json" \
+  SRCELAB_REC_STDOUT="$OUT/$jdx.stdout" SRCELAB_REC_TIME="${TIME_BIN:+$OUT/$jdx.time}" \
   python3 - <<'REC' || fail record-error "failed to record parsed result for $key"
 import json
 import os
+import sys
+sys.path.insert(0, "scripts")
+import srcelab_perf as _perf  # noqa: E402
 
 rec = json.loads(os.environ["SRCELAB_REC_PARSED"])
 with open(os.environ["SRCELAB_REC_CLASSES"], encoding="utf-8") as _cf:
@@ -683,6 +1163,17 @@ rec.update({
     "first_failure": cls["first_failure"],
     "per_error_class": cls["per_error"],
 })
+with open(os.environ["SRCELAB_REC_STDOUT"], encoding="utf-8", errors="replace") as _sf:
+    _stdout = _sf.read()
+_tp = os.environ.get("SRCELAB_REC_TIME") or ""
+_time = None
+if _tp and os.path.exists(_tp):
+    with open(_tp, encoding="utf-8", errors="replace") as _tf:
+        _time = _tf.read()
+rec.update(_perf.perf_record(_stdout, _time))
+# A declaration that spent its whole budget is not a pass: the per-declaration
+# guard reads these names next to the error rows.
+rec["diverged_rows"] = _perf.diverged_rows(_stdout)
 with open(os.environ["SRCELAB_REC_OUT"], "a", encoding="utf-8") as f:
     f.write(json.dumps(rec) + "\n")
 REC
@@ -699,6 +1190,9 @@ REPORT="$REPORT_DIR/srcelab-$(date +%Y-%m-%d)-g$COMMIT.json"
 SRCELAB_RESULTS="$OUT/results.ndjson" SRCELAB_RATCHET="$RATCHET" SRCELAB_REPORT="$REPORT" \
 SRCELAB_COMMIT="$COMMIT" SRCELAB_BIN="$CLEAN_BIN" SRCELAB_UPDATE="$UPDATE" \
 SRCELAB_INVOCATION="clean $INVOCATION" \
+SRCELAB_CORPUS_DIR="$ML" SRCELAB_CORPUS_REV="$CORPUS_REV" \
+SRCELAB_CORPUS_TOOLCHAIN="$CORPUS_TOOLCHAIN" SRCELAB_REPIN_CORPUS="$REPIN_CORPUS" \
+SRCELAB_REBASE_PERF="$REBASE_PERF" SRCELAB_JOBS="$JOBS" \
 python3 - <<'PY'
 import datetime
 import json
@@ -711,6 +1205,39 @@ ratchet = json.load(open(ratchet_path, encoding="utf-8"))
 armed = bool(ratchet.get("armed"))
 baselines = ratchet.get("files", {})
 today = datetime.date.today().isoformat()
+sys.path.insert(0, "scripts")
+import srcelab_decl_guard as _dg  # noqa: E402
+import srcelab_perf as _perf  # noqa: E402
+
+# The armed_commit's dated report is the per-declaration BASELINE. Loaded
+# BEFORE this run writes its own report: at the armed commit, on the same day,
+# the two share a file name.
+_base_report, _base_report_path = None, None
+if armed and ratchet.get("armed_commit"):
+    import glob as _glob
+    _cands = sorted(_glob.glob(os.path.join(
+        os.path.dirname(os.environ["SRCELAB_REPORT"]) or ".",
+        "srcelab-*-g{}.json".format(ratchet["armed_commit"]))))
+    if _cands:
+        _base_report_path = _cands[-1]
+        try:
+            with open(_base_report_path, encoding="utf-8") as _bf:
+                _base_report = json.load(_bf)
+        except (OSError, ValueError):
+            _base_report = None
+_decl = _dg.guard(_base_report, {"files": recs}, ratchet) if _base_report else None
+_perf_res = _perf.compare(
+    {k: v["perf_baseline"] for k, v in baselines.items()
+     if isinstance(v, dict) and isinstance(v.get("perf_baseline"), dict)},
+    {r["key"]: {m: r.get(m) for m in _perf.METRICS} for r in recs},
+    _perf.tolerance_of(ratchet))
+# How many checks ran at once. import_s / elab_s are WALL times measured inside
+# each process, and concurrent checks share memory bandwidth and the box, so a
+# perf comparison across two --jobs values is not like for like (2026-09-25
+# review). Recorded, and compared against the armed_commit report's own value
+# below; reports written before this field say nothing, and that is stated.
+_run_jobs = int(os.environ.get("SRCELAB_JOBS") or 0) or None
+_armed_jobs = (_base_report or {}).get("jobs")
 
 report = {
     "schema_version": "Clean-srcelab-report-v1",
@@ -718,6 +1245,18 @@ report = {
     "commit": os.environ["SRCELAB_COMMIT"],
     "binary": os.environ["SRCELAB_BIN"],
     "invocation": os.environ["SRCELAB_INVOCATION"],
+    "corpus": {
+        "dir": os.environ["SRCELAB_CORPUS_DIR"],
+        "rev": os.environ.get("SRCELAB_CORPUS_REV", ""),
+        "toolchain": os.environ.get("SRCELAB_CORPUS_TOOLCHAIN", ""),
+        "note": (
+            "The Mathlib this run measured, recorded so the counts below can be "
+            "told apart from counts of a different corpus. `dir` is provenance "
+            "only and is NEVER compared: identity is (rev, toolchain). Reports "
+            "written before 2026-09-15 carry no corpus block at all, which is "
+            "why --check-artifact states that absence rather than passing over it."
+        ),
+    },
     "counting_basis": ratchet.get("counting_basis", "allow_sorry_success"),
     "counting_basis_note": (
         "success_count counts --allow-sorry passes: Clean-check-report-v1 has no "
@@ -740,11 +1279,56 @@ report = {
             "rules; do not merge the two histograms."
         ),
     },
+    "accounting": {
+        "invariant": (
+            "per file: success_count + failed_count + diverged_count >= decl_count"
+        ),
+        "note": (
+            "`diverged` is a THIRD verdict (crates/clean-cli/src/cmd_core.rs, "
+            "finalize_check_run): a declaration that spent its whole "
+            "per-declaration budget did not finish, so it is folded into neither "
+            "success_count (nothing was proved) nor failed_count (nothing was "
+            "refuted). It is reported here in its own right — this gate's report "
+            "parser dropped it silently until 2026-08-30, which made "
+            "`success + failed != decl_count` unexplainable from the artifact. A "
+            "sum BELOW decl_count means declarations were examined and given no "
+            "verdict at all; the gate now refuses such a report outright "
+            "(SRCELAB_GATE=failed:check-unaccounted-decls) rather than publish "
+            "counts that do not add up. A sum ABOVE decl_count is expected and "
+            "explained: file-level parser-recovery diagnostics land in the check "
+            "report's `errors` (hence in failed_count) but are not declarations "
+            "and so are not in decl_count. Measured 2026-08-30 over every "
+            "checked-in report row carrying per_error_class, the excess equals "
+            "the parser-recovery diagnostic count exactly in 37 of 37 rows."
+        ),
+    },
+    "decl_guard": {
+        "baseline_report": _base_report_path,
+        "new_failures": (_decl or {}).get("new_failures", []),
+        "ledgered": (_decl or {}).get("ledgered", []),
+        "fixed": (_decl or {}).get("fixed", []),
+        "note": ("per-declaration diff against the armed_commit report "
+                 "(scripts/srcelab_decl_guard.py); null baseline_report = none found, "
+                 "not enforced"),
+    },
+    "jobs": _run_jobs,
+    "perf": {
+        "jobs": {"this_run": _run_jobs, "armed_commit_report": _armed_jobs},
+        "tolerance": _perf_res["tolerance"],
+        "regressions": _perf_res["regressions"],
+        "unmeasured": _perf_res["unmeasured"],
+        "unarmed": _perf_res["unarmed"],
+        "note": ("import_s / elab_s from the check report's `timing`, max_rss_bytes "
+                 "from /usr/bin/time, against files[].perf_baseline "
+                 "(scripts/srcelab_perf.py)"),
+    },
     "files": recs,
     "totals": {
         "decl_count": sum(r["decl_count"] for r in recs),
         "success_count": sum(r["success_count"] for r in recs),
         "failed_count": sum(r["failed_count"] for r in recs),
+        "diverged_count": sum(r["diverged_count"] for r in recs),
+        "accounted_count": sum(r["accounted_count"] for r in recs),
         "sorry_axioms": sum(r["sorry_axioms"] for r in recs),
         "kernel_check_failures": sum(r["kernel_check_failures"] for r in recs),
     },
@@ -754,15 +1338,28 @@ with open(os.environ["SRCELAB_REPORT"], "w", encoding="utf-8") as f:
     f.write("\n")
 
 for r in recs:
-    print("  {}: success={}/{} (sorry_axioms={}, kernel_check_failures={}, check_exit={}, wall={}s)".format(
-        r["key"], r["success_count"], r["decl_count"],
+    # diverged is printed ALWAYS, including as 0. A counter that appears only
+    # when it is nonzero cannot be read as "measured and zero" versus "not
+    # looked at" -- which is precisely the ambiguity this whole fix is about.
+    print("  {}: success={}/{} (diverged={}, sorry_axioms={}, kernel_check_failures={}, check_exit={}, wall={}s)".format(
+        r["key"], r["success_count"], r["decl_count"], r["diverged_count"],
         r["sorry_axioms"], r["kernel_check_failures"], r["check_exit_code"],
         r.get("wall_seconds", 0)))
+    if r["diverged_count"]:
+        print(
+            "      NO VERDICT: {} declaration(s) in {} spent the whole "
+            "per-declaration budget. They are neither passes nor failures, and "
+            "the success rate below is over a denominator that includes "
+            "them.".format(r["diverged_count"], r["key"]),
+            file=sys.stderr,
+        )
     for cls_name, n in (r.get("failure_classes") or {}).items():
         print("      {:4d}  {}".format(n, cls_name))
     ff = r.get("first_failure")
     if ff:
         print("      first failure [{}] {}".format(ff["class"], ff["error"][:160]))
+    print("      perf: import_s={} elab_s={} max_rss_bytes={}".format(
+        r.get("import_s"), r.get("elab_s"), r.get("max_rss_bytes")))
 print("  report: {}".format(os.environ["SRCELAB_REPORT"]))
 
 # Ratchet enforcement (report is already on disk so regressions keep evidence).
@@ -796,20 +1393,168 @@ if armed:
             "from its measured count".format(key)
         )
 
+# ---------------------------------------------------------------------------
+# CORPUS IDENTITY GATE -- runs BEFORE the regression check, because a count
+# measured on a different Mathlib is not evidence about these baselines in
+# EITHER direction. A mismatched corpus can fail a baseline that the pinned
+# corpus meets (measured 2026-09-15, which is what this gate was written for),
+# and it can just as easily PASS one the pinned corpus would fail. So the
+# answer to a mismatch is neither red nor green: it is "nothing was measured
+# against this ratchet", which is what skipped: means here. The report stays on
+# disk -- the measurement is real, it is simply about a different subject.
+#
+# Deliberately AFTER the unbaselined check above: a ratchet that would enforce
+# a baseline of 0 is a defect in the artifact itself and stays loud whatever
+# corpus is mounted.
+measured_corpus = {
+    "rev": (os.environ.get("SRCELAB_CORPUS_REV") or "").strip(),
+    "toolchain": (os.environ.get("SRCELAB_CORPUS_TOOLCHAIN") or "").strip(),
+}
+repin_reason = (os.environ.get("SRCELAB_REPIN_CORPUS") or "").strip()
+is_update = os.environ["SRCELAB_UPDATE"] == "1"
+# Set only where the corpus ACTUALLY moved and the move was authorised. A
+# --repin-corpus on the corpus already pinned is not a rebase and must not buy
+# an exemption from the monotonic-up rule.
+corpus_rebased = False
+
+
+def _rev_agrees(a, b):
+    """Prefix-tolerant, because a pin may be abbreviated and a rev-parse is
+    not. A minimum of 7 hex on the SHORTER side, so a stray one-character pin
+    cannot match every corpus in existence -- the degenerate case that turns an
+    identity check back into no check at all."""
+    a, b = (a or "").strip().lower(), (b or "").strip().lower()
+    if len(a) < 7 or len(b) < 7:
+        return False
+    return a.startswith(b) or b.startswith(a)
+
+
+if armed:
+    pin = ratchet.get("corpus")
+    pinned_ok = (
+        isinstance(pin, dict)
+        and str(pin.get("rev") or "").strip()
+        and str(pin.get("toolchain") or "").strip()
+    )
+    if not pinned_ok:
+        # NOT a skip. An armed ratchet with no corpus identity cannot say what
+        # its own numbers are counts of, so every verdict it has ever rendered
+        # was unfalsifiable. That was this gate's state until 2026-09-15.
+        if is_update and repin_reason:
+            corpus_rebased = True  # the bootstrap: arming the pin IS the explicit act below
+        else:
+            print(
+                "  CORPUS UNPINNED: the ratchet is armed but records no corpus identity "
+                "(`corpus.rev` + `corpus.toolchain`), so its baselines are counts of an "
+                "unidentified Mathlib and no run can be compared to them. This corpus is "
+                "rev={!r} toolchain={!r}. Pin it deliberately: --update --repin-corpus "
+                "'<why>'.".format(measured_corpus["rev"], measured_corpus["toolchain"]),
+                file=sys.stderr,
+            )
+            sys.exit(7)
+    else:
+        agree = (
+            _rev_agrees(measured_corpus["rev"], pin.get("rev"))
+            and measured_corpus["toolchain"] == str(pin.get("toolchain") or "").strip()
+        )
+        if not agree and is_update and repin_reason:
+            corpus_rebased = True
+        if not agree and not (is_update and repin_reason):
+            print(
+                "  CORPUS MISMATCH: baselines were armed against rev={!r} toolchain={!r}; "
+                "this run measured rev={!r} toolchain={!r}. Per-file counts across two "
+                "Mathlib checkouts are not comparable, so this run enforces NOTHING and "
+                "reports no regression. Point CLEAN_MATHLIB_DIR at the armed corpus, or "
+                "re-pin deliberately with --update --repin-corpus '<why>'.".format(
+                    pin.get("rev"), pin.get("toolchain"),
+                    measured_corpus["rev"] or "<no git rev>",
+                    measured_corpus["toolchain"] or "<no lean-toolchain>",
+                ),
+                file=sys.stderr,
+            )
+            sys.exit(6)
+
+# A re-pin is a deliberate act with a reason, and the reason is recorded rather
+# than merely accepted -- same shape as the --rebase ledgers elsewhere in this
+# repo, for the same reason: a move nobody can read afterwards is a move nobody
+# reviewed.
+if repin_reason and not is_update:
+    print("  --repin-corpus has no effect without --update", file=sys.stderr)
+    sys.exit(8)
+if repin_reason and len(repin_reason) < 12:
+    print("  --repin-corpus needs a real reason (>= 12 characters), got {!r}".format(
+        repin_reason), file=sys.stderr)
+    sys.exit(8)
+if is_update and (not measured_corpus["rev"] or not measured_corpus["toolchain"]):
+    # Arming against a corpus that cannot be identified would write exactly the
+    # artifact this whole mechanism exists to forbid: baselines with no
+    # statement of what they are counts of. Refuse at the moment of arming,
+    # rather than writing a ratchet that every later run rejects as
+    # corpus-unpinned -- a defect is cheapest where it is created.
+    print(
+        "  CANNOT ARM: this corpus has no git rev and/or no lean-toolchain "
+        "(rev={!r}, toolchain={!r}), so the baselines would be counts of an "
+        "unidentifiable Mathlib. Arm against a git checkout that carries a "
+        "lean-toolchain.".format(
+            measured_corpus["rev"] or "<none>", measured_corpus["toolchain"] or "<none>"),
+        file=sys.stderr,
+    )
+    sys.exit(8)
+
+# The monotonic-up rule does NOT survive a corpus rebase: the baselines on the
+# left and the counts on the right would be measurements of different source
+# files. Under an authorised rebase the baselines are re-derived from this run
+# instead of being defended against it, and the corpus_repins row records that
+# the basis moved so the discontinuity is on the record rather than hidden
+# inside a flat-looking number.
 regressions = []
 for r in recs:
     base = baselines.get(r["key"], {}).get("success_baseline", 0)
-    if armed and r["success_count"] < base:
+    if armed and not corpus_rebased and r["success_count"] < base:
         regressions.append((r["key"], r["success_count"], base))
 if regressions:
     for key, got, base in regressions:
         print("  REGRESSION {}: success {} < baseline {}".format(key, got, base), file=sys.stderr)
     sys.exit(3)
 
+# PER-DECLARATION GUARD: a newly failing row fails even when its file's count
+# holds. Not under an authorised corpus rebase (different source text).
+if armed and not corpus_rebased:
+    if _decl is None:
+        print("  NOTE: per-declaration guard found no srcelab-*-g{}.json in {}; not "
+              "enforced this run (--check-artifact refuses an armed ratchet with no "
+              "report)".format(ratchet.get("armed_commit"),
+                               os.path.dirname(os.environ["SRCELAB_REPORT"])))
+    else:
+        _dg.render(_decl)
+        if _decl["new_failures"]:
+            sys.exit(9)
+
+# PERFORMANCE LEG. `--update --rebase-perf '<why>'` is the one way past a
+# regression the owner accepts, and it is recorded below.
+rebase_perf = (os.environ.get("SRCELAB_REBASE_PERF") or "").strip()
+if rebase_perf and (not is_update or len(rebase_perf) < 12):
+    print("  --rebase-perf needs --update and a real reason (>= 12 characters)", file=sys.stderr)
+    sys.exit(12)
+_perf.render(_perf_res)
+if any(isinstance(v, dict) and v.get("perf_baseline") for v in baselines.values()):
+    if _armed_jobs is None:
+        print("  NOTE: the armed_commit report records no --jobs, so whether this run's "
+              "timings (--jobs {}) are like for like with perf_baseline is unknown".format(_run_jobs))
+    elif _armed_jobs != _run_jobs:
+        print("  NOTE: perf_baseline was measured at --jobs {} and this run used --jobs {}; "
+              "concurrent checks share the box, so a PERF-REGRESSION here may be contention "
+              "-- re-run at --jobs {} before rebasing".format(_armed_jobs, _run_jobs, _armed_jobs))
+if armed and not corpus_rebased and not rebase_perf:
+    if _perf_res["regressions"]:
+        sys.exit(10)
+    if _perf_res["unmeasured"]:
+        sys.exit(11)
+
 if os.environ["SRCELAB_UPDATE"] == "1":
     for r in recs:
         old = baselines.get(r["key"], {}).get("success_baseline", 0)
-        if armed and r["success_count"] < old:
+        if armed and not corpus_rebased and r["success_count"] < old:
             sys.exit(4)  # defensive; the regression gate above already fired
     ratchet["files"] = {
         r["key"]: {
@@ -817,12 +1562,47 @@ if os.environ["SRCELAB_UPDATE"] == "1":
             "decl_count": r["decl_count"],
             "sorry_axioms": r["sorry_axioms"],
             **({"cap_lines": r["cap_lines"]} if r["cap_lines"] else {}),
+            **({"perf_baseline": {m: r[m] for m in _perf.METRICS if r.get(m) is not None}}
+               if any(r.get(m) is not None for m in _perf.METRICS) else {}),
         }
         for r in recs
     }
+    if rebase_perf:
+        ratchet.setdefault("perf_rebases", []).append({
+            "date": today, "armed_commit": os.environ["SRCELAB_COMMIT"],
+            "reason": rebase_perf, "regressions_accepted": _perf_res["regressions"],
+        })
     ratchet["armed"] = True
     ratchet["last_updated"] = today
     ratchet["armed_commit"] = os.environ["SRCELAB_COMMIT"]
+    # The corpus these baselines are counts OF, written by the same act that
+    # writes the counts. Before 2026-09-15 this was recorded only in the
+    # `notes` prose, where no code could read it.
+    _prev = ratchet.get("corpus") if isinstance(ratchet.get("corpus"), dict) else None
+    ratchet["corpus"] = {
+        "rev": measured_corpus["rev"],
+        "toolchain": measured_corpus["toolchain"],
+        "recorded": today,
+        "source": "measured by scripts/source_elab_gate.sh at arming time",
+    }
+    if repin_reason:
+        ratchet.setdefault("corpus_repins", []).append({
+            "date": today,
+            "from": {"rev": (_prev or {}).get("rev"),
+                     "toolchain": (_prev or {}).get("toolchain")},
+            "to": {"rev": measured_corpus["rev"],
+                   "toolchain": measured_corpus["toolchain"]},
+            "armed_commit": os.environ["SRCELAB_COMMIT"],
+            "reason": repin_reason,
+            "note": (
+                "A corpus re-pin re-bases every per-file baseline onto a "
+                "different Mathlib. The monotonic-up rule does NOT carry across "
+                "it -- counts on two corpora are not comparable -- so this row "
+                "is the only record that the basis moved."
+            ),
+        })
+        print("  corpus RE-PINNED: {!r} -> {!r} ({})".format(
+            (_prev or {}).get("rev"), measured_corpus["rev"], repin_reason))
     with open(ratchet_path, "w", encoding="utf-8") as f:
         json.dump(ratchet, f, indent=2)
         f.write("\n")
@@ -856,6 +1636,13 @@ case "$frc" in
   3) fail ratchet-regression "a pinned file's success count dropped below its armed baseline in $RATCHET (see report + stderr above)" ;;
   4) fail ratchet-lower "--update would LOWER an armed baseline; the ratchet is monotonic-up (a deliberate rebaseline needs a hand edit with justification)" ;;
   5) fail ratchet-missing-key "the ratchet is ARMED but has no baseline entry for a pinned file, which would enforce a baseline of 0; add it with --update (or fix the pinned slice)" ;;
+  6) skip corpus-mismatch "the Mathlib measured here is not the one the baselines were armed against (see stderr) — counts across two corpora are not comparable, so this run enforced nothing. The report is still on disk" ;;
+  7) fail corpus-unpinned "the ratchet is ARMED but records no corpus identity, so nothing establishes what its baselines are counts OF (see stderr)" ;;
+  8) fail repin-corpus-usage "--repin-corpus was used incorrectly (see stderr)" ;;
+  9) fail decl-regression "a declaration that passed in the armed_commit report now fails and no decl_regression_ledger entry covers it (NEW-FAIL rows above; the per-file counts may well hold)" ;;
+  10) fail perf-regression "a pinned file's import_s / elab_s / max_rss_bytes exceeds its armed perf_baseline beyond tolerance (PERF-REGRESSION rows above)" ;;
+  11) fail perf-unmeasured "an armed performance metric was not measured by this run (a binary without the report's timing block, or no /usr/bin/time) — an unknown is not a pass" ;;
+  12) fail rebase-perf-usage "--rebase-perf was used incorrectly (see stderr)" ;;
   *) fail finalize-error "report/ratchet finalize step failed (exit $frc)" ;;
 esac
 

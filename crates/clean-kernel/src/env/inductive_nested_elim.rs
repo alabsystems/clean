@@ -432,24 +432,36 @@ impl NestedElimCtx<'_> {
 
             // Aux type former: kill the container's level params, strip its
             // param telescope, substitute Ds′, re-wrap the OUTER telescope.
+            // Levels are instantiated as Lean's `instantiate_lparams` does
+            // (inductive.cpp:1003), so the rebuild matches what Lean generates
+            // from a verbatim-decoded container (DECISIONS R150).
             let sibling_ty = sibling_val
                 .type_
-                .instantiate_level_params_direct(&sibling_val.level_params, ls);
+                .lean_instantiate_level_params_kept_in_profile(
+                    &sibling_val.level_params,
+                    ls,
+                    self.env.lean_level_profile(),
+                );
             let stripped = strip_pi_binders(&sibling_ty, n).ok_or_else(|| {
                 InductiveError::NestedRestoreInvariant(format!(
                     "container member {sibling} has fewer Pi binders than its num_params"
                 ))
             })?;
-            // Beta-normalize the const-map redex `(fun x => V) k ↦ V` at its
-            // unique source (design 2026-07-05 §5.1): a dependent-parameter
-            // container substitutes β with a const map `fun x => V`, leaving a
-            // `Lam`-headed application that Clean's syntactic head-inspecting
-            // passes (strict positivity, recursor-field classifier, IH-target)
-            // cannot read. Lean whnfs the field at every check site; beta ⊆
-            // whnf, so reducing it once here recovers Lean's verdict without
-            // touching any acceptance gate. On a redex-free term (all
-            // non-dependent-container families) this is the identity.
-            let instantiated = stripped.instantiate_rev(&ds_rev).beta_normalize();
+            // No β step, as Lean's `instantiate_pi_params` (`instantiate_rev`,
+            // inductive.cpp:954-960) takes none: a dependent container
+            // parameter instantiated with a lambda leaves the redex
+            // `(fun x => V) k` in the auxiliary types, and Lean stores it so —
+            // in the block's `isReflexive` (`is_pi` on the unreduced field) and
+            // in the generated recursors the `.olean` replay compares
+            // structurally. The passes that read a field's head call Lean's
+            // `whnf` there, with β (`inductive::head_beta`): strict positivity
+            // (`strict.rs`) and the recursive-field / induction-hypothesis
+            // readers of the recursor builders. Until 2026-10-23 this
+            // β-normalized the auxiliary types instead (design 2026-07-05
+            // §5.1), which flipped `isReflexive` and every such recursor away
+            // from Lean's (`Lean.Json`, `Lean.PrefixTreeNode`, `inductive SGS |
+            // mk : (Σ _ : Nat, Nat → SGS) → SGS`); see `docs/DECISIONS.md`.
+            let instantiated = stripped.instantiate_rev(&ds_rev);
             let aux_type_expr = self.wrap_outer_telescope(instantiated);
 
             // Aux constructors: identical recipe per container ctor.
@@ -463,25 +475,26 @@ impl NestedElimCtx<'_> {
                 })?;
                 let ctor_ty = ctor_val
                     .type_
-                    .instantiate_level_params_direct(&ctor_val.level_params, ls);
+                    .lean_instantiate_level_params_kept_in_profile(
+                        &ctor_val.level_params,
+                        ls,
+                        self.env.lean_level_profile(),
+                    );
                 let ctor_stripped = strip_pi_binders(&ctor_ty, n).ok_or_else(|| {
                     InductiveError::NestedRestoreInvariant(format!(
                         "constructor {ctor_name} has fewer Pi binders than its num_params"
                     ))
                 })?;
-                // Beta-normalize the const-map redex in the field types (the
-                // dependent field `β k` becomes `(fun x => V) k`, contracted to
-                // `V`); see the type-former note above (design 2026-07-05 §5.1).
-                let ctor_instantiated = ctor_stripped.instantiate_rev(&ds_rev).beta_normalize();
+                // As written, redexes included; see the type-former note above.
+                let ctor_instantiated = ctor_stripped.instantiate_rev(&ds_rev);
                 let aux_ctor_type = self.wrap_outer_telescope(ctor_instantiated);
 
                 // Suffix transplant: J.c ↦ Aux.c (Lean :1016).
-                let ctor_str = ctor_name.to_string();
-                let suffix = ctor_str
-                    .rsplit_once('.')
-                    .map(|(_, s)| s)
-                    .unwrap_or(&ctor_str);
-                let aux_ctor_name = Name::from_string(&format!("{aux_name}.{suffix}"));
+                let aux_ctor_name = ctor_name.with_parent(aux_name.clone()).ok_or_else(|| {
+                    InductiveError::NestedRestoreInvariant(format!(
+                        "anonymous constructor in {sibling}"
+                    ))
+                })?;
                 ctor_map.push((aux_ctor_name.clone(), ctor_name.clone()));
                 aux_ctors.push(Constructor {
                     name: aux_ctor_name,

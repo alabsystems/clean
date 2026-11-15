@@ -13,7 +13,6 @@
 use crate::inductive::{count_pi, return_type};
 use crate::level::Level;
 use crate::mutual::BlockCtorInfo;
-use crate::name::Name;
 use crate::rawexpr::BinderInfo;
 use crate::recursor_mutual::{collect_pi_domains, BlockCx};
 use crate::term::{ConstRef, Term, TermKind};
@@ -62,19 +61,27 @@ pub(crate) fn build_mutual_rule_rhs(
         body = Term::app(body, Term::bvar(nf.saturating_sub(1).saturating_sub(f)));
     }
 
+    // `rec_num_levels` is a `u32` header count; `build_block_recursors` already
+    // refused one above `MAX_RECURSOR_LEVELS`, and this keeps the bound where
+    // the vector is sized.
+    if rec_num_levels > crate::recursor::MAX_RECURSOR_LEVELS {
+        return Err(format!(
+            "too many recursor level params ({rec_num_levels} > {})",
+            crate::recursor::MAX_RECURSOR_LEVELS
+        ));
+    }
     let rec_levels: Vec<Level> = (0..rec_num_levels).map(Level::param).collect();
 
-    for (i, &is_rec) in ci.recursive.iter().enumerate() {
-        if !is_rec {
-            continue;
-        }
+    for (i, field_ty, target_idx) in ci.recursive_fields() {
         let i_u32 = u32::try_from(i).map_err(|_| "field idx".to_string())?;
-        let field_ty = &ci.field_tys[i];
         let n_pis = count_pi(field_ty);
-        // recursor of the field's target type.
-        let target_idx = ci.field_motive[i];
-        let target_name = &cx.block_names[target_idx];
-        let rec_name = Name::from_dotted(&format!("{target_name}.rec"));
+        // recursor of the field's target type. A recursive field's motive
+        // index names a block type; one that does not is refused, not indexed.
+        let target_name = cx
+            .block_names
+            .get(target_idx)
+            .ok_or("recursive field targets no block type")?;
+        let rec_name = target_name.str("rec");
         let rec_cref = Term::const_ref(ConstRef::mk_unchecked_levels(rec_name, rec_levels.clone()));
         let mut ih = rec_cref;
         // params: BVar(total_binders-1-p + n_pis).

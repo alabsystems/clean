@@ -1,0 +1,5 @@
+(assume a0 (xor true true))
+(step t1 (cl (= (xor true true) false)) :rule evaluate)
+(step t2 (cl (not (= (xor true true) false)) (not (xor true true)) false) :rule equiv_pos2)
+(step t3 (cl (not false)) :rule false)
+(step t4 (cl) :rule resolution :premises (t2 t1 a0 t3))

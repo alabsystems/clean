@@ -14,7 +14,7 @@ use super::syntax_to_surface;
 pub(super) fn syntax_to_arg(syntax: &Syntax) -> Option<SurfaceArg> {
     if let Syntax::Node(node) = syntax {
         if node.kind.name_str() == "namedArg" && node.children.len() == 2 {
-            let name = node.children[0].as_ident()?.to_string();
+            let name = node.children[0].as_ident()?.clone();
             let expr = syntax_to_surface(&node.children[1])?;
             return Some(SurfaceArg::named(name, expr));
         }
@@ -45,7 +45,9 @@ pub(super) fn syntax_to_match_arm(syntax: &Syntax) -> Option<SurfaceMatchArm> {
 /// Convert syntax to a pattern
 pub(in crate::macro_integration) fn syntax_to_pattern(syntax: &Syntax) -> Option<SurfacePattern> {
     match syntax {
-        Syntax::Ident(_, name) if name == "_" => Some(SurfacePattern::Wildcard),
+        Syntax::Ident(_, name) if name.is_unescaped_component("_") => {
+            Some(SurfacePattern::Wildcard)
+        }
         Syntax::Ident(_, name) => Some(SurfacePattern::Var(name.clone())),
         Syntax::Node(node) => {
             let kind_name = node.kind.name_str();
@@ -54,7 +56,7 @@ pub(in crate::macro_integration) fn syntax_to_pattern(syntax: &Syntax) -> Option
                     if node.children.is_empty() {
                         return None;
                     }
-                    let name = node.children[0].as_ident()?.to_string();
+                    let name = node.children[0].as_ident()?.clone();
                     let args: Option<Vec<_>> =
                         node.children[1..].iter().map(syntax_to_pattern).collect();
                     Some(SurfacePattern::Ctor(name, args?))
@@ -114,7 +116,7 @@ pub(in crate::macro_integration) fn syntax_to_pattern(syntax: &Syntax) -> Option
                     if node.children.len() != 2 {
                         return None;
                     }
-                    let name = node.children[0].as_ident()?.to_string();
+                    let name = node.children[0].as_ident()?.clone();
                     let pat = syntax_to_pattern(&node.children[1])?;
                     Some(SurfacePattern::As(name, Box::new(pat)))
                 }
@@ -127,14 +129,55 @@ pub(in crate::macro_integration) fn syntax_to_pattern(syntax: &Syntax) -> Option
                     let right = syntax_to_pattern(&node.children[1])?;
                     Some(SurfacePattern::Or(Box::new(left), Box::new(right)))
                 }
+                // Structure-instance pattern `{ f := p, .. }` — the inverse of
+                // `surface_pattern_to_syntax`'s `structInstPattern`. Anything
+                // it cannot read yields `None`, never a guessed pattern.
+                "structInstPattern" | "structInstPatternDots" => {
+                    let ellipsis = kind_name == "structInstPatternDots";
+                    let mut fields = Vec::new();
+                    let mut ty = None;
+                    for child in &node.children {
+                        let child_node = match child {
+                            Syntax::Node(n) => n,
+                            _ => return None,
+                        };
+                        match child_node.kind.name_str() {
+                            "structInstPatternField" => {
+                                if child_node.children.len() != 2 {
+                                    return None;
+                                }
+                                let name = child_node.children[0].as_ident()?.clone();
+                                let pat = syntax_to_pattern(&child_node.children[1])?;
+                                fields.push((name, pat));
+                            }
+                            "structInstPatternType" => {
+                                if ty.is_some() || child_node.children.len() != 1 {
+                                    return None;
+                                }
+                                ty = Some(Box::new(syntax_to_surface(&child_node.children[0])?));
+                            }
+                            _ => return None,
+                        }
+                    }
+                    Some(SurfacePattern::StructInst {
+                        fields,
+                        ellipsis,
+                        ty,
+                    })
+                }
                 _ => {
                     // Try as constructor with arguments
                     if node.children.is_empty() {
-                        Some(SurfacePattern::Var(kind_name.to_string()))
+                        Some(SurfacePattern::Var(clean_parser::SurfaceName::from_name(
+                            node.kind.name().clone(),
+                        )))
                     } else {
                         let args: Option<Vec<_>> =
                             node.children.iter().map(syntax_to_pattern).collect();
-                        Some(SurfacePattern::Ctor(kind_name.to_string(), args?))
+                        Some(SurfacePattern::Ctor(
+                            clean_parser::SurfaceName::from_name(node.kind.name().clone()),
+                            args?,
+                        ))
                     }
                 }
             }
@@ -168,7 +211,7 @@ pub(super) fn syntax_to_binder(syntax: &Syntax) -> Option<SurfaceBinder> {
                 return None;
             }
 
-            let name = node.children[0].as_ident()?.to_string();
+            let name = node.children[0].as_ident()?.clone();
             let ty = if node.children.len() > 1 && !node.children[1].is_missing() {
                 Some(Box::new(syntax_to_surface(&node.children[1])?))
             } else {

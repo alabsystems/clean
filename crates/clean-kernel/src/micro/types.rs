@@ -852,39 +852,6 @@ pub enum MicroError {
     Unsupported(String),
 }
 
-/// Error from cross-validation between the micro-checker and the main kernel.
-///
-/// Returned when the micro-checker disagrees with the main kernel's type
-/// inference result. This indicates a potential soundness issue.
-#[derive(Debug, Clone, thiserror::Error)]
-#[non_exhaustive]
-pub enum CrossValidationError {
-    /// Micro-checker inferred a different type than the main kernel
-    #[error(
-        "MICRO-CHECKER DISAGREEMENT: expr={expr}, main_type={main_type}, micro_type={micro_type}"
-    )]
-    Disagreement {
-        /// The expression that was type-checked (debug representation)
-        expr: String,
-        /// Type inferred by the main kernel (debug representation)
-        main_type: String,
-        /// Type inferred by the micro-checker (debug representation)
-        micro_type: String,
-    },
-    /// Micro-checker failed to verify the certificate
-    #[error(
-        "MICRO-CHECKER VERIFICATION FAILED: expr={expr}, main_type={main_type}, error={error}"
-    )]
-    VerificationFailed {
-        /// The expression that was type-checked (debug representation)
-        expr: String,
-        /// Type inferred by the main kernel (debug representation)
-        main_type: String,
-        /// The underlying micro-checker error
-        error: MicroError,
-    },
-}
-
 // ============================================================================
 // De Bruijn Index Arithmetic Helpers
 // ============================================================================

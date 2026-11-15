@@ -75,6 +75,12 @@ pub(crate) trait ExtensionStateHolder: Send + Sync {
     /// Mark as initialized (for empty-import case).
     fn mark_initialized(&mut self);
 
+    /// How many times the state was written: entries added, or mutable
+    /// access granted. Folding imported entries is not a write (the state is
+    /// then a function of `persistent_extensions`). A local fact delta reads
+    /// it to refuse a change it does not carry (`fact_delta` module docs).
+    fn writes(&self) -> u64;
+
     /// Downcast to concrete type for typed access.
     fn as_any(&self) -> &dyn Any;
 
@@ -86,6 +92,7 @@ pub(crate) trait ExtensionStateHolder: Send + Sync {
 pub(crate) struct TypedStateHolder<S: PersistentExtState> {
     pub(crate) state: S,
     initialized: bool,
+    writes: u64,
 }
 
 impl<S: PersistentExtState> TypedStateHolder<S> {
@@ -93,6 +100,7 @@ impl<S: PersistentExtState> TypedStateHolder<S> {
         Self {
             state: S::default(),
             initialized: false,
+            writes: 0,
         }
     }
 
@@ -100,7 +108,10 @@ impl<S: PersistentExtState> TypedStateHolder<S> {
         &self.state
     }
 
+    /// Mutable access, counted as a write whether or not the caller changes
+    /// anything (fail-closed: see [`ExtensionStateHolder::writes`]).
     pub(crate) fn state_mut(&mut self) -> &mut S {
+        self.writes += 1;
         &mut self.state
     }
 }
@@ -110,6 +121,7 @@ impl<S: PersistentExtState + 'static> ExtensionStateHolder for TypedStateHolder<
         Box::new(TypedStateHolder {
             state: self.state.clone(),
             initialized: self.initialized,
+            writes: self.writes,
         })
     }
 
@@ -132,6 +144,10 @@ impl<S: PersistentExtState + 'static> ExtensionStateHolder for TypedStateHolder<
 
     fn mark_initialized(&mut self) {
         self.initialized = true;
+    }
+
+    fn writes(&self) -> u64 {
+        self.writes
     }
 
     fn as_any(&self) -> &dyn Any {
@@ -437,6 +453,37 @@ impl EnvExtensionStates {
         result
     }
 
+    /// The extensions whose state was written (see
+    /// [`ExtensionStateHolder::writes`]) between `before`, an earlier clone of
+    /// these states, and now: their names, in registration order.
+    pub(crate) fn written_since(&self, before: &Self) -> Vec<Name> {
+        let writes = |states: &Self, index: usize| {
+            states
+                .states
+                .get(index)
+                .and_then(Option::as_ref)
+                .map_or(0, |holder| holder.writes())
+        };
+        let written: Vec<usize> = (0..self.states.len().max(before.states.len()))
+            .filter(|&index| writes(self, index) != writes(before, index))
+            .collect();
+        if written.is_empty() {
+            return Vec::new();
+        }
+        let reg = global_registry()
+            .lock()
+            .expect("invariant: extension registry mutex not poisoned");
+        written
+            .into_iter()
+            .map(|index| {
+                reg.descriptors().get(index).map_or_else(
+                    || Name::from_string(&format!("(unregistered extension {index})")),
+                    |desc| desc.name.clone(),
+                )
+            })
+            .collect()
+    }
+
     /// Check if a specific extension has initialized state.
     pub(crate) fn is_initialized(&self, idx: ExtensionIdx) -> bool {
         self.states
@@ -463,7 +510,7 @@ impl EnvExtensionStates {
                 .as_any_mut()
                 .downcast_mut::<TypedStateHolder<S>>()
                 .expect("invariant: extension type matches registration")
-                .state
+                .state_mut()
                 .add_entry(entry);
         }
     }
@@ -482,6 +529,15 @@ impl serde::Serialize for EnvExtensionStates {
     fn serialize<Ser: serde::Serializer>(&self, serializer: Ser) -> Result<Ser::Ok, Ser::Error> {
         // Serialize as unit — actual state is reconstructed from persistent_extensions
         serializer.serialize_unit()
+    }
+}
+
+impl EnvExtensionStates {
+    /// The original persisted contract is unit. Typed runtime states are not
+    /// authority carried by a DAG; raw persistent extension entries remain in
+    /// their separate complete Environment field.
+    pub(crate) fn dag_wire_unit(&self) {
+        let Self { states: _ } = self;
     }
 }
 

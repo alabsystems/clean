@@ -84,7 +84,7 @@ checked by kernel-executed witnesses cross-checked against host `f64`
   on host f64.
 * `crates/clean-verify/tests/fixtures/synth/synth_fsign.trust-ir.txt` /
   `synth_fround.trust-ir.txt` / `synth_fminmax.trust-ir.txt` — the authored
-  E2 twins, `; #synthetic:` self-declaring (freshness-closure invariant
+  E2 twins, `; synthetic:` self-declaring above the `fn` header (freshness-closure invariant
   re-run here: green, crystal_a1_lineage 134 passed). `sigs` functy indices
   **925/926/927** continue the 910-924 convention.
 * `crates/clean-verify/tests/crystal_a3_semdiff/wfr_chains.rs` — **3 chains /
@@ -249,7 +249,7 @@ Spec-free test re-runs, all green: the crystal_a3_semdiff spec-free block
 seven lane pins, and the coverage print with the `== 28` assert HELD — this
 wave adds ops, not constructors); the 3 grid gate tests (eleven delta ids
 pinned); `crystal_a1_lineage` **134 passed** (operand_audit 6/6 and the
-fixture freshness closure accepting the three new `#synthetic:` fixtures);
+fixture freshness closure accepting the three new `synthetic:` fixtures);
 lib unit tests **60 passed** (`eval_ir_float_res_witnesses` 6,
 `eval_ir_wfr_synth` 3, `ir_semdiff::` 51 including the new `Float`
 encodings).

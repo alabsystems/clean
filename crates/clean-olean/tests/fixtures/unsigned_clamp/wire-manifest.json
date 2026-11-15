@@ -1,0 +1,34 @@
+{
+  "width": {
+    "bytes": 23229,
+    "sha256": "26ac76c98d61ffd754e4e0cffaa0f3fb422e6d2cc006a2e547ec3b1063666a8c"
+  },
+  "widthWrongComparison": {
+    "bytes": 23229,
+    "sha256": "6f8a4404968a687895774937d90b45d55905a9373bb07baa175fa264e50081b6"
+  },
+  "widthWrongArms": {
+    "bytes": 23229,
+    "sha256": "7f474f8994e102bb4dd668aa0c86b45c3837a718aef6bcd5c4bbbca237523ca3"
+  },
+  "widthWrongBound": {
+    "bytes": 23229,
+    "sha256": "a9ae71132f6a9905fcaedefeb6c24ea061268703897ac05c6d75c97f3915516e"
+  },
+  "maximum": {
+    "bytes": 34641,
+    "sha256": "2bb9510163730c511bbb8cfbb50cd51e73e5d99654042a8a049a2e483f912895"
+  },
+  "maximumWrongComparison": {
+    "bytes": 34641,
+    "sha256": "55b7cecbf8a24f31e8d116b540de36357ae6d48913971d0751a8c901067d0a6c"
+  },
+  "maximumWrongArms": {
+    "bytes": 34641,
+    "sha256": "669f9d2fa1594e04359cd4613b493caf3aa213424ae6a69e6aa1fa8263de8b8a"
+  },
+  "maximumWrongBound": {
+    "bytes": 34641,
+    "sha256": "d67211de345ec9ce90ecc31b53514626cf03626fd73e08a2d9a47de55354e690"
+  }
+}

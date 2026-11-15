@@ -15,9 +15,20 @@ use std::collections::BTreeSet;
 use clean_kernel::Name;
 use clean_verify::spec::Specification;
 
-/// The 28 `Inst` variants the THIR lowerer constructs, as their `IRInst`
-/// constructor names. Ordered as in `trust_ir::Inst` so the two lists can be
-/// diffed by eye.
+/// The shared representable `IRInst` alphabet. The original 30 constructor names
+/// cover variants constructed by the executed bundle's two producers; the
+/// appended sequential relaxed-u64 fetch-add is ByteV1-only. Legacy `ir_exec`
+/// explicitly refuses that new constructor, so membership is not a claim of
+/// successful legacy execution or measured three-executor agreement.
+///
+/// Twenty-eight come from the THIR lowerer (`crates/trust-thir-lower/src`);
+/// `borrow` and `copy` come from the trust-ir bridge
+/// (`crates/trust-ir-bridge/src/lower.rs`), the producer of the Phase-B callee
+/// sidecar, which constructs `Inst::Borrow`/`Inst::BorrowMut` and `Inst::Copy`.
+/// The modelled set is a SUBSET of the constructed set. B2C will publish that
+/// difference by minting `data/irinst_producer_census.json`; until it exists,
+/// the difference is stated nowhere checkable and no count of it should be
+/// quoted from this list.
 pub(crate) const EMITTED_INSTS: &[&str] = &[
     // arithmetic / comparison / cast
     "binop",
@@ -54,29 +65,39 @@ pub(crate) const EMITTED_INSTS: &[&str] = &[
     "unreachable",
     // pseudo
     "select",
-];
-
-/// The six variants referenced only in pattern position by the lowerer, and so
-/// deliberately absent from `IRInst`. Pinned so that if one of them starts being
-/// constructed, this test is the place that notices.
-pub(crate) const NOT_EMITTED: &[&str] = &[
-    "assume",
+    // the trust-ir bridge's two (Phase B)
+    "borrow",
     "copy",
-    "heapalloc",
-    "insertelement",
-    "invoke",
-    "nullptr",
+    // Compiler-owned atomic bridge; sequential byte execution only.
+    "atomic_fetch_add_relaxed_u64_seq",
+    // Distinct target-indexed Usize lane. Source attachment is separate work.
+    "atomic_fetch_add_relaxed_usize_seq",
+    // Retained syntax only; all executors explicitly halt unmodelled.
+    "release",
 ];
 
-/// The operator alphabets, with their exact Rust-side cardinalities.
-pub(crate) const OPERATOR_ALPHABETS: &[(&str, usize)] = &[
-    ("IRBinOp", 20),
-    ("IRUnOp", 9),
-    ("IRICmpOp", 10),
-    ("IRFCmpOp", 12),
-    ("IRCastOp", 17),
-    ("IROverflowOp", 3),
-];
+/// Variants with no syntactic image, pinned so that adding one to
+/// `IRInst` without moving this list fails here.
+///
+/// The old comment said they were "referenced only in pattern position by the
+/// lowerer" and that "if one of them starts being constructed, this test is
+/// the place that notices". BOTH halves were false and are corrected here
+/// rather than repeated. Measured 2026-09-10 at trust `0dd9d3e2d7` with
+/// `grep -n 'InstrNode::new(Inst::<V> {'`: `Inst::InsertElement` is
+/// CONSTRUCTED at 8 sites in `crates/trust-thir-lower/src/lib.rs` and
+/// `Inst::Assume` at 14 in `crates/trust-ir-bridge/src/lower.rs` — nothing
+/// noticed, because no gate ever compared this list against either producer.
+/// That grep counts construction-SHAPED text rather than code (the project's
+/// own scanner rule), so read the counts as evidence that "never constructed"
+/// is false, not as the census; the parse-based scan is B2C's. `copy` left this
+/// list in Phase B for the opposite reason: the bridge constructs it and the
+/// machine now models it. The list is syntactically excluded, not
+/// "unconstructed". B2C will make the constructed set checkable, by minting
+/// `data/irinst_producer_census.json` from a parse-based two-producer scan
+/// whose `unmodelled_constructed` field publishes the difference; that
+/// artifact does not exist yet, so do not send a reader to it as if it did.
+pub(crate) const NOT_EMITTED: &[&str] =
+    &["assume", "heapalloc", "insertelement", "invoke", "nullptr"];
 
 /// Every `EvalIR` inductive the firewall must clear. These are the relations and
 /// data families the crystal's equality theorem will quantify over, so a
@@ -93,6 +114,7 @@ pub(crate) const EVAL_IR_FAMILIES: &[&str] = &[
     "IROverflowOp",
     "IRSwitchCase",
     "IRInst",
+    "IREnc",
     "IRNode",
     "IRBlock",
     "IRFunc",
@@ -183,14 +205,20 @@ pub(crate) const WITNESSES: &[&str] = &[
     // The adequacy grid's theorem band (plan W5, 2026-08-25): one
     // dropped-operand irrelevance theorem per field the ir_exec dispatch
     // binds and never reads — the three operand-audit-era precedents beside
-    // the dispatch plus the seventeen in eval_ir_adequacy.rs. The grid
+    // the dispatch plus the sixteen in eval_ir_adequacy.rs. The grid
     // (data/evalir_adequacy_grid.json, scripts/evalir_adequacy_grid.py)
-    // derives the 20-row set mechanically; gating them here holds each to
+    // derives the row set mechanically; gating them here holds each to
     // registered + EMPTY transitive axiom closure on the big box.
+    //
+    // `ir_exec_load_ty_irrelevant` LEFT this list in Phase B and did not move
+    // house: the load arm now READS the type through the module's derived
+    // encodings table, so the theorem is false of the general module and is
+    // replaced by the pair below — the conservativity half stated at an
+    // `IRModule.mk`, and the negative witness that exhibits a module at which
+    // the view is not the identity.
     "ir_exec_switch_exh_irrelevant",
     "ir_exec_callind_conv_irrelevant",
     "ir_exec_callind_sig_irrelevant",
-    "ir_exec_load_ty_irrelevant",
     "ir_exec_load_vol_irrelevant",
     "ir_exec_store_ty_irrelevant",
     "ir_exec_store_vol_irrelevant",
@@ -199,7 +227,6 @@ pub(crate) const WITNESSES: &[&str] = &[
     "ir_exec_gep_inbounds_irrelevant",
     "ir_exec_ptrdata_ty_irrelevant",
     "ir_exec_ptrmeta_pt_irrelevant",
-    "ir_exec_ptrmeta_mt_irrelevant",
     "ir_exec_ptrparts_pt_irrelevant",
     "ir_exec_ptrparts_mt_irrelevant",
     "ir_exec_extractfield_ty_irrelevant",
@@ -207,6 +234,15 @@ pub(crate) const WITNESSES: &[&str] = &[
     "ir_exec_extractelement_ty_irrelevant",
     "ir_exec_undef_ty_irrelevant",
     "ir_exec_select_ty_irrelevant",
+    // Phase B (link 3): the encoding-aware load view and the two arms the
+    // trust-ir bridge's sidecar bodies carry. Each is an Eq.refl over the
+    // registered semantics, so an empty axiom closure is the whole claim.
+    "ir_exec_load_ty_irrelevant_mk",
+    "ir_load_view_mkv_reads_ty",
+    "ir_borrow_no_provenance_is_ub",
+    "ir_copy_ty_slot_is_read",
+    "ir_view_ptr0_is_none",
+    "ir_view_agg_is_identity",
     // The float-residue band (2026-08-25, evalir_w4.PENDING.md delta 5's
     // wave): fneg/fabs, fmin/fmax, ffloor/fceil/ftrunc executed vectors —
     // each cross-checked against trust-ir a4e81b6's eval_float_unop /
@@ -286,6 +322,58 @@ pub(crate) const WITNESSES: &[&str] = &[
     "ir_const_agg_two_elements",
     "ir_const_agg_nested",
 ];
+
+/// Phase-B's return-slot stage, in registration order (`add_eval_ir_slot_lemmas`).
+///
+/// The alloca/store/load/ret pattern every derived-bundle callee body opens
+/// with, closed at an ABSTRACT heap and an ABSTRACT allocation counter, plus
+/// the five substrate facts it rests on. The stage file carries the same list
+/// for its own structural tests; this copy is what the registration gate holds
+/// against the built spec.
+pub(crate) const SLOT_LEMMAS: &[&str] = &[
+    // The store/load view family (2026-09-13), first because DECLS registers
+    // it first. See `eval_ir_slot_lemmas.rs` for why the store arm may ignore
+    // its type and exactly where that stops being true.
+    "ir_exec_load_is_view",
+    "ir_view_word_agg",
+    "ir_view_opt_agg",
+    "ir_view_ty_agg",
+    "ir_load_view_opt_agg",
+    "ir_load_view_agg",
+    "ir_exec_load_agg",
+    "ir_nat_sub_self",
+    "ir_nat_eqb_walk_refl",
+    "ir_nat_eqb_refl",
+    "ir_mem_lookup_head",
+    "ir_mem_update_head",
+    "ir_mem_lookup_skip",
+    "ir_slot_b0",
+    "ir_slot_func",
+    "ir_slot_module",
+    "ir_slot_mach0",
+    "ir_slot_smach",
+    "ir_slot_lmach",
+    "ir_slot_rmach",
+    "ir_slot_after_store_lookup",
+    "ir_slot_after_store_update",
+    "ir_slot_after_load",
+    "ir_slot_step_alloca",
+    "ir_slot_step_store",
+    "ir_slot_store_resolved",
+    "ir_slot_step_load",
+    "ir_slot_store_seg",
+    "ir_slot_load_seg",
+    "ir_slot_activation",
+    "ir_slot_seg",
+    "ir_slot_cost_is_4",
+    "ir_slot_concrete",
+    "ir_slot_resumes_caller",
+];
+
+/// The one `ir_slot_`-prefixed declaration that is NOT part of that stage:
+/// `add_eval_ir`'s liveness projection, registered long before it. Named here
+/// so the gate can assert the prefix EXACTLY rather than merely inclusively.
+pub(crate) const SLOT_PREFIX_NOT_FROM_THE_STAGE: &[&str] = &["ir_slot_live"];
 
 pub(crate) fn ctor_names(spec: &Specification, inductive: &str) -> BTreeSet<String> {
     spec.env()

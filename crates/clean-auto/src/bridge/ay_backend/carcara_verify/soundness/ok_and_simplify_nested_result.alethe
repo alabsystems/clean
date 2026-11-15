@@ -1,0 +1,3 @@
+(assume nc (not (= (and true (and p q)) (and p q))))
+(step s (cl (= (and true (and p q)) (and p q))) :rule and_simplify)
+(step done (cl) :rule resolution :premises (nc s))

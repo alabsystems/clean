@@ -1,0 +1,4 @@
+$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/rejected/structural_clause_selects_non_decreasing.lean:3:0: error: failed to infer structural recursion:
+Cannot use parameters #1 of f and #1 of g:
+  failed to eliminate recursive application
+    g n xs

@@ -1,0 +1,3 @@
+(assume nc (not (= (forall ((x Bool)) (or x y)) (forall ((x Bool) (y Bool)) (or x y)))))
+(step s (cl (= (forall ((x Bool)) (or x y)) (forall ((x Bool) (y Bool)) (or x y)))) :rule refl)
+(step done (cl) :rule resolution :premises (nc s))

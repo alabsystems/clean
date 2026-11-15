@@ -15,13 +15,13 @@ use clean_parser::{parse_expr, Span, SurfaceExpr, SyntaxPatternItem};
 /// Build an `elab "<kw>" <vars> : tactic => <body>` surface declaration.
 fn elab_tactic_decl(
     keyword: &str,
-    vars: &[(&str, Option<&str>)],
+    vars: &[(SurfaceName, Option<&str>)],
     body: SurfaceExpr,
 ) -> SurfaceDecl {
     let mut pattern = vec![SyntaxPatternItem::Literal(keyword.to_owned())];
     for (name, category) in vars {
         pattern.push(SyntaxPatternItem::Variable {
-            name: (*name).to_owned(),
+            name: name.clone(),
             category: category.map(str::to_owned),
         });
     }
@@ -35,15 +35,19 @@ fn elab_tactic_decl(
 
 /// A body with no `throwError` so the synthesized bound-variable message fires.
 fn placeholder_body() -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), "skip".to_owned())
+    SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("skip"))
 }
 
 /// Build an `elab "<kw>" <vars> : term => <body>` surface declaration.
-fn elab_term_decl(keyword: &str, vars: &[(&str, Option<&str>)], body: SurfaceExpr) -> SurfaceDecl {
+fn elab_term_decl(
+    keyword: &str,
+    vars: &[(SurfaceName, Option<&str>)],
+    body: SurfaceExpr,
+) -> SurfaceDecl {
     let mut pattern = vec![SyntaxPatternItem::Literal(keyword.to_owned())];
     for (name, category) in vars {
         pattern.push(SyntaxPatternItem::Variable {
-            name: (*name).to_owned(),
+            name: name.clone(),
             category: category.map(str::to_owned),
         });
     }
@@ -76,7 +80,11 @@ fn test_elab_rules_term_arg_tactic_binds_variable_and_fires() {
     let mut ctx = ElabCtx::new(&env);
 
     // elab "my_term" e:term : tactic => skip
-    let decl = elab_tactic_decl("my_term", &[("e", Some("term"))], placeholder_body());
+    let decl = elab_tactic_decl(
+        "my_term",
+        &[(SurfaceName::generated_path("e"), Some("term"))],
+        placeholder_body(),
+    );
     ctx.elab_decl(&decl)
         .expect("non-nullary elab_rules elaborates");
 
@@ -117,7 +125,10 @@ fn test_elab_rules_ident_args_map_to_ident_list() {
     // elab "my_idents" x:ident y:ident : tactic => skip
     let decl = elab_tactic_decl(
         "my_idents",
-        &[("x", Some("ident")), ("y", Some("ident"))],
+        &[
+            (SurfaceName::generated_path("x"), Some("ident")),
+            (SurfaceName::generated_path("y"), Some("ident")),
+        ],
         placeholder_body(),
     );
     ctx.elab_decl(&decl)
@@ -142,7 +153,7 @@ fn test_elab_rules_repetition_pattern_is_deferred() {
             SyntaxPatternItem::Literal("my_rep".to_owned()),
             SyntaxPatternItem::Repetition {
                 pattern: vec![SyntaxPatternItem::Variable {
-                    name: "xs".to_owned(),
+                    name: SurfaceName::generated_path("xs"),
                     category: Some("term".to_owned()),
                 }],
                 separator: Some(",".to_owned()),
@@ -189,8 +200,8 @@ fn test_term_elab_identity_wrapper_elaborates_to_argument() {
 
     let decl = elab_term_decl(
         "mywrap",
-        &[("e", Some("term"))],
-        SurfaceExpr::Ident(Span::dummy(), "e".to_owned()),
+        &[(SurfaceName::generated_path("e"), Some("term"))],
+        SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("e")),
     );
     ctx.elab_decl(&decl).expect("term elaborator registers");
 
@@ -228,7 +239,11 @@ fn test_term_elab_body_uses_argument_in_application() {
 
     let mut ctx = ElabCtx::new(&env);
     let body = parse_expr("box e").expect("body parses");
-    let decl = elab_term_decl("boxit", &[("e", Some("term"))], body);
+    let decl = elab_term_decl(
+        "boxit",
+        &[(SurfaceName::generated_path("e"), Some("term"))],
+        body,
+    );
     ctx.elab_decl(&decl).expect("term elaborator registers");
 
     let call = parse_expr(r#"boxit "hi""#).expect("call parses");
@@ -273,8 +288,11 @@ fn test_term_elab_ill_typed_body_fails_elaboration() {
 
     let decl = elab_term_decl(
         "mybad",
-        &[("e", Some("term"))],
-        SurfaceExpr::Ident(Span::dummy(), "Definitely.Not.A.Real.Constant".to_owned()),
+        &[(SurfaceName::generated_path("e"), Some("term"))],
+        SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("Definitely.Not.A.Real.Constant"),
+        ),
     );
     ctx.elab_decl(&decl).expect("term elaborator registers");
 
@@ -292,8 +310,8 @@ fn test_term_elab_arity_mismatch_does_not_intercept() {
 
     let decl = elab_term_decl(
         "mywrap",
-        &[("e", Some("term"))],
-        SurfaceExpr::Ident(Span::dummy(), "e".to_owned()),
+        &[(SurfaceName::generated_path("e"), Some("term"))],
+        SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("e")),
     );
     ctx.elab_decl(&decl).expect("term elaborator registers");
 

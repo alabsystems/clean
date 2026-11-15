@@ -53,7 +53,7 @@
 
 use clean_parser::{
     Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr, SurfaceLit,
-    SurfaceMatchArm, SurfacePattern,
+    SurfaceMatchArm, SurfaceName, SurfacePattern,
 };
 
 /// If `decls` is a packable mutual block, return the desugared declaration
@@ -91,7 +91,7 @@ pub(crate) fn desugar_mutual_structural(decls: &[SurfaceDecl]) -> Option<Vec<Sur
         }
     }
 
-    let func_names: Vec<&str> = members.iter().map(|m| m.name.as_str()).collect();
+    let func_names: Vec<&SurfaceName> = members.iter().map(|m| &m.name).collect();
     let n = members.len();
 
     // Build the packed return type `Prod β₁ (Prod β₂ (... βₙ))`.
@@ -100,7 +100,7 @@ pub(crate) fn desugar_mutual_structural(decls: &[SurfaceDecl]) -> Option<Vec<Sur
 
     // Packed function name. Deterministic, derived from member names so it is
     // stable and collision-resistant in practice.
-    let pack_name = format!("{}.pack", func_names.join("."));
+    let pack_name = packed_name(&func_names);
 
     // Build the packed arms: for each canonical arm index, combine each
     // member's body for that arm into an N-tuple, rewriting cross/self calls
@@ -145,16 +145,23 @@ pub(crate) fn desugar_mutual_structural(decls: &[SurfaceDecl]) -> Option<Vec<Sur
     // Packed equation-form def: `def <pack> : Ind -> ProdTy | <pack_arms>`.
     let pack_ty = SurfaceExpr::Arrow(
         Span::dummy(),
-        Box::new(SurfaceExpr::ident(&ind_name)),
+        Box::new(SurfaceExpr::Ident(Span::dummy(), ind_name.clone())),
         Box::new(pack_ret_ty),
     );
     let pack_val = SurfaceExpr::PatternMatchLambda(
         Span::dummy(),
-        vec![SurfaceBinder::new("_x", None, SurfaceBinderInfo::Explicit)],
+        vec![SurfaceBinder::new_typed(
+            SurfaceName::pattern_lambda_binder(),
+            None,
+            SurfaceBinderInfo::Explicit,
+        )],
         Box::new(SurfaceExpr::Match(
             Span::dummy(),
             None,
-            Box::new(SurfaceExpr::ident("_x")),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::pattern_lambda_binder(),
+            )),
             pack_arms,
         )),
     );
@@ -170,11 +177,15 @@ pub(crate) fn desugar_mutual_structural(decls: &[SurfaceDecl]) -> Option<Vec<Sur
             n,
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(SurfaceExpr::ident(&pack_name)),
-                vec![SurfaceArg::positional(SurfaceExpr::ident("x"))],
+                Box::new(SurfaceExpr::Ident(Span::dummy(), pack_name.clone())),
+                vec![SurfaceArg::positional(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("x"),
+                ))],
             ),
         );
-        let binder = SurfaceBinder::explicit("x", SurfaceExpr::ident(&ind_name));
+        let binder =
+            SurfaceBinder::explicit("x", SurfaceExpr::Ident(Span::dummy(), ind_name.clone()));
         let mut wrapper = make_def(&m.name, Some(m.ret_ty.clone()), wrapper_body, &m.modifiers);
         if let SurfaceDecl::Def { binders, .. } = &mut wrapper {
             *binders = vec![binder];
@@ -185,10 +196,29 @@ pub(crate) fn desugar_mutual_structural(decls: &[SurfaceDecl]) -> Option<Vec<Sur
     Some(out)
 }
 
+/// Preserve historical labels for ordinary single-component members. Complex
+/// identities use numeric framing, not a concatenated display projection.
+fn packed_name(names: &[&SurfaceName]) -> SurfaceName {
+    if names.iter().all(|name| name.component_text().is_some()) {
+        return names
+            .iter()
+            .fold(SurfaceName::default(), |out, name| out.append(name))
+            .append(&SurfaceName::generated_path("pack"));
+    }
+    let mut out = clean_kernel::Name::anon()
+        .str("_mutual_pack")
+        .num(names.len() as u64);
+    for name in names {
+        out = out.num(name.component_syntax().len() as u64);
+        out = crate::namespace::append_names(&out, name.name());
+    }
+    SurfaceName::from_name(out.str("pack"))
+}
+
 /// A normalized view of one mutual-block member.
 struct Member {
-    name: String,
-    ind_name: String,
+    name: SurfaceName,
+    ind_name: SurfaceName,
     ret_ty: SurfaceExpr,
     arms: Vec<SurfaceMatchArm>,
     modifiers: clean_parser::DeclModifiers,
@@ -236,13 +266,14 @@ fn extract_member(decl: &SurfaceDecl) -> Option<Member> {
     let [lb] = lam_binders.as_slice() else {
         return None;
     };
-    if lb.name != "_x" {
+    if !lb.name.same_syntax(&SurfaceName::pattern_lambda_binder()) {
         return None;
     }
     let SurfaceExpr::Match(_, None, scrut, arms) = lam_body.as_ref() else {
         return None;
     };
-    if !matches!(peel_parens(scrut), SurfaceExpr::Ident(_, s) if s == "_x") {
+    if !matches!(peel_parens(scrut), SurfaceExpr::Ident(_, s) if s.same_syntax(&SurfaceName::pattern_lambda_binder()))
+    {
         return None;
     }
     Some(Member {
@@ -257,8 +288,8 @@ fn extract_member(decl: &SurfaceDecl) -> Option<Member> {
 /// Rewrites cross/self recursive calls `fⱼ v` (v a bound var) into the j-th
 /// product projection of `pack v`.
 struct CallRewriter<'a> {
-    func_names: &'a [&'a str],
-    pack_name: &'a str,
+    func_names: &'a [&'a SurfaceName],
+    pack_name: &'a SurfaceName,
     n: usize,
     bailed: bool,
 }
@@ -268,7 +299,7 @@ impl<'a> CallRewriter<'a> {
         match e {
             SurfaceExpr::App(span, func, args) => {
                 if let SurfaceExpr::Ident(_, fname) = peel_parens(func) {
-                    if let Some(j) = self.func_names.iter().position(|n| n == fname) {
+                    if let Some(j) = self.func_names.iter().position(|n| *n == fname) {
                         // A call to mutual member j. Require exactly one
                         // positional argument; it becomes pack's argument.
                         let [arg] = args.as_slice() else {
@@ -282,7 +313,7 @@ impl<'a> CallRewriter<'a> {
                         let rewritten_arg = self.rewrite(&arg.expr);
                         let pack_call = SurfaceExpr::App(
                             *span,
-                            Box::new(SurfaceExpr::ident(self.pack_name)),
+                            Box::new(SurfaceExpr::Ident(Span::dummy(), self.pack_name.clone())),
                             vec![SurfaceArg::positional(rewritten_arg)],
                         );
                         return nth_projection(j, self.n, pack_call);
@@ -301,7 +332,7 @@ impl<'a> CallRewriter<'a> {
             // A bare reference to a mutual member name outside an application
             // would escape the packing (e.g. used as a first-class value);
             // outside our envelope.
-            SurfaceExpr::Ident(_, name) if self.func_names.iter().any(|n| n == name) => {
+            SurfaceExpr::Ident(_, name) if self.func_names.contains(&name) => {
                 self.bailed = true;
                 e.clone()
             }
@@ -388,7 +419,7 @@ fn prod_app(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
     )
 }
 
-fn prod_proj(proj: &str, e: SurfaceExpr) -> SurfaceExpr {
+fn prod_proj(proj: &'static str, e: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::App(
         Span::dummy(),
         Box::new(SurfaceExpr::ident(proj)),
@@ -397,7 +428,7 @@ fn prod_proj(proj: &str, e: SurfaceExpr) -> SurfaceExpr {
 }
 
 fn make_def(
-    name: &str,
+    name: &SurfaceName,
     ty: Option<SurfaceExpr>,
     val: SurfaceExpr,
     modifiers: &clean_parser::DeclModifiers,
@@ -454,9 +485,9 @@ fn lits_eq(a: &SurfaceLit, b: &SurfaceLit) -> bool {
 /// anywhere in its (full, conservative) sub-tree. Used as a post-rewrite safety
 /// net: any surviving member reference means the body contained a form outside
 /// the rewriter's traversal envelope, so the whole desugar must be declined.
-fn mentions_member(e: &SurfaceExpr, names: &[&str]) -> bool {
+fn mentions_member(e: &SurfaceExpr, names: &[&SurfaceName]) -> bool {
     match e {
-        SurfaceExpr::Ident(_, name) => names.iter().any(|n| n == name),
+        SurfaceExpr::Ident(_, name) => names.contains(&name),
         SurfaceExpr::App(_, f, args) => {
             mentions_member(f, names) || args.iter().any(|a| mentions_member(&a.expr, names))
         }
@@ -469,7 +500,9 @@ fn mentions_member(e: &SurfaceExpr, names: &[&str]) -> bool {
         | SurfaceExpr::PatternMatchLambda(_, _, body)
         | SurfaceExpr::Pi(_, _, body) => mentions_member(body, names),
         SurfaceExpr::Arrow(_, a, b) => mentions_member(a, names) || mentions_member(b, names),
-        SurfaceExpr::Let(_, _, v, body) | SurfaceExpr::LetRec(_, _, v, body) => {
+        SurfaceExpr::Let(_, _, v, body)
+        | SurfaceExpr::Have(_, _, v, body)
+        | SurfaceExpr::LetRec(_, _, v, body) => {
             mentions_member(v, names) || mentions_member(body, names)
         }
         SurfaceExpr::Match(_, _, scrut, arms) => {
@@ -505,14 +538,13 @@ pub(crate) struct NestedMutualFold {
     /// The secondary member's equation-form `def` (`T.g : C T -> R`), registered
     /// after the primary so it can reference the now-defined `T.f`.
     pub secondary_def: SurfaceDecl,
-    /// Short name of the container `C` (e.g. `List`), naming the mirror
-    /// `T._<C>`.
-    pub container_short: String,
+    /// Full structural identity of the container `C` (e.g. `List`).
+    pub container_name: SurfaceName,
     /// `T.g`'s arms — the auxiliary minor bodies.
     pub aux_arms: Vec<SurfaceMatchArm>,
-    /// Fully-qualified names of BOTH members, recognized as recursive self-calls
-    /// inside the fused minors (`T.f t` → ih_t, `T.g rest` → ih_rest).
-    pub member_names: Vec<String>,
+    /// Names and exact annotated types of BOTH members. Retain the source
+    /// telescope so sibling calls are not checked against the primary domain.
+    pub member_signatures: Vec<(SurfaceName, SurfaceExpr)>,
 }
 
 /// Recognize a 2-member `mutual` block of the nested-fold shape
@@ -560,21 +592,38 @@ fn pair_nested(
     if !surface_ty_eq(&prim.ret_ty, &aux.ret_ty) {
         return None;
     }
+    let SurfaceDecl::Def {
+        ty: Some(primary_ty),
+        ..
+    } = prim_decl
+    else {
+        return None;
+    };
+    let SurfaceDecl::Def {
+        ty: Some(secondary_ty),
+        ..
+    } = aux_decl
+    else {
+        return None;
+    };
     Some(NestedMutualFold {
         primary_def: prim_decl.clone(),
         secondary_def: aux_decl.clone(),
-        container_short: aux.container_short.clone(),
+        container_name: aux.container_name.clone(),
         aux_arms: aux.arms.clone(),
-        member_names: vec![prim.name.clone(), aux.name.clone()],
+        member_signatures: vec![
+            (prim.name.clone(), primary_ty.as_ref().clone()),
+            (aux.name.clone(), secondary_ty.as_ref().clone()),
+        ],
     })
 }
 
 /// A normalized view of an auxiliary member `T.g : C T -> R` (domain is a
 /// container application `C T`, not a bare inductive).
 struct NestedMember {
-    name: String,
-    container_short: String,
-    element_ty: String,
+    name: SurfaceName,
+    container_name: SurfaceName,
+    element_ty: SurfaceName,
     ret_ty: SurfaceExpr,
     arms: Vec<SurfaceMatchArm>,
 }
@@ -611,7 +660,7 @@ fn extract_nested_member(decl: &SurfaceDecl) -> Option<NestedMember> {
     let SurfaceExpr::Arrow(_, dom, ret) = ty.as_deref()? else {
         return None;
     };
-    let (container_short, element_ty) = parse_container_app(peel_parens(dom))?;
+    let (container_name, element_ty) = parse_container_app(peel_parens(dom))?;
     // Value must be the equation-form `PatternMatchLambda([_x], Match(_x, arms))`.
     let SurfaceExpr::PatternMatchLambda(_, lam_binders, lam_body) = val.as_ref() else {
         return None;
@@ -619,18 +668,19 @@ fn extract_nested_member(decl: &SurfaceDecl) -> Option<NestedMember> {
     let [lb] = lam_binders.as_slice() else {
         return None;
     };
-    if lb.name != "_x" {
+    if !lb.name.same_syntax(&SurfaceName::pattern_lambda_binder()) {
         return None;
     }
     let SurfaceExpr::Match(_, None, scrut, arms) = lam_body.as_ref() else {
         return None;
     };
-    if !matches!(peel_parens(scrut), SurfaceExpr::Ident(_, s) if s == "_x") {
+    if !matches!(peel_parens(scrut), SurfaceExpr::Ident(_, s) if s.same_syntax(&SurfaceName::pattern_lambda_binder()))
+    {
         return None;
     }
     Some(NestedMember {
         name: name.clone(),
-        container_short,
+        container_name,
         element_ty,
         ret_ty: ret.as_ref().clone(),
         arms: arms.clone(),
@@ -640,7 +690,7 @@ fn extract_nested_member(decl: &SurfaceDecl) -> Option<NestedMember> {
 /// Parse a container application `C T` (e.g. `List Tree`) into the container's
 /// short name and the element type's name. Returns `None` for anything that is
 /// not a single-argument application of two bare idents.
-fn parse_container_app(e: &SurfaceExpr) -> Option<(String, String)> {
+fn parse_container_app(e: &SurfaceExpr) -> Option<(SurfaceName, SurfaceName)> {
     let SurfaceExpr::App(_, head, args) = peel_parens(e) else {
         return None;
     };
@@ -656,12 +706,8 @@ fn parse_container_app(e: &SurfaceExpr) -> Option<(String, String)> {
     let SurfaceExpr::Ident(_, element) = peel_parens(&arg.expr) else {
         return None;
     };
-    let container_short = container
-        .rsplit('.')
-        .next()
-        .unwrap_or(container)
-        .to_string();
-    Some((container_short, element.clone()))
+    let container_name = container.clone();
+    Some((container_name, element.clone()))
 }
 
 /// Span-insensitive structural equality of two surface type expressions, over

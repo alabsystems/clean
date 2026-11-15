@@ -1,0 +1,12 @@
+/-! Propositional equality (PART 1 of the foundation).
+
+Model unit `foundation_eq` — moved out of `crates/clean-verify/src/spec/core_spec/foundation_types.rs`
+(embed memo W1). Registered by `Specification::register_model_unit(ModelUnit::FoundationEq)`
+through the same `add_inductive` / `add_recursive_def` path the literals used; the
+fidelity oracle in `spec/model_units/tests.rs` pins this file against the retained
+literal. EVERY declaration must carry a `/-- ... -/` doc comment: its text is the
+registered description, byte for byte. -/
+
+/-- Propositional equality: Eq α a b means a and b are provably equal. -/
+inductive Eq (α : Sort u) : α → α → Prop
+| refl : forall (a : α), Eq α a a

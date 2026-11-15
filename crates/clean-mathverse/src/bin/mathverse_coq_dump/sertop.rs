@@ -23,7 +23,7 @@ use clean_mathverse::coq::alpha::Sexp;
 
 /// Errors from driving the sertop subprocess.
 #[derive(Debug, Error)]
-pub enum SertopErr {
+pub(crate) enum SertopErr {
     #[error("sertop answer timed out after {0:?}")]
     Timeout(Duration),
     #[error("sertop stream closed unexpectedly")]
@@ -36,7 +36,7 @@ pub enum SertopErr {
 
 /// Everything sertop produced for one command.
 #[derive(Debug, Default)]
-pub struct CmdOutput {
+pub(crate) struct CmdOutput {
     /// Payload answers (the sexp text between the tag and the closing paren).
     pub payloads: Vec<String>,
     /// Raw feedback lines seen while the command was in flight.
@@ -47,7 +47,7 @@ pub struct CmdOutput {
 
 /// Result of a `Definition` / `TypeOf` query, pre-classified.
 #[derive(Debug)]
-pub enum QueryObj {
+pub(crate) enum QueryObj {
     /// `(CoqConstr <term>)` — an elaborated kernel term.
     Constr(Sexp),
     /// `(CoqMInd ...)` — mutual inductive payload (items after the head).
@@ -60,7 +60,7 @@ pub enum QueryObj {
     Other(String),
 }
 
-pub struct Sertop {
+pub(crate) struct Sertop {
     child: Child,
     stdin: ChildStdin,
     rx: Receiver<String>,
@@ -70,7 +70,7 @@ pub struct Sertop {
 
 impl Sertop {
     /// Spawn `sertop --printer=sertop` with piped stdio.
-    pub fn spawn(path: &Path, timeout: Duration) -> Result<Self, SertopErr> {
+    pub(crate) fn spawn(path: &Path, timeout: Duration) -> Result<Self, SertopErr> {
         let mut child = Command::new(path)
             .arg("--printer=sertop")
             .stdin(Stdio::piped())
@@ -107,7 +107,7 @@ impl Sertop {
     }
 
     /// Send one command line and collect everything up to its `Completed`.
-    pub fn command(&mut self, cmd: &str) -> Result<CmdOutput, SertopErr> {
+    pub(crate) fn command(&mut self, cmd: &str) -> Result<CmdOutput, SertopErr> {
         let tag = self.next_tag;
         self.next_tag += 1;
         writeln!(self.stdin, "{cmd}")?;
@@ -148,7 +148,7 @@ impl Sertop {
     /// caller must NOT retry in the same process — the failed Import leaves
     /// grammar side-effects half-applied — but respawn and use
     /// [`Self::require_plain`] (see `Session::client`).
-    pub fn require(&mut self, module: &str) -> Result<(), SertopErr> {
+    pub(crate) fn require(&mut self, module: &str) -> Result<(), SertopErr> {
         self.require_stmt(&format!("Require Import {module}."))
     }
 
@@ -156,7 +156,7 @@ impl Sertop {
     /// notations into scope. Sufficient for the dump — every query is by
     /// fully-qualified name and `Print Module` lists names — and immune to
     /// notation-grammar clashes that break `Require Import`.
-    pub fn require_plain(&mut self, module: &str) -> Result<(), SertopErr> {
+    pub(crate) fn require_plain(&mut self, module: &str) -> Result<(), SertopErr> {
         self.require_stmt(&format!("Require {module}."))
     }
 
@@ -164,7 +164,7 @@ impl Sertop {
     /// the same `Add` + `Exec` protocol as module loading — a `(Query ()
     /// (Vernac ...))` runs in a QUERY context whose side effects do not
     /// reliably persist in the document state.
-    pub fn execute(&mut self, stmt: &str) -> Result<(), SertopErr> {
+    pub(crate) fn execute(&mut self, stmt: &str) -> Result<(), SertopErr> {
         self.require_stmt(stmt)
     }
 
@@ -192,7 +192,7 @@ impl Sertop {
     }
 
     /// Run `(Query () (<kind> "<name>"))` and classify the first object.
-    pub fn query_obj(&mut self, kind: &str, name: &str) -> Result<QueryObj, SertopErr> {
+    pub(crate) fn query_obj(&mut self, kind: &str, name: &str) -> Result<QueryObj, SertopErr> {
         let cmd = format!("(Query () ({kind} {}))", quote_string(name));
         let out = self.command(&cmd)?;
         if let Some(e) = out.exn {

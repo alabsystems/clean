@@ -12,9 +12,11 @@ use super::evidence::{
     ProofDigestAlgorithm, ProofEvidence, RejectingProofAuthorityRechecker, write_digest_stable,
     write_len_stable, write_str_stable, write_u8_stable, write_u32_stable,
 };
-use super::obligations::{ObligationKind, ProofFormula, ProofObligation, ProofStatus};
+use super::obligations::{ObligationKind, ProofFormula, ProofObligation};
 use crate::value::ProofId;
 use std::collections::{BTreeMap, BTreeSet};
+
+mod observed;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -35,6 +37,51 @@ impl core::fmt::Display for ProofLineageId {
         write!(f, "{}", self.0)
     }
 }
+
+impl crate::value::TypedId for ProofLineageId {
+    const SPACE: &'static str = "ProofLineageId";
+
+    fn from_index(index: u32) -> Self {
+        Self(index)
+    }
+
+    fn index(self) -> u32 {
+        self.0
+    }
+}
+
+/// Why [`ProofLineageManifest::append_pass`] refused. The manifest is
+/// unchanged on every refusal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LineageAppendError {
+    /// Several roots and several terminal nodes: silently picking one would
+    /// attest the pass ran on the wrong chain's module in a way
+    /// [`ProofLineageManifest::validate`] cannot detect. Thread `depends_on`
+    /// by hand for a multi-chain manifest.
+    AmbiguousTip,
+    /// The manifest's single root names no node.
+    DanglingRoot(ProofLineageId),
+    /// A node already holds lineage id `u32::MAX`, so no fresh id exists
+    /// (a decoded sidecar can carry any id).
+    IdSpaceExhausted(crate::value::IdSpaceExhausted),
+}
+
+impl core::fmt::Display for LineageAppendError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::AmbiguousTip => f.write_str(
+                "append_pass: ambiguous chain tip (multiple roots / terminal nodes) — thread \
+                 depends_on by hand for multi-chain manifests",
+            ),
+            Self::DanglingRoot(root) => {
+                write!(f, "append_pass: root #{} names no node", root.index())
+            }
+            Self::IdSpaceExhausted(exhausted) => write!(f, "append_pass: {exhausted}"),
+        }
+    }
+}
+
+impl std::error::Error for LineageAppendError {}
 
 /// Coarse stage kind for a proof-producing transform.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -150,10 +197,25 @@ pub struct ProofLineageNode {
     pub target_module: ProofDigest,
     pub obligations: Vec<ProofId>,
     pub certificates: Vec<ProofCertificateRef>,
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
+    /// Deliberately NOT `skip_serializing_if`: a struct may carry at most ONE
+    /// conditionally-skipped field and it must be the LAST, because positional
+    /// MessagePack encodes fields as a bare array and a skipped field in the
+    /// middle silently shifts every later field down a slot. `replay` gained a
+    /// successor (`depends_on`) and kept its skip, so a node with
+    /// `replay: None` and a non-empty `depends_on` emitted 7 elements with
+    /// `depends_on` in slot 6, and the decoder read that `Vec<ProofLineageId>`
+    /// as an `Option<ProofReplayIdentity>` — measured:
+    /// `invalid type: integer 0, expected a string`. `default` still lets a
+    /// pre-existing 6-element node decode with `replay = None`.
+    ///
+    /// This is the THIRD instance of the class and takes the same remedy as
+    /// the first two, both recorded in `proof/obligations.rs` as "R3 #5":
+    /// `ProofFormula::smtlib` (where `smtlib=None`/`sort=Some` silently
+    /// round-tripped back as the reverse, corrupting a live `FunctionSummary`
+    /// contract-clause carrier) and `ProofObligation::formula` (which shifted
+    /// a `FuncId` into the formula slot: "invalid type: integer, expected
+    /// struct ProofFormula"). Both dropped the skip and kept `serde(default)`.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub replay: Option<ProofReplayIdentity>,
     #[cfg_attr(
         feature = "serde",
@@ -269,6 +331,11 @@ impl ProofLineageManifest {
     /// The helper does not weaken validation: `obligations` must be non-empty
     /// and every certificate's obligation bound, exactly as `validate`
     /// requires of hand-built nodes.
+    ///
+    /// # Errors
+    ///
+    /// [`LineageAppendError`] — an ambiguous or dangling tip, or no fresh
+    /// lineage id (a node holds `u32::MAX`). The manifest is unchanged.
     pub fn append_pass(
         &mut self,
         transform: ProofTransform,
@@ -276,16 +343,13 @@ impl ProofLineageManifest {
         target_module: ProofDigest,
         obligations: Vec<ProofId>,
         certificates: Vec<ProofCertificateRef>,
-    ) -> ProofLineageId {
-        // Next id past every existing node, so appending to a hand-built
-        // manifest cannot collide with its ids.
-        let id = ProofLineageId::new(
-            self.nodes
-                .iter()
-                .map(|node| node.id.index() + 1)
-                .max()
-                .unwrap_or(0),
-        );
+    ) -> Result<ProofLineageId, LineageAppendError> {
+        // Next id past every existing node (the one fresh-id rule), so
+        // appending to a hand-built or decoded manifest cannot collide with
+        // its ids, and refuses rather than wraps at `u32::MAX`.
+        let id = crate::value::FreshIds::<ProofLineageId>::after(self.nodes.iter().map(|n| n.id))
+            .take()
+            .map_err(LineageAppendError::IdSpaceExhausted)?;
         let (source_module, depends_on) = if self.nodes.is_empty() {
             (base_module, Vec::new())
         } else {
@@ -295,9 +359,9 @@ impl ProofLineageManifest {
             // depends on). Ambiguity (parallel chains / multiple terminals)
             // cannot be resolved silently — the digest auto-threading would
             // attest the pass ran on the wrong chain's module and validate()
-            // could not detect it — so it panics instead.
-            let tip_id = if self.roots.len() == 1 {
-                self.roots[0]
+            // could not detect it — so it is refused instead.
+            let tip_id = if let [root] = self.roots.as_slice() {
+                *root
             } else {
                 let depended: BTreeSet<ProofLineageId> = self
                     .nodes
@@ -311,17 +375,14 @@ impl ProofLineageManifest {
                     .filter(|id| !depended.contains(id));
                 match (terminals.next(), terminals.next()) {
                     (Some(tip), None) => tip,
-                    _ => panic!(
-                        "append_pass: ambiguous chain tip (multiple roots / terminal \
-                         nodes) — thread depends_on by hand for multi-chain manifests"
-                    ),
+                    _ => return Err(LineageAppendError::AmbiguousTip),
                 }
             };
             let tip = self
                 .nodes
                 .iter()
                 .find(|n| n.id == tip_id)
-                .unwrap_or_else(|| panic!("append_pass: root #{} names no node", tip_id.index()));
+                .ok_or(LineageAppendError::DanglingRoot(tip_id))?;
             (tip.target_module, vec![tip.id])
         };
         let mut node = ProofLineageNode::new(id, transform, source_module, target_module);
@@ -336,7 +397,7 @@ impl ProofLineageManifest {
         }
         self.roots.push(id);
         self.nodes.push(node);
-        id
+        Ok(id)
     }
 
     pub fn validate(&self) -> Result<(), Vec<ProofLineageError>> {
@@ -430,7 +491,7 @@ impl ProofLineageManifest {
     /// Evidence and status do NOT live on the lineage node; the node carries
     /// only [`ProofCertificateRef`] identity tuples. The actual
     /// [`ProofCertificate`] (with its [`ProofEvidence`]) and the
-    /// [`ProofObligation`] (with its [`ProofStatus`]) live on the module's
+    /// [`ProofObligation`] (with its [`ProofStatus`](super::obligations::ProofStatus)) live on the module's
     /// tables, which is why both are passed in here.
     ///
     /// Returns `Ok(())` if the chain is closed, or `Err(gap)` describing the
@@ -667,18 +728,14 @@ impl ProofLineageManifest {
                         ),
                     });
                 };
-                match obligation.status {
-                    ProofStatus::Discharged | ProofStatus::Certified => {}
-                    status
-                    @ (ProofStatus::Trusted | ProofStatus::Failed | ProofStatus::Pending) => {
-                        return Err(LineageGap::TrustedRung {
-                            node: node.id,
-                            justification: format!(
-                                "obligation {} has non-proven status {status:?}",
-                                cert_ref.obligation
-                            ),
-                        });
-                    }
+                if !obligation.status.is_discharged_tier() {
+                    return Err(LineageGap::TrustedRung {
+                        node: node.id,
+                        justification: format!(
+                            "obligation {} has non-proven status {:?}",
+                            cert_ref.obligation, obligation.status
+                        ),
+                    });
                 }
                 if !authority.replays_authority(obligation, certificate) {
                     return Err(LineageGap::TrustedRung {
@@ -1286,7 +1343,7 @@ fn detect_cycles(nodes: &[ProofLineageNode], errors: &mut Vec<ProofLineageError>
     }
 }
 
-fn write_transform_stable(out: &mut Vec<u8>, transform: &ProofTransform) {
+pub(super) fn write_transform_stable(out: &mut Vec<u8>, transform: &ProofTransform) {
     write_u8_stable(
         out,
         match transform.stage {
@@ -1317,7 +1374,7 @@ fn write_replay_stable(out: &mut Vec<u8>, replay: &ProofReplayIdentity) {
     }
 }
 
-fn write_certificate_ref_stable(out: &mut Vec<u8>, cert: &ProofCertificateRef) {
+pub(super) fn write_certificate_ref_stable(out: &mut Vec<u8>, cert: &ProofCertificateRef) {
     write_u32_stable(out, cert.obligation.index());
     write_str_stable(out, &cert.prover);
     write_digest_stable(out, &cert.evidence_digest);
@@ -1356,6 +1413,7 @@ mod closure_tests {
             obligation,
             prover: "ay".into(),
             evidence: ProofEvidence::SmtProof(vec![0xde, 0xad, 0xbe, 0xef]),
+            assurance: None,
         }
     }
 
@@ -1365,6 +1423,7 @@ mod closure_tests {
             obligation,
             prover: "audit".into(),
             evidence: ProofEvidence::Trusted("hand-checked by reviewer".into()),
+            assurance: None,
         }
     }
 
@@ -1691,6 +1750,7 @@ mod append_tests {
             obligation,
             prover: "ay".into(),
             evidence: ProofEvidence::SmtProof(vec![0xde, 0xad, 0xbe, 0xef]),
+            assurance: None,
         }
     }
 
@@ -1710,13 +1770,15 @@ mod append_tests {
         let after = digest("after-pass-0");
         let mut manifest = ProofLineageManifest::new();
         let cert = smt_cert(ProofId::new(0));
-        let id = manifest.append_pass(
-            transform(ProofTransformStage::TrustIrOptimization, "const-fold"),
-            base,
-            after,
-            vec![ProofId::new(0)],
-            vec![cert.lineage_ref()],
-        );
+        let id = manifest
+            .append_pass(
+                transform(ProofTransformStage::TrustIrOptimization, "const-fold"),
+                base,
+                after,
+                vec![ProofId::new(0)],
+                vec![cert.lineage_ref()],
+            )
+            .expect("an empty chain has a fresh id and no tip");
         assert_eq!(id, ProofLineageId::new(0));
         assert_eq!(manifest.nodes.len(), 1);
         assert_eq!(manifest.nodes[0].source_module, base);
@@ -1740,13 +1802,15 @@ mod append_tests {
             let cert = smt_cert(obligation);
             let cert_ref = cert.lineage_ref();
             certificates.push(cert);
-            let id = manifest.append_pass(
-                transform(ProofTransformStage::TrustIrOptimization, name),
-                base,
-                target,
-                vec![obligation],
-                vec![cert_ref],
-            );
+            let id = manifest
+                .append_pass(
+                    transform(ProofTransformStage::TrustIrOptimization, name),
+                    base,
+                    target,
+                    vec![obligation],
+                    vec![cert_ref],
+                )
+                .expect("a single chain appends");
             assert_eq!(id, ProofLineageId::new(i as u32));
             obligations.push(discharged_obligation(
                 obligation,
@@ -1787,13 +1851,15 @@ mod append_tests {
         let mut manifest = ProofLineageManifest::new();
         for (i, target) in ["t0", "t1", "t2"].iter().enumerate() {
             let obligation = ProofId::new(i as u32);
-            manifest.append_pass(
-                transform(ProofTransformStage::TrustIrOptimization, "pass"),
-                base,
-                digest(target),
-                vec![obligation],
-                vec![smt_cert(obligation).lineage_ref()],
-            );
+            manifest
+                .append_pass(
+                    transform(ProofTransformStage::TrustIrOptimization, "pass"),
+                    base,
+                    digest(target),
+                    vec![obligation],
+                    vec![smt_cert(obligation).lineage_ref()],
+                )
+                .expect("a single chain appends");
         }
         manifest.nodes[1].source_module = digest("not-the-predecessor-target");
         let errors = manifest.validate().expect_err("mis-threaded chain");
@@ -1839,13 +1905,15 @@ mod append_tests {
         manifest.nodes.push(first);
         manifest.roots = vec![ProofLineageId::new(1)];
 
-        let id = manifest.append_pass(
-            transform(ProofTransformStage::TrustIrOptimization, "inline"),
-            digest("unused-base"),
-            digest("c-out"),
-            vec![ProofId::new(2)],
-            vec![smt_cert(ProofId::new(2)).lineage_ref()],
-        );
+        let id = manifest
+            .append_pass(
+                transform(ProofTransformStage::TrustIrOptimization, "inline"),
+                digest("unused-base"),
+                digest("c-out"),
+                vec![ProofId::new(2)],
+                vec![smt_cert(ProofId::new(2)).lineage_ref()],
+            )
+            .expect("the declared root is the tip");
         let node = manifest.nodes.iter().find(|n| n.id == id).unwrap();
         // Chained onto the TIP (#1, target b-out), not nodes.last() (#0).
         assert_eq!(node.depends_on, vec![ProofLineageId::new(1)]);
@@ -1855,11 +1923,11 @@ mod append_tests {
     }
 
     #[test]
-    #[should_panic(expected = "ambiguous chain tip")]
-    fn append_pass_panics_on_parallel_chains() {
+    fn append_pass_refuses_parallel_chains() {
         // Two parallel chains (two roots / two terminal nodes): silently
         // picking one would attest the pass ran on the wrong chain's module
-        // in a way validate() cannot detect, so append_pass refuses.
+        // in a way validate() cannot detect, so append_pass refuses — typed,
+        // and with the manifest unchanged.
         let mut manifest = ProofLineageManifest::new();
         for (i, (src, tgt)) in [("base-a", "a-out"), ("base-b", "b-out")]
             .iter()
@@ -1876,12 +1944,80 @@ mod append_tests {
             manifest.nodes.push(node);
             manifest.roots.push(ProofLineageId::new(i as u32));
         }
-        let _ = manifest.append_pass(
+        let before = manifest.clone();
+        let refusal = manifest.append_pass(
             transform(ProofTransformStage::TrustIrOptimization, "inline"),
             digest("unused"),
             digest("c-out"),
             vec![ProofId::new(2)],
             vec![smt_cert(ProofId::new(2)).lineage_ref()],
+        );
+        assert_eq!(refusal, Err(LineageAppendError::AmbiguousTip));
+        assert!(
+            refusal
+                .expect_err("refused")
+                .to_string()
+                .contains("ambiguous chain tip")
+        );
+        assert_eq!(manifest, before);
+    }
+
+    /// r11 sibling m (port of probe P10, evidence kind ii): a decoded sidecar
+    /// whose node holds lineage id `u32::MAX` has no fresh id. Before r11,
+    /// `node.id.index() + 1` panicked in debug and wrapped to id 0 in release
+    /// (a duplicate). Now it is a typed refusal and the manifest is unchanged.
+    /// Mutation check: re-seeding with `index() + 1` panics here.
+    #[test]
+    fn append_pass_refuses_when_no_lineage_id_is_left() {
+        let mut manifest = ProofLineageManifest::new();
+        let mut only = ProofLineageNode::new(
+            ProofLineageId::new(u32::MAX),
+            transform(ProofTransformStage::TrustIrOptimization, "dce"),
+            digest("base"),
+            digest("a-out"),
+        );
+        only.obligations = vec![ProofId::new(0)];
+        only.certificates = vec![smt_cert(ProofId::new(0)).lineage_ref()];
+        manifest.nodes.push(only);
+        manifest.roots = vec![ProofLineageId::new(u32::MAX)];
+        let before = manifest.clone();
+        let refusal = manifest.append_pass(
+            transform(ProofTransformStage::TrustIrOptimization, "inline"),
+            digest("unused-base"),
+            digest("b-out"),
+            vec![ProofId::new(1)],
+            vec![smt_cert(ProofId::new(1)).lineage_ref()],
+        );
+        assert_eq!(
+            refusal,
+            Err(LineageAppendError::IdSpaceExhausted(
+                crate::value::IdSpaceExhausted {
+                    space: "ProofLineageId"
+                }
+            ))
+        );
+        assert_eq!(manifest, before);
+
+        // A single root that names no node is refused, not panicked.
+        let mut dangling = ProofLineageManifest::new();
+        let mut node = ProofLineageNode::new(
+            ProofLineageId::new(0),
+            transform(ProofTransformStage::TrustIrOptimization, "dce"),
+            digest("base"),
+            digest("a-out"),
+        );
+        node.obligations = vec![ProofId::new(0)];
+        dangling.nodes.push(node);
+        dangling.roots = vec![ProofLineageId::new(7)];
+        assert_eq!(
+            dangling.append_pass(
+                transform(ProofTransformStage::TrustIrOptimization, "inline"),
+                digest("unused-base"),
+                digest("b-out"),
+                vec![ProofId::new(1)],
+                vec![],
+            ),
+            Err(LineageAppendError::DanglingRoot(ProofLineageId::new(7)))
         );
     }
 }

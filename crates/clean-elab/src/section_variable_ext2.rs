@@ -327,7 +327,10 @@ impl SectionVariableExt2 {
                 actual: expected_name.to_owned(),
             });
         }
-        let scope = self.scopes.pop().expect("checked above");
+        let scope = self
+            .scopes
+            .pop()
+            .ok_or(SectionVarExt2Error::NoOpenSection)?;
         Ok(EndSectionResult {
             name: scope.name,
             closed_variables: scope.variables,

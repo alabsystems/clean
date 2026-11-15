@@ -23,7 +23,23 @@ impl<'a> ElabCtx<'a> {
         // in the branch type, causing Const-vs-FVar unification failures in nested
         // recursor calls (e.g., Nat.rec inside a match arm body — see #469).
         let ty = self.metas.instantiate_levels(&self.metas.instantiate(&ty));
-        Ok(self.whnf(&ty))
+        // The motive keeps the FOLDED type, as Lean's `elabMatch` does: with no
+        // expected type the first alternative assigns the fresh result-type
+        // metavariable its inferred type as is, never its whnf. Unfolding here
+        // turned an abbreviated monad (`Sem Nat := StateT Nat (Except String)
+        // Nat`) into the bare Pi `Nat → Except String (Nat × Nat)`, against
+        // which a later `throw err`/`pure v` arm can no longer pin its monad
+        // (G31, ledger (101)). Only a head β-redex is contracted. Gated
+        // (`elab_folded_type`): a type headed by a semireducible `def` no
+        // instance keys on keeps the pre-G31 whnf until G47 lands, so
+        // `def M := StateT …` with a `throw err` arm stays refused as Lean
+        // refuses it.
+        let folded = crate::tactic::op_projection::head_beta(&ty);
+        if self.folded_type_reaches_instances(&folded) {
+            Ok(folded)
+        } else {
+            Ok(self.whnf(&ty))
+        }
     }
 
     /// Infer the result type from the first arm of a match expression.
@@ -35,7 +51,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         first_arm: &clean_parser::SurfaceMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Expr, ElabError> {
         match &first_arm.pattern {
             SurfacePattern::Var(name) => {
@@ -114,7 +130,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         arms: &[clean_parser::SurfaceMatchArm],
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
         branch_ty: Expr,
     ) -> Result<Expr, ElabError> {
         let branch_ty = self
@@ -122,7 +138,7 @@ impl<'a> ElabCtx<'a> {
             .instantiate_levels(&self.metas.instantiate(&branch_ty));
         let nonindexed = self
             .env
-            .get_inductive(&Name::from_string(type_name))
+            .get_inductive(type_name.name())
             .is_some_and(|ind| ind.num_indices == 0);
         if arms.len() < 2
             || !self.has_metavars(&branch_ty)
@@ -183,10 +199,10 @@ impl<'a> ElabCtx<'a> {
     fn infer_ctor_arm_branch_ty(
         &mut self,
         first_arm: &clean_parser::SurfaceMatchArm,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Expr, ElabError> {
         self.with_temporary_local_scope(|this| {
             this.infer_ctor_arm_branch_ty_inner(
@@ -202,15 +218,17 @@ impl<'a> ElabCtx<'a> {
     fn infer_ctor_arm_branch_ty_inner(
         &mut self,
         first_arm: &clean_parser::SurfaceMatchArm,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Expr, ElabError> {
         let user_sub_pats: Vec<SurfacePattern> = sub_pats
             .iter()
             .map(normalize_nested_nat_numeral_add_pattern)
             .collect();
+        // Another module's private structure (G21 B3): Lean refuses `⟨...⟩`.
+        self.check_imported_private_anon_pattern(type_name.name(), ctor_name)?;
         let full_ctor = self.ctor_pattern_full_name(ctor_name, type_name);
         // Mirror `elaborate_ctor_arm_inner`: resolve the anonymous-tuple
         // placeholder against the scrutinee's sole real constructor before the
@@ -218,11 +236,17 @@ impl<'a> ElabCtx<'a> {
         let full_ctor = self
             .remap_anonymous_tuple_ctor(type_name, &full_ctor, user_sub_pats.len())
             .unwrap_or(full_ctor);
-        let _ctor_info = self
+        let ctor_info = self
             .env
-            .get_constructor(&Name::from_string(&full_ctor))
+            .get_constructor(full_ctor.name())
             .cloned()
-            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.clone()))?;
+            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
+        if &ctor_info.inductive_name != type_name.name() {
+            return Err(ElabError::TypeMismatch {
+                expected: format!("constructor of {type_name}"),
+                actual: format!("constructor {full_ctor} of {}", ctor_info.inductive_name),
+            });
+        }
         // Mirror `elaborate_ctor_arm`: expand explicit-only patterns to full
         // field length so motive inference binds one fvar per field, including
         // implicit index-witness fields, and the arity check is narrowed to the
@@ -237,8 +261,7 @@ impl<'a> ElabCtx<'a> {
             return self.infer_first_arm_body_ty(&first_arm.body);
         }
 
-        let field_types =
-            self.compute_ctor_field_types(&Name::from_string(&full_ctor), scrutinee_ty)?;
+        let field_types = self.compute_ctor_field_types(full_ctor.name(), scrutinee_ty)?;
         if field_types.len() != normalized_sub_pats.len() {
             return Err(ElabError::InternalInvariant(format!(
                 "constructor metadata `{full_ctor}` exposes {} fields but the normalized pattern has {} slots",
@@ -261,7 +284,7 @@ impl<'a> ElabCtx<'a> {
             let field_ty = self.beta_reduce_predicate_field_ty(&field_ty, &prior_fvars);
             let var_name = match pat {
                 SurfacePattern::Var(n) => n.clone(),
-                _ => "_".to_string(),
+                _ => SurfaceName::generated_path("_"),
             };
             let fvar = self.push_local(var_name, field_ty.clone());
             fvar_tys.push((fvar, field_ty));
@@ -321,7 +344,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         arm: &clean_parser::SurfaceMatchArm,
         arm_idx: usize,
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -372,6 +395,15 @@ impl<'a> ElabCtx<'a> {
                 extra_param_info,
                 use_rec,
             ),
+            SurfacePattern::Lit(SurfaceLit::Nat(0)) if use_rec => self.elaborate_rec_arm(
+                &type_name.append(&SurfaceName::generated_path("zero")),
+                &[],
+                &arm.body,
+                scrutinee_ty,
+                branch_ty,
+                arm_idx,
+                extra_param_info,
+            ),
             SurfacePattern::Lit(lit) => self.elaborate_lit_arm(
                 type_name,
                 lit,
@@ -395,7 +427,7 @@ impl<'a> ElabCtx<'a> {
                         )));
                     }
                     let succ_sub_pats = [inner_pat.as_ref().clone()];
-                    let succ_ctor = format!("{type_name}.succ");
+                    let succ_ctor = type_name.append(&SurfaceName::generated_path("succ"));
                     self.elaborate_rec_arm(
                         &succ_ctor,
                         &succ_sub_pats,
@@ -437,8 +469,8 @@ impl<'a> ElabCtx<'a> {
                 }
             }
             _ => Err(ElabError::NotImplemented(format!(
-                "match arm pattern: {:?}",
-                arm.pattern
+                "match arm pattern: {}",
+                crate::error_render::pattern(&arm.pattern)
             ))),
         }
     }
@@ -446,10 +478,10 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn elaborate_var_arm(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         arm: &clean_parser::SurfaceMatchArm,
         arm_idx: usize,
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -467,7 +499,7 @@ impl<'a> ElabCtx<'a> {
             }
             Ok(wrap_with_extra_params(arm_body, extra_param_info))
         } else {
-            let fvar = self.push_local(name.to_string(), scrutinee_ty.clone());
+            let fvar = self.push_local(name.clone(), scrutinee_ty.clone());
             let arm_body = self.elaborate_with_expected_type(&arm.body, Some(branch_ty.clone()))?;
             if arm_idx > 0 {
                 self.check_arm_type(&arm_body, branch_ty, arm_idx)?;
@@ -486,11 +518,11 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn elaborate_ctor_arm(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         arm: &clean_parser::SurfaceMatchArm,
         arm_idx: usize,
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -516,11 +548,11 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn elaborate_ctor_arm_inner(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         arm: &clean_parser::SurfaceMatchArm,
         arm_idx: usize,
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -532,14 +564,15 @@ impl<'a> ElabCtx<'a> {
         // authenticate and remap that placeholder to the registered flat
         // constructor before normal field expansion. Genuine `Prod` and the
         // non-structure two-field shapes remain on their existing path.
-        let anon_remap = if ctor_name == "Prod.mk" {
+        // Another module's private structure (G21 B3): Lean refuses a `⟨...⟩`
+        // pattern exactly as it refuses the `⟨...⟩` term.
+        self.check_imported_private_anon_pattern(type_name.name(), ctor_name)?;
+        let anon_remap = if ctor_name.same_syntax(&SurfaceName::generated_path("Prod.mk")) {
             self.remap_anon_tuple_to_structure(type_name, sub_pats)
         } else {
             None
         };
-        let ctor_name = anon_remap
-            .as_ref()
-            .map_or(ctor_name, |(ctor, _)| ctor.as_str());
+        let ctor_name = anon_remap.as_ref().map_or(ctor_name, |(ctor, _)| ctor);
         let sub_pats = anon_remap
             .as_ref()
             .map_or(sub_pats, |(_, patterns)| patterns.as_slice());
@@ -556,11 +589,17 @@ impl<'a> ElabCtx<'a> {
         let full_ctor = self
             .remap_anonymous_tuple_ctor(type_name, &full_ctor, user_sub_pats.len())
             .unwrap_or(full_ctor);
-        let _ctor_info = self
+        let ctor_info = self
             .env
-            .get_constructor(&Name::from_string(&full_ctor))
+            .get_constructor(full_ctor.name())
             .cloned()
-            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.clone()))?;
+            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
+        if &ctor_info.inductive_name != type_name.name() {
+            return Err(ElabError::TypeMismatch {
+                expected: format!("constructor of {type_name}"),
+                actual: format!("constructor {full_ctor} of {}", ctor_info.inductive_name),
+            });
+        }
         // Expand explicit-only field patterns to full field length, inserting a
         // wildcard at each implicit field position (e.g. the `{n : Nat}` index
         // witness of an indexed family). This both narrows the arity check to the
@@ -572,7 +611,7 @@ impl<'a> ElabCtx<'a> {
             &user_sub_pats,
         )?;
 
-        if use_rec && !normalized_sub_pats.is_empty() {
+        if use_rec {
             return self.elaborate_rec_arm(
                 &full_ctor,
                 &normalized_sub_pats,
@@ -594,8 +633,7 @@ impl<'a> ElabCtx<'a> {
             return Ok(wrap_with_extra_params(arm_body, extra_param_info));
         }
 
-        let field_types =
-            self.compute_ctor_field_types(&Name::from_string(&full_ctor), scrutinee_ty)?;
+        let field_types = self.compute_ctor_field_types(full_ctor.name(), scrutinee_ty)?;
         if field_types.len() != normalized_sub_pats.len() {
             return Err(ElabError::InternalInvariant(format!(
                 "constructor metadata `{full_ctor}` exposes {} fields but the normalized pattern has {} slots",
@@ -620,8 +658,10 @@ impl<'a> ElabCtx<'a> {
             let field_ty = self.beta_reduce_predicate_field_ty(&field_ty, &prior_fvars);
             let var_name = match pat {
                 SurfacePattern::Var(n) => n.clone(),
-                SurfacePattern::Wildcard | SurfacePattern::Inaccessible(_) => "_".to_string(),
-                _ => "_".to_string(),
+                SurfacePattern::Wildcard | SurfacePattern::Inaccessible(_) => {
+                    SurfaceName::generated_path("_")
+                }
+                _ => SurfaceName::generated_path("_"),
             };
             let fvar = self.push_local(var_name, field_ty.clone());
             fvar_tys.push((fvar, field_ty.clone()));
@@ -647,12 +687,9 @@ impl<'a> ElabCtx<'a> {
                 .fold(fallback_alt.clone(), |acc, (fvar, _)| {
                     Expr::app(acc, Expr::fvar(*fvar))
                 });
-            let mut result = arm_body;
-            for plan in nested_plans.iter().rev() {
-                result =
-                    self.apply_nested_pattern_plan(result, plan, &arm_ty, Some(&fallback_body))?;
-            }
-            result
+            // One arm-scope binding of the fallback, not one inlined copy per
+            // nested `casesOn` level (see `apply_nested_plans_with_fallback`).
+            self.apply_nested_plans_with_fallback(&nested_plans, arm_body, &arm_ty, &fallback_body)?
         } else {
             self.apply_nested_field_plans(&nested_plans, arm_body, &arm_ty)?
         };
@@ -668,11 +705,11 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn elaborate_as_arm(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         inner_pat: &SurfacePattern,
         arm: &clean_parser::SurfaceMatchArm,
         arm_idx: usize,
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         extra_param_info: &[ExtraParamBinding],
@@ -699,7 +736,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn elaborate_lit_arm(
         &mut self,
-        type_name: &str,
+        type_name: &SurfaceName,
         lit: &SurfaceLit,
         arm: &clean_parser::SurfaceMatchArm,
         arm_idx: usize,
@@ -718,7 +755,7 @@ impl<'a> ElabCtx<'a> {
                 // `branch_ty` back unchanged.
                 let arm_ty = self.dependent_arm_branch_ty(
                     branch_ty,
-                    &format!("{type_name}.zero"),
+                    &type_name.append(&SurfaceName::generated_path("zero")),
                     scrutinee_ty,
                     &[],
                 )?;
@@ -751,7 +788,8 @@ impl<'a> ElabCtx<'a> {
                 }
             }
             _ => Err(ElabError::NotImplemented(format!(
-                "match arm pattern: non-Nat literal {lit:?}"
+                "match arm pattern: non-Nat literal {}",
+                crate::error_render::lit(lit)
             ))),
         }
     }
@@ -759,7 +797,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn elaborate_numeral_add_arm(
         &mut self,
-        type_name: &str,
+        type_name: &SurfaceName,
         inner_pat: &SurfacePattern,
         k: u64,
         arm: &clean_parser::SurfaceMatchArm,
@@ -780,7 +818,7 @@ impl<'a> ElabCtx<'a> {
             let mut ctor_value = Expr::fvar(fvar);
             for _ in 0..k {
                 ctor_value = Expr::app(
-                    Expr::const_(Name::from_string(&format!("{type_name}.succ")), vec![]),
+                    Expr::const_(type_name.name().clone().str("succ"), vec![]),
                     ctor_value,
                 );
             }

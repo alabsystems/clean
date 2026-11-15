@@ -22,7 +22,7 @@ use super::{parse_format_arg, truncate};
 
 /// Shared entry for `deps` (forward) and `uses` (reverse). `force_reverse`
 /// lets the `uses` alias guarantee reverse mode even without `--reverse`.
-pub fn cmd_deps_dir(args: &[String], force_reverse: bool) {
+pub(crate) fn cmd_deps_dir(args: &[String], force_reverse: bool) {
     if args.is_empty() {
         eprintln!(
             "Usage: mathverse deps <name> [--reverse] [--transitive] [--depth N] \

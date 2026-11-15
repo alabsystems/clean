@@ -20,12 +20,31 @@
 //! `Lean.Elab.Command.Basic` where multiple elaborators can be registered for
 //! the same command kind and are tried in priority order.
 //!
+//! # Not (yet) on the production dispatch path
+//!
+//! **Nothing outside this crate's tests constructs a [`CommandElabRegistry`].**
+//! Attributes written in a real `.lean` file do not reach these handlers.
+//! Attribute effects are applied by the elaborator's own `collected_*` /
+//! `take_*` pipeline instead: `clean_parser` produces a
+//! `clean_parser::Attribute`, `infer::elab_attributes` collects it, and the
+//! `elaborate_decl_and_register` epilogue in `crate::lib` applies it (for
+//! `@[instance]`: the `instance_attrs` loop). An `instance … where`
+//! DECLARATION is a different surface again — `SurfaceDecl::Instance` →
+//! `infer::elab_instance`.
+//!
+//! This registry is therefore a staged surface, kept because it is the shape
+//! the extensible `@[command_elab]` mechanism needs. Handlers here MUST stay
+//! semantically identical to the live path they shadow — a dead path that
+//! disagrees with the live one silently becomes a bug the day it is wired up.
+//! `crates/clean-elab/tests/instance_attr_default_priority_probe.rs` pins the
+//! agreement for `@[instance]` from both directions.
+//!
 //! # Example
 //!
 //! ```
 //! use clean_elab::command_elab_registry::CommandElabRegistry;
 //!
-//! let registry = CommandElabRegistry::new();
+//! let registry = CommandElabRegistry::default();
 //! assert!(registry.is_registered("reducible"));
 //! assert!(registry.is_registered("simp"));
 //! assert!(registry.is_registered("inline"));
@@ -103,9 +122,10 @@ pub(crate) const DEFAULT_PRIORITY: u32 = 1000;
 
 /// Registry of attribute command elaborators, keyed by command name.
 ///
-/// Constructed via [`CommandElabRegistry::new`] which pre-registers handlers for
-/// common attribute commands (reducible, simp, inline, instance, extern). Users
-/// can register additional handlers via [`CommandElabRegistry::register`].
+/// Constructed via [`Default`] (crate-internally, [`CommandElabRegistry::new`]),
+/// which pre-registers handlers for common attribute commands (reducible, simp,
+/// inline, instance, extern). Users can register additional handlers via
+/// [`CommandElabRegistry::register`].
 ///
 /// When multiple handlers are registered for the same command, they are stored
 /// in descending priority order and tried sequentially during elaboration.
@@ -128,8 +148,13 @@ impl CommandElabRegistry {
     /// Pre-registers handlers for common attribute commands at
     /// [`DEFAULT_PRIORITY`]: `reducible`, `simp`, `inline`, `instance`,
     /// `extern`, `irreducible`, `semireducible`.
+    ///
+    /// Crate-internal on purpose: nothing outside `clean-elab` calls `new`
+    /// (external callers, including the module doctest, go through
+    /// [`Default`]), and keeping it bare `pub` was one bare-pub debt line for a
+    /// door nobody uses.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let mut registry = Self {
             entries: HashMap::new(),
         };
@@ -331,6 +356,20 @@ fn register_inline_handler(registry: &mut CommandElabRegistry) {
 }
 
 /// Register @[instance] handler with optional priority argument.
+///
+/// Mirrors the production `attribute [instance]` path in `crate::lib`: an
+/// absent priority is Lean's `default` (**1000**, `evalOptPrio | none => 1000`
+/// in lean4 `src/Init/Meta/Defs.lean`), and the class is read off the
+/// declaration type's conclusion by the shared
+/// [`crate::instances::instance_class_of`] — never invented from the
+/// declaration name.
+///
+/// Both used to be wrong here: the fallback was the KERNEL's
+/// `DEFAULT_INSTANCE_PRIORITY` (100 — Lean's `low`, the prelude-seeding
+/// value), and `class_name` was stamped with `ctx.decl_name`, which keys the
+/// instance into a bucket no class goal ever queries. Neither was observable
+/// (see the module note above), but a dead path that contradicts the live one
+/// is a trap for whoever wires it up.
 fn register_instance_handler(registry: &mut CommandElabRegistry) {
     registry.register(
         "instance",
@@ -344,12 +383,13 @@ fn register_instance_handler(registry: &mut CommandElabRegistry) {
                         ))
                     })?
                 } else {
-                    clean_kernel::DEFAULT_INSTANCE_PRIORITY
+                    crate::instances::DEFAULT_PRIORITY
                 };
+                let class_name = crate::instances::instance_class_of(ctx.env, &ctx.decl_name)?;
+                crate::instance_alias::register_alias_class(ctx.env, &class_name);
                 let info = clean_kernel::KernelInstanceInfo {
                     name: ctx.decl_name.clone(),
-                    // Placeholder: real class extraction requires type analysis
-                    class_name: ctx.decl_name.clone(),
+                    class_name,
                     priority,
                     type_: None,
                     value: None,

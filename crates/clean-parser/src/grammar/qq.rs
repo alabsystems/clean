@@ -57,7 +57,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HAdd.hAdd".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HAdd.hAdd"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else if self.eat(&TokenKind::Minus) {
@@ -65,7 +68,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HSub.hSub".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HSub.hSub"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else {
@@ -87,7 +93,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HMul.hMul".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HMul.hMul"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else if self.eat(&TokenKind::Slash) {
@@ -95,7 +104,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HDiv.hDiv".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HDiv.hDiv"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else {
@@ -160,6 +172,7 @@ impl Parser {
                     let (projection, end_span) = match self.current_kind().clone() {
                         TokenKind::Ident(field) => {
                             let end_span = self.current_span();
+                            let field = SurfaceName::component(field, self.current().ident_escaped);
                             self.advance();
                             (Projection::Named(field), end_span)
                         }
@@ -179,7 +192,10 @@ impl Parser {
                             if let Some(kw_str) = other.as_keyword_str() {
                                 let end_span = self.current_span();
                                 self.advance();
-                                (Projection::Named(kw_str.to_string()), end_span)
+                                (
+                                    Projection::Named(SurfaceName::component(kw_str, false)),
+                                    end_span,
+                                )
                             } else {
                                 unreachable!("peek_kind already checked");
                             }
@@ -279,7 +295,7 @@ impl Parser {
             TokenKind::Ident(_) => self.ident()?,
             TokenKind::Underscore => {
                 self.advance();
-                "_".to_string()
+                SurfaceName::component("_", false)
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -293,8 +309,10 @@ impl Parser {
             }
         };
 
+        let params = self.optional_binders()?;
+
         // Parse optional type annotation
-        let ty = if self.eat(&TokenKind::Colon) {
+        let mut ty = if self.eat(&TokenKind::Colon) {
             Some(self.qq_expr()?)
         } else {
             None
@@ -304,7 +322,15 @@ impl Parser {
         self.expect(&TokenKind::ColonEq)?;
 
         // Parse value (using qq_expr to support antiquotations)
-        let val = self.qq_expr()?;
+        let mut val = self.qq_expr()?;
+        if !params.is_empty() {
+            if let Some(ret_ty) = ty.take() {
+                let span = val.span().merge(ret_ty.span());
+                val = SurfaceExpr::Ascription(span, Box::new(val), Box::new(ret_ty));
+            }
+            let span = start_span.merge(val.span());
+            val = SurfaceExpr::Lambda(span, params, Box::new(val));
+        }
 
         // Expect 'in' or ';'
         if !self.eat(&TokenKind::In) && !self.eat(&TokenKind::Semicolon) {
@@ -322,7 +348,7 @@ impl Parser {
         let body = self.qq_expr()?;
 
         let span = start_span.merge(body.span());
-        let binder = SurfaceBinder::new(name, ty, SurfaceBinderInfo::Explicit);
+        let binder = SurfaceBinder::new_typed(name, ty, SurfaceBinderInfo::Explicit);
 
         Ok(SurfaceExpr::Let(
             span,
@@ -454,7 +480,7 @@ impl Parser {
 
             // $x - simple identifier antiquotation
             TokenKind::Ident(name) => {
-                let name = name.clone();
+                let name = self.name_token(name)?;
                 let end = self.current_span();
                 self.advance();
                 Ok(SurfaceExpr::QAntiquot {
@@ -483,12 +509,52 @@ mod quotation_body_tests {
     use crate::surface::{QAntiquotContent, SurfaceArg, SurfaceExpr};
     use crate::Parser;
 
+    #[test]
+    fn quotation_antiquotation_binder_and_projection_keep_escaped_names() {
+        let expr = Parser::parse_quotation_body("$«a.b»").unwrap();
+        let SurfaceExpr::QAntiquot {
+            content: QAntiquotContent::Simple(name),
+            ..
+        } = expr
+        else {
+            panic!("expected antiquotation");
+        };
+        assert!(name.same_syntax(&crate::SurfaceName::component("a.b", true)));
+        assert_ne!(
+            name.name(),
+            crate::SurfaceName::generated_path("a.b").name()
+        );
+
+        let expr = Parser::parse_quotation_body("let «Type» := $x; $«Type»").unwrap();
+        let SurfaceExpr::Let(_, binder, _, body) = expr else {
+            panic!("expected let");
+        };
+        assert!(binder
+            .name
+            .same_syntax(&crate::SurfaceName::component("Type", true)));
+        assert!(matches!(*body, SurfaceExpr::QAntiquot {
+            content: QAntiquotContent::Simple(ref name), ..
+        } if name.same_syntax(&binder.name)));
+
+        for text in ["a.b", "1", "Type"] {
+            let expr = Parser::parse_quotation_body(&format!("$x.«{text}»")).unwrap();
+            let SurfaceExpr::Proj(_, _, crate::Projection::Named(name)) = expr else {
+                panic!("escaped field must remain named, got {expr:?}");
+            };
+            assert!(name.same_syntax(&crate::SurfaceName::component(text, true)));
+        }
+        assert!(matches!(
+            Parser::parse_quotation_body("$x.1").unwrap(),
+            SurfaceExpr::Proj(_, _, crate::Projection::Index(1))
+        ));
+    }
+
     fn simple_name(arg: &SurfaceArg) -> Option<&str> {
         match &arg.expr {
             SurfaceExpr::QAntiquot {
                 content: QAntiquotContent::Simple(name),
                 ..
-            } => Some(name.as_str()),
+            } => name.component_text(),
             _ => None,
         }
     }
@@ -501,7 +567,10 @@ mod quotation_body_tests {
             SurfaceExpr::QAntiquot {
                 content: QAntiquotContent::Simple(name),
                 ..
-            } => assert_eq!(name, "x"),
+            } => assert_eq!(
+                name.name(),
+                crate::SurfaceName::component("x", false).name()
+            ),
             other => panic!("expected simple antiquotation, got {other:?}"),
         }
     }
@@ -515,7 +584,7 @@ mod quotation_body_tests {
             panic!("expected an application for `$x + $x`, got {expr:?}");
         };
         assert!(
-            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "HAdd.hAdd"),
+            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == crate::SurfaceName::generated_path("HAdd.hAdd").name()),
             "operator should desugar to HAdd.hAdd, got {func:?}"
         );
         assert_eq!(args.len(), 2, "binary operator must keep both operands");
@@ -530,7 +599,9 @@ mod quotation_body_tests {
         let SurfaceExpr::App(_, func, args) = expr else {
             panic!("expected application, got {expr:?}");
         };
-        assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "id"));
+        assert!(
+            matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("id").name())
+        );
         assert_eq!(args.len(), 1);
         assert_eq!(simple_name(&args[0]), Some("x"));
     }

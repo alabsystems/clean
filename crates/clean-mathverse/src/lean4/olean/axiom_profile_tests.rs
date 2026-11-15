@@ -255,7 +255,7 @@ fn test_extract_deps_nested_lam_forall_let() {
 #[test]
 fn test_extract_deps_mdata_proj_transparent() {
     let inner = ParsedExpr::Const("Inner".to_string(), vec![]);
-    let mdata = ParsedExpr::MData(Box::new(inner));
+    let mdata = ParsedExpr::MData(Vec::new(), Box::new(inner));
     let proj = ParsedExpr::Proj("Prod".to_string(), 0, Box::new(mdata));
     let c = ParsedConstant {
         definition_safety: None,
@@ -443,11 +443,7 @@ fn test_profile_stats_all_pure() {
 /// `(constants, exprs, strings)` *before* any transitive closure has run.
 fn lower_to_shard_parts(
     module: &ParsedModule,
-) -> (
-    Vec<MathverseConstantHeader>,
-    Vec<FlatExpr>,
-    Vec<String>,
-) {
+) -> (Vec<MathverseConstantHeader>, Vec<FlatExpr>, Vec<String>) {
     let mut writer = crate::shard::ShardWriter::new();
     crate::lean4::olean::alpha::import_module(module, &mut writer).expect("import should succeed");
     let mut buf = Vec::new();

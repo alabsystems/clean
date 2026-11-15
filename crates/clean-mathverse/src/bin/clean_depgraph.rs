@@ -19,7 +19,8 @@
 //! clean-depgraph --graphviz T60 > t60.dot       # DOT visualization
 //! ```
 //!
-//! See `reports/depgraph/*.dot` / `*.txt` for committed artifacts.
+//! Every mode prints to stdout (redirect `--graphviz` to a `.dot` file);
+//! nothing is written to disk and no artifacts are committed for it.
 
 use std::process::ExitCode;
 
@@ -110,9 +111,10 @@ fn print_help() {
     }
     println!(
         "\nFull kernel names are accepted directly. Ranking selects domain-specific\n\
-         axioms and trust markers; promoting a high-impact entry unblocks the\n\
-         largest closure sub-tree.\n\n\
-         See `reports/depgraph/*.dot` and `.txt` for committed artifacts."
+         axioms, trust markers and unchecked theorems (value absent, added via\n\
+         add_decl_structural); promoting a high-impact entry unblocks the largest\n\
+         closure sub-tree.\n\n\
+         Every mode prints to stdout; redirect `--graphviz` to a `.dot` file."
     );
 }
 

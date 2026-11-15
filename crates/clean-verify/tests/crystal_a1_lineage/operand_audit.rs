@@ -66,17 +66,14 @@ use super::*;
 const PARAM_TYPES: &[(&str, &str)] = &[
     ("has_cubical_layer", "bb0(%0: ptr) bb4(%1: bool)"),
     ("level_kind_ord", "bb0(%0: ptr) bb6(%1: u8)"),
-    ("from_source_system", "bb0(%0: enum.178) bb13(%1: enum.13)"),
-    (
-        "flat_flags_contains",
-        "bb0(%0: struct.1017, %1: struct.1017)",
-    ),
+    ("from_source_system", "bb0(%0: enum.211) bb13(%1: enum.17)"),
+    ("flat_flags_contains", "bb0(%0: struct.815, %1: struct.815)"),
     (
         "bvar_in_range",
         "bb0(%0: u32, %1: u32, %2: u32) bb3(%3: bool) bb6(%4: bool)",
     ),
     ("is_valid_char", "bb0(%0: u64) bb3(%1: bool) bb6(%2: bool)"),
-    ("expr_path_step_clone", "bb0(%0: ptr) bb12(%1: enum.184)"),
+    ("expr_path_step_clone", "bb0(%0: ptr) bb12(%1: enum.225)"),
     ("float_div", "bb0(%0: ptr, %1: f64, %2: f64)"),
     ("get_char_val_trunc", "bb0(%0: (), %1: u64)"),
     ("meta_tag_shl", ""),
@@ -176,9 +173,9 @@ fn the_switch_exhaustiveness_flag_is_uncomparable_and_says_so() {
 
 /// **The one registered type alias that reaches NO instruction, gated at last.**
 ///
-/// `ir_fc_tflags : IRTy := IRTy.struct_ 1017` is registered by
-/// `eval_ir_contains.rs` and its own description says what it is for: "struct.1017,
-/// the struct id the emitted body names in `bb0(%0: struct.1017, %1: struct.1017)`.
+/// `ir_fc_tflags : IRTy := IRTy.struct_ 815` is registered by
+/// `eval_ir_contains.rs` and its own description says what it is for: "struct.815,
+/// the struct id the emitted body names in `bb0(%0: struct.815, %1: struct.815)`.
 /// Transcribed for fidelity". It appears in no `IRInst` — `ir_fc_b0`'s three
 /// extractfields are all at `ir_tU8` — so no lane in `Cfg` can ever reach it,
 /// and until this test its value was compared by nothing at all.
@@ -204,7 +201,7 @@ fn the_dead_parameter_type_alias_is_pinned_against_the_fixture() {
             panic!("ir_fc_tflags must still be declared in generated/ir_fc.defs.txt")
         });
     assert!(
-        decl.contains("IRTy.struct_ 1017"),
+        decl.contains("IRTy.struct_ 815"),
         "ir_fc_tflags's declaration moved: {decl}"
     );
     let header = fixture("flat_flags_contains.trust-ir.txt")
@@ -214,7 +211,7 @@ fn the_dead_parameter_type_alias_is_pinned_against_the_fixture() {
         .map(str::to_string)
         .expect("the emitted body must declare an entry block with parameters");
     assert_eq!(
-        header, "bb0(%0: struct.1017, %1: struct.1017):",
+        header, "bb0(%0: struct.815, %1: struct.815):",
         "the emitted PARAMETER TYPE of FlatFlags::contains moved. `ir_fc_tflags` was transcribed          from exactly this header and reaches no instruction, so nothing else in this gate — not          one lane of `Cfg` — would have noticed."
     );
 }
@@ -257,6 +254,14 @@ fn the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned() {
         "r.r_align(format!(\"store:{align:?}\"));",
         "is not an operand this reader knows on a `load`",
         "is not an operand this reader knows on a `store`",
+        // `alloca` joined this list on 2026-09-15. It used to be asserted ABSENT
+        // (see below); the lzd chain's `Option::as_deref` opens
+        // `%1 = alloca enum.1`, so the mint grew a real arm and the absence
+        // assertion fired -- correctly, which is how this was found. This test's
+        // own failure message named the remedy: "if an alloca arm exists now, it
+        // must read the align slot fail-closed like load/store".
+        "r.r_align(format!(\"alloca:{align:?}\"));",
+        "is not an operand this reader knows on an `alloca`",
     ] {
         assert!(
             mint.contains(needle),
@@ -265,15 +270,19 @@ fn the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned() {
              rows (scripts/evalir_adequacy_grid.py) rather than deleting this pin."
         );
     }
-    // `alloca` has NO reader arm at all: an emitted alloca falls through to
-    // the fail-closed NoImage refusal, so its align slot (like the whole
-    // instruction) is refused by name, never dropped unread.
-    assert!(
-        !mint.contains("alloca"),
-        "emitted_inst.rs now mentions `alloca`. The audit-pin claims the reader refuses \
-         the mnemonic wholesale; if an alloca arm exists now, it must read the align slot \
-         fail-closed like load/store, and the grid's alloca.align row must be re-derived."
-    );
+    // `alloca` USED to have no reader arm at all, and this pin asserted the
+    // mnemonic was absent: an emitted alloca fell through to the fail-closed
+    // NoImage refusal, so its align slot was refused wholesale rather than
+    // dropped unread. That premise expired on 2026-09-15 and the assertion is
+    // replaced rather than deleted -- the arm is in the needle list above, held
+    // to exactly the fail-closed contract load and store are held to.
+    //
+    // The ERASURE is unchanged and better evidenced: the arm reads the type, an
+    // optional count and `align N`, records the alignment in the `aligns` lane,
+    // and REFUSES any other trailing operand. `align` still reaches the mint,
+    // is still recorded, and still has no `IRInst` slot; only the mechanism
+    // moved from "the mnemonic is unknown" to "the mnemonic is known and the
+    // slot is explicitly erased", which is the stronger of the two.
     assert!(
         mint.contains("CoreError::NoImage(format!(\"printed instruction"),
         "the reader's fail-closed NoImage fall-through moved; it is what refuses an \
@@ -303,7 +312,12 @@ fn the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned() {
     // 3. The machine consults no alignment: the three dispatch arms verbatim.
     let machine = spec_source("eval_ir_machine.rs");
     for arm in [
-        "| IRInst.load t p vol => ir_bind_result s rs (ir_load_eval s (ir_getd s p))",
+        // Phase B: the load arm now decodes the loaded word through the
+        // module's derived encodings table. The pin follows it verbatim — the
+        // point of this clause is that no ALIGNMENT notion entered the arm,
+        // which is still true of the wider one, and `ir_load_view` reads the
+        // type and the table and nothing else.
+        "| IRInst.load t p vol => ir_bind_result s rs (ir_load_view (ir_mod_encs m) t (ir_load_eval s (ir_getd s p)))",
         "| IRInst.store t p v vol => ir_store_exec s (ir_getd s p) (ir_getd s v)",
         "| IRInst.alloca t c => ir_alloca_exec s rs c",
     ] {

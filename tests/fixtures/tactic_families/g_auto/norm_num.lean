@@ -4,8 +4,10 @@ import Init
 -- Rows 01/05/06 are the designated RC-A teeth rows: reverting the
 -- `use super::decide::eval_decide as decide;` import in
 -- crates/clean-elab/src/tactic/norm_num.rs back to `super::smt::decide`
--- flips them to `SmtFailed { tactic: "decide", detail: "found counterexample
--- — goal is not valid" }` (see scripts/tactic_parity/TEETH.md).
+-- flips them to `SmtFailed { tactic: "decide", detail: "found no proof: the
+-- negated goal is satisfiable in the solver's abstraction …" }` (before
+-- 2026-09-28 the same failure read "found counterexample — goal is not
+-- valid"; see scripts/tactic_parity/TEETH.md).
 
 -- Environment canary. BOTH facts are absent from Clean's builtin/stub prelude and
 -- present in real Init, so this declaration fails unless `import Init` genuinely

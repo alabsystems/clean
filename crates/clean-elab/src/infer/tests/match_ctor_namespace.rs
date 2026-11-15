@@ -59,40 +59,46 @@ fn color_env() -> Environment {
 /// Arm bodies are `Color` values (`Color.red`) so the branch type is `Color`,
 /// avoiding any dependency on `Nat` / a full prelude in the test environment.
 fn color_body() -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), "Color.red".to_string())
+    SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("Color.red"))
 }
 
-/// A `match c with | <arm0> | green => Color.red` expression, where `arm0` is
-/// the arm under test (typically a `Var`/`Ctor` pattern naming a constructor).
+/// A `match c with | <arm0> | Color.green => Color.red` expression, where
+/// `arm0` is the arm under test (typically a `Var`/`Ctor` pattern naming a
+/// constructor). The filler arm is spelled QUALIFIED: a bare `green` resolves
+/// only through the scrutinee type's namespace, which is refused (see
+/// `test_match_ctor_bare_name_only_through_the_type_is_refused`).
 fn match_c_with(arm0: SurfaceMatchArm) -> SurfaceExpr {
     SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "c".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("c"),
+        )),
         vec![
             arm0,
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Var("green".to_string()),
+                pattern: SurfacePattern::Var(SurfaceName::generated_path("Color.green")),
                 body: color_body(),
             },
         ],
     )
 }
 
-fn var_arm(name: &str) -> SurfaceMatchArm {
+fn var_arm(name: SurfaceName) -> SurfaceMatchArm {
     SurfaceMatchArm {
         span: Span::dummy(),
-        pattern: SurfacePattern::Var(name.to_string()),
+        pattern: SurfacePattern::Var(name),
         body: color_body(),
     }
 }
 
 /// Install an `open`-style alias `short -> target` into the elaborator's
 /// namespace state, mirroring what `open Foo` / `export` does for term refs.
-fn ctx_with_alias<'a>(env: &'a Environment, short: &str, target: &str) -> ElabCtx<'a> {
+fn ctx_with_alias<'a>(env: &'a Environment, short: Name, target: Name) -> ElabCtx<'a> {
     let mut state = crate::namespace::NamespaceState::new();
-    state.insert_alias_pub(short.to_string(), Name::from_string(target));
+    state.insert_alias_pub(short, target);
     let mut ctx = ElabCtx::new(env);
     ctx.set_namespace_state(state);
     ctx
@@ -114,18 +120,21 @@ fn count_lets(expr: &Expr) -> usize {
 }
 
 #[test]
-fn test_match_ctor_bare_name_still_resolves() {
-    // Baseline: bare `red` resolves via the `TypeName.ctor` fallback and is
-    // treated as the `Color.red` constructor case (no catch-all `let`).
+fn test_match_ctor_bare_name_only_through_the_type_is_refused() {
+    // Bare `red` is not found by ordinary name resolution (no `open Color`),
+    // so Lean 4 reads it as a catch-all VARIABLE; the `TypeName.ctor`
+    // shorthand would read it as the constructor `Color.red`. This test used
+    // to pin the shorthand. The two readings differ — `| some c => 0 | _ => 1`
+    // proved a false theorem that way (2026-09-24/25) — so the pattern is
+    // refused, naming the unambiguous spellings.
     let env = color_env();
     let mut ctx = ElabCtx::new(&env);
-    let result = ctx
-        .elaborate(&match_c_with(var_arm("red")))
-        .expect("bare nullary ctor `red` should resolve to Color.red");
-    assert_eq!(
-        count_lets(&result),
-        0,
-        "bare ctor `red` should compile to a constructor case, not a catch-all binder: {result:?}"
+    let result = ctx.elaborate(&match_c_with(var_arm(SurfaceName::generated_path("red"))));
+    assert!(
+        matches!(&result, Err(ElabError::Unsupported { feature })
+            if feature.contains("is a pattern variable in Lean 4")
+                && feature.contains("Color.red")),
+        "bare `red` must be refused as ambiguous, not resolved to Color.red: {result:?}"
     );
 }
 
@@ -135,7 +144,9 @@ fn test_match_ctor_qualified_name_still_resolves() {
     let env = color_env();
     let mut ctx = ElabCtx::new(&env);
     let result = ctx
-        .elaborate(&match_c_with(var_arm("Color.red")))
+        .elaborate(&match_c_with(var_arm(SurfaceName::generated_path(
+            "Color.red",
+        ))))
         .expect("qualified ctor `Color.red` should resolve");
     assert_eq!(
         count_lets(&result),
@@ -153,9 +164,15 @@ fn test_match_ctor_opened_namespace_alias_resolves_to_constructor() {
     // bound as a fresh catch-all variable (one `let` per ctor case), which is
     // semantically wrong.
     let env = color_env();
-    let mut ctx = ctx_with_alias(&env, "crimson", "Color.red");
+    let mut ctx = ctx_with_alias(
+        &env,
+        Name::from_string("crimson"),
+        Name::from_string("Color.red"),
+    );
     let aliased = ctx
-        .elaborate(&match_c_with(var_arm("crimson")))
+        .elaborate(&match_c_with(var_arm(SurfaceName::generated_path(
+            "crimson",
+        ))))
         .expect("opened-namespace ctor alias `crimson -> Color.red` should resolve");
 
     // It must match the constructor, not bind a catch-all variable.
@@ -168,7 +185,9 @@ fn test_match_ctor_opened_namespace_alias_resolves_to_constructor() {
     // And it must produce exactly the same elaboration as the qualified form.
     let mut ctx_q = ElabCtx::new(&env);
     let qualified = ctx_q
-        .elaborate(&match_c_with(var_arm("Color.red")))
+        .elaborate(&match_c_with(var_arm(SurfaceName::generated_path(
+            "Color.red",
+        ))))
         .expect("qualified baseline should elaborate");
     assert_eq!(
         aliased, qualified,
@@ -179,9 +198,9 @@ fn test_match_ctor_opened_namespace_alias_resolves_to_constructor() {
 #[test]
 fn test_match_ctor_alias_to_other_inductive_is_not_misresolved() {
     // SOUNDNESS: an alias pointing at a constructor of an *unrelated* inductive
-    // (`Bool.true`) must not be accepted as a `Color` constructor. With no
-    // such `Color` constructor it is treated as an ordinary variable binder
-    // (a catch-all), exactly as a non-constructor identifier would be.
+    // (`Bool.true`) must not be accepted as a `Color` constructor or silently
+    // become a variable binder. Actual Lean 4.30.0-rc2 rejects a resolved
+    // foreign constructor even when it was selected through an opened alias.
     let mut env = color_env();
     let bool_name = Name::from_string("Bool");
     let bool_ref = Expr::const_(bool_name.clone(), vec![]);
@@ -206,16 +225,12 @@ fn test_match_ctor_alias_to_other_inductive_is_not_misresolved() {
     .expect("Bool inductive should register");
 
     // alias `t -> Bool.true`; `t` is NOT a Color constructor.
-    let mut ctx = ctx_with_alias(&env, "t", "Bool.true");
-    let result = ctx
-        .elaborate(&match_c_with(var_arm("t")))
-        .expect("alias to unrelated ctor falls back to a variable binder, still well-typed");
-    // Mis-resolution to a Color ctor would have produced a constructor case
-    // (zero lets for this arm). Instead `t` binds a fresh variable: a catch-all
-    // expands to a `let` per remaining constructor case.
+    let mut ctx = ctx_with_alias(&env, Name::from_string("t"), Name::from_string("Bool.true"));
+    let result = ctx.elaborate(&match_c_with(var_arm(SurfaceName::generated_path("t"))));
     assert!(
-        count_lets(&result) > 0,
-        "alias to a foreign inductive's ctor must not be matched as a Color ctor: {result:?}"
+        matches!(&result, Err(ElabError::TypeMismatch { expected, actual })
+            if expected == "constructor of Color" && actual == "constructor Bool.true of Bool"),
+        "a resolved foreign constructor must refuse, not become a catch-all binder: {result:?}"
     );
 }
 
@@ -232,9 +247,39 @@ fn test_match_non_constructor_constant_is_bound_as_variable() {
     })
     .expect("axiom should register");
 
+    // `| notACtor => … | Color.green => …`: read as a binder, `notACtor` is a
+    // catch-all, so the `Color.green` alternative is selected by no value and
+    // Lean refuses the match ("redundant alternative"; G62). That refusal is
+    // what proves the binder reading — a constructor test would leave the
+    // second alternative reachable.
+    let mut ctx = ElabCtx::new(&env);
+    let result = ctx.elaborate(&match_c_with(var_arm(SurfaceName::generated_path(
+        "notACtor",
+    ))));
+    assert!(
+        matches!(result, Err(ElabError::RedundantAlternative { .. })),
+        "a non-constructor constant binds a catch-all variable: {result:?}"
+    );
+    // With the binder arm last, the match elaborates and binds the variable.
+    let binder_last = SurfaceExpr::Match(
+        Span::dummy(),
+        None,
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("c"),
+        )),
+        vec![
+            SurfaceMatchArm {
+                span: Span::dummy(),
+                pattern: SurfacePattern::Var(SurfaceName::generated_path("Color.green")),
+                body: color_body(),
+            },
+            var_arm(SurfaceName::generated_path("notACtor")),
+        ],
+    );
     let mut ctx = ElabCtx::new(&env);
     let result = ctx
-        .elaborate(&match_c_with(var_arm("notACtor")))
+        .elaborate(&binder_last)
         .expect("a non-ctor name binds a variable and still elaborates");
     assert!(
         count_lets(&result) > 0,
@@ -255,33 +300,51 @@ fn test_resolve_ctor_name_helper_paths() {
     .expect("axiom should register");
 
     let mut state = crate::namespace::NamespaceState::new();
-    state.insert_alias_pub("crimson".to_string(), Name::from_string("Color.red"));
-    state.insert_alias_pub("aliasToConst".to_string(), Name::from_string("notACtor"));
+    state.insert_alias_pub(Name::from_string("crimson"), Name::from_string("Color.red"));
+    state.insert_alias_pub(
+        Name::from_string("aliasToConst"),
+        Name::from_string("notACtor"),
+    );
     let mut ctx = ElabCtx::new(&env);
     ctx.set_namespace_state(state);
 
     assert_eq!(
-        ctx.resolve_ctor_name("red", "Color"),
-        Some("Color.red".to_string()),
+        ctx.resolve_ctor_name(
+            &SurfaceName::generated_path("red"),
+            &SurfaceName::generated_path("Color")
+        ),
+        Some(SurfaceName::generated_path("Color.red")),
         "bare ctor name should qualify to Color.red"
     );
     assert_eq!(
-        ctx.resolve_ctor_name("Color.green", "Color"),
-        Some("Color.green".to_string()),
+        ctx.resolve_ctor_name(
+            &SurfaceName::generated_path("Color.green"),
+            &SurfaceName::generated_path("Color")
+        ),
+        Some(SurfaceName::generated_path("Color.green")),
         "already-qualified ctor name should resolve as-is"
     );
     assert_eq!(
-        ctx.resolve_ctor_name("crimson", "Color"),
-        Some("Color.red".to_string()),
+        ctx.resolve_ctor_name(
+            &SurfaceName::generated_path("crimson"),
+            &SurfaceName::generated_path("Color")
+        ),
+        Some(SurfaceName::generated_path("Color.red")),
         "opened-namespace alias should resolve to the qualified ctor"
     );
     assert_eq!(
-        ctx.resolve_ctor_name("aliasToConst", "Color"),
+        ctx.resolve_ctor_name(
+            &SurfaceName::generated_path("aliasToConst"),
+            &SurfaceName::generated_path("Color")
+        ),
         None,
         "alias pointing at a non-constructor constant must not resolve"
     );
     assert_eq!(
-        ctx.resolve_ctor_name("nonexistent", "Color"),
+        ctx.resolve_ctor_name(
+            &SurfaceName::generated_path("nonexistent"),
+            &SurfaceName::generated_path("Color")
+        ),
         None,
         "an unknown name must not resolve"
     );
@@ -332,29 +395,35 @@ fn test_match_nested_ctor_opened_alias_resolves() {
     // of the explicitly-qualified `Color.red` sub-pattern.
     let env = pair_env();
 
-    let mk_arm = |first: SurfacePattern| {
+    // `fallback`: a constructor-valued nested field pattern is partial, so a
+    // real covering arm is supplied and its non-matching Color minor is never
+    // fabricated with a synthetic proof/value. A binder field makes the first
+    // arm a catch-all, and Lean refuses a covering arm behind it ("redundant
+    // alternative", G62), so the binder baseline has none.
+    let mk_arm = |first: SurfacePattern, fallback: bool| {
+        let mut arms = vec![SurfaceMatchArm {
+            span: Span::dummy(),
+            pattern: SurfacePattern::Ctor(
+                SurfaceName::generated_path("Pair.mk"),
+                vec![first, SurfacePattern::Var(SurfaceName::generated_path("g"))],
+            ),
+            body: color_body(),
+        }];
+        if fallback {
+            arms.push(SurfaceMatchArm {
+                span: Span::dummy(),
+                pattern: SurfacePattern::Wildcard,
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("Color.green")),
+            });
+        }
         SurfaceExpr::Match(
             Span::dummy(),
             None,
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "p".to_string())),
-            vec![
-                SurfaceMatchArm {
-                    span: Span::dummy(),
-                    pattern: SurfacePattern::Ctor(
-                        "Pair.mk".to_string(),
-                        vec![first, SurfacePattern::Var("g".to_string())],
-                    ),
-                    body: color_body(),
-                },
-                // A constructor-valued nested field pattern is partial. Supply
-                // a real covering arm so its non-matching Color minor is never
-                // fabricated with a synthetic proof/value.
-                SurfaceMatchArm {
-                    span: Span::dummy(),
-                    pattern: SurfacePattern::Wildcard,
-                    body: SurfaceExpr::Ident(Span::dummy(), "Color.green".to_string()),
-                },
-            ],
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("p"),
+            )),
+            arms,
         )
     };
 
@@ -362,7 +431,10 @@ fn test_match_nested_ctor_opened_alias_resolves() {
     // Color.casesOn is introduced for the first field.
     let mut ctx_var = ElabCtx::new(&env);
     let plain = ctx_var
-        .elaborate(&mk_arm(SurfacePattern::Var("x".to_string())))
+        .elaborate(&mk_arm(
+            SurfacePattern::Var(SurfaceName::generated_path("x")),
+            false,
+        ))
         .expect("nested plain binder should elaborate");
     assert_eq!(
         count_const(&plain, "Color.casesOn"),
@@ -373,9 +445,16 @@ fn test_match_nested_ctor_opened_alias_resolves() {
     // The opened ctor alias `crimson -> Color.red` in a nested position must
     // dispatch on the constructor, introducing an inner Color.casesOn whose
     // matched-case value is the `Color.red` constructor.
-    let mut ctx = ctx_with_alias(&env, "crimson", "Color.red");
+    let mut ctx = ctx_with_alias(
+        &env,
+        Name::from_string("crimson"),
+        Name::from_string("Color.red"),
+    );
     let aliased = ctx
-        .elaborate(&mk_arm(SurfacePattern::Var("crimson".to_string())))
+        .elaborate(&mk_arm(
+            SurfacePattern::Var(SurfaceName::generated_path("crimson")),
+            true,
+        ))
         .expect("nested opened ctor alias should elaborate");
     assert!(
         count_const(&aliased, "Color.casesOn") > 0,

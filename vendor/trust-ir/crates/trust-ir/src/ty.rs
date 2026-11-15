@@ -2,6 +2,17 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // Licensed under the Apache License, Version 2.0
 
+mod observed_clone;
+mod observed_debug;
+mod observed_display;
+mod observed_enum_discriminants;
+mod observed_equality;
+mod observed_nominal_lexical;
+mod observed_queries;
+mod observed_retirement;
+mod observed_trivial_drop;
+pub(crate) use observed_retirement::retire_type as retire_ty_observed;
+
 use crate::value::{ClosureTyId, EnumId, FuncTyId, PredId, RecordId, StructId, TyId};
 
 /// Representation hint for `Ty::Set`.
@@ -34,12 +45,16 @@ impl core::fmt::Display for SetRepr {
 ///
 /// A fat pointer is represented as `(data_ptr, metadata)` where metadata is
 /// length for slices/`str` and a vtable-like descriptor for trait objects.
+/// The two container-tail kinds (`ContainerLen`, `ContainerVtable`) carry
+/// whichever of those the DST at the container's tail demands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FatPtrKind {
     Slice(TyId),
     Str,
-    TraitObject { trait_id: u32 },
+    TraitObject {
+        trait_id: u32,
+    },
     /// A pointer whose pointee merely CONTAINS a DST in tail position, rather
     /// than being one: `*const ArcInner<str>` inside `Arc<str>`. rustc lays it
     /// out fat with `usize` metadata, exactly like `Slice`/`Str`.
@@ -62,6 +77,42 @@ pub enum FatPtrKind {
     /// No pointee `TyId` is carried: the tail type is not what this kind is
     /// about, and recording one would invite exactly the content claim above.
     ContainerLen,
+    /// The `dyn`-tail sibling of [`FatPtrKind::ContainerLen`]: a pointer whose
+    /// pointee merely CONTAINS a `dyn Trait` in tail position, rather than
+    /// being one: `*const ArcInner<dyn Any>` inside `Arc<dyn Any>`. rustc lays
+    /// it out fat with a VTABLE-pointer metadata word, exactly like
+    /// `TraitObject` (two pointer words; size 16 / align 8 on 64-bit).
+    ///
+    /// The metadata is an OPAQUE VTABLE WORD and is NEVER a length. Wherever
+    /// kinds are classified by what their metadata MEANS, this variant follows
+    /// `TraitObject`; it must not join any arm that reads the metadata as an
+    /// unsigned length (`Slice`/`Str`/`ContainerLen` do). A vtable word read
+    /// as a length is a type confusion, not a layout.
+    ///
+    /// It is a DISTINCT kind for the same reason `ContainerLen` is distinct
+    /// from `Str`: the data pointer means something else. A `TraitObject`
+    /// data pointer addresses the OBJECT the vtable dispatches over; this one
+    /// addresses the CONTAINER header (the `ArcInner`), and the vtable
+    /// describes the `dyn` that sits at the container's tail. Spelling one of
+    /// these `TraitObject` would make a false claim about what the pointer
+    /// addresses AND a dispatch claim nobody is making — nothing calls
+    /// through this pointer.
+    ///
+    /// Before this variant the producer had no honest spelling and failed
+    /// closed to `Ty::Unit` (`container_pointee_ty`, trust-thir-lower lib.rs:
+    /// `PointeeMeta::Vtable => None`), so `NonNull<ArcInner<dyn Any>>` was
+    /// declared without a coherent size and every enum transitively holding
+    /// one failed the v31 enum-layout validator. Measured 2026-09-08 on seal
+    /// trust-f2887e0d (the nn-autodiff crate): a struct holding an
+    /// `Arc<dyn Any + Send + Sync>` made every enum containing it report
+    /// `ConstTypeMismatch { .. layout UNRESOLVABLE for type struct.11:
+    /// struct.9 has no size layout metadata }`.
+    ///
+    /// No trait id and no pointee `TyId` are carried: the tail type is not
+    /// what this kind is about; a trait id would assert a dispatch identity
+    /// this pointer does not have; and recording either would invite exactly
+    /// the content claim above.
+    ContainerVtable,
 }
 
 impl core::fmt::Display for FatPtrKind {
@@ -71,6 +122,7 @@ impl core::fmt::Display for FatPtrKind {
             FatPtrKind::Str => f.write_str("str"),
             FatPtrKind::TraitObject { trait_id } => write!(f, "dyn.{trait_id}"),
             FatPtrKind::ContainerLen => f.write_str("container_len"),
+            FatPtrKind::ContainerVtable => f.write_str("container_vtable"),
         }
     }
 }
@@ -210,9 +262,185 @@ pub fn stable_vtable_global_name(
     ))
 }
 
+/// Nominal semantic type owned by a versioned dialect schema.
+///
+/// Identity is the exact namespace, name, and nonzero version. This declaration
+/// supplies no machine representation, layout, executable semantics, or proof
+/// authority. A semantic consumer must admit it through its own exact schema;
+/// a Core consumer must require explicit legalization first. Must-refuse
+/// corpus row `refuse/dialect_type_created_by_load`: a table-backed nominal
+/// value created by a raw `Load`, refused as `InvalidDialectType`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum Ty {
+pub struct DialectTy {
+    pub namespace: String,
+    pub name: String,
+    pub version: u32,
+}
+
+impl DialectTy {
+    /// Construct an untrusted nominal identity. Validation remains required,
+    /// including for values built directly or decoded through serde.
+    pub fn new(namespace: impl Into<String>, name: impl Into<String>, version: u32) -> Self {
+        Self {
+            namespace: namespace.into(),
+            name: name.into(),
+            version,
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), DialectTyError> {
+        let valid_name = |name: &str| {
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(crate::dialect::inst::is_valid_dialect_name_char)
+        };
+        if !valid_name(&self.namespace) {
+            return Err(DialectTyError::InvalidNamespace);
+        }
+        if !valid_name(&self.name) {
+            return Err(DialectTyError::InvalidName);
+        }
+        if self.version == 0 {
+            return Err(DialectTyError::ZeroVersion);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DialectTyError {
+    InvalidNamespace,
+    InvalidName,
+    ZeroVersion,
+}
+
+impl DialectTyError {
+    /// Exact static diagnostic spelling, shared with observed writers.
+    pub const fn message(self) -> &'static str {
+        match self {
+            Self::InvalidNamespace => {
+                "dialect type namespace must be nonempty ASCII letters, digits, or '_'"
+            }
+            Self::InvalidName => "dialect type name must be nonempty ASCII letters, digits, or '_'",
+            Self::ZeroVersion => "dialect type version must be nonzero",
+        }
+    }
+}
+
+impl core::fmt::Display for DialectTyError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.message())
+    }
+}
+
+impl std::error::Error for DialectTyError {}
+
+/// Nominal opaque runtime handle pinned to a trusted runtime (binary v43).
+///
+/// Identity is the exact `(name, runtime)` pair: `("Nat", "trust_bignum::Nat")`
+/// names the arbitrary-precision natural owned by the `trust_bignum` runtime.
+/// A handle is ONE POINTER WORD at the machine level (its layout is `Ptr`'s)
+/// but it is deliberately NOT pointer-like and NEVER equal to `Ptr`: nothing in
+/// the format may dereference, offset, cast, load, store, compare or
+/// constant-construct one. The only way a handle value comes into existence
+/// is a call to a bodyless `External` C declaration the validator has PINNED
+/// to this exact pair (`trust_ir_build::validate::TRUSTED_HANDLE_RUNTIMES`),
+/// and the only things a body may do with it are exact-typed transport:
+/// copy, select, call, return, branch — and, since WS3.6, moving it into and
+/// out of a register-level struct / tuple / enum LANE at exactly that lane's
+/// declared type (an enum payload only under the tag switch that selects its
+/// variant; `docs/SPEC_RATIFICATIONS.md` §7). Two runtimes cannot exchange handles
+/// because `Handle(A) != Handle(B)`, and no cast bridges either to `Ptr`.
+///
+/// This declaration supplies no executable semantics, no Lean origin and no
+/// proof authority. The runtime's implementation is a trusted-base row the
+/// consumer links against; the format only guarantees that a validated module
+/// never FORGES a handle, so every handle a pinned entry point receives was
+/// produced by another pinned entry point of the same runtime.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct HandleTy {
+    /// Runtime-local type name, e.g. `Nat`. Nonempty ASCII `[A-Za-z0-9_]`.
+    pub name: String,
+    /// Runtime path, e.g. `trust_bignum::Nat`: nonempty `::`-separated
+    /// segments of the same charset.
+    pub runtime: String,
+}
+
+impl HandleTy {
+    /// Construct an untrusted handle identity. Validation remains required,
+    /// including for values built directly or decoded through serde.
+    pub fn new(name: impl Into<String>, runtime: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            runtime: runtime.into(),
+        }
+    }
+
+    /// Lexical well-formedness of the pair. Pinning (is this pair a TRUSTED
+    /// runtime?) is the validator's decision, not the type's.
+    ///
+    /// TESTED, not proved. The rules above are an English table, and they
+    /// were measured in the verified contract lane (2026-09-25, `targo trust
+    /// check --release`, trustc 1.99.0-dev 321aaeda7) on a verbatim copy:
+    /// every wrapper over this body is UNKNOWN — `HandleTy::new` allocates
+    /// (its dealloc row is conditional on the global allocator), and the body
+    /// itself "failed to lower into typed TrustIr" because the segment
+    /// closure, `str::chars` and `split("::")` reach `unsupported MIR`
+    /// (`Const::Closure`, `Rvalue::PtrOffset`, `Rvalue::Cast`). Only the
+    /// trivial `is_valid_dialect_name_char('_')` row proved. The nearest
+    /// proved contracts are the `Copy`-enum decision tables in `trust-ir-laws`
+    /// (the coverage order and the codegen-license admission); this one waits
+    /// on the verifier modelling `str` iteration.
+    pub fn validate(&self) -> Result<(), HandleTyError> {
+        let valid_segment = |segment: &str| {
+            !segment.is_empty()
+                && segment
+                    .chars()
+                    .all(crate::dialect::inst::is_valid_dialect_name_char)
+        };
+        if !valid_segment(&self.name) {
+            return Err(HandleTyError::InvalidName);
+        }
+        if self.runtime.is_empty() || !self.runtime.split("::").all(valid_segment) {
+            return Err(HandleTyError::InvalidRuntime);
+        }
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandleTyError {
+    InvalidName,
+    InvalidRuntime,
+}
+
+impl HandleTyError {
+    /// Exact static diagnostic spelling, shared with observed writers.
+    pub const fn message(self) -> &'static str {
+        match self {
+            Self::InvalidName => "handle type name must be nonempty ASCII letters, digits, or '_'",
+            Self::InvalidRuntime => {
+                "handle runtime must be nonempty '::'-separated segments of ASCII letters, \
+                 digits, or '_'"
+            }
+        }
+    }
+}
+
+impl core::fmt::Display for HandleTyError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.message())
+    }
+}
+
+impl std::error::Error for HandleTyError {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TyG<X> {
     // Signed integers
     I8,
     I16,
@@ -270,7 +498,7 @@ pub enum Ty {
     /// condition. Backends that use physical all-ones integer masks such as
     /// `<N x i32>` must first compare that mask to zero, then feed the compare
     /// result to `select`.
-    Vector(Box<Ty>, u32),
+    Vector(Box<TyG<X>>, u32),
     Ptr,
     FatPtr(FatPtrKind),
     Unit,
@@ -278,17 +506,17 @@ pub enum Ty {
     // Composite types
     Struct(StructId),
     Array(TyId, u64),
-    Tuple(Vec<Ty>),
+    Tuple(Vec<TyG<X>>),
     Enum(EnumId),
     Func(FuncTyId),
     // Reference types (Rust borrowing)
-    Ref(Box<Ty>),
-    RefMut(Box<Ty>),
+    Ref(Box<TyG<X>>),
+    RefMut(Box<TyG<X>>),
     // Raw pointer types (C semantics)
-    PtrConst(Box<Ty>),
-    PtrMut(Box<Ty>),
+    PtrConst(Box<TyG<X>>),
+    PtrMut(Box<TyG<X>>),
     // Reference counted (Swift ARC)
-    Rc(Box<Ty>),
+    Rc(Box<TyG<X>>),
     // Aggregate types (issue #30, item 1).
     /// Unordered set of elements of type `T`. Representation hint is carried
     /// alongside the element type so TrustIr can pick bitset vs. boxed lowering
@@ -310,6 +538,25 @@ pub enum Ty {
     /// this is what lets self-referential `FuncDef`s route through the state
     /// partition correctly — see ty#4145 for the soundness lesson where
     /// cached closure bodies diverged from current state.
+    ///
+    /// # Introduction, projection, and (since G18-2) ELIMINATION
+    ///
+    /// * introduce — `Inst::Const { Constant::Closure { func, captures } }`,
+    ///   then per-capture `Inst::InsertField`;
+    /// * project — `Inst::ExtractField` reads a CAPTURE, in capture order. The
+    ///   `func` lane is deliberately not a field: it has no runtime layout for
+    ///   a non-`dyn` closure;
+    /// * eliminate — `Inst::CallIndirect` with this type as the callee. The
+    ///   edge declares `ClosureTy.func` (the APPARENT signature) and the
+    ///   captured environment is passed as LEADING arguments, spread in capture
+    ///   order, so the target's physical signature is
+    ///   `captures ++ apparent params -> apparent returns`.
+    ///
+    /// Before G18-2 the elimination form did not exist and this was an
+    /// introduction-only type. The closure-callee mode is outside the
+    /// lowering-target conformance subset (no Lean closure-application case)
+    /// and is refused by `validate_module_for_codegen`; see
+    /// `lowering-target-subset.md`.
     Closure(ClosureTyId),
     /// **Refinement type**: a value of base type `TyId` that additionally
     /// satisfies predicate `PredId` (see [`crate::pred::Pred`]).
@@ -350,7 +597,37 @@ pub enum Ty {
     ///   `Top`. Failure is a hard error naming BOTH predicates — never a
     ///   silent widen.
     Refine(TyId, PredId),
+    /// A nominal semantic value with no implicit scalar or pointer
+    /// representation. Ordinary SSA transport preserves this exact identity;
+    /// semantic operations and explicit legalization belong to its schema.
+    /// Appended to preserve all earlier serde enum discriminants.
+    Dialect(Box<DialectTy>),
+    /// A nominal opaque runtime handle (v43): one pointer word whose only
+    /// origins are the validator-pinned entry points of its trusted runtime
+    /// and whose only uses are exact-typed transport (including exact-typed
+    /// struct / tuple / enum lanes, WS3.6). NOT pointer-like and
+    /// never equal to `Ptr`. See [`HandleTy`]. Appended last so every
+    /// earlier serde discriminant is preserved.
+    Handle(Box<HandleTy>),
+    /// The level-S extension point (amendment S, `docs/SPEC_RATIFICATIONS.md`
+    /// §1 and §22): at level R `X` is [`crate::level::NoExt`], which has no
+    /// value, so this variant is uninhabited and a parameterized level-R type
+    /// stays unrepresentable. In a template (`X = TemplateRef`) it names a
+    /// type parameter or a type hole. Appended last so every earlier serde
+    /// discriminant is preserved.
+    Ext(X),
+    /// Addressable, possibly uninitialized storage. No SSA value, typed load,
+    /// store, aggregate value or ABI lane can carry this class, transitively.
+    /// Geometry is available for allocation and pointer arithmetic only.
+    /// A consumer MUST refuse by-value use even in an unused signature slot
+    /// (`refuse/storage_by_value_signature`); exact geometry grants no
+    /// initialized-value authority.
+    /// Appended after Ext to preserve existing serde discriminants.
+    Storage(crate::StorageLayout),
 }
+
+/// The level-R type: [`TyG`] with no extension (`NoExt` is uninhabited).
+pub type Ty = TyG<crate::level::NoExt>;
 
 /// The default thin-pointer width, in bits, for the 64-bit targets TrustIr
 /// currently supports.
@@ -364,12 +641,121 @@ pub enum Ty {
 pub const DEFAULT_POINTER_BITS: u32 = 64;
 
 impl Ty {
+    /// True iff the FORMAT knows a value of this type owns nothing a
+    /// destructor could release, so a drop of it is a no-op, spelled by
+    /// ABSENCE (amendment D, `docs/SPEC_RATIFICATIONS.md` §20 rule 5a): a
+    /// `Drop` / `DropInvoke` of such a type, or a drop-glue row keyed on one,
+    /// is refused by `validate_module`.
+    ///
+    /// True for every integer type, `Char`, `F16` / `F32` / `F64`, `Bool`,
+    /// `Unit`, `Never`; the raw and borrowed pointers `Ptr`, `PtrConst`,
+    /// `PtrMut`, `Ref`, `RefMut` and every `FatPtr` (a pointer owns nothing:
+    /// an owning pointer such as a `Box<T>` must be spelled with a type its
+    /// glue can be keyed on, never `Ptr`); `Func` and `Vector`; a `Tuple`
+    /// whose every element is trivially droppable; and `Array(e, n)` when
+    /// `n == 0` or `types[e]` is trivially droppable.
+    ///
+    /// False for `Struct`, `Enum`, `Record`, `Closure`, `Rc`, `Handle`,
+    /// `Dialect`, `Sequence`, `Set`, `Refine` (a refinement is refused
+    /// separately: a drop is spelled at its base) and `Error`. `types`
+    /// resolves `Array` element ids; an out-of-range id or a cycle through
+    /// the table answers `false`. Iterative: no Rust stack in the nesting
+    /// depth.
+    #[must_use]
+    pub fn is_trivially_droppable(&self, types: &[Ty]) -> bool {
+        enum Frame<'a> {
+            Visit(&'a Ty),
+            Exit(u32),
+        }
+        let mut on_path: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        let mut done: std::collections::BTreeSet<u32> = std::collections::BTreeSet::new();
+        let mut stack = vec![Frame::Visit(self)];
+        while let Some(frame) = stack.pop() {
+            let ty = match frame {
+                Frame::Exit(id) => {
+                    on_path.remove(&id);
+                    done.insert(id);
+                    continue;
+                }
+                Frame::Visit(ty) => ty,
+            };
+            match ty {
+                Ty::Storage(_) => return false,
+                Ty::I8
+                | Ty::I16
+                | Ty::I32
+                | Ty::I64
+                | Ty::I128
+                | Ty::U8
+                | Ty::U16
+                | Ty::U32
+                | Ty::U64
+                | Ty::U128
+                | Ty::Isize
+                | Ty::Usize
+                | Ty::Char
+                | Ty::F16
+                | Ty::F32
+                | Ty::F64
+                | Ty::Bool
+                | Ty::Unit
+                | Ty::Never
+                | Ty::Ptr
+                | Ty::PtrConst(_)
+                | Ty::PtrMut(_)
+                | Ty::Ref(_)
+                | Ty::RefMut(_)
+                | Ty::FatPtr(_)
+                | Ty::Func(_)
+                | Ty::Vector(_, _) => {}
+                Ty::Tuple(elements) => stack.extend(elements.iter().map(Frame::Visit)),
+                Ty::Array(element, len) => {
+                    if *len == 0 || done.contains(&element.index()) {
+                        continue;
+                    }
+                    if on_path.contains(&element.index()) {
+                        return false;
+                    }
+                    let Some(element_ty) = types.get(element.as_usize()) else {
+                        return false;
+                    };
+                    on_path.insert(element.index());
+                    stack.push(Frame::Exit(element.index()));
+                    stack.push(Frame::Visit(element_ty));
+                }
+                Ty::Struct(_)
+                | Ty::Enum(_)
+                | Ty::Record(_)
+                | Ty::Closure(_)
+                | Ty::Rc(_)
+                | Ty::Handle(_)
+                | Ty::Dialect(_)
+                | Ty::Sequence(_)
+                | Ty::Set(_, _)
+                | Ty::Refine(_, _)
+                | Ty::Error => return false,
+                Ty::Ext(e) => e.unreachable(),
+            }
+        }
+        true
+    }
+
     /// Bit width of a type whose size is **target-independent**.
     ///
     /// Returns `None` for every pointer-like type (`Ptr`, `*const`/`*mut`,
     /// `&`/`&mut`, `Rc`, fat pointers): their width is the target's pointer
     /// size, which is only known with a target. Resolve them with
     /// [`Ty::bit_width_with`] (e.g. 32 on wasm32, 64 on aarch64/x86-64).
+    ///
+    /// This is the VALUE width, not the storage size. `Bool` is one bit here
+    /// and one BYTE in `Module::ty_layout_shape` (and the reference
+    /// interpreter's `byte_size`), so for `bool` and every `<N x bool>` the
+    /// two answers differ by exactly bits-per-byte — `<8 x bool>` is 8 here
+    /// and 64 there — while for every other scalar and vector element type
+    /// they agree. Both mirror the Lean model (`Ty.bitWidth` /
+    /// `Ty.byteSize`, `lean/trust_ir-semantics/TrustIr/`). Never use this as
+    /// a storage size for a bool-bearing type ([`Ty::has_bool_lanes`]); the
+    /// pin is `tests/bool_lane_width_vs_layout.rs`.
     // Trust: pointers must not report a context-free 64-bit width — that is a
     // latent miscompile/missproof on 32-bit targets such as wasm32.
     pub fn bit_width(&self) -> Option<u32> {
@@ -414,6 +800,9 @@ impl Ty {
             }
             // v25 pointer-width integers.
             Ty::Isize | Ty::Usize => Some(pointer_bits),
+            // v43: a handle occupies exactly one pointer word. It is still not
+            // pointer-like — width is the only thing it shares with `Ptr`.
+            Ty::Handle(_) => Some(pointer_bits),
             Ty::FatPtr(_) => pointer_bits.checked_mul(2),
             Ty::Vector(elem, lanes) => elem
                 .bit_width_with(pointer_bits)
@@ -484,6 +873,12 @@ impl Ty {
 
     /// Lane count for any type that supports element-update operations.
     /// Returns `None` for types that do not have a static element count.
+    ///
+    /// `Ty::Sequence` deliberately answers `None`: a sequence's length is a
+    /// property of the VALUE, not of the type, so no constant index can be
+    /// refused statically and an out-of-range read is run-time undefined
+    /// behaviour (the reference interpreter's `element {i} is out of bounds`),
+    /// exactly as an array read past a dynamic index is.
     pub fn element_op_lane_count(&self) -> Option<u32> {
         match self {
             Ty::Vector(_, lanes) => Some(*lanes),
@@ -493,10 +888,18 @@ impl Ty {
     }
 
     /// Returns true if this type supports element-level update operations
-    /// (`extract_element`, `insert_element`). Both fixed-width SIMD vectors
-    /// and fixed-size arrays qualify.
+    /// (`extract_element`, `insert_element`). Fixed-width SIMD vectors,
+    /// fixed-size arrays, and — since WS3.17 (F-051) — ordered packed
+    /// `Ty::Sequence` values qualify.
+    ///
+    /// The sequence arm is the VERIFICATION-level carrier, not a machine one:
+    /// `Ty::Sequence` has no layout (`shape.rs` refuses it with
+    /// `UnsupportedTyShape`), so a body that reads one is refused by
+    /// `codegen_lowerability_errors` rather than lowered. The reference
+    /// interpreter and the Lean model both execute the read; the validator
+    /// used to be the only engine that refused it.
     pub fn supports_element_ops(&self) -> bool {
-        matches!(self, Ty::Vector(_, _) | Ty::Array(_, _))
+        matches!(self, Ty::Vector(_, _) | Ty::Array(_, _) | Ty::Sequence(_))
     }
 
     /// Canonical CHC x86 lane-packed integer vector type, `<4 x i32>`.
@@ -547,6 +950,23 @@ impl Ty {
     /// Returns true for nonzero-lane vectors whose element type is `bool`.
     pub fn is_bool_vector(&self) -> bool {
         matches!(self, Ty::Vector(elem, lanes) if *lanes > 0 && **elem == Ty::Bool)
+    }
+
+    /// Whether this inline spelling is `bool` or a vector whose element, at
+    /// any nesting, is `bool` — the one family for which [`Ty::bit_width`]
+    /// (one bit per lane, the value width) is NOT the storage size (one byte
+    /// per lane, `Module::ty_layout_shape`). A same-width test between the
+    /// two is meaningless for it, so the reinterpret casts refuse it by name.
+    ///
+    /// Inline only: `Array(ty.0, _)`, `Refine(ty.0, _)` and named aggregates
+    /// are answered `false` here; the module-aware, by-value form that
+    /// follows those references is `Module::type_stores_bool_lane`.
+    pub fn has_bool_lanes(&self) -> bool {
+        match self {
+            Ty::Bool => true,
+            Ty::Vector(elem, _) => elem.has_bool_lanes(),
+            _ => false,
+        }
     }
 
     /// Returns true for nonzero-lane vectors whose element type is float.
@@ -647,39 +1067,58 @@ impl Ty {
             _ => None,
         }
     }
+
+    /// A nominal opaque runtime handle (v43) for the exact `(name, runtime)`
+    /// pair. Lexical validity is not checked here; see [`HandleTy::validate`].
+    pub fn handle(name: impl Into<String>, runtime: impl Into<String>) -> Self {
+        Ty::Handle(Box::new(HandleTy::new(name, runtime)))
+    }
+
+    /// Returns true for the nominal opaque runtime handle type.
+    pub fn is_handle(&self) -> bool {
+        matches!(self, Ty::Handle(_))
+    }
+
+    /// The handle identity, or `None` for every other type.
+    pub fn handle_ty(&self) -> Option<&HandleTy> {
+        match self {
+            Ty::Handle(handle) => Some(handle),
+            _ => None,
+        }
+    }
 }
 
-impl core::fmt::Display for Ty {
+impl<X: crate::level::Extension> core::fmt::Display for TyG<X> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
-            Ty::I8 => f.write_str("i8"),
-            Ty::I16 => f.write_str("i16"),
-            Ty::I32 => f.write_str("i32"),
-            Ty::I64 => f.write_str("i64"),
-            Ty::I128 => f.write_str("i128"),
-            Ty::U8 => f.write_str("u8"),
-            Ty::U16 => f.write_str("u16"),
-            Ty::U32 => f.write_str("u32"),
-            Ty::U64 => f.write_str("u64"),
-            Ty::U128 => f.write_str("u128"),
-            Ty::Isize => f.write_str("isize"),
-            Ty::Usize => f.write_str("usize"),
-            Ty::Char => f.write_str("char"),
+            TyG::I8 => f.write_str("i8"),
+            TyG::I16 => f.write_str("i16"),
+            TyG::I32 => f.write_str("i32"),
+            TyG::I64 => f.write_str("i64"),
+            TyG::I128 => f.write_str("i128"),
+            TyG::U8 => f.write_str("u8"),
+            TyG::U16 => f.write_str("u16"),
+            TyG::U32 => f.write_str("u32"),
+            TyG::U64 => f.write_str("u64"),
+            TyG::U128 => f.write_str("u128"),
+            TyG::Isize => f.write_str("isize"),
+            TyG::Usize => f.write_str("usize"),
+            TyG::Char => f.write_str("char"),
             // Diagnostics-only spelling the parser REJECTS: a leaked Error
             // can never round-trip through the text format.
-            Ty::Error => f.write_str("{error}"),
-            Ty::F16 => f.write_str("f16"),
-            Ty::F32 => f.write_str("f32"),
-            Ty::F64 => f.write_str("f64"),
-            Ty::Bool => f.write_str("bool"),
-            Ty::Vector(elem, lanes) => write!(f, "<{lanes} x {elem}>"),
-            Ty::Ptr => f.write_str("ptr"),
-            Ty::FatPtr(kind) => write!(f, "fatptr<{kind}>"),
-            Ty::Unit => f.write_str("()"),
-            Ty::Never => f.write_str("!"),
-            Ty::Struct(id) => write!(f, "struct.{}", id.0),
-            Ty::Array(elem, len) => write!(f, "[ty.{} x {}]", elem.0, len),
-            Ty::Tuple(elems) => {
+            TyG::Error => f.write_str("{error}"),
+            TyG::F16 => f.write_str("f16"),
+            TyG::F32 => f.write_str("f32"),
+            TyG::F64 => f.write_str("f64"),
+            TyG::Bool => f.write_str("bool"),
+            TyG::Vector(elem, lanes) => write!(f, "<{lanes} x {elem}>"),
+            TyG::Ptr => f.write_str("ptr"),
+            TyG::FatPtr(kind) => write!(f, "fatptr<{kind}>"),
+            TyG::Unit => f.write_str("()"),
+            TyG::Never => f.write_str("!"),
+            TyG::Struct(id) => write!(f, "struct.{}", id.0),
+            TyG::Array(elem, len) => write!(f, "[ty.{} x {}]", elem.0, len),
+            TyG::Tuple(elems) => {
                 // The zero-element tuple is spelled `(,)` so it is textually
                 // distinct from the unit type `()` (which Display emits above).
                 // Without this they would both render `()` and a text round
@@ -696,18 +1135,27 @@ impl core::fmt::Display for Ty {
                 }
                 write!(f, ")")
             }
-            Ty::Enum(id) => write!(f, "enum.{}", id.0),
-            Ty::Func(id) => write!(f, "functy.{}", id.0),
-            Ty::Ref(inner) => write!(f, "&{}", inner),
-            Ty::RefMut(inner) => write!(f, "&mut {}", inner),
-            Ty::PtrConst(inner) => write!(f, "*const {}", inner),
-            Ty::PtrMut(inner) => write!(f, "*mut {}", inner),
-            Ty::Rc(inner) => write!(f, "Rc<{}>", inner),
-            Ty::Set(elem, repr) => write!(f, "set<ty.{}, {}>", elem.0, repr),
-            Ty::Sequence(elem) => write!(f, "seq<ty.{}>", elem.0),
-            Ty::Record(id) => write!(f, "record.{}", id.0),
-            Ty::Closure(id) => write!(f, "closure.{}", id.0),
-            Ty::Refine(base, pred) => write!(f, "refine<ty.{}, pred.{}>", base.0, pred.0),
+            TyG::Enum(id) => write!(f, "enum.{}", id.0),
+            TyG::Func(id) => write!(f, "functy.{}", id.0),
+            TyG::Ref(inner) => write!(f, "&{}", inner),
+            TyG::RefMut(inner) => write!(f, "&mut {}", inner),
+            TyG::PtrConst(inner) => write!(f, "*const {}", inner),
+            TyG::PtrMut(inner) => write!(f, "*mut {}", inner),
+            TyG::Rc(inner) => write!(f, "Rc<{}>", inner),
+            TyG::Set(elem, repr) => write!(f, "set<ty.{}, {}>", elem.0, repr),
+            TyG::Sequence(elem) => write!(f, "seq<ty.{}>", elem.0),
+            TyG::Record(id) => write!(f, "record.{}", id.0),
+            TyG::Closure(id) => write!(f, "closure.{}", id.0),
+            TyG::Refine(base, pred) => write!(f, "refine<ty.{}, pred.{}>", base.0, pred.0),
+            TyG::Dialect(ty) => write!(f, "dialect<{}, {}, {}>", ty.namespace, ty.name, ty.version),
+            // Quoted so the `::` runtime path never collides with the text
+            // grammar; the charset admits no escapes, so `{:?}` is exactly
+            // `"..."` and the parser reads it back with `read_quoted_string`.
+            TyG::Handle(ty) => write!(f, "handle<{:?}, {:?}>", ty.name, ty.runtime),
+            TyG::Ext(e) => e.fmt_ext(f),
+            TyG::Storage(layout) => {
+                write!(f, "storage<{}, {}>", layout.size_bytes, layout.align_bytes)
+            }
         }
     }
 }
@@ -741,6 +1189,23 @@ pub struct RecordDef {
 ///
 /// Bare function pointers (no captures) use `Ty::Func(FuncTyId)` directly;
 /// `Ty::Closure(ClosureTyId)` is for any function value with captured env.
+///
+/// # Application is BY VALUE, and there is no capture-mode field
+///
+/// `Inst::CallIndirect` over a `Ty::Closure` callee supplies the captures as
+/// LEADING ARGUMENTS, spread in capture order (G18-2). Ratified 2026-09-19
+/// (`lowering-target-subset.md`, "Closure application"), that makes
+/// application `FnOnce`-shaped: a body's write to a capture reaches neither
+/// the caller's closure value — an SSA register with no address — nor a later
+/// application. A BY-REFERENCE capture is therefore a capture SLOT WHOSE TYPE
+/// IS A POINTER: the pointer is still passed by value, so the pointee is
+/// shared. That is why `captures` carries types alone and no capture mode.
+///
+/// A `Fn`/`FnMut` closure whose state must persist across calls is spelled
+/// as an environment aggregate in memory plus a `Ty::Func` taking the
+/// environment pointer; a producer that instead emits a first-class closure
+/// for it silently gets by-value semantics, and that is the producer's error.
+/// Executable in `trust-ir-build`'s `closure_application_by_value` test.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ClosureTy {
@@ -769,13 +1234,55 @@ impl ClosureTy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Callable signature, including any recorded ABI transport claims.
+/// Serde consumers MUST refuse unknown outer fields rather than erase a
+/// misspelled or future ABI record into the legacy `abi: None` state.
+/// The binary-only corpus cannot express a poisoned JSON/MessagePack map;
+/// `refuse/signature_abi_outer_unknown_field` records that limitation and
+/// `outer_signature_reader_cannot_drop_unknown_or_misspelled_abi_fields`
+/// supplies the reader controls.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct FuncTy {
-    pub params: Vec<Ty>,
-    pub returns: Vec<Ty>,
+#[cfg_attr(feature = "serde", serde(deny_unknown_fields))]
+pub struct FuncTyG<X> {
+    pub params: Vec<TyG<X>>,
+    pub returns: Vec<TyG<X>>,
     pub is_vararg: bool,
+    /// Target ABI claims retained by arbitrary function pointers as well as
+    /// declarations. None is the legacy, unrecorded state, never an assertion
+    /// that no hidden arguments or extensions are needed.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub abi: Option<crate::signature_abi::SignatureAbi>,
 }
+
+impl<X> FuncTyG<X> {
+    /// Construct a fresh signature with explicitly unrecorded ABI metadata.
+    ///
+    /// This moves the supplied carrier vectors without cloning or inferring
+    /// transport facts. It does not assert that hidden arguments, extensions
+    /// or pass modes are absent, and grants no validation/native authority.
+    /// Remapping an existing signature must preserve or explicitly refuse its
+    /// recorded `abi`, rather than reconstruct it through this constructor.
+    #[must_use]
+    pub fn unrecorded(params: Vec<TyG<X>>, returns: Vec<TyG<X>>, is_vararg: bool) -> Self {
+        Self {
+            params,
+            returns,
+            is_vararg,
+            abi: None,
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "ty/unrecorded_signature_tests.rs"]
+mod unrecorded_signature_tests;
+
+/// The level-R function type: [`FuncTyG`] with no extension.
+pub type FuncTy = FuncTyG<crate::level::NoExt>;
 
 /// ABI / layout classification of a struct, mirroring Rust's `#[repr(..)]`:
 /// - `Rust` — unspecified, layout-optimised representation (the default); field
@@ -815,35 +1322,182 @@ impl core::fmt::Display for StructRepr {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// The SOURCE ENTITY a [`StructDef`] or [`EnumDef`] is the image of — a
+/// nominal identity key, minted by the producer (wire version 58).
+///
+/// # What it is for
+///
+/// Two modules may each define a type that is structurally identical and
+/// nonetheless denotes a DIFFERENT source entity; and one source entity may be
+/// carried into TrustIr by two producers (the Rust mirror of a Clean
+/// inductive) and must then be ONE type across the join. Structure alone
+/// decides neither question, so the producer records the key.
+///
+/// # What it is NOT
+///
+/// It is never an admission rule. A validator, a linker or a comparator may
+/// use an origin only to SPLIT (two structurally equal defs with different
+/// origins are different types) or to REFUSE (equal origins over unequal
+/// structure is a contradiction — [`crate::imports::TypeOriginConflict`]).
+/// Nothing is ever admitted BECAUSE it carries an origin, and an absent origin
+/// is never a wildcard: a def without one compares structurally, exactly as
+/// before this key existed.
+///
+/// # Monomorphic by construction
+///
+/// The IR has no `Ty::Param` (SPEC_RATIFICATIONS §1), so a generic source
+/// definition reaches TrustIr only as a concrete instantiation.
+/// [`TypeOrigin::Rust`] therefore keys on the def path AND an `args_digest`
+/// over the concrete generic arguments: `Vec<u8>` and `Vec<u32>` share a def
+/// path and are two types. A producer that stamps one def path on two
+/// instantiations without distinguishing `args_digest` mints a
+/// [`crate::imports::TypeOriginConflict`] rather than a silent merge.
+///
+/// # The paired carrier
+///
+/// A Rust `enum` that MIRRORS a Clean inductive carries the **Clean** origin,
+/// not its own Rust def path: the two spellings are one entity, and the join
+/// exists to see that. Whether a given Rust def really is that mirror is a
+/// PRODUCER obligation; TrustIr checks only that everything stamped with one
+/// key agrees structurally.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct StructDef {
+pub enum TypeOrigin {
+    /// A rustc `DefId` plus the concrete generic arguments it was
+    /// monomorphized at.
+    Rust {
+        /// rustc's `StableCrateId` for the defining crate.
+        stable_crate_id: u64,
+        /// rustc's 128-bit `DefPathHash`, verbatim.
+        def_path_hash: [u8; 16],
+        /// Producer digest over the concrete `GenericArgs`. An uninstantiated
+        /// def digests its EMPTY argument list; it is never omitted, because
+        /// "no arguments" and "arguments not recorded" must not collide.
+        args_digest: crate::proof::ProofDigest,
+    },
+    /// A Clean declaration in a Clean environment.
+    Clean {
+        /// The fully-qualified Clean declaration name.
+        decl: String,
+        /// Producer digest over the environment the declaration was elaborated
+        /// in, so two Cleans that disagree about `Nat` do not share a key.
+        env_digest: crate::proof::ProofDigest,
+    },
+}
+
+/// Domain for the Trust Rust producer's canonical concrete generic-argument
+/// encoding. This distinguishes nominal instance data, not source authority.
+pub const RUST_TYPE_ARGS_DOMAIN: &str = "trust_ir.rust.type_args.v1";
+
+impl TypeOrigin {
+    /// The producer this key is spelled in the vocabulary of. Used by the
+    /// duplicate/conflict messages so a report names the right half of the
+    /// join.
+    #[must_use]
+    pub const fn language(&self) -> &'static str {
+        match self {
+            Self::Rust { .. } => "rust",
+            Self::Clean { .. } => "clean",
+        }
+    }
+}
+
+impl core::fmt::Display for TypeOrigin {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Rust {
+                stable_crate_id,
+                def_path_hash,
+                args_digest,
+            } => {
+                write!(f, "rust(crate={stable_crate_id:#018x}, path=")?;
+                for byte in def_path_hash {
+                    write!(f, "{byte:02x}")?;
+                }
+                write!(f, ", args={})", DigestText(*args_digest))
+            }
+            Self::Clean { decl, env_digest } => {
+                write!(f, "clean(decl={decl:?}, env={})", DigestText(*env_digest))
+            }
+        }
+    }
+}
+
+/// `algorithm:hex` rendering of a [`crate::proof::ProofDigest`], shared by the
+/// [`TypeOrigin`] display and the text format so one spelling is parsed back.
+pub struct DigestText(pub crate::proof::ProofDigest);
+
+impl core::fmt::Display for DigestText {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self.0.algorithm {
+            crate::proof::ProofDigestAlgorithm::Sha256 => "sha256:",
+            crate::proof::ProofDigestAlgorithm::TrustIrStableV1 => "stablev1:",
+        })?;
+        for byte in &self.0.bytes {
+            write!(f, "{byte:02x}")?;
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(rename = "StructDef"))]
+pub struct StructDefG<X> {
     pub id: StructId,
     pub name: String,
-    pub fields: Vec<FieldDef>,
+    pub fields: Vec<FieldDefG<X>>,
     pub size: Option<u64>,
     pub align: Option<u64>,
     /// ABI / layout classification (defaults to [`StructRepr::Rust`]). Additive:
     /// modules serialized before this field existed deserialize as `Rust`.
     #[cfg_attr(feature = "serde", serde(default))]
     pub repr: StructRepr,
+    /// Nominal identity of the source entity this definition is the image of
+    /// (wire version 58), or `None` when the producer recorded none.
+    ///
+    /// `None` is NOT a wildcard: an unkeyed definition compares structurally,
+    /// exactly as every definition did before this field existed. See
+    /// [`TypeOrigin`] for the split-or-refuse rule.
+    ///
+    /// The sole trailing conditionally-skipped serde field of `StructDef`:
+    /// an unkeyed definition keeps its byte-identical pre-v58 JSON and
+    /// positional-MessagePack record.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub origin: Option<TypeOrigin>,
 }
 
-impl StructDef {
+/// A level-R nominal row; its fields cannot contain an extension.
+pub type StructDef = StructDefG<crate::NoExt>;
+
+impl<X> StructDefG<X> {
     /// Builder-style setter for [`StructDef::repr`], chainable onto a literal.
     pub fn with_repr(mut self, repr: StructRepr) -> Self {
         self.repr = repr;
         self
     }
+
+    /// Builder-style setter for [`StructDef::origin`], chainable onto a literal.
+    pub fn with_origin(mut self, origin: TypeOrigin) -> Self {
+        self.origin = Some(origin);
+        self
+    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct FieldDef {
+#[cfg_attr(feature = "serde", serde(rename = "FieldDef"))]
+pub struct FieldDefG<X> {
     pub name: String,
-    pub ty: Ty,
+    pub ty: TyG<X>,
     pub offset: Option<u64>,
 }
+
+/// A level-R nominal field.
+pub type FieldDef = FieldDefG<crate::NoExt>;
 
 /// Explicit tag-integer representation hint for an enum, mirroring Rust's
 /// `#[repr(u8)] / #[repr(i32)] / …` on a fieldful or fieldless enum.
@@ -863,6 +1517,13 @@ pub enum EnumTagRepr {
     I16,
     I32,
     I64,
+    /// `#[repr(u128)]` (wire v45, roadmap WS3.14(b) / WS2.22). Only the
+    /// non-negative half of the range is spellable: a discriminant is an
+    /// `i128`, so a `u128` value above `i128::MAX` is REFUSED, never
+    /// truncated (see [`EnumTagRepr::fits`]).
+    U128,
+    /// `#[repr(i128)]` (wire v45): the full `i128` discriminant range.
+    I128,
 }
 
 impl EnumTagRepr {
@@ -877,7 +1538,48 @@ impl EnumTagRepr {
             EnumTagRepr::I16 => Ty::I16,
             EnumTagRepr::I32 => Ty::I32,
             EnumTagRepr::I64 => Ty::I64,
+            EnumTagRepr::U128 => Ty::U128,
+            EnumTagRepr::I128 => Ty::I128,
         }
+    }
+
+    /// The tag lane's SIZE in bytes — the width of its integer type, which is
+    /// a property of the type alone and the same on every target.
+    ///
+    /// This is deliberately **not** the tag's alignment. Size and alignment
+    /// coincide on the canonical scalar table for every repr spellable today,
+    /// but they are different facts and only one of them is target-free: a
+    /// target may align an integer below its width (the i386 System V ABI
+    /// aligns `i64` to 4), and rustc aligns `i128` to 16 on x86_64/aarch64
+    /// while other data layouts use 8 — so for the v45 128-bit lanes
+    /// ([`EnumTagRepr::U128`] / [`EnumTagRepr::I128`], WS3.14(b)) the split is
+    /// load-bearing, not hypothetical. A layout-sensitive consumer that needs
+    /// the ALIGNMENT asks the layout authority for it —
+    /// [`crate::Module::enum_tag_repr_align`] — which refuses a target it has
+    /// no scalar table for instead of guessing the byte count.
+    pub fn size_bytes(self) -> u64 {
+        u64::from(
+            self.ty()
+                .bit_width()
+                .expect("an enum tag repr is a sized integer"),
+        ) / 8
+    }
+
+    /// True for the tag reprs added in wire v45 (WS3.14(b)). The binary
+    /// writer selects v45 exactly when one of these occurs, and their tag
+    /// lane is 16 bytes wide — whose ALIGNMENT is target-dependent, so a
+    /// consumer must read it from the target scalar table
+    /// ([`crate::Module::enum_tag_repr_align`], the WS2.22 authority every
+    /// lane is asked of) rather than reuse the size. The must-refuse corpus
+    /// cannot express this (`refuse/wide_enum_tag_alignment_from_target`): it
+    /// is a layout obligation, not a refusal; its rung is the layout
+    /// authority's tests (`enum_tag_lane_alignment.rs`), and the refusal half
+    /// — an untabulated target — is `refuse/enum_tag_lane_off_scalar_table`.
+    ///
+    /// PROVED, every cell: `trust_ir_laws::laws::tag_abi_surface_*` (gate 13).
+    #[must_use]
+    pub fn is_abi_surface(self) -> bool {
+        matches!(self, EnumTagRepr::U128 | EnumTagRepr::I128)
     }
 
     /// True when `value` is representable in this tag type.
@@ -891,14 +1593,19 @@ impl EnumTagRepr {
             EnumTagRepr::I16 => (i16::MIN as i128..=i16::MAX as i128).contains(&value),
             EnumTagRepr::I32 => (i32::MIN as i128..=i32::MAX as i128).contains(&value),
             EnumTagRepr::I64 => (i64::MIN as i128..=i64::MAX as i128).contains(&value),
+            // A discriminant is an `i128`: `u128` covers `0..=i128::MAX` and
+            // a larger value stays unrepresentable (refused, not truncated).
+            EnumTagRepr::U128 => value >= 0,
+            EnumTagRepr::I128 => true,
         }
     }
 
     /// The smallest tag repr whose range covers `[min, max]` under trust-ir's
     /// canonical rule: all-non-negative discriminants take the smallest
     /// unsigned width; any negative discriminant takes the smallest signed
-    /// width. `None` when the span exceeds 64 bits (the canonical tag cap —
-    /// i128-wide discriminants are unsupported, fail-closed).
+    /// width. `None` when the span exceeds 64 bits: INFERENCE keeps the
+    /// 64-bit cap, so only an explicit `repr(u128)`/`repr(i128)` hint (v45)
+    /// selects a 128-bit tag.
     pub fn smallest_for(min: i128, max: i128) -> Option<Self> {
         let candidates: &[EnumTagRepr] = if min >= 0 {
             &[
@@ -933,6 +1640,8 @@ impl core::fmt::Display for EnumTagRepr {
             EnumTagRepr::I16 => "i16",
             EnumTagRepr::I32 => "i32",
             EnumTagRepr::I64 => "i64",
+            EnumTagRepr::U128 => "u128",
+            EnumTagRepr::I128 => "i128",
         })
     }
 }
@@ -944,6 +1653,15 @@ impl core::fmt::Display for EnumTagRepr {
 /// `untagged_variant` retains its ordinary payload value. Niche arithmetic
 /// wraps at `niche_ty`'s width. The interval may contain the untagged variant;
 /// its corresponding reserved value is then a dead/invalid byte image.
+///
+/// Coverage (WS3.14): every INHABITED variant must be the untagged variant or
+/// lie in the niche interval. An uninhabited variant
+/// ([`crate::Module::variant_is_uninhabited`] — rustc's `B(!)`) has no value,
+/// so it needs no encoding and may lie in either place or in neither, exactly
+/// as rustc lays out `enum E { A(char), B(!), C }` (`niche_variants = 2..=2`).
+/// A value of such a variant is never constructed (`Const` is refused as
+/// `UninhabitedVariantConstructed`) and a byte image that names one is refused
+/// on decode.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum EnumTagEncoding {
@@ -998,12 +1716,27 @@ pub enum EnumTagEncoding {
     /// layer out — it additionally forbids a discriminant, because it describes
     /// rustc's enum rather than trust-ir's byte image.)
     Untagged,
+    /// No stored tag, with one explicitly selected inhabited variant among
+    /// several declared variants (wire v65). Canonical values still carry that
+    /// variant's effective discriminant; the memory image contains only its
+    /// payload. Every other variant must be structurally uninhabited.
+    ///
+    /// The descriptor retains one offset row per declared variant. Only the
+    /// selected row describes physical fields; all inactive rows are empty.
+    /// This preserves nominal payload types such as `Infallible` without
+    /// inventing a physical view for values that cannot exist. It does not
+    /// broaden the legacy v37 `Untagged` encoding.
+    SingleInhabited { variant: u32 },
 }
 
 /// Concrete enum memory layout supplied by the producer.
 ///
 /// The descriptor is normative when present: consumers must use this byte
 /// layout instead of synthesizing trust-ir's canonical tagged-union layout.
+/// The must-refuse corpus cannot express this
+/// (`refuse/enum_layout_descriptor_normative`): a positive obligation, not a
+/// refusal; the honest rung is differential execution against the reference
+/// interpreter over the consumer's output.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct EnumLayoutDescriptor {
@@ -1042,12 +1775,13 @@ pub struct EnumLayoutDescriptor {
 /// and no repr hint, preserving the historical index-tag interpretation
 /// (variant *i* tags as *i*). `layout` is a concrete producer-provided layout
 /// descriptor and is normative when present.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct EnumDef {
+#[cfg_attr(feature = "serde", serde(rename = "EnumDef"))]
+pub struct EnumDefG<X> {
     pub id: EnumId,
     pub name: String,
-    pub variants: Vec<EnumVariant>,
+    pub variants: Vec<EnumVariantG<X>>,
     /// Explicit per-variant discriminant values, parallel to `variants`.
     /// Entries may be `None` (implicit: previous + 1, first defaults to 0) and
     /// the vector may be shorter than `variants` (missing entries are
@@ -1069,12 +1803,28 @@ pub struct EnumDef {
     /// compatibility with modules written before wire version 31.
     #[cfg_attr(feature = "serde", serde(default))]
     pub layout: Option<EnumLayoutDescriptor>,
+    /// Nominal identity of the source entity this definition is the image of
+    /// (wire version 58), or `None` when the producer recorded none.
+    ///
+    /// A Rust enum that MIRRORS a Clean inductive carries the **Clean** key:
+    /// that is the whole point of the field at the two-language join. `None`
+    /// is never a wildcard — see [`TypeOrigin`].
+    ///
+    /// The sole trailing conditionally-skipped serde field of `EnumDef`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub origin: Option<TypeOrigin>,
 }
 
-impl EnumDef {
+/// A level-R enum row; its payloads cannot contain an extension.
+pub type EnumDef = EnumDefG<crate::NoExt>;
+
+impl<X> EnumDefG<X> {
     /// Convenience constructor for the common all-implicit case: no explicit
     /// discriminants (variant *i* takes value *i*), no repr hint.
-    pub fn new(id: EnumId, name: impl Into<String>, variants: Vec<EnumVariant>) -> Self {
+    pub fn new(id: EnumId, name: impl Into<String>, variants: Vec<EnumVariantG<X>>) -> Self {
         Self {
             id,
             name: name.into(),
@@ -1082,7 +1832,15 @@ impl EnumDef {
             discriminants: Vec::new(),
             repr: None,
             layout: None,
+            origin: None,
         }
+    }
+
+    /// Builder-style setter for [`EnumDef::origin`], chainable onto a literal.
+    #[must_use]
+    pub fn with_origin(mut self, origin: TypeOrigin) -> Self {
+        self.origin = Some(origin);
+        self
     }
 
     /// Builder-style setter for [`EnumDef::discriminants`].
@@ -1107,13 +1865,16 @@ impl EnumDef {
     /// (duplicate discriminants make the tag ambiguous).
     pub fn effective_discriminants(&self) -> Option<Vec<i128>> {
         let mut out: Vec<i128> = Vec::with_capacity(self.variants.len());
+        // A set beside the list, so a duplicate is found in O(1) rather than
+        // by scanning every earlier value (O(variants^2) per enum).
+        let mut seen = std::collections::HashSet::with_capacity(self.variants.len());
         let mut next: Option<i128> = Some(0);
         for i in 0..self.variants.len() {
             let value = match self.discriminants.get(i).copied().flatten() {
                 Some(explicit) => explicit,
                 None => next?,
             };
-            if out.contains(&value) {
+            if !seen.insert(value) {
                 return None;
             }
             out.push(value);
@@ -1146,11 +1907,12 @@ impl EnumDef {
 }
 
 /// A single variant of an enum type.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct EnumVariant {
+#[cfg_attr(feature = "serde", serde(rename = "EnumVariant"))]
+pub struct EnumVariantG<X> {
     pub name: String,
-    pub fields: Vec<Ty>,
+    pub fields: Vec<TyG<X>>,
     /// Per-field source names, parallel to `fields`. Empty means positional.
     /// These names are fidelity metadata and are ignored by cross-module type
     /// comparison.
@@ -1158,10 +1920,156 @@ pub struct EnumVariant {
     pub field_names: Vec<String>,
 }
 
+/// A level-R enum variant.
+pub type EnumVariant = EnumVariantG<crate::NoExt>;
+
+// Preserve the existing level-R diagnostic and serde record names even though
+// their shared in-memory carriers are now generic. These names grant no authority.
+impl<X: core::fmt::Debug> core::fmt::Debug for StructDefG<X> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self {
+            id,
+            name,
+            fields,
+            size,
+            align,
+            repr,
+            origin,
+        } = self;
+        f.debug_struct("StructDef")
+            .field("id", id)
+            .field("name", name)
+            .field("fields", fields)
+            .field("size", size)
+            .field("align", align)
+            .field("repr", repr)
+            .field("origin", origin)
+            .finish()
+    }
+}
+impl<X: core::fmt::Debug> core::fmt::Debug for FieldDefG<X> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self { name, ty, offset } = self;
+        f.debug_struct("FieldDef")
+            .field("name", name)
+            .field("ty", ty)
+            .field("offset", offset)
+            .finish()
+    }
+}
+impl<X: core::fmt::Debug> core::fmt::Debug for EnumDefG<X> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self {
+            id,
+            name,
+            variants,
+            discriminants,
+            repr,
+            layout,
+            origin,
+        } = self;
+        f.debug_struct("EnumDef")
+            .field("id", id)
+            .field("name", name)
+            .field("variants", variants)
+            .field("discriminants", discriminants)
+            .field("repr", repr)
+            .field("layout", layout)
+            .field("origin", origin)
+            .finish()
+    }
+}
+impl<X: core::fmt::Debug> core::fmt::Debug for EnumVariantG<X> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let Self {
+            name,
+            fields,
+            field_names,
+        } = self;
+        f.debug_struct("EnumVariant")
+            .field("name", name)
+            .field("fields", fields)
+            .field("field_names", field_names)
+            .finish()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::value::{ClosureTyId, EnumId, FuncTyId, PredId, RecordId, StructId, TyId};
+
+    /// Amendment D (§20 rule 5a): what the FORMAT knows owns nothing.
+    #[test]
+    fn trivially_droppable_is_exactly_the_documented_table() {
+        let types = vec![
+            Ty::I32,                      // ty.0: trivially droppable
+            Ty::Struct(StructId::new(0)), // ty.1: owns
+            Ty::Array(TyId::new(2), 1),   // ty.2: a self-cycle
+            Ty::Array(TyId::new(0), 4),   // ty.3: an array of i32
+            Ty::Tuple(vec![Ty::Ptr, Ty::Bool]),
+        ];
+        let yes = [
+            Ty::I8,
+            Ty::U128,
+            Ty::Isize,
+            Ty::Usize,
+            Ty::Char,
+            Ty::F16,
+            Ty::F64,
+            Ty::Bool,
+            Ty::Unit,
+            Ty::Never,
+            Ty::Ptr,
+            Ty::PtrConst(Box::new(Ty::Struct(StructId::new(0)))),
+            Ty::PtrMut(Box::new(Ty::Struct(StructId::new(0)))),
+            Ty::Ref(Box::new(Ty::Struct(StructId::new(0)))),
+            Ty::RefMut(Box::new(Ty::Struct(StructId::new(0)))),
+            Ty::FatPtr(FatPtrKind::Str),
+            Ty::Func(FuncTyId::new(0)),
+            Ty::Vector(Box::new(Ty::F32), 4),
+            Ty::Tuple(vec![]),
+            Ty::Tuple(vec![Ty::I32, Ty::Tuple(vec![Ty::Ptr])]),
+            Ty::Array(TyId::new(0), 8),
+            Ty::Array(TyId::new(1), 0), // zero copies of an owning type
+            Ty::Array(TyId::new(3), 2), // through the table, twice
+            Ty::Array(TyId::new(4), 2),
+        ];
+        for ty in yes {
+            assert!(ty.is_trivially_droppable(&types), "{ty} owns nothing");
+        }
+        let no = [
+            Ty::Struct(StructId::new(0)),
+            Ty::Enum(EnumId::new(0)),
+            Ty::Record(RecordId::new(0)),
+            Ty::Closure(ClosureTyId::new(0)),
+            Ty::Rc(Box::new(Ty::I32)),
+            Ty::handle("Nat", "trust_bignum::Nat"),
+            Ty::Sequence(TyId::new(0)),
+            Ty::Set(TyId::new(0), SetRepr::Bitset),
+            Ty::Refine(TyId::new(0), PredId::new(0)),
+            Ty::Error,
+            Ty::Tuple(vec![Ty::I32, Ty::Struct(StructId::new(0))]),
+            Ty::Array(TyId::new(1), 1),  // an owning element
+            Ty::Array(TyId::new(2), 1),  // a cycle through the table
+            Ty::Array(TyId::new(99), 1), // an out-of-range element id
+        ];
+        for ty in no {
+            assert!(
+                !ty.is_trivially_droppable(&types),
+                "{ty} is not trivially droppable"
+            );
+        }
+        // Deep inline nesting uses no Rust stack.
+        let mut deep = Ty::I32;
+        for _ in 0..100_000 {
+            deep = Ty::Tuple(vec![deep]);
+        }
+        assert!(deep.is_trivially_droppable(&types));
+        while let Ty::Tuple(mut inner) = deep {
+            deep = inner.pop().unwrap();
+        }
+    }
 
     #[test]
     fn bit_width_integers() {
@@ -1345,6 +2253,7 @@ mod tests {
             align: None,
 
             repr: Default::default(),
+            origin: None,
         };
         assert_eq!(sd.name, "Opaque");
         assert!(sd.fields.is_empty());
@@ -1357,6 +2266,7 @@ mod tests {
         let ft = FuncTy {
             params: vec![Ty::I32],
             returns: vec![],
+            abi: None,
             is_vararg: true,
         };
         assert!(ft.is_vararg);
@@ -1368,6 +2278,7 @@ mod tests {
         let ft = FuncTy {
             params: vec![],
             returns: vec![],
+            abi: None,
             is_vararg: false,
         };
         assert!(ft.params.is_empty());
@@ -1380,6 +2291,7 @@ mod tests {
         let ft = FuncTy {
             params: vec![Ty::I32],
             returns: vec![Ty::I32, Ty::Bool],
+            abi: None,
             is_vararg: false,
         };
         assert_eq!(ft.returns.len(), 2);
@@ -1593,6 +2505,7 @@ mod tests {
             discriminants: Vec::new(),
             repr: None,
             layout: None,
+            origin: None,
         };
         assert_eq!(ed.name, "Option");
         assert_eq!(ed.variants.len(), 2);

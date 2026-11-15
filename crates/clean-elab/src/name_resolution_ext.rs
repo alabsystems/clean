@@ -51,7 +51,7 @@ pub(crate) enum ResolutionSource {
     /// Name found through an opened namespace.
     OpenNamespace(Name),
     /// Name found through an alias (export/alias declaration).
-    Alias(String),
+    Alias(Name),
     /// Name found as a fully qualified global constant.
     Global,
     /// Name found via auto-opened associated namespace.
@@ -87,13 +87,13 @@ pub(crate) struct NameResolutionExt {
     /// Names marked as `protected` — skip during unqualified open lookup.
     protected_names: HashSet<Name>,
     /// Explicit aliases: short name -> qualified target.
-    aliases: HashMap<String, Name>,
+    aliases: HashMap<Name, Name>,
     /// Local bindings that shadow everything else.
     local_names: HashSet<Name>,
     /// Auto-open namespace associations: type name -> namespace to open.
     auto_open_map: HashMap<Name, Name>,
-    /// Resolution cache: input name string -> cached result.
-    cache: HashMap<String, ResolutionResult>,
+    /// Last observations by exact Name; never reused against an unbound context.
+    cache: HashMap<Name, ResolutionResult>,
 }
 
 impl NameResolutionExt {
@@ -136,8 +136,8 @@ impl NameResolutionExt {
     }
 
     /// Register an alias: `short` resolves to `target`.
-    pub(crate) fn register_alias(&mut self, short: &str, target: Name) {
-        self.aliases.insert(short.to_string(), target);
+    pub(crate) fn register_alias(&mut self, short: &Name, target: Name) {
+        self.aliases.insert(short.clone(), target);
         self.invalidate_cache();
     }
 
@@ -175,7 +175,7 @@ impl NameResolutionExt {
     // Core resolution
     // =========================================================================
 
-    /// Resolve a name with full priority ordering and caching.
+    /// Resolve a name with full priority ordering and retained observations.
     ///
     /// Priority: local > current namespace > open namespace > alias > auto-open > global.
     ///
@@ -189,14 +189,11 @@ impl NameResolutionExt {
         ns_state: &NamespaceState,
         env: &Environment,
     ) -> ResolutionResult {
-        let key = name.to_string();
-        if self.config.enable_cache {
-            if let Some(cached) = self.cache.get(&key) {
-                return cached.clone();
-            }
-        }
-
-        let result = self.resolve_uncached(name, &key, ns_state, env);
+        let key = name.clone();
+        // The caller owns and may mutate both semantic contexts. A query-only
+        // cache cannot certify that a previous positive or negative still holds.
+        // Recompute before recording; no address- or display-based context key.
+        let result = self.resolve_uncached(name, ns_state, env);
 
         if self.config.enable_cache {
             self.cache.insert(key, result.clone());
@@ -209,7 +206,6 @@ impl NameResolutionExt {
     pub(crate) fn resolve_uncached(
         &self,
         name: &Name,
-        name_str: &str,
         ns_state: &NamespaceState,
         env: &Environment,
     ) -> ResolutionResult {
@@ -225,9 +221,9 @@ impl NameResolutionExt {
             });
         }
 
-        // 2. Qualified name — if it contains a dot, try as fully qualified first
-        if name_str.contains('.') {
-            if let Some(result) = self.resolve_qualified(name, name_str, env) {
+        // 2. A structurally qualified name is tried as fully qualified first
+        if !crate::namespace::parent_name(name).is_anon() {
+            if let Some(result) = self.resolve_qualified(name, env) {
                 return result;
             }
         }
@@ -235,8 +231,7 @@ impl NameResolutionExt {
         // 3. Current namespace qualification
         let current_ns = ns_state.current_namespace();
         if !current_ns.is_anon() {
-            let qualified_str = format!("{current_ns}.{name_str}");
-            let qualified = Name::from_string(&qualified_str);
+            let qualified = crate::namespace::append_names(current_ns, name);
             if env.get_const(&qualified).is_some() {
                 return ResolutionResult::Resolved(ResolutionCandidate {
                     name: qualified,
@@ -246,7 +241,7 @@ impl NameResolutionExt {
         }
 
         // 4. Open namespaces
-        let open_candidates = self.resolve_through_opens(name_str, ns_state, env);
+        let open_candidates = self.resolve_through_opens(name, ns_state, env);
         if open_candidates.len() == 1 {
             return ResolutionResult::Resolved(
                 open_candidates
@@ -260,18 +255,18 @@ impl NameResolutionExt {
         }
 
         // 5. Alias resolution
-        if let Some(target) = self.aliases.get(name_str) {
+        if let Some(target) = self.aliases.get(name) {
             if env.get_const(target).is_some() {
                 return ResolutionResult::Resolved(ResolutionCandidate {
                     name: target.clone(),
-                    source: ResolutionSource::Alias(name_str.to_string()),
+                    source: ResolutionSource::Alias(name.clone()),
                 });
             }
         }
 
         // 6. Auto-open namespaces
         if self.config.auto_open {
-            let auto_candidates = self.resolve_through_auto_open(name_str, env);
+            let auto_candidates = self.resolve_through_auto_open(name, env);
             if auto_candidates.len() == 1 {
                 return ResolutionResult::Resolved(
                     auto_candidates
@@ -296,15 +291,8 @@ impl NameResolutionExt {
         ResolutionResult::Unresolved
     }
 
-    /// Attempt to resolve a dotted qualified name by walking namespace
-    /// segments. For `Foo.bar.baz`, tries `Foo.bar.baz` directly, then
-    /// checks if `Foo.bar` is a namespace containing `baz`.
-    fn resolve_qualified(
-        &self,
-        name: &Name,
-        name_str: &str,
-        env: &Environment,
-    ) -> Option<ResolutionResult> {
+    /// Resolve an exact structurally qualified name without a text round-trip.
+    fn resolve_qualified(&self, name: &Name, env: &Environment) -> Option<ResolutionResult> {
         // Direct match
         if env.get_const(name).is_some() {
             return Some(ResolutionResult::Resolved(ResolutionCandidate {
@@ -313,32 +301,13 @@ impl NameResolutionExt {
             }));
         }
 
-        // Try splitting at each dot from the right to resolve partial qualification
-        let mut dot_pos = name_str.len();
-        while let Some(pos) = name_str[..dot_pos].rfind('.') {
-            let prefix = &name_str[..pos];
-            let suffix = &name_str[pos + 1..];
-            let qualified = Name::from_string(name_str);
-
-            // If the full dotted name exists, we already checked above.
-            // Check if prefix is a known namespace and suffix resolves within it.
-            let candidate = Name::from_string(&format!("{prefix}.{suffix}"));
-            if env.get_const(&candidate).is_some() {
-                return Some(ResolutionResult::Resolved(ResolutionCandidate {
-                    name: qualified,
-                    source: ResolutionSource::Global,
-                }));
-            }
-            dot_pos = pos;
-        }
-
         None
     }
 
     /// Collect candidates from opened namespaces, filtering out protected names.
     fn resolve_through_opens(
         &self,
-        name_str: &str,
+        name: &Name,
         ns_state: &NamespaceState,
         env: &Environment,
     ) -> Vec<ResolutionCandidate> {
@@ -346,10 +315,10 @@ impl NameResolutionExt {
         let mut seen = BTreeSet::new();
 
         // First check aliases from NamespaceState (set by process_open)
-        if let Some(target) = ns_state.resolve(name_str) {
+        if let Some(target) = ns_state.resolve(name) {
             if !self.protected_names.contains(target)
                 && env.get_const(target).is_some()
-                && seen.insert(target.to_string())
+                && seen.insert(target.clone())
             {
                 // Determine which open namespace produced this alias
                 let source = self.find_alias_source(target, ns_state);
@@ -362,14 +331,13 @@ impl NameResolutionExt {
 
         // Also try qualifying with each open namespace
         for open_ns in ns_state.open_namespaces() {
-            let qualified_str = format!("{open_ns}.{name_str}");
-            let qualified = Name::from_string(&qualified_str);
+            let qualified = crate::namespace::append_names(open_ns, name);
 
             if self.protected_names.contains(&qualified) {
                 continue;
             }
 
-            if env.get_const(&qualified).is_some() && seen.insert(qualified_str) {
+            if env.get_const(&qualified).is_some() && seen.insert(qualified.clone()) {
                 candidates.push(ResolutionCandidate {
                     name: qualified,
                     source: ResolutionSource::OpenNamespace(open_ns.clone()),
@@ -382,10 +350,8 @@ impl NameResolutionExt {
 
     /// Determine which open namespace sourced a given resolved name.
     fn find_alias_source(&self, target: &Name, ns_state: &NamespaceState) -> ResolutionSource {
-        let target_str = target.to_string();
         for open_ns in ns_state.open_namespaces() {
-            let prefix = format!("{open_ns}.");
-            if target_str.starts_with(&prefix) {
+            if target != open_ns && crate::namespace::name_has_prefix(target, open_ns) {
                 return ResolutionSource::OpenNamespace(open_ns.clone());
             }
         }
@@ -395,14 +361,14 @@ impl NameResolutionExt {
     /// Collect candidates from auto-open namespace associations.
     fn resolve_through_auto_open(
         &self,
-        name_str: &str,
+        name: &Name,
         env: &Environment,
     ) -> Vec<ResolutionCandidate> {
         let mut candidates = Vec::new();
+        let mut seen = BTreeSet::new();
         for namespace in self.auto_open_map.values() {
-            let qualified_str = format!("{namespace}.{name_str}");
-            let qualified = Name::from_string(&qualified_str);
-            if env.get_const(&qualified).is_some() {
+            let qualified = crate::namespace::append_names(namespace, name);
+            if env.get_const(&qualified).is_some() && seen.insert(qualified.clone()) {
                 candidates.push(ResolutionCandidate {
                     name: qualified,
                     source: ResolutionSource::AutoOpen(namespace.clone()),
@@ -512,5 +478,92 @@ fn type_compatible(actual: &Expr, expected: &Expr) -> bool {
         (ExprKind::Pi(_, _, ab), ExprKind::Pi(_, _, bb)) => type_compatible(ab, bb),
         // Otherwise the discriminant match is sufficient.
         _ => true,
+    }
+}
+
+#[cfg(test)]
+mod typed_tests {
+    use super::*;
+
+    fn add(env: &mut Environment, name: Name) {
+        env.add_decl_structural(clean_kernel::env::Declaration::Axiom {
+            name,
+            level_params: vec![],
+            type_: Expr::type_(),
+        })
+        .unwrap();
+    }
+
+    fn exact(result: ResolutionResult, name: Name) {
+        let ResolutionResult::Resolved(candidate) = result else {
+            panic!("not exactly resolved: {result:?}")
+        };
+        assert_eq!(candidate.name, name);
+    }
+
+    #[test]
+    fn resolver_observation_keys_keep_display_and_numeric_twins() {
+        let env = Environment::new();
+        let state = NamespaceState::new();
+        let mut resolver = NameResolutionExt::new();
+        let names = [
+            Name::anon().str("A.B"),
+            Name::anon().str("A").str("B"),
+            Name::anon().str("7"),
+            Name::anon().num(7),
+        ];
+        for name in &names {
+            resolver.register_local(name.clone());
+        }
+        for name in &names {
+            exact(resolver.resolve(name, &state, &env), name.clone());
+        }
+        assert_eq!(resolver.cache_size(), names.len());
+    }
+
+    #[test]
+    fn switched_namespace_does_not_reuse_prior_query_result() {
+        let mut env = Environment::new();
+        let a = Name::anon().str("A");
+        let b = Name::anon().str("B");
+        let h = Name::anon().str("h");
+        add(&mut env, a.clone().str("h"));
+        add(&mut env, b.clone().str("h"));
+        let mut first = NamespaceState::new();
+        first.enter_namespace(a.clone());
+        let mut second = NamespaceState::new();
+        second.enter_namespace(b.clone());
+        let mut resolver = NameResolutionExt::new();
+        exact(resolver.resolve(&h, &first, &env), a.str("h"));
+        exact(resolver.resolve(&h, &second, &env), b.str("h"));
+    }
+
+    #[test]
+    fn added_constant_invalidates_an_observed_negative_without_a_manual_hook() {
+        let mut env = Environment::new();
+        let state = NamespaceState::new();
+        let mut resolver = NameResolutionExt::new();
+        let name = Name::anon().str("new.const");
+        assert_eq!(
+            resolver.resolve(&name, &state, &env),
+            ResolutionResult::Unresolved
+        );
+        add(&mut env, name.clone());
+        exact(resolver.resolve(&name, &state, &env), name);
+    }
+
+    #[test]
+    fn repeated_auto_open_namespace_does_not_invent_ambiguity() {
+        let mut env = Environment::new();
+        let namespace = Name::anon().str("N.dot");
+        let target = namespace.clone().str("f");
+        add(&mut env, target.clone());
+        let mut resolver = NameResolutionExt::new();
+        resolver.register_auto_open(Name::anon().str("T"), namespace.clone());
+        resolver.register_auto_open(Name::anon().str("Other"), namespace);
+        exact(
+            resolver.resolve(&Name::anon().str("f"), &NamespaceState::new(), &env),
+            target,
+        );
     }
 }

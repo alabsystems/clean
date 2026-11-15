@@ -1,3 +1,8 @@
+-- Updated 2026-11-06: the supplied instance is an ordinary term lambda
+-- binder. Its unused parameter would invalidate a declaration header before
+-- synthesis. This control instead reaches the intended undetermined-candidate
+-- synthesis refusal, with no annotation option disabled. The original source
+-- and both actual Lean diagnostics are retained in the dated audit report.
 -- p22 — CLASS I hygiene: a telescope binder the GOAL does not determine.
 --
 -- PROVES: opening a local's ∀-telescope allocates one metavariable per
@@ -19,8 +24,8 @@
 class MyD (p : Prop) where
   ev : Nat
 
-def MyDConst (α : Type) : Type := (x : α) → MyD True
+@[reducible] def MyDConst (α : Type) : Type := (x : α) → MyD True
 
-def evAt (p : Prop) [MyD p] : Nat := MyD.ev
+def evAt (p : Prop) [MyD p] : Nat := MyD.ev p
 
-def undetermined {α : Type} [MyDConst α] : Nat := evAt True
+def undetermined {α : Type} := fun [h : MyDConst α] => evAt True

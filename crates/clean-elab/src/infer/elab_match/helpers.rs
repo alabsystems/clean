@@ -11,6 +11,24 @@ use super::super::*;
 use crate::stack_safe;
 use std::ops::Range;
 
+/// The existing nested-aux marker is a component boundary, never a dot inside
+/// quoted text. Genuine auxiliary metadata and field arity are still checked.
+fn has_nested_aux_component(name: &SurfaceName) -> bool {
+    let mut current = name.name();
+    loop {
+        match current.inner() {
+            clean_kernel::name::NameInner::Anon => return false,
+            clean_kernel::name::NameInner::Str(parent, component) => {
+                if !parent.is_anon() && component.starts_with('_') {
+                    return true;
+                }
+                current = parent;
+            }
+            clean_kernel::name::NameInner::Num(parent, _) => current = parent,
+        }
+    }
+}
+
 impl<'a> ElabCtx<'a> {
     /// Authenticate one executable recursor packet once per immutable
     /// elaboration environment. The kernel routine proves both cross-table
@@ -102,8 +120,10 @@ impl<'a> ElabCtx<'a> {
             .collect();
         if matches.len() != 1 || matches[0] >= num_motives {
             return Err(ElabError::InternalInvariant(format!(
-                "{context}: selected member `{}` has motive slots {matches:?} in block {:?}, but the eliminator declares {num_motives} motives",
-                ind_info.name, ind_info.all_names
+                "{context}: selected member `{}` has motive slots {} in block {}, but the eliminator declares {num_motives} motives",
+                ind_info.name,
+                crate::error_render::opaque(matches.as_slice()),
+                crate::error_render::opaque(ind_info.all_names.as_slice())
             )));
         }
         Ok(matches[0])
@@ -258,11 +278,12 @@ impl<'a> ElabCtx<'a> {
             let member_ind = self.authenticate_inductive_metadata(member)?;
             if member_ind.all_names != ind_info.all_names {
                 return Err(ElabError::InternalInvariant(format!(
-                    "mutual-family metadata for `{member}` lists {:?}, expected {:?}",
-                    member_ind.all_names, ind_info.all_names
+                    "mutual-family metadata for `{member}` lists {}, expected {}",
+                    crate::error_render::opaque(member_ind.all_names.as_slice()),
+                    crate::error_render::opaque(ind_info.all_names.as_slice())
                 )));
             }
-            let member_rec_name = Name::from_string(&format!("{member}.rec"));
+            let member_rec_name = member.clone().str("rec");
             let member_rec = self.env.get_recursor(&member_rec_name).ok_or_else(|| {
                 ElabError::InternalInvariant(format!(
                     "missing recursor metadata `{member_rec_name}` while authenticating the minor telescope of `{}`",
@@ -295,7 +316,7 @@ impl<'a> ElabCtx<'a> {
         // by the kernel as consecutively numbered companion recursors.
         let mut companion_idx = 1usize;
         while rules.len() < wanted {
-            let name = Name::from_string(&format!("{first}.rec_{companion_idx}"));
+            let name = first.clone().str(format!("rec_{companion_idx}"));
             let companion = self.env.get_recursor(&name).ok_or_else(|| {
                 ElabError::InternalInvariant(format!(
                     "missing restored companion recursor `{name}` while authenticating the minor telescope of `{}`",
@@ -423,11 +444,15 @@ impl<'a> ElabCtx<'a> {
                 .map(|rule| rule.constructor_name.to_string())
                 .collect();
             return Err(ElabError::InternalInvariant(format!(
-                "{context}: recursor minor order does not contain exactly one authenticated slice for the selected inductive; expected {:?}, matching starts {matching_starts:?}, got {actual:?}",
-                expected
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
+                "{context}: recursor minor order does not contain exactly one authenticated slice for the selected inductive; expected {}, matching starts {}, got {}",
+                crate::error_render::opaque(
+                    &expected
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                ),
+                crate::error_render::opaque(&matching_starts),
+                crate::error_render::opaque(&actual)
             )));
         }
 
@@ -445,11 +470,14 @@ impl<'a> ElabCtx<'a> {
                 })
                 .collect();
             return Err(ElabError::NotImplemented(format!(
-                "{context}: non-exhaustive or non-declaration-order primary match; expected exactly {:?}, emitted {actual:?}",
-                expected
-                    .iter()
-                    .map(ToString::to_string)
-                    .collect::<Vec<_>>()
+                "{context}: non-exhaustive or non-declaration-order primary match; expected exactly {}, emitted {}",
+                crate::error_render::opaque(
+                    &expected
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                ),
+                crate::error_render::opaque(&actual)
             )));
         }
 
@@ -458,36 +486,35 @@ impl<'a> ElabCtx<'a> {
 
     /// Extract the type name from an expression (for casesOn lookup).
     /// Returns the base name of the type constructor.
-    pub(in crate::infer) fn get_type_name(&self, ty: &Expr) -> Result<String, ElabError> {
+    pub(in crate::infer) fn get_type_name(&self, ty: &Expr) -> Result<SurfaceName, ElabError> {
+        self.get_type_identity(ty).map(SurfaceName::from_name)
+    }
+
+    pub(in crate::infer) fn get_type_identity(&self, ty: &Expr) -> Result<Name, ElabError> {
         let ty = self.whnf(ty);
         stack_safe(|| match ty.kind() {
-            ExprKind::Const(name, _) => Ok(name.to_string()),
+            ExprKind::Const(name, _) => Ok(name.clone()),
             ExprKind::App(func, _) => {
                 // Recurse on the function to get the base type name
                 // e.g., `Option Nat` -> `Option`
-                self.get_type_name(func)
+                self.get_type_identity(func)
             }
             ExprKind::FVar(id) => {
-                // After WHNF, FVar means an opaque type variable.
-                // Check if the FVar's binding name matches a known inductive —
-                // this handles type parameters that shadow real types, e.g.,
-                // `fun (Nat : Type) (n : Nat) => match n with ...` where the
-                // local `Nat` FVar shadows the global `Nat` constant.
-                for (name, fvar, _) in self.locals.iter().rev() {
-                    if *fvar == *id {
-                        let name_obj = Name::from_string(name);
-                        if self.env.get_inductive(&name_obj).is_some() {
-                            return Ok(name.clone());
-                        }
-                        break;
-                    }
-                }
+                // After WHNF, FVar means an opaque type variable. It is never
+                // the inductive its binder happens to be spelled like: in
+                // `fun (Nat : Type) (n : Nat) => match n with …` the local
+                // `Nat` is an arbitrary type, not `_root_.Nat`, and reading
+                // it by name as the global inductive planned a `Nat.casesOn`
+                // over a value of some other type (Lean 4.8.0 refuses the
+                // match). Identity comes from resolution, never spelling.
                 Err(ElabError::NotImplemented(format!(
-                    "cannot extract type name from opaque type variable FVar({id:?})"
+                    "cannot extract type name from opaque type variable FVar({})",
+                    crate::error_render::fvar(*id, None)
                 )))
             }
             _ => Err(ElabError::NotImplemented(format!(
-                "cannot extract type name from {ty:?}"
+                "cannot extract type name from {}",
+                crate::error_render::term(&ty)
             ))),
         })
     }
@@ -615,15 +642,14 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn dependent_arm_branch_ty(
         &self,
         default: &Expr,
-        full_ctor: &str,
+        full_ctor: &SurfaceName,
         scrutinee_ty: &Expr,
         field_fvars: &[FVarId],
     ) -> Result<Expr, ElabError> {
         if self.match_dependent_motive.is_none() {
             return Ok(default.clone());
         }
-        let ctor_value =
-            self.build_ctor_value(&Name::from_string(full_ctor), scrutinee_ty, field_fvars)?;
+        let ctor_value = self.build_ctor_value(full_ctor.name(), scrutinee_ty, field_fvars)?;
         Ok(self.arm_branch_ty(default, &ctor_value))
     }
 
@@ -853,7 +879,8 @@ impl<'a> ElabCtx<'a> {
         }
         if !matches!(cursor.kind(), ExprKind::Sort(_)) {
             return Err(ElabError::InternalInvariant(format!(
-                "inductive metadata `{ind_name}` has binders beyond its declared parameter/index arity or does not end in a sort: {cursor:?}"
+                "inductive metadata `{ind_name}` has binders beyond its declared parameter/index arity or does not end in a sort: {}",
+                crate::error_render::term(cursor)
             )));
         }
         let occurrences = ind
@@ -938,17 +965,20 @@ impl<'a> ElabCtx<'a> {
             ExprKind::Const(name, levels) if name == &ctor.inductive_name => levels,
             _ => {
                 return Err(ElabError::InternalInvariant(format!(
-                    "constructor metadata `{ctor_name}` does not return inductive `{}` after its declared telescope: {return_ty:?}",
+                    "constructor metadata `{ctor_name}` does not return inductive `{}` after its declared telescope: {}",
                     ctor.inductive_name
-                )));
+                ,
+                crate::error_render::term(return_ty))));
             }
         };
         let expected_levels: Vec<Level> =
             ind.level_params.iter().cloned().map(Level::param).collect();
         if return_levels.as_slice() != expected_levels.as_slice() {
             return Err(ElabError::InternalInvariant(format!(
-                "constructor metadata `{ctor_name}` returns `{}` at universe levels {return_levels:?}, expected {expected_levels:?}",
-                ctor.inductive_name
+                "constructor metadata `{ctor_name}` returns `{}` at universe levels {}, expected {}",
+                ctor.inductive_name,
+                crate::error_render::levels(&return_levels[..]),
+                crate::error_render::levels(&expected_levels[..])
             )));
         }
         let return_args = return_ty.get_app_args();
@@ -964,8 +994,9 @@ impl<'a> ElabCtx<'a> {
                 Expr::bvar(ctor.num_params + ctor.num_fields - 1 - param_index as u32);
             if return_args[param_index] != &expected_bvar {
                 return Err(ElabError::InternalInvariant(format!(
-                    "constructor metadata `{ctor_name}` return parameter {param_index} is {:?}, expected {expected_bvar:?}",
-                    return_args[param_index]
+                    "constructor metadata `{ctor_name}` return parameter {param_index} is {}, expected {}",
+                    crate::error_render::term(return_args[param_index]),
+                    crate::error_render::opaque(&expected_bvar)
                 )));
             }
         }
@@ -1009,6 +1040,25 @@ impl<'a> ElabCtx<'a> {
         Ok(infos)
     }
 
+    /// How many of a registered constructor's fields are explicit (written in a
+    /// pattern). Implicit/instance fields are filled by
+    /// [`Self::expand_implicit_ctor_field_patterns`], so a constructor with zero
+    /// explicit fields is exactly one a bare pattern identifier can denote.
+    pub(in crate::infer) fn ctor_explicit_field_count(
+        &self,
+        full_ctor: &SurfaceName,
+    ) -> Result<usize, ElabError> {
+        let ctor = self
+            .env
+            .get_constructor(full_ctor.name())
+            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
+        Ok(self
+            .ctor_field_binder_infos(ctor)?
+            .iter()
+            .filter(|info| matches!(info, BinderInfo::Default))
+            .count())
+    }
+
     /// Expand a match-pattern constructor's *explicit-only* field patterns into a
     /// full-length field-pattern list, inserting a `Wildcard` at each implicit
     /// field position.
@@ -1037,7 +1087,7 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn expand_implicit_ctor_field_patterns(
         &self,
         context: &str,
-        full_ctor: &str,
+        full_ctor: &SurfaceName,
         sub_pats: &[SurfacePattern],
     ) -> Result<Vec<SurfacePattern>, ElabError> {
         // A trailing `..` ellipsis (`.Ctor x ..`) stands for "the remaining
@@ -1052,15 +1102,11 @@ impl<'a> ElabCtx<'a> {
 
         let ctor = self
             .env
-            .get_constructor(&Name::from_string(full_ctor))
+            .get_constructor(full_ctor.name())
             .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
         let num_fields = ctor.num_fields as usize;
         let field_infos = self.ctor_field_binder_infos(ctor)?;
-
-        let num_explicit = field_infos
-            .iter()
-            .filter(|info| matches!(info, BinderInfo::Default))
-            .count();
+        let num_explicit = self.ctor_explicit_field_count(full_ctor)?;
 
         // With a trailing `..`, the leading patterns must not exceed the explicit
         // field count; the ellipsis fills the rest. Pad up to `num_explicit` and
@@ -1160,28 +1206,51 @@ impl<'a> ElabCtx<'a> {
     /// [`NamespaceState`]: crate::namespace::NamespaceState
     pub(in crate::infer) fn resolve_ctor_name(
         &self,
-        ctor_name: &str,
-        type_name: &str,
-    ) -> Option<String> {
+        ctor_name: &SurfaceName,
+        type_name: &SurfaceName,
+    ) -> Option<SurfaceName> {
+        if ctor_name.is_anonymous() {
+            return None;
+        }
+        if ctor_name.is_relative_constructor() {
+            let selected = type_name.append(&SurfaceName::from_name(ctor_name.name().clone()));
+            return self
+                .ctor_belongs_to(&selected, type_name)
+                .then_some(selected);
+        }
+        let absolute = ctor_name.qualify_under(&SurfaceName::default());
+        if absolute.name() != ctor_name.name() {
+            // Only an actual `_root_.` selector is absolute. If it misses, an
+            // opened alias or matching suffix must not rescue a different name.
+            return self
+                .ctor_belongs_to(&absolute, type_name)
+                .then_some(absolute);
+        }
+        // A genuine local binder shadows an ordinary constructor spelling.
+        // Name normalization resolves constructor nodes before field binders
+        // are introduced, so a retained Var must not be reclassified here.
+        if self.lookup_local(ctor_name).is_some() {
+            return None;
+        }
         // 1. Treat `ctor_name` as already qualified.
         if self.ctor_belongs_to(ctor_name, type_name) {
-            return Some(ctor_name.to_string());
+            return Some(ctor_name.clone());
         }
 
         // 2. Implicit `TypeName.ctor` qualification (only meaningful for an
         //    unqualified pattern name).
-        if !ctor_name.contains('.') {
-            let qualified = format!("{type_name}.{ctor_name}");
+        if ctor_name.parent().is_anonymous() && !ctor_name.is_anonymous() {
+            let qualified = type_name.append(ctor_name);
             if self.ctor_belongs_to(&qualified, type_name) {
                 return Some(qualified);
             }
         }
 
         // 3. Opened-namespace alias table, mirroring term-reference resolution.
-        if let Some(target) = self.namespace_state.resolve(ctor_name) {
-            let target_str = target.to_string();
-            if self.ctor_belongs_to(&target_str, type_name) {
-                return Some(target_str);
+        if let Some(target) = self.namespace_state.resolve(ctor_name.name()) {
+            let target = SurfaceName::from_name(target.clone());
+            if self.ctor_belongs_to(&target, type_name) {
+                return Some(target);
             }
         }
 
@@ -1199,14 +1268,18 @@ impl<'a> ElabCtx<'a> {
         //    match is read off the kernel's constructor list, so it can only
         //    resolve to a genuine constructor of `type_name`; constructor short
         //    names are unique within one inductive, so the suffix is unambiguous.
-        if let Some(ind) = self.env.get_inductive(&Name::from_string(type_name)) {
-            let dotted = format!(".{ctor_name}");
+        if let Some(ind) = self.env.get_inductive(type_name.name()) {
+            let mut candidate = None;
             for full in &ind.constructor_names {
-                let full_str = full.to_string();
-                if full_str == ctor_name || full_str.ends_with(&dotted) {
-                    return Some(full_str);
+                let full = SurfaceName::from_name(full.clone());
+                if full.has_suffix(ctor_name) {
+                    if candidate.is_some() {
+                        return None;
+                    }
+                    candidate = Some(full);
                 }
             }
+            return candidate;
         }
 
         None
@@ -1222,15 +1295,17 @@ impl<'a> ElabCtx<'a> {
     /// keep reporting the name the user wrote.
     pub(in crate::infer) fn ctor_pattern_full_name(
         &self,
-        ctor_name: &str,
-        type_name: &str,
-    ) -> String {
+        ctor_name: &SurfaceName,
+        type_name: &SurfaceName,
+    ) -> SurfaceName {
         self.resolve_ctor_name(ctor_name, type_name)
             .unwrap_or_else(|| {
-                if ctor_name.contains('.') {
-                    ctor_name.to_string()
+                if ctor_name.is_relative_constructor() {
+                    type_name.append(&SurfaceName::from_name(ctor_name.name().clone()))
+                } else if !ctor_name.parent().is_anonymous() {
+                    ctor_name.qualify_under(&SurfaceName::default())
                 } else {
-                    format!("{type_name}.{ctor_name}")
+                    type_name.append(ctor_name)
                 }
             })
     }
@@ -1260,31 +1335,31 @@ impl<'a> ElabCtx<'a> {
     /// then reports the original "does not belong" diagnostic unchanged).
     pub(in crate::infer) fn remap_container_ctor_to_field_aux(
         &self,
-        field_type_name: &str,
-        container_ctor_full: &str,
-    ) -> Option<String> {
+        field_type_name: &SurfaceName,
+        container_ctor_full: &SurfaceName,
+    ) -> Option<SurfaceName> {
         // The field type must be a nested-aux mirror inductive. Aux types are
         // generated with names of the shape `<Parent>._<Container>`; require the
         // `._` marker so we never remap onto an unrelated user inductive that
         // merely happens to share a constructor suffix.
-        if !field_type_name.contains("._") {
+        if !has_nested_aux_component(field_type_name) {
             return None;
         }
-        let aux_ind = Name::from_string(field_type_name);
+        let aux_ind = field_type_name.name().clone();
         // The aux inductive must actually exist as a registered inductive.
         self.env.get_inductive(&aux_ind)?;
         // Suffix of the container constructor the user wrote (e.g. `nil`/`cons`).
-        let suffix = container_ctor_full.rsplit_once('.').map(|(_, s)| s)?;
-        let aux_ctor = format!("{field_type_name}.{suffix}");
-        let aux_info = self.env.get_constructor(&Name::from_string(&aux_ctor))?;
+        if container_ctor_full.parent().is_anonymous() {
+            return None;
+        }
+        let aux_ctor = field_type_name.append(&container_ctor_full.last_component());
+        let aux_info = self.env.get_constructor(aux_ctor.name())?;
         // Soundness gate: the candidate must genuinely belong to the aux
         // inductive and mirror the container ctor's field count exactly.
         if aux_info.inductive_name != aux_ind {
             return None;
         }
-        let container_info = self
-            .env
-            .get_constructor(&Name::from_string(container_ctor_full))?;
+        let container_info = self.env.get_constructor(container_ctor_full.name())?;
         if aux_info.num_fields != container_info.num_fields {
             return None;
         }
@@ -1319,19 +1394,17 @@ impl<'a> ElabCtx<'a> {
     /// this can only narrow, never widen, what type-checks.
     pub(in crate::infer) fn remap_anonymous_tuple_ctor(
         &self,
-        field_type_name: &str,
-        written_ctor_full: &str,
+        field_type_name: &SurfaceName,
+        written_ctor_full: &SurfaceName,
         num_sub_pats: usize,
-    ) -> Option<String> {
+    ) -> Option<SurfaceName> {
         // Only the parser's anonymous-tuple placeholder is remapped. A genuine
         // `Prod` field keeps `Prod.mk` (it belongs, so this path is never reached
         // for it).
-        if written_ctor_full != "Prod.mk" {
+        if !written_ctor_full.same_syntax(&SurfaceName::generated_path("Prod.mk")) {
             return None;
         }
-        let ind = self
-            .env
-            .get_inductive(&Name::from_string(field_type_name))?;
+        let ind = self.env.get_inductive(field_type_name.name())?;
         // Anonymous-constructor resolution targets a single-constructor type.
         let [sole_ctor] = ind.constructor_names.as_slice() else {
             return None;
@@ -1344,7 +1417,7 @@ impl<'a> ElabCtx<'a> {
         if ctor_info.num_fields as usize != num_sub_pats {
             return None;
         }
-        Some(sole_ctor.to_string())
+        Some(SurfaceName::from_name(sole_ctor.clone()))
     }
 
     /// Remap a TOP-LEVEL anonymous-constructor pattern (`⟨a, b, c⟩`) onto a
@@ -1382,18 +1455,18 @@ impl<'a> ElabCtx<'a> {
     /// flattening can only be *rejected*, never silently accepted.
     pub(in crate::infer) fn remap_anon_tuple_to_structure(
         &self,
-        type_name: &str,
+        type_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
-    ) -> Option<(String, Vec<SurfacePattern>)> {
-        let type_name_obj = Name::from_string(type_name);
+    ) -> Option<(SurfaceName, Vec<SurfacePattern>)> {
+        let type_name_obj = type_name.name().clone();
         let ind = self.env.get_inductive(&type_name_obj)?;
         // Anonymous-constructor resolution targets a single-constructor type.
         let [sole_ctor] = ind.constructor_names.as_slice() else {
             return None;
         };
-        let sole_full = sole_ctor.to_string();
+        let sole_full = SurfaceName::from_name(sole_ctor.clone());
         // A genuine `Prod` keeps the placeholder (it belongs); nothing to remap.
-        if sole_full == "Prod.mk" {
+        if sole_full.name() == SurfaceName::generated_path("Prod.mk").name() {
             return None;
         }
         let ctor_info = self.env.get_constructor(sole_ctor)?;
@@ -1436,14 +1509,18 @@ impl<'a> ElabCtx<'a> {
             let tail = it.next()?;
             leaves.push(head);
             cur = match tail {
-                SurfacePattern::Ctor(name, inner) if name == "Prod.mk" => inner,
+                SurfacePattern::Ctor(name, inner)
+                    if name.same_syntax(&SurfaceName::generated_path("Prod.mk")) =>
+                {
+                    inner
+                }
                 other => vec![other],
             };
         }
         let last = if cur.len() == 1 {
             cur.into_iter().next()?
         } else {
-            SurfacePattern::Ctor("Prod.mk".to_string(), cur)
+            SurfacePattern::Ctor(SurfaceName::generated_path("Prod.mk"), cur)
         };
         leaves.push(last);
         (leaves.len() == n).then_some(leaves)
@@ -1454,10 +1531,10 @@ impl<'a> ElabCtx<'a> {
     /// Used by [`resolve_ctor_name`](Self::resolve_ctor_name) as the soundness
     /// gate: a resolved name must be a real constructor of the scrutinee's
     /// inductive, never an unrelated constant or a constructor of another type.
-    fn ctor_belongs_to(&self, name: &str, type_name: &str) -> bool {
+    fn ctor_belongs_to(&self, name: &SurfaceName, type_name: &SurfaceName) -> bool {
         self.env
-            .get_constructor(&Name::from_string(name))
-            .is_some_and(|info| info.inductive_name == Name::from_string(type_name))
+            .get_constructor(name.name())
+            .is_some_and(|info| info.inductive_name == type_name.name().clone())
     }
 
     /// Extract type arguments from a type application (#386)
@@ -1692,9 +1769,9 @@ impl<'a> ElabCtx<'a> {
         &self,
         mut eliminator: Expr,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Expr, ElabError> {
-        let expected_name = Name::from_string(type_name);
+        let expected_name = type_name.name().clone();
         let num_params = self
             .authenticate_inductive_metadata(&expected_name)?
             .num_params;
@@ -1794,7 +1871,7 @@ impl<'a> ElabCtx<'a> {
         let Ok(type_name) = self.get_type_name(ty) else {
             return Ok(None);
         };
-        let ind_name = Name::from_string(&type_name);
+        let ind_name = type_name.name().clone();
         if self.env.get_inductive(&ind_name).is_none() {
             return Ok(None);
         }

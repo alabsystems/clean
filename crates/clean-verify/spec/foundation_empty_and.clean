@@ -1,0 +1,21 @@
+/-! Empty type and proof-relevant conjunction (PART 3.5 of the foundation).
+
+Model unit `foundation_empty_and` — moved out of `crates/clean-verify/src/spec/core_spec/foundation_types.rs`
+(embed memo W1). Registered by `Specification::register_model_unit(ModelUnit::FoundationEmptyAnd)`
+through the same `add_inductive` / `add_recursive_def` path the literals used; the
+fidelity oracle in `spec/model_units/tests.rs` pins this file against the retained
+literal. EVERY declaration must carry a `/-- ... -/` doc comment: its text is the
+registered description, byte for byte. -/
+
+/-- Uninhabited type. Used for constructor discrimination via large elimination. -/
+inductive Empty : Type
+
+-- =========================================================
+-- PART 3.5: Conjunction (AndType) type
+-- =========================================================
+-- AndType is a proof-relevant conjunction used in bidirectional proofs.
+
+-- AndType type (proof-relevant conjunction)
+/-- Proof-relevant conjunction: AndType A B holds when both A and B hold. -/
+inductive AndType (A : Type) (B : Type) : Type
+| intro : A → B → AndType A B

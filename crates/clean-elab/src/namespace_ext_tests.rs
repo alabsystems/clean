@@ -15,7 +15,7 @@ use clean_kernel::Environment;
 use std::collections::HashSet;
 
 /// Helper: add an axiom constant to the environment.
-fn add_const(env: &mut Environment, name: &str) {
+fn add_const(env: &mut Environment, name: &'static str) {
     let n = Name::from_string(name);
     let decl = Declaration::Axiom {
         name: n,
@@ -48,7 +48,7 @@ fn test_protected_access_blocked_via_open() {
     let mut state = NamespaceState::new();
     state.open_namespace(Name::from_string("Nat"));
 
-    let err = ext.check_protected_access("internal", &state);
+    let err = ext.check_protected_access(&Name::from_string("internal"), &state);
     assert!(err.is_some(), "should detect protected access");
     match err.unwrap() {
         NamespaceExtError::ProtectedAccess { name, qualified } => {
@@ -66,7 +66,9 @@ fn test_protected_access_allowed_when_not_opened() {
 
     let state = NamespaceState::new();
     // No namespace opened — no protection violation
-    assert!(ext.check_protected_access("internal", &state).is_none());
+    assert!(ext
+        .check_protected_access(&Name::from_string("internal"), &state)
+        .is_none());
 }
 
 #[test]
@@ -79,12 +81,21 @@ fn test_protected_name_excluded_from_open_ext() {
     ext.mark_protected(Name::from_string("Nat.secret"));
 
     let mut state = NamespaceState::new();
-    ext.process_open_ext(&env, "Nat", &OpenDirective::All, &[], &mut state)
-        .expect("open should succeed");
+    ext.process_open_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &OpenDirective::All,
+        &[],
+        &mut state,
+    )
+    .expect("open should succeed");
 
-    assert!(state.resolve("add").is_some(), "add should be imported");
     assert!(
-        state.resolve("secret").is_none(),
+        state.resolve(&Name::from_string("add")).is_some(),
+        "add should be imported"
+    );
+    assert!(
+        state.resolve(&Name::from_string("secret")).is_none(),
         "protected name should be excluded"
     );
 }
@@ -103,13 +114,22 @@ fn test_open_ext_hiding() {
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
 
-    let hiding: HashSet<String> = ["mul".to_string()].into_iter().collect();
-    ext.process_open_ext(&env, "Nat", &OpenDirective::Hiding(hiding), &[], &mut state)
-        .expect("open should succeed");
+    let hiding: HashSet<Name> = [Name::from_string("mul")].into_iter().collect();
+    ext.process_open_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &OpenDirective::Hiding(hiding),
+        &[],
+        &mut state,
+    )
+    .expect("open should succeed");
 
-    assert!(state.resolve("add").is_some());
-    assert!(state.resolve("zero").is_some());
-    assert!(state.resolve("mul").is_none(), "mul should be hidden");
+    assert!(state.resolve(&Name::from_string("add")).is_some());
+    assert!(state.resolve(&Name::from_string("zero")).is_some());
+    assert!(
+        state.resolve(&Name::from_string("mul")).is_none(),
+        "mul should be hidden"
+    );
 }
 
 #[test]
@@ -122,15 +142,21 @@ fn test_open_ext_hiding_multiple() {
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
 
-    let hiding: HashSet<String> = ["mul".to_string(), "zero".to_string()]
+    let hiding: HashSet<Name> = [Name::from_string("mul"), Name::from_string("zero")]
         .into_iter()
         .collect();
-    ext.process_open_ext(&env, "Nat", &OpenDirective::Hiding(hiding), &[], &mut state)
-        .expect("open should succeed");
+    ext.process_open_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &OpenDirective::Hiding(hiding),
+        &[],
+        &mut state,
+    )
+    .expect("open should succeed");
 
-    assert!(state.resolve("add").is_some());
-    assert!(state.resolve("mul").is_none());
-    assert!(state.resolve("zero").is_none());
+    assert!(state.resolve(&Name::from_string("add")).is_some());
+    assert!(state.resolve(&Name::from_string("mul")).is_none());
+    assert!(state.resolve(&Name::from_string("zero")).is_none());
 }
 
 // =========================================================================
@@ -149,16 +175,16 @@ fn test_open_ext_selective() {
 
     ext.process_open_ext(
         &env,
-        "Nat",
-        &OpenDirective::Selective(vec!["add".into(), "zero".into()]),
+        &Name::from_string("Nat"),
+        &OpenDirective::Selective(vec![Name::from_string("add"), Name::from_string("zero")]),
         &[],
         &mut state,
     )
     .expect("open should succeed");
 
-    assert!(state.resolve("add").is_some());
-    assert!(state.resolve("zero").is_some());
-    assert!(state.resolve("mul").is_none());
+    assert!(state.resolve(&Name::from_string("add")).is_some());
+    assert!(state.resolve(&Name::from_string("zero")).is_some());
+    assert!(state.resolve(&Name::from_string("mul")).is_none());
 }
 
 // =========================================================================
@@ -175,22 +201,31 @@ fn test_open_ext_renaming() {
     let mut state = NamespaceState::new();
 
     let renamings = vec![RenameRule {
-        from: "add".into(),
-        to: "plus".into(),
+        from: Name::from_string("add"),
+        to: Name::from_string("plus"),
     }];
-    ext.process_open_ext(&env, "Nat", &OpenDirective::All, &renamings, &mut state)
-        .expect("open should succeed");
+    ext.process_open_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &OpenDirective::All,
+        &renamings,
+        &mut state,
+    )
+    .expect("open should succeed");
 
     assert_eq!(
-        state.resolve("plus").unwrap().to_string(),
-        "Nat.add",
+        state.resolve(&Name::from_string("plus")).unwrap().clone(),
+        Name::from_string("Nat.add"),
         "add should be renamed to plus"
     );
     assert!(
-        state.resolve("add").is_none(),
+        state.resolve(&Name::from_string("add")).is_none(),
         "original name should not be accessible"
     );
-    assert!(state.resolve("mul").is_some(), "mul should be unaffected");
+    assert!(
+        state.resolve(&Name::from_string("mul")).is_some(),
+        "mul should be unaffected"
+    );
 }
 
 #[test]
@@ -203,21 +238,24 @@ fn test_open_ext_renaming_with_selective() {
     let mut state = NamespaceState::new();
 
     let renamings = vec![RenameRule {
-        from: "add".into(),
-        to: "natAdd".into(),
+        from: Name::from_string("add"),
+        to: Name::from_string("natAdd"),
     }];
     ext.process_open_ext(
         &env,
-        "Nat",
-        &OpenDirective::Selective(vec!["add".into()]),
+        &Name::from_string("Nat"),
+        &OpenDirective::Selective(vec![Name::from_string("add")]),
         &renamings,
         &mut state,
     )
     .expect("open should succeed");
 
-    assert_eq!(state.resolve("natAdd").unwrap().to_string(), "Nat.add");
-    assert!(state.resolve("add").is_none());
-    assert!(state.resolve("mul").is_none());
+    assert_eq!(
+        state.resolve(&Name::from_string("natAdd")).unwrap().clone(),
+        Name::from_string("Nat.add")
+    );
+    assert!(state.resolve(&Name::from_string("add")).is_none());
+    assert!(state.resolve(&Name::from_string("mul")).is_none());
 }
 
 // =========================================================================
@@ -234,24 +272,30 @@ fn test_open_ext_hiding_and_renaming_combined() {
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
 
-    let hiding: HashSet<String> = ["foldl".to_string()].into_iter().collect();
+    let hiding: HashSet<Name> = [Name::from_string("foldl")].into_iter().collect();
     let renamings = vec![RenameRule {
-        from: "map".into(),
-        to: "transform".into(),
+        from: Name::from_string("map"),
+        to: Name::from_string("transform"),
     }];
     ext.process_open_ext(
         &env,
-        "List",
+        &Name::from_string("List"),
         &OpenDirective::Hiding(hiding),
         &renamings,
         &mut state,
     )
     .expect("open should succeed");
 
-    assert_eq!(state.resolve("transform").unwrap().to_string(), "List.map");
-    assert!(state.resolve("map").is_none());
-    assert!(state.resolve("filter").is_some());
-    assert!(state.resolve("foldl").is_none());
+    assert_eq!(
+        state
+            .resolve(&Name::from_string("transform"))
+            .unwrap()
+            .clone(),
+        Name::from_string("List.map")
+    );
+    assert!(state.resolve(&Name::from_string("map")).is_none());
+    assert!(state.resolve(&Name::from_string("filter")).is_some());
+    assert!(state.resolve(&Name::from_string("foldl")).is_none());
 }
 
 // =========================================================================
@@ -270,16 +314,16 @@ fn test_export_ext_selected() {
 
     ext.process_export_ext(
         &env,
-        "Nat",
-        &ExportFilter::Selected(vec!["add".into(), "zero".into()]),
-        Some("MyLib"),
+        &Name::from_string("Nat"),
+        &ExportFilter::Selected(vec![Name::from_string("add"), Name::from_string("zero")]),
+        Some(&Name::from_string("MyLib")),
         &mut state,
     )
     .expect("export should succeed");
 
-    assert!(state.resolve("add").is_some());
-    assert!(state.resolve("zero").is_some());
-    assert!(state.resolve("mul").is_none());
+    assert!(state.resolve(&Name::from_string("add")).is_some());
+    assert!(state.resolve(&Name::from_string("zero")).is_some());
+    assert!(state.resolve(&Name::from_string("mul")).is_none());
 
     let exports = state.exports();
     assert_eq!(exports.len(), 2);
@@ -294,12 +338,18 @@ fn test_export_ext_hiding() {
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
 
-    let hiding: HashSet<String> = ["mul".to_string()].into_iter().collect();
-    ext.process_export_ext(&env, "Nat", &ExportFilter::Hiding(hiding), None, &mut state)
-        .expect("export should succeed");
+    let hiding: HashSet<Name> = [Name::from_string("mul")].into_iter().collect();
+    ext.process_export_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &ExportFilter::Hiding(hiding),
+        None,
+        &mut state,
+    )
+    .expect("export should succeed");
 
-    assert!(state.resolve("add").is_some());
-    assert!(state.resolve("mul").is_none());
+    assert!(state.resolve(&Name::from_string("add")).is_some());
+    assert!(state.resolve(&Name::from_string("mul")).is_none());
 }
 
 #[test]
@@ -311,11 +361,17 @@ fn test_export_ext_all() {
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
 
-    ext.process_export_ext(&env, "Nat", &ExportFilter::All, None, &mut state)
-        .expect("export should succeed");
+    ext.process_export_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &ExportFilter::All,
+        None,
+        &mut state,
+    )
+    .expect("export should succeed");
 
-    assert!(state.resolve("add").is_some());
-    assert!(state.resolve("mul").is_some());
+    assert!(state.resolve(&Name::from_string("add")).is_some());
+    assert!(state.resolve(&Name::from_string("mul")).is_some());
 }
 
 #[test]
@@ -327,7 +383,13 @@ fn test_export_ext_protected_blocked() {
     ext.mark_protected(Name::from_string("Nat.secret"));
 
     let mut state = NamespaceState::new();
-    let result = ext.process_export_ext(&env, "Nat", &ExportFilter::All, None, &mut state);
+    let result = ext.process_export_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &ExportFilter::All,
+        None,
+        &mut state,
+    );
 
     assert!(result.is_err(), "should block protected re-export");
     match result.unwrap_err() {
@@ -351,10 +413,16 @@ fn test_export_ext_protected_allowed_with_config() {
     ext.mark_protected(Name::from_string("Nat.secret"));
 
     let mut state = NamespaceState::new();
-    ext.process_export_ext(&env, "Nat", &ExportFilter::All, None, &mut state)
-        .expect("should allow protected re-export with config");
+    ext.process_export_ext(
+        &env,
+        &Name::from_string("Nat"),
+        &ExportFilter::All,
+        None,
+        &mut state,
+    )
+    .expect("should allow protected re-export with config");
 
-    assert!(state.resolve("secret").is_some());
+    assert!(state.resolve(&Name::from_string("secret")).is_some());
 }
 
 // =========================================================================
@@ -379,7 +447,7 @@ fn test_scoped_attr_register_and_query() {
     state.open_namespace(ns);
     let active = ext.get_active_scoped_attrs("simp", &state);
     assert_eq!(active.len(), 1);
-    assert_eq!(active[0].to_string(), "Nat.add_comm");
+    assert_eq!(active[0].clone(), Name::from_string("Nat.add_comm"));
 }
 
 #[test]
@@ -440,20 +508,18 @@ fn test_resolve_with_suggestions_success() {
     let mut state = NamespaceState::new();
     state.open_namespace(Name::from_string("Nat"));
 
-    let result = ext.resolve_with_suggestions("add", &state, &env);
+    let result = ext.resolve_with_suggestions(&Name::from_string("add"), &state, &env);
     assert_eq!(
-        result
-            .expect("`open Nat` must resolve bare `add`")
-            .to_string(),
-        "Nat.add",
+        result.expect("`open Nat` must resolve bare `add`").clone(),
+        Name::from_string("Nat.add"),
         "open_namespace must unambiguously resolve bare names",
     );
 
     // Adding an explicit alias keeps working (alias takes precedence
     // over open_namespace walk, which is already the resolver order).
-    state.insert_alias_pub("add".into(), Name::from_string("Nat.add"));
-    let result = ext.resolve_with_suggestions("add", &state, &env);
-    assert_eq!(result.unwrap().to_string(), "Nat.add");
+    state.insert_alias_pub(Name::from_string("add"), Name::from_string("Nat.add"));
+    let result = ext.resolve_with_suggestions(&Name::from_string("add"), &state, &env);
+    assert_eq!(result.unwrap().clone(), Name::from_string("Nat.add"));
 }
 
 #[test]
@@ -469,7 +535,7 @@ fn test_resolve_with_suggestions_open_namespace_does_not_invent_constants() {
     let mut state = NamespaceState::new();
     state.open_namespace(Name::from_string("Nat"));
 
-    let result = ext.resolve_with_suggestions("garbage", &state, &env);
+    let result = ext.resolve_with_suggestions(&Name::from_string("garbage"), &state, &env);
     assert!(
         result.is_err(),
         "open_namespace must not fabricate `Nat.garbage` from `garbage` \
@@ -485,8 +551,8 @@ fn test_resolve_with_suggestions_fully_qualified() {
     let ext = NamespaceExt::new();
     let state = NamespaceState::new();
 
-    let result = ext.resolve_with_suggestions("Nat.add", &state, &env);
-    assert_eq!(result.unwrap().to_string(), "Nat.add");
+    let result = ext.resolve_with_suggestions(&Name::from_string("Nat.add"), &state, &env);
+    assert_eq!(result.unwrap().clone(), Name::from_string("Nat.add"));
 }
 
 #[test]
@@ -498,8 +564,8 @@ fn test_resolve_with_suggestions_via_current_namespace() {
     let mut state = NamespaceState::new();
     state.enter_namespace(Name::from_string("Foo"));
 
-    let result = ext.resolve_with_suggestions("bar", &state, &env);
-    assert_eq!(result.unwrap().to_string(), "Foo.bar");
+    let result = ext.resolve_with_suggestions(&Name::from_string("bar"), &state, &env);
+    assert_eq!(result.unwrap().clone(), Name::from_string("Foo.bar"));
 }
 
 #[test]
@@ -510,10 +576,10 @@ fn test_resolve_with_suggestions_failure_provides_suggestions() {
 
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
-    state.insert_alias_pub("add".into(), Name::from_string("Nat.add"));
-    state.insert_alias_pub("addi".into(), Name::from_string("Nat.addi"));
+    state.insert_alias_pub(Name::from_string("add"), Name::from_string("Nat.add"));
+    state.insert_alias_pub(Name::from_string("addi"), Name::from_string("Nat.addi"));
 
-    let result = ext.resolve_with_suggestions("addx", &state, &env);
+    let result = ext.resolve_with_suggestions(&Name::from_string("addx"), &state, &env);
     match result {
         Err(NamespaceExtError::UnresolvedWithSuggestions { name, suggestions }) => {
             assert_eq!(name, "addx");
@@ -539,7 +605,7 @@ fn test_resolve_protected_name_gives_error() {
     let mut state = NamespaceState::new();
     state.open_namespace(Name::from_string("Nat"));
 
-    let result = ext.resolve_with_suggestions("internal", &state, &env);
+    let result = ext.resolve_with_suggestions(&Name::from_string("internal"), &state, &env);
     assert!(
         matches!(result, Err(NamespaceExtError::ProtectedAccess { .. })),
         "should return ProtectedAccess error"
@@ -588,8 +654,14 @@ fn test_open_ext_empty_namespace_is_noop() {
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
 
-    ext.process_open_ext(&env, "NonExistent", &OpenDirective::All, &[], &mut state)
-        .expect("should not error on empty namespace");
+    ext.process_open_ext(
+        &env,
+        &Name::from_string("NonExistent"),
+        &OpenDirective::All,
+        &[],
+        &mut state,
+    )
+    .expect("should not error on empty namespace");
 
     assert!(!state.has_opens());
 }
@@ -631,13 +703,19 @@ fn test_open_ext_excludes_nested() {
     let ext = NamespaceExt::new();
     let mut state = NamespaceState::new();
 
-    ext.process_open_ext(&env, "Foo", &OpenDirective::All, &[], &mut state)
-        .expect("open should succeed");
+    ext.process_open_ext(
+        &env,
+        &Name::from_string("Foo"),
+        &OpenDirective::All,
+        &[],
+        &mut state,
+    )
+    .expect("open should succeed");
 
-    assert!(state.resolve("bar").is_some());
+    assert!(state.resolve(&Name::from_string("bar")).is_some());
     assert!(
-        state.resolve("deep").is_none(),
+        state.resolve(&Name::from_string("deep")).is_none(),
         "nested names should not be imported"
     );
-    assert!(state.resolve("Inner.deep").is_none());
+    assert!(state.resolve(&Name::from_string("Inner.deep")).is_none());
 }

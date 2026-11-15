@@ -316,7 +316,7 @@ fn float_sub_is_float_div_with_exactly_one_token_changed() {
     let normalised = sub_text
         .replace("reduce_float_sub", "reduce_float_div")
         .replace("fsub", "fdiv")
-        .replace("356 214 ", "356 222 ");
+        .replace("168 214 ", "168 222 ");
     assert_eq!(
         normalised,
         fixture("float_div.trust-ir.txt"),

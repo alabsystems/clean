@@ -60,7 +60,7 @@ fn test_build_break_only() {
 #[test]
 fn test_build_full_stack() {
     let mut reassigns = HashSet::new();
-    reassigns.insert("x".to_string());
+    reassigns.insert(clean_parser::SurfaceName::generated_path("x"));
     let info = ControlInfo {
         breaks: true,
         continues: true,
@@ -119,8 +119,14 @@ fn test_sigma_type_single_var() {
     let env = Environment::with_prelude();
     let ctx = ElabCtx::new(&env);
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let sigma =
-        build_sigma_type(&ctx, &[("x".to_string(), nat_ty.clone())]).expect("single state type");
+    let sigma = build_sigma_type(
+        &ctx,
+        &[(
+            clean_parser::SurfaceName::generated_path("x"),
+            nat_ty.clone(),
+        )],
+    )
+    .expect("single state type");
     assert_eq!(format!("{sigma:?}"), format!("{nat_ty:?}"));
 }
 
@@ -132,7 +138,10 @@ fn test_sigma_type_multiple_vars() {
     let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
     let sigma = build_sigma_type(
         &ctx,
-        &[("x".to_string(), nat_ty), ("y".to_string(), bool_ty)],
+        &[
+            (clean_parser::SurfaceName::generated_path("x"), nat_ty),
+            (clean_parser::SurfaceName::generated_path("y"), bool_ty),
+        ],
     )
     .expect("multi-state type");
     // Should be Prod Nat Bool (an App expression)
@@ -151,7 +160,13 @@ fn proposition_state_component_uses_type_zero_cumulativity() {
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let sigma = build_sigma_type(
         &ctx,
-        &[("proof".to_string(), true_prop), ("n".to_string(), nat_ty)],
+        &[
+            (
+                clean_parser::SurfaceName::generated_path("proof"),
+                true_prop,
+            ),
+            (clean_parser::SurfaceName::generated_path("n"), nat_ty),
+        ],
     )
     .expect("Prop is cumulative into Type 0 for product state");
     let ExprKind::App(head, _) = sigma.kind() else {
@@ -173,7 +188,7 @@ fn proposition_state_component_uses_type_zero_cumulativity() {
 #[test]
 fn test_unwrap_sequence_ordering() {
     let mut reassigns = HashSet::new();
-    reassigns.insert("x".to_string());
+    reassigns.insert(clean_parser::SurfaceName::generated_path("x"));
     let info = ControlInfo {
         breaks: true,
         returns_early: true,
@@ -211,7 +226,11 @@ fn test_build_sigma_value_single() {
     let ctx = ElabCtx::new(&env);
     let val = Expr::const_(Name::from_string("myVal"), vec![]);
     let ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let vars = vec![("x".to_string(), val.clone(), ty)];
+    let vars = vec![(
+        clean_parser::SurfaceName::generated_path("x"),
+        val.clone(),
+        ty,
+    )];
     let result = build_sigma_value(&ctx, &vars).expect("single state value");
     // Single var: result should be the value directly
     match result.kind() {
@@ -228,7 +247,10 @@ fn test_build_sigma_value_multiple() {
     let v2 = Expr::const_(Name::from_string("val2"), vec![]);
     let t1 = Expr::const_(Name::from_string("Nat"), vec![]);
     let t2 = Expr::const_(Name::from_string("Bool"), vec![]);
-    let vars = vec![("x".to_string(), v1, t1), ("y".to_string(), v2, t2)];
+    let vars = vec![
+        (clean_parser::SurfaceName::generated_path("x"), v1, t1),
+        (clean_parser::SurfaceName::generated_path("y"), v2, t2),
+    ];
     let result = build_sigma_value(&ctx, &vars).expect("multi-state value");
     // Two vars: head should be Prod.mk (applied to type args and values)
     let head = result.get_app_fn();
@@ -251,12 +273,12 @@ fn test_destructure_sigma_single() {
     let ctx = ElabCtx::new(&env);
     let tuple = Expr::const_(Name::from_string("myTuple"), vec![]);
     let vars = [(
-        "x".to_string(),
+        clean_parser::SurfaceName::generated_path("x"),
         Expr::const_(Name::from_string("Nat"), vec![]),
     )];
     let result = destructure_sigma(&ctx, &vars, tuple).expect("single state projection");
     assert_eq!(result.len(), 1);
-    assert_eq!(result[0].0, "x");
+    assert_eq!(result[0].0, clean_parser::SurfaceName::generated_path("x"));
     match result[0].1.kind() {
         ExprKind::Const(n, _) => assert_eq!(n.to_string(), "myTuple"),
         _ => panic!("single var should be the tuple itself"),
@@ -270,18 +292,18 @@ fn test_destructure_sigma_multiple() {
     let tuple = Expr::const_(Name::from_string("myTuple"), vec![]);
     let vars = [
         (
-            "x".to_string(),
+            clean_parser::SurfaceName::generated_path("x"),
             Expr::const_(Name::from_string("Nat"), vec![]),
         ),
         (
-            "y".to_string(),
+            clean_parser::SurfaceName::generated_path("y"),
             Expr::const_(Name::from_string("Bool"), vec![]),
         ),
     ];
     let result = destructure_sigma(&ctx, &vars, tuple).expect("multi-state projections");
     assert_eq!(result.len(), 2);
-    assert_eq!(result[0].0, "x");
-    assert_eq!(result[1].0, "y");
+    assert_eq!(result[0].0, clean_parser::SurfaceName::generated_path("x"));
+    assert_eq!(result[1].0, clean_parser::SurfaceName::generated_path("y"));
     // First projection should use Prod.fst
     let head0 = result[0].1.get_app_fn();
     match head0.kind() {
@@ -301,22 +323,52 @@ fn heterogeneous_three_field_state_round_trips_with_exact_universes() {
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let type_0 = Expr::type_();
     let type_1 = Expr::sort(Level::succ(Level::succ(Level::zero())));
-    let x = ctx.push_local("x".to_string(), nat_ty.clone());
-    let y = ctx.push_local("y".to_string(), type_0.clone());
-    let z = ctx.push_local("z".to_string(), type_1.clone());
+    let x = ctx.push_local(
+        clean_parser::SurfaceName::generated_path("x"),
+        nat_ty.clone(),
+    );
+    let y = ctx.push_local(
+        clean_parser::SurfaceName::generated_path("y"),
+        type_0.clone(),
+    );
+    let z = ctx.push_local(
+        clean_parser::SurfaceName::generated_path("z"),
+        type_1.clone(),
+    );
     let state_types = vec![
-        ("x".to_string(), nat_ty.clone()),
-        ("y".to_string(), type_0.clone()),
-        ("z".to_string(), type_1.clone()),
+        (
+            clean_parser::SurfaceName::generated_path("x"),
+            nat_ty.clone(),
+        ),
+        (
+            clean_parser::SurfaceName::generated_path("y"),
+            type_0.clone(),
+        ),
+        (
+            clean_parser::SurfaceName::generated_path("z"),
+            type_1.clone(),
+        ),
     ];
 
     let sigma = build_sigma_type(&ctx, &state_types).expect("heterogeneous state type");
     let initial = build_sigma_value(
         &ctx,
         &[
-            ("x".to_string(), Expr::fvar(x), nat_ty.clone()),
-            ("y".to_string(), Expr::fvar(y), type_0.clone()),
-            ("z".to_string(), Expr::fvar(z), type_1.clone()),
+            (
+                clean_parser::SurfaceName::generated_path("x"),
+                Expr::fvar(x),
+                nat_ty.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("y"),
+                Expr::fvar(y),
+                type_0.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("z"),
+                Expr::fvar(z),
+                type_1.clone(),
+            ),
         ],
     )
     .expect("heterogeneous state value");
@@ -355,16 +407,20 @@ fn heterogeneous_three_field_state_round_trips_with_exact_universes() {
         &ctx,
         &[
             (
-                "x".to_string(),
+                clean_parser::SurfaceName::generated_path("x"),
                 Expr::const_(Name::from_string("Nat.zero"), vec![]),
                 nat_ty,
             ),
             (
-                "y".to_string(),
+                clean_parser::SurfaceName::generated_path("y"),
                 Expr::const_(Name::from_string("Nat"), vec![]),
                 type_0,
             ),
-            ("z".to_string(), Expr::type_(), type_1),
+            (
+                clean_parser::SurfaceName::generated_path("z"),
+                Expr::type_(),
+                type_1,
+            ),
         ],
     )
     .expect("repack reassigned heterogeneous state");
@@ -384,7 +440,18 @@ fn test_mk_option_t_fail() {
     let mi = dummy_monad_info();
     let alpha = Expr::const_(Name::from_string("Nat"), vec![]);
     let break_idx = stack.break_layer_idx.expect("break layer should exist");
-    let fail_expr = stack.mk_option_t_fail(break_idx, alpha, &mi);
-    let debug = format!("{fail_expr:?}");
-    assert!(debug.contains("App"), "fail should be an App expression");
+    let inst = Expr::const_(Name::from_string("scratchMonadInst"), vec![]);
+    let fail_expr = stack.mk_option_t_fail(break_idx, alpha.clone(), &mi, inst.clone());
+    // `@OptionT.fail m inst α` — Lean's `[Monad m]` slot carries the instance.
+    let args: Vec<Expr> = fail_expr.get_app_args().into_iter().cloned().collect();
+    assert_eq!(
+        args.len(),
+        3,
+        "OptionT.fail takes {{m}} [Monad m] {{α}}, got {fail_expr:?}"
+    );
+    assert_eq!(
+        args[1], inst,
+        "the [Monad m] argument is the supplied instance"
+    );
+    assert_eq!(args[2], alpha);
 }

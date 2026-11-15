@@ -54,16 +54,19 @@ fn test_tactic_recovery_names_the_failing_tactic() {
             "theorem p (a : Nat) : a = a := by\n  conv in a => rfl\n",
             "conv",
         ),
-        (
-            "theorem p (a b : Nat) : a + b = b + a := by\n  module\n",
-            "module",
-        ),
+        // `by module` used to sit here; `module` is an identifier now (only
+        // the file header reads it as a keyword), so it reaches the
+        // elaborator as an unknown tactic and is refused there BY NAME, as
+        // Lean 4.8.0 refuses it ("unknown tactic").
         // `simp [*]` used to sit here; it parses since the star element landed,
         // so the `simp` attribution row now uses a lemma list that is still
         // genuinely malformed (a `←` modifier with no lemma after it).
         ("theorem p (a : Nat) : a = a := by\n  simp [←]\n", "simp"),
+        // `rcases h with -` used to sit here; `-` parses since the clear
+        // pattern landed, so the row uses a tuple with a trailing comma, which
+        // Lean refuses too ("unexpected token '⟩'; expected rcasesPat").
         (
-            "theorem p (a b : Nat) (h : a = b) : a = b := by\n  rcases h with -\n",
+            "theorem p (a b : Nat) (h : a = b) : a = b := by\n  rcases h with ⟨a,⟩\n",
             "rcases",
         ),
         (
@@ -172,12 +175,13 @@ fn first_tactic(source: &str) -> SurfaceTactic {
 #[test]
 fn test_wildcard_case_alternative_parses() {
     let tac = first_tactic("theorem p (b : Bool) : b = b := by\n  cases b with\n  | _ => rfl\n");
-    let SurfaceTactic::Cases(_, _, alts) = tac else {
+    let SurfaceTactic::Cases(_, _, _, alts) = tac else {
         panic!("expected Cases, got {tac:?}");
     };
     assert_eq!(alts.len(), 1);
     assert_eq!(
-        alts[0].name, "_",
+        alts[0].name,
+        crate::SurfaceName::generated_path("_"),
         "the wildcard alternative name must be `_`"
     );
 }
@@ -187,12 +191,14 @@ fn test_wildcard_alternative_after_named_alternative_parses() {
     let tac = first_tactic(
         "theorem p (b : Bool) : b = b := by\n  cases b with\n  | true => rfl\n  | _ => rfl\n",
     );
-    let SurfaceTactic::Cases(_, _, alts) = tac else {
+    let SurfaceTactic::Cases(_, _, _, alts) = tac else {
         panic!("expected Cases, got {tac:?}");
     };
     assert_eq!(
-        alts.iter().map(|a| a.name.as_str()).collect::<Vec<_>>(),
-        vec!["true", "_"]
+        alts.iter().map(|a| a.name.clone()).collect::<Vec<_>>(),
+        ["true", "_"]
+            .map(crate::SurfaceName::generated_path)
+            .to_vec()
     );
 }
 
@@ -210,9 +216,15 @@ fn test_anonymous_binder_in_case_alternative_parses() {
     };
     let succ = alts
         .iter()
-        .find(|a| a.name == "succ")
+        .find(|a| (a.name).name() == crate::SurfaceName::generated_path("succ").name())
         .expect("succ alternative");
-    assert_eq!(succ.args, vec!["k".to_string(), "_".to_string()]);
+    assert_eq!(
+        succ.args,
+        vec![
+            crate::SurfaceName::generated_path("k"),
+            crate::SurfaceName::generated_path("_")
+        ]
+    );
 }
 
 /// Wildcard alternatives must not silently swallow the block: a wildcard
@@ -230,4 +242,50 @@ fn test_wildcard_alternative_records_no_recovery() {
             "wildcard/anonymous-binder alternative must parse cleanly:\n{source}"
         );
     }
+}
+
+#[test]
+fn explicit_constructor_case_alternative_preserves_marker_and_binders() {
+    let source = "theorem p (w : Word n) : True := by\n  cases w with\n  | nil => trivial\n  | @snoc n w b => trivial\n";
+    let parsed = parse_file_with_diagnostics(source).unwrap();
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
+    let SurfaceDecl::Theorem { proof, .. } = &parsed.decls[0] else {
+        panic!("theorem")
+    };
+    let SurfaceExpr::ByTactic(_, tactics) = proof.as_ref() else {
+        panic!("tactic proof")
+    };
+    let SurfaceTactic::Cases(_, _, _, alts) = &tactics[0] else {
+        panic!("cases")
+    };
+    assert!(!alts[0].explicit);
+    assert!(alts[1].explicit);
+    let expanded = crate::instantiate_tactic_template(tactics, &[], &[], true).unwrap();
+    let SurfaceTactic::Cases(_, _, _, expanded_alts) = &expanded[0] else {
+        panic!("expanded cases")
+    };
+    assert!(!expanded_alts[0].explicit);
+    assert!(expanded_alts[1].explicit);
+    assert_eq!(expanded_alts[1].args.len(), 3);
+    assert_eq!(alts[1].name.to_string(), "snoc");
+    assert_eq!(
+        alts[1]
+            .args
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>(),
+        ["n", "w", "b"]
+    );
+}
+
+#[test]
+fn explicit_wildcard_alternative_is_refused() {
+    assert!(!diagnostics("theorem p : True := by cases x with | @_ => trivial").is_empty());
+}
+
+#[test]
+fn complete_trust_cg_byte_core_source_has_no_parser_recovery() {
+    let source = include_str!("../../tests/fixtures/trust_cg_byte_core.lean");
+    let parsed = parse_file_with_diagnostics(source).expect("complete source parses");
+    assert!(parsed.diagnostics.is_empty(), "{:?}", parsed.diagnostics);
 }

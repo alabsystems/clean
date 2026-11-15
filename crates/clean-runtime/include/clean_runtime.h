@@ -36,7 +36,8 @@ extern "C" {
  *   │   32 bits   │ 8b   │ 8b   │   8 bits │   8 bits  │
  *   └─────────────┴──────┴──────┴──────────┴───────────┘
  *
- * - ref_count: Atomic reference count (0 = unique, use for mutation)
+ * - ref_count: Atomic refs-1 (0 = unique, use for mutation); a count at or
+ *   above CLEAN_RC_STICKY_DROP is frozen and never freed (see clean_inc_n)
  * - tag: Constructor tag (0-255)
  * - kind: Object kind (ctor, closure, array, string, etc.)
  * - num_objs: Number of object (pointer) fields (0-255)
@@ -172,8 +173,8 @@ static inline double clean_unbox_float(clean_obj* o) {
  *   - heap, scalar_sz == 8   -> single `uint64_t` limb              (a UInt64-
  *     carried Nat boxed by `clean_box_uint64`, i.e. `[2^32, 2^64)`)
  *
- * FAIL-CLOSED: a value that does not fit `u128` (`>= 2^128`) aborts via
- * `clean_panic` rather than truncating — never a wrong value. Every
+ * FAIL-CLOSED: a value that does not fit `u128` (`>= 2^128`) stops the
+ * program via `clean_panic` rather than truncating — never a wrong value. Every
  * `UInt64`/`USize`-derived Nat is `<= 2^64`, well inside `u128`.
  */
 #define CLEAN_NAT_HEAP_SCALAR_SZ 16
@@ -230,6 +231,19 @@ clean_obj* clean_int_dec_eq(clean_obj* a, clean_obj* b);
  * `l_Nat_shiftRight` prelude shim (instHShiftRightNat). */
 clean_obj* clean_nat_shift_right(clean_obj* a, clean_obj* b);
 
+/* `Nat.land` / `Nat.lor` / `Nat.xor` (Lean 4 `&&&` / `|||` / `^^^` on Nat).
+ * Heap-aware + arg-consuming like the ops above: both operands are read
+ * through `clean_nat_to_u128` and the result is built by `clean_nat_of_u128`
+ * (tagged below 2^63, heap above). Every runtime Nat is < 2^128, so the result
+ * of a bitwise op on two of them is too: nothing truncates. Back the
+ * `l_Nat_land` / `l_Nat_lor` / `l_Nat_xor` prelude shims, which keep the
+ * prelude's proof-oriented `Nat.bitwise` body (unary fuel `m + n`, one
+ * recursion level per unit — a stack overflow at any heap input) from ever
+ * being compiled for execution (WS6.3, F-105). */
+clean_obj* clean_nat_land(clean_obj* a, clean_obj* b);
+clean_obj* clean_nat_lor(clean_obj* a, clean_obj* b);
+clean_obj* clean_nat_xor(clean_obj* a, clean_obj* b);
+
 /* ============================================================================
  * Quotient eliminators (Quot.lift / Quot.ind)
  * ============================================================================
@@ -247,24 +261,47 @@ clean_obj* clean_quot_ind(clean_obj* f, clean_obj* q);
  * ============================================================================
  */
 
-/* Increment reference count */
+/* Sticky reference counts (Lean v4.35.0 lean.h:640-700, lean4#14838/#15241).
+ * ref_count stores refs-1. A count at or above CLEAN_RC_STICKY_DROP is frozen:
+ * no drop adjusts or frees it. At or above CLEAN_RC_STICKY no increment
+ * adjusts it either. The object then leaks instead of being freed early.
+ * Band widths match Lean's: 0x10000000 between the thresholds and 0x10000000
+ * above CLEAN_RC_STICKY before the u32 wraps, which bounds stale relaxed
+ * adjustments in flight on other threads. CLEAN_RC_INC_MAX caps one inline
+ * increment. */
+#define CLEAN_RC_STICKY_DROP 0xE0000000u
+#define CLEAN_RC_STICKY      0xF0000000u
+#define CLEAN_RC_INC_MAX     ((size_t)0x10000)
+
+/* Cold path of clean_inc_n for n > CLEAN_RC_INC_MAX (clean_runtime.c). */
+void clean_inc_ref_huge_n(clean_obj* o, size_t n);
+
+/* Increment reference count; a no-op on a scalar or a frozen count. */
 static inline void clean_inc(clean_obj* o) {
-    if (!clean_is_scalar(o)) {
+    if (!clean_is_scalar(o) &&
+        atomic_load_explicit(&o->header.ref_count, memory_order_relaxed) < CLEAN_RC_STICKY) {
         atomic_fetch_add_explicit(&o->header.ref_count, 1, memory_order_relaxed);
     }
 }
 
-/* Increment by n */
-static inline void clean_inc_n(clean_obj* o, uint32_t n) {
-    if (!clean_is_scalar(o)) {
-        atomic_fetch_add_explicit(&o->header.ref_count, n, memory_order_relaxed);
+/* Increment by n. Inline from below CLEAN_RC_STICKY a step of at most
+ * CLEAN_RC_INC_MAX reaches at most 0xF000FFFF, so it never wraps. */
+static inline void clean_inc_n(clean_obj* o, size_t n) {
+    if (clean_is_scalar(o)) return;
+    if (n > CLEAN_RC_INC_MAX) {
+        clean_inc_ref_huge_n(o, n);
+        return;
+    }
+    if (atomic_load_explicit(&o->header.ref_count, memory_order_relaxed) < CLEAN_RC_STICKY) {
+        atomic_fetch_add_explicit(&o->header.ref_count, (uint32_t)n, memory_order_relaxed);
     }
 }
 
-/* Decrement reference count, free if zero */
+/* Decrement reference count, free if zero; a no-op on a frozen count */
 void clean_dec(clean_obj* o);
 
 /* Check if object is exclusively owned (ref_count == 0 means 1 reference).
+ * A frozen count is never 0, so a frozen object is never exclusive.
  * Relaxed suffices: is_unique is a hint for reuse optimization.
  * False positive (shared when exclusive) -> unnecessary alloc (safe).
  * False negative cannot happen: the caller holds a reference.
@@ -282,7 +319,9 @@ static inline bool clean_is_exclusive(clean_obj* o) {
 /* Allocate constructor with given tag, field layout, and object fields.
  * scalar_sz is the total byte count for inline scalar storage (after object ptrs).
  * Scalar values are written separately via SSet; only object fields are varargs.
- * Note: tag/num_objs/scalar_sz use unsigned int to avoid varargs promotion issues. */
+ * Note: tag/num_objs/scalar_sz use unsigned int to avoid varargs promotion issues.
+ * Each must fit its 8-bit header byte: a larger one is a clean_panic, never a
+ * truncated (short) allocation. The IR checker refuses such shapes first (C1). */
 clean_obj* clean_alloc_ctor(unsigned int tag, unsigned int num_objs, unsigned int scalar_sz, ...);
 
 /* Allocate constructor without initializing fields */
@@ -360,10 +399,23 @@ static inline void clean_ctor_set(clean_obj* o, size_t idx, clean_obj* v) {
     o->fields[idx] = v;
 }
 
-/* Get object tag */
-static inline uint8_t clean_obj_tag(clean_obj* o) {
+/* Get object tag, 32 bits wide in every lane (the trust-cg lane imports it
+ * as `ptr -> u32`; the Rust runtime's obj_tag returns u32).
+ * A boxed (nullary) constructor carries its tag in the pointer bits, so the
+ * read returns the whole unboxed value: an enum of 256 or more constructors
+ * keeps tag 299 as 299 (an 8-bit read gave 43 and took the wrong branch).
+ * Matches Lean 4: lean_obj_tag returns unsigned (lean.h). A boxed value above
+ * UINT32_MAX is no constructor tag (the IR checker bounds tags by 65535, and a
+ * `Nat` match dispatches on Nat.decEq, never on a tag read), so where Lean
+ * would truncate it the read saturates to UINT32_MAX, which no `case` label
+ * equals: a dispatch takes the branch the whole value would, never the one
+ * its low 32 bits name. A heap constructor's tag is its header byte; the IR
+ * checker bounds heap tags by 243 (C1). */
+_Static_assert(sizeof(unsigned) == sizeof(uint32_t), "clean_obj_tag returns a 32-bit tag");
+static inline unsigned clean_obj_tag(clean_obj* o) {
     if (clean_is_scalar(o)) {
-        return (uint8_t)clean_unbox(o);
+        size_t v = clean_unbox(o);
+        return v > UINT32_MAX ? (unsigned)UINT32_MAX : (unsigned)v;
     }
     return o->header.tag;
 }
@@ -507,7 +559,8 @@ static inline clean_obj* clean_reset(clean_obj* o) {
 /* Reuse reset object or allocate new.
  * num_objs is the number of object pointer fields that follow in varargs.
  * scalar_sz is the total byte count for inline scalar storage.
- * Note: tag/num_objs/scalar_sz use unsigned int to avoid varargs promotion issues. */
+ * Note: tag/num_objs/scalar_sz use unsigned int to avoid varargs promotion issues.
+ * Each must fit its 8-bit header byte, as for clean_alloc_ctor (clean_panic). */
 clean_obj* clean_reuse(clean_obj* reset_slot, unsigned int tag, unsigned int num_objs, unsigned int scalar_sz, ...);
 
 /* ============================================================================
@@ -515,7 +568,13 @@ clean_obj* clean_reuse(clean_obj* reset_slot, unsigned int tag, unsigned int num
  * ============================================================================
  */
 
-/* Create string from C string literal */
+/* Copy len UTF-8 bytes, including embedded NULs, into a fresh owned string.
+ * The source is borrowed and need not be terminated; NULL is allowed at len 0.
+ * A trailing NUL is added for C interoperability, outside the stored length.
+ * Size overflow stops with clean_panic before reading the source. */
+clean_obj* clean_mk_string_from_bytes(const char* s, size_t len);
+
+/* Copy a NUL-terminated C string (for OS argv and legacy C callers). */
 clean_obj* clean_mk_string(const char* s);
 
 /* Get string data (UTF-8) */
@@ -529,7 +588,8 @@ size_t clean_string_len(clean_obj* s);
  * ============================================================================
  */
 
-/* Abort with error message */
+/* Stop the program: `clean panic: <msg>` on stderr, then exit status 1 (Lean's
+ * `lean_internal_panic`; never a crash signal). */
 _Noreturn void clean_panic(const char* msg);
 
 /* ============================================================================

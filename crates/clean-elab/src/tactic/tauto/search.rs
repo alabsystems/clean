@@ -48,7 +48,7 @@ pub(super) fn tauto_prove(
             return Ok(true);
         }
 
-        if let Some(hyp_name) = find_or_hypothesis(state, &goal) {
+        if let Some(hyp_fvar) = find_or_hypothesis(state, &goal) {
             // SOUNDNESS/COMPLETENESS: back out the METAVARIABLE state as well
             // as the goal list. `cases`/`left_`/`right_` close the goal meta
             // via `close_goal`, and `MetaState::assign` refuses re-assignment,
@@ -65,7 +65,7 @@ pub(super) fn tauto_prove(
             // shifted cursor fails "assignment violates its creation scope".
             let next_fvar_backup = state.next_fvar;
             state.metas_mut().push_scope();
-            if cases(state, &hyp_name).is_ok() {
+            if cases_fvar(state, hyp_fvar).is_ok() {
                 let remaining_goals = state.goals.split_off(1);
                 let first_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
                 if tauto_prove(state, &first_goal, depth + 1, max_depth, splits_remaining)? {

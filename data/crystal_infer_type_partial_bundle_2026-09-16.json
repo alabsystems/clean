@@ -1,0 +1,35 @@
+{
+  "schema": "clean.crystal_infer_type_partial_bundle/v1",
+  "what_this_is": "The FIRST derived trust-ir module containing `<impl tc::TypeChecker<'env>>::infer_type`. The whole-bundle lowering is all-or-nothing and errors on the first refusal, so 601 unlowerable members were costing the other 2,388 the artifact entirely. The sidecar now retries over the solo-lowering members and records what it dropped.",
+  "measured_utc": "2026-09-16T17:40:21Z",
+  "trust_rev": "9e405047429dc59a55a9dbc3638acc0e5f537ee6",
+  "clean_rev_dumped": "2fcab7f2639338aa6af55aa6ba4958a38dec2e29",
+  "manifest_sha256": "a7abf0332400e41bf269683377e671436370f6d7ec7db48af3f9d7a79a0b4fd5",
+  "module_text_sha256": "a6c3789355b39022f1ae3c9fc3985c8c58691cc263c2ec5ead7f8e270633b482",
+  "module_bin_sha256": "9b02ce7cdfd4a00087e7d19574ad7a72ae1c973286734c9c0abc465e72a846ad",
+  "members_walked": 2989,
+  "members_lowered": 2388,
+  "members_dropped": 601,
+  "module": {
+    "functions": 2388,
+    "text_bytes": 20959588,
+    "binary_bytes": 13266690,
+    "instructions": 141674,
+    "obligations": 5612,
+    "fresh_symbolic_havoc_markers": 9102,
+    "absent_callee_or_undef": 1828
+  },
+  "entry_body": {
+    "name": "clean_kernel::tc::infer::<impl clean_kernel::tc::TypeChecker<'_>>::infer_type",
+    "present": true,
+    "basic_blocks": 6,
+    "mir_blocks": 6,
+    "opens": "alloca struct.2; call @func.19; switch; extractfield; insertfield; ret",
+    "own_havoc_markers": 4,
+    "carries_panic_freedom_obligation": true
+  },
+  "closed": false,
+  "why_not_closed": "601 bodies are absent and the escaping list is non-empty. `closed` demands an empty escaping list and every root resolved; the manifest contract requires a consumer to read it before trusting the artifact.",
+  "soundness_note": "Excluding a member is strictly MORE conservative than including it: the bundle does not carry that body, which is the state every non-member is already in. No refusal is lifted -- a refused body stays refused. The 9,102 fresh_symbolic_havoc markers are the bridge's sound over-approximation, not a claim.",
+  "reading": "Step 2 of the tracked goal now has its artifact. This is a derived module of the right SHAPE containing the target body -- not a faithful model of the whole closure, and not a proof about infer_type. The 601 dropped bodies are the six refusal families sized in data/crystal_infer_type_lowering_census_2026-09-16.json."
+}

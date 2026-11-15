@@ -201,6 +201,7 @@ fn test_whnf_proj_of_constructor() {
     let mut env = base_env();
     env = env
         .with_const_typed(n("Prod"), 2, v(&base_env(), &r_sort(1)))
+        .with_structure(n("Prod"), n("Prod.mk"), 2, 2)
         .with_constructor(n("Prod.mk"), 2, v(&base_env(), &r_sort(1)), 2, 2);
     // Prod.mk Nat Nat 7 9
     let val = r_apps(

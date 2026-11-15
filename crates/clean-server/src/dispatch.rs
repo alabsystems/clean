@@ -175,6 +175,11 @@ pub(crate) async fn dispatch_request(
                 Err(e) => Response::error(id, e),
             }
         }
+        // A connection's first message (`trust_boundary::admit`), answered
+        // the same way when an admitted connection sends it again.
+        "authenticate" => {
+            crate::trust_boundary::answer_authenticate(state.launch_token(), id, params.as_ref())
+        }
         "serverInfo" => handle_server_info(state, id).await,
         "saveEnvironment" => match parse_params::<crate::handlers::SaveEnvironmentParams>(params) {
             Ok(p) => handle_save_environment(state, id, p).await,

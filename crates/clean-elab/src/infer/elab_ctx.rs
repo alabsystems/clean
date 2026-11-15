@@ -23,33 +23,49 @@ use clean_kernel::ExprFolder;
 /// entries (including let values and local instances) have been destroyed.
 /// Keep an exact, cheap-to-clone snapshot of the scope-coupled state instead.
 #[derive(Clone)]
-struct LocalScopeSnapshot {
-    locals: Vec<(String, FVarId, Expr)>,
+pub(super) struct LocalScopeSnapshot {
+    locals: Vec<(SurfaceName, FVarId, Expr)>,
+    local_name_aliases: Vec<(SurfaceName, FVarId)>,
+    auto_implicits: Vec<(SurfaceName, FVarId, Expr)>,
+    auto_implicit_lookup: HashMap<SurfaceName, FVarId>,
+    single_theorem_capture: Option<elab_single_theorem::SingleTheoremCapture>,
     local_let_values: HashMap<FVarId, Expr>,
-    shared_if_let_scrutinees: Vec<String>,
+    local_binder_infos: HashMap<FVarId, BinderData>,
+    shared_if_let_scrutinees: Vec<SurfaceName>,
     local_instances: Vec<(FVarId, Expr)>,
     instance_cache: HashMap<String, Expr>,
+    postponed_instances: Vec<(Expr, Expr)>,
+    do_pure_obligations: Vec<Expr>,
     current_expected_type: Option<Expr>,
     recursive_def_ctx: Option<RecursiveDefContext>,
     match_dependent_motive: Option<Expr>,
     match_dependent_motive_indices: usize,
     match_index_discriminating_punit: Option<Level>,
-    universe_params: Vec<String>,
+    universe_params: Vec<SurfaceName>,
     /// Moves WITH `universe_params`: auto-binding grows the rigid set during
     /// elaboration, so a failed term that minted `u` must not leave it rigid.
     rigid_level_params: std::collections::HashSet<Name>,
     pending_level_assigns: Vec<(Name, Level)>,
-    hole_names: HashMap<MetaId, String>,
+    hole_names: HashMap<MetaId, SurfaceName>,
+    term_context_count: usize,
+    term_local_display_names: HashMap<FVarId, SurfaceName>,
 }
 
 impl<'a> ElabCtx<'a> {
-    fn local_scope_snapshot(&self) -> LocalScopeSnapshot {
+    pub(super) fn local_scope_snapshot(&self) -> LocalScopeSnapshot {
         LocalScopeSnapshot {
             locals: self.locals.clone(),
+            local_name_aliases: self.local_name_aliases.clone(),
+            auto_implicits: self.auto_implicits.clone(),
+            auto_implicit_lookup: self.auto_implicit_lookup.clone(),
+            single_theorem_capture: self.single_theorem_capture.clone(),
             local_let_values: self.locals.let_values().clone(),
+            local_binder_infos: self.locals.binder_infos().clone(),
             shared_if_let_scrutinees: self.shared_if_let_scrutinees.clone(),
             local_instances: self.local_instances.clone(),
             instance_cache: self.instance_cache.clone(),
+            postponed_instances: self.postponed_open_carrier_instances.clone(),
+            do_pure_obligations: self.do_pure_obligations.clone(),
             current_expected_type: self.current_expected_type.clone(),
             recursive_def_ctx: self.recursive_def_ctx.clone(),
             match_dependent_motive: self.match_dependent_motive.clone(),
@@ -59,13 +75,25 @@ impl<'a> ElabCtx<'a> {
             rigid_level_params: self.metas.rigid_level_params_snapshot(),
             pending_level_assigns: self.pending_level_assigns.borrow().clone(),
             hole_names: self.hole_names.clone(),
+            term_context_count: self.term_contexts.len(),
+            term_local_display_names: self.term_local_display_names.clone(),
         }
     }
 
-    fn restore_local_scope(&mut self, snapshot: LocalScopeSnapshot, restore_failed_state: bool) {
-        self.locals
-            .restore(snapshot.locals, snapshot.local_let_values);
+    pub(super) fn restore_local_scope(
+        &mut self,
+        snapshot: LocalScopeSnapshot,
+        restore_failed_state: bool,
+    ) {
+        self.locals.restore(
+            snapshot.locals,
+            snapshot.local_let_values,
+            snapshot.local_binder_infos,
+        );
+        self.local_name_aliases = snapshot.local_name_aliases;
+        self.single_theorem_capture = snapshot.single_theorem_capture;
         self.shared_if_let_scrutinees = snapshot.shared_if_let_scrutinees;
+        self.term_local_display_names = snapshot.term_local_display_names;
         self.local_instances = snapshot.local_instances;
         self.instance_cache = snapshot.instance_cache;
         self.current_expected_type = snapshot.current_expected_type;
@@ -74,6 +102,13 @@ impl<'a> ElabCtx<'a> {
         self.match_dependent_motive_indices = snapshot.match_dependent_motive_indices;
         self.match_index_discriminating_punit = snapshot.match_index_discriminating_punit;
         if restore_failed_state {
+            self.postponed_open_carrier_instances = snapshot.postponed_instances;
+            self.do_pure_obligations = snapshot.do_pure_obligations;
+            // Successful temporary work may contribute declaration-level
+            // auto-implicits; only failed speculation discards them.
+            self.auto_implicits = snapshot.auto_implicits;
+            self.auto_implicit_lookup = snapshot.auto_implicit_lookup;
+            self.term_contexts.truncate(snapshot.term_context_count);
             // A failed term may have minted declaration-level universe params or
             // left level-equality callback assignments buffered.  The monotone
             // fresh-universe counter intentionally is not rewound, but the
@@ -125,6 +160,51 @@ impl<'a> ElabCtx<'a> {
     /// Run fallible work transactionally with respect to local-scope state.
     /// Successful work keeps its pushed/popped locals; an error restores the
     /// exact entry context and rolls back metavariable assignments/creation.
+    /// A Lean-order alternative to Clean's eager elaboration order (a numeral
+    /// `let` whose value waits for its body, a β-redex whose head goes
+    /// first), run as a transaction. Such an alternative is only closer to
+    /// Lean while nothing in it would have made Lean settle a pending
+    /// metavariable early, which Clean does not model there. Two such events
+    /// are observed, and either one makes the attempt fail (rolled back) so
+    /// the caller keeps its eager order, the pre-R157 behaviour:
+    ///
+    /// * a `let rec` header was elaborated while a postponed numeral `let`'s
+    ///   type was still open (`let_rec_settled_open_numerals`): Lean defaults
+    ///   every pending numeral there, so `let k := 5; let rec go … ; go 2 +
+    ///   Tag.tag (k : Int)` has `k : Nat` in Lean 4.8.0 (110), and the
+    ///   postponed order read `k : Int` (210). A type the body pinned before
+    ///   the header (`let k := 5; Tag.tag (k : Int) + (let rec …)`, 210) is
+    ///   no event;
+    /// * a user `@[default_instance]` answered an open goal
+    ///   (`user_default_instance_answers`): Lean applies it only when nothing
+    ///   else progresses, so `(fun k => Tag.tag k) (5 : Nat)` with a default
+    ///   `Tag Int` is `Tag Nat` in Lean 4.8.0 (5), and the head-first order
+    ///   took the default before the argument was seen (105).
+    ///
+    /// A `let rec` alone is no event: Clean's own numerals and operators
+    /// settle their carriers no later than Lean's header would, so Lean's
+    /// order stands in `(fun k => let rec go … ; go 2 + Tag.tag (k : Int)) 5`
+    /// (210 in Lean 4.8.0; the let-chain read 110).
+    pub(super) fn lean_order_attempt<T>(
+        &mut self,
+        f: impl FnOnce(&mut Self) -> Result<T, ElabError>,
+    ) -> Result<T, ElabError> {
+        self.with_local_scope_rollback(|this| {
+            let defaults_before = this.user_default_instance_answers;
+            let settled_before = this.let_rec_settled_open_numerals;
+            this.defer_user_defaults += 1;
+            let result = f(this);
+            this.defer_user_defaults -= 1;
+            let value = result?;
+            if this.user_default_instance_answers != defaults_before
+                || this.let_rec_settled_open_numerals != settled_before
+            {
+                return Err(ElabError::CannotInfer);
+            }
+            Ok(value)
+        })
+    }
+
     pub(super) fn with_local_scope_rollback<T>(
         &mut self,
         f: impl FnOnce(&mut Self) -> Result<T, ElabError>,
@@ -235,6 +315,18 @@ impl<'a> ElabCtx<'a> {
         Expr::fvar(MetaState::to_fvar(id))
     }
 
+    /// Create a fresh NATURAL metavariable — Lean's `MetavarKind.natural`,
+    /// the kind whose local context the unifier's `ctxApprox` port may narrow
+    /// (see `unify::meta_id::MetaKind`). Use it only where Lean mints a
+    /// natural metavariable: an implicit (non-instance) argument, an anonymous
+    /// `_` hole, an unannotated binder type.
+    pub(crate) fn fresh_natural_meta(&mut self, ty: Expr) -> Expr {
+        let id = self
+            .metas
+            .fresh_natural_with_locals_at(ty, self.locals.clone(), None);
+        Expr::fvar(MetaState::to_fvar(id))
+    }
+
     /// Create a fresh metavariable tagged with the source span of the surface
     /// hole that produced it.
     ///
@@ -258,7 +350,11 @@ impl<'a> ElabCtx<'a> {
     /// that hole with `name` (enabling `case name => …`). A named hole is
     /// otherwise elaborated identically to an anonymous one — the recorded name
     /// never affects unification, def-eq, or the produced term.
-    pub(crate) fn elab_hole(&mut self, span: clean_parser::Span, name: Option<&str>) -> Expr {
+    pub(crate) fn elab_hole(
+        &mut self,
+        span: clean_parser::Span,
+        name: Option<&SurfaceName>,
+    ) -> Expr {
         // The hole's TYPE metavariable is `?t : Sort ?u` with a FRESH LEVEL
         // METAVARIABLE — Lean's `mkFreshTypeMVar` (`mkFreshLevelMVar` then
         // `mkFreshExprMVar (mkSort u)`), NOT a hardcoded `Type`.
@@ -289,12 +385,25 @@ impl<'a> ElabCtx<'a> {
         // (`add_level_constraint`, probes p06/p30/p31) is untouched: those
         // declarations contain no hole.
         let hole_sort = Expr::sort(self.fresh_universe_param());
-        let ty_meta = self.fresh_meta(hole_sort);
-        let meta_id = self
-            .metas
-            .fresh_with_locals_at(ty_meta, self.locals.clone(), Some(span));
+        // An anonymous `_` is Lean's NATURAL metavariable (`elabHole`,
+        // `mkFreshExprMVar … .natural`), so its context may be narrowed by the
+        // unifier's `ctxApprox` port; a named `?x` is synthetic-opaque in Lean
+        // and stays opaque here. (`?_` reaches this function as an anonymous
+        // hole — the parser does not distinguish it from `_` — which is the
+        // one place this is wider than Lean; the `refine` bridge scopes the
+        // goal it makes from such a hole to the enclosing goal, not to the
+        // metavariable's recorded locals, so a narrowed `?_` keeps its goal.)
+        let meta_id = if name.is_none() {
+            let ty_meta = self.fresh_natural_meta(hole_sort);
+            self.metas
+                .fresh_natural_with_locals_at(ty_meta, self.locals.clone(), Some(span))
+        } else {
+            let ty_meta = self.fresh_meta(hole_sort);
+            self.metas
+                .fresh_with_locals_at(ty_meta, self.locals.clone(), Some(span))
+        };
         if let Some(name) = name {
-            self.hole_names.insert(meta_id, name.to_string());
+            self.hole_names.insert(meta_id, name.clone());
         }
         Expr::fvar(MetaState::to_fvar(meta_id))
     }
@@ -312,7 +421,7 @@ impl<'a> ElabCtx<'a> {
     /// deterministic output. This is read-only and has no effect on the kernel.
     ///
     /// [`MetaVar::span`]: crate::unify::MetaVar::span
-    pub fn collect_hole_contexts(&self) -> Vec<HoleContext> {
+    pub(crate) fn collect_hole_contexts(&self) -> Vec<HoleContext> {
         let mut holes: Vec<(u64, HoleContext)> = self
             .metas
             .iter()
@@ -322,7 +431,7 @@ impl<'a> ElabCtx<'a> {
                 let local_bindings = meta
                     .locals
                     .iter()
-                    .map(|(name, _fvar, ty)| (name.clone(), self.metas.instantiate(ty)))
+                    .map(|(name, fvar, ty)| (*fvar, name.to_string(), self.metas.instantiate(ty)))
                     .collect();
                 Some((
                     id.as_u64(),
@@ -380,10 +489,10 @@ impl<'a> ElabCtx<'a> {
     /// silent monomorphization to `Sort 1` (GAP_SWEEP universes/p16,p34). Fresh
     /// universe metavars minted later by `fresh_universe_param` are deliberately
     /// left OUT of the rigid set so they stay solvable.
-    pub(crate) fn set_decl_universe_params(&mut self, params: &[String]) {
+    pub(crate) fn set_decl_universe_params(&mut self, params: &[SurfaceName]) {
         self.universe_params = params.to_vec();
         self.metas
-            .set_rigid_level_params(params.iter().map(|s| Name::from_string(s)));
+            .set_rigid_level_params(params.iter().map(|s| s.name().clone()));
         // U2 rung-4 explicitness channel (2026-08-25). `params` is the MERGED
         // vector `preprocess_decl_with_context` built — file-scope `universe`
         // names first, then whatever the declaration wrote after its name.
@@ -400,7 +509,7 @@ impl<'a> ElabCtx<'a> {
         // (`universe u` + `def f.{u}`): the two vectors are then equal, the
         // subtraction is empty, and Clean keeps today's behaviour rather than
         // guessing.
-        let explicit: Vec<String> = params
+        let explicit: Vec<SurfaceName> = params
             .iter()
             .filter(|p| !self.file_universe_params.contains(*p))
             .cloned()
@@ -431,7 +540,7 @@ impl<'a> ElabCtx<'a> {
     /// the context-free register entry), so only calling THIS setter arms the
     /// explicitness classifier in
     /// [`ElabCtx::set_decl_universe_params`].
-    pub(crate) fn set_file_universe_params(&mut self, params: Vec<String>) {
+    pub(crate) fn set_file_universe_params(&mut self, params: Vec<SurfaceName>) {
         self.file_universe_params = params;
         self.file_universe_scope_known = true;
     }
@@ -445,10 +554,10 @@ impl<'a> ElabCtx<'a> {
     /// them — so membership alone cannot answer "is this already a parameter".
     /// Subtracting the rigid set recovers the minted population, which makes
     /// the classification total with no extra state to keep in sync.
-    pub(crate) fn level_param_role(&self, name: &str) -> LevelParamRole {
-        if self.metas.is_rigid_level_param(&Name::from_string(name)) {
+    pub(crate) fn level_param_role(&self, name: &Name) -> LevelParamRole {
+        if self.metas.is_rigid_level_param(name) {
             LevelParamRole::Rigid
-        } else if self.universe_params.iter().any(|p| p == name) {
+        } else if self.universe_params.iter().any(|p| p.name() == name) {
             LevelParamRole::Minted
         } else {
             LevelParamRole::Foreign
@@ -477,14 +586,14 @@ impl<'a> ElabCtx<'a> {
     /// backstop it always was.
     pub(crate) fn fresh_universe_param(&mut self) -> Level {
         let name = loop {
-            let candidate = self.level_mint.next_name();
+            let candidate = SurfaceName::from_name(Name::anon().str(self.level_mint.next_name()));
             if !self.universe_params.contains(&candidate) {
                 break candidate;
             }
         };
         self.universe_params.push(name.clone());
-        crate::u2_histogram::u2_mint_trace("elabctx", &name);
-        Level::param(Name::from_string(&name))
+        crate::u2_histogram::u2_mint_trace("elabctx", &name.to_string());
+        Level::param(name.name().clone())
     }
 
     /// Mint a fresh USER-FACING universe parameter name for a level that is
@@ -506,18 +615,48 @@ impl<'a> ElabCtx<'a> {
     /// candidate the declaration already holds must be passed over.
     pub(super) fn fresh_generalized_universe_param(&mut self) -> Name {
         let name = loop {
-            let candidate = self.level_mint.next_generalized_name();
+            let candidate =
+                SurfaceName::from_name(Name::anon().str(self.level_mint.next_generalized_name()));
             if !self.universe_params.contains(&candidate) {
                 break candidate;
             }
         };
         self.universe_params.push(name.clone());
-        crate::u2_histogram::u2_mint_trace("generalize", &name);
-        Name::from_string(&name)
+        crate::u2_histogram::u2_mint_trace("generalize", &name.to_string());
+        name.name().clone()
+    }
+
+    /// The universe of a `Sort*` / `Type*` binder: a fresh RIGID universe
+    /// PARAMETER of the declaration, never a level metavariable. Mathlib's
+    /// `Mathlib/Tactic/TypeStar.lean` is `elab "Sort*" : term => return .sort
+    /// <| ← mkFreshLevelParam` — a new name added to the scope's level names,
+    /// which unification can never assign. (A level HOLE, `Sort _`, is the
+    /// metavariable spelling and keeps going through
+    /// [`Self::fresh_universe_param`].)
+    ///
+    /// Minted assignable, the level was solved by whatever unified first.
+    /// Measured on `Mathlib/Logic/Function/Basic.lean`: `Function.extend`
+    /// over `variable {α β γ : Sort*}` asks for `Decidable (∃ a, f a = b)`,
+    /// the Prop-only `exists_prop_decidable` (`Exists.{0}`) assigned α's level
+    /// `:= 0`, and `extend` was ACCEPTED at `α : Prop` — so every later use at
+    /// a `Type` carrier (`extend_id`, `Injective.surjective_comp_right'`) died
+    /// `universe level conflict: 0 vs 1`. Lean registers it at `Sort u_1`.
+    ///
+    /// The name is spelled in the WRITABLE space (`u_N`, the same counter and
+    /// skip rule as [`Self::fresh_generalized_universe_param`]) because it is
+    /// exported as written: `finalize_level_params` keeps a rigid name as a
+    /// declared parameter, and only generalizes (renames) metavariables. It is
+    /// minted per elaboration, so a section `variable {α : Sort*}` gives every
+    /// declaration that uses α its own parameter, and a declaration that does
+    /// not use α never sees it (the final `used` filter).
+    pub(super) fn fresh_star_universe_param(&mut self) -> Level {
+        let name = self.fresh_generalized_universe_param();
+        self.metas.add_rigid_level_param(name.clone());
+        Level::param(name)
     }
 
     /// Push a local binding
-    pub(crate) fn push_local(&mut self, name: String, ty: Expr) -> FVarId {
+    pub(crate) fn push_local(&mut self, name: SurfaceName, ty: Expr) -> FVarId {
         let fvar = self.fresh_fvar();
         self.locals.push((name, fvar, ty));
         fvar
@@ -529,20 +668,19 @@ impl<'a> ElabCtx<'a> {
     /// it reuses the caller-supplied one. Used by the ProofState → ElabCtx
     /// bridge to expose tactic-introduced hypotheses during term
     /// elaboration (#2212).
-    pub(crate) fn push_local_with_fvar(&mut self, name: String, fvar: FVarId, ty: Expr) {
+    pub(crate) fn push_local_with_fvar(&mut self, name: SurfaceName, fvar: FVarId, ty: Expr) {
         self.locals.push((name, fvar, ty));
         // Ensure fresh_fvar() won't collide with the pushed FVar.
         self.next_fvar = self.next_fvar.max(fvar.as_u64() + 1);
     }
 
-    /// Push a let-bound local definition (`let x : T := value`) with an existing
-    /// FVarId. Like [`Self::push_local_with_fvar`], but additionally records the
-    /// binding's `value` so it is body-visible (zeta-reducible) during term
-    /// elaboration. Used by the ProofState → ElabCtx bridge to expose `let`
-    /// tactic locals with their definitional value retained.
+    /// Push a value-bearing local with an existing FVarId. The tactic bridge
+    /// retains both genuine let values and marked have proofs. Only the
+    /// shared reduction view exposes genuine lets as defining equations;
+    /// raw stored values remain available for scope and proof assembly.
     pub(crate) fn push_local_let_with_fvar(
         &mut self,
-        name: String,
+        name: SurfaceName,
         fvar: FVarId,
         ty: Expr,
         value: Expr,
@@ -569,14 +707,139 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Look up a local by name
-    pub(crate) fn lookup_local(&self, name: &str) -> Option<(FVarId, &Expr)> {
+    pub(crate) fn lookup_local(&self, name: &SurfaceName) -> Option<(FVarId, &Expr)> {
+        self.lookup_local_where(name, |_| true)
+    }
+
+    /// [`Self::lookup_local`] passing over the `where`/`let rec` auxiliary
+    /// declarations (Lean's `findLocalDecl? (skipAuxDecl := true)`): the
+    /// innermost ORDINARY local of that spelling.
+    pub(crate) fn lookup_local_skipping_aux(&self, name: &SurfaceName) -> Option<(FVarId, &Expr)> {
+        self.lookup_local_where(name, |fvar| !self.aux_decl_locals.contains(&fvar))
+    }
+
+    /// Whether `fvar` is a `where`/`let rec` auxiliary declaration.
+    pub(crate) fn local_is_aux_decl(&self, fvar: FVarId) -> bool {
+        self.aux_decl_locals.contains(&fvar)
+    }
+
+    fn lookup_local_where(
+        &self,
+        name: &SurfaceName,
+        admit: impl Fn(FVarId) -> bool,
+    ) -> Option<(FVarId, &Expr)> {
+        // A notation's reference to a global constant (`and` for `&&`, `Eq`
+        // for `=`, …) is never a local, whatever the user bound under that
+        // spelling (see `SurfaceName::global_path`). Nor is a reference
+        // spelled as a Lean keyword (`SurfaceName::is_lean_keyword`): Lean
+        // reads the keyword, never a name, even where `«nomatch»` is bound.
+        if name.is_relative_constructor()
+            || name.is_global_reference()
+            || name.is_lean_keyword()
+            || name.is_anonymous()
+            || name.is_unescaped_component("_")
+        {
+            return None;
+        }
+        // A template PATTERN variable, or a template reference to one, carries
+        // the expansion's `TemplateScope` (`clean_parser::
+        // mark_template_free_references`): like Lean's macro scope, it binds
+        // only to a local of the SAME scope — the pattern variable itself —
+        // never to a use-site local of its spelling. Found no such local, it
+        // is the constructor its spelling named where the template was
+        // declared (`resolve_ident_target_in`).
+        if let Some(scope) = name.template_scope() {
+            for (n, fvar, ty) in self.locals.iter().rev() {
+                if !admit(*fvar) {
+                    continue;
+                }
+                if (n.template_scope() == Some(scope) && n == name)
+                    || self.local_name_aliases.iter().rev().any(|(alias, owner)| {
+                        owner == fvar && alias.template_scope() == Some(scope) && alias == name
+                    })
+                {
+                    return Some((*fvar, ty));
+                }
+            }
+            return None;
+        }
+        // A user template's free reference (`clean_parser::
+        // mark_template_free_references`) is never captured by a binder at
+        // the use site: it may denote only the section variable of its
+        // spelling that was in scope where the template was declared (Lean
+        // 4.8.0 `resolveName`: macro scopes, then `sectionFVars`).
+        let template_section_only = name.template_origin().map(|origin| origin.section_variable);
+        if template_section_only == Some(false) {
+            return None;
+        }
         // Search from innermost to outermost
         for (n, fvar, ty) in self.locals.iter().rev() {
-            if n == name {
+            // A template pattern variable is visible only to names of its own
+            // scope (above): no other name, a use-site one or an operand's,
+            // is ever captured by it.
+            if n.template_scope().is_some() {
+                continue;
+            }
+            if template_section_only == Some(true) && !n.is_section_variable() {
+                continue;
+            }
+            // A wildcard owns its telescope slot, but introduces no usable name.
+            // In particular a quoted `_` reference must not discover that slot.
+            if !n.is_unescaped_component("_")
+                && admit(*fvar)
+                && (n == name
+                    || self.local_name_aliases.iter().rev().any(|(alias, owner)| {
+                        owner == fvar && alias.template_scope().is_none() && alias == name
+                    }))
+            {
+                if self.shadowed_by_recursive_helper(name, *fvar) {
+                    return None;
+                }
                 return Some((*fvar, ty));
             }
         }
         None
+    }
+
+    /// A `let rec`/`where` helper's bare name, inside its own body, denotes
+    /// the helper, not a local of that spelling bound outside it: Lean's
+    /// `let rec go` binds `go` over its own value. Without this, a `let rec
+    /// go` inside a `where` helper that has a sibling helper `go` resolved its
+    /// recursive call to the sibling (`twoGoS.other 3 = 101` was accepted;
+    /// Lean 4.8.0 computes 3). Once the outer local is passed over, the
+    /// spelling is the helper's own: `try_elab_recursive_call` takes the
+    /// call, and a bare use is the same unresolved self-reference it is for
+    /// a top-level `def`.
+    fn shadowed_by_recursive_helper(&self, name: &SurfaceName, fvar: FVarId) -> bool {
+        self.recursive_def_ctx.as_ref().is_some_and(|ctx| {
+            ctx.outer_locals_floor
+                .is_some_and(|floor| fvar.as_u64() < floor)
+                && name.parent().is_anonymous()
+                && *name == ctx.short_name()
+        })
+    }
+
+    /// Give a currently bound local an exact alternate spelling for one
+    /// elaboration scope. The alias cannot add a binder or outlive its owner.
+    pub(crate) fn with_local_name_alias<T>(
+        &mut self,
+        name: SurfaceName,
+        owner: FVarId,
+        f: impl FnOnce(&mut Self) -> Result<T, ElabError>,
+    ) -> Result<T, ElabError> {
+        if name.is_anonymous()
+            || name.is_relative_constructor()
+            || !self.locals.iter().any(|(_, fvar, _)| *fvar == owner)
+        {
+            return Err(ElabError::InternalInvariant(
+                "invalid local name alias owner".into(),
+            ));
+        }
+        let previous = self.local_name_aliases.len();
+        self.local_name_aliases.push((name, owner));
+        let result = f(self);
+        self.local_name_aliases.truncate(previous);
+        result
     }
 
     /// Replace occurrences of a free variable with a constant applied to parameters.
@@ -678,7 +941,8 @@ impl<'a> ElabCtx<'a> {
     /// The callback resolves fresh universe params through:
     /// 1. Fast path: kernel `Level::is_def_eq`
     /// 2. Resolve through MetaState union-find + pending buffer
-    /// 3. Assign unresolved params when one side is concrete
+    /// 3. Assign unresolved params when one side is concrete — universe
+    ///    METAVARIABLES only, never a rigid declared parameter (see below)
     ///
     /// `roots` are the (already instantiated) expressions the call will hand
     /// to the kernel: the context is their free-variable closure
@@ -703,18 +967,33 @@ impl<'a> ElabCtx<'a> {
             if Level::is_def_eq(&l1r, &l2r) {
                 return true;
             }
+            // Only a universe METAVARIABLE is solved here. A rigid declared
+            // parameter (`def f.{u}`) is fixed: Lean's level unification
+            // never assigns one, and `add_level_constraint` refuses it when
+            // the buffer is committed. Recorded anyway, a `u := 0` answered
+            // this comparison — and every later one that resolves `u`
+            // through the buffer — with `true`, so an elaboration-time
+            // def-eq held `PUnit.{u+1}` equal to `PUnit.{1}`, the commit
+            // dropped the entry, and only the kernel's re-check of the
+            // finished declaration refused it (`takesP1 y` with
+            // `y : PUnit.{u+1}`; Lean: "Application type mismatch").
+            let assignable = |n: &Name| !metas.is_rigid_level_param(n);
             // Try assignment: if one side is a param and the other is concrete
             match (&l1r, &l2r) {
-                (Level::Param(n), _) if !l2r.has_params() => {
+                (Level::Param(n), _) if assignable(n) && !l2r.has_params() => {
                     pending.borrow_mut().push((n.clone(), l2r));
                     true
                 }
-                (_, Level::Param(n)) if !l1r.has_params() => {
+                (_, Level::Param(n)) if assignable(n) && !l1r.has_params() => {
                     pending.borrow_mut().push((n.clone(), l1r));
                     true
                 }
-                (Level::Param(n1), Level::Param(_)) => {
+                (Level::Param(n1), Level::Param(_)) if assignable(n1) => {
                     pending.borrow_mut().push((n1.clone(), l2r));
+                    true
+                }
+                (Level::Param(_), Level::Param(n2)) if assignable(n2) => {
+                    pending.borrow_mut().push((n2.clone(), l1r));
                     true
                 }
                 (Level::Succ(a), Level::Succ(b)) => {
@@ -725,13 +1004,13 @@ impl<'a> ElabCtx<'a> {
                     let a_r = Self::resolve_level_with_pending(metas, &pending.borrow(), a);
                     let b_r = Self::resolve_level_with_pending(metas, &pending.borrow(), b);
                     if let Level::Param(n) = &a_r {
-                        if !b_r.has_params() {
+                        if assignable(n) && !b_r.has_params() {
                             pending.borrow_mut().push((n.clone(), b_r));
                             return true;
                         }
                     }
                     if let Level::Param(n) = &b_r {
-                        if !a_r.has_params() {
+                        if assignable(n) && !a_r.has_params() {
                             pending.borrow_mut().push((n.clone(), a_r));
                             return true;
                         }
@@ -827,6 +1106,99 @@ impl<'a> ElabCtx<'a> {
         result
     }
 
+    /// Solve an UNTYPED binder's own type from the first place the binder is
+    /// USED as a type — Lean's `Meta.ensureType`, restricted to the arm that
+    /// can only ever ASSIGN.
+    ///
+    /// An unannotated binder (`{α}`, `fun x =>`, `∀ x,`) is elaborated as a
+    /// fresh metavariable `?α : Sort ?u`. Nothing here ever constrained `?α`
+    /// from the binder's USE, so `def idA {alpha} (x : alpha) : alpha := x`
+    /// died with `unsolved metavariables ?[0]`: the metavariable was minted and
+    /// then abandoned. Lean solves it at the use site — an annotation in type
+    /// position runs through `Term.elabType` → `Meta.ensureType`, which sees
+    /// that `alpha`'s type is an unassigned metavariable and assigns
+    /// `?α := Sort ?v` for a fresh level metavariable `?v`. Assigning a
+    /// metavariable also checks the value against the metavariable's declared
+    /// type, so `Sort ?v : Sort (?v + 1)` forces `?u := ?v + 1`; that second
+    /// half is the `solve_level_eq` call below, and without it the declaration
+    /// generalizes a universe parameter Lean does not have.
+    ///
+    /// Ground truth, pinned `lean` v4.30.0-rc2 with `set_option pp.parens true`:
+    ///
+    /// ```text
+    /// def m {a} (x : a) : a := x           => def m.{u_1} : {a : (Sort u_1)} → (a → a)
+    /// def n {a} (x : a) (l : List a) : Nat => def n.{u_1} : {a : (Type u_1)} → …
+    /// def k {a} (x : Nat) : Nat := x       => error: Failed to infer type of binder a
+    /// ```
+    ///
+    /// So the rule is solve-from-USE, **not** a `Sort u` DEFAULT — `def k` has
+    /// no use to solve from and Lean refuses it. This helper only ever assigns
+    /// a metavariable that a use has just demanded be a type; when there is no
+    /// such use `?α` is left unassigned and the existing unsolved-metavariable
+    /// refusal at the declaration boundary still fires, which is the `def k`
+    /// arm. `def n` is the `Sort ?v` → `Type ?w` narrowing: the promotion
+    /// happens at `(x : a)` and the later `List a` pins `?v` through ordinary
+    /// unification.
+    ///
+    /// Deliberately INFALLIBLE. Every other shape — a type whose own type is
+    /// already a sort, an already-assigned metavariable, a metavariable that is
+    /// not sort-typed, or an `infer_type` that does not succeed — is left
+    /// exactly as it was, so this can solve a declaration that used to fail but
+    /// can never reject one that used to pass. `add_decl` re-checks the result.
+    pub(crate) fn solve_binder_type_from_use(&mut self, binder_ty: &Expr) {
+        let Ok(ty) = self.infer_type(binder_ty) else {
+            return;
+        };
+        let ty = self.metas.instantiate(&ty);
+        let ty = self.metas.instantiate_levels(&ty);
+
+        // The binder type's own type must be an UNASSIGNED metavariable —
+        // metavariables are fvars with bit 63 set. Anything else is already
+        // determined and must not be touched.
+        let ExprKind::FVar(fvar_id) = ty.kind() else {
+            return;
+        };
+        let Some(meta_id) = MetaState::from_fvar(*fvar_id) else {
+            return;
+        };
+        if self.metas.is_assigned(meta_id) {
+            return;
+        }
+        let Some(meta) = self.metas.get(meta_id) else {
+            return;
+        };
+        let meta_ty = meta.ty.clone();
+        let meta_ty = self.metas.instantiate(&meta_ty);
+        let meta_ty = self.metas.instantiate_levels(&meta_ty);
+        // …and it must be SORT-typed, with a level that is still a bare
+        // parameter. `Level::Param` is the shape the untyped-binder mint
+        // produces (`Expr::sort(self.fresh_universe_param())`), and it is what
+        // keeps the level equation below TOTAL: `solve_level_eq` reaches a
+        // param-vs-`Succ` arm that either assigns or fails outright, never the
+        // conservative fallthrough that POSTPONES — a postponed equation would
+        // resurface as a refusal from `drain_postponed_levels`, and this
+        // routine must not be able to refuse anything.
+        let ExprKind::Sort(declared_level @ Level::Param(_)) = meta_ty.kind() else {
+            return;
+        };
+        let declared_level = declared_level.clone();
+
+        let level = self.fresh_universe_param();
+        if self.metas.assign(meta_id, Expr::sort(level.clone())) {
+            // The other half of Lean's metavariable assignment: the value must
+            // inhabit the metavariable's declared type, so `Sort ?v : Sort (?v+1)`
+            // forces `?u := ?v + 1`. A rigid `?u` (a user-written `.{u}`) is
+            // refused by `MetaState::add_level_constraint` and the equation
+            // simply fails here, which is the correct reading — the binder's
+            // level was declared and is not ours to move.
+            let _ = crate::unify::level_solve::solve_level_eq(
+                &mut self.metas,
+                &declared_level,
+                &Level::succ(level),
+            );
+        }
+    }
+
     /// Ensure `expr` elaborates to a type and return its universe level.
     ///
     /// This mirrors Lean 4's `Meta.getLevel` behavior for assignable
@@ -836,6 +1208,15 @@ impl<'a> ElabCtx<'a> {
         let ty = self.infer_type(expr)?;
         let ty = self.metas.instantiate(&ty);
         let ty = self.metas.instantiate_levels(&ty);
+
+        // A parameter declared `(β : outParam Type)` has type
+        // `outParam Type`, a reducible sort. Keep the marker in its telescope
+        // while recognizing that β can occur in a type position.
+        if !matches!(ty.kind(), ExprKind::Sort(_)) {
+            if let ExprKind::Sort(level) = self.whnf_reducible(&ty).kind() {
+                return Ok(level.clone());
+            }
+        }
 
         match ty.kind() {
             ExprKind::Sort(level) => Ok(level.clone()),
@@ -894,6 +1275,22 @@ impl<'a> ElabCtx<'a> {
         let tc = self.make_tc(caches, &[&instantiated]);
         let result =
             tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Instances);
+        self.tc_caches.replace(tc.take_caches());
+        result
+    }
+
+    /// WHNF at REDUCIBLE transparency (Lean's `whnfR`): unfolds only
+    /// `@[reducible]` definitions. Used where Lean asks `whnfR` a structural
+    /// question about a type's head (`typeMatchesBaseName` in
+    /// `Lean/Elab/App.lean`), so a semireducible alias stays folded exactly as
+    /// it does there.
+    pub(crate) fn whnf_reducible(&self, expr: &Expr) -> Expr {
+        let instantiated = self.metas.instantiate(expr);
+        let instantiated = self.metas.instantiate_levels(&instantiated);
+        let caches = self.tc_caches.take();
+        let tc = self.make_tc(caches, &[&instantiated]);
+        let result =
+            tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Reducible);
         self.tc_caches.replace(tc.take_caches());
         result
     }

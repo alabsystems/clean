@@ -165,9 +165,34 @@ fn test_imported_simp_lemmas_registered_in_kernel_registry() {
         .iter()
         .find(|s| matches!(&s.module_name, Some(n) if n.ends_with("Init.SimpLemmas")))
         .expect("the root module should produce a summary");
+    let expected = decode_simp_entries("Init/SimpLemmas.olean")
+        .expect("pinned fixture")
+        .0
+        .len();
+    assert!(expected > 0);
+    let rows = own
+        .extension_accounting
+        .iter()
+        .filter(|row| row.extension_name == Name::interned(LEAN_SIMP_EXTENSION))
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "one canonical source extension record");
+    assert_eq!(rows[0].source_rows, Some(expected));
+    assert_eq!(rows[0].decoded_rows, expected);
     assert_eq!(
-        own.extension_undecoded_entries, 0,
-        "every Init.SimpLemmas simp origin should decode AND resolve"
+        (rows[0].undecoded_rows, rows[0].unresolved_targets),
+        (0, 0),
+        "every intended simp origin must decode AND resolve"
+    );
+    assert!(
+        own.extension_undecoded_entries > 0,
+        "unsupported unrelated payloads remain counted"
+    );
+    assert_eq!(
+        own.extension_undecoded_entries,
+        own.extension_accounting
+            .iter()
+            .map(|row| row.undecoded_rows + row.unresolved_targets)
+            .sum::<usize>()
     );
 
     // The registry the simp tactic reads (`collect_registry_lemmas`) must now

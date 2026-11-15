@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 import stat
 import subprocess
@@ -23,7 +24,7 @@ class IsabelleOpsPortabilityTests(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertNotIn("git checkout -- Cargo.lock", ratchet)
-        self.assertIn("cargo build --locked --manifest-path", ratchet)
+        self.assertIn("targo trust build --allow-l0-gaps --locked --manifest-path", ratchet)
 
     def test_shipped_ops_files_have_no_machine_specific_execution_paths(self) -> None:
         # Assembled from fragments so this policing test never itself contains
@@ -88,6 +89,73 @@ class IsabelleOpsPortabilityTests(unittest.TestCase):
             )
             self.assertNotEqual(proc.returncode, 0, f"{name} guessed an Isabelle install")
             self.assertIn("ISABELLE", proc.stderr, f"{name} did not explain configuration")
+
+    def test_trust_ir_build_preserves_missing_toolchain_status(self) -> None:
+        # Stub only the locator's status, never a compiler or build result.
+        # Exercise the shipped caller and its real axis self-test in isolation.
+        for status, expected, diagnostic in (
+            (2, 2, "TRUST-IR BUILD SKIP: no local Trust stage1 toolchain"),
+            (1, 1, "Trust stage1 discovery is invalid or ambiguous"),
+            (7, 1, "Trust stage1 discovery is invalid or ambiguous"),
+        ):
+            with self.subTest(locator_status=status), tempfile.TemporaryDirectory() as tmp:
+                scripts = Path(tmp) / "scripts"
+                scripts.mkdir()
+                for name in ("trust_ir_build.sh", "trust_ir_axes.py", "trust_ir_markers.py"):
+                    shutil.copy2(REPO / "scripts" / name, scripts / name)
+                (scripts / "trust_verify_ratchet.sh").write_text(
+                    f"#!/bin/bash\nexit {status}\n", encoding="utf-8"
+                )
+                proc = subprocess.run(
+                    ["bash", str(scripts / "trust_ir_build.sh")],
+                    text=True, capture_output=True, check=False, timeout=30,
+                )
+                self.assertEqual(proc.returncode, expected, proc.stdout + proc.stderr)
+                self.assertIn(diagnostic, proc.stdout + proc.stderr)
+
+    def test_trust_ir_missing_coverage_reports_semantic_publication_refusal(self) -> None:
+        driver = (REPO / "scripts" / "trust_ir_build.sh").read_text(encoding="utf-8")
+        # Run the production error-path helper; no compiler or build is mocked.
+        fail = next(line for line in driver.splitlines() if line.startswith("fail() {"))
+        start = driver.index("require_coverage() {\n")
+        end = driver.index("\n}\n", start) + 3
+        helper = fail + "\n" + driver[start:end] + '\nrequire_coverage "$1" "$2"\n'
+        refusal = (
+            "warning: trust-ir-lower semantic finalization failed: "
+            "final Trust-IR module validation failed [CallArgTypeMismatch]"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            script = root / "availability.sh"
+            script.write_text(helper, encoding="utf-8")
+            coverage = root / "clean_kernel.coverage.json"
+            log = root / "build.log"
+            for contents, expected in (
+                (refusal + "\n", "compiler refused TrustIR semantic publication"),
+                ("warning: an unrelated warning\n", "the dump sink did not attach"),
+                ("", "the dump sink did not attach"),
+            ):
+                with self.subTest(log=contents):
+                    log.write_text(contents, encoding="utf-8")
+                    proc = subprocess.run(
+                        ["bash", str(script), str(coverage), str(log)],
+                        text=True, capture_output=True, check=False, timeout=10,
+                    )
+                    self.assertEqual(proc.returncode, 1, proc.stdout + proc.stderr)
+                    self.assertIn(expected, proc.stderr)
+                    if contents.startswith(refusal):
+                        self.assertIn(refusal, proc.stderr)
+                        self.assertNotIn("the dump sink did not attach", proc.stderr)
+            # Presence alone passes this availability check; JSON/schema checks
+            # remain the downstream axis extractor's responsibility.
+            coverage.write_text("{}\n", encoding="utf-8")
+            log.write_text(refusal + "\n", encoding="utf-8")
+            proc = subprocess.run(
+                ["bash", str(script), str(coverage), str(log)],
+                text=True, capture_output=True, check=False, timeout=10,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
+            self.assertEqual(proc.stdout + proc.stderr, "")
 
     def test_trust_stage1_locator_honors_and_validates_explicit_bin(self) -> None:
         locator = REPO / "scripts" / "trust_verify_ratchet.sh"
@@ -158,27 +226,25 @@ class IsabelleOpsPortabilityTests(unittest.TestCase):
 
     def test_trust_stage1_locator_prefers_colocated_source_over_path(self) -> None:
         locator = REPO / "scripts" / "trust_verify_ratchet.sh"
-        host_proc = subprocess.run(
-            ["rustc", "-vV"],
-            cwd=REPO,
-            text=True,
-            capture_output=True,
-            check=True,
-        )
-        host = next(
-            line.removeprefix("host: ")
-            for line in host_proc.stdout.splitlines()
-            if line.startswith("host: ")
-        )
+        # The test supplies the `trustc` on PATH the locator asks for the host
+        # (`trustc -vV`); the real one need not run here. The decoy host makes
+        # the lookup load-bearing: the locator's glob fallback refuses two
+        # stage1s as ambiguous.
+        host = "test-host-triple"
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)
             source_bin = tmp_path / "trust" / "build" / host / "stage1" / "bin"
+            decoy_bin = tmp_path / "trust" / "build" / "decoy-host" / "stage1" / "bin"
             path_bin = tmp_path / "path-bin"
             source_bin.mkdir(parents=True)
+            decoy_bin.mkdir(parents=True)
             path_bin.mkdir()
-            for trustc in (source_bin / "trustc", path_bin / "trustc"):
+            for trustc in (source_bin / "trustc", decoy_bin / "trustc"):
                 trustc.write_text("#!/usr/bin/env bash\nexit 0\n", encoding="utf-8")
                 trustc.chmod(trustc.stat().st_mode | stat.S_IXUSR)
+            path_trustc = path_bin / "trustc"
+            path_trustc.write_text(f"#!/usr/bin/env bash\necho 'host: {host}'\n", encoding="utf-8")
+            path_trustc.chmod(path_trustc.stat().st_mode | stat.S_IXUSR)
             env = os.environ.copy()
             env["TRUST_REPO_ROOT"] = str(tmp_path / "trust")
             env["PATH"] = os.pathsep.join((str(path_bin), env["PATH"]))

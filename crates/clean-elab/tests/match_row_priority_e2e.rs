@@ -106,21 +106,61 @@ theorem p11d : f11 9 9 = 3 := rfl
 fn test_p11_wrong_value_no_longer_certifiable() {
     // The buggy value must now be REJECTED by the kernel: `f11 0 0 = 2` was
     // the pre-B05 kernel-certified wrong value (iso_p11_pin2).
-    let err = elaborate_module(
+    let mut env = elaborate_module(
         r"
 def f11 (a b : Nat) : Nat :=
   match a, b with
   | 0, _ => 1
   | _, 0 => 2
   | _, _ => 3
-theorem bad : f11 0 0 = 2 := rfl
+theorem good : f11 0 0 = 1 := rfl
 ",
     )
-    .expect_err("the pre-B05 wrong value `f11 0 0 = 2` must no longer be provable by rfl");
+    .expect("the definition and the correct first-row value must kernel-check first");
+    assert_axiom_free(&env, &["f11", "good"]);
+
+    // Submit only the false theorem after the positive checks. A direct Err
+    // need not print the declaration name; isolating this declaration ensures
+    // an earlier definition failure cannot satisfy this negative control.
+    let decls =
+        parse_file("theorem bad : f11 0 0 = 2 := rfl").expect("the false theorem must parse");
+    assert_eq!(decls.len(), 1);
+    let mut file_ctx = FileContext::new();
+    let processed = preprocess_decl_with_context(&decls[0], &mut file_ctx);
+    match elaborate_decl_and_register(&mut env, &processed) {
+        // A NEGATIVE control must say what it rejected. Checking only that
+        // `bad` stayed unregistered accepts ANY failure -- an unknown `f11`,
+        // an `Unsupported` refusal, an unrelated kernel error -- and reports
+        // `ok` either way, so the control could not fail on the arm every run
+        // takes. The rejection must be ABOUT `bad`: either the error names it,
+        // or it is the type/kernel refusal that a false `rfl` earns.
+        Err(e) => {
+            let rendered = format!("{e}");
+            assert!(
+                rendered.contains("bad")
+                    || rendered.contains("ismatch")
+                    || rendered.contains("efl")
+                    || rendered.contains("ot definitionally equal"),
+                "the false theorem must be rejected FOR ITSELF, not by an \
+                 unrelated failure: {e:?}"
+            );
+            assert!(
+                env.get_const(&Name::from_string("bad")).is_none(),
+                "`bad` was rejected with `{e}` yet still registered"
+            );
+        }
+        Ok(result) => {
+            let mut failures = Vec::new();
+            collect_failures(&result, &mut failures);
+            assert_eq!(failures.len(), 1, "the false theorem must be rejected");
+            assert!(failures[0].contains("bad"), "{failures:?}");
+        }
+    }
     assert!(
-        err.contains("bad"),
-        "failure must be the `bad` theorem, got: {err}"
+        env.get_const(&Name::from_string("bad")).is_none(),
+        "the pre-B05 wrong value must never be registered"
     );
+    assert_axiom_free(&env, &["f11", "good"]);
 }
 
 // =========================================================================
@@ -170,43 +210,51 @@ theorem g99 : g 9 9 = 3 := rfl
     assert_axiom_free(&env, &["g", "g00", "g09", "g90", "g99"]);
 }
 
+/// A row every value of which an earlier row matches is refused, as Lean
+/// 4.8.0 refuses it ("redundant alternative" — pinned binary, 2026-10-07,
+/// `scratchpad/match-compile/v17/oracle/P.lean`). These two matches used to be
+/// pinned ACCEPTED here for their first-row VALUES; Lean gives them none, and
+/// accepting them silently dropped the shadowed row's body (decision D2). The
+/// first-row value semantics stay pinned by every overlapping-but-reachable
+/// match in this file.
+fn assert_redundant_alternative(source: &str, alt: usize) {
+    let error = match elaborate_module(source) {
+        Ok(_) => panic!("Lean refuses a match with an unreachable row:\n{source}"),
+        Err(error) => error,
+    };
+    assert!(
+        error.contains("redundant alternative") && error.contains(&format!("alternative {alt} of")),
+        "must be refused as redundant alternative {alt}: {error}"
+    );
+}
+
 #[test]
-fn test_wildcard_first_row_dominates() {
-    // A leading full-wildcard row shadows everything after it (Lean also
-    // reports "redundant alternative" for the later rows — that diagnostic is
-    // tracked separately in B05; the VALUE semantics are first-row).
-    let env = elaborate_module(
+fn test_wildcard_first_row_shadowing_a_later_row_is_refused() {
+    // A leading full-wildcard row shadows everything after it.
+    assert_redundant_alternative(
         r"
 def h (a b : Nat) : Nat :=
   match a, b with
   | _, _ => 7
   | 0, 0 => 9
-theorem h00 : h 0 0 = 7 := rfl
-theorem h12 : h 1 2 = 7 := rfl
 ",
-    )
-    .expect("leading full-wildcard row must win for every input");
-    assert_axiom_free(&env, &["h", "h00", "h12"]);
+        2,
+    );
 }
 
 #[test]
-fn test_wildcard_row_between_literal_rows() {
-    // Wildcard row in the MIDDLE: rows after it are shadowed only where it
-    // matches. Lean: m 0 0 = 1; m 5 5 = 2 (row 2 `_, _` shadows row 3).
-    let env = elaborate_module(
+fn test_wildcard_row_shadowing_a_later_literal_row_is_refused() {
+    // Wildcard row in the MIDDLE: `5, 5` after `_, _` is reached by no value.
+    assert_redundant_alternative(
         r"
 def m (a b : Nat) : Nat :=
   match a, b with
   | 0, 0 => 1
   | _, _ => 2
   | 5, 5 => 3
-theorem m00 : m 0 0 = 1 := rfl
-theorem m55 : m 5 5 = 2 := rfl
-theorem m01 : m 0 1 = 2 := rfl
 ",
-    )
-    .expect("mid-position wildcard row must shadow all later rows");
-    assert_axiom_free(&env, &["m", "m00", "m55", "m01"]);
+        3,
+    );
 }
 
 // =========================================================================

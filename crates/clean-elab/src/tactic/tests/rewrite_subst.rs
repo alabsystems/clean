@@ -58,16 +58,22 @@ fn test_rewrite_rule_from_hypothesis_forward() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
     let goal = state.current_goal().unwrap().clone();
-    let rule = RewriteRule::from_hypothesis(&state, &goal, "h", RewriteDirection::Forward)
-        .expect("should build rule from hypothesis");
+    let rule = RewriteRule::from_hypothesis(
+        &state,
+        &goal,
+        &clean_parser::SurfaceName::generated_path("h"),
+        RewriteDirection::Forward,
+    )
+    .expect("should build rule from hypothesis");
 
     assert_eq!(rule.direction, RewriteDirection::Forward);
     assert_eq!(*rule.from_expr(), x, "forward from should be LHS");
@@ -90,16 +96,22 @@ fn test_rewrite_rule_from_hypothesis_backward() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
     let goal = state.current_goal().unwrap().clone();
-    let rule = RewriteRule::from_hypothesis(&state, &goal, "h", RewriteDirection::Backward)
-        .expect("should build rule from hypothesis");
+    let rule = RewriteRule::from_hypothesis(
+        &state,
+        &goal,
+        &clean_parser::SurfaceName::generated_path("h"),
+        RewriteDirection::Backward,
+    )
+    .expect("should build rule from hypothesis");
 
     assert_eq!(rule.direction, RewriteDirection::Backward);
     assert_eq!(*rule.from_expr(), y, "backward from should be RHS");
@@ -116,7 +128,12 @@ fn test_rewrite_rule_missing_hypothesis() {
     let state = ProofState::new(env, target);
     let goal = state.current_goal().unwrap().clone();
 
-    let result = RewriteRule::from_hypothesis(&state, &goal, "missing", RewriteDirection::Forward);
+    let result = RewriteRule::from_hypothesis(
+        &state,
+        &goal,
+        &clean_parser::SurfaceName::generated_path("missing"),
+        RewriteDirection::Forward,
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(name)) if name == "missing"),
         "should fail for missing hypothesis"
@@ -135,15 +152,21 @@ fn test_rewrite_rule_non_equality_hypothesis() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
     let goal = state.current_goal().unwrap().clone();
-    let result = RewriteRule::from_hypothesis(&state, &goal, "h", RewriteDirection::Forward);
+    let result = RewriteRule::from_hypothesis(
+        &state,
+        &goal,
+        &clean_parser::SurfaceName::generated_path("h"),
+        RewriteDirection::Forward,
+    );
     assert!(result.is_err(), "should fail for non-equality hypothesis");
 }
 
@@ -182,6 +205,7 @@ fn assert_root_proof_checks(state: &ProofState, root: MetaId, original_target: &
         target: original_target.clone(),
         local_ctx: Vec::new(),
         tag: None,
+        case_binders: Vec::new(),
     });
     let inferred = state
         .infer_type(&probe_goal, &proof)
@@ -250,7 +274,8 @@ fn test_rewrite_env_const_forward_rewrites_goal() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "xy").expect("rw [xy] should use the env theorem");
+    rewrite_ltr(&mut state, &clean_parser::SurfaceName::generated_path("xy"))
+        .expect("rw [xy] should use the env theorem");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -277,7 +302,8 @@ fn test_rewrite_env_const_backward_rewrites_goal() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_rtl(&mut state, "xy").expect("rw [← xy] should use the env theorem");
+    rewrite_rtl(&mut state, &clean_parser::SurfaceName::generated_path("xy"))
+        .expect("rw [← xy] should use the env theorem");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -313,7 +339,8 @@ fn test_rewrite_env_const_quantified_equation_instantiates() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "gx").expect("rw [gx] should instantiate ∀ binder and rewrite");
+    rewrite_ltr(&mut state, &clean_parser::SurfaceName::generated_path("gx"))
+        .expect("rw [gx] should instantiate ∀ binder and rewrite");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -346,15 +373,16 @@ fn test_rewrite_local_hyp_quantified_equation_instantiates() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "h")
+    rewrite_ltr(&mut state, &clean_parser::SurfaceName::generated_path("h"))
         .expect("rw [h] should peel the ∀ binder of a local hyp and rewrite");
 
     assert_eq!(
@@ -431,8 +459,11 @@ fn test_rewrite_env_const_universe_polymorphic_instantiates() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "dup_eq")
-        .expect("rw [dup_eq] should solve universe + value metavars from the goal");
+    rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("dup_eq"),
+    )
+    .expect("rw [dup_eq] should solve universe + value metavars from the goal");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -444,15 +475,25 @@ fn test_rewrite_env_const_universe_polymorphic_instantiates() {
 
 #[test]
 fn test_rewrite_unknown_name_errors_cleanly() {
-    // Neither a local hypothesis nor an env constant: clean HypothesisNotFound.
+    // Neither a local hypothesis nor an env constant — resolved through the
+    // term elaborator's order and still found nowhere.
+    //
+    // This asserted `HypothesisNotFound` until 2026-08-30. That variant means
+    // "you named a hypothesis and it is absent", which sends a reader to
+    // inspect a local context that was never the problem; nothing here is a
+    // hypothesis. `UnknownIdent` is the honest classification, and it is the
+    // same category error the `assumption` split fixed on the other side.
     let env = setup_env_with_full_eq();
     let x = Expr::const_(Name::from_string("x"), vec![]);
     let mut state = ProofState::new(env, make_p(x));
 
-    let result = rewrite_ltr(&mut state, "Does.Not.Exist");
+    let result = rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("Does.Not.Exist"),
+    );
     assert!(
-        matches!(result, Err(TacticError::HypothesisNotFound(ref name)) if name == "Does.Not.Exist"),
-        "unknown rewrite target should be HypothesisNotFound, got {result:?}"
+        matches!(result, Err(TacticError::UnknownIdent(ref name)) if name == "Does.Not.Exist"),
+        "unknown rewrite target should be UnknownIdent, got {result:?}"
     );
 }
 
@@ -476,14 +517,16 @@ fn test_rewrite_local_hyp_shadows_env_const_of_same_name() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "xy".to_string(),
+            name: clean_parser::SurfaceName::generated_path("xy"),
             ty: make_eq_n(x, z.clone()), // local: x = z
             value: None,
         }],
     );
 
-    rewrite_ltr(&mut state, "xy").expect("local hyp xy should be used");
+    rewrite_ltr(&mut state, &clean_parser::SurfaceName::generated_path("xy"))
+        .expect("local hyp xy should be used");
     assert_eq!(
         state.current_goal().unwrap().target,
         make_p(z),
@@ -506,7 +549,7 @@ fn test_rewrite_env_const_no_match_errors() {
     .unwrap();
 
     let mut state = ProofState::new(env, make_p(x));
-    let result = rewrite_ltr(&mut state, "yz");
+    let result = rewrite_ltr(&mut state, &clean_parser::SurfaceName::generated_path("yz"));
     assert!(
         matches!(result, Err(TacticError::RewriteNoMatch { .. })),
         "env const whose LHS is absent should be RewriteNoMatch, got {result:?}"
@@ -536,14 +579,16 @@ fn test_rewrite_chain_two_steps() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -554,8 +599,14 @@ fn test_rewrite_chain_two_steps() {
     let result = rewrite_chain(
         &mut state,
         &[
-            ("h1", RewriteDirection::Forward),
-            ("h2", RewriteDirection::Forward),
+            (
+                &clean_parser::SurfaceName::generated_path("h1"),
+                RewriteDirection::Forward,
+            ),
+            (
+                &clean_parser::SurfaceName::generated_path("h2"),
+                RewriteDirection::Forward,
+            ),
         ],
     );
     assert!(result.is_ok(), "rewrite_chain should succeed");
@@ -588,14 +639,16 @@ fn test_rewrite_chain_mixed_directions() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -606,8 +659,14 @@ fn test_rewrite_chain_mixed_directions() {
     let result = rewrite_chain(
         &mut state,
         &[
-            ("h1", RewriteDirection::Forward),
-            ("h2", RewriteDirection::Backward),
+            (
+                &clean_parser::SurfaceName::generated_path("h1"),
+                RewriteDirection::Forward,
+            ),
+            (
+                &clean_parser::SurfaceName::generated_path("h2"),
+                RewriteDirection::Backward,
+            ),
         ],
     );
     assert!(result.is_ok(), "mixed direction chain should succeed");
@@ -657,14 +716,16 @@ fn test_rewrite_chain_fails_on_second_step() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -675,8 +736,14 @@ fn test_rewrite_chain_fails_on_second_step() {
     let result = rewrite_chain(
         &mut state,
         &[
-            ("h1", RewriteDirection::Forward),
-            ("h2", RewriteDirection::Forward),
+            (
+                &clean_parser::SurfaceName::generated_path("h1"),
+                RewriteDirection::Forward,
+            ),
+            (
+                &clean_parser::SurfaceName::generated_path("h2"),
+                RewriteDirection::Forward,
+            ),
         ],
     );
     assert!(result.is_err(), "chain should fail on non-matching step");
@@ -703,31 +770,39 @@ fn test_subst_eliminates_variable_lhs() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: n_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(11),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: h_ty,
                 value: None,
             },
         ],
     );
 
-    let result = subst(&mut state, "h");
+    let result = subst(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(result.is_ok(), "subst should succeed: {:?}", result.err());
 
     // After subst, x and h should be removed from context
     let new_goal = state.current_goal().unwrap();
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "x"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("x")),
         "x should be removed from context after subst"
     );
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "h"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("h")),
         "h should be removed from context after subst"
     );
 
@@ -756,21 +831,23 @@ fn test_subst_eliminates_variable_rhs() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: n_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(11),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: h_ty,
                 value: None,
             },
         ],
     );
 
-    let result = subst(&mut state, "h");
+    let result = subst(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         result.is_ok(),
         "subst with fvar on RHS should succeed: {:?}",
@@ -779,11 +856,17 @@ fn test_subst_eliminates_variable_rhs() {
 
     let new_goal = state.current_goal().unwrap();
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "x"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("x")),
         "x should be removed"
     );
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "h"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("h")),
         "h should be removed"
     );
 
@@ -812,27 +895,30 @@ fn test_subst_replaces_in_other_hypotheses() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: n_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(11),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: h_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(12),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
         ],
     );
 
-    let result = subst(&mut state, "h");
+    let result = subst(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(result.is_ok(), "subst should succeed");
 
     let new_goal = state.current_goal().unwrap();
@@ -841,7 +927,7 @@ fn test_subst_replaces_in_other_hypotheses() {
     let h2_decl = new_goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "h2")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h2"))
         .expect("h2 should remain in context");
     let expected_h2_ty = make_p(y);
     assert_eq!(
@@ -865,14 +951,15 @@ fn test_subst_non_variable_fails() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
-    let result = subst(&mut state, "h");
+    let result = subst(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         result.is_err(),
         "subst should fail when neither side is a free variable in context"
@@ -888,7 +975,10 @@ fn test_subst_hypothesis_not_found() {
 
     let mut state = ProofState::new(env, target);
 
-    let result = subst(&mut state, "nonexistent");
+    let result = subst(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(name)) if name == "nonexistent"),
         "subst should fail with HypothesisNotFound"
@@ -907,14 +997,15 @@ fn test_subst_non_equality_fails() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
-    let result = subst(&mut state, "h");
+    let result = subst(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         result.is_err(),
         "subst with non-equality hypothesis should fail"
@@ -945,26 +1036,30 @@ fn test_subst_vars_eliminates_all_equalities() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: n_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: y_fvar,
-                name: "y".to_string(),
+                name: clean_parser::SurfaceName::generated_path("y"),
                 ty: n_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(12),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(13),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -981,11 +1076,17 @@ fn test_subst_vars_eliminates_all_equalities() {
     // Both x and y should be eliminated
     let new_goal = state.current_goal().unwrap();
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "x"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("x")),
         "x should be removed by subst_vars"
     );
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "h1"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("h1")),
         "h1 should be removed by subst_vars"
     );
 }
@@ -1002,8 +1103,9 @@ fn test_subst_vars_no_equalities_is_noop() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -1031,7 +1133,10 @@ fn test_subst_vars_no_equalities_is_noop() {
 /// Drive the registry-level `rw` compound handler exactly as the parser would
 /// for surface `rw [<rules>]` on the goal. Returns the handler result so
 /// negative tests can inspect the error.
-fn run_surface_rw(state: &mut ProofState, rules: &[(&str, bool)]) -> Result<(), TacticError> {
+fn run_surface_rw(
+    state: &mut ProofState,
+    rules: &[(&'static str, bool)],
+) -> Result<(), TacticError> {
     use crate::tactic::builtins::register_builtin_tactics;
     use crate::tactic::builtins_phase3d_rewrite::register_phase3d_rewrite;
     use crate::tactic::registry::{ElaboratedRefine, TacticEval, TacticRegistry};
@@ -1083,7 +1188,10 @@ fn run_surface_rw(state: &mut ProofState, rules: &[(&str, bool)]) -> Result<(), 
         .map(|(name, reverse)| SurfaceRwRule {
             span: Span::dummy(),
             reverse: *reverse,
-            term: SurfaceExpr::Ident(Span::dummy(), (*name).to_string()),
+            term: SurfaceExpr::Ident(
+                Span::dummy(),
+                clean_parser::SurfaceName::generated_path(name),
+            ),
         })
         .collect();
     let tactic = SurfaceTactic::Rw(Span::dummy(), surface_rules, SurfaceTacticLocation::Goal);
@@ -1161,8 +1269,9 @@ fn test_surface_rw_chained_global_then_local_rewrites_and_checks() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq_n(x.clone(), y.clone()),
             value: None,
         }],
@@ -1183,16 +1292,20 @@ fn test_surface_rw_chained_global_then_local_rewrites_and_checks() {
 #[test]
 fn test_surface_rw_unknown_global_fails_clean_not_found() {
     // NEGATIVE: `rw [NoSuchLemma]` — neither local hyp nor env const — must
-    // surface a clean HypothesisNotFound naming the missing identifier, never
-    // a panic / crash.
+    // surface a clean error naming the missing identifier, never a panic.
+    //
+    // The classification changed from `HypothesisNotFound` to `UnknownIdent`
+    // on 2026-08-30: see the sibling `test_rewrite_unknown_name_errors_cleanly`
+    // for why. The property this test actually guards — a clean, NAMED failure
+    // rather than a crash — is unchanged.
     let env = setup_env_with_full_eq();
     let x = Expr::const_(Name::from_string("x"), vec![]);
     let mut state = ProofState::new(env, make_p(x));
 
     let result = run_surface_rw(&mut state, &[("NoSuchLemma", false)]);
     assert!(
-        matches!(result, Err(TacticError::HypothesisNotFound(ref n)) if n == "NoSuchLemma"),
-        "rw [NoSuchLemma] should be a clean HypothesisNotFound, got {result:?}"
+        matches!(result, Err(TacticError::UnknownIdent(ref n)) if n == "NoSuchLemma"),
+        "rw [NoSuchLemma] should be a clean UnknownIdent, got {result:?}"
     );
 }
 
@@ -1209,7 +1322,7 @@ fn test_rewrite_env_const_non_equation_fails_clean() {
     let target = make_p(Expr::app(g, x.clone()));
     let mut state = ProofState::new(env, target.clone());
 
-    let result = rewrite_ltr(&mut state, "g");
+    let result = rewrite_ltr(&mut state, &clean_parser::SurfaceName::generated_path("g"));
     match result {
         Err(TacticError::GoalMismatch(msg)) => {
             assert!(
@@ -1284,8 +1397,9 @@ fn test_rewrite_at_with_proof_applied_lemma_rewrites_hyp_and_checks() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty,
             value: None,
         }],
@@ -1294,14 +1408,19 @@ fn test_rewrite_at_with_proof_applied_lemma_rewrites_hyp_and_checks() {
 
     // Proof term `gx x : g x = x` — an application, NOT a bare identifier.
     let gx_x = Expr::app(Expr::const_(Name::from_string("gx"), vec![]), x.clone());
-    rewrite_at_with_proof(&mut state, gx_x.clone(), "h", false)
-        .expect("rw [gx x] at h should rewrite P (g x) -> P x");
+    rewrite_at_with_proof(
+        &mut state,
+        gx_x.clone(),
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    )
+    .expect("rw [gx x] at h should rewrite P (g x) -> P x");
 
     let goal_after = state.current_goal().unwrap().clone();
     let h_decl = goal_after
         .local_ctx
         .iter()
-        .find(|d| d.name == "h")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("h must survive the rewrite");
     let rewritten_hyp_ty = make_p(x.clone());
     assert_eq!(
@@ -1354,8 +1473,9 @@ fn test_rewrite_at_with_proof_reverse_uses_eq_symm_and_checks() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty,
             value: None,
         }],
@@ -1363,14 +1483,19 @@ fn test_rewrite_at_with_proof_reverse_uses_eq_symm_and_checks() {
     let orig_goal = state.current_goal().unwrap().clone();
 
     let gx_x = Expr::app(Expr::const_(Name::from_string("gx"), vec![]), x.clone());
-    rewrite_at_with_proof(&mut state, gx_x.clone(), "h", true)
-        .expect("rw [← gx x] at h should rewrite P x -> P (g x)");
+    rewrite_at_with_proof(
+        &mut state,
+        gx_x.clone(),
+        &clean_parser::SurfaceName::generated_path("h"),
+        true,
+    )
+    .expect("rw [← gx x] at h should rewrite P x -> P (g x)");
 
     let goal_after = state.current_goal().unwrap().clone();
     let h_decl = goal_after
         .local_ctx
         .iter()
-        .find(|d| d.name == "h")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("h must survive the reverse rewrite");
     let rewritten_hyp_ty = make_p(Expr::app(g.clone(), x.clone()));
     assert_eq!(
@@ -1437,15 +1562,21 @@ fn test_rewrite_at_with_proof_no_match_errors_clean_and_preserves_hyp() {
         env,
         make_p(x.clone()),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty.clone(),
             value: None,
         }],
     );
 
     let proof = Expr::app(Expr::const_(Name::from_string("gx"), vec![]), x.clone());
-    let result = rewrite_at_with_proof(&mut state, proof, "h", false);
+    let result = rewrite_at_with_proof(
+        &mut state,
+        proof,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    );
     assert!(
         matches!(result, Err(TacticError::RewriteNoMatch { .. })),
         "rw [gx x] at h with no occurrence of `g x` in h should be a clean \
@@ -1457,7 +1588,7 @@ fn test_rewrite_at_with_proof_no_match_errors_clean_and_preserves_hyp() {
         .unwrap()
         .local_ctx
         .iter()
-        .find(|d| d.name == "h")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("h must still be present after a rejected rewrite");
     assert_eq!(
         h_decl.ty, hyp_ty,

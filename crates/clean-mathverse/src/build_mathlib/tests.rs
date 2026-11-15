@@ -109,7 +109,11 @@ fn test_build_mathlib_small_sample() {
         output_dir: tmp.path().join("mathverse"),
         shard_size_limit: 5000,
         max_file_size: 2_500_000,
-        file_limit: 0,
+        // The sample this test is named for. It was 0 ("no limit") while no
+        // build code read the field, so the "small sample" converted the whole
+        // toolchain library inside the unit suite and was the suite's memory
+        // peak (over 24 GB measured 2026-09-25).
+        file_limit: 10,
         verbose: true,
     };
 

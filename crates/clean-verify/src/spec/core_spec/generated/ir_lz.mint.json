@@ -3,7 +3,7 @@
  "body": "level::Level::is_zero",
  "role": "THE DESIGNATED WIDTH-ONE TARGET. Minted and REGISTERED as `ir_lz_module` on 2026-08-22 (designs/2026-08-22-is-zero-model-vs-minted-decision.md); the hand semantic model that carried that name until then is `ir_lzm_module`, and the chain's A4/A5 theorems are about THAT module. Over this minted module the A4 sentence is refuted, kernel-checked (`ir_lz_minted_refutes_a4_on_max`): the module calls `<LevelArc as Deref>::deref` (canonical index 1) and does not define it.",
  "core_digest": "729170999a5d7ad02cd3f341c1455279ef5b0ab4fb357a4233957c30ad500c55",
- "defs_digest": "b1b5b003982ba94ca67733e28f1615c6dac647fa58d08cdc6fe9397cefdd0b5c",
+ "defs_digest": "6819355e42f8871b48d0b2d27f82bbeb8c37b6df24b0ef8e26112317e785a422",
  "def_count": 13,
  "artifact_core_digest": "72f04d73ab7ab7da50d6eef4a56c64c3d668cc71f37381e424dcd5a06e4c5105",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix, as recorded in BOTH committed provenance files (ir_lz.a152.prov.json and ir_lz.b039.prov.json — two dumps, one digest). `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This chain is NOT in the producer A/B record (generated/ir_mint.producer_ab.json): it was a named REFUSAL (SSA position 20 outside the ir_d0..ir_d16 atom pool) until the 2026-08-22 widening to ir_d0..ir_d63, so the cross-producer identity claimed here is the two reader-A dumps the provenance files record, not three.",

@@ -33,7 +33,7 @@ if [[ "$(uname -m)" != "arm64" ]]; then
 fi
 
 echo "[1/4] building on-chip harness..."
-( cd "$HARNESS_DIR" && cargo build --release )
+( cd "$HARNESS_DIR" && targo --unverified build --release )
 
 echo "[2/4] running real AArch64 instructions on this chip..."
 "$HARNESS_DIR/target/release/isa_harness" "$GEN"

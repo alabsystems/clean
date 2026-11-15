@@ -91,6 +91,17 @@ pub enum OleanError {
     #[error("invalid clean payload: {0}")]
     InvalidPayload(String),
 
+    /// A part Lean's own compiler wrote (a `.olean` of a recognized Lean world)
+    /// carries a `CLEANENV` trailer. Only Clean's exporter appends that
+    /// trailer, and only to its own layout; `lean` never reads it, so a
+    /// re-check that trusted it would admit declarations `leanchecker` never
+    /// sees. The part is refused (R113, finding B3).
+    #[error(
+        "foreign payload trailer: a Lean-written `.olean` part carries a Clean payload trailer \
+         ({0}); `lean` never reads it, so the part is refused"
+    )]
+    PayloadOnLeanPart(String),
+
     /// BigNat value exceeds u64 limit for export
     #[error("export does not support BigNat values exceeding u64::MAX")]
     UnsupportedBigNat,

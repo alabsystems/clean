@@ -43,7 +43,7 @@ impl MonoConfig {
 #[derive(Debug, Clone)]
 pub struct MonoStep {
     /// Name of the lemma applied
-    pub lemma_name: String,
+    pub lemma_name: Name,
     /// Arguments supplied to the lemma
     pub arguments: Vec<Expr>,
     /// Subgoals generated
@@ -187,7 +187,7 @@ fn extract_binary_rel(expr: &Expr, rel_name: &str) -> Option<(Expr, Expr, Expr, 
     }
 
     if let ExprKind::Const(name, _) = current.kind() {
-        if name.to_string() == rel_name {
+        if name == &Name::from_string(rel_name) {
             args.reverse();
             // For Eq: 3 args (type, lhs, rhs)
             if rel_name == "Eq" && args.len() >= 3 {

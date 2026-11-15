@@ -8,6 +8,7 @@
 //!
 //! Split from grind_tests.rs for file size; same imports.
 
+use super::super::grind::grind;
 use super::*;
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
@@ -94,7 +95,9 @@ fn test_grind_funext_bridge_rewrites_to_pointwise_iff() {
         "bridge must hand the closer fan a pointwise Iff, got {pointwise:?}"
     );
     assert!(
-        goal.local_ctx.iter().any(|d| d.name == "x_grind_funext_0"),
+        goal.local_ctx
+            .iter()
+            .any(|d| d.name.name() == &Name::anon().str("x_grind_funext").num(0)),
         "bridge must intro the pointwise binder"
     );
 }

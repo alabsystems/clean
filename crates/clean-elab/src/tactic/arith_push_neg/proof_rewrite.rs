@@ -16,9 +16,9 @@ use super::proof_utils::{
     mk_prop_eq_from_iff, require_consts, PropRewriteResult,
 };
 use super::{
-    is_prop, make_and, make_exists_push_neg, make_forall_push_neg, make_not, make_or, match_and,
-    match_exists_push_neg, match_forall_push_neg, match_ge, match_gt, match_implies, match_le,
-    match_lt, match_not, match_or,
+    is_prop, is_raw_nat_rel, make_and, make_exists_push_neg, make_forall_push_neg, make_not,
+    make_or, match_and, match_exists_push_neg, match_forall_push_neg, match_ge, match_gt,
+    match_implies, match_le_any, match_lt_any, match_not, match_or, nat_le_raw, nat_lt_raw,
 };
 
 fn lift_wrapper_rewrite_with_congr_arg<F>(
@@ -110,20 +110,38 @@ fn rewrite_not_head_with_proof(
         )));
     }
 
-    if let Some((ty, lhs, rhs)) = match_le(&inner) {
+    // `¬(a ≤ b)` → `b < a` (Nat), in EITHER spelling: the `LE.le` typeclass
+    // spine or the raw `Nat.le a b` constant application. `raw` is threaded
+    // into the rule so both sides of the emitted `Eq` keep the spelling the
+    // hypothesis / goal actually had — the rewrite is sound either way (the two
+    // are definitionally equal), but a raw result matches a raw goal
+    // SYNTACTICALLY, which is what the downstream solver and `close_goal` want.
+    if let Some((ty, lhs, rhs)) = match_le_any(&inner) {
         if is_nat_type(&ty) {
+            let raw = is_raw_nat_rel(&inner);
+            let new = if raw {
+                nat_lt_raw(rhs.clone(), lhs.clone())
+            } else {
+                super::super::tc_app::nat_lt_tc(rhs.clone(), lhs.clone())
+            };
             return Ok(Some(super::proof_utils::mk_prop_rewrite_result(
-                super::super::tc_app::nat_lt_tc(rhs.clone(), lhs.clone()),
-                mk_nat_not_le_eq(state, &lhs, &rhs)?,
+                new,
+                mk_nat_not_le_eq(state, &lhs, &rhs, raw)?,
             )));
         }
     }
 
-    if let Some((ty, lhs, rhs)) = match_lt(&inner) {
+    if let Some((ty, lhs, rhs)) = match_lt_any(&inner) {
         if is_nat_type(&ty) {
+            let raw = is_raw_nat_rel(&inner);
+            let new = if raw {
+                nat_le_raw(rhs.clone(), lhs.clone())
+            } else {
+                super::super::tc_app::nat_le_tc(rhs.clone(), lhs.clone())
+            };
             return Ok(Some(super::proof_utils::mk_prop_rewrite_result(
-                super::super::tc_app::nat_le_tc(rhs.clone(), lhs.clone()),
-                mk_nat_not_lt_eq(state, &lhs, &rhs)?,
+                new,
+                mk_nat_not_lt_eq(state, &lhs, &rhs, raw)?,
             )));
         }
     }
@@ -321,32 +339,18 @@ pub(super) fn contrapose_with_proof(
         ],
     )?;
 
-    let contrapositive = Expr::pi(
-        *bi,
-        Expr::arrow(
-            (**cod).clone(),
-            Expr::const_(Name::from_string("False"), vec![]),
-        ),
-        Expr::arrow(
-            (**dom).clone(),
-            Expr::const_(Name::from_string("False"), vec![]),
-        ),
-    );
+    // `¬Q → ¬P`, both negations with the `Not` head as Mathlib's
+    // `contrapose` states them; simp reads a negation off that head only.
+    let not_cod = make_not(cod);
+    let contrapositive = Expr::pi(*bi, not_cod.clone(), make_not(dom));
     let old_target = target.clone();
 
     let forward = mk_lambda(state, &old_target, |state, hpq| {
-        mk_lambda(
-            state,
-            &Expr::arrow(
-                (**cod).clone(),
-                Expr::const_(Name::from_string("False"), vec![]),
-            ),
-            |state, hnot_q| {
-                mk_lambda(state, dom, |_, hp| {
-                    Expr::app(hnot_q.clone(), Expr::app(hpq.clone(), hp))
-                })
-            },
-        )
+        mk_lambda(state, &not_cod, |state, hnot_q| {
+            mk_lambda(state, dom, |_, hp| {
+                Expr::app(hnot_q.clone(), Expr::app(hpq.clone(), hp))
+            })
+        })
     });
 
     let reverse_target = contrapositive.clone();

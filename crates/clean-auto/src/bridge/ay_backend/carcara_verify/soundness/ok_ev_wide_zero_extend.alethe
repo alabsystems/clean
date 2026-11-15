@@ -1,0 +1,3 @@
+(assume nc (not (= (= ((_ zero_extend 4095) #b1) ((_ zero_extend 4095) #b0)) false)))
+(step s (cl (= (= ((_ zero_extend 4095) #b1) ((_ zero_extend 4095) #b0)) false)) :rule evaluate)
+(step done (cl) :rule resolution :premises (nc s))

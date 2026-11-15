@@ -3,24 +3,71 @@
 // Licensed under the Apache License, Version 2.0
 #![forbid(unsafe_code)]
 
+pub mod semr_bool_body;
+
+use std::collections::{BTreeMap, BTreeSet};
+#[cfg(feature = "fmt")]
+use std::collections::{HashMap, HashSet};
+
+// Declared first: `variant_shape!` is textually scoped, and `inst` / `proof`
+// use it to generate their `Copy` shape projections.
+#[macro_use]
+mod variant_shape;
+
 pub mod alloc_bound;
+pub mod analysis;
 pub mod bridge;
+pub mod build_info;
+pub mod bv_meaning;
+mod canonicalize;
+pub mod clean_boxed_u32;
+pub mod closure_storage;
+/// Format identification (`sniff_format`): zero-dep byte checks shared by the CLIs.
+pub mod codec;
+pub mod conditional_facts;
 pub mod constant;
 pub mod dialect;
 pub mod display;
+pub mod effects;
+mod func_ty_equality_observed;
+pub mod function_dependencies;
+pub mod imports;
+mod inhabit;
+pub use inhabit::Inhabitedness;
 pub mod inst;
 pub mod interpret;
+pub mod layout_table;
+pub mod level;
 pub mod mem2reg;
+mod module_aggregate_slot_observed;
+mod module_catalog_observed;
+mod module_catalog_queries_observed;
+mod module_drop_glue_observed;
+pub use module_drop_glue_observed::ObservedDropGlueIndex;
 pub mod node;
 pub mod pred;
 pub mod proof;
 /// Forward, sound, decidable propagation over the [`pred`] lattice.
 pub mod propagate;
+mod reach;
+pub use reach::ByValueStorageQuery;
 pub mod request;
 pub mod shape;
+pub mod signature_abi;
+pub mod storage;
+pub mod storage_usage;
+pub use storage::StorageLayout;
+pub use storage_usage::{StorageSite, StorageViolation, StorageViolationKind};
+mod source_provenance_observed;
 pub mod spec;
 pub mod spec_proof;
+pub mod spec_surface;
+pub mod template;
+pub mod text_directives;
+pub mod text_loss;
 pub mod ty;
+mod type_reachability;
+mod type_walk;
 pub mod value;
 #[cfg(feature = "serde")]
 pub(crate) mod wide_int_serde;
@@ -53,21 +100,32 @@ pub mod clean_expr_lowering;
 pub use bridge::{
     ConformanceSubset, SubsetSite, SubsetViolation, TypedValueMetadata, ValueMetadataOrigin,
 };
-pub use constant::Constant;
+pub use build_info::{BUILD_IDENTITY, BuildIdentity, SourceAttestation};
+pub use constant::{Constant, ConstantG};
 pub use dialect::{
     AttrEntry, AttrValue, Dialect, DialectError, DialectInst, DialectRegistry, LoweringPass,
     LoweringResult, RewriteOutcome,
 };
+pub use effects::{EffectPlace, EffectSet, EffectSummary};
+pub use imports::{
+    ExternRefSite, HashedModule, IdentityScheme, ImportVerificationError, MODULE_IDENTITY_DOMAIN,
+    MODULE_IDENTITY_DOMAIN_V2, ResolvedExternRef, VerifiedImport, signatures_compatible,
+    ty_structurally_eq_across,
+};
 pub use inst::{
-    AtomicRMWOp, BinOp, CastOp, FCmpOp, ICmpOp, Inst, Ordering, OverflowOp, SwitchCase, UnOp,
+    AssertKind, AssertOverflowOp, AtomicRMWOp, BinOp, CallShape, CallTarget, CallUnwindDisposition,
+    CastOp, Edge, EdgeKind, FCmpOp, ICmpOp, Inst, InstG, InstShape, Ordering, OverflowOp,
+    PanicLocation, PanicSite, SwitchCase, UnOp,
 };
 pub use interpret::{
-    InterpretError, InterpretErrorCode, InterpretInt, InterpretOptions, InterpretOutcome,
-    InterpretResult, InterpretValue, InterpretValueKind, Interpreter,
+    ArrayValue, HostCalls, HostRcOp, HostRcRole, HostState, InterpretError, InterpretErrorCode,
+    InterpretInt, InterpretOptions, InterpretOutcome, InterpretPanic, InterpretPanicSite,
+    InterpretResult, InterpretValue, InterpretValueKind, Interpreter, PanicLocationValue,
 };
 // Re-export new types added for TrustIr backend requirements (issue #26)
 // CallingConv, Linkage, Endianness, TargetInfo are defined below in this file.
-pub use node::InstrNode;
+pub use level::{Extension, NoExt, TemplateRef};
+pub use node::{InstrNode, InstrNodeG};
 #[cfg(feature = "clean-expr")]
 pub use proof::ExprObligation;
 // The real Clean-kernel `CleanCicRechecker` a kernel-capable orchestrator injects
@@ -78,15 +136,18 @@ pub use proof::ExprObligation;
 #[cfg(feature = "clean-expr")]
 pub use clean_expr_lowering::contract::KernelCleanCicRechecker;
 pub use proof::{
-    CleanCicKernelRecheck, CleanCicProofAuthorityRechecker, CleanCicRechecker, DiagnosticSeverity,
-    Divergence, LINEAGE_TRANSFORM_BINDING_SCHEMA, LineageGap, ObligationDiagnostic, ObligationKind,
+    CertificateBinding, CleanCicKernelRecheck, CleanCicModuleProofAuthority,
+    CleanCicProofAuthorityRechecker, CleanCicRechecker, DiagnosticSeverity, Divergence,
+    KernelClaimFamily, LINEAGE_TRANSFORM_BINDING_SCHEMA, LineageAppendError, LineageGap,
+    ModuleCleanCicRechecker, ObligationDiagnostic, ObligationKind, ObligationKindShape,
     ObligationSite, PROOF_OBLIGATION_SOURCE_TEXT_ID_MAX_BYTES, ProofAnnotation,
     ProofAnnotationFilters, ProofAuthorityRechecker, ProofCertificate, ProofCertificateRef,
-    ProofDigest, ProofDigestAlgorithm, ProofEvidence, ProofFormula, ProofLineageError,
-    ProofLineageId, ProofLineageManifest, ProofLineageNode, ProofObligation,
-    ProofObligationSourceIdentity, ProofObligationSourceRange, ProofReplayIdentity, ProofStatus,
-    ProofSummary, ProofTransform, ProofTransformStage, PublicObligationIdentity,
-    RejectingCleanCicRechecker, RejectingProofAuthorityRechecker, clean_cic_lineage_digest,
+    ProofDigest, ProofDigestAlgorithm, ProofDigestSha256DomainStream, ProofDigestStreamError,
+    ProofEvidence, ProofEvidenceShape, ProofFormula, ProofLineageError, ProofLineageId,
+    ProofLineageManifest, ProofLineageNode, ProofObligation, ProofObligationSourceIdentity,
+    ProofObligationSourceRange, ProofReplayIdentity, ProofStatus, ProofSummary, ProofTransform,
+    ProofTransformStage, PublicObligationIdentity, RejectingCleanCicRechecker,
+    RejectingProofAuthorityRechecker, SourceDefinitionRef, clean_cic_lineage_digest,
     is_canonical_public_obligation_id, is_valid_proof_obligation_source_text_id, lineage_closed,
     lineage_closed_with_authority, lineage_transform_binding_digest,
     lineage_transform_binding_formula, obligation_has_kernel_rechecked_clean_cic,
@@ -99,6 +160,11 @@ pub use proof::{
 // (`default-features = false`) de-clutters the crate root so the core IR API is
 // not buried under ~330 schema symbols. The schema is always reachable via its
 // canonical `trust_ir::request::` path regardless of this feature.
+/// The writer's refusal, reachable in every feature configuration (the
+/// `binary` module itself is public only under the `binary` feature), so
+/// [`Module::wire_image_refusal`] can name it.
+pub use binary::{BinaryProjectionError, WireNodeSite};
+pub use layout_table::{LayoutMemo, LayoutTable, LayoutTableStats};
 pub use pred::{Pred, PredTable, Space, Universe};
 pub use propagate::{assumed_fact, derive_result_fact, integer_value_range};
 #[cfg(feature = "request-reexports")]
@@ -111,8 +177,8 @@ pub use request::{
     CHC_X86_HARDWARE_VECTOR_CONTRACT_HARDWARE_MODEL,
     CHC_X86_HARDWARE_VECTOR_CONTRACT_MASK_SEMANTICS, CHC_X86_HARDWARE_VECTOR_CONTRACT_SET_NAME,
     CHC_X86_HARDWARE_VECTOR_CONTRACT_SOURCE_PACKAGE,
-    CHC_X86_HARDWARE_VECTOR_CONTRACT_TARGET_FAMILY,
-    CHC_X86_UNSIGNED_VECTOR_COMPARE_FAIL_CLOSED_POLICY,
+    CHC_X86_HARDWARE_VECTOR_CONTRACT_TARGET_FAMILY, CHC_X86_ICMP_CERTIFICATE_RULE,
+    CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS, CHC_X86_UNSIGNED_VECTOR_COMPARE_FAIL_CLOSED_POLICY,
     CHC_X86_V2_I64_HARDWARE_VECTOR_CONTRACT_DESCRIPTOR,
     CHC_X86_V2_I64_HARDWARE_VECTOR_CONTRACT_OPERATIONS,
     CHC_X86_V4_I32_HARDWARE_VECTOR_CONTRACT_DESCRIPTOR,
@@ -121,7 +187,8 @@ pub use request::{
     CHC_X86_V8_I16_HARDWARE_VECTOR_CONTRACT_OPERATIONS, CHC_X86_V8_I16_MASK_TO_BITS_COMPOSITION,
     CHC_X86_V8_I16_MASK_TO_BITS_SEMANTICS, CHC_X86_V16_I8_HARDWARE_VECTOR_CONTRACT_DESCRIPTOR,
     CHC_X86_V16_I8_HARDWARE_VECTOR_CONTRACT_OPERATIONS, CHC_X86_V16_I8_MASK_TO_BITS_COMPOSITION,
-    CHC_X86_V16_I8_MASK_TO_BITS_SEMANTICS, HARDWARE_VECTOR_CONTRACT_MANIFEST_SCHEMA,
+    CHC_X86_V16_I8_MASK_TO_BITS_SEMANTICS, ChcX86IcmpCertificateRule, ChcX86IcmpCertifyingBuild,
+    ChcX86IcmpGround, ChcX86VectorIcmpCell, HARDWARE_VECTOR_CONTRACT_MANIFEST_SCHEMA,
     HARDWARE_VECTOR_CONTRACT_MANIFEST_SCHEMA_VERSION, HARDWARE_VECTOR_CONTRACT_REASON_CODES,
     HARDWARE_VECTOR_CONTRACT_SCHEMA, HARDWARE_VECTOR_CONTRACT_SCHEMA_VERSION,
     HARDWARE_VECTOR_CONTRACT_STATUS_CODES, HardwareVectorContractDescriptor,
@@ -129,8 +196,9 @@ pub use request::{
     NATIVE_BUNDLE_IDENTITY_CONTRACT_DESCRIPTOR, NATIVE_BUNDLE_IDENTITY_CONTRACT_DIGEST_CONTEXTS,
     NATIVE_BUNDLE_IDENTITY_CONTRACT_EXTERNAL_FIELDS,
     NATIVE_BUNDLE_IDENTITY_CONTRACT_PROVIDED_FIELDS, NATIVE_BUNDLE_IDENTITY_CONTRACT_SCHEMA,
-    NATIVE_BUNDLE_IDENTITY_CONTRACT_SCHEMA_VERSION, NATIVE_EVIDENCE_ARTIFACT_ATTACHMENT_SCHEMA,
-    NATIVE_EVIDENCE_ARTIFACT_ATTACHMENT_SCHEMA_VERSION,
+    NATIVE_BUNDLE_IDENTITY_CONTRACT_SCHEMA_VERSION, NATIVE_COVERAGE_ATTESTATION_DIGEST_DOMAIN,
+    NATIVE_COVERAGE_ATTESTATION_SCHEMA_VERSION, NATIVE_COVERAGE_REPLAY_CONTEXT_DIGEST_DOMAIN,
+    NATIVE_EVIDENCE_ARTIFACT_ATTACHMENT_SCHEMA, NATIVE_EVIDENCE_ARTIFACT_ATTACHMENT_SCHEMA_VERSION,
     NATIVE_EVIDENCE_ARTIFACT_AUTHORITY_REPORT_ROW_KEYS,
     NATIVE_EVIDENCE_ARTIFACT_AUTHORITY_RESOLUTION_ROW_KEYS,
     NATIVE_EVIDENCE_ARTIFACT_AUTHORITY_ROW_DESCRIPTOR,
@@ -146,8 +214,10 @@ pub use request::{
     NATIVE_VERIFICATION_BUNDLE_SCHEMA_VERSION, NativeAdapterInput, NativeAdtLayoutFact,
     NativeAssertionId, NativeBundleIdentityContractDescriptor, NativeBundleProducer,
     NativeBundleProvenance, NativeCastFact, NativeCompilerFactId, NativeCompilerFactRef,
-    NativeCompilerFacts, NativeDiagnosticLevel, NativeDiagnosticsPolicy, NativeEnumLayoutFact,
-    NativeEnumNicheFact, NativeEnumTagEncoding, NativeEnumVariantLayoutFact,
+    NativeCompilerFacts, NativeCoverageAttestation, NativeCoverageAttestationError,
+    NativeCoverageAttestationRow, NativeCoverageReplayInconclusive, NativeCoverageReplayRefusal,
+    NativeCoverageResultReplay, NativeDiagnosticLevel, NativeDiagnosticsPolicy,
+    NativeEnumLayoutFact, NativeEnumNicheFact, NativeEnumTagEncoding, NativeEnumVariantLayoutFact,
     NativeEvidenceArtifact, NativeEvidenceArtifactAttachment, NativeEvidenceArtifactAttachmentKey,
     NativeEvidenceArtifactAttachmentResolution, NativeEvidenceArtifactAuthority,
     NativeEvidenceArtifactAuthorityRow, NativeEvidenceArtifactAuthorityRowDescriptor,
@@ -159,8 +229,9 @@ pub use request::{
     NativeGenericArg, NativeIntegerRange, NativeMonomorphizationFact, NativeMonomorphizationId,
     NativeObligationCause, NativeObligationSource, NativePointerOffsetFact,
     NativePointerOffsetProvenance, NativeReplayAtom, NativeReplayAtomId, NativeReplayAtomKind,
-    NativeReplayContext, NativeRequestDigestIdentity, NativeRequestId, NativeRequestProvenance,
-    NativeSemanticBridge, NativeSemanticBridgeEvidenceStatus,
+    NativeReplayContext, NativeReplayContextDigest, NativeReplayContextUnavailable,
+    NativeReplayedResult, NativeReplayedStrength, NativeRequestDigestIdentity, NativeRequestId,
+    NativeRequestProvenance, NativeSemanticBridge, NativeSemanticBridgeEvidenceStatus,
     NativeSemanticBridgeProofIdentityReplayHealthSummaryRoundTripReport,
     NativeSemanticBridgeProofIdentityReplayHealthSummaryRoundTripStatus,
     NativeSemanticBridgeProofIdentityReplayReport, NativeSemanticBridgeProofIdentityReplayStatus,
@@ -297,14 +368,15 @@ pub use request::{
     TrustVcTrustedEvidencePolicy, TrustVcVerificationMode, TrustWpFramePolicy, TrustWpHeapModel,
     TrustWpLoopStrategy, TrustWpNativeEvidenceBundle, TrustWpNativeRequest, TrustWpPanicSemantics,
     TrustWpRequestOptions, TrustWpVerificationMode, TySharedPrimitiveManifest,
-    TySharedPrimitiveManifestReason, TySharedPrimitiveManifestStatus,
+    TySharedPrimitiveManifestReason, TySharedPrimitiveManifestStatus, ValidatedNativeBundle,
     chc_x86_hardware_vector_contract_descriptors, chc_x86_hardware_vector_contract_manifest_digest,
     chc_x86_hardware_vector_contract_manifest_key_value_lines,
     chc_x86_hardware_vector_contract_manifest_key_value_text,
     chc_x86_hardware_vector_contract_manifest_row_count,
     chc_x86_hardware_vector_contract_manifest_rows,
-    chc_x86_hardware_vector_contract_manifest_sha256, native_bundle_identity_contract_descriptor,
-    native_evidence_artifact_authority_row_descriptor,
+    chc_x86_hardware_vector_contract_manifest_sha256, chc_x86_vector_icmp_cell_ground,
+    chc_x86_vector_icmp_cell_status, chc_x86_vector_icmp_lowering_row, chc_x86_vector_icmp_spec,
+    native_bundle_identity_contract_descriptor, native_evidence_artifact_authority_row_descriptor,
     petri_native_verification_bundle_handoff_contract_health_report,
     petri_native_verification_bundle_handoff_descriptor,
     petri_native_verification_bundle_handoff_diagnostic_fixture_manifest,
@@ -320,7 +392,7 @@ pub use request::{
     petri_successor_trust_mc_chc_shared_primitive_contract_manifest_key_value_text,
     petri_successor_trust_mc_chc_shared_primitive_contract_manifest_row_count,
     petri_successor_trust_mc_chc_shared_primitive_contract_manifest_rows,
-    petri_successor_trust_mc_chc_shared_primitive_contract_manifest_sha256,
+    petri_successor_trust_mc_chc_shared_primitive_contract_manifest_sha256, physical_mask_lane,
     ty_shared_primitive_manifest, ty_shared_primitive_manifest_digest,
     ty_shared_primitive_manifest_key_value_lines, ty_shared_primitive_manifest_key_value_text,
     ty_shared_primitive_manifest_row_count, ty_shared_primitive_manifest_rows,
@@ -334,20 +406,29 @@ pub use shape::{
     TyLayoutShape, TyShape, pointer_sized_unsigned_ty,
 };
 pub use spec::{
-    ProofKind, SpecAnchor, SpecCoverage, SpecEnforcementMode, SpecInvariant, SpecLinkOptions,
-    SpecLinkReport, SpecLinkViolation, SpecModule, SpecNonCertificationReason, SpecOrigin,
-    SpecProjectionTarget, SpecProof, SpecVar, SpecWaiver, TEMPORAL_FIELD_PATH_PROJECTION_V1,
-    link_spec_modules, validate_spec_executable_links, validate_spec_structure,
+    KernelCertifiedTheorems, ProofKind, SpecAnchor, SpecCoverage, SpecEnforcementMode,
+    SpecInvariant, SpecLinkOptions, SpecLinkReport, SpecLinkViolation, SpecModule,
+    SpecNonCertificationReason, SpecOrigin, SpecProjectionTarget, SpecProof, SpecTemporal, SpecVar,
+    SpecWaiver, TEMPORAL_FIELD_PATH_PROJECTION_V1, TemporalForm, link_spec_modules,
+    link_spec_modules_with_theorems, validate_clean_theorem_bindings, validate_linked_spec_surface,
+    validate_spec_executable_links, validate_spec_executable_links_observed,
+    validate_spec_structure, validate_spec_structure_observed,
 };
 pub use spec_proof::{HarnessEntry, HarnessManifest, HarnessManifestError, link_proofs};
 pub use ty::{
-    ClosureTy, EnumDef, EnumLayoutDescriptor, EnumTagEncoding, EnumTagRepr, EnumVariant,
-    FatPtrKind, FieldDef, FuncTy, RecordDef, SetRepr, StructDef, StructRepr, Ty,
+    ClosureTy, DialectTy, DialectTyError, EnumDef, EnumDefG, EnumLayoutDescriptor, EnumTagEncoding,
+    EnumTagRepr, EnumVariant, EnumVariantG, FatPtrKind, FieldDef, FieldDefG, FuncTy, FuncTyG,
+    HandleTy, HandleTyError, RecordDef, SetRepr, StructDef, StructDefG, StructRepr, Ty, TyG,
     stable_trait_object_id, stable_vtable_global_name,
 };
+pub use type_reachability::{
+    CallableCarriers, DialectTypeReachability, NominalTypeReachability,
+    ObservedNominalTypeReachability,
+};
 pub use value::{
-    BlockId, ClosureTyId, EnumId, FuncId, FuncTyId, PredId, ProofId, ProofTag, RecordId, ScopeData,
-    SourceSpan, StructId, TyId, UnivId, ValueId,
+    BlockId, ClosureTyId, EnumId, FreshIds, FuncId, FuncTyId, HoleId, IdRun, IdSpaceExhausted,
+    ImportId, InlinedAt, ParamId, PredId, ProofId, ProofTag, RecordId, ScopeData, SourceSpan,
+    StructId, TyId, TypedId, UnivId, ValueId,
 };
 
 /// Calling convention for functions.
@@ -369,6 +450,69 @@ pub enum CallingConv {
     Rust,
     /// Swift calling convention (self/error return conventions).
     Swift,
+    /// Rust `extern "C-unwind"` (v45, roadmap WS3.12 / F-059): the C
+    /// convention on a function that MAY unwind across the boundary. Under the
+    /// ratified panic=abort policy (`docs/ub-numerics-policy.md` §4) this is
+    /// RECORDED, never given unwind semantics: the consumer must not treat it
+    /// as plain `C` when it matters (an unwind table), and nothing here models
+    /// an unwind. Must-refuse corpus row
+    /// `refuse/calling_conv_c_unwind_definition`: a definition with this
+    /// convention is well-formed here, and a consumer that would lower it as
+    /// `C` must refuse it instead.
+    CUnwind,
+    /// `extern "sysv64"`: the System V AMD64 convention, explicitly (v45).
+    SysV64,
+    /// `extern "win64"`: the Microsoft x64 convention, explicitly (v45).
+    Win64,
+    /// `extern "aapcs"`: the 32-bit Arm AAPCS convention (v45).
+    Aapcs,
+    /// `extern "efiapi"`: the UEFI convention (v45).
+    EfiApi,
+    /// `extern "vectorcall"`: the x86 vector-register convention (v45).
+    VectorCall,
+    /// `extern "rust-cold"`: Rust's cold-path convention (v45).
+    RustCold,
+    // No `Other(String)` escape, deliberately (WS3.12): it would break
+    // `Copy`, and a foreign ABI this enum cannot name must be a PRODUCER
+    // refusal, never an opaque string a consumer lowers as C.
+}
+
+impl CallingConv {
+    /// True for the conventions added in wire v45 (WS3.12). The binary
+    /// writer selects v45 exactly when one of these occurs.
+    ///
+    /// PROVED, every cell: `trust_ir_laws::laws::cc_abi_surface_*` (gate 13).
+    #[must_use]
+    pub fn is_abi_surface(self) -> bool {
+        matches!(
+            self,
+            CallingConv::CUnwind
+                | CallingConv::SysV64
+                | CallingConv::Win64
+                | CallingConv::Aapcs
+                | CallingConv::EfiApi
+                | CallingConv::VectorCall
+                | CallingConv::RustCold
+        )
+    }
+
+    /// Every convention, in wire-tag order. The text parser resolves a token
+    /// through this list and [`core::fmt::Display`], so the two spellings
+    /// cannot drift.
+    pub const ALL: [CallingConv; 12] = [
+        CallingConv::C,
+        CallingConv::Fast,
+        CallingConv::Cold,
+        CallingConv::Rust,
+        CallingConv::Swift,
+        CallingConv::CUnwind,
+        CallingConv::SysV64,
+        CallingConv::Win64,
+        CallingConv::Aapcs,
+        CallingConv::EfiApi,
+        CallingConv::VectorCall,
+        CallingConv::RustCold,
+    ];
 }
 
 impl core::fmt::Display for CallingConv {
@@ -379,6 +523,13 @@ impl core::fmt::Display for CallingConv {
             CallingConv::Cold => "coldcc",
             CallingConv::Rust => "rustcc",
             CallingConv::Swift => "swiftcc",
+            CallingConv::CUnwind => "c_unwindcc",
+            CallingConv::SysV64 => "sysv64cc",
+            CallingConv::Win64 => "win64cc",
+            CallingConv::Aapcs => "aapcscc",
+            CallingConv::EfiApi => "efiapicc",
+            CallingConv::VectorCall => "vectorcallcc",
+            CallingConv::RustCold => "rust_coldcc",
         })
     }
 }
@@ -401,12 +552,145 @@ pub enum Linkage {
     Weak,
     /// Like Weak but only one copy is kept after linking.
     LinkOnce,
+    /// Available for inlining but never emitted; the definition lives
+    /// elsewhere (LLVM `available_externally`). v41.
+    ///
+    /// A consumer emits no body for it and binds every use to the symbol. It
+    /// MAY splice the body into a direct call instead of calling the symbol
+    /// (an inline-only body: a runtime helper's fast path shipped beside its
+    /// one out-of-line definition). Doing so rests on the one-definition-rule
+    /// premise that the body computes what the definition the symbol binds to
+    /// computes, which nothing in this module can check. A consumer that makes
+    /// a proof claim about what it compiled therefore must not splice such a
+    /// body unless a `Module.imports` dependency authenticated by
+    /// [`Module::verify_import`] exports a structurally equal definition; it
+    /// keeps the call (and still compiles the module). Must-refuse corpus row
+    /// `refuse/available_externally_inline_unauthenticated` is the `none` row
+    /// for this obligation: a semantics-preservation premise with no refusable
+    /// module, whose rung is the consumer's own test.
+    AvailableExternally,
+    /// A weak DECLARATION: resolves to null rather than failing the link when
+    /// no definition exists (LLVM `extern_weak`). v41.
+    ///
+    /// Body-less, it is an import exactly like a body-less [`Linkage::External`]
+    /// function (validator declaration rule, FFI boundary for
+    /// [`Module::first_ffi_boundary`]), except that its address is NULLABLE:
+    /// see [`Function::is_weak_declaration`] for the spellings the validator
+    /// admits. (A body-less `AvailableExternally` is NOT a declaration: that
+    /// linkage is by definition a copy of a body.) Must-refuse corpus rows
+    /// `refuse/extern_weak_direct_call` (a direct `Call` of the declaration)
+    /// and `refuse/extern_weak_as_fn_def` (a `Constant::FnDef` of it) pin the
+    /// two spellings the validator refuses.
+    ExternalWeak,
+    /// `Weak` under the one-definition rule: all copies are known equivalent,
+    /// so the linker may drop duplicates (LLVM `weak_odr`). v41.
+    WeakOdr,
+    /// `LinkOnce` under the one-definition rule (LLVM `linkonce_odr`). v41.
+    LinkOnceOdr,
+}
+
+impl Linkage {
+    /// Whether this linkage lets the linker bind a DIFFERENT definition than
+    /// the one a module carries (or none): `Weak`, `LinkOnce` and
+    /// `ExternalWeak`.
+    ///
+    /// Exhaustive on purpose — a linkage added later must be classified here
+    /// rather than admitted by a wildcard arm. `WeakOdr` / `LinkOnceOdr` /
+    /// `AvailableExternally` are NOT interposable under the
+    /// one-definition-rule premise (every copy is the same definition), which
+    /// is disclosed, not verified. Import authentication refuses an
+    /// interposable site on either end of a proof-bearing edge
+    /// ([`ImportVerificationError::InterposableFarSite`], WS8.14), and
+    /// trust-ir-build's WS3.8 rule refuses a non-null pointer constant into an
+    /// interposable global (`PointerConstantRefusal::InterposableLinkage`);
+    /// both read this table.
+    ///
+    /// PROVED, every cell: `trust_ir_laws::laws::interposable_*` (gate 13).
+    #[inline]
+    #[must_use]
+    pub const fn is_interposable(self) -> bool {
+        match self {
+            Linkage::Weak | Linkage::LinkOnce | Linkage::ExternalWeak => true,
+            Linkage::External
+            | Linkage::Internal
+            | Linkage::Private
+            | Linkage::AvailableExternally
+            | Linkage::WeakOdr
+            | Linkage::LinkOnceOdr => false,
+        }
+    }
+
+    /// Whether a symbol of this linkage is MODULE-LOCAL — `Internal` or
+    /// `Private` — and so is neither exported to nor importable by another
+    /// module. Its negation is "exported": import authentication refuses a
+    /// module-local far symbol (`ImportVerificationError::SymbolNotExported`),
+    /// the linked walk's export index skips one, and a module-local function
+    /// may not claim `Hidden`/`Protected` visibility
+    /// (`ContradictoryFunctionVisibility`, `trust_ir_laws::visibility_contradicts_linkage`).
+    ///
+    /// PROVED, every cell: `trust_ir_laws::laws::module_local_*` (gate 13).
+    #[inline]
+    #[must_use]
+    pub const fn is_module_local(self) -> bool {
+        matches!(self, Linkage::Internal | Linkage::Private)
+    }
+
+    /// Whether this linkage is one of the four v41 additions
+    /// (`AvailableExternally`, `ExternalWeak`, `WeakOdr`, `LinkOnceOdr`), so a
+    /// function or global carrying it selects the v41 contract-surface wire
+    /// version. The binary writer selects v41 through this table.
+    ///
+    /// PROVED, every cell: `trust_ir_laws::laws::contract_surface_linkage_*`
+    /// (gate 13).
+    #[inline]
+    #[must_use]
+    pub const fn requires_contract_surface(self) -> bool {
+        matches!(
+            self,
+            Linkage::AvailableExternally
+                | Linkage::ExternalWeak
+                | Linkage::WeakOdr
+                | Linkage::LinkOnceOdr
+        )
+    }
+}
+
+/// Symbol visibility (v41) — orthogonal to [`Linkage`].
+///
+/// Linkage answers "may another module define this?"; visibility answers "may
+/// another module SEE it once linked". Consumers that conflate the two cannot
+/// express a hidden-but-external symbol, which is the whole staticlib/cdylib
+/// boundary.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum Visibility {
+    /// Normal, externally visible (ELF `STV_DEFAULT`). The legacy value.
+    #[default]
+    Default,
+    /// Not visible outside the linked image (ELF `STV_HIDDEN`).
+    Hidden,
+    /// Visible, but never preemptible (ELF `STV_PROTECTED`).
+    Protected,
+}
+
+impl core::fmt::Display for Visibility {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Visibility::Default => "default",
+            Visibility::Hidden => "hidden",
+            Visibility::Protected => "protected",
+        })
+    }
 }
 
 impl core::fmt::Display for Linkage {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.write_str(match self {
             Linkage::External => "external",
+            Linkage::AvailableExternally => "available_externally",
+            Linkage::ExternalWeak => "external_weak",
+            Linkage::WeakOdr => "weak_odr",
+            Linkage::LinkOnceOdr => "linkonce_odr",
             Linkage::Internal => "internal",
             Linkage::Private => "private",
             Linkage::Weak => "weak",
@@ -427,16 +711,35 @@ impl core::fmt::Display for Linkage {
 /// | `Producer` | `NativeBundleProducer` | serde name |
 /// |------------|------------------------|------------|
 /// | `TRust`    | `TRust`                | `"Trust"`  |
-/// | `Clean`    | (none — Clean emits modules, not bundles, today) | `"Clean"` |
+/// | `Clean`    | `Clean` (bundle schema 8, WS4.16) | `"Clean"` |
 /// | `TrustIr`  | `TrustIr`              | `"TrustIr"`|
 /// | `TSwift`   | `TSwift` (deprecated)  | `"tSwift"` |
 /// | `TC`       | `TC` (deprecated)      | `"tC"`     |
 /// | `Other(_)` | (none — escape hatch)  | `"Other"`  |
 ///
+/// A bundle over a module must also COVER every function's `Producer` with
+/// its declared language set — the total map is
+/// [`request::facts::NativeSourceLanguage::candidates_for_producer`], and
+/// `None` is covered only by an explicit `Unknown` member.
+///
 /// Like `CallingConv`/`Linkage`, this is claim-style provenance metadata: it
 /// has no operational semantics and carries no proof obligation. Its consumers
 /// are diagnostics (WS3), the cert cache (WS4), and lineage closure reporting
-/// (WS7).
+/// (WS7). Since 2026-10-08 it also selects ONE well-formedness rule: a
+/// function stamped [`Producer::TRust`] carries no `Borrow` / `BorrowMut` /
+/// `EndBorrow` (`docs/SPEC_RATIFICATIONS.md`, "A Rust reference carries no
+/// permission instruction"; `ValidationError::RustReferenceAsPermissionBorrow`
+/// in `trust-ir-build`). Being claim metadata, the stamp catches a producer
+/// regression, not an adversary.
+///
+/// In particular the `clean_backend_tv` kernel anchor is PRODUCER-AGNOSTIC
+/// (ratified 2026-09-18, finding F-016, option A): its re-check proves that the
+/// emitted body denotes the recorded comparand, whatever `producer` says, so
+/// relabelling a certified function's producer neither earns nor forfeits its
+/// `Certified` status. What binds a certificate to identity is the call-edge
+/// composition rule (every call bound to the callee actually called and to that
+/// callee's own kernel TV) and, once it lands, comparand↔source binding — never
+/// this field.
 ///
 /// # Stable wire tags (binary codec, v23)
 ///
@@ -493,11 +796,324 @@ impl core::fmt::Display for Producer {
     }
 }
 
+/// The machine-checkable CODEGEN LICENSE for a function body (binary v41).
+///
+/// The two-language design of record forbids codegen consumption of a
+/// below-tier function body and names an in-band "ungated-body" attribute as
+/// the refusal hook consumers must honor. This is that hook, in-band and
+/// typed — rather than a JSON substring inside a `SpecInvariant` formula
+/// string, which no consumer can be expected to parse.
+///
+/// # Three states, and why `Option` carries one of them
+///
+/// [`Function::body_gate`] is `Option<BodyGate>`, and the `None` is
+/// load-bearing:
+///
+/// * `None` — NO LICENSING CLAIM IS MADE. Every v38-and-older blob decodes to
+///   this, as does any producer outside the licensing regime. It is the
+///   GRANDFATHER state: a consumer may permit it, because refusing it would
+///   refuse every module written before v41. It is **not** `Ungated`.
+/// * `Some(BodyGate::Ungated)` — an AFFIRMATIVE claim that no gate was applied
+///   to this body. A codegen consumer MUST REFUSE it.
+/// * `Some(BodyGate::Gated { authority })` — the body passed the gate owned by
+///   `authority`. A consumer may proceed only if it RECOGNIZES `authority`; an
+///   unrecognized authority is a refusal, never a pass. Some authorities are
+///   also BOUND TO EVIDENCE the module must carry (`trust-ir-build`'s
+///   `EVIDENCE_BOUND_GATE_AUTHORITIES`: `clean-kernel-tv` requires exactly one
+///   kernel-rechecked `clean_backend_tv` certificate scoped to the function),
+///   and a `Failed` TranslationValidation / Postcondition / Precondition row
+///   scoped to the function revokes any `Gated` license; the codegen
+///   validator enforces both.
+///
+/// # Evidence (binary v61, roadmap WS1.12(c) / WS6.7(b))
+///
+/// `Gated` may carry [`GateEvidence`]: the obligation the license rests on and
+/// [`Module::function_body_digest`] of the body it was granted to. A present
+/// evidence is never taken on faith — `trust-ir-build` requires the obligation
+/// to be a `Certified` `TranslationValidation` row scoped to THIS function and
+/// the digest to recompute equal (`GatedEvidenceMismatch`), so a license
+/// stamped on one body and left on a rewritten one is refused. `None` is NO
+/// EVIDENCE RECORDED (every pre-v61 license), refused only under a policy
+/// that requires evidence for an evidence-bound authority. A transform that
+/// rewrites a licensed body must drop the evidence (or the whole license); a
+/// body digest that survives a rewrite would name the old body.
+///
+/// `None` and `Ungated` must never be conflated by any codec, fingerprint or
+/// digest: the first permits and the second refuses. That distinction is why
+/// the wire tag is three-valued rather than a presence byte over two states —
+/// a v41 blob has to be able to spell "no claim", or re-serializing a decoded
+/// legacy module would silently upgrade it into an affirmative refusal.
+///
+/// # Producer conformance rule (checked on the decoded-provenance path)
+///
+/// A v41-or-later producer MUST emit `Ungated` or `Gated` for every function
+/// WITH A BODY. Wire tag `0` (`None`) at v41+ is admitted on a bodyless
+/// declaration only, which produces no code and needs no license.
+///
+/// This is checkable, because the decoder need not drop the header version:
+/// `binary::deserialize_module_with_wire_version` returns the declared
+/// version beside the module as a `binary::WireVersion` — a type only the
+/// decoder can mint, so the version it reports is one a blob actually
+/// declared — and `trust_ir_build::validate_module_as_decoded` refuses, by
+/// name (`ValidationError::ProducerOmittedBodyGate`), a bodied `None` in a
+/// blob whose header is v41 or later, and grandfathers it below v41.
+///
+/// # Must-refuse corpus
+///
+/// Each rule above is pinned as a wire artifact a consumer must refuse
+/// (`crates/trust-ir-conformance/tests/fixtures/refuse/MANIFEST.tsv`, run by
+/// `trust_ir_conformance::refuse`): `refuse/body_gate_ungated` (the
+/// affirmative `Ungated`), `refuse/body_gate_unknown_authority` (an authority
+/// no consumer recognizes; refused once the consumer names its recognized
+/// set), `refuse/body_gate_kernel_tv_without_certificate` (the evidence-bound
+/// authority worn without its certificate),
+/// `refuse/body_gate_refuted_by_failed_tv` (a `Failed` TranslationValidation
+/// row revokes the license), `refuse/body_gate_evidence_stale_body_digest` (a
+/// license's [`GateEvidence`] naming another body's digest),
+/// `refuse/body_gate_kernel_tv_evidence_unrecorded` (an evidence-bound license
+/// with no evidence, refused under the evidence policy) and
+/// `refuse/body_gate_omitted_at_contract_surface`
+/// (a bodied `None` in a v41+ blob: refused by the decoded-provenance layer as
+/// the producer's fault, and by the codegen gate's fail-closed default as an
+/// unlicensed body — a grandfathering consumer permits the second by name).
+/// `trust-ir validate` applies it to every binary input, `--link`
+/// dependencies included, and states, for text / JSON / MessagePack input,
+/// that no wire version exists to check.
+///
+/// The rule used to carry an exception — tag `0` "legitimate as the faithful
+/// re-emission of pre-v41 content" — and the check does NOT honour it,
+/// because nothing can: a blob does not record what its content once was,
+/// and the header version is the WRITER's claim, never the content's. The
+/// exception is retired (2026-09-24); what it was for is a measured property
+/// of the writer instead. `binary::serialize_module` selects the MINIMUM
+/// lossless version for the module it is given, so a faithful re-emission of
+/// pre-v41 content keeps its pre-v41 header and stays grandfathered
+/// (`a_faithful_re_emission_of_pre_v41_content_keeps_its_header`); a
+/// re-emission reaches v41+ only when the module carries a v41+ feature, and
+/// whoever put it there is the v41+ producer of that module, held to the
+/// rule like any other. The three-valued tag still lets every writer spell
+/// `None`, so a transcoder never upgrades a legacy body into an affirmative
+/// `Ungated`; the decoded-path validator then refuses that body BY NAME,
+/// which is the loud form of what a two-valued tag would have done silently.
+///
+/// Residual, stated on the types rather than around them: a [`Module`] itself
+/// carries no wire version — not as a field, which would change its serde
+/// shape and put decode provenance into content identity — so a hand-built
+/// module, one parsed from text / JSON / MessagePack, or one decoded through
+/// the plain `binary::deserialize_module` has no provenance, and the rule
+/// cannot apply to it. Plain `validate_module` accepts a bodied `None` for
+/// exactly that reason. The MUST binds producers regardless; the check is
+/// what a consumer can now run against the artifact it was actually handed
+/// (`docs/binary-format.md`, v41).
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum BodyGate {
+    /// No verification gate was applied to this body. Codegen must refuse
+    /// (must-refuse corpus row `refuse/body_gate_ungated`).
+    Ungated,
+    /// Gated by the named authority. Free-form; round-trips verbatim.
+    Gated {
+        /// The gate's owner, e.g. `clean-kernel-tv`. Recognition is the
+        /// consumer's decision; this crate never interprets it.
+        authority: String,
+        /// What the license rests on (binary v61, tag 3); `None` = NO
+        /// EVIDENCE RECORDED. See the type docs. Sole trailing skipped field
+        /// of this variant, so every evidence-free license keeps its serde
+        /// bytes.
+        #[cfg_attr(
+            feature = "serde",
+            serde(default, skip_serializing_if = "Option::is_none")
+        )]
+        evidence: Option<GateEvidence>,
+    },
+}
+
+/// The evidence a [`BodyGate::Gated`] license rests on (binary v61, roadmap
+/// WS1.12(c)): the obligation it cites and the digest of the body it was
+/// granted to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct GateEvidence {
+    /// The obligation the license cites: for `clean-kernel-tv`, the
+    /// `Certified` `TranslationValidation` row scoped to the function.
+    pub obligation: ProofId,
+    /// [`Module::function_body_digest`] of the licensed body at the time the
+    /// license was granted.
+    pub body_digest: crate::proof::ProofDigest,
+}
+
+/// Digest domain of [`Module::function_body_digest`] (roadmap WS1.12(c)):
+/// the identity [`GateEvidence::body_digest`] names.
+pub const FUNCTION_BODY_DIGEST_V1_DOMAIN: &str = "trust_ir.function.body.v1";
+
+impl BodyGate {
+    /// `Gated` by `authority` with NO evidence recorded — the spelling of
+    /// every pre-v61 license.
+    #[must_use]
+    pub fn gated(authority: impl Into<String>) -> Self {
+        BodyGate::Gated {
+            authority: authority.into(),
+            evidence: None,
+        }
+    }
+
+    /// The evidence a `Gated` license carries, if any.
+    #[must_use]
+    pub fn evidence(&self) -> Option<&GateEvidence> {
+        match self {
+            BodyGate::Ungated => None,
+            BodyGate::Gated { evidence, .. } => evidence.as_ref(),
+        }
+    }
+
+    /// Canonical text token for the `; #body-gate:` clause. `Gated` has no
+    /// bare token — its text form is `gated "<authority>"` — so it returns
+    /// `None`, mirroring [`Producer::token`].
+    #[must_use]
+    pub fn token(&self) -> Option<&'static str> {
+        match self {
+            BodyGate::Ungated => Some("ungated"),
+            BodyGate::Gated { .. } => None,
+        }
+    }
+
+    /// True iff this gate makes any positive licensing claim at all.
+    /// `Ungated` never does. Whether the `authority` is TRUSTED is the
+    /// consumer's call, not this crate's.
+    #[must_use]
+    pub fn is_gated(&self) -> bool {
+        matches!(self, BodyGate::Gated { .. })
+    }
+}
+
+impl core::fmt::Display for BodyGate {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            BodyGate::Ungated => f.write_str("ungated"),
+            BodyGate::Gated {
+                authority,
+                evidence: None,
+            } => write!(f, "gated {authority:?}"),
+            BodyGate::Gated {
+                authority,
+                evidence: Some(evidence),
+            } => write!(
+                f,
+                "gated {authority:?} evidence #{} \"{}\"",
+                evidence.obligation.index(),
+                evidence.body_digest
+            ),
+        }
+    }
+}
+
 /// serde skip predicate for "skip if false". Used by `ParamAttrs`/`FuncAttrs`;
 /// the repo otherwise only has `Option::is_none`/`Vec::is_empty` predicates.
 #[cfg(feature = "serde")]
 fn is_false(b: &bool) -> bool {
     !*b
+}
+
+/// Integer-extension ABI attribute for an argument or return slot (v45,
+/// roadmap WS3.11 / F-054), the `zeroext` / `signext` LLVM parameter
+/// attributes.
+///
+/// It says how a slot NARROWER than the ABI's register lane reaches the
+/// callee: zero-extended, sign-extended, or unrecorded. Names and variants are
+/// taken verbatim from the v2 `FnAbiDescriptor` design so that descriptor can
+/// EXTEND this rather than rename it.
+///
+/// `None` is UNRECORDED, never "no extension needed": a consumer that needs a
+/// concrete extension for a narrow slot (DarwinPCS is the case that forced
+/// this) must refuse rather than pick one. Like the rest of [`ParamAttrs`]
+/// this is a producer CLAIM; the validator checks that it is well-placed
+/// (integer / `Bool` / `Char`, narrower than 64 bits), not that it is true.
+/// Must-refuse corpus row `refuse/narrow_arg_ext_unrecorded_darwin`: an
+/// `i8`/`u16` FFI declaration on aarch64-apple-darwin with a `ParamAttrs`
+/// slot recorded per parameter and `None` on both, well-formed here, and a
+/// DarwinPCS consumer must refuse it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash, PartialOrd, Ord)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum ArgExt {
+    /// No extension recorded. The pre-v45 state of every slot.
+    #[default]
+    None,
+    /// Zero-extended to the ABI lane (LLVM `zeroext`).
+    ZeroExt,
+    /// Sign-extended to the ABI lane (LLVM `signext`).
+    SignExt,
+}
+
+impl ArgExt {
+    /// The canonical text token, or `None` for the unrecorded state (which
+    /// the text form spells by OMITTING the attribute).
+    #[must_use]
+    pub fn token(self) -> Option<&'static str> {
+        match self {
+            ArgExt::None => None,
+            ArgExt::ZeroExt => Some("zeroext"),
+            ArgExt::SignExt => Some("signext"),
+        }
+    }
+}
+
+/// How one argument or return slot crosses a call edge (v45, roadmap WS3.11 /
+/// F-054) — the minimal, plan-of-record subset of the v2 `FnAbiDescriptor`
+/// `PassMode`, with its names and variants kept verbatim so v2 extends rather
+/// than renames.
+///
+/// **The `pass = None` rule, stated here once.** A slot with `pass = None` is
+/// UNRECORDED. A consumer places it only by a classification it ESTABLISHES
+/// under the module's [`StructPassingPolicy`] (under `NativeC`, the target's
+/// ruleset for the edge's convention; under `AlwaysMemory` and `Unclassified`
+/// no by-value aggregate slot is placed from inside the module), and REFUSES a
+/// slot it cannot place, never defaulting it
+/// (`refuse/struct_passing_unclassified_by_value_aggregate` for an aggregate,
+/// `refuse/narrow_arg_ext_unrecorded_darwin` for the sibling `ext` fact). A
+/// recorded mode is a producer CLAIM about that placement. The validator
+/// checks where it may sit (`InvalidAbiSlotFact`). That it AGREES is a
+/// consumer obligation
+/// (`refuse/struct_passing_native_c_pass_mode_contradicts_target`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum PassMode {
+    /// The slot is not passed at all: a zero-sized type. Well-formed only on
+    /// a slot whose layout is computable and empty.
+    Ignore,
+    /// Passed directly in one lane.
+    Direct,
+    /// Passed as two scalar lanes (an aggregate of two scalars, or a fat
+    /// pointer).
+    Pair,
+    /// Passed as the named sequence of closed scalar lanes whose total size
+    /// covers the slot's layout size (LLVM's "coerced to" shape).
+    Cast {
+        /// The lane types, each a closed scalar.
+        pieces: Vec<crate::ty::Ty>,
+    },
+    /// Passed through memory: the value is materialized in a caller-made
+    /// copy.
+    Indirect {
+        /// `true`: the copy itself occupies the outgoing argument area
+        /// (System V `byval`, rustc `Indirect { on_stack: true }`). `false`:
+        /// the copy's address travels as an ordinary pointer argument (AAPCS64
+        /// and Win64 memory class).
+        on_stack: bool,
+    },
+}
+
+impl PassMode {
+    /// The canonical text token of the mode's head.
+    #[must_use]
+    pub fn token(&self) -> &'static str {
+        match self {
+            PassMode::Ignore => "ignore",
+            PassMode::Direct => "direct",
+            PassMode::Pair => "pair",
+            PassMode::Cast { .. } => "cast",
+            PassMode::Indirect { .. } => "indirect",
+        }
+    }
 }
 
 /// Per-parameter optimization attributes (claim-style; TrustCg-facing hints).
@@ -506,7 +1122,8 @@ fn is_false(b: &bool) -> bool {
 /// `CallingConv`/`Linkage` they are assertions a frontend makes that the backend
 /// may exploit. A `Default` (all-`false`/`None`) `ParamAttrs` is the conservative
 /// "no information" state and is what every legacy module deserializes to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+// NOT `Copy` since v45: `PassMode::Cast` carries the lane types.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ParamAttrs {
     // R3 #6: the canonical Module MessagePack codec (`rmp_serde::to_vec`) serializes
@@ -532,15 +1149,17 @@ pub struct ParamAttrs {
     /// Pointee is not written through this parameter (LLVM `readonly`).
     #[cfg_attr(feature = "serde", serde(default))]
     pub readonly: bool,
-    /// Pointer parameter is an aggregate passed BY VALUE through memory: the
-    /// caller makes a hidden copy and passes its address (LLVM `byval`).
+    /// The PRE-LOWERED spelling of a by-value argument
+    /// ([`StructPassingPolicy`]): the callee receives its own copy. How the
+    /// copy crosses is recorded by `pass = indirect { on_stack }` on this
+    /// slot, and is otherwise UNRECORDED: the consumer places it by the
+    /// target's ruleset when it establishes one and refuses the slot otherwise
+    /// (the [`PassMode`] `pass = None` rule). No policy requires or
+    /// re-classifies it.
     ///
-    /// ABI pinning (abi-pinning.md): together with `sret` this is the
-    /// by-value-vs-by-reference classification of aggregate passing at a call
-    /// edge, so two frontends state — rather than independently invent — how a
-    /// memory-classed struct crosses an FFI boundary. Unlike the hint-style
-    /// attributes above, disagreement here changes the call's byte-level ABI.
-    /// Binary codec: v20, flag bit 3; pre-v20 blobs decode to `false`.
+    /// Unlike the hint-style attributes above, disagreement here changes the
+    /// call's byte-level ABI. Binary codec: v20, flag bit 3; pre-v20 blobs
+    /// decode to `false`.
     #[cfg_attr(feature = "serde", serde(default))]
     pub byval: bool,
     /// Pointer parameter is the caller-allocated slot for an aggregate RETURNED
@@ -549,10 +1168,27 @@ pub struct ParamAttrs {
     ///
     /// ABI pinning: the return-position half of the `byval` classification.
     /// Binary codec: v20, flag bit 4; pre-v20 blobs decode to `false`.
-    /// Trailing field — the only one that may `skip_serializing_if` (positional
-    /// MessagePack, R3 #6 above).
-    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
+    /// ALWAYS emitted by serde since v45 (the R3 #6 rule re-applied: `pass`
+    /// was appended after it, and positional MessagePack may only skip a
+    /// TRAILING field).
+    #[cfg_attr(feature = "serde", serde(default))]
     pub sret: bool,
+    /// Integer extension for this slot (v45). See [`ArgExt`]; `None` is
+    /// UNRECORDED, never "no extension needed".
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub ext: ArgExt,
+    /// How this slot crosses the call edge (v45). See [`PassMode`]; `None` is
+    /// UNRECORDED and falls under the `pass = None` rule stated there: the
+    /// consumer places the slot by a classification it establishes, or
+    /// refuses it (`refuse/narrow_arg_ext_unrecorded_darwin` is that refusal
+    /// for the sibling `ext` fact).
+    ///
+    /// Trailing field — the only one that may `skip_serializing_if`.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub pass: Option<PassMode>,
 }
 
 impl ParamAttrs {
@@ -566,15 +1202,27 @@ impl ParamAttrs {
             && !self.readonly
             && !self.byval
             && !self.sret
+            && self.ext == ArgExt::None
+            && self.pass.is_none()
     }
 }
 
-/// Function-level optimization attributes (claim-style; TrustCg-facing hints).
+/// Function-level optimization attributes (TrustCg-facing).
 ///
 /// `readonly`/`readnone` describe memory effects; `inlinehint`/`cold` are
-/// codegen hints. Like `ParamAttrs`, these are claims, not proofs. `params` is
-/// positional and may be shorter than the function's parameter list — a missing
-/// entry means `ParamAttrs::default()` for that parameter.
+/// codegen hints. `params` is positional and may be shorter than the function's
+/// parameter list — a missing entry means `ParamAttrs::default()` for that
+/// parameter.
+///
+/// **What is checked (WS2.7).** On a function WITH a body, `readnone` (LLVM
+/// `memory(none)`) and `readonly` (LLVM `memory(read)`) are CHECKED by
+/// `trust_ir_build::validate_module` (`ValidationError::FuncAttrClaimViolated`):
+/// no write (and for `readnone` no read) through an address that does not root
+/// at one of the function's own `Alloca`s, no synchronizing atomic, fence,
+/// heap or reference-count operation, no indirect call, and every direct callee
+/// carrying the same claim (`readonly` admits a `readnone` callee). On a
+/// bodyless declaration they remain a claim — there is no body to check. The
+/// other attributes, and every `ParamAttrs` entry, are claims, not proofs.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FuncAttrs {
@@ -584,10 +1232,12 @@ pub struct FuncAttrs {
     // readonly=true/readnone=false). Always emit every non-last field; only the
     // trailing `params` may skip. `default` keeps backward-compatible decode of
     // shorter legacy arrays.
-    /// Does not write memory (LLVM `readonly` on a function).
+    /// Does not write memory (LLVM `readonly` on a function). Checked on a
+    /// defined body (see the type docs); a claim on a declaration.
     #[cfg_attr(feature = "serde", serde(default))]
     pub readonly: bool,
-    /// Reads no memory and writes no memory (LLVM `readnone`).
+    /// Reads no memory and writes no memory (LLVM `readnone`). Checked on a
+    /// defined body (see the type docs); a claim on a declaration.
     #[cfg_attr(feature = "serde", serde(default))]
     pub readnone: bool,
     /// Prefer inlining (LLVM `inlinehint`).
@@ -598,11 +1248,45 @@ pub struct FuncAttrs {
     pub cold: bool,
     /// Per-parameter attributes, positional. May be empty or shorter than the
     /// parameter list; missing entries default to `ParamAttrs::default()`.
+    ///
+    /// ALWAYS emitted by serde since v41 (no `skip_serializing_if`): the R3 #7
+    /// rule above, re-applied — `target_features` was appended after it, and
+    /// positional MessagePack may only skip a TRAILING field.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub params: Vec<ParamAttrs>,
+    /// The function is `#[naked]`: it has no compiler-generated prologue or
+    /// epilogue and its body is entirely the producer's (v41).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub naked: bool,
+    /// Target features this function may assume, e.g. `["neon", "aes"]` (v41).
+    ///
+    /// A consumer must not compile a body that names a feature the target does
+    /// not have; nothing in `TargetInfo` could express this before, so
+    /// `#[target_feature]` had no representation at any level. Must-refuse
+    /// corpus row `refuse/target_feature_unknown` (`avx512f` on an aarch64
+    /// target): well-formed here — the validator knows no target's feature
+    /// set — and a consumer must refuse it.
+    ///
+    /// ALWAYS emitted by serde since v45 (the R3 #7 rule re-applied: `ret`
+    /// was appended after it).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub target_features: Vec<String>,
+    /// The RETURN slot's ABI facts (v45, roadmap WS3.11): `ext`, `pass`, and
+    /// the pointer attributes that describe a returned pointer
+    /// (`noalias` / `nonnull` / `align` / `dereferenceable`).
+    ///
+    /// Before this there was no return slot at all: `sret` on a PARAMETER was
+    /// the only return-position ABI fact expressible, so a `u8`-returning C
+    /// declaration could not say `zeroext` and a returned aggregate could not
+    /// say how it comes back.
+    ///
+    /// Declared LAST and conditionally skipped (empty): the sole trailing
+    /// skip, so every pre-v45 positional serde array still decodes.
     #[cfg_attr(
         feature = "serde",
-        serde(default, skip_serializing_if = "Vec::is_empty")
+        serde(default, skip_serializing_if = "ParamAttrs::is_empty")
     )]
-    pub params: Vec<ParamAttrs>,
+    pub ret: ParamAttrs,
 }
 
 impl FuncAttrs {
@@ -612,7 +1296,28 @@ impl FuncAttrs {
             && !self.readnone
             && !self.inlinehint
             && !self.cold
+            // v41: a naked or feature-gated function is NOT attribute-empty.
+            // Omitting these makes the canonical printer skip the `; #attrs:`
+            // line for a naked-only function, which is silent data loss the
+            // text round-trip would then report as a mismatch.
+            && !self.naked
+            && self.target_features.is_empty()
+            // v45: a function whose only ABI fact is on the RETURN slot is
+            // not attribute-empty either.
+            && self.ret.is_empty()
             && self.params.iter().all(ParamAttrs::is_empty)
+    }
+
+    /// True iff any slot uses a v45 ABI fact (an extension, a pass mode, or
+    /// any return-slot attribute). The binary writer selects v45 exactly when
+    /// this holds for some function.
+    #[must_use]
+    pub fn uses_abi_surface(&self) -> bool {
+        !self.ret.is_empty()
+            || self
+                .params
+                .iter()
+                .any(|p| p.ext != ArgExt::None || p.pass.is_some())
     }
 }
 
@@ -657,41 +1362,94 @@ impl core::fmt::Display for Endianness {
     }
 }
 
-/// Module-wide policy for how by-value aggregates cross call edges.
+/// Module-wide policy for by-value aggregates at call edges: WHO classifies
+/// them, and what the producer claims by stamping the value.
 ///
-/// ABI pinning (docs/roadmap/abi-pinning.md): this is the *contract* half of
-/// aggregate passing — the classification scheme every frontend that
-/// contributes to a link agreed to. trust-cg owns the *realization* (the
-/// actual register moves and stack slots for the pinned target).
+/// A *by-value aggregate slot* is a parameter or return of any `FuncTy` of the
+/// module whose type, looking through `Ty::Refine` to its base, is a `Struct`,
+/// `Tuple`, `Array`, `Enum`, `Record`, `Sequence`, `Set`, `Closure` or
+/// `Vector` ([`Module::is_by_value_aggregate_slot`]; ONE predicate, read by the
+/// validator's `AlwaysMemory` rule and its `pass = indirect` placement rule,
+/// and the set a consumer's policy gate must use). Scalars, thin pointers,
+/// `Handle`, `FatPtr` (two scalar lanes), `Unit` and `Never` are not. A
+/// *pre-lowered* crossing is spelled with pointers: an argument as a pointer
+/// parameter marked [`ParamAttrs::byval`], a returned aggregate as the single
+/// `sret` pointer parameter of a signature that returns nothing. No policy
+/// re-classifies a pre-lowered pointer.
+///
+/// ONE RULE for all three values: a consumer places a by-value aggregate slot
+/// only by a classification it ESTABLISHES, and refuses a slot it cannot
+/// place, never by a default. The values differ only in where that
+/// classification comes from (`docs/SPEC_RATIFICATIONS.md` §17). No value
+/// requires `ParamAttrs`. The rule covers a module that pins a target: one
+/// with `target_info: None` carries no policy, and §17 states that scope and
+/// the residual it leaves open.
+///
+/// `struct_passing` feeds `Module::stable_digest`, so the claim a value makes
+/// travels in the module's identity too.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum StructPassingPolicy {
-    /// The pinned target's native C ABI classification rules decide register
-    /// vs memory placement per aggregate (SysV x86-64, AAPCS64, ...). A
-    /// producer marks the memory-classed parameters/returns `byval`/`sret`
-    /// ([`ParamAttrs`]) per those rules.
+    /// The CONSUMER classifies. Each by-value aggregate slot crosses where the
+    /// target's ruleset for the edge's `CallingConv` places that layout. The
+    /// target is `TargetInfo::abi` when present, else the triple. The ruleset
+    /// is:
+    /// - the target's C ruleset for `C`, `CUnwind`, `Rust`, `RustCold`, `Fast`
+    ///   and `Cold` (the format defines no other aggregate ruleset for the last
+    ///   four);
+    /// - the named ruleset for `SysV64` / `Win64` / `Aapcs` / `EfiApi` /
+    ///   `VectorCall`;
+    /// - swiftcall for `Swift`.
+    ///
+    /// A consumer that implements no ruleset for an edge's convention refuses
+    /// the slot.
+    ///
+    /// The PRODUCER claims that placement is the one the other side of every
+    /// edge it emits uses (for foreign code: the foreign side's actual
+    /// convention), and marks nothing to say so. A slot whose intended
+    /// placement differs must be pre-lowered or refused by the producer. A
+    /// producer that establishes this for no slot stamps `Unclassified`.
+    /// Whether the claim is true is not decidable here.
+    ///
+    /// A recorded [`ParamAttrs::pass`] or [`FuncAttrs::ret`] fact on any slot
+    /// is a second statement of the placement the consumer computes and must
+    /// AGREE with it. The validator checks only where a fact may sit
+    /// (`InvalidAbiSlotFact`). A consumer that cannot establish agreement MUST
+    /// refuse the module rather than prefer either statement. Must-refuse
+    /// corpus row `refuse/struct_passing_native_c_pass_mode_contradicts_target`.
     #[default]
     NativeC,
-    /// Every by-value aggregate crosses call edges through memory — a `byval`
-    /// pointer parameter or an `sret` return slot — regardless of size. The
-    /// conservative scheme that needs no per-target classification table.
+    /// Every aggregate crossing is PRE-LOWERED: no `FuncTy` of the module has a
+    /// by-value aggregate slot. Decided by `validate_module`
+    /// (`AlwaysMemoryByValueAggregate`). Must-refuse corpus row
+    /// `refuse/struct_passing_always_memory_by_value_aggregate`. Target-free
+    /// as a SIGNATURE SHAPE only: where a `byval` copy lives is recorded by
+    /// `pass` or is UNRECORDED ([`ParamAttrs::byval`]), and `FatPtr` pairs and
+    /// multi-value returns are placed by the consumer's non-aggregate rules.
     AlwaysMemory,
-    /// The producer performs NO aggregate classification, and says so.
+    /// The producer did NOT establish that the native classification of its
+    /// by-value aggregate slots is the placement the other side of its edges
+    /// uses, and says so. It is a declaration of absence, not a third
+    /// convention, and a consumer MUST NOT infer any classification from it. A
+    /// consumer that would pass or return a by-value aggregate slot MUST refuse
+    /// the module, unless it establishes THAT EDGE's placement from an
+    /// authority outside the module (the producer's own ABI source), writing
+    /// nothing back. Must-refuse corpus rows:
+    /// `refuse/struct_passing_unclassified_by_value_aggregate`,
+    /// `refuse/struct_passing_unclassified_refined_aggregate`,
+    /// `refuse/struct_passing_unclassified_vector_by_value` and
+    /// `refuse/struct_passing_unclassified_closure_by_value`.
+    /// A module with no by-value aggregate slot needs no classification under
+    /// any value.
     ///
-    /// Both schemes above are CLAIMS: each requires the producer to mark memory-classed
-    /// parameters and returns `byval`/`sret` ([`ParamAttrs`]). A producer that emits no
-    /// `ParamAttrs` satisfies neither, so stamping either asserts a contract the module does not
-    /// carry — and since `struct_passing` feeds `Module::stable_digest`, that false claim travels
-    /// in the module's identity too.
+    /// This lets such a producer pin the parts of `TargetInfo` that ARE facts
+    /// about the target (`triple`, `pointer_size`, `endianness`) while stating
+    /// honestly that aggregate passing is unclassified, rather than stamping a
+    /// claim it did not establish into the module's identity.
     ///
-    /// This lets such a producer pin the parts of `TargetInfo` that ARE facts about the target
-    /// (`triple`, `pointer_size`, `endianness`) while stating honestly that aggregate passing is
-    /// unclassified. A CONSUMER MUST NOT infer either scheme from it — it is a declaration of
-    /// absence, not a third convention. A backend needing a classification must refuse the module
-    /// rather than pick one.
-    ///
-    /// Binary codec: tag 2, VERSION 36 (additive; a pre-v36 reader rejects the blob on the
-    /// version gate before reaching this byte, so MIN_READ_VERSION is unchanged).
+    /// Binary codec: tag 2, VERSION 36 (additive; a pre-v36 reader rejects the
+    /// blob on the version gate before reaching this byte, so MIN_READ_VERSION
+    /// is unchanged).
     Unclassified,
 }
 
@@ -740,13 +1498,212 @@ pub struct TargetInfo {
     pub struct_passing: StructPassingPolicy,
 }
 
+/// One authenticated CROSS-CRATE dependency of a module (v41).
+///
+/// A `Module` was flat and self-contained before this: it carried no crate
+/// identity, no dependency list, and no reference that could name an entity in
+/// another module. `ProofEvidence::InheritedFromCallee` was therefore two
+/// module-local `u32`s the validator forced to resolve HERE, so cross-crate
+/// proof inheritance — the whole point of separate compilation with contracts
+/// — could not be SPELLED, let alone checked.
+///
+/// This is the referent table those references resolve against. It is
+/// deliberately NOT a new identity layer: identity is
+/// [`Module::stable_digest_under`] the row's [`ModuleImport::scheme`], and
+/// the digest here is exactly that value taken over the imported module.
+///
+/// # What a consumer must do with one
+///
+/// `digest` is an OBLIGATION, not a decoration. A consumer that composes a
+/// proof across this edge must re-derive `Module::stable_digest_under(scheme)`
+/// of the artifact it actually loaded and compare; a mismatch means the module it
+/// holds is not the module the proof was about, and it must refuse. Matching
+/// `name` is never sufficient — names are producer-chosen and collide.
+/// Must-refuse corpus: `refuse/import_backed_summary_unauthenticated` pins
+/// the single-module half (a `backed_by` claim the authority lane refuses
+/// unauthenticated); the digest mismatch itself needs a root plus dependency
+/// pair, which one wire artifact cannot carry
+/// (`refuse/import_digest_mismatch_pair`, see `crate::imports`).
+///
+/// The API that does exactly this is [`Module::verify_import`] (one edge:
+/// digest, name, producer, target — see [`crate::imports`]); the closure walk
+/// that composes it with the module validator is
+/// `trust_ir_build::validate_linked_module`.
+///
+/// # Content-interned
+///
+/// Identity is the whole row — today `(name, digest, producer, scheme)` —
+/// and nothing else, exactly as for [`Module::universes`] /
+/// [`Module::predicates`]. Mint entries with [`Module::intern_import`], never
+/// `push`: two `ExternRef`s naming the same edge must carry the same
+/// [`ImportId`]. `trust_ir_build::validate_module` enforces it
+/// (`ValidationError::ImportTableNotInterned`) by comparing whole rows with
+/// `==`, so a field added to this struct joins the key automatically.
+///
+/// # One row per `(artifact, producer)` edge
+///
+/// A row is a DEPENDENCY EDGE, not an artifact: [`ModuleImport::producer`] is
+/// single-valued and the resolver pairs it with the far function's producer,
+/// so a MIXED Rust+Clean dependency is imported through two rows — one per
+/// producer — that carry the SAME `name` and `digest`. That is normative
+/// (`docs/SPEC_RATIFICATIONS.md` §6) and not a violation of interning, since
+/// the rows differ. A consumer deduplicating ARTIFACTS (for example to load or
+/// hash each dependency once) keys on `(scheme, digest)` — or on the module's
+/// current-scheme digest once loaded — never on [`ImportId`].
+///
+/// Rows that share a `digest` share a `name` (WS1.16): one artifact has one
+/// [`Module::name`], so a second name for the same digest is a mislabelled
+/// row, refused by `trust_ir_build::validate_module` as
+/// `ValidationError::ImportIdentityConflict`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ModuleImport {
+    /// The imported module's own [`Module::name`].
+    ///
+    /// Diagnostic and lookup aid ONLY. It is not the identity — `digest` is —
+    /// because nothing in the format makes a module name unique.
+    pub name: String,
+    /// [`Module::stable_digest_under`] `scheme` of the EXACT imported module.
+    ///
+    /// This is what makes an [`ExternRef`] checkable rather than asserted.
+    pub digest: crate::proof::ProofDigest,
+    /// Which frontend emitted the imported module, when recorded.
+    ///
+    /// `None` means UNRECORDED and must never be read as a wildcard or as
+    /// agreement with the importer's own producer — the v34 `site = None`
+    /// precedent. A consumer whose rule depends on the producer fails closed
+    /// on `None`.
+    ///
+    /// Always emitted by serde since v44 (`null` when unrecorded): `scheme`
+    /// follows it, and a positional MessagePack struct may carry at most ONE
+    /// trailing skipped field. An absent key still decodes as `None`.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub producer: Option<Producer>,
+    /// The digest construction `digest` was recorded under (v44,
+    /// [`crate::imports::IdentityScheme`]). The verifier hashes the candidate
+    /// under THIS scheme, so a row minted before a domain bump keeps meaning
+    /// what it meant.
+    ///
+    /// A row decoded from a pre-v44 blob, or from serde input without the
+    /// key, is [`crate::imports::IdentityScheme::V2`]; [`ModuleImport::new`]
+    /// records [`crate::imports::IdentityScheme::CURRENT`] (V3), the scheme
+    /// [`Module::stable_digest`] computes. Part of the interned row identity:
+    /// the same digest recorded under two schemes is two rows (and at most one
+    /// of them can ever authenticate a given module).
+    ///
+    /// Sole trailing conditionally-skipped field of this struct (skipped when
+    /// V2, so a legacy row's JSON and MessagePack spelling is unchanged).
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "crate::imports::IdentityScheme::is_v2")
+    )]
+    pub scheme: crate::imports::IdentityScheme,
+}
+
+impl ModuleImport {
+    /// A dependency edge on `name` pinned to `digest`, with no recorded
+    /// producer, recorded under [`crate::imports::IdentityScheme::CURRENT`]
+    /// (V3) — so `digest` must be the dependency's [`Module::stable_digest`].
+    /// A row recorded under another scheme is spelled with
+    /// [`ModuleImport::with_scheme`].
+    pub fn new(name: impl Into<String>, digest: crate::proof::ProofDigest) -> Self {
+        Self {
+            name: name.into(),
+            digest,
+            producer: None,
+            scheme: crate::imports::IdentityScheme::CURRENT,
+        }
+    }
+
+    /// Record that `digest` was taken under `scheme` (for example a legacy
+    /// [`crate::imports::IdentityScheme::V2`] row minted before v44).
+    #[must_use]
+    pub fn with_scheme(mut self, scheme: crate::imports::IdentityScheme) -> Self {
+        self.scheme = scheme;
+        self
+    }
+
+    /// Record which frontend emitted the imported module.
+    #[must_use]
+    pub fn with_producer(mut self, producer: Producer) -> Self {
+        self.producer = Some(producer);
+        self
+    }
+}
+
+/// A reference to an entity in ANOTHER module (v41).
+///
+/// The cross-crate half of the identity story `ModuleImport` opens: `module`
+/// says WHICH module (by interned import, hence by authenticated digest),
+/// `symbol` says which entity in it, and `obligation` optionally says which of
+/// that module's proof obligations is being relied upon.
+///
+/// # Why `symbol` and not an id
+///
+/// A `FuncId` is a module-local arena index and means nothing in another
+/// module's numbering. `symbol` is the LINK-TIME SYMBOL — the identity v41
+/// ratified [`Function::name`] to be — so it is the one function-naming string
+/// that is stable across the module boundary and agrees with what the linker
+/// will actually resolve.
+///
+/// # `obligation` lives in the IMPORTED module's id space
+///
+/// [`ProofId`] is likewise arena-local. The id here indexes the IMPORTED
+/// module's `proof_obligations`, never this module's; a consumer resolves it
+/// only after authenticating that module against
+/// [`ModuleImport::digest`]. `None` means the reference names the entity and
+/// makes NO proof claim about it — never "any obligation" and never "the
+/// obvious one".
+///
+/// [`Module::resolve_extern_ref`] is the resolver: it binds `symbol` to
+/// exactly one exported, non-interposable far function whose producer and
+/// signature agree with the local declaration, and `obligation` to a scoped, discharged obligation
+/// whose kind the citing site may rely on (see [`crate::imports`]).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ExternRef {
+    /// Index into [`Module::imports`] — the module this reference is INTO.
+    pub module: ImportId,
+    /// Link-time symbol of the referenced entity inside that module.
+    pub symbol: String,
+    /// The obligation relied upon, in the IMPORTED module's `proof_obligations`
+    /// id space. `None` = names the entity only, no proof claim.
+    ///
+    /// No `skip_serializing_if`: this struct nests inside `ProofEvidence` and
+    /// `FunctionSummary`, both of which are read positionally by the canonical
+    /// MessagePack codec, and keeping every field always-emitted is the local
+    /// rule that makes appending to it later a one-field decision rather than a
+    /// two-field one.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub obligation: Option<ProofId>,
+}
+
+impl ExternRef {
+    /// Name `symbol` inside the imported module `module`, with no proof claim.
+    pub fn new(module: ImportId, symbol: impl Into<String>) -> Self {
+        Self {
+            module,
+            symbol: symbol.into(),
+            obligation: None,
+        }
+    }
+
+    /// Rely on `obligation` of the referenced entity. The id is in the
+    /// IMPORTED module's id space.
+    #[must_use]
+    pub fn relying_on(mut self, obligation: ProofId) -> Self {
+        self.obligation = Some(obligation);
+        self
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Module {
+pub struct ModuleG<X> {
     pub name: String,
-    pub functions: Vec<Function>,
-    pub structs: Vec<StructDef>,
-    pub enums: Vec<EnumDef>,
+    pub functions: Vec<FunctionG<X>>,
+    pub structs: Vec<StructDefG<X>>,
+    pub enums: Vec<EnumDefG<X>>,
     /// Named-field record definitions (ty-style labeled tuples, no layout).
     /// Referenced from `Ty::Record(RecordId)`. See `RecordDef` in `ty`.
     #[cfg_attr(feature = "serde", serde(default))]
@@ -757,9 +1714,9 @@ pub struct Module {
     /// captures are part of the type identity, not an opaque env pointer.
     #[cfg_attr(feature = "serde", serde(default))]
     pub closure_types: Vec<ClosureTy>,
-    pub globals: Vec<Global>,
-    pub func_types: Vec<FuncTy>,
-    pub types: Vec<Ty>,
+    pub globals: Vec<GlobalG<X>>,
+    pub func_types: Vec<ty::FuncTyG<X>>,
+    pub types: Vec<TyG<X>>,
     pub proof_obligations: Vec<ProofObligation>,
     pub proof_certificates: Vec<ProofCertificate>,
     /// Target machine information. None means target-independent IR.
@@ -817,15 +1774,252 @@ pub struct Module {
     /// less than its parent's — the predicate graph is acyclic by
     /// construction.
     ///
-    /// The SOLE trailing conditionally-skipped field (see the note above).
+    /// ALWAYS emitted by serde since v41: `global_asm` was appended after it,
+    /// and positional MessagePack may only skip a TRAILING field.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub predicates: Vec<Pred>,
+    /// Module-level `global_asm!` blocks, in source order (v41).
+    ///
+    /// Opaque text: TrustIr does not parse it and attaches no semantics. A
+    /// consumer that cannot emit module-level assembly must REFUSE the module
+    /// rather than silently drop these — dropping them removes symbol
+    /// definitions the rest of the module may reference. Must-refuse corpus
+    /// row `refuse/global_asm_block`. Every projection carries the blocks —
+    /// text too since WS4.5, as one `global_asm "<escaped>"` line per block —
+    /// so the refusal cannot be laundered through any transport (F-065).
+    ///
+    /// ALWAYS emitted by serde since the cross-crate identity batch: `imports`
+    /// was appended after it, and positional MessagePack may only skip a
+    /// TRAILING field. `global_asm` held the sole trailing skip for exactly one
+    /// change; flipping it here is the same move `spec_modules` (v30),
+    /// `predicates` (v41) and `source` (v34) each made the moment something
+    /// landed behind them.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub global_asm: Vec<String>,
+    /// **Content-interned** cross-crate dependencies (v41), referenced from
+    /// [`ExternRef::module`].
+    ///
+    /// This is the module's DEPENDENCY LIST and the referent table every
+    /// cross-module reference resolves against. Interning is load-bearing for
+    /// the same reason it is on `predicates`: two references naming one
+    /// artifact must be one id, or a consumer walking the dependency graph
+    /// counts one crate twice and can reach contradictory conclusions about
+    /// which digest it must authenticate.
+    ///
+    /// Mint entries through [`Module::intern_import`], never `push`; two
+    /// equal rows are refused by the validator
+    /// (`ValidationError::ImportTableNotInterned`). Table ORDER is identity,
+    /// not a hint — an [`ImportId`] is only meaningful against this exact
+    /// ordering. One row per `(artifact, producer)` edge: a mixed Rust+Clean
+    /// dependency has two rows sharing one digest (see [`ModuleImport`]).
+    ///
+    /// Always emitted by serde since v42: tuple layouts follow this table.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub imports: Vec<ModuleImport>,
+
+    /// Concrete memory layouts for structural tuples, keyed by `types` entries.
+    /// Absence supplies no source-layout evidence. Equal tuple spellings may
+    /// have only one descriptor, even when the type table contains aliases.
+    /// Consumers must validate the complete table before using these offsets.
+    /// The table is part of canonical binary identity from wire version 42.
+    /// Must-refuse corpus row `refuse/blob_tuple_layout_incoherent`: the
+    /// binary reader itself refuses an incoherent table (`InvalidData`), so a
+    /// consumer that decodes has validated it; the validator's own
+    /// `TupleLayoutInconsistent` is reachable only for a hand-built or
+    /// serde-decoded module.
+    ///
+    /// ALWAYS emitted by serde since WS5.3b: `completeness` was appended after
+    /// it, and positional MessagePack may only skip a TRAILING field (the
+    /// same flip `global_asm`, `imports`, `predicates` and `spec_modules`
+    /// each made the moment something landed behind them).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub tuple_layouts: Vec<TupleLayoutDescriptor>,
+
+    /// The producer's completeness claim for this module (WS5.3b, F-090):
+    /// whether every source item the producer was asked to lower is in the
+    /// module, or which ones are not.
+    ///
+    /// THREE-VALUED, like [`Function::body_gate`]:
+    ///
+    /// * `None` — NO CLAIM. Every module decoded from a blob written before
+    ///   the carrier existed, and every hand-built module, reads as this.
+    ///   It is never `Complete`: a two-state carrier would let a
+    ///   re-serialized legacy module silently claim completeness, which is
+    ///   exactly the F-090 failure ("a silently incomplete module must not
+    ///   read as complete") moved one format inward.
+    /// * `Some(Complete)` — the producer affirms its `unlowered` set was
+    ///   empty. The format cannot check this against source; it is a
+    ///   PRODUCER rule (`docs/SPEC_RATIFICATIONS.md` §15), and the stamp must
+    ///   come from the same computation as the producer's own partial-module
+    ///   refusal, never a second one.
+    /// * `Some(Partial(rows))` — the named symbols were NOT lowered, each
+    ///   with the producer's reason. [`trust_ir_build::validate_module`]
+    ///   refuses a row naming a bodied function of this module
+    ///   (`UnloweredRowNamesDefinition`) and two rows naming one symbol
+    ///   (`DuplicateUnloweredRow`); a row may name a bodyless declaration or
+    ///   no function at all.
+    ///
+    /// Text carries it as the module-level `completeness complete` /
+    /// `completeness partial` line followed by one `unlowered "<symbol>"
+    /// <"<path>" | -> "<reason>"` line per row; JSON and MessagePack carry it
+    /// as this field. ALWAYS emitted by serde since amendment D: `drop_glue`
+    /// was appended after it, and positional MessagePack may only skip a
+    /// TRAILING field (the flip `tuple_layouts`, `imports`, `global_asm`,
+    /// `predicates` and `spec_modules` each made the moment something landed
+    /// behind them); an older document without it still decodes. The BINARY format has
+    /// no carrier yet — its wire part is a member of the next open wire batch
+    /// (a reservation first, per `docs/wire-allocation.md`) — so every binary
+    /// writer REFUSES a module carrying a claim
+    /// (`BinaryProjectionError::CompletenessClaimUnencodable`) rather than
+    /// dropping it, and such a module has no wire identity
+    /// ([`Module::completeness_claim_unencodable`]).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub completeness: Option<ModuleCompleteness>,
+
+    /// The module drop-glue table (amendment D, `docs/SPEC_RATIFICATIONS.md`
+    /// §20): one [`DropGlueEntry`] per type whose destructor the module
+    /// states. An [`Inst::Drop`] / [`Inst::DropInvoke`] at type `T` RESOLVES
+    /// to the glue of the one row whose `ty` equals `T` (derived equality, the
+    /// tuple-layout rule) and executes as a call of it; at a type with no row
+    /// it is UNRESOLVED: well-formed, but never a no-op — both engines refuse
+    /// it and the default codegen gate refuses it
+    /// (`refuse/drop_unresolved`).
+    ///
+    /// ONE canonical order: rows strictly ascending by `glue` (so one glue
+    /// names one type), no two rows with equal `ty`. Build it through
+    /// [`Module::set_drop_glue`], which inserts at the canonical position.
+    /// The binary reader refuses another order (`InvalidData`,
+    /// `refuse/blob_drop_glue_not_canonical`) and `validate_module` refuses a
+    /// malformed row (`InvalidDropGlue`, `refuse/drop_glue_invalid`).
+    ///
+    /// Binary: a trailing section from wire v55 (`DROP_GLUE_FORMAT_VERSION`);
+    /// an older blob decodes with an empty table, so its drops are
+    /// unresolved. It was the sole trailing conditionally-skipped serde field
+    /// until wire v58; it is ALWAYS emitted since `closure_layouts` was
+    /// APPENDED after it (positional MessagePack may only skip a TRAILING
+    /// field — the flip `completeness` made for it), so a module without a
+    /// table spells `[]` here; an older document without it still decodes.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub drop_glue: Vec<DropGlueEntry>,
+
+    /// Concrete memory layouts for first-class closure types (`Ty::Closure`),
+    /// keyed by `closure_types` entries (wire version 58).
+    ///
+    /// The shape and the rules are exactly [`Module::tuple_layouts`]': a
+    /// descriptor per closure type, checked for completeness, natural capture
+    /// alignment, containment and non-overlap before any offset is used, with
+    /// at most ONE row per closure type. Absence supplies no layout evidence
+    /// — a closure type with no row has no byte image, which is the state
+    /// every closure type was in before v58.
+    ///
+    /// Capture offsets follow CAPTURE ORDER, which a producer may lay out in
+    /// any physical order (`repr(Rust)` reorders upvars); the offsets are the
+    /// producer's declared image, not a recomputation.
+    ///
+    /// The table is part of canonical binary identity from wire version 58.
+    /// The sole trailing conditionally-skipped serde field.
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Vec::is_empty")
     )]
-    pub predicates: Vec<Pred>,
+    pub closure_layouts: Vec<ClosureLayoutDescriptor>,
 }
 
-impl Module {
+/// The level-R module: [`ModuleG`] with no extension.
+pub type Module = ModuleG<level::NoExt>;
+
+// The table doors of a plain `Module` never panic on a value their signature
+// admits ("A construction door refuses; it never panics on a value its
+// signature admits", docs/SPEC_RATIFICATIONS.md): a full table is a typed
+// refusal, with the table unchanged. The lint holds this block to it.
+#[cfg_attr(
+    not(test),
+    deny(
+        clippy::panic,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented,
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_truncation
+    )
+)]
+impl<X> ModuleG<X> {
+    /// Append `ft` to the signature table and return its positional id.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the table already holds an entry at id
+    /// `u32::MAX`; the table is unchanged.
+    pub fn add_func_type(&mut self, ft: ty::FuncTyG<X>) -> Result<FuncTyId, IdSpaceExhausted> {
+        let id = value::table_id(self.func_types.len())?;
+        self.func_types.push(ft);
+        Ok(id)
+    }
+
+    /// Raw registration: push `sd` and return its declared id, verbatim.
+    ///
+    /// This legacy constructor performs NO dedup and NO id-collision check —
+    /// reconstruction paths (codecs) and callers that manage their own id
+    /// space rely on that verbatim behavior. New producer code should prefer
+    /// [`Module::add_struct_def`], which dedups structurally-identical defs
+    /// and never lets two defs share an id.
+    pub fn add_struct(&mut self, sd: StructDefG<X>) -> StructId {
+        let id = sd.id;
+        self.structs.push(sd);
+        id
+    }
+
+    /// Raw registration: push `ed` and return its declared id, verbatim.
+    ///
+    /// Legacy counterpart of [`Module::add_enum_def`] — no dedup, no
+    /// id-collision check. See [`Module::add_struct`] for when that is the
+    /// right tool.
+    pub fn add_enum(&mut self, ed: EnumDefG<X>) -> EnumId {
+        let id = ed.id;
+        self.enums.push(ed);
+        id
+    }
+
+    /// Register a record definition in the module's record table.
+    /// Returns the `RecordId` (taken from `rd.id`) so callers can reference
+    /// the record via `Ty::Record(id)`.
+    pub fn add_record(&mut self, rd: RecordDef) -> RecordId {
+        let id = rd.id;
+        self.records.push(rd);
+        id
+    }
+
+    /// Register a closure type in the module's closure-type table and return
+    /// its positional `ClosureTyId`. Callers reference the result via
+    /// `Ty::Closure(id)`.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the table already holds an entry at id
+    /// `u32::MAX`; the table is unchanged.
+    pub fn add_closure_type(&mut self, ct: ClosureTy) -> Result<ClosureTyId, IdSpaceExhausted> {
+        let id = value::table_id(self.closure_types.len())?;
+        self.closure_types.push(ct);
+        Ok(id)
+    }
+
+    /// Append `ty` to the type table and return its positional id.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the table already holds an entry at id
+    /// `u32::MAX`; the table is unchanged.
+    pub fn add_type(&mut self, ty: TyG<X>) -> Result<TyId, IdSpaceExhausted> {
+        let id = value::table_id(self.types.len())?;
+        self.types.push(ty);
+        Ok(id)
+    }
+}
+
+impl<X> ModuleG<X> {
     pub fn new(name: impl Into<String>) -> Self {
         Self {
             name: name.into(),
@@ -845,20 +2039,486 @@ impl Module {
             spec_modules: Vec::new(),
             universes: Vec::new(),
             predicates: Vec::new(),
+            global_asm: Vec::new(),
+            imports: Vec::new(),
+            tuple_layouts: Vec::new(),
+            completeness: None,
+            drop_glue: Vec::new(),
+            closure_layouts: Vec::new(),
         }
     }
 
+    /// `true` when this module carries a completeness claim
+    /// ([`Module::completeness`] is `Some`), which NO binary version can
+    /// encode yet (WS5.3b non-wire half): every binary writer refuses it
+    /// (`BinaryProjectionError::CompletenessClaimUnencodable`) and the
+    /// digests panic on it, exactly as for
+    /// [`first_inlined_scope_chain`](Module::first_inlined_scope_chain).
+    /// `trust_ir_build::wire_identity_blocker` probes this and refuses by
+    /// name.
+    #[must_use]
+    pub fn completeness_claim_unencodable(&self) -> bool {
+        self.completeness.is_some()
+    }
+
+    /// The first signature placement record that exceeds binary encoding
+    /// limits, including unused signature rows. This also applies to a
+    /// template's generic module. The writer's own `func_types` arm refuses
+    /// such a record by the same predicate
+    /// (`SignatureAbi::validate_encoding_limits`), so an identity consumer's
+    /// pre-check is [`Module::wire_image_refusal`], which also covers every
+    /// other construct the writer refuses.
+    #[must_use]
+    pub fn first_signature_abi_encoding_error(&self) -> Option<(usize, String)> {
+        self.func_types
+            .iter()
+            .enumerate()
+            .find_map(|(signature, ty)| {
+                ty.abi.as_ref().and_then(|abi| {
+                    abi.validate_encoding_limits()
+                        .err()
+                        .map(|detail| (signature, detail))
+                })
+            })
+    }
+}
+
+/// A producer's completeness claim for a [`Module`] (WS5.3b, F-090). See
+/// [`Module::completeness`] for the three-valued contract with `None`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum ModuleCompleteness {
+    /// Every item the producer was asked to lower is in the module.
+    Complete,
+    /// These items were NOT lowered. Non-empty by convention: an empty row
+    /// list is the shape of `Complete` and is refused by the validator
+    /// (`EmptyPartialClaim`), so a producer cannot spell "complete" two ways.
+    Partial(Vec<UnloweredRow>),
+}
+
+impl ModuleCompleteness {
+    /// `true` for [`ModuleCompleteness::Complete`].
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        matches!(self, Self::Complete)
+    }
+
+    /// The unlowered rows of a partial claim (empty for `Complete`).
+    #[must_use]
+    pub fn unlowered(&self) -> &[UnloweredRow] {
+        match self {
+            Self::Complete => &[],
+            Self::Partial(rows) => rows,
+        }
+    }
+}
+
+/// One item a producer did not lower into a [`ModuleCompleteness::Partial`]
+/// module.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct UnloweredRow {
+    /// The LINK-TIME SYMBOL the item would have had (`Function::name`'s
+    /// normative reading). Unique across the claim.
+    pub symbol: String,
+    /// The human def-path, when the producer has one (`Function::display_path`).
+    pub display_path: Option<String>,
+    /// The producer's reason, verbatim. Opaque to TrustIr.
+    pub reason: String,
+}
+
+/// A declared tuple byte image. Offsets follow logical element order, which
+/// can differ from physical order. Coherence checking is not a source refinement
+/// certificate: the producer must separately bind this descriptor to its source.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct TupleLayoutDescriptor {
+    pub tuple_type: TyId,
+    pub size: u64,
+    pub align: u64,
+    pub field_offsets: Vec<u64>,
+}
+
+/// One row of the module drop-glue table (amendment D,
+/// `docs/SPEC_RATIFICATIONS.md` §20 rule 1). Must-refuse rows:
+/// `refuse/drop_glue_invalid`, `refuse/blob_drop_glue_not_canonical`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct DropGlueEntry {
+    /// The function a drop of `ty` runs. Its FuncTy is exactly `(ptr) -> ()`,
+    /// not variadic, under any calling convention (the glue's own is used, as
+    /// on a direct `Call`); a definition, or a non-weak bodyless declaration
+    /// that is not a pinned runtime entry.
+    pub glue: FuncId,
+    /// The dropped type, inline. A site resolves through the row whose `ty`
+    /// equals its own by derived equality (the tuple-layout rule): no type
+    /// table is consulted, so `Array(ty.3, 4)` and `Array(ty.7, 4)` are
+    /// different keys even when the two table rows are equal.
+    pub ty: Ty,
+}
+
+/// What a drop at one type resolves to ([`Module::drop_glue_for`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DropResolution {
+    /// Exactly one row names the type: the drop calls this glue.
+    Resolved(FuncId),
+    /// No row names the type: the drop is UNRESOLVED (refused by both engines
+    /// and the default codegen gate; never a no-op).
+    Unresolved,
+    /// Two or more rows name the type. Only an UNVALIDATED module can answer
+    /// this (`validate_module` refuses duplicate keys); a consumer treats it
+    /// as malformed.
+    Ambiguous,
+}
+
+/// Why [`Module::set_drop_glue`] refused a row.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DropGlueConflict {
+    /// The type already has a row, naming this glue.
+    TypeHasGlue { existing: FuncId },
+    /// The glue already destroys another type (glue is injective).
+    GlueHasType { existing: Ty },
+}
+
+impl core::fmt::Display for DropGlueConflict {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::TypeHasGlue { existing } => write!(
+                f,
+                "the type already has drop glue @func.{}",
+                existing.index()
+            ),
+            Self::GlueHasType { existing } => {
+                write!(f, "the glue already destroys {existing}")
+            }
+        }
+    }
+}
+
+impl std::error::Error for DropGlueConflict {}
+
+/// A prebuilt lookup over a module's drop-glue table: O(1) resolution per
+/// drop site and per call of a registered glue. Build it once per consumer
+/// pass ([`Module::drop_glue_index`]); it borrows nothing.
+#[derive(Debug, Clone, Default)]
+pub struct DropGlueIndex {
+    by_ty: std::collections::HashMap<Ty, DropResolution>,
+    glues: BTreeSet<u32>,
+}
+
+impl DropGlueIndex {
+    /// Index `entries` (a module's `drop_glue`). Duplicate keys answer
+    /// [`DropResolution::Ambiguous`].
+    #[must_use]
+    pub fn new(entries: &[DropGlueEntry]) -> Self {
+        let mut by_ty = std::collections::HashMap::with_capacity(entries.len());
+        let mut glues = BTreeSet::new();
+        for entry in entries {
+            glues.insert(entry.glue.index());
+            by_ty
+                .entry(entry.ty.clone())
+                .and_modify(|resolution| *resolution = DropResolution::Ambiguous)
+                .or_insert(DropResolution::Resolved(entry.glue));
+        }
+        Self { by_ty, glues }
+    }
+
+    /// What a drop at `ty` resolves to.
+    #[must_use]
+    pub fn resolve(&self, ty: &Ty) -> DropResolution {
+        self.by_ty
+            .get(ty)
+            .copied()
+            .unwrap_or(DropResolution::Unresolved)
+    }
+
+    /// Whether `func` is the glue of some row.
+    #[must_use]
+    pub fn is_glue(&self, func: FuncId) -> bool {
+        self.glues.contains(&func.index())
+    }
+
+    /// Whether the table is empty (every drop is unresolved).
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.glues.is_empty() && self.by_ty.is_empty()
+    }
+}
+
+/// A declared closure byte image (wire version 58): the environment frame a
+/// `Ty::Closure` value occupies.
+///
+/// Offsets follow CAPTURE order, which can differ from physical order — that
+/// difference is the point, since `repr(Rust)` reorders upvars and a
+/// declaration-order C struct is the wrong image. Coherence checking is not a
+/// source refinement certificate: the producer must separately bind this
+/// descriptor to its source.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct ClosureLayoutDescriptor {
+    pub closure: ClosureTyId,
+    pub size: u64,
+    pub align: u64,
+    pub capture_offsets: Vec<u64>,
+    /// Optional nominal source identity of this exact environment type (v66).
+    /// This is producer identity data, not a source refinement certificate.
+    /// Distinct known origins must not be interned by capture shape alone.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub origin: Option<crate::ty::TypeOrigin>,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ModuleFunctionState<'module> {
+    Unique(&'module Function),
+    Ambiguous,
+}
+
+/// Duplicate-aware index over the functions in one exact [`Module`].
+///
+/// Construction takes `O(F log F)` time and `O(F)` memory for `F` function
+/// declarations. A lookup takes `O(log F)` time. Sparse [`FuncId`] values are
+/// ordinary keys rather than vector positions, and a duplicated ID resolves to
+/// no function, so consumers never authenticate an arbitrary declaration.
+///
+/// Build one catalog at the boundary of a composite module operation and pass
+/// it through that operation's internal helpers. This avoids both repeated
+/// linear function-table scans and repeated `O(F log F)` index construction.
+#[derive(Debug)]
+pub struct ModuleFunctionCatalog<'module> {
+    module: &'module Module,
+    entries: BTreeMap<u32, ModuleFunctionState<'module>>,
+}
+
+impl<'module> ModuleFunctionCatalog<'module> {
+    /// Index every function declaration in `module` exactly once.
+    pub fn new(module: &'module Module) -> Self {
+        let mut entries = BTreeMap::new();
+        for function in &module.functions {
+            match entries.entry(function.id.index()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(ModuleFunctionState::Unique(function));
+                }
+                std::collections::btree_map::Entry::Occupied(mut entry) => {
+                    entry.insert(ModuleFunctionState::Ambiguous);
+                }
+            }
+        }
+        Self { module, entries }
+    }
+
+    /// Return the declaration for `function` only when its ID occurs exactly
+    /// once in the indexed module.
+    pub fn unique(&self, function: FuncId) -> Option<&'module Function> {
+        match self.entries.get(&function.index()) {
+            Some(ModuleFunctionState::Unique(function)) => Some(*function),
+            Some(ModuleFunctionState::Ambiguous) | None => None,
+        }
+    }
+
+    /// Iterate duplicated function IDs in deterministic numeric order.
+    pub fn ambiguous_ids(&self) -> impl Iterator<Item = u32> + '_ {
+        self.entries.iter().filter_map(|(&id, state)| {
+            matches!(state, ModuleFunctionState::Ambiguous).then_some(id)
+        })
+    }
+
+    /// Number of distinct function IDs indexed, including ambiguous IDs.
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether the indexed module has no function IDs.
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Description of the first FFI boundary in the indexed module, or `None`.
+    ///
+    /// After the catalog has been built, this visits at most every function and
+    /// instruction once and performs one `O(log F)` lookup for each direct
+    /// `Call`/`Invoke`: `O(F + I + C log F)` time, where `I` is the total
+    /// instruction count and `C <= I` is the number of direct call edges. It
+    /// allocates only the returned description. Missing or ambiguous function
+    /// IDs never select a declaration; module validation rejects those edges
+    /// independently.
+    pub fn first_ffi_boundary(&self) -> Option<String> {
+        for function in &self.module.functions {
+            if function.blocks.is_empty()
+                && matches!(function.linkage, Linkage::External | Linkage::ExternalWeak)
+                && function.calling_conv != CallingConv::Rust
+            {
+                return Some(format!(
+                    "bodyless {} declaration `{}`",
+                    function.linkage, function.name
+                ));
+            }
+        }
+        for function in &self.module.functions {
+            for block in &function.blocks {
+                for node in &block.body {
+                    match &node.inst {
+                        crate::inst::Inst::Call { callee, .. }
+                        | crate::inst::Inst::CallCannotUnwind { callee, .. } => {
+                            if let Some(callee_function) = self.unique(*callee)
+                                && callee_function.calling_conv != function.calling_conv
+                            {
+                                return Some(format!(
+                                    "cross-convention call edge `{}` ({}) -> `{}` ({})",
+                                    function.name,
+                                    function.calling_conv,
+                                    callee_function.name,
+                                    callee_function.calling_conv
+                                ));
+                            }
+                        }
+                        crate::inst::Inst::Invoke { callee, .. } => {
+                            if let Some(callee_function) = self.unique(*callee)
+                                && callee_function.calling_conv != function.calling_conv
+                            {
+                                return Some(format!(
+                                    "cross-convention invoke edge `{}` ({}) -> `{}` ({})",
+                                    function.name,
+                                    function.calling_conv,
+                                    callee_function.name,
+                                    callee_function.calling_conv
+                                ));
+                            }
+                        }
+                        // Amendment P: a sited check's failure calls its
+                        // entry with the entry's convention.
+                        crate::inst::Inst::Assert {
+                            site: Some(site), ..
+                        }
+                        | crate::inst::Inst::AssertInvoke { site, .. } => {
+                            if let Some(entry) = self.unique(site.entry)
+                                && entry.calling_conv != function.calling_conv
+                            {
+                                return Some(format!(
+                                    "cross-convention panic-site edge `{}` ({}) -> `{}` ({})",
+                                    function.name,
+                                    function.calling_conv,
+                                    entry.name,
+                                    entry.calling_conv
+                                ));
+                            }
+                        }
+                        crate::inst::Inst::CallIndirect { calling_conv, .. }
+                        | crate::inst::Inst::CallIndirectCannotUnwind { calling_conv, .. }
+                        | crate::inst::Inst::InvokeIndirect { calling_conv, .. }
+                            if *calling_conv != function.calling_conv =>
+                        {
+                            return Some(format!(
+                                "cross-convention indirect call edge in `{}` ({}) declaring {}",
+                                function.name, function.calling_conv, calling_conv
+                            ));
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        None
+    }
+}
+
+impl Module {
+    /// What a drop at `ty` resolves to through this module's drop-glue table
+    /// (amendment D, `docs/SPEC_RATIFICATIONS.md` §20 rule 2). A linear scan;
+    /// a pass resolving many sites builds [`Module::drop_glue_index`] once.
+    #[must_use]
+    pub fn drop_glue_for(&self, ty: &Ty) -> DropResolution {
+        let mut rows = self.drop_glue.iter().filter(|entry| entry.ty == *ty);
+        match (rows.next(), rows.next()) {
+            (None, _) => DropResolution::Unresolved,
+            (Some(entry), None) => DropResolution::Resolved(entry.glue),
+            (Some(_), Some(_)) => DropResolution::Ambiguous,
+        }
+    }
+
+    /// Whether `func` is the glue of some drop-glue row (§20 rule 5b: such a
+    /// function is reached only by drop resolution or through its address).
+    #[must_use]
+    pub fn is_registered_drop_glue(&self, func: FuncId) -> bool {
+        self.drop_glue.iter().any(|entry| entry.glue == func)
+    }
+
+    /// An O(1) lookup over the drop-glue table.
+    #[must_use]
+    pub fn drop_glue_index(&self) -> DropGlueIndex {
+        DropGlueIndex::new(&self.drop_glue)
+    }
+
+    /// The sanctioned constructor of a drop-glue row: inserts `(glue, ty)`
+    /// at its canonical position (rows strictly ascending by `glue`).
+    /// Refuses a second row for `ty` or a second type for `glue`; re-stating
+    /// an existing row is a no-op. Whether `glue` names a function of the
+    /// right signature is `validate_module`'s question (`InvalidDropGlue`).
+    pub fn set_drop_glue(&mut self, ty: Ty, glue: FuncId) -> Result<(), DropGlueConflict> {
+        if let Some(entry) = self.drop_glue.iter().find(|entry| entry.ty == ty) {
+            return if entry.glue == glue {
+                Ok(())
+            } else {
+                Err(DropGlueConflict::TypeHasGlue {
+                    existing: entry.glue,
+                })
+            };
+        }
+        if let Some(entry) = self.drop_glue.iter().find(|entry| entry.glue == glue) {
+            return Err(DropGlueConflict::GlueHasType {
+                existing: entry.ty.clone(),
+            });
+        }
+        let at = self
+            .drop_glue
+            .partition_point(|entry| entry.glue.index() < glue.index());
+        self.drop_glue.insert(at, DropGlueEntry { glue, ty });
+        Ok(())
+    }
+}
+
+// The table doors of a plain `Module`: every one refuses a full table with a
+// typed error and the table unchanged, and none panics on a value its
+// signature admits ("A construction door refuses; it never panics on a value
+// its signature admits", docs/SPEC_RATIFICATIONS.md). The lint holds this
+// block to it outside tests.
+#[cfg_attr(
+    not(test),
+    deny(
+        clippy::panic,
+        clippy::unwrap_used,
+        clippy::expect_used,
+        clippy::indexing_slicing,
+        clippy::unreachable,
+        clippy::todo,
+        clippy::unimplemented,
+        clippy::arithmetic_side_effects,
+        clippy::cast_possible_truncation
+    )
+)]
+impl Module {
     /// Interns a debug-info source-file path, returning its index for use in
     /// [`SourceSpan::file`]. Idempotent: a path already in the table returns
     /// its existing index rather than appending a duplicate.
-    pub fn intern_file(&mut self, path: impl Into<String>) -> u32 {
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] (space `files`) when the path is new and the table
+    /// already holds an entry at index `u32::MAX`; the table is unchanged.
+    pub fn intern_file(&mut self, path: impl Into<String>) -> Result<u32, IdSpaceExhausted> {
         let path = path.into();
-        if let Some(i) = self.files.iter().position(|p| *p == path) {
-            return i as u32;
+        // An entry past `u32::MAX` has no index, so nothing can name it: it is
+        // not found here (`value::table_index`), never truncated onto an
+        // index that names another entry.
+        let known = self.files.iter().position(|p| *p == path);
+        if let Some(index) = known.and_then(|i| value::table_index(i, "files").ok()) {
+            return Ok(index);
         }
-        let idx = u32::try_from(self.files.len()).expect("file table exceeds u32 id space");
+        let index = value::table_index(self.files.len(), "files")?;
         self.files.push(path);
-        idx
+        Ok(index)
     }
 
     /// Returns the source-file path for a [`SourceSpan::file`] index, if the
@@ -921,10 +2581,11 @@ impl Module {
     /// `None` when the module has none.
     ///
     /// An *FFI boundary* is either
-    /// 1. a **bodyless `external` declaration** — an import resolved against a
-    ///    separately compiled object at link time (a contract-only declaration
-    ///    with a [`FunctionSummary`] included: the summary aids verification,
-    ///    but the symbol still crosses an object boundary), or
+    /// 1. a **bodyless `external` or `external_weak` declaration** — an import
+    ///    resolved against a separately compiled object at link time (a
+    ///    contract-only declaration with a [`FunctionSummary`] included: the
+    ///    summary aids verification, but the symbol still crosses an object
+    ///    boundary; a weak import crosses it whether or not it resolves), or
     /// 2. a **call edge whose calling convention differs from the enclosing
     ///    function's** — a direct `Call` to a callee with a different
     ///    `Function::calling_conv`, or a `CallIndirect` declaring a different
@@ -934,71 +2595,13 @@ impl Module {
     /// on the ABI, which is only well-defined against a pinned target. This is
     /// the predicate behind [`Module::requires_target_info`]; the returned
     /// description feeds the validator's `TargetInfoRequired` diagnostic.
+    ///
+    /// This convenience entry point constructs one [`ModuleFunctionCatalog`],
+    /// so its complete bound is `O(F log F + I + C log F)` time and `O(F)`
+    /// temporary memory. A composite operation that already has a catalog
+    /// should call [`ModuleFunctionCatalog::first_ffi_boundary`] directly.
     pub fn first_ffi_boundary(&self) -> Option<String> {
-        for func in &self.functions {
-            // Trust (#180): a bodyless external declaration is an FFI boundary only when its
-            // calling convention is FOREIGN. "No body here, linked externally" is equally true of
-            // an ordinary Rust CROSS-CRATE call, and a target must be pinned for byte-level ABI
-            // agreement between SEPARATELY COMPILED objects — which Rust-to-Rust under one
-            // compiler already has by construction. Same conflation the repr(Rust) check had.
-            if func.blocks.is_empty()
-                && matches!(func.linkage, Linkage::External)
-                && func.calling_conv != CallingConv::Rust
-            {
-                return Some(format!("bodyless external declaration `{}`", func.name));
-            }
-        }
-        for func in &self.functions {
-            for block in &func.blocks {
-                for node in &block.body {
-                    match &node.inst {
-                        crate::inst::Inst::Call { callee, .. } => {
-                            // A direct call's edge convention IS the callee's
-                            // `calling_conv` (see `Inst::Call` docs); a dangling
-                            // callee id is flagged by the validator, not here.
-                            if let Some(callee_func) =
-                                self.functions.iter().find(|f| f.id == *callee)
-                                && callee_func.calling_conv != func.calling_conv
-                            {
-                                return Some(format!(
-                                    "cross-convention call edge `{}` ({}) -> `{}` ({})",
-                                    func.name,
-                                    func.calling_conv,
-                                    callee_func.name,
-                                    callee_func.calling_conv
-                                ));
-                            }
-                        }
-                        // Invoke is a direct call with an unwind edge: its
-                        // edge convention is the callee's, same as Call.
-                        crate::inst::Inst::Invoke { callee, .. } => {
-                            if let Some(callee_func) =
-                                self.functions.iter().find(|f| f.id == *callee)
-                                && callee_func.calling_conv != func.calling_conv
-                            {
-                                return Some(format!(
-                                    "cross-convention invoke edge `{}` ({}) -> `{}` ({})",
-                                    func.name,
-                                    func.calling_conv,
-                                    callee_func.name,
-                                    callee_func.calling_conv
-                                ));
-                            }
-                        }
-                        crate::inst::Inst::CallIndirect { calling_conv, .. }
-                            if *calling_conv != func.calling_conv =>
-                        {
-                            return Some(format!(
-                                "cross-convention indirect call edge in `{}` ({}) declaring {}",
-                                func.name, func.calling_conv, calling_conv
-                            ));
-                        }
-                        _ => {}
-                    }
-                }
-            }
-        }
-        None
+        ModuleFunctionCatalog::new(self).first_ffi_boundary()
     }
 
     /// ABI pinning: true when this module contains an FFI boundary (see
@@ -1010,36 +2613,31 @@ impl Module {
         self.first_ffi_boundary().is_some()
     }
 
-    pub fn add_func_type(&mut self, ft: FuncTy) -> FuncTyId {
-        let id = FuncTyId::new(
-            u32::try_from(self.func_types.len()).expect("func-type table exceeds u32 id space"),
-        );
-        self.func_types.push(ft);
-        id
-    }
-
-    /// Raw registration: push `sd` and return its declared id, verbatim.
+    /// Intern a function signature by STRUCTURE, returning its id. Idempotent.
     ///
-    /// This legacy constructor performs NO dedup and NO id-collision check —
-    /// reconstruction paths (codecs) and callers that manage their own id
-    /// space rely on that verbatim behavior. New producer code should prefer
-    /// [`Module::add_struct_def`], which dedups structurally-identical defs
-    /// and never lets two defs share an id.
-    pub fn add_struct(&mut self, sd: StructDef) -> StructId {
-        let id = sd.id;
-        self.structs.push(sd);
-        id
-    }
-
-    /// Raw registration: push `ed` and return its declared id, verbatim.
+    /// Returns the id of the first existing [`FuncTy`] equal to `ft` (every
+    /// field — params, returns, `is_vararg`, and typed ABI claims — compared
+    /// structurally), or
+    /// appends `ft` and returns the new id. [`Module::add_func_type`] stays the
+    /// raw, always-appending constructor: codecs reconstruct tables verbatim
+    /// and a producer that manages its own id space relies on that.
     ///
-    /// Legacy counterpart of [`Module::add_enum_def`] — no dedup, no
-    /// id-collision check. See [`Module::add_struct`] for when that is the
-    /// right tool.
-    pub fn add_enum(&mut self, ed: EnumDef) -> EnumId {
-        let id = ed.id;
-        self.enums.push(ed);
-        id
+    /// Interning changes no meaning: two equal rows are the same signature
+    /// wherever they are cited. It only stops a producer that mints one row
+    /// per call site from growing the table without bound.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when `ft` is new and the table already holds an
+    /// entry at id `u32::MAX`; the table is unchanged.
+    pub fn intern_func_type(&mut self, ft: FuncTy) -> Result<FuncTyId, IdSpaceExhausted> {
+        if let Some(id) = (0..=u32::MAX)
+            .zip(&self.func_types)
+            .find_map(|(index, existing)| (*existing == ft).then_some(FuncTyId::new(index)))
+        {
+            return Ok(id);
+        }
+        self.add_func_type(ft)
     }
 
     /// Allocate the next free `StructId`: one past the highest id currently
@@ -1051,37 +2649,31 @@ impl Module {
     /// built. Reserve-by-insert: register a def under the allocated id (e.g.
     /// via [`Module::add_struct_def`]) before allocating another, or the next
     /// call returns the same id.
-    pub fn allocate_struct_id(&self) -> StructId {
-        StructId::new(
-            self.structs
-                .iter()
-                .map(|sd| {
-                    sd.id
-                        .index()
-                        .checked_add(1)
-                        .expect("struct table exceeds u32 id space")
-                })
-                .max()
-                .unwrap_or(0),
-        )
+    ///
+    /// The id is one past the HIGHEST id in the struct table, by the one
+    /// fresh-id rule ([`FreshIds::after`]).
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the table holds id `u32::MAX` (a DECODED
+    /// table can): no id is free, and none is wrapped onto an id in use.
+    pub fn allocate_struct_id(&self) -> Result<StructId, IdSpaceExhausted> {
+        FreshIds::after(self.structs.iter().map(|sd| sd.id))
+            .peek()
+            .ok_or(IdSpaceExhausted::of::<StructId>())
     }
 
     /// Allocate the next free `EnumId` — the enum-table counterpart of
     /// [`Module::allocate_struct_id`], with the same reserve-by-insert
-    /// contract.
-    pub fn allocate_enum_id(&self) -> EnumId {
-        EnumId::new(
-            self.enums
-                .iter()
-                .map(|ed| {
-                    ed.id
-                        .index()
-                        .checked_add(1)
-                        .expect("enum table exceeds u32 id space")
-                })
-                .max()
-                .unwrap_or(0),
-        )
+    /// contract ([`FreshIds::after`]).
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the table holds id `u32::MAX`.
+    pub fn allocate_enum_id(&self) -> Result<EnumId, IdSpaceExhausted> {
+        FreshIds::after(self.enums.iter().map(|ed| ed.id))
+            .peek()
+            .ok_or(IdSpaceExhausted::of::<EnumId>())
     }
 
     /// Register a struct definition with **mandatory dedup** and a collision-
@@ -1094,70 +2686,54 @@ impl Module {
     /// 3. Otherwise (`sd.id` names a *different* existing def), `sd` is
     ///    inserted under a freshly allocated id — two defs can never share an
     ///    id through this constructor.
-    pub fn add_struct_def(&mut self, sd: StructDef) -> StructId {
+    ///
+    /// All or nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when step 3 needs a fresh id and the table holds
+    /// `u32::MAX` ([`Self::allocate_struct_id`]); the table is unchanged.
+    pub fn add_struct_def(&mut self, sd: StructDef) -> Result<StructId, IdSpaceExhausted> {
         if let Some(existing) = self
             .structs
             .iter()
             .find(|other| struct_def_structurally_eq(other, &sd))
         {
-            return existing.id;
+            return Ok(existing.id);
         }
         let id = if self.structs.iter().any(|other| other.id == sd.id) {
-            self.allocate_struct_id()
+            self.allocate_struct_id()?
         } else {
             sd.id
         };
         self.structs.push(StructDef { id, ..sd });
-        id
+        Ok(id)
     }
 
     /// Register an enum definition with **mandatory dedup** and a collision-
     /// free id guarantee — the enum-table counterpart of
     /// [`Module::add_struct_def`] (same three-step contract; callers must use
-    /// the returned id).
-    pub fn add_enum_def(&mut self, ed: EnumDef) -> EnumId {
+    /// the returned id). All or nothing.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when a re-numbering needs a fresh id and the table
+    /// holds `u32::MAX` ([`Self::allocate_enum_id`]); the table is unchanged.
+    pub fn add_enum_def(&mut self, ed: EnumDef) -> Result<EnumId, IdSpaceExhausted> {
         if let Some(existing) = self
             .enums
             .iter()
             .find(|other| enum_def_structurally_eq(other, &ed))
         {
-            return existing.id;
+            return Ok(existing.id);
         }
         let id = if self.enums.iter().any(|other| other.id == ed.id) {
-            self.allocate_enum_id()
+            self.allocate_enum_id()?
         } else {
             ed.id
         };
         self.enums.push(EnumDef { id, ..ed });
-        id
-    }
-
-    /// Register a record definition in the module's record table.
-    /// Returns the `RecordId` (taken from `rd.id`) so callers can reference
-    /// the record via `Ty::Record(id)`.
-    pub fn add_record(&mut self, rd: RecordDef) -> RecordId {
-        let id = rd.id;
-        self.records.push(rd);
-        id
-    }
-
-    /// Register a closure type in the module's closure-type table and return
-    /// its positional `ClosureTyId`. Callers reference the result via
-    /// `Ty::Closure(id)`.
-    pub fn add_closure_type(&mut self, ct: ClosureTy) -> ClosureTyId {
-        let id = ClosureTyId::new(
-            u32::try_from(self.closure_types.len())
-                .expect("closure-type table exceeds u32 id space"),
-        );
-        self.closure_types.push(ct);
-        id
-    }
-
-    pub fn add_type(&mut self, ty: Ty) -> TyId {
-        let id =
-            TyId::new(u32::try_from(self.types.len()).expect("type table exceeds u32 id space"));
-        self.types.push(ty);
-        id
+        Ok(id)
     }
 
     // ── The typed value model: interned predicate / universe tables ────────
@@ -1182,20 +2758,79 @@ impl Module {
     /// Returns `None` for a non-canonicalizable universe (empty, over
     /// [`pred::MAX_ENUMERATED_MEMBERS`], or containing a constant with no
     /// total order such as a float) — a fail-closed refusal, never a silent
-    /// widening.
-    pub fn intern_universe(&mut self, universe: Universe) -> Option<UnivId> {
+    /// widening. `None` means "not canonicalizable" and nothing else.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the universe is new and the table already
+    /// holds an entry at id `u32::MAX`; the table is unchanged.
+    pub fn intern_universe(
+        &mut self,
+        universe: Universe,
+    ) -> Result<Option<UnivId>, IdSpaceExhausted> {
         let canonical = match universe {
-            Universe::IntRange { lo, hi } => Universe::range(lo, hi)?,
-            Universe::Members(items) => Universe::members(items)?,
+            Universe::IntRange { lo, hi } => Universe::range(lo, hi),
+            Universe::Members(items) => Universe::members(items),
         };
-        if let Some(i) = self.universes.iter().position(|u| *u == canonical) {
-            return Some(UnivId::new(u32::try_from(i).expect("checked on insert")));
+        let Some(canonical) = canonical else {
+            return Ok(None);
+        };
+        if let Some(id) = (0..=u32::MAX)
+            .zip(&self.universes)
+            .find_map(|(index, known)| (*known == canonical).then_some(UnivId::new(index)))
+        {
+            return Ok(Some(id));
         }
-        let id = UnivId::new(
-            u32::try_from(self.universes.len()).expect("universe table exceeds u32 id space"),
-        );
+        let id = value::table_id(self.universes.len())?;
         self.universes.push(canonical);
-        Some(id)
+        Ok(Some(id))
+    }
+
+    /// Interns a [`ModuleImport`] by CONTENT, returning its id. Idempotent.
+    ///
+    /// Identity is the whole row (compared with `==`; today the
+    /// `(name, digest, producer)` triple): two calls with an equal row return
+    /// the same [`ImportId`], and two imports differing in ANY component —
+    /// including a `None` vs `Some` producer — are distinct entries, because
+    /// they are distinct claims about what was depended on.
+    ///
+    /// There is one row per `(artifact, producer)` EDGE: a mixed Rust+Clean
+    /// dependency is two rows with the same `name` and `digest` and different
+    /// producers (ratified in `docs/SPEC_RATIFICATIONS.md` §6), because the
+    /// resolver pairs the row's single producer with the far function's.
+    /// Consumers deduplicating ARTIFACTS key on `digest`, never on the id.
+    ///
+    /// Never `push` into [`Module::imports`] directly. A duplicated ROW gives
+    /// one edge two ids — the "one artifact, two ids" hazard, in which a
+    /// consumer counting dependency edges sees two where there is one and can
+    /// reach contradictory conclusions about what each id authenticated.
+    /// `trust_ir_build::validate_module` refuses it as
+    /// `ValidationError::ImportTableNotInterned`.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the row is new and the table already holds an
+    /// entry at id `u32::MAX`; the table is unchanged.
+    pub fn intern_import(&mut self, import: ModuleImport) -> Result<ImportId, IdSpaceExhausted> {
+        if let Some(id) = (0..=u32::MAX)
+            .zip(&self.imports)
+            .find_map(|(index, existing)| (*existing == import).then_some(ImportId::new(index)))
+        {
+            return Ok(id);
+        }
+        let id = value::table_id(self.imports.len())?;
+        self.imports.push(import);
+        Ok(id)
+    }
+
+    /// Resolve an [`ImportId`] against this module's import table.
+    ///
+    /// `None` for a dangling id. Callers must treat that as a REFUSAL — a
+    /// cross-module reference whose referent this module does not declare
+    /// cannot be authenticated, so nothing may be inherited across it.
+    #[must_use]
+    pub fn import(&self, id: ImportId) -> Option<&ModuleImport> {
+        self.imports.get(id.as_usize())
     }
 
     /// Interns a [`Pred`] by CONTENT, returning its id. Idempotent.
@@ -1206,9 +2841,24 @@ impl Module {
     /// one-spelling-per-construct rule). Returns `None` when the predicate
     /// cannot be made canonical, or when it references an id this module does
     /// not have — a dangling `PredId`/`UnivId` is refused at the door rather
-    /// than deferred to the validator.
-    pub fn intern_pred(&mut self, pred: Pred) -> Option<PredId> {
-        let canonical = match pred {
+    /// than deferred to the validator. `None` means "not canonicalizable" and
+    /// nothing else.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the predicate is new and the table already
+    /// holds an entry at id `u32::MAX`; the table is unchanged.
+    pub fn intern_pred(&mut self, pred: Pred) -> Result<Option<PredId>, IdSpaceExhausted> {
+        let Some(canonical) = self.canonical_pred(pred) else {
+            return Ok(None);
+        };
+        self.intern_canonical_pred(canonical).map(Some)
+    }
+
+    /// The canonical spelling of `pred` against this module's tables, or
+    /// `None` when it has none (see [`Self::intern_pred`]).
+    fn canonical_pred(&self, pred: Pred) -> Option<Pred> {
+        Some(match pred {
             Pred::Interval { lo, hi } => Pred::interval(lo, hi)?,
             Pred::FiniteSet(items) => Pred::finite_set(items)?,
             Pred::InUniverse(u, space) => {
@@ -1220,15 +2870,21 @@ impl Module {
             Pred::Conj(children) => self.canonical_connective(children, true)?,
             Pred::Disj(children) => self.canonical_connective(children, false)?,
             other @ (Pred::NonZero | Pred::NonNull | Pred::Top | Pred::Bottom) => other,
-        };
-        if let Some(i) = self.predicates.iter().position(|p| *p == canonical) {
-            return Some(PredId::new(u32::try_from(i).expect("checked on insert")));
+        })
+    }
+
+    /// Intern an ALREADY-canonical predicate: its existing id, or the next
+    /// slot's id by the one table-id rule ([`value::table_id`]).
+    fn intern_canonical_pred(&mut self, canonical: Pred) -> Result<PredId, IdSpaceExhausted> {
+        if let Some(id) = (0..=u32::MAX)
+            .zip(&self.predicates)
+            .find_map(|(i, p)| (*p == canonical).then_some(PredId::new(i)))
+        {
+            return Ok(id);
         }
-        let id = PredId::new(
-            u32::try_from(self.predicates.len()).expect("predicate table exceeds u32 id space"),
-        );
+        let id = value::table_id(self.predicates.len())?;
         self.predicates.push(canonical);
-        Some(id)
+        Ok(id)
     }
 
     fn canonical_connective(&self, children: Vec<PredId>, conj: bool) -> Option<Pred> {
@@ -1245,7 +2901,10 @@ impl Module {
             0 => None,
             // A one-element connective IS its child; collapsing keeps one
             // spelling per construct so interning stays a true identity.
-            1 => self.predicates.get(children[0].as_usize()).cloned(),
+            1 => children
+                .first()
+                .and_then(|only| self.predicates.get(only.as_usize()))
+                .cloned(),
             n if n <= pred::MAX_CONNECTIVE_ARITY => Some(if conj {
                 Pred::Conj(children)
             } else {
@@ -1256,8 +2915,21 @@ impl Module {
     }
 
     /// Convenience: intern `Pred::InUniverse(universe, space)` in one step.
-    pub fn intern_in_universe(&mut self, universe: Universe, space: Space) -> Option<PredId> {
-        let u = self.intern_universe(universe)?;
+    /// `None` when the universe is not canonicalizable.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when either table must grow and is full. The
+    /// universe may already have been interned when the predicate table is the
+    /// full one (interning is idempotent, so a retry names the same id).
+    pub fn intern_in_universe(
+        &mut self,
+        universe: Universe,
+        space: Space,
+    ) -> Result<Option<PredId>, IdSpaceExhausted> {
+        let Some(u) = self.intern_universe(universe)? else {
+            return Ok(None);
+        };
         self.intern_pred(Pred::InUniverse(u, space))
     }
 
@@ -1292,14 +2964,29 @@ impl Module {
     /// consumption site instead of silently reverting to the raw convention.
     /// An absent side is `Top`, so joining a refined carrier with an unrefined
     /// one yields `Top` — exactly the WP-28 mechanism, made loud.
-    pub fn join_preds(&mut self, a: Option<PredId>, b: Option<PredId>) -> PredId {
+    ///
+    /// Total on a non-canonical join: a DECODED predicate table can hold a
+    /// node with no canonical spelling (an empty interval), and its join with
+    /// itself is that node. The merge then weakens to `Top`, join's own
+    /// fallback, instead of panicking.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the join is a new node and the predicate
+    /// table has no id left for it; the table is unchanged.
+    pub fn join_preds(
+        &mut self,
+        a: Option<PredId>,
+        b: Option<PredId>,
+    ) -> Result<PredId, IdSpaceExhausted> {
         let joined = match (a, b) {
             (Some(a), Some(b)) => self.pred_table().join_pred(a, b),
             // One side carries no fact: the merge carries no fact.
             _ => Pred::Top,
         };
-        self.intern_pred(joined)
-            .expect("join_pred yields a canonical, in-range node")
+        // Every fallback is toward `Top`, which is always canonical.
+        let canonical = self.canonical_pred(joined).unwrap_or(Pred::Top);
+        self.intern_canonical_pred(canonical)
     }
 
     /// The `RefinementType` obligations in this module that cite `pred`
@@ -1361,9 +3048,10 @@ impl Module {
 
     /// Register a function in the module, synthesizing proof-obligation table
     /// entries from its function-level [`ProofAnnotation`]s (roadmap §1.1).
+    /// All or nothing.
     ///
     /// Synthesis is **unconditional in this constructor** — a module built
-    /// through `add_function` never carries a claim-bearing function with a
+    /// through `try_add_function` never carries a claim-bearing function with a
     /// half-populated obligation table. For each annotation whose
     /// [`ProofAnnotation::obligation_kind`] is `Some(kind)`, one `Pending`
     /// obligation scoped to this function (`function == Some(f.id)`, B4) is
@@ -1382,14 +3070,70 @@ impl Module {
     /// *reconstruct* an existing module byte/text-faithfully rather than
     /// construct new IR, so a serialized obligation table always round-trips
     /// unchanged.
-    pub fn add_function(&mut self, f: Function) {
-        self.synthesize_function_obligations(&f);
-        self.functions.push(f);
+    ///
+    /// A DECODED module may already hold obligation id `u32::MAX`, and then no
+    /// synthesized row has an id: the refusal below, never a panic. There is
+    /// no panicking twin; the name `add_function` was deleted (D1b) so every
+    /// old call site fails to compile instead of discarding a `Result`:
+    ///
+    /// ```compile_fail,E0599
+    /// use trust_ir::value::{BlockId, FuncId, FuncTyId};
+    /// use trust_ir::{Function, Module};
+    ///
+    /// let mut module = Module::new("deleted");
+    /// let function = Function::new(FuncId::new(0), "f", FuncTyId::new(0), BlockId::new(0));
+    /// module.add_function(function);
+    /// ```
+    ///
+    /// The same setup through this door compiles:
+    ///
+    /// ```
+    /// use trust_ir::value::{BlockId, FuncId, FuncTyId};
+    /// use trust_ir::{Function, Module};
+    ///
+    /// let mut module = Module::new("kept");
+    /// let function = Function::new(FuncId::new(0), "f", FuncTyId::new(0), BlockId::new(0));
+    /// module.try_add_function(function)?;
+    /// # Ok::<(), trust_ir::AddFunctionError>(())
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// [`AddFunctionError`] when a synthesized obligation needs an id and the
+    /// obligation id space is exhausted. Neither the function nor any
+    /// obligation is pushed; the function comes back in the error.
+    pub fn try_add_function(&mut self, f: Function) -> Result<(), AddFunctionError> {
+        match self.synthesize_function_obligations(&f) {
+            Ok(()) => {
+                self.functions.push(f);
+                Ok(())
+            }
+            Err(exhausted) => Err(AddFunctionError {
+                exhausted,
+                function: Box::new(f),
+            }),
+        }
     }
 
-    /// The synthesis half of [`Module::add_function`]: map the function's
-    /// claims to obligation kinds, dedup, and append `Pending` entries.
-    fn synthesize_function_obligations(&mut self, f: &Function) {
+    /// Record the obligation drafts implied by a function's annotations.
+    ///
+    /// This is the synthesis half of [`Self::try_add_function`]: map claims to
+    /// obligation kinds, deduplicate, and append `Pending` entries without
+    /// inserting or replacing the function itself. Two-phase body builders
+    /// use it when committing into an existing declaration slot.
+    ///
+    /// This creates claims only, never certificates or checked authority.
+    /// The supplied function and final module still require validation.
+    ///
+    /// # Errors
+    ///
+    /// [`IdSpaceExhausted`] when the rows to synthesize need more obligation
+    /// ids than remain (one past the highest in the table, never recycled).
+    /// All or nothing: on `Err` the table is unchanged.
+    pub fn synthesize_function_obligations(
+        &mut self,
+        f: &Function,
+    ) -> Result<(), IdSpaceExhausted> {
         // Distinct kinds in first-appearance order, each with the (deduped)
         // display names of the claims that gave rise to it. Vec keeps the
         // synthesis deterministic (no HashMap iteration order).
@@ -1408,49 +3152,65 @@ impl Module {
                 None => kinds.push((kind, vec![name])),
             }
         }
-        if kinds.is_empty() {
-            return;
-        }
-        // Allocate ids after every existing obligation id (never reuse or
-        // collide, even when the table carries sparse producer-assigned ids).
-        let mut next_id = self
-            .proof_obligations
-            .iter()
-            .map(|o| {
-                o.id.index()
-                    .checked_add(1)
-                    .expect("proof-obligation table exceeds u32 id space")
-            })
-            .max()
-            .unwrap_or(0);
-        for (kind, names) in kinds {
-            if self
+        // Against the table: a kind this function already has a row for is
+        // not synthesized again.
+        kinds.retain(|(kind, _)| {
+            !self
                 .proof_obligations
                 .iter()
-                .any(|o| o.kind == kind && o.function == Some(f.id))
-            {
-                continue;
-            }
+                .any(|o| o.kind == *kind && o.function == Some(f.id))
+        });
+        if kinds.is_empty() {
+            return Ok(());
+        }
+        // Ids after every existing obligation id (never reuse or collide, even
+        // when the table carries sparse producer-assigned ids), taken as ONE
+        // run before any row is pushed: all or nothing. Refused only when a
+        // synthesized row actually needs an id.
+        let count = u32::try_from(kinds.len()).map_err(|_| IdSpaceExhausted::of::<ProofId>())?;
+        let mut ids = self.fresh_obligation_ids().take_run(count)?;
+        for (kind, names) in kinds {
+            let Some(id) = ids.take() else {
+                // The run holds exactly one id per remaining kind.
+                return Err(IdSpaceExhausted::of::<ProofId>());
+            };
             let description = format!(
                 "synthesized from function-level annotation(s) [{}] on `{}`",
                 names.join(", "),
                 f.name
             );
             self.proof_obligations.push(
-                ProofObligation::new(
-                    ProofId::new(next_id),
-                    kind,
-                    ProofStatus::Pending,
-                    description,
-                )
-                .with_function(f.id),
+                ProofObligation::new(id, kind, ProofStatus::Pending, description)
+                    .with_function(f.id),
             );
-            next_id = next_id
-                .checked_add(1)
-                .expect("proof-obligation table exceeds u32 id space");
         }
+        Ok(())
     }
 
+    /// The id a new proof obligation takes: one past the highest id in
+    /// [`Self::proof_obligations`], or `0` for an empty table, so it never
+    /// reuses or collides with an existing row even when the table carries
+    /// sparse, producer-assigned ids.
+    ///
+    /// `None` when no such id exists — a row already holds `u32::MAX` — so a
+    /// caller refuses instead of wrapping onto an existing row. It is
+    /// [`Self::fresh_obligation_ids`]'s first id: the one rule
+    /// ([`FreshIds::after`]), which [`Self::try_add_function`]'s synthesized
+    /// obligations and every table-extending builder allocate through.
+    pub fn next_obligation_id(&self) -> Option<ProofId> {
+        self.fresh_obligation_ids().peek()
+    }
+
+    /// Fresh obligation ids: one past the highest id in
+    /// [`Self::proof_obligations`], never a recycled gap (a stale `ProofRef` to
+    /// a deleted row must not bind a new one). Exhausted when a row holds
+    /// `u32::MAX`.
+    pub fn fresh_obligation_ids(&self) -> FreshIds<ProofId> {
+        FreshIds::after(self.proof_obligations.iter().map(|o| o.id))
+    }
+}
+
+impl Module {
     /// Resolve a function by `FuncId` without assuming declaration order.
     ///
     /// Canonical modules usually store function `N` at `functions[N]`; the
@@ -1488,6 +3248,44 @@ impl Module {
     /// Resolve a registered type by `TyId`.
     pub fn ty(&self, id: TyId) -> Option<&Ty> {
         self.types.get(id.as_usize())
+    }
+
+    /// Whether `ty`, as a `FuncTy` parameter or return, is a BY-VALUE
+    /// AGGREGATE SLOT ([`StructPassingPolicy`], `docs/SPEC_RATIFICATIONS.md`
+    /// §17): after peeling one `Ty::Refine` to its base through `self.types`,
+    /// a `Struct`, `Tuple`, `Array`, `Enum`, `Record`, `Sequence`, `Set`,
+    /// `Closure` or `Vector`.
+    ///
+    /// ONE predicate, stated once: the validator's `AlwaysMemory` rule and its
+    /// `pass = indirect` placement rule read it, and a consumer's
+    /// struct-passing gate must use it rather than a set of its own. A
+    /// refinement has its base's representation, so a refined aggregate is an
+    /// aggregate slot. A dangling or nested `Refine` answers `true` (fail
+    /// closed: an unresolvable slot is never exempted as a scalar). Scalars,
+    /// thin pointers (`Ptr` / `Ref` / `RefMut` / `PtrConst` / `PtrMut` / `Rc` /
+    /// `Func`), `Handle`, `FatPtr` (two scalar lanes), `Unit` and `Never` are
+    /// not aggregate slots.
+    #[must_use]
+    pub fn is_by_value_aggregate_slot(&self, ty: &Ty) -> bool {
+        let base = match ty {
+            Ty::Refine(base, _) => match self.ty(*base) {
+                None | Some(Ty::Refine(..)) => return true,
+                Some(base) => base,
+            },
+            other => other,
+        };
+        matches!(
+            base,
+            Ty::Struct(_)
+                | Ty::Tuple(_)
+                | Ty::Array(_, _)
+                | Ty::Enum(_)
+                | Ty::Record(_)
+                | Ty::Sequence(_)
+                | Ty::Set(_, _)
+                | Ty::Closure(_)
+                | Ty::Vector(_, _)
+        )
     }
 
     /// Resolve a struct definition by `StructId` without assuming table order.
@@ -1571,8 +3369,19 @@ impl Module {
             .collect()
     }
 
-    /// Compute the whole-module stable structural digest — the build-determinism
-    /// (G19) fingerprint of this artifact.
+    /// Compute the whole-module stable structural digest — the module's
+    /// identity under [`crate::IdentityScheme::CURRENT`] (V3, the PORTABLE
+    /// identity) and the build-determinism (G19) fingerprint of this artifact.
+    ///
+    /// Equal to `self.stable_digest_under(IdentityScheme::V3)`: the canonical
+    /// encoding with every [`Module::files`] string projected to `""` (the
+    /// table length kept, so span indices and lines stay identity), hashed
+    /// under [`crate::MODULE_IDENTITY_DOMAIN`] (`trust_ir.module.v3`). Moving
+    /// the checkout a module was compiled from therefore does not move it.
+    /// Before v44 this was the V2 digest (whole encoding, paths included);
+    /// that identity is still [`Module::stable_digest_under`]
+    /// `(IdentityScheme::V2)`, and a `ModuleImport` recorded under it is
+    /// still authenticated under it.
     ///
     /// This is the reusable form of the previously-inline digest computed at the
     /// point of signing (`trust-ir-build`'s `ModuleBuilder::sign`). It serializes
@@ -1582,7 +3391,8 @@ impl Module {
     /// certificates, target info, files, diagnostics, spec modules) in
     /// **declared / insertion (Vec) order** — and then hashes the bytes with the
     /// domain-separated [`crate::proof::ProofDigest::sha256_domain`] hasher
-    /// under the domain `"trust_ir.module.v2"`. Module digests cross untrusted
+    /// under the domain [`crate::MODULE_IDENTITY_DOMAIN`] (its single
+    /// spelling), after the V3 file-string projection. Module digests cross untrusted
     /// transport and lineage boundaries, so the legacy structural checksum is
     /// not an admissible identity here.
     ///
@@ -1607,9 +3417,442 @@ impl Module {
     ///
     /// The canonical serializer is compiled privately when the public `binary`
     /// API feature is disabled, so this identity is available in every build.
+    /// The digest streams that encoding directly into SHA-256 after a
+    /// count-only pass; it does not allocate a whole-module byte buffer.
     pub fn stable_digest(&self) -> crate::proof::ProofDigest {
-        let bytes = crate::binary::serialize_module(self);
-        crate::proof::ProofDigest::sha256_domain("trust_ir.module.v2", &bytes)
+        self.stable_digest_under(crate::imports::IdentityScheme::CURRENT)
+    }
+
+    /// Traverse this module's actual canonical string collection and count/hash
+    /// wire passes under the caller's existing original observation session.
+    /// This computes identity only; it never validates source or proof claims.
+    ///
+    /// Signature ABI descriptors traverse their actual encoding-limit and
+    /// canonical text/parser round trip under that same original session.
+    /// No prefix or partial identity is returned on an unsupported value,
+    /// resource refusal, cancellation or scratch-retirement refusal. Physical
+    /// allocator latency and disposal of caller-owned inputs remain separate.
+    pub fn stable_digest_observed<O: crate::interpret::ExecutionObserver>(
+        &self,
+        session: &mut crate::interpret::ObservedSession<'_, O>,
+        site: crate::interpret::ExecutionSite,
+    ) -> Result<crate::proof::ProofDigest, crate::interpret::ObservedValueError> {
+        crate::binary::observed_module_identity(
+            self,
+            crate::imports::IdentityScheme::CURRENT,
+            session,
+            site,
+        )
+    }
+
+    /// Compute the same observed identity only when the actual writer accepts
+    /// every construct and format count. This includes the writer's existing
+    /// `u32::MAX` count check, which the ordinary total identity API deliberately
+    /// does not enforce. No full validator, ABI truth, source authority, proof
+    /// or admission capability is established by a successful digest.
+    pub fn checked_stable_digest_observed<O: crate::interpret::ExecutionObserver>(
+        &self,
+        session: &mut crate::interpret::ObservedSession<'_, O>,
+        site: crate::interpret::ExecutionSite,
+    ) -> Result<crate::proof::ProofDigest, crate::interpret::ObservedValueError> {
+        crate::binary::observed_checked_module_identity(
+            self,
+            crate::imports::IdentityScheme::CURRENT,
+            session,
+            site,
+        )
+    }
+
+    /// Compute this module's identity under `scheme` — the digest a
+    /// [`ModuleImport`] recorded under that scheme is compared with.
+    ///
+    /// Both schemes hash the same canonical binary plan
+    /// ([`crate::binary::ModuleBinaryPlan`]) under their own domain
+    /// ([`crate::IdentityScheme::domain`]):
+    ///
+    /// * [`crate::IdentityScheme::V2`] (`trust_ir.module.v2`) — the whole
+    ///   encoding, debug file paths included; every pre-v44 import row;
+    /// * [`crate::IdentityScheme::V3`] (`trust_ir.module.v3`) — each
+    ///   `files[i]` string projected to `""`, the table length kept.
+    ///
+    /// Only the debug path STRINGS leave the V3 image: span file indices,
+    /// lines and columns, the module name, and every other string stay
+    /// identity. The projection is sound only while nothing load-bearing
+    /// reads a `files[i]` string (see [`crate::IdentityScheme`]).
+    pub fn stable_digest_under(
+        &self,
+        scheme: crate::imports::IdentityScheme,
+    ) -> crate::proof::ProofDigest {
+        // The domains are pinned in `imports` so the digest producer and the
+        // import verifier share ONE spelling each.
+        crate::binary::ModuleBinaryPlan::identity(self, scheme).sha256_domain(scheme.domain())
+    }
+
+    /// Compute the v1 identity of this module's executable/codegen-facing
+    /// content without its module-level proof sidecars.
+    ///
+    /// This digest uses the shared v38 binary projection/writer and streams
+    /// its projected image, after an exact-length count pass, through
+    /// [`crate::proof::ProofDigest::sha256_domain_stream`] under the versioned
+    /// domain `"trust_ir.module.executable_content.v1"`. Function bodies use
+    /// the canonical block/SSA/parameter-attribute form, so incidental block
+    /// storage order, sparse SSA numbering, and trailing empty parameter
+    /// attribute rows do not perturb the result. All other retained tables are
+    /// emitted deterministically in their declared order, just as they are by
+    /// the canonical binary writer.
+    ///
+    /// # Retained content
+    ///
+    /// The projection retains the module name; function-type, type, struct,
+    /// enum, record, closure-type, universe, and predicate tables; globals;
+    /// target triple/layout/ABI information; and every function declaration
+    /// or definition, including its id, name, signature, entry/body, calling
+    /// convention, linkage, attributes, summary, producer, debug metadata, and
+    /// source provenance. Body-less external/import declarations therefore
+    /// remain identity-bearing.
+    ///
+    /// The v41 ABI/linkage residue is retained explicitly, because a linker or
+    /// code generator acts on every part of it: the `AvailableExternally` /
+    /// `ExternalWeak` / `WeakOdr` / `LinkOnceOdr` linkages on functions and
+    /// globals, `FuncAttrs::naked` and `FuncAttrs::target_features`,
+    /// `Global::section` / `Global::visibility` / `Global::retained`,
+    /// [`Module::global_asm`], and the [`Module::imports`] table.
+    ///
+    /// Function- and instruction-level [`ProofAnnotation`]s are also retained
+    /// exactly when the binary writer can encode them. This intentionally
+    /// includes codegen hints and semantic markers such as `InBounds`,
+    /// `NoOverflow`, `Pure`, `Aligned`, `ValueRange`, `KnownBits`,
+    /// `BranchWeights`, GPU annotations, `Custom`, and `ProofRef`. Node proof
+    /// contexts are retained as part of the body too. The feature-gated
+    /// `ProofAnnotation::Goal` is the existing exception: it is a proof-formula
+    /// payload that the binary writer has always excluded from its stable wire
+    /// image.
+    ///
+    /// # Excluded proof sidecars
+    ///
+    /// The complete [`Module::proof_obligations`],
+    /// [`Module::proof_certificates`], and
+    /// [`Module::obligation_diagnostics`] tables are projected to empty before
+    /// string pooling and hashing. Consequently changes to an obligation's
+    /// kind, status (including `Pending` to `Certified`), description, formula,
+    /// source/site metadata, certificate/prover/evidence payload, or diagnostic
+    /// text/location do not change this digest unless an on-IR carrier such as
+    /// `ProofRef` is changed too. Debug files/spans, spec modules, function
+    /// summaries, source provenance, and all other non-sidecar fields are
+    /// conservatively retained.
+    ///
+    /// # Debug file paths stay in (a decision, not an oversight)
+    ///
+    /// Unlike [`Module::stable_digest`] (V3, WS4.10), this digest KEEPS the
+    /// [`Module::files`] path strings and stays at `v1`. It is not an import
+    /// identity — nothing authenticates a dependency by it — and its consumers
+    /// are codegen caches, for which serving one module's debug names for
+    /// another would be a wrong artifact. A moved checkout therefore changes
+    /// this digest while leaving the V3 identity unchanged; a `_v2` that
+    /// drops the paths is added only if a consumer asks for one.
+    ///
+    /// # Excluded codegen license
+    ///
+    /// [`Function::body_gate`] and [`Function::display_path`] are projected to
+    /// `None`/absent before string pooling and hashing, and neither raises the
+    /// projected wire version on its own. Stamping a license after
+    /// verification, or attaching a human def-path, therefore never moves this
+    /// identity: the license is a verdict ABOUT this image, and an identity
+    /// that changed when the verdict was recorded could never be the identity
+    /// the verdict names. A module whose only v41 feature is the license
+    /// projects to the exact pre-v41 bytes of the same module unlicensed.
+    /// [`Module::stable_digest`], the exact structural identity, still observes
+    /// both fields, as do the faithful `ModuleBinaryOptions` projections.
+    ///
+    /// # Authority boundary
+    ///
+    /// This is an **identity comparison only**. Equality says that the retained
+    /// executable-content projection is byte-identical; it does not validate
+    /// either module, prove semantic equivalence, establish that a retained
+    /// `ProofRef` resolves, show that any obligation is discharged, authenticate
+    /// a certificate, or grant compilation/execution authority. A consumer
+    /// acting on proof-backed annotations must independently validate and
+    /// recheck the proof sidecar against the exact module.
+    #[must_use]
+    pub fn executable_content_digest_v1(&self) -> crate::proof::ProofDigest {
+        crate::binary::executable_content_digest_v1(self)
+    }
+
+    /// The identity of ONE function's body — what [`GateEvidence::body_digest`]
+    /// names (domain [`FUNCTION_BODY_DIGEST_V1_DOMAIN`], roadmap WS1.12(c)).
+    ///
+    /// The preimage is the [`Self::executable_content_digest_v1`] image of a
+    /// module holding ONLY this function (no other function, no module
+    /// tables, an empty name), so the function's own record — its id, link
+    /// symbol, signature id, attributes, linkage, blocks and instructions —
+    /// is what is identified; its codegen license and display path are
+    /// excluded exactly as that projection excludes them, so stamping the
+    /// license (or its evidence) never moves the digest it cites. Type, struct
+    /// and function ids are hashed as the indices the body spells: a module
+    /// that renumbers them has rewritten the body, and a license citing the
+    /// old digest no longer matches (fail-closed — re-mint the evidence).
+    /// SSA values, block order and trailing empty parameter attributes are
+    /// NOT: that projection writes every function through its canonical plan,
+    /// so canonicalization (`format::canonicalize`) keeps a license's evidence
+    /// valid, while a transform that changes the canonical image (mem2reg, a
+    /// dialect lowering) moves the digest and must drop the evidence
+    /// ([`Function::invalidate_gate_evidence`]).
+    ///
+    /// The image's drop-glue table is the part of the module's that this
+    /// body's drops RESOLVE to (amendment D, "Body digest";
+    /// `docs/SPEC_RATIFICATIONS.md` §20): one `(glue, ty)` row per
+    /// [`Inst::Drop`] / [`Inst::DropInvoke`] site type that has one, in the
+    /// table's canonical order. A drop executes as a call of its glue, so
+    /// which glue that is changes what the body runs: re-pointing a resolved
+    /// drop at another glue, removing its row (the drop becomes unresolved)
+    /// or registering glue for a drop that was unresolved each moves the
+    /// digest, and a license citing the old one no longer matches. Rows no
+    /// drop of this body resolves to are not bound, so a body without drops
+    /// keeps the digest it had before the table existed.
+    ///
+    /// What it does NOT bind: the DEFINITIONS those ids name — the signature's
+    /// parameter and return types, struct / enum / record layouts, globals,
+    /// callee and drop-glue bodies — are module tables, outside the preimage. The digest
+    /// says "this is the body the license was granted to", not "this body
+    /// means what it meant": the meaning is the cited obligation's, whose
+    /// kernel re-check (WS1.5, on the codegen lane) re-derives it from the
+    /// module as it stands.
+    ///
+    /// # Errors
+    ///
+    /// When `function` is missing or duplicated, when the function carries a
+    /// construct with no binary carrier yet (an instruction ahead of its wire
+    /// tag, an inlined scope chain), when it spells the producer-internal
+    /// `Ty::Error` (which the binary writer panics on), or when one of its
+    /// drops resolves through a malformed drop-glue table (a site type two
+    /// rows name, or one glue named for two of its site types) — none of
+    /// which has an identity to state. It never panics on a module the writer
+    /// would refuse.
+    pub fn function_body_digest(
+        &self,
+        function: FuncId,
+    ) -> Result<crate::proof::ProofDigest, String> {
+        let mut candidates = self.functions.iter().filter(|f| f.id == function);
+        let (Some(target), None) = (candidates.next(), candidates.next()) else {
+            return Err(format!(
+                "body digest target function #{} is missing or duplicated",
+                function.index()
+            ));
+        };
+        if let Some(construct) = target
+            .blocks
+            .iter()
+            .flat_map(|block| block.body.iter())
+            .find_map(|node| node.inst.binary_wire_gap())
+        {
+            return Err(format!(
+                "function #{} carries {construct}, which has no binary carrier yet, so the body \
+                 has no identity to state",
+                function.index()
+            ));
+        }
+        let mut image = Module::new("");
+        image.functions.push(target.clone());
+        // Amendment D ("Body digest"): the drop-glue rows this body's drops
+        // RESOLVE to are part of what the body executes, so they enter the
+        // image as its drop-glue table — one row per resolved site type, in
+        // the table's canonical (ascending-glue) order. An unresolved drop
+        // contributes no row, so registering glue for it later moves the
+        // digest; a row no drop of this body resolves to is never bound.
+        image.drop_glue = self.function_body_drop_glue(target)?;
+        let mut spells_error = false;
+        image.visit_types(|ty| spells_error |= matches!(ty, Ty::Error));
+        // The minimal binary preimage also emits ABI Cast-piece types, which
+        // the general stored-type visitor does not enumerate. Inline children
+        // are part of those lane types; referenced module tables are not.
+        for slot in target
+            .attrs
+            .params
+            .iter()
+            .chain(std::iter::once(&target.attrs.ret))
+        {
+            if let Some(PassMode::Cast { pieces }) = &slot.pass {
+                for ty in pieces {
+                    ty.visit_types(|ty| spells_error |= matches!(ty, Ty::Error));
+                }
+            }
+        }
+        if spells_error {
+            return Err(format!(
+                "function #{} spells the producer-internal Ty::Error, which has no binary \
+                 spelling, so the body has no identity to state",
+                function.index()
+            ));
+        }
+        if let Some((_, scope)) = image.first_inlined_scope_chain() {
+            return Err(format!(
+                "function #{} lexical scope #{scope} carries an inlining chain link, which has \
+                 no binary carrier yet, so the body has no identity to state",
+                function.index()
+            ));
+        }
+        let executable = image.executable_content_digest_v1();
+        let mut bytes = Vec::with_capacity(1 + 32);
+        bytes.push(match executable.algorithm {
+            crate::proof::ProofDigestAlgorithm::Sha256 => 0,
+            crate::proof::ProofDigestAlgorithm::TrustIrStableV1 => 1,
+        });
+        bytes.extend_from_slice(&executable.bytes);
+        Ok(crate::proof::ProofDigest::sha256_domain(
+            FUNCTION_BODY_DIGEST_V1_DOMAIN,
+            &bytes,
+        ))
+    }
+
+    /// The drop-glue rows `function`'s drops resolve to — the part of the
+    /// module drop-glue table [`Self::function_body_digest`] binds (amendment
+    /// D, "Body digest"). Each [`Inst::Drop`] / [`Inst::DropInvoke`] at type
+    /// `T` contributes the one row whose key equals `T`; an unresolved site
+    /// contributes nothing. Rows come back in the table's canonical order
+    /// (strictly ascending `glue`), each once.
+    ///
+    /// # Errors
+    ///
+    /// When a site's type matches two or more rows, or two resolved rows
+    /// share one glue: a malformed table (`validate_module` refuses it as
+    /// `InvalidDropGlue`) states no single destructor, so the body has no
+    /// identity to state.
+    fn function_body_drop_glue(&self, function: &Function) -> Result<Vec<DropGlueEntry>, String> {
+        let index = self.drop_glue_index();
+        let mut rows: Vec<DropGlueEntry> = Vec::new();
+        for node in function.blocks.iter().flat_map(|block| block.body.iter()) {
+            let ty = match &node.inst {
+                Inst::Drop { ty, .. } | Inst::DropInvoke { ty, .. } => ty,
+                _ => continue,
+            };
+            match index.resolve(ty) {
+                DropResolution::Unresolved => {}
+                DropResolution::Ambiguous => {
+                    return Err(format!(
+                        "function #{} drops {ty}, which two or more drop-glue rows name, so the \
+                         body has no identity to state",
+                        function.id.index()
+                    ));
+                }
+                DropResolution::Resolved(glue) => {
+                    if let Some(row) = rows.iter().find(|row| row.glue == glue) {
+                        if row.ty != *ty {
+                            return Err(format!(
+                                "function #{} drops {} and {ty} through the one glue @func.{}, \
+                                 so the body has no identity to state",
+                                function.id.index(),
+                                row.ty,
+                                glue.index()
+                            ));
+                        }
+                        continue;
+                    }
+                    let at = rows.partition_point(|row| row.glue.index() < glue.index());
+                    rows.insert(
+                        at,
+                        DropGlueEntry {
+                            glue,
+                            ty: ty.clone(),
+                        },
+                    );
+                }
+            }
+        }
+        Ok(rows)
+    }
+
+    /// The first `(function index, scope index)` whose lexical scope carries
+    /// an inlining chain link ([`ScopeData::inlined_at`], WS4.19), if any.
+    ///
+    /// A scope past `u32::MAX` has no index, so it is not reported here; the
+    /// scope table's count is then itself past the format's limit, which
+    /// [`Self::wire_image_refusal`] reports.
+    ///
+    /// Such a module has NO WIRE IDENTITY yet: the binary format has no
+    /// carrier for the link (its wire part is a member of the next open wire
+    /// batch), so every binary writer refuses it and
+    /// [`stable_digest`](Self::stable_digest) /
+    /// [`executable_content_digest_v1`](Self::executable_content_digest_v1)
+    /// PANIC on it, exactly as they do on an `Inst::MakeAggregate` ahead of
+    /// its wire tag. A digest-keyed entry point probes this first and refuses
+    /// by name (`trust_ir_build::wire_identity_blocker`). Available in every
+    /// feature configuration, unlike the `binary` module's spelling.
+    #[must_use]
+    pub fn first_inlined_scope_chain(&self) -> Option<(u32, u32)> {
+        crate::binary::first_inlined_scope_chain(self)
+    }
+
+    /// Why this module has NO WIRE IMAGE, if it has none: the
+    /// highest-precedence construct or count the canonical binary writer
+    /// refuses in the module's exact encoding.
+    ///
+    /// This is THE pre-check of every trust-ir entry point that needs a wire
+    /// image or a digest (`ProjectedModuleBinaryPlan::try_new`, the native
+    /// bundle's `validate`, `trust_ir_build::wire_identity_blocker`, the
+    /// CLI's `convert --to bin` and `digest`). It is not a list of constructs:
+    /// it is the writer itself, run once over a counting check sink that
+    /// reads no payload, and every construct the writer cannot encode is
+    /// refused by the writer's own arm (`docs/SPEC_RATIFICATIONS.md`, "A
+    /// construct or count with no wire image is refused by the writer's own
+    /// arm, at every trust-ir entry point"). So a pre-check cannot omit a
+    /// construct the writer refuses — the drift that left the
+    /// producer-internal `Ty::Error` out of all four hand-written pre-checks
+    /// this replaced.
+    ///
+    /// Precedence (first wins): an instruction or variant ahead of its wire
+    /// tag, a lexical-scope inlining chain link, a completeness claim, a
+    /// certificate binding, a typed signature ABI past its encoding limits,
+    /// `Ty::Error`, then a count past the format's `u32`. Within a class, the
+    /// first the writer meets.
+    ///
+    /// Cost: one walk of the writer over the module (plus its string-table
+    /// collection); it never hashes and never copies a payload.
+    #[must_use]
+    pub fn wire_image_refusal(&self) -> Option<BinaryProjectionError> {
+        self.wire_image_refusals().into_iter().next()
+    }
+
+    /// Every refusal class [`Self::wire_image_refusal`] can report that this
+    /// module triggers, the first occurrence of each, in precedence order —
+    /// for a consumer (the native bundle's `validate`) that reports every
+    /// unencodable carrier rather than the first.
+    #[must_use]
+    pub fn wire_image_refusals(&self) -> Vec<BinaryProjectionError> {
+        crate::binary::wire_image_refusals(self)
+    }
+
+    /// Complete actual raw binary-writer refusal inventory, first per class
+    /// in original precedence order, under the SAME observation session/site.
+    /// This DATA check neither hashes a module nor issues proof authority.
+    pub fn wire_image_refusals_observed<O: crate::interpret::ExecutionObserver>(
+        &self,
+        session: &mut crate::interpret::ObservedSession<'_, O>,
+        site: crate::interpret::ExecutionSite,
+    ) -> Result<Vec<BinaryProjectionError>, crate::interpret::ObservedValueError> {
+        crate::binary::observed_wire_image_refusals(self, session, site)
+    }
+
+    /// The first `(certificate table index, obligation ID)` whose CleanCic
+    /// kernel-recheck directive carries a [`CertificateBinding`], if any.
+    ///
+    /// Since v61 (`binary::CERTIFICATE_BINDING_FORMAT_VERSION`) the binary
+    /// writer carries a binding, so this is no longer a wire blocker: a bound
+    /// module is written at v61 or later, and an explicit v38 projection
+    /// refuses it by name (`CertificateBindingRequiresV61`) rather than
+    /// narrow the binding to `None`. It remains a locator — the table index
+    /// distinguishes even malformed duplicate obligation IDs.
+    #[must_use]
+    pub fn first_certificate_binding(&self) -> Option<(usize, ProofId)> {
+        self.proof_certificates
+            .iter()
+            .enumerate()
+            .find_map(|(index, certificate)| match &certificate.evidence {
+                ProofEvidence::CleanCic {
+                    kernel_recheck: Some(recheck),
+                    ..
+                } if recheck.binding.is_some() => Some((index, certificate.obligation)),
+                _ => None,
+            })
     }
 
     /// Hash the exact containing module and target function while excluding
@@ -1619,6 +3862,11 @@ impl Module {
     /// image, while module/type/global tables and the module name remain. This
     /// binds a carrier to its function and compilation artifact without making
     /// the digest recursively depend on itself or on a sibling carrier.
+    ///
+    /// The image is hashed under the PORTABLE [`crate::IdentityScheme::V3`]
+    /// module identity and sealed under
+    /// `trust_ir.source_provenance.semantic_function.v2` (v1 sealed the V2
+    /// identity, debug file paths included).
     pub fn source_provenance_semantic_digest(
         &self,
         function: FuncId,
@@ -1640,7 +3888,11 @@ impl Module {
             .functions
             .retain(|candidate| candidate.id == function);
         semantic.functions[0].source_provenance = None;
-        let module_digest = semantic.stable_digest();
+        // EXPLICITLY V3, under a seal domain moved to `v2` in the same change
+        // (WS4.10): the preimage changed meaning when the module identity
+        // stopped hashing debug file paths, so it must not keep the `v1` name.
+        // A `v1`-sealed row fails `validate_source_provenance` closed.
+        let module_digest = semantic.stable_digest_under(crate::imports::IdentityScheme::V3);
         let mut bytes = Vec::with_capacity(4 + 1 + 32);
         bytes.extend_from_slice(&function.index().to_be_bytes());
         bytes.push(match module_digest.algorithm {
@@ -1649,16 +3901,17 @@ impl Module {
         });
         bytes.extend_from_slice(&module_digest.bytes);
         Ok(crate::proof::ProofDigest::sha256_domain(
-            "trust_ir.source_provenance.semantic_function.v1",
+            "trust_ir.source_provenance.semantic_function.v2",
             &bytes,
         ))
     }
 
     /// Content-address a `(module, obligation)` pair (v23): the SHA-256
     /// [`ObligationDigest`] used as the WS4-M2 cert-cache key. Returns `None`
-    /// when `id` names no obligation in this module, or when the obligation's
-    /// `function` scope names no function (a dangling scope has no
-    /// addressable content).
+    /// when `id` names no obligation in this module; when the obligation's
+    /// function scope and site disagree; or when its function/site does not
+    /// resolve to an existing function, block, and instruction. Malformed
+    /// proof coordinates have no addressable cache content.
     ///
     /// # Identity contract
     ///
@@ -1667,20 +3920,31 @@ impl Module {
     ///
     /// - obligation kind, description, and full formula (schema, payload,
     ///   smtlib, sort);
-    /// - when the obligation is function-scoped: the owning function's name,
-    ///   its **canonical text form** ([`format::canonical`]'s per-function
-    ///   slice: dense SSA renumbering, stable block order), its `entry`
-    ///   block, and its `summary` contract (`requires`/`ensures`/`params`).
-    ///   `entry` and `summary` are hashed explicitly because the canonical
-    ///   text carries neither, yet both are proof-relevant: `entry` decides
-    ///   execution order, and a cached certificate may have *assumed* the
-    ///   `requires` clauses — weakening a contract MUST invalidate its slot.
+    /// - embedded source/public identity and the exact optional IR `site`
+    ///   (`function`, `block`, and instruction index);
+    /// - when the obligation is function-scoped OR has a `site`: the resolved
+    ///   owning function's name, its **canonical text form**
+    ///   ([`format::canonical`]'s per-function slice: dense SSA renumbering,
+    ///   stable block order), its `entry` block, and its `summary` contract
+    ///   (`requires`/`ensures`/`params`). `entry` and `summary` are hashed
+    ///   explicitly because the canonical text carries neither, yet both are
+    ///   proof-relevant: `entry` decides execution order, and a cached
+    ///   certificate may have *assumed* the `requires` clauses — weakening a
+    ///   contract MUST invalidate its slot.
     ///
     /// Deliberately EXCLUDED: the obligation's [`ProofStatus`] and the
     /// summary's `proved` flag — verification progress is mutable
     /// bookkeeping, not identity (a cache keyed on it would self-invalidate
-    /// on discharge) — and the obligation's own `ProofId`/`FuncId` plus every
-    /// SSA `ValueId` (densely renumbered by the canonical form).
+    /// on discharge) — and the obligation's own `ProofId`/scope `FuncId` plus
+    /// every SSA `ValueId` (densely renumbered by the canonical form). That
+    /// includes the id inside a `ClausePlace::Value` binding (of the
+    /// obligation's formula or of a summary clause): it is hashed as its
+    /// CANONICAL id in the owning function, renumbered with the body (roadmap
+    /// WS4.4 review), so a binding keeps naming the same value in the key —
+    /// a raw id beside a canonical body would let two functions whose `%9`
+    /// names different values share one slot. The raw
+    /// ids inside an explicit `site` ARE identity: they name the exact
+    /// instruction whose check the obligation states.
     ///
     /// # Why `fmt`-gated
     ///
@@ -1697,21 +3961,162 @@ impl Module {
     ///   that);
     /// - raw `bbN` block labels (block-id renumbering shifts the digest;
     ///   `trust-ir-diff` pairs blocks positionally by DFS and ignores it);
+    /// - raw function/block ids inside an explicit obligation `site` (site
+    ///   renumbering shifts the digest because the exact coordinate is bound);
     /// - raw `ProofId` indices inside per-call `; #proof_ctx:` clauses
     ///   (proof-table renumbering shifts the digest; `trust-ir-diff` resolves
     ///   them to claim fingerprints).
     #[cfg(feature = "fmt")]
     pub fn obligation_digest(&self, id: ProofId) -> Option<ObligationDigest> {
         let obligation = self.proof_obligations.iter().find(|o| o.id == id)?;
-        let function = match obligation.function {
+        let function_id = match (obligation.function, obligation.site) {
+            (Some(scope), Some(site)) if scope != site.function => return None,
+            (Some(scope), _) => Some(scope),
+            (None, Some(site)) => Some(site.function),
+            (None, None) => None,
+        };
+        let function = match function_id {
             None => None,
             Some(fid) => Some(self.functions.iter().find(|f| f.id == fid)?),
         };
+        if let Some(site) = obligation.site {
+            let function = function?;
+            let block = function
+                .blocks
+                .iter()
+                .find(|block| block.id == site.block)?;
+            let inst_index = usize::try_from(site.inst_index).ok()?;
+            if inst_index >= block.body.len() {
+                return None;
+            }
+        }
         let content = function.map(|f| (f, format::canonical_function(f)));
         Some(ObligationDigest(proof::obligation_content_digest(
             obligation,
             content.as_ref().map(|(func, text)| (*func, text.as_str())),
         )))
+    }
+
+    /// Build an exact content-digest index for every proof obligation as one
+    /// batch.
+    ///
+    /// The returned [`ObligationDigestIndex`] is deliberately lookup-only: it
+    /// has no iteration-order contract, so proof-table or hash-table order can
+    /// never become part of a caller's identity protocol. Every keyed entry is
+    /// byte-for-byte identical to [`Module::obligation_digest`] for the same
+    /// ID on an unambiguous module. Obligations are grouped by owner, so each
+    /// owning function is canonicalized at most once and that temporary text
+    /// is dropped before the next function is canonicalized.
+    ///
+    /// This is a fail-closed identity index, not a whole-module validator. It
+    /// returns `None` rather than selecting an arbitrary declaration when any
+    /// function ID, block ID within a function, or proof ID is duplicated. It
+    /// also returns `None` for a dangling function/block/instruction site or a
+    /// disagreement between an obligation's function scope and explicit site.
+    /// An empty proof table produces an empty index.
+    ///
+    /// Construction is expected `O(F + B + P + H)` time and
+    /// `O(F + B + P + Cmax)` memory, where `Cmax` is the largest one-function
+    /// canonical text and `H` is the total input size unavoidably hashed across
+    /// all `P` obligations. The canonical text and its digest input remain
+    /// exactly the v23 per-ID identity contract documented on
+    /// [`Module::obligation_digest`].
+    #[cfg(feature = "fmt")]
+    pub fn obligation_digest_index(&self) -> Option<ObligationDigestIndex> {
+        let mut functions = HashMap::with_capacity(self.functions.len());
+        for function in &self.functions {
+            match functions.entry(function.id) {
+                std::collections::hash_map::Entry::Vacant(entry) => {
+                    entry.insert(function);
+                }
+                std::collections::hash_map::Entry::Occupied(_) => return None,
+            }
+        }
+
+        // Index blocks independently of vector position. Reject every
+        // duplicate key up front, including one not currently named by an
+        // obligation: this API promises one unambiguous module-wide index.
+        let block_count = self.functions.iter().try_fold(0_usize, |count, function| {
+            count.checked_add(function.blocks.len())
+        })?;
+        let mut blocks = HashMap::with_capacity(block_count);
+        for function in &self.functions {
+            for block in &function.blocks {
+                match blocks.entry((function.id, block.id)) {
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(block);
+                    }
+                    std::collections::hash_map::Entry::Occupied(_) => return None,
+                }
+            }
+        }
+
+        let mut seen_proofs = HashSet::with_capacity(self.proof_obligations.len());
+        let mut obligations_by_function: HashMap<FuncId, Vec<&ProofObligation>> = HashMap::new();
+        let mut digests = HashMap::with_capacity(self.proof_obligations.len());
+        for obligation in &self.proof_obligations {
+            if !seen_proofs.insert(obligation.id) {
+                return None;
+            }
+
+            let function_id = match (obligation.function, obligation.site) {
+                (Some(scope), Some(site)) if scope != site.function => return None,
+                (Some(scope), _) => Some(scope),
+                (None, Some(site)) => Some(site.function),
+                (None, None) => None,
+            };
+            let function = match function_id {
+                None => None,
+                Some(fid) => Some(*functions.get(&fid)?),
+            };
+            if let Some(site) = obligation.site {
+                let block = blocks.get(&(site.function, site.block))?;
+                let inst_index = usize::try_from(site.inst_index).ok()?;
+                if inst_index >= block.body.len() {
+                    return None;
+                }
+            }
+
+            match (function_id, function) {
+                (Some(fid), Some(_)) => obligations_by_function
+                    .entry(fid)
+                    .or_default()
+                    .push(obligation),
+                (None, None) => {
+                    let digest =
+                        ObligationDigest(proof::obligation_content_digest(obligation, None));
+                    match digests.entry(obligation.id) {
+                        std::collections::hash_map::Entry::Vacant(entry) => {
+                            entry.insert(digest);
+                        }
+                        std::collections::hash_map::Entry::Occupied(_) => return None,
+                    }
+                }
+                // Kept explicit so a future change to either resolution path
+                // cannot silently turn a malformed pairing into a digest.
+                _ => return None,
+            }
+        }
+        for (function_id, obligations) in obligations_by_function {
+            let function = *functions.get(&function_id)?;
+            let canonical = format::canonical_function(function);
+            for obligation in obligations {
+                let digest = ObligationDigest(proof::obligation_content_digest(
+                    obligation,
+                    Some((function, canonical.as_str())),
+                ));
+                match digests.entry(obligation.id) {
+                    std::collections::hash_map::Entry::Vacant(entry) => {
+                        entry.insert(digest);
+                    }
+                    std::collections::hash_map::Entry::Occupied(_) => return None,
+                }
+            }
+        }
+        if digests.len() != seen_proofs.len() {
+            return None;
+        }
+        Some(ObligationDigestIndex { entries: digests })
     }
 }
 
@@ -1730,6 +4135,50 @@ impl core::fmt::Display for ObligationDigest {
     }
 }
 
+/// Complete, duplicate-free proof-ID → content-digest lookup for one module.
+///
+/// This type intentionally exposes keyed lookup but no iterator. There is no
+/// entry-order contract: declaration order and randomized hash-table order are
+/// both semantically irrelevant. Only the exact [`ProofId`] correlation is
+/// meaningful. Instances are minted by [`Module::obligation_digest_index`]
+/// after its fail-closed resolution audit.
+#[cfg(feature = "fmt")]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ObligationDigestIndex {
+    entries: HashMap<ProofId, ObligationDigest>,
+}
+
+#[cfg(feature = "fmt")]
+impl ObligationDigestIndex {
+    /// Number of distinct proof IDs in the complete index.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.entries.len()
+    }
+
+    /// Whether the indexed module contained no proof obligations.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// Look up one exact proof ID without relying on declaration order.
+    #[must_use]
+    pub fn get(&self, id: ProofId) -> Option<ObligationDigest> {
+        self.entries.get(&id).copied()
+    }
+
+    /// Consume one exact proof-ID binding from the index.
+    ///
+    /// Batch consumers can remove every expected ID and finish by requiring
+    /// [`Self::is_empty`], proving both absence of gaps and absence of extras
+    /// without a second index or a quadratic table scan.
+    #[must_use]
+    pub fn remove(&mut self, id: ProofId) -> Option<ObligationDigest> {
+        self.entries.remove(&id)
+    }
+}
+
 /// Structural identity of two struct defs: equal in everything but `id`.
 ///
 /// The exhaustive destructuring is deliberate — adding a field to `StructDef`
@@ -1743,12 +4192,17 @@ fn struct_def_structurally_eq(a: &StructDef, b: &StructDef) -> bool {
         size,
         align,
         repr,
+        origin,
     } = a;
     *name == b.name
         && *fields == b.fields
         && *size == b.size
         && *align == b.align
         && *repr == b.repr
+        // A nominal key SPLITS: two defs that agree in every byte of
+        // structure but name different source entities are two types, and
+        // deduping them here would merge them behind the validator's back.
+        && *origin == b.origin
 }
 
 /// Structural identity of two enum defs: equal in everything but `id`.
@@ -1762,12 +4216,14 @@ fn enum_def_structurally_eq(a: &EnumDef, b: &EnumDef) -> bool {
         discriminants,
         repr,
         layout,
+        origin,
     } = a;
     *name == b.name
         && *variants == b.variants
         && *discriminants == b.discriminants
         && *repr == b.repr
         && *layout == b.layout
+        && *origin == b.origin
 }
 
 /// Current schema for the semantic source-loop/place provenance carrier.
@@ -1917,12 +4373,24 @@ impl SourceProvenance {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Function {
+pub struct FunctionG<X> {
     pub id: FuncId,
+    /// The function's LINK-TIME SYMBOL — normative since v41.
+    ///
+    /// This is name-keyed identity ACROSS modules: consumers emit it verbatim
+    /// as the object symbol, merge/dedup on it (definition upgrades
+    /// declaration), and resolve call relocations through it. It is therefore
+    /// NOT a display name. A producer whose source identity is not injective
+    /// onto symbols must mangle before stamping, and put the readable form in
+    /// [`Function::display_path`] instead.
+    ///
+    /// `validate_module` rejects two functions sharing a name
+    /// (`DuplicateFunctionSymbol`): an ambiguous symbol silently conflates two
+    /// bodies at link time, which is worse than a refusal.
     pub name: String,
     pub ty: FuncTyId,
     pub entry: BlockId,
-    pub blocks: Vec<Block>,
+    pub blocks: Vec<BlockG<X>>,
     pub proofs: Vec<ProofAnnotation>,
     /// Calling convention. Defaults to C.
     pub calling_conv: CallingConv,
@@ -2006,14 +4474,117 @@ pub struct Function {
     /// identity plus an injective source-identifier-to-reconstructible-place
     /// map. This is semantic authority, not debug metadata. Consumers must
     /// recheck its compiler, semantic-body, and binding digests before use.
+    /// Must-refuse corpus row `refuse/source_provenance_stale_body_digest`:
+    /// a carrier whose semantic-body digest is not the body's is refused by
+    /// `validate_module` (`InvalidSourceProvenance`), which rederives it.
     ///
-    /// Declared LAST and conditionally skipped so all pre-v35 positional serde
-    /// arrays continue to decode with `None`.
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "Option::is_none")
-    )]
+    /// ALWAYS emitted by serde since v41 (no `skip_serializing_if`; `None`
+    /// encodes as nil) — the v23/v32/v33/v35 move re-applied per its own
+    /// instruction: `display_path` is now the sole trailing conditionally
+    /// skipped field, so `source_provenance` must be always-present to keep
+    /// its positional index.
+    #[cfg_attr(feature = "serde", serde(default))]
     pub source_provenance: Option<SourceProvenance>,
+    /// The machine-checkable codegen license for this body (v41). See
+    /// [`BodyGate`]: `None` means NO CLAIM (the pre-v41 grandfather state),
+    /// which is NOT the same as `Some(BodyGate::Ungated)`.
+    ///
+    /// This is AUTHORITY metadata, not a debug claim. Unlike `value_names` and
+    /// `scopes`, a wrong value here changes whether a backend may emit code,
+    /// so ordinary transforms must PRESERVE it — never clear it. Clearing
+    /// `Ungated` to `None` would launder a below-tier body into the
+    /// grandfathered-permit state. A transform that REWRITES the body (or
+    /// drops the obligation a license cites) must drop the license's
+    /// [`GateEvidence`], keeping the authority: the evidence names the old
+    /// body's digest and would be refused as `GatedEvidenceMismatch`.
+    ///
+    /// ALWAYS emitted by serde since v41 (no `skip_serializing_if`; `None`
+    /// encodes as nil), so `display_path` keeps the sole trailing slot.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub body_gate: Option<BodyGate>,
+    /// Human-readable definition path for coverage rows and diagnostics (v41)
+    /// — e.g. `core::ptr::drop_in_place::<alloc::string::String>`.
+    ///
+    /// This exists because [`Function::name`] is normatively the LINK-TIME
+    /// SYMBOL. A producer that wants to keep a readable def-path puts it HERE;
+    /// putting it in `name` makes the symbol unlinkable. Claim-style metadata:
+    /// no operational semantics, never proof-bearing, never a linkage identity.
+    ///
+    /// ALWAYS emitted by serde since v45 (no `skip_serializing_if`; `None`
+    /// encodes as nil) — the v23/v32/v33/v35/v41 move re-applied per its own
+    /// instruction: `retained` is now the sole trailing conditionally skipped
+    /// field, so `display_path` must be always-present to keep its positional
+    /// index. `default` still decodes every older, shorter array to `None`.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub display_path: Option<String>,
+    /// Explicit output section for this function's code, e.g. `.text.startup`
+    /// or `__TEXT,__text_cold` (v45, roadmap WS3.10 / F-053). `None` means the
+    /// consumer picks the default text section, as before v45.
+    ///
+    /// Mirrors [`Global::section`]. `trust_ir_build::validate_module` refuses a
+    /// blank name or one containing NUL (`InvalidFunctionSection`), and a
+    /// section on a pinned handle entry point.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub section: Option<String>,
+    /// Symbol visibility (v45, roadmap WS3.10 / F-053). Orthogonal to
+    /// [`Function::linkage`]; see [`Visibility`]. `(External, Hidden)` is
+    /// rustc's default for a non-exported cross-CGU function, which before
+    /// v45 had no spelling at all.
+    ///
+    /// On a bodyless declaration this is the visibility the IMPORT requests.
+    /// `Hidden`/`Protected` together with `Internal`/`Private` linkage is
+    /// contradictory (a module-local symbol has no cross-image visibility to
+    /// restrict) and is refused (`ContradictoryFunctionVisibility`); a pinned
+    /// handle entry point must stay `Default`.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub visibility: Visibility,
+    /// `#[used]`-style retention (v45): keep this function even when nothing
+    /// in the module references it. Mirrors [`Global::retained`].
+    ///
+    /// Declared LAST and conditionally skipped (`false`): the sole trailing
+    /// skip, so every pre-v45 positional serde array still decodes (with
+    /// `Default` visibility, no section, not retained).
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
+    pub retained: bool,
+}
+
+/// The level-R function: [`FunctionG`] with no extension.
+pub type Function = FunctionG<level::NoExt>;
+
+impl<X> FunctionG<X> {
+    pub fn new(id: FuncId, name: impl Into<String>, ty: FuncTyId, entry: BlockId) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            ty,
+            entry,
+            blocks: Vec::new(),
+            proofs: Vec::new(),
+            calling_conv: CallingConv::default(),
+            linkage: Linkage::default(),
+            attrs: FuncAttrs::default(),
+            summary: None,
+            producer: None,
+            value_names: None,
+            scopes: None,
+            source_provenance: None,
+            body_gate: None,
+            display_path: None,
+            section: None,
+            visibility: Visibility::Default,
+            retained: false,
+        }
+    }
+}
+
+impl<X> FunctionG<X> {
+    /// True iff this function uses any v45 symbol attribute: a non-default
+    /// visibility, an explicit section, or retention. The binary writer
+    /// selects v45 exactly when some function (or another v45 feature) does.
+    #[must_use]
+    pub fn has_symbol_attributes(&self) -> bool {
+        self.visibility != Visibility::Default || self.section.is_some() || self.retained
+    }
 }
 
 /// A function's separate-compilation contract: the preconditions a caller must
@@ -2027,11 +4598,13 @@ pub struct Function {
 /// serde type and must not leak into the format core). The
 /// `ProofFormula::trust_types_json` schema round-trips losslessly to the verifier
 /// `Formula` in the `trust-ir-bridge` layer.
-// Field-level `skip_serializing_if` is deliberately NOT used here: the canonical
-// MessagePack codec (`rmp_serde::to_vec`, used by the `trust-ir` CLI) encodes
-// structs POSITIONALLY, where a skipped non-trailing field shifts every later
-// field out of position on decode. Keeping all four fields always-present makes
-// the contract round-trip safely through positional MessagePack as well as JSON.
+// Field-level `skip_serializing_if` is deliberately NOT used on any field but
+// the LAST: the canonical MessagePack codec (`rmp_serde::to_vec`, used by the
+// `trust-ir` CLI) encodes structs POSITIONALLY, where a skipped non-trailing
+// field shifts every later field out of position on decode. So every field is
+// always-present except the single trailing one, `effects` (v59), whose skip
+// keeps every pre-v59 JSON / MessagePack summary byte-identical; a struct may
+// carry at most ONE trailing skipped field, and this is it.
 #[derive(Debug, Clone, PartialEq, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct FunctionSummary {
@@ -2051,8 +4624,74 @@ pub struct FunctionSummary {
     /// True iff every clause is backed by a discharged module obligation. A caller
     /// may assume the `ensures` at a call site only when this holds; an unproved
     /// summary contributes nothing (the call stays havoced).
+    ///
+    /// "Backed" is per clause (WS1.3): for a definition, each clause needs a
+    /// Discharged/Certified obligation of the role's kind, scoped to the
+    /// function, whose `formula` equals the clause (bindings included); a
+    /// body-less declaration is backed only by `backed_by`. `trust-ir-build`'s
+    /// validator enforces this — the bit is a derived claim it re-checks.
     #[cfg_attr(feature = "serde", serde(default))]
     pub proved: bool,
+    /// Well-founded termination measures, in declaration order (v41).
+    ///
+    /// The descent conditions — each measure strictly decreases on every back
+    /// edge, and is bounded below — are REGENERABLE from these at the root, so
+    /// a separately compiled caller does not have to take `proved` on faith for
+    /// termination. Before this field the shipping compiler's `decreases`
+    /// clause was simply dropped at the IR boundary.
+    ///
+    /// No `skip_serializing_if`: the struct-level note above makes
+    /// always-emitted a local rule for every field here, not a preference.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub decreases: Vec<ProofFormula>,
+    /// What AUTHENTICATES [`FunctionSummary::proved`] (v41).
+    ///
+    /// `proved` is a bare `bool` with nothing naming what established it. On a
+    /// summary that was verified in THIS module that is merely thin — the
+    /// module's own obligations and certificates are right there. On a summary
+    /// that arrived from a separately compiled crate it is a bare assertion
+    /// with no referent at all: the module carries no crate identity, so a
+    /// consumer reading `proved: true` on an imported contract has literally
+    /// nothing to check.
+    ///
+    /// `Some(r)` says the bit is backed by [`ExternRef::obligation`] of
+    /// [`ExternRef::symbol`] in the imported module [`ExternRef::module`],
+    /// which a consumer authenticates by re-deriving
+    /// [`crate::Module::stable_digest`] over the artifact it loaded and
+    /// comparing against [`crate::ModuleImport::digest`].
+    ///
+    /// `None` means NOT RECORDED — never "backed locally" and never "trust the
+    /// bit". A fail-closed consumer treats an imported `proved: true` with no
+    /// `backed_by` as unauthenticated, exactly as it treats a v34 `site = None`
+    /// as unbindable.
+    ///
+    /// No `skip_serializing_if`, per the struct-level rule above.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub backed_by: Option<ExternRef>,
+    /// What a call may do to the world: the memory it reads and writes, and
+    /// whether it allocates, frees, unwinds or performs I/O (v59, roadmap
+    /// WS1.14 / F-013). See [`crate::effects`].
+    ///
+    /// `None` means UNRECORDED — a caller havocs the world across the call,
+    /// exactly as before v59 — never "no effects"; the affirmative pure claim
+    /// is `Some(EffectSummary::pure())`. On a DEFINITION the claim is checked
+    /// against the body by `trust_ir_build::validate_module`
+    /// (`EffectSummaryViolated`). On a body-less DECLARATION it is a claim a
+    /// caller's frame check may use only once `validate_linked_module` has
+    /// authenticated the declaration's `backed_by` (the far effects restated
+    /// exactly); otherwise a caller treats it as `None`.
+    ///
+    /// It is part of what the contract MEANS, so it enters
+    /// `obligation_content_digest` (`trust_ir.obligation.digest.v8`).
+    ///
+    /// Declared LAST and skipped when `None`: the sole trailing skipped field
+    /// (see the struct-level note), so every pre-v59 serde spelling decodes to
+    /// `None` and re-encodes byte-identically.
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "Option::is_none")
+    )]
+    pub effects: Option<EffectSummary>,
 }
 
 impl FunctionSummary {
@@ -2096,10 +4735,42 @@ impl FunctionSummary {
         self
     }
 
+    /// Append a well-founded termination measure
+    /// ([`FunctionSummary::decreases`], v41).
+    ///
+    /// Records the measure only. It asserts nothing about descent and does not
+    /// set `proved`: the descent conditions are regenerated from the measure
+    /// at the root and discharged there.
+    #[must_use]
+    pub fn decreasing(mut self, measure: ProofFormula) -> Self {
+        self.decreases.push(measure);
+        self
+    }
+
     /// Mark the summary's clauses as discharged (assumable by callers).
     #[must_use]
     pub fn proved(mut self) -> Self {
         self.proved = true;
+        self
+    }
+
+    /// Name the cross-crate obligation that authenticates
+    /// [`FunctionSummary::proved`]. Does NOT set `proved` — asserting the bit
+    /// and citing what backs it are two separate acts, and a helper that did
+    /// both would let a producer mint an authenticated-looking summary by
+    /// naming a reference it never checked.
+    #[must_use]
+    pub fn backed_by(mut self, reference: ExternRef) -> Self {
+        self.backed_by = Some(reference);
+        self
+    }
+
+    /// Record the call's effect summary ([`FunctionSummary::effects`], v59).
+    /// Records the claim only; `trust_ir_build` decides whether a body honours
+    /// it.
+    #[must_use]
+    pub fn with_effects(mut self, effects: EffectSummary) -> Self {
+        self.effects = Some(effects);
         self
     }
 }
@@ -2120,20 +4791,76 @@ pub struct FunctionBodyRef<'a> {
 }
 
 impl Function {
-    /// Returns the maximum `ValueId` currently used in this function (parameters or instructions).
+    /// Every value id this function DEFINES: block parameters and instruction
+    /// results, in block order. The one spelling of "the function's value
+    /// ids"; [`Self::max_value_id`] and [`Self::fresh_value_ids`] read it.
+    pub fn value_ids(&self) -> impl Iterator<Item = ValueId> + '_ {
+        self.blocks.iter().flat_map(|block| {
+            block.params.iter().map(|(id, _)| *id).chain(
+                block
+                    .body
+                    .iter()
+                    .flat_map(|node| node.results.iter().copied()),
+            )
+        })
+    }
+
+    /// Every block id this function's block list carries, in order.
+    pub fn block_ids(&self) -> impl Iterator<Item = BlockId> + '_ {
+        self.blocks.iter().map(|block| block.id)
+    }
+
+    /// Fresh value ids for new definitions in this function: one past the
+    /// highest id [`Self::value_ids`] yields, refused (never wrapped) when a
+    /// definition holds `u32::MAX`.
+    ///
+    /// "Fresh" is relative to the DEFINED ids: on an unvalidated function a
+    /// dangling use above them can be captured by a new definition. The
+    /// validator's undefined-use refusal is the guard.
+    pub fn fresh_value_ids(&self) -> FreshIds<ValueId> {
+        FreshIds::after(self.value_ids())
+    }
+
+    /// Fresh block ids: one past the highest id in [`Self::block_ids`].
+    pub fn fresh_block_ids(&self) -> FreshIds<BlockId> {
+        FreshIds::after(self.block_ids())
+    }
+
+    /// Returns the maximum `ValueId` currently used in this function
+    /// (parameters or instructions), or `0` when it defines none.
+    ///
+    /// `0` is ambiguous: it means both "no value" and "only `%0`", so
+    /// `max_value_id() + 1` is not a fresh id (and overflows at `u32::MAX`).
+    /// New code mints ids through [`Self::fresh_value_ids`].
     pub fn max_value_id(&self) -> u32 {
-        let mut max = 0u32;
-        for block in &self.blocks {
-            for (id, _) in &block.params {
-                max = max.max(id.index());
-            }
-            for node in &block.body {
-                for id in &node.results {
-                    max = max.max(id.index());
-                }
-            }
-        }
-        max
+        self.value_ids().map(ValueId::index).max().unwrap_or(0)
+    }
+}
+
+/// [`Module::try_add_function`] refused: a synthesized obligation needs an
+/// id and the obligation id space is exhausted. The function is returned
+/// (boxed), untouched and not pushed.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AddFunctionError {
+    /// The exhausted space (`ProofId`).
+    pub exhausted: IdSpaceExhausted,
+    /// The function that was not added.
+    pub function: Box<Function>,
+}
+
+impl core::fmt::Display for AddFunctionError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(
+            f,
+            "cannot add function `{}`: {}",
+            self.function.name, self.exhausted
+        )
+    }
+}
+
+impl std::error::Error for AddFunctionError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.exhausted)
     }
 }
 
@@ -2159,25 +4886,6 @@ fn divergence_worst(
 }
 
 impl Function {
-    pub fn new(id: FuncId, name: impl Into<String>, ty: FuncTyId, entry: BlockId) -> Self {
-        Self {
-            id,
-            name: name.into(),
-            ty,
-            entry,
-            blocks: Vec::new(),
-            proofs: Vec::new(),
-            calling_conv: CallingConv::default(),
-            linkage: Linkage::default(),
-            attrs: FuncAttrs::default(),
-            summary: None,
-            producer: None,
-            value_names: None,
-            scopes: None,
-            source_provenance: None,
-        }
-    }
-
     /// Construct a *contract-only declaration*: a body-less function that carries
     /// a [`FunctionSummary`] instead of blocks (the IR-level "body `None` ⇒
     /// summary" state). Used to build a trusted-prelude module — a [`Module`]
@@ -2207,6 +4915,11 @@ impl Function {
             value_names: None,
             scopes: None,
             source_provenance: None,
+            body_gate: None,
+            display_path: None,
+            section: None,
+            visibility: Visibility::Default,
+            retained: false,
         }
     }
 
@@ -2226,6 +4939,37 @@ impl Function {
         self
     }
 
+    /// Stamp the codegen license on this function (v41). See [`BodyGate`] —
+    /// note that leaving it unset is `None` ("no claim"), which is distinct
+    /// from `BodyGate::Ungated` ("affirmatively not gated").
+    #[must_use]
+    pub fn with_body_gate(mut self, gate: BodyGate) -> Self {
+        self.body_gate = Some(gate);
+        self
+    }
+
+    /// Attach a human-readable definition path (v41). Never a link symbol —
+    /// see [`Function::display_path`].
+    #[must_use]
+    pub fn with_display_path(mut self, path: impl Into<String>) -> Self {
+        self.display_path = Some(path.into());
+        self
+    }
+
+    /// Place this function in an explicit output section (v45).
+    #[must_use]
+    pub fn with_section(mut self, section: impl Into<String>) -> Self {
+        self.section = Some(section.into());
+        self
+    }
+
+    /// Set this function's symbol visibility (v45). See [`Visibility`].
+    #[must_use]
+    pub fn with_visibility(mut self, visibility: Visibility) -> Self {
+        self.visibility = visibility;
+        self
+    }
+
     /// True iff this function has a body (at least one basic block).
     ///
     /// A function with no blocks is a *declaration*: either a contract-only
@@ -2239,6 +4983,41 @@ impl Function {
     #[must_use]
     pub fn is_declaration(&self) -> bool {
         self.blocks.is_empty()
+    }
+
+    /// Drop the [`GateEvidence`] of this function's `Gated` license, keeping
+    /// the license and its authority (binary v61, roadmap WS1.12(c)).
+    ///
+    /// What every transform that REWRITES the body must do — the source
+    /// provenance carrier's rule, applied to the license: the evidence names
+    /// the digest of the body it was granted to, so after a rewrite it would
+    /// name the old body and be refused as a stale license
+    /// (`GatedEvidenceMismatch`). Dropping it leaves NO EVIDENCE RECORDED, the
+    /// pre-v61 meaning, which a consumer that requires evidence still refuses;
+    /// it never re-stamps a digest the transform did not earn. Returns whether
+    /// evidence was dropped.
+    pub fn invalidate_gate_evidence(&mut self) -> bool {
+        match &mut self.body_gate {
+            Some(BodyGate::Gated { evidence, .. }) => evidence.take().is_some(),
+            _ => false,
+        }
+    }
+
+    /// True iff this function is a body-less [`Linkage::ExternalWeak`]
+    /// declaration: an import whose symbol may resolve to NULL at link time.
+    ///
+    /// Such a declaration is a valid import (and an FFI boundary), but its
+    /// address is nullable, so `trust-ir-build` refuses a direct `Call` /
+    /// `Invoke` of it (and a `SeqMap` naming it as `fwd`) and any `Ty::Func` /
+    /// `Ty::Closure` spelling of it; the one
+    /// admitted address-take is `Const SymbolAddr { symbol, addend: 0 } : Ptr`,
+    /// which the producer compares against `NullPtr` before a `CallIndirect`
+    /// that must declare this function's exact convention and signature (and
+    /// no `Switch` case may name it).
+    /// A BODIED `ExternalWeak` function is not a weak declaration.
+    #[must_use]
+    pub fn is_weak_declaration(&self) -> bool {
+        self.blocks.is_empty() && self.linkage == Linkage::ExternalWeak
     }
 
     /// The `Option`-typed body the composition design names: `Some(entry, blocks)`
@@ -2416,13 +5195,16 @@ impl Function {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Block {
+pub struct BlockG<X> {
     pub id: BlockId,
-    pub params: Vec<(ValueId, Ty)>,
-    pub body: Vec<InstrNode>,
+    pub params: Vec<(ValueId, TyG<X>)>,
+    pub body: Vec<node::InstrNodeG<X>>,
 }
 
-impl Block {
+/// The level-R basic block: [`BlockG`] with no extension.
+pub type Block = BlockG<level::NoExt>;
+
+impl<X> BlockG<X> {
     pub fn new(id: BlockId) -> Self {
         Self {
             id,
@@ -2431,11 +5213,13 @@ impl Block {
         }
     }
 
-    pub fn with_param(mut self, value: ValueId, ty: Ty) -> Self {
+    pub fn with_param(mut self, value: ValueId, ty: TyG<X>) -> Self {
         self.params.push((value, ty));
         self
     }
+}
 
+impl Block {
     pub fn terminator(&self) -> Option<&InstrNode> {
         self.body.last().filter(|n| n.is_terminator())
     }
@@ -2453,9 +5237,9 @@ impl Block {
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct Global {
+pub struct GlobalG<X> {
     pub name: String,
-    pub ty: Ty,
+    pub ty: TyG<X>,
     pub mutable: bool,
     pub initializer: Option<Constant>,
     /// Linkage type. Defaults to External.
@@ -2482,11 +5266,219 @@ pub struct Global {
     /// default to `None`; ambiguous-lineage v26..=v28 module blobs are rejected.
     #[cfg_attr(feature = "serde", serde(default))]
     pub align: Option<u32>,
+    /// Explicit output section, e.g. `.text.startup` or `__DATA,__mysection`
+    /// (v41). `None` means the consumer picks by mutability/initializer, as
+    /// before.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub section: Option<String>,
+    /// Symbol visibility (v41). Orthogonal to `linkage`; see [`Visibility`].
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub visibility: Visibility,
+    /// `#[used]` retention (v41): keep this global even with no in-module
+    /// reference.
+    ///
+    /// Without it a conformant consumer may legally drop an `Internal` global
+    /// nothing references — which is exactly the case `#[used]` exists to
+    /// prevent, and how a linker-section registration array silently vanishes.
+    ///
+    /// No `is_false` skip: `Global` carries ZERO `skip_serializing_if` fields
+    /// by the local rule in the `tls` docstring above.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub retained: bool,
 }
+
+/// The level-R global: [`GlobalG`] with no extension.
+pub type Global = GlobalG<level::NoExt>;
+
+#[cfg(test)]
+mod construction_door_tests;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `docs/SPEC_RATIFICATIONS.md` §17: the ONE by-value-aggregate slot
+    /// predicate, row by row. Its readers are the validator's `AlwaysMemory`
+    /// rule, its `pass = indirect` placement rule, and every consumer's
+    /// struct-passing gate.
+    #[test]
+    fn is_by_value_aggregate_slot_table() {
+        let mut module = Module::new("by_value_aggregate_slot");
+        let struct_ty = module
+            .add_type(Ty::Struct(StructId::new(0)))
+            .expect("Module::add_type: test fixture");
+        let refined_ty = module
+            .add_type(Ty::Refine(struct_ty, PredId::new(0)))
+            .expect("Module::add_type: test fixture");
+        let scalar_ty = module
+            .add_type(Ty::I64)
+            .expect("Module::add_type: test fixture");
+        let dangling = TyId::new(u32::MAX);
+        let rows: Vec<(Ty, bool, &str)> = vec![
+            (Ty::Struct(StructId::new(0)), true, "struct"),
+            (Ty::Tuple(vec![Ty::I32, Ty::I32]), true, "tuple"),
+            (Ty::Array(scalar_ty, 4), true, "array"),
+            (Ty::Enum(EnumId::new(0)), true, "enum"),
+            (Ty::Record(RecordId::new(0)), true, "record"),
+            (Ty::Sequence(scalar_ty), true, "sequence"),
+            (Ty::Set(scalar_ty, SetRepr::Boxed), true, "set"),
+            (Ty::Closure(ClosureTyId::new(0)), true, "closure"),
+            (Ty::Vector(Box::new(Ty::I32), 4), true, "vector"),
+            (
+                Ty::Refine(struct_ty, PredId::new(0)),
+                true,
+                "refined struct",
+            ),
+            (
+                Ty::Refine(dangling, PredId::new(0)),
+                true,
+                "dangling refine (fail closed)",
+            ),
+            (
+                Ty::Refine(refined_ty, PredId::new(0)),
+                true,
+                "nested refine (fail closed)",
+            ),
+            (
+                Ty::Refine(scalar_ty, PredId::new(0)),
+                false,
+                "refined scalar",
+            ),
+            (Ty::I64, false, "scalar"),
+            (Ty::Ptr, false, "thin pointer"),
+            (Ty::Ref(Box::new(Ty::I64)), false, "reference"),
+            (Ty::Func(FuncTyId::new(0)), false, "function value"),
+            (
+                Ty::FatPtr(ty::FatPtrKind::Str),
+                false,
+                "fat pointer (two scalar lanes)",
+            ),
+            (
+                Ty::Handle(Box::new(ty::HandleTy {
+                    name: "Nat".into(),
+                    runtime: "trust_bignum::Nat".into(),
+                })),
+                false,
+                "handle",
+            ),
+            (Ty::Unit, false, "unit"),
+            (Ty::Never, false, "never"),
+        ];
+        for (ty, expected, what) in rows {
+            assert_eq!(
+                module.is_by_value_aggregate_slot(&ty),
+                expected,
+                "{what}: {ty}"
+            );
+        }
+    }
+
+    #[test]
+    fn function_catalog_scans_many_edges_to_sparse_ids_without_table_rescans() {
+        const PADDING_FUNCTIONS: u32 = 1_024;
+        const DIRECT_CALLS: usize = 2_048;
+
+        let mut module = Module::new("many-edge-catalog");
+        let mut caller = Function::new(FuncId::new(7), "caller", FuncTyId::new(0), BlockId::new(0));
+        caller.calling_conv = CallingConv::Rust;
+        let mut caller_block = Block::new(BlockId::new(0));
+        for _ in 0..DIRECT_CALLS {
+            caller_block.body.push(InstrNode::new(Inst::Call {
+                callee: FuncId::new(u32::MAX - 1),
+                args: vec![],
+            }));
+        }
+        caller_block.body.push(InstrNode::new(Inst::Call {
+            callee: FuncId::new(u32::MAX),
+            args: vec![],
+        }));
+        caller_block
+            .body
+            .push(InstrNode::new(Inst::Return { values: vec![] }));
+        caller.blocks.push(caller_block);
+        module.functions.push(caller);
+
+        for id in 0..PADDING_FUNCTIONS {
+            let mut function = Function::new(
+                FuncId::new(10_000 + id),
+                format!("padding_{id}"),
+                FuncTyId::new(0),
+                BlockId::new(0),
+            );
+            function.calling_conv = CallingConv::Rust;
+            let mut block = Block::new(BlockId::new(0));
+            block
+                .body
+                .push(InstrNode::new(Inst::Return { values: vec![] }));
+            function.blocks.push(block);
+            module.functions.push(function);
+        }
+
+        for (id, name, convention) in [
+            (u32::MAX - 1, "rust_target", CallingConv::Rust),
+            (u32::MAX, "foreign_target", CallingConv::C),
+        ] {
+            let mut function =
+                Function::new(FuncId::new(id), name, FuncTyId::new(0), BlockId::new(0));
+            function.calling_conv = convention;
+            let mut block = Block::new(BlockId::new(0));
+            block
+                .body
+                .push(InstrNode::new(Inst::Return { values: vec![] }));
+            function.blocks.push(block);
+            module.functions.push(function);
+        }
+
+        let catalog = ModuleFunctionCatalog::new(&module);
+        assert_eq!(catalog.len(), PADDING_FUNCTIONS as usize + 3);
+        assert_eq!(
+            catalog
+                .unique(FuncId::new(u32::MAX - 1))
+                .map(|f| f.name.as_str()),
+            Some("rust_target")
+        );
+        let expected = "cross-convention call edge `caller` (rustcc) -> `foreign_target` (ccc)";
+        assert_eq!(catalog.first_ffi_boundary().as_deref(), Some(expected));
+        assert_eq!(module.first_ffi_boundary().as_deref(), Some(expected));
+    }
+
+    #[test]
+    fn function_catalog_never_selects_an_ambiguous_sparse_target() {
+        let sparse = FuncId::new(u32::MAX);
+        let mut module = Module::new("ambiguous-catalog");
+        let mut caller = Function::new(FuncId::new(1), "caller", FuncTyId::new(0), BlockId::new(0));
+        caller.calling_conv = CallingConv::Rust;
+        let mut block = Block::new(BlockId::new(0));
+        block.body.push(InstrNode::new(Inst::Call {
+            callee: sparse,
+            args: vec![],
+        }));
+        block
+            .body
+            .push(InstrNode::new(Inst::Return { values: vec![] }));
+        caller.blocks.push(block);
+        module.functions.push(caller);
+
+        for (name, convention) in [
+            ("foreign_candidate", CallingConv::C),
+            ("rust_candidate", CallingConv::Rust),
+        ] {
+            let mut function = Function::new(sparse, name, FuncTyId::new(0), BlockId::new(0));
+            function.calling_conv = convention;
+            let mut block = Block::new(BlockId::new(0));
+            block
+                .body
+                .push(InstrNode::new(Inst::Return { values: vec![] }));
+            function.blocks.push(block);
+            module.functions.push(function);
+        }
+
+        let catalog = ModuleFunctionCatalog::new(&module);
+        assert_eq!(catalog.ambiguous_ids().collect::<Vec<_>>(), vec![u32::MAX]);
+        assert!(catalog.unique(sparse).is_none());
+        assert!(catalog.first_ffi_boundary().is_none());
+        assert!(module.first_ffi_boundary().is_none());
+    }
 
     fn make_func(proofs: Vec<ProofAnnotation>) -> Function {
         let mut f = Function::new(FuncId::new(0), "test", FuncTyId::new(0), BlockId::new(0));
@@ -2593,9 +5585,16 @@ mod tests {
             "producer",
             "value_names",
             "scopes",
-            // `source_provenance` is NOT here: as of v35 it is the sole trailing
-            // skipped optional. `scopes` is now always emitted at its stable
-            // positional index.
+            "source_provenance",
+            "body_gate",
+            "display_path",
+            "section",
+            "visibility",
+            // `retained` is NOT here: as of v45 it is the sole trailing
+            // skipped field. `display_path` (the v41 trailing skip) and the
+            // v45 `section` / `visibility` are now always emitted at their
+            // stable positional indices — the v41 note this replaces said the
+            // same thing about `source_provenance` and `body_gate`.
         ];
         expected.sort_unstable();
         assert_eq!(keys, expected, "positional-index discipline broken: {json}");
@@ -2605,6 +5604,14 @@ mod tests {
         assert!(back.value_names.is_none());
         assert!(back.scopes.is_none());
         assert!(back.source_provenance.is_none());
+        assert!(
+            back.body_gate.is_none(),
+            "an absent body gate is `None` (no licensing claim), never `Ungated`"
+        );
+        assert!(back.display_path.is_none());
+        assert!(back.section.is_none());
+        assert_eq!(back.visibility, Visibility::Default);
+        assert!(!back.retained);
 
         // Present summary round-trips losslessly through JSON.
         let summary = FunctionSummary::new()
@@ -2873,6 +5880,7 @@ mod tests {
             Some(vec![ScopeData {
                 parent: None,
                 span: None,
+                inlined_at: None,
             }]),
         ] {
             let bytes = rmp_serde::to_vec(&mk(scopes.clone())).expect("encode v34 function");
@@ -3015,24 +6023,43 @@ mod tests {
     #[cfg(feature = "serde")]
     #[test]
     fn proof_formula_smtlib_sort_survive_positional_msgpack() {
-        let mk = |smtlib: Option<&str>, sort: Option<&str>| crate::ProofFormula {
+        use crate::proof::{ClauseBinding, ClausePlace, ClauseSort};
+        let mk = |smtlib: Option<&str>, sort: Option<&str>, bound: bool| crate::ProofFormula {
             schema: "trust-types.Formula@1".into(),
             payload: "p".into(),
             smtlib: smtlib.map(str::to_string),
             sort: sort.map(str::to_string),
+            bindings: if bound {
+                vec![(
+                    "x".to_string(),
+                    ClauseBinding {
+                        sort: ClauseSort::BitVec(64),
+                        place: ClausePlace::Param { index: 0 },
+                    },
+                )]
+            } else {
+                Vec::new()
+            },
         };
+        // The cross product matters: `sort` stopped being the trailing field in
+        // v41, so a `sort: None` paired with non-empty `bindings` is exactly the
+        // shape that silently shifted fields before the flip.
         for pf in [
-            mk(None, Some("Bool")),
-            mk(Some("(>= x 0)"), None),
-            mk(None, None),
-            mk(Some("(>= x 0)"), Some("Bool")),
+            mk(None, Some("Bool"), false),
+            mk(Some("(>= x 0)"), None, false),
+            mk(None, None, false),
+            mk(Some("(>= x 0)"), Some("Bool"), false),
+            mk(None, None, true),
+            mk(None, Some("Bool"), true),
+            mk(Some("(>= x 0)"), None, true),
+            mk(Some("(>= x 0)"), Some("Bool"), true),
         ] {
             let bytes = rmp_serde::to_vec(&pf).expect("encode ProofFormula");
             let back: crate::ProofFormula =
                 rmp_serde::from_slice(&bytes).expect("decode ProofFormula");
             assert_eq!(
                 back, pf,
-                "ProofFormula smtlib/sort must survive positional msgpack"
+                "ProofFormula smtlib/sort/bindings must survive positional msgpack"
             );
         }
     }
@@ -3113,6 +6140,7 @@ mod tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
         module.proof_obligations.push(ProofObligation {
             id: ProofId::new(1),
@@ -3123,6 +6151,7 @@ mod tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
         module.proof_obligations.push(ProofObligation {
             id: ProofId::new(2),
@@ -3133,6 +6162,7 @@ mod tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
         module.proof_obligations.push(ProofObligation {
             id: ProofId::new(3),
@@ -3143,6 +6173,7 @@ mod tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
         module.proof_obligations.push(ProofObligation {
             id: ProofId::new(4),
@@ -3153,6 +6184,7 @@ mod tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
 
         let summary = module.proof_summary();
@@ -3176,6 +6208,7 @@ mod tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
         module.proof_obligations.push(ProofObligation {
             id: ProofId::new(1),
@@ -3186,6 +6219,7 @@ mod tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
 
         let summary = module.proof_summary();
@@ -3274,9 +6308,15 @@ mod tests {
     #[test]
     fn module_add_type_returns_sequential_ids() {
         let mut module = Module::new("types");
-        let t0 = module.add_type(Ty::I32);
-        let t1 = module.add_type(Ty::I64);
-        let t2 = module.add_type(Ty::F64);
+        let t0 = module
+            .add_type(Ty::I32)
+            .expect("Module::add_type: test fixture");
+        let t1 = module
+            .add_type(Ty::I64)
+            .expect("Module::add_type: test fixture");
+        let t2 = module
+            .add_type(Ty::F64)
+            .expect("Module::add_type: test fixture");
         assert_eq!(t0, TyId::new(0));
         assert_eq!(t1, TyId::new(1));
         assert_eq!(t2, TyId::new(2));
@@ -3289,16 +6329,22 @@ mod tests {
     #[test]
     fn module_add_func_type_returns_sequential_ids() {
         let mut module = Module::new("ftypes");
-        let ft0 = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let ft1 = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft0 = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let ft1 = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         assert_eq!(ft0, FuncTyId::new(0));
         assert_eq!(ft1, FuncTyId::new(1));
         assert_eq!(module.func_types.len(), 2);
@@ -3315,6 +6361,7 @@ mod tests {
             align: None,
 
             repr: Default::default(),
+            origin: None,
         });
         assert_eq!(sid, StructId::new(42));
         assert_eq!(module.structs.len(), 1);
@@ -3335,6 +6382,7 @@ mod tests {
             size: Some(8),
             align: Some(8),
             repr: Default::default(),
+            origin: None,
         }
     }
 
@@ -3357,20 +6405,27 @@ mod tests {
             discriminants: Vec::new(),
             repr: None,
             layout: None,
+            origin: None,
         }
     }
 
     #[test]
     fn add_struct_def_dedups_structurally_identical_defs() {
         let mut module = Module::new("dedup");
-        let a = module.add_struct_def(point_struct(0, "Point", Ty::I64));
+        let a = module
+            .add_struct_def(point_struct(0, "Point", Ty::I64))
+            .expect("Module::add_struct_def: test fixture");
         // Same def again — even under a DIFFERENT declared id — returns the
         // original id and inserts nothing.
-        let b = module.add_struct_def(point_struct(9, "Point", Ty::I64));
+        let b = module
+            .add_struct_def(point_struct(9, "Point", Ty::I64))
+            .expect("Module::add_struct_def: test fixture");
         assert_eq!(a, b);
         assert_eq!(module.structs.len(), 1);
         // A structurally different def (other field type) is a new entry.
-        let c = module.add_struct_def(point_struct(1, "Point", Ty::F64));
+        let c = module
+            .add_struct_def(point_struct(1, "Point", Ty::F64))
+            .expect("Module::add_struct_def: test fixture");
         assert_ne!(a, c);
         assert_eq!(module.structs.len(), 2);
     }
@@ -3378,9 +6433,13 @@ mod tests {
     #[test]
     fn add_struct_def_never_allows_colliding_ids() {
         let mut module = Module::new("collide");
-        let a = module.add_struct_def(point_struct(0, "A", Ty::I64));
+        let a = module
+            .add_struct_def(point_struct(0, "A", Ty::I64))
+            .expect("Module::add_struct_def: test fixture");
         // Different content under the SAME declared id: gets a fresh id.
-        let b = module.add_struct_def(point_struct(0, "B", Ty::I64));
+        let b = module
+            .add_struct_def(point_struct(0, "B", Ty::I64))
+            .expect("Module::add_struct_def: test fixture");
         assert_eq!(a, StructId::new(0));
         assert_ne!(a, b);
         assert_eq!(module.structs.len(), 2);
@@ -3396,29 +6455,52 @@ mod tests {
     #[test]
     fn allocate_struct_id_skips_sparse_ids_and_reserves_by_insert() {
         let mut module = Module::new("alloc");
-        assert_eq!(module.allocate_struct_id(), StructId::new(0));
+        assert_eq!(
+            module
+                .allocate_struct_id()
+                .expect("Module::allocate_struct_id: test fixture"),
+            StructId::new(0)
+        );
         // A sparse producer-assigned id pushes the allocator past it.
         module.add_struct(point_struct(7, "Sparse", Ty::I64));
-        let id = module.allocate_struct_id();
+        let id = module
+            .allocate_struct_id()
+            .expect("Module::allocate_struct_id: test fixture");
         assert_eq!(id, StructId::new(8));
         // Reserve-by-insert: registering under the allocated id advances it.
         let mut sd = point_struct(0, "Next", Ty::F64);
         sd.id = id;
-        assert_eq!(module.add_struct_def(sd), id);
-        assert_eq!(module.allocate_struct_id(), StructId::new(9));
+        assert_eq!(
+            module
+                .add_struct_def(sd)
+                .expect("Module::add_struct_def: test fixture"),
+            id
+        );
+        assert_eq!(
+            module
+                .allocate_struct_id()
+                .expect("Module::allocate_struct_id: test fixture"),
+            StructId::new(9)
+        );
     }
 
     #[test]
     fn add_enum_def_dedups_and_never_collides() {
         let mut module = Module::new("enums");
-        let a = module.add_enum_def(option_enum(0, "Option", Ty::I32));
+        let a = module
+            .add_enum_def(option_enum(0, "Option", Ty::I32))
+            .expect("Module::add_enum_def: test fixture");
         // Structural duplicate under another id dedups to the original.
-        let b = module.add_enum_def(option_enum(5, "Option", Ty::I32));
+        let b = module
+            .add_enum_def(option_enum(5, "Option", Ty::I32))
+            .expect("Module::add_enum_def: test fixture");
         assert_eq!(a, b);
         assert_eq!(module.enums.len(), 1);
         // Different payload type = different def; same declared id must not
         // collide.
-        let c = module.add_enum_def(option_enum(0, "Option", Ty::I64));
+        let c = module
+            .add_enum_def(option_enum(0, "Option", Ty::I64))
+            .expect("Module::add_enum_def: test fixture");
         assert_ne!(a, c);
         assert_eq!(module.enums.len(), 2);
         assert_eq!(
@@ -3426,7 +6508,12 @@ mod tests {
             vec![Ty::I64]
         );
         // Allocator sits past both.
-        assert_eq!(module.allocate_enum_id(), EnumId::new(2));
+        assert_eq!(
+            module
+                .allocate_enum_id()
+                .expect("Module::allocate_enum_id: test fixture"),
+            EnumId::new(2)
+        );
     }
 
     #[test]
@@ -3454,6 +6541,10 @@ mod tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         };
         assert_eq!(g.name, "COUNTER");
         assert_eq!(g.ty, Ty::I64);
@@ -3471,6 +6562,10 @@ mod tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         };
         assert_eq!(g.name, "UNINIT");
         assert!(!g.mutable);
@@ -3491,6 +6586,10 @@ mod tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         };
         if let Some(Constant::Aggregate(elems)) = &g.initializer {
             assert_eq!(elems.len(), 3);
@@ -3546,16 +6645,23 @@ mod tests {
     #[test]
     fn module_add_closure_type_returns_sequential_ids() {
         let mut module = Module::new("closures");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let c0 = module.add_closure_type(ClosureTy::bare(ft));
-        let c1 = module.add_closure_type(ClosureTy {
-            func: ft,
-            captures: vec![Ty::I32, Ty::Bool],
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let c0 = module
+            .add_closure_type(ClosureTy::bare(ft))
+            .expect("Module::add_closure_type: test fixture");
+        let c1 = module
+            .add_closure_type(ClosureTy {
+                func: ft,
+                captures: vec![Ty::I32, Ty::Bool],
+            })
+            .expect("Module::add_closure_type: test fixture");
         assert_eq!(c0, ClosureTyId::new(0));
         assert_eq!(c1, ClosureTyId::new(1));
         assert_eq!(module.closure_types.len(), 2);
@@ -3572,33 +6678,47 @@ mod tests {
             name: "R".to_string(),
             fields: vec![],
         });
-        let tid = module.add_type(Ty::Record(rid));
+        let tid = module
+            .add_type(Ty::Record(rid))
+            .expect("Module::add_type: test fixture");
         assert_eq!(module.types[tid.as_usize()], Ty::Record(rid));
     }
 
     #[test]
     fn module_ty_closure_roundtrip() {
         let mut module = Module::new("tc");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
-        let cid = module.add_closure_type(ClosureTy::bare(ft));
-        let tid = module.add_type(Ty::Closure(cid));
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let cid = module
+            .add_closure_type(ClosureTy::bare(ft))
+            .expect("Module::add_closure_type: test fixture");
+        let tid = module
+            .add_type(Ty::Closure(cid))
+            .expect("Module::add_type: test fixture");
         assert_eq!(module.types[tid.as_usize()], Ty::Closure(cid));
     }
 
     #[test]
     fn module_add_function() {
         let mut module = Module::new("test");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let func = Function::new(FuncId::new(0), "noop", ft, BlockId::new(0));
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
         assert_eq!(module.functions.len(), 1);
         assert_eq!(module.functions[0].name, "noop");
         // A claim-free function synthesizes no obligations.
@@ -3606,6 +6726,105 @@ mod tests {
     }
 
     // --- roadmap §1.1: add_function obligation synthesis ---
+
+    #[test]
+    fn next_obligation_id_is_one_past_the_highest_and_refuses_exhaustion() {
+        let row = |id: u32| {
+            ProofObligation::new(
+                ProofId::new(id),
+                ObligationKind::PanicFreedom,
+                ProofStatus::Pending,
+                "row",
+            )
+        };
+        let mut module = Module::new("next_id");
+        assert_eq!(module.next_obligation_id(), Some(ProofId::new(0)));
+        // Sparse, out-of-order producer ids: past the HIGHEST, not the last.
+        module.proof_obligations = vec![row(7), row(3)];
+        assert_eq!(module.next_obligation_id(), Some(ProofId::new(8)));
+        module.proof_obligations.push(row(u32::MAX - 1));
+        assert_eq!(module.next_obligation_id(), Some(ProofId::new(u32::MAX)));
+        // No id is left: refused, never wrapped onto row 0.
+        module.proof_obligations.push(row(u32::MAX));
+        assert_eq!(module.next_obligation_id(), None);
+    }
+
+    /// r11 item 6 (port of probe P7(a), evidence kind ii): a DECODED table may
+    /// hold obligation id `u32::MAX`, and then a claim-bearing function has no
+    /// id for its synthesized row. `try_add_function` refuses all or nothing —
+    /// the function comes back, no row and no function is pushed, and the
+    /// module digest is unchanged — while a claim-free function (which needs
+    /// no id) is still added. Mutation check: allocating inside the push loop
+    /// (the pre-r11 shape) pushes the first row before refusing the second.
+    #[test]
+    fn try_add_function_refuses_a_claim_when_the_table_holds_u32_max() {
+        let mut module = Module::new("decoded");
+        module.proof_obligations.push(ProofObligation::new(
+            ProofId::new(u32::MAX),
+            ObligationKind::Precondition,
+            ProofStatus::Pending,
+            "decoded row",
+        ));
+        let before = module.stable_digest();
+        let mut claiming = Function::new(FuncId::new(0), "f", FuncTyId::new(0), BlockId::new(0));
+        claiming.proofs = vec![ProofAnnotation::NoPanic, ProofAnnotation::NoOverflow];
+        let refusal = module
+            .try_add_function(claiming.clone())
+            .expect_err("no obligation id is left for the synthesized rows");
+        assert_eq!(refusal.exhausted, IdSpaceExhausted { space: "ProofId" });
+        assert_eq!(*refusal.function, claiming);
+        assert_eq!(module.stable_digest(), before, "nothing was pushed");
+        assert!(module.functions.is_empty());
+        assert_eq!(module.proof_obligations.len(), 1);
+
+        // All or nothing at the boundary: one id left, two rows needed.
+        module.proof_obligations[0].id = ProofId::new(u32::MAX - 1);
+        let before = module.stable_digest();
+        assert!(module.try_add_function(claiming.clone()).is_err());
+        assert_eq!(
+            module.stable_digest(),
+            before,
+            "the first row was not pushed alone"
+        );
+
+        // A claim-free function needs no id and is added.
+        let plain = Function::new(FuncId::new(1), "g", FuncTyId::new(0), BlockId::new(0));
+        module
+            .try_add_function(plain)
+            .expect("no synthesized row, no id needed");
+        assert_eq!(module.functions.len(), 1);
+    }
+
+    /// One spelling of "the function's value ids": `max_value_id` and
+    /// `fresh_value_ids` read the same walk, and the fresh cursor refuses
+    /// (never wraps) when a definition holds `u32::MAX`.
+    #[test]
+    fn value_ids_are_the_one_walk_behind_max_and_fresh() {
+        let mut func = Function::new(FuncId::new(0), "f", FuncTyId::new(0), BlockId::new(0));
+        assert_eq!(func.max_value_id(), 0);
+        assert_eq!(func.fresh_value_ids().peek(), Some(ValueId::new(0)));
+        assert_eq!(func.fresh_block_ids().peek(), Some(BlockId::new(0)));
+        let mut block = Block::new(BlockId::new(4));
+        block.params.push((ValueId::new(9), Ty::I32));
+        block.body.push(
+            InstrNode::new(Inst::Copy {
+                ty: Ty::I32,
+                operand: ValueId::new(9),
+            })
+            .with_result(ValueId::new(2)),
+        );
+        func.blocks.push(block);
+        assert_eq!(
+            func.value_ids().collect::<Vec<_>>(),
+            vec![ValueId::new(9), ValueId::new(2)]
+        );
+        assert_eq!(func.max_value_id(), 9);
+        assert_eq!(func.fresh_value_ids().peek(), Some(ValueId::new(10)));
+        assert_eq!(func.fresh_block_ids().peek(), Some(BlockId::new(5)));
+        func.blocks[0].params[0].0 = ValueId::new(u32::MAX);
+        assert_eq!(func.max_value_id(), u32::MAX);
+        assert!(func.fresh_value_ids().is_exhausted());
+    }
 
     #[test]
     fn add_function_synthesizes_obligations_from_claims() {
@@ -3623,7 +6842,9 @@ mod tests {
             ProofAnnotation::InBounds,
             ProofAnnotation::Terminates,
         ];
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         // NoOverflow + DivNonZero collapse into ONE ArithmeticSafety entry;
         // NoPanic, InBounds, Terminates each map to their own kind.
@@ -3692,7 +6913,9 @@ mod tests {
             ProofAnnotation::ProofRef(ProofId::new(7)),
             ProofAnnotation::Custom(ProofTag::new(9)),
         ];
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
         assert!(
             module.proof_obligations.is_empty(),
             "hint/marker annotations must not synthesize obligations"
@@ -3720,7 +6943,9 @@ mod tests {
             BlockId::new(0),
         );
         func.proofs = vec![ProofAnnotation::NoOverflow, ProofAnnotation::NoPanic];
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         // ArithmeticSafety is NOT duplicated; PanicFreedom is added with an id
         // allocated past the sparse producer id (12, not 0).
@@ -3739,7 +6964,9 @@ mod tests {
             BlockId::new(0),
         );
         again.proofs = vec![ProofAnnotation::NoOverflow, ProofAnnotation::NoPanic];
-        module.add_function(again);
+        module
+            .try_add_function(again)
+            .expect("Module::try_add_function: test fixture");
         assert_eq!(module.proof_obligations.len(), 2);
     }
 
@@ -3752,8 +6979,12 @@ mod tests {
         f0.proofs = vec![ProofAnnotation::NoOverflow];
         let mut f1 = Function::new(FuncId::new(1), "b", FuncTyId::new(0), BlockId::new(0));
         f1.proofs = vec![ProofAnnotation::NoOverflow];
-        module.add_function(f0);
-        module.add_function(f1);
+        module
+            .try_add_function(f0)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .try_add_function(f1)
+            .expect("Module::try_add_function: test fixture");
         assert_eq!(module.proof_obligations.len(), 2);
         assert_eq!(module.proof_obligations[0].function, Some(FuncId::new(0)));
         assert_eq!(module.proof_obligations[1].function, Some(FuncId::new(1)));
@@ -3766,13 +6997,20 @@ mod tests {
     #[test]
     fn module_typed_lookup_helpers_do_not_require_text_roundtrip() {
         let mut module = Module::new("bridge");
-        let ty = module.add_type(Ty::I64);
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I64],
-            returns: vec![Ty::I64],
-            is_vararg: false,
-        });
-        let cid = module.add_closure_type(ClosureTy::bare(ft));
+        let ty = module
+            .add_type(Ty::I64)
+            .expect("Module::add_type: test fixture");
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I64],
+                returns: vec![Ty::I64],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let cid = module
+            .add_closure_type(ClosureTy::bare(ft))
+            .expect("Module::add_closure_type: test fixture");
         let sid = module.add_struct(StructDef {
             id: StructId::new(8),
             name: "Pair".to_string(),
@@ -3785,6 +7023,7 @@ mod tests {
             align: Some(8),
 
             repr: Default::default(),
+            origin: None,
         });
         let eid = module.add_enum(EnumDef {
             id: EnumId::new(4),
@@ -3797,6 +7036,7 @@ mod tests {
             discriminants: Vec::new(),
             repr: None,
             layout: None,
+            origin: None,
         });
         let rid = module.add_record(RecordDef {
             id: RecordId::new(6),
@@ -3814,7 +7054,9 @@ mod tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         assert_eq!(module.ty(ty), Some(&Ty::I64));
         assert_eq!(module.func_type(ft).unwrap().params, vec![Ty::I64]);
@@ -4279,8 +7521,12 @@ mod tests {
     #[test]
     fn module_clone_equals_original() {
         let mut module = Module::new("clone_test");
-        module.add_type(Ty::I32);
-        module.add_type(Ty::F64);
+        module
+            .add_type(Ty::I32)
+            .expect("Module::add_type: test fixture");
+        module
+            .add_type(Ty::F64)
+            .expect("Module::add_type: test fixture");
         module.globals.push(Global {
             name: "G".to_string(),
             ty: Ty::Bool,
@@ -4289,6 +7535,10 @@ mod tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         });
         let cloned = module.clone();
         assert_eq!(module, cloned);
@@ -4334,11 +7584,14 @@ mod serde_tests {
     fn module_json_round_trip() {
         let mut module = Module::new("test_module");
 
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I32, Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32, Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         module.add_struct(StructDef {
             id: StructId::new(0),
@@ -4359,9 +7612,12 @@ mod serde_tests {
             align: Some(8),
 
             repr: Default::default(),
+            origin: None,
         });
 
-        module.add_type(Ty::I32);
+        module
+            .add_type(Ty::I32)
+            .expect("Module::add_type: test fixture");
 
         module.globals.push(Global {
             name: "COUNTER".to_string(),
@@ -4371,6 +7627,10 @@ mod serde_tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         });
 
         let func_id = FuncId::new(0);
@@ -4398,7 +7658,9 @@ mod serde_tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         module.proof_obligations.push(ProofObligation {
             id: ProofId::new(0),
@@ -4409,12 +7671,15 @@ mod serde_tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
 
         module.proof_certificates.push(ProofCertificate {
             obligation: ProofId::new(0),
             prover: "ay".to_string(),
             evidence: ProofEvidence::Trusted("manual review".to_string()),
+
+            assurance: None,
         });
 
         let json = serde_json::to_string_pretty(&module).expect("serialize to JSON");
@@ -4433,11 +7698,14 @@ mod serde_tests {
     fn module_msgpack_round_trip() {
         let mut module = Module::new("msgpack_test");
 
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I64],
-            returns: vec![Ty::Bool],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I64],
+                returns: vec![Ty::Bool],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut func = Function::new(FuncId::new(0), "is_positive", ft, b(0));
         let mut block = Block::new(b(0));
@@ -4464,7 +7732,9 @@ mod serde_tests {
             .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
 
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         msgpack_round_trip(&module);
     }
@@ -4474,13 +7744,20 @@ mod serde_tests {
         let v4bool = Ty::Vector(Box::new(Ty::Bool), 4);
 
         let mut module = Module::new(name);
-        module.add_type(v4i32.clone());
-        module.add_type(v4bool.clone());
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::Ptr, v4i32.clone(), v4i32.clone()],
-            returns: vec![v4i32.clone(), v4bool.clone()],
-            is_vararg: false,
-        });
+        module
+            .add_type(v4i32.clone())
+            .expect("Module::add_type: test fixture");
+        module
+            .add_type(v4bool.clone())
+            .expect("Module::add_type: test fixture");
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Ptr, v4i32.clone(), v4i32.clone()],
+                returns: vec![v4i32.clone(), v4bool.clone()],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut func = Function::new(FuncId::new(0), "batch_i32", ft, b(0));
         let mut block = Block::new(b(0));
@@ -4581,7 +7858,9 @@ mod serde_tests {
         }));
 
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
         module
     }
 
@@ -4629,6 +7908,9 @@ mod serde_tests {
             BinOp::Shl,
             BinOp::LShr,
             BinOp::AShr,
+            BinOp::RotL,
+            BinOp::RotR,
+            BinOp::FCopySign,
         ];
         for op in &ops {
             let inst = Inst::BinOp {
@@ -4645,7 +7927,16 @@ mod serde_tests {
 
     #[test]
     fn serde_all_unop_variants() {
-        let ops = [UnOp::Neg, UnOp::FNeg, UnOp::Not, UnOp::CtPop];
+        let ops = [
+            UnOp::Neg,
+            UnOp::FNeg,
+            UnOp::Not,
+            UnOp::CtPop,
+            UnOp::CtLz,
+            UnOp::CtTz,
+            UnOp::BSwap,
+            UnOp::BitReverse,
+        ];
         for op in &ops {
             let node = InstrNode::new(Inst::UnOp {
                 op: *op,
@@ -4835,6 +8126,7 @@ mod serde_tests {
                 desired: v(2),
                 success: Ordering::AcqRel,
                 failure: Ordering::Relaxed,
+                weak: false,
             })
             .with_result(v(3)),
             InstrNode::new(Inst::Fence {
@@ -5034,7 +8326,11 @@ mod serde_tests {
     fn serde_proof_and_pseudo_instructions() {
         let instructions: Vec<InstrNode> = vec![
             InstrNode::new(Inst::Assume { cond: v(0) }),
-            InstrNode::new(Inst::Assert { cond: v(0) }),
+            InstrNode::new(Inst::Assert {
+                cond: v(0),
+                kind: crate::inst::AssertKind::Unspecified,
+                site: None,
+            }),
             InstrNode::new(Inst::Unreachable),
             InstrNode::new(Inst::Copy {
                 ty: Ty::I32,
@@ -5167,6 +8463,8 @@ mod serde_tests {
             obligation: ProofId::new(0),
             prover: "ay".to_string(),
             evidence: ProofEvidence::SmtProof(vec![1, 2, 3]),
+
+            assurance: None,
         };
         let mut node = ProofLineageNode::new(
             ProofLineageId::new(0),
@@ -5195,6 +8493,82 @@ mod serde_tests {
         manifest.validate().expect("lineage manifest validates");
         json_round_trip(&manifest);
         msgpack_round_trip(&manifest);
+    }
+
+    /// The combination the test above does NOT reach: `replay` absent with a
+    /// non-empty `depends_on`. `ProofLineageNode` carried `skip_serializing_if`
+    /// on BOTH, so in positional MessagePack — a bare array, which is what
+    /// `rmp_serde::to_vec` writes and what the module graph is encoded with —
+    /// skipping `replay` shifted `depends_on` down into slot 6, and the decoder
+    /// read that `Vec<ProofLineageId>` as an `Option<ProofReplayIdentity>`:
+    /// `invalid type: integer 0, expected a string`. A struct may carry at most
+    /// ONE conditionally-skipped field and it must be the LAST; `replay` gained
+    /// a successor and kept its skip.
+    ///
+    /// All four combinations are exercised, because only one of them was
+    /// broken and a fix that traded it for another would look like progress.
+    #[test]
+    fn serde_proof_lineage_node_round_trips_with_and_without_a_replay_identity() {
+        fn node(id: u32) -> ProofLineageNode {
+            ProofLineageNode::new(
+                ProofLineageId::new(id),
+                ProofTransform::new(
+                    ProofTransformStage::SolverAdapter,
+                    "trust-ir-ay",
+                    "TrustIr",
+                    "0.1.0",
+                ),
+                ProofDigest::sha256([1; 32]),
+                ProofDigest::sha256([2; 32]),
+            )
+        }
+
+        for replay in [false, true] {
+            for depends in [false, true] {
+                let mut tail = node(1);
+                if replay {
+                    tail.replay = Some(ProofReplayIdentity::new(
+                        "stage2-tcargo",
+                        "cargo test -p trust-ir-ay",
+                    ));
+                }
+                if depends {
+                    tail.depends_on.push(ProofLineageId::new(0));
+                }
+                let manifest = ProofLineageManifest {
+                    schema_version: ProofLineageManifest::SCHEMA_VERSION,
+                    nodes: vec![node(0), tail],
+                    roots: vec![ProofLineageId::new(0)],
+                };
+                // Positional MessagePack is the encoding the skip rule is
+                // about; JSON is map-based and was never affected.
+                let bytes = rmp_serde::to_vec(&manifest).expect("serialize positional");
+                let back: ProofLineageManifest =
+                    rmp_serde::from_slice(&bytes).unwrap_or_else(|e| {
+                        panic!(
+                            "replay={replay} depends_on={depends}: positional decode failed: {e}"
+                        )
+                    });
+                assert_eq!(manifest, back, "replay={replay} depends_on={depends}");
+                json_round_trip(&manifest);
+
+                // Backward compatibility: `replay` is now always emitted, so
+                // no NEW blob omits it — but blobs written before the flip do,
+                // and `serde(default)` must still read them. Measured on the
+                // real encodings rather than asserted.
+                let mut value: serde_json::Value =
+                    serde_json::from_str(&serde_json::to_string(&manifest).expect("to json"))
+                        .expect("as value");
+                for node in value["nodes"].as_array_mut().expect("nodes") {
+                    node.as_object_mut().expect("node").remove("replay");
+                }
+                let legacy: ProofLineageManifest =
+                    serde_json::from_value(value).expect("a pre-flip JSON node still decodes");
+                for node in &legacy.nodes {
+                    assert!(node.replay.is_none());
+                }
+            }
+        }
     }
 
     // ---- Constant types including nested aggregates ----
@@ -5310,21 +8684,30 @@ mod serde_tests {
         let mut module = Module::new("multi_func");
 
         // Two function types
-        let ft_add = module.add_func_type(FuncTy {
-            params: vec![Ty::I32, Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let ft_main = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let ft_vararg = module.add_func_type(FuncTy {
-            params: vec![Ty::Ptr],
-            returns: vec![Ty::I32],
-            is_vararg: true,
-        });
+        let ft_add = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32, Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let ft_main = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let ft_vararg = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Ptr],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: true,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         // Two struct definitions
         module.add_struct(StructDef {
@@ -5346,6 +8729,7 @@ mod serde_tests {
             align: Some(4),
 
             repr: Default::default(),
+            origin: None,
         });
         module.add_struct(StructDef {
             id: StructId::new(1),
@@ -5366,12 +8750,19 @@ mod serde_tests {
             align: None,
 
             repr: Default::default(),
+            origin: None,
         });
 
         // Types
-        module.add_type(Ty::I32);
-        module.add_type(Ty::Array(TyId::new(0), 10));
-        module.add_type(Ty::Struct(StructId::new(0)));
+        module
+            .add_type(Ty::I32)
+            .expect("Module::add_type: test fixture");
+        module
+            .add_type(Ty::Array(TyId::new(0), 10))
+            .expect("Module::add_type: test fixture");
+        module
+            .add_type(Ty::Struct(StructId::new(0)))
+            .expect("Module::add_type: test fixture");
 
         // Globals
         module.globals.push(Global {
@@ -5382,6 +8773,10 @@ mod serde_tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         });
         module.globals.push(Global {
             name: "CONST_ARRAY".to_string(),
@@ -5395,6 +8790,10 @@ mod serde_tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         });
 
         // Function 1: add
@@ -5418,7 +8817,9 @@ mod serde_tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
         f_add.blocks.push(block_add);
-        module.add_function(f_add);
+        module
+            .try_add_function(f_add)
+            .expect("Module::try_add_function: test fixture");
 
         // Function 2: main (calls add, has control flow)
         let mut f_main = Function::new(FuncId::new(1), "main", ft_main, b(0));
@@ -5448,7 +8849,9 @@ mod serde_tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
         f_main.blocks.push(entry_block);
-        module.add_function(f_main);
+        module
+            .try_add_function(f_main)
+            .expect("Module::try_add_function: test fixture");
 
         // Function 3: vararg printf-like
         let mut f_va = Function::new(FuncId::new(2), "printf_wrapper", ft_vararg, b(0));
@@ -5465,7 +8868,9 @@ mod serde_tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![v(1)] }));
         f_va.blocks.push(va_block);
-        module.add_function(f_va);
+        module
+            .try_add_function(f_va)
+            .expect("Module::try_add_function: test fixture");
 
         // Proof obligations and certificates
         module.proof_obligations.push(ProofObligation {
@@ -5477,6 +8882,7 @@ mod serde_tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
         module.proof_obligations.push(ProofObligation {
             id: ProofId::new(1),
@@ -5487,11 +8893,14 @@ mod serde_tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         });
         module.proof_certificates.push(ProofCertificate {
             obligation: ProofId::new(0),
             prover: "ay".to_string(),
             evidence: ProofEvidence::SmtProof(vec![0x01, 0x02]),
+
+            assurance: None,
         });
 
         json_round_trip(&module);
@@ -5504,11 +8913,14 @@ mod serde_tests {
     fn serde_module_with_control_flow() {
         let mut module = Module::new("control_flow");
 
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut func = Function::new(FuncId::new(0), "abs", ft, b(0));
 
@@ -5565,7 +8977,9 @@ mod serde_tests {
             .push(InstrNode::new(Inst::Return { values: vec![v(5)] }));
         func.blocks.push(merge_block);
 
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         json_round_trip(&module);
         msgpack_round_trip(&module);
@@ -5575,11 +8989,14 @@ mod serde_tests {
     fn serde_module_with_switch() {
         let mut module = Module::new("switch_demo");
 
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut func = Function::new(FuncId::new(0), "classify", ft, b(0));
 
@@ -5627,7 +9044,9 @@ mod serde_tests {
             func.blocks.push(block);
         }
 
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         json_round_trip(&module);
         msgpack_round_trip(&module);
@@ -5678,11 +9097,14 @@ mod serde_tests {
     #[test]
     fn json_function_field_names() {
         let mut module = Module::new("fn_schema");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "test_fn", ft, b(0));
         func.proofs.push(ProofAnnotation::Pure);
         let mut block = Block::new(b(0));
@@ -5703,7 +9125,9 @@ mod serde_tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![v(1)] }));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let json = serde_json::to_string_pretty(&module).expect("serialize");
 
@@ -5741,6 +9165,7 @@ mod serde_tests {
             function: None,
             source: None,
             site: None,
+            spec: None,
         };
         let json = serde_json::to_string_pretty(&obligation).expect("serialize");
         assert!(json.contains("\"id\""));
@@ -5808,6 +9233,10 @@ mod serde_tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         };
         json_round_trip(&global);
         msgpack_round_trip(&global);
@@ -5823,6 +9252,10 @@ mod serde_tests {
             linkage: Linkage::External,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         };
 
         // `tls`/`align` use `serde(default)` (NOT `skip_serializing_if`) so they
@@ -5855,6 +9288,10 @@ mod serde_tests {
             linkage: Linkage::Internal,
             tls: Some(TlsModel::LocalExec),
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         };
 
         let json = serde_json::to_string_pretty(&global).expect("serialize");
@@ -5875,6 +9312,7 @@ mod serde_tests {
             align: None,
 
             repr: Default::default(),
+            origin: None,
         };
         json_round_trip(&sd);
         msgpack_round_trip(&sd);
@@ -5885,6 +9323,7 @@ mod serde_tests {
         let ft = FuncTy {
             params: vec![Ty::Ptr, Ty::I32],
             returns: vec![],
+            abi: None,
             is_vararg: true,
         };
         json_round_trip(&ft);
@@ -5947,6 +9386,7 @@ mod serde_tests {
                 align: 4,
                 variant_field_offsets: vec![vec![], vec![0]],
             }),
+            origin: None,
         };
         json_round_trip(&ed);
         msgpack_round_trip(&ed);
@@ -5972,6 +9412,7 @@ mod serde_tests {
             discriminants: Vec::new(),
             repr: None,
             layout: None,
+            origin: None,
         };
         json_round_trip(&ed);
         msgpack_round_trip(&ed);
@@ -6073,8 +9514,11 @@ mod serde_tests {
             discriminants: Vec::new(),
             repr: None,
             layout: None,
+            origin: None,
         });
-        module.add_type(Ty::Enum(EnumId::new(0)));
+        module
+            .add_type(Ty::Enum(EnumId::new(0)))
+            .expect("Module::add_type: test fixture");
         json_round_trip(&module);
         msgpack_round_trip(&module);
     }
@@ -6086,11 +9530,14 @@ mod serde_tests {
         use crate::node::InstrNode;
 
         let mut module = Module::new("serde_dialect");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::Ptr, Ty::I64],
-            returns: vec![Ty::Ptr],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Ptr, Ty::I64],
+                returns: vec![Ty::Ptr],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "f", ft, b(0));
         let mut block = Block::new(b(0));
         block.params.push((v(0), Ty::Ptr));
@@ -6115,7 +9562,9 @@ mod serde_tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         json_round_trip(&module);
         msgpack_round_trip(&module);

@@ -47,7 +47,11 @@ use super::proof_term::intro;
 /// ```
 ///
 /// Proving `f n = g n` for all `n` is stronger but allows induction on `n`.
-pub fn generalize(state: &mut ProofState, term: Expr, var_name: &str) -> TacticResult {
+pub fn generalize(
+    state: &mut ProofState,
+    term: Expr,
+    var_name: &clean_parser::SurfaceName,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Infer the type of the term
@@ -66,8 +70,14 @@ pub fn generalize(state: &mut ProofState, term: Expr, var_name: &str) -> TacticR
     // Create a new goal: ∀ x : T, goal[term → x]
     let forall_target = Expr::pi(BinderInfo::Default, term_ty.clone(), abstracted_target);
 
-    // Create metavariable for the new goal
-    let new_meta_id = state.fresh_meta(forall_target.clone());
+    // Mint the generalized goal under the PARENT goal's scope, not just its
+    // visible context: in a case of an elimination the eliminated variable is
+    // gone from the context but still bound above this goal, and a scope
+    // built from the context alone let the `intro` below reuse its id —
+    // `close_fvars` then resolved the new variable to the eliminated one
+    // (`generalize e₀ = x₀; cases x₀` three times under `all_goals`: kernel
+    // "expected Option Nat, got Nat"), as `fresh_case_meta` documents.
+    let new_meta_id = state.fresh_case_meta(forall_target.clone(), &goal, &goal.local_ctx);
     let new_meta = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(new_meta_id)));
 
     // The proof of the original goal is: new_proof term
@@ -79,6 +89,7 @@ pub fn generalize(state: &mut ProofState, term: Expr, var_name: &str) -> TacticR
         meta_id: new_meta_id,
         target: forall_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     state.goals.push_front(new_goal);
@@ -121,8 +132,29 @@ pub fn generalize(state: &mut ProofState, term: Expr, var_name: &str) -> TacticR
 pub fn generalize_eq(
     state: &mut ProofState,
     term: Expr,
-    var_name: &str,
-    eq_name: &str,
+    var_name: &clean_parser::SurfaceName,
+    eq_name: &clean_parser::SurfaceName,
+) -> TacticResult {
+    generalize_eq_pending(state, term, var_name)?;
+    intro(state, eq_name)?;
+    Ok(())
+}
+
+/// [`generalize_eq`] that introduces only the variable `x`, leaving the goal
+/// `term = x → target[term → x]`: the equation stays a binder of the TARGET.
+///
+/// This is the shape `cases h : e` needs (Lean's `MVarId.generalize` then
+/// `cases x`, which carries `h` through the eliminator's motive and
+/// re-introduces it in every branch). Introducing `h` and reverting it again
+/// would leave a live `fun h =>` above a goal whose context no longer holds
+/// `h`, and the next binder minted from that context would reuse `h`'s
+/// position.
+///
+/// REQUIRES / ENSURES: as [`generalize_eq`], minus the `eq_name` hypothesis.
+pub(crate) fn generalize_eq_pending(
+    state: &mut ProofState,
+    term: Expr,
+    var_name: &clean_parser::SurfaceName,
 ) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
@@ -135,41 +167,7 @@ pub fn generalize_eq(
     // against `lean`.
     let target = state.metas.instantiate(&goal.target);
 
-    // Check that Eq and Eq.refl are available
-    let eq_name_const = Name::from_string("Eq");
-    if state.env.get_const(&eq_name_const).is_none() {
-        return Err(TacticError::EnvironmentMissing {
-            constant: "Eq".into(),
-        });
-    }
-    let eq_refl_name = Name::from_string("Eq.refl");
-    if state.env.get_const(&eq_refl_name).is_none() {
-        return Err(TacticError::EnvironmentMissing {
-            constant: "Eq.refl".into(),
-        });
-    }
-
-    // Reified checked goals need a concrete Eq universe level here; fresh
-    // params from mk_const_str stay rigid during infer_type on the Pi goal.
-    let (eq_const, eq_levels) = state
-        .infer_type(&goal, &term_ty)
-        .ok()
-        .and_then(|sort| match sort.kind() {
-            ExprKind::Sort(u) => Some((
-                Expr::const_(eq_name_const.clone(), vec![u.clone()]),
-                vec![u.clone()],
-            )),
-            _ => None,
-        })
-        .unwrap_or_else(|| {
-            let eq_const = state.mk_const_str("Eq");
-            let eq_levels = match eq_const.kind() {
-                ExprKind::Const(_, levels) => levels.to_vec(),
-                _ => Vec::new(),
-            };
-            (eq_const, eq_levels)
-        });
-    let eq_refl_const = Expr::const_(eq_refl_name, eq_levels);
+    let (eq_const, eq_refl_const) = eq_constants(state, &goal, &term_ty)?;
 
     // Abstract over the term in the goal
     let abstracted_target = abstract_over(&target, &term);
@@ -192,8 +190,9 @@ pub fn generalize_eq(
         Expr::pi(BinderInfo::Default, eq_type, abstracted_target.lift(1)),
     );
 
-    // Create metavariable for the higher-order continuation goal
-    let new_meta_id = state.fresh_meta(new_target.clone());
+    // Create metavariable for the higher-order continuation goal, under the
+    // parent's scope (see `generalize`).
+    let new_meta_id = state.fresh_case_meta(new_target.clone(), &goal, &goal.local_ctx);
     let new_meta = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(new_meta_id)));
 
     // The original goal is proved by applying the generalized continuation to
@@ -207,12 +206,133 @@ pub fn generalize_eq(
         meta_id: new_meta_id,
         target: new_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     state.goals.push_front(new_goal);
     intro(state, var_name)?;
-    intro(state, eq_name)?;
 
+    Ok(())
+}
+
+/// `Eq` and `Eq.refl` at the universe of `term_ty`'s sort: the constants an
+/// equation `e = x` about a term of type `term_ty` and its `Eq.refl e` proof
+/// are built from. Refuses when the environment lacks either.
+pub(crate) fn eq_constants(
+    state: &mut ProofState,
+    goal: &Goal,
+    term_ty: &Expr,
+) -> Result<(Expr, Expr), TacticError> {
+    let eq_name_const = Name::from_string("Eq");
+    if state.env.get_const(&eq_name_const).is_none() {
+        return Err(TacticError::EnvironmentMissing {
+            constant: "Eq".into(),
+        });
+    }
+    let eq_refl_name = Name::from_string("Eq.refl");
+    if state.env.get_const(&eq_refl_name).is_none() {
+        return Err(TacticError::EnvironmentMissing {
+            constant: "Eq.refl".into(),
+        });
+    }
+
+    // Reified checked goals need a concrete Eq universe level here; fresh
+    // params from mk_const_str stay rigid during infer_type on the Pi goal.
+    let (eq_const, eq_levels) = state
+        .infer_type(goal, term_ty)
+        .ok()
+        .and_then(|sort| match sort.kind() {
+            ExprKind::Sort(u) => Some((
+                Expr::const_(eq_name_const.clone(), vec![u.clone()]),
+                vec![u.clone()],
+            )),
+            _ => None,
+        })
+        .unwrap_or_else(|| {
+            let eq_const = state.mk_const_str("Eq");
+            let eq_levels = match eq_const.kind() {
+                ExprKind::Const(_, levels) => levels.to_vec(),
+                _ => Vec::new(),
+            };
+            (eq_const, eq_levels)
+        });
+    Ok((eq_const, Expr::const_(eq_refl_name, eq_levels)))
+}
+
+/// The hypotheses a `generalize … at loc` also generalizes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum GeneralizeHyps {
+    /// `at h₁ … hₙ` (a `⊢` among them adds nothing: the target is always
+    /// generalized).
+    Listed(Vec<clean_parser::SurfaceName>),
+    /// `at *`: every hypothesis of the goal.
+    All,
+}
+
+/// `generalize (h :)? e = x at loc` — Lean 4.8's `MVarId.generalizeHyp`
+/// (`Lean/Meta/Tactic/Generalize.lean`): of the hypotheses `loc` names, those
+/// whose type mentions `e` are reverted (with their dependents, context order
+/// kept), `e` is generalized in the resulting target — so in their types too
+/// — and they are re-introduced, under their own names, after `x` (and `h`).
+/// A hypothesis whose type does not mention `e` stays where it is. A listed
+/// name that is not a hypothesis is refused, as `getFVarIds` refuses it.
+///
+/// REQUIRES: `state.goals` is non-empty
+/// ENSURES: on Ok, the goal has `x` (and `h : e = x`) followed by the
+/// reverted hypotheses, each with `e` replaced by `x`
+pub(crate) fn generalize_at(
+    state: &mut ProofState,
+    term: Expr,
+    var_name: &clean_parser::SurfaceName,
+    eq_name: Option<&clean_parser::SurfaceName>,
+    hyps: &GeneralizeHyps,
+) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let term = state.metas.instantiate(&term);
+    // Resolve every listed name before mutation, selecting only the newest
+    // matching local. `at *` deliberately visits all local identities.
+    let selected = match hyps {
+        GeneralizeHyps::All => None,
+        GeneralizeHyps::Listed(names) => {
+            let mut ids = std::collections::HashSet::new();
+            for name in names {
+                let decl = goal
+                    .local_ctx
+                    .iter()
+                    .rev()
+                    .find(|decl| super::pattern::names::hypothesis_named(&decl.name, name))
+                    .ok_or_else(|| TacticError::HypothesisNotFound(name.to_string()))?;
+                ids.insert(decl.fvar);
+            }
+            Some(ids)
+        }
+    };
+    // Preserve context order and identities through reversion; names may repeat.
+    let mentioning: Vec<_> = goal
+        .local_ctx
+        .iter()
+        .filter(|decl| selected.as_ref().is_none_or(|ids| ids.contains(&decl.fvar)))
+        .filter(|decl| {
+            let ty = state.metas.instantiate(&decl.ty);
+            abstract_over(&ty, &term) != ty
+        })
+        .map(|decl| decl.fvar)
+        .collect();
+    let mut reverted = Vec::new();
+    for fvar in mentioning.iter().rev() {
+        if reverted.iter().any(|(old, _)| old == fvar) {
+            continue;
+        }
+        let just_reverted = super::specialize_generalize::revert_fvar_with_deps(state, *fvar)?;
+        reverted.extend(just_reverted);
+    }
+    match eq_name {
+        Some(eq_name) => generalize_eq(state, term, var_name, eq_name)?,
+        None => generalize(state, term, var_name)?,
+    }
+    for (_, name) in reverted.iter().rev() {
+        super::target_equation::intro_shadowing(state, name)?;
+    }
     Ok(())
 }
 
@@ -246,7 +366,7 @@ pub fn generalize_eq(
 /// # Errors
 /// - `Other` if `funext` is not in the environment
 /// - `GoalMismatch` if the goal is not an equality of function types
-pub fn ext(state: &mut ProofState, var_name: &str) -> TacticResult {
+pub fn ext(state: &mut ProofState, var_name: &clean_parser::SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = state.whnf(&goal, &goal.target);
 
@@ -329,6 +449,7 @@ pub fn ext(state: &mut ProofState, var_name: &str) -> TacticResult {
         meta_id: pointwise_meta_id,
         target: new_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     state.goals.push_front(new_goal);

@@ -54,7 +54,7 @@ commands and that the local script/doc surfaces they depend on exist.
 
 Options:
   --clean-clone-lite  Also create a temporary detached git worktree at HEAD,
-                      run cargo metadata --locked --no-deps --format-version 1,
+                      run targo metadata --locked --no-deps --format-version 1,
                       ./scripts/run_public_demo.sh, and
                       python3 scripts/check_benchmark_publication.py --check
                       there, then verify git status --short remains empty.
@@ -456,7 +456,7 @@ run_clean_clone_lite_lane() {
         return 0
     fi
 
-    run_clean_checkout_command "$checkout_dir" cargo metadata --locked --no-deps --format-version 1
+    run_clean_checkout_command "$checkout_dir" targo metadata --locked --no-deps --format-version 1
     run_clean_checkout_command "$checkout_dir" ./scripts/run_public_demo.sh
     benchmark_checker=(python3 scripts/check_benchmark_publication.py --check)
     if [[ "$launch_mode" -eq 1 ]]; then
@@ -510,8 +510,8 @@ require_text "docs/RELEASE_READINESS.md" "## Benchmark Freshness"
 require_text "docs/RELEASE_READINESS.md" "## Issue Hygiene"
 require_text "docs/RELEASE_READINESS.md" "git clone --no-local"
 require_text "docs/RELEASE_READINESS.md" "test -z \"\$(git status --short)\""
-require_text "docs/RELEASE_READINESS.md" "cargo metadata --locked --no-deps --format-version 1"
-require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 cargo build --locked --message-format=short -j 1 --release -p clean --bin clean"
+require_text "docs/RELEASE_READINESS.md" "targo metadata --locked --no-deps --format-version 1"
+require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 targo --unverified build --locked --message-format=short -j 1 --release -p clean --bin clean"
 require_text "docs/RELEASE_READINESS.md" "factory status --json"
 require_text "docs/RELEASE_READINESS.md" "> /tmp/Clean-system-health.json"
 require_text "docs/RELEASE_READINESS.md" "python3 scripts/system_health_check.py --json-output /tmp/Clean-system-health-python-fallback.json"
@@ -529,7 +529,7 @@ require_text "docs/RELEASE_READINESS.md" "python3 scripts/check_workspace_depend
 require_text "docs/RELEASE_READINESS.md" "No sibling AY"
 require_text "docs/RELEASE_READINESS.md" "legacy diagnostic output only"
 require_text "docs/RELEASE_READINESS.md" "cannot override Rust factory status"
-require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 cargo test --locked --message-format=short -j 1 -p clean-cli --test docs_drift"
+require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 targo --unverified test --locked --message-format=short -j 1 -p clean-cli --test docs_drift"
 require_text "docs/RELEASE_READINESS.md" "./scripts/run_public_demo.sh"
 require_text "docs/RELEASE_READINESS.md" "python3 scripts/sync_readme_metrics.py --check"
 require_text "docs/RELEASE_READINESS.md" "python3 scripts/check_benchmark_publication.py --check"
@@ -538,9 +538,9 @@ require_text "docs/RELEASE_READINESS.md" "clean replacement trust-core-evidence 
 require_text "docs/RELEASE_READINESS.md" "clean replacement trust-core-evidence --deny-sorry --evidence reports/deny-sorry-launch-evidence.json --json"
 require_text "docs/RELEASE_READINESS.md" "clean replacement axiom-audit --verify data/axiom_audit.json --evidence reports/axiom-audit-launch-evidence.json --json"
 require_text "docs/RELEASE_READINESS.md" "CLEAN_TRUST_BOUNDARY_AUDIT_PATH=/tmp/Clean-2875-auto.tsv"
-require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 cargo test --locked --message-format=short -j 1 -p clean-auto --lib"
+require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 targo --unverified test --locked --message-format=short -j 1 -p clean-auto --lib"
 require_text "docs/RELEASE_READINESS.md" "CLEAN_TRUST_BOUNDARY_AUDIT_PATH=/tmp/Clean-2875-elab.tsv"
-require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 cargo test --locked --message-format=short -j 1 -p clean-elab --lib --features ay-smt"
+require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 targo --unverified test --locked --message-format=short -j 1 -p clean-elab --lib --features ay-smt"
 require_text "docs/RELEASE_READINESS.md" "python3 scripts/trust_boundary_audit.py"
 require_text "docs/RELEASE_READINESS.md" "--input /tmp/Clean-2875-auto.tsv"
 require_text "docs/RELEASE_READINESS.md" "--input /tmp/Clean-2875-elab.tsv"
@@ -553,11 +553,11 @@ require_text "docs/RELEASE_READINESS.md" "\`add_decl_structural_count: 0\`"
 require_text "docs/RELEASE_READINESS.md" "\`add_decl_unchecked_count: 1\`"
 require_text "docs/RELEASE_READINESS.md" "G6 correction (2026-08-23)"
 require_text "docs/RELEASE_READINESS.md" "empty legacy \`files\` list"
-require_text "docs/RELEASE_READINESS.md" "cargo test -p clean-mathverse verify_incremental --lib"
+require_text "docs/RELEASE_READINESS.md" "targo --unverified test -p clean-mathverse verify_incremental --lib"
 require_text "docs/RELEASE_READINESS.md" "rg -n \"add_decl_unchecked\" crates/clean-mathverse/src"
 require_text "docs/RELEASE_READINESS.md" "which should return no"
 require_text "docs/RELEASE_READINESS.md" "proof-status/provenance/spec-filter alignment"
-require_text "docs/RELEASE_READINESS.md" "cargo test --locked --message-format=short -j 1 -p clean-verify --test proof_status_invariants --test type_preservation_provenance"
+require_text "docs/RELEASE_READINESS.md" "targo --unverified test --locked --message-format=short -j 1 -p clean-verify --test proof_status_invariants --test type_preservation_provenance"
 require_text "docs/RELEASE_READINESS.md" "structural 0 / unchecked 0"
 require_text "docs/RELEASE_READINESS.md" "readiness remains fail-closed independently of fresh proof output"
 require_text "docs/RELEASE_READINESS.md" "./scripts/run_public_benchmarks.sh"
@@ -574,18 +574,18 @@ require_text "docs/RELEASE_READINESS.md" "gh issue list --state open"
 require_text "docs/RELEASE_READINESS.md" "Release decision:"
 require_text "docs/RELEASE_READINESS.md" "demos/public/kernel_check_success.lean"
 require_text "docs/RELEASE_READINESS.md" "demos/public/kernel_check_reject_sorry.lean"
-require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 cargo run --locked --message-format=short -j 1 -p clean --bin clean -- --help"
+require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 targo --unverified run --locked --message-format=short -j 1 -p clean --bin clean -- --help"
 require_text "docs/RELEASE_READINESS.md" "clean mathverse download --version <version> --output-dir /tmp/mathverse-dl-test --json"
-require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 cargo test --locked --message-format=short -j 1 -p clean-cli cmd_mathverse::tests"
+require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 targo --unverified test --locked --message-format=short -j 1 -p clean-cli cmd_mathverse::tests"
 require_text "docs/RELEASE_READINESS.md" "mathverse-library-v*.tar.zst"
 require_text "docs/RELEASE_READINESS.md" "zero-shard archives"
-require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 cargo run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse_shard -- verify data/mathverse-library/"
+require_text "docs/RELEASE_READINESS.md" "CARGO_BUILD_JOBS=1 targo --unverified run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse_shard -- verify data/mathverse-library/"
 
 require_file "docs/MATHVERSE_RELEASE_CHECKLIST.md"
 require_text "docs/MATHVERSE_RELEASE_CHECKLIST.md" "clean release readiness-smoke"
 require_text "docs/MATHVERSE_RELEASE_CHECKLIST.md" "clean release readiness-smoke --clean-clone-lite --launch"
-require_text "docs/MATHVERSE_RELEASE_CHECKLIST.md" "CARGO_BUILD_JOBS=1 cargo test --locked --message-format=short -j 1 -p clean-mathverse --lib"
-require_text "docs/MATHVERSE_RELEASE_CHECKLIST.md" "CARGO_BUILD_JOBS=1 cargo run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse_shard -- verify data/mathverse-library/"
+require_text "docs/MATHVERSE_RELEASE_CHECKLIST.md" "CARGO_BUILD_JOBS=1 targo --unverified test --locked --message-format=short -j 1 -p clean-mathverse --lib"
+require_text "docs/MATHVERSE_RELEASE_CHECKLIST.md" "CARGO_BUILD_JOBS=1 targo --unverified run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse_shard -- verify data/mathverse-library/"
 require_file "docs/plans/LEAN4_REPLACEMENT_PLAN.md"
 require_file "data/unchecked_decl_ratchet.json"
 require_text "data/unchecked_decl_ratchet.json" "\"add_decl_structural_count\": 0"
@@ -606,13 +606,13 @@ require_executable "scripts/download_mathverse_shards.sh"
 require_executable "scripts/run_ay_consumer_smoke.sh"
 require_file "scripts/check_ay_updates.py"
 require_file "scripts/crystal_a2_project/Cargo.lock"
-require_text "scripts/crystal_a2_project/Cargo.toml" "cargo build --locked --release --manifest-path scripts/crystal_a2_project/Cargo.toml"
+require_text "scripts/crystal_a2_project/Cargo.toml" "targo --unverified build --locked --release --manifest-path scripts/crystal_a2_project/Cargo.toml"
 require_text "scripts/run_ay_consumer_smoke.sh" "export CARGO_BUILD_JOBS=\"\${CARGO_BUILD_JOBS:-1}\""
 require_text "scripts/run_ay_consumer_smoke.sh" "export RUST_TEST_THREADS=\"\${RUST_TEST_THREADS:-\${CLEAN_AY_TEST_THREADS:-4}}\""
 require_text "scripts/run_ay_consumer_smoke.sh" "caller-provided RUST_TEST_THREADS takes precedence"
 require_text "scripts/run_ay_consumer_smoke.sh" "export PYTEST_DISABLE_PLUGIN_AUTOLOAD=\"\${PYTEST_DISABLE_PLUGIN_AUTOLOAD:-1}\""
-require_text "scripts/run_ay_consumer_smoke.sh" "cargo check --locked -p clean-auto --features ay-smt"
-require_text "scripts/run_ay_consumer_smoke.sh" "cargo metadata --locked --format-version 1"
+require_text "scripts/run_ay_consumer_smoke.sh" "targo --unverified check --locked -p clean-auto --features ay-smt"
+require_text "scripts/run_ay_consumer_smoke.sh" "targo metadata --locked --format-version 1"
 require_text "scripts/run_ay_consumer_smoke.sh" "ay_manifest_pin_count"
 require_text "scripts/run_ay_consumer_smoke.sh" "ay_lock_source_count"
 require_text "scripts/run_ay_consumer_smoke.sh" "--rawfile output"
@@ -636,9 +636,9 @@ require_file "scripts/system_health_check.py"
 require_text "scripts/system_health_check.py" "def check_ay_updates()"
 require_text "scripts/system_health_check.py" "\"pin_status\""
 require_text "scripts/prepare_mathverse_release.sh" "export CARGO_BUILD_JOBS=\"\${CARGO_BUILD_JOBS:-1}\""
-require_text "scripts/prepare_mathverse_release.sh" "cargo test --locked -p clean-mathverse --lib --message-format=short -j \"\$CARGO_BUILD_JOBS\""
-require_text "scripts/prepare_mathverse_release.sh" "cargo build --locked -p clean-mathverse --release --message-format=short -j \"\$CARGO_BUILD_JOBS\""
-require_text "scripts/prepare_mathverse_release.sh" "cargo check --locked -p clean-mathverse --message-format=short -j \"\$CARGO_BUILD_JOBS\""
+require_text "scripts/prepare_mathverse_release.sh" "targo --unverified test --locked -p clean-mathverse --lib --message-format=short -j \"\$CARGO_BUILD_JOBS\""
+require_text "scripts/prepare_mathverse_release.sh" "targo --unverified build --locked -p clean-mathverse --release --message-format=short -j \"\$CARGO_BUILD_JOBS\""
+require_text "scripts/prepare_mathverse_release.sh" "targo --unverified check --locked -p clean-mathverse --message-format=short -j \"\$CARGO_BUILD_JOBS\""
 
 section "Dependency authority"
 run_repo_command python3 scripts/check_workspace_dependency_boundary.py

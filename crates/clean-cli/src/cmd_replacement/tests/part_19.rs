@@ -53,12 +53,23 @@ pub fn add_decl(env: &mut Environment, decl: Declaration) {
 
 // ── the real tree ────────────────────────────────────────────────────────────
 
-/// MEASURED, not asserted: the whole `crates/` tree contains exactly one
-/// production `add_decl_*` bypass, and it is the sanctioned one. This is the
-/// arm that keeps the Rust scan and `scripts/check_add_decl_ratchet.py`
-/// (`structural=0/0, unchecked=1/1`) from drifting apart about the same tree.
+/// MEASURED, not asserted: the whole `crates/` tree contains exactly THREE
+/// production `add_decl_*` bypasses and every one is sanctioned — the import-lane
+/// proof-drop plus the two `TrustedEnvExt` delegations.
+///
+/// AUDIT r11 M11-6: the count moved 1 -> 3 because COVERAGE moved, not because
+/// bypasses were added. The two delegations have been there unchanged
+/// throughout; they were hidden first by a leading-dot call-shape requirement
+/// and then by audit r10's whole-FILE exclusion of `env/trusted_ext.rs`. A file
+/// skip is a suppression — measured, one extra `self.add_decl_unchecked(..)`
+/// planted inside an existing delegation body was invisible to every scanner
+/// under that blanket, while the pre-r10 scanner caught it.
+///
+/// This is also the arm that keeps the Rust scan and
+/// `scripts/check_add_decl_ratchet.py` (`structural=1/1, unchecked=2/2`) from
+/// drifting apart about the same tree.
 #[test]
-fn real_tree_measures_exactly_the_one_sanctioned_add_decl_bypass() {
+fn real_tree_measures_exactly_the_sanctioned_add_decl_bypasses() {
     let measured = measure_add_decl_bypass_sites(&repo_root())
         .expect("the real tree must be scannable; an unlexable file fails closed");
     let sites: Vec<(String, String)> = measured
@@ -67,10 +78,20 @@ fn real_tree_measures_exactly_the_one_sanctioned_add_decl_bypass() {
         .collect();
     assert_eq!(
         sites,
-        vec![(
-            SANCTIONED_FILE.to_string(),
-            "add_decl_unchecked".to_string()
-        )],
+        vec![
+            (
+                SANCTIONED_FILE.to_string(),
+                "add_decl_unchecked".to_string()
+            ),
+            (
+                "crates/clean-kernel/src/env/trusted_ext.rs".to_string(),
+                "add_decl_unchecked".to_string()
+            ),
+            (
+                "crates/clean-kernel/src/env/trusted_ext.rs".to_string(),
+                "add_decl_structural".to_string()
+            ),
+        ],
         "measured production add_decl_* bypasses moved: {measured:?}"
     );
 }
@@ -119,19 +140,53 @@ fn a_real_call_with_a_trailing_comment_still_counts() {
     );
 }
 
-/// Definitions and `Environment::`-qualified delegations are infrastructure,
-/// not usage — the same exclusion the Python scanner documents.
+/// A DEFINITION is not a use; a `Environment::`-qualified CALL is.
+///
+/// AUDIT r10 M10-5 flipped this test. It used to assert that a UFCS call was
+/// out of scope — pinning an exclusion by call SHAPE, which held in every file
+/// and made `Environment::add_decl_unchecked(env, d)` invisible everywhere
+/// (measured: a plant in `env/snapshot.rs` with no `// SOUNDNESS:` comment
+/// passed both scanners byte-identically). The two genuine delegations are
+/// excluded by FILE now, so this test asserts the honest split: the definition
+/// is not a call site, and the UFCS call IS one.
 #[test]
-fn definitions_and_associated_call_delegations_are_out_of_scope() {
-    let source = "\
+fn a_definition_is_not_a_call_but_a_ufcs_call_is() {
+    let definition_only = "\
 pub fn add_decl_unchecked(&mut self, d: Declaration) {}
+";
+    assert!(add_decl_bypass_lines_in_production(definition_only)
+        .expect("lexable")
+        .is_empty());
+
+    let ufcs_call = "\
 pub fn delegate(env: &mut Environment, d: Declaration) {
     Environment::add_decl_unchecked(env, d);
 }
 ";
-    assert!(add_decl_bypass_lines_in_production(source)
-        .expect("lexable")
-        .is_empty());
+    assert_eq!(
+        add_decl_bypass_lines_in_production(ufcs_call).expect("lexable"),
+        vec![(2, "add_decl_unchecked".to_string())],
+        "a UFCS call through the watched door must be counted; excluding it by \
+         shape is what let a production bypass hide in every file"
+    );
+
+    // AUDIT r11: and every OTHER spelling of the same call, because a list of
+    // accepted shapes is always one spelling short -- these three were still
+    // invisible immediately after the r10 fix.
+    for (label, src) in [
+        ("fully qualified",
+         "pub fn f(e: &mut Environment, d: Declaration) {\n    <Environment as TrustedEnvExt>::add_decl_unchecked(e, d);\n}\n"),
+        ("import alias",
+         "pub fn f(e: &mut E, d: Declaration) {\n    E::add_decl_unchecked(e, d);\n}\n"),
+        ("generic parameter",
+         "pub fn f<T: TrustedEnvExt>(e: &mut T, d: Declaration) {\n    T::add_decl_unchecked(e, d);\n}\n"),
+    ] {
+        assert_eq!(
+            add_decl_bypass_lines_in_production(src).expect("lexable"),
+            vec![(2, "add_decl_unchecked".to_string())],
+            "{label} call through the watched door must be counted"
+        );
+    }
 }
 
 #[test]
@@ -250,5 +305,98 @@ fn a_ratchet_row_whose_call_site_vanished_is_refused() {
     assert!(
         err.contains("no live call site"),
         "unexpected refusal: {err}"
+    );
+}
+
+/// AUDIT r14 M14-11: the two producers of `unchecked_decl_ratchet_accounted`
+/// agree on the SET OF FILES EACH READS, not merely on the sites both happen to
+/// find in today's tree. Two scanners blind in the same place pass the latter
+/// perfectly, and measured, these two were not even blind in the same place:
+/// `crates/clean-elab/tests/soundness_gate/{common,baseline}.rs` — 675 lines
+/// compiled into a production `[[bin]]` that `scripts/kernel_soundness_gate.sh`
+/// RUNS to mint launch evidence — were production to the Python producer and
+/// test code to this one, while a plant in either was invisible here.
+///
+/// This arm fails closed: no python3, no comparison, no pass.
+#[test]
+fn add_decl_scan_scope_matches_the_python_producer() {
+    let root = repo_root();
+    let out = Command::new("python3")
+        .arg(root.join("scripts/check_add_decl_ratchet.py"))
+        .arg("--dump-scope")
+        .current_dir(&root)
+        .output()
+        .expect("python3 must be available; the Python producer IS a gate leg");
+    assert!(
+        out.status.success(),
+        "--dump-scope failed: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let python: BTreeSet<String> = String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::to_string)
+        .filter(|l| !l.is_empty())
+        .collect();
+    let rust = add_decl_scan_scope(&root);
+    assert!(
+        python.len() > 3_000,
+        "the Python dump collapsed to {} files; a vacuous comparison is not agreement",
+        python.len()
+    );
+    let only_python: Vec<&String> = python.difference(&rust).collect();
+    let only_rust: Vec<&String> = rust.difference(&python).collect();
+    assert!(
+        only_python.is_empty() && only_rust.is_empty(),
+        "the two producers of one lane id read different files.\n  python-only ({}): {:?}\n  rust-only ({}): {:?}",
+        only_python.len(),
+        &only_python[..only_python.len().min(12)],
+        only_rust.len(),
+        &only_rust[..only_rust.len().min(12)]
+    );
+}
+
+/// AUDIT r15 M15-1: the cfg LATTICE itself, table-driven, on both producers.
+///
+/// The r14 rule dispatched on the outermost connective and token-searched the
+/// unparsed argument text, so `all(not(test))` -- compiled in every non-test
+/// build -- read TEST-ONLY, and `all(unix, feature = "test-utils")` read
+/// TEST-ONLY off a string literal. Neither was visible to
+/// `add_decl_scan_scope_matches_the_python_producer`, because that arm asserts
+/// the two producers agree and they were blind in the SAME place. A parity test
+/// structurally cannot catch a shared blindness; only a table of known answers
+/// can, which is why this exists beside it rather than instead of it.
+#[test]
+fn the_cfg_lattice_answers_every_spelling_correctly() {
+    use crate::cmd_replacement::rust_source_scope::cfg_body_is_test_only as t;
+    let cases: &[(&str, bool)] = &[
+        ("test", true),
+        ("all(test, feature = \"x\")", true),
+        ("any(test, feature = \"x\")", false),
+        // the inversions r14 shipped
+        ("all(not(test))", false),
+        ("all(unix, not(test))", false),
+        ("all(not(test), feature = \"math-overlays\")", false),
+        ("not(test)", false),
+        // negation of a NON-test atom must stay production
+        ("not(unix)", false),
+        // a token search reads inside this string literal; a parse does not
+        ("all(unix, feature = \"test-utils\")", false),
+        ("all(any(test, feature = \"x\"))", false),
+        // genuinely unsatisfiable without `test`
+        ("any(all(test, unix), all(test, windows))", true),
+        ("any(test, all(test, unix))", true),
+        ("all(unix)", false),
+        ("any(test)", true),
+        ("all(test)", true),
+        ("feature = \"x\"", false),
+    ];
+    let wrong: Vec<&str> = cases
+        .iter()
+        .filter(|(body, want)| t(body) != *want)
+        .map(|(body, _)| *body)
+        .collect();
+    assert!(
+        wrong.is_empty(),
+        "cfg spellings classified backwards: {wrong:?}"
     );
 }

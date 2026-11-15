@@ -24,6 +24,7 @@
 //! in `lib.rs`.
 
 use crate::error::ElabError;
+use crate::private_names::PrivateNames;
 use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr, TypeChecker};
 
@@ -92,7 +93,16 @@ impl std::fmt::Display for PrintResult {
 /// #check Nat.zero   -- Nat.zero : Nat
 /// ```
 #[must_use = "check result contains the inferred type"]
-pub fn elab_check(env: &Environment, expr: &Expr) -> Result<CheckResult, ElabError> {
+pub(crate) fn elab_check(env: &Environment, expr: &Expr) -> Result<CheckResult, ElabError> {
+    elab_check_rendered(env, expr, PrivateNames::UserFacing)
+}
+
+/// [`elab_check`] under `pp.privateNames` (`private_names`).
+pub(crate) fn elab_check_rendered(
+    env: &Environment,
+    expr: &Expr,
+    private_names: PrivateNames,
+) -> Result<CheckResult, ElabError> {
     let tc = TypeChecker::new(env);
     let ty = tc
         .infer_type(expr)
@@ -100,9 +110,13 @@ pub fn elab_check(env: &Environment, expr: &Expr) -> Result<CheckResult, ElabErr
             name: Name::anon(),
             detail: e.to_string(),
         })?;
+    // `#check pt` on this module's private `pt` prints `pt : pd 1 = 2` in
+    // Lean 4.8.0: every private constant, the head and those in the type,
+    // shows its user-facing name, not `_private.M.0.…` (G21), unless
+    // `pp.privateNames` is set.
     Ok(CheckResult {
-        expr: format!("{expr}"),
-        ty: format!("{ty}"),
+        expr: private_names.render(expr),
+        ty: private_names.render(&ty),
     })
 }
 
@@ -127,7 +141,7 @@ pub fn elab_check(env: &Environment, expr: &Expr) -> Result<CheckResult, ElabErr
 /// #eval 2 + 3              -- 5
 /// #eval IO.println "hello"  -- prints "hello", returns ()
 /// ```
-pub fn elab_eval(env: &Environment, expr: &Expr) -> Result<EvalResult, ElabError> {
+pub(crate) fn elab_eval(env: &Environment, expr: &Expr) -> Result<EvalResult, ElabError> {
     let tc = TypeChecker::new(env);
     // Validate the expression is well-typed before reducing.
     let _ty = tc
@@ -152,7 +166,15 @@ pub fn elab_eval(env: &Environment, expr: &Expr) -> Result<EvalResult, ElabError
 }
 
 /// Format a constant declaration (definition, theorem, axiom, opaque) for `#print`.
-fn format_constant(name: &str, info: &clean_kernel::ConstantInfo) -> String {
+///
+/// `modifier` is `"private "` for a private constant (Lean 4.8.0's `mkHeader`,
+/// `Print.lean:38-40`: `private theorem Foo.pt : … :=`), `""` otherwise.
+fn format_constant(
+    modifier: &str,
+    name: &str,
+    info: &clean_kernel::ConstantInfo,
+    private_names: PrivateNames,
+) -> String {
     let kind_str = match info.kind {
         clean_kernel::env::ConstantKind::Definition => "def",
         clean_kernel::env::ConstantKind::Theorem => "theorem",
@@ -162,7 +184,8 @@ fn format_constant(name: &str, info: &clean_kernel::ConstantInfo) -> String {
 
     let mut output = String::new();
 
-    // Header: kind + name + universe params
+    // Header: modifier + kind + name + universe params
+    output.push_str(modifier);
     output.push_str(kind_str);
     output.push(' ');
     output.push_str(name);
@@ -180,20 +203,29 @@ fn format_constant(name: &str, info: &clean_kernel::ConstantInfo) -> String {
 
     // Type
     output.push_str(" : ");
-    output.push_str(&format!("{}", info.type_));
+    output.push_str(&private_names.render(&info.type_));
 
-    // Value (if present)
+    // Value (if present), on its own line at column 0, as Lean prints it
+    // (`def x : Nat :=\n1`, measured on pinned Lean 4.8.0 and 4.30.0-rc2).
     if let Some(ref val) = info.value {
-        output.push_str(" :=\n  ");
-        output.push_str(&format!("{val}"));
+        output.push_str(" :=\n");
+        output.push_str(&private_names.render(val));
     }
 
     output
 }
 
-/// Format an inductive declaration for `#print`.
-fn format_inductive(name: &str, ind: &clean_kernel::InductiveVal) -> String {
-    let mut output = format!("inductive {name}");
+/// Format an inductive declaration for `#print`. A private family's header
+/// reads `private inductive Foo.Col : Type`, and its constructors keep their
+/// kernel names (`_private.M.0.Foo.Col.a`), as Lean 4.8.0 prints them.
+fn format_inductive(
+    env: &Environment,
+    modifier: &str,
+    name: &str,
+    ind: &clean_kernel::InductiveVal,
+    private_names: PrivateNames,
+) -> String {
+    let mut output = format!("{modifier}inductive {name}");
 
     if !ind.level_params.is_empty() {
         output.push_str(".{");
@@ -207,15 +239,21 @@ fn format_inductive(name: &str, ind: &clean_kernel::InductiveVal) -> String {
     }
 
     output.push_str(" : ");
-    output.push_str(&format!("{}", ind.type_));
+    output.push_str(&private_names.render(&ind.type_));
 
     output.push_str("\nnumber of parameters: ");
     output.push_str(&ind.num_params.to_string());
 
+    // One `name : type` line per constructor, at column 0, as Lean prints
+    // them (`Col.a : Col`, measured on pinned Lean 4.8.0 and 4.30.0-rc2).
     output.push_str("\nconstructors:");
     for ctor_name in &ind.constructor_names {
-        output.push_str("\n  ");
+        output.push('\n');
         output.push_str(&format!("{ctor_name}"));
+        if let Some(ctor) = env.get_constructor(ctor_name) {
+            output.push_str(" : ");
+            output.push_str(&private_names.render(&ctor.type_));
+        }
     }
 
     output
@@ -242,25 +280,59 @@ fn format_inductive(name: &str, ind: &clean_kernel::InductiveVal) -> String {
 /// ```text
 /// #print Nat.add   -- def Nat.add : Nat → Nat → Nat := ...
 /// ```
-pub fn elab_print(env: &Environment, name: &str) -> Result<PrintResult, ElabError> {
-    let n = Name::from_string(name);
+pub(crate) fn elab_print(env: &Environment, name: &str) -> Result<PrintResult, ElabError> {
+    let parsed =
+        clean_parser::parse_name(name).map_err(|_| ElabError::UnknownIdent(name.to_owned()))?;
+    elab_print_typed(env, &parsed)
+}
 
-    // Try constant lookup first (definitions, theorems, axioms, opaques).
-    if let Some(info) = env.get_const(&n) {
+/// Typed source-name successor; formatting is diagnostic, lookup is structural.
+pub(crate) fn elab_print_typed(
+    env: &Environment,
+    name: &clean_parser::SurfaceName,
+) -> Result<PrintResult, ElabError> {
+    if name.is_relative_constructor() {
+        return Err(ElabError::UnknownIdent(name.to_string()));
+    }
+    let label = name.to_string();
+    elab_print_resolved(env, &label, name.name(), PrivateNames::UserFacing)
+}
+
+/// `#print` of the constant `n`, labelled with the name the user wrote. A
+/// private constant is labelled with its full user-facing name after a
+/// `private ` modifier, whatever was written and whatever `pp.privateNames`
+/// says (Lean 4.8.0's `mkHeader`: `private theorem Foo.pt`); `private_names`
+/// renders the expressions.
+pub(crate) fn elab_print_resolved(
+    env: &Environment,
+    label: &str,
+    n: &Name,
+    private_names: PrivateNames,
+) -> Result<PrintResult, ElabError> {
+    let user_label = crate::private_names::private_to_user_name(n).map(|user| user.to_string());
+    let (modifier, name) = match &user_label {
+        Some(user) => ("private ", user.as_str()),
+        None => ("", label),
+    };
+
+    // An inductive type first: the environment also carries it as a
+    // constant, which printed `def Foo.Col : Type` where Lean 4.8.0 prints
+    // `inductive Foo.Col : Type` and its constructors.
+    if let Some(ind) = env.get_inductive(n) {
         return Ok(PrintResult {
-            output: format_constant(name, info),
+            output: format_inductive(env, modifier, name, ind, private_names),
         });
     }
 
-    // Try inductive lookup.
-    if let Some(ind) = env.get_inductive(&n) {
+    // Then a constant (definitions, theorems, axioms, opaques).
+    if let Some(info) = env.get_const(n) {
         return Ok(PrintResult {
-            output: format_inductive(name, ind),
+            output: format_constant(modifier, name, info, private_names),
         });
     }
 
     // Try constructor lookup.
-    if let Some(ctor) = env.get_constructor(&n) {
+    if let Some(ctor) = env.get_constructor(n) {
         let output = format!(
             "constructor {name} : (part of {})\n  num_fields: {}, num_params: {}",
             ctor.inductive_name, ctor.num_fields, ctor.num_params
@@ -269,7 +341,7 @@ pub fn elab_print(env: &Environment, name: &str) -> Result<PrintResult, ElabErro
     }
 
     // Try recursor lookup.
-    if let Some(rec) = env.get_recursor(&n) {
+    if let Some(rec) = env.get_recursor(n) {
         let output = format!(
             "recursor {name}\n  num_params: {}\n  num_indices: {}\n  num_motives: {}\n  num_minors: {}",
             rec.num_params, rec.num_indices, rec.num_motives, rec.num_minors

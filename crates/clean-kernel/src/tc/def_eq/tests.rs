@@ -98,7 +98,7 @@ fn test_quick_is_def_eq_handles_literals_and_mdata_transparently() {
 
 #[test]
 fn test_try_string_lit_expansion_core_accepts_string_of_list_form() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let lit = Expr::str_lit("clean");

@@ -1,0 +1,5 @@
+(assume a0 (forall ((k Int)) (= k 5)))
+(step t1 (cl (or (not (forall ((k Int)) (= k 5))) (= 6 5))) :rule forall_inst :args (6))
+(step t2 (cl (not (forall ((k Int)) (= k 5))) (= 6 5)) :rule or :premises (t1))
+(step t3 (cl (not (= 6 5))) :rule la_generic :args (1))
+(step t4 (cl) :rule resolution :premises (a0 t2 t3))

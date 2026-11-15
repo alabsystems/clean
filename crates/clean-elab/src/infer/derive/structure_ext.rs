@@ -32,7 +32,7 @@ impl<'a> ElabCtx<'a> {
         fields: &[SurfaceField],
         field_names: &[Name],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{struct_name}Ord"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "Ord");
         let class_name = Name::from_string("Ord");
         let num_params = binders.len();
 
@@ -336,7 +336,7 @@ impl<'a> ElabCtx<'a> {
         binders: &[SurfaceBinder],
         fields: &[SurfaceField],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{struct_name}Nonempty"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "Nonempty");
         let class_name = Name::from_string("Nonempty");
         let num_params = binders.len();
 
@@ -344,8 +344,8 @@ impl<'a> ElabCtx<'a> {
             self.build_parametric_instance_type(struct_name, binders, &class_name);
 
         // Build a witness: StructName.mk default ... default
-        let ctor_name_str = format!("{struct_name}.mk");
-        let mut ctor_app = self.mk_const_str(&ctor_name_str);
+        let ctor_name = struct_name.clone().str("mk");
+        let mut ctor_app = self.mk_const(&ctor_name);
 
         // Apply type parameters for parametric structures
         for i in 0..num_params {
@@ -365,8 +365,14 @@ impl<'a> ElabCtx<'a> {
             ctor_app = Expr::app(ctor_app, default_val);
         }
 
-        // Nonempty.intro witness
-        let core_instance_val = Expr::app(self.mk_const_str("Nonempty.intro"), ctor_app);
+        // `@Nonempty.intro S witness`: the implicit `{α}` is supplied
+        // explicitly, as the value is committed to the kernel verbatim. Only
+        // the field-less, parameter-less structure reaches this handler
+        // (`derive_instance`); without the type argument the kernel refused
+        // the instance and the refusal un-declared the structure (G55).
+        let struct_type = self.mk_const(struct_name);
+        let core_instance_val =
+            Expr::apps(self.mk_const_str("Nonempty.intro"), [struct_type, ctor_app]);
 
         let instance_val =
             self.wrap_parametric_instance_value(core_instance_val, num_params, &class_name);
@@ -393,7 +399,7 @@ impl<'a> ElabCtx<'a> {
         binders: &[SurfaceBinder],
         _field_names: &[Name],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{struct_name}ToString"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "ToString");
         let class_name = Name::from_string("ToString");
         let num_params = binders.len();
 
@@ -437,7 +443,7 @@ impl<'a> ElabCtx<'a> {
         struct_name: &Name,
         binders: &[SurfaceBinder],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{struct_name}Functor"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "Functor");
         let class_name = Name::from_string("Functor");
         let num_params = binders.len();
 
@@ -475,7 +481,7 @@ impl<'a> ElabCtx<'a> {
         struct_name: &Name,
         binders: &[SurfaceBinder],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{struct_name}Foldable"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "Foldable");
         let class_name = Name::from_string("Foldable");
         let num_params = binders.len();
 
@@ -511,7 +517,7 @@ impl<'a> ElabCtx<'a> {
         struct_name: &Name,
         binders: &[SurfaceBinder],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{struct_name}Traversable"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "Traversable");
         let class_name = Name::from_string("Traversable");
         let num_params = binders.len();
 

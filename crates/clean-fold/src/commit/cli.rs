@@ -28,7 +28,10 @@ pub enum CommitCommands {
         /// Output commitment file
         #[arg(short, long)]
         output: PathBuf,
-        /// Maximum polynomial degree (power of 2)
+        /// LOG2 of the maximum polynomial degree: the setup is sized at
+        /// `1 << max_degree`, so the default 16 means degree 65536 — this is
+        /// the exponent, not the degree itself. Values >= 64 are refused
+        /// (the shift would overflow).
         #[arg(short, long, default_value = "16")]
         max_degree: u32,
         /// Show verbose output
@@ -43,7 +46,10 @@ pub enum CommitCommands {
         /// Output commitment file
         #[arg(short, long)]
         output: PathBuf,
-        /// Maximum polynomial degree (power of 2)
+        /// LOG2 of the maximum polynomial degree: the setup is sized at
+        /// `1 << max_degree`, so the default 16 means degree 65536 — this is
+        /// the exponent, not the degree itself. Values >= 64 are refused
+        /// (the shift would overflow).
         #[arg(short, long, default_value = "16")]
         max_degree: u32,
         /// Show verbose output
@@ -99,8 +105,12 @@ commitments and pairing-checked verification, at the cost of a trusted setup.",
         path: &["commit", "ipa"],
         summary: "Commit to a proof certificate with IPA",
         description: "Creates an Inner Product Argument commitment to a proof \
-certificate. IPA requires no trusted setup (it is transparent) but verifies \
-in logarithmic time rather than KZG's constant time.",
+certificate. IPA needs no trusted setup — every generator is derived by \
+hashing a fixed seed string, so there is no ceremony and no structured \
+reference string, unlike `commit kzg`. The trade is verification cost: the \
+PROOF is logarithmic in the polynomial degree (log n round challenges), but \
+verifying it folds all n generators and so is LINEAR in n, against KZG's \
+constant-time pairing check.",
         category: Category::Proof,
         stability: Stability::V1,
         examples: &[Example {

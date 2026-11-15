@@ -52,7 +52,7 @@ impl Parser {
             let span = guard.span().merge(acc.span());
             SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "And".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("And"))),
                 vec![SurfaceArg::positional(guard), SurfaceArg::positional(acc)],
             )
         };
@@ -74,7 +74,7 @@ impl Parser {
             let span = start_span.merge(result.span());
             result = SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "Exists".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("Exists"))),
                 vec![SurfaceArg::positional(SurfaceExpr::Lambda(
                     span,
                     vec![binder],
@@ -108,7 +108,7 @@ impl Parser {
             let span = start_span.merge(result.span());
             result = SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, head.to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
                 vec![SurfaceArg::positional(SurfaceExpr::Lambda(
                     span,
                     vec![binder],
@@ -145,7 +145,7 @@ impl Parser {
             let span = guard.span().merge(acc.span());
             SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "And".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("And"))),
                 vec![SurfaceArg::positional(guard), SurfaceArg::positional(acc)],
             )
         };
@@ -166,7 +166,10 @@ impl Parser {
             let span = start_span.merge(result.span());
             result = SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "ExistsUnique".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("ExistsUnique"),
+                )),
                 vec![SurfaceArg::positional(SurfaceExpr::Lambda(
                     span,
                     vec![binder],
@@ -261,11 +264,13 @@ impl Parser {
         let name = if matches!(self.current_kind(), TokenKind::Ident(_)) {
             self.ident()?
         } else {
-            "this".to_string()
+            SurfaceName::generated_path("this")
         };
 
-        // Parse optional type annotation
-        let ty = if self.eat(&TokenKind::Colon) {
+        let params = self.optional_binders()?;
+        // A function declaration's annotation is its result type, inside
+        // the parameter telescope, as for a term `let f x : T := ...`.
+        let mut ty = if self.eat(&TokenKind::Colon) {
             Some(self.expr()?)
         } else {
             None
@@ -276,13 +281,21 @@ impl Parser {
         // *body*, not a continuation of the value. Using plain `self.expr()` here
         // greedily swallowed the newline-separated body.
         self.expect(&TokenKind::ColonEq)?;
-        let val = self.parse_let_value_layout(have_col)?;
+        let mut val = self.parse_let_value_layout(have_col)?;
+        if !params.is_empty() {
+            if let Some(result_ty) = ty.take() {
+                let span = val.span();
+                val = SurfaceExpr::Ascription(span, Box::new(val), Box::new(result_ty));
+            }
+            let span = val.span();
+            val = SurfaceExpr::Lambda(span, params, Box::new(val));
+        }
 
         let body = self.have_body_after_value()?;
 
         let span = start_span.merge(body.span());
-        let binder = SurfaceBinder::new(name, ty, SurfaceBinderInfo::Explicit);
-        Ok(SurfaceExpr::Let(
+        let binder = SurfaceBinder::new_typed(name, ty, SurfaceBinderInfo::Explicit);
+        Ok(SurfaceExpr::Have(
             span,
             binder,
             Box::new(val),
@@ -351,7 +364,11 @@ impl Parser {
         {
             self.ident()?
         } else {
-            "_h".to_string()
+            // Anonymous `suffices : P …` binds `this`, as in Lean 4
+            // (`Lean.Parser.Term.sufficesDecl`). It used to bind `_h`, an
+            // ordinary identifier, so the justification's reference to a
+            // global `_h` read the binder instead.
+            SurfaceName::generated_path("this")
         };
 
         // Parse type annotation (required for suffices). The type is a full
@@ -416,20 +433,20 @@ impl Parser {
         let body = self.expr()?;
 
         let span = start_span.merge(body.span());
-        let binder = SurfaceBinder::new(name, ty, SurfaceBinderInfo::Explicit);
+        let binder = SurfaceBinder::new_typed(name, ty, SurfaceBinderInfo::Explicit);
 
         // Represent as a let with the justification as the let-body:
-        // suffices h : P by tac; proof   ≈ let h := proof; <by tac>
-        // suffices h : P from e; proof   ≈ let h := proof; e
+        // suffices h : P by tac; proof   ≈ have h := proof; <by tac>
+        // suffices h : P from e; proof   ≈ have h := proof; e
         if let Some(just) = justification {
-            Ok(SurfaceExpr::Let(span, binder, Box::new(body), just))
+            Ok(SurfaceExpr::Have(span, binder, Box::new(body), just))
         } else {
-            // Without justification, just a simple let
-            Ok(SurfaceExpr::Let(
+            // Without justification, retain the same opaque binding
+            Ok(SurfaceExpr::Have(
                 span,
                 binder,
                 Box::new(body),
-                Box::new(SurfaceExpr::Ident(span, "_".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::generated_path("_"))),
             ))
         }
     }
@@ -550,7 +567,10 @@ impl Parser {
         let lambda = SurfaceExpr::Lambda(span, vec![binder], Box::new(pred));
         Ok(SurfaceExpr::App(
             span,
-            Box::new(SurfaceExpr::Ident(start_span, "Subtype".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path("Subtype"),
+            )),
             vec![SurfaceArg::positional(lambda)],
         ))
     }
@@ -569,13 +589,19 @@ impl Parser {
         let last = iter.next().unwrap_or(SurfaceExpr::Hole(span));
         let mut result = SurfaceExpr::App(
             span,
-            Box::new(SurfaceExpr::Ident(start_span, "singleton".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path("singleton"),
+            )),
             vec![SurfaceArg::positional(last)],
         );
         for elem in iter {
             result = SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(start_span, "insert".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    start_span,
+                    SurfaceName::global_path("insert"),
+                )),
                 vec![SurfaceArg::positional(elem), SurfaceArg::positional(result)],
             );
         }
@@ -597,7 +623,7 @@ impl Parser {
         base: Option<Box<SurfaceExpr>>,
     ) -> Result<SurfaceExpr, ParseError> {
         // Parse field assignments, bare-ident abbreviations, and dotted paths.
-        let mut raw_fields: Vec<(Span, Vec<String>, SurfaceExpr)> = Vec::new();
+        let mut raw_fields: Vec<(Span, Vec<SurfaceName>, SurfaceExpr)> = Vec::new();
         let mut any_nested = false;
         while self.is_struct_or_abbrev_field_start() || self.is_struct_field_path_start() {
             let field_span = self.current_span();
@@ -661,7 +687,7 @@ impl Parser {
     }
 
     /// Parse a struct-literal field path: `ident (. ident)*`.
-    fn parse_struct_field_path(&mut self) -> Result<Vec<String>, ParseError> {
+    fn parse_struct_field_path(&mut self) -> Result<Vec<SurfaceName>, ParseError> {
         let mut path = vec![self.ident()?];
         while self.check(&TokenKind::Dot) && matches!(self.peek_kind(1), Some(TokenKind::Ident(_)))
         {
@@ -866,7 +892,10 @@ impl Parser {
             let x_ident = SurfaceExpr::Ident(var_span, var_name.clone());
             let mem = SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(var_span, "Membership.mem".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    var_span,
+                    SurfaceName::global_path("Membership.mem"),
+                )),
                 vec![
                     SurfaceArg::positional(set_expr),
                     SurfaceArg::positional(x_ident),
@@ -874,7 +903,10 @@ impl Parser {
             );
             SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(var_span, "And".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    var_span,
+                    SurfaceName::global_path("And"),
+                )),
                 vec![SurfaceArg::positional(mem), SurfaceArg::positional(pred)],
             )
         } else {
@@ -891,7 +923,7 @@ impl Parser {
         };
 
         let lambda = SurfaceExpr::Lambda(span, vec![binder], Box::new(body_pred));
-        let setof = SurfaceExpr::Ident(span, "setOf".to_string());
+        let setof = SurfaceExpr::Ident(span, SurfaceName::global_path("setOf"));
 
         Ok(SurfaceExpr::App(
             span,
@@ -994,7 +1026,10 @@ impl Parser {
     ) -> Result<SurfaceExpr, ParseError> {
         // Empty list
         if self.eat(&TokenKind::RBracket) {
-            return Ok(SurfaceExpr::Ident(start_span, "List.nil".to_string()));
+            return Ok(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path("List.nil"),
+            ));
         }
 
         // Bracket notation: [≠], [<], [>] etc. — Part of #8, Part of #2550
@@ -1025,28 +1060,29 @@ impl Parser {
             self.advance(); // consume ]
             return Ok(SurfaceExpr::Ident(
                 start_span.merge(end_span),
-                format!("bracketOp.{op_name}"),
+                SurfaceName::global_path("bracketOp")
+                    .append(&SurfaceName::component(op_name, false)),
             ));
         }
 
-        let mut elems = Vec::new();
-        elems.push(self.expr()?);
+        let first = self.expr()?;
 
         // Named instance bracket: [name : Type] — Part of #8, Part of #2550
         // In Lean 4, `[inst : Mul S]` inside a type expression is an instance
         // binder, not a list literal. Parse as ascription so surrounding
         // code (e.g., `(S : Type) → [inst : Mul S] → Prop`) succeeds.
-        if self.check(&TokenKind::Colon) && elems.len() == 1 {
+        if self.check(&TokenKind::Colon) {
             self.advance(); // consume :
             let ty = self.expr()?;
             let end_span = self.expect(&TokenKind::RBracket)?.span;
             return Ok(SurfaceExpr::Ascription(
                 start_span.merge(end_span),
-                Box::new(elems.into_iter().next().expect("len==1")),
+                Box::new(first),
                 Box::new(ty),
             ));
         }
 
+        let mut elems = vec![first];
         while self.eat(&TokenKind::Comma) {
             if self.check(&TokenKind::RBracket) {
                 break;
@@ -1056,12 +1092,18 @@ impl Parser {
         let end_span = self.expect(&TokenKind::RBracket)?.span;
 
         // Build List.cons chain ending with List.nil
-        let mut result = SurfaceExpr::Ident(start_span.merge(end_span), "List.nil".to_string());
+        let mut result = SurfaceExpr::Ident(
+            start_span.merge(end_span),
+            SurfaceName::global_path("List.nil"),
+        );
         for elem in elems.into_iter().rev() {
             let span = start_span.merge(elem.span()).merge(result.span());
             result = SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "List.cons".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("List.cons"),
+                )),
                 vec![SurfaceArg::positional(elem), SurfaceArg::positional(result)],
             );
         }
@@ -1103,12 +1145,15 @@ impl Parser {
 
         // Build the backing `List.cons`/`List.nil` chain (identical structure
         // to `list_literal_body`), then wrap it in the single-field `Array.mk`.
-        let mut backing = SurfaceExpr::Ident(span, "List.nil".to_string());
+        let mut backing = SurfaceExpr::Ident(span, SurfaceName::global_path("List.nil"));
         for elem in elems.into_iter().rev() {
             let elem_span = span.merge(elem.span()).merge(backing.span());
             backing = SurfaceExpr::App(
                 elem_span,
-                Box::new(SurfaceExpr::Ident(elem_span, "List.cons".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    elem_span,
+                    SurfaceName::global_path("List.cons"),
+                )),
                 vec![
                     SurfaceArg::positional(elem),
                     SurfaceArg::positional(backing),
@@ -1118,7 +1163,10 @@ impl Parser {
 
         Ok(SurfaceExpr::App(
             span,
-            Box::new(SurfaceExpr::Ident(span, "Array.mk".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                span,
+                SurfaceName::global_path("Array.mk"),
+            )),
             vec![SurfaceArg::positional(backing)],
         ))
     }
@@ -1210,7 +1258,10 @@ impl Parser {
                 // Finite: fn_name domain (fun x => body)
                 Ok(SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(span, finite_fn.to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path(finite_fn),
+                    )),
                     vec![
                         SurfaceArg::positional(domain),
                         SurfaceArg::positional(lambda),
@@ -1220,7 +1271,10 @@ impl Parser {
                 // Infinite with guard: fn_name (fun x => body)
                 Ok(SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(span, infinite_fn.to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path(infinite_fn),
+                    )),
                     vec![SurfaceArg::positional(lambda)],
                 ))
             }
@@ -1228,7 +1282,10 @@ impl Parser {
             // No domain: infinite_fn (fun x => body)
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, infinite_fn.to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path(infinite_fn),
+                )),
                 vec![SurfaceArg::positional(lambda)],
             ))
         }
@@ -1252,7 +1309,10 @@ impl Parser {
         let span = start_span.merge(body.span());
         Ok(SurfaceExpr::App(
             span,
-            Box::new(SurfaceExpr::Ident(start_span, "set_option".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path("set_option"),
+            )),
             vec![
                 SurfaceArg::positional(name_expr),
                 SurfaceArg::positional(value_expr),
@@ -1270,12 +1330,16 @@ impl Parser {
 /// direct assignment to that field and takes precedence for its group.
 fn build_nested_struct_lit(
     base: Option<SurfaceExpr>,
-    fields: Vec<(Span, Vec<String>, SurfaceExpr)>,
+    fields: Vec<(Span, Vec<SurfaceName>, SurfaceExpr)>,
     struct_type: Option<Box<SurfaceExpr>>,
     span: Span,
 ) -> SurfaceExpr {
     // Group by leading path component, preserving first-seen order.
-    let mut groups: Vec<(String, Span, Vec<(Span, Vec<String>, SurfaceExpr)>)> = Vec::new();
+    let mut groups: Vec<(
+        SurfaceName,
+        Span,
+        Vec<(Span, Vec<SurfaceName>, SurfaceExpr)>,
+    )> = Vec::new();
     for (fspan, mut path, val) in fields {
         let first = path.remove(0);
         if let Some(group) = groups.iter_mut().find(|(name, _, _)| *name == first) {

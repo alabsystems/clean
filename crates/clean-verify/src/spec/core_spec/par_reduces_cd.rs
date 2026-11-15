@@ -73,32 +73,34 @@ impl Specification {
         Ok(())
     }
 
-    /// Brick 0: the combined reduction environment `RedEnv = RecEnv × DefEnv` and
+    /// Brick 0: the combined environment `RedEnv = RecEnv × DefEnv × IndCtorEnv` and
     /// its projections. A single carrier so the δ-extended relation stays
     /// single-parameter (like `par_reduces_c`), with the recursor / definition
     /// envs recovered by `red_rec` / `red_def`.
     pub(super) fn add_red_env(&mut self) -> Result<(), SpecError> {
-        // RedEnv: the product of a recursor environment and a definition
-        // environment. The single index of par_reduces_cd.
+        // Keep all reduction/metadata consumers indexed by the same environment.
+        // Adding stored records does not itself add projection beta or typing.
         self.add_inductive(
             r"inductive RedEnv : Type
-| mk : RecEnv → DefEnv → RedEnv",
-            "Combined reduction environment RedEnv = RecEnv × DefEnv: a recursor environment (for iota) \
-             paired with a definition environment (for delta). The single index of the δ-extended \
-             parallel reduction par_reduces_cd; the two envs are recovered by red_rec / red_def. \
-             Part of #2859 (Increment H).",
+| mk : RecEnv → DefEnv → IndCtorEnv → RedEnv",
+            "One environment containing recursor rules, definitions, and stored inductive/constructor metadata. The existing reduction relation still reads only recursor/definition components; metadata alone establishes neither projection beta nor typing.",
         )?;
 
         // red_rec: project the RecEnv component (large elimination into Type).
         self.add_recursive_def(
-            r"def red_rec (env : RedEnv) : RecEnv := RedEnv.rec (fun (_ : RedEnv) => RecEnv) (fun (r : RecEnv) (d : DefEnv) => r) env",
+            r"def red_rec (env : RedEnv) : RecEnv := RedEnv.rec (fun (_ : RedEnv) => RecEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => r) env",
             "Project the recursor-environment component of a RedEnv. Part of #2859 (Increment H).",
         )?;
 
         // red_def: project the DefEnv component.
         self.add_recursive_def(
-            r"def red_def (env : RedEnv) : DefEnv := RedEnv.rec (fun (_ : RedEnv) => DefEnv) (fun (r : RecEnv) (d : DefEnv) => d) env",
+            r"def red_def (env : RedEnv) : DefEnv := RedEnv.rec (fun (_ : RedEnv) => DefEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => d) env",
             "Project the definition-environment component of a RedEnv. Part of #2859 (Increment H).",
+        )?;
+
+        self.add_recursive_def(
+            r"def red_ind_ctor (env : RedEnv) : IndCtorEnv := RedEnv.rec (fun (_ : RedEnv) => IndCtorEnv) (fun (r : RecEnv) (d : DefEnv) (ic : IndCtorEnv) => ic) env",
+            "Project the stored inductive/constructor table from the same environment used by reduction and inference.",
         )?;
 
         Ok(())
@@ -340,8 +342,10 @@ impl Specification {
             let dinv_kont = concat!(
                 "(fun (dname : Name) (val : KExpr) ",
                 "(hd1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) ",
-                "(hd2 : Eq (OptionType KExpr) (defval_for (red_def env) dname) (OptionType.some KExpr val)) ",
+                "(hd2 : Eq (OptionType KExpr) (kdef_value_at (red_def env) dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) ",
                 "(_hd2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e1)) => ",
+                "kdef_value_at_guard_inv (red_def env) dname (kexpr_const_levels (kapp_fn e)) val C hd2 ",
+                "(fun (defn : KDefSig) (hraw : Eq (OptionType KDefSig) (kdef_for (red_def env) dname) (OptionType.some KDefSig defn)) (_harity : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (_hval : Eq KExpr val (kdef_inst_value defn (kexpr_const_levels (kapp_fn e)))) => ",
                 // invert the iota leg
                 "iota_reduct_some_inv (red_rec env) e e2 C hi ",
                 "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) ",
@@ -350,7 +354,7 @@ impl Specification {
                 "(_hi3 : Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (OptionType.some KExpr major)) ",
                 "(_hi4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) ",
                 "(_hi5 : Eq (OptionType RecRule) (recrule_for (red_rec env) recname cname) (OptionType.some RecRule rule)) ",
-                "(_hi5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))) (OptionType.some KExpr e2)) => ",
+                "(_hi5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))))) (OptionType.some KExpr e2)) => ",
                 // dname = recname (both equal the head const name)
                 "option_none_ne_some RecMeta meta C ",
                 "(Eq.trans (OptionType RecMeta) (OptionType.none RecMeta) (recmeta_for (red_rec env) recname) (OptionType.some RecMeta meta) ",
@@ -361,8 +365,8 @@ impl Specification {
                 "(option_some_inj Name dname recname ",
                 "(Eq.trans (OptionType Name) (OptionType.some Name dname) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) ",
                 "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) hd1) hi1)))) ",
-                "(recenv_defenv_disjoint_recmeta env dname val w hd2))) ",
-                "hi2)))"
+                "(recenv_defenv_disjoint_recmeta env dname (kdef_value defn) w (kdef_raw_value_of_lookup (red_def env) dname defn hraw)))) ",
+                "hi2))))"
             );
             let value = format!(
                 "fun (env : RedEnv) (e : KExpr) (e1 : KExpr) (e2 : KExpr) (C : Prop) \

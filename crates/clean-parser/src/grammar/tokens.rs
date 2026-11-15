@@ -5,15 +5,30 @@
 use super::{IndentContext, Parser};
 use crate::lexer::{Token, TokenKind};
 use crate::surface::Span;
-use crate::ParseError;
+use crate::{ParseError, SurfaceName};
+
+static EMPTY_EOF: Token = Token {
+    kind: TokenKind::Eof,
+    span: Span { start: 0, end: 0 },
+    ident_escaped: false,
+    lean_keyword: false,
+    preceded_by_newline: false,
+    col: 0,
+    line: 1,
+};
 
 impl Parser {
     // Token access
 
     pub(super) fn current(&self) -> &Token {
+        self.token_or_eof(self.pos)
+    }
+
+    fn token_or_eof(&self, index: usize) -> &Token {
         self.tokens
-            .get(self.pos)
-            .unwrap_or_else(|| self.tokens.last().expect("tokens should have at least EOF"))
+            .get(index)
+            .or_else(|| self.tokens.last())
+            .unwrap_or(&EMPTY_EOF)
     }
 
     pub(super) fn current_kind(&self) -> &TokenKind {
@@ -29,12 +44,53 @@ impl Parser {
         self.current().line as usize
     }
 
+    /// The current `Ident` token, spelled `text`, as a NAME: one that is
+    /// bound (a binder, pattern variable, `let`, hypothesis or field name) or
+    /// declared, or any other identifier Lean's `ident` parser reads.
+    ///
+    /// A token Lean 4.8.0 scans as a keyword (`Token::lean_keyword`) is
+    /// refused: Lean's `ident` never matches a keyword, so `fun (nomatch :
+    /// Nat → Nat) => …` and `def nomatch := …` are Lean syntax errors, and
+    /// accepting them let the binding capture the keyword (measured
+    /// 2026-09-26: `nomatch a + b` computed with the binder).
+    pub(super) fn name_token(&self, text: &str) -> Result<SurfaceName, ParseError> {
+        if self.current().lean_keyword {
+            return Err(self.keyword_as_name_error(text));
+        }
+        Ok(SurfaceName::component(text, self.current().ident_escaped))
+    }
+
+    /// The error for the Lean keyword `text` where a name is required.
+    pub(super) fn keyword_as_name_error(&self, text: &str) -> ParseError {
+        ParseError::UnexpectedToken {
+            line: self.current_line(),
+            col: self.current().col as usize,
+            message: format!(
+                "expected identifier, got `{text}`, a keyword in Lean 4.8.0 \
+                 (a name spelled so is written `«{text}»`)"
+            ),
+        }
+    }
+
+    /// The current `Ident` token, spelled `text`, as a term-position
+    /// REFERENCE. A Lean keyword is kept (Clean's recognizers give `nomatch
+    /// e` its meaning) but marked, so it resolves to no local and no
+    /// constant ([`SurfaceName::into_lean_keyword`]).
+    pub(super) fn reference_token(&self, text: &str) -> SurfaceName {
+        let name = SurfaceName::component(text, self.current().ident_escaped);
+        if self.current().lean_keyword {
+            name.into_lean_keyword()
+        } else {
+            name
+        }
+    }
+
     pub(super) fn advance(&mut self) -> &Token {
-        if self.pos < self.tokens.len() - 1 {
+        if self.pos < self.tokens.len().saturating_sub(1) {
             self.pos += 1;
         }
         // Return reference to token we just passed
-        &self.tokens[self.pos.saturating_sub(1)]
+        self.token_or_eof(self.pos.saturating_sub(1))
     }
 
     pub(super) fn check(&self, kind: &TokenKind) -> bool {
@@ -100,6 +156,16 @@ impl Parser {
         prev_adjacent && next_adjacent
     }
 
+    /// True when the current token starts exactly where the previous token
+    /// ended — no whitespace or comment between them (Lean's
+    /// `checkNoWsBefore`). False at the start of input.
+    pub(super) fn at_token_glued_to_previous(&self) -> bool {
+        self.pos
+            .checked_sub(1)
+            .and_then(|i| self.tokens.get(i))
+            .is_some_and(|prev| prev.span.end == self.current().span.start)
+    }
+
     // Indentation stack helpers
 
     pub(super) fn push_indent_for(&mut self, col: u32, construct: &str) {
@@ -120,10 +186,24 @@ impl Parser {
         self.indent_context_stack.pop();
     }
 
+    /// Whether the parse is inside a bracketed term group with no
+    /// indentation frame pushed since it opened (Lean's `withoutPosition`;
+    /// see [`Parser::position_suppressed_at`]). Column-based stops must not
+    /// fire here: the group's closer is the only boundary.
+    pub(super) fn position_suppressed(&self) -> bool {
+        self.position_suppressed_at == Some(self.indent_stack.len())
+    }
+
     /// Current token is on a new line at a column strictly less than the
     /// block's reference column — the block has ended (dedent).
     /// Matches Lean 4: block terminates when a new-line token's column < reference.
+    /// Never fires inside a bracketed group that cleared the position
+    /// ([`Parser::position_suppressed`]), as Lean's `checkColGe` passes when
+    /// no position is saved.
     pub(super) fn at_dedent(&self) -> bool {
+        if self.position_suppressed() {
+            return false;
+        }
         if let Some(&block_col) = self.indent_stack.last() {
             let tok = self.current();
             // Only trigger dedent on new lines — same-line tokens are always part of the block

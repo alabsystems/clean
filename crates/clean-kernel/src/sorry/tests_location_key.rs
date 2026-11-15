@@ -12,7 +12,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 
 #[test]
 fn test_sorry_location_key_override_records_key_instead_of_caller() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     enable_sorry_location_tracking();
     reset_sorry_locations();
@@ -37,7 +37,7 @@ fn test_sorry_location_key_override_records_key_instead_of_caller() {
 
 #[test]
 fn test_sorry_location_key_nested_restores_outer() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     enable_sorry_location_tracking();
     reset_sorry_locations();
@@ -67,7 +67,7 @@ fn test_sorry_location_key_nested_restores_outer() {
 
 #[test]
 fn test_sorry_location_key_restores_after_inner_panic() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     enable_sorry_location_tracking();
     reset_sorry_locations();
@@ -119,7 +119,7 @@ fn test_sorry_location_key_restores_after_inner_panic() {
 
 #[test]
 fn test_sorry_location_key_raw_caller_resumes_after_override() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     enable_sorry_location_tracking();
     reset_sorry_locations();

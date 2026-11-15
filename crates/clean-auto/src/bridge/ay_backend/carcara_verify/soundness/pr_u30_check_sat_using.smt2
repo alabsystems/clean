@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-const p Bool)
+(assert p)
+(check-sat-using smt)
+(assert (not p))
+(check-sat)

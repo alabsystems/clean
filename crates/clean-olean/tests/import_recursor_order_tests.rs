@@ -9,9 +9,11 @@
 //!
 //! Part of #1790
 
-use clean_kernel::env::Environment;
+use clean_kernel::env::{ConstantKind, Environment};
+use clean_kernel::expr::ExprKind;
 use clean_kernel::inductive::RecursorArgOrder;
 use clean_kernel::name::Name;
+use clean_kernel::tc::TypeChecker;
 use clean_olean::{load_module_with_deps, pinned_lean_lib_path};
 
 fn get_lean_lib_path() -> Option<std::path::PathBuf> {
@@ -34,6 +36,49 @@ fn require_olean_lean() -> Option<std::path::PathBuf> {
         return None;
     }
     get_lean_lib_path()
+}
+
+/// Stored recOn/casesOn wrappers are definitions, not necessarily primitive recursors.
+/// Require their real telescope and checked body; absence from both tables is an error.
+fn assert_major_after_motive(env: &Environment, name: &str, inductive: &str) {
+    let name = Name::from_string(name);
+    let info = env.get_const(&name).expect("stored eliminator must exist");
+    let ExprKind::Pi(_, _, after_motive) = info.type_.kind() else {
+        panic!("{name}: motive binder missing");
+    };
+    let ExprKind::Pi(_, major_ty, _) = after_motive.kind() else {
+        panic!("{name}: major binder must follow motive");
+    };
+    assert!(
+        matches!(major_ty.kind(), ExprKind::Const(owner, levels)
+        if owner == &Name::from_string(inductive) && levels.is_empty()),
+        "{name}: wrong major-premise position or owner: {major_ty:?}"
+    );
+    let tc = TypeChecker::new(env);
+    assert!(matches!(
+        tc.infer_type(&info.type_)
+            .expect("eliminator type checks")
+            .kind(),
+        ExprKind::Sort(_)
+    ));
+    if let Some(recursor) = env.get_recursor(&name) {
+        assert_eq!(
+            recursor.arg_order,
+            RecursorArgOrder::MajorAfterMotive,
+            "{name}: stored recursor order must agree with its telescope"
+        );
+    } else {
+        assert_eq!(
+            info.kind,
+            ConstantKind::Definition,
+            "{name}: stored wrapper kind"
+        );
+        tc.check_type(
+            info.value.as_ref().expect("stored wrapper body"),
+            &info.type_,
+        )
+        .unwrap_or_else(|error| panic!("{name}: stored wrapper body does not check: {error:?}"));
+    }
 }
 
 /// Regression test for #1790, updated for the Lean-faithful casesOn layout:
@@ -62,34 +107,8 @@ fn test_olean_cases_on_arg_order_matches_builder() {
         "Nat.rec should use MajorAfterMinors"
     );
 
-    // Nat.casesOn: when present in the recursor table, it must carry the
-    // Lean-faithful MajorAfterMotive layout (the current loader keeps
-    // olean casesOn as a value-bearing Definition, so absence is fine).
-    if let Some(nat_cases) = env.get_recursor(&Name::from_string("Nat.casesOn")) {
-        assert_eq!(
-            nat_cases.arg_order,
-            RecursorArgOrder::MajorAfterMotive,
-            "Nat.casesOn should use MajorAfterMotive (Lean-faithful layout)"
-        );
-    }
-
-    // Nat.recOn: MajorAfterMotive (params → motives → indices → major → minors)
-    let nat_rec_on = env
-        .get_recursor(&Name::from_string("Nat.recOn"))
-        .expect("Nat.recOn not found in olean-loaded env");
-    assert_eq!(
-        nat_rec_on.arg_order,
-        RecursorArgOrder::MajorAfterMotive,
-        "Nat.recOn should use MajorAfterMotive"
-    );
-
-    // Also check Bool.casesOn for a non-recursive inductive (same caveat:
-    // present only when the loader registers it as a recursor).
-    if let Some(bool_cases) = env.get_recursor(&Name::from_string("Bool.casesOn")) {
-        assert_eq!(
-            bool_cases.arg_order,
-            RecursorArgOrder::MajorAfterMotive,
-            "Bool.casesOn should use MajorAfterMotive (Lean-faithful layout)"
-        );
-    }
+    // Keep every original eliminator mandatory, including definition wrappers.
+    assert_major_after_motive(&env, "Nat.casesOn", "Nat");
+    assert_major_after_motive(&env, "Nat.recOn", "Nat");
+    assert_major_after_motive(&env, "Bool.casesOn", "Bool");
 }

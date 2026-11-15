@@ -11,6 +11,7 @@ use crate::tactic::LocalDecl;
 use crate::unify::MetaState;
 use clean_auto::bridge::ay_contract::{AyError, AyLogic, VariableMapping};
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level, Name};
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 // -- Callable FVar head registration (from ay_solver_tests.rs) --
@@ -26,20 +27,23 @@ fn test_verifiable_callable_fvar_head_registers_on_first_use_and_proves_congruen
     let pred_ty = mk_int_to_prop_type();
     let local_ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: pred_fvar,
-            name: "p".to_string(),
+            name: SurfaceName::component("p", false),
             ty: pred_ty.clone(),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: x_fvar,
-            name: "x".to_string(),
+            name: SurfaceName::component("x", false),
             ty: int_ty.clone(),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: y_fvar,
-            name: "y".to_string(),
+            name: SurfaceName::component("y", false),
             ty: int_ty.clone(),
             value: None,
         },
@@ -110,8 +114,9 @@ fn test_translate_and_assert_hypothesis_records_exists_witness_binding() {
     let hyp_fvar = FVarId::new(21);
     let exists_expr = mk_exists_prop_identity();
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "hex".to_string(),
+        name: SurfaceName::component("hex", false),
         ty: exists_expr.clone(),
         value: None,
     }];
@@ -218,8 +223,9 @@ fn test_verifiable_exists_hypothesis_registers_nat_placeholder_witness() {
         predicate,
     );
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "hex_nat".to_string(),
+        name: SurfaceName::component("hex_nat", false),
         ty: exists_expr.clone(),
         value: None,
     }];
@@ -284,8 +290,9 @@ fn test_translate_and_assert_hypothesis_normalizes_nested_exists_placeholders() 
     let hyp_fvar = FVarId::new(23);
     let exists_expr = mk_nested_exists_nat_eq();
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "hex_nested_nat".to_string(),
+        name: SurfaceName::component("hex_nested_nat", false),
         ty: exists_expr.clone(),
         value: None,
     }];
@@ -395,8 +402,9 @@ fn test_register_fvars_from_context_rejects_partially_applied_exists_hypotheses(
         Expr::prop(),
     );
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(31),
-        name: "hpartial".to_string(),
+        name: SurfaceName::component("hpartial", false),
         ty: partial_exists,
         value: None,
     }];

@@ -31,7 +31,7 @@ if [[ "${1:-}" == "--bin" ]]; then
 fi
 if [[ ! -x "$BIN" ]]; then
   echo "[coind-green] building clean (release)..." >&2
-  (cd "$REPO_ROOT" && cargo build --locked --release -p clean)
+  (cd "$REPO_ROOT" && targo --unverified build --locked --release -p clean)
 fi
 [[ -x "$BIN" ]] || { echo "[coind-green] FAIL: no executable clean binary at $BIN" >&2; exit 1; }
 

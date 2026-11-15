@@ -50,8 +50,6 @@
 //! [`crate::engine_induction`]'s final gate; a wrong rewrite or a mis-built
 //! reorder adapter simply fails that check and is never returned as success.
 
-use std::time::Instant;
-
 use clean_kernel::{BinderData, Environment, Expr, ExprKind, FVarId, LocalContext, Name};
 
 use crate::engine::AutomationEngine;
@@ -60,6 +58,7 @@ use crate::engine_induction::{
 };
 use crate::engine_induction_aux::{chaining_facts, eq_trans};
 use crate::engine_induction_match::{refold_nat_add, rewrite_lhs_with_fact};
+use crate::search_stop::SearchStop;
 
 /// Maximum congruence / rewrite recursion depth when discharging an equation.
 ///
@@ -90,10 +89,10 @@ impl AutomationEngine {
         env: &Environment,
         goal: &Expr,
         ctx: &LocalContext,
-        deadline: Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
-        if Instant::now() >= deadline {
+        if stop.backstop_fired() {
             return None;
         }
         let g = type_checker(env, ctx).whnf(goal);
@@ -105,7 +104,7 @@ impl AutomationEngine {
             let mut inner = ctx.clone();
             let y = inner.push(Name::from_string("ind.y"), dom.clone(), bd);
             let opened = body.instantiate(&Expr::fvar(y));
-            let sub = self.prove_goal_rewrite(env, &opened, &inner, deadline, fuel)?;
+            let sub = self.prove_goal_rewrite(env, &opened, &inner, stop, fuel)?;
             return Some(Expr::lam(bd, dom, sub.abstract_fvar(y)));
         }
 
@@ -118,10 +117,10 @@ impl AutomationEngine {
             // the inducted operand (`succ k + m`, `0 + m`), synthesise + prove +
             // kernel-check the bridging lemma (`succ_add` / `zero_add`) and add it
             // as a directed rewrite fact. This is what unlocks `add_comm`.
-            facts.extend(self.synthesize_bridging_facts(env, ctx, &g, deadline));
-            return self.prove_eq_rewrite(env, ctx, &g, &facts, deadline, REWRITE_DEPTH);
+            facts.extend(self.synthesize_bridging_facts(env, ctx, &g, stop));
+            return self.prove_eq_rewrite(env, ctx, &g, &facts, stop, REWRITE_DEPTH);
         }
-        self.discharge_subgoal(env, &g, ctx, deadline, fuel)
+        self.discharge_subgoal(env, &g, ctx, stop, fuel)
     }
 
     /// Prove an equation `goal` (`@Eq.{u} T L R`) in `ctx` using kernel
@@ -145,10 +144,10 @@ impl AutomationEngine {
         ctx: &LocalContext,
         goal: &Expr,
         facts: &[RewriteFact],
-        deadline: Instant,
+        stop: &SearchStop,
         depth: u32,
     ) -> Option<Expr> {
-        if Instant::now() >= deadline {
+        if stop.backstop_fired() {
             return None;
         }
         let (goal_levels, ty, lhs, rhs) = parse_eq(goal)?;
@@ -204,8 +203,7 @@ impl AutomationEngine {
             };
             if tc.is_def_eq(&lhs, &a) && !tc.is_def_eq(&lhs, &b) {
                 let residual = build_eq(&beta_level, &ty, &b, &rhs);
-                let Some(sub) =
-                    self.prove_eq_rewrite(env, ctx, &residual, facts, deadline, depth - 1)
+                let Some(sub) = self.prove_eq_rewrite(env, ctx, &residual, facts, stop, depth - 1)
                 else {
                     continue;
                 };
@@ -227,7 +225,7 @@ impl AutomationEngine {
             &rhs,
             &beta_level,
             facts,
-            deadline,
+            stop,
             depth,
         ) {
             return Some(term);
@@ -249,7 +247,7 @@ impl AutomationEngine {
         // the goal `lhs = rhs` under the final `kernel_accepts`.
         let lhs_s = refold_nat_add(&lhs);
         for fact in &all_facts {
-            if Instant::now() >= deadline {
+            if stop.backstop_fired() {
                 return None;
             }
             let Some((lhs2, h1)) = rewrite_lhs_with_fact(env, ctx, &lhs_s, fact) else {
@@ -259,7 +257,7 @@ impl AutomationEngine {
                 continue;
             }
             let residual = build_eq(&beta_level, &ty, &lhs2, &rhs);
-            let Some(sub) = self.prove_eq_rewrite(env, ctx, &residual, facts, deadline, depth - 1)
+            let Some(sub) = self.prove_eq_rewrite(env, ctx, &residual, facts, stop, depth - 1)
             else {
                 continue;
             };
@@ -287,7 +285,7 @@ impl AutomationEngine {
         rhs: &Expr,
         beta_level: &clean_kernel::Level,
         facts: &[RewriteFact],
-        deadline: Instant,
+        stop: &SearchStop,
         depth: u32,
     ) -> Option<Expr> {
         let lhs_w = tc.whnf(lhs);
@@ -306,7 +304,7 @@ impl AutomationEngine {
         };
         let arg_level = arg_level.normalize();
         let arg_goal = build_eq(&arg_level, &arg_ty, a_l, a_r);
-        let sub = self.prove_eq_rewrite(env, ctx, &arg_goal, facts, deadline, depth - 1)?;
+        let sub = self.prove_eq_rewrite(env, ctx, &arg_goal, facts, stop, depth - 1)?;
         let term = congr_arg(&arg_level, beta_level, &arg_ty, ty, a_l, a_r, f_l, &sub);
         kernel_accepts(env, ctx, &term, goal).then_some(term)
     }
@@ -325,7 +323,7 @@ impl AutomationEngine {
         env: &Environment,
         goal: &Expr,
         base_ctx: &LocalContext,
-        deadline: Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
         let mut ctx = base_ctx.clone();
@@ -352,14 +350,14 @@ impl AutomationEngine {
         }
 
         for target in 1..vars.len() {
-            if Instant::now() >= deadline {
+            if stop.backstop_fired() {
                 return None;
             }
             if !is_inductive_domain(env, &vars[target].2) {
                 continue;
             }
             if let Some(term) =
-                self.induct_reordered_on(env, goal, base_ctx, &vars, &body, target, deadline, fuel)
+                self.induct_reordered_on(env, goal, base_ctx, &vars, &body, target, stop, fuel)
             {
                 return Some(term);
             }
@@ -382,7 +380,7 @@ impl AutomationEngine {
         vars: &[(FVarId, BinderData, Expr)],
         body: &Expr,
         target: usize,
-        deadline: Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
         let n = vars.len();
@@ -400,7 +398,7 @@ impl AutomationEngine {
             permuted = Expr::pi(*bd, dom.clone(), permuted.abstract_fvar(*fvar));
         }
 
-        let proof = self.induct_on_outermost(env, &permuted, base_ctx, deadline, fuel)?;
+        let proof = self.induct_on_outermost(env, &permuted, base_ctx, stop, fuel)?;
 
         // Adapter `fun (x₀ … x_{n-1}) => proof x_{perm[0]} … x_{perm[n-1]}`:
         // open the original telescope under fresh locals, apply `proof` in

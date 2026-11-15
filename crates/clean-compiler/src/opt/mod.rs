@@ -89,6 +89,9 @@ pub mod pull_fun_decls;
 pub mod pull_let_decls;
 pub mod reduce_arity;
 pub mod reduce_jp_arity;
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) mod resolve_carrier_prims;
+pub mod resolve_instances;
 pub mod simp;
 pub mod simp_value;
 pub mod specialize;

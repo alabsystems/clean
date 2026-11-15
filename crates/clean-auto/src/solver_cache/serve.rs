@@ -143,7 +143,7 @@ impl ServeState {
 
     /// Number of configured data directories.
     #[must_use]
-    pub fn data_dir_count(&self) -> usize {
+    pub(crate) fn data_dir_count(&self) -> usize {
         self.data_dirs.len()
     }
 

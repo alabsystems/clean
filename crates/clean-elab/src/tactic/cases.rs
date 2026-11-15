@@ -19,7 +19,8 @@
 //! - `Wildcard` — accept the auto-generated name without further destruction
 
 use crate::stack_safe;
-use clean_kernel::ExprKind;
+use clean_kernel::{ExprKind, Name};
+use clean_parser::SurfaceName;
 
 use super::core::{Goal, ProofState, TacticResult};
 use super::proof_manipulation::cases;
@@ -33,7 +34,7 @@ use super::proof_manipulation::cases;
 #[non_exhaustive]
 pub enum RCasesPattern {
     /// Bind the field to a user-supplied name.
-    Name(String),
+    Name(SurfaceName),
     /// Recursively destruct the field using nested patterns.
     Tuple(Vec<RCasesPattern>),
     /// Accept the auto-generated name; do not destruct further.
@@ -59,7 +60,7 @@ pub enum RCasesPattern {
 /// ENSURES: On Err, the proof state may be partially modified (consistent with `cases`).
 pub fn eval_rcases(
     state: &mut ProofState,
-    target: &str,
+    target: &SurfaceName,
     patterns: &[RCasesPattern],
 ) -> TacticResult {
     stack_safe(|| eval_rcases_inner(state, target, patterns))
@@ -68,7 +69,7 @@ pub fn eval_rcases(
 /// Inner implementation of pattern-directed rcases (stack-safe wrapper above).
 fn eval_rcases_inner(
     state: &mut ProofState,
-    target: &str,
+    target: &SurfaceName,
     patterns: &[RCasesPattern],
 ) -> TacticResult {
     // Count goals before the case split to identify newly created goals.
@@ -124,27 +125,25 @@ fn eval_rcases_inner(
 /// REQUIRES: `state.goals` is non-empty.
 /// REQUIRES: `target` refers to a hypothesis whose type is an inductive type.
 /// ENSURES: On Ok, the current goal is replaced by one goal per constructor.
-pub fn eval_cases(state: &mut ProofState, target: &str) -> TacticResult {
+pub fn eval_cases(state: &mut ProofState, target: &SurfaceName) -> TacticResult {
     cases(state, target)
 }
 
 /// Find the index of the first constructor field in the goal's local context.
 ///
 /// Constructor fields are added at the end of the local context by `cases`.
-/// We identify them by looking for names matching the goal's tag (constructor
-/// short name) prefix pattern `{tag}_N`.
+/// Their exact FVar identities are retained by the case producer, independently
+/// of displayed labels and successor metavariable identities.
 fn find_first_field_idx(goal: &Goal) -> Option<usize> {
-    let tag = goal.tag.as_deref()?;
-    let prefix = format!("{tag}_");
-    goal.local_ctx
+    goal.case_binders
         .iter()
-        .position(|d| d.name.starts_with(&prefix))
+        .find_map(|id| goal.local_ctx.iter().position(|d| d.fvar == *id))
 }
 
 /// Apply sub-patterns to the fields of a constructor goal at `goal_idx`.
 ///
 /// Each sub-pattern in `patterns` is applied positionally to the constructor
-/// fields (identified by the `{tag}_N` naming convention). `Name` patterns
+/// fields (identified by the producer's ordered FVar inventory). `Name` patterns
 /// rename, `Tuple` patterns trigger recursive destruction, and `Wildcard`
 /// patterns leave the auto-generated name.
 ///
@@ -157,20 +156,21 @@ fn apply_field_patterns(
     patterns: &[RCasesPattern],
 ) -> TacticResult {
     let goal = &state.goals[goal_idx];
-    let tag = goal.tag.as_deref().unwrap_or("").to_string();
-    let prefix = format!("{tag}_");
-
-    // Collect field indices and names.
-    let field_entries: Vec<(usize, String)> = goal
-        .local_ctx
+    // Select exact case-introduced identities in producer order.
+    let field_entries: Vec<(usize, SurfaceName)> = goal
+        .case_binders
         .iter()
-        .enumerate()
-        .filter(|(_, d)| d.name.starts_with(&prefix))
+        .filter_map(|id| {
+            goal.local_ctx
+                .iter()
+                .enumerate()
+                .find(|(_, d)| d.fvar == *id)
+        })
         .map(|(i, d)| (i, d.name.clone()))
         .collect();
 
     // Track fields that need recursive destruction after renaming.
-    let mut recursive_targets: Vec<(String, Vec<RCasesPattern>)> = Vec::new();
+    let mut recursive_targets: Vec<(SurfaceName, Vec<RCasesPattern>)> = Vec::new();
 
     for (pat_idx, pat) in patterns.iter().enumerate() {
         if pat_idx >= field_entries.len() {
@@ -185,7 +185,8 @@ fn apply_field_patterns(
             }
             RCasesPattern::Tuple(sub_pats) => {
                 // Give the field a temporary name, then plan recursive destruction.
-                let temp_name = format!("_rcases_{pat_idx}");
+                let temp_name =
+                    SurfaceName::from_name(Name::anon().str("_rcases").num(pat_idx as u64));
                 let final_name = state.goals[goal_idx].local_ctx[*ctx_idx].name.clone();
                 state.goals[goal_idx].local_ctx[*ctx_idx].name = temp_name.clone();
                 // Check if the field type is an inductive type before planning recursion.
@@ -250,6 +251,10 @@ fn apply_field_patterns(
 /// REQUIRES: `state.goals` is non-empty.
 /// REQUIRES: `target` refers to a hypothesis whose type is an inductive type.
 /// ENSURES: Nested inductive types are destructed recursively up to `max_depth`.
-pub fn eval_rcases_depth(state: &mut ProofState, target: &str, max_depth: usize) -> TacticResult {
+pub fn eval_rcases_depth(
+    state: &mut ProofState,
+    target: &SurfaceName,
+    max_depth: usize,
+) -> TacticResult {
     super::inductive_reasoning::rcases(state, target, max_depth)
 }

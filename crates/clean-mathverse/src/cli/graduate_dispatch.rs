@@ -8,8 +8,11 @@
 //! The verb is a thin transcription layer: it builds the source environment,
 //! digests the project manifest, pins the novelty baseline, runs the gate,
 //! and immediately re-verifies the produced shard through
-//! [`crate::shard_verify::cake_gate::verify_cake_shard`] so a CLI run can
-//! never leave an unverified Cake shard behind.
+//! [`crate::shard_verify::cake_gate::verify_cake_shard_fused`] so a CLI run
+//! can never leave an unverified Cake shard behind. The fused form discharges
+//! the per-constant kernel replay against the gate's own recheck environment,
+//! in which every constant passed the real kernel this run; the digest,
+//! provenance and axiom clauses still run on the on-disk shard.
 
 use std::io::Write;
 use std::path::PathBuf;
@@ -78,7 +81,8 @@ pub enum GraduateEnvKind {
     Native,
     /// An environment imported from compiled Lean `.olean` modules via
     /// `clean-olean` (`load_module_with_deps`) — e.g. a lake-built project
-    /// closure over mathlib. Requires `--olean-module` and
+    /// closure over mathlib. Requires `--olean-module` plus search paths from
+    /// either `--lake-project` (which derives them) or one or more explicit
     /// `--olean-search-path`. The import is a *source* environment only:
     /// every accepted candidate is still re-checked from scratch by the
     /// live kernel in the gate's fresh recheck environment.
@@ -120,6 +124,10 @@ pub struct GraduateArgs {
     #[arg(long, conflicts_with = "candidates")]
     pub all: bool,
     /// Novelty baseline: a `.mathverse` shard file or a directory of shards.
+    /// The printed default is a fallback: whenever `--baseline` holds exactly
+    /// that path — passing it by hand counts — the newest
+    /// `_mathverse-artifacts/*.mvix` index is loaded instead if one exists, and
+    /// the substitution is announced on stderr.
     #[arg(long, default_value = "data/mathverse-shards")]
     pub baseline: PathBuf,
     /// Novelty baseline as a prebuilt `MVBIDX01` index file (see
@@ -165,11 +173,13 @@ pub struct GraduateArgs {
     /// `--olean-module`s (e.g. `crown-proofs/lean`). When given, Cake checks that
     /// each declared module's `.olean` is content-fresh vs its source (the
     /// import-list signature) and records the build provenance in the graduation
-    /// record. Without it, freshness is not checked (legacy behavior).
+    /// record. `--lake-project` supplies this root when the flag is absent; with
+    /// neither, freshness is not checked (legacy behavior).
     #[arg(long)]
     pub olean_source_root: Option<PathBuf>,
-    /// Fail closed if Cake reports any declared module stale (requires
-    /// `--olean-source-root`). Default: warn + record the staleness, still graduate.
+    /// Fail closed if Cake reports any declared module stale (needs a source root,
+    /// from `--olean-source-root` or `--lake-project`). Default: warn + record the
+    /// staleness, still graduate.
     #[arg(long)]
     pub require_fresh: bool,
     /// Compute + record each candidate's Cake semantic identity — the env-free Tier-1.5

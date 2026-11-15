@@ -1,0 +1,186 @@
+{
+  "lean_version": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)",
+  "command": "scripts/heavy_gate.sh run 2 x1-mutual-evidence -- python3 scripts/x1_mutual_evidence.py",
+  "probes": [
+    {
+      "program": "c34_r4_i_call_cycle_shared_counter",
+      "sha256": "9dbc368580b9cdf7a1ff6fd36055ad6630b167cebb953c71a38ba1cffd444a22",
+      "source": "/-!\nR4 item (i) of `designs/2026-11-12-kcheck-model-first.md`: a mutual block of\nthree functions, each structurally recursive on one shared `Nat` counter.\n`whnf` and `conv` read a token before they call into the block; `infer`\nreads none and descends its term at an unchanged cursor. The advice is a\ntoken list and a position.\n-/\n\ninductive Tok where\n  | core\n  | stop\n  | same\n  | both\n  | inspect\n\ninductive Tm where\n  | lit : Nat \u2192 Tm\n  | succ : Tm \u2192 Tm\n  | pair : Tm \u2192 Tm \u2192 Tm\n\ninductive Refusal where\n  | depth\n  | noToken : Nat \u2192 Refusal\n  | shape : Nat \u2192 Refusal\n  | differ : Nat \u2192 Refusal\n\ndef Refusal.show : Refusal \u2192 String\n  | .depth => \"depth\"\n  | .noToken p => s!\"no token at {p}\"\n  | .shape p => s!\"step at {p} does not apply\"\n  | .differ p => s!\"terms differ at {p}\"\n\ndef tokAt : List Tok \u2192 Nat \u2192 Option Tok\n  | [], _ => none\n  | t :: _, 0 => some t\n  | _ :: ts, n + 1 => tokAt ts n\n\ndef Tm.beq : Tm \u2192 Tm \u2192 Bool\n  | .lit m, .lit n => m == n\n  | .succ a, .succ b => Tm.beq a b\n  | .pair a b, .pair c d => Tm.beq a c && Tm.beq b d\n  | _, _ => false\n\nmutual\n/-- Head reduction, one token per step: `core` contracts `succ (lit n)`. -/\ndef whnf : Nat \u2192 Tm \u2192 List Tok \u2192 Nat \u2192 Except Refusal (Tm \u00d7 Nat)\n  | 0, _, _, _ => .error .depth\n  | fuel + 1, t, toks, pos =>\n    match tokAt toks pos with\n    | some .inspect =>\n      match infer fuel t toks (pos + 1) with\n      | .ok (_, p) => .ok (t, p)\n      | .error e => .error e\n    | some .stop => .ok (t, pos + 1)\n    | some .core =>\n      match t with\n      | .succ (.lit n) => whnf fuel (.lit (n + 1)) toks (pos + 1)\n      | .succ a =>\n        match whnf fuel a toks (pos + 1) with\n        | .ok (a', p) => whnf fuel (.succ a') toks p\n        | .error e => .error e\n      | _ => .error (.shape pos)\n    | some _ => .error (.shape pos)\n    | none => .error (.noToken pos)\n\n/-- Conversion: `same` compares as they are, `both` reduces both sides. -/\ndef conv : Nat \u2192 Tm \u2192 Tm \u2192 List Tok \u2192 Nat \u2192 Except Refusal Nat\n  | 0, _, _, _, _ => .error .depth\n  | fuel + 1, a, b, toks, pos =>\n    match tokAt toks pos with\n    | some .same => if Tm.beq a b then .ok (pos + 1) else .error (.differ pos)\n    | some .both =>\n      match whnf fuel a toks (pos + 1) with\n      | .error e => .error e\n      | .ok (a', p) =>\n        match whnf fuel b toks p with\n        | .error e => .error e\n        | .ok (b', q) => conv fuel a' b' toks q\n    | some _ => .error (.shape pos)\n    | none => .error (.noToken pos)\n\n/-- Size of a term; reads no token and keeps the cursor. -/\ndef infer : Nat \u2192 Tm \u2192 List Tok \u2192 Nat \u2192 Except Refusal (Nat \u00d7 Nat)\n  | 0, _, _, _ => .error .depth\n  | fuel + 1, t, toks, pos =>\n    match t with\n    | .lit _ => .ok (1, pos)\n    | .succ a =>\n      match conv fuel a a toks pos with\n      | .error e => .error e\n      | .ok _ =>\n        match infer fuel a toks pos with\n        | .ok (n, q) => .ok (n + 1, q)\n        | .error e => .error e\n    | .pair a b =>\n      match infer fuel a toks pos with\n      | .error e => .error e\n      | .ok (m, p) =>\n        match infer fuel b toks p with\n        | .error e => .error e\n        | .ok (n, q) => .ok (m + n + 1, q)\nend\n\ndef verdict (name : String) (r : Except Refusal Nat) : String :=\n  match r with\n  | .ok p => s!\"{name}: ACCEPT cursor={p}\"\n  | .error e => s!\"{name}: REFUSE {e.show}\"\n\ndef main : IO Unit := do\n  let two := Tm.succ (.succ (.lit 0))\n  let adv : List Tok := [.both, .core, .core, .stop, .core, .stop, .stop, .same]\n  IO.println (verdict \"conv-both\" (conv 10 two (.lit 2) adv 0))\n  IO.println (verdict \"conv-same\" (conv 10 (.lit 2) (.lit 2) [.same] 0))\n  IO.println (verdict \"conv-differ\" (conv 10 two (.lit 3) adv 0))\n  IO.println (verdict \"conv-truncated\" (conv 10 two (.lit 2) [.both, .core] 0))\n  IO.println (verdict \"conv-wrong-token\" (conv 10 two (.lit 2) [.core] 0))\n  IO.println (verdict \"conv-depth\" (conv 2 two (.lit 2) adv 0))\n  match infer 10 (.pair two (.lit 5)) [] 7 with\n  | .ok (n, p) => IO.println s!\"infer: size={n} cursor={p}\"\n  | .error e => IO.println s!\"infer: REFUSE {e.show}\"\n\n  match whnf 20 (.succ (.lit 2)) [.inspect, .both, .stop, .stop, .same] 0 with\n  | .ok (_, p) => IO.println s!\"cycle: ACCEPT cursor={p}\"\n  | .error e => IO.println s!\"cycle: REFUSE {e.show}\"\n\n  match whnf 20 (.succ (.lit 2)) [.inspect] 0 with\n  | .ok (_, p) => IO.println s!\"cycle-truncated: ACCEPT cursor={p}\"\n  | .error e => IO.println s!\"cycle-truncated: REFUSE {e.show}\"\n  match whnf 2 (.succ (.lit 2)) [.inspect, .both, .stop, .stop, .same] 0 with\n  | .ok (_, p) => IO.println s!\"cycle-depth: ACCEPT cursor={p}\"\n  | .error e => IO.println s!\"cycle-depth: REFUSE {e.show}\"\n",
+      "members": [
+        "whnf",
+        "conv",
+        "infer"
+      ],
+      "used_constants": {
+        "whnf": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Refusal",
+          "Tm",
+          "Tok",
+          "conv._f",
+          "infer._f",
+          "whnf._f"
+        ],
+        "conv": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Refusal",
+          "Tm",
+          "Tok",
+          "conv._f",
+          "infer._f",
+          "whnf._f"
+        ],
+        "infer": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Refusal",
+          "Tm",
+          "Tok",
+          "conv._f",
+          "infer._f",
+          "whnf._f"
+        ]
+      }
+    },
+    {
+      "program": "c35_r4_ix_walk_call_cycle",
+      "sha256": "d2c9e1a67f1d16f94c4e5ef28f5c62cf8b055f75940389cbd608a80859235fdd",
+      "source": "/-!\nR4 item (ix), from the design's Revision 2: a list-iterating member of the\nblock (the walk of 2.3.1). At `fuel + 1` it handles one `(argument, label)`\npair, calls another member (`conv`) at `fuel`, and calls itself at `fuel` on\nthe rest, so every member recurses on the shared counter, not on the list.\n-/\n\ninductive Tok where\n  | core\n  | stop\n  | same\n  | both\n  | inspect\n\ninductive Tm where\n  | lit : Nat \u2192 Tm\n  | succ : Tm \u2192 Tm\n\ninductive Refusal where\n  | depth\n  | noToken : Nat \u2192 Refusal\n  | shape : Nat \u2192 Refusal\n  | differ : Nat \u2192 Refusal\n\ndef Refusal.show : Refusal \u2192 String\n  | .depth => \"depth\"\n  | .noToken p => s!\"no token at {p}\"\n  | .shape p => s!\"step at {p} does not apply\"\n  | .differ p => s!\"terms differ at {p}\"\n\ndef tokAt : List Tok \u2192 Nat \u2192 Option Tok\n  | [], _ => none\n  | t :: _, 0 => some t\n  | _ :: ts, n + 1 => tokAt ts n\n\ndef Tm.beq : Tm \u2192 Tm \u2192 Bool\n  | .lit m, .lit n => m == n\n  | .succ a, .succ b => Tm.beq a b\n  | _, _ => false\n\nmutual\ndef whnf : Nat \u2192 Tm \u2192 List Tok \u2192 Nat \u2192 Except Refusal (Tm \u00d7 Nat)\n  | 0, _, _, _ => .error .depth\n  | fuel + 1, t, toks, pos =>\n    match tokAt toks pos with\n    | some .inspect =>\n      match walk fuel [(t, t)] toks (pos + 1) with\n      | .ok p => .ok (t, p)\n      | .error e => .error e\n    | some .stop => .ok (t, pos + 1)\n    | some .core =>\n      match t with\n      | .succ (.lit n) => whnf fuel (.lit (n + 1)) toks (pos + 1)\n      | _ => .error (.shape pos)\n    | some _ => .error (.shape pos)\n    | none => .error (.noToken pos)\ndef conv : Nat \u2192 Tm \u2192 Tm \u2192 List Tok \u2192 Nat \u2192 Except Refusal Nat\n  | 0, _, _, _, _ => .error .depth\n  | fuel + 1, a, b, toks, pos =>\n    match tokAt toks pos with\n    | some .same => if Tm.beq a b then .ok (pos + 1) else .error (.differ pos)\n    | some .both =>\n      match whnf fuel a toks (pos + 1) with\n      | .error e => .error e\n      | .ok (a', p) =>\n        match whnf fuel b toks p with\n        | .error e => .error e\n        | .ok (b', q) => conv fuel a' b' toks q\n    | some _ => .error (.shape pos)\n    | none => .error (.noToken pos)\n/-- Check every argument against its label, one pair per call. -/\ndef walk : Nat \u2192 List (Tm \u00d7 Tm) \u2192 List Tok \u2192 Nat \u2192 Except Refusal Nat\n  | 0, _, _, _ => .error .depth\n  | _ + 1, [], _, pos => .ok pos\n  | fuel + 1, (arg, label) :: rest, toks, pos =>\n    match conv fuel arg label toks pos with\n    | .error e => .error e\n    | .ok p => walk fuel rest toks p\nend\n\ndef verdict (name : String) (r : Except Refusal Nat) : String :=\n  match r with\n  | .ok p => s!\"{name}: ACCEPT cursor={p}\"\n  | .error e => s!\"{name}: REFUSE {e.show}\"\n\ndef main : IO Unit := do\n  let pairs : List (Tm \u00d7 Tm) := [(.lit 3, .lit 3), (.succ (.lit 1), .lit 2), (.lit 0, .lit 0)]\n  let adv : List Tok := [.same, .both, .core, .stop, .stop, .same, .same]\n  IO.println (verdict \"walk-three\" (walk 10 pairs adv 0))\n  IO.println (verdict \"walk-empty\" (walk 1 [] [] 4))\n  IO.println (verdict \"walk-bad-label\" (walk 10 [(.lit 3, .lit 3), (.succ (.lit 1), .lit 5)] adv 0))\n  IO.println (verdict \"walk-depth\" (walk 3 pairs adv 0))\n\n  match whnf 20 (.lit 2) [.inspect, .both, .stop, .stop, .same] 0 with\n  | .ok (_, p) => IO.println s!\"cycle: ACCEPT cursor={p}\"\n  | .error e => IO.println s!\"cycle: REFUSE {e.show}\"\n\n  match whnf 20 (.lit 2) [.inspect] 0 with\n  | .ok (_, p) => IO.println s!\"cycle-truncated: ACCEPT cursor={p}\"\n  | .error e => IO.println s!\"cycle-truncated: REFUSE {e.show}\"\n  match whnf 2 (.lit 2) [.inspect, .both, .stop, .stop, .same] 0 with\n  | .ok (_, p) => IO.println s!\"cycle-depth: ACCEPT cursor={p}\"\n  | .error e => IO.println s!\"cycle-depth: REFUSE {e.show}\"\n",
+      "members": [
+        "whnf",
+        "conv",
+        "walk"
+      ],
+      "used_constants": {
+        "whnf": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Refusal",
+          "Tm",
+          "Tok",
+          "conv._f",
+          "walk._f",
+          "whnf._f"
+        ],
+        "conv": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Refusal",
+          "Tm",
+          "Tok",
+          "conv._f",
+          "walk._f",
+          "whnf._f"
+        ],
+        "walk": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Refusal",
+          "Tm",
+          "Tok",
+          "conv._f",
+          "walk._f",
+          "whnf._f"
+        ]
+      }
+    },
+    {
+      "program": "c36_r4_x_report_call_cycle",
+      "sha256": "c45516eb058c0d8fa08d097d1e00d0bf9d816dd5931807c36900281ac56f3195",
+      "source": "/-!\nR4 item (x), from the design's Revision 2: a report accumulator threaded\nthrough every member's `Except` result. Each member takes the report so far\nand returns it extended; the head loop carries it through 10\u2076 self tail\ncalls and must still compile to a loop.\n-/\n\ninductive Tm where\n  | lit : Nat \u2192 Tm\n  | succ : Tm \u2192 Tm\n\n/-- The report: head steps taken and the largest literal reached. -/\nstructure Report where\n  steps : Nat\n  maxLit : Nat\n\ndef Report.note (r : Report) (k : Nat) : Report :=\n  { steps := r.steps + 1, maxLit := if k > r.maxLit then k else r.maxLit }\n\ndef Tm.beq : Tm \u2192 Tm \u2192 Bool\n  | .lit m, .lit n => m == n\n  | .succ a, .succ b => Tm.beq a b\n  | _, _ => false\n\nmutual\n/-- Head loop: the advice is `core` below `n`, then `stop`. -/\ndef whnf : Nat \u2192 Nat \u2192 Tm \u2192 Nat \u2192 Report \u2192 Except String (Tm \u00d7 Nat \u00d7 Report)\n  | 0, _, _, _, _ => .error \"depth\"\n  | fuel + 1, n, t, pos, rep =>\n    if pos < n then\n      match t with\n      | .lit k => whnf fuel n (.lit (k + 1)) (pos + 1) (rep.note (k + 1))\n      | .succ a =>\n        match walk fuel n [(a, a)] (pos + 1) (rep.note 0) with\n        | .error e => .error e\n        | .ok (p, rep') => whnf fuel n a p rep' \n    else .ok (t, pos, rep)\ntermination_by structural fuel _ _ _ _ => fuel\ndef conv : Nat \u2192 Nat \u2192 Tm \u2192 Tm \u2192 Nat \u2192 Report \u2192 Except String (Nat \u00d7 Report)\n  | 0, _, _, _, _, _ => .error \"depth\"\n  | fuel + 1, n, a, b, pos, rep =>\n    match whnf fuel n a pos rep with\n    | .error e => .error e\n    | .ok (a', p, rep') =>\n      if Tm.beq a' b then .ok (p, rep') else .error \"sides differ\"\ntermination_by structural fuel _ _ _ _ _ => fuel\ndef walk : Nat \u2192 Nat \u2192 List (Tm \u00d7 Tm) \u2192 Nat \u2192 Report \u2192 Except String (Nat \u00d7 Report)\n  | 0, _, _, _, _ => .error \"depth\"\n  | _ + 1, _, [], pos, rep => .ok (pos, rep)\n  | fuel + 1, n, (a, b) :: rest, pos, rep =>\n    match conv fuel n a b pos rep with\n    | .error e => .error e\n    | .ok (p, rep') => walk fuel n rest p rep'\ntermination_by structural fuel _ _ _ _ => fuel\nend\n\ndef verdict (name : String) (r : Except String (Nat \u00d7 Report)) : String :=\n  match r with\n  | .ok (p, rep) => s!\"{name}: ACCEPT cursor={p} steps={rep.steps} max={rep.maxLit}\"\n  | .error e => s!\"{name}: REFUSE {e}\"\n\ndef main : IO Unit := do\n  let start : Report := { steps := 0, maxLit := 0 }\n  IO.println (verdict \"million-steps\" (conv 1000002 1000000 (.lit 0) (.lit 1000000) 0 start))\n  IO.println (verdict \"walk\" (walk 10 3 [(.succ (.succ (.lit 7)), .lit 8), (.lit 9, .lit 9)] 0 start))\n  IO.println (verdict \"differ\" (conv 10 2 (.lit 0) (.lit 3) 0 start))\n  IO.println (verdict \"depth\" (conv 1000000 1000000 (.lit 0) (.lit 1000000) 0 start))\n\n  match whnf 20 1 (.succ (.lit 2)) 0 start with\n  | .ok (_, p, rep) => IO.println (verdict \"cycle\" (.ok (p, rep)))\n  | .error e => IO.println (verdict \"cycle\" (.error e))\n  match whnf 2 1 (.succ (.lit 2)) 0 start with\n  | .ok (_, p, rep) => IO.println (verdict \"cycle-depth\" (.ok (p, rep)))\n  | .error e => IO.println (verdict \"cycle-depth\" (.error e))\n",
+      "members": [
+        "whnf",
+        "conv",
+        "walk"
+      ],
+      "used_constants": {
+        "whnf": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Report",
+          "String",
+          "Tm",
+          "conv._f",
+          "walk._f",
+          "whnf._f"
+        ],
+        "conv": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Report",
+          "String",
+          "Tm",
+          "conv._f",
+          "walk._f",
+          "whnf._f"
+        ],
+        "walk": [
+          "Except",
+          "List",
+          "Nat",
+          "Nat.below",
+          "Nat.brecOn",
+          "PProd",
+          "PProd.mk",
+          "Prod",
+          "Report",
+          "String",
+          "Tm",
+          "conv._f",
+          "walk._f",
+          "whnf._f"
+        ]
+      }
+    }
+  ]
+}

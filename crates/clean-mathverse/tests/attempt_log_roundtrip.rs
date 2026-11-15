@@ -634,6 +634,8 @@ fn query_report_filters_and_summarizes_attempt_metadata() {
 
     assert_eq!(limited.total, 4);
     assert_eq!(limited.returned, 2);
+    // A query returns newest first (1c3f1b57e), so a limit keeps the newest rows.
+    assert_eq!(limited.attempts, vec![no_metadata.clone(), timeout.clone()]);
     assert_eq!(limited.summary.by_status["accepted"], 2);
     assert_eq!(
         limited.summary.by_authority_gate["native_authority_gate"],
@@ -674,7 +676,7 @@ fn query_report_filters_and_summarizes_attempt_metadata() {
     .expect("query by authority gate");
     assert_eq!(
         native_gate.attempts,
-        vec![accepted.clone(), rejected.clone()]
+        vec![rejected.clone(), accepted.clone()]
     );
     assert_eq!(
         native_gate.summary.by_authority_gate["native_authority_gate"],

@@ -143,21 +143,21 @@ fn eval_int_binop(
         NativeOp::And => a & b,
         NativeOp::Or => a | b,
         NativeOp::Xor => a ^ b,
+        // Lean 4 machine shifts reduce the AMOUNT modulo the width
+        // (`UInt{N}.shiftLeft a b = ⟨a.toBitVec <<< (UInt{N}.mod b N).toBitVec⟩`,
+        // `src/Init/Data/UInt/Basic.lean`): `(1 : UInt32) <<< 32 = 1`, not `0`.
+        // The evaluator, both constant folders (`const_fold_ext.rs`,
+        // `const_fold_ext2.rs`) and the kernel's reducers must all give that
+        // answer; a saturating guard here made a RUN disagree with a PROOF about
+        // the same term. `b % bits < bits <= 64`, so no shift can overflow; the
+        // left shift's high bits are dropped by the width modulus below.
         NativeOp::ShiftLeft => {
-            let bits = out_ty.bit_width().unwrap_or(64);
-            if b >= u64::from(bits) {
-                0
-            } else {
-                a.wrapping_shl(b as u32)
-            }
+            let bits = u64::from(out_ty.bit_width().unwrap_or(64));
+            a.wrapping_shl((b % bits) as u32)
         }
         NativeOp::ShiftRight => {
-            let bits = out_ty.bit_width().unwrap_or(64);
-            if b >= u64::from(bits) {
-                0
-            } else {
-                a >> b
-            }
+            let bits = u64::from(out_ty.bit_width().unwrap_or(64));
+            a >> (b % bits)
         }
         // Comparisons return a boolean wrapped into out_ty (which is Bool)
         NativeOp::Eq => return Ok(NativeValue::Bool(a == b)),

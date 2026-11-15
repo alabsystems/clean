@@ -1,0 +1,116 @@
+/-! Foundation agreement -- the six declarations the model shares with the ambient environment.
+
+The six declarations the model shares with any ambient Clean environment --
+`Nat`, `Nat.add`, `Nat.pred`, `Nat.sub`, `Eq` and `Empty` -- restated as their own
+DEFINING EQUATIONS, each held by `Eq.refl` so the kernel must decide it by
+computation.
+
+Why this file exists. `crates/clean-verify` builds the model on an EMPTY
+environment and therefore declares its own `Nat`/`Eq`/`Empty`; a `clean { }`
+island registers into the compiler PRELUDE's environment, which already has
+them. In the spec these equations are trivially true -- they restate the model's
+own bodies. In an island they are a real check on the ambient environment, and
+they FAIL unless the prelude's versions compute exactly as the model's do. Same
+text, two environments, two kernels: that is what makes an island green mean
+something about the proved model rather than about whatever the prelude happens
+to hold.
+
+AMBIENT NAMES. Besides the six, the model USES names it never declares -- measured,
+exactly `Bool`, `Bool.true` and `Bool.false`, reached through
+`is_const_app : KExpr -> Bool`. An ambient name is supplied by whichever environment
+the model is elaborated in, so it needs a witness for the same reason a prelude-owned
+declaration does, and it gets one below. A NEW ambient dependency introduced by a
+future unit would not be caught automatically; deriving the ambient set mechanically
+is the next step, and is recorded as such rather than assumed away.
+
+WHY THESE SIX. `scripts/model_islands.py --verify` probes every one of the
+model's 24 declarations against the island environment. Exactly six answer
+"Duplicate declaration", i.e. the prelude already owns them: `Nat`, `Nat.add`,
+`Nat.pred`, `Nat.sub`, `Eq`, `Empty`. The other eighteen are free and are
+registered by the units themselves. The six cannot be re-declared -- an
+`inductive` re-declaration naming a subset of the prelude's constructors is
+SILENTLY accepted and registers nothing, and a `def` re-declaration is refused
+outright -- so agreement is the only honest thing to check about them.
+
+THE TRANSCRIPTION IS CLOSED. These equations were read off the model units by
+hand, so on their own they would prove only that the PRELUDE satisfies whatever
+was written down. The other side is
+`crates/clean-verify/src/spec/model_units/agreement.rs`, which registers THIS
+FILE into the model's own foundation (`CoreSpecBundle::ModelUnits` -- the spec's
+private `Nat`/`Eq`/`Empty` over an EMPTY environment) through the same
+registration path the units use, and requires every equation to elaborate. An
+equation that is not the model's fails there. Both sides also run the same five
+false equations as negative controls and require each to be REFUSED, because
+"every equation elaborates" is satisfiable by an equation that says nothing.
+
+So: one text, two environments, two kernels. Trust's kernel decides it over the
+prelude when the Rust crate is built; Clean's kernel decides it over the model in
+`cargo test -p clean-verify --lib -- spec::model_units::agreement`. -/
+
+/-- Agreement: the ambient Nat has the model's zero constructor. -/
+def fa_nat_zero : Nat := Nat.zero
+
+/-- Agreement: the ambient Nat has the model's succ constructor, at its type. -/
+def fa_nat_succ : Nat -> Nat := Nat.succ
+
+/-- Agreement: Nat.add recurses on its RIGHT argument, base case (model equation 1). -/
+def fa_nat_add_zero (n : Nat) : @Eq Nat (Nat.add n Nat.zero) n := @Eq.refl Nat n
+
+/-- Agreement: Nat.add recurses on its RIGHT argument, step case (model equation 2). -/
+def fa_nat_add_succ (n : Nat) (m : Nat) : @Eq Nat (Nat.add n (Nat.succ m)) (Nat.succ (Nat.add n m)) := @Eq.refl Nat (Nat.succ (Nat.add n m))
+
+/-- Agreement: Nat.pred sends zero to zero (model equation 1). -/
+def fa_nat_pred_zero : @Eq Nat (Nat.pred Nat.zero) Nat.zero := @Eq.refl Nat Nat.zero
+
+/-- Agreement: Nat.pred peels one successor (model equation 2). -/
+def fa_nat_pred_succ (n : Nat) : @Eq Nat (Nat.pred (Nat.succ n)) n := @Eq.refl Nat n
+
+/-- Agreement: Nat.sub recurses on its RIGHT argument, base case (model equation 1). -/
+def fa_nat_sub_zero (a : Nat) : @Eq Nat (Nat.sub a Nat.zero) a := @Eq.refl Nat a
+
+/-- Agreement: Nat.sub peels the right operand through pred (model equation 2). -/
+def fa_nat_sub_succ (a : Nat) (b : Nat) : @Eq Nat (Nat.sub a (Nat.succ b)) (Nat.pred (Nat.sub a b)) := @Eq.refl Nat (Nat.pred (Nat.sub a b))
+
+/-- Agreement: Nat has EXACTLY the model's two constructors. The recursor's minor
+premises are one per constructor, so a Nat carrying a third would not accept this
+eliminator at this arity. Existence of zero and succ is pinned above; this is what
+pins that there are no others. -/
+def fa_nat_rec (C : Nat -> Type) (z : C Nat.zero) (s : (n : Nat) -> C n -> C (Nat.succ n)) (n : Nat) : C n := @Nat.rec C z s n
+
+/-- Agreement: Eq is inhabited at reflexivity, at the model's constructor type. -/
+def fa_eq_refl (T : Type) (a : T) : @Eq T a a := @Eq.refl T a
+
+/-- Agreement: Eq has EXACTLY the model's one constructor, by the same
+minor-premise-arity argument as Nat above. -/
+def fa_eq_rec (T : Type) (a : T) (C : (b : T) -> @Eq T a b -> Prop) (r : C a (@Eq.refl T a)) (b : T) (h : @Eq T a b) : C b h := @Eq.rec T a C r b h
+
+/-- Agreement: the ambient Bool has the model's true constructor. `Bool` is AMBIENT --
+the model USES it (is_const_app returns one) and never declares it, so it is supplied
+by whatever environment the model is elaborated in, and it needs a witness for the same
+reason the prelude-owned declarations do. -/
+def fa_bool_true : Bool := Bool.true
+
+/-- Agreement: the ambient Bool has the model's false constructor. -/
+def fa_bool_false : Bool := Bool.false
+
+/-- Agreement: Bool has EXACTLY those two constructors, in that order, by the
+minor-premise-arity argument used for Nat and Eq above. -/
+def fa_bool_rec (C : Bool -> Type) (f : C Bool.false) (t : C Bool.true) (b : Bool) : C b := @Bool.rec C f t b
+
+/-- Agreement: the shared types live at the model's SORT. The equations above pin
+constructors, eliminator arity and computation, but say nothing about the sort the
+type itself inhabits -- measured, an ambient `Empty : Prop` or `Bool : Type 2`
+satisfies every one of them. These four pin it. -/
+def fa_nat_sort : Type := Nat
+
+/-- Agreement: Bool is at the model's sort. -/
+def fa_bool_sort : Type := Bool
+
+/-- Agreement: Empty is at the model's sort. -/
+def fa_empty_sort : Type := Empty
+
+/-- Agreement: Eq lands in Prop, not in Type. -/
+def fa_eq_is_prop (T : Type) (a : T) (b : T) : Prop := @Eq T a b
+
+/-- Agreement: Empty eliminates into any type, i.e. it has no constructors. -/
+def fa_empty_elim (C : Type) (e : Empty) : C := @Empty.rec (fun (_ : Empty) => C) e

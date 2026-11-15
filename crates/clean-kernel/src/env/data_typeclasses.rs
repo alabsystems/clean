@@ -917,6 +917,20 @@ impl Environment {
             });
         }
 
+        // PARAMETRIC `instDecidableEqList : {α : Type u} → [DecidableEq α] →
+        // DecidableEq (List α)`, backed by the sorry-free, axiom-free
+        // `List.decEq` (`algebra_list_dec_eq_proof.rs`). Before this, the only
+        // list-shaped `DecidableEq` in the prelude was the MONOMORPHIC
+        // `ListChar.decEq` behind `instDecidableEqString`, so
+        // `Decidable ([1] = [1] : List Nat)` had NO candidate and `deriving
+        // DecidableEq` over a `xs : List T` field fail-closed with
+        // `Unsupported`. Registered after the concrete leaves above so the
+        // element instances it composes with (`instDecidableEqNat` and friends)
+        // already exist, and before the `Not`/`And`/`Or` combinators for no
+        // reason beyond reading order. Guarded inside on `List` plus the
+        // `DecidableEq`/`decEq` bridge, and withheld in import mode.
+        self.register_list_dec_eq_proof()?;
+
         // `instDecidableNot : {p} → [Decidable p] → Decidable (Not p)` — so
         // `if (a ≠ b)` / `decide (¬p)` resolve (and reduce soundly: the term
         // reuses the inner decision's real proof, never a sorry).
@@ -1096,7 +1110,7 @@ impl Environment {
     ///     dp
     /// ```
     /// No `sorry`, no axiom — reuses the underlying decisions' witnesses.
-    fn register_decidable_and_instance(&mut self) -> Result<(), EnvError> {
+    pub(crate) fn register_decidable_and_instance(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("instDecidableAnd"))
             .is_some()
@@ -1277,7 +1291,7 @@ impl Environment {
     ///     dp
     /// ```
     /// No `sorry`, no axiom — reuses the underlying decisions' witnesses.
-    fn register_decidable_or_instance(&mut self) -> Result<(), EnvError> {
+    pub(crate) fn register_decidable_or_instance(&mut self) -> Result<(), EnvError> {
         if self
             .get_const(&Name::from_string("instDecidableOr"))
             .is_some()

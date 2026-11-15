@@ -5,10 +5,10 @@
 use ay::{Sort, Term};
 use ay_translate::{TermTranslator, TranslationTermHost};
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprKind, FVarId};
+use clean_kernel::{Expr, ExprKind, FVarId, Literal};
 
 use super::super::concrete_real::{try_extract_concrete_int, try_extract_concrete_nat};
-use super::super::{AyError, AyResult};
+use super::super::{bignat_to_bigint, AyError, AyResult};
 use super::LeanExprTranslator;
 use crate::bridge::expr_classifier::{classify_expr, LogicalForm};
 
@@ -23,10 +23,19 @@ impl LeanExprTranslator {
         let args = expr.get_app_args();
 
         match head.kind() {
-            ExprKind::Const(name, _) => match classify_expr(expr) {
-                LogicalForm::Atom(_) => self.translate_atom_const_app(ctx, name, &args),
-                form => self.translate_classified(ctx, form),
-            },
+            ExprKind::Const(name, _) => {
+                // Int.negSucc n is -(n + 1), so it must not pass through the
+                // generic unary-negation classification. The proof-producing
+                // contract has the same constructor boundary.
+                if matches!(name.to_string().as_str(), "Int.ofNat" | "Int.negSucc") {
+                    self.translate_atom_const_app(ctx, name, &args)
+                } else {
+                    match classify_expr(expr) {
+                        LogicalForm::Atom(_) => self.translate_atom_const_app(ctx, name, &args),
+                        form => self.translate_classified(ctx, form),
+                    }
+                }
+            }
             ExprKind::FVar(fvar_id) => self.translate_fvar_app(ctx, *fvar_id, &args),
             _ => Err(AyError::UnsupportedExpr(
                 "unsupported application head for SMT translation".to_string(),
@@ -121,6 +130,24 @@ impl LeanExprTranslator {
     ) -> AyResult<Term> {
         let name_str = name.to_string();
         let arity = args.len();
+
+        if matches!(name_str.as_str(), "Int.ofNat" | "Int.negSucc") && arity == 1 {
+            if *name != Name::from_string(&name_str) {
+                return Err(AyError::UnsupportedExpr(format!(
+                    "noncanonical integer constructor: {name_str}"
+                )));
+            }
+            let ExprKind::Lit(Literal::Nat(n)) = args[0].strip_mdata().kind() else {
+                return Err(AyError::UnsupportedExpr(format!(
+                    "{name_str} with non-concrete argument"
+                )));
+            };
+            let mut value = bignat_to_bigint(n);
+            if name_str == "Int.negSucc" {
+                value = -value - 1u8;
+            }
+            return Ok(ctx.solver().int_const_bigint(&value));
+        }
 
         if name_str == "Exists" && arity == 2 {
             return self.translate_exists_const_fallback(ctx, args[0], args[1]);

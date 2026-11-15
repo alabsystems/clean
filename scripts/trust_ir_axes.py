@@ -37,8 +37,10 @@ pass. That is the whole point: an unwatched axis is the defect.
 USAGE
 -----
   trust_ir_axes.py measure  --coverage COV.json --log BUILD.log [--out M.json]
-  trust_ir_axes.py check    --measured M.json --baseline B.json [--bodies S.json]
-  trust_ir_axes.py tighten  --measured M.json --baseline B.json [--bodies S.json]
+  trust_ir_axes.py check      --measured M.json --baseline B.json --compiler C.json [--bodies S.json]
+  trust_ir_axes.py tighten    --measured M.json --baseline B.json --compiler C.json [--bodies S.json]
+  trust_ir_axes.py rebaseline --measured M.json --baseline B.json --compiler C.json [--bodies S.json]
+  trust_ir_axes.py compiler-check --baseline B.json --compiler C.json
   trust_ir_axes.py table                     # print the axis inventory
   trust_ir_axes.py selftest                  # comparator unit tests, no build
 
@@ -48,11 +50,29 @@ compared. Run `trust_ir_markers.py ledger --coverage COV.json` for the per-row
 form and `trust_ir_markers.py residual` for what the gate costs in flips.
 
 `check` exits 0 when every gated axis holds, 1 otherwise. It evaluates EVERY
-axis and reports them all before failing, so a standing red on one axis can
-never mask another -- which matters right now, because `lowered`/`spliced` are
-red at HEAD by established COMPILER DRIFT
-(`reports/trust-ir-ratchet-verdict-2026-08-13.md`) and that red is deliberately
-left for the owner to settle.
+axis and reports them all before failing, so a red on one axis can never mask
+another.
+
+THE COMPILER PIN (2026-10-08). Every count here is a property of the compiler
+that measured it as much as of clean-kernel: the baseline recorded `lowered`
+9068 over clean-kernel 71e1ce8be under an August trustc (stamp 94147b34f), and
+the same source measures 7329 under the sealed 321aaeda7. Until this date the baseline mixed the two -- `--tighten`
+raised the axes the newer compiler improved and kept the older compiler's
+values for the ones it lowered -- so the gate was RED on a comparison between
+two compilers, which says nothing about clean (`reports/trust-ir-ratchet-
+verdict-2026-08-13.md` was the same class). The baseline now pins ONE compiler
+(`compiler`: the sha256 of `trustc` and of the `librustc_driver` it loads) and
+every axis is from one run under it:
+
+  * `check` and `tighten` refuse a run under any other compiler (COMPILER
+    MISMATCH), so a count is only ever compared with a count the same compiler
+    produced, and an axis regressing under the pinned compiler stays RED.
+  * `rebaseline` replaces EVERY gated axis from one run, and only under a
+    compiler that is NOT the pinned one. Under the pinned compiler it refuses:
+    there an axis moves only by `tighten`, which never loosens. It also refuses a
+    run with a fatal invariant, a missing gated axis, or a pin axis in
+    `REBASELINE_FIXED` (the subject crate, and no proof authority / native
+    verification request from the producer) at any other value.
 """
 
 from __future__ import annotations
@@ -61,6 +81,7 @@ import argparse
 import collections
 import datetime
 import json
+import math
 import os
 import pathlib
 import re
@@ -75,6 +96,175 @@ import trust_ir_markers  # noqa: E402  (path fixed up immediately above)
 
 SCHEMA_MEASURED = "clean.trust_ir_build.measured.v1"
 SCHEMA_BODIES = "clean.trust_ir_build.agreed_bodies.v1"
+SCHEMA_BASELINE = "clean.trust_ir_build.baseline.v1"
+SCHEMA_COVERAGE = "trust.thir-lower.crate-module.coverage.v2"
+
+
+def _strict_json(path):
+    """Read one unambiguous JSON value, including otherwise-unused metadata."""
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise Refused(f"duplicate JSON key {key!r}")
+            result[key] = value
+        return result
+
+    def constant(value):
+        raise Refused(f"non-finite JSON constant {value}")
+
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise Refused(f"non-finite JSON number {value}")
+        return number
+
+    with open(path, encoding="utf-8") as handle:
+        return json.load(handle, object_pairs_hook=pairs, parse_constant=constant,
+                         parse_float=finite_float)
+
+
+def _counter(value, label):
+    if type(value) is not int or value < 0:
+        raise Refused(f"{label} must be a nonnegative integer, got {value!r}")
+    return value
+
+
+def _validate_axes(values, label, require_gated=False):
+    if not isinstance(values, dict):
+        raise Refused(f"{label} axes must be an object")
+    if require_gated:
+        missing = sorted(GATED - values.keys())
+        if missing:
+            raise Refused(f"{label} lacks gated axes: {', '.join(missing)}")
+    for key, _direction, _source, _why in AXES:
+        if key not in values:
+            continue
+        value = values[key]
+        if key in ("proof_authority", "native_verification_requests"):
+            if type(value) is not bool:
+                raise Refused(f"{label}.{key} must be a boolean")
+        elif key in ("schema", "crate", "direct_obligation_capability"):
+            if not isinstance(value, str) or not value:
+                raise Refused(f"{label}.{key} must be a nonempty string")
+            if key == "schema" and value != SCHEMA_COVERAGE:
+                raise Refused(f"unsupported coverage schema {value!r}")
+        else:
+            _counter(value, f"{label}.{key}")
+
+
+def _validate_invariants(measured, fatal=False):
+    invariants = measured.get("invariants")
+    if not isinstance(invariants, dict):
+        raise Refused("measurement invariants must be an object")
+    for key, _why in FATAL_INVARIANTS:
+        _counter(invariants.get(key), f"invariants.{key}")
+    if fatal and any(invariants[key] for key, _why in FATAL_INVARIANTS):
+        raise Refused("measurement has a nonzero fatal invariant")
+
+
+def _validate_sets(sets, label):
+    if not isinstance(sets, dict):
+        raise Refused(f"{label} must be an object")
+    for channel in ("interpreter_agreed", "seam_agreed", "flip_backed"):
+        names = sets.get(channel)
+        if not isinstance(names, list) or any(
+            not isinstance(name, str) or not name for name in names
+        ):
+            raise Refused(f"{label}.{channel} must be a list of nonempty names")
+
+
+def _validate_measurement(measured, need_sets=False):
+    if not isinstance(measured, dict) or measured.get("schema_self") != SCHEMA_MEASURED:
+        raise Refused("unsupported or missing measurement wrapper schema")
+    _validate_axes(measured.get("measured"), "measurement", require_gated=True)
+    missing = sorted(AXIS_BY_KEY.keys() - measured["measured"].keys())
+    if missing:
+        raise Refused("measurement lacks schema fields: " + ", ".join(missing))
+    _validate_invariants(measured)
+    if need_sets or "sets" in measured:
+        _validate_sets(measured.get("sets"), "measurement sets")
+
+
+def _write_artifacts(artifacts):
+    """Stage every output before replacing any, and roll back a failed install.
+
+    This handles ordinary process errors, not a machine crash between renames.
+    """
+    normalized = {pathlib.Path(path).resolve(): text for path, text in artifacts.items()}
+    if len(normalized) != len(artifacts):
+        raise Refused("output paths refer to the same file")
+    staged, backups, attempted, retained = {}, {}, [], set()
+    committed = False
+
+    def stage(path, content, mode):
+        # Short private names work even when the destination uses NAME_MAX.
+        directory = pathlib.Path(tempfile.mkdtemp(prefix=".trust-ir-stage-", dir=path.parent))
+        temporary = directory / "payload"
+        try:
+            os.chmod(directory, 0o700 | (directory.stat().st_mode & 0o2000))
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+            fd = os.open(temporary, flags, 0o666)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(content)
+                handle.flush()
+                os.fsync(handle.fileno())
+            # Existing modes are preserved. New files retain the mode the OS
+            # selected from 0666 and the process umask, as open(..., "w") did.
+            if mode is not None:
+                os.chmod(temporary, mode)
+            return temporary
+        except BaseException:
+            temporary.unlink(missing_ok=True)
+            directory.rmdir()
+            raise
+
+    try:
+        for path, text in normalized.items():
+            if path.exists():
+                # Rename permission in the parent must not bypass a file's
+                # original write refusal. This probe never truncates it.
+                fd = os.open(path, os.O_WRONLY | getattr(os, "O_BINARY", 0))
+                os.close(fd)
+                previous = path.read_bytes()
+            else:
+                previous = None
+            mode = path.stat().st_mode & 0o777 if previous is not None else None
+            backups[path] = stage(path, previous, mode) if previous is not None else None
+            staged[path] = stage(path, text.encode("utf-8"), mode)
+        retained.update(backup for backup in backups.values() if backup is not None)
+        for path, temporary in staged.items():
+            # A signal can arrive after rename succeeds but before it returns.
+            attempted.append(path)
+            os.replace(temporary, path)
+        committed = True
+    except BaseException as error:
+        if committed:
+            raise
+        rollback_errors = []
+        for path, backup in backups.items():
+            if path not in attempted:
+                retained.discard(backup)
+        for path in reversed(attempted):
+            backup = backups[path]
+            try:
+                if backup is None:
+                    path.unlink(missing_ok=True)
+                else:
+                    os.replace(backup, path)
+                    retained.discard(backup)
+            except OSError as exc:
+                rollback_errors.append(f"{path}: {exc}; preimage {backup}")
+        if rollback_errors:
+            raise Refused("artifact rollback failed: " + "; ".join(rollback_errors)) from error
+        raise
+    finally:
+        if committed:
+            retained.clear()
+        for temporary in [*staged.values(), *backups.values()]:
+            if temporary is not None and temporary not in retained:
+                temporary.unlink(missing_ok=True)
+                temporary.parent.rmdir()
 
 # ---------------------------------------------------------------------------
 # THE AXIS INVENTORY.
@@ -319,18 +509,26 @@ def _samples(body: dict, channel: str) -> int:
     diffs = body["differentials"]
     if channel == "seam":
         seam = diffs.get("seam") or {}
-        return int(seam.get("samples", 0)) if seam.get("state") == "resolved" else 0
-    return int(diffs[channel].get("samples", 0))
+        return _counter(seam.get("samples", 0), "seam samples") if seam.get("state") == "resolved" else 0
+    return _counter(diffs[channel].get("samples", 0), f"{channel} samples")
 
 
 def measure(coverage_path: str, log_path: str) -> dict:
-    with open(coverage_path, encoding="utf-8") as handle:
-        cov = json.load(handle)
+    cov = _strict_json(coverage_path)
+    if not isinstance(cov, dict) or cov.get("schema") != SCHEMA_COVERAGE:
+        raise Refused("unsupported or missing coverage schema")
     rows = cov["bodies"]
+    if not isinstance(rows, list):
+        raise Refused("coverage bodies must be an array")
     totals = cov["totals"]
     by_index: dict[int, dict] = {}
     for row in rows:
-        by_index[int(row["def_index"])] = row
+        if not isinstance(row, dict):
+            raise Refused("coverage body must be an object")
+        index = _counter(row.get("def_index"), "body def_index")
+        if index in by_index:
+            raise Refused(f"duplicate body def_index {index}")
+        by_index[index] = row
 
     def count(channel: str, verdict: str) -> int:
         return sum(1 for r in rows if _verdict(r, channel) == verdict)
@@ -554,7 +752,7 @@ def measure(coverage_path: str, log_path: str) -> dict:
         if _verdict(r, "interpreter") == "not-run"
     )
 
-    return {
+    result = {
         "schema_self": SCHEMA_MEASURED,
         "measured": measured,
         "invariants": invariants,
@@ -566,6 +764,8 @@ def measure(coverage_path: str, log_path: str) -> dict:
         # the gate. `trust_ir_markers.py ledger` prints the per-row form.
         "marker_classes": marker_ledger["classes"],
     }
+    _validate_measurement(result, need_sets=True)
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -586,6 +786,8 @@ def compare(measured: dict, baseline: dict) -> tuple[list[dict], list[str]]:
     rows: list[dict] = []
     failures: list[str] = []
     now_all = measured["measured"]
+    _validate_axes(now_all, "measurement", require_gated=True)
+    _validate_axes(baseline.get("measured", {}), "baseline")
     for key, direction, source, why in AXES:
         now = now_all.get(key)
         was = _baseline_value(baseline, key)
@@ -688,7 +890,7 @@ def render(rows: list[dict], measured: dict, bodies: dict | None,
     if any("interpreter" in f for f in failures):
         print("", file=stream)
         print("  interpreter `not-run` reasons in THIS run (top 6):", file=stream)
-        for reason, n in measured["not_run_reasons"]:
+        for reason, n in measured.get("not_run_reasons", []):
             print(f"    {n:>6}  {reason}", file=stream)
 
 
@@ -702,6 +904,8 @@ def tighten(measured: dict, baseline: dict) -> tuple[dict, list[str], set[str]]:
     incapable of making a failing gate pass.
     """
     now_all = measured["measured"]
+    _validate_axes(now_all, "measurement", require_gated=True)
+    _validate_axes(baseline.get("measured", {}), "baseline")
     changes: list[str] = []
     doc = dict(baseline)
     values = dict(doc.get("measured", {}))
@@ -734,6 +938,116 @@ def tighten(measured: dict, baseline: dict) -> tuple[dict, list[str], set[str]]:
     doc["measured"] = values
     doc["axis_updated"] = stamped
     return doc, changes, moved
+
+
+# ---------------------------------------------------------------------------
+# the compiler pin -- see THE COMPILER PIN in the module docstring
+# ---------------------------------------------------------------------------
+
+# The identity of a compiler, as `trust_ir_build.sh` records it. The version
+# stamp is NOT identity (CFG_VER_HASH is the trust HEAD at build time), so only
+# the two digests are compared; the stamp is carried for the reader.
+COMPILER_KEYS = ("trustc_sha256", "driver_sha256")
+_SHA256_RE = re.compile(r"[0-9a-f]{64}")
+
+# Pin axes a re-baseline may not move, whatever compiler measured them. A
+# compiler under which one of these changes is not "another compiler measuring
+# the same thing": the subject must be clean-kernel, and the producer must grant
+# no proof authority and request no native verification.
+REBASELINE_FIXED: dict[str, object] = {
+    "crate": "clean_kernel",
+    "proof_authority": False,
+    "native_verification_requests": False,
+}
+
+
+class Refused(Exception):
+    """A comparison or re-baseline the comparator will not make, and why."""
+
+
+def _compiler_ok(compiler: object) -> bool:
+    return isinstance(compiler, dict) and all(
+        isinstance(compiler.get(k), str) and _SHA256_RE.fullmatch(compiler[k])
+        for k in COMPILER_KEYS)
+
+
+def compiler_mismatch(pinned: object, current: object) -> str | None:
+    """None when `current` is exactly the compiler the baseline pins; else why not.
+
+    An unpinned or malformed pin is a mismatch too: a count with no compiler
+    cannot be compared with anything (that is the defect the pin closes)."""
+    if not _compiler_ok(current):
+        return ("this run's compiler identity is malformed -- it needs a sha256 for "
+                f"each of {', '.join(COMPILER_KEYS)}")
+    if not _compiler_ok(pinned):
+        return ("the baseline pins no compiler (or a malformed one): a count is a "
+                "property of the compiler that measured it, so this run cannot be "
+                "compared with it")
+    differ = [k for k in COMPILER_KEYS if pinned[k] != current[k]]
+    if not differ:
+        return None
+    return ("COMPILER MISMATCH: the baseline was measured by "
+            f"`{pinned.get('version_stamp', '?')}` ("
+            + ", ".join(f"{k} {pinned[k][:12]}" for k in differ)
+            + f"); this run is `{current.get('version_stamp', '?')}` ("
+            + ", ".join(f"{k} {current[k][:12]}" for k in differ)
+            + "). Counts are compared only under the compiler that produced the "
+              "baseline; re-baseline from ONE run under this compiler with "
+              "`scripts/trust_ir_build.sh --rebaseline`.")
+
+
+def rebaseline(measured: dict, baseline: dict, compiler: dict) -> tuple[dict, list[str]]:
+    """Every gated axis from ONE run, pinned to a compiler OTHER than the baseline's.
+
+    Raises `Refused` under the pinned compiler (there only `tighten` moves an
+    axis, and it never loosens), on a fatal invariant, on a gated axis the
+    measurement lacks, and on a `REBASELINE_FIXED` pin at any other value."""
+    _validate_axes(measured.get("measured"), "measurement", require_gated=True)
+    _validate_axes(baseline.get("measured", {}), "baseline")
+    _validate_invariants(measured, fatal=True)
+    if compiler_mismatch(baseline.get("compiler"), compiler) is None:
+        raise Refused(
+            "this run's compiler IS the one the baseline pins: under one compiler an "
+            "axis moves only by --tighten, which never loosens, so a lower count here "
+            "is a regression, not a re-baseline")
+    if not _compiler_ok(compiler):
+        raise Refused("this run's compiler identity is malformed: "
+                      f"{compiler_mismatch(compiler, compiler)}")
+    inv = measured.get("invariants", {})
+    bad = [f"{k}={inv.get(k)!r}" for k, _why in FATAL_INVARIANTS if inv.get(k) != 0]
+    if bad:
+        raise Refused("a fatal invariant is not 0 in this run: " + ", ".join(bad))
+    now_all = measured["measured"]
+    gated = [key for key, direction, _s, _w in AXES if direction != "record"]
+    missing = [key for key in gated if now_all.get(key) is None]
+    if missing:
+        raise Refused("this run does not measure gated axis/axes: " + ", ".join(missing))
+    moved_fixed = [f"{k} {now_all.get(k)!r} (must be {v!r})"
+                   for k, v in REBASELINE_FIXED.items() if now_all.get(k) != v]
+    if moved_fixed:
+        raise Refused("a pin no compiler may move is off its required value: "
+                      + ", ".join(moved_fixed))
+    today = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    values = {key: now_all[key] for key in gated}
+    changes = [f"rebaseline {key}: {_baseline_value(baseline, key)} -> {values[key]}"
+               for key in gated if _baseline_value(baseline, key) != values[key]]
+    previous = baseline.get("compiler") if _compiler_ok(baseline.get("compiler")) else None
+    doc = {
+        "schema": baseline.get("schema", "clean.trust_ir_build.baseline.v1"),
+        "measured": values,
+        "compiler": {k: compiler[k] for k in ("version_stamp", *COMPILER_KEYS)
+                     if k in compiler},
+        "axis_updated": {key: today for key in gated},
+        "rebaselined": {
+            "date": today,
+            "from_compiler": previous or "unpinned (the baseline mixed compilers)",
+            "from_updated_utc_date": baseline.get("updated_utc_date"),
+        },
+    }
+    for key in ("profile",):
+        if key in baseline:
+            doc[key] = baseline[key]
+    return doc, changes
 
 
 # ---------------------------------------------------------------------------
@@ -986,6 +1300,70 @@ def selftest() -> int:
     doc, _changes, _moved = tighten(improved, holed)
     check("tighten seeds and raises", doc["measured"]["interpreter_agreed"] == 42)
 
+    # THE COMPILER PIN. A count is compared only under the compiler that
+    # produced its baseline; a re-baseline is one run under ANOTHER compiler.
+    old_cc = {"version_stamp": "trustc A", "trustc_sha256": "a" * 64, "driver_sha256": "b" * 64}
+    new_cc = dict(old_cc, version_stamp="trustc B", driver_sha256="c" * 64)
+    pinned = dict(base, compiler=old_cc)
+    check("the pinned compiler is no mismatch", compiler_mismatch(old_cc, dict(old_cc)) is None)
+    check("another driver under the same trustc binary is a mismatch",
+          "COMPILER MISMATCH" in (compiler_mismatch(old_cc, new_cc) or ""))
+    check("an unpinned baseline is a mismatch", compiler_mismatch(None, old_cc) is not None)
+    check("a malformed pin is a mismatch",
+          compiler_mismatch(dict(old_cc, driver_sha256="b" * 12), old_cc) is not None)
+    clean_inv = {k: 0 for k, _w in FATAL_INVARIANTS}
+    lower = {"measured": dict(base["measured"]), "invariants": dict(clean_inv), "sets": {},
+             "not_run_reasons": []}
+    lower["measured"]["lowered"] = 3
+    lower["measured"]["direct_obligation_capability"] = "obligation-bearing-pending-v2"
+    try:
+        rebaseline(lower, pinned, dict(old_cc))
+        check("rebaseline REFUSES the pinned compiler", False)
+    except Refused:
+        pass
+    try:
+        doc, _changes = rebaseline(lower, pinned, new_cc)
+    except Refused as exc:
+        check(f"rebaseline under ANOTHER compiler is admitted ({exc})", False)
+        doc = dict(pinned)
+    check("rebaseline under another compiler takes every axis from the one run",
+          doc["measured"]["lowered"] == 3
+          and doc["measured"]["direct_obligation_capability"] == "obligation-bearing-pending-v2"
+          and doc.get("compiler", {}).get("driver_sha256") == "c" * 64)
+    _rows, failures = compare(lower, doc)
+    check("the re-baselined run is green against its own baseline", failures == [])
+    check("the re-baselined pin refuses the OLD compiler",
+          compiler_mismatch(doc["compiler"], old_cc) is not None)
+    try:
+        rebaseline(lower, doc, dict(new_cc))
+        check("a second rebaseline under the now-pinned compiler is REFUSED", False)
+    except Refused:
+        pass
+    lower_again = {"measured": dict(lower["measured"]), "invariants": dict(clean_inv),
+                   "sets": {}, "not_run_reasons": []}
+    lower_again["measured"]["lowered"] = 2
+    _rows, failures = compare(lower_again, doc)
+    check("under the pinned compiler a lower count is still a regression",
+          any("lowered" in f for f in failures))
+    for label, mutate in (
+        ("rebaseline REFUSES a producer that claims proof authority",
+         lambda m: m["measured"].__setitem__("proof_authority", True)),
+        ("rebaseline REFUSES a different subject crate",
+         lambda m: m["measured"].__setitem__("crate", "clean_elab")),
+        ("rebaseline REFUSES a fatal invariant",
+         lambda m: m["invariants"].__setitem__("flip_lineage_mismatch", 1)),
+        ("rebaseline REFUSES a run missing a gated axis",
+         lambda m: m["measured"].pop("spliced")),
+    ):
+        bad = {"measured": dict(lower["measured"]), "invariants": dict(clean_inv), "sets": {},
+               "not_run_reasons": []}
+        mutate(bad)
+        try:
+            rebaseline(bad, pinned, new_cc)
+            check(label, False)
+        except Refused:
+            pass
+
     # the body-set differ names what was lost, with multiplicity
     lost = _lost(["a", "b", "b", "c"], ["b", "c"])
     check("lost set is a multiset difference", lost == ["a", "b"])
@@ -1021,6 +1399,41 @@ def selftest() -> int:
                                             for _k, d, _s, _w in AXES))
     check("axis keys are unique", len(AXIS_BY_KEY) == len(AXES))
 
+    # Domain checks precede comparisons: Python's bool/int equality and IEEE
+    # infinities must never turn malformed producer data into passing counts.
+    def refuses(label, action):
+        try:
+            action()
+        except Refused:
+            return
+        check(label, False)
+
+    for key, _direction, _source, _why in AXES:
+        if key in ("schema", "crate", "direct_obligation_capability"):
+            continue
+        bad_values = (0, 1, "false") if key in (
+            "proof_authority", "native_verification_requests"
+        ) else (-1, 0.5, False, float("inf"), float("nan"), "1")
+        for value in bad_values:
+            bad = {"measured": dict(base["measured"], **{key: value})}
+            refuses(f"invalid measurement {key}={value!r}", lambda: compare(bad, base))
+            refuses(f"invalid baseline {key}={value!r}", lambda: compare(now, bad))
+    for key, _why in FATAL_INVARIANTS:
+        for value in (False, -1, 0.5, float("inf")):
+            bad = {"invariants": dict(clean_inv, **{key: value})}
+            refuses(f"invalid invariant {key}={value!r}", lambda: _validate_invariants(bad))
+    with tempfile.TemporaryDirectory() as directory:
+        tmp = pathlib.Path(directory)
+        invalid = tmp / "invalid.json"
+        for text in ('{"x": 1, "x": 2}', '{"x": NaN}', '{"x": 1e309}'):
+            invalid.write_text(text, encoding="utf-8")
+            refuses(f"strict JSON refuses {text}", lambda: _strict_json(invalid))
+        invalid.write_text('{"metadata": 1.25}', encoding="utf-8")
+        check("finite additive metadata stays valid", _strict_json(invalid) == {"metadata": 1.25})
+        duplicate = [_row(1, "one", _D1, 1), _row(1, "two", _D2, 2)]
+        refuses("duplicate body indexes are refused",
+                lambda: _measure_synthetic(duplicate, [], tmp))
+
     # The marker ledger is a gated INPUT to this file's axes, so its own
     # comparator must be proved here too -- a marker axis computed by a broken
     # parser is exactly the silent-green shape this file exists to prevent.
@@ -1042,7 +1455,7 @@ def selftest() -> int:
 
 
 # ---------------------------------------------------------------------------
-def main() -> int:
+def _main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -1051,13 +1464,19 @@ def main() -> int:
     p_measure.add_argument("--log", required=True)
     p_measure.add_argument("--out")
 
-    for name in ("check", "tighten"):
+    for name in ("check", "tighten", "rebaseline"):
         p = sub.add_parser(name)
         p.add_argument("--measured", required=True)
         p.add_argument("--baseline", required=True)
+        p.add_argument("--compiler", required=True,
+                       help="the measuring compiler's identity JSON (trust_ir_build.sh writes it)")
         p.add_argument("--bodies")
-        if name == "tighten":
+        if name != "check":
             p.add_argument("--write", action="store_true")
+
+    p_cc = sub.add_parser("compiler-check")
+    p_cc.add_argument("--baseline", required=True)
+    p_cc.add_argument("--compiler", required=True)
 
     sub.add_parser("table")
     sub.add_parser("selftest")
@@ -1077,28 +1496,49 @@ def main() -> int:
 
     if args.cmd == "measure":
         doc = measure(args.coverage, args.log)
-        text = json.dumps(doc, indent=1, sort_keys=False) + "\n"
+        text = json.dumps(doc, indent=1, sort_keys=False, allow_nan=False) + "\n"
         if args.out:
-            with open(args.out, "w", encoding="utf-8") as handle:
-                handle.write(text)
+            _write_artifacts({pathlib.Path(args.out): text})
         else:
             sys.stdout.write(text)
         return 0
 
-    with open(args.measured, encoding="utf-8") as handle:
-        measured = json.load(handle)
-    with open(args.baseline, encoding="utf-8") as handle:
-        baseline = json.load(handle)
+    baseline = _strict_json(args.baseline)
+    if not isinstance(baseline, dict) or baseline.get("schema") != SCHEMA_BASELINE:
+        raise Refused("unsupported or missing baseline schema")
+    _validate_axes(baseline.get("measured"), "baseline")
+    compiler = _strict_json(args.compiler)
+    mismatch = compiler_mismatch(baseline.get("compiler"), compiler)
+
+    if args.cmd == "compiler-check":
+        # Exit 0: this is the pinned compiler. Exit 1: it is not, and why.
+        print(mismatch or "compiler: the baseline's pinned compiler "
+              f"(`{compiler.get('version_stamp', '?')}`)")
+        return 1 if mismatch else 0
+
+    measured = _strict_json(args.measured)
+    _validate_measurement(measured, need_sets=bool(args.bodies))
     bodies = None
     if args.bodies:
+        if pathlib.Path(args.bodies).resolve() == pathlib.Path(args.baseline).resolve():
+            raise Refused("baseline and body sidecar must be different files")
         try:
-            with open(args.bodies, encoding="utf-8") as handle:
-                bodies = json.load(handle)
+            bodies = _strict_json(args.bodies)
         except FileNotFoundError:
             bodies = None
+        if bodies is not None:
+            if not isinstance(bodies, dict) or bodies.get("schema") != SCHEMA_BODIES:
+                raise Refused("unsupported or missing body sidecar schema")
+            _validate_sets(bodies, "body sidecar")
 
     if args.cmd == "check":
         rows, failures = compare(measured, baseline)
+        if mismatch:
+            # Printed FIRST and fatal: every axis row below compares this
+            # compiler's count with another compiler's, so none of them is a
+            # verdict about clean -- the table is shown for the reader only.
+            print(f"RED: {mismatch}", file=sys.stdout)
+            failures = [mismatch] + failures
         render(rows, measured, bodies, failures, sys.stdout)
         inv = measured["invariants"]
         # EVERY invariant is fatal, and an invariant this measurement does not
@@ -1116,18 +1556,36 @@ def main() -> int:
                 failures = failures + [key]
         return 1 if failures else 0
 
-    doc, changes, moved = tighten(measured, baseline)
+    if args.cmd == "rebaseline":
+        try:
+            doc, changes = rebaseline(measured, baseline, compiler)
+        except Refused as exc:
+            print(f"rebaseline REFUSED: {exc}", file=sys.stderr)
+            return 1
+        moved = {key for key, direction, _s, _w in AXES if direction != "record"}
+    else:
+        _validate_invariants(measured, fatal=True)
+        if mismatch:
+            print(f"tighten REFUSED: {mismatch}", file=sys.stderr)
+            return 1
+        doc, changes, moved = tighten(measured, baseline)
+        doc["compiler"] = baseline["compiler"]
+        # Retired with the compiler pin: per-run provenance from before it.
+        for legacy in ("trustc", "trustc_last_tighten", "driver_last_tighten", "standing_red"):
+            doc.pop(legacy, None)
     doc["note"] = (
         "Monotonic baseline for scripts/trust_ir_build.sh. The direction of every axis is "
         "declared in scripts/trust_ir_axes.py::AXES (run `trust_ir_axes.py table`); a gated "
         "axis absent from this file is RED, not a silent pass. Counts are clean-kernel only: "
         "the wrapper attaches -Ztrust-ir-flip to the subject unit alone, and the script "
-        "refuses any event that does not name clean_kernel."
+        "refuses any event that does not name clean_kernel. Every value is from runs under "
+        "the ONE compiler in `compiler` (trustc + librustc_driver sha256): check and "
+        "tighten refuse any other, and only --rebaseline, under a different compiler, "
+        "replaces every axis from one run."
     )
     doc["updated_utc_date"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
     if args.write:
-        with open(args.baseline, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(doc, indent=1) + "\n")
+        outputs = {pathlib.Path(args.baseline): json.dumps(doc, indent=1, allow_nan=False) + "\n"}
         if args.bodies:
             # The sidecar follows the SAME one-directional rule as the scalars it
             # explains. A channel whose scalar axis did not move (or moved the
@@ -1154,13 +1612,21 @@ def main() -> int:
                     out[channel] = measured["sets"][channel]
                 else:
                     out[channel] = merged[channel]
-            with open(args.bodies, "w", encoding="utf-8") as handle:
-                handle.write(json.dumps(out, indent=1) + "\n")
+            outputs[pathlib.Path(args.bodies)] = json.dumps(out, indent=1, allow_nan=False) + "\n"
+        _write_artifacts(outputs)
     for line in changes:
         print(line)
-    print(f"tighten: {len(changes)} axis change(s)"
+    print(f"{args.cmd}: {len(changes)} axis change(s)"
           + ("" if args.write else "  (dry run — pass --write)"))
     return 0
+
+
+def main() -> int:
+    try:
+        return _main()
+    except (Refused, OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"trust_ir_axes REFUSED: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":

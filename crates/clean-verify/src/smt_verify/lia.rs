@@ -517,7 +517,7 @@ fn verify_lia_farkas_inner(inequalities: &[LiaInequality], coefficients: &[i64])
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -889,7 +889,7 @@ mod tests {
         let verdict = check_lia_generic(&dag, SmtStepId(0), &clause, &coefficients);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "verdict detail: {:?}",
             verdict.detail
         );
@@ -928,7 +928,7 @@ mod tests {
         let verdict = check_lia_generic(&dag, SmtStepId(0), &clause, &coefficients);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "verdict detail: {:?}",
             verdict.detail
         );
@@ -1002,7 +1002,7 @@ mod tests {
         let verdict = check_lia_generic(&dag, SmtStepId(0), &clause, &coefficients);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "verdict detail: {:?}",
             verdict.detail
         );
@@ -1036,7 +1036,7 @@ mod tests {
         let verdict = check_lia_generic(&dag, SmtStepId(0), &clause, &coefficients);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "x >= 0 AND x < 0 must be contradictory in integers: {:?}",
             verdict.detail
         );
@@ -1080,7 +1080,7 @@ mod tests {
         let verdict = check_lia_generic(&dag, SmtStepId(0), &clause, &coefficients);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "x > 0 AND x < 0 (integer) must be contradictory: {:?}",
             verdict.detail
         );
@@ -1114,7 +1114,7 @@ mod tests {
         let verdict = check_lia_generic(&dag, SmtStepId(0), &clause, &coefficients);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "x <= 5 AND x > 5 (integer) must be contradictory: {:?}",
             verdict.detail
         );

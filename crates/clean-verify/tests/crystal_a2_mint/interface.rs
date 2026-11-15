@@ -123,7 +123,7 @@ const ROWS: &[Row] = &[
     Row {
         slot: "param-type: &CleanMode becomes Rc<CleanMode>",
         from: "bb0(%0: ptr):",
-        to: "bb0(%0: Rc<enum.13>):",
+        to: "bb0(%0: Rc<enum.17>):",
         expect: "Rc<enum#0>",
     },
     Row {
@@ -152,13 +152,13 @@ const ROWS: &[Row] = &[
     },
     Row {
         slot: "align: the load starts specifying one",
-        from: "load enum.13, ptr %0  ; #loc",
-        to: "load enum.13, ptr %0, align 8  ; #loc",
+        from: "load enum.17, ptr %0  ; #loc",
+        to: "load enum.17, ptr %0, align 8  ; #loc",
         expect: "load:Some(8)",
     },
     Row {
         slot: "annotation kind: an undeclared trailing clause",
-        from: "  ; #loc: 401 338 5",
+        from: "  ; #loc: 214 338 5",
         to: "  ; #trustme: 1",
         expect: "trustme",
     },
@@ -299,7 +299,7 @@ fn the_core_module_alone_still_cannot_separate_the_type_rows() {
 #[test]
 fn renumbering_does_not_fire_the_interface_lane() {
     let t = tags();
-    let renumbered = FIXTURE.replace("#loc: 401", "#loc: 12");
+    let renumbered = FIXTURE.replace("#loc: 214", "#loc: 12");
     assert_ne!(renumbered, FIXTURE, "the substitution must bite");
     let p = ir_mint::project(&renumbered, &t)
         .expect("pure debug-info renumbering must NOT be refused by the interface lane");
@@ -324,16 +324,52 @@ fn renumbering_does_not_fire_the_interface_lane() {
     );
 }
 
-/// A re-interning of the enum the body LOADS also leaves the interface alone
-/// here — the receiver is a `ptr`, so no canonicalization is even reached —
-/// and M7 remains the lane that attributes it.
+/// A re-interning of the enum the body LOADS leaves the INTERFACE lane alone —
+/// the receiver is a `ptr`, so no canonicalization is even reached — and it is
+/// now the AGGREGATE lane that fires, not this one and not only M7.
+///
+/// **This test asserted the opposite until 2026-09-10, and the change is a fix
+/// rather than a loosening.** It used to `.expect(...)` the projection to
+/// SUCCEED, on the stated ground that "M7 is the lane that fires". M7 is a
+/// different test comparing the committed tag artifact against reader A's
+/// provenance; it says nothing about a projection at run time. So what this
+/// test actually pinned was the `aggregate-id` blind slot: a body naming an
+/// `enum.N` the lane does not pin projected cleanly, and
+/// `Tags::alias_defs` would then mint `IRTy.enum_ ir_d13` — the type the LANE
+/// names, not the one the body named. `interface_aggregates::check_aggregates`
+/// refuses it now.
+///
+/// The ATTRIBUTION this test is named for is unchanged and is what it still
+/// checks: the refusal must come from the aggregate lane, naming the ids, and
+/// NOT from the interface lane's `params` / `functy` / `producer` slots.
 #[test]
-fn an_enum_reinterning_is_attributed_to_the_tag_lane_not_to_this_one() {
+fn an_enum_reinterning_is_attributed_to_the_aggregate_lane_not_to_this_one() {
     let t = tags();
-    let reinterned = FIXTURE.replace("enum.13", "enum.176");
+    let reinterned = FIXTURE.replace("enum.17", "enum.199");
     assert_ne!(reinterned, FIXTURE, "the substitution must bite");
-    ir_mint::project(&reinterned, &t)
-        .expect("the interface lane must stay silent on a re-interning; M7 is the lane that fires");
+    let e = ir_mint::project(&reinterned, &t)
+        .map(|_| ())
+        .expect_err("a body naming an enum the lane does not pin must be refused");
+    let msg = format!("{e}");
+    assert!(
+        msg.contains("enum.199") && msg.contains("enum.17"),
+        "the refusal must PRINT both the id the artifact carries and the id the lane pins, so \
+         the re-pin is a one-line edit rather than an investigation: {msg}"
+    );
+    assert!(
+        msg.contains("move the pinned id"),
+        "…and it must say what the one-line edit IS, because a re-interning is the common case \
+         and an investigation is not: {msg}"
+    );
+    // Attribution, stated POSITIVELY. An exclusion list is the wrong shape for
+    // this and was measured wrong: the refusal's own remedy sentence says "if
+    // this is a producer re-interning", so a `!msg.contains("producer")` check
+    // failed on the word rather than on the lane.
+    assert!(
+        msg.contains("`enums` lane") && msg.contains("alias_defs"),
+        "…and it must be attributed to the AGGREGATE lane — naming that lane and the reason an \
+         unpinned index matters — rather than to the interface lane: {msg}"
+    );
 }
 
 // ────────────────────────────────────────────────────────────────────────────

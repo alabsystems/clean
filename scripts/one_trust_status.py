@@ -10,8 +10,8 @@ CHANGE ledger), and pointers to the governing docs — never a number of its own
 Program doc: designs/2026-08-22-one-trust-backward-design.md §1 Layer O (O1)
 and §2 ledger ("the fused status page (O1)"). Status authority, stated once:
 G-SCORE's scoreboard and the committed probes are the number sources;
-docs/CRYSTAL_STATUS.md remains the kernel-workstream page feeding them; this
-fused page AGGREGATES — it never hand-carries a number.
+docs/CRYSTAL_STATUS.md is the frozen, gate-governed Crystal record; the kernel self-proof route is
+docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md. This fused page AGGREGATES — it never hand-carries a number.
 
 A missing source is never silence: the section renders as UNKNOWN with a
 reason and the generator still succeeds (R10 — a coverage number is only as
@@ -444,7 +444,7 @@ def render(repo_root: Path) -> str:
         "Status authority, stated once (One Trust §1 Layer O, O1): "
         "**G-SCORE's scoreboard (`data/spine_scoreboard.json`) and the "
         "committed probes are the number sources; `docs/CRYSTAL_STATUS.md` "
-        "remains the kernel-workstream page feeding them; this fused page "
+        "is the frozen, gate-governed Crystal record; the kernel self-proof route is `docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md`. This fused page "
         "AGGREGATES — it never hand-carries a number.** A value this page "
         "cannot read from a source renders as UNKNOWN with its reason, "
         "never as a guess; UNKNOWN is first-class and is never rounded up.",
@@ -471,10 +471,19 @@ def render(repo_root: Path) -> str:
 
 
 def _mask_generated_line(text: str) -> str:
-    """Mask the volatile generated-at line so --check compares content."""
-    return re.sub(
+    """Mask the volatile TIMESTAMPS so --check compares content, not clocks.
+
+    Two are masked, and the second matters as much as the first. The page quotes
+    the producer artifacts' own `generated_at_utc`, so an unmasked comparison went
+    stale every time any producer was merely REGENERATED -- even with every number
+    on the page unchanged. A check that reddens on a clock tick is a check people
+    learn to skip, and this page's whole job is to be regenerated often. It now
+    goes stale when a NUMBER moves, which is exactly when it should.
+    """
+    text = re.sub(
         rf"^{re.escape(GENERATED_PREFIX)}.*$", f"{GENERATED_PREFIX} <masked>",
         text, count=1, flags=re.MULTILINE)
+    return re.sub(r"generated_at_utc `[^`]*`", "generated_at_utc `<masked>`", text)
 
 
 def check_stale(repo_root: Path) -> int:

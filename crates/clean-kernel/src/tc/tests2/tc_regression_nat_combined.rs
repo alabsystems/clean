@@ -43,7 +43,7 @@ fn binop(op_name: &str, a: Expr, b: Expr) -> Expr {
 
 #[test]
 fn test_regression_nat_add_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     assert_eq!(
         tc.whnf(&binop("Nat.add", Expr::nat_lit(100), Expr::nat_lit(200))),
@@ -54,7 +54,7 @@ fn test_regression_nat_add_reduces() {
 
 #[test]
 fn test_regression_nat_mul_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     assert_eq!(
         tc.whnf(&binop("Nat.mul", Expr::nat_lit(7), Expr::nat_lit(6))),
@@ -66,7 +66,7 @@ fn test_regression_nat_mul_reduces() {
 /// Regression: Nat.pow 2 32 = 4294967296 (UInt32.size). Critical for .olean loading.
 #[test]
 fn test_regression_nat_pow_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     assert_eq!(
         tc.whnf(&binop("Nat.pow", Expr::nat_lit(2), Expr::nat_lit(32))),
@@ -78,7 +78,7 @@ fn test_regression_nat_pow_reduces() {
 /// Regression: Nat.pow 2 64 must reduce for UInt64.size.
 #[test]
 fn test_regression_nat_pow_2_64_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let result = tc.whnf(&binop("Nat.pow", Expr::nat_lit(2), Expr::nat_lit(64)));
@@ -92,7 +92,7 @@ fn test_regression_nat_pow_2_64_reduces() {
 
 #[test]
 fn test_regression_nat_beq_equal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let result = tc.whnf(&binop("Nat.beq", Expr::nat_lit(42), Expr::nat_lit(42)));
     assert!(
@@ -104,7 +104,7 @@ fn test_regression_nat_beq_equal() {
 
 #[test]
 fn test_regression_nat_beq_not_equal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let result = tc.whnf(&binop("Nat.beq", Expr::nat_lit(1), Expr::nat_lit(2)));
     assert!(
@@ -116,7 +116,7 @@ fn test_regression_nat_beq_not_equal() {
 
 #[test]
 fn test_regression_nat_ble_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let r1 = tc.whnf(&binop("Nat.ble", Expr::nat_lit(3), Expr::nat_lit(5)));
@@ -141,8 +141,13 @@ fn test_regression_nat_ble_reduces() {
 /// Regression: Lean.reduceBool native reducer (#3134).
 #[test]
 fn test_regression_reduce_bool_chain() {
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     env.init_native_reducers();
+    // The rule is justified only by Lean's identity opaque (see
+    // `tests_reduce_bool_nat::install_reduce_identities`); declare it.
+    let reduce_ty = Expr::pi(BinderInfo::Default, cst("Bool"), cst("Bool"));
+    let reduce_id = Expr::lam(BinderInfo::Default, cst("Bool"), Expr::bvar(0));
+    add_reducible(&mut env, "Lean.reduceBool", reduce_ty, reduce_id);
     add_reducible(&mut env, "myBool", cst("Bool"), cst("Bool.true"));
 
     let tc = TypeChecker::new(&env);
@@ -160,8 +165,13 @@ fn test_regression_reduce_bool_chain() {
 /// Regression: Lean.reduceNat native reducer.
 #[test]
 fn test_regression_reduce_nat_chain() {
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     env.init_native_reducers();
+    // The rule is justified only by Lean's identity opaque (see
+    // `tests_reduce_bool_nat::install_reduce_identities`); declare it.
+    let reduce_ty = Expr::pi(BinderInfo::Default, cst("Nat"), cst("Nat"));
+    let reduce_id = Expr::lam(BinderInfo::Default, cst("Nat"), Expr::bvar(0));
+    add_reducible(&mut env, "Lean.reduceNat", reduce_ty, reduce_id);
     add_reducible(&mut env, "myNat", cst("Nat"), Expr::nat_lit(30));
 
     let tc = TypeChecker::new(&env);
@@ -327,7 +337,7 @@ fn test_regression_typeclass_projection_chain() {
 
 #[test]
 fn test_regression_nat_succ_literal_normalization() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     assert!(tc.is_def_eq(&nat_succ(Expr::nat_lit(0)), &Expr::nat_lit(1)));
     assert!(tc.is_def_eq(&nat_succ(nat_succ(Expr::nat_lit(0))), &Expr::nat_lit(2)));
@@ -339,7 +349,7 @@ fn test_regression_nat_succ_literal_normalization() {
 
 #[test]
 fn test_regression_nat_zero_edge_cases() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     assert!(tc.is_def_eq(
         &binop("Nat.add", Expr::nat_lit(0), Expr::nat_lit(0)),
@@ -370,7 +380,7 @@ fn test_regression_nat_zero_edge_cases() {
 /// Regression: UInt32.size == Nat.pow(2,32). The key #3134 failure.
 #[test]
 fn test_regression_uint32_size_defeq_pow() {
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     add_reducible(
         &mut env,
         "UInt32_size",
@@ -390,7 +400,7 @@ fn test_regression_uint32_size_defeq_pow() {
 
 #[test]
 fn test_regression_nat_add_through_delta() {
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     add_reducible(&mut env, "x_nat", cst("Nat"), Expr::nat_lit(10));
     add_reducible(&mut env, "y_nat", cst("Nat"), Expr::nat_lit(20));
 
@@ -406,7 +416,7 @@ fn test_regression_nat_add_through_delta() {
 
 #[test]
 fn test_regression_nested_nat_ops_defeq() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     // (3 + 4) * (10 - 3) = 7 * 7 = 49
     let product = binop(

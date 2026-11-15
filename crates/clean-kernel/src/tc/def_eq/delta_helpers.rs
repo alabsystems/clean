@@ -6,7 +6,6 @@ use crate::env::native_reducers_bitvec::names as names_bitvec;
 use crate::env::TransparencyMode;
 use crate::expr::{Expr, ExprKind, LevelVec};
 use crate::name::Name;
-use crate::tc::reduction::string_lit_to_constructor;
 use crate::tc::TypeChecker;
 use std::sync::LazyLock;
 
@@ -206,10 +205,20 @@ impl<'env> TypeChecker<'env> {
         result
     }
 
-    pub(in crate::tc::def_eq) fn reduce_proj_core(&self, c: &Expr, idx: u32) -> Option<Expr> {
+    /// Field `idx` of `c` when `c` (a string literal expanded first) is an
+    /// application of a constructor of `struct_name`, else `None`.
+    ///
+    /// Lean v4.33.1 `reduce_proj_core` (leanprover/lean4#14632) declines a
+    /// constructor of any other inductive; decision R147.
+    pub(in crate::tc::def_eq) fn reduce_proj_core(
+        &self,
+        c: &Expr,
+        struct_name: &Name,
+        idx: u32,
+    ) -> Option<Expr> {
         let c = match c.kind() {
-            ExprKind::Lit(crate::expr::Literal::String(s)) => {
-                let expanded = string_lit_to_constructor(s);
+            ExprKind::Lit(crate::expr::Literal::String(s)) if self.string_literal_admitted() => {
+                let expanded = self.expand_admitted_string_literal(s);
                 self.whnf_impl(&expanded)
             }
             _ => c.clone(),
@@ -219,6 +228,9 @@ impl<'env> TypeChecker<'env> {
             return None;
         };
         let ctor_val = self.env.get_constructor(ctor_name)?;
+        if ctor_val.inductive_name != *struct_name {
+            return None;
+        }
         let args = c.get_app_args();
         let field_idx = (ctor_val.num_params as usize).saturating_add(idx as usize);
         (field_idx < args.len()).then(|| args[field_idx].clone())
@@ -292,11 +304,27 @@ impl<'env> TypeChecker<'env> {
         // Reference: Lean 4 type_checker.cpp:546-567
         if let ExprKind::App(f, arg) = e.kind() {
             if let ExprKind::Const(f_name, _) = f.kind() {
+                // AUTHORITY: `Lean.reduceBool c ≡ c` is the rule the canonical
+                // `opaque Lean.reduceBool (b : Bool) : Bool := b` states; for a
+                // user's `Lean.reduceBool := fun _ => true` it would equate
+                // `false` with `true` (`env/native_fold_authority.rs`).
+                // THEORY (`tc/fold_admission.rs`): Lean's kernel evaluates
+                // these by running compiled code under `Lean.trustCompiler`;
+                // evaluating by whnf is Clean's rule, so the reference theory
+                // declines and the opaque stays stuck.
                 if *f_name == *LEAN_REDUCE_BOOL {
-                    return self.try_reduce_bool(arg);
+                    return if self.hardwired_fold_admitted(f_name) {
+                        self.try_reduce_bool(arg)
+                    } else {
+                        None
+                    };
                 }
                 if *f_name == *LEAN_REDUCE_NAT {
-                    return self.try_reduce_nat_ext(arg);
+                    return if self.hardwired_fold_admitted(f_name) {
+                        self.try_reduce_nat_ext(arg)
+                    } else {
+                        None
+                    };
                 }
             }
         }
@@ -306,11 +334,80 @@ impl<'env> TypeChecker<'env> {
             return None;
         };
 
-        // Look up a native reducer for this constant
-        let reducer = self.env.get_native_reducer(name)?;
+        // `<T>.ofNat <nat-expr>` — NORMALISE THE ARGUMENT, do not unfold the head.
+        //
+        // `UInt32.ofNat` is a definition, so whnf δ-unfolds it and descends into
+        // the `ofBitVec (BitVec.ofFin 32 (Fin.ofNat …))` carrier tower carrying
+        // an UNREDUCED `Nat` argument along. Both sides of a `rfl` then grind
+        // that tower structurally, and `try_iota_reduction` dominates the
+        // profile — Θ(VALUE) memory, measured at ~50 KB of RSS per unit.
+        // `def u : UInt32 := 1000 * 1000` with `theorem : u = 1000000 := rfl`
+        // cost ~15 GB, which is one line of one corpus test holding a whole
+        // suite shard at a 23 GB reservation.
+        //
+        // The two sides are `<T>.ofNat X` and `<T>.ofNat Y`. Reducing X and Y
+        // to literals makes them SYNTACTICALLY equal and the comparison closes
+        // at once (measured: identical `<T>.ofNat 10000` operands are instant,
+        // the same pair with one side `Nat.mul 100 100` is not). The same-head
+        // args-first path in `lazy_delta_step_equal` would also close it, but
+        // it never sees these terms: whnf unfolds `<T>.ofNat` first, so the
+        // heads are gone before lazy delta runs (measured with a gate trace —
+        // `<T>.ofNat` appears in no same-head pair).
+        //
+        // SAFETY. This is the `BitVec.ofNat` pass below, one type up, and it
+        // rests on the same two facts that one states. (1) The argument is
+        // `Nat`-TYPED, so this is not the BitVec-typed-operand hazard the NOTE
+        // at the end of this function refuses: no `UInt*.toBitVec` projection
+        // can appear in a `Nat` position, and no payload is injected into a
+        // carrier position — that is what made `e9a172f67` wedge `Fin.rec` and
+        // get reverted. (2) WHNF is the kernel's own sound reduction, so the
+        // rebuilt argument is def-eq to the original; the term keeps the SAME
+        // head and gains no new normal form, unlike a reducer that returns a
+        // raw payload. If the argument does not reach a literal we return None
+        // and δι proceeds exactly as before.
+        //
+        // TERMINATION: progress is required. We rebuild only when the argument
+        // actually changed, so the re-entered term has a literal argument and
+        // this pass declines on it.
+        if UINT_OF_NAT_NAMES.contains(name) {
+            let args = e.get_app_args();
+            if let [arg] = args.as_slice() {
+                if !matches!(arg.kind(), ExprKind::Lit(crate::expr::Literal::Nat(_))) {
+                    let reduced = self.whnf_impl(arg);
+                    if matches!(reduced.kind(), ExprKind::Lit(crate::expr::Literal::Nat(_))) {
+                        return Some(Expr::app(head.clone(), reduced));
+                    }
+                }
+            }
+        }
+
+        // Look up a native reducer for this constant, gated by the kernel
+        // theory: under `KernelTheory::Lean` a reducer may only accelerate a
+        // δ-unfolding Lean's kernel performs itself (`env/kernel_theory.rs`).
+        let reducer = self.native_reducer_for(name)?;
 
         // Collect arguments (these are not WHNF'd — the reducer handles that if needed)
-        let args = e.get_app_args();
+        let all_args = e.get_app_args();
+
+        // ROOT ARITY GUARD — soundness, for the WHOLE reducer class.
+        //
+        // A native reducer computes the value of its constant applied to
+        // exactly the constant's SYNTACTIC arity (its declared type's leading
+        // `Pi` count, never unfolded). Passing it MORE arguments and returning
+        // its result verbatim DROPS the surplus: an over-applied
+        // `ite (Nat → Prop) True (isTrue …) P Q x` reduced to `P` (dropping
+        // `x`), so `if True then f else g` at a function type equated `(…) 0`
+        // with `(…) 1` and `False` kernel-checked with an empty axiom closure.
+        // The surplus is a genuine application of the computed value, so the
+        // spine is split at the arity, the reducer sees only the head slice,
+        // and the rest is RE-APPLIED — one guard no per-reducer arity spelling
+        // can defeat. An arity-0 head (`instDecidableEqBool : DecidableEq
+        // Bool`) is handed nothing and declines; δ unfolds it instead. An
+        // absent or under-applied head is not consulted.
+        let (args, rest) = self.native_reducer_spine(name, &all_args)?;
+        let reapply = |reduced: Option<Expr>| -> Option<Expr> {
+            reduced.map(|value| Self::reapply_native_surplus(value, rest))
+        };
 
         // Pre-WHNF the instance argument for `decide` / `Decidable.decide`
         // (#3432). `reduce_decide` inspects the head of `args[1]` for
@@ -322,9 +419,9 @@ impl<'env> TypeChecker<'env> {
         // the normal delta path, preserving soundness.
         if (*name == *DECIDE_NAME || *name == *DECIDABLE_DECIDE_NAME) && args.len() >= 2 {
             let inst_whnf = self.whnf_impl(args[1]);
-            let mut args_ref: Vec<&Expr> = args.iter().copied().collect();
+            let mut args_ref: Vec<&Expr> = args.to_vec();
             args_ref[1] = &inst_whnf;
-            return reducer(&args_ref);
+            return reapply(reducer(&args_ref));
         }
 
         // Pre-WHNF the two operands for the single-constructor `Nat`-wrapper
@@ -341,10 +438,10 @@ impl<'env> TypeChecker<'env> {
         if wrapper_cmp_needs_operand_whnf(name) && args.len() >= 2 {
             let a_whnf = self.whnf_impl(args[0]);
             let b_whnf = self.whnf_impl(args[1]);
-            let mut args_ref: Vec<&Expr> = args.iter().copied().collect();
+            let mut args_ref: Vec<&Expr> = args.to_vec();
             args_ref[0] = &a_whnf;
             args_ref[1] = &b_whnf;
-            return reducer(&args_ref);
+            return reapply(reducer(&args_ref));
         }
 
         // Pre-WHNF the two `Nat`-typed arguments of `BitVec.ofNat` (width,
@@ -367,10 +464,10 @@ impl<'env> TypeChecker<'env> {
         if *name == *names_bitvec::BITVEC_OF_NAT && args.len() >= 2 {
             let w_whnf = self.whnf_impl(args[0]);
             let v_whnf = self.whnf_impl(args[1]);
-            let mut args_ref: Vec<&Expr> = args.iter().copied().collect();
+            let mut args_ref: Vec<&Expr> = args.to_vec();
             args_ref[0] = &w_whnf;
             args_ref[1] = &v_whnf;
-            return reducer(&args_ref);
+            return reapply(reducer(&args_ref));
         }
 
         // Scoped operand pre-WHNF for the BitVec CONVERSIONS `toNat`/`toFin`.
@@ -396,9 +493,9 @@ impl<'env> TypeChecker<'env> {
         {
             let last = args.len() - 1;
             let v_whnf = self.whnf_impl(args[last]);
-            let mut args_ref: Vec<&Expr> = args.iter().copied().collect();
+            let mut args_ref: Vec<&Expr> = args.to_vec();
             args_ref[last] = &v_whnf;
-            return reducer(&args_ref);
+            return reapply(reducer(&args_ref));
         }
 
         // NOTE: the BitVec arith/logic/shift/cmp reducers deliberately do NOT
@@ -414,7 +511,7 @@ impl<'env> TypeChecker<'env> {
         // `Nat` literal) that `get_bitvec_operand` peels — the fast O(1) path
         // for genuine BitVec-literal computations — while non-literal operands
         // decline and fall back to δι exactly as before, preserving parity.
-        reducer(&args)
+        reapply(reducer(args))
     }
 
     /// Try to evaluate `Lean.reduceBool target` by WHNF-reducing the argument.
@@ -506,3 +603,18 @@ impl<'env> TypeChecker<'env> {
         None
     }
 }
+
+/// `<T>.ofNat` for the CONCRETE-width unsigned integers.
+///
+/// `USize` is deliberately absent: its width is `System.Platform.numBits`, which
+/// is abstract in v4.30, and every USize reducer is intentionally unregistered
+/// and pinned as such (`native_reducers_uint_tests.rs`). A width-abstract
+/// `USize.ofNat` has no literal value to normalise to.
+static UINT_OF_NAT_NAMES: LazyLock<[Name; 4]> = LazyLock::new(|| {
+    [
+        Name::from_string("UInt8.ofNat"),
+        Name::from_string("UInt16.ofNat"),
+        Name::from_string("UInt32.ofNat"),
+        Name::from_string("UInt64.ofNat"),
+    ]
+});

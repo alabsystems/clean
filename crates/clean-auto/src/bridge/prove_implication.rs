@@ -77,7 +77,7 @@ impl<'env> SmtBridge<'env> {
     /// Returns `Some(Verified)` only on a kernel-valid proof; `None` on any
     /// failure (so the caller falls through to the normal pipeline).
     pub(super) fn try_prove_equality_under_antecedents(
-        &self,
+        &mut self,
         goal: &Expr,
         antecedents: &[Expr],
         consequent: &Expr,
@@ -99,7 +99,10 @@ impl<'env> SmtBridge<'env> {
             fvars.push(fvar);
         }
 
-        let proof = sub.prove_core(consequent).ok()?.verified()?;
+        let core = sub.prove_core(consequent);
+        // A sub-solve stopped by the conflict limit is this bridge's stop too.
+        self.sub_bridge_conflict_limit_reached |= sub.conflict_limit_reached();
+        let proof = core.ok()?.verified()?;
         let closed = bind_antecedent_lambdas(proof.proof_term().clone(), antecedents, &fvars);
 
         // Soundness gate: the re-bound term must kernel-check against the original

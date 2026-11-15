@@ -1,0 +1,34 @@
+# The frontend merge suite's PINNED slow-list (scripts/frontend_merge_suite.sh).
+#
+# Author: Andrew Yates. Copyright 2026 Andrew Yates. License: Apache-2.0.
+#
+# A row here takes one integration test target OUT of the merge suite's run
+# leg. It is not a waiver: scripts/frontend_merge_suite_report.py refuses the
+# whole suite (PLAN REFUSED, before anything builds) when a row
+#   * names a target its package does not have (a stale row),
+#   * records a measurement INSIDE the budget (FRONTEND_SUITE_BUDGET_S, default
+#     600 s) -- a slow-list row under budget is a suppression, not a pin,
+#   * or leaves any column empty.
+# and every pinned target is PRINTED in the suite's table as SLOW, with its
+# measurement and where it runs instead -- never silently dropped.
+#
+# Only a MEASURED duration puts a row here, and only libtest's own
+# `finished in` for that target (not a wall clock around it). Lib, bin and
+# doctest targets cannot be listed: they are the suite.
+#
+# FORMAT, one row per target, `|`-separated:
+#   <package> | <test-target> | <measured seconds> | <where and when measured> | <runs instead>
+#
+# The three rows below are the import probes the 2026-09-24 process audit
+# named (1,403 / 1,401 / 1,291 s in its w3c_tests2.log, 2026-09-21). They were
+# RE-MEASURED before being pinned: the first unfiltered run of this suite,
+# 2026-09-25 at 5c83a2f3d (target/wt/frontend-merge-suite/run.log, libtest's
+# `finished in`, the box shared with three other lanes). Together they are
+# 3,778.8 s of that run leg's 7,134 s. Each loads Lean's real Init .olean
+# closure, which is why each costs about twenty minutes whatever it asserts.
+# Their verdicts stay DURABLE on the suite runner's board, where each has its
+# own digest-bound row -- run them there:
+#   scripts/verify_runner_pinned.sh --only 'clean-elab::test::<target>' run
+clean-elab | instance_attr_default_priority_probe | 1258.02 | 2026-09-25 at 5c83a2f3d, first unfiltered suite run | suite runner row clean-elab::test::instance_attr_default_priority_probe
+clean-elab | instance_priority_import_probe       | 1315.31 | 2026-09-25 at 5c83a2f3d, first unfiltered suite run | suite runner row clean-elab::test::instance_priority_import_probe
+clean-elab | simp_import_registry_probe           | 1205.49 | 2026-09-25 at 5c83a2f3d, first unfiltered suite run | suite runner row clean-elab::test::simp_import_registry_probe

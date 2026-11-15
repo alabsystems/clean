@@ -17,23 +17,36 @@
 //! - Inductive types are reconstructed from the environment's `InductiveVal`
 //!   (parameters/indices split exactly as Clean's kernel recorded them), and
 //!   Lean regenerates its own recursors from that same declaration.
-//! - Anything that cannot be exported faithfully is SKIPPED with a reason and
-//!   reported (partial-but-honest coverage), never weakened.
+//! - Nat has an explicitly proved carrier correspondence. The two reflected
+//!   comparisons additionally have a proved change of evaluation strategy;
+//!   their original bodies and body-dependent proof terms are retained and
+//!   checked before their theorem images are transported by equality.
+//! - Anything that cannot be exported faithfully is SKIPPED with a reason,
+//!   never weakened. Both Byte profiles refuse any skipped closure; explicitly requested
+//!   roots in every profile must be present and exported. The ordinary Full
+//!   default retains its historical partial-but-honest coverage report.
 //!
 //! Usage:
-//!   cargo run --release -p clean-verify --bin lean_export -- \
-//!       [--out FILE] [root ...]
-//! Default roots: tc_infer_soundness, bootstrap_infer_sound,
-//! whnf_terminates_well_typed_dependent.
+//!   scripts/self_verify_crosscheck.sh
+//! Or run `lean_export [--eval-ir-byte-v1] [--out FILE] [--all-spec] [root ...]`.
+//! Without a profile flag, the Full specification and audit roots are unchanged.
+//! `lean_export --eval-ir-byte-v1 --out ByteV1.lean ir_byte_run_add_v1` exports
+//! a live byte/world operational theorem; it does not assert source refinement.
+//! `--eval-ir-byte-literal-v1` selects Full plus ByteV1 and the checked literal
+//! observer adapter, not a native Rust representation or source-refinement proof.
 
+mod audit_roots;
+mod comparison_bridge;
 mod emit;
 mod printer;
+mod profile;
 
 use std::collections::{HashMap, HashSet};
 use std::io::Write as _;
 
 use clean_kernel::{Environment, Expr, ExprKind, Name};
 use clean_verify::Specification;
+use profile::{Command, ExportProfile, RootSelection};
 
 /// How a closure entry is realized in the Lean export.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -51,29 +64,88 @@ enum ItemKind {
     /// quotient (an `axiom` cannot carry the computation rule). `Quot.sound`
     /// stays a plain `Axiom`.
     QuotShim,
+    /// The `Nat` INDUCTIVE, emitted as the bridged-carrier block rather than
+    /// as a plain mirror inductive.
+    ///
+    /// The block emits, in order: the spec's own Nat inductive and its three
+    /// declared bodies VERBATIM under the name `NatSpec`; the `toCore`/`ofCore`
+    /// maps and eight correspondence theorems proving the two are the same
+    /// algebra (including `rec_agrees`, universe-polymorphic); and then
+    /// `Nat`/`.zero`/`.succ`/`.rec`/`.add`/`.sub`/`.pred` as reducible aliases
+    /// of Lean's own `Nat` family, which is what every OTHER exported
+    /// declaration then sees.
+    ///
+    /// This is a bridge that is PROVED, not asserted -- which is what
+    /// distinguishes it from a bare alias. A bare alias would let a garbage
+    /// declared body ride along invisibly in both kernels; the correspondence
+    /// theorems refuse it (an off-by-one `toCore` is rejected, and a
+    /// wrongly-recursing `NatSpec.add` makes `add_agrees` unprovable).
+    NatCarrier,
+    /// `Nat.add` / `Nat.sub` / `Nat.pred`. Emitted as part of the carrier
+    /// block, so the item itself contributes only a provenance comment.
+    ///
+    /// These are the three operations with correspondence proofs in the
+    /// carrier block. The live spec declares further Nat operations, which
+    /// remain ordinary exported definitions until separately bridged. Clean's
+    /// kernel reduces these operations natively on literal `BigNat` operands,
+    /// keyed by name; symbolic operands can still unfold their stored bodies.
+    /// They must be aliased AS A SET:
+    /// aliasing `sub` while keeping the spec's `pred` spelling breaks the
+    /// spec's own `sub_succ_succ`, because Lean's `sub` unfolds to Lean's
+    /// `pred`, which is not defeq to the spec's `Nat.rec` spelling. Measured.
+    NatShim,
+    /// Reflected comparison with its original body and a checked, guarded
+    /// subtraction image. Ordinary Nat.sub is left intact.
+    ComparisonBridge,
+    /// Recheck the original comparison agreement proof and transport its
+    /// result along the checked comparison equality.
+    ComparisonAgreement,
 }
 
 /// The four computation-rule-bearing quotient primitives (NOT `Quot.sound`,
 /// which is a genuine axiom in both kernels).
 const QUOT_SHIM_NAMES: [&str; 4] = ["Quot", "Quot.mk", "Quot.lift", "Quot.ind"];
 
+/// The three Nat operations currently bridged onto Lean's own, each with a
+/// checked correspondence theorem. Aliased AS A SET -- see
+/// `ItemKind::NatShim`.
+const NAT_SHIM_NAMES: [&str; 3] = ["Nat.add", "Nat.sub", "Nat.pred"];
+
+/// Every name the carrier block routes onto Lean's own `Nat` family. Disclosed
+/// in the export summary: a bridge the reader cannot see is not a bridge, it is
+/// a substitution.
+const NAT_BRIDGED_DISCLOSURE: [&str; 8] = [
+    "Nat",
+    "Nat.zero",
+    "Nat.succ",
+    "Nat.rec",
+    "Nat.casesOn",
+    "Nat.add",
+    "Nat.sub",
+    "Nat.pred",
+];
+
 struct Item {
     name: Name,
     kind: ItemKind,
 }
 
-const DEFAULT_ROOTS: [&str; 5] = [
-    "tc_infer_soundness",
-    "bootstrap_infer_sound",
-    "whnf_terminates_well_typed_dependent",
-    // C4 / the crystal: the layer-1 -> layer-2 bridge's keystone rule, and the
-    // witness that keeps it from being a true-but-empty statement. Under
-    // `--all-spec` this list is ALSO the set of `#print axioms` audit roots —
-    // the only way a foreign kernel gets to confirm the zero-axiom claim
-    // instead of us confirming it ourselves.
-    "impl_bridge_fvar",
-    "impl_bridge_fvar_witness",
-];
+/// What `-h`/`--help` prints: the grammar `run` parses, nothing more.
+const USAGE: &str = "\
+usage: lean_export [--eval-ir-byte-v1 | --eval-ir-byte-literal-v1] [--out FILE] [--all-spec] [root ...]
+  --eval-ir-byte-v1  select the checked byte/world EvalIR prelude (default: Full spec)
+  --eval-ir-byte-literal-v1  select Full plus ByteV1 and the literal observer adapter
+  --out FILE        the Lean file to write (default CleanVerifyExport.lean)
+  --all-spec        root at every definition in the selected profile, defaults first
+  root ...          explicit declaration roots; never discarded by --all-spec
+  With no roots, use the selected profile's audit roots: inference/implementation-model
+  bridges for Full; run, call/return, byte-memory and final-world laws for ByteV1.
+  The joint profile combines Full and Byte audit roots with the literal adapter roots.
+  Both Byte profiles refuse any skipped closure. Explicit roots must exist and be exported in every
+  profile. Full without explicit roots retains its reported partial-export behavior.
+  Exit 0 means an export was written, NOT that Lean has checked it. Exit 1 means the spec,
+  required closure or output failed; exit 2 means a bad argument.
+";
 
 fn main() {
     // Deep elaborated proof terms need more than the default stack for the
@@ -89,34 +161,31 @@ fn main() {
 }
 
 fn run() {
-    let mut out_path = String::from("CleanVerifyExport.lean");
-    let mut roots: Vec<String> = Vec::new();
-    let mut all_spec = false;
-    let mut args = std::env::args().skip(1);
-    while let Some(a) = args.next() {
-        if a == "--out" {
-            match args.next() {
-                Some(p) => out_path = p,
-                None => {
-                    eprintln!("--out requires a path");
-                    std::process::exit(2);
-                }
-            }
-        } else if a == "--all-spec" {
-            all_spec = true;
-        } else {
-            roots.push(a);
+    let options = match profile::parse_args(std::env::args().skip(1)) {
+        Ok(Command::Export(options)) => options,
+        Ok(Command::Help) => {
+            print!("{USAGE}");
+            return;
         }
-    }
-    if roots.is_empty() && !all_spec {
-        roots = DEFAULT_ROOTS.iter().map(|s| (*s).to_string()).collect();
-    }
+        Err(error) => {
+            eprint!("lean_export: {error}\n{USAGE}");
+            std::process::exit(2);
+        }
+    };
+    let out_path = &options.out_path;
+    let all_spec = options.all_spec;
 
-    eprintln!("[lean_export] building live Specification::new() ...");
-    let spec = match Specification::new() {
+    let constructor = options.profile.constructor_name();
+    eprintln!("[lean_export] building live {constructor} ...");
+    let built = match options.profile {
+        ExportProfile::Full => Specification::new(),
+        ExportProfile::EvalIrByteV1 => Specification::new_eval_ir_byte_prelude_spec_v1(),
+        ExportProfile::EvalIrByteLiteralV1 => Specification::new_eval_ir_byte_literal_spec_v1(),
+    };
+    let spec = match built {
         Ok(s) => s,
         Err(e) => {
-            eprintln!("[lean_export] FATAL: Specification::new() failed: {e:?}");
+            eprintln!("[lean_export] FATAL: {constructor} failed: {e:?}");
             std::process::exit(1);
         }
     };
@@ -126,32 +195,21 @@ fn run() {
         spec.definitions().len()
     );
 
-    if all_spec {
-        // Root at every registered spec definition, in sorted name order for
-        // deterministic output. The flagship roots stay first so the footer's
-        // #print axioms audits them.
-        let mut names: Vec<String> = spec.definitions().keys().cloned().collect();
-        names.sort();
-        roots = DEFAULT_ROOTS.iter().map(|s| (*s).to_string()).collect();
-        for n in names {
-            if !roots.contains(&n) {
-                roots.push(n);
-            }
-        }
+    let selection = options.select_roots(spec.definitions().keys().map(String::as_str));
+    if let Err(error) = require_roots_present(env, &selection.required_roots) {
+        eprintln!("[lean_export] FATAL: {error}");
+        std::process::exit(1);
     }
+    let roots = &selection.roots;
 
     let mut walker = Walker::new(env);
-    for r in &roots {
+    for r in roots {
         walker.visit_name(&Name::from_string(r));
     }
 
     // Only audit the flagship roots in the footer (an --all-spec run has
     // thousands of roots; #print axioms on each would drown the output).
-    let audit_roots: Vec<String> = if all_spec {
-        DEFAULT_ROOTS.iter().map(|s| (*s).to_string()).collect()
-    } else {
-        roots.clone()
-    };
+    let audit_roots = &selection.audit_roots;
     let header_desc: Vec<String> = if all_spec {
         vec![format!("--all-spec ({} spec definitions)", roots.len())]
     } else {
@@ -186,6 +244,15 @@ fn run() {
     // carry; `Quot.sound` stays an explicit axiom.
     let mut lean = String::new();
     lean.push_str(&emit::header(&header_desc));
+    match options.profile {
+        ExportProfile::Full => {}
+        ExportProfile::EvalIrByteV1 => lean.push_str(
+            "-- Profile: EvalIR ByteV1; operational laws, not source-refinement evidence.\n\n",
+        ),
+        ExportProfile::EvalIrByteLiteralV1 => lean.push_str(
+            "-- Profile: Full + EvalIR ByteV1 + literal observer adapter; not native Rust representation or source-refinement evidence.\n\n",
+        ),
+    }
     let mut emitted: HashSet<String> = HashSet::new();
     let mut skipped: Vec<(String, String)> = std::mem::take(&mut walker.skipped);
     let mut failed: HashSet<Name> = HashSet::new();
@@ -216,18 +283,23 @@ fn run() {
     // Audit roots that survived; a dropped audit root would break #print axioms.
     let surviving_audit: Vec<String> = audit_roots
         .iter()
-        .filter(|r| emitted.contains(r.as_str()))
+        .filter(|r| walker.root_was_emitted(r, &emitted))
         .cloned()
         .collect();
-    for r in &audit_roots {
+    for r in audit_roots {
         if !surviving_audit.contains(r) {
             eprintln!("[lean_export] WARNING: audit root {r} was skipped");
         }
     }
+    if let Err(error) = require_export_coverage(&selection, &walker, &emitted, &skipped) {
+        // Refuse before opening the output: an incomplete strict export must
+        // not overwrite an existing file with a success-shaped partial one.
+        eprintln!("[lean_export] FATAL: {error}");
+        std::process::exit(1);
+    }
     lean.push_str(&emit::footer(&surviving_audit, &walker.renames));
 
-    if let Err(e) = std::fs::File::create(&out_path).and_then(|mut f| f.write_all(lean.as_bytes()))
-    {
+    if let Err(e) = std::fs::File::create(out_path).and_then(|mut f| f.write_all(lean.as_bytes())) {
         eprintln!("[lean_export] FATAL: cannot write {out_path}: {e}");
         std::process::exit(1);
     }
@@ -257,7 +329,7 @@ fn run() {
         }
     }
     eprintln!("\n[lean_export] ==== COVERAGE ====");
-    if roots.len() > 10 {
+    if all_spec {
         eprintln!("[lean_export] roots: {} names (--all-spec)", roots.len());
     } else {
         eprintln!("[lean_export] roots: {roots:?}");
@@ -302,6 +374,39 @@ fn run() {
             "[lean_export]   (Lean side additionally trusts Lean core's Quot/mk/lift/ind primitives + their computation rule; Lean's own Quot.sound is never referenced)"
         );
     }
+    let nat_bridged = walker.order.iter().any(|i| i.kind == ItemKind::NatCarrier);
+    if nat_bridged {
+        eprintln!(
+            "[lean_export] Nat carrier bridged onto Lean core's own Nat ({}):",
+            NAT_BRIDGED_DISCLOSURE.len()
+        );
+        for n in NAT_BRIDGED_DISCLOSURE {
+            eprintln!("[lean_export]   nat-shim {n}");
+        }
+        eprintln!(
+            "[lean_export]   (the spec's OWN Nat inductive and its add/sub/pred bodies are still emitted VERBATIM as CleanVerify.NatSpec and still re-checked by Lean; toCore/ofCore + 8 correspondence theorems -- incl. rec_agrees -- prove the two are the same algebra, with no axiom)"
+        );
+        eprintln!(
+            "[lean_export]   (so every OTHER declaration is re-checked with Lean's Nat substituted for Clean's: Lean re-checks the IMAGE of Clean's theorem under a proved isomorphism, not the theorem verbatim -- see SELF_VERIFICATION_CERTIFICATE.md section 4)"
+        );
+    }
+    let comparisons: Vec<&Item> = walker
+        .order
+        .iter()
+        .filter(|i| i.kind == ItemKind::ComparisonBridge)
+        .collect();
+    if !comparisons.is_empty() {
+        eprintln!(
+            "[lean_export] reflected comparisons with checked evaluation-strategy bridges ({}):",
+            comparisons.len()
+        );
+        for item in comparisons {
+            eprintln!("[lean_export]   comparison-bridge {}", item.name);
+        }
+        eprintln!(
+            "[lean_export]   (original stored bodies and walk-agreement proof terms are retained under ReplayBridge, independently rechecked, and transported only by proved pointwise equalities; ordinary Nat.sub is unchanged)"
+        );
+    }
     if !structs.is_empty() {
         let mut ss: Vec<&String> = structs.iter().collect();
         ss.sort();
@@ -326,6 +431,51 @@ fn run() {
         }
     }
     eprintln!("[lean_export] wrote {out_path}");
+}
+
+fn declaration_present(env: &Environment, name: &Name) -> bool {
+    env.get_const(name).is_some()
+        || env.get_inductive(name).is_some()
+        || env.get_constructor(name).is_some()
+        || env.get_recursor(name).is_some()
+}
+
+fn require_roots_present(env: &Environment, roots: &[String]) -> Result<(), String> {
+    let missing: Vec<_> = roots
+        .iter()
+        .filter(|root| !declaration_present(env, &Name::from_string(root)))
+        .collect();
+    if missing.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "required roots are absent from the selected live profile: {missing:?}"
+        ))
+    }
+}
+
+fn require_export_coverage(
+    selection: &RootSelection,
+    walker: &Walker<'_>,
+    emitted: &HashSet<String>,
+    skipped: &[(String, String)],
+) -> Result<(), String> {
+    let missing: Vec<_> = selection
+        .required_roots
+        .iter()
+        .filter(|root| !walker.root_was_emitted(root, emitted))
+        .collect();
+    if !missing.is_empty() {
+        return Err(format!("required roots were not exported: {missing:?}"));
+    }
+    if selection.refuse_skipped_closure && !skipped.is_empty() {
+        return Err(format!(
+            "ByteV1 export has {} skipped closure entries (first eight): {:?}",
+            skipped.len(),
+            skipped.iter().take(8).collect::<Vec<_>>()
+        ));
+    }
+    Ok(())
 }
 
 /// Dependency-closure walker: DFS post-order emission so dependencies precede
@@ -386,6 +536,14 @@ impl<'e> Walker<'e> {
         name.clone()
     }
 
+    fn root_was_emitted(&self, root: &str, emitted: &HashSet<String>) -> bool {
+        let name = Name::from_string(root);
+        // Constructors and recursors are emitted through their inductive
+        // block, not as independent entries in `emitted`. An absent root is
+        // never rescued merely by having an identically spelled parent.
+        declaration_present(self.env, &name) && emitted.contains(&self.owner_of(&name).to_string())
+    }
+
     fn visit_name(&mut self, raw: &Name) {
         let name = self.owner_of(raw);
         if self.done.contains(&name) {
@@ -429,6 +587,13 @@ impl<'e> Walker<'e> {
                     exprs.push(cv.type_.clone());
                 }
             }
+            // `Nat` becomes the bridged-carrier block instead of a plain mirror
+            // inductive. The spec's inductive is still emitted and still
+            // independently re-checked -- positivity, universe and recursor --
+            // under the name `NatSpec`; only the working carrier changes.
+            if name.to_string() == "Nat" {
+                return (ItemKind::NatCarrier, exprs);
+            }
             return (ItemKind::Inductive, exprs);
         }
         if let Some(ci) = self.env.get_const(name) {
@@ -436,9 +601,20 @@ impl<'e> Walker<'e> {
             let kind = match &ci.value {
                 None if QUOT_SHIM_NAMES.contains(&name.to_string().as_str()) => ItemKind::QuotShim,
                 None => ItemKind::Axiom,
+                // The three bridged ops. The VALUE is deliberately not pushed:
+                // the carrier block emits the spec's body verbatim as
+                // `NatSpec.add`/`.sub`/`.pred` from the environment, so walking the
+                // body here would chase dependencies into names that are not
+                // emitted under those spellings. The TYPE is still walked,
+                // which is what forces the carrier block to be ordered first.
+                Some(_) if NAT_SHIM_NAMES.contains(&name.to_string().as_str()) => ItemKind::NatShim,
                 Some(v) => {
                     exprs.push(v.clone());
-                    if ci.kind == clean_kernel::ConstantKind::Theorem {
+                    if comparison_bridge::COMPARISONS.contains(&name.to_string().as_str()) {
+                        ItemKind::ComparisonBridge
+                    } else if comparison_bridge::AGREEMENTS.contains(&name.to_string().as_str()) {
+                        ItemKind::ComparisonAgreement
+                    } else if ci.kind == clean_kernel::ConstantKind::Theorem {
                         ItemKind::Theorem
                     } else {
                         ItemKind::Def
@@ -502,8 +678,8 @@ fn const_deps(e: &Expr) -> Vec<Name> {
                 stack.push(inner);
             }
             ExprKind::MData(_, inner) => stack.push(inner),
-            // A Nat literal prints in constructor normal form over the mirror
-            // Nat, so it depends on the Nat inductive block.
+            // A Nat literal prints as a numeral over the bridged carrier,
+            // so it depends on the Nat carrier block.
             ExprKind::Lit(clean_kernel::Literal::Nat(_)) => {
                 for c in ["Nat.zero", "Nat.succ"] {
                     let n = Name::from_string(c);

@@ -87,10 +87,13 @@ fn test_let_pattern_var_direct_ast() {
     // Build: let x := 42 | 0 in x
     // This AST cannot be produced by the parser (only q(...) can start let-patterns)
     // but tests the Var branch of elaborate_let_q_pattern
-    let pattern = SurfacePattern::Var("x".to_string());
+    let pattern = SurfacePattern::Var(SurfaceName::generated_path("x"));
     let scrutinee = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)));
     let fallback = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)));
-    let body = Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string()));
+    let body = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("x"),
+    ));
 
     let surface = SurfaceExpr::LetPattern(Span::dummy(), pattern, scrutinee, fallback, body);
 
@@ -200,11 +203,14 @@ fn test_let_pattern_ctor_desugar() {
     // (e.g. `Some` on a Nat) is a hard UnknownIdent error — the old fallback
     // typing lane for unrecognized constructors was a silent miscompile and
     // has been removed.
-    let inner_pattern = SurfacePattern::Var("x".to_string());
-    let pattern = SurfacePattern::Ctor("succ".to_string(), vec![inner_pattern]);
+    let inner_pattern = SurfacePattern::Var(SurfaceName::generated_path("x"));
+    let pattern = SurfacePattern::Ctor(SurfaceName::generated_path("succ"), vec![inner_pattern]);
     let scrutinee = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)));
     let fallback = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)));
-    let body = Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string()));
+    let body = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("x"),
+    ));
 
     let surface = SurfaceExpr::LetPattern(Span::dummy(), pattern, scrutinee, fallback, body);
 
@@ -239,10 +245,13 @@ fn test_let_pattern_as_desugar() {
     // Build: let x @ _ := 42 | 0 in x
     // As pattern with wildcard inner pattern
     let inner_pattern = Box::new(SurfacePattern::Wildcard);
-    let pattern = SurfacePattern::As("x".to_string(), inner_pattern);
+    let pattern = SurfacePattern::As(SurfaceName::generated_path("x"), inner_pattern);
     let scrutinee = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)));
     let fallback = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)));
-    let body = Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string()));
+    let body = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("x"),
+    ));
 
     let surface = SurfaceExpr::LetPattern(Span::dummy(), pattern, scrutinee, fallback, body);
 
@@ -279,8 +288,8 @@ fn test_let_pattern_or_desugar() {
 
     // Build: let (x | y) := 42 | 0 in 1
     // Or pattern with two variable alternatives
-    let left = Box::new(SurfacePattern::Var("x".to_string()));
-    let right = Box::new(SurfacePattern::Var("y".to_string()));
+    let left = Box::new(SurfacePattern::Var(SurfaceName::generated_path("x")));
+    let right = Box::new(SurfacePattern::Var(SurfaceName::generated_path("y")));
     let pattern = SurfacePattern::Or(left, right);
     let scrutinee = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)));
     let fallback = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)));
@@ -325,11 +334,14 @@ fn test_let_pattern_ctor_desugar_kernel_structure() {
     // (`succ` resolves to the genuine Nat.succ; a constructor foreign to the
     // scrutinee's inductive is a hard UnknownIdent error — the old fallback
     // typing lane was a silent miscompile and has been removed.)
-    let inner_pattern = SurfacePattern::Var("x".to_string());
-    let pattern = SurfacePattern::Ctor("succ".to_string(), vec![inner_pattern]);
+    let inner_pattern = SurfacePattern::Var(SurfaceName::generated_path("x"));
+    let pattern = SurfacePattern::Ctor(SurfaceName::generated_path("succ"), vec![inner_pattern]);
     let scrutinee = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)));
     let fallback = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)));
-    let body = Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string()));
+    let body = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("x"),
+    ));
 
     let surface = SurfaceExpr::LetPattern(Span::dummy(), pattern, scrutinee, fallback, body);
 
@@ -374,12 +386,12 @@ fn test_let_pattern_var_body_reference_under_lambda() {
     let env = Environment::new();
     let mut ctx = ElabCtx::new(&env);
 
-    let pattern = SurfacePattern::Var("y".to_string());
+    let pattern = SurfacePattern::Var(SurfaceName::generated_path("y"));
     let scrutinee = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)));
     let fallback = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)));
     let body = Box::new(SurfaceExpr::lambda(
         vec![SurfaceBinder::explicit("_x", SurfaceExpr::prop())],
-        SurfaceExpr::Ident(Span::dummy(), "y".to_string()),
+        SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("y")),
     ));
 
     let surface = SurfaceExpr::LetPattern(Span::dummy(), pattern, scrutinee, fallback, body);

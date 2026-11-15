@@ -147,8 +147,9 @@ fn setup_apply_fun_hypothesis_state() -> (ProofState, crate::unify::MetaId, FVar
         env,
         make_p(x.clone()),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: hyp_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq_n(x.clone(), y.clone()),
             value: None,
         }],
@@ -185,8 +186,9 @@ fn setup_apply_fun_dependent_target_state() -> (ProofState, crate::unify::MetaId
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: hyp_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty,
             value: None,
         }],
@@ -210,14 +212,16 @@ fn setup_apply_fun_dependent_let_binding_state() -> (ProofState, crate::unify::M
         make_p(x),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hyp_fvar,
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: hyp_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: dependent_fvar,
-                name: "k".to_string(),
+                name: clean_parser::SurfaceName::generated_path("k"),
                 ty: witness_of(hyp_ty.clone(), Expr::fvar(hyp_fvar)),
                 value: Some(mk_witness(hyp_ty, Expr::fvar(hyp_fvar))),
             },
@@ -337,7 +341,11 @@ fn test_apply_fun_hypothesis_builds_congr_arg_let_binding() {
     let (mut state, initial_meta_id, _old_fvar, func, x, y) = setup_apply_fun_hypothesis_state();
     let original_target = state.current_goal().unwrap().target.clone();
 
-    let result = apply_fun(&mut state, func.clone(), "h");
+    let result = apply_fun(
+        &mut state,
+        func.clone(),
+        &clean_parser::SurfaceName::generated_path("h"),
+    );
     assert!(result.is_ok(), "apply_fun should succeed: {result:?}");
     assert_eq!(
         state.trusted_axiom_count(),
@@ -383,13 +391,18 @@ fn test_apply_fun_hypothesis_builds_congr_arg_let_binding() {
 fn test_apply_fun_hypothesis_replaces_local_with_fresh_fvar() {
     let (mut state, _initial_meta_id, old_fvar, func, x, y) = setup_apply_fun_hypothesis_state();
 
-    apply_fun(&mut state, func.clone(), "h").unwrap();
+    apply_fun(
+        &mut state,
+        func.clone(),
+        &clean_parser::SurfaceName::generated_path("h"),
+    )
+    .unwrap();
 
     let goal = state.current_goal().unwrap();
     let h = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("replacement hypothesis should remain in the local context");
     assert_ne!(h.fvar, old_fvar, "apply_fun must allocate a fresh fvar");
     assert_eq!(
@@ -398,9 +411,9 @@ fn test_apply_fun_hypothesis_replaces_local_with_fresh_fvar() {
         "replacement hypothesis should expose the transformed equality type"
     );
     assert!(
-        goal.local_ctx
-            .iter()
-            .all(|decl| decl.name != "h" || decl.fvar != old_fvar),
+        goal.local_ctx.iter().all(|decl| decl.name
+            != clean_parser::SurfaceName::generated_path("h")
+            || decl.fvar != old_fvar),
         "old hypothesis fvar must not remain in the rewritten goal"
     );
     assert!(
@@ -411,17 +424,26 @@ fn test_apply_fun_hypothesis_replaces_local_with_fresh_fvar() {
 
 #[test]
 fn test_apply_fun_hypothesis_rejects_ill_typed_dependent_target() {
-    // Wave 98 — Gap 17 CLOSED. `validate_rewritten_goal` now runs a
-    // strict kernel `check_type` on the rewritten target so dependent
-    // Apps whose argument no longer matches the function's domain
-    // (e.g. `Witness {x=y} h_g` with `h_g : g x = g y`) fail-closed.
+    // Wave 98 — Gap 17: a target that depends on `h` (`Witness {x=y} h`)
+    // must not be handed a rewritten `h_g : g x = g y`. Since 2026-10-16 the
+    // refusal is Mathlib's own: `applyFunHyp` CLEARS `h` before it `note`s the
+    // new hypothesis, so it fails with `MVarId.clear`'s "target depends on
+    // 'h'" (the shared replacement now keeps the old local for dependents, as
+    // `rw … at h` must, and would otherwise accept). Was `TypeCheckFailed`
+    // from `validate_rewritten_goal`.
     let (mut state, initial_meta_id, old_fvar, func) = setup_apply_fun_dependent_target_state();
     let original_goal = state.current_goal().unwrap().clone();
 
-    let result = apply_fun(&mut state, func, "h");
+    let result = apply_fun(
+        &mut state,
+        func,
+        &clean_parser::SurfaceName::generated_path("h"),
+    );
     assert!(
-        matches!(result, Err(TacticError::TypeCheckFailed(_))),
-        "apply_fun must fail-closed with TypeCheckFailed on ill-typed dependent target: {result:?}"
+        matches!(&result, Err(TacticError::InvalidTarget { tactic, detail })
+            if tactic == "clear" && detail.contains("target depends on 'h'")),
+        "apply_fun must refuse a target that depends on the hypothesis, as \
+         Mathlib's clear-then-note does: {result:?}"
     );
     assert!(
         !state.metas().is_assigned(initial_meta_id),
@@ -455,7 +477,11 @@ fn test_apply_fun_hypothesis_strict_check_does_not_reject_non_dependent_rewrite(
     // the hypothesis being rewritten, `apply_fun` must still close.
     // This proves the new path is conservative (no false rejects).
     let (mut state, _initial_meta_id, old_fvar, func, _x, _y) = setup_apply_fun_hypothesis_state();
-    let result = apply_fun(&mut state, func, "h");
+    let result = apply_fun(
+        &mut state,
+        func,
+        &clean_parser::SurfaceName::generated_path("h"),
+    );
     assert!(
         result.is_ok(),
         "apply_fun on non-dependent target must still succeed: {result:?}"
@@ -464,24 +490,31 @@ fn test_apply_fun_hypothesis_strict_check_does_not_reject_non_dependent_rewrite(
     let h = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("replacement hypothesis should remain");
     assert_ne!(h.fvar, old_fvar, "apply_fun must allocate a fresh fvar");
 }
 
 #[test]
 fn test_apply_fun_hypothesis_rejects_dependent_let_binding_value() {
-    // Wave 98 — Gap 17 CLOSED. Strict-checking each local's value
-    // catches the case where a downstream `Witness (x=y) h_g` value
-    // still references the post-rewrite hypothesis but expects the
-    // pre-rewrite type.
+    // Wave 98 — Gap 17: a downstream let-bound `k := Witness (x=y) h` must
+    // not be retyped against the rewritten `h`. Since 2026-10-16 the refusal
+    // is Mathlib's own: `applyFunHyp` clears `h` first, so a local whose value
+    // mentions `h` fails it with `MVarId.clear`'s "variable 'k' depends on
+    // 'h'". Was `TypeCheckFailed` from `validate_rewritten_goal`.
     let (mut state, initial_meta_id, func) = setup_apply_fun_dependent_let_binding_state();
     let original_goal = state.current_goal().unwrap().clone();
 
-    let result = apply_fun(&mut state, func, "h");
+    let result = apply_fun(
+        &mut state,
+        func,
+        &clean_parser::SurfaceName::generated_path("h"),
+    );
     assert!(
-        matches!(result, Err(TacticError::TypeCheckFailed(_))),
-        "apply_fun must reject dependent let-binding rewrite: {result:?}"
+        matches!(&result, Err(TacticError::InvalidTarget { tactic, detail })
+            if tactic == "clear" && detail.contains("variable 'k' depends on 'h'")),
+        "apply_fun must refuse a local whose value depends on the hypothesis, as \
+         Mathlib's clear-then-note does: {result:?}"
     );
     assert!(
         !state.metas().is_assigned(initial_meta_id),

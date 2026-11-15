@@ -1,0 +1,1745 @@
+{
+ "schema": "clean.crystal.a0_census/1",
+ "provenance": {
+  "measured_utc": "2026-09-16T05:06:13Z",
+  "lane": "crystal/lzd sidecar-join",
+  "trust_rev": "0dd9d3e2d7513446da8efc5697852918eed98026",
+  "clean_rev": "cb6efc7c3176127aa322f52d38d536d70bda5c2d",
+  "dump": "dump-sidecar-O3",
+  "note": "first census run on a sidecar dump; the artifact-pair closure cell is reported beside the strict one and never replaces it"
+ },
+ "inputs": {
+  "dump_O3": "$HOME/clean/target/crystal-lane/dump-sidecar-O3",
+  "flip_O3": "$HOME/clean/target/crystal-lane/sidecar-O3.flip.txt",
+  "flip_O0": "$HOME/clean/target/crystal-lane/sidecar-O0.flip.txt"
+ },
+ "criteria": [
+  "lowered",
+  "spliced",
+  "zero_unsupported",
+  "derived_agreed",
+  "bodyful_reachable_closure",
+  "flip_event_O3"
+ ],
+ "totals": {
+  "bodies": 14077,
+  "score_distribution": {
+   "0": 5098,
+   "2": 5062,
+   "3": 2287,
+   "4": 415,
+   "5": 1015,
+   "6": 200
+  },
+  "a0_complete_6_of_6": 200,
+  "a0_complete_with_nonvacuous_markers": 40,
+  "ctfe_flip_O3_bodies": 44,
+  "a0_one_short_5_of_6": 1015,
+  "one_short_missing_criterion": {
+   "flip_event_O3": 971,
+   "bodyful_reachable_closure": 44
+  },
+  "a0_complete_semantic": 200,
+  "a0_complete_with_sidecar": 204,
+  "closure_closed_only_by_sidecar": 6
+ },
+ "closure_closed_only_by_sidecar_bodies": [
+  "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+  "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+  "<level::LevelArc as std::ops::Deref>::deref",
+  "expr::meta::level_has_mvar",
+  "level::Level::is_nonzero",
+  "level::Level::is_zero"
+ ],
+ "semantic_only_bodies": [],
+ "a0_complete_bodies": [
+  {
+   "def_path": "bitvec_compute::BvNames::new",
+   "def_index": 328,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::bundle::CertBundle::verify_theorem::{closure#0}",
+   "def_index": 763,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::bundle::trust_min::{closure#0}",
+   "def_index": 814,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::bundle::trust_from_certification_audit::{closure#0}",
+   "def_index": 818,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::cross_project::hex_digit",
+   "def_index": 860,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::types::proof_cert_has_recursive_children",
+   "def_index": 1284,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::builder::state::NodeId::index",
+   "def_index": 1792,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "cert::builder::state::NodeId::raw",
+   "def_index": 1793,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::NullCollector as cert::trace::TraceCollector>::enabled",
+   "def_index": 2620,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::NullCollector as std::default::Default>::default",
+   "def_index": 2622,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::ThreadedCollector as cert::trace::TraceCollector>::enabled",
+   "def_index": 2633,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::origin::OriginTrust::is_unpinned",
+   "def_index": 3070,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::origin::ConstantOrigin::needs_recheck",
+   "def_index": 3079,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::registration::<impl env::Environment>::extend_constants_checked::is_tolerable",
+   "def_index": 3225,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::registration::<impl env::Environment>::upgrade_axiom_stubs_checked::is_tolerable",
+   "def_index": 3235,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::sorry_summary::DeclarationTrustSummary::is_fully_verified",
+   "def_index": 3339,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ai_proof_search::AiSearchBudget as std::default::Default>::default",
+   "def_index": 3589,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::ai_proof_search::constant_kind_rank",
+   "def_index": 3623,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::proof_search::constant_kind_rank",
+   "def_index": 13376,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::Reducibility::height",
+   "def_index": 13552,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::Reducibility::is_regular",
+   "def_index": 13553,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::Reducibility::kind_rank",
+   "def_index": 13556,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::types::SimpPriority::value",
+   "def_index": 13561,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::collect_fvar_ids_for_diagnostics::Collector as expr::visitor::ExprVisitor>::combine",
+   "def_index": 13572,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::persistent_ext::ExtensionIdx::index",
+   "def_index": 13603,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::inductive_container_map::FieldPos::is_self_rec",
+   "def_index": 14069,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "def_index": 15174,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_bool_ext::nat_gcd",
+   "def_index": 15293,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "def_index": 15341,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "def_index": 15542,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "def_index": 15544,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "def_index": 15546,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "def_index": 15548,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::native_reducers_name::lean4_name_hash",
+   "def_index": 15847,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "def_index": 16164,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "env::Environment::set_cumulative",
+   "def_index": 16171,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+   "def_index": 16465,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::Multiplicity::allows_zero",
+   "def_index": 16686,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::Multiplicity::allows_many",
+   "def_index": 16687,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::FVarId::new",
+   "def_index": 16723,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::types::FVarId::as_u64",
+   "def_index": 16724,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "expr::bvar_in_range",
+   "def_index": 16873,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::convert::binder_info_to_u8",
+   "def_index": 17015,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::empty",
+   "def_index": 17149,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::contains",
+   "def_index": 17150,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::with",
+   "def_index": 17151,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "flat::types::FlatFlags::bits",
+   "def_index": 17152,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<inductive::MentionsNameVisitor<'_> as expr::visitor::ExprVisitor>::combine",
+   "def_index": 17252,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "level::Level::kind_ord",
+   "def_index": 17398,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::AllocationId::new",
+   "def_index": 17647,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::AllocationId::raw",
+   "def_index": 17648,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::AllocationId::is_null",
+   "def_index": 17649,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::offset",
+   "def_index": 17653,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::len",
+   "def_index": 17654,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "memory_model::MemoryRegion::is_empty",
+   "def_index": 17655,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "micro::types::MicroLevel::structural_cmp::{closure#0}",
+   "def_index": 18249,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "micro::types::MicroLevel::kind_ord",
+   "def_index": 18250,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "mode::CleanMode::from_source_system",
+   "def_index": 18280,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "mode::CleanMode::allows_large_elimination",
+   "def_index": 18284,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "def_index": 18285,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::Address::new",
+   "def_index": 18840,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::Address::raw",
+   "def_index": 18841,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::Address::is_null",
+   "def_index": 18842,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::MemoryValue::new",
+   "def_index": 18845,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::MemoryValue::get",
+   "def_index": 18846,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sem_memory_model::MemoryValue as std::convert::From<u8>>::from",
+   "def_index": 18848,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "sem_memory_model::<impl std::convert::From<sem_memory_model::MemoryValue> for u8>::from",
+   "def_index": 18850,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::config::<impl tc::TypeChecker<'env>>::set_max_cache_entries",
+   "def_index": 19425,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::def_eq::delta::<impl tc::TypeChecker<'env>>::lazy_delta_step_no_consts",
+   "def_index": 19510,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::SourcePos::unknown",
+   "def_index": 19837,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::SourcePos::new",
+   "def_index": 19838,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::heartbeat_profiler::types::clamp_u32",
+   "def_index": 19845,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::reduction::cofib::CofibAtom::value",
+   "def_index": 20072,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::reduction_stats::reduction_stats_reset",
+   "def_index": 20613,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::TypeChecker::<'env>::set_allow_unsafe",
+   "def_index": 20871,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::TypeChecker::<'env>::set_allow_partial",
+   "def_index": 20872,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "tc::TypeChecker::<'env>::set_cumulative",
+   "def_index": 20873,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<bitvec_compute::BvNames as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21080,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::bundle::BundleInspectIssue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21299,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::ProverSystem as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21412,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::ProverInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21471,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::CrossProjectDependency as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21534,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::cross_project::CrossProjectCert as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21597,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::gamma_crown_import::GammaCrownBoundType as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21689,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::TrustLevel as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21865,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ArchiveDependency as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21926,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::VerificationStep as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 21991,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::DistributionInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 22055,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ArchiveFormat as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 22120,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ArchiveFormat as std::default::Default>::default",
+   "def_index": 22167,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::MetadataValidationError as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 22179,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::metadata::ProofArchiveMetadata as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 22210,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::builder::state::NodeId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24242,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::builder_pool::PoolStats as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24273,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::streaming::CompressionAlgorithm as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24735,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::types::CompressedCertSchema as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 24856,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::types::CompressedExpr as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 25033,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::compression::types::CompressedLevel as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 25193,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cert::trace::DeclKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26730,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<cfg::SsaPosition as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 26933,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::ProofQuality as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27024,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::CertificationIssue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27085,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::CertificationAudit as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27101,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::axiom_audit::CanonicalAmbientAxiomKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27117,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::codata_origin::CodataLane as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27133,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::codata_origin::CodataOrigin as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27193,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_info::InductiveInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27280,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::origin::DeclarationVerification as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27298,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::origin::OriginTrust as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27364,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::origin::ConstantOrigin as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27430,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_elision::ProofValueElision as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27600,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_elision::ProofValueElision as std::default::Default>::default",
+   "def_index": 27602,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_elision::ProofElisionStats as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27621,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_quality::ProofQualityFinding as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27640,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::proof_quality::ProofQualityError as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27649,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::snapshot::SnapshotAttestation as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27846,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::snapshot::SnapshotReceipt as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27907,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::snapshot::SnapshotHeader as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 27969,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::snapshot::SnapshotReceiptPolicy as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28116,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::snapshot::SnapshotReceiptViolation as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28131,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::sorry_summary::DeclarationTrustSummary as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28164,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::sorry_summary::SorrySummary as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28235,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ai_proof_search::AiSearchBudget as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28343,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::algebra_int_mul_assoc_proof::Sign as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28596,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopRulePhase as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 28929,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopRuleBuilder as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29002,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopIndexMode as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29073,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::aesop::AesopIndexMode as std::default::Default>::default",
+   "def_index": 29120,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::TransparencyMode as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29140,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::TransparencyMode as std::default::Default>::default",
+   "def_index": 29145,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::Reducibility as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29213,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::Reducibility as std::default::Default>::default",
+   "def_index": 29218,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::SimpPriority as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29405,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::SimpPriority as std::default::Default>::default",
+   "def_index": 29407,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::ConstantKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 29524,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::types::ConstantKind as std::default::Default>::default",
+   "def_index": 29529,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::persistent_ext::ExtensionIdx as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30138,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_instance::InstanceExtEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30169,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_instance::InstanceInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30182,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_attr::AttrExtEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30203,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::ext_attr::AttrRegistration as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30215,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_builder::GeneratedAuxDefs as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30258,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_container_map::FieldPos as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30292,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_no_confusion::NoConfusionRegenerationIssue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30410,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_no_confusion::NoConfusionRegenerationDiagnostic as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30422,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_no_confusion::NoConfusionRegenerationReport as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30436,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::inductive_rel_family::FieldPos as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30504,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::native_reducers_float_to_rat::DyadicValue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30702,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::native_reducers_float_to_rat::FloatClass as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30722,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<env::native_reducers_float_to_rat::ParsedDyadic as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 30735,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::display::Assoc as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 32933,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::kind::ExprKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 32937,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::kind::ZFCSetExpr as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33543,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderInfo as std::default::Default>::default",
+   "def_index": 33746,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderInfo as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33751,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::Multiplicity as std::default::Default>::default",
+   "def_index": 33816,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::Multiplicity as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33821,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderData as std::default::Default>::default",
+   "def_index": 33882,
+   "markers_exact": true,
+   "markers_vacuous": false,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BinderData as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33887,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::BigNat as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 33953,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::Literal as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34015,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::MDataValue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34083,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<expr::types::FVarId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34147,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<flat::types::FlatTag as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34293,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<flat::types::FlatFlags as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34309,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<inductive::RecursorArgOrder as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 34856,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<memory_model::AllocationId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35030,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<memory_model::MemoryRegion as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35075,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<memory_model::BorrowAccess as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35143,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<micro::types::MicroLiteral as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35296,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<micro::types::MicroResult as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35315,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<micro::types::MicroError as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35325,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::CleanMode as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35398,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::CleanMode as std::default::Default>::default",
+   "def_index": 35454,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::SourceSystem as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35505,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<mode::AxiomId as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35611,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<name::NameInner as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35726,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<serde_budget::DecodeResourceLimits as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35824,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<quot::QuotKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35923,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sem_memory_model::Address as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 35988,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sem_memory_model::MemoryValue as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36034,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<sorry::kind::SorryKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36194,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "def_index": 36292,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::expr_location::ExprPathStep as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36297,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::expr_location::ExprLocation as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36311,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::HeartbeatProfileCategory as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36357,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfileEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36377,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfileNameEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36389,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfileTacticEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36402,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::SourcePos as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36417,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::ProfilePositionEntry as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36436,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::heartbeat_profiler::types::OverrunEstimate as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36450,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::monad_reduce::BindKind as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36492,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::reduction::cofib::CofibAtom as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36510,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<tc::reduction::cofib::Cofib as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36524,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcHypothesis as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36688,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcObligation as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36750,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcResult as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36824,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcBatch as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36884,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  },
+  {
+   "def_path": "<vc_protocol::VcBatchResult as std::cmp::Eq>::assert_fields_are_eq",
+   "def_index": 36942,
+   "markers_exact": true,
+   "markers_vacuous": true,
+   "flip_O0": true,
+   "a6_event_lineage_equal": true
+  }
+ ],
+ "one_short_missing_flip_only_sample": [
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#0}",
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#1}",
+  "<<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_::<impl env::_::_serde::Deserialize<'de> for <cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_seq::{constant#0}",
+  "<cert::compression::limits::LimitedMapAccess<A> as env::_::_serde::de::MapAccess<'de>>::size_hint",
+  "<cert::compression::limits::LimitedSeqAccess<A> as env::_::_serde::de::SeqAccess<'de>>::size_hint",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#0}",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_map::{constant#1}",
+  "<cert::compression::streaming::_::<impl env::_::_serde::Deserialize<'de> for cert::compression::streaming::StreamingArchiveHeader>::deserialize::__Visitor<'de> as env::_::_serde::de::Visitor<'de>>::visit_seq::{constant#0}",
+  "<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::WireSchema::magic::{constant#0}",
+  "<cert::compression::types::CompressedCertSchema as env::_::_serde::Deserialize<'de>>::deserialize::_",
+  "<cert::compression::types::CompressedCertSchema as std::clone::Clone>::clone::{constant#0}",
+  "<cert::compression::types::CompressedCertSchema as std::cmp::Eq>::assert_fields_are_eq::{constant#0}",
+  "<cert::types::BoundedStr<'_> as std::fmt::Debug>::fmt::MAX_CHARS",
+  "<cfg::BasicBlock<I, T, L, P> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::CfgError<L> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::DefinitionSite<L> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::SsaInfo<V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::SsaValidationError<L, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<cfg::UseSite<L> as std::cmp::Eq>::assert_fields_are_eq",
+  "<flat::header::FlatHeader as std::clone::Clone>::clone::{constant#0}",
+  "<flat::header::FlatHeader as std::clone::Clone>::clone::{constant#1}",
+  "<flat::types::FlatExpr as std::clone::Clone>::clone::{constant#0}",
+  "<flat::types::FlatExpr as std::clone::Clone>::clone::{constant#1}",
+  "<flat::types::FlatLevel as std::clone::Clone>::clone::{constant#0}",
+  "<flat::types::FlatLevel as std::clone::Clone>::clone::{constant#1}",
+  "<level::Level as env::_::_serde::Deserialize<'de>>::deserialize::_",
+  "<micro::types::MicroBoundedStr<'_> as std::fmt::Debug>::fmt::MAX_CHARS",
+  "<name::Name as std::cmp::Ord>::cmp::components::{constant#0}",
+  "<name::Name as std::fmt::Debug>::fmt::{constant#0}",
+  "<name::Name as std::fmt::Display>::fmt::{constant#0}",
+  "<separation_logic::SepExpr<A, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<separation_logic::SepHeap<A, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "<separation_logic::SepLogicProof<A, V> as std::cmp::Eq>::assert_fields_are_eq",
+  "VERSION",
+  "bitvec_coercion::names::ADD_ZERO_ID",
+  "bitvec_coercion::names::ALL_FALSE",
+  "bitvec_coercion::names::APPEND",
+  "bitvec_coercion::names::BEQ_EQ_ISZERO_SUB",
+  "bitvec_coercion::names::BVF",
+  "bitvec_coercion::names::BVF_ADD_CONG"
+ ],
+ "one_short_missing_closure_bodies": [
+  "<cache::TypeCheckCacheStats as std::default::Default>::default",
+  "<cert::batch::build_types::BatchBuildStats as std::default::Default>::default",
+  "<cert::batch::verify::BatchVerifyStats as std::default::Default>::default",
+  "<cert::builder_pool::PoolStats as std::default::Default>::default",
+  "<cert::builder_pool::PooledBuilder as std::ops::Deref>::deref",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::discharge_axiom_stub_for_inductive_import",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_arith_native_reducers",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_native_reducers",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::init_quot",
+  "<env::Environment as env::trusted_ext::TrustedEnvExt>::materialize_extension_states",
+  "<env::proof_elision::ProofElisionStats as std::default::Default>::default",
+  "<env::sorry_summary::DeclarationTrustSummary as std::default::Default>::default",
+  "<env::sorry_summary::SorrySummary as std::default::Default>::default",
+  "<expr::sorry::SorryFlags as std::default::Default>::default",
+  "<expr::subst::FVarSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+  "<expr::subst::LevelParamSubst<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+  "<expr::subst::LevelParamSubstSlice<'_> as expr::visitor::opt::ExprFolderOpt>::should_descend",
+  "<flat::types::FlatFlags as std::default::Default>::default",
+  "<level::LevelArc as std::borrow::Borrow<level::Level>>::borrow",
+  "<level::LevelArc as std::cmp::PartialEq>::eq",
+  "<level::LevelArc as std::convert::AsRef<level::Level>>::as_ref",
+  "<memory_model::AllocationId as std::default::Default>::default",
+  "<sem_memory_model::Address as std::default::Default>::default",
+  "<sem_memory_model::MemoryValue as std::default::Default>::default",
+  "<tc::batch::BatchCheckStats as std::default::Default>::default",
+  "<tc::sliding_cache::SlidingCacheStats as std::default::Default>::default",
+  "<tc::sliding_equiv_manager::SlidingEquivStats as std::default::Default>::default",
+  "cert::builder::cache::WhnfCache::is_empty",
+  "env::Environment::ensure_native_reducers",
+  "env::axiom_audit::<impl env::Environment>::axiom_deps::{closure#0}",
+  "env::native_reducers_bitvec::<impl env::Environment>::init_bitvec_native_reducers",
+  "env::native_reducers_float::f64_to_nat",
+  "env::native_reducers_float::nat_to_f64",
+  "expr::kind::ExprKind::compute_meta::{closure#0}",
+  "expr::sorry::<impl expr::Expr>::has_non_synthetic_sorry",
+  "expr::sorry::<impl expr::Expr>::has_sorry",
+  "expr::sorry::<impl expr::Expr>::has_synthetic_sorry",
+  "level::Level::is_nonzero",
+  "level::Level::is_zero",
+  "level::Level::leq",
+  "name::NameInterner::is_empty",
+  "tc::def_eq::proof_irrel::<impl tc::TypeChecker<'env>>::try_infer_type_quick::{closure#1}",
+  "tc::equiv_manager::EquivManager::is_equiv",
+  "tc::reduction::int::contains_big_nat_lit"
+ ]
+}

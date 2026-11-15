@@ -1302,16 +1302,31 @@ impl HardwareVectorContractStatus {
     }
 
     /// Whether consumers must reject rows with this status.
+    ///
+    /// PROVED, every cell: `trust_ir_laws::laws::hv_fail_closed_*` (gate 13).
     pub const fn fail_closed(self) -> bool {
         !matches!(self, HardwareVectorContractStatus::Available)
     }
 }
 
 /// Stable reason code for a TrustIr-owned hardware vector contract descriptor.
+///
+/// The codes are a published sidecar vocabulary
+/// (`HARDWARE_VECTOR_CONTRACT_REASON_CODES`), so a code outlives the last row
+/// that carries it: a sidecar row minted earlier must still parse.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HardwareVectorContractReason {
     CanonicalContract,
+    /// A deferred cell whose lowering has no independently checked
+    /// certificate. No published row carries it since 2026-09-28, when the
+    /// four unsigned `<16 x i8>` compares (its only users) were certified on
+    /// ground (b) of the x86-64 per-cell rule (`docs/dialects.md`); it stays
+    /// as a stable code, and nothing in trust-ir emits it today.
     UnsignedVectorCompareProofBlocked,
+    /// A covered cell with no published row. Only the fallback of
+    /// [`chc_x86_vector_icmp_cell_status`] answers it, and the request tests
+    /// hold every descriptor to a row for every `ICmpOp`, so no manifest row
+    /// carries it today either.
     UnsignedVectorCompareUnavailable,
 }
 
@@ -1336,6 +1351,11 @@ impl HardwareVectorContractReason {
 /// reconstructing vector type names, mask semantics, or readiness strings from
 /// TrustIr IR fixtures. The descriptor is informational; production proof/replay
 /// acceptance still belongs to the relevant solver or hardware lane.
+///
+/// For `icmp.*` rows the status, with an available row's `feature_guard`, is
+/// normative: it is the x86-64 admission rule of `docs/dialects.md`, read
+/// through [`chc_x86_vector_icmp_cell_status`]; every other row stays
+/// informational.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct HardwareVectorContractDescriptor {
     pub schema: &'static str,
@@ -6207,6 +6227,7 @@ pub(crate) const fn native_bundle_producer_code(producer: NativeBundleProducer) 
         NativeBundleProducer::TSwift => "tswift",
         NativeBundleProducer::TC => "tc",
         NativeBundleProducer::TrustIr => "trust-ir",
+        NativeBundleProducer::Clean => "clean",
     }
 }
 
@@ -6513,6 +6534,38 @@ pub const CHC_X86_V4_I32_OPERATION_CONTRACT_ROWS: &[HardwareVectorOperationContr
         semantics: CHC_X86_V4_I32_SHIFT_REASSEMBLY_SEMANTICS,
         composition: CHC_X86_V4_I32_SHIFT_PROOF_CONDITION,
     },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ult",
+        trust_cg_lir_opcode: CHC_X86_V4_I32_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd",
+        semantics: "lane_wise_unsigned_i32_less_than_mask",
+        composition: "pcmpgtd(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias));sign_bit_bias:splat_i32(0x80000000)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ule",
+        trust_cg_lir_opcode: CHC_X86_V4_I32_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd;pcmpeqd;por",
+        semantics: "lane_wise_unsigned_i32_less_equal_mask",
+        composition: "or(pcmpgtd(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias)),pcmpeqd(lhs,rhs));sign_bit_bias:splat_i32(0x80000000)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ugt",
+        trust_cg_lir_opcode: CHC_X86_V4_I32_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd",
+        semantics: "lane_wise_unsigned_i32_greater_than_mask",
+        composition: "pcmpgtd(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias));sign_bit_bias:splat_i32(0x80000000)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.uge",
+        trust_cg_lir_opcode: CHC_X86_V4_I32_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd;pcmpeqd;por",
+        semantics: "lane_wise_unsigned_i32_greater_equal_mask",
+        composition: "or(pcmpgtd(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias)),pcmpeqd(lhs,rhs));sign_bit_bias:splat_i32(0x80000000)",
+    },
 ];
 
 /// Per-operation lowering rows for the canonical `<2 x i64>` x86 contract.
@@ -6637,6 +6690,38 @@ pub const CHC_X86_V2_I64_OPERATION_CONTRACT_ROWS: &[HardwareVectorOperationContr
         semantics: CHC_X86_V2_I64_EXTRACT_ELEMENT_SEMANTICS,
         composition: "constant_lane_0_or_1",
     },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ult",
+        trust_cg_lir_opcode: CHC_X86_V2_I64_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd;pcmpeqd;pshufd;pshufd;pshufd;pand;por",
+        semantics: "lane_wise_unsigned_i64_less_than_mask",
+        composition: "or(pshufd(gt,0xf5),and(pshufd(eq,0xf5),pshufd(gt,0xa0)));gt:pcmpgtd(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias));eq:pcmpeqd(lhs,rhs);sign_bit_bias:splat_i32(0x80000000)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ule",
+        trust_cg_lir_opcode: CHC_X86_V2_I64_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd;pcmpeqd;pshufd;pshufd;pshufd;pand;por;pshufd;pand;por",
+        semantics: "lane_wise_unsigned_i64_less_equal_mask",
+        composition: "or(or(pshufd(gt,0xf5),and(pshufd(eq,0xf5),pshufd(gt,0xa0))),and(pshufd(eq,0xf5),pshufd(eq,0xa0)));gt:pcmpgtd(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias));eq:pcmpeqd(lhs,rhs);sign_bit_bias:splat_i32(0x80000000)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ugt",
+        trust_cg_lir_opcode: CHC_X86_V2_I64_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd;pcmpeqd;pshufd;pshufd;pshufd;pand;por",
+        semantics: "lane_wise_unsigned_i64_greater_than_mask",
+        composition: "or(pshufd(gt,0xf5),and(pshufd(eq,0xf5),pshufd(gt,0xa0)));gt:pcmpgtd(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias));eq:pcmpeqd(lhs,rhs);sign_bit_bias:splat_i32(0x80000000)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.uge",
+        trust_cg_lir_opcode: CHC_X86_V2_I64_ICMP_LIR_OPCODE,
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtd;pcmpeqd;pshufd;pshufd;pshufd;pand;por;pshufd;pand;por",
+        semantics: "lane_wise_unsigned_i64_greater_equal_mask",
+        composition: "or(or(pshufd(gt,0xf5),and(pshufd(eq,0xf5),pshufd(gt,0xa0))),and(pshufd(eq,0xf5),pshufd(eq,0xa0)));gt:pcmpgtd(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias));eq:pcmpeqd(lhs,rhs);sign_bit_bias:splat_i32(0x80000000)",
+    },
 ];
 
 /// Per-operation lowering rows for the canonical `<16 x i8>` x86 narrow
@@ -6654,7 +6739,7 @@ pub const CHC_X86_V16_I8_OPERATION_CONTRACT_ROWS: &[HardwareVectorOperationContr
         operation: "icmp.ne",
         trust_cg_lir_opcode: "",
         feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
-        native_instructions: "pcmpeqb;pcmpeqb;pxor",
+        native_instructions: "pcmpeqb;pcmpeqd;pxor",
         semantics: "lane_wise_i8_not_equal_compare_mask_all_zero_or_all_ones_bytes",
         composition: "not(pcmpeqb(lhs,rhs))",
     },
@@ -6698,6 +6783,38 @@ pub const CHC_X86_V16_I8_OPERATION_CONTRACT_ROWS: &[HardwareVectorOperationContr
         semantics: CHC_X86_V16_I8_MASK_TO_BITS_SEMANTICS,
         composition: CHC_X86_V16_I8_MASK_TO_BITS_COMPOSITION,
     },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ult",
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtb",
+        semantics: "lane_wise_unsigned_i8_less_than_compare_mask_all_zero_or_all_ones_bytes",
+        composition: "pcmpgtb(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias));sign_bit_bias:splat_i8(0x80)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ule",
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtb;pcmpeqb;por",
+        semantics: "lane_wise_unsigned_i8_less_equal_compare_mask_all_zero_or_all_ones_bytes",
+        composition: "or(pcmpgtb(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias)),pcmpeqb(lhs,rhs));sign_bit_bias:splat_i8(0x80)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.ugt",
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtb",
+        semantics: "lane_wise_unsigned_i8_greater_than_compare_mask_all_zero_or_all_ones_bytes",
+        composition: "pcmpgtb(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias));sign_bit_bias:splat_i8(0x80)",
+    },
+    HardwareVectorOperationContractRow {
+        operation: "icmp.uge",
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtb;pcmpeqb;por",
+        semantics: "lane_wise_unsigned_i8_greater_equal_compare_mask_all_zero_or_all_ones_bytes",
+        composition: "or(pcmpgtb(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias)),pcmpeqb(lhs,rhs));sign_bit_bias:splat_i8(0x80)",
+    },
 ];
 
 /// Per-operation lowering rows for the canonical `<8 x i16>` x86 narrow
@@ -6715,7 +6832,7 @@ pub const CHC_X86_V8_I16_OPERATION_CONTRACT_ROWS: &[HardwareVectorOperationContr
         operation: "icmp.ne",
         trust_cg_lir_opcode: "",
         feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
-        native_instructions: "pcmpeqw;pcmpeqw;pxor",
+        native_instructions: "pcmpeqw;pcmpeqd;pxor",
         semantics: "lane_wise_i16_not_equal_compare_mask_all_zero_or_all_ones_words",
         composition: "not(pcmpeqw(lhs,rhs))",
     },
@@ -6759,103 +6876,64 @@ pub const CHC_X86_V8_I16_OPERATION_CONTRACT_ROWS: &[HardwareVectorOperationContr
         semantics: CHC_X86_V8_I16_MASK_TO_BITS_SEMANTICS,
         composition: CHC_X86_V8_I16_MASK_TO_BITS_COMPOSITION,
     },
-];
-
-/// Fail-closed status rows for unsigned `<4 x i32>` vector compares.
-pub const CHC_X86_V4_I32_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[
-    HardwareVectorOperationStatusRow {
+    HardwareVectorOperationContractRow {
         operation: "icmp.ult",
-        status: HardwareVectorContractStatus::Deferred,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareProofBlocked,
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtw",
+        semantics: "lane_wise_unsigned_i16_less_than_compare_mask_all_zero_or_all_ones_words",
+        composition: "pcmpgtw(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias));sign_bit_bias:splat_i16(0x8000)",
     },
-    HardwareVectorOperationStatusRow {
+    HardwareVectorOperationContractRow {
         operation: "icmp.ule",
-        status: HardwareVectorContractStatus::Deferred,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareProofBlocked,
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtw;pcmpeqw;por",
+        semantics: "lane_wise_unsigned_i16_less_equal_compare_mask_all_zero_or_all_ones_words",
+        composition: "or(pcmpgtw(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias)),pcmpeqw(lhs,rhs));sign_bit_bias:splat_i16(0x8000)",
     },
-    HardwareVectorOperationStatusRow {
+    HardwareVectorOperationContractRow {
         operation: "icmp.ugt",
-        status: HardwareVectorContractStatus::Deferred,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareProofBlocked,
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtw",
+        semantics: "lane_wise_unsigned_i16_greater_than_compare_mask_all_zero_or_all_ones_words",
+        composition: "pcmpgtw(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias));sign_bit_bias:splat_i16(0x8000)",
     },
-    HardwareVectorOperationStatusRow {
+    HardwareVectorOperationContractRow {
         operation: "icmp.uge",
-        status: HardwareVectorContractStatus::Deferred,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareProofBlocked,
-    },
-];
-
-/// Fail-closed status rows for unsigned `<2 x i64>` vector compares.
-pub const CHC_X86_V2_I64_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ult",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ule",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ugt",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.uge",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
+        trust_cg_lir_opcode: "",
+        feature_guard: CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+        native_instructions: "mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtw;pcmpeqw;por",
+        semantics: "lane_wise_unsigned_i16_greater_equal_compare_mask_all_zero_or_all_ones_words",
+        composition: "or(pcmpgtw(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias)),pcmpeqw(lhs,rhs));sign_bit_bias:splat_i16(0x8000)",
     },
 ];
 
-/// Fail-closed status rows for unsigned `<16 x i8>` vector compares.
-pub const CHC_X86_V16_I8_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ult",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ule",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ugt",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.uge",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-];
+/// Status-only rows for `<4 x i32>` operations that are NOT available. Empty:
+/// every operation this descriptor lists has an available contract row, the
+/// unsigned compares included since 2026-09-27 (certified on ground (b) of the
+/// x86-64 per-cell rule, `docs/dialects.md`).
+pub const CHC_X86_V4_I32_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[];
 
-/// Fail-closed status rows for unsigned `<8 x i16>` vector compares.
-pub const CHC_X86_V8_I16_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ult",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ule",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.ugt",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-    HardwareVectorOperationStatusRow {
-        operation: "icmp.uge",
-        status: HardwareVectorContractStatus::Unavailable,
-        reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
-    },
-];
+/// Status-only rows for `<2 x i64>` operations that are NOT available. Empty:
+/// every operation this descriptor lists has an available contract row, the
+/// unsigned compares included since 2026-09-27 (certified on ground (b) of the
+/// x86-64 per-cell rule, `docs/dialects.md`).
+pub const CHC_X86_V2_I64_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[];
+
+/// Status-only rows for `<16 x i8>` operations that are NOT available. Empty:
+/// every operation this descriptor lists has an available contract row, the
+/// unsigned compares included since 2026-09-28 (certified on ground (b) of the
+/// x86-64 per-cell rule, `docs/dialects.md`). They were the last fail-closed
+/// `icmp` cells.
+pub const CHC_X86_V16_I8_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[];
+
+/// Status-only rows for `<8 x i16>` operations that are NOT available. Empty:
+/// every operation this descriptor lists has an available contract row, the
+/// unsigned compares included since 2026-09-27 (certified on ground (b) of the
+/// x86-64 per-cell rule, `docs/dialects.md`).
+pub const CHC_X86_V8_I16_OPERATION_STATUS_ROWS: &[HardwareVectorOperationStatusRow] = &[];
 
 /// Canonical `<4 x i32>` CHC x86 hardware vector contract descriptor.
 pub const CHC_X86_V4_I32_HARDWARE_VECTOR_CONTRACT_DESCRIPTOR: HardwareVectorContractDescriptor =
@@ -6982,6 +7060,403 @@ pub const fn chc_x86_hardware_vector_contract_descriptors() -> [HardwareVectorCo
         CHC_X86_V16_I8_HARDWARE_VECTOR_CONTRACT_DESCRIPTOR,
         CHC_X86_V8_I16_HARDWARE_VECTOR_CONTRACT_DESCRIPTOR,
     ]
+}
+
+/// The `icmp.*` operations whose x86-64 lowering rests on the INSTRUCTION
+/// MODEL (ground (a) of the per-cell rule in `docs/dialects.md`): one
+/// `pcmpeq*` / `pcmpgt*` whose backend semantic model IS the lane predicate, so
+/// the backend's registered obligation is degenerate by construction (its query
+/// is `(assert false)`) and no certificate is claimed for these cells. Every
+/// OTHER available `icmp.*` cell rests on a certificate (ground (b)). A
+/// consumer that pins the partition reads this set rather than re-spelling it.
+pub const CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS: &[&str] = &["icmp.eq", "icmp.sgt"];
+
+/// One tool of the x86-64 vector-compare certificate ground (ground (b) of the
+/// per-cell rule in `docs/dialects.md`), named by the SOURCE revision it is
+/// built from. `rev` is the identity: a version names no revision (Clean main
+/// and the installed Clean 0.9.0 package both report `clean 0.9.0`). The
+/// constant names the revision and nothing about where its source lives or
+/// how the rest of the build is configured: the build procedure is trust-cg's
+/// certificate gate's, which records it for each build it makes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChcX86IcmpCertifyingBuild {
+    /// The Cargo package whose binary runs (`ay`, `clean`).
+    pub package: &'static str,
+    /// The exact 40-hex commit of the `package`'s repository the binary is
+    /// built from. In a public snapshot this is the forward projection of the
+    /// development revision (`publish/transforms.sh` T1, as for `AY_REVISION`).
+    pub rev: &'static str,
+    /// The workspace version at `rev`; the binary's `--version` banner must
+    /// report it.
+    pub version: &'static str,
+    /// What follows `targo --unverified build --release --locked` in an export
+    /// of `rev`. The build makes no proof claim.
+    pub build_args: &'static [&'static str],
+    /// The sha256 of every binary that produced or checked the recorded
+    /// certificates. Evidence, not identity: builds of one revision are not
+    /// byte-identical, so a consumer that re-runs the certificates builds
+    /// `rev`, records its own digest and reports whether it is one of these.
+    /// In a public snapshot these stay the digests of the development builds.
+    pub certifying_sha256: &'static [&'static str],
+}
+
+/// The certificate ground of the x86-64 vector-compare rule, as code: the AY
+/// that produced every certificate, the Clean that checked it, the exact
+/// invocations and the verdicts they must print.
+/// [`chc_x86_vector_icmp_cell_ground`] answers
+/// [`ChcX86IcmpGround::Certificate`] naming [`CHC_X86_ICMP_CERTIFICATE_RULE`]
+/// for every available cell whose operation is not in
+/// [`CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS`], and trust-cg's certificate
+/// gate reads the constant from the trust-ir it pins, through the compiled
+/// dependency. The per-cell query digests are trust-cg's
+/// (`CERTIFIED_QUERY_SHA256`), because trust-cg generates the query bytes.
+///
+/// What a pass is, and what it trusts. A pass is an SMT proof that AY `ay.rev`
+/// produced for each cell's exact query, which the Carcara Alethe checker
+/// inside Clean `clean.rev`'s `cert verify-external` accepted in full: exit 0,
+/// no `hole`, no `lia_generic`. It is a checked SMT proof, not a kernel
+/// certificate and not a Lean theorem. It trusts (1) that checker: vendored
+/// Carcara with Clean's downstream soundness fixes, which is unverified
+/// software with a documented record of false accepts, built by
+/// `targo --unverified` into bytes that are not reproducible. The certificates
+/// are also accepted by that Carcara called without Clean's adapter, so the
+/// adapter's rewrites are not load-bearing for them. (2) trust-cg's SMT
+/// encoding of the trust-ir predicate, the spec side: nothing ties it to this
+/// crate's `ICmp` semantics, Lean `semVectorICmp`, the reference interpreter,
+/// or the `<N x bool>` mask convention. (3) trust-cg's SMT models of the x86
+/// instructions, the machine side. It does not bind the obligation to the
+/// instructions ISel emits for a given compile. It runs only when someone runs
+/// the gate; nothing runs it per landing. The eight instruction-model cells
+/// stay trusted base.
+///
+/// In a public snapshot `ay.rev` and `clean.rev` are the forward projections
+/// (the publication engine's `project_forward`, applied by
+/// `publish/transforms.sh` T1) of the development revisions that produced and
+/// checked the certificates.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChcX86IcmpCertificateRule {
+    /// The solver that produced every certificate.
+    pub ay: ChcX86IcmpCertifyingBuild,
+    /// `ay`'s arguments; `{query}` and `{proof}` stand for the query and
+    /// proof paths.
+    pub ay_args: &'static [&'static str],
+    /// The one verdict line AY must print on stdout.
+    pub ay_verdict: &'static str,
+    /// Each field of AY's one `c ay.proof.certificate` stderr report, with
+    /// the value it must have.
+    pub ay_certificate_report: &'static [(&'static str, &'static str)],
+    /// Alethe rules the proof must not contain: the ones the checker accepts
+    /// without checking (Carcara marks both as holey).
+    pub unchecked_proof_rules: &'static [&'static str],
+    /// The checker.
+    pub clean: ChcX86IcmpCertifyingBuild,
+    /// `clean`'s arguments; `{certificate}` stands for the JSON certificate
+    /// `{"type": "alethe_certificate", "version": "1.0", "problem", "proof"}`.
+    pub clean_args: &'static [&'static str],
+    /// The proof status Clean must report. The machine verdict is Clean's
+    /// exit status: `cert verify-external` exits non-zero on a proof it does
+    /// not verify in full. This line, printed under `--verbose`, is a second
+    /// check.
+    pub clean_proof_status: &'static str,
+}
+
+/// THE certificate ground of the x86-64 vector-compare rule (see
+/// [`ChcX86IcmpCertificateRule`]). Moving `ay.rev` or `clean.rev` re-certifies
+/// nothing by itself: every certificate-ground cell must be re-run under the
+/// new tools, with trust-cg's certificate gate, before the move lands, and
+/// `certifying_sha256` moves with it. `ay.rev` and `ay.version` must equal
+/// this repository's AY pin (`dependency_pin_coherence.rs`); `clean.rev` need
+/// not equal the Clean pin, because a Clean pin move re-certifies nothing.
+pub const CHC_X86_ICMP_CERTIFICATE_RULE: ChcX86IcmpCertificateRule = ChcX86IcmpCertificateRule {
+    ay: ChcX86IcmpCertifyingBuild {
+        package: "ay",
+        rev: "add70f658ebe48a4d6a112a68a9d2866dab68970",
+        version: "0.27.0",
+        build_args: &["-p", "ay", "--features", "cli"],
+        certifying_sha256: &["f5fe9a9c8a1863bdb7ea579de788cbe035da87c6ba067c9e1280fd0f14af2f85"],
+    },
+    ay_args: &[
+        "-smt2",
+        "{query}",
+        "--strict-proofs",
+        "--proof",
+        "{proof}",
+        "--proof-format",
+        "alethe",
+    ],
+    ay_verdict: "unsat",
+    ay_certificate_report: &[
+        ("unproved_steps", "0"),
+        ("foreign_assumes", "no"),
+        ("trust_free", "yes"),
+    ],
+    unchecked_proof_rules: &["hole", "lia_generic"],
+    clean: ChcX86IcmpCertifyingBuild {
+        package: "clean",
+        rev: "8db0f0e61a0dea054feb5ebaabd1a07325d985bf",
+        version: "0.9.0",
+        build_args: &["-p", "clean", "--features", "clean/carcara-verify"],
+        certifying_sha256: &[
+            "fc3b35ac3ef05ac67eedc04253edfe2caf53b7eee8b828c6021d26ed8135ecaf",
+            "7bff196544f447482f269cf884e84dcf860dc39c46a13105f04ac0a4baac8ba1",
+        ],
+    },
+    clean_args: &["cert", "verify-external", "{certificate}", "--verbose"],
+    clean_proof_status: "fully verified",
+};
+
+/// The ground an available x86-64 vector-compare cell rests on (the per-cell
+/// rule in `docs/dialects.md`), as [`chc_x86_vector_icmp_cell_ground`] answers
+/// it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChcX86IcmpGround {
+    /// Ground (a): one instruction whose model is the predicate
+    /// ([`CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS`]); a trusted-base fact,
+    /// no certificate.
+    InstructionModel,
+    /// Ground (b): the certificate rule.
+    Certificate(&'static ChcX86IcmpCertificateRule),
+}
+
+/// The manifest operation name of an integer vector compare predicate.
+const fn chc_x86_icmp_operation(op: crate::inst::ICmpOp) -> &'static str {
+    use crate::inst::ICmpOp;
+    match op {
+        ICmpOp::Eq => "icmp.eq",
+        ICmpOp::Ne => "icmp.ne",
+        ICmpOp::Ult => "icmp.ult",
+        ICmpOp::Ule => "icmp.ule",
+        ICmpOp::Ugt => "icmp.ugt",
+        ICmpOp::Uge => "icmp.uge",
+        ICmpOp::Slt => "icmp.slt",
+        ICmpOp::Sle => "icmp.sle",
+        ICmpOp::Sgt => "icmp.sgt",
+        ICmpOp::Sge => "icmp.sge",
+    }
+}
+
+/// One x86-64 vector-compare cell's verdict, exactly as the `chc_x86`
+/// manifest publishes it (answered by [`chc_x86_vector_icmp_cell_status`]).
+///
+/// The verdict is the TRIPLE, never the status alone: an `Available` cell is
+/// lowerable only on a target that has `feature_guard`. The `v2_i64`
+/// `icmp.eq`/`icmp.ne` rows need `x86.sse4.1` (`pcmpeqq`) and its signed
+/// `icmp.slt`/`sle`/`sgt`/`sge` rows `x86.sse4.2` (`pcmpgtq`), so a consumer
+/// that read only `status` would admit `pcmpgtq` on a baseline SSE2
+/// `x86_64` target.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ChcX86VectorIcmpCell {
+    pub status: HardwareVectorContractStatus,
+    pub reason: HardwareVectorContractReason,
+    /// The published `feature_guard` of the cell's lowering (`x86.sse2`,
+    /// `x86.sse4.1`, `x86.sse4.2`): `Some` exactly when `status` is
+    /// `Available`, because a fail-closed cell publishes no lowering
+    /// evidence.
+    pub feature_guard: Option<&'static str>,
+}
+
+impl ChcX86VectorIcmpCell {
+    /// True when an x86-64 consumer MUST refuse the cell whatever the target
+    /// features are (`HardwareVectorContractStatus::fail_closed`).
+    #[must_use]
+    pub const fn fail_closed(&self) -> bool {
+        self.status.fail_closed()
+    }
+}
+
+/// THE reader of the x86-64 vector-compare admission rule (`docs/dialects.md`,
+/// "Vector compares on x86-64 follow one per-cell rule"): the status, reason
+/// and feature guard the `chc_x86` manifest publishes for the `icmp.<op>` cell
+/// of the descriptor whose lanes are `lane_bits` wide and `lane_count` many.
+///
+/// `None` means no descriptor covers the shape (`<8 x i8>`, `<4 x i16>`, a
+/// bool-lane vector, …): such a compare is NOT governed by this manifest. That
+/// is a stated gap, not a grant. A covered shape answers the published row.
+/// `Available` means the cell may be lowered to x86-64 ON A TARGET WITH THE
+/// ANSWERED `feature_guard` (see [`ChcX86VectorIcmpCell`]); every other status
+/// is fail-closed (`fail_closed()`), which an x86-64 consumer MUST refuse.
+/// Since 2026-09-28 no covered cell answers fail-closed, so that clause has no
+/// subject today and the must-refuse corpus carries no row for it: its last
+/// row, `vector_unsigned_cmp_bytes_x86`, retired with the four unsigned
+/// `<16 x i8>` cells it named. A cell that turns fail-closed again (a changed
+/// query not yet re-certified) arrives with its corpus row. A consumer
+/// asks this function and never re-derives the rows. Outside this crate's
+/// tests it is called, since trust-cg
+/// main c1b7c2c54 (pin 7b0947ee), by trust-cg's x86-64 module-entry gate
+/// (`reject_x86_vector_icmp_cell_not_available`), which reads the STATUS and
+/// refuses a fail-closed cell on every x86-64 module entry. trust-cg does not
+/// read `feature_guard` from here: its x86 ISel refuses `pcmpeqq` /
+/// `pcmpgtq` on a target without the feature from its own table, and a
+/// trust-cg test pins that table equal to this function's guard per available
+/// cell. For the guard, "never re-derives" is therefore met only as tested
+/// agreement (`docs/dialects.md`, the rule's `(external)` entry, names the
+/// tests and states the gap). The lane width
+/// is the element's bit width; element signedness plays no part, because the
+/// predicate carries it. Every descriptor publishes a row for every `ICmpOp`
+/// (pinned by the request tests); a covered cell with no row would be answered
+/// fail-closed, never as ungoverned.
+#[must_use]
+pub fn chc_x86_vector_icmp_cell_status(
+    lane_bits: u32,
+    lane_count: u32,
+    op: crate::inst::ICmpOp,
+) -> Option<ChcX86VectorIcmpCell> {
+    Some(
+        match chc_x86_vector_icmp_lookup(lane_bits, lane_count, op)? {
+            ChcX86IcmpLookup::Row(row) => ChcX86VectorIcmpCell {
+                status: HardwareVectorContractStatus::Available,
+                reason: HardwareVectorContractReason::CanonicalContract,
+                feature_guard: Some(row.feature_guard),
+            },
+            ChcX86IcmpLookup::Status(row) => ChcX86VectorIcmpCell {
+                status: row.status,
+                reason: row.reason,
+                feature_guard: None,
+            },
+            ChcX86IcmpLookup::Missing => ChcX86VectorIcmpCell {
+                status: HardwareVectorContractStatus::Unavailable,
+                reason: HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
+                feature_guard: None,
+            },
+        },
+    )
+}
+
+/// What the `chc_x86` manifest publishes for one `icmp` cell: an available
+/// lowering row, a status-only row, or nothing for a covered shape.
+enum ChcX86IcmpLookup {
+    Row(&'static HardwareVectorOperationContractRow),
+    Status(&'static HardwareVectorOperationStatusRow),
+    Missing,
+}
+
+/// THE one lookup behind [`chc_x86_vector_icmp_cell_status`],
+/// [`chc_x86_vector_icmp_spec`] and [`chc_x86_vector_icmp_lowering_row`], so
+/// the governed shapes, the shapes that have a spec, and the published rows
+/// are one set by construction: `None` exactly when no descriptor covers the
+/// shape.
+fn chc_x86_vector_icmp_lookup(
+    lane_bits: u32,
+    lane_count: u32,
+    op: crate::inst::ICmpOp,
+) -> Option<ChcX86IcmpLookup> {
+    let descriptor = chc_x86_hardware_vector_contract_descriptors()
+        .into_iter()
+        .find(|d| d.element_bits == lane_bits && d.lane_count == lane_count)?;
+    let operation = chc_x86_icmp_operation(op);
+    if let Some(row) = descriptor
+        .operation_contracts()
+        .iter()
+        .find(|row| row.operation == operation)
+    {
+        return Some(ChcX86IcmpLookup::Row(row));
+    }
+    if let Some(row) = descriptor
+        .operation_status_rows()
+        .iter()
+        .find(|row| row.operation == operation)
+    {
+        return Some(ChcX86IcmpLookup::Status(row));
+    }
+    Some(ChcX86IcmpLookup::Missing)
+}
+
+/// The hardware vector contracts' PHYSICAL mask lane: a lane where the
+/// compare holds is the all-ones lane of `physical_mask_ty`, a lane where it
+/// fails is zero — `ite(holds, 2^w - 1, 0)` at the lane width `w`
+/// (`mask_semantics` "compare_produced_logical_bool_masks"; the
+/// `logical_mask_ty` `<n x bool>` carried in the `physical_mask_ty` lanes).
+/// It is the carrier, not an instruction model: a consumer's model of
+/// `pcmpeq*` / `pcmpgt*` must stay independent of it, or a cell whose
+/// certificate rests on "the instruction model IS the lane predicate" would
+/// hold by shared code rather than by the model.
+pub fn physical_mask_lane<A: crate::bv_meaning::BvVector>(
+    a: &mut A,
+    holds: A::Bool,
+    lane_bits: u32,
+) -> A::Bv {
+    let ones = a.bv_const(crate::bv_meaning::all_ones(lane_bits), lane_bits);
+    let zero = a.bv_const(0, lane_bits);
+    a.ite(holds, ones, zero)
+}
+
+/// THE spec side of the x86-64 vector-compare cell `icmp.<op>` over a vector
+/// of `lane_count` lanes of `lane_bits` bits: the format's compare
+/// ([`crate::bv_meaning::vector_icmp`] over the two operand images, lane 0
+/// least significant), each lane carried as the [`physical_mask_lane`], the
+/// lanes recomposed with [`crate::bv_meaning::concat_lanes`]. Printed by a
+/// one-node-per-method instance, these are the bytes the cell's certificate
+/// (and, for the instruction-model cells, the degenerate obligation) states
+/// the machine side against, so a consumer builds its spec side HERE rather
+/// than restating it (`docs/SPEC_RATIFICATIONS.md`, "Integer compare has one
+/// bit-vector statement").
+///
+/// `None` exactly when [`chc_x86_vector_icmp_cell_status`] is `None` (no
+/// descriptor governs the shape); the operands are not read then. A
+/// fail-closed cell still has a spec — the status, not the spec, is what an
+/// x86-64 consumer refuses.
+pub fn chc_x86_vector_icmp_spec<A: crate::bv_meaning::BvVector>(
+    a: &mut A,
+    lane_bits: u32,
+    lane_count: u32,
+    op: crate::inst::ICmpOp,
+    lhs: &A::Bv,
+    rhs: &A::Bv,
+) -> Option<A::Bv> {
+    chc_x86_vector_icmp_lookup(lane_bits, lane_count, op)?;
+    let holds = crate::bv_meaning::vector_icmp(a, op, lane_bits, lane_count, lhs, rhs);
+    let lanes = holds
+        .into_iter()
+        .map(|held| physical_mask_lane(a, held, lane_bits))
+        .collect();
+    Some(crate::bv_meaning::concat_lanes(a, lanes))
+}
+
+/// The published lowering row of an AVAILABLE x86-64 vector-compare cell —
+/// its `native_instructions` (the ONE list of the instruction models the
+/// cell's lowering uses), `composition`, `feature_guard` and `semantics` —
+/// or `None` for an ungoverned shape or a fail-closed cell, which publishes
+/// no lowering. A consumer reads the cell's machine side from here, never
+/// from its own restatement.
+#[must_use]
+pub fn chc_x86_vector_icmp_lowering_row(
+    lane_bits: u32,
+    lane_count: u32,
+    op: crate::inst::ICmpOp,
+) -> Option<HardwareVectorOperationContractRow> {
+    match chc_x86_vector_icmp_lookup(lane_bits, lane_count, op)? {
+        ChcX86IcmpLookup::Row(row) => Some(*row),
+        ChcX86IcmpLookup::Status(_) | ChcX86IcmpLookup::Missing => None,
+    }
+}
+
+/// The ground an x86-64 vector-compare cell rests on (`docs/dialects.md`, the
+/// per-cell rule), as a projection of [`chc_x86_vector_icmp_cell_status`], the
+/// table's one reader, so the two cannot disagree: `None` for a shape no
+/// descriptor covers and for every cell that is not `Available` (a fail-closed
+/// cell publishes no ground); [`ChcX86IcmpGround::InstructionModel`] for an
+/// operation in [`CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS`]; and
+/// [`ChcX86IcmpGround::Certificate`] naming [`CHC_X86_ICMP_CERTIFICATE_RULE`]
+/// for every other available cell. A separate function rather than a field of
+/// [`ChcX86VectorIcmpCell`], so adding it breaks no consumer that builds a cell
+/// by struct literal.
+#[must_use]
+pub fn chc_x86_vector_icmp_cell_ground(
+    lane_bits: u32,
+    lane_count: u32,
+    op: crate::inst::ICmpOp,
+) -> Option<ChcX86IcmpGround> {
+    let cell = chc_x86_vector_icmp_cell_status(lane_bits, lane_count, op)?;
+    if cell.status != HardwareVectorContractStatus::Available {
+        return None;
+    }
+    let operation = chc_x86_icmp_operation(op);
+    let ground = if CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS.contains(&operation) {
+        ChcX86IcmpGround::InstructionModel
+    } else {
+        ChcX86IcmpGround::Certificate(&CHC_X86_ICMP_CERTIFICATE_RULE)
+    };
+    Some(ground)
 }
 
 /// Emit one deterministic manifest for all canonical CHC x86 vector contracts.

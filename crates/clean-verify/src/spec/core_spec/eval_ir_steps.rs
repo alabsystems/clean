@@ -48,6 +48,12 @@
 //! here, and only because a halted configuration has no frames left to resume.
 //!
 //! `DerivedProved`, empty axiom closures.
+//!
+//! `ir_steps` directly case-splits `IRConfig` to avoid repeatedly evaluating
+//! computed states through a separate terminal predicate and step adapter.
+//! `ir_steps_shared_driver_agreement` proves this specialization equals the
+//! unchanged `ir_drive_v1` for every module, fuel, and configuration. The
+//! shared driver remains registered; `ir_run` and existing proofs are unchanged.
 
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
@@ -55,6 +61,18 @@ use crate::spec::Specification;
 const SRC_CONFIG_OUTCOME: &str = "def ir_config_outcome (c : IRConfig) : IROutcome := IRConfig.rec (fun (_ : IRConfig) => IROutcome) (fun (_ : IRMachine) => IROutcome.fuel_out) (fun (o : IROutcome) => o) c";
 
 const SRC_STEPS: &str = "def ir_steps (fuel : Nat) (m : IRModule) (c : IRConfig) : IRConfig := Nat.rec (fun (_ : Nat) => IRConfig -> IRConfig) (fun (c0 : IRConfig) => c0) (fun (_ : Nat) (ih : IRConfig -> IRConfig) => fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ih (ir_step m s)) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c";
+
+const IR_STEPS_SHARED_DRIVER_TYPE: &str = r"forall (m : IRModule) (fuel : Nat) (c : IRConfig), Eq IRConfig (ir_steps fuel m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) fuel c)";
+
+const IR_STEPS_SHARED_DRIVER_PROOF: &str = r"fun (m : IRModule) (fuel : Nat) =>
+ Nat.rec
+  (fun (k : Nat) => forall (c : IRConfig), Eq IRConfig (ir_steps k m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) k c))
+  (fun (c : IRConfig) => Eq.refl IRConfig c)
+  (fun (k : Nat) (ih : forall (c : IRConfig), Eq IRConfig (ir_steps k m c) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) k c)) =>
+   fun (c : IRConfig) => IRConfig.rec
+    (fun (c0 : IRConfig) => Eq IRConfig (ir_steps (Nat.succ k) m c0) (ir_drive_v1 IRConfig (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Bool) (fun (_ : IRMachine) => Bool.false) (fun (_ : IROutcome) => Bool.true) c0) (fun (c0 : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => IRConfig) (fun (s : IRMachine) => ir_step m s) (fun (o : IROutcome) => IRConfig.halted o) c0) (Nat.succ k) c0))
+    (fun (s : IRMachine) => ih (ir_step m s))
+    (fun (o : IROutcome) => Eq.refl IRConfig (IRConfig.halted o)) c) fuel";
 
 const SRC_RUN_HALTED: &str = "def ir_run_halted (m : IRModule) (o : IROutcome) (g : Nat) : Eq IROutcome (ir_run g m (IRConfig.halted o)) o := Nat.rec (fun (k : Nat) => Eq IROutcome (ir_run k m (IRConfig.halted o)) o) (Eq.refl IROutcome o) (fun (k : Nat) (_ih : Eq IROutcome (ir_run k m (IRConfig.halted o)) o) => Eq.refl IROutcome o) g";
 
@@ -69,12 +87,21 @@ const SRC_STEPS_ADD: &str = "def ir_steps_add (m : IRModule) (b : Nat) (a : Nat)
 impl Specification {
     /// The configuration-level iterator and its faithfulness to `ir_run`.
     pub(super) fn add_eval_ir_steps(&mut self) -> Result<(), SpecError> {
+        self.add_eval_ir_driver()?;
         self.add_recursive_def(SRC_CONFIG_OUTCOME, "ir_config_outcome: read an outcome off a configuration -- fuel_out if it is still running, its own outcome if it has halted. This is exactly ir_run's ZERO case, factored out, which is what lets ir_run_of_steps state that the iterator and the runner are the same machine. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_STEPS, "ir_steps: iterate ir_step at the CONFIGURATION level, keeping the machine instead of projecting an outcome. \
 \
 ir_run erases every intermediate configuration, so a compositional claim -- after k steps the machine is back in the caller's frame with the call's result id bound -- is not merely hard to prove against it, it is not STATABLE against it. A4's induction over Level has its recursive cases at the Call nodes in blocks b3/b4/b5 of Level::is_zero, so it needs exactly that sentence. \
 \
 Same recursion as ir_run with the projection removed: zero is the identity, succ steps a running machine and leaves a halted one alone. DerivedProved, zero axiom_deps.")?;
+        super::acceptance_in::theorem(
+            self,
+            "ir_steps_shared_driver_agreement",
+            IR_STEPS_SHARED_DRIVER_TYPE,
+            IR_STEPS_SHARED_DRIVER_PROOF,
+            "For every module, fuel and configuration, the directly case-split iterator equals the unchanged shared driver with its actual terminal and step adapters. This is a model specialization theorem, not Rust/compiler refinement.",
+        )?;
+        self.verify_definition("ir_steps_shared_driver_agreement")?;
         self.add_recursive_def(SRC_RUN_HALTED, "ir_run_halted: a halted configuration returns its outcome at ANY fuel. Nat.rec on the fuel; both arms are Eq.refl and neither needs the induction hypothesis, because ir_run's zero and succ cases agree on halted. This is the absorption that makes surplus fuel harmless at the OUTCOME level -- and the reason A4 can take a Le premise rather than an exact count. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_STEPS_HALTED, "ir_steps_halted: a halted configuration is a fixed point of the iterator. \
 \
@@ -162,3 +189,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod agreement_tests;

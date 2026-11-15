@@ -10,7 +10,9 @@ mod solver;
 mod theory;
 mod types;
 
-pub(crate) use solver::SmtSolver;
+#[cfg(test)]
+pub(crate) use solver::SMT_CONFLICT_LIMIT;
+pub(crate) use solver::{SmtSolver, SMT_CONFLICT_LIMIT_REASON};
 pub(crate) use theory::{
     LeveledTheoryState, TheoryCheckResult, TheoryLemmaRequest, TheoryLiteral, TheorySolver,
 };

@@ -47,8 +47,18 @@
 //! congruence prover yields a term *definitionally equal* to the required premise
 //! (e.g. `List.cons α x (xs ++ []) = List.cons α x xs` for the `(x::xs) ++ [] =
 //! x::xs` step), which the final assembly's `is_def_eq` absorbs.
+//!
+//! Bounds: the search is decided by counts alone. They are [`INDUCTION_FUEL`],
+//! [`MAX_GOAL_DEPTH`], the rewrite depth (`REWRITE_DEPTH`), the aux-lemma
+//! synthesis depth (`MAX_SYNTH_DEPTH`), the base engines' own counts (the SMT
+//! bridge's instantiation rounds, its solver's DPLL(T) iterations and CDCL
+//! conflict limit `smt::SMT_CONFLICT_LIMIT`, the superposition prover's
+//! given-clause steps) and the kernel's heartbeats. A wall clock is only the
+//! caller's backstop ([`crate::search_stop`]): it is polled where the counts
+//! have said "go on", and once it fires the whole search reports a fired
+//! backstop ([`InductionSearch::BackstopFired`]), never a missing proof.
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use clean_kernel::{
     BinderInfo, Environment, Expr, ExprKind, Level, LevelVec, LocalContext, Name, TypeChecker,
@@ -59,6 +69,8 @@ use crate::engine_api::AutomationOutcome;
 use crate::engine_induction_assembly::peel_inductive_forall;
 use crate::engine_induction_rewrite::REWRITE_DEPTH;
 use crate::proof_result::HypothesisWithProofFVar;
+use crate::search_stop::SearchStop;
+use crate::smt::SMT_CONFLICT_LIMIT_REASON;
 use crate::ProofResult;
 
 /// Maximum nesting depth of the induction lane.
@@ -119,6 +131,42 @@ pub(crate) fn goal_depth_exceeds(e: &Expr, limit: u32) -> bool {
     false
 }
 
+/// How a structural-induction search ended
+/// ([`AutomationEngine::prove_by_induction_counted`]).
+///
+/// The first three are decided by the search's counts (module docs, "Bounds")
+/// and are the same on every host, idle or loaded. Only
+/// [`Self::BackstopFired`] depends on the clock, and it is not an answer about
+/// the goal.
+///
+/// Deliberately NOT `#[non_exhaustive]`: an embedder that turns this into a
+/// compile decision (Trust's clean-origin gate) must name every arm, so a new
+/// variant is a compile error there rather than a wildcard's silent default.
+#[derive(Debug)]
+pub enum InductionSearch {
+    /// A recursor proof that the kernel accepted against the goal.
+    Proved(ProofResult),
+    /// The counts decided: the goal is not of the lane's shape, or every
+    /// alternative failed, and no SMT solve stopped at the CDCL conflict limit.
+    /// This is not a counter-proof, and not a claim that the search was
+    /// exhaustive. Every other count that ends a branch ends it here: fuel, the
+    /// goal-depth rail, the rewrite and synthesis depths, superposition's
+    /// 10,000 steps and passive-weight cap (`ResourceLimit`), DPLL(T)'s
+    /// 10,000 iterations, E-matching's instantiation rounds, the
+    /// propositional-reconstruction node budget, and kernel heartbeats.
+    NotProved,
+    /// The counts decided: no proof was found, and at least one SMT solve
+    /// inside the search stopped at the CDCL conflict limit
+    /// (`smt::SMT_CONFLICT_LIMIT`) before it decided. The message names that
+    /// count. It is the only count this variant reports today; the others end
+    /// as [`Self::NotProved`]. A larger limit might have found a proof.
+    CountLimit(&'static str),
+    /// The caller's backstop fired before the counts decided. The search could
+    /// not run to its decision: this is neither a proof nor a failure to find
+    /// one, and an embedder reports it as could-not-run, never as a refusal.
+    BackstopFired,
+}
+
 impl AutomationEngine {
     /// Public strategy entry point: try to prove `goal` by structural induction.
     ///
@@ -127,22 +175,81 @@ impl AutomationEngine {
     /// over a registered non-mutual, index-free inductive `I`, or a subgoal could
     /// not be discharged. The returned proof term is closed (no `proof_context`)
     /// when called on a closed goal.
+    ///
+    /// The search is decided by counts ([`Self::prove_by_induction_counted`]);
+    /// `timeout` is only its backstop, measured from this call. A fired backstop
+    /// also answers `None` here; the counted entry tells the two apart.
     pub fn prove_by_induction(
         &self,
         env: &Environment,
         goal: &Expr,
-        timeout: std::time::Duration,
+        timeout: Duration,
     ) -> Option<ProofResult> {
+        let backstop = Instant::now().checked_add(timeout);
+        match self.search_by_induction(env, goal, &LocalContext::new(), backstop) {
+            InductionSearch::Proved(result) => Some(result),
+            InductionSearch::NotProved
+            | InductionSearch::CountLimit(_)
+            | InductionSearch::BackstopFired => None,
+        }
+    }
+
+    /// Prove `goal` by structural induction, decided by counts alone.
+    ///
+    /// `backstop` is an absolute instant, so a caller can share one backstop
+    /// across several attempts. It is only a backstop: it is polled where the
+    /// search's counts have said "go on", and a decision the counts have reached
+    /// is returned even when it arrives after `backstop`. When it fires the
+    /// answer is [`InductionSearch::BackstopFired`]. With the backstop never
+    /// firing, the answer is the same on every host and under any load.
+    pub fn prove_by_induction_counted(
+        &self,
+        env: &Environment,
+        goal: &Expr,
+        backstop: Instant,
+    ) -> InductionSearch {
+        self.search_by_induction(env, goal, &LocalContext::new(), Some(backstop))
+    }
+
+    /// Both entries, in `base_ctx` (empty for a closed goal). `backstop` `None`
+    /// is a search bounded by its counts alone.
+    fn search_by_induction(
+        &self,
+        env: &Environment,
+        goal: &Expr,
+        base_ctx: &LocalContext,
+        backstop: Option<Instant>,
+    ) -> InductionSearch {
+        self.search_by_induction_with(env, goal, base_ctx, &SearchStop::new(backstop))
+    }
+
+    /// [`Self::search_by_induction`] under a caller-built `stop`, so this crate's
+    /// tests can read what the search spent.
+    pub(crate) fn search_by_induction_with(
+        &self,
+        env: &Environment,
+        goal: &Expr,
+        base_ctx: &LocalContext,
+        stop: &SearchStop,
+    ) -> InductionSearch {
         let start = Instant::now();
-        let deadline = start + timeout;
-        let base_ctx = LocalContext::new();
-        let term = self.try_induction_lane(env, goal, &base_ctx, deadline, INDUCTION_FUEL)?;
-        Some(ProofResult::new(
-            term,
-            "proved by structural induction (recursor)",
-            start.elapsed().as_millis() as u64,
-            None,
-        ))
+        let term = self.try_induction_lane(env, goal, base_ctx, stop, INDUCTION_FUEL);
+        // The latch, not the clock: a backstop that no poll saw fire cut no work
+        // short, so the counts' answer stands whenever it arrives.
+        if stop.has_fired() {
+            return InductionSearch::BackstopFired;
+        }
+        match term {
+            Some(term) => InductionSearch::Proved(ProofResult::new(
+                term,
+                "proved by structural induction (recursor)",
+                start.elapsed().as_millis() as u64,
+                (!base_ctx.is_empty()).then(|| base_ctx.clone()),
+            )),
+            None => stop
+                .count_limit()
+                .map_or(InductionSearch::NotProved, InductionSearch::CountLimit),
+        }
     }
 
     /// Pipeline hook: try induction with a fresh fuel budget against `base_ctx`.
@@ -155,18 +262,22 @@ impl AutomationEngine {
         env: &Environment,
         goal: &Expr,
         base_ctx: &LocalContext,
-        deadline: Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
-        if fuel == 0 || Instant::now() >= deadline {
+        if fuel == 0 {
             return None;
         }
         // Robustness rail (BUG 2 / runaway): decline a pathologically deep goal
         // before peeling it. The assembly's kernel re-checks recurse in the goal's
         // structure, so a too-deep goal would otherwise drive a multi-minute run or
-        // a stack overflow inside the kernel (which the per-step deadline poll
+        // a stack overflow inside the kernel (which the per-step backstop poll
         // cannot interrupt mid-`infer_type`). Returns `None` gracefully.
         if goal_depth_exceeds(goal, MAX_GOAL_DEPTH) {
+            return None;
+        }
+        // The counts said "go on": only now may the backstop stop the search.
+        if stop.backstop_fired() {
             return None;
         }
 
@@ -174,7 +285,7 @@ impl AutomationEngine {
         // variable. This proves the base/structural lemmas (`0+n=n`, `l++[]=l`)
         // and any theorem whose step closes on the outermost variable
         // (`append_assoc`).
-        if let Some(term) = self.induct_on_outermost(env, goal, base_ctx, deadline, fuel) {
+        if let Some(term) = self.induct_on_outermost(env, goal, base_ctx, stop, fuel) {
             return Some(term);
         }
 
@@ -182,7 +293,7 @@ impl AutomationEngine {
         // front). `add_assoc` does not close on its outermost variable `n` (the
         // base case `(0+m)+k=0+(m+k)` would need a `0+m=m` lemma) but does close
         // by induction on its third variable `k`.
-        self.try_induction_reordered(env, goal, base_ctx, deadline, fuel)
+        self.try_induction_reordered(env, goal, base_ctx, stop, fuel)
     }
 
     /// Prove `goal = ∀ (x : I …), P x` by inducting on its outermost binder.
@@ -196,7 +307,7 @@ impl AutomationEngine {
         env: &Environment,
         goal: &Expr,
         base_ctx: &LocalContext,
-        deadline: Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
         // Peel `∀ (x : I …), P x` and resolve `I`'s recursor metadata. Declines
@@ -219,7 +330,7 @@ impl AutomationEngine {
             &motive,
             &motive_level,
             base_ctx,
-            deadline,
+            stop,
             fuel - 1,
         )?;
 
@@ -247,16 +358,16 @@ impl AutomationEngine {
         env: &Environment,
         goal: &Expr,
         ctx: &LocalContext,
-        deadline: Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
-        if Instant::now() >= deadline {
+        if stop.backstop_fired() {
             return None;
         }
 
         // 1. Existing engines first (honour "discharge via the existing prover").
         //    Every candidate is kernel-checked inside `run_base_engines`.
-        if let Some(term) = self.run_base_engines(env, goal, ctx, deadline) {
+        if let Some(term) = self.run_base_engines(env, goal, ctx, stop) {
             return Some(term);
         }
 
@@ -267,13 +378,13 @@ impl AutomationEngine {
         //    emits lemmas a minimal environment lacks; this path builds
         //    `Eq.refl`/`congrArg`/IH-application terms directly and re-checks them
         //    against `goal`.
-        if let Some(term) = self.prove_eq_rewrite(env, ctx, goal, &[], deadline, REWRITE_DEPTH) {
+        if let Some(term) = self.prove_eq_rewrite(env, ctx, goal, &[], stop, REWRITE_DEPTH) {
             return Some(term);
         }
 
         // 3. Nested induction (bounded by fuel) for multi-variable goals.
         if fuel > 0 {
-            return self.try_induction_lane(env, goal, ctx, deadline, fuel);
+            return self.try_induction_lane(env, goal, ctx, stop, fuel);
         }
         None
     }
@@ -298,9 +409,9 @@ impl AutomationEngine {
         env: &Environment,
         goal: &Expr,
         ctx: &LocalContext,
-        deadline: Instant,
+        stop: &SearchStop,
     ) -> Option<Expr> {
-        if Instant::now() >= deadline {
+        if stop.backstop_fired() {
             return None;
         }
         let proof_ctx = if ctx.is_empty() {
@@ -310,8 +421,10 @@ impl AutomationEngine {
         };
         let hypotheses = prop_hypotheses(env, ctx);
 
+        // The SMT run polls no clock: its counts (instantiation rounds, DPLL(T)
+        // iterations, the CDCL conflict limit) decide it.
         let now = Instant::now();
-        let smt = self.try_smt_detailed(
+        let smt = self.try_smt_attempt(
             env,
             goal,
             &hypotheses,
@@ -321,14 +434,16 @@ impl AutomationEngine {
             None,
             now,
         );
-        if let AutomationOutcome::Verified(result) = smt {
+        if let AutomationOutcome::Verified(result) = &smt.outcome {
             let term = result.proof_term().clone();
             if kernel_accepts(env, ctx, &term, goal) {
                 return Some(term);
             }
+        } else if smt.conflict_limit_reached {
+            stop.note_count_limit(SMT_CONFLICT_LIMIT_REASON);
         }
 
-        if Instant::now() >= deadline {
+        if stop.backstop_fired() {
             return None;
         }
         let superposition_hyps: Vec<(Expr, clean_kernel::FVarId)> =
@@ -337,7 +452,7 @@ impl AutomationEngine {
             env,
             goal,
             &superposition_hyps,
-            Some(deadline),
+            Some(stop),
         ) {
             let term = result.proof_term().clone();
             if kernel_accepts(env, ctx, &term, goal) {

@@ -13,8 +13,8 @@
 //! ```
 //!
 //! ```text
-//! rustcc fn @cert::builder::state::NodeId::index(functy.97) {
-//! bb0(%0: struct.323):
+//! rustcc fn @cert::builder::state::NodeId::index(functy.85) {
+//! bb0(%0: struct.210):
 //!     %1 = extractfield u32 %0, 0
 //!     %2 = zext u32 %1 to usize
 //!     ret %2
@@ -25,7 +25,7 @@
 //!
 //! The ninth chain's census named two `zext u32 -> usize` bodies that are the
 //! same instruction sequence twice — this one and
-//! `env::persistent_ext::ExtensionIdx::index` (`struct.323` vs `struct.848`
+//! `env::persistent_ext::ExtensionIdx::index` (`struct.210` vs `struct.612`; `struct.323` vs `struct.848` before the 2026-10-07 rebaseline
 //! and nothing else). This chain covers `NodeId::index` ONLY; the sibling
 //! remains unchained, and nothing here transfers to it except the registered
 //! cast semantics.
@@ -123,7 +123,7 @@ const MINTED_IR_NI: &str = include_str!("generated/ir_ni.defs.txt");
 
 /// Registration rationales, one per minted line, in script order.
 const MINTED_IR_NI_DOCS: &[&str] = &[
-    "ir_ni_tself: struct.323, the struct id the emitted body names in `bb0(%0: struct.323)`. Minted from the tag table's INTERFACE-ONLY row (the ir_fc posture: the module's instructions name no aggregate); the value-addressed semantics never consults it. It is ALSO what distinguishes this body from its unchained twin ExtensionIdx::index (struct.848). DerivedProved, zero axiom_deps.",
+    "ir_ni_tself: struct.210, the struct id the emitted body names in `bb0(%0: struct.210)`. Minted from the tag table's INTERFACE-ONLY row (the ir_fc posture: the module's instructions name no aggregate); the value-addressed semantics never consults it. It is ALSO what distinguishes this body from its unchained twin ExtensionIdx::index (struct.848). DerivedProved, zero axiom_deps.",
     "ir_ni_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_ni.core.txt; reader B's copy of the same body is tests/fixtures/node_id_index.trust-ir.txt). Read self.0 (field 0, at u32) into %1, zero-extend %1 from u32 to `usize` into %2, return %2. Every token is a CFG lane: the field index, the extractfield type, the cast opcode (sext at the top half of the range is a DIFFERENT function -- executed below), both cast widths (the emitted destination is `usize`, resolved to the minted literal 64 through the tag table's pinned usize lane), the operand, and the returned id. DerivedProved, zero axiom_deps.",
     "ir_ni_func: NodeId::index as EvalIR -- ONE parameter (%0, self by value), entry block 0, one block. No closure environment: unlike the eighth and ninth chains this is a plain method, not a closure. DerivedProved, zero axiom_deps.",
     "ir_ni_module: the module for cert::builder::state::NodeId::index, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text, reading `usize` through the tag table's pinned width), and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger. Checked lane for lane by tests/crystal_a1_lineage/node_id_index.rs. DerivedProved, zero axiom_deps.",

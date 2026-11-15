@@ -42,7 +42,7 @@
 
 use std::collections::HashMap;
 
-use clean_parser::{DoElem, InterpolationPart, SurfaceArg, SurfaceExpr};
+use clean_parser::{DoElem, InterpolationPart, SurfaceArg, SurfaceExpr, SurfaceName};
 
 /// A registered user-defined term elaborator.
 ///
@@ -53,7 +53,7 @@ use clean_parser::{DoElem, InterpolationPart, SurfaceArg, SurfaceExpr};
 pub(crate) struct UserTermElab {
     /// Bound pattern variable names, in left-to-right order (e.g. `["e"]` for
     /// `elab "mywrap" e:term : term => ...`). Empty for a nullary keyword.
-    pub(super) bound_vars: Vec<String>,
+    pub(super) bound_vars: Vec<SurfaceName>,
     /// The body expression (right of `=>`) to substitute bindings into and
     /// elaborate.
     pub(super) body: SurfaceExpr,
@@ -71,7 +71,7 @@ pub(crate) struct UserTermElab {
 
 /// A single substitution: a bound identifier mapped to the surface expression
 /// that should replace it.
-type Binding = (String, SurfaceExpr);
+type Binding = (SurfaceName, SurfaceExpr);
 
 /// If `expanded` is a call to a registered user term keyword, return the keyword
 /// and the positional call-site argument expressions.
@@ -88,12 +88,17 @@ pub(super) fn match_user_term_call<'e>(
     registry: &HashMap<String, UserTermElab>,
 ) -> Option<(&'e str, Vec<SurfaceExpr>)> {
     match expanded {
-        SurfaceExpr::Ident(_, name) if registry.contains_key(name) => Some((name.as_str(), vec![])),
+        SurfaceExpr::Ident(_, name) => {
+            let text = name.component_text()?;
+            (name.is_unescaped_component(text) && registry.contains_key(text))
+                .then_some((text, vec![]))
+        }
         SurfaceExpr::App(_, func, args) => {
             let SurfaceExpr::Ident(_, name) = func.as_ref() else {
                 return None;
             };
-            if !registry.contains_key(name) {
+            let text = name.component_text()?;
+            if !name.is_unescaped_component(text) || !registry.contains_key(text) {
                 return None;
             }
             // The flat pattern binds positional arguments only. A named argument
@@ -102,7 +107,7 @@ pub(super) fn match_user_term_call<'e>(
                 return None;
             }
             let arg_exprs = args.iter().map(|a| a.expr.clone()).collect();
-            Some((name.as_str(), arg_exprs))
+            Some((text, arg_exprs))
         }
         _ => None,
     }
@@ -264,6 +269,11 @@ fn substitute_in_do_elems(elems: &[DoElem], bindings: &[Binding]) -> Vec<DoElem>
                 out.push(DoElem::Let(*span, binder.clone(), new_val));
                 drop_binding(&mut active, &binder.name);
             }
+            DoElem::Have(span, binder, val) => {
+                let new_val = Box::new(substitute_in_expr(val, &active));
+                out.push(DoElem::Have(*span, binder.clone(), new_val));
+                drop_binding(&mut active, &binder.name);
+            }
             DoElem::Bind(span, binder, val) => {
                 let new_val = Box::new(substitute_in_expr(val, &active));
                 out.push(DoElem::Bind(*span, binder.clone(), new_val));
@@ -286,7 +296,7 @@ fn substitute_in_do_elems(elems: &[DoElem], bindings: &[Binding]) -> Vec<DoElem>
 
 /// Remove any binding for `name` (an inner `do` binder shadows the pattern
 /// variable for the remainder of the block).
-fn drop_binding(bindings: &mut Vec<Binding>, name: &str) {
+fn drop_binding(bindings: &mut Vec<Binding>, name: &SurfaceName) {
     bindings.retain(|(bound, _)| bound != name);
 }
 

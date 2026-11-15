@@ -13,7 +13,8 @@ use crate::name::Name;
 
 use super::aesop::{AesopIndexMode, AesopRule, AesopRuleBuilder, AesopRulePhase, AesopRuleSet};
 use super::types::{
-    EnvError, KernelClassInfo, KernelInstanceInfo, Reducibility, SimpLemmaInfo, SimpPriority,
+    EnvError, GrindAttrKind, KernelClassInfo, KernelInstanceInfo, Reducibility, SimpLemmaInfo,
+    SimpPriority,
 };
 use super::Environment;
 
@@ -64,6 +65,9 @@ impl Environment {
     pub fn register_instance(&mut self, info: KernelInstanceInfo) {
         // Add to reverse lookup for O(1) instance check
         self.instance_names.insert(info.name.clone());
+        // A fresh entry is PUSHED onto Lean's index: the newest position.
+        let seq = self.alloc_instance_seq();
+        self.instance_seqs.insert(info.name.clone(), seq);
 
         let instances = self.instances.entry(info.class_name.clone()).or_default();
         // Insert before the first entry of equal-or-lower priority, so a new
@@ -75,6 +79,120 @@ impl Environment {
             .unwrap_or(instances.len());
         instances.insert(pos, info);
         self.generation += 1;
+    }
+
+    /// A fresh position in Lean's instance index, after every position handed
+    /// out so far (see the `instance_seqs` field): where an entry pushed now
+    /// lands.
+    pub fn alloc_instance_seq(&mut self) -> u64 {
+        let seq = self.next_instance_seq;
+        self.next_instance_seq += 1;
+        seq
+    }
+
+    /// Instance `name`'s position in Lean's instance index (see the
+    /// `instance_seqs` field), if it is a registered instance.
+    #[must_use]
+    pub fn instance_seq(&self, name: &Name) -> Option<u64> {
+        if !self.instance_names.contains(name) {
+            return None;
+        }
+        Some(self.instance_seqs.get(name).copied().unwrap_or(0))
+    }
+
+    /// Move the entry at `pos` of `class_name`'s bucket to where the order
+    /// of [`Self::get_class_instances`] puts it — priority descending, then
+    /// position in Lean's index descending (the newest first).
+    fn reposition_instance(&mut self, class_name: &Name, pos: usize) {
+        let Some(entries) = self.instances.get_mut(class_name) else {
+            return;
+        };
+        let info = entries.remove(pos);
+        let seq_of = |name: &Name| self.instance_seqs.get(name).copied().unwrap_or(0);
+        let key = (info.priority, seq_of(&info.name));
+        let insert_at = entries
+            .iter()
+            .position(|e| (e.priority, seq_of(&e.name)) < key)
+            .unwrap_or(entries.len());
+        entries.insert(insert_at, info);
+        self.generation += 1;
+    }
+
+    /// Lean's `Environment.registerNamespace` for `ns` and each of its
+    /// prefixes (`namespace A.B` enters, and registers, `A` and `A.B`).
+    pub fn register_namespace(&mut self, ns: &Name) {
+        let mut current = ns.clone();
+        while !current.is_anon() {
+            if !self.registered_namespaces.insert(current.clone()) {
+                break;
+            }
+            current = match current.inner() {
+                crate::name::NameInner::Str(parent, _) | crate::name::NameInner::Num(parent, _) => {
+                    parent.as_ref().clone()
+                }
+                crate::name::NameInner::Anon => break,
+            };
+        }
+    }
+
+    /// Whether a `namespace` command registered `ns` (see
+    /// [`Self::register_namespace`]).
+    #[must_use]
+    pub fn is_registered_namespace(&self, ns: &Name) -> bool {
+        self.registered_namespaces.contains(ns)
+    }
+
+    /// Where instance `name` sits: its class and its index in the class's
+    /// bucket.
+    fn instance_slot(&self, name: &Name) -> Option<(Name, usize)> {
+        if !self.instance_names.contains(name) {
+            return None;
+        }
+        self.instances.iter().find_map(|(class, entries)| {
+            entries
+                .iter()
+                .position(|e| &e.name == name)
+                .map(|pos| (class.clone(), pos))
+        })
+    }
+
+    /// Lean's re-insertion of an instance that IS in the global instance
+    /// index: `DiscrTree.insertVal` replaces the equal entry IN PLACE, so it
+    /// keeps its position and takes the new `priority`. Returns `false` (and
+    /// changes nothing) when `name` is not a registered instance.
+    ///
+    /// SOUNDNESS: instance metadata is elaboration-only; the order steers
+    /// which candidate resolution reaches first, and every synthesized term
+    /// is still kernel-checked by its caller.
+    pub fn set_instance_priority_in_place(&mut self, name: &Name, priority: u32) -> bool {
+        let Some((class_name, pos)) = self.instance_slot(name) else {
+            return false;
+        };
+        if let Some(entries) = self.instances.get_mut(&class_name) {
+            entries[pos].priority = priority;
+        }
+        self.reposition_instance(&class_name, pos);
+        true
+    }
+
+    /// Lean's insertion of an instance that is NOT in the global instance
+    /// index (an instance until now only `local`, or only `scoped`, being
+    /// given a global entry): `DiscrTree.insertVal` pushes it, so it takes
+    /// the newest position and `priority`. Returns `false` (and changes
+    /// nothing) when `name` is not a registered instance.
+    ///
+    /// SOUNDNESS: as [`Self::set_instance_priority_in_place`].
+    pub fn push_instance_as_newest(&mut self, name: &Name, priority: u32) -> bool {
+        let Some((class_name, pos)) = self.instance_slot(name) else {
+            return false;
+        };
+        let seq = self.alloc_instance_seq();
+        self.instance_seqs.insert(name.clone(), seq);
+        if let Some(entries) = self.instances.get_mut(&class_name) {
+            entries[pos].priority = priority;
+        }
+        self.reposition_instance(&class_name, pos);
+        true
     }
 
     /// Idempotently install an initializer-owned instance-registry entry.
@@ -161,14 +279,11 @@ impl Environment {
         if previous == priority {
             return Some(previous);
         }
-        let mut info = entries.remove(pos);
-        info.priority = priority;
-        let insert_at = entries
-            .iter()
-            .position(|e| e.priority <= priority)
-            .unwrap_or(entries.len());
-        entries.insert(insert_at, info);
-        self.generation += 1;
+        // Front of its new tier: the newest position.
+        entries[pos].priority = priority;
+        let seq = self.alloc_instance_seq();
+        self.instance_seqs.insert(name.clone(), seq);
+        self.reposition_instance(&class_name, pos);
         Some(previous)
     }
 
@@ -628,6 +743,15 @@ impl Environment {
             .insert(name.clone(), SimpLemmaInfo { name, priority });
         self.generation += 1;
         self.simp_registry_revision += 1;
+        self.simp_cache_identity.registry_changed();
+    }
+
+    /// Process-local environment origin and registry snapshot for simp caches.
+    /// Equality distinguishes independently constructed environments and
+    /// divergent clone mutations; it grants no verification authority.
+    #[must_use]
+    pub fn simp_cache_identity(&self) -> super::SimpCacheIdentity {
+        self.simp_cache_identity.clone()
     }
 
     /// Revision counter of the simp-lemma registry: bumped only by
@@ -658,16 +782,59 @@ impl Environment {
         self.simp_lemmas.len()
     }
 
-    /// Register an imported `export` alias (`isTrue ↦ Decidable.isTrue`).
-    /// First writer wins, so a repeated/overlapping module load is idempotent.
+    /// Register an `export` alias (`isTrue ↦ Decidable.isTrue`), imported or
+    /// made by a source `export` command: Lean's `addAlias`
+    /// (`aliasExtension`, `addAliasEntry`), which adds `target` to the
+    /// alias's targets unless it is already one of them. A repeated or
+    /// overlapping module load is therefore idempotent.
     pub fn register_export_alias(&mut self, alias: Name, target: Name) {
-        self.export_aliases.entry(alias).or_insert(target);
+        match self.export_aliases.get(&alias) {
+            None => {
+                self.export_aliases.insert(alias, target);
+            }
+            Some(first) if *first == target => {}
+            Some(_) => {
+                let others = self.export_alias_others.entry(alias).or_default();
+                if !others.contains(&target) {
+                    others.push(target);
+                }
+            }
+        }
     }
 
-    /// Resolve an imported `export` alias, if one exists.
+    /// The FIRST target of an `export` alias, if there is one. A caller that
+    /// resolves a name must also consider the others
+    /// ([`Self::export_alias_targets`]): with more than one, Lean's
+    /// resolution is ambiguous.
     #[must_use]
     pub fn get_export_alias(&self, alias: &Name) -> Option<&Name> {
         self.export_aliases.get(alias)
+    }
+
+    /// Every (alias, target) pair of the `export` alias table.
+    pub fn export_alias_pairs(&self) -> impl Iterator<Item = (&Name, &Name)> {
+        self.export_aliases.iter().chain(
+            self.export_alias_others
+                .iter()
+                .flat_map(|(alias, targets)| targets.iter().map(move |target| (alias, target))),
+        )
+    }
+
+    /// Every namespace a `namespace` command registered
+    /// ([`Self::register_namespace`]).
+    pub fn registered_namespaces(&self) -> impl Iterator<Item = &Name> {
+        self.registered_namespaces.iter()
+    }
+
+    /// Every target of an `export` alias (Lean's `getAliases`), the first
+    /// registered first.
+    #[must_use]
+    pub fn export_alias_targets(&self, alias: &Name) -> Vec<&Name> {
+        let mut targets: Vec<&Name> = self.export_aliases.get(alias).into_iter().collect();
+        if let Some(others) = self.export_alias_others.get(alias) {
+            targets.extend(others.iter());
+        }
+        targets
     }
 
     /// Number of imported `export` aliases (evidence/diagnostics).
@@ -684,6 +851,7 @@ impl Environment {
         if removed {
             self.generation += 1;
             self.simp_registry_revision += 1;
+            self.simp_cache_identity.registry_changed();
         }
         removed
     }
@@ -814,7 +982,8 @@ impl Environment {
 
     /// Check if a declaration is a csimp lemma.
     pub fn is_csimp(&self, name: &Name) -> bool {
-        self.csimp_lemmas.contains(name)
+        super::csimp::attribute_status(self, name)
+            .unwrap_or_else(|| self.csimp_lemmas.contains(name))
     }
 
     /// Register a congr lemma.
@@ -835,6 +1004,47 @@ impl Environment {
     /// Check if a declaration is an ext lemma.
     pub fn is_ext(&self, name: &Name) -> bool {
         self.ext_lemmas.contains(name)
+    }
+
+    /// Register a declaration as tagged `@[grind]` with `kind`.
+    ///
+    /// Re-registering a name REPLACES its kind (Lean's attribute table is a
+    /// map; the last `attribute [grind …]` wins) and keeps its original
+    /// position, so the order grind consumes the set in stays the declaration
+    /// order of the file.
+    ///
+    /// This registry feeds `grind` ONLY. It deliberately does not touch the
+    /// `@[simp]` set: Mathlib tags lemmas `@[grind]` that are deliberately not
+    /// `@[simp]`, and leaking them into the ambient simp set would change every
+    /// `simp` call in the file.
+    pub fn register_grind_lemma(&mut self, name: Name, kind: GrindAttrKind) {
+        if let Some(entry) = self.grind_lemmas.iter_mut().find(|(n, _)| *n == name) {
+            entry.1 = kind;
+        } else {
+            self.grind_lemmas.push((name, kind));
+        }
+        self.generation += 1;
+    }
+
+    /// Is `name` tagged `@[grind]` (with any kind)?
+    #[must_use]
+    pub fn is_grind_lemma(&self, name: &Name) -> bool {
+        self.grind_lemmas.iter().any(|(n, _)| n == name)
+    }
+
+    /// The kind `name` was tagged `@[grind]` with, if it was.
+    #[must_use]
+    pub fn grind_lemma_kind(&self, name: &Name) -> Option<&GrindAttrKind> {
+        self.grind_lemmas
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, k)| k)
+    }
+
+    /// Every `@[grind]` registration, in declaration order.
+    #[must_use]
+    pub fn grind_lemmas(&self) -> &[(Name, GrindAttrKind)] {
+        &self.grind_lemmas
     }
 
     /// Register a refl lemma.
@@ -954,6 +1164,61 @@ impl Environment {
     /// Check if a declaration is marked `protected`.
     pub fn is_protected(&self, name: &Name) -> bool {
         self.protected_decls.contains(name)
+    }
+
+    /// Record that an instance was declared `local instance`: it is never
+    /// visible outside the module that declares it (Lean does not export a
+    /// local attribute), whatever environment that module was elaborated in.
+    pub fn mark_local_instance(&mut self, name: Name) {
+        self.local_instance_decls.insert(name);
+    }
+
+    /// Every instance recorded by [`Self::mark_local_instance`].
+    pub fn local_instance_names(&self) -> impl Iterator<Item = &Name> {
+        self.local_instance_decls.iter()
+    }
+
+    /// Whether `name` was declared `local instance` (and not since made a
+    /// global instance by an `attribute [instance]`).
+    pub fn is_local_instance(&self, name: &Name) -> bool {
+        self.local_instance_decls.contains(name)
+    }
+
+    /// Undo [`Self::mark_local_instance`]: an `attribute [instance] i` on an
+    /// instance another module declared `local` adds a GLOBAL entry for it,
+    /// which Lean exports like any other (`P: local instance i3 …`,
+    /// `M: import P; attribute [instance] i3` makes `i3` M's newest instance,
+    /// and M's importers see it).
+    pub fn unmark_local_instance(&mut self, name: &Name) -> bool {
+        self.local_instance_decls.remove(name)
+    }
+
+    /// The registered priority of instance `name`, if it is one.
+    pub fn instance_priority(&self, name: &Name) -> Option<u32> {
+        if !self.instance_names.contains(name) {
+            return None;
+        }
+        self.instances
+            .values()
+            .flat_map(|entries| entries.iter())
+            .find(|entry| &entry.name == name)
+            .map(|entry| entry.priority)
+    }
+
+    /// The class instance `name` is registered for, if it is one.
+    pub fn instance_class(&self, name: &Name) -> Option<&Name> {
+        if !self.instance_names.contains(name) {
+            return None;
+        }
+        self.instances
+            .iter()
+            .find(|(_, entries)| entries.iter().any(|entry| &entry.name == name))
+            .map(|(class, _)| class)
+    }
+
+    /// Every declaration marked `private`.
+    pub fn private_decl_names(&self) -> impl Iterator<Item = &Name> {
+        self.private_decls.iter()
     }
 
     /// Mark a declaration as `noncomputable` (no code generation).

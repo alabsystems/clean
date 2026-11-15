@@ -9,14 +9,20 @@
 //!
 //! Part of #1340 — compiler pipeline end-to-end integration test.
 
+mod runtime_fixture;
+
 use clean_compiler::boxing::explicit_boxing_with_config;
 use clean_compiler::emit_c::{emit_c_with_config, CEmitConfig};
 use clean_compiler::lcnf::{Arg, Code, Decl, LetDecl, LetValue, Param};
+use clean_compiler::pass_manager::{compile_lcnf_decls, PipelineConfig};
 use clean_compiler::rc;
 use clean_compiler::to_ir::to_ir;
+use clean_compiler::to_lcnf::constant_to_decl;
 use clean_compiler::to_mono::to_mono;
 use clean_compiler::{BoxingConfig, OptConfig, RCConfig};
+use clean_kernel::env::Declaration;
 use clean_kernel::{Environment, Expr, FVarId, Name};
+use runtime_fixture::MaterializedRuntime;
 
 fn fvar(n: u64) -> FVarId {
     FVarId::new(n)
@@ -198,8 +204,16 @@ fn test_pipeline_multiple_decls() {
 // Part of #1340: emitted C compiles with system C compiler.
 //
 // This test is skipped if no C compiler is available. It verifies that the
-// emitted code, when combined with clean_runtime.h and clean_runtime.c,
-// compiles without errors.
+// emitted code compiles (`cc -c`, no link) against `clean_runtime.h`.
+//
+// The header comes from `clean_runtime::include_dir()`, which serves the
+// crate's compile-time `include/` only when that directory really holds the
+// embedded header and otherwise materializes the embedded copy into a cache
+// directory — so this test does not depend on where `clean-runtime` was
+// compiled. Measured 2026-09-15 before that change: the shared
+// `target/debug` rlib had been built from a since-deleted gate-demonstration
+// sandbox and this test failed with
+// `fatal error: 'clean_runtime.h' file not found`.
 #[test]
 fn test_pipeline_c_compilation() {
     // Check if cc is available
@@ -232,7 +246,8 @@ fn test_pipeline_c_compilation() {
     let full_c = format!("#include \"clean_runtime.h\"\n\n{c_code}\n");
     std::fs::write(&c_file, &full_c).expect("write C file");
 
-    // Get the include directory from clean-runtime
+    // A directory holding the header this binary's clean-runtime embeds,
+    // wherever that crate was compiled from (see the test comment above).
     let include_dir = clean_runtime::include_dir();
 
     // Compile to object file (no linking — we just verify it compiles)
@@ -307,5 +322,114 @@ fn test_pipeline_rc_operations_emitted() {
     assert!(
         c_code.contains("clean_inc(") || c_code.contains("clean_dec("),
         "RC pass should insert inc/dec for multi-use args: {c_code}"
+    );
+}
+
+// The `let`-in-VALUE-position family CLAUDE.md's compiler paragraph records
+// as the third refusal, run END TO END at `-O0` — `OptConfig::minimal()`, the
+// production default of `clean run` — where `simp_value`'s copy propagation
+// does not run. So the zero-argument alias `to_lcnf` mints for `outer :=
+// inner` reaches `to_ir` and must survive as the pure rename it gives it, not
+// as a `clean_apply_0(inner)` whose correctness rested on the runtime's
+// non-closure identity. The unit pins beside `expr_to_let_value` assert the
+// LCNF and IR shapes; this is the execution they lacked (CLAUDE.md: "it
+// landed unverified and the risk it named paid off").
+#[test]
+fn test_let_in_value_position_runs_at_opt_level_0() {
+    if std::process::Command::new("cc")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        eprintln!("SKIP: no C compiler found, skipping execution test");
+        return;
+    }
+
+    // def aliasChain : Nat := let outer : Nat := (let inner : Nat := 7; inner); outer
+    let mut env = Environment::with_prelude();
+    let inner = Expr::let_named(
+        name("inner"),
+        nat_type(),
+        Expr::nat_lit(7),
+        Expr::bvar(0),
+        false,
+    );
+    let outer = Expr::let_named(name("outer"), nat_type(), inner, Expr::bvar(0), false);
+    env.add_decl(Declaration::Definition {
+        name: name("aliasChain"),
+        level_params: vec![],
+        type_: nat_type(),
+        value: outer,
+        is_reducible: true,
+    })
+    .expect("the kernel accepts the definition");
+    let info = env
+        .get_const(&name("aliasChain"))
+        .expect("the definition is registered");
+    let decl = constant_to_decl(&env, info)
+        .expect("the definition lowers to L5CNF")
+        .expect("the definition is compilable");
+
+    let pipeline = PipelineConfig {
+        opt: OptConfig::minimal(),
+        ..PipelineConfig::default()
+    };
+    let artifacts =
+        compile_lcnf_decls(&[decl], &env, &pipeline).expect("the pipeline compiles it at -O0");
+    let c_code = emit_c_with_config(
+        &artifacts.boxed_ir_decls,
+        CEmitConfig {
+            check_ir: true,
+            ..Default::default()
+        },
+    )
+    .expect("emit_c succeeds");
+    assert!(
+        !c_code.contains("clean_apply_0("),
+        "the alias must lower as a rename, never a zero-argument closure call: {c_code}"
+    );
+
+    // Embedded runtime, not a compile-time path (see runtime_fixture.rs).
+    let runtime = MaterializedRuntime::materialize();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let source = dir.path().join("alias_chain.c");
+    let binary = dir.path().join("alias_chain");
+    std::fs::write(
+        &source,
+        format!(
+            "#include \"clean_runtime.h\"\n#include <stdio.h>\n{c_code}\n\
+             int main(void) {{\n    clean_runtime_init();\n    clean_obj* r = l_aliasChain();\n    \
+             printf(\"%zu\\n\", (size_t)clean_unbox(r));\n    clean_runtime_finalize();\n    return 0;\n}}\n"
+        ),
+    )
+    .expect("write source");
+    let compile = std::process::Command::new("cc")
+        .arg("-o")
+        .arg(&binary)
+        .arg(&source)
+        .arg(runtime.c_source())
+        .arg(format!("-I{}", runtime.include_dir().display()))
+        .arg("-lm")
+        .arg("-std=c11")
+        .output()
+        .expect("spawn cc");
+    assert!(
+        compile.status.success(),
+        "cc failed:\n{}\n\nEmitted C:\n{c_code}",
+        String::from_utf8_lossy(&compile.stderr)
+    );
+    let run = std::process::Command::new(&binary)
+        .output()
+        .expect("run alias_chain");
+    assert!(
+        run.status.success(),
+        "alias_chain exited nonzero:\nstdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&run.stdout),
+        String::from_utf8_lossy(&run.stderr)
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&run.stdout).trim(),
+        "7",
+        "`let outer := (let inner := 7; inner); outer` must compute 7 at -O0"
     );
 }

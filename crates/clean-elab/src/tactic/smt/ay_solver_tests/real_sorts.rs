@@ -11,6 +11,7 @@ use crate::tactic::LocalDecl;
 use crate::unify::MetaState;
 use clean_auto::bridge::ay_contract::{AyError, AyLogic};
 use clean_kernel::{Expr, FVarId, Name};
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 fn supported_local_decl_smt_sort_for_test(lean_type: &Expr) -> Option<SmtSort> {
@@ -99,8 +100,9 @@ fn test_trust_solver_rejects_uint8_local() {
     let fvar = FVarId::new(300);
     let uint8_ty = Expr::const_(Name::from_string("UInt8"), vec![]);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "x".to_string(),
+        name: SurfaceName::component("x", false),
         ty: uint8_ty,
         value: None,
     }];
@@ -120,8 +122,9 @@ fn test_trust_solver_rejects_float_local() {
     let fvar = FVarId::new(301);
     let float_ty = Expr::const_(Name::from_string("Float"), vec![]);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "y".to_string(),
+        name: SurfaceName::component("y", false),
         ty: float_ty,
         value: None,
     }];
@@ -140,8 +143,9 @@ fn test_register_fvars_from_context_preserves_real_sort_without_hypothesis_entry
     let real_expr = Expr::fvar(real_fvar);
     let real_ty = Expr::const_(Name::from_string("Real"), vec![]);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: real_fvar,
-        name: "x".to_string(),
+        name: SurfaceName::component("x", false),
         ty: real_ty.clone(),
         value: None,
     }];
@@ -179,8 +183,9 @@ fn test_register_fvars_from_context_rejects_float_type_as_unsound_domain() {
     let float_fvar = FVarId::new(20);
     let float_ty = Expr::const_(Name::from_string("Float"), vec![]);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: float_fvar,
-        name: "f".to_string(),
+        name: SurfaceName::component("f", false),
         ty: float_ty.clone(),
         value: None,
     }];
@@ -213,8 +218,9 @@ fn test_register_fvars_from_context_keeps_int_sort_for_integer_locals() {
     let int_expr = Expr::fvar(int_fvar);
     let int_ty = Expr::const_(Name::from_string("Int"), vec![]);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: int_fvar,
-        name: "n".to_string(),
+        name: SurfaceName::component("n", false),
         ty: int_ty.clone(),
         value: None,
     }];

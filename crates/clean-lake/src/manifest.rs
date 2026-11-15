@@ -186,7 +186,7 @@ impl LakeManifest {
     }
 
     /// Parse lake-manifest.json content
-    pub fn parse(content: &str) -> LakeResult<Self> {
+    pub(crate) fn parse(content: &str) -> LakeResult<Self> {
         serde_json::from_str(content).map_err(|e| LakeError::ManifestParse(e.to_string()))
     }
 
@@ -228,7 +228,7 @@ impl LakeManifest {
 impl ManifestPackage {
     /// Get the package name
     #[must_use]
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         match self {
             ManifestPackage::Git(g) => &g.name,
             ManifestPackage::Path(p) => &p.name,
@@ -269,7 +269,7 @@ impl ManifestPackage {
 impl GitPackage {
     /// Create a new git package
     #[must_use]
-    pub fn new(name: &str, url: &str, rev: &str) -> Self {
+    pub(crate) fn new(name: &str, url: &str, rev: &str) -> Self {
         Self {
             name: name.to_string(),
             url: url.to_string(),

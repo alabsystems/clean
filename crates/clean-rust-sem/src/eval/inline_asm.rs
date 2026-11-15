@@ -9,7 +9,7 @@ use crate::values::{eval_binop, BinOp, Value};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum AsmConstraint {
+pub(crate) enum AsmConstraint {
     Reg,
     RegByte,
     RegAbcd,
@@ -102,11 +102,11 @@ struct TemplateInstruction {
     operands: Vec<TemplateOperand>,
 }
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct AsmTemplate {
+pub(crate) struct AsmTemplate {
     instructions: Vec<TemplateInstruction>,
 }
 impl AsmTemplate {
-    pub fn parse(raw: &str) -> Result<Self, String> {
+    pub(crate) fn parse(raw: &str) -> Result<Self, String> {
         let mut instructions = Vec::new();
         for line in raw
             .split(['\n', ';'])
@@ -177,7 +177,7 @@ impl AsmTemplate {
     }
 }
 #[derive(Debug, Clone)]
-pub struct InlineAsmBlock {
+pub(crate) struct InlineAsmBlock {
     pub template: AsmTemplate,
     pub operands: Vec<AsmOperand>,
     named_operands: HashMap<String, usize>,

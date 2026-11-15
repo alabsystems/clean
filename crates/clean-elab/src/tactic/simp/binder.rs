@@ -52,6 +52,21 @@ use crate::tactic::core::{Goal, LocalDecl};
 /// short of 2^63 allocations in one process.
 const SIMP_BINDER_FVAR_TOP: u64 = (1u64 << 63) - 1;
 
+/// Lowest id a simp binder temporary may take: the descending allocator owns
+/// `[SIMP_BINDER_FVAR_FLOOR, SIMP_BINDER_FVAR_TOP]`, a range no up-counting
+/// allocator reaches short of 2^62 allocations in one process.
+const SIMP_BINDER_FVAR_FLOOR: u64 = 1u64 << 62;
+
+/// Whether `fvar` is a simp binder temporary (by its id range).
+///
+/// An up-counting allocator seeded from a local context must SKIP these: the
+/// successor of the first temporary ever allocated is `1 << 63`, the
+/// metavariable tag itself, so "one past the largest local" would mint free
+/// variables that decode as metavariables (see [`SIMP_BINDER_FVAR_TOP`]).
+pub(crate) fn is_binder_temporary(fvar: FVarId) -> bool {
+    (SIMP_BINDER_FVAR_FLOOR..=SIMP_BINDER_FVAR_TOP).contains(&fvar.as_u64())
+}
+
 /// Descending allocator for simp binder temporaries. See
 /// [`SIMP_BINDER_FVAR_TOP`] for why it counts down.
 static SIMP_BINDER_FVAR_CURSOR: AtomicU64 = AtomicU64::new(SIMP_BINDER_FVAR_TOP);
@@ -63,6 +78,10 @@ fn fresh_binder_fvar() -> FVarId {
     debug_assert!(
         id & (1u64 << 63) == 0,
         "simp binder temporary must stay below the metavariable tag"
+    );
+    debug_assert!(
+        id >= SIMP_BINDER_FVAR_FLOOR,
+        "simp binder temporary left the range `is_binder_temporary` recognises"
     );
     FVarId::new(id)
 }
@@ -95,8 +114,13 @@ pub(crate) fn open_binder(goal: &Goal, ty: &Expr, body: &Expr) -> OpenedBinder {
     let fvar = fresh_binder_fvar();
     let mut extended = goal.clone();
     extended.local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: format!("_simp_binder_{}", fvar.as_u64()),
+        name: clean_parser::SurfaceName::from_name(
+            clean_kernel::Name::anon()
+                .str("_simp_binder")
+                .num(fvar.as_u64()),
+        ),
         ty: ty.clone(),
         value: None,
     });

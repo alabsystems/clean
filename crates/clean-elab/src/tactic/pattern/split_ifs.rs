@@ -16,7 +16,7 @@ pub struct SplitIfsConfig {
     /// Maximum depth of nested if-then-else to split
     pub max_depth: usize,
     /// Hypothesis names to use for conditions (auto-generated if empty)
-    pub hyp_names: Vec<String>,
+    pub hyp_names: Vec<clean_parser::SurfaceName>,
     /// Whether to also split hypotheses, not just the goal
     pub split_hyps: bool,
 }
@@ -37,7 +37,7 @@ impl SplitIfsConfig {
     }
 
     #[must_use]
-    pub fn with_hyp_names(mut self, names: Vec<String>) -> Self {
+    pub(crate) fn with_hyp_names(mut self, names: Vec<clean_parser::SurfaceName>) -> Self {
         self.hyp_names = names;
         self
     }
@@ -213,7 +213,10 @@ pub fn split_ifs_with_config(state: &mut ProofState, config: SplitIfsConfig) -> 
 
     // Generate hypothesis name
     let hyp_name = if config.hyp_names.is_empty() {
-        generate_fresh_hyp_name(&goal.local_ctx, "h")
+        generate_fresh_hyp_name(
+            &goal.local_ctx,
+            &clean_parser::SurfaceName::generated_path("h"),
+        )
     } else {
         config.hyp_names[0].clone()
     };
@@ -228,6 +231,9 @@ pub fn split_ifs_with_config(state: &mut ProofState, config: SplitIfsConfig) -> 
 ///
 /// REQUIRES: `state.goals` is non-empty
 /// ENSURES: Equivalent to `split_ifs_with_config(state, SplitIfsConfig::new().with_hyp_names(names))`
-pub fn split_ifs_with_names(state: &mut ProofState, names: Vec<String>) -> TacticResult {
+pub fn split_ifs_with_names(
+    state: &mut ProofState,
+    names: Vec<clean_parser::SurfaceName>,
+) -> TacticResult {
     split_ifs_with_config(state, SplitIfsConfig::new().with_hyp_names(names))
 }

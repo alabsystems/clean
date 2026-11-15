@@ -33,16 +33,27 @@ impl<'a> ElabCtx<'a> {
         // The inner expression must be a constant for universe instantiation.
         match inner.kind() {
             ExprKind::Const(name, existing_levels) => {
-                // Validate count: explicit levels must match the constant's
-                // universe parameter count.
-                if elab_levels.len() != existing_levels.len() {
+                // More explicit levels than the constant has parameters is an
+                // error, as in Lean ("too many explicit universe levels").
+                if elab_levels.len() > existing_levels.len() {
                     return Err(ElabError::UniverseLevelMismatch {
                         name: format!("{name}"),
                         expected: existing_levels.len(),
                         actual: elab_levels.len(),
                     });
                 }
-                Ok(Expr::const_(name.clone(), elab_levels))
+                // A PARTIAL list fills the leading parameters and leaves the
+                // rest to inference, as Lean's `mkConst` pads with fresh level
+                // metavariables (pinned Lean v4.30.0-rc2: `ULift.{1} Nat :
+                // Type 1`, and `def t : Type := ULift.{1} Nat` is a type
+                // mismatch, so the given level is enforced). The levels the
+                // bare reference was just elaborated with are exactly those
+                // fresh levels, so the tail is taken from them: `Foo.{u}` means
+                // `Foo` with its first level fixed. Breadth class (65) in
+                // docs/FRONTEND_CLASS_LEDGER.md.
+                let mut levels = elab_levels;
+                levels.extend(existing_levels[levels.len()..].iter().cloned());
+                Ok(Expr::const_(name.clone(), levels))
             }
             _ => Err(ElabError::UniverseInstNotConst),
         }

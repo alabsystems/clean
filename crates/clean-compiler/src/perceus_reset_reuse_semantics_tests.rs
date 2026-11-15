@@ -129,7 +129,7 @@ fn build_reset_reuse_model() -> (Module, FuncId) {
     fb.ret(vec![reused_in_place]);
 
     let fid = fb.build();
-    (mb.build(), fid)
+    (mb.build().expect("ModuleBuilder::build: test fixture"), fid)
 }
 
 #[test]

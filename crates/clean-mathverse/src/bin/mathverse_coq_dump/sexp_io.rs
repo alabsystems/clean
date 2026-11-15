@@ -17,7 +17,7 @@ use clean_mathverse::coq::alpha::Sexp;
 // ---------------------------------------------------------------------------
 
 /// Parse a single s-expression, preserving multibyte UTF-8 atoms.
-pub fn parse_sexp_utf8(input: &str) -> Result<Sexp, String> {
+pub(crate) fn parse_sexp_utf8(input: &str) -> Result<Sexp, String> {
     let mut p = Parser {
         b: input.as_bytes(),
         s: input,
@@ -129,7 +129,7 @@ impl Parser<'_> {
 // ---------------------------------------------------------------------------
 
 /// Serialize an s-expression, quoting atoms that contain delimiters.
-pub fn sexp_to_string(s: &Sexp) -> String {
+pub(crate) fn sexp_to_string(s: &Sexp) -> String {
     let mut out = String::new();
     write_sexp(s, &mut out);
     out
@@ -176,7 +176,7 @@ fn write_atom(a: &str, out: &mut String) {
 }
 
 /// Quote a string for embedding in a sertop command (always quoted).
-pub fn quote_string(s: &str) -> String {
+pub(crate) fn quote_string(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
     for c in s.chars() {

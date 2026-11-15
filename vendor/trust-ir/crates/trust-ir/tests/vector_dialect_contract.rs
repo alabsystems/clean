@@ -28,37 +28,40 @@ fn vector_dialect_module() -> Module {
     let v16bool = Ty::v16_bool();
     let mut module = Module::new("vector_dialect_lane_contract");
 
-    let ft = module.add_func_type(FuncTy {
-        params: vec![
-            Ty::I32,
-            Ty::I32,
-            Ty::I32,
-            Ty::I32,
-            Ty::I64,
-            Ty::I64,
-            v4i32.clone(),
-            v2i64.clone(),
-            v4bool.clone(),
-            v2bool.clone(),
-            v8bool.clone(),
-            v16bool.clone(),
-        ],
-        returns: vec![
-            v4i32.clone(),
-            v2i64.clone(),
-            Ty::I32,
-            Ty::I64,
-            v4i32.clone(),
-            v2i64.clone(),
-            Ty::I32,
-            Ty::I64,
-            v4i32.clone(),
-            v2i64.clone(),
-            Ty::I32,
-            Ty::I32,
-        ],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![
+                Ty::I32,
+                Ty::I32,
+                Ty::I32,
+                Ty::I32,
+                Ty::I64,
+                Ty::I64,
+                v4i32.clone(),
+                v2i64.clone(),
+                v4bool.clone(),
+                v2bool.clone(),
+                v8bool.clone(),
+                v16bool.clone(),
+            ],
+            returns: vec![
+                v4i32.clone(),
+                v2i64.clone(),
+                Ty::I32,
+                Ty::I64,
+                v4i32.clone(),
+                v2i64.clone(),
+                Ty::I32,
+                Ty::I64,
+                v4i32.clone(),
+                v2i64.clone(),
+                Ty::I32,
+                Ty::I32,
+            ],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
 
     let mut func = Function::new(FuncId::new(0), "vector_lane_contract", ft, b(0));
     let mut block = Block::new(b(0));
@@ -185,7 +188,9 @@ fn vector_dialect_module() -> Module {
     }));
 
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -257,7 +262,8 @@ fn vector_dialect_payloads_validate_and_roundtrip_text_and_binary() {
         .validate_module(&parsed)
         .expect("parsed vector dialect payloads");
 
-    let bytes = trust_ir::binary::serialize_module(&module);
+    let bytes =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
     let decoded = trust_ir::binary::deserialize_module(&bytes).expect("binary roundtrip");
     assert_eq!(decoded, module);
     registry
@@ -268,7 +274,8 @@ fn vector_dialect_payloads_validate_and_roundtrip_text_and_binary() {
 #[test]
 fn vector_dialect_binary_contract_carries_stable_op_and_attr_payloads() {
     let module = vector_dialect_module();
-    let bytes = trust_ir::binary::serialize_module(&module);
+    let bytes =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
 
     // The V4 binary format interns every string into a single pool and prefixes
     // each pool entry with a *varint* length (`write_v32`), so each distinct op

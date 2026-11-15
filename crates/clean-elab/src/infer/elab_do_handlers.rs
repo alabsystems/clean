@@ -14,8 +14,8 @@ use super::*;
 use clean_parser::{Span, SurfaceBinder, SurfaceBinderInfo};
 
 impl<'a> ElabCtx<'a> {
-    fn current_state_mut_var_info(&self) -> Vec<(String, FVarId, Expr)> {
-        let mut vars: Vec<(String, FVarId, Expr)> = self
+    fn current_state_mut_var_info(&self) -> Vec<(SurfaceName, FVarId, Expr)> {
+        let mut vars: Vec<(SurfaceName, FVarId, Expr)> = self
             .do_control_info
             .as_ref()
             .into_iter()
@@ -50,16 +50,16 @@ impl<'a> ElabCtx<'a> {
 
     fn build_mut_var_state_value(
         &self,
-        target_name: &str,
+        target_name: &SurfaceName,
         target_value: &Expr,
-        mut_var_info: &[(String, FVarId, Expr)],
+        mut_var_info: &[(SurfaceName, FVarId, Expr)],
     ) -> Result<Expr, ElabError> {
         match mut_var_info {
             [] => Ok(target_value.clone()),
             [(name, _, _)] if name == target_name => Ok(target_value.clone()),
             [_] => Ok(target_value.clone()),
             _ => {
-                let vars: Vec<(String, Expr, Expr)> = mut_var_info
+                let vars: Vec<(SurfaceName, Expr, Expr)> = mut_var_info
                     .iter()
                     .map(|(name, fvar, ty)| {
                         let value = if name == target_name {
@@ -123,6 +123,8 @@ impl<'a> ElabCtx<'a> {
 
         // Re-borrow after mutable fresh_meta call.
         // Invariant: both are Some — validated by ok_or_else above.
+        let (inner, iu, iv) = self.do_inner_monad_below(break_idx)?;
+        let monad_inst = self.do_monad_instance(iu, iv, &inner);
         let stack = self
             .do_control_stack
             .as_ref()
@@ -131,7 +133,24 @@ impl<'a> ElabCtx<'a> {
             .do_monad_info
             .as_ref()
             .expect("invariant: do_monad_info validated above");
-        Ok(stack.mk_option_t_fail(break_idx, alpha, monad_info))
+        Ok(stack.mk_option_t_fail(break_idx, alpha, monad_info, monad_inst))
+    }
+
+    /// `(monad, u, v)` below control layer `idx`: the monad whose `Monad`
+    /// instance that layer's `OptionT.fail` takes.
+    fn do_inner_monad_below(&self, idx: usize) -> Result<(Expr, Level, Level), ElabError> {
+        let stack = self.do_control_stack.as_ref().ok_or_else(|| {
+            ElabError::NotImplemented("control flow outside of a do-block ControlStack".into())
+        })?;
+        let info = self
+            .do_monad_info
+            .as_ref()
+            .ok_or_else(|| ElabError::NotImplemented("control flow outside of do-block".into()))?;
+        Ok((
+            stack.inner_monad_below(idx, info),
+            info.u.clone(),
+            info.v.clone(),
+        ))
     }
 
     /// Elaborate `continue` in a do-block.
@@ -181,6 +200,8 @@ impl<'a> ElabCtx<'a> {
 
         let alpha = self.fresh_meta(Expr::sort(u));
 
+        let (inner, iu, iv) = self.do_inner_monad_below(continue_idx)?;
+        let monad_inst = self.do_monad_instance(iu, iv, &inner);
         let stack = self
             .do_control_stack
             .as_ref()
@@ -189,7 +210,7 @@ impl<'a> ElabCtx<'a> {
             .do_monad_info
             .as_ref()
             .expect("invariant: do_monad_info validated above");
-        Ok(stack.mk_option_t_fail(continue_idx, alpha, monad_info))
+        Ok(stack.mk_option_t_fail(continue_idx, alpha, monad_info, monad_inst))
     }
 
     /// Elaborate non-terminal `return e` in a do-block.
@@ -261,6 +282,30 @@ impl<'a> ElabCtx<'a> {
 
         let alpha = self.fresh_meta(Expr::sort(u));
 
+        let (throw_goal_args, throw_levels) = {
+            let stack = self.do_control_stack.as_ref().ok_or_else(|| {
+                ElabError::NotImplemented("early return without ControlStack".into())
+            })?;
+            let monad_info = self.do_monad_info.as_ref().ok_or_else(|| {
+                ElabError::NotImplemented("early return outside of do-block".into())
+            })?;
+            let parts = stack.early_return_parts(monad_info).map(|(rho, inner)| {
+                let except_t = Expr::const_(
+                    Name::from_string("ExceptT"),
+                    vec![monad_info.u.clone(), monad_info.v.clone()],
+                );
+                vec![rho.clone(), Expr::apps(except_t, [rho, inner])]
+            });
+            (parts, elab_do_stack::ControlStack::throw_levels(monad_info))
+        };
+        let except_inst = match throw_goal_args {
+            Some(args) => self.do_instance_arg("MonadExcept", throw_levels, &args),
+            None => {
+                return Err(ElabError::NotImplemented(
+                    "early return: no EarlyReturn layer in ControlStack".into(),
+                ))
+            }
+        };
         let stack = self
             .do_control_stack
             .as_ref()
@@ -270,7 +315,7 @@ impl<'a> ElabCtx<'a> {
             .as_ref()
             .expect("invariant: do_monad_info validated above");
         stack
-            .mk_early_return(val, alpha, monad_info)
+            .mk_early_return(val, alpha, monad_info, except_inst)
             .ok_or_else(|| {
                 ElabError::NotImplemented(
                     "early return: no EarlyReturn layer in ControlStack".into(),
@@ -291,7 +336,7 @@ impl<'a> ElabCtx<'a> {
     /// with the updated state value (or product projection update for multi-var).
     pub(super) fn elab_do_reassign(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         val: &SurfaceExpr,
     ) -> Result<Expr, ElabError> {
         let new_val = self.elaborate(val)?;
@@ -317,17 +362,18 @@ impl<'a> ElabCtx<'a> {
         let new_state = self.build_mut_var_state_value(name, &new_val, &mut_var_info)?;
         let (inner_m, u, v) = self.current_state_inner_monad()?;
 
-        // Generate: @StateT.set σ inner_m new_val
-        // StateT.set : {σ : Type u} → {m : Type u → Type v} → σ → StateT σ m PUnit
+        // Generate: @StateT.set σ inner_m ?inst new_val
+        // StateT.set : {σ : Type u} → {m : Type u → Type v} → [Monad m] → σ →
+        // StateT σ m PUnit (Lean's signature; an instance-less axiom that
+        // proved `False` until 2026-09-28).
+        let inst = self.do_monad_instance(u.clone(), v.clone(), &inner_m);
         let set_const = Expr::const_(Name::from_string("StateT.set"), vec![u, v]);
-        let e = Expr::app(set_const, sigma);
-        let e = Expr::app(e, inner_m);
-        Ok(Expr::app(e, new_state))
+        Ok(Expr::apps(set_const, [sigma, inner_m, inst, new_state]))
     }
 
     pub(super) fn elab_do_reassign_with_rest(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         val: &SurfaceExpr,
         rest: &[DoElem],
     ) -> Result<Expr, ElabError> {
@@ -346,10 +392,11 @@ impl<'a> ElabCtx<'a> {
                 .collect::<Vec<_>>(),
         )?;
         let (inner_m, u, v) = self.current_state_inner_monad()?;
+        let inst = self.do_monad_instance(u.clone(), v.clone(), &inner_m);
         let get_const = Expr::const_(Name::from_string("StateT.get"), vec![u, v]);
-        let get_expr = Expr::app(Expr::app(get_const, sigma.clone()), inner_m);
+        let get_expr = Expr::apps(get_const, [sigma.clone(), inner_m, inst]);
 
-        let state_fvar = self.push_local("__do_state".to_string(), sigma.clone());
+        let state_fvar = self.push_local(SurfaceName::unspellable("__do_state", 0), sigma.clone());
         let shadow_vars = self.destructure_acc_from_expr(Expr::fvar(state_fvar), &mut_var_info)?;
         let mut rebound_rest = self.elab_do_elems(rest)?;
         // Fix #3419: Instantiate metas before abstracting FVars.
@@ -357,7 +404,7 @@ impl<'a> ElabCtx<'a> {
         for (name, shadow_fvar, shadow_ty, proj_expr) in shadow_vars.iter().rev() {
             let abs = rebound_rest.abstract_fvar(*shadow_fvar);
             rebound_rest = Expr::let_named(
-                Name::from_string(name),
+                name.name().clone(),
                 shadow_ty.clone(),
                 proj_expr.clone(),
                 abs,
@@ -371,7 +418,7 @@ impl<'a> ElabCtx<'a> {
         let reassign_cont_body = self.mk_bind_app(get_expr, get_cont);
 
         let discard_ty = self.fresh_meta(Expr::type_());
-        let discard_fvar = self.push_local("_".to_string(), discard_ty.clone());
+        let discard_fvar = self.push_local(SurfaceName::generated_path("_"), discard_ty.clone());
         let reassign_cont_body = reassign_cont_body.abstract_fvar(discard_fvar);
         self.pop_local();
         let reassign_cont = Expr::lam(BinderInfo::Default, discard_ty, reassign_cont_body);
@@ -417,8 +464,9 @@ impl<'a> ElabCtx<'a> {
                 }
                 elab_do_stack::UnwrapKind::State { ref sigma } => {
                     return Err(ElabError::InternalInvariant(format!(
-                        "StateT control unwrap reached without an authenticated initial state for {sigma:?}"
-                    )));
+                        "StateT control unwrap reached without an authenticated initial state for {}"
+                    ,
+                crate::error_render::opaque(&sigma))));
                 }
                 elab_do_stack::UnwrapKind::EarlyReturn { ref return_type } => {
                     // ExceptT.run : {ε} → {m} → {α} → ExceptT ε m α → m (Except ε α)
@@ -452,8 +500,9 @@ impl<'a> ElabCtx<'a> {
         val: &SurfaceExpr,
         rest: &[DoElem],
     ) -> Vec<DoElem> {
-        let tmp_name = "__reassign_tmp".to_string();
-        let tmp_binder = SurfaceBinder::new(&tmp_name, None, SurfaceBinderInfo::Explicit);
+        let tmp_name = SurfaceName::unspellable("__reassign_tmp", 0);
+        let tmp_binder =
+            SurfaceBinder::new_typed(tmp_name.clone(), None, SurfaceBinderInfo::Explicit);
         let tmp_ref = SurfaceExpr::Ident(span, tmp_name);
 
         let mut elems = Vec::new();
@@ -475,15 +524,23 @@ impl<'a> ElabCtx<'a> {
             SurfacePattern::Var(name) => {
                 out.push(DoElem::Reassign(span, name.clone(), Box::new(base.clone())));
             }
-            SurfacePattern::Ctor(ctor, args) if ctor == "Prod.mk" && args.len() == 2 => {
+            SurfacePattern::Ctor(ctor, args)
+                if ctor == &SurfaceName::generated_path("Prod.mk") && args.len() == 2 =>
+            {
                 let fst = SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(span, "Prod.fst".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Prod.fst"),
+                    )),
                     vec![SurfaceArg::positional(base.clone())],
                 );
                 let snd = SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(span, "Prod.snd".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Prod.snd"),
+                    )),
                     vec![SurfaceArg::positional(base.clone())],
                 );
                 Self::emit_pattern_reassigns(span, &args[0], &fst, out);
@@ -503,6 +560,10 @@ impl<'a> ElabCtx<'a> {
             | SurfacePattern::Or(_, _)
             | SurfacePattern::QPattern(_) => {}
             SurfacePattern::Ctor(_, _) => {} // Non-Prod.mk ctors: no projection available
+            // A `{ f := p, .. }` pattern needs the scrutinee's structure to know
+            // which projection each field is, and that is not available here —
+            // the same reason a non-`Prod.mk` constructor emits nothing.
+            SurfacePattern::StructInst { .. } => {}
         }
     }
 

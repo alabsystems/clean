@@ -314,6 +314,11 @@ mod tests {
     fn record(name: &str, kind: DeclarationKind, source_path: &str) -> DeclarationRecord {
         DeclarationRecord {
             name: name.to_owned(),
+            identity: Some(
+                clean_parser::parse_name(name)
+                    .expect("fixture source name")
+                    .into_name(),
+            ),
             kind,
             source_path: source_path.to_owned(),
             span: Some(SourceSpan {

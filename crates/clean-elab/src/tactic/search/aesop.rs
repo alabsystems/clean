@@ -139,30 +139,30 @@ pub(super) fn aesop_safe_rules(
         let target_head = target.get_app_fn();
 
         if let ExprKind::Const(name, _) = target_head.kind() {
-            let name_str = name.to_string();
-
             // Safe rule: intro for Pi types (implications/forall)
             if let ExprKind::Pi(_, _, _) = target.kind() {
-                if intro(state, "h").is_ok() {
+                if intro(state, &clean_parser::SurfaceName::generated_path("h")).is_ok() {
                     made_progress = true;
                     continue;
                 }
             }
 
             // Safe rule: constructor for And
-            if name_str == "And" && split_(state).is_ok() {
+            if name == &Name::from_string("And") && split_(state).is_ok() {
                 made_progress = true;
                 continue;
             }
 
             // Safe rule: constructor for Iff (splits into two implications)
-            if name_str == "Iff" && split_(state).is_ok() {
+            if name == &Name::from_string("Iff") && split_(state).is_ok() {
                 made_progress = true;
                 continue;
             }
 
             // Safe rule: intro for Not (it's really an implication to False)
-            if name_str == "Not" && intro(state, "h").is_ok() {
+            if name == &Name::from_string("Not")
+                && intro(state, &clean_parser::SurfaceName::generated_path("h")).is_ok()
+            {
                 made_progress = true;
                 continue;
             }
@@ -170,7 +170,12 @@ pub(super) fn aesop_safe_rules(
 
         // If target is Pi (forall/implication)
         if let ExprKind::Pi(_, _, _) = target.kind() {
-            if intro(state, &format!("h{depth}")).is_ok() {
+            if intro(
+                state,
+                &clean_parser::SurfaceName::from_name(Name::anon().str(format!("h{depth}"))),
+            )
+            .is_ok()
+            {
                 made_progress = true;
             }
         }

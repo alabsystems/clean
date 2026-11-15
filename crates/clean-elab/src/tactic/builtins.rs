@@ -10,39 +10,93 @@
 use std::sync::Arc;
 
 use clean_kernel::{Expr, ExprKind};
-use clean_parser::{Projection, SurfaceExpr};
+use clean_parser::{Projection, SurfaceExpr, SurfaceName};
 
 use super::registry::{TacticArgPattern, TacticEntry, TacticRegistry};
 use super::{ProofState, TacticError, TacticResult};
 
+#[cfg(test)]
+mod typed_name_tests;
+
 /// Extract a hypothesis name from an elaborated `Expr` argument.
 ///
 /// Handles two common forms:
-/// - `FVar(id)` → look up the display name in the current goal's local context
-/// - `Const(name, _)` → convert the `Name` to a string
+/// - `FVar(id)` → retain the exact local name and its lexical annotation
+/// - typed name-slot metadata → validate and recover the authored SurfaceName
+/// - legacy `Const(name, _)` → retain its exact kernel Name as generated syntax
 ///
 /// REQUIRES: If `expr` is an `FVar`, the current goal local context contains that fvar when callers expect success.
 /// ENSURES: On Ok, returns the user-facing hypothesis/constant name encoded by `expr`.
 /// ENSURES: On Err, proof state is unchanged.
-pub(crate) fn expr_to_hyp_name(ps: &ProofState, expr: &Expr) -> Result<String, TacticError> {
+pub(crate) fn expr_to_hyp_name(ps: &ProofState, expr: &Expr) -> Result<SurfaceName, TacticError> {
+    if let Some(name) = super::registry::decode_name_argument(expr)? {
+        return ordinary_hyp_name(name);
+    }
     match expr.kind() {
         ExprKind::FVar(id) => {
             if let Some(goal) = ps.current_goal() {
                 for decl in &goal.local_ctx {
                     if &decl.fvar == id {
-                        return Ok(decl.name.clone());
+                        return ordinary_hyp_name(decl.name.clone());
                     }
                 }
             }
-            Err(TacticError::HypothesisNotFound(
-                "free variable not found in local context".into(),
-            ))
+            // NAME the variable rather than asserting one is missing. The
+            // payload of `HypothesisNotFound` is meant to be the name the user
+            // wrote; there is none here, so this said nothing and said it in
+            // the wrong variant — the same category error the `assumption`
+            // split fixed. `error_render::fvar` also decodes a metavariable,
+            // which is what an unsolved `?m` in this position actually is.
+            Err(TacticError::InvalidTarget {
+                tactic: "resolve_ident".into(),
+                detail: format!(
+                    "{} is not a hypothesis in the current goal",
+                    crate::error_render::fvar(*id, None)
+                ),
+            })
         }
-        ExprKind::Const(name, _) => Ok(name.to_string()),
+        ExprKind::Const(name, _) => ordinary_hyp_name(SurfaceName::from_name(name.clone())),
+        // `resolve_ident` is this helper, not a tactic anybody typed — but it
+        // fronts ~30 call sites and `builtins_handlers.rs` asserts the string,
+        // so threading the real tactic name is a separate change. What is fixed
+        // here is the detail, which withheld the expression it was holding.
         _ => Err(TacticError::InvalidTarget {
             tactic: "resolve_ident".into(),
-            detail: "expected identifier argument, got expression".into(),
+            detail: format!(
+                "expected an identifier argument, got {} ({})",
+                crate::error_render::term(expr),
+                crate::error_render::kind_name(expr)
+            ),
         }),
+    }
+}
+
+/// The hypothesis a TERM argument denotes (`specialize h a`, `injection h`):
+/// what [`expr_to_hyp_name`] reads, except that a global constant is never a
+/// hypothesis — Lean elaborates the argument and requires a local of the
+/// goal. A notation template's free name elaborates to the global it named
+/// where the template was declared, and a use-site hypothesis spelled like
+/// that global must not be what the tactic acts on (`specialize kz 0` in a
+/// template over a global `kz`, used where a local `kz` is in scope, fails
+/// in Lean).
+pub(crate) fn term_hyp_name(ps: &ProofState, expr: &Expr) -> Result<SurfaceName, TacticError> {
+    if let ExprKind::Const(name, _) = expr.kind() {
+        return Err(TacticError::InvalidTarget {
+            tactic: "resolve_ident".into(),
+            detail: format!("the global constant `{name}` is not a hypothesis of the goal"),
+        });
+    }
+    expr_to_hyp_name(ps, expr)
+}
+
+fn ordinary_hyp_name(name: SurfaceName) -> Result<SurfaceName, TacticError> {
+    if name.is_anonymous() || name.is_relative_constructor() {
+        Err(TacticError::InvalidTarget {
+            tactic: "resolve_ident".into(),
+            detail: "expected an ordinary hypothesis or binder name, not an anonymous or relative constructor selector".into(),
+        })
+    } else {
+        Ok(name)
     }
 }
 
@@ -56,6 +110,41 @@ pub(crate) fn nullary(name: &str, f: fn(&mut ProofState) -> TacticResult) -> Tac
         pattern: TacticArgPattern::Nullary,
         handler: Arc::new(move |ps, _args| f(ps)),
     }
+}
+
+/// Read `grind`'s parameter list and its `only` flag back out of its
+/// elaborated arguments.
+///
+/// An identifier parameter arrives through the name-argument protocol (the
+/// dispatch site treats this pattern like an ident list, because a lemma NAME
+/// is not a term to elaborate against the goal). A parameter that really is a
+/// term — Lean allows one — contributes the head constant of its application
+/// spine, which is the name grind would key it on; anything with no constant
+/// head contributes nothing rather than failing the tactic.
+///
+/// The leading [`clean_parser::GRIND_ONLY_MARKER`] argument, if present, is
+/// the parser's record of `grind only`. It is matched with `same_syntax`, not
+/// `==`: `SurfaceName` equality is structural, so a user lemma literally named
+/// `_grind_only` would compare equal, while its component's origin is `Plain`
+/// and the marker's is `Generated`.
+fn grind_params_from_args(args: &[Expr]) -> Result<(Vec<SurfaceName>, bool), TacticError> {
+    let only_marker = SurfaceName::generated_path(clean_parser::GRIND_ONLY_MARKER);
+    let mut params = Vec::new();
+    let mut only = false;
+    for arg in args {
+        if let Some(name) = super::registry::decode_name_argument(arg)? {
+            if name.same_syntax(&only_marker) {
+                only = true;
+                continue;
+            }
+            params.push(name);
+            continue;
+        }
+        if let ExprKind::Const(name, _) = arg.get_app_fn().kind() {
+            params.push(SurfaceName::from_name(name.clone()));
+        }
+    }
+    Ok((params, only))
 }
 
 /// Create a [`TacticEntry`] for a tactic taking a single elaborated term argument.
@@ -101,14 +190,14 @@ fn two_term(name: &str, f: fn(&mut ProofState, Expr, Expr) -> TacticResult) -> T
 }
 
 /// Create a [`TacticEntry`] for a tactic taking a single hypothesis name.
-fn hyp_arg(name: &str, f: fn(&mut ProofState, &str) -> TacticResult) -> TacticEntry {
+fn hyp_arg(name: &str, f: fn(&mut ProofState, &SurfaceName) -> TacticResult) -> TacticEntry {
     let owned_name = name.to_string();
     TacticEntry {
         name: name.to_string(),
         pattern: TacticArgPattern::TermArg,
         handler: Arc::new(move |ps, args| {
             let hyp = if let Some(arg) = args.first() {
-                expr_to_hyp_name(ps, arg)?
+                term_hyp_name(ps, arg)?
             } else {
                 return Err(TacticError::MissingArgument {
                     tactic: owned_name.clone(),
@@ -178,20 +267,21 @@ fn register_core_nullary(registry: &mut TacticRegistry) {
         nullary("split", super::split_),
         nullary("exfalso", super::exfalso),
         nullary("omega", super::omega),
-        nullary("decide", super::eval_decide),
+        // Lean's procedure (`decide_lean`): free variables and metavariables
+        // refused first, default transparency, `of_decide_eq_true`. The
+        // `eval_decide` ladder stays the internal rung of omega/norm_num/….
+        nullary("decide", super::decide_lean::decide),
         nullary("contradiction", super::contradiction),
         nullary("trivial", super::trivial),
         // Wave 2: 10 more nullary tactics
-        nullary("congr", super::congr),
         nullary("aesop", super::aesop),
         nullary("tauto", super::tauto),
-        nullary("simp_all", super::simp_all),
         nullary("cert_simp", super::cert_simp),
         nullary("norm_num", super::norm_num),
         nullary("ring", super::ring),
         nullary("ring_nf", super::ring_nf),
         nullary("symm", super::symm),
-        nullary("native_decide", super::native_decide),
+        nullary("native_decide", super::decide_lean::native_decide),
         nullary("delta", super::delta),
         // `whnf`: reduce the goal (or conv focus) to weak-head normal form.
         // Works inside `conv => whnf` via the generic conv-body evaluator.
@@ -210,7 +300,6 @@ fn register_core_nullary(registry: &mut TacticRegistry) {
         // proofs elaborate instead of aborting on an unknown tactic. See
         // `existential::classical` for the honest scope (no Decidable fallback).
         nullary("classical", super::classical),
-        nullary("grind", super::grind::grind),
         nullary("auto_cascade", super::auto_cascade),
         // `infer_instance`: synthesize a type-class instance for the goal
         // (e.g. `Decidable True`, `Inhabited Nat`). Closes the goal via the
@@ -221,6 +310,21 @@ fn register_core_nullary(registry: &mut TacticRegistry) {
     for entry in entries {
         registry.register(entry);
     }
+
+    // `grind [f, g]` / `grind only [f]`: Lean's grind takes an optional
+    // parameter list whose entries feed the same E-matching machinery
+    // `@[grind]` registers into. Registered `Nullary` the list was parsed and
+    // DISCARDED — `grind [no_such_lemma_xyzzy]` failed byte-identically to a
+    // bare `grind`, which is how the diagnosis established it was dropped
+    // rather than merely unhelpful.
+    registry.register(TacticEntry {
+        name: "grind".to_string(),
+        pattern: TacticArgPattern::BracketedParamList,
+        handler: Arc::new(|ps, args| {
+            let (params, only) = grind_params_from_args(args)?;
+            super::grind::grind_with_params(ps, &params, only)
+        }),
+    });
 
     // mathverse_use / mathverse_suggest: Mathverse Library premise selection tactics
     registry.register(TacticEntry {
@@ -248,14 +352,30 @@ fn register_phase3c_nullary(registry: &mut TacticRegistry) {
     // Phase 3D.6 keyword-to-Named registrations (#2440)
     super::builtins_phase3d::register_phase3d_keyword(registry);
 
-    // intros — introduce ALL binders (loop intro until failure)
+    // intros — bare, introduce ALL binders (loop intro until failure); with
+    // names, `intros a b` introduces exactly those, like `intro a b` (Lean's
+    // `Lean.Parser.Tactic.intros` takes `(ppSpace colGt (ident <|> hole))*`).
+    // As a nullary entry the names were parsed as the NEXT tactics
+    // (`IsPartialInv.comp`'s `intros a b`: "unknown tactic 'a'", measured
+    // 2026-09-12).
     registry.register(TacticEntry {
         name: "intros".to_string(),
-        pattern: TacticArgPattern::Nullary,
-        handler: Arc::new(|ps, _args| {
-            let mut count = 0;
-            while super::intro(ps, &format!("h_{count}")).is_ok() {
-                count += 1;
+        pattern: TacticArgPattern::IdentList,
+        handler: Arc::new(|ps, args| {
+            if args.is_empty() {
+                let mut count = 0;
+                while super::intro(
+                    ps,
+                    &SurfaceName::from_name(clean_kernel::Name::anon().str(format!("h_{count}"))),
+                )
+                .is_ok()
+                {
+                    count += 1;
+                }
+                return Ok(());
+            }
+            for name in super::builtins_wave3::args_to_names(ps, args)? {
+                super::intro(ps, &name)?;
             }
             Ok(())
         }),
@@ -347,15 +467,15 @@ pub(crate) fn conv_nav(ps: &mut ProofState, pos: super::conv::ConvPosition) -> T
     Ok(())
 }
 
-/// Extract a name string from a surface expression (for name-based tactics).
+/// Extract an exact source name for name-based tactics.
 ///
 /// Shared by phase 3D intro (`cases`, `induction`) and rewrite (`rw`, `simp`)
 /// registration handlers.
 ///
 /// Handles:
-/// - `SurfaceExpr::Ident` → preserves the original identifier text.
-/// - `SurfaceExpr::Proj` with a `Named` projection → joins base and field with
-///   a `.` separator, recursing into the base so `MySem.run` / `StateT.bind` /
+/// - `SurfaceExpr::Ident` → preserves identity and lexical annotation.
+/// - `SurfaceExpr::Proj` with a `Named` projection → appends typed components,
+///   recursing into the base so `MySem.run` / `StateT.bind` /
 ///   `Except.ok.injEq` resolve to their fully-qualified kernel names. This is
 ///   the form produced by the parser for any dotted identifier used in a
 ///   tactic argument list (e.g. `simp only [StateT.bind, Except.ok.injEq] at
@@ -364,20 +484,27 @@ pub(crate) fn conv_nav(ps: &mut ProofState, pos: super::conv::ConvPosition) -> T
 ///   dropped the lemma and reported `NoProgress`.
 /// - `SurfaceExpr::Paren` → strips redundant parentheses (`(foo)` ≡ `foo`).
 ///
-/// ENSURES: `SurfaceExpr::Ident` preserves the original identifier text.
-/// ENSURES: `SurfaceExpr::Proj(base, Named(field))` returns `"{base}.{field}"`
-///   with `base` recursively flattened by the same rule.
-/// ENSURES: Non-identifier / non-projection expressions fall back to their
-///   `Debug` rendering (best-effort; resolution will fail downstream).
-pub(crate) fn surface_expr_to_name(expr: &SurfaceExpr) -> String {
+/// Non-name expressions and relative constructor selectors are rejected;
+/// diagnostics cannot mint a name that happens to resolve downstream.
+pub(crate) fn surface_expr_to_name(expr: &SurfaceExpr) -> Result<SurfaceName, TacticError> {
     match expr {
-        SurfaceExpr::Ident(_, name) => name.clone(),
+        SurfaceExpr::Ident(_, name) if !name.is_anonymous() && !name.is_relative_constructor() => {
+            Ok(name.clone())
+        }
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
-            let base_name = surface_expr_to_name(base);
-            format!("{base_name}.{field}")
+            if field.is_anonymous() || field.is_relative_constructor() {
+                return Err(TacticError::InvalidTarget {
+                    tactic: "resolve_ident".into(),
+                    detail: "expected an ordinary named projection".into(),
+                });
+            }
+            Ok(surface_expr_to_name(base)?.append(field))
         }
         SurfaceExpr::Paren(_, inner) => surface_expr_to_name(inner),
-        other => format!("{other:?}"),
+        other => Err(TacticError::InvalidTarget {
+            tactic: "resolve_ident".into(),
+            detail: format!("expected a name, got {}", crate::error_render::shape(other)),
+        }),
     }
 }
 
@@ -416,6 +543,23 @@ fn register_phase3c_wave2(registry: &mut TacticRegistry) {
         // residual (e.g. a wrong witness `exists 3` on `∃ n, n = 5`) is NOT closed
         // and remains for the user / fails — fail-closed, matching Lean.
         handler: Arc::new(|ps, args| super::term_close::use_(ps, args.to_vec())),
+    });
+
+    // `congr` / `congr n` — Lean's `congrN`, depth `hugeDepth` when omitted.
+    registry.register(TacticEntry {
+        name: "congr".to_string(),
+        pattern: TacticArgPattern::TermArg,
+        handler: Arc::new(|ps, args| {
+            let depth = extract_opt_nat(args).unwrap_or(super::congr_n::CONGR_DEFAULT_DEPTH);
+            super::congr_n::congr_n(ps, depth)
+        }),
+    });
+
+    // Mathlib's `inhabit α` (`Mathlib/Tactic/Inhabit.lean`).
+    registry.register(TacticEntry {
+        name: "inhabit".to_string(),
+        pattern: TacticArgPattern::TermArg,
+        handler: Arc::new(super::inhabit::inhabit),
     });
 
     // 3C.6: opt-nat tactics (rotate_left/rotate_right)

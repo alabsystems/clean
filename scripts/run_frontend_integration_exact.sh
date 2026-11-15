@@ -22,7 +22,7 @@ usage() {
 Usage: ./scripts/run_frontend_integration_exact.sh --filter <module::test> [--nocapture]
 
 Runs:
-  cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS" \
+  targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS" \
     -p clean-elab --test integration -- <module::test> --exact
 
 Examples:
@@ -82,7 +82,7 @@ if [ -z "$LOG_PATH" ]; then
 fi
 
 cargo_cmd=(
-    cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS"
+    targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS"
     -p clean-elab --test integration -- "$FILTER" --exact
 )
 

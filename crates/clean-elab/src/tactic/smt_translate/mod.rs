@@ -14,22 +14,37 @@
 mod classified;
 mod const_app;
 mod core;
+mod integer;
 
-use clean_kernel::expr::Literal;
+use clean_kernel::expr::{BigNat, Literal};
 use clean_kernel::{Expr, ExprKind, FVarId};
 use std::collections::HashMap;
 use thiserror::Error;
 
+/// SMT integer numerals require decimal digits; BigNat's Display uses hex for
+/// multi-limb values, so it is not a wire encoding.
+fn nat_literal_decimal(value: &BigNat) -> String {
+    if let Some(value) = value.to_u64() {
+        return value.to_string();
+    }
+    let bytes: Vec<_> = value
+        .limbs()
+        .iter()
+        .flat_map(|limb| limb.to_le_bytes())
+        .collect();
+    num_bigint::BigUint::from_bytes_le(&bytes).to_str_radix(10)
+}
+
 #[derive(Debug, Error)]
 #[non_exhaustive]
-pub enum TranslateError {
+pub(crate) enum TranslateError {
     #[error("unsupported expression kind for SMT-LIB: {0}")]
     UnsupportedExpr(String),
 }
 
 /// Sort of a declared SMT-LIB variable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SmtSort {
+pub(crate) enum SmtSort {
     Int,
     Bool,
     Real,
@@ -57,7 +72,7 @@ struct ExactConstSymbol {
 /// `VariableMapping` for proof reconstruction. Without it, the reconstruction
 /// pipeline cannot translate ay term IDs back to kernel expressions. Part of #302.
 #[derive(Debug, Clone)]
-pub struct SmtVarDecl {
+pub(crate) struct SmtVarDecl {
     pub name: String,
     pub sort: SmtSort,
     /// Original Lean expression that produced this SMT variable.
@@ -81,7 +96,7 @@ pub(super) struct RegisteredFVarDecl {
 
 #[derive(Debug, Clone)]
 #[cfg_attr(not(test), allow(dead_code))] // result_sort only read in tests (fvar_apps.rs)
-pub struct SmtFuncDecl {
+pub(crate) struct SmtFuncDecl {
     pub name: String,
     pub domain_sorts: Vec<SmtSort>,
     pub result_sort: SmtSort,
@@ -102,7 +117,7 @@ pub(super) struct TranslatedTerm {
 /// and checked for correct population but the individual fields are not read back.
 #[derive(Debug, Clone)]
 #[cfg_attr(not(feature = "ay-smt"), allow(dead_code))]
-pub struct ExistsSkolemization {
+pub(crate) struct ExistsSkolemization {
     pub skolem_smt_name: String,
     pub binder_type: Expr,
     pub predicate: Expr,
@@ -123,7 +138,7 @@ const SKOLEM_FVAR_BASE: u64 = 1_u64 << 62;
 /// Handles the QF_LIA subset: Nat/Int literals, Bool, arithmetic ops (+, -, *,
 /// div, mod), comparisons (<, <=, >, >=, =, !=), and logical connectives
 /// (and, or, not, =>).
-pub struct SmtLibTranslator {
+pub(crate) struct SmtLibTranslator {
     /// Collected SMT-LIB declarations for variables
     pub(super) declarations: Vec<String>,
     /// Structured variable declarations (name + sort)
@@ -161,7 +176,7 @@ impl Default for SmtLibTranslator {
 }
 
 impl SmtLibTranslator {
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         SmtLibTranslator {
             declarations: Vec::new(),
             var_decls: Vec::new(),
@@ -177,7 +192,7 @@ impl SmtLibTranslator {
     }
 
     /// Return the canonical SMT symbol for a free variable.
-    pub fn canonical_fvar_name(id: FVarId) -> String {
+    pub(crate) fn canonical_fvar_name(id: FVarId) -> String {
         format!("fvar_{}", id.as_u64())
     }
 }

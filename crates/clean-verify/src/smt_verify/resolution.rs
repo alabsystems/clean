@@ -205,7 +205,7 @@ pub(crate) fn check_resolution(
 
             return StepVerdict {
                 step_id,
-                trust_level: StepTrustLevel::KernelVerified,
+                trust_level: StepTrustLevel::StepChecked,
                 checker: CHECKER_NAME,
                 detail: if is_tautology {
                     Some("resolvent is tautological".to_string())
@@ -405,7 +405,7 @@ fn check_binary_resolution(
     if result == expected {
         StepVerdict {
             step_id,
-            trust_level: StepTrustLevel::KernelVerified,
+            trust_level: StepTrustLevel::StepChecked,
             checker: CHECKER_NAME,
             detail: None,
         }
@@ -482,7 +482,7 @@ mod tests {
         }) = dag.step(step_id).cloned()
         {
             let verdict = check_resolution(&dag, step_id, &clause, &premises, pivot, &derived);
-            assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+            assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
         } else {
             panic!("expected resolution step");
         }
@@ -533,7 +533,7 @@ mod tests {
             None,
             &derived,
         );
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -588,7 +588,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "tautological premise should resolve correctly: {:?}",
             verdict.detail
         );
@@ -624,7 +624,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "multi-occurrence pivot should be fully eliminated: {:?}",
             verdict.detail
         );
@@ -659,7 +659,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "chain resolution to empty clause should be valid: {:?}",
             verdict.detail
         );
@@ -694,7 +694,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "binary resolution without pivot should auto-detect: {:?}",
             verdict.detail
         );
@@ -821,7 +821,7 @@ mod tests {
         // This is actually valid in some Alethe proof formats (identity resolution).
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "single premise identity should be accepted: {:?}",
             verdict.detail
         );
@@ -864,7 +864,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "4-premise chain to empty should be valid: {:?}",
             verdict.detail
         );
@@ -943,7 +943,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "tautological C1 must keep not_a in resolvent: {:?}",
             verdict.detail
         );
@@ -1009,7 +1009,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "tautological C2 must keep `a` in resolvent: {:?}",
             verdict.detail
         );
@@ -1044,7 +1044,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "both tautological clauses must preserve non-pivot complementary pairs: {:?}",
             verdict.detail
         );
@@ -1114,7 +1114,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "correct chain resolvent should be accepted: {:?}",
             verdict.detail
         );
@@ -1335,7 +1335,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "chain resolution must preserve tautological pair through intermediate steps: {:?}",
             verdict.detail
         );
@@ -1400,7 +1400,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "self-resolution of tautology should yield tautology: {:?}",
             verdict.detail
         );
@@ -1434,7 +1434,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "issue #3346 example must produce {{a, b, c}}, not {{b, c}}: {:?}",
             verdict.detail
         );
@@ -1499,7 +1499,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "pivot variable reappearing in later premise must be preserved: {:?}",
             verdict.detail
         );
@@ -1533,7 +1533,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "both tautological premises must preserve non-pivot polarities: {:?}",
             verdict.detail
         );
@@ -1607,7 +1607,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "correct tautological resolvent should be accepted: {:?}",
             verdict.detail
         );
@@ -1640,7 +1640,7 @@ mod tests {
         );
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "alternative tautological resolvent should also be accepted: {:?}",
             verdict.detail
         );

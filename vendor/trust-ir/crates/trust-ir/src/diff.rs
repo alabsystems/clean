@@ -13,31 +13,129 @@
 //! * `FuncId`, `BlockId`, `ValueId`, `StructId`, `EnumId`, `RecordId`,
 //!   `ClosureTyId`, `FuncTyId`, `TyId` numbering. Two modules that are
 //!   identical up to a renumbering of these ids are considered equal.
-//! * Declaration order of functions/structs/enums/records/closure types
-//!   in the module.
+//! * Declaration order of functions/structs/enums/records/closure types,
+//!   globals, spec modules and imports in the module.
 //! * Claim-style debug metadata: `SourceSpan` and lexical-scope indices on
 //!   instruction nodes, plus function `value_names` and scope trees. These do
 //!   not affect execution or proof authority. `source_provenance` is explicitly
 //!   excluded from this list: it is proof-relevant function metadata.
+//!   The scope tree — parents, opening spans and the WS4.19 inlining chain
+//!   links (`ScopeData.inlined_at`) — can be OPTED IN with
+//!   [`DiffOptions::include_debug`], which reports a change as the `"scopes"`
+//!   function meta row; the default lane is unchanged by the option.
+//! * The module `name` (reported as the diff header, never as a change) and
+//!   the STRINGS of the debug-info `files` table (only spans index it, and
+//!   spans are ignored). The table's LENGTH is compared (the `"files"` module
+//!   row), mirroring the portable import identity
+//!   ([`crate::IdentityScheme::V3`], roadmap WS4.10 / decision DG-16), which
+//!   projects every `files[i]` string to `""` and keeps the length: a checkout
+//!   move is cosmetic, a file entering or leaving the table is not.
+//! * `obligation_diagnostics` (verifier messages keyed by obligation — a
+//!   sidecar, not authority) and rows of the definition tables (`structs`,
+//!   `enums`, `records`, `closure_types`, `func_types`, `types`, `universes`,
+//!   `predicates`) that nothing compared references: a definition is
+//!   fingerprinted structurally at every use, so an unused row is invisible.
+//!
+//! Nothing else is ignored (under default options; `--ignore-proofs`
+//! additionally suppresses only the proof comparisons listed below). In
+//! particular EVERY field of a `Function`, a `Global`, a `SpecModule`, the
+//! `TargetInfo` and a `ModuleImport` that is not named above is compared, and
+//! a change to it is a reported difference (audit rows
+//! `b1.gap.diff_blind_to_*`, 2026-09-17: the diff used to read exactly two
+//! function-metadata fields, so a Clean body losing its codegen license, an
+//! exported symbol going `internal`, a global's initializer changing, or a
+//! module being retargeted all produced an EMPTY diff while
+//! `Module::stable_digest` moved). The same holds for every field of the
+//! proof channel — a `FunctionSummary`, a `ProofFormula`, a `ProofObligation`
+//! and a `ProofCertificate` (roadmap WS4.13).
+//!
+//! That list is enforced at COMPILE time, not by review: each carrier the
+//! diff reads is destructured EXHAUSTIVELY (no `..`) where it is compared, with
+//! every field either read or named `_` beside the reason it is ignored — the
+//! WS4.2 `text_loss` pattern. A field added to `Module`, `Function`,
+//! `FuncAttrs`, `ParamAttrs`, `InstrNode`, `Block`, `Global`, `TargetInfo`,
+//! `ModuleImport`, `ExternRef`, `TupleLayoutDescriptor`, `DropGlueEntry`,
+//! `ClosureLayoutDescriptor`, `StructDef`, `EnumDef`, `SpecModule`,
+//! `SpecAnchor`, `FunctionSummary`, `ProofFormula`, `ClauseBinding`,
+//! `ProofObligation`, `ObligationSite`, `SpecObligationRef`,
+//! `ProofCertificate`, `CoverageAssurance`, `ProofContext`, the kernel
+//! re-check directive, its
+//! `CertificateBinding`, `SourceDefinitionRef` or `IslandEnvironment` fails to
+//! build here until it is classified. (`source_provenance` is compared with
+//! `!=`, which is total over every field by construction.) The dynamic half is
+//! the conformance target
+//! `diff_fields`: every single-field mutant that moves
+//! `Module::stable_digest` must produce a non-empty diff, except the debug
+//! fields listed above.
 //!
 //! # What is compared
 //!
+//! * Declared tuple layouts and (v58) declared closure layouts, including
+//!   unused rows, each keyed by its STRUCTURAL type identity. These are
+//!   execution metadata and are compared even with `--ignore-proofs`.
+//! * A struct or enum definition's v58 nominal key (`origin`), wherever the
+//!   definition is fingerprinted: the key splits type identity, so gaining,
+//!   losing or re-keying it is a change.
+//! * Module-level metadata, each reported as a `MetaChange` in
+//!   `module_meta_changes` and never gated by `--ignore-proofs`:
+//!   `target_info` (always, not only when tuple layouts are declared),
+//!   `global_asm`, `completeness`, `files` (the debug file table's LENGTH;
+//!   see above), `imports` (the authenticated dependency table, compared as a
+//!   set), `drop_glue` (v55: the module drop-glue table, compared as a sorted
+//!   multiset of key type and glue SYMBOL, so declaration order and function
+//!   renumbering stay cosmetic while a duplicated row is reported), the
+//!   per-name `spec_module <name>` rows (matched by machine name,
+//!   declaration order ignored; an anchor's `FuncId`s are resolved to the
+//!   function's symbol, so function renumbering stays cosmetic while
+//!   re-pointing an anchor is reported), and the per-name `global @<name>` rows
+//!   (matched by link-time symbol, declaration order ignored; every field of a
+//!   `Global` — type, mutability, initializer, linkage, TLS model, alignment,
+//!   section, visibility and `#[used]` retention — is part of the fingerprint).
+//!   A `GlobalAddr` instruction is fingerprinted by the SYMBOL its `GlobalId`
+//!   names, so reordering `Module.globals` is cosmetic too.
 //! * The set of function names (added / removed).
+//! * Per matched function, its metadata, each reported as a `MetaChange` in
+//!   `meta_changes` and never gated by `--ignore-proofs`: `producer`,
+//!   `source_provenance`, `body_gate` (the codegen license), `display_path`,
+//!   `section` / `visibility` / `retained` (v45), `linkage`, `calling_conv`,
+//!   `signature` (the `FuncTy`, resolved structurally so `FuncTyId`
+//!   renumbering is still cosmetic) and `attrs`.
 //! * Per matched function: block shape (number of blocks reachable from
 //!   entry), block parameter types, and instruction bodies positionally
 //!   after block alignment.
 //! * Per matched instruction: the `Inst` variant and all type/constant/
 //!   literal payloads it carries, compared via a structural fingerprint
-//!   that resolves id references through each module's own tables.
+//!   that resolves id references through each module's own tables, and the
+//!   node's result ARITY (its result ids are renumbering, their count is
+//!   not).
 //! * `ProofAnnotation` sets attached to each function and each instruction
 //!   node (unless `--ignore-proofs` is set).
+//! * The function's separate-compilation contract (`summary`: `proved`,
+//!   `params`, every `requires` / `ensures` / `decreases` clause and
+//!   `backed_by`), reported through the proof channel.
 //! * Module proof state: `proof_obligations` (matched by claim — kind, scope
-//!   function name, description, formula, and embedded source identity — with `status` reported as a
-//!   change), `proof_certificates` (matched by obligation claim + prover +
-//!   evidence), and per-instruction `proof_context` (its `assumes`/`establishes`
-//!   obligation references resolved to claim keys). All unless `--ignore-proofs`
-//!   is set, which suppresses every proof comparison and preserves the older
+//!   function name, description, formula, embedded source identity, the IR
+//!   `site` it states a check about and the temporal `spec` property it
+//!   discharges — with `status` reported as a change), `proof_certificates`
+//!   (matched by obligation claim + prover + evidence + coverage
+//!   `assurance`; a `CleanCic` payload's kernel re-check directive — module,
+//!   anchor, theorems, admitted axioms and its `CertificateBinding` — is part
+//!   of the evidence), and per-instruction `proof_context` (its
+//!   `assumes`/`establishes` obligation references resolved to claim keys).
+//!   Every `ProofFormula` — a summary clause or an obligation's formula — is
+//!   fingerprinted with ALL of its fields, the v41 clause `bindings` (each
+//!   name's sort and IR place) included. All unless `--ignore-proofs` is set,
+//!   which suppresses every proof comparison and preserves the older
 //!   proof-insensitive behavior.
+//! * Every function-local id a proof-channel row carries is resolved the way
+//!   the body is: an obligation `site` names its function by symbol and its
+//!   block by DFS visit index, a clause's `Value` place names its SSA value by
+//!   canonical walk index, and an `InheritedFromCallee` certificate names its
+//!   callee by symbol and its obligation by claim — so renumbering stays
+//!   cosmetic while re-pointing any of them is reported. The same holds for a
+//!   `ProofRef` annotation, which names its obligation by CLAIM (as a
+//!   certificate and a proof context do): re-pointing it — including by
+//!   renumbering the obligation table under an unchanged index — is reported.
 //!
 //! # Alignment algorithm
 //!
@@ -75,7 +173,7 @@
 //! * No three-way merge is produced.
 
 use crate::{
-    AttrEntry, AttrValue, Block, Function, Module,
+    AttrEntry, AttrValue, Block, DropGlueEntry, Function, Module,
     constant::Constant,
     dialect::DialectInst,
     inst::{BindingFrameDef, BindingSlot, Inst, SwitchCase},
@@ -107,6 +205,14 @@ pub struct DiffOptions {
     /// not compared. Two modules that differ only in their proof coverage
     /// are then reported as equal.
     pub ignore_proofs: bool,
+    /// If true, the per-function lexical scope TREE (`Function.scopes`:
+    /// parents, opening spans and WS4.19 inlining chain links) is compared
+    /// too and a change is reported as the `"scopes"` meta row. Off by
+    /// default: scopes are claim-style debug metadata with no execution or
+    /// proof authority, so the default diff keeps ignoring them. This is a
+    /// DEBUG lane, not an authority one — turning it on never changes what
+    /// the default lane reports.
+    pub include_debug: bool,
 }
 
 /// Result of comparing two modules.
@@ -115,6 +221,8 @@ pub struct Diff {
     pub module_name_a: String,
     pub module_name_b: String,
     pub changes: Vec<FuncChange>,
+    /// Execution-relevant module metadata, compared even under `ignore_proofs`.
+    pub module_meta_changes: Vec<MetaChange>,
     /// Module-level proof-state changes: differences in `proof_obligations`
     /// and `proof_certificates`. Empty when `ignore_proofs` is set or when
     /// the proof state matches. Per-instruction proof state (`proofs` and
@@ -125,7 +233,9 @@ pub struct Diff {
 impl Diff {
     /// Returns `true` when there are no recorded differences.
     pub fn is_empty(&self) -> bool {
-        self.changes.is_empty() && self.proof_state_changes.is_empty()
+        self.changes.is_empty()
+            && self.module_meta_changes.is_empty()
+            && self.proof_state_changes.is_empty()
     }
 
     /// Exit code for CLI use: 0 if isomorphic, 1 if different.
@@ -151,17 +261,33 @@ pub enum FuncChange {
         proof_changes: Vec<ProofChange>,
         /// Changes at the block level.
         block_changes: Vec<BlockChange>,
-        /// Function-metadata changes (producer and semantic source provenance).
-        /// NOT gated by `ignore_proofs` — provenance is not proof coverage.
+        /// Function-metadata changes: `producer`, `source_provenance`,
+        /// `body_gate`, `display_path`, `section`, `visibility`, `retained`,
+        /// `linkage`, `calling_conv`, `signature` and `attrs` (see
+        /// [`MetaChange::field`]).
+        /// NOT gated by `ignore_proofs` — none of these is proof coverage.
         meta_changes: Vec<MetaChange>,
     },
 }
 
-/// A function-metadata change on a matched function (non-proof, non-body):
-/// currently the producer tag and semantic source-provenance carrier.
+/// A metadata change (non-proof, non-body), on a function or the module.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MetaChange {
-    /// Which metadata field changed (e.g. `"producer"`).
+    /// Which metadata field changed.
+    ///
+    /// On a function (`FuncChange::Changed::meta_changes`) one of
+    /// `"producer"`, `"source_provenance"`, `"body_gate"`, `"display_path"`,
+    /// `"section"`, `"visibility"`, `"retained"`, `"linkage"`,
+    /// `"calling_conv"`, `"signature"`, `"attrs"`, or — only under
+    /// [`DiffOptions::include_debug`] — `"scopes"` (the lexical scope tree
+    /// with its WS4.19 inlining chain links).
+    ///
+    /// On the module (`Diff::module_meta_changes`) one of `"tuple_layouts"`,
+    /// `"target_info"`, `"global_asm"`, `"completeness"`, `"imports"`,
+    /// `"drop_glue"`, `"closure_layouts"`, a per-machine
+    /// `"spec_module <name>"` row, or a per-symbol `"global @<name>"` row (an
+    /// added / removed global renders the absent side as `"-"`), or `"files"`
+    /// (the debug file table's length).
     pub field: String,
     /// Rendered A-side value; `"-"` when absent on that side.
     pub before: String,
@@ -247,6 +373,34 @@ pub fn diff(a: &Module, b: &Module) -> Diff {
 
 /// Diff two modules with explicit options.
 pub fn diff_with(a: &Module, b: &Module, opts: DiffOptions) -> Diff {
+    // Compile-time coverage (roadmap WS4.13, the WS4.2 `text_loss` pattern):
+    // every `Module` field is named here with WHERE it is compared, or why it
+    // is not. A new field fails to build until it is classified.
+    let Module {
+        name: _,                   // the diff header, never a change (module doc)
+        functions: _,              // matched by symbol below
+        structs: _,                // fingerprinted structurally at every use
+        enums: _,                  // fingerprinted structurally at every use
+        records: _,                // fingerprinted structurally at every use
+        closure_types: _,          // fingerprinted structurally at every use
+        globals: _,                // `global @<name>` rows
+        func_types: _,             // fingerprinted structurally at every use
+        types: _,                  // fingerprinted structurally at every use
+        proof_obligations: _,      // `proof_state_diff`
+        proof_certificates: _,     // `proof_state_diff`
+        target_info: _,            // `target_info` row
+        files: _,                  // `files` row: the LENGTH (strings are debug)
+        obligation_diagnostics: _, // IGNORED: a verifier-message sidecar, not authority
+        spec_modules: _,           // `spec_module <name>` rows
+        universes: _,              // fingerprinted structurally at every use
+        predicates: _,             // fingerprinted structurally at every use
+        global_asm: _,             // `global_asm` row
+        imports: _,                // `imports` row + every `ExternRef`
+        tuple_layouts: _,          // `tuple_layouts` row
+        completeness: _,           // `completeness` row
+        drop_glue: _,              // `drop_glue` row (v55, amendment D)
+        closure_layouts: _,        // `closure_layouts` row (v58, WS3.9)
+    } = a;
     let mut changes = Vec::new();
 
     // Build name-indexed maps of functions on each side.
@@ -279,18 +433,41 @@ pub fn diff_with(a: &Module, b: &Module, opts: DiffOptions) -> Diff {
                 name: name.to_string(),
             }),
             (Some(fa), Some(fb)) => {
+                // Compile-time coverage of `Function` (see the `Module`
+                // destructure above).
+                let Function {
+                    id: _,                // renumbering: functions are matched by `name`
+                    name: _,              // the match key
+                    ty: _,                // `signature` row (structural)
+                    entry: _,             // the block walk starts here
+                    blocks: _,            // `diff_function`
+                    proofs: _,            // proof channel (`proof_diff`)
+                    calling_conv: _,      // `calling_conv` row
+                    linkage: _,           // `linkage` row
+                    attrs: _,             // `attrs` row
+                    summary: _,           // proof channel (`summary_fp`)
+                    producer: _,          // `producer` row
+                    value_names: _,       // IGNORED: debug names
+                    scopes: _,            // debug lane only (`scopes`, --include-debug)
+                    source_provenance: _, // `source_provenance` row
+                    body_gate: _,         // `body_gate` row
+                    display_path: _,      // `display_path` row
+                    section: _,           // `section` row
+                    visibility: _,        // `visibility` row
+                    retained: _,          // `retained` row
+                } = fa;
                 let mut proof_changes = if opts.ignore_proofs {
                     Vec::new()
                 } else {
-                    proof_diff(&fa.proofs, &fb.proofs)
+                    proof_diff(a, &fa.proofs, b, &fb.proofs)
                 };
                 // The separate-compilation contract is proof-ish: a changed
                 // `requires`/`ensures`/`params`/`proved` is reported through the
                 // proof channel (already gated by `ignore_proofs` and already
                 // promoting the function to `Changed`).
                 if !opts.ignore_proofs {
-                    let sa = summary_fp(fa.summary.as_ref());
-                    let sb = summary_fp(fb.summary.as_ref());
+                    let sa = summary_fp(a, Some(fa), fa.summary.as_ref());
+                    let sb = summary_fp(b, Some(fb), fb.summary.as_ref());
                     if sa != sb {
                         proof_changes.push(ProofChange::Removed {
                             name: format!("summary {sa}"),
@@ -318,6 +495,87 @@ pub fn diff_with(a: &Module, b: &Module, opts: DiffOptions) -> Diff {
                         after: source_provenance_fp(fb.source_provenance.as_ref()),
                     });
                 }
+                // Every remaining Function field is compared too (audit rows
+                // b1.gap.diff_blind_to_{body_gate,display_path,
+                // function_linkage,calling_conv}). The codegen license is the
+                // consumer's refusal hook: Gated -> Ungated / -> None / an
+                // authority swap flips `validate_module_for_codegen`, and the
+                // diff is the ONLY tool that can show a reviewer that flip
+                // (`executable_content_digest_v1` excludes it by design).
+                // None of these is proof coverage, so none is gated by
+                // `ignore_proofs`.
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "body_gate",
+                    body_gate_fp(a, fa),
+                    body_gate_fp(b, fb),
+                );
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "display_path",
+                    display_path_fp(fa.display_path.as_deref()),
+                    display_path_fp(fb.display_path.as_deref()),
+                );
+                // v45 (WS3.10): the function's symbol attributes. Each one
+                // changes the object a consumer emits, so none is cosmetic.
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "section",
+                    display_path_fp(fa.section.as_deref()),
+                    display_path_fp(fb.section.as_deref()),
+                );
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "visibility",
+                    fa.visibility.to_string(),
+                    fb.visibility.to_string(),
+                );
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "retained",
+                    fa.retained.to_string(),
+                    fb.retained.to_string(),
+                );
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "linkage",
+                    fa.linkage.to_string(),
+                    fb.linkage.to_string(),
+                );
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "calling_conv",
+                    fa.calling_conv.to_string(),
+                    fb.calling_conv.to_string(),
+                );
+                // The signature is resolved structurally through each side's
+                // own `func_types` table, so `FuncTyId` renumbering stays
+                // cosmetic while a changed parameter / return list or a
+                // vararg flip is reported.
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "signature",
+                    fp_func_ty_ref(a, fa.ty),
+                    fp_func_ty_ref(b, fb.ty),
+                );
+                push_meta_if_changed(
+                    &mut meta_changes,
+                    "attrs",
+                    func_attrs_fp(&fa.attrs),
+                    func_attrs_fp(&fb.attrs),
+                );
+                // Debug lane (opt-in): the lexical scope tree, including a
+                // WS4.19 inlining chain link. Excluded by default because
+                // scopes carry no authority; included so a reviewer CAN see
+                // a chain appear, move or vanish when asked.
+                if opts.include_debug {
+                    push_meta_if_changed(
+                        &mut meta_changes,
+                        "scopes",
+                        scopes_fp(fa.scopes.as_deref()),
+                        scopes_fp(fb.scopes.as_deref()),
+                    );
+                }
                 let block_changes = diff_function(a, b, fa, fb, opts);
                 if !proof_changes.is_empty()
                     || !block_changes.is_empty()
@@ -341,12 +599,588 @@ pub fn diff_with(a: &Module, b: &Module, opts: DiffOptions) -> Diff {
         proof_state_diff(a, b)
     };
 
+    let mut module_meta_changes = Vec::new();
+    let layouts_a = tuple_layouts_fp(a);
+    let layouts_b = tuple_layouts_fp(b);
+    if layouts_a != layouts_b {
+        module_meta_changes.push(MetaChange {
+            field: "tuple_layouts".into(),
+            before: layouts_a,
+            after: layouts_b,
+        });
+    }
+    // v58 declared closure layouts, diffed on exactly the same footing: a
+    // producer that reorders two captures changes the module's byte image,
+    // which a diff that ignored this table would render as no change at all.
+    let closures_a = closure_layouts_fp(a);
+    let closures_b = closure_layouts_fp(b);
+    if closures_a != closures_b {
+        module_meta_changes.push(MetaChange {
+            field: "closure_layouts".into(),
+            before: closures_a,
+            after: closures_b,
+        });
+    }
+    // Target information is execution metadata for EVERY module, not only one
+    // that declares tuple layouts (audit row
+    // b1.gap.diff_blind_to_spec_modules_and_target: retargeting
+    // aarch64-apple-darwin -> x86_64-linux used to be an empty diff). This row
+    // replaces the older `tuple_layout_target` row, which fired only when a
+    // tuple table was present.
+    push_meta_if_changed(
+        &mut module_meta_changes,
+        "target_info",
+        target_info_fp(a.target_info.as_ref()),
+        target_info_fp(b.target_info.as_ref()),
+    );
+    // Module-level `global_asm!` blocks define symbols the rest of the module
+    // may reference; a consumer must refuse rather than drop them, so a
+    // reviewer must see them change.
+    push_meta_if_changed(
+        &mut module_meta_changes,
+        "global_asm",
+        format!("{:?}", a.global_asm),
+        format!("{:?}", b.global_asm),
+    );
+    // WS5.3b: the producer's completeness claim. A claim appearing,
+    // disappearing, or flipping between `Complete` and `Partial` (or a
+    // partial claim's rows changing) is a change in what the module says
+    // about itself; `None` and `Complete` are distinct here as everywhere.
+    push_meta_if_changed(
+        &mut module_meta_changes,
+        "completeness",
+        format!("{:?}", a.completeness),
+        format!("{:?}", b.completeness),
+    );
+    // The debug file table's LENGTH, never its strings: the portable import
+    // identity (`IdentityScheme::V3`, WS4.10 / DG-16) projects every
+    // `files[i]` to `""` and keeps the length, so a checkout move (every path
+    // rewritten) is cosmetic here as it is there, while a file entering or
+    // leaving the table moves `Module::stable_digest` and is reported.
+    push_meta_if_changed(
+        &mut module_meta_changes,
+        "files",
+        a.files.len().to_string(),
+        b.files.len().to_string(),
+    );
+    // The authenticated dependency table. `ExternRef`s already resolve through
+    // it (`fp_import_ref`), but an import nothing references yet — or a
+    // digest/producer re-pin of one — is authority metadata in its own right.
+    // Compared as a set: the table is content-interned, so its order carries
+    // no information a reviewer needs.
+    push_meta_if_changed(
+        &mut module_meta_changes,
+        "imports",
+        imports_fp(a),
+        imports_fp(b),
+    );
+    // Amendment D (§20): the drop-glue table decides what every `Drop` /
+    // `DropInvoke` EXECUTES, so a row appearing, disappearing or re-pointing
+    // is a change to the program even when no body changed. Compared as a
+    // set of (key type, glue SYMBOL): function renumbering stays cosmetic.
+    push_meta_if_changed(
+        &mut module_meta_changes,
+        "drop_glue",
+        drop_glue_fp(a),
+        drop_glue_fp(b),
+    );
+    // Spec modules (matched by machine name) and globals (matched by link-time
+    // symbol): declaration order is cosmetic, content is not. Audit rows
+    // b1.gap.diff_blind_to_globals / _spec_modules_and_target: a global's
+    // initializer changing altered the program's RESULT (60 -> 62) while the
+    // diff stayed empty, because nothing in this module read `Module.globals`.
+    diff_named_rows(
+        &mut module_meta_changes,
+        "spec_module ",
+        a.spec_modules
+            .iter()
+            .map(|s| (s.name.as_str(), spec_module_fp(a, s))),
+        b.spec_modules
+            .iter()
+            .map(|s| (s.name.as_str(), spec_module_fp(b, s))),
+    );
+    diff_named_rows(
+        &mut module_meta_changes,
+        "global @",
+        a.globals.iter().map(|g| (g.name.as_str(), global_fp(a, g))),
+        b.globals.iter().map(|g| (g.name.as_str(), global_fp(b, g))),
+    );
+
     Diff {
         module_name_a: a.name.clone(),
         module_name_b: b.name.clone(),
         changes,
+        module_meta_changes,
         proof_state_changes,
     }
+}
+
+/// Declaration order and arena TyIds are cosmetic; offset order and duplicate
+/// rows are not. A vector (not a set) preserves the descriptor multiplicity.
+/// The drop-glue table as a sorted set of `key => @glue-symbol` rows (a
+/// dangling glue id keeps its raw index, a distinct spelling).
+fn drop_glue_fp(m: &Module) -> String {
+    let mut rows: Vec<String> = m
+        .drop_glue
+        .iter()
+        .map(|row| {
+            // Every field of a row is read (compile-time coverage, WS4.13).
+            let DropGlueEntry { glue, ty } = row;
+            let glue = match m.function_by_id(*glue) {
+                Some(function) => format!("@{}", function.name),
+                None => format!("#dangling {}", glue.index()),
+            };
+            format!("{}=>{glue}", fp_ty(m, ty))
+        })
+        .collect();
+    rows.sort();
+    format!("[{}]", rows.join(","))
+}
+
+fn tuple_layouts_fp(m: &Module) -> String {
+    // This API does not validate its inputs, but must not traverse a malformed
+    // by-value cycle in the newly inspected table. The CLI rejects these inputs.
+    if let Err(error) = m.validate_tuple_layouts() {
+        return format!(
+            "invalid {error:?}: {:?}; types={:?}",
+            m.tuple_layouts, m.types
+        );
+    }
+    let mut rows: Vec<_> = m
+        .tuple_layouts
+        .iter()
+        .map(|layout| {
+            // Compile-time coverage (roadmap WS4.13): every field is read.
+            let crate::TupleLayoutDescriptor {
+                tuple_type,
+                size,
+                align,
+                field_offsets,
+            } = layout;
+            format!(
+                "{} size={} align={} offsets={:?}",
+                fp_tyid_ref(m, *tuple_type),
+                size,
+                align,
+                field_offsets
+            )
+        })
+        .collect();
+    rows.sort();
+    format!("{rows:?}")
+}
+
+/// The v58 nominal key's fingerprint: its `Display` (exact identity bytes,
+/// hex-rendered) or the literal `none`, which no rendered key can spell.
+fn origin_fp(origin: Option<&crate::ty::TypeOrigin>) -> String {
+    origin.map_or_else(|| "none".to_string(), ToString::to_string)
+}
+
+/// Declaration order and arena `ClosureTyId`s are cosmetic; capture-offset
+/// order and duplicate rows are not. A vector (not a set) preserves descriptor
+/// multiplicity, exactly as [`tuple_layouts_fp`] does.
+///
+/// The row is keyed by the closure type's STRUCTURAL spelling
+/// ([`TypeFingerprint::closure_ref`]), never by its arena index: a producer
+/// that renumbers its closure types has not changed a frame, and one that
+/// renumbers AND swaps two rows HAS moved a frame from one closure type to
+/// another — an index-keyed row would render the first as a change and the
+/// second as none.
+fn closure_layouts_fp(m: &Module) -> String {
+    if let Err(error) = m.validate_closure_layouts() {
+        return format!(
+            "invalid {error:?}: {:?}; closure_types={:?}",
+            m.closure_layouts, m.closure_types
+        );
+    }
+    let mut rows: Vec<_> = m
+        .closure_layouts
+        .iter()
+        .map(|layout| {
+            // Compile-time coverage (roadmap WS4.13): every field is read.
+            let crate::ClosureLayoutDescriptor {
+                origin,
+                closure,
+                size,
+                align,
+                capture_offsets,
+            } = layout;
+            let nominal = origin
+                .as_ref()
+                .map(|origin| format!(" origin={origin}"))
+                .unwrap_or_default();
+            format!(
+                "{} size={} align={} offsets={:?}{nominal}",
+                TypeFingerprint::new(m).closure_ref(*closure),
+                size,
+                align,
+                capture_offsets
+            )
+        })
+        .collect();
+    rows.sort();
+    format!("{rows:?}")
+}
+
+/// Record a [`MetaChange`] for `field` iff the two rendered sides differ.
+fn push_meta_if_changed(out: &mut Vec<MetaChange>, field: &str, before: String, after: String) {
+    if before != after {
+        out.push(MetaChange {
+            field: field.to_string(),
+            before,
+            after,
+        });
+    }
+}
+
+/// Order-insensitive comparison of two name-keyed tables (globals by symbol,
+/// spec modules by machine name). Each distinct name produces at most one
+/// [`MetaChange`] whose field is `prefix + name`; an added or removed row
+/// renders its absent side as `-`. A name that occurs more than once on one
+/// side (ill-formed, but this API does not validate) fingerprints as the
+/// sorted multiset of its rows, so a duplicate is neither hidden nor a panic.
+fn diff_named_rows<'a>(
+    out: &mut Vec<MetaChange>,
+    prefix: &str,
+    a: impl Iterator<Item = (&'a str, String)>,
+    b: impl Iterator<Item = (&'a str, String)>,
+) {
+    fn collect<'a>(rows: impl Iterator<Item = (&'a str, String)>) -> HashMap<&'a str, Vec<String>> {
+        let mut table: HashMap<&str, Vec<String>> = HashMap::new();
+        for (name, fp) in rows {
+            table.entry(name).or_default().push(fp);
+        }
+        for fps in table.values_mut() {
+            fps.sort();
+        }
+        table
+    }
+    fn render(fps: Option<&Vec<String>>) -> String {
+        match fps {
+            None => "-".to_string(),
+            Some(fps) if fps.len() == 1 => fps[0].clone(),
+            Some(fps) => format!("duplicate x{} {fps:?}", fps.len()),
+        }
+    }
+    let ta = collect(a);
+    let tb = collect(b);
+    let mut names: Vec<&str> = ta.keys().copied().collect();
+    for k in tb.keys() {
+        if !ta.contains_key(*k) {
+            names.push(*k);
+        }
+    }
+    names.sort();
+    for name in names {
+        push_meta_if_changed(
+            out,
+            &format!("{prefix}{name}"),
+            render(ta.get(name)),
+            render(tb.get(name)),
+        );
+    }
+}
+
+/// Rendered codegen license for a [`MetaChange`]; `-` is the pre-v41 "no
+/// licensing claim" state, which a consumer PERMITS while it REFUSES
+/// `ungated` — so the two must render differently.
+///
+/// A license's v61 [`crate::GateEvidence`] is rendered by what it MEANS, not
+/// by its arena numbers, so the diff stays renumbering-insensitive: the cited
+/// obligation by its claim key ([`fp_obligation_claim`], or `#<id>?` when the
+/// module declares no such row), and the body digest by whether it still
+/// names the body as it stands (`holds` / `stale` / `undigestable`). The raw
+/// digest is deliberately not shown: it hashes the function's own id, so a
+/// renumbered but otherwise identical module would report a change, while a
+/// body rewritten under an unchanged license flips `holds` -> `stale`.
+fn body_gate_fp(m: &Module, func: &Function) -> String {
+    match &func.body_gate {
+        None => "-".to_string(),
+        Some(gate @ (crate::BodyGate::Ungated | crate::BodyGate::Gated { evidence: None, .. })) => {
+            gate.to_string()
+        }
+        Some(crate::BodyGate::Gated {
+            authority,
+            evidence: Some(evidence),
+        }) => {
+            let mut cited = m
+                .proof_obligations
+                .iter()
+                .filter(|o| o.id == evidence.obligation);
+            let claim = match (cited.next(), cited.next()) {
+                (Some(row), None) => fp_obligation_claim(m, row),
+                _ => format!("#{}?", evidence.obligation.index()),
+            };
+            let body = match m.function_body_digest(func.id) {
+                Ok(digest) if digest == evidence.body_digest => "holds",
+                Ok(_) => "stale",
+                Err(_) => "undigestable",
+            };
+            format!("gated {authority:?} evidence [{claim}] body={body}")
+        }
+    }
+}
+
+fn display_path_fp(p: Option<&str>) -> String {
+    p.map_or_else(|| "-".to_string(), |p| format!("{p:?}"))
+}
+
+/// Every claim-style function attribute, positional parameter attributes
+/// included. `naked` and `target_features` (v41) decide whether a consumer may
+/// compile the body at all, so a change to them is never cosmetic.
+fn func_attrs_fp(a: &crate::FuncAttrs) -> String {
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    let crate::FuncAttrs {
+        readonly,
+        readnone,
+        inlinehint,
+        cold,
+        params,
+        naked,
+        target_features,
+        ret,
+    } = a;
+    let mut s = format!(
+        "readonly={} readnone={} inlinehint={} cold={} naked={} target_features={:?} ret={} \
+         params=[",
+        readonly,
+        readnone,
+        inlinehint,
+        cold,
+        naked,
+        target_features,
+        // v45: the return slot is an ABI pin like any parameter's.
+        slot_attrs_fp(ret),
+    );
+    for (i, p) in params.iter().enumerate() {
+        if i > 0 {
+            s.push(',');
+        }
+        s.push_str(&slot_attrs_fp(p));
+    }
+    s.push(']');
+    s
+}
+
+/// One slot's claim-style attributes, v45 ABI facts included: a changed
+/// extension or pass mode changes the call's byte-level ABI, so it is never
+/// cosmetic.
+fn slot_attrs_fp(p: &crate::ParamAttrs) -> String {
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    let crate::ParamAttrs {
+        dereferenceable,
+        nonnull,
+        align,
+        noalias,
+        readonly,
+        byval,
+        sret,
+        ext,
+        pass,
+    } = p;
+    let pass = match pass {
+        None => "-".to_string(),
+        Some(crate::PassMode::Cast { pieces }) => format!(
+            "cast({})",
+            pieces
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(",")
+        ),
+        Some(crate::PassMode::Indirect { on_stack }) => format!("indirect({on_stack})"),
+        Some(mode) => mode.token().to_string(),
+    };
+    format!(
+        "{{deref={} nonnull={} align={} noalias={} readonly={} byval={} sret={} ext={:?} \
+         pass={pass}}}",
+        dereferenceable.map_or_else(|| "-".to_string(), |d| d.to_string()),
+        nonnull,
+        align.map_or_else(|| "-".to_string(), |a| a.to_string()),
+        noalias,
+        readonly,
+        byval,
+        sret,
+        ext,
+    )
+}
+
+/// Every field of [`TargetInfo`]; `-` when the module is target-independent.
+fn target_info_fp(t: Option<&crate::TargetInfo>) -> String {
+    let Some(t) = t else {
+        return "-".to_string();
+    };
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    let crate::TargetInfo {
+        triple,
+        pointer_size,
+        endianness,
+        abi,
+        struct_passing,
+    } = t;
+    format!(
+        "triple={:?} pointer_size={} endianness={} abi={} struct_passing={:?}",
+        triple,
+        pointer_size,
+        endianness,
+        abi.as_deref()
+            .map_or_else(|| "-".to_string(), |a| format!("{a:?}")),
+        struct_passing,
+    )
+}
+
+/// The dependency table as a sorted set of `(name, digest, producer, scheme)`
+/// rows.
+fn imports_fp(m: &Module) -> String {
+    let mut rows: Vec<String> = m
+        .imports
+        .iter()
+        .map(|imp| {
+            // Compile-time coverage (roadmap WS4.13): every field is read.
+            let crate::ModuleImport {
+                name,
+                digest,
+                producer,
+                scheme,
+            } = imp;
+            // The v44 scheme is spelled only when it is not the legacy V2,
+            // so a table of V2 rows fingerprints exactly as before v44.
+            let scheme = if scheme.is_v2() {
+                String::new()
+            } else {
+                format!("{{{scheme}}}")
+            };
+            format!(
+                "{name}@{digest}[{}]{scheme}",
+                producer
+                    .as_ref()
+                    .map_or_else(|| "-".to_string(), ToString::to_string),
+            )
+        })
+        .collect();
+    rows.sort();
+    format!("{rows:?}")
+}
+
+/// Every field of a [`Global`] other than its name (which keys the row). The
+/// type is fingerprinted structurally so arena ids stay cosmetic; the
+/// initializer is fingerprinted through [`fp_constant`], which resolves
+/// `FnDef` / `Closure` / `SymbolAddr` references through the module.
+fn global_fp(m: &Module, g: &crate::Global) -> String {
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    let crate::Global {
+        name: _, // the row key (`global @<name>`)
+        ty,
+        mutable,
+        initializer,
+        linkage,
+        tls,
+        align,
+        section,
+        visibility,
+        retained,
+    } = g;
+    format!(
+        "ty={} mutable={} init={} linkage={} tls={} align={} section={} visibility={} retained={}",
+        fp_ty(m, ty),
+        mutable,
+        initializer
+            .as_ref()
+            .map_or_else(|| "-".to_string(), |c| fp_constant(m, c)),
+        linkage,
+        tls.map_or_else(|| "-".to_string(), |t| t.to_string()),
+        align.map_or_else(|| "-".to_string(), |a| a.to_string()),
+        section
+            .as_deref()
+            .map_or_else(|| "-".to_string(), |s| format!("{s:?}")),
+        visibility,
+        retained,
+    )
+}
+
+/// Every field of a [`SpecModule`](crate::spec::SpecModule) other than its
+/// name (which keys the row): vars, actions, invariants, anchors, waivers,
+/// proof bindings, origin, enforcement mode and the v46 temporal properties
+/// (the v46 `SpecVar.sort` / `SpecInvariant.typed` / `ProofKind::CleanTheorem`
+/// ride in the `Debug` of their carriers), all in declaration order
+/// (within a machine, order is content — anchors and waivers are positional
+/// evidence about a named action).
+///
+/// An anchor's `function` and `Function(..)` projection target are
+/// [`FuncId`]s, so they are resolved to the function's link-time SYMBOL
+/// through `m` — the key functions are matched by — rather than printed as a
+/// raw arena index. A raw index would make `FuncId` renumbering a spurious
+/// change AND, worse, hide a re-point: an anchor moved from `f` to `g` in a
+/// build where `g` now holds `f`'s old index would fingerprint identically.
+fn spec_module_fp(m: &Module, s: &crate::spec::SpecModule) -> String {
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    let crate::spec::SpecModule {
+        name: _, // the row key (`spec_module <name>`)
+        vars,
+        actions,
+        invariants,
+        anchors,
+        waivers,
+        proofs,
+        origin,
+        enforcement,
+        temporal,
+    } = s;
+    let anchors: Vec<String> = anchors
+        .iter()
+        .map(|a| {
+            // Compile-time coverage (roadmap WS4.13): every field is read.
+            let crate::spec::SpecAnchor {
+                machine,
+                action,
+                rust_symbol,
+                span,
+                project,
+                function,
+                projection_target,
+            } = a;
+            let target = match *projection_target {
+                None => "-".to_string(),
+                Some(crate::spec::SpecProjectionTarget::Function(id)) => {
+                    format!("function({})", spec_func_ref(m, id))
+                }
+                Some(t) => t.tag().to_string(),
+            };
+            format!(
+                "{{machine={:?} action={:?} rust_symbol={:?} span={:?} project={:?} function={} projection_target={}}}",
+                machine,
+                action,
+                rust_symbol,
+                span,
+                project,
+                function.map_or_else(|| "-".to_string(), |id| spec_func_ref(m, id)),
+                target,
+            )
+        })
+        .collect();
+    format!(
+        "enforcement={:?} origin={} vars={:?} actions={:?} invariants={:?} anchors=[{}] waivers={:?} proofs={:?} temporal={:?}",
+        enforcement,
+        origin.label(),
+        vars,
+        actions,
+        invariants,
+        anchors.join(","),
+        waivers,
+        proofs,
+        temporal,
+    )
+}
+
+/// A module-local `FuncId` (a spec anchor's, an obligation site's, an
+/// `InheritedFromCallee` callee's), resolved to `@<symbol>`; a dangling id
+/// keeps its raw index under a distinct spelling (never a panic, never a match
+/// for a real function).
+fn spec_func_ref(m: &Module, id: FuncId) -> String {
+    function_by_id(m, id).map_or_else(
+        || format!("#dangling {}", id.index()),
+        |f| format!("@{}", f.name),
+    )
 }
 
 // -----------------------------------------------------------------------------
@@ -389,6 +1223,12 @@ fn diff_function(
             (Some(&ba), Some(&bb)) => {
                 let blk_a = fa.blocks.iter().find(|b| b.id == ba).expect("walk id");
                 let blk_b = fb.blocks.iter().find(|b| b.id == bb).expect("walk id");
+                // Compile-time coverage (roadmap WS4.13).
+                let Block {
+                    id: _,     // renumbering: blocks are matched by DFS visit order
+                    params: _, // compared below (count + types)
+                    body: _,   // `diff_block_body`
+                } = blk_a;
 
                 // Compare block parameter types (number + fingerprint).
                 if blk_a.params.len() != blk_b.params.len() {
@@ -482,26 +1322,13 @@ fn block_successors(blk: &Block) -> Vec<BlockId> {
     let Some(term) = blk.body.last() else {
         return Vec::new();
     };
-    match &term.inst {
-        Inst::Br { target, .. } => vec![*target],
-        Inst::CondBr {
-            then_target,
-            else_target,
-            ..
-        } => vec![*then_target, *else_target],
-        Inst::Switch { default, cases, .. } => {
-            let mut v: Vec<BlockId> = cases.iter().map(|c| c.target).collect();
-            v.push(*default);
-            v
-        }
-        // An invoke branches to its normal continuation or its landing pad.
-        Inst::Invoke {
-            normal_dest,
-            unwind_dest,
-            ..
-        } => vec![*normal_dest, *unwind_dest],
-        _ => Vec::new(),
-    }
+    // The exhaustive accessor (amendment D §1.3): an invoke-family
+    // terminator branches to its normal continuation or its landing pad.
+    term.inst
+        .successor_edges()
+        .into_iter()
+        .map(|edge| edge.target)
+        .collect()
 }
 
 /// Build a canonical mapping from ValueId to a u32 index.
@@ -558,23 +1385,44 @@ fn diff_block_body(
     for i in 0..n {
         match (ba.body.get(i), bb.body.get(i)) {
             (Some(na), Some(nb)) => {
+                // Compile-time coverage (roadmap WS4.13).
+                let InstrNode {
+                    inst: _,          // `fp_inst`
+                    results: _,       // ids: renumbering; the ARITY is compared below
+                    proofs: _,        // proof channel
+                    span: _,          // IGNORED: debug span
+                    proof_context: _, // proof channel
+                    scope: _,         // IGNORED: debug scope index
+                } = na;
                 let fa_key = fp_inst(ma, &na.inst, va, ba_map);
                 let fb_key = fp_inst(mb, &nb.inst, vb, bb_map);
-                let inst_eq = fa_key == fb_key;
+                // A node's result ids are renumbering, their COUNT is not: a
+                // call node that stops binding its callee's return value moves
+                // `Module::stable_digest` and must not diff empty.
+                let arity_eq = na.results.len() == nb.results.len();
+                let inst_eq = fa_key == fb_key && arity_eq;
 
                 let proofs_eq = if opts.ignore_proofs {
                     true
                 } else {
-                    fp_proofs(&na.proofs) == fp_proofs(&nb.proofs)
+                    fp_proofs(ma, &na.proofs) == fp_proofs(mb, &nb.proofs)
                         && fp_proof_context(ma, na.proof_context.as_ref())
                             == fp_proof_context(mb, nb.proof_context.as_ref())
                 };
 
                 if !inst_eq || !proofs_eq {
+                    let mut before = render_inst(ma, na, opts);
+                    let mut after = render_inst(mb, nb, opts);
+                    // Spell the arity only when it is what differs, so every
+                    // other rendering keeps its earlier text.
+                    if !arity_eq {
+                        let _ = write!(before, " [results={}]", na.results.len());
+                        let _ = write!(after, " [results={}]", nb.results.len());
+                    }
                     changes.push(InstrChange::Replaced {
                         index: i,
-                        before: render_inst(ma, na, opts),
-                        after: render_inst(mb, nb, opts),
+                        before,
+                        after,
                     });
                 }
             }
@@ -596,9 +1444,16 @@ fn diff_block_body(
 // Proof diff
 // -----------------------------------------------------------------------------
 
-fn proof_diff(a: &[ProofAnnotation], b: &[ProofAnnotation]) -> Vec<ProofChange> {
-    let a_keys: Vec<String> = a.iter().map(fp_proof).collect();
-    let b_keys: Vec<String> = b.iter().map(fp_proof).collect();
+/// The function-level annotation sets, each fingerprinted in its OWN module
+/// (a `ProofRef` resolves through that module's obligation table).
+fn proof_diff(
+    ma: &Module,
+    a: &[ProofAnnotation],
+    mb: &Module,
+    b: &[ProofAnnotation],
+) -> Vec<ProofChange> {
+    let a_keys: Vec<String> = a.iter().map(|p| fp_proof(ma, p)).collect();
+    let b_keys: Vec<String> = b.iter().map(|p| fp_proof(mb, p)).collect();
     let a_set: std::collections::HashSet<&str> = a_keys.iter().map(String::as_str).collect();
     let b_set: std::collections::HashSet<&str> = b_keys.iter().map(String::as_str).collect();
 
@@ -630,8 +1485,8 @@ fn proof_diff(a: &[ProofAnnotation], b: &[ProofAnnotation]) -> Vec<ProofChange> 
     out
 }
 
-fn fp_proofs(ps: &[ProofAnnotation]) -> String {
-    let mut keys: Vec<String> = ps.iter().map(fp_proof).collect();
+fn fp_proofs(m: &Module, ps: &[ProofAnnotation]) -> String {
+    let mut keys: Vec<String> = ps.iter().map(|p| fp_proof(m, p)).collect();
     keys.sort();
     keys.join(",")
 }
@@ -739,41 +1594,102 @@ fn proof_state_diff(a: &Module, b: &Module) -> Vec<ProofStateChange> {
 }
 
 /// Stable, id-renumbering-insensitive key for the *claim* an obligation makes:
-/// its kind, scope (resolved to the function name), description, formula, and
-/// embedded source/public identity.
+/// its kind, scope (resolved to the function name), description, formula (all
+/// five fields, the v41 clause `bindings` included), embedded source/public
+/// identity, the IR `site` it states a check about (v34), and the temporal
+/// `spec` property it discharges (v46).
 /// Deliberately excludes `id` (arena index) and `status` (the mutable label
 /// whose changes `proof_state_diff` reports separately).
 fn fp_obligation_claim(m: &Module, o: &ProofObligation) -> String {
+    // Compile-time coverage (roadmap WS4.13): every field is read or named.
+    let ProofObligation {
+        id: _,     // arena index: renumbering
+        kind,      // claim
+        status: _, // reported as `ObligationStatusChanged`, never part of the key
+        description,
+        formula,
+        function,
+        source,
+        site,
+        spec,
+    } = o;
     let mut s = String::new();
-    let _ = write!(s, "kind={}", o.kind);
-    let func = o
-        .function
-        .and_then(|fid| m.functions.iter().find(|f| f.id == fid))
-        .map(|f| f.name.as_str());
-    match func {
-        Some(name) => {
-            let _ = write!(s, ";fn={name}");
+    let _ = write!(s, "kind={kind}");
+    let func = function.and_then(|fid| function_by_id(m, fid));
+    match (function, func) {
+        (_, Some(f)) => {
+            let _ = write!(s, ";fn={}", f.name);
         }
-        None => s.push_str(";fn=_"),
+        (None, None) => s.push_str(";fn=_"),
+        // A scope naming no function keeps its raw index under a distinct
+        // spelling: it must never collapse onto the unscoped `_` (a scope
+        // gained or dropped moves `Module::stable_digest`, so the claim key
+        // must move too — this API does not validate its inputs).
+        (Some(fid), None) => {
+            let _ = write!(s, ";fn=#dangling {}", fid.index());
+        }
     }
-    let _ = write!(s, ";desc={}", o.description);
-    match &o.formula {
+    let _ = write!(s, ";desc={description}");
+    match formula {
         Some(f) => {
-            let _ = write!(s, ";formula[{}]={}", f.schema, f.payload);
-            if let Some(smt) = &f.smtlib {
+            let crate::ProofFormula {
+                schema,
+                payload,
+                smtlib,
+                sort,
+                bindings,
+            } = f;
+            let _ = write!(s, ";formula[{schema}]={payload}");
+            if let Some(smt) = smtlib {
                 let _ = write!(s, ";smt={smt}");
             }
-            if let Some(sort) = &f.sort {
+            if let Some(sort) = sort {
                 let _ = write!(s, ";sort={sort}");
             }
+            // A `Value` place names an SSA value of the obligation's own
+            // function (its `site` function when it names no scope).
+            let owner = func.or_else(|| site.and_then(|site| function_by_id(m, site.function)));
+            s.push_str(&fp_formula_bindings(bindings, owner, ";"));
         }
         None => s.push_str(";formula=_"),
     }
     let mut source_bytes = Vec::new();
-    write_proof_obligation_source_identity_stable(&mut source_bytes, o.source.as_ref());
+    write_proof_obligation_source_identity_stable(&mut source_bytes, source.as_ref());
     s.push_str(";source=");
     for byte in source_bytes {
         let _ = write!(s, "{byte:02x}");
+    }
+    // v34: WHICH instruction a per-check obligation is about. Twelve bounds
+    // checks in one function differ ONLY here, so a site moved from one check
+    // to another is a different claim. Rendered like the body: the function by
+    // symbol, the block by DFS visit index, the instruction by position; a
+    // `None` site renders as nothing, so an unsited obligation keeps the key it
+    // had before sites were compared.
+    if let Some(site) = site {
+        let crate::proof::ObligationSite {
+            function,
+            block,
+            inst_index,
+        } = *site;
+        // Only the block walk is needed here, not the value numbering.
+        let block = function_by_id(m, function)
+            .and_then(|f| walk_blocks(f).iter().position(|&b| b == block))
+            .map_or_else(|| format!("bb?{}", block.index()), |i| format!("bb{i}"));
+        let _ = write!(
+            s,
+            ";site={}/{block}#{inst_index}",
+            spec_func_ref(m, function)
+        );
+    }
+    // v46: WHICH temporal property the obligation discharges is part of its
+    // claim — two liveness rows that differ only here are different claims.
+    match spec {
+        Some(spec) => {
+            // Compile-time coverage (roadmap WS4.13): every field is read.
+            let crate::proof::SpecObligationRef { machine, temporal } = spec;
+            let _ = write!(s, ";spec={machine:?}/{temporal:?}");
+        }
+        None => s.push_str(";spec=_"),
     }
     s
 }
@@ -793,15 +1709,78 @@ fn obligation_claim_by_id(m: &Module, id: ProofId) -> String {
 /// its claim key (so renumbering the proof table does not surface here), and
 /// the prover and evidence are compared structurally.
 fn fp_certificate(m: &Module, c: &ProofCertificate) -> String {
-    format!(
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    let ProofCertificate {
+        obligation,
+        prover,
+        evidence,
+        assurance,
+    } = c;
+    let mut s = format!(
         "obl={};prover={};ev={}",
-        obligation_claim_by_id(m, c.obligation),
-        c.prover,
-        fp_evidence(&c.evidence)
+        obligation_claim_by_id(m, *obligation),
+        prover,
+        fp_evidence(m, evidence)
+    );
+    // v41 coverage projection. NON-AUTHORITATIVE for a consumer (it derives
+    // coverage from evidence it re-checks), but it is carried content: a row
+    // claiming `Unbounded` where it said `UnwindBounded { depth: 1 }`, or citing
+    // another bundle, moves `Module::stable_digest` and a reviewer must see it.
+    // Absent renders as nothing, so every certificate without one keeps its
+    // pre-WS4.13 fingerprint.
+    if let Some(crate::proof::CoverageAssurance {
+        bound,
+        request_digest,
+    }) = assurance
+    {
+        let _ = write!(s, ";assurance={bound:?}@{request_digest}");
+    }
+    s
+}
+
+/// Resolve an [`crate::ImportId`] to its CONTENT for fingerprinting.
+///
+/// A raw index would make two modules whose import tables differ compare equal
+/// wherever the index happened to line up — the diff's whole job is to be blind
+/// to renumbering and sensitive to meaning, and an import's meaning is the
+/// artifact it pins. Falls back to `import#N` for a dangling id so the
+/// fingerprint stays total.
+fn fp_import_ref(m: &Module, id: crate::ImportId) -> String {
+    match m.import(id) {
+        Some(imp) => format!(
+            "{}@{}[{}]",
+            imp.name,
+            imp.digest,
+            match &imp.producer {
+                None => "-".to_string(),
+                Some(producer) => producer.to_string(),
+            }
+        ),
+        None => format!("import#{}", id.index()),
+    }
+}
+
+fn fp_extern_ref(m: &Module, reference: &crate::ExternRef) -> String {
+    // Compile-time coverage (roadmap WS4.13): every field is read. The
+    // obligation id indexes the IMPORTED module's arena, whose identity the
+    // import's digest pins, so its raw index IS its identity here.
+    let crate::ExternRef {
+        module,
+        symbol,
+        obligation,
+    } = reference;
+    format!(
+        "{}::{}::{}",
+        fp_import_ref(m, *module),
+        symbol,
+        match obligation {
+            None => "-".to_string(),
+            Some(obligation) => obligation.index().to_string(),
+        }
     )
 }
 
-fn fp_evidence(e: &ProofEvidence) -> String {
+fn fp_evidence(m: &Module, e: &ProofEvidence) -> String {
     match e {
         ProofEvidence::SmtProof(bytes) => {
             let mut s = String::from("smt:");
@@ -827,21 +1806,36 @@ fn fp_evidence(e: &ProofEvidence) -> String {
             s
         }
         ProofEvidence::Trusted(reason) => format!("trusted:{reason}"),
-        ProofEvidence::InheritedFromCallee { callee, obligation } => {
-            // Callee `FuncId` is left as a raw index here: certificates do not
-            // carry the module they came from, and the obligation reference is
-            // already an arena id. This keeps the fingerprint total without
-            // pretending an id resolves to a name out of context.
-            format!("inherited:{}:{}", callee.index(), obligation.index())
+        ProofEvidence::InheritedFromCallee {
+            callee,
+            obligation,
+            external,
+        } => {
+            // Both references are LOCAL arena ids, resolved through `m` the way
+            // the rest of the diff resolves them: the callee by its link-time
+            // SYMBOL, the relied-upon obligation by its CLAIM key. A raw index
+            // made FuncId / ProofId renumbering a spurious change and — worse —
+            // hid a retarget onto whatever function or obligation came to
+            // occupy the old index (roadmap WS4.13).
+            let mut s = format!(
+                "inherited:{}:{}",
+                spec_func_ref(m, *callee),
+                obligation_claim_by_id(m, *obligation)
+            );
+            // v41. MUST be fingerprinted: "discharged in this module" and
+            // "discharged in crate X" are different claims, and a diff that
+            // compared them equal would report no change when a producer
+            // retargeted an inheritance across a crate boundary.
+            if let Some(reference) = external {
+                let _ = write!(s, ":extern:{}", fp_extern_ref(m, reference));
+            }
+            s
         }
         ProofEvidence::CleanCic {
             term,
             context,
             lineage,
-            // The kernel re-check directive is not part of this textual diff
-            // fingerprint (consistent with the textual display format); it
-            // travels in the structured serde/binary format.
-            kernel_recheck: _,
+            kernel_recheck,
         } => {
             let mut s = String::from("cleancic:");
             for byte in term {
@@ -852,9 +1846,76 @@ fn fp_evidence(e: &ProofEvidence) -> String {
                 let _ = write!(s, "{byte:02x}");
             }
             let _ = write!(s, ":{lineage}");
+            // The kernel re-check directive is what makes the certificate
+            // RE-CHECKABLE at all (without it a re-checking validator refuses
+            // the row), and its binding is what the statement is bound to. It
+            // used to be skipped here, so dropping it, re-anchoring it or
+            // re-binding it diffed as no change (roadmap WS4.13). Absent
+            // renders as nothing, keeping every directive-free certificate's
+            // earlier fingerprint.
+            if let Some(recheck) = kernel_recheck {
+                let _ = write!(s, ":recheck{{{}}}", fp_kernel_recheck(recheck));
+            }
             s
         }
     }
+}
+
+/// Every field of a `CleanCic` kernel re-check directive and of its
+/// [`CertificateBinding`](crate::proof::CertificateBinding). An island's
+/// declaration bytes are fingerprinted by their RECOMPUTED digest beside the
+/// stored one — the `source_provenance` rule: a carrier whose stored digest
+/// went stale must still be visible.
+fn fp_kernel_recheck(r: &crate::proof::CleanCicKernelRecheck) -> String {
+    let crate::proof::CleanCicKernelRecheck {
+        module,
+        theorems,
+        anchor,
+        allowed_axioms,
+        binding,
+    } = r;
+    let mut s = format!(
+        "module={module:?};anchor={anchor:?};theorems={theorems:?};axioms={allowed_axioms:?}"
+    );
+    if let Some(binding) = binding {
+        let crate::proof::CertificateBinding {
+            environment_digest,
+            statement_digest,
+            origin_module,
+            source,
+            callees,
+            environment,
+        } = &**binding;
+        let _ = write!(
+            s,
+            ";binding{{environment={environment_digest};statement={statement_digest};origin={}",
+            origin_module.map_or_else(|| "-".to_string(), |d| d.to_string())
+        );
+        match source {
+            None => s.push_str(";source=-"),
+            Some(crate::proof::SourceDefinitionRef {
+                decl,
+                closure_digest,
+            }) => {
+                let _ = write!(s, ";source={decl:?}@{closure_digest}");
+            }
+        }
+        let _ = write!(s, ";callees={callees:?}");
+        if let Some(crate::proof::IslandEnvironment {
+            declarations,
+            digest,
+        }) = environment
+        {
+            let _ = write!(
+                s,
+                ";island{{stored={digest};content={};bytes={}}}",
+                crate::proof::island_declarations_digest(declarations),
+                declarations.len()
+            );
+        }
+        s.push('}');
+    }
+    s
 }
 
 /// Stable fingerprint of a node's per-call `ProofContext`. Both `assumes` and
@@ -866,14 +1927,17 @@ fn fp_proof_context(m: &Module, ctx: Option<&ProofContext>) -> String {
     let Some(ctx) = ctx else {
         return String::new();
     };
-    let mut assumes: Vec<String> = ctx
-        .assumes
+    // Compile-time coverage (roadmap WS4.13): every field is read.
+    let ProofContext {
+        assumes,
+        establishes,
+    } = ctx;
+    let mut assumes: Vec<String> = assumes
         .iter()
         .map(|id| obligation_claim_by_id(m, *id))
         .collect();
     assumes.sort();
-    let mut establishes: Vec<String> = ctx
-        .establishes
+    let mut establishes: Vec<String> = establishes
         .iter()
         .map(|id| obligation_claim_by_id(m, *id))
         .collect();
@@ -889,6 +1953,37 @@ fn fp_proof_context(m: &Module, ctx: Option<&ProofContext>) -> String {
 /// absent tag so `None -> Some(...)` transitions render as `- -> trust`.
 fn producer_fp(p: Option<&crate::Producer>) -> String {
     p.map_or_else(|| "-".to_string(), ToString::to_string)
+}
+
+/// Render a lexical scope tree for the opt-in `"scopes"` debug meta row:
+/// one `#i parent=<p|root> at <f> <l> <c> inlined-at <f> <l> <c> callee <path>`
+/// entry per scope. Scope indices are function-local and positional, so the
+/// table is compared in order (a reorder IS a change to the tree).
+fn scopes_fp(scopes: Option<&[crate::ScopeData]>) -> String {
+    let Some(scopes) = scopes else {
+        return "-".to_string();
+    };
+    let mut out = String::new();
+    for (i, sc) in scopes.iter().enumerate() {
+        if i > 0 {
+            out.push_str("; ");
+        }
+        out.push_str(&format!("#{i} "));
+        match sc.parent {
+            None => out.push_str("root"),
+            Some(p) => out.push_str(&format!("parent={p}")),
+        }
+        if let Some(span) = &sc.span {
+            out.push_str(&format!(" at {} {} {}", span.file, span.line, span.col));
+        }
+        if let Some(link) = &sc.inlined_at {
+            out.push_str(&format!(
+                " inlined-at {} {} {} callee {:?}",
+                link.span.file, link.span.line, link.span.col, link.callee
+            ));
+        }
+    }
+    out
 }
 
 /// Render the complete proof-relevant source carrier in deterministic order.
@@ -935,39 +2030,204 @@ fn source_provenance_fp(p: Option<&crate::SourceProvenance>) -> String {
 
 /// Order-stable structural fingerprint of a function's separate-compilation
 /// contract. `None` and an empty summary both fingerprint to the empty marker so
-/// only a real contract change is reported.
-fn summary_fp(s: Option<&crate::FunctionSummary>) -> String {
+/// only a real contract change is reported. `owner` is the function the
+/// summary belongs to: a clause binding's `Value` place is resolved through
+/// its body ([`fp_formula_bindings`]).
+fn summary_fp(m: &Module, owner: Option<&Function>, s: Option<&crate::FunctionSummary>) -> String {
     // R3 #8: `proved` is part of the contract — fold it into the triviality test, so
     // a `None -> Some(proved, empty)` or `proved=false -> true` transition on an
     // otherwise-empty summary is still fingerprinted (was collapsing to the same `∅`
     // marker as `None`). Only a genuinely empty, param-less, UNPROVED summary is ≡ None.
-    let Some(s) = s.filter(|s| !(s.is_empty() && s.params.is_empty() && !s.proved)) else {
+    // v41: `decreases` and `backed_by` are contract content too. A summary
+    // carrying only a termination measure, or only the cross-crate reference
+    // that authenticates `proved`, is NOT equivalent to no summary at all — so
+    // both join the triviality test rather than collapsing to the `∅` marker.
+    let Some(s) = s.filter(|s| {
+        !(s.is_empty()
+            && s.params.is_empty()
+            && !s.proved
+            && s.decreases.is_empty()
+            && s.backed_by.is_none()
+            && s.effects.is_none())
+    }) else {
         return "∅".to_string();
     };
-    // Fingerprint ALL four ProofFormula fields: smtlib/sort are what the verifier
+    // Compile-time coverage (roadmap WS4.13): every contract field is read.
+    let crate::FunctionSummary {
+        requires,
+        ensures,
+        params,
+        proved,
+        decreases,
+        backed_by,
+        effects,
+    } = s;
+    // Fingerprint ALL five ProofFormula fields: smtlib/sort are what the verifier
     // dispatches/solves on (independent of the opaque payload), so a changed SMT
-    // rendering of a published contract must be reported (audit 2026-06-25 F3).
+    // rendering of a published contract must be reported (audit 2026-06-25 F3);
+    // the v41 `bindings` say what each free name DENOTES (its sort and IR
+    // place), so re-binding `x` from parameter 0 to parameter 1, or widening
+    // its sort, changes the contract even when its text is untouched (roadmap
+    // WS4.13).
     let clause = |c: &crate::ProofFormula| {
+        let crate::ProofFormula {
+            schema,
+            payload,
+            smtlib,
+            sort,
+            bindings,
+        } = c;
         format!(
-            "{}|{}|{}|{}",
-            c.schema,
-            c.payload,
-            c.smtlib.as_deref().unwrap_or(""),
-            c.sort.as_deref().unwrap_or(""),
+            "{}|{}|{}|{}{}",
+            schema,
+            payload,
+            smtlib.as_deref().unwrap_or(""),
+            sort.as_deref().unwrap_or(""),
+            fp_formula_bindings(bindings, owner, "|"),
         )
     };
-    let req: Vec<String> = s.requires.iter().map(clause).collect();
-    let ens: Vec<String> = s.ensures.iter().map(clause).collect();
+    let req: Vec<String> = requires.iter().map(clause).collect();
+    let ens: Vec<String> = ensures.iter().map(clause).collect();
+    // v41. `decreases` was landed with no fingerprint at all, so changing a
+    // function's termination measure diffed as no change; `backed_by` is what
+    // authenticates `proved`, and retargeting it at a different crate is
+    // exactly the kind of change a reviewer must see.
+    let dec: Vec<String> = decreases.iter().map(clause).collect();
     format!(
-        "proved={};params=[{}];requires=[{}];ensures=[{}]",
-        s.proved,
-        s.params.join(","),
+        "proved={};params=[{}];requires=[{}];ensures=[{}];decreases=[{}];backed_by={};effects={}",
+        proved,
+        params.join(","),
         req.join(";"),
         ens.join(";"),
+        dec.join(";"),
+        match backed_by {
+            None => "-".to_string(),
+            Some(reference) => fp_extern_ref(m, reference),
+        },
+        // v59: the effect frame is contract content — widening a callee's
+        // `writes` is exactly the change a reviewer of a published contract
+        // must see. `None` (UNRECORDED) keeps its own spelling.
+        match effects {
+            None => "-".to_string(),
+            Some(effects) => fp_effect_summary(m, effects),
+        },
     )
 }
 
-fn fp_proof(p: &ProofAnnotation) -> String {
+/// v59: order-stable fingerprint of an [`crate::EffectSummary`]. A `Global`
+/// place is fingerprinted by its link-time SYMBOL, like `GlobalAddr`, so
+/// reordering `Module.globals` stays cosmetic.
+fn fp_effect_summary(m: &Module, effects: &crate::EffectSummary) -> String {
+    let set = |set: &crate::EffectSet| match set {
+        crate::EffectSet::Nothing => "nothing".to_string(),
+        crate::EffectSet::Everything => "everything".to_string(),
+        crate::EffectSet::Places(places) => {
+            let mut rendered: Vec<String> = places
+                .iter()
+                .map(|place| match place {
+                    crate::EffectPlace::ParamPointee { index } => format!("*param{index}"),
+                    crate::EffectPlace::Global(global) => match m.globals.get(global.as_usize()) {
+                        Some(g) => format!("@{}", g.name),
+                        None => format!("#dangling {}", global.index()),
+                    },
+                })
+                .collect();
+            rendered.sort();
+            format!("[{}]", rendered.join(","))
+        }
+    };
+    format!(
+        "reads={};writes={};allocates={};frees={};may_unwind={};io={}",
+        set(&effects.reads),
+        set(&effects.writes),
+        effects.allocates,
+        effects.frees,
+        effects.may_unwind,
+        effects.io,
+    )
+}
+
+/// An SSA value numbering resolved to the canonical walk indices the body
+/// comparison uses ([`walk_blocks`], [`build_value_map`]), so a proof-channel
+/// row that names an SSA value is exactly as blind to renumbering as the body
+/// it points into. (A block reference resolves to its DFS visit index, the
+/// position in [`walk_blocks`].)
+struct LocalIds {
+    values: HashMap<ValueId, u32>,
+}
+
+impl LocalIds {
+    fn of(f: &Function) -> Self {
+        let walk = walk_blocks(f);
+        LocalIds {
+            values: build_value_map(f, &walk),
+        }
+    }
+}
+
+/// The function `id` names in `m`, if exactly the arena row with that id.
+fn function_by_id(m: &Module, id: FuncId) -> Option<&Function> {
+    m.functions.iter().find(|f| f.id == id)
+}
+
+/// A clause's v41 typed bindings (`name:sort@place`, in declaration order —
+/// the order is the producer's and is part of the carried value). Empty
+/// bindings render as NOTHING, so every formula that carries none keeps the
+/// exact fingerprint it had before bindings were compared; a non-empty list is
+/// appended after `sep`. A `Value` place is resolved through `owner`'s body
+/// ([`LocalIds`]); without an owner, or for an id the body does not define, it
+/// keeps its raw index under a distinct `%?` spelling.
+fn fp_formula_bindings(
+    bindings: &[(String, crate::proof::ClauseBinding)],
+    owner: Option<&Function>,
+    sep: &str,
+) -> String {
+    if bindings.is_empty() {
+        return String::new();
+    }
+    let needs_body = bindings
+        .iter()
+        .any(|(_, b)| matches!(b.place, crate::proof::ClausePlace::Value(_)));
+    let ids = if needs_body {
+        owner.map(LocalIds::of)
+    } else {
+        None
+    };
+    let rows: Vec<String> = bindings
+        .iter()
+        .map(|(name, binding)| {
+            let crate::proof::ClauseBinding { sort, place } = binding;
+            use crate::proof::ClausePlace;
+            let place = match *place {
+                ClausePlace::Param { index } => format!("param{index}"),
+                ClausePlace::ResultSlot { index } => format!("result{index}"),
+                ClausePlace::MutParamExit { index } => format!("exit{index}"),
+                ClausePlace::World => "world".to_string(),
+                ClausePlace::Unwind => "unwind".to_string(),
+                ClausePlace::Value(v) => match ids.as_ref().and_then(|ids| ids.values.get(&v)) {
+                    Some(canon) => format!("%{canon}"),
+                    None => format!("%?{}", v.index()),
+                },
+                ClausePlace::SpecVar { index } => format!("specvar{index}"),
+                ClausePlace::SpecVarNext { index } => format!("specvar{index}'"),
+                // v59 (WS1.14): the world epochs, each its own spelling.
+                ClausePlace::WorldPre => "world_pre".to_string(),
+                ClausePlace::WorldPost => "world_post".to_string(),
+                ClausePlace::ParamPointeeEntry { index } => format!("*param{index}"),
+            };
+            format!("{name:?}:{sort:?}@{place}")
+        })
+        .collect();
+    format!("{sep}bindings=[{}]", rows.join(","))
+}
+
+/// One annotation's fingerprint. Every payload is a value except
+/// `ProofRef`'s, which is a module-local `ProofId`: it is resolved through
+/// `m` to the CLAIM of the obligation it names ([`obligation_claim_by_id`]),
+/// the way a certificate's and a proof context's references are, so
+/// renumbering the proof table is cosmetic while re-pointing the backref —
+/// including by renumbering the table UNDER an unchanged index — is reported.
+fn fp_proof(m: &Module, p: &ProofAnnotation) -> String {
     match p {
         ProofAnnotation::InBounds => "InBounds".to_string(),
         ProofAnnotation::NotNull => "NotNull".to_string(),
@@ -988,6 +2248,7 @@ fn fp_proof(p: &ProofAnnotation) -> String {
         ProofAnnotation::Tainted => "Tainted".to_string(),
         ProofAnnotation::TrustedSink => "TrustedSink".to_string(),
         ProofAnnotation::FreshSymbolicHavoc => "FreshSymbolicHavoc".to_string(),
+        ProofAnnotation::RegionHavocStore => "RegionHavocStore".to_string(),
         ProofAnnotation::AtomicOrdering(o) => format!("AtomicOrdering({:?})", o),
         ProofAnnotation::BoundedOutput { lo, hi } => {
             format!("BoundedOutput({},{})", lo.to_bits(), hi.to_bits())
@@ -1011,7 +2272,7 @@ fn fp_proof(p: &ProofAnnotation) -> String {
         // its Debug form so semantic diff can detect a changed goal/hypotheses.
         #[cfg(feature = "clean-expr")]
         ProofAnnotation::Goal(ob) => format!("Goal({ob:?})"),
-        ProofAnnotation::ProofRef(id) => format!("ProofRef({})", id.index()),
+        ProofAnnotation::ProofRef(id) => format!("ProofRef({})", obligation_claim_by_id(m, *id)),
         ProofAnnotation::ValueRange { lo, hi } => format!("ValueRange({lo},{hi})"),
         ProofAnnotation::KnownBits { zeros, ones } => format!("KnownBits({zeros},{ones})"),
         ProofAnnotation::BranchWeights(w) => format!(
@@ -1033,6 +2294,49 @@ fn fp_proof(p: &ProofAnnotation) -> String {
 /// Fingerprint an `Inst` to a canonical string. The fingerprint ignores
 /// raw `ValueId` / `BlockId` / type-table-id numbering by substituting
 /// the canonical visit-order indices from the supplied maps.
+/// The kind (plan item P) and panic site (amendment P) of an assert's
+/// fingerprint. The site is IDENTITY: its entry is resolved by function
+/// name and a `Global` location by global symbol (as `Call` callees and
+/// `GlobalAddr` are), so renumbering stays cosmetic while retargeting either
+/// is a body change.
+fn fp_assert_kind_and_site(
+    m: &Module,
+    s: &mut String,
+    kind: &crate::inst::AssertKind,
+    site: Option<&crate::inst::PanicSite>,
+    vv: &dyn Fn(&ValueId) -> String,
+) {
+    if !kind.is_unspecified() {
+        let _ = write!(s, ",{}", kind.keyword());
+        if let crate::inst::AssertKind::Overflow(op) = kind {
+            let _ = write!(s, ":{}", op.name());
+        }
+        if let Some([a, b]) = kind.operands() {
+            let _ = write!(s, ",{},{}", vv(&a), vv(&b));
+        }
+    }
+    if let Some(site) = site {
+        let entry = m
+            .functions
+            .iter()
+            .find(|f| f.id == site.entry)
+            .map(|f| f.name.as_str())
+            .unwrap_or("<unknown>");
+        let _ = write!(s, ",panic {entry} at ");
+        match site.location {
+            crate::inst::PanicLocation::Global(global) => match m.globals.get(global.as_usize()) {
+                Some(g) => {
+                    let _ = write!(s, "@{}", g.name);
+                }
+                None => {
+                    let _ = write!(s, "#dangling {}", global.index());
+                }
+            },
+            crate::inst::PanicLocation::Value(value) => s.push_str(&vv(&value)),
+        }
+    }
+}
+
 fn fp_inst(
     m: &Module,
     inst: &Inst,
@@ -1054,6 +2358,50 @@ fn fp_inst(
     };
 
     match inst {
+        // Crystal lane (wave-DS): the dropped type and the place are both part of the
+        // instruction's identity.
+        Inst::Drop { ty, ptr } => {
+            let _ = write!(s, "Drop({},{})", fp_ty(m, ty), vv(ptr));
+        }
+        // Amendment D: the drop's identity, then its edges (as `Invoke`'s).
+        Inst::DropInvoke {
+            ty,
+            ptr,
+            normal_dest,
+            normal_args,
+            unwind_dest,
+        } => {
+            let na = normal_args.iter().map(vv).collect::<Vec<_>>().join(",");
+            let _ = write!(
+                s,
+                "DropInvoke({},{},[{na}],{},{})",
+                fp_ty(m, ty),
+                vv(ptr),
+                vb(normal_dest),
+                vb(unwind_dest)
+            );
+        }
+        // Amendment D, Part 2: `CallIndirect`'s identity, then the edges.
+        Inst::InvokeIndirect {
+            callee,
+            sig,
+            args,
+            calling_conv,
+            normal_dest,
+            normal_args,
+            unwind_dest,
+        } => {
+            let a = args.iter().map(vv).collect::<Vec<_>>().join(",");
+            let na = normal_args.iter().map(vv).collect::<Vec<_>>().join(",");
+            let _ = write!(
+                s,
+                "InvokeIndirect({},{},[{a}],{calling_conv},[{na}],{},{})",
+                vv(callee),
+                fp_func_ty_ref(m, *sig),
+                vb(normal_dest),
+                vb(unwind_dest)
+            );
+        }
         Inst::BinOp { op, ty, lhs, rhs } => {
             let _ = write!(s, "BinOp({op:?},{},{},{})", fp_ty(m, ty), vv(lhs), vv(rhs));
         }
@@ -1239,10 +2587,14 @@ fn fp_inst(
             desired,
             success,
             failure,
+            weak,
         } => {
+            // Trust (crystal D3): strength is part of the instruction's identity; a strong
+            // compare-exchange fingerprints exactly as before.
             let _ = write!(
                 s,
-                "CmpXchg({},{},{},{},{success:?},{failure:?})",
+                "{}({},{},{},{},{success:?},{failure:?})",
+                if *weak { "CmpXchgWeak" } else { "CmpXchg" },
                 fp_ty(m, ty),
                 vv(ptr),
                 vv(expected),
@@ -1292,7 +2644,7 @@ fn fp_inst(
             }
             let _ = write!(s, "Switch({},{},[{d}],[{cs}])", vv(value), vb(default));
         }
-        Inst::Call { callee, args } => {
+        Inst::Call { callee, args } | Inst::CallCannotUnwind { callee, args } => {
             // Callee is a FuncId; resolve it by the callee function's *name*
             // when possible so that id renumbering does not surface here.
             let name = m
@@ -1302,18 +2654,34 @@ fn fp_inst(
                 .map(|f| f.name.as_str())
                 .unwrap_or("<unknown>");
             let a = args.iter().map(vv).collect::<Vec<_>>().join(",");
-            let _ = write!(s, "Call({name},[{a}])");
+            let opcode = if matches!(inst, Inst::CallCannotUnwind { .. }) {
+                "CallCannotUnwind"
+            } else {
+                "Call"
+            };
+            let _ = write!(s, "{opcode}({name},[{a}])");
         }
         Inst::CallIndirect {
             callee,
             sig,
             args,
             calling_conv,
+        }
+        | Inst::CallIndirectCannotUnwind {
+            callee,
+            sig,
+            args,
+            calling_conv,
         } => {
+            let opcode = if matches!(inst, Inst::CallIndirectCannotUnwind { .. }) {
+                "CallIndirectCannotUnwind"
+            } else {
+                "CallIndirect"
+            };
             let a = args.iter().map(vv).collect::<Vec<_>>().join(",");
             let _ = write!(
                 s,
-                "CallIndirect({},{},[{a}],{calling_conv})",
+                "{opcode}({},{},[{a}],{calling_conv})",
                 vv(callee),
                 fp_func_ty_ref(m, *sig)
             );
@@ -1333,6 +2701,40 @@ fn fp_inst(
                 fp_ty(m, ty),
                 vv(aggregate)
             );
+        }
+        Inst::MakeAggregate {
+            ty,
+            variant,
+            fields,
+        } => {
+            // The variant clause is part of the identity: two constructions of
+            // the SAME enum type differing only in variant are different
+            // instructions, and `-` (absent) is a third, distinct spelling.
+            let variant = match variant {
+                Some(variant) => variant.to_string(),
+                None => "-".to_string(),
+            };
+            let lanes: Vec<String> = fields.iter().map(vv).collect();
+            let _ = write!(
+                s,
+                "MakeAggregate({},{variant},[{}])",
+                fp_ty(m, ty),
+                lanes.join(",")
+            );
+        }
+        Inst::MakeClosure { ty, func, captures } => {
+            let lanes = captures.iter().map(vv).collect::<Vec<_>>().join(",");
+            let _ = write!(
+                s,
+                "MakeClosure({},{},[{}])",
+                fp_ty(m, &Ty::Closure(*ty)),
+                spec_func_ref(m, *func),
+                lanes
+            );
+        }
+        // v50: the lane count is part of the type fingerprint; one operand.
+        Inst::ArraySplat { ty, value } => {
+            let _ = write!(s, "ArraySplat({},{})", fp_ty(m, ty), vv(value));
         }
         Inst::InsertField {
             ty,
@@ -1377,7 +2779,19 @@ fn fp_inst(
         }
         Inst::NullPtr => s.push_str("NullPtr"),
         Inst::GlobalAddr { global } => {
-            let _ = write!(s, "GlobalAddr({})", global.index());
+            // Resolved to the global's link-time SYMBOL, the key its
+            // `global @<name>` row is matched by, so reordering
+            // `Module.globals` stays cosmetic while retargeting the address to
+            // a different global is still a body change. A dangling id keeps
+            // its raw index (distinct spelling, never a panic).
+            match m.globals.get(global.as_usize()) {
+                Some(g) => {
+                    let _ = write!(s, "GlobalAddr(@{})", g.name);
+                }
+                None => {
+                    let _ = write!(s, "GlobalAddr(#dangling {})", global.index());
+                }
+            }
         }
         Inst::Undef { ty } => {
             let _ = write!(s, "Undef({})", fp_ty(m, ty));
@@ -1385,8 +2799,25 @@ fn fp_inst(
         Inst::Assume { cond } => {
             let _ = write!(s, "Assume({})", vv(cond));
         }
-        Inst::Assert { cond } => {
-            let _ = write!(s, "Assert({})", vv(cond));
+        Inst::Assert { cond, kind, site } => {
+            let _ = write!(s, "Assert({}", vv(cond));
+            // An `Unspecified` kind and an absent site keep the historical
+            // fingerprint.
+            fp_assert_kind_and_site(m, &mut s, kind, site.as_ref(), &vv);
+            s.push(')');
+        }
+        Inst::AssertInvoke {
+            cond,
+            kind,
+            site,
+            normal_dest,
+            normal_args,
+            unwind_dest,
+        } => {
+            let _ = write!(s, "AssertInvoke({}", vv(cond));
+            fp_assert_kind_and_site(m, &mut s, kind, Some(site), &vv);
+            let na = normal_args.iter().map(vv).collect::<Vec<_>>().join(",");
+            let _ = write!(s, ",[{na}],{},{})", vb(normal_dest), vb(unwind_dest));
         }
         Inst::Unreachable => s.push_str("Unreachable"),
         Inst::Copy { ty, operand } => {
@@ -1427,6 +2858,23 @@ fn fp_inst(
         }
         Inst::Dealloc { ptr } => {
             let _ = write!(s, "Dealloc({})", vv(ptr));
+        }
+        Inst::MemCopy {
+            dst,
+            src,
+            bytes,
+            overlap,
+        } => {
+            let _ = write!(
+                s,
+                "MemCopy({},{},{},{overlap})",
+                vv(dst),
+                vv(src),
+                vv(bytes)
+            );
+        }
+        Inst::MemSet { dst, byte, bytes } => {
+            let _ = write!(s, "MemSet({},{},{})", vv(dst), vv(byte), vv(bytes));
         }
         Inst::OpenFrame { def } => {
             let _ = write!(s, "OpenFrame({})", fp_binding_frame_def(m, def));
@@ -1554,256 +3002,370 @@ fn fp_attr(m: &Module, v: &AttrValue) -> String {
 /// `Record`, `Closure`, `Func`, `Array`) are resolved against `m` and
 /// rendered by definition rather than by id index.
 fn fp_ty(m: &Module, t: &Ty) -> String {
-    match t {
-        Ty::I8 => "i8".into(),
-        Ty::I16 => "i16".into(),
-        Ty::I32 => "i32".into(),
-        Ty::I64 => "i64".into(),
-        Ty::I128 => "i128".into(),
-        Ty::U8 => "u8".into(),
-        Ty::U16 => "u16".into(),
-        Ty::U32 => "u32".into(),
-        Ty::U64 => "u64".into(),
-        Ty::U128 => "u128".into(),
-        Ty::Isize => "isize".into(),
-        Ty::Usize => "usize".into(),
-        Ty::Char => "char".into(),
-        Ty::Error => "error".into(),
-        Ty::F16 => "f16".into(),
-        Ty::F32 => "f32".into(),
-        Ty::F64 => "f64".into(),
-        Ty::Bool => "bool".into(),
-        Ty::Ptr => "ptr".into(),
-        Ty::FatPtr(kind) => format!("fatptr<{}>", fp_fat_ptr_kind(m, kind)),
-        Ty::Unit => "unit".into(),
-        Ty::Never => "never".into(),
-        Ty::Struct(id) => fp_struct_ref(m, *id),
-        Ty::Array(elem, n) => format!("arr[{};{}]", fp_tyid_ref(m, *elem), n),
-        Ty::Vector(elem, lanes) => format!("vec<{lanes}x{}>", fp_ty(m, elem)),
-        Ty::Tuple(ts) => {
-            let mut s = String::from("tuple(");
-            for (i, t) in ts.iter().enumerate() {
-                if i > 0 {
-                    s.push(',');
-                }
-                s.push_str(&fp_ty(m, t));
-            }
-            s.push(')');
-            s
-        }
-        Ty::Enum(id) => fp_enum_ref(m, *id),
-        Ty::Func(id) => fp_func_ty_ref(m, *id),
-        Ty::Ref(inner) => format!("&{}", fp_ty(m, inner)),
-        Ty::RefMut(inner) => format!("&mut {}", fp_ty(m, inner)),
-        Ty::PtrConst(inner) => format!("*const {}", fp_ty(m, inner)),
-        Ty::PtrMut(inner) => format!("*mut {}", fp_ty(m, inner)),
-        Ty::Rc(inner) => format!("Rc<{}>", fp_ty(m, inner)),
-        Ty::Set(elem, repr) => format!(
-            "set<{},{}>",
-            fp_tyid_ref(m, *elem),
-            match repr {
-                SetRepr::Bitset => "bitset",
-                SetRepr::Boxed => "boxed",
-            }
-        ),
-        Ty::Sequence(elem) => format!("seq<{}>", fp_tyid_ref(m, *elem)),
-        Ty::Record(id) => fp_record_ref(m, *id),
-        Ty::Closure(id) => fp_closure_ref(m, *id),
-        // The predicate is resolved into the fingerprint rather than cited by
-        // id: two structurally identical refinements must fingerprint the same
-        // even if their modules interned in a different order.
-        Ty::Refine(base, pred) => format!(
-            "refine<{},{}>",
-            fp_tyid_ref(m, *base),
-            match m.predicates.get(pred.as_usize()) {
-                Some(p) => format!("{p}"),
-                None => format!("pred#{}", pred.index()),
-            }
-        ),
-    }
-}
-
-fn fp_fat_ptr_kind(m: &Module, kind: &FatPtrKind) -> String {
-    match kind {
-        FatPtrKind::Slice(elem) => format!("slice {}", fp_tyid_ref(m, *elem)),
-        FatPtrKind::Str => "str".to_string(),
-        FatPtrKind::TraitObject { trait_id } => format!("dyn.{trait_id}"),
-        // Spelled exactly as `Display for FatPtrKind` spells it, and distinct
-        // from every other arm: a `ContainerLen` pointer addresses the
-        // container header rather than slice content, so fingerprinting it as
-        // `str` or `slice` would make two ABI-different fat pointers compare
-        // identical in `trust-ir-diff`.
-        FatPtrKind::ContainerLen => "container_len".to_string(),
-    }
+    TypeFingerprint::new(m).ty(t)
 }
 
 fn fp_tyid_ref(m: &Module, id: TyId) -> String {
-    match m.types.get(id.as_usize()) {
-        Some(t) => fp_ty(m, t),
-        None => format!("ty#{}", id.0),
-    }
-}
-
-fn fp_struct_ref(m: &Module, id: StructId) -> String {
-    let sd: Option<&StructDef> = m.structs.iter().find(|s| s.id == id);
-    match sd {
-        Some(sd) => {
-            // `repr` is part of the ABI contract (Rust vs C vs transparent vs
-            // packed(N)) — two structs identical in name/size/align/fields but
-            // differing in repr are ABI-incompatible, so it MUST participate in
-            // the fingerprint or `trust-ir-diff` would report them as identical.
-            let mut s = format!(
-                "struct({},size={:?},align={:?},repr={:?}",
-                sd.name, sd.size, sd.align, sd.repr
-            );
-            for f in &sd.fields {
-                let _ = write!(s, ",{}", fp_field(m, f));
-            }
-            s.push(')');
-            s
-        }
-        None => format!("struct#{}", id.0),
-    }
-}
-
-fn fp_enum_ref(m: &Module, id: EnumId) -> String {
-    let ed: Option<&EnumDef> = m.enums.iter().find(|e| e.id == id);
-    match ed {
-        Some(ed) => {
-            let mut s = format!("enum({}", ed.name);
-            for v in &ed.variants {
-                let _ = write!(s, ",{}", fp_variant(m, v));
-            }
-            // Canonical-layout identity, not spelling: fingerprint the
-            // EFFECTIVE discriminants and the RESOLVED tag repr, so an
-            // explicit `A = 0, B = 1` spelling of the implicit default (and a
-            // `repr(u8)` hint naming the tag the canonical rule picks anyway)
-            // fingerprints equal. An ill-formed assignment (duplicates /
-            // overflow / unfittable hint) falls back to the raw fields so two
-            // differently-broken defs still compare unequal.
-            match ed.effective_discriminants() {
-                Some(discs) => {
-                    let _ = write!(s, ";discs{discs:?}");
-                }
-                None => {
-                    let _ = write!(s, ";raw_discs{:?}", ed.discriminants);
-                }
-            }
-            match ed.canonical_tag_repr() {
-                Some(tag) => {
-                    let _ = write!(s, ";tag={tag}");
-                }
-                None => {
-                    let _ = write!(s, ";tag=unavailable(hint={:?})", ed.repr);
-                }
-            }
-            match &ed.layout {
-                None => s.push_str(";layout=canonical"),
-                Some(layout) => {
-                    let _ = write!(s, ";layout={}:{}:", layout.size, layout.align);
-                    match &layout.encoding {
-                        // Distinct from the `layout=canonical` spelling above:
-                        // that one means NO descriptor, this one is a declared
-                        // tag-free image. Confusing them would make an enum
-                        // that gained a descriptor look unchanged.
-                        crate::ty::EnumTagEncoding::Untagged => {
-                            s.push_str("untagged");
-                        }
-                        crate::ty::EnumTagEncoding::Direct { tag_offset } => {
-                            let _ = write!(s, "direct@{tag_offset}");
-                        }
-                        crate::ty::EnumTagEncoding::Niche {
-                            untagged_variant,
-                            niche_variants_start,
-                            niche_variants_end,
-                            niche_start,
-                            niche_offset,
-                            niche_ty,
-                        } => {
-                            let _ = write!(
-                                s,
-                                "niche:{untagged_variant}:{niche_variants_start}:{niche_variants_end}:{niche_start}@{niche_offset}:{niche_ty}"
-                            );
-                        }
-                    }
-                    let _ = write!(s, ":offsets={:?}", layout.variant_field_offsets);
-                }
-            }
-            s.push(')');
-            s
-        }
-        None => format!("enum#{}", id.0),
-    }
-}
-
-fn fp_variant(m: &Module, v: &EnumVariant) -> String {
-    let mut s = format!("[{}", v.name);
-    for t in &v.fields {
-        let _ = write!(s, ",{}", fp_ty(m, t));
-    }
-    s.push(']');
-    s
-}
-
-fn fp_record_ref(m: &Module, id: RecordId) -> String {
-    let rd: Option<&RecordDef> = m.records.iter().find(|r| r.id == id);
-    match rd {
-        Some(rd) => {
-            let mut s = format!("record({}", rd.name);
-            for f in &rd.fields {
-                let _ = write!(s, ",{}", fp_field(m, f));
-            }
-            s.push(')');
-            s
-        }
-        None => format!("record#{}", id.0),
-    }
-}
-
-fn fp_field(m: &Module, f: &FieldDef) -> String {
-    format!("{}:{}:{:?}", f.name, fp_ty(m, &f.ty), f.offset)
-}
-
-fn fp_closure_ref(m: &Module, id: ClosureTyId) -> String {
-    let ct: Option<&ClosureTy> = m.closure_types.get(id.as_usize());
-    match ct {
-        Some(ct) => {
-            let mut s = format!("closure({}", fp_func_ty_ref(m, ct.func));
-            for t in &ct.captures {
-                let _ = write!(s, ",{}", fp_ty(m, t));
-            }
-            s.push(')');
-            s
-        }
-        None => format!("closure#{}", id.0),
-    }
+    TypeFingerprint::new(m).tyid_ref(id)
 }
 
 fn fp_func_ty_ref(m: &Module, id: FuncTyId) -> String {
-    let ft: Option<&FuncTy> = m.func_types.get(id.as_usize());
-    match ft {
-        Some(ft) => {
-            let mut s = String::from("functy(");
-            for (i, p) in ft.params.iter().enumerate() {
-                if i > 0 {
-                    s.push(',');
-                }
-                s.push_str(&fp_ty(m, p));
-            }
-            s.push(';');
-            for (i, r) in ft.returns.iter().enumerate() {
-                if i > 0 {
-                    s.push(',');
-                }
-                s.push_str(&fp_ty(m, r));
-            }
-            if ft.is_vararg {
-                s.push_str(";vararg");
-            }
-            s.push(')');
-            s
+    TypeFingerprint::new(m).func_ty_ref(id)
+}
+
+/// Resolve recursive type graphs without leaking arena ids into the spelling.
+/// Back-references use positions in the current structural traversal stack.
+struct TypeFingerprint<'a> {
+    module: &'a Module,
+    active: Vec<(u8, u32)>,
+}
+
+impl<'a> TypeFingerprint<'a> {
+    fn new(module: &'a Module) -> Self {
+        Self {
+            module,
+            active: Vec::new(),
         }
-        None => format!("functy#{}", id.0),
+    }
+
+    fn reference(&mut self, key: (u8, u32), body: impl FnOnce(&mut Self) -> String) -> String {
+        if let Some(position) = self.active.iter().position(|entry| *entry == key) {
+            return format!("recursive@{position}");
+        }
+        self.active.push(key);
+        let result = body(self);
+        self.active.pop();
+        result
+    }
+
+    fn func_ty_ref(&mut self, id: FuncTyId) -> String {
+        self.reference((5, id.0), |this| this.func_ty_ref_definition(id))
+    }
+
+    fn closure_ref(&mut self, id: ClosureTyId) -> String {
+        self.reference((4, id.0), |this| this.closure_ref_definition(id))
+    }
+
+    fn record_ref(&mut self, id: RecordId) -> String {
+        self.reference((3, id.0), |this| this.record_ref_definition(id))
+    }
+
+    fn enum_ref(&mut self, id: EnumId) -> String {
+        self.reference((2, id.0), |this| this.enum_ref_definition(id))
+    }
+
+    fn struct_ref(&mut self, id: StructId) -> String {
+        self.reference((1, id.0), |this| this.struct_ref_definition(id))
+    }
+
+    fn tyid_ref(&mut self, id: TyId) -> String {
+        self.reference((0, id.0), |this| this.tyid_ref_definition(id))
+    }
+
+    fn ty(&mut self, t: &Ty) -> String {
+        let m = self.module;
+        match t {
+            Ty::Storage(layout) => format!("storage<{},{}>", layout.size_bytes, layout.align_bytes),
+            Ty::I8 => "i8".into(),
+            Ty::I16 => "i16".into(),
+            Ty::I32 => "i32".into(),
+            Ty::I64 => "i64".into(),
+            Ty::I128 => "i128".into(),
+            Ty::U8 => "u8".into(),
+            Ty::U16 => "u16".into(),
+            Ty::U32 => "u32".into(),
+            Ty::U64 => "u64".into(),
+            Ty::U128 => "u128".into(),
+            Ty::Isize => "isize".into(),
+            Ty::Usize => "usize".into(),
+            Ty::Char => "char".into(),
+            Ty::Error => "error".into(),
+            Ty::F16 => "f16".into(),
+            Ty::F32 => "f32".into(),
+            Ty::F64 => "f64".into(),
+            Ty::Bool => "bool".into(),
+            Ty::Ptr => "ptr".into(),
+            Ty::FatPtr(kind) => format!("fatptr<{}>", self.fat_ptr_kind(kind)),
+            Ty::Unit => "unit".into(),
+            Ty::Never => "never".into(),
+            Ty::Struct(id) => self.struct_ref(*id),
+            Ty::Array(elem, n) => format!("arr[{};{}]", self.tyid_ref(*elem), n),
+            Ty::Vector(elem, lanes) => format!("vec<{lanes}x{}>", self.ty(elem)),
+            Ty::Tuple(ts) => {
+                let mut s = String::from("tuple(");
+                for (i, t) in ts.iter().enumerate() {
+                    if i > 0 {
+                        s.push(',');
+                    }
+                    s.push_str(&self.ty(t));
+                }
+                s.push(')');
+                s
+            }
+            Ty::Enum(id) => self.enum_ref(*id),
+            Ty::Func(id) => self.func_ty_ref(*id),
+            Ty::Ref(inner) => format!("&{}", self.ty(inner)),
+            Ty::RefMut(inner) => format!("&mut {}", self.ty(inner)),
+            Ty::PtrConst(inner) => format!("*const {}", self.ty(inner)),
+            Ty::PtrMut(inner) => format!("*mut {}", self.ty(inner)),
+            Ty::Rc(inner) => format!("Rc<{}>", self.ty(inner)),
+            Ty::Set(elem, repr) => format!(
+                "set<{},{}>",
+                self.tyid_ref(*elem),
+                match repr {
+                    SetRepr::Bitset => "bitset",
+                    SetRepr::Boxed => "boxed",
+                }
+            ),
+            Ty::Sequence(elem) => format!("seq<{}>", self.tyid_ref(*elem)),
+            Ty::Record(id) => self.record_ref(*id),
+            Ty::Closure(id) => self.closure_ref(*id),
+            // The predicate is resolved into the fingerprint rather than cited by
+            // id: two structurally identical refinements must fingerprint the same
+            // even if their modules interned in a different order.
+            Ty::Refine(base, pred) => format!(
+                "refine<{},{}>",
+                self.tyid_ref(*base),
+                match m.predicates.get(pred.as_usize()) {
+                    Some(p) => format!("{p}"),
+                    None => format!("pred#{}", pred.index()),
+                }
+            ),
+            Ty::Dialect(ty) => format!("dialect<{:?},{:?},{}>", ty.namespace, ty.name, ty.version),
+            // v43: nominal identity is the pair; nothing to resolve.
+            Ty::Handle(ty) => format!("handle<{:?},{:?}>", ty.name, ty.runtime),
+            Ty::Ext(e) => e.unreachable(),
+        }
+    }
+
+    fn fat_ptr_kind(&mut self, kind: &FatPtrKind) -> String {
+        match kind {
+            FatPtrKind::Slice(elem) => format!("slice {}", self.tyid_ref(*elem)),
+            FatPtrKind::Str => "str".to_string(),
+            FatPtrKind::TraitObject { trait_id } => format!("dyn.{trait_id}"),
+            // Spelled exactly as `Display for FatPtrKind` spells it, and distinct
+            // from every other arm: a `ContainerLen` pointer addresses the
+            // container header rather than slice content, so fingerprinting it as
+            // `str` or `slice` would make two ABI-different fat pointers compare
+            // identical in `trust-ir-diff`.
+            FatPtrKind::ContainerLen => "container_len".to_string(),
+            // v40, the `dyn`-tail sibling, on the same terms: spelled as `Display`
+            // spells it and distinct from `dyn.N` -- it addresses the container
+            // header rather than the dispatched object, and carries no trait id,
+            // so fingerprinting it as any `dyn.N` would make two ABI-different
+            // fat pointers compare identical.
+            FatPtrKind::ContainerVtable => "container_vtable".to_string(),
+        }
+    }
+
+    fn tyid_ref_definition(&mut self, id: TyId) -> String {
+        let m = self.module;
+        match m.types.get(id.as_usize()) {
+            Some(t) => self.ty(t),
+            None => format!("ty#{}", id.0),
+        }
+    }
+
+    fn struct_ref_definition(&mut self, id: StructId) -> String {
+        let m = self.module;
+        let sd: Option<&StructDef> = m.structs.iter().find(|s| s.id == id);
+        match sd {
+            Some(sd) => {
+                // Compile-time coverage (roadmap WS4.13): every field is read.
+                let StructDef {
+                    id: _, // renumbering: a definition is fingerprinted at every use
+                    name,
+                    fields,
+                    size,
+                    align,
+                    repr,
+                    origin,
+                } = sd;
+                // `repr` is part of the ABI contract (Rust vs C vs transparent vs
+                // packed(N)) — two structs identical in name/size/align/fields but
+                // differing in repr are ABI-incompatible, so it MUST participate in
+                // the fingerprint or `trust-ir-diff` would report them as identical.
+                let mut s = format!("struct({name},size={size:?},align={align:?},repr={repr:?}");
+                for f in fields {
+                    let _ = write!(s, ",{}", self.field(f));
+                }
+                // The v58 nominal key SPLITS type identity (two structurally
+                // identical defs under different keys are two types), so a
+                // re-keyed or un-keyed def is a real change and MUST be seen
+                // here; a diff blind to it would call the split "no change".
+                // `None` fingerprints as its own spelling, distinct from every
+                // key, so gaining or losing a key is a change too.
+                let _ = write!(s, ";origin={}", origin_fp(origin.as_ref()));
+                s.push(')');
+                s
+            }
+            None => format!("struct#{}", id.0),
+        }
+    }
+
+    fn enum_ref_definition(&mut self, id: EnumId) -> String {
+        let m = self.module;
+        let ed: Option<&EnumDef> = m.enums.iter().find(|e| e.id == id);
+        match ed {
+            Some(ed) => {
+                // Compile-time coverage (roadmap WS4.13): every field is read.
+                let EnumDef {
+                    id: _,            // renumbering: a definition is fingerprinted at every use
+                    name: _,          // `enum(<name>`
+                    variants: _,      // one fingerprint per variant
+                    discriminants: _, // the EFFECTIVE values (raw when ill-formed)
+                    repr: _,          // the RESOLVED tag repr (the hint when unavailable)
+                    layout: _,        // `layout=` (`canonical` when absent)
+                    origin: _,        // the v58 nominal key
+                } = ed;
+                let mut s = format!("enum({}", ed.name);
+                for v in &ed.variants {
+                    let _ = write!(s, ",{}", self.variant(v));
+                }
+                // Canonical-layout identity, not spelling: fingerprint the
+                // EFFECTIVE discriminants and the RESOLVED tag repr, so an
+                // explicit `A = 0, B = 1` spelling of the implicit default (and a
+                // `repr(u8)` hint naming the tag the canonical rule picks anyway)
+                // fingerprints equal. An ill-formed assignment (duplicates /
+                // overflow / unfittable hint) falls back to the raw fields so two
+                // differently-broken defs still compare unequal.
+                match ed.effective_discriminants() {
+                    Some(discs) => {
+                        let _ = write!(s, ";discs{discs:?}");
+                    }
+                    None => {
+                        let _ = write!(s, ";raw_discs{:?}", ed.discriminants);
+                    }
+                }
+                match ed.canonical_tag_repr() {
+                    Some(tag) => {
+                        let _ = write!(s, ";tag={tag}");
+                    }
+                    None => {
+                        let _ = write!(s, ";tag=unavailable(hint={:?})", ed.repr);
+                    }
+                }
+                match &ed.layout {
+                    None => s.push_str(";layout=canonical"),
+                    Some(layout) => {
+                        let _ = write!(s, ";layout={}:{}:", layout.size, layout.align);
+                        match &layout.encoding {
+                            // Distinct from the `layout=canonical` spelling above:
+                            // that one means NO descriptor, this one is a declared
+                            // tag-free image. Confusing them would make an enum
+                            // that gained a descriptor look unchanged.
+                            crate::ty::EnumTagEncoding::Untagged => {
+                                s.push_str("untagged");
+                            }
+                            crate::ty::EnumTagEncoding::SingleInhabited { variant } => {
+                                let _ = write!(s, "single-inhabited@{variant}");
+                            }
+                            crate::ty::EnumTagEncoding::Direct { tag_offset } => {
+                                let _ = write!(s, "direct@{tag_offset}");
+                            }
+                            crate::ty::EnumTagEncoding::Niche {
+                                untagged_variant,
+                                niche_variants_start,
+                                niche_variants_end,
+                                niche_start,
+                                niche_offset,
+                                niche_ty,
+                            } => {
+                                let _ = write!(
+                                    s,
+                                    "niche:{untagged_variant}:{niche_variants_start}:{niche_variants_end}:{niche_start}@{niche_offset}:{niche_ty}"
+                                );
+                            }
+                        }
+                        let _ = write!(s, ":offsets={:?}", layout.variant_field_offsets);
+                    }
+                }
+                // v58 nominal key: see `struct_ref_definition`.
+                let _ = write!(s, ";origin={}", origin_fp(ed.origin.as_ref()));
+                s.push(')');
+                s
+            }
+            None => format!("enum#{}", id.0),
+        }
+    }
+
+    fn variant(&mut self, v: &EnumVariant) -> String {
+        let mut s = format!("[{}", v.name);
+        for t in &v.fields {
+            let _ = write!(s, ",{}", self.ty(t));
+        }
+        s.push(']');
+        s
+    }
+
+    fn record_ref_definition(&mut self, id: RecordId) -> String {
+        let m = self.module;
+        let rd: Option<&RecordDef> = m.records.iter().find(|r| r.id == id);
+        match rd {
+            Some(rd) => {
+                let mut s = format!("record({}", rd.name);
+                for f in &rd.fields {
+                    let _ = write!(s, ",{}", self.field(f));
+                }
+                s.push(')');
+                s
+            }
+            None => format!("record#{}", id.0),
+        }
+    }
+
+    fn field(&mut self, f: &FieldDef) -> String {
+        format!("{}:{}:{:?}", f.name, self.ty(&f.ty), f.offset)
+    }
+
+    fn closure_ref_definition(&mut self, id: ClosureTyId) -> String {
+        let m = self.module;
+        let ct: Option<&ClosureTy> = m.closure_types.get(id.as_usize());
+        match ct {
+            Some(ct) => {
+                let mut s = format!("closure({}", self.func_ty_ref(ct.func));
+                for t in &ct.captures {
+                    let _ = write!(s, ",{}", self.ty(t));
+                }
+                s.push(')');
+                s
+            }
+            None => format!("closure#{}", id.0),
+        }
+    }
+
+    fn func_ty_ref_definition(&mut self, id: FuncTyId) -> String {
+        let m = self.module;
+        let ft: Option<&FuncTy> = m.func_types.get(id.as_usize());
+        match ft {
+            Some(ft) => {
+                let mut s = String::from("functy(");
+                for (i, p) in ft.params.iter().enumerate() {
+                    if i > 0 {
+                        s.push(',');
+                    }
+                    s.push_str(&self.ty(p));
+                }
+                s.push(';');
+                for (i, r) in ft.returns.iter().enumerate() {
+                    if i > 0 {
+                        s.push(',');
+                    }
+                    s.push_str(&self.ty(r));
+                }
+                if ft.is_vararg {
+                    s.push_str(";vararg");
+                }
+                if let Some(abi) = &ft.abi {
+                    let text = abi.to_canonical_text();
+                    use core::fmt::Write;
+                    write!(s, ";abi:{}:{text}", text.len()).expect("String write");
+                }
+                s.push(')');
+                s
+            }
+            None => format!("functy#{}", id.0),
+        }
     }
 }
 
@@ -1842,6 +3404,10 @@ fn fp_constant(m: &Module, c: &Constant) -> String {
             s.push(')');
             s
         }
+        // v50: the element fingerprint once, then the length — never `len`
+        // copies (a splat and the equal list are different SPELLINGS, and the
+        // §3 rule keeps a valid module to one of them).
+        Constant::Splat { elem, len } => format!("splat({};{len})", fp_constant(m, elem)),
         Constant::Vector(cs) => {
             let mut s = String::from("vec(");
             for (i, c) in cs.iter().enumerate() {
@@ -1915,6 +3481,8 @@ fn fp_constant(m: &Module, c: &Constant) -> String {
             format!("symaddr({symbol},{addend})")
         }
         Constant::PhantomData => "phantomdata".to_string(),
+        Constant::Uninit => "uninit".to_string(),
+        Constant::Ext(e) => e.unreachable(),
     }
 }
 
@@ -1938,7 +3506,7 @@ fn render_inst(m: &Module, node: &InstrNode, opts: DiffOptions) -> String {
             if i > 0 {
                 s.push(',');
             }
-            s.push_str(&fp_proof(p));
+            s.push_str(&fp_proof(m, p));
         }
         s.push('}');
     }
@@ -1952,12 +3520,95 @@ fn render_inst(m: &Module, node: &InstrNode, opts: DiffOptions) -> String {
     s
 }
 
+/// The rendered `, KIND` and `, panic @<entry> at LOC` clauses of an assert.
+fn render_assert_kind_and_site(
+    m: &Module,
+    s: &mut String,
+    kind: &crate::inst::AssertKind,
+    site: Option<&crate::inst::PanicSite>,
+) {
+    if let crate::inst::AssertKind::Overflow(op) = kind {
+        let _ = write!(s, ", overflow {}", op.name());
+    } else if let Some([a, b]) = kind.operands() {
+        let _ = write!(s, ", {} %{}, %{}", kind.keyword(), a.0, b.0);
+    } else if !kind.is_unspecified() {
+        let _ = write!(s, ", {}", kind.keyword());
+    }
+    if let Some(site) = site {
+        let entry = m
+            .functions
+            .iter()
+            .find(|f| f.id == site.entry)
+            .map(|f| f.name.as_str())
+            .unwrap_or("<unknown>");
+        let _ = write!(s, ", panic @{entry} at ");
+        match site.location {
+            crate::inst::PanicLocation::Global(global) => {
+                let _ = write!(s, "@global.{}", global.index());
+            }
+            crate::inst::PanicLocation::Value(value) => {
+                let _ = write!(s, "%{}", value.0);
+            }
+        }
+    }
+}
+
 fn render_inst_core(m: &Module, inst: &Inst) -> String {
     // Use our structural format (without canonical renumbering maps).
     // Operand ValueIds / BlockIds are rendered as raw indices here since
     // the maps only make sense inside a diffing pass.
     let mut s = String::new();
     match inst {
+        // Crystal lane (wave-DS): see the fingerprint twin above.
+        Inst::Drop { ty, ptr } => {
+            let _ = write!(s, "drop {} %{}", render_ty(m, ty), ptr.0);
+        }
+        Inst::DropInvoke {
+            ty,
+            ptr,
+            normal_dest,
+            normal_args,
+            unwind_dest,
+        } => {
+            let mut na = String::new();
+            for (i, arg) in normal_args.iter().enumerate() {
+                let _ = write!(na, "{}%{}", if i > 0 { ", " } else { "" }, arg.0);
+            }
+            let _ = write!(
+                s,
+                "drop_invoke {} %{} to bb{}({na}) unwind bb{}",
+                render_ty(m, ty),
+                ptr.0,
+                normal_dest.index(),
+                unwind_dest.index()
+            );
+        }
+        Inst::InvokeIndirect {
+            callee,
+            sig,
+            args,
+            calling_conv,
+            normal_dest,
+            normal_args,
+            unwind_dest,
+        } => {
+            let mut rest = String::new();
+            for a in args {
+                let _ = write!(rest, " %{}", a.0);
+            }
+            let mut na = String::new();
+            for (i, arg) in normal_args.iter().enumerate() {
+                let _ = write!(na, "{}%{}", if i > 0 { ", " } else { "" }, arg.0);
+            }
+            let _ = write!(
+                s,
+                "invoke_indirect %{} sig={} cc={calling_conv}{rest} to bb{}({na}) unwind bb{}",
+                callee.0,
+                fp_func_ty_ref(m, *sig),
+                normal_dest.index(),
+                unwind_dest.index()
+            );
+        }
         Inst::BinOp { op, ty, lhs, rhs } => {
             let _ = write!(
                 s,
@@ -2142,10 +3793,12 @@ fn render_inst_core(m: &Module, inst: &Inst) -> String {
             desired,
             success,
             failure,
+            weak,
         } => {
             let _ = write!(
                 s,
-                "cmpxchg {} %{} %{} %{} {:?} {:?}",
+                "cmpxchg {}{} %{} %{} %{} {:?} {:?}",
+                if *weak { "weak " } else { "" },
                 render_ty(m, ty),
                 ptr.0,
                 expected.0,
@@ -2212,7 +3865,7 @@ fn render_inst_core(m: &Module, inst: &Inst) -> String {
                 let _: &SwitchCase = c;
             }
         }
-        Inst::Call { callee, args } => {
+        Inst::Call { callee, args } | Inst::CallCannotUnwind { callee, args } => {
             let name = m
                 .functions
                 .iter()
@@ -2223,21 +3876,37 @@ fn render_inst_core(m: &Module, inst: &Inst) -> String {
             for a in args {
                 let _ = write!(rest, " %{}", a.0);
             }
-            let _ = write!(s, "call @{name}{rest}");
+            let opcode = if matches!(inst, Inst::CallCannotUnwind { .. }) {
+                "call_cannot_unwind"
+            } else {
+                "call"
+            };
+            let _ = write!(s, "{opcode} @{name}{rest}");
         }
         Inst::CallIndirect {
             callee,
             sig,
             args,
             calling_conv,
+        }
+        | Inst::CallIndirectCannotUnwind {
+            callee,
+            sig,
+            args,
+            calling_conv,
         } => {
+            let opcode = if matches!(inst, Inst::CallIndirectCannotUnwind { .. }) {
+                "call_indirect_cannot_unwind"
+            } else {
+                "call_indirect"
+            };
             let mut rest = String::new();
             for a in args {
                 let _ = write!(rest, " %{}", a.0);
             }
             let _ = write!(
                 s,
-                "call_indirect %{} sig={} cc={calling_conv}{rest}",
+                "{opcode} %{} sig={} cc={calling_conv}{rest}",
                 callee.0,
                 fp_func_ty_ref(m, *sig)
             );
@@ -2261,6 +3930,35 @@ fn render_inst_core(m: &Module, inst: &Inst) -> String {
                 aggregate.0,
                 field
             );
+        }
+        Inst::MakeAggregate {
+            ty,
+            variant,
+            fields,
+        } => {
+            let _ = write!(s, "make_aggregate {}", render_ty(m, ty));
+            if let Some(variant) = variant {
+                let _ = write!(s, " variant {variant}");
+            }
+            let lanes: Vec<String> = fields.iter().map(|f| format!("%{}", f.0)).collect();
+            let _ = write!(s, " ({})", lanes.join(", "));
+        }
+        Inst::MakeClosure { ty, func, captures } => {
+            let lanes = captures
+                .iter()
+                .map(|v| format!("%{}", v.0))
+                .collect::<Vec<_>>()
+                .join(", ");
+            let _ = write!(
+                s,
+                "make_closure {} {} ({})",
+                render_ty(m, &Ty::Closure(*ty)),
+                spec_func_ref(m, *func),
+                lanes
+            );
+        }
+        Inst::ArraySplat { ty, value } => {
+            let _ = write!(s, "array_splat {} %{}", render_ty(m, ty), value.0);
         }
         Inst::InsertField {
             ty,
@@ -2319,8 +4017,30 @@ fn render_inst_core(m: &Module, inst: &Inst) -> String {
         Inst::Assume { cond } => {
             let _ = write!(s, "assume %{}", cond.0);
         }
-        Inst::Assert { cond } => {
+        Inst::Assert { cond, kind, site } => {
             let _ = write!(s, "assert %{}", cond.0);
+            render_assert_kind_and_site(m, &mut s, kind, site.as_ref());
+        }
+        Inst::AssertInvoke {
+            cond,
+            kind,
+            site,
+            normal_dest,
+            normal_args,
+            unwind_dest,
+        } => {
+            let _ = write!(s, "assert_invoke %{}", cond.0);
+            render_assert_kind_and_site(m, &mut s, kind, Some(site));
+            let mut na = String::new();
+            for (i, arg) in normal_args.iter().enumerate() {
+                let _ = write!(na, "{}%{}", if i > 0 { ", " } else { "" }, arg.0);
+            }
+            let _ = write!(
+                s,
+                " to bb{}({na}) unwind bb{}",
+                normal_dest.index(),
+                unwind_dest.index()
+            );
         }
         Inst::Unreachable => s.push_str("unreachable"),
         Inst::Copy { ty, operand } => {
@@ -2361,6 +4081,18 @@ fn render_inst_core(m: &Module, inst: &Inst) -> String {
         }
         Inst::Dealloc { ptr } => {
             let _ = write!(s, "dealloc %{}", ptr.0);
+        }
+        Inst::MemCopy {
+            dst,
+            src,
+            bytes,
+            overlap,
+        } => {
+            let ov = if *overlap { " overlap" } else { "" };
+            let _ = write!(s, "memcopy{ov} %{} %{} %{}", dst.0, src.0, bytes.0);
+        }
+        Inst::MemSet { dst, byte, bytes } => {
+            let _ = write!(s, "memset %{} %{} %{}", dst.0, byte.0, bytes.0);
         }
         Inst::OpenFrame { def } => {
             let _ = write!(s, "open_frame #{} {}", def.id.0, def.name);
@@ -2531,6 +4263,9 @@ impl Diff {
                 }
             }
         }
+        for mc in &self.module_meta_changes {
+            let _ = writeln!(s, "~ module {}: {} -> {}", mc.field, mc.before, mc.after);
+        }
         for psc in &self.proof_state_changes {
             match psc {
                 ProofStateChange::ObligationAdded { obligation, status } => {
@@ -2572,7 +4307,9 @@ impl Diff {
     ///     { "kind": "func_changed",
     ///       "name": "<fn>",
     ///       "meta": [
-    ///         { "field": "producer", "before": "...", "after": "..." }
+    ///         { "field": "producer", "before": "...", "after": "..." },
+    ///         { "field": "body_gate", "before": "gated \"clean-kernel-tv\"",
+    ///           "after": "ungated" }
     ///       ],
     ///       "proofs": [
     ///         { "kind": "proof_added",   "name": "..." },
@@ -2592,6 +4329,12 @@ impl Diff {
     ///         }
     ///       ]
     ///     }
+    ///   ],
+    ///   "module_meta": [
+    ///     { "field": "tuple_layouts", "before": "...", "after": "..." },
+    ///     { "field": "target_info", "before": "...", "after": "..." },
+    ///     { "field": "global @G", "before": "...", "after": "..." },
+    ///     { "field": "spec_module M", "before": "...", "after": "..." }
     ///   ],
     ///   "proof_state": [
     ///     { "kind": "obligation_added",   "obligation": "...", "status": "..." },
@@ -2743,6 +4486,19 @@ impl Diff {
                 }
             }
         }
+        s.push_str("],\"module_meta\":[");
+        for (i, mc) in self.module_meta_changes.iter().enumerate() {
+            if i > 0 {
+                s.push(',');
+            }
+            let _ = write!(
+                s,
+                "{{\"field\":{},\"before\":{},\"after\":{}}}",
+                json_string(&mc.field),
+                json_string(&mc.before),
+                json_string(&mc.after)
+            );
+        }
         s.push_str("],\"proof_state\":[");
         for (i, psc) in self.proof_state_changes.iter().enumerate() {
             if i > 0 {
@@ -2838,26 +4594,192 @@ mod tests {
         value::{BlockId, EnumId, FuncId, FuncTyId, RecordId, StructId, ValueId},
     };
 
+    /// Amendment D (§20): the drop-glue table decides what a drop executes,
+    /// so a row appearing or re-pointing is a module row even when no body
+    /// changed; renumbering the glue function is cosmetic.
+    #[test]
+    fn drop_glue_change_is_a_module_row() {
+        let base = |glue_name: &str, glue_id: u32| {
+            let mut m = Module::new("drop_glue_diff");
+            let sig = m
+                .add_func_type(FuncTy {
+                    abi: None,
+                    params: vec![Ty::Ptr],
+                    returns: vec![],
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let mut glue = Function::new(FuncId::new(glue_id), glue_name, sig, BlockId::new(0));
+            let mut block = Block::new(BlockId::new(0));
+            block.params.push((ValueId::new(0), Ty::Ptr));
+            block
+                .body
+                .push(InstrNode::new(Inst::Return { values: vec![] }));
+            glue.blocks.push(block);
+            m.functions.push(glue);
+            m
+        };
+        let owned = Ty::Struct(StructId::new(0));
+        let without = base("drop_owned", 0);
+        let mut with = base("drop_owned", 0);
+        with.set_drop_glue(owned.clone(), FuncId::new(0)).unwrap();
+        let rows = |d: &Diff| -> Vec<String> {
+            d.module_meta_changes
+                .iter()
+                .filter(|mc| mc.field == "drop_glue")
+                .map(|mc| format!("{} -> {}", mc.before, mc.after))
+                .collect()
+        };
+        assert_eq!(rows(&diff(&without, &with)).len(), 1, "a row appearing");
+        let mut renumbered = base("drop_owned", 9);
+        renumbered
+            .set_drop_glue(owned.clone(), FuncId::new(9))
+            .unwrap();
+        assert!(
+            rows(&diff(&with, &renumbered)).is_empty(),
+            "renumbering is cosmetic"
+        );
+        let mut repointed = base("drop_other", 0);
+        repointed.set_drop_glue(owned, FuncId::new(0)).unwrap();
+        let changed = rows(&diff(&with, &repointed));
+        assert_eq!(changed.len(), 1, "re-pointing the row");
+        assert!(changed[0].contains("@drop_other"), "{changed:?}");
+    }
+
     /// R3 #8: a proved-but-empty summary must NOT fingerprint to the same `∅` marker
     /// as `None` (or as an UNPROVED empty summary), so a `None -> Some(proved)` or a
     /// `proved=false -> true` transition is reported by the diff.
     #[test]
     fn summary_fp_distinguishes_proved_empty_from_none() {
-        let none_fp = summary_fp(None);
+        let m = Module::new("summary_fp");
+        let none_fp = summary_fp(&m, None, None);
         let unproved_empty = crate::FunctionSummary::default();
         let proved_empty = crate::FunctionSummary {
             proved: true,
             ..Default::default()
         };
         assert_eq!(
-            summary_fp(Some(&unproved_empty)),
+            summary_fp(&m, None, Some(&unproved_empty)),
             none_fp,
             "unproved empty ≡ None"
         );
         assert_ne!(
-            summary_fp(Some(&proved_empty)),
+            summary_fp(&m, None, Some(&proved_empty)),
             none_fp,
             "a proved (empty) summary must be distinguishable from None"
+        );
+    }
+
+    /// v41: the two fields appended to `FunctionSummary` are contract content,
+    /// so an otherwise-empty summary carrying either must NOT collapse to the
+    /// `∅` marker — and a retargeted `backed_by` must not diff as no change.
+    /// `decreases` landed in v41 with no fingerprint at all, which made a
+    /// changed termination measure invisible to `trust-ir-diff`.
+    #[test]
+    fn summary_fp_reports_decreases_and_backed_by() {
+        let mut m = Module::new("summary_fp_v41");
+        let a = m
+            .intern_import(crate::ModuleImport::new(
+                "crate_a",
+                crate::proof::ProofDigest::sha256([1u8; 32]),
+            ))
+            .expect("Module::intern_import: test fixture");
+        let b = m
+            .intern_import(crate::ModuleImport::new(
+                "crate_b",
+                crate::proof::ProofDigest::sha256([2u8; 32]),
+            ))
+            .expect("Module::intern_import: test fixture");
+
+        let none_fp = summary_fp(&m, None, None);
+
+        let only_decreases = crate::FunctionSummary {
+            decreases: vec![crate::ProofFormula::new("schema", "n")],
+            ..Default::default()
+        };
+        assert_ne!(
+            summary_fp(&m, None, Some(&only_decreases)),
+            none_fp,
+            "a summary whose only content is a termination measure is not ≡ None"
+        );
+
+        let measure_changed = crate::FunctionSummary {
+            decreases: vec![crate::ProofFormula::new("schema", "n - 1")],
+            ..Default::default()
+        };
+        assert_ne!(
+            summary_fp(&m, None, Some(&only_decreases)),
+            summary_fp(&m, None, Some(&measure_changed)),
+            "changing the termination measure must be reported"
+        );
+
+        let backed_a = crate::FunctionSummary {
+            proved: true,
+            backed_by: Some(crate::ExternRef::new(a, "foo")),
+            ..Default::default()
+        };
+        let backed_b = crate::FunctionSummary {
+            proved: true,
+            backed_by: Some(crate::ExternRef::new(b, "foo")),
+            ..Default::default()
+        };
+        assert_ne!(
+            summary_fp(&m, None, Some(&backed_a)),
+            summary_fp(&m, None, Some(&backed_b)),
+            "retargeting `proved`'s authority at a different crate must be reported"
+        );
+    }
+
+    /// v59 (WS1.14): the world epochs are distinct places — re-binding a
+    /// clause name from the entry world to the exit world (or to the legacy
+    /// un-epoched `World`) changes what the clause states, so it is reported.
+    #[test]
+    fn summary_fp_tells_the_world_epochs_apart() {
+        use crate::proof::{ClauseBinding, ClausePlace, ClauseSort};
+        let m = Module::new("summary_fp_epochs");
+        let bound = |place: ClausePlace| {
+            let mut clause = crate::ProofFormula::smtlib2("(= h h)", "Bool");
+            clause.bindings = vec![(
+                "h".to_string(),
+                ClauseBinding {
+                    sort: ClauseSort::Int,
+                    place,
+                },
+            )];
+            summary_fp(
+                &m,
+                None,
+                Some(&crate::FunctionSummary::new().ensuring(clause)),
+            )
+        };
+        let pre = bound(ClausePlace::WorldPre);
+        let post = bound(ClausePlace::WorldPost);
+        let legacy = bound(ClausePlace::World);
+        assert_ne!(pre, post);
+        assert_ne!(pre, legacy);
+        assert_ne!(post, legacy);
+    }
+
+    /// v59 (WS1.14): the effect frame is contract content. A summary whose
+    /// only content is `effects` is not ≡ None, `Some(pure)` is not ≡ None
+    /// (UNRECORDED), and widening `writes` is reported.
+    #[test]
+    fn summary_fp_reports_effects() {
+        let m = Module::new("summary_fp_effects");
+        let none_fp = summary_fp(&m, None, None);
+        let pure = crate::FunctionSummary::new().with_effects(crate::EffectSummary::pure());
+        assert_ne!(summary_fp(&m, None, Some(&pure)), none_fp);
+        let writer =
+            crate::FunctionSummary::new().with_effects(crate::EffectSummary::pure().writing(
+                crate::EffectSet::of([crate::EffectPlace::ParamPointee { index: 0 }]),
+            ));
+        assert_ne!(
+            summary_fp(&m, None, Some(&pure)),
+            summary_fp(&m, None, Some(&writer))
+        );
+        assert_eq!(
+            summary_fp(&m, None, Some(&writer)),
+            summary_fp(&m, None, Some(&writer.clone()))
         );
     }
 
@@ -2874,6 +4796,7 @@ mod tests {
             DiffOptions::default(),
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         ] {
             let d = diff_with(&a, &b_mod, opts);
@@ -2925,6 +4848,7 @@ mod tests {
             DiffOptions::default(),
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         ] {
             let result = diff_with(&a, &b_mod, opts);
@@ -2944,9 +4868,17 @@ mod tests {
     /// therefore stay outside the semantic diff.
     #[test]
     fn debug_metadata_is_ignored_as_cosmetic() {
-        let a = single_return_module("m", 0, 0);
+        // The file table is interned on BOTH sides: its LENGTH is compared
+        // (the `files` row, WS4.13, mirroring the V3 identity), so a file
+        // entering the table is a reported change of its own
+        // (`diff_fields::files_count_is_reported_and_strings_are_not`); what
+        // stays cosmetic is the debug metadata that indexes it.
+        let mut a = single_return_module("m", 0, 0);
+        let file = a
+            .intern_file("src/main.rs")
+            .expect("Module::intern_file: test fixture");
         let mut b_mod = a.clone();
-        let file = b_mod.intern_file("src/main.rs");
+        b_mod.files[file as usize] = "/elsewhere/src/main.rs".into();
         let function = &mut b_mod.functions[0];
         function.value_names = Some(vec![(v(0), "unit value".to_string())]);
         function.scopes = Some(vec![crate::ScopeData {
@@ -2956,6 +4888,7 @@ mod tests {
                 line: 1,
                 col: 0,
             }),
+            inlined_at: None,
         }]);
         function.blocks[0].body[0].span = Some(crate::SourceSpan {
             file,
@@ -2968,6 +4901,7 @@ mod tests {
             DiffOptions::default(),
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         ] {
             let d = diff_with(&a, &b_mod, opts);
@@ -2986,8 +4920,10 @@ mod tests {
         m.add_func_type(FuncTy {
             params: vec![],
             returns: vec![Ty::Unit],
+            abi: None,
             is_vararg: false,
         })
+        .expect("Module::add_func_type: test fixture")
     }
 
     fn v(n: u32) -> ValueId {
@@ -3018,7 +4954,8 @@ mod tests {
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(blk);
-        m.add_function(f);
+        m.try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
         m
     }
 
@@ -3064,6 +5001,7 @@ mod tests {
             &b,
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         );
         assert!(
@@ -3086,7 +5024,8 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            m_a.add_function(f);
+            m_a.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
         }
 
         let mut m_b = Module::new("m");
@@ -3098,7 +5037,8 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            m_b.add_function(f);
+            m_b.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
         }
 
         let d = diff(&m_a, &m_b);
@@ -3110,11 +5050,14 @@ mod tests {
     #[test]
     fn added_instruction_reports_exactly_that_instruction() {
         let mut a = Module::new("m");
-        let ft_i = a.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft_i = a
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut fa = Function::new(FuncId::new(0), "main", ft_i, b(0));
         let mut blk = Block::new(b(0));
         blk.body.push(
@@ -3127,14 +5070,18 @@ mod tests {
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![v(0)] }));
         fa.blocks.push(blk);
-        a.add_function(fa);
+        a.try_add_function(fa)
+            .expect("Module::try_add_function: test fixture");
 
         let mut b_mod = Module::new("m");
-        let ft_i = b_mod.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft_i = b_mod
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut fb = Function::new(FuncId::new(0), "main", ft_i, b(0));
         let mut blk = Block::new(b(0));
         blk.body.push(
@@ -3156,7 +5103,9 @@ mod tests {
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![v(1)] }));
         fb.blocks.push(blk);
-        b_mod.add_function(fb);
+        b_mod
+            .try_add_function(fb)
+            .expect("Module::try_add_function: test fixture");
 
         let d = diff(&a, &b_mod);
         assert_eq!(d.changes.len(), 1);
@@ -3222,7 +5171,9 @@ mod tests {
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(blk);
-        b_mod.add_function(f);
+        b_mod
+            .try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
 
         let d = diff(&a, &b_mod);
         let j = d.to_json();
@@ -3254,19 +5205,24 @@ mod tests {
             size: None,
             align: None,
             repr: Default::default(),
+            origin: None,
         });
-        let ft = a.add_func_type(FuncTy {
-            params: vec![Ty::Struct(sa)],
-            returns: vec![Ty::Unit],
-            is_vararg: false,
-        });
+        let ft = a
+            .add_func_type(FuncTy {
+                params: vec![Ty::Struct(sa)],
+                returns: vec![Ty::Unit],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
         let mut blk = Block::new(b(0));
         blk.params.push((v(0), Ty::Struct(sa)));
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(blk);
-        a.add_function(f);
+        a.try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
 
         // Module B: same struct with id=17 instead of 3.
         let mut b_mod = Module::new("m");
@@ -3288,19 +5244,25 @@ mod tests {
             size: None,
             align: None,
             repr: Default::default(),
+            origin: None,
         });
-        let ft = b_mod.add_func_type(FuncTy {
-            params: vec![Ty::Struct(sb)],
-            returns: vec![Ty::Unit],
-            is_vararg: false,
-        });
+        let ft = b_mod
+            .add_func_type(FuncTy {
+                params: vec![Ty::Struct(sb)],
+                returns: vec![Ty::Unit],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
         let mut blk = Block::new(b(0));
         blk.params.push((v(0), Ty::Struct(sb)));
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(blk);
-        b_mod.add_function(f);
+        b_mod
+            .try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
 
         let d = diff(&a, &b_mod);
         assert!(d.is_empty(), "{}", d.to_text());
@@ -3326,19 +5288,24 @@ mod tests {
                 size: Some(4),
                 align: Some(4),
                 repr,
+                origin: None,
             });
-            let ft = m.add_func_type(FuncTy {
-                params: vec![Ty::Struct(s)],
-                returns: vec![Ty::Unit],
-                is_vararg: false,
-            });
+            let ft = m
+                .add_func_type(FuncTy {
+                    params: vec![Ty::Struct(s)],
+                    returns: vec![Ty::Unit],
+                    abi: None,
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
             let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
             let mut blk = Block::new(b(0));
             blk.params.push((v(0), Ty::Struct(s)));
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            m.add_function(f);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
             m
         }
 
@@ -3348,6 +5315,245 @@ mod tests {
         assert!(
             !d.is_empty(),
             "differing struct repr (C vs Rust) must produce a diff"
+        );
+    }
+
+    // 6c. the v58 nominal key IS a diff ------------------------------------
+
+    /// A definition's `origin` splits type identity (WS3.9), so a diff that
+    /// ignored it would report a re-keyed, newly keyed or un-keyed definition
+    /// as "no change". Pinned for both tables, with the control that an
+    /// EQUAL key on both sides is not a change.
+    #[test]
+    fn type_origin_difference_produces_diff() {
+        use crate::proof::ProofDigest;
+        use crate::ty::TypeOrigin;
+
+        fn key(path: u8) -> TypeOrigin {
+            TypeOrigin::Rust {
+                stable_crate_id: 7,
+                def_path_hash: [path; 16],
+                args_digest: ProofDigest::sha256([1; 32]),
+            }
+        }
+        fn module_with_keys(
+            struct_origin: Option<TypeOrigin>,
+            enum_origin: Option<TypeOrigin>,
+        ) -> Module {
+            let mut m = Module::new("m");
+            let s = m.add_struct(StructDef {
+                id: StructId::new(0),
+                name: "P".into(),
+                fields: vec![FieldDef {
+                    name: "x".into(),
+                    ty: Ty::I32,
+                    offset: None,
+                }],
+                size: Some(4),
+                align: Some(4),
+                repr: StructRepr::Rust,
+                origin: struct_origin,
+            });
+            let mut e = EnumDef::new(
+                EnumId::new(0),
+                "E",
+                vec![EnumVariant {
+                    name: "A".into(),
+                    fields: vec![],
+                    field_names: vec![],
+                }],
+            );
+            e.origin = enum_origin;
+            let e = m.add_enum(e);
+            let ft = m
+                .add_func_type(FuncTy {
+                    abi: None,
+                    params: vec![Ty::Struct(s), Ty::Enum(e)],
+                    returns: vec![Ty::Unit],
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
+            let mut blk = Block::new(b(0));
+            blk.params.push((v(0), Ty::Struct(s)));
+            blk.params.push((v(1), Ty::Enum(e)));
+            blk.body
+                .push(InstrNode::new(Inst::Return { values: vec![] }));
+            f.blocks.push(blk);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
+            m
+        }
+
+        // Control: equal keys on both sides are not a change.
+        let keyed = module_with_keys(Some(key(0xa1)), Some(key(0xb2)));
+        let same = module_with_keys(Some(key(0xa1)), Some(key(0xb2)));
+        let d = diff(&keyed, &same);
+        assert!(d.is_empty(), "{}", d.to_text());
+
+        // A re-keyed struct (one source entity swapped for another).
+        let rekeyed_struct = module_with_keys(Some(key(0xa2)), Some(key(0xb2)));
+        assert!(
+            !diff(&keyed, &rekeyed_struct).is_empty(),
+            "a struct under a different origin is a different type"
+        );
+        // A re-keyed enum.
+        let rekeyed_enum = module_with_keys(Some(key(0xa1)), Some(key(0xb3)));
+        assert!(
+            !diff(&keyed, &rekeyed_enum).is_empty(),
+            "an enum under a different origin is a different type"
+        );
+        // Losing the key entirely: `None` is its own spelling, never equal to
+        // a key, so un-keying is visible too (and so is keying, by symmetry).
+        let unkeyed = module_with_keys(None, None);
+        assert!(
+            !diff(&keyed, &unkeyed).is_empty(),
+            "dropping the origin is a change"
+        );
+        assert!(
+            !diff(&unkeyed, &keyed).is_empty(),
+            "gaining the origin is a change"
+        );
+        let d = diff(&unkeyed, &module_with_keys(None, None));
+        assert!(d.is_empty(), "{}", d.to_text());
+    }
+
+    // 6d. closure layout rows are keyed by STRUCTURE, not ClosureTyId ------
+
+    /// A `closure_layouts` row names its closure type by arena id on the wire,
+    /// but the diff must key it structurally, exactly as `tuple_layouts_fp`
+    /// keys a tuple row: renumbering the closure types is no change, while
+    /// moving a frame from one closure type to another IS one — and an
+    /// index-keyed row gets both of those backwards.
+    #[test]
+    fn closure_layout_rows_are_keyed_by_closure_structure() {
+        use crate::ty::ClosureTy;
+        use crate::{ClosureLayoutDescriptor, Endianness, TargetInfo};
+
+        // Two closure types with the SAME capture shape (one `U64`) and
+        // different apparent signatures, so their frames are interchangeable
+        // in arity and distinguishable only by which type they belong to.
+        fn module(reverse_ids: bool, swap_frames: bool) -> Module {
+            let mut m = Module::new("closure_layouts");
+            m.target_info = Some(TargetInfo {
+                triple: "aarch64-apple-darwin".into(),
+                pointer_size: 8,
+                endianness: Endianness::Little,
+                abi: None,
+                struct_passing: Default::default(),
+            });
+            let wide = m
+                .add_func_type(FuncTy {
+                    abi: None,
+                    params: vec![Ty::U64],
+                    returns: vec![Ty::U64],
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let narrow = m
+                .add_func_type(FuncTy {
+                    abi: None,
+                    params: vec![Ty::U32],
+                    returns: vec![Ty::U32],
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let wide_closure = ClosureTy {
+                func: wide,
+                captures: vec![Ty::U64],
+            };
+            let narrow_closure = ClosureTy {
+                func: narrow,
+                captures: vec![Ty::U64],
+            };
+            let (wide_id, narrow_id) = if reverse_ids {
+                let n = m
+                    .add_closure_type(narrow_closure)
+                    .expect("Module::add_closure_type: test fixture");
+                let w = m
+                    .add_closure_type(wide_closure)
+                    .expect("Module::add_closure_type: test fixture");
+                (w, n)
+            } else {
+                let w = m
+                    .add_closure_type(wide_closure)
+                    .expect("Module::add_closure_type: test fixture");
+                let n = m
+                    .add_closure_type(narrow_closure)
+                    .expect("Module::add_closure_type: test fixture");
+                (w, n)
+            };
+            // The wide closure's frame is 8 bytes; the narrow one's is a
+            // 16-byte frame with its capture at offset 8.
+            let (wide_frame, narrow_frame) = if swap_frames {
+                (narrow_id, wide_id)
+            } else {
+                (wide_id, narrow_id)
+            };
+            m.closure_layouts.push(ClosureLayoutDescriptor {
+                origin: None,
+                closure: wide_frame,
+                size: 8,
+                align: 8,
+                capture_offsets: vec![0],
+            });
+            m.closure_layouts.push(ClosureLayoutDescriptor {
+                origin: None,
+                closure: narrow_frame,
+                size: 16,
+                align: 8,
+                capture_offsets: vec![8],
+            });
+            let ft = m
+                .add_func_type(FuncTy {
+                    abi: None,
+                    params: vec![Ty::Closure(wide_id), Ty::Closure(narrow_id)],
+                    returns: vec![Ty::Unit],
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
+            let mut blk = Block::new(b(0));
+            blk.params.push((v(0), Ty::Closure(wide_id)));
+            blk.params.push((v(1), Ty::Closure(narrow_id)));
+            blk.body
+                .push(InstrNode::new(Inst::Return { values: vec![] }));
+            f.blocks.push(blk);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
+            assert!(m.validate_closure_layouts().is_ok());
+            m
+        }
+
+        let base = module(false, false);
+        // Renumbered closure types, every frame still on its own type: NO
+        // change. (An index-keyed row would report `closure.0` and
+        // `closure.1` as having swapped sizes.)
+        let renumbered = module(true, false);
+        let d = diff(&base, &renumbered);
+        assert!(d.is_empty(), "{}", d.to_text());
+
+        // The frames MOVED between the two closure types: a change, and it is
+        // the closure-layout row that reports it.
+        let moved = module(false, true);
+        let d = diff(&base, &moved);
+        assert!(
+            d.module_meta_changes
+                .iter()
+                .any(|change| change.field == "closure_layouts"),
+            "{}",
+            d.to_text()
+        );
+        // Renumbered AND moved: still a change. (An index-keyed row would
+        // read `closure.0 size=8` on both sides and call it no change.)
+        let renumbered_and_moved = module(true, true);
+        let d = diff(&base, &renumbered_and_moved);
+        assert!(
+            d.module_meta_changes
+                .iter()
+                .any(|change| change.field == "closure_layouts"),
+            "{}",
+            d.to_text()
         );
     }
 
@@ -3365,18 +5571,22 @@ mod tests {
                 offset: None,
             }],
         });
-        let ft = a.add_func_type(FuncTy {
-            params: vec![Ty::Record(ra)],
-            returns: vec![Ty::Unit],
-            is_vararg: false,
-        });
+        let ft = a
+            .add_func_type(FuncTy {
+                params: vec![Ty::Record(ra)],
+                returns: vec![Ty::Unit],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
         let mut blk = Block::new(b(0));
         blk.params.push((v(0), Ty::Record(ra)));
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(blk);
-        a.add_function(f);
+        a.try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
 
         let mut b_mod = Module::new("m");
         let rb = b_mod.add_record(RecordDef {
@@ -3388,18 +5598,23 @@ mod tests {
                 offset: None,
             }],
         });
-        let ft = b_mod.add_func_type(FuncTy {
-            params: vec![Ty::Record(rb)],
-            returns: vec![Ty::Unit],
-            is_vararg: false,
-        });
+        let ft = b_mod
+            .add_func_type(FuncTy {
+                params: vec![Ty::Record(rb)],
+                returns: vec![Ty::Unit],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
         let mut blk = Block::new(b(0));
         blk.params.push((v(0), Ty::Record(rb)));
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(blk);
-        b_mod.add_function(f);
+        b_mod
+            .try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
 
         let d = diff(&a, &b_mod);
         assert!(d.is_empty(), "{}", d.to_text());
@@ -3425,7 +5640,8 @@ mod tests {
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(entry);
             f.blocks.push(other);
-            m.add_function(f);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
             m
         }
 
@@ -3451,6 +5667,7 @@ mod tests {
             &b_mod,
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         );
         assert!(d2.is_empty(), "{}", d2.to_text());
@@ -3479,6 +5696,7 @@ mod tests {
             &b_mod,
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         );
         assert!(d2.is_empty(), "{}", d2.to_text());
@@ -3499,7 +5717,8 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            a.add_function(f);
+            a.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
         }
 
         let mut b_mod = Module::new("m");
@@ -3510,7 +5729,9 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            b_mod.add_function(f);
+            b_mod
+                .try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
         }
 
         let d = diff(&a, &b_mod);
@@ -3541,7 +5762,8 @@ mod tests {
         blk.body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(blk);
-        a.add_function(f);
+        a.try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
 
         let mut b_mod = Module::new("m");
         let ft = make_unit_ft(&mut b_mod);
@@ -3558,7 +5780,9 @@ mod tests {
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         f.blocks.push(entry);
         f.blocks.push(other);
-        b_mod.add_function(f);
+        b_mod
+            .try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
 
         let d = diff(&a, &b_mod);
         assert!(!d.is_empty());
@@ -3581,11 +5805,14 @@ mod tests {
     fn different_binop_reports_replaced() {
         let mk = |op: BinOp| -> Module {
             let mut m = Module::new("m");
-            let ft = m.add_func_type(FuncTy {
-                params: vec![Ty::I32, Ty::I32],
-                returns: vec![Ty::I32],
-                is_vararg: false,
-            });
+            let ft = m
+                .add_func_type(FuncTy {
+                    params: vec![Ty::I32, Ty::I32],
+                    returns: vec![Ty::I32],
+                    abi: None,
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
             let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
             let mut blk = Block::new(b(0));
             blk.params.push((v(0), Ty::I32));
@@ -3602,7 +5829,8 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
             f.blocks.push(blk);
-            m.add_function(f);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
             m
         };
 
@@ -3630,11 +5858,14 @@ mod tests {
         use crate::inst::ICmpOp;
         let mk = |op: ICmpOp| -> Module {
             let mut m = Module::new("m");
-            let ft = m.add_func_type(FuncTy {
-                params: vec![Ty::I32, Ty::I32],
-                returns: vec![Ty::Bool],
-                is_vararg: false,
-            });
+            let ft = m
+                .add_func_type(FuncTy {
+                    params: vec![Ty::I32, Ty::I32],
+                    returns: vec![Ty::Bool],
+                    abi: None,
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
             let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
             let mut blk = Block::new(b(0));
             blk.params.push((v(0), Ty::I32));
@@ -3651,7 +5882,8 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
             f.blocks.push(blk);
-            m.add_function(f);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
             m
         };
         let d = diff(&mk(ICmpOp::Eq), &mk(ICmpOp::Ne));
@@ -3719,18 +5951,22 @@ mod tests {
     fn diff_reports_vector_lane_count_and_element_type_differences() {
         let vector_param_module = |ty: Ty| -> Module {
             let mut m = Module::new("m");
-            let ft = m.add_func_type(FuncTy {
-                params: vec![ty.clone()],
-                returns: vec![],
-                is_vararg: false,
-            });
+            let ft = m
+                .add_func_type(FuncTy {
+                    params: vec![ty.clone()],
+                    returns: vec![],
+                    abi: None,
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
             let mut f = Function::new(FuncId::new(0), "main", ft, b(0));
             let mut blk = Block::new(b(0));
             blk.params.push((v(0), ty));
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            m.add_function(f);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
             m
         };
 
@@ -3824,6 +6060,7 @@ mod tests {
             &b_mod,
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         );
         assert!(d2.is_empty(), "{}", d2.to_text());
@@ -3937,6 +6174,8 @@ mod tests {
                     obligation: ProofId::new(0),
                     prover: "ay".into(),
                     evidence: ProofEvidence::SmtProof(vec![1, 2, 3]),
+
+                    assurance: None,
                 });
             }
             m
@@ -3966,6 +6205,7 @@ mod tests {
             &b_mod,
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         );
         assert!(d2.is_empty(), "{}", d2.to_text());
@@ -3986,8 +6226,10 @@ mod tests {
             m.add_func_type(FuncTy {
                 params: vec![],
                 returns: vec![Ty::Unit],
+                abi: None,
                 is_vararg: false,
-            });
+            })
+            .expect("Module::add_func_type: test fixture");
 
             // Two obligations so the context can reference either.
             m.proof_obligations.push(
@@ -4015,7 +6257,8 @@ mod tests {
             gblk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             g.blocks.push(gblk);
-            m.add_function(g);
+            m.try_add_function(g)
+                .expect("Module::try_add_function: test fixture");
 
             // Caller main (id 0) calls g with a proof_context.
             let mut f = Function::new(FuncId::new(0), "main", FuncTyId::new(0), b(0));
@@ -4033,7 +6276,8 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            m.add_function(f);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
             m
         };
 
@@ -4073,6 +6317,7 @@ mod tests {
             &b_mod,
             DiffOptions {
                 ignore_proofs: true,
+                ..DiffOptions::default()
             },
         );
         assert!(d2.is_empty(), "{}", d2.to_text());
@@ -4090,8 +6335,10 @@ mod tests {
             m.add_func_type(FuncTy {
                 params: vec![],
                 returns: vec![Ty::Unit],
+                abi: None,
                 is_vararg: false,
-            });
+            })
+            .expect("Module::add_func_type: test fixture");
             for (i, desc) in ["a", "b"].iter().enumerate() {
                 m.proof_obligations.push(ProofObligation::new(
                     ProofId::new(i as u32),
@@ -4105,7 +6352,8 @@ mod tests {
             gblk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             g.blocks.push(gblk);
-            m.add_function(g);
+            m.try_add_function(g)
+                .expect("Module::try_add_function: test fixture");
 
             let mut f = Function::new(FuncId::new(0), "main", FuncTyId::new(0), b(0));
             let mut blk = Block::new(b(0));
@@ -4122,7 +6370,8 @@ mod tests {
             blk.body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             f.blocks.push(blk);
-            m.add_function(f);
+            m.try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
             m
         };
 
@@ -4160,5 +6409,241 @@ mod tests {
         assert_eq!(ps[0]["kind"], "obligation_status_changed");
         assert_eq!(ps[0]["before"], "pending");
         assert_eq!(ps[0]["after"], "discharged");
+    }
+
+    /// The import-seam comparator (`trust_ir::imports::ty_structurally_eq_across`)
+    /// and this file's type fingerprint must AGREE on every pair of resolvable
+    /// types within one module: two types fingerprint equal iff the comparator
+    /// says they are structurally equal. They are separate code because the
+    /// fingerprint is not cycle-safe, so this is the guard that the second
+    /// comparator did not quietly become a second opinion. Excluded by
+    /// design: `Ty::Error` (fingerprints as "error", never equal at the seam)
+    /// and dangling ids (fingerprint as `ty#N`, `false` at the seam).
+    #[test]
+    fn import_seam_comparator_agrees_with_fp_ty_over_fixture_types() {
+        use crate::pred::Pred;
+        use crate::ty::{ClosureTy, DialectTy, EnumTagRepr, FatPtrKind, SetRepr};
+
+        let mut m = Module::new("agreement");
+        let i64_ty = m.add_type(Ty::I64).expect("Module::add_type: test fixture");
+        let bool_ty = m
+            .add_type(Ty::Bool)
+            .expect("Module::add_type: test fixture");
+        let point = m.add_struct(StructDef {
+            id: StructId::new(0),
+            name: "Point".into(),
+            fields: vec![
+                FieldDef {
+                    name: "x".into(),
+                    ty: Ty::I64,
+                    offset: Some(0),
+                },
+                FieldDef {
+                    name: "y".into(),
+                    ty: Ty::I64,
+                    offset: Some(8),
+                },
+            ],
+            size: Some(16),
+            align: Some(8),
+            repr: StructRepr::C,
+            origin: None,
+        });
+        let point_rust = m.add_struct(StructDef {
+            id: StructId::new(1),
+            name: "Point".into(),
+            fields: vec![
+                FieldDef {
+                    name: "x".into(),
+                    ty: Ty::I64,
+                    offset: Some(0),
+                },
+                FieldDef {
+                    name: "y".into(),
+                    ty: Ty::I64,
+                    offset: Some(8),
+                },
+            ],
+            size: Some(16),
+            align: Some(8),
+            repr: StructRepr::Rust,
+            origin: None,
+        });
+        let point_again = m.add_struct(StructDef {
+            id: StructId::new(2),
+            name: "Point".into(),
+            fields: vec![
+                FieldDef {
+                    name: "x".into(),
+                    ty: Ty::I64,
+                    offset: Some(0),
+                },
+                FieldDef {
+                    name: "y".into(),
+                    ty: Ty::I64,
+                    offset: Some(8),
+                },
+            ],
+            size: Some(16),
+            align: Some(8),
+            repr: StructRepr::C,
+            origin: None,
+        });
+        let opt = m.add_enum(EnumDef::new(
+            EnumId::new(0),
+            "Opt",
+            vec![
+                EnumVariant {
+                    name: "None".into(),
+                    fields: vec![],
+                    field_names: vec![],
+                },
+                EnumVariant {
+                    name: "Some".into(),
+                    fields: vec![Ty::I64],
+                    field_names: vec![],
+                },
+            ],
+        ));
+        let opt_named = m.add_enum(EnumDef::new(
+            EnumId::new(1),
+            "Opt",
+            vec![
+                EnumVariant {
+                    name: "None".into(),
+                    fields: vec![],
+                    field_names: vec![],
+                },
+                EnumVariant {
+                    name: "Some".into(),
+                    fields: vec![Ty::I64],
+                    field_names: vec!["value".into()],
+                },
+            ],
+        ));
+        let opt_u32 = m.add_enum(
+            EnumDef::new(
+                EnumId::new(2),
+                "Opt",
+                vec![
+                    EnumVariant {
+                        name: "None".into(),
+                        fields: vec![],
+                        field_names: vec![],
+                    },
+                    EnumVariant {
+                        name: "Some".into(),
+                        fields: vec![Ty::I64],
+                        field_names: vec![],
+                    },
+                ],
+            )
+            .with_repr(EnumTagRepr::U32),
+        );
+        let rec = m.add_record(RecordDef {
+            id: RecordId::new(0),
+            name: "R".into(),
+            fields: vec![FieldDef {
+                name: "k".into(),
+                ty: Ty::Bool,
+                offset: None,
+            }],
+        });
+        let sig = m
+            .add_func_type(FuncTy {
+                params: vec![Ty::I64],
+                returns: vec![Ty::Bool],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let sig_again = m
+            .add_func_type(FuncTy {
+                params: vec![Ty::I64],
+                returns: vec![Ty::Bool],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let closure = m
+            .add_closure_type(ClosureTy {
+                func: sig,
+                captures: vec![Ty::I64],
+            })
+            .expect("Module::add_closure_type: test fixture");
+        let closure_again = m
+            .add_closure_type(ClosureTy {
+                func: sig_again,
+                captures: vec![Ty::I64],
+            })
+            .expect("Module::add_closure_type: test fixture");
+        let interval = m
+            .intern_pred(Pred::Interval { lo: 0, hi: 10 })
+            .expect("Module::intern_pred: test fixture")
+            .unwrap();
+        let nonzero = m
+            .intern_pred(Pred::NonZero)
+            .expect("Module::intern_pred: test fixture")
+            .unwrap();
+
+        let fixture: Vec<Ty> = vec![
+            Ty::I8,
+            Ty::I64,
+            Ty::U64,
+            Ty::Isize,
+            Ty::Usize,
+            Ty::Char,
+            Ty::F32,
+            Ty::Bool,
+            Ty::Ptr,
+            Ty::Unit,
+            Ty::Never,
+            Ty::Vector(Box::new(Ty::I32), 4),
+            Ty::Vector(Box::new(Ty::I32), 8),
+            Ty::FatPtr(FatPtrKind::Str),
+            Ty::FatPtr(FatPtrKind::ContainerLen),
+            Ty::FatPtr(FatPtrKind::ContainerVtable),
+            Ty::FatPtr(FatPtrKind::TraitObject { trait_id: 1 }),
+            Ty::FatPtr(FatPtrKind::TraitObject { trait_id: 2 }),
+            Ty::FatPtr(FatPtrKind::Slice(i64_ty)),
+            Ty::Struct(point),
+            Ty::Struct(point_rust),
+            Ty::Struct(point_again),
+            Ty::Array(i64_ty, 3),
+            Ty::Array(bool_ty, 3),
+            Ty::Tuple(vec![Ty::I64, Ty::Bool]),
+            Ty::Tuple(vec![Ty::Bool, Ty::I64]),
+            Ty::Enum(opt),
+            Ty::Enum(opt_named),
+            Ty::Enum(opt_u32),
+            Ty::Func(sig),
+            Ty::Func(sig_again),
+            Ty::Ref(Box::new(Ty::Struct(point))),
+            Ty::RefMut(Box::new(Ty::Struct(point))),
+            Ty::PtrConst(Box::new(Ty::I64)),
+            Ty::PtrMut(Box::new(Ty::I64)),
+            Ty::Rc(Box::new(Ty::I64)),
+            Ty::Set(i64_ty, SetRepr::Bitset),
+            Ty::Set(i64_ty, SetRepr::Boxed),
+            Ty::Sequence(i64_ty),
+            Ty::Record(rec),
+            Ty::Closure(closure),
+            Ty::Closure(closure_again),
+            Ty::Refine(i64_ty, interval),
+            Ty::Refine(i64_ty, nonzero),
+            Ty::Dialect(Box::new(DialectTy::new("clean", "Nat", 1))),
+            Ty::Dialect(Box::new(DialectTy::new("clean", "Nat", 2))),
+        ];
+
+        for a in &fixture {
+            for b in &fixture {
+                let by_fingerprint = fp_ty(&m, a) == fp_ty(&m, b);
+                let at_the_seam = crate::imports::ty_structurally_eq_across(&m, a, &m, b);
+                assert_eq!(
+                    by_fingerprint, at_the_seam,
+                    "fp_ty and ty_structurally_eq_across disagree on {a} vs {b}"
+                );
+            }
+        }
     }
 }

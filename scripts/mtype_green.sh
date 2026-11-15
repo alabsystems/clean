@@ -6,20 +6,22 @@
 # designs/2026-07-29-rocq-features-into-clean.md). Four checks, all fail-closed:
 #
 #   1. `clean check --prelude builtin` accepts proof/MType.lean
-#      (exactly 49 declarations, 0 failed, 0 sorry), proof/MTypeIndexed.lean
+#      (exactly 48 declarations, 0 failed, 0 sorry), proof/MTypeIndexed.lean
 #      (exactly 229 declarations — the R2 indexed M-type core: tower, child,
 #      IMdest/IMmk/IMcorec + rfl computation laws + the source-index and
 #      tag-index capstones), and the two elaborator
 #      regression locks (fvar hygiene 21, @-explicit scope 27).
-#   2. `clean export-cert` exports exactly the 23 theorems (the full set —
+#   2. `clean export-cert` exports exactly the 22 theorems (the full set —
 #      the former 7-theorem cert-engine-parity blocked set is EMPTY since the
-#      type-directed def-eq rules landed) with
+#      type-directed def-eq rules landed; `cast_cast` left the set on
+#      2026-09-27: it is a Lean 4.8.0 core theorem, which Lean and Clean both
+#      refuse to see redeclared, and Clean's prelude now supplies it) with
 #      all_axiom_closures_foundational_only = true and empty
 #      non-foundational/trust-marker lists per declaration.
 #   3. `clean kernel cert verify` independently replays the .cleancert bundle
 #      (replay.json parsed: all_passed true, passed == exported).
 #   4. ANTI-TRIVIALITY: `clean check --json` on
-#      proof/antitriviality_must_fail.lean reports EXACTLY 4 passed / 1 failed,
+#      proof/antitriviality_must_fail.lean reports EXACTLY 43 passed / 1 failed,
 #      the sole failure being map_iterate_is_defeq_MUST_FAIL — so the rejection
 #      can only come from the rfl theorem, and the flagship `map_iterate` is
 #      certified not closable by `bisim_refl` on a defeq pair.
@@ -37,7 +39,7 @@ if [[ "${1:-}" == "--bin" ]]; then
 fi
 if [[ ! -x "$BIN" ]]; then
   echo "[mtype-green] building clean (release)..." >&2
-  (cd "$REPO_ROOT" && cargo build --locked --release -p clean)
+  (cd "$REPO_ROOT" && targo --unverified build --locked --release -p clean)
 fi
 [[ -x "$BIN" ]] || { echo "[mtype-green] FAIL: no executable clean binary at $BIN" >&2; exit 1; }
 
@@ -78,7 +80,7 @@ def need(cond, msg):
     if not cond:
         raise SystemExit(f"[mtype-green] FAIL: {msg}: {j}")
 need(j["status"] == "pass", "check status")
-need(j["success_count"] == 49 and j["failed_count"] == 0, "expected exactly 49/49 declarations")
+need(j["success_count"] == 48 and j["failed_count"] == 0, "expected exactly 48/48 declarations")
 need(j["trust_summary"]["sorry_axioms"] == 0, "sorry leaked")
 PY
 
@@ -87,7 +89,7 @@ PY
 for spec in "MTypeIndexed.lean:229" "MTypeIndexedPoly.lean:229" \
             "../../../../crates/clean-elab/data/MTypeIndexedPoly2.lean:229" \
             "ITreeHK.lean:249" \
-            "ITreeEco.lean:717" \
+            "ITreeEco.lean:716" \
             "../../clean-iris/proof/IrisCore.lean:46" \
             "../../clean-iris/proof/IrisCMRA.lean:63" \
             "elab_fvar_hygiene_regression.lean:21" \
@@ -120,14 +122,14 @@ need(j["all_axiom_closures_foundational_only"] is True, "non-foundational axiom 
 bad = [d for d in j["per_decl_axiom_closure"]
        if d["non_foundational_axioms"] or d["trust_markers"]]
 need(not bad, f"non-empty closures: {bad}")
-need(j["exported"] == 23, f"expected exactly 23 exported theorems, got {j['exported']}")
+need(j["exported"] == 22, f"expected exactly 22 exported theorems, got {j['exported']}")
 # EXACT pin of the full export set (fail-closed): the cert-engine-parity
 # rung landed the type-directed def-eq rules (proof irrelevance, structure
 # eta, unit-like collapse, K-like Eq.rec conversion), emptying the former
 # 7-theorem blocked set. Any drift — a dropped theorem OR a new failure —
 # trips the gate.
 expected_theorems = sorted([
-    "cast_cast", "child_coherent", "dest_corec", "head_corec",
+    "child_coherent", "dest_corec", "head_corec",
     "label_stable", "label_step", "mkApprox_coherent", "mk_dest",
     "mk_dest_approx", "mk_dest_child", "mshead_ofStream",
     "mstail_ofStream", "ofStream_toStream", "ofStream_toStream_level",
@@ -193,8 +195,8 @@ j = json.load(open(sys.argv[1]))
 def need(cond, msg):
     if not cond:
         raise SystemExit(f"[mtype-green] FAIL: anti-triviality probe: {msg}: {j}")
-need(j["decl_count"] == 45, "expected 45 declarations (the 44 mirrored decls + 1 rfl probe)")
-need(j["success_count"] == 44, "the 44 mirrored decls must all check")
+need(j["decl_count"] == 44, "expected 44 declarations (the 43 mirrored decls + 1 rfl probe)")
+need(j["success_count"] == 43, "the 43 mirrored decls must all check")
 need(j["failed_count"] == 1, "exactly the rfl theorem must fail")
 errs = json.dumps(j.get("errors", [])) + json.dumps(j.get("proof_state_feedback", []))
 need("roundtrip_MUST_FAIL" in errs or j["failed_count"] == 1,
@@ -273,7 +275,7 @@ report = {
                           "passed": replay.get("passed")},
     "anti_triviality": {
         "probe": "data/graduation/clean-mtype/proof/antitriviality_must_fail.lean",
-        "result": "44 mirrored decls passed, exactly the rfl probe rejected (asserted via --json)",
+        "result": "43 mirrored decls passed, exactly the rfl probe rejected (asserted via --json)",
         "note": "mk (dest m) and m are NOT defeq; the roundtrip is genuinely "
                 "propositional — the construction is not an identity in disguise",
     },

@@ -2,14 +2,15 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // Licensed under the Apache License, Version 2.0
 
+#[cfg(test)]
 use crate::inst::Inst;
 use crate::proof::{ProofAnnotation, ProofAnnotationFilters, ProofContext};
 use crate::value::{SourceSpan, ValueId};
 
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub struct InstrNode {
-    pub inst: Inst,
+pub struct InstrNodeG<X> {
+    pub inst: crate::inst::InstG<X>,
     pub results: Vec<ValueId>,
     pub proofs: Vec<ProofAnnotation>,
     pub span: Option<SourceSpan>,
@@ -42,8 +43,11 @@ pub struct InstrNode {
     pub scope: Option<u32>,
 }
 
-impl InstrNode {
-    pub fn new(inst: Inst) -> Self {
+/// The level-R instruction node: [`InstrNodeG`] with no extension.
+pub type InstrNode = InstrNodeG<crate::level::NoExt>;
+
+impl<X> InstrNodeG<X> {
+    pub fn new(inst: crate::inst::InstG<X>) -> Self {
         Self {
             inst,
             results: Vec::new(),
@@ -85,7 +89,9 @@ impl InstrNode {
         self.scope = Some(scope);
         self
     }
+}
 
+impl InstrNode {
     /// Returns true if this instruction node has the given proof annotation.
     pub fn has_proof(&self, annotation: &ProofAnnotation) -> bool {
         self.proofs.contains(annotation)
@@ -245,7 +251,11 @@ mod tests {
 
     #[test]
     fn has_side_effects_assert() {
-        let node = InstrNode::new(Inst::Assert { cond: v(0) });
+        let node = InstrNode::new(Inst::Assert {
+            cond: v(0),
+            kind: crate::inst::AssertKind::Unspecified,
+            site: None,
+        });
         assert!(node.has_side_effects());
     }
 
@@ -281,6 +291,7 @@ mod tests {
             desired: v(2),
             success: Ordering::SeqCst,
             failure: Ordering::SeqCst,
+            weak: false,
         });
         assert!(node.has_side_effects());
     }
@@ -616,7 +627,11 @@ mod tests {
 
     #[test]
     fn not_terminator_assert() {
-        let node = InstrNode::new(Inst::Assert { cond: v(0) });
+        let node = InstrNode::new(Inst::Assert {
+            cond: v(0),
+            kind: crate::inst::AssertKind::Unspecified,
+            site: None,
+        });
         assert!(!node.is_terminator());
     }
 
@@ -667,6 +682,7 @@ mod tests {
             desired: v(2),
             success: Ordering::SeqCst,
             failure: Ordering::Relaxed,
+            weak: false,
         });
         assert!(!node.is_terminator());
     }

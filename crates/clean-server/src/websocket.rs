@@ -53,7 +53,13 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, Semaphore};
-use tokio_tungstenite::{accept_async, tungstenite::Message};
+use tokio_tungstenite::accept_hdr_async_with_config;
+use tokio_tungstenite::tungstenite::handshake::server::{
+    ErrorResponse as HandshakeRefusal, Request as HandshakeRequest, Response as HandshakeResponse,
+};
+use tokio_tungstenite::tungstenite::http::{header, HeaderValue, StatusCode};
+use tokio_tungstenite::tungstenite::protocol::WebSocketConfig as ProtocolConfig;
+use tokio_tungstenite::tungstenite::{Error as ProtocolError, Message};
 use tracing::{debug, error, info, instrument, warn};
 
 /// Progress notification sent during long-running operations
@@ -153,6 +159,23 @@ pub struct WebSocketConfig {
     pub max_requests_per_connection: u64,
     /// Graceful shutdown drain timeout in seconds.
     pub drain_timeout_secs: u64,
+    /// The `Origin`s a browser may open a connection from (compared without
+    /// regard to ASCII case). Empty by default: a handshake that carries an
+    /// `Origin` is refused unless the operator named it here. A handshake
+    /// without one (a client that is not a browser) goes on to the token.
+    pub allowed_origins: Vec<String>,
+    /// The directory the file methods are confined to (`None`: the directory
+    /// the server starts in); see [`crate::ServerConfig::workspace_root`].
+    pub workspace_root: Option<std::path::PathBuf>,
+    /// Where the launch writes its token and announces it on standard error
+    /// (`None`: neither; the embedder reads [`WebSocketHandle::launch_token`]).
+    pub token_file: Option<crate::TokenFile>,
+    /// The token clients must present (`None`: a new one is generated).
+    pub launch_token: Option<crate::LaunchToken>,
+    /// How long a connection has from its opening to finish its handshake and
+    /// present the launch token (milliseconds; default 10,000); see
+    /// [`crate::ServerConfig::authenticate_timeout_ms`].
+    pub authenticate_timeout_ms: u64,
 }
 
 impl std::fmt::Debug for WebSocketConfig {
@@ -168,6 +191,11 @@ impl std::fmt::Debug for WebSocketConfig {
                 &self.max_requests_per_connection,
             )
             .field("drain_timeout_secs", &self.drain_timeout_secs)
+            .field("allowed_origins", &self.allowed_origins)
+            .field("workspace_root", &self.workspace_root)
+            .field("token_file", &self.token_file)
+            .field("launch_token", &self.launch_token)
+            .field("authenticate_timeout_ms", &self.authenticate_timeout_ms)
             .field(
                 "initial_env",
                 &self.initial_env.as_ref().map(|e| {
@@ -192,7 +220,7 @@ impl std::fmt::Debug for WebSocketConfig {
 impl Default for WebSocketConfig {
     fn default() -> Self {
         Self {
-            addr: "127.0.0.1:8081".parse().expect("valid default address"),
+            addr: SocketAddr::from(([127, 0, 0, 1], 8081)),
             gpu_enabled: false,
             max_concurrent: 100,
             default_timeout_ms: 5000,
@@ -201,6 +229,11 @@ impl Default for WebSocketConfig {
             project_theorem_index: None,
             max_requests_per_connection: crate::DEFAULT_MAX_REQUESTS_PER_CONNECTION,
             drain_timeout_secs: crate::DEFAULT_DRAIN_TIMEOUT_SECS,
+            allowed_origins: Vec::new(),
+            workspace_root: None,
+            token_file: None,
+            launch_token: None,
+            authenticate_timeout_ms: crate::trust_boundary::DEFAULT_AUTHENTICATE_TIMEOUT_MS,
         }
     }
 }
@@ -255,6 +288,9 @@ impl WebSocketConfig {
 pub struct WebSocketHandle {
     /// Local address the server is bound to
     local_addr: SocketAddr,
+    /// The token every connection must present first (its accessor is in
+    /// `lib.rs`, beside `ServerHandle`'s and the token type's)
+    pub(crate) launch_token: crate::LaunchToken,
     /// Shutdown signal sender
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
@@ -284,9 +320,12 @@ pub async fn serve_websocket(config: WebSocketConfig) -> Result<WebSocketHandle,
     let local_addr = listener.local_addr()?;
     info!("clean WebSocket server listening on {}", local_addr);
 
+    let (mut state, launch_token) =
+        crate::launch_state(config.workspace_root.as_deref(), config.launch_token)?;
+    crate::announce_token(config.token_file.as_ref(), local_addr, &launch_token)?;
+    let allowed_origins: Arc<[String]> = config.allowed_origins.into();
     let initial_env = config.initial_env.unwrap_or_default();
-    let mut state = ServerState::new();
-    state.env = Arc::new(tokio::sync::RwLock::new(initial_env));
+    state.env = crate::handlers::SharedEnv::new(initial_env);
     state.default_timeout_ms = config.default_timeout_ms;
     state.gpu_enabled = config.gpu_enabled;
     state.worker_threads = config.worker_threads;
@@ -297,13 +336,14 @@ pub async fn serve_websocket(config: WebSocketConfig) -> Result<WebSocketHandle,
     }
     state.cache_metrics = crate::handlers::CacheMetrics::default();
     state.olean_cache = Arc::new(clean_olean::ModuleCache::new());
-    state.tactic_patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
+    state.tactic_patterns = Arc::new(clean_elab::tactic::builtins::builtin_tactic_patterns());
     let state = Arc::new(state);
 
     let semaphore = Arc::new(Semaphore::new(config.max_concurrent));
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let max_requests = config.max_requests_per_connection;
     let drain_timeout = std::time::Duration::from_secs(config.drain_timeout_secs);
+    let authenticate_timeout = std::time::Duration::from_millis(config.authenticate_timeout_ms);
 
     let inflight_notify = Arc::new(tokio::sync::Notify::new());
     let inflight_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -318,13 +358,14 @@ pub async fn serve_websocket(config: WebSocketConfig) -> Result<WebSocketHandle,
                         Ok((stream, peer_addr)) => {
                             debug!("New WebSocket connection from {}", peer_addr);
                             let state = Arc::clone(&state);
+                            let origins = Arc::clone(&allowed_origins);
                             let permit = semaphore.clone().acquire_owned().await;
                             let n = Arc::clone(&notify_loop);
                             let c = Arc::clone(&count_loop);
                             c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             tokio::spawn(async move {
                                 let _permit = permit;
-                                if let Err(e) = handle_websocket_connection(stream, state, max_requests).await {
+                                if let Err(e) = handle_websocket_connection(stream, state, max_requests, origins, authenticate_timeout).await {
                                     warn!("WebSocket error from {}: {}", peer_addr, e);
                                 }
                                 debug!("WebSocket connection closed: {}", peer_addr);
@@ -347,20 +388,76 @@ pub async fn serve_websocket(config: WebSocketConfig) -> Result<WebSocketHandle,
 
     Ok(WebSocketHandle {
         local_addr,
+        launch_token,
         shutdown_tx: Some(shutdown_tx),
     })
 }
 
+/// The largest message (and frame) a connection reads: the TCP transport's
+/// line limit. tungstenite's defaults (64 MiB a message, 16 MiB a frame) let a
+/// WebSocket request be six times what a TCP one may be, and the request is
+/// parsed on the runtime.
+pub(crate) const MAX_MESSAGE_BYTES: usize = crate::MAX_TCP_LINE_LENGTH;
+
+/// The protocol settings a connection is accepted with.
+fn protocol_config() -> ProtocolConfig {
+    ProtocolConfig::default()
+        .max_message_size(Some(MAX_MESSAGE_BYTES))
+        .max_frame_size(Some(MAX_MESSAGE_BYTES))
+}
+
+/// The handshake's `Origin` check (`trust_boundary::origin_refusal`): every
+/// `Origin` header the request carries must be on `allowed`; a refusal is
+/// `403 Forbidden` with the reason as its body.
+fn check_origin(
+    request: &HandshakeRequest,
+    response: HandshakeResponse,
+    allowed: &[String],
+) -> Result<HandshakeResponse, HandshakeRefusal> {
+    for origin in request.headers().get_all(header::ORIGIN) {
+        let origin = String::from_utf8_lossy(origin.as_bytes());
+        if let Some(reason) = crate::trust_boundary::origin_refusal(Some(&origin), allowed) {
+            warn!("{reason}");
+            let length = reason.len();
+            let mut refusal = HandshakeRefusal::new(Some(reason));
+            *refusal.status_mut() = StatusCode::FORBIDDEN;
+            let headers = refusal.headers_mut();
+            headers.insert(
+                header::CONTENT_TYPE,
+                HeaderValue::from_static("text/plain; charset=utf-8"),
+            );
+            headers.insert(header::CONTENT_LENGTH, HeaderValue::from(length));
+            headers.insert(header::CONNECTION, HeaderValue::from_static("close"));
+            return Err(refusal);
+        }
+    }
+    Ok(response)
+}
+
 /// Handle a single WebSocket connection
-#[instrument(skip(stream, state))]
+#[instrument(skip(stream, state, allowed_origins))]
 async fn handle_websocket_connection(
     stream: TcpStream,
     state: Arc<ServerState>,
     max_requests: u64,
+    allowed_origins: Arc<[String]>,
+    authenticate_timeout: std::time::Duration,
 ) -> Result<(), WebSocketError> {
-    let ws_stream = accept_async(stream)
-        .await
-        .map_err(|e| WebSocketError::Handshake(e.to_string()))?;
+    // The handshake and the first message both arrive within the authenticate
+    // deadline, counted from the connection's opening: a peer without the
+    // token holds a connection slot no longer than that.
+    let admit_by = tokio::time::Instant::now() + authenticate_timeout;
+    let origin_check = move |request: &HandshakeRequest, response: HandshakeResponse| {
+        check_origin(request, response, &allowed_origins)
+    };
+    let handshake = accept_hdr_async_with_config(stream, origin_check, Some(protocol_config()));
+    let ws_stream = match tokio::time::timeout_at(admit_by, handshake).await {
+        Ok(accepted) => accepted.map_err(|e| WebSocketError::Handshake(e.to_string()))?,
+        Err(_) => {
+            warn!("closing a WebSocket connection whose handshake did not finish in time");
+            return Ok(());
+        }
+    };
 
     let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
@@ -378,10 +475,58 @@ async fn handle_websocket_connection(
     });
 
     let mut request_count: u64 = 0;
+    // Nothing a connection sends is dispatched until it has presented the
+    // launch token (`trust_boundary::admit`).
+    let mut admitted = false;
 
     // Process incoming messages
-    while let Some(msg) = ws_receiver.next().await {
+    loop {
+        let next = if admitted {
+            ws_receiver.next().await
+        } else {
+            match tokio::time::timeout_at(admit_by, ws_receiver.next()).await {
+                Ok(next) => next,
+                Err(_) => {
+                    warn!("closing a WebSocket connection that presented no launch token in time");
+                    let refusal = Response::error(
+                        RequestId::Null,
+                        crate::trust_boundary::unauthorized_idle(authenticate_timeout),
+                    );
+                    send_serialized(&refusal, RequestId::Null, &tx).await;
+                    break;
+                }
+            }
+        };
+        let Some(msg) = next else {
+            break;
+        };
         match msg {
+            Ok(Message::Text(text)) if !admitted => {
+                match crate::trust_boundary::admit(&text, state.launch_token()) {
+                    crate::trust_boundary::Admission::Admitted(answer) => {
+                        admitted = true;
+                        if let Some(answer) = answer {
+                            send_serialized(&answer, RequestId::Null, &tx).await;
+                        }
+                    }
+                    crate::trust_boundary::Admission::Refused(refusal) => {
+                        warn!(
+                            "refusing a WebSocket connection that did not present the launch token"
+                        );
+                        send_serialized(&refusal, RequestId::Null, &tx).await;
+                        break;
+                    }
+                }
+            }
+            Ok(Message::Binary(_)) if !admitted => {
+                warn!("refusing a WebSocket connection whose first message is binary");
+                let refusal = Response::error(
+                    RequestId::Null,
+                    crate::trust_boundary::unauthorized_missing(),
+                );
+                send_serialized(&refusal, RequestId::Null, &tx).await;
+                break;
+            }
             Ok(Message::Text(text)) => {
                 // Enforce per-connection request limit (0 = unlimited)
                 request_count = request_count.saturating_add(1);
@@ -420,6 +565,20 @@ async fn handle_websocket_connection(
             }
             Ok(Message::Frame(_)) => {
                 // Internal frame, ignore
+            }
+            Err(ProtocolError::Capacity(e)) => {
+                // A message past the limit is never read whole, so the
+                // connection cannot go on: answer the TCP transport's error
+                // for an overlong line, then close.
+                warn!("WebSocket message exceeds {MAX_MESSAGE_BYTES} byte limit: {e}");
+                let err_response = Response::error(
+                    RequestId::Null,
+                    RpcError::invalid_request(format!(
+                        "{e}: a request is at most {MAX_MESSAGE_BYTES} bytes"
+                    )),
+                );
+                send_serialized(&err_response, RequestId::Null, &tx).await;
+                break;
             }
             Err(e) => {
                 error!("WebSocket error: {}", e);
@@ -633,6 +792,9 @@ pub enum WebSocketError {
     /// An I/O error occurred during WebSocket communication.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    /// The launch could not set up its token or workspace root.
+    #[error("{0}")]
+    Launch(#[from] crate::ServerError),
 }
 
 #[cfg(test)]
@@ -739,6 +901,17 @@ mod tests {
             crate::DEFAULT_MAX_REQUESTS_PER_CONNECTION
         );
         assert_eq!(config.drain_timeout_secs, crate::DEFAULT_DRAIN_TIMEOUT_SECS);
+        assert_eq!(
+            config.allowed_origins,
+            Vec::<String>::new(),
+            "no browser origin may connect unless the operator names one"
+        );
+        assert_eq!(config.workspace_root, None);
+        assert_eq!(config.token_file, None);
+        assert!(
+            config.launch_token.is_none(),
+            "a launch makes its own token"
+        );
     }
 
     #[test]
@@ -775,9 +948,33 @@ mod tests {
     // Integration tests (async)
     // ════════════════════════════════════════════════════════════════════════════
 
-    async fn connect_and_send(addr: SocketAddr, request: &str) -> Vec<String> {
-        let url = format!("ws://{addr}");
-        let (mut ws_stream, _) = connect_async(&url).await.unwrap();
+    type ClientStream =
+        tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<TcpStream>>;
+
+    /// A connection to `handle`'s server that has presented its launch token
+    /// (`trust_boundary::admit`) and been admitted.
+    async fn admitted(handle: &WebSocketHandle) -> ClientStream {
+        let (mut ws_stream, _) = connect_async(format!("ws://{}", handle.local_addr()))
+            .await
+            .unwrap();
+        let hello = format!(
+            r#"{{"jsonrpc":"2.0","method":"authenticate","params":{{"token":"{}"}},"id":0}}"#,
+            handle.launch_token().as_str()
+        );
+        ws_stream.send(Message::Text(hello.into())).await.unwrap();
+        match ws_stream.next().await {
+            Some(Ok(Message::Text(text))) => assert_eq!(
+                text.as_str(),
+                r#"{"jsonrpc":"2.0","result":{"authenticated":true},"id":0}"#,
+                "the launch token admits the connection"
+            ),
+            other => panic!("the server did not admit the launch token: {other:?}"),
+        }
+        ws_stream
+    }
+
+    async fn connect_and_send(handle: &WebSocketHandle, request: &str) -> Vec<String> {
+        let mut ws_stream = admitted(handle).await;
 
         ws_stream
             .send(Message::Text(request.to_string().into()))
@@ -807,15 +1004,72 @@ mod tests {
         responses
     }
 
+    /// Send `request` on a fresh connection and return the first text the
+    /// server answers, if any, before it closes the connection (or the hang
+    /// detector fires). The send runs beside the read: a server that stops
+    /// reading part-way through a message never lets a large send finish.
+    async fn first_answer_to(handle: &WebSocketHandle, request: String) -> Option<String> {
+        let ws_stream = admitted(handle).await;
+        let (mut sink, mut stream) = ws_stream.split();
+        let sending = tokio::spawn(async move {
+            let _ = sink.send(Message::Text(request.into())).await;
+            sink
+        });
+        let answer = tokio::time::timeout(std::time::Duration::from_secs(60), async {
+            while let Some(msg) = stream.next().await {
+                match msg {
+                    Ok(Message::Text(text)) => return Some(text.to_string()),
+                    Ok(Message::Close(_)) | Err(_) => return None,
+                    Ok(_) => {}
+                }
+            }
+            None
+        })
+        .await
+        .unwrap_or(None);
+        sending.abort();
+        answer
+    }
+
+    /// A request padded with whitespace (valid JSON) to `bytes` bytes.
+    fn padded_server_info(bytes: usize) -> String {
+        let mut request = String::from(r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#);
+        let pad = bytes.saturating_sub(request.len());
+        request.push_str(&" ".repeat(pad));
+        request
+    }
+
+    /// A WebSocket message was read up to tungstenite's defaults (64 MiB a
+    /// message, 16 MiB a frame), six times the TCP transport's line limit, and
+    /// parsed on the runtime. A message past the limit is refused now, and
+    /// one within it is served.
+    #[tokio::test]
+    async fn test_websocket_message_past_the_line_limit_is_refused() {
+        let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let handle = serve_websocket(config).await.unwrap();
+
+        let within = first_answer_to(&handle, padded_server_info(1024 * 1024)).await;
+        assert!(
+            within.as_deref().is_some_and(|a| a.contains("\"result\"")),
+            "a request within the limit was not served: {within:?}"
+        );
+        let past = first_answer_to(&handle, padded_server_info(MAX_MESSAGE_BYTES + 1)).await;
+        assert!(
+            !past.as_deref().is_some_and(|a| a.contains("\"result\"")),
+            "a request past the limit was served: {past:?}"
+        );
+
+        handle.shutdown();
+    }
+
     #[tokio::test]
     async fn test_websocket_server_check() {
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
         // Use fully-typed expression
         let request = r#"{"jsonrpc": "2.0", "method": "check", "params": {"code": "fun (A : Type) (x : A) => x"}, "id": 1}"#;
-        let responses = connect_and_send(addr, request).await;
+        let responses = connect_and_send(&handle, request).await;
 
         assert!(
             !responses.is_empty(),
@@ -832,10 +1086,9 @@ mod tests {
     async fn test_websocket_server_info() {
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
         let request = r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#;
-        let responses = connect_and_send(addr, request).await;
+        let responses = connect_and_send(&handle, request).await;
 
         assert!(!responses.is_empty());
         assert!(responses[0].contains("clean-server"));
@@ -902,10 +1155,9 @@ mod tests {
     async fn test_websocket_method_not_found() {
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
         let request = r#"{"jsonrpc": "2.0", "method": "unknownMethod", "id": 1}"#;
-        let responses = connect_and_send(addr, request).await;
+        let responses = connect_and_send(&handle, request).await;
 
         assert!(!responses.is_empty());
         assert!(responses[0].contains("\"error\""));
@@ -918,10 +1170,8 @@ mod tests {
     async fn test_websocket_batch_progress_streaming() {
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
-        let url = format!("ws://{addr}");
-        let (mut ws_stream, _) = connect_async(&url).await.unwrap();
+        let mut ws_stream = admitted(&handle).await;
 
         let request = r#"{"jsonrpc": "2.0", "method": "batchCheck", "params": {"items": [{"id": "1", "code": "fun (A : Type) (x : A) => x"}, {"id": "2", "code": "Type"}]}, "id": 42}"#;
         ws_stream
@@ -1115,10 +1365,8 @@ mod tests {
     async fn test_websocket_jsonrpc_batch_streams_progress() {
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
-        let url = format!("ws://{addr}");
-        let (mut ws_stream, _) = connect_async(&url).await.unwrap();
+        let mut ws_stream = admitted(&handle).await;
 
         let request = r#"[{"jsonrpc": "2.0", "method": "batchCheck", "params": {"items": [{"id": "1", "code": "fun (A : Type) (x : A) => x"}, {"id": "2", "code": "Type"}]}, "id": 1}, {"jsonrpc": "2.0", "method": "getType", "params": {"code": "Type"}, "id": 2}]"#;
         ws_stream
@@ -1163,10 +1411,9 @@ mod tests {
     async fn test_websocket_invalid_json() {
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
         let request = r"{invalid json";
-        let responses = connect_and_send(addr, request).await;
+        let responses = connect_and_send(&handle, request).await;
 
         assert!(!responses.is_empty());
         assert!(responses[0].contains("\"error\""));
@@ -1206,10 +1453,8 @@ mod tests {
 
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
-        let url = format!("ws://{addr}");
-        let (mut ws_stream, _) = connect_async(&url).await.unwrap();
+        let mut ws_stream = admitted(&handle).await;
 
         // Construct valid certificates for Sort(0) : Sort(1)
         let level = Level::zero();
@@ -1284,10 +1529,8 @@ mod tests {
     async fn test_websocket_batch_get_premises_progress_streaming() {
         let config = WebSocketConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
-        let url = format!("ws://{addr}");
-        let (mut ws_stream, _) = connect_async(&url).await.unwrap();
+        let mut ws_stream = admitted(&handle).await;
 
         let params = crate::handlers::BatchGetPremisesParams {
             items: vec![
@@ -1361,10 +1604,8 @@ mod tests {
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_max_requests_per_connection(3);
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
-        let url = format!("ws://{addr}");
-        let (mut ws_stream, _) = connect_async(&url).await.unwrap();
+        let mut ws_stream = admitted(&handle).await;
 
         let request = r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#;
 
@@ -1441,13 +1682,12 @@ mod tests {
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_max_requests_per_connection(0);
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
         let request = r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#;
 
         // Send 5 requests, all should succeed
         for _ in 0..5 {
-            let responses = connect_and_send(addr, request).await;
+            let responses = connect_and_send(&handle, request).await;
             assert!(
                 !responses.is_empty(),
                 "Should receive at least one response"
@@ -1468,11 +1708,10 @@ mod tests {
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_drain_timeout_secs(5);
         let handle = serve_websocket(config).await.unwrap();
-        let addr = handle.local_addr();
 
         // Start a request that will complete before shutdown
         let request = r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#;
-        let responses = connect_and_send(addr, request).await;
+        let responses = connect_and_send(&handle, request).await;
         assert!(!responses.is_empty(), "Pre-shutdown request should succeed");
 
         // Shutdown should complete cleanly

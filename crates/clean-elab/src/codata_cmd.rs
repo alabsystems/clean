@@ -63,7 +63,7 @@ use crate::{ElabError, ElabResult, RegisteredElabResult};
 use clean_kernel::Environment;
 use clean_parser::{
     DeclModifiers, LevelExpr, Projection, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo,
-    SurfaceDecl, SurfaceExpr, SurfaceField, TerminationHints, UniverseExpr,
+    SurfaceDecl, SurfaceExpr, SurfaceField, SurfaceName, TerminationHints, UniverseExpr,
 };
 
 fn unsupported(msg: impl Into<String>) -> ElabError {
@@ -83,18 +83,18 @@ fn unsupported(msg: impl Into<String>) -> ElabError {
 pub(crate) fn punit_ty() -> SurfaceExpr {
     SurfaceExpr::UniverseInst(
         Span::dummy(),
-        Box::new(ident("PUnit")),
+        Box::new(ident(GlobalPath("PUnit"))),
         vec![LevelExpr::Lit(1)],
     )
 }
 
 /// `Type` or `Type u` — the result-sort/state-sort for generated code,
 /// polymorphic when the codata declares `.{u}` (U2 rung 7 part 2).
-fn type_u(poly: Option<&str>) -> SurfaceExpr {
+pub(crate) fn type_u(poly: Option<&SurfaceName>) -> SurfaceExpr {
     match poly {
         Some(u) => SurfaceExpr::Universe(
             Span::dummy(),
-            UniverseExpr::TypeLevel(Box::new(LevelExpr::Param(u.to_string()))),
+            UniverseExpr::TypeLevel(Box::new(LevelExpr::Param(u.clone()))),
         ),
         None => type_universe(),
     }
@@ -102,19 +102,19 @@ fn type_u(poly: Option<&str>) -> SurfaceExpr {
 
 /// `PUnit.{1}` (mono) or `PUnit.{u+1}` (polymorphic): the container
 /// index/tag unit at the level matching `Type`/`Type u` families.
-fn punit_ty_p(poly: Option<&str>) -> SurfaceExpr {
+pub(crate) fn punit_ty_p(poly: Option<&SurfaceName>) -> SurfaceExpr {
     match poly {
         Some(u) => SurfaceExpr::UniverseInst(
             Span::dummy(),
-            Box::new(ident("PUnit")),
-            vec![LevelExpr::Succ(Box::new(LevelExpr::Param(u.to_string())))],
+            Box::new(ident(GlobalPath("PUnit"))),
+            vec![LevelExpr::Succ(Box::new(LevelExpr::Param(u.clone())))],
         ),
         None => punit_ty(),
     }
 }
 
 /// Stamp the declared universe params onto a generated def/theorem.
-fn set_uparams(mut decl: SurfaceDecl, poly: Option<&str>) -> SurfaceDecl {
+pub(crate) fn set_uparams(mut decl: SurfaceDecl, poly: Option<&SurfaceName>) -> SurfaceDecl {
     if let Some(u) = poly {
         match &mut decl {
             SurfaceDecl::Def {
@@ -122,19 +122,170 @@ fn set_uparams(mut decl: SurfaceDecl, poly: Option<&str>) -> SurfaceDecl {
             }
             | SurfaceDecl::Theorem {
                 universe_params, ..
-            } => *universe_params = vec![u.to_string()],
+            } => *universe_params = vec![u.clone()],
             _ => {}
         }
     }
     decl
 }
 
-pub(crate) fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), name.to_string())
+/// Inputs to this family's compiler-authored AST builders. Text is accepted
+/// only with a static lifetime for fixed canonical compiler paths. There is
+/// deliberately no String, &String, or general &str implementation: source
+/// names and dynamically generated identities must remain SurfaceName values.
+pub(crate) trait CodataIdentifier {
+    fn surface_name(self) -> SurfaceName;
+}
+
+impl CodataIdentifier for SurfaceName {
+    fn surface_name(self) -> SurfaceName {
+        self
+    }
+}
+
+impl CodataIdentifier for &SurfaceName {
+    fn surface_name(self) -> SurfaceName {
+        self.clone()
+    }
+}
+
+impl CodataIdentifier for &&SurfaceName {
+    fn surface_name(self) -> SurfaceName {
+        (*self).clone()
+    }
+}
+
+impl CodataIdentifier for &'static str {
+    fn surface_name(self) -> SurfaceName {
+        SurfaceName::generated_path(self)
+    }
+}
+
+/// A generated reference to the GLOBAL constant at this path
+/// ([`SurfaceName::global_path`]): never resolved to a local. The codata
+/// generators emit their terms inside the user's own binders (field and
+/// parameter names), so a constant they name (`Eq`, `PUnit.unit`, `Sum.rec`,
+/// `cond`, …) written as a plain generated identifier was captured by a user
+/// binder of that spelling. A bare `&'static str` stays a binder the
+/// generator itself introduces.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct GlobalPath(pub(crate) &'static str);
+
+impl CodataIdentifier for GlobalPath {
+    fn surface_name(self) -> SurfaceName {
+        SurfaceName::global_path(self.0)
+    }
+}
+
+pub(crate) fn surface_binder(
+    name: impl CodataIdentifier,
+    ty: Option<SurfaceExpr>,
+    info: SurfaceBinderInfo,
+) -> SurfaceBinder {
+    SurfaceBinder::new_typed(name.surface_name(), ty, info)
+}
+
+/// Affix the actual terminal string component; never format and reparse a
+/// displayed path. Numeric/generated identities keep their constructor as a
+/// parent of a fresh generated component instead of becoming decimal strings.
+pub(crate) fn affix_name(name: &SurfaceName, prefix: &str, suffix: &str) -> SurfaceName {
+    match name.name().inner() {
+        clean_kernel::name::NameInner::Str(_, text) => {
+            name.parent().append(&SurfaceName::from_name(
+                clean_kernel::Name::anon().str(format!("{prefix}{text}{suffix}")),
+            ))
+        }
+        _ => name.append(&SurfaceName::from_name(
+            clean_kernel::Name::anon().str(format!("{prefix}{suffix}")),
+        )),
+    }
+}
+
+/// Fixed compiler companion under an exact source owner.
+pub(crate) fn child_name(name: &SurfaceName, child: &'static str) -> SurfaceName {
+    name.append(&SurfaceName::generated_path(child))
+}
+
+/// A generated name assembled from two identities. For atomic string names
+/// this preserves the historical label; otherwise their structural boundary
+/// is retained. Callers still reject duplicate generated family members.
+pub(crate) fn pair_name(left: &SurfaceName, separator: &str, right: &SurfaceName) -> SurfaceName {
+    match (left.name().inner(), right.name().inner()) {
+        (clean_kernel::name::NameInner::Str(lp, l), clean_kernel::name::NameInner::Str(rp, r))
+            if lp.is_anon() && rp.is_anon() =>
+        {
+            SurfaceName::from_name(clean_kernel::Name::anon().str(format!("{l}{separator}{r}")))
+        }
+        _ => left
+            .append(&SurfaceName::from_name(
+                clean_kernel::Name::anon().str(separator),
+            ))
+            .append(right),
+    }
+}
+
+pub(crate) fn strip_slot_suffix(slot: &SurfaceName) -> Option<SurfaceName> {
+    let clean_kernel::name::NameInner::Str(_, text) = slot.name().inner() else {
+        return None;
+    };
+    let field = text.strip_suffix('F').filter(|s| !s.is_empty())?;
+    Some(slot.parent().append(&SurfaceName::from_name(
+        clean_kernel::Name::anon().str(field),
+    )))
+}
+
+pub(crate) fn registered_definition_name(
+    result: &ElabResult,
+) -> Result<clean_kernel::Name, ElabError> {
+    match result {
+        ElabResult::Definition { name, .. } => Ok(name.clone()),
+        _ => Err(unsupported(
+            "codata: generated definition did not return an exact registered owner",
+        )),
+    }
+}
+
+/// What a `codata` / `codef` command hands back: every declaration it
+/// generated, elaborated, kernel-checked and registered, as one block.
+///
+/// These commands used to answer `Skipped` after registering real
+/// declarations, and `Skipped` is the result of a command that declares
+/// NOTHING. Every consumer that counts or re-checks declarations therefore
+/// saw nothing: `clean project check` reported a codata-only package as
+/// `pass, 0 declarations checked` (and, once its vacuity gate landed, refused
+/// that valid package as "checked nothing"), `clean check` reported
+/// "Checked 0 declarations", and the per-declaration trust gates of
+/// `clean compile` never looked at them. A block of the registered results is
+/// what was declared; `ElabResult::leaf_decls` flattens it for every consumer.
+pub(crate) fn generated_declarations(results: Vec<ElabResult>) -> RegisteredElabResult {
+    RegisteredElabResult {
+        result: ElabResult::Multiple(results),
+        warning: None,
+        hole_contexts: Vec::new(),
+    }
+}
+
+pub(crate) fn retain_registered_carrier(
+    source_owner: &SurfaceName,
+    generated: &SurfaceDecl,
+    result: &ElabResult,
+    carrier: &mut Option<clean_kernel::Name>,
+) -> Result<(), ElabError> {
+    if matches!(generated, SurfaceDecl::Def { name, .. } if name == source_owner) {
+        if carrier.is_some() {
+            return Err(unsupported("codata: duplicate generated carrier"));
+        }
+        *carrier = Some(registered_definition_name(result)?);
+    }
+    Ok(())
+}
+
+pub(crate) fn ident(name: impl CodataIdentifier) -> SurfaceExpr {
+    SurfaceExpr::Ident(Span::dummy(), name.surface_name())
 }
 
 /// `@name args…` — Explicit-marked head, positional args.
-pub(crate) fn at_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
+pub(crate) fn at_app(name: impl CodataIdentifier, args: Vec<SurfaceExpr>) -> SurfaceExpr {
     let head = SurfaceExpr::Explicit(Span::dummy(), Box::new(ident(name)));
     if args.is_empty() {
         return head;
@@ -147,7 +298,7 @@ pub(crate) fn at_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
 }
 
 /// `name args…` — plain application (no @).
-pub(crate) fn plain_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
+pub(crate) fn plain_app(name: impl CodataIdentifier, args: Vec<SurfaceExpr>) -> SurfaceExpr {
     if args.is_empty() {
         return ident(name);
     }
@@ -159,23 +310,29 @@ pub(crate) fn plain_app(name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
 }
 
 /// `fun b1 b2 … => body` with untyped binders.
-pub(crate) fn lam(names: &[&str], body: SurfaceExpr) -> SurfaceExpr {
+pub(crate) fn lam(names: &[impl CodataIdentifier + Clone], body: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::Lambda(
         Span::dummy(),
         names
             .iter()
-            .map(|n| SurfaceBinder::new(*n, None, SurfaceBinderInfo::Explicit))
+            .map(|n| {
+                SurfaceBinder::new_typed(
+                    n.clone().surface_name(),
+                    None,
+                    SurfaceBinderInfo::Explicit,
+                )
+            })
             .collect(),
         Box::new(body),
     )
 }
 
 /// `(name : ty) → body` (dependent) — a one-binder Pi.
-pub(crate) fn pi(name: &str, ty: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
+pub(crate) fn pi(name: impl CodataIdentifier, ty: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::Pi(
         Span::dummy(),
-        vec![SurfaceBinder::new(
-            name,
+        vec![SurfaceBinder::new_typed(
+            name.surface_name(),
             Some(ty),
             SurfaceBinderInfo::Explicit,
         )],
@@ -193,7 +350,7 @@ pub(crate) fn type_universe() -> SurfaceExpr {
 }
 
 pub(crate) fn mk_def(
-    name: String,
+    name: SurfaceName,
     binders: Vec<SurfaceBinder>,
     ty: SurfaceExpr,
     val: SurfaceExpr,
@@ -213,7 +370,7 @@ pub(crate) fn mk_def(
 }
 
 pub(crate) fn mk_theorem(
-    name: String,
+    name: SurfaceName,
     binders: Vec<SurfaceBinder>,
     ty: SurfaceExpr,
     proof: SurfaceExpr,
@@ -234,11 +391,11 @@ pub(crate) fn mk_theorem(
 
 /// Does `expr` mention the identifier `name` (exactly, or as a dotted
 /// prefix `name.…`)? Conservative surface walk for self-reference checks.
-pub(crate) fn mentions(expr: &SurfaceExpr, name: &str) -> bool {
+pub(crate) fn mentions(expr: &SurfaceExpr, name: &SurfaceName) -> bool {
     let mut found = false;
     walk(expr, &mut |e| {
         if let SurfaceExpr::Ident(_, id) = e {
-            if id == name || id.starts_with(&format!("{name}.")) {
+            if id.has_prefix(name) {
                 found = true;
             }
         }
@@ -272,7 +429,13 @@ pub(crate) fn walk(expr: &SurfaceExpr, f: &mut impl FnMut(&SurfaceExpr)) {
         SurfaceExpr::Paren(_, e)
         | SurfaceExpr::Explicit(_, e)
         | SurfaceExpr::OutParam(_, e)
-        | SurfaceExpr::SemiOutParam(_, e) => walk(e, f),
+        | SurfaceExpr::SemiOutParam(_, e)
+        // A universe instantiation wraps the name it instantiates. Without
+        // this arm `mentions(T.{u} A, "T")` is FALSE, so a recursive argument
+        // written `T.{u} A` is classified as a PAYLOAD and the declaration is
+        // then refused for having no recursive argument at all — a refusal
+        // that names the wrong problem entirely.
+        | SurfaceExpr::UniverseInst(_, e, _) => walk(e, f),
         SurfaceExpr::Ascription(_, e, t) => {
             walk(e, f);
             walk(t, f);
@@ -284,26 +447,26 @@ pub(crate) fn walk(expr: &SurfaceExpr, f: &mut impl FnMut(&SurfaceExpr)) {
 /// The validated shape of a `codata` declaration: N observations, then
 /// M trailing recursive step fields.
 struct CodataShape<'a> {
-    name: &'a str,
+    name: &'a SurfaceName,
     /// The single declared universe parameter, when polymorphic (v1: ≤1).
-    poly: Option<&'a str>,
+    poly: Option<&'a SurfaceName>,
     binders: &'a [SurfaceBinder],
-    obs: Vec<(&'a str, &'a SurfaceExpr)>,
-    steps: Vec<&'a str>,
+    obs: Vec<(&'a SurfaceName, &'a SurfaceExpr)>,
+    steps: Vec<&'a SurfaceName>,
 }
 
 fn validate<'a>(
-    name: &'a str,
-    universe_params: &'a [String],
+    name: &'a SurfaceName,
+    universe_params: &'a [SurfaceName],
     binders: &'a [SurfaceBinder],
     ty: &Option<Box<SurfaceExpr>>,
     fields: &'a [SurfaceField],
-    deriving: &[String],
+    deriving: &[SurfaceName],
     modifiers: &DeclModifiers,
 ) -> Result<CodataShape<'a>, ElabError> {
     let poly = match universe_params {
         [] => None,
-        [u] => Some(u.as_str()),
+        [u] => Some(u),
         _ => {
             return Err(unsupported(
                 "codata: at most ONE universe parameter is supported in v1 \
@@ -317,7 +480,11 @@ fn validate<'a>(
             "codata: deriving {} is rejected — BEq/DecidableEq/Repr have no \
              sound derivation for M-encoded codata (potentially infinite \
              values); this is a deliberate loud reject, not an omission",
-            deriving.join(", ")
+            deriving
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
         )));
     }
     if !modifiers.is_default() {
@@ -359,9 +526,9 @@ fn validate<'a>(
     }
     // Split at the trailing block of recursive fields (each exactly the
     // codata type at its own parameters).
-    let expected_args: Vec<&str> = binders.iter().map(|b| b.name.as_str()).collect();
+    let expected_args: Vec<&SurfaceName> = binders.iter().map(|b| &b.name).collect();
     let mut split = fields.len();
-    while split > 0 && is_self_at_params(&fields[split - 1].ty, name, &expected_args) {
+    while split > 0 && is_self_at_params(&fields[split - 1].ty, name, &expected_args, poly) {
         split -= 1;
     }
     let (obs_fields, step_fields) = fields.split_at(split);
@@ -388,9 +555,9 @@ fn validate<'a>(
             )));
         }
     }
-    let mut seen: Vec<&str> = Vec::new();
+    let mut seen: Vec<&SurfaceName> = Vec::new();
     for f in fields {
-        if seen.contains(&f.name.as_str()) {
+        if seen.contains(&&f.name) {
             return Err(unsupported("codata: field names must be distinct"));
         }
         seen.push(&f.name);
@@ -403,7 +570,7 @@ fn validate<'a>(
             "mk",
             "mkStep",
         ] {
-            if f.name == reserved {
+            if f.name == SurfaceName::generated_path(reserved) {
                 return Err(unsupported(format!(
                     "codata: field name `{reserved}` collides with a generated \
                      companion definition"
@@ -415,32 +582,56 @@ fn validate<'a>(
         name,
         poly,
         binders,
-        obs: obs_fields
-            .iter()
-            .map(|f| (f.name.as_str(), &f.ty))
-            .collect(),
-        steps: step_fields.iter().map(|f| f.name.as_str()).collect(),
+        obs: obs_fields.iter().map(|f| (&f.name, &f.ty)).collect(),
+        steps: step_fields.iter().map(|f| &f.name).collect(),
     })
 }
 
 /// Is `expr` exactly `head p1 … pk` (modulo parens) with the given
 /// identifier arguments in order?
-pub(crate) fn is_self_at_params(expr: &SurfaceExpr, head: &str, params: &[&str]) -> bool {
+/// Does `expr` name the carrier `head`, either bare (`T`) or instantiated at
+/// the declaration's OWN universe parameter (`T.{u}`)?
+///
+/// Accepting the second spelling is not cosmetic. `codata T.{u}` makes
+/// `| Cons : A → T.{u} A → T.{u} A` the natural thing to write, and it was
+/// refused with "must return `T` applied to exactly its declared parameters,
+/// by name" — a diagnostic that never mentions universes and so reads as a
+/// complaint about the arguments. Only the declaration's own parameter is
+/// accepted: `T.{0}` inside a `codata T.{u}` denotes a DIFFERENT type, and
+/// treating it as the carrier would silently monomorphise the declaration.
+fn self_head_matches(expr: &SurfaceExpr, head: &SurfaceName, poly: Option<&SurfaceName>) -> bool {
+    match strip_parens(expr) {
+        SurfaceExpr::Ident(_, id) => id == head,
+        SurfaceExpr::UniverseInst(_, inner, levels) => {
+            let Some(u) = poly else { return false };
+            matches!(strip_parens(inner), SurfaceExpr::Ident(_, id) if id == head)
+                && matches!(levels.as_slice(), [LevelExpr::Param(p)] if p == u)
+        }
+        _ => false,
+    }
+}
+
+pub(crate) fn is_self_at_params(
+    expr: &SurfaceExpr,
+    head: &SurfaceName,
+    params: &[&SurfaceName],
+    poly: Option<&SurfaceName>,
+) -> bool {
     let expr = strip_parens(expr);
     if params.is_empty() {
-        return matches!(expr, SurfaceExpr::Ident(_, id) if id == head);
+        return self_head_matches(expr, head, poly);
     }
     let SurfaceExpr::App(_, h, args) = expr else {
         return false;
     };
-    if !matches!(strip_parens(h), SurfaceExpr::Ident(_, id) if id == head) {
+    if !self_head_matches(h, head, poly) {
         return false;
     }
     if args.len() != params.len() {
         return false;
     }
     args.iter().zip(params).all(|(a, p)| {
-        a.name.is_none() && matches!(strip_parens(&a.expr), SurfaceExpr::Ident(_, id) if id == p)
+        a.name.is_none() && matches!(strip_parens(&a.expr), SurfaceExpr::Ident(_, id) if id == *p)
     })
 }
 
@@ -530,28 +721,29 @@ pub(crate) fn elab_codata_decl(
                 } else {
                     generate_indexed(&ishape)
                 };
+                let mut carrier = None;
+                let mut declared = Vec::new();
                 for (i, generated) in gen_decls.into_iter().enumerate() {
-                    crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(
-                        |e| {
+                    let registered = crate::elaborate_decl_and_register(&mut candidate, &generated)
+                        .map_err(|e| {
                             unsupported(format!(
                                 "indexed codata `{name}`: generated declaration {i} \
                                  failed to elaborate/kernel-check (env left \
                                  untouched): {e:?}"
                             ))
-                        },
-                    )?;
+                        })?;
+                    retain_registered_carrier(name, &generated, &registered, &mut carrier)?;
+                    declared.push(registered);
                 }
                 // Mark the carrier as GENERATED by this command, so
                 // recognition can require provenance rather than accepting any
                 // type that merely owns a `<C>.corec`. Into the candidate, so a
                 // codata whose generated declarations failed leaves no mark.
-                candidate.mark_codata_carrier(clean_kernel::Name::from_string(name));
+                candidate.mark_codata_carrier(
+                    carrier.ok_or_else(|| unsupported("codata: generated carrier missing"))?,
+                );
                 *env = candidate;
-                return Ok(RegisteredElabResult {
-                    result: ElabResult::Skipped,
-                    warning: None,
-                    hole_contexts: Vec::new(),
-                });
+                return Ok(generated_declarations(declared));
             }
         }
     }
@@ -568,22 +760,25 @@ pub(crate) fn elab_codata_decl(
     let mut candidate = env.clone();
     ensure_codata_seeds(&mut candidate)?;
 
+    let mut carrier = None;
+    let mut declared = Vec::new();
     for (i, generated) in generate(&shape).into_iter().enumerate() {
-        crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
-            unsupported(format!(
-                "codata `{name}`: generated declaration {i} failed to \
+        let registered =
+            crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
+                unsupported(format!(
+                    "codata `{name}`: generated declaration {i} failed to \
                  elaborate/kernel-check (env left untouched): {e:?}"
-            ))
-        })?;
+                ))
+            })?;
+        retain_registered_carrier(name, &generated, &registered, &mut carrier)?;
+        declared.push(registered);
     }
     // Same carrier provenance mark as the indexed lane above.
-    candidate.mark_codata_carrier(clean_kernel::Name::from_string(name));
+    candidate.mark_codata_carrier(
+        carrier.ok_or_else(|| unsupported("codata: generated carrier missing"))?,
+    );
     *env = candidate;
-    Ok(RegisteredElabResult {
-        result: ElabResult::Skipped,
-        warning: None,
-        hole_contexts: Vec::new(),
-    })
+    Ok(generated_declarations(declared))
 }
 
 /// Build the generated declarations, mirroring the hand-validated probe
@@ -611,51 +806,56 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         })
         .collect();
 
-    let shape_f = format!("{name}.shapeF");
-    let pos_f = format!("{name}.posF");
-    let tgt_f = format!("{name}.tgtF");
-    let container = |f: &str| plain_app(f, params.clone());
+    let shape_f = child_name(name, "shapeF");
+    let pos_f = child_name(name, "posF");
+    let tgt_f = child_name(name, "tgtF");
+    let container = |f: &SurfaceName| plain_app(f, params.clone());
     let self_ty = plain_app(name, params.clone());
-    let corec_step = format!("{name}.corecStep");
-    let corec = format!("{name}.corec");
+    let corec_step = child_name(name, "corecStep");
+    let corec = child_name(name, "corec");
 
     // The label type: right-nested PProd of the observation types.
     let label_ty = obs
         .iter()
         .rev()
         .map(|(_, t)| (*t).clone())
-        .reduce(|acc, t| plain_app("PProd", vec![t, acc]))
+        .reduce(|acc, t| plain_app(GlobalPath("PProd"), vec![t, acc]))
         .expect("validate guarantees at least one observation");
     // The packed label from per-observation values.
     fn pack(vals: &[SurfaceExpr]) -> SurfaceExpr {
         match vals {
             [only] => only.clone(),
-            [first, rest @ ..] => plain_app("PProd.mk", vec![first.clone(), pack(rest)]),
+            [first, rest @ ..] => {
+                plain_app(GlobalPath("PProd.mk"), vec![first.clone(), pack(rest)])
+            }
             [] => unreachable!("validate guarantees at least one observation"),
         }
     }
     // The position type for m recursive fields: Unit for one, a
     // right-nested Sum of Units for more.
-    fn pos_ty(m: usize, poly: Option<&str>) -> SurfaceExpr {
+    fn pos_ty(m: usize, poly: Option<&SurfaceName>) -> SurfaceExpr {
         if m == 1 {
             punit_ty_p(poly)
         } else {
-            plain_app("Sum", vec![punit_ty_p(poly), pos_ty(m - 1, poly)])
+            plain_app(
+                GlobalPath("Sum"),
+                vec![punit_ty_p(poly), pos_ty(m - 1, poly)],
+            )
         }
     }
     // The i-th position point out of m.
     fn pos_point(i: usize, m: usize) -> SurfaceExpr {
         if m == 1 {
-            ident("PUnit.unit")
+            ident(GlobalPath("PUnit.unit"))
         } else if i == 0 {
-            plain_app("Sum.inl", vec![ident("PUnit.unit")])
+            plain_app(GlobalPath("Sum.inl"), vec![ident(GlobalPath("PUnit.unit"))])
         } else {
-            plain_app("Sum.inr", vec![pos_point(i - 1, m - 1)])
+            plain_app(GlobalPath("Sum.inr"), vec![pos_point(i - 1, m - 1)])
         }
     }
     // The coalgebra child function over the position type: selects the
     // i-th step function's next state.
-    fn child_fn(step_apps: &[SurfaceExpr], poly: Option<&str>) -> SurfaceExpr {
+    fn child_fn(step_apps: &[SurfaceExpr], poly: Option<&SurfaceName>) -> SurfaceExpr {
         match step_apps {
             [only] => lam(&["_"], only.clone()),
             [first, rest @ ..] => {
@@ -665,12 +865,12 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
                 };
                 SurfaceExpr::Lambda(
                     Span::dummy(),
-                    vec![SurfaceBinder::new("b", None, SurfaceBinderInfo::Explicit)],
+                    vec![surface_binder("b", None, SurfaceBinderInfo::Explicit)],
                     Box::new(SurfaceExpr::App(
                         Span::dummy(),
                         Box::new(SurfaceExpr::Explicit(
                             Span::dummy(),
-                            Box::new(ident("Sum.rec")),
+                            Box::new(ident(GlobalPath("Sum.rec"))),
                         )),
                         vec![
                             SurfaceArg::positional(punit_ty_p(poly)),
@@ -699,23 +899,23 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         e
     }
 
-    let s_binder = SurfaceBinder::new("S", Some(type_u(poly)), SurfaceBinderInfo::Implicit);
-    let obs_f_names: Vec<String> = obs.iter().map(|(n, _)| format!("{n}F")).collect();
-    let step_f_names: Vec<String> = steps.iter().map(|n| format!("{n}F")).collect();
+    let s_binder = surface_binder("S", Some(type_u(poly)), SurfaceBinderInfo::Implicit);
+    let obs_f_names: Vec<SurfaceName> = obs.iter().map(|(n, _)| affix_name(n, "", "F")).collect();
+    let step_f_names: Vec<SurfaceName> = steps.iter().map(|n| affix_name(n, "", "F")).collect();
     let mut corec_fn_binders: Vec<SurfaceBinder> = obs
         .iter()
         .zip(&obs_f_names)
         .map(|((_, t), fname)| {
-            SurfaceBinder::new(
-                fname.as_str(),
+            surface_binder(
+                fname,
                 Some(arrow(ident("S"), (*t).clone())),
                 SurfaceBinderInfo::Explicit,
             )
         })
         .collect();
     for step_f in &step_f_names {
-        corec_fn_binders.push(SurfaceBinder::new(
-            step_f.as_str(),
+        corec_fn_binders.push(surface_binder(
+            step_f,
             Some(arrow(ident("S"), ident("S"))),
             SurfaceBinderInfo::Explicit,
         ));
@@ -725,20 +925,20 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
     let corec_call = |extra: SurfaceExpr| {
         let mut args = params.clone();
         args.push(ident("S"));
-        args.extend(obs_f_names.iter().map(|n| ident(n)));
-        args.extend(step_f_names.iter().map(|n| ident(n)));
+        args.extend(obs_f_names.iter().map(ident));
+        args.extend(step_f_names.iter().map(ident));
         args.push(extra);
         at_app(&corec, args)
     };
     let head_call = |x: SurfaceExpr| {
         at_app(
-            "Codata.IMhead",
+            GlobalPath("Codata.IMhead"),
             vec![
                 punit_ty_p(poly),
                 container(&shape_f),
                 container(&pos_f),
                 container(&tgt_f),
-                ident("PUnit.unit"),
+                ident(GlobalPath("PUnit.unit")),
                 x,
             ],
         )
@@ -778,21 +978,21 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
                     arrow(plain_app(&pos_f, pos_args), punit_ty_p(poly))
                 })
             }),
-            lam(&["_", "_", "_"], ident("PUnit.unit")),
+            lam(&["_", "_", "_"], ident(GlobalPath("PUnit.unit"))),
         ),
         // def C (ps) : Type := @Codata.IMIntl Unit … Unit.unit
         mk_def(
-            (*name).to_string(),
+            (*name).clone(),
             explicit_binders.clone(),
             type_u(poly),
             at_app(
-                "Codata.IMIntl",
+                GlobalPath("Codata.IMIntl"),
                 vec![
                     punit_ty_p(poly),
                     container(&shape_f),
                     container(&pos_f),
                     container(&tgt_f),
-                    ident("PUnit.unit"),
+                    ident(GlobalPath("PUnit.unit")),
                 ],
             ),
         ),
@@ -802,10 +1002,10 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
     let k = obs.len();
     for (i, (obs_name, obs_ty)) in obs.iter().enumerate() {
         out.push(mk_def(
-            format!("{name}.{obs_name}"),
+            name.append(obs_name),
             {
                 let mut bs = implicit_binders.clone();
-                bs.push(SurfaceBinder::new(
+                bs.push(surface_binder(
                     "x",
                     Some(self_ty.clone()),
                     SurfaceBinderInfo::Explicit,
@@ -822,10 +1022,10 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
     let m = steps.len();
     for (i, step_name) in steps.iter().enumerate() {
         out.push(mk_def(
-            format!("{name}.{step_name}"),
+            name.append(step_name),
             {
                 let mut bs = implicit_binders.clone();
-                bs.push(SurfaceBinder::new(
+                bs.push(surface_binder(
                     "x",
                     Some(self_ty.clone()),
                     SurfaceBinderInfo::Explicit,
@@ -834,13 +1034,13 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
             },
             self_ty.clone(),
             at_app(
-                "Codata.IMchild",
+                GlobalPath("Codata.IMchild"),
                 vec![
                     punit_ty_p(poly),
                     container(&shape_f),
                     container(&pos_f),
                     container(&tgt_f),
-                    ident("PUnit.unit"),
+                    ident(GlobalPath("PUnit.unit")),
                     ident("x"),
                     pos_point(i, m),
                 ],
@@ -875,7 +1075,7 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
                         container(&shape_f),
                         container(&pos_f),
                         container(&tgt_f),
-                        plain_app("Codata.uFam", vec![ident("S")]),
+                        plain_app(GlobalPath("Codata.uFam"), vec![ident("S")]),
                         ident("j"),
                     ],
                 ),
@@ -911,7 +1111,7 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
             let mut bs = implicit_binders.clone();
             bs.push(s_binder.clone());
             bs.extend(corec_fn_binders.clone());
-            bs.push(SurfaceBinder::new(
+            bs.push(surface_binder(
                 "s",
                 Some(ident("S")),
                 SurfaceBinderInfo::Explicit,
@@ -919,11 +1119,11 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
             bs
         },
         self_ty.clone(),
-        at_app("Codata.ucorec", {
+        at_app(GlobalPath("Codata.ucorec"), {
             let mut step_args = params.clone();
             step_args.push(ident("S"));
-            step_args.extend(obs_f_names.iter().map(|n| ident(n)));
-            step_args.extend(step_f_names.iter().map(|n| ident(n)));
+            step_args.extend(obs_f_names.iter().map(ident));
+            step_args.extend(step_f_names.iter().map(ident));
             vec![
                 container(&shape_f),
                 container(&pos_f),
@@ -938,7 +1138,7 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
     // The CONSTRUCTOR: C.mk (one arg per field) — finite one-layer
     // construction via Codata.IMmk, giving finite-prefix-then-corecurse
     // (depth-1 guardedness) at the term level. Per-field laws are rfl.
-    let mk_step_name = format!("{name}.mkStep");
+    let mk_step_name = child_name(name, "mkStep");
     let unit_self = |extra: Vec<SurfaceExpr>| -> SurfaceExpr {
         let mut args = params.clone();
         args.extend(extra);
@@ -949,30 +1149,34 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         {
             let mut bs = implicit_binders.clone();
             bs.extend([
-                SurfaceBinder::new(
+                surface_binder(
                     "a",
-                    Some(unit_self(vec![ident("PUnit.unit")])),
+                    Some(unit_self(vec![ident(GlobalPath("PUnit.unit"))])),
                     SurfaceBinderInfo::Explicit,
                 ),
-                SurfaceBinder::new(
+                surface_binder(
                     "f",
                     Some(SurfaceExpr::Pi(
                         Span::dummy(),
-                        vec![SurfaceBinder::new(
+                        vec![surface_binder(
                             "b",
                             Some({
                                 let mut args = params.clone();
-                                args.extend([ident("PUnit.unit"), ident("a")]);
+                                args.extend([ident(GlobalPath("PUnit.unit")), ident("a")]);
                                 plain_app(&pos_f, args)
                             }),
                             SurfaceBinderInfo::Explicit,
                         )],
-                        Box::new(plain_app("Codata.IMIntl", {
+                        Box::new(plain_app(GlobalPath("Codata.IMIntl"), {
                             let mut args =
                                 vec![container(&shape_f), container(&pos_f), container(&tgt_f)];
                             args.push({
                                 let mut targs = params.clone();
-                                targs.extend([ident("PUnit.unit"), ident("a"), ident("b")]);
+                                targs.extend([
+                                    ident(GlobalPath("PUnit.unit")),
+                                    ident("a"),
+                                    ident("b"),
+                                ]);
                                 plain_app(&tgt_f, targs)
                             });
                             args
@@ -990,36 +1194,39 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
                 container(&pos_f),
                 container(&tgt_f),
                 plain_app(
-                    "Codata.IMIntl",
+                    GlobalPath("Codata.IMIntl"),
                     vec![container(&shape_f), container(&pos_f), container(&tgt_f)],
                 ),
-                ident("PUnit.unit"),
+                ident(GlobalPath("PUnit.unit")),
             ],
         ),
-        plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+        plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
     ));
     // Field-value binders for mk.
     let mut mk_binders = implicit_binders.clone();
     for (obs_name, obs_ty) in obs.iter() {
-        mk_binders.push(SurfaceBinder::new(
-            format!("{obs_name}V").as_str(),
+        mk_binders.push(surface_binder(
+            affix_name(obs_name, "", "V"),
             Some((*obs_ty).clone()),
             SurfaceBinderInfo::Explicit,
         ));
     }
     for step_name in steps.iter() {
-        mk_binders.push(SurfaceBinder::new(
-            format!("{step_name}V").as_str(),
+        mk_binders.push(surface_binder(
+            affix_name(step_name, "", "V"),
             Some(self_ty.clone()),
             SurfaceBinderInfo::Explicit,
         ));
     }
     let mk_label = pack(
         &obs.iter()
-            .map(|(n, _)| ident(&format!("{n}V")))
+            .map(|(n, _)| ident(affix_name(n, "", "V")))
             .collect::<Vec<_>>(),
     );
-    let mk_children: Vec<SurfaceExpr> = steps.iter().map(|n| ident(&format!("{n}V"))).collect();
+    let mk_children: Vec<SurfaceExpr> = steps
+        .iter()
+        .map(|n| ident(affix_name(n, "", "V")))
+        .collect();
     let mk_child_fn = if mk_children.len() == 1 {
         lam(&["_"], mk_children[0].clone())
     } else {
@@ -1031,9 +1238,9 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
             let label = mk_label.clone();
             move |bpos: SurfaceExpr| -> SurfaceExpr {
                 let mut targs = pe.clone();
-                targs.extend([ident("PUnit.unit"), label.clone(), bpos]);
+                targs.extend([ident(GlobalPath("PUnit.unit")), label.clone(), bpos]);
                 plain_app(
-                    "Codata.IMIntl",
+                    GlobalPath("Codata.IMIntl"),
                     vec![
                         plain_app(&shape_f, pe.clone()),
                         plain_app(&pos_f, pe.clone()),
@@ -1048,12 +1255,12 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         // constant-Unit target family reduces per branch).
         SurfaceExpr::Lambda(
             Span::dummy(),
-            vec![SurfaceBinder::new("b", None, SurfaceBinderInfo::Explicit)],
+            vec![surface_binder("b", None, SurfaceBinderInfo::Explicit)],
             Box::new(mut_state_chain_p(
                 &mk_children,
                 0,
                 &plain_app(
-                    "Codata.IMIntl",
+                    GlobalPath("Codata.IMIntl"),
                     vec![container(&shape_f), container(&pos_f), container(&tgt_f)],
                 ),
                 &{
@@ -1062,7 +1269,7 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
                     let label = mk_label.clone();
                     move |bpos: SurfaceExpr| -> SurfaceExpr {
                         let mut targs = pe.clone();
-                        targs.extend([ident("PUnit.unit"), label.clone(), bpos]);
+                        targs.extend([ident(GlobalPath("PUnit.unit")), label.clone(), bpos]);
                         plain_app(&tgt_f, targs)
                     }
                 },
@@ -1072,16 +1279,16 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         )
     };
     out.push(mk_def(
-        format!("{name}.mk"),
+        child_name(name, "mk"),
         mk_binders.clone(),
         self_ty.clone(),
-        at_app("Codata.IMmk", {
+        at_app(GlobalPath("Codata.IMmk"), {
             let mut args = vec![
                 punit_ty_p(poly),
                 container(&shape_f),
                 container(&pos_f),
                 container(&tgt_f),
-                ident("PUnit.unit"),
+                ident(GlobalPath("PUnit.unit")),
             ];
             let mut mkargs = params.clone();
             mkargs.extend([mk_label.clone(), mk_child_fn]);
@@ -1094,27 +1301,27 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         let mut args = params.clone();
         args.extend(
             obs.iter()
-                .map(|(n, _)| ident(&format!("{n}V")))
-                .chain(steps.iter().map(|n| ident(&format!("{n}V")))),
+                .map(|(n, _)| ident(affix_name(n, "", "V")))
+                .chain(steps.iter().map(|n| ident(affix_name(n, "", "V")))),
         );
-        at_app(&format!("{name}.mk"), args)
+        at_app(child_name(name, "mk"), args)
     };
     for field_name in obs.iter().map(|(n, _)| *n).chain(steps.iter().copied()) {
-        let full = format!("{name}.{field_name}");
+        let full = name.append(field_name);
         let mut acc_args = params.clone();
         acc_args.push(mk_call.clone());
         out.push(mk_theorem(
-            format!("{full}_mk"),
+            affix_name(&full, "", "_mk"),
             mk_binders.clone(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(at_app(&full, acc_args)),
-                    SurfaceArg::positional(ident(&format!("{field_name}V"))),
+                    SurfaceArg::positional(ident(affix_name(field_name, "", "V"))),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
@@ -1123,7 +1330,7 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         let mut bs = implicit_binders.clone();
         bs.push(s_binder.clone());
         bs.extend(corec_fn_binders.clone());
-        bs.push(SurfaceBinder::new(
+        bs.push(surface_binder(
             "s",
             Some(ident("S")),
             SurfaceBinderInfo::Explicit,
@@ -1131,42 +1338,42 @@ fn generate(shape: &CodataShape<'_>) -> Vec<SurfaceDecl> {
         bs
     };
     for ((obs_name, _), fname) in obs.iter().zip(&obs_f_names) {
-        let obs_full = format!("{name}.{obs_name}");
+        let obs_full = name.append(obs_name);
         let mut obs_args = params.clone();
         obs_args.push(corec_call(ident("s")));
         out.push(mk_theorem(
-            format!("{obs_full}_corec"),
+            affix_name(&obs_full, "", "_corec"),
             law_binders(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(at_app(&obs_full, obs_args)),
                     SurfaceArg::positional(plain_app(fname, vec![ident("s")])),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
     // Per-recursive-field law:
     //   @C.step_i ps (corec-call s) = corec-call (step_iF s) := rfl
     for (step_name, fname) in steps.iter().zip(&step_f_names) {
-        let step_full = format!("{name}.{step_name}");
+        let step_full = name.append(step_name);
         let mut step_args = params.clone();
         step_args.push(corec_call(ident("s")));
         out.push(mk_theorem(
-            format!("{step_full}_corec"),
+            affix_name(&step_full, "", "_corec"),
             law_binders(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(at_app(&step_full, step_args)),
                     SurfaceArg::positional(corec_call(plain_app(fname, vec![ident("s")]))),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
@@ -1233,15 +1440,15 @@ pub(crate) fn elab_codef_decl(
         };
         (c.clone(), args)
     };
-    let corec_name = format!("{head_name}.corec");
-    let corec_const = clean_kernel::Name::from_string(&corec_name);
+    let corec_name = child_name(&head_name, "corec");
+    let corec_const = corec_name.name().clone();
     if env.get_const(&corec_const).is_none() {
         return Err(unsupported(format!(
             "codef: `{head_name}` is not a codata type — `{corec_name}` does \
              not exist (declare it with the `codata` command first)"
         )));
     }
-    let param_names = env.get_param_names(&corec_const).ok_or_else(|| {
+    let param_names = env.get_typed_param_names(&corec_const).ok_or_else(|| {
         unsupported(format!(
             "codef: no parameter names recorded for `{corec_name}`"
         ))
@@ -1253,11 +1460,16 @@ pub(crate) fn elab_codef_decl(
     })?;
     // The clause slots are the EXPLICIT corec parameters except the final
     // state argument.
-    let mut slots: Vec<String> = param_names
+    if param_names.len() != param_infos.len() {
+        return Err(unsupported(
+            "codef: parameter names and binder kinds disagree",
+        ));
+    }
+    let mut slots: Vec<SurfaceName> = param_names
         .iter()
         .zip(param_infos.iter())
         .filter(|(_, i)| matches!(i, clean_kernel::BinderInfo::Default))
-        .map(|(n, _)| n.clone())
+        .map(|(n, _)| SurfaceName::from_name(n.clone()))
         .collect();
     if slots.is_empty() {
         return Err(unsupported(format!(
@@ -1268,7 +1480,17 @@ pub(crate) fn elab_codef_decl(
     slots.pop(); // the trailing state argument
                  // An INDEXED corecursor has one more trailing explicit parameter — the
                  // index — which is the only generated explicit slot not `F`-suffixed.
-    let indexed = slots.last().is_some_and(|sl| !sl.ends_with('F'));
+    for slot in &slots {
+        if !matches!(
+            slot.name().inner(),
+            clean_kernel::name::NameInner::Str(_, _)
+        ) {
+            return Err(unsupported("codef: unsupported non-string corecursor slot"));
+        }
+    }
+    let indexed = slots
+        .last()
+        .is_some_and(|sl| strip_slot_suffix(sl).is_none());
     if indexed {
         slots.pop();
     }
@@ -1318,44 +1540,43 @@ pub(crate) fn elab_codef_decl(
             name, binders, ty, clauses, &slots, &head_name, &type_args, state,
         )? {
             let mut candidate = env.clone();
-            crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
-                unsupported(format!(
-                    "codef `{name}` (mk-guarded): the generated corecursor \
-                     application failed to elaborate/kernel-check (env left \
-                     untouched): {e:?}"
-                ))
-            })?;
+            let registered = crate::elaborate_decl_and_register(&mut candidate, &generated)
+                .map_err(|e| {
+                    unsupported(format!(
+                        "codef `{name}` (mk-guarded): the generated corecursor \
+                         application failed to elaborate/kernel-check (env left \
+                         untouched): {e:?}"
+                    ))
+                })?;
             *env = candidate;
-            return Ok(RegisteredElabResult {
-                result: ElabResult::Skipped,
-                warning: None,
-                hole_contexts: Vec::new(),
-            });
+            return Ok(generated_declarations(vec![registered]));
         }
     }
 
     // Map each slot `<field>F` to its clause, building the per-slot lambda.
-    let state_name = state.map_or("_", |b| b.name.as_str());
+    let state_name = state.map_or_else(|| SurfaceName::generated_path("_"), |b| b.name.clone());
     let mut slot_lambdas: Vec<SurfaceExpr> = Vec::new();
-    let mut used: Vec<&str> = Vec::new();
+    let mut used: Vec<SurfaceName> = Vec::new();
     // (field, index the author wrote) for each indexed self-call, checked below.
-    let mut idx_checks: Vec<(String, SurfaceExpr)> = Vec::new();
+    let mut idx_checks: Vec<(SurfaceName, SurfaceExpr)> = Vec::new();
     for slot in &slots {
-        let field = slot.strip_suffix('F').unwrap_or(slot);
-        let Some((_, value)) = clauses.iter().find(|(n, _)| n == field) else {
+        let field = strip_slot_suffix(slot).ok_or_else(|| unsupported(
+            format!("codef: unsupported corecursor slot `{slot}` (expected a nonempty terminal string with F suffix)")
+        ))?;
+        let Some((_, value)) = clauses.iter().find(|(n, _)| n == &field) else {
             return Err(unsupported(format!(
                 "codef: missing clause for observation `{field}` of \
                  `{head_name}`"
             )));
         };
-        used.push(field);
+        used.push(field.clone());
         // A syntactic self-call is a corecursive step: the lambda returns
         // the NEW STATE. Anything else is an observation value and must
         // not mention the function being defined (productivity).
         let body = match self_call_arg(value, name, indexed) {
             Some(call) => {
                 if let Some(written) = call.index {
-                    idx_checks.push((field.to_string(), written));
+                    idx_checks.push((field.clone(), written));
                 }
                 call.state
             }
@@ -1373,14 +1594,14 @@ pub(crate) fn elab_codef_decl(
         };
         let mut lam_binders = Vec::new();
         if let Some(ib) = idx_binder {
-            lam_binders.push(SurfaceBinder::new(
-                ib.name.as_str(),
+            lam_binders.push(surface_binder(
+                &ib.name,
                 ib.ty.as_deref().cloned(),
                 SurfaceBinderInfo::Explicit,
             ));
         }
-        lam_binders.push(SurfaceBinder::new(
-            state_name,
+        lam_binders.push(surface_binder(
+            &state_name,
             state.and_then(|b| b.ty.as_deref().cloned()),
             SurfaceBinderInfo::Explicit,
         ));
@@ -1391,11 +1612,14 @@ pub(crate) fn elab_codef_decl(
         ));
     }
     for (n, _) in clauses {
-        if !used.contains(&n.as_str()) {
+        if !used.contains(n) {
             return Err(unsupported(format!(
                 "codef: `{n}` is not an observation of `{head_name}` \
                  (expected: {})",
-                used.join(", ")
+                used.iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
             )));
         }
     }
@@ -1404,7 +1628,7 @@ pub(crate) fn elab_codef_decl(
     let state_ty = state
         .and_then(|b| b.ty.as_deref().cloned())
         .unwrap_or_else(punit_ty);
-    let init_state = state.map_or_else(|| ident("PUnit.unit"), |b| ident(&b.name));
+    let init_state = state.map_or_else(|| ident(GlobalPath("PUnit.unit")), |b| ident(&b.name));
 
     // INDEX-FIDELITY GUARD.
     //
@@ -1440,24 +1664,21 @@ pub(crate) fn elab_codef_decl(
         // `UnknownIdent` for `C.<field>`, reported as an index mismatch). This
         // guard owns index fidelity only; carrier impersonation is checked
         // elsewhere. Nothing to compare against, so skip.
-        let accessor = format!("{head_name}.{field}");
-        if env
-            .get_const(&clean_kernel::Name::from_string(&accessor))
-            .is_none()
-        {
+        let accessor = head_name.append(field);
+        if env.get_const(&accessor.name().clone()).is_none() {
             continue;
         }
         let mut probe_args = type_args.clone();
         probe_args.pop(); // the result type's own index
         probe_args.push(written.clone());
         let mut probe_binders = binders.to_vec();
-        probe_binders.push(SurfaceBinder::new(
+        probe_binders.push(surface_binder(
             "_idxProbeSelf",
             Some((**ty).clone()),
             SurfaceBinderInfo::Explicit,
         ));
         let probe = mk_def(
-            format!("{name}._indexProbe_{field}"),
+            name.append(&affix_name(field, "_indexProbe_", "")),
             probe_binders,
             plain_app(&head_name, probe_args),
             plain_app(&accessor, vec![ident("_idxProbeSelf")]),
@@ -1497,12 +1718,13 @@ pub(crate) fn elab_codef_decl(
     );
 
     let mut candidate = env.clone();
-    crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
-        unsupported(format!(
-            "codef `{name}`: the generated corecursor application failed to \
+    let registered =
+        crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
+            unsupported(format!(
+                "codef `{name}`: the generated corecursor application failed to \
              elaborate/kernel-check (env left untouched): {e:?}"
-        ))
-    })?;
+            ))
+        })?;
     // Record that WE generated this constant, for the rank-7 direct-lazy
     // lowering (B2). Minted into `candidate`, so a codef whose generated body
     // failed to kernel-check above leaves behind no origin either.
@@ -1513,24 +1735,20 @@ pub(crate) fn elab_codef_decl(
     // never has to guess from a name — `C.corec` is user-derivable, and
     // matching on it would be a soundness hole wearing metadata's clothes.
     candidate.set_codata_origin(
-        clean_kernel::Name::from_string(name),
+        registered_definition_name(&registered)?,
         clean_kernel::CodataOrigin {
             lane: if indexed {
                 clean_kernel::CodataLane::Indexed
             } else {
                 clean_kernel::CodataLane::Plain
             },
-            carrier: clean_kernel::Name::from_string(&head_name),
+            carrier: head_name.name().clone(),
             corec: corec_const.clone(),
-            slots: slots.clone(),
+            slots: slots.iter().map(ToString::to_string).collect(),
         },
     );
     *env = candidate;
-    Ok(RegisteredElabResult {
-        result: ElabResult::Skipped,
-        warning: None,
-        hole_contexts: Vec::new(),
-    })
+    Ok(generated_declarations(vec![registered]))
 }
 
 /// A recognized corecursive self-call: the new state, plus the index the author
@@ -1555,11 +1773,11 @@ struct SelfCall {
 /// guard can check it against the codata field's target index before anything
 /// is generated. A self-call that writes a different index is now a loud
 /// error rather than a silently different program.
-fn self_call_arg(expr: &SurfaceExpr, fname: &str, indexed: bool) -> Option<SelfCall> {
+fn self_call_arg(expr: &SurfaceExpr, fname: &SurfaceName, indexed: bool) -> Option<SelfCall> {
     match strip_parens(expr) {
         SurfaceExpr::Ident(_, id) if id == fname && !indexed => Some(SelfCall {
             index: None,
-            state: ident("PUnit.unit"),
+            state: ident(GlobalPath("PUnit.unit")),
         }),
         SurfaceExpr::App(_, h, args) => {
             let SurfaceExpr::Ident(_, id) = strip_parens(h) else {
@@ -1584,7 +1802,7 @@ fn self_call_arg(expr: &SurfaceExpr, fname: &str, indexed: bool) -> Option<SelfC
             let state = if args.len() == expected {
                 args[expected - 1].expr.clone()
             } else {
-                ident("PUnit.unit")
+                ident(GlobalPath("PUnit.unit"))
             };
             Some(SelfCall { index, state })
         }
@@ -1599,12 +1817,12 @@ fn self_call_arg(expr: &SurfaceExpr, fname: &str, indexed: bool) -> Option<SelfC
 // the Σ-tag index — a named build item.
 
 struct MutualMember<'a> {
-    name: &'a str,
+    name: &'a SurfaceName,
     binders: &'a [SurfaceBinder],
     /// Observations: (name, type). The leading non-recursive fields.
-    obs: Vec<(&'a str, &'a SurfaceExpr)>,
+    obs: Vec<(&'a SurfaceName, &'a SurfaceExpr)>,
     /// Recursive fields: (name, target member index). The trailing block.
-    steps: Vec<(&'a str, usize)>,
+    steps: Vec<(&'a SurfaceName, usize)>,
 }
 
 /// Elaborate a `mutual` block whose members are all `codata`.
@@ -1615,17 +1833,17 @@ pub(crate) fn elab_mutual_codata(
     if members.len() < 2 {
         return Err(unsupported("mutual codata needs at least two members"));
     }
-    let names: Vec<&str> = members
+    let names: Vec<&SurfaceName> = members
         .iter()
         .map(|d| match d {
-            SurfaceDecl::Codata { name, .. } => Ok(name.as_str()),
+            SurfaceDecl::Codata { name, .. } => Ok(name),
             _ => Err(unsupported(
                 "mutual codata: every member of the block must be a `codata` \
                  declaration",
             )),
         })
         .collect::<Result<_, _>>()?;
-    let shapes: Vec<(MutualMember<'_>, Option<&str>)> = members
+    let shapes: Vec<(MutualMember<'_>, Option<&SurfaceName>)> = members
         .iter()
         .map(|d| validate_mutual_member(d, &names))
         .collect::<Result<_, _>>()?;
@@ -1639,8 +1857,8 @@ pub(crate) fn elab_mutual_codata(
              universe parameter list",
         ));
     }
-    let b0: Vec<&str> = shapes[0].binders.iter().map(|b| b.name.as_str()).collect();
-    let b1: Vec<&str> = shapes[1].binders.iter().map(|b| b.name.as_str()).collect();
+    let b0: Vec<&SurfaceName> = shapes[0].binders.iter().map(|b| &b.name).collect();
+    let b1: Vec<&SurfaceName> = shapes[1].binders.iter().map(|b| &b.name).collect();
     if b0 != b1 {
         return Err(unsupported(
             "mutual codata v1 requires both members to declare IDENTICAL \
@@ -1655,30 +1873,29 @@ pub(crate) fn elab_mutual_codata(
     } else {
         generate_mutual_n(&shapes, poly)
     };
+    let mut declared = Vec::new();
     for (i, generated) in generated_decls.into_iter().enumerate() {
         if std::env::var("CLEAN_CODATA_DUMP").is_ok() {
             eprintln!("[codata-gen {i}] {generated:#?}");
         }
-        crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
-            unsupported(format!(
-                "mutual codata `{}`/`{}`: generated declaration {i} failed \
+        let registered =
+            crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
+                unsupported(format!(
+                    "mutual codata `{}`/`{}`: generated declaration {i} failed \
                  to elaborate/kernel-check (env left untouched): {e:?}",
-                names[0], names[1]
-            ))
-        })?;
+                    names[0], names[1]
+                ))
+            })?;
+        declared.push(registered);
     }
     *env = candidate;
-    Ok(RegisteredElabResult {
-        result: ElabResult::Skipped,
-        warning: None,
-        hole_contexts: Vec::new(),
-    })
+    Ok(generated_declarations(declared))
 }
 
 fn validate_mutual_member<'a>(
     decl: &'a SurfaceDecl,
-    names: &[&str],
-) -> Result<(MutualMember<'a>, Option<&'a str>), ElabError> {
+    names: &[&SurfaceName],
+) -> Result<(MutualMember<'a>, Option<&'a SurfaceName>), ElabError> {
     let SurfaceDecl::Codata {
         name,
         universe_params,
@@ -1705,7 +1922,7 @@ fn validate_mutual_member<'a>(
     };
     let member_poly = match universe_params.as_slice() {
         [] => None,
-        [u] => Some(u.as_str()),
+        [u] => Some(u),
         _ => {
             return Err(unsupported(format!(
                 "mutual codata member `{name}`: at most ONE universe \
@@ -1743,9 +1960,11 @@ fn validate_mutual_member<'a>(
             )));
         }
     }
-    let params: Vec<&str> = binders.iter().map(|b| b.name.as_str()).collect();
+    let params: Vec<&SurfaceName> = binders.iter().map(|b| &b.name).collect();
     let target_of = |t: &SurfaceExpr| -> Option<usize> {
-        names.iter().position(|n| is_self_at_params(t, n, &params))
+        names
+            .iter()
+            .position(|n| is_self_at_params(t, n, &params, member_poly))
     };
     let mut split = fields.len();
     while split > 0 && target_of(&fields[split - 1].ty).is_some() {
@@ -1770,9 +1989,9 @@ fn validate_mutual_member<'a>(
             }
         }
     }
-    let mut seen: Vec<&str> = Vec::new();
+    let mut seen: Vec<&SurfaceName> = Vec::new();
     for f in fields.iter() {
-        if seen.contains(&f.name.as_str()) {
+        if seen.contains(&&f.name) {
             return Err(unsupported(format!(
                 "mutual codata member `{name}`: field names must be distinct"
             )));
@@ -1783,15 +2002,12 @@ fn validate_mutual_member<'a>(
         MutualMember {
             name,
             binders,
-            obs: obs_fields
-                .iter()
-                .map(|f| (f.name.as_str(), &f.ty))
-                .collect(),
+            obs: obs_fields.iter().map(|f| (&f.name, &f.ty)).collect(),
             steps: step_fields
                 .iter()
                 .map(|f| {
                     (
-                        f.name.as_str(),
+                        &f.name,
                         target_of(&f.ty).expect("trailing split guarantees a target"),
                     )
                 })
@@ -1805,20 +2021,26 @@ fn validate_mutual_member<'a>(
 /// Label type at the declared level: an obs-less member's label is the unit
 /// at the FAMILY universe (`PUnit.{u+1}` when polymorphic) so the shapeF
 /// tower's `Type u` motive accepts it.
-fn mutual_label_ty_p(obs: &[(&str, &SurfaceExpr)], poly: Option<&str>) -> SurfaceExpr {
+fn mutual_label_ty_p(
+    obs: &[(&SurfaceName, &SurfaceExpr)],
+    poly: Option<&SurfaceName>,
+) -> SurfaceExpr {
     obs.iter()
         .rev()
         .map(|(_, t)| (*t).clone())
-        .reduce(|acc, t| plain_app("PProd", vec![t, acc]))
+        .reduce(|acc, t| plain_app(GlobalPath("PProd"), vec![t, acc]))
         .unwrap_or_else(|| punit_ty_p(poly))
 }
 
 /// Right-nested `PProd.mk` chain (`Unit.unit` when no observations).
 fn mutual_pack(vals: &[SurfaceExpr]) -> SurfaceExpr {
     match vals {
-        [] => ident("PUnit.unit"),
+        [] => ident(GlobalPath("PUnit.unit")),
         [only] => only.clone(),
-        [first, rest @ ..] => plain_app("PProd.mk", vec![first.clone(), mutual_pack(rest)]),
+        [first, rest @ ..] => plain_app(
+            GlobalPath("PProd.mk"),
+            vec![first.clone(), mutual_pack(rest)],
+        ),
     }
 }
 
@@ -1826,28 +2048,31 @@ fn mutual_pack(vals: &[SurfaceExpr]) -> SurfaceExpr {
 /// Position tower at the declared level: `PUnit.{u+1}` towers when the
 /// codata is polymorphic (positions live in the same universe as the
 /// families — the plain-lane discipline), `PUnit.{1}` otherwise.
-fn mut_pos_ty_p(m: usize, poly: Option<&str>) -> SurfaceExpr {
+fn mut_pos_ty_p(m: usize, poly: Option<&SurfaceName>) -> SurfaceExpr {
     if m <= 1 {
         punit_ty_p(poly)
     } else {
-        plain_app("Sum", vec![punit_ty_p(poly), mut_pos_ty_p(m - 1, poly)])
+        plain_app(
+            GlobalPath("Sum"),
+            vec![punit_ty_p(poly), mut_pos_ty_p(m - 1, poly)],
+        )
     }
 }
 
 fn mut_pos_point(i: usize, m: usize) -> SurfaceExpr {
     if m <= 1 {
-        ident("PUnit.unit")
+        ident(GlobalPath("PUnit.unit"))
     } else if i == 0 {
-        plain_app("Sum.inl", vec![ident("PUnit.unit")])
+        plain_app(GlobalPath("Sum.inl"), vec![ident(GlobalPath("PUnit.unit"))])
     } else {
-        plain_app("Sum.inr", vec![mut_pos_point(i - 1, m - 1)])
+        plain_app(GlobalPath("Sum.inr"), vec![mut_pos_point(i - 1, m - 1)])
     }
 }
 
-fn lam1(name: &str, body: SurfaceExpr) -> SurfaceExpr {
+fn lam1(name: impl CodataIdentifier, body: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::Lambda(
         Span::dummy(),
-        vec![SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit)],
+        vec![surface_binder(name, None, SurfaceBinderInfo::Explicit)],
         Box::new(body),
     )
 }
@@ -1860,17 +2085,21 @@ fn bool_rec(
     scrut: SurfaceExpr,
 ) -> SurfaceExpr {
     let mut args = vec![SurfaceArg::positional(motive)];
-    args[0].name = Some("motive".to_string());
+    args[0].name = Some(SurfaceName::generated_path("motive"));
     args.extend([
         SurfaceArg::positional(fc),
         SurfaceArg::positional(tc),
         SurfaceArg::positional(scrut),
     ]);
-    SurfaceExpr::App(Span::dummy(), Box::new(ident("Bool.rec")), args)
+    SurfaceExpr::App(Span::dummy(), Box::new(ident(GlobalPath("Bool.rec"))), args)
 }
 
 /// Non-dependent Sum.rec chain over m positions returning `Bool` targets.
-fn mut_tgt_chain_p(targets: &[SurfaceExpr], scrut: SurfaceExpr, poly: Option<&str>) -> SurfaceExpr {
+fn mut_tgt_chain_p(
+    targets: &[SurfaceExpr],
+    scrut: SurfaceExpr,
+    poly: Option<&SurfaceName>,
+) -> SurfaceExpr {
     match targets {
         [only] => only.clone(),
         [first, rest @ ..] => {
@@ -1883,12 +2112,12 @@ fn mut_tgt_chain_p(targets: &[SurfaceExpr], scrut: SurfaceExpr, poly: Option<&st
                 Span::dummy(),
                 Box::new(SurfaceExpr::Explicit(
                     Span::dummy(),
-                    Box::new(ident("Sum.rec")),
+                    Box::new(ident(GlobalPath("Sum.rec"))),
                 )),
                 vec![
                     SurfaceArg::positional(punit_ty_p(poly)),
                     SurfaceArg::positional(mut_pos_ty_p(rest.len(), poly)),
-                    SurfaceArg::positional(lam1("_", ident("Bool"))),
+                    SurfaceArg::positional(lam1("_", ident(GlobalPath("Bool")))),
                     SurfaceArg::positional(lam1("_", first.clone())),
                     SurfaceArg::positional(inner),
                     SurfaceArg::positional(scrut),
@@ -1909,7 +2138,7 @@ fn mut_state_chain_p(
     st_at: &SurfaceExpr,
     tgt_full: &dyn Fn(SurfaceExpr) -> SurfaceExpr,
     scrut: SurfaceExpr,
-    poly: Option<&str>,
+    poly: Option<&SurfaceName>,
 ) -> SurfaceExpr {
     match branch_states {
         [only] => only.clone(),
@@ -1917,7 +2146,7 @@ fn mut_state_chain_p(
             let wrap = |e: SurfaceExpr, d: usize| -> SurfaceExpr {
                 let mut w = e;
                 for _ in 0..d {
-                    w = plain_app("Sum.inr", vec![w]);
+                    w = plain_app(GlobalPath("Sum.inr"), vec![w]);
                 }
                 w
             };
@@ -1940,7 +2169,7 @@ fn mut_state_chain_p(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Explicit(
                     Span::dummy(),
-                    Box::new(ident("Sum.rec")),
+                    Box::new(ident(GlobalPath("Sum.rec"))),
                 )),
                 vec![
                     SurfaceArg::positional(punit_ty_p(poly)),
@@ -1956,8 +2185,8 @@ fn mut_state_chain_p(
     }
 }
 
-fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<SurfaceDecl> {
-    let names: Vec<&str> = shapes.iter().map(|m| m.name).collect();
+fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&SurfaceName>) -> Vec<SurfaceDecl> {
+    let names: Vec<&SurfaceName> = shapes.iter().map(|m| m.name).collect();
     let param_exprs: Vec<SurfaceExpr> = shapes[0].binders.iter().map(|b| ident(&b.name)).collect();
     let explicit_binders: Vec<SurfaceBinder> = shapes[0].binders.to_vec();
     let implicit_binders: Vec<SurfaceBinder> = explicit_binders
@@ -1970,14 +2199,14 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         .collect();
     let tag = |mi: usize| ident(if mi == 0 { "true" } else { "false" });
 
-    let joint = format!("{}.{}", names[0], names[1]);
-    let shape_f = format!("{joint}.shapeF");
-    let pos_f = format!("{joint}.posF");
-    let tgt_f = format!("{joint}.tgtF");
-    let st_f = format!("{joint}.stF");
-    let mk_step = format!("{joint}.mkStep");
-    let step_fn = format!("{joint}.step");
-    let container = |f: &str| plain_app(f, param_exprs.clone());
+    let joint = names[0].append(names[1]);
+    let shape_f = child_name(&joint, "shapeF");
+    let pos_f = child_name(&joint, "posF");
+    let tgt_f = child_name(&joint, "tgtF");
+    let st_f = child_name(&joint, "stF");
+    let mk_step = child_name(&joint, "mkStep");
+    let step_fn = child_name(&joint, "step");
+    let container = |f: &SurfaceName| plain_app(f, param_exprs.clone());
 
     let mut out = Vec::new();
 
@@ -1985,7 +2214,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     out.push(mk_def(
         shape_f.clone(),
         explicit_binders.clone(),
-        arrow(ident("Bool"), type_u(poly)),
+        arrow(ident(GlobalPath("Bool")), type_u(poly)),
         lam1(
             "tg",
             bool_rec(
@@ -2000,7 +2229,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     out.push(mk_def(
         pos_f.clone(),
         explicit_binders.clone(),
-        pi("i", ident("Bool"), {
+        pi("i", ident(GlobalPath("Bool")), {
             let mut args = param_exprs.clone();
             args.push(ident("i"));
             arrow(plain_app(&shape_f, args), type_u(poly))
@@ -2026,8 +2255,8 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             SurfaceExpr::Lambda(
                 Span::dummy(),
                 vec![
-                    SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                    SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
+                    surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                    surface_binder("_", None, SurfaceBinderInfo::Explicit),
                 ],
                 Box::new(targets[0].clone()),
             )
@@ -2035,8 +2264,8 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             SurfaceExpr::Lambda(
                 Span::dummy(),
                 vec![
-                    SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                    SurfaceBinder::new("pb", None, SurfaceBinderInfo::Explicit),
+                    surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                    surface_binder("pb", None, SurfaceBinderInfo::Explicit),
                 ],
                 Box::new(mut_tgt_chain_p(&targets, ident("pb"), poly)),
             )
@@ -2045,13 +2274,13 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     out.push(mk_def(
         tgt_f.clone(),
         explicit_binders.clone(),
-        pi("i", ident("Bool"), {
+        pi("i", ident(GlobalPath("Bool")), {
             let mut sargs = param_exprs.clone();
             sargs.push(ident("i"));
             pi("a", plain_app(&shape_f, sargs), {
                 let mut pargs = param_exprs.clone();
                 pargs.extend([ident("i"), ident("a")]);
-                arrow(plain_app(&pos_f, pargs), ident("Bool"))
+                arrow(plain_app(&pos_f, pargs), ident(GlobalPath("Bool")))
             })
         }),
         lam1(
@@ -2063,7 +2292,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                     pi("a", plain_app(&shape_f, sargs), {
                         let mut pargs = param_exprs.clone();
                         pargs.extend([ident("tg2"), ident("a")]);
-                        arrow(plain_app(&pos_f, pargs), ident("Bool"))
+                        arrow(plain_app(&pos_f, pargs), ident(GlobalPath("Bool")))
                     })
                 }),
                 tgt_case(&shapes[1]),
@@ -2076,13 +2305,13 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     // Member carriers.
     for (mi, m) in shapes.iter().enumerate() {
         out.push(mk_def(
-            m.name.to_string(),
+            m.name.clone(),
             explicit_binders.clone(),
             type_u(poly),
             at_app(
-                "Codata.IMIntl",
+                GlobalPath("Codata.IMIntl"),
                 vec![
-                    ident("Bool"),
+                    ident(GlobalPath("Bool")),
                     container(&shape_f),
                     container(&pos_f),
                     container(&tgt_f),
@@ -2098,9 +2327,9 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         let k = m.obs.len();
         for (oi, (obs_name, obs_ty)) in m.obs.iter().enumerate() {
             let mut sel = at_app(
-                "Codata.IMhead",
+                GlobalPath("Codata.IMhead"),
                 vec![
-                    ident("Bool"),
+                    ident(GlobalPath("Bool")),
                     container(&shape_f),
                     container(&pos_f),
                     container(&tgt_f),
@@ -2115,10 +2344,10 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                 sel = SurfaceExpr::Proj(Span::dummy(), Box::new(sel), Projection::Index(1));
             }
             out.push(mk_def(
-                format!("{}.{obs_name}", m.name),
+                m.name.append(obs_name),
                 {
                     let mut bs = implicit_binders.clone();
-                    bs.push(SurfaceBinder::new(
+                    bs.push(surface_binder(
                         "x",
                         Some(self_ty.clone()),
                         SurfaceBinderInfo::Explicit,
@@ -2132,10 +2361,10 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         let mcount = m.steps.len();
         for (si, (step_name, tgt_mi)) in m.steps.iter().enumerate() {
             out.push(mk_def(
-                format!("{}.{step_name}", m.name),
+                m.name.append(step_name),
                 {
                     let mut bs = implicit_binders.clone();
-                    bs.push(SurfaceBinder::new(
+                    bs.push(surface_binder(
                         "x",
                         Some(self_ty.clone()),
                         SurfaceBinderInfo::Explicit,
@@ -2144,9 +2373,9 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                 },
                 plain_app(names[*tgt_mi], param_exprs.clone()),
                 at_app(
-                    "Codata.IMchild",
+                    GlobalPath("Codata.IMchild"),
                     vec![
-                        ident("Bool"),
+                        ident(GlobalPath("Bool")),
                         container(&shape_f),
                         container(&pos_f),
                         container(&tgt_f),
@@ -2163,10 +2392,10 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     out.push(mk_def(
         st_f.clone(),
         vec![
-            SurfaceBinder::new("S1", Some(type_u(poly)), SurfaceBinderInfo::Explicit),
-            SurfaceBinder::new("S2", Some(type_u(poly)), SurfaceBinderInfo::Explicit),
+            surface_binder("S1", Some(type_u(poly)), SurfaceBinderInfo::Explicit),
+            surface_binder("S2", Some(type_u(poly)), SurfaceBinderInfo::Explicit),
         ],
-        arrow(ident("Bool"), type_u(poly)),
+        arrow(ident(GlobalPath("Bool")), type_u(poly)),
         lam1(
             "tg",
             bool_rec(
@@ -2185,10 +2414,14 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         {
             let mut bs = implicit_binders.clone();
             bs.extend([
-                SurfaceBinder::new("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
-                SurfaceBinder::new("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
-                SurfaceBinder::new("tg", Some(ident("Bool")), SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(
+                surface_binder("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                surface_binder("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                surface_binder(
+                    "tg",
+                    Some(ident(GlobalPath("Bool"))),
+                    SurfaceBinderInfo::Explicit,
+                ),
+                surface_binder(
                     "a",
                     Some({
                         let mut args = param_exprs.clone();
@@ -2197,11 +2430,11 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                     }),
                     SurfaceBinderInfo::Explicit,
                 ),
-                SurfaceBinder::new(
+                surface_binder(
                     "f",
                     Some(SurfaceExpr::Pi(
                         Span::dummy(),
-                        vec![SurfaceBinder::new(
+                        vec![surface_binder(
                             "b",
                             Some({
                                 let mut args = param_exprs.clone();
@@ -2235,7 +2468,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                 ident("tg"),
             ],
         ),
-        plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+        plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
     ));
 
     // Per-field corec function binders (member 0's fields, then member 1's;
@@ -2244,16 +2477,16 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     for (mi, m) in shapes.iter().enumerate() {
         let s_own = if mi == 0 { "S1" } else { "S2" };
         for (obs_name, obs_ty) in &m.obs {
-            fn_binders.push(SurfaceBinder::new(
-                format!("{}_{obs_name}F", m.name).as_str(),
+            fn_binders.push(surface_binder(
+                affix_name(&pair_name(m.name, "_", obs_name), "", "F"),
                 Some(arrow(ident(s_own), (*obs_ty).clone())),
                 SurfaceBinderInfo::Explicit,
             ));
         }
         for (step_name, tgt_mi) in &m.steps {
             let s_tgt = if *tgt_mi == 0 { "S1" } else { "S2" };
-            fn_binders.push(SurfaceBinder::new(
-                format!("{}_{step_name}F", m.name).as_str(),
+            fn_binders.push(surface_binder(
+                affix_name(&pair_name(m.name, "_", step_name), "", "F"),
                 Some(arrow(ident(s_own), ident(s_tgt))),
                 SurfaceBinderInfo::Explicit,
             ));
@@ -2264,11 +2497,11 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         .flat_map(|m| {
             m.obs
                 .iter()
-                .map(|(n, _)| ident(&format!("{}_{n}F", m.name)))
+                .map(|(n, _)| ident(affix_name(&pair_name(m.name, "_", n), "", "F")))
                 .chain(
                     m.steps
                         .iter()
-                        .map(|(n, _)| ident(&format!("{}_{n}F", m.name))),
+                        .map(|(n, _)| ident(affix_name(&pair_name(m.name, "_", n), "", "F"))),
                 )
                 .collect::<Vec<_>>()
         })
@@ -2280,13 +2513,23 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         let label = mutual_pack(
             &m.obs
                 .iter()
-                .map(|(n, _)| plain_app(&format!("{}_{n}F", m.name), vec![ident("sv")]))
+                .map(|(n, _)| {
+                    plain_app(
+                        affix_name(&pair_name(m.name, "_", n), "", "F"),
+                        vec![ident("sv")],
+                    )
+                })
                 .collect::<Vec<_>>(),
         );
         let branch_states: Vec<SurfaceExpr> = m
             .steps
             .iter()
-            .map(|(n, _)| plain_app(&format!("{}_{n}F", m.name), vec![ident("sv")]))
+            .map(|(n, _)| {
+                plain_app(
+                    affix_name(&pair_name(m.name, "_", n), "", "F"),
+                    vec![ident("sv")],
+                )
+            })
             .collect();
         let tgt_full = {
             let param_exprs = param_exprs.clone();
@@ -2323,13 +2566,13 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         {
             let mut bs = implicit_binders.clone();
             bs.extend([
-                SurfaceBinder::new("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
-                SurfaceBinder::new("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                surface_binder("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                surface_binder("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
             ]);
             bs.extend(fn_binders.clone());
             bs
         },
-        pi("j", ident("Bool"), {
+        pi("j", ident(GlobalPath("Bool")), {
             arrow(
                 SurfaceExpr::App(
                     Span::dummy(),
@@ -2381,7 +2624,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     for (mi, m) in shapes.iter().enumerate() {
         let s_own = if mi == 0 { "S1" } else { "S2" };
         let self_ty = plain_app(m.name, param_exprs.clone());
-        let corec_name = format!("{}.corec", m.name);
+        let corec_name = child_name(m.name, "corec");
         let step_call = {
             let mut args = param_exprs.clone();
             args.extend([ident("S1"), ident("S2")]);
@@ -2393,11 +2636,11 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             {
                 let mut bs = implicit_binders.clone();
                 bs.extend([
-                    SurfaceBinder::new("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
-                    SurfaceBinder::new("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                    surface_binder("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                    surface_binder("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
                 ]);
                 bs.extend(fn_binders.clone());
-                bs.push(SurfaceBinder::new(
+                bs.push(surface_binder(
                     "s",
                     Some(ident(s_own)),
                     SurfaceBinderInfo::Explicit,
@@ -2408,7 +2651,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             at_app(
                 "Codata.IMcorec",
                 vec![
-                    ident("Bool"),
+                    ident(GlobalPath("Bool")),
                     container(&shape_f),
                     container(&pos_f),
                     container(&tgt_f),
@@ -2424,13 +2667,13 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
     // member's tag; children typed at their target members. rfl laws.
     for (mi, m) in shapes.iter().enumerate() {
         let self_ty = plain_app(m.name, param_exprs.clone());
-        let mk_step_name = format!("{}.mkStep2", m.name);
+        let mk_step_name = child_name(m.name, "mkStep2");
         out.push(mk_def(
             mk_step_name.clone(),
             {
                 let mut bs = implicit_binders.clone();
                 bs.extend([
-                    SurfaceBinder::new(
+                    surface_binder(
                         "a",
                         Some({
                             let mut args = param_exprs.clone();
@@ -2439,11 +2682,11 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                         }),
                         SurfaceBinderInfo::Explicit,
                     ),
-                    SurfaceBinder::new(
+                    surface_binder(
                         "f",
                         Some(SurfaceExpr::Pi(
                             Span::dummy(),
-                            vec![SurfaceBinder::new(
+                            vec![surface_binder(
                                 "b",
                                 Some({
                                     let mut args = param_exprs.clone();
@@ -2453,7 +2696,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                                 SurfaceBinderInfo::Explicit,
                             )],
                             Box::new(plain_app(
-                                "Codata.IMIntl",
+                                GlobalPath("Codata.IMIntl"),
                                 vec![container(&shape_f), container(&pos_f), container(&tgt_f), {
                                     let mut targs = param_exprs.clone();
                                     targs.extend([tag(mi), ident("a"), ident("b")]);
@@ -2473,25 +2716,25 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                     container(&pos_f),
                     container(&tgt_f),
                     plain_app(
-                        "Codata.IMIntl",
+                        GlobalPath("Codata.IMIntl"),
                         vec![container(&shape_f), container(&pos_f), container(&tgt_f)],
                     ),
                     tag(mi),
                 ],
             ),
-            plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+            plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
         ));
         let mut mk_binders = implicit_binders.clone();
         for (obs_name, obs_ty) in m.obs.iter() {
-            mk_binders.push(SurfaceBinder::new(
-                format!("{obs_name}V").as_str(),
+            mk_binders.push(surface_binder(
+                affix_name(obs_name, "", "V"),
                 Some((*obs_ty).clone()),
                 SurfaceBinderInfo::Explicit,
             ));
         }
         for (step_name, tgt_mi) in m.steps.iter() {
-            mk_binders.push(SurfaceBinder::new(
-                format!("{step_name}V").as_str(),
+            mk_binders.push(surface_binder(
+                affix_name(step_name, "", "V"),
                 Some(plain_app(names[*tgt_mi], param_exprs.clone())),
                 SurfaceBinderInfo::Explicit,
             ));
@@ -2499,13 +2742,13 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
         let mk_label = mutual_pack(
             &m.obs
                 .iter()
-                .map(|(n, _)| ident(&format!("{n}V")))
+                .map(|(n, _)| ident(affix_name(n, "", "V")))
                 .collect::<Vec<_>>(),
         );
         let mk_children: Vec<SurfaceExpr> = m
             .steps
             .iter()
-            .map(|(n, _)| ident(&format!("{n}V")))
+            .map(|(n, _)| ident(affix_name(n, "", "V")))
             .collect();
         let mk_child_fn = if mk_children.len() == 1 {
             lam1("_", mk_children[0].clone())
@@ -2527,7 +2770,7 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
                     &mk_children,
                     0,
                     &plain_app(
-                        "Codata.IMIntl",
+                        GlobalPath("Codata.IMIntl"),
                         vec![container(&shape_f), container(&pos_f), container(&tgt_f)],
                     ),
                     &tgt_full,
@@ -2537,14 +2780,14 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             )
         };
         out.push(mk_def(
-            format!("{}.mk", m.name),
+            child_name(m.name, "mk"),
             mk_binders.clone(),
             self_ty.clone(),
-            at_app("Codata.IMmk", {
+            at_app(GlobalPath("Codata.IMmk"), {
                 let mut mkargs = param_exprs.clone();
                 mkargs.extend([mk_label.clone(), mk_child_fn]);
                 vec![
-                    ident("Bool"),
+                    ident(GlobalPath("Bool")),
                     container(&shape_f),
                     container(&pos_f),
                     container(&tgt_f),
@@ -2558,10 +2801,10 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             args.extend(
                 m.obs
                     .iter()
-                    .map(|(n, _)| ident(&format!("{n}V")))
-                    .chain(m.steps.iter().map(|(n, _)| ident(&format!("{n}V")))),
+                    .map(|(n, _)| ident(affix_name(n, "", "V")))
+                    .chain(m.steps.iter().map(|(n, _)| ident(affix_name(n, "", "V")))),
             );
-            at_app(&format!("{}.mk", m.name), args)
+            at_app(child_name(m.name, "mk"), args)
         };
         for field_name in m
             .obs
@@ -2569,21 +2812,21 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             .map(|(n, _)| *n)
             .chain(m.steps.iter().map(|(n, _)| *n))
         {
-            let full = format!("{}.{field_name}", m.name);
+            let full = m.name.append(field_name);
             let mut acc_args = param_exprs.clone();
             acc_args.push(mk_call.clone());
             out.push(mk_theorem(
-                format!("{full}_mk"),
+                affix_name(&full, "", "_mk"),
                 mk_binders.clone(),
                 SurfaceExpr::App(
                     Span::dummy(),
-                    Box::new(ident("Eq")),
+                    Box::new(ident(GlobalPath("Eq"))),
                     vec![
                         SurfaceArg::positional(at_app(&full, acc_args)),
-                        SurfaceArg::positional(ident(&format!("{field_name}V"))),
+                        SurfaceArg::positional(ident(affix_name(field_name, "", "V"))),
                     ],
                 ),
-                ident("rfl"),
+                ident(GlobalPath("rfl")),
             ));
         }
     }
@@ -2595,16 +2838,16 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             args.extend([ident("S1"), ident("S2")]);
             args.extend(all_fn_idents.clone());
             args.push(extra);
-            at_app(&format!("{}.corec", names[member]), args)
+            at_app(child_name(names[member], "corec"), args)
         };
         let law_binders = || {
             let mut bs = implicit_binders.clone();
             bs.extend([
-                SurfaceBinder::new("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
-                SurfaceBinder::new("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                surface_binder("S1", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
+                surface_binder("S2", Some(type_u(poly)), SurfaceBinderInfo::Implicit),
             ]);
             bs.extend(fn_binders.clone());
-            bs.push(SurfaceBinder::new(
+            bs.push(surface_binder(
                 "s",
                 Some(ident(if mi == 0 { "S1" } else { "S2" })),
                 SurfaceBinderInfo::Explicit,
@@ -2612,45 +2855,48 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
             bs
         };
         for (obs_name, _) in &m.obs {
-            let full = format!("{}.{obs_name}", m.name);
+            let full = m.name.append(obs_name);
             let mut acc_args = param_exprs.clone();
             acc_args.push(corec_call(mi, ident("s")));
             out.push(mk_theorem(
-                format!("{full}_corec"),
+                affix_name(&full, "", "_corec"),
                 law_binders(),
                 SurfaceExpr::App(
                     Span::dummy(),
-                    Box::new(ident("Eq")),
+                    Box::new(ident(GlobalPath("Eq"))),
                     vec![
                         SurfaceArg::positional(at_app(&full, acc_args)),
                         SurfaceArg::positional(plain_app(
-                            &format!("{}_{obs_name}F", m.name),
+                            affix_name(&pair_name(m.name, "_", obs_name), "", "F"),
                             vec![ident("s")],
                         )),
                     ],
                 ),
-                ident("rfl"),
+                ident(GlobalPath("rfl")),
             ));
         }
         for (step_name, tgt_mi) in &m.steps {
-            let full = format!("{}.{step_name}", m.name);
+            let full = m.name.append(step_name);
             let mut acc_args = param_exprs.clone();
             acc_args.push(corec_call(mi, ident("s")));
             out.push(mk_theorem(
-                format!("{full}_corec"),
+                affix_name(&full, "", "_corec"),
                 law_binders(),
                 SurfaceExpr::App(
                     Span::dummy(),
-                    Box::new(ident("Eq")),
+                    Box::new(ident(GlobalPath("Eq"))),
                     vec![
                         SurfaceArg::positional(at_app(&full, acc_args)),
                         SurfaceArg::positional(corec_call(
                             *tgt_mi,
-                            plain_app(&format!("{}_{step_name}F", m.name), vec![ident("s")]),
+                            plain_app(
+                                affix_name(&pair_name(m.name, "_", step_name), "", "F"),
+                                vec![ident("s")],
+                            ),
                         )),
                     ],
                 ),
-                ident("rfl"),
+                ident(GlobalPath("rfl")),
             ));
         }
     }
@@ -2664,31 +2910,31 @@ fn generate_mutual(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Surfa
 // index its child lives at. Mirrors the hand-validated IStream expansion.
 
 struct IndexedShape<'a> {
-    name: &'a str,
+    name: &'a SurfaceName,
     /// The single declared universe parameter, when polymorphic (v1: ≤1).
-    poly: Option<&'a str>,
+    poly: Option<&'a SurfaceName>,
     binders: &'a [SurfaceBinder],
     idx_binders: &'a [SurfaceBinder],
-    idx_name: &'a str,
+    idx_name: &'a SurfaceName,
     idx_ty: &'a SurfaceExpr,
-    obs: Vec<(&'a str, &'a SurfaceExpr)>,
+    obs: Vec<(&'a SurfaceName, &'a SurfaceExpr)>,
     /// (field name, target index expressions — one per index binder)
-    steps: Vec<(&'a str, Vec<&'a SurfaceExpr>)>,
+    steps: Vec<(&'a SurfaceName, Vec<&'a SurfaceExpr>)>,
 }
 
 #[allow(clippy::too_many_arguments)]
 fn validate_indexed<'a>(
-    name: &'a str,
-    universe_params: &'a [String],
+    name: &'a SurfaceName,
+    universe_params: &'a [SurfaceName],
     binders: &'a [SurfaceBinder],
     pi_binders: &'a [SurfaceBinder],
     fields: &'a [SurfaceField],
-    deriving: &[String],
+    deriving: &[SurfaceName],
     modifiers: &DeclModifiers,
 ) -> Result<IndexedShape<'a>, ElabError> {
     let poly = match universe_params {
         [] => None,
-        [u] => Some(u.as_str()),
+        [u] => Some(u),
         _ => {
             return Err(unsupported(format!(
                 "indexed codata `{name}`: at most ONE universe parameter is \
@@ -2732,7 +2978,7 @@ fn validate_indexed<'a>(
     }
     // A recursive field is exactly `C p1 … pk <index-expr>` (the shared
     // parameters in order, then one positional index expression).
-    let param_names: Vec<&str> = binders.iter().map(|b| b.name.as_str()).collect();
+    let param_names: Vec<&SurfaceName> = binders.iter().map(|b| &b.name).collect();
     let target_of = |t: &'a SurfaceExpr| -> Option<Vec<&'a SurfaceExpr>> {
         let SurfaceExpr::App(_, h, args) = strip_parens(t) else {
             return None;
@@ -2746,7 +2992,7 @@ fn validate_indexed<'a>(
             return None;
         }
         for (a, pn) in args.iter().zip(&param_names) {
-            if !matches!(strip_parens(&a.expr), SurfaceExpr::Ident(_, id) if id == pn) {
+            if !matches!(strip_parens(&a.expr), SurfaceExpr::Ident(_, id) if id == *pn) {
                 return None;
             }
         }
@@ -2783,9 +3029,9 @@ fn validate_indexed<'a>(
             )));
         }
     }
-    let mut seen: Vec<&str> = Vec::new();
+    let mut seen: Vec<&SurfaceName> = Vec::new();
     for f in fields {
-        if seen.contains(&f.name.as_str()) {
+        if seen.contains(&&f.name) {
             return Err(unsupported(format!(
                 "indexed codata `{name}`: field names must be distinct"
             )));
@@ -2799,15 +3045,12 @@ fn validate_indexed<'a>(
         idx_binders: pi_binders,
         idx_name: &idx.name,
         idx_ty,
-        obs: obs_fields
-            .iter()
-            .map(|f| (f.name.as_str(), &f.ty))
-            .collect(),
+        obs: obs_fields.iter().map(|f| (&f.name, &f.ty)).collect(),
         steps: step_fields
             .iter()
             .map(|f| {
                 (
-                    f.name.as_str(),
+                    &f.name,
                     target_of(&f.ty).expect("trailing split guarantees a target"),
                 )
             })
@@ -2838,17 +3081,17 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             ib
         })
         .collect();
-    let capp = |f: &str, extra: Vec<SurfaceExpr>| -> SurfaceExpr {
+    let capp = |f: &SurfaceName, extra: Vec<SurfaceExpr>| -> SurfaceExpr {
         let mut args = param_exprs.clone();
         args.extend(extra);
         plain_app(f, args)
     };
-    let shape_f = format!("{name}.shapeF");
-    let pos_f = format!("{name}.posF");
-    let tgt_f = format!("{name}.tgtF");
-    let mk_step = format!("{name}.mkStep");
-    let step_fn = format!("{name}.stepFn");
-    let corec = format!("{name}.corec");
+    let shape_f = child_name(name, "shapeF");
+    let pos_f = child_name(name, "posF");
+    let tgt_f = child_name(name, "tgtF");
+    let mk_step = child_name(name, "mkStep");
+    let step_fn = child_name(name, "stepFn");
+    let corec = child_name(name, "corec");
     let m = steps.len();
     let k = obs.len();
 
@@ -2856,7 +3099,7 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         .iter()
         .rev()
         .map(|(_, t)| (*t).clone())
-        .reduce(|acc, t| plain_app("PProd", vec![t, acc]))
+        .reduce(|acc, t| plain_app(GlobalPath("PProd"), vec![t, acc]))
         .expect("validated: at least one observation");
 
     let mut out = Vec::new();
@@ -2879,8 +3122,8 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(mut_pos_ty_p(m, poly)),
         ),
@@ -2892,9 +3135,9 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new(*idx_name, None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder(*idx_name, None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(idx_targets[0].clone()),
         )
@@ -2902,9 +3145,9 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new(*idx_name, None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("pb", None, SurfaceBinderInfo::Explicit),
+                surface_binder(*idx_name, None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("pb", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(mut_idx_chain_p(&idx_targets, &ity, ident("pb"), None)),
         )
@@ -2921,10 +3164,10 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     ));
     // def C (idx : I) : Type := @Codata.IMIntl I shapeF posF tgtF idx
     out.push(mk_def(
-        (*name).to_string(),
+        (*name).clone(),
         {
             let mut bs = explicit_params.clone();
-            bs.push(SurfaceBinder::new(
+            bs.push(surface_binder(
                 *idx_name,
                 Some(ity.clone()),
                 SurfaceBinderInfo::Explicit,
@@ -2933,7 +3176,7 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         },
         type_u(poly),
         at_app(
-            "Codata.IMIntl",
+            GlobalPath("Codata.IMIntl"),
             vec![
                 ity.clone(),
                 capp(&shape_f, vec![]),
@@ -2944,11 +3187,11 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         ),
     ));
     let self_at = |e: SurfaceExpr| capp(name, vec![e]);
-    let idx_binder = SurfaceBinder::new(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Implicit);
+    let idx_binder = surface_binder(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Implicit);
     // Observation accessors.
     for (oi, (obs_name, obs_ty)) in obs.iter().enumerate() {
         let mut sel = at_app(
-            "Codata.IMhead",
+            GlobalPath("Codata.IMhead"),
             vec![
                 ity.clone(),
                 capp(&shape_f, vec![]),
@@ -2965,12 +3208,12 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             sel = SurfaceExpr::Proj(Span::dummy(), Box::new(sel), Projection::Index(1));
         }
         out.push(mk_def(
-            format!("{name}.{obs_name}"),
+            name.append(obs_name),
             {
                 let mut bs = implicit_params.clone();
                 bs.extend([
                     idx_binder.clone(),
-                    SurfaceBinder::new(
+                    surface_binder(
                         "x",
                         Some(self_at(ident(idx_name))),
                         SurfaceBinderInfo::Explicit,
@@ -2985,12 +3228,12 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     // Recursive accessors (result type at the moved index).
     for (si, (step_name, idx_expr)) in steps.iter().enumerate() {
         out.push(mk_def(
-            format!("{name}.{step_name}"),
+            name.append(step_name),
             {
                 let mut bs = implicit_params.clone();
                 bs.extend([
                     idx_binder.clone(),
-                    SurfaceBinder::new(
+                    surface_binder(
                         "x",
                         Some(self_at(ident(idx_name))),
                         SurfaceBinderInfo::Explicit,
@@ -3000,7 +3243,7 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             },
             self_at(idx_expr[0].clone()),
             at_app(
-                "Codata.IMchild",
+                GlobalPath("Codata.IMchild"),
                 vec![
                     ity.clone(),
                     capp(&shape_f, vec![]),
@@ -3014,7 +3257,7 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         ));
     }
     // mkStep {S : I → Type} (idx) (a) (f)
-    let s_binder = SurfaceBinder::new(
+    let s_binder = surface_binder(
         "S",
         Some(arrow(ity.clone(), type_u(poly))),
         SurfaceBinderInfo::Implicit,
@@ -3025,17 +3268,17 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             let mut bs = implicit_params.clone();
             bs.extend(vec![
                 s_binder.clone(),
-                SurfaceBinder::new(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(
+                surface_binder(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Explicit),
+                surface_binder(
                     "a",
                     Some(capp(&shape_f, vec![ident(idx_name)])),
                     SurfaceBinderInfo::Explicit,
                 ),
-                SurfaceBinder::new(
+                surface_binder(
                     "f",
                     Some(SurfaceExpr::Pi(
                         Span::dummy(),
-                        vec![SurfaceBinder::new(
+                        vec![surface_binder(
                             "b",
                             Some(capp(&pos_f, vec![ident(idx_name), ident("a")])),
                             SurfaceBinderInfo::Explicit,
@@ -3064,13 +3307,13 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 ident(idx_name),
             ],
         ),
-        plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+        plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
     ));
     // Per-field function binders: obsF : (n : I) → S n → T; stepF : (n : I) → S n → S <idx-expr>
     let fn_ty = |result: SurfaceExpr| {
         SurfaceExpr::Pi(
             Span::dummy(),
-            vec![SurfaceBinder::new(
+            vec![surface_binder(
                 *idx_name,
                 Some(ity.clone()),
                 SurfaceBinderInfo::Explicit,
@@ -3087,15 +3330,15 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     };
     let mut fn_binders: Vec<SurfaceBinder> = Vec::new();
     for (obs_name, obs_ty) in obs {
-        fn_binders.push(SurfaceBinder::new(
-            format!("{obs_name}F").as_str(),
+        fn_binders.push(surface_binder(
+            affix_name(obs_name, "", "F"),
             Some(fn_ty((*obs_ty).clone())),
             SurfaceBinderInfo::Explicit,
         ));
     }
     for (step_name, idx_expr) in steps {
-        fn_binders.push(SurfaceBinder::new(
-            format!("{step_name}F").as_str(),
+        fn_binders.push(surface_binder(
+            affix_name(step_name, "", "F"),
             Some(fn_ty(SurfaceExpr::App(
                 Span::dummy(),
                 Box::new(ident("S")),
@@ -3106,18 +3349,18 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     }
     let all_fn_idents: Vec<SurfaceExpr> = obs
         .iter()
-        .map(|(n, _)| ident(&format!("{n}F")))
-        .chain(steps.iter().map(|(n, _)| ident(&format!("{n}F"))))
+        .map(|(n, _)| ident(affix_name(n, "", "F")))
+        .chain(steps.iter().map(|(n, _)| ident(affix_name(n, "", "F"))))
         .collect();
     // stepFn
     let label_pack = mutual_pack(
         &obs.iter()
-            .map(|(n, _)| plain_app(&format!("{n}F"), vec![ident("jv"), ident("sv")]))
+            .map(|(n, _)| plain_app(affix_name(n, "", "F"), vec![ident("jv"), ident("sv")]))
             .collect::<Vec<_>>(),
     );
     let branch_states: Vec<SurfaceExpr> = steps
         .iter()
-        .map(|(n, _)| plain_app(&format!("{n}F"), vec![ident("jv"), ident("sv")]))
+        .map(|(n, _)| plain_app(affix_name(n, "", "F"), vec![ident("jv"), ident("sv")]))
         .collect();
     let child = if m == 1 {
         lam1("_", branch_states[0].clone())
@@ -3169,8 +3412,8 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new("jv", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("sv", None, SurfaceBinderInfo::Explicit),
+                surface_binder("jv", None, SurfaceBinderInfo::Explicit),
+                surface_binder("sv", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(at_app(&mk_step, mkargs)),
         ),
@@ -3189,8 +3432,8 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             bs.push(s_binder.clone());
             bs.extend(fn_binders.clone());
             bs.extend([
-                SurfaceBinder::new(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(
+                surface_binder(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Explicit),
+                surface_binder(
                     "s",
                     Some(SurfaceExpr::App(
                         Span::dummy(),
@@ -3220,28 +3463,28 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     // The CONSTRUCTOR: C.mk {ps} {idx} (field values) — the finite
     // one-layer node at the given index; children live at their own
     // target indices. Per-field laws are rfl.
-    let mk_step_name = format!("{name}.mkStep2");
+    let mk_step_name = child_name(name, "mkStep2");
     out.push(mk_def(
         mk_step_name.clone(),
         {
             let mut bs = implicit_params.clone();
             bs.extend([
-                SurfaceBinder::new(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Implicit),
-                SurfaceBinder::new(
+                surface_binder(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Implicit),
+                surface_binder(
                     "a",
                     Some(capp(&shape_f, vec![ident(idx_name)])),
                     SurfaceBinderInfo::Explicit,
                 ),
-                SurfaceBinder::new(
+                surface_binder(
                     "f",
                     Some(SurfaceExpr::Pi(
                         Span::dummy(),
-                        vec![SurfaceBinder::new(
+                        vec![surface_binder(
                             "b",
                             Some(capp(&pos_f, vec![ident(idx_name), ident("a")])),
                             SurfaceBinderInfo::Explicit,
                         )],
-                        Box::new(plain_app("Codata.IMIntl", {
+                        Box::new(plain_app(GlobalPath("Codata.IMIntl"), {
                             vec![
                                 capp(&shape_f, vec![]),
                                 capp(&pos_f, vec![]),
@@ -3262,7 +3505,7 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 capp(&pos_f, vec![]),
                 capp(&tgt_f, vec![]),
                 plain_app(
-                    "Codata.IMIntl",
+                    GlobalPath("Codata.IMIntl"),
                     vec![
                         capp(&shape_f, vec![]),
                         capp(&pos_f, vec![]),
@@ -3272,35 +3515,37 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 ident(idx_name),
             ],
         ),
-        plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+        plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
     ));
     let mut mk_binders = implicit_params.clone();
-    mk_binders.push(SurfaceBinder::new(
+    mk_binders.push(surface_binder(
         *idx_name,
         Some(ity.clone()),
         SurfaceBinderInfo::Implicit,
     ));
     for (obs_name, obs_ty) in obs.iter() {
-        mk_binders.push(SurfaceBinder::new(
-            format!("{obs_name}V").as_str(),
+        mk_binders.push(surface_binder(
+            affix_name(obs_name, "", "V"),
             Some((*obs_ty).clone()),
             SurfaceBinderInfo::Explicit,
         ));
     }
     for (step_name, idx_expr) in steps.iter() {
-        mk_binders.push(SurfaceBinder::new(
-            format!("{step_name}V").as_str(),
+        mk_binders.push(surface_binder(
+            affix_name(step_name, "", "V"),
             Some(self_at(idx_expr[0].clone())),
             SurfaceBinderInfo::Explicit,
         ));
     }
     let mk_label = mutual_pack(
         &obs.iter()
-            .map(|(n, _)| ident(&format!("{n}V")))
+            .map(|(n, _)| ident(affix_name(n, "", "V")))
             .collect::<Vec<_>>(),
     );
-    let mk_children: Vec<SurfaceExpr> =
-        steps.iter().map(|(n, _)| ident(&format!("{n}V"))).collect();
+    let mk_children: Vec<SurfaceExpr> = steps
+        .iter()
+        .map(|(n, _)| ident(affix_name(n, "", "V")))
+        .collect();
     let mk_child_fn = if mk_children.len() == 1 {
         lam1("_", mk_children[0].clone())
     } else {
@@ -3318,7 +3563,7 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 &mk_children,
                 0,
                 &plain_app(
-                    "Codata.IMIntl",
+                    GlobalPath("Codata.IMIntl"),
                     vec![
                         capp(&shape_f, vec![]),
                         capp(&pos_f, vec![]),
@@ -3332,10 +3577,10 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         )
     };
     out.push(mk_def(
-        format!("{name}.mk"),
+        child_name(name, "mk"),
         mk_binders.clone(),
         self_at(ident(idx_name)),
-        at_app("Codata.IMmk", {
+        at_app(GlobalPath("Codata.IMmk"), {
             let mut mkargs = param_exprs.clone();
             mkargs.extend([ident(idx_name), mk_label.clone(), mk_child_fn]);
             vec![
@@ -3353,31 +3598,31 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         args.push(ident(idx_name));
         args.extend(
             obs.iter()
-                .map(|(n, _)| ident(&format!("{n}V")))
-                .chain(steps.iter().map(|(n, _)| ident(&format!("{n}V")))),
+                .map(|(n, _)| ident(affix_name(n, "", "V")))
+                .chain(steps.iter().map(|(n, _)| ident(affix_name(n, "", "V")))),
         );
-        at_app(&format!("{name}.mk"), args)
+        at_app(child_name(name, "mk"), args)
     };
     for field_name in obs
         .iter()
         .map(|(n, _)| *n)
         .chain(steps.iter().map(|(n, _)| *n))
     {
-        let full = format!("{name}.{field_name}");
+        let full = name.append(field_name);
         let mut acc_args = param_exprs.clone();
         acc_args.extend([ident(idx_name), mk_call.clone()]);
         out.push(mk_theorem(
-            format!("{full}_mk"),
+            affix_name(&full, "", "_mk"),
             mk_binders.clone(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(at_app(&full, acc_args)),
-                    SurfaceArg::positional(ident(&format!("{field_name}V"))),
+                    SurfaceArg::positional(ident(affix_name(field_name, "", "V"))),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
@@ -3394,8 +3639,8 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         bs.push(s_binder.clone());
         bs.extend(fn_binders.clone());
         bs.extend([
-            SurfaceBinder::new(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Explicit),
-            SurfaceBinder::new(
+            surface_binder(*idx_name, Some(ity.clone()), SurfaceBinderInfo::Explicit),
+            surface_binder(
                 "s",
                 Some(SurfaceExpr::App(
                     Span::dummy(),
@@ -3408,35 +3653,35 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         bs
     };
     for (obs_name, _) in obs {
-        let full = format!("{name}.{obs_name}");
+        let full = name.append(obs_name);
         out.push(mk_theorem(
-            format!("{full}_corec"),
+            affix_name(&full, "", "_corec"),
             law_binders(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(plain_app(
                         &full,
                         vec![corec_call(ident(idx_name), ident("s"))],
                     )),
                     SurfaceArg::positional(plain_app(
-                        &format!("{obs_name}F"),
+                        affix_name(obs_name, "", "F"),
                         vec![ident(idx_name), ident("s")],
                     )),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
     for (step_name, idx_expr) in steps {
-        let full = format!("{name}.{step_name}");
+        let full = name.append(step_name);
         out.push(mk_theorem(
-            format!("{full}_corec"),
+            affix_name(&full, "", "_corec"),
             law_binders(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(plain_app(
                         &full,
@@ -3444,11 +3689,14 @@ fn generate_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                     )),
                     SurfaceArg::positional(corec_call(
                         idx_expr[0].clone(),
-                        plain_app(&format!("{step_name}F"), vec![ident(idx_name), ident("s")]),
+                        plain_app(
+                            affix_name(step_name, "", "F"),
+                            vec![ident(idx_name), ident("s")],
+                        ),
                     )),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
@@ -3461,7 +3709,7 @@ fn mut_idx_chain_p(
     targets: &[SurfaceExpr],
     ity: &SurfaceExpr,
     scrut: SurfaceExpr,
-    poly: Option<&str>,
+    poly: Option<&SurfaceName>,
 ) -> SurfaceExpr {
     match targets {
         [only] => only.clone(),
@@ -3475,7 +3723,7 @@ fn mut_idx_chain_p(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Explicit(
                     Span::dummy(),
-                    Box::new(ident("Sum.rec")),
+                    Box::new(ident(GlobalPath("Sum.rec"))),
                 )),
                 vec![
                     SurfaceArg::positional(punit_ty_p(poly)),
@@ -3505,7 +3753,7 @@ fn tag_tower_p(
     mk_m: &dyn Fn(SurfaceExpr) -> SurfaceExpr,
     depth: usize,
     scrut: SurfaceExpr,
-    poly: Option<&str>,
+    poly: Option<&SurfaceName>,
 ) -> SurfaceExpr {
     match cases {
         [only] => only.clone(),
@@ -3513,7 +3761,7 @@ fn tag_tower_p(
             let wrap = |e: SurfaceExpr, d: usize| -> SurfaceExpr {
                 let mut w = e;
                 for _ in 0..d {
-                    w = plain_app("Sum.inr", vec![w]);
+                    w = plain_app(GlobalPath("Sum.inr"), vec![w]);
                 }
                 w
             };
@@ -3527,7 +3775,7 @@ fn tag_tower_p(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Explicit(
                     Span::dummy(),
-                    Box::new(ident("Sum.rec")),
+                    Box::new(ident(GlobalPath("Sum.rec"))),
                 )),
                 vec![
                     SurfaceArg::positional(punit_ty_p(poly)),
@@ -3543,9 +3791,9 @@ fn tag_tower_p(
     }
 }
 
-fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<SurfaceDecl> {
+fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&SurfaceName>) -> Vec<SurfaceDecl> {
     let n = shapes.len();
-    let names: Vec<&str> = shapes.iter().map(|m| m.name).collect();
+    let names: Vec<&SurfaceName> = shapes.iter().map(|m| m.name).collect();
     let param_exprs: Vec<SurfaceExpr> = shapes[0].binders.iter().map(|b| ident(&b.name)).collect();
     let explicit_binders: Vec<SurfaceBinder> = shapes[0].binders.to_vec();
     let implicit_binders: Vec<SurfaceBinder> = explicit_binders
@@ -3558,24 +3806,27 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
         .collect();
     let tag_ty = mut_pos_ty_p(n, poly);
     let tag = |mi: usize| mut_pos_point(mi, n);
-    let state_name = |mi: usize| format!("S{}", mi + 1);
+    let state_name = |mi: usize| SurfaceName::component(format!("S{}", mi + 1), false);
 
-    let joint = names.join(".");
-    let shape_f = format!("{joint}.shapeF");
-    let pos_f = format!("{joint}.posF");
-    let tgt_f = format!("{joint}.tgtF");
-    let st_f = format!("{joint}.stF");
-    let mk_step = format!("{joint}.mkStep");
-    let step_fn = format!("{joint}.step");
-    let container = |f: &str| plain_app(f, param_exprs.clone());
+    let joint = names
+        .iter()
+        .skip(1)
+        .fold(names[0].clone(), |n, next| n.append(next));
+    let shape_f = child_name(&joint, "shapeF");
+    let pos_f = child_name(&joint, "posF");
+    let tgt_f = child_name(&joint, "tgtF");
+    let st_f = child_name(&joint, "stF");
+    let mk_step = child_name(&joint, "mkStep");
+    let step_fn = child_name(&joint, "step");
+    let container = |f: &SurfaceName| plain_app(f, param_exprs.clone());
     let st_container = plain_app(
         &st_f,
-        (0..n).map(|i| ident(&state_name(i))).collect::<Vec<_>>(),
+        (0..n).map(|i| ident(state_name(i))).collect::<Vec<_>>(),
     );
     let state_binders: Vec<SurfaceBinder> = (0..n)
         .map(|i| {
-            SurfaceBinder::new(
-                state_name(i).as_str(),
+            surface_binder(
+                state_name(i),
                 Some(type_u(poly)),
                 SurfaceBinderInfo::Implicit,
             )
@@ -3648,8 +3899,8 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                     SurfaceExpr::Lambda(
                         Span::dummy(),
                         vec![
-                            SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                            SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
+                            surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                            surface_binder("_", None, SurfaceBinderInfo::Explicit),
                         ],
                         Box::new(targets[0].clone()),
                     )
@@ -3657,8 +3908,8 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                     SurfaceExpr::Lambda(
                         Span::dummy(),
                         vec![
-                            SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                            SurfaceBinder::new("pb", None, SurfaceBinderInfo::Explicit),
+                            surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                            surface_binder("pb", None, SurfaceBinderInfo::Explicit),
                         ],
                         Box::new(mut_idx_chain_p(&targets, &tag_ty, ident("pb"), poly)),
                     )
@@ -3701,11 +3952,11 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
     // Carriers + accessors (same as the 2-member path modulo tags).
     for (mi, m) in shapes.iter().enumerate() {
         out.push(mk_def(
-            m.name.to_string(),
+            m.name.clone(),
             explicit_binders.clone(),
             type_u(poly),
             at_app(
-                "Codata.IMIntl",
+                GlobalPath("Codata.IMIntl"),
                 vec![
                     tag_ty.clone(),
                     container(&shape_f),
@@ -3722,7 +3973,7 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
         let k = m.obs.len();
         for (oi, (obs_name, obs_ty)) in m.obs.iter().enumerate() {
             let mut sel = at_app(
-                "Codata.IMhead",
+                GlobalPath("Codata.IMhead"),
                 vec![
                     tag_ty.clone(),
                     container(&shape_f),
@@ -3739,10 +3990,10 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                 sel = SurfaceExpr::Proj(Span::dummy(), Box::new(sel), Projection::Index(1));
             }
             out.push(mk_def(
-                format!("{}.{obs_name}", m.name),
+                m.name.append(obs_name),
                 {
                     let mut bs = implicit_binders.clone();
-                    bs.push(SurfaceBinder::new(
+                    bs.push(surface_binder(
                         "x",
                         Some(self_ty.clone()),
                         SurfaceBinderInfo::Explicit,
@@ -3756,10 +4007,10 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
         let mcount = m.steps.len();
         for (si, (step_name, tgt_mi)) in m.steps.iter().enumerate() {
             out.push(mk_def(
-                format!("{}.{step_name}", m.name),
+                m.name.append(step_name),
                 {
                     let mut bs = implicit_binders.clone();
-                    bs.push(SurfaceBinder::new(
+                    bs.push(surface_binder(
                         "x",
                         Some(self_ty.clone()),
                         SurfaceBinderInfo::Explicit,
@@ -3768,7 +4019,7 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                 },
                 plain_app(names[*tgt_mi], param_exprs.clone()),
                 at_app(
-                    "Codata.IMchild",
+                    GlobalPath("Codata.IMchild"),
                     vec![
                         tag_ty.clone(),
                         container(&shape_f),
@@ -3788,8 +4039,8 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
         st_f.clone(),
         (0..n)
             .map(|i| {
-                SurfaceBinder::new(
-                    state_name(i).as_str(),
+                surface_binder(
+                    state_name(i),
                     Some(type_u(poly)),
                     SurfaceBinderInfo::Explicit,
                 )
@@ -3799,7 +4050,7 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
         lam1(
             "tg",
             tag_tower_p(
-                &(0..n).map(|i| ident(&state_name(i))).collect::<Vec<_>>(),
+                &(0..n).map(|i| ident(state_name(i))).collect::<Vec<_>>(),
                 &|_| type_u(poly),
                 0,
                 ident("tg"),
@@ -3814,8 +4065,8 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
             let mut bs = implicit_binders.clone();
             bs.extend(state_binders.clone());
             bs.extend([
-                SurfaceBinder::new("tg", Some(tag_ty.clone()), SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(
+                surface_binder("tg", Some(tag_ty.clone()), SurfaceBinderInfo::Explicit),
+                surface_binder(
                     "a",
                     Some({
                         let mut args = param_exprs.clone();
@@ -3824,11 +4075,11 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                     }),
                     SurfaceBinderInfo::Explicit,
                 ),
-                SurfaceBinder::new(
+                surface_binder(
                     "f",
                     Some(SurfaceExpr::Pi(
                         Span::dummy(),
-                        vec![SurfaceBinder::new(
+                        vec![surface_binder(
                             "b",
                             Some({
                                 let mut args = param_exprs.clone();
@@ -3862,7 +4113,7 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                 ident("tg"),
             ],
         ),
-        plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+        plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
     ));
 
     // Per-field function binders across all members, in member order.
@@ -3870,16 +4121,16 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
     for (mi, m) in shapes.iter().enumerate() {
         let s_own = state_name(mi);
         for (obs_name, obs_ty) in &m.obs {
-            fn_binders.push(SurfaceBinder::new(
-                format!("{}_{obs_name}F", m.name).as_str(),
+            fn_binders.push(surface_binder(
+                affix_name(&pair_name(m.name, "_", obs_name), "", "F"),
                 Some(arrow(ident(&s_own), (*obs_ty).clone())),
                 SurfaceBinderInfo::Explicit,
             ));
         }
         for (step_name, tgt_mi) in &m.steps {
-            fn_binders.push(SurfaceBinder::new(
-                format!("{}_{step_name}F", m.name).as_str(),
-                Some(arrow(ident(&s_own), ident(&state_name(*tgt_mi)))),
+            fn_binders.push(surface_binder(
+                affix_name(&pair_name(m.name, "_", step_name), "", "F"),
+                Some(arrow(ident(&s_own), ident(state_name(*tgt_mi)))),
                 SurfaceBinderInfo::Explicit,
             ));
         }
@@ -3889,11 +4140,11 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
         .flat_map(|m| {
             m.obs
                 .iter()
-                .map(|(o, _)| ident(&format!("{}_{o}F", m.name)))
+                .map(|(o, _)| ident(affix_name(&pair_name(m.name, "_", o), "", "F")))
                 .chain(
                     m.steps
                         .iter()
-                        .map(|(st, _)| ident(&format!("{}_{st}F", m.name))),
+                        .map(|(st, _)| ident(affix_name(&pair_name(m.name, "_", st), "", "F"))),
                 )
                 .collect::<Vec<_>>()
         })
@@ -3908,13 +4159,23 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                 let label = mutual_pack(
                     &m.obs
                         .iter()
-                        .map(|(o, _)| plain_app(&format!("{}_{o}F", m.name), vec![ident("sv")]))
+                        .map(|(o, _)| {
+                            plain_app(
+                                affix_name(&pair_name(m.name, "_", o), "", "F"),
+                                vec![ident("sv")],
+                            )
+                        })
                         .collect::<Vec<_>>(),
                 );
                 let branch_states: Vec<SurfaceExpr> = m
                     .steps
                     .iter()
-                    .map(|(st, _)| plain_app(&format!("{}_{st}F", m.name), vec![ident("sv")]))
+                    .map(|(st, _)| {
+                        plain_app(
+                            affix_name(&pair_name(m.name, "_", st), "", "F"),
+                            vec![ident("sv")],
+                        )
+                    })
                     .collect();
                 let child = if branch_states.len() == 1 {
                     lam1("_", branch_states[0].clone())
@@ -3943,7 +4204,7 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                     )
                 };
                 let mut mk_args = param_exprs.clone();
-                mk_args.extend((0..n).map(|i| ident(&state_name(i))));
+                mk_args.extend((0..n).map(|i| ident(state_name(i))));
                 mk_args.extend([tag(mi), label, child]);
                 lam1("sv", at_app(&mk_step, mk_args))
             })
@@ -4014,10 +4275,10 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
     // Per-member corec + laws.
     for (mi, m) in shapes.iter().enumerate() {
         let self_ty = plain_app(m.name, param_exprs.clone());
-        let corec_name = format!("{}.corec", m.name);
+        let corec_name = child_name(m.name, "corec");
         let step_call = {
             let mut args = param_exprs.clone();
-            args.extend((0..n).map(|i| ident(&state_name(i))));
+            args.extend((0..n).map(|i| ident(state_name(i))));
             args.extend(all_fn_idents.clone());
             at_app(&step_fn, args)
         };
@@ -4027,9 +4288,9 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                 let mut bs = implicit_binders.clone();
                 bs.extend(state_binders.clone());
                 bs.extend(fn_binders.clone());
-                bs.push(SurfaceBinder::new(
+                bs.push(surface_binder(
                     "s",
-                    Some(ident(&state_name(mi))),
+                    Some(ident(state_name(mi))),
                     SurfaceBinderInfo::Explicit,
                 ));
                 bs
@@ -4054,13 +4315,13 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
     // member's tag; children typed at their target members. rfl laws.
     for (mi, m) in shapes.iter().enumerate() {
         let self_ty = plain_app(m.name, param_exprs.clone());
-        let mk_step_name = format!("{}.mkStep2", m.name);
+        let mk_step_name = child_name(m.name, "mkStep2");
         out.push(mk_def(
             mk_step_name.clone(),
             {
                 let mut bs = implicit_binders.clone();
                 bs.extend([
-                    SurfaceBinder::new(
+                    surface_binder(
                         "a",
                         Some({
                             let mut args = param_exprs.clone();
@@ -4069,11 +4330,11 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                         }),
                         SurfaceBinderInfo::Explicit,
                     ),
-                    SurfaceBinder::new(
+                    surface_binder(
                         "f",
                         Some(SurfaceExpr::Pi(
                             Span::dummy(),
-                            vec![SurfaceBinder::new(
+                            vec![surface_binder(
                                 "b",
                                 Some({
                                     let mut args = param_exprs.clone();
@@ -4083,7 +4344,7 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                                 SurfaceBinderInfo::Explicit,
                             )],
                             Box::new(plain_app(
-                                "Codata.IMIntl",
+                                GlobalPath("Codata.IMIntl"),
                                 vec![container(&shape_f), container(&pos_f), container(&tgt_f), {
                                     let mut targs = param_exprs.clone();
                                     targs.extend([tag(mi), ident("a"), ident("b")]);
@@ -4103,25 +4364,25 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                     container(&pos_f),
                     container(&tgt_f),
                     plain_app(
-                        "Codata.IMIntl",
+                        GlobalPath("Codata.IMIntl"),
                         vec![container(&shape_f), container(&pos_f), container(&tgt_f)],
                     ),
                     tag(mi),
                 ],
             ),
-            plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+            plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
         ));
         let mut mk_binders = implicit_binders.clone();
         for (obs_name, obs_ty) in m.obs.iter() {
-            mk_binders.push(SurfaceBinder::new(
-                format!("{obs_name}V").as_str(),
+            mk_binders.push(surface_binder(
+                affix_name(obs_name, "", "V"),
                 Some((*obs_ty).clone()),
                 SurfaceBinderInfo::Explicit,
             ));
         }
         for (step_name, tgt_mi) in m.steps.iter() {
-            mk_binders.push(SurfaceBinder::new(
-                format!("{step_name}V").as_str(),
+            mk_binders.push(surface_binder(
+                affix_name(step_name, "", "V"),
                 Some(plain_app(names[*tgt_mi], param_exprs.clone())),
                 SurfaceBinderInfo::Explicit,
             ));
@@ -4129,13 +4390,13 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
         let mk_label = mutual_pack(
             &m.obs
                 .iter()
-                .map(|(n, _)| ident(&format!("{n}V")))
+                .map(|(n, _)| ident(affix_name(n, "", "V")))
                 .collect::<Vec<_>>(),
         );
         let mk_children: Vec<SurfaceExpr> = m
             .steps
             .iter()
-            .map(|(n, _)| ident(&format!("{n}V")))
+            .map(|(n, _)| ident(affix_name(n, "", "V")))
             .collect();
         let mk_child_fn = if mk_children.len() == 1 {
             lam1("_", mk_children[0].clone())
@@ -4157,7 +4418,7 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
                     &mk_children,
                     0,
                     &plain_app(
-                        "Codata.IMIntl",
+                        GlobalPath("Codata.IMIntl"),
                         vec![container(&shape_f), container(&pos_f), container(&tgt_f)],
                     ),
                     &tgt_full,
@@ -4167,10 +4428,10 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
             )
         };
         out.push(mk_def(
-            format!("{}.mk", m.name),
+            child_name(m.name, "mk"),
             mk_binders.clone(),
             self_ty.clone(),
-            at_app("Codata.IMmk", {
+            at_app(GlobalPath("Codata.IMmk"), {
                 let mut mkargs = param_exprs.clone();
                 mkargs.extend([mk_label.clone(), mk_child_fn]);
                 vec![
@@ -4188,10 +4449,10 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
             args.extend(
                 m.obs
                     .iter()
-                    .map(|(n, _)| ident(&format!("{n}V")))
-                    .chain(m.steps.iter().map(|(n, _)| ident(&format!("{n}V")))),
+                    .map(|(n, _)| ident(affix_name(n, "", "V")))
+                    .chain(m.steps.iter().map(|(n, _)| ident(affix_name(n, "", "V")))),
             );
-            at_app(&format!("{}.mk", m.name), args)
+            at_app(child_name(m.name, "mk"), args)
         };
         for field_name in m
             .obs
@@ -4199,21 +4460,21 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
             .map(|(n, _)| *n)
             .chain(m.steps.iter().map(|(n, _)| *n))
         {
-            let full = format!("{}.{field_name}", m.name);
+            let full = m.name.append(field_name);
             let mut acc_args = param_exprs.clone();
             acc_args.push(mk_call.clone());
             out.push(mk_theorem(
-                format!("{full}_mk"),
+                affix_name(&full, "", "_mk"),
                 mk_binders.clone(),
                 SurfaceExpr::App(
                     Span::dummy(),
-                    Box::new(ident("Eq")),
+                    Box::new(ident(GlobalPath("Eq"))),
                     vec![
                         SurfaceArg::positional(at_app(&full, acc_args)),
-                        SurfaceArg::positional(ident(&format!("{field_name}V"))),
+                        SurfaceArg::positional(ident(affix_name(field_name, "", "V"))),
                     ],
                 ),
-                ident("rfl"),
+                ident(GlobalPath("rfl")),
             ));
         }
     }
@@ -4221,62 +4482,65 @@ fn generate_mutual_n(shapes: &[MutualMember<'_>], poly: Option<&str>) -> Vec<Sur
     for (mi, m) in shapes.iter().enumerate() {
         let corec_call = |member: usize, extra: SurfaceExpr| {
             let mut args = param_exprs.clone();
-            args.extend((0..n).map(|i| ident(&state_name(i))));
+            args.extend((0..n).map(|i| ident(state_name(i))));
             args.extend(all_fn_idents.clone());
             args.push(extra);
-            at_app(&format!("{}.corec", names[member]), args)
+            at_app(child_name(names[member], "corec"), args)
         };
         let law_binders = || {
             let mut bs = implicit_binders.clone();
             bs.extend(state_binders.clone());
             bs.extend(fn_binders.clone());
-            bs.push(SurfaceBinder::new(
+            bs.push(surface_binder(
                 "s",
-                Some(ident(&state_name(mi))),
+                Some(ident(state_name(mi))),
                 SurfaceBinderInfo::Explicit,
             ));
             bs
         };
         for (obs_name, _) in &m.obs {
-            let full = format!("{}.{obs_name}", m.name);
+            let full = m.name.append(obs_name);
             let mut acc_args = param_exprs.clone();
             acc_args.push(corec_call(mi, ident("s")));
             out.push(mk_theorem(
-                format!("{full}_corec"),
+                affix_name(&full, "", "_corec"),
                 law_binders(),
                 SurfaceExpr::App(
                     Span::dummy(),
-                    Box::new(ident("Eq")),
+                    Box::new(ident(GlobalPath("Eq"))),
                     vec![
                         SurfaceArg::positional(at_app(&full, acc_args)),
                         SurfaceArg::positional(plain_app(
-                            &format!("{}_{obs_name}F", m.name),
+                            affix_name(&pair_name(m.name, "_", obs_name), "", "F"),
                             vec![ident("s")],
                         )),
                     ],
                 ),
-                ident("rfl"),
+                ident(GlobalPath("rfl")),
             ));
         }
         for (step_name, tgt_mi) in &m.steps {
-            let full = format!("{}.{step_name}", m.name);
+            let full = m.name.append(step_name);
             let mut acc_args = param_exprs.clone();
             acc_args.push(corec_call(mi, ident("s")));
             out.push(mk_theorem(
-                format!("{full}_corec"),
+                affix_name(&full, "", "_corec"),
                 law_binders(),
                 SurfaceExpr::App(
                     Span::dummy(),
-                    Box::new(ident("Eq")),
+                    Box::new(ident(GlobalPath("Eq"))),
                     vec![
                         SurfaceArg::positional(at_app(&full, acc_args)),
                         SurfaceArg::positional(corec_call(
                             *tgt_mi,
-                            plain_app(&format!("{}_{step_name}F", m.name), vec![ident("s")]),
+                            plain_app(
+                                affix_name(&pair_name(m.name, "_", step_name), "", "F"),
+                                vec![ident("s")],
+                            ),
                         )),
                     ],
                 ),
-                ident("rfl"),
+                ident(GlobalPath("rfl")),
             ));
         }
     }
@@ -4296,12 +4560,11 @@ pub(crate) fn elab_mutual_codef(
     members: &[SurfaceDecl],
 ) -> Result<RegisteredElabResult, ElabError> {
     struct CodefBits<'a> {
-        name: &'a str,
+        name: &'a SurfaceName,
         binders: &'a [SurfaceBinder],
         ty: &'a SurfaceExpr,
-        head: String,
-        type_args: Vec<SurfaceExpr>,
-        clauses: &'a [(String, SurfaceExpr)],
+        head: SurfaceName,
+        clauses: &'a [(SurfaceName, SurfaceExpr)],
     }
     let mut bits: Vec<CodefBits<'_>> = Vec::new();
     for d in members {
@@ -4336,9 +4599,8 @@ pub(crate) fn elab_mutual_codef(
                 )));
             }
         }
-        let (head, type_args) = {
+        let head = {
             let mut t = strip_parens(ty);
-            let mut args: Vec<SurfaceExpr> = Vec::new();
             if let SurfaceExpr::App(_, h, a) = t {
                 for arg in a {
                     if arg.name.is_some() {
@@ -4347,7 +4609,6 @@ pub(crate) fn elab_mutual_codef(
                              result type are not supported"
                         )));
                     }
-                    args.push(arg.expr.clone());
                 }
                 t = strip_parens(h);
             }
@@ -4357,25 +4618,24 @@ pub(crate) fn elab_mutual_codef(
                      member (a constant, possibly applied to parameters)"
                 )));
             };
-            (c.clone(), args)
+            c.clone()
         };
         bits.push(CodefBits {
             name,
             binders,
             ty,
             head,
-            type_args,
             clauses,
         });
     }
-    let fn_names: Vec<&str> = bits.iter().map(|b| b.name).collect();
+    let fn_names: Vec<&SurfaceName> = bits.iter().map(|b| b.name).collect();
 
     // All members must target the same mutual block: their corecs share
     // one recorded slot list. Use member 0's corec as the authority.
-    let corec0 = format!("{}.corec", bits[0].head);
-    let corec0_const = clean_kernel::Name::from_string(&corec0);
+    let corec0 = child_name(&bits[0].head, "corec");
+    let corec0_const = corec0.name().clone();
     let param_names = env
-        .get_param_names(&corec0_const)
+        .get_typed_param_names(&corec0_const)
         .ok_or_else(|| {
             unsupported(format!(
                 "mutual codef: `{}` is not a codata member (`{corec0}` has no \
@@ -4388,11 +4648,16 @@ pub(crate) fn elab_mutual_codef(
         .get_param_binder_infos(&corec0_const)
         .ok_or_else(|| unsupported("mutual codef: no binder kinds recorded".to_string()))?
         .to_vec();
-    let mut slots: Vec<String> = param_names
+    if param_names.len() != param_infos.len() {
+        return Err(unsupported(
+            "mutual codef: parameter names and binder kinds disagree",
+        ));
+    }
+    let mut slots: Vec<SurfaceName> = param_names
         .iter()
         .zip(param_infos.iter())
         .filter(|(_, i)| matches!(i, clean_kernel::BinderInfo::Default))
-        .map(|(n, _)| n.clone())
+        .map(|(n, _)| SurfaceName::from_name(n.clone()))
         .collect();
     if slots.is_empty() {
         return Err(unsupported(format!(
@@ -4405,25 +4670,43 @@ pub(crate) fn elab_mutual_codef(
     // by the codef whose result head is `<Member>`.
     let mut slot_lambdas: Vec<SurfaceExpr> = Vec::new();
     for slot in &slots {
-        let base = slot.strip_suffix('F').unwrap_or(slot);
-        let Some((member, field)) = base.split_once('_') else {
+        // Recreate the generated protocol from every authored exact pair.
+        // Display splitting cannot identify qualified/quoted member or field names.
+        let mut matches = bits.iter().flat_map(|cb| {
+            cb.clauses.iter().filter_map(move |(field, value)| {
+                (affix_name(&pair_name(&cb.head, "_", field), "", "F") == *slot)
+                    .then_some((cb, field, value))
+            })
+        });
+        let Some((cb, field, value)) = matches.next() else {
+            // Preserve the established ordinary-label refusal after the exact
+            // structural search has already failed. This legacy slot spelling
+            // is diagnostic only: splitting it never selects a clause or
+            // authorizes a successful generated corecursor application.
+            if let Some(base) = strip_slot_suffix(slot) {
+                if let Some(text) = base.component_text() {
+                    if let Some((member, field)) = text.split_once('_') {
+                        if !member.is_empty()
+                            && !field.is_empty()
+                            && !bits.iter().any(|b| b.head.component_text() == Some(member))
+                        {
+                            return Err(unsupported(format!(
+                                "mutual codef: no codef in the block targets `{member}` \
+                                 (needed for its `{field}` clause; unmatched exact slot `{slot}`)"
+                            )));
+                        }
+                    }
+                }
+            }
             return Err(unsupported(format!(
-                "mutual codef: unexpected corecursor slot `{slot}` — \
-                 `{corec0}` is not a mutual-codata corecursor"
+                "mutual codef: no exact clause for slot `{slot}`"
             )));
         };
-        let Some(cb) = bits.iter().find(|b| b.head == member) else {
+        if matches.next().is_some() {
             return Err(unsupported(format!(
-                "mutual codef: no codef in the block targets `{member}` \
-                 (needed for its `{field}` clause)"
+                "mutual codef: ambiguous exact slot `{slot}`"
             )));
-        };
-        let Some((_, value)) = cb.clauses.iter().find(|(n, _)| n == field) else {
-            return Err(unsupported(format!(
-                "mutual codef `{}`: missing clause for `{field}` of `{member}`",
-                cb.name
-            )));
-        };
+        }
         // A call to ANY block codef is the corecursive step for this slot.
         let body = match mutual_self_call_arg(value, &fn_names) {
             Some(next_state) => next_state,
@@ -4441,11 +4724,14 @@ pub(crate) fn elab_mutual_codef(
                 value.clone()
             }
         };
-        let state_name = cb.binders.first().map_or("_", |b| b.name.as_str());
+        let state_name = cb
+            .binders
+            .first()
+            .map_or_else(|| SurfaceName::generated_path("_"), |b| b.name.clone());
         slot_lambdas.push(SurfaceExpr::Lambda(
             Span::dummy(),
-            vec![SurfaceBinder::new(
-                state_name,
+            vec![surface_binder(
+                &state_name,
                 cb.binders.first().and_then(|b| b.ty.as_deref().cloned()),
                 SurfaceBinderInfo::Explicit,
             )],
@@ -4455,6 +4741,7 @@ pub(crate) fn elab_mutual_codef(
 
     // One generated def per codef, all sharing the slot lambdas.
     let mut candidate = env.clone();
+    let mut declared = Vec::new();
     for cb in &bits {
         let state_ty = cb
             .binders
@@ -4464,48 +4751,47 @@ pub(crate) fn elab_mutual_codef(
         let init_state = cb
             .binders
             .first()
-            .map_or_else(|| ident("PUnit.unit"), |b| ident(&b.name));
+            .map_or_else(|| ident(GlobalPath("PUnit.unit")), |b| ident(&b.name));
         // The 2-member corec takes {S1 S2}; n-member {S1..Sn} — all
         // implicit, inferred from the state lambdas' ascribed types and
         // the init state. Pass the member's OWN state type positionally is
         // not possible (implicit), so rely on inference via the explicit
         // fn lambdas — their binder ascriptions pin each S_i.
         let _ = state_ty;
-        let mut corec_args = cb.type_args.clone();
-        corec_args.extend(slot_lambdas.iter().cloned());
+        // The written result type fixes the codata parameters. They are
+        // implicit in corec, so ordinary application starts at the slot lambdas.
+        let mut corec_args = slot_lambdas.clone();
         corec_args.push(init_state);
         let generated = mk_def(
-            cb.name.to_string(),
+            cb.name.clone(),
             cb.binders.to_vec(),
             cb.ty.clone(),
-            plain_app(&format!("{}.corec", cb.head), corec_args),
+            plain_app(child_name(&cb.head, "corec"), corec_args),
         );
-        crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
-            unsupported(format!(
-                "mutual codef `{}`: the generated corecursor application \
+        let registered =
+            crate::elaborate_decl_and_register(&mut candidate, &generated).map_err(|e| {
+                unsupported(format!(
+                    "mutual codef `{}`: the generated corecursor application \
                  failed to elaborate/kernel-check (env left untouched): {e:?}",
-                cb.name
-            ))
-        })?;
+                    cb.name
+                ))
+            })?;
+        declared.push(registered);
     }
     *env = candidate;
-    Ok(RegisteredElabResult {
-        result: ElabResult::Skipped,
-        warning: None,
-        hole_contexts: Vec::new(),
-    })
+    Ok(generated_declarations(declared))
 }
 
 /// If `expr` is exactly `<one of fnames> <one-arg>` (or a bare name for
 /// zero-state members), return the new-state expression.
-fn mutual_self_call_arg(expr: &SurfaceExpr, fnames: &[&str]) -> Option<SurfaceExpr> {
+fn mutual_self_call_arg(expr: &SurfaceExpr, fnames: &[&SurfaceName]) -> Option<SurfaceExpr> {
     match strip_parens(expr) {
-        SurfaceExpr::Ident(_, id) if fnames.contains(&id.as_str()) => Some(ident("PUnit.unit")),
+        SurfaceExpr::Ident(_, id) if fnames.contains(&id) => Some(ident(GlobalPath("PUnit.unit"))),
         SurfaceExpr::App(_, h, args) => {
             let SurfaceExpr::Ident(_, id) = strip_parens(h) else {
                 return None;
             };
-            if !fnames.contains(&id.as_str()) || args.len() != 1 || args[0].name.is_some() {
+            if !fnames.contains(&id) || args.len() != 1 || args[0].name.is_some() {
                 return None;
             }
             Some(args[0].expr.clone())
@@ -4548,7 +4834,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         .iter()
         .rev()
         .map(|b| b.ty.as_deref().expect("validated").clone())
-        .reduce(|acc, t| plain_app("PProd", vec![t, acc]))
+        .reduce(|acc, t| plain_app(GlobalPath("PProd"), vec![t, acc]))
         .expect("validated: at least one index binder");
     // The packed value from the (unpacked) index idents.
     let pack_idents = || -> SurfaceExpr {
@@ -4574,8 +4860,8 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             idx_binders
                 .iter()
                 .map(|b| {
-                    SurfaceBinder::new(
-                        b.name.as_str(),
+                    surface_binder(
+                        &b.name,
                         b.ty.as_deref().cloned(),
                         SurfaceBinderInfo::Explicit,
                     )
@@ -4592,15 +4878,15 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         )
     };
 
-    let shape_f = format!("{name}.shapeF");
-    let pos_f = format!("{name}.posF");
-    let tgt_f = format!("{name}.tgtF");
-    let mk_step = format!("{name}.mkStep");
-    let step_fn = format!("{name}.stepFn");
-    let corec = format!("{name}.corec");
+    let shape_f = child_name(name, "shapeF");
+    let pos_f = child_name(name, "posF");
+    let tgt_f = child_name(name, "tgtF");
+    let mk_step = child_name(name, "mkStep");
+    let step_fn = child_name(name, "stepFn");
+    let corec = child_name(name, "corec");
     let m = steps.len();
     let k_obs = obs.len();
-    let capp = |f: &str, extra: Vec<SurfaceExpr>| -> SurfaceExpr {
+    let capp = |f: &SurfaceName, extra: Vec<SurfaceExpr>| -> SurfaceExpr {
         let mut args = param_exprs.clone();
         args.extend(extra);
         plain_app(f, args)
@@ -4610,7 +4896,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         .iter()
         .rev()
         .map(|(_, t)| (*t).clone())
-        .reduce(|acc, t| plain_app("PProd", vec![t, acc]))
+        .reduce(|acc, t| plain_app(GlobalPath("PProd"), vec![t, acc]))
         .expect("validated: at least one observation");
 
     let mut out = Vec::new();
@@ -4633,8 +4919,8 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(mut_pos_ty_p(m, poly)),
         ),
@@ -4652,9 +4938,9 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new("ip", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("ip", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(idx_targets[0].clone()),
         )
@@ -4662,9 +4948,9 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new("ip", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("pb", None, SurfaceBinderInfo::Explicit),
+                surface_binder("ip", None, SurfaceBinderInfo::Explicit),
+                surface_binder("_", None, SurfaceBinderInfo::Explicit),
+                surface_binder("pb", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(mut_idx_chain_p(&idx_targets, &packed_ty, ident("pb"), None)),
         )
@@ -4684,7 +4970,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     ));
     // Carrier: C (ps) (i1 : T1) … (ik : Tk) : Type := IMIntl … (pack)
     out.push(mk_def(
-        (*name).to_string(),
+        (*name).clone(),
         {
             let mut bs = explicit_params.clone();
             bs.extend(idx_binders.iter().cloned());
@@ -4692,7 +4978,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         },
         type_u(poly),
         at_app(
-            "Codata.IMIntl",
+            GlobalPath("Codata.IMIntl"),
             vec![
                 packed_ty.clone(),
                 capp(&shape_f, vec![]),
@@ -4718,7 +5004,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     // Observation accessors: {ps} {i1..ik} (x : C ps i…) : T[i…]
     for (oi, (obs_name, obs_ty)) in obs.iter().enumerate() {
         let mut sel = at_app(
-            "Codata.IMhead",
+            GlobalPath("Codata.IMhead"),
             vec![
                 packed_ty.clone(),
                 capp(&shape_f, vec![]),
@@ -4735,11 +5021,11 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             sel = SurfaceExpr::Proj(Span::dummy(), Box::new(sel), Projection::Index(1));
         }
         out.push(mk_def(
-            format!("{name}.{obs_name}"),
+            name.append(obs_name),
             {
                 let mut bs = implicit_params.clone();
                 bs.extend(implicit_idx.iter().cloned());
-                bs.push(SurfaceBinder::new(
+                bs.push(surface_binder(
                     "x",
                     Some(self_unpacked()),
                     SurfaceBinderInfo::Explicit,
@@ -4755,11 +5041,11 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         let mut res_args = param_exprs.clone();
         res_args.extend(exprs.iter().map(|e| (*e).clone()));
         out.push(mk_def(
-            format!("{name}.{step_name}"),
+            name.append(step_name),
             {
                 let mut bs = implicit_params.clone();
                 bs.extend(implicit_idx.iter().cloned());
-                bs.push(SurfaceBinder::new(
+                bs.push(surface_binder(
                     "x",
                     Some(self_unpacked()),
                     SurfaceBinderInfo::Explicit,
@@ -4768,7 +5054,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             },
             plain_app(name, res_args),
             at_app(
-                "Codata.IMchild",
+                GlobalPath("Codata.IMchild"),
                 vec![
                     packed_ty.clone(),
                     capp(&shape_f, vec![]),
@@ -4782,7 +5068,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         ));
     }
     // mkStep {ps} {S : packed → Type} (ip) (a) (f)
-    let s_binder = SurfaceBinder::new(
+    let s_binder = surface_binder(
         "S",
         Some(arrow(packed_ty.clone(), type_u(poly))),
         SurfaceBinderInfo::Implicit,
@@ -4793,17 +5079,17 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             let mut bs = implicit_params.clone();
             bs.push(s_binder.clone());
             bs.extend([
-                SurfaceBinder::new("ip", Some(packed_ty.clone()), SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new(
+                surface_binder("ip", Some(packed_ty.clone()), SurfaceBinderInfo::Explicit),
+                surface_binder(
                     "a",
                     Some(capp(&shape_f, vec![ident("ip")])),
                     SurfaceBinderInfo::Explicit,
                 ),
-                SurfaceBinder::new(
+                surface_binder(
                     "f",
                     Some(SurfaceExpr::Pi(
                         Span::dummy(),
-                        vec![SurfaceBinder::new(
+                        vec![surface_binder(
                             "b",
                             Some(capp(&pos_f, vec![ident("ip"), ident("a")])),
                             SurfaceBinderInfo::Explicit,
@@ -4832,13 +5118,13 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 ident("ip"),
             ],
         ),
-        plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+        plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
     ));
     // Per-field function binders over the packed index.
     let fn_ty = |result: SurfaceExpr| {
         SurfaceExpr::Pi(
             Span::dummy(),
-            vec![SurfaceBinder::new(
+            vec![surface_binder(
                 "ip",
                 Some(packed_ty.clone()),
                 SurfaceBinderInfo::Explicit,
@@ -4855,15 +5141,15 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     };
     let mut fn_binders: Vec<SurfaceBinder> = Vec::new();
     for (obs_name, obs_ty) in obs {
-        fn_binders.push(SurfaceBinder::new(
-            format!("{obs_name}F").as_str(),
+        fn_binders.push(surface_binder(
+            affix_name(obs_name, "", "F"),
             Some(fn_ty(wrap((*obs_ty).clone()))),
             SurfaceBinderInfo::Explicit,
         ));
     }
     for ((step_name, _), wrapped_tgt) in steps.iter().zip(&idx_targets) {
-        fn_binders.push(SurfaceBinder::new(
-            format!("{step_name}F").as_str(),
+        fn_binders.push(surface_binder(
+            affix_name(step_name, "", "F"),
             Some(fn_ty(SurfaceExpr::App(
                 Span::dummy(),
                 Box::new(ident("S")),
@@ -4874,18 +5160,18 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     }
     let all_fn_idents: Vec<SurfaceExpr> = obs
         .iter()
-        .map(|(n, _)| ident(&format!("{n}F")))
-        .chain(steps.iter().map(|(n, _)| ident(&format!("{n}F"))))
+        .map(|(n, _)| ident(affix_name(n, "", "F")))
+        .chain(steps.iter().map(|(n, _)| ident(affix_name(n, "", "F"))))
         .collect();
     // stepFn
     let label_pack = mutual_pack(
         &obs.iter()
-            .map(|(n, _)| plain_app(&format!("{n}F"), vec![ident("jp"), ident("sv")]))
+            .map(|(n, _)| plain_app(affix_name(n, "", "F"), vec![ident("jp"), ident("sv")]))
             .collect::<Vec<_>>(),
     );
     let branch_states: Vec<SurfaceExpr> = steps
         .iter()
-        .map(|(n, _)| plain_app(&format!("{n}F"), vec![ident("jp"), ident("sv")]))
+        .map(|(n, _)| plain_app(affix_name(n, "", "F"), vec![ident("jp"), ident("sv")]))
         .collect();
     let child = if m == 1 {
         lam1("_", branch_states[0].clone())
@@ -4937,8 +5223,8 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         SurfaceExpr::Lambda(
             Span::dummy(),
             vec![
-                SurfaceBinder::new("jp", None, SurfaceBinderInfo::Explicit),
-                SurfaceBinder::new("sv", None, SurfaceBinderInfo::Explicit),
+                surface_binder("jp", None, SurfaceBinderInfo::Explicit),
+                surface_binder("sv", None, SurfaceBinderInfo::Explicit),
             ],
             Box::new(at_app(&mk_step, mkargs)),
         ),
@@ -4957,7 +5243,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
             bs.push(s_binder.clone());
             bs.extend(fn_binders.clone());
             bs.extend(idx_binders.iter().cloned());
-            bs.push(SurfaceBinder::new(
+            bs.push(surface_binder(
                 "s",
                 Some(SurfaceExpr::App(
                     Span::dummy(),
@@ -4985,29 +5271,29 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     ));
     // The CONSTRUCTOR: C.mk {ps} {i1..ik} (field values) at the packed
     // index; children live at their own (unpacked) target indices. rfl laws.
-    let mk_step_name = format!("{name}.mkStep2");
+    let mk_step_name = child_name(name, "mkStep2");
     out.push(mk_def(
         mk_step_name.clone(),
         {
             let mut bs = implicit_params.clone();
             bs.extend(implicit_idx.iter().cloned());
             bs.extend([
-                SurfaceBinder::new(
+                surface_binder(
                     "a",
                     Some(capp(&shape_f, vec![pack_idents()])),
                     SurfaceBinderInfo::Explicit,
                 ),
-                SurfaceBinder::new(
+                surface_binder(
                     "f",
                     Some(SurfaceExpr::Pi(
                         Span::dummy(),
-                        vec![SurfaceBinder::new(
+                        vec![surface_binder(
                             "b",
                             Some(capp(&pos_f, vec![pack_idents(), ident("a")])),
                             SurfaceBinderInfo::Explicit,
                         )],
                         Box::new(plain_app(
-                            "Codata.IMIntl",
+                            GlobalPath("Codata.IMIntl"),
                             vec![
                                 capp(&shape_f, vec![]),
                                 capp(&pos_f, vec![]),
@@ -5028,7 +5314,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 capp(&pos_f, vec![]),
                 capp(&tgt_f, vec![]),
                 plain_app(
-                    "Codata.IMIntl",
+                    GlobalPath("Codata.IMIntl"),
                     vec![
                         capp(&shape_f, vec![]),
                         capp(&pos_f, vec![]),
@@ -5038,13 +5324,13 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 pack_idents(),
             ],
         ),
-        plain_app("Sigma.mk", vec![ident("a"), ident("f")]),
+        plain_app(GlobalPath("Sigma.mk"), vec![ident("a"), ident("f")]),
     ));
     let mut mk_binders = implicit_params.clone();
     mk_binders.extend(implicit_idx.iter().cloned());
     for (obs_name, obs_ty) in obs.iter() {
-        mk_binders.push(SurfaceBinder::new(
-            format!("{obs_name}V").as_str(),
+        mk_binders.push(surface_binder(
+            affix_name(obs_name, "", "V"),
             Some((*obs_ty).clone()),
             SurfaceBinderInfo::Explicit,
         ));
@@ -5052,19 +5338,21 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     for (step_name, exprs) in steps.iter() {
         let mut res_args = param_exprs.clone();
         res_args.extend(exprs.iter().map(|e| (*e).clone()));
-        mk_binders.push(SurfaceBinder::new(
-            format!("{step_name}V").as_str(),
+        mk_binders.push(surface_binder(
+            affix_name(step_name, "", "V"),
             Some(plain_app(name, res_args)),
             SurfaceBinderInfo::Explicit,
         ));
     }
     let mk_label = mutual_pack(
         &obs.iter()
-            .map(|(n, _)| ident(&format!("{n}V")))
+            .map(|(n, _)| ident(affix_name(n, "", "V")))
             .collect::<Vec<_>>(),
     );
-    let mk_children: Vec<SurfaceExpr> =
-        steps.iter().map(|(n, _)| ident(&format!("{n}V"))).collect();
+    let mk_children: Vec<SurfaceExpr> = steps
+        .iter()
+        .map(|(n, _)| ident(affix_name(n, "", "V")))
+        .collect();
     let mk_child_fn = if mk_children.len() == 1 {
         lam1("_", mk_children[0].clone())
     } else {
@@ -5085,7 +5373,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                 &mk_children,
                 0,
                 &plain_app(
-                    "Codata.IMIntl",
+                    GlobalPath("Codata.IMIntl"),
                     vec![
                         capp(&shape_f, vec![]),
                         capp(&pos_f, vec![]),
@@ -5099,10 +5387,10 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         )
     };
     out.push(mk_def(
-        format!("{name}.mk"),
+        child_name(name, "mk"),
         mk_binders.clone(),
         self_unpacked(),
-        at_app("Codata.IMmk", {
+        at_app(GlobalPath("Codata.IMmk"), {
             let mut mkargs = param_exprs.clone();
             mkargs.extend(idx_binders.iter().map(|b| ident(&b.name)));
             mkargs.extend([mk_label.clone(), mk_child_fn]);
@@ -5121,32 +5409,32 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         args.extend(idx_binders.iter().map(|b| ident(&b.name)));
         args.extend(
             obs.iter()
-                .map(|(n, _)| ident(&format!("{n}V")))
-                .chain(steps.iter().map(|(n, _)| ident(&format!("{n}V")))),
+                .map(|(n, _)| ident(affix_name(n, "", "V")))
+                .chain(steps.iter().map(|(n, _)| ident(affix_name(n, "", "V")))),
         );
-        at_app(&format!("{name}.mk"), args)
+        at_app(child_name(name, "mk"), args)
     };
     for field_name in obs
         .iter()
         .map(|(n, _)| *n)
         .chain(steps.iter().map(|(n, _)| *n))
     {
-        let full = format!("{name}.{field_name}");
+        let full = name.append(field_name);
         let mut acc_args = param_exprs.clone();
         acc_args.extend(idx_binders.iter().map(|b| ident(&b.name)));
         acc_args.push(mk_call.clone());
         out.push(mk_theorem(
-            format!("{full}_mk"),
+            affix_name(&full, "", "_mk"),
             mk_binders.clone(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(at_app(&full, acc_args)),
-                    SurfaceArg::positional(ident(&format!("{field_name}V"))),
+                    SurfaceArg::positional(ident(affix_name(field_name, "", "V"))),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
@@ -5172,7 +5460,7 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
         bs.push(s_binder.clone());
         bs.extend(fn_binders.clone());
         bs.extend(idx_binders.iter().cloned());
-        bs.push(SurfaceBinder::new(
+        bs.push(surface_binder(
             "s",
             Some(SurfaceExpr::App(
                 Span::dummy(),
@@ -5185,35 +5473,35 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
     };
     let own_idx: Vec<SurfaceExpr> = idx_binders.iter().map(|b| ident(&b.name)).collect();
     for (obs_name, _) in obs {
-        let full = format!("{name}.{obs_name}");
+        let full = name.append(obs_name);
         out.push(mk_theorem(
-            format!("{full}_corec"),
+            affix_name(&full, "", "_corec"),
             law_binders(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(plain_app(
                         &full,
                         vec![mk_corec_call(own_idx.clone(), ident("s"))],
                     )),
                     SurfaceArg::positional(plain_app(
-                        &format!("{obs_name}F"),
+                        affix_name(obs_name, "", "F"),
                         vec![pack_idents(), ident("s")],
                     )),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
     for (step_name, exprs) in steps {
-        let full = format!("{name}.{step_name}");
+        let full = name.append(step_name);
         out.push(mk_theorem(
-            format!("{full}_corec"),
+            affix_name(&full, "", "_corec"),
             law_binders(),
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(ident("Eq")),
+                Box::new(ident(GlobalPath("Eq"))),
                 vec![
                     SurfaceArg::positional(plain_app(
                         &full,
@@ -5221,11 +5509,14 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
                     )),
                     SurfaceArg::positional(mk_corec_call(
                         exprs.iter().map(|e| (*e).clone()).collect(),
-                        plain_app(&format!("{step_name}F"), vec![pack_idents(), ident("s")]),
+                        plain_app(
+                            affix_name(step_name, "", "F"),
+                            vec![pack_idents(), ident("s")],
+                        ),
                     )),
                 ],
             ),
-            ident("rfl"),
+            ident(GlobalPath("rfl")),
         ));
     }
 
@@ -5235,9 +5526,12 @@ fn generate_multi_indexed(shape: &IndexedShape<'_>) -> Vec<SurfaceDecl> {
 /// Right-nested `PProd.mk` chain (single value passes through).
 fn mutual_pack_pprod(vals: &[SurfaceExpr]) -> SurfaceExpr {
     match vals {
-        [] => ident("PUnit.unit"),
+        [] => ident(GlobalPath("PUnit.unit")),
         [only] => only.clone(),
-        [first, rest @ ..] => plain_app("PProd.mk", vec![first.clone(), mutual_pack_pprod(rest)]),
+        [first, rest @ ..] => plain_app(
+            GlobalPath("PProd.mk"),
+            vec![first.clone(), mutual_pack_pprod(rest)],
+        ),
     }
 }
 
@@ -5254,20 +5548,20 @@ fn mutual_pack_pprod(vals: &[SurfaceExpr]) -> SurfaceExpr {
 /// v1 — nested `mk`s reject loudly.
 #[allow(clippy::too_many_arguments)]
 fn compile_guarded_codef(
-    name: &str,
+    name: &SurfaceName,
     binders: &[SurfaceBinder],
     ty: &SurfaceExpr,
-    clauses: &[(String, SurfaceExpr)],
-    slots: &[String],
-    head_name: &str,
+    clauses: &[(SurfaceName, SurfaceExpr)],
+    slots: &[SurfaceName],
+    head_name: &SurfaceName,
     type_args: &[SurfaceExpr],
     state: Option<&SurfaceBinder>,
 ) -> Result<Option<SurfaceDecl>, ElabError> {
-    let mk_name = format!("{head_name}.mk");
+    let mk_name = child_name(head_name, "mk");
     fn is_mk_app_impl<'e>(
         e: &'e SurfaceExpr,
-        mk_name: &str,
-        head_name: &str,
+        mk_name: &SurfaceName,
+        head_name: &SurfaceName,
     ) -> Option<&'e [SurfaceArg]> {
         let SurfaceExpr::App(_, h, args) = strip_parens(e) else {
             return None;
@@ -5275,7 +5569,7 @@ fn compile_guarded_codef(
         let is_mk = match strip_parens(h) {
             SurfaceExpr::Ident(_, id) => id == mk_name,
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
-                field == "mk"
+                field == &SurfaceName::generated_path("mk")
                     && matches!(strip_parens(base),
                         SurfaceExpr::Ident(_, id) if id == head_name)
             }
@@ -5358,13 +5652,16 @@ fn compile_guarded_codef(
         }
     }
 
-    let state_name = state.map_or("_", |b| b.name.as_str());
+    let state_name = state.map_or_else(|| SurfaceName::generated_path("_"), |b| b.name.clone());
     let state_ty = state
         .and_then(|b| b.ty.as_deref().cloned())
         .unwrap_or_else(punit_ty);
     // Buffered state: a Nat flag (0 = the outer node, k = the k-th guard
     // layer) paired with the user's state.
-    let buffered_ty = plain_app("PProd", vec![ident("Nat"), state_ty.clone()]);
+    let buffered_ty = plain_app(
+        GlobalPath("PProd"),
+        vec![ident(GlobalPath("Nat")), state_ty.clone()],
+    );
     let nat_lit = |k: usize| -> SurfaceExpr {
         SurfaceExpr::Lit(
             Span::dummy(),
@@ -5376,25 +5673,25 @@ fn compile_guarded_codef(
             Span::dummy(),
             Box::new(SurfaceExpr::Lambda(
                 Span::dummy(),
-                vec![SurfaceBinder::new(
-                    state_name,
+                vec![surface_binder(
+                    &state_name,
                     Some(state_ty.clone()),
                     SurfaceBinderInfo::Explicit,
                 )],
                 Box::new(e),
             )),
             vec![SurfaceArg::positional(plain_app(
-                "PProd.snd",
+                GlobalPath("PProd.snd"),
                 vec![ident("p")],
             ))],
         )
     };
-    let flag = plain_app("PProd.fst", vec![ident("p")]);
-    let payload = plain_app("PProd.snd", vec![ident("p")]);
+    let flag = plain_app(GlobalPath("PProd.fst"), vec![ident("p")]);
+    let payload = plain_app(GlobalPath("PProd.snd"), vec![ident("p")]);
     let plam = |body: SurfaceExpr| -> SurfaceExpr {
         SurfaceExpr::Lambda(
             Span::dummy(),
-            vec![SurfaceBinder::new(
+            vec![surface_binder(
                 "p",
                 Some(buffered_ty.clone()),
                 SurfaceBinderInfo::Explicit,
@@ -5402,8 +5699,9 @@ fn compile_guarded_codef(
             Box::new(body),
         )
     };
-    let beq_flag =
-        |k: usize| -> SurfaceExpr { plain_app("Nat.beq", vec![flag.clone(), nat_lit(k)]) };
+    let beq_flag = |k: usize| -> SurfaceExpr {
+        plain_app(GlobalPath("Nat.beq"), vec![flag.clone(), nat_lit(k)])
+    };
     // cond chain: flag 0 -> outer, flag k -> layer k (the last layer is
     // the chain's final else branch).
     let cond_chain = |outer: SurfaceExpr, layer_vals: Vec<SurfaceExpr>| -> SurfaceExpr {
@@ -5412,29 +5710,37 @@ fn compile_guarded_codef(
             .cloned()
             .expect("depth >= 1: at least one layer");
         for (k, v) in layer_vals.iter().enumerate().rev().skip(1) {
-            chain = plain_app("cond", vec![beq_flag(k + 1), v.clone(), chain]);
+            chain = plain_app(GlobalPath("cond"), vec![beq_flag(k + 1), v.clone(), chain]);
         }
-        plain_app("cond", vec![beq_flag(0), outer, chain])
+        plain_app(GlobalPath("cond"), vec![beq_flag(0), outer, chain])
     };
     let mut slot_lambdas: Vec<SurfaceExpr> = Vec::new();
     for (si, slot) in slots.iter().enumerate() {
-        let field = slot.strip_suffix('F').unwrap_or(slot);
+        let field = strip_slot_suffix(slot).ok_or_else(|| unsupported(
+            format!("codef: unsupported corecursor slot `{slot}` (expected a nonempty terminal string with F suffix)")
+        ))?;
         if si == obs_count {
             // The recursive slot: at the last layer wrap back to flag 0
             // with the (re-bound) next state; otherwise advance the flag.
             slot_lambdas.push(plam(plain_app(
-                "cond",
+                GlobalPath("cond"),
                 vec![
                     beq_flag(depth),
-                    plain_app("PProd.mk", vec![nat_lit(0), rebind(next_state.clone())]),
                     plain_app(
-                        "PProd.mk",
-                        vec![plain_app("Nat.succ", vec![flag.clone()]), payload.clone()],
+                        GlobalPath("PProd.mk"),
+                        vec![nat_lit(0), rebind(next_state.clone())],
+                    ),
+                    plain_app(
+                        GlobalPath("PProd.mk"),
+                        vec![
+                            plain_app(GlobalPath("Nat.succ"), vec![flag.clone()]),
+                            payload.clone(),
+                        ],
                     ),
                 ],
             )));
         } else {
-            let Some((_, outer)) = clauses.iter().find(|(n, _)| n == field) else {
+            let Some((_, outer)) = clauses.iter().find(|(n, _)| n == &field) else {
                 return Err(unsupported(format!(
                     "codef `{name}`: missing clause for observation `{field}` \
                      of `{head_name}`"
@@ -5446,10 +5752,10 @@ fn compile_guarded_codef(
         }
     }
     let init = plain_app(
-        "PProd.mk",
+        GlobalPath("PProd.mk"),
         vec![
             nat_lit(0),
-            state.map_or_else(|| ident("PUnit.unit"), |b| ident(&b.name)),
+            state.map_or_else(|| ident(GlobalPath("PUnit.unit")), |b| ident(&b.name)),
         ],
     );
     let mut corec_args = type_args.to_vec();
@@ -5457,9 +5763,9 @@ fn compile_guarded_codef(
     corec_args.extend(slot_lambdas);
     corec_args.push(init);
     Ok(Some(mk_def(
-        name.to_string(),
+        name.clone(),
         binders.to_vec(),
         ty.clone(),
-        at_app(&format!("{head_name}.corec"), corec_args),
+        at_app(child_name(head_name, "corec"), corec_args),
     )))
 }

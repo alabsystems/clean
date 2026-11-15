@@ -93,9 +93,9 @@ struct FamilyTele {
 
 fn bridge_names(aux: &Name) -> (Name, Name, Name) {
     (
-        Name::from_string(&format!("{aux}.bridge_mp")),
-        Name::from_string(&format!("{aux}.bridge_mpr")),
-        Name::from_string(&format!("{aux}.bridge")),
+        aux.clone().str("bridge_mp"),
+        aux.clone().str("bridge_mpr"),
+        aux.clone().str("bridge"),
     )
 }
 
@@ -126,7 +126,7 @@ impl Environment {
             });
         }
         for f in families {
-            let crec = Name::from_string(&format!("{}.rec", f.container));
+            let crec = f.container.clone().str("rec");
             match self.get_recursor(&crec) {
                 None => {
                     return Ok(BridgeOutcome::OutOfScope {
@@ -312,7 +312,7 @@ impl Environment {
         let fvars: Vec<Expr> = tele.binders.iter().map(|(_, fv, _)| fv.clone()).collect();
 
         let (h_id, h_fv) = tele.b.fresh_local(tele.lhs.clone());
-        let rec_name = Name::from_string(&format!("{}.rec", f.aux_name));
+        let rec_name = f.aux_name.clone().str("rec");
         let rec = self
             .get_recursor(&rec_name)
             .ok_or_else(|| inv(format!("{rec_name} is not registered")))?
@@ -567,7 +567,7 @@ impl Environment {
         let fvars: Vec<Expr> = tele.binders.iter().map(|(_, fv, _)| fv.clone()).collect();
 
         let (h_id, h_fv) = tele.b.fresh_local(tele.rhs.clone());
-        let rec_name = Name::from_string(&format!("{}.rec", f.container));
+        let rec_name = f.container.clone().str("rec");
         let rec = self
             .get_recursor(&rec_name)
             .ok_or_else(|| inv(format!("{rec_name} is not registered")))?

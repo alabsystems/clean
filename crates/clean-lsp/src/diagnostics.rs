@@ -202,6 +202,7 @@ mod tests {
             }],
             warnings: vec![],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         };
@@ -251,6 +252,7 @@ mod tests {
             }],
             warnings: vec![],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         });
@@ -315,6 +317,7 @@ mod tests {
                 related: Vec::new(),
             }],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         };
@@ -353,6 +356,7 @@ mod tests {
                 related: Vec::new(),
             }],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         };
@@ -400,6 +404,7 @@ mod tests {
                 related: Vec::new(),
             }],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         });
@@ -447,6 +452,7 @@ mod tests {
                 }],
             }],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         };
@@ -495,6 +501,7 @@ mod tests {
                 related: Vec::new(),
             }],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         };
@@ -532,6 +539,7 @@ mod tests {
             }],
             warnings: vec![],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         };

@@ -5,7 +5,7 @@
 //! Canonical TrustIr text pretty-printer for diff stability (issue #62).
 //!
 //! [`canonical`] returns the canonical text form of a [`Module`]: the
-//! deterministic, idempotent, diff-stable rendering that the `trust-ir fmt`
+//! deterministic, idempotent, diff-stable rendering that the `trust-ir-fmt`
 //! CLI emits.
 //!
 //! # What "canonical" means
@@ -53,27 +53,102 @@
 //! produces the same diagnostic set as `validate_module(&m)` (modulo the
 //! SSA renumbering; validation is SSA-name-invariant). The helper
 //! [`canonicalize`] returns the rewritten [`Module`] for callers who want
-//! both the canonical module and its string form.
+//! both the canonical module and its string form. Producers that already own
+//! a just-built module can use [`into_canonical`] to perform the same rewrite
+//! without cloning the complete module first.
 
-// The authoritative per-instruction SSA operand-remap lives in `mem2reg`
-// (always compiled), so the alloca-promotion pass can reuse it without
-// pulling in the `fmt` feature. Canonicalization reuses the same walker here.
-use crate::mem2reg::rewrite_node;
-use crate::value::ValueId;
+use crate::canonicalize::{
+    FunctionCanonicalPlan, canonicalize_function, canonicalize_function_with, obligation_owner,
+    unique_function_positions,
+};
 use crate::{Function, Module};
-use std::collections::HashMap;
+
+pub use crate::text_loss::{
+    FloatSite, NameKind, TextLoss, TextLossError, TextLossKind, is_bare_ident, text_losses,
+};
 
 /// Render `module` in canonical TrustIr text form.
 ///
-/// This is the string the `trust-ir fmt` CLI emits. See the module-level
+/// This is the human dump of the canonicalized module. See the module-level
 /// documentation for the full definition of "canonical".
 ///
+/// When [`text_losses`] of the canonicalized module is non-empty, the output
+/// carries a `; #lossy: <summaries>` line right after the header and the
+/// parser REFUSES it (roadmap WS4.2): the text is still printed, for humans,
+/// but it can no longer be parsed back into a module that silently lacks the
+/// fields. Writers of text meant to be READ BACK (the `trust-ir convert --to
+/// text` and `trust-ir-fmt` CLIs, producers' `.trust-ir.txt`) should use
+/// [`canonical_checked`], which refuses instead.
+///
 /// Guaranteed to be idempotent: `canonical(parse(canonical(m))) ==
-/// canonical(m)` for every well-formed `m`, when the `parser` feature is
-/// enabled.
+/// canonical(m)` for every well-formed `m` with `text_losses(m).is_empty()`,
+/// when the `parser` feature is enabled.
 pub fn canonical(module: &Module) -> String {
     let canon = canonicalize(module);
     format!("{canon}")
+}
+
+/// Render `module` in canonical text form, or refuse with every field the
+/// text grammar cannot carry (roadmap WS4.2, finding F-065).
+///
+/// `Ok(text)` is exactly [`canonical`]`(module)` and carries no `#lossy`
+/// marker; for it, `parse_module(text)` rebuilds [`canonicalize`]`(module)`
+/// field for field. `Err` lists every [`TextLoss`] of the canonicalized
+/// module — use the binary, JSON or MessagePack codec instead.
+///
+/// # Errors
+///
+/// [`TextLossError`] when [`text_losses`] of the canonicalized module is
+/// non-empty.
+pub fn canonical_checked(module: &Module) -> Result<String, TextLossError> {
+    let canon = canonicalize(module);
+    let losses = text_losses(&canon);
+    if losses.is_empty() {
+        Ok(format!("{canon}"))
+    } else {
+        Err(TextLossError { losses })
+    }
+}
+
+/// Render `module` in text form EXACTLY as it is stored — no canonical
+/// rewrite — or refuse with every field the text grammar cannot carry.
+///
+/// This is the transport spelling of the text format, as distinct from
+/// [`canonical_checked`]'s diff-stable one. It prints the module's OWN SSA
+/// value ids, its own block order and its own parameter-attribute table, so
+/// for any module (canonical or not) with no [`text_losses`]:
+///
+/// ```text
+/// parse_module(&text_checked(m).unwrap()) == Ok(m)
+/// ```
+///
+/// and therefore `bin -> text -> bin` is byte-identical. [`canonical_checked`]
+/// guarantees that identity only for a module already in canonical form
+/// (`m == canonicalize(m)`): on any other module it renumbers SSA values
+/// densely and reorders blocks FIRST, so what parses back is
+/// [`canonicalize`]`(m)`, not `m` — a silent rewrite that `text_losses`
+/// deliberately does not report, because canonicalization is a declared
+/// transform rather than a grammar gap. Writers whose text is meant to be read
+/// back into the same module (the `trust-ir convert --to text` transport, a
+/// producer's `.trust-ir.txt` sidecar) want this function; writers that want a
+/// stable diff across producers (the `trust-ir-fmt` binary) want
+/// [`canonical_checked`].
+///
+/// Sparse and out-of-order value ids are legal in a module — SSA validation
+/// requires unique definitions and dominance, not density, and the binary
+/// codec writes each id verbatim — so preserving them here loses nothing the
+/// other codecs keep.
+///
+/// # Errors
+///
+/// [`TextLossError`] when [`text_losses`]`(module)` is non-empty.
+pub fn text_checked(module: &Module) -> Result<String, TextLossError> {
+    let losses = text_losses(module);
+    if losses.is_empty() {
+        Ok(format!("{module}"))
+    } else {
+        Err(TextLossError { losses })
+    }
 }
 
 /// Return a new [`Module`] whose SSA values have been renumbered to a
@@ -83,62 +158,86 @@ pub fn canonical(module: &Module) -> String {
 /// actually rewrites that function. A rewritten function loses
 /// [`Function::source_provenance`]: an ordinary syntactic transform is not
 /// authorized to re-seal compiler source authority for a changed artifact.
-/// Its canonical text can be fed back through the parser when `parser` is enabled, but the text
-/// surface intentionally omits v31 enum field names and concrete layout
-/// descriptors; use binary or serde when those producer facts must survive.
+/// Its canonical text can be fed back through the parser when `parser` is
+/// enabled and [`text_losses`] is empty; a module with fields the text
+/// grammar cannot carry prints with a refused `; #lossy:` marker — use binary
+/// or serde when those facts must survive. WS4.5 carries the layout and
+/// linkage surface: struct field names and offsets, enum LAYOUT DESCRIPTORS
+/// (a descriptor that contradicts its own enum is still refused — see
+/// [`TextLoss::EnumLayout`]), enum variant field names (`Name(field: ty, ..)`;
+/// a list not parallel to the fields is refused —
+/// [`TextLoss::EnumFieldNames`]), the `switch` exhaustiveness hint
+/// (`.. ] exhaustive`) and `global_asm` blocks (`global_asm "<escaped>"`).
+/// The proof surface — function summaries, clause bindings, certificate
+/// assurance, `clean_cic` kernel re-check directives, the v41 obligation kinds
+/// and the v46 typed spec carrier — is carried as of WS4.4.
 ///
 /// Callers that want only the text form should use [`canonical`]
 /// directly.
 pub fn canonicalize(module: &Module) -> Module {
-    let mut out = module.clone();
-    for func in &mut out.functions {
-        canonicalize_function(func);
-    }
-    out
+    into_canonical(module.clone())
 }
 
-/// Build the per-function dense SSA remap table.
+/// Consume and canonicalize an owned [`Module`] without first cloning it.
 ///
-/// Visit block parameters first (in block-id order), then instruction
-/// results (in original instruction order per block). Every `ValueId`
-/// defined by the function receives a fresh dense index in `0..N`.
-fn build_value_map(func: &Function) -> HashMap<ValueId, ValueId> {
-    let mut map = HashMap::new();
-    let mut next: u32 = 0;
-
-    // Blocks are already canonical if emitted in block.id order; the
-    // walker below enforces that order by sorting a temporary vector of
-    // block indices. We do NOT mutate the block vector here — the Display
-    // impl iterates `func.blocks` directly, so the caller must also sort
-    // blocks (see `canonicalize_function`).
-    let mut block_indices: Vec<usize> = (0..func.blocks.len()).collect();
-    block_indices.sort_by_key(|&i| func.blocks[i].id.index());
-
-    // Pass 1: block parameters in block-id order.
-    for &bi in &block_indices {
-        for (val, _ty) in &func.blocks[bi].params {
-            map.entry(*val).or_insert_with(|| {
-                let id = ValueId::new(next);
-                next += 1;
-                id
-            });
+/// This performs exactly the same deterministic block ordering, dense SSA
+/// renumbering, parameter-attribute trimming, and source-provenance handling
+/// as [`canonicalize`]. It is intended for producer pipelines that can
+/// canonicalize once immediately after construction, before binding proof or
+/// cache authority, so later canonical binary identities can take their
+/// no-remap function-body path instead of rebuilding fallback value maps.
+///
+/// The operation is syntactic preparation, not validation or proof. A
+/// function whose stored representation changes loses its
+/// [`Function::source_provenance`] exactly as it does under [`canonicalize`].
+/// The inherited legacy comparison also drops provenance from an otherwise
+/// canonical function containing a non-reflexive `f64::NAN` in a bounded-output
+/// proof or dialect attribute (but not in a float constant).
+///
+/// Existing obligations, certificates, proof annotations, and external cache
+/// entries are neither cleared nor re-sealed by this helper. Callers must run
+/// normal validation and bind any source/proof/cache authority to the returned
+/// module rather than treating retained metadata as automatically rebound.
+/// Because exact module serialization retains stored SSA and block order, this
+/// rewrite can change [`Module::stable_digest`].
+/// [`Module::executable_content_digest_v1`] remains invariant only when source
+/// provenance is absent or preserved; invalidating provenance changes that
+/// deliberately provenance-bearing identity as well.
+///
+/// # Clause bindings (roadmap WS4.4, NEW-1)
+///
+/// A `ClausePlace::Value(v)` binding names an SSA value of its owning
+/// function, so it is renumbered WITH that function: the function's own
+/// summary clauses, and the bindings of every module obligation whose
+/// `function` scope (else its `site`'s function) is the rewritten function.
+/// Before WS4.4 the body was renumbered and the bindings were not, so a
+/// binding silently re-pointed at whichever value took its old number. A
+/// binding naming a value the function does not define is kept OUTSIDE the
+/// renumbered range (never rebound), so the validator still refuses it. The
+/// bindings sit inside the obligation's lineage and content digests, so a
+/// certificate bound before the rewrite no longer matches after it: that is
+/// the fail-closed outcome, and the reason to bind authority to the RETURNED
+/// module. A module with no `Value` binding is rewritten exactly as before.
+#[must_use]
+pub fn into_canonical(mut module: Module) -> Module {
+    let plans: Vec<FunctionCanonicalPlan> = module
+        .functions
+        .iter()
+        .map(FunctionCanonicalPlan::new)
+        .collect();
+    let positions = unique_function_positions(&module);
+    for obligation in &mut module.proof_obligations {
+        let Some(&position) = obligation_owner(obligation).and_then(|id| positions.get(&id)) else {
+            continue;
+        };
+        if let Some(formula) = obligation.formula.as_mut() {
+            plans[position].remap_formula_bindings(formula);
         }
     }
-
-    // Pass 2: instruction results in original block-id-then-source order.
-    for &bi in &block_indices {
-        for node in &func.blocks[bi].body {
-            for r in &node.results {
-                map.entry(*r).or_insert_with(|| {
-                    let id = ValueId::new(next);
-                    next += 1;
-                    id
-                });
-            }
-        }
+    for (function, plan) in module.functions.iter_mut().zip(&plans) {
+        canonicalize_function_with(function, plan);
     }
-
-    map
+    module
 }
 
 /// Render a single function in canonical text form: canonicalize a clone
@@ -151,8 +250,18 @@ fn build_value_map(func: &Function) -> HashMap<ValueId, ValueId> {
 /// the function's `functy.N` signature index — module-level *type-table*
 /// renumbering is not normalized here (nor by [`canonical`], which prints
 /// tables in id order).
+///
+/// The function's `summary` is deliberately NOT part of this rendering, even
+/// though WS4.4 made `Display` print it (`; #summary:` block): the obligation
+/// digest encodes the summary's clauses itself, and EXCLUDES its `proved` bit
+/// and `backed_by` citation (verification progress is bookkeeping, not
+/// identity — a cache keyed on it would self-invalidate on discharge). Printing
+/// the summary here would fold `proved` back in through the text, so it is
+/// stripped first and the pre-WS4.4 rendering — and every obligation digest —
+/// is unchanged.
 pub(crate) fn canonical_function(func: &Function) -> String {
     let mut canon = func.clone();
+    canon.summary = None;
     canonicalize_function(&mut canon);
     format!("{canon}")
 }
@@ -160,63 +269,17 @@ pub(crate) fn canonical_function(func: &Function) -> String {
 /// Canonicalize a function in place: sort blocks by `block.id`, then
 /// rewrite every `ValueId` that appears in the function (definitions and
 /// uses) via the dense remap table.
-fn canonicalize_function(func: &mut Function) {
-    // Temporarily remove proof-bearing source provenance while deciding
-    // whether this pass changes the function. If it does, fail closed by
-    // leaving the carrier absent. An already-canonical function can retain its
-    // byte-identical carrier.
-    let source_provenance = func.source_provenance.take();
-    let before = func.clone();
-
-    // 0. Trim trailing empty per-parameter attribute slots. The text printer
-    //    emits `#param_attrs {i}:` only for non-empty entries by index, and the
-    //    parser reconstructs the vector up to the highest non-empty index — so a
-    //    trailing `ParamAttrs::default()` slot cannot survive a text round-trip.
-    //    Normalizing it away here keeps the canonical form equal to what text
-    //    print→parse produces (trailing empties are semantically inert).
-    while func.attrs.params.last().is_some_and(|pa| pa.is_empty()) {
-        func.attrs.params.pop();
-    }
-
-    // 1. Stable block order (by block.id).
-    func.blocks.sort_by_key(|b| b.id.index());
-
-    // 2. Build the dense SSA remap.
-    let map = build_value_map(func);
-
-    // 3. Rewrite every ValueId occurrence in the function.
-    for block in &mut func.blocks {
-        for (val, _ty) in &mut block.params {
-            *val = *map.get(val).unwrap_or(val);
-        }
-        for node in &mut block.body {
-            rewrite_node(node, &map);
-        }
-    }
-
-    // Debug names refer to the same SSA namespace as parameters, results, and
-    // operands. Leaving this side table sparse while rewriting the body would
-    // silently attach names to the wrong canonical values.
-    if let Some(names) = &mut func.value_names {
-        for (value, _) in names {
-            *value = *map.get(value).unwrap_or(value);
-        }
-    }
-
-    if *func == before {
-        func.source_provenance = source_provenance;
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::Block;
+    use crate::SourceProvenance;
+    use crate::canonicalize::FunctionCanonicalPlan;
     use crate::inst::{BinOp, ICmpOp, Inst};
     use crate::node::InstrNode;
-    use crate::proof::ProofAnnotation;
+    use crate::proof::{ProofAnnotation, ProofDigest};
     use crate::ty::{FuncTy, Ty};
-    use crate::value::{BlockId, FuncId};
+    use crate::value::{BlockId, FuncId, ValueId};
 
     fn v(n: u32) -> ValueId {
         ValueId::new(n)
@@ -226,15 +289,26 @@ mod tests {
         BlockId::new(n)
     }
 
+    fn source_carrier() -> SourceProvenance {
+        SourceProvenance::new(
+            ProofDigest::sha256([1; 32]),
+            ProofDigest::sha256([2; 32]),
+            Vec::new(),
+        )
+    }
+
     /// `fn add(i64 %0, i64 %1) -> i64 { %2 = add %0, %1; ret %2 }`
     /// But with sparse SSA numbering: %17, %19, %23.
     fn sparse_add_module() -> Module {
         let mut module = Module::new("sparse_add");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I64, Ty::I64],
-            returns: vec![Ty::I64],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I64, Ty::I64],
+                returns: vec![Ty::I64],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "add", ft, b(0));
         let mut block = Block::new(b(0));
         block.params.push((v(17), Ty::I64));
@@ -252,8 +326,46 @@ mod tests {
             values: vec![v(23)],
         }));
         func.blocks.push(block);
-        module.add_function(func);
         module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
+        module
+    }
+
+    /// v61 (roadmap WS1.12(c)): a license's `GateEvidence` survives
+    /// canonicalization, because the body digest it names is taken over the
+    /// canonical image (`executable_content_digest_v1` projects every
+    /// function through the same plan). Canonicalizing is not a rewrite the
+    /// evidence has to be dropped for — and a real rewrite still moves the
+    /// digest.
+    #[test]
+    fn canonicalize_keeps_gate_evidence_valid() {
+        let mut sparse = sparse_add_module();
+        let fid = sparse.functions[0].id;
+        let digest = sparse.function_body_digest(fid).expect("digest");
+        sparse.functions[0].body_gate = Some(crate::BodyGate::Gated {
+            authority: "clean-kernel-tv".into(),
+            evidence: Some(crate::GateEvidence {
+                obligation: crate::ProofId::new(0),
+                body_digest: digest,
+            }),
+        });
+        let dense = canonicalize(&sparse);
+        assert_ne!(
+            dense.functions[0].blocks, sparse.functions[0].blocks,
+            "control: canonicalization renumbered the body"
+        );
+        assert_eq!(dense.function_body_digest(fid), Ok(digest));
+        assert_eq!(dense.functions[0].body_gate, sparse.functions[0].body_gate);
+
+        let mut rewritten = dense;
+        rewritten.functions[0].blocks[0].body[0].inst = Inst::BinOp {
+            op: BinOp::Sub,
+            ty: Ty::I64,
+            lhs: v(0),
+            rhs: v(1),
+        };
+        assert_ne!(rewritten.function_body_digest(fid), Ok(digest));
     }
 
     #[test]
@@ -274,19 +386,109 @@ mod tests {
     }
 
     #[test]
-    fn canonicalize_invalidates_only_when_it_rewrites_source_bound_body() {
-        use crate::SourceProvenance;
-        use crate::proof::ProofDigest;
+    fn owned_canonicalization_matches_borrowed_without_cloning_the_module_owner() {
+        let module = sparse_add_module();
+        let expected = canonicalize(&module);
+        let expected_executable_digest = module.executable_content_digest_v1();
+        let original_stable_digest = module.stable_digest();
+        let module_name_allocation = module.name.as_ptr();
 
-        let carrier = || {
-            SourceProvenance::new(
-                ProofDigest::sha256([1; 32]),
-                ProofDigest::sha256([2; 32]),
-                Vec::new(),
-            )
-        };
+        let actual = into_canonical(module);
+
+        assert_eq!(actual, expected);
+        assert_eq!(
+            actual.executable_content_digest_v1(),
+            expected_executable_digest
+        );
+        assert_ne!(actual.stable_digest(), original_stable_digest);
+        assert_eq!(
+            actual.name.as_ptr(),
+            module_name_allocation,
+            "the consuming path must retain the owned module-name allocation"
+        );
+        assert!(
+            actual
+                .functions
+                .iter()
+                .all(|function| FunctionCanonicalPlan::new_if_needed(function).is_none()),
+            "the owned result must not require a fallback function remap plan"
+        );
+    }
+
+    #[test]
+    fn owned_canonicalization_does_not_preserve_a_digest_after_provenance_invalidation() {
+        let mut module = sparse_add_module();
+        module.functions[0].source_provenance = Some(source_carrier());
+        let original_executable_digest = module.executable_content_digest_v1();
+
+        let actual = into_canonical(module);
+
+        assert!(actual.functions[0].source_provenance.is_none());
+        assert_ne!(
+            actual.executable_content_digest_v1(),
+            original_executable_digest,
+            "executable-content identity retains source provenance"
+        );
+    }
+
+    #[test]
+    fn owned_canonicalization_preserves_legacy_nan_provenance_behavior() {
+        let mut plain = into_canonical(sparse_add_module());
+        plain.functions[0].source_provenance = Some(source_carrier());
+
+        let mut constant_nan = plain.clone();
+        constant_nan.functions[0].blocks[0].body.insert(
+            1,
+            InstrNode::new(Inst::Const {
+                ty: Ty::F64,
+                value: crate::Constant::Float(f64::NAN),
+            })
+            .with_result(v(3)),
+        );
+        assert!(
+            into_canonical(constant_nan).functions[0]
+                .source_provenance
+                .is_some(),
+            "float constants compare by their bit pattern"
+        );
+
+        let mut bounded_nan = plain.clone();
+        bounded_nan.functions[0]
+            .proofs
+            .push(ProofAnnotation::BoundedOutput {
+                lo: f64::NAN,
+                hi: 1.0,
+            });
+        assert!(
+            into_canonical(bounded_nan).functions[0]
+                .source_provenance
+                .is_none(),
+            "legacy derived PartialEq invalidates provenance for bounded NaN"
+        );
+
+        let mut dialect_nan = plain;
+        dialect_nan.functions[0].blocks[0].body.insert(
+            1,
+            InstrNode::new(Inst::DialectOp(Box::new(
+                crate::dialect::DialectInst::new("fixture", "nan")
+                    .with_operand(v(0))
+                    .with_result_ty(Ty::I64)
+                    .with_attr("nan", crate::dialect::AttrValue::F64(f64::NAN)),
+            )))
+            .with_result(v(3)),
+        );
+        assert!(
+            into_canonical(dialect_nan).functions[0]
+                .source_provenance
+                .is_none(),
+            "legacy derived PartialEq invalidates provenance for dialect NaN"
+        );
+    }
+
+    #[test]
+    fn canonicalize_invalidates_only_when_it_rewrites_source_bound_body() {
         let mut sparse = sparse_add_module();
-        sparse.functions[0].source_provenance = Some(carrier());
+        sparse.functions[0].source_provenance = Some(source_carrier());
         let dense = canonicalize(&sparse);
         assert!(
             dense.functions[0].source_provenance.is_none(),
@@ -294,7 +496,7 @@ mod tests {
         );
 
         let mut already_dense = dense;
-        already_dense.functions[0].source_provenance = Some(carrier());
+        already_dense.functions[0].source_provenance = Some(source_carrier());
         let unchanged = canonicalize(&already_dense);
         assert_eq!(
             unchanged.functions[0].source_provenance, already_dense.functions[0].source_provenance,
@@ -331,11 +533,14 @@ mod tests {
         // default slot cannot survive a text round-trip (Display emits only
         // non-empty entries by index), so canonicalize must drop it.
         let mut m = Module::new("trim");
-        let ft = m.add_func_type(FuncTy {
-            params: vec![Ty::Ptr, Ty::Ptr],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = m
+            .add_func_type(FuncTy {
+                params: vec![Ty::Ptr, Ty::Ptr],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "f", ft, b(0));
         let mut block = Block::new(b(0));
         block.params.push((v(0), Ty::Ptr));
@@ -351,7 +556,8 @@ mod tests {
             },
             ParamAttrs::default(), // trailing empty — should be trimmed
         ];
-        m.add_function(func);
+        m.try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let c = canonicalize(&m);
         assert_eq!(
@@ -379,11 +585,14 @@ mod tests {
     fn canonical_sparse_and_dense_produce_same_text() {
         // Dense version of the same function: params %0, %1, result %2.
         let mut dense = Module::new("sparse_add");
-        let ft = dense.add_func_type(FuncTy {
-            params: vec![Ty::I64, Ty::I64],
-            returns: vec![Ty::I64],
-            is_vararg: false,
-        });
+        let ft = dense
+            .add_func_type(FuncTy {
+                params: vec![Ty::I64, Ty::I64],
+                returns: vec![Ty::I64],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "add", ft, b(0));
         let mut block = Block::new(b(0));
         block.params.push((v(0), Ty::I64));
@@ -401,7 +610,9 @@ mod tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
         func.blocks.push(block);
-        dense.add_function(func);
+        dense
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let sparse = sparse_add_module();
         assert_eq!(canonical(&sparse), canonical(&dense));
@@ -410,11 +621,14 @@ mod tests {
     #[test]
     fn canonical_sorts_blocks_by_id() {
         let mut module = Module::new("blocks");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "f", ft, b(0));
 
         // Push blocks out of order: b2 before b0 before b1.
@@ -441,7 +655,9 @@ mod tests {
         func.blocks.push(b2);
         func.blocks.push(b0);
         func.blocks.push(b1);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let c = canonicalize(&module);
         let ids: Vec<u32> = c.functions[0].blocks.iter().map(|b| b.id.index()).collect();
@@ -451,11 +667,14 @@ mod tests {
     #[test]
     fn canonical_preserves_proof_annotations() {
         let mut module = Module::new("proofs");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::I32, Ty::I32],
-            returns: vec![Ty::Bool],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32, Ty::I32],
+                returns: vec![Ty::Bool],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "eq", ft, b(0));
         func.proofs.push(ProofAnnotation::Pure);
         func.proofs.push(ProofAnnotation::Deterministic);
@@ -476,7 +695,9 @@ mod tests {
             values: vec![v(12)],
         }));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let text = canonical(&module);
         assert!(text.contains("; #proof: pure"), "want #proof annotation");
@@ -498,5 +719,167 @@ mod tests {
             first, second,
             "canonical(parse(canonical(m))) must equal canonical(m)"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // Roadmap WS4.4, NEW-1: `ClausePlace::Value` bindings follow the SSA
+    // renumbering of their owning function.
+    // ------------------------------------------------------------------
+
+    fn value_bound(value: ValueId) -> crate::proof::ProofFormula {
+        let mut formula = crate::proof::ProofFormula::smtlib2("(= r 1)", "Bool");
+        formula.bindings = vec![(
+            "r".to_string(),
+            crate::proof::ClauseBinding {
+                sort: crate::proof::ClauseSort::BitVec(64),
+                place: crate::proof::ClausePlace::Value(value),
+            },
+        )];
+        formula
+    }
+
+    fn bound_value(formula: &crate::proof::ProofFormula) -> ValueId {
+        match formula.bindings[0].1.place {
+            crate::proof::ClausePlace::Value(value) => value,
+            other => panic!("expected a Value binding, got {other:?}"),
+        }
+    }
+
+    /// `sparse_add_module` (`%17, %19 -> %23`, renumbered to `%0, %1 -> %2`)
+    /// with an `ensures` bound to `%23`, a module obligation SCOPED to the
+    /// function bound to `%23`, and one scoped only by its `site`.
+    fn sparse_add_with_value_bindings() -> Module {
+        use crate::proof::{ObligationKind, ObligationSite, ProofObligation, ProofStatus};
+        use crate::value::ProofId;
+        let mut module = sparse_add_module();
+        module.functions[0].summary = Some(
+            crate::FunctionSummary::new()
+                .with_params(vec!["a".into(), "b".into()])
+                .ensuring(value_bound(v(23))),
+        );
+        module.proof_obligations.push(
+            ProofObligation::new(
+                ProofId::new(0),
+                ObligationKind::Postcondition,
+                ProofStatus::Pending,
+                "scoped",
+            )
+            .with_function(FuncId::new(0))
+            .with_formula(value_bound(v(23))),
+        );
+        module.proof_obligations.push(
+            ProofObligation::new(
+                ProofId::new(1),
+                ObligationKind::MemorySafety,
+                ProofStatus::Pending,
+                "sited",
+            )
+            .with_site(ObligationSite::new(FuncId::new(0), b(0), 0))
+            .with_formula(value_bound(v(19))),
+        );
+        module
+    }
+
+    /// The roadmap's NEW-1 test: before WS4.4 the body was renumbered and the
+    /// bindings were not, so `%23` stayed `%23` — a value the canonical
+    /// function no longer defines — or, worse, named whichever value took the
+    /// old number. Now each binding names the SAME value it named before.
+    #[test]
+    fn new1_value_bindings_follow_the_canonical_renumbering() {
+        let module = sparse_add_with_value_bindings();
+        let canon = canonicalize(&module);
+        assert_eq!(canon.functions[0].blocks[0].body[0].results[0], v(2));
+        let summary = canon.functions[0].summary.as_ref().unwrap();
+        assert_eq!(bound_value(&summary.ensures[0]), v(2), "summary ensures");
+        assert_eq!(
+            bound_value(canon.proof_obligations[0].formula.as_ref().unwrap()),
+            v(2),
+            "a `function`-scoped obligation"
+        );
+        assert_eq!(
+            bound_value(canon.proof_obligations[1].formula.as_ref().unwrap()),
+            v(1),
+            "a `site`-scoped obligation (`%19` is the second parameter)"
+        );
+        // The owned path agrees, and the rewrite is idempotent.
+        assert_eq!(into_canonical(module.clone()), canon);
+        assert_eq!(canonicalize(&canon), canon);
+    }
+
+    /// A binding naming a value the function does NOT define stays dangling:
+    /// it is moved OUT of the renumbered range rather than left at a number
+    /// the rewrite reassigns (`%1` would otherwise silently name the second
+    /// parameter after canonicalization).
+    #[test]
+    fn new1_a_dangling_value_binding_is_never_rebound() {
+        let mut module = sparse_add_module();
+        module.functions[0].summary = Some(
+            crate::FunctionSummary::new()
+                .with_params(vec!["a".into(), "b".into()])
+                .ensuring(value_bound(v(1)))
+                .ensuring(value_bound(v(40))),
+        );
+        let canon = canonicalize(&module);
+        let summary = canon.functions[0].summary.as_ref().unwrap();
+        // Three definitions (`%0..%2` after the rewrite): `%1` is moved to
+        // 3 + 1, and `%40` (already outside the range) is kept.
+        assert_eq!(bound_value(&summary.ensures[0]), v(4));
+        assert_eq!(bound_value(&summary.ensures[1]), v(40));
+        assert_eq!(canonicalize(&canon), canon, "idempotent");
+    }
+
+    /// An obligation whose scope names no function, or a duplicated id, is
+    /// not remapped against a guess (the validator refuses its scope).
+    #[test]
+    fn new1_unresolvable_owner_is_not_remapped() {
+        let mut module = sparse_add_with_value_bindings();
+        module.proof_obligations[0].function = Some(FuncId::new(9));
+        let mut duplicate = module.functions[0].clone();
+        duplicate.name = "twin".into();
+        module.functions.push(duplicate);
+        module.proof_obligations[1].site =
+            Some(crate::proof::ObligationSite::new(FuncId::new(0), b(0), 0));
+        let canon = canonicalize(&module);
+        assert_eq!(
+            bound_value(canon.proof_obligations[0].formula.as_ref().unwrap()),
+            v(23)
+        );
+        assert_eq!(
+            bound_value(canon.proof_obligations[1].formula.as_ref().unwrap()),
+            v(19),
+            "FuncId 0 names two functions"
+        );
+    }
+
+    /// A module WITHOUT `Value` bindings is rewritten exactly as before:
+    /// identity-neutral for the whole existing corpus.
+    #[test]
+    fn new1_is_identity_neutral_without_value_bindings() {
+        let mut module = sparse_add_module();
+        let mut world = value_bound(v(23));
+        world.bindings[0].1.place = crate::proof::ClausePlace::Param { index: 0 };
+        module.functions[0].summary = Some(crate::FunctionSummary::new().ensuring(world.clone()));
+        let canon = canonicalize(&module);
+        assert_eq!(
+            canon.functions[0].summary.as_ref().unwrap().ensures[0],
+            world
+        );
+    }
+
+    /// The obligation digest's function-content text does NOT include the
+    /// summary block `Display` prints since WS4.4: the digest excludes the
+    /// summary's `proved` bit (verification progress is not identity), so
+    /// flipping it must not move the digest.
+    #[test]
+    fn obligation_digest_ignores_the_printed_summary_block() {
+        use crate::value::ProofId;
+        let module = sparse_add_with_value_bindings();
+        let before = module.obligation_digest(ProofId::new(0)).unwrap();
+        let mut proved = module.clone();
+        proved.functions[0].summary.as_mut().unwrap().proved = true;
+        proved.functions[0].summary.as_mut().unwrap().backed_by =
+            Some(crate::ExternRef::new(crate::value::ImportId::new(0), "x"));
+        assert_eq!(proved.obligation_digest(ProofId::new(0)).unwrap(), before);
+        assert!(!canonical_function(&proved.functions[0]).contains("#summary"));
     }
 }

@@ -40,19 +40,42 @@
 //!
 //! ## Coverage, as a fraction
 //!
-//! `IRInst` has **28 constructors, one per `Inst` variant the lowerer actually
-//! constructs**. Measured at HEAD in the sibling trust checkout's `crates/trust-thir-lower/src` by
-//! per-occurrence classification: 34 `Inst::` variants are referenced, six of
-//! them only in pattern position and never constructed — `Assume`, `Copy`,
-//! `HeapAlloc`, `InsertElement`, `Invoke`, `NullPtr` — leaving **28
-//! constructed**. Those six are deliberately absent here; the fraction is
-//! 28/28 of the emitted set and 28/57 of the full `Inst` enum.
+//! `IRInst` has **33 constructors**: thirty cover the `trust_ir::Inst`
+//! variants the two producers construct and the legacy machine models, and
+//! the U64 and Usize fetch-add constructors name narrow sequential ByteV1
+//! operations that the legacy cell machine explicitly refuses. Their presence is syntax
+//! coverage, not legacy execution coverage or a concurrent-atomic theorem.
+//! Twenty-eight come from the THIR lowerer (`crates/trust-thir-lower/src`);
+//! `borrow` and `copy` come from the OTHER producer, the trust-ir bridge
+//! (`crates/trust-ir-bridge/src/lower.rs`), which is what emits the Phase-B
+//! callee sidecar whose bodies carry them.
 //!
-//! The operator alphabets are complete against their Rust enums: `IRBinOp`
-//! 20/20, `IRUnOp` 9/9, `IRICmpOp` 10/10, `IRFCmpOp` 12/12, `IRCastOp` 17/17,
-//! `IROverflowOp` 3/3. `IRTy` is **not** complete against `Ty` (**37**
-//! variants, counted at HEAD from `crates/trust-ir/src/ty.rs:84`'s enum body —
-//! the crystal design doc's §3.2 says 38, which no longer matches);
+//! The modelled set is a SUBSET of the constructed set, and the difference is
+//! PUBLISHED rather than implied. The older sentence here — "34 `Inst::`
+//! variants are referenced, six of them only in pattern position" — was a
+//! `grep -roh "Inst::[A-Za-z0-9_]*"` over one producer, and it was measurably
+//! false: that recipe yields 61 distinct tokens, and `Inst::InsertElement` is
+//! CONSTRUCTED at eight sites in `crates/trust-thir-lower/src/lib.rs`
+//! (`InstrNode::new(Inst::InsertElement {`, measured 2026-09-10 at trust
+//! `0dd9d3e2d7`) while `insertelement` sat in `NOT_EMITTED` under a comment
+//! promising this test would notice. `data/irinst_producer_census.json` (B2C) is the
+//! parse-based two-producer scan that replaces the recipe; until it is minted,
+//! quote no fraction of the full `Inst` enum from here.
+//!
+//! `IRBinOp` has twenty canonical operators, not an injective mirror of the
+//! `trust_ir::BinOp` spellings. The ByteV1 reflector maps validated scalar Bool
+//! `BAnd/BOr/BXor` to typed `and_/or_/xor_`, retaining `IRTy.bool_` and the
+//! original module identity separately. This is not a discriminant mapping or
+//! authority for the separate Lean integer model.
+//!
+//! No coverage fraction against a `trust_ir` enum is restated in this comment:
+//! the ones it carried went stale unnoticed (`IRUnOp` "9/9" after trust-ir
+//! 4f09dab8 grew `UnOp` to 13 variants, `Ty` "37" at 40). Each registered
+//! description (`IRTy` and the six operator alphabets) states its split against
+//! the `trust_ir` enum it names, and `tests/eval_ir/trust_ir_parity.rs` holds
+//! every such statement, and the constructor order, against the enum itself —
+//! through exhaustive matches, so a variant trust-ir adds fails to compile
+//! there until someone classifies it. `IRTy` is **not** complete against `Ty`;
 //! it carries the scalar, pointer-like and aggregate-by-id forms the emitted
 //! fragment observes, and names aggregates by id rather than by structure —
 //! see the `IRTy` registration comment for the exact list and why the
@@ -80,7 +103,7 @@ use crate::spec::Specification;
 
 impl Specification {
     /// Register the `EvalIR` syntax layer: lists/options, the type and constant
-    /// algebras, the six operator alphabets, `IRInst` (28), and the
+    /// algebras, the six operator alphabets, `IRInst` (33, Release-retaining syntax epoch), `IREnc`, and the
     /// block/function/module structure.
     ///
     /// # Errors
@@ -132,9 +155,11 @@ impl Specification {
         //    binary32 and binary16 are different formats with different exponent
         //    fields. Nothing observes more than the width: there is no per-format
         //    layout table here, only the one this module's boundary constants fix;
-        //  - the pointer-like family (`Ref`/`RefMut`/`PtrConst`/`PtrMut`/`Rc`/
-        //    `FatPtr`) keeps its pointee, because `PtrMetadata` dispatches on
-        //    thin-vs-fat;
+        //  - the thin pointer family keeps its pointee. The legacy `fatptr_`
+        //    remains untouched, while appended ByteV1 kinds distinguish Str,
+        //    Slice (with its element type), Dyn (with its trait identity),
+        //    ContainerLen and ContainerVtable. No invented pointee marker
+        //    identifies these nominally distinct types;
         //  - aggregates are named by ID (`struct_`/`enum_`/`tuple_`/`func_`),
         //    NOT by structure. A structural `tuple_ : IRList IRTy` would be a
         //    NESTED inductive, which the elaborator does not register; and the
@@ -161,12 +186,24 @@ impl Specification {
 | array_ : IRTy → Nat → IRTy
 | struct_ : Nat → IRTy
 | enum_ : Nat → IRTy
-| func_ : Nat → IRTy",
-            "EvalIR types. Mirrors trust_ir::Ty over the emitted fragment: scalars by width, the \
-             pointer-like family with its pointee (PtrMetadata dispatches thin-vs-fat), and \
-             aggregates named by ID. Aggregates are NOT structural — a structural tuple would be \
+| func_ : Nat → IRTy
+| usize_ : Nat → IRTy
+| fatstr_ : IRTy
+| fatslice_ : IRTy → IRTy
+| fatdyn_ : Nat → IRTy
+| containerlen_ : IRTy
+| containervtable_ : IRTy",
+            "EvalIR types. Mirrors the 41 trust_ir::Ty variants over the emitted fragment, NOT \
+             one-to-one: scalars by width, the pointer-like family with its pointee \
+             (PtrMetadata dispatches thin-vs-fat), and aggregates named by ID. Aggregates are NOT structural — a structural tuple would be \
              a nested inductive, and the cell-addressed semantics never inspects an aggregate's \
-             field types.",
+             field types. Appended Usize and five distinct fat-pointer kinds preserve \
+             target width, slice element and trait identity. ByteV1 supplies their typed \
+             operations; legacy untyped pointer-part helpers remain unchanged. The old fatptr_ remains \
+             distinct and Byte-refused; fat-pointer memory, casts and native ABI are not \
+             admitted by these syntax additions. Storage describes addressable, possibly \
+             uninitialized geometry and has no IRTy image; it grants no initialized-value \
+             semantics or admitted storage operations.",
         )?;
 
         // =========================================================
@@ -217,8 +254,9 @@ impl Specification {
 | func_ : Nat → IRConst
 | aggv : IRConst → IRConst
 | vnil : IRConst
-| vcons : IRConst → IRConst → IRConst",
-            "EvalIR constants: the `Inst::Const` payload. `float_` carries an IEEE 754 binary64 \
+| vcons : IRConst → IRConst → IRConst
+| phantomdata : IRConst",
+            "EvalIR constants: the `Inst::Const` payload. `phantomdata` is trust_ir::Constant::PhantomData, the ZERO-SIZED marker, added 2026-09-16 because `tc::heartbeat::tick_heartbeat` -- the one callee whose absence makes infer_type's call closure cyclic -- emits `const () phantomdata`, and reader A REFUSED to project it (\"no Clean IRConst image for PhantomData\"). A SEPARATE constructor rather than an alias for `unit_`, because the producer keeps it separate (trust_ir constant.rs:140) and the emitted text prints it by its own name; it EVALUATES to IRScalar.unit_, which is faithful -- the emitted type is already `()` and a zero-sized type has no other value. `float_` carries an IEEE 754 binary64 \
              bit pattern. As of 2026-08-15 float arithmetic IS partly modelled — see \
              super::eval_ir_float for exactly which fragment and the measured reason the rest is \
              refused; this comment previously said \"no float arithmetic is modelled\" and was \
@@ -230,7 +268,7 @@ impl Specification {
         )?;
 
         // =========================================================
-        // Operator alphabets — complete against their Rust enums.
+        // Canonical typed operator alphabets; not Rust enum discriminants.
         // =========================================================
         self.add_inductive(
             r"inductive IRBinOp : Type
@@ -254,7 +292,12 @@ impl Specification {
 | shl : IRBinOp
 | lshr : IRBinOp
 | ashr : IRBinOp",
-            "EvalIR binary operators — 20/20 of trust_ir::BinOp, in declaration order.",
+            "EvalIR binary operators: twenty typed semantic constructors, one each for 20 of \
+             the 26 trust_ir::BinOp variants, in declaration order; not a \
+             discriminant-preserving mirror. ByteV1 maps validated scalar Bool BAnd/BOr/BXor \
+             to and_/or_/xor_ while retaining IRTy.bool_ and the original module identity \
+             separately. RotL, RotR and FCopySign (trust-ir WS3.20) have NO constructor: a \
+             projection that meets one refuses it by name, never approximates.",
         )?;
 
         self.add_inductive(
@@ -268,7 +311,10 @@ impl Specification {
 | ftrunc : IRUnOp
 | not_ : IRUnOp
 | ctpop : IRUnOp",
-            "EvalIR unary operators — 9/9 of trust_ir::UnOp, in declaration order.",
+            "EvalIR unary operators: one constructor each for 9 of the 13 trust_ir::UnOp \
+             variants, in declaration order. CtLz, CtTz, BSwap and BitReverse (trust-ir WS3.20) \
+             have NO constructor: a projection that meets one refuses it by name, never \
+             approximates.",
         )?;
 
         self.add_inductive(
@@ -353,7 +399,7 @@ impl Specification {
         )?;
 
         // =========================================================
-        // Instructions — 28, one per CONSTRUCTED Inst variant.
+        // Instructions — 30, one per CONSTRUCTED-and-MODELLED Inst variant.
         // =========================================================
         //
         // Field-shape notes where this deviates from `trust_ir::Inst`, each an
@@ -375,6 +421,20 @@ impl Specification {
         //  - `GEP.inbounds` is KEPT (the Bool field): it licenses no-wrap
         //    folding, so it is load-bearing for any later optimisation
         //    argument.
+        //  - `Copy.ty` is KEPT and READ. The reference's arm calls
+        //    `expect_ty(operand, ty)` and raises a `type_error` when the two
+        //    disagree (trust-ir interpret.rs, `Inst::Copy`), so this is a slot
+        //    that decides ACCEPT-versus-FAULT: an irrelevance theorem for it
+        //    would be an adequacy claim the reference refutes. The machine
+        //    models the check at the granularity the model can decide —
+        //    `ir_copy_eval`'s shape agreement — and the residual coarseness
+        //    (widths, signedness, aggregate ids) is a DECLARED DELTA
+        //    (`copy-type-check-coarse` in data/evalir_adequacy_grid.json),
+        //    never an irrelevance row.
+        //  - `Borrow` carries only its operand: the reference's arm is
+        //    `expect_pointer`, a dereference-time PROVENANCE check, which the
+        //    machine models by resolving the address in memory
+        //    (`ir_borrow_eval`).
         self.add_inductive(
             r"inductive IRInst : Type
 | binop : IRBinOp → IRTy → Nat → Nat → IRInst
@@ -404,15 +464,34 @@ impl Specification {
 | undef : IRTy → IRInst
 | assert : Nat → IRInst
 | unreachable : IRInst
-| select : IRTy → Nat → Nat → Nat → IRInst",
-            "EvalIR instructions: 28 constructors, one per trust_ir::Inst variant the THIR \
-             lowerer actually constructs (34 referenced minus the six pattern-position-only \
-             Assume/Copy/HeapAlloc/InsertElement/Invoke/NullPtr). SSA operands are Nat value \
+| select : IRTy → Nat → Nat → Nat → IRInst
+| borrow : Nat → IRInst
+| copy : IRTy → Nat → IRInst
+| atomic_fetch_add_relaxed_u64_seq : Nat → Nat → IRInst
+| atomic_fetch_add_relaxed_usize_seq : Nat → Nat → Nat → IRInst
+| release : Nat → IRInst",
+            "EvalIR instructions: 33 constructors in the Release-retaining syntax epoch. Thirty cover trust_ir::Inst variants that the two \
+             producers of the executed bundle construct AND the legacy machine models — the THIR \
+             lowerer (crates/trust-thir-lower/src) for 28 of them, the trust-ir bridge \
+             (crates/trust-ir-bridge/src/lower.rs) for `borrow` and `copy`, which the Phase-B \
+             callee sidecar's own bodies carry. The modelled set is a SUBSET of the constructed \
+             set; B2C will publish that difference by minting \
+             data/irinst_producer_census.json, which does not exist yet, so quote no fraction \
+             of the full Inst enum from this string either. SSA operands are Nat value \
              ids; the result of a value-producing instruction is bound at the machine's fresh \
              next-value-id, mirroring the Lean model's bindFresh. `align` is erased from \
              load/store/alloca (not observable in a cell-addressed model); \
              Switch.exhaustive_enum_unreachable, GEP.inbounds and CallIndirect.calling_conv are \
-             retained.",
+             retained. The APPENDED atomic_fetch_add_relaxed_u64_seq constructor carries the \
+             pointer and increment SSA ids, preserving every prior constructor position. It \
+             names only sequential relaxed u64 fetch-add for the byte profile, not general \
+             AtomicRMW or concurrent execution. The legacy cell-addressed ir_exec refuses it \
+             explicitly. The appended usize operation retains a distinct target-bit-width \
+             index before its two SSA operands; only width 64 executes in ByteV1. The appended \
+             IRTy.usize_ is not an alias of uint_, and adding syntax grants no source or \
+             concurrent atomic execution authority. The APPENDED release constructor retains exactly \
+             one SSA pointer id and is result-free at its node/site. All three evaluators \
+             explicitly halt unmodelled; this is syntax retention, not ARC execution.",
         )?;
 
         // =========================================================
@@ -465,11 +544,68 @@ impl Specification {
              yields a pointer to the cell the machine materializes for it at start-up.",
         )?;
 
+        // The ENCODINGS TABLE (Phase B, link 3). A row says how the byte image
+        // of one aggregate id decodes into the model's inline-aggregate value,
+        // for exactly the two shapes the crystal chain loads:
+        //
+        //  - `nicheptr K none some T` — enum id K is NICHE-encoded over a
+        //    pointer-shaped payload of type T: word 0 is variant `none`, every
+        //    other word is variant `some` carrying the payload. That is the
+        //    reference's word decode at `niche_start = 0` over an empty
+        //    variant range, and the thirteen F9 clauses (design
+        //    `semantics_rule`) are what a DERIVED row must satisfy before it
+        //    may be minted — the model cannot read `niche_start` /
+        //    `niche_variants_*`, so the requirement that they not be ignored
+        //    is met at the derivation rule, not here.
+        //  - `ptrwrap S i c T` — struct id S has `c` fields, all zero-sized
+        //    except field `i`, which carries the payload of type T. Its byte
+        //    image IS the payload's, so the model's aggregate value is the
+        //    payload at slot `i` and `aggv vnil` (the image `decode_value`
+        //    returns for a zero-FIELD aggregate) elsewhere.
+        //
+        // A row is keyed on `(KIND, id)`, never on the id alone: the crystal's
+        // own table has `(enum 0)` and `(struct 0)`, so an id-only key would
+        // refuse the chain it exists for. `ir_enc_matches` keys nicheptr on
+        // `IRTy.enum_` and ptrwrap on `IRTy.struct_`, which is why the
+        // semantics never had that defect.
+        self.add_inductive(
+            r"inductive IREnc : Type
+| nicheptr : Nat → Nat → Nat → IRTy → IREnc
+| ptrwrap : Nat → Nat → Nat → IRTy → IREnc",
+            "One row of a module's encodings table: how the byte image of an aggregate id \
+             decodes into a cell-addressed value. `nicheptr K none some T` is a two-variant \
+             niche-encoded enum over a pointer payload (word 0 = the `none` variant, any other \
+             word = the `some` variant carrying a payload of type T); `ptrwrap S i c T` is a \
+             c-field struct whose only non-ZST field is `i`, of type T. Rows are DERIVED from \
+             the artifact's layout descriptors and refused clause by clause (design F9); a \
+             hand-typed row is never a pin.",
+        )?;
+
+        // `mkv` is ADDITIVE, and that is the whole conservativity argument.
+        // Every module minted before Phase B is an `IRModule.mk`, and
+        // `ir_mod_encs` sends `mk` to the EMPTY table, so the encoding-aware
+        // load view iota-reduces to the identity on every one of them — an
+        // `Eq.refl` at an abstract module, not an argument. A module that
+        // carries a derived table is an `IRModule.mkv`.
         self.add_inductive(
             r"inductive IRModule : Type
-| mk : IRList IRFunc → IRList IRGlobal → IRModule",
-            "A module: its functions and its globals. The unit an artifact digest is taken over \
-             (Phase-A job A1); EvalIR itself never hashes anything.",
+| mk : IRList IRFunc → IRList IRGlobal → IRModule
+| mkv : IRList IRFunc → IRList IRGlobal → IRList IREnc → IRModule",
+            "A module: its functions, its globals, and (in the `mkv` form) its DERIVED \
+             encodings table. The unit an artifact digest is taken over (Phase-A job A1); \
+             EvalIR itself never hashes anything. `mk` is retained rather than widened so the \
+             eighteen chains minted before Phase B keep their exact terms, and `ir_mod_encs \
+             (IRModule.mk fs gs)` is the empty table by definition — the load view is then the \
+             identity on them by iota, which is what makes this extension conservative. \
+             SCOPE, stated rather than implied: as of B2 `mkv` has NO producer. The minter \
+             (crates/clean-verify/src/ir_mint/mint.rs) still renders `IRModule.mk` with an \
+             empty global list and the decoder still reads `IRModule.mk`, because the minter's \
+             globals rendering that `mkv` extends is Phase-A job A:S6, which is not in this \
+             worktree; the minter/decoder arms move with it in B4/B5. Until then the only \
+             terms of this form in the environment are the three registered witnesses \
+             ir_load_view_mkv_reads_ty, ir_view_ptr0_is_none and ir_view_agg_is_identity — a \
+             capability whose caller arrives later, recorded here so it is a stated gap and \
+             not a silent one.",
         )?;
 
         Ok(())

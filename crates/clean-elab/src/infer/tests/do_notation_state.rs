@@ -59,6 +59,32 @@ fn nat_state_elab(input: &str) -> Result<Expr, ElabError> {
     elab_with_env(&env, input)
 }
 
+/// Prelude environment with `xs : List Unit` — a collection that really has a
+/// `ForIn` instance.
+///
+/// `nat_state_for_env` below declares `xs : Type`, which is deliberately NOT
+/// iterable (its tests assert a descope). A test that wants the for-loop to
+/// ELABORATE needs a real list, or `elab_ident("xs")` fails and the test
+/// silently passes through its `Err` branch — the #1915 class.
+fn list_unit_for_env() -> Environment {
+    use clean_kernel::env::Declaration;
+    use clean_kernel::name::Name;
+    use clean_kernel::Level;
+
+    let mut env = Environment::with_prelude();
+    let list_unit = Expr::app(
+        Expr::const_(Name::from_string("List"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Unit"), vec![]),
+    );
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("xs"),
+        level_params: vec![],
+        type_: list_unit,
+    })
+    .expect("adding xs axiom");
+    env
+}
+
 fn nat_state_for_env() -> Environment {
     use clean_kernel::env::Declaration;
     use clean_kernel::name::Name;
@@ -113,17 +139,17 @@ fn pure_mutable_if_missing_decidable_fails_without_synthetic_sorry() {
     let env = opaque_do_condition_env();
     let mut ctx = ElabCtx::new(&env);
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    ctx.push_local("x".to_string(), nat_ty);
-    ctx.do_mut_vars.push("x".to_string());
-    let cond = SurfaceExpr::Ident(Span::dummy(), "OpaqueDoP".to_string());
+    ctx.push_local(SurfaceName::generated_path("x"), nat_ty);
+    ctx.do_mut_vars.push(SurfaceName::generated_path("x"));
+    let cond = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("OpaqueDoP"));
     let then_branch = [DoElem::Reassign(
         Span::dummy(),
-        "x".to_string(),
+        SurfaceName::generated_path("x"),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
     )];
     let else_branch = [DoElem::Reassign(
         Span::dummy(),
-        "x".to_string(),
+        SurfaceName::generated_path("x"),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(2))),
     )];
     reset_sorry_counter();
@@ -156,32 +182,46 @@ fn test_let_mut_reassign_desugars_to_let_shadowing() {
                 "pure reassignment must not use the StateT transformer, got {expr:?}"
             );
         }
-        Err(e) => {
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("mut") || msg.contains("reassign") || msg.contains("unknown"),
-                "unexpected error for let mut + reassign: {e:?}"
-            );
-        }
+        // FAIL-CLOSED since 2026-09-16: MEASURED, `nat_state_elab` succeeds on
+        // this input (outermost `Let`, no `StateT` const). The sibling
+        // `test_let_mut_reassign_full_structure` already panics on `Err` for
+        // the same input, so this arm could only ever hide a regression.
+        Err(e) => panic!("`do {{ let mut x := 0; x := 1; x }}` must elaborate: {e:?}"),
     }
 }
 
-/// Terminal return optimization: `do { if Prop then return Prop else return Prop }`
+/// Terminal return optimization: `do { if <guard> then return Prop else return Prop }`
 /// All returns are inside terminal branches — no ExceptT needed.
+///
+/// BROKEN FIXTURE, repaired 2026-09-16. `elab(...)` is a bare
+/// `Environment::new()` and `Prop` is not a conditional guard, so this
+/// elaboration has never succeeded: MEASURED, bare env gives
+/// `TypeMismatch { expected: "valid type", actual: "Unknown constant: Pure.pure" }`
+/// and the prelude gives `expected: "conditional guard of type Bool or Prop"`.
+/// The `if let Ok(...)` wrapper turned that permanent failure into a pass, so
+/// the `assert_ne!` inside it never ran. With the prelude and a `Bool` guard
+/// the term elaborates (MEASURED: head `ite`, no `ExceptT`).
 #[test]
 fn test_terminal_return_in_branches_no_wrapping() {
-    let result = elab("do { if Prop then return Prop else return Prop }");
-    if let Ok(expr) = result {
-        let head = expr.get_app_fn();
-        if let ExprKind::Const(name, _) = head.kind() {
-            assert_ne!(
-                name.to_string(),
-                "ExceptT.run",
-                "terminal returns in all branches should NOT produce ExceptT.run"
-            );
-        }
+    let env = Environment::with_prelude();
+    let expr = elab_with_env(
+        &env,
+        "do { if Bool.true then return Prop else return Prop }",
+    )
+    .expect("terminal returns in both branches of a Bool guard must elaborate");
+    let head = expr.get_app_fn();
+    match head.kind() {
+        ExprKind::Const(name, _) => assert_ne!(
+            name.to_string(),
+            "ExceptT.run",
+            "terminal returns in all branches should NOT produce ExceptT.run"
+        ),
+        other => panic!("expected a Const head for the guarded do-block, got {other:?}"),
     }
-    // May fail due to missing ite/Decidable
+    assert!(
+        !expr_contains_const(&expr, "ExceptT.run"),
+        "terminal returns in all branches must not reach the ExceptT transformer"
+    );
 }
 
 // === End-to-end StateT integration tests (#1818 Phase 4C) ===
@@ -237,13 +277,11 @@ fn test_let_mut_reassign_then_pure() {
                 "the terminal `pure x` should be Pure.pure, got {expr:?}"
             );
         }
-        Err(e) => {
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("pure") || msg.contains("unknown") || msg.contains("Pure"),
-                "unexpected error for reassign + pure: {e:?}"
-            );
-        }
+        // FAIL-CLOSED since 2026-09-16: MEASURED, this input elaborates
+        // (`Environment::with_prelude()`, outermost `Let`, `Pure.pure` present,
+        // no `StateT`). The disjunctive arm only protected the three assertions
+        // above from ever running.
+        Err(e) => panic!("`do {{ let mut x := 0; x := 1; pure x }}` must elaborate: {e:?}"),
     }
 }
 
@@ -437,44 +475,20 @@ fn test_for_loop_multi_var_projection() {
     );
 }
 
-/// `do { let mut x := 0; for y in xs do return 1; x }` — for-loop body
-/// with non-terminal return. The ExceptT layer from early return coexists with
-/// StateT from mut. This tests the interaction of multiple transformer layers
-/// inside the for-loop body.
+/// `do { let mut x := 0; for y in xs do return 1; x }`: the `for` body is the
+/// sequence `return 1; x`, which pinned Lean 4.8.0 refuses ("must be last
+/// element in a `do` sequence", measured 2026-10-16); so does Clean since
+/// round-5 lane D (G54).
 #[test]
 fn test_for_loop_mut_and_early_return() {
-    let result = nat_state_elab("do { let mut x := 0; for y in xs do return 1; x }");
-    match result {
-        Ok(expr) => {
-            // With mut + early return, the outermost unwrap depends on stack ordering.
-            // We just verify it doesn't panic and produces a valid expression.
-            let head = expr.get_app_fn();
-            if let ExprKind::Const(name, _) = head.kind() {
-                let name_str = name.to_string();
-                assert!(
-                    name_str == "StateT.run"
-                        || name_str == "ExceptT.run"
-                        || name_str == "OptionT.run",
-                    "expected transformer run, got {name_str}"
-                );
-            }
-            // metavar or other — acceptable
-        }
-        Err(e) => {
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("xs")
-                    || msg.contains("ForIn")
-                    || msg.contains("unknown")
-                    || msg.contains("NotImplemented"),
-                "unexpected error for for-loop + mut + return: {e:?}"
-            );
-        }
-    }
+    let err = nat_state_elab("do { let mut x := 0; for y in xs do return 1; x }")
+        .expect_err("Lean refuses an element after `return` in the loop body");
+    assert!(
+        format!("{err:?}").contains("must be last element in a `do` sequence"),
+        "the refusal is Lean's: {err:?}"
+    );
 }
 
-/// `do { let mut x := 0; for y in xs do x := 1; pure x }` — for-loop body
-/// mutating an outer `mut` var is descoped LOUD (B08).
 #[test]
 fn test_for_loop_mut_structural_bind_get() {
     assert_for_loop_descope(
@@ -483,35 +497,34 @@ fn test_for_loop_mut_structural_bind_get() {
     );
 }
 
-/// For-loop WITHOUT mutable variables should NOT inject StateT.get projection.
-/// `do { for x in xs do return x }` — no let mut in scope, should be plain
-/// ForIn.forIn with PUnit accumulator.
+/// For-loop WITHOUT mutable variables should NOT inject a StateT projection.
+/// `do { for x in xs do return x }` — no `let mut` in scope.
+///
+/// BROKEN FIXTURE, repaired 2026-09-16 — the #1915 class named in
+/// `do_control_flow.rs::for_loop_env`. This test called `elab(...)`, a bare
+/// `Environment::new()` in which `xs` is unbound, so the elaboration was always
+/// `UnknownIdent("xs")` and the `Err` arm's `msg.contains("xs")` accepted it:
+/// the `assert_ne!` in the `Ok` arm never ran once. With `xs : List Unit`
+/// declared the term elaborates (MEASURED: head `Bind.bind`, containing
+/// `List.rec`, `ForInStep.done` and `Option.some`, and no `StateT` const).
 #[test]
 fn test_for_loop_no_mut_no_projection() {
-    let result = elab("do { for x in xs do return x }");
-    match result {
-        Ok(expr) => {
-            // No StateT.run — should be ForIn.forIn directly.
-            let head = expr.get_app_fn();
-            if let ExprKind::Const(name, _) = head.kind() {
-                assert_ne!(
-                    name.to_string(),
-                    "StateT.run",
-                    "for-loop without mut should NOT produce StateT.run"
-                );
-            }
-        }
-        Err(e) => {
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("xs")
-                    || msg.contains("ForIn")
-                    || msg.contains("unknown")
-                    || msg.contains("NotImplemented"),
-                "unexpected error for for-loop no mut: {e:?}"
-            );
-        }
+    let env = list_unit_for_env();
+    let expr = elab_with_env(&env, "do { for x in xs do return x }")
+        .expect("a for-loop over a real List must elaborate with no mut in scope");
+    let head = expr.get_app_fn();
+    match head.kind() {
+        ExprKind::Const(name, _) => assert_ne!(
+            name.to_string(),
+            "StateT.run",
+            "for-loop without mut should NOT produce StateT.run"
+        ),
+        other => panic!("expected a Const head for the for-loop, got {other:?}"),
     }
+    assert!(
+        !expr_contains_state_t(&expr),
+        "a for-loop with no mut in scope must not reach the StateT transformer"
+    );
 }
 
 #[test]
@@ -531,14 +544,14 @@ fn do_conditionals_reject_type_valued_guards_before_instance_synthesis() {
     // dispatcher deliberately descopes this branch shape before reaching it.
     let mut ctx = ElabCtx::new(&env);
     ctx.push_local(
-        "x".to_string(),
+        SurfaceName::generated_path("x"),
         Expr::const_(Name::from_string("Nat"), vec![]),
     );
-    ctx.do_mut_vars.push("x".to_string());
+    ctx.do_mut_vars.push(SurfaceName::generated_path("x"));
     let branch = |value| {
         [DoElem::Reassign(
             Span::dummy(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
             Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(value))),
         )]
     };
@@ -546,7 +559,7 @@ fn do_conditionals_reject_type_valued_guards_before_instance_synthesis() {
     let else_branch = branch(2);
     let err = ctx
         .elab_do_pure_if(
-            &SurfaceExpr::Ident(Span::dummy(), "Type".to_string()),
+            &SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("Type")),
             &then_branch,
             Some(&else_branch),
             &[],

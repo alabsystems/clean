@@ -10,7 +10,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
-  "functy": 488,
+  "functy": 459,
   "functy_note": "Pinned VERBATIM and re-pinned under review; read the notes in ir_h2.tags.json. The producer A/B record has this index at 661/661/486 over its three dumps and reader A's 2026-08-21 laneREG dump says 485, all with the instruction text byte-identical. The pin compares reader B's header against the FIXTURE-ERA 488; reader A's value is RECORDED in ir_fc.mint.json, NEVER COMPARED.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
@@ -20,7 +20,7 @@
     "index": 0,
     "ssa": 0,
     "ty": "struct#0",
-    "observed_ty": "struct.1017",
+    "observed_ty": "struct.815",
     "rust_type": "flat::types::FlatFlags",
     "note": "`self`, BY VALUE. The subset test's LEFT operand: its field-0 payload is masked with the other's."
    },
@@ -29,7 +29,7 @@
     "index": 1,
     "ssa": 1,
     "ty": "struct#0",
-    "observed_ty": "struct.1017",
+    "observed_ty": "struct.815",
     "rust_type": "flat::types::FlatFlags",
     "note": "`other`, BY VALUE, the SAME canonical struct -- which is the row's semantic payload: a twin whose second parameter is a different struct is a different program the core module cannot see."
    }
@@ -47,7 +47,7 @@
  "structs": [
   {
    "canonical": 0,
-   "crate_id": 1017,
+   "crate_id": 815,
    "alias": "ir_fc_tflags",
    "rust_type": "flat::types::FlatFlags",
    "observed_crate_id_by_producer": {

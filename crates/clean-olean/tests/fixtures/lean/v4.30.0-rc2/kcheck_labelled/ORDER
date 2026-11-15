@@ -1,0 +1,9 @@
+# The design's checker over its specification, for
+# `crates/clean-olean/tests/kcheck_labelled.rs` (plan unit C2). The checker imports
+# `CICL.*` and the specification's model-free modules; the specification's own
+# modules import `CICLModel.*`, so the model is compiled before it. The family has
+# no module of its own.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_labelled

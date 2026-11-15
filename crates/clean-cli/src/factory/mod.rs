@@ -184,7 +184,10 @@ pub(crate) enum FactoryOpsError {
         path: PathBuf,
     },
     /// The queue does not contain a processable item.
-    #[error("factory queue is empty")]
+    #[error(
+        "factory queue has no entry with status `queued`; it is either empty or \
+         holds nothing but processing/failed/merged entries"
+    )]
     QueueEmpty,
     /// Queue state is invalid.
     #[error("factory queue state is invalid: {0}")]

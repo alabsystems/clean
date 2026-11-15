@@ -15,8 +15,8 @@ fn dummy_span() -> Span {
 #[test]
 fn test_detect_no_recursion() {
     // def f x := x
-    let body = SurfaceExpr::Ident(dummy_span(), "x".to_string());
-    let info = detect_recursion("f", &body);
+    let body = SurfaceExpr::Ident(dummy_span(), SurfaceName::generated_path("x"));
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(!info.is_recursive);
     assert!(info.calls.is_empty());
 }
@@ -26,16 +26,21 @@ fn test_detect_simple_recursion() {
     // def f x := f x
     let body = SurfaceExpr::App(
         dummy_span(),
-        Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("f"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(info.is_recursive);
     assert_eq!(info.calls.len(), 1);
-    assert!(matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == "x"));
+    assert!(
+        matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == &SurfaceName::generated_path("x"))
+    );
 }
 
 #[test]
@@ -46,24 +51,31 @@ fn test_detect_recursion_curried_application() {
         dummy_span(),
         Box::new(SurfaceExpr::App(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("f"),
+            )),
             vec![SurfaceArg::positional(SurfaceExpr::Ident(
                 dummy_span(),
-                "a".to_string(),
+                SurfaceName::generated_path("a"),
             ))],
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "b".to_string(),
+            SurfaceName::generated_path("b"),
         ))],
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(info.is_recursive, "Should detect curried recursive call");
     assert_eq!(info.calls.len(), 1, "Should be exactly one call");
     // Both args a and b should be recorded
     assert_eq!(info.calls[0].args.len(), 2, "Should have 2 args");
-    assert!(matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == "a"));
-    assert!(matches!(info.calls[0].args[1], RecursiveArg::Var(ref n) if n == "b"));
+    assert!(
+        matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == &SurfaceName::generated_path("a"))
+    );
+    assert!(
+        matches!(info.calls[0].args[1], RecursiveArg::Var(ref n) if n == &SurfaceName::generated_path("b"))
+    );
 }
 
 #[test]
@@ -73,15 +85,18 @@ fn test_detect_recursion_with_qualified_projection() {
         dummy_span(),
         Box::new(SurfaceExpr::Proj(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "foo".to_string())),
-            Projection::Named("bar".to_string()),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("foo"),
+            )),
+            Projection::Named(SurfaceName::generated_path("bar")),
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("foo.bar", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("foo.bar"), &body);
     assert!(info.is_recursive);
     assert_eq!(info.calls.len(), 1);
 }
@@ -95,16 +110,19 @@ fn test_detect_recursion_with_paren_qualified_projection() {
             dummy_span(),
             Box::new(SurfaceExpr::Paren(
                 dummy_span(),
-                Box::new(SurfaceExpr::Ident(dummy_span(), "foo".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    dummy_span(),
+                    SurfaceName::generated_path("foo"),
+                )),
             )),
-            Projection::Named("bar".to_string()),
+            Projection::Named(SurfaceName::generated_path("bar")),
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("foo.bar", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("foo.bar"), &body);
     assert!(info.is_recursive);
     assert_eq!(info.calls.len(), 1);
 }
@@ -114,13 +132,16 @@ fn test_detect_recursion_with_short_name_in_namespace() {
     // def foo.bar x := bar x
     let body = SurfaceExpr::App(
         dummy_span(),
-        Box::new(SurfaceExpr::Ident(dummy_span(), "bar".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("bar"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("foo.bar", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("foo.bar"), &body);
     assert!(info.is_recursive);
     assert_eq!(info.calls.len(), 1);
 }
@@ -137,14 +158,17 @@ fn test_detect_recursion_shadowed_short_name_in_namespace() {
         )],
         Box::new(SurfaceExpr::App(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "bar".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("bar"),
+            )),
             vec![SurfaceArg::positional(SurfaceExpr::Ident(
                 dummy_span(),
-                "x".to_string(),
+                SurfaceName::generated_path("x"),
             ))],
         )),
     );
-    let info = detect_recursion("foo.bar", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("foo.bar"), &body);
     assert!(!info.is_recursive);
     assert!(info.calls.is_empty());
 }
@@ -155,21 +179,27 @@ fn test_detect_recursion_shadowed_namespace_base() {
     let body = SurfaceExpr::Let(
         dummy_span(),
         clean_parser::SurfaceBinder::new("foo", None, clean_parser::SurfaceBinderInfo::Explicit),
-        Box::new(SurfaceExpr::Ident(dummy_span(), "foo".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("foo"),
+        )),
         Box::new(SurfaceExpr::App(
             dummy_span(),
             Box::new(SurfaceExpr::Proj(
                 dummy_span(),
-                Box::new(SurfaceExpr::Ident(dummy_span(), "foo".to_string())),
-                Projection::Named("bar".to_string()),
+                Box::new(SurfaceExpr::Ident(
+                    dummy_span(),
+                    SurfaceName::generated_path("foo"),
+                )),
+                Projection::Named(SurfaceName::generated_path("bar")),
             )),
             vec![SurfaceArg::positional(SurfaceExpr::Ident(
                 dummy_span(),
-                "x".to_string(),
+                SurfaceName::generated_path("x"),
             ))],
         )),
     );
-    let info = detect_recursion("foo.bar", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("foo.bar"), &body);
     assert!(!info.is_recursive);
     assert!(info.calls.is_empty());
 }
@@ -183,17 +213,20 @@ fn test_detect_recursion_with_root_qualified_name() {
             dummy_span(),
             Box::new(SurfaceExpr::Proj(
                 dummy_span(),
-                Box::new(SurfaceExpr::Ident(dummy_span(), "_root_".to_string())),
-                Projection::Named("foo".to_string()),
+                Box::new(SurfaceExpr::Ident(
+                    dummy_span(),
+                    SurfaceName::component("_root_", false),
+                )),
+                Projection::Named(SurfaceName::generated_path("foo")),
             )),
-            Projection::Named("bar".to_string()),
+            Projection::Named(SurfaceName::generated_path("bar")),
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("foo.bar", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("foo.bar"), &body);
     assert!(info.is_recursive);
     assert_eq!(info.calls.len(), 1);
 }
@@ -205,15 +238,20 @@ fn test_detect_recursion_with_universe_inst() {
         dummy_span(),
         Box::new(SurfaceExpr::UniverseInst(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "foo.bar".to_string())),
-            vec![clean_parser::LevelExpr::Param("u".to_string())],
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("foo.bar"),
+            )),
+            vec![clean_parser::LevelExpr::Param(SurfaceName::generated_path(
+                "u",
+            ))],
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("foo.bar", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("foo.bar"), &body);
     assert!(info.is_recursive);
     assert_eq!(info.calls.len(), 1);
 }
@@ -225,14 +263,17 @@ fn test_detect_recursion_with_explicit_wrapper() {
         dummy_span(),
         Box::new(SurfaceExpr::Explicit(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("f"),
+            )),
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(info.is_recursive, "Explicit wrapper should be unwrapped");
     assert_eq!(info.calls.len(), 1);
 }
@@ -244,15 +285,21 @@ fn test_detect_recursion_with_ascription_wrapper() {
         dummy_span(),
         Box::new(SurfaceExpr::Ascription(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "T".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("f"),
+            )),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("T"),
+            )),
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(info.is_recursive, "Ascription wrapper should be unwrapped");
     assert_eq!(info.calls.len(), 1);
 }
@@ -264,12 +311,15 @@ fn test_qualified_name_from_proj_with_explicit_base() {
         dummy_span(),
         Box::new(SurfaceExpr::Explicit(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "foo".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("foo"),
+            )),
         )),
-        Projection::Named("bar".to_string()),
+        Projection::Named(SurfaceName::generated_path("bar")),
     );
     let name = qualified_name_from_proj(&expr);
-    assert_eq!(name, Some("foo.bar".to_string()));
+    assert_eq!(name, Some(SurfaceName::generated_path("foo.bar")));
 }
 
 #[test]
@@ -279,13 +329,19 @@ fn test_qualified_name_from_proj_with_ascription_base() {
         dummy_span(),
         Box::new(SurfaceExpr::Ascription(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "foo".to_string())),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "T".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("foo"),
+            )),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("T"),
+            )),
         )),
-        Projection::Named("bar".to_string()),
+        Projection::Named(SurfaceName::generated_path("bar")),
     );
     let name = qualified_name_from_proj(&expr);
-    assert_eq!(name, Some("foo.bar".to_string()));
+    assert_eq!(name, Some(SurfaceName::generated_path("foo.bar")));
 }
 
 #[test]
@@ -294,21 +350,27 @@ fn test_detect_recursion_in_match() {
     let body = SurfaceExpr::Match(
         dummy_span(),
         None,
-        Box::new(SurfaceExpr::Ident(dummy_span(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("x"),
+        )),
         vec![clean_parser::SurfaceMatchArm {
             span: dummy_span(),
             pattern: SurfacePattern::Wildcard,
             body: SurfaceExpr::App(
                 dummy_span(),
-                Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    dummy_span(),
+                    SurfaceName::generated_path("f"),
+                )),
                 vec![SurfaceArg::positional(SurfaceExpr::Ident(
                     dummy_span(),
-                    "y".to_string(),
+                    SurfaceName::generated_path("y"),
                 ))],
             ),
         }],
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(info.is_recursive);
     assert_eq!(info.calls.len(), 1);
 }
@@ -325,14 +387,17 @@ fn test_detect_recursion_shadowed_by_lambda() {
         )],
         Box::new(SurfaceExpr::App(
             dummy_span(),
-            Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                dummy_span(),
+                SurfaceName::generated_path("f"),
+            )),
             vec![SurfaceArg::positional(SurfaceExpr::Ident(
                 dummy_span(),
-                "x".to_string(),
+                SurfaceName::generated_path("x"),
             ))],
         )),
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(!info.is_recursive);
     assert!(info.calls.is_empty());
 }
@@ -342,10 +407,16 @@ fn test_find_decreasing_arg() {
     // All calls pass variable at position 1
     let calls = vec![
         RecursiveCall {
-            args: vec![RecursiveArg::Other, RecursiveArg::Var("xs".to_string())],
+            args: vec![
+                RecursiveArg::Other,
+                RecursiveArg::Var(SurfaceName::generated_path("xs")),
+            ],
         },
         RecursiveCall {
-            args: vec![RecursiveArg::Other, RecursiveArg::Var("ys".to_string())],
+            args: vec![
+                RecursiveArg::Other,
+                RecursiveArg::Var(SurfaceName::generated_path("ys")),
+            ],
         },
     ];
     assert_eq!(find_decreasing_arg(&calls, &[], None), Some(1));
@@ -356,10 +427,16 @@ fn test_no_decreasing_arg() {
     // Position 0: not all vars, Position 1: not all vars
     let calls = vec![
         RecursiveCall {
-            args: vec![RecursiveArg::Var("x".to_string()), RecursiveArg::Other],
+            args: vec![
+                RecursiveArg::Var(SurfaceName::generated_path("x")),
+                RecursiveArg::Other,
+            ],
         },
         RecursiveCall {
-            args: vec![RecursiveArg::Other, RecursiveArg::Var("y".to_string())],
+            args: vec![
+                RecursiveArg::Other,
+                RecursiveArg::Var(SurfaceName::generated_path("y")),
+            ],
         },
     ];
     assert_eq!(find_decreasing_arg(&calls, &[], None), None);
@@ -369,10 +446,13 @@ fn test_no_decreasing_arg() {
 fn test_find_decreasing_arg_mismatched_arity() {
     let calls = vec![
         RecursiveCall {
-            args: vec![RecursiveArg::Var("x".to_string())],
+            args: vec![RecursiveArg::Var(SurfaceName::generated_path("x"))],
         },
         RecursiveCall {
-            args: vec![RecursiveArg::Var("y".to_string()), RecursiveArg::Other],
+            args: vec![
+                RecursiveArg::Var(SurfaceName::generated_path("y")),
+                RecursiveArg::Other,
+            ],
         },
     ];
     assert_eq!(find_decreasing_arg(&calls, &[], None), None);
@@ -384,18 +464,21 @@ fn test_find_decreasing_arg_prefers_changed_param() {
     let calls = vec![
         RecursiveCall {
             args: vec![
-                RecursiveArg::Var("f".to_string()),
-                RecursiveArg::Var("tail".to_string()),
+                RecursiveArg::Var(SurfaceName::generated_path("f")),
+                RecursiveArg::Var(SurfaceName::generated_path("tail")),
             ],
         },
         RecursiveCall {
             args: vec![
-                RecursiveArg::Var("f".to_string()),
-                RecursiveArg::Var("rest".to_string()),
+                RecursiveArg::Var(SurfaceName::generated_path("f")),
+                RecursiveArg::Var(SurfaceName::generated_path("rest")),
             ],
         },
     ];
-    let param_names = vec!["f".to_string(), "xs".to_string()];
+    let param_names = vec![
+        SurfaceName::generated_path("f"),
+        SurfaceName::generated_path("xs"),
+    ];
     assert_eq!(find_decreasing_arg(&calls, &param_names, None), Some(1));
 }
 
@@ -407,15 +490,18 @@ fn test_find_decreasing_arg_with_param_names() {
     // With param names, position 1 is preferred (xs -> tail, different)
     let calls = vec![RecursiveCall {
         args: vec![
-            RecursiveArg::Var("f".to_string()), // same as param, not decreasing
-            RecursiveArg::Var("tail".to_string()), // different from param, decreasing!
+            RecursiveArg::Var(SurfaceName::generated_path("f")), // same as param, not decreasing
+            RecursiveArg::Var(SurfaceName::generated_path("tail")), // different from param, decreasing!
         ],
     }];
     // Without param names: fallback to last position (1)
     assert_eq!(find_decreasing_arg(&calls, &[], None), Some(1));
 
     // With param names: correctly identifies position 1 (different from "xs")
-    let param_names = vec!["f".to_string(), "xs".to_string()];
+    let param_names = vec![
+        SurfaceName::generated_path("f"),
+        SurfaceName::generated_path("xs"),
+    ];
     assert_eq!(find_decreasing_arg(&calls, &param_names, None), Some(1));
 
     // Position 0 would be wrong: f -> f (same name, not decreasing)
@@ -432,11 +518,14 @@ fn test_find_decreasing_arg_param_names_both_different() {
     // elaboration handles this case - this heuristic is just a first guess.
     let calls = vec![RecursiveCall {
         args: vec![
-            RecursiveArg::Var("new_acc".to_string()), // different from "acc"
-            RecursiveArg::Var("tail".to_string()),    // different from "xs"
+            RecursiveArg::Var(SurfaceName::generated_path("new_acc")), // different from "acc"
+            RecursiveArg::Var(SurfaceName::generated_path("tail")),    // different from "xs"
         ],
     }];
-    let param_names = vec!["acc".to_string(), "xs".to_string()];
+    let param_names = vec![
+        SurfaceName::generated_path("acc"),
+        SurfaceName::generated_path("xs"),
+    ];
     // Returns first differing position - may need refinement for acc patterns
     assert_eq!(find_decreasing_arg(&calls, &param_names, None), Some(0));
 }
@@ -447,20 +536,25 @@ fn test_detect_recursion_through_lift_method() {
     // The recursive call `f x` is wrapped in LiftMethod(<- f x)
     let recursive_call = SurfaceExpr::App(
         dummy_span(),
-        Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("f"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
     let body = SurfaceExpr::LiftMethod(dummy_span(), Box::new(recursive_call));
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(
         info.is_recursive,
         "Should detect recursive call through LiftMethod wrapper"
     );
     assert_eq!(info.calls.len(), 1);
-    assert!(matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == "x"));
+    assert!(
+        matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == &SurfaceName::generated_path("x"))
+    );
 }
 
 #[test]
@@ -469,14 +563,17 @@ fn test_detect_recursion_lift_method_no_call() {
     // LiftMethod wraps a non-recursive call - should not detect recursion
     let non_recursive_call = SurfaceExpr::App(
         dummy_span(),
-        Box::new(SurfaceExpr::Ident(dummy_span(), "g".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("g"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
     let body = SurfaceExpr::LiftMethod(dummy_span(), Box::new(non_recursive_call));
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(
         !info.is_recursive,
         "Should not detect recursion for non-recursive LiftMethod"
@@ -490,21 +587,27 @@ fn test_detect_recursion_nested_lift_method_in_app() {
     // App(h, [LiftMethod(App(f, [x]))])
     let recursive_call = SurfaceExpr::App(
         dummy_span(),
-        Box::new(SurfaceExpr::Ident(dummy_span(), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("f"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
     let body = SurfaceExpr::App(
         dummy_span(),
-        Box::new(SurfaceExpr::Ident(dummy_span(), "h".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("h"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::LiftMethod(
             dummy_span(),
             Box::new(recursive_call),
         ))],
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(
         info.is_recursive,
         "Should detect recursion through LiftMethod nested in App argument"

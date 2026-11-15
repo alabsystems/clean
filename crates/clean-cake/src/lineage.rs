@@ -84,20 +84,28 @@ pub struct Edge {
     pub evidence: String,
 }
 
+/// One node of the lineage graph.
+#[derive(Debug)]
+struct Node {
+    /// union-find parent (over ALL edges — clustering / search).
+    parent: usize,
+    /// union-find rank.
+    rank: usize,
+    /// incident edges, as indices into `LineageGraph::edges`.
+    adj: Vec<usize>,
+}
+
 /// The accumulating lineage equivalence graph.
 #[derive(Debug, Default)]
 pub struct LineageGraph {
     /// digest → dense node index.
     index: HashMap<String, usize>,
-    /// union-find parent (over ALL edges — clustering / search). Its length is
-    /// the node count (`index`, `parent`, `rank`, `adj` grow together in `node`),
-    /// so no separate index→digest `Vec<String>` is kept — that would be a dead,
+    /// One slot per node, keyed by the dense index `index` hands out. Its
+    /// length is the node count; the union-find parent, rank and adjacency of
+    /// a node live in ONE slot, so they cannot drift apart in length. No
+    /// separate index→digest `Vec<String>` is kept — that would be a dead,
     /// write-only allocation per node on the corpus-scale lineage build.
-    parent: Vec<usize>,
-    /// union-find rank.
-    rank: Vec<usize>,
-    /// adjacency keyed by node index, edge index into `edges`.
-    adj: Vec<Vec<usize>>,
+    nodes: Vec<Node>,
     /// all edges, in insertion order (the audit log).
     edges: Vec<Edge>,
 }
@@ -113,18 +121,38 @@ impl LineageGraph {
         if let Some(&i) = self.index.get(digest) {
             return i;
         }
-        let i = self.parent.len();
+        let i = self.nodes.len();
         self.index.insert(digest.to_string(), i);
-        self.parent.push(i);
-        self.rank.push(0);
-        self.adj.push(Vec::new());
+        self.nodes.push(Node {
+            parent: i,
+            rank: 0,
+            adj: Vec::new(),
+        });
         i
     }
 
+    fn parent_of(&self, x: usize) -> Option<usize> {
+        self.nodes.get(x).map(|n| n.parent)
+    }
+
+    fn set_parent(&mut self, x: usize, parent: usize) {
+        if let Some(n) = self.nodes.get_mut(x) {
+            n.parent = parent;
+        }
+    }
+
+    /// The class root of node `x`. Every index this graph handles came from
+    /// `node`, and every parent link points at a node, so each lookup below
+    /// finds its slot; an index with no slot is answered as its own root
+    /// instead of indexed out of bounds.
     fn find(&mut self, mut x: usize) -> usize {
-        while self.parent[x] != x {
-            self.parent[x] = self.parent[self.parent[x]]; // path halving
-            x = self.parent[x];
+        while let Some(p) = self.parent_of(x) {
+            if p == x {
+                break;
+            }
+            let grand = self.parent_of(p).unwrap_or(p);
+            self.set_parent(x, grand); // path halving
+            x = grand;
         }
         x
     }
@@ -134,13 +162,24 @@ impl LineageGraph {
         if ra == rb {
             return;
         }
-        if self.rank[ra] < self.rank[rb] {
-            self.parent[ra] = rb;
-        } else if self.rank[ra] > self.rank[rb] {
-            self.parent[rb] = ra;
-        } else {
-            self.parent[rb] = ra;
-            self.rank[ra] += 1;
+        let (Some(rank_a), Some(rank_b)) = (
+            self.nodes.get(ra).map(|n| n.rank),
+            self.nodes.get(rb).map(|n| n.rank),
+        ) else {
+            return;
+        };
+        match rank_a.cmp(&rank_b) {
+            std::cmp::Ordering::Less => self.set_parent(ra, rb),
+            std::cmp::Ordering::Greater => self.set_parent(rb, ra),
+            std::cmp::Ordering::Equal => {
+                self.set_parent(rb, ra);
+                if let Some(n) = self.nodes.get_mut(ra) {
+                    // Union-by-rank keeps a rank below log2(node count);
+                    // saturating states that bound's consequence without a
+                    // panicking add.
+                    n.rank = rank_a.saturating_add(1);
+                }
+            }
         }
     }
 
@@ -155,8 +194,11 @@ impl LineageGraph {
             kind,
             evidence: evidence.into(),
         });
-        self.adj[fi].push(edge_idx);
-        self.adj[ti].push(edge_idx);
+        for i in [fi, ti] {
+            if let Some(n) = self.nodes.get_mut(i) {
+                n.adj.push(edge_idx);
+            }
+        }
         self.union(fi, ti);
     }
 
@@ -180,13 +222,19 @@ impl LineageGraph {
         if ai == bi {
             return true;
         }
-        let mut seen = vec![false; self.parent.len()];
+        // A set grown per visited node, not a `vec![false; node_count]` sized up
+        // front: the search usually stops long before it has seen every node,
+        // and the bulk allocation had no bound the verifier could check.
+        let mut seen: std::collections::HashSet<usize> = std::collections::HashSet::new();
         let mut q = VecDeque::new();
-        seen[ai] = true;
+        seen.insert(ai);
         q.push_back(ai);
         while let Some(n) = q.pop_front() {
-            for &ei in &self.adj[n] {
-                let e = &self.edges[ei];
+            let incident = self
+                .nodes
+                .get(n)
+                .map_or(&[] as &[usize], |node| node.adj.as_slice());
+            for e in incident.iter().filter_map(|&ei| self.edges.get(ei)) {
                 if !e.kind.is_sound() {
                     continue;
                 }
@@ -198,8 +246,7 @@ impl LineageGraph {
                 if other == bi {
                     return true;
                 }
-                if !seen[other] {
-                    seen[other] = true;
+                if seen.insert(other) {
                     q.push_back(other);
                 }
             }
@@ -212,10 +259,15 @@ impl LineageGraph {
     #[cfg_attr(not(test), expect(dead_code))]
     #[must_use]
     pub(crate) fn edges_of(&self, digest: &str) -> Vec<&Edge> {
-        match self.index.get(digest) {
-            Some(&i) => self.adj[i].iter().map(|&ei| &self.edges[ei]).collect(),
-            None => Vec::new(),
-        }
+        let incident = self
+            .index
+            .get(digest)
+            .and_then(|&i| self.nodes.get(i))
+            .map_or(&[] as &[usize], |node| node.adj.as_slice());
+        incident
+            .iter()
+            .filter_map(|&ei| self.edges.get(ei))
+            .collect()
     }
 
     /// The full edge log in insertion order — the serializable audit trail (each [`Edge`]
@@ -230,7 +282,7 @@ impl LineageGraph {
     /// object; this count is the "how much did lineage collapse the corpus?" headline.
     #[must_use]
     pub fn class_count(&mut self) -> usize {
-        let n = self.parent.len();
+        let n = self.nodes.len();
         let mut roots: std::collections::HashSet<usize> = std::collections::HashSet::new();
         for i in 0..n {
             let r = self.find(i);
@@ -242,19 +294,44 @@ impl LineageGraph {
     /// Number of nodes / edges (for stats).
     #[must_use]
     pub fn len(&self) -> (usize, usize) {
-        (self.parent.len(), self.edges.len())
+        (self.nodes.len(), self.edges.len())
     }
 
     /// Is the graph empty?
     #[must_use]
     pub fn is_empty(&self) -> bool {
-        self.parent.is_empty()
+        self.nodes.is_empty()
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression (Trust verified lane, 2026-10-03): `find` indexed
+    /// `parent[x]` unchecked, and the stage1 verifier's counterexample was
+    /// `x = 0` on an empty graph. An index with no node is now its own root,
+    /// and union-find over real nodes (path halving, union by rank, a long
+    /// chain) still answers as before.
+    #[test]
+    fn test_find_without_a_node_is_its_own_root() {
+        let mut g = LineageGraph::new();
+        assert_eq!(g.find(0), 0);
+        g.add_edge("a", "b", EdgeKind::Conjectured, "x");
+        assert_eq!(g.find(7), 7);
+        assert_eq!(g.len(), (2, 1));
+
+        let mut chain = LineageGraph::new();
+        let names: Vec<String> = (0..64).map(|i| format!("n{i}")).collect();
+        for w in names.windows(2) {
+            chain.add_edge(&w[0], &w[1], EdgeKind::Defeq, "chain");
+        }
+        assert_eq!(chain.class_count(), 1);
+        assert!(chain.same_class("n0", "n63"));
+        assert!(chain.soundly_equivalent("n0", "n63"));
+        assert_eq!(chain.edges_of("n5").len(), 2);
+        assert!(chain.edges_of("absent").is_empty());
+    }
 
     #[test]
     fn test_trust_ordering() {
@@ -320,5 +397,36 @@ mod tests {
         // The edge log is the full serializable audit trail in insertion order.
         assert_eq!(g.edges()[0].evidence, "sem:1");
         assert_eq!(g.edges()[2].kind, EdgeKind::RewriteCanonical);
+    }
+
+    /// Regression (Trust verified lane, 2026-10-02): equal-rank `union` did
+    /// `rank += 1`, a panicking add. It saturates now, and the union is still
+    /// recorded.
+    #[test]
+    fn test_union_at_max_rank_saturates_and_still_unions() {
+        let mut g = LineageGraph::new();
+        let (a, b) = (g.node("a"), g.node("b"));
+        g.nodes[a].rank = usize::MAX;
+        g.nodes[b].rank = usize::MAX;
+        g.union(a, b);
+        let root = g.find(a);
+        assert_eq!(root, g.find(b));
+        assert_eq!(g.nodes[root].rank, usize::MAX);
+    }
+
+    /// The `seen` set replaced a node-count-sized bit vector; a sound path that
+    /// needs several hops through a branching graph is still found, and a node
+    /// reached only through an unsound edge still is not.
+    #[test]
+    fn test_soundly_equivalent_multi_hop_with_set_frontier() {
+        let mut g = LineageGraph::new();
+        g.add_edge("a", "b", EdgeKind::Defeq, "1");
+        g.add_edge("a", "x", EdgeKind::Defeq, "2");
+        g.add_edge("x", "a", EdgeKind::Defeq, "3");
+        g.add_edge("b", "c", EdgeKind::Defeq, "4");
+        g.add_edge("c", "d", EdgeKind::Conjectured, "5");
+        assert!(g.soundly_equivalent("a", "c"));
+        assert!(g.soundly_equivalent("c", "x"));
+        assert!(!g.soundly_equivalent("a", "d"));
     }
 }

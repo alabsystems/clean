@@ -10,13 +10,13 @@
 //!
 //! Used by the production load path (Phase 2, #2428) and by tests.
 
-use super::convert_expr::{convert_binder_info, convert_level, hash_str, intern_expr};
+use super::convert_expr::{convert_binder_info, intern_expr, pop_converted};
 use super::{ExprInternCache, ExprSharingStats, ImportError};
 use crate::error::OleanError;
 use crate::expr::expr_tags;
 use crate::expr::{ParsedBinderInfo, ParsedLiteral, EXPR_DATA_SCALAR_BYTES};
 use crate::region::{is_ptr, is_scalar, unbox_scalar, CompactedRegion};
-use clean_kernel::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, LevelVec, Literal, MDataMap};
+use clean_kernel::expr::{BigNat, BinderInfo, Expr, ExprKind, LevelVec, Literal, MDataMap};
 use clean_kernel::name::Name;
 use hashbrown::HashMap;
 use smallvec::SmallVec;
@@ -119,8 +119,8 @@ enum DirectConvertWork {
     BuildPi(BinderInfo),
     /// Build Let from top 3 results
     BuildLet(Name, bool),
-    /// Build MData from top result
-    BuildMData,
+    /// Build MData (with Lean's payload) from top result
+    BuildMData(MDataMap),
     /// Build Proj from top result
     BuildProj(Name, u32),
 }
@@ -225,45 +225,45 @@ pub(crate) fn read_and_convert_expr_with_memo(
                 }
             }
             DirectConvertWork::BuildApp => {
-                let arg = results.pop().expect("stack balance invariant");
-                let func = results.pop().expect("stack balance invariant");
+                let arg = pop_converted(&mut results, name)?;
+                let func = pop_converted(&mut results, name)?;
                 results.push(do_intern!(
                     intern,
                     Expr::from_kind(ExprKind::App(func, arg))
                 ));
             }
             DirectConvertWork::BuildLam(info) => {
-                let body = results.pop().expect("stack balance invariant");
-                let ty = results.pop().expect("stack balance invariant");
+                let body = pop_converted(&mut results, name)?;
+                let ty = pop_converted(&mut results, name)?;
                 results.push(do_intern!(
                     intern,
                     Expr::from_kind(ExprKind::Lam(info.into(), ty, body))
                 ));
             }
             DirectConvertWork::BuildPi(info) => {
-                let body = results.pop().expect("stack balance invariant");
-                let ty = results.pop().expect("stack balance invariant");
+                let body = pop_converted(&mut results, name)?;
+                let ty = pop_converted(&mut results, name)?;
                 results.push(do_intern!(
                     intern,
                     Expr::from_kind(ExprKind::Pi(info.into(), ty, body))
                 ));
             }
             DirectConvertWork::BuildLet(let_name, nondep) => {
-                let body = results.pop().expect("stack balance invariant");
-                let val = results.pop().expect("stack balance invariant");
-                let ty = results.pop().expect("stack balance invariant");
+                let body = pop_converted(&mut results, name)?;
+                let val = pop_converted(&mut results, name)?;
+                let ty = pop_converted(&mut results, name)?;
                 let kind = ExprKind::Let(let_name, ty, val, body, nondep);
                 results.push(do_intern!(intern, Expr::from_kind(kind)));
             }
-            DirectConvertWork::BuildMData => {
-                let inner = results.pop().expect("stack balance invariant");
+            DirectConvertWork::BuildMData(map) => {
+                let inner = pop_converted(&mut results, name)?;
                 results.push(do_intern!(
                     intern,
-                    Expr::from_kind(ExprKind::MData(MDataMap::new(), inner))
+                    Expr::from_kind(ExprKind::MData(map, inner))
                 ));
             }
             DirectConvertWork::BuildProj(struct_name, idx) => {
-                let inner = results.pop().expect("stack balance invariant");
+                let inner = pop_converted(&mut results, name)?;
                 results.push(do_intern!(
                     intern,
                     Expr::from_kind(ExprKind::Proj(struct_name, idx, inner))
@@ -278,7 +278,7 @@ pub(crate) fn read_and_convert_expr_with_memo(
         cache_hits,
         unique_exprs: intern.total_entries - cache_size_before,
     };
-    let result_arc = results.pop().expect("stack balance invariant");
+    let result_arc = pop_converted(&mut results, name)?;
     Ok((
         Arc::try_unwrap(result_arc).unwrap_or_else(|arc| (*arc).clone()),
         stats,
@@ -349,20 +349,17 @@ fn parse_ptr(
             total_intern_calls,
             cache_hits,
         ),
-        expr_tags::FVAR => {
-            let id_ptr = region.read_u64_at(field_base)?;
-            let id_str = region.resolve_name_ptr(id_ptr)?;
-            results.push(do_intern!(
-                intern,
-                Expr::fvar(FVarId::new(hash_str(&id_str)))
-            ));
-            Ok(())
-        }
+        // Serialized declarations must be closed. A lossy hash of a Name is
+        // neither its identity nor evidence that an imported free variable is
+        // in scope. Refuse rather than borrow an unrelated local FVarId.
+        expr_tags::FVAR => Err(ImportError::ExprConversion {
+            name: name.to_string(),
+            message: "unresolved free variable in imported declaration".into(),
+        }),
         expr_tags::MVAR => Err(ImportError::UnsupportedMVar(name.to_string())),
         expr_tags::SORT => {
             let level_ptr = region.read_u64_at(field_base)?;
-            let parsed_level = region.resolve_level_ptr(level_ptr, 0)?;
-            let level = convert_level(name, &parsed_level)?;
+            let level = region.read_kernel_level_ptr(level_ptr)?;
             results.push(do_intern!(intern, Expr::sort(level)));
             Ok(())
         }
@@ -435,28 +432,26 @@ fn parse_ptr(
             let type_ptr = region.read_u64_at(field_base + 8)?;
             let value_ptr = region.read_u64_at(field_base + 16)?;
             let body_ptr = region.read_u64_at(field_base + 24)?;
-            let decl_name_str = region.resolve_name_ptr(name_ptr)?;
+            let decl_name = region.read_kernel_name_ptr(name_ptr)?;
             // Like binderInfo above, `nondep` follows the cached Expr.Data
             // word. Reading the hash byte made nearly every let look nondep.
             let nondep = region.bytes_at(scalar_base + EXPR_DATA_SCALAR_BYTES, 1)?[0] != 0;
             if memo.is_enabled() {
                 work.push(DirectConvertWork::Memo(ptr));
             }
-            work.push(DirectConvertWork::BuildLet(
-                Name::from_string(&decl_name_str),
-                nondep,
-            ));
+            work.push(DirectConvertWork::BuildLet(decl_name, nondep));
             work.push(DirectConvertWork::Parse(body_ptr));
             work.push(DirectConvertWork::Parse(value_ptr));
             work.push(DirectConvertWork::Parse(type_ptr));
             Ok(())
         }
         expr_tags::MDATA => {
+            let map = region.read_mdata_map(region.read_u64_at(field_base)?)?;
             let expr_ptr = region.read_u64_at(field_base + 8)?;
             if memo.is_enabled() {
                 work.push(DirectConvertWork::Memo(ptr));
             }
-            work.push(DirectConvertWork::BuildMData);
+            work.push(DirectConvertWork::BuildMData(map));
             work.push(DirectConvertWork::Parse(expr_ptr));
             Ok(())
         }
@@ -492,13 +487,7 @@ fn parse_bvar(
     cache_hits: &mut u64,
 ) -> Result<(), ImportError> {
     let idx_ptr = region.read_u64_at(field_base)?;
-    let idx = if is_scalar(idx_ptr) {
-        unbox_scalar(idx_ptr)
-    } else if is_ptr(idx_ptr) {
-        region.read_nat_value(idx_ptr)?
-    } else {
-        0
-    };
+    let idx = region.read_kernel_nat_u64(idx_ptr)?;
     if idx > u64::from(Expr::MAX_BVAR_INDEX) {
         return Err(ImportError::ExprConversion {
             name: name.to_string(),
@@ -517,7 +506,7 @@ fn parse_bvar(
 fn parse_const(
     region: &CompactedRegion<'_>,
     field_base: usize,
-    name: &str,
+    _name: &str,
     intern: &mut ExprInternCache,
     results: &mut SmallVec<[Arc<Expr>; 32]>,
     total_intern_calls: &mut u64,
@@ -525,16 +514,12 @@ fn parse_const(
 ) -> Result<(), ImportError> {
     let name_ptr = region.read_u64_at(field_base)?;
     let levels_ptr = region.read_u64_at(field_base + 8)?;
-    let const_name_str = region.resolve_name_ptr(name_ptr)?;
-    let parsed_levels = region.read_level_list(levels_ptr)?;
-    let levels: LevelVec = parsed_levels
-        .iter()
-        .map(|l| convert_level(name, l))
-        .collect::<Result<_, _>>()?;
-    let (arc, was_hit) = intern_expr(
-        intern,
-        Expr::const_(Name::interned(&const_name_str), levels),
-    );
+    let const_name = region.read_kernel_name_ptr(name_ptr)?;
+    let levels: LevelVec = region
+        .read_kernel_level_list(levels_ptr)?
+        .into_iter()
+        .collect();
+    let (arc, was_hit) = intern_expr(intern, Expr::const_(const_name, levels));
     *total_intern_calls += 1;
     if was_hit {
         *cache_hits += 1;
@@ -583,24 +568,15 @@ fn parse_proj(
     let type_name_ptr = region.read_u64_at(field_base)?;
     let idx_ptr = region.read_u64_at(field_base + 8)?;
     let struct_ptr = region.read_u64_at(field_base + 16)?;
-    let type_name_str = region.resolve_name_ptr(type_name_ptr)?;
-    let idx = if is_scalar(idx_ptr) {
-        unbox_scalar(idx_ptr)
-    } else if is_ptr(idx_ptr) {
-        region.read_nat_value(idx_ptr).unwrap_or(0)
-    } else {
-        0
-    };
+    let type_name = region.read_kernel_name_ptr(type_name_ptr)?;
+    let idx = region.read_kernel_nat_u64(idx_ptr)?;
     if idx > u64::from(u32::MAX) {
         return Err(ImportError::ExprConversion {
             name: name.to_string(),
             message: format!("projection index too large: {idx}"),
         });
     }
-    work.push(DirectConvertWork::BuildProj(
-        Name::interned(&type_name_str),
-        idx as u32,
-    ));
+    work.push(DirectConvertWork::BuildProj(type_name, idx as u32));
     work.push(DirectConvertWork::Parse(struct_ptr));
     Ok(())
 }

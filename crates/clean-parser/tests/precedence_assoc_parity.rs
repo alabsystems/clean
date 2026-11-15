@@ -36,7 +36,9 @@ use clean_parser::{parse_expr, ParseError, SurfaceArg, SurfaceExpr, SurfaceLit};
 /// makes an unexpected shape fail loudly rather than silently pass.
 fn render(e: &SurfaceExpr) -> String {
     match e {
-        SurfaceExpr::Ident(_, s) => s.clone(),
+        SurfaceExpr::Ident(_, s) => s
+            .source_spelling()
+            .expect("fixture identifier has exact source spelling"),
         SurfaceExpr::Lit(_, SurfaceLit::Nat(n)) => n.to_string(),
         SurfaceExpr::Paren(_, inner) => render(inner),
         SurfaceExpr::App(_, f, args) => {

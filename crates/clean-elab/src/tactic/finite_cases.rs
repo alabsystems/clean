@@ -54,7 +54,7 @@ use super::finite_cases_proof::build_fin_cases_proof;
 /// ENSURES: on `Err(NoGoals)`, `state` is unchanged
 /// ENSURES: on `Err(HypothesisNotFound)`, `state` is unchanged
 /// ENSURES: on `Err(InvalidTarget)`, `state` is unchanged
-pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn fin_cases(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -65,7 +65,8 @@ pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     let hyp = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?
         .clone();
 
@@ -134,8 +135,9 @@ pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
                 eq_fvar_id += 1;
                 state.next_fvar = state.next_fvar.max(eq_fvar_id);
                 new_ctx.push(LocalDecl {
+                    binder_info: Default::default(),
                     fvar: eq_fvar,
-                    name: format!("{hyp_name}_eq"),
+                    name: super::pattern::names::generated_suffix(hyp_name, "_eq"),
                     ty: make_equality_type(
                         &hyp.ty,
                         &Expr::fvar(hyp.fvar),
@@ -168,6 +170,7 @@ pub fn fin_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
             meta_id: new_meta_id,
             target: new_target,
             local_ctx: new_ctx,
+            case_binders: goal.case_binders.clone(),
             tag: None,
         });
     }
@@ -314,7 +317,7 @@ pub(crate) fn make_nat_literal(n: u64) -> Expr {
 ///
 /// `Fin.mk : {n} → (val : Nat) → (isLt : Nat.lt val n) → Fin n` requires a
 /// genuine proof of `val < n` in the `isLt` slot. `Nat.lt val n` is defeq
-/// `Nat.le (val+1) n`, so we build a constructive `Nat.le.refl`/`Nat.le.step`
+/// `Nat.le (val+1) n`, so we build a constant-size `Nat.le_of_ble_eq_true`
 /// witness (no `sorryAx`). Because `isLt` is proof-irrelevant, the specific
 /// witness does not matter for downstream defeq.
 ///

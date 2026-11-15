@@ -157,7 +157,13 @@ impl Environment {
         self.register_error_accum_step(&c)?;
         self.register_error_accum_step3(&c)?;
         self.register_error_accum_step4(&c)?;
-        self.register_fl_op_rel_error_discharges(&c)?;
+        // SOUNDNESS (2026-09-26): the per-op relative-error discharges evaluate
+        // `Rat.roundToNearestEven`, an opaque placeholder whose value only its
+        // native reducer supplies; they register only where a canonical
+        // definition justifies that fold (see `init_nn_verify_rounding_half_ulp`).
+        if self.native_fold_authorized(&Name::from_string("Rat.roundToNearestEven")) {
+            self.register_fl_op_rel_error_discharges(&c)?;
+        }
         self.register_gamma_n_reductions(&c)?;
 
         Ok(())

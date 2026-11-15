@@ -52,7 +52,34 @@ clean_obj* clean_alloc_ctor_uninit(uint8_t tag, uint8_t num_objs, uint8_t scalar
     return o;
 }
 
+/* The header keeps tag, num_objs and scalar_sz in one byte each. A larger
+ * value used to be cast to uint8_t for the allocation while the vararg loop
+ * wrote the untruncated num_objs: 256 object fields allocated 0 slots and
+ * took 256 pointer writes, 320 scalar bytes allocated 64. Stop by name
+ * instead. The IR checker refuses these shapes before any lane emits them
+ * (ir_checker rule C1); this is the defence in depth. */
+static void clean_check_ctor_layout(const char* who, unsigned int tag, unsigned int num_objs,
+                                    unsigned int scalar_sz) {
+    char msg[160];
+    if (tag > UINT8_MAX) {
+        snprintf(msg, sizeof msg, "%s: constructor tag %u exceeds the 8-bit object header (max %u)",
+                 who, tag, (unsigned)UINT8_MAX);
+        clean_panic(msg);
+    }
+    if (num_objs > UINT8_MAX) {
+        snprintf(msg, sizeof msg, "%s: %u object fields exceed the 8-bit object header (max %u)",
+                 who, num_objs, (unsigned)UINT8_MAX);
+        clean_panic(msg);
+    }
+    if (scalar_sz > UINT8_MAX) {
+        snprintf(msg, sizeof msg, "%s: %u scalar bytes exceed the 8-bit object header (max %u)",
+                 who, scalar_sz, (unsigned)UINT8_MAX);
+        clean_panic(msg);
+    }
+}
+
 clean_obj* clean_alloc_ctor(unsigned int tag, unsigned int num_objs, unsigned int scalar_sz, ...) {
+    clean_check_ctor_layout("clean_alloc_ctor", tag, num_objs, scalar_sz);
     clean_obj* o = clean_alloc_ctor_uninit((uint8_t)tag, (uint8_t)num_objs, (uint8_t)scalar_sz);
 
     if (num_objs > 0) {
@@ -97,64 +124,87 @@ clean_obj* clean_alloc_closure(void* fn, unsigned int arity, unsigned int num_fi
  * ============================================================================
  */
 
-/* Decrement ref count, free if last reference.
- *
- * Uses iterative tail-child optimization: when freeing an object with N
- * children, children 0..N-2 are dec'd recursively but the last child (N-1)
- * is handled via loop iteration. This converts O(depth) stack usage to O(1)
- * for linked-list-shaped graphs where the tail is the last field.
- *
- * Also dispatches on object kind for closures (Part of #1944 F1):
- * closures store captured args in clean_closure.args[], not clean_obj.fields[].
- */
-void clean_dec(clean_obj* o) {
-    while (1) {
-        if (clean_is_scalar(o)) return;
-
-        uint32_t old_count = atomic_fetch_sub_explicit(&o->header.ref_count, 1, memory_order_release);
-
-        /* Still referenced — nothing to free */
-        if (old_count != 0) return;
-
-        /* Acquire fence: ensure all prior writes to the object are visible
-         * before we read children and free. Matches Rust runtime. */
-        atomic_thread_fence(memory_order_acquire);
-
-        /* Use clean_num_child_fields() to read closure.num_fixed (u16)
-         * instead of header.num_objs (u8) for closures. Part of #1996. */
-        uint16_t num_children = clean_num_child_fields(o);
-
-        if (o->header.kind == CLEAN_OBJ_KIND_CLOSURE) {
-            clean_closure* c = (clean_closure*)o;
-            if (num_children == 0) {
-                clean_free(o);
-                return;
-            }
-            /* Dec all captured args except the last */
-            for (uint16_t i = 0; i < num_children - 1; i++) {
-                clean_dec(c->args[i]);
-            }
-            /* Tail-loop on the last captured arg */
-            clean_obj* last = c->args[num_children - 1];
-            clean_free(o);
-            o = last;
-            continue;
-        }
-
-        /* Ctor and other object kinds */
-        if (num_children == 0) {
-            clean_free(o);
-            return;
-        }
-        /* Dec all fields except the last */
-        for (uint16_t i = 0; i < num_children - 1; i++) {
-            clean_dec(o->fields[i]);
-        }
-        /* Tail-loop on the last field */
-        clean_obj* last = o->fields[num_children - 1];
-        clean_free(o);
-        o = last;
+/* Cold path of clean_inc_n (Lean v4.35.0 object.cpp:433 lean_inc_ref_huge_n):
+ * each step is one ordinary increment of at most CLEAN_RC_INC_MAX, and
+ * re-reading the count stops the loop once the count is frozen. The whole n is
+ * applied or the count is left frozen; it never wraps. */
+void clean_inc_ref_huge_n(clean_obj* o, size_t n) {
+    if (clean_is_scalar(o)) return;
+    while (n > 0 &&
+           atomic_load_explicit(&o->header.ref_count, memory_order_relaxed) < CLEAN_RC_STICKY) {
+        size_t chunk = n < CLEAN_RC_INC_MAX ? n : CLEAN_RC_INC_MAX;
+        atomic_fetch_add_explicit(&o->header.ref_count, (uint32_t)chunk, memory_order_relaxed);
+        n -= chunk;
     }
+}
+
+/* Drop one reference. True when it was the last one (the caller frees).
+ * A frozen count (>= CLEAN_RC_STICKY_DROP) is left untouched (Lean
+ * lean_is_never_freed, lean4#15241). Release on the decrement and an acquire
+ * fence before freeing, so every write of a former holder is visible. */
+static inline bool clean_rc_drop(clean_obj* o) {
+    if (atomic_load_explicit(&o->header.ref_count, memory_order_relaxed) >= CLEAN_RC_STICKY_DROP)
+        return false;
+    if (atomic_fetch_sub_explicit(&o->header.ref_count, 1, memory_order_release) != 0)
+        return false;
+    atomic_thread_fence(memory_order_acquire);
+    return true;
+}
+
+#define CLEAN_DEC_LOCAL 64
+
+static clean_obj** clean_dec_grow(clean_obj** todo, clean_obj** local, size_t* cap) {
+    if (*cap > SIZE_MAX / 2 / sizeof(clean_obj*))
+        clean_panic("clean_dec: deletion worklist size overflow");
+    size_t new_cap = *cap * 2;
+    clean_obj** grown = (todo == local)
+        ? (clean_obj**)malloc(new_cap * sizeof(clean_obj*))
+        : (clean_obj**)realloc(todo, new_cap * sizeof(clean_obj*));
+    if (grown == NULL)
+        clean_panic("clean_dec: out of memory growing the deletion worklist");
+    if (todo == local) memcpy(grown, local, *cap * sizeof(clean_obj*));
+    *cap = new_cap;
+    return grown;
+}
+
+/* Free `o`, whose last reference was just dropped, and every child whose last
+ * reference that frees, through an explicit worklist: no recursion, so a graph
+ * of any shape and depth frees in constant C stack. A frozen child is never
+ * adjusted or freed; a dying child with no children is freed at once. Closures
+ * keep their children in args[] (count num_fixed, u16, Part of #1944/#1996).
+ * Out of line, so clean_dec's frame carries no worklist. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((noinline))
+#endif
+static void clean_dec_release(clean_obj* o) {
+    clean_obj* local[CLEAN_DEC_LOCAL];
+    clean_obj** todo = local;
+    size_t len = 0, cap = CLEAN_DEC_LOCAL;
+    for (;;) {
+        uint16_t n = clean_num_child_fields(o);
+        clean_obj** kids = (o->header.kind == CLEAN_OBJ_KIND_CLOSURE)
+                               ? ((clean_closure*)o)->args : o->fields;
+        for (uint16_t i = 0; i < n; i++) {
+            clean_obj* c = kids[i];
+            if (clean_is_scalar(c) || !clean_rc_drop(c)) continue;
+            if (clean_num_child_fields(c) == 0) {
+                clean_free(c);
+                continue;
+            }
+            if (len == cap) todo = clean_dec_grow(todo, local, &cap);
+            todo[len++] = c;
+        }
+        clean_free(o);
+        if (len == 0) break;
+        o = todo[--len];
+    }
+    if (todo != local) free(todo);
+}
+
+/* Decrement ref count; on the last reference free the object and every child
+ * that reference kept alive. A no-op on a scalar or a frozen count. */
+void clean_dec(clean_obj* o) {
+    if (!clean_is_scalar(o) && clean_rc_drop(o)) clean_dec_release(o);
 }
 
 /* ============================================================================
@@ -312,6 +362,37 @@ clean_obj* clean_nat_shift_right(clean_obj* a, clean_obj* b) {
     return clean_nat_of_u128(r);
 }
 
+/* Lean 4 `Nat.land` / `Nat.lor` / `Nat.xor` (arbitrary precision). Both
+ * operands are < 2^128 (the runtime's Nat bound), so each result is too and
+ * `clean_nat_of_u128` represents it exactly: tagged below 2^63, heap above.
+ * Heap-aware + arg-consuming (RUNG B). These replace the prelude's
+ * `Nat.bitwise` body for execution — a unary-fuel definition (`fuel = m + n`,
+ * one recursion level per unit) that overflows the stack at any heap input
+ * (WS6.3, F-105; postmortems/2026-09-18-ws6-3-mask-crash.md). */
+clean_obj* clean_nat_land(clean_obj* a, clean_obj* b) {
+    unsigned __int128 x = clean_nat_to_u128(a);
+    unsigned __int128 y = clean_nat_to_u128(b);
+    clean_dec(a);
+    clean_dec(b);
+    return clean_nat_of_u128(x & y);
+}
+
+clean_obj* clean_nat_lor(clean_obj* a, clean_obj* b) {
+    unsigned __int128 x = clean_nat_to_u128(a);
+    unsigned __int128 y = clean_nat_to_u128(b);
+    clean_dec(a);
+    clean_dec(b);
+    return clean_nat_of_u128(x | y);
+}
+
+clean_obj* clean_nat_xor(clean_obj* a, clean_obj* b) {
+    unsigned __int128 x = clean_nat_to_u128(a);
+    unsigned __int128 y = clean_nat_to_u128(b);
+    clean_dec(a);
+    clean_dec(b);
+    return clean_nat_of_u128(x ^ y);
+}
+
 /* ============================================================================
  * Quotient eliminators (Quot.lift / Quot.ind)
  * ============================================================================
@@ -433,6 +514,10 @@ clean_obj* clean_int_dec_eq(clean_obj* a, clean_obj* b) {
 clean_obj* clean_reuse(clean_obj* reset_slot, unsigned int tag, unsigned int num_objs, unsigned int scalar_sz, ...) {
     clean_obj* o;
 
+    /* Before either path: the same-layout assertions below compare header
+     * bytes, which a truncated 256 would have matched against a 0-field slot. */
+    clean_check_ctor_layout("clean_reuse", tag, num_objs, scalar_sz);
+
     if (reset_slot != NULL && reset_slot->header.kind == CLEAN_OBJ_KIND_CTOR) {
         /* Reuse the Ctor reset slot — update header to match new constructor.
          * Part of #1990: must set num_objs and scalar_sz, not just tag.
@@ -479,8 +564,10 @@ typedef struct clean_string {
     char data[];
 } clean_string;
 
-clean_obj* clean_mk_string(const char* s) {
-    size_t len = strlen(s);
+clean_obj* clean_mk_string_from_bytes(const char* s, size_t len) {
+    if (len > SIZE_MAX - sizeof(clean_string) - 1) {
+        clean_panic("clean_mk_string_from_bytes: string size overflow");
+    }
     size_t size = sizeof(clean_string) + len + 1;
 
     clean_string* str = (clean_string*)clean_malloc(size);
@@ -490,9 +577,16 @@ clean_obj* clean_mk_string(const char* s) {
     str->header.num_objs = 0;
     str->header.scalar_sz = 0;  /* Strings use their own layout, not scalar_sz */
     str->len = len;
-    memcpy(str->data, s, len + 1);
+    if (len != 0) {
+        memcpy(str->data, s, len);
+    }
+    str->data[len] = 0;
 
     return (clean_obj*)str;
+}
+
+clean_obj* clean_mk_string(const char* s) {
+    return clean_mk_string_from_bytes(s, strlen(s));
 }
 
 const char* clean_string_data(clean_obj* s) {
@@ -508,9 +602,17 @@ size_t clean_string_len(clean_obj* s) {
  * ============================================================================
  */
 
+/* Lean 4's runtime fatal path, matched (pinned v4.30.0-rc2 `libleanrt.a`,
+ * `object.cpp`: `lean_internal_panic` prints `INTERNAL PANIC: <msg>` to stderr
+ * and calls `exit(1)`; it calls `abort()` only when `LEAN_ABORT_ON_PANIC` is
+ * set). The program ENDS WITH STATUS 1 and no crash signal is raised; `exit`
+ * flushes the program's buffered stdout, as Lean's does. `abort()` here made
+ * every fail-closed refusal a SIGABRT death: a macOS crash report per run and
+ * `clean run` reporting signal 6 (macOS's `abort()` flushes stdio too, so the
+ * output there was kept; glibc's does not) (docs/DECISIONS.md R86). */
 _Noreturn void clean_panic(const char* msg) {
     fprintf(stderr, "clean panic: %s\n", msg);
-    abort();
+    exit(1);
 }
 
 /* ============================================================================

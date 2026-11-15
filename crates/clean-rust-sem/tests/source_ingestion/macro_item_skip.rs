@@ -2,9 +2,9 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Tests for silently skipping item-position macro invocations during
-//! source ingestion. Covers top-level, impl-block, trait-impl, and
-//! block-scoped macro invocations.
+//! Historical item-position macro ingestion behavior outside function blocks.
+//! Computational block invocations now refuse rather than losing their bodies;
+//! the other legacy contexts remain explicit incomplete source-model behavior.
 
 use super::{Interpreter, SourceProgram, Value};
 
@@ -255,7 +255,7 @@ fn test_source_program_skips_block_level_extern_crate() {
 }
 
 #[test]
-fn test_source_program_skips_block_level_mod() {
+fn test_source_program_refuses_block_level_mod() {
     let source = r#"
         fn main() -> u32 {
             mod nested {
@@ -265,11 +265,12 @@ fn test_source_program_skips_block_level_mod() {
         }
     "#;
 
-    let program = SourceProgram::parse(source).expect("block-level mod should be skipped");
-    let mut interpreter = Interpreter::new();
-    let result = program.run(&mut interpreter);
-
-    assert_eq!(result.value(), Some(Value::u32(42)));
+    let error = SourceProgram::parse(source)
+        .expect_err("unsupported block modules must not erase computational items");
+    assert!(
+        error.to_string().contains("unsupported item kind `mod`"),
+        "expected a named nested-module refusal, got: {error}"
+    );
 }
 
 #[test]
@@ -307,7 +308,7 @@ fn test_source_program_skips_block_level_trait_aliases() {
 }
 
 #[test]
-fn test_source_program_skips_block_level_macro_invocations() {
+fn test_source_program_refuses_block_level_macro_invocations() {
     let source = r#"
         fn main() -> u32 {
             bitflags! {
@@ -319,12 +320,9 @@ fn test_source_program_skips_block_level_macro_invocations() {
         }
     "#;
 
-    let program =
-        SourceProgram::parse(source).expect("block-level macro invocations should be skipped");
-    let mut interpreter = Interpreter::new();
-    let result = program.run(&mut interpreter);
-
-    assert_eq!(result.value(), Some(Value::u32(42)));
+    let error = SourceProgram::parse(source)
+        .expect_err("unexpanded block macro items must not erase computational content");
+    assert!(error.to_string().contains("unsupported"), "{error}");
 }
 
 #[test]

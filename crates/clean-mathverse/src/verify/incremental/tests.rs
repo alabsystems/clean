@@ -4360,6 +4360,95 @@ mod seeded_duplicate_dedup_tests {
         );
     }
 
+    /// A DEFINITION over a resident AXIOM is a redeclaration, never a stub
+    /// upgrade: refused as already declared, and the axiom stays value-free.
+    /// Upgrading it made `ReplayForgedBoolDef`'s `def bool_ax_b := true` the
+    /// resident `bool_ax_b`, so its `forged_bool_false : False` was stamped.
+    #[test]
+    fn test_seeded_dup_definition_over_axiom_is_refused_as_already_declared() {
+        let mut env = env_with_props();
+        let value = Expr::const_(n("twin_r"), vec![]);
+        let result = try_add_decl(
+            &mut env,
+            n("twin_r2"),
+            DeclKind::Definition,
+            vec![],
+            Expr::const_(n("TwinP"), vec![]),
+            Some(&value),
+            false,
+        );
+        match result {
+            AddConstResult::KernelRejected(msg) => assert!(
+                msg.contains("already declared as an axiom"),
+                "a definition over an axiom must be refused as already declared, got: {msg}"
+            ),
+            other => panic!("a definition over an axiom must fail closed, got {other:?}"),
+        }
+        let ci = env.get_const(&n("twin_r2")).expect("axiom still present");
+        assert!(ci.value.is_none(), "the axiom must stay value-free");
+    }
+
+    /// An OPAQUE whose value an elision pass dropped (`--single-pass` rolls
+    /// one over each verified target) is resident value-free and not an
+    /// axiom: a DEFINITION over it would make it unfold, so it is refused as
+    /// already declared, while a value of the opaque's own kind still
+    /// completes it (checked). Filling it with a definition let
+    /// `ReplayForgedOpaqueDef`'s `def op_b := true` replace an earlier target's
+    /// `opaque op_b`, and a later target's proof of `False` was stamped.
+    #[test]
+    fn test_seeded_dup_definition_over_elided_opaque_is_refused_as_already_declared() {
+        let opaque_env = || {
+            let mut env = env_with_props();
+            env.add_decl(Declaration::Opaque {
+                name: n("twin_o"),
+                level_params: vec![],
+                type_: Expr::const_(n("TwinP"), vec![]),
+                value: Expr::const_(n("twin_r"), vec![]),
+            })
+            .expect("register opaque");
+            env.elide_proof_values(clean_kernel::env::ProofValueElision::OpaqueOnly);
+            let ci = env.get_const(&n("twin_o")).expect("opaque present");
+            assert!(ci.value.is_none(), "the elided opaque must be value-free");
+            env
+        };
+        let value = Expr::const_(n("twin_r"), vec![]);
+        let mut env = opaque_env();
+        let result = try_add_decl(
+            &mut env,
+            n("twin_o"),
+            DeclKind::Definition,
+            vec![],
+            Expr::const_(n("TwinP"), vec![]),
+            Some(&value),
+            false,
+        );
+        match result {
+            AddConstResult::KernelRejected(msg) => assert!(
+                msg.contains("already declared as an opaque"),
+                "a definition over an opaque must be refused as already declared, got: {msg}"
+            ),
+            other => panic!("a definition over an opaque must fail closed, got {other:?}"),
+        }
+        let ci = env.get_const(&n("twin_o")).expect("opaque still present");
+        assert!(ci.value.is_none(), "the opaque must stay value-free");
+        assert_eq!(ci.kind, clean_kernel::ConstantKind::Opaque);
+
+        let mut env = opaque_env();
+        let result = try_add_decl(
+            &mut env,
+            n("twin_o"),
+            DeclKind::Opaque,
+            vec![],
+            Expr::const_(n("TwinP"), vec![]),
+            Some(&value),
+            false,
+        );
+        assert!(
+            matches!(result, AddConstResult::KernelVerified),
+            "the opaque's own elided value still completes it, got {result:?}"
+        );
+    }
+
     /// A value-free seeded stub whose olean value FAILS kernel checking must be
     /// rejected fail-closed, carrying the real upgrade error — never accepted
     /// as a twin on the type match alone (that would launder the unproven stub

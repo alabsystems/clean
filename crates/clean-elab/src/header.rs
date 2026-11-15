@@ -45,8 +45,9 @@
 //! source-order semantics — which is the fail-closed direction.
 
 use clean_kernel::{Environment, Expr, Name};
-use clean_parser::{SurfaceBinder, SurfaceDecl, SurfaceExpr};
+use clean_parser::{SurfaceBinder, SurfaceDecl, SurfaceExpr, SurfaceName};
 
+use crate::infer::elaborate_decl::{private_kind_of, PrivateNameKind};
 use crate::{ElabCtx, FileContext};
 
 /// A declaration's signature, elaborated without its body.
@@ -105,8 +106,11 @@ fn collect_headers(
         // `elaborate_decl_and_register_inner_with_aux` so qualification and
         // alias scoping agree with the authoritative pass.
         SurfaceDecl::Namespace { name, decls, .. } => {
+            let resolved = name.qualify_under(&SurfaceName::from_name(
+                fc.namespace_state().current_namespace().clone(),
+            ));
             fc.namespace_state_mut()
-                .enter_namespace(Name::from_string(name));
+                .enter_resolved_namespace(resolved.into_name());
             fc.namespace_state_mut().push_scope();
             fc.enter_local_scope();
             for inner in decls {
@@ -149,29 +153,61 @@ fn collect_headers(
             universe_params,
             binders,
             ty: Some(ty),
+            modifiers,
             ..
-        } => push_header(env, fc, name, universe_params, binders, ty, out),
+        } => push_header(
+            env,
+            fc,
+            name,
+            private_kind_of(modifiers, PrivateNameKind::Definition),
+            (universe_params, binders, ty),
+            out,
+        ),
         SurfaceDecl::Theorem {
             name,
             universe_params,
             binders,
             ty,
+            modifiers,
             ..
-        }
-        | SurfaceDecl::Axiom {
+        } => push_header(
+            env,
+            fc,
+            name,
+            private_kind_of(modifiers, PrivateNameKind::Theorem),
+            (universe_params, binders, ty),
+            out,
+        ),
+        SurfaceDecl::Axiom {
             name,
             universe_params,
             binders,
             ty,
+            modifiers,
             ..
-        }
-        | SurfaceDecl::Opaque {
+        } => push_header(
+            env,
+            fc,
+            name,
+            private_kind_of(modifiers, PrivateNameKind::Axiom),
+            (universe_params, binders, ty),
+            out,
+        ),
+        SurfaceDecl::Opaque {
             name,
             universe_params,
             binders,
             ty,
+            modifiers,
             ..
-        } => push_header(env, fc, name, universe_params, binders, ty, out),
+        } => push_header(
+            env,
+            fc,
+            name,
+            private_kind_of(modifiers, PrivateNameKind::Definition),
+            (universe_params, binders, ty),
+            out,
+        ),
 
         // Everything else introduces no forward-referenceable header here.
         //
@@ -188,19 +224,21 @@ fn collect_headers(
 fn push_header(
     env: &Environment,
     fc: &FileContext,
-    name: &str,
-    universe_params: &[String],
-    binders: &[SurfaceBinder],
-    ty: &SurfaceExpr,
+    name: &SurfaceName,
+    private_kind: Option<PrivateNameKind>,
+    (universe_params, binders, ty): (&[SurfaceName], &[SurfaceBinder], &SurfaceExpr),
     out: &mut Vec<DeclHeader>,
 ) {
     let mut ctx = ElabCtx::new(env);
     ctx.set_namespace_state(fc.namespace_state().clone());
+    let instance_view = fc.instance_view(env);
     ctx.set_instance_scope_state(
-        fc.dead_local_instances().clone(),
+        instance_view.hidden(),
         fc.scoped_instance_map().clone(),
         fc.default_instance_entries(),
     );
+    ctx.set_instance_view(instance_view);
+    ctx.set_foreign_private_decls(fc.foreign_private_decls());
     // U2 rung-4 explicitness channel. Header staging never reaches
     // `finalize_level_params` (it elaborates a signature and filters the
     // surviving params; it does not generalize), so nothing here can be
@@ -210,7 +248,7 @@ fn push_header(
     // from a written `.{...}` list.
     ctx.set_file_universe_params(fc.current_universe_params().to_vec());
     if let Ok((name, universe_params, ty)) =
-        ctx.elab_decl_header_inner(name, universe_params, binders, ty)
+        ctx.elab_decl_header_inner(name, private_kind, universe_params, binders, ty)
     {
         out.push(DeclHeader {
             name,

@@ -21,24 +21,43 @@ pub(crate) use clean_auto::arith_proof::{
     combine_ops, detect_sort, mk_chain_step, mk_lt_irrefl_false, ArithSort, CmpOp,
 };
 
-/// Detect the comparison operator from the function name of a LE/LT expression.
-fn detect_cmp_op(fn_name: &str) -> Option<CmpOp> {
+/// The operator of a typeclass comparison head, and whether its two operands
+/// are written in reverse order.
+///
+/// Lean 4.8.0 `Init/Prelude.lean:1115-1117` defines `GE.ge a b := LE.le b a`
+/// and `GT.gt a b := LT.lt b a` (both `@[reducible]`), so `a ≥ b` is `b ≤ a`
+/// and `a > b` is `b < a`.
+fn detect_cmp_op(fn_name: &str) -> Option<(CmpOp, bool)> {
     match fn_name {
-        "LE.le" | "GE.ge" => Some(CmpOp::Le),
-        "LT.lt" | "GT.gt" => Some(CmpOp::Lt),
+        "LE.le" => Some((CmpOp::Le, false)),
+        "LT.lt" => Some((CmpOp::Lt, false)),
+        "GE.ge" => Some((CmpOp::Le, true)),
+        "GT.gt" => Some((CmpOp::Lt, true)),
         _ => None,
     }
 }
 
-/// Extract (α, cmp_op, lhs, rhs) from a typeclass comparison or direct
-/// `{Nat|Int|Rat|Real}.{le|lt}` comparison.
+/// Extract `(α, op, lhs, rhs)` from a typeclass comparison or a direct
+/// `{Nat|Int|Rat|Real}.{le|lt}` comparison, ORIENTED: a proof of `ty` proves
+/// `lhs op rhs` by definition. `a ≥ b` comes back as `(Le, b, a)` and `a > b`
+/// as `(Lt, b, a)` ([`detect_cmp_op`]), so no consumer re-derives the
+/// orientation from the surface head.
+///
+/// A strict comparison keeps its endpoints (a chain `a < b`, `b < c` matches
+/// on `b`); [`strict_as_le_lhs`] is the one place a consumer that needs a `≤`
+/// turns it into the `≤` it is by definition.
 pub(crate) fn extract_le_args_full(ty: &Expr) -> Option<(Expr, CmpOp, Expr, Expr)> {
     let args = ty.get_app_args();
     if args.len() == 4 {
         let fn_expr = ty.get_app_fn();
         if let ExprKind::Const(name, _) = fn_expr.kind() {
-            let op = detect_cmp_op(&name.to_string())?;
-            return Some((args[0].clone(), op, args[2].clone(), args[3].clone()));
+            let (op, swapped) = detect_cmp_op(&name.to_string())?;
+            let (lhs, rhs) = if swapped {
+                (args[3].clone(), args[2].clone())
+            } else {
+                (args[2].clone(), args[3].clone())
+            };
+            return Some((args[0].clone(), op, lhs, rhs));
         }
     }
     if args.len() == 2 {
@@ -51,6 +70,54 @@ pub(crate) fn extract_le_args_full(ty: &Expr) -> Option<(Expr, CmpOp, Expr, Expr
         }
     }
     None
+}
+
+/// The left endpoint of the `≤` that a proof of the strict `lhs < rhs` proves
+/// by definition, so that it proves `strict_as_le_lhs(sort, lhs) ≤ rhs`:
+///
+/// - Nat: `Nat.succ lhs`. Lean 4.8.0 `Init/Prelude.lean:1643-1644`:
+///   `protected def Nat.lt (n m : Nat) : Prop := Nat.le (succ n) m`.
+/// - Int: `Int.add lhs (Int.ofNat 1)`. Lean 4.8.0
+///   `Init/Data/Int/Basic.lean:180`: `protected def lt (a b : Int) : Prop :=
+///   (a + 1) ≤ b`; the prelude's `Int.lt` body is this term
+///   (`clean-kernel` `env/order_int.rs`).
+/// - Real / Rat: `None`. Their `<` is not a `≤` by definition (`Real.lt` is a
+///   separate constant), so no `≤` is proposed from a strict proof.
+///
+/// The kernel re-checks every term built from the result, so a reading the
+/// prelude does not share fails closed.
+pub(crate) fn strict_as_le_lhs(sort: ArithSort, lhs: &Expr) -> Option<Expr> {
+    match sort {
+        ArithSort::Nat => Some(Expr::app(
+            Expr::const_(clean_kernel::Name::from_string("Nat.succ"), vec![]),
+            lhs.clone(),
+        )),
+        ArithSort::Int => Some(Expr::apps(
+            Expr::const_(clean_kernel::Name::from_string("Int.add"), vec![]),
+            [
+                lhs.clone(),
+                Expr::app(
+                    Expr::const_(clean_kernel::Name::from_string("Int.ofNat"), vec![]),
+                    Expr::nat_lit(1),
+                ),
+            ],
+        )),
+        ArithSort::Real | ArithSort::Rat => None,
+    }
+}
+
+/// `(lhs', rhs)` such that a proof of `lhs op rhs` proves `lhs' ≤ rhs` by
+/// definition ([`strict_as_le_lhs`] for a strict `op`).
+pub(crate) fn definitional_le_endpoints(
+    sort: ArithSort,
+    op: CmpOp,
+    lhs: &Expr,
+    rhs: &Expr,
+) -> Option<(Expr, Expr)> {
+    match op {
+        CmpOp::Le => Some((lhs.clone(), rhs.clone())),
+        CmpOp::Lt => Some((strict_as_le_lhs(sort, lhs)?, rhs.clone())),
+    }
 }
 
 fn direct_cmp_op(name: &str) -> Option<CmpOp> {
@@ -294,8 +361,9 @@ mod tests {
             .iter()
             .enumerate()
             .map(|(i, (fvar, ty))| LocalDecl {
+                binder_info: Default::default(),
                 fvar: *fvar,
-                name: format!("h{i}"),
+                name: clean_parser::SurfaceName::from_name(Name::anon().str(format!("h{i}"))),
                 ty: ty.clone(),
                 value: None,
             })
@@ -304,6 +372,7 @@ mod tests {
             meta_id: MetaId(0),
             target: Expr::const_(Name::from_string("False"), vec![]),
             local_ctx,
+            case_binders: Vec::new(),
             tag: None,
         }
     }

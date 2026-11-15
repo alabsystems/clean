@@ -6,8 +6,9 @@
 //!
 //! When two `is_def_eq` inputs are applications of the same recursor, most of
 //! the work is usually in the shared parameters, motive, and branch bodies.
-//! This module memoizes no-delta WHNF results by expression hash so repeated
-//! branch comparisons can reuse reductions of common prefixes.
+//! This module memoizes demanded no-delta WHNF results by exact expression so
+//! repeated branch comparisons can reuse reductions of common prefixes without
+//! eagerly normalizing their entire subtrees.
 //!
 //! ## Prefix factoring (#3402)
 //!
@@ -16,11 +17,11 @@
 //! of monadic binds before the first divergence point. The prefix-factoring
 //! optimization detects this: when comparing minor premise pairs, it walks
 //! into lambda bodies and compares the App-spine arguments left-to-right,
-//! recording verified-equal hashes. Subsequent branch comparisons skip
-//! arguments whose hashes match previously verified pairs.
+//! recording verified-equal expression pairs. Subsequent branch comparisons
+//! skip arguments that match previously verified pairs.
 
 use crate::expr::{Expr, ExprKind};
-use crate::tc::branch_sharing_recursor_app::RecursorApp;
+use crate::tc::branch_sharing_recursor_app::{RecursorApp, RecursorLayout};
 use crate::tc::{TcHashMap, TypeChecker};
 use std::ops::Range;
 
@@ -28,8 +29,8 @@ use std::ops::Range;
 ///
 /// BOTH maps are keyed on full `Expr` structural equality, not just cached
 /// hashes. `Expr::hash` is O(1) via a cached 32-bit hash, but `Expr::eq`
-/// falls back to structural comparison on hash collision, so lookups are
-/// O(1) amortized AND collision-safe.
+/// can traverse distinct expression DAGs when their hashes agree. Lookups are
+/// collision-safe; their equality work is not uniformly constant-time.
 ///
 /// SOUNDNESS/COMPLETENESS (fix): `entries` (the no-delta WHNF memo) was
 /// previously keyed on the raw 32-bit `hash_cached()` with NO structural
@@ -41,7 +42,7 @@ use std::ops::Range;
 /// `LieDerivation.ofGradingSum._proof_4`'s `SMulCommClass` congruence), but
 /// in principle a wrong `true` as well. Keying by `Expr` matches the
 /// collision-safe policy of every other TC cache (`whnf_core_cache`,
-/// `def_eq_cache`) and keeps the same amortized O(1) cost.
+/// `def_eq_cache`), including exact structural checks when hashes agree.
 #[derive(Default)]
 pub(super) struct BranchSharingCache {
     entries: TcHashMap<Expr, Expr>,
@@ -50,14 +51,13 @@ pub(super) struct BranchSharingCache {
 
 impl BranchSharingCache {
     fn get(&self, key: &Expr) -> Option<Expr> {
+        // One probe of kernel work (`crate::work_meter`).
+        crate::work_meter::charge(crate::work_meter::Walk::Probe, 1);
         self.entries.get(key).cloned()
     }
 
-    fn contains(&self, key: &Expr) -> bool {
-        self.entries.contains_key(key)
-    }
-
     fn insert(&mut self, key: Expr, value: Expr) {
+        crate::work_meter::charge(crate::work_meter::Walk::Probe, 1);
         self.entries.insert(key, value);
     }
 
@@ -77,6 +77,9 @@ impl BranchSharingCache {
     }
 
     fn is_verified_pair(&self, a: &Expr, b: &Expr) -> bool {
+        if self.verified_pairs.is_empty() {
+            return false;
+        }
         // `record_verified_pair` always stores in canonical (smaller-hash-first)
         // order, so probing that same canonical key is sufficient — one lookup
         // and two clones instead of two-and-four. For distinct hashes this is
@@ -91,7 +94,14 @@ impl BranchSharingCache {
         self.verified_pairs.contains_key(&key)
     }
 
-    fn record_verified_pair(&mut self, a: &Expr, b: &Expr) {
+    fn record_verified_pair(&mut self, a: &Expr, b: &Expr, max_entries: usize) {
+        // Exact-equality hits need not insert WHNFs, so WHNF-cache eviction can
+        // no longer incidentally bound this map. Limit new admission directly,
+        // before cloning either expression. A full or zero-capacity map only
+        // forgoes memoization; existing entries and the equality result survive.
+        if self.verified_pairs.len() >= max_entries {
+            return;
+        }
         let (lhs, rhs) = if a.hash_cached() <= b.hash_cached() {
             (a.clone(), b.clone())
         } else {
@@ -122,63 +132,6 @@ impl<'env> TypeChecker<'env> {
         Some(f(&mut cache.borrow_mut()))
     }
 
-    fn cache_branch_sharing_whnf(&self, expr: &Expr) {
-        let Some(cache_cell) = self.branch_sharing_cache.as_ref() else {
-            return;
-        };
-
-        let mut stack = vec![expr];
-        while let Some(curr) = stack.pop() {
-            if cache_cell.borrow().contains(curr) {
-                continue;
-            }
-
-            let reduced = self.whnf_core_no_delta(curr, true);
-            {
-                let mut cache = cache_cell.borrow_mut();
-                if cache.len() >= self.max_cache_entries {
-                    cache.clear();
-                }
-                cache.insert(curr.clone(), reduced);
-            }
-
-            match curr.kind() {
-                ExprKind::App(f, a) => {
-                    stack.push(f);
-                    stack.push(a);
-                }
-                ExprKind::Lam(_, ty, body)
-                | ExprKind::Pi(_, ty, body)
-                | ExprKind::Let(_, ty, _, body, _) => {
-                    stack.push(ty);
-                    stack.push(body);
-                    if let ExprKind::Let(_, _, val, _, _) = curr.kind() {
-                        stack.push(val);
-                    }
-                }
-                ExprKind::Proj(_, _, target) | ExprKind::MData(_, target) => stack.push(target),
-                ExprKind::Squash(ty) => stack.push(ty),
-                ExprKind::CubicalPath { ty, left, right } => {
-                    stack.push(ty);
-                    stack.push(left);
-                    stack.push(right);
-                }
-                ExprKind::CubicalPathLam { body } => stack.push(body),
-                ExprKind::CubicalPathApp { path, arg } => {
-                    stack.push(path);
-                    stack.push(arg);
-                }
-                ExprKind::CubicalHComp { ty, phi, u, base } => {
-                    stack.push(ty);
-                    stack.push(phi);
-                    stack.push(u);
-                    stack.push(base);
-                }
-                _ => {}
-            }
-        }
-    }
-
     fn branch_sharing_whnf(&self, expr: &Expr) -> Expr {
         if let Some(cached) = self
             .branch_sharing_cache
@@ -200,8 +153,8 @@ impl<'env> TypeChecker<'env> {
 
     /// Compare two expressions using the branch-sharing WHNF cache.
     ///
-    /// Pre-caches no-delta WHNF results; checks verified-pair set first for
-    /// O(1) hit. Used by `try_branch_sharing_def_eq` and
+    /// Checks exact equality and verified pairs before normalizing only the
+    /// demanded roots. Used by `try_branch_sharing_def_eq` and
     /// `is_def_eq_app_spine` (same-Const head). (#3402)
     ///
     /// SOUNDNESS (#3402 audit, 2026-04-18): (1) record-on-success only,
@@ -209,29 +162,40 @@ impl<'env> TypeChecker<'env> {
     /// (3) per-TC scope cleared on commit/rollback, (4) context-free on
     /// closed subterms; lambda bodies gated by `compare_lambda_binder_types`.
     pub(super) fn branch_sharing_compare(&self, a: &Expr, b: &Expr) -> bool {
-        // O(1) check: was this exact pair already verified in a prior branch?
-        if let Some(cache_cell) = self.branch_sharing_cache.as_ref() {
-            if cache_cell.borrow().is_verified_pair(a, b) {
-                return true;
-            }
-        }
-
-        self.cache_branch_sharing_whnf(a);
-        self.cache_branch_sharing_whnf(b);
-
-        let a_n = self.branch_sharing_whnf(a);
-        let b_n = self.branch_sharing_whnf(b);
-        let result = if a_n == b_n {
+        let result = if std::ptr::eq(a, b) {
             true
         } else {
-            self.is_def_eq_impl(&a_n, &b_n)
+            // Prefer an already verified pair to repeating structural equality
+            // across distinct DAGs. Each stored key pins shallow Expr clones, so
+            // comparison with its original input can reuse shared Arc children.
+            if let Some(cache_cell) = self.branch_sharing_cache.as_ref() {
+                if cache_cell.borrow().is_verified_pair(a, b) {
+                    return true;
+                }
+            }
+
+            // The same exact structural check already used by is_def_eq_impl:
+            // metadata only filters it, never establishes definitional inequality.
+            if a == b {
+                true
+            } else {
+                // Descendants are normalized only when the exact comparison
+                // asks for them. The reducer and exact fallback are unchanged.
+                let a_n = self.branch_sharing_whnf(a);
+                let b_n = self.branch_sharing_whnf(b);
+                if a_n == b_n {
+                    true
+                } else {
+                    self.is_def_eq_impl(&a_n, &b_n)
+                }
+            }
         };
 
         // Record verified pair so subsequent branches skip this comparison.
         if result {
             if let Some(cache_cell) = self.branch_sharing_cache.as_ref() {
                 let mut cache = cache_cell.borrow_mut();
-                cache.record_verified_pair(a, b);
+                cache.record_verified_pair(a, b, self.max_cache_entries);
             }
         }
 
@@ -320,14 +284,10 @@ impl<'env> TypeChecker<'env> {
         let app = RecursorApp {
             name,
             levels,
-            arg_order: recursor.arg_order,
-            num_params: recursor.num_params as usize,
-            num_indices: recursor.num_indices as usize,
-            num_motives: recursor.num_motives as usize,
-            num_minors: recursor.num_minors as usize,
+            layout: RecursorLayout::new(recursor),
             args: expr.get_app_args(),
         };
-        (app.args.len() >= app.required_args()).then_some(app)
+        (app.args.len() >= app.layout.required_args()).then_some(app)
     }
 
     fn compare_arg_range(&self, a_args: &[&Expr], b_args: &[&Expr], range: Range<usize>) -> bool {
@@ -365,8 +325,8 @@ impl<'env> TypeChecker<'env> {
     /// pair comparison verifies and records the shared prefix, subsequent
     /// minors skip already-verified sub-expressions via the verified_pairs set.
     ///
-    /// Returns `None` when either expression is not a recursor application or
-    /// when their heads differ. Returns `Some(false)` on a definite mismatch.
+    /// Returns `Some(true)` when congruence establishes equality; otherwise
+    /// returns `None` so ordinary reduction can still decide the comparison.
     pub(super) fn try_branch_sharing_def_eq(&self, a: &Expr, b: &Expr) -> Option<bool> {
         let a_app = self.as_recursor_app(a)?;
         let b_app = self.as_recursor_app(b)?;
@@ -401,23 +361,28 @@ impl<'env> TypeChecker<'env> {
             return None;
         }
 
-        let shared_prefix_end = a_app.motives_range().end;
+        let shared_prefix_end = a_app.layout.motives_range().end;
         if !self.compare_arg_range(&a_app.args, &b_app.args, 0..shared_prefix_end) {
             return None;
         }
-        if !self.compare_arg_range(&a_app.args, &b_app.args, a_app.indices_range()) {
+        if !self.compare_arg_range(&a_app.args, &b_app.args, a_app.layout.indices_range()) {
             return None;
         }
-        if !self
-            .branch_sharing_compare(a_app.args[a_app.major_idx()], b_app.args[b_app.major_idx()])
-        {
+        if !self.branch_sharing_compare(
+            a_app.args[a_app.layout.major_idx()],
+            b_app.args[b_app.layout.major_idx()],
+        ) {
             return None;
         }
         // Minor premises use lambda-aware prefix-factored comparison.
-        if !self.compare_minors_range(&a_app.args, &b_app.args, a_app.minors_range()) {
+        if !self.compare_minors_range(&a_app.args, &b_app.args, a_app.layout.minors_range()) {
             return None;
         }
-        if !self.compare_arg_range(&a_app.args, &b_app.args, a_app.extras_range()) {
+        if !self.compare_arg_range(
+            &a_app.args,
+            &b_app.args,
+            a_app.layout.extras_range(a_app.args.len()),
+        ) {
             return None;
         }
 

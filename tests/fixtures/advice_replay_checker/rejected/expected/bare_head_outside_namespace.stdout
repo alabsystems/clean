@@ -1,0 +1,5 @@
+bare_head_outside_namespace.lean:10:4: error: Invalid pattern: Expected a constructor or constant marked with `[match_pattern]`
+
+Hint: Using one of these would be valid:
+  [apply] `Nat.succ`
+  [apply] `Tm.succ`

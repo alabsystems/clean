@@ -6,7 +6,9 @@
 //!
 //! Walks one or more directories for `.fst` / `.fsti` files, parses every
 //! top-level declaration via `clean_mathverse::fstar_source`, writes the
-//! imported declarations to a single `.mathverse` shard, and reports honest
+//! imported declarations to `<output>/fstar.mathverse` — plus, when any
+//! inductive or constructor imported, the inductive-family subset again to
+//! `<output>/inductives/fstar_inductives.mathverse` — and reports honest
 //! coverage: declarations *recognised* (val/let/type/constructor heads) vs
 //! *imported* (those that lower to a real `FlatExpr` tree, never a stub).
 //!

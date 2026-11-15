@@ -1,0 +1,31 @@
+{
+  "sources": [
+    {"module": "MiniRust", "path": "../semr/MiniRust.lean"},
+    {"module": "TrustSemAllocationBoundary", "path": "TrustSemAllocationBoundary.lean"}
+  ],
+  "module": "TrustSemAllocationBoundary",
+  "roots": [
+    "TrustSem.AllocationBoundary.unit_alignment_allocates",
+    "TrustSem.AllocationBoundary.zero_size_is_valid",
+    "TrustSem.AllocationBoundary.address_space_alignment_rejected_run",
+    "TrustSem.AllocationBoundary.raw_zero_size_always_allocates_false",
+    "TrustSem.AllocationBoundary.zero_fuel_remains_fuel",
+    "TrustSem.AllocationBoundary.unit_alignment_has_room",
+    "TrustSem.AllocationBoundary.address_space_alignment_has_no_room",
+    "TrustSem.AllocationBoundary.choose_no_candidates",
+    "TrustSem.AllocationBoundary.address_space_alignment_has_no_candidates",
+    "MRf.BasicMemory.allocate",
+    "SPick.choose",
+    "SOut.runOracle"
+  ],
+  "positive": [
+    {"proof": "TrustSem.AllocationBoundary.unit_alignment_allocates", "goal": "TrustSem.AllocationBoundary.UnitAlignmentGoal"},
+    {"proof": "TrustSem.AllocationBoundary.address_space_alignment_rejected_run", "goal": "TrustSem.AllocationBoundary.AddressSpaceAlignmentGoal"},
+    {"proof": "TrustSem.AllocationBoundary.zero_fuel_remains_fuel", "goal": "TrustSem.AllocationBoundary.ZeroFuelGoal"}
+  ],
+  "negative": [
+    {"proof": "TrustSem.AllocationBoundary.unit_alignment_allocates", "goal": "TrustSem.AllocationBoundary.WrongAddressGoal"},
+    {"proof": "TrustSem.AllocationBoundary.unit_alignment_allocates", "goal": "TrustSem.AllocationBoundary.WrongMemoryGoal"},
+    {"proof": "TrustSem.AllocationBoundary.zero_fuel_remains_fuel", "goal": "TrustSem.AllocationBoundary.FuelWasRejectedGoal"}
+  ]
+}

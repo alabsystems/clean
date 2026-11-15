@@ -42,7 +42,10 @@ impl<'a> ElabCtx<'a> {
     fn default_do_else_branch() -> Vec<DoElem> {
         vec![DoElem::Return(
             Span::dummy(),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "Unit.unit".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::global_path("Unit.unit"),
+            )),
         )]
     }
 
@@ -73,7 +76,7 @@ impl<'a> ElabCtx<'a> {
         let nested_inst = self.metas.instantiate(&nested_result);
         let nested_abs = nested_inst.abstract_fvar(fvar);
         Ok(Expr::let_named(
-            Name::from_string(&synth_name),
+            synth_name.name().clone(),
             scrutinee_ty,
             scrutinee_expr,
             nested_abs,
@@ -215,7 +218,7 @@ impl<'a> ElabCtx<'a> {
                 let then_inst = self.metas.instantiate(&then_expr);
                 let body_abs = then_inst.abstract_fvar(fvar);
                 Ok(Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     scrutinee_ty,
                     scrutinee_expr,
                     body_abs,
@@ -244,7 +247,11 @@ impl<'a> ElabCtx<'a> {
                     |ctx, synth_ident| {
                         let mut wrapped_then = vec![DoElem::Let(
                             Span::dummy(),
-                            SurfaceBinder::new(name.clone(), None, SurfaceBinderInfo::Explicit),
+                            SurfaceBinder::new_typed(
+                                name.clone(),
+                                None,
+                                SurfaceBinderInfo::Explicit,
+                            ),
                             Box::new(synth_ident.clone()),
                         )];
                         wrapped_then.extend(then_branch.iter().cloned());
@@ -284,7 +291,8 @@ impl<'a> ElabCtx<'a> {
                 )
             }
             _ => Err(ElabError::NotImplemented(format!(
-                "if-let with complex pattern: {pat:?}"
+                "if-let with complex pattern: {}",
+                crate::error_render::pattern(pat)
             ))),
         }
     }
@@ -297,16 +305,31 @@ impl<'a> ElabCtx<'a> {
     /// proof witness `h` bound as a local variable in scope.
     pub(super) fn elab_do_if_decidable(
         &mut self,
-        witness_name: &str,
+        witness_name: &SurfaceName,
         prop: &SurfaceExpr,
         then_branch: &[DoElem],
         else_branch: Option<&[DoElem]>,
     ) -> Result<Expr, ElabError> {
+        self.with_temporary_local_scope(|this| {
+            this.elab_do_if_decidable_inner(witness_name, prop, then_branch, else_branch)
+        })
+    }
+
+    fn elab_do_if_decidable_inner(
+        &mut self,
+        witness_name: &SurfaceName,
+        prop: &SurfaceExpr,
+        then_branch: &[DoElem],
+        else_branch: Option<&[DoElem]>,
+    ) -> Result<Expr, ElabError> {
+        let expected = self.current_expected_type.take();
         let prop_expr = self.elaborate(prop)?;
+        self.current_expected_type = expected;
 
         // Then branch: (fun h : prop => thenBranch)
-        let then_fvar = self.push_local(witness_name.to_string(), prop_expr.clone());
+        let then_fvar = self.push_local(witness_name.clone(), prop_expr.clone());
         let then_expr = self.elab_do_body_with_outer_continuation(then_branch)?;
+        let result_ty = self.infer_type(&then_expr)?;
         self.pop_local();
         // Fix #3419: Instantiate metas before abstracting FVars.
         let then_inst = self.metas.instantiate(&then_expr);
@@ -317,13 +340,13 @@ impl<'a> ElabCtx<'a> {
         );
 
         // Else branch: (fun h : ¬prop => elseBranch)
-        // ¬p = p → False
-        let not_prop = Expr::pi(
-            BinderInfo::Default,
+        // `¬p` with the `Not` head, as `dite`'s `e : ¬c → α` and Lean's
+        // elaborator state it: simp reads a negation off that head only.
+        let not_prop = Expr::app(
+            Expr::const_(Name::from_string("Not"), vec![]),
             prop_expr.clone(),
-            Expr::const_(Name::from_string("False"), vec![]),
         );
-        let else_fvar = self.push_local(witness_name.to_string(), not_prop.clone());
+        let else_fvar = self.push_local(witness_name.clone(), not_prop.clone());
         let else_expr = if let Some(else_elems) = else_branch {
             self.elab_do_body_with_outer_continuation(else_elems)?
         } else {
@@ -339,11 +362,16 @@ impl<'a> ElabCtx<'a> {
             else_inst.abstract_fvar(else_fvar),
         );
 
-        // Build: dite prop then_lambda else_lambda
-        let dite = self.mk_const_str("dite");
-        Ok(Expr::app(
-            Expr::app(Expr::app(dite, prop_expr), then_lambda),
-            else_lambda,
+        // Supply the kernel's complete telescope, as in the ordinary if
+        // elaborator: @dite.{u} α prop inst thenLambda elseLambda.
+        let result_ty = self
+            .metas
+            .instantiate_levels(&self.metas.instantiate(&result_ty));
+        let level = self.infer_sort(&result_ty)?;
+        let decidable = self.resolve_decidable(&prop_expr)?;
+        Ok(Expr::apps(
+            Expr::const_(Name::from_string("dite"), vec![level]),
+            [result_ty, prop_expr, decidable, then_lambda, else_lambda],
         ))
     }
 }

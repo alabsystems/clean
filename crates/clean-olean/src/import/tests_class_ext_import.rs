@@ -142,10 +142,39 @@ fn test_imported_class_registered_with_real_out_params() {
     let summaries = load_module_with_deps(&mut env, "Init.Prelude", &[lib])
         .expect("Init.Prelude should import");
 
-    // Loud contract holds end-to-end: nothing undecoded, and no hand-registered
-    // twin drifted from the real Lean classExtension (empty mismatch list).
+    // This control concerns the entire canonical classExtension population,
+    // not unsupported payloads of unrelated extensions (which stay visible).
+    let expected = decode_class_entries("Init/Prelude.olean")
+        .expect("pinned fixture")
+        .0
+        .len();
+    assert!(expected > 0);
+    let own = summaries
+        .iter()
+        .find(|s| s.module_name.as_deref() == Some("Init.Prelude"))
+        .expect("root summary");
+    let rows = own
+        .extension_accounting
+        .iter()
+        .filter(|row| row.extension_name == Name::interned(LEAN_CLASS_EXTENSION))
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "one canonical source extension record");
+    assert_eq!(rows[0].source_rows, Some(expected));
+    assert_eq!(rows[0].decoded_rows, expected);
+    assert_eq!((rows[0].undecoded_rows, rows[0].unresolved_targets), (0, 0));
+    assert!(
+        own.extension_undecoded_entries > 0,
+        "unsupported unrelated payloads remain counted"
+    );
     for summary in &summaries {
-        assert_eq!(summary.extension_undecoded_entries, 0);
+        assert_eq!(
+            summary.extension_undecoded_entries,
+            summary
+                .extension_accounting
+                .iter()
+                .map(|row| row.undecoded_rows + row.unresolved_targets)
+                .sum::<usize>()
+        );
         assert!(
             summary.class_out_param_mismatches.is_empty(),
             "class out-param fidelity drift in {:?}: {:?}",

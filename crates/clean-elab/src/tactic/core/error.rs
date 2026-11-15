@@ -34,17 +34,21 @@ impl RewriteCandidate {
     }
 }
 
-/// Render the trailing goal block of a `NoProgress` message.
+/// Render the trailing goal block of a message that carries one.
 ///
-/// Kept out of the `#[error(...)]` format string because the attribute cannot
+/// `lead` is the connective that joins the sentence to the block, so each
+/// message reads as English: `" on"` for `no progress made on <goal>`, `":"`
+/// for `no hypothesis matches the goal: <goal>`.
+///
+/// Kept out of the `#[error(...)]` format strings because the attribute cannot
 /// hold a multi-line expression, and because the empty case must add NOTHING —
 /// a bare `simp: no progress made` is still the right message when no goal was
 /// attached, and every existing assertion on that exact string must keep
 /// passing.
 #[must_use]
-fn render_goal_suffix(goal: Option<&str>) -> String {
+fn render_goal_suffix(lead: &str, goal: Option<&str>) -> String {
     match goal {
-        Some(g) if !g.is_empty() => format!(" on\n{g}"),
+        Some(g) if !g.is_empty() => format!("{lead}\n{g}"),
         _ => String::new(),
     }
 }
@@ -68,14 +72,58 @@ pub enum TacticError {
     #[error("unknown tactic '{0}'")]
     UnknownTactic(String),
 
+    /// An unknown tactic, with the registered names closest to what was typed.
+    ///
+    /// `UnknownTactic` above stays for the case with no near miss — suggesting
+    /// nothing is better than suggesting noise. This variant exists because the
+    /// registry of ~70 names and the edit-distance helper
+    /// (`agent_diagnostics::nearest_string_candidates`) were BOTH already in
+    /// scope at every mint site, and neither was called: the corpus face was a
+    /// bare `unknown tactic 'inhabit'`.
+    #[error("unknown tactic '{name}'; did you mean {}?", suggestions.join(", "))]
+    UnknownTacticWithSuggestions {
+        name: String,
+        /// Non-empty by construction — the mint falls back to
+        /// [`Self::UnknownTactic`] when the suggester returns nothing.
+        suggestions: Vec<String>,
+    },
+
     #[error("type check failed: {0}")]
     TypeCheckFailed(String),
 
     #[error("unification failed: {0}")]
     UnificationFailed(String),
 
+    /// A hypothesis was named and is not in the local context.
+    ///
+    /// This is a NAME failure: the payload is the name the user wrote. It is
+    /// NOT the right variant for "I searched the context and nothing matched" —
+    /// that is [`Self::NoMatchingHypothesis`], and conflating the two is what
+    /// made `assumption` render the self-contradicting
+    /// `hypothesis not found: no matching hypothesis found`.
     #[error("hypothesis not found: {0}")]
     HypothesisNotFound(String),
+
+    /// A search over the whole local context found nothing matching the goal.
+    ///
+    /// `assumption` and `assumption_with_cert` used to report this as
+    /// `HypothesisNotFound("no matching hypothesis found")`, which rendered
+    /// with the tuple variant's own prefix as
+    /// `hypothesis not found: no matching hypothesis found` — a doubled,
+    /// self-contradicting message carrying no name, no goal and no candidate
+    /// list. Measured over the 2026-08-25 source-elab corpus it was 11 of the
+    /// 14 `hypothesis not found` entries and 11 of the 38 zero-payload
+    /// `tactic failed` rows
+    /// (`docs/analysis/srcelab-bucket-decomposition-2026-08-28.md` §3.2).
+    ///
+    /// `goal` carries the rendered goal — which is exactly the right payload
+    /// here, because a goal block IS the target plus every hypothesis the
+    /// search considered. `None` only when there is no current goal.
+    #[error("{tactic}: no hypothesis matches the goal{}", render_goal_suffix(":", goal.as_deref()))]
+    NoMatchingHypothesis {
+        tactic: String,
+        goal: Option<String>,
+    },
 
     #[error("{tactic}: requires {expected}")]
     MissingArgument { tactic: String, expected: String },
@@ -95,14 +143,19 @@ pub enum TacticError {
     /// no goal, no target, nothing to classify. 38 of that report's 74
     /// `tactic failed` rows carried no payload for this reason. See
     /// `docs/analysis/srcelab-bucket-decomposition-2026-08-28.md` §3.1.
-    #[error("{tactic}: no progress made{}", render_goal_suffix(goal.as_deref()))]
+    #[error("{tactic}: no progress made{}", render_goal_suffix(" on", goal.as_deref()))]
     NoProgress {
         tactic: String,
         goal: Option<String>,
     },
 
+    // Private constants by their user names, as Lean 4.8.0 prints them (G21).
     #[error(
-        "{tactic}: rewrite rule {rule} did not match focused subterm; searched for {searched_for} in {focus}"
+        "{tactic}: rewrite rule {rule} ({direction}) did not match at {}; searched for {} in {}{}",
+        format_focus_path(focus_path),
+        crate::private_names::user_facing_text(searched_for),
+        crate::private_names::user_facing_text(focus),
+        format_rewrite_candidates(candidates)
     )]
     RewriteNoMatch {
         tactic: String,
@@ -114,9 +167,14 @@ pub enum TacticError {
         candidates: Vec<RewriteCandidate>,
     },
 
+    // `focus_path.join(".")` rendered a dangling `at ` — with nothing after it —
+    // whenever the path was empty, which is the common case of a rewrite at the
+    // goal root. `format_focus_path` exists three screens below and says
+    // "root"; this attribute simply never called it.
     #[error(
-        "{tactic}: failed to lift rewrite proof for {rule} through focused subterm at {}",
-        focus_path.join(".")
+        "{tactic}: failed to lift rewrite proof for {rule} ({direction}) through the subterm at {}: \
+         {searched_for} -> {replacement} turned {focus_before} into {focus_after}",
+        format_focus_path(focus_path)
     )]
     RewriteProofLiftFailed {
         tactic: String,
@@ -237,6 +295,7 @@ impl TacticError {
             self,
             Self::GoalMismatch(_)
                 | Self::HypothesisNotFound(_)
+                | Self::NoMatchingHypothesis { .. }
                 | Self::UnificationFailed(_)
                 | Self::UnfoldFailed { .. }
                 | Self::Timeout { .. }
@@ -265,6 +324,7 @@ impl TacticError {
                 | Self::TypeCheckFailed(_)
                 | Self::InstanceSynthesisFailed { .. }
                 | Self::UnknownIdent(_)
+                | Self::UnknownTacticWithSuggestions { .. }
                 | Self::EnvironmentMissing { .. }
                 | Self::ProofNotProduced
                 | Self::ElaborationFailed { .. }
@@ -275,6 +335,14 @@ impl TacticError {
     pub(crate) fn from_elab_error(err: ElabError) -> Self {
         match err {
             ElabError::TacticFailed(err) => err,
+            // The attribution wrapper is TRANSPARENT here on purpose. A nested
+            // `by` block that failed comes back through this boundary into a
+            // combinator (`first`, `try`, `all_goals`), whose backtracking
+            // decision is made by `is_recoverable_first_failure` on the
+            // *variant*. Unwrapping keeps every such decision byte-identical to
+            // the pre-attribution behaviour; the enclosing block re-attributes
+            // on the way out.
+            ElabError::InTactic { source, .. } => Self::from_elab_error(*source),
             other => Self::UpstreamElabError {
                 source: Box::new(other),
             },
@@ -360,6 +428,43 @@ impl TacticError {
             _ => Vec::new(),
         }
     }
+}
+
+/// Render the candidate subterms a failed rewrite actually looked at.
+///
+/// `RewriteNoMatch` already CARRIES these — `agent_diagnostics` emits every one
+/// of them to `--json` — and the human message showed none. "Did not match" is
+/// the one sentence a reader cannot act on; the list of what WAS there is the
+/// whole diagnosis, and it was being computed and thrown away.
+///
+/// Capped at two. One of the seven `rewrite` rows in the 2026-08-25 corpus
+/// already hits that report's 400-character truncation, so an uncapped list
+/// would push the useful head of other messages off the end — trading one
+/// unreadable message for several. The count is always stated, so a reader
+/// knows the list is a sample rather than the set.
+#[must_use]
+fn format_rewrite_candidates(candidates: &[RewriteCandidate]) -> String {
+    if candidates.is_empty() {
+        return "; no subterm at that focus was a rewrite candidate".to_string();
+    }
+    const SHOWN: usize = 2;
+    let mut out = format!("; {} candidate subterm(s) considered", candidates.len());
+    for c in candidates.iter().take(SHOWN) {
+        // A private constant by its user name, like the rest of this message
+        // (G21; the candidate list printed `_private.Pkg.M1.0.pd 2`).
+        out.push_str(&format!(
+            "\n    at {}: {}",
+            c.path,
+            crate::private_names::user_facing_text(&c.subterm)
+        ));
+    }
+    if candidates.len() > SHOWN {
+        out.push_str(&format!(
+            "\n    … and {} more (all of them are in `--json`)",
+            candidates.len() - SHOWN
+        ));
+    }
+    out
 }
 
 fn format_focus_path(path: &[String]) -> String {

@@ -504,7 +504,8 @@ mod tests {
 
         /// Count occurrences of `Ident(name)` anywhere in a surface expression.
         fn count_ident(expr: &SurfaceExpr, name: &str) -> usize {
-            let here = matches!(expr, SurfaceExpr::Ident(_, s) if s == name) as usize;
+            let here = matches!(expr, SurfaceExpr::Ident(_, s) if s.name() == crate::SurfaceName::generated_path(name).name())
+                as usize;
             let mut n = here;
             match expr {
                 SurfaceExpr::App(_, f, args) => {
@@ -609,7 +610,7 @@ mod tests {
                 SurfaceExpr::Pi(_, binders, body) => {
                     assert_eq!(binders.len(), 5, "w, l, r, hs, h0 — nothing more");
                     assert!(
-                        matches!(body.as_ref(), SurfaceExpr::Ident(_, name) if name == "True"),
+                        matches!(body.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("True").name()),
                         "body must be exactly `True` — a leaked guard wraps it in an Arrow: {body:?}"
                     );
                 }
@@ -627,13 +628,19 @@ mod tests {
             match &expr {
                 SurfaceExpr::Arrow(_, domain, body) => {
                     assert!(
-                        matches!(body.as_ref(), SurfaceExpr::Ident(_, name) if name == "True"),
+                        matches!(body.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("True").name()),
                         "codomain is True: {body:?}"
                     );
-                    let d = format!("{domain:?}");
+                    let d = match domain.as_ref() {
+                        SurfaceExpr::Paren(_, inner) => inner.as_ref(),
+                        inner => inner,
+                    };
                     assert!(
-                        d.contains("GT.gt") || d.contains('>'),
-                        "domain keeps the relation: {d}"
+                        matches!(d, SurfaceExpr::App(_, head, args)
+                            if matches!(head.as_ref(), SurfaceExpr::Ident(_, name)
+                                if name.name() == crate::SurfaceName::generated_path("GT.gt").name())
+                                && args.len() == 2),
+                        "domain keeps the relation: {d:?}"
                     );
                 }
                 other => panic!("expected plain Arrow, got {other:?}"),

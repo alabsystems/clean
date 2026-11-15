@@ -1,0 +1,107 @@
+; TrustIr text format v1
+module "clean_kernel::callees"
+file 0 "$HOME/trust/scratchpad/laneREG/sysroot-v13/lib/rustlib/src/rust/library/core/src/option.rs"
+
+struct @core::ptr::non_null::NonNull { ptr } size=8 align=8 repr=transparent id=0
+
+struct @core::marker::PhantomData {  } size=0 align=1 id=1
+
+struct @alloc::alloc::Global {  } size=0 align=1 id=2
+
+struct @alloc::sync::Arc { struct.0, struct.1, struct.2 } size=8 align=8 id=3
+
+struct @datatype::clean_kernel::level::Level {  } id=4
+
+struct @core::sync::atomic::private::Align8 { usize } size=8 align=8 repr=c id=5
+
+struct @core::cell::UnsafeCell { struct.5 } size=8 align=8 repr=transparent id=6
+
+struct @core::sync::atomic::Atomic { struct.6 } size=8 align=8 repr=c id=7
+
+struct @alloc::sync::ArcInner { struct.7, struct.7, struct.4 } size=56 align=8 repr=c id=8
+
+enum @core::option::Option { None = 0, Some(ptr) = 1 } id=0
+
+enum @core::option::Option { None = 0, Some(struct.3) = 1 } id=1
+
+functy.0 = (enum.0, fatptr<str>) -> (ptr)
+
+functy.1 = (ptr) -> (enum.0)
+
+functy.2 = (ptr) -> (ptr)
+
+type ty.0 = u8
+
+fn @core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>(functy.0) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: enum.0, %1: fatptr<str>):
+    %2 = extractfield u8 %0, 0
+    %3 = zext u8 %2 to isize
+    switch %3 [ 0: bb2 1: bb3 default: bb1 ]
+bb1:
+    unreachable
+bb2:
+    %4 = const bool false
+    assert %4  ; #proof: no_panic
+    unreachable
+bb3:
+    %5 = extractfield ptr %0, 1
+    %6 = copy ptr %5
+    ret %6
+}
+
+fn @core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>(functy.1) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: ptr):
+    %1 = alloca enum.0
+    %2 = load enum.1, ptr %0  ; #proof: valid_borrow
+    %3 = extractfield u8 %2, 0
+    %4 = zext u8 %3 to isize
+    switch %4 [ 0: bb2 1: bb3 default: bb1 ]
+bb1:
+    unreachable
+bb2:
+    %5 = const enum.0 { 0 }
+    store enum.0 %5, ptr %1
+    br bb4
+bb3:
+    %6 = const i64 0
+    %7 = gep inbounds i8, ptr %0, %6
+    %8 = borrow %7  ; #proof: shared_borrow
+    %9 = const enum.0 { 1, 0 }
+    %10 = insertfield enum.0 %9, 1, %8
+    %11 = extractfield ptr %10, 1
+    %12 = copy ptr %11
+    %13 = call @func.2(%12)
+    br bb5
+bb4:
+    %14 = load enum.0, ptr %1
+    ret %14
+bb5:
+    %15 = const enum.0 { 1, 0 }
+    %16 = insertfield enum.0 %15, 1, %13
+    store enum.0 %16, ptr %1
+    br bb4
+}
+
+fn @<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>(functy.2) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: ptr):
+    %1 = load struct.3, ptr %0  ; #proof: valid_borrow
+    %2 = extractfield struct.0 %1, 0
+    %3 = copy struct.0 %2
+    %4 = extractfield ptr %3, 0
+    %5 = const i64 16
+    %6 = gep inbounds i8, ptr %4, %5
+    %7 = borrow %6  ; #proof: shared_borrow
+    ret %7
+}
+
+obligation 0 panic_freedom pending "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>: all assertions hold" function 0 formula "trust.trust_ir.obligation-source.v1" "{\"source_id\":\"mir-assertions:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:panic-freedom\",\"assertion_id\":\"trust-assertion:mir-assertions:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:panic-freedom\",\"native_assertion_id\":3563014763,\"span\":{\"file\":\"$HOME/trust/scratchpad/laneREG/sysroot-v13/lib/rustlib/src/rust/library/core/src/option.rs\",\"line_start\":966,\"col_start\":4,\"line_end\":971,\"col_end\":5}}" source "mir-assertions:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:panic-freedom" assertion "trust-assertion:mir-assertions:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:panic-freedom" range 0 966 4 971 5
+
+obligation 1 panic_freedom pending "panic call `core::option::expect_failed` must be unreachable" function 0 formula "trust.trust_ir.obligation-source.v1" "{\"source_id\":\"mir-assert:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:bb2:terminator\",\"assertion_id\":\"trust-assertion:mir-assert:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:bb2:terminator:27c3529d1cad3862ba8c3cbbf6b4db3209ba25946665d4887ee9538533213c7c\",\"native_assertion_id\":4290939773,\"span\":{\"file\":\"$HOME/trust/scratchpad/laneREG/sysroot-v13/lib/rustlib/src/rust/library/core/src/option.rs\",\"line_start\":969,\"col_start\":20,\"line_end\":969,\"col_end\":38}}" source "mir-assert:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:bb2:terminator" assertion "trust-assertion:mir-assert:core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>:bb2:terminator:27c3529d1cad3862ba8c3cbbf6b4db3209ba25946665d4887ee9538533213c7c" range 0 969 20 969 38 site f0/bb2#1
+
+obligation 2 panic_freedom pending "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>: all assertions hold" function 1 formula "trust.trust_ir.obligation-source.v1" "{\"source_id\":\"mir-assertions:core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>:panic-freedom\",\"assertion_id\":\"trust-assertion:mir-assertions:core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>:panic-freedom\",\"native_assertion_id\":4109736201,\"span\":{\"file\":\"$HOME/trust/scratchpad/laneREG/sysroot-v13/lib/rustlib/src/rust/library/core/src/option.rs\",\"line_start\":1386,\"col_start\":4,\"line_end\":1391,\"col_end\":5}}" source "mir-assertions:core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>:panic-freedom" assertion "trust-assertion:mir-assertions:core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>:panic-freedom" range 0 1386 4 1391 5

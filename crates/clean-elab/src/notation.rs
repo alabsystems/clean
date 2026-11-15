@@ -37,7 +37,7 @@
 //!     },
 //!     expansion: clean_parser::SurfaceExpr::Ident(
 //!         clean_parser::Span::new(0, 0),
-//!         "HAdd.hAdd".to_owned(),
+//!         clean_parser::SurfaceName::generated_path("HAdd.hAdd"),
 //!     ),
 //!     priority: 65,
 //!     kind: NotationKind::Infixl,

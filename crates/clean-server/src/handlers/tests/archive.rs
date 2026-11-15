@@ -18,6 +18,7 @@ async fn test_compress_cert_simple() {
     let params = CompressCertParams {
         cert,
         include_stats: false,
+        timeout_ms: None,
     };
 
     let response = handle_compress_cert(&state, RequestId::Number(1), params).await;
@@ -47,6 +48,7 @@ async fn test_compress_cert_with_stats() {
     let params = CompressCertParams {
         cert,
         include_stats: true,
+        timeout_ms: None,
     };
 
     let response = handle_compress_cert(&state, RequestId::Number(1), params).await;
@@ -77,6 +79,7 @@ async fn test_compress_decompress_roundtrip() {
     let compress_params = CompressCertParams {
         cert: original_cert.clone(),
         include_stats: false,
+        timeout_ms: None,
     };
     let compress_response =
         handle_compress_cert(&state, RequestId::Number(1), compress_params).await;
@@ -92,6 +95,7 @@ async fn test_compress_decompress_roundtrip() {
     // Decompress
     let decompress_params = DecompressCertParams {
         compressed: compress_result.compressed,
+        timeout_ms: None,
     };
     let decompress_response =
         handle_decompress_cert(&state, RequestId::Number(2), decompress_params).await;
@@ -131,6 +135,7 @@ async fn test_archive_cert_lz4() {
         algorithm: Some("lz4".to_string()),
         level: None,
         include_stats: false,
+        timeout_ms: None,
     };
 
     let response = handle_archive_cert(&state, RequestId::Number(1), params).await;
@@ -162,6 +167,7 @@ async fn test_archive_cert_zstd() {
         algorithm: Some("zstd".to_string()),
         level: None,
         include_stats: false,
+        timeout_ms: None,
     };
 
     let response = handle_archive_cert(&state, RequestId::Number(1), params).await;
@@ -192,6 +198,7 @@ async fn test_archive_unarchive_roundtrip() {
         algorithm: Some("lz4".to_string()),
         level: None,
         include_stats: false,
+        timeout_ms: None,
     };
     let archive_response = handle_archive_cert(&state, RequestId::Number(1), archive_params).await;
     assert!(
@@ -206,6 +213,7 @@ async fn test_archive_unarchive_roundtrip() {
     // Unarchive
     let unarchive_params = UnarchiveCertParams {
         archive: archive_result.archive,
+        timeout_ms: None,
     };
     let unarchive_response =
         handle_unarchive_cert(&state, RequestId::Number(2), unarchive_params).await;
@@ -247,6 +255,7 @@ async fn test_archive_invalid_algorithm() {
         algorithm: Some("invalid_algo".to_string()),
         level: None,
         include_stats: false,
+        timeout_ms: None,
     };
 
     let response = handle_archive_cert(&state, RequestId::Number(1), params).await;
@@ -266,6 +275,7 @@ async fn test_unarchive_invalid_base64() {
 
     let params = UnarchiveCertParams {
         archive: "not valid base64!!!".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_unarchive_cert(&state, RequestId::Number(1), params).await;

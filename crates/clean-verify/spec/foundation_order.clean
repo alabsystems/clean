@@ -1,0 +1,19 @@
+/-! Order relations on Nat (PART 3 of the foundation, continued).
+
+Model unit `foundation_order` — moved out of `crates/clean-verify/src/spec/core_spec/foundation_types.rs`
+(embed memo W1). Registered by `Specification::register_model_unit(ModelUnit::FoundationOrder)`
+through the same `add_inductive` / `add_recursive_def` path the literals used; the
+fidelity oracle in `spec/model_units/tests.rs` pins this file against the retained
+literal. EVERY declaration must carry a `/-- ... -/` doc comment: its text is the
+registered description, byte for byte. -/
+
+/-- Strict ordering on Nat. Lt n m means n < m. Inductive definition enables structural induction on ordering proofs. -/
+inductive Lt : Nat → Nat → Type
+| zero_lt_succ : forall (n : Nat), Lt Nat.zero (Nat.succ n)
+| succ_lt_succ : forall (n : Nat) (m : Nat), Lt n m → Lt (Nat.succ n) (Nat.succ m)
+
+-- Le: inductive less-than-or-equal relation with constructor surface.
+/-- Less-than-or-equal on natural numbers as an inductive relation. -/
+inductive Le : Nat → Nat → Prop
+| refl : forall (n : Nat), Le n n
+| step : forall (n : Nat) (m : Nat), Le n m → Le n (Nat.succ m)

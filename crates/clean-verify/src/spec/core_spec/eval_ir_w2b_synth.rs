@@ -49,10 +49,13 @@
 //!   elsewhere would genuinely diverge (Clean UB, interpreter defined), and no
 //!   module here does that — recorded as fragment residue in
 //!   `data/evalir_w2b.PENDING.md`, not smoothed.
-//! * **Clean's fat pointer erases the metadata's pointer-ness.**
-//!   `IRScalar.fat_ d md` carries `md : Nat`, so `ir_ptrmeta_eval` on a fat
-//!   value returns `IRScalar.int_ md` even when the metadata was built from a
-//!   pointer (`ir_ptrparts_at`'s vtable arm). The battery therefore measures
+//! * **Clean's fat pointer erased the metadata's pointer-ness until crystal
+//!   E5.** `IRScalar.fat_ d md` carries `md : Nat`, and `ir_ptrmeta_eval`
+//!   returned `IRScalar.int_ md` even when the metadata was built from a
+//!   pointer (`ir_ptrparts_at`'s vtable arm). Since E5 (decision memo §23) it
+//!   reads the word at the node's declared metadata type -- `ptr_ md` at
+//!   `IRTy.ptr_` -- and the thin/not-ptr witnesses below hold at EVERY
+//!   declared type. The battery therefore measures
 //!   `ptrmetadata` on the SLICE/STR shape, where both executors return the
 //!   length as a pointer-sized unsigned integer; the vtable and fnptr rebuild
 //!   arms are pinned kernel-side here (`ir_w2b_pp_vtable`/`ir_w2b_pp_fnptr`)
@@ -158,9 +161,9 @@ pub fn ir_w2b_pm_module_defs() -> &'static [&'static str] {
 
 const SRC_IR_W2B_PM_ON_LEN: &str = "def ir_w2b_pm_on_len (x : Nat) (n : Nat) : Eq IROutcome (ir_eval ir_d8 ir_w2b_pm_module ir_d0 (IRList.cons IRScalar (IRScalar.int_ x) (IRList.cons IRScalar (IRScalar.int_ n) (IRList.nil IRScalar))) ir_mem0 ir_d0) (IROutcome.ret (ir_vl1 (IRScalar.int_ n))) := Eq.refl IROutcome (IROutcome.ret (ir_vl1 (IRScalar.int_ n)))";
 
-const SRC_IR_W2B_PM_THIN: &str = "def ir_w2b_pm_thin (a : Nat) : Eq IRStepResult (ir_ptrmeta_eval (IRScalar.ptr_ a)) (IRStepResult.value IRScalar.unit_) := Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)";
+const SRC_IR_W2B_PM_THIN: &str = "def ir_w2b_pm_thin (mt : IRTy) (a : Nat) : Eq IRStepResult (ir_ptrmeta_eval mt (IRScalar.ptr_ a)) (IRStepResult.value IRScalar.unit_) := Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)";
 
-const SRC_IR_W2B_PM_NOT_PTR: &str = "def ir_w2b_pm_not_ptr (n : Nat) : Eq IRStepResult (ir_ptrmeta_eval (IRScalar.int_ n)) (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr))";
+const SRC_IR_W2B_PM_NOT_PTR: &str = "def ir_w2b_pm_not_ptr (mt : IRTy) (n : Nat) : Eq IRStepResult (ir_ptrmeta_eval mt (IRScalar.int_ n)) (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.type_error IRFault.not_ptr))";
 
 // ── ptrfromparts: thin and fat rebuilds, each observed through a deref ────
 //
@@ -251,7 +254,7 @@ impl Specification {
             (SRC_IR_W2B_PP_MODULE, "ir_w2b_pp_module: the SYNTHETIC ptrfromparts module (E2 twin tests/fixtures/synth/synth_ptrfromparts.trust-ir.txt). DerivedProved, zero axiom_deps."),
             (SRC_IR_W2B_PP_ON_THIN, "ir_w2b_pp_on_thin: the thin rebuild dereferences to the stored value, for every value and every (unused-on-this-path) length. DerivedProved, zero axiom_deps."),
             (SRC_IR_W2B_PP_ON_FAT, "ir_w2b_pp_on_fat: the fat rebuild's data lane dereferences to the stored value, for every value and every length — with ir_w2b_pm_on_len this pins that a rebuilt fat pointer carries BOTH lanes intact. DerivedProved, zero axiom_deps."),
-            (SRC_IR_W2B_PP_VTABLE, "ir_w2b_pp_vtable: the TRAIT-OBJECT rebuild arm, value-level — pointer metadata rebuilds fat_ a x, at every address pair. NOTE the erasure this witness states exactly: fat_ carries md : Nat, so the metadata's pointer-ness is erased and ir_ptrmeta_eval on the result returns int_ x, never ptr_ x — the reason the battery measures the metadata lane on the slice/str shape only (module doc). DerivedProved, zero axiom_deps."),
+            (SRC_IR_W2B_PP_VTABLE, "ir_w2b_pp_vtable: the TRAIT-OBJECT rebuild arm, value-level — pointer metadata rebuilds fat_ a x, at every address pair. fat_ carries md : Nat; since crystal E5 ir_ptrmeta_eval reads it back at the declared metadata type (ptr_ x at IRTy.ptr_, ir_e5_ptrmeta_mt_is_read), where it used to return int_ x at every type -- the reason the battery measures the metadata lane on the slice/str shape only (module doc). DerivedProved, zero axiom_deps."),
             (SRC_IR_W2B_PP_FNPTR, "ir_w2b_pp_fnptr: the FNPTR-metadata rebuild arm, value-level — function-pointer metadata rebuilds fat_ a f (vtable-as-fnptr shape), at every pair. DerivedProved, zero axiom_deps."),
             (SRC_IR_W2B_PP_BAD_MD, "ir_w2b_pp_bad_md: FAULT EDGE — a boolean in the metadata slot is `type_error not_int` at every address (ir_ptrparts_at rejects every non-metadata scalar shape). DerivedProved, zero axiom_deps."),
             (SRC_IR_W2B_PP_NULL_DATA, "ir_w2b_pp_null_data: FAULT EDGE — a null data lane is `ub null_deref` at EVERY metadata value, universally quantified over the whole IRScalar family: the match decides on the data operand alone, so the metadata is never inspected. DerivedProved, zero axiom_deps."),

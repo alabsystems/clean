@@ -31,10 +31,11 @@
 //! rather than milestone 2's O(steps²) `checkRefutes_sound`: a barrel shifter's
 //! refutation is resolution-step-heavier than the array multiplier's for the same
 //! clause count, and the O(steps²) reduction OOMs (~30 GB) at width 4, whereas the
-//! trie reduction re-checks it in ~30 s / ~8 GB. Both bridges are PROVED Theorems
-//! with an empty domain-axiom closure — the `Unsat` conclusion and its foundational
-//! residue are identical; only the reduction complexity differs (ZERO soundness
-//! effect).
+//! trie reduction re-checks it in ~30 s / ~8 GB (measured when this lane landed,
+//! a786ad249, on that day's 172-clause / 925-step width-4 identity trace). Both
+//! bridges are PROVED Theorems with an empty domain-axiom closure — the `Unsat`
+//! conclusion and its foundational residue are identical; only the reduction
+//! complexity differs (ZERO soundness effect).
 //!
 //! # The barrel-shifter bit-blast (genuine, no shift axiom)
 //!
@@ -60,11 +61,19 @@
 //! # Honest budget
 //!
 //! A WIDTH-`n` variable barrel shift bit-blasts to `O(n·log n)` gates. Proof
-//! producer changes can materially change the resolution trace without changing
-//! the clause semantics: the AY 0e35 producer emits the width-8 identity as 430
-//! clauses / 266 steps, which is within the reflection budget and kernel
-//! certifies. Any future or wider trace above [`MAX_REFLECTION_STEPS`] is still
-//! capped and declined before reflection.
+//! producer changes can materially change the trace without changing what it
+//! proves. The width-8 identity was 430 clauses / 5356 steps, then 430 / 266 at
+//! AY 0e35. Since ay 8d72a7b97 the exporter folds the identity's `or(const 0, x)`
+//! wrapper to `x`'s own wires, so both sides blast to the same output bits and
+//! the refutation is the per-bit `XnorEq` derivation plus the disequality
+//! (`2·n + 1` steps): at AY 0.27.0@f28345ff the width-8 identity is 382 clauses /
+//! 17 steps, and it kernel-certifies. That refutation uses none of the shifter's
+//! clauses. One that must resolve through them is much larger; at the same pin
+//! `shl(shl(v, 1), s) == shl(shl(v, s), 1)` is 193 clauses / 305 steps at width 4
+//! and 479 / 1868 at width 8, and `shl(v, s) + shl(v, s) == shl(v + v, s)`
+//! (shifter and adder) is 118 / 371 at width 2 and 328 / 1908 at width 4 (the
+//! non-identity positives in `tests_pcay_bvshift.rs`). Any trace above
+//! [`MAX_REFLECTION_STEPS`] is still capped and declined before reflection.
 //!
 //! # Fail-closed
 //!

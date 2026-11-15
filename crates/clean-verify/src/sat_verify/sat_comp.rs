@@ -65,7 +65,7 @@ pub struct SatCompetitionResult {
     pub trust_level: TrustLevel,
     /// Number of proof steps verified.
     pub steps_verified: usize,
-    /// Number of proof steps accepted on trust (not kernel-verified).
+    /// Number of proof steps accepted on trust (not certificate-checked).
     pub steps_trusted: usize,
     /// Wall-clock verification time in microseconds.
     pub verification_time_us: u64,
@@ -90,13 +90,14 @@ pub fn verify_sat_competition_entry(formula: &[u8], proof: &[u8]) -> SatCompetit
     match verify_any_proof(formula, proof) {
         Ok(result) => {
             // SOUNDNESS (root cause C): `s VERIFIED` is a discharge claim, so
-            // require full kernel verification. `result.valid` alone is only the
+            // require full certificate checking. `result.valid` alone is only the
             // structural "derives the empty clause" signal — for a proof routed
             // through the SMT checker it is true even when the empty clause was
             // laundered from a structurally-accepted step. A holey/partially-
             // verified proof maps to `NotVerified`. See
             // docs/SOUNDNESS_FINDINGS_CLEAN_VERIFY_2026-07.md.
-            let fully_verified = result.valid && result.trust_level == TrustLevel::KernelVerified;
+            let fully_verified =
+                result.valid && result.trust_level == TrustLevel::CertificateChecked;
             let verdict = if fully_verified {
                 SatCompVerdict::Verified
             } else {
@@ -106,7 +107,7 @@ pub fn verify_sat_competition_entry(formula: &[u8], proof: &[u8]) -> SatCompetit
                 None
             } else if result.valid {
                 Some(format!(
-                    "proof derives the empty clause but is not fully kernel-verified \
+                    "proof derives the empty clause but is not fully certificate-checked \
                      (trust: {}, trusted steps: {})",
                     result.trust_level, result.steps_trusted
                 ))
@@ -218,7 +219,7 @@ mod tests {
 
         assert_eq!(result.verdict, SatCompVerdict::Verified);
         assert_eq!(result.format, ProofFormat::Lrat);
-        assert_eq!(result.trust_level, TrustLevel::KernelVerified);
+        assert_eq!(result.trust_level, TrustLevel::CertificateChecked);
         assert!(result.error.is_none());
     }
 
@@ -245,7 +246,7 @@ mod tests {
         let result = SatCompetitionResult {
             verdict: SatCompVerdict::Verified,
             format: ProofFormat::Lrat,
-            trust_level: TrustLevel::KernelVerified,
+            trust_level: TrustLevel::CertificateChecked,
             steps_verified: 42,
             steps_trusted: 0,
             verification_time_us: 1000,

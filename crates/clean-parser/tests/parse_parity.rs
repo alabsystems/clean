@@ -406,3 +406,67 @@ fn parse_parity_no_unpinned_silent_divergence() {
          this run. Replace the fenced block's contents with:\n{board_block}"
     );
 }
+
+/// Declaration-level parity for Lean's structural clause binders (X1).
+/// These rows are also elaborated by pinned Lean; the negative elaboration
+/// control is held in advice_replay_checker/rejected, not a parser refusal.
+#[test]
+fn structural_termination_clause_binders_match_pinned_lean() {
+    let path = fixture_path().with_file_name("termination_structural.tsv");
+    let rows = std::fs::read_to_string(path).expect("structural parity rows");
+    let mut count = 0;
+    for row in rows
+        .lines()
+        .filter(|row| !row.starts_with('#') && !row.is_empty())
+    {
+        let fields: Vec<_> = row.split('\t').collect();
+        assert_eq!(fields.len(), 3);
+        let input = fields[0].replace("\\n", "\n");
+        let report = clean_parser::parse_file_with_diagnostics(&input).expect("parse declaration");
+        assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+        let termination = match report.decls.as_slice() {
+            [clean_parser::SurfaceDecl::Def {
+                termination,
+                where_decls,
+                ..
+            }] => {
+                if termination.termination_by.is_some() {
+                    termination
+                } else {
+                    &where_decls[0].termination
+                }
+            }
+            [clean_parser::SurfaceDecl::Theorem { termination, .. }] => termination,
+            _ => panic!("expected one definition or theorem: {:?}", report.decls),
+        };
+        let tb = termination
+            .termination_by
+            .as_ref()
+            .expect("retained clause");
+        assert_eq!(
+            tb.kind,
+            clean_parser::TerminationKind::Structural(clean_parser::SurfaceName::generated_path(
+                fields[2]
+            ))
+        );
+        let params: Vec<_> = tb
+            .params
+            .iter()
+            .map(|param| {
+                if param.is_anonymous() {
+                    "_".to_string()
+                } else {
+                    param.to_string()
+                }
+            })
+            .collect();
+        let expected: Vec<_> = if fields[1] == "-" {
+            vec![]
+        } else {
+            fields[1].split(',').map(String::from).collect()
+        };
+        assert_eq!(params, expected);
+        count += 1;
+    }
+    assert_eq!(count, 5);
+}

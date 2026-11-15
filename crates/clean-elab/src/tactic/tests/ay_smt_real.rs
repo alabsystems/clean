@@ -18,6 +18,7 @@ use super::*;
 use crate::tactic::smt::{ay_smt, AyConfig, SmtVerifyPolicy};
 use clean_auto::bridge::ay_contract::AyLogic;
 use clean_kernel::Level;
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 // ── Environment ──────────────────────────────────────────────────────────────
@@ -203,8 +204,9 @@ fn test_ay_smt_real_strict_qf_lra_concrete_ofnat_lt() {
         env,
         prop.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: prop,
             value: None,
         }],
@@ -233,14 +235,16 @@ fn test_ay_smt_real_strict_qf_lra_add_ofnat_hypothesis_forwarding() {
         prop.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: SurfaceName::component("x", false),
                 ty: real_type(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_fvar,
-                name: "h".to_string(),
+                name: SurfaceName::component("h", false),
                 ty: prop,
                 value: None,
             },
@@ -274,20 +278,23 @@ fn test_ay_smt_real_strict_qf_lra_sub_transitivity() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: SurfaceName::component("x", false),
                 ty: real_type(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: SurfaceName::component("h1", false),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: SurfaceName::component("h2", false),
                 ty: h2_ty,
                 value: None,
             },
@@ -320,14 +327,16 @@ fn test_ay_smt_real_strict_qf_lra_mul_div_ofint_hypothesis() {
         prop.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: SurfaceName::component("x", false),
                 ty: real_type(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_fvar,
-                name: "h".to_string(),
+                name: SurfaceName::component("h", false),
                 ty: prop,
                 value: None,
             },

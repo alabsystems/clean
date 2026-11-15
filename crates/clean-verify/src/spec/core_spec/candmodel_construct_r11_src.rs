@@ -45,9 +45,9 @@ pub(super) const DENV: &str = "(red_def the_red_env)";
 pub(super) const RENV: &str = "(red_rec the_red_env)";
 /// A REAL reflected kernel name that is neither δ-defined nor a recursor — the
 /// inductive type `DefEnv` (R9's `DEADNAME`, R10's unlock entry point).
-pub(super) const DEADNAME: &str = "kcre_name_12";
+pub(super) const DEADNAME: &str = "fixture_def_env_name";
 /// The bare const at that name.
-pub(super) const DEADCONST: &str = "(KExpr.const kcre_name_12 (ListType.nil Level))";
+pub(super) const DEADCONST: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
 /// **THE CONVERSION COUNTEREXAMPLE'S TYPE.** `app (lam (sort 0) (bvar 0))
 /// (pi (sort 0) (sort 0))` — a β-redex AT THE TYPE LEVEL whose contractum is
 /// `PI00`. `candInterp` reads the head former of a type, and this one is `app`,

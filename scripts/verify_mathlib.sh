@@ -58,7 +58,7 @@ find_binary() {
         fi
     done
     echo "ERROR: verify_olean_batch binary not found." >&2
-    echo "  Build with: cargo build --release --message-format=short -j 1 --bin verify_olean_batch" >&2
+    echo "  Build with: targo --unverified build --release --message-format=short -j 1 --bin verify_olean_batch" >&2
     return 1
 }
 

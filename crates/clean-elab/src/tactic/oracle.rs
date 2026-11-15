@@ -58,7 +58,7 @@ pub fn build_oracle_request(state: &ProofState) -> Result<OracleRequest, TacticE
 /// REQUIRES: `goal.target` and all hypothesis types are well-formed.
 /// ENSURES: Goal and hypotheses are formatted via Lean 4 Display (not Debug).
 /// ENSURES: Metavariables in the target and hypotheses are instantiated.
-pub fn build_oracle_request_for_goal(
+pub(crate) fn build_oracle_request_for_goal(
     state: &ProofState,
     goal: &Goal,
 ) -> Result<OracleRequest, TacticError> {
@@ -71,7 +71,11 @@ pub fn build_oracle_request_for_goal(
     // Add hypotheses from local context
     for decl in &goal.local_ctx {
         let ty = state.metas.instantiate(&decl.ty);
-        let name = decl.name.clone();
+        let name = decl.name.source_spelling().ok_or_else(|| {
+            TacticError::TypeCheckFailed(
+                "oracle request cannot spell an exact local identifier".into(),
+            )
+        })?;
         let ty_text = format_expr_for_oracle(&ty);
         request = request.with_hypothesis(name, ty_text);
     }
@@ -255,8 +259,9 @@ mod tests {
 
         // Add hypothesis: n : Nat
         state.goals[0].local_ctx.push(LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "n".to_string(),
+            name: clean_parser::SurfaceName::generated_path("n"),
             ty: Expr::const_str("Nat"),
             value: None,
         });

@@ -54,6 +54,8 @@ pub enum DoElem {
     /// Let binding: `let x := e` (pure, not monadic)
     /// Desugars to: `let x := e in rest`
     Let(Span, SurfaceBinder, Box<SurfaceExpr>),
+    /// An opaque local value introduced by `have` inside `do`.
+    Have(Span, SurfaceBinder, Box<SurfaceExpr>),
 
     /// Mutable let: `let mut x := e`
     /// For now, treated as a regular let (mutable variable lifting deferred)
@@ -95,7 +97,7 @@ pub enum DoElem {
     /// Desugars to: `dite prop (fun h => thenBranch) (fun h => elseBranch)`
     IfDecidable(
         Span,
-        String,
+        crate::SurfaceName,
         Box<SurfaceExpr>,
         Vec<DoElem>,
         Option<Vec<DoElem>>,
@@ -202,7 +204,7 @@ pub enum DoElem {
     /// with the updated state tuple.
     ///
     /// Reference: Lean 4 `doReassign` in `src/Lean/Parser/Do.lean:91-92`
-    Reassign(Span, String, Box<SurfaceExpr>),
+    Reassign(Span, crate::SurfaceName, Box<SurfaceExpr>),
 
     /// Pattern reassignment: `(a, b) := expr`
     ///
@@ -246,7 +248,7 @@ pub struct DoMatchArm {
 pub struct DoCatchClause {
     pub span: Span,
     /// The exception binder name
-    pub binder: String,
+    pub binder: crate::SurfaceName,
     /// Optional exception type annotation (if present, uses `tryCatchThe`)
     pub exc_type: Option<Box<SurfaceExpr>>,
     /// The handler body (do-element sequence)
@@ -258,6 +260,7 @@ impl DoElem {
         match self {
             DoElem::Bind(s, _, _)
             | DoElem::Let(s, _, _)
+            | DoElem::Have(s, _, _)
             | DoElem::LetMut(s, _, _)
             | DoElem::LetRec(s, _)
             | DoElem::Return(s, _)

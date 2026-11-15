@@ -115,3 +115,110 @@ fn test_plain_simp_lemma_list_is_unchanged() {
         "plain simp [lemma] control",
     );
 }
+
+// ---------------------------------------------------------------------------
+// `[*]` over NON-equational Prop hypotheses — Lean's `applyStarArg`
+// ---------------------------------------------------------------------------
+//
+// Lean's `[*]` loops over `getPropHyps` — EVERY Prop hypothesis — and calls
+// `simpTheorems.addTheorem (.fvar h)`, the same `preprocess` a named lemma
+// takes: `hab : a ≤ b` becomes `(a ≤ b) = True` and `ha : a ≤ b → p a` becomes
+// the conditional `∀ (_ : a ≤ b), p a = True`. Clean's `collect_hypothesis_lemmas`
+// kept only `h : a = b`-shaped locals and `continue`d on the rest with no
+// diagnostic, which is the residual CLAUDE.md class (27) states in its own
+// text ("`simp [*]` still skips Prop locals"). It is what `Order/Basic.lean`'s
+// four `Prod` rows and `min_rec` end on, and why `simp only [ha, hab]` — the
+// named path, which has always had the fall-through — proved goals `simp [*]`
+// could not.
+
+/// Like [`assert_all_closed`], but only the LAST declaration must be a
+/// theorem: the fixtures below open with `axiom` declarations.
+#[track_caller]
+fn assert_last_closed(code: &str, what: &str) {
+    let results = elab_all(code);
+    let last = results.last().expect("nothing parsed");
+    assert!(
+        matches!(last, Ok(ElabResult::Theorem { .. })),
+        "{what}: expected a kernel-registered theorem, got {last:?}"
+    );
+}
+
+/// The `min_rec` shape: a conditional Prop hypothesis plus its premise.
+const COND_FIXTURE: &str = "\
+axiom LEq : Nat → Nat → Prop
+axiom p : Nat → Prop
+";
+
+/// Negative control: without the star nothing closes this goal, so the pass
+/// below is attributable to the hypothesis rules and nothing else.
+#[test]
+fn test_plain_simp_cannot_close_the_conditional_prop_goal() {
+    let results = elab_all(&format!(
+        "{COND_FIXTURE}theorem ctl (a b : Nat) (ha : LEq a b → p a) (hab : LEq a b) : p a := by \
+         simp\n"
+    ));
+    assert!(
+        results.iter().any(|r| r.is_err()),
+        "control is broken: plain `simp` closed the conditional goal, so the \
+         star test below no longer discriminates. Got {results:?}"
+    );
+}
+
+/// `simp [*]` with the facts present only as PROPOSITIONS.
+#[test]
+fn test_simp_star_uses_a_conditional_prop_hypothesis() {
+    assert_last_closed(
+        &format!(
+            "{COND_FIXTURE}theorem starCond (a b : Nat) (ha : LEq a b → p a) (hab : LEq a b) : \
+             p a := by simp [*]\n"
+        ),
+        "simp [*] over Prop hypotheses",
+    );
+}
+
+/// The same facts reached by NAME already worked; this is the control that
+/// isolates the `*` collection as the whole difference.
+#[test]
+fn test_named_prop_hypotheses_close_the_same_goal() {
+    assert_last_closed(
+        &format!(
+            "{COND_FIXTURE}theorem namedCond (a b : Nat) (ha : LEq a b → p a) (hab : LEq a b) : \
+             p a := by simp only [ha, hab]\n"
+        ),
+        "simp only [ha, hab]",
+    );
+}
+
+/// The `Prod` rows' shape: a disjunctive goal whose two conjuncts sit in the
+/// context as bare propositions.
+#[test]
+fn test_simp_star_uses_bare_prop_hypotheses_under_a_disjunction() {
+    assert_all_closed(
+        "theorem starDisj (P Q R : Prop) (h1 : P) (h2 : Q) : (P ∧ Q) ∨ R := by simp [*]\n",
+        "simp [*] over bare Prop hypotheses",
+    );
+}
+
+/// `simp [lemma, *]` — the rows' exact spelling, a named lemma AND the star in
+/// one list.
+#[test]
+fn test_simp_star_beside_a_named_lemma_still_uses_prop_hypotheses() {
+    assert_all_closed(
+        "theorem starNamed (P Q R : Prop) (h1 : P) (h2 : Q) : (P ∧ Q) ∨ R := by \
+         simp [Nat.add_zero, *]\n",
+        "simp [lemma, *] over bare Prop hypotheses",
+    );
+}
+
+/// A hypothesis must not be rewritten by its OWN rule: Lean's `simpGoal`
+/// removes it from the set first. Here `h : P` and `e : P = Q` are both
+/// priority-75 star rules and `h` is collected FIRST, so without the exclusion
+/// `h`'s own `P = True` fires and `h : True` can no longer close `⊢ Q`.
+#[test]
+fn test_simp_star_at_a_hypothesis_excludes_that_hypothesis_own_rule() {
+    assert_last_closed(
+        "axiom P : Prop\naxiom Q : Prop\n\
+         theorem starAt (h : P) (e : P = Q) : Q := by\n  simp [*] at h\n  exact h\n",
+        "simp [*] at h excludes h's own rule",
+    );
+}

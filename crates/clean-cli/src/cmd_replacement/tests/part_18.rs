@@ -20,10 +20,15 @@
 
 use crate::cmd_replacement::*;
 
-/// The three artifacts that actually carried effectively-green rows.
+/// The artifacts that actually carried effectively-green rows.
+///
+/// `reports/tactic-parity-counts.json` was the third, and left this list on
+/// 2026-09-24: its contract is now `EvidenceContract::Vacuous` (its `matched:
+/// true` rows are source literals and pinned Lean is never run), so arm 5's
+/// "the real content is Present" no longer holds of it BY DESIGN -- no content
+/// at that path backs a row. Slice 20 pins that instead.
 const SUBSTITUTION_TARGETS: &[&str] = &[
     "reports/compile-runtime-smoke.json",
-    "reports/tactic-parity-counts.json",
     "reports/strict-solver-fragment-dashboard.json",
 ];
 
@@ -273,7 +278,9 @@ fn evidence_contract_agrees_with_validate_report_kinds() {
     ] {
         let contract = evidence_contract_for(artifact)
             .unwrap_or_else(|| panic!("{artifact} has no declared evidence contract"));
-        let EvidenceContract::JsonReport { schema_version } = contract else {
+        // `Unproduced` (the LSP report since 2026-09-25) validates real content
+        // exactly as `JsonReport` does, so it must pin the same schema too.
+        let Some(schema_version) = contract.json_schema() else {
             panic!("{artifact} is a validate-report kind and must carry a JSON contract");
         };
         assert_eq!(
@@ -329,10 +336,16 @@ fn multi_path_evidence_combines_fail_closed() {
         "a missing path must not be masked by a present sibling"
     );
 
-    // The `{"stub": true}` placeholder classification must not regress.
-    tree.write("reports/lsp-infoview-parity.json", "{\"stub\": true}\n");
+    // The `{"stub": true}` placeholder classification must not regress. (This
+    // used the LSP report until 2026-09-25; that path is `Unproduced` now and
+    // its stub reads VACUOUS -- slice 20 pins that. A path with an ordinary
+    // JSON contract keeps the plain Stub reading.)
+    tree.write(
+        "reports/native-library-replacement.json",
+        "{\"stub\": true}\n",
+    );
     assert_eq!(
-        tree.state_of("reports/lsp-infoview-parity.json"),
+        tree.state_of("reports/native-library-replacement.json"),
         EvidenceState::Stub,
         "a stub must still classify as Stub, not merely Invalid"
     );

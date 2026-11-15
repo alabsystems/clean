@@ -10,7 +10,7 @@
 //!
 //! Reference: Lean 4 `src/Lean/Elab/PreDefinition/Basic.lean`
 
-use clean_parser::SurfaceExpr;
+use clean_parser::{SurfaceExpr, SurfaceName};
 
 /// Pre-definition: a fully elaborated function before WF encoding.
 ///
@@ -43,7 +43,7 @@ pub(crate) struct PreDefinition {
 pub(crate) struct TerminationMeasure {
     /// Parameter names bound in the measure expression.
     /// These correspond to the function's arguments that appear in the measure.
-    pub(crate) params: Vec<String>,
+    pub(crate) params: Vec<SurfaceName>,
     /// The measure expression itself (surface syntax to be elaborated).
     pub(crate) measure_expr: Box<SurfaceExpr>,
     /// Optional `decreasing_by` tactic for proving termination obligations.

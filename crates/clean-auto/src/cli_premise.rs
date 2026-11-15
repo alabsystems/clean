@@ -5,11 +5,11 @@
 //! `clean auto premise` — top-k premise shortlist for a goal type string.
 //!
 //! Purpose: agents searching for premises to use in proofs currently grep the
-//! codebase blindly (`git grep "Nat.zero_le"`). For our whitelist of ~175
-//! declarations (42 Theorems + ~130 axioms registered by
-//! `Environment::with_prelude()`), this CLI ranks candidate premises by a
-//! cheap hybrid of head-symbol match + token Jaccard overlap — no kernel
-//! `Expr` construction required from the caller.
+//! codebase blindly (`git grep "Nat.zero_le"`). Over every declaration
+//! `Environment::with_prelude()` registers, this CLI ranks candidate premises
+//! by a cheap hybrid of head-symbol match + token Jaccard overlap — no kernel
+//! `Expr` construction required from the caller. There is no whitelist: the
+//! only filter is the classification the caller asks for.
 //!
 //! Design: `designs/2026-04-18-unified-cli-feature-index.md` (CLI surface)
 //! and issue #3600 (this verb).
@@ -356,9 +356,9 @@ pub struct RankedPremise {
 /// Build an in-memory ranked list of candidates for `goal_fp` against the
 /// given environment.
 ///
-/// The index is built on every invocation because `Environment::with_prelude`
-/// is <175 declarations and walking it takes a few milliseconds. If this ever
-/// grows, cache the fingerprints on `ConstantInfo` via an extension.
+/// The index is built on every invocation because walking every declaration
+/// `Environment::with_prelude` registers takes a few milliseconds. If that
+/// stops being true, cache the fingerprints on `ConstantInfo` via an extension.
 pub(crate) fn rank_premises(
     env: &Environment,
     goal_fp: &Fingerprint,
@@ -559,7 +559,7 @@ fn emit_table(
         environment.as_str()
     );
     if ranked.is_empty() {
-        println!("  (no candidates scored above 0)");
+        println!("  (no candidates left after scoring, the classification filter and --limit)");
         return;
     }
     // Column widths: name up to 40, kind 11, quality 20, score 6.

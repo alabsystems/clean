@@ -343,11 +343,7 @@ impl MathverseExtSolver {
         }
 
         // Solve modular constraints
-        if !self.mod_constraints.is_empty() && !self.solve_mod()? {
-            return Ok(false);
-        }
-
-        Ok(true)
+        Ok(self.mod_constraints.is_empty() || self.solve_mod()?)
     }
 }
 

@@ -381,15 +381,36 @@ fn test_eval_uint32_shift_right() {
     assert_eq!(eval_native(&expr).unwrap(), NativeValue::UInt32(16));
 }
 
+/// Lean 4 reduces a machine shift AMOUNT mod the width: `(1 : UInt32) <<< 32 =
+/// 1` and `<<< 33 = 2`. This test used to be `..._shift_left_overflow` and
+/// asserted `0`, which made a RUN disagree with the kernel's `rfl` about the
+/// same term.
 #[test]
-fn test_eval_uint32_shift_left_overflow() {
-    // Shift by >= bit_width yields 0
-    let expr = NativeExpr::BinOp(
-        NativeOp::ShiftLeft,
-        Box::new(uint32(1)),
-        Box::new(uint32(32)),
+fn test_eval_uint32_shift_amount_is_reduced_mod_32() {
+    let shift = |op, a: u64, b: u64| {
+        eval_native(&NativeExpr::BinOp(
+            op,
+            Box::new(uint32(a)),
+            Box::new(uint32(b)),
+        ))
+        .unwrap()
+    };
+    assert_eq!(shift(NativeOp::ShiftLeft, 1, 32), NativeValue::UInt32(1));
+    assert_eq!(shift(NativeOp::ShiftLeft, 1, 33), NativeValue::UInt32(2));
+    assert_ne!(shift(NativeOp::ShiftLeft, 1, 33), NativeValue::UInt32(0));
+    // in-range amounts still wrap the RESULT to the width
+    assert_eq!(
+        shift(NativeOp::ShiftLeft, 0xFFFF_FFFF, 31),
+        NativeValue::UInt32(0x8000_0000)
     );
-    assert_eq!(eval_native(&expr).unwrap(), NativeValue::UInt32(0));
+    assert_eq!(
+        shift(NativeOp::ShiftRight, 0x8000_0000, 32),
+        NativeValue::UInt32(0x8000_0000)
+    );
+    assert_eq!(
+        shift(NativeOp::ShiftRight, 0x8000_0000, 63),
+        NativeValue::UInt32(1)
+    );
 }
 
 #[test]

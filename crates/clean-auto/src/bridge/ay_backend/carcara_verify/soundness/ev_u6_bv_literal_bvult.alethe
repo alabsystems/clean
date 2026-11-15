@@ -1,0 +1,3 @@
+(assume nc (not (= (bvult #b10 (_ bv5 2)) true)))
+(step s (cl (= (bvult #b10 (_ bv5 2)) true)) :rule evaluate)
+(step done (cl) :rule resolution :premises (nc s))

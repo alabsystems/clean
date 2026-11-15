@@ -46,11 +46,15 @@ fn suffices_probe_proof() -> SurfaceExpr {
 #[test]
 fn test_suffices_from_newline_continuation_parses() {
     match suffices_probe_proof() {
-        SurfaceExpr::Let(_, binder, value, justification) => {
-            assert_eq!(binder.name, "h", "binder name");
+        SurfaceExpr::Have(_, binder, value, justification) => {
+            assert_eq!(
+                binder.name.name(),
+                clean_parser::SurfaceName::generated_path("h").name(),
+                "binder name"
+            );
             assert!(binder.ty.is_some(), "type `a = b` preserved");
             assert!(
-                matches!(&*value, SurfaceExpr::Ident(_, n) if n == "hab"),
+                matches!(&*value, SurfaceExpr::Ident(_, n) if n.name() == clean_parser::SurfaceName::generated_path("hab").name()),
                 "continuation `hab` becomes the let value, got {value:?}"
             );
             assert!(
@@ -58,15 +62,15 @@ fn test_suffices_from_newline_continuation_parses() {
                 "`Eq.symm h` justification is the let body, got {justification:?}"
             );
         }
-        other => panic!("expected Let, got {other:?}"),
+        other => panic!("expected Have, got {other:?}"),
     }
 }
 
 /// The compound type `a = b` (not a bare atom) must survive as the binder type.
 #[test]
 fn test_suffices_from_compound_type_is_full_expr() {
-    let SurfaceExpr::Let(_, binder, _, _) = suffices_probe_proof() else {
-        panic!("expected Let");
+    let SurfaceExpr::Have(_, binder, _, _) = suffices_probe_proof() else {
+        panic!("expected Have");
     };
     let ty = binder.ty.expect("type present");
     // `a = b` desugars to an `Eq` application — a full operator expr, not just `a`.
@@ -135,11 +139,24 @@ fn test_struct_custom_ctor_name_captured() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Point");
-            assert_eq!(ctor_name.as_deref(), Some("make"), "custom ctor name");
+            assert_eq!(
+                name.name(),
+                clean_parser::SurfaceName::generated_path("Point").name()
+            );
+            assert_eq!(
+                ctor_name.as_ref(),
+                Some(&clean_parser::SurfaceName::generated_path("make")),
+                "custom ctor name"
+            );
             assert_eq!(fields.len(), 2, "both fields parsed");
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
+            assert_eq!(
+                fields[0].name.name(),
+                clean_parser::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                fields[1].name.name(),
+                clean_parser::SurfaceName::generated_path("y").name()
+            );
         }
         other => panic!("expected Structure, got {other:?}"),
     }
@@ -170,11 +187,14 @@ fn test_nested_struct_inst_lval_desugars() {
     };
     // Outer base is `o`.
     assert!(
-        matches!(base.as_deref(), Some(SurfaceExpr::Ident(_, n)) if n == "o"),
+        matches!(base.as_deref(), Some(SurfaceExpr::Ident(_, n)) if n.name() == clean_parser::SurfaceName::generated_path("o").name()),
         "outer base is `o`, got {base:?}"
     );
     assert_eq!(fields.len(), 1, "single top-level field `inner`");
-    assert_eq!(fields[0].name, "inner");
+    assert_eq!(
+        fields[0].name.name(),
+        clean_parser::SurfaceName::generated_path("inner").name()
+    );
     // Its value is the nested update `{ o.inner with v := 3 }`.
     match &fields[0].val {
         SurfaceExpr::StructLit {
@@ -186,12 +206,15 @@ fn test_nested_struct_inst_lval_desugars() {
                 matches!(
                     inner_base.as_deref(),
                     Some(SurfaceExpr::Proj(_, obj, Projection::Named(f)))
-                        if matches!(&**obj, SurfaceExpr::Ident(_, n) if n == "o") && f == "inner"
+                        if matches!(&**obj, SurfaceExpr::Ident(_, n) if n.name() == clean_parser::SurfaceName::generated_path("o").name()) && f.name() == clean_parser::SurfaceName::generated_path("inner").name()
                 ),
                 "inner base is the projection `o.inner`, got {inner_base:?}"
             );
             assert_eq!(inner_fields.len(), 1);
-            assert_eq!(inner_fields[0].name, "v");
+            assert_eq!(
+                inner_fields[0].name.name(),
+                clean_parser::SurfaceName::generated_path("v").name()
+            );
             assert!(
                 matches!(
                     &inner_fields[0].val,
@@ -214,7 +237,10 @@ fn test_plain_struct_update_unchanged() {
     };
     assert!(base.is_some(), "has a `with` base");
     assert_eq!(fields.len(), 1);
-    assert_eq!(fields[0].name, "y");
+    assert_eq!(
+        fields[0].name.name(),
+        clean_parser::SurfaceName::generated_path("y").name()
+    );
     assert!(
         matches!(&fields[0].val, SurfaceExpr::Lit(_, SurfaceLit::Nat(3))),
         "y := 3 stays a direct assignment, got {:?}",
@@ -237,10 +263,19 @@ fn test_class_inductive_parses_as_inductive() {
     .expect("class inductive parses");
     match decl {
         SurfaceDecl::Inductive { name, ctors, .. } => {
-            assert_eq!(name, "MyDec");
+            assert_eq!(
+                name.name(),
+                clean_parser::SurfaceName::generated_path("MyDec").name()
+            );
             assert_eq!(ctors.len(), 2, "both constructors parsed");
-            assert_eq!(ctors[0].name, "isFalse");
-            assert_eq!(ctors[1].name, "isTrue");
+            assert_eq!(
+                ctors[0].name.name(),
+                clean_parser::SurfaceName::generated_path("isFalse").name()
+            );
+            assert_eq!(
+                ctors[1].name.name(),
+                clean_parser::SurfaceName::generated_path("isTrue").name()
+            );
         }
         other => panic!("expected Inductive, got {other:?}"),
     }
@@ -261,7 +296,12 @@ fn test_multi_param_universe_binder() {
     else {
         panic!("expected Def");
     };
-    assert_eq!(universe_params, vec!["u".to_string(), "v".to_string()]);
+    assert_eq!(
+        universe_params,
+        ["u", "v"]
+            .map(clean_parser::SurfaceName::generated_path)
+            .to_vec()
+    );
 }
 
 /// Space-separated `.{u v}` (no comma) is still accepted.
@@ -274,7 +314,12 @@ fn test_multi_param_universe_binder_space_separated() {
     else {
         panic!("expected Def");
     };
-    assert_eq!(universe_params, vec!["u".to_string(), "v".to_string()]);
+    assert_eq!(
+        universe_params,
+        ["u", "v"]
+            .map(clean_parser::SurfaceName::generated_path)
+            .to_vec()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -330,20 +375,20 @@ fn test_recovery_resync_does_not_swallow_following_decls() {
         decls.first()
     );
     // The following good declarations survive intact.
-    let names: Vec<&str> = decls
+    let names: Vec<clean_parser::SurfaceName> = decls
         .iter()
         .filter_map(|d| match d {
-            SurfaceDecl::Def { name, .. } => Some(name.as_str()),
-            SurfaceDecl::Theorem { name, .. } => Some(name.as_str()),
+            SurfaceDecl::Def { name, .. } => Some(name.clone()),
+            SurfaceDecl::Theorem { name, .. } => Some(name.clone()),
             _ => None,
         })
         .collect();
     assert!(
-        names.contains(&"good"),
+        names.contains(&clean_parser::SurfaceName::generated_path("good")),
         "`def good` must survive recovery, got decls {names:?}"
     );
     assert!(
-        names.contains(&"good_pin"),
+        names.contains(&clean_parser::SurfaceName::generated_path("good_pin")),
         "`theorem good_pin` must survive recovery, got decls {names:?}"
     );
 }
@@ -354,15 +399,15 @@ fn test_recovery_resync_does_not_swallow_following_decls() {
 #[test]
 fn test_recovery_resync_single_char_then_newline() {
     let decls = parse_file("def bad : Char := 'a\ndef good : Nat := 5").expect("parses");
-    let names: Vec<&str> = decls
+    let names: Vec<clean_parser::SurfaceName> = decls
         .iter()
         .filter_map(|d| match d {
-            SurfaceDecl::Def { name, .. } => Some(name.as_str()),
+            SurfaceDecl::Def { name, .. } => Some(name.clone()),
             _ => None,
         })
         .collect();
     assert!(
-        names.contains(&"good"),
+        names.contains(&clean_parser::SurfaceName::generated_path("good")),
         "`def good` must survive the `'a` unterminated char, got {names:?}"
     );
 }

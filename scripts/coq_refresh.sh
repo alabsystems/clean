@@ -54,7 +54,7 @@ done
 
 [[ -x "$SHARD_BIN" ]] || {
   echo "[coq-refresh] building mathverse_shard (release)..." >&2
-  (cd "$REPO_ROOT" && cargo build --release -p clean-mathverse --bin mathverse_shard)
+  (cd "$REPO_ROOT" && targo --unverified build --release -p clean-mathverse --bin mathverse_shard)
 }
 
 # Modules needing a re-dump: any with recorded skips, or listed in a manifest's

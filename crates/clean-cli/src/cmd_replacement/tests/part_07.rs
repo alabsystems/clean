@@ -507,6 +507,11 @@ fn replacement_status_points_to_native_library_evidence_report() {
         })));
 }
 
+/// The `compile-runtime` row is backed by the byte-exact differential battery,
+/// not by the emit-C smoke that linked, ran and compared nothing (measured
+/// 2026-09-25: it stayed Green while `clean run` printed wrong answers at exit
+/// 0). The battery gates fail-closedness, not parity, so the row may not be
+/// Green on it.
 #[test]
 fn replacement_status_points_to_compile_runtime_evidence_report() {
     let Ok(report) = ReplacementStatusReport::current() else {
@@ -519,35 +524,46 @@ fn replacement_status_points_to_compile_runtime_evidence_report() {
         .find(|row| row.id == "compile-runtime")
         .expect("compile runtime row");
 
-    assert_eq!(compile_row.status, ReplacementStatus::Green);
+    assert_eq!(compile_row.status, ReplacementStatus::InProgress);
     assert_eq!(
         compile_row.gate_command,
-        "clean compile demos/public/kernel_check_success.lean --decl main --emit c"
+        "cargo test --locked -p clean --test native_exec_battery"
     );
     assert_eq!(
         compile_row.evidence_artifact,
-        "reports/compile-runtime-smoke.json"
+        "reports/native-exec-battery.json"
     );
     assert!(compile_row
         .blocker
-        .contains("Public demo compile smoke emits C"));
+        .contains("byte-exact differential battery"));
 
     let artifact = fs::read_to_string(repo_artifact_path(compile_row.evidence_artifact))
-        .expect("compile-runtime smoke report should be checked in");
+        .expect("the native execution battery report should be checked in");
     let artifact_json: serde_json::Value =
-        serde_json::from_str(&artifact).expect("compile-runtime report should be JSON");
+        serde_json::from_str(&artifact).expect("the battery report should be JSON");
     assert_eq!(
         artifact_json["schema_version"],
-        "clean-compile-runtime-smoke-v1"
+        "clean-native-exec-battery-v1"
     );
-    assert_eq!(artifact_json["replacement_row"]["id"], "compile-runtime");
-    assert_eq!(artifact_json["replacement_row"]["issue"], 3708);
     assert_eq!(artifact_json["status"], "passed");
-    assert!(artifact_json["rows"]
+    assert_eq!(artifact_json["wrong_output_exit0"], 0);
+    let programs = artifact_json["programs"]
         .as_array()
-        .expect("compile-runtime report rows should be an array")
-        .iter()
-        .any(|row| row["id"] == "public-demo-main-emit-c" && row["status"] == "passed"));
+        .expect("the battery report lists its programs");
+    assert!(
+        !programs.is_empty(),
+        "a battery of zero programs gates nothing"
+    );
+    for program in programs {
+        let verdict = program["verdict"]
+            .as_str()
+            .expect("each program has a verdict");
+        assert!(
+            matches!(verdict, "BYTE_EQUAL" | "REFUSED_BUILD" | "REFUSED_RUNTIME"),
+            "{} is {verdict}: neither byte-identical to Lean nor refused by name",
+            program["name"]
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------

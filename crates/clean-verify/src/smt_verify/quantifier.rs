@@ -411,7 +411,7 @@ fn as_negation(dag: &SmtProofDag, term_id: SmtTermId) -> Option<SmtTermId> {
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -484,7 +484,7 @@ mod tests {
         let verdict = check_forall_inst(&dag, SmtStepId(0), &clause, &args);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "simple forall_inst should verify: {:?}",
             verdict.detail
         );
@@ -527,7 +527,7 @@ mod tests {
         let verdict = check_forall_inst(&dag, SmtStepId(0), &clause, &args);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "multi-var forall_inst should verify: {:?}",
             verdict.detail
         );
@@ -554,7 +554,7 @@ mod tests {
         let verdict = check_forall_inst(&dag, SmtStepId(0), &clause, &args);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "forall_inst by matching should verify: {:?}",
             verdict.detail
         );
@@ -563,7 +563,7 @@ mod tests {
     #[test]
     fn test_forall_inst_wrong_substitution() {
         // forall x. P(x), instantiated with t, but the claimed result is P(s)
-        // where s != t. This should NOT be kernel-verified.
+        // where s != t. This should NOT be step-checked.
         let mut dag = SmtProofDag::new();
 
         let x = dag.add_term(SmtTerm::Var("x".to_string(), SmtSort::Int));
@@ -586,8 +586,8 @@ mod tests {
         // we do structural equality, this should fail to verify at kernel level.
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
-            "wrong substitution should not be kernel-verified: {:?}",
+            StepTrustLevel::StepChecked,
+            "wrong substitution should not be step-checked: {:?}",
             verdict.detail
         );
     }
@@ -621,7 +621,7 @@ mod tests {
         let verdict = check_skolem(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "simple skolem should verify: {:?}",
             verdict.detail
         );
@@ -647,7 +647,7 @@ mod tests {
         let verdict = check_skolem(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "skolem constant should verify: {:?}",
             verdict.detail
         );
@@ -863,7 +863,7 @@ mod tests {
         let verdict = check_forall_inst(&dag, SmtStepId(0), &clause, &[forty_two]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "forall x. P(x, x) instantiated with 42 should produce P(42, 42): {:?}",
             verdict.detail
         );
@@ -876,7 +876,7 @@ mod tests {
         let bad_verdict = check_forall_inst(&dag, SmtStepId(0), &bad_clause, &[forty_two]);
         assert_ne!(
             bad_verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "P(42, 99) is NOT a valid instantiation of forall x. P(x, x): {:?}",
             bad_verdict.detail
         );
@@ -954,7 +954,7 @@ mod tests {
         let verdict = check_forall_inst(&dag, SmtStepId(0), &clause, &[y_arg]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "substituting x -> y must preserve the free y in the body: {:?}",
             verdict.detail
         );
@@ -964,7 +964,7 @@ mod tests {
     fn test_forall_inst_body_contains_nested_quantifier() {
         // match_terms does not descend into Forall/Exists bodies (they fall into
         // the _ => false catch-all). When the body of the outer forall is itself
-        // a quantifier, check_forall_inst cannot produce KernelVerified and must
+        // a quantifier, check_forall_inst cannot produce StepChecked and must
         // fall back to a weaker trust level. This test documents and verifies
         // that soundness boundary.
         let mut dag = SmtProofDag::new();
@@ -1007,8 +1007,8 @@ mod tests {
         let verdict = check_forall_inst(&dag, SmtStepId(0), &clause, &[five]);
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
-            "nested quantifiers prevent KernelVerified — should fall back: {:?}",
+            StepTrustLevel::StepChecked,
+            "nested quantifiers prevent StepChecked — should fall back: {:?}",
             verdict.detail
         );
     }

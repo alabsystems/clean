@@ -199,6 +199,7 @@ fn bench_get_type(c: &mut Criterion) {
     for (name, expr) in expressions {
         let params = GetTypeParams {
             expr: expr.to_string(),
+            timeout_ms: None,
         };
 
         group.bench_with_input(BenchmarkId::from_parameter(name), &params, |b, params| {
@@ -447,6 +448,7 @@ fn bench_e2e_latency(c: &mut Criterion) {
     group.bench_function("get_type_e2e", |b| {
         let params = GetTypeParams {
             expr: "fun (A : Type) (x : A) => x".to_string(),
+            timeout_ms: None,
         };
         b.iter(|| {
             rt.block_on(async {

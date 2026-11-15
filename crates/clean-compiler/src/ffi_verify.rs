@@ -219,7 +219,7 @@ const RUNTIME_SIGNATURES: &[RuntimeSignature] = &[
         name: "clean_obj_tag",
         fixed_arity: 1,
         variadic: false,
-        return_type: RuntimeReturnType::UInt8,
+        return_type: RuntimeReturnType::UInt32,
     },
     RuntimeSignature {
         name: "clean_ctor_get_uint8",
@@ -408,6 +408,12 @@ const RUNTIME_SIGNATURES: &[RuntimeSignature] = &[
         return_type: RuntimeReturnType::Object,
     },
     RuntimeSignature {
+        name: "clean_mk_string_from_bytes",
+        fixed_arity: 2,
+        variadic: false,
+        return_type: RuntimeReturnType::Object,
+    },
+    RuntimeSignature {
         name: "clean_mk_string",
         fixed_arity: 1,
         variadic: false,
@@ -556,6 +562,32 @@ mod tests {
             result.is_ok(),
             "object-return extern should verify: {result:?}"
         );
+    }
+
+    #[test]
+    fn sized_string_signature_accepts_two_args_and_refuses_wrong_arity() {
+        let binding = extern_data("c", "clean_mk_string_from_bytes");
+        assert!(verify_extern_signature(
+            &name("bytes"),
+            &[param(0), param(1)],
+            &Expr::const_str("String"),
+            &binding,
+        )
+        .is_ok());
+        for arity in [0, 1, 3] {
+            let params: Vec<_> = (0..arity).map(param).collect();
+            let err = verify_extern_signature(
+                &name("bytes"),
+                &params,
+                &Expr::const_str("String"),
+                &binding,
+            )
+            .expect_err("sized constructor requires both byte pointer and length");
+            assert!(
+                matches!(err, FfiMismatch::ArityMismatch { expected, found, .. }
+                if expected == "2" && found == arity as usize)
+            );
+        }
     }
 
     #[test]

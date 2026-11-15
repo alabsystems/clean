@@ -57,7 +57,7 @@ use clean_parser::SurfaceExpr;
 /// so routing leaves it alone.
 pub(crate) fn mentioned_params(
     measure: &SurfaceExpr,
-    param_names: &[String],
+    param_names: &[clean_parser::SurfaceName],
 ) -> Option<Vec<usize>> {
     let mut found = Vec::new();
     walk(measure, param_names, &mut found)?;
@@ -72,7 +72,10 @@ pub(crate) fn mentioned_params(
 /// "Exactly one" is deliberately the same rule the well-founded lowering
 /// applies to the elaborated measure in phase 2b, so routing and lowering agree
 /// on what a one-parameter measure is instead of drifting apart.
-pub(crate) fn sole_mentioned_param(measure: &SurfaceExpr, param_names: &[String]) -> Option<usize> {
+pub(crate) fn sole_mentioned_param(
+    measure: &SurfaceExpr,
+    param_names: &[clean_parser::SurfaceName],
+) -> Option<usize> {
     match mentioned_params(measure, param_names)?.as_slice() {
         [only] => Some(*only),
         _ => None,
@@ -83,7 +86,11 @@ pub(crate) fn sole_mentioned_param(measure: &SurfaceExpr, param_names: &[String]
 ///
 /// `None` propagates: one unanalysable node anywhere makes the whole answer
 /// unavailable, which is the fail-closed direction (routing is left untouched).
-fn walk(expr: &SurfaceExpr, param_names: &[String], found: &mut Vec<usize>) -> Option<()> {
+fn walk(
+    expr: &SurfaceExpr,
+    param_names: &[clean_parser::SurfaceName],
+    found: &mut Vec<usize>,
+) -> Option<()> {
     match expr {
         SurfaceExpr::Ident(_, name) => {
             if let Some(pos) = param_names.iter().position(|p| p == name) {
@@ -136,7 +143,7 @@ mod tests {
 
     /// Parse `termination_by <measure>` off a one-declaration source and hand
     /// back the measure with the declaration's parameter names.
-    fn measure_of(source: &str) -> (SurfaceExpr, Vec<String>) {
+    fn measure_of(source: &str) -> (SurfaceExpr, Vec<clean_parser::SurfaceName>) {
         let decls = parse_file(source).expect("fixture should parse");
         let clean_parser::SurfaceDecl::Def {
             binders,

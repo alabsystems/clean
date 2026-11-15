@@ -19,6 +19,7 @@ fn make_goal(target: Expr) -> Goal {
         target,
         local_ctx: Vec::new(),
         tag: None,
+        case_binders: Vec::new(),
     }
 }
 
@@ -32,6 +33,7 @@ fn make_goals(n: usize) -> Vec<Goal> {
                 target,
                 local_ctx: Vec::new(),
                 tag: None,
+                case_binders: Vec::new(),
             }
         })
         .collect()

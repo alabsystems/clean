@@ -21,10 +21,10 @@
 //!    on the blocking pool — and mechanisms 1–2 cover the window an abort
 //!    cannot reach.
 //!
-//! Requests racing the background task (hover, plainGoal, plainTermGoal,
-//! inlay hints, ...) answer from the last committed snapshot:
-//! `Document::apply_change` preserves `elaborated` across edits precisely so
-//! that window serves data instead of going dark.
+//! Existing hover, plainGoal and inlay consumers retain the last committed
+//! declaration snapshot while a check runs. `Document::apply_change` clears
+//! hole contexts on edits: ranged term goals wait for a current-version
+//! capture rather than mapping old hole offsets through the changed text.
 //!
 //! tower-lsp gives notification handlers no response and no cross-handler
 //! ordering guarantee, so every method here tolerates a concurrent bump or

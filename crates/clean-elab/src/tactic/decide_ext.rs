@@ -103,6 +103,7 @@ where
         meta_id,
         target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: goal.tag.clone(),
     });
     trial.invalidate_tc_cache();

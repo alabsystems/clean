@@ -20,14 +20,14 @@
         "std::option::Option::<T>::expect": {
           "clause": "a",
           "model": "ir_lzb_deref (function 1 of ir_lzb_module, crates/clean-verify/src/spec/core_spec/eval_ir_lzb.rs)",
-          "residual": "Option<Arc<Level>>'s None is the null niche, and as_deref().expect() is load + null-check + assert. The model is NOT total: ir_lzb_deref_refuses_none computes ub assert_failed on a null field, so the assumption is observable, not decorative.",
+          "residual": "TWO clauses: (1) Option<Arc<Level>>'s None is the null niche; (2) as_deref().expect() is load + null-check + assert, and the pointer it yields is the Arc's DATA address. A THIRD clause stood here between 2026-09-02 and 2026-09-09 and is now DISCHARGED rather than restated: audit r16 M16-6 measured that the model returned the loaded field word UNCHANGED, computing x where the shipped function computes &*x, which did not weaken the relation but made EncodesLevelArcF unsatisfiable by any real Level heap at the Succ/Max/IMax nodes link 4's content is about. ir_lzb_deref now carries `const i64 16` + `gep`, EncodesLevelArcF places every child at Nat.add b ir_d16, and the two Eq.refl cost equations that re-derives are kernel-checked at their new values (ir_lzb_cost_halts_max 41, ir_lzb_cost_halts_imax 22). What survives is a LAYOUT obligation, not a modelling error: that the Arc data offset is 16 on this target -- data/spine_assumption_ledger.json row A-CLZ-DEREF-ARC-DATA-OFFSET, class layout-obligation, pinned by deref_model_arc_data_offset_is_what_the_model_assumes. The model is NOT total: ir_lzb_deref_refuses_none computes ub assert_failed on a null field, so both clauses are observable, not decorative.",
           "beyond_this_callee": "expect's own failure branch (expect_failed -> panic_display -> panic_fmt -> panic_impl -> #[panic_handler] -> __rust_start_panic -> _Unwind_RaiseException) is clause (b): ir_lzb_panic_path_is_unreachable (eval_ir_lzb_correct.rs, DerivedProved, 0 axiom_deps) -- on a represented heap with enough fuel, halting at ub assert_failed derives every C : Type.",
           "v1_func_id_on_2026_08_21_dump": 6516
         },
         "std::option::Option::<T>::as_deref": {
           "clause": "a",
           "model": "ir_lzb_deref (same model; deref's two extern edges are one collapsed semantic assumption, deliberately -- splitting it would be three assumptions instead of one)",
-          "residual": "same as 6516; the two edges are the two halves of as_deref().expect()",
+          "residual": "same as 6516 -- the two clauses, with the Arc data-offset clause DISCHARGED 2026-09-09 (the model geps by the header; the residue is the layout row A-CLZ-DEREF-ARC-DATA-OFFSET); the two edges are the two halves of as_deref().expect()",
           "v1_func_id_on_2026_08_21_dump": 7211
         }
       }

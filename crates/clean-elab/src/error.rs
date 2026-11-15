@@ -16,6 +16,21 @@ use clean_kernel::Name;
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub enum ElabError {
+    /// A do block requires a type constructor application into Type.
+    #[error("invalid `do` notation, expected type is not a monad application\n  {type_}\nUse `Id.run do` for pure code")]
+    InvalidDoExpectedType { type_: String },
+    /// A declaration in a do sequence shadows a still-active mutable local.
+    #[error("mutable variable `{name}` cannot be shadowed")]
+    MutableVariableShadowing { name: String },
+    /// A surface command cannot use another source world's semantics.
+    #[error("source world refused: {0}")]
+    SourceWorld(String),
+    /// A declaration or forall binder uses `[...]` for a non-class type.
+    #[error("invalid binder annotation, type is not a class instance: {type_}")]
+    InvalidInstanceBinder { type_: String },
+    /// An explicit local-instance parameter cannot be recovered by resolution.
+    #[error("invalid parametric local instance, parameter with type {type_} does not have forward dependencies")]
+    InvalidParametricLocalInstance { type_: String },
     /// An internal elaborator scope/state invariant was violated.
     ///
     /// This is a compiler defect, not unsupported source syntax.  Keep it as a
@@ -23,8 +38,13 @@ pub enum ElabError {
     /// elaboration failure into a process panic.
     #[error("Internal elaboration invariant violated: {0}")]
     InternalInvariant(String),
-    /// Type mismatch between expected and actual types.
-    #[error("Type mismatch: expected {expected}, got {actual}")]
+    /// Type mismatch between expected and actual types. A private constant
+    /// is shown by its user name, as Lean 4.8.0 prints it (G21).
+    #[error(
+        "Type mismatch: expected {}, got {}",
+        crate::private_names::user_facing_text(expected),
+        crate::private_names::user_facing_text(actual)
+    )]
     TypeMismatch { expected: String, actual: String },
     /// A finalized declaration still contains unresolved variables — either
     /// metavariable-tagged FVars (an implicit argument no unification could
@@ -71,6 +91,63 @@ pub enum ElabError {
         goal: String,
         /// Candidate list plus the options a reader can take.
         detail: String,
+    },
+    /// The declaration spent its whole automation work budget
+    /// (`clean check --automation-budget`), and failed after it did.
+    ///
+    /// Clean's analogue of Lean's `throwMaxHeartbeat` "(deterministic)
+    /// timeout …, maximum number of heartbeats … has been reached"
+    /// (`Lean.Core.checkMaxHeartbeatsCore`, `src/lean/Lean/CoreM.lean`). Once
+    /// the budget is spent every automation call of the declaration gives up
+    /// (`clean-auto`'s `work_budget.rs`), so `underlying` — the error the
+    /// declaration then failed with — is what the script could do without
+    /// automation, not evidence that the goal is out of reach. It is kept in
+    /// the message verbatim so the failure stays classifiable by what the
+    /// script was doing.
+    #[error(
+        "(deterministic) automation budget exhausted: the declaration spent all {limit} \
+         units of its automation work budget (exhausted in `{site}`); raise it with \
+         `--automation-budget <n>`, or 0 for unlimited. It then failed with: {underlying}"
+    )]
+    AutomationBudgetExhausted {
+        /// The per-declaration limit, in automation work units.
+        limit: u64,
+        /// The automation site whose charge found the budget spent.
+        site: String,
+        /// The error the declaration failed with after the budget ran out.
+        underlying: Box<ElabError>,
+    },
+    /// Reference to an identifier that is not in scope, whose "nearest
+    /// theorem names" have NOT been computed.
+    ///
+    /// Computing them is a Levenshtein scan over every accessible theorem in
+    /// the environment, and most unknown-identifier errors are never reported:
+    /// they are raised on SPECULATIVE paths that catch them and try something
+    /// else — a pattern name tried as a constructor before it is bound as a
+    /// variable (`elab_match/name_classification.rs`), a dotted name's prefix
+    /// tried as a receiver before the qualified constant
+    /// (`infer/elab_proj.rs`). Measured by the performance audit
+    /// (`reports/lean4-replacement-audit-2026-09-24/performance.json`) at
+    /// 4-15% of `Mathlib/Logic/Basic.lean`'s elaboration, under exactly those
+    /// two callers. So the scan runs only for the error that is REPORTED:
+    /// [`ElabError::with_ident_suggestions`] turns this into
+    /// [`ElabError::UnknownIdentWithSuggestions`] (or [`ElabError::UnknownIdent`]
+    /// when nothing is near) at the declaration boundary, with the namespace
+    /// the identifier was written in, which decides what is accessible.
+    /// Unmaterialized, it renders exactly as [`ElabError::UnknownIdent`].
+    #[error("Unknown identifier: {name}")]
+    UnknownIdentDeferred {
+        /// Unresolved identifier.
+        name: String,
+        /// The namespace the identifier was written in (private names are
+        /// suggested only inside their own namespace).
+        namespace_prefix: Name,
+        /// What to report instead when nothing is near `name`. Upstream's
+        /// dotted-name fallback (`infer/elab_proj.rs`) forwards the QUALIFIED
+        /// name only when it carries suggestions and otherwise reports the
+        /// base-name error; whether suggestions exist is decided only when the
+        /// error is reported, so the base error rides along until then.
+        fallback: Option<Box<ElabError>>,
     },
     /// Reference to an identifier that is not in scope.
     #[error("Unknown identifier: {0}")]
@@ -156,8 +233,8 @@ pub enum ElabError {
          supported for structural recursion (match/equation form on a \
          structurally decreasing parameter) and for well-founded recursion \
          whose `termination_by` measure names ONE parameter; the form of \
-         `{decl}` ({params} parameter(s); neither lowering applied) is outside \
-         today's fragment.\n  \
+         `{decl}` ({params} parameter(s); neither lowering applied: {detail}) is \
+         outside today's fragment.\n  \
          help: ways forward, in order of preference — (1) restate `{decl}` \
          structurally: match on one parameter and recurse on its immediate \
          sub-term, which lowers through that type's recursor and needs no \
@@ -177,6 +254,10 @@ pub enum ElabError {
         decl: String,
         /// Its explicit parameter count, after equation-form normalization.
         params: usize,
+        /// Which recursion form was met and why no lowering takes it: the
+        /// decreasing parameter the structural lowering tried and what the
+        /// unresolved call passes there, or that no parameter was found.
+        detail: String,
     },
     /// The unresolved identifier matches a declaration in the SAME batch that
     /// contributed no forward-resolvable header, so header-first checking had
@@ -255,6 +336,17 @@ pub enum ElabError {
         /// Nearest declared field names.
         suggestions: Vec<String>,
     },
+    /// A structure-instance pattern named the same field slot twice.
+    ///
+    /// Lean rejects a repeated `structInstField` the same way; accepting one
+    /// would silently drop a user-written pattern.
+    #[error("Duplicate field {field} in a `{{ … }}` pattern for {struct_name}")]
+    DuplicateStructureField {
+        /// Target structure.
+        struct_name: Name,
+        /// The repeated field name.
+        field: String,
+    },
     /// Structure literal omitted one or more required fields.
     #[error("Missing field(s) for {struct_name}: {}", fields.join(", "))]
     MissingStructureFields {
@@ -307,8 +399,13 @@ pub enum ElabError {
         /// Guidance on the core-compatible spelling, e.g. `use \`Type _\` or \`Type u\``.
         hint: &'static str,
     },
-    /// Kernel rejected a declaration during full type checking.
-    #[error("Kernel check failed for {name}: {detail}")]
+    /// Kernel rejected a declaration during full type checking. The detail's
+    /// private constants are shown by their user names, as Lean 4.8.0 prints
+    /// them (G21).
+    #[error(
+        "Kernel check failed for {name}: {}",
+        crate::private_names::user_facing_text(detail)
+    )]
     KernelCheckFailed { name: Name, detail: String },
     /// Environment registration failed after elaboration produced a declaration.
     #[error("Kernel registration failed during {operation}: {detail}")]
@@ -336,12 +433,119 @@ pub enum ElabError {
     /// Reference to a structure that is not defined.
     #[error("Unknown structure: {name}")]
     UnknownStruct { name: String },
+    /// Attribute name has no modeled or explicitly recognized handler.
+    #[error("Unknown attribute `[{name}]`")]
+    UnknownAttribute { name: String },
+
+    /// Compiler simplification accepts only bare constant replacement equalities.
+    #[error("invalid 'csimp' theorem, only constant replacement theorems (e.g., `@f = @g`) are currently supported.")]
+    InvalidCsimpTheorem { name: Name },
+    /// A class attribute targets a value-bearing declaration.
+    #[error(
+        "invalid 'class', declaration '{name}' must be inductive datatype, structure, or constant"
+    )]
+    InvalidClassAttribute { name: Name },
+    /// A class is registered twice.
+    #[error("class has already been declared '{name}'")]
+    ClassAlreadyDeclared { name: Name },
+    /// A regular class parameter depends on an output parameter.
+    #[error(
+        "invalid class, parameter #{parameter} depends on `outParam`, but it is not an `outParam`"
+    )]
+    InvalidClassOutParam { parameter: usize },
     /// Feature is not supported by the elaborator.
     #[error("Unsupported feature: {feature}")]
     Unsupported { feature: String },
-    /// An `import` named a module that resolves to nothing real: no `.olean`
-    /// was loadable for it, no intra-project `.lean` source was elaborated for
-    /// it this run, and Clean declares no hand-written prelude under that name.
+    /// An `@[implemented_by f]` use pinned Lean rejects, displayed in Lean's
+    /// text (`crate::implemented_by`). `target` is `f` as written, or as
+    /// resolved once it resolved.
+    #[error("{}", crate::implemented_by::render(decl, target, defect))]
+    InvalidImplementedBy {
+        decl: Name,
+        target: String,
+        defect: crate::implemented_by::ImplementedByDefect,
+    },
+    /// `attribute [attr] decl` for a parametric attribute (`extern`) on a
+    /// declaration this run did not add (`crate::declared_here`): Lean's
+    /// `ParametricAttribute.add` refuses it with this text.
+    #[error(
+        "Cannot add attribute `[{attribute}]` to declaration `{decl}` because it is in an \
+         imported module"
+    )]
+    AttributeOnImportedDeclaration { attribute: &'static str, decl: Name },
+    /// One class of a `deriving` clause failed for a type that itself
+    /// elaborated. Lean adds the type before it runs any deriving handler, so
+    /// this is an error about the clause, never about the type: the type is
+    /// registered and this error is reported beside it as its own failed leaf
+    /// (`crate::infer::deriving_log`). Displays as the handler's own error.
+    #[error("{error}")]
+    DerivingHandlerFailed {
+        /// The class as the clause names it.
+        class: String,
+        /// The type the clause belongs to.
+        type_name: String,
+        /// Why the handler failed.
+        error: Box<ElabError>,
+    },
+    /// A built-in `deriving` handler refused a type that Lean 4.8.0's
+    /// handler refuses too, with Lean's message (`failed to generate
+    /// 'Inhabited' instance for 'T'`, `Lean/Elab/Deriving/Inhabited.lean`).
+    #[error("{message}")]
+    DerivingRefused {
+        /// Lean's message.
+        message: String,
+    },
+    /// A declaration of a name Lean 4.8.0 core already declares
+    /// (`crate::lean_core_names`), whether or not Clean's prelude models it:
+    /// Lean refuses it, so Clean does too.
+    #[error("`{name}` has already been declared (Lean 4.8.0 core)")]
+    DeclaredInLeanCore { name: String },
+    /// Lean 4.8.0's `checkNotAlreadyDeclared`
+    /// (`Lean/Elab/DeclModifiers.lean:17-40`) where a `private` name is
+    /// involved: a private and a public declaration of one user-facing name in
+    /// one module, or two private ones. With module-local private names (G21)
+    /// the two no longer collide in the kernel, so the rule is Lean's and the
+    /// message is Lean's text (`private declaration 'z' …`, `a private
+    /// declaration 'x' …`, `a non-private declaration 'y' has already been
+    /// declared`).
+    #[error("{message}")]
+    PrivateNameAlreadyDeclared {
+        /// Lean's message, with the user-facing name.
+        message: String,
+    },
+    /// A structure field, or the constructor behind `⟨...⟩` / `{...}`
+    /// notation, that is `private` to ANOTHER module (G21 B3). Lean 4.8.0
+    /// refuses each from an importer (`Lean/Elab/App.lean` `resolveLValAux`,
+    /// `BuiltinNotation.lean` `elabAnonymousConstructor`, `StructInst.lean`):
+    /// "field 'x' from structure '_private.M.0.S' is private", "invalid ⟨...⟩
+    /// notation, constructor for `_private.M.0.S` is marked as private",
+    /// "invalid {...} notation, constructor for `_private.M.0.S` is marked as
+    /// private" — the text is Lean's, with the raw kernel name it prints.
+    #[error("{message}")]
+    PrivateFromImportedModule {
+        /// Lean's message.
+        message: String,
+    },
+    /// A source declaration whose name is reserved for a kernel-owned axiom —
+    /// a foundational axiom (`propext`, `Quot.sound`, `Classical.choice`, the
+    /// `Quot` primitives) or a trust marker (`sorry`, `sorryAx`,
+    /// `trustedArith`, `trustedAy`) — structurally or by printed form
+    /// (`clean_kernel::is_reserved_ambient_axiom_name`). Only the kernel's own
+    /// declaration may carry such a name; `«Quot.sound»` is a different
+    /// one-component name that prints exactly like `Quot.sound`.
+    #[error(
+        "`{name}` is reserved: it is or prints as `{printed}`, a kernel-owned axiom or trust \
+         marker, and only the kernel's own declaration may carry that name"
+    )]
+    ReservedKernelName {
+        /// The declared name, rendered unambiguously (`«»` around a component
+        /// that contains a dot).
+        name: String,
+        /// The name as every report would print it.
+        printed: String,
+    },
+    /// An `import` could not be resolved, or its loader refused to continue.
+    /// A refused partial load must not be replaced by another resolution path.
     ///
     /// FAIL-CLOSED ON PURPOSE. The elaborator used to fabricate a prelude here
     /// and return `Ok(())`, so every declaration in such a file was checked
@@ -350,10 +554,10 @@ pub enum ElabError {
     /// strictly worse than no verdict — see [`crate::imports::ImportPolicy`].
     #[error(
         "unresolved import `{module}`: {reason}\n  \
-         nothing real provides this module, so nothing in this file can be \
-         checked against it.\n  \
-         Pass `--permissive-imports` to substitute a hand-written stand-in and \
-         continue (the resulting verdict is not a verification claim)."
+         The module was not loaded successfully. For an absent module, \
+         `--permissive-imports` can substitute a hand-written stand-in \
+         (the resulting verdict is not a verification claim). It cannot \
+         override resource, integrity, or Lean-world refusals."
     )]
     UnresolvedImport {
         /// The module name exactly as written in the `import` statement.
@@ -470,6 +674,40 @@ pub enum ElabError {
     /// A tactic failed during tactic block elaboration.
     #[error("Tactic failed: {0}")]
     TacticFailed(#[source] TacticError),
+    /// **Attribution wrapper**: a tactic block failed with a diagnostic that
+    /// did not name the tactic responsible.
+    ///
+    /// Brick T0 of `docs/plans/TACTICS_TO_100_2026-07-29.md` closed the
+    /// *silent* class (a construct that produced no diagnostic at all). This
+    /// closes the neighbouring one: `unsolved goals: tactic block has 1
+    /// unsolved goal(s)`, `TypeMismatch`, `UnknownIdentWithSuggestions` and
+    /// friends fail loudly but carry no tactic, so a reader cannot tell
+    /// whether `omega` ran and gave up or was never reached — the tactic is
+    /// *effectively* hidden. Measured on `origin/main` at 2026-08-09,
+    /// **88 of 373** census probes failed this way
+    /// (`data/silent_tactic_census.json`, verdict `unnamed`).
+    ///
+    /// Added at the `by`-block boundary only, and only when the underlying
+    /// diagnostic does not already name the dispatching tactic. Every error
+    /// that already carries a `tactic:` field is returned unchanged, and the
+    /// wrapper is transparent to `TacticError::from_elab_error`, so no
+    /// combinator (`first`, `try`, `all_goals`) sees a different error than
+    /// before. This changes the *message*, never the verdict.
+    #[error("{source} [raised under tactic {chain} at source bytes {span_start}..{span_end}]")]
+    InTactic {
+        /// Source spelling of the innermost tactic in scope when the failure
+        /// was raised (`arg`, not the registry key `conv_arg`).
+        tactic: String,
+        /// The nesting chain, outermost → innermost, e.g. ``` `conv` > `lhs` ```.
+        chain: String,
+        /// Start byte offset of that tactic in the source file.
+        span_start: usize,
+        /// End byte offset (exclusive).
+        span_end: usize,
+        /// The original diagnostic, structurally unmodified.
+        #[source]
+        source: Box<ElabError>,
+    },
     /// A user metaprogram (term/tactic elaborator body) raised a custom error via
     /// `throwError "msg"` (or an alias). The `message` is the literal string the
     /// user passed. This is a plain typed diagnostic: it closes no goal, accepts
@@ -477,6 +715,19 @@ pub enum ElabError {
     /// exactly the user's message.
     #[error("{message}")]
     UserThrowError { message: String },
+    /// A Lean testing or audit command (`#guard`, `#print axioms`,
+    /// `#guard_msgs`) failed. `message` is the error Lean logs for the same
+    /// failure, verbatim where Clean can produce Lean's text (`unknown
+    /// constant 'c'`, the `#guard_msgs` mismatch report), because a
+    /// surrounding `#guard_msgs` compares exactly this text.
+    #[error("{message}")]
+    CommandFailed { message: String },
+    /// A `#reduce` outside the class in which Clean knows what pinned Lean's
+    /// `Meta.reduce` does, or whose output a `#guard_msgs` would compare
+    /// (`crate::reduce_command`). It is Clean's own refusal, not a message of
+    /// Lean's, so no `#guard_msgs` consumes it.
+    #[error("`#reduce` refused: {reason}")]
+    ReduceUnmodeled { reason: String },
     /// Post-hoc proof type check failed: the assembled proof term's type
     /// does not match the expected goal type. This is the hard gate at
     /// the tactic elaboration boundary (Phase 2 of #2154/#2201).
@@ -492,10 +743,24 @@ pub enum ElabError {
     /// from the cause as the kernel's "Declaration contains free variables"
     /// rejection. Lean ground truth: "failed to synthesize <goal>"
     /// (lean4 `src/Lean/Meta/SynthInstance.lean`, `synthInstance` failure).
-    #[error("failed to synthesize instance `{goal}`")]
+    #[error("failed to synthesize instance `{goal}`{detail}")]
     FailedToSynthesizeInstance {
         /// Rendered instance goal (e.g. `Hm Int`).
         goal: String,
+        /// The candidate list and the reader's options, already prefixed with
+        /// its own newline, or EMPTY when the site has no `ElabCtx` to build it
+        /// from or the goal is not a class application.
+        ///
+        /// The bare form of this error was the whole message for essentially
+        /// every real instance failure: the rich explanation existed, was
+        /// reachable, and lost a race. `ensure_no_residual_fvars` builds it at
+        /// declaration CLOSE, but an ordinary synthesis failure aborts the body
+        /// long before close — so on a pinned Mathlib slice the rich text fired
+        /// 0 times against 497 bare ones. Replacing the proofs with `sorry` (so
+        /// the argument loop never runs) took it to 3, which is what identified
+        /// the race rather than a dead path. The detail is built HERE now,
+        /// where the failure actually happens.
+        detail: String,
     },
     /// Universe instance `.{{u, v}}` applied to a non-constant expression.
     #[error("Universe instance applied to non-constant expression")]
@@ -508,26 +773,14 @@ pub enum ElabError {
         expected: usize,
         actual: usize,
     },
-    /// A declaration wrote an EXPLICIT `.{...}` universe list and elaboration
-    /// still left an undetermined universe level that the list does not name
-    /// (U2 rung-4 explicitness channel, 2026-08-25).
-    ///
-    /// Lean treats an explicit list as EXHAUSTIVE
-    /// (`Lean.sortDeclLevelParams`): when `allUserLevelNames` is non-empty,
-    /// a used level outside it is an error, never an extra parameter. Clean
-    /// used to APPEND the leftovers instead, so `def leak.{u} (A : Type u)
-    /// (a : A) := fun (B : Type _) (b : B) => b` registered with arity TWO
-    /// while its author declared one — the declaration's universe signature
-    /// silently disagreed with its source, and only a use site
-    /// (`@leak.{0}` → `UniverseLevelMismatch { expected: 2, actual: 1 }`)
-    /// ever reported it, at a distance and blaming the caller.
-    ///
-    /// Scoped precisely to declarations that WROTE a list: `universe u` at
-    /// file scope is folded into the same parameter vector by
-    /// [`crate::preprocess_decl_with_context`] and does NOT close anything,
-    /// so the explicit set is derived by subtracting the file-scope names
-    /// (`ElabCtx::set_file_universe_params`). A declaration with no written
-    /// list keeps auto-generalizing exactly as before.
+    /// A declaration wrote an explicit `.{...}` universe list and its VALUE left an
+    /// undetermined universe level that neither its type nor the list names (U2 rung 4,
+    /// 2026-08-25; Lean's rule since 2026-10-19, `docs/DECISIONS.md` R93). Lean generalizes
+    /// a level its TYPE leaves into an appended parameter (`levelMVarToParamTypesPreDecls`,
+    /// `sortDeclLevelParams`) and refuses a value-only one ("contains universe level
+    /// metavariables"). Only a WRITTEN list counts: file-scope `universe u` names are
+    /// subtracted (`ElabCtx::set_file_universe_params`), and a declaration with no list
+    /// still generalizes every leftover (`docs/FRONTEND_CLASS_LEDGER.md` (164), open half).
     #[error("{detail}")]
     ExplicitUniverseListClosed {
         /// Which levels leaked, which list they leaked out of, and the two
@@ -557,6 +810,16 @@ pub enum ElabError {
         /// instead. Keep it SINGLE-LINE, for the reason spelled out on
         /// [`Self::ExplicitUniverseListClosed`]'s `detail`.
         detail: String,
+    },
+    /// A universe name that is neither declared (`universe u`, `.{u}`) nor
+    /// auto-boundable: `autoImplicit` is off, or the name fails Lean's
+    /// `isValidAutoBoundLevelName` (under `relaxedAutoImplicit false`, an
+    /// ASCII-lowercase letter plus digits / subscripts / `_` / `'`). Lean's
+    /// message, from `Lean/Elab/Level.lean` `elabLevel`.
+    #[error("unknown universe level `{name}`")]
+    UnknownUniverseLevel {
+        /// The universe name as written.
+        name: String,
     },
     /// Named-argument binding failed (B01, GAP_SWEEP_2026-07-09).
     ///
@@ -592,6 +855,16 @@ pub enum ElabError {
         /// Description of the unsupported shape.
         shape: String,
     },
+    /// A `where` / `let rec` helper lifts to a name that is already declared,
+    /// or that a second helper of the same declaration also lifts to. Lean
+    /// 4.8.0 refuses both (`checkNotAlreadyDeclared` in `Lean/Elab/LetRec.lean`;
+    /// pinned: `'foo.go' has already been declared`, also for two identical
+    /// helpers), so Clean does too (`crate::infer::let_rec_lift`).
+    #[error("`{name}` has already been declared (a `where`/`let rec` helper lifts to it)")]
+    LetRecAuxAlreadyDeclared {
+        /// The auxiliary declaration name.
+        name: String,
+    },
     /// A `match h : e with …` (annotated discriminant, Lean
     /// `Lean/Parser/Term.lean:275 matchDiscr` / `Lean/Elab/Match.lean:67`)
     /// combined with a match sub-shape the equality-hypothesis lowering does
@@ -604,6 +877,46 @@ pub enum ElabError {
         hyp: String,
         /// Description of the unsupported sub-shape.
         shape: String,
+    },
+    /// A `match` alternative (or equation) that no value selects: every value
+    /// it matches is matched by an earlier alternative. Lean 4.8.0 refuses the
+    /// match ("redundant alternative", `reportMatcherResultErrors` in
+    /// `src/Lean/Elab/Match.lean`); accepting it would admit a program Lean
+    /// rejects and silently drop the alternative's body (decision D2).
+    #[error("redundant alternative: {detail}")]
+    RedundantAlternative {
+        /// Which alternative, of which match, and why it is unreachable.
+        detail: String,
+    },
+    /// A `do` block that Lean 4.8.0's `do` elaborator refuses
+    /// (`src/Lean/Elab/Do.lean`), reported with Lean's own message: a
+    /// `(← e)` lifted over a binder (`expandLiftMethodAux`), a `return` /
+    /// `break` / `continue` that is not the last element of its sequence
+    /// (`checkLastElem`). Accepting either would admit a program Lean
+    /// rejects (decision D2).
+    #[error("{message}")]
+    DoNotation {
+        /// Lean's message.
+        message: String,
+    },
+    /// Two members of a `mutual` block carry well-founded `termination_by` measures of different
+    /// types. Lean packs the block into ONE well-founded relation and refuses it with this message
+    /// (`checkCodomains`, `Lean/Elab/PreDefinition/WF/Rel.lean`); Clean's structural lowering
+    /// would ignore the measures and accept it (`infer/elab_mutual_measures.rs`).
+    #[error(
+        "The termination measures of mutually recursive functions must have the same return \
+         type, but the termination measure of {first} has type\n  {first_ty}\nwhile the \
+         termination measure of {other} has type\n  {other_ty}\nTry using `sizeOf` explicitly"
+    )]
+    MutualMeasureTypeMismatch {
+        /// The block's first member with a measure.
+        first: String,
+        /// Its measure's type.
+        first_ty: String,
+        /// The member whose measure type differs.
+        other: String,
+        /// That measure's type.
+        other_ty: String,
     },
 }
 
@@ -620,6 +933,48 @@ impl From<TacticError> for ElabError {
 
 #[path = "error_diagnostics.rs"]
 mod diagnostics;
+
+#[path = "error_ident_suggestions.rs"]
+mod ident_suggestions;
+
+impl ElabError {
+    /// Strip any [`ElabError::InTactic`] attribution wrappers, and the
+    /// [`ElabError::DerivingHandlerFailed`] wrapper a logged `deriving`
+    /// failure travels in.
+    ///
+    /// Attribution is presentation, not classification: every site that
+    /// *categorises* an error (failure trackers, blocking-reason tables, the
+    /// reverse `ElabError → TacticError` boundary) must look through the
+    /// wrapper so the category it reports is exactly the one it reported
+    /// before attribution existed.
+    #[must_use]
+    pub fn innermost(&self) -> &ElabError {
+        match self {
+            Self::InTactic { source, .. } => source.innermost(),
+            // A logged `deriving` failure names the class it came from; WHAT
+            // failed is the handler's own error.
+            Self::DerivingHandlerFailed { error, .. } => error.innermost(),
+            other => other,
+        }
+    }
+
+    /// The identifier an unknown-identifier error names, whichever form it
+    /// takes: raised plain, still deferred inside the elaborator
+    /// ([`ElabError::UnknownIdentDeferred`]), or materialized with suggestions
+    /// at the reporting boundary. A site that asks "is this an unknown
+    /// identifier, and which?" asks this rather than matching one form, so
+    /// the deferral of the "did you mean" scan never changes what it sees.
+    #[must_use]
+    #[cfg(test)]
+    pub(crate) fn unknown_ident_name(&self) -> Option<&str> {
+        match self {
+            Self::UnknownIdent(name)
+            | Self::UnknownIdentDeferred { name, .. }
+            | Self::UnknownIdentWithSuggestions { name, .. } => Some(name),
+            _ => None,
+        }
+    }
+}
 
 impl From<crate::options_registry::OptionError> for ElabError {
     /// Map a command-level `set_option` validation failure onto a loud

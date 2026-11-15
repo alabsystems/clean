@@ -31,7 +31,15 @@ impl<'env> CertVerifier<'env> {
     /// quotient, and MData reductions.
     ///
     /// Reference: tc/whnf.rs `whnf_core_inner`
+    ///
+    /// Has no fuel of its own: a caller's deadline (`tc::run_until`) is the
+    /// bound. Once it has fired, the input is returned unreduced, as the type
+    /// checker's `whnf` does on a spent heartbeat; `verify` then refuses the
+    /// whole check with `CertError::Interrupted`.
     pub(super) fn whnf_impl(&self, e: &Expr) -> Expr {
+        if crate::tc::poll_deadline() {
+            return e.clone();
+        }
         stack_safe(|| self.whnf_inner(e))
     }
 
@@ -101,13 +109,14 @@ impl<'env> CertVerifier<'env> {
         let head = expr_whnf.get_app_fn();
         if let ExprKind::Const(ctor_name, _) = &head.kind {
             if let Some(ctor_val) = self.env.get_constructor(ctor_name) {
-                // Lean 4 parity: reduce_proj_core does NOT check that the
-                // constructor's inductive matches the Proj struct name.
-                // This is critical for type aliases (Part of #3209).
-                let args = expr_whnf.get_app_args();
-                let field_idx = ctor_val.num_params as usize + idx as usize;
-                if field_idx < args.len() {
-                    return self.whnf_impl(args[field_idx]);
+                // Lean v4.33.1 `reduce_proj_core` (leanprover/lean4#14632): a
+                // constructor of another inductive is not projected (R147).
+                if ctor_val.inductive_name == *struct_name {
+                    let args = expr_whnf.get_app_args();
+                    let field_idx = ctor_val.num_params as usize + idx as usize;
+                    if field_idx < args.len() {
+                        return self.whnf_impl(args[field_idx]);
+                    }
                 }
             }
         }
@@ -298,6 +307,11 @@ impl<'env> CertVerifier<'env> {
         if !matches!(&head.kind, ExprKind::Const(name, _) if *name == *crate::quot::names::QUOT_LIFT)
         {
             return None;
+        }
+        // SOUNDNESS: kernel-built quotient primitives only — same guard as
+        // `TypeChecker::try_quot_reduction` (a name alone carries no rule).
+        if let ExprKind::Const(name, _) = &head.kind {
+            self.env.get_quot(name)?;
         }
         let args = e.get_app_args();
         crate::quot::try_quot_lift_reduction(head, &args, |expr| self.whnf_impl(expr))

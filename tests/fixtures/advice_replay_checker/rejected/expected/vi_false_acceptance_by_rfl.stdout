@@ -1,0 +1,10 @@
+vi_false_acceptance_by_rfl.lean:103:0: error: Not a definitional equality: the left-hand side
+  accepts (conv 10 two (Tm.lit 3) adv 0)
+is not definitionally equal to the right-hand side
+  true
+vi_false_acceptance_by_rfl.lean:103:81: error: Type mismatch
+  rfl
+has type
+  ?m.9 = ?m.9
+but is expected to have type
+  accepts (conv 10 two (Tm.lit 3) adv 0) = true

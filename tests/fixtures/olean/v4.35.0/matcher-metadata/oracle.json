@@ -1,0 +1,160 @@
+[
+  {
+    "altInfos": [
+      {
+        "hasUnitThunk": true,
+        "numFields": 0,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": true,
+        "numFields": 0,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": true,
+        "numFields": 0,
+        "numOverlaps": 0
+      }
+    ],
+    "altNumParams": [
+      1,
+      1,
+      1
+    ],
+    "discrNames": [
+      null
+    ],
+    "name": "choose.match_1",
+    "numDiscrs": 1,
+    "numParams": 0,
+    "overlaps": [],
+    "registered": true,
+    "uElimPos": 0
+  },
+  {
+    "altInfos": [
+      {
+        "hasUnitThunk": false,
+        "numFields": 0,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": false,
+        "numFields": 0,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": false,
+        "numFields": 0,
+        "numOverlaps": 0
+      }
+    ],
+    "altNumParams": [
+      1,
+      1,
+      1
+    ],
+    "discrNames": [
+      "h"
+    ],
+    "name": "chooseEq.match_1",
+    "numDiscrs": 1,
+    "numParams": 0,
+    "overlaps": [],
+    "registered": true,
+    "uElimPos": 0
+  },
+  {
+    "altInfos": [
+      {
+        "hasUnitThunk": true,
+        "numFields": 0,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": true,
+        "numFields": 0,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": true,
+        "numFields": 0,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": true,
+        "numFields": 0,
+        "numOverlaps": 0
+      }
+    ],
+    "altNumParams": [
+      1,
+      1,
+      1,
+      1
+    ],
+    "discrNames": [
+      null,
+      null
+    ],
+    "name": "chooseTwo.match_1",
+    "numDiscrs": 2,
+    "numParams": 0,
+    "overlaps": [],
+    "registered": true,
+    "uElimPos": 0
+  },
+  {
+    "altInfos": [
+      {
+        "hasUnitThunk": false,
+        "numFields": 1,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": false,
+        "numFields": 1,
+        "numOverlaps": 0
+      },
+      {
+        "hasUnitThunk": false,
+        "numFields": 2,
+        "numOverlaps": 0
+      }
+    ],
+    "altNumParams": [
+      1,
+      1,
+      2
+    ],
+    "discrNames": [
+      null,
+      null
+    ],
+    "name": "chooseOverlap.match_1",
+    "numDiscrs": 2,
+    "numParams": 0,
+    "overlaps": [
+      {
+        "alternative": 1,
+        "overlapping": [
+          0
+        ]
+      },
+      {
+        "alternative": 2,
+        "overlapping": [
+          0,
+          1
+        ]
+      }
+    ],
+    "registered": true,
+    "uElimPos": 0
+  },
+  {
+    "name": "ordinary.match_1",
+    "registered": false
+  }
+]

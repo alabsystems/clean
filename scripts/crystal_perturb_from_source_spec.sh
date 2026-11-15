@@ -9,7 +9,7 @@ REPO="$(cd "$(dirname "$0")/.." && pwd -P)"
 OPS="$REPO/crates/clean-verify/src/spec/core_spec/eval_ir_ops.rs"
 
 pass=0; fail=0
-run() { (cd "$REPO" && cargo test --locked -p clean-verify --test eval_ir --message-format=short) >"$OUT" 2>&1; }
+run() { (cd "$REPO" && targo --unverified test --locked -p clean-verify --test eval_ir --message-format=short) >"$OUT" 2>&1; }
 expect() {
   run; rc=$?
   want="$1"; label="$2"

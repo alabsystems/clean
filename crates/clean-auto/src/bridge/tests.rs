@@ -19,6 +19,8 @@ mod tests_arith_reconstruction;
 mod tests_arith_typecheck;
 #[path = "tests_array.rs"]
 mod tests_array;
+#[path = "tests_conflict_limit.rs"]
+mod tests_conflict_limit;
 #[path = "tests_cross_validation.rs"]
 mod tests_cross_validation;
 #[path = "tests_disjunction.rs"]
@@ -37,6 +39,8 @@ mod tests_kernel_validate;
 mod tests_kernel_validate_exists;
 #[path = "tests_kernel_validate_exists_unkeyable.rs"]
 mod tests_kernel_validate_exists_unkeyable;
+#[path = "tests_open_implication_indices.rs"]
+mod tests_open_implication_indices;
 #[path = "tests_proof_recon_equality.rs"]
 mod tests_proof_recon_equality;
 #[path = "tests_proof_reconstruction.rs"]
@@ -81,6 +85,8 @@ mod tests_scoring_quantifier;
 mod tests_skolem;
 #[path = "tests_stack_safety.rs"]
 mod tests_stack_safety;
+#[path = "tests_symbol_namespace_open_defect.rs"]
+mod tests_symbol_namespace_open_defect;
 #[path = "tests_total_priority.rs"]
 mod tests_total_priority;
 #[path = "tests_trail_guidance.rs"]

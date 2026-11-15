@@ -51,13 +51,16 @@ fn test_intro_basic() {
     let mut state = ProofState::new(env, target);
 
     // intro x
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     // Now the goal should be A with x : A in context
     assert!(!state.is_complete());
     let goal = state.current_goal().unwrap();
     assert_eq!(goal.local_ctx.len(), 1);
-    assert_eq!(goal.local_ctx[0].name, "x");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
 }
 
 #[test]
@@ -71,7 +74,7 @@ fn test_intro_and_assumption() {
     let mut state = ProofState::new(env, target);
 
     // intro x
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     // assumption (finds x : A)
     assumption(&mut state).unwrap();
@@ -138,14 +141,27 @@ fn test_intros() {
     let mut state = ProofState::new(env, target);
 
     // intros x y
-    intros(&mut state, vec!["x".to_string(), "y".to_string()]).unwrap();
+    intros(
+        &mut state,
+        vec![
+            clean_parser::SurfaceName::generated_path("x"),
+            clean_parser::SurfaceName::generated_path("y"),
+        ],
+    )
+    .unwrap();
 
     // Now goal is A with x : A, y : B in context
     assert!(!state.is_complete());
     let goal = state.current_goal().unwrap();
     assert_eq!(goal.local_ctx.len(), 2);
-    assert_eq!(goal.local_ctx[0].name, "x");
-    assert_eq!(goal.local_ctx[1].name, "y");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
+    assert_eq!(
+        goal.local_ctx[1].name,
+        clean_parser::SurfaceName::generated_path("y")
+    );
 }
 
 #[test]
@@ -160,9 +176,9 @@ fn test_complex_proof() {
     let mut state = ProofState::new(env, target);
 
     // intro x
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     // intro y
-    intro(&mut state, "y").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("y")).unwrap();
     // assumption (finds x : A)
     assumption(&mut state).unwrap();
 
@@ -205,8 +221,8 @@ fn test_multi_binder_proof_check_type_correct() {
     let target = Expr::arrow(a.clone(), Expr::arrow(b, a));
 
     let mut state = ProofState::new(env.clone(), target.clone());
-    intro(&mut state, "x").unwrap();
-    intro(&mut state, "y").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("y")).unwrap();
     assumption(&mut state).unwrap();
 
     assert!(state.is_complete(), "proof should be complete");
@@ -231,8 +247,8 @@ fn test_multi_binder_proof_check_type_wrong_target() {
     let target = Expr::arrow(a.clone(), Expr::arrow(b.clone(), a.clone()));
 
     let mut state = ProofState::new(env.clone(), target);
-    intro(&mut state, "x").unwrap();
-    intro(&mut state, "y").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("y")).unwrap();
     assumption(&mut state).unwrap();
 
     let proof = state.instantiated_proof().unwrap();
@@ -268,7 +284,7 @@ fn test_goal_type_stable_after_tactics() {
     }
 
     // After intro: goal_type should still match original target (MetaId(0) type)
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     let gt2 = state.goal_type().expect("goal_type should still exist");
     let tc = TypeChecker::new(&env);
     assert!(
@@ -299,16 +315,19 @@ fn test_cases_bool_creates_two_goals() {
     let mut state = ProofState::new(env, target);
 
     // intro b
-    intro(&mut state, "b").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
 
     // Verify we have one goal with hypothesis b : Bool
     assert!(!state.is_complete());
     let goal = state.current_goal().unwrap();
     assert_eq!(goal.local_ctx.len(), 1);
-    assert_eq!(goal.local_ctx[0].name, "b");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("b")
+    );
 
     // cases b
-    cases(&mut state, "b").unwrap();
+    cases(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
 
     // Should now have 2 goals (one for false, one for true)
     assert_eq!(
@@ -329,10 +348,10 @@ fn test_cases_bool_proof_completion() {
     let mut state = ProofState::new(env, target);
 
     // intro b
-    intro(&mut state, "b").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
 
     // cases b
-    cases(&mut state, "b").unwrap();
+    cases(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
 
     // Now we should have 2 goals, each of type Bool
     assert_eq!(state.goals().len(), 2);
@@ -362,7 +381,10 @@ fn test_cases_nonexistent_hypothesis() {
     let mut state = ProofState::new(env, target);
 
     // Try cases on a hypothesis that doesn't exist
-    let result = cases(&mut state, "nonexistent");
+    let result = cases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
 
     match result {
         Err(TacticError::UnknownIdent(name)) => {
@@ -390,16 +412,19 @@ fn test_induction_nat_creates_two_goals() {
     let mut state = ProofState::new(env, target);
 
     // intro n
-    intro(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // Verify we have one goal with hypothesis n : Nat
     assert!(!state.is_complete());
     let goal = state.current_goal().unwrap();
     assert_eq!(goal.local_ctx.len(), 1);
-    assert_eq!(goal.local_ctx[0].name, "n");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("n")
+    );
 
     // induction n
-    induction(&mut state, "n").unwrap();
+    induction(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // Should now have 2 goals (one for zero, one for succ)
     assert_eq!(
@@ -420,10 +445,10 @@ fn test_induction_nat_has_ih_in_succ_case() {
     let mut state = ProofState::new(env, target);
 
     // intro n
-    intro(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // induction n
-    induction(&mut state, "n").unwrap();
+    induction(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // Check that we have 2 goals
     assert_eq!(state.goals().len(), 2);
@@ -445,11 +470,13 @@ fn test_induction_nat_has_ih_in_succ_case() {
         succ_goal.local_ctx.len()
     );
 
-    // Find the IH hypothesis
+    // Nat.succ records its field first, then the exact IH FVar.
+    assert_eq!(succ_goal.case_binders.len(), 2);
+    assert_ne!(succ_goal.case_binders[0], succ_goal.case_binders[1]);
     let ih_hyp = succ_goal
         .local_ctx
         .iter()
-        .find(|d| d.name.starts_with("ih_"));
+        .find(|d| d.fvar == succ_goal.case_binders[1]);
     assert!(ih_hyp.is_some(), "succ case should have an IH hypothesis");
 }
 
@@ -464,10 +491,10 @@ fn test_induction_nat_proof_completion() {
     let mut state = ProofState::new(env, target);
 
     // intro n
-    intro(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // induction n
-    induction(&mut state, "n").unwrap();
+    induction(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     assert_eq!(state.goals().len(), 2);
 
@@ -480,10 +507,14 @@ fn test_induction_nat_proof_completion() {
     let succ_goal = state.current_goal().unwrap().clone();
 
     // Find the predecessor field
+    let pred_id = succ_goal
+        .case_binders
+        .first()
+        .expect("should record predecessor field");
     let pred_field = succ_goal
         .local_ctx
         .iter()
-        .find(|d| d.name.starts_with("succ_"))
+        .find(|d| d.fvar == *pred_id)
         .expect("should have succ field");
 
     // Use Nat.succ pred_field
@@ -508,8 +539,8 @@ fn test_induction_nat_using_ih() {
 
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "n").unwrap();
-    induction(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
+    induction(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // Zero case: exact Nat.zero
     let zero_const = Expr::const_(Name::from_string("Nat.zero"), vec![]);
@@ -519,10 +550,14 @@ fn test_induction_nat_using_ih() {
     let succ_goal = state.current_goal().unwrap().clone();
 
     // Find the IH
+    let ih_id = succ_goal
+        .case_binders
+        .get(1)
+        .expect("should record IH after predecessor");
     let ih_hyp = succ_goal
         .local_ctx
         .iter()
-        .find(|d| d.name.starts_with("ih_"))
+        .find(|d| d.fvar == *ih_id)
         .expect("should have IH");
 
     // Use the IH directly as the proof term
@@ -541,7 +576,10 @@ fn test_induction_nonexistent_hypothesis() {
     let mut state = ProofState::new(env, target);
 
     // Try induction on a hypothesis that doesn't exist
-    let result = induction(&mut state, "nonexistent");
+    let result = induction(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
 
     match result {
         Err(TacticError::UnknownIdent(name)) => {
@@ -561,15 +599,16 @@ fn test_induction_bool_no_ih() {
 
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "b").unwrap();
-    induction(&mut state, "b").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
+    induction(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
 
     // Should have 2 goals
     assert_eq!(state.goals().len(), 2);
 
     // Neither goal should have IH since Bool constructors have no recursive fields
     for goal in state.goals() {
-        let has_ih = goal.local_ctx.iter().any(|d| d.name.starts_with("ih_"));
+        assert!(goal.local_ctx.is_empty(), "Bool case has no fields or IH");
+        let has_ih = !goal.case_binders.is_empty();
         assert!(!has_ih, "Bool goals should not have IH");
     }
 }
@@ -580,37 +619,24 @@ fn test_induction_bool_no_ih() {
 
 #[test]
 fn test_induction_alt_args_renames_hypotheses() {
-    // After induction on Nat, the succ case has auto-generated names:
-    // succ_0 (field) and ih_succ_0 (IH). Verify that alt.args can rename them.
+    // After induction on Nat, the succ case owns a field and an IH.
+    // Verify that alt.args renames those exact binders.
     let env = setup_env_with_nat();
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let target = Expr::arrow(nat_ty.clone(), nat_ty.clone());
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "n").unwrap();
-    induction(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
+    induction(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     assert_eq!(state.goals().len(), 2);
 
-    // The succ goal (index 1) should have succ_0 and ih_succ_0
-    let succ_goal = &state.goals()[1];
-    let tag = succ_goal.tag.as_deref().unwrap_or("");
-    assert_eq!(tag, "succ");
-
-    // Collect auto-generated field names (tag_N pattern)
-    let tag_prefix = format!("{tag}_");
-    let ih_prefix = format!("ih_{tag}_");
-    let mut auto_indices: Vec<usize> = Vec::new();
-    for (i, decl) in succ_goal.local_ctx.iter().enumerate() {
-        if decl.name.starts_with(&tag_prefix) {
-            auto_indices.push(i);
-        }
-    }
-    for (i, decl) in succ_goal.local_ctx.iter().enumerate() {
-        if decl.name.starts_with(&ih_prefix) {
-            auto_indices.push(i);
-        }
-    }
+    // The same production consumer joins the eliminator's exact FVar inventory
+    // to the visible context, preserving field-before-IH order.
+    let succ_goal = state.goals()[1].clone();
+    let tag = succ_goal.tag.as_ref().expect("succ goal has a tag");
+    assert_eq!(tag, &clean_parser::SurfaceName::generated_path("succ"));
+    let auto_indices = builtins_compound::case_binder_indices(&succ_goal);
 
     // Should have exactly 2 auto-generated hypotheses: succ_0 and ih_succ_0
     assert_eq!(
@@ -620,33 +646,42 @@ fn test_induction_alt_args_renames_hypotheses() {
         succ_goal
             .local_ctx
             .iter()
-            .map(|d| d.name.as_str())
+            .map(|d| &d.name)
             .collect::<Vec<_>>()
     );
 
-    // Simulate the renaming that eval_induction_alts now performs
-    let mut goal = succ_goal.clone();
-    let user_args = ["m".to_string(), "ih".to_string()];
-    for (arg_idx, user_name) in user_args.iter().enumerate() {
-        if arg_idx < auto_indices.len() {
-            goal.local_ctx[auto_indices[arg_idx]].name = user_name.clone();
-        }
-    }
+    let old_field_name = succ_goal.local_ctx[auto_indices[0]].name.clone();
+    let old_ih_name = succ_goal.local_ctx[auto_indices[1]].name.clone();
+    state.goals.swap(0, 1);
+    let user_args = [
+        clean_parser::SurfaceName::generated_path("m"),
+        clean_parser::SurfaceName::generated_path("ih"),
+    ];
+    builtins_compound::rename_alternative_binders(
+        state.current_goal_mut().unwrap(),
+        &user_args,
+        true,
+    );
+    let goal = state.current_goal().unwrap();
+    assert_eq!(goal.case_binders, succ_goal.case_binders);
 
     // Verify the renamed hypotheses
-    let has_m = goal.local_ctx.iter().any(|d| d.name == "m");
-    let has_ih = goal.local_ctx.iter().any(|d| d.name == "ih");
+    let has_m = goal.local_ctx.iter().any(|d| {
+        d.fvar == succ_goal.case_binders[0]
+            && d.name == clean_parser::SurfaceName::generated_path("m")
+    });
+    let has_ih = goal.local_ctx.iter().any(|d| {
+        d.fvar == succ_goal.case_binders[1]
+            && d.name == clean_parser::SurfaceName::generated_path("ih")
+    });
     assert!(has_m, "field should be renamed to 'm'");
     assert!(has_ih, "IH should be renamed to 'ih'");
 
     // The old auto-generated names should be gone
-    let has_succ_0 = goal.local_ctx.iter().any(|d| d.name == "succ_0");
-    let has_ih_succ_0 = goal.local_ctx.iter().any(|d| d.name == "ih_succ_0");
-    assert!(!has_succ_0, "old name 'succ_0' should be gone after rename");
-    assert!(
-        !has_ih_succ_0,
-        "old name 'ih_succ_0' should be gone after rename"
-    );
+    let has_succ_0 = goal.local_ctx.iter().any(|d| d.name == old_field_name);
+    let has_ih_succ_0 = goal.local_ctx.iter().any(|d| d.name == old_ih_name);
+    assert!(!has_succ_0, "old field name should be gone after rename");
+    assert!(!has_ih_succ_0, "old IH name should be gone after rename");
 }
 
 #[test]
@@ -657,24 +692,16 @@ fn test_cases_alt_args_renames_fields() {
     let target = Expr::arrow(nat_ty.clone(), nat_ty.clone());
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "n").unwrap();
-    cases(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
+    cases(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     assert_eq!(state.goals().len(), 2);
 
     // succ case should have succ_0 (field only, no IH for cases)
-    let succ_goal = &state.goals()[1];
-    let tag = succ_goal.tag.as_deref().unwrap_or("");
-    assert_eq!(tag, "succ");
-
-    let tag_prefix = format!("{tag}_");
-    let field_indices: Vec<usize> = succ_goal
-        .local_ctx
-        .iter()
-        .enumerate()
-        .filter(|(_, d)| d.name.starts_with(&tag_prefix))
-        .map(|(i, _)| i)
-        .collect();
+    let succ_goal = state.goals()[1].clone();
+    let tag = succ_goal.tag.as_ref().expect("succ goal has a tag");
+    assert_eq!(tag, &clean_parser::SurfaceName::generated_path("succ"));
+    let field_indices = builtins_compound::case_binder_indices(&succ_goal);
 
     assert_eq!(
         field_indices.len(),
@@ -682,11 +709,20 @@ fn test_cases_alt_args_renames_fields() {
         "cases succ should have 1 field (succ_0)"
     );
 
-    // Simulate renaming: | succ k =>
-    let mut goal = succ_goal.clone();
-    goal.local_ctx[field_indices[0]].name = "k".to_string();
+    // Exercise the production rename consumer: | succ k =>
+    state.goals.swap(0, 1);
+    builtins_compound::rename_alternative_binders(
+        state.current_goal_mut().unwrap(),
+        &[clean_parser::SurfaceName::generated_path("k")],
+        true,
+    );
+    let goal = state.current_goal().unwrap();
+    assert_eq!(goal.case_binders, succ_goal.case_binders);
 
-    let has_k = goal.local_ctx.iter().any(|d| d.name == "k");
+    let has_k = goal.local_ctx.iter().any(|d| {
+        d.fvar == succ_goal.case_binders[0]
+            && d.name == clean_parser::SurfaceName::generated_path("k")
+    });
     assert!(has_k, "field should be renamed to 'k'");
 }
 
@@ -699,36 +735,33 @@ fn test_induction_alt_args_partial_rename() {
     let target = Expr::arrow(nat_ty.clone(), nat_ty.clone());
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "n").unwrap();
-    induction(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
+    induction(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
-    let succ_goal = &state.goals()[1];
-    let tag = succ_goal.tag.as_deref().unwrap_or("");
-    let tag_prefix = format!("{tag}_");
-    let ih_prefix = format!("ih_{tag}_");
-    let mut auto_indices: Vec<usize> = Vec::new();
-    for (i, decl) in succ_goal.local_ctx.iter().enumerate() {
-        if decl.name.starts_with(&tag_prefix) {
-            auto_indices.push(i);
-        }
-    }
-    for (i, decl) in succ_goal.local_ctx.iter().enumerate() {
-        if decl.name.starts_with(&ih_prefix) {
-            auto_indices.push(i);
-        }
-    }
+    let succ_goal = state.goals()[1].clone();
+    let auto_indices = builtins_compound::case_binder_indices(&succ_goal);
+    assert_eq!(auto_indices.len(), 2);
+    let old_ih_name = succ_goal.local_ctx[auto_indices[1]].name.clone();
 
     // Only rename the first arg (field), leave IH auto-generated
-    let mut goal = succ_goal.clone();
-    let user_args = ["m".to_string()]; // only 1 name for 2 hypotheses
-    for (arg_idx, user_name) in user_args.iter().enumerate() {
-        if arg_idx < auto_indices.len() {
-            goal.local_ctx[auto_indices[arg_idx]].name = user_name.clone();
-        }
-    }
+    let user_args = [clean_parser::SurfaceName::generated_path("m")]; // only 1 name for 2 hypotheses
+    state.goals.swap(0, 1);
+    builtins_compound::rename_alternative_binders(
+        state.current_goal_mut().unwrap(),
+        &user_args,
+        true,
+    );
+    let goal = state.current_goal().unwrap();
+    assert_eq!(goal.case_binders, succ_goal.case_binders);
 
-    let has_m = goal.local_ctx.iter().any(|d| d.name == "m");
-    let has_ih_auto = goal.local_ctx.iter().any(|d| d.name.starts_with("ih_"));
+    let has_m = goal.local_ctx.iter().any(|d| {
+        d.fvar == succ_goal.case_binders[0]
+            && d.name == clean_parser::SurfaceName::generated_path("m")
+    });
+    let has_ih_auto = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.fvar == succ_goal.case_binders[1] && d.name.same_syntax(&old_ih_name));
     assert!(has_m, "first arg should be renamed to 'm'");
     assert!(has_ih_auto, "IH should keep auto-generated name");
 }
@@ -772,8 +805,9 @@ fn test_decide_with_hypothesis() {
     // Setup: we have a hypothesis h : a = b
     let hyp_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: hyp_ty,
         value: None,
     };
@@ -804,14 +838,16 @@ fn test_decide_transitivity() {
 
     // Hypotheses: h1 : a = b, h2 : b = c
     let hyp1 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: make_eq(a_ty.clone(), a.clone(), b.clone()),
         value: None,
     };
     let hyp2 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: make_eq(a_ty.clone(), b, c.clone()),
         value: None,
     };
@@ -847,8 +883,9 @@ fn test_decide_congruence() {
 
     // Hypothesis: h : a = b
     let hyp = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: make_eq(a_ty.clone(), a, b),
         value: None,
     };
@@ -904,8 +941,9 @@ fn test_decide_proof_uses_hypothesis_fvar() {
     let hyp_fvar = FVarId::new(42);
     let hyp_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: hyp_ty,
         value: None,
     };
@@ -963,8 +1001,9 @@ fn test_decide_symmetry_proof_structure() {
     // Hypothesis: h : a = b
     let hyp_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: hyp_ty,
         value: None,
     };
@@ -1047,8 +1086,9 @@ fn test_proof_state_create_cert_verifier_with_context() {
     // Create a proof state with local hypotheses
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -1096,8 +1136,9 @@ fn test_proof_state_infer_type_with_cert() {
 
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -1138,8 +1179,9 @@ fn test_proof_state_verify_proof() {
 
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -1164,8 +1206,9 @@ fn test_proof_state_verify_proof_type_mismatch() {
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let b_ty = Expr::const_(Name::from_string("B"), vec![]);
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -1235,7 +1278,7 @@ fn test_intro_with_cert() {
     let mut state = ProofState::new(env, target);
 
     // intro x (with certificate)
-    let cert = intro_with_cert(&mut state, "x")
+    let cert = intro_with_cert(&mut state, &clean_parser::SurfaceName::generated_path("x"))
         .expect("intro_with_cert should introduce binder for function goals");
     assert!(!state.is_complete()); // Still have goal A to prove
                                    // Certificate is for the domain type (A : Type)
@@ -1253,8 +1296,8 @@ fn test_intro_with_cert_prop() {
     let mut state = ProofState::new(env, target);
 
     // intro h (with certificate)
-    let cert =
-        intro_with_cert(&mut state, "h").expect("intro_with_cert should introduce Prop binders");
+    let cert = intro_with_cert(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro_with_cert should introduce Prop binders");
     // Certificate is for Prop : Type (Sort(0) : Sort(1))
     assert!(matches!(cert, ProofCert::Sort { .. }));
 }
@@ -1266,8 +1309,9 @@ fn test_assumption_with_cert() {
     // Goal: A with hypothesis x : A
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -1314,7 +1358,8 @@ fn test_certified_proof_chain() {
     let mut certs = Vec::new();
 
     // intro x (with cert)
-    let cert1 = intro_with_cert(&mut state, "x").unwrap();
+    let cert1 =
+        intro_with_cert(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     certs.push(cert1);
 
     // assumption (with cert)
@@ -1599,8 +1644,9 @@ fn test_ay_omega_with_hypothesis() {
     let h_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let h_fvar = FVarId::new(0);
     let h_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: h_fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: h_ty,
         value: None,
     };
@@ -1660,7 +1706,12 @@ fn test_have_with_proof_adds_hypothesis() {
     let mut state = ProofState::new(env, b_ty.clone());
 
     // have h : A := a
-    let result = have_(&mut state, "h", a_ty.clone(), Some(a));
+    let result = have_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty.clone(),
+        Some(a),
+    );
     assert!(result.is_ok(), "have with proof should succeed");
 
     // Should still have 1 goal (the original B)
@@ -1669,7 +1720,10 @@ fn test_have_with_proof_adds_hypothesis() {
     // New goal should have h in context
     let new_goal = state.current_goal().unwrap();
     assert_eq!(new_goal.local_ctx.len(), 1);
-    assert_eq!(new_goal.local_ctx[0].name, "h");
+    assert_eq!(
+        new_goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("h")
+    );
 
     // Goal should still be B
     assert!(matches!(new_goal.target.kind(), ExprKind::Const(name, _) if name.to_string() == "B"));
@@ -1686,7 +1740,12 @@ fn test_have_without_proof_creates_two_goals() {
     let mut state = ProofState::new(env, b_ty.clone());
 
     // have h : A (without proof)
-    let result = have_(&mut state, "h", a_ty.clone(), None);
+    let result = have_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty.clone(),
+        None,
+    );
     assert!(result.is_ok(), "have without proof should succeed");
 
     // Should have 2 goals
@@ -1706,7 +1765,10 @@ fn test_have_without_proof_creates_two_goals() {
         "second goal should be B"
     );
     assert_eq!(second_goal.local_ctx.len(), 1);
-    assert_eq!(second_goal.local_ctx[0].name, "h");
+    assert_eq!(
+        second_goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("h")
+    );
 }
 
 #[test]
@@ -1721,7 +1783,12 @@ fn test_have_wrong_type_fails() {
     let mut state = ProofState::new(env, a_ty.clone());
 
     // have h : B := a (wrong - a has type A, not B)
-    let result = have_(&mut state, "h", b_ty, Some(a));
+    let result = have_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        b_ty,
+        Some(a),
+    );
     assert!(result.is_err(), "have with wrong type should fail");
 }
 
@@ -1739,7 +1806,13 @@ fn test_have_complete_proof() {
     let mut state = ProofState::new(env, b_ty);
 
     // have h : A := a
-    have_(&mut state, "h", a_ty, Some(a)).unwrap();
+    have_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty,
+        Some(a),
+    )
+    .unwrap();
 
     // Now goal is still B with h : A in context
     // Apply f : A → B to get goal A
@@ -1771,7 +1844,12 @@ fn test_suffices_with_proof_fn() {
     let mut state = ProofState::new(env, b_ty);
 
     // suffices h : A by f
-    let result = suffices_(&mut state, "h", a_ty.clone(), Some(f));
+    let result = suffices_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty.clone(),
+        Some(f),
+    );
     assert!(
         result.is_ok(),
         "suffices with valid proof fn should succeed"
@@ -1800,7 +1878,12 @@ fn test_suffices_without_proof_fn() {
     let mut state = ProofState::new(env, b_ty.clone());
 
     // suffices h : A (no proof function)
-    let result = suffices_(&mut state, "h", a_ty.clone(), None);
+    let result = suffices_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty.clone(),
+        None,
+    );
     assert!(result.is_ok(), "suffices without proof fn should succeed");
 
     // Should have 2 goals
@@ -1842,7 +1925,12 @@ fn test_suffices_wrong_type_fails() {
     let mut state = ProofState::new(env, b_ty);
 
     // suffices h : A by a (wrong - a : A, not A → B)
-    let result = suffices_(&mut state, "h", a_ty, Some(a));
+    let result = suffices_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty,
+        Some(a),
+    );
     assert!(
         result.is_err(),
         "suffices with wrong proof type should fail"
@@ -1863,14 +1951,20 @@ fn test_suffices_complete_proof() {
     let mut state = ProofState::new(env, b_ty);
 
     // suffices h : A (no proof function)
-    suffices_(&mut state, "h", a_ty, None).unwrap();
+    suffices_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty,
+        None,
+    )
+    .unwrap();
 
     // Goal 1: prove A
     exact(&mut state, a).unwrap();
 
     // Goal 2: prove A → B
     // intro to get h : A, then apply f h
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Now goal is B with h : A in context
     // Apply f : A → B
@@ -1894,7 +1988,12 @@ fn test_suffices_no_goals_fails() {
     exact(&mut state, a.clone()).unwrap();
 
     // Now try suffices on completed proof
-    let result = suffices_(&mut state, "h", a_ty, None);
+    let result = suffices_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty,
+        None,
+    );
     assert!(
         matches!(result, Err(TacticError::NoGoals)),
         "suffices on complete proof should fail with NoGoals"
@@ -1912,7 +2011,12 @@ fn test_have_no_goals_fails() {
     exact(&mut state, a.clone()).unwrap();
 
     // Now try have on completed proof
-    let result = have_(&mut state, "h", a_ty, Some(a));
+    let result = have_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty,
+        Some(a),
+    );
     assert!(
         matches!(result, Err(TacticError::NoGoals)),
         "have on complete proof should fail with NoGoals"
@@ -1931,8 +2035,9 @@ fn test_try_tactic_succeeds_on_success() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: target,
             value: None,
         }],
@@ -2047,8 +2152,9 @@ fn test_trivial_uses_assumption() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: target,
             value: None,
         }],
@@ -2114,8 +2220,9 @@ fn test_solve_by_elim_direct_match() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: fvar_h,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: target,
             value: None,
         }],
@@ -2147,14 +2254,16 @@ fn test_solve_by_elim_one_step() {
         type_b.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h1,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: type_a.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h2,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: Expr::arrow(type_a, type_b),
                 value: None,
             },
@@ -2202,20 +2311,23 @@ fn test_solve_by_elim_chain() {
         type_c.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h1,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: type_a.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h2,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: Expr::arrow(type_a, type_b.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h3,
-                name: "h3".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: Expr::arrow(type_b, type_c),
                 value: None,
             },
@@ -2264,14 +2376,16 @@ fn test_solve_by_elim_respects_depth_limit() {
         type_b.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h1,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: type_a.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h2,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: Expr::arrow(type_a, type_b),
                 value: None,
             },
@@ -2297,15 +2411,16 @@ fn test_clear_removes_hypothesis() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: fvar_h,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: target,
             value: None,
         }],
     );
 
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 1);
-    clear(&mut state, "h").unwrap();
+    clear(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 0);
 }
 
@@ -2315,7 +2430,10 @@ fn test_clear_fails_for_nonexistent() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = clear(&mut state, "nonexistent");
+    let result = clear(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     if let Err(TacticError::HypothesisNotFound(name)) = result {
         assert_eq!(name, "nonexistent");
     } else {
@@ -2337,15 +2455,24 @@ fn test_rename_changes_name() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: fvar_h,
-            name: "old_name".to_string(),
+            name: clean_parser::SurfaceName::generated_path("old_name"),
             ty: target,
             value: None,
         }],
     );
 
-    rename(&mut state, "old_name", "new_name").unwrap();
-    assert_eq!(state.current_goal().unwrap().local_ctx[0].name, "new_name");
+    rename(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("old_name"),
+        &clean_parser::SurfaceName::generated_path("new_name"),
+    )
+    .unwrap();
+    assert_eq!(
+        state.current_goal().unwrap().local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("new_name")
+    );
 }
 
 #[test]
@@ -2354,7 +2481,11 @@ fn test_rename_fails_for_nonexistent() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = rename(&mut state, "nonexistent", "new");
+    let result = rename(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        &clean_parser::SurfaceName::generated_path("new"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s == "nonexistent"));
 }
 
@@ -2372,17 +2503,26 @@ fn test_duplicate_adds_copy() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: fvar_h,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: target.clone(),
             value: None,
         }],
     );
 
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 1);
-    duplicate(&mut state, "h", "h_copy").unwrap();
+    duplicate(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &clean_parser::SurfaceName::generated_path("h_copy"),
+    )
+    .unwrap();
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 2);
-    assert_eq!(state.current_goal().unwrap().local_ctx[1].name, "h_copy");
+    assert_eq!(
+        state.current_goal().unwrap().local_ctx[1].name,
+        clean_parser::SurfaceName::generated_path("h_copy")
+    );
     // Both should reference the same fvar
     assert_eq!(
         state.current_goal().unwrap().local_ctx[0].fvar,
@@ -2396,7 +2536,11 @@ fn test_duplicate_fails_for_nonexistent() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = duplicate(&mut state, "nonexistent", "copy");
+    let result = duplicate(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        &clean_parser::SurfaceName::generated_path("copy"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s == "nonexistent"));
 }
 
@@ -2418,8 +2562,9 @@ fn test_specialize_reduces_pi_type() {
         env,
         b_ty.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: arrow_ty.clone(),
             value: None,
         }],
@@ -2427,7 +2572,12 @@ fn test_specialize_reduces_pi_type() {
 
     // Specialize h with 'a'
     let a_term = Expr::const_(Name::from_string("a"), vec![]);
-    specialize(&mut state, "h", a_term).unwrap();
+    specialize(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_term,
+    )
+    .unwrap();
 
     // After specialization, the hypothesis named `h` (the most-recent binding,
     // which shadows the original `A → B` via the `have`/`let_named` mechanism)
@@ -2438,10 +2588,10 @@ fn test_specialize_reduces_pi_type() {
         .local_ctx
         .iter()
         .rev()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("specialized hypothesis should remain visible")
         .clone();
-    assert_eq!(hyp.name, "h");
+    assert_eq!(hyp.name, clean_parser::SurfaceName::generated_path("h"));
     // The specialized type should be B
     assert!(matches!(hyp.ty.kind(), ExprKind::Const(n, _) if n == &Name::from_string("B")));
 }
@@ -2458,21 +2608,28 @@ fn test_specialize_inserts_after_later_dependencies_and_hides_old_hypothesis() {
         make_p(x.clone()),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: old_h_fvar,
-                name: "h".into(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: Expr::pi(BinderInfo::Default, n_ty.clone(), make_p(Expr::bvar(0))),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".into(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: n_ty,
                 value: None,
             },
         ],
     );
 
-    specialize(&mut state, "h", Expr::fvar(n_fvar)).expect("specialize should succeed");
+    specialize(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        Expr::fvar(n_fvar),
+    )
+    .expect("specialize should succeed");
 
     // `specialize` re-binds the same name via the shared `have`/`let_named`
     // mechanism (Lean semantics: `have h := h n` shadows the old `h`). The new
@@ -2485,11 +2642,14 @@ fn test_specialize_inserts_after_later_dependencies_and_hides_old_hypothesis() {
         .local_ctx
         .iter()
         .rev()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("specialized hypothesis should be present");
     assert_eq!(visible_h.ty, make_p(Expr::fvar(n_fvar)));
+    // `specialize` goes through `have_`: the value is the proof, marked as a
+    // `have`'s (Lean's specialized hypothesis has no value; DECISIONS R127).
+    assert!(visible_h.is_have(), "specialize makes a `have` local");
     assert_eq!(
-        visible_h.value,
+        visible_h.value.as_ref().map(|value| value.strip_mdata().clone()),
         Some(Expr::app(Expr::fvar(old_h_fvar), Expr::fvar(n_fvar))),
         "specialize should record the new hypothesis value as the original proof applied to the argument"
     );
@@ -2502,12 +2662,12 @@ fn test_specialize_inserts_after_later_dependencies_and_hides_old_hypothesis() {
     let visible_h_pos = goal
         .local_ctx
         .iter()
-        .rposition(|decl| decl.name == "h")
+        .rposition(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("specialized hypothesis should be present");
     let n_pos = goal
         .local_ctx
         .iter()
-        .position(|decl| decl.name == "n")
+        .position(|decl| decl.name == clean_parser::SurfaceName::generated_path("n"))
         .expect("dependency local should remain present");
     assert!(
         visible_h_pos > n_pos,
@@ -2532,15 +2692,20 @@ fn test_specialize_fails_on_non_pi() {
     // Add hypothesis h : A (not a Pi type)
     let fvar = state.fresh_fvar();
     state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a_ty.clone(),
         value: None,
     });
 
     // Try to specialize - should fail
     let arg = Expr::const_(Name::from_string("a"), vec![]);
-    let result = specialize(&mut state, "h", arg);
+    let result = specialize(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        arg,
+    );
     assert!(matches!(result, Err(TacticError::GoalMismatch(ref s)) if s.contains("specialize")));
 }
 
@@ -2557,8 +2722,9 @@ fn test_specialize_fails_on_wrong_arg_type() {
     // Add hypothesis h : A → B
     let fvar = state.fresh_fvar();
     state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: arrow_ty,
         value: None,
     });
@@ -2566,7 +2732,11 @@ fn test_specialize_fails_on_wrong_arg_type() {
     // Try to specialize with wrong type - should fail
     // We need something of type B, not A
     let wrong_arg = Expr::const_(Name::from_string("f"), vec![]); // f : A → B, wrong type
-    let result = specialize(&mut state, "h", wrong_arg);
+    let result = specialize(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        wrong_arg,
+    );
     assert!(matches!(result, Err(TacticError::TypeMismatch { .. })));
 }
 
@@ -2577,7 +2747,11 @@ fn test_specialize_not_found() {
     let mut state = ProofState::new(env, target);
 
     let arg = Expr::const_(Name::from_string("a"), vec![]);
-    let result = specialize(&mut state, "nonexistent", arg);
+    let result = specialize(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        arg,
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -2596,8 +2770,9 @@ fn test_revert_moves_hyp_to_goal() {
         env,
         b_ty.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: a_ty.clone(),
             value: None,
         }],
@@ -2606,7 +2781,7 @@ fn test_revert_moves_hyp_to_goal() {
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 1);
 
     // Revert h
-    revert(&mut state, "h").unwrap();
+    revert(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Context should be empty, goal should be A → B
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 0);
@@ -2625,7 +2800,10 @@ fn test_revert_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = revert(&mut state, "nonexistent");
+    let result = revert(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -2640,11 +2818,11 @@ fn test_intro_revert_roundtrip() {
     let mut state = ProofState::new(env, arrow_ty.clone());
 
     // intro h gives us h : A, goal B
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 1);
 
     // revert h gives us goal A → B again (but with fresh meta)
-    revert(&mut state, "h").unwrap();
+    revert(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
     assert_eq!(state.current_goal().unwrap().local_ctx.len(), 0);
 
     // Target should be Pi again
@@ -2659,17 +2837,20 @@ fn test_intro_revert_roundtrip() {
 // ==========================================================================
 
 #[test]
-fn test_congr_fails_on_non_equality() {
+fn test_congr_leaves_a_non_equality_goal_unchanged() {
+    // Lean's `congr` (`MVarId.congrN`) never fails: a goal no step applies
+    // to is handed back as it was (pinned v4.30.0-rc2, 2026-09-12).
     let env = setup_env();
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
-    let mut state = ProofState::new(env, a_ty);
+    let mut state = ProofState::new(env, a_ty.clone());
 
-    let result = congr(&mut state);
-    assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
+    congr(&mut state).expect("congr does not fail on a non-equality goal");
+    assert_eq!(state.goals().len(), 1);
+    assert_eq!(state.current_goal().map(|g| g.target.clone()), Some(a_ty));
 }
 
 #[test]
-fn test_congr_with_different_functions_fails() {
+fn test_congr_leaves_a_goal_whose_heads_differ() {
     let mut env = Environment::new();
     env.init_eq().unwrap();
 
@@ -2724,10 +2905,15 @@ fn test_congr_with_different_functions_fails() {
         gx,
     );
 
-    let mut state = ProofState::new(env, eq);
+    let mut state = ProofState::new(env, eq.clone());
 
-    let result = congr(&mut state);
-    assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
+    // Lean leaves `f x = g x` untouched: congr-simp needs one head on both
+    // sides, and `congr` never reduces the goal to `f = g` (pinned Lean,
+    // `example (f g : Nat → Nat) (a : Nat) (h : f = g) : f a = g a := by congr`
+    // reports the goal unsolved).
+    congr(&mut state).expect("congr does not fail when the heads differ");
+    assert_eq!(state.goals().len(), 1);
+    assert_eq!(state.current_goal().map(|g| g.target.clone()), Some(eq));
 }
 
 // ==========================================================================
@@ -2744,13 +2930,19 @@ fn test_obtain_fails_on_non_exists() {
     // Add hypothesis h : A (not an Exists type)
     let fvar = state.fresh_fvar();
     state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a_ty,
         value: None,
     });
 
-    let result = obtain(&mut state, "h", "x", "hx");
+    let result = obtain(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &clean_parser::SurfaceName::generated_path("x"),
+        &clean_parser::SurfaceName::generated_path("hx"),
+    );
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -2760,7 +2952,12 @@ fn test_obtain_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = obtain(&mut state, "nonexistent", "x", "hx");
+    let result = obtain(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        &clean_parser::SurfaceName::generated_path("x"),
+        &clean_parser::SurfaceName::generated_path("hx"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -2825,14 +3022,16 @@ fn test_subst_replaces_fvar_in_goal() {
         goal_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: n_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_fvar,
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: eq_ty,
                 value: None,
             },
@@ -2840,7 +3039,7 @@ fn test_subst_replaces_fvar_in_goal() {
     );
 
     // Apply subst
-    subst(&mut state, "h").unwrap();
+    subst(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Check that goal is now P 5
     let new_goal = state.current_goal().unwrap();
@@ -2849,11 +3048,17 @@ fn test_subst_replaces_fvar_in_goal() {
 
     // Check that h and x are removed from context
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "h"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("h")),
         "h should be removed"
     );
     assert!(
-        !new_goal.local_ctx.iter().any(|d| d.name == "x"),
+        !new_goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("x")),
         "x should be removed"
     );
 }
@@ -2912,14 +3117,16 @@ fn test_subst_reverse_equality() {
         goal_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: n_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_fvar,
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: eq_ty,
                 value: None,
             },
@@ -2927,7 +3134,7 @@ fn test_subst_reverse_equality() {
     );
 
     // Apply subst - should handle reverse equality
-    subst(&mut state, "h").unwrap();
+    subst(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Check that goal is now P 5
     let new_goal = state.current_goal().unwrap();
@@ -2946,14 +3153,15 @@ fn test_subst_not_equality_fails() {
         env,
         a_ty.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: a_ty, // Not an equality
             value: None,
         }],
     );
 
-    let result = subst(&mut state, "h");
+    let result = subst(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -3005,14 +3213,15 @@ fn test_subst_no_fvar_fails() {
         env,
         n_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: eq_ty,
             value: None,
         }],
     );
 
-    let result = subst(&mut state, "h");
+    let result = subst(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -3022,7 +3231,10 @@ fn test_subst_hypothesis_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = subst(&mut state, "nonexistent");
+    let result = subst(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -3112,26 +3324,30 @@ fn test_subst_vars_substitutes_multiple() {
         goal_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_fvar,
-                name: "x".to_string(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: n_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: y_fvar,
-                name: "y".to_string(),
+                name: clean_parser::SurfaceName::generated_path("y"),
                 ty: n_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: eq_x_a,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: eq_y_b,
                 value: None,
             },
@@ -3167,8 +3383,9 @@ fn test_subst_vars_no_op_when_no_equalities() {
         env,
         a_ty.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: a_ty,
             value: None,
         }],
@@ -3218,12 +3435,20 @@ fn test_generalize_abstracts_term() {
     let mut state = ProofState::new(env, goal_ty);
 
     // Generalize 5 as n
-    generalize(&mut state, five, "n").unwrap();
+    generalize(
+        &mut state,
+        five,
+        &clean_parser::SurfaceName::generated_path("n"),
+    )
+    .unwrap();
 
     // Check that goal is now P n with n : N in context
     let new_goal = state.current_goal().unwrap();
     assert_eq!(new_goal.local_ctx.len(), 1);
-    assert_eq!(new_goal.local_ctx[0].name, "n");
+    assert_eq!(
+        new_goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("n")
+    );
     assert_eq!(new_goal.local_ctx[0].ty, n_ty);
 
     // Target should contain the free variable
@@ -3278,15 +3503,19 @@ fn test_generalize_term_not_in_goal() {
     // Generalize `six`, which does NOT occur in the goal. Matching Lean 4,
     // this is NOT an error: the variable `n : N` is still introduced and the
     // goal target is left unchanged (no occurrence to abstract).
-    generalize(&mut state, six, "n")
-        .expect("generalize over an absent term should still introduce n (Lean 4 semantics)");
+    generalize(
+        &mut state,
+        six,
+        &clean_parser::SurfaceName::generated_path("n"),
+    )
+    .expect("generalize over an absent term should still introduce n (Lean 4 semantics)");
 
     let new_goal = state
         .current_goal()
         .expect("a goal should remain after generalize");
     assert_eq!(
-        new_goal.local_ctx.last().map(|d| d.name.as_str()),
-        Some("n"),
+        new_goal.local_ctx.last().map(|d| &d.name),
+        Some(&clean_parser::SurfaceName::generated_path("n")),
         "generalize should still introduce the fresh variable n"
     );
     let expected_target = Expr::app(Expr::const_(Name::from_string("P"), vec![]), five);
@@ -3335,13 +3564,25 @@ fn test_generalize_eq_creates_equality_hyp() {
     let mut state = ProofState::new(env, goal_ty);
 
     // Generalize 5 as n with equality heq
-    generalize_eq(&mut state, five.clone(), "n", "heq").unwrap();
+    generalize_eq(
+        &mut state,
+        five.clone(),
+        &clean_parser::SurfaceName::generated_path("n"),
+        &clean_parser::SurfaceName::generated_path("heq"),
+    )
+    .unwrap();
 
     // Check that context has n : N and heq : n = 5
     let new_goal = state.current_goal().unwrap();
     assert_eq!(new_goal.local_ctx.len(), 2);
-    assert_eq!(new_goal.local_ctx[0].name, "n");
-    assert_eq!(new_goal.local_ctx[1].name, "heq");
+    assert_eq!(
+        new_goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("n")
+    );
+    assert_eq!(
+        new_goal.local_ctx[1].name,
+        clean_parser::SurfaceName::generated_path("heq")
+    );
 
     // Check heq type is @Eq.{u} N n five (universe-polymorphic since #2225)
     let n_fvar = new_goal.local_ctx[0].fvar;
@@ -3417,7 +3658,13 @@ fn test_generalize_eq_completes_goal() {
     let goal_ty = Expr::app(Expr::const_(Name::from_string("P"), vec![]), five.clone());
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
 
-    generalize_eq(&mut state, five.clone(), "n", "heq").unwrap();
+    generalize_eq(
+        &mut state,
+        five.clone(),
+        &clean_parser::SurfaceName::generated_path("n"),
+        &clean_parser::SurfaceName::generated_path("heq"),
+    )
+    .unwrap();
     let n_fvar = state.current_goal().unwrap().local_ctx[0].fvar;
     let proof = Expr::app(
         Expr::const_(Name::from_string("allP"), vec![]),
@@ -3471,7 +3718,12 @@ fn test_generalize_eq_requires_eq() {
 
     let mut state = ProofState::new(env, goal_ty);
 
-    let result = generalize_eq(&mut state, five, "n", "heq");
+    let result = generalize_eq(
+        &mut state,
+        five,
+        &clean_parser::SurfaceName::generated_path("n"),
+        &clean_parser::SurfaceName::generated_path("heq"),
+    );
     assert!(matches!(
         result,
         Err(TacticError::InvalidTarget { .. } | TacticError::EnvironmentMissing { .. })
@@ -3527,7 +3779,12 @@ fn test_generalize_eq_requires_eq_refl() {
     let goal_ty = Expr::app(Expr::const_(Name::from_string("P"), vec![]), five.clone());
 
     let mut state = ProofState::new(env, goal_ty);
-    let result = generalize_eq(&mut state, five, "n", "heq");
+    let result = generalize_eq(
+        &mut state,
+        five,
+        &clean_parser::SurfaceName::generated_path("n"),
+        &clean_parser::SurfaceName::generated_path("heq"),
+    );
     assert!(
         matches!(result, Err(TacticError::EnvironmentMissing { ref constant }) if constant == "Eq.refl"),
         "missing Eq.refl should be reported explicitly, got: {result:?}"
@@ -3583,13 +3840,16 @@ fn test_funext_creates_pointwise_goal() {
     let (env, nat, f, g, goal_ty) = setup_funext_goal_env();
     let mut state = ProofState::new(env, goal_ty);
 
-    funext(&mut state, "x").unwrap();
+    funext(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     let goal = state
         .current_goal()
         .expect("funext should leave one pointwise subgoal");
     assert_eq!(goal.local_ctx.len(), 1, "funext should intro one binder");
-    assert_eq!(goal.local_ctx[0].name, "x");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
     assert_eq!(goal.local_ctx[0].ty, nat.clone());
 
     let x = Expr::fvar(goal.local_ctx[0].fvar);
@@ -3661,7 +3921,7 @@ fn test_ext_requires_funext() {
 
     let mut state = ProofState::new(env, goal_ty);
 
-    let result = ext(&mut state, "x");
+    let result = ext(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(
         matches!(result, Err(TacticError::EnvironmentMissing { ref constant }) if constant.contains("funext"))
     );
@@ -3674,7 +3934,7 @@ fn test_ext_goal_not_equality() {
 
     let mut state = ProofState::new(env, a_ty);
 
-    let result = ext(&mut state, "x");
+    let result = ext(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -3683,13 +3943,16 @@ fn test_ext_creates_pointwise_goal() {
     let (env, nat, f, g, goal_ty) = setup_funext_goal_env();
     let mut state = ProofState::new(env, goal_ty);
 
-    ext(&mut state, "x").unwrap();
+    ext(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     let goal = state
         .current_goal()
         .expect("ext should leave one pointwise subgoal");
     assert_eq!(goal.local_ctx.len(), 1, "ext should intro one binder");
-    assert_eq!(goal.local_ctx[0].name, "x");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
     assert_eq!(goal.local_ctx[0].ty, nat.clone());
 
     let x = Expr::fvar(goal.local_ctx[0].fvar);
@@ -3755,7 +4018,7 @@ fn test_ext_lhs_not_function() {
 
     let mut state = ProofState::new(env, goal_ty);
 
-    let result = ext(&mut state, "x");
+    let result = ext(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -3818,14 +4081,17 @@ fn test_injection_nat_succ() {
     let mut state = ProofState::new(env, goal_ty);
 
     // intro h
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Apply injection on h
-    injection(&mut state, "h").unwrap();
+    injection(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // After injection, we should have a new hypothesis h_inj : a = b
     let goal = state.current_goal().unwrap();
-    let inj_hyp = goal.local_ctx.iter().find(|d| d.name.contains("inj"));
+    let inj_hyp = goal
+        .local_ctx
+        .iter()
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h_inj"));
     assert!(
         inj_hyp.is_some(),
         "injection should create an injected hypothesis"
@@ -3876,10 +4142,10 @@ fn test_injection_different_constructors_fails() {
     let mut state = ProofState::new(env, goal_ty);
 
     // intro h
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // injection should fail because constructors are different
-    let result = injection(&mut state, "h");
+    let result = injection(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -3904,10 +4170,10 @@ fn test_injection_not_equality_fails() {
     let mut state = ProofState::new(env, goal_ty);
 
     // intro n
-    intro(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // injection should fail because n is not an equality
-    let result = injection(&mut state, "n");
+    let result = injection(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -3918,7 +4184,10 @@ fn test_injection_hypothesis_not_found() {
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let mut state = ProofState::new(env, nat);
 
-    let result = injection(&mut state, "nonexistent");
+    let result = injection(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -3955,10 +4224,10 @@ fn test_injection_no_fields_fails() {
     let mut state = ProofState::new(env, goal_ty);
 
     // intro h
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // injection should fail because Nat.zero has no fields
-    let result = injection(&mut state, "h");
+    let result = injection(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -4011,10 +4280,10 @@ fn test_discriminate_different_constructors() {
     let mut state = ProofState::new(env, goal_ty);
 
     // intro h
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // discriminate should succeed: Nat.zero ≠ Nat.succ n (different constructors)
-    discriminate(&mut state, "h")
+    discriminate(&mut state, &clean_parser::SurfaceName::generated_path("h"))
         .expect("discriminate should close goal for different constructors");
     assert!(
         state.is_complete(),
@@ -4076,10 +4345,10 @@ fn test_discriminate_same_constructor_fails() {
     let mut state = ProofState::new(env, goal_ty);
 
     // intro h
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // discriminate should fail because constructors are the same
-    let result = discriminate(&mut state, "h");
+    let result = discriminate(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -4090,7 +4359,10 @@ fn test_discriminate_hypothesis_not_found() {
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let mut state = ProofState::new(env, nat);
 
-    let result = discriminate(&mut state, "nonexistent");
+    let result = discriminate(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -4115,10 +4387,10 @@ fn test_discriminate_not_equality_fails() {
     let mut state = ProofState::new(env, goal_ty);
 
     // intro n
-    intro(&mut state, "n").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).unwrap();
 
     // discriminate should fail because n is not an equality
-    let result = discriminate(&mut state, "n");
+    let result = discriminate(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
 }
 
@@ -4137,10 +4409,15 @@ fn test_rcases_basic() {
     let mut state = ProofState::new(env, target);
 
     // intro b
-    intro(&mut state, "b").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
 
     // rcases b (with max depth 1)
-    rcases(&mut state, "b", 1).unwrap();
+    rcases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("b"),
+        1,
+    )
+    .unwrap();
 
     // Should have 2 goals (same as cases for Bool)
     assert_eq!(state.goals().len(), 2);
@@ -4157,12 +4434,17 @@ fn test_rcases_depth_zero_noop() {
     let mut state = ProofState::new(env, target);
 
     // intro b
-    intro(&mut state, "b").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("b")).unwrap();
 
     let goals_before = state.goals().len();
 
     // rcases with depth 0 should do nothing
-    rcases(&mut state, "b", 0).unwrap();
+    rcases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("b"),
+        0,
+    )
+    .unwrap();
 
     assert_eq!(state.goals().len(), goals_before);
 }
@@ -4220,7 +4502,7 @@ fn test_tc_cache_invalidated_on_goal_switch() {
     assert_eq!(whnf_warm, a_ty, "whnf of A should be A (already in WHNF)");
 
     // intro creates a new goal with different meta_id
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     let goal_after = state.current_goal().unwrap().clone();
     assert_ne!(
@@ -4280,7 +4562,7 @@ fn test_tc_cache_invalidated_on_pop_current_goal() {
     assert_eq!(whnf_warm, a_ty, "whnf of A should be A");
 
     // intro creates a new goal and pops the old one
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
     let goal1 = state.current_goal().unwrap().clone();
 
     // The new goal should have the hypothesis in its local context
@@ -4300,8 +4582,9 @@ fn test_proof_state_scope_with_context_root_is_exact() {
     let local_ty = Expr::const_(Name::from_string("A"), vec![]);
     let local_fvar = FVarId::new(17);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: local_fvar,
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: local_ty.clone(),
         value: None,
     }];
@@ -4314,7 +4597,11 @@ fn test_proof_state_scope_with_context_root_is_exact() {
 
     assert_eq!(
         root.locals,
-        vec![("x".to_string(), local_fvar, local_ty)],
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            local_fvar,
+            local_ty
+        )],
         "the root metavariable must capture exactly the supplied local context"
     );
 }
@@ -4325,8 +4612,9 @@ fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
     let elab_ty = Expr::type_();
     let elab_fvar = FVarId::new(10);
     let elab_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: elab_fvar,
-        name: "alpha".to_string(),
+        name: clean_parser::SurfaceName::generated_path("alpha"),
         ty: elab_ty.clone(),
         value: None,
     };
@@ -4338,8 +4626,9 @@ fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
         .expect("initial goal")
         .local_ctx
         .push(LocalDecl {
+            binder_info: Default::default(),
             fvar: parent_only_fvar,
-            name: "parent_only".to_string(),
+            name: clean_parser::SurfaceName::generated_path("parent_only"),
             ty: Expr::prop(),
             value: None,
         });
@@ -4349,8 +4638,9 @@ fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
     let child_ctx = vec![
         elab_decl,
         LocalDecl {
+            binder_info: Default::default(),
             fvar: child_fvar,
-            name: "child".to_string(),
+            name: clean_parser::SurfaceName::generated_path("child"),
             ty: child_ty.clone(),
             value: None,
         },
@@ -4364,8 +4654,16 @@ fn test_proof_state_scope_fresh_child_is_exact_elab_union() {
     assert_eq!(
         child.locals,
         vec![
-            ("alpha".to_string(), elab_fvar, elab_ty),
-            ("child".to_string(), child_fvar, child_ty),
+            (
+                clean_parser::SurfaceName::generated_path("alpha"),
+                elab_fvar,
+                elab_ty
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("child"),
+                child_fvar,
+                child_ty
+            ),
         ],
         "the child scope must be the de-duplicated elaborator/child union, not the focused parent"
     );
@@ -4384,8 +4682,9 @@ fn test_proof_state_scope_clone_imports_missing_meta_exactly() {
     let elab_fvar = FVarId::new(20);
     let elab_ty = Expr::type_();
     let elab_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: elab_fvar,
-        name: "alpha".to_string(),
+        name: clean_parser::SurfaceName::generated_path("alpha"),
         ty: elab_ty.clone(),
         value: None,
     };
@@ -4399,13 +4698,15 @@ fn test_proof_state_scope_clone_imports_missing_meta_exactly() {
         local_ctx: vec![
             elab_decl,
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: child_fvar,
-                name: "child".to_string(),
+                name: clean_parser::SurfaceName::generated_path("child"),
                 ty: child_ty.clone(),
                 value: None,
             },
         ],
         tag: None,
+        case_binders: Vec::new(),
     };
 
     let focused = parent.clone_with_goal(goal);
@@ -4416,8 +4717,16 @@ fn test_proof_state_scope_clone_imports_missing_meta_exactly() {
     assert_eq!(
         imported.locals,
         vec![
-            ("alpha".to_string(), elab_fvar, elab_ty),
-            ("child".to_string(), child_fvar, child_ty),
+            (
+                clean_parser::SurfaceName::generated_path("alpha"),
+                elab_fvar,
+                elab_ty
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("child"),
+                child_fvar,
+                child_ty
+            ),
         ],
         "an imported goal metavariable must use the exact goal scope"
     );
@@ -4435,8 +4744,9 @@ fn test_proof_state_scope_clone_mismatch_fails_closed() {
         env,
         Expr::prop(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: original_fvar,
-            name: "original".to_string(),
+            name: clean_parser::SurfaceName::generated_path("original"),
             ty: original_ty,
             value: None,
         }],
@@ -4446,12 +4756,14 @@ fn test_proof_state_scope_clone_mismatch_fails_closed() {
         meta_id: state.root_meta_id,
         target: Expr::prop(),
         local_ctx: vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(31),
-            name: "different".to_string(),
+            name: clean_parser::SurfaceName::generated_path("different"),
             ty: Expr::prop(),
             value: None,
         }],
         tag: None,
+        case_binders: Vec::new(),
     };
 
     let _ = state.clone_with_goal(mismatched_goal);
@@ -4468,8 +4780,9 @@ fn test_proof_state_scope_clone_retype_mismatch_fails_closed() {
         env,
         Expr::prop(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: "x".to_string(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         }],
@@ -4479,12 +4792,14 @@ fn test_proof_state_scope_clone_retype_mismatch_fails_closed() {
         meta_id: state.root_meta_id,
         target: Expr::prop(),
         local_ctx: vec![LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: "x".to_string(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: Expr::const_(Name::from_string("B"), vec![]),
             value: None,
         }],
         tag: None,
+        case_binders: Vec::new(),
     };
 
     let _ = state.clone_with_goal(retyped_goal);
@@ -4500,6 +4815,7 @@ fn test_proof_state_scope_clone_target_mismatch_fails_closed() {
         target: Expr::const_(Name::from_string("A"), vec![]),
         local_ctx: Vec::new(),
         tag: None,
+        case_binders: Vec::new(),
     };
 
     let _ = state.clone_with_goal(retargeted_goal);
@@ -4516,21 +4832,27 @@ fn test_proof_state_scope_clone_accepts_narrowed_context() {
         Expr::prop(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: kept_fvar,
-                name: "kept".to_string(),
+                name: clean_parser::SurfaceName::generated_path("kept"),
                 ty: ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: cleared_fvar,
-                name: "cleared".to_string(),
+                name: clean_parser::SurfaceName::generated_path("cleared"),
                 ty: ty.clone(),
                 value: None,
             },
         ],
     );
 
-    clear(&mut state, "cleared").expect("clear should narrow the visible context");
+    clear(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("cleared"),
+    )
+    .expect("clear should narrow the visible context");
     let narrowed_goal = state.current_goal().expect("narrowed goal").clone();
     let focused = state.clone_with_goal(narrowed_goal);
     let root = focused
@@ -4556,18 +4878,27 @@ fn test_proof_state_scope_clone_accepts_renamed_context() {
         env,
         Expr::prop(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: "before".to_string(),
+            name: clean_parser::SurfaceName::generated_path("before"),
             ty,
             value: None,
         }],
     );
 
-    rename(&mut state, "before", "after").expect("rename should preserve local identity");
+    rename(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("before"),
+        &clean_parser::SurfaceName::generated_path("after"),
+    )
+    .expect("rename should preserve local identity");
     let renamed_goal = state.current_goal().expect("renamed goal").clone();
     let focused = state.clone_with_goal(renamed_goal);
 
-    assert_eq!(focused.current_goal().unwrap().local_ctx[0].name, "after");
+    assert_eq!(
+        focused.current_goal().unwrap().local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("after")
+    );
     assert_eq!(
         focused
             .metas()
@@ -4575,7 +4906,7 @@ fn test_proof_state_scope_clone_accepts_renamed_context() {
             .expect("focused root metavariable")
             .locals[0]
             .0,
-        "before",
+        clean_parser::SurfaceName::generated_path("before"),
         "surface renaming must not mutate the immutable creation scope"
     );
 }
@@ -4589,8 +4920,9 @@ fn test_proof_state_scope_fresh_scratch_clone_uses_explicit_context() {
         env,
         Expr::prop(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: front_fvar,
-            name: "front".to_string(),
+            name: clean_parser::SurfaceName::generated_path("front"),
             ty: ty.clone(),
             value: None,
         }],
@@ -4598,8 +4930,9 @@ fn test_proof_state_scope_fresh_scratch_clone_uses_explicit_context() {
 
     let scratch_fvar = FVarId::new(61);
     let scratch_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: scratch_fvar,
-        name: "scratch".to_string(),
+        name: clean_parser::SurfaceName::generated_path("scratch"),
         ty: ty.clone(),
         value: None,
     }];
@@ -4612,11 +4945,18 @@ fn test_proof_state_scope_fresh_scratch_clone_uses_explicit_context() {
 
     assert_eq!(scratch_goal.local_ctx.len(), 1);
     assert_eq!(scratch_goal.local_ctx[0].fvar, scratch_fvar);
-    assert_eq!(scratch_goal.local_ctx[0].name, "scratch");
+    assert_eq!(
+        scratch_goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("scratch")
+    );
     assert_eq!(scratch_goal.local_ctx[0].ty, scratch_ctx[0].ty);
     assert_eq!(
         scratch_meta.locals,
-        vec![("scratch".to_string(), scratch_fvar, ty)]
+        vec![(
+            clean_parser::SurfaceName::generated_path("scratch"),
+            scratch_fvar,
+            ty
+        )]
     );
     assert!(
         scratch_meta
@@ -4633,7 +4973,12 @@ fn test_assert_continuation_uses_hypothesis_and_closed_proof_checks() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target.clone());
 
-    assert_(&mut state, "h", target.clone()).expect("assert should create two goals");
+    assert_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        target.clone(),
+    )
+    .expect("assert should create two goals");
     exact(&mut state, Expr::const_(Name::from_string("a"), vec![]))
         .expect("the assertion proof goal should close with a");
     assumption(&mut state).expect("the continuation must close using asserted hypothesis h");
@@ -4787,13 +5132,15 @@ fn test_all_goals_pattern_propagates_meta_across_goals() {
         meta_id: goal1_meta,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("goal1".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal1")),
+        case_binders: Vec::new(),
     });
     ps.goals.push_back(Goal {
         meta_id: goal2_meta,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("goal2".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal2")),
+        case_binders: Vec::new(),
     });
 
     // Simulate all_goals pattern: drain, clone_with_goal, process, merge
@@ -4845,6 +5192,7 @@ fn test_try_combinator_rollback_preserves_original_state() {
         target: b,
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
 
     // Rollback: restore saved state (as try combinator does)
@@ -4883,13 +5231,15 @@ fn test_merge_meta_state_propagates_level_constraints() {
         meta_id: goal1_meta,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("goal1".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal1")),
+        case_binders: Vec::new(),
     });
     ps.goals.push_back(Goal {
         meta_id: goal2_meta,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("goal2".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal2")),
+        case_binders: Vec::new(),
     });
 
     let u0 = Name::from_string("u_0");
@@ -4962,32 +5312,34 @@ fn test_case_tactic_focuses_matching_goal() {
         meta_id: meta1,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("inl".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("inl")),
+        case_binders: Vec::new(),
     });
     ps.goals.push_back(Goal {
         meta_id: meta2,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("inr".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("inr")),
+        case_binders: Vec::new(),
     });
 
     // Simulate case tag focusing: find "inr" and swap to front
-    let tag = "inr";
+    let tag = clean_parser::SurfaceName::generated_path("inr");
     let idx = ps
         .goals
         .iter()
-        .position(|g| g.tag.as_deref() == Some(tag))
+        .position(|g| g.tag.as_ref() == Some(&tag))
         .expect("should find goal with tag 'inr'");
     ps.goals.swap(0, idx);
 
     assert_eq!(
-        ps.goals[0].tag.as_deref(),
-        Some("inr"),
+        ps.goals[0].tag.as_ref(),
+        Some(&clean_parser::SurfaceName::generated_path("inr")),
         "first goal should be the one matching the case tag"
     );
     assert_eq!(
-        ps.goals[1].tag.as_deref(),
-        Some("inl"),
+        ps.goals[1].tag.as_ref(),
+        Some(&clean_parser::SurfaceName::generated_path("inl")),
         "second goal should be the remaining one"
     );
 }
@@ -5298,6 +5650,7 @@ fn test_prune_solved_goals_removes_assigned_goal() {
         target: a.clone(),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
     assert_eq!(ps.goals.len(), 2);
 
@@ -5340,19 +5693,22 @@ fn test_prune_solved_goals_transitive_shared_mvar() {
         meta_id: m0,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("m0".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("m0")),
+        case_binders: Vec::new(),
     });
     ps.goals.push_back(Goal {
         meta_id: m1,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("m1".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("m1")),
+        case_binders: Vec::new(),
     });
     ps.goals.push_back(Goal {
         meta_id: m2,
         target: a.clone(),
         local_ctx: vec![],
-        tag: Some("m2_unrelated".to_string()),
+        tag: Some(clean_parser::SurfaceName::generated_path("m2_unrelated")),
+        case_binders: Vec::new(),
     });
     assert_eq!(ps.goals.len(), 3);
 
@@ -5397,6 +5753,7 @@ fn test_prune_solved_goals_no_change_when_none_assigned() {
         target: a,
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
     assert_eq!(ps.goals.len(), 2);
 
@@ -5484,8 +5841,9 @@ fn test_superposition_fallback_symmetry_with_hypothesis() {
     use crate::tactic::smt::try_superposition_fallback;
 
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: hyp_ty,
         value: None,
     };
@@ -5514,14 +5872,16 @@ fn test_superposition_fallback_transitivity() {
     let c = Expr::const_(Name::from_string("c"), vec![]);
 
     let hyp1 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: make_eq(a_ty.clone(), a.clone(), b.clone()),
         value: None,
     };
     let hyp2 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: make_eq(a_ty.clone(), b, c.clone()),
         value: None,
     };

@@ -12,7 +12,7 @@
 //! | census stays 11 | no declaration is a kernel `ConstantKind::Axiom` |
 //! | every relation is inhabited | `WITNESSES` present, `DerivedProved`, empty `axiom_deps` |
 //! | the bridge is not identity-on-syntax | `CtxRep` and `ExprRep` are real inductives with the expected constructors |
-//! | coverage stated as a fraction | exactly the eight bridged rules exist, the ninth is REFUTED, and the name `impl_bridge_lit` is never minted |
+//! | coverage stated as a fraction | all nine bridge arms exist; both literal kinds have positive and wrong-type witnesses |
 
 use clean_kernel::env::ConstantKind;
 use clean_kernel::Name;
@@ -49,11 +49,16 @@ const EXPECTED_NAMES: &[&str] = &[
     "impl_bridge_pi",
     "impl_bridge_let_core",
     "impl_bridge_let",
-    // the ninth rule, refuted rather than bridged
-    "KNotLit",
-    "kernelinfers_lit_rejects",
-    "impl_bridge_lit_refuted",
-    "impl_bridge_lit_unprovable",
+    // both literal kinds are genuinely bridged and their exact outputs checked
+    "impl_bridge_lit",
+    "LiteralReturn",
+    "literal_infer_result",
+    "literal_return_eq",
+    "kernelinfers_literal_result",
+    "kernelinfers_literal_nat_type",
+    "kernelinfers_literal_string_type",
+    "kernelinfers_nat_not_string",
+    "kernelinfers_string_not_nat",
     // the closed-level fact
     "ctx_rep_nil_lookup_empty",
 ];
@@ -76,10 +81,11 @@ const WITNESSES: &[&str] = &[
     "impl_bridge_lam_witness",
     "impl_bridge_pi_witness",
     "impl_bridge_let_witness",
+    "impl_bridge_lit_nat_witness",
+    "impl_bridge_lit_string_witness",
 ];
 
-/// The eight `ImplInfer` rules this lane bridges into `KernelInfers` — stated as
-/// a fraction of nine, never rounded up.
+/// Every `ImplInfer` rule now has a bridge arm, including both literal kinds.
 const BRIDGED_RULES: &[&str] = &[
     "impl_bridge_sort",
     "impl_bridge_fvar",
@@ -89,23 +95,16 @@ const BRIDGED_RULES: &[&str] = &[
     "impl_bridge_lam",
     "impl_bridge_pi",
     "impl_bridge_let",
+    "impl_bridge_lit",
 ];
 
-/// The ninth rule is REFUTED, not bridged. These three must exist and be real
-/// proofs; `impl_bridge_lit_unprovable` is the decisive one — it takes the
-/// would-be type of the rule and returns `Empty`.
-const REFUTATION: &[&str] = &[
+/// These old conclusions were true of the previous literal-free judgment.
+/// They cannot remain registered after the supported judgment grows.
+const RETIRED_LITERAL_REFUTATIONS: &[&str] = &[
     "kernelinfers_lit_rejects",
     "impl_bridge_lit_refuted",
     "impl_bridge_lit_unprovable",
 ];
-
-/// The name that must NEVER be minted. Asserting its absence is what keeps the
-/// fraction honest: `impl_bridge_lit_unprovable` proves that registering a
-/// declaration with that statement would make the specification inconsistent,
-/// so a future edit that adds the name — with or without a value — is a defect,
-/// not progress.
-const NEVER_MINTED: &[&str] = &["impl_bridge_lit"];
 
 #[test]
 fn test_ctx_rep_bridge_meets_c4_acceptance_gate() {
@@ -196,7 +195,7 @@ fn test_ctx_rep_bridge_meets_c4_acceptance_gate() {
         fvar_bridge.type_src
     );
 
-    // ── coverage as a fraction: EIGHT of nine bridged ───────────────────────
+    // Every operational-model rule has a representation bridge.
     for name in BRIDGED_RULES {
         let def = defs
             .get(*name)
@@ -214,9 +213,8 @@ fn test_ctx_rep_bridge_meets_c4_acceptance_gate() {
     }
     assert_eq!(
         BRIDGED_RULES.len(),
-        8,
-        "C4 bridges EIGHT of ImplInfer's nine rules; the fraction is 8/9 with the ninth \
-         REFUTED, and must not be rounded up to 9"
+        9,
+        "all nine ImplInfer rules must have a real bridge"
     );
 
     // ── the three binder rules are representation-sensitive AT the binder ───
@@ -268,44 +266,43 @@ fn test_ctx_rep_bridge_meets_c4_acceptance_gate() {
         app_bridge.type_src
     );
 
-    // ── the ninth rule: REFUTED, and the name never minted ──────────────────
-    for name in REFUTATION {
-        let def = defs
-            .get(*name)
-            .unwrap_or_else(|| panic!("refutation declaration `{name}` is missing"));
-        assert!(
-            def.value_src.is_some() && !def.is_axiom && def.axiom_deps.is_empty(),
-            "`{name}` must be a valued, axiom-free proof — a value-less refutation would \
-             be an axiom asserting the very impossibility it claims to prove"
-        );
-        assert!(
-            def.type_src.contains("Empty"),
-            "`{name}` must CONCLUDE at Empty; got: {}",
-            def.type_src
-        );
-    }
-    // The decisive one takes the would-be statement of the rule — ImplInfer.lit
-    // has zero premises and concludes at `impl_lit_type lt`, so the rule's type
-    // is exactly that forall-closure — and returns Empty.
-    let unprovable = defs
-        .get("impl_bridge_lit_unprovable")
-        .expect("impl_bridge_lit_unprovable is the decisive statement");
-    assert!(
-        unprovable.type_src.contains(
-            "KernelInfers tenv G (to_kexpr (ImplExpr.lit lt) rho) \
-                      (to_kexpr (impl_lit_type lt) rho)"
-        ),
-        "impl_bridge_lit_unprovable must assume EXACTLY the type impl_bridge_lit would \
-         have had — otherwise it refutes something else; got: {}",
-        unprovable.type_src
-    );
-    for name in NEVER_MINTED {
+    for name in RETIRED_LITERAL_REFUTATIONS {
         assert!(
             !defs.contains_key(*name),
-            "`{name}` exists, but impl_bridge_lit_unprovable proves that statement yields \
-             Empty — registering it would make the specification inconsistent. Either a \
-             literal rule was added to KernelInfers (in which case update the refutation, \
-             the header and this gate) or a name was minted without a proof"
+            "obsolete literal-free impossibility theorem {name} must be retired"
+        );
+    }
+    for name in [
+        "literal_decode_encode",
+        "literal_kinds_distinct",
+        "kernelinfers_literal_nat_type",
+        "kernelinfers_literal_string_type",
+        "kernelinfers_nat_not_string",
+        "kernelinfers_string_not_nat",
+    ] {
+        let def = defs.get(name).unwrap_or_else(|| panic!("{name} missing"));
+        assert!(def.value_src.is_some() && !def.is_axiom);
+        assert!(
+            crate::spec_axiom_closure::computed_axiom_closure(&spec, name).is_empty(),
+            "{name} must have no hidden axioms"
+        );
+    }
+    let literal_bridge = defs.get("impl_bridge_lit").expect("literal bridge");
+    assert!(
+        !literal_bridge.type_src.contains("Empty"),
+        "literal bridge must apply without an impossible premise"
+    );
+    for (name, expected_rule) in [
+        ("impl_bridge_lit_nat_witness", "impl_bridge_lit"),
+        ("impl_bridge_lit_string_witness", "impl_bridge_lit"),
+    ] {
+        let witness = defs.get(name).expect("literal witness");
+        assert!(
+            witness
+                .value_src
+                .as_ref()
+                .is_some_and(|v| v.contains(expected_rule)),
+            "{name} must consume the bridge theorem"
         );
     }
 }

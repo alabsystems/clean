@@ -1,11 +1,11 @@
-rustcc fn @flat::types::FlatFlags::with(functy.489) {
+rustcc fn @flat::types::FlatFlags::with(functy.460) {
     ; #producer: trust
     ; #names: %0="self", %1="other"
-bb0(%0: struct.1017, %1: struct.1017):
-    %2 = extractfield u8 %0, 0  ; #loc: 388 96 18
-    %3 = extractfield u8 %1, 0  ; #loc: 388 96 27
-    %4 = or u8 %2, %3  ; #loc: 388 96 18
-    %5 = const struct.1017 { 0 }  ; #loc: 388 96 8
-    %6 = insertfield struct.1017 %5, 0, %4  ; #loc: 388 96 8
-    ret %6  ; #loc: 388 97 5
+bb0(%0: struct.815, %1: struct.815):
+    %2 = extractfield u8 %0, 0  ; #loc: 201 96 18
+    %3 = extractfield u8 %1, 0  ; #loc: 201 96 27
+    %4 = or u8 %2, %3  ; #loc: 201 96 18
+    %5 = const struct.815 { 0 }  ; #loc: 201 96 8
+    %6 = insertfield struct.815 %5, 0, %4  ; #loc: 201 96 8
+    ret %6  ; #loc: 201 97 5
 }

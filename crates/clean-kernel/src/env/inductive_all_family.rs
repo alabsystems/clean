@@ -90,7 +90,7 @@ impl Environment {
             .iter()
             .map(|n| Level::param(n.clone()))
             .collect();
-        let all_name = Name::from_string(&format!("{container}.All"));
+        let all_name = container.clone().str("All");
 
         // ── Build with the FVar builder, close at the end ──────────────────
         let mut b = EnvDeclBuilder::new();
@@ -221,13 +221,10 @@ impl Environment {
             for ((a_id, _), ty) in a_locals.iter().zip(&param_tys).rev() {
                 ct_full = b.mk_pi(*a_id, BinderInfo::Implicit, ty.clone(), ct_full);
             }
-            let suffix = ctor_name
-                .to_string()
-                .rsplit_once('.')
-                .map(|(_, s)| s.to_string())
-                .unwrap_or_else(|| ctor_name.to_string());
             ctors.push(Constructor {
-                name: Name::from_string(&format!("{all_name}.{suffix}")),
+                name: ctor_name
+                    .with_parent(all_name.clone())
+                    .ok_or_else(|| format!("anonymous constructor in {container}"))?,
                 type_: b.finish(ct_full),
             });
         }

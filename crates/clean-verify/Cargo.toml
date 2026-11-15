@@ -1,17 +1,22 @@
 [package]
 name = "clean-verify"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
-description = "Self-verification proofs for Clean kernel correctness"
+description = "EvalIR semantics and source/IR connections; legacy kernel metatheory"
 license = "Apache-2.0"
 repository.workspace = true
 readme.workspace = true
+# Test targets are declared explicitly below; see tests/spec_suite.rs.
+autotests = false
 
 [lints]
 workspace = true
 
 [features]
 default = []
+# Mathematical source/IR connection only; no runtime or proof-grade admission.
+source-ir-identity = ["dep:clean-rust-sem"]
+source-ir-word64-addition = ["source-ir-identity"]
 # Expose test_utils for integration tests; propagates to clean-kernel
 test-utils = ["clean-kernel/test-utils"]
 # Enables the `cli` module (`clean verify proof` / `proof_check` compat shim).
@@ -20,6 +25,7 @@ test-utils = ["clean-kernel/test-utils"]
 sat-verify = ["dep:clap", "dep:clean-features"]
 
 [dependencies]
+clean-rust-sem = { workspace = true, optional = true }
 blake3.workspace = true
 clap = { workspace = true, optional = true }
 clean-features = { workspace = true, features = ["serde"], optional = true }
@@ -34,6 +40,9 @@ syn = { workspace = true, features = ["full"] }
 thiserror.workspace = true
 
 [dev-dependencies]
+# The kernel's native-fold mint bypass, for re-pinning the spec's fold
+# digests (`tests/native_fold_canon_spec.rs`). Test builds only.
+clean-kernel = { path = "../clean-kernel", features = ["test-fixtures"] }
 proptest = { workspace = true }
 tempfile = { workspace = true }
 # Real deployed-workload corpus source for the model↔kernel fidelity gate
@@ -79,3 +88,38 @@ required-features = ["sat-verify"]
 [[bin]]
 name = "ir_mint_gen"
 path = "src/bin/ir_mint_gen.rs"
+
+# Test targets are declared explicitly because `autotests = false`: the
+# specification-building targets are aggregated into ONE binary
+# (`tests/spec_suite.rs`) so `Specification::new()` is built once per
+# process instead of once per file. See that file's header.
+# `scripts/check_test_target_coverage.py` refuses a `tests/*.rs` that is
+# neither listed here nor `#[path]`-included by something that is.
+[[test]]
+name = "spec_suite"
+path = "tests/spec_suite.rs"
+
+[[test]]
+name = "crystal_a1_lineage"
+path = "tests/crystal_a1_lineage.rs"
+
+[[test]]
+name = "crystal_a3_semdiff"
+path = "tests/crystal_a3_semdiff.rs"
+
+[[test]]
+name = "eval_ir"
+path = "tests/eval_ir.rs"
+
+[[test]]
+name = "evalir_scratchpad"
+path = "tests/evalir_scratchpad.rs"
+
+[[test]]
+name = "fidelity_gate_lane"
+path = "tests/fidelity_gate_lane.rs"
+
+[[test]]
+name = "spec_scratchpad"
+path = "tests/spec_scratchpad.rs"
+

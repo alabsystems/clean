@@ -55,12 +55,22 @@ use std::sync::Arc;
 use thiserror::Error;
 
 #[cfg(feature = "trust-ir-backend")]
+pub(crate) use pipeline::compile_lcnf_decls_at_rust_abi;
+#[cfg(test)]
+pub(crate) use pipeline::compile_lcnf_decls_with_rc_repair;
+#[cfg(feature = "trust-ir-backend")]
 pub use pipeline::compile_lcnf_to_trust_ir;
 #[cfg(feature = "trust-ir-backend")]
+pub use pipeline::compile_lcnf_to_trust_ir_in_runtime_closure;
+#[cfg(feature = "trust-ir-backend")]
+pub use pipeline::compile_lcnf_to_trust_ir_with_carrier_exports;
+#[cfg(feature = "trust-ir-backend")]
 pub use pipeline::compile_lcnf_to_trust_ir_with_report;
+#[cfg(feature = "trust-ir-backend")]
+pub use pipeline::compile_lcnf_to_trust_ir_with_report_for;
 pub use pipeline::{
-    compile_lcnf_decls, compile_lcnf_to_c, compile_lcnf_to_rust, PipelineArtifacts, PipelineConfig,
-    PipelineError,
+    compile_lcnf_decls, compile_lcnf_decls_for, compile_lcnf_decls_in_runtime_closure,
+    compile_lcnf_to_c, compile_lcnf_to_rust, PipelineArtifacts, PipelineConfig, PipelineError,
 };
 
 /// Compiler phases (progression is unidirectional).

@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const n Int)
+(assert (> n 0))
+(assert (< n 1))
+(check-sat)

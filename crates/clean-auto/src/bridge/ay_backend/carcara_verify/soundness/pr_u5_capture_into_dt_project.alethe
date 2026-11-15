@@ -1,0 +1,3 @@
+(assume a0 (not (= (h fst) a)))
+(step t1 (cl (= (fst (mk a b)) a)) :rule dt_project)
+(step t2 (cl) :rule resolution :premises (a0 t1))

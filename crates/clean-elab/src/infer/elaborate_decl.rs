@@ -17,9 +17,10 @@
 
 use crate::macro_integration::quotation_category_head;
 use crate::tactic::{TacticArgPattern, TacticEntry, TacticError};
+use crate::term_info::TermInfoCapture;
 use crate::ElabError;
 use clean_parser::{
-    DoElem, MacroArm, SurfaceArg, SurfaceDecl, SurfaceExpr, SurfaceLit, SurfaceTactic,
+    DoElem, MacroArm, SurfaceArg, SurfaceDecl, SurfaceExpr, SurfaceLit, SurfaceName, SurfaceTactic,
     SurfaceTacticLocation, SyntaxPatternItem,
 };
 use std::sync::Arc;
@@ -27,12 +28,199 @@ use std::sync::Arc;
 use super::{ElabCtx, ElabResult};
 
 impl<'a> ElabCtx<'a> {
-    pub(super) fn qualify_name(&self, name: &str) -> String {
-        if self.namespace_prefix.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{}.{}", self.namespace_prefix, name)
+    pub(super) fn qualify_name(&self, name: &SurfaceName) -> SurfaceName {
+        name.qualify_under(&self.namespace_prefix)
+    }
+
+    /// The kernel name a declaration with these modifiers registers under:
+    /// its namespace-qualified name, or — for a `private` declaration of a
+    /// kind that is mangled ([`mangles_private_names`]) in a module the driver
+    /// named — Lean's `_private.<module>.0.<name>` (`applyVisibility`,
+    /// `Lean/Elab/DeclModifiers.lean:150-166`; G21).
+    pub(crate) fn kernel_decl_name(
+        &self,
+        name: &SurfaceName,
+        modifiers: &clean_parser::DeclModifiers,
+        kind: PrivateNameKind,
+    ) -> clean_kernel::Name {
+        self.kernel_decl_name_for(name, private_kind_of(modifiers, kind))
+    }
+
+    /// [`Self::kernel_decl_name`] for a declaration whose privacy is already
+    /// read off its modifiers: `Some(kind)` for a `private` one.
+    pub(crate) fn kernel_decl_name_for(
+        &self,
+        name: &SurfaceName,
+        private_kind: Option<PrivateNameKind>,
+    ) -> clean_kernel::Name {
+        self.kernel_name_of_qualified(self.qualify_name(name).into_name(), private_kind)
+    }
+
+    /// [`Self::kernel_decl_name_for`] over a name that is already
+    /// namespace-qualified (a named instance's, or an anonymous instance's
+    /// freshened `inst…`).
+    pub(crate) fn kernel_name_of_qualified(
+        &self,
+        qualified: clean_kernel::Name,
+        private_kind: Option<PrivateNameKind>,
+    ) -> clean_kernel::Name {
+        if private_kind.is_some_and(mangles_private_names) {
+            if let Some(mangled) = self.namespace_state.private_name(&qualified) {
+                return mangled;
+            }
         }
+        qualified
+    }
+
+    /// The name an inductive family (`inductive` / `structure` / `class`, a
+    /// `mutual` inductive member) is elaborated under: the namespace-qualified
+    /// surface name, or — for a `private` one in a module the driver named —
+    /// Lean's `_private.<module>.0.<name>` (G21 B3). Every name the family
+    /// derives from it (constructors, recursors, `casesOn`, projections,
+    /// `mk.injEq`) then carries the prefix, as Lean's do
+    /// (`_private.Pkg.A.0.Foo.S.mk`, measured on Lean 4.8.0).
+    pub(crate) fn family_decl_name(
+        &self,
+        name: &SurfaceName,
+        modifiers: &clean_parser::DeclModifiers,
+    ) -> SurfaceName {
+        let qualified = self.qualify_name(name);
+        let kernel = self.kernel_name_of_qualified(
+            qualified.name().clone(),
+            private_kind_of(modifiers, PrivateNameKind::Family),
+        );
+        if kernel == *qualified.name() {
+            qualified
+        } else {
+            SurfaceName::from_name(kernel)
+        }
+    }
+
+    /// Lean's `isPrivateNameFromImportedModule env name` in a module the
+    /// driver named: `name` is private and another module minted it. Always
+    /// `false` without a named module, whose private names are plain.
+    pub(crate) fn is_imported_private_name(&self, name: &clean_kernel::Name) -> bool {
+        self.namespace_state.main_module().is_some_and(|module| {
+            crate::private_names::is_private_name_from_imported_module(Some(module), name)
+        })
+    }
+
+    /// Whether the environment declares `name` in any form Lean's
+    /// `env.contains` sees (a constant, inductive, constructor or recursor).
+    fn declares(&self, name: &clean_kernel::Name) -> bool {
+        self.env.get_const(name).is_some()
+            || self.env.get_inductive(name).is_some()
+            || self.env.get_constructor(name).is_some()
+            || self.env.get_recursor(name).is_some()
+    }
+
+    /// Lean 4.8.0's `checkNotAlreadyDeclared` (`Lean/Elab/DeclModifiers.lean:
+    /// 17-40`) for the cases a `private` name is in, in a module the driver
+    /// named. Mangling separates a private declaration from a public one of
+    /// the same user-facing name in the kernel, so without this rule `private
+    /// theorem x` then `theorem x`, `theorem y` then `private theorem y`, and
+    /// a namespaced `private theorem N.w` then `theorem N.w` would all be
+    /// accepted where Lean refuses them (measured 2026-10-08, ThE–ThH). A
+    /// public name that exists is left to the kernel's duplicate check, as
+    /// before.
+    fn check_private_not_already_declared(&self, decl: &SurfaceDecl) -> Result<(), ElabError> {
+        if self.namespace_state.main_module().is_none() {
+            return Ok(());
+        }
+        let (name, modifiers, kind) = match decl {
+            SurfaceDecl::Mutual { decls, .. } => {
+                for inner in decls {
+                    self.check_private_not_already_declared(inner)?;
+                }
+                return Ok(());
+            }
+            SurfaceDecl::Theorem {
+                name, modifiers, ..
+            } => (name, modifiers, PrivateNameKind::Theorem),
+            SurfaceDecl::Axiom {
+                name, modifiers, ..
+            } => (name, modifiers, PrivateNameKind::Axiom),
+            SurfaceDecl::Def {
+                name, modifiers, ..
+            }
+            | SurfaceDecl::Opaque {
+                name, modifiers, ..
+            }
+            | SurfaceDecl::Instance {
+                name: Some(name),
+                modifiers,
+                ..
+            } => (name, modifiers, PrivateNameKind::Definition),
+            SurfaceDecl::Inductive {
+                name, modifiers, ..
+            }
+            | SurfaceDecl::Structure {
+                name, modifiers, ..
+            }
+            | SurfaceDecl::Class {
+                name, modifiers, ..
+            } => (name, modifiers, PrivateNameKind::Family),
+            SurfaceDecl::Coinductive {
+                name, modifiers, ..
+            } => (name, modifiers, PrivateNameKind::NotYetMangled),
+            _ => return Ok(()),
+        };
+        let user = self.qualify_name(name).into_name();
+        let decl_name = self.kernel_decl_name(name, modifiers, kind);
+        self.check_private_name_free(&user, &decl_name)
+    }
+
+    /// The rules of [`Self::check_private_not_already_declared`] for one
+    /// declaration whose namespace-qualified user-facing name is `user` and
+    /// whose kernel name is `decl_name` (equal to `user` unless mangled). An
+    /// anonymous instance, whose name is minted only once its class is
+    /// elaborated, calls this directly. A no-op without a named module.
+    pub(crate) fn check_private_name_free(
+        &self,
+        user: &clean_kernel::Name,
+        decl_name: &clean_kernel::Name,
+    ) -> Result<(), ElabError> {
+        if self.namespace_state.main_module().is_none() {
+            return Ok(());
+        }
+        let shown = |n: &clean_kernel::Name| crate::private_names::user_facing_name(n).to_string();
+        let refuse = |message: String| Err(ElabError::PrivateNameAlreadyDeclared { message });
+        let is_mangled = crate::private_names::is_private_name(decl_name);
+        if is_mangled && self.declares(decl_name) {
+            return refuse(format!(
+                "private declaration '{}' has already been declared",
+                shown(decl_name)
+            ));
+        }
+        if !is_mangled {
+            if let Some(private) = self.namespace_state.private_name(decl_name) {
+                if self.declares(&private) {
+                    return refuse(format!(
+                        "a private declaration '{}' has already been declared",
+                        shown(decl_name)
+                    ));
+                }
+            }
+        }
+        // `private theorem y` over an existing `y`. A plain-named `private`
+        // declaration of ANOTHER module (a kind not mangled yet) is not this
+        // module's and does not collide (Lean mangles it too); one of this
+        // module is a private declaration of the same name.
+        if is_mangled && self.declares(user) {
+            if !self.env.is_private(user) {
+                return refuse(format!(
+                    "a non-private declaration '{}' has already been declared",
+                    shown(user)
+                ));
+            }
+            if !self.foreign_private_decls.contains(user) {
+                return refuse(format!(
+                    "private declaration '{}' has already been declared",
+                    shown(user)
+                ));
+            }
+        }
+        Ok(())
     }
 
     /// Activate the scoped notations of the namespaces named by an `open` /
@@ -47,16 +235,15 @@ impl<'a> ElabCtx<'a> {
             if !(path.names.is_empty() && path.hiding.is_empty() && path.renaming.is_empty()) {
                 continue;
             }
-            let ns = path.path.join(".");
-            if ns.is_empty() {
+            let ns = path.path.clone();
+            if ns.is_anonymous() {
                 continue;
             }
-            let mut candidates = vec![ns.clone()];
-            if !self.namespace_prefix.is_empty() {
-                let segments: Vec<&str> = self.namespace_prefix.split('.').collect();
-                for i in 1..=segments.len() {
-                    candidates.push(format!("{}.{ns}", segments[..i].join(".")));
-                }
+            let mut candidates = vec![ns.qualify_under(&SurfaceName::default())];
+            let mut prefix = self.namespace_prefix.clone();
+            while !prefix.is_anonymous() {
+                candidates.push(ns.qualify_under(&prefix));
+                prefix = prefix.parent();
             }
             for candidate in candidates {
                 self.macro_ctx.activate_scoped_namespace(&candidate);
@@ -66,21 +253,17 @@ impl<'a> ElabCtx<'a> {
 
     fn elab_namespace(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         decls: &[SurfaceDecl],
     ) -> Result<ElabResult, ElabError> {
         let prev_prefix = std::mem::take(&mut self.namespace_prefix);
-        self.namespace_prefix = if prev_prefix.is_empty() {
-            name.to_owned()
-        } else {
-            format!("{prev_prefix}.{name}")
-        };
+        self.namespace_prefix = name.qualify_under(&prev_prefix);
         // Update NamespaceState so that name resolution inside the block
         // can qualify bare identifiers with the current namespace prefix.
         // Without this, elab_ident cannot resolve `Ty` as `TMir.Ty` inside
         // `namespace TMir { ... }`. Fixes #3410 (UnknownFVar in namespace).
         self.namespace_state
-            .enter_namespace(clean_kernel::name::Name::from_string(name));
+            .enter_resolved_namespace(self.namespace_prefix.name().clone());
         // A namespace block is an alias-scope boundary (Lean pushes a Scope per
         // `namespace`; `end` pops it, discarding its `open` decls —
         // `Lean/Elab/BuiltinCommand.lean` `elabNamespace`/`elabEnd`). Without
@@ -119,23 +302,12 @@ impl<'a> ElabCtx<'a> {
                     ))
                 }
             } else {
-                let used = used_section_binders(
-                    &self.section_binder_stack,
-                    inner,
-                    Some(&self.macro_ctx),
-                    &self.included_var_stack,
-                );
-                if used.is_empty() {
-                    None
-                } else {
-                    let mut fc = crate::FileContext::new();
-                    fc.add_variables(&used);
-                    Some(crate::preprocess::preprocess_decl_with_context(
-                        inner, &mut fc,
-                    ))
-                }
+                self.prepend_section_binders(inner)
             };
-            let result = match self.elab_decl(processed.as_ref().unwrap_or(inner)) {
+            let result = self.elab_decl(processed.as_ref().unwrap_or(inner));
+            // A pruning armed for `inner` must not reach the next declaration.
+            let _ = self.take_section_prune_outcome();
+            let result = match result {
                 Ok(r) => r,
                 Err(e) => {
                     self.section_binder_stack.truncate(saved_section_binders);
@@ -149,7 +321,11 @@ impl<'a> ElabCtx<'a> {
                 }
             };
             if let SurfaceDecl::Variable { binders, .. } = inner {
-                self.section_binder_stack.extend(binders.iter().cloned());
+                self.section_binder_stack.extend(
+                    binders
+                        .iter()
+                        .map(crate::section_scope::section_variable_binder),
+                );
             }
             apply_include_omit(&mut self.included_var_stack, inner);
             if !matches!(result, ElabResult::Skipped) {
@@ -164,6 +340,34 @@ impl<'a> ElabCtx<'a> {
         self.macro_ctx.pop_scoped_activation_frame();
         self.macro_ctx.set_current_namespace(&self.namespace_prefix);
         Ok(ElabResult::Multiple(results))
+    }
+
+    /// `decl` with the section variables of this `ElabCtx`-level block
+    /// prepended — the same rewrite `preprocess_decl_with_context` performs on
+    /// the file-level path — or `None` when it receives none. When the
+    /// selection could not scan `decl`, the pruning of the unused ones is
+    /// armed for its elaboration (`section_prune`).
+    fn prepend_section_binders(&mut self, decl: &SurfaceDecl) -> Option<SurfaceDecl> {
+        let selection = crate::section_var_selection::select_section_binders(
+            &self.section_binder_stack,
+            decl,
+            Some(&self.macro_ctx),
+            &self.included_var_stack,
+        );
+        if selection.binders.is_empty() {
+            return None;
+        }
+        if let Some(request) = selection.prune {
+            self.set_section_prune_request(request);
+        }
+        // The rewrite re-selects over `selection.binders`, so it must see the
+        // same `include`s or a theorem would drop the variables they force.
+        let mut fc = crate::FileContext::new();
+        fc.add_variables(&selection.binders);
+        fc.include_variables(&self.included_var_stack);
+        Some(crate::preprocess::preprocess_decl_with_context(
+            decl, &mut fc,
+        ))
     }
 
     fn elab_section(&mut self, decls: &[SurfaceDecl]) -> Result<ElabResult, ElabError> {
@@ -192,22 +396,11 @@ impl<'a> ElabCtx<'a> {
         // exactly how `elab_namespace` (above) already reports its inner declarations.
         let mut results: Vec<ElabResult> = Vec::new();
         for decl in decls {
-            let used = used_section_binders(
-                &self.section_binder_stack,
-                decl,
-                Some(&self.macro_ctx),
-                &self.included_var_stack,
-            );
-            let processed = if used.is_empty() {
-                None
-            } else {
-                let mut fc = crate::FileContext::new();
-                fc.add_variables(&used);
-                Some(crate::preprocess::preprocess_decl_with_context(
-                    decl, &mut fc,
-                ))
-            };
-            match self.elab_decl_inner(processed.as_ref().unwrap_or(decl)) {
+            let processed = self.prepend_section_binders(decl);
+            let result = self.elab_decl_inner(processed.as_ref().unwrap_or(decl));
+            // A pruning armed for `decl` must not reach the next declaration.
+            let _ = self.take_section_prune_outcome();
+            match result {
                 Ok(ElabResult::Skipped) => {}
                 Ok(r) => results.push(r),
                 Err(e) => {
@@ -221,16 +414,22 @@ impl<'a> ElabCtx<'a> {
                     // directly are now resilient too; the top-level file section is
                     // intercepted earlier by the lib.rs Section arm. State is
                     // restored once after the loop, so no per-failure cleanup here.
-                    let short = crate::preprocess_ext::decl_name(decl).unwrap_or("");
+                    let short = crate::preprocess_ext::decl_name(decl)
+                        .cloned()
+                        .unwrap_or_default();
                     results.push(ElabResult::Failed {
-                        name: self.qualify_name(short),
+                        name: self.qualify_name(&short).to_string(),
                         decl: Box::new(decl.clone()),
                         error: Box::new(e),
                     });
                 }
             }
             if let SurfaceDecl::Variable { binders, .. } = decl {
-                self.section_binder_stack.extend(binders.iter().cloned());
+                self.section_binder_stack.extend(
+                    binders
+                        .iter()
+                        .map(crate::section_scope::section_variable_binder),
+                );
             }
             apply_include_omit(&mut self.included_var_stack, decl);
         }
@@ -242,10 +441,10 @@ impl<'a> ElabCtx<'a> {
         // Preserve the historical shape for degenerate sections (empty / commands-only → Skipped;
         // exactly one declaration → that declaration) so downstream matchers keep working; the
         // fix is that MULTIPLE declarations now ALL surface (and thus all register).
-        Ok(match results.len() {
-            0 => ElabResult::Skipped,
-            1 => results.pop().expect("len == 1"),
-            _ => ElabResult::Multiple(results),
+        Ok(if results.len() > 1 {
+            ElabResult::Multiple(results)
+        } else {
+            results.pop().unwrap_or(ElabResult::Skipped)
         })
     }
 
@@ -254,6 +453,21 @@ impl<'a> ElabCtx<'a> {
         pattern: &[SyntaxPatternItem],
         category: &str,
         body: &SurfaceExpr,
+    ) -> Result<ElabResult, ElabError> {
+        self.elab_tactic_decl(pattern, category, body, None)
+    }
+
+    /// [`Self::elab_tactic_elab_decl`], or — with `template` — the body of a
+    /// tactic MACRO: a quotation over the operand variables `template.vars`,
+    /// which every use INSTANTIATES (`clean_parser::instantiate_tactic_template`)
+    /// with the call's arguments, as Lean expands the macro, hygienically
+    /// unless `template.hygienic` is false.
+    fn elab_tactic_decl(
+        &mut self,
+        pattern: &[SyntaxPatternItem],
+        category: &str,
+        body: &SurfaceExpr,
+        template: Option<super::user_tactic::TacticTemplate>,
     ) -> Result<ElabResult, ElabError> {
         // Phase 5: term-category elaborators. A `elab "kw" e:term : term => body`
         // declaration makes `kw e` in term position elaborate to the body with
@@ -280,7 +494,7 @@ impl<'a> ElabCtx<'a> {
             repetition,
         } = parsed;
         let arg_pattern = arg_pattern_for_bound_vars(&bound_vars, repetition.as_ref());
-        let bound_names: Vec<String> = bound_vars.into_iter().map(|v| v.name).collect();
+        let bound_names: Vec<SurfaceName> = bound_vars.into_iter().map(|v| v.name).collect();
         let repetition_name = repetition.map(|r| r.name);
 
         // A simple registry entry is always recorded so the parser learns the
@@ -312,24 +526,49 @@ impl<'a> ElabCtx<'a> {
         // tactic evaluator (no new way to close a goal).
         if let SurfaceExpr::ByTactic(_, tactics) = body {
             if super::user_tactic::is_executable_tactic_body(tactics) {
-                if let Some(rep_name) = repetition_name {
-                    self.tactic_registry.register_compound(
-                        super::user_tactic::build_variadic_tactic_handler(
+                // A macro's operands are its template's operand variables.
+                let (template, bound_names, repetition_name) = match template {
+                    Some(template) => {
+                        let rep = repetition_name
+                            .as_ref()
+                            .and_then(|_| template.vars.last().cloned());
+                        let fixed = match rep {
+                            Some(_) => template.vars[..template.vars.len() - 1].to_vec(),
+                            None => template.vars.clone(),
+                        };
+                        (Some(template.hygienic), fixed, rep)
+                    }
+                    None => (None, bound_names, repetition_name),
+                };
+                let handler = match (template, repetition_name) {
+                    (Some(hygienic), Some(rep_name)) => {
+                        super::user_tactic::build_variadic_tactic_macro_handler(
                             name,
                             bound_names,
                             rep_name,
                             tactics.clone(),
-                        ),
-                    );
-                } else {
-                    self.tactic_registry.register_compound(
-                        super::user_tactic::build_user_tactic_handler(
-                            name,
-                            bound_names,
-                            tactics.clone(),
-                        ),
-                    );
-                }
+                            hygienic,
+                        )
+                    }
+                    (Some(hygienic), None) => super::user_tactic::build_tactic_macro_handler(
+                        name,
+                        bound_names,
+                        tactics.clone(),
+                        hygienic,
+                    ),
+                    (None, Some(rep_name)) => super::user_tactic::build_variadic_tactic_handler(
+                        name,
+                        bound_names,
+                        rep_name,
+                        tactics.clone(),
+                    ),
+                    (None, None) => super::user_tactic::build_user_tactic_handler(
+                        name,
+                        bound_names,
+                        tactics.clone(),
+                    ),
+                };
+                self.tactic_registry.register_compound(handler);
             }
         }
         Ok(ElabResult::Skipped)
@@ -363,6 +602,7 @@ impl<'a> ElabCtx<'a> {
         pattern: &[SyntaxPatternItem],
         category: &str,
         expansion: &SurfaceExpr,
+        site: clean_parser::TemplateSiteId,
     ) -> Result<Option<ElabResult>, ElabError> {
         if category == "conv" {
             // Conv-position macros register through the conv bridge — the same
@@ -371,7 +611,9 @@ impl<'a> ElabCtx<'a> {
             // route OWNS the whole category: unsupported shapes reject loudly
             // (the Syntax-level expander can never fire at conv position, so
             // falling through would register a silently-dead macro).
-            return self.try_register_conv_macro(pattern, expansion).map(Some);
+            return self
+                .try_register_conv_macro(pattern, expansion, site)
+                .map(Some);
         }
         if category != "tactic" {
             return Ok(None);
@@ -398,19 +640,27 @@ impl<'a> ElabCtx<'a> {
                 )));
             }
         }
-        let bound: Vec<&str> = pattern
+        let bound: Vec<&SurfaceName> = pattern
             .iter()
             .filter_map(|item| match item {
-                SyntaxPatternItem::Variable { name, .. } => Some(name.as_str()),
+                SyntaxPatternItem::Variable { name, .. } => Some(name),
                 _ => None,
             })
             .collect();
-        let Some(body) = rewrite_bound_antiquots(body, &bound) else {
+        // `$x` is the operand; a bare `x` of the template is the template's
+        // own identifier (hygienic, resolved where the macro is declared).
+        // So `$x` is spelled `«$x»`, an identifier distinct from every other
+        // name the quotation writes, and the template is walked over those.
+        let Some(body) = rewrite_tactic_antiquots(body, &bound) else {
             return Err(ElabError::MacroError(format!(
                 "tactic macro expansion `(tactic| {body})` uses an antiquotation the \
                  pattern does not bind"
             )));
         };
+        let vars: Vec<SurfaceName> = bound
+            .iter()
+            .map(|name| tactic_operand_variable(name))
+            .collect();
         let patterns = self.tactic_registry.tactic_patterns();
         let by_expr = clean_parser::parse_expr_with_tactics(&format!("by {body}"), &patterns)
             .map_err(|e| {
@@ -424,8 +674,29 @@ impl<'a> ElabCtx<'a> {
                 "tactic macro expansion `(tactic| {body})` did not produce a tactic block"
             )));
         }
-        self.elab_tactic_elab_decl(pattern, "tactic", &by_expr)
-            .map(Some)
+        // The template's free names resolve HERE, as for a term macro: a
+        // tactic macro declared under `open A` reads `A`'s names at every use
+        // (Lean pre-resolves the quotation's identifiers), and no binder of
+        // the template captures an operand's identifier. Under `set_option
+        // hygiene false` the template is the bare substitution.
+        let hygienic = self.templates_hygienic();
+        let by_expr = if hygienic {
+            self.record_template_site_resolutions(site, &vars, &by_expr)?;
+            self.macro_ctx
+                .mark_template(&by_expr, &vars, site)
+                .map_err(|refusal| {
+                    ElabError::MacroError(format!("template refused: {}", refusal.reason()))
+                })?
+        } else {
+            by_expr
+        };
+        self.elab_tactic_decl(
+            pattern,
+            "tactic",
+            &by_expr,
+            Some(super::user_tactic::TacticTemplate { vars, hygienic }),
+        )
+        .map(Some)
     }
 
     /// One tactic- or conv-position `macro_rules` arm:
@@ -438,7 +709,11 @@ impl<'a> ElabCtx<'a> {
     /// registers through the matching bridge or rejects loudly (fail closed),
     /// because the Syntax-level registration can never fire at tactic/conv
     /// position and would leave a silently-dead arm.
-    fn try_register_tactic_macro_rules_arm(&mut self, arm: &MacroArm) -> Result<bool, ElabError> {
+    fn try_register_tactic_macro_rules_arm(
+        &mut self,
+        arm: &MacroArm,
+        site: clean_parser::TemplateSiteId,
+    ) -> Result<bool, ElabError> {
         let SurfaceExpr::SyntaxQuote(_, content) = arm.pattern.as_ref() else {
             return Ok(false);
         };
@@ -452,12 +727,12 @@ impl<'a> ElabCtx<'a> {
         if head == "conv" {
             // Conv-headed arm: the conv bridge owns it end-to-end (registers
             // or rejects loudly — see `try_register_conv_macro`).
-            self.try_register_conv_macro(&items, arm.expansion.as_ref())?;
+            self.try_register_conv_macro(&items, arm.expansion.as_ref(), site)?;
             return Ok(true);
         }
         // The expansion side reuses the macro-command route (tactic-head
         // check, antiquotation rewrite, body parse, bridge registration).
-        match self.try_register_tactic_macro(&items, "tactic", arm.expansion.as_ref())? {
+        match self.try_register_tactic_macro(&items, "tactic", arm.expansion.as_ref(), site)? {
             Some(_) => Ok(true),
             None => Err(ElabError::MacroError(
                 "tactic macro_rules expansion must be a `(tactic| …)` quotation (fail closed)"
@@ -495,6 +770,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         pattern: &[SyntaxPatternItem],
         expansion: &SurfaceExpr,
+        site: clean_parser::TemplateSiteId,
     ) -> Result<ElabResult, ElabError> {
         let SurfaceExpr::SyntaxQuote(_, content) = expansion else {
             return Err(ElabError::MacroError(
@@ -552,8 +828,10 @@ impl<'a> ElabCtx<'a> {
                  rejected (fail closed) rather than shadowing the tactic"
             )));
         }
-        let bound: Vec<&str> = bound_vars.iter().map(|v| v.name.as_str()).collect();
-        let Some(script_src) = rewrite_bound_antiquots(body, &bound) else {
+        let bound: Vec<&SurfaceName> = bound_vars.iter().map(|v| &v.name).collect();
+        // As for a tactic macro: `$x` is the operand, spelled `«$x»`, and a
+        // bare `x` is the template's own identifier.
+        let Some(script_src) = rewrite_tactic_antiquots(body, &bound) else {
             return Err(ElabError::MacroError(format!(
                 "conv macro expansion `(conv| {body})` uses an antiquotation the \
                  pattern does not bind"
@@ -584,7 +862,10 @@ impl<'a> ElabCtx<'a> {
                 )));
             }
         };
-        let bound_names: Vec<String> = bound_vars.iter().map(|v| v.name.clone()).collect();
+        let bound_names: Vec<SurfaceName> = bound
+            .iter()
+            .map(|name| tactic_operand_variable(name))
+            .collect();
         if !bound_names.is_empty() {
             if let Some(offender) = script
                 .iter()
@@ -608,11 +889,31 @@ impl<'a> ElabCtx<'a> {
             pattern: arg_pattern,
             handler: super::user_conv::conv_macro_simple_handler(name.clone()),
         });
+        // The script is a template, expanded hygienically at each use (see
+        // `try_register_tactic_macro`).
+        let hygienic = self.templates_hygienic();
+        let script = if hygienic {
+            let block = SurfaceExpr::ByTactic(clean_parser::Span::dummy(), script);
+            self.record_template_site_resolutions(site, &bound_names, &block)?;
+            match self.macro_ctx.mark_template(&block, &bound_names, site) {
+                Ok(SurfaceExpr::ByTactic(_, marked)) => marked,
+                Ok(_) => unreachable!("the template walk keeps a tactic block a tactic block"),
+                Err(refusal) => {
+                    return Err(ElabError::MacroError(format!(
+                        "template refused: {}",
+                        refusal.reason()
+                    )))
+                }
+            }
+        } else {
+            script
+        };
         self.tactic_registry
             .register_compound(super::user_conv::build_user_conv_handler(
                 name,
                 bound_names,
                 script,
+                hygienic,
             ));
         Ok(ElabResult::Skipped)
     }
@@ -669,7 +970,7 @@ impl<'a> ElabCtx<'a> {
         let OptionalClassification::Tractable(optional_trailing) = optional_trailing else {
             return Ok(ElabResult::Skipped);
         };
-        let bound_names: Vec<String> = bound_vars.into_iter().map(|v| v.name).collect();
+        let bound_names: Vec<SurfaceName> = bound_vars.into_iter().map(|v| v.name).collect();
         self.user_term_elabs.insert(
             name,
             super::user_term::UserTermElab {
@@ -691,6 +992,16 @@ impl<'a> ElabCtx<'a> {
     /// - Auto-implicit discovery is enabled during elaboration
     /// - Universe levels are canonicalized in the result
     pub fn elab_decl(&mut self, decl: &SurfaceDecl) -> Result<ElabResult, ElabError> {
+        // Nested/generated declarations own only their own do obligations.
+        // Failed work must not poison the next declaration on a reused context.
+        let previous_do_obligations = std::mem::take(&mut self.do_pure_obligations);
+        let previous_postponed = self.postponed_open_carrier_instances.clone();
+        // Expected-sort names belong to this declaration's elaboration;
+        // source-info identities remain shared across the document.
+        let previous_term_capture = self.term_info_capture.take();
+        self.term_info_capture = previous_term_capture
+            .as_ref()
+            .map(TermInfoCapture::declaration_scope);
         // Enable auto-implicits for declaration elaboration (#164)
         // Save previous state to restore after (for nested calls)
         let prev_in_decl_context = self.in_decl_context;
@@ -713,16 +1024,32 @@ impl<'a> ElabCtx<'a> {
 
         let result = self
             .elab_decl_inner(decl)
-            .map(|result| self.canonicalize_levels_in_elab_result(result))
-            // B07: rewrite `Pure.pure`/`Bind.bind` stub applications over
-            // concrete instance-resolvable monads into instance-projected
-            // form so the kernel can value-certify do-notation output via
-            // ordinary delta + proj-of-mk iota (elab_monad_materialize.rs).
-            .and_then(|result| self.materialize_monad_instances_in_elab_result(result));
+            .map(|result| self.canonicalize_levels_in_elab_result(result));
+        // Every `deriving` failure is attached by the dispatcher arm that
+        // recorded it; one still pending here fails the declaration rather
+        // than vanish with the context.
+        let result = match self.unattached_deriving_failure() {
+            Some(error) => Err(error),
+            None => result,
+        };
+        // (A B07 post-pass rewrote instance-less `Pure.pure`/`Bind.bind` axiom
+        // applications into `Proj` form here. Those axioms proved `False` and
+        // were replaced on 2026-09-28 by Lean's class projections, which carry
+        // their synthesized instance, so there is nothing left to rewrite.)
+
+        let result = result.and_then(|result| {
+            self.ensure_do_pure_obligations()?;
+            Ok(result)
+        });
+        self.do_pure_obligations = previous_do_obligations;
+        if result.is_err() {
+            self.postponed_open_carrier_instances = previous_postponed;
+        }
 
         // Restore context state after elaboration
         self.in_decl_context = prev_in_decl_context;
         self.self_reference = previous_self_reference;
+        self.term_info_capture = previous_term_capture;
         result
     }
 
@@ -748,8 +1075,220 @@ impl<'a> ElabCtx<'a> {
         })
     }
 
-    /// Inner implementation of declaration elaboration
+    /// The name a source declaration introduces, as written: one name, a
+    /// `mutual` block's members, or nothing (`example`, commands).
+    pub(super) fn declared_surface_name(decl: &SurfaceDecl) -> DeclaredSurfaceName<'_> {
+        match decl {
+            SurfaceDecl::Def { name, .. }
+            | SurfaceDecl::Theorem { name, .. }
+            | SurfaceDecl::Axiom { name, .. }
+            | SurfaceDecl::Opaque { name, .. }
+            | SurfaceDecl::Inductive { name, .. }
+            | SurfaceDecl::Coinductive { name, .. }
+            | SurfaceDecl::Codata { name, .. }
+            | SurfaceDecl::Codef { name, .. }
+            | SurfaceDecl::Structure { name, .. }
+            | SurfaceDecl::Class { name, .. }
+            | SurfaceDecl::Instance {
+                name: Some(name), ..
+            } => DeclaredSurfaceName::One(name),
+            SurfaceDecl::Mutual { decls, .. } => DeclaredSurfaceName::Block(decls),
+            _ => DeclaredSurfaceName::None,
+        }
+    }
+
+    /// Refuse a source declaration — of ANY kind, `private`, `protected`,
+    /// `_root_`-qualified or inside a namespace — whose full name is reserved
+    /// for a kernel-owned axiom: a foundational axiom (`propext`,
+    /// `Quot.sound`, `Classical.choice`, the `Quot` primitives) or a trust
+    /// marker (`sorry`, `sorryAx`, `trustedArith`, `trustedAy`), matched
+    /// STRUCTURALLY or by PRINTED FORM
+    /// ([`clean_kernel::is_reserved_ambient_axiom_name`]).
+    ///
+    /// Structurally equal names already collide in the kernel wherever the
+    /// kernel's own declaration is present; this refusal also holds in an
+    /// environment without it, with a clear error instead of a duplicate-name
+    /// failure. The printed-form half is the one Lean itself would accept:
+    /// `axiom «Quot.sound» : False` declares a ONE-component name that is not
+    /// Lean's `Quot.sound` but prints exactly like it, so every report that
+    /// lists it (`assumptions`, `#print axioms`, a bundle's axiom list) would
+    /// show the foundation. Until 2026-09-28 the axiom classifier also compared
+    /// printed names, and a proof of `False` through such an axiom passed
+    /// `clean check` with nothing disclosed. Clean refuses the name
+    /// deliberately, as a hardening beyond Lean; nothing sound needs it.
+    ///
+    /// Runs in every environment, whether or not it models Lean's `Init`
+    /// (`check_not_declared_in_lean_core` does not always), and ahead of it.
+    fn check_not_reserved_kernel_name(&self, decl: &SurfaceDecl) -> Result<(), ElabError> {
+        let name = match Self::declared_surface_name(decl) {
+            DeclaredSurfaceName::One(name) => name,
+            DeclaredSurfaceName::Block(decls) => {
+                for inner in decls {
+                    self.check_not_reserved_kernel_name(inner)?;
+                }
+                return Ok(());
+            }
+            DeclaredSurfaceName::None => return Ok(()),
+        };
+        let full = self.qualify_name(name).into_name();
+        if clean_kernel::is_reserved_ambient_axiom_name(&full) {
+            return Err(ElabError::ReservedKernelName {
+                name: full.to_unambiguous_string(),
+                printed: full.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// Refuse a declaration whose full name is a constant of Lean 4.8.0 core
+    /// (`crate::lean_core_names`): the environment of a Lean file with no
+    /// `import` line already holds it, so Lean reports it as already declared
+    /// (`Lean.Elab.checkNotAlreadyDeclared`) and keeps its core meaning.
+    ///
+    /// This holds whether or not Clean models the constant. Clean's prelude
+    /// models only part of `Init`, and the kernel's duplicate check sees only
+    /// what the prelude holds; for the rest Clean used to accept the user's
+    /// declaration and compute with the user's body: `def Nat.lcm := fun x y
+    /// => x + y + 7` proved `Nat.lcm 4 6 = 17` (Lean 4.8.0: 12), `def bne`,
+    /// `def List.getLast!`, `def EmptyCollection.emptyCollection` (read back
+    /// through `∅`) and 19 more core names likewise (measured 2026-09-26).
+    ///
+    /// Only SOURCE declarations come through here. Clean's own model of
+    /// `Init` is built into the environment by the prelude providers
+    /// (`clean_kernel::Environment::init_*`), never by elaborating a
+    /// declaration, so it is exempt by construction and nothing a user writes
+    /// can claim that exemption. `private` does not change the full name here,
+    /// and Lean refuses a private redeclaration of a core name as well ("a
+    /// non-private declaration … has already been declared").
+    ///
+    /// The rule applies in full in an environment that holds Clean's model of
+    /// `Init` (`Environment::models_lean_init`: built by the prelude, as
+    /// every `clean check`, project and lake lane is). Lean's check consults
+    /// the environment, and one built without the prelude holds no core
+    /// constant — a Lean `prelude` file, or a kernel-model harness such as
+    /// `clean-verify`'s foundation units (`inductive Nat`, `inductive Eq`,
+    /// `def Nat.add`), may declare those names. There the core name is still
+    /// refused where the environment already RESOLVES it as the core
+    /// constant without declaring it — a redirect (`xor` is `Bool.xor`), the
+    /// `cond` fallback, a recognizer's `T.elim` — as it was before
+    /// (`Self::models_lean_core_global`).
+    fn check_not_declared_in_lean_core(&self, decl: &SurfaceDecl) -> Result<(), ElabError> {
+        let name = match Self::declared_surface_name(decl) {
+            DeclaredSurfaceName::One(name) => name,
+            DeclaredSurfaceName::Block(decls) => {
+                for inner in decls {
+                    self.check_not_declared_in_lean_core(inner)?;
+                }
+                return Ok(());
+            }
+            DeclaredSurfaceName::None => return Ok(()),
+        };
+        let full = self.qualify_name(name).into_name();
+        if !crate::lean_core_names::is_lean_init_constant(&full) {
+            return Ok(());
+        }
+        let declared_in_core = self.env.models_lean_init() || {
+            let present = self.env.get_const(&full).is_some()
+                || self.env.get_inductive(&full).is_some()
+                || self.env.get_constructor(&full).is_some()
+                || self.env.get_recursor(&full).is_some();
+            !present && self.models_lean_core_global(&full)
+        };
+        if declared_in_core {
+            return Err(ElabError::DeclaredInLeanCore {
+                name: full.to_string(),
+            });
+        }
+        Ok(())
+    }
+
+    /// The `SurfaceDecl::Notation` arm of [`Self::elab_decl`], run in whatever
+    /// namespace the caller has made current.
+    fn elab_notation_decl(
+        &mut self,
+        span: clean_parser::Span,
+        kind: clean_parser::NotationKind,
+        precedence: Option<u32>,
+        pattern: &[clean_parser::NotationItem],
+        expansion: &SurfaceExpr,
+        scope: clean_parser::DeclScope,
+    ) -> Result<ElabResult, ElabError> {
+        // The template's free references resolve HERE, as Lean
+        // pre-resolves a quotation's identifiers at the declaration
+        // (`crate::namespace::TemplateResolution`). The parser marked
+        // them with this site; the registration below marks the macro
+        // form's the same way.
+        // Under `set_option hygiene false` nothing is pre-resolved.
+        let site = clean_parser::TemplateSiteId::of_span(span);
+        let hygienic = self.templates_hygienic();
+        if hygienic {
+            self.record_template_resolutions(site, pattern, expansion)?;
+        }
+        self.macro_ctx.set_template_site(Some(site));
+        self.macro_ctx.set_template_hygiene(hygienic);
+        let registered = self.register_notation_decl(kind, precedence, pattern, expansion, scope);
+        self.macro_ctx.set_template_site(None);
+        self.macro_ctx.set_template_hygiene(true);
+        registered
+    }
+
+    /// Register a `notation` command's template (the body of the
+    /// `SurfaceDecl::Notation` arm of [`Self::elab_decl`]).
+    fn register_notation_decl(
+        &mut self,
+        kind: clean_parser::NotationKind,
+        precedence: Option<u32>,
+        pattern: &[clean_parser::NotationItem],
+        expansion: &SurfaceExpr,
+        scope: clean_parser::DeclScope,
+    ) -> Result<ElabResult, ElabError> {
+        // `scoped notation` (Lean: active only when the declaring
+        // namespace is opened / current — `Lean/Elab/Notation.lean`
+        // attrKind `scoped`) registers against the CURRENT namespace
+        // and stays out of the live registry until that namespace is
+        // active (current, an ancestor of the current namespace, or
+        // activated by `open Ns` / `open scoped Ns`). At root Lean
+        // rejects the `scoped` modifier ("scoped attributes must be
+        // used inside namespaces"), so we fail closed there rather
+        // than registering a notation that could never be gated
+        // honestly (gap sweep B13, namespaces_scoping/p10).
+        if scope == clean_parser::DeclScope::Scoped {
+            if self.namespace_prefix.is_anonymous() {
+                return Err(ElabError::MacroError(
+                    "scoped notation must be declared inside a namespace".to_string(),
+                ));
+            }
+            let namespace = self.namespace_prefix.clone();
+            self.macro_ctx
+                .register_scoped_notation(&namespace, kind, precedence, pattern, expansion)
+                .map_err(|e| ElabError::MacroError(e.to_string()))?;
+            return Ok(ElabResult::Skipped);
+        }
+        // `local notation` and plain `notation` both register in the
+        // macro context; section/namespace blocks snapshot-restore the
+        // macro context, which bounds `local` to its block.
+        self.macro_ctx
+            .register_notation(kind, precedence, pattern, expansion)
+            .map_err(|e| ElabError::MacroError(e.to_string()))?;
+        Ok(ElabResult::Skipped)
+    }
+
+    /// Inner implementation of declaration elaboration, inside the namespace
+    /// pinned Lean opens around `decl` (`Self::decl_site_namespace`), which
+    /// a nested command (`namespace`, `section`, `open … in`) replaces for
+    /// its own declarations and which is restored on the way out.
     pub(super) fn elab_decl_inner(&mut self, decl: &SurfaceDecl) -> Result<ElabResult, ElabError> {
+        let opened = self.lean_decl_namespace(decl);
+        let enclosing = std::mem::replace(&mut self.decl_site_namespace, opened);
+        let result = self.elab_decl_inner_at_site(decl);
+        self.decl_site_namespace = enclosing;
+        result
+    }
+
+    fn elab_decl_inner_at_site(&mut self, decl: &SurfaceDecl) -> Result<ElabResult, ElabError> {
+        self.check_not_reserved_kernel_name(decl)?;
+        self.check_not_declared_in_lean_core(decl)?;
+        self.check_private_not_already_declared(decl)?;
         match decl {
             SurfaceDecl::Def {
                 name,
@@ -837,8 +1376,8 @@ impl<'a> ElabCtx<'a> {
                 ..
             } => {
                 self.set_decl_universe_params(universe_params);
-                let qname = self.qualify_name(name);
-                self.elab_inductive(
+                let qname = self.family_decl_name(name, modifiers);
+                let result = self.elab_inductive(
                     &qname,
                     universe_params,
                     binders,
@@ -846,7 +1385,10 @@ impl<'a> ElabCtx<'a> {
                     ctors,
                     deriving,
                     modifiers,
-                )
+                );
+                // A failed `deriving` class is an error beside the type, never
+                // instead of it (`deriving_log`).
+                self.attach_logged_deriving_failures(decl, result)
             }
 
             // Coinductive (#191): the v1 greatest-fixpoint lowering.
@@ -896,9 +1438,10 @@ impl<'a> ElabCtx<'a> {
                             feature: format!(
                                 "coinductive declaration `{qname}`: the generated \
                                  greatest-fixpoint declaration `{}` failed to \
-                                 elaborate/kernel-check ({e:?}); the declaration is \
+                                 elaborate/kernel-check ({}); the declaration is \
                                  REJECTED rather than partially registered",
-                                crate::preprocess_ext::decl_name(gen_decl).unwrap_or("?")
+                                crate::preprocess_ext::decl_name(gen_decl).map(ToString::to_string).unwrap_or_else(|| "?".into()),
+                                e
                             ),
                         },
                     )?;
@@ -936,19 +1479,22 @@ impl<'a> ElabCtx<'a> {
                 // field/parent constants (e.g. `Inh.{u_0} α`) collapse ONTO the
                 // declaration's `u` rather than silently renaming `u` to `u_0`.
                 self.set_decl_universe_params(universe_params);
-                let qname = self.qualify_name(name);
-                self.elab_structure(
+                let qname = self.family_decl_name(name, modifiers);
+                let result = self.elab_structure(
                     &qname,
                     universe_params,
                     binders,
                     extends,
                     ty.as_deref(),
-                    ctor_name.as_deref(),
+                    ctor_name.as_ref(),
                     fields,
                     deriving,
                     modifiers,
                     super::elab_structure::StructureKind::Structure,
-                )
+                );
+                // A failed `deriving` class is an error beside the structure,
+                // never instead of it (`deriving_log`).
+                self.attach_logged_deriving_failures(decl, result)
             }
 
             SurfaceDecl::Class {
@@ -962,7 +1508,7 @@ impl<'a> ElabCtx<'a> {
                 ..
             } => {
                 self.set_decl_universe_params(universe_params);
-                let qname = self.qualify_name(name);
+                let qname = self.family_decl_name(name, modifiers);
                 self.elab_class(
                     &qname,
                     universe_params,
@@ -982,19 +1528,37 @@ impl<'a> ElabCtx<'a> {
                 fields,
                 priority,
                 modifiers,
+                compiler_attrs,
                 ..
             } => {
                 self.set_decl_universe_params(universe_params);
                 let qname = name.as_ref().map(|n| self.qualify_name(n));
-                self.elab_instance(
-                    qname.as_deref(),
+                let result = self.elab_instance(
+                    qname.as_ref(),
                     universe_params,
                     binders,
                     class_type,
                     fields,
                     *priority,
                     modifiers,
-                )
+                )?;
+                // `@[implemented_by]` / `@[extern]` on the instance bind the
+                // instance constant, applied after it is registered like a
+                // `def`'s (`decl_attributes`).
+                match &result {
+                    ElabResult::Instance { name, .. } => {
+                        self.collect_attributes(name, compiler_attrs);
+                    }
+                    _ if !compiler_attrs.is_empty() => {
+                        return Err(ElabError::Unsupported {
+                            feature: "`@[implemented_by]` / `@[extern]` on an instance that \
+                                      did not elaborate to one instance constant"
+                                .to_string(),
+                        });
+                    }
+                    _ => {}
+                }
+                Ok(result)
             }
 
             // Macro-related declarations: register with macro context
@@ -1006,15 +1570,17 @@ impl<'a> ElabCtx<'a> {
                 ..
             } => {
                 self.macro_ctx
-                    .register_syntax(name.as_deref(), *precedence, pattern, category)
+                    .register_syntax(name.as_ref(), *precedence, pattern, category)
                     .map_err(|e| ElabError::MacroError(e.to_string()))?;
                 Ok(ElabResult::Skipped)
             }
             SurfaceDecl::DeclareSyntaxCat { name, .. } => {
-                self.macro_ctx.register_syntax_category(name);
+                self.macro_ctx.register_typed_syntax_category(name)
+                    .map_err(|e| ElabError::MacroError(e.to_string()))?;
                 Ok(ElabResult::Skipped)
             }
             SurfaceDecl::Macro {
+                span,
                 pattern,
                 category,
                 expansion,
@@ -1027,7 +1593,12 @@ impl<'a> ElabCtx<'a> {
                 // `Some` means the route owned the declaration (registered, or
                 // rejected loudly); `None` falls through to the Syntax-level
                 // registration unchanged.
-                let routed = self.try_register_tactic_macro(pattern, category, expansion)?;
+                let routed = self.try_register_tactic_macro(
+                    pattern,
+                    category,
+                    expansion,
+                    clean_parser::TemplateSiteId::of_span(*span),
+                )?;
                 if let Some(result) = routed {
                     return Ok(result);
                 }
@@ -1065,91 +1636,207 @@ impl<'a> ElabCtx<'a> {
                          `declare_syntax_cat {category}`"
                     )));
                 }
-                self.macro_ctx
+                // The template's free names resolve HERE (Lean pre-resolves a
+                // quotation's identifiers at the declaration), as for a
+                // `notation`: a `macro` declared under `open A` reads `A`'s
+                // names at every use, whatever is open there.
+                // A template the walk refuses is still registered (as a
+                // refusing expansion), so a use is refused rather than read
+                // as other syntax; the declaration reports the refusal.
+                // Under `set_option hygiene false` nothing is pre-resolved:
+                // the template's names resolve at each use.
+                let site = clean_parser::TemplateSiteId::of_span(*span);
+                let hygienic = self.templates_hygienic();
+                let recorded = if hygienic {
+                    self.record_macro_template(site, expansion)
+                } else {
+                    Ok(())
+                };
+                self.macro_ctx.set_template_site(Some(site));
+                self.macro_ctx.set_template_hygiene(hygienic);
+                let registered = self
+                    .macro_ctx
                     .register_macro(pattern, category, expansion)
-                    .map_err(|e| ElabError::MacroError(e.to_string()))?;
+                    .map_err(|e| ElabError::MacroError(e.to_string()));
+                self.macro_ctx.set_template_site(None);
+                self.macro_ctx.set_template_hygiene(true);
+                registered?;
+                recorded?;
                 Ok(ElabResult::Skipped)
             }
-            SurfaceDecl::MacroRules { name, arms, .. } => {
+            SurfaceDecl::MacroRules {
+                span, name, arms, ..
+            } => {
                 // Tactic-position arms (`` `(tactic| kw …) => `(tactic| …) ``)
                 // register through the tactic bridge — the Syntax-level
                 // expander cannot fire at tactic position. Remaining arms keep
                 // the Syntax-level registration unchanged.
                 let syntax_level_arms = arms
                     .iter()
-                    .filter_map(|arm| match self.try_register_tactic_macro_rules_arm(arm) {
+                    .filter_map(|arm| match self
+                        .try_register_tactic_macro_rules_arm(arm, clean_parser::TemplateSiteId::of_span(*span))
+                    {
                         Ok(true) => None,
                         Ok(false) => Some(Ok(arm.clone())),
                         Err(e) => Some(Err(e)),
                     })
                     .collect::<Result<Vec<MacroArm>, ElabError>>()?;
                 if !syntax_level_arms.is_empty() {
-                    self.macro_ctx
-                        .register_macro_rules(name.as_deref(), &syntax_level_arms)
-                        .map_err(|e| ElabError::MacroError(e.to_string()))?;
+                    // Pre-resolve the arms' templates at this declaration (see
+                    // the `Macro` arm).
+                    let site = clean_parser::TemplateSiteId::of_span(*span);
+                    let hygienic = self.templates_hygienic();
+                    let mut recorded = Ok(());
+                    for arm in syntax_level_arms.iter().filter(|_| hygienic) {
+                        let arm_recorded = self.record_macro_template(site, &arm.expansion);
+                        if recorded.is_ok() {
+                            recorded = arm_recorded;
+                        }
+                    }
+                    self.macro_ctx.set_template_site(Some(site));
+                    self.macro_ctx.set_template_hygiene(hygienic);
+                    let registered = self
+                        .macro_ctx
+                        .register_macro_rules(name.as_ref(), &syntax_level_arms)
+                        .map_err(|e| ElabError::MacroError(e.to_string()));
+                    self.macro_ctx.set_template_site(None);
+                    self.macro_ctx.set_template_hygiene(true);
+                    registered?;
+                    recorded?;
                 }
                 Ok(ElabResult::Skipped)
             }
             SurfaceDecl::Notation {
+                span,
                 kind,
                 precedence,
                 pattern,
                 expansion,
                 scope,
-                ..
+                scope_ns,
             } => {
-                // `scoped notation` (Lean: active only when the declaring
-                // namespace is opened / current — `Lean/Elab/Notation.lean`
-                // attrKind `scoped`) registers against the CURRENT namespace
-                // and stays out of the live registry until that namespace is
-                // active (current, an ancestor of the current namespace, or
-                // activated by `open Ns` / `open scoped Ns`). At root Lean
-                // rejects the `scoped` modifier ("scoped attributes must be
-                // used inside namespaces"), so we fail closed there rather
-                // than registering a notation that could never be gated
-                // honestly (gap sweep B13, namespaces_scoping/p10).
-                if *scope == clean_parser::DeclScope::Scoped {
-                    if self.namespace_prefix.is_empty() {
-                        return Err(ElabError::MacroError(
-                            "scoped notation must be declared inside a namespace".to_string(),
-                        ));
-                    }
-                    let namespace = self.namespace_prefix.clone();
-                    self.macro_ctx
-                        .register_scoped_notation(
-                            &namespace,
-                            *kind,
-                            *precedence,
-                            pattern,
-                            expansion,
-                        )
-                        .map_err(|e| ElabError::MacroError(e.to_string()))?;
-                    return Ok(ElabResult::Skipped);
+                // Mathlib's `scoped[NS]` is `with_weak_namespace _root_.NS`:
+                // the declaration is registered in, and its template resolved
+                // against, `NS` -- not the namespace it is written in.
+                let enclosing = scope_ns
+                    .as_ref()
+                    .map(|ns| std::mem::replace(&mut self.namespace_prefix, ns.clone()));
+                let registered = self.elab_notation_decl(*span, *kind, *precedence, pattern, expansion, *scope);
+                // Restored on every path, the error one included.
+                if let Some(enclosing) = enclosing {
+                    self.namespace_prefix = enclosing;
                 }
-                // `local notation` and plain `notation` both register in the
-                // macro context; section/namespace blocks snapshot-restore the
-                // macro context, which bounds `local` to its block.
-                self.macro_ctx
-                    .register_notation(*kind, *precedence, pattern, expansion)
-                    .map_err(|e| ElabError::MacroError(e.to_string()))?;
-                Ok(ElabResult::Skipped)
+                registered
             }
 
             SurfaceDecl::Check { expr, .. } => {
                 let kernel_expr = self.elaborate(expr)?;
-                let result = crate::commands::elab_check(self.env, &kernel_expr)?;
+                let result = crate::commands::elab_check_rendered(
+                    self.env,
+                    &kernel_expr,
+                    self.private_names_rendering(),
+                )?;
                 Ok(ElabResult::Command(super::CommandOutput::Check(result)))
             }
             SurfaceDecl::Eval { expr, .. } => {
                 let kernel_expr = self.elaborate(expr)?;
+                // What pinned Lean will not run (review r6, X11 and X1;
+                // docs/DECISIONS.md R134): a term that depends on `sorry`, uses
+                // a constant with no code, or has no way to be displayed.
+                let ty = clean_kernel::TypeChecker::new(self.env)
+                    .infer_type(&kernel_expr)
+                    .map_err(|e| ElabError::KernelCheckFailed {
+                        name: clean_kernel::name::Name::anon(),
+                        detail: e.to_string(),
+                    })?;
+                if let Some(message) =
+                    crate::lean_compile_checks::eval_refusal(self.env, &kernel_expr, &ty)
+                {
+                    return Err(ElabError::CommandFailed { message });
+                }
                 let result = crate::commands::elab_eval(self.env, &kernel_expr)?;
                 Ok(ElabResult::Command(super::CommandOutput::Eval(result)))
             }
+            SurfaceDecl::Reduce {
+                expr,
+                reduce_proofs,
+                reduce_types,
+                ..
+            } => {
+                // Not `#eval`: nothing is compiled or run, and no `Repr` is
+                // needed (`crate::reduce_command`).
+                let bound_option_set = crate::reduce_command::BOUND_OPTIONS
+                    .into_iter()
+                    .chain(crate::reduce_command::WARNING_OPTIONS)
+                    .find(|option| self.get_option(option).is_some());
+                let kernel_expr = self.elaborate(expr)?;
+                let flags = crate::reduce_command::ReduceFlags {
+                    reduce_types: *reduce_types,
+                    reduce_proofs: *reduce_proofs,
+                };
+                let result = crate::reduce_command::elab_reduce(
+                    self.env,
+                    &kernel_expr,
+                    flags,
+                    bound_option_set,
+                )?;
+                Ok(ElabResult::Command(super::CommandOutput::Reduce(result)))
+            }
             SurfaceDecl::Print { name, .. } => {
-                let result = crate::commands::elab_print(self.env, name)?;
+                // A name that is no constant as written resolves the way
+                // Lean's `#print` resolves it (`realizeGlobalConstWithInfos`):
+                // through the namespace, the `open`s and the private step, so
+                // `#print p` reaches this module's private `p`, which exists
+                // nowhere under its plain name once mangled (G21).
+                let resolved = if name.is_relative_constructor()
+                    || self.env.get_const(name.name()).is_some()
+                    || self.env.get_inductive(name.name()).is_some()
+                    || self.env.get_constructor(name.name()).is_some()
+                    || self.env.get_recursor(name.name()).is_some()
+                {
+                    None
+                } else {
+                    match self.resolve_global_ident_target(name) {
+                        super::elab_core::IdentTarget::Global(global) => Some(global),
+                        _ => None,
+                    }
+                };
+                let rendering = self.private_names_rendering();
+                let result = match resolved {
+                    Some(global) => crate::commands::elab_print_resolved(
+                        self.env,
+                        &name.to_string(),
+                        &global,
+                        rendering,
+                    )?,
+                    None if name.is_relative_constructor() => {
+                        crate::commands::elab_print_typed(self.env, name)?
+                    }
+                    None => crate::commands::elab_print_resolved(
+                        self.env,
+                        &name.to_string(),
+                        name.name(),
+                        rendering,
+                    )?,
+                };
                 Ok(ElabResult::Command(super::CommandOutput::Print(result)))
             }
-            SurfaceDecl::Variable { binders, .. } => {
+            SurfaceDecl::PrintAxioms { name, .. } => self.elab_print_axioms_cmd(name),
+            SurfaceDecl::Guard { expr, .. } => self.elab_guard_cmd(expr),
+            SurfaceDecl::GuardMsgs { doc, spec, cmd, .. } => {
+                self.elab_guard_msgs_cmd(doc.as_deref(), spec, cmd)
+            }
+            SurfaceDecl::Variable { binders, visibility, .. } => {
+                if visibility.is_some() {
+                    let world = match clean_olean::environment_world(self.env) {
+                        Some(tag) => tag.parse::<clean_kernel::LeanWorld>()
+                            .map_err(|error| ElabError::SourceWorld(error.to_string()))?,
+                        None => clean_kernel::LeanWorld::ORACLE,
+                    };
+                    if !world.variable_visibility() {
+                        return Err(ElabError::SourceWorld(format!("{world} does not admit public/private variable")));
+                    }
+                }
                 self.elab_variable_binders(binders)?;
                 Ok(ElabResult::Skipped)
             }
@@ -1173,7 +1860,13 @@ impl<'a> ElabCtx<'a> {
                     self.namespace_state.push_scope();
                     self.macro_ctx.push_scoped_activation_frame();
                     self.activate_open_scoped_notation(paths);
+                    let before = self.namespace_state.activated_scopes().to_vec();
                     let open_result = if *scoped {
+                        crate::namespace::process_open_scoped(
+                            self.env,
+                            paths,
+                            &mut self.namespace_state,
+                        );
                         Ok(())
                     } else {
                         crate::namespace::process_open(self.env, paths, &mut self.namespace_state)
@@ -1181,13 +1874,25 @@ impl<'a> ElabCtx<'a> {
                                 feature: e.to_string(),
                             })
                     };
+                    let activated = self.namespace_state.newly_activated(&before);
+                    let saved = self.activate_scoped_instances_here(&activated);
                     let result = open_result.and_then(|()| self.elab_decl_inner(inner));
+                    self.restore_instance_state(saved);
                     self.macro_ctx.pop_scoped_activation_frame();
                     self.namespace_state.pop_scope();
                     return result;
                 }
                 self.activate_open_scoped_notation(paths);
+                // The file-level driver activates the namespaces' scoped
+                // instances in the environment once this declaration's
+                // namespace state is persisted (`FileContext::
+                // activate_scoped_instances`).
                 if *scoped {
+                    crate::namespace::process_open_scoped(
+                        self.env,
+                        paths,
+                        &mut self.namespace_state,
+                    );
                     return Ok(ElabResult::Skipped);
                 }
                 crate::namespace::process_open(self.env, paths, &mut self.namespace_state)
@@ -1208,10 +1913,10 @@ impl<'a> ElabCtx<'a> {
                 // visible as `x` from within `Bar` (via the outward walk) and
                 // as `Bar.x` elsewhere in the file. The current namespace was
                 // previously hardwired to `None`, exporting everything at root.
-                let current_ns = if self.namespace_prefix.is_empty() {
+                let current_ns = if self.namespace_prefix.is_anonymous() {
                     None
                 } else {
-                    Some(self.namespace_prefix.as_str())
+                    Some(&self.namespace_prefix)
                 };
                 crate::namespace::process_export(
                     self.env,
@@ -1225,6 +1930,20 @@ impl<'a> ElabCtx<'a> {
                 })?;
                 Ok(ElabResult::Skipped)
             }
+            SurfaceDecl::Alias { names, target, attrs, modifiers, .. } => {
+                if names.is_empty() {
+                    let target = self.with_term_body_scope(|ctx| ctx.elab_ident(target))?;
+                    if !matches!(target.kind(), clean_kernel::ExprKind::Const(..)) {
+                        return Err(ElabError::Unsupported { feature: "alias target must be a global constant".into() });
+                    }
+                    return Ok(ElabResult::Skipped);
+                }
+                let mut results = Vec::with_capacity(names.len());
+                for (name, direction) in names {
+                    results.push(self.elab_alias_inner(name, target, *direction, attrs, modifiers)?);
+                }
+                Ok(ElabResult::Multiple(results))
+            }
             SurfaceDecl::Example {
                 binders, ty, val, ..
             } => {
@@ -1236,8 +1955,13 @@ impl<'a> ElabCtx<'a> {
                 // `example` the dedicated kernel check below produces the same
                 // verdict attributed to `example`, so re-wrap the relocated
                 // mismatch to keep that attribution (Lean `elabExample`).
-                let (ty_expr, val_expr) = match self.elab_def_body(binders, ty.as_deref(), val) {
-                    Ok(pair) => pair,
+                // A mismatch raised INSIDE the example's `by` body arrives as
+                // `ElabError::InTactic { source: TypeMismatch, .. }` and is
+                // deliberately not re-wrapped: naming the tactic that raised
+                // it is the more precise attribution, and the verdict is the
+                // same either way.
+                let (ty_expr, val_expr) = match self.elab_decl_body(binders, ty.as_deref(), val) {
+                    Ok((ty, val, _)) => (ty, val),
                     Err(ElabError::TypeMismatch { expected, actual }) => {
                         return Err(ElabError::KernelCheckFailed {
                             name: clean_kernel::name::Name::from_string("example"),
@@ -1325,22 +2049,32 @@ impl<'a> ElabCtx<'a> {
                 // still elaborate. A KNOWN option with a wrongly-typed value stays
                 // a loud error. See `validate_command_option_lenient`.
                 let _known =
-                    crate::options_registry::validate_command_option_lenient(name, value.as_deref())?;
+                    crate::options_registry::validate_command_option_lenient(&crate::options_registry::surface_option_key(name)?, value.as_deref())?;
                 if let Some(inner_decl) = body {
-                    // Per-declaration scoping: `set_option ... in <decl>`
-                    // Set the option, elaborate the inner decl, then remove it.
-                    self.set_local_option(name.clone(), value.clone());
+                    // Per-declaration scoping: `set_option ... in <decl>` sets
+                    // the option for that one command only (Lean's `in`), so
+                    // the previous local value is restored after it — a
+                    // `set_option hygiene false in notation …` inside a section
+                    // must not leave the section's later templates unhygienic.
+                    let key = crate::options_registry::surface_option_key(name)?;
+                    let previous = self.local_options.get(&key).cloned();
+                    self.set_local_option(key.clone(), value.clone());
                     let result = self.elab_decl_inner(inner_decl);
-                    // Remove the scoped option (best-effort — local options don't
-                    // currently support removal, so we rely on the outer handler
-                    // in lib.rs doing the real env-level restore).
+                    match previous {
+                        Some(previous) => {
+                            self.local_options.insert(key, previous);
+                        }
+                        None => {
+                            self.local_options.remove(&key);
+                        }
+                    }
                     result
                 } else {
                     // Store option locally so it is visible within the current
                     // elaboration context (sections, namespaces). The file-scope
                     // handler in lib.rs persists options to Environment and
                     // FileContext for cross-declaration visibility.
-                    self.set_local_option(name.clone(), value.clone());
+                    self.set_local_option(crate::options_registry::surface_option_key(name)?, value.clone());
                     Ok(ElabResult::Skipped)
                 }
             }
@@ -1363,6 +2097,13 @@ impl<'a> ElabCtx<'a> {
             | SurfaceDecl::DeclareAesopRuleSets { .. }
             // `library_note «title»` carries no checkable content — a no-op.
             | SurfaceDecl::LibraryNote { .. } => Ok(ElabResult::Skipped),
+            SurfaceDecl::Prelude { .. } => {
+                if crate::source_prelude::is_bare_module(self.env) && self.env.num_constants() == 0 {
+                    Ok(ElabResult::Skipped)
+                } else {
+                    Err(ElabError::ParseError("prelude requires a fresh module environment without implicit Init".to_owned()))
+                }
+            }
             SurfaceDecl::RawDecl { content, .. } => Err(ElabError::ParseError(format!(
                 "parser recovery produced raw declaration: {content}"
             ))),
@@ -1370,185 +2111,13 @@ impl<'a> ElabCtx<'a> {
     }
 }
 
-/// Free surface identifiers of a value declaration (binder types, result
-/// type, value/proof, `where` bodies), plus the decl's own binder names.
-///
-/// Returns `None` for declaration kinds that never receive section-variable
-/// binders (mirroring which kinds `preprocess` prepends variables to:
-/// `Def`/`Theorem`/`Example`/`Instance`).
-/// Whether [`decl_free_surface_idents`] can see every identifier in `decl`.
-///
-/// Mirrors that function's traversal, asking
-/// [`crate::where_desugar_ext::free_idents_are_complete`] of each expression it
-/// visits. Any `false` makes the whole declaration unanalyzable, which
-/// `used_section_binders` treats as "include every section binder".
-fn decl_free_idents_complete(decl: &SurfaceDecl) -> bool {
-    use crate::where_desugar_ext::free_idents_are_complete;
-    let binders_ok = |binders: &[clean_parser::SurfaceBinder]| {
-        binders
-            .iter()
-            .all(|b| b.ty.as_ref().is_none_or(|ty| free_idents_are_complete(ty)))
-    };
-    match decl {
-        SurfaceDecl::Def {
-            binders,
-            ty,
-            val,
-            where_decls,
-            ..
-        } => {
-            binders_ok(binders)
-                && ty.as_ref().is_none_or(|t| free_idents_are_complete(t))
-                && free_idents_are_complete(val)
-                && where_decls.iter().all(|w| {
-                    binders_ok(&w.binders)
-                        && w.ret_ty
-                            .as_ref()
-                            .is_none_or(|t| free_idents_are_complete(t))
-                        && free_idents_are_complete(&w.body)
-                })
-        }
-        SurfaceDecl::Theorem {
-            binders,
-            ty,
-            proof,
-            where_decls,
-            ..
-        } => {
-            binders_ok(binders)
-                && free_idents_are_complete(ty)
-                && free_idents_are_complete(proof)
-                && where_decls.iter().all(|w| {
-                    binders_ok(&w.binders)
-                        && w.ret_ty
-                            .as_ref()
-                            .is_none_or(|t| free_idents_are_complete(t))
-                        && free_idents_are_complete(&w.body)
-                })
-        }
-        SurfaceDecl::Example {
-            binders, ty, val, ..
-        } => {
-            binders_ok(binders)
-                && ty.as_ref().is_none_or(|t| free_idents_are_complete(t))
-                && free_idents_are_complete(val)
-        }
-        SurfaceDecl::Instance {
-            binders,
-            class_type,
-            fields,
-            ..
-        } => {
-            binders_ok(binders)
-                && free_idents_are_complete(class_type)
-                && fields.iter().all(|f| free_idents_are_complete(&f.val))
-        }
-        // Anything else is not a prepend site; `used_section_binders` already
-        // returns empty for it via `decl_free_surface_idents`.
-        _ => true,
-    }
-}
-
-fn decl_free_surface_idents(
-    decl: &SurfaceDecl,
-) -> Option<(
-    std::collections::HashSet<String>,
-    std::collections::HashSet<String>,
-)> {
-    use crate::where_desugar_ext::collect_free_idents;
-    let mut free = std::collections::HashSet::new();
-    let collect_binders = |binders: &[clean_parser::SurfaceBinder],
-                           free: &mut std::collections::HashSet<String>| {
-        for b in binders {
-            if let Some(ty) = &b.ty {
-                free.extend(collect_free_idents(ty));
-            }
-        }
-    };
-    let own: std::collections::HashSet<String> = match decl {
-        SurfaceDecl::Def {
-            binders,
-            ty,
-            val,
-            where_decls,
-            ..
-        } => {
-            collect_binders(binders, &mut free);
-            if let Some(ty) = ty {
-                free.extend(collect_free_idents(ty));
-            }
-            free.extend(collect_free_idents(val));
-            for w in where_decls {
-                collect_binders(&w.binders, &mut free);
-                if let Some(rt) = &w.ret_ty {
-                    free.extend(collect_free_idents(rt));
-                }
-                free.extend(collect_free_idents(&w.body));
-            }
-            binders.iter().map(|b| b.name.clone()).collect()
-        }
-        SurfaceDecl::Theorem {
-            binders,
-            ty,
-            proof,
-            where_decls,
-            ..
-        } => {
-            collect_binders(binders, &mut free);
-            free.extend(collect_free_idents(ty));
-            free.extend(collect_free_idents(proof));
-            for w in where_decls {
-                collect_binders(&w.binders, &mut free);
-                if let Some(rt) = &w.ret_ty {
-                    free.extend(collect_free_idents(rt));
-                }
-                free.extend(collect_free_idents(&w.body));
-            }
-            binders.iter().map(|b| b.name.clone()).collect()
-        }
-        SurfaceDecl::Example {
-            binders, ty, val, ..
-        } => {
-            collect_binders(binders, &mut free);
-            if let Some(ty) = ty {
-                free.extend(collect_free_idents(ty));
-            }
-            free.extend(collect_free_idents(val));
-            binders.iter().map(|b| b.name.clone()).collect()
-        }
-        SurfaceDecl::Instance {
-            binders,
-            class_type,
-            fields,
-            ..
-        } => {
-            collect_binders(binders, &mut free);
-            free.extend(collect_free_idents(class_type));
-            for f in fields {
-                free.extend(collect_free_idents(&f.val));
-            }
-            binders.iter().map(|b| b.name.clone()).collect()
-        }
-        _ => return None,
-    };
-    Some((free, own))
-}
-
-/// The subset of section `variable` binders a declaration actually USES,
-/// closed under type dependencies, in declaration order.
-///
-/// Lean includes a section variable in a declaration only when the
-/// declaration mentions it (`Lean/Elab/MutualDef.lean` section-variable
-/// inclusion); instance-implicit variables are additionally included when
-/// their TYPE mentions an included variable (so `variable {α} [Add α]` adds
-/// `[Add α]` to any decl that uses `α`). A decl binder with the same name
-/// shadows the section variable.
 /// Apply an `include` / `omit` command to a block's forced-in variable names.
 ///
 /// Neither command can name a variable into existence — the name must already
-/// be a section `variable` for [`used_section_binders`] to have anything to
+/// be a section `variable` for
+/// [`crate::section_var_selection::select_section_binders`] to have anything to
 /// include.
-fn apply_include_omit(included: &mut Vec<String>, decl: &SurfaceDecl) {
+fn apply_include_omit(included: &mut Vec<SurfaceName>, decl: &SurfaceDecl) {
     match decl {
         SurfaceDecl::IncludeVars { names, .. } => {
             for name in names {
@@ -1564,109 +2133,29 @@ fn apply_include_omit(included: &mut Vec<String>, decl: &SurfaceDecl) {
     }
 }
 
-/// `forced` names section variables an `include` command put in scope: they are
-/// treated as USED whether the declaration mentions them or not, and the
-/// dependency fixpoint below then drags in whatever their types need (so
-/// `include h` with `h : Involutive f` also pulls `f`, and `f : α → α` pulls
-/// `α`). A declaration binder of the same name still shadows, exactly as it
-/// does for a mentioned variable.
-pub(crate) fn used_section_binders(
-    section_binders: &[clean_parser::SurfaceBinder],
-    decl: &SurfaceDecl,
-    macro_ctx: Option<&crate::macro_integration::MacroCtx>,
-    forced: &[String],
-) -> Vec<clean_parser::SurfaceBinder> {
-    use crate::where_desugar_ext::collect_free_idents;
-    if section_binders.is_empty() {
-        return Vec::new();
-    }
-    // FAIL CLOSED when the use-analysis cannot see everything.
-    //
-    // `collect_free_idents` documents itself as "may undercount edges, never
-    // overcount": its final match arm silently ignores constructs it does not
-    // model (`Proj`, `Do`, `StructLit`, `ByTactic`, `Explicit`, `NamedArg`,
-    // `InterpolatedStr`, ...). Undercounting is sound for the dependency
-    // analysis it was written for; it is NOT sound HERE, where a missed
-    // identifier means a section `variable` is not prepended and the
-    // declaration registers with the WRONG ARITY.
-    //
-    // Measured regression this guards: `variable {α : Type} (p : α × α)` with
-    // `def f : α × α := (p.2, p.1)` dropped `p`, because `p` occurs only as a
-    // `Proj` receiver. `f` then took no explicit argument and every later
-    // application failed with `TooManyArguments`
-    // (`lean4_corpus_tests::test_r90_discovery_lock`, snippet
-    // `sectvar_transitive_incl`).
-    //
-    // Where the analysis IS complete, the Lean-faithful used-closure still
-    // applies and keeps the Mathlib win it was introduced for. Where it is not,
-    // including every in-scope binder is the previous, over-inclusive but
-    // CORRECT behavior — the safe direction to be wrong in.
-    if !decl_free_idents_complete(decl) {
-        return section_binders.to_vec();
-    }
-    let Some((mut used, own_binders)) = decl_free_surface_idents(decl) else {
-        return Vec::new();
-    };
-    if let Some(macro_ctx) = macro_ctx {
-        macro_ctx.close_over_simple_notation_dependencies(&mut used);
-    }
-    for name in &own_binders {
-        used.remove(name);
-    }
-    // `include`d variables count as used. Applied AFTER own-binder shadowing so
-    // a declaration that binds its own `h` keeps its own.
-    for name in forced {
-        if !own_binders.iter().any(|b| b == name) {
-            used.insert(name.clone());
-        }
-    }
-
-    let mut include = vec![false; section_binders.len()];
-    // Fixpoint: including a binder can make its type's free idents "used"
-    // (dependency closure, e.g. `a : α` pulls in `α`), and an included
-    // variable can activate an instance-implicit binder whose type mentions
-    // it. The stack is small; loop until stable.
-    loop {
-        let mut changed = false;
-        for (i, binder) in section_binders.iter().enumerate() {
-            if include[i] {
-                continue;
-            }
-            let directly_used = used.contains(&binder.name);
-            let inst_activated = binder.info == clean_parser::SurfaceBinderInfo::Instance
-                && binder
-                    .ty
-                    .as_ref()
-                    .is_some_and(|ty| collect_free_idents(ty).iter().any(|n| used.contains(n)));
-            if directly_used || inst_activated {
-                include[i] = true;
-                changed = true;
-                used.insert(binder.name.clone());
-                if let Some(ty) = &binder.ty {
-                    used.extend(collect_free_idents(ty));
-                }
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    section_binders
-        .iter()
-        .zip(include)
-        .filter(|&(_, inc)| inc)
-        .map(|(binder, _)| binder.clone())
-        .collect()
+/// The operand variable a tactic macro's template writes for the pattern
+/// variable `name`: the identifier `«$name»` (see [`rewrite_tactic_antiquots`]).
+fn tactic_operand_variable(name: &SurfaceName) -> SurfaceName {
+    SurfaceName::component(
+        format!("${}", name.component_text().unwrap_or_default()),
+        true,
+    )
 }
 
-/// Rewrite the pattern-bound antiquotation references of a tactic-quotation
-/// body (`$x` → `x`) so the body parses with the plain tactic grammar; the
-/// bound name is then substituted with the call-site argument by the
-/// user-tactic bridge (`build_user_tactic_handler`). Any antiquotation that is
-/// NOT pattern-bound — including `$(…)` splices — returns `None` so the caller
+/// Rewrite the pattern-bound antiquotation references of a tactic- or
+/// conv-quotation body so the body parses with the plain tactic grammar:
+/// each `$x` becomes the identifier `«$x»` ([`tactic_operand_variable`]),
+/// which no other identifier of the quotation spells — a bare `x` in the
+/// quotation is the TEMPLATE's `x`, never the operand (Lean: `$x + x` is the
+/// operand plus the template's own `x✝`). The body is then a template over
+/// those variables, which every use instantiates with the call's arguments.
+/// An antiquotation that is NOT pattern-bound — including `$(…)` splices —
+/// and a quotation that already writes `«$` return `None`, so the caller
 /// rejects loudly rather than registering a macro that would mis-expand.
-fn rewrite_bound_antiquots(body: &str, bound: &[&str]) -> Option<String> {
+fn rewrite_tactic_antiquots(body: &str, bound: &[&SurfaceName]) -> Option<String> {
+    if body.contains("«$") {
+        return None;
+    }
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
     while let Some(pos) = rest.find('$') {
@@ -1676,10 +2165,13 @@ fn rewrite_bound_antiquots(body: &str, bound: &[&str]) -> Option<String> {
             .find(|c: char| !(c.is_alphanumeric() || c == '_' || c == '\''))
             .unwrap_or(after.len());
         let name = &after[..ident_len];
-        if name.is_empty() || !bound.contains(&name) {
+        let parsed = clean_parser::parse_name(name).ok()?;
+        if name.is_empty() || !bound.contains(&&parsed) {
             return None;
         }
+        out.push_str("«$");
         out.push_str(name);
+        out.push('»');
         rest = &after[ident_len..];
     }
     out.push_str(rest);
@@ -1732,7 +2224,8 @@ fn macro_rules_arm_pattern_items(
             )));
         };
         items.push(SyntaxPatternItem::Variable {
-            name: name.to_string(),
+            name: clean_parser::parse_name(name)
+                .map_err(|err| ElabError::MacroError(err.to_string()))?,
             category: None,
         });
     }
@@ -1748,7 +2241,7 @@ fn macro_rules_arm_pattern_items(
 /// variables — and never fabricates success.
 fn simple_unsupported_handler(
     name: String,
-    bound_names: Vec<String>,
+    bound_names: Vec<SurfaceName>,
     body: &SurfaceExpr,
 ) -> crate::tactic::TacticHandler {
     let static_message = find_throw_error_message(body);
@@ -1760,7 +2253,7 @@ fn simple_unsupported_handler(
             }
             None => format!(
                 "unsupported tactic elaborator body for `{name}` (bound: {}; received {} argument(s))",
-                bound_names.join(", "),
+                bound_names.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "),
                 args.len()
             ),
         };
@@ -1770,7 +2263,7 @@ fn simple_unsupported_handler(
 
 /// A bound variable inside a tactic `elab_rules` pattern.
 struct TacticElabBoundVar {
-    name: String,
+    name: SurfaceName,
     category: Option<String>,
 }
 
@@ -1778,7 +2271,7 @@ struct TacticElabBoundVar {
 /// term `elab` pattern. Phase 6 supports a SINGLE trailing repetition; the var
 /// binds the entire variadic tail of the call-site arguments as a LIST.
 struct TacticElabRepetition {
-    name: String,
+    name: SurfaceName,
     category: Option<String>,
 }
 
@@ -1976,7 +2469,8 @@ fn find_throw_error_message(expr: &SurfaceExpr) -> Option<String> {
     match expr {
         SurfaceExpr::Do(_, elems) => elems.iter().find_map(find_throw_error_message_in_do_elem),
         SurfaceExpr::App(_, func, args) => {
-            if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "throwError") {
+            if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name.is_unescaped_component("throwError"))
+            {
                 return args.first().and_then(string_arg);
             }
             find_throw_error_message(func).or_else(|| {
@@ -1999,9 +2493,10 @@ fn find_throw_error_message(expr: &SurfaceExpr) -> Option<String> {
 fn find_throw_error_message_in_do_elem(elem: &DoElem) -> Option<String> {
     match elem {
         DoElem::Expr(_, expr) | DoElem::Return(_, expr) => find_throw_error_message(expr),
-        DoElem::Bind(_, _, expr) | DoElem::Let(_, _, expr) | DoElem::LetMut(_, _, expr) => {
-            find_throw_error_message(expr)
-        }
+        DoElem::Bind(_, _, expr)
+        | DoElem::Let(_, _, expr)
+        | DoElem::Have(_, _, expr)
+        | DoElem::LetMut(_, _, expr) => find_throw_error_message(expr),
         DoElem::LetRec(_, defs) => defs
             .iter()
             .find_map(|(_, expr)| find_throw_error_message(expr)),
@@ -2080,6 +2575,61 @@ fn string_arg(arg: &SurfaceArg) -> Option<String> {
     }
 }
 
+/// What [`ElabCtx::declared_surface_name`] finds a source declaration
+/// introduces.
+pub(super) enum DeclaredSurfaceName<'a> {
+    /// One declared name, as written.
+    One(&'a SurfaceName),
+    /// A `mutual` block: its members declare the names.
+    Block(&'a [SurfaceDecl]),
+    /// No declared name (`example`, a command).
+    None,
+}
+
+/// The declaration kinds whose `private` names get Lean's module-local kernel
+/// name. Staged (`designs/2026-10-08-private-name-mangling.md`): B1 mangles
+/// theorems and axioms, B2 definitions (`def`, `abbrev`, `opaque`, `partial`,
+/// `instance`, `mutual` defs and the auxiliaries derived from them), B3 the
+/// inductive families (`inductive`, `structure`, `class`, a `mutual`
+/// inductive block — constructors, recursors and projections inherit the
+/// prefix); `coinductive`, whose greatest-fixpoint lowering mints its own
+/// names, keeps the plain name plus the private mark.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum PrivateNameKind {
+    /// `theorem` (also a `mutual` member and a staged header).
+    Theorem,
+    /// `axiom`.
+    Axiom,
+    /// `def` / `abbrev` / `opaque` / `partial def` / `instance`, a `mutual`
+    /// def member and a staged header of one (B2).
+    Definition,
+    /// `inductive` / `structure` / `class` and a `mutual` inductive block
+    /// (B3): the type's name, and so every name derived from it.
+    Family,
+    /// Every other kind (`coinductive`).
+    NotYetMangled,
+}
+
+/// `Some(kind)` when `modifiers` make the declaration `private`.
+pub(crate) fn private_kind_of(
+    modifiers: &clean_parser::DeclModifiers,
+    kind: PrivateNameKind,
+) -> Option<PrivateNameKind> {
+    (modifiers.visibility == clean_parser::Visibility::Private).then_some(kind)
+}
+
+/// Whether a `private` declaration of `kind` is registered under its mangled
+/// name.
+pub(crate) const fn mangles_private_names(kind: PrivateNameKind) -> bool {
+    match kind {
+        PrivateNameKind::Theorem
+        | PrivateNameKind::Axiom
+        | PrivateNameKind::Definition
+        | PrivateNameKind::Family => true,
+        PrivateNameKind::NotYetMangled => false,
+    }
+}
+
 #[cfg(test)]
 mod elab_pattern_tests {
     use super::*;
@@ -2088,9 +2638,9 @@ mod elab_pattern_tests {
         SyntaxPatternItem::Literal(s.to_owned())
     }
 
-    fn var(name: &str, category: Option<&str>) -> SyntaxPatternItem {
+    fn var(name: SurfaceName, category: Option<&str>) -> SyntaxPatternItem {
         SyntaxPatternItem::Variable {
-            name: name.to_owned(),
+            name,
             category: category.map(str::to_owned),
         }
     }
@@ -2100,12 +2650,16 @@ mod elab_pattern_tests {
     /// pattern parser must promote `xs` to a repetition var with no fixed vars.
     #[test]
     fn test_parse_pattern_recognizes_star_repetition() {
-        let pattern = vec![lit("intros2"), var("xs", Some("ident")), lit("_")];
+        let pattern = vec![
+            lit("intros2"),
+            var(SurfaceName::generated_path("xs"), Some("ident")),
+            lit("_"),
+        ];
         let parsed = parse_tactic_elab_pattern(&pattern).expect("should parse");
         assert_eq!(parsed.name, "intros2");
         assert!(parsed.bound_vars.is_empty(), "no fixed vars before the rep");
         let rep = parsed.repetition.expect("should have a repetition var");
-        assert_eq!(rep.name, "xs");
+        assert_eq!(rep.name, SurfaceName::generated_path("xs"));
         assert_eq!(rep.category.as_deref(), Some("ident"));
     }
 
@@ -2113,10 +2667,15 @@ mod elab_pattern_tests {
     /// are stripped and `xs` is promoted to the single repetition var.
     #[test]
     fn test_parse_pattern_recognizes_comma_star_repetition() {
-        let pattern = vec![lit("mk"), var("xs", Some("term")), lit("_"), lit("_")];
+        let pattern = vec![
+            lit("mk"),
+            var(SurfaceName::generated_path("xs"), Some("term")),
+            lit("_"),
+            lit("_"),
+        ];
         let parsed = parse_tactic_elab_pattern(&pattern).expect("should parse");
         let rep = parsed.repetition.expect("comma-star is a repetition");
-        assert_eq!(rep.name, "xs");
+        assert_eq!(rep.name, SurfaceName::generated_path("xs"));
         assert_eq!(rep.category.as_deref(), Some("term"));
     }
 
@@ -2126,24 +2685,30 @@ mod elab_pattern_tests {
     fn test_parse_pattern_fixed_prefix_plus_repetition() {
         let pattern = vec![
             lit("kw"),
-            var("x", Some("term")),
-            var("xs", Some("ident")),
+            var(SurfaceName::generated_path("x"), Some("term")),
+            var(SurfaceName::generated_path("xs"), Some("ident")),
             lit("_"),
         ];
         let parsed = parse_tactic_elab_pattern(&pattern).expect("should parse");
         assert_eq!(parsed.bound_vars.len(), 1);
-        assert_eq!(parsed.bound_vars[0].name, "x");
-        assert_eq!(parsed.repetition.expect("trailing repetition").name, "xs");
+        assert_eq!(parsed.bound_vars[0].name, SurfaceName::generated_path("x"));
+        assert_eq!(
+            parsed.repetition.expect("trailing repetition").name,
+            SurfaceName::generated_path("xs")
+        );
     }
 
     /// A flat pattern (no repetition) must parse byte-for-byte as before: all
     /// items become fixed bound vars and `repetition` is `None`.
     #[test]
     fn test_parse_pattern_flat_has_no_repetition() {
-        let pattern = vec![lit("myexact"), var("e", Some("term"))];
+        let pattern = vec![
+            lit("myexact"),
+            var(SurfaceName::generated_path("e"), Some("term")),
+        ];
         let parsed = parse_tactic_elab_pattern(&pattern).expect("should parse");
         assert_eq!(parsed.bound_vars.len(), 1);
-        assert_eq!(parsed.bound_vars[0].name, "e");
+        assert_eq!(parsed.bound_vars[0].name, SurfaceName::generated_path("e"));
         assert!(
             parsed.repetition.is_none(),
             "flat pattern must not be classified as repetition"
@@ -2155,7 +2720,11 @@ mod elab_pattern_tests {
     #[test]
     fn test_parse_pattern_uncategorized_trailing_var_not_repetition() {
         // `[Literal, Variable{xs, None}, Literal("_")]` — the var has no category.
-        let pattern = vec![lit("kw"), var("xs", None), lit("_")];
+        let pattern = vec![
+            lit("kw"),
+            var(SurfaceName::generated_path("xs"), None),
+            lit("_"),
+        ];
         let parsed = parse_tactic_elab_pattern(&pattern);
         // The `_` is a flat literal item, which the loop rejects -> deferred.
         assert!(
@@ -2170,7 +2739,7 @@ mod elab_pattern_tests {
     #[test]
     fn test_classify_optional_trailing_single_optional() {
         let vars = vec![TacticElabBoundVar {
-            name: "x".to_owned(),
+            name: SurfaceName::generated_path("x"),
             category: Some("term?".to_owned()),
         }];
         assert!(
@@ -2188,11 +2757,11 @@ mod elab_pattern_tests {
     fn test_classify_optional_trailing_prefix_then_optional() {
         let vars = vec![
             TacticElabBoundVar {
-                name: "a".to_owned(),
+                name: SurfaceName::generated_path("a"),
                 category: Some("term".to_owned()),
             },
             TacticElabBoundVar {
-                name: "b".to_owned(),
+                name: SurfaceName::generated_path("b"),
                 category: Some("term?".to_owned()),
             },
         ];
@@ -2209,7 +2778,7 @@ mod elab_pattern_tests {
     #[test]
     fn test_classify_optional_trailing_all_mandatory() {
         let vars = vec![TacticElabBoundVar {
-            name: "e".to_owned(),
+            name: SurfaceName::generated_path("e"),
             category: Some("term".to_owned()),
         }];
         assert!(
@@ -2227,11 +2796,11 @@ mod elab_pattern_tests {
     fn test_classify_optional_trailing_non_trailing_optional_defers() {
         let vars = vec![
             TacticElabBoundVar {
-                name: "a".to_owned(),
+                name: SurfaceName::generated_path("a"),
                 category: Some("term?".to_owned()),
             },
             TacticElabBoundVar {
-                name: "b".to_owned(),
+                name: SurfaceName::generated_path("b"),
                 category: Some("term".to_owned()),
             },
         ];
@@ -2261,7 +2830,7 @@ mod elab_pattern_tests {
     #[test]
     fn test_arg_pattern_for_repetition() {
         let ident_rep = TacticElabRepetition {
-            name: "xs".to_owned(),
+            name: SurfaceName::generated_path("xs"),
             category: Some("ident".to_owned()),
         };
         assert_eq!(
@@ -2269,7 +2838,7 @@ mod elab_pattern_tests {
             TacticArgPattern::IdentList
         );
         let term_rep = TacticElabRepetition {
-            name: "xs".to_owned(),
+            name: SurfaceName::generated_path("xs"),
             category: Some("term".to_owned()),
         };
         assert_eq!(

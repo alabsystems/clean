@@ -37,9 +37,18 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
+#[path = "hnf3_guarded_head.rs"]
+mod guarded_head;
+
 impl Specification {
     /// The chaining inductions, three new suppliers, and the refutation.
     pub(super) fn add_hnf3_residual(&mut self) -> Result<(), SpecError> {
+        for source in guarded_head::declarations()
+            .into_iter()
+            .chain(guarded_head::witnesses())
+        {
+            self.add_recursive_def(&source, "Guarded dead-head supplier: preserve the exact constant head, including universe arguments, under reduction. No raw-absence consequence is assumed from stuckness; the premise is actual guarded lookup absence.")?;
+        }
         self.add_recursive_def(
             SRC_IOTA_NEUTRAL_OF_DEAD_CONST_HEAD,
             "iota_neutral_of_dead_const_head: iota_neutral holds all the way UP a delta-dead recmeta-free spine. THE CHAINING INDUCTION the docs named as missing. \\
@@ -122,9 +131,9 @@ const SRC_NF_HEAD_APP_OF_BVAR_MAJOR: &str = "def nf_head_app_of_bvar_major (nm :
 
 const SRC_HNF3_APP_RESIDUAL_OF_BVAR_MAJOR: &str = "def hnf3_app_residual_of_bvar_major (r0 : KExpr) (k0 : Nat) (zf : KExpr) (za : KExpr) (nm : Name) (meta : RecMeta) (bi : Nat) (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) (OptionType.none KExpr)) (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) nm) (OptionType.some RecMeta meta)) (hhf : Eq (OptionType Name) (kexpr_const_name (kapp_fn zf)) (OptionType.some Name nm)) (hlenf : Eq Nat (list_length (kapp_args zf)) (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (hbv : Eq KExpr za (KExpr.bvar bi)) (_hs : wh3_stuck_at k0 r0) (heq : Eq KExpr r0 (KExpr.app zf za)) : nf_head r0 := Eq.substType KExpr (fun (xx : KExpr) => nf_head xx) (KExpr.app zf za) r0 (Eq.symm KExpr r0 (KExpr.app zf za) heq) (Eq.substType KExpr (fun (yy : KExpr) => nf_head (KExpr.app zf yy)) (KExpr.bvar bi) za (Eq.symm KExpr za (KExpr.bvar bi) hbv) (nf_head_app_of_bvar_major nm meta bi hdef hrec zf hhf hlenf))";
 
-const SRC_NF_HEAD_NATREC_UNDER_APPLIED_WITNESS: &str = "def nf_head_natrec_under_applied_witness : nf_head (KExpr.app (KExpr.app (KExpr.app (KExpr.const kcre_name_27 (ListType.nil Level)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) := nf_head_app_of_under_applied kcre_name_27 (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true))) (KExpr.app (KExpr.app (KExpr.const kcre_name_27 (ListType.nil Level)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero) (Eq.refl (OptionType Name) (OptionType.some Name kcre_name_27)) (Le.refl (Nat.succ (Nat.succ (Nat.succ Nat.zero))))";
+const SRC_NF_HEAD_NATREC_UNDER_APPLIED_WITNESS: &str = "def nf_head_natrec_under_applied_witness : nf_head (KExpr.app (KExpr.app (KExpr.app (KExpr.const fixture_nat_rec_name kcre_witness_rec_levels) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) := nf_head_app_of_under_applied fixture_nat_rec_name fixture_nat_rec_meta (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta fixture_nat_rec_meta)) (KExpr.app (KExpr.app (KExpr.const fixture_nat_rec_name kcre_witness_rec_levels) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero) (Eq.refl (OptionType Name) (OptionType.some Name fixture_nat_rec_name)) (Le.refl (Nat.succ (Nat.succ (Nat.succ Nat.zero))))";
 
-const SRC_NF_HEAD_NATREC_BVAR_MAJOR_WITNESS: &str = "def nf_head_natrec_bvar_major_witness : nf_head (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const kcre_name_27 (ListType.nil Level)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.bvar Nat.zero)) := nf_head_app_of_bvar_major kcre_name_27 (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true) Nat.zero (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true))) (KExpr.app (KExpr.app (KExpr.app (KExpr.const kcre_name_27 (ListType.nil Level)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (Eq.refl (OptionType Name) (OptionType.some Name kcre_name_27)) (Eq.refl Nat (Nat.succ (Nat.succ (Nat.succ Nat.zero))))";
+const SRC_NF_HEAD_NATREC_BVAR_MAJOR_WITNESS: &str = "def nf_head_natrec_bvar_major_witness : nf_head (KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const fixture_nat_rec_name kcre_witness_rec_levels) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.bvar Nat.zero)) := nf_head_app_of_bvar_major fixture_nat_rec_name fixture_nat_rec_meta Nat.zero (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta fixture_nat_rec_meta)) (KExpr.app (KExpr.app (KExpr.app (KExpr.const fixture_nat_rec_name kcre_witness_rec_levels) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (Eq.refl (OptionType Name) (OptionType.some Name fixture_nat_rec_name)) (Eq.refl Nat (Nat.succ (Nat.succ (Nat.succ Nat.zero))))";
 
 const SRC_KAPP_HEAD_BVAR_ABSURD: &str = "def kapp_head_bvar_absurd (e : KExpr) : Type := KExpr.rec (fun (_z : KExpr) => Type) (fun (sl : Level) => ConstFreeUnit) (fun (bi : Nat) => Empty) (fun (af : KExpr) (aa : KExpr) (cf : Type) (_ca : Type) => cf) (fun (lty : KExpr) (lb : KExpr) (_cty : Type) (_cb : Type) => ConstFreeUnit) (fun (pty : KExpr) (pb : KExpr) (_cty : Type) (_cb : Type) => ConstFreeUnit) (fun (cn : Name) (cus : ListType Level) => ConstFreeUnit) (fun (zty : KExpr) (zv : KExpr) (zb : KExpr) (_c1 : Type) (_c2 : Type) (_c3 : Type) => ConstFreeUnit) (fun (psn : Name) (pix : Nat) (psub : KExpr) (_csub : Type) => ConstFreeUnit) (fun (lv : Nat) => ConstFreeUnit) e";
 

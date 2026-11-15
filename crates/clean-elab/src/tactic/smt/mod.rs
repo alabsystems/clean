@@ -34,12 +34,18 @@ pub(crate) mod batch_search;
 mod bridge_reconstruction;
 mod bridge_validation;
 mod decide;
+#[cfg(any(feature = "ay-smt", test))]
+mod prepare_integer_ops;
+#[cfg(test)]
+mod prepare_integer_ops_tests;
 mod reconstruction_gate;
 mod selected_proof;
 mod trusted_subterms;
 
 #[cfg(test)]
 mod ay_contract_ratchet_tests;
+#[cfg(all(test, feature = "ay-smt"))]
+mod ay_integer_input_tests;
 #[cfg(all(test, feature = "ay-smt"))]
 mod ay_proof_tests;
 #[cfg(all(test, feature = "ay-smt"))]

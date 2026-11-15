@@ -12,8 +12,9 @@
 //! [`crate::clean_expr_lowering::divnonzero::divnonzero_goal`], …). Where an L0
 //! encoder grounds a node's OWN fields, an L1 encoder grounds a contract
 //! obligation's predicate FORMULA: it takes the obligation's
-//! [`crate::proof::ProofFormula`] (an SMT-LIB2 s-expression in `smtlib`/`payload`,
-//! e.g. `(> x 0)`, `(not (= result 0))`, `(and (>= x 0) (<= x 10))`) and returns
+//! [`crate::proof::ProofFormula`] — its ONE SMT-LIB2 text
+//! ([`crate::proof::ProofFormula::smtlib_text`]: an `smtlib2` payload, e.g.
+//! `(> x 0)`, `(not (= result 0))`, `(and (>= x 0) (<= x 10))`) — and returns
 //! the obligation as a `clean_kernel::Expr` so the contract claim is expressed in
 //! the kernel's own AST — exactly the CIC grounding the L0 path performs.
 //!
@@ -41,7 +42,9 @@
 //! it cannot fully establish —
 //!
 //! 1. an obligation kind outside the L1 contract set;
-//! 2. a missing predicate formula;
+//! 2. a missing predicate formula, one declared of a sort other than `Bool`,
+//!    or one that states no single SMT-LIB text (an opaque schema, or an
+//!    `smtlib2` payload its `smtlib` rendering contradicts);
 //! 3. an SMT-LIB2 shape outside the supported decidable fragment (any unknown
 //!    head symbol, a non-literal operand, a wrong arity, free variables, …);
 //! 4. a predicate that grounds but the kernel REFUSES to discharge.
@@ -53,14 +56,38 @@
 //! or undischarged predicate. This mirrors the L0 encoders' `Result<_, _Error>`
 //! envelope: an unsupported shape never yields a (wrong or vacuous) goal.
 //!
+//! ## Module-free vs module-bound grounding
+//!
+//! Two entry families, split on purpose (WS1.1, finding F-001):
+//!
+//! * **Module-free** — [`contract_goal`], [`contract_clean_cic_certificate`] and
+//!   the [`crate::proof::CleanCicRechecker`] impl of [`KernelCleanCicRechecker`]
+//!   ground **literal-only** predicates. A clause containing any non-literal
+//!   atom is [`ContractLoweringError::UnsupportedPredicate`]: without the module
+//!   there is no way to know what a free name denotes.
+//! * **Module-bound** — [`contract_goal_in`], [`contract_clean_cic_certificate_in`],
+//!   [`contract_nat_nonneg_obligation_in`] and the
+//!   [`crate::proof::ModuleCleanCicRechecker`] impl are the ONLY paths that may
+//!   produce the single free-name tautology `∀ x : Nat, Nat.ble 0 x = true`, and
+//!   only after [`bind_nat_nonneg`] has bound the clause symbol to an unsigned
+//!   integer IR place read at sort `Int`. Before that split the closed goal was
+//!   produced from the clause TEXT alone, so `fn f() -> i64 { -1 }` with
+//!   `ensures (>= result 0)` reached kernel-`Certified`.
+//!
 //! The whole module is gated on `clean-expr` (via the parent module in lib.rs)
 //! so the default zero-dependency trust-ir format build never references
 //! clean-kernel.
 
+use crate::Module;
+use crate::proof::clause_typing::{is_smt_simple_symbol, resolve_clause_place, smt_free_symbols};
 use crate::proof::{
-    ExprObligation, ObligationKind, ProofCertificate, ProofEvidence, ProofFormula, ProofObligation,
-    clean_cic_lineage_digest, decode_clean_expr_v1, encode_clean_expr_v1,
+    ClausePlace, ClauseSort, ExprObligation, ObligationKind, OwnedFormulaSchema, ProofCertificate,
+    ProofEvidence, ProofFormula, ProofObligation, SmtSexp, clean_cic_lineage_digest,
+    decode_clean_expr_v1, encode_clean_expr_v1, read_smtlib_term,
 };
+use crate::spec_surface::linked_var_name_problem;
+use crate::ty::Ty;
+use crate::value::FuncId;
 use clean_kernel::{BinderInfo, Expr, Level, Name};
 
 /// Encode one proof term with the exact codec the consumer uses.
@@ -128,14 +155,14 @@ impl std::error::Error for ContractLoweringError {}
 /// True iff `kind` is one of the L1 contract kinds whose predicate formula this
 /// encoder grounds. A safety / translation / temporal obligation is NOT a
 /// contract predicate and must fail closed.
+///
+/// The table, and why `Termination` / `Ownership` are outside it BY DECISION
+/// (WS1.9 DECIDE A), is [`crate::proof::ObligationKindShape::is_grounded_contract_kind`],
+/// whose every cell is a proved Trust contract (gate 13). The two-language row
+/// `b2.gap.termination_not_kernel_certifiable` holds the same shape, so a
+/// grounder that started certifying either kind trips it.
 fn is_contract_kind(kind: &ObligationKind) -> bool {
-    matches!(
-        kind,
-        ObligationKind::Precondition
-            | ObligationKind::Postcondition
-            | ObligationKind::LoopInvariant
-            | ObligationKind::RefinementType
-    )
+    kind.shape().is_grounded_contract_kind()
 }
 
 // ---------------------------------------------------------------------------
@@ -183,15 +210,19 @@ fn bool_is_true(inner: Expr) -> Expr {
 }
 
 // ---------------------------------------------------------------------------
-// A tiny, fail-closed SMT-LIB2 s-expression reader for the supported fragment.
-//
-// The grammar is deliberately small. Any token / shape outside it returns
-// `None`, which the caller maps to `UnsupportedPredicate` — fail-closed.
+// The supported fragment, read by trust-ir's ONE SMT-LIB2 reader
+// ([`read_smtlib_term`]): a text it refuses (a non-SMT-LIB character such as
+// U+3000 or VT, a `'` in a name, a leading-zero numeral, a string, quoted
+// symbol or comment, a nesting past the depth bound) grounds NOTHING. This
+// module used to tokenize on its own, splitting on Rust `char::is_whitespace`
+// and taking any run of other characters as an atom, so
+// `(>=\u{3000}5\u{3000}0)` and `(>= x' 0)` were grounded and kernel-replayed
+// although no SMT-LIB2 reader reads either text.
 //
 //   pred  := '(' BOOLOP pred+ ')' | cmp
 //   cmp   := '(' CMPOP nat nat ')'           ; CMPOP ∈ { =, <, <=, >, >= }
 //   BOOLOP∈ { and, or, not }
-//   nat   := non-negative decimal integer literal
+//   nat   := SMT-LIB2 numeral
 //
 // Only ground (literal-operand) comparisons are grounded: a contract predicate
 // is groundable iff every leaf is a Nat literal. A free program variable (e.g.
@@ -200,180 +231,123 @@ fn bool_is_true(inner: Expr) -> Expr {
 // unsupported shape yields no goal.
 // ---------------------------------------------------------------------------
 
-/// One s-expression token.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Tok {
-    Open,
-    Close,
-    Atom(String),
-}
-
-/// Tokenize an SMT-LIB2 predicate string into parens/atoms. Returns `None` on
-/// any character class we do not model (keeps the reader total and fail-closed).
-fn tokenize(s: &str) -> Option<Vec<Tok>> {
-    let mut toks = Vec::new();
-    let mut chars = s.chars().peekable();
-    while let Some(&c) = chars.peek() {
-        match c {
-            '(' => {
-                toks.push(Tok::Open);
-                chars.next();
-            }
-            ')' => {
-                toks.push(Tok::Close);
-                chars.next();
-            }
-            c if c.is_whitespace() => {
-                chars.next();
-            }
-            _ => {
-                let mut atom = String::new();
-                while let Some(&c) = chars.peek() {
-                    if c == '(' || c == ')' || c.is_whitespace() {
-                        break;
-                    }
-                    atom.push(c);
-                    chars.next();
-                }
-                toks.push(Tok::Atom(atom));
-            }
-        }
-    }
-    Some(toks)
-}
-
-/// A parsed s-expression: an atom or a list.
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum Sexp {
-    Atom(String),
-    List(Vec<Sexp>),
-}
-
-/// Parse a single complete s-expression from `toks[*pos..]`, advancing `pos`.
-/// Returns `None` on any malformed structure — fail-closed.
-fn parse_sexp(toks: &[Tok], pos: &mut usize) -> Option<Sexp> {
-    match toks.get(*pos)? {
-        Tok::Atom(a) => {
-            *pos += 1;
-            Some(Sexp::Atom(a.clone()))
-        }
-        Tok::Open => {
-            *pos += 1;
-            let mut items = Vec::new();
-            loop {
-                match toks.get(*pos)? {
-                    Tok::Close => {
-                        *pos += 1;
-                        return Some(Sexp::List(items));
-                    }
-                    _ => items.push(parse_sexp(toks, pos)?),
-                }
-            }
-        }
-        Tok::Close => None,
-    }
-}
-
-/// Parse a complete predicate string into a single `Sexp`, requiring all tokens
-/// to be consumed. Returns `None` (fail-closed) on trailing tokens or a parse
-/// failure.
-fn parse_predicate(s: &str) -> Option<Sexp> {
-    let toks = tokenize(s)?;
-    let mut pos = 0usize;
-    let sexp = parse_sexp(&toks, &mut pos)?;
-    if pos == toks.len() { Some(sexp) } else { None }
+/// Read a predicate text as one SMT-LIB2 term, or `None` (fail-closed) for any
+/// text [`read_smtlib_term`] refuses.
+fn parse_predicate(s: &str) -> Option<SmtSexp<'_>> {
+    read_smtlib_term(s).ok()
 }
 
 /// A non-negative decimal `Nat` literal, or `None` (fail-closed) for a symbol,
 /// a negative number, or anything non-numeric. Free program variables land here
 /// and so make the whole predicate ungroundable.
+///
+/// ASCII DIGITS ONLY. `u64::from_str` also accepts a leading `+`, but in
+/// SMT-LIB2 `+1` is a simple SYMBOL (only a leading digit makes a numeral), so
+/// reading it as the numeral 1 would let the literal-only path certify
+/// `(>= +1 0)` while a consumer that honours the clause's bindings reads it as
+/// `<bound place> >= 0` — the F-001 hole through the module-free door.
 fn parse_nat_literal(atom: &str) -> Option<u64> {
+    if atom.is_empty() || !atom.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
     atom.parse::<u64>().ok()
 }
 
 // ---------------------------------------------------------------------------
-// R-L1 goal item #4, slice 1: a SINGLE free-var Nat non-negativity tautology.
+// R-L1 goal item #4, slice 1: a SINGLE free-name Nat non-negativity tautology.
 //
 // The literal-fixture path above grounds only predicates whose leaves are all
-// `Nat` literals. This adds the FIRST non-literal-fixture increment: the one
-// predicate that is a genuine tautology over a single free `Nat` variable and
-// nothing else —
+// `Nat` literals. This adds the one predicate over a single free NAME —
 //
-//     x >= 0        (SMT `(>= x 0)`)  or its normal form
-//     0 <= x        (SMT `(<= 0 x)`)
+//     s >= 0        (SMT `(>= s 0)`)  or its normal form
+//     0 <= s        (SMT `(<= 0 s)`)
 //
-// Both ground to the SAME kernel Bool decision `Nat.ble 0 x`, which the kernel
-// DEFINITIONALLY reduces to `Bool.true` for EVERY `x : Nat` (the recursive
-// `Nat.ble` matches its first argument: `ble 0 _ = true`, independent of `x`).
-// So `@Eq.refl Bool Bool.true` genuinely proves `@Eq Bool (Nat.ble 0 x)
-// Bool.true` under a context binding `x : Nat` — a real proof term, NOT a
-// literal fixture (empirically confirmed against the trusted kernel; and the
-// kernel REFUSES `Nat.ble 5 x = true`, so `x >= 5` cannot mint anything).
+// Both ground to the SAME closed kernel proposition
+// `∀ x : Nat, @Eq Bool (Nat.ble 0 x) Bool.true`, which the kernel discharges
+// with `fun x => @Eq.refl Bool Bool.true` because `Nat.ble 0 x` reduces to
+// `Bool.true` for EVERY `x : Nat` (and the kernel REFUSES `Nat.ble 5 x = true`,
+// so `s >= 5` cannot mint anything).
 //
-// FAIL-CLOSED: this recognizer returns `Some` ONLY for exactly this shape over
-// a single free `Nat` var. Anything else — a non-zero bound (`x >= 5`), the
-// wrong operator (`x <= 0`, `x = 0`, `x > 0`), a literal on the var side, two
-// distinct free vars, a nested boolean, a non-`Nat` var — returns `None`, so
-// no goal and no `Certified` stamp is minted for it. The `Nat`-typing of the
-// var is guaranteed by the way we ground it (an `FVar` we bind at type `Nat`);
-// there is no path that admits a non-`Nat` var here.
+// WHAT THE KERNEL DOES NOT SEE (finding F-001). The closed proposition
+// quantifies over `Nat` and discards the clause symbol, so the kernel judgment
+// is true whatever `s` denotes. It is the denotation of the clause only when
+// `s` IS a Nat-valued IR place. That is established OUTSIDE the kernel, by
+// `bind_nat_nonneg`, from the obligation's owning function, its `FuncTy`, and
+// the clause's `bindings`: exactly one binding, naming `s`, at a
+// `Param`/`ResultSlot`/`MutParamExit`/`ParamPointeeEntry` place whose IR type
+// is an unsigned integer, read at sort `Int`. Only the module-bound entry points run it, so
+// only they may produce this goal; the module-free ones refuse the shape.
+// The residual denotation lemma — "the Int value of an unsigned w-bit place
+// is a Nat" — is recorded in TRUST.md (item 11).
+//
+// FAIL-CLOSED: the recognizer returns `Some` ONLY for exactly this shape over
+// one free name. Anything else — a non-zero bound (`s >= 5`), the wrong
+// operator (`s <= 0`, `s = 0`, `s > 0`), a literal on the var side, two
+// distinct names, a nested boolean, an atom that is not an SMT simple symbol
+// (`-5`, `+1`, `#x00`, `true`) or is a theory function symbol (`and`, `abs`)
+// — returns `None`.
 // ---------------------------------------------------------------------------
 
 /// The canonical free-var name of the single-var Nat non-negativity tautology.
 /// The var is a syntactic SMT symbol; we only ever bind ONE, at type `Nat`.
 const NAT_NONNEG_VAR_KEY: &str = "x";
 
-/// True iff `atom` is a syntactic free variable — a non-empty symbol that is
-/// NOT a `Nat` literal. (A literal is grounded by the fixture path; a free var
-/// is the only leaf the tautology path admits, and only in the `x >= 0` shape.)
+/// True iff `atom` is a syntactic free name: a name trust-ir's one reader
+/// reads as a variable ([`linked_var_name_problem`]). That is an SMT simple
+/// symbol under the shared grammar `[A-Za-z_][A-Za-z0-9_.]*` and not a
+/// reserved word ([`is_smt_simple_symbol`]) — so `-5`, `+1`, `#x00` and
+/// `true`, which the former "does not parse as a `u64`" test admitted as free
+/// variables, are refused — and no function symbol of the theories the
+/// surface draws on (`and`, `not`, `distinct`, `div`, `abs`, `bvadd`,
+/// `concat`, …). A clause `(>= and 0)` bound `and` -> a u64 param used to be
+/// minted, kernel-replayed and its coverage established, although the Linked
+/// spec surface refuses `and` as a variable and z3 refuses
+/// `(declare-const and Int)` ("invalid declaration, builtin symbol").
 fn is_free_var_atom(atom: &str) -> bool {
-    !atom.is_empty() && parse_nat_literal(atom).is_none()
+    linked_var_name_problem(atom).is_none()
 }
 
-/// Recognize EXACTLY the single-free-var Nat non-negativity tautology
-/// `x >= 0` / `0 <= x`, returning the variable's SMT symbol name. Returns `None`
-/// (fail-closed) for every other shape — the recognizer is the soundness
-/// cornerstone of this slice, so it is deliberately narrow:
-///
-///  * `(>= <var> 0)`  — var on the left, literal `0` on the right, OR
-///  * `(<= 0 <var>)`  — literal `0` on the left, var on the right.
-///
-/// A non-zero bound, the wrong operator, a literal where the var must be (or
-/// vice-versa), a second free var, or any nesting all return `None`.
-fn recognize_nat_nonneg(sexp: &Sexp) -> Option<&str> {
-    let Sexp::List(items) = sexp else {
+/// The operand of a `(>= a 0)` / `(<= 0 a)` comparison whose `a` is an atom
+/// that is NOT a `Nat` literal, whatever else it is. This is the SHAPE the
+/// binding rule diagnoses; [`recognize_nat_nonneg`] additionally requires the
+/// operand to be a simple symbol.
+fn nat_nonneg_operand<'a>(sexp: &SmtSexp<'a>) -> Option<&'a str> {
+    let SmtSexp::List(items) = sexp else {
         return None;
     };
-    let [Sexp::Atom(op), Sexp::Atom(lhs), Sexp::Atom(rhs)] = &items[..] else {
+    let [SmtSexp::Atom(op), SmtSexp::Atom(lhs), SmtSexp::Atom(rhs)] = items[..] else {
         return None;
     };
-    match op.as_str() {
-        // x >= 0 : var on the left, literal 0 on the right.
-        ">=" => {
-            if is_free_var_atom(lhs) && parse_nat_literal(rhs) == Some(0) {
-                Some(lhs.as_str())
-            } else {
-                None
-            }
-        }
-        // 0 <= x : literal 0 on the left, var on the right.
-        "<=" => {
-            if parse_nat_literal(lhs) == Some(0) && is_free_var_atom(rhs) {
-                Some(rhs.as_str())
-            } else {
-                None
-            }
-        }
+    let non_literal = |atom: &str| !atom.is_empty() && parse_nat_literal(atom).is_none();
+    match op {
+        // s >= 0 : operand on the left, literal 0 on the right.
+        ">=" if non_literal(lhs) && parse_nat_literal(rhs) == Some(0) => Some(lhs),
+        // 0 <= s : literal 0 on the left, operand on the right.
+        "<=" if parse_nat_literal(lhs) == Some(0) && non_literal(rhs) => Some(rhs),
         _ => None,
     }
+}
+
+/// Recognize EXACTLY the single-free-name Nat non-negativity tautology
+/// `s >= 0` / `0 <= s`, returning the symbol. Returns `None` (fail-closed) for
+/// every other shape — the recognizer is the syntactic half of the soundness
+/// argument, so it is deliberately narrow:
+///
+///  * `(>= <sym> 0)`  — symbol on the left, literal `0` on the right, OR
+///  * `(<= 0 <sym>)`  — literal `0` on the left, symbol on the right,
+///
+/// where `<sym>` is a free name ([`is_free_var_atom`]). The SEMANTIC
+/// half — what `<sym>` denotes — is [`bind_nat_nonneg`].
+fn recognize_nat_nonneg<'a>(sexp: &SmtSexp<'a>) -> Option<&'a str> {
+    nat_nonneg_operand(sexp).filter(|operand| is_free_var_atom(operand))
 }
 
 /// Ground a comparison `(OP a b)` over two `Nat` literals into a kernel Bool
 /// decision. `<`/`<=`/`>`/`>=` reduce to `Nat.ble` (the native reducer the L0
 /// in-bounds encoder uses); `=` to `Nat.beq`. Returns `None` (fail-closed) for
 /// any non-literal operand.
-fn ground_comparison(op: &str, a: &Sexp, b: &Sexp) -> Option<Expr> {
-    let (Sexp::Atom(a), Sexp::Atom(b)) = (a, b) else {
+fn ground_comparison(op: &str, a: &SmtSexp<'_>, b: &SmtSexp<'_>) -> Option<Expr> {
+    let (SmtSexp::Atom(a), SmtSexp::Atom(b)) = (a, b) else {
         return None;
     };
     let a = Expr::nat_lit(parse_nat_literal(a)?);
@@ -399,17 +373,21 @@ fn ground_comparison(op: &str, a: &Sexp, b: &Sexp) -> Option<Expr> {
     }
 }
 
-/// Ground a predicate `Sexp` into a kernel Bool decision `Expr`, or `None`
-/// (fail-closed) for any shape outside the supported fragment.
-fn ground_sexp(sexp: &Sexp) -> Option<Expr> {
-    let Sexp::List(items) = sexp else {
+/// Ground a predicate term into a kernel Bool decision `Expr`, or `None`
+/// (fail-closed) for any shape outside the supported fragment. The recursion
+/// is bounded by the reader's depth bound.
+fn ground_sexp(sexp: &SmtSexp<'_>) -> Option<Expr> {
+    let SmtSexp::List(items) = sexp else {
         // A bare atom (`x`, `true`, `42`) is not a predicate shape we ground.
         return None;
     };
-    let (Some(Sexp::Atom(head)), rest) = (items.first(), &items[1..]) else {
+    // The empty list `()` has no head: it is no predicate. (This slice was
+    // `&items[1..]`, which panicked on `()`, aborting the validator on a
+    // two-byte formula.)
+    let [SmtSexp::Atom(head), rest @ ..] = items.as_slice() else {
         return None;
     };
-    match head.as_str() {
+    match *head {
         "=" | "<" | "<=" | ">" | ">=" => {
             if rest.len() != 2 {
                 return None;
@@ -422,8 +400,13 @@ fn ground_sexp(sexp: &Sexp) -> Option<Expr> {
             }
             Some(bool_not(ground_sexp(&rest[0])?))
         }
+        // SMT-LIB2 Core declares `and` / `or` `:left-assoc` over two or more
+        // arguments, and trust-ir's one reader refuses fewer ("takes at least
+        // 2 argument(s)"). `(and (>= 5 0))` used to ground as `(>= 5 0)`, so
+        // its certificate replayed and established coverage for a text no
+        // strict SMT-LIB2 reader reads.
         "and" => {
-            if rest.is_empty() {
+            if rest.len() < 2 {
                 return None;
             }
             let mut it = rest.iter();
@@ -434,7 +417,7 @@ fn ground_sexp(sexp: &Sexp) -> Option<Expr> {
             Some(acc)
         }
         "or" => {
-            if rest.is_empty() {
+            if rest.len() < 2 {
                 return None;
             }
             let mut it = rest.iter();
@@ -448,15 +431,59 @@ fn ground_sexp(sexp: &Sexp) -> Option<Expr> {
     }
 }
 
-/// The SMT-LIB2 predicate text of a contract formula: prefer the explicit
-/// `smtlib` rendering, fall back to the `payload` (which is the SMT-LIB2 text
-/// for the `smtlib2` schema). Mirrors how the router indexes obligations.
-fn predicate_text(formula: &ProofFormula) -> &str {
-    formula.smtlib.as_deref().unwrap_or(&formula.payload)
+/// The ONE SMT-LIB2 text of a contract formula ([`ProofFormula::smtlib_text`]):
+/// the payload of an `smtlib2` formula whose `smtlib` rendering, if any, is
+/// that payload. Every grounding in this module reads this text and nothing
+/// else, so what the kernel re-checks is the obligation's own formula.
+///
+/// A formula that states no single SMT-LIB text grounds NOTHING
+/// ([`ContractLoweringError::UnsupportedPredicate`]), whatever its schema
+/// (decided exhaustively over [`OwnedFormulaSchema`]; an unowned schema is
+/// never grounded). (This used to prefer the rendering whatever the schema: a
+/// certificate replaying a true `smtlib` was admitted for an obligation whose
+/// `smtlib2` payload was false, and an opaque payload was grounded as
+/// SMT-LIB.) The text is then read by [`read_smtlib_term`] alone, so a text
+/// that is not SMT-LIB2 source grounds nothing either.
+fn predicate_text(formula: &ProofFormula) -> Result<&str, ContractLoweringError> {
+    // A formula declared of another sort is no predicate, whatever its text
+    // reads as: grounding `(>= 5 0)` of sort `Int` as a Bool decision proves a
+    // claim the obligation does not state.
+    if let Some(sort) = formula.sort.as_deref().filter(|sort| *sort != "Bool") {
+        return Err(ContractLoweringError::UnsupportedPredicate(format!(
+            "the formula is declared of sort `{sort}`, so it states no predicate"
+        )));
+    }
+    formula.smtlib_text().ok_or_else(|| {
+        let why = match formula.owned_schema() {
+            Some(OwnedFormulaSchema::Smtlib2) => "its `smtlib` rendering differs from its payload",
+            Some(OwnedFormulaSchema::Pred) => {
+                "a `pred.N` citation states a refinement predicate over `self`, which no \
+                 contract clause grounds"
+            }
+            Some(
+                OwnedFormulaSchema::BvBlastGoal
+                | OwnedFormulaSchema::SatRes
+                | OwnedFormulaSchema::LineageTransformBinding,
+            ) => "a claim schema states no SMT-LIB text",
+            None => "trust-ir does not own the schema, so its payload is opaque",
+        };
+        ContractLoweringError::UnsupportedPredicate(format!(
+            "the formula states no single SMT-LIB text (schema {:?}: {why}): only an `smtlib2` \
+             payload whose `smtlib` rendering is absent or identical is grounded",
+            formula.schema
+        ))
+    })
+}
+
+/// [`read_smtlib_term`] of a predicate text, its refusal named.
+fn read_predicate(text: &str) -> Result<SmtSexp<'_>, ContractLoweringError> {
+    read_smtlib_term(text).map_err(|defect| {
+        ContractLoweringError::UnsupportedPredicate(format!("predicate {text:?} {defect}"))
+    })
 }
 
 /// Build the kernel Bool-decision goal `Expr` for an L1 contract obligation from
-/// its kind + predicate formula.
+/// its kind + predicate formula — **module-free, literal-only**.
 ///
 /// Returns the proposition `@Eq Bool (<decision for the predicate>) Bool.true`.
 /// Fails closed for a non-contract kind ([`ContractLoweringError::NotAContractKind`]),
@@ -464,6 +491,11 @@ fn predicate_text(formula: &ProofFormula) -> &str {
 /// outside the grounded fragment
 /// ([`ContractLoweringError::UnsupportedPredicate`]) — never minting a vacuous
 /// goal, mirroring the L0 encoders' fail-closed envelope.
+///
+/// Every leaf must be a `Nat` literal. A clause over a free name — including
+/// the `(>= s 0)` tautology shape — is `UnsupportedPredicate` here, because
+/// without the module nothing says what the name denotes; use
+/// [`contract_goal_in`].
 pub fn contract_goal(
     kind: &ObligationKind,
     formula: Option<&ProofFormula>,
@@ -472,18 +504,205 @@ pub fn contract_goal(
         return Err(ContractLoweringError::NotAContractKind(kind.clone()));
     }
     let formula = formula.ok_or(ContractLoweringError::NoFormula)?;
-    let text = predicate_text(formula);
-    let sexp = parse_predicate(text)
-        .ok_or_else(|| ContractLoweringError::UnsupportedPredicate(text.to_string()))?;
-    // The one supported free-variable predicate is represented as a CLOSED
-    // proposition. Closing over `x : Nat` makes the serialized claim replayable
-    // without relying on process-local FVar ids or an omitted LocalContext.
-    if recognize_nat_nonneg(&sexp).is_some() {
-        return Ok(nat_nonneg_closed_goal());
-    }
+    let text = predicate_text(formula)?;
+    let sexp = read_predicate(text)?;
     let decision = ground_sexp(&sexp)
         .ok_or_else(|| ContractLoweringError::UnsupportedPredicate(text.to_string()))?;
     Ok(bool_is_true(decision))
+}
+
+/// What [`bind_nat_nonneg`] established about a `(>= s 0)` clause: the symbol,
+/// the owning function, the place the symbol's binding names, and that place's
+/// IR type (always an unsigned integer).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NatNonnegBinding {
+    pub symbol: String,
+    pub function: FuncId,
+    pub place: ClausePlace,
+    pub ty: Ty,
+}
+
+/// True iff `formula` has the `(>= a 0)` / `(<= 0 a)` shape with a non-literal
+/// operand `a` — the shape [`bind_nat_nonneg`] decides. (Whether `a` is a legal
+/// symbol, and what it denotes, is the binding rule's job, not this test's.)
+pub fn is_nat_nonneg_shape(formula: &ProofFormula) -> bool {
+    predicate_text(formula)
+        .ok()
+        .and_then(parse_predicate)
+        .as_ref()
+        .and_then(nat_nonneg_operand)
+        .is_some()
+}
+
+/// **The binding rule** for the single-symbol nonneg clause `(>= s 0)` /
+/// `(<= 0 s)`: the check that makes the closed kernel proposition
+/// `∀ x : Nat, Nat.ble 0 x = true` a faithful denotation of the clause.
+///
+/// Every failure is [`ContractLoweringError::UnsupportedPredicate`] carrying the
+/// reason, so it FAILS CLOSED. In order:
+///
+/// * (a) the obligation is a contract kind — `Postcondition` /
+///   `RefinementType` (proved) or `Precondition` / `LoopInvariant` (assumed);
+/// * (b) the operand `s` is an SMT simple symbol (`[A-Za-z_][A-Za-z0-9_.]*`,
+///   not `true`/`false`/`let`/`forall`/`exists`/`as`/`!`/`_`), and it is the
+///   clause's only free symbol;
+/// * (c) `obligation.function == Some(f)`, `f` resolves uniquely, and its
+///   `FuncTy` resolves;
+/// * (d) `formula.bindings` has exactly one entry, and its name is `s`;
+/// * (e) the place resolves to a type: `Param{i}` → `params[i]`,
+///   `ResultSlot{i}` → `returns[i]`, `MutParamExit{i}` → `T` of a `&mut T` /
+///   `*mut T` parameter, `ParamPointeeEntry{i}` (v62) → `T` of a `&T` /
+///   `&mut T` parameter; `Value`, `World` and `Unwind` are refused, and a
+///   `Precondition` may not name a result or exit place (it may name the
+///   entry pointee, which exists before the call);
+/// * (f) that type is `U8`/`U16`/`U32`/`U64`/`U128`, or `Usize` when the module
+///   carries `target_info` (a `Ty::Handle` place is refused by name);
+/// * (g) the binding's sort is `ClauseSort::Int` — `BitVec(w)` is refused
+///   (SMT `>=` is ill-sorted on bit-vectors), as are `Float`, `Bool`,
+///   `RoundingMode`, `Array` and `Datatype`.
+///
+/// The one fact left outside every check is the denotation lemma "the Int
+/// value of an unsigned w-bit place is a Nat" (TRUST.md item 11). The
+/// certificate LINEAGE already binds the bindings; this rule binds the
+/// `FuncTy` side, which lineage cannot see.
+pub fn bind_nat_nonneg(
+    module: &Module,
+    obligation: &ProofObligation,
+) -> Result<NatNonnegBinding, ContractLoweringError> {
+    let refuse = |reason: String| Err(ContractLoweringError::UnsupportedPredicate(reason));
+    // (a) kind.
+    if !is_contract_kind(&obligation.kind) {
+        return refuse(format!(
+            "obligation kind {:?} neither proves nor assumes a contract clause",
+            obligation.kind
+        ));
+    }
+    let Some(formula) = obligation.formula.as_ref() else {
+        return refuse("the obligation carries no predicate formula".to_string());
+    };
+    let text = predicate_text(formula)?;
+    let sexp = read_predicate(text)?;
+    let Some(operand) = nat_nonneg_operand(&sexp) else {
+        return refuse(format!(
+            "predicate {text:?} is not the single-symbol nonneg shape `(>= s 0)` / `(<= 0 s)`"
+        ));
+    };
+    // (b) the operand is a free name, and the clause's only free name.
+    if !is_smt_simple_symbol(operand) {
+        return refuse(format!(
+            "clause operand `{operand}` is not an SMT simple symbol"
+        ));
+    }
+    if let Some(problem) = linked_var_name_problem(operand) {
+        return refuse(format!(
+            "clause operand `{operand}` is no free name: {problem}"
+        ));
+    }
+    if smt_free_symbols(text).is_none_or(|free| free.len() != 1 || !free.contains(operand)) {
+        return refuse(format!(
+            "clause {text:?} does not have `{operand}` as its only free symbol"
+        ));
+    }
+    // (c) the owning function.
+    let Some(function) = obligation.function else {
+        return refuse("the obligation has no owning function (`function` is None)".to_string());
+    };
+    // (d) exactly one binding, naming the clause symbol.
+    let [(name, binding)] = &formula.bindings[..] else {
+        return refuse(format!(
+            "the clause must bind exactly its one symbol `{operand}`, but carries {} bindings",
+            formula.bindings.len()
+        ));
+    };
+    if name != operand {
+        return refuse(format!(
+            "binding `{name}` does not name the clause symbol `{operand}`"
+        ));
+    }
+    // (e) the place resolves to an IR type (function + signature resolution
+    // included — the (c) half that needs the module).
+    if obligation.kind == ObligationKind::Precondition
+        && matches!(
+            binding.place,
+            ClausePlace::ResultSlot { .. } | ClausePlace::MutParamExit { .. }
+        )
+    {
+        return refuse(format!(
+            "a Precondition cannot name the result or exit place {:?}",
+            binding.place
+        ));
+    }
+    let ty = match resolve_clause_place(module, function, &binding.place) {
+        Ok(ty) => ty,
+        Err(error) => return refuse(error.to_string()),
+    };
+    // (f) the place is an unsigned integer.
+    match &ty {
+        Ty::U8 | Ty::U16 | Ty::U32 | Ty::U64 | Ty::U128 => {}
+        Ty::Usize if module.target_info.is_some() => {}
+        Ty::Usize => {
+            return refuse(
+                "a usize place has no fixed width without the module's target_info".to_string(),
+            );
+        }
+        Ty::Handle(_) => {
+            return refuse(format!(
+                "place {:?} is the runtime handle {ty}, which has no machine value a nonneg \
+                 clause can denote",
+                binding.place
+            ));
+        }
+        _ => {
+            return refuse(format!(
+                "place {:?} has IR type {ty}, which is not an unsigned integer",
+                binding.place
+            ));
+        }
+    }
+    // (g) the clause reads the place at sort Int.
+    if binding.sort != ClauseSort::Int {
+        return refuse(format!(
+            "binding sort {:?} is not Int (the Nat reading of `>=` needs the mathematical \
+             integer value of the place)",
+            binding.sort
+        ));
+    }
+    Ok(NatNonnegBinding {
+        symbol: operand.to_string(),
+        function,
+        place: binding.place,
+        ty,
+    })
+}
+
+/// Build the kernel goal for an L1 contract obligation **with its module in
+/// scope** — the only path that may produce the free-name nonneg tautology.
+///
+/// A `(>= s 0)` / `(<= 0 s)` clause grounds to the closed proposition
+/// `∀ x : Nat, @Eq Bool (Nat.ble 0 x) Bool.true` exactly when
+/// [`bind_nat_nonneg`] binds `s` to an unsigned integer IR place read at sort
+/// `Int`; any binding failure is that rule's `UnsupportedPredicate`. Every other
+/// clause is grounded module-free by [`contract_goal`] (literal-only).
+pub fn contract_goal_in(
+    module: &Module,
+    obligation: &ProofObligation,
+) -> Result<Expr, ContractLoweringError> {
+    if !is_contract_kind(&obligation.kind) {
+        return Err(ContractLoweringError::NotAContractKind(
+            obligation.kind.clone(),
+        ));
+    }
+    let formula = obligation
+        .formula
+        .as_ref()
+        .ok_or(ContractLoweringError::NoFormula)?;
+    if is_nat_nonneg_shape(formula) {
+        bind_nat_nonneg(module, obligation)?;
+        // Closing over `x : Nat` makes the serialized claim replayable without
+        // relying on process-local FVar ids or an omitted LocalContext.
+        return Ok(nat_nonneg_closed_goal());
+    }
+    contract_goal(&obligation.kind, Some(formula))
 }
 
 /// Build the full [`ExprObligation`] for an L1 contract obligation, ready to
@@ -511,14 +730,17 @@ fn refl_true() -> Expr {
 }
 
 /// Kernel-discharge a grounded contract obligation: `check_type(refl_true, goal)`
-/// under `Environment::with_prelude()` ONLY — the same gate the L0 encoders'
-/// `discharge` helper uses, no external `.lean`. Returns true iff the kernel
-/// accepts (i.e. the predicate genuinely reduces to `Bool.true`).
+/// under the kernel-owned ordinary prelude ONLY — the same vocabulary the L0
+/// encoders' `discharge` helper uses, no external `.lean`. Only the immutable
+/// baseline is reused; every attempt has a fresh context and checker. Returns
+/// true iff the kernel accepts; unavailable construction fails closed.
 fn kernel_discharges(goal: &Expr) -> bool {
     use clean_kernel::{Environment, LocalContext, TypeChecker};
-    let env = Environment::with_prelude();
-    let tc = TypeChecker::with_context(&env, LocalContext::new());
-    tc.check_type(&refl_true(), goal).is_ok()
+    Environment::with_reusable_prelude(|env| {
+        let tc = TypeChecker::with_context(env, LocalContext::new());
+        tc.check_type(&refl_true(), goal).is_ok()
+    })
+    .unwrap_or(false)
 }
 
 /// PROVE the single-free-var Nat non-negativity tautology `x >= 0` at the KERNEL
@@ -550,16 +772,19 @@ fn nat_nonneg_closed_proof() -> Expr {
 
 fn prove_nat_nonneg_free_var() -> Option<(Expr, Expr)> {
     use clean_kernel::{Environment, LocalContext, TypeChecker};
-    let env = Environment::with_prelude();
     let goal = nat_nonneg_closed_goal();
     let proof = nat_nonneg_closed_proof();
-    let tc = TypeChecker::with_context(&env, LocalContext::new());
-    if tc.check_type(&proof, &goal).is_ok() {
-        Some((goal, proof))
-    } else {
-        // Fail-closed: the kernel refused, so NO proof, NO Certified.
-        None
-    }
+    Environment::with_reusable_prelude(|env| {
+        let tc = TypeChecker::with_context(env, LocalContext::new());
+        if tc.check_type(&proof, &goal).is_ok() {
+            Some((goal, proof))
+        } else {
+            // Fail-closed: the kernel refused, so NO proof, NO Certified.
+            None
+        }
+    })
+    .ok()
+    .flatten()
 }
 
 /// ASSUME the single-free-var Nat non-negativity predicate `x >= 0`: build the
@@ -601,16 +826,13 @@ fn assume_nat_nonneg_free_var() -> Expr {
 ///
 /// Getting this backwards is the catastrophic failure mode; keying strictly on
 /// `ObligationKind` here (available on every `ProofObligation`) is what keeps an
-/// unproven postcondition from ever being stamped.
+/// unproven postcondition from ever being stamped. The table is
+/// [`crate::proof::ObligationKindShape::free_var_is_proved`], every cell of
+/// which is a proved Trust contract (gate 13): `Postcondition` and
+/// `RefinementType` PROVED, `Precondition` and `LoopInvariant` ASSUMED, and
+/// every non-contract kind (which never reaches here) `false`.
 fn free_var_kind_is_proved(kind: &ObligationKind) -> bool {
-    match kind {
-        // PROVED: a claim to the caller — must carry a real proof term.
-        ObligationKind::Postcondition | ObligationKind::RefinementType => true,
-        // ASSUMED: reasoned-under, not concluded — hypothesis, no proof term.
-        ObligationKind::Precondition | ObligationKind::LoopInvariant => false,
-        // Any other (non-contract) kind never reaches here.
-        _ => false,
-    }
+    kind.shape().free_var_is_proved()
 }
 
 /// Encode the kernel proof TERM of a grounded contract goal to the opaque
@@ -630,8 +852,33 @@ fn proof_term_bytes(proof_term: &Expr) -> Option<Vec<u8>> {
     encode_proof_term(proof_term)
 }
 
+/// Mint a `CleanCic` certificate carrying `proof`, lineage-bound to
+/// `obligation`. Fail-closed on encode.
+fn mint_clean_cic(
+    obligation: &ProofObligation,
+    prover: impl Into<String>,
+    proof: &Expr,
+) -> Option<ProofCertificate> {
+    // Serialize the DECODABLE proof term so the consumer-side kernel
+    // re-checker can independently re-validate it (fail-closed on encode).
+    let term = proof_term_bytes(proof)?;
+    Some(ProofCertificate {
+        assurance: None,
+        obligation: obligation.id,
+        prover: prover.into(),
+        evidence: ProofEvidence::CleanCic {
+            term,
+            context: Vec::new(),
+            lineage: clean_cic_lineage_digest(obligation),
+            kernel_recheck: None,
+        },
+    })
+}
+
 /// **Ground an L1 contract obligation to a kernel-checkable `CleanCic`
 /// certificate — the `Certified` tier — or return `None` (fail-closed).**
+/// Module-free, so **literal-only**: see [`contract_clean_cic_certificate_in`]
+/// for a clause over a free name.
 ///
 /// This is the L1 analogue of the L0 certify path: it grounds the obligation's
 /// predicate into a CIC term and, *only when the trusted kernel actually
@@ -641,7 +888,8 @@ fn proof_term_bytes(proof_term: &Expr) -> Option<Vec<u8>> {
 /// different obligation).
 ///
 /// SOUNDNESS — returns `None` (NO Certified stamp) when:
-///  * the predicate is not groundable ([`contract_goal`] errs), OR
+///  * the predicate is not groundable ([`contract_goal`] errs — every clause
+///    with a non-literal leaf does), OR
 ///  * the kernel REFUSES to discharge the grounded goal.
 ///
 /// There is no path that yields a `CleanCic` for an ungroundable or
@@ -652,90 +900,170 @@ pub fn contract_clean_cic_certificate(
     obligation: &ProofObligation,
     prover: impl Into<String>,
 ) -> Option<ProofCertificate> {
-    // 0. Free-var Nat non-negativity tautology (`x >= 0` / `0 <= x`), the R-L1
-    //    slice-1 increment. Only reachable for a contract kind, and only for a
-    //    predicate that IS that exact single-free-var shape. ObligationKind
-    //    decides prove-vs-assume:
-    //
-    //      * PROVED kind (Postcondition / RefinementType): the tautology is a
-    //        claim to the caller, so the kernel MUST discharge a real proof term
-    //        for it before we mint `Certified`. `prove_nat_nonneg_free_var`
-    //        returns the goal only when the kernel accepts `@Eq.refl` — so this
-    //        is a genuine kernel-checked proof, exactly like the literal path.
-    //      * ASSUMED kind (Precondition / LoopInvariant): the predicate is
-    //        assumed, NOT proved. Assuming is not a `Certified` proof — we mint
-    //        NO CleanCic certificate here. (The assumed-hypothesis obligation is
-    //        materialized by `contract_nat_nonneg_obligation`.) Returning `None`
-    //        is the whole point: an unproven claim never becomes `Certified`.
-    if is_contract_kind(&obligation.kind)
-        && let Some(formula) = obligation.formula.as_ref()
-        && let Some(sexp) = parse_predicate(predicate_text(formula))
-        && recognize_nat_nonneg(&sexp).is_some()
-    {
-        // KEY ON ObligationKind — the assume-vs-prove split.
-        if !free_var_kind_is_proved(&obligation.kind) {
-            // ASSUMED: no proof term, no Certified stamp. Fail-closed
-            // w.r.t. minting Certified — the assumption is not a proof.
-            return None;
-        }
-        // PROVED: the kernel must ACTUALLY discharge the tautology.
-        let (_goal, proof) = prove_nat_nonneg_free_var()?;
-        let term = proof_term_bytes(&proof)?;
-        let lineage = clean_cic_lineage_digest(obligation);
-        return Some(ProofCertificate {
-            obligation: obligation.id,
-            prover: prover.into(),
-            evidence: ProofEvidence::CleanCic {
-                term,
-                context: Vec::new(),
-                lineage,
-                kernel_recheck: None,
-            },
-        });
-    }
-
     // 1. Ground the predicate into a CIC term (literal-fixture path). Fail-closed
     //    on any unsupported kind / missing formula / unsupported predicate shape.
     let goal = contract_goal(&obligation.kind, obligation.formula.as_ref()).ok()?;
     // 2. The trusted kernel must ACTUALLY discharge it. A grounded-but-false
     //    predicate is rejected here — no Certified stamp for an unproven claim.
-    let proof = refl_true();
     if !kernel_discharges(&goal) {
         return None;
     }
-    // 3. Serialize the DECODABLE proof term so the consumer-side kernel
-    //    re-checker can independently re-validate it (fail-closed on encode).
+    // 3. Mint the kernel-checkable certificate, lineage-bound to this obligation.
+    mint_clean_cic(obligation, prover, &refl_true())
+}
+
+/// [`contract_clean_cic_certificate`] **with the module in scope**: the only
+/// minter of a `CleanCic` for the free-name nonneg tautology `(>= s 0)` /
+/// `(<= 0 s)`.
+///
+/// For that shape, `ObligationKind` decides prove-vs-assume:
+///
+///  * PROVED kind (Postcondition / RefinementType): [`bind_nat_nonneg`] must
+///    bind `s` to an unsigned integer IR place read at sort `Int`, and the
+///    kernel must ACTUALLY discharge the closed tautology — only then is a
+///    certificate minted.
+///  * ASSUMED kind (Precondition / LoopInvariant): assuming is not proving, so
+///    NO certificate (the hypothesis is [`contract_nat_nonneg_obligation_in`]).
+///
+/// Every other clause falls through to the literal-only
+/// [`contract_clean_cic_certificate`].
+pub fn contract_clean_cic_certificate_in(
+    module: &Module,
+    obligation: &ProofObligation,
+    prover: impl Into<String>,
+) -> Option<ProofCertificate> {
+    if is_contract_kind(&obligation.kind)
+        && let Some(formula) = obligation.formula.as_ref()
+        && is_nat_nonneg_shape(formula)
+    {
+        // KEY ON ObligationKind — the assume-vs-prove split.
+        if !free_var_kind_is_proved(&obligation.kind) {
+            return None;
+        }
+        // The clause must denote a Nat-valued IR place — or nothing is minted.
+        bind_nat_nonneg(module, obligation).ok()?;
+        // PROVED: the kernel must ACTUALLY discharge the tautology.
+        let (_goal, proof) = prove_nat_nonneg_free_var()?;
+        return mint_clean_cic(obligation, prover, &proof);
+    }
+    contract_clean_cic_certificate(obligation, prover)
+}
+
+/// [`contract_clean_cic_certificate_in`], BOUND (roadmap WS1.12a): the same
+/// grounding and the same kernel discharge, but the certificate carries a
+/// [`KERNEL_ANCHOR_TRUST_IR_CONTRACT`] directive whose
+/// [`CertificateBinding`] names the environment and the statement it was
+/// checked in, and its `lineage` is the symbol-keyed v8 form
+/// ([`clean_cic_lineage_digest_v8`]), so it survives an id renumbering.
+///
+/// * `environment_digest` = [`kernel_environment_digest`] of the kernel-owned
+///   ordinary prelude — exactly the environment `kernel_accepts_term`
+///   re-checks in;
+/// * `statement_digest` = [`clean_cic_statement_digest`] of
+///   [`contract_goal_in`]'s goal — exactly the statement the re-checker
+///   re-grounds;
+/// * `origin_module = None` (minted here), `source = None`, `callees = []`.
+///
+/// Returns `None` (no certificate, never a partial one) when the legacy
+/// minter would, when a digest cannot be computed, or when the obligation's
+/// owning function does not resolve to one link symbol (a lineage that cannot
+/// be keyed is not minted).
+///
+/// The legacy minters stay directive-less on purpose. A binding has had a
+/// binary carrier since v61 (`binary::CERTIFICATE_BINDING_FORMAT_VERSION`),
+/// so a module carrying this certificate is written at v61 or later; before
+/// it, such a module travelled in JSON / MessagePack only.
+///
+/// [`CertificateBinding`]: crate::proof::CertificateBinding
+/// [`KERNEL_ANCHOR_TRUST_IR_CONTRACT`]: crate::proof::KERNEL_ANCHOR_TRUST_IR_CONTRACT
+/// [`clean_cic_lineage_digest_v8`]: crate::proof::clean_cic_lineage_digest_v8
+/// [`kernel_environment_digest`]: crate::proof::kernel_environment_digest
+/// [`clean_cic_statement_digest`]: crate::proof::clean_cic_statement_digest
+pub fn contract_clean_cic_certificate_bound_in(
+    module: &Module,
+    obligation: &ProofObligation,
+    prover: impl Into<String>,
+) -> Option<ProofCertificate> {
+    use crate::proof::{
+        CertificateBinding, CleanCicKernelRecheck, KERNEL_ANCHOR_TRUST_IR_CONTRACT,
+        KERNEL_ANCHOR_TRUST_IR_CONTRACT_MODULE, clean_cic_lineage_digest_v8,
+        clean_cic_statement_digest, kernel_environment_digest,
+    };
+    use clean_kernel::Environment;
+    if !is_contract_kind(&obligation.kind) {
+        return None;
+    }
+    let formula = obligation.formula.as_ref()?;
+    // The same prove-vs-assume split and the same kernel discharge as the
+    // legacy minters: a proof term exists only for what the kernel accepts.
+    let proof = if is_nat_nonneg_shape(formula) {
+        if !free_var_kind_is_proved(&obligation.kind) {
+            return None;
+        }
+        bind_nat_nonneg(module, obligation).ok()?;
+        prove_nat_nonneg_free_var()?.1
+    } else {
+        let goal = contract_goal(&obligation.kind, Some(formula)).ok()?;
+        if !kernel_discharges(&goal) {
+            return None;
+        }
+        refl_true()
+    };
+    // The statement the re-checker re-grounds, and the environment it
+    // re-checks in — both computed HERE, never asserted.
+    let goal = contract_goal_in(module, obligation).ok()?;
+    let statement_digest = clean_cic_statement_digest(&goal).ok()?;
+    let environment_digest = Environment::with_reusable_prelude(kernel_environment_digest)
+        .ok()?
+        .ok()?;
+    let binding = CertificateBinding::new(environment_digest, statement_digest);
+    let resolve = |id: crate::value::FuncId| module.function_by_id(id).map(|f| f.name.clone());
+    let lineage = clean_cic_lineage_digest_v8(obligation, &resolve, Some(&binding))?;
     let term = proof_term_bytes(&proof)?;
-    // 4. Mint the kernel-checkable certificate, lineage-bound to this obligation.
-    let lineage = clean_cic_lineage_digest(obligation);
     Some(ProofCertificate {
+        assurance: None,
         obligation: obligation.id,
         prover: prover.into(),
         evidence: ProofEvidence::CleanCic {
             term,
             context: Vec::new(),
             lineage,
-            kernel_recheck: None,
+            kernel_recheck: Some(CleanCicKernelRecheck {
+                module: KERNEL_ANCHOR_TRUST_IR_CONTRACT_MODULE.to_string(),
+                theorems: Vec::new(),
+                anchor: KERNEL_ANCHOR_TRUST_IR_CONTRACT.to_string(),
+                allowed_axioms: Vec::new(),
+                binding: Some(Box::new(binding)),
+            }),
         },
     })
 }
 
-/// Ground the single-free-var Nat non-negativity predicate `x >= 0` / `0 <= x`
-/// into an [`ExprObligation`], for the **ASSUME** case (a PRECONDITION /
-/// LoopInvariant). The obligation carries the tautology's Bool-decision goal
-/// `@Eq Bool (Nat.ble 0 x) Bool.true` AND a named hypothesis of the same shape
-/// — the assumed predicate `h : P(x)` introduced into the caller's context.
+/// Ground the single-free-name Nat non-negativity predicate `s >= 0` /
+/// `0 <= s` into an [`ExprObligation`], for the **ASSUME** case (a
+/// PRECONDITION / LoopInvariant). The obligation carries the tautology's
+/// Bool-decision goal `@Eq Bool (Nat.ble 0 x) Bool.true` AND a named hypothesis
+/// of the same shape — the assumed predicate `h : P(x)` introduced into the
+/// caller's context.
 ///
 /// Returns `None` (fail-closed) unless:
 ///  * the kind is an ASSUMED contract kind (Precondition / LoopInvariant), AND
-///  * the predicate is EXACTLY the recognized single-free-var `x >= 0` shape.
+///  * the predicate is EXACTLY the recognized single-symbol `s >= 0` shape, AND
+///  * [`bind_nat_nonneg`] binds `s` to an unsigned integer IR place of
+///    `module` read at sort `Int`.
+///
+/// There is no module-free form: without the module nothing says the symbol
+/// denotes a `Nat`, so the hypothesis could not be justified.
 ///
 /// SOUNDNESS: this is the assume side — it introduces a hypothesis with NO proof
 /// term, which is sound for a precondition (the caller owes its establishment).
 /// It deliberately does NOT mint a `Certified` certificate; assuming is not
 /// proving. A POSTCONDITION never routes here (it must be *proved* via
-/// [`contract_clean_cic_certificate`]).
-pub fn contract_nat_nonneg_obligation(obligation: &ProofObligation) -> Option<ExprObligation> {
+/// [`contract_clean_cic_certificate_in`]).
+pub fn contract_nat_nonneg_obligation_in(
+    module: &Module,
+    obligation: &ProofObligation,
+) -> Option<ExprObligation> {
     if !is_contract_kind(&obligation.kind) {
         return None;
     }
@@ -745,11 +1073,32 @@ pub fn contract_nat_nonneg_obligation(obligation: &ProofObligation) -> Option<Ex
         return None;
     }
     let formula = obligation.formula.as_ref()?;
-    let sexp = parse_predicate(predicate_text(formula))?;
+    let sexp = parse_predicate(predicate_text(formula).ok()?)?;
     recognize_nat_nonneg(&sexp)?;
+    bind_nat_nonneg(module, obligation).ok()?;
     // Ground the assumed predicate: the goal shape IS the hypothesis shape.
     let assumed = assume_nat_nonneg_free_var();
     Some(ExprObligation::new(assumed.clone()).with_hypothesis("h_precond", assumed))
+}
+
+/// The Clean kernel accepts the decoded proof `term` bytes as an inhabitant of
+/// `goal`, in a fresh checker and local context under the kernel-owned
+/// ordinary prelude. Fail-closed on decode or construction failure.
+fn kernel_accepts_term(term: &[u8], goal: &Expr) -> bool {
+    use clean_kernel::{Environment, LocalContext, TypeChecker};
+    // Decode the certificate's serialized proof TERM (untrusted bytes) with the
+    // same canonical, bounded, whole-slice codec as the minter.
+    let Some(proof_term) = decode_proof_term(term) else {
+        return false;
+    };
+    // The TRUSTED Clean kernel must accept that the decoded term inhabits the
+    // canonical goal. This is the de Bruijn criterion: a tampered or forged
+    // term, or a term proving some *other* proposition, is rejected.
+    Environment::with_reusable_prelude(|env| {
+        let tc = TypeChecker::with_context(env, LocalContext::new());
+        tc.check_type(&proof_term, goal).is_ok()
+    })
+    .unwrap_or(false)
 }
 
 /// The **real** Clean-kernel re-validator for L1 contract
@@ -758,17 +1107,21 @@ pub fn contract_nat_nonneg_obligation(obligation: &ProofObligation) -> Option<Ex
 /// [`crate::proof::obligation_has_kernel_rechecked_clean_cic`].
 ///
 /// Given a `Certified` obligation and its lineage-bound `CleanCic` certificate,
-/// [`Self::kernel_rechecks_clean_cic`]:
+/// the module-free `kernel_rechecks_clean_cic` and the module-bound
+/// `kernel_rechecks_clean_cic_in`:
 ///
-/// 1. **re-grounds the canonical goal from the OBLIGATION** (`kind` + `formula`)
-///    via [`contract_goal`] — never from the certificate's bytes, so a term that
-///    proves some *other* proposition cannot be substituted in;
+/// 1. **re-ground the canonical goal from the OBLIGATION** (`kind` + `formula`)
+///    via [`contract_goal`] (literal-only) or [`contract_goal_in`] (the module
+///    in scope, the only path that binds a free-name nonneg clause to its IR
+///    place) — never from the certificate's bytes, so a term that proves some
+///    *other* proposition cannot be substituted in;
 /// 2. **decodes the certificate's serialized proof TERM** (untrusted `term`
 ///    bytes) with a canonical, whole-slice, byte/node/depth-bounded codec; and
 /// 3. has the **trusted `clean-kernel` type-checker** confirm the decoded term
 ///    inhabits that re-grounded goal
-///    (`TypeChecker::check_type(term, &goal)` under `Environment::with_prelude()`
-///    — the same gate the minter uses).
+///    (`TypeChecker::check_type(term, &goal)` in a fresh checker/local context
+///    under the kernel-owned ordinary prelude — the same gate the minter uses).
+///    The baseline environment may be reused, never the proof-checking result.
 ///
 /// Every step is fail-closed: an ungroundable obligation, undecodable bytes, or
 /// a term the kernel refuses all yield `false`. A tampered/forged term (one that
@@ -779,31 +1132,92 @@ pub fn contract_nat_nonneg_obligation(obligation: &ProofObligation) -> Option<Ex
 pub struct KernelCleanCicRechecker;
 
 impl crate::proof::CleanCicRechecker for KernelCleanCicRechecker {
+    /// Module-free: re-checks only LITERAL goals ([`contract_goal`]). A clause
+    /// over a free name — the nonneg tautology included — returns `false`,
+    /// because nothing here can say what the name denotes; see the
+    /// [`crate::proof::ModuleCleanCicRechecker`] impl.
     fn kernel_rechecks_clean_cic(
         &self,
         obligation: &ProofObligation,
         cert: &ProofCertificate,
     ) -> bool {
-        use clean_kernel::{Environment, LocalContext, TypeChecker};
         let ProofEvidence::CleanCic { term, .. } = &cert.evidence else {
             return false;
         };
-        // (1) Reconstruct the obligation's canonical claim from the OBLIGATION's
-        //     own data — never the (untrusted) certificate bytes.
+        // Reconstruct the obligation's canonical claim from the OBLIGATION's own
+        // data — never the (untrusted) certificate bytes.
         let Ok(goal) = contract_goal(&obligation.kind, obligation.formula.as_ref()) else {
             return false;
         };
-        // (2) Decode the certificate's serialized proof TERM (untrusted bytes)
-        //     with the same canonical, bounded, whole-slice codec as the minter.
-        let Some(proof_term) = decode_proof_term(term) else {
+        kernel_accepts_term(term, &goal)
+    }
+}
+
+impl crate::proof::ModuleCleanCicRechecker for KernelCleanCicRechecker {
+    /// Module-bound: re-grounds the claim with [`contract_goal_in`], so a
+    /// free-name nonneg clause re-checks only when [`bind_nat_nonneg`] binds it
+    /// to an unsigned integer place of `module`; literal clauses re-check
+    /// exactly as the module-free impl does.
+    fn kernel_rechecks_clean_cic_in(
+        &self,
+        module: &Module,
+        obligation: &ProofObligation,
+        cert: &ProofCertificate,
+    ) -> bool {
+        let ProofEvidence::CleanCic { term, .. } = &cert.evidence else {
             return false;
         };
-        // (3) The TRUSTED Clean kernel must accept that the decoded term inhabits
-        //     the canonical goal. This is the de Bruijn criterion: a tampered or
-        //     forged term, or a term proving some *other* proposition, is rejected.
-        let env = Environment::with_prelude();
-        let tc = TypeChecker::with_context(&env, LocalContext::new());
-        tc.check_type(&proof_term, &goal).is_ok()
+        let Ok(goal) = contract_goal_in(module, obligation) else {
+            return false;
+        };
+        kernel_accepts_term(term, &goal)
+    }
+
+    /// Everything this rechecker accepts is a [`contract_goal_in`] goal — a
+    /// closed ground Bool decision, or the free-name nonneg tautology bound to
+    /// an unsigned place — so an accepted certificate re-checked the
+    /// [`KernelClaimFamily::ContractGroundDecision`] family. Classified ONLY
+    /// when the certificate claims that path itself: no directive, or the
+    /// [`KERNEL_ANCHOR_TRUST_IR_CONTRACT`] anchor in its canonical form (the
+    /// contract module, no theorems, no admitted axioms). A certificate that
+    /// names any other anchor was minted to prove something else; that its
+    /// term also inhabits the contract goal is not what its producer claimed,
+    /// so it stays unclassified and confers no coverage.
+    ///
+    /// Pure classification: the caller
+    /// ([`crate::proof::CleanCicModuleProofAuthority`]) has already required
+    /// the kernel re-check to accept.
+    ///
+    /// [`KernelClaimFamily::ContractGroundDecision`]: crate::proof::KernelClaimFamily::ContractGroundDecision
+    /// [`KERNEL_ANCHOR_TRUST_IR_CONTRACT`]: crate::proof::KERNEL_ANCHOR_TRUST_IR_CONTRACT
+    fn rechecked_claim_family(
+        &self,
+        _module: &Module,
+        obligation: &ProofObligation,
+        cert: &ProofCertificate,
+    ) -> Option<crate::proof::KernelClaimFamily> {
+        use crate::proof::{
+            KERNEL_ANCHOR_TRUST_IR_CONTRACT, KERNEL_ANCHOR_TRUST_IR_CONTRACT_MODULE,
+            KernelClaimFamily,
+        };
+        if !is_contract_kind(&obligation.kind) {
+            return None;
+        }
+        let ProofEvidence::CleanCic { kernel_recheck, .. } = &cert.evidence else {
+            return None;
+        };
+        match kernel_recheck {
+            None => Some(KernelClaimFamily::ContractGroundDecision),
+            Some(directive)
+                if directive.anchor == KERNEL_ANCHOR_TRUST_IR_CONTRACT
+                    && directive.module == KERNEL_ANCHOR_TRUST_IR_CONTRACT_MODULE
+                    && directive.theorems.is_empty()
+                    && directive.allowed_axioms.is_empty() =>
+            {
+                Some(KernelClaimFamily::ContractGroundDecision)
+            }
+            Some(_) => None,
+        }
     }
 }
 
@@ -873,6 +1287,35 @@ mod tests {
     }
 
     #[test]
+    fn test_warm_prelude_rechecks_good_forged_good_certificate_terms() {
+        let ob = obligation(ObligationKind::Postcondition, "(= 1 1)");
+        let good = contract_clean_cic_certificate(&ob, "trust-ir.R-L1")
+            .expect("true contract has an actual kernel proof");
+        let mut forged = good.clone();
+        let ProofEvidence::CleanCic { term, .. } = &mut forged.evidence else {
+            unreachable!("minter produces CleanCic")
+        };
+        // Keep the obligation, lineage, context and all metadata identical.
+        // This canonical expression decodes but is not a proof of the goal.
+        *term = encode_proof_term(&Expr::const_str("Bool.true")).expect("canonical expression");
+        assert!(obligation_has_matching_clean_cic(
+            &ob,
+            std::slice::from_ref(&forged),
+        ));
+        for (certificate, accepted) in [(&good, true), (&forged, false), (&good, true)] {
+            assert_eq!(
+                obligation_has_kernel_rechecked_clean_cic(
+                    &ob,
+                    std::slice::from_ref(certificate),
+                    &KernelCleanCicRechecker,
+                ),
+                accepted,
+                "a warmed baseline must neither cache a verdict nor retain failed-check state",
+            );
+        }
+    }
+
+    #[test]
     fn test_kernel_recheck_rejects_tampered_term_that_lineage_floor_accepts() {
         // THE TRUSTED-ON-READ GAP, CLOSED. The lineage-only floor
         // (`obligation_has_matching_clean_cic`) admits a `CleanCic` certificate on
@@ -907,6 +1350,8 @@ mod tests {
                 lineage,
                 kernel_recheck,
             },
+
+            assurance: None,
         };
 
         // (1) The lineage-only FLOOR still ACCEPTS the tampered cert — the gap.
@@ -936,6 +1381,8 @@ mod tests {
                 lineage: clean_cic_lineage_digest(&ob),
                 kernel_recheck: None,
             },
+
+            assurance: None,
         };
         assert!(
             obligation_has_matching_clean_cic(&ob, std::slice::from_ref(&garbage)),
@@ -1084,208 +1531,505 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // R-L1 goal item #4, slice 1: single-free-var Nat non-negativity tautology
-    // `x >= 0`. These tests are the teeth of the assume-vs-prove split and the
-    // tautology-only gating.
+    // R-L1 goal item #4, slice 1: single-free-name Nat non-negativity tautology
+    // `s >= 0`. These tests are the teeth of the assume-vs-prove split, the
+    // tautology-only gating, and (WS1.1) the binding rule: the tautology is
+    // produced ONLY with the module in scope and the symbol bound to an
+    // unsigned integer IR place read at sort Int.
     // -----------------------------------------------------------------------
 
-    /// (1) A POSTCONDITION `(>= x 0)` grounds with a REAL kernel proof
-    /// (`Certified` CleanCic), NOT a literal fixture. This is the whole point of
-    /// the slice: a free-var predicate now grounds through a genuine kernel
-    /// discharge of the `Nat.ble 0 x = true` tautology.
+    use crate::proof::{ClauseBinding, ClausePlace, ClauseSort};
+    use crate::ty::FuncTy;
+    use crate::value::{BlockId, FuncTyId};
+    use crate::{Function, Module};
+
+    /// `f0 : (u64, &mut u16, i64) -> u64`, the owning function of every bound
+    /// fixture below.
+    fn signature_module() -> Module {
+        let mut module = Module::new("contract_binding");
+        module.func_types.push(FuncTy {
+            params: vec![Ty::U64, Ty::RefMut(Box::new(Ty::U16)), Ty::I64],
+            returns: vec![Ty::U64],
+            abi: None,
+            is_vararg: false,
+        });
+        module.functions.push(Function::new(
+            FuncId::new(0),
+            "f0",
+            FuncTyId::new(0),
+            BlockId::new(0),
+        ));
+        module
+    }
+
+    /// `obligation(kind, smtlib)` scoped to `f0` with ONE binding `name`.
+    fn bound(
+        kind: ObligationKind,
+        smtlib: &str,
+        name: &str,
+        sort: ClauseSort,
+        place: ClausePlace,
+    ) -> ProofObligation {
+        let mut formula = ProofFormula::smtlib2(smtlib, "Bool");
+        formula.bindings = vec![(name.to_string(), ClauseBinding { sort, place })];
+        ProofObligation::new(ProofId::new(0), kind, ProofStatus::Pending, "contract")
+            .with_function(FuncId::new(0))
+            .with_formula(formula)
+    }
+
+    fn result_u64(kind: ObligationKind, smtlib: &str, name: &str) -> ProofObligation {
+        bound(
+            kind,
+            smtlib,
+            name,
+            ClauseSort::Int,
+            ClausePlace::ResultSlot { index: 0 },
+        )
+    }
+
+    fn unsupported_reason(result: Result<NatNonnegBinding, ContractLoweringError>) -> String {
+        match result {
+            Err(ContractLoweringError::UnsupportedPredicate(reason)) => reason,
+            other => panic!("expected an UnsupportedPredicate refusal, got {other:?}"),
+        }
+    }
+
+    /// (1) A POSTCONDITION `(>= s 0)` is NOT groundable module-free — nothing
+    /// there says what `s` denotes — and IS proved `Certified` through the
+    /// module-bound path once `s` binds to the u64 result at sort Int. The
+    /// proof is a real closed lambda re-checked by the kernel, not a fixture.
     #[test]
     fn test_postcondition_nat_nonneg_free_var_proves_certified() {
-        let ob = obligation(ObligationKind::Postcondition, "(>= x 0)");
-        let cert = contract_clean_cic_certificate(&ob, "trust-ir.R-L1")
-            .expect("postcondition (>= x 0) is a Nat tautology => proved Certified");
+        let module = signature_module();
+        let ob = result_u64(ObligationKind::Postcondition, "(>= result 0)", "result");
+
+        // Module-free: refused at every entry point.
         assert!(
-            matches!(cert.evidence, ProofEvidence::CleanCic { .. }),
-            "must be CleanCic evidence (the Certified tier), a real kernel proof"
+            matches!(
+                contract_goal(&ob.kind, ob.formula.as_ref()),
+                Err(ContractLoweringError::UnsupportedPredicate(_))
+            ),
+            "the module-free grounder is literal-only"
         );
-        // The carrier is an actual closed lambda proof, not the former Display
-        // bytes of an open FVar goal.
-        if let ProofEvidence::CleanCic { term, .. } = &cert.evidence {
-            let decoded = decode_proof_term(term).expect("canonical proof term decodes");
-            assert!(
-                matches!(decoded.kind(), clean_kernel::ExprKind::Lam(..)),
-                "the free-variable proof must close x with a lambda, got {decoded:?}"
-            );
-        }
-        // Lineage-bound to THIS obligation (admissibility floor accepts it).
+        assert!(
+            contract_clean_cic_certificate(&ob, "trust-ir.R-L1").is_none(),
+            "no module, no binding, no certificate"
+        );
+
+        // Module-bound: minted, and a closed lambda.
+        let cert = contract_clean_cic_certificate_in(&module, &ob, "trust-ir.R-L1")
+            .expect("(>= result 0) over a u64 result bound at Int => proved Certified");
+        let ProofEvidence::CleanCic { term, .. } = &cert.evidence else {
+            panic!("must be CleanCic evidence (the Certified tier)");
+        };
+        let decoded = decode_proof_term(term).expect("canonical proof term decodes");
+        assert!(
+            matches!(decoded.kind(), clean_kernel::ExprKind::Lam(..)),
+            "the free-name proof must close x with a lambda, got {decoded:?}"
+        );
         assert!(
             obligation_has_matching_clean_cic(&ob, std::slice::from_ref(&cert)),
             "the CleanCic cert must be lineage-bound to its obligation"
         );
+        // The module-bound rechecker replays it; the module-free one refuses.
+        assert!(crate::proof::obligation_has_kernel_rechecked_clean_cic_in(
+            &module,
+            &ob,
+            std::slice::from_ref(&cert),
+            &KernelCleanCicRechecker,
+        ));
         assert!(
-            obligation_has_kernel_rechecked_clean_cic(
+            !obligation_has_kernel_rechecked_clean_cic(
                 &ob,
                 std::slice::from_ref(&cert),
                 &KernelCleanCicRechecker,
             ),
-            "the serialized closed proof must replay against the re-derived closed goal"
+            "the module-free rechecker must refuse a free-name clause"
         );
-
-        let goal = contract_goal(&ob.kind, ob.formula.as_ref()).expect("closed goal");
+        let goal = contract_goal_in(&module, &ob).expect("closed goal");
         assert!(
             matches!(goal.kind(), clean_kernel::ExprKind::Pi(..)),
             "the re-derived claim must close x with a Pi, got {goal:?}"
         );
 
-        // The normal form `(<= 0 x)` proves identically.
-        let ob_nf = obligation(ObligationKind::Postcondition, "(<= 0 x)");
-        assert!(
-            contract_clean_cic_certificate(&ob_nf, "trust-ir.R-L1").is_some(),
-            "the normal form (<= 0 x) is the same tautology => proved Certified"
+        // The normal form `(<= 0 s)`, a u64 Param, and the `&mut u16` exit value
+        // prove identically; a RefinementType is PROVED too.
+        for ob in [
+            result_u64(ObligationKind::Postcondition, "(<= 0 result)", "result"),
+            bound(
+                ObligationKind::Postcondition,
+                "(>= x 0)",
+                "x",
+                ClauseSort::Int,
+                ClausePlace::Param { index: 0 },
+            ),
+            bound(
+                ObligationKind::Postcondition,
+                "(>= y_exit 0)",
+                "y_exit",
+                ClauseSort::Int,
+                ClausePlace::MutParamExit { index: 1 },
+            ),
+            // v62: the `&mut u16`'s value at ENTRY is a Nat-valued place too.
+            bound(
+                ObligationKind::Postcondition,
+                "(>= y_entry 0)",
+                "y_entry",
+                ClauseSort::Int,
+                ClausePlace::ParamPointeeEntry { index: 1 },
+            ),
+            result_u64(ObligationKind::RefinementType, "(>= result 0)", "result"),
+        ] {
+            assert!(
+                contract_clean_cic_certificate_in(&module, &ob, "trust-ir.R-L1").is_some(),
+                "{:?} must be proved Certified",
+                ob.formula
+            );
+        }
+        // The exit value spelled `y'` is no SMT-LIB2 token (a `'` is in none):
+        // the one reader refuses the text, so nothing is minted for it.
+        let primed = bound(
+            ObligationKind::Postcondition,
+            "(>= y' 0)",
+            "y'",
+            ClauseSort::Int,
+            ClausePlace::MutParamExit { index: 1 },
         );
-        // A RefinementType is also a PROVED kind.
-        let ob_ref = obligation(ObligationKind::RefinementType, "(>= x 0)");
-        assert!(
-            contract_clean_cic_certificate(&ob_ref, "trust-ir.R-L1").is_some(),
-            "a RefinementType (>= x 0) is proved Certified"
-        );
+        assert!(contract_clean_cic_certificate_in(&module, &primed, "trust-ir.R-L1").is_none());
+        assert!(matches!(
+            bind_nat_nonneg(&module, &primed),
+            Err(ContractLoweringError::UnsupportedPredicate(reason))
+                if reason.contains("no SMT-LIB2 token")
+        ));
     }
 
-    /// (2) A PRECONDITION `(>= x 0)` is ASSUMED: it GROUNDS to an obligation with
-    /// the hypothesis added — but it does NOT mint a Certified certificate
-    /// (assuming is not proving). This is the assume side of the split.
+    /// (1b) The binding rule refuses, with a named reason, every way the clause
+    /// can fail to denote a Nat-valued IR place — and the certificate path
+    /// mints nothing for any of them.
+    #[test]
+    fn test_nat_nonneg_binding_rule_refusals() {
+        let module = signature_module();
+        let post = ObligationKind::Postcondition;
+        let cases: Vec<(ProofObligation, &str)> = vec![
+            (
+                bound(
+                    post.clone(),
+                    "(>= z 0)",
+                    "z",
+                    ClauseSort::Int,
+                    ClausePlace::Param { index: 2 },
+                ),
+                "is not an unsigned integer",
+            ),
+            (
+                bound(
+                    post.clone(),
+                    "(>= x 0)",
+                    "x",
+                    ClauseSort::BitVec(64),
+                    ClausePlace::Param { index: 0 },
+                ),
+                "is not Int",
+            ),
+            (
+                bound(
+                    post.clone(),
+                    "(>= x 0)",
+                    "x",
+                    ClauseSort::Bool,
+                    ClausePlace::Param { index: 0 },
+                ),
+                "is not Int",
+            ),
+            (
+                bound(
+                    post.clone(),
+                    "(>= x 0)",
+                    "result",
+                    ClauseSort::Int,
+                    ClausePlace::ResultSlot { index: 0 },
+                ),
+                "does not name the clause symbol",
+            ),
+            (
+                bound(
+                    post.clone(),
+                    "(>= x 0)",
+                    "x",
+                    ClauseSort::Int,
+                    ClausePlace::MutParamExit { index: 0 },
+                ),
+                "not a &mut / *mut",
+            ),
+            // v62: the by-value `x: u64` has no entry pointee.
+            (
+                bound(
+                    post.clone(),
+                    "(>= x 0)",
+                    "x",
+                    ClauseSort::Int,
+                    ClausePlace::ParamPointeeEntry { index: 0 },
+                ),
+                "not a & / &mut reference",
+            ),
+            // v62: an entry pointee past the three-parameter signature.
+            (
+                bound(
+                    post.clone(),
+                    "(>= y_entry 0)",
+                    "y_entry",
+                    ClauseSort::Int,
+                    ClausePlace::ParamPointeeEntry { index: 3 },
+                ),
+                "out of range",
+            ),
+            (
+                bound(
+                    post.clone(),
+                    "(>= x 0)",
+                    "x",
+                    ClauseSort::Int,
+                    ClausePlace::World,
+                ),
+                "denotes ambient state",
+            ),
+            (
+                bound(
+                    post.clone(),
+                    "(>= -5 0)",
+                    "-5",
+                    ClauseSort::Int,
+                    ClausePlace::ResultSlot { index: 0 },
+                ),
+                "is not an SMT simple symbol",
+            ),
+            (
+                bound(
+                    post.clone(),
+                    "(>= true 0)",
+                    "true",
+                    ClauseSort::Int,
+                    ClausePlace::ResultSlot { index: 0 },
+                ),
+                "is not an SMT simple symbol",
+            ),
+            (
+                bound(
+                    ObligationKind::Precondition,
+                    "(>= result 0)",
+                    "result",
+                    ClauseSort::Int,
+                    ClausePlace::ResultSlot { index: 0 },
+                ),
+                "cannot name the result or exit place",
+            ),
+        ];
+        for (ob, needle) in cases {
+            let reason = unsupported_reason(bind_nat_nonneg(&module, &ob));
+            assert!(reason.contains(needle), "{:?}: {reason}", ob.formula);
+            assert!(contract_clean_cic_certificate_in(&module, &ob, "p").is_none());
+            assert!(contract_goal_in(&module, &ob).is_err());
+        }
+
+        // No owning function.
+        let mut unscoped = result_u64(ObligationKind::Postcondition, "(>= result 0)", "result");
+        unscoped.function = None;
+        assert!(
+            unsupported_reason(bind_nat_nonneg(&module, &unscoped)).contains("no owning function")
+        );
+        // Empty bindings: UNBINDABLE, never a wildcard.
+        let mut unbound = result_u64(ObligationKind::Postcondition, "(>= result 0)", "result");
+        unbound.formula.as_mut().unwrap().bindings.clear();
+        assert!(
+            unsupported_reason(bind_nat_nonneg(&module, &unbound)).contains("carries 0 bindings")
+        );
+        // A usize place needs target_info to have a width at all.
+        let mut usize_module = signature_module();
+        usize_module.func_types[0].returns = vec![Ty::Usize];
+        let ob = result_u64(ObligationKind::Postcondition, "(>= result 0)", "result");
+        assert!(unsupported_reason(bind_nat_nonneg(&usize_module, &ob)).contains("target_info"));
+        usize_module.target_info = Some(crate::TargetInfo {
+            triple: "aarch64-apple-darwin".into(),
+            pointer_size: 8,
+            endianness: crate::Endianness::Little,
+            abi: None,
+            struct_passing: Default::default(),
+        });
+        assert!(bind_nat_nonneg(&usize_module, &ob).is_ok());
+    }
+
+    /// (2) A PRECONDITION `(>= s 0)` is ASSUMED: with the module in scope it
+    /// GROUNDS to an obligation with the hypothesis added — but it does NOT
+    /// mint a Certified certificate (assuming is not proving).
     #[test]
     fn test_precondition_nat_nonneg_free_var_is_assumed() {
-        let ob = obligation(ObligationKind::Precondition, "(>= x 0)");
+        let module = signature_module();
+        let pre = |kind| {
+            bound(
+                kind,
+                "(>= x 0)",
+                "x",
+                ClauseSort::Int,
+                ClausePlace::Param { index: 0 },
+            )
+        };
+        let ob = pre(ObligationKind::Precondition);
 
-        // It GROUNDS as an assumed-hypothesis obligation ...
-        let assumed = contract_nat_nonneg_obligation(&ob)
-            .expect("precondition (>= x 0) grounds as an assumed hypothesis");
+        let assumed = contract_nat_nonneg_obligation_in(&module, &ob)
+            .expect("precondition (>= x 0) over a u64 param grounds as an assumed hypothesis");
         assert_eq!(
             assumed.hypotheses.len(),
             1,
             "the assumed predicate is introduced as a hypothesis"
         );
-        // ... the hypothesis is the predicate itself (goal shape == hyp shape).
         assert_eq!(
             &assumed.hypotheses[0].1, &assumed.goal,
             "the assumed hypothesis IS the grounded predicate"
         );
-
-        // ... but it does NOT mint a Certified certificate: an assumed
-        // precondition is not a proved claim, so no CleanCic / Certified.
         assert!(
-            contract_clean_cic_certificate(&ob, "trust-ir.R-L1").is_none(),
+            contract_clean_cic_certificate_in(&module, &ob, "trust-ir.R-L1").is_none(),
             "a PRECONDITION is ASSUMED, not PROVED => NO Certified stamp"
         );
 
+        // An unbindable precondition is not assumed either: the hypothesis
+        // would claim a Nat the place does not hold.
+        let signed = bound(
+            ObligationKind::Precondition,
+            "(>= z 0)",
+            "z",
+            ClauseSort::Int,
+            ClausePlace::Param { index: 2 },
+        );
+        assert!(contract_nat_nonneg_obligation_in(&module, &signed).is_none());
+
         // A LoopInvariant is likewise assumed at entry.
-        let ob_inv = obligation(ObligationKind::LoopInvariant, "(>= x 0)");
-        assert!(
-            contract_nat_nonneg_obligation(&ob_inv).is_some(),
-            "a LoopInvariant (>= x 0) grounds as an assumed hypothesis"
-        );
-        assert!(
-            contract_clean_cic_certificate(&ob_inv, "trust-ir.R-L1").is_none(),
-            "a LoopInvariant is assumed => NO Certified stamp"
-        );
+        let ob_inv = pre(ObligationKind::LoopInvariant);
+        assert!(contract_nat_nonneg_obligation_in(&module, &ob_inv).is_some());
+        assert!(contract_clean_cic_certificate_in(&module, &ob_inv, "trust-ir.R-L1").is_none());
 
         // A POSTCONDITION never routes through the assume path.
-        let ob_post = obligation(ObligationKind::Postcondition, "(>= x 0)");
+        let ob_post = pre(ObligationKind::Postcondition);
         assert!(
-            contract_nat_nonneg_obligation(&ob_post).is_none(),
+            contract_nat_nonneg_obligation_in(&module, &ob_post).is_none(),
             "a POSTCONDITION is PROVED, not ASSUMED — the assume path rejects it"
         );
     }
 
-    /// (3) NEGATIVE: a POSTCONDITION `(>= x 5)` FAILS CLOSED — it does NOT mint
-    /// Certified. `x >= 5` is NOT a tautology (false at x = 0), so neither the
-    /// recognizer (non-zero bound) nor the literal path (free var) grounds it.
-    /// This proves the tautology-only gating has teeth: the assume-vs-prove split
-    /// cannot be tricked into stamping a non-tautology postcondition.
+    /// (3) NEGATIVE: a POSTCONDITION `(>= s 5)` FAILS CLOSED even when bound —
+    /// `s >= 5` is NOT a tautology, so neither the recognizer (non-zero bound)
+    /// nor the literal path (free name) grounds it.
     #[test]
     fn test_postcondition_nat_nonneg_nontautology_fails_closed() {
-        // `x >= 5`: a free var with a NON-ZERO bound.
-        let ob_ge5 = obligation(ObligationKind::Postcondition, "(>= x 5)");
+        let module = signature_module();
+        let ob_ge5 = result_u64(ObligationKind::Postcondition, "(>= result 5)", "result");
         assert!(
-            recognize_nat_nonneg(&parse_predicate("(>= x 5)").unwrap()).is_none(),
-            "(>= x 5) is NOT the x>=0 tautology shape (non-zero bound)"
+            recognize_nat_nonneg(&parse_predicate("(>= result 5)").unwrap()).is_none(),
+            "(>= result 5) is NOT the s>=0 tautology shape (non-zero bound)"
         );
-        assert!(
-            contract_clean_cic_certificate(&ob_ge5, "trust-ir.R-L1").is_none(),
-            "a POSTCONDITION (>= x 5) is NOT a tautology => FAIL CLOSED, no Certified"
-        );
+        assert!(contract_clean_cic_certificate_in(&module, &ob_ge5, "trust-ir.R-L1").is_none());
 
-        // Even as a PRECONDITION, (>= x 5) is not the recognized assume shape.
-        let ob_pre5 = obligation(ObligationKind::Precondition, "(>= x 5)");
-        assert!(
-            contract_nat_nonneg_obligation(&ob_pre5).is_none(),
-            "(>= x 5) is not the assumed x>=0 shape either => no grounding"
-        );
+        let ob_pre5 = result_u64(ObligationKind::Precondition, "(>= result 5)", "result");
+        assert!(contract_nat_nonneg_obligation_in(&module, &ob_pre5).is_none());
 
-        // Wrong operators over the free var are non-tautologies too — all fail:
-        // `x <= 0` (false for x>0), `x = 0` (false for x>0), `x > 0` (false at 0).
-        for pred in ["(<= x 0)", "(= x 0)", "(> x 0)"] {
-            let ob = obligation(ObligationKind::Postcondition, pred);
+        // Wrong operators over the free name are non-tautologies too.
+        for pred in ["(<= result 0)", "(= result 0)", "(> result 0)"] {
+            let ob = result_u64(ObligationKind::Postcondition, pred, "result");
             assert!(
-                contract_clean_cic_certificate(&ob, "trust-ir.R-L1").is_none(),
-                "POSTCONDITION {pred} is not the x>=0 tautology => FAIL CLOSED"
+                contract_clean_cic_certificate_in(&module, &ob, "trust-ir.R-L1").is_none(),
+                "POSTCONDITION {pred} is not the s>=0 tautology => FAIL CLOSED"
             );
         }
     }
 
-    /// (4) FAIL-CLOSED on the everything-else set: a non-`Nat`-shaped predicate,
-    /// a multi-free-var predicate, and a non-`>=0` comparison all mint nothing.
+    /// (4) FAIL-CLOSED on the everything-else set: multi-name predicates,
+    /// nested booleans, the wrong side, non-contract kinds, and atoms that are
+    /// not SMT simple symbols all mint nothing, bound or not.
     #[test]
     fn test_nat_nonneg_fail_closed_on_everything_else() {
-        // Multiple distinct free vars: `(>= x y)` — not a single-var tautology.
-        let ob_multivar = obligation(ObligationKind::Postcondition, "(>= x y)");
-        assert!(
-            recognize_nat_nonneg(&parse_predicate("(>= x y)").unwrap()).is_none(),
-            "(>= x y) has two free vars, not the single-var x>=0 shape"
-        );
-        assert!(
-            contract_clean_cic_certificate(&ob_multivar, "trust-ir.R-L1").is_none(),
-            "multi-free-var => FAIL CLOSED"
-        );
+        let module = signature_module();
+        for pred in [
+            "(>= x y)",
+            "(and (>= x 0) (>= y 0))",
+            "(>= 0 x)",
+            "(<= x 0)",
+        ] {
+            assert!(
+                recognize_nat_nonneg(&parse_predicate(pred).unwrap()).is_none(),
+                "{pred} is not the bare s>=0 shape"
+            );
+            let ob = bound(
+                ObligationKind::Postcondition,
+                pred,
+                "x",
+                ClauseSort::Int,
+                ClausePlace::Param { index: 0 },
+            );
+            assert!(
+                contract_clean_cic_certificate_in(&module, &ob, "trust-ir.R-L1").is_none(),
+                "{pred} => FAIL CLOSED"
+            );
+        }
 
-        // A nested boolean wrapping the tautology is NOT the bare shape.
-        let ob_nested = obligation(ObligationKind::Postcondition, "(and (>= x 0) (>= y 0))");
-        assert!(
-            recognize_nat_nonneg(&parse_predicate("(and (>= x 0) (>= y 0))").unwrap()).is_none(),
-            "a nested/conjoined predicate is not the bare x>=0 shape"
-        );
-        assert!(
-            contract_clean_cic_certificate(&ob_nested, "trust-ir.R-L1").is_none(),
-            "nested boolean over free vars => FAIL CLOSED"
-        );
+        // Atoms the former "does not parse as a u64" test admitted as free
+        // variables are not symbols under the shared grammar.
+        for atom in ["-5", "+1", "#x00", "true", "false", "_"] {
+            let pred = format!("(>= {atom} 0)");
+            assert!(
+                recognize_nat_nonneg(&parse_predicate(&pred).unwrap()).is_none(),
+                "{pred} must not be recognized"
+            );
+        }
 
-        // The var must be on the correct side: `(>= 0 x)` means `0 >= x`
-        // (i.e. `x <= 0`), which is FALSE for x>0 — must NOT be recognized.
-        assert!(
-            recognize_nat_nonneg(&parse_predicate("(>= 0 x)").unwrap()).is_none(),
-            "(>= 0 x) is `0 >= x` (x<=0), NOT the tautology — wrong side"
-        );
-        let ob_wrongside = obligation(ObligationKind::Postcondition, "(>= 0 x)");
-        assert!(
-            contract_clean_cic_certificate(&ob_wrongside, "trust-ir.R-L1").is_none(),
-            "(>= 0 x) is x<=0, not a tautology => FAIL CLOSED"
-        );
-        // Symmetrically `(<= x 0)` means `x <= 0` — also not the tautology.
-        assert!(
-            recognize_nat_nonneg(&parse_predicate("(<= x 0)").unwrap()).is_none(),
-            "(<= x 0) is x<=0, NOT the tautology"
-        );
+        // ...nor numerals: an SMT numeral is ASCII digits only, so a `+`-signed
+        // atom (an SMT SYMBOL) never grounds on the literal-only path.
+        for pred in ["(>= +1 0)", "(<= 0 +1)", "(= +1 1)", "(>= 5 +0)"] {
+            assert!(
+                matches!(
+                    contract_goal(
+                        &ObligationKind::Postcondition,
+                        Some(&ProofFormula::smtlib2(pred, "Bool"))
+                    ),
+                    Err(ContractLoweringError::UnsupportedPredicate(_))
+                ),
+                "{pred} must not ground module-free"
+            );
+        }
+        assert_eq!(parse_nat_literal("007"), Some(7));
+        assert_eq!(parse_nat_literal("+1"), None);
+        assert_eq!(parse_nat_literal(""), None);
 
         // A non-contract kind with the tautology formula still mints nothing.
-        let ob_safety = ProofObligation::new(
-            ProofId::new(0),
+        let ob_safety = bound(
             ObligationKind::MemorySafety,
-            ProofStatus::Pending,
-            "not a contract",
-        )
-        .with_formula(ProofFormula::smtlib2("(>= x 0)", "Bool"));
-        assert!(
-            contract_clean_cic_certificate(&ob_safety, "trust-ir.R-L1").is_none(),
-            "a non-contract kind never grounds the free-var tautology"
+            "(>= x 0)",
+            "x",
+            ClauseSort::Int,
+            ClausePlace::Param { index: 0 },
         );
-        assert!(
-            contract_nat_nonneg_obligation(&ob_safety).is_none(),
-            "a non-contract kind never grounds the assumed hypothesis"
+        assert!(contract_clean_cic_certificate_in(&module, &ob_safety, "trust-ir.R-L1").is_none());
+        assert!(contract_nat_nonneg_obligation_in(&module, &ob_safety).is_none());
+        assert_eq!(
+            contract_goal_in(&module, &ob_safety),
+            Err(ContractLoweringError::NotAContractKind(
+                ObligationKind::MemorySafety
+            ))
         );
+    }
+
+    /// (5) Literal clauses are unaffected by the split: the module-bound path
+    /// grounds them exactly as the module-free one does.
+    #[test]
+    fn test_literal_clauses_agree_across_entry_points() {
+        let module = signature_module();
+        let ob = obligation(ObligationKind::Postcondition, "(= 1 1)");
+        assert_eq!(
+            contract_goal_in(&module, &ob),
+            contract_goal(&ob.kind, ob.formula.as_ref())
+        );
+        assert_eq!(
+            contract_clean_cic_certificate_in(&module, &ob, "p"),
+            contract_clean_cic_certificate(&ob, "p")
+        );
+        assert!(contract_clean_cic_certificate(&ob, "p").is_some());
     }
 }

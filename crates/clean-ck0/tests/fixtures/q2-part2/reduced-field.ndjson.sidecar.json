@@ -1,0 +1,69 @@
+{
+  "command": [
+    "lean4export",
+    "Q2EdgeCases",
+    "--",
+    "q2ReducedIota"
+  ],
+  "decls": [
+    "q2ReducedIota"
+  ],
+  "environment": {
+    "HOME": "<home>",
+    "LEAN_ABORT_ON_PANIC": "1",
+    "LEAN_PATH": "/private/tmp/q2-part2-edge-cases",
+    "LEAN_SYSROOT": "<toolchain dir>",
+    "PATH": "<toolchain dir>/bin:/usr/bin:/bin",
+    "TMPDIR": "<tmpdir>"
+  },
+  "environment_cleared": true,
+  "export": {
+    "bytes": 16840,
+    "file": "reduced-field.ndjson",
+    "lines": 294,
+    "sha256": "d8e2327283a0d1bd8fa4102657d4c8fdc66aa958247621b3ad93ff54c0570cfb"
+  },
+  "exporter": {
+    "binary_sha256": "157f4e82e28fbd84ae5e12d3855591b8e14eaba3357851d5991d33c61de37fee",
+    "commit": "12581a6b680d8478175596338eb2d53383a323e3",
+    "kind": "lean4export-repo",
+    "repo": "https://github.com/leanprover/lean4export",
+    "tag": "v4.30.0-rc2"
+  },
+  "gate": {
+    "held": "",
+    "label": "lean-export-mint-Q2EdgeCases",
+    "reserved_gb": 4,
+    "script": "scripts/heavy_gate.sh",
+    "script_sha256": "6cf91332c255dcebee8905eeac68bf613b60159ffa6bb139f804b8117856a6f1",
+    "weight": "4"
+  },
+  "generated": "2026-11-13T13:53:54Z",
+  "host": "Darwin arm64",
+  "lean_banner": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)",
+  "lean_githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+  "meta": {
+    "meta": {
+      "exporter": {
+        "name": "lean4export",
+        "version": "3.1.0"
+      },
+      "format": {
+        "version": "3.1.0"
+      },
+      "lean": {
+        "githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+        "version": "4.30.0-rc2"
+      }
+    }
+  },
+  "meta_line": "{\"meta\":{\"exporter\":{\"name\":\"lean4export\",\"version\":\"3.1.0\"},\"format\":{\"version\":\"3.1.0\"},\"lean\":{\"githash\":\"3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc\",\"version\":\"4.30.0-rc2\"}}}",
+  "minted_by": "scripts/lean_export_mint.sh",
+  "modules": [
+    "Q2EdgeCases"
+  ],
+  "options": [],
+  "schema": "clean.lean_export_mint/1",
+  "script_sha256": "5e76ea608272c4d5eb804d33a996ddae5a8dfa8c456c8d7f575df74d6331717d",
+  "toolchain": "v4.30.0-rc2"
+}

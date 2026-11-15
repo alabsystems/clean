@@ -58,8 +58,9 @@
 //! chain. It states that `<LevelArc as Deref>::deref` — that is,
 //! `Option::as_deref` followed by `Option::expect` on a
 //! `LevelArc(Option<Arc<Level>>)` — loads the pointer out of the field it is
-//! given, traps if that pointer is null, and otherwise returns it. Five nodes:
-//! `load ptr`, `const null`, `icmp ne`, `assert`, `ret`. No gate can promote
+//! given, traps if that pointer is null, and otherwise returns that pointer
+//! offset by the `Arc` header. Seven nodes: `load ptr`, `const null`,
+//! `icmp ne`, `assert`, `const i64 16`, `gep`, `ret`. No gate can promote
 //! this to a derivation, because no artifact in this repository carries those
 //! two `core` bodies — measured, not assumed: both appear by name in the
 //! trust-ir text artifact, among 309 `std`/`core`/`alloc`-named entries, and
@@ -80,8 +81,39 @@
 //! body structurally — two `call`s — would not shrink the assumption; it would
 //! replace one clearly-stated semantic assumption with three (an `as_deref`
 //! model, an `expect` model, and the niche layout), none of them derivable.
-//! What is assumed here is exactly: `Option<Arc<Level>>`'s `None` is the null
-//! niche, and `as_deref().expect()` is load + null-check + assert.
+//! What is assumed here is exactly TWO things:
+//!
+//!   1. `Option<Arc<Level>>`'s `None` is the null niche.
+//!   2. `as_deref().expect()` is load + null-check + assert, and the pointer it
+//!      yields is the `Arc`'s DATA address.
+//!
+//! ## THE ARC DATA OFFSET — the third clause, and why it is gone
+//!
+//! Audit r16 M16-6 (2026-09-02) measured a THIRD assumption that four committed
+//! artifacts had enumerated away: the model returned the loaded field word
+//! UNCHANGED, so it computed `x` where the shipped function computes `&*x`.
+//! `<Arc<T> as Deref>::deref` yields the address of the Arc's DATA, past the
+//! strong and weak counts, which on this target is `stored_ptr + 16` — measured
+//! on stable rustc 1.97.1 aarch64-apple-darwin against a stand-in with `Level`'s
+//! recorded shape (size 40 / align 8): `stored=0x105459bf0`,
+//! `deref_result=0x105459c00`, `delta=16`.
+//!
+//! That clause was not weak, it was FALSE, and it made the relation
+//! unsatisfiable: `EncodesLevelArcF` was written to match the model, so under
+//! the byte-offset reading this repo pins in
+//! `tests/crystal_a1_lineage/level_is_zero.rs` no real `Level` heap satisfied it
+//! at a `Succ`/`Max`/`IMax` node — exactly the nodes link 4's content is about.
+//!
+//! **The strengthening is TAKEN here.** The model carries the missing
+//! `const i64 16` + `gep`, `EncodesLevelArcF` places each child at the Arc's
+//! data address rather than at the stored word, and the two `Eq.refl` cost
+//! equations it re-derives moved with it: `ir_lzb_cost_halts_max` 37 → **41**
+//! and `ir_lzb_cost_halts_imax` 20 → **22**, two more steps per deref frame,
+//! four frames in `Max` and one in `IMax`. Every one of those numbers is
+//! computed by the kernel, not asserted: an off-by-one is a build failure.
+//! `designs/2026-08-26-a0-semantic-no-escape.md` states the residual as the
+//! identity `Option::Some(x).as_deref().expect(_) == &*x`; the model now
+//! implements the right side.
 //!
 //! Two things keep the assumption honest rather than convenient:
 //! `ir_lzb_deref_refuses_none` computes `ub assert_failed` on a null field, so
@@ -131,7 +163,7 @@
 //! frames, with the short-circuit `&&` taking its then-edge.
 //!
 //! The `ir_lzb_cost_halts_*` witnesses pin the EXACT step count of each arm —
-//! 6, 6, 6, **37**, **20** — by `Eq.refl`, so the cost function the activation
+//! 6, 6, 6, **41**, **22** — by `Eq.refl`, so the cost function the activation
 //! induction will need is validated by computation before a line of it is
 //! written. An off-by-one is a build failure here, not a wrong theorem later.
 //!
@@ -142,8 +174,14 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
-/// The authored deref model: five nodes in one block, function id 1.
-const SRC_DEREF_B0: &str = "def ir_lzb_deref_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.load IRTy.ptr_ ir_d0 Bool.false) ir_d1) (IRList.cons IRNode (ir_nd1 (IRInst.const_ IRTy.ptr_ IRConst.null_) ir_d2) (ir_bd3 (ir_nd1 (IRInst.icmp IRICmpOp.ne_ IRTy.ptr_ ir_d1 ir_d2) ir_d3) (ir_nd (IRInst.assert ir_d3)) (ir_nd (IRInst.ret (ir_nl1 ir_d1))))))";
+/// The authored deref model: seven nodes in one block, function id 1.
+///
+/// The last two — `const i64 16` and a `gep` by it — are what make this model
+/// compute `&*x` rather than `x`. See the `ARC DATA OFFSET` section of the
+/// module doc: `<Arc<T> as Deref>::deref` returns the address of the Arc's
+/// DATA, past the strong/weak header, and a model that returned the loaded
+/// field word unchanged was describing a different function.
+const SRC_DEREF_B0: &str = "def ir_lzb_deref_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.load IRTy.ptr_ ir_d0 Bool.false) ir_d1) (IRList.cons IRNode (ir_nd1 (IRInst.const_ IRTy.ptr_ IRConst.null_) ir_d2) (IRList.cons IRNode (ir_nd1 (IRInst.icmp IRICmpOp.ne_ IRTy.ptr_ ir_d1 ir_d2) ir_d3) (IRList.cons IRNode (ir_nd (IRInst.assert ir_d3)) (ir_bd3 (ir_nd1 (IRInst.const_ (IRTy.int_ 64) (IRConst.int_ ir_d16)) ir_d4) (ir_nd1 (IRInst.gep (IRTy.int_ ir_d8) ir_d1 (ir_nl1 ir_d4) Bool.true) ir_d5) (ir_nd (IRInst.ret (ir_nl1 ir_d5))))))))";
 
 const SRC_DEREF: &str = "def ir_lzb_deref : IRFunc := IRFunc.mk ir_d1 (ir_nl1 ir_d0) ir_d0 (ir_blk ir_lzb_deref_b0 ir_blk0)";
 
@@ -152,13 +190,19 @@ const SRC_MODULE: &str = "def ir_lzb_module : IRModule := IRModule.mk (IRList.co
 
 const ARGS0: &str = "(ir_vl1 (IRScalar.ptr_ ir_d0))";
 
-/// Field-addressed heaps: the enum value at `a`, the two `LevelArc` pointers
-/// at `a+8` and `a+16`.
+/// Field-addressed heaps with the Arc header modelled: the enum value at `a`,
+/// the two `LevelArc` pointers at `a+8` and `a+16`, and each child `Level`
+/// SIXTEEN CELLS PAST the pointer stored in its field — where
+/// `<Arc<T> as Deref>::deref` looks, not where the field points.
+///
+/// So a field holding `ptr 1` names an Arc allocation at 1 whose `Level` sits
+/// at 17: cells 1 and 9 would be the strong and weak counts, and the machine
+/// never reads them, so the heaps do not carry them.
 const HEAP_ZERO: &str = "(ir_cell ir_d0 (ir_var ir_d0 ir_sp0) ir_mem0)";
-const HEAP_SUCC: &str = "(ir_cell ir_d0 (ir_var ir_d1 (ir_sp1 (IRScalar.ptr_ ir_d1))) (ir_cell ir_d8 (IRScalar.ptr_ ir_d1) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) ir_mem0)))";
+const HEAP_SUCC: &str = "(ir_cell ir_d0 (ir_var ir_d1 (ir_sp1 (IRScalar.ptr_ ir_d1))) (ir_cell ir_d8 (IRScalar.ptr_ ir_d1) (ir_cell ir_d17 (ir_var ir_d0 ir_sp0) ir_mem0)))";
 const HEAP_PARAM: &str = "(ir_cell ir_d0 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) ir_mem0)";
-const HEAP_MAXZZ: &str = "(ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d8 (IRScalar.ptr_ ir_d1) (ir_cell ir_d16 (IRScalar.ptr_ ir_d2) (ir_cell ir_d1 (ir_var ir_d0 ir_sp0) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0)))))";
-const HEAP_IMAXPZ: &str = "(ir_cell ir_d0 (ir_var ir_d3 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d8 (IRScalar.ptr_ ir_d1) (ir_cell ir_d16 (IRScalar.ptr_ ir_d2) (ir_cell ir_d1 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) (ir_cell ir_d2 (ir_var ir_d0 ir_sp0) ir_mem0)))))";
+const HEAP_MAXZZ: &str = "(ir_cell ir_d0 (ir_var ir_d2 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d8 (IRScalar.ptr_ ir_d1) (ir_cell ir_d16 (IRScalar.ptr_ ir_d2) (ir_cell ir_d17 (ir_var ir_d0 ir_sp0) (ir_cell ir_d18 (ir_var ir_d0 ir_sp0) ir_mem0)))))";
+const HEAP_IMAXPZ: &str = "(ir_cell ir_d0 (ir_var ir_d3 (ir_sp2 (IRScalar.ptr_ ir_d1) (IRScalar.ptr_ ir_d2))) (ir_cell ir_d8 (IRScalar.ptr_ ir_d1) (ir_cell ir_d16 (IRScalar.ptr_ ir_d2) (ir_cell ir_d17 (ir_var ir_d4 (ir_sp1 (IRScalar.int_ n))) (ir_cell ir_d18 (ir_var ir_d0 ir_sp0) ir_mem0)))))";
 const HEAP_NULLFIELD: &str = "(ir_cell ir_d8 IRScalar.nullptr_ ir_mem0)";
 
 const RET_TRUE: &str = "(IROutcome.ret (ir_vl1 (IRScalar.bool_ Bool.true)))";
@@ -207,7 +251,7 @@ impl Specification {
     /// Returns `SpecError` if any declaration fails to elaborate or
     /// kernel-check. A wrong step count in `halts` fails HERE, by computation.
     pub(super) fn add_eval_ir_lzb_module(&mut self) -> Result<(), SpecError> {
-        self.add_recursive_def(SRC_DEREF_B0, "ir_lzb_deref_b0: *** AN ASSUMPTION, LABELLED. *** The authored model of <LevelArc as Deref>::deref -- Option::as_deref followed by Option::expect on a LevelArc(Option<Arc<Level>>). Five nodes: load the pointer out of the FIELD ADDRESS it was given, compare it against null, assert non-null, return it. This is a STATED MODEL of two core functions the artifact carries as declarations ONLY -- re-measured 2026-08-26 from the trust-ir text artifact itself: Option::as_deref and Option::expect both appear there by name, among 309 std/core/alloc-named entries, and all 309 are EMPTY (a name, a `; #producer` line, 0 instructions between them). Three walls were long conflated here and only one is a floor: (1) rustc has no cross-crate THIR (thir_body takes a LocalDefId, no thir_of_instance) and (2) every body-producing path keys on is_local() -- both real, both BUILD ITEMS; (3) expect's closure ends at a declaration with no body ANYWHERE (expect -> expect_failed -> panic_display -> panic_fmt -> panic_impl, and panic_impl is `unsafe extern \"Rust\"` in core/src/panicking.rs:67-70, supplied at link time from std/src/panicking.rs:611) -- that one is the FLOOR, and no lowering fixes it. Note what this model is NOT: splitting it into separate as_deref and expect models would not shrink the assumption, it would turn one clearly-stated semantic assumption into three (two unavailable callee models plus the niche layout), so the collapse here is deliberate. What it assumes is exactly: Option<Arc<Level>>'s None is the null niche, and as_deref().expect() is load + null-check + assert. No gate in this repository can promote it to a derivation and none is claimed to; it is the residual of the whole chain. The assert is load-bearing, not decoration: ir_lzb_deref_refuses_none computes ub assert_failed on a null field. DerivedProved, zero axiom_deps.")?;
+        self.add_recursive_def(SRC_DEREF_B0, "ir_lzb_deref_b0: *** AN ASSUMPTION, LABELLED. *** The authored model of <LevelArc as Deref>::deref -- Option::as_deref followed by Option::expect on a LevelArc(Option<Arc<Level>>). Seven nodes: load the pointer out of the FIELD ADDRESS it was given, compare it against null, assert non-null, then gep it by the Arc header (const i64 16) and return THAT -- the Arc's DATA address, which is what <Arc<T> as Deref>::deref yields and what the recursive call is then entered at. This is a STATED MODEL of two core functions the artifact carries as declarations ONLY -- re-measured 2026-08-26 from the trust-ir text artifact itself: Option::as_deref and Option::expect both appear there by name, among 309 std/core/alloc-named entries, and all 309 are EMPTY (a name, a `; #producer` line, 0 instructions between them). Three walls were long conflated here and only one is a floor: (1) rustc has no cross-crate THIR (thir_body takes a LocalDefId, no thir_of_instance) and (2) every body-producing path keys on is_local() -- both real, both BUILD ITEMS; (3) expect's closure ends at a declaration with no body ANYWHERE (expect -> expect_failed -> panic_display -> panic_fmt -> panic_impl, and panic_impl is `unsafe extern \"Rust\"` in core/src/panicking.rs:67-70, supplied at link time from std/src/panicking.rs:611) -- that one is the FLOOR, and no lowering fixes it. Note what this model is NOT: splitting it into separate as_deref and expect models would not shrink the assumption, it would turn one clearly-stated semantic assumption into three (two unavailable callee models plus the niche layout), so the collapse here is deliberate. What it assumes is exactly: Option<Arc<Level>>'s None is the null niche, and as_deref().expect() is load + null-check + assert + the Arc data offset. The THIRD clause audit r16 M16-6 measured -- that the stored field word IS the child's address, which was FALSE by 16 bytes -- is discharged rather than stated: the gep is in the body above, EncodesLevelArcF places each child at stored+16 to match, and the two Eq.refl cost equations moved 37 -> 41 and 20 -> 22. No gate in this repository can promote it to a derivation and none is claimed to; it is the residual of the whole chain. The assert is load-bearing, not decoration: ir_lzb_deref_refuses_none computes ub assert_failed on a null field. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_DEREF, "ir_lzb_deref: the deref model as a function at canonical id 1 -- the id the minted body's three `call 1` sites name, pinned to <level::LevelArc as std::ops::Deref>::deref (crate id 3894) by the committed tag table's funcs lane and by tests/crystal_a2_mint/callee_identity.rs. One ptr parameter, one block, entry b0. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_MODULE, "ir_lzb_module: the designated target's minted body WITH a deref model beside it -- Option B's module. Function 0 is ir_lz_func, the MINTED term, by name: there is no second transcription of the emitted body anywhere in this file, and ir_lzb_func0_is_minted is the kernel-checked equation that says so. Function 1 is the authored assumption. \
 \
@@ -229,8 +273,8 @@ It is a THIRD module and not an edit of ir_lz_module because FOUR gates refuse a
         }
 
         self.add_recursive_def(
-            &witness("ir_lzb_deref_reads_the_field", "", "ir_d1", "(ir_vl1 (IRScalar.ptr_ ir_d8))", HEAP_MAXZZ, "ir_d17", "(IROutcome.ret (ir_vl1 (IRScalar.ptr_ ir_d1)))"),
-            "ir_lzb_deref_reads_the_field: the model in isolation. Entered at the FIELD ADDRESS the minted b4 geps to (cell 8 of the Max(Zero, Zero) heap), it returns the child pointer stored there. Five steps, and the null check decides true. DerivedProved, zero axiom_deps.",
+            &witness("ir_lzb_deref_reads_the_field", "", "ir_d1", "(ir_vl1 (IRScalar.ptr_ ir_d8))", HEAP_MAXZZ, "ir_d17", "(IROutcome.ret (ir_vl1 (IRScalar.ptr_ ir_d17)))"),
+            "ir_lzb_deref_reads_the_field: the model in isolation. Entered at the FIELD ADDRESS the minted b4 geps to (cell 8 of the Max(Zero, Zero) heap), it loads the pointer stored there and returns that pointer PLUS THE ARC HEADER -- ptr 1 in the field, ptr 17 out, which is where the child Level lives. Seven steps: the five that check the field, then the const and the gep that make the answer the Arc's DATA address rather than the stored word. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
             &witness("ir_lzb_deref_refuses_none", "", "ir_d1", "(ir_vl1 (IRScalar.ptr_ ir_d8))", HEAP_NULLFIELD, "ir_d9", "(IROutcome.ub IRFault.assert_failed)"),
@@ -268,8 +312,8 @@ It is a THIRD module and not an edit of ir_lz_module because FOUR gates refuse a
             ("ir_lzb_cost_halts_zero", "", HEAP_ZERO, "ir_d1", 6u32, "true", "ir_lzb_cost_halts_zero: SIX steps exactly -- b0's load, extractfield and switch, b1's const and br, and b6's ret. The hand model's leaf cost was five, because it returned from the arm instead of branching to a join. Eq.refl on a CONFIGURATION, so the count is pinned, not bounded. DerivedProved, zero axiom_deps."),
             ("ir_lzb_cost_halts_succ", "", HEAP_SUCC, "ir_d9", 6, "false", "ir_lzb_cost_halts_succ: six, through b2. DerivedProved, zero axiom_deps."),
             ("ir_lzb_cost_halts_param", "(n : Nat) ", HEAP_PARAM, "ir_d1", 6, "false", "ir_lzb_cost_halts_param: six for every n, through b3 -- which the emitted body does not share with b2, so the equal count is a coincidence of length and not of path. DerivedProved, zero axiom_deps."),
-            ("ir_lzb_cost_halts_max", "", HEAP_MAXZZ, "ir_d17", 37, "true", "ir_lzb_cost_halts_max: *** THIRTY-SEVEN STEPS. *** The interesting count. Four frame pushes and pops (two deref, two self), two field geps, two null checks, a CondBr taking its then-edge, and two joins. 14 before the first self activation, 6 for it, 11 after including the second deref and self pair at 6 + 6. This is the arithmetic ir_lzb_cost must reproduce, VALIDATED BY THE KERNEL before the cost function is written -- an off-by-one is a build failure here rather than a wrong theorem in the activation induction later. DerivedProved, zero axiom_deps."),
-            ("ir_lzb_cost_halts_imax", "(n : Nat) ", HEAP_IMAXPZ, "ir_d17", 20, "true", "ir_lzb_cost_halts_imax: twenty, for every n: 12 before the self activation on the second operand, 6 for it, 2 after. One deref frame and one self frame. DerivedProved, zero axiom_deps."),
+            ("ir_lzb_cost_halts_max", "", HEAP_MAXZZ, "ir_d17", 41, "true", "ir_lzb_cost_halts_max: *** FORTY-ONE STEPS. *** The interesting count. Four frame pushes and pops (two deref, two self), two field geps, two null checks, two ARC-HEADER geps inside the deref frames, a CondBr taking its then-edge, and two joins. 16 before the first self activation, 6 for it, 13 after including the second deref and self pair at 8 + 6. It read 37 while the deref model returned the stored word unchanged; the two extra nodes that make it return the Arc DATA address cost two steps per deref frame, and there are two. This is the arithmetic ir_lzb_cost must reproduce, VALIDATED BY THE KERNEL before the cost function is written -- an off-by-one is a build failure here rather than a wrong theorem in the activation induction later. DerivedProved, zero axiom_deps."),
+            ("ir_lzb_cost_halts_imax", "(n : Nat) ", HEAP_IMAXPZ, "ir_d17", 22, "true", "ir_lzb_cost_halts_imax: twenty-two, for every n: 14 before the self activation on the second operand, 6 for it, 2 after. One deref frame and one self frame; the deref pays 8 rather than the 6 it paid before the Arc-header gep landed. DerivedProved, zero axiom_deps."),
         ] {
             self.add_recursive_def(&halts(name, binder, heap, na, steps, ans), doc)?;
         }

@@ -12,7 +12,7 @@
     "total_declarations_in_records": "Sum of declarations over the provenance records that have a populated declarations field."
   },
   "census_target_repos": 238,
-  "importer_source_systems": 69,
+  "importer_source_systems": 70,
   "provenance_records": 131,
   "shards_produced": 107,
   "total_declarations_census": 30049434,

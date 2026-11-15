@@ -50,7 +50,13 @@ pub enum MintError {
     #[error(transparent)]
     Core(#[from] CoreError),
     /// A numeral with no atom in the registered `ir_dN` pool.
-    #[error("numeral {0} is outside the registered ir_d0..ir_d63 atom pool; minting it would need a pool entry this change does not add")]
+    // `max` is a NAMED argument deliberately: an implicit `{}` beside an
+    // explicit `{0}` would resolve to the numeral, not to the bound, and the
+    // message would be wrong in a new way while still reading plausibly.
+    #[error(
+        "numeral {0} is outside the registered ir_d0..ir_d{max} atom pool; minting it would need a pool entry this change does not add",
+        max = super::mint::MAX_STRUCTURAL_ATOM
+    )]
     Numeral(u128),
 }
 

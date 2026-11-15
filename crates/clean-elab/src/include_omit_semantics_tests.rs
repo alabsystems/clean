@@ -13,7 +13,8 @@
 //! models include/omit, but it is NOT the live path — nothing outside its own
 //! tests constructs one — and its model is the older "auto-include everything,
 //! `omit` excludes" one rather than Lean's current mention-based inclusion.
-//! The live path is `used_section_binders` + `FileContext::apply_include`,
+//! The live path is `section_var_selection::select_section_binders` +
+//! `FileContext::apply_include`,
 //! which is what these tests exercise.
 
 use crate::{preprocess_decl_with_context, FileContext};
@@ -21,7 +22,7 @@ use clean_parser::{parse_file, SurfaceDecl};
 
 /// Preprocess every declaration in `code` against one file context and return
 /// the binder names each value declaration ends up carrying.
-fn binder_names(code: &str) -> Vec<(String, Vec<String>)> {
+fn binder_names(code: &str) -> Vec<(clean_parser::SurfaceName, Vec<clean_parser::SurfaceName>)> {
     let decls = parse_file(code).expect("parses");
     let mut fc = FileContext::new();
     let mut out = Vec::new();
@@ -37,10 +38,10 @@ fn binder_names(code: &str) -> Vec<(String, Vec<String>)> {
     out
 }
 
-fn binders_of(code: &str, theorem: &str) -> Vec<String> {
+fn binders_of(code: &str, theorem: &'static str) -> Vec<clean_parser::SurfaceName> {
     binder_names(code)
         .into_iter()
-        .find(|(n, _)| n == theorem)
+        .find(|(n, _)| n.name() == &clean_kernel::Name::from_string(theorem))
         .unwrap_or_else(|| panic!("no theorem `{theorem}`"))
         .1
 }
@@ -50,7 +51,10 @@ fn binders_of(code: &str, theorem: &str) -> Vec<String> {
 #[test]
 fn test_unmentioned_section_variable_is_not_included_by_default() {
     let code = "variable {α : Type} (h : α)\ntheorem t : True := trivial\n";
-    assert_eq!(binders_of(code, "t"), Vec::<String>::new());
+    assert_eq!(
+        binders_of(code, "t"),
+        Vec::<clean_parser::SurfaceName>::new()
+    );
 }
 
 /// `include h` forces `h` in even though `t` never mentions it — the whole
@@ -62,7 +66,10 @@ fn test_include_forces_an_unmentioned_variable_in() {
     let code = "variable {α : Type} (h : α)\ninclude h\ntheorem t : True := trivial\n";
     assert_eq!(
         binders_of(code, "t"),
-        vec!["α".to_string(), "h".to_string()]
+        vec![
+            clean_parser::SurfaceName::generated_path("α"),
+            clean_parser::SurfaceName::generated_path("h")
+        ]
     );
 }
 
@@ -74,7 +81,11 @@ fn test_include_closes_over_type_dependencies() {
         "variable {α : Type} {f : α → α} (h : Foo f)\ninclude h\ntheorem t : True := trivial\n";
     assert_eq!(
         binders_of(code, "t"),
-        vec!["α".to_string(), "f".to_string(), "h".to_string()],
+        vec![
+            clean_parser::SurfaceName::generated_path("α"),
+            clean_parser::SurfaceName::generated_path("f"),
+            clean_parser::SurfaceName::generated_path("h")
+        ],
         "including `h` must also bring in what `h`'s type needs"
     );
 }
@@ -98,7 +109,7 @@ fn test_omit_cancels_a_preceding_include() {
                 theorem after : True := trivial\n";
     assert_eq!(
         binders_of(code, "after"),
-        Vec::<String>::new(),
+        Vec::<clean_parser::SurfaceName>::new(),
         "`omit h` cancels the `include h` above it, so `after` — which never \
          mentions `h` — carries nothing"
     );
@@ -114,20 +125,31 @@ fn test_control_without_omit_the_include_still_reaches_the_declaration() {
                 theorem after : True := trivial\n";
     assert_eq!(
         binders_of(code, "after"),
-        vec!["α".to_string(), "h".to_string()]
+        vec![
+            clean_parser::SurfaceName::generated_path("α"),
+            clean_parser::SurfaceName::generated_path("h")
+        ]
     );
 }
 
-/// A declaration's OWN binder of the same name still shadows the section
-/// variable — `include` does not override shadowing.
+/// `include` keeps the variable by IDENTITY: a theorem binder of the same
+/// name shadows the section `h` inside the theorem, but does not un-include it.
+/// Lean (`withHeaderSecVars`, `Lean/Elab/MutualDef.lean:466-470`, keyed on the
+/// variable's unique id) measured on the pinned v4.30.0-rc2:
+/// `@t : ∀ {α : Type} (h : α), True → True`, with the `unusedSectionVars`
+/// linter naming the included `h✝`. So the theorem carries the included `h`,
+/// `α` through it, and then its own `h`.
 #[test]
-fn test_own_binder_shadows_an_included_variable() {
+fn test_own_binder_does_not_uninclude_an_included_variable() {
     let code = "variable {α : Type} (h : α)\ninclude h\ntheorem t (h : True) : True := h\n";
     assert_eq!(
         binders_of(code, "t"),
-        vec!["h".to_string()],
-        "exactly one `h`: the declaration's own. `α` does not come either — it \
-         was only ever reachable THROUGH the shadowed `h`"
+        vec![
+            clean_parser::SurfaceName::generated_path("α"),
+            clean_parser::SurfaceName::generated_path("h"),
+            clean_parser::SurfaceName::generated_path("h"),
+        ],
+        "the included `h` (with the `α` it needs), then the theorem's own `h`"
     );
 }
 
@@ -142,8 +164,11 @@ fn test_own_binder_shadows_an_included_variable() {
 fn test_include_dies_with_its_section() {
     let mut fc = FileContext::new();
     fc.enter_section();
-    fc.include_variables(&["h".to_string()]);
-    assert_eq!(fc.included_variables(), ["h".to_string()]);
+    fc.include_variables(&[clean_parser::SurfaceName::generated_path("h")]);
+    assert_eq!(
+        fc.included_variables(),
+        [clean_parser::SurfaceName::generated_path("h")]
+    );
     fc.exit_section();
     assert!(
         fc.included_variables().is_empty(),
@@ -156,15 +181,21 @@ fn test_include_dies_with_its_section() {
 fn test_nested_section_restores_the_outer_include_set() {
     let mut fc = FileContext::new();
     fc.enter_section();
-    fc.include_variables(&["outer".to_string()]);
+    fc.include_variables(&[clean_parser::SurfaceName::generated_path("outer")]);
     fc.enter_section();
-    fc.include_variables(&["inner".to_string()]);
+    fc.include_variables(&[clean_parser::SurfaceName::generated_path("inner")]);
     assert_eq!(
         fc.included_variables(),
-        ["outer".to_string(), "inner".to_string()]
+        [
+            clean_parser::SurfaceName::generated_path("outer"),
+            clean_parser::SurfaceName::generated_path("inner")
+        ]
     );
     fc.exit_section();
-    assert_eq!(fc.included_variables(), ["outer".to_string()]);
+    assert_eq!(
+        fc.included_variables(),
+        [clean_parser::SurfaceName::generated_path("outer")]
+    );
 }
 
 /// `include a b` includes both.
@@ -173,7 +204,10 @@ fn test_include_several_names() {
     let code = "variable (a : Nat) (b : Nat)\ninclude a b\ntheorem t : True := trivial\n";
     assert_eq!(
         binders_of(code, "t"),
-        vec!["a".to_string(), "b".to_string()]
+        vec![
+            clean_parser::SurfaceName::generated_path("a"),
+            clean_parser::SurfaceName::generated_path("b")
+        ]
     );
 }
 
@@ -199,7 +233,7 @@ fn test_involutive_shape_keeps_the_typed_h() {
     let h = fc
         .current_variables()
         .iter()
-        .filter(|b| b.name == "h")
+        .filter(|b| b.name == clean_parser::SurfaceName::generated_path("h"))
         .collect::<Vec<_>>();
     assert_eq!(h.len(), 1, "exactly one section variable named `h`");
     assert!(
@@ -207,11 +241,85 @@ fn test_involutive_shape_keeps_the_typed_h() {
         "`h` must keep its type; an untyped `h` here is the fail-open"
     );
     assert!(
-        fc.current_variables().iter().all(|b| b.name != "include"),
+        fc.current_variables()
+            .iter()
+            .all(|b| b.name != clean_parser::SurfaceName::generated_path("include")),
         "`include` must never become a section variable: {:?}",
         fc.current_variables()
             .iter()
             .map(|b| &b.name)
             .collect::<Vec<_>>()
+    );
+}
+
+/// The binder names a declaration of ANY kind ends up carrying.
+///
+/// [`binder_names`] reads `Theorem` only; instance activation is the rule that
+/// bit us, and it bit an `instance`.
+fn instance_binders(
+    code: &str,
+    instance_name: &clean_parser::SurfaceName,
+) -> Vec<clean_parser::SurfaceName> {
+    let decls = parse_file(code).expect("parses");
+    let mut fc = FileContext::new();
+    for decl in &decls {
+        let processed = preprocess_decl_with_context(decl, &mut fc);
+        if let SurfaceDecl::Instance { name, binders, .. } = &processed {
+            if name.as_ref() == Some(instance_name) {
+                return binders.iter().map(|b| b.name.clone()).collect();
+            }
+        }
+    }
+    panic!("no instance `{instance_name}`");
+}
+
+/// INSTANCE ACTIVATION IS KEYED ON A USED SECTION VARIABLE, not on any used name.
+///
+/// `used` is seeded from a declaration's free identifiers, which includes the
+/// CLASS CONSTANT. So `variable {α : Type} [Tagd α]` followed by
+/// `instance : Tagd Nat := …` activated `[Tagd α]` on the `Tagd` in the
+/// instance's OWN class type, and the dependency step then pulled in `α`. The
+/// instance registered as `∀ {α} [Tagd α], Tagd Nat`, which cannot inhabit
+/// `Tagd Nat` without first inhabiting `Tagd α` — so the only candidate for the
+/// goal was unusable and every `Tagd Nat` synthesis in the file failed
+/// (`user_class_projection_e2e::b06_p08_variable_instance_pin`).
+///
+/// Lean includes an instance-implicit variable when its type mentions a
+/// VARIABLE that is already included. A class constant is not a variable.
+#[test]
+fn a_class_name_does_not_activate_its_own_section_instance_binder() {
+    let code = "class Tagd (a : Type) where\n  tag : a -> Nat\n\n\
+                variable {a : Type} [Tagd a]\n\n\
+                instance instTagdNat : Tagd Nat := ⟨fun n => n + 5⟩\n";
+    assert_eq!(
+        instance_binders(
+            code,
+            &clean_parser::SurfaceName::generated_path("instTagdNat")
+        ),
+        Vec::<clean_parser::SurfaceName>::new(),
+        "the instance mentions neither `a` nor the `[Tagd a]` binder, so Lean \
+         binds neither"
+    );
+}
+
+/// The other direction, which the activation exists FOR and must not lose: a
+/// declaration that genuinely uses the section variable still drags the
+/// instance binder in with it.
+#[test]
+fn a_used_section_variable_still_activates_its_instance_binder() {
+    let code = "class Tagd (a : Type) where\n  tag : a -> Nat\n\n\
+                variable {a : Type} [Tagd a]\n\n\
+                theorem tagOf (x : a) : Tagd.tag x = Tagd.tag x := rfl\n";
+    let binders = binders_of(code, "tagOf");
+    assert!(
+        binders
+            .iter()
+            .any(|b| b == &clean_parser::SurfaceName::generated_path("a")),
+        "`a` is used by `(x : a)` and must be bound: {binders:?}"
+    );
+    assert_eq!(
+        binders.len(),
+        3,
+        "`a`, the activated `[Tagd a]`, and the declaration's own `x`: {binders:?}"
     );
 }

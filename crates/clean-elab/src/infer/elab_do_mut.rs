@@ -53,7 +53,7 @@ use clean_parser::{DoElem, SurfaceBinder, SurfaceBinderInfo};
 struct ForAccState {
     /// Sorted accumulator variable names. May be EMPTY for a B96 loop whose
     /// only accumulator content is the early-return `Option` slot.
-    vars: Vec<String>,
+    vars: Vec<SurfaceName>,
     /// Types parallel to `vars`.
     tys: Vec<Expr>,
     /// The mut-only pack type: `tys[0]` itself when single (B23,
@@ -70,7 +70,7 @@ struct ForAccState {
 
 impl<'a> ElabCtx<'a> {
     /// Type of the most-recent local named `name`, if in scope.
-    fn lookup_local_ty(&self, name: &str) -> Option<Expr> {
+    fn lookup_local_ty(&self, name: &SurfaceName) -> Option<Expr> {
         self.locals
             .iter()
             .rev()
@@ -79,7 +79,7 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// FVarId of the most-recent local named `name`, if in scope.
-    fn lookup_local_fvar(&self, name: &str) -> Option<FVarId> {
+    fn lookup_local_fvar(&self, name: &SurfaceName) -> Option<FVarId> {
         self.locals
             .iter()
             .rev()
@@ -87,7 +87,7 @@ impl<'a> ElabCtx<'a> {
             .map(|(_, fvar, _)| *fvar)
     }
 
-    fn immutable_reassign_err(name: &str) -> ElabError {
+    fn immutable_reassign_err(name: &SurfaceName) -> ElabError {
         ElabError::Unsupported {
             feature: format!(
                 "reassignment of immutable variable `{name}` — only `let mut` \
@@ -129,7 +129,7 @@ impl<'a> ElabCtx<'a> {
     /// immutable variable" (do_notation/p19).
     pub(super) fn elab_do_reassign_pure(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         val: &SurfaceExpr,
         rest: &[DoElem],
     ) -> Result<Expr, ElabError> {
@@ -148,13 +148,13 @@ impl<'a> ElabCtx<'a> {
         // term to the kernel (Lean parity, do_notation/p19-adjacent).
         let val_expr = self.elaborate_with_expected_type(val, Some(ty.clone()))?;
         self.enforce_expr_type(&val_expr, &ty)?;
-        let fvar = self.push_local(name.to_string(), ty.clone());
+        let fvar = self.push_local(name.clone(), ty.clone());
         let rest_expr = self.elab_do_elems(rest)?;
         self.pop_local();
         let rest_inst = self.metas.instantiate(&rest_expr);
         let body_abs = rest_inst.abstract_fvar(fvar);
         Ok(Expr::let_named(
-            Name::from_string(name),
+            name.name().clone(),
             ty,
             val_expr,
             body_abs,
@@ -169,7 +169,7 @@ impl<'a> ElabCtx<'a> {
     fn elab_pure_state_branch_value(
         &mut self,
         branch: &[DoElem],
-        yield_var: &str,
+        yield_var: &SurfaceName,
     ) -> Result<Expr, ElabError> {
         match branch {
             [] => {
@@ -198,7 +198,7 @@ impl<'a> ElabCtx<'a> {
                 let rest_inst = self.metas.instantiate(&rest_val);
                 let body_abs = rest_inst.abstract_fvar(fvar);
                 Ok(Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     ty,
                     val_expr,
                     body_abs,
@@ -225,11 +225,45 @@ impl<'a> ElabCtx<'a> {
                 let rest_inst = self.metas.instantiate(&rest_val);
                 let body_abs = rest_inst.abstract_fvar(fvar);
                 Ok(Expr::let_named(
-                    Name::from_string(&binder.name),
+                    binder.name.name().clone(),
                     ty,
                     val_expr,
                     body_abs,
                     false,
+                ))
+            }
+            [DoElem::Have(_, binder, val), rest @ ..] => {
+                let (ty, val_expr) = match &binder.ty {
+                    Some(t) => {
+                        let ty = self.elaborate(t)?;
+                        let val_expr = self.elaborate_with_expected_type(val, Some(ty.clone()))?;
+                        (ty, val_expr)
+                    }
+                    None => {
+                        let val_expr = self.elaborate_with_expected_type(val, None)?;
+                        let ty = self.infer_type(&val_expr)?;
+                        (ty, val_expr)
+                    }
+                };
+                let fvar = self.fresh_fvar();
+                self.push_local_let_with_fvar(
+                    binder.name.clone(),
+                    fvar,
+                    ty.clone(),
+                    crate::tactic::have_value(val_expr.clone()),
+                );
+                self.capture_binder_info(binder, fvar);
+                let rest_val = self.elab_pure_state_branch_value(rest, yield_var);
+                self.pop_local();
+                let rest_val = rest_val?;
+                let rest_inst = self.metas.instantiate(&rest_val);
+                let body_abs = rest_inst.abstract_fvar(fvar);
+                Ok(Expr::let_named(
+                    binder.name.name().clone(),
+                    ty,
+                    val_expr,
+                    body_abs,
+                    true,
                 ))
             }
             _ => Err(ElabError::Unsupported {
@@ -326,6 +360,42 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
+        // TERMINAL `if … then T else E` (nothing follows it in this block,
+        // outside any loop body) whose branches are complete sub-blocks — one
+        // returns, or one ends in a value rather than a reassignment: each
+        // branch's value IS the block's value, so no `mut` state has to be
+        // joined across it — `let mut` reassignments inside a branch are its
+        // own `let`-shadowing, and a `return` in it ends the block either
+        // way. Lowers to `ite cond ⟦T⟧ ⟦E⟧` (Lean's `doIf` with no
+        // continuation). `if a then x := 5; pure x else ⏎ if b then x := 2 ⏎
+        // x := x + 10 ⏎ return x` (Lean 4.8: `5`, `10`, `12`) fell to the LOUD
+        // refusal below. Two reassignment-only branches keep the
+        // single-variable join.
+        let straight_line = |branch: &[DoElem]| {
+            branch.iter().all(|elem| {
+                matches!(
+                    elem,
+                    DoElem::Reassign(..) | DoElem::Let(..) | DoElem::Have(..) | DoElem::LetMut(..)
+                )
+            })
+        };
+        let sub_blocks = then_info.returns_early
+            || else_info.returns_early
+            || !straight_line(then_branch)
+            || else_branch.is_some_and(|branch| !straight_line(branch));
+        let terminal = rest.is_empty() && self.do_loop_ctx.is_none() && sub_blocks;
+        if let Some(else_elems) = else_branch.filter(|_| terminal) {
+            let result_ty = self.current_expected_type.clone();
+            let cond_expr = self.elaborate_with_expected_type(cond, None)?;
+            let then_expr = self.elab_do_elems(then_branch)?;
+            let else_expr = self.elab_do_elems(else_elems)?;
+            let result_ty = match result_ty {
+                Some(result_ty) => result_ty,
+                None => self.infer_type(&then_expr)?,
+            };
+            return self.mk_do_ite(cond_expr, then_expr, else_expr, result_ty);
+        }
+
         // Single-variable mut join: both branches only reassign one mut var.
         if then_info.returns_early || else_info.returns_early {
             return Err(ElabError::Unsupported {
@@ -334,7 +404,7 @@ impl<'a> ElabCtx<'a> {
                     .into(),
             });
         }
-        let mut mutated: Vec<String> = then_info
+        let mut mutated: Vec<SurfaceName> = then_info
             .reassigns
             .union(&else_info.reassigns)
             .cloned()
@@ -367,7 +437,7 @@ impl<'a> ElabCtx<'a> {
             let rest_inst = self.metas.instantiate(&rest_expr);
             let body_abs = rest_inst.abstract_fvar(fvar);
             return Ok(Expr::let_named(
-                Name::from_string(&var),
+                var.name().clone(),
                 var_ty,
                 joined,
                 body_abs,
@@ -508,11 +578,11 @@ impl<'a> ElabCtx<'a> {
         // loop, in deterministic sorted-name order. A reassigned variable
         // declared by `let mut` INSIDE the body is fresh per iteration — the
         // step walker threads it; it never accumulates across iterations.
-        let mut reassigned: Vec<String> = body_info.reassigns.iter().cloned().collect();
+        let mut reassigned: Vec<SurfaceName> = body_info.reassigns.iter().cloned().collect();
         reassigned.sort();
-        let mut body_local_muts: Vec<String> = Vec::new();
+        let mut body_local_muts: Vec<SurfaceName> = Vec::new();
         collect_do_mut_var_names(body, &mut body_local_muts);
-        let mut vars: Vec<String> = Vec::new();
+        let mut vars: Vec<SurfaceName> = Vec::new();
         for name in reassigned {
             let declared_in_body = body_local_muts.contains(&name);
             let in_scope = self.lookup_local_fvar(&name).is_some();
@@ -764,25 +834,21 @@ impl<'a> ElabCtx<'a> {
             rest_inst.abstract_fvar(fvar_cont),
         );
 
-        // @Bind.bind.{do_u,do_v} m β bind_alpha fold cont
-        let bind_const = Expr::const_(Name::from_string("Bind.bind"), vec![do_u, do_v]);
-        Ok(Expr::apps(
-            bind_const,
-            [m, accs.beta.clone(), bind_alpha, fold, cont],
-        ))
+        // @Bind.bind.{do_u,do_v} m ?inst β bind_alpha fold cont
+        Ok(self.mk_bind_term(do_u, do_v, m, accs.beta.clone(), bind_alpha, fold, cont))
     }
 
     /// Name of the accumulator lambda local: the variable itself when single
     /// (B23 shadowing), a reserved packed name when several (B93) or when the
     /// accumulator carries the early-return `Option` layer (B96 — the local
     /// is then never a plain mut variable, even with a single accumulator).
-    fn acc_local_name(accs: &ForAccState) -> String {
+    fn acc_local_name(accs: &ForAccState) -> SurfaceName {
         if accs.tunnel.is_some() {
-            return "__b96_acc".to_string();
+            return SurfaceName::unspellable("__b96_acc", 0);
         }
         match accs.vars.as_slice() {
             [only] => only.clone(),
-            _ => "__b23_acc".to_string(),
+            _ => SurfaceName::unspellable("__b23_acc", 0),
         }
     }
 
@@ -902,18 +968,15 @@ impl<'a> ElabCtx<'a> {
 
         // some r → `pure r` at do-block level; nested, tunnel onward through
         // the enclosing loop's Option slot.
-        let fvar_r = self.push_local("__b96_ret".to_string(), ret_ty.clone());
+        let fvar_r = self.push_local(SurfaceName::unspellable("__b96_ret", 0), ret_ty.clone());
         let some_val = match outer {
-            None => {
-                let pure_const = Expr::const_(
-                    Name::from_string("Pure.pure"),
-                    vec![do_u.clone(), do_v.clone()],
-                );
-                Ok(Expr::apps(
-                    pure_const,
-                    [m.clone(), ret_ty.clone(), Expr::fvar(fvar_r)],
-                ))
-            }
+            None => Ok(self.mk_pure_term(
+                do_u.clone(),
+                do_v.clone(),
+                m.clone(),
+                ret_ty.clone(),
+                Expr::fvar(fvar_r),
+            )),
             Some(o) => self
                 .pack_step_acc(o, Some(Expr::fvar(fvar_r)))
                 .map(|acc_val| self.mk_pure_for_in_step(m, &o.beta, do_u, do_v, true, acc_val)),
@@ -993,7 +1056,7 @@ impl<'a> ElabCtx<'a> {
     /// reduces on `Prod.mk`), so `rfl` value pins compute.
     fn bind_acc_projection_lets(
         &mut self,
-        vars: &[String],
+        vars: &[SurfaceName],
         tys: &[Expr],
         pack: Expr,
         k: impl FnOnce(&mut Self) -> Result<Expr, ElabError>,
@@ -1022,7 +1085,7 @@ impl<'a> ElabCtx<'a> {
         let inner = inner?;
         let inner_inst = self.metas.instantiate(&inner);
         Ok(Expr::let_named(
-            Name::from_string(var),
+            var.name().clone(),
             ty.clone(),
             val,
             inner_inst.abstract_fvar(fvar),
@@ -1083,7 +1146,8 @@ impl<'a> ElabCtx<'a> {
                 feature: format!(
                     "multi-accumulator `for` loops pack accumulators in `Prod`, \
                      which needs every accumulator type in `Type _`; this type's \
-                     sort is `Sort {sort:?}` (B93)"
+                     sort is `Sort {}` (B93)",
+                    crate::error_render::level(&sort)
                 ),
             }),
         }
@@ -1168,7 +1232,7 @@ impl<'a> ElabCtx<'a> {
                 let rest_val = rest_val?;
                 let rest_inst = self.metas.instantiate(&rest_val);
                 Ok(Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     ty,
                     val_expr,
                     rest_inst.abstract_fvar(fvar),
@@ -1194,11 +1258,46 @@ impl<'a> ElabCtx<'a> {
                 let rest_val = rest_val?;
                 let rest_inst = self.metas.instantiate(&rest_val);
                 Ok(Expr::let_named(
-                    Name::from_string(&binder.name),
+                    binder.name.name().clone(),
                     ty,
                     val_expr,
                     rest_inst.abstract_fvar(fvar),
                     false,
+                ))
+            }
+            // An opaque have retains its value for scope/proof assembly,
+            // including in this pure loop-body continuation.
+            [DoElem::Have(_, binder, val), rest @ ..] => {
+                let (ty, val_expr) = match &binder.ty {
+                    Some(t) => {
+                        let ty = self.elaborate(t)?;
+                        let val_expr = self.elaborate_with_expected_type(val, Some(ty.clone()))?;
+                        (ty, val_expr)
+                    }
+                    None => {
+                        let val_expr = self.elaborate_with_expected_type(val, None)?;
+                        let ty = self.infer_type(&val_expr)?;
+                        (ty, val_expr)
+                    }
+                };
+                let fvar = self.fresh_fvar();
+                self.push_local_let_with_fvar(
+                    binder.name.clone(),
+                    fvar,
+                    ty.clone(),
+                    crate::tactic::have_value(val_expr.clone()),
+                );
+                self.capture_binder_info(binder, fvar);
+                let rest_val = self.elab_do_for_step_value(rest, accs, m, do_u, do_v);
+                self.pop_local();
+                let rest_val = rest_val?;
+                let rest_inst = self.metas.instantiate(&rest_val);
+                Ok(Expr::let_named(
+                    binder.name.name().clone(),
+                    ty,
+                    val_expr,
+                    rest_inst.abstract_fvar(fvar),
+                    true,
                 ))
             }
             // A body-local `let mut` is fresh per iteration: bind it exactly
@@ -1223,7 +1322,7 @@ impl<'a> ElabCtx<'a> {
                 let rest_val = rest_val?;
                 let rest_inst = self.metas.instantiate(&rest_val);
                 Ok(Expr::let_named(
-                    Name::from_string(&binder.name),
+                    binder.name.name().clone(),
                     ty,
                     val_expr,
                     rest_inst.abstract_fvar(fvar),
@@ -1284,7 +1383,7 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// The current value of the loop accumulator `var` (its innermost local).
-    fn current_acc_value(&self, var: &str) -> Result<Expr, ElabError> {
+    fn current_acc_value(&self, var: &SurfaceName) -> Result<Expr, ElabError> {
         self.lookup_local_fvar(var)
             .map(Expr::fvar)
             .ok_or_else(|| ElabError::Unsupported {
@@ -1306,9 +1405,9 @@ impl<'a> ElabCtx<'a> {
         self.pack_full_acc(accs, &vals, ret_val)
     }
 
-    /// `@Pure.pure.{do_u,do_v} m (ForInStep β) (@ForInStep.(done|yield).{do_u} β acc)`.
+    /// `@Pure.pure.{do_u,do_v} m ?inst (ForInStep β) (@ForInStep.(done|yield).{do_u} β acc)`.
     fn mk_pure_for_in_step(
-        &self,
+        &mut self,
         m: &Expr,
         beta: &Expr,
         do_u: &Level,
@@ -1329,11 +1428,13 @@ impl<'a> ElabCtx<'a> {
             Expr::const_(Name::from_string("ForInStep"), vec![do_u.clone()]),
             beta.clone(),
         );
-        let pure_const = Expr::const_(
-            Name::from_string("Pure.pure"),
-            vec![do_u.clone(), do_v.clone()],
-        );
-        Expr::apps(pure_const, [m.clone(), for_in_step_beta, step])
+        self.mk_pure_term(
+            do_u.clone(),
+            do_v.clone(),
+            m.clone(),
+            for_in_step_beta,
+            step,
+        )
     }
 
     /// Build the inlined `List.forIn` fold applied to the initial accumulator:
@@ -1352,7 +1453,7 @@ impl<'a> ElabCtx<'a> {
     /// specialised to the (concrete) do-block monad `m`, built with
     /// `push_local`/`abstract_fvar` so the de Bruijn indices are machine-checked.
     #[allow(clippy::too_many_arguments)]
-    fn build_list_forin_fold(
+    pub(super) fn build_list_forin_fold(
         &mut self,
         alpha: &Expr,
         beta: &Expr,
@@ -1374,13 +1475,18 @@ impl<'a> ElabCtx<'a> {
         let m_beta = Expr::app(m.clone(), beta.clone());
         // ih : β → m β  (non-dependent, closed)
         let ih_ty = Expr::pi(BinderInfo::Default, beta.clone(), m_beta.clone());
-        let pure_const = Expr::const_(
-            Name::from_string("Pure.pure"),
-            vec![do_u.clone(), do_v.clone()],
+        // The `[Pure m]` / `[Bind m]` instances of `List.forIn`'s `[Monad m]`
+        // binder, synthesized once for the whole fold.
+        let uv = vec![do_u.clone(), do_v.clone()];
+        let pure_inst = self.do_instance_arg("Pure", uv.clone(), std::slice::from_ref(m));
+        let bind_inst = self.do_instance_arg("Bind", uv.clone(), std::slice::from_ref(m));
+        let pure_const = Expr::apps(
+            Expr::const_(Name::from_string("Pure.pure"), uv.clone()),
+            [m.clone(), pure_inst],
         );
-        let bind_const = Expr::const_(
-            Name::from_string("Bind.bind"),
-            vec![do_u.clone(), do_v.clone()],
+        let bind_const = Expr::apps(
+            Expr::const_(Name::from_string("Bind.bind"), uv),
+            [m.clone(), bind_inst],
         );
 
         // motive := fun (_ : List α) => (β → m β)
@@ -1388,11 +1494,8 @@ impl<'a> ElabCtx<'a> {
 
         // nil := fun (acc : β) => @Pure.pure m β acc
         let nil_case = {
-            let acc_fv = self.push_local("__forin_acc".to_string(), beta.clone());
-            let pure_acc = Expr::apps(
-                pure_const.clone(),
-                [m.clone(), beta.clone(), Expr::fvar(acc_fv)],
-            );
+            let acc_fv = self.push_local(SurfaceName::unspellable("__forin_acc", 0), beta.clone());
+            let pure_acc = Expr::apps(pure_const.clone(), [beta.clone(), Expr::fvar(acc_fv)]);
             self.pop_local();
             Expr::lam(
                 BinderInfo::Default,
@@ -1406,26 +1509,29 @@ impl<'a> ElabCtx<'a> {
         //             (fun s => @ForInStep.rec β (fun _ => m β)
         //                          (fun b => @Pure.pure m β b) (fun b => ih b) s)
         let cons_case = {
-            let hd_fv = self.push_local("__forin_hd".to_string(), alpha.clone());
-            let tl_fv = self.push_local("__forin_tl".to_string(), list_alpha.clone());
-            let ih_fv = self.push_local("__forin_ih".to_string(), ih_ty.clone());
-            let acc_fv = self.push_local("__forin_acc".to_string(), beta.clone());
+            let hd_fv = self.push_local(SurfaceName::unspellable("__forin_hd", 0), alpha.clone());
+            let tl_fv = self.push_local(
+                SurfaceName::unspellable("__forin_tl", 0),
+                list_alpha.clone(),
+            );
+            let ih_fv = self.push_local(SurfaceName::unspellable("__forin_ih", 0), ih_ty.clone());
+            let acc_fv = self.push_local(SurfaceName::unspellable("__forin_acc", 0), beta.clone());
 
             let step_app = Expr::apps(step_lam.clone(), [Expr::fvar(hd_fv), Expr::fvar(acc_fv)]);
 
             // continuation: fun (s : ForInStep β) => ForInStep.rec β motive2 done yield s
-            let s_fv = self.push_local("__forin_s".to_string(), for_in_step_beta.clone());
+            let s_fv = self.push_local(
+                SurfaceName::unspellable("__forin_s", 0),
+                for_in_step_beta.clone(),
+            );
             let motive2 = Expr::lam(
                 BinderInfo::Default,
                 for_in_step_beta.clone(),
                 m_beta.clone(),
             );
             let done_minor = {
-                let b_fv = self.push_local("__forin_b".to_string(), beta.clone());
-                let pure_b = Expr::apps(
-                    pure_const.clone(),
-                    [m.clone(), beta.clone(), Expr::fvar(b_fv)],
-                );
+                let b_fv = self.push_local(SurfaceName::unspellable("__forin_b", 0), beta.clone());
+                let pure_b = Expr::apps(pure_const.clone(), [beta.clone(), Expr::fvar(b_fv)]);
                 self.pop_local();
                 Expr::lam(
                     BinderInfo::Default,
@@ -1434,7 +1540,7 @@ impl<'a> ElabCtx<'a> {
                 )
             };
             let yield_minor = {
-                let b_fv = self.push_local("__forin_b".to_string(), beta.clone());
+                let b_fv = self.push_local(SurfaceName::unspellable("__forin_b", 0), beta.clone());
                 let ih_b = Expr::app(Expr::fvar(ih_fv), Expr::fvar(b_fv));
                 self.pop_local();
                 Expr::lam(BinderInfo::Default, beta.clone(), ih_b.abstract_fvar(b_fv))
@@ -1462,13 +1568,7 @@ impl<'a> ElabCtx<'a> {
 
             let bind_app = Expr::apps(
                 bind_const,
-                [
-                    m.clone(),
-                    for_in_step_beta.clone(),
-                    beta.clone(),
-                    step_app,
-                    cont,
-                ],
+                [for_in_step_beta.clone(), beta.clone(), step_app, cont],
             );
 
             self.pop_local(); // acc
@@ -1515,7 +1615,7 @@ impl<'a> ElabCtx<'a> {
 }
 
 /// Collect the names declared with `let mut` anywhere in a do-block.
-pub(super) fn collect_do_mut_var_names(elems: &[DoElem], out: &mut Vec<String>) {
+pub(super) fn collect_do_mut_var_names(elems: &[DoElem], out: &mut Vec<SurfaceName>) {
     stack_safe(|| {
         for elem in elems {
             match elem {

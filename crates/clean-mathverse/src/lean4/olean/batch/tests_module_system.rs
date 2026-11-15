@@ -7,15 +7,16 @@
 //! In the module system a module's public `.olean` stores every public theorem
 //! (and any definition whose body lives in the private region) as a value-less,
 //! axiom-shaped stub; the proof/body lives in the `.olean.private` companion,
-//! whose objects cross-reference the base region. The batch importer must merge
-//! those companions (via [`parse_target_module_with_proofs`]) so the shard
-//! stores real, kernel-checkable VALUES rather than registering theorems as
-//! value-less axioms.
+//! whose objects cross-reference the base region. The batch importer must read
+//! that companion (via [`parse_target_module_with_proofs`], which reads a
+//! module-system artifact's `.olean.private`) so the shard stores real,
+//! kernel-checkable VALUES rather than registering theorems as value-less
+//! axioms.
 //!
 //! Fixture: `tests/fixtures/olean/v4.30.0/module-system/Sigma.{olean,olean.server,
 //! olean.private}` — a two-theorem slice of `Mathlib/Data/Finite/Sigma` built by
 //! Lean `v4.30.0-rc2` with the module system enabled. Base-only parsing surfaces
-//! two value-less `Axiom` stubs; merging the private companion recovers two
+//! two value-less `Axiom` stubs; reading the private part recovers two
 //! proof-carrying `Theorem`s.
 
 use std::path::PathBuf;
@@ -52,18 +53,19 @@ fn test_module_system_base_only_exposes_value_less_stubs() {
 fn test_module_system_merge_recovers_theorem_proof_values() {
     // Merging the `.olean.private` companion promotes the stubs to their true,
     // proof-carrying `Theorem` records.
-    let module = parse_target_module_with_proofs(&sigma_fixture()).expect("merge companions");
+    let module =
+        parse_target_module_with_proofs(&sigma_fixture()).expect("read the authoritative part");
     assert_eq!(
         module.constants.len(),
         2,
-        "merge preserves the two constants"
+        "the private part holds the two constants"
     );
     assert!(
         module
             .constants
             .iter()
             .all(|c| c.kind == ConstantKind::Theorem && c.value.is_some()),
-        "merging .olean.private must recover theorem proof values, got {:?}",
+        "reading .olean.private must recover theorem proof values, got {:?}",
         module
             .constants
             .iter()
@@ -74,7 +76,7 @@ fn test_module_system_merge_recovers_theorem_proof_values() {
 
 #[test]
 fn test_import_file_stores_private_proof_values_in_shard() {
-    // End-to-end: the batch importer must route through the proof-merging parse
+    // End-to-end: the batch importer must route through the authoritative-part read
     // so the erased theorem proofs land in the shard as real values. Guards
     // against a silent revert to the public-only `parse_module_file`.
     let importer = Lean4BatchImporter::new(Lean4BatchConfig::new(PathBuf::from(".")));
@@ -95,6 +97,6 @@ fn test_import_file_stores_private_proof_values_in_shard() {
         .count();
     assert_eq!(
         with_value, 2,
-        "both theorems must carry a kernel-checkable value after the .olean.private merge"
+        "both theorems must carry a kernel-checkable value read from .olean.private"
     );
 }

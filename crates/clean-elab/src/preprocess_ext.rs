@@ -9,7 +9,7 @@
 
 // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
 // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-use clean_parser::{SurfaceDecl, SurfaceExpr};
+use clean_parser::{SurfaceDecl, SurfaceExpr, SurfaceName};
 use std::collections::{HashMap, HashSet, VecDeque};
 
 /// Errors from extended preprocessing.
@@ -42,14 +42,14 @@ pub(crate) struct Docstring {
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct MutualGroup {
     pub(crate) indices: Vec<usize>,
-    pub(crate) names: Vec<String>,
+    pub(crate) names: Vec<SurfaceName>,
 }
 
 /// Collected universe parameter from a declaration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) struct UniverseParam {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) decl_name: String,
 }
 
@@ -81,7 +81,7 @@ pub(crate) struct PreprocessResult {
 
 /// Extract name from a surface declaration.
 #[must_use]
-pub(crate) fn decl_name(decl: &SurfaceDecl) -> Option<&str> {
+pub(crate) fn decl_name(decl: &SurfaceDecl) -> Option<&SurfaceName> {
     match decl {
         SurfaceDecl::Def { name, .. }
         | SurfaceDecl::Theorem { name, .. }
@@ -91,14 +91,17 @@ pub(crate) fn decl_name(decl: &SurfaceDecl) -> Option<&str> {
         | SurfaceDecl::Coinductive { name, .. }
         | SurfaceDecl::Structure { name, .. }
         | SurfaceDecl::Class { name, .. }
-        | SurfaceDecl::Namespace { name, .. } => Some(name.as_str()),
-        SurfaceDecl::Instance { name, .. } => name.as_deref(),
+        | SurfaceDecl::Namespace { name, .. } => Some(name),
+        SurfaceDecl::Alias { names, .. } => names.first().map(|(name, _)| name),
+        SurfaceDecl::Instance { name, .. } => name.as_ref(),
+        // A `#guard_msgs` is reported under what it wraps.
+        SurfaceDecl::GuardMsgs { cmd, .. } => decl_name(cmd),
         _ => None,
     }
 }
 
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
-fn decl_universe_params(decl: &SurfaceDecl) -> &[String] {
+fn decl_universe_params(decl: &SurfaceDecl) -> &[SurfaceName] {
     match decl {
         SurfaceDecl::Def {
             universe_params, ..
@@ -162,7 +165,8 @@ pub(crate) fn extract_docstrings(comments: &[&str], decls: &[SurfaceDecl]) -> Ve
             if let Some(decl) = decls.get(i) {
                 result.push(Docstring {
                     text,
-                    decl_name: decl_name(decl).unwrap_or("<anonymous>").to_string(),
+                    decl_name: decl_name(decl)
+                        .map_or_else(|| "<anonymous>".to_owned(), ToString::to_string),
                 });
             }
         }
@@ -174,7 +178,7 @@ pub(crate) fn extract_docstrings(comments: &[&str], decls: &[SurfaceDecl]) -> Ve
 
 /// Collect identifiers referenced in a surface expression.
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
-pub(crate) fn collect_idents(expr: &SurfaceExpr, out: &mut HashSet<String>) {
+pub(crate) fn collect_idents(expr: &SurfaceExpr, out: &mut HashSet<SurfaceName>) {
     match expr {
         SurfaceExpr::Ident(_, name) => {
             out.insert(name.clone());
@@ -190,6 +194,7 @@ pub(crate) fn collect_idents(expr: &SurfaceExpr, out: &mut HashSet<String>) {
         | SurfaceExpr::Pi(_, _, body) => collect_idents(body, out),
         SurfaceExpr::Arrow(_, lhs, rhs)
         | SurfaceExpr::Let(_, _, lhs, rhs)
+        | SurfaceExpr::Have(_, _, lhs, rhs)
         | SurfaceExpr::LetRec(_, _, lhs, rhs) => {
             collect_idents(lhs, out);
             collect_idents(rhs, out);
@@ -202,7 +207,7 @@ pub(crate) fn collect_idents(expr: &SurfaceExpr, out: &mut HashSet<String>) {
 }
 
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
-fn collect_decl_refs(decl: &SurfaceDecl) -> HashSet<String> {
+fn collect_decl_refs(decl: &SurfaceDecl) -> HashSet<SurfaceName> {
     let mut refs = HashSet::new();
     match decl {
         SurfaceDecl::Def { ty, val, .. } => {
@@ -227,7 +232,7 @@ fn collect_decl_refs(decl: &SurfaceDecl) -> HashSet<String> {
 #[must_use]
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn detect_mutual_groups(decls: &[SurfaceDecl]) -> Vec<MutualGroup> {
-    let name_to_idx: HashMap<&str, usize> = decls
+    let name_to_idx: HashMap<&SurfaceName, usize> = decls
         .iter()
         .enumerate()
         .filter_map(|(i, d)| decl_name(d).map(|n| (n, i)))
@@ -236,7 +241,7 @@ pub(crate) fn detect_mutual_groups(decls: &[SurfaceDecl]) -> Vec<MutualGroup> {
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (i, decl) in decls.iter().enumerate() {
         for r in collect_decl_refs(decl) {
-            if let Some(&j) = name_to_idx.get(r.as_str()) {
+            if let Some(&j) = name_to_idx.get(&r) {
                 if j != i {
                     adj[i].push(j);
                 }
@@ -249,7 +254,7 @@ pub(crate) fn detect_mutual_groups(decls: &[SurfaceDecl]) -> Vec<MutualGroup> {
         .map(|indices| {
             let names = indices
                 .iter()
-                .filter_map(|&i| decl_name(&decls[i]).map(String::from))
+                .filter_map(|&i| decl_name(&decls[i]).cloned())
                 .collect();
             MutualGroup { indices, names }
         })
@@ -320,7 +325,7 @@ pub(crate) fn collect_universe_params(decls: &[SurfaceDecl]) -> Vec<UniversePara
     decls
         .iter()
         .flat_map(|decl| {
-            let dn = decl_name(decl).unwrap_or("<anonymous>");
+            let dn = decl_name(decl).map_or_else(|| "<anonymous>".to_owned(), ToString::to_string);
             decl_universe_params(decl)
                 .iter()
                 .map(move |u| UniverseParam {
@@ -343,8 +348,8 @@ pub(crate) fn validate_attributes(decls: &[SurfaceDecl]) -> Result<usize, Prepro
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn resolve_namespaces(
     decls: &[SurfaceDecl],
-    opened: &[String],
-    known: &HashSet<String>,
+    opened: &[SurfaceName],
+    known: &HashSet<SurfaceName>,
 ) -> (Vec<SurfaceDecl>, usize) {
     let mut count = 0;
     let out = decls
@@ -357,8 +362,8 @@ pub(crate) fn resolve_namespaces(
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn resolve_decl(
     decl: &SurfaceDecl,
-    opened: &[String],
-    known: &HashSet<String>,
+    opened: &[SurfaceName],
+    known: &HashSet<SurfaceName>,
     count: &mut usize,
 ) -> SurfaceDecl {
     match decl {
@@ -417,17 +422,17 @@ fn resolve_decl(
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 fn resolve_expr(
     expr: &SurfaceExpr,
-    opened: &[String],
-    known: &HashSet<String>,
+    opened: &[SurfaceName],
+    known: &HashSet<SurfaceName>,
     count: &mut usize,
 ) -> SurfaceExpr {
     match expr {
         SurfaceExpr::Ident(span, name) => {
-            if known.contains(name) || name.contains('.') {
+            if known.contains(name) || name.component_text().is_none() {
                 return expr.clone();
             }
             for ns in opened {
-                let q = format!("{ns}.{name}");
+                let q = name.qualify_under(ns);
                 if known.contains(&q) {
                     *count += 1;
                     return SurfaceExpr::Ident(*span, q);
@@ -457,11 +462,11 @@ fn resolve_expr(
 /// Expand `open Foo` declarations into opened namespace prefixes.
 #[must_use]
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
-pub(crate) fn expand_imports(decls: &[SurfaceDecl]) -> Vec<String> {
+pub(crate) fn expand_imports(decls: &[SurfaceDecl]) -> Vec<SurfaceName> {
     decls
         .iter()
         .filter_map(|d| match d {
-            SurfaceDecl::Open { paths, .. } => Some(paths.iter().map(|p| p.path.join("."))),
+            SurfaceDecl::Open { paths, .. } => Some(paths.iter().map(|p| p.path.clone())),
             _ => None,
         })
         .flatten()
@@ -485,7 +490,9 @@ pub(crate) fn desugar_decls(decls: &[SurfaceDecl]) -> (Vec<SurfaceDecl>, usize) 
                 count += 1;
                 SurfaceDecl::Def {
                     span: *span,
-                    name: format!("_example_{count}"),
+                    name: SurfaceName::from_name(
+                        clean_kernel::Name::anon().str(format!("_example_{count}")),
+                    ),
                     universe_params: Vec::new(),
                     binders: binders.clone(),
                     ty: ty.clone(),
@@ -513,7 +520,7 @@ pub(crate) fn order_by_deps(
     if n <= 1 {
         return Ok((decls.to_vec(), 0));
     }
-    let name_to_idx: HashMap<&str, usize> = decls
+    let name_to_idx: HashMap<&SurfaceName, usize> = decls
         .iter()
         .enumerate()
         .filter_map(|(i, d)| decl_name(d).map(|n| (n, i)))
@@ -522,7 +529,7 @@ pub(crate) fn order_by_deps(
     let mut adj: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (i, decl) in decls.iter().enumerate() {
         for r in collect_decl_refs(decl) {
-            if let Some(&j) = name_to_idx.get(r.as_str()) {
+            if let Some(&j) = name_to_idx.get(&r) {
                 if j != i {
                     adj[j].push(i);
                     in_deg[i] += 1;
@@ -560,7 +567,7 @@ pub(crate) fn order_by_deps(
 pub(crate) fn preprocess_pipeline(
     decls: &[SurfaceDecl],
     comments: &[&str],
-    known_names: &HashSet<String>,
+    known_names: &HashSet<SurfaceName>,
 ) -> Result<PreprocessResult, PreprocessError> {
     let mut stats = PreprocessStats {
         decls_preprocessed: decls.len(),

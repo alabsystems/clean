@@ -10,17 +10,22 @@
 //!
 //! Usage:
 //!   mathverse_shard build <lean-lib-dir> <output-dir> [options]
+//!   mathverse_shard build-coq <lean-lib-dir> <output-dir> [--coq-extract=<file>] [--verbose]
 //!   mathverse_shard build-native <output-dir>
 //!   mathverse_shard verify <shard-dir>
-//!   mathverse_shard verify-kernel <shard-dir> [--json=<path>] [--incremental]
-//!   mathverse_shard verify-kernel --corpus <shard-dir>
+//!   mathverse_shard verify-kernel <shard-dir> [--json=<path>]
+//!   mathverse_shard verify-kernel <shard-dir> --incremental          (writes no JSON)
+//!   mathverse_shard verify-kernel --corpus <shard-dir> [--emit-verified=<path>]
 //!   mathverse_shard verify-kernel --native <shard-dir>
 //!   mathverse_shard verify-kernel --per-constant <shard-dir>
+//!   mathverse_shard verify-kernel --module <Mathlib.X.Y> --olean-root <dir>... [--emit <sidecar.json>]
+//!   mathverse_shard verify-kernel --corpus-sharded --olean-root <dir>... --out <dir> [--jobs N] [--module-list <file>]
 //!   mathverse_shard verify-incremental <shard-dir>
 //!   mathverse_shard coq-import --sexp-root=<dir> --out=<dir> [--library=<name>]... [--json=<path>] [--lean-faithful] [--no-stamp]
+//!   mathverse_shard lint-levels <shard-dir> [--strict]
 //!   mathverse_shard stamp --shard-dir=<dir> --manifest=<kernel-verified.json> [--json]
-//!   mathverse_shard audit <shard-dir> [--json=<path>] [--name=<const>]
-//!   mathverse_shard proof-search <shard-dir> [--goal=<name>] [--budget=<N>] [--json=<path>]
+//!   mathverse_shard audit <shard-dir> [--json=<path> | --name=<const>]
+//!   mathverse_shard proof-search <shard-dir> [--budget=<N>] [--json=<path> | --goal=<name>]
 
 // Track B1: install mimalloc as this binary's allocator (behind `--features
 // mimalloc`). `mathverse_shard verify-kernel --corpus-sharded` and the PARAGON
@@ -85,7 +90,7 @@ fn main() {
         "verify-kernel" => {
             if args.len() < 3 {
                 eprintln!(
-                    "Usage: mathverse_shard verify-kernel <shard-dir> [--json=<path>] [--incremental | --corpus]"
+                    "Usage: mathverse_shard verify-kernel <shard-dir> [--json=<path> | --incremental | --corpus]"
                 );
                 std::process::exit(1);
             }
@@ -164,9 +169,11 @@ fn print_usage() {
     eprintln!("        proved inside this repo). Writes clean-native.mathverse + .json sidecar.");
     eprintln!("  verify <shard-dir>");
     eprintln!("        Verify integrity of .mathverse shards (checksum only)");
-    eprintln!("  verify-kernel <shard-dir> [--json=<path>] [--incremental]");
-    eprintln!("        Kernel-verify all constants in .mathverse shards");
-    eprintln!("        --incremental: use shared environment with dependency ordering");
+    eprintln!("  verify-kernel <shard-dir> [--json=<path>]");
+    eprintln!("        Kernel-verify all constants in .mathverse shards; --json=<path> writes");
+    eprintln!("        the report (this plain form only — the modes below write no JSON)");
+    eprintln!("  verify-kernel <shard-dir> --incremental");
+    eprintln!("        Use a shared environment with dependency ordering");
     eprintln!("  verify-kernel --corpus <shard-dir>");
     eprintln!("        Global dependency-closed re-verification: merge ALL shards into one");
     eprintln!("        library and re-verify the whole corpus in a single prelude-seeded");
@@ -195,15 +202,20 @@ fn print_usage() {
     eprintln!("        SerAPI dump to <out>/<library>/coq_<library>.mathverse, kernel-recheck the");
     eprintln!("        whole library corpus, write kernel-verified.json, stamp verdicts (unless");
     eprintln!("        --no-stamp), and report per-library trust distribution + BEDROCK counts");
+    eprintln!("  lint-levels <shard-dir> [--strict]");
+    eprintln!("        Audit level-parameter integrity of every .mathverse shard");
+    eprintln!("        (--strict: exit 2 on a corrupt shard)");
     eprintln!("  stamp --shard-dir=<dir> --manifest=<kernel-verified.json> [--json]");
     eprintln!("        Apply an EXISTING merged kernel-verified manifest to pre-built shards");
     eprintln!("        on disk (NO re-verify). Persists the driver's full-closure verdict so a");
     eprintln!("        `clean mathverse stats` reader sees a stored KernelVerified count.");
-    eprintln!("  audit <shard-dir> [--json=<path>] [--name=<const>]");
+    eprintln!("  audit <shard-dir> [--json=<path> | --name=<const>]");
     eprintln!("        Axiom audit: classify proof quality for all declarations");
-    eprintln!("        --name=<const>: audit a single declaration by name");
-    eprintln!("  proof-search <shard-dir> [--goal=<name>] [--budget=<N>] [--json=<path>]");
+    eprintln!("        --json=<path>: write the full report (not used with --name)");
+    eprintln!("        --name=<const>: audit a single declaration by name (prints only)");
+    eprintln!("  proof-search <shard-dir> [--budget=<N>] [--json=<path> | --goal=<name>]");
     eprintln!("        Run proof search across loaded environment");
+    eprintln!("        --json=<path>: write the all-theorems report (not used with --goal)");
     eprintln!("        --goal=<name>: search for proof of a specific theorem's type");
     eprintln!("        --budget=<N>: max candidates to try (default: 10000)");
 }
@@ -237,6 +249,7 @@ fn cmd_build(args: &[String]) {
         modules: opts.modules,
         shard_size_limit: opts.shard_size,
         max_file_size: opts.max_file_size,
+        file_limit: 0,
         verbose: opts.verbose,
         ..BuildConfig::default()
     };

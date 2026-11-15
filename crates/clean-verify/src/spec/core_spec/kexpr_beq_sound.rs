@@ -1804,6 +1804,8 @@ mod tests {
         );
         spec.add_expr_model()
             .expect("expr_model (KExpr/Name/Level/ListType) should build");
+        spec.add_declaration_signature_carrier()
+            .expect("pure stored signature carrier should build");
         spec.add_rec_env()
             .expect("rec_env (nat_eqb/name_eqb/nat_is_zero) should build");
         spec.add_typing_universe_levels().expect(

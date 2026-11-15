@@ -48,7 +48,7 @@ use crate::superposition::{Clause, Inference, ProofTrace};
 /// Given a `ProofTrace` from the superposition prover and a `SymbolMap`
 /// connecting superposition symbols to kernel expressions, produces a
 /// kernel `Expr` proof term that the type checker can verify.
-pub struct SuperpositionReconstructor<'a> {
+pub(crate) struct SuperpositionReconstructor<'a> {
     /// Symbol/variable → kernel Expr mapping
     symbol_map: &'a SymbolMap,
     /// Clause lookup by ID (from the proof trace)
@@ -61,7 +61,7 @@ pub struct SuperpositionReconstructor<'a> {
 
 impl<'a> SuperpositionReconstructor<'a> {
     /// Create a new reconstructor from a proof trace and symbol map.
-    pub fn new(trace: &'a ProofTrace, symbol_map: &'a SymbolMap) -> Self {
+    pub(crate) fn new(trace: &'a ProofTrace, symbol_map: &'a SymbolMap) -> Self {
         let mut clause_map = HashMap::new();
         for clause in &trace.clauses {
             clause_map.insert(clause.id, clause);
@@ -80,7 +80,7 @@ impl<'a> SuperpositionReconstructor<'a> {
     ///
     /// The environment enables accurate universe level inference via
     /// `TypeChecker::infer_sort` instead of the Level 1 heuristic.
-    pub fn with_env(
+    pub(crate) fn with_env(
         trace: &'a ProofTrace,
         symbol_map: &'a SymbolMap,
         env: &'a Environment,
@@ -112,7 +112,7 @@ impl<'a> SuperpositionReconstructor<'a> {
     /// The superposition prover derives a refutation (empty clause = False).
     /// This method builds a proof of `False` from the hypotheses, which can
     /// then be used via `False.elim` to prove the original goal.
-    pub fn reconstruct(&mut self) -> ReconstructionResult<(Expr, String)> {
+    pub(crate) fn reconstruct(&mut self) -> ReconstructionResult<(Expr, String)> {
         let empty_id = self
             .clause_map
             .keys()
@@ -153,7 +153,7 @@ impl<'a> SuperpositionReconstructor<'a> {
     ///
     /// For Iff goals (P ↔ Q), produces `Iff.intro mp mpr` where each
     /// direction uses `byContradiction` with the same refutation proof.
-    pub fn reconstruct_goal(&mut self) -> ReconstructionResult<(Expr, String)> {
+    pub(crate) fn reconstruct_goal(&mut self) -> ReconstructionResult<(Expr, String)> {
         let (goal, num_goal_clauses, fvar_base) =
             self.symbol_map.goal_info.clone().ok_or_else(|| {
                 ReconstructionError::MalformedTrace(

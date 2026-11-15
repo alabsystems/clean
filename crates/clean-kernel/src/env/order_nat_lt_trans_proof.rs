@@ -97,13 +97,17 @@ fn fresh_outer_binders(b: &mut EnvDeclBuilder, nat_const: &Expr) -> OuterBinders
 
 /// Build the theorem type:
 ///   `∀ a b c : Nat, a < b → b < c → a < c` (typeclass `LT.lt` form).
+/// `∀ {a b c : Nat}, a < b → b < c → a < c` — Lean's binders (pinned
+/// v4.30.0-rc2: `@Nat.lt_trans : ∀ {n m k : Nat}, …`). Until 2026-09-30 the
+/// three `Nat`s were explicit here, so Lean's `Nat.lt_trans h₁ h₂` did not
+/// elaborate.
 fn build_trans_type(b: &mut EnvDeclBuilder, nat_const: &Expr, ob: &OuterBinders) -> Expr {
     let ty_body = nat_lt_tc(ob.a.clone(), ob.c.clone());
     let e = b.mk_pi(ob.hbc_id, BinderInfo::Default, ob.hbc_type.clone(), ty_body);
     let e = b.mk_pi(ob.hab_id, BinderInfo::Default, ob.hab_type.clone(), e);
-    let e = b.mk_pi(ob.c_id, BinderInfo::Default, nat_const.clone(), e);
-    let e = b.mk_pi(ob.bv_id, BinderInfo::Default, nat_const.clone(), e);
-    b.mk_pi(ob.a_id, BinderInfo::Default, nat_const.clone(), e)
+    let e = b.mk_pi(ob.c_id, BinderInfo::Implicit, nat_const.clone(), e);
+    let e = b.mk_pi(ob.bv_id, BinderInfo::Implicit, nat_const.clone(), e);
+    b.mk_pi(ob.a_id, BinderInfo::Implicit, nat_const.clone(), e)
 }
 
 /// Build the motive: `fun (k : Nat) (_ : Nat.le (Nat.succ b) k) => Nat.le (Nat.succ a) k`.
@@ -175,9 +179,9 @@ fn close_outer_lambdas(
 ) -> Expr {
     let e = b.mk_lam(ob.hbc_id, BinderInfo::Default, ob.hbc_type.clone(), body);
     let e = b.mk_lam(ob.hab_id, BinderInfo::Default, ob.hab_type.clone(), e);
-    let e = b.mk_lam(ob.c_id, BinderInfo::Default, nat_const.clone(), e);
-    let e = b.mk_lam(ob.bv_id, BinderInfo::Default, nat_const.clone(), e);
-    b.mk_lam(ob.a_id, BinderInfo::Default, nat_const.clone(), e)
+    let e = b.mk_lam(ob.c_id, BinderInfo::Implicit, nat_const.clone(), e);
+    let e = b.mk_lam(ob.bv_id, BinderInfo::Implicit, nat_const.clone(), e);
+    b.mk_lam(ob.a_id, BinderInfo::Implicit, nat_const.clone(), e)
 }
 
 impl Environment {

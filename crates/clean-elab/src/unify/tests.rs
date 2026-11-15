@@ -136,7 +136,11 @@ fn test_unify_meta_constrains_concrete_type_level_for_fvar_assignment() {
     );
     let meta_id = state.fresh_with_locals(
         Expr::type_(),
-        vec![("α".to_string(), alpha, Expr::sort(alpha_level.clone()))],
+        vec![(
+            clean_parser::SurfaceName::generated_path("α"),
+            alpha,
+            Expr::sort(alpha_level.clone()),
+        )],
     );
     let meta_expr = meta_expr(meta_id);
 
@@ -189,8 +193,14 @@ fn test_unify_meta_type_accepts_prop_fvar_by_cumulativity() {
     let mut ctx = LocalContext::new();
     let mut state = MetaState::new();
     let a_fvar = ctx.push(Name::from_string("A"), Expr::prop(), BinderInfo::Default);
-    let meta_id =
-        state.fresh_with_locals(Expr::type_(), vec![("A".to_string(), a_fvar, Expr::prop())]);
+    let meta_id = state.fresh_with_locals(
+        Expr::type_(),
+        vec![(
+            clean_parser::SurfaceName::generated_path("A"),
+            a_fvar,
+            Expr::prop(),
+        )],
+    );
     let meta_expr = meta_expr(meta_id);
 
     let result = {
@@ -1840,7 +1850,14 @@ fn test_bare_meta_scope_check_accepts_captured_local() {
     );
 
     let mut state = MetaState::new();
-    let meta = state.fresh_with_locals(nat.clone(), vec![("captured".to_string(), captured, nat)]);
+    let meta = state.fresh_with_locals(
+        nat.clone(),
+        vec![(
+            clean_parser::SurfaceName::generated_path("captured"),
+            captured,
+            nat,
+        )],
+    );
     let result = {
         let mut unifier = Unifier::with_env(&mut state, &env, ctx);
         unifier.unify(&meta_expr(meta), &Expr::fvar(captured))
@@ -1882,7 +1899,11 @@ fn test_pi_comparison_skips_historical_meta_local_id() {
     let historical = FVarId::new(0);
     let meta = state.fresh_with_locals(
         Expr::type_(),
-        vec![("historical".to_string(), historical, Expr::type_())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("historical"),
+            historical,
+            Expr::type_(),
+        )],
     );
     let left = Expr::pi(BinderInfo::Default, Expr::type_(), meta_expr(meta));
     let right = Expr::pi(BinderInfo::Default, Expr::type_(), Expr::bvar(0));
@@ -1903,12 +1924,73 @@ fn test_pi_comparison_skips_historical_meta_local_id() {
 }
 
 #[test]
+fn test_merge_from_preserves_historical_local_binder_guard() {
+    let env = Environment::new();
+    let mut parent = MetaState::new();
+    let mut focused = parent.clone();
+    let historical = FVarId::new(0);
+    let meta = focused.fresh_with_locals(
+        Expr::type_(),
+        vec![(
+            clean_parser::SurfaceName::generated_path("historical"),
+            historical,
+            Expr::type_(),
+        )],
+    );
+    parent.merge_from(&focused);
+    let left = Expr::pi(BinderInfo::Default, Expr::type_(), meta_expr(meta));
+    let escaping = Expr::pi(BinderInfo::Default, Expr::type_(), Expr::bvar(0));
+    let result = Unifier::with_env(&mut parent, &env, LocalContext::new()).unify(&left, &escaping);
+    assert!(
+        !matches!(result, UnifyResult::Success),
+        "temporary binder escaped: {result:?}"
+    );
+    assert!(!parent.is_assigned(meta));
+
+    let closed = Expr::pi(BinderInfo::Default, Expr::type_(), Expr::prop());
+    let result = Unifier::with_env(&mut parent, &env, LocalContext::new()).unify(&left, &closed);
+    assert!(
+        matches!(result, UnifyResult::Success),
+        "closed assignment refused: {result:?}"
+    );
+    assert_eq!(parent.get_assignment(meta), Some(&Expr::prop()));
+}
+
+#[test]
+fn test_merge_from_retains_retired_local_history_through_rollback() {
+    let mut parent = MetaState::new();
+    let mut focused = parent.clone();
+    let retired = FVarId::new(41);
+    focused.push_scope();
+    let removed = focused.fresh_with_locals(
+        Expr::type_(),
+        vec![(
+            clean_parser::SurfaceName::generated_path("retired"),
+            retired,
+            Expr::type_(),
+        )],
+    );
+    assert!(focused.pop_scope());
+    assert!(focused.get(removed).is_none());
+    parent.push_scope();
+    parent.merge_from(&focused);
+    assert!(parent.historical_local_fvars().contains(&retired));
+    assert!(parent.pop_scope());
+    assert!(parent.historical_local_fvars().contains(&retired));
+    assert!(parent.get(removed).is_none());
+}
+
+#[test]
 fn test_delayed_nested_meta_is_contextually_lifted_through_its_type() {
     let env = Environment::new();
     let mut ctx = LocalContext::new();
     let nat = Expr::const_str("Nat");
     let x = ctx.push(Name::from_string("x"), nat.clone(), BinderInfo::Default);
-    let x_scope = vec![("x".to_string(), x, nat.clone())];
+    let x_scope = vec![(
+        clean_parser::SurfaceName::generated_path("x"),
+        x,
+        nat.clone(),
+    )];
 
     let mut state = MetaState::new();
     // The nested value's type is itself an unsolved meta with the wider x
@@ -1954,8 +2036,22 @@ fn test_contextual_lift_rolls_back_helpers_and_partial_assignments() {
 
     let mut state = MetaState::new();
     let outer = state.fresh_with_locals(Expr::arrow(nat.clone(), nat.clone()), Vec::new());
-    let good = state.fresh_with_locals(nat.clone(), vec![("x".to_string(), x, nat.clone())]);
-    let bad = state.fresh_with_locals(nat, vec![("z".to_string(), z, Expr::const_str("Nat"))]);
+    let good = state.fresh_with_locals(
+        nat.clone(),
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
+    );
+    let bad = state.fresh_with_locals(
+        nat,
+        vec![(
+            clean_parser::SurfaceName::generated_path("z"),
+            z,
+            Expr::const_str("Nat"),
+        )],
+    );
     let before_count = state.iter().count();
     let before_depth = state.scope_depth();
     let rhs = Expr::apps(Expr::const_str("Pair"), [meta_expr(good), meta_expr(bad)]);
@@ -2013,7 +2109,14 @@ fn test_bare_meta_meta_reverses_away_from_scope_widening() {
     let x = ctx.push(Name::from_string("x"), nat.clone(), BinderInfo::Default);
     let mut state = MetaState::new();
     let outer = state.fresh_with_locals(nat.clone(), Vec::new());
-    let inner = state.fresh_with_locals(nat, vec![("x".to_string(), x, Expr::const_str("Nat"))]);
+    let inner = state.fresh_with_locals(
+        nat,
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            Expr::const_str("Nat"),
+        )],
+    );
 
     let result = {
         let mut unifier = Unifier::with_env(&mut state, &env, ctx);
@@ -2044,7 +2147,14 @@ fn test_miller_pattern_single_arg_solves_lambda() {
     let mut state = MetaState::new();
     // `?f : Nat → Nat`, created with `x` in its captured scope.
     let f_ty = Expr::arrow(nat.clone(), nat.clone());
-    let f = state.fresh_with_locals(f_ty, vec![("x".to_string(), x, nat.clone())]);
+    let f = state.fresh_with_locals(
+        f_ty,
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
+    );
 
     // LHS: `?f x`.  RHS: `Nat.succ x`.
     let lhs = Expr::app(meta_expr(f), Expr::fvar(x));
@@ -2095,8 +2205,16 @@ fn test_miller_pattern_two_args_abstraction_order() {
     let g = state.fresh_with_locals(
         g_ty,
         vec![
-            ("x".to_string(), x, nat.clone()),
-            ("y".to_string(), y, nat.clone()),
+            (
+                clean_parser::SurfaceName::generated_path("x"),
+                x,
+                nat.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("y"),
+                y,
+                nat.clone(),
+            ),
         ],
     );
 
@@ -2144,7 +2262,11 @@ fn test_miller_non_pattern_repeated_arg_defers_no_assignment() {
     let mut state = MetaState::new();
     let f = state.fresh_with_locals(
         Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())),
-        vec![("x".to_string(), x, nat.clone())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
     );
 
     // `?f x x =?= x` — repeated arg ⇒ not a pattern (λx.λx.? could be either).
@@ -2179,7 +2301,11 @@ fn test_miller_scope_check_out_of_scope_local_defers() {
     // ?f's scope only contains `x`, deliberately excluding `z`.
     let f = state.fresh_with_locals(
         Expr::arrow(nat.clone(), nat.clone()),
-        vec![("x".to_string(), x, nat.clone())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
     );
 
     // `?f x =?= z`. `z` escapes ?f's scope ⇒ Miller defers; the RHS is a bare
@@ -2216,8 +2342,16 @@ fn test_miller_pattern_in_scope_local_rhs_solves() {
     let f = state.fresh_with_locals(
         Expr::arrow(nat.clone(), nat.clone()),
         vec![
-            ("z".to_string(), z, nat.clone()),
-            ("x".to_string(), x, nat.clone()),
+            (
+                clean_parser::SurfaceName::generated_path("z"),
+                z,
+                nat.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("x"),
+                x,
+                nat.clone(),
+            ),
         ],
     );
 
@@ -2253,7 +2387,11 @@ fn test_miller_occurs_check_prevents_self_reference() {
     let mut state = MetaState::new();
     let f = state.fresh_with_locals(
         Expr::arrow(nat.clone(), nat.clone()),
-        vec![("x".to_string(), x, nat.clone())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
     );
 
     // `?f x =?= Nat.succ (?f x)` — ?f occurs in the RHS.
@@ -2316,7 +2454,14 @@ fn test_miller_regression_rigid_app_still_unifies() {
 
     let mut state = MetaState::new();
     // `?a` is a bare metavariable argument inside a rigid head `Nat.succ ?a`.
-    let a = state.fresh_with_locals(nat.clone(), vec![("x".to_string(), x, nat.clone())]);
+    let a = state.fresh_with_locals(
+        nat.clone(),
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
+    );
 
     // `Nat.succ ?a =?= Nat.succ x` should solve `?a := x` via the structural
     // App arm (rigid head, meta in argument position), unchanged by Miller.
@@ -2353,8 +2498,16 @@ fn test_miller_same_meta_flex_flex_decomposes() {
     let f = state.fresh_with_locals(
         Expr::arrow(nat.clone(), nat.clone()),
         vec![
-            ("x".to_string(), x, nat.clone()),
-            ("y".to_string(), y, nat.clone()),
+            (
+                clean_parser::SurfaceName::generated_path("x"),
+                x,
+                nat.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("y"),
+                y,
+                nat.clone(),
+            ),
         ],
     );
 
@@ -2400,16 +2553,32 @@ fn test_miller_flex_flex_intersection_distinct_patterns_solves() {
     let m = state.fresh_with_locals(
         Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())),
         vec![
-            ("x".to_string(), x, nat.clone()),
-            ("y".to_string(), y, nat.clone()),
+            (
+                clean_parser::SurfaceName::generated_path("x"),
+                x,
+                nat.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("y"),
+                y,
+                nat.clone(),
+            ),
         ],
     );
     // ?n : Nat → Nat → Nat, scoped over {y, z}.
     let n = state.fresh_with_locals(
         Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())),
         vec![
-            ("y".to_string(), y, nat.clone()),
-            ("z".to_string(), z, nat.clone()),
+            (
+                clean_parser::SurfaceName::generated_path("y"),
+                y,
+                nat.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("z"),
+                z,
+                nat.clone(),
+            ),
         ],
     );
 
@@ -2496,13 +2665,25 @@ fn test_miller_flex_flex_intersection_non_pattern_defers() {
     // ?m has a repeated argument (x x) ⇒ not a pattern.
     let m = state.fresh_with_locals(
         Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())),
-        vec![("x".to_string(), x, nat.clone())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
     );
     let n = state.fresh_with_locals(
         Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())),
         vec![
-            ("x".to_string(), x, nat.clone()),
-            ("y".to_string(), y, nat.clone()),
+            (
+                clean_parser::SurfaceName::generated_path("x"),
+                x,
+                nat.clone(),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("y"),
+                y,
+                nat.clone(),
+            ),
         ],
     );
     let metas_before = state.iter().count();
@@ -2542,7 +2723,11 @@ fn test_miller_flex_flex_intersection_same_head_still_decomposes() {
     let mut state = MetaState::new();
     let m = state.fresh_with_locals(
         Expr::arrow(nat.clone(), nat.clone()),
-        vec![("x".to_string(), x, nat.clone())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
     );
 
     // `?m x =?= ?m x`: same head, identical args ⇒ decompose to `x =?= x`,
@@ -2585,12 +2770,20 @@ fn test_miller_flex_flex_intersection_non_pattern_and_scope_blocked_defers() {
     // ?m's scope is {x}; it is applied to a repeated argument (x x).
     let m = state.fresh_with_locals(
         Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())),
-        vec![("x".to_string(), x, nat.clone())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            nat.clone(),
+        )],
     );
     // ?n's scope is only {z}; it deliberately does NOT contain x.
     let n = state.fresh_with_locals(
         Expr::arrow(nat.clone(), nat.clone()),
-        vec![("z".to_string(), z, nat.clone())],
+        vec![(
+            clean_parser::SurfaceName::generated_path("z"),
+            z,
+            nat.clone(),
+        )],
     );
 
     // `?m x x =?= ?n z`: left is non-pattern (repeated x); the only other
@@ -2738,17 +2931,26 @@ fn test_unify_levels_meta_occurs_in_max_defers() {
     {
         let mut unifier = Unifier::new(&mut state);
         let result = unifier.unify_levels(&v, &max_with_v);
+        // `?v =?= max(?v, u0)` is satisfiable (`u0 ≤ ?v`): since 2026-09-11 it
+        // is POSTPONED rather than refused as circular (the shape the
+        // `Compl (α → Prop)` instance search poses before `u0` is pinned),
+        // and only the no-postpone drain refuses it.
         assert!(
-            matches!(result, UnifyResult::Failure(_)),
-            "?v =?= max(?v, u0) must fail the level occurs-check, got {result:?}"
+            matches!(result, UnifyResult::Success),
+            "?v =?= max(?v, u0) is deferred, not refused, got {result:?}"
         );
     }
+    assert_eq!(
+        state.postponed_level_count(),
+        1,
+        "the equation is on the postponed queue"
+    );
 
     // No assignment should have been recorded: ?v still resolves to itself.
     assert_eq!(
         state.instantiate_level(&v),
         v,
-        "occurs-check failure must not assign ?v"
+        "deferral must not assign ?v"
     );
     // No level-map entry of ANY kind for ?v. This used to read the legacy
     // `level_constraints` map (removed 2026-08-26, U2 stage-3 deferral 2);
@@ -2912,19 +3114,37 @@ fn test_level_bound_merge_from_propagates() {
 
 #[test]
 fn test_level_bound_cyclic_class_terminates() {
-    let mut state = MetaState::new();
     let u = Name::from_string("bound_cyc_u");
     let v = Name::from_string("bound_cyc_v");
 
-    // `u := Succ(v)` then union `v` into `u`'s class: the bound now
-    // references its own class. The chain guard must terminate and return
-    // the canonical-param fixed point inside the Succ.
-    state
+    // `u := Succ(v)` then union `v` into `u`'s class would make the bound
+    // reference its own class. The assignment funnel REFUSES that union, as
+    // Lean's `isLevelDefEq ?v ?u` does once `?u := ?v + 1` (it answers false
+    // and leaves `?v` unassigned).
+    let mut direct = MetaState::new();
+    direct
+        .add_level_constraint(u.clone(), Level::succ(Level::param(v.clone())))
+        .expect("compound assignment should be accepted");
+    assert!(
+        direct
+            .add_level_constraint(v.clone(), Level::param(u.clone()))
+            .is_err(),
+        "a union that puts `u := Succ(v)` in `v`'s own class must be refused"
+    );
+
+    // The chain guard stays the defense in depth for a cyclic class that
+    // reaches the state WITHOUT the funnel: `merge_from` copies union-find
+    // state verbatim. It must terminate at the canonical-param fixed point
+    // inside the Succ.
+    let mut state = MetaState::new();
+    let mut focused = state.clone();
+    focused
         .add_level_constraint(u.clone(), Level::succ(Level::param(v.clone())))
         .expect("compound assignment should be accepted");
     state
         .add_level_constraint(v, Level::param(u.clone()))
-        .expect("param union should be accepted");
+        .expect("a union of two unbound params should be accepted");
+    state.merge_from(&focused);
 
     let resolved = state.instantiate_level(&Level::param(u));
     assert!(
@@ -2996,12 +3216,12 @@ fn test_pi_assignment_constrains_sort_meta_max() {
         Expr::sort(Level::param(u9.clone())),
         vec![
             (
-                "alpha".to_owned(),
+                clean_parser::SurfaceName::generated_path("alpha"),
                 fa,
                 Expr::sort(Level::succ(Level::param(u0.clone()))),
             ),
             (
-                "beta".to_owned(),
+                clean_parser::SurfaceName::generated_path("beta"),
                 fb,
                 Expr::sort(Level::succ(Level::param(u1.clone()))),
             ),
@@ -3059,12 +3279,12 @@ fn test_pi_assignment_rigid_refusal_is_loud() {
         Expr::type_(),
         vec![
             (
-                "alpha".to_owned(),
+                clean_parser::SurfaceName::generated_path("alpha"),
                 fa,
                 Expr::sort(Level::succ(Level::param(ur))),
             ),
             (
-                "beta".to_owned(),
+                clean_parser::SurfaceName::generated_path("beta"),
                 fb,
                 Expr::sort(Level::succ(Level::param(vr))),
             ),
@@ -3080,4 +3300,72 @@ fn test_pi_assignment_rigid_refusal_is_loud() {
         matches!(result, UnifyResult::Failure(_)),
         "a Pi-level equation that must assign a rigid param refuses loudly, got {result:?}"
     );
+}
+
+/// `(x : ?ι) → ?π x =?= (x : α) → Prop` — the `Pi.instCompl` conclusion
+/// against the goal `Compl (α → Prop)` — must solve `?ι := α` and
+/// `?π := fun _ => Prop` (a Miller pattern under the opened binder), with
+/// `α : Type u` over a RIGID universe parameter exactly as with `α : Type`.
+/// Measured 2026-09-11 (`CLEAN_INSTANCE_TRACE`): the `Type*` shape failed
+/// "arguments do not unify" while the `Type 0` shape passed.
+#[test]
+fn test_pi_with_flex_body_unifies_against_a_non_dependent_arrow_over_a_rigid_universe() {
+    for (label, alpha_ty) in [
+        ("Type 0", Expr::type_()),
+        (
+            "Type u",
+            Expr::sort(Level::succ(Level::param(Name::from_string("u")))),
+        ),
+    ] {
+        let env = Environment::new();
+        let mut ctx = LocalContext::new();
+        let mut state = MetaState::new();
+        state.set_rigid_level_params([Name::from_string("u")]);
+        let alpha = ctx.push(
+            Name::from_string("α"),
+            alpha_ty.clone(),
+            BinderInfo::Default,
+        );
+        // ?ι : Type ?a, ?π : ?ι → Type ?b
+        let a = Level::param(Name::from_string("?a"));
+        let b = Level::param(Name::from_string("?b"));
+        let scope = vec![(
+            clean_parser::SurfaceName::generated_path("α"),
+            alpha,
+            alpha_ty.clone(),
+        )];
+        let iota = state.fresh_with_locals(Expr::sort(Level::succ(a)), scope.clone());
+        let iota_expr = meta_expr(iota);
+        let pi_ty = Expr::pi(
+            BinderInfo::Default,
+            iota_expr.clone(),
+            Expr::sort(Level::succ(b)),
+        );
+        let pi_meta = state.fresh_with_locals(pi_ty, scope);
+        let pi_expr = meta_expr(pi_meta);
+        let left = Expr::pi(
+            BinderInfo::Default,
+            iota_expr.clone(),
+            Expr::app(pi_expr.clone(), Expr::bvar(0)),
+        );
+        let right = Expr::pi(BinderInfo::Default, Expr::fvar(alpha), Expr::prop());
+        let result = {
+            let mut unifier = Unifier::with_env(&mut state, &env, ctx);
+            unifier.unify(&left, &right)
+        };
+        assert!(
+            matches!(result, UnifyResult::Success),
+            "[{label}] `(x : ?ι) → ?π x =?= (x : α) → Prop` must unify, got {result:?}"
+        );
+        assert_eq!(
+            state.instantiate(&iota_expr),
+            Expr::fvar(alpha),
+            "[{label}] ?ι := α"
+        );
+        let solved = state.instantiate(&pi_expr);
+        assert!(
+            matches!(solved.kind(), ExprKind::Lam(_, _, body) if **body == Expr::prop()),
+            "[{label}] ?π := fun _ => Prop, got {solved:?}"
+        );
+    }
 }

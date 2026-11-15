@@ -315,15 +315,13 @@ impl<'a> CrossValidator<'a> {
         }
     }
 
-    /// Run type inference on the specification via cert-verified path.
+    /// Run type inference on the specification with certificate generation.
     ///
     /// Unlike `run_impl_infer` (release-mode fast path with no cert), this
-    /// infers the type with certificate generation and then cross-validates
-    /// through the micro-checker. A micro-checker disagreement produces a
-    /// real mismatch instead of the previous tautological pass-through.
+    /// infers the type while constructing a certificate. It uses the same
+    /// kernel and is not an independent check.
     fn run_spec_infer(&self, src: &str) -> SpecResult {
         use clean_elab::ElabCtx;
-        use clean_kernel::micro::cross_validate_with_micro;
         use clean_parser::parse_expr;
 
         // Parse
@@ -342,21 +340,17 @@ impl<'a> CrossValidator<'a> {
         // Type infer WITH certificate
         let tc = TypeChecker::with_mode(&self.env, self.env.mode());
         match tc.infer_type_with_cert(&expr) {
-            Ok((ty, cert)) => match cross_validate_with_micro(&expr, &ty, &cert) {
-                Ok(_) => SpecResult::TypeInferred(ty),
-                Err(e) => SpecResult::Error(format!("Micro-checker disagreement: {e:?}")),
-            },
+            Ok((ty, _cert)) => SpecResult::TypeInferred(ty),
             Err(e) => SpecResult::Error(format!("Type error: {e:?}")),
         }
     }
 
-    /// Run type checking on the specification via cert-verified path.
+    /// Run type checking on the specification with certificate generation.
     ///
-    /// Infers the type with certificate, cross-validates through the
-    /// micro-checker, then checks the inferred type matches the expected type.
+    /// Infers the type with certificate, then checks that it matches the
+    /// expected type. This uses the same kernel and is not an independent check.
     fn run_spec_check(&self, src: &str, ty: &str) -> SpecResult {
         use clean_elab::ElabCtx;
-        use clean_kernel::micro::cross_validate_with_micro;
         use clean_parser::parse_expr;
 
         // Parse expression
@@ -387,18 +381,15 @@ impl<'a> CrossValidator<'a> {
         // Type infer WITH certificate
         let tc = TypeChecker::with_mode(&self.env, self.env.mode());
         match tc.infer_type_with_cert(&expr) {
-            Ok((actual_ty, cert)) => match cross_validate_with_micro(&expr, &actual_ty, &cert) {
-                Ok(_) => {
-                    if tc.is_def_eq(&actual_ty, &expected_ty) {
-                        SpecResult::TypeChecked
-                    } else {
-                        SpecResult::Error(format!(
-                            "Type mismatch: expected {expected_ty:?}, got {actual_ty:?}"
-                        ))
-                    }
+            Ok((actual_ty, _cert)) => {
+                if tc.is_def_eq(&actual_ty, &expected_ty) {
+                    SpecResult::TypeChecked
+                } else {
+                    SpecResult::Error(format!(
+                        "Type mismatch: expected {expected_ty:?}, got {actual_ty:?}"
+                    ))
                 }
-                Err(e) => SpecResult::Error(format!("Micro-checker disagreement: {e:?}")),
-            },
+            }
             Err(e) => SpecResult::Error(format!("Type error: {e:?}")),
         }
     }

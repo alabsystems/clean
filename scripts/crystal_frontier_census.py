@@ -3,6 +3,7 @@
 
     scripts/crystal_frontier_census.py <dump_O3> <dump_O0> <O3.flip.txt> <O0.flip.txt> \
         <out.json> [KEY=VALUE ...]
+    scripts/crystal_frontier_census.py --self-test | --pinned-inputs
 
 Trailing `KEY=VALUE` pairs are recorded VERBATIM under `provenance`. They are
 the only fields this script cannot derive -- which driver seal produced the
@@ -47,10 +48,21 @@ THE TWO INDEX FACTS IT DEPENDS ON, both re-checked on every run:
 
 import collections
 import json
+import os
 import re
 import sys
+import tempfile
 
-FN = re.compile(r"^(?:rustcc )?fn @(.*)\(functy\.(\d+)\) \{$")
+if os.path.dirname(os.path.abspath(__file__)) not in sys.path:
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# The ONE reader of trust-ir's definition-site symbols (M2, 2026-09-27): trust-ir WS4.3 prints a
+# non-bare name QUOTED; the reader decodes it, refuses what the printer cannot write, and holds
+# the module to one grammar, so a body's name is compared with its coverage `def_path` as a NAME.
+import crystal_trust_ir_symbols as tir_symbols  # noqa: E402
+
+# Read by check_gate_registry.py (PINNED_INPUTS_MARKER): `--pinned-inputs` prints the first-party
+# modules this script executes besides itself (derived from its imports).
+ANSWERS_PINNED_INPUTS = True
 CALL = re.compile(r"call @func\.(\d+)")
 ASSIGN = re.compile(r"^\s+%\d+ = ([a-z_]+)")
 BARE = re.compile(r"^\s+([a-z_]+)")
@@ -76,11 +88,15 @@ CONSTRUCTS = (
 def parse_ir(path):
     """Every `fn @…` entry in emission order: opcode census and callee set."""
     funcs, cur = [], None
-    for ln in open(path, encoding="utf-8", errors="replace"):
+    syms = tir_symbols.ModuleSymbols(tir_symbols.RUSTCC_PREFIX)
+    for ln_no, ln in enumerate(open(path, encoding="utf-8", errors="replace"), 1):
         s = ln.rstrip("\n")
-        m = FN.match(s)
-        if m:
-            cur = {"name": m.group(1), "ops": collections.Counter(), "callees": set()}
+        try:
+            fh = syms.fn_header(s, f"line {ln_no}")
+        except tir_symbols.SymbolRefusal as exc:
+            raise SystemExit(f"trust-ir text {path} line {ln_no}: {exc}")
+        if fh is not None:
+            cur = {"name": fh[0], "ops": collections.Counter(), "callees": set()}
             funcs.append(cur)
             continue
         if cur is None:
@@ -163,7 +179,54 @@ def parse_flips(path):
     return cod, ctfe, fb
 
 
+def self_test():
+    """M2 (2026-09-27): `parse_ir` reads a module however trust-ir printed its symbols.
+
+    A WS4.3 module (non-bare names QUOTED) parses to the SAME decoded names, opcodes and callees as
+    its legacy twin -- the `fn @(.*)` regex this replaced kept the quotes in the name, so every
+    body missed its coverage `def_path` -- and what no trust-ir printer writes is REFUSED."""
+    legacy = ("rustcc fn @k::a<'_>(functy.0) {\nbb0:\n    %0 = call @func.1()\n    ret\n}\n"
+              "rustcc fn @<k::S as k::T>::b(functy.1) {\n}\n")
+    quoted = tir_symbols.respell_ws43(legacy)
+    arms = []
+    with tempfile.TemporaryDirectory() as d:
+        def parse(text):
+            path = os.path.join(d, "m.trust-ir.txt")
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(text)
+            return [(f["name"], dict(f["ops"]), sorted(f["callees"])) for f in parse_ir(path)]
+
+        want = [("k::a<'_>", {"call": 1, "ret": 1}, [1]), ("<k::S as k::T>::b", {}, [])]
+        got = parse(legacy)
+        arms.append(("a legacy module parses", got == want, got))
+        got = parse(quoted)
+        arms.append(("a WS4.3 quoted module parses to the SAME names, opcodes and callees",
+                     '@"k::a<\'_>"' in quoted and got == want, got))
+        for tag, text, needle in (
+                ("a module mixing quoted and raw symbols is REFUSED",
+                 quoted.replace('@"<k::S as k::T>::b"', "@<k::S as k::T>::b"), "mixes a QUOTED"),
+                ("an escape the printer cannot write is REFUSED",
+                 quoted.replace('"k::a<\'_>"', '"k::a\\q"'), "is not one the trust-ir printer emits")):
+            try:
+                got = parse(text)
+            except SystemExit as exc:
+                arms.append((tag, needle in str(exc), f"refused by the wrong guard: {exc}"))
+            else:
+                arms.append((tag, False, f"parsed {got} instead of refusing"))
+    bad = [(tag, why) for tag, ok, why in arms if not ok]
+    for tag, why in bad:
+        print(f"  [RED] self-test arm {tag}: {why}")
+    print(f"crystal_frontier_census self-test: {len(arms) - len(bad)}/{len(arms)} arms behave")
+    return 0 if not bad else 1
+
+
 def main(argv):
+    if len(argv) == 2 and argv[1] in ("--self-test", "--selftest"):
+        raise SystemExit(self_test())
+    if len(argv) == 2 and argv[1] == "--pinned-inputs":
+        from pathlib import Path  # noqa: PLC0415 -- this flag's only use
+        print("\n".join(tir_symbols.first_party_imports(Path(__file__))))
+        return
     if len(argv) < 6:
         raise SystemExit(__doc__)
     d3, d0, f3, f0, out = argv[1:6]

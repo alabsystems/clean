@@ -5,8 +5,9 @@
 //! Clap types and `FeatureDescriptor` entries for the `clean kernel ...`
 //! verb tree introduced in Epic #3436 Phase 3.
 //!
-//! Split out of `cli.rs` to keep both files under the 500-line limit while
-//! preserving a single logical feature surface. The parent `cli.rs` re-exports
+//! Split out of `cli/mod.rs` so the verb tree and the flag docs live in separate
+//! files (both sit around the 500-line guideline; this one is over it) while
+//! preserving a single logical feature surface. The parent `cli/mod.rs` re-exports
 //! every public item defined here and concatenates [`KERNEL_VERB_FEATURES`]
 //! into the crate-level `FEATURES` constant.
 
@@ -19,8 +20,8 @@ use super::{CRATE_REF, DESIGN_REF};
 
 /// Subcommands under `clean kernel ...`.
 ///
-/// Introduced by Epic #3436 Phase 3 to absorb four orphan kernel binaries
-/// into the unified `clean` CLI:
+/// Introduced by Epic #3436 Phase 3 to absorb six orphan kernel binaries
+/// into the unified `clean` CLI (plus the native `classify` verb):
 ///   - `clean kernel lrat-conform`              ← `lrat_oracle_conformance` (#3443)
 ///   - `clean kernel soundness-gate`            ← `soundness_gate`          (#3444)
 ///   - `clean kernel verify-gamma-crown`        ← `verify_gamma_crown`      (#3446)
@@ -109,12 +110,10 @@ pub enum KernelCommands {
     /// Requires a Lean 4 toolchain on `PATH` or in `~/.elan/bin`.
     ///
     /// When `--output` is omitted the handler discovers the enclosing `.git`
-    /// workspace root and writes to `crates/clean-kernel/tests/differential/
-    /// lean4_baseline.json`, matching the original binary's hard-coded path.
+    /// workspace root and writes to `tests/differential/lean4_baseline.json`, matching the original binary's hard-coded path.
     GenerateLean4Baseline {
         /// Explicit path for the generated baseline JSON. Defaults to the
-        /// workspace-root-relative `crates/clean-kernel/tests/differential/
-        /// lean4_baseline.json` when omitted.
+        /// workspace-root-relative `tests/differential/lean4_baseline.json` when omitted.
         #[arg(long, value_name = "PATH")]
         output: Option<PathBuf>,
     },
@@ -193,18 +192,18 @@ pub const KERNEL_VERB_FEATURES: &[FeatureDescriptor] = &[
 Runs clean's native LRAT verifiers side-by-side against external oracles \
 (`ay-lrat-check` and/or `cake_lpr`) on a maintained proof corpus. Reports \
 per-case agreement and flags internal disagreements. Use `--update-report` \
-to persist the Markdown report to `reports/research/`.\n\n\
+to write the Markdown report to `reports/research/`.\n\n\
 Absorbs the deprecated `lrat_oracle_conformance` standalone binary (#3443).",
         category: Category::Verification,
         stability: Stability::V1,
         examples: &[
             Example {
                 cmd: "clean kernel lrat-conform",
-                what: "run the oracle-conformance harness with auto-discovered oracles",
+                what: "run the oracle-conformance harness; only ay-lrat-check is auto-discovered (cake-lpr joins when passed explicitly)",
             },
             Example {
                 cmd: "clean kernel lrat-conform --update-report",
-                what: "run the harness and persist the Markdown report under reports/research/",
+                what: "run the harness; it writes the Markdown report under reports/research/",
             },
         ],
         see_also: &["cert verify"],
@@ -298,10 +297,17 @@ standalone binary (#3446).",
         summary: "Verify every theorem inside a .cleancert proof bundle",
         description: "\
 Loads a `.cleancert` bundle produced by \
-`clean_kernel::cert::bundle::CertBundle` and verifies every theorem in it \
-against the bundle's serialized environment. Emits per-theorem status plus a \
-trust-level summary. Unlike `clean cert verify` (which takes a single \
-`ProofCert` + `Expr` JSON pair), this verb targets whole bundles.\n\n\
+`clean_kernel::cert::bundle::CertBundle` and verifies every theorem in it. \
+The bundle's serialized environment is not trusted: every declaration in it \
+is first re-derived from the canonical base (the prelude) — a prelude name \
+must hold the prelude's very declaration, everything else is re-admitted by \
+the kernel in dependency order — and each theorem is replayed in the rebuilt \
+environment. A theorem resting on a declaration the kernel refused fails, \
+naming it; a bundle that redefines a prelude declaration fails every \
+theorem. Emits per-theorem status, a trust-level summary, the environment \
+re-check, and the axioms each theorem rests on. Unlike `clean cert verify` \
+(which takes a single `ProofCert` + `Expr` JSON pair), this verb targets \
+whole bundles.\n\n\
 Absorbs the deprecated `clean_cert verify` standalone binary (#3447).",
         category: Category::Verification,
         stability: Stability::V1,
@@ -393,7 +399,7 @@ Absorbs the deprecated `clean_cert stats` standalone binary (#3447).",
         summary: "Regenerate the Lean 4 differential-testing baseline JSON",
         description: "\
 Runs the external `lean` (Lean 4) toolchain over the test-expression corpus at \
-`crates/clean-kernel/tests/differential/expressions.txt` and captures the \
+`tests/differential/expressions.txt` and captures the \
 normalized inferred types as a cached JSON baseline. The resulting file feeds \
 clean's differential parity test (`lean4_parity`), letting CI run without a \
 Lean 4 installation while keeping the clean vs Lean4 cross-check honest.\n\n\
@@ -439,7 +445,7 @@ emits one JSON line per name.\n\n\
 Replaces the 90-second `mathverse_shard build-native | grep Constructive` \
 feedback loop with a sub-500ms per-theorem check. JSON schema per line: \
 `name`, `kind` (Theorem/Axiom/Opaque/Definition), `classification` \
-(Constructive/AxiomDependent/TrustMarkerReached/Unchecked/Unknown/NotFound), \
+(Constructive/AxiomDependent/TrustMarkerReached/Unchecked/Unknown/NotFound/\nNotATheorem — the last for a name that exists but is an axiom, opaque, or \ndefinition rather than a theorem), \
 `axiom_closure`, `trust_markers_reached`.\n\n\
 `--all-constructive` iterates every theorem in the seeded env and emits one \
 JSON line for each constructive one. `--why-rejected <NAME>` prints a single \

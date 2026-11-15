@@ -30,7 +30,7 @@ fn test_build_loop_acc_value_without_return_uses_raw_accumulator() {
     let env = Environment::new();
     let mut ctx = ElabCtx::new(&env);
     let sigma = Expr::const_(Name::from_string("PUnit"), vec![]);
-    let acc_fvar = ctx.push_local("__do_acc".to_string(), sigma.clone());
+    let acc_fvar = ctx.push_local(SurfaceName::generated_path("__do_acc"), sigma.clone());
 
     ctx.do_loop_ctx = Some(DoLoopContext {
         sigma,
@@ -52,7 +52,7 @@ fn test_build_loop_acc_value_with_return_wraps_option_none() {
     let env = Environment::with_prelude();
     let mut ctx = ElabCtx::new(&env);
     let sigma = Expr::const_(Name::from_string("PUnit"), vec![]);
-    let acc_fvar = ctx.push_local("__do_acc".to_string(), sigma.clone());
+    let acc_fvar = ctx.push_local(SurfaceName::generated_path("__do_acc"), sigma.clone());
 
     ctx.do_loop_ctx = Some(DoLoopContext {
         sigma,
@@ -78,15 +78,19 @@ fn test_build_loop_acc_value_with_return_and_mut_vars_builds_prod() {
     let env = Environment::with_prelude();
     let mut ctx = ElabCtx::new(&env);
     let sigma = Expr::const_(Name::from_string("PUnit"), vec![]);
-    let acc_fvar = ctx.push_local("__do_acc".to_string(), sigma.clone());
+    let acc_fvar = ctx.push_local(SurfaceName::generated_path("__do_acc"), sigma.clone());
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let state_fvar = ctx.push_local("state".to_string(), nat_ty.clone());
+    let state_fvar = ctx.push_local(SurfaceName::generated_path("state"), nat_ty.clone());
 
     ctx.do_loop_ctx = Some(DoLoopContext {
         sigma,
         acc_fvar,
         u_level: Level::zero(),
-        mut_vars: vec![("state".to_string(), state_fvar, nat_ty.clone())],
+        mut_vars: vec![(
+            SurfaceName::generated_path("state"),
+            state_fvar,
+            nat_ty.clone(),
+        )],
         return_type: Some(nat_ty),
     });
 
@@ -108,20 +112,20 @@ fn test_is_loop_mut_var_reads_active_loop_bindings() {
     let env = Environment::new();
     let mut ctx = ElabCtx::new(&env);
     let sigma = Expr::const_(Name::from_string("PUnit"), vec![]);
-    let acc_fvar = ctx.push_local("__do_acc".to_string(), sigma.clone());
+    let acc_fvar = ctx.push_local(SurfaceName::generated_path("__do_acc"), sigma.clone());
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let counter_fvar = ctx.push_local("counter".to_string(), nat_ty.clone());
+    let counter_fvar = ctx.push_local(SurfaceName::generated_path("counter"), nat_ty.clone());
 
     ctx.do_loop_ctx = Some(DoLoopContext {
         sigma,
         acc_fvar,
         u_level: Level::zero(),
-        mut_vars: vec![("counter".to_string(), counter_fvar, nat_ty)],
+        mut_vars: vec![(SurfaceName::generated_path("counter"), counter_fvar, nat_ty)],
         return_type: None,
     });
 
-    assert!(ctx.is_loop_mut_var("counter"));
-    assert!(!ctx.is_loop_mut_var("missing"));
+    assert!(ctx.is_loop_mut_var(&SurfaceName::generated_path("counter")));
+    assert!(!ctx.is_loop_mut_var(&SurfaceName::generated_path("missing")));
 }
 
 #[test]
@@ -132,25 +136,25 @@ fn test_polymorphic_three_mut_do_state_projects_reassigns_and_kernel_checks() {
     let type_0 = Expr::type_();
     let type_1 = Expr::sort(Level::succ(Level::succ(Level::zero())));
 
-    let x = ctx.push_local("x".to_string(), nat_ty.clone());
-    let y = ctx.push_local("y".to_string(), type_0.clone());
-    let z = ctx.push_local("z".to_string(), type_1.clone());
+    let x = ctx.push_local(SurfaceName::generated_path("x"), nat_ty.clone());
+    let y = ctx.push_local(SurfaceName::generated_path("y"), type_0.clone());
+    let z = ctx.push_local(SurfaceName::generated_path("z"), type_1.clone());
     let state_types = vec![
-        ("x".to_string(), nat_ty.clone()),
-        ("y".to_string(), type_0.clone()),
-        ("z".to_string(), type_1.clone()),
+        (SurfaceName::generated_path("x"), nat_ty.clone()),
+        (SurfaceName::generated_path("y"), type_0.clone()),
+        (SurfaceName::generated_path("z"), type_1.clone()),
     ];
     let sigma = elab_do_prod::build_sigma_type(&ctx, &state_types)
         .expect("polymorphic do-state product type");
-    let acc_fvar = ctx.push_local("__do_acc".to_string(), sigma.clone());
+    let acc_fvar = ctx.push_local(SurfaceName::generated_path("__do_acc"), sigma.clone());
     ctx.do_loop_ctx = Some(DoLoopContext {
         sigma: sigma.clone(),
         acc_fvar,
         u_level: Level::succ(Level::succ(Level::zero())),
         mut_vars: vec![
-            ("x".to_string(), x, nat_ty.clone()),
-            ("y".to_string(), y, type_0.clone()),
-            ("z".to_string(), z, type_1.clone()),
+            (SurfaceName::generated_path("x"), x, nat_ty.clone()),
+            (SurfaceName::generated_path("y"), y, type_0.clone()),
+            (SurfaceName::generated_path("z"), z, type_1.clone()),
         ],
         return_type: None,
     });
@@ -164,9 +168,9 @@ fn test_polymorphic_three_mut_do_state_projects_reassigns_and_kernel_checks() {
     assert!(ctx.is_def_eq(&packed_ty, &sigma));
 
     let mut_info = vec![
-        ("x".to_string(), x, nat_ty.clone()),
-        ("y".to_string(), y, type_0.clone()),
-        ("z".to_string(), z, type_1.clone()),
+        (SurfaceName::generated_path("x"), x, nat_ty.clone()),
+        (SurfaceName::generated_path("y"), y, type_0.clone()),
+        (SurfaceName::generated_path("z"), z, type_1.clone()),
     ];
     let projections = ctx
         .destructure_acc_from_expr(packed, &mut_info)
@@ -181,16 +185,16 @@ fn test_polymorphic_three_mut_do_state_projects_reassigns_and_kernel_checks() {
     // Model a reassignment round: the active do context now points at fresh
     // values of the same three heterogeneous types. Repacking must retain the
     // original sigma type exactly.
-    let x2 = ctx.push_local("x_reassigned".to_string(), nat_ty.clone());
-    let y2 = ctx.push_local("y_reassigned".to_string(), type_0.clone());
-    let z2 = ctx.push_local("z_reassigned".to_string(), type_1.clone());
+    let x2 = ctx.push_local(SurfaceName::generated_path("x_reassigned"), nat_ty.clone());
+    let y2 = ctx.push_local(SurfaceName::generated_path("y_reassigned"), type_0.clone());
+    let z2 = ctx.push_local(SurfaceName::generated_path("z_reassigned"), type_1.clone());
     ctx.do_loop_ctx
         .as_mut()
         .expect("active do loop context")
         .mut_vars = vec![
-        ("x".to_string(), x2, nat_ty),
-        ("y".to_string(), y2, type_0),
-        ("z".to_string(), z2, type_1),
+        (SurfaceName::generated_path("x"), x2, nat_ty),
+        (SurfaceName::generated_path("y"), y2, type_0),
+        (SurfaceName::generated_path("z"), z2, type_1),
     ];
     let reassigned = ctx
         .build_loop_acc_value()

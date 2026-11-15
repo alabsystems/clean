@@ -32,9 +32,17 @@ fn setup_conv_at_hyp_state() -> (ProofState, Environment) {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "h_eq").expect("intro h_eq");
-    intro(&mut state, "h_target").expect("intro h_target");
-    intro(&mut state, "hy").expect("intro hy");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h_eq"),
+    )
+    .expect("intro h_eq");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h_target"),
+    )
+    .expect("intro h_target");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hy")).expect("intro hy");
     (state, env)
 }
 
@@ -54,7 +62,9 @@ fn test_conv_at_hypothesis_uses_local_proof_carry_without_trust() {
         &mut state,
         &SurfaceTactic::Conv(
             Span::dummy(),
-            SurfaceTacticLocation::Hyps(vec!["h_target".into()]),
+            SurfaceTacticLocation::Hyps(vec![clean_parser::SurfaceName::generated_path(
+                "h_target",
+            )]),
             vec![
                 SurfaceTactic::ConvArg(Span::dummy(), -2),
                 SurfaceTactic::Rw(
@@ -72,7 +82,7 @@ fn test_conv_at_hypothesis_uses_local_proof_carry_without_trust() {
         .unwrap()
         .local_ctx
         .iter()
-        .find(|d| d.name == "h_target")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h_target"))
         .expect("rewritten hypothesis should remain");
     assert_ne!(
         h_target.fvar, h_target_fvar,
@@ -132,7 +142,11 @@ fn test_conv_goal_compound_lhs_rewrite_zero_trusted_axioms() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hxy").expect("intro");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro");
     let axiom_before = axiom_snapshot();
 
     let mut ctx = ElabCtx::new(&env);
@@ -193,7 +207,11 @@ fn test_conv_goal_compound_rhs_rewrite_zero_trusted_axioms() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hyx").expect("intro");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+    )
+    .expect("intro");
     let axiom_before = axiom_snapshot();
 
     let mut ctx = ElabCtx::new(&env);
@@ -310,7 +328,11 @@ fn test_conv_congr_surface_rewrite_kernel_checked_no_new_axioms() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "hyx").expect("intro hyx : y = x");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+    )
+    .expect("intro hyx : y = x");
     let axiom_before = axiom_snapshot();
 
     let mut ctx = ElabCtx::new(&env);
@@ -440,7 +462,11 @@ fn test_conv_goal_compound_nonprop_lhs_rewrite_zero_trusted_axioms() {
         make_eq_n(x.clone(), y.clone()),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hxy").expect("intro");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro");
     let axiom_before = axiom_snapshot();
 
     let mut ctx = ElabCtx::new(&env);
@@ -560,7 +586,11 @@ fn adversarial_conv_congr_wrong_witness_cannot_discharge_original() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "hzy").expect("intro hzy : z = y");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hzy"),
+    )
+    .expect("intro hzy : z = y");
 
     let mut ctx = ElabCtx::new(&env);
     let _ = ctx.eval(
@@ -635,7 +665,11 @@ fn adversarial_conv_congr_lift_is_faithful_not_overstrong() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "hyx").expect("intro hyx : y = x");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+    )
+    .expect("intro hyx : y = x");
     let mut ctx = ElabCtx::new(&env);
     ctx.eval(
         &mut state,

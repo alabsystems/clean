@@ -95,7 +95,10 @@ pub(super) fn try_classical_atom_split(
             let pos_goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
             let pos_ok = tauto_prove(state, &pos_goal, depth + 1, max_depth, splits_remaining)?;
             if std::env::var_os("CLEAN_TAUTO_TRACE").is_some() {
-                let t: String = format!("{:?}", pos_goal.target).chars().take(80).collect();
+                let t: String = crate::error_render::term(&pos_goal.target)
+                    .chars()
+                    .take(80)
+                    .collect();
                 eprintln!(
                     "atom-split: POS branch {} target {t}",
                     if pos_ok { "OK" } else { "FAIL" }

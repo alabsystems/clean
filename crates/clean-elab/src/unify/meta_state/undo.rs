@@ -225,11 +225,19 @@ impl MetaState {
             UndoRecord::MetaCreate { id } => {
                 self.metas.remove(&id);
             }
+            UndoRecord::MetaLocals { id, old_locals } => {
+                if let Some(meta) = self.metas.get_mut(&id) {
+                    meta.locals = old_locals;
+                }
+            }
             UndoRecord::NextId { old_value } => {
                 self.next_id = old_value;
             }
             UndoRecord::LevelPostpone => {
                 self.postponed_levels.pop();
+            }
+            UndoRecord::NumeralPostpone => {
+                self.postponed_numerals.pop();
             }
             UndoRecord::LevelParent { name, old_parent } => {
                 if let Some(parent) = old_parent {

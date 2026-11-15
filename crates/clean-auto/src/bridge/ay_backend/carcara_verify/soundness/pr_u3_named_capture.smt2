@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-fun x () Int)
+(assert (= (! x :named k) x))
+(define-fun h ((x Int)) Int k)
+(assert (= (h 5) x))
+(assert (not (= x 5)))
+(check-sat)

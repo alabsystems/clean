@@ -18,9 +18,14 @@ mod certified;
 mod equality_solver;
 mod fail_closed;
 mod gcd_normalize;
+mod hyp_facts;
+mod hyp_split;
+mod hyp_tighten;
+mod hyp_view;
 mod le_solver;
 mod nat_div_mod;
 mod nat_sub;
+mod unsat_core;
 
 pub(crate) use certified::{extract_certified_mathverse_constraints, mathverse_check_certified};
 
@@ -101,7 +106,7 @@ impl MathverseCertificate {
     /// ENSURES: `result.coefficients == linarith_cert.coefficients`
     /// ENSURES: `result.uses_goal_negation == true` (linarith always negates goal)
     /// ENSURES: `result.contradiction_type` is `LinearCombination`
-    pub fn from_linarith(linarith_cert: &LinarithCertificate) -> Self {
+    pub(crate) fn from_linarith(linarith_cert: &LinarithCertificate) -> Self {
         Self {
             coefficients: linarith_cert.coefficients.clone(),
             uses_goal_negation: true, // linarith always negates goal
@@ -134,7 +139,7 @@ impl CertifiedMathverseConstraint {
     /// ENSURES: `result.certificate.coefficients[hyp_index] == 1`
     /// ENSURES: All other coefficients are 0
     /// ENSURES: `result.certificate.coefficients.len() == num_hypotheses`
-    pub fn from_hypothesis(
+    pub(crate) fn from_hypothesis(
         constraint: OmegaConstraint,
         hyp_index: usize,
         num_hypotheses: usize,
@@ -152,7 +157,7 @@ impl CertifiedMathverseConstraint {
     /// ENSURES: `result.certificate.uses_goal_negation == true`
     /// ENSURES: All coefficients are 0 (goal negation, not a hypothesis)
     /// ENSURES: `result.certificate.coefficients.len() == num_hypotheses`
-    pub fn from_negated_goal(constraint: OmegaConstraint, num_hypotheses: usize) -> Self {
+    pub(crate) fn from_negated_goal(constraint: OmegaConstraint, num_hypotheses: usize) -> Self {
         let mut cert = MathverseCertificate::new(num_hypotheses);
         cert.uses_goal_negation = true;
         Self {
@@ -176,7 +181,7 @@ impl CertifiedMathverseConstraint {
     ///
     /// ENSURES: All coefficients are 0 and `uses_goal_negation == false`
     /// ENSURES: `result.certificate.coefficients.len() == num_hypotheses`
-    pub fn from_implicit_nonneg(constraint: OmegaConstraint, num_hypotheses: usize) -> Self {
+    pub(crate) fn from_implicit_nonneg(constraint: OmegaConstraint, num_hypotheses: usize) -> Self {
         Self {
             constraint,
             certificate: MathverseCertificate::new(num_hypotheses),
@@ -231,21 +236,78 @@ pub enum OmegaConstraint {
     },
 }
 
+/// Replay a refuting certificate through the hypothesis-only builder
+/// (`build_mathverse_proof`) and close the goal with the result; `Err` carries
+/// the reason when no term was built or `close_goal` refused it.
+fn replay_hypothesis_proof(
+    state: &mut ProofState,
+    goal: &Goal,
+    certificate: &MathverseCertificate,
+    hypothesis_fvars: &[FVarId],
+) -> Result<(), String> {
+    let env = state.env().clone();
+    let Some(proof) = build_mathverse_proof(state, goal, certificate, hypothesis_fvars, &env)
+    else {
+        tracing::debug!("mathverse: build_mathverse_proof returned None for certified mathverse");
+        return Err("build_mathverse_proof returned None".to_string());
+    };
+    state.close_goal(goal, proof).map_err(|err| {
+        tracing::debug!(
+            "mathverse: build_mathverse_proof succeeded but close_goal rejected: {err:?}"
+        );
+        format!("close_goal rejected arithmetic proof: {err}")
+    })
+}
+
+/// `constraints` are the rows `certificate` refutes; they let the
+/// hypothesis-only replay retry on an irreducible core when the certificate
+/// flags every hypothesis ([`unsat_core::hypothesis_unsat_core`]).
 fn close_certified_mathverse_contradiction(
     state: &mut ProofState,
     goal: &Goal,
     certificate: &MathverseCertificate,
     hypothesis_fvars: &[FVarId],
+    constraints: &[CertifiedMathverseConstraint],
 ) -> TacticResult {
     match &certificate.contradiction_type {
         MathverseContradictionType::Arithmetic | MathverseContradictionType::LinearCombination => {
             // General Farkas-with-goal route (Nat): the certified replay below
             // only combines hypotheses with each other and drops the negated
             // goal, so genuine `hyp + neg_goal` certificates (t1/t2/t5) never
-            // produce the target term. Try the by-contradiction Farkas builder
-            // first; its term is re-checked by `close_goal`, so a wrong
-            // combination fails closed. Only fires when the certificate's UNSAT
-            // witness uses the negated goal.
+            // produce the target term — and neither does any goal needing a
+            // DERIVED combination (`n < 21 ⊢ 3*n < 63`, `n < 21 ⊢ n ≤ 20`),
+            // which is why the replay below hands back the hypothesis and
+            // `close_goal` reports `expected <goal>, got <hypothesis>`.
+            //
+            // CONSTRUCTIVE wrapper FIRST. The Farkas core is axiom-free; only
+            // the wrapper that brings the refuted goal into scope had a choice
+            // of routes, and `Nat.le_or_lt` + `Or.rec` is the choice-FREE one.
+            // Trying it ahead of the `Classical.byContradiction` lane is what
+            // keeps a row omega discharges out of `Classical.choice`'s closure —
+            // a dependency `axiom_deps` does not report (it filters the
+            // foundational axioms out), so this ordering is the only thing
+            // enforcing it. Both terms are re-checked by `close_goal`, so a
+            // wrong combination fails closed either way. See
+            // `arith_linarith_farkas_goal`.
+            if let Some(proof) =
+                super::arith_linarith_farkas_goal::try_build_constructive_goal_split_proof(
+                    state,
+                    goal,
+                    certificate,
+                    hypothesis_fvars,
+                )
+            {
+                match state.close_goal(goal, proof) {
+                    Ok(()) => return Ok(()),
+                    Err(err) => tracing::debug!(
+                        "mathverse: constructive goal-split proof built but close_goal rejected: {err:?}"
+                    ),
+                }
+            }
+
+            // Classical fallback, unchanged. Reached only when the constructive
+            // split could not be built at all (e.g. `Nat.le_or_lt` absent from
+            // the environment), so nothing that reconstructs above pays for it.
             if let Some(proof) = super::arith_linarith_farkas_goal::try_build_farkas_goal_proof(
                 state,
                 goal,
@@ -260,25 +322,20 @@ fn close_certified_mathverse_contradiction(
                 }
             }
 
-            let env = state.env().clone();
-            let arithmetic_reason = if let Some(proof) =
-                build_mathverse_proof(state, goal, certificate, hypothesis_fvars, &env)
-            {
-                match state.close_goal(goal, proof) {
+            let arithmetic_reason =
+                match replay_hypothesis_proof(state, goal, certificate, hypothesis_fvars) {
                     Ok(()) => return Ok(()),
-                    Err(err) => {
-                        tracing::debug!(
-                            "mathverse: build_mathverse_proof succeeded but close_goal rejected: {err:?}"
-                        );
-                        format!("close_goal rejected arithmetic proof: {err}")
-                    }
+                    Err(reason) => reason,
+                };
+            // The equality / `≤` solver flags EVERY hypothesis, so one
+            // irrelevant hypothesis in scope can keep the builders from
+            // chaining or summing the ones that refute each other. Retry on the
+            // irreducible core; the reported reason stays the full set's.
+            if let Some(core) = unsat_core::hypothesis_unsat_core(certificate, constraints) {
+                if replay_hypothesis_proof(state, goal, &core, hypothesis_fvars).is_ok() {
+                    return Ok(());
                 }
-            } else {
-                tracing::debug!(
-                    "mathverse: build_mathverse_proof returned None for certified mathverse"
-                );
-                "build_mathverse_proof returned None".to_string()
-            };
+            }
 
             if decide(state).is_ok() {
                 return Ok(());
@@ -326,12 +383,21 @@ fn close_certified_mathverse_contradiction(
 /// positive relation. Restricting to these keeps the normalization from
 /// over-transforming unrelated negations (`¬(P ∧ Q)`, `¬∃`, …) that the omega
 /// solver could not use.
+///
+/// `≤` / `<` are matched in BOTH spellings (`match_le_any` / `match_lt_any`):
+/// the `LE.le` / `LT.lt` typeclass spine that `a ≤ b` elaborates to, and the
+/// raw `Nat.le a b` / `Nat.lt a b` constant application that a hand-written
+/// Lean island — or a Trust two-language model spelling its decisions out —
+/// produces. Only the typeclass spine was matched before, so a hypothesis
+/// `h : Not (Nat.lt x y)` was never normalized and omega failed the goal
+/// `Nat.le y x` (`close_goal rejected arithmetic proof: type mismatch`) that it
+/// proves when the very same hypothesis is written `h : ¬ (x < y)`.
 fn is_negated_relation(ty: &Expr) -> bool {
     let Some(inner) = super::match_not(ty) else {
         return false;
     };
-    super::match_le(&inner).is_some()
-        || super::match_lt(&inner).is_some()
+    super::match_le_any(&inner).is_some()
+        || super::match_lt_any(&inner).is_some()
         || super::match_ge(&inner).is_some()
         || super::match_gt(&inner).is_some()
         || super::match_eq(&inner).is_some()
@@ -356,7 +422,7 @@ fn normalize_negated_relations(state: &mut ProofState) {
     let Some(goal) = state.current_goal().cloned() else {
         return;
     };
-    let neg_hyp_names: Vec<String> = goal
+    let neg_hyp_names: Vec<clean_parser::SurfaceName> = goal
         .local_ctx
         .iter()
         .filter(|d| is_negated_relation(&d.ty))
@@ -426,7 +492,7 @@ fn try_direct_nat_reconstruction(state: &mut ProofState, goal: &Goal) -> TacticR
         .close_goal(goal, proof)
         .map_err(|e| TacticError::ArithmeticFailed {
             tactic: "omega".to_string(),
-            reason: format!("direct Nat reconstruction rejected by close_goal: {e:?}"),
+            reason: format!("direct Nat reconstruction rejected by close_goal: {}", e),
         })
 }
 
@@ -481,7 +547,7 @@ fn try_int_reconstruction(state: &mut ProofState, goal: &Goal) -> TacticResult {
         .close_goal(goal, proof)
         .map_err(|e| TacticError::ArithmeticFailed {
             tactic: "omega".to_string(),
-            reason: format!("direct Int reconstruction rejected by close_goal: {e:?}"),
+            reason: format!("direct Int reconstruction rejected by close_goal: {}", e),
         })
 }
 
@@ -519,7 +585,21 @@ fn is_false_target(ty: &Expr) -> bool {
 /// # Errors
 /// - `NoGoals` if there are no goals
 /// - `Other` if the goal cannot be decided
+///
+/// # Propositional hypotheses
+///
+/// `∧`, `∨`, `≠`, `¬(p ∨ q)`, `p → q` and `p ↔ q` hypotheses are read the
+/// way Lean's `omega` reads them: when the linear pipeline below fails, the
+/// goal is retried with conjunctions destructured and the rest rewritten, and
+/// then case-split on its first relevant disjunction, each branch solved the
+/// same way (`hyp_split`, bounded by `MAX_HYP_CASE_SPLITS`).
 pub fn omega(state: &mut ProofState) -> TacticResult {
+    hyp_split::omega_with_hyp_splits(state, omega_linear)
+}
+
+/// The linear pipeline `omega` runs on one goal, before and inside any
+/// hypothesis case split.
+fn omega_linear(state: &mut ProofState) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -563,6 +643,21 @@ pub fn omega(state: &mut ProofState) -> TacticResult {
         return Ok(());
     }
 
+    // Goal-driven PURE-ORDER reconstruction for fixed-width unsigned-integer
+    // carriers (`UInt8`/…/`UInt64`/`USize`). Their `≤`/`<` unfold definitionally
+    // to `Nat.le`/`Nat.lt` on the order-preserving `.toNat` embedding, so a
+    // pure-order goal (`a ≤ a`, `¬(a < b) ⊢ b ≤ a`, …) reduces to the matching
+    // `Nat` problem over opaque `toNat` atoms and reuses the `Nat` direct prover.
+    // SOUNDNESS: `UInt` arithmetic wraps, so the lane fires ONLY when every atom
+    // is arithmetic-free; the synthesized term is re-checked by `close_goal`
+    // (kernel def-eq against the original goal), so false goals fail closed. See
+    // `arith_uint_order`.
+    if let Some(proof) = super::arith_uint_order::try_prove_uint_order(&goal) {
+        if state.close_goal(&goal, proof).is_ok() {
+            return Ok(());
+        }
+    }
+
     // Try certified mathverse first for proof reconstruction
     if let Some((certified_constraints, hypothesis_fvars)) =
         extract_certified_mathverse_constraints(state, &goal)
@@ -574,10 +669,32 @@ pub fn omega(state: &mut ProofState) -> TacticResult {
                     &goal,
                     &certificate,
                     &hypothesis_fvars,
+                    &certified_constraints,
                 );
             }
             // Fall through to uncertified check
             MathverseCertifiedResult::Sat | MathverseCertifiedResult::Unknown => {}
+        }
+    }
+
+    // Goal-directed CONSTRUCTIVE Farkas lane, run WITHOUT a mathverse
+    // certificate. The block above can be skipped entirely — not merely report
+    // `Sat`/`Unknown` — because the mathverse linear parser names atoms by
+    // `FVarId`, so a hypothesis or goal over an opaque Nat term
+    // (`UInt32.toNat d`, `Nat.xor a b`, any function call) parses to nothing and
+    // `extract_certified_mathverse_constraints` returns `None`. The Farkas
+    // builder's linear forms are keyed by `Expr` and atomize such a term
+    // natively, and its Farkas-gap test decides the goal on its own. Placed
+    // after the certified block so no currently-reconstructing goal changes
+    // route. Fail-closed: no positive constant gap ⇒ `None`, and the term is
+    // re-checked by `close_goal`.
+    if let Some(proof) =
+        super::arith_linarith_farkas_goal::try_build_constructive_goal_proof_from_context(
+            state, &goal,
+        )
+    {
+        if state.close_goal(&goal, proof).is_ok() {
+            return Ok(());
         }
     }
 
@@ -660,6 +777,7 @@ fn mathverse_try_uncertified(state: &mut ProofState, goal: &Goal) -> TacticResul
                         goal,
                         &certificate,
                         &hypothesis_fvars,
+                        &certified_constraints,
                     );
                 }
                 MathverseCertifiedResult::Sat | MathverseCertifiedResult::Unknown => {}

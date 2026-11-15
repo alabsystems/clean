@@ -32,31 +32,40 @@
 pub mod codata_recognize;
 mod lower;
 pub(crate) mod mentions;
+mod scoped_application_type;
+#[cfg(test)]
+mod scoped_application_type_tests;
 mod sink_ih;
 #[cfg(test)]
 mod sink_ih_tests;
 #[cfg(test)]
 mod tests;
+mod uint_decision;
 
+use crate::implemented_by::CodeMeaning;
 use crate::lcnf::{Code, FunDecl, LetDecl, LetValue};
 use clean_kernel::{Environment, Expr, FVarId, Name};
+use std::collections::HashMap;
 
-pub use lower::{constant_to_decl, expr_to_code, is_erasable};
+pub use lower::{
+    constant_to_decl, constant_to_decl_in_runtime_closure, constant_to_decl_with_meaning,
+    expr_to_code, is_erasable,
+};
 
 /// Counter for generating fresh FVarIds.
 #[derive(Debug, Default)]
-pub struct FVarIdGen {
+pub(crate) struct FVarIdGen {
     next: u64,
 }
 
 impl FVarIdGen {
     /// Create a new generator starting from 0.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { next: 0 }
     }
 
     /// Generate a fresh FVarId.
-    pub fn fresh(&mut self) -> FVarId {
+    pub(crate) fn fresh(&mut self) -> FVarId {
         let id = FVarId::new(self.next);
         self.next += 1;
         id
@@ -75,8 +84,15 @@ pub struct LcnfContext<'a> {
     /// Stack mapping de Bruijn indices to FVarIds.
     /// Index 0 is the innermost binder.
     pub(crate) bvar_stack: Vec<FVarId>,
+    /// Local types with enclosing de Bruijn variables resolved to stable ids.
+    local_types: HashMap<FVarId, Expr>,
     /// Accumulated local declarations in source order.
     pending: Vec<PendingLocal>,
+    /// What the lowered code means: which body a reference to an
+    /// `@[implemented_by]` declaration runs.
+    pub(crate) meaning: CodeMeaning,
+    /// Rules at this body's compilation point, before later source attributes.
+    pub(crate) csimp_rules: Vec<clean_kernel::env::csimp::Rule>,
 }
 
 enum PendingLocal {
@@ -94,11 +110,20 @@ impl<'a> LcnfContext<'a> {
     /// constructor existed only for the old `Nat.rec` special case, whose
     /// `self_name(pred)` IH under-applied multi-parameter declarations.
     pub fn new(env: &'a Environment) -> Self {
+        Self::with_meaning(env, CodeMeaning::LeanCompiled)
+    }
+
+    /// [`Self::new`] for code that means `meaning`
+    /// ([`CodeMeaning::KernelValue`]: no reference is substituted).
+    pub(crate) fn with_meaning(env: &'a Environment, meaning: CodeMeaning) -> Self {
         Self {
             env,
             fvar_gen: FVarIdGen::new(),
             bvar_stack: Vec::new(),
+            local_types: HashMap::new(),
             pending: Vec::new(),
+            meaning,
+            csimp_rules: clean_kernel::env::csimp::rules_for(env, None),
         }
     }
 
@@ -118,10 +143,34 @@ impl<'a> LcnfContext<'a> {
     }
 
     /// Push a new binder onto the stack.
+    #[cfg(test)]
     pub(crate) fn push_binder(&mut self) -> FVarId {
         let fvar = self.fresh_fvar();
         self.bvar_stack.push(fvar);
         fvar
+    }
+
+    /// Record a parameter's type before entering its binder scope.
+    pub(crate) fn push_typed_binder(&mut self, ty: &Expr) -> FVarId {
+        let ty = self.resolve_local_type(ty);
+        let fvar = self.fresh_fvar();
+        self.local_types.insert(fvar, ty);
+        self.bvar_stack.push(fvar);
+        fvar
+    }
+
+    fn resolve_local_type(&self, ty: &Expr) -> Expr {
+        let locals: Vec<_> = self
+            .bvar_stack
+            .iter()
+            .rev()
+            .map(|id| Expr::fvar(*id))
+            .collect();
+        ty.instantiate_rev(&locals)
+    }
+
+    pub(crate) fn local_type(&self, fvar: FVarId) -> Option<&Expr> {
+        self.local_types.get(&fvar)
     }
 
     /// Pop a binder from the stack.
@@ -132,6 +181,8 @@ impl<'a> LcnfContext<'a> {
     /// Add a let-binding and return the bound FVarId.
     pub(crate) fn add_let(&mut self, name: Name, ty: Expr, value: LetValue) -> FVarId {
         let fvar = self.fresh_fvar();
+        let local_ty = self.resolve_local_type(&ty);
+        self.local_types.insert(fvar, local_ty);
         self.pending
             .push(PendingLocal::Let(LetDecl::new(fvar, name, ty, value)));
         fvar

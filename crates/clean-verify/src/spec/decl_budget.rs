@@ -56,16 +56,21 @@
 //!
 //! **What that total is, from two measurements and one division.**
 //!
-//! * `CoreSpecBundle::EvalIr`, measured 2026-08-28 with the trace below
-//!   (`cargo test -p clean-verify --test evalir_scratchpad`), TWICE: **763**
-//!   registered declarations both times, max **362,826**
-//!   (`ir_lzb_max_true_seg`) — identical in both runs — bundle total
-//!   **2,081,303** and **2,115,691** ticks, median **610** and **646**. The
-//!   ~1.6% spread between runs is worth knowing: the per-declaration count is
-//!   NOT bit-reproducible across builds even though the mechanism is
-//!   deterministic per input, so read these as a scale, not a fixed point. The
-//!   build was reported at 0.1 s — call it ~2.1e7 ticks/second for a debug
-//!   build on this box.
+//! * `CoreSpecBundle::EvalIr`, RE-MEASURED 2026-09-10 with the trace below
+//!   (`cargo test -p clean-verify --test evalir_scratchpad`): **811**
+//!   registered declarations, max **378,972** (`ir_lzb_max_true_seg`), bundle
+//!   total **2,323,616** ticks, median **702**. The Phase-B load arm decodes
+//!   the loaded word through the module's encodings table, which adds iota
+//!   steps to every `load` — hence the +4.4% on the maximum and the re-derived
+//!   floor in the test below.
+//! * The same bundle on 2026-08-28, kept because the SPREAD is the lesson:
+//!   **763** declarations both times over two runs, max **362,826**
+//!   (`ir_lzb_max_true_seg`) — identical in both — bundle total **2,081,303**
+//!   and **2,115,691** ticks, median **610** and **646**. The ~1.6% spread
+//!   between runs means the per-declaration count is NOT bit-reproducible
+//!   across builds even though the mechanism is deterministic per input, so
+//!   read these as a scale, not a fixed point. The build was reported at 0.1 s
+//!   — call it ~2.1e7 ticks/second for a debug build on this box.
 //! * A full `Specification::new()` is recorded at **984.6 s** in-process
 //!   (`data/gate_registry.json`, `clean-verify::test::premise_witness_gate`).
 //! * 984.6 s x ~2.1e7 ticks/s ~= **2e10 ticks for the entire full-spec build**.
@@ -150,7 +155,10 @@ pub(crate) const DEFAULT_SPEC_DECL_BUDGET: u64 = 100_000_000_000;
 /// Returns `SpecError::ParseError` if the override is set but not a `u64`.
 pub(crate) fn configured_budget() -> Result<u64, SpecError> {
     match std::env::var(SPEC_DECL_BUDGET_ENV) {
-        Err(_) => Ok(DEFAULT_SPEC_DECL_BUDGET),
+        Err(std::env::VarError::NotPresent) => Ok(DEFAULT_SPEC_DECL_BUDGET),
+        Err(std::env::VarError::NotUnicode(_)) => Err(SpecError::ParseError(format!(
+            "{SPEC_DECL_BUDGET_ENV} is not UTF-8; use a decimal u64 tick count"
+        ))),
         Ok(raw) => raw.trim().parse::<u64>().map_err(|e| {
             SpecError::ParseError(format!(
                 "{SPEC_DECL_BUDGET_ENV}={raw:?} is not a u64 tick count ({e}); \
@@ -284,10 +292,21 @@ mod tests {
         // reports/decl-budget-calibration.json, 2026-08-27, `max_ticks`: the
         // heaviest of 136 real declarations, including a Mathlib file.
         const MEASURED_MATHLIB_MAX_TICKS: u64 = 7_727_977;
-        // The heaviest declaration of the EvalIR spec bundle, measured
-        // 2026-08-28 with CLEAN_SPEC_DECL_BUDGET_TRACE=1 over 763 declarations
-        // (`ir_lzb_max_true_seg`).
-        const MEASURED_EVALIR_MAX_TICKS: u64 = 362_826;
+        // The heaviest declaration of the EvalIR spec bundle, RE-MEASURED
+        // 2026-09-10 with CLEAN_SPEC_DECL_BUDGET_TRACE=1 over 811 registered
+        // declarations (`ir_lzb_max_true_seg`, still the heaviest), bundle
+        // total 2,323,616 ticks, median 702. It read 362,826 over 763
+        // declarations on 2026-08-28; the +4.4% is the Phase-B load arm, which
+        // now decodes the loaded word through the module's encodings table and
+        // so adds iota steps to every `load` the heaviest segment lemma runs.
+        // Both this number and the ratio below come from that run — the ratio
+        // is the measured quotient (263,871) rounded DOWN to the nearest
+        // 5,000, giving 260,000. That is the rule the previous 275,000 figure
+        // followed against its own 275,614; it is NOT a 10,000 rule, under
+        // which 275,614 would have given 270,000 (a stated-precedent error
+        // found in review 2026-09-10 — the constant is right under either rule,
+        // only the sentence was wrong).
+        const MEASURED_EVALIR_MAX_TICKS: u64 = 378_972;
         // The ESTIMATED total tick cost of a whole `Specification::new()`:
         // 984.6 s in-process (data/gate_registry.json, premise_witness_gate) at
         // the ~2.1e7 ticks/s the EvalIR census measured on this box. An
@@ -307,7 +326,7 @@ mod tests {
         }
         const {
             assert!(
-                DEFAULT_SPEC_DECL_BUDGET / MEASURED_EVALIR_MAX_TICKS >= 275_000,
+                DEFAULT_SPEC_DECL_BUDGET / MEASURED_EVALIR_MAX_TICKS >= 260_000,
                 "…and a much looser one over the heaviest SPEC declaration measured \
                  so far, because the full spec's maximum is still unmeasured"
             );

@@ -18,6 +18,10 @@ pub enum HeartbeatProfileCategory {
     IsDefEq,
     /// Type inference (`infer_type` / `tick_heartbeat`).
     InferType,
+    /// Structural walks converted into heartbeats (`crate::work_meter`):
+    /// equality walks behind cache probes, the probes, fold and equivalence
+    /// walks.
+    KernelWork,
 }
 
 impl fmt::Display for HeartbeatProfileCategory {
@@ -26,6 +30,7 @@ impl fmt::Display for HeartbeatProfileCategory {
             Self::Whnf => write!(f, "whnf"),
             Self::IsDefEq => write!(f, "isDefEq"),
             Self::InferType => write!(f, "inferType"),
+            Self::KernelWork => write!(f, "kernelWork"),
         }
     }
 }
@@ -160,7 +165,7 @@ impl OverrunEstimate {
     /// `projected_total = consumed * 2` hint and rounds the suggested
     /// limit up to the next `SUGGESTION_ROUND_UP` multiple.
     #[must_use]
-    pub fn from_consumed(consumed: u64) -> Self {
+    pub(crate) fn from_consumed(consumed: u64) -> Self {
         let projected_total = consumed.saturating_mul(2);
         let suggested_limit = round_up_to_next(projected_total, SUGGESTION_ROUND_UP);
         Self {

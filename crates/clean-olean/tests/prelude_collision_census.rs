@@ -27,14 +27,14 @@
 //! | test | needs `.olean`? | what it enforces |
 //! |---|---|---|
 //! | [`census_artifact_is_self_consistent_and_ratcheted`] | no | artifact totals match its own rows; every ratcheted count is flat-or-down |
-//! | [`census_prelude_side_is_current`] | no | every recorded prelude spelling still matches the live prelude — a prelude edit that changes a shadowing statement fails until the census is regenerated |
+//! | [`census_prelude_side_is_current`] | no | every recorded prelude spelling still matches the live prelude, and the prelude still has the recorded NUMBER of constants — a prelude edit that changes a shadowing statement, or adds or drops a declaration, fails until the census is regenerated |
 //! | [`census_matches_real_lean_olean`] | yes (release only) | the recorded Lean spellings and the collision set still match a real toolchain |
 //!
 //! ## Regenerating
 //!
 //! ```sh
-//! CLEAN_PRELUDE_CENSUS_UPDATE=1 \
-//!   cargo test --offline --release -p clean-olean --test prelude_collision_census
+//! CLEAN_OLEAN_REQUIRE_PINNED_LEAN=1 CLEAN_PRELUDE_CENSUS_UPDATE=1 \
+//!   targo --unverified test --locked --offline --release -p clean-olean --test prelude_collision_census -- --test-threads=1
 //! ```
 //!
 //! The heavy lane is release-only on purpose: it imports all of `Init`
@@ -46,7 +46,7 @@ use std::path::{Path, PathBuf};
 
 use clean_kernel::env::Environment;
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, Level};
+use clean_kernel::{Expr, ExprVisitor, Level, LevelVec};
 
 /// Root module whose transitive closure is censused.
 const IMPORT_ROOT: &str = "Init";
@@ -214,11 +214,34 @@ fn canonicalize_levels(ty: &Expr, level_params: &[Name]) -> Expr {
     ty.instantiate_level_params(&subst)
 }
 
-/// Whether `printed` mentions any class projection from [`OP_PROJECTIONS`] as an
-/// applied head. The census compares printed forms rather than walking `Expr`
-/// twice; the printed form is the same one the `rw` diagnostic shows.
-fn uses_op_projection(printed: &str) -> bool {
-    OP_PROJECTIONS.iter().any(|p| printed.contains(p))
+/// Whether `ty` mentions any class projection from [`OP_PROJECTIONS`] —
+/// decided on the `Expr`, never on its printed form.
+///
+/// Until 2026-09-15 this scanned the PRINTED type for the projection's name,
+/// and the 2026-08-27 change that taught `Display for Expr` Lean notation
+/// (`crates/clean-kernel/src/expr/display.rs`) prints `HAppend.hAppend … x
+/// (List.nil u)` as `x ++ List.nil u`: the name vanished from every printed
+/// Lean type, every row read `bare_spelled: false`, and a regenerated census
+/// counted 5 bare-spelled rows where the ratchet pins 117 known ones — the
+/// class had stopped being measured, which is exactly the disappearance
+/// `scripts/check_prelude_collision_ratchet.py`'s "no longer measured" refusal
+/// exists to catch. The printed forms stay recorded beside each row for the
+/// human reading the artifact; the classification no longer depends on them.
+fn uses_op_projection(ty: &Expr) -> bool {
+    struct Finder(bool);
+    impl ExprVisitor for Finder {
+        type Result = ();
+        fn combine(&self, _a: (), _b: ()) {}
+        fn visit_const(&mut self, name: &Name, _levels: &LevelVec) {
+            if !self.0 {
+                let name = name.to_string();
+                self.0 = OP_PROJECTIONS.iter().any(|p| *p == name);
+            }
+        }
+    }
+    let mut finder = Finder(false);
+    finder.visit_expr(ty);
+    finder.0
 }
 
 /// Head namespace family of a colliding name: the first `.`-component
@@ -296,16 +319,14 @@ fn compute_census(search_paths: &[PathBuf]) -> Census {
         if &lean_type == prelude_type {
             continue;
         }
-        let prelude_printed = prelude_type.to_string();
-        let lean_printed = lean_type.to_string();
+        let bare_spelled = uses_op_projection(&lean_type) && !uses_op_projection(prelude_type);
         collisions.push(Collision {
             name,
             prelude_kind: prelude_kind.clone(),
             lean_kind: format!("{:?}", lean.kind),
-            bare_spelled: uses_op_projection(&lean_printed)
-                && !uses_op_projection(&prelude_printed),
-            prelude_type: prelude_printed,
-            lean_type: lean_printed,
+            bare_spelled,
+            prelude_type: prelude_type.to_string(),
+            lean_type: lean_type.to_string(),
             prelude_has_value: *prelude_has_value,
         });
     }
@@ -314,8 +335,8 @@ fn compute_census(search_paths: &[PathBuf]) -> Census {
     let bare_spelled = collisions.iter().filter(|c| c.bare_spelled).count();
     Census {
         generated_by: format!(
-            "{UPDATE_ENV_VAR}=1 cargo test --offline --release -p clean-olean \
-             --test prelude_collision_census"
+            "CLEAN_OLEAN_REQUIRE_PINNED_LEAN=1 {UPDATE_ENV_VAR}=1 targo --unverified test --locked --offline --release -p clean-olean \
+             --test prelude_collision_census -- --test-threads=1"
         ),
         import_root: IMPORT_ROOT.to_owned(),
         totals: Totals {
@@ -439,6 +460,23 @@ fn census_prelude_side_is_current() {
          (see `generated_by` in the artifact):\n{}",
         stale.join("\n")
     );
+
+    // A NEW prelude declaration is a new candidate collision, and the rows
+    // above cannot see it: measured 2026-09-29, 135 constants had been added
+    // (1979 -> 2114) and 38 of them shadowed a differently-stated Lean
+    // declaration, while this lane stayed green and the ratchet read the stale
+    // artifact. Counting the prelude costs nothing and needs no toolchain.
+    assert_eq!(
+        prelude.num_constants(),
+        census.totals.prelude_constants,
+        "{CENSUS_REL} was measured over a prelude of {} constants and the live \
+         prelude has {} — declarations were added or removed without \
+         regenerating the census, so collisions they cause are counted by \
+         nothing. Regenerate it (see `generated_by` in the artifact) and let \
+         scripts/check_prelude_collision_ratchet.py judge the result",
+        census.totals.prelude_constants,
+        prelude.num_constants()
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -451,7 +489,7 @@ fn census_matches_real_lean_olean() {
         eprintln!(
             "SKIP census_matches_real_lean_olean: release-only lane \
              (importing {IMPORT_ROOT} in debug is prohibitively slow). \
-             Run: cargo test --offline --release -p clean-olean --test prelude_collision_census"
+             Run: CLEAN_OLEAN_REQUIRE_PINNED_LEAN=1 targo --unverified test --locked --offline --release -p clean-olean --test prelude_collision_census -- --test-threads=1"
         );
         return;
     }

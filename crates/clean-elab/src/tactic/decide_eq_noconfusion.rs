@@ -29,9 +29,7 @@ mod fin;
 mod wrappers;
 
 use fin::build_fin_ne_body;
-use wrappers::{
-    char_type, eq_level_for_type, list_type, to_char_view, to_int_view, to_uint_view, IntView,
-};
+use wrappers::{char_type, list_type, to_char_view, to_int_view, to_uint_view, IntView};
 
 /// View of a Nat expression in constructor form.
 enum NatView {
@@ -184,6 +182,18 @@ struct NoConfusionCtx {
     /// the same param instantiation). Empty for 0-param types, whose
     /// noConfusion shape is unchanged.
     param_premises: Vec<(Expr, Level, bool)>,
+}
+
+impl NoConfusionCtx {
+    /// A type parameter's universe comes from its instantiated declaration
+    /// domain, not from recognizing the argument's syntax. The argument may
+    /// be a local type variable or an arbitrary user-defined type.
+    fn type_parameter_level(&self, index: usize) -> Option<Level> {
+        match self.param_premises.get(index)?.0.kind() {
+            ExprKind::Sort(level) => Some(level.clone()),
+            _ => None,
+        }
+    }
 }
 
 /// Does `e` reference any of the `limit` innermost enclosing binders?
@@ -597,7 +607,7 @@ fn build_ne_body(
             build_fin_ne_body(env, &ctx, eq_ty, lhs, rhs, eq_level, depth)
         } else if ctx.type_name == "List" {
             let elem_ty = ctx.type_params.first()?.clone();
-            let elem_eq_level = eq_level_for_type(&elem_ty)?;
+            let elem_eq_level = ctx.type_parameter_level(0)?;
             let lhs_view = to_list_view(lhs)?;
             let rhs_view = to_list_view(rhs)?;
 
@@ -702,7 +712,7 @@ fn build_ne_body(
             }
         } else if ctx.type_name == "Option" {
             let elem_ty = ctx.type_params.first()?.clone();
-            let elem_eq_level = eq_level_for_type(&elem_ty)?;
+            let elem_eq_level = ctx.type_parameter_level(0)?;
             let lhs_view = to_option_view(lhs)?;
             let rhs_view = to_option_view(rhs)?;
 
@@ -795,8 +805,8 @@ fn build_ne_body(
             // from either one suffices.
             let fst_ty = ctx.type_params.first()?.clone();
             let snd_ty = ctx.type_params.get(1)?.clone();
-            let fst_eq_level = eq_level_for_type(&fst_ty)?;
-            let snd_eq_level = eq_level_for_type(&snd_ty)?;
+            let fst_eq_level = ctx.type_parameter_level(0)?;
+            let snd_eq_level = ctx.type_parameter_level(1)?;
             let lhs_view = to_prod_view(lhs)?;
             let rhs_view = to_prod_view(rhs)?;
 
@@ -886,8 +896,8 @@ fn build_ne_body(
             // left-summand payload, `inr` a right-summand one.
             let left_ty = ctx.type_params.first()?.clone();
             let right_ty = ctx.type_params.get(1)?.clone();
-            let left_eq_level = eq_level_for_type(&left_ty)?;
-            let right_eq_level = eq_level_for_type(&right_ty)?;
+            let left_eq_level = ctx.type_parameter_level(0)?;
+            let right_eq_level = ctx.type_parameter_level(1)?;
             let lhs_view = to_sum_view(lhs)?;
             let rhs_view = to_sum_view(rhs)?;
 
@@ -1166,3 +1176,7 @@ fn mk_noconfusion_app(
     );
     Expr::app(nc, major)
 }
+
+#[cfg(test)]
+#[path = "decide_eq_noconfusion_param_tests.rs"]
+mod parameter_levels_tests;

@@ -18,8 +18,10 @@
 //! - `conv_change` - Replace the focused expression with a definitionally equal one
 //! - `eval_conv` - Entry point for conv tactic mode
 
+use super::pattern::names::local_name_matches;
 use clean_kernel::expr::ExprKind;
 use clean_kernel::{Expr, Name};
+use clean_parser::SurfaceName;
 
 use super::conv_proof::{build_conv_rewrite_eq_proof, ConvRewriteProofInputs};
 use super::{
@@ -230,7 +232,10 @@ impl ConvState {
             _ => {
                 return Err(TacticError::InvalidTarget {
                     tactic: "conv".into(),
-                    detail: format!("cannot navigate {pos:?} at this position"),
+                    detail: format!(
+                        "cannot navigate {} at this position",
+                        crate::error_render::opaque(&pos)
+                    ),
                 })
             }
         };
@@ -247,7 +252,7 @@ impl ConvState {
     /// ENSURES: returns true iff `from` appears in `self.focus`, in which
     /// case all occurrences of `from` are replaced by `to`; returns false
     /// with `self.focus` unchanged if `from` is not found
-    pub fn rewrite_focus(&mut self, from: &Expr, to: &Expr) -> bool {
+    pub(crate) fn rewrite_focus(&mut self, from: &Expr, to: &Expr) -> bool {
         if contains_expr(&self.focus, from) {
             self.focus = replace_expr(&self.focus, from, to);
             true
@@ -295,7 +300,7 @@ impl ConvState {
 pub fn conv_rw(
     state: &mut ProofState,
     path: ConvPath,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     reverse: bool,
 ) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
@@ -305,7 +310,8 @@ pub fn conv_rw(
     let hyp_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?
         .clone();
 
@@ -330,11 +336,14 @@ pub fn conv_rw(
     if !conv.rewrite_focus(&from, &to) {
         return Err(TacticError::RewriteNoMatch {
             tactic: "conv_rw".to_owned(),
-            rule: hyp_name.to_owned(),
+            rule: hyp_name.to_string(),
             direction: if reverse { "backward" } else { "forward" }.to_owned(),
             searched_for: from.to_string(),
             focus: focus_before.to_string(),
-            focus_path: path.iter().map(|pos| format!("{pos:?}")).collect(),
+            focus_path: path
+                .iter()
+                .map(|pos| crate::error_render::opaque(&pos))
+                .collect(),
             candidates: rewrite_candidate_summaries(&focus_before, &from, 5),
         });
     }
@@ -379,13 +388,16 @@ pub fn conv_rw(
             else {
                 return Err(TacticError::RewriteProofLiftFailed {
                     tactic: "conv_rw".to_owned(),
-                    rule: hyp_name.to_owned(),
+                    rule: hyp_name.to_string(),
                     direction: if reverse { "backward" } else { "forward" }.to_owned(),
                     searched_for: from.to_string(),
                     replacement: to.to_string(),
                     focus_before: focus_before.to_string(),
                     focus_after: focus_after.to_string(),
-                    focus_path: path.iter().map(|pos| format!("{pos:?}")).collect(),
+                    focus_path: path
+                        .iter()
+                        .map(|pos| crate::error_render::opaque(&pos))
+                        .collect(),
                 });
             };
             state.replace_target_eq(new_target, target_eq_proof)
@@ -401,7 +413,7 @@ pub fn conv_rw(
 /// REQUIRES: goal target is an equality; `hyp_name` has equality type in context
 ///
 /// ENSURES: on Ok, only the LHS of the equality is rewritten
-pub fn conv_lhs(state: &mut ProofState, hyp_name: &str, reverse: bool) -> TacticResult {
+pub fn conv_lhs(state: &mut ProofState, hyp_name: &SurfaceName, reverse: bool) -> TacticResult {
     conv_rw(state, vec![ConvPosition::EqLhs], hyp_name, reverse)
 }
 
@@ -412,7 +424,7 @@ pub fn conv_lhs(state: &mut ProofState, hyp_name: &str, reverse: bool) -> Tactic
 /// REQUIRES: goal target is an equality; `hyp_name` has equality type in context
 ///
 /// ENSURES: on Ok, only the RHS of the equality is rewritten
-pub fn conv_rhs(state: &mut ProofState, hyp_name: &str, reverse: bool) -> TacticResult {
+pub fn conv_rhs(state: &mut ProofState, hyp_name: &SurfaceName, reverse: bool) -> TacticResult {
     conv_rw(state, vec![ConvPosition::EqRhs], hyp_name, reverse)
 }
 

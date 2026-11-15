@@ -79,6 +79,7 @@ pub(crate) struct SlidingCache<K, V> {
     current: TcHashMap<K, V>,
     previous: TcHashMap<K, V>,
     stats: SlidingCacheStats,
+    disabled: bool,
 }
 
 impl<K, V> Default for SlidingCache<K, V> {
@@ -87,6 +88,7 @@ impl<K, V> Default for SlidingCache<K, V> {
             current: Default::default(),
             previous: Default::default(),
             stats: SlidingCacheStats::default(),
+            disabled: false,
         }
     }
 }
@@ -97,7 +99,14 @@ impl<K: Eq + Hash + Clone, V: Clone> SlidingCache<K, V> {
     /// Returns a clone of the cached value if found in either generation.
     /// Entries found in `previous` are moved to `current` so they survive
     /// the next eviction cycle.
+    ///
+    /// One probe is one unit of kernel work (`crate::work_meter`); a key
+    /// comparison it reaches pays for its own nodes through `Expr`'s equality.
     pub(crate) fn get(&mut self, key: &K) -> Option<V> {
+        if self.disabled {
+            return None;
+        }
+        crate::work_meter::charge(crate::work_meter::Walk::Probe, 1);
         if let Some(v) = self.current.get(key) {
             self.stats.hits_current += 1;
             return Some(v.clone());
@@ -115,7 +124,13 @@ impl<K: Eq + Hash + Clone, V: Clone> SlidingCache<K, V> {
     }
 
     /// Insert a key-value pair into the current generation.
+    ///
+    /// One probe of kernel work, like [`Self::get`].
     pub(crate) fn insert(&mut self, key: K, value: V) {
+        if self.disabled {
+            return;
+        }
+        crate::work_meter::charge(crate::work_meter::Walk::Probe, 1);
         self.current.insert(key, value);
     }
 
@@ -138,6 +153,13 @@ impl<K: Eq + Hash + Clone, V: Clone> SlidingCache<K, V> {
     pub(crate) fn clear(&mut self) {
         self.current.clear();
         self.previous.clear();
+    }
+
+    /// A sharing replay must visit each dynamic encounter within this run.
+    /// Clearing only between runs cannot prevent cached answers hiding choices.
+    pub(crate) fn disable_for_sharing_replay(&mut self) {
+        self.clear();
+        self.disabled = true;
     }
 
     /// Total entries across both generations.

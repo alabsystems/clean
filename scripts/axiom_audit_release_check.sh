@@ -24,7 +24,49 @@ PYTHON_BIN="${PYTHON:-python3}"
 cd "$REPO_ROOT"
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
 
-EVIDENCE_SCHEMA_VERSION="Clean-axiom-audit-launch-evidence-v1"
+# The Rust reader compares this EXACTLY and case-sensitively
+# (`cmd_replacement/evidence_contract.rs`, against the constant in
+# `cmd_replacement/consts.rs`), and this script's default EVIDENCE_PATH is the
+# TRACKED artifact, which it `rm -f`s before writing. So a spelling that
+# disagrees does not merely mint a bad file: it DESTROYS the good one and
+# replaces it with evidence the replacement gate refuses.
+#
+# It disagreed. Until 2026-09-15 this line read `Clean-…` with a capital C --
+# the only occurrence of that spelling in the tree, pinned by no test. Measured
+# with a control/subject pair: the committed lowercase artifact scores the
+# `axiom-audit` row `status: passed`, and the capital-C spelling scores it
+# `pending_evidence` with `schema_version … != clean-axiom-audit-launch-evidence-v1`
+# and adds `axiom-audit` to the blocking zero-trust gates. The path is
+# production -- `cmd_axiom_audit_release_check.rs` runs this script with no
+# AXIOM_AUDIT_EVIDENCE_PATH override -- so `clean mathverse axiom-audit
+# release-check` was one command away from blocking a launch gate with its own
+# PASS. Only `scripts/local_gate.sh` was safe, because it redirects the evidence
+# to a mktemp.
+EVIDENCE_SCHEMA_VERSION="clean-axiom-audit-launch-evidence-v1"
+
+# Fail closed rather than drift again. A literal shared across a language
+# boundary and pinned by nothing is exactly what went wrong above, so the
+# script refuses to run when its own spelling stops matching the Rust constant
+# that will read it back. Cheap: one grep, no build. If the constant is ever
+# renamed or restructured so this cannot find it, that is also a refusal --
+# an unlocatable contract is not a satisfied one.
+_rust_schema_const="crates/clean-cli/src/cmd_replacement/consts.rs"
+_rust_schema_value="$(sed -n 's/.*"\(clean-axiom-audit-launch-evidence-v[0-9]*\)".*/\1/p' \
+    "$REPO_ROOT/$_rust_schema_const" | head -1)"
+if [ -z "$_rust_schema_value" ]; then
+    echo "axiom_audit_release_check: cannot locate the schema_version constant in" \
+         "$_rust_schema_const -- refusing to write evidence whose reader I cannot check against" >&2
+    exit 1
+fi
+if [ "$_rust_schema_value" != "$EVIDENCE_SCHEMA_VERSION" ]; then
+    echo "axiom_audit_release_check: schema_version disagreement -- this script would write" \
+         "'$EVIDENCE_SCHEMA_VERSION' but $_rust_schema_const declares '$_rust_schema_value'." \
+         "The Rust reader compares exactly and case-sensitively, and the default evidence path" \
+         "is the tracked artifact this script deletes first. Refusing." >&2
+    exit 1
+fi
+unset _rust_schema_const _rust_schema_value
+
 EVIDENCE_PATH="${AXIOM_AUDIT_EVIDENCE_PATH:-reports/axiom-audit-launch-evidence.json}"
 EXPECTED_STEPS=2
 

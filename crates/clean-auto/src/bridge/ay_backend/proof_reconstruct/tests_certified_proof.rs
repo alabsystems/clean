@@ -18,7 +18,11 @@
 //! The reconstruction setup mirrors the unit-contradiction fixture in
 //! `tests_e2e.rs`.
 
-use super::super::{attempt_reconstruction, ReconstructionResult, VariableMapping};
+use super::super::tests_e2e_lra::{mk_le_real, mk_real_ofnat};
+use super::super::tests_trace::checked_nra_sos_refutation;
+use super::super::{
+    attempt_reconstruction, ReconstructionError, ReconstructionResult, VariableMapping,
+};
 use super::{
     certify_kernel_term, certify_reconstruction, deserialize_context, deserialize_term, false_expr,
     serialize_context, serialize_term, CertifiedPayload, NotCertified, ReducedContext,
@@ -193,6 +197,71 @@ fn test_certify_unit_contradiction_yields_payload_and_roundtrips() {
         result.proof_term.as_ref().expect("term present"),
         "round-trip must preserve the proof term"
     );
+}
+
+/// A valid AY849 SOS refutation remains unsupported by Clean. In particular,
+/// successful AY replay must not promote the real reconstruction's residual
+/// trust to a Clean CertifiedPayload.
+#[test]
+fn test_certify_real_nra_sos_refutation_rejects_unsupported_step() {
+    let (env, supported, supported_ctx) = reconstruct_unit_contradiction();
+    certify_reconstruction(&supported, &env, &supported_ctx)
+        .expect("the existing supported reconstruction must still certify");
+
+    let (terms, proof, _assertions) = checked_nra_sos_refutation();
+    let real_ty = Expr::const_(Name::from_string("Real"), vec![]);
+    let x_id = FVarId::new(30);
+    let x = Expr::fvar(x_id);
+    let lower_prop = mk_le_real(&mk_real_ofnat(1), &x);
+    let upper_prop = mk_le_real(&x, &mk_real_ofnat(0));
+    let mut map = VariableMapping::new();
+    map.register_var("nra_sos_x", x, real_ty.clone());
+    let mut ctx = LocalContext::new();
+    ctx.push_with_id(x_id, Name::from_string("x"), real_ty, BinderInfo::Default);
+    for (id, name, prop) in [
+        (FVarId::new(31), "h_lower", lower_prop),
+        (FVarId::new(32), "h_upper", upper_prop),
+    ] {
+        map.register_hypothesis(name, id, Expr::fvar(id), prop.clone());
+        ctx.push_with_id(id, Name::from_string(name), prop, BinderInfo::Default);
+    }
+
+    let mut result = attempt_reconstruction(&proof, &terms, &map, &mk_neq_prop());
+    let first = result
+        .stats
+        .first_diagnostic
+        .as_ref()
+        .expect("SOS is unsupported");
+    assert_eq!(first.step_index, Some(0));
+    assert_eq!(
+        first.error,
+        ReconstructionError::UnsupportedStep {
+            step_index: 0,
+            description: "unknown proof step variant".to_string(),
+        }
+    );
+    assert_eq!(result.stats.total_steps, 5);
+    assert_eq!(result.stats.assume_steps, 2);
+    assert!(result.stats.reconstructed_steps >= 2);
+    assert!(result.proof_term.is_some(), "not a missing-term rejection");
+    assert!(result.derives_empty_clause, "not a missing-root rejection");
+    assert!(result.compound_witness_fvars.is_empty());
+    assert!(result.negated_goal_fvar.is_none());
+    assert!(result.trust_subterm_count > 0);
+    // This exact gate precedes kernel environment checking. No Real axioms
+    // are added, and no SOS kernel reconstruction is claimed by this test.
+    assert!(matches!(
+        certify_reconstruction(&result, &env, &ctx),
+        Err(NotCertified::TrustedSubterms { count }) if count > 0
+    ));
+
+    // The actual retained term must also refuse promotion if its advisory
+    // trust counter is understated; the certifier independently rescans it.
+    result.trust_subterm_count = 0;
+    assert!(matches!(
+        certify_reconstruction(&result, &env, &ctx),
+        Err(NotCertified::TrustedSubterms { count }) if count > 0
+    ));
 }
 
 /// Canonical proof carriers reject a valid term prefix followed by arbitrary

@@ -72,8 +72,9 @@ fn test_eval_contradiction_false_hyp() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: false_type,
             value: None,
         }],
@@ -101,14 +102,16 @@ fn test_eval_contradiction_p_and_not_p() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: p_type,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: not_p,
                 value: None,
             },
@@ -134,8 +137,9 @@ fn test_eval_contradiction_no_match() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: p_type,
             value: None,
         }],

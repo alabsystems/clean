@@ -49,13 +49,14 @@ fn ill_typed(name: &str) -> Declaration {
 #[tokio::test]
 async fn test_add_decl_valid_theorem_is_kernel_verified_and_accepted() {
     let state = ServerState::new();
-    let session_id = state.create_session().await;
+    let session_id = state.create_session().await.expect("open a session");
 
     let params = AddDeclParams {
         session_id: Some(session_id.to_string()),
         decl: imp_self("Swarm.imp_self"),
         require_foundational: true,
         heartbeat_limit: None,
+        timeout_ms: None,
     };
 
     let response = handle_add_decl(&state, RequestId::Number(1), params).await;
@@ -77,8 +78,8 @@ async fn test_add_decl_valid_theorem_is_kernel_verified_and_accepted() {
     assert!(result.reject_reason.is_none());
 
     // The decl must now be a premise inside the session overlay...
-    let sessions = state.sessions.read().await;
-    let session = sessions.get(&session_id).expect("session is live");
+    let session = state.session(&session_id).await.expect("session is live");
+    let session = session.lock().await;
     assert!(
         session.contains(&Name::from_string("Swarm.imp_self")),
         "accepted decl must land in the session overlay (immediately a premise)"
@@ -91,13 +92,14 @@ async fn test_add_decl_ill_typed_fails_closed_base_pristine() {
 
     // Capture the shared base size before the session is even created.
     let base_count_before = state.env.read().await.num_constants();
-    let session_id = state.create_session().await;
+    let session_id = state.create_session().await.expect("open a session");
 
     let params = AddDeclParams {
         session_id: Some(session_id.to_string()),
         decl: ill_typed("Swarm.ill_typed"),
         require_foundational: true,
         heartbeat_limit: None,
+        timeout_ms: None,
     };
 
     let response = handle_add_decl(&state, RequestId::Number(2), params).await;
@@ -122,8 +124,8 @@ async fn test_add_decl_ill_typed_fails_closed_base_pristine() {
 
     // Session overlay must not have gained the bad decl...
     {
-        let sessions = state.sessions.read().await;
-        let session = sessions.get(&session_id).expect("session is live");
+        let session = state.session(&session_id).await.expect("session is live");
+        let session = session.lock().await;
         assert!(
             !session.contains(&Name::from_string("Swarm.ill_typed")),
             "ill-typed decl must not enter the overlay"
@@ -146,6 +148,7 @@ async fn test_add_decl_missing_session_fails_closed() {
         decl: imp_self("Swarm.no_session"),
         require_foundational: true,
         heartbeat_limit: None,
+        timeout_ms: None,
     };
     let response = handle_add_decl(&state, RequestId::Number(3), params).await;
     assert!(
@@ -164,6 +167,7 @@ async fn test_add_decl_unknown_session_fails_closed() {
         decl: imp_self("Swarm.ghost_session"),
         require_foundational: true,
         heartbeat_limit: None,
+        timeout_ms: None,
     };
     let response = handle_add_decl(&state, RequestId::Number(4), params).await;
     assert!(
@@ -175,7 +179,7 @@ async fn test_add_decl_unknown_session_fails_closed() {
 #[tokio::test]
 async fn test_add_decl_accepted_decl_is_premise_for_sibling() {
     let state = ServerState::new();
-    let session_id = state.create_session().await;
+    let session_id = state.create_session().await.expect("open a session");
 
     // First, add an axiom the sibling will depend on.
     let axiom = Declaration::Axiom {
@@ -193,6 +197,7 @@ async fn test_add_decl_accepted_decl_is_premise_for_sibling() {
             // require foundational for this setup step.
             require_foundational: false,
             heartbeat_limit: None,
+            timeout_ms: None,
         },
     )
     .await;
@@ -215,6 +220,7 @@ async fn test_add_decl_accepted_decl_is_premise_for_sibling() {
             decl: dependent,
             require_foundational: false,
             heartbeat_limit: None,
+            timeout_ms: None,
         },
     )
     .await;
@@ -230,7 +236,7 @@ async fn test_add_decl_accepted_decl_is_premise_for_sibling() {
 #[tokio::test]
 async fn test_add_decl_require_foundational_rejects_axiom_dependent_and_rolls_back() {
     let state = ServerState::new();
-    let session_id = state.create_session().await;
+    let session_id = state.create_session().await.expect("open a session");
 
     // Seed a domain axiom into the session (no foundational requirement).
     let axiom = Declaration::Axiom {
@@ -246,6 +252,7 @@ async fn test_add_decl_require_foundational_rejects_axiom_dependent_and_rolls_ba
             decl: axiom,
             require_foundational: false,
             heartbeat_limit: None,
+            timeout_ms: None,
         },
     )
     .await;
@@ -270,6 +277,7 @@ async fn test_add_decl_require_foundational_rejects_axiom_dependent_and_rolls_ba
             decl: dependent,
             require_foundational: true,
             heartbeat_limit: None,
+            timeout_ms: None,
         },
     )
     .await;
@@ -293,8 +301,8 @@ async fn test_add_decl_require_foundational_rejects_axiom_dependent_and_rolls_ba
 
     // The policy-rejected decl must NOT linger in the overlay (rolled back),
     // while the earlier accepted axiom is preserved.
-    let sessions = state.sessions.read().await;
-    let session = sessions.get(&session_id).expect("session is live");
+    let session = state.session(&session_id).await.expect("session is live");
+    let session = session.lock().await;
     assert!(
         !session.contains(&Name::from_string("Swarm.cites_axiom")),
         "a policy-rejected decl must be rolled out of the overlay"
@@ -308,7 +316,7 @@ async fn test_add_decl_require_foundational_rejects_axiom_dependent_and_rolls_ba
 #[tokio::test]
 async fn test_add_decl_axiom_dependent_accepted_when_not_requiring_foundational() {
     let state = ServerState::new();
-    let session_id = state.create_session().await;
+    let session_id = state.create_session().await.expect("open a session");
 
     // Seed a domain axiom `Swarm.dep_axiom : ∀ (p : Prop), p → p`.
     let axiom = Declaration::Axiom {
@@ -324,6 +332,7 @@ async fn test_add_decl_axiom_dependent_accepted_when_not_requiring_foundational(
             decl: axiom,
             require_foundational: false,
             heartbeat_limit: None,
+            timeout_ms: None,
         },
     )
     .await;
@@ -347,6 +356,7 @@ async fn test_add_decl_axiom_dependent_accepted_when_not_requiring_foundational(
             decl: dependent,
             require_foundational: false,
             heartbeat_limit: None,
+            timeout_ms: None,
         },
     )
     .await;
@@ -361,8 +371,8 @@ async fn test_add_decl_axiom_dependent_accepted_when_not_requiring_foundational(
     assert_eq!(result.verdict, AddDeclVerdict::AxiomDependent);
     assert_eq!(result.axiom_closure, vec!["Swarm.dep_axiom".to_string()]);
 
-    let sessions = state.sessions.read().await;
-    let session = sessions.get(&session_id).expect("session is live");
+    let session = state.session(&session_id).await.expect("session is live");
+    let session = session.lock().await;
     assert!(
         session.contains(&Name::from_string("Swarm.dep_thm")),
         "an accepted axiom-dependent decl lands in the overlay"

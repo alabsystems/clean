@@ -70,7 +70,15 @@ impl OleanExporter {
     ///
     /// The Bool is stored as a scalar byte after the pointer fields, not as a tagged pointer.
     pub(super) fn write_import(&mut self, module_name: &str, runtime_only: bool) -> usize {
-        let name_offset = self.write_name(module_name);
+        // This compatibility API spells a module path, not an arbitrary
+        // declaration Name. Digit-only path components are literal strings;
+        // Name.num is an ill-formed upstream module import. Keep the legacy
+        // treatment of empty dotted components, but never infer numeric Names.
+        let module_name = module_name
+            .split('.')
+            .filter(|component| !component.is_empty())
+            .fold(Name::anon(), |parent, component| parent.str(component));
+        let name_offset = self.write_kernel_name(&module_name);
         let name_ptr = self.offset_to_ptr(name_offset);
 
         self.align8();
@@ -467,6 +475,28 @@ impl OleanExporter {
                 self.write_u64(name_ptr);
                 self.write_u64(out_params_ptr);
                 self.write_u64(out_level_params_ptr);
+                self.offset_to_ptr(offset)
+            }
+            ParsedExtensionEntry::Structure(st) => {
+                // A decoded real-Lean `Lean.structureExt` entry. The exporter
+                // does not reproduce Lean's nested `StructureInfo` layout
+                // (three arrays of constructor objects with trailing scalar
+                // bytes); like the `Instance` and `Simp` arms, re-export it as
+                // a plain `(Name × DataValue)` pair — structure name × tagged
+                // scalar 0 — which re-imports as `Named { name, Scalar(0) }`.
+                // Before the typed decoder these entries were the generic
+                // `Named` pair already, so this loses nothing relative to the
+                // prior round-trip; a Clean-exported module's structures get
+                // their field tables from the projection-derived pass.
+                let name_offset = self.write_name(&st.struct_name);
+                let name_ptr = self.offset_to_ptr(name_offset);
+                let data_ptr = 1; // tagged scalar 0: `(0 << 1) | 1`
+
+                self.align8();
+                let offset = self.current_offset();
+                self.write_header(0, 2, 0);
+                self.write_u64(name_ptr);
+                self.write_u64(data_ptr);
                 self.offset_to_ptr(offset)
             }
             ParsedExtensionEntry::Simp(simp) => {

@@ -1,0 +1,3 @@
+(assume h (not (= (oth (mk a b)) a)))
+(step s (cl (= (oth (mk a b)) a)) :rule dt_project)
+(step t (cl) :rule resolution :premises (h s))

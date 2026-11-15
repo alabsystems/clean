@@ -4,7 +4,7 @@
  "derivation": {
   "script": "scripts/verdict_io_contracts.py",
   "source_artifact": "data/verdict_set.json",
-  "source_artifact_sha256": "6a3d8b4da88930a26d837f6c78226b021c27210435219f0e8dc09bb98833fc5e",
+  "source_artifact_sha256": "68f9a07b863cb1133d3476c708dc109798c094dac7eb867a2207e8792fc76c5e",
   "shared_denominator": "the site scan is IMPORTED from scripts/verdict_set.py (production_lines + IO_TOKENS) and re-run over the same members at the same pinned digests; a total that disagrees with the committed io_site_total aborts the mint",
   "axis_1_effect": {
    "what": "what the site actually does, decided by ordered lexical rules over the LEXED line (comments and literals blanked, #[cfg(test)] mod bodies removed); first match wins; a site matching no rule aborts the mint",
@@ -34,6 +34,12 @@
      "means": "an in-memory buffer wearing an IO name (`io::Cursor`, `MmapMut::map_anon`) \u2014 no file"
     },
     {
+     "id": "E-FNITEM",
+     "effect": "fn-item-path",
+     "regex": "\\bfs::DirEntry::[a-z_]+\\b(?!\\s*\\()",
+     "means": "a function ITEM named as a value (`sort_by_key(fs::DirEntry::file_name)`) \u2014 the path mentions an IO type but issues no syscall; the call form is deliberately NOT matched, so writing one aborts the derivation as unclassified rather than inheriting this rule"
+    },
+    {
      "id": "E-ENV",
      "effect": "read-env",
      "regex": "\\benv::var(?:_os)?\\s*\\(",
@@ -60,8 +66,8 @@
     {
      "id": "E-STAT",
      "effect": "stat-file",
-     "regex": "\\bfs::metadata\\s*\\(",
-     "means": "a file's metadata is read without reading its content (`fs::metadata`)"
+     "regex": "\\bfs::metadata\\s*\\(|\\bfs::symlink_metadata\\s*\\(|\\bfs::canonicalize\\s*\\(",
+     "means": "a file's metadata is read without reading its content \u2014 `fs::metadata`, `fs::symlink_metadata` (the same, not following a final symlink), and `fs::canonicalize` (resolves the path through the filesystem and returns it; no content is read)"
     },
     {
      "id": "E-READDIR",
@@ -101,6 +107,7 @@
     "declaration-type": "verdict-irrelevant",
     "error-value": "verdict-irrelevant",
     "in-memory-no-io": "verdict-irrelevant",
+    "fn-item-path": "verdict-irrelevant",
     "write-file": "success-only",
     "read-file": "content-bearing",
     "read-dir": "content-bearing",
@@ -127,44 +134,44 @@
   "regenerate": "scripts/verdict_io_contracts.py     (--check to verify the committed file)"
  },
  "classification": {
-  "site_total": 211,
-  "sites_issuing_io": 128,
-  "sites_issuing_no_io": 83,
+  "site_total": 316,
+  "sites_issuing_io": 210,
+  "sites_issuing_no_io": 106,
   "by_effect": {
-   "read-file": 41,
-   "declaration-import": 34,
-   "write-file": 30,
-   "declaration-type": 24,
+   "read-file": 100,
+   "declaration-import": 46,
+   "write-file": 40,
+   "declaration-type": 35,
    "error-value": 23,
    "spawn-process": 23,
-   "read-env": 14,
-   "read-dir": 12,
-   "stat-file": 4,
+   "read-dir": 22,
+   "read-env": 19,
    "in-memory-no-io": 2,
    "process-stream": 2,
-   "read-ambient": 2
+   "read-ambient": 2,
+   "stat-file": 2
   },
   "by_dependence": {
-   "content-bearing": 98,
-   "verdict-irrelevant": 83,
-   "success-only": 30
+   "content-bearing": 170,
+   "verdict-irrelevant": 106,
+   "success-only": 40
   },
   "effect_by_dependence": {
    "content-bearing": {
-    "read-file": 41,
+    "read-file": 100,
     "spawn-process": 23,
-    "read-env": 14,
-    "read-dir": 12,
-    "stat-file": 4,
+    "read-dir": 22,
+    "read-env": 19,
     "process-stream": 2,
-    "read-ambient": 2
+    "read-ambient": 2,
+    "stat-file": 2
    },
    "success-only": {
-    "write-file": 30
+    "write-file": 40
    },
    "verdict-irrelevant": {
-    "declaration-import": 34,
-    "declaration-type": 24,
+    "declaration-import": 46,
+    "declaration-type": 35,
     "error-value": 23,
     "in-memory-no-io": 2
    }
@@ -180,11 +187,11 @@
     "declaration_only": false
    },
    "crates/clean-mathverse/src/attempt_log/mod.rs": {
-    "sites": 15,
+    "sites": 17,
     "issuing_io": 10,
     "content_bearing": 5,
     "success_only": 5,
-    "verdict_irrelevant": 5,
+    "verdict_irrelevant": 7,
     "declaration_only": false
    },
    "crates/clean-mathverse/src/authority_scope.rs": {
@@ -234,6 +241,54 @@
     "success_only": 0,
     "verdict_irrelevant": 2,
     "declaration_only": true
+   },
+   "crates/clean-mathverse/src/graduate/baseline_index.rs": {
+    "sites": 11,
+    "issuing_io": 9,
+    "content_bearing": 4,
+    "success_only": 5,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/graduate/compact_record.rs": {
+    "sites": 5,
+    "issuing_io": 4,
+    "content_bearing": 4,
+    "success_only": 0,
+    "verdict_irrelevant": 1,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/graduate/intake.rs": {
+    "sites": 8,
+    "issuing_io": 8,
+    "content_bearing": 6,
+    "success_only": 2,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/graduate/lineage_build.rs": {
+    "sites": 2,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/graduate/record.rs": {
+    "sites": 6,
+    "issuing_io": 6,
+    "content_bearing": 4,
+    "success_only": 2,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/graduate/tree_score.rs": {
+    "sites": 2,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
    },
    "crates/clean-mathverse/src/hol/error.rs": {
     "sites": 1,
@@ -307,12 +362,36 @@
     "verdict_irrelevant": 9,
     "declaration_only": false
    },
+   "crates/clean-mathverse/src/shard_verify/cake_gate.rs": {
+    "sites": 5,
+    "issuing_io": 3,
+    "content_bearing": 3,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
    "crates/clean-mathverse/src/shard_verify/mod.rs": {
     "sites": 4,
     "issuing_io": 2,
     "content_bearing": 1,
     "success_only": 1,
     "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/shard_verify/native_gate.rs": {
+    "sites": 4,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 2,
+    "declaration_only": false
+   },
+   "crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs": {
+    "sites": 2,
+    "issuing_io": 1,
+    "content_bearing": 1,
+    "success_only": 0,
+    "verdict_irrelevant": 1,
     "declaration_only": false
    },
    "crates/clean-mathverse/src/verify/incremental/mod.rs": {
@@ -339,12 +418,92 @@
     "verdict_irrelevant": 1,
     "declaration_only": true
    },
-   "crates/clean-olean/src/import/mod.rs": {
+   "crates/clean-olean/src/import/artifact.rs": {
+    "sites": 2,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/lake_package.rs": {
     "sites": 6,
-    "issuing_io": 4,
-    "content_bearing": 4,
+    "issuing_io": 6,
+    "content_bearing": 6,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/load.rs": {
+    "sites": 6,
+    "issuing_io": 6,
+    "content_bearing": 6,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/load/graph_limit.rs": {
+    "sites": 2,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/mod.rs": {
+    "sites": 2,
+    "issuing_io": 0,
+    "content_bearing": 0,
     "success_only": 0,
     "verdict_irrelevant": 2,
+    "declaration_only": true
+   },
+   "crates/clean-olean/src/import/module_cache_direct.rs": {
+    "sites": 1,
+    "issuing_io": 1,
+    "content_bearing": 1,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/module_cache_direct/capture.rs": {
+    "sites": 5,
+    "issuing_io": 2,
+    "content_bearing": 1,
+    "success_only": 1,
+    "verdict_irrelevant": 3,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/parse.rs": {
+    "sites": 8,
+    "issuing_io": 8,
+    "content_bearing": 8,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/path.rs": {
+    "sites": 11,
+    "issuing_io": 5,
+    "content_bearing": 5,
+    "success_only": 0,
+    "verdict_irrelevant": 6,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/import/project_world.rs": {
+    "sites": 16,
+    "issuing_io": 12,
+    "content_bearing": 12,
+    "success_only": 0,
+    "verdict_irrelevant": 4,
+    "declaration_only": false
+   },
+   "crates/clean-olean/src/lean_ir/module_ir.rs": {
+    "sites": 2,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
     "declaration_only": false
    },
    "crates/clean-verify/src/external_checker.rs": {
@@ -354,15 +513,32 @@
     "success_only": 0,
     "verdict_irrelevant": 4,
     "declaration_only": false
+   },
+   "crates/clean-verify/src/spec/core_spec/bundles.rs": {
+    "sites": 1,
+    "issuing_io": 1,
+    "content_bearing": 1,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
+   },
+   "crates/clean-verify/src/spec/decl_budget.rs": {
+    "sites": 2,
+    "issuing_io": 2,
+    "content_bearing": 2,
+    "success_only": 0,
+    "verdict_irrelevant": 0,
+    "declaration_only": false
    }
   },
   "declaration_only_members": {
    "what": "members whose every IO token hit is a declaration / error value / in-memory buffer: they are IO-BEARING in the token scan and issue no IO at all. This is the measured half of lane (b)'s 'decode-pure separated from read-IO' obligation that needs no refactor \u2014 the split is already there, it had just never been measured.",
-   "count": 3,
+   "count": 4,
    "members": [
     "crates/clean-mathverse/src/error.rs",
     "crates/clean-mathverse/src/hol/error.rs",
-    "crates/clean-olean/src/error.rs"
+    "crates/clean-olean/src/error.rs",
+    "crates/clean-olean/src/import/mod.rs"
    ]
   }
  },
@@ -374,14 +550,20 @@
     "read-file"
    ],
    "dependence": "content-bearing",
-   "site_count": 41,
-   "member_count": 13,
+   "site_count": 100,
+   "member_count": 28,
    "members": [
     "crates/clean-mathverse/src/artifacts.rs",
     "crates/clean-mathverse/src/attempt_log/mod.rs",
     "crates/clean-mathverse/src/authority_scope.rs",
     "crates/clean-mathverse/src/drift.rs",
     "crates/clean-mathverse/src/env_fingerprint.rs",
+    "crates/clean-mathverse/src/graduate/baseline_index.rs",
+    "crates/clean-mathverse/src/graduate/compact_record.rs",
+    "crates/clean-mathverse/src/graduate/intake.rs",
+    "crates/clean-mathverse/src/graduate/lineage_build.rs",
+    "crates/clean-mathverse/src/graduate/record.rs",
+    "crates/clean-mathverse/src/graduate/tree_score.rs",
     "crates/clean-mathverse/src/hol/isabelle/importer.rs",
     "crates/clean-mathverse/src/math_map/bundle.rs",
     "crates/clean-mathverse/src/math_map/ingest.rs",
@@ -389,7 +571,16 @@
     "crates/clean-mathverse/src/math_map/policy.rs",
     "crates/clean-mathverse/src/release.rs",
     "crates/clean-mathverse/src/shard.rs",
-    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs"
+    "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+    "crates/clean-mathverse/src/shard_verify/native_gate.rs",
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+    "crates/clean-olean/src/import/artifact.rs",
+    "crates/clean-olean/src/import/lake_package.rs",
+    "crates/clean-olean/src/import/load.rs",
+    "crates/clean-olean/src/import/load/graph_limit.rs",
+    "crates/clean-olean/src/import/parse.rs",
+    "crates/clean-olean/src/import/project_world.rs",
+    "crates/clean-olean/src/lean_ir/module_ir.rs"
    ],
    "statement": "Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
    "check_strength": "partial",
@@ -398,8 +589,8 @@
      "file": "crates/clean-mathverse/src/shard.rs",
      "pattern": "let actual_hash = blake3::hash\\(content\\);",
      "lines": [
-      1215,
-      1634
+      1245,
+      1685
      ],
      "what": "the EAGER shard readers (`ShardReader::from_bytes`, `ShardMmapReader::from_mmap`) recompute a whole-file blake3 and compare it to the footer, so on those two entry points corruption and truncation are caught"
     }
@@ -409,7 +600,7 @@
      "file": "crates/clean-mathverse/src/shard.rs",
      "pattern": "fn from_mmap_no_checksum",
      "lines": [
-      1808
+      1859
      ],
      "what": "`open_lazy` / `open_lazy_from_bytes` route through a reader that SKIPS the footer blake3 by design (demand paging: checking it would fault every page), so on the lazy path nothing verifies the bytes at all"
     },
@@ -417,7 +608,7 @@
      "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
      "pattern": "let data = std::fs::read_to_string\\(path\\)\\?;",
      "lines": [
-      288
+      299
      ],
      "what": "the KernelVerified manifest is read back as authoritative JSON with no digest, no signature and no comparison to the run that wrote it"
     }
@@ -431,6 +622,12 @@
     "crates/clean-mathverse/src/authority_scope.rs": 1,
     "crates/clean-mathverse/src/drift.rs": 2,
     "crates/clean-mathverse/src/env_fingerprint.rs": 7,
+    "crates/clean-mathverse/src/graduate/baseline_index.rs": 4,
+    "crates/clean-mathverse/src/graduate/compact_record.rs": 4,
+    "crates/clean-mathverse/src/graduate/intake.rs": 4,
+    "crates/clean-mathverse/src/graduate/lineage_build.rs": 2,
+    "crates/clean-mathverse/src/graduate/record.rs": 4,
+    "crates/clean-mathverse/src/graduate/tree_score.rs": 2,
     "crates/clean-mathverse/src/hol/isabelle/importer.rs": 2,
     "crates/clean-mathverse/src/math_map/bundle.rs": 3,
     "crates/clean-mathverse/src/math_map/ingest.rs": 2,
@@ -438,8 +635,18 @@
     "crates/clean-mathverse/src/math_map/policy.rs": 2,
     "crates/clean-mathverse/src/release.rs": 3,
     "crates/clean-mathverse/src/shard.rs": 10,
-    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 3
-   }
+    "crates/clean-mathverse/src/shard_verify/cake_gate.rs": 2,
+    "crates/clean-mathverse/src/shard_verify/native_gate.rs": 2,
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 3,
+    "crates/clean-olean/src/import/artifact.rs": 2,
+    "crates/clean-olean/src/import/lake_package.rs": 6,
+    "crates/clean-olean/src/import/load.rs": 6,
+    "crates/clean-olean/src/import/load/graph_limit.rs": 2,
+    "crates/clean-olean/src/import/parse.rs": 8,
+    "crates/clean-olean/src/import/project_world.rs": 9,
+    "crates/clean-olean/src/lean_ir/module_ir.rs": 2
+   },
+   "sites_discarding_the_error": 6
   },
   {
    "id": "C-READ-SET",
@@ -448,16 +655,21 @@
     "read-dir"
    ],
    "dependence": "content-bearing",
-   "site_count": 12,
-   "member_count": 7,
+   "site_count": 22,
+   "member_count": 12,
    "members": [
     "crates/clean-mathverse/src/artifacts.rs",
     "crates/clean-mathverse/src/attempt_log/mod.rs",
     "crates/clean-mathverse/src/authority_scope.rs",
+    "crates/clean-mathverse/src/graduate/intake.rs",
     "crates/clean-mathverse/src/hol/isabelle/importer.rs",
     "crates/clean-mathverse/src/math_map/bundle.rs",
     "crates/clean-mathverse/src/release.rs",
-    "crates/clean-mathverse/src/shard_verify/mod.rs"
+    "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+    "crates/clean-mathverse/src/shard_verify/mod.rs",
+    "crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs",
+    "crates/clean-olean/src/import/path.rs",
+    "crates/clean-olean/src/import/project_world.rs"
    ],
    "statement": "A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
    "check_strength": "none",
@@ -479,44 +691,113 @@
     "crates/clean-mathverse/src/artifacts.rs": 1,
     "crates/clean-mathverse/src/attempt_log/mod.rs": 1,
     "crates/clean-mathverse/src/authority_scope.rs": 1,
+    "crates/clean-mathverse/src/graduate/intake.rs": 2,
     "crates/clean-mathverse/src/hol/isabelle/importer.rs": 2,
     "crates/clean-mathverse/src/math_map/bundle.rs": 2,
     "crates/clean-mathverse/src/release.rs": 4,
-    "crates/clean-mathverse/src/shard_verify/mod.rs": 1
+    "crates/clean-mathverse/src/shard_verify/cake_gate.rs": 1,
+    "crates/clean-mathverse/src/shard_verify/mod.rs": 1,
+    "crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs": 1,
+    "crates/clean-olean/src/import/path.rs": 4,
+    "crates/clean-olean/src/import/project_world.rs": 2
    },
    "sites_discarding_the_error": 1
   },
   {
    "id": "C-STAT-FRESH",
-   "title": "equal metadata implies equal content",
+   "title": "a metadata read names the same object the content read returns",
    "effects": [
     "stat-file"
    ],
    "dependence": "content-bearing",
-   "site_count": 4,
-   "member_count": 1,
+   "site_count": 2,
+   "member_count": 2,
    "members": [
-    "crates/clean-olean/src/import/mod.rs"
+    "crates/clean-olean/src/import/module_cache_direct.rs",
+    "crates/clean-olean/src/import/module_cache_direct/capture.rs"
    ],
-   "statement": "When a cache returns a previously parsed module because the file's mtime equals the recorded mtime, the file's CONTENT equals the content that was parsed.",
-   "check_strength": "none",
-   "checked_by": [],
-   "holes": [
+   "statement": "When a metadata-only call (`symlink_metadata`, `canonicalize`) decides how a file is treated or what key it is stored under, the object it answered about is the same object whose CONTENT the surrounding capture reads.",
+   "check_strength": "partial",
+   "checked_by": [
     {
-     "file": "crates/clean-olean/src/import/mod.rs",
-     "pattern": "entry\\.mtime\\.is_some\\(\\) && entry\\.mtime == mtime",
+     "file": "crates/clean-olean/src/import/module_cache_direct.rs",
+     "pattern": "Some\\(module\\) if module\\.identity == captured\\.identity",
      "lines": [
-      450
+      209
      ],
-     "what": "the module cache's hit condition IS the assumption: mtime equality is taken as content equality, and the hit returns an `Arc<ParsedModule>` that later feeds registration"
+     "what": "the module cache's hit condition is CONTENT identity, not metadata: every lookup re-reads and re-hashes all three parts and compares blake3 digests, so no stat result can serve stale bytes"
+    },
+    {
+     "file": "crates/clean-olean/src/import/module_cache_direct.rs",
+     "pattern": "digest: blake3::hash\\(bytes\\)",
+     "lines": [
+      29
+     ],
+     "what": "the identity a hit compares is a blake3 digest of the bytes actually read on this lookup, together with their length"
+    },
+    {
+     "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+     "pattern": "let metadata = file\\.metadata\\(\\)\\?;",
+     "lines": [
+      195
+     ],
+     "what": "metadata is read from the opened descriptor, rather than re-resolving its path; this does not bind the earlier canonical pathname to that descriptor"
+    },
+    {
+     "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+     "pattern": "if !metadata\\.is_file\\(\\)",
+     "lines": [
+      196
+     ],
+     "what": "the opened descriptor must be a regular file before its admitted capture; this does not make separate part captures coherent"
+    },
+    {
+     "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+     "pattern": "if Stamp::of\\(&current\\) != self\\.initial",
+     "lines": [
+      219
+     ],
+     "what": "a descriptor stamp is checked before reading; on Unix it includes device, inode, mtime and ctime, so restoring only mtime does not defeat the instability check"
+    },
+    {
+     "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+     "pattern": "if Stamp::of\\(&after\\) != self\\.initial",
+     "lines": [
+      271
+     ],
+     "what": "the same descriptor is checked again after its bounded-length read and growth probe; separate parts still need not come from one filesystem state"
     }
    ],
-   "why_unproved": "mtime equality does not imply content equality \u2014 a same-second rewrite, an archive restore, a `touch -r`, or a coarse-granularity filesystem all produce equal mtimes over different bytes. (One direction IS fail-closed: a failed `stat` yields `None`, and the hit condition requires `is_some()`, so a stat failure misses rather than falsely hits.)",
-   "discharge": "key the cache on something that implies content equality \u2014 at minimum `(len, mtime_ns, dev, ino)` from the stat already being made, and a content digest on any path whose output is used to MINT a verdict rather than to serve a query.",
+   "holes": [
+    {
+     "file": "crates/clean-olean/src/import/module_cache_direct.rs",
+     "pattern": "let base = capture::required\\(path, budget\\)\\?;",
+     "lines": [
+      114
+     ],
+     "what": "the capture is NOT atomic: `canonicalize` resolves the key, then the base is read from the ORIGINAL path, then the two companions are captured separately, with optional IR captured later. The filesystem may move between them, so the key can name one object while the digests cover another, or the bundle can mix two generations"
+    },
+    {
+     "file": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+     "pattern": "match std::fs::symlink_metadata\\(path\\)",
+     "lines": [
+      317
+     ],
+     "what": "an absent file and a DANGLING SYMLINK are separated by a second syscall issued after the failed open, so the two answers are about two moments; a link created in between is reported as an unreadable companion and a link removed in between as an absent one"
+    }
+   ],
+   "why_unproved": "content digests prevent stale cache hits and descriptor checks detect per-part instability. They do not bind the earlier canonical key to the opened object, make all part captures coherent, or make the absence probe atomic with the failed open.",
+   "discharge": "bind the cache key to the descriptor actually read, and bind the presence and bytes of every base, server, private and optional IR part to a coherent manifest or snapshot. Opening each part once does not by itself provide that multi-part coherence.",
    "owning_job": "R2b-STAT",
    "sites_by_member": {
-    "crates/clean-olean/src/import/mod.rs": 4
-   }
+    "crates/clean-olean/src/import/module_cache_direct.rs": 1,
+    "crates/clean-olean/src/import/module_cache_direct/capture.rs": 1
+   },
+   "history": [
+    "2026-09-09 (9329c2b2b, another lane): the hole this contract was written for is CLOSED at the cause. `ModuleCache` keyed on `entry.mtime.is_some() && entry.mtime == mtime` and served an `Arc<ParsedModule>` on metadata equality alone; it now keys on a blake3 digest of every captured part. Recommendation REC-CACHE-KEY offered a cheap `(len, mtime_ns, dev, ino)` variant and priced the sound content-digest variant as NOT cheap \u2014 the sound one is what landed, and the cache now avoids re-PARSING rather than re-READING.",
+    "2026-09-14: this contract was re-stated over what the remaining stat sites actually assume. It is not a weakening: `check_strength` rose from `none` to `partial` because real enforcement now exists to cite, and the residual named below is narrower than the one it replaces.",
+    "2026-11-14 (fffdd0035 capture intake): cite the opened regular-file and pre/post descriptor stamp checks, and move both hole anchors with the implementation. This remains partial: canonical-key binding, multi-part coherence and two-moment absence detection are still owed. Explicit capture limits are caller-owned; ordinary loaders retain None and this contract makes no unconditional resource-bound claim."
+   ]
   },
   {
    "id": "C-ENV-NEUTRAL",
@@ -525,14 +806,18 @@
     "read-env"
    ],
    "dependence": "content-bearing",
-   "site_count": 14,
-   "member_count": 5,
+   "site_count": 19,
+   "member_count": 9,
    "members": [
     "crates/clean-mathverse/src/coq/alpha.rs",
     "crates/clean-mathverse/src/coq/universe_releveling.rs",
     "crates/clean-mathverse/src/inductive_replay.rs",
     "crates/clean-mathverse/src/shard.rs",
-    "crates/clean-mathverse/src/verify/incremental/mod.rs"
+    "crates/clean-mathverse/src/verify/incremental/mod.rs",
+    "crates/clean-olean/src/import/path.rs",
+    "crates/clean-olean/src/import/project_world.rs",
+    "crates/clean-verify/src/spec/core_spec/bundles.rs",
+    "crates/clean-verify/src/spec/decl_budget.rs"
    ],
    "statement": "The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
    "check_strength": "none",
@@ -550,7 +835,7 @@
      "file": "crates/clean-mathverse/src/shard.rs",
      "pattern": "std::env::var\\(MAX_DECOMPRESS_BYTES_ENV\\)",
      "lines": [
-      98
+      110
      ],
      "what": "a BEHAVIOUR-CHANGING variable: `MATHVERSE_MAX_DECOMPRESS_BYTES` moves the decompression bound a shard read is refused at"
     }
@@ -563,14 +848,22 @@
     "crates/clean-mathverse/src/coq/universe_releveling.rs": 1,
     "crates/clean-mathverse/src/inductive_replay.rs": 5,
     "crates/clean-mathverse/src/shard.rs": 1,
-    "crates/clean-mathverse/src/verify/incremental/mod.rs": 2
+    "crates/clean-mathverse/src/verify/incremental/mod.rs": 2,
+    "crates/clean-olean/src/import/path.rs": 1,
+    "crates/clean-olean/src/import/project_world.rs": 1,
+    "crates/clean-verify/src/spec/core_spec/bundles.rs": 1,
+    "crates/clean-verify/src/spec/decl_budget.rs": 2
    },
    "variables": {
     "CLEAN_WS16_DEBUG": 6,
     "COQ_MOTIVE_DEBUG": 4,
+    "<unresolved>": 2,
     "CLEAN_COQ_VAR_RELEVEL": 1,
     "CLEAN_DISC_FAIL_LOG": 1,
     "CLEAN_SPECULATIVE_REJECT_LOG": 1,
+    "CLEAN_SPEC_DECL_BUDGET": 1,
+    "CLEAN_SPEC_DECL_BUDGET_TRACE": 1,
+    "CLEAN_SPEC_STAGE_TIMING": 1,
     "MATHVERSE_MAX_DECOMPRESS_BYTES": 1
    }
   },
@@ -716,7 +1009,7 @@
      "file": "crates/clean-mathverse/src/attempt_log/mod.rs",
      "pattern": "hasher\\.update\\(&std::process::id\\(\\)\\.to_be_bytes\\(\\)\\);",
      "lines": [
-      56
+      59
      ],
      "what": "the pid is hashed INTO an attempt identifier, so the identifier is not reproducible across runs \u2014 benign for a nonce, load-bearing if an identifier is ever compared"
     }
@@ -736,17 +1029,21 @@
     "write-file"
    ],
    "dependence": "success-only",
-   "site_count": 30,
-   "member_count": 8,
+   "site_count": 40,
+   "member_count": 12,
    "members": [
     "crates/clean-mathverse/src/artifacts.rs",
     "crates/clean-mathverse/src/attempt_log/mod.rs",
     "crates/clean-mathverse/src/drift.rs",
+    "crates/clean-mathverse/src/graduate/baseline_index.rs",
+    "crates/clean-mathverse/src/graduate/intake.rs",
+    "crates/clean-mathverse/src/graduate/record.rs",
     "crates/clean-mathverse/src/release.rs",
     "crates/clean-mathverse/src/shard.rs",
     "crates/clean-mathverse/src/shard_verify/mod.rs",
     "crates/clean-mathverse/src/verify/incremental/mod.rs",
-    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs"
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
+    "crates/clean-olean/src/import/module_cache_direct/capture.rs"
    ],
    "statement": "Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
    "check_strength": "partial",
@@ -755,7 +1052,7 @@
      "file": "crates/clean-mathverse/src/attempt_log/mod.rs",
      "pattern": "OpenOptions::new\\(\\)\\.write\\(true\\)\\.create_new\\(true\\)",
      "lines": [
-      1120
+      1149
      ],
      "what": "one record writer refuses to clobber an existing file (`create_new`), so a re-run cannot silently overwrite the record a previous verdict was minted against"
     }
@@ -765,7 +1062,7 @@
      "file": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
      "pattern": "std::fs::write\\(path, self\\.to_json\\(\\)\\?\\)\\?;",
      "lines": [
-      279
+      290
      ],
      "what": "`fs::write` is not atomic: a crash or a full disk mid-write leaves a truncated JSON manifest that `from_file` will later read as authoritative"
     },
@@ -786,11 +1083,15 @@
     "crates/clean-mathverse/src/artifacts.rs": 2,
     "crates/clean-mathverse/src/attempt_log/mod.rs": 5,
     "crates/clean-mathverse/src/drift.rs": 3,
+    "crates/clean-mathverse/src/graduate/baseline_index.rs": 5,
+    "crates/clean-mathverse/src/graduate/intake.rs": 2,
+    "crates/clean-mathverse/src/graduate/record.rs": 2,
     "crates/clean-mathverse/src/release.rs": 10,
     "crates/clean-mathverse/src/shard.rs": 5,
     "crates/clean-mathverse/src/shard_verify/mod.rs": 1,
     "crates/clean-mathverse/src/verify/incremental/mod.rs": 2,
-    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 2
+    "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs": 2,
+    "crates/clean-olean/src/import/module_cache_direct/capture.rs": 1
    },
    "sites_discarding_the_error": 5
   }
@@ -815,41 +1116,85 @@
    "declaration-import",
    "declaration-type",
    "error-value",
-   "in-memory-no-io"
+   "in-memory-no-io",
+   "fn-item-path"
   ],
-  "statement": "These sites matched the IO token table but perform no IO: they import a module, name a type, construct or inspect an `io::Error` value, or wrap an in-memory buffer in an IO-shaped API. No verdict can turn on their result, so no contract is owed.",
-  "site_count": 83
+  "statement": "These sites matched the IO token table but perform no IO: they import a module, name a type or a function ITEM, construct or inspect an `io::Error` value, or wrap an in-memory buffer in an IO-shaped API. No verdict can turn on their result, so no contract is owed.",
+  "site_count": 106
  },
  "ledger": {
   "what": "the \u00a73.6 assumption ledger for lane (b): one row per (contract x member) that nothing fully checks, plus the rows this MODEL itself stands on. Each row carries a statement, a probe command, a discharge condition, a date and an owning job.",
   "pattern": "designs/2026-08-22-spine-and-lattice-program.md \u00a73.6",
   "destination": "data/spine_assumption_ledger.json, when that file exists; until then these rows live here and scripts/verdict_gate.sh reads them from here",
   "direction": "down",
-  "row_count": 44,
+  "row_count": 73,
   "rows_by_class": {
-   "content-bearing": 34,
+   "content-bearing": 59,
    "meta": 2,
-   "success-only": 8
+   "success-only": 12
   },
   "rows_by_contract": {
    "*": 1,
    "C-AMBIENT-NONCE": 2,
-   "C-ENV-NEUTRAL": 5,
+   "C-ENV-NEUTRAL": 9,
    "C-NONE": 1,
-   "C-READ-BYTES": 13,
-   "C-READ-SET": 7,
+   "C-READ-BYTES": 28,
+   "C-READ-SET": 12,
    "C-SPAWN-FAITHFUL": 1,
    "C-SPAWN-IDENTITY": 5,
-   "C-STAT-FRESH": 1,
-   "C-WRITE-COMPLETE": 8
+   "C-STAT-FRESH": 2,
+   "C-WRITE-COMPLETE": 12
   },
   "row_ratchet": {
    "what": "assumption-ledger rows; may fall freely, may rise only through scripts/verdict_io_contracts.py --rebase-up '<reason>' (recorded below)",
    "direction": "down",
-   "baseline_rows": 44,
-   "measured_rows": 44,
-   "minted_utc": "2026-08-26T19:26:29Z",
-   "rebases": []
+   "baseline_rows": 73,
+   "measured_rows": 73,
+   "minted_utc": "2026-11-14T21:29:54Z",
+   "rebases": [
+    {
+     "date": "2026-09-30",
+     "from": 65,
+     "to": 66,
+     "reason": "2026-09-30 Phase 1 integration (on origin/main's baseline after the third merge): the paragon split moved enforce_module_graph_limit* out of crates/clean-olean/src/import/load.rs into import/load/graph_limit.rs, and ledger rows are per module, so its .olean read (graph_limit.rs) owns a row of its own. It is the same C-READ-BYTES assumption load.rs's row carried before the move; no new IO site."
+    },
+    {
+     "date": "2026-10-23",
+     "from": 66,
+     "to": 67,
+     "reason": "2026-10-23 R113 (fix/replay-part-coverage): the one artifact reader is a new module, crates/clean-olean/src/import/artifact.rs, whose read_artifact reads an artifact's parts itself (the mathverse bridge, per-constant-verify's name index and the import-closure walks call it in place of their own .olean reads), and ledger rows are per module, so its part read (artifact.rs, std::fs::read of the .olean) owns a C-READ-BYTES row. The bytes it reads are checked by check_artifact_parts (one header, one record per name, placement) before any reading is returned."
+    },
+    {
+     "date": "2026-10-26",
+     "from": 67,
+     "to": 68,
+     "reason": "2026-10-26 merge of origin/main f89f0d5f8 into land/lean4-delta-r5-20261021: main still has 67 rows and this branch adds the one it recorded on 2026-10-25, L-READ-BYTES/clean-olean::lean_ir::module_ir (R149, lane C: the .olean loader reads a Lean-built module's compiled IR to judge a late @[implemented_by] binding); 67 -> 68, no other row"
+    },
+    {
+     "date": "2026-10-29",
+     "from": 68,
+     "to": 72,
+     "reason": "2026-10-28: lane W (R111, landed bc01ee4e4) made crates/clean-olean/src/import/project_world.rs and lake_package.rs verdict-path members: the import world gate reads the project's lean-toolchain and Lake package files (C-READ-BYTES, 2 rows), walks the package directory (C-READ-SET) and reads LEAN_PATH (C-ENV-NEUTRAL), each ledgered here as an unproved assumption with its probe; the growth was masked at landing because the chain walk stopped at main's earlier verdict-set red (afa1b0d84, which adds no ledger row)"
+    },
+    {
+     "date": "2026-11-14",
+     "from": 72,
+     "to": 73,
+     "reason": "2026-11-14: incoming descriptor-capture module adds one IO-bearing ledger row (72 to 73); retain C-STAT-FRESH as open and bind moved evidence selectors, no debt hidden"
+    },
+    {
+     "date": "2026-11-14",
+     "from": 72,
+     "to": 73,
+     "reason": "2026-11-14 moved module capture: preserve STAT residual on extracted capture.rs; explicitly count its additional contract/member row (72 to 73), no exclusion or residual discharged"
+    },
+    {
+     "date": "2026-11-14",
+     "from": 72,
+     "to": 73,
+     "reason": "2026-11-14 UTC: actual canonical source61df Olean capture closureA158/B44 adds descriptor-capture per-member IO obligations; measured ledger72->73(+1). Existing contract statements/statuses and all historical rebase entries retained; C-STAT-FRESH remains partial with two real holes. No checker/classifier/default weakening."
+    }
+   ]
   },
   "rows": [
    {
@@ -865,7 +1210,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/artifacts.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -875,15 +1220,15 @@
     "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
     "site_count": 3,
     "lines": [
-     1045,
-     1045,
-     1162
+     1058,
+     1058,
+     1191
     ],
     "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/attempt_log/mod.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -899,7 +1244,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/authority_scope.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -916,7 +1261,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/drift.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -938,7 +1283,117 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/env_fingerprint.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::graduate::baseline_index",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+    "site_count": 4,
+    "lines": [
+     159,
+     159,
+     316,
+     316
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/baseline_index.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/graduate/baseline_index.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::graduate::compact_record",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/graduate/compact_record.rs",
+    "site_count": 4,
+    "lines": [
+     197,
+     197,
+     207,
+     207
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/compact_record.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/graduate/compact_record.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::graduate::intake",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/graduate/intake.rs",
+    "site_count": 4,
+    "lines": [
+     200,
+     200,
+     2018,
+     2018
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/intake.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/graduate/intake.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::graduate::lineage_build",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/graduate/lineage_build.rs",
+    "site_count": 2,
+    "lines": [
+     77,
+     77
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/lineage_build.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/graduate/lineage_build.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::graduate::record",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/graduate/record.rs",
+    "site_count": 4,
+    "lines": [
+     483,
+     483,
+     507,
+     507
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/record.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/graduate/record.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::graduate::tree_score",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/graduate/tree_score.rs",
+    "site_count": 2,
+    "lines": [
+     214,
+     214
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/tree_score.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/graduate/tree_score.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -955,7 +1410,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/hol/isabelle/importer.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -973,7 +1428,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/bundle.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -990,7 +1445,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/ingest.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -1007,7 +1462,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/keys.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -1024,7 +1479,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/math_map/policy.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -1042,7 +1497,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/release.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -1052,22 +1507,56 @@
     "member": "crates/clean-mathverse/src/shard.rs",
     "site_count": 10,
     "lines": [
-     1184,
-     1184,
-     1600,
-     1600,
-     1600,
-     1604,
-     1759,
-     1759,
-     1759,
-     1764
+     1214,
+     1214,
+     1651,
+     1651,
+     1651,
+     1655,
+     1810,
+     1810,
+     1810,
+     1815
     ],
     "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/shard.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::shard_verify::cake_gate",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+    "site_count": 2,
+    "lines": [
+     393,
+     493
+    ],
+    "statement": "crates/clean-mathverse/src/shard_verify/cake_gate.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-mathverse::shard_verify::native_gate",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/shard_verify/native_gate.rs",
+    "site_count": 2,
+    "lines": [
+     170,
+     202
+    ],
+    "statement": "crates/clean-mathverse/src/shard_verify/native_gate.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/shard_verify/native_gate.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -1077,15 +1566,155 @@
     "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
     "site_count": 3,
     "lines": [
-     288,
-     288,
-     288
+     299,
+     299,
+     299
     ],
     "statement": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
     "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::import::artifact",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/artifact.rs",
+    "site_count": 2,
+    "lines": [
+     116,
+     116
+    ],
+    "statement": "crates/clean-olean/src/import/artifact.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/artifact.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-15",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::import::lake_package",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/lake_package.rs",
+    "site_count": 6,
+    "lines": [
+     57,
+     57,
+     57,
+     59,
+     59,
+     59
+    ],
+    "statement": "crates/clean-olean/src/import/lake_package.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/lake_package.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::import::load",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/load.rs",
+    "site_count": 6,
+    "lines": [
+     87,
+     87,
+     599,
+     599,
+     887,
+     887
+    ],
+    "statement": "crates/clean-olean/src/import/load.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/load.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-15",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::import::load::graph_limit",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/load/graph_limit.rs",
+    "site_count": 2,
+    "lines": [
+     96,
+     96
+    ],
+    "statement": "crates/clean-olean/src/import/load/graph_limit.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/load/graph_limit.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::import::parse",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/parse.rs",
+    "site_count": 8,
+    "lines": [
+     65,
+     65,
+     280,
+     280,
+     290,
+     290,
+     312,
+     312
+    ],
+    "statement": "crates/clean-olean/src/import/parse.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/parse.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::import::project_world",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/project_world.rs",
+    "site_count": 9,
+    "lines": [
+     330,
+     330,
+     330,
+     448,
+     448,
+     448,
+     480,
+     480,
+     480
+    ],
+    "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/import/project_world.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-READ"
+   },
+   {
+    "id": "L-READ-BYTES/clean-olean::lean_ir::module_ir",
+    "contract": "C-READ-BYTES",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/lean_ir/module_ir.rs",
+    "site_count": 2,
+    "lines": [
+     205,
+     205
+    ],
+    "statement": "crates/clean-olean/src/lean_ir/module_ir.rs assumes, without proof, that: Every byte a verdict path consumes from a file is the byte its provenance was established over: the path names the file that was digested, the file is not substituted between the pin and the read, and a short or truncated read is refused rather than decoded.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-BYTES --member crates/clean-olean/src/lean_ir/module_ir.rs",
+    "discharge": "bind every content-bearing read to a digest the verdict's provenance already pins (the shard footer for shards; an artifact-lineage digest for manifests), and require the checksummed reader on any path that will MINT a verdict.",
+    "date": "2026-11-14",
     "owning_job": "R2b-READ"
    },
    {
@@ -1101,7 +1730,7 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/artifacts.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SET"
    },
    {
@@ -1111,13 +1740,13 @@
     "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
     "site_count": 1,
     "lines": [
-     1036
+     1049
     ],
     "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/attempt_log/mod.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SET"
    },
    {
@@ -1133,7 +1762,24 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/authority_scope.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::graduate::intake",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/graduate/intake.rs",
+    "site_count": 2,
+    "lines": [
+     377,
+     377
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/intake.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/graduate/intake.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-11-14",
     "owning_job": "R2b-SET"
    },
    {
@@ -1150,7 +1796,7 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/hol/isabelle/importer.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SET"
    },
    {
@@ -1167,7 +1813,7 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/math_map/bundle.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SET"
    },
    {
@@ -1186,7 +1832,23 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/release.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-mathverse::shard_verify::cake_gate",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+    "site_count": 1,
+    "lines": [
+     473
+    ],
+    "statement": "crates/clean-mathverse/src/shard_verify/cake_gate.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-11-14",
     "owning_job": "R2b-SET"
    },
    {
@@ -1202,26 +1864,91 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/shard_verify/mod.rs",
     "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SET"
    },
    {
-    "id": "L-STAT-FRESH/clean-olean::import::mod",
-    "contract": "C-STAT-FRESH",
+    "id": "L-READ-SET/clean-mathverse::shard_verify::native_gate_helpers",
+    "contract": "C-READ-SET",
     "class": "content-bearing",
-    "member": "crates/clean-olean/src/import/mod.rs",
+    "member": "crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs",
+    "site_count": 1,
+    "lines": [
+     163
+    ],
+    "statement": "crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-olean::import::path",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/path.rs",
     "site_count": 4,
     "lines": [
-     444,
-     444,
-     474,
-     474
+     358,
+     358,
+     537,
+     537
     ],
-    "statement": "crates/clean-olean/src/import/mod.rs assumes, without proof, that: When a cache returns a previously parsed module because the file's mtime equals the recorded mtime, the file's CONTENT equals the content that was parsed.",
+    "statement": "crates/clean-olean/src/import/path.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
     "checked": "NOTHING in the tree checks this contract",
-    "probe": "scripts/verdict_io_contracts.py --sites C-STAT-FRESH --member crates/clean-olean/src/import/mod.rs",
-    "discharge": "key the cache on something that implies content equality \u2014 at minimum `(len, mtime_ns, dev, ino)` from the stat already being made, and a content digest on any path whose output is used to MINT a verdict rather than to serve a query.",
-    "date": "2026-08-26",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-olean/src/import/path.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-READ-SET/clean-olean::import::project_world",
+    "contract": "C-READ-SET",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/project_world.rs",
+    "site_count": 2,
+    "lines": [
+     573,
+     573
+    ],
+    "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: A directory walk returns exactly the input set the verdict quantifies over: no entry appears or disappears during the walk, no entry is silently dropped for being a symlink, non-UTF-8 or unreadable, and enumeration order does not change the verdict.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-READ-SET --member crates/clean-olean/src/import/project_world.rs",
+    "discharge": "quantify every walk over a committed manifest and refuse on set difference in BOTH directions (missing and unexpected), rather than over whatever the filesystem returned.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-SET"
+   },
+   {
+    "id": "L-STAT-FRESH/clean-olean::import::module_cache_direct",
+    "contract": "C-STAT-FRESH",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/module_cache_direct.rs",
+    "site_count": 1,
+    "lines": [
+     110
+    ],
+    "statement": "crates/clean-olean/src/import/module_cache_direct.rs assumes, without proof, that: When a metadata-only call (`symlink_metadata`, `canonicalize`) decides how a file is treated or what key it is stored under, the object it answered about is the same object whose CONTENT the surrounding capture reads.",
+    "checked": "PARTIAL \u2014 6 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
+    "probe": "scripts/verdict_io_contracts.py --sites C-STAT-FRESH --member crates/clean-olean/src/import/module_cache_direct.rs",
+    "discharge": "bind the cache key to the descriptor actually read, and bind the presence and bytes of every base, server, private and optional IR part to a coherent manifest or snapshot. Opening each part once does not by itself provide that multi-part coherence.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-STAT"
+   },
+   {
+    "id": "L-STAT-FRESH/clean-olean::import::module_cache_direct::capture",
+    "contract": "C-STAT-FRESH",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+    "site_count": 1,
+    "lines": [
+     317
+    ],
+    "statement": "crates/clean-olean/src/import/module_cache_direct/capture.rs assumes, without proof, that: When a metadata-only call (`symlink_metadata`, `canonicalize`) decides how a file is treated or what key it is stored under, the object it answered about is the same object whose CONTENT the surrounding capture reads.",
+    "checked": "PARTIAL \u2014 6 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
+    "probe": "scripts/verdict_io_contracts.py --sites C-STAT-FRESH --member crates/clean-olean/src/import/module_cache_direct/capture.rs",
+    "discharge": "bind the cache key to the descriptor actually read, and bind the presence and bytes of every base, server, private and optional IR part to a coherent manifest or snapshot. Opening each part once does not by itself provide that multi-part coherence.",
+    "date": "2026-11-14",
     "owning_job": "R2b-STAT"
    },
    {
@@ -1241,7 +1968,7 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/coq/alpha.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-ENV"
    },
    {
@@ -1257,7 +1984,7 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/coq/universe_releveling.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-ENV"
    },
    {
@@ -1277,7 +2004,7 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/inductive_replay.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-ENV"
    },
    {
@@ -1287,13 +2014,13 @@
     "member": "crates/clean-mathverse/src/shard.rs",
     "site_count": 1,
     "lines": [
-     98
+     110
     ],
     "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/shard.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-ENV"
    },
    {
@@ -1303,14 +2030,79 @@
     "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
     "site_count": 2,
     "lines": [
-     1149,
-     1681
+     1150,
+     1682
     ],
     "statement": "crates/clean-mathverse/src/verify/incremental/mod.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-mathverse/src/verify/incremental/mod.rs",
     "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-olean::import::path",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/path.rs",
+    "site_count": 1,
+    "lines": [
+     357
+    ],
+    "statement": "crates/clean-olean/src/import/path.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-olean/src/import/path.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-olean::import::project_world",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-olean/src/import/project_world.rs",
+    "site_count": 1,
+    "lines": [
+     572
+    ],
+    "statement": "crates/clean-olean/src/import/project_world.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-olean/src/import/project_world.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-verify::spec::core_spec::bundles",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-verify/src/spec/core_spec/bundles.rs",
+    "site_count": 1,
+    "lines": [
+     4778
+    ],
+    "statement": "crates/clean-verify/src/spec/core_spec/bundles.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-verify/src/spec/core_spec/bundles.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-ENV"
+   },
+   {
+    "id": "L-ENV-NEUTRAL/clean-verify::spec::decl_budget",
+    "contract": "C-ENV-NEUTRAL",
+    "class": "content-bearing",
+    "member": "crates/clean-verify/src/spec/decl_budget.rs",
+    "site_count": 2,
+    "lines": [
+     157,
+     172
+    ],
+    "statement": "crates/clean-verify/src/spec/decl_budget.rs assumes, without proof, that: The ABSENCE of every environment variable is the safe default, and no value a caller can set either changes what a verdict depends on or escapes being recorded in that verdict's provenance.",
+    "checked": "NOTHING in the tree checks this contract",
+    "probe": "scripts/verdict_io_contracts.py --sites C-ENV-NEUTRAL --member crates/clean-verify/src/spec/decl_budget.rs",
+    "discharge": "commit a table of every variable name lane (b) reads with a declared disposition (`diagnostic-only` / `behaviour-changing`), enforce it here so an unlisted name aborts the mint, and require every behaviour-changing name to appear in the provenance of any verdict minted under it.",
+    "date": "2026-11-14",
     "owning_job": "R2b-ENV"
    },
    {
@@ -1332,7 +2124,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/artifacts.rs",
     "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SPAWN"
    },
    {
@@ -1351,7 +2143,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
     "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/env_fingerprint.rs",
     "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SPAWN"
    },
    {
@@ -1367,7 +2159,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/math_map/ingest.rs",
     "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SPAWN"
    },
    {
@@ -1392,7 +2184,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-mathverse/src/release.rs",
     "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SPAWN"
    },
    {
@@ -1408,7 +2200,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-IDENTITY --member crates/clean-verify/src/external_checker.rs",
     "discharge": "resolve each tool once to an absolute path, fingerprint it through the `capture_solver_binary` machinery that already exists, and compare the digest to a committed pin before the first spawn.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-SPAWN"
    },
    {
@@ -1425,7 +2217,7 @@
     "checked": "PARTIAL \u2014 3 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
     "probe": "scripts/verdict_io_contracts.py --sites C-SPAWN-FAITHFUL --member crates/clean-verify/src/external_checker.rs",
     "discharge": "either declare the external checker TCB with a pinned digest (C-SPAWN-IDENTITY) and say so in the trust register, or require every accepted verdict to carry a certificate the Clean kernel re-checks \u2014 the S&L \u00a70.6 'diverse re-check' posture.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-CHILD"
    },
    {
@@ -1435,13 +2227,13 @@
     "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
     "site_count": 1,
     "lines": [
-     56
+     59
     ],
     "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: `std::process::id()` is used only for uniqueness, so two runs over the same input that differ only in pid produce the same verdict.",
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-AMBIENT-NONCE --member crates/clean-mathverse/src/attempt_log/mod.rs",
     "discharge": "a determinism probe \u2014 mint the same verdict twice in one tree and diff \u2014 plus this enumeration held at exactly two sites by the gate.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-AMBIENT"
    },
    {
@@ -1457,7 +2249,7 @@
     "checked": "NOTHING in the tree checks this contract",
     "probe": "scripts/verdict_io_contracts.py --sites C-AMBIENT-NONCE --member crates/clean-mathverse/src/release.rs",
     "discharge": "a determinism probe \u2014 mint the same verdict twice in one tree and diff \u2014 plus this enumeration held at exactly two sites by the gate.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-AMBIENT"
    },
    {
@@ -1474,7 +2266,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/artifacts.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1484,17 +2276,17 @@
     "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
     "site_count": 5,
     "lines": [
-     942,
-     951,
-     1117,
-     1120,
-     1592
+     945,
+     959,
+     1146,
+     1149,
+     1622
     ],
     "statement": "crates/clean-mathverse/src/attempt_log/mod.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, at least one inside this member; the member's other sites are not covered by it",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/attempt_log/mod.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1512,7 +2304,61 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/drift.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::graduate::baseline_index",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+    "site_count": 5,
+    "lines": [
+     273,
+     273,
+     273,
+     273,
+     273
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/baseline_index.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/graduate/baseline_index.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::graduate::intake",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/graduate/intake.rs",
+    "site_count": 2,
+    "lines": [
+     1868,
+     1868
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/intake.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/graduate/intake.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-11-14",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-mathverse::graduate::record",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-mathverse/src/graduate/record.rs",
+    "site_count": 2,
+    "lines": [
+     478,
+     478
+    ],
+    "statement": "crates/clean-mathverse/src/graduate/record.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/graduate/record.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1537,7 +2383,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/release.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1547,17 +2393,17 @@
     "member": "crates/clean-mathverse/src/shard.rs",
     "site_count": 5,
     "lines": [
-     981,
-     981,
-     981,
-     982,
-     982
+     998,
+     998,
+     998,
+     999,
+     999
     ],
     "statement": "crates/clean-mathverse/src/shard.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/shard.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1573,7 +2419,7 @@
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/shard_verify/mod.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1583,14 +2429,14 @@
     "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
     "site_count": 2,
     "lines": [
-     1706,
-     1706
+     1707,
+     1707
     ],
     "statement": "crates/clean-mathverse/src/verify/incremental/mod.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/verify/incremental/mod.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1600,14 +2446,30 @@
     "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
     "site_count": 2,
     "lines": [
-     279,
-     279
+     290,
+     290
     ],
     "statement": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
     "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
     "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
     "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
-    "date": "2026-08-26",
+    "date": "2026-11-14",
+    "owning_job": "R2b-WRITE"
+   },
+   {
+    "id": "L-WRITE-COMPLETE/clean-olean::import::module_cache_direct::capture",
+    "contract": "C-WRITE-COMPLETE",
+    "class": "success-only",
+    "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+    "site_count": 1,
+    "lines": [
+     285
+    ],
+    "statement": "crates/clean-olean/src/import/module_cache_direct/capture.rs assumes, without proof, that: Every write either lands completely or reports an error; no partially written artifact is later read back as authoritative. The write's CONTENT needs no contract at all \u2014 the bytes were computed in memory before the call, so the verdict depends on the call's SUCCESS and on nothing that came back.",
+    "checked": "PARTIAL \u2014 1 cited check(s) for this contract, NONE of them in this member",
+    "probe": "scripts/verdict_io_contracts.py --sites C-WRITE-COMPLETE --member crates/clean-olean/src/import/module_cache_direct/capture.rs",
+    "discharge": "tmp-write + rename for the writes whose output is read back as authoritative, and propagate (or explicitly justify discarding) every write error. This is the cheapest class in the model and should close first.",
+    "date": "2026-11-14",
     "owning_job": "R2b-WRITE"
    },
    {
@@ -1618,8 +2480,8 @@
     "probe": "scripts/verdict_io_contracts.py --sites C-NONE",
     "discharge": "re-derive the classification from MIR/THIR rather than from source lines \u2014 the same whole-crate dump G-SPINE-SET waits on (data/spine_set.PENDING.md).",
     "owning_job": "R2b-LEX",
-    "date": "2026-08-26",
-    "site_count": 83
+    "date": "2026-11-14",
+    "site_count": 106
    },
    {
     "id": "L-DENOM",
@@ -1629,8 +2491,8 @@
     "probe": "scripts/verdict_io_contracts.py --describe   # prints the borrowed token table",
     "discharge": "derive sites from the call graph instead of from tokens; until then, every added token lands with a mutation arm proving the scan would have missed it before.",
     "owning_job": "R2b-DENOM",
-    "date": "2026-08-26",
-    "site_count": 211
+    "date": "2026-11-14",
+    "site_count": 316
    }
   ]
  },
@@ -1678,9 +2540,10 @@
   {
    "id": "REC-CACHE-KEY",
    "contract": "C-STAT-FRESH",
-   "cheap_because": "PARTLY \u2014 the cheap variant is free, the sound variant is not",
-   "what": "clean-olean's module cache keys on mtime alone. The FREE improvement is to key on `(len, mtime_ns, dev, ino)` from the `fs::metadata` call already being made, which closes the same-second rewrite and the archive-restore cases. The SOUND fix \u2014 a content digest \u2014 is NOT cheap and should be stated as such: it means reading the file the cache exists to avoid reading, so it belongs on mint paths only, never on the serve path.",
-   "cost": "cheap variant: zero new syscalls, a wider key struct. Sound variant: one full read + hash per cache probe \u2014 quote it honestly rather than calling the whole row cheap.",
+   "status": "TAKEN 2026-09-09 at 9329c2b2b \u2014 the SOUND variant, by another lane",
+   "cheap_because": "n/a \u2014 this row is kept as a record of what was recommended and what landed",
+   "what": "RECOMMENDED: clean-olean's module cache keyed on mtime alone; the FREE improvement was to key on `(len, mtime_ns, dev, ino)` from the `fs::metadata` already being made, with the content digest priced as NOT cheap because it means reading the file the cache exists to avoid reading. LANDED: the content digest, on the serve path. Every lookup re-reads and blake3-hashes all three parts and compares `ModuleIdentity`; `fs::metadata` is gone from the member entirely. The cache now avoids re-PARSING rather than re-READING \u2014 which is the cost this row quoted, paid deliberately.",
+   "cost": "as predicted: one full read + hash per cache probe. The row's own warning was that the sound variant is not cheap; it is recorded as taken anyway, not as cheap.",
    "owner": "crates/clean-olean \u2014 NOT this lane"
   }
  ],
@@ -1885,25 +2748,43 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 12,
-   "token": "OpenOptions",
+   "line": 13,
+   "token": "fs::*",
    "rule": "E-USE",
    "effect": "declaration-import",
    "dependence": "verdict-irrelevant",
-   "code": "use std::fs::{self, File, OpenOptions};"
-  },
-  {
-   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 12,
-   "token": "std::fs",
-   "rule": "E-USE",
-   "effect": "declaration-import",
-   "dependence": "verdict-irrelevant",
-   "code": "use std::fs::{self, File, OpenOptions};"
+   "code": "use std::fs::File;"
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
    "line": 13,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::File;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 14,
+   "token": "OpenOptions",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::{self, OpenOptions};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 14,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::{self, OpenOptions};"
+  },
+  {
+   "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
+   "line": 15,
    "token": "io::*",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -1912,7 +2793,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 13,
+   "line": 15,
    "token": "std::io",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -1921,7 +2802,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 56,
+   "line": 59,
    "token": "std::process",
    "rule": "E-PID",
    "effect": "read-ambient",
@@ -1930,7 +2811,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 942,
+   "line": 945,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -1940,7 +2821,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 951,
+   "line": 959,
    "token": "OpenOptions",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -1950,7 +2831,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1036,
+   "line": 1049,
    "token": "fs::*",
    "rule": "E-READDIR",
    "effect": "read-dir",
@@ -1960,7 +2841,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1045,
+   "line": 1058,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -1970,7 +2851,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1045,
+   "line": 1058,
    "token": "read_to_string",
    "rule": "E-READ",
    "effect": "read-file",
@@ -1980,7 +2861,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1117,
+   "line": 1146,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -1990,7 +2871,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1120,
+   "line": 1149,
    "token": "OpenOptions",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -2000,7 +2881,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1122,
+   "line": 1151,
    "token": "std::io",
    "rule": "E-ERRVAL",
    "effect": "error-value",
@@ -2009,7 +2890,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1162,
+   "line": 1191,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -2019,7 +2900,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/attempt_log/mod.rs",
-   "line": 1592,
+   "line": 1622,
    "token": "OpenOptions",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -2351,7 +3232,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/error.rs",
-   "line": 92,
+   "line": 100,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -2360,12 +3241,349 @@
   },
   {
    "member": "crates/clean-mathverse/src/error.rs",
-   "line": 109,
+   "line": 117,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
    "dependence": "verdict-irrelevant",
    "code": "Io(#[from] std::io::Error),"
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 68,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 68,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Write;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 159,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 159,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 273,
+   "token": "BufWriter",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut file = std::io::BufWriter::new(std::fs::File::create(out).map_err(MathverseError::Io)?);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 273,
+   "token": "File::open/create",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut file = std::io::BufWriter::new(std::fs::File::create(out).map_err(MathverseError::Io)?);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 273,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut file = std::io::BufWriter::new(std::fs::File::create(out).map_err(MathverseError::Io)?);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 273,
+   "token": "std::fs",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut file = std::io::BufWriter::new(std::fs::File::create(out).map_err(MathverseError::Io)?);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 273,
+   "token": "std::io",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut file = std::io::BufWriter::new(std::fs::File::create(out).map_err(MathverseError::Io)?);",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 316,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read(path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/baseline_index.rs",
+   "line": 316,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let data = std::fs::read(path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/compact_record.rs",
+   "line": 53,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/compact_record.rs",
+   "line": 197,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let grad_bytes = std::fs::read(grad_path).map_err(|source| CompactRecordError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/compact_record.rs",
+   "line": 197,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let grad_bytes = std::fs::read(grad_path).map_err(|source| CompactRecordError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/compact_record.rs",
+   "line": 207,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let shard_bytes = std::fs::read(shard_path).map_err(|source| CompactRecordError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/compact_record.rs",
+   "line": 207,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let shard_bytes = std::fs::read(shard_path).map_err(|source| CompactRecordError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 200,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 200,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 377,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in std::fs::read_dir(dir).map_err(MathverseError::Io)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 377,
+   "token": "std::fs",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "for entry in std::fs::read_dir(dir).map_err(MathverseError::Io)? {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 1868,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "std::fs::create_dir_all(out_dir).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 1868,
+   "token": "std::fs",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "std::fs::create_dir_all(out_dir).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 2018,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let shard_bytes = std::fs::read(&shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/intake.rs",
+   "line": 2018,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let shard_bytes = std::fs::read(&shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/lineage_build.rs",
+   "line": 77,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/lineage_build.rs",
+   "line": 77,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/record.rs",
+   "line": 478,
+   "token": "fs::*",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "std::fs::write(path, json).map_err(MathverseError::Io)",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/record.rs",
+   "line": 478,
+   "token": "std::fs",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "std::fs::write(path, json).map_err(MathverseError::Io)",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/record.rs",
+   "line": 483,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/record.rs",
+   "line": 483,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/record.rs",
+   "line": 507,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/record.rs",
+   "line": 507,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/tree_score.rs",
+   "line": 214,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/graduate/tree_score.rs",
+   "line": 214,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(shard_path).map_err(MathverseError::Io)?;",
+   "error_discarded": false
   },
   {
    "member": "crates/clean-mathverse/src/hol/error.rs",
@@ -3252,7 +4470,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 98,
+   "line": 110,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -3263,7 +4481,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 981,
+   "line": 998,
    "token": "File::open/create",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3273,7 +4491,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 981,
+   "line": 998,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3283,7 +4501,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 981,
+   "line": 998,
    "token": "std::fs",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3293,7 +4511,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 982,
+   "line": 999,
    "token": "BufWriter",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3303,7 +4521,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 982,
+   "line": 999,
    "token": "std::io",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3313,7 +4531,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1184,
+   "line": 1214,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3323,7 +4541,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1184,
+   "line": 1214,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3333,7 +4551,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1552,
+   "line": 1603,
    "token": "mmap",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -3342,7 +4560,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1596,
+   "line": 1647,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -3351,7 +4569,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1600,
+   "line": 1651,
    "token": "File::open/create",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3361,7 +4579,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1600,
+   "line": 1651,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3371,7 +4589,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1600,
+   "line": 1651,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3381,7 +4599,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1604,
+   "line": 1655,
    "token": "mmap",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3391,7 +4609,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1610,
+   "line": 1661,
    "token": "mmap",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -3400,7 +4618,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1755,
+   "line": 1806,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -3409,7 +4627,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1759,
+   "line": 1810,
    "token": "File::open/create",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3419,7 +4637,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1759,
+   "line": 1810,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3429,7 +4647,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1759,
+   "line": 1810,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3439,7 +4657,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1764,
+   "line": 1815,
    "token": "mmap",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3449,7 +4667,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1782,
+   "line": 1833,
    "token": "mmap",
    "rule": "E-NOIO",
    "effect": "in-memory-no-io",
@@ -3458,12 +4676,60 @@
   },
   {
    "member": "crates/clean-mathverse/src/shard.rs",
-   "line": 1808,
+   "line": 1859,
    "token": "mmap",
    "rule": "E-TYPE",
    "effect": "declaration-type",
    "dependence": "verdict-irrelevant",
    "code": "fn from_mmap_no_checksum(mmap: Mmap) -> MathverseResult<Self> {"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+   "line": 71,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+   "line": 341,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+   "line": 393,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let shard_bytes = fs::read(path).map_err(|source| CakeGateError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+   "line": 473,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "let entries = fs::read_dir(dir).map_err(|source| CakeGateError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/cake_gate.rs",
+   "line": 493,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let Ok(bytes) = fs::read(path) else {",
+   "error_discarded": false
   },
   {
    "member": "crates/clean-mathverse/src/shard_verify/mod.rs",
@@ -3504,8 +4770,65 @@
    "error_discarded": true
   },
   {
+   "member": "crates/clean-mathverse/src/shard_verify/native_gate.rs",
+   "line": 9,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/native_gate.rs",
+   "line": 160,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "source: std::io::Error,"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/native_gate.rs",
+   "line": 170,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = fs::read(path).map_err(|source| NativeGateError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/native_gate.rs",
+   "line": 202,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = fs::read(&path).map_err(|source| NativeGateError::Io {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs",
+   "line": 12,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs;"
+  },
+  {
+   "member": "crates/clean-mathverse/src/shard_verify/native_gate_helpers.rs",
+   "line": 163,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "let entries = fs::read_dir(dir).map_err(|source| NativeGateError::Io {",
+   "error_discarded": false
+  },
+  {
    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
-   "line": 1149,
+   "line": 1150,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -3516,7 +4839,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
-   "line": 1681,
+   "line": 1682,
    "token": "env::var",
    "rule": "E-ENV",
    "effect": "read-env",
@@ -3527,7 +4850,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
-   "line": 1705,
+   "line": 1706,
    "token": "io::*",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -3536,7 +4859,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
-   "line": 1705,
+   "line": 1706,
    "token": "std::io",
    "rule": "E-USE",
    "effect": "declaration-import",
@@ -3545,7 +4868,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
-   "line": 1706,
+   "line": 1707,
    "token": "OpenOptions",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3555,7 +4878,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/incremental/mod.rs",
-   "line": 1706,
+   "line": 1707,
    "token": "std::fs",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3565,7 +4888,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 279,
+   "line": 290,
    "token": "fs::*",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3575,7 +4898,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 279,
+   "line": 290,
    "token": "std::fs",
    "rule": "E-WRITE",
    "effect": "write-file",
@@ -3585,7 +4908,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 288,
+   "line": 299,
    "token": "fs::*",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3595,7 +4918,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 288,
+   "line": 299,
    "token": "read_to_string",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3605,7 +4928,7 @@
   },
   {
    "member": "crates/clean-mathverse/src/verify/kernel_verified_manifest.rs",
-   "line": 288,
+   "line": 299,
    "token": "std::fs",
    "rule": "E-READ",
    "effect": "read-file",
@@ -3623,8 +4946,168 @@
    "code": "Io(#[from] std::io::Error),"
   },
   {
+   "member": "crates/clean-olean/src/import/artifact.rs",
+   "line": 116,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let base_bytes = std::fs::read(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/artifact.rs",
+   "line": 116,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let base_bytes = std::fs::read(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/lake_package.rs",
+   "line": 57,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let package = if let Ok(text) = std::fs::read_to_string(root.join(               )) {",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-olean/src/import/lake_package.rs",
+   "line": 57,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let package = if let Ok(text) = std::fs::read_to_string(root.join(               )) {",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-olean/src/import/lake_package.rs",
+   "line": 57,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let package = if let Ok(text) = std::fs::read_to_string(root.join(               )) {",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-olean/src/import/lake_package.rs",
+   "line": 59,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "} else if let Ok(text) = std::fs::read_to_string(root.join(               )) {",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-olean/src/import/lake_package.rs",
+   "line": 59,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "} else if let Ok(text) = std::fs::read_to_string(root.join(               )) {",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-olean/src/import/lake_package.rs",
+   "line": 59,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "} else if let Ok(text) = std::fs::read_to_string(root.join(               )) {",
+   "error_discarded": true
+  },
+  {
+   "member": "crates/clean-olean/src/import/load.rs",
+   "line": 87,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(|source| ImportError::FileUnreadable {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/load.rs",
+   "line": 87,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path).map_err(|source| ImportError::FileUnreadable {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/load.rs",
+   "line": 599,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let base = parse_load_module(std::fs::read(path)?)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/load.rs",
+   "line": 599,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let base = parse_load_module(std::fs::read(path)?)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/load.rs",
+   "line": 887,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(&path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/load.rs",
+   "line": 887,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(&path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/load/graph_limit.rs",
+   "line": 96,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(&path).map_err(|source| ImportError::FileUnreadable {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/load/graph_limit.rs",
+   "line": 96,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(&path).map_err(|source| ImportError::FileUnreadable {",
+   "error_discarded": false
+  },
+  {
    "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 120,
+   "line": 226,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -3633,7 +5116,7 @@
   },
   {
    "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 136,
+   "line": 242,
    "token": "std::io",
    "rule": "E-TYPE",
    "effect": "declaration-type",
@@ -3641,40 +5124,421 @@
    "code": "source: std::io::Error,"
   },
   {
-   "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 444,
-   "token": "fs::*",
-   "rule": "E-STAT",
-   "effect": "stat-file",
-   "dependence": "content-bearing",
-   "code": "let mtime = std::fs::metadata(path)"
-  },
-  {
-   "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 444,
+   "member": "crates/clean-olean/src/import/module_cache_direct.rs",
+   "line": 110,
    "token": "std::fs",
    "rule": "E-STAT",
    "effect": "stat-file",
    "dependence": "content-bearing",
-   "code": "let mtime = std::fs::metadata(path)"
+   "code": "std::fs::canonicalize(path).map_err(|source| ImportError::FileUnreadable {"
   },
   {
-   "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 474,
-   "token": "fs::*",
-   "rule": "E-STAT",
-   "effect": "stat-file",
-   "dependence": "content-bearing",
-   "code": "let mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());"
+   "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+   "line": 11,
+   "token": "OpenOptions",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::{File, Metadata, OpenOptions};"
   },
   {
-   "member": "crates/clean-olean/src/import/mod.rs",
-   "line": 474,
+   "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+   "line": 11,
+   "token": "std::fs",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::fs::{File, Metadata, OpenOptions};"
+  },
+  {
+   "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+   "line": 12,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::{self, Read};"
+  },
+  {
+   "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+   "line": 285,
+   "token": "OpenOptions",
+   "rule": "E-WRITE",
+   "effect": "write-file",
+   "dependence": "success-only",
+   "code": "let mut options = OpenOptions::new();",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+   "line": 317,
    "token": "std::fs",
    "rule": "E-STAT",
    "effect": "stat-file",
    "dependence": "content-bearing",
-   "code": "let mtime = std::fs::metadata(path).ok().and_then(|m| m.modified().ok());"
+   "code": "match std::fs::symlink_metadata(path) {"
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 65,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 65,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let bytes = std::fs::read(path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 280,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let base_bytes = std::fs::read(base_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 280,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let base_bytes = std::fs::read(base_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 290,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let server_bytes = std::fs::read(&server_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 290,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let server_bytes = std::fs::read(&server_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 312,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let private_bytes = std::fs::read(&private_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/parse.rs",
+   "line": 312,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let private_bytes = std::fs::read(&private_path)?;",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 177,
+   "token": "std::fs",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 177,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 235,
+   "token": "std::fs",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 235,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 292,
+   "token": "std::fs",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 292,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 357,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "|key: &str| env::var_os(key),",
+   "env_name": null,
+   "env_name_via": null
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 358,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "|path: &Path| std::fs::read_dir(path),",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 358,
+   "token": "std::fs",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "|path: &Path| std::fs::read_dir(path),",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 537,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "let discovered = discover_lake_package_paths(root, |p| std::fs::read_dir(p));",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/path.rs",
+   "line": 537,
+   "token": "std::fs",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "let discovered = discover_lake_package_paths(root, |p| std::fs::read_dir(p));",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 330,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let read = |path: &Path| std::fs::read_to_string(path).ok();",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 330,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let read = |path: &Path| std::fs::read_to_string(path).ok();",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 330,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let read = |path: &Path| std::fs::read_to_string(path).ok();",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 446,
+   "token": "io::*",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Read;"
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 446,
+   "token": "std::io",
+   "rule": "E-USE",
+   "effect": "declaration-import",
+   "dependence": "verdict-irrelevant",
+   "code": "use std::io::Read;"
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 448,
+   "token": "File::open/create",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "std::fs::File::open(lib.join(                    ))",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 448,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "std::fs::File::open(lib.join(                    ))",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 448,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "std::fs::File::open(lib.join(                    ))",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 480,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let raw = std::fs::read_to_string(&lean_toolchain).unwrap_or_default();",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 480,
+   "token": "read_to_string",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let raw = std::fs::read_to_string(&lean_toolchain).unwrap_or_default();",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 480,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "let raw = std::fs::read_to_string(&lean_toolchain).unwrap_or_default();",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 572,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "|key: &str| std::env::var_os(key),",
+   "env_name": null,
+   "env_name_via": null
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 573,
+   "token": "fs::*",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "|path: &Path| std::fs::read_dir(path),",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 573,
+   "token": "std::fs",
+   "rule": "E-READDIR",
+   "effect": "read-dir",
+   "dependence": "content-bearing",
+   "code": "|path: &Path| std::fs::read_dir(path),",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 585,
+   "token": "std::fs",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/import/project_world.rs",
+   "line": 585,
+   "token": "std::io",
+   "rule": "E-TYPE",
+   "effect": "declaration-type",
+   "dependence": "verdict-irrelevant",
+   "code": "R: for<'a> FnMut(&'a Path) -> std::io::Result<std::fs::ReadDir>,"
+  },
+  {
+   "member": "crates/clean-olean/src/lean_ir/module_ir.rs",
+   "line": 205,
+   "token": "fs::*",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "std::fs::read(path).map_err(|e| LeanIrError::MissingFile {",
+   "error_discarded": false
+  },
+  {
+   "member": "crates/clean-olean/src/lean_ir/module_ir.rs",
+   "line": 205,
+   "token": "std::fs",
+   "rule": "E-READ",
+   "effect": "read-file",
+   "dependence": "content-bearing",
+   "code": "std::fs::read(path).map_err(|e| LeanIrError::MissingFile {",
+   "error_discarded": false
   },
   {
    "member": "crates/clean-verify/src/external_checker.rs",
@@ -3740,6 +5604,39 @@
    "effect": "process-stream",
    "dependence": "content-bearing",
    "code": "stderr.read_to_string(&mut stderr_buf)?;"
+  },
+  {
+   "member": "crates/clean-verify/src/spec/core_spec/bundles.rs",
+   "line": 4778,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "let timing = std::env::var_os(                         ).is_some();",
+   "env_name": "CLEAN_SPEC_STAGE_TIMING",
+   "env_name_via": "literal"
+  },
+  {
+   "member": "crates/clean-verify/src/spec/decl_budget.rs",
+   "line": 157,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "match std::env::var(SPEC_DECL_BUDGET_ENV) {",
+   "env_name": "CLEAN_SPEC_DECL_BUDGET",
+   "env_name_via": "const in the same file"
+  },
+  {
+   "member": "crates/clean-verify/src/spec/decl_budget.rs",
+   "line": 172,
+   "token": "env::var",
+   "rule": "E-ENV",
+   "effect": "read-env",
+   "dependence": "content-bearing",
+   "code": "std::env::var(SPEC_DECL_BUDGET_TRACE_ENV).is_ok_and(|v| v ==    )",
+   "env_name": "CLEAN_SPEC_DECL_BUDGET_TRACE",
+   "env_name_via": "const in the same file"
   }
  ]
 }

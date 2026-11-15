@@ -21,6 +21,7 @@
 //! non-terminating traversal, which is how it was verified.
 
 use super::*;
+use crate::tactic::simp::types::UnfoldDef;
 use crate::tactic::{simp_with_budget, SimpBudget};
 
 /// The runaway shape, reduced to its essentials: `f := g f f`.
@@ -42,7 +43,13 @@ fn runaway_unfold_config() -> SimpConfig {
     let mut config = SimpConfig::new();
     // Only simplify: this fixture is about the traversal, not about closing.
     config.only_simplify = true;
-    config.unfold_defs.insert(f, body);
+    config.unfold_defs.insert(
+        f,
+        UnfoldDef {
+            level_params: vec![],
+            value: body,
+        },
+    );
     config
 }
 

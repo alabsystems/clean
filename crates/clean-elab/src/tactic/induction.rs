@@ -11,8 +11,10 @@ use clean_kernel::name::Name;
 use clean_kernel::{
     BinderInfo, ConstructorVal, Expr, ExprKind, FVarId, InductiveVal, Level, RecursorVal,
 };
+use clean_parser::SurfaceName;
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
+use super::indexed_family::{applied_index_args, beta_apply, build_family_motive, FamilyMotive};
 use super::proof_manipulation::recursor_levels;
 
 /// Data for one induction case (one constructor branch).
@@ -33,7 +35,7 @@ pub(crate) struct InductionCase {
     /// Induction hypothesis free variables (None for non-recursive fields).
     pub(crate) ih_fvars: Vec<Option<FVarId>>,
     /// Short constructor name (e.g., "zero", "succ").
-    pub(crate) ctor_tag: String,
+    pub(crate) ctor_tag: SurfaceName,
 }
 
 /// Shared context for building an induction proof.
@@ -45,6 +47,10 @@ struct InductionCtx<'a> {
     args: &'a [Expr],
     levels: &'a [Level],
     motive: &'a Expr,
+    /// The major premise's index arguments (empty for a non-indexed type).
+    /// `T.rec` takes these immediately before the major premise, after every
+    /// minor premise.
+    index_args: &'a [Expr],
     hyp_fvar: FVarId,
     hyp_idx: usize,
 }
@@ -56,7 +62,7 @@ struct InductionCtx<'a> {
 /// ENSURES: On Ok, the current goal is replaced by one goal per constructor (with induction hypotheses)
 /// ENSURES: On Ok, recursive constructor goals include an induction hypothesis for each recursive argument
 /// ENSURES: On Err(UnknownIdent), `hyp_name` is not in the local context
-pub fn induction(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn induction(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
     induction_using(state, hyp_name, None)
 }
 
@@ -85,10 +91,47 @@ pub fn induction(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 /// ENSURES: On Err(EnvironmentMissing), `rec_override` is not a registered recursor
 pub fn induction_using(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     rec_override: Option<&Name>,
 ) -> TacticResult {
     induction_using_alts(state, hyp_name, rec_override, &[])
+}
+
+/// The `@[induction_eliminator]` that replaces the default recursor for
+/// `induction hyp` (Lean's `getCustomEliminator? #[hyp]`): keyed by the head
+/// constant of the target's head-beta-reduced type, never its `whnf`.
+///
+/// `Ok(None)` when `tactic.customEliminators` is `false`, when the target is
+/// not a hypothesis (the recursor path reports that), when its type is not
+/// headed by a constant, or when nothing is registered for that constant.
+fn registered_induction_eliminator(
+    state: &mut ProofState,
+    hyp_name: &SurfaceName,
+) -> Result<Option<Name>, TacticError> {
+    let refuse = |detail: String| TacticError::InvalidTarget {
+        tactic: "induction".into(),
+        detail,
+    };
+    if !super::custom_eliminator::custom_eliminators_enabled(&state.env).map_err(refuse)? {
+        return Ok(None);
+    }
+    let Some(goal) = state.current_goal() else {
+        return Ok(None);
+    };
+    let Some(decl) = goal
+        .local_ctx
+        .iter()
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
+    else {
+        return Ok(None);
+    };
+    let ty = super::op_projection::head_beta(&state.metas.instantiate(&decl.ty));
+    let head = match ty.get_app_fn().strip_mdata().kind() {
+        ExprKind::Const(name, _) => name.clone(),
+        _ => return Ok(None),
+    };
+    super::custom_eliminator::find_induction_eliminator(&mut state.env, &head).map_err(refuse)
 }
 
 /// [`induction_using`] plus the `with`-block alternative names, in source
@@ -107,9 +150,9 @@ pub fn induction_using(
 ///   names a registered kernel recursor (or is `None`)
 pub fn induction_using_alts(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     rec_override: Option<&Name>,
-    alt_names: &[String],
+    alt_names: &[SurfaceName],
 ) -> TacticResult {
     // Custom eliminator (`@[elab_as_elim]`): a `using` name that is a real
     // constant but NOT a kernel recursor. Dispatching here — and only here —
@@ -117,7 +160,41 @@ pub fn induction_using_alts(
     if let Some(elim) = rec_override {
         if state.env.get_recursor(elim).is_none() && state.env.get_const(elim).is_some() {
             return super::induction_elim::induction_using_eliminator(
-                state, hyp_name, elim, alt_names,
+                state,
+                hyp_name,
+                elim,
+                super::induction_elim::AltTags::WithBlock(alt_names),
+            );
+        }
+    }
+
+    // No `using`: an `@[induction_eliminator]` registered for the target's
+    // type replaces the default recursor (Lean's `getElimNameInfo`), unless
+    // `tactic.customEliminators` is off.
+    if rec_override.is_none() {
+        if let Some(elim) = registered_induction_eliminator(state, hyp_name)? {
+            if state.env.get_recursor(&elim).is_some() {
+                return induction_using_alts(state, hyp_name, Some(&elim), alt_names);
+            }
+            // Lean matches `with` alternatives by the eliminator's binder
+            // names, which Clean's kernel `Pi` does not store; the positional
+            // fallback of `induction … using` would accept a name Lean
+            // rejects. Only `_` alternatives are name-independent.
+            if let Some(named) = alt_names.iter().find(|n| !n.is_unescaped_component("_")) {
+                return Err(TacticError::InvalidTarget {
+                    tactic: "induction".into(),
+                    detail: format!(
+                        "alternative `{named}` for the `@[induction_eliminator]` `{elim}`: \
+                         alternative names of a custom eliminator are not recorded, so only \
+                         `_` alternatives are supported"
+                    ),
+                });
+            }
+            return super::induction_elim::induction_using_eliminator(
+                state,
+                hyp_name,
+                &elim,
+                super::induction_elim::AltTags::Inaccessible,
             );
         }
     }
@@ -128,7 +205,8 @@ pub fn induction_using_alts(
         .local_ctx
         .iter()
         .enumerate()
-        .find(|(_, d)| d.name == hyp_name)
+        .rev()
+        .find(|(_, d)| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::UnknownIdent(hyp_name.to_string()))?;
     let hyp_fvar = hyp_decl.fvar;
     let hyp_ty = state.metas.instantiate(&hyp_decl.ty);
@@ -141,7 +219,8 @@ pub fn induction_using_alts(
         ExprKind::Const(name, _) => name.clone(),
         _ => {
             return Err(TacticError::GoalMismatch(format!(
-                "induction: hypothesis '{hyp_name}' has type '{hyp_ty_whnf:?}' which is not an inductive type"
+                "induction: hypothesis '{hyp_name}' has type '{}' which is not an inductive type",
+                crate::error_render::term(&hyp_ty_whnf)
             )));
         }
     };
@@ -170,11 +249,37 @@ pub fn induction_using_alts(
             constant: rec_name.to_string(),
         })?
         .clone();
-    let motive = Expr::lam(
-        BinderInfo::Default,
-        hyp_ty.clone(),
-        goal.target.abstract_fvar(hyp_fvar),
-    );
+    // Lean 4.8's `getElimNameInfo` (`Lean/Elab/Tactic/Induction.lean`)
+    // refuses the default eliminator of a mutual or nested family, whose
+    // recursor has several motives; so does Clean, with Lean's message,
+    // rather than assemble a one-motive spine the kernel would refuse.
+    if rec_override.is_none() {
+        if ind_info.all_names.len() != 1 {
+            return Err(TacticError::GoalMismatch(format!(
+                "'induction' tactic does not support mutually inductive types, the eliminator \
+                 '{rec_name}' has multiple motives"
+            )));
+        }
+        if ind_info.is_nested || rec_info.num_motives > 1 {
+            return Err(TacticError::GoalMismatch(format!(
+                "'induction' tactic does not support nested inductive types, the eliminator \
+                 '{rec_name}' has multiple motives"
+            )));
+        }
+    }
+    // The motive abstracts the family's INDICES as well as the major premise —
+    // for a non-indexed type this is exactly the historical one-binder motive.
+    // See `super::indexed_family` for why the missing index binders made every
+    // indexed `induction` assemble a mis-positioned recursor spine (RC-S).
+    let FamilyMotive { motive, index_args } = build_family_motive(
+        state,
+        &head,
+        &ind_info,
+        &args,
+        &hyp_ty,
+        Some(hyp_fvar),
+        &goal.target,
+    )?;
 
     // 0-ctor inductive: close directly with the recursor applied to the major premise.
     if ind_info.constructor_names.is_empty() {
@@ -184,6 +289,11 @@ pub fn induction_using_alts(
             proof = Expr::app(proof, arg.clone());
         }
         proof = Expr::app(proof, motive.clone());
+        // `rec` layout: minor premises (none here) come first, THEN the indices
+        // and the major premise.
+        for idx in &index_args {
+            proof = Expr::app(proof, idx.clone());
+        }
         proof = Expr::app(proof, Expr::fvar(hyp_fvar));
         // Part of #2154 Tier 2 Wave 1: 0-ctor induction, no metas.
         state.close_goal(&goal, proof)?;
@@ -198,6 +308,7 @@ pub fn induction_using_alts(
         args: &args,
         levels: &levels,
         motive: &motive,
+        index_args: &index_args,
         hyp_fvar,
         hyp_idx,
     };
@@ -258,7 +369,7 @@ fn build_induction_cases(
         };
         let mut new_ctx = ctx.goal.local_ctx.clone();
         new_ctx.remove(ctx.hyp_idx);
-        let field_fvars = extract_ctor_fields(
+        let (field_fvars, ctor_result_ty) = extract_ctor_fields(
             state,
             &ctor_info,
             &mut new_ctx,
@@ -268,13 +379,12 @@ fn build_induction_cases(
         );
         let ih_fvars = build_induction_hypotheses(
             state,
-            ctx.goal,
+            ctx,
             &mut new_ctx,
             ctor_name,
             &field_fvars,
             &recursive_fields,
-            ctx.hyp_fvar,
-        );
+        )?;
         // Track the largest id any branch reserved so the post-loop counter sits
         // past every branch's fields and IHs (mirrors `cases_core`).
         branch_fvar_max = branch_fvar_max.max(state.next_fvar);
@@ -286,16 +396,35 @@ fn build_induction_cases(
         for fvar in &field_fvars {
             ctor_app = Expr::app(ctor_app, Expr::fvar(*fvar));
         }
-        let new_target = state
-            .metas
-            .instantiate(&ctx.goal.target.subst_fvar(ctx.hyp_fvar, &ctor_app));
-        let ctor_short_tag = ctor_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or(&ctor_name.to_string())
-            .to_string();
-        let case_meta = state.fresh_meta_in_context(new_target.clone(), &new_ctx);
+        let new_target = if ctx.index_args.is_empty() {
+            // Non-indexed family: unchanged from before indices were handled.
+            state
+                .metas
+                .instantiate(&ctx.goal.target.subst_fvar(ctx.hyp_fvar, &ctor_app))
+        } else {
+            // Indexed family: this branch's goal is the recursor's own minor
+            // premise, `motive ctor_indices… (C params… fields…)`, obtained by
+            // beta-applying the same motive that goes into the proof term.
+            let ctor_indices =
+                applied_index_args(ctx.ind_info, &ctor_result_ty).ok_or_else(|| {
+                    TacticError::GoalMismatch(format!(
+                        "induction: constructor '{ctor_name}' of indexed family '{}' does not \
+                         conclude in an applied '{}' after its fields",
+                        ctx.ind_info.name, ctx.ind_info.name
+                    ))
+                })?;
+            let mut applied = ctor_indices;
+            applied.push(ctor_app);
+            state.metas.instantiate(&beta_apply(ctx.motive, &applied))
+        };
+        // `tag ++ ctorName`, as for `cases` (`proof_manipulation::cases_core`).
+        let ctor_short = SurfaceName::from_name(ctor_name.clone()).last_component();
+        let ctor_short_tag = match &ctx.goal.tag {
+            Some(parent) if !parent.is_anonymous() => parent.append(&ctor_short),
+            _ => ctor_short,
+        };
+        // Scope keeps the eliminated major, as for `cases` (`fresh_case_meta`).
+        let case_meta = state.fresh_case_meta(new_target.clone(), ctx.goal, &new_ctx);
         cases.push(InductionCase {
             case_meta,
             new_ctx,
@@ -325,6 +454,10 @@ fn build_induction_cases(
 /// REQUIRES: `ctor_info.type_` is a well-formed constructor type
 /// ENSURES: returned fvars are added to `new_ctx`
 /// ENSURES: returned vec length equals number of fields extracted
+/// ENSURES: the second component is the constructor's RESULT type with the
+///          parameters and the freshly bound fields instantiated — i.e.
+///          `T params… ctor_indices…`, which is where an indexed family's
+///          per-branch index values are read from.
 fn extract_ctor_fields(
     state: &mut ProofState,
     ctor_info: &ConstructorVal,
@@ -332,7 +465,7 @@ fn extract_ctor_fields(
     ctor_name: &Name,
     args: &[Expr],
     ind_levels: &[Level],
-) -> Vec<FVarId> {
+) -> (Vec<FVarId>, Expr) {
     // Length-guarded universe instantiation: on any params/levels mismatch keep
     // the stored type and let the kernel re-check fail closed, never
     // mis-substitute.
@@ -357,15 +490,17 @@ fn extract_ctor_fields(
     let mut field_fvars = Vec::new();
     let mut field_idx = 0;
     while let ExprKind::Pi(bi, domain, codomain) = ctor_ty.clone().kind() {
-        let ctor_short_name = ctor_name.to_string();
-        let ctor_short = ctor_short_name
-            .rsplit('.')
-            .next()
-            .unwrap_or(&ctor_short_name);
-        let field_name = format!("{ctor_short}_{field_idx}");
+        let tag = SurfaceName::from_name(ctor_name.clone()).last_component();
+        let base = super::case_field_names::generated_case_field_name(
+            &tag,
+            field_idx as u64,
+            super::case_field_names::CaseFieldKind::Field,
+        );
+        let field_name = super::pattern::util::generate_fresh_hyp_name(new_ctx, &base);
         let field_fvar = state.fresh_fvar();
         let field_ty = domain.as_ref().clone();
         new_ctx.push(LocalDecl {
+            binder_info: *bi,
             fvar: field_fvar,
             name: field_name,
             ty: field_ty,
@@ -377,14 +512,8 @@ fn extract_ctor_fields(
         if field_idx >= ctor_info.num_fields as usize {
             break;
         }
-        if !matches!(
-            bi.info,
-            BinderInfo::Default | BinderInfo::Implicit | BinderInfo::InstImplicit
-        ) {
-            break;
-        }
     }
-    field_fvars
+    (field_fvars, ctor_ty)
 }
 
 /// Build induction hypotheses for recursive fields of a constructor.
@@ -392,29 +521,67 @@ fn extract_ctor_fields(
 /// REQUIRES: `field_fvars` and `recursive_fields` correspond to the same constructor
 /// ENSURES: IH decls are added to `new_ctx` for each recursive field
 /// ENSURES: returned vec has same length as `field_fvars`
+///
+/// # Errors
+/// [`TacticError::GoalMismatch`] when the family is indexed and a recursive
+/// field's own type is not a direct application of it (a reflexive/nested
+/// occurrence such as `(Nat → T …)`): the induction hypothesis would need that
+/// field's index arguments and there are none to read, so this fails closed
+/// rather than emit an ill-typed hypothesis.
 fn build_induction_hypotheses(
     state: &mut ProofState,
-    goal: &Goal,
+    ctx: &InductionCtx<'_>,
     new_ctx: &mut Vec<LocalDecl>,
     ctor_name: &Name,
     field_fvars: &[FVarId],
     recursive_fields: &[bool],
-    hyp_fvar: FVarId,
-) -> Vec<Option<FVarId>> {
+) -> Result<Vec<Option<FVarId>>, TacticError> {
     let mut ih_fvars = Vec::new();
     for (i, fvar) in field_fvars.iter().enumerate() {
         if i < recursive_fields.len() && recursive_fields[i] {
-            let ctor_short_name = ctor_name.to_string();
-            let ctor_short = ctor_short_name
-                .rsplit('.')
-                .next()
-                .unwrap_or(&ctor_short_name);
-            let ih_name = format!("ih_{ctor_short}_{i}");
+            let tag = SurfaceName::from_name(ctor_name.clone()).last_component();
+            let base = super::case_field_names::generated_case_field_name(
+                &tag,
+                i as u64,
+                super::case_field_names::CaseFieldKind::InductionHypothesis,
+            );
+            let ih_name = super::pattern::util::generate_fresh_hyp_name(new_ctx, &base);
+            let ih_ty = if ctx.index_args.is_empty() {
+                // Non-indexed family: unchanged from before indices were handled.
+                state
+                    .metas
+                    .instantiate(&ctx.goal.target.subst_fvar(ctx.hyp_fvar, &Expr::fvar(*fvar)))
+            } else {
+                // Indexed family: the IH is `motive field_indices… field`, and
+                // the field's indices come from its OWN declared type — they
+                // differ from the major premise's (that is the whole point of an
+                // index).
+                let field_ty = new_ctx
+                    .iter()
+                    .find(|d| d.fvar == *fvar)
+                    .map(|d| d.ty.clone())
+                    .ok_or_else(|| {
+                        TacticError::GoalMismatch(format!(
+                            "induction: recursive field {i} of '{ctor_name}' is missing from the \
+                             branch context"
+                        ))
+                    })?;
+                let field_indices =
+                    applied_index_args(ctx.ind_info, &field_ty).ok_or_else(|| {
+                        TacticError::GoalMismatch(format!(
+                        "induction: recursive field {i} of '{ctor_name}' does not have a direct \
+                         '{}' type, so no induction hypothesis can be formed for the indexed \
+                         family",
+                        ctx.ind_info.name
+                    ))
+                    })?;
+                let mut applied = field_indices;
+                applied.push(Expr::fvar(*fvar));
+                state.metas.instantiate(&beta_apply(ctx.motive, &applied))
+            };
             let ih_fvar = state.fresh_fvar();
-            let ih_ty = state
-                .metas
-                .instantiate(&goal.target.subst_fvar(hyp_fvar, &Expr::fvar(*fvar)));
             new_ctx.push(LocalDecl {
+                binder_info: Default::default(),
                 fvar: ih_fvar,
                 name: ih_name,
                 ty: ih_ty,
@@ -425,7 +592,7 @@ fn build_induction_hypotheses(
             ih_fvars.push(None);
         }
     }
-    ih_fvars
+    Ok(ih_fvars)
 }
 
 /// Assemble the recursor proof term from case metas, close the goal, and push new goals.
@@ -474,6 +641,13 @@ fn assemble_induction_proof(
         }
         proof = Expr::app(proof, case_proof);
     }
+    // `T.rec` takes the family's INDICES immediately before the major premise,
+    // i.e. AFTER every minor premise (unlike `T.casesOn`, where they come right
+    // after the motive). Omitting them — as this did before RC-S — put the
+    // major premise in the first index slot.
+    for idx in ctx.index_args {
+        proof = Expr::app(proof, idx.clone());
+    }
     proof = Expr::app(proof, Expr::fvar(ctx.hyp_fvar));
 
     // Part of #2154 Tier 2 Wave 2: structural recursor with meta case branches.
@@ -489,6 +663,12 @@ fn assemble_induction_proof(
             meta_id: case.case_meta,
             target: case.new_target,
             local_ctx: case.new_ctx,
+            case_binders: case
+                .field_fvars
+                .iter()
+                .copied()
+                .chain(case.ih_fvars.iter().flatten().copied())
+                .collect(),
             tag: Some(case.ctor_tag),
         });
     }

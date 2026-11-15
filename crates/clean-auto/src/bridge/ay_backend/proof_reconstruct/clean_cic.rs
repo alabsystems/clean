@@ -25,7 +25,7 @@ use super::certified_proof::CertifiedPayload;
 /// Mirrors `trust_ir::proof::ProofDigest`: a 1-byte algorithm tag followed by a
 /// 32-byte digest. `TAG_STABLE_V1` matches trust-ir's `TrustIrStableV1`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct CleanCicLineage {
+pub(crate) struct CleanCicLineage {
     /// Algorithm tag (`Self::TAG_STABLE_V1` or `Self::TAG_SHA256`).
     pub algorithm: u8,
     /// 32-byte digest binding the certificate to the obligation it certifies.
@@ -42,7 +42,7 @@ impl CleanCicLineage {
     /// runs structural checksum — the same role trust-ir's `TrustIrStableV1`
     /// plays). FNV-1a over a domain-separated byte stream.
     #[must_use]
-    pub fn stable(domain: &str, data: &[u8]) -> Self {
+    pub(crate) fn stable(domain: &str, data: &[u8]) -> Self {
         let mut bytes = [0u8; 32];
         // Eight independent FNV-1a lanes, each salted by lane index + domain, so
         // the 32-byte output is well-mixed and deterministic.
@@ -67,7 +67,7 @@ impl CleanCicLineage {
 
 /// Byte-for-byte the `trust_ir::proof::ProofEvidence::CleanCic` payload.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct CleanCicPayload {
+pub(crate) struct CleanCicPayload {
     /// `bincode`-serialized kernel proof term (`CertifiedPayload::term_bytes`).
     pub term: Vec<u8>,
     /// `bincode`-serialized reduced context (`CertifiedPayload::context_bytes`).
@@ -84,7 +84,10 @@ pub struct CleanCicPayload {
 /// goal). The payload's `term`/`context` are exactly the certified bytes — a CIC
 /// kernel re-checks them; nothing is trusted.
 #[must_use]
-pub fn to_clean_cic(payload: &CertifiedPayload, lineage: CleanCicLineage) -> CleanCicPayload {
+pub(crate) fn to_clean_cic(
+    payload: &CertifiedPayload,
+    lineage: CleanCicLineage,
+) -> CleanCicPayload {
     CleanCicPayload {
         term: payload.term_bytes.clone(),
         context: payload.context_bytes.clone(),

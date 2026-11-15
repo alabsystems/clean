@@ -19,7 +19,7 @@ use ay_core::quote_symbol;
 /// dialect-specific behavior later without changing call sites.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[must_use]
-pub enum SmtLibDialect {
+pub(crate) enum SmtLibDialect {
     #[default]
     Standard,
     Z3Extension,
@@ -29,7 +29,7 @@ pub enum SmtLibDialect {
 /// Solver commands supported by the backend-local SMT-LIB builder.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub enum Command {
+pub(crate) enum Command {
     DeclareSort {
         name: String,
         arity: u32,
@@ -49,7 +49,7 @@ pub enum Command {
 impl Command {
     /// Render a command as SMT-LIB2 text.
     #[must_use]
-    pub fn to_smtlib2(&self) -> String {
+    pub(crate) fn to_smtlib2(&self) -> String {
         match self {
             Self::DeclareSort { name, arity } => {
                 format!("(declare-sort {} {arity})", quote_symbol(name))
@@ -78,7 +78,7 @@ impl Command {
 /// Portable solver response surface for SMT-LIB execution.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub enum SolverResponse {
+pub(crate) enum SolverResponse {
     Sat { model: Option<String> },
     Unsat,
     Unknown { detail: Option<String> },
@@ -88,7 +88,7 @@ pub enum SolverResponse {
 impl SolverResponse {
     /// Return the tri-state solve result when the response is not an error.
     #[must_use]
-    pub fn solve_result(&self) -> Option<AySolveResult> {
+    pub(crate) fn solve_result(&self) -> Option<AySolveResult> {
         match self {
             Self::Sat { .. } => Some(AySolveResult::Sat),
             Self::Unsat => Some(AySolveResult::Unsat),
@@ -101,7 +101,7 @@ impl SolverResponse {
 /// Builder for backend-local SMT-LIB command sequences.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[must_use]
-pub struct SmtLibBuilder {
+pub(crate) struct SmtLibBuilder {
     dialect: SmtLibDialect,
     logic: Option<String>,
     commands: Vec<Command>,
@@ -115,7 +115,7 @@ impl Default for SmtLibBuilder {
 
 impl SmtLibBuilder {
     /// Create an empty builder for the selected dialect.
-    pub fn new(dialect: SmtLibDialect) -> Self {
+    pub(crate) fn new(dialect: SmtLibDialect) -> Self {
         Self {
             dialect,
             logic: None,
@@ -124,29 +124,29 @@ impl SmtLibBuilder {
     }
 
     /// Return the configured dialect.
-    pub fn dialect(&self) -> SmtLibDialect {
+    pub(crate) fn dialect(&self) -> SmtLibDialect {
         self.dialect
     }
 
     /// Set `(set-logic ...)` for emitted queries.
-    pub fn set_logic(&mut self, logic: impl Into<String>) -> &mut Self {
+    pub(crate) fn set_logic(&mut self, logic: impl Into<String>) -> &mut Self {
         self.logic = Some(logic.into());
         self
     }
 
     /// Append a raw command.
-    pub fn add_command(&mut self, command: Command) -> &mut Self {
+    pub(crate) fn add_command(&mut self, command: Command) -> &mut Self {
         self.commands.push(command);
         self
     }
 
     /// Access the currently accumulated commands.
-    pub fn commands(&self) -> &[Command] {
+    pub(crate) fn commands(&self) -> &[Command] {
         &self.commands
     }
 
     /// Append `(declare-sort ...)`.
-    pub fn declare_sort(&mut self, name: impl Into<String>, arity: u32) -> &mut Self {
+    pub(crate) fn declare_sort(&mut self, name: impl Into<String>, arity: u32) -> &mut Self {
         self.add_command(Command::DeclareSort {
             name: name.into(),
             arity,
@@ -154,7 +154,7 @@ impl SmtLibBuilder {
     }
 
     /// Append `(declare-fun ...)`.
-    pub fn declare_fun(
+    pub(crate) fn declare_fun(
         &mut self,
         name: impl Into<String>,
         args: Vec<String>,
@@ -168,33 +168,33 @@ impl SmtLibBuilder {
     }
 
     /// Append `(assert ...)`.
-    pub fn assert(&mut self, formula: impl Into<String>) -> &mut Self {
+    pub(crate) fn assert(&mut self, formula: impl Into<String>) -> &mut Self {
         self.add_command(Command::Assert(formula.into()))
     }
 
     /// Append `(check-sat)`.
-    pub fn check_sat(&mut self) -> &mut Self {
+    pub(crate) fn check_sat(&mut self) -> &mut Self {
         self.add_command(Command::CheckSat)
     }
 
     /// Append `(get-model)`.
-    pub fn get_model(&mut self) -> &mut Self {
+    pub(crate) fn get_model(&mut self) -> &mut Self {
         self.add_command(Command::GetModel)
     }
 
     /// Append `(push N)`.
-    pub fn push(&mut self, levels: u32) -> &mut Self {
+    pub(crate) fn push(&mut self, levels: u32) -> &mut Self {
         self.add_command(Command::Push(levels))
     }
 
     /// Append `(pop N)`.
-    pub fn pop(&mut self, levels: u32) -> &mut Self {
+    pub(crate) fn pop(&mut self, levels: u32) -> &mut Self {
         self.add_command(Command::Pop(levels))
     }
 
     /// Render the accumulated command sequence as SMT-LIB2 text.
     #[must_use]
-    pub fn to_smtlib2(&self) -> String {
+    pub(crate) fn to_smtlib2(&self) -> String {
         render_lines(self.logic.as_deref(), &self.commands)
     }
 
@@ -205,7 +205,7 @@ impl SmtLibBuilder {
     /// builder are emitted after the supplied assertions. If no trailing
     /// `check-sat` is present, one is appended automatically.
     #[must_use]
-    pub fn build_query<I, S>(&self, assertions: I) -> String
+    pub(crate) fn build_query<I, S>(&self, assertions: I) -> String
     where
         I: IntoIterator<Item = S>,
         S: AsRef<str>,
@@ -239,7 +239,7 @@ impl SmtLibBuilder {
 ///
 /// Empty lines, comments, and `success` acknowledgements are ignored. When the
 /// status is `sat`, any remaining payload is returned as the model text.
-pub fn parse_response(text: &str) -> AyResult<SolverResponse> {
+pub(crate) fn parse_response(text: &str) -> AyResult<SolverResponse> {
     let mut status = None;
     let mut payload = Vec::new();
 

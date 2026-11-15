@@ -40,21 +40,21 @@ use crate::spec::Specification;
 // THE FOUR OPERATORS ARE NOT CHAINED. A real evaluation case nothing executes
 // is a stub with better documentation, and `fadd`'s signed-zero rule is exactly
 // the sort of thing that is wrong in a table nobody ran.
-const SRC_WF_ADD_MM: &str = "def ir_f64_w_add_minus_zeros : Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
-const SRC_WF_ADD_MP: &str = "def ir_f64_w_add_mixed_zeros : Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.float_ 0)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
-const SRC_WF_SUB_MP: &str = "def ir_f64_w_sub_mixed_zeros : Eq IRStepResult (ir_binop_eval IRBinOp.fsub (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
-const SRC_WF_ADD_NEGPAIR: &str = "def ir_f64_w_add_exact_zero_sum : Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.float_ 0)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
-const SRC_WF_ADD_INF_MINF: &str = "def ir_f64_w_add_opposite_infinities_refused : Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 9218868437227405312) (IRScalar.float_ 18442240474082181120)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
-const SRC_WF_ADD_FIN_FIN: &str = "def ir_f64_w_add_finite_finite_answers : Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
-const SRC_WF_ADD_FIN_TIE: &str = "def ir_f64_w_add_finite_finite_ties_to_even : Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4368491638549381120)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
-const SRC_WF_SUB_FIN_FIN: &str = "def ir_f64_w_sub_finite_finite_answers : Eq IRStepResult (ir_binop_eval IRBinOp.fsub (IRTy.float_ 64) (IRScalar.float_ 4613937818241073152) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
-const SRC_WF_MUL_FIN_FIN: &str = "def ir_f64_w_mul_finite_finite_answers : Eq IRStepResult (ir_binop_eval IRBinOp.fmul (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4613937818241073152)) (IRStepResult.value (IRScalar.float_ 4618441417868443648)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4618441417868443648))";
-const SRC_WF_DIV_FIN_FIN: &str = "def ir_f64_w_div_finite_finite_still_refused : Eq IRStepResult (ir_binop_eval IRBinOp.fdiv (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4607182418800017408)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
-const SRC_WF_MUL_ZERO_INF: &str = "def ir_f64_w_mul_zero_by_infinity_refused : Eq IRStepResult (ir_binop_eval IRBinOp.fmul (IRTy.float_ 64) (IRScalar.float_ 0) (IRScalar.float_ 9218868437227405312)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
-const SRC_WF_MUL_XSIGN: &str = "def ir_f64_w_mul_sign_is_the_xor : Eq IRStepResult (ir_binop_eval IRBinOp.fmul (IRTy.float_ 64) (IRScalar.float_ 13830554455654793216) (IRScalar.float_ 9218868437227405312)) (IRStepResult.value (IRScalar.float_ 18442240474082181120)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 18442240474082181120))";
-const SRC_WF_NAN_CLASS: &str = "def ir_f64_w_quiet_nan_classifies_nan : Eq IRF64Class (ir_f64_class 9221120237041090560) IRF64Class.nan_ := Eq.refl IRF64Class IRF64Class.nan_";
-const SRC_WF_JUNK_CLASS: &str = "def ir_f64_w_junk_pattern_classifies_nan : Eq IRF64Class (ir_f64_class 18446744073709551616) IRF64Class.nan_ := Eq.refl IRF64Class IRF64Class.nan_";
-const SRC_WF_FREM: &str = "def ir_f64_w_frem_is_still_unmodelled : Eq IRStepResult (ir_binop_eval IRBinOp.frem (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
+const SRC_WF_ADD_MM: &str = "def ir_f64_w_add_minus_zeros : @Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
+const SRC_WF_ADD_MP: &str = "def ir_f64_w_add_mixed_zeros : @Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.float_ 0)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
+const SRC_WF_SUB_MP: &str = "def ir_f64_w_sub_mixed_zeros : @Eq IRStepResult (ir_binop_eval IRBinOp.fsub (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
+const SRC_WF_ADD_NEGPAIR: &str = "def ir_f64_w_add_exact_zero_sum : @Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.float_ 0)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
+const SRC_WF_ADD_INF_MINF: &str = "def ir_f64_w_add_opposite_infinities_refused : @Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 9218868437227405312) (IRScalar.float_ 18442240474082181120)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
+const SRC_WF_ADD_FIN_FIN: &str = "def ir_f64_w_add_finite_finite_answers : @Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
+const SRC_WF_ADD_FIN_TIE: &str = "def ir_f64_w_add_finite_finite_ties_to_even : @Eq IRStepResult (ir_binop_eval IRBinOp.fadd (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4368491638549381120)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
+const SRC_WF_SUB_FIN_FIN: &str = "def ir_f64_w_sub_finite_finite_answers : @Eq IRStepResult (ir_binop_eval IRBinOp.fsub (IRTy.float_ 64) (IRScalar.float_ 4613937818241073152) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
+const SRC_WF_MUL_FIN_FIN: &str = "def ir_f64_w_mul_finite_finite_answers : @Eq IRStepResult (ir_binop_eval IRBinOp.fmul (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4613937818241073152)) (IRStepResult.value (IRScalar.float_ 4618441417868443648)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4618441417868443648))";
+const SRC_WF_DIV_FIN_FIN: &str = "def ir_f64_w_div_finite_finite_still_refused : @Eq IRStepResult (ir_binop_eval IRBinOp.fdiv (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4607182418800017408)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
+const SRC_WF_MUL_ZERO_INF: &str = "def ir_f64_w_mul_zero_by_infinity_refused : @Eq IRStepResult (ir_binop_eval IRBinOp.fmul (IRTy.float_ 64) (IRScalar.float_ 0) (IRScalar.float_ 9218868437227405312)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
+const SRC_WF_MUL_XSIGN: &str = "def ir_f64_w_mul_sign_is_the_xor : @Eq IRStepResult (ir_binop_eval IRBinOp.fmul (IRTy.float_ 64) (IRScalar.float_ 13830554455654793216) (IRScalar.float_ 9218868437227405312)) (IRStepResult.value (IRScalar.float_ 18442240474082181120)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 18442240474082181120))";
+const SRC_WF_NAN_CLASS: &str = "def ir_f64_w_quiet_nan_classifies_nan : @Eq IRF64Class (ir_f64_class 9221120237041090560) IRF64Class.nan_ := @Eq.refl IRF64Class IRF64Class.nan_";
+const SRC_WF_JUNK_CLASS: &str = "def ir_f64_w_junk_pattern_classifies_nan : @Eq IRF64Class (ir_f64_class 18446744073709551616) IRF64Class.nan_ := @Eq.refl IRF64Class IRF64Class.nan_";
+const SRC_WF_FREM: &str = "def ir_f64_w_frem_is_still_unmodelled : @Eq IRStepResult (ir_binop_eval IRBinOp.frem (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
 
 impl Specification {
     /// The machine-facing combinators: the float views of a value and of a
@@ -66,18 +66,18 @@ impl Specification {
     pub(super) fn add_eval_ir_float_machine(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             r"def ir_as_float (v : IRScalar) : IROption Nat := match v with
-| IRScalar.undef_ => IROption.none Nat
-| IRScalar.bool_ b => IROption.none Nat
-| IRScalar.int_ n => IROption.none Nat
-| IRScalar.float_ n => IROption.some Nat n
-| IRScalar.unit_ => IROption.none Nat
-| IRScalar.ptr_ a => IROption.none Nat
-| IRScalar.nullptr_ => IROption.none Nat
-| IRScalar.fat_ d md => IROption.none Nat
-| IRScalar.fnptr_ f => IROption.none Nat
-| IRScalar.aggv sp => IROption.none Nat
-| IRScalar.vnil => IROption.none Nat
-| IRScalar.vcons x rest => IROption.none Nat",
+| IRScalar.undef_ => @IROption.none Nat
+| IRScalar.bool_ b => @IROption.none Nat
+| IRScalar.int_ n => @IROption.none Nat
+| IRScalar.float_ n => @IROption.some Nat n
+| IRScalar.unit_ => @IROption.none Nat
+| IRScalar.ptr_ a => @IROption.none Nat
+| IRScalar.nullptr_ => @IROption.none Nat
+| IRScalar.fat_ d md => @IROption.none Nat
+| IRScalar.fnptr_ f => @IROption.none Nat
+| IRScalar.aggv sp => @IROption.none Nat
+| IRScalar.vnil => @IROption.none Nat
+| IRScalar.vcons x rest => @IROption.none Nat",
             "Float view of a value. An INTEGER is deliberately not a float: the two constructors \
              carry the same Nat but under different interpretations, and reading an int_ as a bit \
              pattern would let `fdiv` accept an integer operand and answer a float. The mirror of \
@@ -86,24 +86,30 @@ impl Specification {
 
         self.add_recursive_def(
             r"def ir_ty_float_width (t : IRTy) : IROption Nat := match t with
-| IRTy.bool_ => IROption.none Nat
-| IRTy.int_ w => IROption.none Nat
-| IRTy.uint_ w => IROption.none Nat
-| IRTy.float_ w => IROption.some Nat w
-| IRTy.ptr_ => IROption.none Nat
-| IRTy.ref_ p => IROption.none Nat
-| IRTy.refmut_ p => IROption.none Nat
-| IRTy.rawconst_ p => IROption.none Nat
-| IRTy.rawmut_ p => IROption.none Nat
-| IRTy.rc_ p => IROption.none Nat
-| IRTy.fatptr_ p => IROption.none Nat
-| IRTy.unit_ => IROption.none Nat
-| IRTy.never_ => IROption.none Nat
-| IRTy.tuple_ n => IROption.none Nat
-| IRTy.array_ e n => IROption.none Nat
-| IRTy.struct_ n => IROption.none Nat
-| IRTy.enum_ n => IROption.none Nat
-| IRTy.func_ n => IROption.none Nat",
+| IRTy.bool_ => @IROption.none Nat
+| IRTy.int_ w => @IROption.none Nat
+| IRTy.uint_ w => @IROption.none Nat
+| IRTy.float_ w => @IROption.some Nat w
+| IRTy.ptr_ => @IROption.none Nat
+| IRTy.ref_ p => @IROption.none Nat
+| IRTy.refmut_ p => @IROption.none Nat
+| IRTy.rawconst_ p => @IROption.none Nat
+| IRTy.rawmut_ p => @IROption.none Nat
+| IRTy.rc_ p => @IROption.none Nat
+| IRTy.fatptr_ p => @IROption.none Nat
+| IRTy.unit_ => @IROption.none Nat
+| IRTy.never_ => @IROption.none Nat
+| IRTy.tuple_ n => @IROption.none Nat
+| IRTy.array_ e n => @IROption.none Nat
+| IRTy.struct_ n => @IROption.none Nat
+| IRTy.enum_ n => @IROption.none Nat
+| IRTy.func_ n => @IROption.none Nat
+| IRTy.usize_ bits => @IROption.none Nat
+| IRTy.fatstr_ => @IROption.none Nat
+| IRTy.fatslice_ element => @IROption.none Nat
+| IRTy.fatdyn_ traitId => @IROption.none Nat
+| IRTy.containerlen_ => @IROption.none Nat
+| IRTy.containervtable_ => @IROption.none Nat",
             "The bit width of a FLOAT type, and none for every other type. The exact mirror of \
              ir_ty_int_width, and load-bearing in the same way: the instruction's IRTy is \
              semantic input, so `fdiv f32` and `fdiv f64` are different operations and only one \
@@ -138,9 +144,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_float2 (f : Nat -> Nat -> IRStepResult) (a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_float_type_fault ",
-                "(fun (x : Nat) => IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "(fun (x : Nat) => @IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_float_type_fault ",
                 "(fun (y : Nat) => f x y) (ir_as_float b)) ",
                 "(ir_as_float a)",
@@ -152,7 +158,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_result (o : IROption Nat) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_float_fault ",
                 "(fun (k : Nat) => IRStepResult.value (IRScalar.float_ k)) o",
             ),
@@ -165,9 +171,9 @@ impl Specification {
             concat!(
                 "def ir_float_binop (f : Nat -> Nat -> IROption Nat) (t : IRTy) ",
                 "(a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_float_type_fault ",
-                "(fun (w : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "(fun (w : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "ir_float_fault ",
                 "(ir_float2 (fun (x : Nat) (y : Nat) => ir_f64_result (f x y)) a b) ",
                 "(ir_nat_eqb w 64)) ",

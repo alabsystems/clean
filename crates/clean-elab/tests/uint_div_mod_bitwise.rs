@@ -254,30 +254,17 @@ fn addition_subtraction_multiplication_control() {
     assert_reduces_to("UInt8", "(16 : UInt8) * 16", "0");
 }
 
-// ── What is deliberately NOT fixed ─────────────────────────────────────────
-
-/// STATED BOUNDARY, not an oversight. `^^^`/`<<<`/`>>>` are left out: Clean's
-/// `Nat.shiftRight` is still an admitted AXIOM on the `with_prelude` path, so a
-/// `UInt{N}.shiftRight` built on it would be the only axiom-bearing constant in
-/// an otherwise axiom-free overlay — and the shift classes carry an independent
-/// shift-amount slot (`homogeneous == false` in the binop desugaring), which is
-/// a different elaboration problem from a missing instance. Pinned so the
-/// boundary is visible rather than folklore; DELETE this test in the commit
-/// that closes it.
-#[test]
-fn xor_and_shifts_are_still_out_of_scope_at_uint_carriers() {
-    for carrier in WIDTHS {
-        for op in ["^^^", "<<<", ">>>"] {
-            let err = expect_refusal(&format!(
-                "def probe (a b : {carrier}) : {carrier} := a {op} b"
-            ));
-            assert!(
-                !err.is_empty(),
-                "`{op}` at {carrier} is out of scope and must still be refused"
-            );
-        }
-    }
-}
+// ── What was deliberately NOT fixed here, and where it went ────────────────
+//
+// `xor_and_shifts_are_still_out_of_scope_at_uint_carriers` stood here, pinning
+// `^^^`/`<<<`/`>>>` as REFUSED, with the instruction to delete it in the commit
+// that closed the boundary. That commit is the one that added
+// `uint_xor_shift_conv.rs`, which answers both reasons the old pin gave:
+// `UInt{N}.shiftRight` is built on `Nat.div`/`Nat.pow`, not on the admitted
+// `Nat.shiftRight`, so the overlay stays axiom-free; and a numeral shift amount
+// is measured to resolve at the carrier. The boundary that STILL stands —
+// nothing at `USize` — is pinned there
+// (`usize_is_still_refused_for_xor_shifts_and_conversions`).
 
 // ── A genuinely missing instance still REFUSES — now readably ──────────────
 
@@ -355,6 +342,65 @@ fn each_operator_reports_its_own_class() {
     }
 }
 
+/// The explanation must reach the path the failures actually take.
+///
+/// There are two: `ensure_no_residual_fvars` builds a full explanation — what
+/// was left unfilled, which candidates exist, what the reader can do — at
+/// declaration CLOSE, and the argument loop raises a bare
+/// `FailedToSynthesizeInstance` the moment a GROUND instance goal cannot be
+/// resolved. The second aborts the body long before the first runs, so on real
+/// input the good message never fired: measured over the pinned Mathlib slice
+/// in `reports/source-elab/`, 0 rich against 497 bare. Replacing every proof
+/// body with `sorry`, so the argument loop never runs, took the rich count to 3
+/// — which is what showed this was a race and not dead code.
+///
+/// `Widget` has no `HMod` instance and the goal is fully ground, so this is the
+/// eager path exactly.
+#[test]
+fn the_eager_path_carries_the_same_explanation_as_the_close_path() {
+    let err = expect_refusal(
+        "structure Widget where\n  w : Nat\n\ndef bad (a b : Widget) : Widget := a % b\n",
+    );
+    assert!(
+        err.contains("failed to synthesize instance `HMod Widget Widget Widget`"),
+        "the goal line must be unchanged, got:\n{err}"
+    );
+    assert!(
+        err.contains("An instance-implicit argument was left unfilled"),
+        "the eager path must carry the explanation, not just the goal, got:\n{err}"
+    );
+}
+
+/// The diagnostic must not list a candidate and then say there is none.
+///
+/// `registered_carriers` read the HEAD of each instance type, and a derived
+/// instance is Pi-headed — `∀ {α} [Sho α], Sho (Option α)` — so
+/// `extract_class_app` returned `None` for it and it contributed no carrier.
+/// With every candidate Pi-headed the carrier list came back empty and the
+/// Options block took its no-instance branch, so one message listed an instance
+/// under "Instance synthesis had these candidates" and, a few lines later, told
+/// the reader to "Register an instance of `Sho` — there is currently none."
+/// A diagnostic that contradicts itself inside one screen teaches nothing.
+#[test]
+fn the_failure_help_never_lists_a_candidate_and_then_denies_it() {
+    let err = expect_refusal(
+        "structure Widget where\n  w : Nat\n\n\
+         class Sho (a : Type) where\n  sho : a -> Nat\n\n\
+         instance [Sho a] : Sho (Option a) := ⟨fun _ => 0⟩\n\n\
+         def bad (x : Widget) : Nat := Sho.sho x\n",
+    );
+    assert!(
+        err.contains("failed to synthesize instance"),
+        "the fixture must fail synthesis, or this test proves nothing:\n{err}"
+    );
+    if err.contains("had these candidates") {
+        assert!(
+            !err.contains("there is currently none"),
+            "the message lists a candidate AND denies one:\n{err}"
+        );
+    }
+}
+
 /// A genuinely MIXED-carrier `%` — `Nat % UInt64` — is still refused, and the
 /// refusal now names the heterogeneous goal it could not synthesize instead of
 /// a metavariable id. This is the shape real Lean reports for the same source
@@ -374,12 +420,13 @@ fn a_mixed_carrier_modulus_is_still_refused_and_names_both_carriers() {
     );
 }
 
-/// The new rendering is SCOPED to instance goals. A refusal whose residuals are
-/// not instance goals keeps the original classified-id wording, and the eager
-/// ground-goal path (`FailedToSynthesizeInstance`, raised inside the argument
-/// loop) keeps its own shorter message — both are pinned elsewhere
-/// (`user_class_projection_e2e.rs`, `parametric_instance_e2e.rs`). What is
-/// pinned here is that a plain type error is NOT relabelled as synthesis.
+/// The new rendering is SCOPED to instance goals: a refusal whose residuals are
+/// not instance goals keeps the original classified-id wording. What is pinned
+/// here is that a plain type error is NOT relabelled as synthesis.
+///
+/// This comment used to add that the eager ground-goal path "keeps its own
+/// shorter message". It no longer does — see
+/// `the_eager_path_carries_the_same_explanation_as_the_close_path` above.
 #[test]
 fn a_plain_type_mismatch_is_not_relabelled_as_instance_synthesis() {
     let err = expect_refusal("def bad (a : Nat) (b : UInt64) : UInt64 := if a < b then b else b");

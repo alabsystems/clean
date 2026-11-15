@@ -195,3 +195,76 @@ fn case_unclosed_body_errors() {
         "`case zero => skip` leaves the `zero` goal OPEN; `case` requires closure, so this MUST fail"
     );
 }
+
+#[test]
+fn explicit_cases_names_implicit_constructor_field() {
+    assert_tactic_theorem_axioms(
+        "hidden_case",
+        r#"
+inductive HiddenField where
+  | mk {h : True} (n : Nat) : HiddenField
+ theorem hidden_case (x : HiddenField) : True := by
+  cases x with
+  | @mk h n => exact h
+"#,
+        &[],
+    );
+}
+
+#[test]
+fn explicit_induction_names_implicit_constructor_field() {
+    assert_tactic_theorem_axioms(
+        "hidden_induction",
+        r#"
+inductive HiddenInduction where
+  | mk {h : True} (n : Nat) : HiddenInduction
+ theorem hidden_induction (x : HiddenInduction) : True := by
+  induction x with
+  | @mk h n => exact h
+"#,
+        &[],
+    );
+}
+
+#[test]
+fn explicit_alternative_rejects_surplus_names() {
+    let mut env = Environment::with_prelude();
+    assert!(try_elaborate_into(&mut env,
+        "theorem extra (n : Nat) : n = n := by\n  cases n with\n  | @zero extra => rfl\n  | @succ k => rfl").is_err());
+}
+
+#[test]
+fn explicit_alternative_cannot_turn_true_field_into_false_proof() {
+    let mut env = Environment::with_prelude();
+    assert!(try_elaborate_into(
+        &mut env,
+        r#"
+inductive BadHidden where
+  | mk {h : True} (n : Nat) : BadHidden
+ theorem false_hidden (x : BadHidden) : False := by
+  cases x with
+  | @mk h n => exact h
+"#
+    )
+    .is_err());
+    assert!(env.get_const(&Name::from_string("false_hidden")).is_none());
+}
+
+#[test]
+fn explicit_indexed_snoc_binds_index_word_and_byte_in_order() {
+    assert_tactic_theorem_axioms(
+        "word_case",
+        r#"
+inductive CaseWord : Nat → Type where
+  | nil : CaseWord 0
+  | snoc {n : Nat} : CaseWord n → Nat → CaseWord (n + 1)
+theorem word_case {n : Nat} (w : CaseWord n) : True := by
+  cases w with
+  | nil => exact True.intro
+  | @snoc n w b =>
+    have typed : CaseWord n := w
+    exact True.intro
+"#,
+        &[],
+    );
+}

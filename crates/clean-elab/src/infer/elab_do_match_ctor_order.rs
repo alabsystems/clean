@@ -36,7 +36,7 @@ impl<'a> ElabCtx<'a> {
     pub(super) fn try_build_ctor_ordered_do_match_alts(
         &mut self,
         arms: &[DoMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
     ) -> Result<Option<Vec<Expr>>, ElabError> {
@@ -53,7 +53,7 @@ impl<'a> ElabCtx<'a> {
         // constructor and the legacy source-order loop then placed arms in the
         // wrong `casesOn` slots, leaving an unreduced motive beta-redex the
         // kernel rejected (the App(Lam …) type-mismatch cluster).
-        let ind_name = Name::from_string(type_name);
+        let ind_name = type_name.name().clone();
         let Some(ind_info) = self.env.get_inductive(&ind_name).cloned() else {
             return Ok(None);
         };
@@ -88,11 +88,11 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         ctor_name: &Name,
         arms: &[DoMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
     ) -> Result<Option<Expr>, ElabError> {
-        let ctor_name_str = ctor_name.to_string();
+        let ctor_name_exact = ctor_name;
         // (arm, is_catch_all) in source order. A catch-all terminates collection
         // for this constructor (everything after it is shadowed).
         let mut relevant: Vec<(DoMatchArm, bool)> = Vec::new();
@@ -115,11 +115,11 @@ impl<'a> ElabCtx<'a> {
                     let resolved = self.resolve_ctor_name(name, type_name);
                     let nullary_ctor = resolved.filter(|full_ctor| {
                         self.env
-                            .get_constructor(&Name::from_string(full_ctor))
+                            .get_constructor(full_ctor.name())
                             .is_some_and(|info| info.num_fields == 0)
                     });
                     if let Some(full_ctor) = nullary_ctor {
-                        if full_ctor == ctor_name_str {
+                        if full_ctor.name() == ctor_name_exact {
                             relevant.push((normalized, false));
                             break;
                         }
@@ -133,7 +133,7 @@ impl<'a> ElabCtx<'a> {
                     else {
                         return Ok(None);
                     };
-                    if full_ctor == ctor_name_str {
+                    if full_ctor.name() == ctor_name_exact {
                         relevant.push((normalized, false));
                     }
                 }
@@ -244,8 +244,12 @@ impl<'a> ElabCtx<'a> {
                 for (idx, field_ty) in field_tys.iter().enumerate() {
                     let prior_fvars: Vec<FVarId> = field_fvars.iter().map(|(f, _)| *f).collect();
                     let field_ty = Self::open_field_type_with_fvars(field_ty, &prior_fvars);
-                    let fvar =
-                        self.push_local(format!("_do_match_ctor_field_{idx}"), field_ty.clone());
+                    let fvar = self.push_local(
+                        SurfaceName::from_name(
+                            Name::anon().str("_do_match_ctor_field").num(idx as u64),
+                        ),
+                        field_ty.clone(),
+                    );
                     field_fvars.push((fvar, field_ty));
                 }
                 let field_ids: Vec<FVarId> = field_fvars.iter().map(|(fvar, _)| *fvar).collect();
@@ -255,7 +259,7 @@ impl<'a> ElabCtx<'a> {
                 let arm_body = self.metas.instantiate(&arm_body);
                 self.pop_local();
                 let mut result = Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     scrutinee_ty.clone(),
                     ctor_value,
                     arm_body.abstract_fvar(alias_fvar),

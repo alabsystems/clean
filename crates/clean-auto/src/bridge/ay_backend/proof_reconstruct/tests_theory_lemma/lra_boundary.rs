@@ -19,11 +19,7 @@ fn test_theory_lemma_unsupported_arithmetic() {
 
     let a = terms.mk_var("a", Sort::Int);
     let b = terms.mk_var("b", Sort::Int);
-    let lt_ab = terms.mk_app(
-        ay_core::Symbol::Named("<".to_string()),
-        vec![a, b],
-        Sort::Bool,
-    );
+    let lt_ab = terms.mk_app(ay_core::Symbol::Named("<".into()), vec![a, b], Sort::Bool);
 
     let mut proof = Proof::new();
     proof.add_theory_lemma_with_farkas("LRA", vec![lt_ab], FarkasAnnotation::from_ints(&[1]));

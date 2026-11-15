@@ -20,8 +20,9 @@
 //!   (e) brecOn regression — valid recursion terms still accepted
 
 use super::*;
-use crate::env::Declaration;
+use crate::env::{Declaration, EnvError};
 use crate::level::Level;
+use crate::tc::TypeError;
 
 mod cert_path;
 
@@ -235,12 +236,34 @@ fn deep_pi_type_sort_not_collapsed() {
 // (d) UNSAFE / PARTIAL const in argument position — must REJECT
 // ===========================================================================
 
-/// Exploit (d): a safe declaration referencing an `unsafe` constant buried in
-/// argument position.
+/// (d): a declaration referencing an `unsafe` constant in argument position.
 ///
-/// `evil` is declared then marked `unsafe`. A subsequent *safe* definition
-/// `uses_unsafe := myid evil evil` (where `evil` appears in argument position)
-/// must be rejected by the whole-term unsafe backstop in `add_decl`.
+/// **AUDIT r17 M16-10 — this test asserted a backstop that does not exist, and
+/// was vacuous besides.** It read "must be rejected by the whole-term unsafe
+/// backstop in `add_decl`", and `add_decl` has no such backstop: all four
+/// `TypeChecker` constructors default `allow_unsafe: true, allow_partial: true`
+/// (`tc/mod.rs:794,845,896,952`) and `env/decl_add.rs:846` never lowers them, so
+/// the gate at `tc/infer.rs:401,404` is unreachable from this path. Measured:
+/// `add_decl` on a well-typed `def uses : Prop := evil` with `evil` marked
+/// unsafe returns **`Ok(())`**, while `check_decl_readonly_strict` on the same
+/// declaration returns `Err(UnsafeDeclaration { evil })`.
+///
+/// The test was ALSO vacuous: `myid evil evil` (with `myid : (A : Prop) → A → A`)
+/// is ill-typed on its own — the second `evil` has type `Prop`, not `evil` — so
+/// it failed with a `TypeMismatch` whether or not the mark existed. Measured by
+/// mutation: deleting the gate at `tc/infer.rs:401,404` AND
+/// `tc/cert/infer_core.rs:104,107` left both tests green.
+///
+/// It now characterises what the kernel ACTUALLY does, on a term that is
+/// well-typed but for the mark, asserting the error VARIANT rather than
+/// `is_err()`. That is not an endorsement: Lean 4 rejects this
+/// (`type_checker.cpp:100-108`, which the kernel's own comment cites). Clean
+/// cannot today, because `Declaration` carries no safety flag and
+/// `clean-elab/src/register.rs:586-587` marks a declaration AFTER
+/// `add_decl_with_kernel_check` — so a strict `add_decl` would reject a
+/// legitimate `unsafe def foo := bar` at the moment `foo` is not yet marked.
+/// Closing it means giving `Declaration` its own unsafe/partial intent, which is
+/// an owner decision and is recorded as open, not taken here.
 #[test]
 fn unsafe_const_in_arg_rejects() {
     let mut env = make_true_false_env();
@@ -269,18 +292,68 @@ fn unsafe_const_in_arg_rejects() {
     let result = env.add_decl(Declaration::Definition {
         name: Name::from_string("uses_unsafe"),
         level_params: vec![],
-        type_: prop,
+        type_: prop.clone(),
         value,
         is_reducible: false,
     });
+    // The ill-typed term is kept as the ORIGINAL exploit shape, but it is no
+    // longer the thing this test rests on -- it fails for its own reason.
     assert!(
-        result.is_err(),
-        "safe declaration referencing an unsafe const in argument position was accepted: {result:?}"
+        matches!(
+            result,
+            Err(EnvError::TypeCheckFailed {
+                source: TypeError::TypeMismatch { .. },
+                ..
+            })
+        ),
+        "the original (d) term is ill-typed on its own; if this stops being a \
+         TypeMismatch the test has drifted: {result:?}"
+    );
+
+    // The characterisation that matters: a term well-typed BUT FOR the mark.
+    let well_typed = env.add_decl(Declaration::Definition {
+        name: Name::from_string("uses_unsafe_well_typed"),
+        level_params: vec![],
+        type_: prop.clone(),
+        value: Expr::const_(Name::from_string("evil"), vec![]),
+        is_reducible: false,
+    });
+    assert!(
+        well_typed.is_ok(),
+        "add_decl has NO unsafe backstop -- it admits a safe definition whose \
+         value is an unsafe constant. If this became an error, the kernel gained \
+         the backstop the old docstring claimed and this test must be rewritten \
+         to assert it (audit r17 M16-10): {well_typed:?}"
+    );
+    let strict = env.check_decl_readonly_strict(&Declaration::Definition {
+        name: Name::from_string("uses_unsafe_strict"),
+        level_params: vec![],
+        type_: prop,
+        value: Expr::const_(Name::from_string("evil"), vec![]),
+        is_reducible: false,
+    });
+    assert!(
+        matches!(
+            strict,
+            Err(EnvError::TypeCheckFailed {
+                source: TypeError::UnsafeDeclaration { .. },
+                ..
+            })
+        ),
+        "the strict entry point DOES carry the backstop, and asserting the \
+         VARIANT is what keeps this test from passing on any error at all: \
+         {strict:?}"
     );
 }
 
-/// (d') Partial-const variant: a safe declaration referencing a `partial`
-/// constant in argument position must also be rejected by the backstop.
+/// (d') Partial-const variant. Same defect, same repair as
+/// `unsafe_const_in_arg_rejects` above (audit r17 M16-10): the assertion was
+/// `is_err()` over a term that is ill-typed on its own, so it passed with the
+/// `partial` gate deleted at both `tc/infer.rs:404` and
+/// `tc/cert/infer_core.rs:107`. Rewritten to assert the error VARIANT, and to
+/// characterise what `add_decl` actually does on a term well-typed but for the
+/// mark: it ACCEPTS. `check_decl_readonly_strict` is the entry point that
+/// carries the backstop.
 #[test]
 fn partial_const_in_arg_rejects() {
     let mut env = make_true_false_env();
@@ -306,13 +379,52 @@ fn partial_const_in_arg_rejects() {
     let result = env.add_decl(Declaration::Definition {
         name: Name::from_string("uses_partial"),
         level_params: vec![],
-        type_: prop,
+        type_: prop.clone(),
         value,
         is_reducible: false,
     });
     assert!(
-        result.is_err(),
-        "safe declaration referencing a partial const in argument position was accepted: {result:?}"
+        matches!(
+            result,
+            Err(EnvError::TypeCheckFailed {
+                source: TypeError::TypeMismatch { .. },
+                ..
+            })
+        ),
+        "the original (d') term is ill-typed on its own; if this stops being a \
+         TypeMismatch the test has drifted: {result:?}"
+    );
+
+    let well_typed = env.add_decl(Declaration::Definition {
+        name: Name::from_string("uses_partial_well_typed"),
+        level_params: vec![],
+        type_: prop.clone(),
+        value: Expr::const_(Name::from_string("loopy"), vec![]),
+        is_reducible: false,
+    });
+    assert!(
+        well_typed.is_ok(),
+        "add_decl has NO partial backstop -- it admits a safe definition whose \
+         value is a partial constant. If this became an error, the kernel gained \
+         the backstop the old docstring claimed and this test must be rewritten \
+         to assert it (audit r17 M16-10): {well_typed:?}"
+    );
+    let strict = env.check_decl_readonly_strict(&Declaration::Definition {
+        name: Name::from_string("uses_partial_strict"),
+        level_params: vec![],
+        type_: prop,
+        value: Expr::const_(Name::from_string("loopy"), vec![]),
+        is_reducible: false,
+    });
+    assert!(
+        matches!(
+            strict,
+            Err(EnvError::TypeCheckFailed {
+                source: TypeError::PartialDeclaration { .. },
+                ..
+            })
+        ),
+        "the strict entry point DOES carry the partial backstop: {strict:?}"
     );
 }
 

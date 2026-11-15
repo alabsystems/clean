@@ -67,8 +67,12 @@ pub fn create_sorry_term_with_kind_at_level(
         goal_ty
     );
 
-    record_sorry_creation(kind);
-    record_sorry_location();
+    {
+        #[cfg(test)]
+        let _admitted = super::test_gate::admit_mint();
+        record_sorry_creation(kind);
+        record_sorry_location();
+    }
 
     if env.get_const(&NAME_SORRY_AX).is_some() {
         return build_sorry_ax(level, goal_ty, kind);
@@ -115,8 +119,12 @@ pub fn create_sorry_term(env: &Environment, goal_ty: &Expr) -> Expr {
 #[track_caller]
 pub fn create_trusted_ay_term(env: &Environment, goal_ty: &Expr) -> Expr {
     if env.get_const(&NAME_TRUSTED_AY).is_some() {
-        record_ay_location();
-        record_ay_creation();
+        {
+            #[cfg(test)]
+            let _admitted = super::test_gate::admit_mint();
+            record_ay_location();
+            record_ay_creation();
+        }
         let u = infer_sorry_level(env, goal_ty);
         return Expr::app(
             Expr::const_(NAME_TRUSTED_AY.clone(), vec![u]),

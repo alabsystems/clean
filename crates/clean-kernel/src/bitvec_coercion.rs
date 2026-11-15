@@ -145,6 +145,9 @@ pub mod names {
     /// LEFT-identity (adding all-false with carry-in false returns y). Strips the
     /// AArch64 `madd Wd,Wn,Wm,WZR` (= `BvAdd(0, mul)`) wrapper the IR `BvMul` lacks.
     pub const ADD_ZERO_ID: &str = "Clean.BVC.add_zero_id";
+    /// `add_right_zero_id : ∀ y, addRecM y (bvAllFalse y) false = y`.
+    /// Constructive right identity, including symbolic address bit lists.
+    pub const ADD_RIGHT_ZERO_ID: &str = "Clean.BVC.add_right_zero_id";
     /// `bvf_add_zero_id : ∀ (e : BvF), bvfEval (Add (Const (bvAllFalse (bvfEval e))) e) = bvfEval e`
     /// — the bvfEval lift of `add_zero_id` (mirrors `bvf_or_zero_id`).
     pub const BVF_ADD_ZERO_ID: &str = "Clean.BVC.bvf_add_zero_id";
@@ -152,6 +155,14 @@ pub mod names {
     pub const BVF: &str = "Clean.BVC.BvF";
     /// `bvfEval : BvF → List Bool`.
     pub const BVF_EVAL: &str = "Clean.BVC.bvfEval";
+    /// `bvConcat high low := bvAppend low high`: SMT high/low argument order,
+    /// with the low operand first in the kernel's least-significant-bit lists.
+    pub const BV_CONCAT: &str = "Clean.BVC.bvConcat";
+    /// Two checked operand equalities transport through `BvF.Concat`.
+    pub const BVF_CONCAT_CONG: &str = "Clean.BVC.bvf_concat_cong";
+    /// `eval (ExtractLow (Concat high low) low) = eval low`, for arbitrary
+    /// operands, derived from the existing inductively proved prefix-take law.
+    pub const BVF_CONCAT_LOW: &str = "Clean.BVC.bvf_concat_low";
     /// `bvf_extract_zeroext_id : ∀ (e : BvF) k,
     ///     bvfEval (ExtractLow (ZeroExt e k) (lenTag e)) = bvfEval e`  (see note).
     pub const BVF_EXTRACT_ZEXT_ID: &str = "Clean.BVC.bvf_extract_zeroext_id";
@@ -1386,6 +1397,92 @@ impl Environment {
             })?;
         }
 
+        // Right identity uses the same List induction and explicit Bool cases;
+        // the opposite operand order is proved, not borrowed by rewriting.
+        {
+            let add_rec_m = |x: Expr, y: Expr| {
+                Expr::apps(
+                    Expr::const_str(crate::bitvec_inductive::names::ADD_REC_M),
+                    [x, y, bfalse()],
+                )
+            };
+            let goal_of = |y: Expr| eq_list(add_rec_m(y.clone(), all_false(y.clone())), y);
+            let ty = {
+                let mut b = EnvDeclBuilder::new();
+                let (y_id, y) = b.fresh_local(list_bool());
+                b.finish(b.mk_pi(y_id, BinderInfo::Default, list_bool(), goal_of(y.clone())))
+            };
+            let val = {
+                let mut b = EnvDeclBuilder::new();
+                let (y_id, y) = b.fresh_local(list_bool());
+                let motive = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (w_id, w) = c.fresh_local(list_bool());
+                    c.finish_child(c.mk_lam(
+                        w_id,
+                        BinderInfo::Default,
+                        list_bool(),
+                        goal_of(w.clone()),
+                    ))
+                };
+                let nil_case = eq_refl_list(nil_b());
+                let cons_case = {
+                    let mut c = EnvDeclBuilder::child_of(&b);
+                    let (h_id, h) = c.fresh_local(bool_ty());
+                    let (t_id, t) = c.fresh_local(list_bool());
+                    let ih_ty = goal_of(t.clone());
+                    let (ih_id, ih) = c.fresh_local(ih_ty.clone());
+                    // The cons-step bit-ops `xor3 h false false` / `maj h false false` are STUCK
+                    // on a symbolic head h (Bool.xor recurses on its first arg). DISPATCH h via
+                    // Bool.rec: at each LITERAL head the LHS reduces concretely to
+                    //   cons h0 (addRecM t (allFalse t) false), proved by congrArg (cons h0 ·) ih.
+                    let lhs_tail = add_rec_m(t.clone(), all_false(t.clone()));
+                    let mk_leaf = |h0: Expr, parent: &EnvDeclBuilder| -> Expr {
+                        let cons_h_fn = {
+                            let mut d = EnvDeclBuilder::child_of(parent);
+                            let (w_id, w) = d.fresh_local(list_bool());
+                            d.finish_child(d.mk_lam(
+                                w_id,
+                                BinderInfo::Default,
+                                list_bool(),
+                                cons_b(h0.clone(), w),
+                            ))
+                        };
+                        congr_arg_ll(lhs_tail.clone(), t.clone(), cons_h_fn, ih.clone())
+                    };
+                    // motive_h h0 := addRecM (cons h0 t) (allFalse (cons h0 t)) false = cons h0 t
+                    let hmot = {
+                        let mut d = EnvDeclBuilder::child_of(&c);
+                        let (h0_id, h0) = d.fresh_local(bool_ty());
+                        let g = eq_list(
+                            add_rec_m(
+                                cons_b(h0.clone(), t.clone()),
+                                all_false(cons_b(h0.clone(), t.clone())),
+                            ),
+                            cons_b(h0.clone(), t.clone()),
+                        );
+                        d.finish_child(d.mk_lam(h0_id, BinderInfo::Default, bool_ty(), g))
+                    };
+                    // motive eliminates into Prop (Eq is Sort 0) -> Bool.rec.{0}.
+                    let body = Expr::apps(
+                        Expr::const_(Name::from_string("Bool.rec"), vec![Level::zero()]),
+                        [hmot, mk_leaf(bfalse(), &c), mk_leaf(btrue(), &c), h.clone()],
+                    );
+                    let r = c.mk_lam(ih_id, BinderInfo::Default, ih_ty, body);
+                    let r = c.mk_lam(t_id, BinderInfo::Default, list_bool(), r);
+                    c.finish_child(c.mk_lam(h_id, BinderInfo::Default, bool_ty(), r))
+                };
+                let rec = list_rec_prop(motive, nil_case, cons_case, y.clone());
+                b.finish(b.mk_lam(y_id, BinderInfo::Default, list_bool(), rec))
+            };
+            self.add_decl(Declaration::Theorem {
+                name: Name::from_string(names::ADD_RIGHT_ZERO_ID),
+                level_params: vec![],
+                type_: ty,
+                value: val,
+            })?;
+        }
+
         Ok(())
     }
 
@@ -1397,6 +1494,7 @@ impl Environment {
     ///   ExtractLow: BvF → BvF → BvF      (2nd arg = the "length tag" list; eval
     ///                                     takes `bvTakeLen (eval tag) (eval e)`)
     ///   Or        : BvF → BvF → BvF
+    ///   Concat    : BvF → BvF → BvF      (high operand, then low operand)
     /// The ExtractLow length is carried as a `BvF` whose eval supplies the take
     /// length (mirroring the gate's `Extract[len(z)-1:0]`, where the width is the
     /// inner operand's width) — this keeps the eval purely list-structural.
@@ -1438,6 +1536,7 @@ impl Environment {
                     ctor("Clean.BVC.BvF.Shl", &[bvf.clone(), bvf.clone()]),
                     ctor("Clean.BVC.BvF.LShr", &[bvf.clone(), bvf.clone()]),
                     ctor("Clean.BVC.BvF.AShr", &[bvf.clone(), bvf.clone()]),
+                    ctor("Clean.BVC.BvF.Concat", &[bvf.clone(), bvf.clone()]),
                 ],
             }],
         };
@@ -1450,6 +1549,23 @@ impl Environment {
     /// ops use this module's `bvZeroExt`/`bvTakeLen`/`bvZipOr`. (The coercion
     /// identities below do NOT depend on the Add semantics — that is the point.)
     fn register_bvf_eval(&mut self) -> Result<(), EnvError> {
+        // Lists are LSB-first. Reversing these two operands would silently
+        // reverse the byte order of the consumer's little-endian memory load.
+        let concat_value = {
+            let mut b = EnvDeclBuilder::new();
+            let (high_id, high) = b.fresh_local(list_bool());
+            let (low_id, low) = b.fresh_local(list_bool());
+            let body = app2(low, high);
+            let body = b.mk_lam(low_id, BinderInfo::Default, list_bool(), body);
+            b.finish(b.mk_lam(high_id, BinderInfo::Default, list_bool(), body))
+        };
+        self.add_decl_if_absent(Declaration::Definition {
+            name: Name::from_string(names::BV_CONCAT),
+            level_params: vec![],
+            type_: Expr::arrow(list_bool(), Expr::arrow(list_bool(), list_bool())),
+            value: concat_value,
+            is_reducible: true,
+        })?;
         // Ensure the #34 adder is present (for the Add arm).
         self.init_bv_inductive()?;
         // bvMul : List Bool → List Bool → List Bool — TOTAL shift-add multiplier.
@@ -2003,7 +2119,9 @@ impl Environment {
             let shl_case = bin_shift_case(names::BV_SHL);
             let lshr_case = bin_shift_case(names::BV_LSHR);
             let ashr_case = bin_shift_case(names::BV_ASHR);
-            // @BvF.rec.{1} (motive := fun _ => List Bool) leaf const add sub and xor zext extract or mul div sdiv shl lshr ashr e
+            let concat_case = bin_shift_case(names::BV_CONCAT);
+            // Constructor cases follow the datatype's order; Concat is appended
+            // so the existing constructor indices remain unchanged.
             let rec = Expr::apps(
                 Expr::const_(
                     Name::from_string(&format!("{}.rec", names::BVF)),
@@ -2026,6 +2144,7 @@ impl Environment {
                     shl_case,
                     lshr_case,
                     ashr_case,
+                    concat_case,
                     e.clone(),
                 ],
             );
@@ -2052,6 +2171,39 @@ impl Environment {
         let bvf = Expr::const_str(names::BVF);
         let eval = |e: Expr| Expr::app(Expr::const_str(names::BVF_EVAL), e);
         let mk = |ctor: &str, args: Vec<Expr>| Expr::apps(Expr::const_str(ctor), args);
+
+        // The low-width tag is the actual low operand, not a guessed width.
+        // `bvTakeLenAppend` supplies an induction proof for symbolic operands;
+        // no evaluation axiom or trusted solver result enters this theorem.
+        {
+            let ty = {
+                let mut b = EnvDeclBuilder::new();
+                let (high_id, high) = b.fresh_local(bvf.clone());
+                let (low_id, low) = b.fresh_local(bvf.clone());
+                let joined = mk("Clean.BVC.BvF.Concat", vec![high, low.clone()]);
+                let sliced = mk("Clean.BVC.BvF.ExtractLow", vec![joined, low.clone()]);
+                let goal = eq_list(eval(sliced), eval(low));
+                let goal = b.mk_pi(low_id, BinderInfo::Default, bvf.clone(), goal);
+                b.finish(b.mk_pi(high_id, BinderInfo::Default, bvf.clone(), goal))
+            };
+            let value = {
+                let mut b = EnvDeclBuilder::new();
+                let (high_id, high) = b.fresh_local(bvf.clone());
+                let (low_id, low) = b.fresh_local(bvf.clone());
+                let proof = Expr::apps(
+                    Expr::const_str(names::BV_TAKE_LEN_APPEND),
+                    [eval(low), eval(high)],
+                );
+                let proof = b.mk_lam(low_id, BinderInfo::Default, bvf.clone(), proof);
+                b.finish(b.mk_lam(high_id, BinderInfo::Default, bvf.clone(), proof))
+            };
+            self.add_decl(Declaration::Theorem {
+                name: Name::from_string(names::BVF_CONCAT_LOW),
+                level_params: vec![],
+                type_: ty,
+                value,
+            })?;
+        }
 
         // bvf_extract_zeroext_id
         {
@@ -2469,6 +2621,12 @@ impl Environment {
             (names::BVF_SHL_CONG, "Clean.BVC.BvF.Shl", names::BV_SHL),
             (names::BVF_LSHR_CONG, "Clean.BVC.BvF.LShr", names::BV_LSHR),
             (names::BVF_ASHR_CONG, "Clean.BVC.BvF.AShr", names::BV_ASHR),
+            // Concat's reduced operation owns the high/low-to-LSB ordering.
+            (
+                names::BVF_CONCAT_CONG,
+                "Clean.BVC.BvF.Concat",
+                names::BV_CONCAT,
+            ),
         ] {
             let op = |x: Expr, y: Expr| mk(ctor_name, vec![x, y]);
             let red = |x: Expr, y: Expr| Expr::apps(Expr::const_str(reduced), [x, y]);

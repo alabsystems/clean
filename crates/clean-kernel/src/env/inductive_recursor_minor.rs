@@ -12,8 +12,8 @@
 //! of the type the constructor belongs to, and each IH uses the motive
 //! of the type the recursive field returns to (Lean 4 inductive.cpp:644,658).
 
-use crate::expr::{BinderInfo, Expr, ExprKind};
-use crate::inductive::{get_return_type, InductiveType};
+use crate::expr::{BinderData, BinderInfo, Expr, ExprKind};
+use crate::inductive::{get_return_type, head_beta_spine, InductiveType};
 use crate::level::Level;
 use crate::name::Name;
 use std::sync::Arc;
@@ -22,6 +22,30 @@ use super::inductive_fixed_indices::ind_const_with_levels;
 use super::Environment;
 
 impl Environment {
+    /// Preserve the checked constructor's field annotations in both minor
+    /// premises and iota-rule field lambdas. Outer recursor implicit inference
+    /// does not visit the nested minor telescope (e.g. Nat.le.step's `{m}`).
+    pub(crate) fn constructor_field_binder_data(
+        ctor_name: &Name,
+        num_params: u32,
+        num_fields: u32,
+        all_types: &[InductiveType],
+    ) -> Vec<BinderData> {
+        all_types
+            .iter()
+            .flat_map(|ty| &ty.constructors)
+            .find(|ctor| &ctor.name == ctor_name)
+            .map(|ctor| {
+                Self::collect_pi_domains(&ctor.type_)
+                    .into_iter()
+                    .skip(num_params as usize)
+                    .take(num_fields as usize)
+                    .map(|(binder, _)| binder)
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Build the minor premise type for a constructor.
     ///
     /// For `succ (n : Nat)`, generates: `(n : Nat) -> motive n -> motive (Nat.succ n)`
@@ -47,6 +71,12 @@ impl Environment {
         // Count how many IH parameters we need
         let num_ihs: usize = recursive_flags.iter().filter(|&&b| b).count();
         let num_fields = num_fields as usize;
+        let field_binders = Self::constructor_field_binder_data(
+            ctor_name,
+            num_params,
+            num_fields as u32,
+            all_types,
+        );
 
         // With num_motives motives, the motive binders occupy positions
         // [num_fields + num_ihs .. num_fields + num_ihs + num_motives - 1].
@@ -95,16 +125,23 @@ impl Environment {
                 let ihs_above = num_ihs - 1 - ih_offset;
                 let field_depth = (num_fields - 1 - i) + ihs_above;
 
+                // The induction hypothesis reads the field the way Lean's
+                // `mk_rec_infos` does, through `whnf` of the field and of each
+                // body of its Pi spine (inductive.cpp:650-656), here β only
+                // (`head_beta_spine`). The field's own binder below keeps the
+                // type as written, as Lean's minor premise does.
+                let ih_view = field_types.get(i).map(head_beta_spine);
+
                 // Determine which motive to use for this IH based on the field type's
                 // return type (Lean 4 inductive.cpp:658 -- get_I_indices on u_i_ty).
-                let ih_motive_idx = field_types
-                    .get(i)
+                let ih_motive_idx = ih_view
+                    .as_ref()
                     .map(|ft| Self::field_motive_index(ft, all_types))
                     .unwrap_or(conclusion_motive_idx);
                 let motive_at_ih = num_fields + ihs_above + (num_motives - 1 - ih_motive_idx);
 
                 // Count Pi binders for reflexive fields (#1784).
-                let n_pis = field_types.get(i).map(Self::count_pi_binders).unwrap_or(0);
+                let n_pis = ih_view.as_ref().map(Self::count_pi_binders).unwrap_or(0);
 
                 // Under n_pis Pi binders, all outer BVars shift by n_pis.
                 let ih_motive = motive_at_ih + n_pis;
@@ -113,9 +150,8 @@ impl Environment {
                 let mut ih_type = Expr::bvar(Self::usize_to_u32(ih_motive));
 
                 // Apply index arguments (remapped for the Pi-wrapped context).
-                let field_ty = field_types
-                    .get(i)
-                    .cloned()
+                let field_ty = ih_view
+                    .clone()
                     .unwrap_or_else(|| ind_const_with_levels(ind_name, ind_level_params));
                 let field_indices = self.get_constructor_return_indices(&field_ty, num_params);
                 for idx_expr in &field_indices {
@@ -138,8 +174,8 @@ impl Environment {
                 ih_type = Expr::app(ih_type, major);
 
                 // Wrap in Pi binders for reflexive fields (#1784 audit fix).
-                let pi_domains = field_types
-                    .get(i)
+                let pi_domains = ih_view
+                    .as_ref()
                     .map(Self::collect_pi_domains)
                     .unwrap_or_default();
                 for (k, (bi, domain)) in pi_domains.iter().enumerate().rev() {
@@ -167,7 +203,11 @@ impl Environment {
                 .unwrap_or_else(|| ind_const_with_levels(ind_name, ind_level_params));
             // Insert num_motives slots at depth `i` for the motive binders.
             let lifted_field_ty = field_ty.lift_from(Self::usize_to_u32(i), num_motives as u32);
-            result = Expr::pi(BinderInfo::Default, lifted_field_ty, result);
+            let binder = field_binders
+                .get(i)
+                .copied()
+                .unwrap_or_else(|| BinderInfo::Default.into());
+            result = Expr::pi(binder, lifted_field_ty, result);
         }
 
         result

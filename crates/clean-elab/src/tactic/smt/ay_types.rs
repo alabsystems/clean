@@ -197,7 +197,7 @@ impl AyConfig {
         self.logic
     }
 
-    pub fn with_logic(mut self, logic: AyLogic) -> Self {
+    pub(crate) fn with_logic(mut self, logic: AyLogic) -> Self {
         self.logic = Some(logic);
         self
     }

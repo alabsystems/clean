@@ -8,7 +8,11 @@
 //! proof-reconstruction module that matches raw ay_core proof payload types.
 
 use ay::Sort;
-use ay_core::{AletheRule, FarkasAnnotation, Proof, Symbol, TermId, TermStore, TheoryLemmaKind};
+use ay_core::{
+    AletheRule, FarkasAnnotation, NraSosCertificate, NraSosOrigin, NraSosRational, NraSosTerm,
+    Proof, ProofStep, Symbol, TermId, TermStore, TheoryLemmaKind,
+};
+use ay_proof::{re_check_bundle_strict, SerializableProofBundle};
 use num_bigint::BigInt;
 use num_rational::{BigRational, Rational64};
 
@@ -17,6 +21,86 @@ use super::trace::{ConstantView, ProofTrace, RuleView, StepView, TermView, Theor
 
 fn int_var(terms: &mut TermStore, name: &str) -> TermId {
     terms.mk_var(name, Sort::Int)
+}
+
+/// AY849's hand-authored linear SOS fixture, closed by real resolution steps.
+/// The independent AY checker, not this constructor, authenticates the payload.
+pub(super) fn checked_nra_sos_refutation() -> (TermStore, Proof, [TermId; 2]) {
+    fn rational(value: i64) -> NraSosRational {
+        NraSosRational {
+            numerator: value.into(),
+            denominator: 1.into(),
+        }
+    }
+
+    let mut terms = TermStore::new();
+    let x = terms.mk_var("nra_sos_x", Sort::Real);
+    let zero = terms.mk_rational(BigRational::from_integer(0.into()));
+    let one = terms.mk_rational(BigRational::from_integer(1.into()));
+    let lower = terms.mk_ge(x, one);
+    let upper = terms.mk_le(x, zero);
+    let not_lower = terms.mk_not_raw(lower);
+    let not_upper = terms.mk_not_raw(upper);
+    // 0 + (x - 1) + (-x) = -1, with a positive-semidefinite zero Gram matrix.
+    let certificate = NraSosCertificate {
+        basis: vec![vec![]],
+        gram: vec![vec![rational(0)]],
+        terms: vec![
+            NraSosTerm {
+                origin: NraSosOrigin::ClauseLiteral { position: 0 },
+                multiplier: rational(1),
+            },
+            NraSosTerm {
+                origin: NraSosOrigin::ClauseLiteral { position: 1 },
+                multiplier: rational(1),
+            },
+        ],
+        rhs: rational(-1),
+    };
+    let mut proof = Proof::new();
+    let sos = proof.add_step(ProofStep::NraSos {
+        clause: vec![not_lower, not_upper],
+        certificate,
+    });
+    let lower_assumption = proof.add_assume(lower, None);
+    let remaining = proof.add_resolution(vec![not_upper], lower, sos, lower_assumption);
+    let upper_assumption = proof.add_assume(upper, None);
+    proof.add_resolution(vec![], upper, remaining, upper_assumption);
+
+    let assertions = [lower, upper];
+    let bundle = SerializableProofBundle::from_proof(&proof, &terms, assertions.to_vec());
+    let checked = re_check_bundle_strict(&bundle)
+        .expect("the actual AY SOS payload and complete refutation must replay independently");
+    assert_eq!(checked.quality.theory_lemma_count, 1);
+    assert_eq!(checked.quality.trust_count, 0);
+    assert_eq!(checked.quality.hole_count, 0);
+    assert_eq!(checked.assume_terms, assertions.to_vec());
+    (terms, proof, assertions)
+}
+
+#[test]
+fn test_trace_real_nra_sos_step_is_unknown_not_an_empty_clause() {
+    let (terms, proof, assertions) = checked_nra_sos_refutation();
+    let ProofStep::NraSos { clause, .. } = &proof.steps[0] else {
+        panic!("fixture must contain AY849's actual SOS variant");
+    };
+    assert_eq!(clause.len(), 2);
+    let trace = ProofTrace::new(&proof, &terms);
+    assert_eq!(trace.step_count(), 5);
+    assert!(matches!(trace.step(0), StepView::Unknown));
+    assert!(trace.clause_of_step(0).is_empty());
+    assert!(!trace.step_derives_empty_clause(0));
+    assert_eq!(trace.root_empty_clause_step(), Some(4));
+    assert_eq!(trace.reachable_from(4), vec![true; 5]);
+
+    // Ensure the independent checker is reading the SOS identity, not merely
+    // accepting the new variant or the final resolution's empty clause.
+    let mut forged = SerializableProofBundle::from_proof(&proof, &terms, assertions.to_vec());
+    let ProofStep::NraSos { certificate, .. } = &mut forged.steps[0] else {
+        panic!("bundle must retain the real SOS step");
+    };
+    certificate.rhs.numerator = 1.into();
+    assert!(re_check_bundle_strict(&forged).is_err());
 }
 
 #[test]

@@ -24,25 +24,28 @@
 //!
 //! ```
 //! use clean_elab::macro_cmd::{MacroDef, MacroPatternPart, MacroRegistry, MacroScoping};
-//! use clean_parser::{Span, SurfaceExpr};
+//! use clean_parser::{Span, SurfaceExpr, SurfaceName};
 //!
 //! let mut registry = MacroRegistry::new();
 //! registry.register(MacroDef {
-//!     name: "double".to_owned(),
+//!     name: SurfaceName::generated_path("double"),
 //!     pattern: vec![MacroPatternPart::Expr],
 //!     expansion_template: SurfaceExpr::App(
 //!         Span::new(0, 0),
-//!         Box::new(SurfaceExpr::Ident(Span::new(0, 0), "Nat.add".to_owned())),
+//!         Box::new(SurfaceExpr::Ident(
+//!             Span::new(0, 0),
+//!             SurfaceName::generated_path("Nat.add"),
+//!         )),
 //!         vec![],  // Arguments substituted at expansion time
 //!     ),
 //!     scoping: MacroScoping::Term,
 //! });
-//! assert!(registry.lookup("double").is_some());
+//! assert!(registry.lookup(&SurfaceName::generated_path("double")).is_some());
 //! ```
 
 use std::collections::HashMap;
 
-use clean_parser::{Span, SurfaceArg, SurfaceExpr};
+use clean_parser::{Span, SurfaceArg, SurfaceExpr, SurfaceName};
 
 /// Error type for macro expansion failures.
 #[derive(Debug, Clone, thiserror::Error)]
@@ -50,20 +53,20 @@ use clean_parser::{Span, SurfaceArg, SurfaceExpr};
 pub enum MacroError {
     /// Referenced a macro that is not registered.
     #[error("unknown macro: {0}")]
-    UnknownMacro(String),
+    UnknownMacro(SurfaceName),
     /// Wrong number of arguments passed to the macro.
     #[error("macro '{name}' expects {expected} argument(s), got {actual}")]
     ArityMismatch {
-        name: String,
+        name: SurfaceName,
         expected: usize,
         actual: usize,
     },
     /// A required expression argument was missing.
     #[error("macro '{name}': missing required expression argument at position {position}")]
-    MissingArgument { name: String, position: usize },
+    MissingArgument { name: SurfaceName, position: usize },
     /// Expansion template substitution failed.
     #[error("macro '{name}' expansion failed: {detail}")]
-    ExpansionFailed { name: String, detail: String },
+    ExpansionFailed { name: SurfaceName, detail: String },
 }
 
 /// A single part of a macro's expected argument pattern.
@@ -105,7 +108,7 @@ pub enum MacroScoping {
 #[derive(Debug, Clone)]
 pub struct MacroDef {
     /// The name used to invoke the macro (e.g., `"check"` for `#check`).
-    pub name: String,
+    pub name: SurfaceName,
     /// The expected argument pattern.
     pub pattern: Vec<MacroPatternPart>,
     /// The expansion template. `Hole` nodes in the template are replaced
@@ -132,7 +135,7 @@ impl MacroDef {
 /// command macros (`#check`, `#eval`, `#print`). Users can register
 /// additional macros via [`MacroRegistry::register`].
 pub struct MacroRegistry {
-    entries: HashMap<String, MacroDef>,
+    entries: HashMap<SurfaceName, MacroDef>,
 }
 
 impl std::fmt::Debug for MacroRegistry {
@@ -180,14 +183,18 @@ impl MacroRegistry {
 
     /// Look up a macro definition by name.
     #[must_use]
-    pub fn lookup(&self, name: &str) -> Option<&MacroDef> {
+    pub fn lookup(&self, name: &SurfaceName) -> Option<&MacroDef> {
+        if name.is_relative_constructor() || name.is_anonymous() || name.is_unescaped_component("_")
+        {
+            return None;
+        }
         self.entries.get(name)
     }
 
     /// Check whether a macro is registered.
     #[must_use]
-    pub fn is_registered(&self, name: &str) -> bool {
-        self.entries.contains_key(name)
+    pub fn is_registered(&self, name: &SurfaceName) -> bool {
+        self.lookup(name).is_some()
     }
 
     /// Number of registered macros.
@@ -197,8 +204,8 @@ impl MacroRegistry {
     }
 
     /// Iterate over all registered macro names.
-    pub fn names(&self) -> impl Iterator<Item = &str> {
-        self.entries.keys().map(|s| s.as_str())
+    pub fn names(&self) -> impl Iterator<Item = &SurfaceName> {
+        self.entries.keys()
     }
 
     /// Iterate over all registered macro definitions.
@@ -220,7 +227,7 @@ impl MacroRegistry {
 /// is provided.
 pub fn expand_macro(
     registry: &MacroRegistry,
-    name: &str,
+    name: &SurfaceName,
     args: &[SurfaceExpr],
 ) -> Result<SurfaceExpr, MacroError> {
     let def = registry
@@ -247,7 +254,7 @@ pub fn expand_macro(
 /// substituted for the first hole encountered in a depth-first traversal.
 fn substitute_template(
     template: &SurfaceExpr,
-    macro_name: &str,
+    macro_name: &SurfaceName,
     args: &[SurfaceExpr],
 ) -> Result<SurfaceExpr, MacroError> {
     match template {
@@ -314,28 +321,41 @@ fn substitute_template(
 fn register_builtin_macros(registry: &mut MacroRegistry) {
     // #check <expr> -- type-check and display the type
     registry.register(MacroDef {
-        name: "check".to_owned(),
+        name: SurfaceName::generated_path("check"),
         pattern: vec![MacroPatternPart::Expr],
-        expansion_template: SurfaceExpr::Ident(Span::new(0, 0), "#check".to_owned()),
+        expansion_template: SurfaceExpr::Ident(
+            Span::new(0, 0),
+            SurfaceName::from_name(clean_kernel::Name::anon().str("#check")),
+        ),
         scoping: MacroScoping::Command,
     });
 
     // #eval <expr> -- evaluate and display the result
     registry.register(MacroDef {
-        name: "eval".to_owned(),
+        name: SurfaceName::generated_path("eval"),
         pattern: vec![MacroPatternPart::Expr],
-        expansion_template: SurfaceExpr::Ident(Span::new(0, 0), "#eval".to_owned()),
+        expansion_template: SurfaceExpr::Ident(
+            Span::new(0, 0),
+            SurfaceName::from_name(clean_kernel::Name::anon().str("#eval")),
+        ),
         scoping: MacroScoping::Command,
     });
 
     // #print <ident> -- print a declaration's definition
     registry.register(MacroDef {
-        name: "print".to_owned(),
+        name: SurfaceName::generated_path("print"),
         pattern: vec![MacroPatternPart::Ident],
-        expansion_template: SurfaceExpr::Ident(Span::new(0, 0), "#print".to_owned()),
+        expansion_template: SurfaceExpr::Ident(
+            Span::new(0, 0),
+            SurfaceName::from_name(clean_kernel::Name::anon().str("#print")),
+        ),
         scoping: MacroScoping::Command,
     });
 }
+
+#[cfg(test)]
+#[path = "macro_cmd_typed_tests.rs"]
+mod typed_tests;
 
 #[cfg(test)]
 #[path = "macro_cmd_tests.rs"]

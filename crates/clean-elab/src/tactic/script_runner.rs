@@ -5,37 +5,74 @@
 //! Shared tactic-script parsing/execution for server handlers and oracle replay.
 
 pub mod comment_strip;
+mod names;
 
 use crate::elaborate;
 use crate::tactic as elab_tactic;
 use clean_auto::oracle::{OracleCandidate, OracleCandidateRunner, OracleRunError};
 use clean_auto::ProofResult;
 use clean_kernel::{Environment, Expr, LocalContext, TypeChecker};
-use clean_parser::parse_expr;
+use clean_parser::{parse_expr, SurfaceName};
+use names::name as script_name;
 use std::time::{Duration, Instant};
 
-/// Strip a Lean-style line comment (`-- ...`) from a tactic fragment.
-fn strip_line_comment(s: &str) -> &str {
-    match s.find("--") {
-        Some(pos) => &s[..pos],
-        None => s,
-    }
-}
-
-/// Parse a tactic script into individual tactics.
-///
-/// Strips `/- ... -/` block comments (including nested), splits by newlines and
-/// semicolons, strips `-- ...` line comments, trims whitespace, and filters
-/// empty fragments.  This prevents standalone proof comments from becoming
-/// spurious `UnknownIdent` errors during replay.
+/// Split the simple script protocol outside quoted identifiers and strings.
+/// Source text inside a quoted component is never a command separator/comment.
 pub fn parse_tactic_script(script: &str) -> Vec<String> {
-    let block_stripped = comment_strip::strip_block_comments(script);
-    block_stripped
-        .lines()
-        .flat_map(|line| line.split(';'))
-        .map(|s| strip_line_comment(s).trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
+    let input = comment_strip::strip_block_comments(script);
+    let mut result = Vec::new();
+    let mut fragment = String::new();
+    let mut quoted = false;
+    let mut string = false;
+    let mut escaped = false;
+    let mut comment = false;
+    let mut chars = input.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if comment {
+            if ch != '\n' {
+                continue;
+            }
+            comment = false;
+        } else if quoted {
+            fragment.push(ch);
+            if ch == '»' {
+                quoted = false;
+            }
+            continue;
+        } else if string {
+            fragment.push(ch);
+            if escaped {
+                escaped = false;
+            } else if ch == '\\' {
+                escaped = true;
+            } else if ch == '"' {
+                string = false;
+            }
+            continue;
+        } else if ch == '«' {
+            quoted = true;
+        } else if ch == '"' {
+            string = true;
+        } else if ch == '-' && chars.peek() == Some(&'-') {
+            comment = true;
+            chars.next();
+            continue;
+        }
+        if ch == '\n' || ch == ';' {
+            let trimmed = fragment.trim();
+            if !trimmed.is_empty() {
+                result.push(trimmed.to_owned());
+            }
+            fragment.clear();
+        } else {
+            fragment.push(ch);
+        }
+    }
+    let trimmed = fragment.trim();
+    if !trimmed.is_empty() {
+        result.push(trimmed.to_owned());
+    }
+    result
 }
 
 fn parse_option_value_literal(raw: &str) -> elab_tactic::OptionValue {
@@ -86,15 +123,19 @@ fn parse_solve_by_elim_depth(raw: Option<&str>) -> Result<usize, elab_tactic::Ta
     }
 }
 
-/// Extract the hypothesis named by a Lean-style `at <hyp>` target, if present.
-///
-/// Returns `Some(hyp)` for token streams like `push_neg at h` or
-/// `unfold foo at h`, and `None` when there is no `at` keyword (the tactic then
-/// applies to the goal). A bare trailing `at` with no following name yields
-/// `None`, falling back to the goal-directed form.
-fn at_target<'a>(parts: &[&'a str]) -> Option<&'a str> {
-    let idx = parts.iter().position(|&p| p == "at")?;
-    parts.get(idx + 1).copied()
+/// An authored, unescaped `at` token selects exactly one following name.
+/// Missing/extra selectors refuse instead of silently switching to the goal.
+fn at_target(parts: &[&str]) -> Result<Option<SurfaceName>, elab_tactic::TacticError> {
+    let Some(idx) = parts.iter().position(|&part| part == "at") else {
+        return Ok(None);
+    };
+    if idx + 2 != parts.len() {
+        return Err(elab_tactic::TacticError::MissingArgument {
+            tactic: parts.first().copied().unwrap_or("").into(),
+            expected: "exactly one hypothesis after at".into(),
+        });
+    }
+    script_name(parts[idx + 1]).map(Some)
 }
 
 fn resolve_expr_in_context(
@@ -103,18 +144,27 @@ fn resolve_expr_in_context(
     env: &Environment,
     tactic: &str,
 ) -> Result<Expr, elab_tactic::TacticError> {
-    if !expr_str.chars().any(char::is_whitespace) {
-        if let Some(goal) = proof_state.current_goal() {
-            if let Some(decl) = goal.local_ctx.iter().find(|decl| decl.name == expr_str) {
-                return Ok(Expr::fvar(decl.fvar));
-            }
-        }
-    }
-
     let surface_expr = parse_expr(expr_str).map_err(|e| elab_tactic::TacticError::ParseFailed {
         tactic: tactic.to_string(),
         detail: format!("{e}"),
     })?;
+    if let Some(goal) = proof_state.current_goal() {
+        let mut context = crate::ElabCtx::new(env);
+        for decl in &goal.local_ctx {
+            match decl.value.as_ref() {
+                Some(value) => context.push_local_let_with_fvar(
+                    decl.name.clone(),
+                    decl.fvar,
+                    decl.ty.clone(),
+                    value.clone(),
+                ),
+                None => context.push_local_with_fvar(decl.name.clone(), decl.fvar, decl.ty.clone()),
+            }
+        }
+        if let Some(local) = context.resolve_local_surface_reference(&surface_expr) {
+            return Ok(local);
+        }
+    }
     elaborate(env, &surface_expr).map_err(elab_tactic::TacticError::from_elab_error)
 }
 
@@ -141,7 +191,7 @@ pub fn execute_simple_tactic(
     use elab_tactic::{delta, ext, fin_cases, revert, unfold};
     use elab_tactic::{norm_num_at, push_neg_at, unfold_at};
 
-    let parts: Vec<&str> = tactic_str.split_whitespace().collect();
+    let parts = names::words(tactic_str, false)?;
     if parts.is_empty() {
         return Err(TacticError::MissingArgument {
             tactic: "".to_string(),
@@ -153,12 +203,16 @@ pub fn execute_simple_tactic(
         "intro" => {
             let name = parts
                 .get(1)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "h".to_string());
+                .map(|s| script_name(s))
+                .transpose()?
+                .unwrap_or_else(|| SurfaceName::generated_path("h"));
             intro(proof_state, &name)
         }
         "intros" => {
-            let names: Vec<String> = parts[1..].iter().map(|s| s.to_string()).collect();
+            let names = parts[1..]
+                .iter()
+                .map(|s| script_name(s))
+                .collect::<Result<Vec<_>, _>>()?;
             elab_tactic::intros(proof_state, names)
         }
         "exact" => {
@@ -190,14 +244,11 @@ pub fn execute_simple_tactic(
         "admit" => admit(proof_state),
         "simp" => {
             if parts.len() > 1 && parts[1] == "only" {
-                let lemmas: Vec<String> = parts[2..]
-                    .iter()
-                    .map(|s| {
-                        s.trim_matches(|c| c == '[' || c == ']' || c == ',')
-                            .to_string()
-                    })
-                    .filter(|s| !s.is_empty())
-                    .collect();
+                let raw = parts[2..].join(" ");
+                let lemmas = names::words(&raw, true)?
+                    .into_iter()
+                    .map(script_name)
+                    .collect::<Result<Vec<_>, _>>()?;
                 simp_only(proof_state, lemmas)
             } else {
                 simp_default(proof_state)
@@ -206,8 +257,8 @@ pub fn execute_simple_tactic(
         "simp_all" => simp_all(proof_state),
         "ring" => ring(proof_state),
         "ring_nf" => ring_nf(proof_state),
-        "norm_num" => match at_target(&parts) {
-            Some(hyp) => norm_num_at(proof_state, hyp),
+        "norm_num" => match at_target(&parts)? {
+            Some(hyp) => norm_num_at(proof_state, &hyp),
             None => norm_num(proof_state),
         },
         "omega" => omega(proof_state),
@@ -238,7 +289,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            cases(proof_state, parts[1])
+            cases(proof_state, &script_name(parts[1])?)
         }
         "induction" => {
             if parts.len() < 2 {
@@ -247,7 +298,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            induction(proof_state, parts[1])
+            induction(proof_state, &script_name(parts[1])?)
         }
         "rewrite" | "rw" => {
             if parts.len() < 2 {
@@ -258,7 +309,7 @@ pub fn execute_simple_tactic(
             }
             let hyp = parts[1].trim_start_matches('←').trim_start_matches("<-");
             let reverse = parts[1].starts_with('←') || parts[1].starts_with("<-");
-            rewrite(proof_state, hyp, reverse)
+            rewrite(proof_state, &script_name(hyp)?, reverse)
         }
         "rw_ltr" => {
             if parts.len() < 2 {
@@ -267,7 +318,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            rewrite_ltr(proof_state, parts[1])
+            rewrite_ltr(proof_state, &script_name(parts[1])?)
         }
         "rw_rtl" => {
             if parts.len() < 2 {
@@ -276,14 +327,15 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            rewrite_rtl(proof_state, parts[1])
+            rewrite_rtl(proof_state, &script_name(parts[1])?)
         }
         "symm" => symm(proof_state),
         "funext" => {
             let name = parts
                 .get(1)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "x".to_string());
+                .map(|s| script_name(s))
+                .transpose()?
+                .unwrap_or_else(|| SurfaceName::generated_path("x"));
             funext(proof_state, &name)
         }
         "clear" => {
@@ -293,7 +345,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            clear(proof_state, parts[1])
+            clear(proof_state, &script_name(parts[1])?)
         }
         "rename" => {
             if parts.len() < 3 {
@@ -302,22 +354,27 @@ pub fn execute_simple_tactic(
                     expected: "<old-name> <new-name>".to_string(),
                 });
             }
-            rename(proof_state, parts[1], parts[2])
+            rename(
+                proof_state,
+                &script_name(parts[1])?,
+                &script_name(parts[2])?,
+            )
         }
         "by_contra" => {
             let name = parts
                 .get(1)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "h".to_string());
+                .map(|s| script_name(s))
+                .transpose()?
+                .unwrap_or_else(|| SurfaceName::generated_path("h"));
             by_contra(proof_state, &name)
         }
-        "push_neg" => match at_target(&parts) {
-            Some(hyp) => push_neg_at(proof_state, hyp),
+        "push_neg" => match at_target(&parts)? {
+            Some(hyp) => push_neg_at(proof_state, &hyp),
             None => push_neg(proof_state),
         },
         "contrapose" => {
             if parts.len() > 1 {
-                contrapose_hyp(proof_state, parts[1])
+                contrapose_hyp(proof_state, &script_name(parts[1])?)
             } else {
                 contrapose(proof_state)
             }
@@ -344,7 +401,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            subst(proof_state, parts[1])
+            subst(proof_state, &script_name(parts[1])?)
         }
         "subst_vars" => subst_vars(proof_state),
         "ac_rfl" => ac_rfl(proof_state),
@@ -366,7 +423,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            revert(proof_state, parts[1])
+            revert(proof_state, &script_name(parts[1])?)
         }
         "unfold" => {
             if parts.len() < 2 {
@@ -375,9 +432,9 @@ pub fn execute_simple_tactic(
                     expected: "definition name".to_string(),
                 });
             }
-            match at_target(&parts) {
-                Some(hyp) => unfold_at(proof_state, parts[1], hyp),
-                None => unfold(proof_state, parts[1]),
+            match at_target(&parts)? {
+                Some(hyp) => unfold_at(proof_state, &script_name(parts[1])?, &hyp),
+                None => unfold(proof_state, &script_name(parts[1])?),
             }
         }
         "fin_cases" => {
@@ -387,13 +444,14 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            fin_cases(proof_state, parts[1])
+            fin_cases(proof_state, &script_name(parts[1])?)
         }
         "ext" => {
             let name = parts
                 .get(1)
-                .map(|s| s.to_string())
-                .unwrap_or_else(|| "x".to_string());
+                .map(|s| script_name(s))
+                .transpose()?
+                .unwrap_or_else(|| SurfaceName::generated_path("x"));
             ext(proof_state, &name)
         }
         "injection" => {
@@ -403,7 +461,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            injection(proof_state, parts[1])
+            injection(proof_state, &script_name(parts[1])?)
         }
         "discriminate" => {
             if parts.len() < 2 {
@@ -412,7 +470,7 @@ pub fn execute_simple_tactic(
                     expected: "hypothesis name".to_string(),
                 });
             }
-            discriminate(proof_state, parts[1])
+            discriminate(proof_state, &script_name(parts[1])?)
         }
         "interval_cases" => {
             if parts.len() < 2 {
@@ -421,7 +479,7 @@ pub fn execute_simple_tactic(
                     expected: "variable name".to_string(),
                 });
             }
-            interval_cases(proof_state, parts[1])
+            interval_cases(proof_state, &script_name(parts[1])?)
         }
         "convert" => {
             if parts.len() < 2 {
@@ -521,8 +579,9 @@ fn kernel_to_tactic_context(local_ctx: &LocalContext) -> Vec<elab_tactic::LocalD
     local_ctx
         .iter()
         .map(|decl| elab_tactic::LocalDecl {
+            binder_info: decl.bi,
             fvar: decl.id,
-            name: decl.name.to_string(),
+            name: SurfaceName::from_name(decl.name.clone()),
             ty: decl.type_.clone(),
             value: decl.value.clone(),
         })
@@ -531,3 +590,6 @@ fn kernel_to_tactic_context(local_ctx: &LocalContext) -> Vec<elab_tactic::LocalD
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod typed_tests;

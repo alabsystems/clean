@@ -16,12 +16,15 @@
 //! validates that the declaration exists and the extern name is non-empty.
 //! Multi-backend declarations use `@[extern c "c_name" llvm "llvm_name"]`.
 //!
-//! `@[implemented_by impl_name]` is processed by `ImplementedBy.lean`. It
-//! validates that both the source declaration and the target implementation
-//! exist, and that their types are definitionally equal.
+//! `@[implemented_by impl_name]` is processed by `ImplementedByAttr.lean`. It
+//! resolves the target as an existing global constant, requires equal
+//! universe-parameter counts, and requires the target's type, instantiated at
+//! the declaration's universe parameters, to be STRUCTURALLY equal to the
+//! declaration's (`Expr` `==`, which ignores binder names and annotations —
+//! not definitional equality). [`validate_implemented_by`] is that rule.
 
 use clean_kernel::expr::ExprKind;
-use clean_kernel::{Environment, Expr, Name};
+use clean_kernel::{Environment, Expr, Level, Name};
 
 use crate::error::ElabError;
 
@@ -242,56 +245,110 @@ pub(crate) fn validate_extern_signature(
     })
 }
 
-/// Validate an `@[implemented_by impl_name]` binding.
+/// Validate an `@[implemented_by impl_name]` binding with Lean's rule
+/// (`src/Lean/Compiler/ImplementedByAttr.lean`, v4.30.0-rc2), after the
+/// declaration is registered and before the binding is:
 ///
-/// Checks that:
-/// 1. The declaration exists in the environment
-/// 2. The implementation name is non-empty
-/// 3. The implementation target exists in the environment (if registered)
+/// 1. `impl_name` must name a constant that ALREADY exists — a forward
+///    reference is Lean's "Unknown constant" (it resolves the argument with
+///    `realizeGlobalConstNoOverload` when the attribute is applied);
+/// 2. the two universe-parameter counts must be equal;
+/// 3. the implementation's type, instantiated at the declaration's universe
+///    parameters (positionally), must be structurally equal to the
+///    declaration's type — [`implemented_by_types_agree`], NOT definitional
+///    equality: Lean rejects `MyNat → MyNat` for `Nat → Nat` under
+///    `abbrev MyNat := Nat`;
+/// 4. the implementation must not be the declaration itself.
 ///
-/// Note: Full type-level definitional equality checking between the
-/// declaration and implementation types is deferred to the kernel's
-/// type checker. This function performs the elaboration-level validation.
+/// The compiler substitutes the implementation at every call
+/// (`clean_compiler::to_lcnf`), so a binding this accepts must be one Lean
+/// accepts: a mismatched type would run code of another type.
 ///
 /// # Errors
 ///
-/// Returns `Err` if validation fails.
+/// [`ElabError::InvalidImplementedBy`] with Lean's message: an empty or
+/// unregistered name is an unknown constant (the resolver,
+/// `crate::implemented_by::resolve_implemented_by`, has refused those before
+/// this runs), the rest are 2-4.
 pub(crate) fn validate_implemented_by(
     decl_name: &Name,
-    impl_name: &str,
+    impl_name: &Name,
     env: &Environment,
 ) -> Result<(), ElabError> {
-    if impl_name.is_empty() {
-        return Err(ElabError::Unsupported {
-            feature: format!(
-                "implemented_by attribute on '{decl_name}' has empty implementation name"
-            ),
-        });
+    use crate::implemented_by::ImplementedByDefect;
+    let refuse = |target: &Name, defect| ElabError::InvalidImplementedBy {
+        decl: decl_name.clone(),
+        target: target.to_string(),
+        defect,
+    };
+    let (Some(decl), Some(target)) = (env.get_const(decl_name), env.get_const(impl_name)) else {
+        let missing = if env.get_const(decl_name).is_none() {
+            decl_name
+        } else {
+            impl_name
+        };
+        return Err(refuse(missing, ImplementedByDefect::UnknownConstant));
+    };
+    if decl.level_params.len() != target.level_params.len() {
+        return Err(refuse(
+            impl_name,
+            ImplementedByDefect::LevelCount {
+                target_levels: target.level_params.len(),
+                decl_levels: decl.level_params.len(),
+            },
+        ));
     }
-
-    // Verify the source declaration exists
-    if env.get_const(decl_name).is_none() {
-        return Err(ElabError::UnknownIdent(format!(
-            "extern declaration '{decl_name}' not found in environment"
-        )));
+    let levels: Vec<Level> = decl
+        .level_params
+        .iter()
+        .map(|param| Level::param(param.clone()))
+        .collect();
+    let target_type = target
+        .type_
+        .instantiate_level_params_direct(&target.level_params, &levels);
+    if !implemented_by_types_agree(&decl.type_, &target_type) {
+        return Err(refuse(
+            impl_name,
+            ImplementedByDefect::TypeMismatch {
+                target_type: target_type.to_string(),
+                decl_type: decl.type_.to_string(),
+            },
+        ));
     }
-
-    // If the implementation is already registered, verify it exists too
-    let impl_n = Name::from_string(impl_name);
-    if env.get_const(&impl_n).is_some() {
-        // Both exist — check that the implementation is not the same as the
-        // declaration (self-referential implemented_by makes no sense).
-        if *decl_name == impl_n {
-            return Err(ElabError::Unsupported {
-                feature: format!("implemented_by on '{decl_name}' points to itself"),
-            });
-        }
+    if decl_name == impl_name {
+        return Err(refuse(impl_name, ImplementedByDefect::SelfImplementation));
     }
-    // If the implementation doesn't exist yet, that's OK — it may be
-    // defined later in the same file. The kernel will catch missing
-    // references at use sites.
-
     Ok(())
+}
+
+/// Lean's `Expr` `==` (`Expr.eqv`): structural equality up to binder names and
+/// binder annotations. Clean's `Expr` `==` also compares binder annotations,
+/// and Lean accepts `def slow {α} (x : α)` implemented by `def fast (α) (x : α)`.
+/// Anything this does not recognise falls back to Clean's stricter `==`, so it
+/// can only refuse more than Lean, never accept a pair Lean rejects.
+pub(crate) fn implemented_by_types_agree(a: &Expr, b: &Expr) -> bool {
+    if a == b {
+        return true;
+    }
+    match (a.kind(), b.kind()) {
+        (ExprKind::Pi(_, ta, ba), ExprKind::Pi(_, tb, bb))
+        | (ExprKind::Lam(_, ta, ba), ExprKind::Lam(_, tb, bb))
+        | (ExprKind::App(ta, ba), ExprKind::App(tb, bb)) => {
+            implemented_by_types_agree(ta, tb) && implemented_by_types_agree(ba, bb)
+        }
+        (ExprKind::Let(_, ta, va, ba, _), ExprKind::Let(_, tb, vb, bb, _)) => {
+            implemented_by_types_agree(ta, tb)
+                && implemented_by_types_agree(va, vb)
+                && implemented_by_types_agree(ba, bb)
+        }
+        (ExprKind::MData(ma, ia), ExprKind::MData(mb, ib)) => {
+            ma == mb && implemented_by_types_agree(ia, ib)
+        }
+        (ExprKind::Proj(na, ia, ea), ExprKind::Proj(nb, ib, eb)) => {
+            na == nb && ia == ib && implemented_by_types_agree(ea, eb)
+        }
+        _ => false,
+    }
 }
 
 /// Process a complete extern attribute during elaboration.

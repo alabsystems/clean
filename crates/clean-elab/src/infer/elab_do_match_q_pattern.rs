@@ -52,8 +52,7 @@ impl<'a> ElabCtx<'a> {
                 if let Some(result) = match_result {
                     let mut alias_fvars = Vec::new();
                     for alias in &aliases {
-                        alias_fvars
-                            .push(self.push_local((*alias).to_string(), scrutinee_ty.clone()));
+                        alias_fvars.push(self.push_local((*alias).clone(), scrutinee_ty.clone()));
                     }
 
                     for (name, _val, ty) in &result.bindings {
@@ -73,7 +72,7 @@ impl<'a> ElabCtx<'a> {
                     let mut result_expr = self.metas.instantiate(&body);
                     for (binding_name, val, ty) in result.bindings.into_iter().rev() {
                         result_expr = Expr::let_named(
-                            Name::from_string(&binding_name),
+                            binding_name.name().clone(),
                             ty,
                             val,
                             result_expr,
@@ -93,7 +92,7 @@ impl<'a> ElabCtx<'a> {
                     return Ok(result_expr);
                 }
 
-                tried_patterns.push(format!("{pattern:?}"));
+                tried_patterns.push(crate::error_render::pattern(pattern));
                 continue;
             }
 
@@ -109,7 +108,7 @@ impl<'a> ElabCtx<'a> {
                     let body_inst = self.metas.instantiate(&body);
                     let body_abs = body_inst.abstract_fvar(fvar);
                     return Ok(Expr::let_named(
-                        Name::from_string(name),
+                        name.name().clone(),
                         scrutinee_ty.clone(),
                         scrutinee.clone(),
                         body_abs,
@@ -118,7 +117,8 @@ impl<'a> ElabCtx<'a> {
                 }
                 _ => {
                     return Err(ElabError::NotImplemented(format!(
-                        "q-do-match with non-q pattern: {pattern:?}"
+                        "q-do-match with non-q pattern: {}",
+                        crate::error_render::pattern(pattern)
                     )));
                 }
             }
@@ -132,9 +132,10 @@ impl<'a> ElabCtx<'a> {
             Err(ElabError::TypeMismatch {
                 expected: format!("scrutinee to match one of: {}", tried_patterns.join(", ")),
                 actual: format!(
-                    "scrutinee {:?} of type {:?} did not match any q-pattern. \
+                    "scrutinee {} of type {} did not match any q-pattern. \
                     Consider adding a wildcard pattern `| _ => ...`",
-                    scrutinee, scrutinee_ty
+                    crate::error_render::term(scrutinee),
+                    crate::error_render::term(scrutinee_ty)
                 ),
             })
         }

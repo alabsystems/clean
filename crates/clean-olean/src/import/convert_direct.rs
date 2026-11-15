@@ -7,10 +7,7 @@
 //! Converts `LoadConstant` entries to kernel types using `read_and_convert_expr`
 //! instead of the two-phase `ParsedExpr` -> `convert_expr` pipeline.
 
-use super::convert::{
-    elides_value, infer_recursor_arg_order, proof_value_or_placeholder, ConvertedConstant,
-};
-use super::convert_expr::convert_level_params;
+use super::convert::{elides_value, proof_value_or_placeholder, ConvertedConstant};
 use super::convert_expr_direct::{read_and_convert_expr_with_memo, RegionPtrCache};
 use super::load_parse::LoadConstant;
 use super::{ExprInternCache, ExprSharingStats, ImportError};
@@ -18,8 +15,10 @@ use crate::module::{ConstantKind, ReducibilityHintsData};
 use crate::region::CompactedRegion;
 use clean_kernel::env::{Declaration, ProofValueElision};
 use clean_kernel::expr::Expr;
-use clean_kernel::inductive::{ConstructorVal, InductiveVal, RecursorRule, RecursorVal};
-use clean_kernel::name::Name;
+use clean_kernel::inductive::{
+    ConstructorVal, InductiveVal, RecursorArgOrder, RecursorRule, RecursorVal,
+};
+use clean_kernel::name::{Name, NameInner};
 
 /// Convert a load-ready constant directly from binary, bypassing ParsedExpr.
 pub(super) fn convert_load_constant(
@@ -94,12 +93,8 @@ fn convert_load_inductive(
     let mut stats = ExprSharingStats::default();
     let result = (|| {
         let type_ = convert_type_expr(constant, region, intern, memo, &mut stats)?;
-        let level_params: Vec<Name> = constant
-            .level_params
-            .iter()
-            .map(|s| Name::interned(s))
-            .collect();
-        let name = Name::interned(&constant.name);
+        let level_params = constant.kernel_level_params.clone();
+        let name = constant.kernel_name.clone();
         let ind_data = constant.inductive_val.as_ref();
 
         Ok(InductiveVal {
@@ -108,13 +103,8 @@ fn convert_load_inductive(
             type_,
             num_params: ind_data.map_or(0, |d| d.num_params),
             num_indices: ind_data.map_or(0, |d| d.num_indices),
-            all_names: ind_data.map_or_else(
-                || vec![name.clone()],
-                |d| d.all.iter().map(|s| Name::interned(s)).collect(),
-            ),
-            constructor_names: ind_data
-                .map(|d| d.ctors.iter().map(|s| Name::interned(s)).collect())
-                .unwrap_or_default(),
+            all_names: constant.kernel_all.clone(),
+            constructor_names: constant.kernel_ctors.clone(),
             is_recursive: ind_data.is_some_and(|d| d.is_rec),
             is_reflexive: ind_data.is_some_and(|d| d.is_reflexive),
             is_large_elim: true, // placeholder, recomputed in fixup pass
@@ -133,27 +123,18 @@ fn convert_load_constructor(
     let mut stats = ExprSharingStats::default();
     let result = (|| {
         let type_ = convert_type_expr(constant, region, intern, memo, &mut stats)?;
-        let level_params: Vec<Name> = constant
-            .level_params
-            .iter()
-            .map(|s| Name::interned(s))
-            .collect();
-        let name = Name::interned(&constant.name);
+        let level_params = constant.kernel_level_params.clone();
+        let name = constant.kernel_name.clone();
         let ctor_data = constant.constructor_val.as_ref();
 
         Ok(ConstructorVal {
             name: name.clone(),
-            inductive_name: ctor_data.map_or_else(
-                || {
-                    Name::interned(
-                        constant
-                            .name
-                            .rsplit_once('.')
-                            .map_or(constant.name.as_str(), |(p, _)| p),
-                    )
-                },
-                |d| Name::interned(&d.induct),
-            ),
+            inductive_name: constant.kernel_inductive.clone().ok_or_else(|| {
+                ImportError::ExprConversion {
+                    name: constant.name.clone(),
+                    message: "missing typed constructor owner".into(),
+                }
+            })?,
             level_params,
             type_,
             num_params: ctor_data.map_or(0, |d| d.num_params),
@@ -176,29 +157,25 @@ fn convert_load_recursor(
     let mut stats = ExprSharingStats::default();
     let result = (|| {
         let type_ = convert_type_expr(constant, region, intern, memo, &mut stats)?;
-        let level_params: Vec<Name> = constant
-            .level_params
-            .iter()
-            .map(|s| Name::interned(s))
-            .collect();
-        let name = Name::interned(&constant.name);
-
-        let inductive_name = Name::interned(
-            constant
-                .name
-                .strip_suffix(".rec")
-                .or_else(|| constant.name.strip_suffix(".recOn"))
-                .or_else(|| constant.name.strip_suffix(".casesOn"))
-                .or_else(|| constant.name.strip_suffix(".brecOn"))
-                .unwrap_or(&constant.name),
-        );
+        let level_params = constant.kernel_level_params.clone();
+        let name = constant.kernel_name.clone();
+        // `T.rec_<n>` is a nested block's auxiliary recursor; like `T.rec` it
+        // belongs to the family head `T` (the kernel's nested restore names it
+        // the same way, and the imported-family check compares this field).
+        let inductive_name = match name.inner() {
+            NameInner::Str(parent, suffix)
+                if matches!(suffix.as_ref(), "rec" | "recOn" | "casesOn" | "brecOn")
+                    || super::convert::is_aux_recursor_suffix(suffix.as_ref()) =>
+            {
+                parent.as_ref().clone()
+            }
+            _ => name.clone(),
+        };
 
         let rec_data = constant.recursor_val.as_ref();
 
-        let mutual_inductives: Vec<Name> = rec_data.map_or_else(
-            || vec![inductive_name.clone()],
-            |d| d.all.iter().map(|s| Name::interned(s)).collect(),
-        );
+        let mutual_inductives: Vec<Name> =
+            rec_data.map_or_else(|| vec![inductive_name.clone()], |d| d.all.clone());
 
         let param_count = rec_data.map_or(0, |d| d.num_params);
 
@@ -229,7 +206,7 @@ fn convert_load_recursor(
                         };
 
                         Ok(RecursorRule {
-                            constructor_name: Name::interned(&r.ctor),
+                            constructor_name: r.ctor.clone(),
                             num_fields: r.num_fields,
                             recursive_fields: vec![], // Placeholder, filled in later
                             rhs,
@@ -240,7 +217,17 @@ fn convert_load_recursor(
             .transpose()?
             .unwrap_or_default();
 
-        let arg_order = infer_recursor_arg_order(&constant.name);
+        let arg_order = match name.inner() {
+            NameInner::Str(_, suffix)
+                if suffix.as_ref() == "recOn"
+                    || suffix.as_ref() == "casesOn"
+                    || suffix.starts_with("recOn_")
+                    || suffix.starts_with("casesOn_") =>
+            {
+                RecursorArgOrder::MajorAfterMotive
+            }
+            _ => RecursorArgOrder::MajorAfterMinors,
+        };
 
         let rec_val = RecursorVal {
             name: name.clone(),
@@ -283,8 +270,8 @@ fn convert_load_other(
         } else {
             convert_value_expr(constant, region, intern, memo, &mut stats)?
         };
-        let level_params = convert_level_params(&constant.level_params);
-        let name = Name::interned(&constant.name);
+        let level_params = constant.kernel_level_params.clone();
+        let name = constant.kernel_name.clone();
 
         match constant.kind {
             ConstantKind::Axiom | ConstantKind::Quot => Ok(Declaration::Axiom {

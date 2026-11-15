@@ -9,8 +9,17 @@
 **Current Release:** mathverse-v0.9.0 (2026-04-01) — published as GitHub Release assets on `alabsystems/Clean`.
 **Total (census):** 30,049,434 declarations counted across 238 census target repos in 229.7 seconds.
 **Total (converted pipeline):** 3,254,463 declarations across 107 `.mathverse` shards (`shards_produced: 107`; release manifest `mathverse_summary.json`).
-**Importer source systems:** historical 68-system figure; later provenance uses
-69 importer enum variants (see `SourceSystem` in `crates/clean-mathverse/src/types.rs`).
+**Importer source systems:** **70** — the `SourceSystem` enum in
+`crates/clean-mathverse/src/types.rs`, `Lean4 = 0` through `Cake = 69`. The
+figure has drifted twice and both drifts are recorded here rather than
+overwritten: a historical 68-system count, then 69, then 70 when `Cake` landed
+on 2026-06-10 (`f47e4f128`). **The 69 stood for three months.** What was
+supposed to catch it is
+`crates/clean-mathverse/tests/provenance_consistency.rs`, which re-parses the
+enum and asserts the artifact matches — it is RED at HEAD and no gate, hook leg
+or suite row runs it (`ls data/suite_state | grep -c mathverse` is 0). Run it
+before trusting this number:
+`cargo test -p clean-mathverse --test provenance_consistency`.
 **Note:** The headline 30M is a keyword-scan census. See MATHVERSE_KERNEL_COMPATIBILITY.md for what Clean can actually kernel-type-check (measured 156/47,301 on Init, 0.33%).
 
 ### Canonical Count Vocabulary (#3623)
@@ -19,7 +28,7 @@ Four separate numbers describe the library at different layers. They answer diff
 
 | Field | Value | What it counts |
 |------|-------|----------------|
-| `importer_source_systems` | 69 | `SourceSystem` enum variants. Canonical importer count. |
+| `importer_source_systems` | 70 | `SourceSystem` enum variants (`Lean4 = 0` … `Cake = 69`). Canonical importer count. |
 | `provenance_records` | 131 | Distinct repo clones with reproducibility metadata (`.sources` length). |
 | `census_target_repos` | 238 | Repositories scanned by the wide census (this file). |
 | `shards_produced` | 107 | `.mathverse` shard files in release `mathverse-v0.9.0`. |

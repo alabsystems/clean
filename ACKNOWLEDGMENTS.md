@@ -61,6 +61,47 @@ from-scratch, `#![forbid(unsafe_code)]` Rust kernel that is simultaneously a
 Lean-4-compatible production checker and a self-verified artifact, with the
 trusted base collapsed toward three foundational axioms.
 
+### Kernel self-proof route (2026-11-12)
+
+What the self-proof plan takes from each, and what it does not, is recorded in
+docs/analysis/2026-11-12-lean4lean-port-decision.md.
+No source from any of them is in this repository.
+
+- **Lean4Lean** (above; Apache-2.0): its typing rules are the named comparison
+  for rules of the CIC_L specification under `theories/cic_l`.
+- **nanoda_lib** — <https://github.com/ammkrn/nanoda_lib> (Apache-2.0). An
+  independent Lean 4 type checker in Rust, selected as the first external
+  member of the re-check quorum. Unit Q3 qualifies commit
+  `0da9f98feadd3a0a2ef4b3dbcf52a298a6fef929` without vendoring its source;
+  licence, source, lockfile and binary digests are in `data/nanoda_q3_pin.json`,
+  and measured results in `reports/self-proof-q3-2026-11-12/`.
+- **lean4export** — <https://github.com/leanprover/lean4export> (Lean FRO,
+  Apache-2.0). Its NDJSON format is the one Clean's export writer writes
+  (unit Q1). `scripts/lean_export_mint.sh` builds the exporter at a pinned
+  commit outside the repository; the Q1 differential compares its exports
+  with Clean's, and `scripts/lean_export_replay.sh --reader upstream`
+  compiles its parser (`Export/Parse.lean`) from that checkout to read
+  Clean's exports for Lean's kernel (and, with `--against`, to compare them
+  with the environment Lean imports). One export it wrote is a test fixture
+  under `crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2/lean4export_minted/`;
+  its source is not vendored.
+- **Lean Kernel Arena** — <https://github.com/leanprover/lean-kernel-arena>.
+  Its Round 2026-09 tests (Apache-2.0) are vendored under
+  `crates/clean-olean/tests/fixtures/kernel_arena/round-2026-09` and qualify
+  external checkers before their verdicts count.
+- **cic-model** — <https://github.com/barras/cic-model>. Set-theoretical
+  models of type theories up to an extensional Calculus of Inductive
+  Constructions, in Coq. Ideas only; the repository carries no licence.
+- **lean-inductive-models** — J. Breitner,
+  <https://github.com/nomeata/lean-inductive-models> (Apache-2.0). Translation
+  validation of Lean inductives over a five-type basis. Unit D4 built and ran
+  commit `86caadd58c70f0cfc8455748994a781402276164` over pinned Init without
+  vendoring its source; licence, build-file, binary and export digests are in
+  `reports/self-proof-d4-2026-11-13/README.md`, and its measurement is why the
+  self-proof plan models inductives through checked certificates
+  (analysis). It is an
+  untrusted producer the plan may use, not a dependency.
+
 ## TLA+ and TLAPS
 
 `Clean-tla` depends on the public `tla-core` crate from the public <https://github.com/alabsystems/ty> repository. The names differ because `tla2` is the repository/workspace name, while `tla-core` is the reusable library crate inside it that Clean imports. Clean reuses that shared public TLA+ AST and TLAPS obligation model instead of maintaining a divergent second TLA+ front end.

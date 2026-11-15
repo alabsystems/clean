@@ -125,28 +125,22 @@ fn known_options_are_accepted() {
 // ----------------------------------------------------------------------------
 
 #[test]
-fn unknown_attribute_is_tolerated_as_noop() {
-    // Drop-in behavior (supersedes the strict B21 probe attributes_options/p14):
-    // an UNKNOWN (unmodeled) attribute is tolerated as a no-op — real Lean core +
-    // Mathlib register hundreds of attributes via macros (`@[grind]`, `@[simps]`,
-    // `@[mfld_simps]`, `@[nolint]`, …) that Clean does not enumerate, and a
-    // declaration carrying one MUST still elaborate. Clean cannot act on an
-    // attribute it does not model, so ignoring it is sound; the decl is still
-    // kernel-checked. (A MODELED attribute given the wrong target stays loud — see
-    // `attribute_ext2` `validate_attribute_for_decl`.)
-    let result = try_elaborate("@[notARealAttribute] def bad14 : Nat := 1");
+fn unknown_attribute_is_refused_by_name() {
+    let error = try_elaborate("@[notARealAttribute] def bad14 : Nat := 1")
+        .expect_err("Lean rejects an attribute no module registered");
     assert!(
-        result.is_ok(),
-        "unknown attribute must be tolerated so `bad14` still elaborates, got: {result:?}"
+        error.contains("Unknown attribute") && error.contains("notARealAttribute"),
+        "{error}"
     );
 }
 
 #[test]
-fn unknown_attribute_in_command_form_is_tolerated() {
-    let result = try_elaborate("def cmdTarget : Nat := 1\nattribute [notARealAttribute] cmdTarget");
+fn unknown_attribute_in_command_form_is_refused() {
+    let error = try_elaborate("def cmdTarget : Nat := 1\nattribute [notARealAttribute] cmdTarget")
+        .expect_err("command-form attributes use the same name validation");
     assert!(
-        result.is_ok(),
-        "command-form unknown attribute must be tolerated, got: {result:?}"
+        error.contains("Unknown attribute") && error.contains("notARealAttribute"),
+        "{error}"
     );
 }
 

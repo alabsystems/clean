@@ -18,13 +18,43 @@ impl MetaId {
     }
 }
 
+/// Which metavariables the unifier may restrict to a smaller local context.
+///
+/// Lean's `MetavarKind` (`Lean/MetavarContext.lean`) reduced to the one
+/// distinction Clean's unifier reads: `CheckAssignment.checkMVar`
+/// (`Lean/Meta/ExprDefEq.lean:856-890`) approximates the context of a NATURAL
+/// metavariable and refuses a synthetic-opaque one.
+///
+/// The default is [`MetaKind::Opaque`], deliberately the conservative side of
+/// Lean's rule: Clean has consumers that hold on to a metavariable's identity
+/// and scope — the deferred-instance list (`resolve_deferred_instances`), the
+/// tactic goal list and its assignment-scope check, and the `refine` bridge's
+/// hole collector — and a meta minted by an unaudited site must never have its
+/// scope narrowed behind their backs. Only the minting sites that correspond
+/// to Lean's natural metavariables (implicit arguments, anonymous `_` holes,
+/// unannotated binder types) opt in with [`MetaKind::Natural`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum MetaKind {
+    /// Lean's `.natural`: its local context may be approximated.
+    Natural,
+    /// Every other metavariable: never approximated.
+    #[default]
+    Opaque,
+}
+
 /// A metavariable
 #[derive(Debug, Clone)]
 pub struct MetaVar {
     /// The type of the metavariable
     pub ty: Expr,
     /// Local context visible when the metavariable was created.
-    pub locals: Vec<(String, clean_kernel::FVarId, Expr)>,
+    ///
+    /// Only ever NARROWED after creation, by the unifier's `ctxApprox` port
+    /// (`MetaState::restrict_locals`), and only for a [`MetaKind::Natural`]
+    /// metavariable.
+    pub locals: Vec<(clean_parser::SurfaceName, clean_kernel::FVarId, Expr)>,
+    /// Whether the unifier may approximate [`Self::locals`] (see [`MetaKind`]).
+    pub(crate) kind: MetaKind,
     /// The assigned value (if any)
     pub assignment: Option<Expr>,
     /// Source span of the surface hole (`_`) that created this metavariable,
@@ -69,6 +99,14 @@ pub(super) enum UndoRecord {
         /// The metavariable that was created
         id: MetaId,
     },
+    /// A metavariable's captured local scope was narrowed (`ctxApprox`).
+    /// On undo: restore the previous scope.
+    MetaLocals {
+        /// The metavariable whose scope was narrowed
+        id: MetaId,
+        /// The scope before narrowing
+        old_locals: Vec<(clean_parser::SurfaceName, clean_kernel::FVarId, Expr)>,
+    },
     /// The fresh metavariable id cursor changed.
     ///
     /// This is independent from `MetaCreate`: importing an existing high-id
@@ -91,6 +129,10 @@ pub(super) enum UndoRecord {
     /// its. Both removed 2026-08-26 with the map: U2 stage-3 deferral 2,
     /// `docs/analysis/u2-stage3-deferrals-2026-08-26.md`.)
     LevelPostpone,
+    /// A numeral was postponed (pushed onto `postponed_numerals`). On undo:
+    /// pop it, so an entry never outlives the branch that minted its
+    /// metavariable (whose id a later branch may re-mint).
+    NumeralPostpone,
     /// A level parent pointer was set (union-find)
     LevelParent {
         /// The parameter name

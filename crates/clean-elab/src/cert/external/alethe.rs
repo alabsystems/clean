@@ -41,6 +41,23 @@ pub struct ExternalAletheCert {
 /// - `VerifierNotAvailable`: ay-smt feature not enabled
 /// - `ProofVerificationFailed`: Carcara encountered an error
 pub fn verify_alethe_certificate(cert: &ExternalAletheCert) -> Result<bool, ExternalCertError> {
+    verify_alethe_certificate_until(cert, None)
+}
+
+/// [`verify_alethe_certificate`], refused once `deadline` passes.
+///
+/// Carcara's resource budget bounds what one proof step builds, not how long a proof takes, so a
+/// caller checking certificates it does not trust gives a deadline: the checker reads it before
+/// and after every command and its comparisons as they go
+/// (`third-party/carcara/DOWNSTREAM.md`, "The checker stops at a deadline").
+///
+/// # Errors
+/// - those of [`verify_alethe_certificate`]
+/// - `Timeout`: the check reached `deadline` before it ended (the proof is not accepted)
+pub fn verify_alethe_certificate_until(
+    cert: &ExternalAletheCert,
+    deadline: Option<std::time::Instant>,
+) -> Result<bool, ExternalCertError> {
     ensure_version(&cert.version)?;
     if cert.problem.is_empty() {
         return Err(ExternalCertError::invalid_schema(
@@ -53,17 +70,34 @@ pub fn verify_alethe_certificate(cert: &ExternalAletheCert) -> Result<bool, Exte
         ));
     }
 
-    #[cfg(feature = "ay-smt")]
+    #[cfg(all(feature = "ay-smt", not(target_arch = "wasm32")))]
     {
-        use clean_auto::bridge::ay_contract::verify_alethe_proof;
-        match verify_alethe_proof(&cert.problem, &cert.proof) {
+        use clean_auto::bridge::ay_contract::verify_alethe_proof_until;
+        match verify_alethe_proof_until(&cert.problem, &cert.proof, deadline) {
             Ok(valid) => Ok(valid),
+            #[cfg(feature = "carcara-verify")]
+            Err(e @ clean_auto::bridge::ay_contract::VerifyError::CarcaraDeadline(_)) => {
+                Err(ExternalCertError {
+                    code: super::error::ExternalCertErrorCode::Timeout,
+                    detail: e.to_string(),
+                })
+            }
             Err(e) => Err(ExternalCertError::proof_verification_failed(e.to_string())),
         }
     }
 
+    // The vendored checker is native: the wasm32 contract links none.
+    #[cfg(all(feature = "ay-smt", target_arch = "wasm32"))]
+    {
+        let _ = deadline;
+        Err(ExternalCertError::verifier_not_available(
+            "no Alethe proof checker is linked on wasm32".to_string(),
+        ))
+    }
+
     #[cfg(not(feature = "ay-smt"))]
     {
+        let _ = deadline;
         Err(ExternalCertError::verifier_not_available(
             "ay-smt feature required for Alethe proof verification".to_string(),
         ))

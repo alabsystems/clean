@@ -219,7 +219,7 @@ pub(crate) mod proof_formats {
 
 impl ProofFormat {
     /// Create an Alethe format with the current standard version
-    pub fn alethe() -> Self {
+    pub(crate) fn alethe() -> Self {
         Self::Alethe {
             version: proof_formats::ALETHE_VERSION.to_string(),
         }
@@ -227,19 +227,19 @@ impl ProofFormat {
 
     /// Create an LRAT format with text output
     #[cfg(test)]
-    pub fn lrat_text() -> Self {
+    pub(crate) fn lrat_text() -> Self {
         Self::Lrat { binary: false }
     }
 
     /// Create an LRAT format with binary output
     #[cfg(test)]
-    pub fn lrat_binary() -> Self {
+    pub(crate) fn lrat_binary() -> Self {
         Self::Lrat { binary: true }
     }
 
     /// Get the format identifier string
     #[cfg(test)]
-    pub fn format_id(&self) -> &'static str {
+    pub(crate) fn format_id(&self) -> &'static str {
         match self {
             Self::None => "none",
             Self::Alethe { .. } => "alethe",
@@ -250,7 +250,7 @@ impl ProofFormat {
 
     /// Get the file extension for this format
     #[cfg(test)]
-    pub fn file_extension(&self) -> &'static str {
+    pub(crate) fn file_extension(&self) -> &'static str {
         match self {
             Self::None => "",
             Self::Alethe { .. } => proof_formats::ALETHE_EXT,

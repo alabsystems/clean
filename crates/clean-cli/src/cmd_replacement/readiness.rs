@@ -34,6 +34,10 @@ pub(crate) struct ReplacementReadinessAccounting {
     pub(crate) blocked_required_row_count: usize,
     pub(crate) pending_evidence_required_row_count: usize,
     pub(crate) in_progress_required_row_count: usize,
+    /// Rows whose evidence is VACUOUS (`ReplacementStatus::Unknown`). Its own
+    /// bucket, so blocked + pending + in-progress + unknown still partitions
+    /// the non-green rows.
+    pub(crate) unknown_required_row_count: usize,
     pub(crate) launch_blocking_row_ids: Vec<&'static str>,
     pub(crate) rust_first_launch_blocking_command_ids: Vec<&'static str>,
     pub(crate) python_wrapper_count: usize,
@@ -178,6 +182,10 @@ impl ReplacementReadinessAccounting {
             in_progress_required_row_count: required_rows
                 .iter()
                 .filter(|row| row.effective_status == ReplacementStatus::InProgress)
+                .count(),
+            unknown_required_row_count: required_rows
+                .iter()
+                .filter(|row| row.effective_status == ReplacementStatus::Unknown)
                 .count(),
             launch_blocking_row_ids,
             rust_first_launch_blocking_command_ids,

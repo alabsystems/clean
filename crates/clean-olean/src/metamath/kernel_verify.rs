@@ -460,7 +460,7 @@ pub fn kernel_verify_database(db: &Database) -> MetamathResult<KernelVerifyRepor
     kernel_verify_database_prefix(db, usize::MAX)
 }
 
-/// Like [`kernel_verify_database_prefix`] but skips collecting `verified_exprs`
+/// Like `kernel_verify_database_prefix` but skips collecting `verified_exprs`
 /// (the per-theorem `(name, type, value)` tuples used only for Mathverse export).
 /// At full set.mm scale those clones roughly DOUBLE peak memory and trigger
 /// macOS memory-compressor thrashing; a pure verify/count pass (e.g. `mm_kverify`)
@@ -561,20 +561,20 @@ pub fn kernel_verify_pass1_types(
 ///
 /// # Errors
 /// See [`kernel_verify_database`].
-pub fn kernel_verify_database_prefix(
+pub(crate) fn kernel_verify_database_prefix(
     db: &Database,
     max_provables: usize,
 ) -> MetamathResult<KernelVerifyReport> {
     kernel_verify_database_prefix_impl(db, max_provables, CollectMode::Collect, TwoPass::Single)
 }
 
-/// Like [`kernel_verify_database_prefix`] but STREAMS each verified theorem's
+/// Like `kernel_verify_database_prefix` but STREAMS each verified theorem's
 /// `(name, type, value)` to `sink` and then immediately drops the proof value
 /// (`forget_value`), so values never accumulate. This keeps peak memory bounded
 /// for full-corpus Mathverse export (the alternative — collecting all ~25-30k
 /// values into `verified_exprs` while the Environment also retains them — needs
 /// ~90 GB). `report.verified_exprs` stays empty; the sink is the consumer.
-/// Verified/failed/skipped counts are identical to [`kernel_verify_database_prefix`].
+/// Verified/failed/skipped counts are identical to `kernel_verify_database_prefix`.
 ///
 /// # Errors
 /// See [`kernel_verify_database`].
@@ -1899,12 +1899,13 @@ fn build_tree(
         }
     }
 
-    if stack.len() != 1 {
-        return Err(MetamathError::FinalResultMismatch {
+    // Exactly one entry must be left: the proof's conclusion.
+    match (stack.pop(), stack.is_empty()) {
+        (Some(result), true) => Ok(result),
+        _ => Err(MetamathError::FinalResultMismatch {
             theorem: theorem.label.clone(),
-        });
+        }),
     }
-    Ok(stack.pop().expect("stack length checked"))
 }
 
 /// Apply one labelled proof step: push the corresponding stack entry and return

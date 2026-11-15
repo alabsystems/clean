@@ -4,7 +4,6 @@
 
 //! C-header regression tests for inline `clean_reset` behavior.
 
-use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -18,10 +17,6 @@ fn find_c_compiler() -> Option<&'static str> {
             .map(|output| output.status.success())
             .unwrap_or(false)
     })
-}
-
-fn runtime_include_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("include")
 }
 
 fn compile_and_run_header_only_c(c_source: &str) -> Option<String> {
@@ -49,7 +44,10 @@ fn compile_and_run_header_only_c(c_source: &str) -> Option<String> {
         .arg("-Wall")
         .arg("-Wextra")
         .arg("-Werror")
-        .arg(format!("-I{}", runtime_include_dir().display()))
+        // The crate's resolver, not a bare compile-time path: it serves
+        // `include/` only when that holds the embedded header and otherwise
+        // materializes the embedded copy (see `clean_runtime::include_dir`).
+        .arg(format!("-I{}", clean_runtime::include_dir().display()))
         .arg("-o")
         .arg(&binary_path)
         .arg(&source_path)

@@ -150,11 +150,16 @@ EFFECT_RULES: tuple[tuple[str, str, str], ...] = (
     ),
     ("E-ERRVAL", r"std::io::ErrorKind::|std::io::Error::new", "error-value"),
     ("E-NOIO", r"io::Cursor|\bmap_anon\s*\(", "in-memory-no-io"),
+    ("E-FNITEM", r"\bfs::DirEntry::[a-z_]+\b(?!\s*\()", "fn-item-path"),
     ("E-ENV", r"\benv::var(?:_os)?\s*\(", "read-env"),
     ("E-PID", r"std::process::id\s*\(", "read-ambient"),
     ("E-PIPE", r"\b(?:stdin|stdout|stderr)\s*\.", "process-stream"),
     ("E-SPAWN", r"\bCommand::new\b|\bStdio::", "spawn-process"),
-    ("E-STAT", r"\bfs::metadata\s*\(", "stat-file"),
+    (
+        "E-STAT",
+        r"\bfs::metadata\s*\(|\bfs::symlink_metadata\s*\(|\bfs::canonicalize\s*\(",
+        "stat-file",
+    ),
     ("E-READDIR", r"\bread_dir\s*\(", "read-dir"),
     (
         "E-READ",
@@ -177,11 +182,16 @@ EFFECT_RULE_DOC: dict[str, str] = {
     "E-ERRVAL": "an io::Error VALUE is constructed or inspected (`ErrorKind::…`, `Error::new`) — "
     "error plumbing, no syscall",
     "E-NOIO": "an in-memory buffer wearing an IO name (`io::Cursor`, `MmapMut::map_anon`) — no file",
+    "E-FNITEM": "a function ITEM named as a value (`sort_by_key(fs::DirEntry::file_name)`) — the path "
+    "mentions an IO type but issues no syscall; the call form is deliberately NOT matched, so writing "
+    "one aborts the derivation as unclassified rather than inheriting this rule",
     "E-ENV": "an environment-variable read (`env::var`/`env::var_os`)",
     "E-PID": "ambient process state (`std::process::id()`)",
     "E-PIPE": "a child process's stdin/stdout/stderr stream is read or written",
     "E-SPAWN": "a child process is configured or spawned (`Command::new`, `Stdio::…`)",
-    "E-STAT": "a file's metadata is read without reading its content (`fs::metadata`)",
+    "E-STAT": "a file's metadata is read without reading its content — `fs::metadata`, "
+    "`fs::symlink_metadata` (the same, not following a final symlink), and `fs::canonicalize` "
+    "(resolves the path through the filesystem and returns it; no content is read)",
     "E-READDIR": "a directory is enumerated (`read_dir`)",
     "E-READ": "a file's CONTENT is read (`fs::read`, `read_to_string`, `File::open`, `Mmap::map`, "
     "`BufReader::new`)",
@@ -199,6 +209,7 @@ DEPENDENCE: dict[str, str] = {
     "declaration-type": "verdict-irrelevant",
     "error-value": "verdict-irrelevant",
     "in-memory-no-io": "verdict-irrelevant",
+    "fn-item-path": "verdict-irrelevant",
     "write-file": "success-only",
     "read-file": "content-bearing",
     "read-dir": "content-bearing",
@@ -299,27 +310,91 @@ CONTRACTS: tuple[dict, ...] = (
     },
     {
         "id": "C-STAT-FRESH",
-        "title": "equal metadata implies equal content",
+        "title": "a metadata read names the same object the content read returns",
         "effects": ("stat-file",),
-        "statement": "When a cache returns a previously parsed module because the file's mtime equals "
-        "the recorded mtime, the file's CONTENT equals the content that was parsed.",
-        "checks": (),
-        "holes": (
+        "statement": "When a metadata-only call (`symlink_metadata`, `canonicalize`) decides how a file "
+        "is treated or what key it is stored under, the object it answered about is the same object "
+        "whose CONTENT the surrounding capture reads.",
+        "checks": (
             (
-                "crates/clean-olean/src/import/mod.rs",
-                r"entry\.mtime\.is_some\(\) && entry\.mtime == mtime",
-                "the module cache's hit condition IS the assumption: mtime equality is taken as content "
-                "equality, and the hit returns an `Arc<ParsedModule>` that later feeds registration",
+                "crates/clean-olean/src/import/module_cache_direct.rs",
+                r"Some\(module\) if module\.identity == captured\.identity",
+                "the module cache's hit condition is CONTENT identity, not metadata: every lookup "
+                "re-reads and re-hashes all three parts and compares blake3 digests, so no stat result "
+                "can serve stale bytes",
+            ),
+            (
+                "crates/clean-olean/src/import/module_cache_direct.rs",
+                r"digest: blake3::hash\(bytes\)",
+                "the identity a hit compares is a blake3 digest of the bytes actually read on this "
+                "lookup, together with their length",
+            ),
+            (
+                "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+                r"let metadata = file\.metadata\(\)\?;",
+                "metadata is read from the opened descriptor, rather than re-resolving its path; "
+                "this does not bind the earlier canonical pathname to that descriptor",
+            ),
+            (
+                "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+                r"if !metadata\.is_file\(\)",
+                "the opened descriptor must be a regular file before its admitted capture; this "
+                "does not make separate part captures coherent",
+            ),
+            (
+                "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+                r"if Stamp::of\(&current\) != self\.initial",
+                "a descriptor stamp is checked before reading; on Unix it includes device, inode, "
+                "mtime and ctime, so restoring only mtime does not defeat the instability check",
+            ),
+            (
+                "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+                r"if Stamp::of\(&after\) != self\.initial",
+                "the same descriptor is checked again after its bounded-length read and growth "
+                "probe; separate parts still need not come from one filesystem state",
             ),
         ),
-        "why_unproved": "mtime equality does not imply content equality — a same-second rewrite, an "
-        "archive restore, a `touch -r`, or a coarse-granularity filesystem all produce equal mtimes over "
-        "different bytes. (One direction IS fail-closed: a failed `stat` yields `None`, and the hit "
-        "condition requires `is_some()`, so a stat failure misses rather than falsely hits.)",
-        "discharge": "key the cache on something that implies content equality — at minimum "
-        "`(len, mtime_ns, dev, ino)` from the stat already being made, and a content digest on any path "
-        "whose output is used to MINT a verdict rather than to serve a query.",
+        "holes": (
+            (
+                "crates/clean-olean/src/import/module_cache_direct.rs",
+                r"let base = capture::required\(path, budget\)\?;",
+                "the capture is NOT atomic: `canonicalize` resolves the key, then the base is read from "
+                "the ORIGINAL path, then the two companions are captured separately, with optional "
+                "IR captured later. The filesystem may move between them, so the key can name one "
+                "object while the digests cover another, or the bundle can mix two generations",
+            ),
+            (
+                "crates/clean-olean/src/import/module_cache_direct/capture.rs",
+                r"match std::fs::symlink_metadata\(path\)",
+                "an absent file and a DANGLING SYMLINK are separated by a second syscall issued after "
+                "the failed open, so the two answers are about two moments; a link created in between "
+                "is reported as an unreadable companion and a link removed in between as an absent one",
+            ),
+        ),
+        "why_unproved": "content digests prevent stale cache hits and descriptor checks detect "
+        "per-part instability. They do not bind the earlier canonical key to the opened object, make "
+        "all part captures coherent, or make the absence probe atomic with the failed open.",
+        "discharge": "bind the cache key to the descriptor actually read, and bind the presence and "
+        "bytes of every base, server, private and optional IR part to a coherent manifest or snapshot. "
+        "Opening each part once does not by itself provide that multi-part coherence.",
         "owning_job": "R2b-STAT",
+        "history": (
+            "2026-09-09 (9329c2b2b, another lane): the hole this contract was written for is CLOSED at "
+            "the cause. `ModuleCache` keyed on `entry.mtime.is_some() && entry.mtime == mtime` and "
+            "served an `Arc<ParsedModule>` on metadata equality alone; it now keys on a blake3 digest "
+            "of every captured part. Recommendation REC-CACHE-KEY offered a cheap `(len, mtime_ns, dev, "
+            "ino)` variant and priced the sound content-digest variant as NOT cheap — the sound one is "
+            "what landed, and the cache now avoids re-PARSING rather than re-READING.",
+            "2026-09-14: this contract was re-stated over what the remaining stat sites actually assume. "
+            "It is not a weakening: `check_strength` rose from `none` to `partial` because real "
+            "enforcement now exists to cite, and the residual named below is narrower than the one it "
+            "replaces.",
+            "2026-11-14 (fffdd0035 capture intake): cite the opened regular-file and pre/post "
+            "descriptor stamp checks, and move both hole anchors with the implementation. This "
+            "remains partial: canonical-key binding, multi-part coherence and two-moment absence "
+            "detection are still owed. Explicit capture limits are caller-owned; ordinary loaders "
+            "retain None and this contract makes no unconditional resource-bound claim.",
+        ),
     },
     {
         "id": "C-ENV-NEUTRAL",
@@ -518,10 +593,16 @@ MEASURED_ABSENT: tuple[dict, ...] = (
 RESIDUE_CLASS = {
     "id": "C-NONE",
     "title": "token hits that issue no syscall",
-    "effects": ("declaration-import", "declaration-type", "error-value", "in-memory-no-io"),
+    "effects": (
+        "declaration-import",
+        "declaration-type",
+        "error-value",
+        "in-memory-no-io",
+        "fn-item-path",
+    ),
     "statement": "These sites matched the IO token table but perform no IO: they import a module, name "
-    "a type, construct or inspect an `io::Error` value, or wrap an in-memory buffer in an IO-shaped "
-    "API. No verdict can turn on their result, so no contract is owed.",
+    "a type or a function ITEM, construct or inspect an `io::Error` value, or wrap an in-memory buffer "
+    "in an IO-shaped API. No verdict can turn on their result, so no contract is owed.",
 }
 
 # ---------------------------------------------------------------------------
@@ -829,6 +910,10 @@ def build(
             "owning_job": c["owning_job"],
             "sites_by_member": {m: sum(1 for s in c_sites if s["member"] == m) for m in members},
         }
+        # A contract that is re-stated because the CODE moved must say so, or a
+        # reader cannot tell a discharge from a quietly weakened model.
+        if c.get("history"):
+            row["history"] = list(c["history"])
         if any(s["effect"] == "spawn-process" for s in c_sites):
             progs: dict[str, int] = {}
             resolutions: dict[str, int] = {}
@@ -894,6 +979,31 @@ def build(
         else:
             row["site_count"] = len(sites)
         ledger_rows.append(row)
+
+    # STICKY DATES. `today` above is what a row gets when it is NEW or when its
+    # CONTENT has changed. Stamping it unconditionally made this artifact go stale
+    # on the calendar with zero tree change, which made `--check` red-by-
+    # construction and therefore unwireable: a gate that cannot be green tomorrow
+    # cannot be a gate. Measured 2026-09-12 — the committed file differed from a
+    # fresh derivation in exactly 88 lines, all of them `"date":`, and rendering
+    # with the mint day pinned reproduced it byte-for-byte. The same rule already
+    # governs scripts/spine_assumption_ledger.py. A row's date now means "when this
+    # assumption last CHANGED", which is what a ledger date was always read as.
+    prev_rows = {
+        r["id"]: r
+        for r in (previous or {}).get("ledger", {}).get("rows", [])
+        if isinstance(r, dict) and isinstance(r.get("id"), str)
+    }
+    for row in ledger_rows:
+        prior = prev_rows.get(row["id"])
+        if prior is None:
+            continue
+        if not isinstance(prior.get("date"), str) or not prior["date"]:
+            continue
+        if {k: v for k, v in prior.items() if k != "date"} == {
+            k: v for k, v in row.items() if k != "date"
+        }:
+            row["date"] = prior["date"]
 
     for row in ledger_rows:
         for field in ("statement", "probe", "discharge", "date", "owning_job"):
@@ -1142,14 +1252,17 @@ RECOMMENDATIONS: tuple[dict, ...] = (
     {
         "id": "REC-CACHE-KEY",
         "contract": "C-STAT-FRESH",
-        "cheap_because": "PARTLY — the cheap variant is free, the sound variant is not",
-        "what": "clean-olean's module cache keys on mtime alone. The FREE improvement is to key on "
-        "`(len, mtime_ns, dev, ino)` from the `fs::metadata` call already being made, which closes the "
-        "same-second rewrite and the archive-restore cases. The SOUND fix — a content digest — is NOT "
-        "cheap and should be stated as such: it means reading the file the cache exists to avoid "
-        "reading, so it belongs on mint paths only, never on the serve path.",
-        "cost": "cheap variant: zero new syscalls, a wider key struct. Sound variant: one full read + "
-        "hash per cache probe — quote it honestly rather than calling the whole row cheap.",
+        "status": "TAKEN 2026-09-09 at 9329c2b2b — the SOUND variant, by another lane",
+        "cheap_because": "n/a — this row is kept as a record of what was recommended and what landed",
+        "what": "RECOMMENDED: clean-olean's module cache keyed on mtime alone; the FREE improvement was "
+        "to key on `(len, mtime_ns, dev, ino)` from the `fs::metadata` already being made, with the "
+        "content digest priced as NOT cheap because it means reading the file the cache exists to avoid "
+        "reading. LANDED: the content digest, on the serve path. Every lookup re-reads and blake3-hashes "
+        "all three parts and compares `ModuleIdentity`; `fs::metadata` is gone from the member entirely. "
+        "The cache now avoids re-PARSING rather than re-READING — which is the cost this row quoted, "
+        "paid deliberately.",
+        "cost": "as predicted: one full read + hash per cache probe. The row's own warning was that the "
+        "sound variant is not cheap; it is recorded as taken anyway, not as cheap.",
         "owner": "crates/clean-olean — NOT this lane",
     },
 )

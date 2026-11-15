@@ -46,7 +46,7 @@ fn src(command_line: &str) -> String {
 }
 
 /// Binders of the first `variable` declaration, as `(name, has_type)`.
-fn variable_binders(decls: &[SurfaceDecl]) -> Vec<(String, bool)> {
+fn variable_binders(decls: &[SurfaceDecl]) -> Vec<(crate::SurfaceName, bool)> {
     decls
         .iter()
         .find_map(|d| match d {
@@ -65,7 +65,10 @@ fn variable_binders(decls: &[SurfaceDecl]) -> Vec<(String, bool)> {
 fn assert_variable_untouched(decls: &[SurfaceDecl]) {
     assert_eq!(
         variable_binders(decls),
-        vec![("f".to_string(), true), ("h".to_string(), true)],
+        vec![
+            (crate::SurfaceName::generated_path("f"), true),
+            (crate::SurfaceName::generated_path("h"), true)
+        ],
         "the `variable` line must bind exactly its own two typed binders; an \
          extra entry here is the fail-open re-opening, and an UNTYPED `h` \
          would shadow the real one"
@@ -78,7 +81,7 @@ fn test_include_after_variable_is_not_absorbed_as_binders() {
     assert_variable_untouched(&decls);
 
     let found = decls.iter().any(
-        |d| matches!(d, SurfaceDecl::IncludeVars { names, .. } if names == &["h".to_string()]),
+        |d| matches!(d, SurfaceDecl::IncludeVars { names, .. } if names == &[crate::SurfaceName::generated_path("h")]),
     );
     assert!(
         found,
@@ -93,7 +96,7 @@ fn test_omit_after_variable_is_not_absorbed_as_binders() {
 
     let found = decls
         .iter()
-        .any(|d| matches!(d, SurfaceDecl::OmitVars { names, .. } if names == &["h".to_string()]));
+        .any(|d| matches!(d, SurfaceDecl::OmitVars { names, .. } if names == &[crate::SurfaceName::generated_path("h")]));
     assert!(found, "`omit h` must parse as an Omit command: {decls:#?}");
 }
 
@@ -139,7 +142,7 @@ fn test_declaration_after_an_unknown_command_still_parses() {
         let decls = parse_file(&src(line)).expect("parses");
         let has_theorem = decls
             .iter()
-            .any(|d| matches!(d, SurfaceDecl::Theorem { name, .. } if name == "t"));
+            .any(|d| matches!(d, SurfaceDecl::Theorem { name, .. } if (name).name() == crate::SurfaceName::generated_path("t").name()));
         assert!(
             has_theorem,
             "`{line}` swallowed the following theorem: {decls:#?}"
@@ -154,7 +157,10 @@ fn test_variable_bare_name_run_on_one_line_still_binds_all() {
     let decls = parse_file("variable α β\n\ntheorem t : True := trivial\n").expect("parses");
     assert_eq!(
         variable_binders(&decls),
-        vec![("α".to_string(), false), ("β".to_string(), false)]
+        vec![
+            (crate::SurfaceName::generated_path("α"), false),
+            (crate::SurfaceName::generated_path("β"), false)
+        ]
     );
 }
 
@@ -167,7 +173,10 @@ fn test_variable_binders_continue_on_an_indented_line() {
         .expect("parses");
     assert_eq!(
         variable_binders(&decls),
-        vec![("α".to_string(), true), ("x".to_string(), true)]
+        vec![
+            (crate::SurfaceName::generated_path("α"), true),
+            (crate::SurfaceName::generated_path("x"), true)
+        ]
     );
 }
 
@@ -179,7 +188,10 @@ fn test_variable_bare_run_stops_at_the_next_command_line() {
         parse_file("variable α β\ninclude α\n\ntheorem t : True := trivial\n").expect("parses");
     assert_eq!(
         variable_binders(&decls),
-        vec![("α".to_string(), false), ("β".to_string(), false)]
+        vec![
+            (crate::SurfaceName::generated_path("α"), false),
+            (crate::SurfaceName::generated_path("β"), false)
+        ]
     );
     assert!(
         decls
@@ -201,7 +213,13 @@ fn test_universe_does_not_absorb_the_next_command_line() {
             _ => None,
         })
         .expect("a `universe` declaration");
-    assert_eq!(names, vec!["u".to_string(), "v".to_string()]);
+    assert_eq!(
+        names,
+        vec![
+            crate::SurfaceName::generated_path("u"),
+            crate::SurfaceName::generated_path("v")
+        ]
+    );
 }
 
 /// `include` is not a reserved word in Lean, so the command fires only when a
@@ -232,7 +250,11 @@ fn test_include_takes_several_names() {
         .expect("an inclusion command");
     assert_eq!(
         names,
-        vec!["a".to_string(), "b".to_string(), "c".to_string()]
+        vec![
+            crate::SurfaceName::generated_path("a"),
+            crate::SurfaceName::generated_path("b"),
+            crate::SurfaceName::generated_path("c")
+        ]
     );
 }
 
@@ -285,10 +307,14 @@ fn test_include_does_not_absorb_the_following_omit_line() {
         (SurfaceDecl::IncludeVars { names: inc, .. }, SurfaceDecl::OmitVars { names: om, .. }) => {
             assert_eq!(
                 inc,
-                &vec!["h".to_string()],
+                &vec![crate::SurfaceName::generated_path("h")],
                 "include takes only its own line"
             );
-            assert_eq!(om, &vec!["h".to_string()], "omit takes only its own line");
+            assert_eq!(
+                om,
+                &vec![crate::SurfaceName::generated_path("h")],
+                "omit takes only its own line"
+            );
         }
         other => panic!("expected IncludeVars then OmitVars, got {other:?}"),
     }
@@ -304,7 +330,13 @@ fn test_include_names_may_continue_on_an_indented_line() {
     let decls = parse_file(code).expect("parses");
     match &decls[0] {
         SurfaceDecl::IncludeVars { names, .. } => {
-            assert_eq!(names, &vec!["h".to_string(), "k".to_string()]);
+            assert_eq!(
+                names,
+                &vec![
+                    crate::SurfaceName::generated_path("h"),
+                    crate::SurfaceName::generated_path("k")
+                ]
+            );
         }
         other => panic!("expected IncludeVars, got {other:?}"),
     }
@@ -324,22 +356,20 @@ fn test_include_with_its_name_on_the_next_line_is_not_the_command() {
     );
 }
 
-/// THE REMAINING FAIL-OPEN, recorded as measured rather than as intent.
+/// `omit h` written after a TERM-MODE proof is the command, not two more
+/// arguments of the proof. Measured 2026-08-25, before the fix: the proof
+/// `:= trivial` was an application head and the argument loop took `omit` and
+/// `h` as arguments (`App(Ident("trivial"), [Ident("omit"), Ident("h")])`), so
+/// the `omit` never ran and the theorem failed with "2 argument(s) remain".
 ///
-/// `omit h` written after a TERM-MODE proof never reaches the command
-/// dispatcher at all: the proof `:= trivial` is an application head, and the
-/// argument loop has no line discipline of its own, so it takes `omit` and `h`
-/// as two arguments. Measured 2026-08-25:
-///   `proof: App(Ident("trivial"), [Ident("omit"), Ident("h")])`
-///
-/// This is a DIFFERENT parser path from the two barriers this change adds —
-/// term application, not a command's name run — and closing it means giving
-/// argument position the `colGt` rule Lean gets for free from `withPosition`.
-/// That is a much larger blast radius (every multi-line application in
-/// Mathlib) and is deliberately NOT attempted here. The test asserts today's
-/// behaviour so that a future fix flips it deliberately instead of silently.
+/// The fix is narrower than the `colGt` rule once proposed here: pinned Lean
+/// v4.30.0-rc2 RESERVES both words (`def include : Nat := 1` is "unexpected
+/// token 'include'", and even an indented `omit` ends the term before it), so
+/// a line-start `include` / `omit` joins the soft command keywords that end an
+/// application (`is_boundary_command_keyword`). No other multi-line
+/// application changes.
 #[test]
-fn test_omit_after_a_term_mode_proof_is_absorbed_by_the_proof() {
+fn test_omit_after_a_term_mode_proof_is_the_command() {
     let code = "variable {α : Type} (h : α)\n\
                 include h\n\
                 theorem before : True := trivial\n\
@@ -349,10 +379,53 @@ fn test_omit_after_a_term_mode_proof_is_absorbed_by_the_proof() {
     let kinds: Vec<&str> = decls.iter().map(decl_kind).collect();
     assert_eq!(
         kinds,
-        vec!["Variable", "IncludeVars", "Theorem", "Theorem"],
-        "MEASURED, not desired: there is no OmitVars — `:= trivial` ate the \
-         `omit h` line as two application arguments"
+        vec!["Variable", "IncludeVars", "Theorem", "OmitVars", "Theorem"],
+        "the `omit h` line must end the proof above it"
     );
+}
+
+/// The same boundary for `include`, and indented: Lean ends the term there too.
+#[test]
+fn test_indented_include_after_a_term_mode_proof_is_the_command() {
+    let code = "variable {α : Type} (h : α)\n\
+                theorem before : True := f 5\n  include h\n\
+                theorem after : True := trivial\n";
+    let decls = parse_file(code).expect("parses");
+    let kinds: Vec<&str> = decls.iter().map(decl_kind).collect();
+    assert_eq!(
+        kinds,
+        vec!["Variable", "Theorem", "IncludeVars", "Theorem"],
+        "the `include h` line must end the proof above it"
+    );
+}
+
+/// An `attribute` target list ends at a line-start `include` as well.
+#[test]
+fn test_include_after_an_attribute_target_list_is_the_command() {
+    let code = "variable {α : Type} (h : α)\n\
+                attribute [simp] foo\n\
+                include h\n\
+                theorem after : True := trivial\n";
+    let decls = parse_file(code).expect("parses");
+    let [_, SurfaceDecl::Attribute { names, .. }, SurfaceDecl::IncludeVars { .. }, _] =
+        decls.as_slice()
+    else {
+        panic!("expected variable, attribute, include, theorem: {decls:#?}");
+    };
+    assert_eq!(
+        names.len(),
+        1,
+        "`include` is not an attribute target: {names:?}"
+    );
+}
+
+/// Mid-line, the word stays an identifier: only a line start is a boundary.
+#[test]
+fn test_mid_line_omit_is_still_an_argument() {
+    let decls = parse_file("def g : Nat := f omit\n").expect("parses");
+    let [SurfaceDecl::Def { .. }] = decls.as_slice() else {
+        panic!("expected one def, got {decls:#?}");
+    };
 }
 
 /// Short name for a declaration's variant, for the shape assertions above.
@@ -362,6 +435,7 @@ fn decl_kind(decl: &SurfaceDecl) -> &'static str {
         SurfaceDecl::IncludeVars { .. } => "IncludeVars",
         SurfaceDecl::OmitVars { .. } => "OmitVars",
         SurfaceDecl::Theorem { .. } => "Theorem",
+        SurfaceDecl::Prelude { .. } => "Prelude",
         SurfaceDecl::RawDecl { .. } => "RawDecl",
         _ => "other",
     }

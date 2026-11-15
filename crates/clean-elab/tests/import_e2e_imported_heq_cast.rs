@@ -679,8 +679,10 @@ fn test_native_box_transport_unchanged() {
         .expect("native Box.casesOn should be a registered recursor");
     assert_eq!(
         rec.arg_order,
-        clean_kernel::RecursorArgOrder::MajorAfterMinors,
-        "native casesOn uses the MajorAfterMinors layout"
+        clean_kernel::RecursorArgOrder::MajorAfterMotive,
+        "native casesOn uses the MajorAfterMotive layout — the Lean-faithful \
+         one. It was MajorAfterMinors until the kernel fixed it; that layout \
+         broke iota reduction (clean-kernel tc/tests2/no_confusion_value_tests.rs)"
     );
 
     elaborate_decls_into(

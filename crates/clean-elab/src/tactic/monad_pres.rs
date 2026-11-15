@@ -58,7 +58,15 @@ pub(crate) fn analyze_monad_expr(
     goal: &Goal,
     expr: &Expr,
 ) -> Option<MonadPattern> {
-    let expr = state.whnf(goal, expr);
+    // The surface spine first: `Bind.bind` / `Pure.pure` / `StateT.get` are
+    // reducible DEFINITIONS (Lean's class projections and `[Monad m]` defs
+    // since 2026-09-28; value-less axioms before), so `whnf` unfolds them
+    // through the instance and the monadic shape is gone. Fall back to
+    // `whnf` only for shapes that surface after reduction (abbreviations).
+    classify_monad_spine(expr).or_else(|| classify_monad_spine(&state.whnf(goal, expr)))
+}
+
+fn classify_monad_spine(expr: &Expr) -> Option<MonadPattern> {
     let head = expr.get_app_fn().clone();
     let args: Vec<Expr> = expr.get_app_args().into_iter().cloned().collect();
 
@@ -591,12 +599,10 @@ fn plan_action_step(
     ))
 }
 
-fn mk_false() -> Expr {
-    Expr::const_(Name::from_string("False"), vec![])
-}
-
+/// `¬prop`, with the `Not` head Lean states a negated condition with;
+/// simp reads a negation off that head only.
 fn mk_not(prop: Expr) -> Expr {
-    Expr::pi(BinderInfo::Default, prop, mk_false())
+    Expr::app(Expr::const_(Name::from_string("Not"), vec![]), prop)
 }
 
 fn abstract_over_locals(mut expr: Expr, locals: &[LocalDecl]) -> Expr {
@@ -612,6 +618,7 @@ fn abstract_over_locals(mut expr: Expr, locals: &[LocalDecl]) -> Expr {
 
 fn make_case_local_decl(state: &mut ProofState, goal: &Goal, base: &str, ty: Expr) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: state.fresh_fvar(),
         name: fresh_hyp_name(&goal.local_ctx, base),
         ty,
@@ -981,7 +988,12 @@ fn step_proof_or_goal(
             meta_id: step_meta_id,
             target: step_target,
             local_ctx: goal.local_ctx.clone(),
-            tag: Some(format!("monad_pres.step_{step_idx}")),
+            case_binders: goal.case_binders.clone(),
+            tag: Some(clean_parser::SurfaceName::from_name(
+                Name::anon()
+                    .str("monad_pres")
+                    .str(format!("step_{step_idx}")),
+            )),
         }),
     )
 }
@@ -1016,6 +1028,7 @@ fn extend_goal(goal: &Goal, target: Expr, introduced_locals: &[LocalDecl]) -> Go
         meta_id: goal.meta_id,
         target,
         local_ctx,
+        case_binders: goal.case_binders.clone(),
         tag: goal.tag.clone(),
     }
 }
@@ -1339,6 +1352,7 @@ fn build_chain_proof(
                 meta_id: goal.meta_id,
                 target: mk_eq(eq_ty.clone(), lhs.clone(), split_input_field.clone()),
                 local_ctx: goal.local_ctx.clone(),
+                case_binders: goal.case_binders.clone(),
                 tag: goal.tag.clone(),
             };
             let (tail_proof, mut tail_pending) =

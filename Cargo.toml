@@ -1,6 +1,16 @@
+# A live full-workspace Trust check exceeded the default eight-hour process
+# bound on seal 16387. Keep a finite workspace-owned backstop: 2500 scales
+# the reference clocks by 2.5 and gives the compiler process twenty hours.
+# Solver effort, verification policy and proof requirements retain their defaults.
+[trust]
+backstop = 2500
+
 [workspace]
 resolver = "2"
-exclude = ["fuzz", "scripts/isa_harness", "vendor"]
+# third-party/carcara is vendored third-party source with its own workspace
+# (see third-party/carcara/DOWNSTREAM.md); clean-auto reaches it as a path
+# dependency, so it must be excluded here or Cargo would claim it as a member.
+exclude = ["fuzz", "scripts/isa_harness", "third-party/carcara", "vendor"]
 members = [
     "crates/clean",
     "crates/clean-auto",
@@ -20,6 +30,7 @@ members = [
     "crates/clean-math-project",
     "crates/clean-olean",
     "crates/clean-mathverse",
+    "crates/clean-native",
     "crates/clean-parser",
     "crates/clean-runtime",
     "crates/clean-rust-sem",
@@ -43,7 +54,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
 # Minimum Supported Rust Version. The codebase uses if-let chains (1.87),
 # the `[lints]` workspace inheritance (1.74), and various clippy lints
@@ -61,7 +72,7 @@ readme = "README.md"
 # concrete justification; workspace-wide `allow` levels conceal real drift.
 # Cargo does not allow member manifests to inherit workspace lints and keep
 # package-local lint tables, so the custom cfg whitelist lives here.
-unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(trust_verify)', 'cfg(feature, values("carcara-verify", "debug-infer", "debug-whnf", "farkas-constructive", "geometry-tools", "math-overlays", "mimalloc", "round-trip-compile", "test-utils", "ay-smt"))'] }
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)', 'cfg(trust_verify)', 'cfg(clean_trust_islands)', 'cfg(feature, values("carcara-verify", "debug-infer", "debug-whnf", "farkas-constructive", "geometry-tools", "math-overlays", "mimalloc", "round-trip-compile", "test-utils", "ay-smt"))'] }
 dead_code = "warn"
 unused_imports = "warn"
 unused_variables = "warn"
@@ -135,7 +146,6 @@ libc = "0.2"
 # Data structures
 ahash = "0.8"
 hashbrown = { version = "0.17.1", features = ["serde"] }
-indexmap = "2.0"
 # NO `features = ["serde"]`. That feature is a `smallvec -> serde` NORMAL
 # dependency edge, and `smallvec` was one of the third-party packages holding
 # `serde` in Trust's shipping closure. The single serde-derived `SmallVec` in
@@ -160,7 +170,6 @@ proc-macro2 = "1.0"
 lz4_flex = "0.13"
 zstd = { version = "0.13", features = ["zdict_builder"] }
 flate2 = "1"
-tar = "0.4"
 
 # HTTP
 ureq = "3"
@@ -172,7 +181,12 @@ httparse = "1.10"
 percent-encoding = "2.3"
 
 # Async
-tokio = { version = "1.0", features = ["full"] }
+# Keep the complete runtime surface without procedural macros for library consumers.
+# Packages using Tokio macros, and test graphs that need them, opt into `full`.
+tokio = { version = "1.0", features = [
+    "fs", "io-util", "io-std", "net", "parking_lot", "process",
+    "rt", "rt-multi-thread", "signal", "sync", "time",
+] }
 tokio-tungstenite = "0.29"
 futures-util = "0.3"
 
@@ -222,6 +236,7 @@ clean-fold = { path = "crates/clean-fold" }
 clean-kernel = { path = "crates/clean-kernel" }
 clean-mathverse = { path = "crates/clean-mathverse" }
 clean-lake = { path = "crates/clean-lake" }
+clean-native = { path = "crates/clean-native" }
 clean-cake = { path = "crates/clean-cake" }
 # Cross-repo verification vocabulary lives in TrustIr's dependency-leaf
 # contract. Its immutable Git identity keeps standalone Clean builds independent
@@ -239,19 +254,15 @@ clean-parser = { path = "crates/clean-parser" }
 clean-runtime = { path = "crates/clean-runtime" }
 clean-rust-sem = { path = "crates/clean-rust-sem" }
 clean-server = { path = "crates/clean-server" }
-clean-sys = { path = "crates/clean-sys" }
 clean-verify = { path = "crates/clean-verify" }
 
 # Arkworks cryptography (for polynomial commitments and folding)
 ark-ff = "0.5"
 ark-ec = "0.5"
 ark-poly = "0.5"
-ark-poly-commit = "0.5"
 ark-bls12-381 = "0.5"
 ark-serialize = "0.5"
 ark-std = "0.5"
-ark-relations = "0.5"
-rand = "0.9.2"
 
 # Hashing
 sha2 = "0.11"
@@ -262,8 +273,9 @@ blake3 = "1.5"
 # workspace dependency does not change the resolved graph — it stays
 # `--offline --locked`-clean. Exposes real Ed25519 sign/verify; no fake crypto.
 ring = "0.17"
-# constant_time_eq 0.5 requires rustc >=1.95; local toolchain is now 1.95.0, so the
-# previous `=0.4.2` MSRV pin (for 1.94.1) is lifted. blake3 may still resolve its own
+# constant_time_eq 0.5 requires rustc >=1.95; the Trust toolchain (1.99.0-dev) and
+# the public 1.97.1 pin both satisfy it, so the previous `=0.4.2` MSRV pin (for
+# 1.94.1) is lifted. blake3 may still resolve its own
 # 0.4.x transitively (it declares `^0.4.2`); clean-olean uses 0.5. See issue #3535.
 constant_time_eq = "0.5"
 
@@ -290,13 +302,13 @@ stacker = "0.1"
 # pure-Rust num_rational overflow fallback is functionally identical and adds no
 # native `-lgmp` link, so the Trust rustc_driver link (which pulls clean-auto
 # through trust-certify) has no undefined `___gmpq_*` symbols.
-ay = { package = "ay", version = "0.22.0", git = "https://github.com/alabsystems/ay.git", rev = "5d586a5c2035e94c3f6ad00028e21ae5529cd2f3", default-features = false }
-ay-dpll = { package = "ay-dpll", version = "0.22.0", git = "https://github.com/alabsystems/ay.git", rev = "5d586a5c2035e94c3f6ad00028e21ae5529cd2f3" }
-ay-core = { package = "ay-core", version = "0.22.0", git = "https://github.com/alabsystems/ay.git", rev = "5d586a5c2035e94c3f6ad00028e21ae5529cd2f3" }
-ay-lean-bridge = { package = "ay-lean-bridge", version = "0.22.0", git = "https://github.com/alabsystems/ay.git", rev = "5d586a5c2035e94c3f6ad00028e21ae5529cd2f3" }
-ay-proof = { package = "ay-proof", version = "0.22.0", git = "https://github.com/alabsystems/ay.git", rev = "5d586a5c2035e94c3f6ad00028e21ae5529cd2f3" }
-ay-frontend = { package = "ay-frontend", version = "0.22.0", git = "https://github.com/alabsystems/ay.git", rev = "5d586a5c2035e94c3f6ad00028e21ae5529cd2f3" }
-ay-translate = { package = "ay-translate", version = "0.22.0", git = "https://github.com/alabsystems/ay.git", rev = "5d586a5c2035e94c3f6ad00028e21ae5529cd2f3" }
+ay = { package = "ay", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be", default-features = false }
+ay-dpll = { package = "ay-dpll", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
+ay-core = { package = "ay-core", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
+ay-lean-bridge = { package = "ay-lean-bridge", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
+ay-proof = { package = "ay-proof", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
+ay-frontend = { package = "ay-frontend", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
+ay-translate = { package = "ay-translate", version = "0.28.0", git = "https://github.com/alabsystems/ay.git", rev = "9dfa20b5790b03c8ffe57fbbe67316ece665c5be" }
 
 [profile.dev]
 # Reduce debug binary sizes to mitigate macOS _dyld_start stalls (#1388).
@@ -304,6 +316,16 @@ ay-translate = { package = "ay-translate", version = "0.22.0", git = "https://gi
 # split-debuginfo=unpacked avoids embedding DWARF in the binary.
 debug = 1
 split-debuginfo = "unpacked"
+
+# Reference-kernel replays need optimization without changing debug-only
+# validation, overflow checks, or the test selection. Keep release replays
+# separate so production-only paths are exercised too.
+[profile.authority]
+inherits = "test"
+opt-level = 2
+codegen-units = 16
+debug-assertions = true
+overflow-checks = true
 
 # lto disabled in release + bench profiles. `lto = true` was costing
 # ~10 min per rebuild during the test-fix iteration on a development
@@ -328,5 +350,732 @@ codegen-units = 1
 # The user-facing commands for `clean`. The mathverse_*, mm_*, verify_*, *_gate, solver_serve,
 # doc-gen and conformance bins are internal tooling.
 expose = ["clean", "clean-lsp"]
-# clean-lsp is not a default-member, so build it (and clean) explicitly.
-build-args = ["-p", "clean", "-p", "clean-lsp"]
+# aterm ships the complete proof toolchain: Clean must independently check AY's
+# Alethe proofs. A default-feature build exposes the command but rejects every
+# proof. This feature also enables the required ay-smt lane transitively.
+# clean-lsp is not a default-member, so build both exposed programs explicitly.
+build-args = ["-p", "clean", "-p", "clean-lsp", "--features", "clean/carcara-verify"]
+
+# What a package of main is held to before aterm's tip lane (`atpkg-publish lane run tip`)
+# stages it. The two source steps are this package's own guards in publish/config.sh's release
+# gate; the build is the pack itself (`build-args` above); the packed steps are the controls
+# build 13482 (0.9.0) was cut under on 2026-11-07, run against the packed `clean` and
+# `clean-lsp` from a scratch directory outside the checkout with an empty HOME. Each step
+# passes only if it exits 0 within `within-secs` with at least `min-tests` libtest passes.
+# The recipe above keeps the features the package needs.
+[[workspace.metadata.atpkg.qualify]]
+name = "atpkg-recipe"
+stage = "source"
+run = ["python3.14", "scripts/test_atpkg_recipe.py"]
+within-secs = 120
+
+# A build with the package's proof-checking feature checks an AY proof and refuses a false one.
+[[workspace.metadata.atpkg.qualify]]
+name = "atpkg-proof-checker"
+stage = "source"
+run = [
+    "targo", "--unverified", "test", "--locked", "-p", "clean",
+    "--features", "clean/carcara-verify", "--test", "atpkg_proof_checker",
+]
+within-secs = 6480
+min-tests = 2
+
+[[workspace.metadata.atpkg.qualify]]
+name = "build"
+stage = "build"
+within-secs = 6240
+
+[[workspace.metadata.atpkg.qualify]]
+name = "version"
+stage = "packed"
+run = ["{bin}/clean", "--version"]
+within-secs = 120
+
+# Both commands are native to this machine, signed, link only system libraries, and
+# `clean-lsp` reaches its sibling.
+[[workspace.metadata.atpkg.qualify]]
+name = "binaries"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+arch=$(uname -m)
+for exe in clean clean-lsp; do
+  /usr/bin/file "{bin}/$exe" | grep -qF "$arch" || exit 1
+  /usr/bin/codesign --verify --strict "{bin}/$exe" || exit 1
+  libs=$(/usr/bin/otool -L "{bin}/$exe" | tail -n +2 | awk '{print $1}') || exit 1
+  [ -n "$libs" ] || exit 1
+  for lib in $libs; do case "$lib" in /usr/lib/*|/System/Library/*) ;; *) echo "$exe links $lib" >&2; exit 1 ;; esac; done
+done
+"{bin}/clean-lsp" --help </dev/null | grep -qF lsp
+''']
+within-secs = 120
+
+# A true theorem checks and a false one is refused by name.
+[[workspace.metadata.atpkg.qualify]]
+name = "proof-check"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > Good.lean <<'EOF'
+theorem atpkg_control : 1 = 1 := rfl
+EOF
+cat > Bad.lean <<'EOF'
+theorem atpkg_false : 1 = 2 := rfl
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+good = run([clean, "check", "--json", "Good.lean"])
+assert json.loads(good.stdout)["status"] == "pass"
+refused([clean, "check", "--json", "Bad.lean"], "atpkg_false")
+PY
+''']
+within-secs = 120
+
+# The independent Alethe checker verifies a resolution proof and refuses one that resolves
+# a premise with itself.
+[[workspace.metadata.atpkg.qualify]]
+name = "alethe"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+problem = "(set-logic QF_UF)\n(declare-const p Bool)\n(assert p)\n(assert (not p))\n(check-sat)\n"
+good = "(assume t0 p)\n(assume t1 (not p))\n(step t2 (cl) :rule resolution :premises (t1 t0))\n"
+bad = "(assume t0 p)\n(step t1 (cl) :rule resolution :premises (t0 t0))\n"
+for name, proof in (("good.json", good), ("bad.json", bad)):
+    with open(name, "w") as f:
+        json.dump({"type": "alethe_certificate", "version": "1.0", "problem": problem, "proof": proof}, f)
+run([clean, "cert", "verify-external", "good.json", "--verbose"], 0, "Proof status: fully verified")
+p = refused([clean, "cert", "verify-external", "bad.json", "--verbose"])
+assert b"Proof status: fully verified" not in p.stdout and b"feature required" not in p.stderr, p
+PY
+''']
+within-secs = 120
+
+# The trust-ir backend emits a module the installed `trust-ir` validates, and the validator
+# refuses the same module with one trailing byte.
+[[workspace.metadata.atpkg.qualify]]
+name = "backend"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > demo.lean <<'EOF'
+def demoId (x : Nat) : Nat := x
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+import shutil
+validator = shutil.which("trust-ir")
+assert validator, "no trust-ir on PATH"
+run([clean, "compile", "demo.lean", "--decl", "demoId", "--emit", "trustir-bin", "-o", "demo.bin"])
+module = open("demo.bin", "rb").read()
+assert module
+run([validator, "validate", "--format", "bin", "demo.bin"])
+with open("demo-trailing.bin", "wb") as f:
+    f.write(module + bytes(1))
+refused([validator, "validate", "--format", "bin", "demo-trailing.bin"])
+PY
+''']
+within-secs = 120
+
+# The runtime archive the binary carries holds its three objects and links with the system
+# compiler, and a native `clean run` prints exactly its line.
+[[workspace.metadata.atpkg.qualify]]
+name = "native-runtime"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > Main.lean <<'EOF'
+def main : IO Unit := IO.println "atpkg-clean-native-ok"
+EOF
+cat > runtime-link.c <<'EOF'
+extern void clean_alloc_ctor(void);
+extern void clean_inc(void);
+extern void l_Nat_add(void);
+extern void l_Nat_land(void);
+static void *volatile keep[] = {(void *)&clean_alloc_ctor, (void *)&clean_inc, (void *)&l_Nat_add, (void *)&l_Nat_land};
+int main(void) { return keep[0] == 0; }
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+run([clean, "native-runtime", "--out-dir", "runtime"], 0, "libclean_runtime.a -lm")
+members = run(["/usr/bin/ar", "t", "runtime/libclean_runtime.a"]).stdout.decode().splitlines()
+assert [m for m in members if m.endswith(".o")] == ["clean_runtime.o", "runtime_extern.o", "clean_prelude_shims.o"], members
+run(["/usr/bin/cc", "-O0", "runtime-link.c", "runtime/libclean_runtime.a", "-lm", "-o", "runtime-link"])
+run(["./runtime-link"])
+native = run([clean, "run", "--decl", "main", "Main.lean"])
+assert native.stdout == b"atpkg-clean-native-ok\n", native.stdout
+PY
+''']
+within-secs = 120
+
+# Anonymous `have` binders stay inaccessible: reachable only by `rename_i`, never as `this`,
+# never proving False, and a `have` without `:=` is a parse error.
+[[workspace.metadata.atpkg.qualify]]
+name = "have-binders"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > positive.lean <<'EOF'
+theorem probe (p q : Prop) (hp : p) (hq : q) : p ∧ q := by
+  have _ := hp
+  have _ := hq
+  rename_i first second
+  exact And.intro first second
+/-- info: 'probe' does not depend on any axioms -/
+#guard_msgs in
+#print axioms probe
+EOF
+cat > false.lean <<'EOF'
+theorem probe : False := by
+  have _ : False := True.intro
+  assumption
+EOF
+cat > hygiene.lean <<'EOF'
+theorem probe (a b : Nat) (h : a = b) : b = a := by
+  have _ := h.symm
+  exact this
+EOF
+cat > missing-value.lean <<'EOF'
+theorem probe : True := by
+  have _ : True by
+    exact True.intro
+  exact True.intro
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+check("positive.lean")
+check("false.lean", False, "mismatch")
+check("hygiene.lean", False, "this")
+run([clean, "check", "--json", "missing-value.lean"], 1, "expected \':=\' or \'|\'")
+PY
+''']
+within-secs = 120
+
+# tests/fixtures/recursive_theorem, byte for byte: the positive file checks, a cycle and an
+# extra section argument are refused.
+[[workspace.metadata.atpkg.qualify]]
+name = "recursive-theorem"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > positive.lean <<'EOF'
+theorem single : ∀ n : Nat, n + 0 = n
+  | 0 => rfl
+  | n + 1 => by exact congrArg Nat.succ (single n)
+
+theorem byCases (n : Nat) : n + 0 = n := by
+  cases n with
+  | zero => rfl
+  | succ k => exact congrArg Nat.succ (byCases k)
+
+section
+variable (p : Prop)
+theorem captured (x : α) (hp : p) : ∀ n : Nat, x = x
+  | 0 => rfl
+  | n + 1 => by exact @captured α x hp n
+end
+
+theorem capturedUse : (3 : Nat) = 3 := captured True 3 True.intro 2
+
+section
+variable (p : α → Prop)
+theorem capturedAuto (x : α) (hp : p x) : ∀ n : Nat, p x
+  | 0 => hp
+  | n + 1 => by exact @capturedAuto x hp n
+theorem mixedAuto (x : α) (y : β) (hp : p x) : ∀ n : Nat, y = y
+  | 0 => rfl
+  | n + 1 => by exact @mixedAuto β x y hp n
+end
+
+theorem capturedAutoUse : True :=
+  capturedAuto (fun (_ : Nat) => True) 3 True.intro 2
+theorem mixedAutoUse : (3 : Nat) = 3 :=
+  mixedAuto (fun (_ : Nat) => True) 4 3 True.intro 2
+
+/-- info: 'single' does not depend on any axioms -/
+#guard_msgs in
+#print axioms single
+/-- info: 'captured' does not depend on any axioms -/
+#guard_msgs in
+#print axioms captured
+/-- info: 'capturedUse' does not depend on any axioms -/
+#guard_msgs in
+#print axioms capturedUse
+/-- info: 'capturedAuto' does not depend on any axioms -/
+#guard_msgs in
+#print axioms capturedAuto
+/-- info: 'mixedAuto' does not depend on any axioms -/
+#guard_msgs in
+#print axioms mixedAuto
+EOF
+cat > cycle.lean <<'EOF'
+theorem bad : ∀ n : Nat, False
+  | 0 => by exact bad 0
+  | n + 1 => by exact bad n
+EOF
+cat > extra.lean <<'EOF'
+section
+variable (p : Prop)
+theorem bad (hp : p) : ∀ n : Nat, p
+  | 0 => hp
+  | n + 1 => by exact bad p hp n
+end
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+check("positive.lean")
+check("cycle.lean", False, "constructor field")
+check("extra.lean", False, "mismatch")
+PY
+''']
+within-secs = 120
+
+# tests/fixtures/section_auto_order, byte for byte: section variables are captured in source
+# order, in the checker and in a native run.
+[[workspace.metadata.atpkg.qualify]]
+name = "section-order"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > positive.lean <<'EOF'
+section
+variable (p : Prop)
+theorem own (x : α) (hp : p) : x = x := rfl
+def identityOwn (x : α) (hp : p) : α := x
+theorem equationOwn (x : α) (hp : p) : ∀ n : Nat, x = x
+ | 0 => rfl
+ | n + 1 => by rfl
+theorem recursiveOwn (x : α) (hp : p) : ∀ n : Nat, x = x
+ | 0 => rfl
+ | n + 1 => by exact @recursiveOwn α x hp n
+end
+theorem use : (3 : Nat) = 3 := @own True Nat 3 True.intro
+theorem useIdentity : @identityOwn True Nat 3 True.intro = 3 := rfl
+theorem named : identityOwn (p := True) (x := 3) (hp := True.intro) = 3 := rfl
+theorem useEquation : (3 : Nat) = 3 := @equationOwn True Nat 3 True.intro 2
+theorem useRecursive : (3 : Nat) = 3 := @recursiveOwn True Nat 3 True.intro 2
+section
+variable (q : α → Prop)
+section
+variable (p : Prop)
+theorem capturedOwn (x : α) (y : β) (hp : p) (hq : q x) : y = y := rfl
+theorem capturedRecursive (x : α) (y : β) (hp : p) (hq : q x) : ∀ n : Nat, y = y
+ | 0 => rfl
+ | n + 1 => by exact @capturedRecursive β x y hp hq n
+end
+end
+theorem useCaptured : true = true := @capturedOwn Nat (fun _ => True) True Bool 3 true True.intro True.intro
+theorem useCapturedRecursive : true = true := @capturedRecursive Nat (fun _ => True) True Bool 3 true True.intro True.intro 2
+section
+variable (A : Type) (f : A → Type)
+def dependent (x : f a) : f a := x
+end
+theorem useDependent : @dependent Nat (fun _ => Nat) 2 3 = 3 := rfl
+/-- info: 'own' does not depend on any axioms -/
+#guard_msgs in
+#print axioms own
+/-- info: 'recursiveOwn' does not depend on any axioms -/
+#guard_msgs in
+#print axioms recursiveOwn
+/-- info: 'useCapturedRecursive' does not depend on any axioms -/
+#guard_msgs in
+#print axioms useCapturedRecursive
+section
+variable (A : Type) (f : A → Type)
+theorem dependentRecursive (x : f a) : ∀ n : Nat, x = x
+ | 0 => rfl
+ | n + 1 => by exact @dependentRecursive a x n
+end
+theorem useDependentRecursive : (3 : Nat) = 3 := @dependentRecursive Nat (fun _ => Nat) 2 3 2
+section
+variable (p : Prop)
+theorem severalOwn (n : Nat) (x : α) (y : β) (hp : p) : x = x := rfl
+end
+theorem useSeveralOwn : (3 : Nat) = 3 := @severalOwn True Nat Bool 0 3 true True.intro
+/-- info: 'dependentRecursive' does not depend on any axioms -/
+#guard_msgs in
+#print axioms dependentRecursive
+EOF
+cat > wrong.lean <<'EOF'
+section
+variable (q : α → Prop) (p : Prop)
+theorem capturedOwn (x : α) (y : β) (hp : p) (hq : q x) : y = y := rfl
+end
+theorem bad : true = true := @capturedOwn Nat Bool (fun _ => True) True 3 true True.intro True.intro
+EOF
+cat > native.lean <<'EOF'
+section
+variable (offset : Nat)
+def shifted (x : α) (n : Nat) : Nat := offset + n
+def shiftedRec (x : α) : Nat → Nat
+ | 0 => offset
+ | n + 1 => shiftedRec x n + 1
+end
+def main (args : List String) : IO Unit := do
+  IO.println (toString (@shifted args.length Bool true 3))
+  IO.println (toString (@shiftedRec args.length Bool true 2))
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+check("positive.lean")
+check("wrong.lean", False, "mismatch")
+for args, wanted in (([], b"3\n2\n"), (["a", "b"], b"5\n4\n")):
+    p = run([clean, "run", "--decl", "main", "native.lean", "--", *args])
+    assert p.stdout == wanted and not p.stderr, (args, p.stdout, p.stderr)
+PY
+''']
+within-secs = 120
+
+# reports/trust-ir-semantics-probe/repros G12, byte for byte: `simp` closes the Bool match and
+# leaves its false twin unsolved.
+[[workspace.metadata.atpkg.qualify]]
+name = "simp-bool-match"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > positive.lean <<'EOF'
+inductive P where
+  | owned | shared (n : Nat) | unique
+def P.canRead : P → Bool
+  | .owned => true | .shared _ => true | .unique => true
+def P.canWrite : P → Bool
+  | .owned => true | .shared _ => false | .unique => true
+theorem t (p : P) : P.canWrite p = true → P.canRead p = true := by
+  cases p <;> simp [P.canRead, P.canWrite]
+EOF
+cat > twin.lean <<'EOF'
+inductive P where
+  | owned | shared (n : Nat) | unique
+def P.canRead : P → Bool
+  | .owned => true | .shared _ => true | .unique => true
+def P.canWrite : P → Bool
+  | .owned => true | .shared _ => false | .unique => true
+theorem g12_twin (p : P) : P.canRead p = true → P.canWrite p = true := by
+  cases p <;> simp [P.canRead, P.canWrite]
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+d = check("positive.lean")
+assert d["decl_count"] == 4 and d["trust_summary"]["kernel_check_failures"] == 0, d
+d = check("twin.lean", False, "unsolved goals")
+assert d["decl_count"] == 4 and d["trust_summary"]["kernel_check_failures"] == 0, d
+assert d["failed_count"] == 1 and "g12_twin" in json.dumps(d["errors"]), d
+PY
+''']
+within-secs = 120
+
+# crates/clean-native/tests/fixtures, byte for byte: signed absolute values, and strings that
+# carry NUL and multi-byte characters through a native run.
+[[workspace.metadata.atpkg.qualify]]
+name = "native-strings"
+stage = "packed"
+run = ["/bin/sh", "-c", '''
+set -u
+d=$(mktemp -d) || exit 1; trap 'rm -rf "$d"' EXIT; cd "$d" || exit 1
+cat > signed.lean <<'EOF'
+def absValue (z : Int) : Nat := Int.natAbs z
+def main (args : List String) : IO Unit := do
+  IO.println (toString (absValue (Int.ofNat args.length)))
+  IO.println (toString (absValue (Int.negSucc args.length)))
+EOF
+cat > sized.lean <<'EOF'
+
+def emit (s : String) : IO Unit := do
+  let t := String.append (String.append s (toString (Char.ofNat 0))) "β\x007"
+  IO.print "a\x00b"
+  IO.println t
+  IO.println t
+  IO.println (@ToString.toString Nat { toString := fun _ => t } 5)
+  IO.println (String.append t t)
+  IO.println (toString (Char.ofNat s.length))
+  IO.println (String.append (String.append t (toString (Char.ofNat 233))) (toString (Char.ofNat 8364)))
+  let c := Char.ofNat (s.length + 128512)
+  IO.println (String.append t (toString c))
+  IO.println (toString c)
+  IO.println (toString t.length)
+  IO.println "\x00\x00"
+  IO.println ""
+  IO.eprintln t
+def main (args : List String) : IO Unit :=
+  match args with
+  | [] => emit ""
+  | s :: _ => emit s
+EOF
+python3.14 -I - "{bin}" <<'PY'
+import json, os, subprocess, sys
+bins = sys.argv[1]
+clean = bins + "/clean"
+os.mkdir("home", 0o700)
+home = os.getcwd() + "/home"
+env = {"PATH": bins + ":/usr/bin:/bin:/usr/sbin:/sbin", "HOME": home, "TMPDIR": home, "XDG_CONFIG_HOME": home + "/.config",
+       "XDG_CACHE_HOME": home + "/.cache", "XDG_DATA_HOME": home + "/.local/share", "CLEAN_CC": "/usr/bin/cc"}
+def run(args, code=0, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode == code, (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def refused(args, contains=None):
+    p = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=180)
+    both = p.stdout + p.stderr
+    assert p.returncode in (1, 2) and both.strip(), (args, p.returncode, both[-2000:])
+    assert contains is None or contains.encode() in both, (args, contains, both[-2000:])
+    return p
+def check(path, accepted=True, reason=None):
+    p = run([clean, "check", "--json", path], 0 if accepted else 1, reason)
+    d = json.loads(p.stdout)
+    assert d["status"] == ("pass" if accepted else "fail") and d["decl_count"] > 0, d
+    t = d["trust_summary"]
+    assert t["sorry_axioms"] == 0 and t["sorry_terms_minted"] == 0 and b"synthetic sorry" not in p.stdout + p.stderr, d
+    if accepted:
+        assert d["failed_count"] == 0 and d["success_count"] > 0, d
+        assert not (d["errors"] or d["parser_recovery"] or d["kernel_failures"] or d["trust_failures"]), d
+    return d
+for args, wanted in (([], b"0\n1\n"), (["a", "b"], b"2\n3\n")):
+    p = run([clean, "run", "--decl", "main", "signed.lean", "--", *args])
+    assert p.stdout == wanted and not p.stderr, (args, p.stdout, p.stderr)
+for prefix in (None, "", "suffix7", "\u00e9\U0001f980"):
+    p = run([clean, "run", "--decl", "main", "sized.lean", "--", *([] if prefix is None else [prefix])])
+    s = prefix or ""
+    t = s + "\0\u03b2\0" + "7"
+    c = chr(len(s))
+    emoji = chr(128512 + len(s))
+    wanted = f"a\0b{t}\n{t}\n{t}\n{t}{t}\n{c}\n{t}\u00e9\u20ac\n{t}{emoji}\n{emoji}\n{len(t)}\n\0\0\n\n"
+    assert p.stdout == wanted.encode() and p.stderr == (t + "\n").encode(), (prefix, p.stdout, p.stderr)
+PY
+''']
+within-secs = 120

@@ -8,8 +8,11 @@
 //!
 //! In release builds, `infer_type()` uses the fast path instead of the
 //! certificate-generating debug path. These tests compare the release path
-//! against `infer_type_with_cert()` on a representative corpus and verify
-//! that the closed-term type cache records real hits.
+//! against `infer_type_with_cert()` on a representative corpus, including the
+//! `ExprLocation` every located error carries, and verify that the closed-term
+//! type cache records real hits. In a debug build `infer_type()` IS the
+//! certificate path, so there is nothing to compare and this file compiles to
+//! no tests: run it with `--release`.
 
 #[path = "release_infer_parity/support.rs"]
 mod release_infer_parity_support;
@@ -18,7 +21,7 @@ use clean_kernel::env::Environment;
 use clean_kernel::expr::{BinderInfo, Expr, ExprKind, FVarId, ZFCSetExpr};
 use clean_kernel::level::Level;
 use clean_kernel::mode::CleanMode;
-use clean_kernel::{LocalContext, Name, TypeChecker};
+use clean_kernel::{ExprPathStep, LocalContext, Name, TypeChecker, TypeError};
 use release_infer_parity_support::{
     cubical_constant_interval_family, cubical_constant_prop_path, cubical_i0, cubical_i1,
     cubical_interval, release_infer_env, release_zfc_env, wave0_corpus, zfc_empty_set,
@@ -26,67 +29,22 @@ use release_infer_parity_support::{
 };
 
 fn infer_fast(tc: &TypeChecker<'_>, expr: &Expr) -> Result<Expr, String> {
-    tc.infer_type(expr)
-        .map_err(|err| strip_location(&format!("{err:?}")))
+    tc.infer_type(expr).map_err(|err| format!("{err:?}"))
 }
 
 fn infer_cert(tc: &TypeChecker<'_>, expr: &Expr) -> Result<Expr, String> {
     tc.infer_type_with_cert(expr)
         .map(|(ty, _cert)| ty)
-        .map_err(|err| strip_location(&format!("{err:?}")))
+        .map_err(|err| format!("{err:?}"))
 }
 
-/// The certifying infer path records an `ExprLocation` (decl_name + traversal
-/// steps) for error reporting; the fast path does not. That asymmetry is a
-/// reporting feature, not a parity gap — the underlying error variant and
-/// payload are the same. Strip the `location:` field from both Debug strings
-/// so the parity assertion compares the kernel error shape, not the
-/// location-tracking metadata.
-fn strip_location(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let bytes = s.as_bytes();
-    let mut i = 0usize;
-    while i < bytes.len() {
-        // Look for the start of a ", location: " segment.
-        let rest = &s[i..];
-        if let Some(label) = [", location: ", " location: "]
-            .iter()
-            .find(|lbl| rest.starts_with(*lbl))
-        {
-            let after_label = i + label.len();
-            let after = &s[after_label..];
-            // Determine the length of the value to drop: `None` or `Some(...)`.
-            let drop_len = if after.starts_with("None") {
-                4
-            } else if after.starts_with("Some(") {
-                let mut depth = 1u32;
-                let mut consumed = "Some(".len();
-                for c in after[consumed..].chars() {
-                    consumed += c.len_utf8();
-                    match c {
-                        '(' => depth += 1,
-                        ')' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                consumed
-            } else {
-                0
-            };
-            i = after_label + drop_len;
-            continue;
-        }
-        let ch = s[i..].chars().next().unwrap();
-        out.push(ch);
-        i += ch.len_utf8();
-    }
-    out
-}
+// Errors are compared as their full `Debug` strings, `location:` included.
+// Both bodies record an `ExprLocation` (decl_name + traversal steps), and the
+// same ill-typed term must get the same one from either: Trust's UI tests read
+// it, and a per-profile trail is a diagnostic that depends on the build. This
+// file used to strip `location:` before comparing, which is how the release
+// body naming the parent instead of the ill-typed child at seven error sites
+// went unseen (#3425; `infer_parity_release_matches_certified_error_locations`).
 
 fn assert_parity_in_mode(env: &Environment, mode: CleanMode, name: &str, expr: &Expr) {
     let fast = infer_fast(&TypeChecker::with_mode(env, mode), expr);
@@ -160,6 +118,195 @@ fn infer_parity_release_matches_certified_error_paths() {
         let cert = infer_cert(&TypeChecker::new(&env), &expr);
         assert_parity(name, fast, cert);
     }
+}
+
+/// `let v : ty := val; body`.
+fn let_v(ty: Expr, val: Expr, body: Expr) -> Expr {
+    Expr::let_named(Name::from_string("v"), ty, val, body, false)
+}
+
+/// One ill-typed term per error that names a child term, each checked through
+/// both bodies with the `ExprLocation` compared.
+struct LocationCase {
+    name: &'static str,
+    expr: Expr,
+    /// `TypeError` variant the term must raise.
+    variant: &'static str,
+    /// The trail the certificate body records at top level: the one step to
+    /// the child the error names (`wrapped` prepends a parent's step).
+    steps: Vec<ExprPathStep>,
+    /// The check also runs in infer-only mode (`infer_type`). App-argument,
+    /// Lam-domain and Let checks run only in check mode (`infer_only = false`).
+    in_infer_only: bool,
+}
+
+fn location_cases() -> Vec<LocationCase> {
+    use ExprPathStep::{AppArg, AppFn, LamType, LetType, LetVal, PiBody, PiDom};
+    let prop = Expr::prop;
+    // `λ y : Prop, y : Prop → Prop`: a term whose type is a Pi, not a Sort.
+    let not_a_type = || Expr::lam(BinderInfo::Default, prop(), Expr::bvar(0));
+    let case = |name, expr, variant, step, in_infer_only| LocationCase {
+        name,
+        expr,
+        variant,
+        steps: vec![step],
+        in_infer_only,
+    };
+    vec![
+        // `Prop Prop`: `Prop : Type` is not a function type.
+        case(
+            "not_a_function",
+            Expr::app(prop(), prop()),
+            "NotAFunction",
+            AppFn,
+            true,
+        ),
+        // `(λ x : Prop, x) Prop`: `Prop : Type`, the domain is `Prop`.
+        case(
+            "app_arg_mismatch",
+            Expr::app(not_a_type(), prop()),
+            "TypeMismatch",
+            AppArg,
+            false,
+        ),
+        // `λ x : (λ y : Prop, y), Prop`.
+        case(
+            "lam_domain_not_a_sort",
+            Expr::lam(BinderInfo::Default, not_a_type(), prop()),
+            "ExpectedSort",
+            LamType,
+            false,
+        ),
+        // `∀ x : (λ y : Prop, y), Prop`.
+        case(
+            "pi_domain_not_a_sort",
+            Expr::pi(BinderInfo::Default, not_a_type(), prop()),
+            "ExpectedSort",
+            PiDom,
+            true,
+        ),
+        // `∀ x : Prop, (λ y : Prop, y)`.
+        case(
+            "pi_body_not_a_sort",
+            Expr::pi(BinderInfo::Default, prop(), not_a_type()),
+            "ExpectedSort",
+            PiBody,
+            true,
+        ),
+        // `let v : (λ y : Prop, y) := Prop; Prop`.
+        case(
+            "let_type_not_a_sort",
+            let_v(not_a_type(), prop(), prop()),
+            "ExpectedSort",
+            LetType,
+            false,
+        ),
+        // `let v : Prop := Prop; Prop`: `Prop : Type`, annotated `Prop`.
+        case(
+            "let_value_mismatch",
+            let_v(prop(), prop(), prop()),
+            "TypeMismatch",
+            LetVal,
+            false,
+        ),
+    ]
+}
+
+/// Each case also runs one binder down, so the parent's steps are compared too.
+fn wrapped(case: &LocationCase) -> Vec<(String, Expr, Vec<ExprPathStep>)> {
+    let under = |step: ExprPathStep, label: &str, expr: Expr| {
+        let mut steps = vec![step];
+        steps.extend(case.steps.iter().cloned());
+        (format!("{}_under_{label}", case.name), expr, steps)
+    };
+    let bad = || case.expr.clone();
+    vec![
+        (case.name.to_string(), bad(), case.steps.clone()),
+        under(
+            ExprPathStep::LamBody,
+            "lam",
+            Expr::lam(BinderInfo::Default, Expr::prop(), bad()),
+        ),
+        under(
+            ExprPathStep::PiBody,
+            "pi",
+            Expr::pi(BinderInfo::Default, Expr::prop(), bad()),
+        ),
+        under(
+            ExprPathStep::LetBody,
+            "let",
+            let_v(Expr::type_(), Expr::prop(), bad()),
+        ),
+    ]
+}
+
+/// Release `infer_type` and the certificate body agree on the error AND on the
+/// `ExprLocation` at every error that names a child term: `NotAFunction`
+/// (`AppFn`), App argument (`AppArg`), Lam domain (`LamType`), Pi domain
+/// (`PiDom`), Pi body (`PiBody`), Let type (`LetType`) and Let value
+/// (`LetVal`). The certificate body pushes the child step before its snapshot;
+/// before #3425 the release body snapshotted at the parent. Each case is
+/// checked in check mode and, where that check runs there, in infer-only mode.
+/// The expected trail is asserted on the certificate error as well, so a case
+/// that stops raising its error cannot pass as vacuous parity.
+#[test]
+fn infer_parity_release_matches_certified_error_locations() {
+    let env = release_infer_env();
+    // Every disagreement is collected and reported together, so one run names
+    // every site whose trail differs rather than the first.
+    let mut mismatches = Vec::new();
+
+    for case in location_cases() {
+        for (name, expr, steps) in wrapped(&case) {
+            let expect = |mode: &str, cert: &Result<Expr, TypeError>| {
+                let Err(err) = cert else {
+                    panic!("{name} ({mode}): cert must reject, got {cert:?}");
+                };
+                assert!(
+                    format!("{err:?}").starts_with(case.variant),
+                    "{name} ({mode}): expected {}, got {err:?}",
+                    case.variant
+                );
+                let location = err.location().map(|loc| loc.steps.clone());
+                assert_eq!(location, Some(steps.clone()), "{name} ({mode}) trail");
+            };
+            let mut compare =
+                |mode: &str, fast: Result<Expr, String>, cert: Result<Expr, String>| {
+                    if fast != cert {
+                        mismatches.push(format!(
+                            "{name} ({mode}):\n  fast={fast:?}\n  cert={cert:?}"
+                        ));
+                    }
+                };
+
+            let fast = TypeChecker::new(&env).infer_type_full(&expr);
+            let cert = TypeChecker::new(&env)
+                .infer_type_with_cert_full(&expr)
+                .map(|(ty, _cert)| ty);
+            expect("check", &cert);
+            compare(
+                "check",
+                fast.map_err(|err| format!("{err:?}")),
+                cert.map_err(|err| format!("{err:?}")),
+            );
+
+            let fast = infer_fast(&TypeChecker::new(&env), &expr);
+            let cert = TypeChecker::new(&env)
+                .infer_type_with_cert(&expr)
+                .map(|(ty, _cert)| ty);
+            if case.in_infer_only {
+                expect("infer-only", &cert);
+            }
+            compare("infer-only", fast, cert.map_err(|err| format!("{err:?}")));
+        }
+    }
+
+    assert!(
+        mismatches.is_empty(),
+        "release infer parity: {} error location mismatch(es):\n{}",
+        mismatches.len(),
+        mismatches.join("\n")
+    );
 }
 
 #[test]

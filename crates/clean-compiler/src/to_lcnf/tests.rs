@@ -2174,3 +2174,565 @@ fn test_let_in_value_position_flattens_in_scope_order() {
         other => panic!("expected a Return terminal, got {other:?}"),
     }
 }
+
+#[test]
+fn test_local_value_alias_keeps_parameter_type_and_outer_scope() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    let outer = ctx.push_typed_binder(&Expr::const_str("String"));
+    let nested = Expr::let_named(
+        Name::from_string("inner"),
+        Expr::const_str("Nat"),
+        Expr::nat_lit(7),
+        Expr::bvar(1),
+        false,
+    );
+    let (value, ty) = expr_to_let_value(&mut ctx, &nested).unwrap();
+    assert_eq!(ty, Expr::const_str("String"));
+    assert!(matches!(value, LetValue::FVar { fvar, args } if fvar == outer && args.is_empty()));
+    assert_eq!(ctx.lookup_bvar(0), Some(outer));
+    let (value, ty) = expr_to_let_value(&mut ctx, &Expr::fvar(outer)).unwrap();
+    assert_eq!(ty, Expr::const_str("String"));
+    assert!(matches!(value, LetValue::FVar { fvar, args } if fvar == outer && args.is_empty()));
+}
+
+#[test]
+fn test_local_value_alias_resolves_dependent_type_before_shadowing() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    let outer = ctx.push_typed_binder(&Expr::type_());
+    let inner = ctx.push_typed_binder(&Expr::type_());
+    let dependent = Expr::app(
+        Expr::app(Expr::const_str("Pair"), Expr::bvar(1)),
+        Expr::bvar(0),
+    );
+    let expected = Expr::app(
+        Expr::app(Expr::const_str("Pair"), Expr::fvar(outer)),
+        Expr::fvar(inner),
+    );
+    let value = ctx.push_typed_binder(&dependent);
+    let (_, ty) = expr_to_let_value(&mut ctx, &Expr::bvar(0)).unwrap();
+    assert_eq!(
+        ty, expected,
+        "type indices belong to the parameter's outer scope"
+    );
+    let alias = ctx.add_let(
+        Name::anon(),
+        ty,
+        LetValue::FVar {
+            fvar: value,
+            args: vec![],
+        },
+    );
+    ctx.pop_binder();
+    ctx.push_typed_binder(&Expr::const_str("Nat"));
+    let (_, ty) = expr_to_let_value(&mut ctx, &Expr::fvar(alias)).unwrap();
+    assert_eq!(
+        ty, expected,
+        "later binders cannot capture the alias's type"
+    );
+}
+
+#[test]
+fn test_lambda_value_alias_records_the_real_parameter_type() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    let nat = Expr::const_str("Nat");
+    let body = Expr::let_named(
+        Name::anon(),
+        nat.clone(),
+        Expr::bvar(0),
+        Expr::bvar(0),
+        false,
+    );
+    let lambda = Expr::lam(BinderInfo::Default, nat.clone(), body);
+    let arg = expr_to_arg(&mut ctx, &lambda).unwrap();
+    let Arg::FVar(function) = arg else {
+        panic!("expected local lambda")
+    };
+    let code = ctx.wrap_lets(Code::Return(function));
+    let Code::Fun(fun, _) = code else {
+        panic!("missing lambda declaration")
+    };
+    let Code::Let(alias, terminal) = fun.body.as_ref() else {
+        panic!("missing parameter alias")
+    };
+    assert_eq!(alias.ty, nat);
+    assert!(
+        matches!(&alias.value, LetValue::FVar { fvar, args } if *fvar == fun.params[0].fvar_id && args.is_empty())
+    );
+    assert!(matches!(terminal.as_ref(), Code::Return(id) if *id == alias.fvar_id));
+    assert_eq!(ctx.lookup_bvar(0), None);
+}
+
+#[test]
+fn test_local_value_alias_refuses_missing_bindings_and_types() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    for expr in [Expr::bvar(0), Expr::fvar(FVarId::new(99))] {
+        assert!(matches!(
+            expr_to_let_value(&mut ctx, &expr),
+            Err(CompilerError::InvalidExpr(_))
+        ));
+    }
+    ctx.push_binder(); // A scope-only test binder has no declared type.
+    assert!(matches!(
+        expr_to_let_value(&mut ctx, &Expr::bvar(0)),
+        Err(CompilerError::InvalidExpr(_))
+    ));
+}
+
+#[test]
+fn test_failed_let_body_restores_outer_binder_in_both_positions() {
+    let env = make_env();
+    for value_position in [false, true] {
+        let mut ctx = LcnfContext::new(&env);
+        let outer = ctx.push_typed_binder(&Expr::const_str("String"));
+        let bad = Expr::let_named(
+            Name::anon(),
+            Expr::const_str("Nat"),
+            Expr::nat_lit(7),
+            Expr::bvar(99),
+            false,
+        );
+        if value_position {
+            assert!(expr_to_let_value(&mut ctx, &bad).is_err());
+        } else {
+            assert!(expr_to_code(&mut ctx, &bad).is_err());
+        }
+        assert_eq!(ctx.lookup_bvar(0), Some(outer));
+        assert_eq!(ctx.lookup_bvar(1), None);
+    }
+}
+
+/// The sibling shape for a bare FREE variable: the beta-redex funnel in
+/// `expr_to_let_value` let-binds each argument (BIND-ONCE) and substitutes its
+/// ATOM `FVar(f)` for the binder, so `(fun x : Nat => x) 7` reduces to the bare
+/// `FVar(f)` and re-enters the funnel as exactly that expression — a form it
+/// had no arm for. In value position (here the RHS of a `let`) the reduct must
+/// lower to the bound atom itself, and the scope assertions are the same as in
+/// the `BVar` pin above: the argument's binding is emitted first, the `let`
+/// names it, the terminal returns the `let`.
+#[test]
+fn test_let_in_value_position_beta_identity_yields_bare_fvar() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    let nat = Expr::const_str("Nat");
+
+    // let r : Nat := (fun x : Nat => x) 7; r
+    let redex = Expr::app(
+        Expr::lam(BinderInfo::Default, nat.clone(), Expr::bvar(0)),
+        Expr::nat_lit(7),
+    );
+    let decl = Expr::let_named(Name::from_string("r"), nat, redex, Expr::bvar(0), false);
+
+    let code = expr_to_code(&mut ctx, &decl)
+        .expect("a beta-redex reducing to its own bound argument must lower");
+
+    let mut lets = Vec::new();
+    let mut cur = &code;
+    while let Code::Let(decl, rest) = cur {
+        lets.push(decl);
+        cur = rest.as_ref();
+    }
+
+    assert_eq!(
+        lets.len(),
+        2,
+        "the argument's binding and the `let` must both survive, got: {lets:?}"
+    );
+    match &lets[0].value {
+        LetValue::Lit(clean_kernel::Literal::Nat(n)) if n.to_u64() == Some(7) => {}
+        other => {
+            panic!("the redex argument must be let-bound FIRST to the literal 7, got {other:?}")
+        }
+    }
+    match &lets[1].value {
+        LetValue::FVar { fvar, args } => {
+            assert_eq!(
+                *fvar, lets[0].fvar_id,
+                "the `let` must name the argument's atom — the identity redex \
+                 reduces to exactly that free variable"
+            );
+            assert!(args.is_empty(), "no application is involved, got {args:?}");
+        }
+        other => panic!("expected the `let` to name the argument's fvar, got {other:?}"),
+    }
+    match cur {
+        Code::Return(fv) => assert_eq!(
+            *fv, lets[1].fvar_id,
+            "the declaration must return the `let`"
+        ),
+        other => panic!("expected a Return terminal, got {other:?}"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// GAP G15: a `theorem` is a PROOF, not code — it must never become a function
+// ---------------------------------------------------------------------------
+
+/// GAP G15 — PROOF-TO-EXEC LAUNDERING, closed.
+///
+/// A `theorem` carries a proof term in `ConstantInfo.value`, so before the
+/// `ConstantKind::Theorem` gate it sailed past the two early `Ok(None)` drops
+/// (`is_noncomputable`, "no value") and landed in the Prop-valued arm of
+/// `constant_to_decl`, which emits the erased-return stub
+/// `let r := ⟨erased⟩; return r`. That stub is a REAL `Decl`, and the trust-ir
+/// backend turns a real `Decl` into a real `trust_ir::Function` whose erased
+/// return is materialized as a boxed zero / NullPtr — i.e. the shared
+/// two-language module gained a CALLABLE item with no computational meaning,
+/// which the format presents as executable and any module-level quantified
+/// statement then silently ranges over.
+///
+/// A theorem is now dropped exactly as an axiom is: `Ok(None)`, the extern
+/// boundary. The decision reads the kernel's own `ConstantKind` (Lean 4 keeps
+/// `TheoremVal` distinct from `DefinitionVal` for precisely this reason), not
+/// the shape of the type.
+#[test]
+fn test_theorem_never_lowers_to_a_decl() {
+    let mut env = Environment::with_prelude();
+    let name = Name::from_string("GapG15.trivialTheorem");
+    // `theorem GapG15.trivialTheorem : True := True.intro` — kernel-checked by
+    // `add_decl`, so the `ConstantKind::Theorem` under test is stamped by the
+    // KERNEL, not hand-written into a `ConstantInfo`.
+    env.add_decl(Declaration::Theorem {
+        name: name.clone(),
+        level_params: vec![],
+        type_: Expr::const_str("True"),
+        value: Expr::const_str("True.intro"),
+    })
+    .expect("`True.intro : True` kernel-checks against the prelude");
+
+    let info = env.get_const(&name).expect("the theorem is registered");
+    // Guard against this test going vacuous if `add_decl` ever stops stamping
+    // the kind: the whole point is that the kind is what is consulted.
+    assert_eq!(
+        info.kind,
+        clean_kernel::env::ConstantKind::Theorem,
+        "add_decl must stamp Declaration::Theorem as ConstantKind::Theorem"
+    );
+    // And the precondition of the defect: a theorem DOES carry a value, which
+    // is exactly why the two pre-existing `Ok(None)` drops never caught it.
+    assert!(
+        info.value.is_some(),
+        "a theorem carries its proof term as a value — that is the trap"
+    );
+
+    let lowered = constant_to_decl(&env, info);
+    assert!(
+        matches!(lowered, Ok(None)),
+        "a theorem must be DROPPED to the extern boundary, never lowered to a \
+         Decl (proof-to-exec laundering); got {lowered:?}"
+    );
+}
+
+/// NOT OVER-FIXED (the companion of `test_theorem_never_lowers_to_a_decl`).
+///
+/// The erased-stub path exists to keep runtime-irrelevant *definitions*
+/// LINKABLE — type-level machinery and Prop-valued class heads are
+/// `ConstantKind::Definition`s that other code legitimately references by
+/// symbol. The G15 refusal keys on the KIND, not on Prop-ness, so a definition
+/// with the very same Prop type and the very same proof-shaped body still
+/// lowers to the erased stub.
+///
+/// If this test ever fails alongside the one above passing, the theorem gate
+/// has been widened into the erasure and the two distinct defects have been
+/// conflated.
+#[test]
+fn test_prop_typed_definition_still_emits_the_erased_stub() {
+    let mut env = Environment::with_prelude();
+    let name = Name::from_string("GapG15.trivialDefinition");
+    // Byte-for-byte the same type and value as the theorem above — only the
+    // declaration KIND differs.
+    env.add_decl(Declaration::Definition {
+        name: name.clone(),
+        level_params: vec![],
+        type_: Expr::const_str("True"),
+        value: Expr::const_str("True.intro"),
+        is_reducible: false,
+    })
+    .expect("`True.intro : True` kernel-checks as a definition too");
+
+    let info = env.get_const(&name).expect("the definition is registered");
+    assert_eq!(
+        info.kind,
+        clean_kernel::env::ConstantKind::Definition,
+        "the companion must actually be a Definition, or it proves nothing"
+    );
+
+    let decl = constant_to_decl(&env, info)
+        .expect("a Prop-valued definition lowers")
+        .expect("a Prop-valued definition must keep emitting its erased stub");
+    let crate::lcnf::DeclValue::Code(code) = &decl.body else {
+        panic!("expected a Code body");
+    };
+    let Code::Let(let_decl, rest) = code.as_ref() else {
+        panic!("expected `let _ := ⟨erased⟩; ..`, got {code:?}");
+    };
+    assert!(
+        matches!(let_decl.value, LetValue::Erased),
+        "the stub must bind the erased token, got {:?}",
+        let_decl.value
+    );
+    assert!(
+        matches!(rest.as_ref(), Code::Return(fv) if *fv == let_decl.fvar_id),
+        "the stub must return its erased binding"
+    );
+}
+
+/// GAP G15 AT SCALE — the module-wide gate.
+///
+/// The single hand-built theorem above pins the mechanism; this pins the
+/// POPULATION. `constant_to_decl` must drop EVERY `ConstantKind::Theorem` in
+/// the environment, so no theorem anywhere in a module can reach the backend
+/// as a `Decl` (and therefore as a callable `trust_ir::Function`).
+///
+/// Measured with the gate disabled on 2026-09-01: the full prelude carries
+/// 332 theorems and ALL 332 lowered to `Ok(Some(Decl))` with the erased-return
+/// stub body — a 100% laundering rate, not an edge case. With the gate: 0.
+///
+/// The floor assertion keeps the test from going vacuous if the prelude ever
+/// stops registering theorems.
+#[test]
+fn test_no_prelude_theorem_ever_lowers_to_a_decl() {
+    let env = full_prelude_env();
+    let theorems: Vec<clean_kernel::ConstantInfo> = env
+        .constants()
+        .filter(|c| c.kind == clean_kernel::env::ConstantKind::Theorem)
+        .cloned()
+        .collect();
+    assert!(
+        theorems.len() > 250,
+        "prelude theorem population collapsed ({}) — this gate would be vacuous",
+        theorems.len()
+    );
+
+    let leaked: Vec<String> = theorems
+        .iter()
+        .filter(|info| matches!(constant_to_decl(&env, info), Ok(Some(_))))
+        .map(|info| info.name.to_string())
+        .collect();
+    assert!(
+        leaked.is_empty(),
+        "{} of {} prelude theorems were lowered to emitted Decls \
+         (proof-to-exec laundering); first offenders: {:?}",
+        leaked.len(),
+        theorems.len(),
+        &leaked[..leaked.len().min(10)]
+    );
+}
+
+// ---------------------------------------------------------------------------
+// The ADJACENT question the theorem gate deliberately left open: `opaque`
+// ---------------------------------------------------------------------------
+
+/// An `opaque` constant IS code — the doc that said otherwise was wrong.
+///
+/// A `ConstantKind::Opaque` clears the same "no value" drop a theorem used to
+/// clear, because `Declaration::Opaque.value` is not an `Option`: every opaque
+/// the kernel stamps arrives with `value: Some(..)`. So the shape of the trap
+/// is IDENTICAL to G15 — and the answer is the OPPOSITE one. An `opaque` body
+/// is real runtime content that is merely δ-irreducible for the type checker;
+/// dropping it would turn every caller's reference into a dangling extern (a
+/// link error), not into a safe refusal. It therefore lowers exactly like a
+/// definition, and `constant_to_decl`'s doc now says so.
+///
+/// This test is the pin: if someone ever "completes" the G15 fix by adding
+/// `| ConstantKind::Opaque` to the theorem gate, it fails here rather than at
+/// link time in a downstream repo.
+#[test]
+fn test_value_bearing_opaque_still_lowers_to_a_decl() {
+    let mut env = Environment::with_prelude();
+    let name = Name::from_string("GapG15.opaqueValue");
+    // `opaque GapG15.opaqueValue : Nat := Nat.zero` — kernel-checked, so the
+    // `ConstantKind::Opaque` under test is stamped by the KERNEL.
+    env.add_decl(Declaration::Opaque {
+        name: name.clone(),
+        level_params: vec![],
+        type_: Expr::const_str("Nat"),
+        value: Expr::const_str("Nat.zero"),
+    })
+    .expect("`Nat.zero : Nat` kernel-checks against the prelude");
+
+    let info = env.get_const(&name).expect("the opaque is registered");
+    assert_eq!(
+        info.kind,
+        clean_kernel::env::ConstantKind::Opaque,
+        "add_decl must stamp Declaration::Opaque as ConstantKind::Opaque"
+    );
+    // The precondition that makes this the same trap as the theorem: an opaque
+    // DOES carry a value, so the "no value" drop never sees it.
+    assert!(
+        info.value.is_some(),
+        "a kernel-stamped opaque always carries its body — that is why the \
+         `None => Ok(None)` arm cannot be what handles opaques"
+    );
+
+    let decl = constant_to_decl(&env, info)
+        .expect("an opaque with a computable body lowers")
+        .expect(
+            "a value-bearing opaque must NOT be dropped — a dropped opaque \
+                 that something calls is a link error, not a refusal",
+        );
+    let crate::lcnf::DeclValue::Code(code) = &decl.body else {
+        panic!("expected a Code body");
+    };
+    // And it must carry REAL CONTENT, not the erased stub: `Nat` is neither
+    // Prop-valued nor type-level machinery, so nothing here may erase it.
+    if let Code::Let(let_decl, _) = code.as_ref() {
+        assert!(
+            !matches!(let_decl.value, LetValue::Erased),
+            "a data-returning opaque must not be erased to the ⟨erased⟩ stub"
+        );
+    }
+}
+
+/// The one `Opaque` that IS dropped — and the reason it is not a
+/// counter-example to the test above.
+///
+/// `clean_olean`'s trusted-import path registers a value-LESS
+/// `ConstantKind::Opaque` TYPE STUB for a proof body the types-only loader
+/// skipped (`convert_parsed_constant_to_type_stub`; the kind is deliberately
+/// kept as `Opaque` rather than `Axiom` so the axiom set is not inflated).
+/// That stub has nothing to lower, so it takes the "no value" drop and behaves
+/// as an axiom does. The DROP IS DRIVEN BY THE ABSENT VALUE, never by the kind
+/// — which is exactly what makes the doc's old "None for axioms/opaque" claim
+/// wrong rather than merely imprecise.
+#[test]
+fn test_value_less_opaque_type_stub_is_dropped() {
+    let mut env = Environment::with_prelude();
+    let name = Name::from_string("GapG15.opaqueTypeStub");
+    // Built the way the trusted importer builds it: a `ConstantInfo` with the
+    // `Opaque` kind and NO value. `add_decl` cannot express this (the
+    // `Declaration::Opaque` value field is not optional), so this goes through
+    // the same `extend_constants_unchecked` hook the importer uses.
+    env.extend_constants_unchecked(std::iter::once(
+        clean_kernel::env::ConstantInfo::new_with_reducibility(
+            name.clone(),
+            vec![],
+            Expr::const_str("Nat"),
+            None,
+            clean_kernel::env::Reducibility::Opaque,
+            clean_kernel::env::ConstantKind::Opaque,
+        ),
+    ));
+
+    let info = env.get_const(&name).expect("the stub is registered");
+    assert_eq!(
+        info.kind,
+        clean_kernel::env::ConstantKind::Opaque,
+        "the stub must really be an Opaque, or it proves nothing"
+    );
+    assert!(info.value.is_none(), "a type stub carries no body");
+
+    let lowered = constant_to_decl(&env, info);
+    assert!(
+        matches!(lowered, Ok(None)),
+        "a value-less opaque has nothing to lower and takes the extern \
+         boundary; got {lowered:?}"
+    );
+}
+
+#[test]
+fn test_value_variable_atoms_preserve_identity_and_refuse_unbound_indices() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    let outer = ctx.push_typed_binder(&Expr::const_str("Nat"));
+    let inner = ctx.push_typed_binder(&Expr::const_str("Nat"));
+    for (expr, expected) in [
+        (Expr::bvar(0), inner),
+        (Expr::bvar(1), outer),
+        (Expr::fvar(outer), outer),
+    ] {
+        let (value, ty) = expr_to_let_value(&mut ctx, &expr).expect("variable atom must lower");
+        assert!(
+            matches!(value, LetValue::FVar { fvar, args } if fvar == expected && args.is_empty())
+        );
+        // The merged lowerer carries declared local types through atom aliases.
+        assert_eq!(ty, Expr::const_str("Nat"));
+    }
+    for idx in [2, Expr::MAX_BVAR_INDEX] {
+        assert!(matches!(
+            expr_to_let_value(&mut ctx, &Expr::bvar(idx)),
+            Err(CompilerError::InvalidExpr(_))
+        ));
+    }
+    assert_eq!(ctx.bvar_stack, vec![outer, inner]);
+    assert!(ctx.take_lets().is_empty());
+}
+
+/// This ordinary-runtime fixture cannot reach the lowerer: kernel metadata
+/// rejects the original over-limit input when constructing the expression.
+#[test]
+#[should_panic(expected = "too many bound variables")]
+fn test_value_variable_fixture_rejects_unrepresentable_kernel_index() {
+    let _ = Expr::bvar(u32::MAX);
+}
+
+#[test]
+fn test_value_let_resolves_outer_index_and_restores_scope() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    let outer = ctx.push_typed_binder(&Expr::const_str("Nat"));
+    let value = Expr::let_named(
+        Name::from_string("inner"),
+        Expr::const_str("Nat"),
+        Expr::nat_lit(7),
+        Expr::bvar(1),
+        false,
+    );
+    let (value, _) = expr_to_let_value(&mut ctx, &value).expect("outer variable remains in scope");
+    assert!(matches!(value, LetValue::FVar { fvar, args } if fvar == outer && args.is_empty()));
+    assert_eq!(ctx.bvar_stack, vec![outer]);
+    let lets = ctx.take_lets();
+    assert_eq!(lets.len(), 1);
+    assert_ne!(lets[0].fvar_id, outer);
+    assert!(
+        matches!(&lets[0].value, LetValue::Lit(clean_kernel::Literal::Nat(n)) if n.to_u64() == Some(7))
+    );
+}
+
+#[test]
+fn test_value_and_code_let_restore_scope_on_body_refusal() {
+    let env = make_env();
+    for code_position in [false, true] {
+        let mut ctx = LcnfContext::new(&env);
+        let outer = ctx.push_typed_binder(&Expr::const_str("Nat"));
+        let value = Expr::let_named(
+            Name::from_string("inner"),
+            Expr::const_str("Nat"),
+            Expr::nat_lit(7),
+            Expr::bvar(2),
+            false,
+        );
+        let result = if code_position {
+            expr_to_code(&mut ctx, &value).map(|_| ())
+        } else {
+            expr_to_let_value(&mut ctx, &value).map(|_| ())
+        };
+        assert!(matches!(result, Err(CompilerError::InvalidExpr(_))));
+        assert_eq!(ctx.bvar_stack, vec![outer]);
+        assert_eq!(ctx.lookup_bvar(0), Some(outer));
+        assert_eq!(ctx.lookup_bvar(1), None);
+    }
+}
+
+#[test]
+fn test_beta_identity_value_reuses_its_single_argument_binding() {
+    let env = make_env();
+    let mut ctx = LcnfContext::new(&env);
+    let value = Expr::app(
+        Expr::lam(BinderInfo::Default, Expr::const_str("Nat"), Expr::bvar(0)),
+        Expr::nat_lit(7),
+    );
+    let (value, _) = expr_to_let_value(&mut ctx, &value).expect("identity beta body is an atom");
+    let lets = ctx.take_lets();
+    assert_eq!(lets.len(), 1, "the argument must be bound exactly once");
+    assert!(
+        matches!(&lets[0].value, LetValue::Lit(clean_kernel::Literal::Nat(n)) if n.to_u64() == Some(7))
+    );
+    assert!(
+        matches!(value, LetValue::FVar { fvar, args } if fvar == lets[0].fvar_id && args.is_empty())
+    );
+    assert!(ctx.bvar_stack.is_empty());
+}

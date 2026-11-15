@@ -15,11 +15,13 @@
 //! - [`LintRule::MissingDocs`] — a public top-level declaration with no
 //!   doc-comment / leading `--` line comment.
 //!
-//! Soundness note: the "used" check is a *textual* over-approximation. We slice
+//! The "used" check is a conservative source-token approximation. We slice
 //! the body's source text (`Span` carries byte offsets into the original
-//! source) and look for the bound name as a whole identifier token. Because the
-//! scan can only ever *over-count* uses, we never falsely flag a binding that is
-//! genuinely used. This also keeps the analysis robust against future
+//! source) and compare structural names from the actual lexer. A qualified
+//! prefix may be a local receiver, so it counts as a possible use. Opaque
+//! quotations, interpolations and lexical errors also count as possibly used;
+//! this pass does not claim name resolution or macro-expansion completeness.
+//! This keeps the analysis conservative against future
 //! `SurfaceExpr` variants — a hand-written AST walker would silently miss uses
 //! if a variant were added.
 //!
@@ -27,9 +29,11 @@
 //! unused `import`s resolved against the real environment) are deferred; see the
 //! module-level follow-ups in `clean lake lint`'s command handler.
 
+use clean_kernel::Name;
+use clean_parser::lexer::{Lexer, Token, TokenKind};
 use clean_parser::{
     parse_file_with_tactics_diagnostics, SurfaceBinder, SurfaceDecl, SurfaceExpr,
-    SurfaceFieldAssign,
+    SurfaceFieldAssign, SurfaceName,
 };
 use std::fmt;
 
@@ -194,7 +198,7 @@ fn lint_decl(decl: &SurfaceDecl, source: &str, index: &LineIndex, issues: &mut V
             ..
         } => {
             check_missing_docs(*span, name, modifiers.visibility, source, index, issues);
-            let scope: Vec<String> = binders.iter().map(|b| b.name.clone()).collect();
+            let scope: Vec<Name> = binders.iter().map(|b| b.name.name().clone()).collect();
             check_binder_shadowing(binders, &[], *span, index, issues);
             lint_expr(val, source, index, &scope, issues);
         }
@@ -207,14 +211,14 @@ fn lint_decl(decl: &SurfaceDecl, source: &str, index: &LineIndex, issues: &mut V
             ..
         } => {
             check_missing_docs(*span, name, modifiers.visibility, source, index, issues);
-            let scope: Vec<String> = binders.iter().map(|b| b.name.clone()).collect();
+            let scope: Vec<Name> = binders.iter().map(|b| b.name.name().clone()).collect();
             check_binder_shadowing(binders, &[], *span, index, issues);
             lint_expr(proof, source, index, &scope, issues);
         }
         SurfaceDecl::Example {
             binders, val, span, ..
         } => {
-            let scope: Vec<String> = binders.iter().map(|b| b.name.clone()).collect();
+            let scope: Vec<Name> = binders.iter().map(|b| b.name.name().clone()).collect();
             check_binder_shadowing(binders, &[], *span, index, issues);
             lint_expr(val, source, index, &scope, issues);
         }
@@ -280,7 +284,7 @@ fn lint_decl(decl: &SurfaceDecl, source: &str, index: &LineIndex, issues: &mut V
 /// documentation comment (`/-- ... -/`) or `--` line comment.
 fn check_missing_docs(
     span: clean_parser::Span,
-    name: &str,
+    name: &SurfaceName,
     visibility: clean_parser::Visibility,
     source: &str,
     index: &LineIndex,
@@ -325,18 +329,19 @@ fn lint_expr(
     expr: &SurfaceExpr,
     source: &str,
     index: &LineIndex,
-    scope: &[String],
+    scope: &[Name],
     issues: &mut Vec<LintIssue>,
 ) {
     match expr {
         SurfaceExpr::Let(span, binder, value, body)
+        | SurfaceExpr::Have(span, binder, value, body)
         | SurfaceExpr::LetRec(span, binder, value, body) => {
             // Value is elaborated in the outer scope.
             lint_expr(value, source, index, scope, issues);
             check_binder_shadowing(std::slice::from_ref(binder), scope, *span, index, issues);
             check_unused_binding(binder, body, *span, source, index, issues);
             let mut inner = scope.to_vec();
-            inner.push(binder.name.clone());
+            inner.push(binder.name.name().clone());
             lint_expr(body, source, index, &inner, issues);
         }
         SurfaceExpr::Lambda(span, binders, body)
@@ -347,7 +352,7 @@ fn lint_expr(
                 check_unused_binding(binder, body, *span, source, index, issues);
             }
             let mut inner = scope.to_vec();
-            inner.extend(binders.iter().map(|b| b.name.clone()));
+            inner.extend(binders.iter().map(|b| b.name.name().clone()));
             lint_expr(body, source, index, &inner, issues);
         }
         SurfaceExpr::App(_, f, args) => {
@@ -400,7 +405,7 @@ fn lint_field_assign(
     field: &SurfaceFieldAssign,
     source: &str,
     index: &LineIndex,
-    scope: &[String],
+    scope: &[Name],
     issues: &mut Vec<LintIssue>,
 ) {
     lint_expr(&field.val, source, index, scope, issues);
@@ -421,6 +426,10 @@ fn check_unused_binding(
     }
     let body_span = body.span();
     let snippet = span_text(source, body_span);
+    if snippet.is_empty() {
+        // A missing/dummy/invalid source span cannot establish non-use.
+        return;
+    }
     if !identifier_used(&binder.name, snippet) {
         let (line, column) = binder_location(binder, decl_span, index);
         issues.push(LintIssue::new(
@@ -435,19 +444,19 @@ fn check_unused_binding(
 /// `shadowed-binding`: flag any binder whose name is already present in `scope`.
 fn check_binder_shadowing(
     binders: &[SurfaceBinder],
-    scope: &[String],
+    scope: &[Name],
     decl_span: clean_parser::Span,
     index: &LineIndex,
     issues: &mut Vec<LintIssue>,
 ) {
     // Track names introduced within this binder group too, so
     // `fun x x => ...` is flagged.
-    let mut seen: Vec<&str> = scope.iter().map(String::as_str).collect();
+    let mut seen: Vec<&Name> = scope.iter().collect();
     for binder in binders {
         if is_anonymous(&binder.name) {
             continue;
         }
-        if seen.contains(&binder.name.as_str()) {
+        if seen.contains(&binder.name.name()) {
             let (line, column) = binder_location(binder, decl_span, index);
             issues.push(LintIssue::new(
                 LintRule::ShadowedBinding,
@@ -456,7 +465,7 @@ fn check_binder_shadowing(
                 format!("binding `{}` shadows an existing binding", binder.name),
             ));
         }
-        seen.push(binder.name.as_str());
+        seen.push(binder.name.name());
     }
 }
 
@@ -475,8 +484,12 @@ fn binder_location(
 }
 
 /// `true` for anonymous / wildcard binder names that should not be linted.
-fn is_anonymous(name: &str) -> bool {
-    name.is_empty() || name == "_" || name.starts_with('_')
+fn is_anonymous(name: &SurfaceName) -> bool {
+    name.is_anonymous()
+        || name.is_relative_constructor()
+        || name
+            .component_text()
+            .is_some_and(|text| text.starts_with('_') && name.is_unescaped_component(text))
 }
 
 /// Slice the source by a span, defensively clamping to the source length.
@@ -486,55 +499,74 @@ fn span_text(source: &str, span: clean_parser::Span) -> &str {
     source.get(start..end).unwrap_or("")
 }
 
-/// Returns `true` if `name` appears as a whole identifier token in `text`.
-///
-/// A "whole identifier" is bounded by characters that cannot be part of a Lean
-/// identifier (ASCII alphanumerics, `_`, `'`, `.`, and non-ASCII letters such
-/// as Greek used in Mathlib). This over-approximates uses, so it never flags a
-/// genuinely-used binding.
-fn identifier_used(name: &str, text: &str) -> bool {
-    if name.is_empty() {
+/// Whether source tokens may use the exact binding. Prefixes count because
+/// `x.field` can use a local receiver; suffixes and leading-dot selectors do not.
+/// Quoted `«A.B»` is one Str, never the qualified path `A.B` or a numeric Name.
+fn identifier_used(name: &SurfaceName, text: &str) -> bool {
+    if name.is_anonymous() {
         return true;
     }
-    let bytes = text.as_bytes();
-    let needle = name.as_bytes();
-    let mut search_from = 0;
-    while let Some(rel) = find_subslice(&bytes[search_from..], needle) {
-        let start = search_from + rel;
-        let end = start + needle.len();
-        let before_ok = start == 0 || !is_ident_char(prev_char(text, start));
-        let after_ok = end >= text.len() || !is_ident_char(next_char(text, end));
-        if before_ok && after_ok {
+    if name.is_relative_constructor() {
+        return false;
+    }
+    let tokens = Lexer::tokenize(text);
+    if tokens.iter().any(|token| {
+        matches!(
+            token.kind,
+            TokenKind::Error(_) | TokenKind::SyntaxQuote(_) | TokenKind::InterpolatedString(..)
+        )
+    }) {
+        return true;
+    }
+    let mut i = 0;
+    while i < tokens.len() {
+        let relative = matches!(tokens[i].kind, TokenKind::Dot);
+        if relative {
+            i += 1;
+        }
+        let Some(token) = tokens.get(i) else {
+            break;
+        };
+        let Some(mut found) = identifier_component(token) else {
+            i += 1;
+            continue;
+        };
+        let keyword_head = !matches!(token.kind, TokenKind::Ident(_));
+        let mut can_match = !relative && !keyword_head;
+        if can_match && found.name() == name.name() {
             return true;
         }
-        search_from = start + 1;
+        let mut end = token.span.end;
+        i += 1;
+        while let (Some(dot), Some(next)) = (tokens.get(i), tokens.get(i + 1)) {
+            if !matches!(dot.kind, TokenKind::Dot)
+                || dot.span.start != end
+                || dot.span.end != next.span.start
+            {
+                break;
+            }
+            let Some(component) = identifier_component(next) else {
+                break;
+            };
+            found = found.append(&component);
+            can_match = !relative;
+            if can_match && found.name() == name.name() {
+                return true;
+            }
+            end = next.span.end;
+            i += 2;
+        }
     }
     false
 }
 
-/// Find the first occurrence of `needle` in `haystack`, returning its index.
-fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    if needle.is_empty() || needle.len() > haystack.len() {
-        return None;
+fn identifier_component(token: &Token) -> Option<SurfaceName> {
+    match &token.kind {
+        TokenKind::Ident(text) => Some(SurfaceName::component(text, token.ident_escaped)),
+        kind => kind
+            .as_keyword_str()
+            .map(|text| SurfaceName::component(text, false)),
     }
-    haystack
-        .windows(needle.len())
-        .position(|window| window == needle)
-}
-
-/// The character ending just before byte index `idx`.
-fn prev_char(text: &str, idx: usize) -> char {
-    text[..idx].chars().next_back().unwrap_or(' ')
-}
-
-/// The character starting at byte index `idx`.
-fn next_char(text: &str, idx: usize) -> char {
-    text[idx..].chars().next().unwrap_or(' ')
-}
-
-/// Whether `c` can be part of a Lean identifier token.
-fn is_ident_char(c: char) -> bool {
-    c == '_' || c == '\'' || c == '.' || c.is_alphanumeric()
 }
 
 /// Maps byte offsets to 1-based `(line, column)` positions.
@@ -579,6 +611,151 @@ impl LineIndex {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // Preserve the existing simple-name controls through the explicit token
+    // constructor; production consumers pass their original typed source name.
+    fn identifier_used(name: &str, text: &str) -> bool {
+        super::identifier_used(&SurfaceName::component(name, false), text)
+    }
+
+    #[test]
+    fn typed_lint_use_distinguishes_quoted_paths_numeric_components_and_suffixes() {
+        let quoted = SurfaceName::component("A.B", true);
+        let qualified = SurfaceName::generated_path("A.B");
+        assert!(super::identifier_used(&quoted, "«A.B»"));
+        assert!(!super::identifier_used(&quoted, "A.B"));
+        assert!(super::identifier_used(&qualified, "A.B"));
+        assert!(!super::identifier_used(&qualified, "«A.B»"));
+        assert!(super::identifier_used(
+            &SurfaceName::component("7", true),
+            "«7»"
+        ));
+        assert!(!super::identifier_used(
+            &SurfaceName::from_name(Name::anon().num(7)),
+            "«7»"
+        ));
+        assert!(
+            identifier_used("x", "x.field"),
+            "a prefix may be a local receiver"
+        );
+        assert!(!identifier_used("field", "x.field"));
+        assert!(identifier_used("α'", "«α'»"));
+        assert!(!identifier_used("A.B", "-- «A.B»\n\"A.B\""));
+    }
+
+    #[test]
+    fn typed_lint_relative_selectors_and_keyword_tokens_are_not_local_references() {
+        assert!(!identifier_used("ctor", ".ctor"));
+        assert!(!identifier_used("ctor", "f .ctor"));
+        assert!(identifier_used("ctor", "«ctor»"));
+        assert!(super::identifier_used(
+            &SurfaceName::component(".ctor", true),
+            "«.ctor»"
+        ));
+        assert!(!super::identifier_used(
+            &SurfaceName::component(".ctor", true),
+            ".ctor"
+        ));
+        assert!(!identifier_used("Type", "Type"));
+        assert!(identifier_used("Type", "«Type»"));
+        assert!(!super::identifier_used(
+            &SurfaceName::component("ctor", false).with_relative_constructor(),
+            "ctor"
+        ));
+    }
+
+    #[test]
+    fn typed_lint_unknown_lexical_bodies_do_not_establish_non_use() {
+        for text in ["s!\"value {x}\"", "`(x)", "«unfinished"] {
+            assert!(identifier_used("x", text), "{text}");
+        }
+        let source = "α";
+        let index = LineIndex::new(source);
+        let binder = SurfaceBinder::new_typed(
+            SurfaceName::component("x", false),
+            None,
+            clean_parser::SurfaceBinderInfo::Explicit,
+        );
+        let mut issues = Vec::new();
+        check_unused_binding(
+            &binder,
+            &SurfaceExpr::Hole(clean_parser::Span::new(1, 2)),
+            clean_parser::Span::dummy(),
+            source,
+            &index,
+            &mut issues,
+        );
+        assert!(
+            issues.is_empty(),
+            "invalid UTF-8 span is not evidence of non-use"
+        );
+    }
+
+    #[test]
+    fn typed_lint_shadow_keys_preserve_identity_and_escaped_name_syntax() {
+        let quoted = SurfaceName::component("A.B", true);
+        let qualified = SurfaceName::generated_path("A.B");
+        let make =
+            |name| SurfaceBinder::new_typed(name, None, clean_parser::SurfaceBinderInfo::Explicit);
+        let index = LineIndex::new("");
+        let mut issues = Vec::new();
+        check_binder_shadowing(
+            &[make(quoted.clone())],
+            &[qualified.into_name()],
+            clean_parser::Span::dummy(),
+            &index,
+            &mut issues,
+        );
+        assert!(issues.is_empty());
+        check_binder_shadowing(
+            &[make(SurfaceName::component("x", true))],
+            &[SurfaceName::component("x", false).into_name()],
+            clean_parser::Span::dummy(),
+            &index,
+            &mut issues,
+        );
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].rule, LintRule::ShadowedBinding);
+        assert!(is_anonymous(&SurfaceName::component("_", false)));
+        assert!(!is_anonymous(&SurfaceName::component("_", true)));
+    }
+
+    #[test]
+    fn typed_lint_source_uses_and_shadowing_do_not_join_equal_display_names() {
+        for source in [
+            "/-- Doc. -/\ndef f : Nat := let «A.B» := 5; «A.B»\n",
+            "/-- Doc. -/\ndef f : Nat := let x := 5; «x»\n",
+        ] {
+            let report = lint_source(source);
+            assert!(report.issues.is_empty(), "{source}: {:?}", report.issues);
+        }
+        let report = lint_source("/-- Doc. -/\ndef f : Nat := let «A.B» := 5; A.B\n");
+        assert_eq!(
+            report
+                .issues
+                .iter()
+                .filter(|issue| issue.rule == LintRule::UnusedBinding)
+                .count(),
+            1
+        );
+        assert!(!report
+            .issues
+            .iter()
+            .any(|issue| issue.rule == LintRule::ParseError));
+        let report = lint_source("/-- Doc. -/\ndef f (x : Nat) : Nat := let «x» := 5; x\n");
+        assert_eq!(
+            report
+                .issues
+                .iter()
+                .filter(|issue| issue.rule == LintRule::ShadowedBinding)
+                .count(),
+            1
+        );
+        assert!(!report
+            .issues
+            .iter()
+            .any(|issue| issue.rule == LintRule::ParseError));
+    }
 
     #[test]
     fn test_line_index_line_col_first_line() {

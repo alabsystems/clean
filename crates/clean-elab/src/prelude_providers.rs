@@ -294,7 +294,7 @@ fn init_full_mathlib(env: &mut Environment) -> Result<(), ElabError> {
     ignore_dup(env.init_subring());
     ignore_dup(env.init_subfield());
     ignore_dup(env.init_submonoid());
-    ignore_dup(env.init_fact());
+    crate::source_family_authority::complete_fact_bootstrap(env)?;
     ignore_dup(env.init_odd());
     ignore_dup(env.init_nat_card());
     ignore_dup(env.init_ring_hom());
@@ -514,7 +514,7 @@ static MATHLIB_INIT: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBo
 /// an accountable substitution; a stand-in minted for an arbitrary string is a
 /// fabrication. See [`crate::imports::ImportPolicy`].
 #[must_use]
-pub fn has_declared_prelude(module: &str) -> bool {
+pub(crate) fn has_declared_prelude(module: &str) -> bool {
     PRELUDE_PROVIDERS
         .iter()
         .any(|provider| provider.provides().contains(&module))
@@ -522,7 +522,10 @@ pub fn has_declared_prelude(module: &str) -> bool {
         || module.starts_with("Lean.")
 }
 
-pub fn init_prelude_for_module(env: &mut Environment, module: &str) -> Result<bool, ElabError> {
+pub(crate) fn init_prelude_for_module(
+    env: &mut Environment,
+    module: &str,
+) -> Result<bool, ElabError> {
     // Try exact match first
     for provider in PRELUDE_PROVIDERS {
         if provider.provides().contains(&module) {
@@ -561,7 +564,7 @@ pub fn init_prelude_for_module(env: &mut Environment, module: &str) -> Result<bo
     Ok(false)
 }
 
-pub fn init_surface_prelude_after_olean(
+pub(crate) fn init_surface_prelude_after_olean(
     env: &mut Environment,
     module: &str,
 ) -> Result<bool, ElabError> {
@@ -580,6 +583,6 @@ pub fn init_surface_prelude_after_olean(
 
 /// Reset Mathlib init tracking (for tests).
 #[cfg(test)]
-pub fn reset_mathlib_init() {
+pub(crate) fn reset_mathlib_init() {
     MATHLIB_INIT.store(false, std::sync::atomic::Ordering::Relaxed);
 }

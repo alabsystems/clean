@@ -355,7 +355,13 @@ pub(super) fn setup_env_for_finite_cases() -> Environment {
 /// has no `forall_congr` or has one whose conclusion is not an equation. Test
 /// environments that want the Pi-body congruence path therefore have to
 /// declare it.
+///
+/// The default prelude carries it since G39 (ledger (109)); an environment
+/// that already declares it is left alone.
 pub(super) fn add_lean_forall_congr(env: &mut Environment) {
+    if env.get_const(&Name::from_string("forall_congr")).is_some() {
+        return;
+    }
     let prop = Expr::prop();
     let u = Name::from_string("u");
     // `@Eq.{1} Prop a b` — α = Prop : Sort 1, so Eq sits at level 1.
@@ -603,6 +609,8 @@ mod app_spine_regressions;
 mod apply_fun_goal_regressions;
 mod apply_fun_proof_carry;
 mod arithmetic;
+mod assumption_no_match_goal;
+mod assumption_protected_search;
 mod at_location;
 #[cfg(feature = "ay-smt")]
 mod ay_lra_linarith;
@@ -627,6 +635,7 @@ mod decide_ay_guards;
 mod decide_eq_noconfusion_shape;
 mod decide_eq_wrapper_parity;
 mod decide_fallback_routing;
+mod decide_finite_forall;
 mod domain_profile;
 mod dsimp_finisher;
 mod equality;
@@ -656,11 +665,14 @@ mod mathverse_modular_proof_carry;
 mod mathverse_proof_carry;
 mod mono_tactics;
 mod nat_numeral_ofnat;
+mod nat_rel_spelling_matchers;
 mod native_decide;
 mod nlinarith_proof_carry;
 mod omega_farkas_goal;
 mod omega_hyp_eq_adversarial;
+mod omega_hyp_split;
 mod omega_int_equality;
+mod omega_literal_gap_cost;
 mod omega_nat_equality_direct;
 mod omega_nat_equality_hyps;
 mod omega_nat_inequality_direct;
@@ -686,6 +698,8 @@ mod reduce_eq;
 mod replace_target;
 mod replace_target_witness;
 mod rewrite_def_unfold;
+mod rewrite_rw_clear_lean48;
+mod rewrite_side_conditions;
 mod rewrite_subst;
 mod rfl_prod_cases_on;
 mod ring_hadd_hmul;
@@ -699,11 +713,19 @@ mod ring_proof_carry;
 mod ring_proof_sort;
 mod ring_proof_surface;
 mod ring_roundtrip;
+mod rw_at_assert_after;
+mod rw_unfold_namespace_resolution;
+mod rwa_focused;
 mod search_tactics;
 mod seq_focus;
 mod simp;
+mod simp_args;
+mod simp_args_adversarial;
 mod simp_binder_congruence_proof;
 mod simp_budget_refusal;
+mod simp_congr_arg_kinds;
+mod simp_lean48_fidelity;
+mod simp_lean48_fidelity_review;
 mod simp_local_context;
 mod simp_multi_binder_proof;
 mod simp_no_progress_goal;
@@ -711,6 +733,7 @@ mod simp_perf_cache;
 mod simp_proof_carry;
 mod simp_star_hypotheses;
 mod simp_unfold_defs;
+mod simp_unfold_defs_universe_levels;
 mod simp_universe_levels;
 mod simpa_using_term_type;
 mod simproc;
@@ -727,3 +750,4 @@ mod trusted_ay;
 mod trusted_ratchet;
 mod unfold_tests;
 mod unfold_universe_levels;
+mod unknown_tactic_suggestions;

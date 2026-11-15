@@ -81,15 +81,20 @@ impl Environment {
             let (a_id, a_var) = b.fresh_local(sort_u.clone());
             let (synthetic_id, _synthetic) = b.fresh_local(bool_ty.clone());
             let r = b.mk_pi(synthetic_id, BinderInfo::Default, bool_ty, a_var);
-            let r = b.mk_pi(a_id, BinderInfo::Implicit, sort_u, r);
+            let r = b.mk_pi(a_id, BinderInfo::Default, sort_u, r);
             b.finish(r)
         };
 
         self.add_decl(Declaration::Axiom {
-            name: sorry_ax,
+            name: sorry_ax.clone(),
             level_params: vec![u],
             type_,
         })?;
+
+        // Init/Prelude declares this runtime abort implementation. Retaining
+        // its executable metadata permits compiling a placeholder while its
+        // axiom/trust debt remains visible. Evaluation still refuses sorry.
+        self.register_extern(sorry_ax, "lean_sorry".to_string());
 
         Ok(())
     }

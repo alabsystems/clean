@@ -42,8 +42,9 @@ pub(crate) fn build_recursor_type(
     // `ind_level_subst` is the identity, so this is a no-op.
     let param_binders: Vec<(BinderInfo, Term)> = pi_domains_with_info(&decl.type_, num_params)
         .into_iter()
-        .map(|(bi, t)| (bi, t.instantiate_levels(ind_level_subst)))
-        .collect();
+        .map(|(bi, t)| t.instantiate_levels(ind_level_subst).map(|t| (bi, t)))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
     let mut after_params = decl.type_.clone();
     for _ in 0..num_params {
         if let TermKind::Pi(_, _, codom) = after_params.kind() {
@@ -52,8 +53,9 @@ pub(crate) fn build_recursor_type(
     }
     let index_binders: Vec<(BinderInfo, Term)> = pi_domains_with_info(&after_params, num_indices)
         .into_iter()
-        .map(|(bi, t)| (bi, t.instantiate_levels(ind_level_subst)))
-        .collect();
+        .map(|(bi, t)| t.instantiate_levels(ind_level_subst).map(|t| (bi, t)))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
 
     let ind_const = ConstRef::mk_unchecked_levels(decl.name.clone(), ind_level_subst.to_vec());
 
@@ -152,8 +154,9 @@ fn build_motive_type(
     }
     let index_binders: Vec<(BinderInfo, Term)> = pi_domains_with_info(&after_params, num_indices)
         .into_iter()
-        .map(|(bi, t)| (bi, t.instantiate_levels(ind_level_subst)))
-        .collect();
+        .map(|(bi, t)| t.instantiate_levels(ind_level_subst).map(|t| (bi, t)))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
 
     // innermost: Sort u
     let mut mtype = Term::sort(motive_univ.clone());
@@ -235,10 +238,7 @@ fn build_minor_premise_type(
 
     // IH binders for recursive fields, innermost-first (reverse order).
     let mut ih_offset: u32 = 0;
-    for (i, &is_rec) in ci.recursive.iter().enumerate().rev() {
-        if !is_rec {
-            continue;
-        }
+    for (i, field_ty) in ci.recursive_fields().rev() {
         let i_u32 = u32::try_from(i).map_err(|_| "field idx".to_string())?;
         let ihs_above = num_ihs.saturating_sub(1).saturating_sub(ih_offset);
         // field i is at BVar((num_fields-1-i) + ihs_above) inside the IH binders.
@@ -256,7 +256,6 @@ fn build_minor_premise_type(
         // `(z_0:D_0')..(z_{k-1}:D_{k-1}') -> motive idxs' (field i z_0..z_{k-1})`
         // — i.e. the recursive call under the same higher-order binders (Lean's
         // reflexive minor premise, #1784).
-        let field_ty = &ci.field_tys[i];
         let n_pis = count_pi(field_ty);
         let field_ret = return_type(field_ty);
         let (_h, field_ret_args) = field_ret.unfold_apps();
@@ -298,8 +297,8 @@ fn build_minor_premise_type(
     // param refs in a field domain must shift by 1. We lift_from(i, 1) so refs to
     // earlier fields (< i) are untouched while refs to params (>= i) shift by 1
     // (to step over the motive binder).
-    for i in (0..num_fields).rev() {
-        let field_ty = &ci.field_tys[usize::try_from(i).unwrap_or(usize::MAX)];
+    for (i, field_ty) in ci.field_tys.iter().enumerate().rev() {
+        let i = u32::try_from(i).map_err(|_| "field idx".to_string())?;
         let lifted = lift_from(field_ty, i, 1);
         result = Term::pi(BinderInfo::Default, lifted, result);
     }

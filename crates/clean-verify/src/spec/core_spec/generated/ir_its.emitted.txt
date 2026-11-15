@@ -1,0 +1,8 @@
+fn @<[clean_kernel::level::Level; 2] as smallvec::Array>::size::<__trust_args@2188175c7c24d59812e972b212b2c9e2>(functy.110) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0:
+    %0 = const usize 2
+    %1 = copy usize %0
+    ret %1
+}

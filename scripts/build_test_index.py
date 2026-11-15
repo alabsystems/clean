@@ -227,9 +227,9 @@ def build_cargo_cmd(
     module_path: str,
     test_name: str,
 ) -> str:
-    """Build a copy-pasteable cargo test invocation."""
+    """Build a copy-pasteable targo --unverified test invocation."""
     filter_path = f"{module_path}::{test_name}" if module_path else test_name
-    base = f"cargo test --locked --message-format=short -j 1 -p {package}"
+    base = f"targo --unverified test --locked --message-format=short -j 1 -p {package}"
     if cargo_target_flag is None:
         return f"{base} -- {filter_path}"
     if cargo_target_name is None:
@@ -640,7 +640,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "Commands:\n"
             "  build   Rebuild .cleancache/test_index.json\n"
-            "  query   Return a copy-pasteable cargo test command\n"
+            "  query   Return a copy-pasteable targo --unverified test command\n"
             "  stats   Show index coverage summary\n"
         ),
     )

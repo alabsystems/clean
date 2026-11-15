@@ -1,0 +1,19 @@
+# Module SOURCES, compiled in order by the pinned `lean -o` (Lean's kernel checks
+# them first): trust-ir's SemR (`SemR.lean`), MiniRust's generated operators
+# (`MiniRust.lean`), the operator lemma (`SemRMiniRust.lean`) and the memory
+# slice's laws (`SemRMemory.lean`), each byte for byte trust-ir's `lean/semr/` file
+# (`semr_reference.rs` pins their SHA-256s), then the runs, decodes, operator and
+# encoding instances and forged statements Clean's entry checks over them.
+SemR
+SemRUnsignedSelect
+MiniRust
+SemRMiniRust
+SemRMemory
+ClosureConstruction
+ClosureAxiomAudit
+U64Addition
+U64AdditionAudit
+U64ScalarProfile
+U64AdditionConsumer
+MetadataCheck
+SemRCheck

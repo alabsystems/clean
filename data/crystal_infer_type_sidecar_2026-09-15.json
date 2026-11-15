@@ -1,0 +1,99 @@
+{
+  "schema": "clean.crystal_infer_type_sidecar/v1",
+  "what_this_is": "The FIRST measurement of <impl tc::TypeChecker<'env>>::infer_type as a derived body. The THIR lowering declines it -- coverage row `lowered False / spliced False / func_id None`, unsupported `Try(mixed enum spelling)` and `Ty(opaque-lane enum return)` -- and both of those are THIR SHAPE classifications. The callee sidecar's derivation path is MIR-only (ty::Instance::try_resolve -> tcx.instance_mir -> extract_function_faithful(tcx, &mir::Body)), by which point `?` and enum returns are already desugared, so neither decline binds on that route. This record is what happened when the route was actually taken.",
+  "measured_utc": "2026-09-16T05:52:34Z",
+  "lane": "crystal/lzd + trust crystal/callee-sidecar (local-root arm)",
+  "trust_rev": "86c476fabe710c10507b4ea65679872a36a0ff05",
+  "clean_rev_dumped": "2fcab7f2639338aa6af55aa6ba4958a38dec2e29",
+  "driver_seal": "target/crystal-lane/seal-infertype",
+  "driver_note": "Sealed from the wmain worktree with the 2026-08-11 SEED stamp, as every crystal driver here is; seal_driver.sh reported `sysroot compat OK` against laneREG/sysroot-v13 and `verify OK`. Identity is the seal's REV plus the sidecar-path blobs, never --version.",
+  "arm": "O3 (-Copt-level=3), cargo rustc --locked --release -p clean-kernel --lib",
+  "runs": {
+    "f512": {
+      "filter": "local:infer_type",
+      "member_fuel": 512,
+      "manifest_sha256": "10a0d471545be0f5683370b5cba90d118be6e86463981346f551e5f970325239",
+      "closed": false,
+      "lowering": "error: UnsupportedType(\"Seq { elem: Int { width: 8, signed: false } }\")",
+      "roots_total": 74,
+      "root_outcomes": {
+        "resolved": 60,
+        "refused: local root is Closure, not a fn": 14
+      },
+      "members": 512,
+      "panic_terminals": 7,
+      "escaping_total": 193,
+      "escaping_by_class": {
+        "MIR unavailable": 12,
+        "non-Item instance kind": 22,
+        "indirect call": 3,
+        "member fuel": 156
+      },
+      "fuel_exhausted": true,
+      "entry": {
+        "name": "clean_kernel::tc::infer::<impl clean_kernel::tc::TypeChecker<'_>>::infer_type::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>",
+        "def_path": "infer::<impl TypeChecker<'env>>::infer_type",
+        "sidecar_func_id": 7,
+        "mir_blocks": 6,
+        "extracted_blocks": 6,
+        "direct_calls": [
+          "tc::heartbeat::<impl tc::TypeChecker<'_>>::tick_heartbeat",
+          "tc::infer::<impl tc::TypeChecker<'_>>::infer_type_fast"
+        ]
+      },
+      "entry_closure": {
+        "members_reachable": 438,
+        "extracted_blocks": 5580,
+        "call_edges": 1774,
+        "edges_leaving_bundle": {
+          "escaping: callee refused on its own walk": 410,
+          "panic-terminal": 87,
+          "escaping: indirect call (non-const func operand)": 3
+        }
+      }
+    },
+    "f16384": {
+      "filter": "local:tc::infer::<impl tc::TypeChecker<'env>>::infer_type",
+      "member_fuel": 16384,
+      "manifest_sha256": "fe930834498db87d5329f25b98ebd8012de43d56cb8ee4d4929d6be288341fe6",
+      "closed": false,
+      "lowering": "error: UnsupportedType(\"Seq { elem: Int { width: 8, signed: false } }\")",
+      "roots_total": 30,
+      "root_outcomes": {
+        "resolved": 25,
+        "refused: local root is Closure, not a fn": 5
+      },
+      "members": 2989,
+      "panic_terminals": 10,
+      "escaping_total": 254,
+      "escaping_by_class": {
+        "MIR unavailable": 28,
+        "non-Item instance kind": 213,
+        "indirect call": 13
+      },
+      "fuel_exhausted": false,
+      "entry": {
+        "name": "clean_kernel::tc::infer::<impl clean_kernel::tc::TypeChecker<'_>>::infer_type::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>",
+        "def_path": "infer::<impl TypeChecker<'env>>::infer_type",
+        "sidecar_func_id": 0,
+        "mir_blocks": 6,
+        "extracted_blocks": 6,
+        "direct_calls": [
+          "tc::heartbeat::<impl tc::TypeChecker<'_>>::tick_heartbeat",
+          "tc::infer::<impl tc::TypeChecker<'_>>::infer_type_fast"
+        ]
+      },
+      "entry_closure": {
+        "members_reachable": 2974,
+        "extracted_blocks": 34956,
+        "call_edges": 11098,
+        "edges_leaving_bundle": {
+          "escaping: callee refused on its own walk": 1533,
+          "panic-terminal": 590,
+          "escaping: indirect call (non-const func operand)": 13
+        }
+      }
+    }
+  },
+  "reading": "The body EXTRACTS (6 MIR blocks, 6 extracted) and its closure TERMINATES: at fuel 16384 the walk stopped on its own at 2989 members with no fuel-exhaustion entry, so 2974 reachable members is the real size and not a truncation. What is NOT closed is three named classes of escaping edge and, separately, the bundle's LOWERING, which refuses exactly one type: Seq { elem: Int { width: 8, signed: false } } -- a byte slice. Nothing here claims a proof about infer_type; it claims that the artifact a proof would be about can now be built, and states what still stops it being built completely."
+}

@@ -20,7 +20,6 @@
 //! corpus re-verifier (`verify_corpus_incremental`) re-checks it independently.
 //! Nothing is stamped `KernelVerified` that the kernel did not accept.
 
-use clean_kernel::env::is_foundational_axiom;
 use clean_kernel::hol_light_import::import_proof_object_json;
 use clean_kernel::Environment;
 
@@ -73,11 +72,13 @@ pub fn import_verified_hol_proofs(
             continue;
         }
 
-        // Gate on axiom closure ⊆ FOUNDATIONAL_AXIOMS (the 3 + quotient prims).
-        let reducible_to_three = match env.axiom_deps(&translated.theorem_name) {
-            Some(deps) => deps.iter().all(is_foundational_axiom),
-            None => false,
-        };
+        // Gate on axiom closure ⊆ FOUNDATIONAL_AXIOMS (the 3 + quotient prims):
+        // `axiom_deps` drops exactly the kernel's CANONICAL foundations, so
+        // the closure qualifies iff nothing is left (re-testing the rest by
+        // name would re-admit an axiom that merely shares a foundational name).
+        let reducible_to_three = env
+            .axiom_deps(&translated.theorem_name)
+            .is_some_and(|deps| deps.is_empty());
         if !reducible_to_three {
             out.rejected += 1;
             continue;

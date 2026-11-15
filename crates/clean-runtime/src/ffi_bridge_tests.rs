@@ -938,13 +938,14 @@ fn test_int_div_normal() {
 }
 
 #[test]
-fn test_int_mod_by_zero_is_zero() {
+fn test_int_mod_by_zero_preserves_dividend() {
     let bridge = FfiBridge::new();
-    // Int modulus by zero yields 0 (Lean convention).
-    let result = bridge
-        .call_native("Int.mod", &[Value::Int(7), Value::Int(0)])
-        .expect("Int.mod by zero should succeed (total)");
-    assert_eq!(result, Value::Int(0));
+    for dividend in [7, -7, 0] {
+        let result = bridge
+            .call_native("Int.mod", &[Value::Int(dividend), Value::Int(0)])
+            .expect("Int.mod by zero should succeed (total)");
+        assert_eq!(result, Value::Int(dividend));
+    }
 }
 
 #[test]

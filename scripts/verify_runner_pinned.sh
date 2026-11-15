@@ -96,4 +96,11 @@ else
   git -C "$REPO_ROOT" worktree add --detach "$WORKTREE" "$sha" >/dev/null
 fi
 
-exec /usr/bin/env python3 "$WORKTREE/scripts/verify_runner.py" "${@:-status}"
+# The PINNED worktree's runner, through THIS checkout's wrapper -- not
+# `/usr/bin/env python3`, and not the pinned worktree's own wrapper. The wrapper
+# resolves a Python >= 3.11 (the runner needs tomllib; Apple's default python3
+# is 3.9) the same way scripts/local_gate.sh does and fails closed without one;
+# a pin older than that resolver (COMMITISH=<older sha>) would otherwise bring
+# the 3.9 death back with it.
+VERIFY_RUNNER_SCRIPT="$WORKTREE/scripts/verify_runner.py" \
+  exec bash "$REPO_ROOT/scripts/verify_runner.sh" "${@:-status}"

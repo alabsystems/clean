@@ -1,72 +1,37 @@
-# ck0 Genesis — the irreducible trust floor (honestly named)
+# ck0's remaining trust floor
 
-> Operating standard: the floor is **minimized and named, never pretended to be
-> zero.** "ck0 says Trusted" is only as good as the items below. This document is
-> the honest accounting of what you must trust to believe a ck0 verdict.
+`clean-ck0` is an independent, unproved Rust kernel implementation and a bounded
+export reader. Its `#![forbid(unsafe_code)]` source and adversarial tests do not
+prove correspondence to Lean or semantic soundness. Read the current rule and
+refusal inventory in the Q2 report, and the Q0/Q4 reports for counted-quorum
+limitations. Q6's candidate evidence does not change those claims.
 
-## What ck0 *is*
+A verdict still relies on:
 
-`clean-ck0` is a from-scratch, minimal, `#![forbid(unsafe_code)]` proof-checking
-kernel for a Lean-4-shaped Calculus of Inductive Constructions. It decides every
-judgment itself (no caches as oracles), is **two-valued / fail-closed** (no
-fail-open verdict), and is built so two bug classes are *unrepresentable*:
-fixed-width overflow (no `i128`/`f64`/`as`-casts in the kernel path — universe
-levels and `Nat` literals are arbitrary-precision) and casesOn level-arity
-false-Trusted (eliminator levels are kernel-derived, not a caller input).
+1. Specification faithfulness of ck0's rules, parsing, policies, and any caller's
+   translation. An accepted test is not a proof of rule faithfulness.
+2. The compiler and backend, their bootstrap origins, compiler runtime, standard
+   library, linker, system libraries, OS and hardware. Exact executable/sysroot
+   identities narrow provenance; they do not prove translation correctness.
+   Trust and stock rustc share ancestry. Their agreement does not remove this
+   floor or constitute independent compiler implementations or classical DDC.
+3. The actual resolved arithmetic and other dependencies. Standalone Clean uses
+   registry num-bigint/num-integer/num-traits. Trust's temporal workspace patches
+   those packages to ty's tla-bignum implementations. Qualifying the former does
+   not qualify the latter. Export builds also enable sha2, serde and serde_json;
+   the lock and recorded dependency-source inventories name the precise closure.
+4. The shell, environment, build scripts, configuration and evidence producer.
+   Q6's Python tool is unproved evidence bookkeeping. It is not a trusted proof
+   checker, signed attestation, or assurance that all future build inputs have
+   been discovered. Committed inventories and negative controls detect specified
+   drift; a party replacing code and all its pins is outside that claim.
 
-Scope of this seed: **M0–M3** — terms + validation chokepoint, whnf/def_eq,
-inductive admission, mutual + nested recursor derivation, strict-positivity and
-subsingleton/large-elim soundness gates. (M4–M7 — cert ingest, legacy retirement,
-durable production genesis — are roadmap; this is a genesis seed of the trust
-root **as it stands**, regenerated at each milestone.)
+The old `MANIFEST.txt` is historical and stale. `CANDIDATE.json` names measured
+source without genesis promotion. Binary digests in the qualification record do
+not promise portable custody, bit-for-bit reproduction, or production deployment.
+A full Q6 remains open until independent compilation and the exact production
+closure are qualified and the genesis seed can honestly be promoted.
 
-## The irreducible floor — what you must trust
-
-1. **The Rust compiler (`rustc` + LLVM), pinned in `MANIFEST.txt`.** ck0 is *not*
-   yet self-hosted; rustc+LLVM are trusted to faithfully compile ck0's source to
-   machine code. *This is the item the whole ck2 program exists to shrink:* the
-   verified-codegen work (C1) has the kernel re-check a compiler's *output* to
-   `trust_count == 0`, so rustc/LLVM leave the trust root **for checked programs** —
-   but the kernel binary itself is still rustc-built until self-hosting (M6+).
-
-2. **The Rust standard library + the host OS/syscalls.** ck0 uses `std`
-   (`Vec`, `String`, iteration). `std` and the OS are trusted; the host triple is
-   recorded in the manifest.
-
-3. **`num-bigint` / `num-traits`.** The arbitrary-precision arithmetic backing
-   `BigNat` (universe levels, `Nat` literals). Trusted for correct bignum
-   arithmetic. This is a *deliberate* trade: bignum **kills** the fixed-width
-   overflow bug class by construction, at the cost of trusting num-bigint's adds
-   and comparisons. `thiserror` is also a dependency but is soundness-inert (it
-   only formats error values; a wrong error string cannot make a `false` verdict
-   read as Trusted).
-
-4. **Specification faithfulness — the statement.** The gap between "ck0's `check`
-   returns Trusted" and "the term is genuinely well-typed in CIC / the theorem is
-   genuinely true." ck0's rules are *intended* to be Lean-4-faithful CIC; that
-   faithfulness is evidenced by the validation suite (181 tests, incl. ~70
-   adversarially-forged soundness exploits run through the real kernel, and a
-   *pre-existing* positivity hole found and fixed), **not** by a machine-checked
-   equivalence to an independent CIC specification. A faithfulness bug here is the
-   residual soundness risk. Named, not zero.
-
-5. **For the codegen path (C1) only — additionally:** the ISA / bit-blasting model
-   fidelity (currently exercised at BV4) and the `trust-cg` lowering semantics.
-   These are *not* in the floor for pure-math checking; they apply when ck0 is used
-   to re-check verified codegen.
-
-## What is NOT in the floor (decided by ck0 itself)
-
-Type inference, definitional equality, inductive positivity, recursor derivation
-and ι-reduction, the subsingleton/large-elim gate, level/universe checking — all
-decided from first principles by the ~8.8k-LOC kernel source pinned in the
-manifest, with no trusted oracle, cache, or external prover consulted.
-
-## Reproducibility level of this seed
-
-- **Source: checksum-pinned** (sha256 over all 46 build inputs in `MANIFEST.txt`).
-- **Build: test-reproducible** — `verify.sh` rebuilds from the pinned source with
-  the pinned command and runs the kernel's own validation suite; exit 0 == reproduced.
-- **Bit-identical binary: stretch goal** — achievable only under the exact pinned
-  `rustc` with deterministic flags; not claimed here. `verify.sh` warns (never
-  fails) on a toolchain mismatch, because the *source* is pinned regardless.
+The adopted self-proof route remains a Lean-defined `kcheck` compiled by Trust,
+by design until its gates hold in fact. Soundness is per universe bound; a
+generation proves no more consistency than its base, and the quorum stays.

@@ -1,3 +1,6 @@
+-- Updated 2026-11-06: explicitly reducible aliases and explicit class
+-- projection arguments repair Lean source preconditions. All original bytes
+-- and oracle decisions remain in reports/source-frontier-header-2026-11-06/.
 -- p25 — CLASS I, FRONTIER STAGE I-2: the refusal that makes p24 mean
 -- something. The goal telescope must be solved for an ARBITRARY argument.
 --
@@ -25,7 +28,7 @@ class MyD (p : Prop) where
 
 instance trueMyD : MyD (true = true) := ⟨7⟩
 
-def MyDEq (α : Type) : Type := (x : α) → (y : α) → MyD (x = y)
+@[reducible] def MyDEq (α : Type) : Type := (x : α) → (y : α) → MyD (x = y)
 
 def callee {α : Type} [MyDEq α] (a : α) : Nat := 0
 

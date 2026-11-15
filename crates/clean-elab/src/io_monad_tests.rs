@@ -5,18 +5,69 @@
 //! Tests for IO monad elaboration.
 
 use crate::io_monad::*;
-use clean_parser::SurfaceExpr;
+use clean_parser::{SurfaceExpr, SurfaceName};
+
+fn surface(path: &'static str) -> SurfaceName {
+    SurfaceName::generated_path(path)
+}
+
+#[test]
+fn typed_io_operation_and_binding_identity_preserves_twins() {
+    use clean_kernel::Name;
+    for &operation in IO_OPERATIONS {
+        let actual = surface(operation);
+        let quoted_twin = SurfaceName::component(operation, true);
+        assert!(is_io_operation(&actual));
+        assert!(!is_io_operation(&quoted_twin));
+        assert_eq!(name_to_io_op(actual.name()), Some(operation));
+        assert_eq!(name_to_io_op(quoted_twin.name()), None);
+    }
+    for name in [
+        SurfaceName::component("x.dot", true),
+        surface("x.dot"),
+        SurfaceName::component("7", true),
+        SurfaceName::from_name(Name::anon().num(7)),
+    ] {
+        let body = SurfaceExpr::Ident(clean_parser::Span::dummy(), name.clone());
+        let bound = mk_io_bind(&name, mk_io_get_line(), body);
+        let SurfaceExpr::App(_, _, arguments) = bound else {
+            panic!("expected bind")
+        };
+        let SurfaceExpr::Lambda(_, binders, body) = &arguments[1].expr else {
+            panic!("expected continuation")
+        };
+        assert!(binders[0].name.same_syntax(&name));
+        assert!(
+            matches!(body.as_ref(), SurfaceExpr::Ident(_, actual) if actual.same_syntax(&name))
+        );
+    }
+}
+
+#[test]
+fn typed_io_entrypoint_requires_exact_main_owner() {
+    let ty = SurfaceExpr::app(SurfaceExpr::ident("IO"), vec![SurfaceExpr::ident("Unit")]);
+    assert_eq!(
+        validate_main(&SurfaceName::component("main", true), Some(&ty)),
+        MainValidation::IoUnit
+    );
+    for name in [
+        surface("Namespace.main"),
+        SurfaceName::component("Namespace.main", true),
+    ] {
+        assert_eq!(validate_main(&name, Some(&ty)), MainValidation::NotMain);
+    }
+}
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
 /// Extract the function name from a surface App expression.
-fn app_fn_name(expr: &SurfaceExpr) -> Option<&str> {
+fn app_fn_name(expr: &SurfaceExpr) -> Option<SurfaceName> {
     match expr {
         SurfaceExpr::App(_, func, _) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                Some(name.as_str())
+                Some(name.clone())
             } else {
                 None
             }
@@ -106,7 +157,7 @@ fn test_io_result_type_io_unit() {
     let result = io_result_type(&expr);
     assert!(result.is_some());
     if let Some(SurfaceExpr::Ident(_, name)) = result {
-        assert_eq!(name, "Unit");
+        assert_eq!(name.name(), surface("Unit").name());
     } else {
         panic!("expected Ident(Unit)");
     }
@@ -130,23 +181,23 @@ fn test_io_result_type_bare_io() {
 
 #[test]
 fn test_is_io_operation_known() {
-    assert!(is_io_operation("IO.bind"));
-    assert!(is_io_operation("IO.pure"));
-    assert!(is_io_operation("IO.println"));
-    assert!(is_io_operation("IO.print"));
-    assert!(is_io_operation("IO.getLine"));
-    assert!(is_io_operation("IO.tryCatch"));
-    assert!(is_io_operation("IO.Ref.new"));
-    assert!(is_io_operation("IO.Ref.get"));
-    assert!(is_io_operation("IO.Ref.set"));
-    assert!(is_io_operation("IO.Ref.modify"));
+    assert!(is_io_operation(&surface("IO.bind")));
+    assert!(is_io_operation(&surface("IO.pure")));
+    assert!(is_io_operation(&surface("IO.println")));
+    assert!(is_io_operation(&surface("IO.print")));
+    assert!(is_io_operation(&surface("IO.getLine")));
+    assert!(is_io_operation(&surface("IO.tryCatch")));
+    assert!(is_io_operation(&surface("IO.Ref.new")));
+    assert!(is_io_operation(&surface("IO.Ref.get")));
+    assert!(is_io_operation(&surface("IO.Ref.set")));
+    assert!(is_io_operation(&surface("IO.Ref.modify")));
 }
 
 #[test]
 fn test_is_io_operation_unknown() {
-    assert!(!is_io_operation("IO.unknown"));
-    assert!(!is_io_operation("Nat.add"));
-    assert!(!is_io_operation(""));
+    assert!(!is_io_operation(&surface("IO.unknown")));
+    assert!(!is_io_operation(&surface("Nat.add")));
+    assert!(!is_io_operation(&surface("")));
 }
 
 // ============================================================================
@@ -156,38 +207,47 @@ fn test_is_io_operation_unknown() {
 #[test]
 fn test_validate_main_io_unit() {
     let ty = SurfaceExpr::app(SurfaceExpr::ident("IO"), vec![SurfaceExpr::ident("Unit")]);
-    assert_eq!(validate_main("main", Some(&ty)), MainValidation::IoUnit);
+    assert_eq!(
+        validate_main(&surface("main"), Some(&ty)),
+        MainValidation::IoUnit
+    );
 }
 
 #[test]
 fn test_validate_main_io_uint32() {
     let ty = SurfaceExpr::app(SurfaceExpr::ident("IO"), vec![SurfaceExpr::ident("UInt32")]);
-    assert_eq!(validate_main("main", Some(&ty)), MainValidation::IoUInt32);
+    assert_eq!(
+        validate_main(&surface("main"), Some(&ty)),
+        MainValidation::IoUInt32
+    );
 }
 
 #[test]
 fn test_validate_main_not_main() {
     let ty = SurfaceExpr::app(SurfaceExpr::ident("IO"), vec![SurfaceExpr::ident("Unit")]);
-    assert_eq!(validate_main("helper", Some(&ty)), MainValidation::NotMain);
+    assert_eq!(
+        validate_main(&surface("helper"), Some(&ty)),
+        MainValidation::NotMain
+    );
 }
 
 #[test]
 fn test_validate_main_wrong_type() {
     let ty = SurfaceExpr::ident("Nat");
-    let result = validate_main("main", Some(&ty));
+    let result = validate_main(&surface("main"), Some(&ty));
     assert!(matches!(result, MainValidation::InvalidMainType { .. }));
 }
 
 #[test]
 fn test_validate_main_no_type() {
-    let result = validate_main("main", None);
+    let result = validate_main(&surface("main"), None);
     assert!(matches!(result, MainValidation::InvalidMainType { .. }));
 }
 
 #[test]
 fn test_validate_main_bare_io() {
     let ty = SurfaceExpr::ident("IO");
-    let result = validate_main("main", Some(&ty));
+    let result = validate_main(&surface("main"), Some(&ty));
     assert!(
         matches!(result, MainValidation::InvalidMainType { actual_type } if actual_type.contains("missing"))
     );
@@ -201,9 +261,9 @@ fn test_validate_main_bare_io() {
 fn test_mk_io_bind_structure() {
     let action = SurfaceExpr::ident("readInput");
     let body = SurfaceExpr::ident("processInput");
-    let result = mk_io_bind("x", action, body);
+    let result = mk_io_bind(&surface("x"), action, body);
 
-    assert_eq!(app_fn_name(&result), Some("IO.bind"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.bind")));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -211,7 +271,7 @@ fn test_mk_io_bind_structure() {
 fn test_mk_io_bind_continuation_is_lambda() {
     let action = SurfaceExpr::ident("readInput");
     let body = SurfaceExpr::ident("processInput");
-    let result = mk_io_bind("x", action, body);
+    let result = mk_io_bind(&surface("x"), action, body);
 
     if let SurfaceExpr::App(_, _, args) = &result {
         assert!(is_lambda(&args[1].expr));
@@ -222,35 +282,35 @@ fn test_mk_io_bind_continuation_is_lambda() {
 
 #[test]
 fn test_desugar_io_binds_single_step() {
-    let steps = vec![("x".to_owned(), SurfaceExpr::ident("getInput"))];
+    let steps = vec![(surface("x"), SurfaceExpr::ident("getInput"))];
     let terminal = mk_io_pure(SurfaceExpr::ident("x"));
     let result = desugar_io_binds(&steps, terminal);
 
-    assert_eq!(app_fn_name(&result), Some("IO.bind"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.bind")));
 }
 
 #[test]
 fn test_desugar_io_binds_multiple_steps() {
     let steps = vec![
-        ("x".to_owned(), SurfaceExpr::ident("getLine")),
-        ("y".to_owned(), SurfaceExpr::ident("processLine")),
+        (surface("x"), SurfaceExpr::ident("getLine")),
+        (surface("y"), SurfaceExpr::ident("processLine")),
     ];
     let terminal = mk_io_pure(SurfaceExpr::ident("y"));
     let result = desugar_io_binds(&steps, terminal);
 
     // Outermost should be IO.bind for first step
-    assert_eq!(app_fn_name(&result), Some("IO.bind"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.bind")));
 }
 
 #[test]
 fn test_desugar_io_binds_empty_steps() {
-    let steps: Vec<(String, SurfaceExpr)> = vec![];
+    let steps: Vec<(SurfaceName, SurfaceExpr)> = vec![];
     let terminal = SurfaceExpr::ident("done");
     let result = desugar_io_binds(&steps, terminal);
 
     // With no steps, should return terminal directly
     if let SurfaceExpr::Ident(_, name) = &result {
-        assert_eq!(name, "done");
+        assert_eq!(name.name(), surface("done").name());
     } else {
         panic!("expected Ident(done)");
     }
@@ -265,7 +325,7 @@ fn test_mk_io_pure_wraps_value() {
     let val = SurfaceExpr::ident("result");
     let result = mk_io_pure(val);
 
-    assert_eq!(app_fn_name(&result), Some("IO.pure"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.pure")));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -273,10 +333,10 @@ fn test_mk_io_pure_wraps_value() {
 fn test_mk_io_pure_unit() {
     let result = mk_io_pure_unit();
 
-    assert_eq!(app_fn_name(&result), Some("IO.pure"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.pure")));
     if let SurfaceExpr::App(_, _, args) = &result {
         if let SurfaceExpr::Ident(_, name) = &args[0].expr {
-            assert_eq!(name, "Unit.unit");
+            assert_eq!(name.name(), surface("Unit.unit").name());
         } else {
             panic!("expected Ident(Unit.unit)");
         }
@@ -295,7 +355,7 @@ fn test_mk_io_map_structure() {
     let action = SurfaceExpr::ident("getLine");
     let result = mk_io_map(f, action);
 
-    assert_eq!(app_fn_name(&result), Some("IO.map"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.map")));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -307,9 +367,9 @@ fn test_mk_io_map_structure() {
 fn test_mk_io_try_catch_structure() {
     let action = SurfaceExpr::ident("riskyAction");
     let handler = SurfaceExpr::ident("handleError");
-    let result = mk_io_try_catch(action, "e", handler);
+    let result = mk_io_try_catch(action, &surface("e"), handler);
 
-    assert_eq!(app_fn_name(&result), Some("IO.tryCatch"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.tryCatch")));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -317,7 +377,7 @@ fn test_mk_io_try_catch_structure() {
 fn test_mk_io_try_catch_handler_is_lambda() {
     let action = SurfaceExpr::ident("riskyAction");
     let handler = SurfaceExpr::ident("handleError");
-    let result = mk_io_try_catch(action, "e", handler);
+    let result = mk_io_try_catch(action, &surface("e"), handler);
 
     if let SurfaceExpr::App(_, _, args) = &result {
         assert!(is_lambda(&args[1].expr));
@@ -335,7 +395,7 @@ fn test_mk_io_ref_new() {
     let init = SurfaceExpr::nat(0);
     let result = mk_io_ref_new(init);
 
-    assert_eq!(app_fn_name(&result), Some("IO.Ref.new"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.Ref.new")));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -344,7 +404,7 @@ fn test_mk_io_ref_get() {
     let ref_expr = SurfaceExpr::ident("myRef");
     let result = mk_io_ref_get(ref_expr);
 
-    assert_eq!(app_fn_name(&result), Some("IO.Ref.get"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.Ref.get")));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -354,7 +414,7 @@ fn test_mk_io_ref_set() {
     let new_val = SurfaceExpr::nat(42);
     let result = mk_io_ref_set(ref_expr, new_val);
 
-    assert_eq!(app_fn_name(&result), Some("IO.Ref.set"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.Ref.set")));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -364,7 +424,7 @@ fn test_mk_io_ref_modify() {
     let f = SurfaceExpr::ident("Nat.succ");
     let result = mk_io_ref_modify(ref_expr, f);
 
-    assert_eq!(app_fn_name(&result), Some("IO.Ref.modify"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.Ref.modify")));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -377,7 +437,7 @@ fn test_mk_io_println() {
     let msg = SurfaceExpr::ident("msg");
     let result = mk_io_println(msg);
 
-    assert_eq!(app_fn_name(&result), Some("IO.println"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.println")));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -386,7 +446,7 @@ fn test_mk_io_print() {
     let msg = SurfaceExpr::ident("msg");
     let result = mk_io_print(msg);
 
-    assert_eq!(app_fn_name(&result), Some("IO.print"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.print")));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -394,7 +454,7 @@ fn test_mk_io_print() {
 fn test_mk_io_get_line() {
     let result = mk_io_get_line();
     if let SurfaceExpr::Ident(_, name) = &result {
-        assert_eq!(name, "IO.getLine");
+        assert_eq!(name.name(), surface("IO.getLine").name());
     } else {
         panic!("expected Ident(IO.getLine)");
     }
@@ -407,7 +467,7 @@ fn test_mk_io_get_line() {
 #[test]
 fn test_check_io_entry_point_valid() {
     let ty = SurfaceExpr::app(SurfaceExpr::ident("IO"), vec![SurfaceExpr::ident("Unit")]);
-    let result = check_io_entry_point("main", Some(&ty));
+    let result = check_io_entry_point(&surface("main"), Some(&ty));
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), Some(MainValidation::IoUnit));
 }
@@ -415,7 +475,7 @@ fn test_check_io_entry_point_valid() {
 #[test]
 fn test_check_io_entry_point_not_main() {
     let ty = SurfaceExpr::app(SurfaceExpr::ident("IO"), vec![SurfaceExpr::ident("Unit")]);
-    let result = check_io_entry_point("helper", Some(&ty));
+    let result = check_io_entry_point(&surface("helper"), Some(&ty));
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), None);
 }
@@ -423,7 +483,7 @@ fn test_check_io_entry_point_not_main() {
 #[test]
 fn test_check_io_entry_point_invalid_type() {
     let ty = SurfaceExpr::ident("Nat");
-    let result = check_io_entry_point("main", Some(&ty));
+    let result = check_io_entry_point(&surface("main"), Some(&ty));
     assert!(result.is_err());
 }
 
@@ -436,7 +496,7 @@ fn test_build_io_program_empty_with_terminal() {
     let terminal = mk_io_pure(SurfaceExpr::ident("result"));
     let result = build_io_program(&[], Some(terminal)).expect("should succeed");
 
-    assert_eq!(app_fn_name(&result), Some("IO.pure"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.pure")));
 }
 
 #[test]
@@ -444,15 +504,15 @@ fn test_build_io_program_empty_no_terminal() {
     let result = build_io_program(&[], None).expect("should succeed");
 
     // Should produce IO.pure Unit.unit
-    assert_eq!(app_fn_name(&result), Some("IO.pure"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.pure")));
 }
 
 #[test]
 fn test_build_io_program_with_steps() {
-    let steps = vec![("_".to_owned(), mk_io_println(SurfaceExpr::ident("msg")))];
+    let steps = vec![(surface("_"), mk_io_println(SurfaceExpr::ident("msg")))];
     let result = build_io_program(&steps, None).expect("should succeed");
 
-    assert_eq!(app_fn_name(&result), Some("IO.bind"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO.bind")));
 }
 
 // ============================================================================

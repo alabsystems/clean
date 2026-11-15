@@ -67,142 +67,29 @@ fn test_null_replay_strategy_name_and_formats() {
 }
 
 // ---------------------------------------------------------------------------
-// AletheLfReplayStrategy integration tests
+// Unavailable certificate replay backends
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_alethe_lf_replay_valid_cert_returns_certificate_replayed() {
-    let strategy = AletheLfReplayStrategy::new();
-    let cert = Certificate::new(
-        CertificateFormat::AletheLF,
-        b"(assume h1 (not P))\n(step t1 (cl P Q) :rule resolution)".to_vec(),
-        "cvc5",
-    );
-    let result = strategy.replay(&cert).expect("valid Alethe-LF cert");
-    assert!(result.verified);
-    assert_eq!(result.trust_level, TrustLevel::CertificateReplayed);
-    assert!(result.axiom_profile.contains(AxiomProfile::SAT_CERT));
-}
-
-#[test]
-fn test_alethe_lf_replay_wrong_format_returns_error() {
-    let strategy = AletheLfReplayStrategy::new();
-    let cert = Certificate::new(CertificateFormat::Drat, b"data".to_vec(), "cadical");
-    let err = strategy.replay(&cert).unwrap_err();
-    assert!(matches!(err, CertReplayError::UnsupportedFormat { .. }));
-}
-
-#[test]
-fn test_alethe_lf_replay_empty_cert_returns_error() {
-    let strategy = AletheLfReplayStrategy::new();
-    let cert = Certificate::new(CertificateFormat::AletheLF, vec![], "cvc5");
-    let err = strategy.replay(&cert).unwrap_err();
-    assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-}
-
-#[test]
-fn test_alethe_lf_replay_no_proof_steps_returns_error() {
-    let strategy = AletheLfReplayStrategy::new();
-    let cert = Certificate::new(
-        CertificateFormat::AletheLF,
-        b"(define-fun f () Bool true)".to_vec(),
-        "cvc5",
-    );
-    let err = strategy.replay(&cert).unwrap_err();
-    assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-}
-
-#[test]
-fn test_alethe_lf_replay_invalid_utf8_returns_error() {
-    let strategy = AletheLfReplayStrategy::new();
-    let cert = Certificate::new(CertificateFormat::AletheLF, vec![0xFF, 0xFE], "cvc5");
-    let err = strategy.replay(&cert).unwrap_err();
-    assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-}
-
-#[test]
-fn test_alethe_lf_as_trait_object() {
-    let strategy: Box<dyn CertReplayStrategy> = Box::new(AletheLfReplayStrategy::new());
-    let cert = Certificate::new(
-        CertificateFormat::AletheLF,
-        b"(assume a1 P)\n(step t1 (cl P) :rule assumption)".to_vec(),
-        "cvc5",
-    );
-    let result = strategy.replay(&cert).expect("trait object replay");
-    assert!(result.verified);
-}
-
-// ---------------------------------------------------------------------------
-// DratReplayStrategy integration tests
-// ---------------------------------------------------------------------------
-
-#[test]
-fn test_drat_replay_text_cert_returns_certificate_replayed() {
-    let strategy = DratReplayStrategy::new();
-    let cert = Certificate::new(
-        CertificateFormat::Drat,
-        b"1 2 0\n-1 3 0\nd 1 2 0\n4 0\n".to_vec(),
-        "cadical",
-    );
-    let result = strategy.replay(&cert).expect("valid text DRAT cert");
-    assert!(result.verified);
-    assert_eq!(result.trust_level, TrustLevel::CertificateReplayed);
-    assert!(result.axiom_profile.contains(AxiomProfile::SAT_CERT));
-}
-
-#[test]
-fn test_drat_replay_binary_cert_accepted() {
-    let strategy = DratReplayStrategy::new();
-    let binary_cert = vec![b'a', 0x02, 0x04, 0x00, b'd', 0x02, 0x00, b'a', 0x06, 0x00];
-    let cert = Certificate::new(CertificateFormat::Drat, binary_cert, "cadical");
-    let result = strategy.replay(&cert).expect("binary DRAT cert");
-    assert!(result.verified);
-    assert!(result.diagnostics.iter().any(|d| d.contains("binary")));
-}
-
-#[test]
-fn test_lrat_replay_text_cert_accepted() {
-    let strategy = DratReplayStrategy::new();
-    let cert = Certificate::new(
-        CertificateFormat::Lrat,
-        b"5 1 2 0 1 2 0\n6 -1 3 0 3 4 0\nd 1 2 0\n7 0 5 6 0\n".to_vec(),
-        "cake_lpr",
-    );
-    let result = strategy.replay(&cert).expect("LRAT cert");
-    assert!(result.verified);
-    assert!(result.diagnostics.iter().any(|d| d.contains("LRAT")));
-}
-
-#[test]
-fn test_drat_replay_wrong_format_returns_error() {
-    let strategy = DratReplayStrategy::new();
-    let cert = Certificate::new(CertificateFormat::AletheLF, b"(step t1)".to_vec(), "cvc5");
-    let err = strategy.replay(&cert).unwrap_err();
-    assert!(matches!(err, CertReplayError::UnsupportedFormat { .. }));
-}
-
-#[test]
-fn test_drat_replay_empty_cert_returns_error() {
-    let strategy = DratReplayStrategy::new();
-    let cert = Certificate::new(CertificateFormat::Drat, vec![], "cadical");
-    let err = strategy.replay(&cert).unwrap_err();
-    assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-}
-
-#[test]
-fn test_drat_replay_min_size_threshold_rejects_small_cert() {
-    let strategy = DratReplayStrategy::new().with_min_cert_size(100);
-    let cert = Certificate::new(CertificateFormat::Drat, b"1 0\n".to_vec(), "cadical");
-    let err = strategy.replay(&cert).unwrap_err();
-    assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-}
-
-#[test]
-fn test_drat_as_trait_object() {
-    let strategy: Box<dyn CertReplayStrategy> = Box::new(DratReplayStrategy::new());
-    let cert = Certificate::new(CertificateFormat::Drat, b"1 2 0\n".to_vec(), "cadical");
-    let result = strategy.replay(&cert).expect("trait object replay");
-    assert!(result.verified);
+fn test_unavailable_replay_does_not_produce_an_audit_verdict() {
+    let cases: [(Box<dyn CertReplayStrategy>, CertificateFormat); 3] = [
+        (
+            Box::new(AletheLfReplayStrategy::new()),
+            CertificateFormat::AletheLF,
+        ),
+        (Box::new(DratReplayStrategy::new()), CertificateFormat::Drat),
+        (Box::new(DratReplayStrategy::new()), CertificateFormat::Lrat),
+    ];
+    for (strategy, format) in cases {
+        let cert = Certificate::new(format.clone(), b"(step forged) 0".to_vec(), "producer");
+        let error = strategy
+            .replay(&cert)
+            .expect_err("no checked replay exists");
+        match error {
+            CertReplayError::ReplayUnavailable { format: name } => assert_eq!(name, format.name()),
+            other => panic!("expected unavailable replay, got {other}"),
+        }
+    }
 }
 
 // ===========================================================================
@@ -2058,7 +1945,7 @@ fn test_smt_vc_bundle_assertion_source_line_tracking() {
 
 #[test]
 fn test_multiple_replay_strategies_on_same_cert() {
-    // A certificate in DRAT format should succeed with DRAT strategy, fail with Alethe.
+    // Only the explicitly trusted oracle returns a result; neither backend replays it.
     let cert = Certificate::new(CertificateFormat::Drat, b"1 2 0\n3 0\n".to_vec(), "cadical");
 
     let null = NullReplayStrategy;
@@ -2068,9 +1955,12 @@ fn test_multiple_replay_strategies_on_same_cert() {
     let null_result = null.replay(&cert).expect("null always succeeds");
     assert!(null_result.verified);
 
-    let drat_result = drat.replay(&cert).expect("DRAT should accept DRAT cert");
-    assert!(drat_result.verified);
-    assert_eq!(drat_result.trust_level, TrustLevel::CertificateReplayed);
+    assert_eq!(null_result.trust_level, TrustLevel::TrustedOracle);
+    assert!(null_result.axiom_profile.contains(AxiomProfile::SMT_ORACLE));
+    assert!(matches!(
+        drat.replay(&cert),
+        Err(CertReplayError::ReplayUnavailable { .. })
+    ));
 
     let alethe_result = alethe.replay(&cert);
     assert!(alethe_result.is_err(), "Alethe should reject DRAT cert");

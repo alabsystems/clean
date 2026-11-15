@@ -67,6 +67,7 @@ fn decode_prelude_instance_entries() -> Option<(Vec<ParsedInstanceEntry>, usize)
 
 #[test]
 fn test_instance_ext_decoder_prelude_entries_fully_decoded() {
+    // SELF-SKIP OK: needs the pinned leanprover/lean4 v4.30.0-rc2 stdlib oleans (external elan toolchain); skips with a message only when crate::pinned_lean_lib_path() finds none. Decode or parse defects still panic in the helper.
     let Some((decoded, undecoded)) = decode_prelude_instance_entries() else {
         eprintln!("Skipping test: {PINNED_TOOLCHAIN} not installed");
         return;
@@ -112,6 +113,7 @@ fn test_instance_ext_decoder_prelude_entries_fully_decoded() {
 
 #[test]
 fn test_imported_instances_registered_with_real_priorities() {
+    // SELF-SKIP OK: needs the pinned leanprover/lean4 v4.30.0-rc2 stdlib oleans (external elan toolchain); skips with a message only when crate::pinned_lean_lib_path() finds none.
     let Some(lib) = v4_30_lib_path() else {
         eprintln!("Skipping test: {PINNED_TOOLCHAIN} not installed");
         return;
@@ -120,11 +122,36 @@ fn test_imported_instances_registered_with_real_priorities() {
     let mut env = Environment::new();
     let summaries = load_module_with_deps(&mut env, "Init.Prelude", &[lib])
         .expect("Init.Prelude should import");
+    let expected = decode_prelude_instance_entries()
+        .expect("pinned fixture")
+        .0
+        .len();
+    assert!(expected > 0);
+    let own = summaries
+        .iter()
+        .find(|s| s.module_name.as_deref() == Some("Init.Prelude"))
+        .expect("root summary");
+    let rows = own
+        .extension_accounting
+        .iter()
+        .filter(|row| row.extension_name == Name::interned(LEAN_INSTANCE_EXTENSION))
+        .collect::<Vec<_>>();
+    assert_eq!(rows.len(), 1, "one canonical source extension record");
+    assert_eq!(rows[0].source_rows, Some(expected));
+    assert_eq!(rows[0].decoded_rows, expected);
+    assert_eq!((rows[0].undecoded_rows, rows[0].unresolved_targets), (0, 0));
+    assert!(
+        own.extension_undecoded_entries > 0,
+        "unsupported unrelated payloads remain counted"
+    );
     for summary in &summaries {
         assert_eq!(
-            summary.extension_undecoded_entries, 0,
-            "module {:?} should decode all typed extension entries",
-            summary.module_name
+            summary.extension_undecoded_entries,
+            summary
+                .extension_accounting
+                .iter()
+                .map(|row| row.undecoded_rows + row.unresolved_targets)
+                .sum::<usize>()
         );
     }
 
@@ -173,6 +200,7 @@ fn test_imported_instances_registered_with_real_priorities() {
 
 #[test]
 fn test_heuristic_dropped_real_instances_are_restored() {
+    // SELF-SKIP OK: needs the pinned leanprover/lean4 v4.30.0-rc2 stdlib oleans (external elan toolchain); skips with a message only when crate::pinned_lean_lib_path() finds none.
     let Some(lib) = v4_30_lib_path() else {
         eprintln!("Skipping test: {PINNED_TOOLCHAIN} not installed");
         return;
@@ -209,6 +237,7 @@ fn test_heuristic_dropped_real_instances_are_restored() {
 
 #[test]
 fn test_instance_ext_synth_order_decoded_and_registered() {
+    // SELF-SKIP OK: needs the pinned leanprover/lean4 v4.30.0-rc2 stdlib oleans (external elan toolchain); skips with a message only when crate::pinned_lean_lib_path() finds none. Decode defects still panic in the helper.
     let Some((decoded, undecoded)) = decode_prelude_instance_entries() else {
         eprintln!("Skipping test: {PINNED_TOOLCHAIN} not installed");
         return;
@@ -245,6 +274,7 @@ fn test_instance_ext_synth_order_decoded_and_registered() {
 
 #[test]
 fn test_imported_synth_order_registered_in_environment() {
+    // SELF-SKIP OK: needs the pinned leanprover/lean4 v4.30.0-rc2 stdlib oleans (external elan toolchain); skips with a message only when crate::pinned_lean_lib_path() finds none.
     let Some(lib) = v4_30_lib_path() else {
         eprintln!("Skipping test: {PINNED_TOOLCHAIN} not installed");
         return;
@@ -272,4 +302,68 @@ fn test_imported_synth_order_registered_in_environment() {
         env.get_instance_synth_order(&Name::interned("instAddNat_not_registered_here")),
         None
     );
+}
+
+/// `Classical.propDecidable` is declared `scoped instance` in `Init/Classical.lean`;
+/// the decoded entry must carry `attr_kind = Scoped` with its declaring
+/// namespace, which is what gates it on `open Classical` downstream
+/// (`ScopedInstanceState`, 2026-09-11).
+#[test]
+fn test_scoped_instance_entry_carries_its_namespace() {
+    // SELF-SKIP OK: needs the pinned leanprover/lean4 v4.30.0-rc2 stdlib oleans (external elan toolchain); skips with a message only when crate::pinned_lean_lib_path() finds none.
+    let Some(lib) = crate::pinned_lean_lib_path() else {
+        eprintln!("Skipping test: pinned toolchain not installed");
+        return;
+    };
+    let bytes = std::fs::read(lib.join("Init/Classical.olean"))
+        .expect("pinned toolchain resolved, so Init/Classical.olean must be readable");
+    let module = parse_module(&bytes).expect("Init/Classical.olean should parse");
+    let entry = module
+        .entries
+        .iter()
+        .filter(|ext| ext.extension_name == LEAN_INSTANCE_EXTENSION)
+        .flat_map(|ext| ext.entries.iter())
+        .find_map(|e| match e {
+            ParsedExtensionEntry::Instance(i) if i.instance_name == "Classical.propDecidable" => {
+                Some(i.clone())
+            }
+            _ => None,
+        })
+        .expect("Classical.propDecidable must be a decoded instance entry");
+    eprintln!(
+        "propDecidable: attr_kind={:?} scope_ns={:?} priority={}",
+        entry.attr_kind, entry.scope_ns, entry.priority
+    );
+    assert_eq!(entry.attr_kind, ParsedAttrKind::Scoped);
+    assert_eq!(entry.scope_ns.as_deref(), Some("Classical"));
+}
+
+/// `Classical.decidable_of_decidable_not` is a plain `def` in
+/// `Init/Classical.lean` ("This can not be an instance as it would be tried
+/// everywhere"), made an instance only `local`ly — so it must NOT appear as
+/// a persisted `@[instance]` entry.
+#[test]
+fn test_decidable_of_decidable_not_is_not_a_persisted_instance() {
+    // SELF-SKIP OK: needs the pinned leanprover/lean4 v4.30.0-rc2 stdlib oleans (external elan toolchain); skips with a message only when crate::pinned_lean_lib_path() finds none.
+    let Some(lib) = crate::pinned_lean_lib_path() else {
+        eprintln!("Skipping test: pinned toolchain not installed");
+        return;
+    };
+    let bytes = std::fs::read(lib.join("Init/Classical.olean"))
+        .expect("pinned toolchain resolved, so Init/Classical.olean must be readable");
+    let module = parse_module(&bytes).expect("Init/Classical.olean should parse");
+    let names: Vec<String> = module
+        .entries
+        .iter()
+        .filter(|ext| ext.extension_name == LEAN_INSTANCE_EXTENSION)
+        .flat_map(|ext| ext.entries.iter())
+        .filter_map(|e| match e {
+            ParsedExtensionEntry::Instance(i) => Some(i.instance_name.clone()),
+            _ => None,
+        })
+        .collect();
+    eprintln!("Init/Classical instance entries: {names:?}");
+    assert!(!names
+        .iter()
+        .any(|n| n == "Classical.decidable_of_decidable_not"));
 }

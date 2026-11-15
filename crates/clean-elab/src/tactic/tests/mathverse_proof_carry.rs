@@ -23,8 +23,9 @@ fn contradictory_nat_le_false_state() -> ProofState {
         Environment::with_prelude(),
         false_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -43,8 +44,9 @@ fn large_nat_mathverse_replay_fixture() -> (ProofState, FVarId, MathverseCertifi
         Environment::with_prelude(),
         false_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],

@@ -745,3 +745,49 @@ fn trust_core_evidence_rejects_unknown_unchecked_decl_method() {
         .to_string()
         .contains("unsupported unchecked-decl method `add_decl_uncheckd`"));
 }
+
+/// The lane argvs spell the Trust driver, as `scripts/kernel_soundness_gate.sh`
+/// and `scripts/deny_sorry_gate.sh` do (owner directive 2026-09-28): no lane
+/// may name a stock `cargo`, and every one selects the unverified Targo lane.
+#[test]
+fn lane_commands_spell_the_targo_unverified_driver() {
+    let lanes: &[&[&str]] = &[
+        KERNEL_LEAN4_PARITY_LANE_COMMAND,
+        ELAB_SOUNDNESS_GATE_LANE_COMMAND,
+        DENY_SORRY_KERNEL_GATE_LANE_COMMAND,
+        DENY_SORRY_LEAN4_PARITY_LANE_COMMAND,
+        DENY_SORRY_ELAB_ACCEPT_LANE_COMMAND,
+        DENY_SORRY_ELAB_REJECT_LANE_COMMAND,
+    ];
+    for argv in lanes {
+        assert!(!argv.contains(&"cargo"), "stock cargo in lane {argv:?}");
+        let at = argv
+            .iter()
+            .position(|arg| *arg == "targo")
+            .unwrap_or_else(|| panic!("no targo driver in lane {argv:?}"));
+        assert_eq!(argv.get(at + 1), Some(&"--unverified"), "{argv:?}");
+    }
+}
+
+/// `$CARGO` (the running Targo) replaces the `targo` token -- after an
+/// `env VAR=value` prefix too -- and an unset or empty `$CARGO` leaves it.
+#[test]
+fn lane_driver_resolves_through_cargo_env() {
+    use std::ffi::OsString;
+    let cargo = || Some(OsString::from("/store/trust/bin/targo"));
+    let parity = resolve_lane_driver(KERNEL_LEAN4_PARITY_LANE_COMMAND, cargo());
+    assert_eq!(parity[0], "/store/trust/bin/targo");
+    assert_eq!(parity[1], "--unverified");
+    let deny = resolve_lane_driver(DENY_SORRY_KERNEL_GATE_LANE_COMMAND, cargo());
+    assert_eq!(deny[0], "env");
+    assert_eq!(deny[1], "DENY_SORRY=1");
+    assert_eq!(deny[2], "/store/trust/bin/targo");
+    assert_eq!(deny[3], "--unverified");
+    for unset in [None, Some(OsString::new())] {
+        let kept = resolve_lane_driver(ELAB_SOUNDNESS_GATE_LANE_COMMAND, unset);
+        assert_eq!(kept[0], "targo");
+    }
+    // A driver that is not `targo` is never rewritten.
+    let other = resolve_lane_driver(&["python3", "x.py"], cargo());
+    assert_eq!(other[0], "python3");
+}

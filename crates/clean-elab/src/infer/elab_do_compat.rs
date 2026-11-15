@@ -53,7 +53,10 @@ impl<'a> ElabCtx<'a> {
         let success_body = if rest.is_empty() {
             vec![DoElem::Return(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "Unit.unit".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("Unit.unit"),
+                )),
             )]
         } else {
             rest.to_vec()
@@ -76,8 +79,9 @@ impl<'a> ElabCtx<'a> {
                 self.elab_do_elems(&[match_elem])
             }
             DoLetExprKind::Bind => {
-                let fresh = "__let_expr_x".to_string();
-                let binder = SurfaceBinder::new(&fresh, None, SurfaceBinderInfo::Explicit);
+                let fresh = SurfaceName::unspellable("__let_expr_x", 0);
+                let binder =
+                    SurfaceBinder::new_typed(fresh.clone(), None, SurfaceBinderInfo::Explicit);
                 let bind_elem = DoElem::Bind(span, binder, Box::new(discr.clone()));
                 let match_elem = DoElem::Match(
                     span,

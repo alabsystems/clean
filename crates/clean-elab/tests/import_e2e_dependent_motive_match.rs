@@ -434,7 +434,7 @@ fn test_dependent_motive_match_with_field_binding_arm() {
     elaborate_decls_into(
         &mut env,
         "def ChooseO (o : MyOption Nat) : Type := \
-            @MyOption.casesOn Nat (fun _ => Type) Nat (fun _ => MyBool) o\n\
+            @MyOption.casesOn Nat (fun _ => Type) o Nat (fun _ => MyBool)\n\
          def chooseO (o : MyOption Nat) : ChooseO o := match o with\n  \
          | MyOption.none => Nat.zero\n  \
          | MyOption.some a => MyBool.tt",
@@ -490,10 +490,15 @@ fn test_dependent_motive_match_on_native_mybool() {
         "native MyBool.casesOn IS a registered recursor"
     );
 
-    // Native casesOn is MajorAfterMinors: @MyBool.casesOn motive mtt mff major.
+    // Native casesOn is MajorAfterMotive (inductive_recursor.rs: `arg_order:
+    // RecursorArgOrder::MajorAfterMotive`, since ce73b9010 on 2026-06-12):
+    // `@MyBool.casesOn motive major mtt mff`. The pre-flip spelling that stood
+    // here put the major LAST and died in declaration 0 with "cannot unify a
+    // sort with a constant: Type vs MyBool", so the dependent `match` this file
+    // exists to probe was never reached.
     elaborate_decls_into(
         &mut env,
-        "def Choose (b : MyBool) : Type := @MyBool.casesOn (fun _ => Type) Nat MyBool b\n\
+        "def Choose (b : MyBool) : Type := @MyBool.casesOn (fun _ => Type) b Nat MyBool\n\
          def choose (b : MyBool) : Choose b := match b with\n  \
          | MyBool.tt => Nat.zero\n  \
          | MyBool.ff => MyBool.tt",

@@ -8,6 +8,10 @@ use crate::cmd_core::resolve_project_dir;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
+#[cfg(test)]
+#[path = "build_typed_tests.rs"]
+mod typed_name_tests;
+
 /// Build a Lake project
 pub(super) fn lake_build(
     target: Option<String>,
@@ -53,11 +57,14 @@ pub(super) fn lake_build(
     if verbose || !result.is_success() {
         println!("Build completed in {:.2}s", result.duration.as_secs_f64());
         println!(
-            "  {} built, {} skipped, {} failed",
+            "  {} built, {} reused (build trace matches), {} failed",
             result.built.len(),
             result.skipped.len(),
             result.failed.len()
         );
+        for module in &result.skipped {
+            println!("  reused: {module}");
+        }
     }
 
     if !result.failed.is_empty() {
@@ -70,17 +77,48 @@ pub(super) fn lake_build(
 
     ensure_native_artifacts_for_executable_targets(ctx.workspace(), requested_target)?;
 
+    print_disclosures(&result.disclosures);
     if result.built.is_empty() && result.skipped.is_empty() {
         println!("Nothing to build.");
     } else if !verbose {
+        // Say how many modules were NOT built this run (T7a2: a reused
+        // module was once counted as OK without being named as reused).
         println!(
-            "Build OK ({} modules, {:.2}s)",
+            "Build OK ({} modules: {} built, {} reused from a matching build trace, {:.2}s)",
             result.built.len() + result.skipped.len(),
+            result.built.len(),
+            result.skipped.len(),
             result.duration.as_secs_f64()
         );
     }
 
     Ok(())
+}
+
+/// Print the imported artifacts a build took as built, as `clean check`
+/// discloses them (module-trust round 31: `clean lake build` loaded such
+/// artifacts and said nothing).
+pub(super) fn print_disclosures(rows: &[String]) {
+    if rows.is_empty() {
+        return;
+    }
+    println!(
+        "  {} {}:",
+        rows.len(),
+        crate::import_binding::DISCLOSURE_HEADING
+    );
+    for row in rows
+        .iter()
+        .take(crate::import_binding::DISCLOSURE_ROWS_SHOWN)
+    {
+        println!("    - {row}");
+    }
+    if rows.len() > crate::import_binding::DISCLOSURE_ROWS_SHOWN {
+        println!(
+            "    … and {} more",
+            rows.len() - crate::import_binding::DISCLOSURE_ROWS_SHOWN
+        );
+    }
 }
 
 pub(super) fn ensure_native_artifacts_for_executable_targets(
@@ -127,6 +165,19 @@ pub(super) fn ensure_native_artifact_for_executable(
     let root_path = workspace
         .find_module(&exe.root)
         .ok_or_else(|| anyhow::anyhow!("Root module '{}' not found", exe.root))?;
+    if !exe.more_link_args.is_empty() {
+        // Lake hands these to Lean's bundled linker (trust_ir-semantics'
+        // `-Wl,-no_data_const` works around that linker's macOS 15 dyld
+        // abort). Clean links with the system `cc` through the native
+        // backend, which takes no extra arguments; say so, never drop them
+        // in silence.
+        eprintln!(
+            "warning: lean_exe {}: moreLinkArgs [{}] are not passed to Clean's native link \
+             (the native backend links with the system cc and takes no extra arguments)",
+            exe.name,
+            exe.more_link_args.join(", ")
+        );
+    }
     let output = super::run::native_executable_build_path(workspace, &exe.name);
     let source_artifact = executable_c_source_artifact_path(workspace, &exe.name);
 
@@ -135,7 +186,7 @@ pub(super) fn ensure_native_artifact_for_executable(
     // shim coverage and the embedded clean_runtime materialization. This builds the
     // root module's `main` into a native binary written to `output`, and persists
     // the rendered C translation unit to `source_artifact` for inspection.
-    crate::native_build::build_native_executable_with_source_sink(
+    clean_native::native_build::build_native_executable_with_source_sink(
         &root_path,
         "main",
         0,
@@ -209,31 +260,14 @@ fn executable_source_closure(
     Ok(visited.into_iter().collect())
 }
 
-/// Parse `import <Module>` lines from a Lean source file, mirroring the parser
-/// used elsewhere in the CLI: strip line comments, stop at the first non-import
-/// declaration, and tolerate attribute lines before the import block.
-fn import_modules(text: &str) -> Vec<String> {
-    let mut imports = Vec::new();
-    for line in text.lines() {
-        let line = line.split("--").next().unwrap_or("").trim();
-        let Some(rest) = line.strip_prefix("import ") else {
-            if !line.is_empty() && !line.starts_with("@[") {
-                break;
-            }
-            continue;
-        };
-        imports.extend(
-            rest.split_whitespace()
-                .map(|part| {
-                    part.trim_matches(|ch: char| {
-                        !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '.')
-                    })
-                })
-                .filter(|part| !part.is_empty())
-                .map(ToOwned::to_owned),
-        );
-    }
-    imports
+/// Use the actual shared import-header grammar, including quoted components,
+/// comment state and public/meta modifiers. Never trim punctuation or reparse
+/// displayed names before the typed filesystem resolver.
+fn import_modules(text: &str) -> Vec<clean_kernel::Name> {
+    clean_parser::notation_seed::scan_imports(text)
+        .into_iter()
+        .map(clean_parser::SurfaceName::into_name)
+        .collect()
 }
 
 /// Content-hash the source closure into a stable hex digest. blake3 (already a

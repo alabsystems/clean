@@ -12,7 +12,7 @@ use crate::inductive::{count_pi, return_type, InductiveDecl};
 use crate::level::Level;
 use crate::name::Name;
 use crate::rawexpr::BinderInfo;
-use crate::recursor::CtorInfo;
+use crate::recursor::{CtorInfo, MAX_RECURSOR_LEVELS};
 use crate::recursor_build::collect_pi_domains;
 use crate::term::{ConstRef, Term, TermKind};
 
@@ -65,15 +65,19 @@ pub(crate) fn build_rule_rhs(
     }
 
     // recursor levels: the motive level (if large_elim) leads, then ind levels.
+    // `rec_num_levels` is a `u32` header count (the inductive's level params,
+    // plus the motive's); `build_recursor` already refused one above
+    // `MAX_RECURSOR_LEVELS`, and this keeps the bound where the vector is sized.
+    if rec_num_levels > MAX_RECURSOR_LEVELS {
+        return Err(format!(
+            "too many recursor level params ({rec_num_levels} > {MAX_RECURSOR_LEVELS})"
+        ));
+    }
     let rec_levels: Vec<Level> = (0..rec_num_levels).map(Level::param).collect();
 
     // apply IH for each recursive field.
-    for (i, &is_rec) in ci.recursive.iter().enumerate() {
-        if !is_rec {
-            continue;
-        }
+    for (i, field_ty) in ci.recursive_fields() {
         let i_u32 = u32::try_from(i).map_err(|_| "field idx".to_string())?;
-        let field_ty = &ci.field_tys[i];
         // n_pis = reflexive higher-order binders of the field; the IH recurses
         // under the same binders (Lean #1784). All non-z references shift by
         // n_pis inside those binders.

@@ -51,7 +51,11 @@ fn test_apply_fun_hypothesis_not_found() {
     let target = Expr::type_();
     let mut state = ProofState::new(env, target);
     let func = Expr::lam(BinderInfo::Default, Expr::type_(), Expr::bvar(0));
-    let result = apply_fun(&mut state, func, "nonexistent");
+    let result = apply_fun(
+        &mut state,
+        func,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -90,21 +94,30 @@ fn test_clear_except_keeps_specified() {
 
     let goal = state.current_goal_mut().unwrap();
     goal.local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(100),
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: p.clone(),
         value: None,
     });
     goal.local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(101),
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: p.clone(),
         value: None,
     });
 
-    clear_except(&mut state, &["h1"]).unwrap();
+    clear_except(
+        &mut state,
+        &[clean_parser::SurfaceName::generated_path("h1")],
+    )
+    .unwrap();
     let goal = state.current_goal().unwrap();
-    assert!(goal.local_ctx.iter().any(|d| d.name == "h1"));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("h1")));
 }
 
 #[test]
@@ -112,7 +125,11 @@ fn test_replace_hypothesis_not_found() {
     let env = Environment::new();
     let target = Expr::type_();
     let mut state = ProofState::new(env, target);
-    let result = replace(&mut state, "nonexistent", Expr::prop());
+    let result = replace(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        Expr::prop(),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -138,15 +155,21 @@ fn test_replace_creates_new_goal() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: p.clone(),
             value: None,
         }],
     );
 
     let initial_goals = state.goals.len();
-    replace(&mut state, "h", q.clone()).unwrap();
+    replace(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        q.clone(),
+    )
+    .unwrap();
     assert_eq!(state.goals.len(), initial_goals + 1);
 }
 
@@ -161,38 +184,45 @@ fn test_replace_proof_goal_keeps_later_dependency_context() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_fvar,
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: make_p(Expr::const_(Name::from_string("x"), vec![])),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: Expr::const_(Name::from_string("N"), vec![]),
                 value: None,
             },
         ],
     );
 
-    replace(&mut state, "h", make_p(Expr::fvar(n_fvar))).unwrap();
+    replace(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        make_p(Expr::fvar(n_fvar)),
+    )
+    .unwrap();
 
     let main_goal = state.current_goal().unwrap();
     let h = main_goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("main goal should keep a visible replacement hypothesis");
     assert_eq!(h.ty, make_p(Expr::fvar(n_fvar)));
     let h_pos = main_goal
         .local_ctx
         .iter()
-        .position(|decl| decl.name == "h")
+        .position(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("replacement hypothesis should be present");
     let n_pos = main_goal
         .local_ctx
         .iter()
-        .position(|decl| decl.name == "n")
+        .position(|decl| decl.name == clean_parser::SurfaceName::generated_path("n"))
         .expect("later dependency should remain present");
     assert!(
         h_pos > n_pos,
@@ -239,16 +269,27 @@ fn test_replace_hyp_updates_hypothesis() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: p.clone(),
             value: None,
         }],
     );
 
-    replace_hyp(&mut state, "h", q.clone(), proof).unwrap();
+    replace_hyp(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        q.clone(),
+        proof,
+    )
+    .unwrap();
     let goal = state.current_goal().unwrap();
-    let h = goal.local_ctx.iter().find(|d| d.name == "h").unwrap();
+    let h = goal
+        .local_ctx
+        .iter()
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
+        .unwrap();
     assert!(exprs_equal(&h.ty, &q));
 }
 

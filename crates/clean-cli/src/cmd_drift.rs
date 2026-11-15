@@ -81,9 +81,9 @@ Compares two drift snapshots and fails closed when a change would block the \
 statement-preservation authority gate. Blocking drift exits non-zero: \
 `--allow-weaker` and `--allow-authority-gate-blocking` are explicit escape \
 hatches for reviewed changes, never defaults. `--record-attempt --root \
-<project>` appends the exact snapshot-bound gate result to the Mathverse \
-attempt log under `.mathverse/attempts` and refuses to record from a dirty \
-git worktree. `--json` emits the full gate report, drift summary, and \
+<project>` appends the exact snapshot-bound gate result to the shared \
+authority-attempt log under `.cake/attempts` and refuses to record from a \
+dirty git worktree. `--json` emits the full gate report, drift summary, and \
 authority receipt for release automation.",
         category: Category::Verification,
         stability: Stability::Building,
@@ -139,7 +139,9 @@ pub(crate) enum DriftCommands {
         /// Append the statement-preservation gate result as a Mathverse proof attempt.
         #[arg(long)]
         record_attempt: bool,
-        /// Repository or project root containing the `.mathverse` attempt log.
+        /// Repository or project root holding the `.cake/attempts` ledger (the
+        /// shared authority-attempt log; nothing writes `.mathverse/attempts`) —
+        /// and, when recording, the WRITE root the attempt lands under.
         #[arg(long, default_value = ".")]
         root: PathBuf,
         /// Emit a JSON command report.

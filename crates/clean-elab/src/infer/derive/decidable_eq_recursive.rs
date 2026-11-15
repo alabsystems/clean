@@ -74,12 +74,7 @@ impl<'a> ElabCtx<'a> {
         ind_type: &Expr,
         ctors: &[SurfaceCtor],
     ) -> Option<Expr> {
-        let short = ind_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let short = clean_parser::SurfaceName::from_name(ind_name.clone()).last_component();
 
         // Analyze every ctor; bail if any field is an unsupported recursive shape
         // (e.g. `List Self`) or lacks a closed `DecidableEq` instance.
@@ -100,7 +95,7 @@ impl<'a> ElabCtx<'a> {
         }
 
         let level_one = Level::succ(Level::zero());
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
 
         // Recursor motive: `fun a' : Ind => (b : Ind) -> Decidable (@Eq Ind a' b)`.
         // Inside the motive lambda, a' = bvar 1 under the `(b : Ind)` binder,
@@ -134,7 +129,7 @@ impl<'a> ElabCtx<'a> {
     fn analyze_ctor_deceq_rec(
         &mut self,
         ind_name: &Name,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         ctor: &SurfaceCtor,
     ) -> Option<CtorAnalysis> {
@@ -144,7 +139,9 @@ impl<'a> ElabCtx<'a> {
         // kernel registers ctors as `{ind_name}.{ctor}` (e.g. `N.Tree.leaf`).
         // `short` is retained only for surface-type self-recursion detection.
         Some(CtorAnalysis {
-            name: Name::from_string(&format!("{ind_name}.{}", ctor.name)),
+            name: clean_parser::SurfaceName::from_name(ind_name.clone())
+                .append(&ctor.name)
+                .into_name(),
             fields,
         })
     }
@@ -152,7 +149,7 @@ impl<'a> ElabCtx<'a> {
     /// Peel a ctor's surface telescope, classifying each field.
     fn collect_fields_deceq_rec(
         &mut self,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         surf: &SurfaceExpr,
         out: &mut Vec<FieldKind>,
@@ -183,14 +180,14 @@ impl<'a> ElabCtx<'a> {
     /// Classify a single field surface type into a [`FieldKind`].
     fn classify_field_deceq_rec(
         &mut self,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         ty: &SurfaceExpr,
     ) -> Option<FieldKind> {
         let ty = peel_paren(ty);
         // Direct self reference.
         if let SurfaceExpr::Ident(_, n) = ty {
-            if n == short {
+            if !n.is_relative_constructor() && n == short {
                 return Some(FieldKind::SelfRec);
             }
         }
@@ -298,7 +295,7 @@ impl<'a> ElabCtx<'a> {
         b_fvar: FVarId,
     ) -> Option<Expr> {
         let level_one = Level::succ(Level::zero());
-        let cases_on = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on = ind_name.clone().str("casesOn");
         let decidable = Expr::const_(Name::from_string("Decidable"), vec![]);
 
         // Inner motive: `fun b' : Ind => Decidable (@Eq Ind a_applied b')`.
@@ -344,7 +341,7 @@ impl<'a> ElabCtx<'a> {
         a_applied: &Expr,
     ) -> Expr {
         let level_one = Level::succ(Level::zero());
-        let no_conf = Name::from_string(&format!("{ind_name}.noConfusion"));
+        let no_conf = ind_name.clone().str("noConfusion");
         let false_const = Expr::const_(Name::from_string("False"), vec![]);
         let is_false = Expr::const_(Name::from_string("Decidable.isFalse"), vec![]);
 
@@ -562,7 +559,7 @@ impl<'a> ElabCtx<'a> {
     ) -> Expr {
         let level_one = Level::succ(Level::zero());
         let is_false = Expr::const_(Name::from_string("Decidable.isFalse"), vec![]);
-        let no_conf = Name::from_string(&format!("{ind_name}.noConfusion"));
+        let no_conf = ind_name.clone().str("noConfusion");
         let false_const = Expr::const_(Name::from_string("False"), vec![]);
 
         let hne_fvar = self.fresh_fvar();
@@ -752,7 +749,7 @@ fn eq_trans(level: &Level, ty: &Expr, x: &Expr, y: &Expr, z: &Expr, p: Expr, q: 
 }
 
 /// Whether a surface type mentions identifier `name`.
-fn surface_mentions(expr: &SurfaceExpr, name: &str) -> bool {
+fn surface_mentions(expr: &SurfaceExpr, name: &clean_parser::SurfaceName) -> bool {
     match expr {
         SurfaceExpr::Ident(_, n) => n == name,
         SurfaceExpr::App(_, h, args) => {

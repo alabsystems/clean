@@ -4,10 +4,13 @@
 
 //! CLI wiring for trust audit commands owned by `clean-cli`.
 //!
-//! Tier 1 surface: only `clean audit trust-ledger <name>`, a focused
-//! per-declaration integrity diagnostic. It walks a declaration's recursive
-//! dependency closure and reports the trust levels, axioms, and trust markers
-//! affecting it, answering "why isn't this declaration kernel-clean".
+//! Three subcommands. `clean audit trust-ledger <name>` is the Tier 1 surface,
+//! a focused per-declaration integrity diagnostic: it walks a declaration's
+//! recursive dependency closure and reports the trust levels, axioms, and trust
+//! markers affecting it, answering "why isn't this declaration kernel-clean".
+//! `clean audit cake <project>` audits a Cake/Lake project's trust boundary and
+//! emits an `AuditReport`. `clean audit soundness` emits the kernel + overlay
+//! soundness certificate, and refuses without the `math-overlays` feature.
 
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
@@ -21,7 +24,7 @@ use clean_elab::{
     elaborate_decl_and_register_with_context_and_warning, preprocess_decl_with_context, FileContext,
 };
 use clean_features::{Category, Example, FeatureDescriptor, RefKind, Reference, Stability};
-use clean_kernel::{ConstantKind, Environment};
+use clean_kernel::{ConstantKind, Environment, Name};
 use clean_mathverse::attempt_log::{
     put_artifact, record_authority_gate_attempt, AttemptStatus, AuthorityGateAttempt,
     AuthorityReceipt, ProofAttempt,
@@ -39,7 +42,7 @@ use clean_mathverse::trust::project_audit::{
     PROJECT_AUDIT_GOAL_SHAPE,
 };
 use clean_mathverse::types::{AxiomProfile, TrustLevel};
-use clean_parser::parse_file_with_tactics;
+use clean_parser::{parse_file_with_tactics, SurfaceName};
 use serde::Serialize;
 
 use crate::authority_source_guard::AuthoritySourceGuard;
@@ -99,16 +102,20 @@ diagnostic external-baseline evidence and does not satisfy authority gates.",
     },
     FeatureDescriptor {
         path: &["audit", "soundness"],
-        summary: "Emit THE soundness certificate (C1-C5) for the kernel + overlay corpus",
+        summary: "Emit THE soundness certificate (C1-C5 + C4') for the kernel + overlay corpus",
         description: "\
 Runs the single mechanical soundness check over the full kernel + math overlay \
-environment and prints THE soundness certificate: C1 total re-verification \
-(every theorem/definition re-type-checks through the kernel), C2 trusted-axiom \
-base enumeration pinned against a checked-in golden, C3 no trust marker \
-reachable, C4 carrier-generic refutation resistance (no admitted axiom over any \
-concrete carrier is refutable), and C5 deep-nested False-proof rejection. Exits \
-non-zero unless the certificate is SOUND. Use `--json` for the machine-readable \
-form. Requires the `math-overlays` feature.",
+environment and prints THE soundness certificate. SIX claims are computed and \
+`is_sound()` conjoins all six: C1 total re-verification (every \
+theorem/definition re-type-checks through the kernel; Axiom-kind decls carry no \
+value and are skipped), C2 trusted-axiom base enumeration pinned against a \
+checked-in golden, C3 no trust marker reachable, C4 carrier-generic refutation \
+resistance (no admitted axiom C4 can examine is refutable; axioms stuck on an \
+opaque carrier are reported as unexamined and trusted, not checked), C4' \
+opacity-transparency (no opaque-with-body carrier masks a refutable axiom), and \
+C5 deep-nested False-proof rejection. Exits non-zero unless the certificate is \
+SOUND. Use `--json` for the machine-readable form. Requires the `math-overlays` \
+feature.",
         category: Category::Verification,
         stability: Stability::Building,
         examples: &[Example {
@@ -228,7 +235,7 @@ pub(crate) enum AuditCommands {
     Cake(AuditLakeArgs),
     /// Generate a recursive trust ledger for a specific theorem or constant.
     TrustLedger(AuditTrustLedgerArgs),
-    /// Emit THE soundness certificate (C1-C5) for the kernel + overlay corpus.
+    /// Emit THE soundness certificate (C1-C5 plus C4') for the kernel + overlay corpus.
     Soundness(AuditSoundnessArgs),
 }
 
@@ -265,7 +272,9 @@ pub(crate) struct AuditLakeArgs {
     /// Append this audit as a trust_audit authority-gate proof attempt.
     #[arg(long)]
     pub(crate) record_attempt: bool,
-    /// Repository or project root containing the `.mathverse` attempt log.
+    /// Repository or project root holding the `.cake/attempts` ledger (the
+    /// shared authority-attempt log; nothing writes `.mathverse/attempts`) —
+    /// and, when recording, the WRITE root the attempt lands under.
     #[arg(long, value_name = "ROOT")]
     pub(crate) root: Option<PathBuf>,
 }
@@ -278,13 +287,16 @@ pub(crate) struct AuditTrustLedgerArgs {
     /// Emit report as JSON.
     #[arg(long)]
     pub(crate) json: bool,
-    /// Write report to this path.
+    /// Write the report to this path. Read on the `--json` path; without
+    /// `--json` the summary goes to stdout and this path is left unwritten.
     #[arg(long, value_name = "PATH")]
     pub(crate) out: Option<PathBuf>,
     /// Append this ledger as a trust_ledger authority-gate proof attempt.
     #[arg(long)]
     pub(crate) record_attempt: bool,
-    /// Repository or project root containing the `.mathverse` attempt log.
+    /// Repository or project root holding the `.cake/attempts` ledger (the
+    /// shared authority-attempt log; nothing writes `.mathverse/attempts`) —
+    /// and, when recording, the WRITE root the attempt lands under.
     #[arg(long, value_name = "ROOT", requires = "record_attempt")]
     pub(crate) root: Option<PathBuf>,
 }
@@ -298,8 +310,8 @@ pub(crate) fn handle_audit_command(command: AuditCommands) -> anyhow::Result<()>
 }
 
 /// `clean audit soundness [--json]` — build the canonical kernel + overlay env,
-/// emit THE soundness certificate (the five mechanical claims C1-C5), and exit
-/// non-zero iff the certificate is NOT sound. Behind the `math-overlays`
+/// emit THE soundness certificate (the six mechanical claims C1-C5, C4'), and
+/// exit non-zero iff the certificate is NOT sound. Behind the `math-overlays`
 /// feature because the certificate runs over the full overlay corpus.
 #[cfg(feature = "math-overlays")]
 fn run_soundness_certificate(args: AuditSoundnessArgs) -> anyhow::Result<()> {
@@ -338,7 +350,7 @@ fn run_soundness_certificate(_args: AuditSoundnessArgs) -> anyhow::Result<()> {
     bail!(
         "clean audit soundness requires the `math-overlays` feature (the certificate \
          runs over the full overlay corpus). Rebuild with \
-         `cargo build -p clean-cli --features math-overlays`."
+         `cargo build -p clean --features math-overlays`."
     );
 }
 
@@ -355,7 +367,7 @@ fn run_trust_ledger(args: AuditTrustLedgerArgs) -> anyhow::Result<()> {
     };
     let env = Environment::try_with_prelude().unwrap_or_else(|_| Environment::new());
 
-    let target = clean_kernel::name::Name::from_string(&args.name);
+    let target = Name::from_string(&args.name);
     let (report, ledger) = build_trust_ledger_report(&env, target)?;
     let authority_receipt = if args.record_attempt {
         if let Some(source_guard) = source_guard.as_ref() {
@@ -410,7 +422,7 @@ fn run_trust_ledger(args: AuditTrustLedgerArgs) -> anyhow::Result<()> {
 
 fn build_trust_ledger_report(
     env: &Environment,
-    target: clean_kernel::name::Name,
+    target: Name,
 ) -> anyhow::Result<(AuditReport, TrustLedgerEvidence)> {
     let mut builder = AuditReportBuilder::new();
     let mut visited = HashSet::new();
@@ -431,7 +443,7 @@ fn build_trust_ledger_report(
         if let Some(ci) = env.get_const(&name) {
             let is_axiom = matches!(ci.kind, ConstantKind::Axiom);
             let is_opaque = matches!(ci.kind, ConstantKind::Opaque);
-            let trust = trust_level_for_constant(&name, ci.kind);
+            let trust = trust_level_for_constant(env, &name, ci.kind);
             let profile = if is_axiom {
                 AxiomProfile::CLASSICAL
             } else {
@@ -443,7 +455,7 @@ fn build_trust_ledger_report(
 
             let deps = immediate_const_deps(ci);
             for dep in &deps {
-                stack.push(clean_kernel::name::Name::from_string(dep));
+                stack.push(Name::from_string(dep));
             }
             immediate_dependency_names.insert(name_text.clone(), deps.clone());
 
@@ -620,9 +632,11 @@ fn immediate_const_deps(ci: &clean_kernel::env::ConstantInfo) -> Vec<String> {
     deps
 }
 
-fn trust_level_for_constant(name: &clean_kernel::name::Name, kind: ConstantKind) -> TrustLevel {
+fn trust_level_for_constant(env: &Environment, name: &Name, kind: ConstantKind) -> TrustLevel {
     if matches!(kind, ConstantKind::Axiom) {
-        if clean_kernel::is_foundational_axiom(name) {
+        // The kernel's canonical declaration of a foundational name — never
+        // the name alone (a user axiom named like one is an assumption).
+        if env.is_canonical_foundational_axiom(name) {
             TrustLevel::KernelVerified
         } else {
             TrustLevel::AxiomDependent
@@ -890,7 +904,13 @@ fn run_lake_audit(args: AuditLakeArgs) -> anyhow::Result<()> {
     })?;
     let adapter = LakeAuditWorkspace {
         workspace: &workspace,
-        modules: args.modules.clone(),
+        modules: if args.modules.is_empty() {
+            workspace
+                .all_modules()
+                .context("invalid workspace module index")?
+        } else {
+            args.modules.clone()
+        },
     };
     let modules = adapter.all_modules();
     let env_load = load_project_environment(&workspace, &modules, args.project_oleans_only);
@@ -1031,11 +1051,7 @@ struct LakeAuditWorkspace<'a> {
 
 impl ProjectAuditWorkspace for LakeAuditWorkspace<'_> {
     fn all_modules(&self) -> Vec<String> {
-        if self.modules.is_empty() {
-            self.workspace.all_modules()
-        } else {
-            self.modules.clone()
-        }
+        self.modules.clone()
     }
 
     fn find_module(&self, module_name: &str) -> Option<PathBuf> {
@@ -1098,7 +1114,13 @@ fn load_project_environment(
     };
 
     for module in modules {
-        let olean_path = project_olean_path(workspace, &module, &load.search_paths);
+        let olean_path = match project_olean_path(workspace, &module, &load.search_paths) {
+            Ok(path) => path,
+            Err(error) => {
+                load.module_errors.push(ModuleLoadError { module, error });
+                continue;
+            }
+        };
         match clean_olean::load_olean_file(&mut load.env, &olean_path) {
             Ok(summary) => {
                 load.modules_loaded += 1;
@@ -1195,9 +1217,10 @@ fn load_project_source_environment(
     // unresolvable module and refuses every internal import, which is exactly
     // what `lake_audit_source_loader_reconstructs_workspace_without_oleans`
     // exists to catch.
-    let mut satisfied_from_source: HashSet<String> = HashSet::new();
-    for module in modules {
-        let Some(path) = workspace.find_module(&module) else {
+    let mut satisfied_from_source: HashSet<Name> = HashSet::new();
+    for module_identity in modules {
+        let module = module_name_label(&module_identity);
+        let Some(path) = workspace.find_module_name(&module_identity) else {
             load.module_errors.push(ModuleLoadError {
                 module,
                 error: "workspace index did not resolve module source".to_owned(),
@@ -1260,7 +1283,7 @@ fn load_project_source_environment(
         // Only a module that elaborated CLEANLY counts as satisfying a later
         // import: one that broke off mid-file left a partial environment, and
         // recording it would hide that behind a resolved-looking import.
-        satisfied_from_source.insert(module);
+        satisfied_from_source.insert(module_identity);
     }
 
     load.module_errors
@@ -1271,13 +1294,25 @@ fn load_project_source_environment(
 fn source_load_order_for_modules(
     workspace: &clean_lake::Workspace,
     requested_modules: &[String],
-) -> Result<Vec<String>, String> {
+) -> Result<Vec<Name>, String> {
     let workspace_modules = workspace_source_module_set(workspace)?;
-    let graph = workspace.import_graph().map_err(|err| err.to_string())?;
+    let graph = workspace
+        .import_graph_names()
+        .map_err(|err| err.to_string())?;
     let mut roots = if requested_modules.is_empty() {
         workspace_modules.iter().cloned().collect::<Vec<_>>()
     } else {
-        requested_modules.to_vec()
+        requested_modules
+            .iter()
+            .map(|source| {
+                let parsed = clean_parser::parse_name(source)
+                    .map_err(|error| format!("invalid requested module `{source}`: {error}"))?;
+                if parsed.is_relative_constructor() || parsed.is_anonymous() {
+                    return Err(format!("invalid requested module `{source}`"));
+                }
+                Ok(parsed.into_name())
+            })
+            .collect::<Result<Vec<_>, String>>()?
     };
     roots.sort();
     roots.dedup();
@@ -1285,7 +1320,8 @@ fn source_load_order_for_modules(
     for module in &roots {
         if !workspace_modules.contains(module) {
             return Err(format!(
-                "requested module `{module}` is not a workspace source module"
+                "requested module `{}` is not a workspace source module",
+                module_name_label(module)
             ));
         }
     }
@@ -1310,16 +1346,20 @@ fn source_load_order_for_modules(
     Ok(result)
 }
 
-fn workspace_source_module_set(
-    workspace: &clean_lake::Workspace,
-) -> Result<HashSet<String>, String> {
+fn workspace_source_module_set(workspace: &clean_lake::Workspace) -> Result<HashSet<Name>, String> {
+    workspace
+        .validate_module_index()
+        .map_err(|error| error.to_string())?;
     let package_roots = workspace.package_dirs();
     let mut modules = HashSet::new();
 
-    for module in workspace.all_modules() {
-        let path = workspace
-            .find_module(&module)
-            .ok_or_else(|| format!("workspace index did not resolve `{module}`"))?;
+    for module in workspace.all_module_names() {
+        let path = workspace.find_module_name(&module).ok_or_else(|| {
+            format!(
+                "workspace index did not resolve `{}`",
+                module_name_label(&module)
+            )
+        })?;
         if !package_roots.iter().any(|root| path.starts_with(root)) {
             modules.insert(module);
         }
@@ -1330,20 +1370,27 @@ fn workspace_source_module_set(
 
 #[allow(clippy::too_many_arguments)]
 fn visit_source_module(
-    module: &str,
-    graph: &HashMap<String, Vec<String>>,
-    workspace_modules: &HashSet<String>,
-    visited: &mut HashSet<String>,
-    visiting: &mut HashSet<String>,
-    stack: &mut Vec<String>,
-    result: &mut Vec<String>,
+    module: &Name,
+    graph: &HashMap<Name, Vec<Name>>,
+    workspace_modules: &HashSet<Name>,
+    visited: &mut HashSet<Name>,
+    visiting: &mut HashSet<Name>,
+    stack: &mut Vec<Name>,
+    result: &mut Vec<Name>,
 ) -> Result<(), String> {
     if visited.contains(module) {
         return Ok(());
     }
     if visiting.contains(module) {
         stack.push(module.to_owned());
-        return Err(format!("circular dependency: {}", stack.join(" -> ")));
+        return Err(format!(
+            "circular dependency: {}",
+            stack
+                .iter()
+                .map(module_name_label)
+                .collect::<Vec<_>>()
+                .join(" -> ")
+        ));
     }
 
     visiting.insert(module.to_owned());
@@ -1378,21 +1425,29 @@ fn visit_source_module(
     Ok(())
 }
 
+fn module_name_label(name: &Name) -> String {
+    SurfaceName::from_name(name.clone())
+        .source_spelling()
+        .unwrap_or_else(|| format!("{name:?}"))
+}
+
 fn project_olean_path(
     workspace: &clean_lake::Workspace,
     module: &str,
     search_paths: &[PathBuf],
-) -> PathBuf {
-    let mut rel_path = PathBuf::new();
-    for part in module.split('.') {
-        rel_path.push(part);
-    }
-    rel_path.set_extension("olean");
-    search_paths
+) -> Result<PathBuf, String> {
+    let fallback = workspace
+        .olean_path(module)
+        .map_err(|error| error.to_string())?;
+    let lib_dir = workspace.lib_dir();
+    let rel_path = fallback
+        .strip_prefix(&lib_dir)
+        .map_err(|error| format!("module artifact escaped its workspace library root: {error}"))?;
+    Ok(search_paths
         .iter()
-        .map(|dir| dir.join(&rel_path))
+        .map(|dir| dir.join(rel_path))
         .find(|path| path.is_file())
-        .unwrap_or_else(|| workspace.olean_path(module))
+        .unwrap_or(fallback))
 }
 
 fn record_load_summary(load: &mut EnvironmentLoad, summary: clean_olean::LoadSummary) {
@@ -1673,11 +1728,7 @@ fn collect_const_deps(expr: &clean_kernel::Expr, deps: &mut Vec<String>) {
 
         fn combine(&self, _a: Self::Result, _b: Self::Result) -> Self::Result {}
 
-        fn visit_const(
-            &mut self,
-            name: &clean_kernel::name::Name,
-            _levels: &clean_kernel::LevelVec,
-        ) {
+        fn visit_const(&mut self, name: &Name, _levels: &clean_kernel::LevelVec) {
             self.0.push(name.to_string());
         }
     }
@@ -1710,6 +1761,40 @@ fn write_output(contents: &str, out: Option<&Path>) -> anyhow::Result<()> {
 mod tests {
     use super::*;
     use clean_kernel::env::{ConstantInfo, Reducibility, TrustedEnvExt};
+
+    #[test]
+    fn lake_source_load_order_retains_quoted_and_hierarchical_module_identities() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::write(
+            dir.path().join("lakefile.lean"),
+            "package test\nlean_lib Test\n",
+        )
+        .expect("lakefile");
+        fs::create_dir(dir.path().join("A")).expect("nested directory");
+        fs::write(dir.path().join("A.B.lean"), "def quotedLeaf : Nat := 1\n").expect("quoted file");
+        fs::write(dir.path().join("A/B.lean"), "def nestedLeaf : Nat := 2\n").expect("nested file");
+        fs::write(
+            dir.path().join("Entry.lean"),
+            "import «A.B»\nimport A.B\ndef both : Nat := Nat.add quotedLeaf nestedLeaf\n",
+        )
+        .expect("entry");
+        let workspace = clean_lake::Workspace::load(dir.path()).expect("workspace");
+        let order = source_load_order_for_modules(&workspace, &["Entry".to_owned()])
+            .expect("typed source closure");
+        assert_eq!(order.len(), 3);
+        assert_eq!(order.last(), Some(&Name::anon().str("Entry")));
+        assert!(order.contains(&Name::anon().str("A.B")));
+        assert!(order.contains(&Name::anon().str("A").str("B")));
+        assert_eq!(
+            source_load_order_for_modules(&workspace, &["«A.B»".to_owned()])
+                .expect("one exact source"),
+            vec![Name::anon().str("A.B")]
+        );
+        let load = load_project_source_environment(&workspace, &["Entry".to_owned()]);
+        assert!(load.module_errors.is_empty(), "{:?}", load.module_errors);
+        assert_eq!(load.modules_discovered, 3);
+        assert_eq!(load.modules_loaded, 3);
+    }
 
     #[test]
     fn test_soundness_failure_msg_names_claims_and_doc() {
@@ -1946,7 +2031,7 @@ mod tests {
         .expect("Test.lean should be written");
 
         let workspace = clean_lake::Workspace::load(dir.path()).expect("workspace should load");
-        let modules = workspace.all_modules();
+        let modules = workspace.all_modules().expect("valid module index");
         let load = load_project_environment(&workspace, &modules, false);
 
         assert!(
@@ -1960,14 +2045,8 @@ mod tests {
             "expected Test and Test.A modules, got {}",
             load.modules_discovered
         );
-        assert!(load
-            .env
-            .get_const(&clean_kernel::Name::from_string("Test.A.a"))
-            .is_some());
-        assert!(load
-            .env
-            .get_const(&clean_kernel::Name::from_string("Test.b"))
-            .is_some());
+        assert!(load.env.get_const(&Name::from_string("Test.A.a")).is_some());
+        assert!(load.env.get_const(&Name::from_string("Test.b")).is_some());
     }
 
     #[test]
@@ -2007,17 +2086,15 @@ mod tests {
         assert_eq!(load.modules_loaded, 2);
         assert!(load
             .env
-            .get_const(&clean_kernel::Name::from_string("Test.Core.core"))
+            .get_const(&Name::from_string("Test.Core.core"))
             .is_some());
         assert!(load
             .env
-            .get_const(&clean_kernel::Name::from_string(
-                "Test.Calibration.calibration"
-            ))
+            .get_const(&Name::from_string("Test.Calibration.calibration"))
             .is_some());
         assert!(load
             .env
-            .get_const(&clean_kernel::Name::from_string("Test.Unused.unused"))
+            .get_const(&Name::from_string("Test.Unused.unused"))
             .is_none());
     }
 
@@ -2041,7 +2118,7 @@ mod tests {
     #[test]
     fn trust_ledger_missing_target_is_hard_failure() {
         let env = Environment::new();
-        let target = clean_kernel::Name::from_string("Ledger.Missing");
+        let target = Name::from_string("Ledger.Missing");
 
         let (report, ledger) =
             build_trust_ledger_report(&env, target).expect("ledger should build");
@@ -2058,7 +2135,7 @@ mod tests {
     #[test]
     fn trust_ledger_non_foundational_axiom_is_hard_failure() {
         let mut env = Environment::new();
-        let target = clean_kernel::Name::from_string("Ledger.NonFoundationalAxiom");
+        let target = Name::from_string("Ledger.NonFoundationalAxiom");
         env.extend_constants_unchecked(std::iter::once(ConstantInfo::new_with_reducibility(
             target.clone(),
             Vec::new(),
@@ -2082,7 +2159,7 @@ mod tests {
     fn trust_ledger_record_attempt_writes_mathverse_evidence() {
         let dir = tempfile::tempdir().expect("tempdir should be created");
         let env = Environment::new();
-        let target = clean_kernel::Name::from_string("Ledger.Missing");
+        let target = Name::from_string("Ledger.Missing");
         let (report, ledger) =
             build_trust_ledger_report(&env, target).expect("ledger should build");
 

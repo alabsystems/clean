@@ -37,7 +37,7 @@ use std::collections::{HashMap, HashSet};
 /// notations that are expanded before parsing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
-pub enum ScopedNotationKind {
+pub(crate) enum ScopedNotationKind {
     /// Prefix operator (e.g., `- x`, `! x`).
     Prefix,
     /// Infix operator (e.g., `x + y`).
@@ -67,7 +67,7 @@ impl std::fmt::Display for ScopedNotationKind {
 /// Each entry associates a token with an expansion template, a numeric
 /// priority for disambiguation, and an optional namespace scope.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NotationScopeEntry {
+pub(crate) struct NotationScopeEntry {
     /// Notation name/token (e.g., `"+"`).
     pub(crate) name: String,
     /// The syntactic kind of this notation.

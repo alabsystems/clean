@@ -28,7 +28,9 @@ fn source_identity() -> ProofObligationSourceIdentity {
 
 fn module_with_source() -> Module {
     let mut module = Module::new("source_identity");
-    module.intern_file("src/módulo.rs");
+    module
+        .intern_file("src/módulo.rs")
+        .expect("Module::intern_file: test fixture");
     module.proof_obligations.push(
         ProofObligation::new(
             ProofId::new(7),
@@ -84,19 +86,20 @@ fn module_stable_digest_binds_every_embedded_source_identity_field() {
 #[test]
 fn binary_current_version_roundtrip_preserves_complete_embedded_identity() {
     let module = module_with_source();
-    let encoded = trust_ir::binary::serialize_module(&module);
+    let encoded =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
     // The embedded obligation-source identity landed in v28 and has been
     // written unconditionally since v29 (the merged-superset version; v26..=v28
     // are ambiguous-lineage and refused on read — see the VERSION ledger in
     // binary.rs). v30 appended the typed-value-model tables, v31 extended enum
     // records additively, v32 appended value names, and v33 appended lexical
     // scopes, and v34 appended the obligation SITE backref. That is why this
-    // assertion tracks the current version rather than pinning 29: the
+    // assertion tracks the legacy baseline version rather than pinning 29: the
     // source-identity bytes are unmoved by those changes, and the round-trip
     // below is what proves it.
     assert_eq!(
         u32::from_le_bytes(encoded[8..12].try_into().unwrap()),
-        trust_ir::binary::VERSION,
+        trust_ir::binary::BASE_FORMAT_VERSION,
     );
     let decoded = trust_ir::binary::deserialize_module(&encoded).expect("decode module");
     assert_eq!(decoded, module);

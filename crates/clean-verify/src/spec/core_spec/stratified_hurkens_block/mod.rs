@@ -149,14 +149,15 @@ pub(super) const VAL_HK_KILL_NONPI: &str = "fun (x : KExpr) (PA : KExpr) (PB : K
 // Group E — the positive half: powr / powr2 / U0 typings.
 // ================================================================
 
-pub(super) const TY_TYPINGCTX_POWR_TY: &str = "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr), TypingCtx tenv G X (KExpr.sort Level.zero) -> TypingCtx tenv G (powr X) (KExpr.sort powr_level)";
-pub(super) const VAL_TYPINGCTX_POWR_TY: &str = "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr) (hX : TypingCtx tenv G X (KExpr.sort Level.zero)) => TypingCtx.pi tenv G X (KExpr.sort Level.zero) Level.zero (Level.succ Level.zero) hX (TypingCtx.sort tenv (ListType.cons KExpr X G) Level.zero)";
+pub(super) const TY_TYPINGCTX_POWR_TY: &str = "forall (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr), TypingCtx tenv G X (KExpr.sort Level.zero) -> TypingCtx tenv G (powr X) (KExpr.sort powr_level)";
+pub(super) const VAL_TYPINGCTX_POWR_TY: &str = "fun (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr) (hX : TypingCtx tenv G X (KExpr.sort Level.zero)) => TypingCtx.pi tenv G X (KExpr.sort Level.zero) Level.zero (Level.succ Level.zero) hX (TypingCtx.sort tenv (ListType.cons KExpr X G) Level.zero)";
 
-pub(super) const TY_TYPINGCTX_POWR2_TY: &str = "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr), TypingCtx tenv G X (KExpr.sort Level.zero) -> TypingCtx tenv G (powr2 X) (KExpr.sort powr2_level)";
-pub(super) const VAL_TYPINGCTX_POWR2_TY: &str = "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr) (hX : TypingCtx tenv G X (KExpr.sort Level.zero)) => TypingCtx.pi tenv G (powr X) (KExpr.sort Level.zero) powr_level (Level.succ Level.zero) (typingctx_powr_ty tenv G X hX) (TypingCtx.sort tenv (ListType.cons KExpr (powr X) G) Level.zero)";
+pub(super) const TY_TYPINGCTX_POWR2_TY: &str = "forall (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr), TypingCtx tenv G X (KExpr.sort Level.zero) -> TypingCtx tenv G (powr2 X) (KExpr.sort powr2_level)";
+pub(super) const VAL_TYPINGCTX_POWR2_TY: &str = "fun (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr) (hX : TypingCtx tenv G X (KExpr.sort Level.zero)) => TypingCtx.pi tenv G (powr X) (KExpr.sort Level.zero) powr_level (Level.succ Level.zero) (typingctx_powr_ty tenv G X hX) (TypingCtx.sort tenv (ListType.cons KExpr (powr X) G) Level.zero)";
 
-pub(super) const TY_TYPINGCTX_U0_FORMABLE: &str = "forall (tenv : Name -> OptionType KExpr), TypingCtx tenv (ListType.nil KExpr) U0 (KExpr.sort U0_level)";
-pub(super) const VAL_TYPINGCTX_U0_FORMABLE: &str = "fun (tenv : Name -> OptionType KExpr) => TypingCtx.pi tenv (ListType.nil KExpr) (KExpr.sort Level.zero) U0_body (Level.succ Level.zero) (Level.imax U0_arrow_level powr2_level) (TypingCtx.sort tenv (ListType.nil KExpr) Level.zero) (TypingCtx.pi tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) U0_arrow (powr2 (KExpr.bvar (Nat.succ Nat.zero))) U0_arrow_level powr2_level (TypingCtx.pi tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (powr2 (KExpr.bvar Nat.zero)) (KExpr.bvar (Nat.succ Nat.zero)) powr2_level Level.zero (typingctx_powr2_ty tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (KExpr.bvar Nat.zero) (TypingCtx.var tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) Nat.zero (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))) (TypingCtx.var tenv (ListType.cons KExpr (powr2 (KExpr.bvar Nat.zero)) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))) (Nat.succ Nat.zero) (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))) (typingctx_powr2_ty tenv (ListType.cons KExpr U0_arrow (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))) (KExpr.bvar (Nat.succ Nat.zero)) (TypingCtx.var tenv (ListType.cons KExpr U0_arrow (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))) (Nat.succ Nat.zero) (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))))";
+pub(super) const TY_TYPINGCTX_U0_FORMABLE: &str =
+    "forall (tenv : KDeclEnv), TypingCtx tenv (ListType.nil KExpr) U0 (KExpr.sort U0_level)";
+pub(super) const VAL_TYPINGCTX_U0_FORMABLE: &str = "fun (tenv : KDeclEnv) => TypingCtx.pi tenv (ListType.nil KExpr) (KExpr.sort Level.zero) U0_body (Level.succ Level.zero) (Level.imax U0_arrow_level powr2_level) (TypingCtx.sort tenv (ListType.nil KExpr) Level.zero) (TypingCtx.pi tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) U0_arrow (powr2 (KExpr.bvar (Nat.succ Nat.zero))) U0_arrow_level powr2_level (TypingCtx.pi tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (powr2 (KExpr.bvar Nat.zero)) (KExpr.bvar (Nat.succ Nat.zero)) powr2_level Level.zero (typingctx_powr2_ty tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (KExpr.bvar Nat.zero) (TypingCtx.var tenv (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) Nat.zero (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))) (TypingCtx.var tenv (ListType.cons KExpr (powr2 (KExpr.bvar Nat.zero)) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))) (Nat.succ Nat.zero) (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))) (typingctx_powr2_ty tenv (ListType.cons KExpr U0_arrow (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))) (KExpr.bvar (Nat.succ Nat.zero)) (TypingCtx.var tenv (ListType.cons KExpr U0_arrow (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr))) (Nat.succ Nat.zero) (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))))";
 
 // ================================================================
 // Group F — the block: structural rule inversion.
@@ -172,7 +173,7 @@ pub(super) const VAL_TYPINGCTX_U0_FORMABLE: &str = "fun (tenv : Name -> OptionTy
 /// `Level.imax n m`, never `Level.zero` (`sort_universe_consistency` +
 /// `level_imax_ne_zero`).
 pub(super) const SRC_TYPINGCTX_PI_SMALL_INV: &str = concat!(
-    "def typingctx_pi_small_inv (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : TypingCtx tenv G e T) : forall (PA : KExpr) (PB : KExpr), Eq KExpr e (KExpr.pi PA PB) -> Eq KExpr T (KExpr.sort Level.zero) -> Empty := ",
+    "def typingctx_pi_small_inv (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : TypingCtx tenv G e T) : forall (PA : KExpr) (PB : KExpr), Eq KExpr e (KExpr.pi PA PB) -> Eq KExpr T (KExpr.sort Level.zero) -> Empty := ",
     "TypingCtx.rec tenv ",
     "(fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) (_h : TypingCtx tenv G0 e0 T0) => forall (PA : KExpr) (PB : KExpr), Eq KExpr e0 (KExpr.pi PA PB) -> Eq KExpr T0 (KExpr.sort Level.zero) -> Empty) ",
     // var
@@ -186,37 +187,37 @@ pub(super) const SRC_TYPINGCTX_PI_SMALL_INV: &str = concat!(
     // app
     "(fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) (hf : TypingCtx tenv G0 f (KExpr.pi A B)) (ha : TypingCtx tenv G0 a A) (ihf : forall (PA : KExpr) (PB : KExpr), Eq KExpr f (KExpr.pi PA PB) -> Eq KExpr (KExpr.pi A B) (KExpr.sort Level.zero) -> Empty) (iha : forall (PA : KExpr) (PB : KExpr), Eq KExpr a (KExpr.pi PA PB) -> Eq KExpr A (KExpr.sort Level.zero) -> Empty) (PA : KExpr) (PB : KExpr) (he : Eq KExpr (KExpr.app f a) (KExpr.pi PA PB)) (ht : Eq KExpr (instantiate B a) (KExpr.sort Level.zero)) => hk_kill_nonpi (KExpr.app f a) PA PB he ConstFreeUnit.triv) ",
     // const
-    "(fun (G0 : ListType KExpr) (cn : Name) (us : ListType Level) (A : KExpr) (hget : Eq (OptionType KExpr) (tenv cn) (OptionType.some KExpr A)) (PA : KExpr) (PB : KExpr) (he : Eq KExpr (KExpr.const cn us) (KExpr.pi PA PB)) (ht : Eq KExpr A (KExpr.sort Level.zero)) => hk_kill_nonpi (KExpr.const cn us) PA PB he ConstFreeUnit.triv) ",
+    "(fun (G0 : ListType KExpr) (cn : Name) (us : ListType Level) (A : KExpr) (hget : Eq (OptionType KExpr) (kdecl_type_at tenv cn us) (OptionType.some KExpr A)) (PA : KExpr) (PB : KExpr) (he : Eq KExpr (KExpr.const cn us) (KExpr.pi PA PB)) (ht : Eq KExpr A (KExpr.sort Level.zero)) => hk_kill_nonpi (KExpr.const cn us) PA PB he ConstFreeUnit.triv) ",
     // let_
     "(fun (G0 : ListType KExpr) (lty : KExpr) (lv : KExpr) (lb : KExpr) (B : KExpr) (u : Level) (hty : TypingCtx tenv G0 lty (KExpr.sort u)) (hv : TypingCtx tenv G0 lv lty) (hb : TypingCtx tenv (ListType.cons KExpr lty G0) lb B) (ihty : forall (PA : KExpr) (PB : KExpr), Eq KExpr lty (KExpr.pi PA PB) -> Eq KExpr (KExpr.sort u) (KExpr.sort Level.zero) -> Empty) (ihv : forall (PA : KExpr) (PB : KExpr), Eq KExpr lv (KExpr.pi PA PB) -> Eq KExpr lty (KExpr.sort Level.zero) -> Empty) (ihb : forall (PA : KExpr) (PB : KExpr), Eq KExpr lb (KExpr.pi PA PB) -> Eq KExpr B (KExpr.sort Level.zero) -> Empty) (PA : KExpr) (PB : KExpr) (he : Eq KExpr (KExpr.let_ lty lv lb) (KExpr.pi PA PB)) (ht : Eq KExpr (instantiate B lv) (KExpr.sort Level.zero)) => hk_kill_nonpi (KExpr.let_ lty lv lb) PA PB he ConstFreeUnit.triv) ",
     "G e T h"
 );
 
-pub(super) const TY_TYPINGCTX_PI_NOT_SMALL: &str = "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (A : KExpr) (B : KExpr), TypingCtx tenv G (KExpr.pi A B) (KExpr.sort Level.zero) -> Empty";
-pub(super) const VAL_TYPINGCTX_PI_NOT_SMALL: &str = "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (A : KExpr) (B : KExpr) (h : TypingCtx tenv G (KExpr.pi A B) (KExpr.sort Level.zero)) => typingctx_pi_small_inv tenv G (KExpr.pi A B) (KExpr.sort Level.zero) h A B (Eq.refl KExpr (KExpr.pi A B)) (Eq.refl KExpr (KExpr.sort Level.zero))";
+pub(super) const TY_TYPINGCTX_PI_NOT_SMALL: &str = "forall (tenv : KDeclEnv) (G : ListType KExpr) (A : KExpr) (B : KExpr), TypingCtx tenv G (KExpr.pi A B) (KExpr.sort Level.zero) -> Empty";
+pub(super) const VAL_TYPINGCTX_PI_NOT_SMALL: &str = "fun (tenv : KDeclEnv) (G : ListType KExpr) (A : KExpr) (B : KExpr) (h : TypingCtx tenv G (KExpr.pi A B) (KExpr.sort Level.zero)) => typingctx_pi_small_inv tenv G (KExpr.pi A B) (KExpr.sort Level.zero) h A B (Eq.refl KExpr (KExpr.pi A B)) (Eq.refl KExpr (KExpr.sort Level.zero))";
 
-pub(super) const TY_TYPINGCTX_POWR2_NOT_SMALL: &str = "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr), TypingCtx tenv G (powr2 X) (KExpr.sort Level.zero) -> Empty";
-pub(super) const VAL_TYPINGCTX_POWR2_NOT_SMALL: &str = "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr) (h : TypingCtx tenv G (powr2 X) (KExpr.sort Level.zero)) => typingctx_pi_not_small tenv G (powr X) (KExpr.sort Level.zero) h";
+pub(super) const TY_TYPINGCTX_POWR2_NOT_SMALL: &str = "forall (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr), TypingCtx tenv G (powr2 X) (KExpr.sort Level.zero) -> Empty";
+pub(super) const VAL_TYPINGCTX_POWR2_NOT_SMALL: &str = "fun (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr) (h : TypingCtx tenv G (powr2 X) (KExpr.sort Level.zero)) => typingctx_pi_not_small tenv G (powr X) (KExpr.sort Level.zero) h";
 
-pub(super) const TY_TYPINGCTX_U0_NOT_SMALL: &str = "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr), TypingCtx tenv G U0 (KExpr.sort Level.zero) -> Empty";
-pub(super) const VAL_TYPINGCTX_U0_NOT_SMALL: &str = "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (h : TypingCtx tenv G U0 (KExpr.sort Level.zero)) => typingctx_pi_not_small tenv G (KExpr.sort Level.zero) U0_body h";
+pub(super) const TY_TYPINGCTX_U0_NOT_SMALL: &str = "forall (tenv : KDeclEnv) (G : ListType KExpr), TypingCtx tenv G U0 (KExpr.sort Level.zero) -> Empty";
+pub(super) const VAL_TYPINGCTX_U0_NOT_SMALL: &str = "fun (tenv : KDeclEnv) (G : ListType KExpr) (h : TypingCtx tenv G U0 (KExpr.sort Level.zero)) => typingctx_pi_not_small tenv G (KExpr.sort Level.zero) U0_body h";
 
-pub(super) const TY_TYPINGCTX_POWR2_NEVER_SMALL: &str = "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr) (k : Level), TypingCtx tenv G (powr2 X) (KExpr.sort k) -> Eq Level k Level.zero -> Empty";
-pub(super) const VAL_TYPINGCTX_POWR2_NEVER_SMALL: &str = "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (X : KExpr) (k : Level) (h : TypingCtx tenv G (powr2 X) (KExpr.sort k)) (hk : Eq Level k Level.zero) => typingctx_powr2_not_small tenv G X (Eq.substType Level (fun (z : Level) => TypingCtx tenv G (powr2 X) (KExpr.sort z)) k Level.zero hk h)";
+pub(super) const TY_TYPINGCTX_POWR2_NEVER_SMALL: &str = "forall (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr) (k : Level), TypingCtx tenv G (powr2 X) (KExpr.sort k) -> Eq Level k Level.zero -> Empty";
+pub(super) const VAL_TYPINGCTX_POWR2_NEVER_SMALL: &str = "fun (tenv : KDeclEnv) (G : ListType KExpr) (X : KExpr) (k : Level) (h : TypingCtx tenv G (powr2 X) (KExpr.sort k)) (hk : Eq Level k Level.zero) => typingctx_powr2_not_small tenv G X (Eq.substType Level (fun (z : Level) => TypingCtx tenv G (powr2 X) (KExpr.sort z)) k Level.zero hk h)";
 
-pub(super) const TY_TYPINGCTX_U0_NEVER_SMALL: &str = "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (k : Level), TypingCtx tenv G U0 (KExpr.sort k) -> Eq Level k Level.zero -> Empty";
-pub(super) const VAL_TYPINGCTX_U0_NEVER_SMALL: &str = "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (k : Level) (h : TypingCtx tenv G U0 (KExpr.sort k)) (hk : Eq Level k Level.zero) => typingctx_U0_not_small tenv G (Eq.substType Level (fun (z : Level) => TypingCtx tenv G U0 (KExpr.sort z)) k Level.zero hk h)";
+pub(super) const TY_TYPINGCTX_U0_NEVER_SMALL: &str = "forall (tenv : KDeclEnv) (G : ListType KExpr) (k : Level), TypingCtx tenv G U0 (KExpr.sort k) -> Eq Level k Level.zero -> Empty";
+pub(super) const VAL_TYPINGCTX_U0_NEVER_SMALL: &str = "fun (tenv : KDeclEnv) (G : ListType KExpr) (k : Level) (h : TypingCtx tenv G U0 (KExpr.sort k)) (hk : Eq Level k Level.zero) => typingctx_U0_not_small tenv G (Eq.substType Level (fun (z : Level) => TypingCtx tenv G U0 (KExpr.sort z)) k Level.zero hk h)";
 
 // ================================================================
 // Group G — ground non-vacuity witnesses (empty const-env).
 // ================================================================
 
-pub(super) const TY_TYPINGCTX_POWR_WITNESS: &str = "TypingCtx (fun (nm : Name) => OptionType.none KExpr) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (powr (KExpr.bvar Nat.zero)) (KExpr.sort powr_level)";
-pub(super) const VAL_TYPINGCTX_POWR_WITNESS: &str = "typingctx_powr_ty (fun (nm : Name) => OptionType.none KExpr) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (KExpr.bvar Nat.zero) (TypingCtx.var (fun (nm : Name) => OptionType.none KExpr) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) Nat.zero (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))";
+pub(super) const TY_TYPINGCTX_POWR_WITNESS: &str = "TypingCtx (fun (nm : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (powr (KExpr.bvar Nat.zero)) (KExpr.sort powr_level)";
+pub(super) const VAL_TYPINGCTX_POWR_WITNESS: &str = "typingctx_powr_ty (fun (nm : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (KExpr.bvar Nat.zero) (TypingCtx.var (fun (nm : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) Nat.zero (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))";
 
-pub(super) const TY_TYPINGCTX_U0_WITNESS: &str = "TypingCtx (fun (nm : Name) => OptionType.none KExpr) (ListType.nil KExpr) U0 (KExpr.sort U0_level)";
+pub(super) const TY_TYPINGCTX_U0_WITNESS: &str = "TypingCtx (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil KExpr) U0 (KExpr.sort U0_level)";
 pub(super) const VAL_TYPINGCTX_U0_WITNESS: &str =
-    "typingctx_U0_formable (fun (nm : Name) => OptionType.none KExpr)";
+    "typingctx_U0_formable (fun (nm : Name) => OptionType.none KConstSig)";
 
 mod block;
 mod objects;

@@ -42,8 +42,7 @@ use clean_verify::ir_mint::{self, Sx};
 use clean_verify::vacuity_firewall::env_knows;
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -131,7 +130,7 @@ fn m2_reader_b_equals_reader_a_modulo_the_switch_flag() {
 #[test]
 fn m3_mint_reproduces_the_registered_script() {
     let minted = ir_mint::mint(&core_a(), PREFIX, &tags())
-        .expect("the ir_d0..ir_d63 pool mints the designated target")
+        .expect("the ir_d0..ir_d130 pool mints the designated target")
         .text();
     assert_eq!(
         minted,
@@ -186,9 +185,9 @@ fn m7_the_tag_table_still_matches_the_artifact() {
          re-interned and this table needs a one-line REVIEWED re-pin"
     );
     assert!(ir_mint::IR_LZ_TAGS.contains("\"functy\": 0"));
-    assert_eq!(FIXTURE.matches("enum.2").count(), 1, "one load of enum.2");
-    assert!(ir_mint::IR_LZ_TAGS.contains("\"crate_id\": 2"));
-    for (id, count) in [(3905u32, 3usize), (3894, 3)] {
+    assert_eq!(FIXTURE.matches("enum.3").count(), 1, "one load of enum.3");
+    assert!(ir_mint::IR_LZ_TAGS.contains("\"crate_id\": 3"));
+    for (id, count) in [(1961u32, 3usize), (1947, 3)] {
         assert_eq!(
             FIXTURE.matches(&format!("@func.{id}(")).count(),
             count,
@@ -269,10 +268,10 @@ fn m10_the_committed_fixture_projects_under_its_pinned_interface() {
 fn m10_the_interface_pins_bite() {
     let t = tags();
     for (from, to, slot) in [
-        ("bb0(%0: ptr):", "bb0(%0: enum.2):", "parameter"),
+        ("bb0(%0: ptr):", "bb0(%0: enum.3):", "parameter"),
         (
-            "load enum.2, ptr %0",
-            "load enum.2, ptr %0, align 8",
+            "load enum.3, ptr %0",
+            "load enum.3, ptr %0, align 8",
             "align",
         ),
         ("rustcc fn @", "ccc fn @", "calling convention"),

@@ -2,10 +2,11 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Brick 1 of the faithful micro-checker spec (the bvar-arm triple): the
-//! FRESH-NAME context-indexed verification relation `MicroVerifies`, its
-//! kernel-agreement theorems for the two arms it has, ground positive
-//! witnesses, and an empty-context bvar REJECTION witness.
+//! Bricks 1-2 of the faithful micro-checker spec: the FRESH-NAME
+//! context-indexed verification relation `MicroVerifies`, its kernel-agreement
+//! theorems for the three arms it has, ground positive witnesses, an
+//! empty-context bvar REJECTION witness, and a Pi witness that pins the
+//! CONTEXT PUSH.
 //!
 //! Per `designs/2026-08-23-micro-faithful-spec-scoping.md` (the faithful-spec
 //! plan) and the Brick-6 fresh-names constraint of `micro_soundness.rs:33-38`:
@@ -17,11 +18,12 @@
 //!
 //! ## Honesty notes (read before quoting)
 //!
-//! - **PARTIAL relation: 2 arms (sort, bvar) ONLY.** `MicroVerifies G c e T`
+//! - **PARTIAL relation: 3 arms (sort, bvar, pi) ONLY.** `MicroVerifies G c e T`
 //!   models "`verify_impl(cert c, expr e)` returns `Ok(T)` under context `G`"
 //!   (`crates/clean-kernel/src/micro/checker.rs::verify_impl`) arm-for-arm,
-//!   but this brick carries ONLY the Sort rule (checker.rs:319-327) and the
-//!   BVar rule (checker.rs:363-381). Pi/lam/app/let arms are LATER bricks;
+//!   but this brick carries ONLY the Sort rule (checker.rs:319-327), the
+//!   BVar rule (checker.rs:363-381) and the Pi rule (checker.rs:464-510).
+//!   lam/app/let arms are LATER bricks;
 //!   const/opaque/lit/proj are out-of-fragment per the plan. Absence of a
 //!   derivation for those shapes means "outside the modeled fragment", NOT
 //!   "the checker rejects".
@@ -35,6 +37,24 @@
 //!   level-exact, env-free fragment: pairs the Rust def_eq equates only via
 //!   delta/iota/universe-blindness have NO derivation here. That is an honest
 //!   under-approximation, never an over-claim.
+//! - **`universe_blind` IS A CHECKER MODE, and the Pi arm is where it starts
+//!   to bite — measured 2026-09-17.** `MicroChecker` carries a `universe_blind: bool`
+//!   (checker.rs:172). `MicroChecker::new()` sets it FALSE (checker.rs:194);
+//!   `MicroChecker::with_env()` — the env-aware constructor — sets it TRUE
+//!   (checker.rs:207), and says so in its own doc: "Runs universe-blind for
+//!   typing. The load-bearing reduction re-check is universe-independent."
+//!   The flag guards exactly three sites: the Pi rule's two level checks
+//!   (checker.rs:481, :499) and the `Sort`/`Sort` def-eq case
+//!   (checker.rs:914).
+//!
+//!   **The Sort rule's own level check (checker.rs:320) is NOT guarded**, so
+//!   `MicroVerifies.sort` is faithful in BOTH modes — and the BVar rule has no
+//!   level check of its own. That was luck, not design, and it expired at the
+//!   Pi arm exactly as predicted: **`MicroVerifies.pi`'s two level premises
+//!   model the `new()` checker ONLY**, and OVER-approximate the `with_env()`
+//!   one, which accepts any levels there. So the "honest under-approximation,
+//!   never an over-claim" sentence below does NOT cover the Pi arm, and must
+//!   not be quoted as if it did. This is the band's first two-sided narrowing.
 //! - **The sort arm's level equality is exactly faithful.** Rust
 //!   `MicroLevel::level_eq` is derived structural `PartialEq`
 //!   (micro/types.rs:1453); `micro_level_eqb` is the reflected structural
@@ -63,7 +83,7 @@
 //! ## Census
 //!
 //! ZERO new axioms: one genuine `add_inductive` (lowers to
-//! Inductive/Constructor/Recursor), four plain defs, seven kernel-checked
+//! Inductive/Constructor/Recursor), five plain defs, ten kernel-checked
 //! theorems/witnesses. Census-neutral.
 
 use std::collections::HashSet;
@@ -97,6 +117,16 @@ pub(super) const SRC_MV_OPT_MAP_MICRO: &str = "def mv_opt_map_micro (o : OptionT
 /// bvar, sort, app, lam, pi, let_, opaque_.
 pub(super) const SRC_MV_SORT_HEAD_TYPE: &str = "def mv_sort_head_type (e : MicroExpr) : Type := MicroExpr.rec (fun (_ : MicroExpr) => Type) (fun (i : Nat) => Empty) (fun (l : MicroLevel) => Nat) (fun (f : MicroExpr) (a : MicroExpr) (_ : Type) (_ : Type) => Empty) (fun (t : MicroExpr) (b : MicroExpr) (_ : Type) (_ : Type) => Empty) (fun (t : MicroExpr) (b : MicroExpr) (_ : Type) (_ : Type) => Empty) (fun (t : MicroExpr) (v : MicroExpr) (b : MicroExpr) (_ : Type) (_ : Type) (_ : Type) => Empty) (fun (t : MicroExpr) (_ : Type) => Empty) e";
 
+/// Head discriminator for the Pi arm of the rejection proof: `pi` heads map to
+/// an inhabited type (`Nat`), every other head to `Empty`.
+///
+/// `mv_sort_head_type` cannot serve here — it sends BOTH `pi` and `bvar` to
+/// `Empty`, so it kills the sort minor and nothing else. Adding the Pi arm to
+/// `MicroVerifies` adds a third minor to its recursor, and that minor needs a
+/// discriminator that separates `pi` from `bvar`. Minor-premise order, as
+/// above: bvar, sort, app, lam, pi, let_, opaque_.
+pub(super) const SRC_MV_PI_HEAD_TYPE: &str = "def mv_pi_head_type (e : MicroExpr) : Type := MicroExpr.rec (fun (_z : MicroExpr) => Type) (fun (bi : Nat) => Empty) (fun (sl : MicroLevel) => Empty) (fun (af : MicroExpr) (aa : MicroExpr) (_cf : Type) (_ca : Type) => Empty) (fun (lty : MicroExpr) (lb : MicroExpr) (_cty : Type) (_cb : Type) => Empty) (fun (pty : MicroExpr) (pb : MicroExpr) (_cty : Type) (_cb : Type) => Nat) (fun (zty : MicroExpr) (zv : MicroExpr) (zb : MicroExpr) (_c1 : Type) (_c2 : Type) (_c3 : Type) => Empty) (fun (ot : MicroExpr) (_ct : Type) => Empty) e";
+
 // ================================================================
 // Group B — the relation: FRESH-NAME, context-indexed, HONESTLY PARTIAL
 // (sort + bvar arms only in this brick).
@@ -116,7 +146,8 @@ pub(super) const SRC_MV_SORT_HEAD_TYPE: &str = "def mv_sort_head_type (e : Micro
 // require.
 pub(super) const SRC_MICRO_VERIFIES: &str = r"inductive MicroVerifies : ListType MicroExpr -> MicroCert -> MicroExpr -> MicroExpr -> Type
 | sort : forall (G : ListType MicroExpr) (cl : MicroLevel) (l : MicroLevel), Eq Bool (micro_level_eqb cl l) Bool.true -> MicroVerifies G (MicroCert.sort cl) (MicroExpr.sort l) (MicroExpr.sort (MicroLevel.succ cl))
-| bvar : forall (i : Nat) (cty : MicroExpr) (A : MicroExpr) (G : ListType MicroExpr), Eq (OptionType MicroExpr) (mv_ctx_lookup G i) (OptionType.some MicroExpr A) -> Eq Bool (micro_def_eq cty (micro_lift A Nat.zero (Nat.succ i))) Bool.true -> MicroVerifies G (MicroCert.bvar i cty) (MicroExpr.bvar i) cty";
+| bvar : forall (i : Nat) (cty : MicroExpr) (A : MicroExpr) (G : ListType MicroExpr), Eq (OptionType MicroExpr) (mv_ctx_lookup G i) (OptionType.some MicroExpr A) -> Eq Bool (micro_def_eq cty (micro_lift A Nat.zero (Nat.succ i))) Bool.true -> MicroVerifies G (MicroCert.bvar i cty) (MicroExpr.bvar i) cty
+| pi : forall (G : ListType MicroExpr) (A : MicroExpr) (B : MicroExpr) (ca : MicroCert) (cb : MicroCert) (cl1 : MicroLevel) (cl2 : MicroLevel) (SA : MicroExpr) (l1 : MicroLevel) (SB : MicroExpr) (l2 : MicroLevel), MicroVerifies G ca A SA -> Eq MicroExpr (micro_whnf_iter (micro_size SA) SA) (MicroExpr.sort l1) -> Eq Bool (micro_level_eqb l1 cl1) Bool.true -> MicroVerifies (ListType.cons MicroExpr A G) cb B SB -> Eq MicroExpr (micro_whnf_iter (micro_size SB) SB) (MicroExpr.sort l2) -> Eq Bool (micro_level_eqb l2 cl2) Bool.true -> MicroVerifies G (MicroCert.pi ca cl1 cb cl2) (MicroExpr.pi A B) (MicroExpr.sort (MicroLevel.imax cl1 cl2))";
 
 // ================================================================
 // Group C — the ctx_lookup/translation commutation lemma (minted here, as
@@ -132,6 +163,16 @@ pub(super) const VAL_MICRO_KERNEL_SORT_AGREE: &str = "fun (G : ListType KExpr) (
 pub(super) const TY_MICRO_KERNEL_BVAR_AGREE: &str = "forall (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> MicroVerifies (mv_kctx_to_micro G) (MicroCert.bvar i (kernel_to_micro (lift_at A Nat.zero (Nat.succ i)))) (MicroExpr.bvar i) (kernel_to_micro (lift_at A Nat.zero (Nat.succ i)))";
 pub(super) const VAL_MICRO_KERNEL_BVAR_AGREE: &str = "fun (G : ListType KExpr) (i : Nat) (A : KExpr) (hlk : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) => MicroVerifies.bvar i (kernel_to_micro (lift_at A Nat.zero (Nat.succ i))) (kernel_to_micro A) (mv_kctx_to_micro G) (Eq.trans (OptionType MicroExpr) (mv_ctx_lookup (mv_kctx_to_micro G) i) (mv_opt_map_micro (ctx_lookup G i)) (OptionType.some MicroExpr (kernel_to_micro A)) (mv_ctx_lookup_commute G i) (Eq.cong (OptionType KExpr) (OptionType MicroExpr) (fun (o : OptionType KExpr) => mv_opt_map_micro o) (ctx_lookup G i) (OptionType.some KExpr A) hlk)) (Eq.trans Bool (micro_def_eq (kernel_to_micro (lift_at A Nat.zero (Nat.succ i))) (micro_lift (kernel_to_micro A) Nat.zero (Nat.succ i))) (micro_def_eq (micro_lift (kernel_to_micro A) Nat.zero (Nat.succ i)) (micro_lift (kernel_to_micro A) Nat.zero (Nat.succ i))) Bool.true (Eq.cong MicroExpr Bool (fun (z : MicroExpr) => micro_def_eq z (micro_lift (kernel_to_micro A) Nat.zero (Nat.succ i))) (kernel_to_micro (lift_at A Nat.zero (Nat.succ i))) (micro_lift (kernel_to_micro A) Nat.zero (Nat.succ i)) (kernel_to_micro_lift_commute A Nat.zero (Nat.succ i))) (micro_def_eq_refl (micro_lift (kernel_to_micro A) Nat.zero (Nat.succ i))))";
 
+/// The Pi arm's kernel-agreement theorem.
+///
+/// Three iota steps carry it, all on genuine constructor applications so they
+/// fire with `A`, `B`, `G`, `u`, `v` still variables: `mv_kctx_to_micro (cons A
+/// G)` to `cons (kernel_to_micro A) (mv_kctx_to_micro G)`, `kernel_to_micro
+/// (KExpr.pi A B)` to `MicroExpr.pi …`, and `kernel_to_micro (KExpr.sort
+/// (Level.imax u v))` to `MicroExpr.sort (MicroLevel.imax …)`.
+pub(super) const TY_MICRO_KERNEL_PI_AGREE: &str = "forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (ca : MicroCert) (cb : MicroCert) (u : Level) (v : Level) (SA : MicroExpr) (SB : MicroExpr), MicroVerifies (mv_kctx_to_micro G) ca (kernel_to_micro A) SA -> Eq MicroExpr (micro_whnf_iter (micro_size SA) SA) (MicroExpr.sort (level_to_microlevel u)) -> MicroVerifies (mv_kctx_to_micro (ListType.cons KExpr A G)) cb (kernel_to_micro B) SB -> Eq MicroExpr (micro_whnf_iter (micro_size SB) SB) (MicroExpr.sort (level_to_microlevel v)) -> MicroVerifies (mv_kctx_to_micro G) (MicroCert.pi ca (level_to_microlevel u) cb (level_to_microlevel v)) (kernel_to_micro (KExpr.pi A B)) (kernel_to_micro (KExpr.sort (Level.imax u v)))";
+pub(super) const VAL_MICRO_KERNEL_PI_AGREE: &str = "fun (G : ListType KExpr) (A : KExpr) (B : KExpr) (ca : MicroCert) (cb : MicroCert) (u : Level) (v : Level) (SA : MicroExpr) (SB : MicroExpr) (dA : MicroVerifies (mv_kctx_to_micro G) ca (kernel_to_micro A) SA) (hwA : Eq MicroExpr (micro_whnf_iter (micro_size SA) SA) (MicroExpr.sort (level_to_microlevel u))) (dB : MicroVerifies (mv_kctx_to_micro (ListType.cons KExpr A G)) cb (kernel_to_micro B) SB) (hwB : Eq MicroExpr (micro_whnf_iter (micro_size SB) SB) (MicroExpr.sort (level_to_microlevel v))) => MicroVerifies.pi (mv_kctx_to_micro G) (kernel_to_micro A) (kernel_to_micro B) ca cb (level_to_microlevel u) (level_to_microlevel v) SA (level_to_microlevel u) SB (level_to_microlevel v) dA hwA (micro_level_eqb_refl (level_to_microlevel u)) dB hwB (micro_level_eqb_refl (level_to_microlevel v))";
+
 // ================================================================
 // Group D — witnesses: two ground positive derivations, a lift-arithmetic
 // pin, and the empty-context bvar REJECTION.
@@ -146,12 +187,32 @@ pub(super) const VAL_MV_BVAR_GROUND_WITNESS: &str = "MicroVerifies.bvar Nat.zero
 pub(super) const TY_MV_BVAR_LIFT_FIRES_WITNESS: &str = "MicroVerifies (ListType.cons MicroExpr (MicroExpr.sort MicroLevel.zero) (ListType.cons MicroExpr (MicroExpr.bvar Nat.zero) (ListType.nil MicroExpr))) (MicroCert.bvar (Nat.succ Nat.zero) (MicroExpr.bvar (Nat.succ (Nat.succ Nat.zero)))) (MicroExpr.bvar (Nat.succ Nat.zero)) (MicroExpr.bvar (Nat.succ (Nat.succ Nat.zero)))";
 pub(super) const VAL_MV_BVAR_LIFT_FIRES_WITNESS: &str = "MicroVerifies.bvar (Nat.succ Nat.zero) (MicroExpr.bvar (Nat.succ (Nat.succ Nat.zero))) (MicroExpr.bvar Nat.zero) (ListType.cons MicroExpr (MicroExpr.sort MicroLevel.zero) (ListType.cons MicroExpr (MicroExpr.bvar Nat.zero) (ListType.nil MicroExpr))) (Eq.refl (OptionType MicroExpr) (OptionType.some MicroExpr (MicroExpr.bvar Nat.zero))) (Eq.refl Bool Bool.true)";
 
+/// `(Sort 0) -> (Sort 0) : Sort (imax 1 1)`, at the empty context.
+///
+/// Both whnf premises are `Eq.refl`: `micro_size (MicroExpr.sort l)` reduces to
+/// `Nat.succ Nat.zero`, `micro_whnf_iter (Nat.succ Nat.zero) e` to
+/// `micro_whnf e`, and `micro_whnf` leaves a sort alone.
+pub(super) const TY_MV_PI_GROUND_WITNESS: &str = "MicroVerifies (ListType.nil MicroExpr) (MicroCert.pi (MicroCert.sort MicroLevel.zero) (MicroLevel.succ MicroLevel.zero) (MicroCert.sort MicroLevel.zero) (MicroLevel.succ MicroLevel.zero)) (MicroExpr.pi (MicroExpr.sort MicroLevel.zero) (MicroExpr.sort MicroLevel.zero)) (MicroExpr.sort (MicroLevel.imax (MicroLevel.succ MicroLevel.zero) (MicroLevel.succ MicroLevel.zero)))";
+pub(super) const VAL_MV_PI_GROUND_WITNESS: &str = "MicroVerifies.pi (ListType.nil MicroExpr) (MicroExpr.sort MicroLevel.zero) (MicroExpr.sort MicroLevel.zero) (MicroCert.sort MicroLevel.zero) (MicroCert.sort MicroLevel.zero) (MicroLevel.succ MicroLevel.zero) (MicroLevel.succ MicroLevel.zero) (MicroExpr.sort (MicroLevel.succ MicroLevel.zero)) (MicroLevel.succ MicroLevel.zero) (MicroExpr.sort (MicroLevel.succ MicroLevel.zero)) (MicroLevel.succ MicroLevel.zero) (MicroVerifies.sort (ListType.nil MicroExpr) MicroLevel.zero MicroLevel.zero (Eq.refl Bool Bool.true)) (Eq.refl MicroExpr (MicroExpr.sort (MicroLevel.succ MicroLevel.zero))) (Eq.refl Bool Bool.true) (MicroVerifies.sort (ListType.cons MicroExpr (MicroExpr.sort MicroLevel.zero) (ListType.nil MicroExpr)) MicroLevel.zero MicroLevel.zero (Eq.refl Bool Bool.true)) (Eq.refl MicroExpr (MicroExpr.sort (MicroLevel.succ MicroLevel.zero))) (Eq.refl Bool Bool.true)";
+
+/// `(X : Sort 0) -> X`, at the empty context — and this one PINS THE PUSH.
+///
+/// The ground witness above never reads the pushed binder, so it says nothing
+/// about `checker.rs`'s `self.context.push(arg_ty)` (line 488). This one's body
+/// derivation is exactly `mv_bvar_ground_witness`, which is IMPOSSIBLE at `nil`
+/// — that is `mv_bvar_nil_reject` — so it kernel-checks only if
+/// `ListType.cons MicroExpr A G` genuinely models the push.
+pub(super) const TY_MV_PI_PUSH_FIRES_WITNESS: &str = "MicroVerifies (ListType.nil MicroExpr) (MicroCert.pi (MicroCert.sort MicroLevel.zero) (MicroLevel.succ MicroLevel.zero) (MicroCert.bvar Nat.zero (MicroExpr.sort MicroLevel.zero)) MicroLevel.zero) (MicroExpr.pi (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero)) (MicroExpr.sort (MicroLevel.imax (MicroLevel.succ MicroLevel.zero) MicroLevel.zero))";
+pub(super) const VAL_MV_PI_PUSH_FIRES_WITNESS: &str = "MicroVerifies.pi (ListType.nil MicroExpr) (MicroExpr.sort MicroLevel.zero) (MicroExpr.bvar Nat.zero) (MicroCert.sort MicroLevel.zero) (MicroCert.bvar Nat.zero (MicroExpr.sort MicroLevel.zero)) (MicroLevel.succ MicroLevel.zero) MicroLevel.zero (MicroExpr.sort (MicroLevel.succ MicroLevel.zero)) (MicroLevel.succ MicroLevel.zero) (MicroExpr.sort MicroLevel.zero) MicroLevel.zero (MicroVerifies.sort (ListType.nil MicroExpr) MicroLevel.zero MicroLevel.zero (Eq.refl Bool Bool.true)) (Eq.refl MicroExpr (MicroExpr.sort (MicroLevel.succ MicroLevel.zero))) (Eq.refl Bool Bool.true) (MicroVerifies.bvar Nat.zero (MicroExpr.sort MicroLevel.zero) (MicroExpr.sort MicroLevel.zero) (ListType.cons MicroExpr (MicroExpr.sort MicroLevel.zero) (ListType.nil MicroExpr)) (Eq.refl (OptionType MicroExpr) (OptionType.some MicroExpr (MicroExpr.sort MicroLevel.zero))) (Eq.refl Bool Bool.true)) (Eq.refl MicroExpr (MicroExpr.sort MicroLevel.zero)) (Eq.refl Bool Bool.true)";
+
 pub(super) const TY_MV_BVAR_NIL_REJECT: &str = "forall (cty : MicroExpr) (T : MicroExpr), MicroVerifies (ListType.nil MicroExpr) (MicroCert.bvar Nat.zero cty) (MicroExpr.bvar Nat.zero) T -> Empty";
-pub(super) const VAL_MV_BVAR_NIL_REJECT: &str = "fun (cty : MicroExpr) (T : MicroExpr) (d : MicroVerifies (ListType.nil MicroExpr) (MicroCert.bvar Nat.zero cty) (MicroExpr.bvar Nat.zero) T) => MicroVerifies.rec (fun (G2 : ListType MicroExpr) (c2 : MicroCert) (e2 : MicroExpr) (T2 : MicroExpr) (_d2 : MicroVerifies G2 c2 e2 T2) => Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr) -> Eq MicroExpr e2 (MicroExpr.bvar Nat.zero) -> Empty) (fun (G2 : ListType MicroExpr) (cl : MicroLevel) (l : MicroLevel) (_hl : Eq Bool (micro_level_eqb cl l) Bool.true) (_hG : Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr)) (he : Eq MicroExpr (MicroExpr.sort l) (MicroExpr.bvar Nat.zero)) => Eq.substType MicroExpr mv_sort_head_type (MicroExpr.sort l) (MicroExpr.bvar Nat.zero) he Nat.zero) (fun (i2 : Nat) (cty2 : MicroExpr) (A2 : MicroExpr) (G2 : ListType MicroExpr) (hlk : Eq (OptionType MicroExpr) (mv_ctx_lookup G2 i2) (OptionType.some MicroExpr A2)) (_hdeq : Eq Bool (micro_def_eq cty2 (micro_lift A2 Nat.zero (Nat.succ i2))) Bool.true) (hG : Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr)) (_he : Eq MicroExpr (MicroExpr.bvar i2) (MicroExpr.bvar Nat.zero)) => option_none_ne_some_type MicroExpr A2 Empty (Eq.substType (ListType MicroExpr) (fun (g : ListType MicroExpr) => Eq (OptionType MicroExpr) (mv_ctx_lookup g i2) (OptionType.some MicroExpr A2)) G2 (ListType.nil MicroExpr) hG hlk)) (ListType.nil MicroExpr) (MicroCert.bvar Nat.zero cty) (MicroExpr.bvar Nat.zero) T d (Eq.refl (ListType MicroExpr) (ListType.nil MicroExpr)) (Eq.refl MicroExpr (MicroExpr.bvar Nat.zero))";
+pub(super) const VAL_MV_BVAR_NIL_REJECT: &str = "fun (cty : MicroExpr) (T : MicroExpr) (d : MicroVerifies (ListType.nil MicroExpr) (MicroCert.bvar Nat.zero cty) (MicroExpr.bvar Nat.zero) T) => MicroVerifies.rec (fun (G2 : ListType MicroExpr) (c2 : MicroCert) (e2 : MicroExpr) (T2 : MicroExpr) (_d2 : MicroVerifies G2 c2 e2 T2) => Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr) -> Eq MicroExpr e2 (MicroExpr.bvar Nat.zero) -> Empty) (fun (G2 : ListType MicroExpr) (cl : MicroLevel) (l : MicroLevel) (_hl : Eq Bool (micro_level_eqb cl l) Bool.true) (_hG : Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr)) (he : Eq MicroExpr (MicroExpr.sort l) (MicroExpr.bvar Nat.zero)) => Eq.substType MicroExpr mv_sort_head_type (MicroExpr.sort l) (MicroExpr.bvar Nat.zero) he Nat.zero) (fun (i2 : Nat) (cty2 : MicroExpr) (A2 : MicroExpr) (G2 : ListType MicroExpr) (hlk : Eq (OptionType MicroExpr) (mv_ctx_lookup G2 i2) (OptionType.some MicroExpr A2)) (_hdeq : Eq Bool (micro_def_eq cty2 (micro_lift A2 Nat.zero (Nat.succ i2))) Bool.true) (hG : Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr)) (_he : Eq MicroExpr (MicroExpr.bvar i2) (MicroExpr.bvar Nat.zero)) => option_none_ne_some_type MicroExpr A2 Empty (Eq.substType (ListType MicroExpr) (fun (g : ListType MicroExpr) => Eq (OptionType MicroExpr) (mv_ctx_lookup g i2) (OptionType.some MicroExpr A2)) G2 (ListType.nil MicroExpr) hG hlk)) (fun (G2 : ListType MicroExpr) (A2 : MicroExpr) (B2 : MicroExpr) (ca2 : MicroCert) (cb2 : MicroCert) (cl1 : MicroLevel) (cl2 : MicroLevel) (SA : MicroExpr) (l1 : MicroLevel) (SB : MicroExpr) (l2 : MicroLevel) (_dA : MicroVerifies G2 ca2 A2 SA) (_hwA : Eq MicroExpr (micro_whnf_iter (micro_size SA) SA) (MicroExpr.sort l1)) (_hlA : Eq Bool (micro_level_eqb l1 cl1) Bool.true) (_dB : MicroVerifies (ListType.cons MicroExpr A2 G2) cb2 B2 SB) (_hwB : Eq MicroExpr (micro_whnf_iter (micro_size SB) SB) (MicroExpr.sort l2)) (_hlB : Eq Bool (micro_level_eqb l2 cl2) Bool.true) (_ihA : Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr) -> Eq MicroExpr A2 (MicroExpr.bvar Nat.zero) -> Empty) (_ihB : Eq (ListType MicroExpr) (ListType.cons MicroExpr A2 G2) (ListType.nil MicroExpr) -> Eq MicroExpr B2 (MicroExpr.bvar Nat.zero) -> Empty) (_hG : Eq (ListType MicroExpr) G2 (ListType.nil MicroExpr)) (he : Eq MicroExpr (MicroExpr.pi A2 B2) (MicroExpr.bvar Nat.zero)) => Eq.substType MicroExpr mv_pi_head_type (MicroExpr.pi A2 B2) (MicroExpr.bvar Nat.zero) he Nat.zero) (ListType.nil MicroExpr) (MicroCert.bvar Nat.zero cty) (MicroExpr.bvar Nat.zero) T d (Eq.refl (ListType MicroExpr) (ListType.nil MicroExpr)) (Eq.refl MicroExpr (MicroExpr.bvar Nat.zero))";
 
 impl Specification {
     /// Register Brick 1 of the faithful micro-checker verification relation:
-    /// the fresh-name `MicroVerifies` (sort + bvar arms ONLY), its substrate
+    /// the fresh-name `MicroVerifies` (sort, bvar AND pi arms — the "sort +
+    /// bvar ONLY" this line carried was falsified by the `pi` constructor in
+    /// this file's own inductive, corrected 2026-09-20), its substrate
     /// defs, the ctx_lookup/translation commutation, the per-arm kernel
     /// agreement theorems, the ground witnesses, and the empty-context bvar
     /// rejection.
@@ -204,13 +265,20 @@ impl Specification {
              of the mv_bvar_nil_reject inversion. Part of Brick 1 of the faithful \
              micro spec.",
         )?;
+        self.add_recursive_def(
+            SRC_MV_PI_HEAD_TYPE,
+            "Head discriminator for the Pi arm: pi heads -> Nat (inhabited), every other \
+             MicroExpr head -> Empty. mv_sort_head_type cannot serve, sending BOTH pi and bvar \
+             to Empty; adding the Pi arm adds a third minor to MicroVerifies.rec, and that minor \
+             needs a discriminator separating pi from bvar. Brick 2 of the faithful micro spec.",
+        )?;
 
         // --- Group B: the relation ---
         self.add_inductive(
             SRC_MICRO_VERIFIES,
             "FRESH-NAME faithful micro-checker verification relation (Brick 1): \
              MicroVerifies G c e T models 'verify_impl(cert c, expr e) = Ok(T) under \
-             context G' (micro/checker.rs). HONESTLY PARTIAL: exactly TWO arms in this \
+             context G' (micro/checker.rs). HONESTLY PARTIAL: exactly THREE arms in this \
              brick — sort (checker.rs:319-327: cert level structurally equals the expr \
              level via micro_level_eqb, the reflected mirror of the Rust structural \
              level_eq; concludes sort (succ cert-level)) and bvar (checker.rs:363-381: \
@@ -323,6 +391,41 @@ impl Specification {
             ])),
             axiom_deps: HashSet::new(),
         })?;
+        self.add_definition(SpecDefinition {
+            name: "micro_kernel_pi_agree".to_string(),
+            type_src: TY_MICRO_KERNEL_PI_AGREE.to_string(),
+            value_src: Some(VAL_MICRO_KERNEL_PI_AGREE.to_string()),
+            is_axiom: false,
+            description:
+                "THE BRICK-2 AGREEMENT THEOREM (pi arm): given kernel-side sub-derivations \
+                 for the domain and, at the EXTENDED context, the codomain, the MicroVerifies pi \
+                 derivation exists at the translated context with conclusion kernel_to_micro \
+                 (KExpr.sort (Level.imax u v)) — literally kernel_to_micro of the type \
+                 KernelInfers.pi concludes. Three iota steps carry it, all on genuine constructor \
+                 applications so they fire with A, B, G, u, v still variables. \
+                 \
+                 FAITHFULNESS CAVEAT, AND IT IS NEW AT THIS ARM: the deployed Pi rule's two level \
+                 checks (checker.rs:481, :499) are guarded by universe_blind, which \
+                 MicroChecker::with_env sets TRUE. The level premises here therefore model the \
+                 MicroChecker::new checker ONLY, and OVER-approximate the env-aware one, which \
+                 accepts any levels there. The Sort rule's own level check is NOT guarded and BVar \
+                 has none, so the first two arms were faithful in both modes by luck. The band's \
+                 standing 'honest under-approximation, never an over-claim' framing does not \
+                 inherit past bvar, and this is where it stops. Zero axiom_deps."
+                    .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "MicroVerifies".to_string(),
+                "MicroVerifies.pi".to_string(),
+                "kernel_to_micro".to_string(),
+                "level_to_microlevel".to_string(),
+                "micro_level_eqb_refl".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
 
         // --- Group D: witnesses ---
         self.add_definition(SpecDefinition {
@@ -392,6 +495,55 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
         self.add_definition(SpecDefinition {
+            name: "mv_pi_ground_witness".to_string(),
+            type_src: TY_MV_PI_GROUND_WITNESS.to_string(),
+            value_src: Some(VAL_MV_PI_GROUND_WITNESS.to_string()),
+            is_axiom: false,
+            description:
+                "GROUND POSITIVE WITNESS for the pi arm: (Sort 0) -> (Sort 0) verifies at \
+                 the empty context against a concrete MicroCert.pi, concluding Sort (imax 1 1). \
+                 Both whnf premises are Eq.refl by computation — micro_size of a sort is one, \
+                 micro_whnf_iter at one is micro_whnf, and micro_whnf leaves a sort alone. \
+                 It shows the arm is INHABITED, which a conditional rule cannot show about \
+                 itself. Zero axiom_deps."
+                    .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "MicroVerifies.pi".to_string(),
+                "MicroVerifies.sort".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+        self.add_definition(SpecDefinition {
+            name: "mv_pi_push_fires_witness".to_string(),
+            type_src: TY_MV_PI_PUSH_FIRES_WITNESS.to_string(),
+            value_src: Some(VAL_MV_PI_PUSH_FIRES_WITNESS.to_string()),
+            is_axiom: false,
+            description: "THE WITNESS THAT PINS THE CONTEXT PUSH: (X : Sort 0) -> X, at the EMPTY \
+                 context. mv_pi_ground_witness never reads the pushed binder, so it says nothing \
+                 about checker.rs:488's self.context.push(arg_ty). This one's body derivation IS \
+                 mv_bvar_ground_witness, and a bvar derivation at nil is IMPOSSIBLE — that is \
+                 exactly mv_bvar_nil_reject — so it kernel-checks only if ListType.cons MicroExpr \
+                 A G genuinely models the push, with the head as de Bruijn zero. \
+                 micro_lift of a sort is the sort, so the bvar arm's def-eq premise is Eq.refl. \
+                 Zero axiom_deps."
+                .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "MicroVerifies.pi".to_string(),
+                "MicroVerifies.sort".to_string(),
+                "MicroVerifies.bvar".to_string(),
+                "mv_ctx_lookup".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+        self.add_definition(SpecDefinition {
             name: "mv_bvar_nil_reject".to_string(),
             type_src: TY_MV_BVAR_NIL_REJECT.to_string(),
             value_src: Some(VAL_MV_BVAR_NIL_REJECT.to_string()),
@@ -432,16 +584,17 @@ mod tests {
     use crate::test_utils::parse_check;
 
     /// Every plain-def source in registration order.
-    const DEF_SOURCES: [&str; 4] = [
+    const DEF_SOURCES: [&str; 5] = [
         SRC_MV_CTX_LOOKUP,
         SRC_MV_KCTX_TO_MICRO,
         SRC_MV_OPT_MAP_MICRO,
         SRC_MV_SORT_HEAD_TYPE,
+        SRC_MV_PI_HEAD_TYPE,
     ];
 
     /// Every (name, type, value) triple registered via `add_definition`, in
     /// registration order.
-    const THEOREM_SOURCES: [(&str, &str, &str); 7] = [
+    const THEOREM_SOURCES: [(&str, &str, &str); 10] = [
         (
             "mv_ctx_lookup_commute",
             TY_MV_CTX_LOOKUP_COMMUTE,
@@ -476,6 +629,21 @@ mod tests {
             "mv_bvar_nil_reject",
             TY_MV_BVAR_NIL_REJECT,
             VAL_MV_BVAR_NIL_REJECT,
+        ),
+        (
+            "micro_kernel_pi_agree",
+            TY_MICRO_KERNEL_PI_AGREE,
+            VAL_MICRO_KERNEL_PI_AGREE,
+        ),
+        (
+            "mv_pi_ground_witness",
+            TY_MV_PI_GROUND_WITNESS,
+            VAL_MV_PI_GROUND_WITNESS,
+        ),
+        (
+            "mv_pi_push_fires_witness",
+            TY_MV_PI_PUSH_FIRES_WITNESS,
+            VAL_MV_PI_PUSH_FIRES_WITNESS,
         ),
     ];
 
@@ -526,12 +694,17 @@ mod tests {
     /// without updating the honesty story should fail HERE, in milliseconds.
     #[test]
     fn test_micro_verifies_r0_arm_shapes_faithful() {
-        // Exactly TWO arms in this brick — the relation is honestly partial.
+        // Exactly THREE arms in this brick — sort, bvar, pi. The relation is
+        // still honestly partial: lam/app/let are later bricks, and
+        // const/opaque/lit/proj are out of fragment.
         assert_eq!(
             SRC_MICRO_VERIFIES.matches("\n| ").count(),
-            2,
-            "MicroVerifies must have exactly the sort and bvar arms in Brick 1"
+            3,
+            "MicroVerifies must carry exactly three arms here — sort, bvar and pi. A fourth \
+             without updating this module's doc, its census and certificate item 7 would make \
+             the band claim more coverage than it measures."
         );
+
         // Sort arm: reflected structural level equality, cert-level successor
         // conclusion (checker.rs:319-327).
         assert!(
@@ -595,9 +768,11 @@ mod tests {
             "mv_kctx_to_micro",
             "mv_opt_map_micro",
             "mv_sort_head_type",
+            "mv_pi_head_type",
             "MicroVerifies",
             "MicroVerifies.sort",
             "MicroVerifies.bvar",
+            "MicroVerifies.pi",
             "MicroVerifies.rec",
             "mv_ctx_lookup_commute",
             "micro_kernel_sort_agree",
@@ -606,6 +781,9 @@ mod tests {
             "mv_bvar_ground_witness",
             "mv_bvar_lift_fires_witness",
             "mv_bvar_nil_reject",
+            "micro_kernel_pi_agree",
+            "mv_pi_ground_witness",
+            "mv_pi_push_fires_witness",
         ] {
             assert!(
                 spec.definitions().contains_key(name),

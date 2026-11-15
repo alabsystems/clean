@@ -86,6 +86,13 @@ pub struct MethodInfo {
     /// Whether this method is safe to call in JSON-RPC batch mode
     /// (false = requires single-request framing for correct semantics)
     pub batch_safe: bool,
+    /// Whether this method writes a file on the server's machine or adds
+    /// client-chosen declarations to the shared environment other clients'
+    /// requests are checked against (`false`: read-only in that sense; it may
+    /// still keep per-request state, such as a proof state). `serverInfo`
+    /// lists the destructive methods; each one's path is confined to the
+    /// workspace root (`trust_boundary.rs`).
+    pub destructive: bool,
     /// Alternative names that route to the same handler.
     ///
     /// Aliases are accepted in dispatch but NOT advertised in `serverInfo`.
@@ -121,6 +128,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "check",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("valid"),
@@ -131,6 +139,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getType",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -141,6 +150,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "batchCheck",
         supports_progress: true,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -152,6 +162,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "prove",
         supports_progress: true,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("found"),
@@ -163,6 +174,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getPremises",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -173,6 +185,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "batchGetPremises",
         supports_progress: true,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -184,6 +197,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verifyCert",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -194,6 +208,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "batchVerifyCert",
         supports_progress: true,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -204,6 +219,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verifyCertArchive",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -214,6 +230,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "batchVerifyCertArchive",
         supports_progress: true,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -225,6 +242,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verify_alethe_certificate",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &["verifyAletheCertificate"],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -235,6 +253,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verify_farkas_certificate",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &["verifyFarkasCertificate"],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -245,6 +264,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verify_entailment_certificate",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &["verifyEntailmentCertificate"],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -255,6 +275,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verify_certificates_batch",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &["verifyCertificatesBatch", "batchVerifyExternalCert"],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -265,6 +286,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "compressCert",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -275,6 +297,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "decompressCert",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -285,6 +308,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "archiveCert",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -295,6 +319,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "unarchiveCert",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -305,6 +330,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "trainDict",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -315,6 +341,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "archiveCertWithDict",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -325,6 +352,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "unarchiveCertWithDict",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -336,6 +364,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verifyC",
         supports_progress: true,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -344,9 +373,25 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
     },
     // Server Management
     MethodInfo {
+        // A connection's first message (`trust_boundary.rs`); once admitted, a
+        // connection may send it again and is answered the same way. Its
+        // answer is `{"authenticated": true}` or an error, never a false
+        // outcome, so it has no outcome field.
+        name: "authenticate",
+        supports_progress: false,
+        batch_safe: true,
+        destructive: false,
+        aliases: &[],
+        outcome_contract: OutcomeContract {
+            top_level_field: None,
+            item_field: None,
+        },
+    },
+    MethodInfo {
         name: "serverInfo",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -357,6 +402,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "saveEnvironment",
         supports_progress: false,
         batch_safe: true,
+        destructive: true,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -367,6 +413,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "loadEnvironment",
         supports_progress: false,
         batch_safe: true,
+        destructive: true,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -377,6 +424,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "importModule",
         supports_progress: false,
         batch_safe: true,
+        destructive: true,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -388,6 +436,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "addDecl",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("accepted"),
@@ -398,6 +447,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getEnvironment",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -408,6 +458,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getConfig",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -418,6 +469,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getMetrics",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -428,6 +480,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getCacheMetrics",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -439,6 +492,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "initProofState",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -449,6 +503,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "proofState.openObligation",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -459,6 +514,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "applyTactic",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -469,6 +525,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "batchApplyTactic",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -479,6 +536,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getProofState",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -489,6 +547,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "proofState.searchTheorems",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -499,6 +558,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "proofState.searchTactics",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -509,6 +569,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "proofState.close",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("closed"),
@@ -519,6 +580,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "proofState.retain",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("retained"),
@@ -529,6 +591,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "proofState.explainFailure",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -539,6 +602,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "extractProof",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -549,6 +613,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verifyProof",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("verified"),
@@ -559,6 +624,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verifyProofBatch",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -569,6 +635,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "verifyFile",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("verified"),
@@ -579,6 +646,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "fillSorries",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -589,6 +657,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "composeProof",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("success"),
@@ -600,6 +669,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "searchProof",
         supports_progress: true,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: Some("found"),
@@ -611,6 +681,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "Lean.Widget.getInteractiveDiagnostics",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -621,6 +692,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "Lean.Widget.getInteractiveGoals",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -631,6 +703,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getPlainGoal",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -642,6 +715,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getWidgets",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -652,6 +726,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "getWidgetSource",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -662,6 +737,7 @@ pub const METHOD_REGISTRY: &[MethodInfo] = &[
         name: "Widget_event",
         supports_progress: false,
         batch_safe: true,
+        destructive: false,
         aliases: &[],
         outcome_contract: OutcomeContract {
             top_level_field: None,
@@ -765,6 +841,16 @@ pub fn is_batch_safe(method: &str) -> bool {
         .unwrap_or(false) // Unknown methods are treated as non-batch-safe
 }
 
+/// The canonical names of the destructive methods (see
+/// [`MethodInfo::destructive`]), for `serverInfo`.
+pub(crate) fn destructive_methods() -> Vec<&'static str> {
+    METHOD_REGISTRY
+        .iter()
+        .filter(|m| m.destructive)
+        .map(|m| m.name)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -778,6 +864,7 @@ mod tests {
         "applyTactic",
         "archiveCert",
         "archiveCertWithDict",
+        "authenticate",
         "batchApplyTactic",
         "batchCheck",
         "batchGetPremises",

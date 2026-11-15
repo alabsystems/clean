@@ -106,7 +106,7 @@ fn test_lra_simple_bound_conflict_x_ge_0_x_le_neg1() {
         result.stats.theory_lemma_counts.get(&SmtTheory::Lra),
         Some(&1),
     );
-    assert_eq!(result.stats.kernel_verified, 3); // 1 LRA + 2 resolutions
+    assert_eq!(result.stats.step_checked, 3); // 1 LRA + 2 resolutions
     assert_eq!(result.stats.axiomatic, 2); // 2 assumptions
 }
 
@@ -1272,7 +1272,7 @@ fn test_invalid_structural_out_of_range_premise() {
 
 #[test]
 fn test_stats_verification_coverage_fully_verified() {
-    // A simple proof where every step is kernel-verified or axiomatic.
+    // A simple proof where every step is step-checked or axiomatic.
     let mut dag = SmtProofDag::new();
     let p = dag.add_term(SmtTerm::Var("p".to_string(), SmtSort::Bool));
     let not_p = dag.add_term(SmtTerm::Not(p));
@@ -1291,7 +1291,7 @@ fn test_stats_verification_coverage_fully_verified() {
     assert!(result.stats.is_fully_verified());
     assert_eq!(result.stats.total_steps, 3);
     assert_eq!(result.stats.axiomatic, 2);
-    assert_eq!(result.stats.kernel_verified, 1);
+    assert_eq!(result.stats.step_checked, 1);
     assert_eq!(result.stats.structurally_accepted, 0);
     assert_eq!(result.stats.trusted, 0);
 }

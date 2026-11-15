@@ -36,7 +36,7 @@
 //!   `iota_reduces` are env-FIXED to `the_red_env`. The FUTURE SN theorem must be
 //!   pinned to that fixed env; the TypingCtx judgment itself only needs the
 //!   const-typing env `tenv`, which we carry as an inductive PARAMETER (a total
-//!   map `Name -> OptionType KExpr` sending each defined name to its declared
+//!   map `KDeclEnv` sending each defined name to its declared
 //!   TYPE — the type-level companion of `DefEnv`, which stores δ-bodies).
 //! - Prop vs Type: the guide states `TypingCtx : ... -> Prop`; clean-verify's
 //!   `add_inductive` elaborates families into `Type` (exactly as the live
@@ -65,6 +65,30 @@ use crate::spec::definition::SpecDefinition;
 use crate::spec::error::SpecError;
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
+
+/// The `CandModel.mk` constructor telescope, spelled as the binder list a
+/// `CandModel.rec` MINOR must bind: `Red` plus its fourteen laws, in the
+/// inductive's own order.
+///
+/// It lives here as ONE definition because a second projection needed it and
+/// a duplicated fifteen-binder telescope drifts silently — the field list in
+/// `candmodel_red_sort_cr1_witness`'s own description was once wrong by four
+/// and named a field the telescope does not have. Derive the field list from
+/// the inductive's declaration or from this constant; never from prose.
+pub(super) const CANDMODEL_MK_BINDERS: &str = concat!(
+    "(fun (Red : KExpr -> KExpr -> Type) ",
+    "(cr1 : forall (T : KExpr) (e : KExpr), Red T e -> whnf_acc e) ",
+    "(cr2 : forall (T : KExpr) (e : KExpr) (e2 : KExpr), Red T e -> whnf_step e e2 -> Red T e2) ",
+    "(cr3 : forall (T : KExpr) (e : KExpr), Neutral e -> (forall (e2 : KExpr), whnf_step e e2 -> Red T e2) -> Red T e) ",
+    "(red_sort : forall (n : Level) (e : KExpr), whnf_acc e -> Red (KExpr.sort n) e) ",
+    "(pi_elim : forall (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), Red (KExpr.pi A B) f -> Red A a -> Red (instantiate B a) (KExpr.app f a)) ",
+    "(pi_intro : forall (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app f a)) -> Red (KExpr.pi A B) f) ",
+    "(redAbstraction : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app (KExpr.lam A b) a)) ",
+    "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
+    "(redLet : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.let_ A a b)) ",
+    "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) ",
+    "(redRecW : forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> Red T contractum -> Red T (wRecApp u m mn t)) (redRecMut : forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (mutRecApp msig u i cs ms t)) (redRecIdx : forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> Red T contractum -> Red T (iRecApp fam isig u m ms ix t)) (redTypeStep : forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (Red T e -> Red T2 e) (Red T2 e -> Red T e)) => ",
+);
 
 impl Specification {
     /// Register the rich-model dependent typing judgment `TypingCtx`, its context
@@ -105,13 +129,13 @@ impl Specification {
         // (Inductive/Constructor/Recursor, not Axiom).
         self.add_inductive(
             concat!(
-                "inductive TypingCtx (tenv : Name -> OptionType KExpr) : ListType KExpr -> KExpr -> KExpr -> Type\n",
+                "inductive TypingCtx (tenv : KDeclEnv) : ListType KExpr -> KExpr -> KExpr -> Type\n",
                 "| var : forall (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> TypingCtx tenv G (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))\n",
                 "| sort : forall (G : ListType KExpr) (n : Level), TypingCtx tenv G (KExpr.sort n) (KExpr.sort (Level.succ n))\n",
                 "| pi : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), TypingCtx tenv G A (KExpr.sort n) -> TypingCtx tenv (ListType.cons KExpr A G) B (KExpr.sort m) -> TypingCtx tenv G (KExpr.pi A B) (KExpr.sort (Level.imax n m))\n",
                 "| lam : forall (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level), TypingCtx tenv G A (KExpr.sort u) -> TypingCtx tenv (ListType.cons KExpr A G) b B -> TypingCtx tenv G (KExpr.lam A b) (KExpr.pi A B)\n",
                 "| app : forall (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr), TypingCtx tenv G f (KExpr.pi A B) -> TypingCtx tenv G a A -> TypingCtx tenv G (KExpr.app f a) (instantiate B a)\n",
-                "| const : forall (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> TypingCtx tenv G (KExpr.const n us) A\n",
+                "| const : forall (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> TypingCtx tenv G (KExpr.const n us) A\n",
                 "| let_ : forall (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level), TypingCtx tenv G ty (KExpr.sort u) -> TypingCtx tenv G v ty -> TypingCtx tenv (ListType.cons KExpr ty G) b B -> TypingCtx tenv G (KExpr.let_ ty v b) (instantiate B v)"
             ),
             "Context-indexed dependent typing judgment (Brick 2 rich model): TypingCtx tenv G e T means e has type T in context G under const-typing environment tenv. The context-indexed generalization of the degenerate env-free Typing, WITH the de Bruijn `var` rule (bvar i : the i+1-lifted declared type looked up in G) and the `const` rule (const n us : its declared type tenv n), the two rules the degenerate fragment omits. var re-opens genuine free variables so β no longer degenerates — it is over THIS judgment that SN needs the Girard reducibility candidates (the isolated Gödel floor; guide Part 2). Faithful transcription of the strategy guide's TypingCtx (dependent_sn_modulo_candmodel.lean:888-905). Kernel generates TypingCtx.rec, sound by construction. ZERO new axioms (Inductive/Constructor/Recursor, census-neutral). LET INCREMENT (task #28): the trailing let_ rule is the standard dependent let (ty : sort u, v : ty, body : B under cons ty G, let : instantiate B v — guide SnLet.lean:1004); TypingCtx.rec gains a trailing 7th minor (fundamental_general).",
@@ -123,9 +147,9 @@ impl Specification {
         // and constructor application type-checks.
         self.add_definition(SpecDefinition {
             name: "typingctx_sort_witness".to_string(),
-            type_src: "TypingCtx (fun (nm : Name) => OptionType.none KExpr) (ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))".to_string(),
+            type_src: "TypingCtx (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))".to_string(),
             value_src: Some(
-                "TypingCtx.sort (fun (nm : Name) => OptionType.none KExpr) (ListType.nil KExpr) Level.zero".to_string(),
+                "TypingCtx.sort (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil KExpr) Level.zero".to_string(),
             ),
             is_axiom: false,
             description: "Non-vacuity witness for the dependent judgment: (sort 0 : sort 1) in the \
@@ -153,9 +177,9 @@ impl Specification {
         // reduction in the type).
         self.add_definition(SpecDefinition {
             name: "typingctx_var_witness".to_string(),
-            type_src: "TypingCtx (fun (nm : Name) => OptionType.none KExpr) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (KExpr.bvar Nat.zero) (lift_at (KExpr.sort Level.zero) Nat.zero (Nat.succ Nat.zero))".to_string(),
+            type_src: "TypingCtx (fun (nm : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) (KExpr.bvar Nat.zero) (lift_at (KExpr.sort Level.zero) Nat.zero (Nat.succ Nat.zero))".to_string(),
             value_src: Some(
-                "TypingCtx.var (fun (nm : Name) => OptionType.none KExpr) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) Nat.zero (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero)))".to_string(),
+                "TypingCtx.var (fun (nm : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.nil KExpr)) Nat.zero (KExpr.sort Level.zero) (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero)))".to_string(),
             ),
             is_axiom: false,
             description: "Non-vacuity witness exercising the NEW var rule: bvar 0 : lift_at (sort 0) 0 1 \
@@ -222,20 +246,26 @@ impl Specification {
         //             body under the annotation binder; instantiate with the value.
         //             This is the genuine 7th algorithmic shape, and the matching
         //             KernelInfers.rec minor is consumed by bootstrap_infer_sound.
+        //   - lit_nat / lit_string: exact builtin result types for the tagged
+        //             literal model. Unlike the older seven-arm Rust micro-model,
+        //             this relation now includes both production literal kinds.
+        //             Their actual Rust execution correspondence remains separate.
         // ZERO new axioms (Inductive/Constructor/Recursor, census-neutral).
         self.add_inductive(
             concat!(
-                "inductive KernelInfers (tenv : Name -> OptionType KExpr) : ListType KExpr -> KExpr -> KExpr -> Type\n",
+                "inductive KernelInfers (tenv : KDeclEnv) : ListType KExpr -> KExpr -> KExpr -> Type\n",
                 "| sort : forall (G : ListType KExpr) (n : Level), KernelInfers tenv G (KExpr.sort n) (KExpr.sort (Level.succ n))\n",
                 "| bvar : forall (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> KernelInfers tenv G (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))\n",
                 "| pi : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (SA : KExpr) (n : Level) (SB : KExpr) (m : Level), KernelInfers tenv G A SA -> whnf_to SA (KExpr.sort n) -> KernelInfers tenv (ListType.cons KExpr A G) B SB -> whnf_to SB (KExpr.sort m) -> KernelInfers tenv G (KExpr.pi A B) (KExpr.sort (Level.imax n m))\n",
                 "| lam : forall (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (SA : KExpr) (u : Level), KernelInfers tenv G A SA -> whnf_to SA (KExpr.sort u) -> KernelInfers tenv (ListType.cons KExpr A G) b B -> KernelInfers tenv G (KExpr.lam A b) (KExpr.pi A B)\n",
-                "| const : forall (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> KernelInfers tenv G (KExpr.const n us) A\n",
+                "| const : forall (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> KernelInfers tenv G (KExpr.const n us) A\n",
                 "| app : forall (G : ListType KExpr) (f : KExpr) (a : KExpr) (F : KExpr) (A : KExpr) (B : KExpr) (A' : KExpr), KernelInfers tenv G f F -> whnf_to F (KExpr.pi A B) -> KernelInfers tenv G a A' -> DefEq A' A -> KernelInfers tenv G (KExpr.app f a) (instantiate B a)\n",
-                "| let_ : forall (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (Ty : KExpr) (u : Level) (Tv : KExpr) (B : KExpr), KernelInfers tenv G ty Ty -> whnf_to Ty (KExpr.sort u) -> KernelInfers tenv G v Tv -> DefEq Tv ty -> KernelInfers tenv (ListType.cons KExpr ty G) b B -> KernelInfers tenv G (KExpr.let_ ty v b) (instantiate B v)"
+                "| let_ : forall (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (Ty : KExpr) (u : Level) (Tv : KExpr) (B : KExpr), KernelInfers tenv G ty Ty -> whnf_to Ty (KExpr.sort u) -> KernelInfers tenv G v Tv -> DefEq Tv ty -> KernelInfers tenv (ListType.cons KExpr ty G) b B -> KernelInfers tenv G (KExpr.let_ ty v b) (instantiate B v)\n",
+                "| lit_nat : forall (G : ListType KExpr) (n : Nat), KernelInfers tenv G (literal_nat n) literal_nat_type\n",
+                "| lit_string : forall (G : ListType KExpr) (n : Nat), KernelInfers tenv G (literal_string n) literal_string_type"
             ),
-            "Algorithmic type-inference relation KernelInfers tenv G e T: a FAITHFUL arm-for-arm \
-             reflection of the real Rust model_infer_type (bootstrap/kernel_model.rs). sort/bvar/pi/\
+            "Algorithmic type-inference relation KernelInfers tenv G e T: its original seven \
+             arms reflect the Rust model_infer_type (bootstrap/kernel_model.rs). sort/bvar/pi/\
              lam/const transcribe the corresponding match arms; the CRUCIAL app arm uses the \
              algorithm's own operations — whnf-reduce the function type F to a Pi A B (whnf_to) and \
              check the argument type A' def-eq the domain A (DefEq) — NOT the declarative f:Pi A B / \
@@ -246,8 +276,10 @@ impl Specification {
              annotation (DefEq Tv ty), infer the body under the binder, conclude instantiate B v \
              (the algorithm's subst_fvar zeta). This is the object-of-study of the \
              opaque-constant re-architecture (relational restatement of the deleted total-equality \
-             model_infer_type / bootstrap_model_fidelity axioms). Kernel generates KernelInfers.rec, \
-             sound by construction. ZERO new axioms (census-neutral).",
+             model_infer_type / bootstrap_model_fidelity axioms). Two additional literal arms \
+             preserve Nat/String kinds and infer their exact builtin types. These remain \
+             model rules, not a theorem about executing the production Rust checker. Kernel \
+             generates and checks KernelInfers.rec. ZERO new axioms (census-neutral).",
         )?;
 
         // Non-vacuity witness for KernelInfers: (sort 0 : sort 1) in the empty
@@ -256,9 +288,9 @@ impl Specification {
         // confirming the inductive is well-formed and inhabited.
         self.add_definition(SpecDefinition {
             name: "kernelinfers_sort_witness".to_string(),
-            type_src: "KernelInfers (fun (nm : Name) => OptionType.none KExpr) (ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))".to_string(),
+            type_src: "KernelInfers (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))".to_string(),
             value_src: Some(
-                "KernelInfers.sort (fun (nm : Name) => OptionType.none KExpr) (ListType.nil KExpr) Level.zero".to_string(),
+                "KernelInfers.sort (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil KExpr) Level.zero".to_string(),
             ),
             is_axiom: false,
             description: "Non-vacuity witness for the algorithmic relation: (sort 0 : sort 1) in the \
@@ -279,7 +311,7 @@ impl Specification {
 
         // TypingCtxConv tenv G e T : the DECLARATIVE-with-conversion typing
         // judgment — TypingCtx's base rules (var/sort/pi/lam/app/const), the
-        // dependent let rule, and the standard CIC conversion rule `conv`, with
+        // dependent let rule, conversion, and Nat/String literal rules, with
         // recursive premises taken over TypingCtxConv. This is the SOUNDNESS
         // TARGET for KernelInfers
         // (`bootstrap_infer_sound`: KernelInfers G e T -> TypingCtxConv G e T).
@@ -303,15 +335,17 @@ impl Specification {
         // the `app` rule concludes `app f a : instantiate B a`. ZERO new axioms.
         self.add_inductive(
             concat!(
-                "inductive TypingCtxConv (tenv : Name -> OptionType KExpr) : ListType KExpr -> KExpr -> KExpr -> Type\n",
+                "inductive TypingCtxConv (tenv : KDeclEnv) : ListType KExpr -> KExpr -> KExpr -> Type\n",
                 "| var : forall (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> TypingCtxConv tenv G (KExpr.bvar i) (lift_at A Nat.zero (Nat.succ i))\n",
                 "| sort : forall (G : ListType KExpr) (n : Level), TypingCtxConv tenv G (KExpr.sort n) (KExpr.sort (Level.succ n))\n",
                 "| pi : forall (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), TypingCtxConv tenv G A (KExpr.sort n) -> TypingCtxConv tenv (ListType.cons KExpr A G) B (KExpr.sort m) -> TypingCtxConv tenv G (KExpr.pi A B) (KExpr.sort (Level.imax n m))\n",
                 "| lam : forall (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level), TypingCtxConv tenv G A (KExpr.sort u) -> TypingCtxConv tenv (ListType.cons KExpr A G) b B -> TypingCtxConv tenv G (KExpr.lam A b) (KExpr.pi A B)\n",
                 "| app : forall (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr), TypingCtxConv tenv G f (KExpr.pi A B) -> TypingCtxConv tenv G a A -> TypingCtxConv tenv G (KExpr.app f a) (instantiate B a)\n",
-                "| const : forall (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> TypingCtxConv tenv G (KExpr.const n us) A\n",
+                "| const : forall (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> TypingCtxConv tenv G (KExpr.const n us) A\n",
                 "| conv : forall (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr), TypingCtxConv tenv G e A -> DefEq A B -> TypingCtxConv tenv G e B\n",
-                "| let_ : forall (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level), TypingCtxConv tenv G ty (KExpr.sort u) -> TypingCtxConv tenv G v ty -> TypingCtxConv tenv (ListType.cons KExpr ty G) b B -> TypingCtxConv tenv G (KExpr.let_ ty v b) (instantiate B v)"
+                "| let_ : forall (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level), TypingCtxConv tenv G ty (KExpr.sort u) -> TypingCtxConv tenv G v ty -> TypingCtxConv tenv (ListType.cons KExpr ty G) b B -> TypingCtxConv tenv G (KExpr.let_ ty v b) (instantiate B v)\n",
+                "| lit_nat : forall (G : ListType KExpr) (n : Nat), TypingCtxConv tenv G (literal_nat n) literal_nat_type\n",
+                "| lit_string : forall (G : ListType KExpr) (n : Nat), TypingCtxConv tenv G (literal_string n) literal_string_type"
             ),
             "Declarative-with-conversion typing judgment TypingCtxConv tenv G e T: the standard \
              declarative CIC judgment (var/sort/pi/lam/app/const/let_) with recursive premises over \
@@ -321,11 +355,13 @@ impl Specification {
              This is the soundness TARGET for the algorithmic KernelInfers: conv discharges the \
              faithful app arm (whnf F->pi gives DefEq F (pi A B) then conv; DefEq A' A then conv). \
              Kernel generates TypingCtxConv.rec, sound by construction. ZERO new axioms \
-             (census-neutral). LET INCREMENT (task #28): the dependent let_ rule is appended \
-             LAST (after conv — the B5a cross-lane convention: binders G ty v b B u, premises \
+             (census-neutral). LET INCREMENT (task #28): the dependent let_ rule follows \
+             conv (the B5a cross-lane convention: binders G ty v b B u, premises \
              ty : sort u / v : ty / cons ty G |- b : B, conclusion instantiate B v), so every \
              external TypingCtxConv.rec consumer (subject_reduction_bundle.rs) gains its let \
-             minor as the TRAILING 8th minor.",
+             minor as the 8th minor. Nat/String literal rules now occupy the trailing 9th \
+             and 10th minors. Prelude/type validity and production environment coherence \
+             are separate obligations; this judgment alone does not supply them.",
         )?;
 
         // Non-vacuity witness for TypingCtxConv: (sort 0 : sort 1) in the empty
@@ -333,9 +369,9 @@ impl Specification {
         // smoke test.
         self.add_definition(SpecDefinition {
             name: "typingctxconv_sort_witness".to_string(),
-            type_src: "TypingCtxConv (fun (nm : Name) => OptionType.none KExpr) (ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))".to_string(),
+            type_src: "TypingCtxConv (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil KExpr) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero))".to_string(),
             value_src: Some(
-                "TypingCtxConv.sort (fun (nm : Name) => OptionType.none KExpr) (ListType.nil KExpr) Level.zero".to_string(),
+                "TypingCtxConv.sort (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil KExpr) Level.zero".to_string(),
             ),
             is_axiom: false,
             description: "Non-vacuity witness for the declarative-with-conversion judgment: \
@@ -584,7 +620,7 @@ impl Specification {
         // field type, so positivity is trivially satisfied (it is a large sigma).
         self.add_inductive(
             concat!(
-                "inductive CandModel (tenv : Name -> OptionType KExpr) : Type 1\n",
+                "inductive CandModel (tenv : KDeclEnv) : Type 1\n",
                 "| mk : forall (Red : KExpr -> KExpr -> Type) ",
                 "(cr1 : forall (T : KExpr) (e : KExpr), Red T e -> whnf_acc e) ",
                 "(cr2 : forall (T : KExpr) (e : KExpr) (e2 : KExpr), Red T e -> whnf_step e e2 -> Red T e2) ",
@@ -593,7 +629,7 @@ impl Specification {
                 "(pi_elim : forall (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), Red (KExpr.pi A B) f -> Red A a -> Red (instantiate B a) (KExpr.app f a)) ",
                 "(pi_intro : forall (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app f a)) -> Red (KExpr.pi A B) f) ",
                 "(redAbstraction : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app (KExpr.lam A b) a)) ",
-                "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
+                "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
                 "(redLet : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.let_ A a b)) ",
                 "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) ",
                 "(redRecW : forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> Red T contractum -> Red T (wRecApp u m mn t)) (redRecMut : forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (mutRecApp msig u i cs ms t)) (redRecIdx : forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> Red T contractum -> Red T (iRecApp fam isig u m ms ix t)) (redTypeStep : forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (Red T e -> Red T2 e) (Red T2 e -> Red T e)), ",
@@ -606,40 +642,36 @@ impl Specification {
         // fields project via CandModel.rec: this composes the `red_sort` base clause
         // with the CR1 accessor to round-trip whnf_acc e -> whnf_acc e THROUGH the
         // model (red_sort n e h : Red (sort n) e, then cr1 (sort n) e that : whnf_acc e).
-        // Confirms CandModel.rec is generated with the right arity and that the full
-        // 11-field (redLet + Nat.rec redNatRec) constructor telescope (incl. the let-increment redLet) type-checks and is usable. The motive lands
+        // Confirms CandModel.rec is generated with the right arity and that the whole
+        // constructor telescope -- `Red` plus its laws, spelled out verbatim in the
+        // value below; read it there and never a count from prose -- type-checks and
+        // is usable. It no longer carries a `redNatRec` field: `redNatRec_holds` is a
+        // DERIVED consequence of `redRecGen` (see its re-body below). The motive lands
         // in Type 0 (eliminating the Type-1 inductive into Type 0 — allowed, it is a
         // non-Prop inductive with unrestricted large elimination).
         self.add_definition(SpecDefinition {
             name: "candmodel_red_sort_cr1_witness".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (n : Level) (e : KExpr), whnf_acc e -> whnf_acc e".to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => ",
-                    "CandModel.rec tenv ",
-                    "(fun (M0 : CandModel tenv) => forall (n : Level) (e : KExpr), whnf_acc e -> whnf_acc e) ",
-                    "(fun (Red : KExpr -> KExpr -> Type) ",
-                    "(cr1 : forall (T : KExpr) (e : KExpr), Red T e -> whnf_acc e) ",
-                    "(cr2 : forall (T : KExpr) (e : KExpr) (e2 : KExpr), Red T e -> whnf_step e e2 -> Red T e2) ",
-                    "(cr3 : forall (T : KExpr) (e : KExpr), Neutral e -> (forall (e2 : KExpr), whnf_step e e2 -> Red T e2) -> Red T e) ",
-                    "(red_sort : forall (n : Level) (e : KExpr), whnf_acc e -> Red (KExpr.sort n) e) ",
-                    "(pi_elim : forall (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), Red (KExpr.pi A B) f -> Red A a -> Red (instantiate B a) (KExpr.app f a)) ",
-                    "(pi_intro : forall (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app f a)) -> Red (KExpr.pi A B) f) ",
-                    "(redAbstraction : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app (KExpr.lam A b) a)) ",
-                    "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
-                    "(redLet : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.let_ A a b)) ",
-                    "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) ",
-                    "(redRecW : forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> Red T contractum -> Red T (wRecApp u m mn t)) (redRecMut : forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (mutRecApp msig u i cs ms t)) (redRecIdx : forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> Red T contractum -> Red T (iRecApp fam isig u m ms ix t)) (redTypeStep : forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (Red T e -> Red T2 e) (Red T2 e -> Red T e)) => ",
-                    "fun (n : Level) (e : KExpr) (h : whnf_acc e) => cr1 (KExpr.sort n) e (red_sort n e h)) ",
-                    "M"
-                ).to_string(),
-            ),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (n : Level) (e : KExpr), whnf_acc e -> whnf_acc e".to_string(),
+            value_src: Some(format!(
+                "{}{}{}",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv \
+                 (fun (M0 : CandModel tenv) => forall (n : Level) (e : KExpr), \
+                 whnf_acc e -> whnf_acc e) ",
+                CANDMODEL_MK_BINDERS,
+                "fun (n : Level) (e : KExpr) (h : whnf_acc e) => \
+                 cr1 (KExpr.sort n) e (red_sort n e h)) M"
+            )),
             is_axiom: false,
             description: "CandModel elaboration + field-projection witness: via CandModel.rec, the \
                           model's fields project and compose — red_sort (base clause) then cr1 \
                           (CR1 accessor) round-trip whnf_acc e -> whnf_acc e through the candidate \
-                          family. Confirms CandModel.rec exists at the right arity and the 11-field (redLet + Nat.rec redNatRec) \
-                          telescope (incl. redLet) type-checks + is usable. Zero axiom_deps (census-neutral)."
+                          family. Confirms CandModel.rec exists at the right arity and that the whole \
+                          constructor telescope -- Red plus its laws, including the let-increment redLet -- \
+                          type-checks and is usable. Derive the field list from the inductive's own \
+                          declaration, never from a count in prose: this description carried one that was \
+                          wrong by four and named a redNatRec field the telescope does not have, \
+                          redNatRec_holds having been re-bodied as a DERIVED consequence of redRecGen. \
+                          Zero axiom_deps (census-neutral)."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
@@ -1587,35 +1619,51 @@ impl Specification {
         // (fvRel_kapp_fn)), and relate the reducts via fvRelL_apply_spine on the
         // FVRel-related arg spines (fvRel_kapp_args) with the shared body val.
         self.add_definition_structural(SpecDefinition {
+            name: "fvRel_const_levels".to_string(),
+            type_src: "forall (k : Nat) (e : KExpr) (e2 : KExpr), FVRel k e e2 -> Eq (ListType Level) (kexpr_const_levels e) (kexpr_const_levels e2)".to_string(),
+            value_src: Some(r"fun (k : Nat) (e : KExpr) (e2 : KExpr) (h : FVRel k e e2) => FVRel.rec (fun (k0 : Nat) (a : KExpr) (b : KExpr) (hh : FVRel k0 a b) => Eq (ListType Level) (kexpr_const_levels a) (kexpr_const_levels b)) (fun (k0 : Nat) (i : Nat) (hlt : Lt i k0) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (i : Nat) (j : Nat) (hi : Le k0 i) (hj : Le k0 j) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (n : Level) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (n : Name) (us : ListType Level) => Eq.refl (ListType Level) us) (fun (k0 : Nat) (f : KExpr) (f2 : KExpr) (a : KExpr) (a2 : KExpr) (hf : FVRel k0 f f2) (ha : FVRel k0 a a2) (ihf : Eq (ListType Level) (kexpr_const_levels f) (kexpr_const_levels f2)) (iha : Eq (ListType Level) (kexpr_const_levels a) (kexpr_const_levels a2)) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : FVRel k0 A A2) (hb : FVRel (Nat.succ k0) b b2) (ihA : Eq (ListType Level) (kexpr_const_levels A) (kexpr_const_levels A2)) (ihb : Eq (ListType Level) (kexpr_const_levels b) (kexpr_const_levels b2)) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (A : KExpr) (A2 : KExpr) (B : KExpr) (B2 : KExpr) (hA : FVRel k0 A A2) (hB : FVRel (Nat.succ k0) B B2) (ihA : Eq (ListType Level) (kexpr_const_levels A) (kexpr_const_levels A2)) (ihB : Eq (ListType Level) (kexpr_const_levels B) (kexpr_const_levels B2)) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (lty : KExpr) (lty2 : KExpr) (lv : KExpr) (lv2 : KExpr) (lb : KExpr) (lb2 : KExpr) (hty : FVRel k0 lty lty2) (hv : FVRel k0 lv lv2) (hb : FVRel (Nat.succ k0) lb lb2) (ihty : Eq (ListType Level) (kexpr_const_levels lty) (kexpr_const_levels lty2)) (ihv : Eq (ListType Level) (kexpr_const_levels lv) (kexpr_const_levels lv2)) (ihb : Eq (ListType Level) (kexpr_const_levels lb) (kexpr_const_levels lb2)) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (s : Name) (i : Nat) (sub : KExpr) (sub2 : KExpr) (hsub : FVRel k0 sub sub2) (ihsub : Eq (ListType Level) (kexpr_const_levels sub) (kexpr_const_levels sub2)) => Eq.refl (ListType Level) (ListType.nil Level)) (fun (k0 : Nat) (v : Nat) => Eq.refl (ListType Level) (ListType.nil Level)) k e e2 h".to_string()),
+            is_axiom: false,
+            description: "FVRel preserves the full ordered universe argument list of constant nodes; its const constructor retains exactly the same us. The non-constant cases compute to nil. DerivedProved, zero axiom_deps.".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "FVRel".to_string(), "FVRel.rec".to_string(), "kexpr_const_levels".to_string(), "Eq.refl".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition_structural(SpecDefinition {
             name: "fvRel_delta_bisim".to_string(),
             type_src: "forall (k : Nat) (e : KExpr) (f : KExpr) (e2 : KExpr), FVRel k e f -> delta_reduces e e2 -> DeltaBisimWitness k f e2".to_string(),
             value_src: Some(concat!(
                 "fun (k : Nat) (e : KExpr) (f : KExpr) (e2 : KExpr) (hR : FVRel k e f) (hde : delta_reduces e e2) => ",
                 "opt_bind_some_inv_type Name KExpr (kexpr_const_name (kapp_fn e)) ",
-                "(fun (dname : Name) => opt_bind KExpr KExpr (defval_for (red_def the_red_env) dname) (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val))) ",
+                "(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn e))) (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val))) ",
                 "e2 (DeltaBisimWitness k f e2) ",
                 "(delta_reduces_to_step e e2 hde) ",
-                "(fun (dname : Name) (hcn : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) (hrest : Eq (OptionType KExpr) (opt_bind KExpr KExpr (defval_for (red_def the_red_env) dname) (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val))) (OptionType.some KExpr e2)) => ",
-                "opt_bind_some_inv_type KExpr KExpr (defval_for (red_def the_red_env) dname) ",
+                "(fun (dname : Name) (hcn : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) (hrest : Eq (OptionType KExpr) (opt_bind KExpr KExpr (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn e))) (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val))) (OptionType.some KExpr e2)) => ",
+                "opt_bind_some_inv_type KExpr KExpr (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn e))) ",
                 "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val)) ",
                 "e2 (DeltaBisimWitness k f e2) ",
                 "hrest ",
-                "(fun (val : KExpr) (hv : Eq (OptionType KExpr) (defval_for (red_def the_red_env) dname) (OptionType.some KExpr val)) (hval : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e2)) => ",
+                "(fun (val : KExpr) (hv : Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) (hval : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e2)) => ",
                 "DeltaBisimWitness.mk k f e2 (apply_spine (kapp_args f) val) ",
                 "(delta_reduces.mk f (apply_spine (kapp_args f) val) ",
                 "(Eq.trans (OptionType KExpr) ",
                 "(delta_reduct (red_def the_red_env) f) ",
-                "(opt_bind KExpr KExpr (defval_for (red_def the_red_env) dname) (fun (val2 : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val2))) ",
+                "(opt_bind KExpr KExpr (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn f))) (fun (val2 : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val2))) ",
                 "(OptionType.some KExpr (apply_spine (kapp_args f) val)) ",
-                "(Eq.cong (OptionType Name) (OptionType KExpr) (fun (o : OptionType Name) => opt_bind Name KExpr o (fun (dname2 : Name) => opt_bind KExpr KExpr (defval_for (red_def the_red_env) dname2) (fun (val2 : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val2)))) (kexpr_const_name (kapp_fn f)) (OptionType.some Name dname) ",
+                "(Eq.cong (OptionType Name) (OptionType KExpr) (fun (o : OptionType Name) => opt_bind Name KExpr o (fun (dname2 : Name) => opt_bind KExpr KExpr (kdef_value_at (red_def the_red_env) dname2 (kexpr_const_levels (kapp_fn f))) (fun (val2 : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val2)))) (kexpr_const_name (kapp_fn f)) (OptionType.some Name dname) ",
                 "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) ",
                 "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (kexpr_const_name (kapp_fn f)) (fvRel_const_name k (kapp_fn e) (kapp_fn f) (fvRel_kapp_fn k e f hR))) ",
                 "hcn)) ",
-                "(Eq.cong (OptionType KExpr) (OptionType KExpr) (fun (o : OptionType KExpr) => opt_bind KExpr KExpr o (fun (val2 : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val2))) (defval_for (red_def the_red_env) dname) (OptionType.some KExpr val) hv))) ",
+                "(Eq.cong (OptionType KExpr) (OptionType KExpr) (fun (o : OptionType KExpr) => opt_bind KExpr KExpr o (fun (val2 : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val2))) (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn f))) (OptionType.some KExpr val) (Eq.trans (OptionType KExpr) (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn f))) (kdef_value_at (red_def the_red_env) dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) (Eq.cong (ListType Level) (OptionType KExpr) (fun (us : ListType Level) => kdef_value_at (red_def the_red_env) dname us) (kexpr_const_levels (kapp_fn f)) (kexpr_const_levels (kapp_fn e)) (Eq.symm (ListType Level) (kexpr_const_levels (kapp_fn e)) (kexpr_const_levels (kapp_fn f)) (fvRel_const_levels k (kapp_fn e) (kapp_fn f) (fvRel_kapp_fn k e f hR)))) hv)))) ",
                 "(Eq.substType KExpr (fun (w : KExpr) => FVRel k w (apply_spine (kapp_args f) val)) (apply_spine (kapp_args e) val) e2 (option_some_inj KExpr (apply_spine (kapp_args e) val) e2 hval) (fvRelL_apply_spine k (kapp_args e) (kapp_args f) (fvRel_kapp_args k e f hR) val val (fvRel_refl k val)))))",
             ).to_string()),
             is_axiom: false,
-            description: "delta-reduction respects FVRel: FVRel k e f and delta_reduces e e2 give a delta-reduct f2 of f with FVRel k e2 f2 (packaged as DeltaBisimWitness). Guide's fvRel_delta_bisim (line 1599). The fixed definition body val is inserted identically into both related terms. DerivedProved via opt_bind_some_inv_type (twice) + const-head/spine FVRel helpers. Zero axiom_deps.".to_string(),
+            description: "delta-reduction respects FVRel: FVRel k e f and delta_reduces e e2 give a delta-reduct f2 of f with FVRel k e2 f2 (packaged as DeltaBisimWitness). Guide's fvRel_delta_bisim (line 1599). The guarded instantiated body val is inserted identically into both related terms because FVRel preserves both head names and their complete universe argument lists. DerivedProved via opt_bind_some_inv_type (twice) + const-head/spine FVRel helpers. Zero axiom_deps.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
@@ -1624,7 +1672,7 @@ impl Specification {
                 "DeltaBisimWitness".to_string(), "DeltaBisimWitness.mk".to_string(),
                 "delta_reduces".to_string(), "delta_reduces.mk".to_string(),
                 "delta_reduces_to_step".to_string(), "opt_bind_some_inv_type".to_string(),
-                "delta_reduct".to_string(), "opt_bind".to_string(), "defval_for".to_string(),
+                "delta_reduct".to_string(), "opt_bind".to_string(), "kdef_value_at".to_string(), "kexpr_const_levels".to_string(), "fvRel_const_levels".to_string(),
                 "fvRel_const_name".to_string(), "fvRel_kapp_fn".to_string(),
                 "fvRel_kapp_args".to_string(), "fvRelL_apply_spine".to_string(), "fvRel_refl".to_string(),
                 "option_some_inj".to_string(), "Eq.cong".to_string(), "Eq.trans".to_string(),
@@ -1653,21 +1701,36 @@ impl Specification {
             "IotaBisimWitness k f e2 (Brick 2 batch 6): the packaged existential `exists f2, iota_reduces f f2 and FVRel k e2 f2` (guide fvRel_iota_bisim, line 1625), a single-constructor witness inductive (DeltaBisimWitness idiom) binding the iota-reduct f2 with its step and the FVRel relation. Kernel generates IotaBisimWitness.rec. ZERO new axioms.",
         )?;
 
-        // fvRel_iota_bisim (B8): iota-reduction respects FVRel — the fixed
-        // recursor-rule body is inserted identically into both related terms
-        // (guide fvRel_iota_bisim, line 1625). Invert the five nested opt_binds
-        // (opt_bind_some_inv_type x5), pick f's FVRel-related major' via
-        // fvRelL_head_some, rebuild iota_reduct f = some (...) via
-        // opt_bind_some_intro x5 (reusing hm/hrule; recname/cname FVRel-preserved),
-        // then relate the reducts through the three nested apply_spines
-        // (fvRelL_apply_spine), transporting the middle spine length along
-        // fvRelL_length (major vs major').
+        // Actual guarded iota respects FVRel. Full inversion exposes both guards;
+        // related head universe lists and major-spine lengths derive the guards
+        // on f. Each side inserts the actual once-instantiated RHS, related using
+        // the proved equality of its universe arguments. Reconstruct through the
+        // canonical five-lookup/guard view, not a duplicated raw opt_bind chain.
         self.add_definition_structural(SpecDefinition {
             name: "fvRel_iota_bisim".to_string(),
             type_src: "forall (k : Nat) (e : KExpr) (f : KExpr) (e2 : KExpr), FVRel k e f -> iota_reduces e e2 -> IotaBisimWitness k f e2".to_string(),
-            value_src: Some(r"fun (k : Nat) (e : KExpr) (f : KExpr) (e2 : KExpr) (hR : FVRel k e f) (hie : iota_reduces e e2) => opt_bind_some_inv_type Name KExpr (kexpr_const_name (kapp_fn e)) (fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for (red_rec the_red_env) recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))))))))) e2 (IotaBisimWitness k f e2) (iota_reduces_to_step e e2 hie) (fun (recname : Name) (hcn : (Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname))) (hrest1 : (Eq (OptionType KExpr) (opt_bind RecMeta KExpr (recmeta_for (red_rec the_red_env) recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))))))))) (OptionType.some KExpr e2))) => (opt_bind_some_inv_type RecMeta KExpr (recmeta_for (red_rec the_red_env) recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))))))) e2 (IotaBisimWitness k f e2) hrest1 (fun (meta : RecMeta) (hm : (Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) recname) (OptionType.some RecMeta meta))) (hrest2 : (Eq (OptionType KExpr) (opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))))))) (OptionType.some KExpr e2))) => (opt_bind_some_inv_type KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))))))) e2 (IotaBisimWitness k f e2) hrest2 (fun (major : KExpr) (hmaj : (Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (OptionType.some KExpr major))) (hrest3 : (Eq (OptionType KExpr) (opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))))))) (OptionType.some KExpr e2))) => (opt_bind_some_inv_type Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))))) e2 (IotaBisimWitness k f e2) hrest3 (fun (cname : Name) (hcm : (Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))) (hrest4 : (Eq (OptionType KExpr) (opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))))) (OptionType.some KExpr e2))) => (opt_bind_some_inv_type RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))))) e2 (IotaBisimWitness k f e2) hrest4 (fun (rule : RecRule) (hrule : (Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) recname cname) (OptionType.some RecRule rule))) (hfin : (Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))) (OptionType.some KExpr e2))) => FVRelHeadWitness.rec k (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f)) major (fun (_w : FVRelHeadWitness k (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f)) major) => IotaBisimWitness k f e2) (fun (major2 : KExpr) (hmaj_f : (Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f))) (OptionType.some KExpr major2))) (hmajR : FVRel k major major2) => (IotaBisimWitness.mk k f e2 (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) (iota_reduces.mk f (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn f)) (fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for (red_rec the_red_env) recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))))))))) recname (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (kexpr_const_name (kapp_fn f)) (fvRel_const_name k (kapp_fn e) (kapp_fn f) (fvRel_kapp_fn k e f hR))) hcn) (opt_bind_some_intro RecMeta KExpr (recmeta_for (red_rec the_red_env) recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule))))))))) meta (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) hm (opt_bind_some_intro KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))))))) major2 (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) hmaj_f (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn major2)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule))))))) cname (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn major2)) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn major)) (kexpr_const_name (kapp_fn major2)) (fvRel_const_name k (kapp_fn major) (kapp_fn major2) (fvRel_kapp_fn k major major2 hmajR))) hcm) (opt_bind_some_intro RecRule KExpr (recrule_for (red_rec the_red_env) recname cname) (fun (rule : RecRule) => (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))))) rule (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) hrule (Eq.refl (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))))))))))) (Eq.substType KExpr (fun (w : KExpr) => FVRel k w (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule))))) (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))) e2 (option_some_inj KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))) e2 hfin) (Eq.substType Nat (fun (n : Nat) => FVRel k (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub n (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)))) (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule))))) (list_length (kapp_args major2)) (list_length (kapp_args major)) (Eq.symm Nat (list_length (kapp_args major)) (list_length (kapp_args major2)) (fvRelL_length k (kapp_args major) (kapp_args major2) (fvRel_kapp_args k major major2 hmajR))) (fvRelL_apply_spine k (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (fvRelL_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) k (kapp_args e) (kapp_args f) (fvRel_kapp_args k e f hR)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule))) (fvRelL_apply_spine k (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major)) (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (fvRelL_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) k (kapp_args major) (kapp_args major2) (fvRel_kapp_args k major major2 hmajR)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)) (fvRelL_apply_spine k (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (fvRelL_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) k (kapp_args e) (kapp_args f) (fvRel_kapp_args k e f hR)) (recrule_rhs rule) (recrule_rhs rule) (fvRel_refl k (recrule_rhs rule))))))))) (fvRelL_head_some k (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e)) (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f)) major (fvRelL_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) k (kapp_args e) (kapp_args f) (fvRel_kapp_args k e f hR)) hmaj))))))))))".to_string()),
+            value_src: Some(r"fun (k : Nat) (e : KExpr) (f : KExpr) (e2 : KExpr) (hR : FVRel k e f) (hie : iota_reduces e e2) =>
+ iota_reduct_full_inv_type (red_rec the_red_env) e e2 (IotaBisimWitness k f e2) (iota_reduces_to_step e e2 hie)
+ (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
+ (hcn : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname))
+ (hm : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) recname) (OptionType.some RecMeta meta))
+ (hmaj : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index meta) (kapp_args e))) (OptionType.some KExpr major))
+ (hcm : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
+ (hrule : Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) recname cname) (OptionType.some RecRule rule))
+ (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (harity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true)
+ (hreturned : Eq KExpr e2 (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))))) =>
+ FVRelHeadWitness.rec k (list_drop (iota_major_index meta) (kapp_args f)) major
+ (fun (_w : FVRelHeadWitness k (list_drop (iota_major_index meta) (kapp_args f)) major) => IotaBisimWitness k f e2)
+ (fun (major2 : KExpr)
+ (hmaj_f : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index meta) (kapp_args f))) (OptionType.some KExpr major2))
+ (hmajR : FVRel k major major2) =>
+ IotaBisimWitness.mk k f e2 (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (iota_reduces.mk f (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (iota_reduct_full_recon (red_rec the_red_env) f (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) recname meta major2 cname rule (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (kexpr_const_name (kapp_fn f)) (fvRel_const_name k (kapp_fn e) (kapp_fn f) (fvRel_kapp_fn k e f hR))) hcn) hm hmaj_f (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn major2)) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn major)) (kexpr_const_name (kapp_fn major2)) (fvRel_const_name k (kapp_fn major) (kapp_fn major2) (fvRel_kapp_fn k major major2 hmajR))) hcm) hrule (Eq.subst Nat (fun (n : Nat) => Eq Bool (nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero) Bool.true) (list_length (kapp_args major)) (list_length (kapp_args major2)) (fvRelL_length k (kapp_args major) (kapp_args major2) (fvRel_kapp_args k major major2 hmajR)) hfields) (Eq.subst (ListType Level) (fun (us : ListType Level) => Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len us)) Bool.true) (kexpr_const_levels (kapp_fn e)) (kexpr_const_levels (kapp_fn f)) (fvRel_const_levels k (kapp_fn e) (kapp_fn f) (fvRel_kapp_fn k e f hR)) harity) (Eq.refl KExpr (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))))))
+ (Eq.substType KExpr (fun (r : KExpr) => FVRel k r (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))))) e2 (Eq.symm KExpr e2 (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))))) hreturned) (Eq.substType Nat (fun (n : Nat) => FVRel k (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args e)) (apply_spine (list_drop (Nat.sub n (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))))) (apply_spine (list_drop (Nat.succ (iota_major_index meta)) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (list_length (kapp_args major2)) (list_length (kapp_args major)) (Eq.symm Nat (list_length (kapp_args major)) (list_length (kapp_args major2)) (fvRelL_length k (kapp_args major) (kapp_args major2) (fvRel_kapp_args k major major2 hmajR))) (fvRelL_apply_spine k (list_drop (Nat.succ (iota_major_index meta)) (kapp_args e)) (list_drop (Nat.succ (iota_major_index meta)) (kapp_args f)) (fvRelL_drop (Nat.succ (iota_major_index meta)) k (kapp_args e) (kapp_args f) (fvRel_kapp_args k e f hR)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))) (fvRelL_apply_spine k (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major)) (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) (kapp_args major2)) (fvRelL_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule)) k (kapp_args major) (kapp_args major2) (fvRel_kapp_args k major major2 hmajR)) (apply_spine (list_take (iota_prefix_count meta) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) (apply_spine (list_take (iota_prefix_count meta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (fvRelL_apply_spine k (list_take (iota_prefix_count meta) (kapp_args e)) (list_take (iota_prefix_count meta) (kapp_args f)) (fvRelL_take (iota_prefix_count meta) k (kapp_args e) (kapp_args f) (fvRel_kapp_args k e f hR)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))) (Eq.substType KExpr (fun (r : KExpr) => FVRel k (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))) r) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))) (Eq.cong (ListType Level) KExpr (fun (us : ListType Level) => recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) us) (kexpr_const_levels (kapp_fn e)) (kexpr_const_levels (kapp_fn f)) (fvRel_const_levels k (kapp_fn e) (kapp_fn f) (fvRel_kapp_fn k e f hR))) (fvRel_refl k (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))))))))))
+ (fvRelL_head_some k (list_drop (iota_major_index meta) (kapp_args e)) (list_drop (iota_major_index meta) (kapp_args f)) major
+ (fvRelL_drop (iota_major_index meta) k (kapp_args e) (kapp_args f) (fvRel_kapp_args k e f hR)) hmaj))".to_string()),
             is_axiom: false,
-            description: "iota-reduction respects FVRel: FVRel k e f and iota_reduces e e2 give an iota-reduct f2 of f with FVRel k e2 f2 (packaged as IotaBisimWitness). Guide's fvRel_iota_bisim (line 1625). The fixed recursor-rule body is inserted identically into both related terms; the major spine length is transported along fvRelL_length. DerivedProved via opt_bind_some_inv_type (5x) + opt_bind_some_intro (5x) + FVRelHeadWitness destruct + spine FVRel helpers. Zero axiom_deps.".to_string(),
+            description: "Actual guarded iota respects FVRel. Canonical full inversion retains fields and arity; FVRel preserves head universe lists and major-spine lengths, deriving both output guards. The once-instantiated RHSs are related by their proved equal universe arguments; no raw-RHS identity or assumed output step. Zero axiom_deps.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
@@ -1675,8 +1738,9 @@ impl Specification {
             dependencies: Some(HashSet::from([
                 "IotaBisimWitness".to_string(), "IotaBisimWitness.mk".to_string(),
                 "iota_reduces".to_string(), "iota_reduces.mk".to_string(),
-                "iota_reduces_to_step".to_string(), "opt_bind_some_inv_type".to_string(),
-                "opt_bind_some_intro".to_string(), "iota_reduct".to_string(),
+                "iota_reduces_to_step".to_string(), "iota_reduct_full_inv_type".to_string(),
+                "iota_reduct_full_recon".to_string(), "fvRel_const_levels".to_string(),
+                "recursor_rhs_instance".to_string(), "iota_reduct".to_string(),
                 "opt_bind".to_string(), "recmeta_for".to_string(), "recrule_for".to_string(),
                 "recrule_rhs".to_string(), "recrule_num_fields".to_string(),
                 "recmeta_num_params".to_string(), "recmeta_num_motives".to_string(),
@@ -1904,31 +1968,6 @@ impl Specification {
             ).to_string()),
             is_axiom: false,
             description: "Lt a b -> Le a b. DerivedProved via Lt.rec (zero_lt_succ = le_zero_n, succ = le_succ_succ). Zero axiom_deps.".to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Lt".to_string(), "Lt.rec".to_string(), "Le".to_string(),
-                "le_zero_n".to_string(), "le_succ_succ".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
-
-        // lt_to_le_succ: Lt a b -> Le (succ a) b. Lt.rec; zero_lt_succ =
-        // le_succ_succ 0 n (le_zero_n n), succ_lt_succ = le_succ_succ (succ n) m ih.
-        self.add_definition_structural(SpecDefinition {
-            name: "lt_to_le_succ".to_string(),
-            type_src: "forall (a : Nat) (b : Nat), Lt a b -> Le (Nat.succ a) b".to_string(),
-            value_src: Some(concat!(
-                "fun (a : Nat) (b : Nat) (h : Lt a b) => ",
-                "Lt.rec (fun (x : Nat) (y : Nat) (_ : Lt x y) => Le (Nat.succ x) y) ",
-                "(fun (n : Nat) => le_succ_succ Nat.zero n (le_zero_n n)) ",
-                "(fun (n : Nat) (m : Nat) (_hnm : Lt n m) (ih : Le (Nat.succ n) m) => le_succ_succ (Nat.succ n) m ih) ",
-                "a b h",
-            ).to_string()),
-            is_axiom: false,
-            description: "Lt a b -> Le (succ a) b. DerivedProved via Lt.rec (zero_lt_succ = le_succ_succ 0 n (le_zero_n n), succ = le_succ_succ). Zero axiom_deps.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
@@ -2503,8 +2542,12 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
 
-        // The CandModel mk-case binder (the 11-field (redLet + Nat.rec redNatRec) telescope, incl. the
-        // let-increment redLet), shared by every
+        // The CandModel mk-case binder -- the whole constructor telescope, `Red`
+        // plus its laws (the let-increment redLet included), written out in
+        // `cm_tel` immediately below. Take the field list from there, never from
+        // a count in a comment: this one claimed eleven fields and a redNatRec
+        // the telescope has not had since redNatRec_holds was re-bodied as a
+        // derived consequence of redRecGen. Shared by every
         // field projection via CandModel.rec. Its field types reference the bound
         // `Red`, so on the `mk` constructor cm_Red reduces to `Red` and every
         // projection's motive-goal reduces to that field's type. Guide's `M.Red`
@@ -2519,7 +2562,7 @@ impl Specification {
             "(pi_elim : forall (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), Red (KExpr.pi A B) f -> Red A a -> Red (instantiate B a) (KExpr.app f a)) ",
             "(pi_intro : forall (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app f a)) -> Red (KExpr.pi A B) f) ",
             "(redAbstraction : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.app (KExpr.lam A b) a)) ",
-            "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
+            "(redConst : forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> Red (psubst s A) (KExpr.const n us)) ",
             "(redLet : forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), Red A a -> Red (instantiate B a) (instantiate b a)) -> forall (a : KExpr), Red A a -> Red (instantiate B a) (KExpr.let_ A a b)) ",
             "(redRecGen : forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (genRecApp fam sig u m ms t)) ",
             "(redRecW : forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> Red T contractum -> Red T (wRecApp u m mn t)) (redRecMut : forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> Red T contractum -> Red T (mutRecApp msig u i cs ms t)) (redRecIdx : forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> Red T contractum -> Red T (iRecApp fam isig u m ms ix t)) (redTypeStep : forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (Red T e -> Red T2 e) (Red T2 e -> Red T e)) => {body})"
@@ -2535,7 +2578,7 @@ impl Specification {
         // All downstream (red_var, Models, fundamental) phrase reducibility via cm_Red.
         self.add_recursive_def(
             &format!(
-                "def cm_Red (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : KExpr -> KExpr -> Type := CandModel.rec tenv (fun (M0 : CandModel tenv) => KExpr -> KExpr -> Type) {tel} M",
+                "def cm_Red (tenv : KDeclEnv) (M : CandModel tenv) : KExpr -> KExpr -> Type := CandModel.rec tenv (fun (M0 : CandModel tenv) => KExpr -> KExpr -> Type) {tel} M",
                 tel = cm_tel("Red"),
             ),
             "cm_Red tenv M : the reducibility family Red of a CandModel (guide's M.Red). CandModel.rec projection (constant Type-1 motive); reduces to the stored Red on mk. Semireducible def so the field accessors + red_var/Models can unfold it. Zero axiom_deps.",
@@ -2545,9 +2588,9 @@ impl Specification {
         // the cr1 field; on mk the goal reduces (cm_Red (mk ..) = Red) to cr1's type.
         self.add_definition_structural(SpecDefinition {
             name: "CR1".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (T : KExpr) (e : KExpr), cm_Red tenv M T e -> whnf_acc e".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (T : KExpr) (e : KExpr), cm_Red tenv M T e -> whnf_acc e".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (T : KExpr) (e : KExpr), cm_Red tenv M0 T e -> whnf_acc e) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (T : KExpr) (e : KExpr), cm_Red tenv M0 T e -> whnf_acc e) {tel} M",
                 tel = cm_tel("cr1"),
             )),
             is_axiom: false,
@@ -2563,9 +2606,9 @@ impl Specification {
         // CR2 : reducibility is preserved by reduction (guide CR2 accessor).
         self.add_definition_structural(SpecDefinition {
             name: "CR2".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (T : KExpr) (e : KExpr) (e2 : KExpr), cm_Red tenv M T e -> whnf_step e e2 -> cm_Red tenv M T e2".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (T : KExpr) (e : KExpr) (e2 : KExpr), cm_Red tenv M T e -> whnf_step e e2 -> cm_Red tenv M T e2".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (T : KExpr) (e : KExpr) (e2 : KExpr), cm_Red tenv M0 T e -> whnf_step e e2 -> cm_Red tenv M0 T e2) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (T : KExpr) (e : KExpr) (e2 : KExpr), cm_Red tenv M0 T e -> whnf_step e e2 -> cm_Red tenv M0 T e2) {tel} M",
                 tel = cm_tel("cr2"),
             )),
             is_axiom: false,
@@ -2582,9 +2625,9 @@ impl Specification {
         // (guide CR3 accessor). The vacuous-neutral engine behind red_var.
         self.add_definition_structural(SpecDefinition {
             name: "CR3".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (T : KExpr) (e : KExpr), Neutral e -> (forall (e2 : KExpr), whnf_step e e2 -> cm_Red tenv M T e2) -> cm_Red tenv M T e".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (T : KExpr) (e : KExpr), Neutral e -> (forall (e2 : KExpr), whnf_step e e2 -> cm_Red tenv M T e2) -> cm_Red tenv M T e".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (T : KExpr) (e : KExpr), Neutral e -> (forall (e2 : KExpr), whnf_step e e2 -> cm_Red tenv M0 T e2) -> cm_Red tenv M0 T e) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (T : KExpr) (e : KExpr), Neutral e -> (forall (e2 : KExpr), whnf_step e e2 -> cm_Red tenv M0 T e2) -> cm_Red tenv M0 T e) {tel} M",
                 tel = cm_tel("cr3"),
             )),
             is_axiom: false,
@@ -2602,7 +2645,7 @@ impl Specification {
         // reducible def so redAbstraction_holds : RedAbstraction and the fundamental
         // lam case can apply it directly.
         self.add_recursive_def(
-            "def RedAbstraction (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (instantiate b a)) -> forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.app (KExpr.lam A b) a)",
+            "def RedAbstraction (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (instantiate b a)) -> forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.app (KExpr.lam A b) a)",
             "RedAbstraction tenv M : the Tait/Girard weak-head-expansion (abstraction) closure law over cm_Red. Guide's RedAbstraction (line 1844). Reducible def; the sole candidate-model input to the fundamental lam case.",
         )?;
 
@@ -2612,9 +2655,9 @@ impl Specification {
         // exactly the redAbstraction field's type.
         self.add_definition_structural(SpecDefinition {
             name: "redAbstraction_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedAbstraction tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedAbstraction tenv M".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedAbstraction tenv M0) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedAbstraction tenv M0) {tel} M",
                 tel = cm_tel("redAbstraction"),
             )),
             is_axiom: false,
@@ -2632,7 +2675,7 @@ impl Specification {
         // enters the candidates exactly the way beta does). Guide's RedLet
         // (SnLet.lean:2077). Let-promotion increment (task #28).
         self.add_recursive_def(
-            "def RedLet (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (instantiate b a)) -> forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.let_ A a b)",
+            "def RedLet (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (A : KExpr) (b : KExpr) (B : KExpr), whnf_acc A -> (forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (instantiate b a)) -> forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.let_ A a b)",
             "RedLet tenv M : the zeta weak-head-expansion closure law over cm_Red — the let_ analogue of RedAbstraction (zeta enters the candidates exactly the way beta does). Guide's RedLet (SnLet.lean:2077). Reducible def; the sole candidate-model input to the fundamental let case. Let-promotion increment (task #28).",
         )?;
 
@@ -2642,9 +2685,9 @@ impl Specification {
         // to exactly the redLet field's type.
         self.add_definition_structural(SpecDefinition {
             name: "redLet_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedLet tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedLet tenv M".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedLet tenv M0) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedLet tenv M0) {tel} M",
                 tel = cm_tel("redLet"),
             )),
             is_axiom: false,
@@ -2669,20 +2712,20 @@ impl Specification {
         // natRec_adequacy_numeral are unchanged (they only apply redNatRec_holds and
         // depend on its TYPE). Zero domain axioms; census-neutral.
         self.add_recursive_def(
-            "def RedNatRec (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (z : KExpr) (s : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), NatFresh denv -> NatRecEnvOK u renv -> NatRecContract u (natRecApp u m z s t) contractum -> whnf_acc m -> whnf_acc z -> whnf_acc s -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (natRecApp u m z s t)",
+            "def RedNatRec (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (z : KExpr) (s : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), NatFresh denv -> NatRecEnvOK u renv -> NatRecContract u (natRecApp u m z s t) contractum -> whnf_acc m -> whnf_acc z -> whnf_acc s -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (natRecApp u m z s t)",
             "RedNatRec tenv M: the object-level-iota weak-head-expansion closure law over cm_Red — the Nat.rec analogue of RedLet. Now a DERIVED consequence of RedRecGen (redNatRec_holds re-body). Nat.rec port N3.",
         )?;
         self.add_recursive_def(
-            "def RedRecGen (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (genRecApp fam sig u m ms t)",
+            "def RedRecGen (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (fam : Name) (sig : ListType Nat) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), GenFresh fam sig denv -> GenRecEnvOK fam sig u renv -> GenRecContract fam sig u (genRecApp fam sig u m ms t) contractum -> whnf_acc m -> WhnfAccAll ms -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (genRecApp fam sig u m ms t)",
             "RedRecGen tenv M: the GENERIC object-level-iota weak-head-expansion closure over cm_Red for the whole signature schema (fam, sig) — the single candidate-model recursor-adequacy field, generalizing RedNatRec. SnSchema B5.",
         )?;
         // redRecGen_holds: trivial CandModel.rec projection of the generic redRecGen
         // field (on mk, cm_Red (mk ..) = Red reduces the goal to the field's type).
         self.add_definition_structural(SpecDefinition {
             name: "redRecGen_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedRecGen tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedRecGen tenv M".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecGen tenv M0) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecGen tenv M0) {tel} M",
                 tel = cm_tel("redRecGen"),
             )),
             is_axiom: false,
@@ -2711,7 +2754,7 @@ impl Specification {
         // labeled Gödel-floor assumption. Guide: AccWTypeSN.lean:1128-1132
         // (redRecW field) and :1169-1176 (redRecW_holds).
         self.add_recursive_def(
-            "def RedRecW (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (wRecApp u m mn t)",
+            "def RedRecW (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (mn : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), WFresh denv -> WRecEnvOK u renv -> WRecContract u (wRecApp u m mn t) contractum -> whnf_acc m -> whnf_acc mn -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (wRecApp u m mn t)",
             "RedRecW tenv M: the W-shaped (higher-order-field) object-level-iota weak-head-expansion closure over cm_Red — the wRec analogue of RedRecGen, gated on WFresh/WRecEnvOK so it is vacuous off-target. Not an instance of RedRecGen: the W contractum carries an IH function under a binder. AccWType adequacy Phase 1.",
         )?;
         // RedRecMut / redRecMut_holds — the MUTUAL-block analogue of
@@ -2722,7 +2765,7 @@ impl Specification {
         // identifier: MemL". redRecGen already uses WhnfAccAll for the same
         // reason (schema.rs documents them as equivalent).
         self.add_recursive_def(
-            "def RedRecMut (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (mutRecApp msig u i cs ms t)",
+            "def RedRecMut (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (msig : ListType FamSpec) (u : Level) (i : Nat) (denv : DefEnv) (renv : RecEnv) (cs : ListType KExpr) (ms : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), MutFresh msig denv -> MutRecEnvOK msig u renv -> MutRecContract msig u (mutRecApp msig u i cs ms t) contractum -> WhnfAccAll cs -> WhnfAccAll ms -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (mutRecApp msig u i cs ms t)",
             "RedRecMut tenv M: the mutual-block object-level-iota weak-head-expansion closure over cm_Red, carrying MutFresh/MutRecEnvOK premises. NOTE: denv/renv are quantified INSIDE the field and occur only in those premises, never in the conclusion, so they do NOT restrict which candidate models satisfy it (an instantiator may take denv := DefEnv.empty). Do not describe this as vacuous off-target. Not an instance of RedRecGen: mutRecApp/mutContractum are the K-family generalization of which genRecApp/genContractum are the degenerate single-family case (mutual_schema.rs proves that direction), so the arrow points the wrong way to derive it. MutSchema adequacy Phase 1.",
         )?;
         // RedRecIdx / redRecIdx_holds — the INDEXED-family analogue, third and
@@ -2731,7 +2774,7 @@ impl Specification {
         // Statable only because the indexed object layer landed in
         // add_snschema_objects; before that its type had no referents.
         self.add_recursive_def(
-            "def RedRecIdx (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (iRecApp fam isig u m ms ix t)",
+            "def RedRecIdx (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (iFam : Name) (fam : Name) (nIdx : Nat) (isig : ListType ICtor) (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (ms : ListType KExpr) (ix : ListType KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr), IGenFresh fam isig denv -> IGenRecEnvOK iFam fam nIdx isig u renv -> IGenRecContract fam nIdx isig u (iRecApp fam isig u m ms ix t) contractum -> whnf_acc m -> WhnfAccAll ms -> WhnfAccAll ix -> whnf_acc t -> cm_Red tenv M T contractum -> cm_Red tenv M T (iRecApp fam isig u m ms ix t)",
             "RedRecIdx tenv M: the indexed-family object-level-iota weak-head-expansion closure over cm_Red, carrying IGenFresh/IGenRecEnvOK premises. NOTE: denv/renv are quantified INSIDE the field and occur only in those premises, never in the conclusion, so they do NOT restrict which candidate models satisfy it. Do not describe this as vacuous off-target. Uses WhnfAccAll for the minor/index list SN hypotheses (the guide's MemL phrasing is not in scope at this stage). Indexed adequacy Phase 1.",
         )?;
 
@@ -2752,7 +2795,7 @@ impl Specification {
         // redAbstraction, redConst, redLet, redRecGen, redRecW), and the guide
         // carries it as a field for the same reason.
         self.add_recursive_def(
-            "def RedTypeStep (tenv : Name -> OptionType KExpr) (M : CandModel tenv) : Type := forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (cm_Red tenv M T e -> cm_Red tenv M T2 e) (cm_Red tenv M T2 e -> cm_Red tenv M T e)",
+            "def RedTypeStep (tenv : KDeclEnv) (M : CandModel tenv) : Type := forall (T : KExpr) (T2 : KExpr) (e : KExpr), whnf_step T T2 -> AndType (cm_Red tenv M T e -> cm_Red tenv M T2 e) (cm_Red tenv M T2 e -> cm_Red tenv M T e)",
             "RedTypeStep tenv M: the type of the CandModel FIELD redTypeStep (adding it made CandModel a strictly stronger hypothesis for every CandModel-conditional theorem in the spec) -- the candidates-respect-conversion law over cm_Red — reducibility transports along ONE whnf step of the TYPE index, in both directions. Guide AccWTypeSN.lean:1136 states it as an Iff; encoded here as an AndType of the two implications. Consumed by minorUseW_motive_step and w_adequacy_stuck.",
         )?;
 
@@ -2760,9 +2803,9 @@ impl Specification {
         // redTypeStep field, exactly as redRecW_holds projects redRecW.
         self.add_definition_structural(SpecDefinition {
             name: "redTypeStep_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedTypeStep tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedTypeStep tenv M".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedTypeStep tenv M0) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedTypeStep tenv M0) {tel} M",
                 tel = cm_tel("redTypeStep"),
             )),
             is_axiom: false,
@@ -2784,9 +2827,9 @@ impl Specification {
         // exactly as redRecGen_holds projects redRecGen.
         self.add_definition_structural(SpecDefinition {
             name: "redRecW_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedRecW tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedRecW tenv M".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecW tenv M0) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecW tenv M0) {tel} M",
                 tel = cm_tel("redRecW"),
             )),
             is_axiom: false,
@@ -2810,9 +2853,9 @@ impl Specification {
         // will be needed.
         self.add_definition_structural(SpecDefinition {
             name: "redRecMut_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedRecMut tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedRecMut tenv M".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecMut tenv M0) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecMut tenv M0) {tel} M",
                 tel = cm_tel("redRecMut"),
             )),
             is_axiom: false,
@@ -2832,9 +2875,9 @@ impl Specification {
         // mirroring redRecW_holds / redRecMut_holds. Generic over denv/renv.
         self.add_definition_structural(SpecDefinition {
             name: "redRecIdx_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedRecIdx tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedRecIdx tenv M".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecIdx tenv M0) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => RedRecIdx tenv M0) {tel} M",
                 tel = cm_tel("redRecIdx"),
             )),
             is_axiom: false,
@@ -2855,9 +2898,9 @@ impl Specification {
         // adequacy from the generic redRecGen field at (natName, sigNat, ms=[z,s]).
         self.add_definition_structural(SpecDefinition {
             name: "redNatRec_holds".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv), RedNatRec tenv M".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv), RedNatRec tenv M".to_string(),
             value_src: Some(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => fun (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (z : KExpr) (s : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr) (hf : NatFresh denv) (hok : NatRecEnvOK u renv) (hc : NatRecContract u (natRecApp u m z s t) contractum) (hm : whnf_acc m) (hz : whnf_acc z) (hs : whnf_acc s) (ht : whnf_acc t) (hred : cm_Red tenv M T contractum) => redRecGen_holds tenv M natName sigNat u denv renv m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) t contractum T (natFresh_to_genFresh denv hf) (natRecEnvOK_to_gen u renv hok) (natContract_to_gen u (natRecApp u m z s t) contractum hc) hm (whnfAccAll_cons2 z s hz hs) ht hred".to_string(),
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => fun (u : Level) (denv : DefEnv) (renv : RecEnv) (m : KExpr) (z : KExpr) (s : KExpr) (t : KExpr) (contractum : KExpr) (T : KExpr) (hf : NatFresh denv) (hok : NatRecEnvOK u renv) (hc : NatRecContract u (natRecApp u m z s t) contractum) (hm : whnf_acc m) (hz : whnf_acc z) (hs : whnf_acc s) (ht : whnf_acc t) (hred : cm_Red tenv M T contractum) => redRecGen_holds tenv M natName sigNat u denv renv m (ListType.cons KExpr z (ListType.cons KExpr s (ListType.nil KExpr))) t contractum T (natFresh_to_genFresh denv hf) (natRecEnvOK_to_gen u renv hok) (natContract_to_gen u (natRecApp u m z s t) contractum hc) hm (whnfAccAll_cons2 z s hz hs) ht hred".to_string(),
             ),
             is_axiom: false,
             description: "redNatRec_holds M : RedNatRec M. DERIVED from the generic redRecGen field (redRecGen_holds at natName/sigNat/ms=[z,s]) — natFresh_to_genFresh/natRecEnvOK_to_gen/natContract_to_gen bridges + whnfAccAll_cons2; genRecApp natName sigNat u m [z,s] t ≡ natRecApp u m z s t by rfl. The sole candidate-model input to natRec_adequacy_numeral (consumers unchanged). SnSchema B5. Zero axiom_deps.".to_string(),
@@ -2949,9 +2992,9 @@ impl Specification {
         // (no_whnf_step_bvar), so CR3 applies vacuously.
         self.add_definition_structural(SpecDefinition {
             name: "red_var".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (T : KExpr) (i : Nat), cm_Red tenv M T (KExpr.bvar i)".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (T : KExpr) (i : Nat), cm_Red tenv M T (KExpr.bvar i)".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (T : KExpr) (i : Nat) => ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (T : KExpr) (i : Nat) => ",
                 "CR3 tenv M T (KExpr.bvar i) ConstFreeUnit.triv ",
                 "(fun (e2 : KExpr) (hstep : whnf_step (KExpr.bvar i) e2) => no_whnf_step_bvar i e2 (cm_Red tenv M T e2) hstep)",
             ).to_string()),
@@ -3295,7 +3338,7 @@ impl Specification {
         // over cm_Red + ctx_lookup so models_idsubst / models_extend and the
         // fundamental cases can unfold it.
         self.add_recursive_def(
-            "def Models (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (s : Nat -> KExpr) (G : ListType KExpr) : Type := forall (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> cm_Red tenv M (psubst s (lift_at A Nat.zero (Nat.succ i))) (s i)",
+            "def Models (tenv : KDeclEnv) (M : CandModel tenv) (s : Nat -> KExpr) (G : ListType KExpr) : Type := forall (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> cm_Red tenv M (psubst s (lift_at A Nat.zero (Nat.succ i))) (s i)",
             "Models tenv M s G : s models the context G for M (guide Models, line 1808) — every ctx var i:A maps to a term reducible at psubst s (lift_at A 0 (i+1)). The semantic environment of the fundamental theorem. Reducible def over cm_Red / ctx_lookup.",
         )?;
 
@@ -3303,9 +3346,9 @@ impl Specification {
         // variables are reducible by red_var). Guide line 1813.
         self.add_definition_structural(SpecDefinition {
             name: "models_idsubst".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr), Models tenv M idsubst G".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr), Models tenv M idsubst G".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) ",
                 "(i : Nat) (A : KExpr) (_hget : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) => ",
                 "red_var tenv M (psubst idsubst (lift_at A Nat.zero (Nat.succ i))) i",
             ).to_string()),
@@ -3391,9 +3434,9 @@ impl Specification {
         // the tail model hs (transport along psubst_cancel + lift_at_compose).
         self.add_definition_structural(SpecDefinition {
             name: "models_extend".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (s : Nat -> KExpr) (G : ListType KExpr) (A : KExpr) (a : KExpr), cm_Red tenv M (psubst s A) a -> Models tenv M s G -> Models tenv M (scons a s) (ListType.cons KExpr A G)".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (s : Nat -> KExpr) (G : ListType KExpr) (A : KExpr) (a : KExpr), cm_Red tenv M (psubst s A) a -> Models tenv M s G -> Models tenv M (scons a s) (ListType.cons KExpr A G)".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (s : Nat -> KExpr) (G : ListType KExpr) (A : KExpr) (a : KExpr) (ha : cm_Red tenv M (psubst s A) a) (hs : Models tenv M s G) => ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (s : Nat -> KExpr) (G : ListType KExpr) (A : KExpr) (a : KExpr) (ha : cm_Red tenv M (psubst s A) a) (hs : Models tenv M s G) => ",
                 "fun (i : Nat) (A2 : KExpr) (hget : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) i) (OptionType.some KExpr A2)) => ",
                 "Nat.rec (fun (i0 : Nat) => Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) i0) (OptionType.some KExpr A2) -> cm_Red tenv M (psubst (scons a s) (lift_at A2 Nat.zero (Nat.succ i0))) (scons a s i0)) ",
                 "(fun (h0 : Eq (OptionType KExpr) (ctx_lookup (ListType.cons KExpr A G) Nat.zero) (OptionType.some KExpr A2)) => ",
@@ -3781,9 +3824,9 @@ impl Specification {
         // M.red_sort). CandModel.rec projection of the red_sort field.
         self.add_definition_structural(SpecDefinition {
             name: "red_sort".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (n : Level) (e : KExpr), whnf_acc e -> cm_Red tenv M (KExpr.sort n) e".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (n : Level) (e : KExpr), whnf_acc e -> cm_Red tenv M (KExpr.sort n) e".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (n : Level) (e : KExpr), whnf_acc e -> cm_Red tenv M0 (KExpr.sort n) e) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (n : Level) (e : KExpr), whnf_acc e -> cm_Red tenv M0 (KExpr.sort n) e) {tel} M",
                 tel = cm_tel("red_sort"),
             )),
             is_axiom: false,
@@ -3799,9 +3842,9 @@ impl Specification {
         // pi_elim accessor: the dependent Pi elimination clause (guide's M.pi_elim).
         self.add_definition_structural(SpecDefinition {
             name: "pi_elim".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), cm_Red tenv M (KExpr.pi A B) f -> cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.app f a)".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), cm_Red tenv M (KExpr.pi A B) f -> cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.app f a)".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), cm_Red tenv M0 (KExpr.pi A B) f -> cm_Red tenv M0 A a -> cm_Red tenv M0 (instantiate B a) (KExpr.app f a)) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (A : KExpr) (B : KExpr) (f : KExpr) (a : KExpr), cm_Red tenv M0 (KExpr.pi A B) f -> cm_Red tenv M0 A a -> cm_Red tenv M0 (instantiate B a) (KExpr.app f a)) {tel} M",
                 tel = cm_tel("pi_elim"),
             )),
             is_axiom: false,
@@ -3817,9 +3860,9 @@ impl Specification {
         // pi_intro accessor: the dependent Pi introduction clause (guide's M.pi_intro).
         self.add_definition_structural(SpecDefinition {
             name: "pi_intro".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.app f a)) -> cm_Red tenv M (KExpr.pi A B) f".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), cm_Red tenv M A a -> cm_Red tenv M (instantiate B a) (KExpr.app f a)) -> cm_Red tenv M (KExpr.pi A B) f".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), cm_Red tenv M0 A a -> cm_Red tenv M0 (instantiate B a) (KExpr.app f a)) -> cm_Red tenv M0 (KExpr.pi A B) f) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (A : KExpr) (B : KExpr) (f : KExpr), (forall (a : KExpr), cm_Red tenv M0 A a -> cm_Red tenv M0 (instantiate B a) (KExpr.app f a)) -> cm_Red tenv M0 (KExpr.pi A B) f) {tel} M",
                 tel = cm_tel("pi_intro"),
             )),
             is_axiom: false,
@@ -3836,9 +3879,9 @@ impl Specification {
         // instance of their declared type (guide's M.redConst).
         self.add_definition_structural(SpecDefinition {
             name: "redConst".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> cm_Red tenv M (psubst s A) (KExpr.const n us)".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> cm_Red tenv M (psubst s A) (KExpr.const n us)".to_string(),
             value_src: Some(format!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> cm_Red tenv M0 (psubst s A) (KExpr.const n us)) {tel} M",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) => CandModel.rec tenv (fun (M0 : CandModel tenv) => forall (n : Name) (us : ListType Level) (A : KExpr) (s : Nat -> KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> cm_Red tenv M0 (psubst s A) (KExpr.const n us)) {tel} M",
                 tel = cm_tel("redConst"),
             )),
             is_axiom: false,
@@ -3856,9 +3899,9 @@ impl Specification {
         // (line 1898): the Models lookup itself (psubst s (bvar i) defeq s i).
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_var".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (lift_at A Nat.zero (Nat.succ i))) (psubst s (KExpr.bvar i))".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (i : Nat) (A : KExpr), Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (lift_at A Nat.zero (Nat.succ i))) (psubst s (KExpr.bvar i))".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (i : Nat) (A : KExpr) (hget : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) (s : Nat -> KExpr) (hs : Models tenv M s G) => ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (i : Nat) (A : KExpr) (hget : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) (s : Nat -> KExpr) (hs : Models tenv M s G) => ",
                 "hs i A hget",
             ).to_string()),
             is_axiom: false,
@@ -3878,9 +3921,9 @@ impl Specification {
         // red_sort + whnfAcc_sort. psubst on sort reduces definitionally.
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_sort".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (n : Level), forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort (Level.succ n))) (psubst s (KExpr.sort n))".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (n : Level), forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort (Level.succ n))) (psubst s (KExpr.sort n))".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (n : Level) (s : Nat -> KExpr) (_hs : Models tenv M s G) => ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (n : Level) (s : Nat -> KExpr) (_hs : Models tenv M s G) => ",
                 "red_sort tenv M (Level.succ n) (KExpr.sort n) (whnfAcc_sort n)",
             ).to_string()),
             is_axiom: false,
@@ -3902,9 +3945,9 @@ impl Specification {
         // the fresh variable bvar 0, reshaped by psubst_scons_instantiate).
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_pi".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort n)) (psubst s A)) -> (forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G) -> cm_Red tenv M (psubst s (KExpr.sort m)) (psubst s B)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort (Level.imax n m))) (psubst s (KExpr.pi A B))".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort n)) (psubst s A)) -> (forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G) -> cm_Red tenv M (psubst s (KExpr.sort m)) (psubst s B)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort (Level.imax n m))) (psubst s (KExpr.pi A B))".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) ",
                 "(ihA : forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort n)) (psubst s A)) ",
                 "(ihB : forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G) -> cm_Red tenv M (psubst s (KExpr.sort m)) (psubst s B)) ",
                 "(s : Nat -> KExpr) (hs : Models tenv M s G) => ",
@@ -3938,9 +3981,9 @@ impl Specification {
         // extended substitution via psubst_scons_instantiate (twice: type + term).
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_lam".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s A)) -> (forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G) -> cm_Red tenv M (psubst s B) (psubst s b)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.pi A B)) (psubst s (KExpr.lam A b))".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s A)) -> (forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G) -> cm_Red tenv M (psubst s B) (psubst s b)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.pi A B)) (psubst s (KExpr.lam A b))".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
                 "(ihA : forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s A)) ",
                 "(ihb : forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G) -> cm_Red tenv M (psubst s B) (psubst s b)) ",
                 "(s : Nat -> KExpr) (hs : Models tenv M s G) => ",
@@ -3971,9 +4014,9 @@ impl Specification {
         // codomain instantiation back through the substitution via psubst_instantiate.
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_app".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.pi A B)) (psubst s f)) -> (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s A) (psubst s a)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (instantiate B a)) (psubst s (KExpr.app f a))".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.pi A B)) (psubst s f)) -> (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s A) (psubst s a)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (instantiate B a)) (psubst s (KExpr.app f a))".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) ",
                 "(ihf : forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.pi A B)) (psubst s f)) ",
                 "(iha : forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s A) (psubst s a)) ",
                 "(s : Nat -> KExpr) (hs : Models tenv M s G) => ",
@@ -4000,9 +4043,9 @@ impl Specification {
         // defeq const n us).
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_const".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s A) (psubst s (KExpr.const n us))".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr), Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s A) (psubst s (KExpr.const n us))".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) (hget : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) (s : Nat -> KExpr) (_hs : Models tenv M s G) => ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) (hget : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) (s : Nat -> KExpr) (_hs : Models tenv M s G) => ",
                 "redConst tenv M n us A s hget",
             ).to_string()),
             is_axiom: false,
@@ -4030,9 +4073,9 @@ impl Specification {
         // let_ (psubst s ty) (psubst s v) (psubst (up s) b).
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_let".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s ty)) -> (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s ty) (psubst s v)) -> (forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr ty G) -> cm_Red tenv M (psubst s B) (psubst s b)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (instantiate B v)) (psubst s (KExpr.let_ ty v b))".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level), (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s ty)) -> (forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s ty) (psubst s v)) -> (forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr ty G) -> cm_Red tenv M (psubst s B) (psubst s b)) -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (instantiate B v)) (psubst s (KExpr.let_ ty v b))".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (B : KExpr) (u : Level) ",
                 "(ihty : forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s ty)) ",
                 "(ihv : forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s ty) (psubst s v)) ",
                 "(ihb : forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr ty G) -> cm_Red tenv M (psubst s B) (psubst s b)) ",
@@ -4069,9 +4112,9 @@ impl Specification {
         // fun G e T _h => forall s, Models tenv M s G -> cm_Red tenv M (psubst s T) (psubst s e).
         self.add_definition_structural(SpecDefinition {
             name: "fundamental_general".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (e : KExpr) (T : KExpr), TypingCtx tenv G e T -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s T) (psubst s e)".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (e : KExpr) (T : KExpr), TypingCtx tenv G e T -> forall (s : Nat -> KExpr), Models tenv M s G -> cm_Red tenv M (psubst s T) (psubst s e)".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : TypingCtx tenv G e T) => ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (G : ListType KExpr) (e : KExpr) (T : KExpr) (h : TypingCtx tenv G e T) => ",
                 "TypingCtx.rec tenv ",
                 "(fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) (_h : TypingCtx tenv G0 e0 T0) => forall (s : Nat -> KExpr), Models tenv M s G0 -> cm_Red tenv M (psubst s T0) (psubst s e0)) ",
                 "(fun (G0 : ListType KExpr) (i : Nat) (A : KExpr) (hget : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) => fundamental_var tenv M G0 i A hget) ",
@@ -4079,7 +4122,7 @@ impl Specification {
                 "(fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (n : Level) (m : Level) (hA : TypingCtx tenv G0 A (KExpr.sort n)) (hB : TypingCtx tenv (ListType.cons KExpr A G0) B (KExpr.sort m)) (ihA : forall (s : Nat -> KExpr), Models tenv M s G0 -> cm_Red tenv M (psubst s (KExpr.sort n)) (psubst s A)) (ihB : forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G0) -> cm_Red tenv M (psubst s (KExpr.sort m)) (psubst s B)) => fundamental_pi tenv M G0 A B n m ihA ihB) ",
                 "(fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (u : Level) (hA : TypingCtx tenv G0 A (KExpr.sort u)) (hb : TypingCtx tenv (ListType.cons KExpr A G0) b B) (ihA : forall (s : Nat -> KExpr), Models tenv M s G0 -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s A)) (ihb : forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr A G0) -> cm_Red tenv M (psubst s B) (psubst s b)) => fundamental_lam tenv M G0 A b B u ihA ihb) ",
                 "(fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (A : KExpr) (B : KExpr) (hf : TypingCtx tenv G0 f (KExpr.pi A B)) (ha : TypingCtx tenv G0 a A) (ihf : forall (s : Nat -> KExpr), Models tenv M s G0 -> cm_Red tenv M (psubst s (KExpr.pi A B)) (psubst s f)) (iha : forall (s : Nat -> KExpr), Models tenv M s G0 -> cm_Red tenv M (psubst s A) (psubst s a)) => fundamental_app tenv M G0 f a A B ihf iha) ",
-                "(fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) (hget : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) => fundamental_const tenv M G0 n us A hget) ",
+                "(fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) (hget : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) => fundamental_const tenv M G0 n us A hget) ",
                 "(fun (G0 : ListType KExpr) (lty : KExpr) (lv : KExpr) (lb : KExpr) (B : KExpr) (u : Level) (hty : TypingCtx tenv G0 lty (KExpr.sort u)) (hv : TypingCtx tenv G0 lv lty) (hb : TypingCtx tenv (ListType.cons KExpr lty G0) lb B) (ihty : forall (s : Nat -> KExpr), Models tenv M s G0 -> cm_Red tenv M (psubst s (KExpr.sort u)) (psubst s lty)) (ihv : forall (s : Nat -> KExpr), Models tenv M s G0 -> cm_Red tenv M (psubst s lty) (psubst s lv)) (ihb : forall (s : Nat -> KExpr), Models tenv M s (ListType.cons KExpr lty G0) -> cm_Red tenv M (psubst s B) (psubst s lb)) => fundamental_let tenv M G0 lty lv lb B u ihty ihv ihb) ",
                 "G e T h",
             ).to_string()),
@@ -4105,9 +4148,9 @@ impl Specification {
         // BRICK 2 COMPLETE: the dependent SN theorem, modulo the M : CandModel hypothesis.
         self.add_definition_structural(SpecDefinition {
             name: "whnf_terminates_well_typed_dependent".to_string(),
-            type_src: "forall (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (e : KExpr) (T : KExpr), TypingCtx tenv (ListType.nil KExpr) e T -> whnf_acc e".to_string(),
+            type_src: "forall (tenv : KDeclEnv) (M : CandModel tenv) (e : KExpr) (T : KExpr), TypingCtx tenv (ListType.nil KExpr) e T -> whnf_acc e".to_string(),
             value_src: Some(concat!(
-                "fun (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (e : KExpr) (T : KExpr) (h : TypingCtx tenv (ListType.nil KExpr) e T) => ",
+                "fun (tenv : KDeclEnv) (M : CandModel tenv) (e : KExpr) (T : KExpr) (h : TypingCtx tenv (ListType.nil KExpr) e T) => ",
                 "CR1 tenv M T e ",
                 "(Eq.substType KExpr (fun (w : KExpr) => cm_Red tenv M T w) (psubst idsubst e) e (psubst_id e) ",
                 "(Eq.substType KExpr (fun (w : KExpr) => cm_Red tenv M w (psubst idsubst e)) (psubst idsubst T) T (psubst_id T) ",

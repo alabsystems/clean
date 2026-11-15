@@ -70,10 +70,7 @@ pub(crate) fn build_mutual_minor_type(
 
     // IH binders for recursive fields, innermost-first.
     let mut ih_offset: u32 = 0;
-    for (i, &is_rec) in ci.recursive.iter().enumerate().rev() {
-        if !is_rec {
-            continue;
-        }
+    for (i, field_ty, target_motive) in ci.recursive_fields().rev() {
         let i_u32 = u32::try_from(i).map_err(|_| "field idx".to_string())?;
         let ihs_above = num_ihs.saturating_sub(1).saturating_sub(ih_offset);
         let field_depth = num_fields
@@ -82,14 +79,12 @@ pub(crate) fn build_mutual_minor_type(
             .checked_add(ihs_above)
             .ok_or("bvar overflow")?;
         // IH uses motive of the field's target type.
-        let ih_motive_idx =
-            u32::try_from(ci.field_motive[i]).map_err(|_| "motive idx".to_string())?;
+        let ih_motive_idx = u32::try_from(target_motive).map_err(|_| "motive idx".to_string())?;
         let motive_at_ih = num_fields
             .checked_add(ihs_above)
             .and_then(|x| x.checked_add(nt.saturating_sub(1).saturating_sub(ih_motive_idx)))
             .ok_or("bvar overflow")?;
 
-        let field_ty = &ci.field_tys[i];
         let n_pis = count_pi(field_ty);
         let field_ret = return_type(field_ty);
         let (_h, field_ret_args) = field_ret.unfold_apps();
@@ -123,8 +118,8 @@ pub(crate) fn build_mutual_minor_type(
 
     // field binders (outermost). field_ty[i] references earlier fields (<i) and
     // params; the N motive binders sit between fields and params, so lift_from(i, N).
-    for i in (0..num_fields).rev() {
-        let field_ty = &ci.field_tys[usize::try_from(i).unwrap_or(usize::MAX)];
+    for (i, field_ty) in ci.field_tys.iter().enumerate().rev() {
+        let i = u32::try_from(i).map_err(|_| "field idx".to_string())?;
         let lifted = lift_from(field_ty, i, nt);
         result = Term::pi(BinderInfo::Default, lifted, result);
     }

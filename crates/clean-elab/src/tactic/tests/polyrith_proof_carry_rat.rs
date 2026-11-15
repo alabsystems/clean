@@ -108,14 +108,16 @@ fn setup_two_hyp_rat_state(goal_lhs: Expr, goal_rhs: Expr) -> ProofState {
         make_eq(rat.clone(), goal_lhs, goal_rhs),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(rat.clone(), rat_var("a"), rat_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(rat, rat_var("c"), rat_var("d")),
                 value: None,
             },
@@ -144,8 +146,9 @@ fn setup_single_hyp_rat_state(goal_lhs: Expr, goal_rhs: Expr) -> ProofState {
         env,
         make_eq(rat.clone(), goal_lhs, goal_rhs),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq(rat, rat_var("a"), rat_var("b")),
             value: None,
         }],
@@ -231,7 +234,11 @@ fn test_fractional_rat_proof_builder_single_hyp_closes_without_trust() {
         rat_mul_fraction_div(1, 2, rat_var("b")),
     );
     let goal = state.current_goal().expect("goal should exist").clone();
-    let coeffs = vec![LinearCoeff::new("h", 1, 2)];
+    let coeffs = vec![LinearCoeff::new(
+        &clean_parser::SurfaceName::generated_path("h"),
+        1,
+        2,
+    )];
 
     let proof = pattern::linear_combination_proof::build_linear_combination_eq_proof(
         &state, &goal, &coeffs,
@@ -251,8 +258,15 @@ fn test_fractional_rat_linear_combination_tactic_closes_without_trust() {
         rat_mul_fraction_div(1, 2, rat_var("b")),
     );
 
-    linear_combination(&mut state, vec![LinearCoeff::new("h", 1, 2)])
-        .expect("linear_combination should close the fractional Rat goal");
+    linear_combination(
+        &mut state,
+        vec![LinearCoeff::new(
+            &clean_parser::SurfaceName::generated_path("h"),
+            1,
+            2,
+        )],
+    )
+    .expect("linear_combination should close the fractional Rat goal");
 
     assert_closed_clean_proof(
         &state,
@@ -267,7 +281,10 @@ fn test_fractional_rat_proof_builder_commuted_goal_closes_without_trust() {
         rat_add(rat_var("d"), rat_mul_fraction_div(1, 2, rat_var("b"))),
     );
     let goal = state.current_goal().expect("goal should exist").clone();
-    let coeffs = vec![LinearCoeff::new("h1", 1, 2), LinearCoeff::new("h2", 1, 1)];
+    let coeffs = vec![
+        LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h1"), 1, 2),
+        LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h2"), 1, 1),
+    ];
 
     let proof = pattern::linear_combination_proof::build_linear_combination_eq_proof(
         &state, &goal, &coeffs,
@@ -289,7 +306,10 @@ fn test_fractional_rat_linear_combination_commuted_goal_closes_without_trust() {
 
     linear_combination(
         &mut state,
-        vec![LinearCoeff::new("h1", 1, 2), LinearCoeff::new("h2", 1, 1)],
+        vec![
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h1"), 1, 2),
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h2"), 1, 1),
+        ],
     )
     .expect("linear_combination should close the commuted fractional Rat goal");
 
@@ -314,8 +334,14 @@ fn test_ring_nf_fractional_rat_commuted_goal_closes_without_trust() {
 fn test_polyrith_two_hyp_rat_identity_cert_pipeline_e2e() {
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(1, 1)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(1, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
         ],
         verified: true,
         explanation: "two-hyp Rat identity goal".to_string(),
@@ -344,8 +370,14 @@ fn test_polyrith_two_hyp_rat_identity_cert_pipeline_e2e() {
 fn test_polyrith_two_hyp_weighted_rat_cert_pipeline_e2e() {
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(2, 1)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(2, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
         ],
         verified: true,
         explanation: "two-hyp weighted Rat goal".to_string(),
@@ -374,7 +406,10 @@ fn test_polyrith_two_hyp_weighted_rat_cert_pipeline_e2e() {
 #[test]
 fn test_polyrith_rat_symmetry_single_hyp_e2e() {
     let cert = PolyrithCertificate {
-        coefficients: vec![("h1".to_string(), Polynomial::constant(-1, 1))],
+        coefficients: vec![(
+            clean_parser::SurfaceName::generated_path("h1"),
+            Polynomial::constant(-1, 1),
+        )],
         verified: true,
         explanation: "single-hyp Rat symmetry goal".to_string(),
     };
@@ -402,8 +437,9 @@ fn test_polyrith_rat_symmetry_single_hyp_e2e() {
         env,
         make_eq(rat.clone(), rat_var("b"), rat_var("a")),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h1".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h1"),
             ty: make_eq(rat, rat_var("a"), rat_var("b")),
             value: None,
         }],
@@ -425,8 +461,14 @@ fn test_polyrith_rat_symmetry_single_hyp_e2e() {
 fn test_polyrith_rat_negative_weighted_cert_pipeline_e2e() {
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(-2, 1)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(-2, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
         ],
         verified: true,
         explanation: "two-hyp negative weighted Rat goal".to_string(),

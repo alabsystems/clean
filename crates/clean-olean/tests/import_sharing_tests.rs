@@ -5,7 +5,8 @@
 //! Tests for expression structure sharing via hash-consing (#2383).
 
 use clean_kernel::env::Environment;
-use clean_olean::{load_module_with_deps, load_olean_file, pinned_lean_lib_path};
+use clean_olean::{load_module_with_deps, load_module_with_deps_shared, pinned_lean_lib_path};
+use hashbrown::HashSet;
 use std::path::PathBuf;
 
 fn get_lean_lib_path() -> Option<PathBuf> {
@@ -28,11 +29,6 @@ fn require_olean_lean() -> Option<PathBuf> {
         return None;
     }
     get_lean_lib_path()
-}
-
-fn module_to_olean_path(name: &str, lib_path: &std::path::Path) -> PathBuf {
-    let rel = name.replace('.', "/");
-    lib_path.join(format!("{rel}.olean"))
 }
 
 struct SharingReport {
@@ -145,12 +141,26 @@ fn load_per_module(
 ) -> (Environment, Vec<clean_olean::LoadSummary>) {
     let mut env = Environment::default();
     let mut summaries = Vec::new();
+    let mut visited = HashSet::new();
     for name in module_names {
-        let path = module_to_olean_path(name, lib_path);
-        match load_olean_file(&mut env, &path) {
-            Ok(summary) => summaries.push(summary),
-            Err(e) => eprintln!("Warning: failed to load {name}: {e}"),
+        let artifact = name
+            .strip_suffix("._server")
+            .or_else(|| name.strip_suffix("._private"))
+            .unwrap_or(name);
+        if visited.contains(artifact) {
+            continue;
         }
+        // Each API call creates a fresh expression cache. The shared visited set
+        // prevents dependency reloads; the production loader still reads ALL parts
+        // together, including cross-region references and private definitions.
+        let parts = load_module_with_deps_shared(
+            &mut env,
+            artifact,
+            &[lib_path.to_path_buf()],
+            &mut visited,
+        )
+        .unwrap_or_else(|error| panic!("baseline must load artifact {artifact}: {error}"));
+        summaries.extend(parts);
     }
     (env, summaries)
 }
@@ -219,8 +229,30 @@ fn test_cross_module_sharing_init_core() {
 
     // Run B: Per-module sharing (baseline — fresh cache per module)
     let start_b = std::time::Instant::now();
-    let (_env_b, summaries_b) = load_per_module(&module_names, &lib_path);
+    let (env_b, summaries_b) = load_per_module(&module_names, &lib_path);
     let report_b = SharingReport::from_summaries(&summaries_b, start_b.elapsed());
+    assert_eq!(
+        summaries_b
+            .iter()
+            .filter_map(|s| s.module_name.clone())
+            .collect::<Vec<_>>(),
+        module_names,
+        "both measurements must load the identical complete part roster"
+    );
+    assert_eq!(env_a.num_constants(), env_b.num_constants());
+    for original in env_a.constants() {
+        let same = env_b
+            .get_const(&original.name)
+            .expect("baseline lost a declaration");
+        assert_eq!(
+            same.level_params, original.level_params,
+            "{} universes",
+            original.name
+        );
+        assert_eq!(same.kind, original.kind, "{} kind", original.name);
+        assert_eq!(same.type_, original.type_, "{} type", original.name);
+        assert_eq!(same.value, original.value, "{} value", original.name);
+    }
 
     // Report
     let expr_bytes = size_of::<clean_kernel::expr::Expr>() as u64;

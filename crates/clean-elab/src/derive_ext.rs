@@ -436,7 +436,7 @@ pub(crate) fn register_ext_handlers(registry: &mut DeriveExtHandlers) {
     registry.register("Ord", derive_ord_ext);
 }
 
-pub fn register_all_handlers(registry: &mut crate::derive::DeriveRegistry) {
+pub(crate) fn register_all_handlers(registry: &mut crate::derive::DeriveRegistry) {
     crate::derive_handlers::register_builtin_handlers(registry);
     registry.register_handler("Ord", Box::new(DeriveOrd));
     // Previously implemented but unregistered canonical handlers. Nonempty is

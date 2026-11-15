@@ -52,7 +52,7 @@ pub(super) fn run(json: bool, csv: bool, latex: bool) -> anyhow::Result<()> {
 pub(super) fn run(_json: bool, _csv: bool, _latex: bool) -> anyhow::Result<()> {
     bail!(
         "clean kernel verify-gamma-crown requires the `math-overlays` feature. \
-         Rebuild with `cargo build -p clean-cli --features math-overlays` \
+         Rebuild with `cargo build -p clean --features math-overlays` \
          (or the equivalent feature on the `clean` package)."
     );
 }

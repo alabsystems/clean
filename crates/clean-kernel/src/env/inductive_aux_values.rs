@@ -288,8 +288,36 @@ impl Environment {
             ));
         }
 
-        let canonical = self
-            .build_aux_eliminator_value(
+        let canonical = if Self::cases_on_is_member_shaped(&cases.type_, rec) {
+            // A member of a mutual or nested family, in Lean's shape: its
+            // `casesOn` takes only this member's motive and minors
+            // (`inductive_aux_values_member.rs`, G33). Clean's own block-shaped
+            // wrapper (every motive and minor) keeps the path below.
+            let member_motive = self
+                .get_inductive(&rec.inductive_name)
+                .and_then(|ind| {
+                    ind.all_names
+                        .iter()
+                        .position(|name| *name == rec.inductive_name)
+                })
+                .ok_or_else(|| {
+                    format!(
+                        "`{rec_name}` names `{}`, which is not a member of its own family",
+                        rec.inductive_name
+                    )
+                })?;
+            self.build_member_cases_on_value(
+                rec,
+                &cases.level_params,
+                &cases.type_,
+                member_motive,
+                minor_arities,
+            )
+            .map_err(|error| {
+                format!("failed to reconstruct canonical cases eliminator `{cases_name}`: {error}")
+            })?
+        } else {
+            self.build_aux_eliminator_value(
                 cases_name,
                 rec_name,
                 &cases.level_params,
@@ -303,7 +331,8 @@ impl Environment {
             )
             .map_err(|error| {
                 format!("failed to reconstruct canonical cases eliminator `{cases_name}`: {error}")
-            })?;
+            })?
+        };
         let value = cases
             .value
             .as_ref()

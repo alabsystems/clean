@@ -9,7 +9,7 @@
 
 // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
 // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-use clean_kernel::{BinderInfo, Expr, ExprKind, Level, LocalContext, Name};
+use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level, LocalContext, Name};
 
 use super::super::op_projection::{is_hetero_op_projection, reduce_op_projection_head};
 use super::super::{Goal, ProofState, TacticError, TacticResult};
@@ -18,7 +18,8 @@ use super::expr_utils::{
     rewrite_candidate_summaries,
 };
 use super::rewrite_delta::{delta_rule, shadowed_by_local, unfold_at_hyp, unfold_in_goal};
-use crate::unify::{MetaState, Unifier, UnifyResult};
+use crate::unify::{MetaId, MetaState, Unifier, UnifyResult};
+use std::collections::HashSet;
 
 /// Direction of a rewrite operation.
 ///
@@ -76,13 +77,14 @@ impl RewriteRule {
     pub(crate) fn from_hypothesis(
         state: &ProofState,
         goal: &Goal,
-        hyp_name: &str,
+        hyp_name: &clean_parser::SurfaceName,
         direction: RewriteDirection,
     ) -> Result<Self, TacticError> {
         let hyp_decl = goal
             .local_ctx
             .iter()
-            .find(|d| d.name == hyp_name)
+            .rev()
+            .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
             .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
         let hyp_ty = state.whnf(goal, &hyp_decl.ty);
@@ -144,7 +146,11 @@ impl RewriteRule {
 /// ENSURES: On Ok, the goal target has `a` (or `b` if `reverse`) replaced with `b` (or `a`)
 /// ENSURES: On Ok, the proof uses `Eq.subst` to justify the rewrite
 /// ENSURES: On Err(HypothesisNotFound), `hyp_name` is not in the local context
-pub fn rewrite(state: &mut ProofState, hyp_name: &str, reverse: bool) -> TacticResult {
+pub fn rewrite(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+    reverse: bool,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // `rw [X]` where `X` is a DEFINITION whose type is not an equation — the
@@ -178,7 +184,12 @@ pub fn rewrite(state: &mut ProofState, hyp_name: &str, reverse: bool) -> TacticR
     // Resolution order matches Lean 4: a local hypothesis named `hyp_name`
     // shadows an environment constant of the same name. Only when no such
     // hypothesis exists do we fall back to the environment (`rw [Nat.add_comm]`).
-    let eqn = match goal.local_ctx.iter().find(|d| d.name == hyp_name) {
+    let eqn = match goal
+        .local_ctx
+        .iter()
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
+    {
         Some(hyp_decl) => {
             // Check that the hypothesis is an equality. If it is an `Iff` instead,
             // adapt it to an `Eq` via `propext` and feed the same machinery.
@@ -209,6 +220,7 @@ pub fn rewrite(state: &mut ProofState, hyp_name: &str, reverse: bool) -> TacticR
             } else {
                 match match_equality(&hyp_ty) {
                     Ok((eq_type, lhs, rhs, eq_levels)) => RewriteEquation {
+                        pending_args: Vec::new(),
                         eq_type,
                         lhs,
                         rhs,
@@ -225,12 +237,14 @@ pub fn rewrite(state: &mut ProofState, hyp_name: &str, reverse: bool) -> TacticR
         }
     };
 
-    finish_rewrite(state, &goal, hyp_name, reverse, eqn)
+    finish_rewrite(state, &goal, &hyp_name.to_string(), reverse, eqn)
 }
 
 /// A fully-resolved rewrite equation: `proof : @Eq eq_type lhs rhs` with
 /// `lhs`/`rhs` concrete (no loose metavariables after env instantiation).
 struct RewriteEquation {
+    // Actual telescope argument metas; unresolved ones remain proof obligations.
+    pending_args: Vec<MetaId>,
     eq_type: Expr,
     lhs: Expr,
     rhs: Expr,
@@ -266,6 +280,7 @@ fn iff_rewrite_equation(iff_ty: &Expr, iff_proof: Expr) -> Option<RewriteEquatio
         iff_proof,
     );
     Some(RewriteEquation {
+        pending_args: Vec::new(),
         eq_type: Expr::prop(),
         lhs: p,
         rhs: q,
@@ -321,16 +336,20 @@ fn iff_rewrite_equation(iff_ty: &Expr, iff_proof: Expr) -> Option<RewriteEquatio
 fn resolve_env_rewrite_equation(
     state: &mut ProofState,
     goal: &Goal,
-    name: &str,
+    name: &clean_parser::SurfaceName,
     reverse: bool,
     haystack: &Expr,
     focus_path: Vec<String>,
 ) -> Result<RewriteEquation, TacticError> {
-    let const_name = Name::from_string(name);
+    // Resolve through the term elaborator's order, not a bare literal lookup.
+    // `rw [not_injective_iff]` inside `namespace Function` used to fail on a
+    // lemma declared in that same file, because this site only ever tried the
+    // spelling the user typed.
+    let const_name = crate::tactic::core::resolve_global_name(state, name)?;
     let info = state
         .env
         .get_const(&const_name)
-        .ok_or_else(|| TacticError::HypothesisNotFound(name.to_string()))?;
+        .ok_or_else(|| TacticError::UnknownIdent(name.to_string()))?;
     let level_params = info.level_params.clone();
     let const_type = info.type_.clone();
 
@@ -369,7 +388,7 @@ fn resolve_env_rewrite_equation(
 pub fn resolve_env_rewrite_parts(
     state: &mut ProofState,
     goal: &Goal,
-    name: &str,
+    name: &clean_parser::SurfaceName,
     reverse: bool,
     haystack: &Expr,
 ) -> Result<(Expr, Expr, Expr, Vec<Level>, Expr), TacticError> {
@@ -418,7 +437,7 @@ pub fn resolve_env_rewrite_parts(
 fn peel_and_resolve_rewrite_equation(
     state: &mut ProofState,
     goal: &Goal,
-    name: &str,
+    name: &clean_parser::SurfaceName,
     reverse: bool,
     haystack: &Expr,
     focus_path: Vec<String>,
@@ -430,9 +449,11 @@ fn peel_and_resolve_rewrite_equation(
     // re-apply them as `proof_base meta₀ meta₁ …` (Lean theorem-application order).
     let mut current = state.whnf(goal, &base_type);
     let mut meta_args: Vec<Expr> = Vec::new();
+    let mut pending_args = Vec::new();
     while let ExprKind::Pi(_bi, domain, codomain) = current.kind() {
         let domain_inst = state.metas.instantiate(domain);
         let meta_id = state.fresh_meta(domain_inst);
+        pending_args.push(meta_id);
         let meta = Expr::fvar(MetaState::to_fvar(meta_id));
         current = codomain.instantiate(&meta);
         meta_args.push(meta);
@@ -470,7 +491,7 @@ fn peel_and_resolve_rewrite_equation(
         let shown = resolve_all(state, &from_pattern);
         return Err(TacticError::RewriteNoMatch {
             tactic: "rewrite".to_owned(),
-            rule: name.to_owned(),
+            rule: name.to_string(),
             direction: if reverse { "backward" } else { "forward" }.to_owned(),
             searched_for: shown.to_string(),
             focus: haystack.to_string(),
@@ -505,6 +526,7 @@ fn peel_and_resolve_rewrite_equation(
         .collect();
 
     Ok(RewriteEquation {
+        pending_args,
         eq_type: resolve_all(state, &eq_type),
         lhs: resolve_all(state, &lhs),
         rhs: resolve_all(state, &rhs),
@@ -520,7 +542,18 @@ fn peel_and_resolve_rewrite_equation(
 /// separately for the resulting term to be syntactically concrete.
 fn resolve_all(state: &ProofState, expr: &Expr) -> Expr {
     let inst = state.metas.instantiate(expr);
-    state.metas.instantiate_levels(&inst)
+    let inst = state.metas.instantiate_levels(&inst);
+    // Beta-contract what the substitution just created. A higher-order match
+    // solves a motive as `?p := fun x1 => p`, and substituting it leaves the
+    // redex `(fun x1 => p) x` in the resolved side. The rewriter's search is
+    // syntactic (`contains_expr`), so it then fails to find a needle that IS
+    // present up to beta — a FALSE `RewriteNoMatch` on a term Lean's `kabstract`
+    // accepts. The corpus face is `searched for … ((fun x1 => φ) x) …`.
+    //
+    // This function's own contract is "syntactically concrete", and a residual
+    // redex is exactly what that excludes; beta is definitional, so the proof
+    // term the kernel re-checks is unchanged in meaning.
+    crate::tactic::debug::beta_reduce_all(&inst)
 }
 
 /// Find the first subterm of `haystack` that unifies with `pattern` (a side of
@@ -671,6 +704,37 @@ fn keyed_head_unify(
 ) -> bool {
     let pat_fn = pattern.get_app_fn();
     let hay_fn = haystack.get_app_fn();
+    // The same LOCAL at both heads (`g (f ?x)` from `rw [h.comp_eq]` with
+    // `h : ∀ x, g (f x) = x`) keys exactly like a constant: the arguments are
+    // matched on their SURFACE spelling below, so `?x` takes the goal's
+    // `OfNat.ofNat Nat 3 _` rather than the whnf'd literal the general
+    // unifier would assign (which `finish_rewrite`'s syntactic search then
+    // fails to find; measured 2026-09-12).
+    if let (ExprKind::FVar(p), ExprKind::FVar(h)) = (pat_fn.kind(), hay_fn.kind()) {
+        if p != h || MetaState::from_fvar(*p).is_some() {
+            return false;
+        }
+        let pat_args: Vec<Expr> = pattern.get_app_args().into_iter().cloned().collect();
+        let hay_args: Vec<Expr> = haystack.get_app_args().into_iter().cloned().collect();
+        if pat_args.len() != hay_args.len() {
+            return false;
+        }
+        state.metas.push_scope();
+        let ok = {
+            let (metas, env) = state.metas_and_env();
+            let mut unifier = Unifier::with_env(metas, env, ctx.clone());
+            pat_args
+                .iter()
+                .zip(hay_args.iter())
+                .all(|(ap, ah)| surface_unify(&mut unifier, ap, ah))
+        };
+        if ok {
+            state.metas.commit();
+        } else {
+            state.metas.pop_scope();
+        }
+        return ok;
+    }
     let (ExprKind::Const(pat_name, pat_levels), ExprKind::Const(hay_name, hay_levels)) =
         (pat_fn.kind(), hay_fn.kind())
     else {
@@ -758,6 +822,35 @@ fn keyed_head_unify(
     }
 }
 
+/// Unify a pattern argument with a goal argument on their SURFACE spelling:
+/// a bare metavariable takes the goal's subterm as written, and two
+/// applications with the same head (the same local, or the same constant at
+/// the same levels) and arity are matched argument by argument; anything else
+/// goes to the general unifier. `f ?x` against `f (OfNat.ofNat Nat 3 _)` so
+/// assigns `?x` the `OfNat` form the syntactic replacement then finds, where
+/// the unifier's argument reduction would assign the literal `3`.
+fn surface_unify(unifier: &mut Unifier<'_>, ap: &Expr, ah: &Expr) -> bool {
+    if unifier.try_assign_bare_meta(ap, ah) {
+        return true;
+    }
+    let same_head = match (ap.get_app_fn().kind(), ah.get_app_fn().kind()) {
+        (ExprKind::FVar(a), ExprKind::FVar(b)) => a == b && MetaState::from_fvar(*a).is_none(),
+        (ExprKind::Const(a, la), ExprKind::Const(b, lb)) => a == b && la == lb,
+        _ => false,
+    };
+    if same_head {
+        let pa = ap.get_app_args();
+        let ha = ah.get_app_args();
+        if !pa.is_empty() && pa.len() == ha.len() {
+            return pa
+                .into_iter()
+                .zip(ha)
+                .all(|(x, y)| crate::stack_safe(|| surface_unify(unifier, x, y)));
+        }
+    }
+    matches!(unifier.unify(ap, ah), UnifyResult::Success)
+}
+
 /// Locate the first subterm of `haystack` that is definitionally equal to
 /// `needle` but does **not** occur syntactically (so `contains_expr` already
 /// failed). Returns the *surface* (un-reduced) goal subterm so the subsequent
@@ -784,6 +877,41 @@ fn find_defeq_subterm(
     find_defeq_subterm_with(haystack, needle, &mut |a, b| state.is_def_eq(goal, a, b))
 }
 
+/// Expose unsolved arguments of the actual instantiated rule after a successful
+/// checked rewrite. These are the same metas used in its proof, in telescope
+/// order, with the original scope. Keep them after the rewritten main goal and
+/// before previously pending siblings (Lean's `newMain :: rewriteResult.mvarIds`).
+fn commit_rewrite_argument_goals(
+    state: &mut ProofState,
+    original: &Goal,
+    pending_args: Vec<MetaId>,
+) -> TacticResult {
+    if pending_args.is_empty() {
+        return Ok(());
+    }
+    let mut queued: HashSet<_> = state.goals.iter().map(|goal| goal.meta_id).collect();
+    let mut side_goals = Vec::new();
+    for meta_id in pending_args {
+        let meta = state.metas.get(meta_id).ok_or_else(|| {
+            TacticError::TypeCheckFailed("rewrite argument metavariable disappeared".into())
+        })?;
+        if meta.assignment.is_some() || !queued.insert(meta_id) {
+            continue;
+        }
+        side_goals.push(Goal {
+            meta_id,
+            target: state.metas.instantiate(&meta.ty),
+            local_ctx: original.local_ctx.clone(),
+            tag: None,
+            case_binders: original.case_binders.clone(),
+        });
+    }
+    let tail = state.goals.split_off(state.goals.len().min(1));
+    state.goals.extend(side_goals);
+    state.goals.extend(tail);
+    Ok(())
+}
+
 /// Shared tail of `rewrite`: with a concrete equation in hand, replace the
 /// `from` side with the `to` side in the goal and build the kernel-checked
 /// `Eq.subst` proof. `rule_name` is used only for diagnostics.
@@ -795,6 +923,7 @@ fn finish_rewrite(
     eqn: RewriteEquation,
 ) -> TacticResult {
     let RewriteEquation {
+        pending_args,
         eq_type,
         lhs,
         rhs,
@@ -858,6 +987,79 @@ fn finish_rewrite(
     // P(to) = new_target. P(from) is def-eq to target (= P(from_in_goal)).
     let motive = abstract_over(&target, &from_in_goal);
 
+    // A target living in `Sort v` with `v` not literally zero (`α i` for
+    // `α : ι → Sort*`: `uniqueElim`'s `rw [Unique.eq_default i]`, measured
+    // 2026-09-12 as `expected ι → Prop, got ι → Sort ?u`) cannot go through
+    // `Eq.subst`, whose motive is `α → Prop`. Lean's `rw` closes the goal at
+    // ANY sort with `Eq.mpr (congrArg (fun x => G[x]) h) ?new`
+    // (`Lean.MVarId.rewrite`, `Lean/Meta/Tactic/Rewrite.lean`); do the same.
+    let target_sort = state
+        .infer_type(goal, &target)
+        .ok()
+        .map(|ty| state.whnf(goal, &ty))
+        .and_then(|ty| match ty.kind() {
+            ExprKind::Sort(level) => Some(level.clone()),
+            _ => None,
+        });
+    if let Some(sort_level) = target_sort.filter(|level| !level.is_zero()) {
+        // `h_ft : from = to`.
+        let h_ft = if reverse {
+            let symm = Expr::const_(Name::from_string("Eq.symm"), eq_levels.clone());
+            Expr::app(
+                Expr::app(
+                    Expr::app(Expr::app(symm, eq_type.clone()), lhs.clone()),
+                    rhs.clone(),
+                ),
+                eq_proof,
+            )
+        } else {
+            eq_proof
+        };
+        let mut congr_levels = eq_levels.clone();
+        congr_levels.push(Level::succ(sort_level.clone()));
+        let congr = Expr::app(
+            Expr::app(
+                Expr::app(
+                    Expr::app(
+                        Expr::app(
+                            Expr::app(
+                                Expr::const_(Name::from_string("congrArg"), congr_levels),
+                                eq_type.clone(),
+                            ),
+                            Expr::sort(sort_level.clone()),
+                        ),
+                        from.clone(),
+                    ),
+                    to.clone(),
+                ),
+                Expr::lam(BinderInfo::Default, eq_type.clone(), motive),
+            ),
+            h_ft,
+        );
+        let proof = Expr::app(
+            Expr::app(
+                Expr::app(
+                    Expr::app(
+                        Expr::const_(Name::from_string("Eq.mpr"), vec![sort_level]),
+                        target.clone(),
+                    ),
+                    new_target.clone(),
+                ),
+                congr,
+            ),
+            new_meta.clone(),
+        );
+        state.close_goal(goal, proof)?;
+        state.goals.push_front(Goal {
+            meta_id: new_meta_id,
+            target: new_target,
+            local_ctx: goal.local_ctx.clone(),
+            tag: None,
+            case_binders: goal.case_binders.clone(),
+        });
+        return commit_rewrite_argument_goals(state, goal, pending_args);
+    }
+
     // Proof construction using Eq.subst:
     // Eq.subst : {α} → {motive : α → Prop} → {a b : α} → Eq a b → motive a → motive b
     //
@@ -917,22 +1119,23 @@ fn finish_rewrite(
         meta_id: new_meta_id,
         target: new_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     state.goals.push_front(new_goal);
 
-    Ok(())
+    commit_rewrite_argument_goals(state, goal, pending_args)
 }
 
 /// Rewrite the goal using an equality hypothesis (left-to-right).
 /// Convenience wrapper for `rewrite(state, hyp_name, false)`.
-pub fn rewrite_ltr(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn rewrite_ltr(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     rewrite(state, hyp_name, false)
 }
 
 /// Rewrite the goal using an equality hypothesis (right-to-left).
 /// Convenience wrapper for `rewrite(state, hyp_name, true)`.
-pub fn rewrite_rtl(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn rewrite_rtl(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     rewrite(state, hyp_name, true)
 }
 
@@ -958,61 +1161,156 @@ pub fn rewrite_rtl(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 pub fn rewrite_with_proof(state: &mut ProofState, proof: Expr, reverse: bool) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
-    // Infer the proof term's type, then resolve any value/universe metavariables
-    // introduced by elaboration so the equality sides are syntactically concrete
-    // for the structural `contains_expr` / `replace_expr` search in
-    // `finish_rewrite` (mirrors the env-constant path's `resolve_all`).
-    //
-    // We deliberately do NOT WHNF-reduce the inferred type before matching: the
-    // `from` side must stay in the same *syntactic* form carried by the proof's
-    // type (e.g. `dbl n` from `dbl_unfold n : dbl n = n + n`), so it matches a
-    // use of the reducible defined constant in the goal. WHNF would unfold the
-    // `from` side to its δ/ι-normal form and the structural `contains_expr`
-    // search would then miss the surface occurrence. We only WHNF as a *fallback*
-    // when the inferred type is not already an `@Eq` application at the head
-    // (e.g. a reducible alias for `Eq`).
-    let proof_ty = resolve_all(state, &state.infer_type(&goal, &proof)?);
+    let eqn = term_rewrite_equation(state, &goal, proof, reverse, &goal.target)?;
+    finish_rewrite(state, &goal, "<term>", reverse, eqn)
+}
+
+/// Whether `expr` mentions an unassigned metavariable (an `FVar` carrying
+/// `MetaState`'s high-bit tag) — after `resolve_all`, exactly the
+/// metavariables elaboration left open.
+fn mentions_meta(expr: &Expr) -> bool {
+    match expr.kind() {
+        ExprKind::FVar(id) => MetaState::from_fvar(*id).is_some(),
+        ExprKind::App(f, a) => mentions_meta(f) || mentions_meta(a),
+        ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
+            mentions_meta(ty) || mentions_meta(body)
+        }
+        ExprKind::Let(_, ty, val, body, _) => {
+            mentions_meta(ty) || mentions_meta(val) || mentions_meta(body)
+        }
+        ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
+            mentions_meta(inner)
+        }
+        _ => false,
+    }
+}
+
+/// Fully resolve every part of an equation (expression metavariables and
+/// universe levels) so the structural search downstream sees concrete terms.
+fn resolve_equation(state: &ProofState, eqn: RewriteEquation) -> RewriteEquation {
+    RewriteEquation {
+        pending_args: eqn.pending_args,
+        eq_type: resolve_all(state, &eqn.eq_type),
+        lhs: resolve_all(state, &eqn.lhs),
+        rhs: resolve_all(state, &eqn.rhs),
+        eq_levels: eqn
+            .eq_levels
+            .iter()
+            .map(|l| state.metas.instantiate_level(l))
+            .collect(),
+        proof: resolve_all(state, &eqn.proof),
+    }
+}
+
+/// The rewrite equation carried by an elaborated proof TERM (`rw [e]`,
+/// `rw [e] at h`), oriented as written.
+///
+/// The proof term's type is inferred and every value/universe metavariable
+/// elaboration solved is resolved, so the equality sides are syntactically
+/// concrete for the structural `contains_expr` / `replace_expr` search in
+/// `finish_rewrite` (mirrors the env-constant path's `resolve_all`).
+///
+/// The inferred type is deliberately NOT WHNF-reduced before matching: the
+/// `from` side must stay in the same *syntactic* form carried by the proof's
+/// type (e.g. `dbl n` from `dbl_unfold n : dbl n = n + n`), so it matches a
+/// use of the reducible defined constant in the goal. WHNF would unfold the
+/// `from` side to its δ/ι-normal form and the structural search would then
+/// miss the surface occurrence. WHNF is only a *fallback* when the inferred
+/// type is not already an `@Eq` application at the head (a reducible alias
+/// for `Eq`), after the `Iff`-via-`propext` adaptation.
+///
+/// Metavariables elaboration could NOT solve — a lemma's implicit arguments
+/// fixed only by its statement, `{a} {b}` in
+/// `forall_update_iff f fun a b ↦ ¬p a b` — are solved the way the
+/// environment-constant path solves its peeled binders: the `from` side is
+/// unified against a subterm of `haystack` (the goal target, or the
+/// hypothesis being rewritten). Lean's `rw` gets this from `kabstract`'s
+/// `isDefEq`; the syntactic search alone treated the metavariables as rigid
+/// locals and reported no match (`exists_update_iff`,
+/// `Involutive.leftInverse_iff` in `Mathlib/Logic/Function/Basic.lean`,
+/// measured 2026-09-11). When no subterm unifies the equation is returned
+/// as is, so `finish_rewrite` reports the same `RewriteNoMatch` as before.
+fn term_rewrite_equation(
+    state: &mut ProofState,
+    goal: &Goal,
+    proof: Expr,
+    reverse: bool,
+    haystack: &Expr,
+) -> Result<RewriteEquation, TacticError> {
+    let original_proof = proof;
+    let original_ty = resolve_all(state, &state.infer_type(goal, &original_proof)?);
+    let is_equation = |ty: &Expr| match_equality(ty).is_ok() || match_iff(ty).is_some();
+    let mut proof = original_proof.clone();
+    let mut proof_ty = original_ty.clone();
+    let mut pending_args = Vec::new();
+    // A rule term whose type is a `∀`-telescope over an equation
+    // (`rw [MyInv.comp_eq h]`, `rw [@bar_iff]`) is instantiated with fresh
+    // metavariables first — Lean's `Lean.MVarId.rewrite` runs
+    // `forallMetaTelescopeReducing` on the rule's type; they are solved by the
+    // pattern unification below. The peel is kept only when it ENDS at an
+    // `=`/`↔`: a telescope that does not (a definition unfolded to a `∀`
+    // over a non-equation) is rolled back whole, so no δ-unfolded
+    // metavariable-bearing pattern reaches the unbudgeted unifier.
+    if !is_equation(&proof_ty) {
+        state.metas.push_scope();
+        while !is_equation(&proof_ty) {
+            let whnf = state.whnf(goal, &proof_ty);
+            let ExprKind::Pi(_, domain, codomain) = whnf.kind() else {
+                break;
+            };
+            let meta_id = state.fresh_meta(state.metas.instantiate(domain));
+            pending_args.push(meta_id);
+            let meta = Expr::fvar(MetaState::to_fvar(meta_id));
+            proof = Expr::app(proof, meta.clone());
+            proof_ty = resolve_all(state, &codomain.instantiate(&meta));
+        }
+        if is_equation(&proof_ty) {
+            state.metas.commit();
+        } else {
+            state.metas.pop_scope();
+            proof = original_proof;
+            proof_ty = original_ty;
+            pending_args.clear();
+        }
+    }
     let eqn = match match_equality(&proof_ty) {
         Ok((eq_type, lhs, rhs, eq_levels)) => RewriteEquation {
-            eq_type: resolve_all(state, &eq_type),
-            lhs: resolve_all(state, &lhs),
-            rhs: resolve_all(state, &rhs),
-            eq_levels: eq_levels
-                .iter()
-                .map(|l| state.metas.instantiate_level(l))
-                .collect(),
-            proof: resolve_all(state, &proof),
+            pending_args: Vec::new(),
+            eq_type,
+            lhs,
+            rhs,
+            eq_levels,
+            proof: proof.clone(),
         },
-        Err(eq_err) => {
-            // Not a syntactic `Eq`. Adapt an `Iff` proof via `propext`; otherwise
-            // fall back to WHNF (reducible alias for `Eq`) before giving up.
-            match iff_rewrite_equation(&proof_ty, resolve_all(state, &proof)) {
-                Some(mut eqn) => {
-                    eqn.lhs = resolve_all(state, &eqn.lhs);
-                    eqn.rhs = resolve_all(state, &eqn.rhs);
-                    eqn.proof = resolve_all(state, &eqn.proof);
-                    eqn
-                }
-                None => {
-                    let reduced = resolve_all(state, &state.whnf(&goal, &proof_ty));
-                    let (eq_type, lhs, rhs, eq_levels) =
-                        match_equality(&reduced).map_err(|_| eq_err)?;
-                    RewriteEquation {
-                        eq_type: resolve_all(state, &eq_type),
-                        lhs: resolve_all(state, &lhs),
-                        rhs: resolve_all(state, &rhs),
-                        eq_levels: eq_levels
-                            .iter()
-                            .map(|l| state.metas.instantiate_level(l))
-                            .collect(),
-                        proof: resolve_all(state, &proof),
-                    }
+        Err(eq_err) => match iff_rewrite_equation(&proof_ty, resolve_all(state, &proof)) {
+            Some(eqn) => eqn,
+            None => {
+                let reduced = resolve_all(state, &state.whnf(goal, &proof_ty));
+                let (eq_type, lhs, rhs, eq_levels) =
+                    match_equality(&reduced).map_err(|_| eq_err)?;
+                RewriteEquation {
+                    pending_args: Vec::new(),
+                    eq_type,
+                    lhs,
+                    rhs,
+                    eq_levels,
+                    proof: proof.clone(),
                 }
             }
-        }
+        },
     };
+    let mut eqn = resolve_equation(state, eqn);
+    eqn.pending_args = pending_args;
 
-    finish_rewrite(state, &goal, "<term>", reverse, eqn)
+    let from_pattern = if reverse { &eqn.rhs } else { &eqn.lhs };
+    if mentions_meta(from_pattern) {
+        let from_pattern = from_pattern.clone();
+        let haystack = state.metas.instantiate(haystack);
+        if unify_pattern_with_subterm(state, goal, &from_pattern, &haystack) {
+            return Ok(resolve_equation(state, eqn));
+        }
+    }
+    Ok(eqn)
 }
 
 /// Rewrite within a specific hypothesis using an equality lemma.
@@ -1032,10 +1330,29 @@ pub fn rewrite_with_proof(state: &mut ProofState, proof: Expr, reverse: bool) ->
 /// This follows Lean 4's `MVarId.replaceLocalDecl` pattern.
 pub fn rewrite_at(
     state: &mut ProofState,
-    lemma_name: &str,
-    target_hyp: &str,
+    lemma_name: &clean_parser::SurfaceName,
+    target_hyp: &clean_parser::SurfaceName,
     reverse: bool,
 ) -> TacticResult {
+    let target_fvar = state
+        .current_goal()
+        .ok_or(TacticError::NoGoals)?
+        .local_ctx
+        .iter()
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, target_hyp))
+        .map(|decl| decl.fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(target_hyp.to_string()))?;
+    rewrite_at_fvar(state, lemma_name, target_fvar, reverse).map(|_| ())
+}
+
+/// Rewrite an exact local and return the checked replacement's identity.
+pub(crate) fn rewrite_at_fvar(
+    state: &mut ProofState,
+    lemma_name: &clean_parser::SurfaceName,
+    target_fvar: FVarId,
+    reverse: bool,
+) -> Result<FVarId, TacticError> {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Find the target hypothesis up front so the env-rule path can match the
@@ -1043,10 +1360,16 @@ pub fn rewrite_at(
     let target_idx = goal
         .local_ctx
         .iter()
-        .position(|d| d.name == target_hyp)
-        .ok_or_else(|| TacticError::HypothesisNotFound(target_hyp.to_string()))?;
+        .position(|decl| decl.fvar == target_fvar)
+        .ok_or_else(|| TacticError::InvalidTarget {
+            tactic: "rewrite_at".into(),
+            detail: format!(
+                "hypothesis variable {} is not in the current goal",
+                target_fvar.as_u64()
+            ),
+        })?;
 
-    let target_fvar = goal.local_ctx[target_idx].fvar;
+    let target_hyp = &goal.local_ctx[target_idx].name;
     let old_ty = goal.local_ctx[target_idx].ty.clone();
 
     // `rw [X] at h` where `X` is a DEFINITION whose type is not an equation:
@@ -1070,12 +1393,18 @@ pub fn rewrite_at(
     // location being rewritten), which solves the lemma's quantified
     // metavariables. (#2624 — at-hyp env-lemma resolution.)
     let RewriteEquation {
+        pending_args,
         eq_type,
         lhs,
         rhs,
         eq_levels,
         proof: lemma_proof,
-    } = match goal.local_ctx.iter().find(|d| d.name == lemma_name) {
+    } = match goal
+        .local_ctx
+        .iter()
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, lemma_name))
+    {
         Some(lemma_decl) => {
             // Check that the hypothesis is an equality. If it is an `Iff`, adapt
             // via `propext` and feed the same machinery.
@@ -1101,6 +1430,7 @@ pub fn rewrite_at(
             } else {
                 match match_equality(&lemma_ty) {
                     Ok((eq_type, lhs, rhs, eq_levels)) => RewriteEquation {
+                        pending_args: Vec::new(),
                         eq_type,
                         lhs,
                         rhs,
@@ -1145,7 +1475,7 @@ pub fn rewrite_at(
     } else {
         return Err(TacticError::RewriteNoMatch {
             tactic: "rewrite_at".to_owned(),
-            rule: lemma_name.to_owned(),
+            rule: lemma_name.to_string(),
             direction: if reverse { "backward" } else { "forward" }.to_owned(),
             searched_for: from.to_string(),
             focus: old_ty.to_string(),
@@ -1199,7 +1529,9 @@ pub fn rewrite_at(
         Expr::fvar(target_fvar), // h_old
     );
 
-    state.replace_local_decl_with_cast(target_fvar, new_ty, h_cast)
+    let replacement = state.replace_local_decl_with_cast_fvar(target_fvar, new_ty, h_cast)?;
+    commit_rewrite_argument_goals(state, &goal, pending_args)?;
+    Ok(replacement)
 }
 
 /// `rw [<proof-term>] at h`: rewrite inside hypothesis `target_hyp` by the
@@ -1208,66 +1540,58 @@ pub fn rewrite_at(
 /// analogue of [`rewrite_with_proof`]: it derives the [`RewriteEquation`] from
 /// the proof term (the same `match_equality`/`Iff`-adapt/`whnf`-fallback path)
 /// and then applies [`rewrite_at`]'s `Eq.subst`-cast hypothesis rewrite. Kept as
-/// a self-contained path (not a refactor of `rewrite_at`) so the proven at-goal
-/// and at-hyp env-lemma paths are byte-for-byte unchanged.
+/// a separate equation-derivation path sharing the checked local replacement
+/// boundary with the named-rule entry point.
 pub fn rewrite_at_with_proof(
     state: &mut ProofState,
     proof: Expr,
-    target_hyp: &str,
+    target_hyp: &clean_parser::SurfaceName,
     reverse: bool,
 ) -> TacticResult {
+    let target_fvar = state
+        .current_goal()
+        .ok_or(TacticError::NoGoals)?
+        .local_ctx
+        .iter()
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, target_hyp))
+        .map(|decl| decl.fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(target_hyp.to_string()))?;
+    rewrite_at_fvar_with_proof(state, proof, target_fvar, reverse).map(|_| ())
+}
+
+/// Proof-term rewrite of an exact local, retaining the replacement's identity.
+pub(crate) fn rewrite_at_fvar_with_proof(
+    state: &mut ProofState,
+    proof: Expr,
+    target_fvar: FVarId,
+    reverse: bool,
+) -> Result<FVarId, TacticError> {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target_idx = goal
         .local_ctx
         .iter()
-        .position(|d| d.name == target_hyp)
-        .ok_or_else(|| TacticError::HypothesisNotFound(target_hyp.to_string()))?;
-    let target_fvar = goal.local_ctx[target_idx].fvar;
+        .position(|decl| decl.fvar == target_fvar)
+        .ok_or_else(|| TacticError::InvalidTarget {
+            tactic: "rewrite_at".into(),
+            detail: format!(
+                "hypothesis variable {} is not in the current goal",
+                target_fvar.as_u64()
+            ),
+        })?;
+    let target_hyp = &goal.local_ctx[target_idx].name;
     let old_ty = goal.local_ctx[target_idx].ty.clone();
 
-    // Derive the equation from the proof term (mirrors `rewrite_with_proof`).
-    let proof_ty = resolve_all(state, &state.infer_type(&goal, &proof)?);
+    // Derive the equation from the proof term (shared with `rewrite_with_proof`);
+    // metavariables its elaboration left are solved against the hypothesis.
     let RewriteEquation {
+        pending_args,
         eq_type,
         lhs,
         rhs,
         eq_levels,
         proof: eq_proof_term,
-    } = match match_equality(&proof_ty) {
-        Ok((eq_type, lhs, rhs, eq_levels)) => RewriteEquation {
-            eq_type: resolve_all(state, &eq_type),
-            lhs: resolve_all(state, &lhs),
-            rhs: resolve_all(state, &rhs),
-            eq_levels: eq_levels
-                .iter()
-                .map(|l| state.metas.instantiate_level(l))
-                .collect(),
-            proof: resolve_all(state, &proof),
-        },
-        Err(eq_err) => match iff_rewrite_equation(&proof_ty, resolve_all(state, &proof)) {
-            Some(mut eqn) => {
-                eqn.lhs = resolve_all(state, &eqn.lhs);
-                eqn.rhs = resolve_all(state, &eqn.rhs);
-                eqn.proof = resolve_all(state, &eqn.proof);
-                eqn
-            }
-            None => {
-                let reduced = resolve_all(state, &state.whnf(&goal, &proof_ty));
-                let (eq_type, lhs, rhs, eq_levels) =
-                    match_equality(&reduced).map_err(|_| eq_err)?;
-                RewriteEquation {
-                    eq_type: resolve_all(state, &eq_type),
-                    lhs: resolve_all(state, &lhs),
-                    rhs: resolve_all(state, &rhs),
-                    eq_levels: eq_levels
-                        .iter()
-                        .map(|l| state.metas.instantiate_level(l))
-                        .collect(),
-                    proof: resolve_all(state, &proof),
-                }
-            }
-        },
-    };
+    } = term_rewrite_equation(state, &goal, proof, reverse, &old_ty)?;
 
     // Rewrite the hypothesis by that equation (mirrors `rewrite_at`'s tail).
     let (from, to) = if reverse {
@@ -1322,7 +1646,9 @@ pub fn rewrite_at_with_proof(
         ),
         Expr::fvar(target_fvar),
     );
-    state.replace_local_decl_with_cast(target_fvar, new_ty, h_cast)
+    let replacement = state.replace_local_decl_with_cast_fvar(target_fvar, new_ty, h_cast)?;
+    commit_rewrite_argument_goals(state, &goal, pending_args)?;
+    Ok(replacement)
 }
 
 /// Rewrite the goal by applying a sequence of equality hypotheses.
@@ -1349,7 +1675,7 @@ pub fn rewrite_at_with_proof(
 #[allow(dead_code)] // 2026-08-10: no caller; staged prototype kept per keep-and-annotate doctrine.
 pub(crate) fn rewrite_chain(
     state: &mut ProofState,
-    steps: &[(&str, RewriteDirection)],
+    steps: &[(&clean_parser::SurfaceName, RewriteDirection)],
 ) -> TacticResult {
     for (hyp_name, direction) in steps {
         rewrite(state, hyp_name, direction.is_reverse())?;

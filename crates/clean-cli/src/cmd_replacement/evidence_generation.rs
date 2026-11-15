@@ -130,7 +130,7 @@ pub(crate) fn build_provenance_verdict(
     let Some(built_at) = built_at else {
         return Err(
             "this binary carries no CLEAN_BUILD_GIT_SHA stamp, so it cannot be shown \
-                    to match HEAD; rebuild with `cargo build -p clean --bin clean`"
+                    to match HEAD; rebuild with `targo --unverified build -p clean --bin clean`"
                 .to_string(),
         );
     };
@@ -153,7 +153,7 @@ pub(crate) fn build_provenance_verdict(
     }
     Err(format!(
         "this binary was built at {built_at} but HEAD is {head}; it would describe code \
-         that is not in the tree. Rebuild with `cargo build -p clean --bin clean` and \
+         that is not in the tree. Rebuild with `targo --unverified build -p clean --bin clean` and \
          re-run. (A stale binary once went undetected for 11 days.)"
     ))
 }
@@ -197,8 +197,13 @@ pub(crate) type KernelSoundnessLaneRunner<'a> =
 /// The elaborator soundness gate writes its `soundness_gate: PASS` marker to
 /// stderr, so stdout alone is not enough; this mirrors the `2>&1` redirection
 /// in `scripts/kernel_soundness_gate.sh`.
+///
+/// The lane argvs spell the driver `targo` (owner directive 2026-09-28), as
+/// the two scripts do. Under a running Targo, `$CARGO` names that binary and
+/// replaces the `targo` token; nothing falls back to a stock `cargo`.
 pub(crate) fn run_kernel_soundness_lane_command(argv: &[&'static str]) -> Result<String, String> {
-    let Some((program, args)) = argv.split_first() else {
+    let resolved = resolve_lane_driver(argv, std::env::var_os("CARGO"));
+    let Some((program, args)) = resolved.split_first() else {
         return Err("lane command is empty".to_string());
     };
     let repo_root = repo_artifact_path("Cargo.toml")
@@ -222,6 +227,23 @@ pub(crate) fn run_kernel_soundness_lane_command(argv: &[&'static str]) -> Result
             output.status
         ))
     }
+}
+
+/// `argv` with its `targo` driver token (the first, after any `env VAR=value`
+/// prefix) replaced by `cargo_env` when that is set and non-empty.
+pub(crate) fn resolve_lane_driver(
+    argv: &[&'static str],
+    cargo_env: Option<std::ffi::OsString>,
+) -> Vec<std::ffi::OsString> {
+    let mut out: Vec<std::ffi::OsString> = argv.iter().map(Into::into).collect();
+    let driver_at = argv
+        .iter()
+        .position(|arg| *arg != "env" && !arg.contains('='))
+        .filter(|&at| argv[at] == "targo");
+    if let (Some(at), Some(cargo)) = (driver_at, cargo_env.filter(|c| !c.is_empty())) {
+        out[at] = cargo;
+    }
+    out
 }
 
 /// True when libtest output reports exactly `expected` tests, all passing.

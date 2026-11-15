@@ -49,7 +49,7 @@ pub fn neg_rational(iv: &Interval<Rational64>) -> Interval<Rational64> {
 /// Uses the four-product method: compute all products of endpoints,
 /// take min and max.
 #[must_use]
-pub fn mul_rational(
+pub(crate) fn mul_rational(
     lhs: &Interval<Rational64>,
     rhs: &Interval<Rational64>,
 ) -> Interval<Rational64> {

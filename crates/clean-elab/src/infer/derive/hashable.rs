@@ -105,7 +105,7 @@ impl<'a> ElabCtx<'a> {
         );
 
         Ok(DerivedInstance {
-            name: Name::from_string(&format!("inst{struct_name}Hashable")),
+            name: crate::derive::builtin_instance_name(struct_name, "Hashable"),
             class_name: Name::from_string("Hashable"),
             ty: instance_ty,
             val: instance_val,
@@ -167,7 +167,7 @@ impl<'a> ElabCtx<'a> {
         // `T.casesOn.{1} (fun _ : T => Nat) x minor…` — motive returns
         // `Nat : Sort 1`; Lean-faithful casesOn order: motive, major, minors.
         let motive_u = Level::succ(Level::zero());
-        let cases_on_name = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on_name = ind_name.clone().str("casesOn");
         let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
         let motive = Expr::lam(BinderInfo::Default, ind_type.clone(), nat_ty);
 
@@ -206,7 +206,7 @@ impl<'a> ElabCtx<'a> {
         );
 
         Ok(DerivedInstance {
-            name: Name::from_string(&format!("inst{ind_name}Hashable")),
+            name: crate::derive::builtin_instance_name(ind_name, "Hashable"),
             class_name: Name::from_string("Hashable"),
             ty: instance_ty,
             val: instance_val,
@@ -222,7 +222,7 @@ impl<'a> ElabCtx<'a> {
     fn build_field_hash_call(
         &mut self,
         owner_name: &Name,
-        field_label: &str,
+        field_label: &impl std::fmt::Display,
         field_ty: &Expr,
         value: Expr,
     ) -> Result<Expr, ElabError> {

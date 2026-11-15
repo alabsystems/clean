@@ -301,14 +301,26 @@ impl Environment {
             cur = body.instantiate(&Expr::fvar(fvar_id));
         }
         // Indexed inductives never reach a Sort here — the params-only scope
-        // check and the result-sort extraction are the same walk.
-        let ExprKind::Sort(ind_sort_level) = &cur.kind else {
-            return Err(EnvError::InductiveCodomainNotSort {
-                name: ind_name.clone(),
-                num_params,
-            });
+        // check and the result-sort extraction are the same walk, so a `Pi`
+        // after the parameters stays refused. Any other non-`Sort` codomain
+        // is read up to whnf by the helper every elimination decision reads,
+        // and only when no binder hides behind it (a δ-`Type` family gets its
+        // `noConfusion`, as in Lean).
+        let ind_sort_level = match &cur.kind {
+            ExprKind::Sort(level) => level.clone(),
+            ExprKind::Pi(..) => {
+                return Err(EnvError::InductiveCodomainNotSort {
+                    name: ind_name.clone(),
+                    num_params,
+                })
+            }
+            _ => self
+                .type_former_level_at_arity(&ind_type.type_, decl.num_params)
+                .ok_or_else(|| EnvError::InductiveCodomainNotSort {
+                    name: ind_name.clone(),
+                    num_params,
+                })?,
         };
-        let ind_sort_level = ind_sort_level.clone();
 
         // Per-ctor field data (primary type).
         let mut ctors = Vec::with_capacity(ind_type.constructors.len());
@@ -336,7 +348,7 @@ impl Environment {
             });
         }
 
-        let cases_on_name = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on_name = ind_name.clone().str("casesOn");
         Ok(HeteroInfo {
             result_univ_name,
             level_params,
@@ -521,10 +533,7 @@ impl Environment {
         let ind_const = ind_const_with_levels(ind_name, &decl.level_params);
         let mut nct_levels = vec![result_univ.clone()];
         nct_levels.extend(decl.level_params.iter().map(|p| Level::param(p.clone())));
-        let nct_const = Expr::const_(
-            Name::from_string(&format!("{ind_name}.noConfusionType")),
-            nct_levels,
-        );
+        let nct_const = Expr::const_(ind_name.clone().str("noConfusionType"), nct_levels);
 
         let mut b = EnvDeclBuilder::new();
         // Binder layout: {P} {p…} {t} {p'…} {t'} (h₁)…(hₙ) (h_t).

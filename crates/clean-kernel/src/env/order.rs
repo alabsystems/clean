@@ -187,11 +187,9 @@ impl Environment {
     /// Initialize PartialOrder instance for Nat
     ///
     /// This adds:
-    /// - Nat.le_antisymm : axiom ∀ a b : Nat, Nat.le a b → Nat.le b a → a = b
-    /// - instPartialOrderNat : PartialOrder Nat
-    ///
-    /// Note: Nat.le_antisymm is added as an axiom. The actual proof would require
-    /// induction on Nat.le.
+    /// - Nat.le_antisymm : theorem ∀ a b : Nat, a ≤ b → b ≤ a → a = b
+    /// - instPartialOrderNat : PartialOrder Nat — a Definition,
+    ///   `PartialOrder.mk Nat instPreorderNat Nat.le_antisymm`.
     ///
     /// # Contract
     ///
@@ -217,17 +215,37 @@ impl Environment {
         // PartialOrder caller below. `register_*` is idempotent.
         self.register_nat_le_antisymm_proof()?;
 
-        // instPartialOrderNat : PartialOrder Nat
-        // Axiom — bypasses projection reduction gap (#1488, #1526).
+        // instPartialOrderNat : PartialOrder Nat :=
+        //   PartialOrder.mk Nat instPreorderNat Nat.le_antisymm
+        //
+        // Until 2026-09-29 this was a value-less AXIOM ("bypasses projection
+        // reduction gap #1488, #1526"). The prelude axiom census could not
+        // witness `PartialOrder Nat` inhabited — it asserts an order WITH ITS
+        // LAWS — so it was `debt_inhabitation`
+        // (docs/issues/2026-09-28-prelude-pure-proves-false.md). The gap is
+        // closed: `Nat.le_antisymm` is stated over `@LE.le Nat instLENat`, and
+        // the field's `LE.le Nat (Preorder.toLE Nat instPreorderNat)` reaches
+        // the same instance by δ on `instPreorderNat` and projection of
+        // `Preorder.mk`, which the kernel re-checks here.
         let inst_partial_order_nat_type = Expr::app(
             Expr::const_(Name::from_string("PartialOrder"), vec![Level::zero()]),
             nat_const.clone(),
         );
+        let inst_partial_order_nat_value = Expr::apps(
+            Expr::const_(Name::from_string("PartialOrder.mk"), vec![Level::zero()]),
+            [
+                nat_const.clone(),
+                Expr::const_(Name::from_string("instPreorderNat"), vec![]),
+                Expr::const_(Name::from_string("Nat.le_antisymm"), vec![]),
+            ],
+        );
 
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("instPartialOrderNat"),
             level_params: vec![],
             type_: inst_partial_order_nat_type,
+            value: inst_partial_order_nat_value,
+            is_reducible: false,
         })?;
 
         self.nat_partial_order_init = true;
@@ -282,17 +300,32 @@ impl Environment {
         // idempotent and a no-op if `Nat.le_total` is already present.
         self.register_nat_le_total_proof()?;
 
-        // instLinearOrderNat : LinearOrder Nat
-        // Axiom — bypasses projection reduction gap (#1488, #1526).
+        // instLinearOrderNat : LinearOrder Nat :=
+        //   LinearOrder.mk Nat instPartialOrderNat Nat.le_total
+        //
+        // A value-less AXIOM until 2026-09-29, for the reason given at
+        // `instPartialOrderNat` above; `Nat.le_total`'s `@LE.le Nat instLENat`
+        // meets the field's `LE.le` through `PartialOrder.toPreorder` and
+        // `Preorder.toLE` by δ and projection.
         let inst_linear_order_nat_type = Expr::app(
             Expr::const_(Name::from_string("LinearOrder"), vec![Level::zero()]),
             nat_const.clone(),
         );
+        let inst_linear_order_nat_value = Expr::apps(
+            Expr::const_(Name::from_string("LinearOrder.mk"), vec![Level::zero()]),
+            [
+                nat_const.clone(),
+                Expr::const_(Name::from_string("instPartialOrderNat"), vec![]),
+                Expr::const_(Name::from_string("Nat.le_total"), vec![]),
+            ],
+        );
 
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("instLinearOrderNat"),
             level_params: vec![],
             type_: inst_linear_order_nat_type,
+            value: inst_linear_order_nat_value,
+            is_reducible: false,
         })?;
 
         self.nat_linear_order_init = true;

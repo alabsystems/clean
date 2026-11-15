@@ -141,11 +141,27 @@ fn test_obtain_compound_rhs_term_kernel_accepts() {
     let mut env = setup_logic_env();
     let result = check_and_add_decl(
         &mut env,
-        "theorem obtain_compound_rhs : P := by\n  obtain ⟨a, b⟩ := And.intro P Q hp hq\n  exact a",
+        "theorem obtain_compound_rhs : P := by\n  obtain ⟨a, b⟩ := And.intro hp hq\n  exact a",
     );
     assert!(
         result.is_ok(),
-        "obtain ⟨a, b⟩ := And.intro P Q hp hq then `exact a` should kernel-check, got: {result:?}"
+        "obtain ⟨a, b⟩ := And.intro hp hq then `exact a` should kernel-check, got: {result:?}"
+    );
+}
+
+#[test]
+fn test_obtain_compound_rhs_explicit_implicit_args_refused() {
+    // Negative control: `And.intro`'s `a b` are implicit, so passing them
+    // explicitly over-applies it. Pinned Lean refuses this source.
+    let mut env = setup_logic_env();
+    let err = check_and_add_decl(
+        &mut env,
+        "theorem obtain_compound_rhs_bad : P := by\n  obtain ⟨a, b⟩ := And.intro P Q hp hq\n  exact a",
+    )
+    .expect_err("And.intro P Q hp hq over-applies And.intro and must be refused");
+    assert!(
+        err.contains("Too many arguments"),
+        "expected the over-application refusal, got: {err}"
     );
 }
 

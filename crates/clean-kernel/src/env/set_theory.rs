@@ -21,6 +21,210 @@ use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
 
+/// The bodies of the `Set` operations (KR1 increment 3, `docs/DECISIONS.md`
+/// R143). Until R143 each was a value-less axiom of the right type; each is
+/// now Mathlib's pointwise definition over `Set α := α → Prop`, written in de
+/// Bruijn form and re-checked by the kernel against the unchanged type.
+struct SetOps {
+    u: Level,
+}
+
+impl SetOps {
+    fn new(u: &Level) -> Self {
+        Self { u: u.clone() }
+    }
+
+    fn type_u(&self) -> Expr {
+        Expr::sort(Level::succ(self.u.clone()))
+    }
+
+    fn set(&self, alpha: Expr) -> Expr {
+        Expr::app(
+            Expr::const_(Name::from_string("Set"), vec![self.u.clone()]),
+            alpha,
+        )
+    }
+
+    fn c(name: &str) -> Expr {
+        Expr::const_(Name::from_string(name), vec![])
+    }
+
+    fn bin(name: &str, a: Expr, b: Expr) -> Expr {
+        Expr::apps(Self::c(name), [a, b])
+    }
+
+    fn not(a: Expr) -> Expr {
+        Expr::app(Self::c("Not"), a)
+    }
+
+    /// `@Eq.{u+1} α x y`.
+    fn eq(&self, alpha: Expr, x: Expr, y: Expr) -> Expr {
+        Expr::apps(
+            Expr::const_(Name::from_string("Eq"), vec![Level::succ(self.u.clone())]),
+            [alpha, x, y],
+        )
+    }
+
+    /// `fun {α : Type u} => body`.
+    fn over_alpha(&self, body: Expr) -> Expr {
+        Expr::lam(BinderInfo::Implicit, self.type_u(), body)
+    }
+
+    /// `fun {α} (s : Set α) (a : α) => s a`.
+    fn mem(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            self.set(Expr::bvar(0)),
+            Expr::lam(
+                BinderInfo::Default,
+                Expr::bvar(1),
+                Expr::app(Expr::bvar(1), Expr::bvar(0)),
+            ),
+        ))
+    }
+
+    /// `fun {α} (p : α → Prop) => p`.
+    fn set_of(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            Expr::pi(BinderInfo::Default, Expr::bvar(0), Expr::prop()),
+            Expr::bvar(0),
+        ))
+    }
+
+    /// `fun {α} (s t : Set α) (a : α) => body`, `s` = `#2`, `t` = `#1`,
+    /// `a` = `#0` inside `body`.
+    fn binop(&self, body: Expr) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            self.set(Expr::bvar(0)),
+            Expr::lam(
+                BinderInfo::Default,
+                self.set(Expr::bvar(1)),
+                Expr::lam(BinderInfo::Default, Expr::bvar(2), body),
+            ),
+        ))
+    }
+
+    fn s_a() -> Expr {
+        Expr::app(Expr::bvar(2), Expr::bvar(0))
+    }
+
+    fn t_a() -> Expr {
+        Expr::app(Expr::bvar(1), Expr::bvar(0))
+    }
+
+    /// `s a ∨ t a`.
+    fn union(&self) -> Expr {
+        self.binop(Self::bin("Or", Self::s_a(), Self::t_a()))
+    }
+
+    /// `s a ∧ t a`.
+    fn inter(&self) -> Expr {
+        self.binop(Self::bin("And", Self::s_a(), Self::t_a()))
+    }
+
+    /// `s a ∧ ¬ t a`.
+    fn diff(&self) -> Expr {
+        self.binop(Self::bin("And", Self::s_a(), Self::not(Self::t_a())))
+    }
+
+    /// `(s a ∧ ¬ t a) ∨ (t a ∧ ¬ s a)`: Mathlib's `s ∆ t = (s \ t) ∪ (t \ s)`.
+    fn symm_diff(&self) -> Expr {
+        self.binop(Self::bin(
+            "Or",
+            Self::bin("And", Self::s_a(), Self::not(Self::t_a())),
+            Self::bin("And", Self::t_a(), Self::not(Self::s_a())),
+        ))
+    }
+
+    /// `fun {α} (s : Set α) (a : α) => ¬ s a`.
+    fn compl(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            self.set(Expr::bvar(0)),
+            Expr::lam(
+                BinderInfo::Default,
+                Expr::bvar(1),
+                Self::not(Expr::app(Expr::bvar(1), Expr::bvar(0))),
+            ),
+        ))
+    }
+
+    /// `fun {α} (a : α) => False`.
+    fn empty(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            Expr::bvar(0),
+            Self::c("False"),
+        ))
+    }
+
+    /// `fun {α} (a : α) => True`.
+    fn univ(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            Expr::bvar(0),
+            Self::c("True"),
+        ))
+    }
+
+    /// `fun {α} (x a : α) => a = x` (Mathlib: `{a | a = x}`).
+    fn singleton(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            Expr::bvar(0),
+            Expr::lam(
+                BinderInfo::Default,
+                Expr::bvar(1),
+                self.eq(Expr::bvar(2), Expr::bvar(0), Expr::bvar(1)),
+            ),
+        ))
+    }
+
+    /// `fun {α} (x : α) (s : Set α) (a : α) => a = x ∨ s a`.
+    fn insert(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            Expr::bvar(0),
+            Expr::lam(
+                BinderInfo::Default,
+                self.set(Expr::bvar(1)),
+                Expr::lam(
+                    BinderInfo::Default,
+                    Expr::bvar(2),
+                    Self::bin(
+                        "Or",
+                        self.eq(Expr::bvar(3), Expr::bvar(0), Expr::bvar(2)),
+                        Expr::app(Expr::bvar(1), Expr::bvar(0)),
+                    ),
+                ),
+            ),
+        ))
+    }
+
+    /// `fun {α} (s t : Set α) => ∀ ⦃a : α⦄, s a → t a`.
+    fn subset(&self) -> Expr {
+        self.over_alpha(Expr::lam(
+            BinderInfo::Default,
+            self.set(Expr::bvar(0)),
+            Expr::lam(
+                BinderInfo::Default,
+                self.set(Expr::bvar(1)),
+                Expr::pi(
+                    BinderInfo::StrictImplicit,
+                    Expr::bvar(2),
+                    Expr::pi(
+                        BinderInfo::Default,
+                        Expr::app(Expr::bvar(2), Expr::bvar(0)),
+                        Expr::app(Expr::bvar(2), Expr::bvar(1)),
+                    ),
+                ),
+            ),
+        ))
+    }
+}
+
 impl Environment {
     /// Initialize Set Theory module
     ///
@@ -316,6 +520,11 @@ impl Environment {
         }
 
         self.init_eq()?;
+        // The connectives the set operations below are defined with (KR1
+        // increment 3, R143): each initializer is idempotent.
+        self.init_true_false()?;
+        self.init_and()?;
+        self.init_or()?;
 
         let u = Name::from_string("u");
         let v = Name::from_string("v");
@@ -564,10 +773,15 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
+        // KR1 increment 3 (R143): a definition, as Mathlib's
+        // `def Set.Mem (s : Set α) (a : α) : Prop := s a`, no longer an axiom.
+        let ops = SetOps::new(&u_level);
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("Set.mem"),
             level_params: vec![u.clone()],
             type_: set_mem_type,
+            value: ops.mem(),
+            is_reducible: false,
         })?;
 
         // ================================================================
@@ -646,10 +860,13 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
+        // Mathlib: `def setOf {α : Type u} (p : α → Prop) : Set α := p`.
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("setOf"),
             level_params: vec![u.clone()],
             type_: setof_type,
+            value: ops.set_of(),
+            is_reducible: false,
         })?;
 
         // ================================================================
@@ -669,11 +886,20 @@ impl Environment {
             b.finish(e)
         };
 
-        for name in &["Set.union", "Set.inter", "Set.diff", "Set.symmDiff"] {
-            self.add_decl(Declaration::Axiom {
+        // Mathlib's pointwise definitions (`{a | a ∈ s ∨ a ∈ t}`, …), each
+        // unfolded to the predicate it denotes.
+        for (name, value) in [
+            ("Set.union", ops.union()),
+            ("Set.inter", ops.inter()),
+            ("Set.diff", ops.diff()),
+            ("Set.symmDiff", ops.symm_diff()),
+        ] {
+            self.add_decl(Declaration::Definition {
                 name: Name::from_string(name),
                 level_params: vec![u.clone()],
                 type_: set_binop_type.clone(),
+                value,
+                is_reducible: false,
             })?;
         }
 
@@ -689,10 +915,12 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("Set.compl"),
             level_params: vec![u.clone()],
             type_: set_compl_type,
+            value: ops.compl(),
+            is_reducible: false,
         })?;
 
         // ================================================================
@@ -706,19 +934,23 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("Set.empty"),
             level_params: vec![u.clone()],
             type_: set_empty_type.clone(),
+            value: ops.empty(),
+            is_reducible: false,
         })?;
 
         // ================================================================
         // Set.univ : {α : Type u} → Set α
         // ================================================================
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("Set.univ"),
             level_params: vec![u.clone()],
             type_: set_empty_type.clone(),
+            value: ops.univ(),
+            is_reducible: false,
         })?;
 
         // ================================================================
@@ -734,10 +966,12 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("Set.singleton"),
             level_params: vec![u.clone()],
             type_: set_singleton_type,
+            value: ops.singleton(),
+            is_reducible: false,
         })?;
 
         // ================================================================
@@ -756,10 +990,12 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("Set.insert"),
             level_params: vec![u.clone()],
             type_: set_insert_type,
+            value: ops.insert(),
+            is_reducible: false,
         })?;
 
         // ================================================================
@@ -778,10 +1014,12 @@ impl Environment {
             b.finish(e)
         };
 
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("Set.Subset"),
             level_params: vec![u.clone()],
             type_: set_subset_type,
+            value: ops.subset(),
+            is_reducible: false,
         })?;
 
         self.set_init = true;

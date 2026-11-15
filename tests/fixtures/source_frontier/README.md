@@ -121,8 +121,8 @@ this box carries other lanes.
 |---|---|---|
 | `p19_control_two_carriers_selected` | 1 pass | **selection.** Two alias locals at different carriers; each `if` takes its OWN dictionary and survives the kernel re-check. A "grab the first local you can name" implementation would emit an ill-typed term here |
 | `p20_wrong_carrier_refused_MUST_FAIL` | 0 pass / 1 fail | **refusal.** A `[DecidableEq α]` local is NOT grabbed for a `Decidable (b = b)` goal at an unrelated `β`, and the pre-existing diagnostic is unchanged. p19 alone would be satisfied by "grab any local"; p20 alone by "grab nothing" |
-| `p21_control_global_beats_telescoped_local` | 10 pass | **ambiguity.** Half 1: a telescoped local IS a viable candidate for `MyE Nat` (without this, half 2 is vacuous). Half 2: at a class that also has a global instance, the GLOBAL still wins — measured by an `rfl` that closes only on the global |
-| `p22_undetermined_binder_refused_MUST_FAIL` | 3 pass / 1 fail | **hygiene.** A telescope binder the goal does not determine is refused, not emitted as `h ?x`. An unassigned metavariable is a tagged free variable and would surface far away as the kernel's "Declaration contains free variables" |
+| `p21_control_local_beats_global` | 10 pass | **ambiguity.** Half 1: a telescoped local IS a viable candidate for `MyE Nat` (without this, half 2 is vacuous). Half 2: at a class that also has a global instance, the LOCAL dictionary wins — measured by an `rfl` against that exact dictionary field |
+| `p22_undetermined_binder_refused_MUST_FAIL` | 3 pass / 1 fail | **hygiene in an ordinary instance lambda.** A telescope binder the goal does not determine is refused, not emitted as `h ?x`. An unassigned metavariable is a tagged free variable and would surface far away as the kernel's "Declaration contains free variables" |
 | `p23_control_telescoped_local_no_bridge` | 4 pass | **the general capability**, with the hand-written `Decidable`/`Eq` bridge out of the picture: a user-declared class and `def`-based alias, conclusion matched under the telescope, term returned APPLIED |
 
 **What stage I-1 does NOT claim.** Nothing about the 34 corpus entries. They
@@ -170,6 +170,9 @@ conclusion's search, which is a separate increment with its own argument.
 | `p24_goal_side_telescope_no_bridge` | **10 pass** (was 8/2) | **the general capability**, with the hand-written `Decidable`/`Eq` bridge out of the picture — p18 and p09 both run through it. User-declared class, alias and global instance. `depUse` adds a DEPENDENT telescope (`(x : α) → (y : x = x) → …`) whose second binder type mentions the first binder: it kernel-checks only if abstraction reaches into binder types, not just the conclusion. In-file control `bodyIsSolvable` was passing before and after |
 | `p25_goal_side_arbitrary_argument_MUST_FAIL` | 5 pass / 1 fail | **refusal — arbitrary argument.** The only instance covers `MyD (true = true)`; generalising it to `fun x y => trueMyD` must not happen. Byte-identical before and after the stage. Its in-file control `bodyAtTrue` resolves that one argument, so this is not "the instance is unreachable" |
 | `p26_goal_telescope_arity_cap_MUST_FAIL` | 7 pass / 1 fail | **refusal — arity.** Nine binders exceeds `MAX_GOAL_TELESCOPE` and the goal is refused whole. Its in-file control `useNarrow` — same alias shape, two binders — flipped to PASS with this stage, so what is refused is the arity and nothing else |
+| `p27_goal_side_candidate_subgoal` | **9 pass** (was 8/1 before 2026-09-10) | **the same telescope, one level DOWN**: `Pi.hasLe' : [∀ i, LE (π i)] → LE (∀ i, π i)` with only `[∀ i, Pre (π i)]` in scope (`Pre extends LE`), so the candidate's premise is `fun i => Pre.toLE` and has to be built under the candidate. A `depth == 0` guard on `resolve_pi_goal_by_abstraction` (307dc1afb, 2026-08-28) refused that; Lean's `SynthInstance.tryResolve` opens every sub-goal's telescope, at any depth. Retired 2026-09-10 — the five `Mathlib/Order/Basic.lean` regressions in `srcelab-2026-09-02-ge0b3ef7dd.json` were this guard. Six in-file controls, each one link of the chain, pass before and after; p25/p26 still refuse |
+| `p28_class_typed_local_is_an_instance` | **6 pass** (was 2/4 before 2026-09-10) | **the local side**: a local is an instance because of its TYPE, not its brackets (Lean's `withNewLocalInstances` is keyed on `isClass?`). `{_ : Cls α}`, `{inst : Cls α}` and `(h : Cls α)` now count like `[Cls α]`; every push site used to test `BinderInfo::InstImplicit` only. Control `viaInst` is the bracket spelling, passing throughout. Mathlib's `uniqueElim_default {_ : Unique ι}` is this shape |
+| `p29_rfl_closes_iff_and_heq` | **6 pass** (was 2/4 before 2026-09-10) | **`rfl` on every `@[refl]` relation**: `Iff.refl`/`Iff.rfl` and `HEq.refl` beside `Eq.refl`, dispatched on the goal's head as Lean's `rfl` does. Clean applied `Eq.refl` to an `Iff` goal and reported `rigid head/arity mismatch: Eq vs Iff` — the failure `Pi.preorder`'s autoParam script `by intros; rfl` hit on `Mathlib/Order/Basic.lean`. Controls `eqRfl` and `iffExact` pass throughout |
 
 **What stage I-2 does NOT claim.** The same rule as I-1: no corpus count. The
 before/after here is the 25 builtin-prelude probes of this family, mutation-proved
@@ -200,3 +203,20 @@ identifier means either touching the five `TooManyArguments` raise sites or
 refusing the auto-bind — and refusing it changes which declarations elaborate,
 which a stage-0 instrument may not do. That repair is now a well-specified
 follow-on with a committed trigger, which it did not have before.
+
+## Source preconditions repaired 2026-11-06
+
+The dated source audit retains every original fixture and both actual Lean
+versions' decisions. Ordinary definition aliases in bracketed headers were
+invalid Lean source; their replacements are explicitly reducible. Explicit
+class field parameters are supplied. p21 now asserts Lean's actual local
+precedence and retains the old wrong-global equality as a rejected control in
+the audit. p22 reaches synthesis inside a term instance lambda; declaration
+header annotation checks stay enabled. p24's dependent conclusion now mentions
+its proof parameter, with a Sort-polymorphic reflexive instance. p26's two/nine
+parameters all occur forward; both Lean versions accept the wide case, while
+Clean retains its documented cap refusal. p27 uses Type _ and keeps bare
+Pre.toLE. Historical measurements above belong to their original source bytes.
+The registered39 assertions, exact counts and refusal fragments are unchanged;
+its two registered mutation arms must be replayed for these inputs. This battery
+has no Mathlib corpus count and supplies no full replacement claim.

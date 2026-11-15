@@ -98,12 +98,10 @@ impl EmConsts {
         }
     }
 
-    /// `Not p := p → False`.
-    fn not(&self, b: &EnvDeclBuilder, p: Expr) -> Expr {
-        let mut c = EnvDeclBuilder::child_of(b);
-        let (x_id, _) = c.fresh_local(p.clone());
-        let r = c.mk_pi(x_id, BinderInfo::Default, p, self.false_.clone());
-        c.finish_child(r)
+    /// `¬p`, with the `Not` head as Lean states `Classical.em` and
+    /// `Classical.byContradiction` (`Not p` unfolds to `p → False`).
+    fn not(&self, _b: &EnvDeclBuilder, p: Expr) -> Expr {
+        Expr::app(Expr::const_(Name::from_string("Not"), vec![]), p)
     }
 
     /// `Or a b`.

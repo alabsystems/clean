@@ -16,7 +16,17 @@ use crate::error::{LakeError, LakeResult};
 /// not here — write the SAME value the library scaffold writes. A second
 /// spelling in the CLI is how the two `init` implementations drifted apart in
 /// the first place.
-pub const DEFAULT_CLEAN_TOOLCHAIN: &str = "clean:stable\n";
+///
+/// The spelling is chosen for what elan does with it (plan item
+/// `devsurface-lake-env-no-silent-lean`): the bare name `clean` is a custom
+/// toolchain when one is linked (`elan toolchain link clean <dir>`) and
+/// otherwise the Lean release `clean`, which does not exist, so `lean` or
+/// `lake` run through elan in the project fails loudly. The old `clean:stable`
+/// is outside elan's name grammar, and elan 4.2.1 skipped such a file and ran
+/// its default Lean toolchain with no message. The measurement is
+/// `reports/lake-new-elan-toolchain-2026-10-25/`, pinned by
+/// `test_default_toolchain_matches_the_measured_elan_probe`.
+pub const DEFAULT_CLEAN_TOOLCHAIN: &str = "clean\n";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct LoadedToolchain {
@@ -235,5 +245,163 @@ mod tests {
         let version = resolve_toolchain_version("leanprover/lean4:stable", &available);
 
         assert!(version.is_none());
+    }
+
+    #[test]
+    fn test_resolve_toolchain_version_bare_clean_never_resolves_to_lean4() {
+        let available = vec![
+            "v4.29.1".to_string(),
+            "v4.30.0-rc2".to_string(),
+            "nightly-2026-04-21".to_string(),
+        ];
+        assert!(resolve_toolchain_version("clean", &available).is_none());
+        assert!(resolve_toolchain_version("clean", &[]).is_none());
+    }
+
+    /// elan's name lookup, read from its source at v4.2.1 and v4.2.4
+    /// (`src/elan/toolchain.rs`, `lookup_unresolved_toolchain_desc`;
+    /// `src/elan-dist/src/dist.rs`, `ToolchainDesc::from_resolved_str`), which
+    /// agree for every name below. A name outside the grammar
+    /// `^(?:owner/repo:)?[a-zA-Z0-9-.]+$` is unparseable, and elan 4.2.1 skips an
+    /// unparseable `lean-toolchain` and falls back to its default toolchain
+    /// (`clean:stable` did exactly that). The names `stable`, `beta`, `nightly`
+    /// and `lean-toolchain` are channels, which fall back to an installed
+    /// toolchain when the release query fails. A version-shaped name names a
+    /// real Lean release. Any name is first tried as a path relative to the
+    /// project (`try_parse_path_toolchain`), used only when
+    /// `<project>/<name>/bin/lean` is a file. Otherwise a bare name in the
+    /// grammar is a linked custom toolchain when one exists and else the
+    /// release `leanprover/lean4:<name>`, which is only installed by
+    /// downloading it. This model explains the spelling; the measurement is
+    /// [`test_default_toolchain_matches_the_measured_elan_probe`].
+    #[test]
+    fn test_default_toolchain_is_a_bare_elan_name_not_a_channel_path_or_version() {
+        let name = super::DEFAULT_CLEAN_TOOLCHAIN
+            .strip_suffix('\n')
+            .expect("the scaffold toolchain is one newline-terminated line");
+        assert!(
+            !name.is_empty()
+                && name
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.'),
+            "`{name}` is outside elan's bare-name grammar; elan 4.2.1 would skip the \
+             file and fall back to its default toolchain"
+        );
+        assert!(
+            !["stable", "beta", "nightly", "lean-toolchain"].contains(&name),
+            "`{name}` is an elan channel, which falls back to an installed toolchain offline"
+        );
+        assert!(
+            !name.starts_with("nightly")
+                && !name.starts_with(|c: char| c.is_ascii_digit())
+                && super::parse_semver(name).is_none(),
+            "`{name}` is shaped like a Lean release"
+        );
+    }
+
+    /// The committed measurement of what real elan does in a `clean lake new`
+    /// project (`scripts/probe_lake_new_elan_toolchain.py`, run sealed with a
+    /// dead proxy). Changing the scaffold spelling without re-measuring fails
+    /// here.
+    const ELAN_PROBE_REPORT: &str = "reports/lake-new-elan-toolchain-2026-10-25/offline-fixed.json";
+
+    fn elan_version(run: &serde_json::Value) -> (u64, u64, u64) {
+        let text = run["elan_version"]
+            .as_str()
+            .expect("elan_version is a string");
+        let number = text
+            .strip_prefix("elan ")
+            .and_then(|rest| rest.split_whitespace().next())
+            .unwrap_or_else(|| panic!("unexpected elan version line `{text}`"));
+        let parts: Vec<u64> = number
+            .split('.')
+            .map(|p| p.parse().expect("numeric elan version part"))
+            .collect();
+        assert_eq!(
+            parts.len(),
+            3,
+            "elan version `{number}` is major.minor.patch"
+        );
+        (parts[0], parts[1], parts[2])
+    }
+
+    fn fired(case: &serde_json::Value, key: &str) -> bool {
+        case["steps"]
+            .as_array()
+            .expect("steps")
+            .iter()
+            .any(|s| s[key].as_bool().expect("a sentinel flag"))
+    }
+
+    #[test]
+    fn test_default_toolchain_matches_the_measured_elan_probe() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let raw = fs::read_to_string(root.join(ELAN_PROBE_REPORT))
+            .unwrap_or_else(|e| panic!("read {ELAN_PROBE_REPORT}: {e}"));
+        let report: serde_json::Value = serde_json::from_str(&raw).expect("probe report is JSON");
+        let runs = report["runs"].as_array().expect("report has runs");
+        let mut versions = Vec::new();
+        for run in runs {
+            let version = elan_version(run);
+            versions.push(version);
+            let cases = run["cases"].as_array().expect("run has cases");
+            assert_eq!(cases.len(), 4, "four cases per elan: {version:?}");
+            for case in cases {
+                let verdict = case["verdict"].as_str().expect("verdict");
+                match case["case"].as_str().expect("case name") {
+                    "clean lake new" => {
+                        assert_eq!(
+                            case["lean_toolchain"].as_str(),
+                            Some(super::DEFAULT_CLEAN_TOOLCHAIN),
+                            "the report measured a different spelling than the scaffold writes"
+                        );
+                        assert_eq!(verdict, "refused", "elan {version:?}");
+                        assert!(
+                            !fired(case, "sentinel_fired"),
+                            "elan {version:?} ran the fake leanprover lean"
+                        );
+                    }
+                    "legacy clean:stable" => {
+                        // The defect this spelling replaced: 4.2.1 falls back
+                        // silently, 4.2.2 and later refuse the name.
+                        let expected = if version < (4, 2, 2) {
+                            "ran-leanprover"
+                        } else {
+                            "refused"
+                        };
+                        assert_eq!(verdict, expected, "legacy spelling under {version:?}");
+                    }
+                    "positive control" => {
+                        assert_eq!(verdict, "ran-leanprover", "harness blind at {version:?}");
+                        assert!(
+                            fired(case, "sentinel_fired"),
+                            "the control's sentinel fired"
+                        );
+                    }
+                    "linked clean" => {
+                        // `elan toolchain link clean <dir>` is how a user
+                        // points the scaffold's name at a Clean shim.
+                        assert_eq!(
+                            case["lean_toolchain"].as_str(),
+                            Some(super::DEFAULT_CLEAN_TOOLCHAIN)
+                        );
+                        assert_eq!(verdict, "ran-linked", "elan {version:?}");
+                        assert!(!fired(case, "sentinel_fired"), "elan {version:?}");
+                    }
+                    other => panic!("unknown probe case `{other}`"),
+                }
+            }
+        }
+        for needed in [(4, 2, 1), (4, 2, 2)] {
+            assert!(
+                versions.contains(&needed),
+                "the probe covers elan {needed:?}, the last silent fallback and the first \
+                 refusal of an unparseable name: {versions:?}"
+            );
+        }
+        assert!(
+            versions.iter().any(|v| *v >= (4, 2, 3)),
+            "the probe covers an elan at or after 4.2.3: {versions:?}"
+        );
     }
 }

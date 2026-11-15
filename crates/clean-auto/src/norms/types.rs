@@ -139,7 +139,7 @@ impl<T> Matrix<T> {
     }
 
     /// Iterator over row slices. Returns an empty iterator for 0x0 matrices.
-    pub fn row_iter(&self) -> impl Iterator<Item = &[T]> {
+    pub(crate) fn row_iter(&self) -> impl Iterator<Item = &[T]> {
         // chunks(0) panics, so guard against zero-column matrices.
         if self.cols == 0 {
             // Return an empty chunks iterator by slicing an empty range.

@@ -128,14 +128,22 @@ fn uint32_field_code_point(e: &Expr) -> Option<u64> {
     if let ExprKind::Const(name, _) = head.kind() {
         let s = name.to_string();
         match s.as_str() {
-            // UInt32.ofBitVec b  ->  recurse into b (the BitVec)
-            // BitVec.ofFin f     ->  recurse into f (the Fin)
-            "UInt32.ofBitVec" | "BitVec.ofFin" => {
+            // UInt32.ofBitVec b  ->  recurse into b (the BitVec; no implicit args)
+            "UInt32.ofBitVec" => {
                 return args.first().and_then(|a| uint32_field_code_point(a));
             }
-            // Fin.mk val isLt: the code point is the first explicit Nat argument.
+            // `@BitVec.ofFin {w} f` -> recurse into f, spine index 1. Index 0 is
+            // the WIDTH: reading it made every `BitVec.ofFin 32 ⟨65, _⟩` with a
+            // bare-literal width a code point of 32 (a wrong value from a native
+            // reducer, fixed 2026-09-26 with the fold-authority audit; the same
+            // index `get_uint_ctor_val` in `native_reducers_uint.rs` reads).
+            "BitVec.ofFin" => {
+                return args.get(1).and_then(|a| uint32_field_code_point(a));
+            }
+            // `@Fin.mk {n} val isLt`: the value is spine index 1; index 0 is the
+            // BOUND `n` (the same wrong-value shape as `BitVec.ofFin` above).
             "Fin.mk" => {
-                return args.first().and_then(|a| get_nat_val(a));
+                return args.get(1).and_then(|a| get_nat_val(a));
             }
             // BitVec.ofNat w n  /  BitVec.ofNatLT {w} n h: the code point is at arg
             // index 1 (AFTER the width). `BitVec.ofNatLT {w} (i : Nat) (p)` carries
@@ -262,13 +270,39 @@ pub(crate) fn reduce_char_dec_le(_args: &[&Expr]) -> Option<Expr> {
     None
 }
 
-/// Native reducer for `Char.isAlpha : Char → Bool`.
+// ── Lean's `Char` classifiers and case maps are ASCII-ONLY ──────────────────
+//
+// Transcribed from Lean v4.30.0-rc2 `src/Init/Data/Char/Basic.lean`:
+//
+//     def isWhitespace (c : Char) : Bool := c = ' ' || c = '\t' || c = '\r' || c = '\n'
+//     def isUpper (c : Char) : Bool := c.val ≥ 'A'.val ∧ c.val ≤ 'Z'.val
+//     def isLower (c : Char) : Bool := c.val ≥ 'a'.val && c.val ≤ 'z'.val
+//     def isAlpha (c : Char) : Bool := c.isUpper || c.isLower
+//     def toLower (c : Char) : Char :=
+//       if h : c.val ≥ 'A'.val ∧ c.val ≤ 'Z'.val then ⟨c.val + ('a'.val - 'A'.val), ?_⟩ else c
+//     def toUpper (c : Char) : Char :=
+//       if h : 'a'.val ≤ c.val ∧ c.val ≤ 'z'.val then ⟨c.val + ('A'.val - 'a'.val), ?_⟩ else c
+//
+// (`'A'.val - 'a'.val` wraps in `UInt32`; adding it is subtracting 32.)
+//
+// These six reducers used Rust's UNICODE predicates (`is_alphabetic`,
+// `is_whitespace`, `is_lowercase`, `is_uppercase`, `to_lowercase`,
+// `to_uppercase`), which answer differently from Lean on every non-ASCII letter
+// — `'é'.toUpper` is `'é'` in Lean and was `'É'` here — and, for
+// `isWhitespace`, inside ASCII too: Rust counts U+000B and U+000C, Lean's list
+// is exactly space, tab, CR, LF. A reducer is keyed on the NAME, so under olean
+// import it fires on Lean's own `Char.toUpper` and would overrule Lean's body
+// with a value Lean's kernel rejects. They are pinned against an independent
+// model of the definitions above by
+// `test_char_reducers_are_ascii_only_like_lean`.
+
+/// Native reducer for `Char.isAlpha : Char → Bool` (ASCII letters only).
 pub(crate) fn reduce_char_is_alpha(args: &[&Expr]) -> Option<Expr> {
     if args.is_empty() {
         return None;
     }
     let c = get_char_val(args[0])?;
-    Some(mk_bool_expr(c.is_alphabetic()))
+    Some(mk_bool_expr(c.is_ascii_alphabetic()))
 }
 
 /// Native reducer for `Char.isDigit : Char → Bool`.
@@ -287,7 +321,8 @@ pub(crate) fn reduce_char_is_whitespace(args: &[&Expr]) -> Option<Expr> {
         return None;
     }
     let c = get_char_val(args[0])?;
-    Some(mk_bool_expr(c.is_whitespace()))
+    // Exactly Lean's four. NOT `is_ascii_whitespace`, which also admits U+000C.
+    Some(mk_bool_expr(matches!(c, ' ' | '\t' | '\r' | '\n')))
 }
 
 /// Native reducer for `Char.isLower : Char → Bool`.
@@ -296,7 +331,7 @@ pub(crate) fn reduce_char_is_lower(args: &[&Expr]) -> Option<Expr> {
         return None;
     }
     let c = get_char_val(args[0])?;
-    Some(mk_bool_expr(c.is_lowercase()))
+    Some(mk_bool_expr(c.is_ascii_lowercase()))
 }
 
 /// Native reducer for `Char.isUpper : Char → Bool`.
@@ -305,7 +340,7 @@ pub(crate) fn reduce_char_is_upper(args: &[&Expr]) -> Option<Expr> {
         return None;
     }
     let c = get_char_val(args[0])?;
-    Some(mk_bool_expr(c.is_uppercase()))
+    Some(mk_bool_expr(c.is_ascii_uppercase()))
 }
 
 /// Native reducer for `Char.toLower : Char → Char`.
@@ -314,14 +349,9 @@ pub(crate) fn reduce_char_to_lower(args: &[&Expr]) -> Option<Expr> {
         return None;
     }
     let c = get_char_val(args[0])?;
-    // Lean 4 Char.toLower maps to a single char. For simplicity, use ASCII toLower.
-    // Full Unicode lowercasing can produce multiple characters (which doesn't fit Char).
-    let lower = if c.is_ascii() {
-        c.to_ascii_lowercase()
-    } else {
-        c.to_lowercase().next().unwrap_or(c)
-    };
-    Some(mk_char_expr(lower))
+    // `to_ascii_lowercase` maps 'A'..='Z' and is the identity on everything
+    // else, non-ASCII included — Lean's definition exactly.
+    Some(mk_char_expr(c.to_ascii_lowercase()))
 }
 
 /// Native reducer for `Char.toUpper : Char → Char`.
@@ -330,12 +360,9 @@ pub(crate) fn reduce_char_to_upper(args: &[&Expr]) -> Option<Expr> {
         return None;
     }
     let c = get_char_val(args[0])?;
-    let upper = if c.is_ascii() {
-        c.to_ascii_uppercase()
-    } else {
-        c.to_uppercase().next().unwrap_or(c)
-    };
-    Some(mk_char_expr(upper))
+    // `to_ascii_uppercase` maps 'a'..='z' and is the identity on everything
+    // else, non-ASCII included — Lean's definition exactly.
+    Some(mk_char_expr(c.to_ascii_uppercase()))
 }
 
 /// Register all Char native reducers on the environment.

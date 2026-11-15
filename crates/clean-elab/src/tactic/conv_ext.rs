@@ -11,8 +11,10 @@
 //! - `conv_change` - Replace the focused expression with a definitionally equal one
 //! - `eval_conv` - Programmatic entry point for conv tactic mode
 
+use super::pattern::names::require_binding_name;
 use clean_kernel::expr::ExprKind;
 use clean_kernel::Expr;
+use clean_parser::SurfaceName;
 
 use super::conv::ConvState;
 use super::core::{ConvFocus, ConvNav};
@@ -31,13 +33,14 @@ use super::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 /// `var_name` with the binder's domain type
 ///
 /// ENSURES: on Err, proof state is unchanged
-pub fn conv_ext(state: &mut ProofState, var_name: &str) -> TacticResult {
+pub fn conv_ext(state: &mut ProofState, var_name: &SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    require_binding_name(var_name, "conv ext")?;
     let target = state.metas.instantiate(&goal.target);
 
-    let (binder_ty, body) = match target.kind() {
-        ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-            ((**ty).clone(), (**body).clone())
+    let (binder_info, binder_ty, body) = match target.kind() {
+        ExprKind::Lam(bi, ty, body) | ExprKind::Pi(bi, ty, body) => {
+            (*bi, (**ty).clone(), (**body).clone())
         }
         _ => {
             return Err(TacticError::InvalidTarget {
@@ -57,7 +60,8 @@ pub fn conv_ext(state: &mut ProofState, var_name: &str) -> TacticResult {
     // Add the new variable to the local context
     let mut new_local_ctx = goal.local_ctx.clone();
     new_local_ctx.push(LocalDecl {
-        name: var_name.to_string(),
+        binder_info,
+        name: var_name.clone(),
         fvar: fvar_id,
         ty: binder_ty,
         value: None,
@@ -73,6 +77,7 @@ pub fn conv_ext(state: &mut ProofState, var_name: &str) -> TacticResult {
         meta_id: scratch_meta_id,
         target: opened_body,
         local_ctx: new_local_ctx,
+        case_binders: goal.case_binders.clone(),
         tag: goal.tag,
     });
 
@@ -335,7 +340,7 @@ pub fn conv_change(state: &mut ProofState, new_focus: Expr) -> TacticResult {
 /// ```text
 /// eval_conv(&mut state, |ps| {
 ///     conv_lhs_nav(ps)?;   // focus on LHS
-///     conv_rw(ps, vec![], "h", false)?;  // rewrite at focus
+///     conv_rw(ps, vec![], &clean_parser::parse_name("h").unwrap(), false)?;
 ///     Ok(())
 /// })
 /// ```
@@ -388,6 +393,7 @@ where
             meta_id: goal.meta_id,
             target: old_target.clone(),
             local_ctx: goal.local_ctx.clone(),
+            case_binders: goal.case_binders.clone(),
             tag: goal.tag.clone(),
         };
         let Some(congr_proof) =
@@ -444,6 +450,7 @@ where
                     meta_id: goal.meta_id,
                     target: old_target.clone(),
                     local_ctx: goal.local_ctx.clone(),
+                    case_binders: goal.case_binders.clone(),
                     tag: goal.tag,
                 };
 

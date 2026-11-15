@@ -1,0 +1,8 @@
+# key	blob	row	fid	function (aterm's PM-1-free F1 rows, aterm docs/PLAN-tests-to-specs-2026-10-15.md; the mirror's path first, then the aterm function)
+aterm	aterm/f1_rows.bin	aterm_clamp_wait_ms	1	`wire::clamp_wait_ms` (aterm-control `wire::clamp_wait_ms`, src/wire.rs:113; F1 row 13)
+aterm	aterm/f1_rows.bin	aterm_is_rise	2	`chrome::is_rise` (aterm-messages `chrome::is_rise`, src/chrome.rs:64; F1 row 19)
+aterm	aterm/f1_rows.bin	aterm_paste_is_watched	4	`waits::paste_is_watched` (aterm-messages `waits::paste_is_watched`, src/waits.rs:390; F1 row 20)
+aterm	aterm/f1_rows.bin	aterm_bar_glints	6	`animate::bar_glints` (aterm-messages `animate::bar_glints`, src/animate.rs:628: `(shown as u32) * 2`, the multiplication's overflow check; F1 row 21)
+aterm	aterm/f1_rows.bin	aterm_over_bound	9	`mailbox::over_bound` (aterm-link `mailbox::over_bound`, src/mailbox.rs:322; F1 row 15)
+aterm	aterm/f1_rows.bin	aterm_at_low_water	10	`mailbox::at_low_water` (aterm-link `mailbox::at_low_water`, src/mailbox.rs:326: the divisions by a constant; F1 row 16)
+aterm	aterm/f1_rows.bin	aterm_osc_put_keeps	12	`dispatch::osc_put_keeps` (aterm-parser `dispatch::osc_put_keeps`, src/dispatch.rs:23; F1 row 22)

@@ -33,6 +33,47 @@ impl<'a> ElabCtx<'a> {
         expr: &SurfaceExpr,
         expected_ty: Option<Expr>,
     ) -> Result<Expr, ElabError> {
+        if self.term_info_capture.is_some() {
+            self.elaborate_capturing_term(expr, expected_ty.clone(), |ctx| {
+                ctx.elaborate_with_expected_type_core(expr, expected_ty)
+            })
+        } else {
+            self.elaborate_with_expected_type_core(expr, expected_ty)
+        }
+    }
+
+    fn elaborate_with_expected_type_core(
+        &mut self,
+        expr: &SurfaceExpr,
+        expected_ty: Option<Expr>,
+    ) -> Result<Expr, ElabError> {
+        // `@f a` is a genuine PARTIAL application: Lean's `finalize` ends it
+        // with every unsupplied binder intact and `ensureHasType` then does a
+        // plain `isDefEq` with no further insertion. `explicit_mode` has
+        // already been restored by `elab_app` when the reconciliation below
+        // runs, so the `@`-ness is read off the SURFACE term here, while it is
+        // still in scope, and carried into
+        // `apply_implicit_to_expected_type` (which recurses into itself, hence
+        // a field rather than a parameter).
+        let surface = expr;
+        // Implicit-lambda introduction (Lean's `elabTerm` dispatch,
+        // `Term/TermElabM.lean`:1806): when the expected type's leading binder
+        // is implicit or instance-implicit and the term is not one of the
+        // blocked shapes, the term is WRAPPED rather than unified with the
+        // `Pi`. Without it, `Function.Injective.preorder f .rfl .rfl`
+        // (`Mathlib/Order/Basic.lean`) left the `{x y}` of
+        // `∀ {x y}, f x ≤ f y ↔ x ≤ y` as metavariables nothing constrains.
+        if let Some(expected) = expected_ty.as_ref() {
+            if self.use_implicit_lambda(expr, expected) {
+                let expected = expected.clone();
+                return self.elab_implicit_lambda(expr, &expected);
+            }
+        }
+        if let Some(expected) = expected_ty.as_ref() {
+            if let Some(decided) = self.try_proj_with_waiting_numerals(expr, expected) {
+                return decided;
+            }
+        }
         let prev_expected = self.current_expected_type.clone();
         self.current_expected_type = expected_ty.clone();
         let result = self.elaborate(expr);
@@ -40,7 +81,11 @@ impl<'a> ElabCtx<'a> {
         match result {
             Ok(expr) => {
                 if let Some(expected_ty) = expected_ty {
-                    let expr = self.apply_implicit_to_expected_type(&expr, &expected_ty)?;
+                    let expr = self.apply_implicit_to_expected_type_for_surface(
+                        surface,
+                        &expr,
+                        &expected_ty,
+                    )?;
                     // Prop → Bool decision coercion (Track PP). This is the
                     // single central expected-type chokepoint, so applying the
                     // `decide` coercion here covers every site that elaborates
@@ -245,9 +290,10 @@ impl<'a> ElabCtx<'a> {
     /// `TypeMismatch` (loud at elaboration), plus the ill-typed term never being
     /// registered.
     ///
-    /// Skipped (stay lenient — the kernel re-check decides) when either type
-    /// still carries an unsolved metavariable (the ground kernel verdict would
-    /// be unreliable) or the body's type cannot be inferred here.
+    /// Skipped (stay lenient — the kernel re-check decides) only when the
+    /// body's type cannot be inferred here. A type that still carries an
+    /// unsolved metavariable is checked with it opaque (G46: the metavariable
+    /// skip this once claimed was vacuous).
     pub(super) fn reject_body_type_mismatch(&self, val: &Expr, ty: &Expr) -> Result<(), ElabError> {
         let Ok(val_ty) = self.infer_type(val) else {
             return Ok(());
@@ -256,9 +302,11 @@ impl<'a> ElabCtx<'a> {
             .metas
             .instantiate_levels(&self.metas.instantiate(&val_ty));
         let ty = self.metas.instantiate_levels(&self.metas.instantiate(ty));
-        if val_ty.has_expr_mvar_quick() || ty.has_expr_mvar_quick() {
-            return Ok(());
-        }
+        // NO metavariable skip (G46, ledger (116)): the skip this gate carried
+        // tested `has_expr_mvar_quick`, constant false for elaborator metas
+        // (bit-63 FVars), so it never fired. The gate has always run with the
+        // metas opaque, and stays that way: a real skip would hand an
+        // ill-typed body with an open `?m` onward instead of refusing it here.
         let ctx = self.build_local_ctx();
         // Transparency-blind, complete def-eq: mirrors the kernel `add_decl`
         // re-check that would otherwise reject (or, on the synthetic-sorry
@@ -267,11 +315,12 @@ impl<'a> ElabCtx<'a> {
         if kernel_ok {
             Ok(())
         } else {
-            // Readable (Display) rendering — this is a user-facing elaboration
-            // error, not the kernel's internal debug dump.
+            // Readable rendering — this is a user-facing elaboration error, not
+            // the kernel's internal debug dump; a private constant shows its
+            // user name, as Lean 4.8.0's "type mismatch" does (G21).
             Err(ElabError::TypeMismatch {
-                expected: format!("{ty}"),
-                actual: format!("{val_ty}"),
+                expected: crate::error_render::term(&ty),
+                actual: crate::error_render::term(&val_ty),
             })
         }
     }

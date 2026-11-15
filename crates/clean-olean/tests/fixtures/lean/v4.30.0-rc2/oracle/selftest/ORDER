@@ -1,0 +1,6 @@
+# Dependency order for the oracle self-test family (see README.md).
+# `Sib` and `Sub/part` are `prelude` twins imported by `Probe`.
+Sib
+Sub/part
+Probe
+ModProbe

@@ -1,0 +1,3 @@
+(assume nc (not (or (not (forall ((x Bool)) (let ((y x)) (= y x)))) (let ((y a)) (= y a)))))
+(step s (cl (or (not (forall ((x Bool)) (let ((y x)) (= y x)))) (let ((y a)) (= y a)))) :rule forall_inst :args (a))
+(step done (cl) :rule resolution :premises (nc s))

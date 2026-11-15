@@ -64,23 +64,23 @@ impl SyntaxKind {
         Self::app("dbgTrace")
     }
     /// Syntax kind for `assert!` macro.
-    pub fn assert_macro() -> Self {
+    pub(crate) fn assert_macro() -> Self {
         Self::app("assert")
     }
     /// Syntax kind for `panic!` macro.
-    pub fn panic_macro() -> Self {
+    pub(crate) fn panic_macro() -> Self {
         Self::app("panic")
     }
     /// Syntax kind for `have` tactic/term.
-    pub fn have_macro() -> Self {
+    pub(crate) fn have_macro() -> Self {
         Self::app("haveMacro")
     }
     /// Syntax kind for `let` tactic/term.
-    pub fn let_macro() -> Self {
+    pub(crate) fn let_macro() -> Self {
         Self::app("letMacro")
     }
     /// Syntax kind for `show` tactic/term.
-    pub fn show_macro() -> Self {
+    pub(crate) fn show_macro() -> Self {
         Self::app("showMacro")
     }
     /// Syntax kind for `match` expressions.
@@ -92,11 +92,11 @@ impl SyntaxKind {
         Self::app("matchArm")
     }
     /// Syntax kind for `calc` proofs.
-    pub fn calc_macro() -> Self {
+    pub(crate) fn calc_macro() -> Self {
         Self::app("calc")
     }
     /// Syntax kind for `conv` tactic mode.
-    pub fn conv_macro() -> Self {
+    pub(crate) fn conv_macro() -> Self {
         Self::app("conv")
     }
 }
@@ -133,17 +133,17 @@ fn register_conditionals(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::if_then_else(),
             vec![
-                Syntax::mk_antiquot("cond"),
-                Syntax::mk_antiquot("thenBranch"),
-                Syntax::mk_antiquot("elseBranch"),
+                Syntax::generated_antiquot("cond"),
+                Syntax::generated_antiquot("thenBranch"),
+                Syntax::generated_antiquot("elseBranch"),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::ident("ite"),
+            Syntax::global_ident("ite"),
             vec![
-                Syntax::mk_antiquot("cond"),
-                Syntax::mk_antiquot("thenBranch"),
-                Syntax::mk_antiquot("elseBranch"),
+                Syntax::generated_antiquot("cond"),
+                Syntax::generated_antiquot("thenBranch"),
+                Syntax::generated_antiquot("elseBranch"),
             ],
         )),
     )
@@ -159,14 +159,20 @@ fn register_conditionals(registry: &mut MacroRegistry) {
         SyntaxKind::unless(),
         Syntax::node(
             SyntaxKind::unless(),
-            vec![Syntax::mk_antiquot("cond"), Syntax::mk_antiquot("body")],
+            vec![
+                Syntax::generated_antiquot("cond"),
+                Syntax::generated_antiquot("body"),
+            ],
         ),
         SyntaxQuote::term(Syntax::node(
             SyntaxKind::if_then_else(),
             vec![
-                Syntax::mk_app(Syntax::ident("Not"), vec![Syntax::mk_antiquot("cond")]),
-                Syntax::mk_antiquot("body"),
-                Syntax::ident("Unit.unit"),
+                Syntax::mk_app(
+                    Syntax::global_ident("Not"),
+                    vec![Syntax::generated_antiquot("cond")],
+                ),
+                Syntax::generated_antiquot("body"),
+                Syntax::global_ident("Unit.unit"),
             ],
         )),
     )
@@ -182,14 +188,17 @@ fn register_conditionals(registry: &mut MacroRegistry) {
         SyntaxKind::when(),
         Syntax::node(
             SyntaxKind::when(),
-            vec![Syntax::mk_antiquot("cond"), Syntax::mk_antiquot("body")],
+            vec![
+                Syntax::generated_antiquot("cond"),
+                Syntax::generated_antiquot("body"),
+            ],
         ),
         SyntaxQuote::term(Syntax::node(
             SyntaxKind::if_then_else(),
             vec![
-                Syntax::mk_antiquot("cond"),
-                Syntax::mk_antiquot("body"),
-                Syntax::ident("Unit.unit"),
+                Syntax::generated_antiquot("cond"),
+                Syntax::generated_antiquot("body"),
+                Syntax::global_ident("Unit.unit"),
             ],
         )),
     )
@@ -213,10 +222,10 @@ fn register_do_notation(registry: &mut MacroRegistry) {
             SyntaxKind::do_notation(),
             vec![Syntax::node(
                 SyntaxKind::do_elem(),
-                vec![Syntax::mk_antiquot("e")],
+                vec![Syntax::generated_antiquot("e")],
             )],
         ),
-        SyntaxQuote::term(Syntax::mk_antiquot("e")),
+        SyntaxQuote::term(Syntax::generated_antiquot("e")),
     )
     .with_priority(0)
     .with_doc("do e => e (single element do block)");
@@ -237,16 +246,25 @@ fn register_do_notation(registry: &mut MacroRegistry) {
             vec![
                 Syntax::node(
                     SyntaxKind::do_bind(),
-                    vec![Syntax::mk_antiquot("x"), Syntax::mk_antiquot("e1")],
+                    vec![
+                        Syntax::generated_antiquot("x"),
+                        Syntax::generated_antiquot("e1"),
+                    ],
                 ),
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::mk_antiquot("e2")]),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_antiquot("e2")],
+                ),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_app(Syntax::ident("bind"), vec![Syntax::mk_antiquot("e1")]),
+            Syntax::mk_app(
+                Syntax::global_ident("bind"),
+                vec![Syntax::generated_antiquot("e1")],
+            ),
             vec![Syntax::mk_lambda(
-                vec![Syntax::mk_antiquot("x")],
-                Syntax::mk_antiquot("e2"),
+                vec![Syntax::generated_antiquot("x")],
+                Syntax::generated_antiquot("e2"),
             )],
         )),
     )
@@ -266,16 +284,22 @@ fn register_do_notation(registry: &mut MacroRegistry) {
             vec![
                 Syntax::node(
                     SyntaxKind::do_let(),
-                    vec![Syntax::mk_antiquot("x"), Syntax::mk_antiquot("e1")],
+                    vec![
+                        Syntax::generated_antiquot("x"),
+                        Syntax::generated_antiquot("e1"),
+                    ],
                 ),
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::mk_antiquot("e2")]),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_antiquot("e2")],
+                ),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_let(
-            Syntax::mk_antiquot("x"),
+            Syntax::generated_antiquot("x"),
             None,
-            Syntax::mk_antiquot("e1"),
-            Syntax::mk_antiquot("e2"),
+            Syntax::generated_antiquot("e1"),
+            Syntax::generated_antiquot("e2"),
         )),
     )
     .with_priority(10)
@@ -293,15 +317,24 @@ fn register_do_notation(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::do_notation(),
             vec![
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::mk_antiquot("e1")]),
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::mk_antiquot("e2")]),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_antiquot("e1")],
+                ),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_antiquot("e2")],
+                ),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_app(Syntax::ident("seq"), vec![Syntax::mk_antiquot("e1")]),
+            Syntax::mk_app(
+                Syntax::global_ident("seq"),
+                vec![Syntax::generated_antiquot("e1")],
+            ),
             vec![Syntax::mk_lambda(
-                vec![Syntax::ident("_")],
-                Syntax::mk_antiquot("e2"),
+                vec![Syntax::generated_ident("_")],
+                Syntax::generated_antiquot("e2"),
             )],
         )),
     )
@@ -320,12 +353,12 @@ fn register_do_notation(registry: &mut MacroRegistry) {
             SyntaxKind::do_notation(),
             vec![Syntax::node(
                 SyntaxKind::do_return(),
-                vec![Syntax::mk_antiquot("e")],
+                vec![Syntax::generated_antiquot("e")],
             )],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::ident("pure"),
-            vec![Syntax::mk_antiquot("e")],
+            Syntax::global_ident("pure"),
+            vec![Syntax::generated_antiquot("e")],
         )),
     )
     .with_priority(10)
@@ -356,22 +389,30 @@ fn register_do_notation(registry: &mut MacroRegistry) {
             vec![
                 Syntax::node(
                     SyntaxKind::do_bind(),
-                    vec![Syntax::mk_antiquot("x"), Syntax::mk_antiquot("e1")],
+                    vec![
+                        Syntax::generated_antiquot("x"),
+                        Syntax::generated_antiquot("e1"),
+                    ],
                 ),
-                Syntax::mk_antiquot("e2"),
-                Syntax::mk_antiquot_splice("rest"),
+                Syntax::generated_antiquot("e2"),
+                Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path("rest")),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_app(Syntax::ident("bind"), vec![Syntax::mk_antiquot("e1")]),
+            Syntax::mk_app(
+                Syntax::global_ident("bind"),
+                vec![Syntax::generated_antiquot("e1")],
+            ),
             vec![Syntax::mk_lambda(
-                vec![Syntax::mk_antiquot("x")],
+                vec![Syntax::generated_antiquot("x")],
                 // Recursively wrap remaining elements in do
                 Syntax::node(
                     SyntaxKind::do_notation(),
                     vec![
-                        Syntax::mk_antiquot("e2"),
-                        Syntax::mk_antiquot_splice("rest"),
+                        Syntax::generated_antiquot("e2"),
+                        Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path(
+                            "rest",
+                        )),
                     ],
                 ),
             )],
@@ -390,21 +431,24 @@ fn register_do_notation(registry: &mut MacroRegistry) {
             vec![
                 Syntax::node(
                     SyntaxKind::do_let(),
-                    vec![Syntax::mk_antiquot("x"), Syntax::mk_antiquot("e1")],
+                    vec![
+                        Syntax::generated_antiquot("x"),
+                        Syntax::generated_antiquot("e1"),
+                    ],
                 ),
-                Syntax::mk_antiquot("e2"),
-                Syntax::mk_antiquot_splice("rest"),
+                Syntax::generated_antiquot("e2"),
+                Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path("rest")),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_let(
-            Syntax::mk_antiquot("x"),
+            Syntax::generated_antiquot("x"),
             None,
-            Syntax::mk_antiquot("e1"),
+            Syntax::generated_antiquot("e1"),
             Syntax::node(
                 SyntaxKind::do_notation(),
                 vec![
-                    Syntax::mk_antiquot("e2"),
-                    Syntax::mk_antiquot_splice("rest"),
+                    Syntax::generated_antiquot("e2"),
+                    Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path("rest")),
                 ],
             ),
         )),
@@ -420,20 +464,28 @@ fn register_do_notation(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::do_notation(),
             vec![
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::mk_antiquot("e1")]),
-                Syntax::mk_antiquot("e2"),
-                Syntax::mk_antiquot_splice("rest"),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_antiquot("e1")],
+                ),
+                Syntax::generated_antiquot("e2"),
+                Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path("rest")),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_app(Syntax::ident("seq"), vec![Syntax::mk_antiquot("e1")]),
+            Syntax::mk_app(
+                Syntax::global_ident("seq"),
+                vec![Syntax::generated_antiquot("e1")],
+            ),
             vec![Syntax::mk_lambda(
-                vec![Syntax::ident("_")],
+                vec![Syntax::generated_ident("_")],
                 Syntax::node(
                     SyntaxKind::do_notation(),
                     vec![
-                        Syntax::mk_antiquot("e2"),
-                        Syntax::mk_antiquot_splice("rest"),
+                        Syntax::generated_antiquot("e2"),
+                        Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path(
+                            "rest",
+                        )),
                     ],
                 ),
             )],
@@ -458,15 +510,15 @@ fn register_assertions(registry: &mut MacroRegistry) {
         SyntaxKind::assert_macro(),
         Syntax::node(
             SyntaxKind::assert_macro(),
-            vec![Syntax::mk_antiquot("cond")],
+            vec![Syntax::generated_antiquot("cond")],
         ),
         SyntaxQuote::term(Syntax::node(
             SyntaxKind::if_then_else(),
             vec![
-                Syntax::mk_antiquot("cond"),
-                Syntax::ident("Unit.unit"),
+                Syntax::generated_antiquot("cond"),
+                Syntax::global_ident("Unit.unit"),
                 Syntax::mk_app(
-                    Syntax::ident("panic"),
+                    Syntax::global_ident("panic"),
                     vec![Syntax::mk_str("assertion failed")],
                 ),
             ],
@@ -482,10 +534,13 @@ fn register_assertions(registry: &mut MacroRegistry) {
     let panic_def = MacroDef::new(
         "panic",
         SyntaxKind::panic_macro(),
-        Syntax::node(SyntaxKind::panic_macro(), vec![Syntax::mk_antiquot("msg")]),
+        Syntax::node(
+            SyntaxKind::panic_macro(),
+            vec![Syntax::generated_antiquot("msg")],
+        ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::ident("panic"),
-            vec![Syntax::mk_antiquot("msg")],
+            Syntax::global_ident("panic"),
+            vec![Syntax::generated_antiquot("msg")],
         )),
     )
     .with_doc("panic! msg => panic with message");
@@ -500,13 +555,19 @@ fn register_assertions(registry: &mut MacroRegistry) {
         SyntaxKind::dbg_trace(),
         Syntax::node(
             SyntaxKind::dbg_trace(),
-            vec![Syntax::mk_antiquot("msg"), Syntax::mk_antiquot("body")],
+            vec![
+                Syntax::generated_antiquot("msg"),
+                Syntax::generated_antiquot("body"),
+            ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_app(Syntax::ident("dbgTrace"), vec![Syntax::mk_antiquot("msg")]),
+            Syntax::mk_app(
+                Syntax::global_ident("dbgTrace"),
+                vec![Syntax::generated_antiquot("msg")],
+            ),
             vec![Syntax::mk_lambda(
-                vec![Syntax::ident("_")],
-                Syntax::mk_antiquot("body"),
+                vec![Syntax::generated_ident("_")],
+                Syntax::generated_antiquot("body"),
             )],
         )),
     )
@@ -529,21 +590,24 @@ fn register_let_have_show(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::have_macro(),
             vec![
-                Syntax::mk_antiquot("h"),
-                Syntax::mk_antiquot("ty"),
-                Syntax::mk_antiquot("proof"),
-                Syntax::mk_antiquot("body"),
+                Syntax::generated_antiquot("h"),
+                Syntax::generated_antiquot("ty"),
+                Syntax::generated_antiquot("proof"),
+                Syntax::generated_antiquot("body"),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
             Syntax::mk_lambda(
                 vec![Syntax::node(
                     SyntaxKind::app("binder"),
-                    vec![Syntax::mk_antiquot("h"), Syntax::mk_antiquot("ty")],
+                    vec![
+                        Syntax::generated_antiquot("h"),
+                        Syntax::generated_antiquot("ty"),
+                    ],
                 )],
-                Syntax::mk_antiquot("body"),
+                Syntax::generated_antiquot("body"),
             ),
-            vec![Syntax::mk_antiquot("proof")],
+            vec![Syntax::generated_antiquot("proof")],
         )),
     )
     .with_doc("have h : T := proof; body => (fun (h : T) => body) proof");
@@ -560,14 +624,17 @@ fn register_let_have_show(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::let_macro(),
             vec![
-                Syntax::mk_antiquot("x"),
-                Syntax::mk_antiquot("e"),
-                Syntax::mk_antiquot("body"),
+                Syntax::generated_antiquot("x"),
+                Syntax::generated_antiquot("e"),
+                Syntax::generated_antiquot("body"),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_lambda(vec![Syntax::mk_antiquot("x")], Syntax::mk_antiquot("body")),
-            vec![Syntax::mk_antiquot("e")],
+            Syntax::mk_lambda(
+                vec![Syntax::generated_antiquot("x")],
+                Syntax::generated_antiquot("body"),
+            ),
+            vec![Syntax::generated_antiquot("e")],
         )),
     )
     .with_doc("let x := e; body => (fun x => body) e");
@@ -584,12 +651,18 @@ fn register_let_have_show(registry: &mut MacroRegistry) {
         SyntaxKind::show_macro(),
         Syntax::node(
             SyntaxKind::show_macro(),
-            vec![Syntax::mk_antiquot("ty"), Syntax::mk_antiquot("e")],
+            vec![
+                Syntax::generated_antiquot("ty"),
+                Syntax::generated_antiquot("e"),
+            ],
         ),
         // show T from e => @id T e (type annotation)
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_app(Syntax::ident("@id"), vec![Syntax::mk_antiquot("ty")]),
-            vec![Syntax::mk_antiquot("e")],
+            Syntax::mk_app(
+                Syntax::generated_ident("@id"),
+                vec![Syntax::generated_antiquot("ty")],
+            ),
+            vec![Syntax::generated_antiquot("e")],
         )),
     )
     .with_doc("show T from e => type annotation");
@@ -607,7 +680,7 @@ fn register_let_have_show(registry: &mut MacroRegistry) {
 /// Additional syntax kinds for calc and conv macros.
 impl SyntaxKind {
     /// Syntax kind for individual steps in `calc` proofs.
-    pub fn calc_step() -> Self {
+    pub(crate) fn calc_step() -> Self {
         Self::app("calcStep")
     }
     /// Syntax kind for individual steps in `conv` mode.
@@ -615,7 +688,7 @@ impl SyntaxKind {
         Self::app("convStep")
     }
     /// Syntax kind for sequences of `conv` tactics.
-    pub fn conv_seq() -> Self {
+    pub(crate) fn conv_seq() -> Self {
         Self::app("convSeq")
     }
 }
@@ -638,16 +711,22 @@ fn register_calc_conv(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::calc_macro(),
             vec![
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h1")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h2")]),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h1")],
+                ),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h2")],
+                ),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
             Syntax::mk_app(
-                Syntax::ident("Trans.trans"),
-                vec![Syntax::mk_antiquot("h1")],
+                Syntax::global_ident("Trans.trans"),
+                vec![Syntax::generated_antiquot("h1")],
             ),
-            vec![Syntax::mk_antiquot("h2")],
+            vec![Syntax::generated_antiquot("h2")],
         )),
     )
     .with_priority(10)
@@ -664,10 +743,10 @@ fn register_calc_conv(registry: &mut MacroRegistry) {
             SyntaxKind::calc_macro(),
             vec![Syntax::node(
                 SyntaxKind::calc_step(),
-                vec![Syntax::mk_antiquot("h")],
+                vec![Syntax::generated_antiquot("h")],
             )],
         ),
-        SyntaxQuote::term(Syntax::mk_antiquot("h")),
+        SyntaxQuote::term(Syntax::generated_antiquot("h")),
     )
     .with_priority(0)
     .with_doc("calc a = b := h => h (single step)");
@@ -680,23 +759,32 @@ fn register_calc_conv(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::calc_macro(),
             vec![
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h1")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h2")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h3")]),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h1")],
+                ),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h2")],
+                ),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h3")],
+                ),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
             Syntax::mk_app(
-                Syntax::ident("Trans.trans"),
+                Syntax::global_ident("Trans.trans"),
                 vec![Syntax::mk_app(
                     Syntax::mk_app(
-                        Syntax::ident("Trans.trans"),
-                        vec![Syntax::mk_antiquot("h1")],
+                        Syntax::global_ident("Trans.trans"),
+                        vec![Syntax::generated_antiquot("h1")],
                     ),
-                    vec![Syntax::mk_antiquot("h2")],
+                    vec![Syntax::generated_antiquot("h2")],
                 )],
             ),
-            vec![Syntax::mk_antiquot("h3")],
+            vec![Syntax::generated_antiquot("h3")],
         )),
     )
     .with_priority(15)
@@ -721,23 +809,38 @@ fn register_calc_conv(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::calc_macro(),
             vec![
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h1")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h2")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h3")]),
-                Syntax::mk_antiquot_splice("rest"),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h1")],
+                ),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h2")],
+                ),
+                Syntax::node(
+                    SyntaxKind::calc_step(),
+                    vec![Syntax::generated_antiquot("h3")],
+                ),
+                Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path("rest")),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
             Syntax::mk_app(
-                Syntax::ident("Trans.trans"),
-                vec![Syntax::mk_antiquot("h1")],
+                Syntax::global_ident("Trans.trans"),
+                vec![Syntax::generated_antiquot("h1")],
             ),
             vec![Syntax::node(
                 SyntaxKind::calc_macro(),
                 vec![
-                    Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h2")]),
-                    Syntax::node(SyntaxKind::calc_step(), vec![Syntax::mk_antiquot("h3")]),
-                    Syntax::mk_antiquot_splice("rest"),
+                    Syntax::node(
+                        SyntaxKind::calc_step(),
+                        vec![Syntax::generated_antiquot("h2")],
+                    ),
+                    Syntax::node(
+                        SyntaxKind::calc_step(),
+                        vec![Syntax::generated_antiquot("h3")],
+                    ),
+                    Syntax::mk_antiquot_splice(&clean_parser::SurfaceName::generated_path("rest")),
                 ],
             )],
         )),
@@ -761,11 +864,11 @@ fn register_calc_conv(registry: &mut MacroRegistry) {
         SyntaxKind::conv_macro(),
         Syntax::node(
             SyntaxKind::conv_macro(),
-            vec![Syntax::mk_antiquot("tactic")],
+            vec![Syntax::generated_antiquot("tactic")],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::ident("convTactic"),
-            vec![Syntax::mk_antiquot("tactic")],
+            Syntax::generated_ident("convTactic"),
+            vec![Syntax::generated_antiquot("tactic")],
         )),
     )
     .with_priority(0)
@@ -780,12 +883,18 @@ fn register_calc_conv(registry: &mut MacroRegistry) {
             SyntaxKind::conv_macro(),
             vec![Syntax::node(
                 SyntaxKind::conv_seq(),
-                vec![Syntax::mk_antiquot("t1"), Syntax::mk_antiquot("t2")],
+                vec![
+                    Syntax::generated_antiquot("t1"),
+                    Syntax::generated_antiquot("t2"),
+                ],
             )],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::ident("convSeq"),
-            vec![Syntax::mk_antiquot("t1"), Syntax::mk_antiquot("t2")],
+            Syntax::generated_ident("convSeq"),
+            vec![
+                Syntax::generated_antiquot("t1"),
+                Syntax::generated_antiquot("t2"),
+            ],
         )),
     )
     .with_priority(5)
@@ -801,14 +910,17 @@ fn register_calc_conv(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::conv_macro(),
             vec![
-                Syntax::ident("at"),
-                Syntax::mk_antiquot("h"),
-                Syntax::mk_antiquot("tactic"),
+                Syntax::generated_ident("at"),
+                Syntax::generated_antiquot("h"),
+                Syntax::generated_antiquot("tactic"),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_app(Syntax::ident("convAt"), vec![Syntax::mk_antiquot("h")]),
-            vec![Syntax::mk_antiquot("tactic")],
+            Syntax::mk_app(
+                Syntax::generated_ident("convAt"),
+                vec![Syntax::generated_antiquot("h")],
+            ),
+            vec![Syntax::generated_antiquot("tactic")],
         )),
     )
     .with_priority(10)
@@ -839,19 +951,22 @@ fn register_match(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::match_expr(),
             vec![
-                Syntax::mk_antiquot("scrutinee"),
+                Syntax::generated_antiquot("scrutinee"),
                 Syntax::node(
                     SyntaxKind::match_arm(),
-                    vec![Syntax::mk_antiquot("pat"), Syntax::mk_antiquot("body")],
+                    vec![
+                        Syntax::generated_antiquot("pat"),
+                        Syntax::generated_antiquot("body"),
+                    ],
                 ),
             ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
             Syntax::mk_lambda(
-                vec![Syntax::mk_antiquot("pat")],
-                Syntax::mk_antiquot("body"),
+                vec![Syntax::generated_antiquot("pat")],
+                Syntax::generated_antiquot("body"),
             ),
-            vec![Syntax::mk_antiquot("scrutinee")],
+            vec![Syntax::generated_antiquot("scrutinee")],
         )),
     )
     .with_priority(0)
@@ -873,27 +988,30 @@ fn register_match(registry: &mut MacroRegistry) {
         Syntax::node(
             SyntaxKind::if_let(),
             vec![
-                Syntax::mk_antiquot("pat"),
-                Syntax::mk_antiquot("scrutinee"),
-                Syntax::mk_antiquot("thenBranch"),
-                Syntax::mk_antiquot("elseBranch"),
+                Syntax::generated_antiquot("pat"),
+                Syntax::generated_antiquot("scrutinee"),
+                Syntax::generated_antiquot("thenBranch"),
+                Syntax::generated_antiquot("elseBranch"),
             ],
         ),
         // For now, create a match node that elaboration will handle
         SyntaxQuote::term(Syntax::node(
             SyntaxKind::match_expr(),
             vec![
-                Syntax::mk_antiquot("scrutinee"),
+                Syntax::generated_antiquot("scrutinee"),
                 Syntax::node(
                     SyntaxKind::match_arm(),
                     vec![
-                        Syntax::mk_antiquot("pat"),
-                        Syntax::mk_antiquot("thenBranch"),
+                        Syntax::generated_antiquot("pat"),
+                        Syntax::generated_antiquot("thenBranch"),
                     ],
                 ),
                 Syntax::node(
                     SyntaxKind::match_arm(),
-                    vec![Syntax::ident("_"), Syntax::mk_antiquot("elseBranch")],
+                    vec![
+                        Syntax::generated_ident("_"),
+                        Syntax::generated_antiquot("elseBranch"),
+                    ],
                 ),
             ],
         )),
@@ -933,9 +1051,9 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::if_then_else(),
             vec![
-                Syntax::ident("cond"),
-                Syntax::ident("thenBranch"),
-                Syntax::ident("elseBranch"),
+                Syntax::generated_ident("cond"),
+                Syntax::generated_ident("thenBranch"),
+                Syntax::generated_ident("elseBranch"),
             ],
         );
 
@@ -944,7 +1062,10 @@ mod tests {
         // Should expand to (app ite cond thenBranch elseBranch)
         assert!(result.is_node());
         assert_eq!(result.kind(), Some(&SyntaxKind::app_kind()));
-        assert_eq!(result.child(0).unwrap().as_ident(), Some("ite"));
+        assert_eq!(
+            result.child(0).unwrap().as_ident(),
+            Some(&clean_parser::SurfaceName::generated_path("ite"))
+        );
     }
 
     #[test]
@@ -953,7 +1074,10 @@ mod tests {
 
         let input = Syntax::node(
             SyntaxKind::unless(),
-            vec![Syntax::ident("cond"), Syntax::ident("body")],
+            vec![
+                Syntax::generated_ident("cond"),
+                Syntax::generated_ident("body"),
+            ],
         );
 
         let result = expand(&registry, input).unwrap();
@@ -971,7 +1095,10 @@ mod tests {
 
         let input = Syntax::node(
             SyntaxKind::when(),
-            vec![Syntax::ident("cond"), Syntax::ident("body")],
+            vec![
+                Syntax::generated_ident("cond"),
+                Syntax::generated_ident("body"),
+            ],
         );
 
         let result = expand(&registry, input).unwrap();
@@ -992,12 +1119,15 @@ mod tests {
             SyntaxKind::do_notation(),
             vec![Syntax::node(
                 SyntaxKind::do_elem(),
-                vec![Syntax::ident("expr")],
+                vec![Syntax::generated_ident("expr")],
             )],
         );
 
         let result = expand(&registry, input).unwrap();
-        assert_eq!(result.as_ident(), Some("expr"));
+        assert_eq!(
+            result.as_ident(),
+            Some(&clean_parser::SurfaceName::generated_path("expr"))
+        );
     }
 
     #[test]
@@ -1010,13 +1140,16 @@ mod tests {
             vec![
                 Syntax::node(
                     SyntaxKind::do_bind(),
-                    vec![Syntax::ident("x"), Syntax::ident("getLine")],
+                    vec![
+                        Syntax::generated_ident("x"),
+                        Syntax::generated_ident("getLine"),
+                    ],
                 ),
                 Syntax::node(
                     SyntaxKind::do_elem(),
                     vec![Syntax::mk_app(
-                        Syntax::ident("putStrLn"),
-                        vec![Syntax::ident("x")],
+                        Syntax::generated_ident("putStrLn"),
+                        vec![Syntax::generated_ident("x")],
                     )],
                 ),
             ],
@@ -1057,8 +1190,14 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::do_notation(),
             vec![
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::ident("action1")]),
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::ident("action2")]),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_ident("action1")],
+                ),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_ident("action2")],
+                ),
             ],
         );
 
@@ -1078,9 +1217,18 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::do_notation(),
             vec![
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::ident("action1")]),
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::ident("action2")]),
-                Syntax::node(SyntaxKind::do_elem(), vec![Syntax::ident("action3")]),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_ident("action1")],
+                ),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_ident("action2")],
+                ),
+                Syntax::node(
+                    SyntaxKind::do_elem(),
+                    vec![Syntax::generated_ident("action3")],
+                ),
             ],
         );
 
@@ -1106,17 +1254,23 @@ mod tests {
             vec![
                 Syntax::node(
                     SyntaxKind::do_bind(),
-                    vec![Syntax::ident("x"), Syntax::ident("getLine")],
+                    vec![
+                        Syntax::generated_ident("x"),
+                        Syntax::generated_ident("getLine"),
+                    ],
                 ),
                 Syntax::node(
                     SyntaxKind::do_bind(),
-                    vec![Syntax::ident("y"), Syntax::ident("getLine")],
+                    vec![
+                        Syntax::generated_ident("y"),
+                        Syntax::generated_ident("getLine"),
+                    ],
                 ),
                 Syntax::node(
                     SyntaxKind::do_elem(),
                     vec![Syntax::mk_app(
-                        Syntax::ident("putStrLn"),
-                        vec![Syntax::ident("x")],
+                        Syntax::generated_ident("putStrLn"),
+                        vec![Syntax::generated_ident("x")],
                     )],
                 ),
             ],
@@ -1136,7 +1290,10 @@ mod tests {
     fn test_assert_expansion() {
         let registry = builtin_registry();
 
-        let input = Syntax::node(SyntaxKind::assert_macro(), vec![Syntax::ident("condition")]);
+        let input = Syntax::node(
+            SyntaxKind::assert_macro(),
+            vec![Syntax::generated_ident("condition")],
+        );
 
         let result = expand(&registry, input).unwrap();
 
@@ -1152,7 +1309,10 @@ mod tests {
 
         let input = Syntax::node(
             SyntaxKind::dbg_trace(),
-            vec![Syntax::mk_str("debug message"), Syntax::ident("result")],
+            vec![
+                Syntax::mk_str("debug message"),
+                Syntax::generated_ident("result"),
+            ],
         );
 
         let result = expand(&registry, input).unwrap();
@@ -1170,10 +1330,10 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::have_macro(),
             vec![
-                Syntax::ident("h"),
-                Syntax::ident("Nat"),
+                Syntax::generated_ident("h"),
+                Syntax::generated_ident("Nat"),
                 Syntax::mk_num(42),
-                Syntax::ident("body"),
+                Syntax::generated_ident("body"),
             ],
         );
 
@@ -1192,10 +1352,13 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::match_expr(),
             vec![
-                Syntax::ident("scrutinee"),
+                Syntax::generated_ident("scrutinee"),
                 Syntax::node(
                     SyntaxKind::match_arm(),
-                    vec![Syntax::ident("x"), Syntax::ident("body")],
+                    vec![
+                        Syntax::generated_ident("x"),
+                        Syntax::generated_ident("body"),
+                    ],
                 ),
             ],
         );
@@ -1215,10 +1378,10 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::if_let(),
             vec![
-                Syntax::ident("Some x"),
-                Syntax::ident("maybeValue"),
-                Syntax::ident("thenBranch"),
-                Syntax::ident("elseBranch"),
+                Syntax::generated_ident("Some x"),
+                Syntax::generated_ident("maybeValue"),
+                Syntax::generated_ident("thenBranch"),
+                Syntax::generated_ident("elseBranch"),
             ],
         );
 
@@ -1236,7 +1399,7 @@ mod tests {
         // show T from e => @id T e
         let input = Syntax::node(
             SyntaxKind::show_macro(),
-            vec![Syntax::ident("Nat"), Syntax::mk_num(42)],
+            vec![Syntax::generated_ident("Nat"), Syntax::mk_num(42)],
         );
 
         let result = expand(&registry, input).unwrap();
@@ -1286,9 +1449,15 @@ mod tests {
 
         // Test that nested macros expand correctly
         // when (x > 0) (assert! (x > 0))
-        let inner = Syntax::node(SyntaxKind::assert_macro(), vec![Syntax::ident("positive")]);
+        let inner = Syntax::node(
+            SyntaxKind::assert_macro(),
+            vec![Syntax::generated_ident("positive")],
+        );
 
-        let outer = Syntax::node(SyntaxKind::when(), vec![Syntax::ident("cond"), inner]);
+        let outer = Syntax::node(
+            SyntaxKind::when(),
+            vec![Syntax::generated_ident("cond"), inner],
+        );
 
         let result = expand(&registry, outer).unwrap();
 
@@ -1307,12 +1476,15 @@ mod tests {
             SyntaxKind::calc_macro(),
             vec![Syntax::node(
                 SyntaxKind::calc_step(),
-                vec![Syntax::ident("h")],
+                vec![Syntax::generated_ident("h")],
             )],
         );
 
         let result = expand(&registry, input).unwrap();
-        assert_eq!(result.as_ident(), Some("h"));
+        assert_eq!(
+            result.as_ident(),
+            Some(&clean_parser::SurfaceName::generated_path("h"))
+        );
     }
 
     #[test]
@@ -1323,8 +1495,8 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::calc_macro(),
             vec![
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h1")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h2")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h1")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h2")]),
             ],
         );
 
@@ -1343,9 +1515,9 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::calc_macro(),
             vec![
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h1")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h2")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h3")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h1")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h2")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h3")]),
             ],
         );
 
@@ -1363,10 +1535,10 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::calc_macro(),
             vec![
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h1")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h2")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h3")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h4")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h1")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h2")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h3")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h4")]),
             ],
         );
 
@@ -1389,11 +1561,11 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::calc_macro(),
             vec![
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h1")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h2")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h3")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h4")]),
-                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::ident("h5")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h1")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h2")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h3")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h4")]),
+                Syntax::node(SyntaxKind::calc_step(), vec![Syntax::generated_ident("h5")]),
             ],
         );
 
@@ -1411,7 +1583,10 @@ mod tests {
         let registry = builtin_registry();
 
         // conv => t => convTactic t
-        let input = Syntax::node(SyntaxKind::conv_macro(), vec![Syntax::ident("rfl")]);
+        let input = Syntax::node(
+            SyntaxKind::conv_macro(),
+            vec![Syntax::generated_ident("rfl")],
+        );
 
         let result = expand(&registry, input).unwrap();
         let pretty = result.pretty();
@@ -1426,9 +1601,9 @@ mod tests {
         let input = Syntax::node(
             SyntaxKind::conv_macro(),
             vec![
-                Syntax::ident("at"),
-                Syntax::ident("h"),
-                Syntax::ident("rfl"),
+                Syntax::generated_ident("at"),
+                Syntax::generated_ident("h"),
+                Syntax::generated_ident("rfl"),
             ],
         );
 

@@ -63,6 +63,12 @@
 //! guide's own R9 note claiming otherwise is stale against its own R3 code.
 //! Census stays 11.
 
+// Guarded-iota migration: rule tables store each RHS once at the signature's
+// anonymous universe parameter. Retained rule/environment u arguments are API
+// compatibility only; the active operator instantiates the actual head levels.
+// Rose evidence here remains raw computation. Existing auxiliary telescope/RHS
+// typing inconsistencies are not repaired or certified by this storage change.
+
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
@@ -172,12 +178,14 @@ impl Specification {
             "roseRecRhs u: the full node rule-rhs lambda (lam motive, minor, children; body = roseRecRhsBody). Rose rung.",
         )?;
         // Metadata, rules, env.
+        // Metadata-only migration: the signature is stored schematically while
+        // the existing per-u rules and old iota operation remain unchanged.
         self.add_recursive_def(
-            "def roseRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true",
+            "def roseRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (roseRecTy (Level.param Name.anonymous))) Nat.zero",
             "roseRecMeta: Rose recursor metadata (0 params, 1 motive, 1 minor, 0 indices, major-after-minors). Rose rung.",
         )?;
         self.add_recursive_def(
-            "def roseRecRules (u : Level) : RecRules := RecRules.cons (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs u)) RecRules.nil",
+            "def roseRecRules (u : Level) : RecRules := RecRules.cons (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs (Level.param Name.anonymous))) RecRules.nil",
             "roseRecRules u: the Rose recursor's single node rule. Rose rung.",
         )?;
 
@@ -194,8 +202,16 @@ impl Specification {
         //
         // All four are pure data (RecMeta/KExpr/RecRules) with no proof
         // obligation, so this is a faithful transcription, not a derivation.
+        // TYPE-VALIDITY DEBT: the appended auxiliary signature records exactly
+        // roseTEnv's existing listRecName declaration, roseRecTy(param anonymous).
+        // That is a three-binder Rose type, whereas this metadata says four
+        // binders (0/1/2/0), and the fused RHSs below carry erased/placeholder
+        // binder annotations. Agreement with the existing declaration is NOT
+        // valid auxiliary List.rec admission or RHS typing. Repair the actual
+        // auxiliary telescope and its RHSs together in the later typing phase;
+        // do not silently invent that theorem during this metadata-only step.
         self.add_recursive_def(
-            "def roseListRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true",
+            "def roseListRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (roseRecTy (Level.param Name.anonymous))) Nat.zero",
             "roseListRecMeta: metadata for the FUSED auxiliary List.rec that the rose recursor's rhs maps over its children — 0 params, 1 motive, 2 minors, 0 indices. Guide NestedRoseSN.lean:3336.",
         )?;
 
@@ -210,7 +226,7 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def roseListRecRules (u : Level) : RecRules := RecRules.cons (RecRule.mk listNilName Nat.zero roseListRecRhsNil) (RecRules.cons (RecRule.mk listConsName (Nat.succ (Nat.succ Nat.zero)) (roseListRecRhsCons u)) RecRules.nil)",
+            "def roseListRecRules (u : Level) : RecRules := RecRules.cons (RecRule.mk listNilName Nat.zero roseListRecRhsNil) (RecRules.cons (RecRule.mk listConsName (Nat.succ (Nat.succ Nat.zero)) (roseListRecRhsCons (Level.param Name.anonymous))) RecRules.nil)",
             "roseListRecRules: the two rules of the fused auxiliary list recursor (nil/0 fields, cons/2 fields). Guide NestedRoseSN.lean:3361.",
         )?;
         self.add_recursive_def(
@@ -231,7 +247,7 @@ impl Specification {
             "RoseFresh denv: the Rose/List family/ctor/recursor names are all unbound in denv. Rose rung.",
         )?;
         self.add_inductive(
-            "inductive RoseRecEnvOK : Level -> RecEnv -> Type\n| mk : forall (u : Level) (renv : RecEnv), Eq (OptionType RecMeta) (recmeta_for renv roseRecName) (OptionType.some RecMeta roseRecMeta) -> Eq (OptionType RecRule) (recrule_for renv roseRecName nodeName) (OptionType.some RecRule (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs u))) -> RoseRecEnvOK u renv",
+            "inductive RoseRecEnvOK : Level -> RecEnv -> Type\n| mk : forall (u : Level) (renv : RecEnv), Eq (OptionType RecMeta) (recmeta_for renv roseRecName) (OptionType.some RecMeta roseRecMeta) -> Eq (OptionType RecRule) (recrule_for renv roseRecName nodeName) (OptionType.some RecRule (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs (Level.param Name.anonymous)))) -> RoseRecEnvOK u renv",
             "RoseRecEnvOK u renv: renv stores the Rose recursor metadata + the node rule. Rose rung.",
         )?;
         // rfl gates (LOUD validation of the whole nested wiring incl. the fused map).
@@ -240,13 +256,53 @@ impl Specification {
             "rose_iota_fires_gen: the Rose iota FIRES by rfl (rec C m (node cs) -> roseRecRhs C m cs). THE loud validation gate for the nested object-layer wiring. Rose rung.",
         )?;
         self.add_recursive_def(
-            "def roseREnv_ok (u : Level) : RoseRecEnvOK u (roseREnv u) := RoseRecEnvOK.mk u (roseREnv u) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta roseRecMeta)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs u))))",
+            "def roseREnv_ok (u : Level) : RoseRecEnvOK u (roseREnv u) := RoseRecEnvOK.mk u (roseREnv u) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta roseRecMeta)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk nodeName (Nat.succ Nat.zero) (roseRecRhs (Level.param Name.anonymous)))))",
             "roseREnv_ok u: RoseRecEnvOK holds for roseREnv by rfl. Rose rung.",
         )?;
         // SN via the fundamental-theorem one-liner (mirror mutTEnv/wTEnv).
+        // The legacy `u` argument is retained only for the existing API. Both
+        // recursor constants carry one universe argument, so their signatures
+        // store one parameter and the schematic type, not a type specialized
+        // at `u`. Families and constructors remain monomorphic. This preserves
+        // the existing model's use of roseRecTy for the fused list recursor;
+        // it does not establish that recursor's source-level type fidelity.
         self.add_recursive_def(
-            "def roseTEnv (u : Level) (n : Name) : OptionType KExpr := opt_pick KExpr (name_eqb n roseName) (KExpr.sort (Level.succ Level.zero)) (opt_pick KExpr (name_eqb n nodeName) (KExpr.pi roseListTyC roseTyC) (opt_pick KExpr (name_eqb n roseRecName) (roseRecTy u) (opt_pick KExpr (name_eqb n roseListName) (KExpr.sort (Level.succ Level.zero)) (opt_pick KExpr (name_eqb n listNilName) roseListTyC (opt_pick KExpr (name_eqb n listConsName) (KExpr.pi roseTyC (KExpr.pi roseListTyC roseListTyC)) (opt_pick KExpr (name_eqb n listRecName) (roseRecTy u) (OptionType.none KExpr)))))))",
-            "roseTEnv u: the Rose+List const-typing env (families at Sort 1; node at List Rose->Rose; cons at Rose->List->List; recursors at their rec types). Rose rung SN.",
+            "def roseTEnv (u : Level) (n : Name) : OptionType KConstSig := opt_pick KConstSig (name_eqb n roseName) (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) (opt_pick KConstSig (name_eqb n nodeName) (KConstSig.mk (ListType.nil Name) (KExpr.pi roseListTyC roseTyC)) (opt_pick KConstSig (name_eqb n roseRecName) (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (roseRecTy (Level.param Name.anonymous))) (opt_pick KConstSig (name_eqb n roseListName) (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) (opt_pick KConstSig (name_eqb n listNilName) (KConstSig.mk (ListType.nil Name) roseListTyC) (opt_pick KConstSig (name_eqb n listConsName) (KConstSig.mk (ListType.nil Name) (KExpr.pi roseTyC (KExpr.pi roseListTyC roseListTyC))) (opt_pick KConstSig (name_eqb n listRecName) (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (roseRecTy (Level.param Name.anonymous))) (OptionType.none KConstSig)))))))",
+            "roseTEnv u: schematic Rose+List signatures; legacy u is unused. Families/constructors have no level parameters; both recursors have one parameter, instantiated by guarded lookup. The existing fused-list roseRecTy model formula is preserved, not asserted source-faithful.",
+        )?;
+        self.add_recursive_def(
+            "def roseRecMeta_signature : Eq (OptionType KConstSig) (roseTEnv Level.zero roseRecName) (OptionType.some KConstSig (recmeta_signature (roseRecMeta))) := Eq.refl (OptionType KConstSig) (OptionType.some KConstSig (recmeta_signature (roseRecMeta)))",
+            "Rose metadata agrees with its existing schematic declaration; no new RHS typing claim.",
+        )?;
+
+        self.add_recursive_def(
+            "def roseTEnv_rec_lookup (u : Level) : Eq (OptionType KExpr) (kdecl_type_at (roseTEnv Level.zero) roseRecName (ListType.cons Level u (ListType.nil Level))) (OptionType.some KExpr (roseRecTy u)) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (roseRecTy u))",
+            "roseTEnv_rec_lookup: the stored schematic Rose recursor type instantiates at the occurrence's actual universe, independently of the legacy environment argument.",
+        )?;
+        self.add_recursive_def(
+            "def roseListRecMeta_declared_signature : Eq (OptionType KConstSig) (roseTEnv Level.zero listRecName) (OptionType.some KConstSig (recmeta_signature (roseListRecMeta))) := Eq.refl (OptionType KConstSig) (OptionType.some KConstSig (recmeta_signature (roseListRecMeta)))",
+            "Only agreement with the existing auxiliary declaration: its known telescope/RHS mismatch remains explicit and this is not valid auxiliary recursor admission.",
+        )?;
+
+        self.add_recursive_def(
+            "def roseTEnv_list_rec_lookup (u : Level) : Eq (OptionType KExpr) (kdecl_type_at (roseTEnv Level.zero) listRecName (ListType.cons Level u (ListType.nil Level))) (OptionType.some KExpr (roseRecTy u)) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (roseRecTy u))",
+            "roseTEnv_list_rec_lookup: the fused-list recursor also preserves its one-argument universe interface and computes the existing model's instantiated roseRecTy.",
+        )?;
+        self.add_recursive_def(
+            "def roseTEnv_rec_nonzero_typed : TypingCtx (roseTEnv Level.zero) (ListType.nil KExpr) (roseRecC (Level.succ Level.zero)) (roseRecTy (Level.succ Level.zero)) := TypingCtx.const (roseTEnv Level.zero) (ListType.nil KExpr) roseRecName (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level)) (roseRecTy (Level.succ Level.zero)) (roseTEnv_rec_lookup (Level.succ Level.zero))",
+            "roseTEnv_rec_nonzero_typed: actual guarded typing at universe one through the legacy-zero environment, not a pre-specialized type assumption.",
+        )?;
+        self.add_recursive_def(
+            "def roseTEnv_list_rec_nonzero_typed : TypingCtx (roseTEnv Level.zero) (ListType.nil KExpr) (listRecC (Level.succ Level.zero)) (roseRecTy (Level.succ Level.zero)) := TypingCtx.const (roseTEnv Level.zero) (ListType.nil KExpr) listRecName (ListType.cons Level (Level.succ Level.zero) (ListType.nil Level)) (roseRecTy (Level.succ Level.zero)) (roseTEnv_list_rec_lookup (Level.succ Level.zero))",
+            "roseTEnv_list_rec_nonzero_typed: the fused-list recursor is admitted at universe one by its actual guarded lookup in this model.",
+        )?;
+        self.add_recursive_def(
+            "def roseTEnv_rec_missing_argument : Eq (OptionType KExpr) (kdecl_type_at (roseTEnv Level.zero) roseRecName (ListType.nil Level)) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+            "roseTEnv_rec_missing_argument: the Rose recursor lookup fails closed when its required universe argument is absent.",
+        )?;
+        self.add_recursive_def(
+            "def roseTEnv_list_rec_missing_argument : Eq (OptionType KExpr) (kdecl_type_at (roseTEnv Level.zero) listRecName (ListType.nil Level)) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+            "roseTEnv_list_rec_missing_argument: the fused-list recursor also rejects a missing universe argument.",
         )?;
         self.add_recursive_def(
             "def whnf_terminates_well_typed_rose (u : Level) (M : CandModel (roseTEnv u)) (e : KExpr) (T : KExpr) (h : TypingCtx (roseTEnv u) (ListType.nil KExpr) e T) : whnf_acc e := whnf_terminates_well_typed_dependent (roseTEnv u) M e T h",
@@ -305,12 +361,12 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def roseRecRhs_instIter (u : Level) (d : DefEnv) (C : KExpr) (m : KExpr) (cs : KExpr) : whnf_red_step_star (RedEnv.mk (roseREnv u) d) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (roseRhsBeta u C m cs) := beta_bd_star_to_whnf_red_star (RedEnv.mk (roseREnv u) d) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (roseRhsBeta u C m cs) (roseRecRhs_betaStar u C m cs)",
+            "def roseRecRhs_instIter (u : Level) (d : DefEnv) (ic : IndCtorEnv) (C : KExpr) (m : KExpr) (cs : KExpr) : whnf_red_step_star (RedEnv.mk (roseREnv u) d ic) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (roseRhsBeta u C m cs) := beta_bd_star_to_whnf_red_star (RedEnv.mk (roseREnv u) d ic) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (roseRhsBeta u C m cs) (roseRecRhs_betaStar u C m cs)",
             "roseRecRhs_instIter: iterated instantiation of the rose rule-rhs yields the contractum. DEFERRAL RETIRED: the module header listed this as needing 'a whnf_step/RoseMajor reduction substrate not yet in-spec'. That was wrong on both counts -- beta_reduces/whnf_step/whnf_acc have been in-spec since stage 29, and this theorem is a pure beta-chain statement with no env dependence at all. The guide PROVES it (NestedRoseSN.lean:3531-3535, `repeat constructor`); this is the explicit-term port. Rung 10.",
         )?;
 
         self.add_recursive_def(
-            "def rose_iota_beta_steps (u : Level) (d : DefEnv) (C : KExpr) (m : KExpr) (cs : KExpr) : whnf_red_step_star (RedEnv.mk (roseREnv u) d) (roseRecApp u C m (roseNode cs)) (roseRhsBeta u C m cs) := whnf_red_step_star.step (RedEnv.mk (roseREnv u) d) (roseRecApp u C m (roseNode cs)) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (roseRhsBeta u C m cs) (whnf_red_step.iota (RedEnv.mk (roseREnv u) d) (roseRecApp u C m (roseNode cs)) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (rose_iota_fires_gen u C m cs)) (roseRecRhs_instIter u d C m cs)",
+            "def rose_iota_beta_steps (u : Level) (d : DefEnv) (ic : IndCtorEnv) (C : KExpr) (m : KExpr) (cs : KExpr) : whnf_red_step_star (RedEnv.mk (roseREnv u) d ic) (roseRecApp u C m (roseNode cs)) (roseRhsBeta u C m cs) := whnf_red_step_star.step (RedEnv.mk (roseREnv u) d ic) (roseRecApp u C m (roseNode cs)) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (roseRhsBeta u C m cs) (whnf_red_step.iota (RedEnv.mk (roseREnv u) d ic) (roseRecApp u C m (roseNode cs)) (KExpr.app (KExpr.app (KExpr.app (roseRecRhs u) C) m) cs) (rose_iota_fires_gen u C m cs)) (roseRecRhs_instIter u d ic C m cs)",
             "rose_iota_beta_steps: the rose iota fire composed with the rhs beta chain, as a reduction-star. The (a)-half of the guide's computation-fidelity pair.",
         )?;
 

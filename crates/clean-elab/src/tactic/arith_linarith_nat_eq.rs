@@ -1135,20 +1135,35 @@ fn expand_mul_leaves(e: &Expr) -> Option<(Expr, Expr)> {
 
 /// Rewrite every `Nat.succ t` node in the additive / literal-multiplication
 /// structure of `e` into `Nat.add t' 1` (recursing into `t`, both `add`
-/// children, and the *symbolic* side of a `k * atom` / `atom * k` leaf).
-/// Ground leaves (`eval_nat_expr`-evaluable) and all other atoms are preserved
-/// verbatim, so atom identity stays aligned with the [`accumulate`] decision
-/// gate.
+/// children, and the *symbolic* side of a `k * atom` / `atom * k` leaf), and
+/// collapse every GROUND leaf to the single `Nat` literal it evaluates to.
+///
+/// The ground-leaf collapse is not cosmetic. A surface numeral elaborates to
+/// the typeclass spine `@OfNat.ofNat Nat k (instOfNatNat k)`, which is an `App`
+/// node. [`normalize_to_canonical`] orders leaves by their `{:?}` debug string,
+/// where `App(` sorts BEFORE `FVar(` and `Lit(` — so a numeral written in
+/// source lands at the HEAD of the canonical sum while a raw `Expr::nat_lit`
+/// built by a tactic lands in the TAIL. That breaks the invariant
+/// [`fold_canonical_literal_tail`] depends on (the evaluable leaves are a
+/// contiguous tail): it sees a symbolic `FVar` inside the run it is about to
+/// fold and returns the sum unfolded, after which the two sides' canonical
+/// forms differ and a TRUE linear equality is refused. `(n + 1) + 21` vs
+/// `(21 + n) + 1` — the shape every Farkas `L = R + k` obligation has, with one
+/// constant from the hypothesis and one minted by the tactic — is exactly that
+/// case. Collapsing ground leaves first puts every constant in the `Lit(` tail
+/// regardless of which spelling it came from.
 ///
 /// The transformation is DEFINITIONAL: `Nat.add t 1` iota-reduces to
 /// `Nat.succ t` (literal `1` unfolds to `Nat.succ Nat.zero` in major-premise
-/// position), and an `HAdd`/`HMul` head delta-reduces to `Nat.add`/`Nat.mul`.
+/// position), an `HAdd`/`HMul` head delta-reduces to `Nat.add`/`Nat.mul`, and
+/// `@OfNat.ofNat Nat k (instOfNatNat k)` delta/proj-reduces to the literal `k`.
 /// The caller therefore carries the whole pass with a single re-typed
 /// `Eq.refl`, and a non-def-eq rebuild is rejected by the kernel (fail closed).
 fn eliminate_succ_nodes(e: &Expr) -> Expr {
-    // Ground leaf: keep verbatim (the literal folder handles it downstream).
-    if eval_nat_expr(e).is_some() {
-        return e.clone();
+    // Ground leaf: collapse to its value, so every constant reaches the
+    // canonical sum in the same (`Lit`) spelling.
+    if let Some(v) = eval_nat_expr(e) {
+        return Expr::nat_lit(v);
     }
     // `Nat.succ t` → `Nat.add t' 1`.
     if let ExprKind::App(f, arg) = e.kind() {

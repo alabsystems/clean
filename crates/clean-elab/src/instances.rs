@@ -35,7 +35,8 @@
 //! # Priority
 //!
 //! Instances have numeric priorities (higher = tried first).
-//! Default priority is 1000 (Lean's `default`; `low` = 100, `high` = 10000).
+//! Default priority is 1000 (Lean's `default`; `low` = 100, `mid` = 500,
+//! `high` = 10000).
 //! Instances can override with e.g. `(priority := low)` or `@[instance 50]`.
 //! Within one priority tier, candidates are tried most-recent-first (the
 //! kernel registry prepends within a tier and [`InstanceTable`] preserves
@@ -87,8 +88,8 @@ pub struct InstanceInfo {
 
 /// Default instance priority — Lean's `default` prio (1000).
 ///
-/// Lean's priority keywords: `low` = 100, `default`/`mid` = 1000,
-/// `high` = 10000 (`Init/Prelude` `prio` macros; clean-parser's
+/// Lean's priority keywords: `low` = 100, `mid` = 500, `default` = 1000,
+/// `high` = 10000 (`Init/Notation.lean` `prio` macros; clean-parser's
 /// `instance_priority_value` maps the keywords identically). This constant
 /// was previously 100, which made an UNANNOTATED instance TIE with a
 /// `(priority := low)` one — and the most-recent-first tie-break then let a
@@ -113,6 +114,11 @@ pub struct InstanceTable {
     classes: HashMap<Name, ClassInfo>,
     /// Instances by class name, sorted by priority (highest first)
     instances: HashMap<Name, Vec<InstanceInfo>>,
+    /// Registered classes that are reducible ALIASES of another class
+    /// (`DecidableLT α` ⟶ `∀ a b, Decidable (a < b)`), keyed by the class they
+    /// conclude in — see [`crate::instance_alias`]. Empty unless the table was
+    /// built from an environment (`init_instances_from_env`).
+    aliases: HashMap<Name, Vec<crate::instance_alias::ClassAlias>>,
 }
 
 impl InstanceTable {
@@ -146,7 +152,7 @@ impl InstanceTable {
     /// * `num_params` - Number of parameters the class takes
     /// * `out_params` - Indices of output parameters
     /// * `semi_out_params` - Indices of semi-output parameters
-    pub fn register_class_full(
+    pub(crate) fn register_class_full(
         &mut self,
         name: Name,
         num_params: usize,
@@ -198,7 +204,7 @@ impl InstanceTable {
     ///
     /// [`Self::add_instance`] delegates here with `synth_order = None`,
     /// which makes the resolver compute a Lean-style default.
-    pub fn add_instance_with_synth_order(
+    pub(crate) fn add_instance_with_synth_order(
         &mut self,
         instance_name: Name,
         class_name: Name,
@@ -272,9 +278,83 @@ impl InstanceTable {
         }
     }
 
+    /// Put the entries of `changed` where Lean's state has them: each named
+    /// in `entries` takes that priority, and every class holding one of them
+    /// is re-sorted into Lean's order — priority descending, then position in
+    /// the index descending (`SynthInstance.getInstances` stable-sorts the
+    /// leaf by priority and tries the last entry first). A position not in
+    /// `entries` is the environment's (`Environment::instance_seq`).
+    pub(crate) fn apply_instance_entries(
+        &mut self,
+        changed: &[Name],
+        entries: &HashMap<Name, crate::instance_store::FrameEntry>,
+        env: &clean_kernel::Environment,
+    ) {
+        if changed.is_empty() {
+            return;
+        }
+        let changed: std::collections::HashSet<&Name> = changed.iter().collect();
+        for instances in self.instances.values_mut() {
+            if !instances.iter().any(|info| changed.contains(&info.name)) {
+                continue;
+            }
+            for info in instances.iter_mut() {
+                if let Some(entry) = entries.get(&info.name) {
+                    info.priority = entry.priority;
+                }
+            }
+            let seq_of = |name: &Name| {
+                entries
+                    .get(name)
+                    .map(|entry| entry.seq)
+                    .or_else(|| env.instance_seq(name))
+                    .unwrap_or(0)
+            };
+            instances.sort_by_cached_key(|info| {
+                (
+                    std::cmp::Reverse(info.priority),
+                    std::cmp::Reverse(seq_of(&info.name)),
+                )
+            });
+        }
+    }
+
+    /// The buckets holding any of `names`, as they are now (for
+    /// [`Self::restore_buckets`]).
+    pub(crate) fn snapshot_buckets(&self, names: &[Name]) -> Vec<(Name, Vec<InstanceInfo>)> {
+        let names: std::collections::HashSet<&Name> = names.iter().collect();
+        self.instances
+            .iter()
+            .filter(|(_, instances)| instances.iter().any(|info| names.contains(&info.name)))
+            .map(|(class, instances)| (class.clone(), instances.clone()))
+            .collect()
+    }
+
+    /// Put back buckets [`Self::snapshot_buckets`] took.
+    pub(crate) fn restore_buckets(&mut self, buckets: Vec<(Name, Vec<InstanceInfo>)>) {
+        for (class, instances) in buckets {
+            self.instances.insert(class, instances);
+        }
+    }
+
     /// Get all instances for a class, sorted by priority (highest first)
-    pub fn get_instances(&self, class_name: &Name) -> &[InstanceInfo] {
+    pub(crate) fn get_instances(&self, class_name: &Name) -> &[InstanceInfo] {
         self.instances.get(class_name).map_or(&[], Vec::as_slice)
+    }
+
+    /// Record the reducible class aliases of the table's classes, grouped by
+    /// the class each concludes in ([`crate::instance_alias::class_aliases_by_final`]).
+    pub(crate) fn set_class_aliases(
+        &mut self,
+        aliases: HashMap<Name, Vec<crate::instance_alias::ClassAlias>>,
+    ) {
+        self.aliases = aliases;
+    }
+
+    /// The registered alias classes whose reducible telescope concludes in
+    /// `final_class` (`Decidable` ⟶ `DecidableEq`, `DecidableLT`, …).
+    pub(crate) fn aliases_of(&self, final_class: &Name) -> &[crate::instance_alias::ClassAlias] {
+        self.aliases.get(final_class).map_or(&[], Vec::as_slice)
     }
 
     /// Get all registered classes
@@ -356,6 +436,55 @@ pub(crate) fn extract_class_app(ty: &Expr) -> Option<(Name, Vec<Expr>)> {
     } else {
         None
     }
+}
+
+/// The class a `@[instance]` target registers under: the constant head of its
+/// type's conclusion.
+///
+/// Lean's `instance` attribute (`src/Lean/Meta/Instances.lean`, `addInstance`
+/// → `getClassName`) reads the class off the declaration's type after peeling
+/// the telescope, and rejects a declaration whose conclusion is not a class
+/// application. This is the single implementation of that rule — every caller
+/// that registers a `KernelInstanceInfo` from a declaration name must use it,
+/// so no path can drift into inventing a class name of its own.
+///
+/// # Errors
+///
+/// - [`ElabError::UnknownIdent`] if `decl_name` is not in `env`.
+/// - [`ElabError::Unsupported`] if the conclusion is not an application of a
+///   registered class (Lean's "invalid 'instance' attribute").
+pub(crate) fn instance_class_of(
+    env: &clean_kernel::Environment,
+    decl_name: &Name,
+) -> Result<Name, crate::ElabError> {
+    let target_ty = env
+        .get_const(decl_name)
+        .map(|info| info.type_.clone())
+        .ok_or_else(|| {
+            crate::ElabError::UnknownIdent(format!("attribute [instance] target {decl_name}"))
+        })?;
+    let mut conclusion = &target_ty;
+    while let ExprKind::Pi(_, _, body) = conclusion.kind() {
+        conclusion = body;
+    }
+    // A reducible ALIAS of a class (`DecidableLT α` ⟶ `∀ a b, Decidable (a <
+    // b)`) is accepted too: Lean's `getClassName` reads the class through a
+    // reducible telescope, so `attribute [instance] LinearOrder.toDecidableLT`
+    // is an instance of `Decidable`. Clean files it under the alias, as
+    // `clean-olean` files the imported ones, and the caller registers the
+    // alias as a class ([`crate::instance_alias::register_alias_class`]).
+    extract_class_app(conclusion)
+        .map(|(class_name, _)| class_name)
+        .filter(|class_name| {
+            env.get_class_info(class_name).is_some()
+                || crate::instance_alias::alias_class_arity(env, class_name).is_some()
+        })
+        .ok_or_else(|| crate::ElabError::Unsupported {
+            feature: format!(
+                "attribute [instance]: type of `{decl_name}` does not conclude in a \
+                 registered class (got `{conclusion}`)"
+            ),
+        })
 }
 
 #[cfg(test)]

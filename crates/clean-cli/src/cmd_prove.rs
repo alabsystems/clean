@@ -412,14 +412,17 @@ fn read_key_from_keys_file(name: &str) -> anyhow::Result<String> {
     )
 }
 
-/// Submit to Aristotle without waiting and print the project id for later
-/// `clean prove status <id>` / `clean prove list`.
+/// Submit to Aristotle without waiting. The project id is not printed here: the
+/// `aristotle` child inherits stdio, so what it prints is what the user sees,
+/// and the follow-up route is `clean prove list` then `clean prove status <id>`.
 fn aristotle_submit_async(inv: &BackendInvocation) -> anyhow::Result<()> {
     println!("Submitting to Aristotle (async; use `clean prove status <id>` to follow up) …");
     run_backend(inv)?;
     println!(
         "Submitted. Run `clean prove list` to find the project id, then \
-         `clean prove status <id>`; download + verify with `--wait` once it finishes."
+         `clean prove status <id>`. No verb here downloads a project that was \
+         already submitted: `clean prove run --wait` submits a fresh one and \
+         waits, so reach for it instead of this async flow, not after it."
     );
     Ok(())
 }
@@ -820,18 +823,27 @@ pub(crate) const FEATURES: &[FeatureDescriptor] = &[
         summary: "Prove a Lean goal via a remote/automated backend, then verify it locally",
         description: "\
 Submits a `<Module>:<theorem>` goal in a Lean project to a remote or automated \
-prover backend, retrieves the candidate proof, and — non-negotiably — \
-RE-VERIFIES it locally before reporting success.\n\n\
+prover backend, retrieves the candidate proof, and RE-VERIFIES it locally \
+before reporting success. The one way to skip that is `--skip-verify`, which \
+returns before verification runs and prints that the backend's report is NOT \
+authoritative; without it, no backend outcome can produce a success here on its \
+own say-so.\n\n\
 Backends (`--backend`):\n\
 - `aristotle` (default) — Harmonic's remote Lean proof agent. Submits a project \
 snapshot + prompt, waits with `--wait`, and downloads a result tarball.\n\
 - `ax-deepseek` — the Axiom Math `ax-prover` agent on its DeepSeek backend.\n\
 - `ax-claude-code` — `ax-prover` driving Claude through the local, \
-subscription-authenticated `claude` CLI (no API key; tools-disabled).\n\n\
+subscription-authenticated `claude` CLI (no API key). Clean passes `--config \
+claude_code.yaml prove <goal> --folder <dir> --overwrite` and nothing else; \
+whether tools are enabled is decided by that ax-prover config file, which does \
+not live in this repo.\n\n\
 Verification re-runs `lake build` (must be clean), scans every `.lean` source \
-for residual `sorry`/`admit`, and checks `#print axioms <theorem>` against a \
-foundational allowlist (propext, Quot.sound, Classical.choice, the Eq/rfl \
-built-ins). The provider's own success message is advisory only.\n\n\
+for residual `sorry`/`admit`, and checks `#print axioms <theorem>` against the \
+kernel's own `FOUNDATIONAL_AXIOMS` allowlist — propext, Quot.sound, \
+Classical.choice, proofIrrel, Eq.refl, the four Quot primitives, \
+WellFounded.fix, Char.decEq and String.decEq. A probe whose output cannot be \
+parsed fails closed rather than being assumed foundational. The provider's own \
+success message is advisory only.\n\n\
 Keys load from the shell-sourceable `~/keys` file (`ARISTOTLE`, `DEEPSEEK`) \
 without being echoed; `ax-claude-code` needs no key. Use `--dry-run` to print \
 the backend invocation without running it, or `--wait` for the synchronous \

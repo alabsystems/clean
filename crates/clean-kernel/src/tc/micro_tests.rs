@@ -10,7 +10,7 @@ use super::tests::helpers::{
     build_nested_beta_redex, build_nested_lam, build_nested_lets, build_nested_pi,
 };
 use super::*;
-use crate::micro::{cross_validate_with_micro, MicroChecker, MicroExpr};
+use crate::micro::{MicroChecker, MicroExpr};
 
 const PROPTEST_CASES: u32 = 24;
 
@@ -109,7 +109,7 @@ proptest! {
         let tc = TypeChecker::new(&env);
         let expr = supported_closed_expr(case, raw_depth);
 
-        let (ty, cert) = tc
+        let (ty, _cert) = tc
             .infer_type_with_cert(&expr)
             .expect("supported closed expressions should infer");
 
@@ -124,13 +124,6 @@ proptest! {
             "inferred type must itself be well-formed: expr={:?}, ty={:?}",
             expr,
             ty
-        );
-        let validated = cross_validate_with_micro(&expr, &ty, &cert);
-        prop_assert!(
-            matches!(&validated, Ok(true)),
-            "micro-checker should validate supported inferred terms: expr={:?}, result={:?}",
-            expr,
-            validated
         );
     }
 
@@ -187,7 +180,7 @@ proptest! {
         let expr = build_nested_lam(depth, &Expr::type_(), Expr::bvar(0));
         let expected_ty = build_nested_pi(depth);
 
-        let (ty, cert) = tc
+        let (ty, _cert) = tc
             .infer_type_with_cert(&expr)
             .expect("nested lambda should infer");
 
@@ -196,12 +189,6 @@ proptest! {
             "nested lambda should infer the expected Pi tower: expected={:?}, actual={:?}",
             expected_ty,
             ty
-        );
-        let validated = cross_validate_with_micro(&expr, &ty, &cert);
-        prop_assert!(
-            matches!(&validated, Ok(true)),
-            "nested binder validation should succeed, got {:?}",
-            validated
         );
     }
 }
@@ -287,18 +274,13 @@ fn test_micro_bound_variables_handle_outer_binders() {
         Expr::pi(BinderInfo::Default, Expr::bvar(0), Expr::type_()),
     );
 
-    let (ty, cert) = tc
+    let (ty, _cert) = tc
         .infer_type_with_cert(&expr)
         .expect("outer-binder expression should infer");
 
     assert!(
         tc.is_def_eq(&ty, &expected_ty),
         "outer binder references must be preserved across binder nesting"
-    );
-    let validated = cross_validate_with_micro(&expr, &ty, &cert);
-    assert!(
-        matches!(&validated, Ok(true)),
-        "outer-binder validation should succeed, got {validated:?}"
     );
 }
 
@@ -315,16 +297,11 @@ fn test_micro_sort_inference_for_prop_and_type() {
         let inferred_sort = tc
             .infer_sort(&expr)
             .expect("Prop/Type should inhabit a sort");
-        let (ty, cert) = tc
+        let (ty, _cert) = tc
             .infer_type_with_cert(&expr)
             .expect("Prop/Type should infer with certificate");
 
         assert_eq!(inferred_sort, expected_sort);
         assert_eq!(ty, Expr::from_kind(ExprKind::Sort(expected_sort.clone())));
-        let validated = cross_validate_with_micro(&expr, &ty, &cert);
-        assert!(
-            matches!(&validated, Ok(true)),
-            "sort validation should succeed for {expr:?}, got {validated:?}"
-        );
     }
 }

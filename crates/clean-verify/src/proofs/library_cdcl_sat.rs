@@ -60,7 +60,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "cdcl_s01_trail_consistency",
                 "fun (n : Nat) (trail : TrailOp n) => \
-                 TrailOp.rec n \
+                 @TrailOp.rec n \
                    (fun (t : TrailOp n) => TrailConsistent n t) \
                    (TrailConsistent.empty n) \
                    (fun (var : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
@@ -98,7 +98,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "cdcl_s02_two_watched",
                 "fun (nc : Nat) (ops : WatchOp nc) => \
-                 WatchOp.rec nc \
+                 @WatchOp.rec nc \
                    (fun (w : WatchOp nc) => WatchInvariant nc w) \
                    (WatchInvariant.init nc) \
                    (fun (clause_idx : Nat) (old_watch : Nat) (new_watch : Nat) \
@@ -139,7 +139,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "cdcl_s03_learned_clause_sound",
                 "fun (db_size : Nat) (deriv : ResolutionStep db_size) => \
-                 ResolutionStep.rec db_size \
+                 @ResolutionStep.rec db_size \
                    (fun (d : ResolutionStep db_size) => ResolutionSound db_size d) \
                    (fun (idx : Nat) => ResolutionSound.axiom_clause db_size idx) \
                    (fun (pivot : Nat) (left : ResolutionStep db_size) (right : ResolutionStep db_size) \
@@ -176,7 +176,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "cdcl_s04_backtrack_correctness",
                 "fun (n : Nat) (ops : BacktrackOp n) => \
-                 BacktrackOp.rec n \
+                 @BacktrackOp.rec n \
                    (fun (b : BacktrackOp n) => BacktrackValid n b) \
                    (fun (level : Nat) => BacktrackValid.current n level) \
                    (fun (var : Nat) (var_level : Nat) \
@@ -216,7 +216,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "cdcl_s05_propagation_completeness",
                 "fun (n : Nat) (steps : BCPStep n) => \
-                 BCPStep.rec n \
+                 @BCPStep.rec n \
                    (fun (s : BCPStep n) => BCPComplete n s) \
                    (BCPComplete.fixpoint n) \
                    (fun (clause_idx : Nat) (lit : Nat) \
@@ -258,7 +258,7 @@ impl ProofLibrary {
             ProofTerm::new(
                 "cdcl_s06_termination",
                 "fun (bound : Nat) (steps : CDCLStep bound) => \
-                 CDCLStep.rec bound \
+                 @CDCLStep.rec bound \
                    (fun (s : CDCLStep bound) => CDCLTerminates bound s) \
                    (CDCLTerminates.sat bound) \
                    (CDCLTerminates.unsat bound) \

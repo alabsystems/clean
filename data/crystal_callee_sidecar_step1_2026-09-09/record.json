@@ -1,0 +1,151 @@
+{
+  "schema": "crystal-callee-sidecar-step1-v1",
+  "measured_utc": "2026-09-10T02:40:55Z",
+  "purpose": "Step 1 of retiring the AUTHORED ir_lzb_deref: measure whether the three callees the local <level::LevelArc as Deref>::deref body calls can be DERIVED from the compiler as a closed, havoc-free trust-ir bundle. This record is a MEASUREMENT; the spec still proves A4/A5 over the authored model until Phase A/B land.",
+  "clean_rev": "faef65ed7a080066b5e56655ed83d2472695056c",
+  "trust": {
+    "base_rev": "0dd9d3e2d7513446da8efc5697852918eed98026",
+    "lane_branch": "crystal/callee-sidecar",
+    "lane_commit": "348b515afbb4f95abcc9f10aecd32751da8821a9",
+    "pushed": false,
+    "changed_files": {
+      "compiler/rustc_session/src/options.rs": "745c547c2d0e51cbbe649ccbbc7b131f5af531db",
+      "compiler/rustc_session/src/session.rs": "600aa1fca83d532c7cb5c368ba70eb4fce174bcb",
+      "crates/trust-ir-bridge/src/lower.rs": "d11f96c609b5b9c856d8e8f98c6f334ba603ef81",
+      "crates/trust-mir-extract/src/ty_convert.rs": "69f18be8270490c4b1705e9defb862ff7266537e",
+      "crates/trust-thir-lower/src/crate_module.rs": "658e6906d1684135385f892da2fe153b8daf2faa",
+      "crates/trust-thir-lower/src/lib.rs": "f156d379e55abdc8bdcbf465ea71618dad29713c",
+      "crates/trust-thir-lower/src/callee_sidecar.rs": "89b3d6efd5a403f12685a589cee718e07a6dd26f"
+    }
+  },
+  "driver_seal": {
+    "dir": "$HOME/clean/target/crystal-lane/seal-sidecar",
+    "tc_sha256": "e16948bb5bf8e8f6bb95139b002147359a28aa688700ea47a09a04d964284963",
+    "driver_sha256": "86dbbfab4f11f462f57c919c424ab7507a6e456d3160d5f8f44b63524d8fb862",
+    "stamp": "1.99.0-dev (94147b34f 2026-08-11) \u2014 the SEED stamp (see docs/CRYSTAL_STATUS.md \u00a77(a)); identity is the lane commit above",
+    "sysroot": "$HOME/trust/scratchpad/laneREG/sysroot-v13"
+  },
+  "recipe": {
+    "flags": "-Ztrust-ir-lower=on -Copt-level=3 -Ztrust-ir-callee-sidecar='LevelArc as std::ops::Deref' -Ztrust-dump=ir:<dir>",
+    "arm": "release/-O3 lib-only clean-kernel (scripts in target/crystal-lane: buildsidecar.sh, dumpSidecar.sh, dumpControl.sh, cycle.sh, measure_sidecar.py, covdiff.py)"
+  },
+  "control": {
+    "driver": "seal-main (trust 0dd9d3e2d7 unpatched), same clean rev",
+    "crate_module_text_sha256_control": "e95438eb8bc3303681870103584d2fc0dae83c4abf9a2e1ef1bd85a23db679e2",
+    "crate_module_text_sha256_sidecar": "e95438eb8bc3303681870103584d2fc0dae83c4abf9a2e1ef1bd85a23db679e2",
+    "flips_control": 288,
+    "flips_sidecar": 288,
+    "coverage_transitions": "104 bodies changed in differential DETAIL text only; 1 interpreter not-run->agreed; totals equal; zero regressions (covdiff.py)"
+  },
+  "sidecar": {
+    "text_sha256": "c303b404cfefa8f871a304cfd97de9f26b0debfceb4493285d0a4a10ebfe3fa0",
+    "binary_sha256": "4471de76a392438d52701463fb0c9a7bf1db95e9f27da9ed972d82341ef7ff6e",
+    "closed": true,
+    "lowering": "ok",
+    "members": [
+      "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>",
+      "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>",
+      "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>"
+    ],
+    "panic_terminals": [
+      "core::option::expect_failed"
+    ],
+    "escaping": [],
+    "roots": [
+      {
+        "caller": "<level::LevelArc as std::ops::Deref>::deref",
+        "callee_def_path": "std::option::Option::<T>::expect",
+        "crate_decl_func_ids": [
+          4939
+        ],
+        "sidecar_func_id": 0
+      },
+      {
+        "caller": "<level::LevelArc as std::ops::Deref>::deref",
+        "callee_def_path": "std::option::Option::<T>::as_deref",
+        "crate_decl_func_ids": [
+          4938
+        ],
+        "sidecar_func_id": 1
+      }
+    ]
+  },
+  "verdicts": [
+    "GREEN R1 closed        closed=True escaping=0",
+    "GREEN R2 members       3 members; designated present={'as_deref': True, 'Deref>::deref': True, '::expect': True}",
+    "GREEN R3 havoc         undef values in members: 0",
+    "GREEN R4 gep-spelling  2 geps, 0 not byte-form-const: []",
+    "AMBER R5 load-types    load types in bundle: ['enum.0', 'enum.1', 'struct.3'] (crux: ptr vs struct/enum at the Arc field cell)",
+    "AMBER R6 first-class   10 rows, opaque=3",
+    "GREEN R7 name-link     joined via manifest concrete keys: linked=2 unlinked=0"
+  ],
+  "derived_facts": {
+    "arc_data_byte_offset": 16,
+    "option_arc_payload_byte_offset": 0,
+    "note": "both offsets are rustc layout copied by the extractor (variant_field_offsets / FieldDef.offset), not typed by hand"
+  },
+  "residuals": [
+    "`Level` is still the by-name datatype marker of ty_convert's is_level_path model (name-keyed)",
+    "the MIR extractor names enums by def path WITHOUT generic args (enum.0 serves Option<&Level> and Option<&Arc<Level>>; enum.1 = Option<Arc<Level>>)",
+    "MIR-bridge dialect: `borrow`/`copy` pseudo-moves and an alloca+store+load return slot; the THIR producer emits neither borrow nor copy (0 uses in the crate module); EvalIR has no borrow/copy constructor",
+    "`Option::expect` is #[track_caller]: the sidecar body spells two params, the real ABI three",
+    "expect_failed stays bodyless (owner floor ruling 2026-08-27); the ledger row A-CLZ-DEREF-MODEL's own closing text must be amended by the owner before the row can close",
+    "the manifest's crate_decl_func_ids (4938/4939) are ids of THIS dump (trust-main-era producer), not of the committed rev18-era fixtures (7211/6516)",
+    "NO DIFFERENTIAL COVERS A DERIVED BODY, and that is structural rather than an oversight. A LOCAL body has two producers \u2014 THIR (the crate module) and monomorphized MIR (the oracle) \u2014 and their agreement is the `derived_mir` verdict coverage.json carries per row; the local <LevelArc as Deref>::deref reads `agreed`. A FOREIGN callee has no THIR at all (that is the gap the sidecar exists to fill), so a sidecar member rests on ONE producer path with no second witness. The available second witness is execution, not extraction: the trust-ir reference interpreter and Clean's EvalIR machine running the same body (the a3 semdiff lane's three executors). Until that runs over the derived bodies, 'derived' means produced by the compiler from the callee's own MIR \u2014 not cross-checked."
+  ],
+  "files": {
+    "sidecar_text": "clean_kernel.callees.trust-ir.txt",
+    "manifest": "clean_kernel.callees.manifest.json",
+    "measurement_log": "cycle3_measurement.log"
+  },
+  "addendum_opt_in_2026-09-09": {
+    "trust_lane_commit": "4c22c0bc37",
+    "change": "member precedence made OPT-IN (PreferBundledBodiesGuard / lower_to_trust_ir_functions_preferring_bundled_bodies); the sidecar uses the opt-in entry; the bridge's default policy is unchanged",
+    "why": "the global gate turned cellset_summary_beats_resolution_when_the_std_body_is_bundled red \u2014 that pin documents why a std summary beats a bundled std body by default (keeps the body's constructs out of the verifier's slice); the derivation lane is the one place the bundled body IS the artifact",
+    "bridge_lib_tests": "883 passed / 11 failed on the lane == the 11 that fail on trust main 0dd9d3e2d7 (fail-base.txt vs fail-r2.txt identical); zero attributable failures",
+    "re_measured_sidecar_text_sha256": "c303b404cfefa8f871a304cfd97de9f26b0debfceb4493285d0a4a10ebfe3fa0",
+    "identical_to_recorded_text": true,
+    "verdicts_re_measured": [
+      "GREEN R1 closed        closed=True escaping=0",
+      "GREEN R2 members       3 members; designated present={'as_deref': True, 'Deref>::deref': True, '::expect': True}",
+      "GREEN R3 havoc         undef values in members: 0",
+      "GREEN R4 gep-spelling  2 geps, 0 not byte-form-const: []",
+      "AMBER R5 load-types    load types in bundle: ['enum.0', 'enum.1', 'struct.3'] (crux: ptr vs struct/enum at the Arc field cell)",
+      "AMBER R6 first-class   10 rows, opaque=3",
+      "GREEN R7 name-link     joined via manifest concrete keys: linked=2 unlinked=0"
+    ]
+  },
+  "o0_arm_2026-09-09": {
+    "flags": "-Copt-level=0 -Cdebug-assertions=off (the census's second arm), same filter",
+    "sidecar_text_sha256": "c303b404cfefa8f871a304cfd97de9f26b0debfceb4493285d0a4a10ebfe3fa0",
+    "identical_to_o3_text": true,
+    "closed": true,
+    "note": "the derived bodies come from the callee crates' encoded optimized MIR, so they do not vary with clean-kernel's opt level; only the crate module (flip count 257 at -O0 vs 288 at -O3) does"
+  },
+  "rebuilt_at_lane_tip_2026-09-10": {
+    "why": "the recorded artifacts were cut with a seal built at the FIRST lane commit, which does not contain B12/B13/B14; whether the later commits move the derived bodies was an INFERENCE until this run",
+    "trust_lane_tip": "35afbf7dfa45bb290e6e798ba89f7dd638767af6",
+    "lane_commits": [
+      "348b515afb feat(trust-ir): callee SIDECAR \u2014 derive foreign monomorphic callee bodies from upstream MIR beside the crate module",
+      "4c22c0bc37 bridge: member precedence is OPT-IN (PreferBundledBodiesGuard) \u2014 the derivation lane's entry; default policy unchanged",
+      "6fa017f411 tests: pin the sidecar lane's producer changes (variant-payload byte GEP, declared offsets, PtrSizedInt tag, local-first cut)",
+      "946398bfe5 sidecar: freeze waiver for the crate_module.rs hook, typed ManifestV1 manifest with a deterministic writer, fixture + round-trip test (Phase B step B12)",
+      "4f6278771b tests: the opt-in guard and the five PtrSizedInt tag peepholes, each pin falsified at its own site (Phase B step B13)",
+      "35afbf7dfa sidecar: correct the stale producer.bridge field, and a run-make integration test for -Ztrust-ir-callee-sidecar (Phase B step B14)"
+    ],
+    "sidecar_text_sha256": "c303b404cfefa8f871a304cfd97de9f26b0debfceb4493285d0a4a10ebfe3fa0",
+    "identical_to_the_first_seal_text": true,
+    "crate_module_matches_its_unpatched_control": true,
+    "verdicts": [
+      "GREEN R1 closed        closed=True escaping=0",
+      "GREEN R2 members       3 members; designated present={'as_deref': True, 'Deref>::deref': True, '::expect': True}",
+      "GREEN R3 havoc         undef values in members: 0",
+      "GREEN R4 gep-spelling  2 geps, 0 not byte-form-const: []",
+      "AMBER R5 load-types    load types in bundle: ['enum.0', 'enum.1', 'struct.3'] (crux: ptr vs struct/enum at the Arc field cell)",
+      "AMBER R6 first-class   10 rows, opaque=3",
+      "GREEN R7 name-link     joined via manifest concrete keys: linked=2 unlinked=0"
+    ],
+    "manifest_correction": "producer.bridge named lower_to_trust_ir_functions_with_expected_absent after the opt-in switched run() to lower_to_trust_ir_functions_preferring_bundled_bodies; the field exists to tell two recipes apart, so it was defeating its own purpose. Corrected in the producer; this record's manifest, the trust-side fixture and the RECORDED_SHA256 pin move with it.",
+    "manifest_sha256_now": "9cb56322a240616ef0542bf2d41aaab68892e1a36446ae8caf0abfc3d3131b8a"
+  }
+}

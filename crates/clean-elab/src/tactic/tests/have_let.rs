@@ -26,7 +26,12 @@ fn test_let_with_value_adds_definition() {
     let mut state = ProofState::new(env, b_ty.clone());
 
     // let x : A := a
-    let result = let_(&mut state, "x", a_ty.clone(), Some(a.clone()));
+    let result = let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty.clone(),
+        Some(a.clone()),
+    );
     assert!(result.is_ok(), "let with value should succeed");
 
     // Should still have 1 goal (the original B)
@@ -35,7 +40,10 @@ fn test_let_with_value_adds_definition() {
     // New goal should have x in context with value
     let new_goal = state.current_goal().unwrap();
     assert_eq!(new_goal.local_ctx.len(), 1);
-    assert_eq!(new_goal.local_ctx[0].name, "x");
+    assert_eq!(
+        new_goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
 
     // The local decl should have a value (transparent definition)
     assert!(
@@ -62,7 +70,12 @@ fn test_let_value_type_mismatch_fails() {
     let mut state = ProofState::new(env, a_ty.clone());
 
     // let x : B := a (wrong - a has type A, not B)
-    let result = let_(&mut state, "x", b_ty, Some(a));
+    let result = let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        b_ty,
+        Some(a),
+    );
     assert!(result.is_err(), "let with wrong type should fail");
 
     // State should be unchanged
@@ -88,7 +101,12 @@ fn test_let_without_value_creates_two_goals() {
     let mut state = ProofState::new(env, b_ty.clone());
 
     // let x : A (without value)
-    let result = let_(&mut state, "x", a_ty.clone(), None);
+    let result = let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty.clone(),
+        None,
+    );
     assert!(result.is_ok(), "let without value should succeed");
 
     // Should have 2 goals
@@ -108,7 +126,10 @@ fn test_let_without_value_creates_two_goals() {
         "second goal should be B"
     );
     assert_eq!(second_goal.local_ctx.len(), 1);
-    assert_eq!(second_goal.local_ctx[0].name, "x");
+    assert_eq!(
+        second_goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
 
     // The continuation's local decl should have value (the meta expr)
     assert!(
@@ -132,7 +153,12 @@ fn test_let_no_goals_fails() {
     exact(&mut state, a.clone()).unwrap();
 
     // Now try let on completed proof
-    let result = let_(&mut state, "x", a_ty, Some(a));
+    let result = let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty,
+        Some(a),
+    );
     assert!(
         matches!(result, Err(TacticError::NoGoals)),
         "let on complete proof should fail with NoGoals"
@@ -148,7 +174,12 @@ fn test_let_no_goals_without_value_fails() {
     let mut state = ProofState::new(env, a_ty.clone());
     exact(&mut state, a).unwrap();
 
-    let result = let_(&mut state, "x", a_ty, None);
+    let result = let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty,
+        None,
+    );
     assert!(
         matches!(result, Err(TacticError::NoGoals)),
         "let without value on complete proof should fail with NoGoals"
@@ -172,13 +203,25 @@ fn test_let_retains_value_have_does_not_for_opaque() {
 
     // Test let_
     let mut let_state = ProofState::new(env.clone(), b_ty.clone());
-    let_(&mut let_state, "x", a_ty.clone(), Some(a.clone())).unwrap();
+    let_(
+        &mut let_state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty.clone(),
+        Some(a.clone()),
+    )
+    .unwrap();
     let let_decl = &let_state.current_goal().unwrap().local_ctx[0];
     assert!(let_decl.value.is_some(), "let_ should retain value");
 
     // Test have_ without proof (creates 2 goals, second has h in context)
     let mut have_state = ProofState::new(env, b_ty);
-    have_(&mut have_state, "h", a_ty, None).unwrap();
+    have_(
+        &mut have_state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a_ty,
+        None,
+    )
+    .unwrap();
     let have_decl = &have_state.goals()[1].local_ctx[0];
     assert!(
         have_decl.value.is_none(),
@@ -204,7 +247,13 @@ fn test_let_complete_proof_with_value() {
     let mut state = ProofState::new(env, b_ty);
 
     // let x : A := a
-    let_(&mut state, "x", a_ty, Some(a)).unwrap();
+    let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty,
+        Some(a),
+    )
+    .unwrap();
 
     // Now goal is still B with x : A := a in context
     // Apply f : A -> B to get goal A
@@ -231,7 +280,13 @@ fn test_let_complete_proof_without_value() {
     let mut state = ProofState::new(env, b_ty);
 
     // let x : A (no value)
-    let_(&mut state, "x", a_ty, None).unwrap();
+    let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty,
+        None,
+    )
+    .unwrap();
 
     // Goal 1: produce A (the value)
     exact(&mut state, a).unwrap();
@@ -261,8 +316,9 @@ fn test_let_preserves_existing_context() {
 
     // Create state with existing hypothesis
     let existing_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -270,11 +326,23 @@ fn test_let_preserves_existing_context() {
     let mut state = ProofState::with_context(env, b_ty, vec![existing_decl]);
 
     // let x : A := a
-    let_(&mut state, "x", a_ty, Some(a)).unwrap();
+    let_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        a_ty,
+        Some(a),
+    )
+    .unwrap();
 
     // Should have both h and x in context
     let goal = state.current_goal().unwrap();
     assert_eq!(goal.local_ctx.len(), 2);
-    assert_eq!(goal.local_ctx[0].name, "h");
-    assert_eq!(goal.local_ctx[1].name, "x");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("h")
+    );
+    assert_eq!(
+        goal.local_ctx[1].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
 }

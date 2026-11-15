@@ -127,7 +127,12 @@ string equality. Grammar:
 
 - **Leaves:** identifiers verbatim (`f`, `Nat.succ`); `Nat` literals verbatim
   (`3`); `#str` / `#char` / `#float` for other literals; `_` for holes; `·` for
-  a `(· …)` section variable.
+  a `(· …)` section variable; `_x` for the scrutinee a pattern `fun`
+  (`fun (a, b) =>`, `fun ⟨a, b⟩ =>`, `fun | p =>`) binds. The last two are
+  compiler-introduced binders no source identifier can spell in either engine —
+  Lean's are hygienic (`pp.raw` prints the scrutinee `x._@.…._hyg.N`), Clean's
+  are `SurfaceName::unspellable` (`__cdot.N`, `_dx.N`, `_x.0`) — so the renderer
+  maps each family to its fixed leaf and refuses any other unspellable name.
 - **Application:** `(head arg …)`, spine-flattened (`(f a) b` ≡ `f a b`) so
   clean's curried `|>`/`<|` desugar matches Lean's flatten-macro.
 - **Operators:** the desugared head, prefix — `a + b` → `(HAdd.hAdd a b)`,
@@ -198,3 +203,16 @@ set-builder, and `×ˢ` rows are that explicit exception.
 
 The `.mathverse`-style shard rule does not apply here — this fixture is small,
 deterministic, and checked in.
+
+## Structural termination declarations (X1 re-check, 2026-11-14)
+
+`termination_structural.tsv` adds three declaration-level parity rows for
+`termination_by structural args => parameter`, including header binders and
+the short spelling. The `structural_termination_clause_binders_match_pinned_lean`
+test in `parse_parity.rs` requires the exact binder list and selected parameter,
+with zero recovery diagnostics. These supplementary declaration rows are
+separate from the expression scoreboard above. Pinned elan
+`leanprover/lean4:v4.30.0-rc2` accepted each entire source (exit 0), recorded
+in `reports/x1-recheck/lean-controls.json`; the X1 integration test also
+elaborates them through Clean. The same oracle rejected the explicit
+non-decreasing-major control under `advice_replay_checker/rejected/`.

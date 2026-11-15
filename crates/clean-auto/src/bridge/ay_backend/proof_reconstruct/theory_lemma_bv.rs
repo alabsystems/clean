@@ -216,7 +216,7 @@ impl BvReconstruction {
 /// See [`BvReconstructError`]. Returns [`BvReconstructError::NotIdenticalSlice`]
 /// for any non-identical (SAT / out-of-scope) obligation rather than fabricating
 /// a proof.
-pub fn reconstruct_bv_bitblast(
+pub(crate) fn reconstruct_bv_bitblast(
     proof: &BvBlastProof,
     negated_goal_fvar: FVarId,
 ) -> Result<BvReconstruction, BvReconstructError> {

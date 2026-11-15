@@ -22,7 +22,7 @@ impl<'a> ReconstructionContext<'a> {
     /// because the same TermId may translate to different expressions depending on
     /// binder context (e.g., `Var("x")` → `BVar(0)` inside a forall vs. FVar
     /// outside).
-    pub fn translate_term(&mut self, term_id: TermId) -> ReconstructResult<Expr> {
+    pub(crate) fn translate_term(&mut self, term_id: TermId) -> ReconstructResult<Expr> {
         let in_binder = !self.binder_names.is_empty();
         if !in_binder {
             if let Some(cached) = self.term_cache.get(&term_id) {

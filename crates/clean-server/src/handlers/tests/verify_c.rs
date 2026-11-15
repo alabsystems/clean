@@ -293,9 +293,11 @@ async fn test_verify_c_details_populated() {
         for detail in &func.details {
             assert!(
                 detail.status == "proved"
+                    || detail.status == "structural_matched"
+                    || detail.status == "unverified"
                     || detail.status == "failed"
                     || detail.status == "unknown",
-                "VC detail status should be proved/failed/unknown, got: {}",
+                "VC detail must name a bridge, structural match, unverified, failed or unknown result, got: {}",
                 detail.status
             );
             // Failed details should have a reason

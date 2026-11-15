@@ -169,41 +169,35 @@ fn test_contrapose_hyp_uses_local_proof_carry_without_trust() {
         Expr::pi(BinderInfo::Default, prop_p.clone(), initial_target.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "h").expect("intro should create h");
-    intro(&mut state, "hp").expect("intro should create hp");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should create h");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hp"))
+        .expect("intro should create hp");
     let goal = state.current_goal().expect("goal should exist after intro");
     let old_h_fvar = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .map(|decl| decl.fvar)
         .expect("h should exist after intro");
     let hp_fvar = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "hp")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("hp"))
         .map(|decl| decl.fvar)
         .expect("hp should exist after intro");
 
-    contrapose_hyp(&mut state, "h").expect("contrapose_hyp should rewrite through proof carry");
+    contrapose_hyp(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("contrapose_hyp should rewrite through proof carry");
 
     let goal = state.current_goal().expect("goal should remain open");
     let h = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("rewritten hypothesis should remain visible");
     assert_ne!(h.fvar, old_h_fvar, "replacement must allocate a fresh fvar");
-    assert_eq!(
-        h.ty,
-        Expr::arrow(
-            make_not(&prop_q),
-            Expr::arrow(
-                prop_p.clone(),
-                Expr::const_(Name::from_string("False"), vec![])
-            ),
-        )
-    );
+    assert_eq!(h.ty, Expr::arrow(make_not(&prop_q), make_not(&prop_p)));
     assert_eq!(
         goal.target, initial_target,
         "contrapose_hyp should not rewrite the target"
@@ -423,7 +417,9 @@ fn test_field_simp_cross_multiplies_with_side_goals() {
     let ne_goals: Vec<_> = state
         .goals
         .iter()
-        .filter(|g| g.tag.as_deref() == Some("field_simp:ne_zero"))
+        .filter(|g| {
+            g.tag.as_ref().map(|name| name.name()) == Some(&Name::anon().str("field_simp:ne_zero"))
+        })
         .collect();
     assert_eq!(ne_goals.len(), 1, "expected exactly one non-zero side goal");
     assert_eq!(
@@ -462,7 +458,9 @@ fn test_field_simp_rhs_division_preserves_single_side_goal() {
     let ne_goals: Vec<_> = state
         .goals
         .iter()
-        .filter(|g| g.tag.as_deref() == Some("field_simp:ne_zero"))
+        .filter(|g| {
+            g.tag.as_ref().map(|name| name.name()) == Some(&Name::anon().str("field_simp:ne_zero"))
+        })
         .collect();
     assert_eq!(
         ne_goals.len(),
@@ -519,7 +517,9 @@ fn test_field_simp_both_sides_denominator_two_side_goals() {
     let ne_goals: Vec<_> = state
         .goals
         .iter()
-        .filter(|g| g.tag.as_deref() == Some("field_simp:ne_zero"))
+        .filter(|g| {
+            g.tag.as_ref().map(|name| name.name()) == Some(&Name::anon().str("field_simp:ne_zero"))
+        })
         .collect();
     assert_eq!(
         ne_goals.len(),

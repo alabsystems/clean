@@ -24,7 +24,18 @@ mod tests_delta;
 #[cfg(test)]
 mod tests_delta_ordering;
 #[cfg(test)]
+mod tests_fvar_closed_payload;
+#[cfg(test)]
+mod tests_fvar_context;
+#[cfg(test)]
+mod tests_native_reducer_arity;
+#[cfg(test)]
+mod tests_recursor_order;
+#[cfg(test)]
 mod tests_reduce_bool_nat;
+#[cfg(test)]
+mod tests_uint_ofnat_arg_norm;
+
 #[cfg(test)]
 mod tests_struct_eta_app;
 #[cfg(test)]
@@ -177,9 +188,16 @@ impl<'env> TypeChecker<'env> {
     /// ENSURES: Reflexive, Symmetric, Transitive, Deterministic
     /// ENSURES: Terminates for well-typed input
     pub fn is_def_eq(&self, a: &Expr, b: &Expr) -> bool {
+        // The scope also covers the equiv-manager recording below.
+        let _metered = self.begin_operation();
         // No stack_safe here — is_def_eq_impl already wraps its inner call
         // in stack_safe, and all recursive paths go through is_def_eq_impl.
         let result = self.is_def_eq_impl(a, b);
+        // A universe instantiation whose Lean answer depends on `.olean`
+        // object sharing refuses every answer (`tc/level_profile.rs`).
+        if self.level_sharing_recorded() {
+            return false;
+        }
         // Record positive results in the equiv_manager for cross-call
         // amortization. Lean 4 reference: type_checker.cpp:1138.
         // Sliding window eviction retains previous generation on trim (#2410).
@@ -210,6 +228,7 @@ impl<'env> TypeChecker<'env> {
     /// Lean default (`cumulative == false` ⇒ identical to `is_def_eq`).
     /// Tracking: #3300.
     pub fn is_le(&self, a: &Expr, b: &Expr) -> bool {
+        let _metered = self.metered_scope();
         if !self.cumulative {
             return self.is_def_eq(a, b);
         }
@@ -251,6 +270,9 @@ impl<'env> TypeChecker<'env> {
     /// Every recursive call goes through `stack_safe` to prevent stack overflow
     /// on deeply nested expressions. See #1455.
     pub(super) fn is_def_eq_impl(&self, a: &Expr, b: &Expr) -> bool {
+        // Metered from before the pointer/equiv/cache checks: none of them is
+        // free when it compares long keys (`work_account.rs`).
+        let _metered = self.metered_scope();
         stack_safe(|| self.is_def_eq_inner(a, b))
     }
 
@@ -419,15 +441,15 @@ impl<'env> TypeChecker<'env> {
             }
         }
 
-        // Proof irrelevance: any two proofs of the same Prop are definitionally equal.
-        // Matches Lean 4 type_checker.cpp:1089 — full infer_type + is_prop via RefCell.
+        // Proof irrelevance is three-valued and both definite answers are final
+        // (type_checker.cpp@v4.30.0-rc2:1087-1088; @v4.35.0:1163-1164).
         let proof_irrel = self.is_def_eq_proof_irrel(&a_n, &b_n);
         #[cfg(feature = "reduction-stats")]
         crate::tc::reduction_stats::record_proof_irrel(proof_irrel);
-        if proof_irrel == Some(true) {
+        if let Some(answer) = proof_irrel {
             #[cfg(feature = "debug-def-eq")]
-            eprintln!("[def_eq_core] => true (proof irrel)");
-            return true;
+            eprintln!("[def_eq_core] => {answer} (proof irrel)");
+            return answer;
         }
 
         // Branch-sharing optimization for recursor congruence (#3402).
@@ -493,8 +515,11 @@ impl<'env> TypeChecker<'env> {
         }
 
         // Phase 4: Projection comparison with lazy delta (Lean 4 type_checker.cpp:1103-1108).
-        if let (ExprKind::Proj(_, i1, e1), ExprKind::Proj(_, i2, e2)) = (t_n.kind(), s_n.kind()) {
-            if i1 == i2 && self.lazy_delta_proj_reduction(e1, e2, *i1) {
+        // Lean v4.33.1 (leanprover/lean4#14631) compares the indices only when
+        // both projections name the SAME structure: an index means a field of
+        // that structure's layout (decision R147).
+        if let (ExprKind::Proj(s1, i1, e1), ExprKind::Proj(s2, i2, e2)) = (t_n.kind(), s_n.kind()) {
+            if s1 == s2 && i1 == i2 && self.lazy_delta_proj_reduction(e1, e2, s1, *i1) {
                 #[cfg(feature = "debug-def-eq")]
                 eprintln!("[def_eq_core] => true (P4 proj)");
                 return true;
@@ -590,125 +615,108 @@ impl<'env> TypeChecker<'env> {
 
     /// Check that all FVars in an expression are present in the current context.
     ///
-    /// This is a debug-only validation for the FVarId-unreachability invariant
+    /// This validates the FVarId-unreachability invariant
     /// (#1773): since FVarIds are monotonically increasing and never reused
     /// after `ctx_pop`, expressions containing popped FVars should never appear
     /// in cache lookups. A `false` return here indicates a soundness concern.
     ///
-    /// Performance: O(n) expression traversal — this call site (`:251-252`) has
-    /// **no** `debug_assert!`/`cfg(debug_assertions)` gate despite the doc
-    /// comment above; it runs on every build as a guard on whether a negative
+    /// It runs on every build as a guard on whether a negative
     /// def-eq cache result is safe to trust across a context pop.
     ///
-    /// PERF (Track XX, extended): delegates to a pointer-identity-memoized
-    /// worker ([`Self::all_fvars_in_context_memo`]) — same discipline as
-    /// [`FoldMemo`](crate::expr::subst) in `expr/subst.rs`: match-lowering
-    /// shares one "fallback" continuation `Arc<Expr>` across many `casesOn`
-    /// minors, so an unmemoized walk re-visits that shared node once per
-    /// occurrence (a DAG walked as a tree). The memo is built **fresh for this
-    /// call only** — never persisted across separate `all_fvars_in_context`
-    /// invocations — because the walk reads `self.ctx`, which is stable within
-    /// one call but mutates between calls via `ctx_push_let`/`ctx_pop`. A memo
-    /// hit returns exactly the bool the unmemoized walk would have produced for
-    /// the same (node, ctx) pair — same verdict, fewer re-walks.
+    /// Walk the immutable expression DAG once with an explicit worklist, not
+    /// the Rust call stack. Match-lowering shares fallback continuations across
+    /// recursor minors; pointer-identity deduplication avoids revisiting those
+    /// subgraphs. Deep generated memory functions also require stack-independent
+    /// traversal even when every node is distinct.
+    ///
+    /// The visited set lives only for this call. The expression remains borrowed
+    /// and the context is fixed throughout, so no pointer can be recycled and
+    /// no cached answer can survive `ctx_push_let`/`ctx_pop`. Since every visited
+    /// child is still pending or already checked, any absent FVar returns false
+    /// immediately; reaching an empty worklist establishes the same conjunction
+    /// as the recursive walk. Child order and opaque ZFC handling are unchanged.
     fn all_fvars_in_context(&self, e: &Expr) -> bool {
-        let mut memo = std::collections::HashMap::new();
-        self.all_fvars_in_context_memo(e, &mut memo)
-    }
-
-    /// Memoized worker for [`Self::all_fvars_in_context`]. `memo` is keyed on
-    /// the visited node's pointer identity alone (no depth component — the
-    /// FVar-in-context question does not depend on binder nesting, only on
-    /// `self.ctx`, which is fixed for the lifetime of this call).
-    fn all_fvars_in_context_memo(
-        &self,
-        e: &Expr,
-        memo: &mut std::collections::HashMap<usize, bool>,
-    ) -> bool {
-        let key = e as *const Expr as usize;
-        if let Some(cached) = memo.get(&key) {
-            return *cached;
+        let ctx = self.ctx.borrow();
+        let mut visited = std::collections::HashSet::new();
+        let mut pending = vec![e];
+        while let Some(current) = pending.pop() {
+            // Immutable metadata covers every child the walk follows. A closed
+            // subtree cannot contain an absent local, regardless of its size.
+            if !current.has_fvar_quick() {
+                continue;
+            }
+            if !visited.insert(current as *const Expr) {
+                continue;
+            }
+            // One unit of kernel work per distinct node (`crate::work_meter`).
+            crate::work_meter::charge(crate::work_meter::Walk::Equiv, 1);
+            match current.kind() {
+                ExprKind::FVar(id) => {
+                    if ctx.get(*id).is_none() {
+                        return false;
+                    }
+                }
+                ExprKind::App(f, a) => {
+                    pending.push(a);
+                    pending.push(f);
+                }
+                ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
+                    pending.push(body);
+                    pending.push(ty);
+                }
+                ExprKind::Let(_, ty, val, body, _) => {
+                    pending.push(body);
+                    pending.push(val);
+                    pending.push(ty);
+                }
+                ExprKind::Proj(_, _, inner)
+                | ExprKind::MData(_, inner)
+                | ExprKind::Squash(inner)
+                | ExprKind::CubicalPathLam { body: inner } => pending.push(inner),
+                // Cubical binders use BVars; all expression children must still
+                // be checked for free variables from the surrounding context.
+                ExprKind::CubicalPath { ty, left, right } => {
+                    pending.push(right);
+                    pending.push(left);
+                    pending.push(ty);
+                }
+                ExprKind::CubicalPathApp { path, arg } => {
+                    pending.push(arg);
+                    pending.push(path);
+                }
+                ExprKind::CubicalHComp { ty, phi, u, base } => {
+                    pending.push(base);
+                    pending.push(u);
+                    pending.push(phi);
+                    pending.push(ty);
+                }
+                ExprKind::CubicalTransp { ty, phi, base } => {
+                    pending.push(base);
+                    pending.push(phi);
+                    pending.push(ty);
+                }
+                ExprKind::CubicalCoe { ty, r, s, base } => {
+                    pending.push(base);
+                    pending.push(s);
+                    pending.push(r);
+                    pending.push(ty);
+                }
+                ExprKind::BVar(_)
+                | ExprKind::Sort(_)
+                | ExprKind::Const(_, _)
+                | ExprKind::Lit(_)
+                | ExprKind::SProp
+                | ExprKind::CubicalInterval
+                | ExprKind::CubicalI0
+                | ExprKind::CubicalI1 => {}
+                // Preserve the existing ZFC policy. Traversing these previously
+                // opaque forms is a separate completeness change, not part of
+                // replacing the stack used by this guard.
+                ExprKind::ZFCSet(_)
+                | ExprKind::ZFCMem { .. }
+                | ExprKind::ZFCComprehension { .. } => {}
+            }
         }
-        let result = self.all_fvars_in_context_inner(e, memo);
-        memo.insert(key, result);
-        result
-    }
-
-    fn all_fvars_in_context_inner(
-        &self,
-        e: &Expr,
-        memo: &mut std::collections::HashMap<usize, bool>,
-    ) -> bool {
-        match e.kind() {
-            ExprKind::FVar(id) => self.ctx.borrow().get(*id).is_some(),
-            ExprKind::App(f, a) => {
-                self.all_fvars_in_context_memo(f, memo) && self.all_fvars_in_context_memo(a, memo)
-            }
-            ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-                self.all_fvars_in_context_memo(ty, memo)
-                    && self.all_fvars_in_context_memo(body, memo)
-            }
-            ExprKind::Let(_, ty, val, body, _) => {
-                self.all_fvars_in_context_memo(ty, memo)
-                    && self.all_fvars_in_context_memo(val, memo)
-                    && self.all_fvars_in_context_memo(body, memo)
-            }
-            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) => {
-                self.all_fvars_in_context_memo(inner, memo)
-            }
-            // Leaf nodes without FVars
-            ExprKind::BVar(_) | ExprKind::Sort(_) | ExprKind::Const(_, _) | ExprKind::Lit(_) => {
-                true
-            }
-            // Mode extensions — check contained exprs
-            ExprKind::Squash(inner) => self.all_fvars_in_context_memo(inner, memo),
-            // Cubical mode extensions: recurse into children so the cross-context
-            // negative-cache guard (the `out_of_context` check above, #1773/#38)
-            // stays correct for cubical terms. The prior unconditional `true` for
-            // these kinds defeated that guard for exactly the constructs the
-            // cubical layer introduces — a stale NEGATIVE def-eq result could be
-            // trusted across a context pop instead of being recomputed. A plain
-            // structural walk is correct: the interval cofibration `phi` and the
-            // partial element `u` of the Kan operations are ordinary sub-exprs,
-            // and the path-lam body's bound interval variable is a BVar (not an
-            // FVar), so it is never "out of context".
-            ExprKind::CubicalInterval | ExprKind::CubicalI0 | ExprKind::CubicalI1 => true,
-            ExprKind::CubicalPath { ty, left, right } => {
-                self.all_fvars_in_context_memo(ty, memo)
-                    && self.all_fvars_in_context_memo(left, memo)
-                    && self.all_fvars_in_context_memo(right, memo)
-            }
-            ExprKind::CubicalPathLam { body } => self.all_fvars_in_context_memo(body, memo),
-            ExprKind::CubicalPathApp { path, arg } => {
-                self.all_fvars_in_context_memo(path, memo)
-                    && self.all_fvars_in_context_memo(arg, memo)
-            }
-            ExprKind::CubicalHComp { ty, phi, u, base } => {
-                self.all_fvars_in_context_memo(ty, memo)
-                    && self.all_fvars_in_context_memo(phi, memo)
-                    && self.all_fvars_in_context_memo(u, memo)
-                    && self.all_fvars_in_context_memo(base, memo)
-            }
-            ExprKind::CubicalTransp { ty, phi, base } => {
-                self.all_fvars_in_context_memo(ty, memo)
-                    && self.all_fvars_in_context_memo(phi, memo)
-                    && self.all_fvars_in_context_memo(base, memo)
-            }
-            ExprKind::CubicalCoe { ty, r, s, base } => {
-                self.all_fvars_in_context_memo(ty, memo)
-                    && self.all_fvars_in_context_memo(r, memo)
-                    && self.all_fvars_in_context_memo(s, memo)
-                    && self.all_fvars_in_context_memo(base, memo)
-            }
-            // ZFC set-theoretic kinds wrap a `ZFCSetExpr` enum that needs its own
-            // dedicated traversal; until that exists, stay conservative. `SProp`
-            // is childless. Returning `true` here only risks trusting a stale
-            // NEGATIVE cache entry (a completeness, not soundness, concern), and
-            // ZFC terms are off the cubical path.
-            ExprKind::ZFCSet(_)
-            | ExprKind::ZFCMem { .. }
-            | ExprKind::ZFCComprehension { .. }
-            | ExprKind::SProp => true,
-        }
+        true
     }
 }

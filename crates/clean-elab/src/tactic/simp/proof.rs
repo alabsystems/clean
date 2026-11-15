@@ -399,16 +399,14 @@ pub(crate) fn mk_congr_arg(
     }))
 }
 
-/// Build `congrFun'` proof: given `h : f = g`, produce proof of `f a = g a`.
+/// Build `congrFun` proof: given `h : f = g`, prove `f a = g a`.
 ///
-/// `congrFun' : {α : Sort u} → {β : Sort v} → {f g : α → β} → f = g → (a : α) → f a = g a`
+/// Both dependent and constant codomains use the actual core `congrFun`
+/// theorem. `congrFun'` exists in Clean's built-in prelude but is absent from
+/// imported Lean 4.8 Init, so using it silently lost application witnesses.
 ///
-/// # Contract
-///
-/// REQUIRES: `h` has type `@Eq (α → β) f_old f_new`
-/// REQUIRES: `a` has type `α`
-/// ENSURES: On Some, result has type `@Eq β (f_old a) (f_new a)`
-/// ENSURES: On None, type inference failed for `a`, `f_old`, or sort levels
+/// Returns `None` if the function type, its universe levels or the core
+/// theorem are unavailable. The caller still checks the resulting equation.
 pub(crate) fn mk_congr_fun(
     state: &ProofState,
     goal: &Goal,
@@ -417,21 +415,32 @@ pub(crate) fn mk_congr_fun(
     a: &Expr,
     h: &Expr,
 ) -> Option<Expr> {
-    let alpha = state.infer_type(goal, a).ok()?;
-    let beta = state
+    let congr_name = Name::from_string("congrFun");
+    state.env().get_const(&congr_name)?;
+    let f_ty = state.whnf(goal, &state.infer_type(goal, f_old).ok()?);
+    let ExprKind::Pi(_, domain, codomain) = f_ty.kind() else {
+        return None;
+    };
+    let u = get_sort_level(state, goal, domain)?;
+    let applied_type = state
         .infer_type(goal, &Expr::app(f_old.clone(), a.clone()))
         .ok()?;
-    let u = get_sort_level(state, goal, &alpha)?;
-    let v = get_sort_level(state, goal, &beta)?;
-    Some(EqProofBuilder::mk_congr_fun(
-        u,
-        v,
-        alpha,
-        beta,
-        f_old.clone(),
-        f_new.clone(),
-        h.clone(),
-        a.clone(),
+    let v = get_sort_level(state, goal, &applied_type)?;
+    let family = Expr::lam(
+        BinderInfo::Default,
+        domain.as_ref().clone(),
+        codomain.as_ref().clone(),
+    );
+    Some(Expr::apps(
+        Expr::const_(congr_name, vec![u, v]),
+        [
+            domain.as_ref().clone(),
+            family,
+            f_old.clone(),
+            f_new.clone(),
+            h.clone(),
+            a.clone(),
+        ],
     ))
 }
 

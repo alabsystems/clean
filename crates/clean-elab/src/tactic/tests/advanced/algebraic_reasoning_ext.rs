@@ -33,9 +33,9 @@ fn test_calc_rel_enum() {
 #[test]
 fn test_calc_justification_variants() {
     let term = CalcJustification::Term(Expr::type_());
-    let hyp = CalcJustification::Hyp("h".to_string());
+    let hyp = CalcJustification::Hyp(clean_parser::SurfaceName::generated_path("h"));
     let refl = CalcJustification::Refl;
-    let lemma = CalcJustification::Lemma("my_lemma".to_string());
+    let lemma = CalcJustification::Lemma(clean_parser::SurfaceName::generated_path("my_lemma"));
 
     // Just verify variants can be constructed
     match term {
@@ -43,7 +43,9 @@ fn test_calc_justification_variants() {
         _ => panic!("Expected Term"),
     }
     match hyp {
-        CalcJustification::Hyp(name) => assert_eq!(name, "h"),
+        CalcJustification::Hyp(name) => {
+            assert_eq!(name, clean_parser::SurfaceName::generated_path("h"))
+        }
         _ => panic!("Expected Hyp"),
     }
     match refl {
@@ -51,7 +53,9 @@ fn test_calc_justification_variants() {
         _ => panic!("Expected Refl"),
     }
     match lemma {
-        CalcJustification::Lemma(name) => assert_eq!(name, "my_lemma"),
+        CalcJustification::Lemma(name) => {
+            assert_eq!(name, clean_parser::SurfaceName::generated_path("my_lemma"))
+        }
         _ => panic!("Expected Lemma"),
     }
 }
@@ -234,7 +238,12 @@ fn test_wlog_creates_two_goals() {
     let assumption = Expr::const_(Name::from_string("Q"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    wlog(&mut state, "h", assumption).expect("wlog should succeed");
+    wlog(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        assumption,
+    )
+    .expect("wlog should succeed");
     // Should create 2 goals: target with h : assumption, target with h_neg : ¬assumption
     assert_eq!(state.goals.len(), 2);
 }
@@ -250,7 +259,12 @@ fn test_wlog_assigns_proof_to_original_meta() {
 
     let original_meta = state.current_goal().unwrap().meta_id;
 
-    wlog(&mut state, "h", assumption).expect("wlog should succeed");
+    wlog(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        assumption,
+    )
+    .expect("wlog should succeed");
 
     // The original goal's metavariable MUST be assigned (Or.elim proof)
     assert!(
@@ -466,8 +480,9 @@ fn test_convert_with_hypothesis_fvar() {
     // Create a hypothesis h : A in the goal context
     let h_fvar = FVarId::new(1);
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: h_fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -498,8 +513,9 @@ fn test_convert_hyp_with_local_hypothesis() {
 
     let h_fvar = FVarId::new(1);
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: h_fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a_ty.clone(),
         value: None,
     };
@@ -507,7 +523,7 @@ fn test_convert_hyp_with_local_hypothesis() {
     // Goal: ⊢ A with hypothesis h : A
     let mut state = ProofState::with_context(env, a_ty, vec![local_decl]);
 
-    convert_hyp(&mut state, "h")
+    convert_hyp(&mut state, &clean_parser::SurfaceName::generated_path("h"))
         .expect("BUG #2214: convert_hyp should resolve named hypothesis from goal context");
 
     assert_eq!(
@@ -527,7 +543,10 @@ fn test_push_neg_at_not_found() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, a);
 
-    let result = push_neg_at(&mut state, "nonexistent");
+    let result = push_neg_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s == "nonexistent"));
 }
 
@@ -609,28 +628,31 @@ fn test_contrapose_hyp_uses_local_proof_carry() {
         env,
         initial_target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: old_h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: Expr::arrow(p.clone(), q.clone()),
             value: None,
         }],
     );
     let initial_meta = state.current_goal().unwrap().meta_id;
 
-    contrapose_hyp(&mut state, "h").expect("contrapose_hyp should succeed");
+    contrapose_hyp(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("contrapose_hyp should succeed");
 
     let goal = state.current_goal().unwrap();
     let h = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("rewritten hypothesis should remain visible");
     assert_ne!(h.fvar, old_h_fvar);
     assert_eq!(
         h.ty,
+        // `¬Q → ¬P`, with the `Not` head as Mathlib's `contrapose` states it.
         Expr::arrow(
-            Expr::arrow(q, Expr::const_(Name::from_string("False"), vec![])),
-            Expr::arrow(p, Expr::const_(Name::from_string("False"), vec![])),
+            Expr::app(Expr::const_(Name::from_string("Not"), vec![]), q),
+            Expr::app(Expr::const_(Name::from_string("Not"), vec![]), p),
         )
     );
     assert_eq!(
@@ -653,7 +675,10 @@ fn test_norm_num_at_not_found() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, a);
 
-    let result = norm_num_at(&mut state, "nonexistent");
+    let result = norm_num_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s == "nonexistent"));
 }
 
@@ -689,22 +714,24 @@ fn test_norm_num_at_uses_defeq_local_replacement() {
         env,
         Expr::prop(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: old_h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: eq_ty,
             value: None,
         }],
     );
     let initial_meta = state.current_goal().unwrap().meta_id;
 
-    norm_num_at(&mut state, "h").expect("norm_num_at should succeed on defeq arithmetic");
+    norm_num_at(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("norm_num_at should succeed on defeq arithmetic");
 
     let h = state
         .current_goal()
         .unwrap()
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("rewritten hypothesis should remain visible");
     assert_ne!(h.fvar, old_h_fvar);
     assert_eq!(
@@ -744,15 +771,16 @@ fn test_norm_num_at_fails_closed_on_non_defeq_rewrite() {
         env,
         Expr::prop(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: old_h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: bad_ty.clone(),
             value: None,
         }],
     );
     let initial_meta = state.current_goal().unwrap().meta_id;
 
-    let result = norm_num_at(&mut state, "h");
+    let result = norm_num_at(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         matches!(result, Err(TacticError::GoalMismatch(_))),
         "non-defeq arithmetic rewrites must fail closed, got: {result:?}"

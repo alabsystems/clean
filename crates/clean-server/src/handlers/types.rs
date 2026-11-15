@@ -96,7 +96,11 @@ pub enum ProveStatus {
     /// never be `Verified` when the re-check failed. The rejected term and a
     /// non-`fully_verified` `trust_summary` are surfaced for inspection.
     KernelRejected,
-    /// SMT found a counterexample to the goal.
+    /// A VALIDATED counterexample to the goal. Nothing produces this today:
+    /// an SMT satisfying assignment is a model of the bridge's abstraction
+    /// (operations outside its theories are uninterpreted), so `prove`
+    /// reports it as `Unknown` with a `reason` that labels the model
+    /// unvalidated.
     Refuted,
     /// The solver could not determine the result.
     #[default]
@@ -144,6 +148,9 @@ pub struct ProveResult {
 pub struct GetTypeParams {
     /// Expression to get type of
     pub expr: String,
+    /// Optional timeout in milliseconds (the server's default when absent)
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Get type response
@@ -250,6 +257,11 @@ pub struct ServerInfo {
     /// Additive field — absent for older server versions.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub method_contracts: Vec<MethodContractInfo>,
+    /// The methods that write a file on the server's machine or add
+    /// client-chosen declarations to the shared environment (the registry's
+    /// `destructive` flag). Additive field, since 2026-10-21.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub destructive_methods: Vec<String>,
 }
 
 // ============================================================================
@@ -284,6 +296,13 @@ pub struct GetMetricsResult {
     pub timing: TimingStats,
     /// Cached names in the global name interner
     pub name_interner_entries: u64,
+    /// Requests' synchronous work holding a work-pool slot now: running, or
+    /// still running after its request answered the timeout error.
+    #[serde(default)]
+    pub work_in_use: u64,
+    /// The most pieces of request work that run at once (`work_in_use`'s bound).
+    #[serde(default)]
+    pub work_limit: u64,
 }
 
 /// Type cache metrics for the kernel type checker
@@ -394,11 +413,23 @@ pub struct GetConfigResult {
 /// Save environment request parameters
 #[derive(Debug, Clone, Deserialize)]
 pub struct SaveEnvironmentParams {
-    /// File path to save to
+    /// File path to save to. It must resolve under the server's workspace
+    /// root, through any symbolic links, or the save writes nothing and
+    /// answers `-32007`; a relative path is relative to the root.
     pub path: String,
     /// Format: "bincode" (default) or "json"
     #[serde(default)]
     pub format: Option<String>,
+    /// Timeout in milliseconds (ten times the server's default without one,
+    /// as for `loadEnvironment`): the request answers the timeout error at it
+    /// (since 2026-10-16), and then a regular file is as it was (since
+    /// 2026-10-18), and a path where nothing was, through symbolic links or
+    /// not, still holds nothing (since 2026-10-19). A save that has begun
+    /// renaming its file when the timeout fires is waited for and answered by
+    /// what became of the file. One writing a named pipe writes it to its
+    /// end, its request answered.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Save environment response
@@ -417,7 +448,9 @@ pub struct SaveEnvironmentResult {
 /// Load environment request parameters
 #[derive(Debug, Clone, Deserialize)]
 pub struct LoadEnvironmentParams {
-    /// File path to load from
+    /// File path to load from. It must resolve under the server's workspace
+    /// root, or nothing is read and the request answers `-32007`; a relative
+    /// path is relative to the root.
     pub path: String,
     /// Format: "bincode" (default) or "json"
     #[serde(default)]
@@ -435,6 +468,18 @@ pub struct LoadEnvironmentParams {
     /// `data/env_bypass_census.json` (row `env-serde-load`).
     #[serde(default)]
     pub replace_unchecked: bool,
+    /// The server's launch token, required with `replace_unchecked: true`
+    /// (since 2026-10-21): the connection's token is not enough for a request
+    /// that makes later verdicts rest on declarations no kernel checked
+    /// (`importModule` asks for it too). Any other load ignores it.
+    #[serde(default)]
+    pub token: Option<String>,
+    /// Optional timeout in milliseconds for reading the file and, in merge
+    /// mode, re-checking every loaded declaration (ten times the server's
+    /// default when absent). A merge still running at it answers the timeout
+    /// error and merges nothing.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Load environment response
@@ -453,9 +498,29 @@ pub struct LoadEnvironmentResult {
 pub struct ImportModuleParams {
     /// Module name in dot-separated form (e.g. "Init", "Init.Core", "Std", "Mathlib")
     pub module: String,
-    /// Additional search paths for .olean files (optional)
+    /// Additional search paths for .olean files (optional), searched after
+    /// the server's defaults. Each must resolve under the server's workspace
+    /// root, or nothing is read and the request answers `-32007`; a relative
+    /// one is relative to the root. Each module file read from one, the
+    /// requested module's and every one an `.olean` header in its import
+    /// graph lists (with the `.olean.server` and `.olean.private` parts beside
+    /// it), must resolve under that search path and under the workspace root,
+    /// symbolic links followed, when the load reaches it, or the request
+    /// answers `-32007` before that file is read and installs nothing. The
+    /// module name's components may not contain a path separator (`-32602`).
     #[serde(default)]
     pub search_paths: Vec<String>,
+    /// Optional timeout in milliseconds for loading the module closure (ten
+    /// times the server's default when absent). A load still running at it
+    /// answers the timeout error and imports nothing.
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
+    /// The server's launch token (required): what the import installs has no
+    /// kernel check, and later verdicts rest on it, so the connection's token
+    /// is not enough. Without it, or with another, the request answers
+    /// `-32006` and reads nothing.
+    #[serde(default)]
+    pub token: Option<String>,
 }
 
 /// Import module response
@@ -477,6 +542,10 @@ pub struct GetEnvironmentParams {
     /// Return JSON representation (default: false returns summary)
     #[serde(default)]
     pub include_json: bool,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Get environment response

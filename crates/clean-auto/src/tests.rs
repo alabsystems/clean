@@ -250,8 +250,12 @@ fn test_auto_prove_with_premises() {
     );
 }
 
+/// An SMT satisfying assignment of `¬P` is a model of the bridge's
+/// abstraction, not a refutation: the engine reports `Unknown` with a reason
+/// that labels the model (decide review, 2026-09-28; this test expected
+/// `Refuted` before).
 #[test]
-fn test_auto_prove_with_request_preserves_refuted_outcome() {
+fn test_auto_prove_with_request_reports_an_smt_model_as_unvalidated() {
     let env = setup_env_with_prop("P");
     let goal = Expr::const_(Name::from_string("P"), vec![]);
     let engine = AutomationEngine::new();
@@ -259,16 +263,17 @@ fn test_auto_prove_with_request_preserves_refuted_outcome() {
     let outcome =
         engine.auto_prove_with_request(&env, AutomationRequest::new(&goal, Duration::from_secs(5)));
 
-    assert!(
-        matches!(
-            outcome,
-            AutomationOutcome::Refuted {
-                source: AutomationSource::Smt,
-                ..
-            }
+    match &outcome {
+        AutomationOutcome::Unknown {
+            source: AutomationSource::Smt,
+            reason,
+            ..
+        } => assert!(
+            reason.contains("solver's abstraction") && reason.contains("not a refutation"),
+            "the SMT model must be labelled unvalidated, got: {reason}"
         ),
-        "expected SMT refutation to survive the engine boundary, got: {outcome:?}"
-    );
+        other => panic!("expected an SMT `Unknown` carrying the model's label, got: {other:?}"),
+    }
 }
 
 #[test]

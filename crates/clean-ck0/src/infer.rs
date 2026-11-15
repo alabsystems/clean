@@ -29,12 +29,12 @@
 //! delegated to [`crate::def_eq`].
 
 use crate::budget::{Budget, BudgetError};
-use crate::def_eq::is_def_eq;
+use crate::def_eq::{is_def_eq, is_def_eq_in_context};
 use crate::level::Level;
 use crate::name::Name;
 use crate::term::{Lit, Term, TermKind};
 use crate::validate::Env;
-use crate::whnf::whnf;
+use crate::whnf::whnf_in_context;
 
 /// Errors from inference / checking.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -103,11 +103,20 @@ impl From<BudgetError> for InferError {
     }
 }
 
+/// A level past the depth bound is refused as the frame cap and the reduct
+/// bound are: out of budget, so every soundness caller rejects (R166).
+impl From<crate::level::LevelTooDeep> for InferError {
+    fn from(_: crate::level::LevelTooDeep) -> Self {
+        InferError::OutOfBudget
+    }
+}
+
 /// A local typing context: de Bruijn binder types, innermost last.
 type Ctx = Vec<Term>;
 
 /// Infer the type of `e` in the empty context.
 pub fn infer(env: &dyn Env, e: &Term, budget: &mut Budget) -> Result<Term, InferError> {
+    let _scope = crate::whnf::DecisionScope::enter();
     let mut ctx = Ctx::new();
     infer_in(env, &mut ctx, e, budget)
 }
@@ -115,6 +124,7 @@ pub fn infer(env: &dyn Env, e: &Term, budget: &mut Budget) -> Result<Term, Infer
 /// Infer the *sort* of a type `e` (its type, reduced to a [`Level`]). Errors
 /// with [`InferError::NotASort`] if `e`'s type is not a `Sort`.
 pub fn infer_sort(env: &dyn Env, e: &Term, budget: &mut Budget) -> Result<Level, InferError> {
+    let _scope = crate::whnf::DecisionScope::enter();
     let mut ctx = Ctx::new();
     infer_sort_in(env, &mut ctx, e, budget)
 }
@@ -130,6 +140,7 @@ pub fn infer_in_context(
     e: &Term,
     budget: &mut Budget,
 ) -> Result<Term, InferError> {
+    let _scope = crate::whnf::DecisionScope::enter();
     let mut ctx = ctx.to_vec();
     infer_in(env, &mut ctx, e, budget)
 }
@@ -141,6 +152,7 @@ pub fn infer_sort_in_context(
     e: &Term,
     budget: &mut Budget,
 ) -> Result<Level, InferError> {
+    let _scope = crate::whnf::DecisionScope::enter();
     let mut ctx = ctx.to_vec();
     infer_sort_in(env, &mut ctx, e, budget)
 }
@@ -154,6 +166,7 @@ pub fn check(
     expected: &Term,
     budget: &mut Budget,
 ) -> Result<(), InferError> {
+    let _scope = crate::whnf::DecisionScope::enter();
     let mut ctx = Ctx::new();
     let inferred = infer_in(env, &mut ctx, e, budget)?;
     // Conversion exhaustion -> error -> reject (never accept).
@@ -164,6 +177,9 @@ pub fn check(
     }
 }
 
+/// One fuel step per call, then the decision's earlier result for `e` in `ctx`
+/// if there is one (the infer cache beside `whnf`'s, in `crate::whnf`), else
+/// the inference, whose success is remembered for the rest of the decision.
 fn infer_in(
     env: &dyn Env,
     ctx: &mut Ctx,
@@ -171,6 +187,20 @@ fn infer_in(
     budget: &mut Budget,
 ) -> Result<Term, InferError> {
     budget.step()?;
+    if let Some(ty) = crate::whnf::cached_infer(ctx, e) {
+        return Ok(ty);
+    }
+    let ty = infer_uncached(env, ctx, e, budget)?;
+    crate::whnf::remember_infer(ctx, e, &ty);
+    Ok(ty)
+}
+
+fn infer_uncached(
+    env: &dyn Env,
+    ctx: &mut Ctx,
+    e: &Term,
+    budget: &mut Budget,
+) -> Result<Term, InferError> {
     match e.kind() {
         TermKind::BVar(i) => {
             let depth = ctx.len();
@@ -181,15 +211,30 @@ fn infer_in(
                 .checked_sub(1)
                 .and_then(|d| d.checked_sub(idx))
                 .ok_or(InferError::UnboundVar { index: *i, depth })?;
-            let stored = ctx[pos].clone();
+            let stored = ctx
+                .get(pos)
+                .ok_or(InferError::UnboundVar { index: *i, depth })?
+                .clone();
             // The stored type was valid one binder shallower for each binder
             // between it and the use site: lift by i+1.
             Ok(stored.lift(i.saturating_add(1)))
         }
-        TermKind::Sort(l) => Ok(Term::sort(Level::succ(l.clone()))),
+        TermKind::Sort(l) => Ok(Term::sort(Level::try_succ(l.clone())?)),
         TermKind::Const(cref) => {
+            // A derived ι-rule names its recursor as `Const(I.rec)` in the IH
+            // calls of its right-hand side; the untrusted boundary never
+            // produces that form (`validate` refuses a recursor name in `Const`
+            // position). It denotes the same recursor as `Elim(I)`, which `whnf`
+            // and `def_eq` already treat it as, so it has the same type. Lean
+            // types `I.rec` as a constant, by its recursor type. A reduct holding
+            // an IH call is inferred since R147: `infer_proj`'s `is_prop` takes
+            // the sort of a whnf'd structure type.
             let ty = env
                 .const_type(cref.name())
+                .or_else(|| {
+                    env.recursor_inductive(cref.name())
+                        .and_then(|ind| env.recursor_type(&ind))
+                })
                 .ok_or_else(|| InferError::UnknownConst {
                     name: cref.name().clone(),
                 })?;
@@ -213,7 +258,7 @@ fn infer_in(
                     got,
                 });
             }
-            Ok(ty.instantiate_levels(cref.levels()))
+            Ok(ty.instantiate_levels(cref.levels())?)
         }
         TermKind::Elim(eref) => {
             // Elim typing (M2): the recursor type stored for the inductive,
@@ -227,18 +272,18 @@ fn infer_in(
                     .ok_or_else(|| InferError::UnknownConst {
                         name: eref.inductive().clone(),
                     })?;
-            Ok(rec_ty.instantiate_levels(eref.levels()))
+            Ok(rec_ty.instantiate_levels(eref.levels())?)
         }
         TermKind::App(f, a) => {
             let f_ty = infer_in(env, ctx, f, budget)?;
-            let f_ty = whnf(env, &f_ty, budget)?;
+            let f_ty = whnf_in_context(env, ctx, &f_ty, budget)?;
             let TermKind::Pi(_, dom, codom) = f_ty.kind() else {
                 return Err(InferError::NotAFunction);
             };
             // check the argument against the domain (positive check; exhaustion
             // -> error -> reject).
             let a_ty = infer_in(env, ctx, a, budget)?;
-            if !is_def_eq(env, &a_ty, dom, budget)? {
+            if !is_def_eq_in_context(env, ctx, &a_ty, dom, budget)? {
                 return Err(InferError::TypeMismatch);
             }
             Ok(codom.instantiate(a))
@@ -258,22 +303,22 @@ fn infer_in(
             let codom_sort = infer_sort_in(env, ctx, codom, budget);
             ctx.pop();
             let codom_sort = codom_sort?;
-            Ok(Term::sort(Level::imax(dom_sort, codom_sort)))
+            Ok(Term::sort(Level::try_imax(dom_sort, codom_sort)?))
         }
         TermKind::Let(ty, val, body) => {
             // ty must be a type; val must check against ty.
             let _ = infer_sort_in(env, ctx, ty, budget)?;
             let val_ty = infer_in(env, ctx, val, budget)?;
-            if !is_def_eq(env, &val_ty, ty, budget)? {
+            if !is_def_eq_in_context(env, ctx, &val_ty, ty, budget)? {
                 return Err(InferError::TypeMismatch);
             }
-            // body is typed with the let-bound variable; its inferred type may
-            // mention BVar(0), which we instantiate with `val` (ζ on the type).
-            ctx.push(ty.clone());
-            let body_ty = infer_in(env, ctx, body, budget);
-            ctx.pop();
-            let body_ty = body_ty?;
-            Ok(body_ty.instantiate(val))
+            // The body is typed with the let-bound value substituted (ζ first,
+            // R162): a `let` is a local DEFINITION, so its body may need the
+            // variable to be its value (Lean's kernel types the body with the
+            // variable as a local definition). Typing the body over an opaque
+            // variable refused such bodies (`funext`, `Nat.le_trans`, every
+            // structural-recursion proof whose `let` binds the motive).
+            infer_in(env, ctx, &body.instantiate(val), budget)
         }
         TermKind::Lit(Lit::Nat(_)) => Ok(Term::native_const(Name::from_dotted("Nat"))),
         TermKind::Lit(Lit::Str(_)) => Ok(Term::native_const(Name::from_dotted("String"))),
@@ -290,7 +335,7 @@ fn infer_sort_in(
     budget: &mut Budget,
 ) -> Result<Level, InferError> {
     let ty = infer_in(env, ctx, e, budget)?;
-    let ty = whnf(env, &ty, budget)?;
+    let ty = whnf_in_context(env, ctx, &ty, budget)?;
     match ty.kind() {
         TermKind::Sort(l) => Ok(l.clone()),
         _ => Err(InferError::NotASort),
@@ -302,6 +347,14 @@ fn infer_sort_in(
 /// (design: "Proj typing pulls the field type from e's inferred structure type;
 /// does NOT require a constructor head; Proj reduction on a constructor is
 /// separate").
+///
+/// The guards are Lean's `infer_proj` (`type_checker.cpp`; decision R147): the
+/// subject's type is headed by the structure the projection NAMES, applied to
+/// exactly its parameters (a structure has no indices); and when that type is
+/// a proposition (`is_prop`, which since leanprover/lean4#14807 requires the
+/// type's type to be a sort), the projected field and every earlier field the
+/// rest of the telescope depends on must be proofs, so a proof never yields
+/// data.
 fn infer_proj(
     env: &dyn Env,
     ctx: &mut Ctx,
@@ -310,27 +363,27 @@ fn infer_proj(
     inner: &Term,
     budget: &mut Budget,
 ) -> Result<Term, InferError> {
+    let invalid = || InferError::NotAStructure {
+        struct_name: struct_name.clone(),
+        idx,
+    };
     let inner_ty = infer_in(env, ctx, inner, budget)?;
-    let inner_ty = whnf(env, &inner_ty, budget)?;
+    let inner_ty = whnf_in_context(env, ctx, &inner_ty, budget)?;
     let (head, ty_args) = inner_ty.unfold_apps();
     let TermKind::Const(ty_cref) = head.kind() else {
-        return Err(InferError::NotAStructure {
-            struct_name: struct_name.clone(),
-            idx,
-        });
+        return Err(invalid());
     };
-    let info = env
-        .structure_info(ty_cref.name())
-        .ok_or_else(|| InferError::NotAStructure {
-            struct_name: struct_name.clone(),
-            idx,
-        })?;
-    if idx >= info.num_fields {
-        return Err(InferError::NotAStructure {
-            struct_name: struct_name.clone(),
-            idx,
-        });
+    if ty_cref.name() != struct_name {
+        return Err(invalid());
     }
+    let info = env.structure_info(struct_name).ok_or_else(invalid)?;
+    if idx >= info.num_fields {
+        return Err(invalid());
+    }
+    if u32::try_from(ty_args.len()).ok() != Some(info.num_params) {
+        return Err(invalid());
+    }
+    let is_prop_type = infer_sort_in(env, ctx, &inner_ty, budget)?.is_zero();
     // The constructor's type, level-instantiated, is a telescope:
     //   (params...) -> (field_0 : F0) -> ... -> StructTy
     // Field `idx`'s type is the domain of the (num_params + idx)-th Pi, with the
@@ -341,38 +394,40 @@ fn infer_proj(
         .ok_or_else(|| InferError::UnknownConst {
             name: info.ctor.clone(),
         })?
-        .instantiate_levels(ty_cref.levels());
-    let mut cur = whnf(env, &ctor_ty, budget)?;
+        .instantiate_levels(ty_cref.levels())?;
+    let mut cur = whnf_in_context(env, ctx, &ctor_ty, budget)?;
     // Instantiate the parameters with the structure type's arguments.
     let num_params = usize::try_from(info.num_params).unwrap_or(usize::MAX);
     for p in ty_args.iter().take(num_params) {
         let TermKind::Pi(_, _, codom) = cur.kind() else {
-            return Err(InferError::NotAStructure {
-                struct_name: struct_name.clone(),
-                idx,
-            });
+            return Err(invalid());
         };
-        cur = whnf(env, &codom.instantiate(p), budget)?;
+        cur = whnf_in_context(env, ctx, &codom.instantiate(p), budget)?;
     }
     // Walk `idx` fields, instantiating each with the projection of `inner`.
     for field in 0..idx {
-        let TermKind::Pi(_, _, codom) = cur.kind() else {
-            return Err(InferError::NotAStructure {
-                struct_name: struct_name.clone(),
-                idx,
-            });
+        let TermKind::Pi(_, dom, codom) = cur.kind() else {
+            return Err(invalid());
         };
+        // When the rest of the telescope mentions this field, it mentions a
+        // projection of `inner`; out of a proof that must itself be a proof.
+        if is_prop_type
+            && codom.has_loose_bvar(0)
+            && !infer_sort_in(env, ctx, dom, budget)?.is_zero()
+        {
+            return Err(invalid());
+        }
         let proj = Term::proj(struct_name.clone(), field, inner.clone());
-        cur = whnf(env, &codom.instantiate(&proj), budget)?;
+        cur = whnf_in_context(env, ctx, &codom.instantiate(&proj), budget)?;
     }
     // The current Pi's domain is field `idx`'s type.
-    match cur.kind() {
-        TermKind::Pi(_, dom, _) => Ok(dom.clone()),
-        _ => Err(InferError::NotAStructure {
-            struct_name: struct_name.clone(),
-            idx,
-        }),
+    let TermKind::Pi(_, dom, _) = cur.kind() else {
+        return Err(invalid());
+    };
+    if is_prop_type && !infer_sort_in(env, ctx, dom, budget)?.is_zero() {
+        return Err(invalid());
     }
+    Ok(dom.clone())
 }
 
 #[cfg(test)]

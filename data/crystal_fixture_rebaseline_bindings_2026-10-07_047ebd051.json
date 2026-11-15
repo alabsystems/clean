@@ -1,0 +1,575 @@
+{
+ "schema": "clean.crystal.fixture_rebaseline_bindings/v1",
+ "binding_mode": "numbering-repin",
+ "what_this_binds": "The complete set of live numbering changes whose concrete token is consumed by a registered proof/spec/tag lane, measured at clean 047ebd051 with trustc 321aaeda7 (aterm package store 9192): every moved functy, type-table, callee and global token of the 20 NUMBERING-ONLY bodies (strict_monads reads IDENTICAL, its STRUCTURAL drift having been re-derived in 047ebd051). Each anchor is the consumer's new spelling, re-pinned through the tag table (tags) and the minter (defs); the rebaseline tool refuses fixture replacement unless every mapping is in the exact live delta and every anchor is present exactly.",
+ "clean_source_rev": "047ebd0512cd5b1fd9146edb8506a182b09de2ec",
+ "clean_kernel_src_sha256": "0bf6d530ac72c6883a444dfe1d88772f5c430c80be9214f8bdd1e996b2a8d78b",
+ "dump_bin_sha256": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+ "dump_ir_sha256": "d3eee57ad5d17a4e1e4dff3127abf24b99994961a2c6b8fa40b3c4678f1a8292",
+ "pre_report_sha256": "23f0591fa7f79656dab29ecc347e77f9ae1cbcc9fb77613529e5d1ac112e100e",
+ "bindings": [
+  {
+   "stem": "bvar_in_range",
+   "class": "functy-index",
+   "old": "functy.467",
+   "new": "functy.435",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_br.tags.json",
+     "must_contain": "\"functy\": 435",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "expr_path_step_clone",
+   "class": "functy-index",
+   "old": "functy.859",
+   "new": "functy.903",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ep.tags.json",
+     "must_contain": "\"functy\": 903",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "expr_path_step_clone",
+   "class": "type-table-index",
+   "old": "enum.184",
+   "new": "enum.225",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ep.tags.json",
+     "must_contain": "\"crate_id\": 225",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ep.defs.txt",
+     "must_contain": "IRTy.enum_ 225",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_contains",
+   "class": "functy-index",
+   "old": "functy.488",
+   "new": "functy.459",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fc.tags.json",
+     "must_contain": "\"functy\": 459",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_contains",
+   "class": "type-table-index",
+   "old": "struct.1017",
+   "new": "struct.815",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fc.tags.json",
+     "must_contain": "\"crate_id\": 815",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fc.defs.txt",
+     "must_contain": "IRTy.struct_ 815",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_with",
+   "class": "functy-index",
+   "old": "functy.489",
+   "new": "functy.460",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fw.tags.json",
+     "must_contain": "\"functy\": 460",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_with",
+   "class": "type-table-index",
+   "old": "struct.1017",
+   "new": "struct.815",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fw.tags.json",
+     "must_contain": "\"crate_id\": 815",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fw.defs.txt",
+     "must_contain": "IRTy.struct_ 815",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_add",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fa.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_div",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fd.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_mul",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fm.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_sub",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs2.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "from_source_system",
+   "class": "functy-index",
+   "old": "functy.554",
+   "new": "functy.518",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.tags.json",
+     "must_contain": "\"functy\": 518",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "from_source_system",
+   "class": "type-table-index",
+   "old": "enum.13",
+   "new": "enum.17",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.tags.json",
+     "must_contain": "\"crate_id\": 17",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.defs.txt",
+     "must_contain": "IRTy.enum_ 17",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "from_source_system",
+   "class": "type-table-index",
+   "old": "enum.178",
+   "new": "enum.211",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.tags.json",
+     "must_contain": "\"crate_id\": 211",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.defs.txt",
+     "must_contain": "IRTy.enum_ 211",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "get_char_val_trunc",
+   "class": "functy-index",
+   "old": "functy.370",
+   "new": "functy.352",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_gc.tags.json",
+     "must_contain": "\"functy\": 352",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_cubical_layer",
+   "class": "type-table-index",
+   "old": "enum.13",
+   "new": "enum.17",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_h2.tags.json",
+     "must_contain": "\"crate_id\": 17",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_h2.defs.txt",
+     "must_contain": "IRTy.enum_ 17",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_loose_bvars",
+   "class": "callee-index",
+   "old": "@func.3657",
+   "new": "@func.1729",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"crate_id\": 1729",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_loose_bvars",
+   "class": "functy-index",
+   "old": "functy.435",
+   "new": "functy.410",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"functy\": 410",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_loose_bvars",
+   "class": "type-table-index",
+   "old": "struct.29",
+   "new": "struct.765",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"crate_id\": 765",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.defs.txt",
+     "must_contain": "IRTy.struct_ 765",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "is_valid_char",
+   "class": "functy-index",
+   "old": "functy.377",
+   "new": "functy.359",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_vc.tags.json",
+     "must_contain": "\"functy\": 359",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "callee-index",
+   "old": "@func.3894",
+   "new": "@func.1947",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 1947",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 1947",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/tests/crystal_a2_mint/callee_identity.rs",
+     "must_contain": "@func.1947",
+     "count": 2
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "callee-index",
+   "old": "@func.3905",
+   "new": "@func.1961",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 1961",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 1961",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/tests/crystal_a2_mint/callee_identity.rs",
+     "must_contain": "@func.1961",
+     "count": 2
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "type-table-index",
+   "old": "enum.2",
+   "new": "enum.3",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.defs.txt",
+     "must_contain": "IRTy.enum_ ir_d3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.defs.txt",
+     "must_contain": "IRTy.enum_ ir_d3",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "callee-index",
+   "old": "@func.6516",
+   "new": "@func.4925",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 4925",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "callee-index",
+   "old": "@func.7211",
+   "new": "@func.4924",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 4924",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "functy-index",
+   "old": "functy.45",
+   "new": "functy.22",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"functy\": 22",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "global-index",
+   "old": "@global.4557",
+   "new": "@global.1135",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 1135",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"name\": \"__trust_promoted_1135\"",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_kind_ord",
+   "class": "functy-index",
+   "old": "functy.306",
+   "new": "functy.278",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ko.tags.json",
+     "must_contain": "\"functy\": 278",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_kind_ord",
+   "class": "type-table-index",
+   "old": "enum.2",
+   "new": "enum.3",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ko.tags.json",
+     "must_contain": "\"crate_id\": 3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ko.defs.txt",
+     "must_contain": "IRTy.enum_ ir_d3",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "loose_bvar_range_callee",
+   "class": "functy-index",
+   "old": "functy.433",
+   "new": "functy.408",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"functy\": 408",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "loose_bvar_range_callee",
+   "class": "type-table-index",
+   "old": "struct.29",
+   "new": "struct.765",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"crate_id\": 765",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.defs.txt",
+     "must_contain": "IRTy.struct_ 765",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "meta_tag_shl",
+   "class": "functy-index",
+   "old": "functy.118",
+   "new": "functy.116",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_mt.tags.json",
+     "must_contain": "\"functy\": 116",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "node_id_index",
+   "class": "functy-index",
+   "old": "functy.97",
+   "new": "functy.85",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ni.tags.json",
+     "must_contain": "\"functy\": 85",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "node_id_index",
+   "class": "type-table-index",
+   "old": "struct.323",
+   "new": "struct.210",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ni.tags.json",
+     "must_contain": "\"crate_id\": 210",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ni.defs.txt",
+     "must_contain": "IRTy.struct_ 210",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "simp_priority_value",
+   "class": "functy-index",
+   "old": "functy.147",
+   "new": "functy.149",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_pv.tags.json",
+     "must_contain": "\"functy\": 149",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "simp_priority_value",
+   "class": "type-table-index",
+   "old": "enum.127",
+   "new": "enum.135",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_pv.tags.json",
+     "must_contain": "\"crate_id\": 135",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_pv.defs.txt",
+     "must_contain": "IRTy.enum_ 135",
+     "count": 1
+    }
+   ]
+  }
+ ]
+}

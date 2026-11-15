@@ -55,6 +55,7 @@ pub use eval_ir_kind_ord::ir_ko_module_defs;
 pub use eval_ir_mode::ir_h2_module_defs;
 pub use eval_ir_node_id_index::ir_ni_module_defs;
 pub use eval_ir_priority::ir_pv_module_defs;
+pub use eval_ir_slot_lemmas::SLOT_LEMMA_NAMES;
 pub use eval_ir_strict_monads::{ir_sm_module_defs, ir_sm_semdiff_defs};
 pub use eval_ir_trunc::ir_gc_module_defs;
 pub use eval_ir_valid_char::ir_vc_module_defs;
@@ -69,6 +70,11 @@ pub use eval_ir_w2c_synth::{ir_w2c_ci_module_defs, ir_w2c_ga_module_defs};
 pub use eval_ir_w3_synth::{ir_w3_os_module_defs, ir_w3_ou_module_defs};
 pub use eval_ir_w4_synth::ir_w4_fc_module_defs;
 pub use eval_ir_wfr_synth::{ir_frm_module_defs, ir_frr_module_defs, ir_frs_module_defs};
+mod acceptance_cdp_in;
+mod acceptance_constants;
+mod acceptance_in;
+mod acceptance_legacy;
+mod beta_subst_congr;
 mod bvar_slot;
 mod candmodel_construct_r0;
 mod candmodel_construct_r1;
@@ -89,7 +95,31 @@ mod candmodel_construct_r16_src;
 mod candmodel_construct_r17;
 mod candmodel_construct_r17_src;
 mod candmodel_construct_r17_src2;
+mod candmodel_construct_r18;
+mod candmodel_construct_r18_src;
+mod candmodel_construct_r19;
+mod candmodel_construct_r19_src;
 mod candmodel_construct_r2;
+mod candmodel_construct_r20;
+mod candmodel_construct_r20_src;
+mod candmodel_construct_r21;
+mod candmodel_construct_r21_src;
+mod candmodel_construct_r22;
+mod candmodel_construct_r22_src;
+mod candmodel_construct_r23;
+mod candmodel_construct_r23_src;
+mod candmodel_construct_r24;
+mod candmodel_construct_r24_src;
+mod candmodel_construct_r25;
+mod candmodel_construct_r25_src;
+mod candmodel_construct_r26;
+mod candmodel_construct_r26_src;
+mod candmodel_construct_r27;
+mod candmodel_construct_r27_src;
+mod candmodel_construct_r28;
+mod candmodel_construct_r28_src;
+mod candmodel_construct_r29;
+mod candmodel_construct_r29_src;
 mod candmodel_construct_r3;
 mod candmodel_construct_r4;
 mod candmodel_construct_r5;
@@ -97,10 +127,27 @@ mod candmodel_construct_r6;
 mod candmodel_construct_r7;
 mod candmodel_construct_r8;
 mod candmodel_construct_r9;
+mod candmodel_construct_r9_rank;
+mod candmodel_dep_pi_probe;
+mod candmodel_inhabit_probe;
+mod candmodel_necessary;
+mod candmodel_whnf_backward;
+mod candmodel_whnf_pi_intro;
+mod candmodel_whnf_probe;
+mod candmodel_whnf_typestep;
 mod closedness_bundle;
 mod complete_development;
+mod constructor_projection;
+mod constructor_return_coherence;
+mod ctor_spine_lengths;
 mod ctx_canonical_forms;
 mod ctx_rep;
+mod declaration_lookup_closedness;
+mod declaration_lookup_instantiation;
+mod declaration_signature_lookup;
+mod declaration_signatures;
+#[cfg(test)]
+mod declaration_source_tests;
 mod def_eq_joinable;
 mod def_eq_lift_congr;
 mod defeq_capstone;
@@ -121,20 +168,94 @@ pub(super) mod defeq_whnf_join;
 mod delta_step;
 mod delta_step_bridge;
 mod delta_subst;
+mod delta_universe_instantiation;
 mod dependent_sn_richmodel;
 mod derived_rules;
 mod env_closed_checkers;
 mod env_closed_checkers_depth;
 mod env_extensions;
+mod env_freshness;
 mod eval_ir_activation;
 mod eval_ir_adequacy;
 mod eval_ir_bits;
 mod eval_ir_bits_witnesses;
 mod eval_ir_bvar_range;
+mod eval_ir_byte;
+mod eval_ir_byte_access_laws;
+mod eval_ir_byte_alignment_laws;
+mod eval_ir_byte_allocation_laws;
+mod eval_ir_byte_allocation_world_laws;
+mod eval_ir_byte_arc_frame;
+mod eval_ir_byte_arc_tail;
+mod eval_ir_byte_atomic;
+mod eval_ir_byte_atomic_laws;
+mod eval_ir_byte_atomic_step_laws;
+#[cfg(test)]
+mod eval_ir_byte_atomic_step_tests;
+#[cfg(test)]
+mod eval_ir_byte_atomic_tests;
+mod eval_ir_byte_binding_laws;
+mod eval_ir_byte_builtin_name;
+mod eval_ir_byte_call_laws;
+mod eval_ir_byte_cast;
+mod eval_ir_byte_codec_laws;
+mod eval_ir_byte_const;
+#[cfg(test)]
+mod eval_ir_byte_const_tests;
+mod eval_ir_byte_enum;
+#[cfg(test)]
+mod eval_ir_byte_enum_tests;
+mod eval_ir_byte_fat;
+mod eval_ir_byte_fat_laws;
+mod eval_ir_byte_field;
+mod eval_ir_byte_field_extract_laws;
+mod eval_ir_byte_field_get_laws;
+mod eval_ir_byte_field_preservation_laws;
+mod eval_ir_byte_field_set_laws;
+#[cfg(test)]
+mod eval_ir_byte_field_tests;
+mod eval_ir_byte_fresh_separation_laws;
+mod eval_ir_byte_function_laws;
+mod eval_ir_byte_gep_typed;
+#[cfg(test)]
+mod eval_ir_byte_gep_typed_tests;
+mod eval_ir_byte_import_laws;
+mod eval_ir_byte_initialization_laws;
+mod eval_ir_byte_lifetime_laws;
+mod eval_ir_byte_literal_bridge;
+mod eval_ir_byte_literal_typing;
+mod eval_ir_byte_machine;
+#[cfg(test)]
+mod eval_ir_byte_machine_tests;
+mod eval_ir_byte_memory;
+mod eval_ir_byte_memory_laws;
+mod eval_ir_byte_old_frame_laws;
+mod eval_ir_byte_overflow;
+#[cfg(test)]
+mod eval_ir_byte_overflow_tests;
+mod eval_ir_byte_radix_laws;
+mod eval_ir_byte_range_laws;
+mod eval_ir_byte_scalar_laws;
+mod eval_ir_byte_site_order;
+mod eval_ir_byte_step_laws;
+mod eval_ir_byte_ty_eq_laws;
+mod eval_ir_byte_types;
+mod eval_ir_byte_usize;
+mod eval_ir_byte_usize_cmp;
+mod eval_ir_byte_usize_cmp_step_laws;
+#[cfg(test)]
+mod eval_ir_byte_usize_cmp_tests;
+#[cfg(test)]
+mod eval_ir_byte_usize_tests;
+mod eval_ir_byte_world_laws;
+mod eval_ir_cf;
 mod eval_ir_contains;
 mod eval_ir_correct;
 mod eval_ir_cost;
 mod eval_ir_crystal;
+mod eval_ir_driver;
+mod eval_ir_execution;
+mod eval_ir_fbq;
 mod eval_ir_fcmp;
 mod eval_ir_flat_flags_with;
 mod eval_ir_float;
@@ -148,22 +269,82 @@ mod eval_ir_float_ops;
 mod eval_ir_float_res;
 mod eval_ir_float_res_witnesses;
 mod eval_ir_float_sub;
+mod eval_ir_fng;
 mod eval_ir_from_source;
 mod eval_ir_fuel;
 mod eval_ir_has_loose_bvars;
+mod eval_ir_it;
+mod eval_ir_itb;
+mod eval_ir_itc;
+mod eval_ir_itd;
+mod eval_ir_ite;
+mod eval_ir_its;
 mod eval_ir_kind_ord;
 mod eval_ir_level_minted;
 mod eval_ir_lzb;
 mod eval_ir_lzb_activation;
 mod eval_ir_lzb_correct;
+mod eval_ir_lzc;
+mod eval_ir_lzd;
+mod eval_ir_lzd_activation;
+mod eval_ir_lzd_correct;
+mod eval_ir_lzd_fresh;
 mod eval_ir_machine;
 mod eval_ir_meta_tag;
 mod eval_ir_mode;
 mod eval_ir_node_id_index;
 mod eval_ir_ops;
 mod eval_ir_path_step;
+mod eval_ir_positive_division_v1;
 mod eval_ir_priority;
 mod eval_ir_repr;
+mod eval_ir_rust_u64;
+mod eval_ir_sh;
+mod eval_ir_slot_lemmas;
+mod eval_ir_stack;
+mod eval_ir_stack_minted;
+mod eval_ir_steps_scaling_probe;
+#[cfg(test)]
+mod eval_ir_vcg;
+pub use eval_ir_stack_minted::STACK_MINTED_NAMES;
+mod eval_ir_stack_theorems;
+pub use eval_ir_stack_theorems::STACK_THEOREM_NAMES;
+mod eval_ir_stack_split;
+pub use eval_ir_stack_split::STACK_SPLIT_NAMES;
+mod eval_ir_stack_axes_minted;
+pub use eval_ir_stack_axes_minted::STACK_AXES_MINTED_NAMES;
+mod eval_ir_stack_axes;
+pub use eval_ir_stack_axes::STACK_AXES_NAMES;
+mod eval_ir_itf;
+pub use eval_ir_itf::ITF_NAMES;
+mod eval_ir_stk_witness;
+pub use eval_ir_stk_witness::STK_WITNESS_NAMES;
+mod eval_ir_stack_axes_witness;
+pub use eval_ir_stack_axes_witness::STACK_AXES_WITNESS_NAMES;
+mod eval_ir_ctr;
+pub use acceptance_cdp_in::{
+    ACCEPTS_IN_PROOF_NAMES, ACCEPTS_TC_NAT_NAME_ALIASES, ACCEPTS_TC_QUOT_NAME_ALIASES,
+    ACCEPTS_TC_STRING_NAME_ALIASES, NATIVE_NAT_PROOF_NAMES, STRING_LITERAL_PROOF_NAMES,
+};
+pub use eval_ir_ctr::CTR_NAMES;
+pub use literal_string_codec::STRING_LIT_CODEC_PROOF_NAMES;
+mod eval_ir_lzd_sctr;
+pub use eval_ir_lzd_sctr::LZD_SCTR_NAMES;
+mod eval_ir_ctr_stack;
+pub use eval_ir_ctr_stack::CTR_STACK_NAMES;
+mod eval_ir_e5;
+pub use eval_ir_e5::E5_NAMES;
+mod eval_ir_bmem_core;
+pub use eval_ir_bmem_core::BMEM_CORE_NAMES;
+mod eval_ir_bmem_trie;
+pub use eval_ir_bmem_trie::BMEM_TRIE_NAMES;
+mod eval_ir_lzd_pc;
+pub use eval_ir_lzd_pc::LZD_PC_NAMES;
+mod eval_ir_it_sctr;
+pub use eval_ir_it_sctr::IT_SCTR_NAMES;
+mod eval_ir_it_pc;
+pub use eval_ir_it_pc::IT_PC_NAMES;
+mod declaration_input_admission;
 mod eval_ir_state;
 mod eval_ir_steps;
 mod eval_ir_strict_monads;
@@ -213,11 +394,13 @@ mod hnf3_residual;
 mod hnf_conv;
 mod hnf_discharge3;
 mod hnf_refutation;
+mod impl_constant_soundness;
 mod impl_infer;
 mod impl_infer_mode_gate;
 mod impl_infer_sound;
 mod impl_infer_syntax;
 mod impl_infer_witnesses;
+mod impl_literal_soundness;
 mod implementation_soundness;
 mod implementation_soundness_admissibility;
 mod implementation_soundness_admissibility_wrappers;
@@ -234,11 +417,17 @@ mod implementation_soundness_infer_refinement_binder_typing;
 mod implementation_soundness_infer_refinement_dispatch;
 mod implementation_soundness_simulation;
 mod implementation_soundness_whnf_decomposition;
+mod ind_ctor_env;
+mod ind_ctor_table;
 mod infer_terminates_proof;
 mod iota_closedness_bundle;
+mod iota_contractum;
+mod iota_contractum_declines;
 mod iota_core;
 mod iota_immunity;
+mod iota_option_views;
 mod iota_prepass;
+mod iota_reduct_views;
 mod iota_step;
 mod iota_step_bridge;
 mod iota_subst;
@@ -248,15 +437,24 @@ mod kernel_core_red_env;
 mod kexpr_beq;
 mod kexpr_beq_sound;
 mod kexpr_discr;
+mod kinfers_declarative;
+mod literal_model;
+mod literal_string_codec;
 mod micro_checker;
 mod micro_soundness;
+mod micro_totality_contrast;
 mod micro_verifies_r0;
 mod mutual_schema;
+mod named_block_return;
+mod named_indexed_guard;
+mod nat_zero_rhs_general;
+mod nat_zero_rhs_typing;
 mod natrec;
 mod nf_app_leg;
 mod nf_head;
 mod nf_head_const_name;
 mod nf_shape;
+mod omega_not_sn;
 mod par_reduces_c;
 mod par_reduces_cd;
 mod par_reduces_cd_commute;
@@ -280,10 +478,29 @@ mod pi_injectivity_confluence;
 mod pi_injectivity_def_eq;
 mod premise_witnesses;
 mod proj_rigidity;
+mod projection_confluence;
+mod projection_level_zero;
+mod projection_metadata;
+mod projection_reduction;
+mod projection_semantic;
+mod projection_telescope;
+mod projection_typing;
+mod projection_unused_binder;
+mod r29_premise_witnesses;
+mod raw_block_return;
 mod rbelow_descent;
 mod rec_env;
 mod rec_env_closed;
+mod recursor_generic_rhs_instances;
+mod recursor_rhs_instantiation;
+mod recursor_schematic_rhs_instances;
+mod redabstraction_probe;
+mod rednd_probe;
+mod redrecgen_probe;
 mod reduction_witnesses;
+mod reflected_nat_zero_general;
+mod reflected_nat_zero_source_bridge;
+mod reflected_nat_zero_typing;
 mod residual_narrowing;
 mod rigid_app_head;
 mod rigid_app_inv;
@@ -292,9 +509,30 @@ mod rigid_preservation;
 mod rigid_tag;
 mod rose_schema;
 mod schema;
+mod schematic_delta_typing;
+mod schematic_tenv_rep;
+mod semantic_closedness;
+mod semantic_delta_compat;
+mod semantic_injectivity;
+mod semantic_iota_compat;
+mod semantic_iota_universe_instantiation;
+mod semantic_join;
+mod semantic_parallel_compat;
+mod semantic_reduction_universe_instantiation;
+mod semantic_spine_compat;
+mod semantic_term_instantiation;
+mod semantic_typed_spine;
+mod semantic_typed_spine_forward;
+mod semantic_typed_spine_select;
+mod semantic_typing_inversion;
+mod semantic_typing_universe_instantiation;
+mod semantic_universe_substitution;
+mod semantic_wh3_soundness_in;
 mod slot_collapse;
 mod slot_dispatch_at;
 mod spine_join_components;
+mod step_app_inversion;
+mod stored_family_admission;
 mod stratified_hurkens_block;
 mod stuck_app_rigidity;
 mod stuck_immunity;
@@ -317,12 +555,27 @@ mod type_preservation_generation_app;
 mod type_preservation_raw_bridge;
 mod type_preservation_subst;
 mod type_preservation_weakening;
+mod typing_closed_weakening;
 mod typing_def_eq;
 mod typing_def_eq_reduction_families;
 mod typing_def_eq_typed;
 mod typing_universe_levels;
+mod typingctx_universe_instantiation;
+mod typingctxconv_universe_instantiation;
 mod unique_normal_forms_c;
+mod univ_instantiation_syntax;
 mod univ_poly;
+mod universe_closedness;
+mod universe_geq_bounded_offsets;
+mod universe_geq_core;
+mod universe_geq_stabilization;
+mod universe_instantiation_bridge;
+mod universe_lookup_bridge;
+mod universe_normalization_offset_spine;
+mod universe_param_support;
+mod universe_schematic_rep;
+mod universe_semantic_bridge;
+mod universe_support_fusion;
 mod wall_a_completeness;
 mod wall_a_headmatch;
 mod wbelow3;
@@ -335,6 +588,9 @@ mod wh3_soundness;
 mod wh3_spine;
 mod wh3_stability;
 mod wh3_stuck_head;
+mod wh3_to_wh_transfer;
+mod wh3_to_wh_transfer_loop;
+mod wh3_to_wh_transfer_step;
 mod wh_fuel_adequacy;
 mod wh_hiota_repair;
 mod wh_neutral_stuck;
@@ -421,20 +677,23 @@ impl Specification {
     /// for EvalIR's own witnesses and vacuity firewall.  Consumers that compose
     /// EvalIR with authored Clean source need the standard notation,
     /// typeclasses, and logical vocabulary installed by
-    /// [`Environment::with_prelude`].  This constructor adds the exact same
-    /// single EvalIR stage to that production prelude without pulling in the
-    /// unrelated self-verification specification.
+    /// [`Environment::with_prelude`]. This constructor installs the execution
+    /// vocabulary and shared literal builders without the historical Crystal
+    /// worked examples or the unrelated self-verification specification.
     ///
     /// # Errors
     /// Returns `SpecError` if any EvalIR declaration fails to parse, elaborate,
     /// or kernel-check in the prelude environment.
     pub fn new_eval_ir_prelude_spec() -> Result<Self, SpecError> {
         let mut spec = Specification {
-            env: Environment::with_prelude(),
+            env: Environment::try_with_prelude()
+                .map_err(|error| SpecError::EnvError(error.to_string()))?,
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: super::ModelUnitSource::default(),
         };
-        spec.add_eval_ir()?;
+        spec.add_eval_ir_execution()?;
         // A2's `add_eval_ir_repr` is deliberately NOT in this bundle. Its
         // `EncodesLevelArc` is indexed by `Level`, and this bundle starts from
         // `Environment::with_prelude()` — the Lean-style prelude — which carries
@@ -529,9 +788,14 @@ impl Specification {
         spec.add_foundation_arith_positivity()?;
         spec.add_foundation_arith_transport()?;
         spec.add_expr_model()?;
+        spec.add_declaration_signature_carrier()?;
         spec.add_rec_env()?;
+        spec.add_univ_instantiation_syntax()?;
+        spec.add_recursor_rhs_instantiation_syntax()?;
+        spec.add_declaration_signatures()?;
         spec.add_iota_step()?;
         spec.add_delta_step_core()?;
+        spec.add_ind_ctor_env()?;
         spec.add_red_env()?;
         spec.add_bvar_ceiling_definition()?;
         spec.add_env_closed_checker_defs()?;
@@ -551,10 +815,60 @@ impl Specification {
 
     /// Construct an empty specification for subset builders.
     fn new_empty() -> Self {
-        Specification {
+        let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
-        }
+            red_env_interning_override: None,
+            model_unit_source: super::ModelUnitSource::default(),
+        };
+        // CLOSING THE FREE-VARIABLE FAIL-OPEN FOR THE SPEC (2026-09-20).
+        //
+        // `relaxedAutoImplicit` defaults TRUE -- Lean 4's own default, which
+        // Clean reproduces faithfully and pins at
+        // `tests/lean4_compat/lean4_tests/1011.lean` (3 must-succeed, 4
+        // expected-fail). Under it, ANY undeclared identifier whose first
+        // character is alphabetic auto-binds as a fresh implicit in TYPE
+        // position, while the same spelling in VALUE position is a hard error
+        // (`elab_core.rs`'s auto-implicit block, guarded by `!in_term_body`).
+        // A declaration hitting that is true of an ARBITRARY inhabitant rather
+        // than of the constant it names -- strictly weaker than it reads, and
+        // it still kernel-checks. That is how `ir_lzd_max_running_at_9` and
+        // `_at_10` came to be true of an arbitrary counter rather than of 64.
+        //
+        // THE ELABORATOR DEFAULT IS NOT TOUCHED. Changing it would diverge from
+        // Lean and break that fidelity pin. This opts the SPEC's environment out
+        // instead -- the same thing Mathlib does project-wide -- where an
+        // undeclared name is always a bug and never a convenience.
+        //
+        // Only the RELAXED half is disabled, which is the surgical choice:
+        // single-letter type variables still auto-bind, so inductive headers
+        // keep the auto-implicit table `elab_inductive.rs` uses structurally for
+        // `num_params`. Only multi-character names like `ir_d64` become errors.
+        //
+        // MEASURED before landing, at every scope this box can build: the
+        // substitution spec (150 stages, 503.1 s), the EvalIR spec (50.7 s), and
+        // the FULL spec via `axiom_ratchet` (3/3, headline still three). The
+        // four `free_var_*` probe rows flip to `Unknown identifier` and are
+        // pinned below as refusals, so removing this line makes them pass and
+        // the test says so.
+        spec.env
+            .set_option("relaxedAutoImplicit".to_string(), Some("false".to_string()));
+        spec
+    }
+
+    /// Build ONLY the stage prefix that registers the `.clean` model units
+    /// (foundation types through `add_expr_model`), reading the units from
+    /// `source`. This is what the W1 fidelity oracle compares: one build from
+    /// the files, one from the retained literals, over the same six stages.
+    ///
+    /// # Errors
+    /// Returns `SpecError` if any stage fails.
+    #[cfg(test)]
+    pub(crate) fn new_model_units_spec(source: super::ModelUnitSource) -> Result<Self, SpecError> {
+        let mut spec = Self::new_empty();
+        spec.set_model_unit_source(source);
+        bundles::run_bundle(&mut spec, bundles::CoreSpecBundle::ModelUnits)?;
+        Ok(spec)
     }
 }

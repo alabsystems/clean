@@ -23,18 +23,20 @@
 //! CONCRETE, FIXED, FINITE reflected environment, so the rank can be computed
 //! for the actual environment and the decrease proved the way R3/R4 proved
 //! ι-deadness and δ-deadness at concrete heads: by kernel computation.
-//! Measured here on the generated env (`generated/kernel_core_red_env.defs.txt`):
-//! the `DefEnv` is a **50-entry** `DefEnv.addDef` chain over 127 interned names,
+//! Historical initial-R9 measurement (2026-08-26, before shared signatures):
+//! the `DefEnv` was a **50-entry** `DefEnv.addDef` chain over 127 interned names,
 //! its δ-dependency graph has **67 edges**, it is **ACYCLIC**, and its longest
 //! δ-chain is **7** — so `rk` ranges over `0..8`. It is acyclic for a structural
 //! reason worth recording: the reflection compiles every recursive kernel
 //! definition through the corresponding `.rec`, so not one of the 50 bodies
-//! mentions its own name.
+//! mentioned its own name. Those counts are not current limits: registration now
+//! decodes the current elaborated KDefSig bodies, derives a fresh candidate DAG
+//! rank table, and still requires the kernel's unchanged rank checker to pass.
 //!
 //! The route is the established one-rfl checker pattern (`env_closed_checkers.rs`
 //! §"Why checkers"), not a 50-way case analysis:
 //!
-//! 1. `rk : Name -> Nat` — a 127-entry rank TABLE indexed by the interned
+//! 1. `rk : Name -> Nat` — a current-artifact rank TABLE indexed by the interned
 //!    numeral of a `Name.str Name.anonymous k`, `Nat.zero` for every other name.
 //!    Table-lookup rather than a `name_eqb` cascade on purpose: the checker
 //!    evaluates `rk` once per const occurrence and there are **963** of them
@@ -81,7 +83,7 @@
 //! - **At a sort-typed slot the δ rule is landed and is VACUOUS OVER THIS ENV,
 //!   proved.** `SynTyC.konstDelta` types `const c us` at `sort m` from a
 //!   derivation of its unfolding at `sort m`. Over `the_red_env` no such
-//!   derivation exists, because **all 50 real definition bodies are `KExpr.lam`**
+//!   derivation exists, because **all reflected definition bodies are `KExpr.lam`**
 //!   (`r9_the_red_env_all_lam`, one `Eq.refl` over the real env) and `SynTyC`
 //!   types no `lam` at a `sort` (`synTyC_no_lam_at_sort`). The two compose into
 //!   `r9_konstDelta_no_real_instance`. This is a labeled by-design vacuity in
@@ -91,7 +93,7 @@
 //!   `const c us` at any sort when `defval_for (red_def the_red_env) c = none`:
 //!   such a const is whnf-STUCK (no β at a const head, no ι at a bare const, no
 //!   δ), so `whnfAcc_const_dead` gives it membership outright. Over the real env
-//!   that is every name outside the 50 — every reflected inductive type,
+//!   that is every name outside the definition table — every reflected inductive type,
 //!   constructor and recursor. `synTyC_konst_dead_witness` types the REAL
 //!   reflected `DefEnv` constant and `synTyC_sn_konst_witness` gets its SN
 //!   THROUGH the capstone. This is the first rung of the ladder whose judgment
@@ -242,52 +244,32 @@ const NILUS: &str = "(ListType.nil Level)";
 /// The fixed definition environment every δ statement here is relative to.
 const DENV: &str = "(red_def the_red_env)";
 /// A REAL reflected kernel name with NO definitional value: `DefEnv`, the
-/// inductive type. `defval_for (red_def the_red_env) kcre_name_12` computes to
+/// inductive type. `defval_for (red_def the_red_env) fixture_def_env_name` computes to
 /// `none`.
-const DEADNAME: &str = "kcre_name_12";
+const DEADNAME: &str = "fixture_def_env_name";
 /// The bare const at that name.
-const DEADCONST: &str = "(KExpr.const kcre_name_12 (ListType.nil Level))";
+const DEADCONST: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
 /// A REAL reflected kernel name that IS delta-defined — the outermost `DefEnv`
 /// entry `def_env_lift_closed_b` (R2's `kcre_witness_delta_head`), whose value
 /// is `kcre_witness_delta_value`.
 const LIVECONST: &str = "(KExpr.const kcre_witness_delta_head (ListType.nil Level))";
-/// The name occurring in that value: `def_env_closed_b` (rank 4 against the
-/// head's rank 5).
-const LIVEREF: &str = "kcre_name_90";
+/// The semantic name occurring in that value: `def_env_closed_b`. Its actual
+/// rank and the witness head's rank are recomputed from the current bodies.
+const LIVEREF: &str = "fixture_def_env_closed_b_name";
 
 // ================================================================
 // Group A — B3: `const_occurs`, the COMPUTED rank, and the δ-decrease.
 // ================================================================
 
-/// The δ-rank table over the 127 interned reflected names, index-aligned to
-/// `kcre_name_<i>`.
-///
-/// `0` means "not a definition of `the_red_env`" — every reflected inductive
-/// type, constructor and recursor. A defined name gets `1 + d` where `d` is the
-/// length of the longest δ-chain out of it, so a defined name always outranks an
-/// undefined one and the whole table is bounded by `8`. Derived mechanically
-/// from `generated/kernel_core_red_env.defs.txt` (50 entries, 67 edges,
-/// acyclic); the kernel re-derives its adequacy in one step through
-/// `the_red_env_ranked`, so a table that stopped matching the env would fail
-/// CLOSED rather than be believed.
-const R9_RANKS: [u8; 127] = [
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //   0- 9
-    0, 0, 0, 0, 0, 1, 0, 0, 0, 0, //  10-19  (15 Nat.add)
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, //  20-29
-    0, 2, 0, 1, 2, 0, 0, 0, 0, 0, //  30-39  (31 Nat.sub, 33 opt_bind, 34 kapp_args)
-    0, 0, 0, 0, 4, 1, 0, 0, 0, 0, //  40-49  (44 name_eqb, 45 Bool.and)
-    1, 1, 0, 0, 0, 0, 1, 1, 2, 3, //  50-59  (50 apply_spine .. 59 nat_eqb)
-    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, //  60-69  (60-62 recmeta_num_*)
-    0, 0, 0, 0, 0, 0, 0, 2, 1, 1, //  70-79  (77 bvar_ceiling, 78, 79)
-    0, 0, 0, 0, 1, 0, 0, 0, 0, 1, //  80-89  (84 Nat.pred, 89 bool_pick)
-    4, 5, 7, 6, 5, 4, 3, 1, 1, 1, //  90-99  (90 def_env_closed_b .. 96 lift_bvar_at)
-    1, 1, 1, 5, 4, 5, 1, 6, 5, 1, // 100-109
-    5, 0, 0, 0, 0, 0, 0, 0, 5, 6, // 110-119 (118 def_env_lift_closed_b, 119 delta_reduct)
-    8, 7, 5, 6, 1, 1, 1, // 120-126 (120 instantiate, 121 iota_reduct)
-];
+/// Ranks are candidates derived from the actual elaborated reflected bodies at
+/// registration. No source-number table has proof authority: the unchanged
+/// def_env_ranked_b equality must still kernel-check over the actual environment.
+/// This small table is only a source-parser/chunk-layout fixture.
+#[cfg(test)]
+const R9_PARSE_TEST_RANKS: [u64; 33] = [0; 33];
 
 /// A unary `Nat` literal.
-fn nat_lit(n: u8) -> String {
+fn nat_lit(n: u64) -> String {
     let mut s = "Nat.zero".to_string();
     for _ in 0..n {
         s = format!("(Nat.succ {s})");
@@ -307,19 +289,19 @@ const R9_TBL_CHUNK: usize = 16;
 
 /// The chunk defs, innermost (last) first — the order they must be registered
 /// in, since each names the next.
-pub(super) fn src_r9_rank_tbl_chunks() -> Vec<(String, String)> {
-    let n = R9_RANKS.len();
+pub(super) fn src_r9_rank_tbl_chunks(ranks: &[u64]) -> Vec<(String, String)> {
+    let n = ranks.len().max(1);
     let starts: Vec<usize> = (0..n).step_by(R9_TBL_CHUNK).collect();
     let mut out: Vec<(String, String)> = Vec::new();
     for (idx, start) in starts.iter().enumerate().rev() {
-        let end = (start + R9_TBL_CHUNK).min(n);
+        let end = (start + R9_TBL_CHUNK).min(ranks.len());
         let tail = if idx + 1 == starts.len() {
             "(ListType.nil Nat)".to_string()
         } else {
             format!("r9_rank_tbl_{}", starts[idx + 1])
         };
         let mut acc = tail;
-        for r in R9_RANKS[*start..end].iter().rev() {
+        for r in ranks[*start..end].iter().rev() {
             acc = format!("(ListType.cons Nat {} {acc})", nat_lit(*r));
         }
         let name = format!("r9_rank_tbl_{start}");
@@ -352,6 +334,63 @@ pub(super) const SRC_CONST_OCCURS: &str = r"def const_occurs (c : Name) (e : KEx
 | KExpr.proj s i sub => const_occurs c sub
 | KExpr.lit n => Bool.false";
 
+pub(super) const SRC_DELTA_BOOL_AND_CONG: &str = r"def delta_bool_and_cong : forall (a : Bool) (b : Bool) (c : Bool) (d : Bool), Eq Bool a b -> Eq Bool c d -> Eq Bool (Bool.and a c) (Bool.and b d) :=
+fun (a : Bool) (b : Bool) (c : Bool) (d : Bool) (h1 : Eq Bool a b) (h2 : Eq Bool c d) =>
+  Eq.trans Bool (Bool.and a c) (Bool.and b c) (Bool.and b d)
+    (Eq.cong Bool Bool (fun (x : Bool) => Bool.and x c) a b h1)
+    (Eq.cong Bool Bool (fun (x : Bool) => Bool.and b x) c d h2)";
+
+pub(super) const SRC_RANK_DOMINATES_B_INSTL: &str = r"def rank_dominates_b_instL : forall (r : Nat) (s : Name -> Level) (e : KExpr), Eq Bool (rank_dominates_b r (instL s e)) (rank_dominates_b r e) :=
+fun (r : Nat) (s : Name -> Level) (e : KExpr) => KExpr.rec (fun (q : KExpr) => Eq Bool (rank_dominates_b r (instL s q)) (rank_dominates_b r q))
+  (fun (u : Level) => Eq.refl Bool Bool.true)
+  (fun (i : Nat) => Eq.refl Bool Bool.true)
+  (fun (a : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+    delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) ha hb)
+  (fun (a : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+    delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) ha hb)
+  (fun (a : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+    delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) ha hb)
+  (fun (n : Name) (us : ListType Level) => Eq.refl Bool (nat_lt_b (rk n) r))
+  (fun (a : KExpr) (v : KExpr) (b : KExpr) (ha : Eq Bool (rank_dominates_b r (instL s a)) (rank_dominates_b r a)) (hv : Eq Bool (rank_dominates_b r (instL s v)) (rank_dominates_b r v)) (hb : Eq Bool (rank_dominates_b r (instL s b)) (rank_dominates_b r b)) =>
+    delta_bool_and_cong (rank_dominates_b r (instL s a)) (rank_dominates_b r a)
+    (Bool.and (rank_dominates_b r (instL s v)) (rank_dominates_b r (instL s b)))
+    (Bool.and (rank_dominates_b r v) (rank_dominates_b r b)) ha
+    (delta_bool_and_cong (rank_dominates_b r (instL s v)) (rank_dominates_b r v) (rank_dominates_b r (instL s b)) (rank_dominates_b r b) hv hb))
+  (fun (n : Name) (i : Nat) (sub : KExpr) (h : Eq Bool (rank_dominates_b r (instL s sub)) (rank_dominates_b r sub)) => h)
+  (fun (i : Nat) => Eq.refl Bool Bool.true) e";
+
+pub(super) const SRC_KEXPR_IS_LAM_B_INSTL: &str = r"def kexpr_is_lam_b_instL : forall (s : Name -> Level) (e : KExpr), Eq Bool (kexpr_is_lam_b (instL s e)) (kexpr_is_lam_b e) :=
+fun (s : Name -> Level) (e : KExpr) => KExpr.rec (fun (q : KExpr) => Eq Bool (kexpr_is_lam_b (instL s q)) (kexpr_is_lam_b q))
+  (fun (u : Level) => Eq.refl Bool Bool.false)
+  (fun (i : Nat) => Eq.refl Bool Bool.false)
+  (fun (a : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.false)
+  (fun (a : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.true)
+  (fun (a : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.false)
+  (fun (n : Name) (us : ListType Level) => Eq.refl Bool Bool.false)
+  (fun (a : KExpr) (v : KExpr) (b : KExpr) (_ha : Eq Bool (kexpr_is_lam_b (instL s a)) (kexpr_is_lam_b a)) (_hv : Eq Bool (kexpr_is_lam_b (instL s v)) (kexpr_is_lam_b v)) (_hb : Eq Bool (kexpr_is_lam_b (instL s b)) (kexpr_is_lam_b b)) => Eq.refl Bool Bool.false)
+  (fun (n : Name) (i : Nat) (sub : KExpr) (_h : Eq Bool (kexpr_is_lam_b (instL s sub)) (kexpr_is_lam_b sub)) => Eq.refl Bool Bool.false)
+  (fun (i : Nat) => Eq.refl Bool Bool.false) e";
+
+pub(super) const SRC_DEF_ENV_RANKED_VALUE_AT: &str = r"def def_env_ranked_value_at : forall (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr), Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v) -> Eq Bool (def_env_ranked_b env) Bool.true -> Eq Bool (rank_dominates_b (rk n) v) Bool.true :=fun (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr) (h : Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v)) (hb : Eq Bool (def_env_ranked_b env) Bool.true) =>
+kdef_value_at_guard_inv env n us v (Eq Bool (rank_dominates_b (rk n) v) Bool.true) h
+  (fun (defn : KDefSig) (hraw : Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn))
+    (_hg : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
+    (hv : Eq KExpr v (kdef_inst_value defn us)) =>
+    Eq.trans Bool (rank_dominates_b (rk n) v) (rank_dominates_b (rk n) (kdef_inst_value defn us)) Bool.true
+      (Eq.cong KExpr Bool (fun (e : KExpr) => (rank_dominates_b (rk n) e)) v (kdef_inst_value defn us) hv)
+      (Eq.trans Bool (rank_dominates_b (rk n) (kdef_inst_value defn us)) (rank_dominates_b (rk n) (kdef_value defn)) Bool.true (rank_dominates_b_instL (rk n) (paramSubstN (kconst_params (kdef_signature defn)) us) (kdef_value defn))
+        (def_env_ranked_b_sound env n (kdef_value defn) (kdef_raw_value_of_lookup env n defn hraw) hb)))";
+
+pub(super) const SRC_DEF_ENV_ALL_LAM_VALUE_AT: &str = r"def def_env_all_lam_value_at : forall (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr), Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v) -> Eq Bool (def_env_all_lam_b env) Bool.true -> Eq Bool (kexpr_is_lam_b v) Bool.true :=fun (env : DefEnv) (n : Name) (us : ListType Level) (v : KExpr) (h : Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr v)) (hb : Eq Bool (def_env_all_lam_b env) Bool.true) =>
+kdef_value_at_guard_inv env n us v (Eq Bool (kexpr_is_lam_b v) Bool.true) h
+  (fun (defn : KDefSig) (hraw : Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn))
+    (_hg : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
+    (hv : Eq KExpr v (kdef_inst_value defn us)) =>
+    Eq.trans Bool (kexpr_is_lam_b v) (kexpr_is_lam_b (kdef_inst_value defn us)) Bool.true
+      (Eq.cong KExpr Bool (fun (e : KExpr) => (kexpr_is_lam_b e)) v (kdef_inst_value defn us) hv)
+      (Eq.trans Bool (kexpr_is_lam_b (kdef_inst_value defn us)) (kexpr_is_lam_b (kdef_value defn)) Bool.true (kexpr_is_lam_b_instL (paramSubstN (kconst_params (kdef_signature defn)) us) (kdef_value defn))
+        (def_env_all_lam_b_sound env n (kdef_value defn) (kdef_raw_value_of_lookup env n defn hraw) hb)))";
+
 pub(super) const SRC_RANK_DOMINATES_B: &str = r"def rank_dominates_b (r : Nat) (e : KExpr) : Bool := match e with
 | KExpr.sort n => Bool.true
 | KExpr.bvar i => Bool.true
@@ -365,7 +404,7 @@ pub(super) const SRC_RANK_DOMINATES_B: &str = r"def rank_dominates_b (r : Nat) (
 
 pub(super) const SRC_DEF_ENV_RANKED_B: &str = r"def def_env_ranked_b (env : DefEnv) : Bool := match env with
 | DefEnv.empty => Bool.true
-| DefEnv.addDef tail dname val => Bool.and (rank_dominates_b (rk dname) val) (def_env_ranked_b tail)";
+| DefEnv.addDef tail dname defn => Bool.and (rank_dominates_b (rk dname) (kdef_value defn)) (def_env_ranked_b tail)";
 
 pub(super) fn ty_the_red_env_ranked() -> String {
     format!("Eq Bool (def_env_ranked_b {DENV}) Bool.true")
@@ -415,7 +454,7 @@ pub(super) fn val_def_env_ranked_b_sound() -> String {
     // per-entry test mentions the entry's OWN name, so the rank has to be
     // transported along name_eqb_eq before the value is.
     let m_add = format!(
-        "(fun (tail : DefEnv) (dn : Name) (dv : KExpr) (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_ranked_b tail) Bool.true -> {goal}) (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn dv) dname) (OptionType.some KExpr defval)) (hb : Eq Bool (def_env_ranked_b (DefEnv.addDef tail dn dv)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) dv (defval_for tail dname) defval ({goal}) hlk (fun (ht : Eq Bool (name_eqb dn dname) Bool.true) (hval : Eq KExpr dv defval) => Eq.subst KExpr (fun (w : KExpr) => Eq Bool (rank_dominates_b (rk dname) w) Bool.true) dv defval hval (Eq.subst Name (fun (w : Name) => Eq Bool (rank_dominates_b (rk w) dv) Bool.true) dn dname (name_eqb_eq dn dname ht) (band_eq_true_left (rank_dominates_b (rk dn) dv) (def_env_ranked_b tail) hb))) (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => ih htail (band_eq_true_right (rank_dominates_b (rk dn) dv) (def_env_ranked_b tail) hb)))"
+        "(fun (tail : DefEnv) (dn : Name) (defn : KDefSig) (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_ranked_b tail) Bool.true -> {goal}) (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) (hb : Eq Bool (def_env_ranked_b (DefEnv.addDef tail dn defn)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) (defval_for tail dname) defval ({goal}) hlk (fun (ht : Eq Bool (name_eqb dn dname) Bool.true) (hval : Eq KExpr (kdef_value defn) defval) => Eq.subst KExpr (fun (w : KExpr) => Eq Bool (rank_dominates_b (rk dname) w) Bool.true) (kdef_value defn) defval hval (Eq.subst Name (fun (w : Name) => Eq Bool (rank_dominates_b (rk w) (kdef_value defn)) Bool.true) dn dname (name_eqb_eq dn dname ht) (band_eq_true_left (rank_dominates_b (rk dn) (kdef_value defn)) (def_env_ranked_b tail) hb))) (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => ih htail (band_eq_true_right (rank_dominates_b (rk dn) (kdef_value defn)) (def_env_ranked_b tail) hb)))"
     );
     format!("fun (env : DefEnv) (dname : Name) (defval : KExpr) => DefEnv.rec {motive} {m_empty} {m_add} env")
 }
@@ -467,16 +506,16 @@ pub(super) fn val_rank_dominates_occurs() -> String {
     format!("fun (r : Nat) (c2 : Name) (e : KExpr) => KExpr.rec {motive} {a_sort} {a_bvar} {a_app} {a_lam} {a_pi} {a_const} {a_let} {a_proj} {a_lit} e")
 }
 
-pub(super) const TY_DELTA_STEP_DEFVAL_INV: &str = "forall (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr), delta_step env (KExpr.const c us) body -> Eq (OptionType KExpr) (defval_for env c) (OptionType.some KExpr body)";
+pub(super) const TY_DELTA_STEP_DEFVAL_INV: &str = "forall (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr), delta_step env (KExpr.const c us) body -> Eq (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr body)";
 
-pub(super) const VAL_DELTA_STEP_DEFVAL_INV: &str = "fun (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step env (KExpr.const c us) body) => opt_bind_some_inv KExpr KExpr (defval_for env c) (fun (v : KExpr) => OptionType.some KExpr v) body (Eq (OptionType KExpr) (defval_for env c) (OptionType.some KExpr body)) hd (fun (w : KExpr) (hw : Eq (OptionType KExpr) (defval_for env c) (OptionType.some KExpr w)) (hfw : Eq (OptionType KExpr) (OptionType.some KExpr w) (OptionType.some KExpr body)) => Eq.trans (OptionType KExpr) (defval_for env c) (OptionType.some KExpr w) (OptionType.some KExpr body) hw hfw)";
+pub(super) const VAL_DELTA_STEP_DEFVAL_INV: &str = "fun (env : DefEnv) (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step env (KExpr.const c us) body) => opt_bind_some_inv KExpr KExpr (kdef_value_at env c us) (fun (v : KExpr) => OptionType.some KExpr v) body (Eq (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr body)) hd (fun (w : KExpr) (hw : Eq (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr w)) (hfw : Eq (OptionType KExpr) (OptionType.some KExpr w) (OptionType.some KExpr body)) => Eq.trans (OptionType KExpr) (kdef_value_at env c us) (OptionType.some KExpr w) (OptionType.some KExpr body) hw hfw)";
 
 pub(super) fn ty_the_red_env_delta_rank_decrease() -> String {
     format!("forall (c : Name) (us : ListType Level) (body : KExpr) (c2 : Name), delta_step {DENV} (KExpr.const c us) body -> Eq Bool (const_occurs c2 body) Bool.true -> Lt (rk c2) (rk c)")
 }
 
 pub(super) fn val_the_red_env_delta_rank_decrease() -> String {
-    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (c2 : Name) (hd : delta_step {DENV} (KExpr.const c us) body) (ho : Eq Bool (const_occurs c2 body) Bool.true) => rank_dominates_occurs (rk c) c2 body (def_env_ranked_b_sound {DENV} c body (delta_step_defval_inv {DENV} c us body hd) the_red_env_ranked) ho")
+    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (c2 : Name) (hd : delta_step {DENV} (KExpr.const c us) body) (ho : Eq Bool (const_occurs c2 body) Bool.true) => rank_dominates_occurs (rk c) c2 body (def_env_ranked_value_at {DENV} c us body (delta_step_defval_inv {DENV} c us body hd) the_red_env_ranked) ho")
 }
 
 pub(super) const TY_R9_LT_IRREFL: &str = "forall (n : Nat), Lt n n -> Empty";
@@ -501,7 +540,7 @@ pub(super) fn ty_r9_const_delta_dead() -> String {
 }
 
 pub(super) fn val_r9_const_delta_dead() -> String {
-    let dead = format!("(Eq.cong (OptionType KExpr) (OptionType KExpr) (fun (o : OptionType KExpr) => opt_bind KExpr KExpr o (fun (v : KExpr) => OptionType.some KExpr v)) (defval_for {DENV} c) (OptionType.none KExpr) hn)");
+    let dead = format!("(delta_reduct_no_raw_value {DENV} (KExpr.const c us) c (Eq.refl (OptionType Name) (OptionType.some Name c)) hn)");
     format!("fun (c : Name) (us : ListType Level) (hn : Eq (OptionType KExpr) (defval_for {DENV} c) (OptionType.none KExpr)) (g2 : KExpr) (C : Type) (hd : delta_step {DENV} (KExpr.const c us) g2) => option_none_ne_some_type KExpr g2 C (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct {DENV} (KExpr.const c us)) (OptionType.some KExpr g2) (Eq.symm (OptionType KExpr) (delta_reduct {DENV} (KExpr.const c us)) (OptionType.none KExpr) {dead}) hd)")
 }
 
@@ -670,7 +709,7 @@ pub(super) const SRC_KEXPR_IS_LAM_B: &str = r"def kexpr_is_lam_b (e : KExpr) : B
 
 pub(super) const SRC_DEF_ENV_ALL_LAM_B: &str = r"def def_env_all_lam_b (env : DefEnv) : Bool := match env with
 | DefEnv.empty => Bool.true
-| DefEnv.addDef tail dname val => Bool.and (kexpr_is_lam_b val) (def_env_all_lam_b tail)";
+| DefEnv.addDef tail dname defn => Bool.and (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail)";
 
 pub(super) fn ty_r9_the_red_env_all_lam() -> String {
     format!("Eq Bool (def_env_all_lam_b {DENV}) Bool.true")
@@ -685,7 +724,7 @@ pub(super) fn val_def_env_all_lam_b_sound() -> String {
     let motive = format!("(fun (e : DefEnv) => Eq (OptionType KExpr) (defval_for e dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_all_lam_b e) Bool.true -> {goal})");
     let m_empty = format!("(fun (hlk : Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (OptionType.some KExpr defval)) (_hb : Eq Bool (def_env_all_lam_b DefEnv.empty) Bool.true) => option_none_ne_some KExpr defval ({goal}) hlk)");
     let m_add = format!(
-        "(fun (tail : DefEnv) (dn : Name) (dv : KExpr) (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_all_lam_b tail) Bool.true -> {goal}) (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn dv) dname) (OptionType.some KExpr defval)) (hb : Eq Bool (def_env_all_lam_b (DefEnv.addDef tail dn dv)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) dv (defval_for tail dname) defval ({goal}) hlk (fun (_ht : Eq Bool (name_eqb dn dname) Bool.true) (hval : Eq KExpr dv defval) => Eq.subst KExpr (fun (w : KExpr) => Eq Bool (kexpr_is_lam_b w) Bool.true) dv defval hval (band_eq_true_left (kexpr_is_lam_b dv) (def_env_all_lam_b tail) hb)) (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => ih htail (band_eq_true_right (kexpr_is_lam_b dv) (def_env_all_lam_b tail) hb)))"
+        "(fun (tail : DefEnv) (dn : Name) (defn : KDefSig) (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> Eq Bool (def_env_all_lam_b tail) Bool.true -> {goal}) (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) (hb : Eq Bool (def_env_all_lam_b (DefEnv.addDef tail dn defn)) Bool.true) => opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) (defval_for tail dname) defval ({goal}) hlk (fun (_ht : Eq Bool (name_eqb dn dname) Bool.true) (hval : Eq KExpr (kdef_value defn) defval) => Eq.subst KExpr (fun (w : KExpr) => Eq Bool (kexpr_is_lam_b w) Bool.true) (kdef_value defn) defval hval (band_eq_true_left (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail) hb)) (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => ih htail (band_eq_true_right (kexpr_is_lam_b (kdef_value defn)) (def_env_all_lam_b tail) hb)))"
     );
     format!("fun (env : DefEnv) (dname : Name) (defval : KExpr) => DefEnv.rec {motive} {m_empty} {m_add} env")
 }
@@ -695,7 +734,7 @@ pub(super) fn ty_r9_real_delta_body_is_lam() -> String {
 }
 
 pub(super) fn val_r9_real_delta_body_is_lam() -> String {
-    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step {DENV} (KExpr.const c us) body) => def_env_all_lam_b_sound {DENV} c body (delta_step_defval_inv {DENV} c us body hd) r9_the_red_env_all_lam")
+    format!("fun (c : Name) (us : ListType Level) (body : KExpr) (hd : delta_step {DENV} (KExpr.const c us) body) => def_env_all_lam_value_at {DENV} c us body (delta_step_defval_inv {DENV} c us body hd) r9_the_red_env_all_lam")
 }
 
 /// The two constructor discriminators, as REGISTERED defs rather than inline
@@ -921,7 +960,7 @@ pub(super) fn ty_r9_live_const_not_dead() -> String {
 }
 
 pub(super) fn val_r9_live_const_not_dead() -> String {
-    format!("fun (h : Eq (OptionType KExpr) (defval_for {DENV} kcre_witness_delta_head) (OptionType.none KExpr)) => option_none_ne_some_type KExpr kcre_witness_delta_value Empty (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (defval_for {DENV} kcre_witness_delta_head) (OptionType.some KExpr kcre_witness_delta_value) (Eq.symm (OptionType KExpr) (defval_for {DENV} kcre_witness_delta_head) (OptionType.none KExpr) h) (delta_step_defval_inv {DENV} kcre_witness_delta_head {NILUS} kcre_witness_delta_value the_red_env_delta_nonvacuous))")
+    format!("fun (h : Eq (OptionType KExpr) (defval_for {DENV} kcre_witness_delta_head) (OptionType.none KExpr)) => option_none_ne_some_type KExpr kcre_witness_delta_value Empty (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (kdef_value_at {DENV} kcre_witness_delta_head {NILUS}) (OptionType.some KExpr kcre_witness_delta_value) (Eq.symm (OptionType KExpr) (kdef_value_at {DENV} kcre_witness_delta_head {NILUS}) (OptionType.none KExpr) (kdef_value_at_none {DENV} kcre_witness_delta_head {NILUS} h)) (delta_step_defval_inv {DENV} kcre_witness_delta_head {NILUS} kcre_witness_delta_value the_red_env_delta_nonvacuous))")
 }
 
 pub(super) fn ty_synty_c_not_total() -> String {
@@ -987,7 +1026,8 @@ impl Specification {
     /// `kernel_core_red_env` atoms.
     pub(super) fn add_candmodel_construct_r9(&mut self) -> Result<(), SpecError> {
         // --- Group A: B3, the COMPUTED rank ---
-        for (name, src) in src_r9_rank_tbl_chunks() {
+        let ranks = super::candmodel_construct_r9_rank::actual_ranks(self)?;
+        for (name, src) in src_r9_rank_tbl_chunks(&ranks) {
             self.add_recursive_def(
                 &src,
                 &format!(
@@ -996,24 +1036,21 @@ impl Specification {
                      rather than written as one spine because the parser refuses at nesting depth \
                      129 (max 128), which a single 127-deep ListType.cons literal exceeds \
                      (measured 2026-08-26). The chunk defs are plain aliases, so the VALUE is the \
-                     same 127-element list and the kernel unfolds through them when the rank \
+                     same current-artifact list and the kernel unfolds through them when the rank \
                      checker runs."
                 ),
             )?;
         }
         self.add_recursive_def(
             &src_r9_rank_tbl(),
-            "r9_rank_tbl — THE COMPUTED delta-RANK TABLE for the real reflected environment, one \
-             entry per interned name of kernel_core_red_env (127 of them, index-aligned to \
-             kcre_name_<i>). An entry is Nat.zero when the name has no definitional value in \
-             the_red_env — every reflected inductive type, constructor and recursor — and 1 + d \
-             when it does, where d is the length of the longest delta-chain out of it. Derived \
-             mechanically from the generated env: 50 DefEnv entries, 67 delta edges, ACYCLIC, \
-             longest chain 7, so the table is bounded by 8. It is acyclic for a structural reason \
-             worth recording — the reflection compiles every recursive kernel definition through \
-             the matching .rec, so not one of the 50 bodies mentions its own name. NOTHING is \
-             trusted about this table: the_red_env_ranked makes the kernel re-derive its adequacy \
-             in one Eq.refl, so a table that stopped matching the environment fails CLOSED. \
+            "r9_rank_tbl — a candidate delta-RANK TABLE decoded from the actual elaborated \
+             kernel_core_red_env KDefSig BODIES, indexed by the current validated name tags. \
+             Undefined names get zero; defined names get one plus the maximum body dependency \
+             rank. A cyclic or malformed decoded graph is refused. Signature types are not body \
+             dependencies. No old tag ordering, definition count or numeric rank is assumed. \
+             NOTHING is trusted about the candidate computation: the_red_env_ranked makes the \
+             kernel check its adequacy in one Eq.refl over the actual environment, so a bad \
+             candidate fails CLOSED. \
              Value-bearing plain def; zero axioms.",
         )?;
         self.add_recursive_def(
@@ -1023,8 +1060,8 @@ impl Specification {
              so the reduction behaviour on a concrete index is exactly the one the rank checker \
              needs and nothing depends on match compilation. A list walk rather than a decidable- \
              equality cascade is the load-bearing choice: the checker evaluates rk once per const \
-             occurrence and the 50 real bodies contain 963 of them, so a 50-deep name_eqb cascade \
-             over unary numerals up to 126 would be ~10^7 reduction steps where this is ~10^5.",
+             occurrence. The original 50-body/963-occurrence snapshot motivated this choice; \
+             those historical counts and tag bounds are not assumptions about the current reflection.",
         )?;
         self.add_recursive_def(
             SRC_RK,
@@ -1060,6 +1097,11 @@ impl Specification {
              Eq.refl over a concrete term.",
         )?;
         self.add_recursive_def(
+            SRC_DELTA_BOOL_AND_CONG,
+            "Boolean conjunction congruence for universe-instantiation invariants; zero axioms.",
+        )?;
+        self.add_recursive_def(SRC_RANK_DOMINATES_B_INSTL, "Universe instantiation changes levels but not constant names or the rank predicate. Explicit structural induction; zero axioms.")?;
+        self.add_recursive_def(
             SRC_DEF_ENV_RANKED_B,
             "def_env_ranked_b env — the rank checker: every registered definition's value is \
              dominated by the definition's OWN rank. Same fold shape as def_env_closed_b \
@@ -1076,7 +1118,7 @@ impl Specification {
             &["def_env_ranked_b", "rk", "red_def", "the_red_env"],
             "BUILD ITEM B3, LANDED AND COMPUTED: the rank checker returns true on the REAL \
              reflected environment, by a single Eq.refl — the kernel whnf-evaluates the fold over \
-             all 50 DefEnv entries and all 963 const occurrences in their values. Four rungs (R2, \
+             every current DefEnv entry and every const occurrence in its body. Four rungs (R2, \
              R4, R7, R8) recorded that the delta/redConst rung 'needs a WfEnv/EnvAcyclic rank \
              witness for the real reflected env' and R2 specified it as a CARRIED premise. It does \
              not have to be carried: the_red_env is a concrete, fixed, finite reflected \
@@ -1212,6 +1254,7 @@ impl Specification {
              would be a fact about a lookup table with no bearing on reduction. GENERIC in env. \
              Zero axiom_deps.",
         )?;
+        self.add_recursive_def(SRC_DEF_ENV_RANKED_VALUE_AT, "Guarded instantiated bodies inherit the raw environment rank invariant via instL preservation, not a per-instance assumption.")?;
         add_thm(
             self,
             "the_red_env_delta_rank_decrease",
@@ -1388,11 +1431,11 @@ impl Specification {
             "SynTyC G e T — THE CONST RUNG'S JUDGMENT: R8's SynTyL with a const rule, in two \
              clauses. konstDead types const c us at any sort when the real reflected environment \
              maps c to NOTHING — such a const is whnf-stuck, and over the_red_env that is every \
-             name outside the 50 DefEnv entries, i.e. every reflected inductive type, constructor \
+             name outside the current DefEnv entries, i.e. every reflected inductive type, constructor \
              and recursor. konstDelta types it when its real delta-unfolding is typed at the same \
              sort; that clause is SOUND and its engine (candInterp_delta_expand_sort) is the \
              deliverable R2/R4/R7/R8 asked for, but it is VACUOUS over this environment and that \
-             is PROVED here rather than asserted (r9_konstDelta_no_real_instance: all 50 real \
+             is PROVED here rather than asserted (r9_konstDelta_no_real_instance: all reflected \
              definition bodies are KExpr.lam, and SynTyC types no lam at a sort). Registering it \
              anyway is the design's section 6.3 labeled by-design vacuity, measured. The other six \
              rules are R8's, unchanged: var lifts exactly as TypingCtx.var, pi is TypingCtx.pi's \
@@ -1522,6 +1565,7 @@ impl Specification {
              motive (synTyC_no_lam_at_sort), and the two must be the SAME predicate for them to \
              compose.",
         )?;
+        self.add_recursive_def(SRC_KEXPR_IS_LAM_B_INSTL, "Universe instantiation preserves the lambda shape test by structural induction; zero axioms.")?;
         self.add_recursive_def(
             SRC_DEF_ENV_ALL_LAM_B,
             "def_env_all_lam_b env — every registered definition's value is a lambda. The \
@@ -1565,6 +1609,7 @@ impl Specification {
              def_env_ranked_b_sound this one needs no name transport. GENERIC in env. Zero \
              axiom_deps.",
         )?;
+        self.add_recursive_def(SRC_DEF_ENV_ALL_LAM_VALUE_AT, "Guarded instantiated bodies inherit the raw lambda-shape invariant via instL preservation.")?;
         add_thm(
             self,
             "r9_real_delta_body_is_lam",
@@ -1704,9 +1749,9 @@ impl Specification {
             val_synty_c_konst_dead_witness(),
             &["SynTyC.konstDead", "defval_for", "the_red_env", "Eq.refl"],
             "THE CONST WITNESS, AND THE FIRST TIME THE LADDER'S JUDGMENT REACHES A KExpr.const AT \
-             ALL: the REAL reflected kernel name kcre_name_12 (the inductive type DefEnv) is typed \
+             ALL: the REAL reflected kernel name fixture_def_env_name (the inductive type DefEnv) is typed \
              at sort 0 in the empty context, by SynTyC.konstDead over a side condition the kernel \
-             COMPUTES — defval_for (red_def the_red_env) kcre_name_12 whnf-evaluates to none by \
+             COMPUTES — defval_for (red_def the_red_env) fixture_def_env_name whnf-evaluates to none by \
              walking the real 50-entry DefEnv chain, so the Eq.refl is a genuine measurement of \
              the reflected environment and not a syntactic identity. Designated-discharge posture: \
              a regeneration of the reflection that gave that name a definitional value fails this \
@@ -1759,7 +1804,7 @@ impl Specification {
                 "Lt",
             ],
             "THE SECOND KIND OF OCCURRENCE, at the SAME real delta step: the value also mentions \
-             kcre_name_12, a name with no DefEnv entry at all, whose rank is 0 — below every \
+             fixture_def_env_name, a name with no DefEnv entry at all, whose rank is 0 — below every \
              defined name. Registered beside the first because the two are the reason the rank is \
              defined the way it is: most const occurrences in real definition bodies are inductive \
              types, constructors and recursors, and a rank scheme that did not put them strictly \
@@ -2018,8 +2063,8 @@ mod tests {
     }
 
     /// The one inductive and every plain def, as full declaration sources.
-    fn decl_sources() -> Vec<(String, String)> {
-        let mut v: Vec<(String, String)> = src_r9_rank_tbl_chunks();
+    fn decl_sources(ranks: &[u64]) -> Vec<(String, String)> {
+        let mut v: Vec<(String, String)> = src_r9_rank_tbl_chunks(ranks);
         v.extend(vec![
             ("r9_rank_tbl".to_string(), src_r9_rank_tbl()),
             ("r9_rank_nth".to_string(), SRC_R9_RANK_NTH.to_string()),
@@ -2038,6 +2083,26 @@ mod tests {
             ("r9_const_discr".to_string(), SRC_R9_CONST_DISCR.to_string()),
             ("kexpr_is_lam_b".to_string(), SRC_KEXPR_IS_LAM_B.to_string()),
             (
+                "delta_bool_and_cong".to_string(),
+                SRC_DELTA_BOOL_AND_CONG.to_string(),
+            ),
+            (
+                "rank_dominates_b_instL".to_string(),
+                SRC_RANK_DOMINATES_B_INSTL.to_string(),
+            ),
+            (
+                "kexpr_is_lam_b_instL".to_string(),
+                SRC_KEXPR_IS_LAM_B_INSTL.to_string(),
+            ),
+            (
+                "def_env_ranked_value_at".to_string(),
+                SRC_DEF_ENV_RANKED_VALUE_AT.to_string(),
+            ),
+            (
+                "def_env_all_lam_value_at".to_string(),
+                SRC_DEF_ENV_ALL_LAM_VALUE_AT.to_string(),
+            ),
+            (
                 "def_env_all_lam_b".to_string(),
                 SRC_DEF_ENV_ALL_LAM_B.to_string(),
             ),
@@ -2054,7 +2119,7 @@ mod tests {
             parse_check(&assembled)
                 .unwrap_or_else(|e| panic!("{name} should parse as a def: {e}\n{assembled}"));
         }
-        for (name, src) in decl_sources() {
+        for (name, src) in decl_sources(&R9_PARSE_TEST_RANKS) {
             parse_check(&src).unwrap_or_else(|e| panic!("{name} should parse: {e}\n{src}"));
         }
     }
@@ -2067,7 +2132,7 @@ mod tests {
             all.push((format!("{n}::ty"), ty));
             all.push((format!("{n}::val"), val));
         }
-        for (n, src) in decl_sources() {
+        for (n, src) in decl_sources(&R9_PARSE_TEST_RANKS) {
             all.push((format!("{n}::decl"), src));
         }
         for (name, src) in &all {
@@ -2146,35 +2211,25 @@ mod tests {
         }
     }
 
-    /// The rank table is the one the environment justifies: 127 entries,
-    /// bounded by 8, with exactly 50 non-zero ones (the DefEnv entries).
+    /// Encoding checks are independent of tag ordering and actual graph depth.
+    /// Actual rank adequacy is checked by the existing kernel theorem.
     #[test]
     fn test_candmodel_r9_rank_table_shape() {
-        assert_eq!(R9_RANKS.len(), 127, "one entry per interned reflected name");
-        assert!(
-            R9_RANKS.iter().all(|r| *r <= 8),
-            "the measured longest delta-chain is 7, so no rank exceeds 8"
-        );
+        let chunks = src_r9_rank_tbl_chunks(&R9_PARSE_TEST_RANKS);
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].0, "r9_rank_tbl_32");
+        assert_eq!(chunks[1].0, "r9_rank_tbl_16");
+        assert_eq!(chunks[2].0, "r9_rank_tbl_0");
+        assert!(chunks[0].1.ends_with("(ListType.nil Nat))"));
+        assert!(chunks[2].1.contains("r9_rank_tbl_16"));
+        let empty = src_r9_rank_tbl_chunks(&[]);
         assert_eq!(
-            R9_RANKS.iter().filter(|r| **r > 0).count(),
-            50,
-            "exactly the 50 DefEnv entries have a definitional value, and only those get a \
-             non-zero rank — an undefined name must sit strictly below every defined one or the \
-             decrease theorem is FALSE, not merely unprovable"
+            empty,
+            vec![(
+                "r9_rank_tbl_0".to_string(),
+                "def r9_rank_tbl_0 : ListType Nat := (ListType.nil Nat)".to_string()
+            )]
         );
-        // Spot-pins on the two witness pairs, so a silent re-ordering of the
-        // table cannot leave the witnesses reading a different fact.
-        assert_eq!(
-            R9_RANKS[120], 8,
-            "instantiate is the DEEPEST definition of the reflected core, not \
-             def_env_lift_closed_b — the 2026-08-26 first-cut pin got that wrong and the table \
-             (which is generated) was right"
-        );
-        assert_eq!(R9_RANKS[118], 5, "def_env_lift_closed_b, the witness head");
-        assert_eq!(R9_RANKS[90], 4, "def_env_closed_b sits one below it");
-        assert_eq!(R9_RANKS[12], 0, "DefEnv is an inductive type, not a def");
-        assert_eq!(R9_RANKS[84], 1, "Nat.pred bottoms out at the recursors");
-        assert_eq!(R9_RANKS[31], 2, "Nat.sub goes through Nat.pred");
     }
 
     /// Shape guards.
@@ -2399,7 +2454,7 @@ mod tests {
             "the rank witness must reuse the Guard-4 delta step rather than mint a new one"
         );
         assert!(
-            ty_synty_c_konst_dead_witness().contains("kcre_name_12")
+            ty_synty_c_konst_dead_witness().contains("fixture_def_env_name")
                 && val_synty_c_konst_dead_witness().contains("Eq.refl (OptionType KExpr)"),
             "the const witness must be at a REAL reflected name with a kernel-COMPUTED lookup"
         );
@@ -2417,8 +2472,8 @@ mod tests {
     /// `add_candmodel_construct_r9`, and the shape guard
     /// `test_candmodel_r9_plan_matches_registration` pins that this list names
     /// the same constants.
-    fn registration_plan() -> Vec<(&'static str, String, String)> {
-        let mut v: Vec<(&'static str, String, String)> = src_r9_rank_tbl_chunks()
+    fn registration_plan(ranks: &[u64]) -> Vec<(&'static str, String, String)> {
+        let mut v: Vec<(&'static str, String, String)> = src_r9_rank_tbl_chunks(ranks)
             .into_iter()
             .map(|(n, src)| ("def", n, src))
             .collect();
@@ -2446,6 +2501,16 @@ mod tests {
                 SRC_DEF_ENV_RANKED_B.to_string(),
             ),
         ]);
+        v.push((
+            "def",
+            "delta_bool_and_cong".to_string(),
+            SRC_DELTA_BOOL_AND_CONG.to_string(),
+        ));
+        v.push((
+            "def",
+            "rank_dominates_b_instL".to_string(),
+            SRC_RANK_DOMINATES_B_INSTL.to_string(),
+        ));
         let thm = |name: &str, ty: String, val: String| {
             (
                 "thm",
@@ -2478,6 +2543,13 @@ mod tests {
             "r9_const_headfree_absurd",
             "r9_const_obstruction_located",
         ] {
+            if n == "the_red_env_delta_rank_decrease" {
+                v.push((
+                    "def",
+                    "def_env_ranked_value_at".to_string(),
+                    SRC_DEF_ENV_RANKED_VALUE_AT.to_string(),
+                ));
+            }
             v.push(get(n));
         }
         v.push(("inductive", "SynTyC".to_string(), src_syn_ty_c()));
@@ -2509,6 +2581,11 @@ mod tests {
             "def_env_all_lam_b".to_string(),
             SRC_DEF_ENV_ALL_LAM_B.to_string(),
         ));
+        v.push((
+            "def",
+            "kexpr_is_lam_b_instL".to_string(),
+            SRC_KEXPR_IS_LAM_B_INSTL.to_string(),
+        ));
         for n in [
             "r9_the_red_env_all_lam",
             "def_env_all_lam_b_sound",
@@ -2528,6 +2605,13 @@ mod tests {
             "r9_live_const_not_dead",
             "synTyC_not_total",
         ] {
+            if n == "r9_real_delta_body_is_lam" {
+                v.push((
+                    "def",
+                    "def_env_all_lam_value_at".to_string(),
+                    SRC_DEF_ENV_ALL_LAM_VALUE_AT.to_string(),
+                ));
+            }
             v.push(get(n));
         }
         v
@@ -2537,11 +2621,13 @@ mod tests {
     /// run below cannot silently check a subset.
     #[test]
     fn test_candmodel_r9_plan_matches_registration() {
-        let planned: std::collections::BTreeSet<String> =
-            registration_plan().into_iter().map(|(_, n, _)| n).collect();
+        let planned: std::collections::BTreeSet<String> = registration_plan(&R9_PARSE_TEST_RANKS)
+            .into_iter()
+            .map(|(_, n, _)| n)
+            .collect();
         let mut declared: std::collections::BTreeSet<String> =
             theorem_sources().into_iter().map(|(n, _, _)| n).collect();
-        for (n, _) in decl_sources() {
+        for (n, _) in decl_sources(&R9_PARSE_TEST_RANKS) {
             declared.insert(n);
         }
         assert_eq!(
@@ -2567,7 +2653,9 @@ mod tests {
             return;
         }
         let mut failures: Vec<String> = Vec::new();
-        for (kind, name, src) in registration_plan() {
+        let ranks = super::super::candmodel_construct_r9_rank::actual_ranks(&spec)
+            .expect("rank candidates from the current elaborated environment");
+        for (kind, name, src) in registration_plan(&ranks) {
             let desc = "R9 scratch candidate";
             let result = match kind {
                 "inductive" => spec.add_inductive(&src, desc),
@@ -2589,8 +2677,10 @@ mod tests {
     #[test]
     fn test_candmodel_r9_registered_and_reverifies() {
         let spec = crate::test_utils::build_substitution_spec_with_stack();
+        let ranks = super::super::candmodel_construct_r9_rank::actual_ranks(&spec)
+            .expect("actual current-body rank candidates");
         let mut names: Vec<String> = theorem_sources().into_iter().map(|(n, _, _)| n).collect();
-        for (n, _) in decl_sources() {
+        for (n, _) in decl_sources(&ranks) {
             names.push(n);
         }
         for name in &names {
@@ -2599,7 +2689,7 @@ mod tests {
                 "{name} should be registered by the candmodel_construct_r9 stage"
             );
         }
-        for (name, _, _) in theorem_sources() {
+        for name in names {
             spec.verify_definition(&name).unwrap_or_else(|e| {
                 panic!("{name} should re-typecheck in the spec environment: {e:?}")
             });

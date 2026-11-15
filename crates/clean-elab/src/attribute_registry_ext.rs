@@ -191,7 +191,8 @@ impl<'a> ExtendedAttributeRegistry<'a> {
             if !allowed_kinds.contains(kind) {
                 return Err(ElabError::Unsupported {
                     feature: format!(
-                        "attribute '{normalized}' cannot be applied to {kind:?} declarations"
+                        "attribute '{normalized}' cannot be applied to {} declarations",
+                        crate::error_render::opaque(&kind)
                     ),
                 });
             }

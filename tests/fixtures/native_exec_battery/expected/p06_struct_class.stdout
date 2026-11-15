@@ -1,0 +1,5 @@
+(4, 2)
+false
+{ x := 1, y := -2 }
+square: 9
+rect: 10

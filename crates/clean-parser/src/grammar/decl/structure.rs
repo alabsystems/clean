@@ -189,7 +189,9 @@ impl Parser {
     }
 
     /// Parse a deriving clause: `deriving Class1, Class2, ...`
-    pub(in crate::grammar) fn parse_deriving_clause(&mut self) -> Result<Vec<String>, ParseError> {
+    pub(in crate::grammar) fn parse_deriving_clause(
+        &mut self,
+    ) -> Result<Vec<SurfaceName>, ParseError> {
         if !self.eat(&TokenKind::Deriving) {
             return Ok(Vec::new());
         }
@@ -197,11 +199,11 @@ impl Parser {
         let mut classes = Vec::new();
 
         // Parse first class name
-        classes.push(self.ident()?);
+        classes.push(self.qualified_ident()?);
 
         // Parse remaining class names separated by commas
         while self.eat(&TokenKind::Comma) {
-            classes.push(self.ident()?);
+            classes.push(self.qualified_ident()?);
         }
 
         Ok(classes)
@@ -287,13 +289,30 @@ impl Parser {
         result
     }
 
-    pub(in crate::grammar) fn universe_params(&mut self) -> Result<Vec<String>, ParseError> {
+    pub(in crate::grammar) fn universe_params(&mut self) -> Result<Vec<SurfaceName>, ParseError> {
         let mut params = Vec::new();
 
-        // Universe params can be:
-        // 1. .{u v} - explicit with dot prefix
-        // 2. {u v} - identifiers only, no colon (distinguishes from implicit binders {α : Type})
-
+        // Lean 4 spells declaration universe binders with a DOT ONLY: `def f.{u}`
+        // (`declId := ident >> optional (".{" >> sepBy1 ident ", " >> "}")` in
+        // `Lean/Parser/Command.lean`). A DOTLESS `{...}` after a declaration name is
+        // always an implicit binder group, never a universe list, and the absence of a
+        // colon does NOT distinguish the two — Lean auto-binds an untyped implicit.
+        //
+        // Measured against the pinned `lean` v4.30.0-rc2 with `set_option pp.parens true`:
+        //
+        //   def f {a} (x : a) : a := x
+        //     => def f.{u_1} : {a : (Sort u_1)} → (a → a)   -- `a` is an IMPLICIT BINDER,
+        //                                                   -- the universe is auto-bound
+        //   def g.{u} (x : Type u) : Type u := x
+        //     => def g.{u} : (Type u) → (Type u)            -- `u` is a universe param
+        //   structure C {u} (A : Type u) where val : A
+        //     => error: Failed to infer type of binder `u`  -- read as an implicit binder
+        //                                                   -- and REJECTED, not a universe list
+        //
+        // Accepting the dotless form here refused every ordinary untyped implicit binder
+        // (`def idA {alpha} (x : alpha) : alpha := x`) by routing it into the closed
+        // explicit-universe-list check, which then reported a leaked level metavariable.
+        // That cost the pinned Mathlib SOURCE slice 326/784 -> 301/775.
         if self.check(&TokenKind::Dot) {
             // Check for .{u v} syntax
             let next_is_lbrace = self
@@ -304,37 +323,17 @@ impl Parser {
                 self.advance(); // consume dot
                 self.advance(); // consume lbrace
                                 // Lean `declId` universe binders are comma-separated:
-                                // `def f.{u, v}` (`Lean/Parser/Command.lean`). Space-separated
-                                // (`.{u v}`) is also accepted; tolerate both by eating an
-                                // optional comma between names.
+                                // `def f.{u, v}` (`Lean/Parser/Command.lean`). Lean itself
+                                // REJECTS the space-separated `.{u v}` ("unexpected
+                                // identifier; expected '}'", measured on the pinned
+                                // v4.30.0-rc2); we accept it as a deliberate superset by
+                                // eating an optional comma between names.
                 while let TokenKind::Ident(name) = self.current_kind() {
-                    params.push(name.clone());
+                    params.push(self.name_token(name)?);
                     self.advance();
                     self.eat(&TokenKind::Comma);
                 }
                 self.expect(&TokenKind::RBrace)?;
-            }
-        } else if self.check(&TokenKind::LBrace) {
-            // Check for {u v} style - but only if it's NOT followed by a colon
-            // (which would make it an implicit binder like {α : Type})
-            let saved_pos = self.pos;
-            self.advance(); // consume lbrace
-
-            // Collect identifiers (comma-separated or space-separated)
-            let mut names = Vec::new();
-            while let TokenKind::Ident(name) = self.current_kind() {
-                names.push(name.clone());
-                self.advance();
-                self.eat(&TokenKind::Comma);
-            }
-
-            // If we see RBrace (not Colon), these are universe params
-            if self.check(&TokenKind::RBrace) && !names.is_empty() {
-                self.advance(); // consume rbrace
-                params = names;
-            } else {
-                // Backtrack - this is an implicit binder, not universe params
-                self.pos = saved_pos;
             }
         }
 
@@ -372,7 +371,7 @@ impl Parser {
                         )
                     );
                     let span = self.current_span();
-                    let name = name.clone();
+                    let name = self.name_token(name)?;
                     self.advance();
                     binders.push(SurfaceBinder {
                         span,
@@ -389,6 +388,12 @@ impl Parser {
             }
         }
 
+        // This parser is used for declaration headers, including local
+        // functions subsequently lowered to lambdas. Keep that origin so
+        // elaboration can distinguish them from source `fun` binders.
+        for binder in &mut binders {
+            binder.name = binder.name.clone().with_header_binder_origin(true);
+        }
         Ok(binders)
     }
 
@@ -540,13 +545,13 @@ impl Parser {
     /// `inductive` constructor grammar.
     fn codata_variant_clauses(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         binders: &[SurfaceBinder],
     ) -> Result<Vec<SurfaceCtor>, ParseError> {
         let mut ctors = Vec::new();
         while self.eat(&TokenKind::Pipe) {
             let ctor_span = self.current_span();
-            let ctor_name = self.ident()?;
+            let ctor_name = self.raw_ident()?;
             let ctor_ty = self.parse_ctor_type(ctor_span, name, binders)?;
             ctors.push(SurfaceCtor {
                 span: ctor_span,

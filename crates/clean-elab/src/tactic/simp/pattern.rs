@@ -35,7 +35,7 @@ use crate::unify::MetaState;
 pub(crate) fn convert_bvars_to_metas(
     pattern: &Expr,
     metas: &mut MetaState,
-    scope: &[(String, FVarId, Expr)],
+    scope: &[(clean_parser::SurfaceName, FVarId, Expr)],
 ) -> (Expr, hashbrown::HashMap<u32, Expr>) {
     let mut bvar_to_meta = hashbrown::HashMap::new();
     let result = convert_bvars_to_metas_aux(pattern, metas, scope, &mut bvar_to_meta, 0);
@@ -45,7 +45,7 @@ pub(crate) fn convert_bvars_to_metas(
 fn convert_bvars_to_metas_aux(
     expr: &Expr,
     metas: &mut MetaState,
-    scope: &[(String, FVarId, Expr)],
+    scope: &[(clean_parser::SurfaceName, FVarId, Expr)],
     bvar_to_meta: &mut hashbrown::HashMap<u32, Expr>,
     depth: u32,
 ) -> Expr {

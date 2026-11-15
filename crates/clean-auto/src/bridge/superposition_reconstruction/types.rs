@@ -18,7 +18,7 @@ use crate::superposition::{Symbol, Term};
 /// code that asks for a missing type gets an explicit error instead of a
 /// fabricated `Sort 1` placeholder. Part of #2345.
 #[derive(Debug, Clone)]
-pub enum StoredType {
+pub(crate) enum StoredType {
     /// Real type obtained from the kernel type checker.
     Known(Expr),
     /// Type inference failed — stores the reason string.
@@ -34,7 +34,7 @@ impl From<Expr> for StoredType {
 /// Errors from superposition proof reconstruction.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum ReconstructionError {
+pub(crate) enum ReconstructionError {
     /// A superposition symbol has no mapping to a kernel expression.
     #[error("unmapped symbol: {0}")]
     UnmappedSymbol(Symbol),
@@ -73,7 +73,7 @@ pub type ReconstructionResult<T> = Result<T, ReconstructionError>;
 /// (u32-based) which is separate from the kernel's `Expr`. This struct
 /// provides the bidirectional mapping needed for proof reconstruction.
 #[derive(Debug, Default)]
-pub struct SymbolMap {
+pub(crate) struct SymbolMap {
     /// Superposition Symbol → kernel Expr (for constants/functions)
     symbol_to_expr: HashMap<Symbol, Expr>,
     /// Superposition Symbol → kernel type (known or missing). Part of #2345.
@@ -103,7 +103,7 @@ pub struct SymbolMap {
 
 impl SymbolMap {
     /// Create a new empty symbol map.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -111,19 +111,19 @@ impl SymbolMap {
     ///
     /// Accepts `Expr` (auto-converts to `StoredType::Known`) or `StoredType`
     /// directly. Part of #2345.
-    pub fn add_symbol(&mut self, sym: Symbol, expr: Expr, ty: impl Into<StoredType>) {
+    pub(crate) fn add_symbol(&mut self, sym: Symbol, expr: Expr, ty: impl Into<StoredType>) {
         self.symbol_to_expr.insert(sym, expr);
         self.symbol_to_type.insert(sym, ty.into());
     }
 
     /// Register a variable binding.
-    pub fn add_variable(&mut self, var: u32, expr: Expr, ty: Expr) {
+    pub(crate) fn add_variable(&mut self, var: u32, expr: Expr, ty: Expr) {
         self.var_to_expr.insert(var, expr);
         self.var_to_type.insert(var, ty);
     }
 
     /// Register an input clause with its kernel hypothesis.
-    pub fn add_input_clause(&mut self, clause_id: u64, fvar: FVarId, prop: Expr) {
+    pub(crate) fn add_input_clause(&mut self, clause_id: u64, fvar: FVarId, prop: Expr) {
         self.input_to_fvar.insert(clause_id, fvar);
         self.input_to_type.insert(clause_id, prop);
     }
@@ -133,7 +133,7 @@ impl SymbolMap {
     /// The clausifier calls this when creating `sk_N` constants via
     /// `nnf_skolemize`. The declaration is stored so the kernel Environment
     /// can be extended before type-checking proof terms.
-    pub fn register_skolem(&mut self, name: Name, ty: Expr) {
+    pub(crate) fn register_skolem(&mut self, name: Name, ty: Expr) {
         self.skolem_decls.push((name, ty));
     }
 
@@ -142,7 +142,7 @@ impl SymbolMap {
     /// Skolem constants are opaque witnesses introduced by Skolemization.
     /// They have a type but no computable value. Declaring them as axioms
     /// allows the type checker to accept proof terms that reference them.
-    pub fn declare_skolems(&self, env: &mut Environment) {
+    pub(crate) fn declare_skolems(&self, env: &mut Environment) {
         for (name, ty) in &self.skolem_decls {
             // SOUNDNESS: registers an UNCHECKED axiom via the TrustedEnvExt
             // choke trait. The sole production caller
@@ -159,7 +159,7 @@ impl SymbolMap {
 
     /// Get the Skolem constant declarations.
     #[cfg(test)]
-    pub fn skolem_declarations(&self) -> &[(Name, Expr)] {
+    pub(crate) fn skolem_declarations(&self) -> &[(Name, Expr)] {
         &self.skolem_decls
     }
 
@@ -169,7 +169,7 @@ impl SymbolMap {
     /// with `try_superposition_prove_with_fvars` where tactic FVarIds
     /// may collide, use `set_goal_info_with_fvar_base` instead.
     #[cfg(test)]
-    pub fn set_goal_info(&mut self, goal: Expr, num_goal_clauses: usize) {
+    pub(crate) fn set_goal_info(&mut self, goal: Expr, num_goal_clauses: usize) {
         self.goal_info = Some((goal, num_goal_clauses, 0));
     }
 
@@ -180,7 +180,7 @@ impl SymbolMap {
     /// tactic framework, tactic-scope FVarIds (0, 1, 2, ...) may
     /// collide with the default goal clause FVarIds. Setting a high
     /// sentinel base avoids this collision.
-    pub fn set_goal_info_with_fvar_base(
+    pub(crate) fn set_goal_info_with_fvar_base(
         &mut self,
         goal: Expr,
         num_goal_clauses: usize,
@@ -190,7 +190,7 @@ impl SymbolMap {
     }
 
     /// Convert a superposition `Term` to a kernel `Expr`.
-    pub fn term_to_expr(&self, term: &Term) -> ReconstructionResult<Expr> {
+    pub(crate) fn term_to_expr(&self, term: &Term) -> ReconstructionResult<Expr> {
         match term {
             Term::Var(v) => self
                 .var_to_expr
@@ -237,7 +237,7 @@ impl SymbolMap {
     /// Returns an error if the function type has fewer Pi binders than arguments.
     /// Returns `SortInferenceFailed` if a symbol has missing type metadata
     /// (Part of #2345).
-    pub fn term_type(&self, term: &Term) -> ReconstructionResult<Expr> {
+    pub(crate) fn term_type(&self, term: &Term) -> ReconstructionResult<Expr> {
         match term {
             Term::Var(v) => self
                 .var_to_type

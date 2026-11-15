@@ -179,8 +179,10 @@ pub(crate) fn build_or_elim_chain(
 
     let eq_level = Level::succ(Level::zero());
     let prop = make_equality_type(eq_type, &Expr::fvar(hyp_fvar), &values[idx], eq_level);
-    let false_const = Expr::const_(Name::from_string("False"), vec![]);
-    let not_prop = Expr::pi(BinderInfo::Default, prop.clone(), false_const);
+    // `¬(h = vₖ)`, with the `Not` head. Lean states this hypothesis with the `Not` head; simp reads a
+    // negation off that head only, so a `c → False` here would not rewrite
+    // `c` to `False` (`tests_simp_lemma_sources`).
+    let not_prop = Expr::app(Expr::const_(Name::from_string("Not"), vec![]), prop.clone());
 
     let em = Expr::app(state.mk_const_str("Classical.em"), prop.clone());
 

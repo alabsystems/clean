@@ -379,7 +379,7 @@ pub(crate) unsafe fn mk_array(n: usize, v: LeanObjPtr) -> LeanObjPtr {
         if n == 0 {
             lean_dec(v);
         } else if n > 1 {
-            lean_inc_n(v, (n - 1) as u32);
+            lean_inc_n(v, n - 1);
         }
         (*(a as *mut ArrayObj)).size = n;
         a

@@ -40,8 +40,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -66,7 +65,7 @@ fn canon(sx: &Sx) -> String {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// M1 — the committed core is canonical: load, write field 81, store, ret.
+// M1 — the committed core is canonical: load, write field 83, store, ret.
 // ────────────────────────────────────────────────────────────────────────────
 
 #[test]
@@ -83,8 +82,8 @@ fn m1_committed_core_round_trips_its_printer() {
         "the committed core must read the whole Environment through the receiver:\n{text}"
     );
     assert!(
-        text.contains("(insertfield (struct 0) 2 81 1)"),
-        "and write FIELD 81 — the numeral this chain's refusal was named for:\n{text}"
+        text.contains("(insertfield (struct 0) 2 83 1)"),
+        "and write FIELD 83 (81 until the 2026-10-07 re-derivation) — the numeral this chain's refusal was named for:\n{text}"
     );
     assert!(
         text.contains("(store (struct 0) 0 3 false)"),
@@ -118,8 +117,8 @@ fn m2_reader_b_equals_reader_a_with_an_empty_ledger() {
 #[test]
 fn reader_b_store_arm_refuses_malformed_tails() {
     let junk = FIXTURE.replace(
-        "store struct.441 %3, ptr %0",
-        "store struct.441 %3, ptr %0, banana",
+        "store struct.586 %3, ptr %0",
+        "store struct.586 %3, ptr %0, banana",
     );
     assert_ne!(junk, FIXTURE);
     let e = ir_mint::read_emitted(&junk)
@@ -158,19 +157,19 @@ fn m3_mint_reproduces_the_registered_script() {
 }
 
 /// **The converted refusal, pinned from both sides.** The field index mints
-/// as the bare literal 81 — a datum above the pool — and a field index AT the
+/// as the bare literal 83 (81 before the 2026-10-07 re-derivation) — a datum above the pool — and a field index AT the
 /// pool still renders through it, so the reclassification changed exactly the
 /// artifacts it had to and no others.
 #[test]
 fn m3_the_field_index_renders_as_the_literal() {
     assert!(
-        ir_mint::IR_SM_DEFS.contains("ir_sm_tenv ir_d2 81 ir_d1"),
-        "field 81 must be the bare literal, the spelling the hand transcription proved \
+        ir_mint::IR_SM_DEFS.contains("ir_sm_tenv ir_d2 83 ir_d1"),
+        "field 83 must be the bare literal, the spelling the hand transcription proved \
          against:\n{}",
         ir_mint::IR_SM_DEFS
     );
     assert!(
-        !ir_mint::IR_SM_DEFS.contains("ir_d81"),
+        !ir_mint::IR_SM_DEFS.contains("ir_d83"),
         "and NOT a pool atom the specification does not register"
     );
     // The pool arm, on the sibling that exercises it: ir_fw's insertfield
@@ -189,8 +188,12 @@ fn m3_the_field_index_renders_as_the_literal() {
 #[test]
 fn a_structural_numeral_above_the_pool_still_refuses() {
     // The committed core with its insertfield RESULT (an SSA position) forged
-    // to 81 — same numeral, structural slot.
-    let forged = ir_mint::IR_SM_CORE.replace("(results 3)", "(results 81)");
+    // to 131 — one above `mint::MAX_STRUCTURAL_ATOM`. It was 81 until
+    // 2026-09-20: the 2026-09-16 widening to ir_d0..ir_d130 made 81 a numeral
+    // the minter ACCEPTS, so this pin stopped refusing and nothing said so.
+    // If it stops refusing again the pool has widened again — move the
+    // specimen, never loosen the assertion.
+    let forged = ir_mint::IR_SM_CORE.replace("(results 3)", "(results 131)");
     assert_ne!(forged, ir_mint::IR_SM_CORE, "the forgery must bite");
     let sx = ir_mint::parse(&forged).expect("the forged core still parses");
     let e = ir_mint::mint(&sx, PREFIX, &tags())
@@ -225,20 +228,20 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("(functy.404)"),
-        "the emitted body must still carry signature index 404; if it does not, the artifact \
+        FIXTURE.contains("(functy.385)"),
+        "the emitted body must still carry signature index 385; if it does not, the artifact \
          was re-interned and this table needs a one-line REVIEWED re-pin"
     );
     assert!(
-        ir_mint::IR_SM_TAGS.contains("\"functy\": 404"),
+        ir_mint::IR_SM_TAGS.contains("\"functy\": 385"),
         "and the committed table must record it"
     );
     assert!(
-        FIXTURE.matches("struct.441").count() == 3,
+        FIXTURE.matches("struct.586").count() == 3,
         "all three instructions name the SAME struct — the row is REAL, not interface-only"
     );
     assert!(
-        ir_mint::IR_SM_TAGS.contains("\"crate_id\": 441"),
+        ir_mint::IR_SM_TAGS.contains("\"crate_id\": 586"),
         "and the committed table pins that id"
     );
 }
@@ -277,16 +280,16 @@ fn m10_the_interface_pins_bite() {
     for (from, to, slot) in [
         (
             "bb0(%0: ptr, %1: bool):",
-            "bb0(%0: struct.441, %1: bool):",
+            "bb0(%0: struct.586, %1: bool):",
             "parameter",
         ),
         (
-            "store struct.441 %3, ptr %0",
-            "store struct.441 %3, ptr %0, align 8",
+            "store struct.586 %3, ptr %0",
+            "store struct.586 %3, ptr %0, align 8",
             "align",
         ),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.404)", "(functy.405)", "signature index"),
+        ("(functy.385)", "(functy.386)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");
@@ -338,6 +341,6 @@ fn m4_the_registered_kernel_term_decodes_to_the_committed_core() {
         "the ELABORATED term registered under `{MODULE_CONST}` does not decode to the committed \
          core module. This is the check that keeps `mint` out of the trusted base: reader C \
          never sees the minter's output — and on this chain it is also what pins that the \
-         registered term's literal 81 IS the field the artifact writes."
+         registered term's literal 83 IS the field the artifact writes."
     );
 }

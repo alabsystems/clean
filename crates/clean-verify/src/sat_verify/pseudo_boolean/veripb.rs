@@ -34,7 +34,7 @@ use crate::sat_verify::proof_complexity::cutting_planes::CuttingPlanesProof;
 /// A single step in a VeriPB proof.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum VeriPbStep {
+pub(crate) enum VeriPbStep {
     /// Derive a new constraint via a proof rule.
     PolynomialAddition { result: PbConstraint, rule: PbRule },
     /// Derive a new constraint via reverse unit propagation.
@@ -54,7 +54,7 @@ pub enum VeriPbStep {
 
 /// A complete VeriPB proof.
 #[derive(Debug, Clone)]
-pub struct VeriPbProof {
+pub(crate) struct VeriPbProof {
     /// The formula being refuted.
     pub formula: PbFormula,
     /// The proof steps.
@@ -64,7 +64,7 @@ pub struct VeriPbProof {
 impl VeriPbProof {
     /// Create a new proof for the given formula.
     #[must_use]
-    pub fn new(formula: PbFormula) -> Self {
+    pub(crate) fn new(formula: PbFormula) -> Self {
         Self {
             formula,
             steps: Vec::new(),
@@ -72,7 +72,7 @@ impl VeriPbProof {
     }
 
     /// Add a derivation step. Returns the step index.
-    pub fn add_step(&mut self, step: VeriPbStep) -> usize {
+    pub(crate) fn add_step(&mut self, step: VeriPbStep) -> usize {
         let idx = self.steps.len();
         self.steps.push(step);
         idx
@@ -84,7 +84,7 @@ impl VeriPbProof {
     /// `verify_rule` function receives `Option<PbConstraint>` entries: `None`
     /// for deleted constraints, `Some(...)` for live ones. References to
     /// deleted constraints fail with `IndexOutOfBounds`.
-    pub fn verify(&self) -> Result<(), PbError> {
+    pub(crate) fn verify(&self) -> Result<(), PbError> {
         let mut derived: Vec<Option<PbConstraint>> = Vec::new();
         let mut concluded = false;
 
@@ -144,7 +144,7 @@ impl VeriPbProof {
 
     /// Output the proof in VeriPB text format.
     #[must_use]
-    pub fn to_veripb_format(&self) -> String {
+    pub(crate) fn to_veripb_format(&self) -> String {
         let mut out = String::new();
 
         // Header: pseudo-Boolean proof version.
@@ -184,7 +184,7 @@ impl VeriPbProof {
 
     /// Certificate size in bytes (VeriPB text format size).
     #[must_use]
-    pub fn certificate_size(&self) -> usize {
+    pub(crate) fn certificate_size(&self) -> usize {
         self.to_veripb_format().len()
     }
 }

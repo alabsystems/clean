@@ -12,10 +12,10 @@ use super::*;
 use crate::inductive::{Constructor, InductiveDecl, InductiveType};
 
 // ================================================================
-// Performance proof: recursor rule lookup is O(1) via constructor_idx
+// Regression check: indexed recursor rule lookup uses one name comparison
 //
 // try_iota_reduction uses `rules.get(constructor_idx)` for O(1) lookup
-// (reduction.rs:241-248). Previously used `.iter().find()` which was O(N).
+// followed by a name check. Previously used `.iter().find()` which was O(N).
 // Fixed via #1853: constructor_idx directly indexes into rules vec.
 // ================================================================
 
@@ -64,50 +64,53 @@ fn build_big_enum_rec_app(n: usize, _env: &Environment, last_ctor: &Name) -> Exp
     Expr::app(app, Expr::const_(last_ctor.clone(), vec![]))
 }
 
-/// Verifies O(1) recursor rule lookup in try_iota_reduction (#1853).
-/// Uses acceptance criteria sizes: 1, 3, 10, 20 constructors.
-/// With constructor_idx direct indexing, 20/1 ratio should be near 1.0.
+/// Count rule-name comparisons on cold iota reductions, not warmed WHNF hits.
+/// The aligned constructor must take one probe at every size. A constructor
+/// with no rule exercises the full fallback scan and must remain stuck.
 #[test]
 fn test_iota_recursor_rule_lookup_scaling() {
+    use crate::inductive::ConstructorVal;
+    use crate::tc::reduction::take_iota_rule_probes_for_tests;
+
     run_with_timeout(
         SCALING_TEST_TIMEOUT,
         "test_iota_recursor_rule_lookup_scaling",
         || {
-            let sizes = [1usize, 3, 10, 20];
-            let mut times = Vec::new();
+            for n in [1usize, 3, 10, 20] {
+                let (mut env, last_ctor) = make_many_ctor_env(n);
+                {
+                    let tc = TypeChecker::new(&env);
+                    let app = build_big_enum_rec_app(n, &env, &last_ctor);
+                    take_iota_rule_probes_for_tests();
+                    let reduced = tc
+                        .try_iota_reduction(&app, true)
+                        .expect("aligned constructor must iota-reduce");
+                    let probes = take_iota_rule_probes_for_tests();
+                    assert_eq!(probes, 1, "indexed lookup with {n} constructors");
+                    assert_eq!(tc.whnf(&reduced), Expr::type_());
+                }
 
-            for &n in &sizes {
-                let (env, last_ctor) = make_many_ctor_env(n);
+                // This constructor claims the same parent and index but is
+                // absent from its recursor's rules. A name check must reject
+                // the indexed candidate and inspect all n fallback rules.
+                let absent = Name::from_string("BigEnum.absent");
+                env.register_constructor(ConstructorVal {
+                    name: absent.clone(),
+                    inductive_name: Name::from_string("BigEnum"),
+                    level_params: vec![],
+                    type_: Expr::const_(Name::from_string("BigEnum"), vec![]),
+                    num_params: 0,
+                    num_fields: 0,
+                    constructor_idx: (n - 1) as u32,
+                });
                 let tc = TypeChecker::new(&env);
-                let app = build_big_enum_rec_app(n, &env, &last_ctor);
-
-                // Warmup
-                for _ in 0..10 {
-                    let _ = tc.whnf(&app);
-                }
-
-                let iters = 1000;
-                let start = std::time::Instant::now();
-                for _ in 0..iters {
-                    let _ = tc.whnf(&app);
-                }
-                let elapsed = start.elapsed().as_nanos() as u64;
-                times.push(elapsed / iters as u64);
-            }
-
-            eprintln!(
-                "iota rule lookup (constructor_idx O(1)): sizes={sizes:?}, times_ns={times:?}"
-            );
-
-            // With O(1) indexing, 20-ctor lookup should not be significantly
-            // slower than 1-ctor lookup. Allow 10x for noise (env size differences,
-            // minor premise count differences in whnf). Linear scan would give ~20x.
-            if times[0] > 0 {
-                let ratio = times[3] as f64 / times[0] as f64;
-                assert!(
-                    ratio < 10.0,
-                    "iota recursor rule lookup scaling: 20/1 ctor ratio = {ratio:.1}x \
-                     (expected ~1x for O(1) constructor_idx lookup). times: {times:?}"
+                let app = build_big_enum_rec_app(n, &env, &absent);
+                take_iota_rule_probes_for_tests();
+                assert!(tc.try_iota_reduction(&app, true).is_none());
+                assert_eq!(
+                    take_iota_rule_probes_for_tests(),
+                    n + 1,
+                    "one indexed name check plus {n} fallback probes"
                 );
             }
         },

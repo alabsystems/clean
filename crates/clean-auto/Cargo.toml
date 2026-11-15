@@ -85,21 +85,16 @@ rayon.workspace = true
 # (axum is not vendored offline) with `httparse` + a percent decoder for the
 # request path, and `anyhow` for the binary's ad-hoc error context. These are
 # only used by the binary; the library surface stays `thiserror`-typed.
-tokio = { workspace = true }
 httparse.workspace = true
 percent-encoding.workspace = true
 anyhow.workspace = true
 
-# Optional ay SMT solver
-ay = { workspace = true, optional = true }
-ay-core = { workspace = true, optional = true }
-ay-dpll = { workspace = true, optional = true }
-ay-proof = { workspace = true, optional = true }
-ay-translate = { workspace = true, optional = true }
-
 # Optional Carcara proof verifier (Alethe format)
 # Note: Carcara requires GMP via the `rug` crate
-carcara = { git = "https://github.com/ufmg-smite/carcara", rev = "fecb4224def3c26f93a5d4f1804ecf58eb979650", optional = true }
+# Vendored from upstream ufmg-smite/carcara d62d45cf972875b3c1463b287e9a86536b56551d;
+# origin, license and every local change are listed in
+# third-party/carcara/DOWNSTREAM.md.
+carcara = { path = "../../third-party/carcara/carcara", optional = true }
 
 # Optional HTTP oracle backend
 ureq = { workspace = true, optional = true }
@@ -111,13 +106,24 @@ ureq = { workspace = true, optional = true }
 clean-features = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 
+# Native-only dependencies. tokio backs the solver-cache HTTP service and the
+# ay solver stack has no wasm32 port (signal-hook / libc signal APIs), so both
+# are absent on wasm; the ay-smt module tree is target-gated to match.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true }
+ay = { workspace = true, optional = true }
+ay-core = { workspace = true, optional = true }
+ay-dpll = { workspace = true, optional = true }
+ay-proof = { workspace = true, optional = true }
+ay-translate = { workspace = true, optional = true }
+
 [dev-dependencies]
 clean-kernel = { workspace = true, features = ["math-overlays"] }
 proptest.workspace = true
 criterion.workspace = true
 serial_test = { workspace = true, features = ["file_locks"] }
 ntest.workspace = true
-tokio = { workspace = true, features = ["rt", "macros"] }
+tokio = { workspace = true, features = ["full"] }
 num-rational.workspace = true
 tempfile.workspace = true
 ay-lean-bridge.workspace = true

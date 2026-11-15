@@ -35,7 +35,7 @@ pub(super) const RENV: &str = "(red_rec the_red_env)";
 pub(super) const HF_REFL: &str = "(Eq.refl (OptionType Name) (OptionType.none Name))";
 /// R10's REAL reflected dead constant: `defval_for` and `recmeta_for` are both
 /// `none` by `Eq.refl` over the live `the_red_env`.
-pub(super) const DEADCONST: &str = "(KExpr.const kcre_name_12 (ListType.nil Level))";
+pub(super) const DEADCONST: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
 
 /// The `konst` rule's first inertness premise: the constant has NO definitional
 /// value, so no δ step can fire at it. R10's `defval_none`.

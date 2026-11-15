@@ -713,8 +713,13 @@ fn resolve_battery(spec: &Specification) -> Result<BTreeMap<&'static str, Vec<Ex
         for src in srcs {
             match spec.elaborate_source(&src, &format!("battery {ty}")) {
                 Ok(e) => {
+                    // `has_fvar_quick` is what rejects a leaked elaborator
+                    // metavariable (a bit-63 FVar); the kernel's
+                    // `has_expr_mvar_quick` is constant false and was a dead
+                    // disjunct here (G46, ledger (116)). The meta scan names
+                    // the case explicitly.
                     if e.has_fvar_quick()
-                        || e.has_expr_mvar_quick()
+                        || clean_elab::MetaState::expr_has_meta(&e)
                         || e.has_level_mvar_quick()
                         || e.has_level_param_quick()
                         || e.has_loose_bvars_quick()

@@ -5,7 +5,7 @@
 //! Proof certificate verification command handlers.
 
 use anyhow::{anyhow, bail, Context};
-use clean_elab::cert::external::verify_alethe_certificate;
+use clean_elab::cert::external::verify_alethe_certificate_until;
 use clean_elab::cert::{
     verify_entailment_certificate, verify_farkas_certificate, ExternalCertificate,
 };
@@ -14,7 +14,7 @@ use clean_kernel::cli::CertCommands;
 use clean_kernel::{Environment, Expr};
 use rayon::prelude::*;
 use std::path::Path;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 pub(crate) fn handle_cert_command(command: CertCommands) -> anyhow::Result<()> {
     match command {
@@ -25,13 +25,25 @@ pub(crate) fn handle_cert_command(command: CertCommands) -> anyhow::Result<()> {
             minimal_env,
             verbose,
         } => cert_verify(&cert, &expr, env.as_deref(), minimal_env, verbose),
-        CertCommands::VerifyExternal { cert, verbose } => cert_verify_external(&cert, verbose),
+        CertCommands::VerifyExternal {
+            cert,
+            verbose,
+            timeout_ms,
+        } => cert_verify_external(&cert, verbose, check_limit(timeout_ms)),
         CertCommands::VerifyExternalBatch {
             certs,
             threads,
             verbose,
-        } => cert_verify_external_batch(&certs, threads, verbose),
+            timeout_ms,
+        } => cert_verify_external_batch(&certs, threads, verbose, check_limit(timeout_ms)),
     }
+}
+
+/// `--timeout-ms`: how long one Alethe check may take (`0` for no limit). The vendored checker's
+/// resource budget bounds what a proof step builds, not how long a proof takes
+/// (`third-party/carcara/DOWNSTREAM.md`, "The checker stops at a deadline").
+fn check_limit(timeout_ms: u64) -> Option<Duration> {
+    (timeout_ms > 0).then(|| Duration::from_millis(timeout_ms))
 }
 
 fn load_cert_env(env_path: Option<&Path>, minimal_env: bool) -> anyhow::Result<Environment> {
@@ -125,7 +137,10 @@ fn external_certificate_label(cert: &ExternalCertificate) -> &'static str {
     }
 }
 
-fn verify_external_certificate(cert: &ExternalCertificate) -> anyhow::Result<Vec<String>> {
+fn verify_external_certificate(
+    cert: &ExternalCertificate,
+    limit: Option<Duration>,
+) -> anyhow::Result<Vec<String>> {
     match cert {
         ExternalCertificate::Farkas(farkas) => {
             let contradiction_value = verify_farkas_certificate(farkas)
@@ -147,7 +162,10 @@ fn verify_external_certificate(cert: &ExternalCertificate) -> anyhow::Result<Vec
                 format!("Claimed bound: {}", claimed_bound.to_compact_string()),
             ])
         }
-        ExternalCertificate::Alethe(alethe) => match verify_alethe_certificate(alethe) {
+        ExternalCertificate::Alethe(alethe) => match verify_alethe_certificate_until(
+            alethe,
+            limit.and_then(|limit| Instant::now().checked_add(limit)),
+        ) {
             Ok(true) => Ok(vec![
                 format!(
                     "Problem bytes: {}, proof bytes: {}",
@@ -170,9 +188,13 @@ struct BatchItemResult {
     message: String,
 }
 
-fn verify_external_batch_item(index: usize, cert: &ExternalCertificate) -> BatchItemResult {
+fn verify_external_batch_item(
+    index: usize,
+    cert: &ExternalCertificate,
+    limit: Option<Duration>,
+) -> BatchItemResult {
     let kind = external_certificate_label(cert);
-    match verify_external_certificate(cert) {
+    match verify_external_certificate(cert, limit) {
         Ok(_) => BatchItemResult {
             index,
             success: true,
@@ -186,12 +208,16 @@ fn verify_external_batch_item(index: usize, cert: &ExternalCertificate) -> Batch
     }
 }
 
-fn cert_verify_external(cert_path: &Path, verbose: bool) -> anyhow::Result<()> {
+fn cert_verify_external(
+    cert_path: &Path,
+    verbose: bool,
+    limit: Option<Duration>,
+) -> anyhow::Result<()> {
     let cert = load_external_certificate(cert_path)?;
     let cert_type = external_certificate_label(&cert);
     let start = Instant::now();
 
-    match verify_external_certificate(&cert) {
+    match verify_external_certificate(&cert, limit) {
         Ok(detail_lines) => {
             let elapsed = start.elapsed();
             println!("External certificate verification: PASSED");
@@ -219,6 +245,7 @@ fn cert_verify_external_batch(
     certs_path: &Path,
     threads: usize,
     verbose: bool,
+    limit: Option<Duration>,
 ) -> anyhow::Result<()> {
     let certs = load_external_certificate_batch(certs_path)?;
     if certs.is_empty() {
@@ -233,7 +260,7 @@ fn cert_verify_external_batch(
         certs
             .iter()
             .enumerate()
-            .map(|(index, cert)| verify_external_batch_item(index, cert))
+            .map(|(index, cert)| verify_external_batch_item(index, cert, limit))
             .collect()
     } else {
         let pool = rayon::ThreadPoolBuilder::new()
@@ -244,7 +271,7 @@ fn cert_verify_external_batch(
             certs
                 .par_iter()
                 .enumerate()
-                .map(|(index, cert)| verify_external_batch_item(index, cert))
+                .map(|(index, cert)| verify_external_batch_item(index, cert, limit))
                 .collect()
         })
     };

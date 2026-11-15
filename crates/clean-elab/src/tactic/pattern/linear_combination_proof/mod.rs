@@ -246,7 +246,11 @@ fn build_combined_equality(
             continue;
         }
 
-        let hyp = goal.local_ctx.iter().find(|h| h.name == coeff.hyp_name)?;
+        let hyp = goal
+            .local_ctx
+            .iter()
+            .rev()
+            .find(|h| super::names::local_name_matches(&h.name, &coeff.hyp_name))?;
         let hyp_ty = state.metas.instantiate(&hyp.ty);
         let hyp_fvar = Expr::fvar(hyp.fvar);
 

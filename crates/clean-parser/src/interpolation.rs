@@ -27,7 +27,9 @@ pub enum InterpolationError {
     UnmatchedCloseBrace { offset: usize },
 }
 
-pub fn parse_interpolation(input: &str) -> Result<Vec<InterpolationPart>, InterpolationError> {
+pub(crate) fn parse_interpolation(
+    input: &str,
+) -> Result<Vec<InterpolationPart>, InterpolationError> {
     let mut parts = Vec::new();
     let mut literal = String::new();
     let mut chars = input.char_indices().peekable();
@@ -238,7 +240,8 @@ pub fn desugar_interpolation(parts: Vec<InterpolationPart>) -> SurfaceExpr {
     desugar_parts(parts, mk_string_lit, mk_to_string, "String.append")
 }
 
-pub fn desugar_prefixed_interpolation(
+#[cfg(test)]
+pub(crate) fn desugar_prefixed_interpolation(
     kind: InterpolatedStringKind,
     input: &str,
 ) -> Result<SurfaceExpr, InterpolationError> {
@@ -263,13 +266,48 @@ pub fn desugar_prefixed_interpolation_parts(
         InterpolatedStringKind::Format => {
             desugar_parts(owned, mk_format_text, mk_format_expr, "Format.append")
         }
-        InterpolatedStringKind::MessageData => mk_message_data(desugar_parts(
-            owned,
-            mk_format_text,
-            mk_format_expr,
-            "Format.append",
-        )),
+        InterpolatedStringKind::MessageData => desugar_message_data(owned),
     }
+}
+
+/// `m!"…"` exactly as Lean's macro expands it (`Lean/Message.lean`:
+/// `interpStr.expandInterpolatedStr (← `(MessageData)) (← `(toMessageData))`,
+/// `Init/Meta/Defs.lean` `expandInterpolatedStr`): every chunk -- literal and
+/// `{e}` alike -- becomes `toMessageData chunk`, empty literals are skipped,
+/// the chunks are joined LEFT-associatively with `++`, and the whole is
+/// ascribed `MessageData`. The macro is declared in namespace `Lean`, so its
+/// hygienic names are `Lean.MessageData` and `toMessageData`, which is the
+/// `export ToMessageData (toMessageData)` alias of the class method
+/// `Lean.ToMessageData.toMessageData` -- named here directly, as the hygienic
+/// resolution names it.
+///
+/// It used to read `MessageData.ofFormat (Format.append (Format.text …)
+/// (format …))` at the ROOT, a shape no Lean prelude provides: with `import
+/// Lean` it failed `Unknown identifier: MessageData.ofFormat` (upstream
+/// tests/elab/2077.lean), and Clean's own prelude has no `MessageData` at all.
+fn desugar_message_data(parts: Vec<InterpolationPart>) -> SurfaceExpr {
+    const OF: &str = "Lean.ToMessageData.toMessageData";
+    let mut acc: Option<SurfaceExpr> = None;
+    for part in parts {
+        let elem = match part {
+            InterpolationPart::Literal(text) if text.is_empty() => continue,
+            InterpolationPart::Literal(text) => mk_unary_app(OF, mk_string_lit(&text)),
+            InterpolationPart::Expr(expr) => mk_unary_app(OF, expr),
+        };
+        acc = Some(match acc {
+            None => elem,
+            Some(left) => mk_binary_app("HAppend.hAppend", left, elem),
+        });
+    }
+    let body = acc.unwrap_or_else(|| mk_unary_app(OF, mk_string_lit("")));
+    SurfaceExpr::Ascription(
+        Span::dummy(),
+        Box::new(body),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            crate::SurfaceName::global_path("Lean.MessageData"),
+        )),
+    )
 }
 
 fn desugar_parts(
@@ -278,10 +316,6 @@ fn desugar_parts(
     mk_expr: fn(SurfaceExpr) -> SurfaceExpr,
     append_name: &str,
 ) -> SurfaceExpr {
-    if parts.is_empty() {
-        return mk_lit("");
-    }
-
     let mut exprs: Vec<_> = parts
         .into_iter()
         .map(|part| match part {
@@ -290,11 +324,10 @@ fn desugar_parts(
         })
         .collect();
 
-    if exprs.len() == 1 {
-        return exprs.pop().expect("single interpolation segment");
-    }
-
-    let mut acc = exprs.pop().expect("non-empty interpolation");
+    // No part at all is the empty literal; a single part is itself.
+    let Some(mut acc) = exprs.pop() else {
+        return mk_lit("");
+    };
     while let Some(expr) = exprs.pop() {
         acc = mk_binary_app(append_name, expr, acc);
     }
@@ -317,17 +350,13 @@ fn mk_format_expr(expr: SurfaceExpr) -> SurfaceExpr {
     mk_unary_app("format", expr)
 }
 
-fn mk_message_data(expr: SurfaceExpr) -> SurfaceExpr {
-    mk_unary_app("MessageData.ofFormat", expr)
-}
-
 fn mk_unary_app(name: &str, arg: SurfaceExpr) -> SurfaceExpr {
-    let func = SurfaceExpr::Ident(Span::dummy(), name.to_owned());
+    let func = SurfaceExpr::Ident(Span::dummy(), crate::SurfaceName::global_path(name));
     SurfaceExpr::app(func, vec![arg])
 }
 
 fn mk_binary_app(name: &str, lhs: SurfaceExpr, rhs: SurfaceExpr) -> SurfaceExpr {
-    let func = SurfaceExpr::Ident(Span::dummy(), name.to_owned());
+    let func = SurfaceExpr::Ident(Span::dummy(), crate::SurfaceName::global_path(name));
     SurfaceExpr::app(func, vec![lhs, rhs])
 }
 

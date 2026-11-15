@@ -330,7 +330,7 @@ fn test_reduce_native_fires_inst_decidable_nat_lt() {
     use super::native_reducers_decidable::names;
     use crate::tc::TypeChecker;
 
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     env.init_decidable_native_reducers();
     let tc = TypeChecker::new(&env);
 
@@ -354,7 +354,7 @@ fn test_reduce_native_fires_inst_decidable_nat_le() {
     use super::native_reducers_decidable::names;
     use crate::tc::TypeChecker;
 
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     env.init_decidable_native_reducers();
     let tc = TypeChecker::new(&env);
 

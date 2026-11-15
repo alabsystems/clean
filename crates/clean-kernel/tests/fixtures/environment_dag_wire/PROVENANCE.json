@@ -1,0 +1,45 @@
+{
+  "c4": {
+    "execution_manifest_sha256": "d0ed24c313f23e64d92da2449d8c4ef858840557f1ae34966a42298d0f074d9b",
+    "generator_sha256": "1ecf6671c729ce8c7644568a42207813ece97fa09829c82ff1fd062ffd0794cf",
+    "native_sha256": "14ca1fb6c7897463dce5fee34c8156acef1831b98990b4bbb590b80443045678",
+    "producer": "c4bcd22d6794d469385db3a0430274605df9e312",
+    "scope": "Genuine unchanged G1 writer source before V2 replacement; JSON is authored fixture/subset observation only, not full Environment losslessness or proof admission."
+  },
+  "files": {
+    "c4-lean430.dag": {
+      "bytes": 819,
+      "sha256": "0833fdb82e927c2a9da8982bdb4adf31d8b575fa2dbdcdcae29d0caee99030c6"
+    },
+    "c4-lean430.json": {
+      "bytes": 1212,
+      "sha256": "a8b113ae63b9d601670be9ea293f2f898b29542995a3f778c4359111290e4565"
+    },
+    "c4-lean48.dag": {
+      "bytes": 819,
+      "sha256": "5792f52f37830826ac2b01d11b622d426dd775fdb70b8db5b35a618a17dcf421"
+    },
+    "c4-lean48.json": {
+      "bytes": 1211,
+      "sha256": "96ec52dded645f2502b8947629c456bf2a64bc22affa0247b9a82722c076309d"
+    },
+    "original-3fa-BUNDLE.json": {
+      "bytes": 599,
+      "sha256": "eb4927eb5c216a418606213825421c20a34efd045bac445dcbcb77bd4bce42f7"
+    },
+    "original-3fa.dag.zst": {
+      "bytes": 1736558,
+      "sha256": "0eb639b891320cd64730eb7ce233620481647a3dd3c4889d1eec8f748a5647b3"
+    }
+  },
+  "legacy3fa": {
+    "producer": "3fa056eb1b97bdd62de3200d5a0f4232e9c570f8",
+    "source": "Original published CG retained i128 input, copied byte-for-byte; BUNDLE/raw/compressed checks precede explicit epoch selection. No regenerated theorem/artifact."
+  },
+  "schema": 1,
+  "v2_primitive_oracle": {
+    "bytes": 1043,
+    "scope": "Independent Python fixed primitive framing of the frozen default field list; not emitted by the production V2 writer",
+    "sha256": "dfdcfce723c5f1ff1371cb9acf5994c43249f0cd6d68f691021d1689cf45d625"
+  }
+}

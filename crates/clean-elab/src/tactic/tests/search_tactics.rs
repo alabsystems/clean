@@ -16,8 +16,9 @@ fn test_exact_search_finds_hypothesis() {
         env,
         a.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: a.clone(),
             value: None,
         }],
@@ -25,7 +26,7 @@ fn test_exact_search_finds_hypothesis() {
 
     let results = exact_search(&mut state, 10).unwrap();
     assert!(!results.is_empty());
-    assert_eq!(results[0].name.to_string(), "h");
+    assert_eq!(results[0].name, Name::from_string("h"));
     assert!(results[0].suggestion.contains("exact"));
 }
 
@@ -38,8 +39,9 @@ fn test_exact_search_no_match() {
         env,
         a,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: b,
             value: None,
         }],
@@ -47,7 +49,7 @@ fn test_exact_search_no_match() {
 
     let results = exact_search(&mut state, 10).unwrap();
     // No matching hypothesis in local context
-    assert!(results.iter().all(|r| r.name.to_string() != "h"));
+    assert!(results.iter().all(|r| r.name != Name::from_string("h")));
 }
 
 #[test]
@@ -62,8 +64,9 @@ fn test_apply_search_finds_implication() {
         env,
         a,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "f".to_string(),
+            name: clean_parser::SurfaceName::generated_path("f"),
             ty: impl_ty,
             value: None,
         }],
@@ -72,7 +75,7 @@ fn test_apply_search_finds_implication() {
     let results = apply_search(&mut state, 10).unwrap();
     assert!(!results.is_empty());
     // Should find the implication hypothesis
-    let found = results.iter().any(|r| r.name.to_string() == "f");
+    let found = results.iter().any(|r| r.name == Name::from_string("f"));
     assert!(found);
 }
 
@@ -220,8 +223,9 @@ fn test_exact_search_and_apply_closes_goal() {
         env,
         a.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: a.clone(),
             value: None,
         }],
@@ -242,8 +246,9 @@ fn test_exact_search_and_apply_fails_no_match() {
         env,
         unique_goal_type,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: unique_hyp_type,
             value: None,
         }],
@@ -273,8 +278,9 @@ fn test_rewrite_search_finds_equality_hypothesis() {
         env,
         make_p(x.clone()),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq_n(x.clone(), y.clone()),
             value: None,
         }],
@@ -282,12 +288,12 @@ fn test_rewrite_search_finds_equality_hypothesis() {
 
     let results = rewrite_search(&mut state, 10).expect("rewrite_search should run on a goal");
     assert!(
-        results.iter().any(|r| r.name.to_string() == "h"),
+        results.iter().any(|r| r.name == Name::from_string("h")),
         "rw? should find the equality hypothesis h : x = y"
     );
     let h = results
         .iter()
-        .find(|r| r.name.to_string() == "h")
+        .find(|r| r.name == Name::from_string("h"))
         .expect("h should be among the results");
     assert_eq!(
         h.suggestion, "rw [h]",
@@ -316,8 +322,9 @@ fn test_rewrite_search_no_applicable_equality_reports_none() {
         env,
         make_p(x),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq_n(y, z),
             value: None,
         }],
@@ -325,7 +332,7 @@ fn test_rewrite_search_no_applicable_equality_reports_none() {
 
     let results = rewrite_search(&mut state, 10).expect("rewrite_search should run on a goal");
     assert!(
-        results.iter().all(|r| r.name.to_string() != "h"),
+        results.iter().all(|r| r.name != Name::from_string("h")),
         "h : y = z must not be reported as applicable to P(x)"
     );
 }
@@ -336,8 +343,9 @@ fn test_rewrite_search_and_apply_matches_explicit_rw() {
     let y = Expr::const_(Name::from_string("y"), vec![]);
 
     let hyp = || LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: make_eq_n(x.clone(), y.clone()),
         value: None,
     };
@@ -351,7 +359,12 @@ fn test_rewrite_search_and_apply_matches_explicit_rw() {
     // State B: apply via explicit `rw [h]` (forward).
     let mut via_explicit =
         ProofState::with_context(setup_env_with_full_eq(), make_p(x.clone()), vec![hyp()]);
-    rewrite(&mut via_explicit, "h", false).expect("explicit rw [h] should succeed");
+    rewrite(
+        &mut via_explicit,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    )
+    .expect("explicit rw [h] should succeed");
 
     // Both should yield the same number of open goals and the same target P(y),
     // proving rw? went through the same kernel-checked Eq.subst rewrite as `rw`.
@@ -388,8 +401,9 @@ fn test_rewrite_search_and_apply_no_match_is_search_exhausted() {
         env,
         make_p(x),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq_n(y, z),
             value: None,
         }],
@@ -460,8 +474,9 @@ fn test_aesop_with_hypothesis() {
         env,
         a.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: a.clone(),
             value: None,
         }],
@@ -485,8 +500,9 @@ fn test_aesop_max_depth_exceeded() {
         env,
         a.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "ha".to_string(),
+            name: clean_parser::SurfaceName::generated_path("ha"),
             ty: a,
             value: None,
         }],
@@ -518,7 +534,7 @@ fn test_search_result_fields() {
         suggestion: "exact test".to_string(),
     };
 
-    assert_eq!(result.name.to_string(), "test");
+    assert_eq!(result.name, Name::from_string("test"));
     assert_eq!(result.suggestion, "exact test");
 }
 

@@ -15,8 +15,11 @@ use super::*;
 use clean_kernel::Expr;
 use clean_parser::{Span, SurfaceExpr};
 
-fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), name.to_owned())
+fn ident(name: &'static str) -> SurfaceExpr {
+    SurfaceExpr::Ident(
+        Span::dummy(),
+        clean_parser::SurfaceName::generated_path(name),
+    )
 }
 
 fn if_expr(cond: SurfaceExpr, then_br: SurfaceExpr, else_br: SurfaceExpr) -> SurfaceExpr {

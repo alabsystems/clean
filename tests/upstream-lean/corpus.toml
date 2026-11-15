@@ -1,0 +1,318 @@
+# Pinned probe set for the upstream-Lean drop-in invariant.
+#
+# Author: Andrew Yates | Copyright 2026 Andrew Yates | License: Apache-2.0
+#
+# Each probe names ONE declaration in ONE pinned upstream Lean file and the
+# outcome that declaration is expected to produce when driven through
+# `clean compile <file> --decl <name> --emit trustir`. `clean compile` selects a
+# single declaration, so a probe is a (file, decl) pair rather than a file.
+#
+# UNSEEDED. See baseline.toml `[seeding]` for why, for the ramp deadline, and
+# for the command that seeds it. No `expected` value in this file may be written
+# from intuition: it is the outcome a real run produced, or the row does not
+# exist.
+#
+# ROW SCHEMA
+#   id        stable probe identifier: "upstream-lean.<file-stem>.<decl>"
+#   file      path RELATIVE to baseline.toml's [upstream] corpus_path
+#   decl      the declaration name passed to `--decl`
+#   expected  "lowers"   exit 0 and a textual TrustIr module on stdout
+#             "rejected" a clean non-zero refusal (parse, elab, or lowering)
+#             "empty"    exit 0 with no module text — a silent success that
+#                        emitted nothing; pinnable, but review it hard
+#   note      optional prose
+
+schema_version = "0.1.0"
+# (the empty `probes = []` that stood here was removed when the corpus was
+# seeded: a bare key and an array-of-tables cannot both define `probes`.)
+# SEEDED 2026-09-20 from a real run over the pinned corpus
+# (`run_upstream_lean.py --seed-from-corpus-dir`, one top-level computational
+# declaration per file, `clean` built with `--features trust-ir-backend`).
+# Every `expected` below is the outcome that run produced. None was written from
+# intuition.
+
+[[probes]]
+id = "upstream-lean.1007.norm"
+file = "1007.lean"
+decl = "norm"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1011.f"
+file = "1011.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1039.elabEnd'"
+file = "1039.lean"
+decl = "elabEnd'"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.10488.succ"
+file = "10488.lean"
+decl = "succ"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1057.T.eval"
+file = "1057.lean"
+decl = "T.eval"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.1074b.Brx.interp"
+file = "1074b.lean"
+decl = "Brx.interp"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1081.f"
+file = "1081.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1113.foo"
+file = "1113.lean"
+decl = "foo"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1206.boo"
+file = "1206.lean"
+decl = "boo"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1279.Arrow.compose"
+file = "1279.lean"
+decl = "Arrow.compose"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1279_simplified.Arrow.compose"
+file = "1279_simplified.lean"
+decl = "Arrow.compose"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1292.test"
+file = "1292.lean"
+decl = "test"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1298.Nat.castTest"
+file = "1298.lean"
+decl = "Nat.castTest"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1301.b"
+file = "1301.lean"
+decl = "b"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1363.f"
+file = "1363.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1367.two"
+file = "1367.lean"
+decl = "two"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.1371.f"
+file = "1371.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1377.foo"
+file = "1377.lean"
+decl = "foo"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1433.dividend"
+file = "1433.lean"
+decl = "dividend"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1569.foo"
+file = "1569.lean"
+decl = "foo"
+expected = "rejected"
+note = "RE-PINNED 2026-10-07 lowers -> rejected, read against real Lean. 1569.lean is an upstream tests/elab_fail file: the example's `simp [typo]` is an error, and Lean's own compile driver refuses the MODULE -- `lean 1569.lean -c out.c` exits 1 and writes no C, on both v4.30.0-rc2 (the pin) and 4.8.0. clean now refuses too (the example's closure reaches sorryAx, 01189665c). The old `lowers` compiled a declaration out of a module Lean will not build. clean only WARNS on the unknown simp lemma where Lean errors; that is a separate, open divergence this probe does not measure."
+[[probes]]
+id = "upstream-lean.1657.natrec_inner"
+file = "1657.lean"
+decl = "natrec_inner"
+expected = "rejected"
+note = "RE-PINNED 2026-10-07 lowers -> rejected, read against real Lean. 1657.lean is an upstream tests/elab_fail file and Lean refuses the MODULE: `lean 1657.lean -c out.c` exits 1 with no C on v4.30.0-rc2 (`error` exceeds compiler.maxRecInlineIfReduce) and on 4.8.0 (`foldr` has already been declared). clean refuses on the 4.8.0 reason (fd20888d5). The old `lowers` compiled a declaration out of a module neither Lean builds."
+[[probes]]
+id = "upstream-lean.1668.origin"
+file = "1668.lean"
+decl = "origin"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.1673.foo.a"
+file = "1673.lean"
+decl = "foo.a"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1690.foo"
+file = "1690.lean"
+decl = "foo"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1707.y"
+file = "1707.lean"
+decl = "y"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1781.Univ"
+file = "1781.lean"
+decl = "Univ"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1804.inc"
+file = "1804.lean"
+decl = "inc"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1845.bar"
+file = "1845.lean"
+decl = "bar"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1856.piSplitAt"
+file = "1856.lean"
+decl = "piSplitAt"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1878.test"
+file = "1878.lean"
+decl = "test"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1891.Wrapper"
+file = "1891.lean"
+decl = "Wrapper"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.1971.f1"
+file = "1971.lean"
+decl = "f1"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.2005.foo2"
+file = "2005.lean"
+decl = "foo2"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.2045.Function.comp'"
+file = "2045.lean"
+decl = "Function.comp'"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.2077.foo"
+file = "2077.lean"
+decl = "foo"
+expected = "lowers"
+note = "RE-PINNED `lowers` 2026-10-08, closing the open divergence pinned `rejected` 2026-10-07. Real Lean v4.30.0-rc2 accepts the file (`lean 2077.lean -c out.c` exits 0, writes C, and prints `true true true`). Clean's elaboration layers were fixed 2026-10-07 (trailing optParam defaults, double-backtick and single-quote name literals, `m!`); what still refused it was LOWERING of every `import Lean` file: `build_ctor_env` refused the whole environment's constructor table at the first constructor field typed by a universe (`unsupported IR type expression: Sort(..)`). A `Sort`/`SProp`-typed field is a type and is erased at runtime, as Lean's compiler erases it (`clean_compiler::to_ir::types::ctor_field_ir_type`: an object slot holding the boxed unit, as for a proof field). Measured with `--clean-bin` of a `--release --features trust-ir-backend` build of that change: this probe moved `rejected` -> `lowers` and the other 55 probes matched their pins."
+[[probes]]
+id = "upstream-lean.2115.foo"
+file = "2115.lean"
+decl = "foo"
+# Re-pinned 2026-10-01: real Lean 4.8.0 and v4.30.0-rc2 both accept the file, and
+# clean now lowers `foo` (measured with a `trust-ir-backend` build of 3c82461cd).
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.2125.f"
+file = "2125.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.220.f"
+file = "220.lean"
+decl = "f"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.223.h"
+file = "223.lean"
+decl = "h"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.2273.instP"
+file = "2273.lean"
+decl = "instP"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.241.ex1"
+file = "241.lean"
+decl = "ex1"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.243.f"
+file = "243.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.247.f"
+file = "247.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.2505.Lean.MVarId.getType''"
+file = "2505.lean"
+decl = "Lean.MVarId.getType''"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.255.x"
+file = "255.lean"
+decl = "x"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.276.PEmpty.elim'"
+file = "276.lean"
+decl = "PEmpty.elim'"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.277b.foo"
+file = "277b.lean"
+decl = "foo"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.283.f"
+file = "283.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.302.f"
+file = "302.lean"
+decl = "f"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.307.INT32_MIN"
+file = "307.lean"
+decl = "INT32_MIN"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.331.baz"
+file = "331.lean"
+decl = "baz"
+expected = "lowers"
+[[probes]]
+id = "upstream-lean.346.a"
+file = "346.lean"
+decl = "a"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.348.doSomething"
+file = "348.lean"
+decl = "doSomething"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.366.foo"
+file = "366.lean"
+decl = "foo"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.386.kernelErrorMetavar1"
+file = "386.lean"
+decl = "kernelErrorMetavar1"
+expected = "rejected"
+[[probes]]
+id = "upstream-lean.389.getFoo"
+file = "389.lean"
+decl = "getFoo"
+expected = "rejected"

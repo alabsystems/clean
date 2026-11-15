@@ -177,7 +177,12 @@ impl SmtLibTranslator {
                     sort: lhs.sort,
                 })
             }
-            SmtLogicalForm::Div { ty, lhs, rhs } => {
+            SmtLogicalForm::Div {
+                ty,
+                lhs,
+                rhs,
+                int_rounding,
+            } => {
                 // Check concrete divisor BEFORE translating expressions so
                 // symbolic Real denominators fail with the right error instead
                 // of failing on unregistered FVar translation.
@@ -208,13 +213,23 @@ impl SmtLibTranslator {
                         sort,
                     })
                 } else {
+                    let rounding = int_rounding.ok_or_else(|| {
+                        TranslateError::UnsupportedExpr(
+                            "integer division requires a resolved rounding convention".to_string(),
+                        )
+                    })?;
                     Ok(TranslatedTerm {
-                        smt: format!("(div {} {})", lhs_s.smt, rhs_s.smt),
+                        smt: super::integer::quotient(lhs_s.smt, rhs_s.smt, rounding),
                         sort,
                     })
                 }
             }
-            SmtLogicalForm::Mod { ty, lhs, rhs } => {
+            SmtLogicalForm::Mod {
+                ty,
+                lhs,
+                rhs,
+                int_rounding,
+            } => {
                 let lhs_s = self.translate_expr_typed(&lhs)?;
                 let rhs_s = self.translate_expr_typed(&rhs)?;
                 let sort = infer_smt_sort_from_type(&ty).ok_or_else(|| {
@@ -235,8 +250,13 @@ impl SmtLibTranslator {
                         sort,
                     })
                 } else {
+                    let rounding = int_rounding.ok_or_else(|| {
+                        TranslateError::UnsupportedExpr(
+                            "integer modulus requires a resolved rounding convention".to_string(),
+                        )
+                    })?;
                     Ok(TranslatedTerm {
-                        smt: format!("(mod {} {})", lhs_s.smt, rhs_s.smt),
+                        smt: super::integer::remainder(lhs_s.smt, rhs_s.smt, rounding),
                         sort,
                     })
                 }

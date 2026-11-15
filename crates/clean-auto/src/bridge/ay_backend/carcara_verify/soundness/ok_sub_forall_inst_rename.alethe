@@ -1,0 +1,3 @@
+(assume nc (not (or (not (forall ((x Bool)) (forall ((y Bool)) (or x y y_renamed)))) (forall ((y_renamed_renamed Bool)) (or y y_renamed_renamed y_renamed)))))
+(step s (cl (or (not (forall ((x Bool)) (forall ((y Bool)) (or x y y_renamed)))) (forall ((y_renamed_renamed Bool)) (or y y_renamed_renamed y_renamed)))) :rule forall_inst :args (y))
+(step done (cl) :rule resolution :premises (nc s))

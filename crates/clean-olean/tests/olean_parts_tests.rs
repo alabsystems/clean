@@ -201,3 +201,60 @@ fn test_parse_module_parts_module_system_recovers_private_proof_values() {
         "private companion must recover proof-carrying values"
     );
 }
+
+/// R113 (finding B3): a `CLEANENV` payload trailer appended to a part Lean's
+/// own compiler wrote is refused at decode. Only Clean's exporter writes that
+/// trailer, and only onto its own layout; `lean` never reads it, so a re-check
+/// that trusted its declarations would admit constants `leanchecker` never
+/// sees. The checked-in `Sigma.olean` is a genuine Lean v4.30.0-rc2 artifact.
+#[test]
+fn test_payload_trailer_on_a_lean_written_part_is_refused() {
+    use clean_olean::{encode_clean_payload, parse_module_file, CleanPayload};
+
+    let base = module_system_fixture();
+    // Control: the untouched Lean artifact parses.
+    parse_module_file(&base).expect("the honest Lean artifact parses");
+
+    let mut bytes = fs::read(&base).expect("read Sigma.olean");
+    bytes.extend(encode_clean_payload(&CleanPayload::default()).expect("encode trailer"));
+    let dir = tempdir().expect("tempdir");
+    let tampered = dir.path().join("Sigma.olean");
+    fs::write(&tampered, &bytes).expect("write tampered");
+
+    let err =
+        parse_module_file(&tampered).expect_err("a trailer on a Lean-written part must be refused");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("payload trailer") && msg.contains("Lean-written"),
+        "the refusal must name the foreign trailer: {msg}"
+    );
+}
+
+/// R113's one artifact reader over real Lean output: the checked-in v4.30.0-rc2
+/// module-system triple is read through its `.olean.private`, at both depths, with
+/// one import list.
+#[test]
+fn test_read_artifact_reads_a_lean_module_through_its_private_part() {
+    use clean_olean::{read_artifact, ArtifactDepth};
+    let base = module_system_fixture();
+    let names = read_artifact("Sigma", &base, ArtifactDepth::Names).expect("names depth");
+    let records = read_artifact("Sigma", &base, ArtifactDepth::Records).expect("records depth");
+    for read in [&names, &records] {
+        assert!(read.is_module);
+        assert_eq!(read.authoritative, OLeanLevel::Private);
+        assert!(!read.names.is_empty() && !read.imports.is_empty());
+    }
+    assert_eq!(names.names, records.names);
+    assert_eq!(
+        names
+            .imports
+            .iter()
+            .map(|i| i.module_name.clone())
+            .collect::<Vec<_>>(),
+        records
+            .imports
+            .iter()
+            .map(|i| i.module_name.clone())
+            .collect::<Vec<_>>()
+    );
+}

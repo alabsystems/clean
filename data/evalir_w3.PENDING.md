@@ -91,7 +91,7 @@ the correct reading and is never rounded up.
   (bundles.rs, after `add_eval_ir_w2c_synth`; reuses only `add_eval_ir`
   names). All `Eq.refl`, no new inductives.
 * `crates/clean-verify/tests/fixtures/synth/synth_overflow_{u8,i8}.trust-ir.txt`
-  — the authored E2 twins, `; #synthetic:` self-declaring (freshness-closure
+  — the authored E2 twins, `; synthetic:` self-declaring above the `fn` header (freshness-closure
   invariant re-run here: green, 17 passed).
 * `crates/clean-verify/tests/crystal_a3_semdiff/w3_chains.rs` — **2 chains /
   8 rows**, `Synthetic`-labeled, E3 absent by construction, reusing the W2a

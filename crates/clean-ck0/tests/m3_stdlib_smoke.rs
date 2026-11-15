@@ -277,19 +277,26 @@ fn true_decl() -> InductiveDecl {
     }
 }
 
-/// `Prod.{u,v} (A : Type u) (B : Type v) : Type (max u v)` with
-/// `mk : A -> B -> Prod A B`. num_params = 2, num_level_params = 2.
+/// `Prod.{u,v} (A : Sort u) (B : Sort v) : Sort (max 1 u v)` with
+/// `mk : A -> B -> Prod A B` — Lean's `PProd`. num_params = 2,
+/// num_level_params = 2. The `max 1` makes the level provably nonzero, which
+/// is what lets Lean's kernel give `PProd.rec` a motive universe; a bare
+/// `Sort (max u v)` may be `Prop`, and its non-`Prop` fields then keep the
+/// recursor `Prop`-only (2026-10-17, the ck0 gate's `is_not_zero` fix).
 fn prod_decl() -> InductiveDecl {
     let b = boot(&[("Prod", 2), ("Prod.mk", 2)]);
-    // Prod : Type u -> Type v -> Type (max u v)
+    // Prod : Sort u -> Sort v -> Sort (max 1 u v)
     let ty = r_pi(
         r_sort_param(0),
         r_pi(
             r_sort_param(1),
-            RawExpr::Sort(RawLevel::Max(Box::new(lparam(0)), Box::new(lparam(1)))),
+            RawExpr::Sort(RawLevel::Max(
+                Box::new(lsucc(RawLevel::Zero)),
+                Box::new(RawLevel::Max(Box::new(lparam(0)), Box::new(lparam(1)))),
+            )),
         ),
     );
-    // mk : (A : Type u) -> (B : Type v) -> A -> B -> Prod A B
+    // mk : (A : Sort u) -> (B : Sort v) -> A -> B -> Prod A B
     let mk_ty = r_pi(
         r_sort_param(0),
         r_pi(

@@ -4,7 +4,10 @@
 
 //! Tests for genuine kernel verification of Metamath theorems.
 
-use super::{kernel_verify_database, kernel_verify_theorem, KernelVerifyOutcome};
+use super::{
+    kernel_verify_database, kernel_verify_database_prefix_count_only,
+    kernel_verify_database_prefix_streaming, kernel_verify_theorem, KernelVerifyOutcome,
+};
 use crate::metamath::parse_database;
 
 /// The standard `demo0.mm` database: a complete real Metamath theorem `th1`
@@ -133,6 +136,59 @@ fn test_kernel_verify_lemma_reuse() {
         "th2 (which reuses th1) must verify; report={report:?}"
     );
     assert!(report.failed.is_empty(), "no failures expected: {report:?}");
+}
+
+/// Count/stream modes remove each checked proof from the resident environment.
+/// A later theorem must still reuse its type, and a wrong conclusion must stay
+/// refused. The stream must emit the same checked payloads before their removal.
+#[test]
+fn proof_elision_modes_preserve_dependent_verdicts_and_stream_payloads() {
+    let good = format!("{DEMO0_DB}th2 $p |- ( t + 0 ) = ( t + 0 ) $= tt tze tpl th1 $.\n");
+    let bad = good.replace(
+        "th2 $p |- ( t + 0 ) = ( t + 0 ) $=",
+        "th2 $p |- ( t + 0 ) = 0 $=",
+    );
+    let labels = |rows: &[(String, String)]| {
+        rows.iter()
+            .map(|(name, _)| name.clone())
+            .collect::<Vec<_>>()
+    };
+    for (source, expected) in [(&good, vec!["th1", "th2"]), (&bad, vec!["th1"])] {
+        let db = parse_database(source).expect("parse dependent fixture");
+        let collect = kernel_verify_database(&db).expect("collect");
+        let count = kernel_verify_database_prefix_count_only(&db, usize::MAX).expect("count");
+        let mut emitted = Vec::new();
+        let stream =
+            kernel_verify_database_prefix_streaming(&db, usize::MAX, &mut |name, ty, value| {
+                emitted.push((name.to_owned(), ty.clone(), value.clone()))
+            })
+            .expect("stream");
+        assert_eq!(collect.verified, expected);
+        assert_eq!(collect.verified_exprs.len(), expected.len());
+        if expected.len() == 1 {
+            let refused: Vec<_> = collect
+                .failed
+                .iter()
+                .chain(&collect.skipped)
+                .map(|(name, _)| name.as_str())
+                .collect();
+            assert_eq!(
+                refused,
+                vec!["th2"],
+                "wrong dependent conclusion is refused"
+            );
+        } else {
+            assert!(collect.failed.is_empty() && collect.skipped.is_empty());
+        }
+        for report in [&count, &stream] {
+            assert_eq!(report.verified, collect.verified);
+            assert_eq!(report.ground_only, collect.ground_only);
+            assert_eq!(labels(&report.failed), labels(&collect.failed));
+            assert_eq!(labels(&report.skipped), labels(&collect.skipped));
+            assert!(report.verified_exprs.is_empty());
+        }
+        assert_eq!(emitted, collect.verified_exprs);
+    }
 }
 
 /// The batch report verifies every `$p` theorem in `demo0` (just `th1`).

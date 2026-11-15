@@ -330,8 +330,8 @@ fn recursive_arm_rejects_non_inductive_scrutinee_without_fabricating_lambdas() {
     let depth_before = ctx.metas.scope_depth();
     let body = SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0));
     let result = ctx.elaborate_rec_arm(
-        "Nat.succ",
-        &[SurfacePattern::Var("n".to_string())],
+        &SurfaceName::generated_path("Nat.succ"),
+        &[SurfacePattern::Var(SurfaceName::generated_path("n"))],
         &body,
         &Expr::type_(),
         &Expr::const_(Name::from_string("Nat"), vec![]),
@@ -377,10 +377,10 @@ fn recursive_arm_rejects_truncated_constructor_field_telescope() {
     let depth_before = ctx.metas.scope_depth();
     let body = SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0));
     let result = ctx.elaborate_rec_arm(
-        "ExactRec.next",
+        &SurfaceName::generated_path("ExactRec.next"),
         &[
-            SurfacePattern::Var("n".to_string()),
-            SurfacePattern::Var("tail".to_string()),
+            SurfacePattern::Var(SurfaceName::generated_path("n")),
+            SurfacePattern::Var(SurfaceName::generated_path("tail")),
         ],
         &body,
         &Expr::const_(Name::from_string("ExactRec"), vec![]),
@@ -419,8 +419,8 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
         valid_ctx
             .expand_implicit_ctor_field_patterns(
                 "metadata positive control",
-                "Nat.succ",
-                &[SurfacePattern::Var("n".to_string())],
+                &SurfaceName::generated_path("Nat.succ"),
+                &[SurfacePattern::Var(SurfaceName::generated_path("n"))],
             )
             .expect("authentic explicit field packet")
             .len(),
@@ -439,7 +439,7 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
     env.register_constructor(malformed);
 
     let mut ctx = ElabCtx::new(&env);
-    let sentinel = ctx.push_local("sentinel".to_string(), nat.clone());
+    let sentinel = ctx.push_local(SurfaceName::generated_path("sentinel"), nat.clone());
     ctx.current_expected_type = Some(nat.clone());
     let locals_before = ctx.locals.clone();
     let let_values_before = ctx.locals.let_values().clone();
@@ -453,8 +453,8 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
 
     let expansion = ctx.expand_implicit_ctor_field_patterns(
         "constructor dispatch regression",
-        "Nat.succ",
-        &[SurfacePattern::Var("n".to_string())],
+        &SurfaceName::generated_path("Nat.succ"),
+        &[SurfacePattern::Var(SurfaceName::generated_path("n"))],
     );
     assert!(
         matches!(&expansion, Err(ElabError::InternalInvariant(message))
@@ -467,20 +467,23 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "sentinel".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("sentinel"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Nat.zero".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Nat.zero"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
-                    vec![SurfacePattern::Var("n".to_string())],
+                    SurfaceName::generated_path("Nat.succ"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("n"))],
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "n".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n")),
             },
         ],
     );
@@ -504,8 +507,11 @@ fn metadata_fail_closed_constructor_disagreement_rolls_back_match_state() {
     assert_eq!(ctx.metas.scope_depth(), meta_depth_before);
     assert_eq!(ctx.metas.undo_trail_len_for_tests(), meta_trail_before);
     assert_eq!(
-        ctx.elaborate(&SurfaceExpr::Ident(Span::dummy(), "sentinel".to_string(),))
-            .expect("same context remains usable after failed match"),
+        ctx.elaborate(&SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("sentinel"),
+        ))
+        .expect("same context remains usable after failed match"),
         Expr::fvar(sentinel)
     );
 }
@@ -568,7 +574,11 @@ fn index_discriminator_rejects_constructor_universe_mismatch_transactionally() {
     let mut valid_ctx = ElabCtx::new(&env);
     assert!(
         valid_ctx
-            .build_index_discriminating_motive_body(&scrutinee_ty, "IndexedBox", &nat)
+            .build_index_discriminating_motive_body(
+                &scrutinee_ty,
+                &SurfaceName::generated_path("IndexedBox"),
+                &nat
+            )
             .expect("valid discriminator probe")
             .is_some(),
         "fixture must exercise the positive discriminator path"
@@ -588,7 +598,11 @@ fn index_discriminator_rejects_constructor_universe_mismatch_transactionally() {
     let locals_before = ctx.locals.clone();
     let depth_before = ctx.metas.scope_depth();
     let result = ctx
-        .build_index_discriminating_motive_body(&scrutinee_ty, "IndexedBox", &nat)
+        .build_index_discriminating_motive_body(
+            &scrutinee_ty,
+            &SurfaceName::generated_path("IndexedBox"),
+            &nat,
+        )
         .expect("metadata mismatch is an optional-probe miss");
     assert!(
         result.is_none(),
@@ -648,7 +662,7 @@ fn test_match_nested_inductive_value_elaborates() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = make_value_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "v".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("v"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -657,10 +671,10 @@ fn test_match_nested_inductive_value_elaborates() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.int".to_string(),
+                    SurfaceName::generated_path("Value.int"),
                     vec![
-                        SurfacePattern::Var("a".to_string()),
-                        SurfacePattern::Var("b".to_string()),
+                        SurfacePattern::Var(SurfaceName::generated_path("a")),
+                        SurfacePattern::Var(SurfaceName::generated_path("b")),
                     ],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1)),
@@ -668,24 +682,24 @@ fn test_match_nested_inductive_value_elaborates() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.float".to_string(),
-                    vec![SurfacePattern::Var("x".to_string())],
+                    SurfaceName::generated_path("Value.float"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(2)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.bool".to_string(),
-                    vec![SurfacePattern::Var("b".to_string())],
+                    SurfaceName::generated_path("Value.bool"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("b"))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(3)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.aggregate".to_string(),
-                    vec![SurfacePattern::Var("items".to_string())],
+                    SurfaceName::generated_path("Value.aggregate"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("items"))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(4)),
             },
@@ -785,7 +799,7 @@ fn test_3406_kernel_typecheck_match_on_nested() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = make_value_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "v".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("v"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -794,10 +808,10 @@ fn test_3406_kernel_typecheck_match_on_nested() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.int".to_string(),
+                    SurfaceName::generated_path("Value.int"),
                     vec![
-                        SurfacePattern::Var("a".to_string()),
-                        SurfacePattern::Var("b".to_string()),
+                        SurfacePattern::Var(SurfaceName::generated_path("a")),
+                        SurfacePattern::Var(SurfaceName::generated_path("b")),
                     ],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1)),
@@ -805,24 +819,24 @@ fn test_3406_kernel_typecheck_match_on_nested() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.float".to_string(),
-                    vec![SurfacePattern::Var("x".to_string())],
+                    SurfaceName::generated_path("Value.float"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(2)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.bool".to_string(),
-                    vec![SurfacePattern::Var("b".to_string())],
+                    SurfaceName::generated_path("Value.bool"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("b"))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(3)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.aggregate".to_string(),
-                    vec![SurfacePattern::Var("items".to_string())],
+                    SurfaceName::generated_path("Value.aggregate"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("items"))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(4)),
             },
@@ -848,7 +862,7 @@ fn test_match_nested_inductive_value_wildcard() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = make_value_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "v".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("v"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -857,7 +871,7 @@ fn test_match_nested_inductive_value_wildcard() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Value.int".to_string(),
+                    SurfaceName::generated_path("Value.int"),
                     vec![SurfacePattern::Wildcard, SurfacePattern::Wildcard],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
@@ -1074,7 +1088,7 @@ fn nested_caseson_without_fallback_rejects_missing_minors_without_sorry() {
     let mut ctx = ElabCtx::new(&env);
     let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let field = ctx.push_local("field".to_string(), bool_ty.clone());
+    let field = ctx.push_local(SurfaceName::generated_path("field"), bool_ty.clone());
 
     reset_sorry_counter();
     let baseline_sorry = sorry_count();
@@ -1083,7 +1097,7 @@ fn nested_caseson_without_fallback_rejects_missing_minors_without_sorry() {
         Expr::const_(Name::from_string("Nat.zero"), vec![]),
         Expr::fvar(field),
         &bool_ty,
-        "Bool.true",
+        &SurfaceName::generated_path("Bool.true"),
         &nat_ty,
     );
     assert!(
@@ -1613,13 +1627,13 @@ fn malformed_restored_nested_minor_does_not_leak_fallback_local() {
     );
 
     let mut ctx = ElabCtx::new(&env);
-    let major = ctx.push_local("major".to_string(), value_ty.clone());
+    let major = ctx.push_local(SurfaceName::generated_path("major"), value_ty.clone());
     let locals_before = ctx.locals.len();
     let result = ctx.wrap_with_nested_ctor_caseson_with_fallback(
         matching_int_minor,
         Expr::fvar(major),
         &value_ty,
-        "Value.int",
+        &SurfaceName::generated_path("Value.int"),
         &nat_ty,
         nat_zero,
     );
@@ -1639,7 +1653,7 @@ fn malformed_restored_nested_minor_does_not_leak_fallback_local() {
     assert!(
         ctx.locals
             .iter()
-            .all(|(name, _, _)| name != "_nested_fallback"),
+            .all(|(name, _, _)| name != &SurfaceName::unspellable("_nested_fallback", 0)),
         "error recovery must not retain the internal fallback local"
     );
 
@@ -1650,10 +1664,10 @@ fn malformed_restored_nested_minor_does_not_leak_fallback_local() {
         .bind_nested_pattern_plan(
             "transaction regression",
             &SurfacePattern::Ctor(
-                "Value.int".to_string(),
+                SurfaceName::generated_path("Value.int"),
                 vec![
-                    SurfacePattern::Var("a".to_string()),
-                    SurfacePattern::Var("b".to_string()),
+                    SurfacePattern::Var(SurfaceName::generated_path("a")),
+                    SurfacePattern::Var(SurfaceName::generated_path("b")),
                 ],
             ),
             Expr::fvar(major),
@@ -1683,7 +1697,7 @@ fn malformed_restored_nested_minor_does_not_leak_fallback_local() {
     let major_again = ctx
         .elaborate(&SurfaceExpr::Ident(
             clean_parser::Span::dummy(),
-            "major".to_string(),
+            SurfaceName::generated_path("major"),
         ))
         .expect("same ElabCtx must remain usable after failed plan application");
     assert_eq!(major_again, Expr::fvar(major));
@@ -1699,24 +1713,28 @@ fn malformed_nested_subpattern_restores_complete_elab_context() {
     let mut ctx = ElabCtx::new(&env);
     let value_ty = Expr::const_(Name::from_string("Value"), vec![]);
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let sentinel = ctx.push_local("sentinel".to_string(), nat_ty.clone());
-    let major = ctx.push_local("major".to_string(), value_ty.clone());
+    let sentinel = ctx.push_local(SurfaceName::generated_path("sentinel"), nat_ty.clone());
+    let major = ctx.push_local(SurfaceName::generated_path("major"), value_ty.clone());
 
     ctx.current_expected_type = Some(nat_ty.clone());
     ctx.match_dependent_motive = Some(Expr::bvar(0));
     ctx.match_dependent_motive_indices = 1;
     ctx.match_index_discriminating_punit = Some(Level::zero());
     ctx.recursive_def_ctx = Some(RecursiveDefContext {
-        func_name: "Value.audit".to_string(),
+        func_name: SurfaceName::generated_path("Value.audit"),
         decreasing_arg_pos: 0,
-        decreasing_arg_name: "major".to_string(),
+        decreasing_arg_name: SurfaceName::generated_path("major"),
         inductive_type_name: Some(Name::from_string("Value")),
         ih_fvar: Some(sentinel),
         ih_type: Some(nat_ty.clone()),
-        ih_map: HashMap::from([("major".to_string(), sentinel)]),
-        sibling_names: vec!["Value.auditSibling".to_string()],
-        extra_params: Vec::new(),
+        ih_map: HashMap::from([(major, sentinel)]),
+        sibling_names: vec![SurfaceName::generated_path("Value.auditSibling")],
+        sibling_types: Vec::new(),
+        parameters: Vec::new(),
+        generalized_params: Vec::new(),
+        index_params: Vec::new(),
         wf_measure: None,
+        outer_locals_floor: None,
     });
 
     let locals_before = ctx.locals.clone();
@@ -1733,9 +1751,12 @@ fn malformed_nested_subpattern_restores_complete_elab_context() {
     let meta_scope_depth_before = ctx.metas.scope_depth();
 
     let malformed = SurfacePattern::Ctor(
-        "Value.int".to_string(),
+        SurfaceName::generated_path("Value.int"),
         vec![
-            SurfacePattern::As("alias".to_string(), Box::new(SurfacePattern::Wildcard)),
+            SurfacePattern::As(
+                SurfaceName::generated_path("alias"),
+                Box::new(SurfacePattern::Wildcard),
+            ),
             SurfacePattern::Or(
                 Box::new(SurfacePattern::Wildcard),
                 Box::new(SurfacePattern::Wildcard),
@@ -1762,8 +1783,14 @@ fn malformed_nested_subpattern_restores_complete_elab_context() {
         Ok(_) => "Ok(NestedPatternPlan)".to_string(),
         Err(error) => format!("Err({error:?})"),
     };
+    // The boundary is named as the user WROTE it (`_ | _`), not as the parser
+    // stores it. This assertion used to look for the substring "Or" — the
+    // `SurfacePattern::Or` variant name leaking out of a `{pat:?}` dump. The
+    // rendered form is checked instead, which is strictly stronger: "Or" also
+    // matched any message that merely happened to contain those two letters,
+    // where `_ | _` can only come from rendering this exact pattern.
     assert!(
-        matches!(&result, Err(ElabError::NotImplemented(message)) if message.contains("nested constructor field pattern") && message.contains("Or")),
+        matches!(&result, Err(ElabError::NotImplemented(message)) if message.contains("nested constructor field pattern") && message.contains("_ | _")),
         "malformed nested subpattern should report the exact unsupported-pattern boundary, got {result_summary}"
     );
 
@@ -1790,7 +1817,7 @@ fn malformed_nested_subpattern_restores_complete_elab_context() {
     let sentinel_again = ctx
         .elaborate(&SurfaceExpr::Ident(
             clean_parser::Span::dummy(),
-            "sentinel".to_string(),
+            SurfaceName::generated_path("sentinel"),
         ))
         .expect("same ElabCtx must elaborate after malformed nested subpattern");
     assert_eq!(sentinel_again, Expr::fvar(sentinel));

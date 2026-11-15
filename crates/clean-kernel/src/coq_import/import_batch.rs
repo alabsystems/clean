@@ -101,7 +101,7 @@ impl CoqBatchImporter {
         self.context.import_stdlib_type_mappings();
     }
 
-    pub fn import_stdlib_propositions(&mut self) {
+    pub(crate) fn import_stdlib_propositions(&mut self) {
         self.context.import_stdlib_propositions();
     }
 
@@ -117,7 +117,10 @@ impl CoqBatchImporter {
         self.stats
     }
 
-    pub fn translate_source(&self, source: &str) -> CoqImportResult<Vec<TranslatedGlobalDecl>> {
+    pub(crate) fn translate_source(
+        &self,
+        source: &str,
+    ) -> CoqImportResult<Vec<TranslatedGlobalDecl>> {
         parse_declarations(source)?
             .iter()
             .map(|decl| translate_global_decl(decl, &self.context))

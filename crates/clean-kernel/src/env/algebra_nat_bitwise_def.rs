@@ -449,7 +449,19 @@ impl Environment {
         self.add_decl(Declaration::Definition {
             name,
             level_params: vec![],
-            type_: c.nat_to_nat_to_nat.clone(),
+            // Lean's type, `@& Nat → @& Nat → Nat`: each borrowed argument is
+            // `mdata {borrowed := true}` on its binder domain (pinned
+            // v4.30.0-rc2, `repr` of `Nat.shiftRight`'s stored type). The
+            // annotation is transparent to the kernel, so every term typed
+            // against the `Nat → Nat → Nat` axiom this replaces stays typed.
+            type_: {
+                let borrowed = crate::env::lean_nat_spelling::LeanNat::borrowed(c.nat.clone());
+                Expr::pi(
+                    BinderInfo::Default,
+                    borrowed.clone(),
+                    Expr::pi(BinderInfo::Default, borrowed, c.nat.clone()),
+                )
+            },
             value,
             is_reducible: false,
         })

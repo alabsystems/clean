@@ -5,18 +5,65 @@
 //! Tests for extended IO monad elaboration.
 
 use crate::io_monad_ext::*;
-use clean_parser::SurfaceExpr;
+use clean_parser::{SurfaceExpr, SurfaceName};
+
+fn surface(path: &'static str) -> SurfaceName {
+    SurfaceName::generated_path(path)
+}
+
+#[test]
+fn typed_transformer_parameters_and_handlers_keep_exact_identity() {
+    use clean_kernel::Name;
+    for name in [
+        SurfaceName::component("State.dot", true),
+        surface("State.dot"),
+        SurfaceName::component("7", true),
+        SurfaceName::from_name(Name::anon().num(7)),
+    ] {
+        let stack = TransformerStack {
+            layers: vec![TransformerLayer::StateT {
+                state_type: name.clone(),
+            }],
+        };
+        let ty = stack.build_type(SurfaceExpr::ident("Unit"));
+        let SurfaceExpr::App(_, _, arguments) = ty else {
+            panic!("expected transformer")
+        };
+        assert!(
+            matches!(&arguments[0].expr, SurfaceExpr::Ident(_, actual) if actual.same_syntax(&name))
+        );
+        let handled = mk_io_catch(
+            SurfaceExpr::ident("action"),
+            &name,
+            SurfaceExpr::Ident(clean_parser::Span::dummy(), name.clone()),
+        );
+        let SurfaceExpr::App(_, _, arguments) = handled else {
+            panic!("expected catch")
+        };
+        let SurfaceExpr::Lambda(_, binders, body) = &arguments[1].expr else {
+            panic!("expected handler")
+        };
+        assert!(binders[0].name.same_syntax(&name));
+        assert!(
+            matches!(body.as_ref(), SurfaceExpr::Ident(_, actual) if actual.same_syntax(&name))
+        );
+    }
+    for &operation in EXTENDED_IO_OPS {
+        assert!(is_extended_io_op(&surface(operation)));
+        assert!(!is_extended_io_op(&SurfaceName::component(operation, true)));
+    }
+}
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
 /// Extract the function name from a surface App expression.
-fn app_fn_name(expr: &SurfaceExpr) -> Option<&str> {
+fn app_fn_name(expr: &SurfaceExpr) -> Option<SurfaceName> {
     match expr {
         SurfaceExpr::App(_, func, _) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                Some(name.as_str())
+                Some(name.clone())
             } else {
                 None
             }
@@ -50,7 +97,7 @@ fn default_config() -> IoMonadExtConfig {
 fn test_mk_io_throw_structure() {
     let err_val = SurfaceExpr::ident("myError");
     let result = mk_io_throw(err_val);
-    assert_eq!(app_fn_name(&result), Some(IO_THROW));
+    assert_eq!(app_fn_name(&result), Some(surface(IO_THROW)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -58,8 +105,8 @@ fn test_mk_io_throw_structure() {
 fn test_mk_io_catch_structure() {
     let action = SurfaceExpr::ident("dangerousAction");
     let handler = SurfaceExpr::ident("handleError");
-    let result = mk_io_catch(action, "e", handler);
-    assert_eq!(app_fn_name(&result), Some(IO_CATCH));
+    let result = mk_io_catch(action, &surface("e"), handler);
+    assert_eq!(app_fn_name(&result), Some(surface(IO_CATCH)));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -67,7 +114,7 @@ fn test_mk_io_catch_structure() {
 fn test_mk_io_catch_has_lambda_handler() {
     let action = SurfaceExpr::ident("act");
     let handler = SurfaceExpr::ident("recover");
-    let result = mk_io_catch(action, "err", handler);
+    let result = mk_io_catch(action, &surface("err"), handler);
     if let SurfaceExpr::App(_, _, args) = &result {
         assert!(is_lambda(&args[1].expr), "handler should be a lambda");
     } else {
@@ -79,8 +126,8 @@ fn test_mk_io_catch_has_lambda_handler() {
 fn test_mk_io_try_catch_structure() {
     let action = SurfaceExpr::ident("tryAction");
     let handler = SurfaceExpr::ident("catchHandler");
-    let result = mk_io_try_catch(action, "e", handler);
-    assert_eq!(app_fn_name(&result), Some(IO_TRY_CATCH));
+    let result = mk_io_try_catch(action, &surface("e"), handler);
+    assert_eq!(app_fn_name(&result), Some(surface(IO_TRY_CATCH)));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -89,7 +136,7 @@ fn test_mk_io_try_finally_structure() {
     let action = SurfaceExpr::ident("mainAction");
     let finalizer = SurfaceExpr::ident("cleanup");
     let result = mk_io_try_finally(action, finalizer);
-    assert_eq!(app_fn_name(&result), Some(IO_TRY_FINALLY));
+    assert_eq!(app_fn_name(&result), Some(surface(IO_TRY_FINALLY)));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -115,7 +162,7 @@ fn test_mk_io_try_finally_no_lambda() {
 fn test_mk_ioref_mk_structure() {
     let init = SurfaceExpr::nat(42);
     let result = mk_ioref_mk(init);
-    assert_eq!(app_fn_name(&result), Some(IOREF_MK));
+    assert_eq!(app_fn_name(&result), Some(surface(IOREF_MK)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -123,7 +170,7 @@ fn test_mk_ioref_mk_structure() {
 fn test_mk_ioref_get_structure() {
     let ref_expr = SurfaceExpr::ident("myRef");
     let result = mk_ioref_get(ref_expr);
-    assert_eq!(app_fn_name(&result), Some(IOREF_GET));
+    assert_eq!(app_fn_name(&result), Some(surface(IOREF_GET)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -132,7 +179,7 @@ fn test_mk_ioref_set_structure() {
     let ref_expr = SurfaceExpr::ident("myRef");
     let new_val = SurfaceExpr::nat(100);
     let result = mk_ioref_set(ref_expr, new_val);
-    assert_eq!(app_fn_name(&result), Some(IOREF_SET));
+    assert_eq!(app_fn_name(&result), Some(surface(IOREF_SET)));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -141,7 +188,7 @@ fn test_mk_ioref_modify_structure() {
     let ref_expr = SurfaceExpr::ident("counter");
     let f = SurfaceExpr::ident("Nat.succ");
     let result = mk_ioref_modify(ref_expr, f);
-    assert_eq!(app_fn_name(&result), Some(IOREF_MODIFY));
+    assert_eq!(app_fn_name(&result), Some(surface(IOREF_MODIFY)));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -150,7 +197,7 @@ fn test_mk_ioref_swap_structure() {
     let ref_expr = SurfaceExpr::ident("slot");
     let new_val = SurfaceExpr::ident("newValue");
     let result = mk_ioref_swap(ref_expr, new_val);
-    assert_eq!(app_fn_name(&result), Some(IOREF_SWAP));
+    assert_eq!(app_fn_name(&result), Some(surface(IOREF_SWAP)));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -162,7 +209,7 @@ fn test_mk_ioref_swap_structure() {
 fn test_mk_task_spawn_structure() {
     let action = SurfaceExpr::ident("heavyComputation");
     let result = mk_task_spawn(action);
-    assert_eq!(app_fn_name(&result), Some(TASK_SPAWN));
+    assert_eq!(app_fn_name(&result), Some(surface(TASK_SPAWN)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -170,7 +217,7 @@ fn test_mk_task_spawn_structure() {
 fn test_mk_task_get_structure() {
     let task = SurfaceExpr::ident("myTask");
     let result = mk_task_get(task);
-    assert_eq!(app_fn_name(&result), Some(TASK_GET));
+    assert_eq!(app_fn_name(&result), Some(surface(TASK_GET)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -182,7 +229,7 @@ fn test_mk_task_get_structure() {
 fn test_mk_fs_read_file_structure() {
     let path = SurfaceExpr::ident("filePath");
     let result = mk_fs_read_file(path);
-    assert_eq!(app_fn_name(&result), Some(FS_READ_FILE));
+    assert_eq!(app_fn_name(&result), Some(surface(FS_READ_FILE)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -191,7 +238,7 @@ fn test_mk_fs_write_file_structure() {
     let path = SurfaceExpr::ident("outPath");
     let content = SurfaceExpr::ident("data");
     let result = mk_fs_write_file(path, content);
-    assert_eq!(app_fn_name(&result), Some(FS_WRITE_FILE));
+    assert_eq!(app_fn_name(&result), Some(surface(FS_WRITE_FILE)));
     assert_eq!(app_arg_count(&result), 2);
 }
 
@@ -199,7 +246,7 @@ fn test_mk_fs_write_file_structure() {
 fn test_mk_fs_remove_file_structure() {
     let path = SurfaceExpr::ident("tempFile");
     let result = mk_fs_remove_file(path);
-    assert_eq!(app_fn_name(&result), Some(FS_REMOVE_FILE));
+    assert_eq!(app_fn_name(&result), Some(surface(FS_REMOVE_FILE)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -211,7 +258,7 @@ fn test_mk_fs_remove_file_structure() {
 fn test_mk_process_run_structure() {
     let args = SurfaceExpr::ident("processArgs");
     let result = mk_process_run(args);
-    assert_eq!(app_fn_name(&result), Some(PROCESS_RUN));
+    assert_eq!(app_fn_name(&result), Some(surface(PROCESS_RUN)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -219,7 +266,7 @@ fn test_mk_process_run_structure() {
 fn test_mk_process_spawn_structure() {
     let config = SurfaceExpr::ident("procConfig");
     let result = mk_process_spawn(config);
-    assert_eq!(app_fn_name(&result), Some(PROCESS_SPAWN));
+    assert_eq!(app_fn_name(&result), Some(surface(PROCESS_SPAWN)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -231,14 +278,16 @@ fn test_mk_process_spawn_structure() {
 fn test_mk_io_get_env_structure() {
     let var = SurfaceExpr::ident("PATH");
     let result = mk_io_get_env(var);
-    assert_eq!(app_fn_name(&result), Some(IO_GET_ENV));
+    assert_eq!(app_fn_name(&result), Some(surface(IO_GET_ENV)));
     assert_eq!(app_arg_count(&result), 1);
 }
 
 #[test]
 fn test_mk_io_get_cwd_is_ident() {
     let result = mk_io_get_cwd();
-    assert!(matches!(result, SurfaceExpr::Ident(_, name) if name == IO_GET_CWD));
+    assert!(
+        matches!(result, SurfaceExpr::Ident(_, name) if name.name() == surface(IO_GET_CWD).name())
+    );
 }
 
 // ============================================================================
@@ -248,28 +297,28 @@ fn test_mk_io_get_cwd_is_ident() {
 #[test]
 fn test_is_extended_io_op_recognizes_all() {
     for &op in EXTENDED_IO_OPS {
-        assert!(is_extended_io_op(op), "should recognize {op}");
+        assert!(is_extended_io_op(&surface(op)), "should recognize {op}");
     }
 }
 
 #[test]
 fn test_is_extended_io_op_rejects_unknown() {
-    assert!(!is_extended_io_op("IO.unknown"));
-    assert!(!is_extended_io_op("Nat.add"));
-    assert!(!is_extended_io_op(""));
+    assert!(!is_extended_io_op(&surface("IO.unknown")));
+    assert!(!is_extended_io_op(&surface("Nat.add")));
+    assert!(!is_extended_io_op(&surface("")));
 }
 
 #[test]
 fn test_is_monad_transformer_recognizes_all() {
-    assert!(is_monad_transformer(STATE_T));
-    assert!(is_monad_transformer(EXCEPT_T));
-    assert!(is_monad_transformer(READER_T));
+    assert!(is_monad_transformer(&surface(STATE_T)));
+    assert!(is_monad_transformer(&surface(EXCEPT_T)));
+    assert!(is_monad_transformer(&surface(READER_T)));
 }
 
 #[test]
 fn test_is_monad_transformer_rejects_unknown() {
-    assert!(!is_monad_transformer("IO"));
-    assert!(!is_monad_transformer("WriterT"));
+    assert!(!is_monad_transformer(&surface("IO")));
+    assert!(!is_monad_transformer(&surface("WriterT")));
 }
 
 // ============================================================================
@@ -289,7 +338,7 @@ fn test_transformer_stack_push_increases_depth() {
     stack
         .push(
             TransformerLayer::StateT {
-                state_type: "Nat".into(),
+                state_type: surface("Nat"),
             },
             &config,
         )
@@ -298,7 +347,7 @@ fn test_transformer_stack_push_increases_depth() {
     stack
         .push(
             TransformerLayer::ExceptT {
-                error_type: "String".into(),
+                error_type: surface("String"),
             },
             &config,
         )
@@ -316,7 +365,7 @@ fn test_transformer_stack_overflow_error() {
     stack
         .push(
             TransformerLayer::StateT {
-                state_type: "Nat".into(),
+                state_type: surface("Nat"),
             },
             &config,
         )
@@ -324,14 +373,14 @@ fn test_transformer_stack_overflow_error() {
     stack
         .push(
             TransformerLayer::ExceptT {
-                error_type: "String".into(),
+                error_type: surface("String"),
             },
             &config,
         )
         .unwrap();
     let err = stack.push(
         TransformerLayer::ReaderT {
-            env_type: "Env".into(),
+            env_type: surface("Env"),
         },
         &config,
     );
@@ -350,7 +399,7 @@ fn test_transformer_stack_build_type_plain_io() {
     let stack = TransformerStack::new();
     let result = stack.build_type(SurfaceExpr::ident("Unit"));
     // Should be `IO Unit`
-    assert_eq!(app_fn_name(&result), Some("IO"));
+    assert_eq!(app_fn_name(&result), Some(surface("IO")));
     assert_eq!(app_arg_count(&result), 1);
 }
 
@@ -361,7 +410,7 @@ fn test_transformer_stack_build_type_single_layer() {
     stack
         .push(
             TransformerLayer::StateT {
-                state_type: "Nat".into(),
+                state_type: surface("Nat"),
             },
             &config,
         )
@@ -371,7 +420,7 @@ fn test_transformer_stack_build_type_single_layer() {
     // IO Bool` with `StateT` as the outermost App head.
     assert_eq!(
         app_fn_name(&result),
-        Some(STATE_T),
+        Some(surface(STATE_T)),
         "single-layer transformer stack must wrap with the layer head",
     );
 }
@@ -383,7 +432,7 @@ fn test_transformer_stack_build_type_two_layers() {
     stack
         .push(
             TransformerLayer::ExceptT {
-                error_type: "String".into(),
+                error_type: surface("String"),
             },
             &config,
         )
@@ -391,7 +440,7 @@ fn test_transformer_stack_build_type_two_layers() {
     stack
         .push(
             TransformerLayer::ReaderT {
-                env_type: "Config".into(),
+                env_type: surface("Config"),
             },
             &config,
         )
@@ -401,7 +450,7 @@ fn test_transformer_stack_build_type_two_layers() {
     // App head must be `ExceptT` and not another App.
     assert_eq!(
         app_fn_name(&result),
-        Some(EXCEPT_T),
+        Some(surface(EXCEPT_T)),
         "two-layer transformer stack outermost head must be ExceptT",
     );
 }
@@ -415,7 +464,7 @@ fn test_transformer_stack_build_type_zero_layers_is_io_only() {
     let result = stack.build_type(SurfaceExpr::ident("Bool"));
     assert_eq!(
         app_fn_name(&result),
-        Some("IO"),
+        Some(surface("IO")),
         "empty stack must produce a bare `IO α`, not a transformer wrap",
     );
 }
@@ -431,7 +480,7 @@ fn test_transformer_stack_build_type_single_layer_inner_is_io() {
     stack
         .push(
             TransformerLayer::ReaderT {
-                env_type: "Config".into(),
+                env_type: surface("Config"),
             },
             &config,
         )
@@ -440,7 +489,11 @@ fn test_transformer_stack_build_type_single_layer_inner_is_io() {
     if let SurfaceExpr::App(_, _, args) = &result {
         assert_eq!(args.len(), 3, "single-layer should produce 3 App args");
         if let SurfaceExpr::Ident(_, name) = &args[1].expr {
-            assert_eq!(name.as_str(), "IO", "inner stack must terminate at IO");
+            assert_eq!(
+                name.name(),
+                surface("IO").name(),
+                "inner stack must terminate at IO"
+            );
         } else {
             panic!(
                 "expected `IO` ident as second App arg, got {:?}",
@@ -462,7 +515,7 @@ fn test_check_io_type_valid() {
     let inner = check_io_type(&expr);
     assert!(inner.is_some());
     if let Some(SurfaceExpr::Ident(_, name)) = inner {
-        assert_eq!(name, "String");
+        assert_eq!(name.name(), surface("String").name());
     } else {
         panic!("expected Ident(String)");
     }
@@ -561,14 +614,14 @@ fn test_purity_struct_field_disallows_io() {
 fn test_check_io_purity_allows_in_io_context() {
     let config = default_config();
     let ctx = PurityContext::IoFunction;
-    assert!(check_io_purity(IO_THROW, &ctx, &config).is_ok());
+    assert!(check_io_purity(&surface(IO_THROW), &ctx, &config).is_ok());
 }
 
 #[test]
 fn test_check_io_purity_rejects_in_pure_context() {
     let config = default_config();
     let ctx = PurityContext::PureFunction { name: "foo".into() };
-    let result = check_io_purity(IO_THROW, &ctx, &config);
+    let result = check_io_purity(&surface(IO_THROW), &ctx, &config);
     assert!(result.is_err());
     match result.unwrap_err() {
         IoMonadExtError::PurityViolation { operation, context } => {
@@ -586,7 +639,7 @@ fn test_check_io_purity_disabled() {
         ..Default::default()
     };
     let ctx = PurityContext::Theorem { name: "thm".into() };
-    assert!(check_io_purity(IO_THROW, &ctx, &config).is_ok());
+    assert!(check_io_purity(&surface(IO_THROW), &ctx, &config).is_ok());
 }
 
 #[test]

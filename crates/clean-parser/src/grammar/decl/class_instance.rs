@@ -12,14 +12,6 @@ use crate::surface::*;
 use crate::ParseError;
 
 impl Parser {
-    /// Parse a class declaration with default modifiers.
-    pub(in crate::grammar) fn class_decl(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        self.class_decl_with_mods(start_span, DeclModifiers::default())
-    }
-
     /// Parse a class declaration with explicit modifiers.
     ///
     /// ```text
@@ -200,6 +192,7 @@ impl Parser {
             self.advance();
             if let TokenKind::Ident(kw) = self.current_kind() {
                 if kw == "priority"
+                    && !self.current().ident_escaped
                     && self.tokens.get(self.pos + 1).map(|t| &t.kind) == Some(&TokenKind::ColonEq)
                 {
                     self.advance(); // consume `priority`
@@ -226,8 +219,21 @@ impl Parser {
 
         // Check for optional name: `instance instAddNat : ...`
         // vs anonymous: `instance : ...`
-        // We need to distinguish between a name and a binder/colon
-        let name = if let TokenKind::Ident(_) = self.current_kind() {
+        // We need to distinguish between a name and a binder/colon.
+        //
+        // The head may be a KEYWORD token: `instance Prop.instCompl : Compl Prop`
+        // (Mathlib Order/Basic:502) lexes as [Prop][Dot][Ident]. Gating this on
+        // `Ident` alone skipped the name branch entirely, `optional_binders` then
+        // stopped at a token it did not own, and the whole declaration died at
+        // `expected Colon, got Prop` — 28 `instance` declarations across 14
+        // Mathlib files, and `instance` was the ONLY declaration form still
+        // rejecting such a name (`def`/`theorem`/`abbrev`/`axiom`/`structure`/
+        // `class`/`inductive` all parse `Prop.foo` since 51dcb1193).
+        // `keyword_name_head` is that fix's own rule, so a bare keyword — which
+        // would mean an instance NAMED `Prop` — is still not a name here.
+        let name = if matches!(self.current_kind(), TokenKind::Ident(_))
+            || self.keyword_name_head().is_some()
+        {
             let saved_pos = self.pos;
             if let Ok(candidate) = self.qualified_ident() {
                 // A name is confirmed by a following `:` OR any binder opener:
@@ -276,7 +282,22 @@ impl Parser {
             let val = self.expr()?;
             fields.push(SurfaceFieldAssign {
                 span: start_span,
-                name: "_value".to_string(),
+                name: SurfaceName::generated_path("_value"),
+                val,
+            });
+        } else if self.check(&TokenKind::Pipe) {
+            // Equations: `instance … : DecidableEq (∀ hp, α hp) | f, g => …`.
+            // `instance := … declSig >> declVal` and `declVal := declValSimple
+            // <|> declValEqns <|> whereStructInst`
+            // (`Lean/Parser/Command.lean:169-184,200-202`), so an instance takes
+            // the same equations a `def` does; the value is the `def`'s
+            // equation lambda. Measured before: `decidableEqPFun` (Mathlib
+            // `Logic/Function/Basic.lean:165`) died "expected `where` or `:=`
+            // in instance declaration, got Pipe".
+            let val = self.def_match_body(start_span)?;
+            fields.push(SurfaceFieldAssign {
+                span: start_span,
+                name: SurfaceName::generated_path("_value"),
                 val,
             });
         } else {
@@ -304,6 +325,18 @@ impl Parser {
             fields,
             priority,
             modifiers,
+            compiler_attrs: attrs
+                .iter()
+                .filter(|attr| {
+                    matches!(
+                        attr,
+                        Attribute::ImplementedBy(_)
+                            | Attribute::Extern(_)
+                            | Attribute::DefaultInstance { .. }
+                    ) || matches!(attr, Attribute::Unknown(n) if matches!(n.as_str(), "expose" | "no_expose" | "defeq" | "backward_defeq"))
+                })
+                .cloned()
+                .collect(),
         })
     }
 
@@ -353,20 +386,31 @@ impl Parser {
     }
 
     /// Parse the value of a `(priority := …)` instance option: a numeric literal
-    /// or a Lean priority keyword (`high`/`default`/`mid`/`low`, the `prio`
-    /// macros — `high = 10000`, `default/mid = 1000`, `low = 100`). Advances past
-    /// the value it recognizes; returns `None` (without advancing) for anything
-    /// else, so the caller's paren-skip still consumes the option cleanly.
+    /// or a Lean priority keyword.
+    ///
+    /// Values are lean4 `src/Init/Notation.lean`'s `prio` macros verbatim:
+    /// `high = 10000`, `default = 1000`, **`mid = 500`**, `low = 100`. Lean
+    /// documents the invariant `low < mid < default` there ("This is lower than
+    /// `default`, and higher than `low`") — `mid` was previously mapped to 1000
+    /// here, which collapsed it onto `default` and made
+    /// `instance (priority := mid)` TIE with an unannotated instance instead of
+    /// losing to it; the most-recent-first tie-break then handed the win to
+    /// whichever was declared later.
+    ///
+    /// Advances past the value it recognizes; returns `None` (without
+    /// advancing) for anything else, so the caller's paren-skip still consumes
+    /// the option cleanly.
     pub(in crate::grammar) fn instance_priority_value(&mut self) -> Option<u32> {
         match self.current_kind().clone() {
             TokenKind::NatLit(n) => {
                 self.advance();
                 n.to_u64().and_then(|v| u32::try_from(v).ok())
             }
-            TokenKind::Ident(kw) => {
+            TokenKind::Ident(kw) if !self.current().ident_escaped => {
                 let prio = match kw.as_str() {
                     "high" => Some(10000),
-                    "default" | "mid" => Some(1000),
+                    "default" => Some(1000),
+                    "mid" => Some(500),
                     "low" => Some(100),
                     _ => None,
                 };
@@ -515,7 +559,7 @@ impl Parser {
                     self.advance();
                     binders.push(SurfaceBinder {
                         span,
-                        name: "_".to_string(),
+                        name: SurfaceName::generated_path("_"),
                         ty: None,
                         default: None,
                         info: SurfaceBinderInfo::Explicit,
@@ -523,7 +567,7 @@ impl Parser {
                 }
                 TokenKind::Ident(name) => {
                     let span = self.current_span();
-                    let name = name.clone();
+                    let name = self.name_token(name)?;
                     self.advance();
                     binders.push(SurfaceBinder {
                         span,

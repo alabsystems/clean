@@ -50,7 +50,7 @@ pub struct RustVerifyArgs {
     /// List every bundled example and exit.
     #[arg(long)]
     pub list: bool,
-    /// Show per-stage details for the verified example.
+    /// Append a note that per-stage detail is deferred; stage lines always print.
     #[arg(short, long)]
     pub verbose: bool,
 }
@@ -114,7 +114,7 @@ pub enum RustSemCliError {
 // -- Public entry points ------------------------------------------------------
 
 /// Dispatch entry point for `clean verify rust`. Called from the top-level
-/// `clean-cli` binary via `cmd_rust_sem::handle`.
+/// `clean-cli` binary via `cmd_rust_sem::handle_rust_verify_command`.
 pub fn run(args: RustVerifyArgs) -> Result<(), RustSemCliError> {
     if args.list {
         pipeline::print_catalog();
@@ -195,7 +195,7 @@ VIR pipeline stabilizes. Part of Epic #3436 (#3451).",
         },
         Example {
             cmd: "clean verify rust --example overlapping_mut_borrows --verbose",
-            what: "verify a negative example and show per-stage summary",
+            what: "verify a negative example; `--verbose` adds a per-stage-detail deferral note",
         },
     ],
     see_also: &["verify-c", "check"],

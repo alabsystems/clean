@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-const y Bool)
+(declare-const t Bool)
+(declare-const p Bool)
+(declare-const y_renamed Bool)
+(assert (not (= (let ((x true)) (and x y)) (let ((x true) (y true)) (and x y)))))
+(check-sat)

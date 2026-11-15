@@ -19,7 +19,7 @@
 //! ## SMT-COMP Classification
 //!
 //! SMT-COMP 2026 requires proof checkers to classify proofs:
-//! - **valid**: every step kernel-verified or axiomatic; no structural holes.
+//! - **valid**: every step step-checked or axiomatic; no structural holes.
 //! - **holey**: structurally accepted steps exist, but no blindly trusted steps.
 //! - **invalid**: at least one blindly trusted step, or proof does not derive
 //!   the empty clause.
@@ -87,7 +87,7 @@ impl fmt::Display for SmtProofFormat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum SmtCompVerdict {
-    /// Every step was kernel-verified or axiomatic.
+    /// Every step was step-checked or axiomatic.
     Valid,
     /// Structurally accepted steps exist but no blindly trusted steps.
     Holey,
@@ -290,7 +290,7 @@ pub fn verify_smt_competition_entry(
         Ok(result) => SmtCompetitionResult {
             verdict: result.verdict,
             holes: result.holes,
-            steps_verified: result.stats.kernel_verified
+            steps_verified: result.stats.step_checked
                 + result.stats.structurally_accepted
                 + result.stats.axiomatic,
             steps_trusted: result.stats.trusted,
@@ -563,7 +563,7 @@ mod tests {
     fn test_stats_to_verdict_valid() {
         let stats = SmtVerifyStats {
             total_steps: 3,
-            kernel_verified: 2,
+            step_checked: 2,
             axiomatic: 1,
             ..Default::default()
         };
@@ -574,7 +574,7 @@ mod tests {
     fn test_stats_to_verdict_holey() {
         let stats = SmtVerifyStats {
             total_steps: 3,
-            kernel_verified: 1,
+            step_checked: 1,
             structurally_accepted: 2,
             ..Default::default()
         };
@@ -585,7 +585,7 @@ mod tests {
     fn test_stats_to_verdict_invalid_trusted() {
         let stats = SmtVerifyStats {
             total_steps: 3,
-            kernel_verified: 1,
+            step_checked: 1,
             trusted: 2,
             ..Default::default()
         };
@@ -596,7 +596,7 @@ mod tests {
     fn test_stats_to_verdict_invalid_not_valid() {
         let stats = SmtVerifyStats {
             total_steps: 3,
-            kernel_verified: 3,
+            step_checked: 3,
             ..Default::default()
         };
         assert_eq!(stats_to_verdict(&stats, false), SmtCompVerdict::Invalid);

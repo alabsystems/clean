@@ -11,6 +11,7 @@
 //! Part of #2516: eliminate trusted fallback from cast-normalization tactics.
 
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level, Name};
+use clean_parser::SurfaceName;
 
 use crate::tactic::core::{Goal, ProofState, TacticError};
 use crate::tactic::simp::{collect_named_eq_lemmas, simp_expr, SimpConfig, SimpLemmaSet};
@@ -71,8 +72,12 @@ impl CastRewriteFlavor {
 
 fn has_unsupported_cast_source(expr: &Expr, flavor: CastRewriteFlavor) -> bool {
     let blocked_head = match (flavor, expr.get_app_fn().kind()) {
-        (CastRewriteFlavor::Zify, ExprKind::Const(name, _)) => name.to_string() == "Nat.sub",
-        (CastRewriteFlavor::Qify, ExprKind::Const(name, _)) => name.to_string() == "Int.div",
+        (CastRewriteFlavor::Zify, ExprKind::Const(name, _)) => {
+            name == &Name::anon().str("Nat").str("sub")
+        }
+        (CastRewriteFlavor::Qify, ExprKind::Const(name, _)) => {
+            name == &Name::anon().str("Int").str("div")
+        }
         _ => false,
     };
     if blocked_head {
@@ -248,7 +253,7 @@ fn build_local_cast_expr(
     state: &mut ProofState,
     goal: &Goal,
     hyp_fvar: FVarId,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     old_ty: &Expr,
     new_ty: &Expr,
     eq_proof: Option<Expr>,
@@ -286,5 +291,29 @@ fn build_local_cast_expr(
             "{tactic_name} at {hyp_name}: congruence proof construction failed; \
              simplified type is not definitionally equal to the original"
         )))
+    }
+}
+
+#[cfg(test)]
+mod typed_name_tests {
+    use super::*;
+
+    #[test]
+    fn side_condition_refusals_bind_exact_builtin_identity() {
+        for (flavor, owner, member) in [
+            (CastRewriteFlavor::Zify, "Nat", "sub"),
+            (CastRewriteFlavor::Qify, "Int", "div"),
+        ] {
+            let builtin = Expr::const_(Name::anon().str(owner).str(member), vec![]);
+            assert!(has_unsupported_cast_source(&builtin, flavor));
+            assert!(has_unsupported_cast_source(
+                &Expr::app(builtin, Expr::prop()),
+                flavor
+            ));
+            let quoted = Expr::const_(Name::anon().str(format!("{owner}.{member}")), vec![]);
+            let foreign = Expr::const_(Name::anon().str("Foreign").str(owner).str(member), vec![]);
+            assert!(!has_unsupported_cast_source(&quoted, flavor));
+            assert!(!has_unsupported_cast_source(&foreign, flavor));
+        }
     }
 }

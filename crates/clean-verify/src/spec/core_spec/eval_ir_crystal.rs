@@ -99,17 +99,12 @@ impl Specification {
     /// Returns `SpecError` if any declaration fails to elaborate or
     /// kernel-check.
     pub(super) fn add_eval_ir(&mut self) -> Result<(), SpecError> {
-        self.add_eval_ir_syntax()?;
-        self.add_eval_ir_state()?;
-        self.add_eval_ir_ops()?;
-        self.add_eval_ir_machine()?;
+        self.add_eval_ir_execution()?;
         self.add_eval_ir_crystal()
     }
 
     /// The hand-authored `Level::is_zero` module and its execution witnesses.
     fn add_eval_ir_crystal(&mut self) -> Result<(), SpecError> {
-        self.add_eval_ir_numerals()?;
-        self.add_eval_ir_builders()?;
         self.add_eval_ir_level_module()?;
         self.add_eval_ir_witnesses()?;
         // The MINTED module for the same body, under the chain's name, with
@@ -119,256 +114,33 @@ impl Specification {
         // it, under its OWN module name. Must follow the minted module --
         // `ir_lzb_module` names `ir_lz_func` rather than transcribing it, which
         // is the whole point and also a hard ordering dependency.
-        self.add_eval_ir_lzb_module()
-    }
-
-    /// Small unary numerals, named once so the module literal reads as a
-    /// program rather than as a tower of `Nat.succ`.
-    fn add_eval_ir_numerals(&mut self) -> Result<(), SpecError> {
-        self.add_recursive_def("def ir_d0 : Nat := Nat.zero", "EvalIR numeral 0.")?;
-        self.add_recursive_def("def ir_d1 : Nat := Nat.succ ir_d0", "EvalIR numeral 1.")?;
-        self.add_recursive_def("def ir_d2 : Nat := Nat.succ ir_d1", "EvalIR numeral 2.")?;
-        self.add_recursive_def("def ir_d3 : Nat := Nat.succ ir_d2", "EvalIR numeral 3.")?;
-        self.add_recursive_def("def ir_d4 : Nat := Nat.succ ir_d3", "EvalIR numeral 4.")?;
-        self.add_recursive_def("def ir_d5 : Nat := Nat.succ ir_d4", "EvalIR numeral 5.")?;
-        self.add_recursive_def("def ir_d6 : Nat := Nat.succ ir_d5", "EvalIR numeral 6.")?;
-        self.add_recursive_def("def ir_d7 : Nat := Nat.succ ir_d6", "EvalIR numeral 7.")?;
-        self.add_recursive_def("def ir_d8 : Nat := Nat.succ ir_d7", "EvalIR numeral 8.")?;
-        self.add_recursive_def("def ir_d9 : Nat := Nat.succ ir_d8", "EvalIR numeral 9.")?;
-        self.add_recursive_def("def ir_d10 : Nat := Nat.succ ir_d9", "EvalIR numeral 10.")?;
-        self.add_recursive_def("def ir_d11 : Nat := Nat.succ ir_d10", "EvalIR numeral 11.")?;
-        self.add_recursive_def("def ir_d12 : Nat := Nat.succ ir_d11", "EvalIR numeral 12.")?;
-        self.add_recursive_def("def ir_d13 : Nat := Nat.succ ir_d12", "EvalIR numeral 13.")?;
-        self.add_recursive_def("def ir_d14 : Nat := Nat.succ ir_d13", "EvalIR numeral 14.")?;
-        self.add_recursive_def("def ir_d15 : Nat := Nat.succ ir_d14", "EvalIR numeral 15.")?;
-        self.add_recursive_def("def ir_d16 : Nat := Nat.succ ir_d15", "EvalIR numeral 16.")?;
-        // ── the 2026-08-22 widening: ir_d17..ir_d63 ──────────────────────
-        // The designated target's mint refusal was "SSA positions reach 20,
-        // above the ir_d0..ir_d16 atom pool". Structural slots (SSA ids, block
-        // ids, function ids) stay ATOMS by design — a garbage numeral must
-        // keep refusing loudly — so the pool grows to 63 instead of the rule
-        // dissolving into literals. TWO gaps, deliberate: ir_d32 and ir_d64
-        // are ALREADY registered by the chains that own them (Nat.add forms in
-        // eval_ir_bvar_range.rs / eval_ir_valid_char.rs, registered after this
-        // section — a second definition here would be a duplicate, and the
-        // lineage suite's numeral_names_carry_their_values proved exactly that
-        // the first time this widening was built). ir_d33 therefore takes the
-        // Nat.add form, since ir_d32 does not exist yet at this point in the
-        // registration order. Cost, measured before adoption: see the lz
-        // migration commit.
-        self.add_recursive_def("def ir_d17 : Nat := Nat.succ ir_d16", "EvalIR numeral 17.")?;
-        self.add_recursive_def("def ir_d18 : Nat := Nat.succ ir_d17", "EvalIR numeral 18.")?;
-        self.add_recursive_def("def ir_d19 : Nat := Nat.succ ir_d18", "EvalIR numeral 19.")?;
-        self.add_recursive_def("def ir_d20 : Nat := Nat.succ ir_d19", "EvalIR numeral 20.")?;
-        self.add_recursive_def("def ir_d21 : Nat := Nat.succ ir_d20", "EvalIR numeral 21.")?;
-        self.add_recursive_def("def ir_d22 : Nat := Nat.succ ir_d21", "EvalIR numeral 22.")?;
-        self.add_recursive_def("def ir_d23 : Nat := Nat.succ ir_d22", "EvalIR numeral 23.")?;
-        self.add_recursive_def("def ir_d24 : Nat := Nat.succ ir_d23", "EvalIR numeral 24.")?;
-        self.add_recursive_def("def ir_d25 : Nat := Nat.succ ir_d24", "EvalIR numeral 25.")?;
-        self.add_recursive_def("def ir_d26 : Nat := Nat.succ ir_d25", "EvalIR numeral 26.")?;
-        self.add_recursive_def("def ir_d27 : Nat := Nat.succ ir_d26", "EvalIR numeral 27.")?;
-        self.add_recursive_def("def ir_d28 : Nat := Nat.succ ir_d27", "EvalIR numeral 28.")?;
-        self.add_recursive_def("def ir_d29 : Nat := Nat.succ ir_d28", "EvalIR numeral 29.")?;
-        self.add_recursive_def("def ir_d30 : Nat := Nat.succ ir_d29", "EvalIR numeral 30.")?;
-        self.add_recursive_def("def ir_d31 : Nat := Nat.succ ir_d30", "EvalIR numeral 31.")?;
-        self.add_recursive_def("def ir_d33 : Nat := Nat.add ir_d16 ir_d17", "EvalIR numeral 33 (ir_d32 is chain-owned and not yet registered here; the sum form keeps this section self-contained).")?;
-        self.add_recursive_def("def ir_d34 : Nat := Nat.succ ir_d33", "EvalIR numeral 34.")?;
-        self.add_recursive_def("def ir_d35 : Nat := Nat.succ ir_d34", "EvalIR numeral 35.")?;
-        self.add_recursive_def("def ir_d36 : Nat := Nat.succ ir_d35", "EvalIR numeral 36.")?;
-        self.add_recursive_def("def ir_d37 : Nat := Nat.succ ir_d36", "EvalIR numeral 37.")?;
-        self.add_recursive_def("def ir_d38 : Nat := Nat.succ ir_d37", "EvalIR numeral 38.")?;
-        self.add_recursive_def("def ir_d39 : Nat := Nat.succ ir_d38", "EvalIR numeral 39.")?;
-        self.add_recursive_def("def ir_d40 : Nat := Nat.succ ir_d39", "EvalIR numeral 40.")?;
-        self.add_recursive_def("def ir_d41 : Nat := Nat.succ ir_d40", "EvalIR numeral 41.")?;
-        self.add_recursive_def("def ir_d42 : Nat := Nat.succ ir_d41", "EvalIR numeral 42.")?;
-        self.add_recursive_def("def ir_d43 : Nat := Nat.succ ir_d42", "EvalIR numeral 43.")?;
-        self.add_recursive_def("def ir_d44 : Nat := Nat.succ ir_d43", "EvalIR numeral 44.")?;
-        self.add_recursive_def("def ir_d45 : Nat := Nat.succ ir_d44", "EvalIR numeral 45.")?;
-        self.add_recursive_def("def ir_d46 : Nat := Nat.succ ir_d45", "EvalIR numeral 46.")?;
-        self.add_recursive_def("def ir_d47 : Nat := Nat.succ ir_d46", "EvalIR numeral 47.")?;
-        self.add_recursive_def("def ir_d48 : Nat := Nat.succ ir_d47", "EvalIR numeral 48.")?;
-        self.add_recursive_def("def ir_d49 : Nat := Nat.succ ir_d48", "EvalIR numeral 49.")?;
-        self.add_recursive_def("def ir_d50 : Nat := Nat.succ ir_d49", "EvalIR numeral 50.")?;
-        self.add_recursive_def("def ir_d51 : Nat := Nat.succ ir_d50", "EvalIR numeral 51.")?;
-        self.add_recursive_def("def ir_d52 : Nat := Nat.succ ir_d51", "EvalIR numeral 52.")?;
-        self.add_recursive_def("def ir_d53 : Nat := Nat.succ ir_d52", "EvalIR numeral 53.")?;
-        self.add_recursive_def("def ir_d54 : Nat := Nat.succ ir_d53", "EvalIR numeral 54.")?;
-        self.add_recursive_def("def ir_d55 : Nat := Nat.succ ir_d54", "EvalIR numeral 55.")?;
-        self.add_recursive_def("def ir_d56 : Nat := Nat.succ ir_d55", "EvalIR numeral 56.")?;
-        self.add_recursive_def("def ir_d57 : Nat := Nat.succ ir_d56", "EvalIR numeral 57.")?;
-        self.add_recursive_def("def ir_d58 : Nat := Nat.succ ir_d57", "EvalIR numeral 58.")?;
-        self.add_recursive_def("def ir_d59 : Nat := Nat.succ ir_d58", "EvalIR numeral 59.")?;
-        self.add_recursive_def("def ir_d60 : Nat := Nat.succ ir_d59", "EvalIR numeral 60.")?;
-        self.add_recursive_def("def ir_d61 : Nat := Nat.succ ir_d60", "EvalIR numeral 61.")?;
-        self.add_recursive_def("def ir_d62 : Nat := Nat.succ ir_d61", "EvalIR numeral 62.")?;
-        self.add_recursive_def("def ir_d63 : Nat := Nat.succ ir_d62", "EvalIR numeral 63.")?;
-
-        // Fuel. `ir_run`'s Nat.rec only unfolds one level per machine step and
-        // the `halted` minor ignores its induction hypothesis, so surplus fuel
-        // costs nothing in reduction — it just has to be large enough. The
-        // longest witness below (Max with two recursive calls) takes fewer than
-        // thirty steps.
-        self.add_recursive_def(
-            "def ir_fuel : Nat := ir_nat_pow2 ir_d7",
-            "128 steps of fuel: enough for every witness in this module with headroom, and \
-             cheap because `ir_run` stops unfolding as soon as the machine halts.",
-        )?;
-
-        Ok(())
-    }
-
-    /// One-line list and node builders, so the module literal is reviewable.
-    fn add_eval_ir_builders(&mut self) -> Result<(), SpecError> {
-        self.add_recursive_def(
-            "def ir_nl0 : IRList Nat := IRList.nil Nat",
-            "Empty id list.",
-        )?;
-        self.add_recursive_def(
-            "def ir_nl1 (a : Nat) : IRList Nat := IRList.cons Nat a ir_nl0",
-            "One-element id list.",
-        )?;
-        self.add_recursive_def(
-            "def ir_nl2 (a : Nat) (b : Nat) : IRList Nat := IRList.cons Nat a (ir_nl1 b)",
-            "Two-element id list.",
-        )?;
-
-        self.add_recursive_def(
-            "def ir_vl0 : IRList IRScalar := IRList.nil IRScalar",
-            "Empty value list.",
-        )?;
-        self.add_recursive_def(
-            "def ir_vl1 (a : IRScalar) : IRList IRScalar := IRList.cons IRScalar a ir_vl0",
-            "One-element value list.",
-        )?;
-        self.add_recursive_def(
-            "def ir_nd (i : IRInst) : IRNode := IRNode.mk i ir_nl0",
-            "A node that binds nothing (a terminator, a Store, an Assert).",
-        )?;
-        self.add_recursive_def(
-            "def ir_nd1 (i : IRInst) (r : Nat) : IRNode := IRNode.mk i (ir_nl1 r)",
-            "A node that binds one result.",
-        )?;
-
-        self.add_recursive_def(
-            "def ir_bd0 : IRList IRNode := IRList.nil IRNode",
-            "Empty node list.",
-        )?;
-        self.add_recursive_def(
-            "def ir_bd1 (a : IRNode) : IRList IRNode := IRList.cons IRNode a ir_bd0",
-            "One-node body.",
-        )?;
-        self.add_recursive_def(
-            "def ir_bd2 (a : IRNode) (b : IRNode) : IRList IRNode := IRList.cons IRNode a (ir_bd1 b)",
-            "Two-node body.",
-        )?;
-        self.add_recursive_def(
-            "def ir_bd3 (a : IRNode) (b : IRNode) (c : IRNode) : IRList IRNode := IRList.cons IRNode a (ir_bd2 b c)",
-            "Three-node body.",
-        )?;
-        self.add_recursive_def(
-            concat!(
-                "def ir_bd6 (a : IRNode) (b : IRNode) (c : IRNode) (d : IRNode) (e : IRNode) (f : IRNode) : IRList IRNode := ",
-                "IRList.cons IRNode a (IRList.cons IRNode b (IRList.cons IRNode c (ir_bd3 d e f)))",
-            ),
-            "Six-node body (the Max/IMax arms: extract, null constant, compare, assert, call, \
-             terminator).",
-        )?;
-
-        self.add_recursive_def(
-            "def ir_sc0 : IRList IRSwitchCase := IRList.nil IRSwitchCase",
-            "Empty Switch arm list.",
-        )?;
-        self.add_recursive_def(
-            concat!(
-                "def ir_sc (v : Nat) (t : Nat) (rest : IRList IRSwitchCase) : IRList IRSwitchCase := ",
-                "IRList.cons IRSwitchCase (IRSwitchCase.mk v t ir_nl0) rest",
-            ),
-            "Cons a no-argument Switch arm: selector value v jumps to block t.",
-        )?;
-
-        self.add_recursive_def(
-            "def ir_blk0 : IRList IRBlock := IRList.nil IRBlock",
-            "Empty block list.",
-        )?;
-        self.add_recursive_def(
-            "def ir_blk (b : IRBlock) (rest : IRList IRBlock) : IRList IRBlock := IRList.cons IRBlock b rest",
-            "Cons a block.",
-        )?;
-
-        self.add_recursive_def(
-            "def ir_mem0 : IRList IRMemSlot := IRList.nil IRMemSlot",
-            "Empty memory.",
-        )?;
-        self.add_recursive_def(
-            concat!(
-                "def ir_cell (a : Nat) (v : IRScalar) (rest : IRList IRMemSlot) : IRList IRMemSlot := ",
-                "IRList.cons IRMemSlot (IRMemSlot.mk a v Bool.true) rest",
-            ),
-            "Cons a LIVE memory cell. Every cell a witness supplies is live, which is what the \
-             representation premise A2 will have to entail.",
-        )?;
-
-        self.add_recursive_def(
-            "def ir_sp0 : IRScalar := IRScalar.vnil",
-            "Empty payload spine: an aggregate with no fields.",
-        )?;
-        self.add_recursive_def(
-            "def ir_sp1 (a : IRScalar) : IRScalar := IRScalar.vcons a ir_sp0",
-            "One-field payload spine.",
-        )?;
-        self.add_recursive_def(
-            "def ir_sp2 (a : IRScalar) (b : IRScalar) : IRScalar := IRScalar.vcons a (ir_sp1 b)",
-            "Two-field payload spine.",
-        )?;
-        self.add_recursive_def(
-            concat!(
-                "def ir_var (tag : Nat) (fs : IRScalar) : IRScalar := ",
-                "IRScalar.aggv (IRScalar.vcons (IRScalar.int_ tag) fs)",
-            ),
-            "Build an enum value: the discriminant at spine slot 0, then the selected variant's \
-             fields — the trust-ir producer's tag-at-field-0 convention \
-             (`interpret.rs:1628-1684`), so `ExtractField 0` reads the tag and \
-             `ExtractField (succ j)` reads payload field j with no special case in the semantics.",
-        )?;
-
-        // The CONSTANT-side counterparts. `trust_ir::Constant::Aggregate` is an
-        // element list, and `IRConst` carries it as an inline spine for the same
-        // nested-inductive reason `IRScalar` does, so these mirror
-        // ir_sp0/ir_sp1/ir_sp2/ir_var one for one.
-        self.add_recursive_def(
-            "def ir_cs0 : IRConst := IRConst.vnil",
-            "Empty constant element spine: `Constant::Aggregate(vec![])`.",
-        )?;
-        self.add_recursive_def(
-            "def ir_cs1 (a : IRConst) : IRConst := IRConst.vcons a ir_cs0",
-            "One-element constant spine.",
-        )?;
-        self.add_recursive_def(
-            "def ir_cs2 (a : IRConst) (b : IRConst) : IRConst := IRConst.vcons a (ir_cs1 b)",
-            "Two-element constant spine.",
-        )?;
-        self.add_recursive_def(
-            "def ir_cvar (tag : Nat) : IRConst := IRConst.aggv (ir_cs1 (IRConst.int_ tag))",
-            "Build a FIELDLESS enum CONSTANT: `const enum.N { tag }`. MEASURED shape — this is \
-             exactly what `mode::CleanMode::from_source_system` (`const enum.13 { k }`) and \
-             `<tc::ExprPathStep as Clone>::clone` (`const enum.181 { k }`) emit at every arm: \
-             `Constant::Aggregate([Constant::Int(k)])`, arity one, element kind Int, nesting \
-             depth one. `ir_const_value (ir_cvar k)` is definitionally `ir_var k ir_sp0`, so a \
-             materialized enum constant and a loaded enum value are the SAME value and \
-             ExtractField reads both the same way.",
-        )?;
-
-        Ok(())
+        self.add_eval_ir_lzb_module()?;
+        // Phase A of retiring that model: BOTH functions minted, from one
+        // dump. Must follow the minted module for the same reason --
+        // `ir_lzc_func0_is_the_lz_mint` names `ir_lz_func` -- and follows the
+        // lzb module so the file order matches the programme order.
+        self.add_eval_ir_lzc_module()?;
+        // Phase B: the FIVE-body module — the target plus the real bodies of
+        // every function it reaches, from two artifacts joined by the callee
+        // sidecar's manifest. Must follow the minted module for the same
+        // reason the two above do: `ir_lzd_func0_is_the_lz_mint` names
+        // `ir_lz_func`. It registers a CLOSED module and nothing more; A4 and
+        // A5 over it are not in that file, so the authored `ir_lzb_deref`
+        // remains the chain's residual until they are.
+        self.add_eval_ir_lzd_module()
     }
 
     /// The module literal.
     fn add_eval_ir_level_module(&mut self) -> Result<(), SpecError> {
         // Shorthands for the three types this body mentions.
         self.add_recursive_def(
-            "def ir_tLevel : IRTy := IRTy.enum_ ir_d2",
-            "The `Level` enum type, enum id 2 -- the id the emitted body names in `%3 = load \
-             enum.2, ptr %0` (tests/fixtures/level_is_zero.trust-ir.txt), and the same id \
-             `ir_ko_tenum` carries for the same Rust type in the kind_ord chain. \
+            "def ir_tLevel : IRTy := IRTy.enum_ ir_d3",
+            "The `Level` enum type, enum id 3 -- the id the emitted body names in `%3 = load \
+             enum.3, ptr %0` (tests/fixtures/level_is_zero.trust-ir.txt), and the same id \
+             `ir_ko_tenum` carries for the same Rust type in the kind_ord chain. It was 2 until \
+             the 2026-10-07 source-bound rebaseline (clean 047ebd051), whose dump interns \
+             `Level` one later; `crystal_a2_mint_lz`'s wall decodes this model under the \
+             artifact's tag table, so the numeral follows the artifact. \
              \
              CORRECTED 2026-08-19 from `IRTy.enum_ ir_d0`, whose description read \"enum id 0. A \
              real emission's id comes from the module's type table; nothing in the semantics \
@@ -652,6 +424,22 @@ impl Specification {
         self.add_recursive_def(
             "def ir_const_value_bool_unchanged (b : Bool) : Eq IRScalar (ir_const_value (IRConst.bool_ b)) (IRScalar.bool_ b) := Eq.refl IRScalar (IRScalar.bool_ b)",
             "REGRESSION PIN: the bool_ arm, for every b.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_value_phantomdata_is_unit : Eq IRScalar (ir_const_value IRConst.phantomdata) IRScalar.unit_ := Eq.refl IRScalar IRScalar.unit_",
+            "THE ELEVENTH MINOR, pinned like the other ten: `phantomdata` evaluates to the unit \
+             value. Added 2026-09-16 with the constructor itself. It matters that this is a \
+             SEPARATE pin from ir_const_value_unit_unchanged rather than the same one reused: the \
+             two constructors are deliberately distinct (the producer keeps them distinct, \
+             trust_ir constant.rs:140) and agree only in their VALUE, so a recursor whose minors \
+             drifted by one would still satisfy a single shared pin and fails both of these. \
+             DerivedProved, zero axiom_deps.",
+        )?;
+        self.add_recursive_def(
+            "def ir_const_eval_phantomdata_is_unit (t : IRTy) : Eq IRStepResult (ir_const_eval t IRConst.phantomdata) (IRStepResult.value IRScalar.unit_) := Eq.refl IRStepResult (IRStepResult.value IRScalar.unit_)",
+            "And the TYPED evaluator's arm, at EVERY declared type. `phantomdata` ignores `t` \
+             exactly as `unit_` does -- a zero-sized marker carries no bits to canonicalize -- \
+             and pinning it for all t is what says so. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
             "def ir_const_value_unit_unchanged : Eq IRScalar (ir_const_value IRConst.unit_) IRScalar.unit_ := Eq.refl IRScalar IRScalar.unit_",

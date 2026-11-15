@@ -2,18 +2,23 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // Licensed under the Apache License, Version 2.0
 
+mod source_theorem;
+
 use std::env;
-use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use clean_kernel::Expr;
-use clean_parser::{parse_file_with_tactics, Span, SurfaceDecl, SurfaceExpr};
+use clean_server::{proof_state as server_proof_state, Response};
+// The embedded open-obligation path drives the in-process server handlers,
+// which are native-only (tokio); the wire/proof-state types above stay on
+// wasm.
+#[cfg(not(target_arch = "wasm32"))]
 use clean_server::{
     handlers::{handle_open_obligation, ServerState},
-    proof_state as server_proof_state, RequestId, Response,
+    RequestId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -27,6 +32,10 @@ use super::handlers::load_project_args;
 use super::output::{render_proof_state_report, write_output};
 use crate::math_project::{
     load_json, obligation_fingerprint, validate_obligation, ArtifactRef, MathObligation,
+};
+use source_theorem::{
+    parse_source_theorem_state_id, render_source_theorem_snapshot, source_theorem_snapshot,
+    source_theorem_state_id, SourceTheoremHandle,
 };
 
 const PROOF_STATE_SERVER_ENV: &str = "CLEAN_PROOF_STATE_SERVER";
@@ -134,6 +143,7 @@ pub(super) fn run_proof_state_open_obligation(
         max_states: 4096,
         min_schema_version: server_proof_state::PROOF_STATE_SCHEMA_VERSION.to_owned(),
         max_schema_version: server_proof_state::PROOF_STATE_SCHEMA_VERSION.to_owned(),
+        timeout_ms: None,
     };
 
     let server = effective_server(args.server.as_deref());
@@ -398,301 +408,6 @@ pub(super) fn run_proof_state_extract(args: ProofStateExtractArgs) -> Result<(),
     )
 }
 
-#[derive(Debug)]
-struct SourceTheoremHandle {
-    project: String,
-    theorem: String,
-    file: PathBuf,
-}
-
-#[derive(Debug, Serialize)]
-struct SourceTheoremSnapshotReport {
-    schema_version: &'static str,
-    operation: &'static str,
-    state: String,
-    status: &'static str,
-    project: String,
-    theorem: String,
-    file: String,
-    line: usize,
-    column: usize,
-    format: &'static str,
-    is_solved: bool,
-    proof_status: &'static str,
-    binder_count: usize,
-    target_debug: String,
-    declaration_source: String,
-    goals: Vec<SourceTheoremGoal>,
-    feedback: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-struct SourceTheoremGoal {
-    goal_id: String,
-    status: &'static str,
-    target_debug: String,
-    hypotheses: Vec<String>,
-}
-
-fn source_theorem_state_id(project: &str, file: &Path, theorem: &str) -> String {
-    format!(
-        "math-theorem:{}:{}:{}",
-        project.replace(char::is_whitespace, "_"),
-        theorem.replace(char::is_whitespace, "_"),
-        file.display()
-    )
-}
-
-fn parse_source_theorem_state_id(state: &str) -> Option<SourceTheoremHandle> {
-    let mut parts = state.splitn(4, ':');
-    if parts.next()? != "math-theorem" {
-        return None;
-    }
-    Some(SourceTheoremHandle {
-        project: parts.next()?.to_owned(),
-        theorem: parts.next()?.to_owned(),
-        file: PathBuf::from(parts.next()?),
-    })
-}
-
-fn source_theorem_snapshot(
-    state: &str,
-    format: SnapshotFormat,
-    handle: SourceTheoremHandle,
-) -> Result<SourceTheoremSnapshotReport, String> {
-    let source = fs::read_to_string(&handle.file).map_err(|err| {
-        format!(
-            "source-backed theorem snapshot could not read `{}`: {err}",
-            handle.file.display()
-        )
-    })?;
-    let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
-    let decls = parse_file_with_tactics(&source, &patterns).map_err(|err| {
-        format!(
-            "source-backed theorem snapshot could not parse `{}`: {err}",
-            handle.file.display()
-        )
-    })?;
-
-    let Some((span, parsed_name, binders, target_debug)) =
-        find_source_theorem_decl(&decls, &handle.theorem)
-    else {
-        return Err(format!(
-            "source-backed theorem snapshot could not find theorem `{}` in `{}`",
-            handle.theorem,
-            handle.file.display()
-        ));
-    };
-
-    let (line, column) = line_column_for_offset(&source, span.start);
-    let declaration_source = source_declaration_slice(&source, span.start).unwrap_or_else(|| {
-        source
-            .get(span.start..span.end)
-            .unwrap_or_default()
-            .trim()
-            .to_owned()
-    });
-    let proof_status =
-        if declaration_source.contains("sorry") || declaration_source.contains("admit") {
-            "closed-with-trust-debt"
-        } else {
-            "closed-source-theorem"
-        };
-    let mut feedback = vec![
-        "source-backed theorem snapshot: the declaration is already closed in the source file"
-            .to_owned(),
-        "for live tactic application, use a persistent proof-state server".to_owned(),
-    ];
-    if proof_status == "closed-with-trust-debt" {
-        feedback.push(
-            "proof text contains `sorry` or `admit`; trust audit must reject this as proof debt"
-                .to_owned(),
-        );
-    }
-
-    let goal = SourceTheoremGoal {
-        goal_id: format!("source:{}", parsed_name),
-        status: proof_status,
-        target_debug: target_debug.clone(),
-        hypotheses: binders,
-    };
-
-    Ok(SourceTheoremSnapshotReport {
-        schema_version: "clean-cli-source-theorem-snapshot-v1",
-        operation: "snapshot",
-        state: state.to_owned(),
-        status: "source-backed-theorem-snapshot",
-        project: handle.project,
-        theorem: handle.theorem,
-        file: handle.file.display().to_string(),
-        line,
-        column,
-        format: match format {
-            SnapshotFormat::Json => "json",
-            SnapshotFormat::Llm => "llm",
-        },
-        is_solved: true,
-        proof_status,
-        binder_count: goal.hypotheses.len(),
-        target_debug,
-        declaration_source,
-        goals: vec![goal],
-        feedback,
-    })
-}
-
-fn find_source_theorem_decl(
-    decls: &[SurfaceDecl],
-    requested_name: &str,
-) -> Option<(Span, String, Vec<String>, String)> {
-    find_source_theorem_decl_in_scope(decls, requested_name, "")
-}
-
-fn find_source_theorem_decl_in_scope(
-    decls: &[SurfaceDecl],
-    requested_name: &str,
-    namespace: &str,
-) -> Option<(Span, String, Vec<String>, String)> {
-    let requested_short = requested_name.rsplit('.').next().unwrap_or(requested_name);
-    decls.iter().find_map(|decl| match decl {
-        SurfaceDecl::Namespace { name, decls, .. } => {
-            let nested = if namespace.is_empty() {
-                name.clone()
-            } else {
-                format!("{namespace}.{name}")
-            };
-            find_source_theorem_decl_in_scope(decls, requested_name, &nested)
-        }
-        SurfaceDecl::Section { decls, .. } => {
-            find_source_theorem_decl_in_scope(decls, requested_name, namespace)
-        }
-        SurfaceDecl::Theorem {
-            span,
-            name,
-            binders,
-            ty,
-            proof,
-            ..
-        } => {
-            let full_name = if namespace.is_empty() {
-                name.clone()
-            } else {
-                format!("{namespace}.{name}")
-            };
-            if name != requested_name && name != requested_short && full_name != requested_name {
-                return None;
-            }
-            let declaration_span = Span::new(span.start, proof.span().end);
-            Some((
-                declaration_span,
-                full_name,
-                binders.iter().map(|binder| format!("{binder:?}")).collect(),
-                surface_expr_debug(ty),
-            ))
-        }
-        _ => None,
-    })
-}
-
-fn surface_expr_debug(expr: &SurfaceExpr) -> String {
-    format!("{expr:?}")
-}
-
-fn line_column_for_offset(source: &str, offset: usize) -> (usize, usize) {
-    let mut line = 1;
-    let mut line_start = 0;
-    for (idx, ch) in source.char_indices() {
-        if idx >= offset {
-            break;
-        }
-        if ch == '\n' {
-            line += 1;
-            line_start = idx + 1;
-        }
-    }
-    (line, offset.saturating_sub(line_start) + 1)
-}
-
-fn source_declaration_slice(source: &str, start: usize) -> Option<String> {
-    if start >= source.len() {
-        return None;
-    }
-    let line_start = source[..start].rfind('\n').map_or(0, |idx| idx + 1);
-    let mut offset = line_start;
-    let mut end = source.len();
-    let mut seen_start_line = false;
-
-    for line in source[line_start..].split_inclusive('\n') {
-        if seen_start_line && is_unindented_declaration_boundary(line) {
-            end = offset;
-            break;
-        }
-        seen_start_line = true;
-        offset += line.len();
-    }
-
-    let slice = source.get(line_start..end)?.trim();
-    (!slice.is_empty()).then(|| slice.to_owned())
-}
-
-fn is_unindented_declaration_boundary(line: &str) -> bool {
-    let Some(first) = line.chars().next() else {
-        return false;
-    };
-    if first.is_whitespace() {
-        return false;
-    }
-
-    let trimmed = line.trim_start();
-    const BOUNDARIES: &[&str] = &[
-        "@[",
-        "/--",
-        "/-!",
-        "#",
-        "abbrev ",
-        "axiom ",
-        "class ",
-        "def ",
-        "end ",
-        "example ",
-        "inductive ",
-        "instance ",
-        "lemma ",
-        "namespace ",
-        "noncomputable ",
-        "opaque ",
-        "private ",
-        "protected ",
-        "section ",
-        "set_option ",
-        "structure ",
-        "theorem ",
-    ];
-    BOUNDARIES
-        .iter()
-        .any(|boundary| trimmed.starts_with(boundary))
-}
-
-fn render_source_theorem_snapshot(
-    out: &mut dyn Write,
-    report: &SourceTheoremSnapshotReport,
-) -> std::io::Result<()> {
-    writeln!(out, "operation: {}", report.operation)?;
-    writeln!(out, "status: {}", report.status)?;
-    writeln!(out, "theorem: {}", report.theorem)?;
-    writeln!(
-        out,
-        "file: {}:{}:{}",
-        report.file, report.line, report.column
-    )?;
-    writeln!(out, "proof_status: {}", report.proof_status)?;
-    writeln!(out, "target: {}", report.target_debug)?;
-    for feedback in &report.feedback {
-        writeln!(out, "- {feedback}")?;
-    }
-    Ok(())
-}
-
 fn run_proof_state_bridge(
     operation: &'static str,
     json: bool,
@@ -825,6 +540,7 @@ enum ExprPayloadError {
     InvalidSerialized { path: String, error: String },
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn run_open_obligation_in_embedded_server(
     root: PathBuf,
     request: server_proof_state::OpenObligationRequest,
@@ -845,6 +561,18 @@ fn run_open_obligation_in_embedded_server(
     })
     .join()
     .map_err(|_| MathError::Failed("embedded proof-state server thread panicked".to_owned()))?
+}
+
+/// wasm32 variant: the embedded open-obligation path needs the in-process
+/// server handlers (tokio), which are native-only.
+#[cfg(target_arch = "wasm32")]
+fn run_open_obligation_in_embedded_server(
+    _root: PathBuf,
+    _request: server_proof_state::OpenObligationRequest,
+) -> Result<Response, MathError> {
+    Err(MathError::Failed(
+        "the embedded proof-state server is native-only and unavailable on wasm".to_owned(),
+    ))
 }
 
 fn run_open_obligation_in_persistent_server(
@@ -920,6 +648,20 @@ fn call_json_rpc(
     method: &'static str,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, MathError> {
+    // `localhost` is `127.0.0.1`, the one address `clean server` binds: a
+    // resolver may answer `::1` first, where another user can listen on the
+    // server's port, and the first message carries the token.
+    let address = clean_server::client_server_address(server);
+    let server: &str = &address;
+    // A connection's first message presents the server's launch token
+    // (`CLEAN_SERVER_TOKEN`, `CLEAN_SERVER_TOKEN_FILE`, or, for a server on
+    // 127.0.0.1, the default token file of a server on that port); the server
+    // answers nothing else first.
+    let token = clean_server::client_launch_token(server).map_err(|err| {
+        MathError::Failed(format!(
+            "no launch token for proof-state server `{server}`: {err}"
+        ))
+    })?;
     let mut stream = TcpStream::connect(server).map_err(|err| {
         MathError::Failed(format!(
             "failed to connect to proof-state server `{server}`: {err}"
@@ -928,6 +670,23 @@ fn call_json_rpc(
     let timeout = Some(Duration::from_secs(30));
     stream.set_read_timeout(timeout)?;
     stream.set_write_timeout(timeout)?;
+    let mut reader = BufReader::new(stream.try_clone()?);
+    let hello = json!({
+        "jsonrpc": "2.0",
+        "method": "authenticate",
+        "params": { "token": token.as_str() },
+        "id": 0,
+    });
+    writeln!(stream, "{}", serde_json::to_string(&hello)?)?;
+    stream.flush()?;
+    let admitted: JsonRpcEnvelope =
+        serde_json::from_str(&read_response_line(&mut reader, server)?)?;
+    if let Some(error) = admitted.error {
+        return Err(MathError::Failed(format!(
+            "proof-state server `{server}` refused the launch token: {}",
+            error.message
+        )));
+    }
 
     let request = json!({
         "jsonrpc": "2.0",
@@ -937,16 +696,21 @@ fn call_json_rpc(
     });
     writeln!(stream, "{}", serde_json::to_string(&request)?)?;
     stream.flush()?;
+    serde_json::from_str(&read_response_line(&mut reader, server)?).map_err(Into::into)
+}
 
-    let mut reader = BufReader::new(stream);
+/// One response line from the proof-state server.
+fn read_response_line(
+    reader: &mut BufReader<TcpStream>,
+    server: &str,
+) -> Result<String, MathError> {
     let mut line = String::new();
-    let bytes = reader.read_line(&mut line)?;
-    if bytes == 0 {
+    if reader.read_line(&mut line)? == 0 {
         return Err(MathError::Failed(format!(
             "proof-state server `{server}` closed the connection without a response"
         )));
     }
-    serde_json::from_str(&line).map_err(Into::into)
+    Ok(line)
 }
 
 fn write_server_result(
@@ -1090,7 +854,81 @@ impl ProofStateOpenObligationReport {
 
 #[cfg(test)]
 mod tests {
+    use super::source_theorem::find_source_theorem_decl;
     use super::*;
+    use clean_parser::{parse_file_with_tactics, SurfaceDecl};
+    use std::fs;
+
+    fn parsed_theorems(source: &str) -> Vec<SurfaceDecl> {
+        parse_file_with_tactics(source, &Default::default()).expect("theorem fixture parses")
+    }
+
+    #[test]
+    fn source_theorem_lookup_preserves_component_boundaries() {
+        let source = "theorem «A.B» : True := True.intro\nnamespace A\ntheorem B : True := True.intro\nend A\n";
+        let decls = parsed_theorems(source);
+        let quoted = find_source_theorem_decl(&decls, "«A.B»").expect("quoted theorem");
+        let nested = find_source_theorem_decl(&decls, "A.B").expect("nested theorem");
+        assert_eq!(quoted.1, "«A.B»");
+        assert_eq!(nested.1, "A.B");
+        assert_ne!(quoted.0, nested.0);
+        assert!(find_source_theorem_decl(&decls, "Missing.B").is_none());
+        assert!(find_source_theorem_decl(&decls, "A.B trailing").is_none());
+        assert!(find_source_theorem_decl(&decls, ".B").is_none());
+    }
+
+    #[test]
+    fn source_theorem_short_lookup_requires_unique_structural_name() {
+        let decls = parsed_theorems("namespace A\ntheorem chosen : True := True.intro\nend A\nnamespace B\ntheorem chosen : True := True.intro\nend B\n");
+        assert!(find_source_theorem_decl(&decls, "chosen").is_none());
+        assert_eq!(
+            find_source_theorem_decl(&decls, "A.chosen")
+                .expect("exact A")
+                .1,
+            "A.chosen"
+        );
+        let unique =
+            parsed_theorems("namespace «A.B»\ntheorem chosen : True := True.intro\nend «A.B»\n");
+        assert_eq!(
+            find_source_theorem_decl(&unique, "chosen")
+                .expect("unique short")
+                .1,
+            "«A.B».chosen"
+        );
+        assert!(find_source_theorem_decl(&unique, "A.B.chosen").is_none());
+        assert!(find_source_theorem_decl(&unique, "_root_.chosen").is_none());
+    }
+
+    #[test]
+    fn source_theorem_quoted_numeral_does_not_accept_numeric_expression() {
+        let decls = parsed_theorems("theorem «7» : True := True.intro\n");
+        assert!(find_source_theorem_decl(&decls, "«7»").is_some());
+        assert!(find_source_theorem_decl(&decls, "7").is_none());
+    }
+
+    #[test]
+    fn source_theorem_handle_preserves_quoted_whitespace_and_delimiters() {
+        let state =
+            source_theorem_state_id("project : λ", Path::new("/tmp/a:b.lean"), "«a b:c».«λ 星»");
+        let handle = parse_source_theorem_state_id(&state).expect("exact handle");
+        assert_eq!(handle.project, "project : λ");
+        assert_eq!(handle.theorem, "«a b:c».«λ 星»");
+        assert_eq!(handle.file, PathBuf::from("/tmp/a:b.lean"));
+        for malformed in [
+            "math-theorem-v2:999:x",
+            "math-theorem-v2:1:λ1:a/file",
+            "math-theorem-v2:not-a-length:x",
+        ] {
+            assert!(
+                parse_source_theorem_state_id(malformed).is_none(),
+                "{malformed}"
+            );
+        }
+        let old = parse_source_theorem_state_id("math-theorem:p:A.b:/tmp/a:b.lean")
+            .expect("legacy handle");
+        assert_eq!(old.theorem, "A.b");
+        assert_eq!(old.file, PathBuf::from("/tmp/a:b.lean"));
+    }
 
     #[test]
     fn server_domain_profile_preserves_nn_verify() {
@@ -1113,8 +951,8 @@ mod tests {
         );
         let handle = parse_source_theorem_state_id(&state).expect("source theorem handle");
 
-        assert_eq!(handle.project, "demo_project");
-        assert_eq!(handle.theorem, "Demo.theorem_name");
+        assert_eq!(handle.project, "demo project");
+        assert_eq!(handle.theorem, "Demo.theorem name");
         assert_eq!(handle.file, PathBuf::from("/tmp/Demo.lean"));
     }
 

@@ -46,6 +46,7 @@ fn two_goal_state() -> ProofState {
         target: Expr::sort(Level::zero()),
         local_ctx: Vec::new(),
         tag: None,
+        case_binders: Vec::new(),
     });
     state
 }

@@ -283,57 +283,158 @@ fn test_colliding_axiom_does_not_displace_genuine_inductive() {
     );
 }
 
-/// COVERAGE: the axiom-stub DISCHARGE path (`is_axiom_carrier_stub` +
-/// `discharge_carrier_stubs` → `discharge_axiom_stub_for_inductive_import`) is
-/// still live code for stubs that arrive VIA IMPORT, even though the prelude no
-/// longer manufactures one. Exercise it end-to-end with a synthetic
-/// `PhantomCarrier`: first import a bare value-free Axiom stub, then the
-/// genuine inductive of the same name — the stub must be discharged and the
-/// checked inductive must register. A strict trust improvement: an unchecked
-/// assumption is replaced by a kernel-checked declaration; it can never admit
-/// a NEW axiom.
+/// An axiom stub one imported module declares, and a genuine inductive of the
+/// same name another declares: two declarations of one name, whichever loads
+/// first. Until module-trust round 29 the stub-first order DISCHARGED the stub
+/// (`discharge_carrier_stubs`) and the inductive won, while the other order
+/// kept the inductive and dropped the stub — which one a consumer saw
+/// depended on import order. Lean refuses both ("environment already
+/// contains"), and so does the loader now (`artifact_ledger`). The discharge
+/// stays for a stub the checker's own prelude registers, which is not an
+/// artifact's.
 #[test]
-fn test_axiom_stub_discharged_when_genuine_inductive_imports() {
-    let mut env = Environment::try_with_prelude_for_import().expect("import prelude");
+fn test_axiom_stub_and_genuine_inductive_from_two_modules_refuse_the_import() {
+    for stub_first in [true, false] {
+        let mut env = Environment::try_with_prelude_for_import().expect("import prelude");
+        let stub = || axiom_module_named("PhantomCarrier");
+        let genuine = || class_module_named("PhantomCarrier");
+        let (first, first_name, second, second_name) = if stub_first {
+            (stub(), "StubProvider", genuine(), "GenuineProvider")
+        } else {
+            (genuine(), "GenuineProvider", stub(), "StubProvider")
+        };
+        load_parsed_module(&mut env, &first, Some(first_name.to_string()))
+            .expect("the first module loads");
+        let err = load_parsed_module(&mut env, &second, Some(second_name.to_string()))
+            .expect_err("a second declaration of PhantomCarrier must refuse the import");
+        assert!(
+            matches!(
+                &err,
+                crate::ImportError::ConflictingDeclaration { name, first }
+                    if name == "PhantomCarrier" && first == first_name
+            ),
+            "stub_first={stub_first}: {err}"
+        );
+    }
+}
 
-    load_parsed_module(
-        &mut env,
-        &axiom_module_named("PhantomCarrier"),
-        Some("StubProvider".to_string()),
-    )
-    .expect("stub module should load");
-    let stub = env
-        .get_const(&Name::from_string("PhantomCarrier"))
-        .expect("stub registered");
-    assert_eq!(
-        stub.kind,
-        KernelConstantKind::Axiom,
-        "precondition: the imported carrier stub is a bare Axiom"
-    );
-    assert!(
-        env.get_inductive(&Name::from_string("PhantomCarrier"))
-            .is_none(),
-        "precondition: no genuine PhantomCarrier inductive exists yet"
-    );
+/// The same pair under `clean olean replay`'s load
+/// (`OleanImportPolicy::with_replay_refusals`), where rule 1 records instead of
+/// refusing the import: the second declaration of `PhantomCarrier` must be
+/// RECORDED as a duplicate for the replay to refuse, never displace the first.
+/// Whichever order they load in, the first stays resident and the second is
+/// in `shadowed_declarations`. The carrier discharge used to fire in the
+/// stub-first order under this policy (it read any value-free axiom as the
+/// checker's own carrier stub), so a module's inductive silently replaced an
+/// imported axiom and nothing recorded it: `clean olean replay` then admitted
+/// `ReplayForgedIndOverAx`'s proof of `False`, which `leanchecker` refuses
+/// (`constant has already been declared 'ind_ax_t'`).
+#[test]
+fn test_axiom_stub_and_genuine_inductive_under_the_replay_load_record_the_duplicate() {
+    let policy = crate::OleanImportPolicy::default()
+        .with_kernel_only()
+        .with_replay_refusals();
+    let name = Name::from_string("PhantomCarrier");
+    for stub_first in [true, false] {
+        let mut env = Environment::for_lean_replay();
+        let (first, first_name, second, second_name) = if stub_first {
+            (
+                axiom_module_named("PhantomCarrier"),
+                "StubProvider",
+                class_module_named("PhantomCarrier"),
+                "GenuineProvider",
+            )
+        } else {
+            (
+                class_module_named("PhantomCarrier"),
+                "GenuineProvider",
+                axiom_module_named("PhantomCarrier"),
+                "StubProvider",
+            )
+        };
+        super::load_parsed_module_with_import_policy(
+            &mut env,
+            &first,
+            Some(first_name.to_string()),
+            policy,
+        )
+        .unwrap_or_else(|e| panic!("stub_first={stub_first}: the first module loads: {e}"));
+        let summary = super::load_parsed_module_with_import_policy(
+            &mut env,
+            &second,
+            Some(second_name.to_string()),
+            policy,
+        )
+        .unwrap_or_else(|e| panic!("stub_first={stub_first}: the replay load records: {e}"));
+        assert!(
+            summary
+                .shadowed_declarations
+                .iter()
+                .any(|(n, held_by)| n == &name && held_by.contains(first_name)),
+            "stub_first={stub_first}: the second declaration is recorded as held by \
+             `{first_name}`: {:?}",
+            summary.shadowed_declarations
+        );
+        assert!(
+            !summary.added_names.contains(&name),
+            "stub_first={stub_first}: the second declaration is not registered: {:?}",
+            summary.added_names
+        );
+        assert_eq!(
+            env.get_inductive(&name).is_some(),
+            !stub_first,
+            "stub_first={stub_first}: the FIRST declaration stays resident"
+        );
+    }
+}
 
-    load_parsed_module(
-        &mut env,
-        &class_module_named("PhantomCarrier"),
-        Some("GenuineProvider".to_string()),
-    )
-    .expect("genuine class module should load");
-
-    assert!(
-        env.get_inductive(&Name::from_string("PhantomCarrier"))
-            .is_some(),
-        "the genuine inductive must register, discharging the axiom stub"
-    );
-    assert_ne!(
-        env.get_const(&Name::from_string("PhantomCarrier"))
-            .expect("constant present")
-            .kind,
-        KernelConstantKind::Axiom,
-        "after discharge, PhantomCarrier must no longer be an Axiom — the phantom \
-         domain axiom is retired"
-    );
+/// A kernel quotient primitive is never a carrier stub: an incoming inductive
+/// of its name is a duplicate, recorded for a Lean-profile re-check to refuse,
+/// under every policy. `Environment::for_lean_replay` seeds `Quot.ind` as a
+/// value-free axiom with no artifact behind it, which the carrier discharge
+/// used to take for a prelude stub: the module's inductive replaced the
+/// kernel's `Quot.ind` constant (its `get_quot` record, and so its reduction
+/// rule, stayed), with nothing recorded, under the default policy as under the
+/// replay's (measured on this test's module before the guard: `now_inductive
+/// = true`, `shadowed = []` for both). Lean refuses such a module as already
+/// declared once any import has run `init_quot`.
+#[test]
+fn test_inductive_named_like_a_kernel_quotient_primitive_does_not_displace_it() {
+    let name = Name::from_string("Quot.ind");
+    for policy in [
+        crate::OleanImportPolicy::default(),
+        crate::OleanImportPolicy::default()
+            .with_kernel_only()
+            .with_replay_refusals(),
+    ] {
+        let mut env = Environment::for_lean_replay();
+        assert!(
+            env.get_quot(&name).is_some(),
+            "the replay env seeds Quot.ind"
+        );
+        let summary = super::load_parsed_module_with_import_policy(
+            &mut env,
+            &class_module_named("Quot.ind"),
+            Some("Forger".to_string()),
+            policy,
+        )
+        .unwrap_or_else(|e| panic!("{policy:?}: {e}"));
+        assert!(
+            env.get_inductive(&name).is_none(),
+            "{policy:?}: the kernel's Quot.ind must not be displaced"
+        );
+        assert_eq!(
+            env.get_const(&name).map(|c| c.kind),
+            Some(KernelConstantKind::Axiom),
+            "{policy:?}: Quot.ind is still the kernel's primitive"
+        );
+        assert!(
+            summary
+                .shadowed_declarations
+                .iter()
+                .any(|(n, _)| n == &name),
+            "{policy:?}: the incoming inductive is a recorded duplicate: {:?}",
+            summary.shadowed_declarations
+        );
+    }
 }

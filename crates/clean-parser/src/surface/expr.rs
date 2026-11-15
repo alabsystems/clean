@@ -4,6 +4,8 @@
 
 //! Surface expression types: the main AST node for parsed expressions.
 
+use super::name::{NameComponentSyntax, SurfaceName};
+
 use super::binder::{OpenPath, SurfaceBinder, SurfaceBinderInfo};
 use super::decl::SurfaceFieldAssign;
 use super::span::Span;
@@ -23,27 +25,82 @@ pub enum QQuotationKind {
 #[derive(Debug, Clone)]
 pub enum QAntiquotContent {
     /// Simple identifier antiquotation: `$x`
-    Simple(String),
+    Simple(SurfaceName),
     /// Parenthesized expression antiquotation: `$(e)`
     Expr(Box<SurfaceExpr>),
     /// Typed antiquotation: `$(x : τ)`
-    Typed { name: String, ty: Box<SurfaceExpr> },
+    Typed {
+        name: SurfaceName,
+        ty: Box<SurfaceExpr>,
+    },
     /// Splice antiquotation: `$[xs]*` or `$[xs]+`
     /// - `name`: the variable name containing the list to splice
     /// - `separator`: optional separator between spliced elements (default: None)
     /// - `at_least_one`: true for `+`, false for `*`
     Splice {
-        name: String,
+        name: SurfaceName,
         separator: Option<String>,
         at_least_one: bool,
     },
+}
+
+/// Head identifier of the type-less ascription `(e :)`, which the parser
+/// represents as `App(Ident(TYPE_ASCRIPTION_WITHOUT_TYPE), [e])`.
+///
+/// Lean's `typeAscription := "(" term " :" optional term ")"`
+/// (`Lean/Parser/Term.lean:182-183`) makes the type optional, and
+/// `(e :)` elaborates `e` with NO expected type before `ensureHasType`
+/// (`Lean/Elab/BuiltinNotation.lean:433-435`). That is not `(e : _)`, whose
+/// hole Clean unifies with the expected type first. The spelling contains
+/// characters no identifier token can hold, so no user name collides with it.
+pub const TYPE_ASCRIPTION_WITHOUT_TYPE: &str = "(· :)";
+
+/// The compiler-authored head of `(e :)`. Its component carries
+/// [`NameComponentSyntax::Generated`], which no source identifier has — an
+/// escaped `«(· :)»` is [`NameComponentSyntax::Escaped`] — so
+/// [`is_type_ascription_without_type`] never mistakes a user name for it.
+#[must_use]
+pub(crate) fn type_ascription_without_type_head() -> SurfaceName {
+    SurfaceName::from_name(clean_kernel::Name::anon().str(TYPE_ASCRIPTION_WITHOUT_TYPE))
+}
+
+/// Whether `name` is the head [`type_ascription_without_type_head`] mints.
+#[must_use]
+pub fn is_type_ascription_without_type(name: &SurfaceName) -> bool {
+    name.component_text() == Some(TYPE_ASCRIPTION_WITHOUT_TYPE)
+        && !name.is_relative_constructor()
+        && name.component_syntax() == [NameComponentSyntax::Generated]
+}
+
+/// Head identifier of the anonymous constructor `⟨a, b, …⟩`, which the parser
+/// represents as `App(Ident(ANONYMOUS_CONSTRUCTOR), [a, b, …])`.
+pub const ANONYMOUS_CONSTRUCTOR: &str = "anonymousCtor";
+
+/// The compiler-authored head of `⟨…⟩`. Like
+/// [`type_ascription_without_type_head`], its component carries
+/// [`NameComponentSyntax::Generated`], which no source identifier has, so a
+/// user's own `anonymousCtor` (a definition, a parameter, a `let`) is an
+/// ordinary identifier and never the anonymous constructor. Recognizing the
+/// head by its text alone made `anonymousCtor 1 2` build `⟨1, 2⟩` whatever
+/// the user had bound under that name.
+#[must_use]
+pub fn anonymous_constructor_head() -> SurfaceName {
+    SurfaceName::global_path(ANONYMOUS_CONSTRUCTOR)
+}
+
+/// Whether `name` is the head [`anonymous_constructor_head`] mints.
+#[must_use]
+pub fn is_anonymous_constructor_head(name: &SurfaceName) -> bool {
+    name.component_text() == Some(ANONYMOUS_CONSTRUCTOR)
+        && !name.is_relative_constructor()
+        && name.component_syntax() == [NameComponentSyntax::Generated]
 }
 
 /// Surface expression (before elaboration)
 #[derive(Debug, Clone)]
 pub enum SurfaceExpr {
     /// Identifier: `foo`, `Nat.add`
-    Ident(Span, String),
+    Ident(Span, SurfaceName),
 
     /// Parser-generated placeholder that should elaborate as synthetic sorry.
     SyntheticSorry(Span),
@@ -70,6 +127,10 @@ pub enum SurfaceExpr {
 
     /// Let binding: `let x := v in e` or `let x : T := v in e`
     Let(Span, SurfaceBinder, Box<SurfaceExpr>, Box<SurfaceExpr>),
+
+    /// Opaque term binding: `have x : T := v; e`. Retains its value for proof
+    /// assembly, but the local is not definitionally equal to that value.
+    Have(Span, SurfaceBinder, Box<SurfaceExpr>, Box<SurfaceExpr>),
 
     /// Recursive let binding: `let rec f (n : Nat) : Nat := ... in e`
     LetRec(Span, SurfaceBinder, Box<SurfaceExpr>, Box<SurfaceExpr>),
@@ -101,7 +162,7 @@ pub enum SurfaceExpr {
     /// generated goal so `case name => …` / `next` can select it (Lean 4
     /// `syntheticHole`). In ordinary term position a named hole elaborates
     /// identically to an anonymous hole (a fresh metavariable).
-    NamedHole(Span, String),
+    NamedHole(Span, SurfaceName),
 
     /// Type ascription: `(e : T)`
     Ascription(Span, Box<SurfaceExpr>, Box<SurfaceExpr>),
@@ -133,7 +194,7 @@ pub enum SurfaceExpr {
     /// witness name, proposition, then-branch, else-branch
     IfDecidable(
         Span,
-        String,
+        SurfaceName,
         Box<SurfaceExpr>,
         Box<SurfaceExpr>,
         Box<SurfaceExpr>,
@@ -147,7 +208,12 @@ pub enum SurfaceExpr {
     /// `match h : e with | p => …` binds `h : e = p` in each branch
     /// (`Lean/Elab/Match.lean:67`, `Discr` with `.some h`). `None` is the
     /// plain `match e with` form.
-    Match(Span, Option<String>, Box<SurfaceExpr>, Vec<SurfaceMatchArm>),
+    Match(
+        Span,
+        Option<SurfaceName>,
+        Box<SurfaceExpr>,
+        Vec<SurfaceMatchArm>,
+    ),
 
     /// Projection: `e.field` or `e.0`
     Proj(Span, Box<SurfaceExpr>, Projection),
@@ -157,7 +223,7 @@ pub enum SurfaceExpr {
 
     /// Named argument: `(name := expr)` - used in function applications
     /// This represents the parenthesized named argument syntax
-    NamedArg(Span, String, Box<SurfaceExpr>),
+    NamedArg(Span, SurfaceName, Box<SurfaceExpr>),
 
     /// Raw syntax quotation token (`` `(…) ``) preserved from the lexer
     /// Used by macro declarations and `macro_rules` patterns/expansions.
@@ -257,7 +323,7 @@ pub struct SurfaceArg {
     /// The argument expression
     pub expr: SurfaceExpr,
     /// Named argument: `(name := e)`
-    pub name: Option<String>,
+    pub name: Option<SurfaceName>,
 }
 
 impl SurfaceArg {
@@ -282,13 +348,54 @@ impl SurfaceArg {
     /// - `name == Some(name)`
     /// - `span` is taken from the expression
     #[must_use]
-    pub fn named(name: String, expr: SurfaceExpr) -> Self {
+    pub fn named(name: SurfaceName, expr: SurfaceExpr) -> Self {
         let span = expr.span();
         Self {
             span,
             expr,
             name: Some(name),
         }
+    }
+
+    /// Compiler-generated syntax marker, outside source identifier space.
+    /// The numeric root and lexical metadata survive exact macro transport;
+    /// authored `«..»` and numeric-looking identifier text remain real names.
+    fn ellipsis_name() -> SurfaceName {
+        SurfaceName::from_name(
+            clean_kernel::Name::anon()
+                .num(u64::MAX)
+                .str("application-ellipsis"),
+        )
+    }
+
+    /// Create the trailing-ellipsis argument for Lean's `Term.ellipsis`
+    /// (`f ..`, `Lean/Parser/Term.lean`): "fill every REMAINING explicit
+    /// parameter of `f` with `_`".
+    ///
+    /// The arity is not known to the parser, so the marker is carried through
+    /// to the elaborator, which expands it against the inferred function type
+    /// (`Elaborator::expand_app_ellipsis`). The payload expression is a
+    /// [`SurfaceExpr::Hole`] purely so the arg is well-formed if some
+    /// unrelated pass walks it; the *marker* is the reserved typed syntax.
+    ///
+    /// # ENSURES
+    /// - `is_ellipsis()` is true
+    #[must_use]
+    pub fn ellipsis(span: Span) -> Self {
+        Self {
+            span,
+            expr: SurfaceExpr::Hole(span),
+            name: Some(Self::ellipsis_name()),
+        }
+    }
+
+    /// Is this the trailing application ellipsis `..` rather than a real
+    /// positional or named argument?
+    #[must_use]
+    pub fn is_ellipsis(&self) -> bool {
+        self.name
+            .as_ref()
+            .is_some_and(|name| name.same_syntax(&Self::ellipsis_name()))
     }
 }
 
@@ -321,7 +428,7 @@ pub enum LevelExpr {
     /// Numeric literal: 0, 1, 2, ...
     Lit(u32),
     /// Level parameter: u, v
-    Param(String),
+    Param(SurfaceName),
     /// Successor: u + 1
     Succ(Box<LevelExpr>),
     /// Max: max u v
@@ -329,7 +436,7 @@ pub enum LevelExpr {
     /// `IMax`: `imax u v`
     IMax(Box<LevelExpr>, Box<LevelExpr>),
     /// Antiquotation: $u (used in q(...) for universe polymorphism)
-    Antiquot(String),
+    Antiquot(SurfaceName),
 }
 
 /// A match arm
@@ -346,9 +453,9 @@ pub struct SurfaceMatchArm {
 #[derive(Debug, Clone)]
 pub enum SurfacePattern {
     /// Variable pattern: `x`
-    Var(String),
+    Var(SurfaceName),
     /// Constructor pattern: `Nat.zero` or `Nat.succ n`
-    Ctor(String, Vec<SurfacePattern>),
+    Ctor(SurfaceName, Vec<SurfacePattern>),
     /// Wildcard: `_`
     Wildcard,
     /// Inaccessible pattern: `.(expr)` - checked by unification, does not bind.
@@ -358,13 +465,34 @@ pub enum SurfacePattern {
     /// Numeral addition pattern: `n + 1` (sugar for successor patterns)
     NumeralAdd(Box<SurfacePattern>, u64),
     /// As pattern: `n@pat` - binds `n` to the matched value and checks `pat`
-    As(String, Box<SurfacePattern>),
+    As(SurfaceName, Box<SurfacePattern>),
     /// Or pattern: `pat1 | pat2` - matches if either pattern matches
     Or(Box<SurfacePattern>, Box<SurfacePattern>),
     /// Qq pattern: `q(expr)` with antiquotation pattern variables
     /// Used for pattern matching on Q(α) values in type-safe metaprogramming.
     /// Part of #16: Qq quotation support - Phase 3
     QPattern(Box<SurfaceExpr>),
+    /// Structure-instance pattern: `{ f := p, g := q, .. }`, optionally with a
+    /// type ascription `{ f := p : S }`.
+    ///
+    /// Lean has no separate pattern grammar — patterns ARE terms, so
+    /// `Lean.Parser.Term.structInst` parses in pattern position for free and
+    /// `Lean/Elab/PatternVar.lean:304-313` walks each field's value collecting
+    /// pattern variables. Clean's pattern parser is a closed token set, so the
+    /// form needs its own node. The field names are resolved to constructor
+    /// positions in the elaborator (`normalize_match_pattern_names_inner`),
+    /// where the scrutinee type is known; the parser records them verbatim.
+    ///
+    /// `with` sources are refused at parse time, exactly as Lean refuses them
+    /// (`Lean/Elab/PatternVar.lean:306`).
+    StructInst {
+        /// Field assignments, in source order. `{ x }` abbreviates `{ x := x }`.
+        fields: Vec<(SurfaceName, SurfacePattern)>,
+        /// Whether the literal ended with `..` (remaining fields are wildcards).
+        ellipsis: bool,
+        /// Optional `: S` ascription naming the structure.
+        ty: Option<Box<SurfaceExpr>>,
+    },
     /// Constructor-field ellipsis: the `..` in `.Ctor ..`. Appears only as the
     /// trailing element of a `Ctor` argument list. It means "every remaining
     /// explicit field is a wildcard". Constructor-pattern arity expansion
@@ -385,7 +513,7 @@ impl SurfacePattern {
     ///
     /// Used by pattern reassignment to determine which mutable variables
     /// are being updated (for ControlInfo `reassigns` computation).
-    pub fn collect_var_names(&self, names: &mut Vec<String>) {
+    pub fn collect_var_names(&self, names: &mut Vec<SurfaceName>) {
         match self {
             SurfacePattern::Var(name) => names.push(name.clone()),
             SurfacePattern::Ctor(_, args) => {
@@ -402,6 +530,11 @@ impl SurfacePattern {
                 b.collect_var_names(names);
             }
             SurfacePattern::NumeralAdd(inner, _) => inner.collect_var_names(names),
+            SurfacePattern::StructInst { fields, .. } => {
+                for (_, pat) in fields {
+                    pat.collect_var_names(names);
+                }
+            }
             SurfacePattern::Wildcard
             | SurfacePattern::Ellipsis
             | SurfacePattern::Inaccessible(_)
@@ -415,7 +548,7 @@ impl SurfacePattern {
 #[derive(Debug, Clone)]
 pub enum Projection {
     /// Named field: `.foo`
-    Named(String),
+    Named(SurfaceName),
     /// Indexed field: `.1`, `.2`
     Index(u32),
 }
@@ -468,7 +601,7 @@ impl SurfaceExpr {
             SurfaceExpr::PatternMatchLambda(s, _, _) => *s,
             SurfaceExpr::Pi(s, _, _) => *s,
             SurfaceExpr::Arrow(s, _, _) => *s,
-            SurfaceExpr::Let(s, _, _, _) => *s,
+            SurfaceExpr::Let(s, _, _, _) | SurfaceExpr::Have(s, _, _, _) => *s,
             SurfaceExpr::LetRec(s, _, _, _) => *s,
             SurfaceExpr::LetPattern(s, _, _, _, _) => *s,
             SurfaceExpr::Lit(s, _) => *s,
@@ -499,9 +632,12 @@ impl SurfaceExpr {
         }
     }
 
-    /// Create an `Ident` with dummy span.
+    /// A compiler-authored reference to the global constant `name`, with a
+    /// dummy span. It never resolves to a local
+    /// ([`SurfaceName::global_path`]); a reference to a binder the caller
+    /// introduced is built from that binder's own name instead.
     pub fn ident(name: impl Into<String>) -> Self {
-        SurfaceExpr::Ident(Span::dummy(), name.into())
+        SurfaceExpr::Ident(Span::dummy(), SurfaceName::global_path(&name.into()))
     }
 
     /// Create an `App` with span from `func`; args converted to positional.
@@ -559,7 +695,7 @@ impl SurfaceExpr {
     pub fn let_expr(name: impl Into<String>, value: SurfaceExpr, body: SurfaceExpr) -> Self {
         let binder = SurfaceBinder {
             span: Span::dummy(),
-            name: name.into(),
+            name: SurfaceName::component(name.into(), false),
             ty: None,
             default: None,
             info: SurfaceBinderInfo::Explicit,

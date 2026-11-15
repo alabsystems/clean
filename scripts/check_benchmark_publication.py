@@ -53,9 +53,9 @@ CANONICAL_INPUTS = [
 ]
 
 CANONICAL_COMMANDS = {
-    "kernel_bench": "cargo bench --locked --message-format=short -j 1 --package clean-kernel --bench kernel_bench -- --output-format bencher",
-    "cert_macro_bench": "cargo bench --locked --message-format=short -j 1 --package clean-kernel --bench cert_macro_bench -- --output-format bencher",
-    "server_ops": "cargo bench --locked --message-format=short -j 1 --package clean-server --bench server_ops -- --output-format bencher",
+    "kernel_bench": "targo --unverified bench --locked --message-format=short -j 1 --package clean-kernel --bench kernel_bench -- --output-format bencher",
+    "cert_macro_bench": "targo --unverified bench --locked --message-format=short -j 1 --package clean-kernel --bench cert_macro_bench -- --output-format bencher",
+    "server_ops": "targo --unverified bench --locked --message-format=short -j 1 --package clean-server --bench server_ops -- --output-format bencher",
 }
 
 REQUIRED_RUN_ARTIFACTS = [

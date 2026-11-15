@@ -897,10 +897,14 @@ fn verify_ctor_set_tag() {
     let new_tag: u8 = kani::any();
 
     let o = alloc_ctor_uninit(original_tag, 0, 0);
-    assert_eq!(obj_tag(o), original_tag);
+    assert_eq!(obj_tag(o), u32::from(original_tag));
 
     ctor_set_tag(o, new_tag);
-    assert_eq!(obj_tag(o), new_tag, "ctor_set_tag must update header tag");
+    assert_eq!(
+        obj_tag(o),
+        u32::from(new_tag),
+        "ctor_set_tag must update header tag"
+    );
 
     // Verify that set_tag didn't corrupt the kind field.
     // SAFETY: The object was returned by an allocator above and is non-null (asserted).

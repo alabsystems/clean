@@ -5,7 +5,7 @@
 //! Kernel-derived **recursor** generation (design §5.2, milestone M2) for a
 //! *single, non-mutual, non-nested* inductive — the **top-tier TCB** surface.
 //!
-//! [`build_recursor`] derives, for an inductive `I`:
+//! `build_recursor` derives, for an inductive `I`:
 //!
 //! * the recursor **type** `I.rec` (Lean order
 //!   `params -> motive -> minors -> indices -> major -> conclusion`),
@@ -101,6 +101,106 @@ pub struct RecursorData {
     pub rules: Vec<IotaRule>,
 }
 
+/// The most universe level params a recursor is derived for, and the most
+/// fields the structure-η ι-rule expands (`whnf::try_iota`).
+///
+/// Both counts are `u32` header fields (`InductiveDecl::num_level_params`,
+/// `IotaRule::num_fields`), not the length of anything already in memory, and
+/// each sizes a vector built up front: a forged count of `u32::MAX` asked for
+/// tens of GB and aborted the process. Above the limit admission is a typed
+/// `AdmitError::Derivation` and ι-reduction leaves the term stuck, both
+/// fail-closed. No real declaration comes near it.
+pub const MAX_DERIVED_ARITY: u32 = 1 << 16;
+
+/// The most universe level params a derived recursor carries: the inductive's
+/// own (at most [`MAX_DERIVED_ARITY`]) plus the large-eliminating motive's.
+pub const MAX_RECURSOR_LEVELS: u32 = MAX_DERIVED_ARITY + 1;
+
+/// The most constructors one inductive, and the most types one mutual block,
+/// a recursor is derived for.
+///
+/// Unlike [`MAX_DERIVED_ARITY`] these are lengths of vectors already in memory,
+/// but each derived element is wider than its source: a `CtorInfo` with declared and analysis field views
+/// per 32-byte `Constructor`, a `RecursorData` per 64-byte `InductiveDecl`. So a
+/// declaration of a few million constructors makes derivation ask for one
+/// allocation several times the size of its input. Capping the width at 2^20
+/// bounds the up-front width; the telescope depth is checked separately. Above it admission is a
+/// typed `AdmitError::Derivation` (fail-closed: it only rejects); no real
+/// declaration comes anywhere near it.
+pub const MAX_INDUCTIVE_WIDTH: usize = 1 << 20;
+
+/// Refuse a recursor whose telescope cannot fit the depth bound, before
+/// derivation builds anything (R166). The type has one binder per parameter,
+/// motive, minor premise, index and the major premise, so it is at least that
+/// deep. Past [`crate::MAX_VALIDATE_DEPTH`], the bound every input and every
+/// reduct is held to, `kernel_check_recursor`'s `infer` walk over it would
+/// overflow the native stack. Lean admits such an inductive; ck0 refuses it,
+/// which is fail-closed. [`check_rule_width`] bounds the rules the same way.
+pub(crate) fn check_telescope_width(
+    params: u32,
+    motives: u32,
+    minors: u32,
+    indices: u32,
+) -> Result<(), String> {
+    // AUDIT: saturating; a count compared with a bound, never a value.
+    let binders = u64::from(params)
+        .saturating_add(u64::from(motives))
+        .saturating_add(u64::from(minors))
+        .saturating_add(u64::from(indices))
+        .saturating_add(1);
+    if binders > u64::from(crate::MAX_VALIDATE_DEPTH) {
+        return Err(format!(
+            "the recursor's telescope has {binders} binders, past the depth bound {}",
+            crate::MAX_VALIDATE_DEPTH
+        ));
+    }
+    Ok(())
+}
+
+/// Refuse a recursor whose ι rule for a constructor of `fields` fields cannot
+/// fit the depth bound, before derivation builds anything (R166). A rule binds
+/// every parameter, motive and minor premise and the constructor's fields, then
+/// applies the minor, so it is at least that many binders plus one deep; a
+/// recursive field also adds an induction hypothesis that applies them all
+/// again, which [`check_derived_depth`] sees once the rule is built. Without
+/// this the recursor type's minor premises and every rule are built, quadratic
+/// in the fields, before any depth check can refuse them.
+pub(crate) fn check_rule_width(
+    params: u32,
+    motives: u32,
+    minors: u32,
+    fields: u32,
+) -> Result<(), String> {
+    // AUDIT: saturating; a count compared with a bound, never a value.
+    let binders = u64::from(params)
+        .saturating_add(u64::from(motives))
+        .saturating_add(u64::from(minors))
+        .saturating_add(u64::from(fields));
+    if binders.saturating_add(1) > u64::from(crate::MAX_VALIDATE_DEPTH) {
+        return Err(format!(
+            "a constructor's ι rule binds {binders} variables, past the depth bound {}",
+            crate::MAX_VALIDATE_DEPTH
+        ));
+    }
+    Ok(())
+}
+
+/// Refuse a derived recursor term (its type or one rule) deeper than the depth
+/// bound, as soon as it is built and before anything walks it natively
+/// (R166). Derivation builds these terms itself, so `validate`'s bound never
+/// sees them, and checking each one as it is built stops derivation at the
+/// first that is too deep.
+pub(crate) fn check_derived_depth(term: &Term) -> Result<(), String> {
+    if term.depth > crate::MAX_VALIDATE_DEPTH {
+        return Err(format!(
+            "a derived recursor term has depth {}, past the depth bound {}",
+            term.depth,
+            crate::MAX_VALIDATE_DEPTH
+        ));
+    }
+    Ok(())
+}
+
 /// Derive + kernel-check the recursor for a single non-mutual inductive.
 pub(crate) fn build_recursor(
     env: &dyn Env,
@@ -115,8 +215,21 @@ pub(crate) fn build_recursor(
     let num_params = decl.num_params;
     let type_arity = count_pi(&decl.type_);
     let num_indices = type_arity.saturating_sub(num_params);
-    let num_minors = u32::try_from(decl.constructors.len())
-        .map_err(|_| derr("too many constructors".to_string()))?;
+    let num_ctors = decl.constructors.len();
+    if num_ctors > MAX_INDUCTIVE_WIDTH {
+        return Err(derr(format!(
+            "too many constructors ({num_ctors} > {MAX_INDUCTIVE_WIDTH})"
+        )));
+    }
+    let num_minors =
+        u32::try_from(num_ctors).map_err(|_| derr("too many constructors".to_string()))?;
+    check_telescope_width(num_params, 1, num_minors, num_indices).map_err(derr)?;
+    if decl.num_level_params > MAX_DERIVED_ARITY {
+        return Err(derr(format!(
+            "too many universe level params ({} > {MAX_DERIVED_ARITY})",
+            decl.num_level_params
+        )));
+    }
 
     // Level signature: motive universe param is index 0 when large-eliminating,
     // and the inductive's own params follow (shifted by 1). When Prop-only, the
@@ -142,35 +255,54 @@ pub(crate) fn build_recursor(
     // are pulled from the constructor's declared type, which is written over the
     // inductive's own universe params; **level-shift** them by `ind_level_subst`
     // so they live in the recursor's level telescope (identity when small-elim).
-    let mut ctor_infos: Vec<CtorInfo> = Vec::with_capacity(decl.constructors.len());
+    let mut ctor_infos: Vec<CtorInfo> = Vec::with_capacity(num_ctors);
     for ctor in &decl.constructors {
         let (field_tys, ret) = split_ctor_telescope(&ctor.type_, num_params);
-        let recursive: Vec<bool> = field_tys
+        let views = crate::inductive::fields::constructor_view(
+            env,
+            &ctor.type_,
+            num_params,
+            std::slice::from_ref(&decl.name),
+        )
+        .map_err(|e| derr(format!("constructor field reduction: {e}")))?
+        .fields;
+        let recursive: Vec<bool> = views
             .iter()
             .map(|f| is_recursive_field(&decl.name, f))
             .collect();
+        let recursive_tys = views
+            .into_iter()
+            .map(|t| t.instantiate_levels(&ind_level_subst))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| derr(e.to_string()))?;
         let field_tys: Vec<Term> = field_tys
             .into_iter()
             .map(|t| t.instantiate_levels(&ind_level_subst))
-            .collect();
+            .collect::<Result<_, _>>()
+            .map_err(|e| derr(e.to_string()))?;
         let (_h, ret_args) = ret.unfold_apps();
         let np = usize::try_from(num_params).unwrap_or(usize::MAX);
         let return_indices: Vec<Term> = ret_args
             .into_iter()
             .skip(np)
             .map(|t| t.instantiate_levels(&ind_level_subst))
-            .collect();
+            .collect::<Result<_, _>>()
+            .map_err(|e| derr(e.to_string()))?;
         ctor_infos.push(CtorInfo {
             name: ctor.name.clone(),
             num_fields: u32::try_from(field_tys.len())
                 .map_err(|_| derr("too many fields".to_string()))?,
             field_tys,
+            recursive_tys,
             recursive,
             return_indices,
         });
     }
 
-    let rec_name = Name::from_dotted(&format!("{}.rec", decl.name));
+    let rec_name = decl.name.str("rec");
+
+    let max_fields = ctor_infos.iter().map(|c| c.num_fields).max().unwrap_or(0);
+    check_rule_width(num_params, 1, num_minors, max_fields).map_err(derr)?;
 
     // Build the recursor type.
     let rec_ty = build_recursor_type(
@@ -181,7 +313,8 @@ pub(crate) fn build_recursor(
         &ind_level_subst,
         &ctor_infos,
     )
-    .map_err(&derr)?;
+    .map_err(derr)?;
+    check_derived_depth(&rec_ty).map_err(derr)?;
 
     // Build ι-rules.
     let mut rules = Vec::with_capacity(ctor_infos.len());
@@ -196,7 +329,8 @@ pub(crate) fn build_recursor(
             ci,
             &ind_level_subst,
         )
-        .map_err(&derr)?;
+        .map_err(derr)?;
+        check_derived_depth(&rhs).map_err(derr)?;
         rules.push(IotaRule {
             constructor: ci.name.clone(),
             num_fields: ci.num_fields,
@@ -230,8 +364,24 @@ pub(crate) struct CtorInfo {
     pub(crate) name: Name,
     pub(crate) num_fields: u32,
     pub(crate) field_tys: Vec<Term>,
+    /// Reduced analysis shapes; declared field binders remain in field_tys.
+    pub(crate) recursive_tys: Vec<Term>,
     pub(crate) recursive: Vec<bool>,
     pub(crate) return_indices: Vec<Term>,
+}
+
+impl CtorInfo {
+    /// `(field index, field type)` of every recursive field, in field order.
+    /// `recursive` is mapped from `recursive_tys`, so they are equally long
+    /// by construction and the pairing needs no index into either.
+    pub(crate) fn recursive_fields(&self) -> impl DoubleEndedIterator<Item = (usize, &Term)> {
+        self.recursive_tys
+            .iter()
+            .zip(&self.recursive)
+            .enumerate()
+            .filter(|&(_, (_, &is_rec))| is_rec)
+            .map(|(i, (ty, _))| (i, ty))
+    }
 }
 
 /// A field is recursive iff its return-type head (after stripping its own Pi

@@ -43,13 +43,13 @@ pub(crate) struct Cli {
 
 impl Cli {
     /// Parse process args. Exits with a clap-formatted error on failure.
-    pub fn parse_args() -> Self {
+    pub(crate) fn parse_args() -> Self {
         <Self as Parser>::parse()
     }
 
     /// Parse from an explicit iterator. Used in tests.
     #[cfg(test)]
-    pub fn try_parse_from<I, T>(iter: I) -> Result<Self, clap::Error>
+    pub(crate) fn try_parse_from<I, T>(iter: I) -> Result<Self, clap::Error>
     where
         I: IntoIterator<Item = T>,
         T: Into<std::ffi::OsString> + Clone,

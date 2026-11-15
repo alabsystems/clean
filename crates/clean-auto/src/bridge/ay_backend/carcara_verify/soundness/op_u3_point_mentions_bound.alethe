@@ -1,0 +1,5 @@
+(assume nc (not (= (forall ((x Bool)) (=> (exists ((y Bool)) (= x y)) (= x p))) (=> (exists ((z Bool)) (= y z)) (= y p)))))
+(anchor :step s :args ((:= (x Bool) y)))
+(step s.t1 (cl (= (=> (exists ((y Bool)) (= x y)) (= x p)) (=> (exists ((z Bool)) (= y z)) (= y p)))) :rule refl)
+(step s (cl (= (forall ((x Bool)) (=> (exists ((y Bool)) (= x y)) (= x p))) (=> (exists ((z Bool)) (= y z)) (= y p)))) :rule onepoint)
+(step done (cl) :rule resolution :premises (nc s))

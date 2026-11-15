@@ -44,10 +44,10 @@ pub(super) const TOPSET: &str = "(fun (e : KExpr) => whnf_acc e)";
 pub(super) const DENV: &str = "(red_def the_red_env)";
 /// The fixed recursor environment.
 pub(super) const RENV: &str = "(red_rec the_red_env)";
-/// The bare const at `kcre_name_12` — a REAL reflected kernel name that is
+/// The bare const at `fixture_def_env_name` — a REAL reflected kernel name that is
 /// neither δ-defined nor a recursor (the inductive type `DefEnv`, R9's
 /// `DEADNAME`).
-pub(super) const DEADCONST: &str = "(KExpr.const kcre_name_12 (ListType.nil Level))";
+pub(super) const DEADCONST: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
 
 // ================================================================
 // Group A — THE SETTLEMENT: unrestricted cr3 for `PiSet` is FALSE.
@@ -199,7 +199,7 @@ pub(super) fn val_r10_stuckomega_no_whnf_step() -> String {
         "(fun (qhdr : delta_reduces {redex} g2) => option_none_ne_some_type KExpr g2 Empty (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct {DENV} {redex}) (OptionType.some KExpr g2) (Eq.symm (OptionType KExpr) (delta_reduct {DENV} {redex}) (OptionType.none KExpr) r10_stuckOmega_delta_none) (delta_reduces_to_step {redex} g2 qhdr)))"
     );
     let beta_arm = format!(
-        "(fun (qhbr : beta_reduces {redex} g2) => constSpine3_beta_inv kcre_name_27 (ListType.nil Level) {d1} {d2} {d3} {V0} {OM} {V0} g2 Empty qhbr {k1} {k2} {k3})",
+        "(fun (qhbr : beta_reduces {redex} g2) => constSpine3_beta_inv fixture_nat_rec_name kcre_witness_rec_levels {d1} {d2} {d3} {V0} {OM} {V0} g2 Empty qhbr {k1} {k2} {k3})",
         d1 = dead(1),
         d2 = dead(2),
         d3 = dead(3),
@@ -216,7 +216,7 @@ pub(super) fn ty_r10_natzero_whnfacc() -> String {
     format!("whnf_acc {NZERO}")
 }
 
-pub(super) const VAL_R10_NATZERO_WHNFACC: &str = "whnfAcc_const_dead kcre_name_18 (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr))";
+pub(super) const VAL_R10_NATZERO_WHNFACC: &str = "whnfAcc_const_dead fixture_nat_zero_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr))";
 
 pub(super) fn ty_r10_zc_collapse() -> String {
     format!("Eq KExpr {} r5_omegaLam", b3())
@@ -608,7 +608,7 @@ pub(super) fn ty_r10_deadconst_headinert() -> String {
     format!("HeadInert {DEADCONST}")
 }
 
-pub(super) const VAL_R10_DEADCONST_HEADINERT: &str = "inertConst_headInert kcre_name_12 (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))";
+pub(super) const VAL_R10_DEADCONST_HEADINERT: &str = "inertConst_headInert fixture_def_env_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))";
 
 pub(super) fn ty_r10_deadconst_cand_mem() -> String {
     format!(
@@ -632,7 +632,7 @@ pub(super) fn ty_r10_interp_const_pi_witness() -> String {
 
 pub(super) fn val_r10_interp_const_pi_witness() -> String {
     format!(
-        "r10_deadConst_cand_mem (candInterp {PI00}) (candInterp_isCandHI {PI00}) kcre_name_12 (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))"
+        "r10_deadConst_cand_mem (candInterp {PI00}) (candInterp_isCandHI {PI00}) fixture_def_env_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))"
     )
 }
 
@@ -642,7 +642,7 @@ pub(super) fn ty_r10_headinert_strictly_weaker() -> String {
 
 pub(super) fn val_r10_headinert_strictly_weaker() -> String {
     format!(
-        "AndType.intro (HeadInert {DEADCONST}) (HeadFree {DEADCONST} -> Empty) r10_deadConst_headInert (r9_const_headfree_absurd kcre_name_12 (ListType.nil Level))"
+        "AndType.intro (HeadInert {DEADCONST}) (HeadFree {DEADCONST} -> Empty) r10_deadConst_headInert (r9_const_headfree_absurd fixture_def_env_name (ListType.nil Level))"
     )
 }
 
@@ -658,7 +658,7 @@ pub(super) fn val_r10_natrec3_not_headinert() -> String {
     let redex4 = sp(&["x1", "x2", "x3", NZERO]);
     let contract = zcontract("x1", "x2", "x3");
     let free_arm = format!(
-        "(fun (ze : KExpr) (zhf : HeadFree ze) (zeq : Eq KExpr ze {e}) => r9_const_headfree_absurd kcre_name_27 (ListType.nil Level) (Eq.substType KExpr (fun (zw : KExpr) => HeadFree zw) ze {e} zeq zhf))"
+        "(fun (ze : KExpr) (zhf : HeadFree ze) (zeq : Eq KExpr ze {e}) => r9_const_headfree_absurd fixture_nat_rec_name kcre_witness_rec_levels (Eq.substType KExpr (fun (zw : KExpr) => HeadFree zw) ze {e} zeq zhf))"
     );
     let head_at_e = format!(
         "(Eq.substType KExpr (fun (zw : KExpr) => {}) ze {e} zeq zh)",

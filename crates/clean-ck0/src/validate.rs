@@ -10,7 +10,7 @@
 //! 1. **closed de Bruijn under the given context depth** (no loose variable
 //!    escapes the context);
 //! 2. **canonical levels** (every `RawLevel` is rebuilt through the
-//!    canonicalizing [`Level`] smart constructors);
+//!    canonicalizing [`Level`](crate::level::Level) smart constructors);
 //! 3. **every `ConstRef`/`ElimRef` arity matches the env** (via the smart
 //!    constructors, which return `Err` on mismatch);
 //! 4. **correct cached structural hash** (asserted equal to a fresh recompute).
@@ -19,10 +19,17 @@
 //! above is a separately testable property; `#[cfg(kani)]` harness skeletons
 //! live at the bottom of this file.
 
-use crate::level::Level;
 use crate::name::Name;
-use crate::rawexpr::{RawExpr, RawLevel, RawLit};
+use crate::rawexpr::{RawExpr, RawLit};
 use crate::term::{ConstRef, ElimRef, Lit, Term, TermError};
+
+mod depth;
+mod terms;
+use depth::check_raw_depth;
+use terms::validate_rec;
+mod levels;
+pub use levels::WrittenLevel;
+use levels::{validate_level, validate_levels};
 
 /// δ-reduction transparency of a constant (design §5.1 "δ transparency-gated").
 ///
@@ -68,12 +75,7 @@ pub enum QuotKind {
 }
 
 /// Environment surface the decision core needs.
-///
-/// M0 needed only arity + large-elim. M1 adds the δ surface (definition body +
-/// transparency), constant *types* (for `infer`), and the closed `Quot`
-/// recognition. Recursor *reduction* (ι) is M2; the env may report that a name
-/// is a recursor ([`Env::is_recursor`]) so `whnf` leaves its application stuck
-/// rather than mis-handling it, but it never reduces one at M1.
+/// Types, definitions and licensed computations.
 pub trait Env {
     /// `Some(n)` = the declaration's `num_level_params`; `None` = unknown name.
     fn num_level_params(&self, name: &Name) -> Option<u32>;
@@ -90,9 +92,21 @@ pub trait Env {
         None
     }
 
+    /// Whether this environment licenses the named native Nat computation.
+    /// Existing host environments retain their previous behavior by default.
+    /// An untrusted byte reader must fence names until their closure is checked.
+    fn native_nat_allowed(&self, _name: &Name) -> bool {
+        true
+    }
+
+    /// Whether canonical checked String/Char/List definitions license the
+    /// literal's constructor view. Existing hosts opt in explicitly.
+    fn string_literal_view(&self) -> bool {
+        false
+    }
+
     /// The constant's declared *type* (a closed [`Term`] over its level params),
     /// used by `infer` for `Const`/`Proj`/literals. `None` = unknown name.
-    /// Default: no types known.
     fn const_type(&self, _name: &Name) -> Option<Term> {
         None
     }
@@ -157,14 +171,16 @@ pub trait Env {
     fn recursor_shape(&self, _name: &Name) -> Option<RecursorShape> {
         None
     }
-
     /// The number of leading parameters of the inductive `name`, if `name` is a
     /// known inductive. Used by the **nested→mutual** auxiliary construction (M3)
     /// to peel a nesting container's parameters. `None` = not a known inductive.
     fn inductive_num_params(&self, _name: &Name) -> Option<u32> {
         None
     }
-
+    /// Container family in declaration order; legacy hosts default to one member.
+    fn inductive_family(&self, name: &Name) -> Option<Vec<Name>> {
+        self.inductive_num_params(name).map(|_| vec![name.clone()])
+    }
     /// The constructors `(name, declared_type)` of the inductive `name`, in
     /// declaration order, if known. Used by the nested→mutual auxiliary
     /// construction (M3) to mirror a container's constructors. The types are
@@ -267,6 +283,14 @@ pub enum ValidateError {
         /// The pinned maximum depth ([`MAX_VALIDATE_DEPTH`]).
         max: u32,
     },
+    /// A level written in a form Lean's kernel reads differently from ck0's
+    /// canonical form (R177). ck0 keeps only the canonical form, so it refuses
+    /// the level where Lean's kernel would decide on the form as written.
+    #[error("a level written as {form}, which Lean's kernel reads differently from ck0's canonical form (R177)")]
+    LevelAsWritten {
+        /// The form.
+        form: WrittenLevel,
+    },
 }
 
 /// Pinned maximum structural nesting depth of an untrusted [`RawExpr`] accepted
@@ -274,13 +298,20 @@ pub enum ValidateError {
 ///
 /// Every trusted-side term consumer is natively recursive over the term tree:
 /// `validate_rec` here, the nested→mutual admission helpers in
-/// [`crate::nested`] / [`crate::nested_replace`], and `Term`'s own recursive
+/// [`crate::nested`] / `crate::nested_replace`, and `Term`'s own recursive
 /// `Drop`. A term deep enough to exhaust the native stack would **abort the
 /// process** (SIGABRT) rather than fail to an [`crate::BudgetError`]. Because
 /// `Term`'s fields are private and `validate` is the sole way to mint one, an
 /// explicit, *iterative* depth check here is a single chokepoint that protects
-/// **every** recursive consumer at once: no term deep enough to overflow them
-/// can be constructed.
+/// **every** recursive consumer at once: no input deep enough to overflow them
+/// can be constructed. Reduction mints terms too, and head reduction is a loop
+/// that can build one far deeper than its input, so `whnf_core` refuses a reduct
+/// whose cached depth passes this cap (R166). A universe level counts toward the
+/// depth of the term it sits in, one more per `Succ`, `Max` and `IMax` node, as
+/// the level operations recurse over it natively too; δ-unfolding a
+/// universe-polymorphic constant can grow one, and the same reduct check holds
+/// it (R166). A derived recursor's telescope is held to the cap as well
+/// ([`crate::recursor`]).
 ///
 /// The cap is deliberately conservative. Empirically (debug build, default main
 /// thread stack) `validate_rec` alone overflows near depth ~1900; downstream
@@ -306,8 +337,24 @@ impl Term {
         // recursive term consumer, including `Term`'s `Drop`) walks the tree by
         // native recursion and would SIGABRT on a deep term. The check itself
         // uses an explicit work stack, so it cannot overflow on the same input.
+        let _dag = crate::term_dag::DagScope::enter();
         check_raw_depth(raw)?;
-        let term = validate_rec(env, raw, ctx_depth, level_arity)?;
+        let term = validate_rec(
+            env,
+            raw,
+            ctx_depth,
+            level_arity,
+            &mut std::collections::HashMap::new(),
+        )?;
+        // The term as built can be deeper than the raw input: canonicalising a
+        // level flattens a `Max` into a chain of its distinct arguments, which
+        // `validate_level` bounds node by node, so the built term is within
+        // about twice the bound and this O(1) check refuses the rest (R166).
+        if term.depth > MAX_VALIDATE_DEPTH {
+            return Err(ValidateError::MaxDepthExceeded {
+                max: MAX_VALIDATE_DEPTH,
+            });
+        }
         // WF invariant #4: cached hash is correct.
         if term.cached_hash() != term.recompute_hash() {
             return Err(ValidateError::HashMismatch);
@@ -322,122 +369,6 @@ impl Term {
     /// params) — the common top-level case.
     pub fn validate_closed(env: &dyn Env, raw: &RawExpr) -> Result<Term, ValidateError> {
         Term::validate(env, raw, 0, 0)
-    }
-}
-
-/// Reject any [`RawExpr`] whose structural nesting depth exceeds
-/// [`MAX_VALIDATE_DEPTH`]. Iterative (explicit work stack of `(node, depth)`),
-/// so it never grows the native stack — it can vet an arbitrarily deep,
-/// attacker-supplied term that the natively-recursive `validate_rec` could not
-/// touch without overflowing. Returns on the *first* over-deep node, so it does
-/// O(min(size, work-until-first-violation)) and never materializes anything.
-///
-/// Note `RawExpr`'s own `Drop` is native recursion owned by the *caller* of
-/// `validate` (the untrusted boundary holds the value); the kernel's invariant
-/// is only that it never *mints a `Term`* from an over-deep input.
-fn check_raw_depth(root: &RawExpr) -> Result<(), ValidateError> {
-    // Each stack entry is a subterm together with the depth at which it sits.
-    let mut stack: Vec<(&RawExpr, u32)> = vec![(root, 1)];
-    while let Some((node, depth)) = stack.pop() {
-        if depth > MAX_VALIDATE_DEPTH {
-            return Err(ValidateError::MaxDepthExceeded {
-                max: MAX_VALIDATE_DEPTH,
-            });
-        }
-        let child_depth = depth.saturating_add(1);
-        match node {
-            RawExpr::BVar(_)
-            | RawExpr::Sort(_)
-            | RawExpr::Const(_, _)
-            | RawExpr::Elim(_, _, _)
-            | RawExpr::Lit(_) => {}
-            RawExpr::App(f, a) => {
-                stack.push((f, child_depth));
-                stack.push((a, child_depth));
-            }
-            RawExpr::Lam(_, ty, body) | RawExpr::Pi(_, ty, body) => {
-                stack.push((ty, child_depth));
-                stack.push((body, child_depth));
-            }
-            RawExpr::Let(ty, val, body) => {
-                stack.push((ty, child_depth));
-                stack.push((val, child_depth));
-                stack.push((body, child_depth));
-            }
-            RawExpr::Proj(_, _, e) => stack.push((e, child_depth)),
-        }
-    }
-    Ok(())
-}
-
-fn validate_rec(
-    env: &dyn Env,
-    raw: &RawExpr,
-    depth: u32,
-    level_arity: u32,
-) -> Result<Term, ValidateError> {
-    match raw {
-        RawExpr::BVar(i) => {
-            // WF #1: closed under context.
-            if *i >= depth {
-                return Err(ValidateError::OpenVar { index: *i, depth });
-            }
-            Ok(Term::bvar(*i))
-        }
-        RawExpr::Sort(l) => {
-            let level = validate_level(l, level_arity)?;
-            Ok(Term::sort(level))
-        }
-        RawExpr::Const(name, raw_levels) => {
-            // WF #3b (design §4.2/§4.3): recursors are NOT ordinary constants.
-            // An eliminator name in `Const` position is rejected — it must arrive
-            // as `RawExpr::Elim` so `ElimRef` derives the level vector and the
-            // caller can never author an eliminator's levels. This closes the
-            // bypass where an imported `.rec`/`.casesOn` dodges the `ElimRef`
-            // arity kill (Codex review A3).
-            if is_recursor_name(name) {
-                return Err(ValidateError::RecursorAsConst { name: name.clone() });
-            }
-            let levels = validate_levels(raw_levels, level_arity)?;
-            // WF #3: arity is checked inside ConstRef::mk.
-            let cref = ConstRef::mk(env, name.clone(), levels)?;
-            Ok(Term::const_ref(cref))
-        }
-        RawExpr::Elim(inductive, motive_raw, ind_raw) => {
-            let motive = validate_level(motive_raw, level_arity)?;
-            let ind_levels = validate_levels(ind_raw, level_arity)?;
-            // WF #3: the caller supplies NO full level vector; ElimRef::mk
-            // derives it. The producer's motive level + ind levels are the only
-            // inputs.
-            let eref = ElimRef::mk(env, inductive.clone(), motive, ind_levels)?;
-            Ok(Term::elim(eref))
-        }
-        RawExpr::App(f, a) => {
-            let f = validate_rec(env, f, depth, level_arity)?;
-            let a = validate_rec(env, a, depth, level_arity)?;
-            Ok(Term::app(f, a))
-        }
-        RawExpr::Lam(bi, ty, body) => {
-            let ty = validate_rec(env, ty, depth, level_arity)?;
-            let body = validate_rec(env, body, depth.saturating_add(1), level_arity)?;
-            Ok(Term::lam(*bi, ty, body))
-        }
-        RawExpr::Pi(bi, ty, body) => {
-            let ty = validate_rec(env, ty, depth, level_arity)?;
-            let body = validate_rec(env, body, depth.saturating_add(1), level_arity)?;
-            Ok(Term::pi(*bi, ty, body))
-        }
-        RawExpr::Let(ty, val, body) => {
-            let ty = validate_rec(env, ty, depth, level_arity)?;
-            let val = validate_rec(env, val, depth, level_arity)?;
-            let body = validate_rec(env, body, depth.saturating_add(1), level_arity)?;
-            Ok(Term::let_(ty, val, body))
-        }
-        RawExpr::Lit(lit) => Ok(Term::lit(validate_lit(lit))),
-        RawExpr::Proj(name, idx, e) => {
-            let e = validate_rec(env, e, depth, level_arity)?;
-            Ok(Term::proj(name.clone(), *idx, e))
-        }
     }
 }
 
@@ -469,33 +400,6 @@ fn validate_lit(lit: &RawLit) -> Lit {
     }
 }
 
-fn validate_levels(raws: &[RawLevel], arity: u32) -> Result<Vec<Level>, ValidateError> {
-    raws.iter().map(|r| validate_level(r, arity)).collect()
-}
-
-/// Rebuild a `RawLevel` through the canonicalizing [`Level`] constructors (WF #2)
-/// and check every `Param` index is in range (WF #3 for levels).
-fn validate_level(raw: &RawLevel, arity: u32) -> Result<Level, ValidateError> {
-    match raw {
-        RawLevel::Zero => Ok(Level::zero()),
-        RawLevel::Param(i) => {
-            if *i >= arity {
-                return Err(ValidateError::LevelParam { index: *i, arity });
-            }
-            Ok(Level::param(*i))
-        }
-        RawLevel::Succ(l) => Ok(Level::succ(validate_level(l, arity)?)),
-        RawLevel::Max(a, b) => Ok(Level::max(
-            validate_level(a, arity)?,
-            validate_level(b, arity)?,
-        )),
-        RawLevel::IMax(a, b) => Ok(Level::imax(
-            validate_level(a, arity)?,
-            validate_level(b, arity)?,
-        )),
-    }
-}
-
 #[cfg(kani)]
 mod kani_harnesses {
     //! Per-invariant chokepoint harnesses (design §8 tier 1, "one harness per
@@ -504,6 +408,7 @@ mod kani_harnesses {
     //! builds; these are the staged-machine-checked versions.
     use super::*;
     use crate::minimal_env::MinimalEnv;
+    use crate::rawexpr::RawLevel;
 
     /// WF #1: a BVar whose index reaches the context depth is rejected.
     #[kani::proof]

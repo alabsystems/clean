@@ -10,6 +10,59 @@
 
 use super::*;
 
+/// Open the source definition's two Int binders in a real kernel context.
+fn elaborated_int_binary_body(
+    source: &str,
+) -> (clean_kernel::Environment, clean_kernel::LocalContext, Expr) {
+    let mut env = clean_kernel::Environment::with_prelude();
+    let decls = clean_parser::parse_file(source).expect("parse the real source fixture");
+    assert_eq!(decls.len(), 1);
+    crate::elaborate_decl_and_register(&mut env, &decls[0])
+        .expect("elaborate and register the source fixture");
+    let name = Name::from_string("smtInput");
+    let info = env.get_const(&name).expect("source definition registered");
+    let mut value = info
+        .value
+        .as_ref()
+        .expect("source definition has a value")
+        .clone();
+    {
+        let tc = clean_kernel::TypeChecker::new(&env);
+        let inferred = tc
+            .infer_type_full(&value)
+            .expect("strict kernel checks the source value");
+        assert!(tc.is_def_eq(&inferred, &info.type_));
+    }
+    assert!(env.axiom_deps(&name).expect("source closure").is_empty());
+    let mut context = clean_kernel::LocalContext::new();
+    let int_ty = Expr::const_(Name::from_string("Int"), vec![]);
+    for name in ["a", "b"] {
+        let ExprKind::Lam(bi, domain, body) = value.kind() else {
+            panic!("expected the source definition's Int binder: {value:?}");
+        };
+        assert_eq!(domain.as_ref(), &int_ty);
+        let id = context.push(Name::from_string(name), domain.as_ref().clone(), *bi);
+        value = body.instantiate(&Expr::fvar(id));
+    }
+    {
+        let tc = clean_kernel::TypeChecker::with_context(&env, context.clone());
+        assert_eq!(
+            tc.infer_type_full(&value)
+                .expect("strict kernel checks opened body"),
+            int_ty
+        );
+    }
+    (env, context, value)
+}
+
+fn translator_for_int_context(context: &clean_kernel::LocalContext) -> SmtLibTranslator {
+    let mut translator = SmtLibTranslator::new();
+    for decl in context.iter() {
+        translator.register_fvar(decl.id, SmtSort::Int, Expr::fvar(decl.id));
+    }
+    translator
+}
+
 // -- Family-local helpers --
 
 fn real_of_int_neg_succ(n: u64) -> Expr {
@@ -156,12 +209,45 @@ fn test_hdiv_nat_still_uses_total_after_real_div_fix() {
 }
 
 #[test]
-fn test_hdiv_int_still_uses_int_div_after_real_div_fix() {
-    // Ensure Int division is unchanged by the Real division fix
-    let mut t = SmtLibTranslator::new();
+fn test_elaborated_int_ediv_uses_total_euclidean_division() {
+    let (_env, context, expr) =
+        elaborated_int_binary_body("def smtInput (a b : Int) : Int := Int.ediv a b");
+    let mut translator = translator_for_int_context(&context);
+    assert_eq!(
+        translator
+            .translate_expr(&expr)
+            .expect("translate checked Int.ediv"),
+        "(ite (= fvar_1 0) 0 (div fvar_0 fvar_1))"
+    );
+}
+
+#[test]
+fn test_hdiv_int_with_nat_dictionary_is_ill_typed_and_refused() {
+    // The old positive fixture supplied both the wrong dictionary and Nat operands.
+    let env = clean_kernel::Environment::with_prelude();
     let int_ty = Expr::const_(Name::from_string("Int"), vec![]);
     let expr = make_hdiv(int_ty, Expr::nat_lit(7), Expr::nat_lit(3));
-    assert_eq!(t.translate_expr(&expr).unwrap(), "(div 7 3)");
+    assert!(clean_kernel::TypeChecker::new(&env)
+        .infer_type_full(&expr)
+        .is_err());
+    assert!(matches!(
+        SmtLibTranslator::new().translate_expr(&expr),
+        Err(TranslateError::UnsupportedExpr(message)) if message.contains("HDiv.hDiv")
+    ));
+}
+
+#[test]
+fn test_checked_custom_int_division_dictionary_is_refused() {
+    // A valid dictionary can select a different function; the Int carrier alone
+    // does not establish the built-in Euclidean division semantics.
+    let (_env, context, expr) = elaborated_int_binary_body(
+        "def smtInput (a b : Int) : Int := \
+         @HDiv.hDiv Int Int Int (@HDiv.mk Int Int Int (fun x y => x)) a b",
+    );
+    assert!(matches!(
+        translator_for_int_context(&context).translate_expr(&expr),
+        Err(TranslateError::UnsupportedExpr(message)) if message.contains("HDiv.hDiv")
+    ));
 }
 
 // --- Direct Real.add / Real.sub / Real.mul tests (#2796) ---

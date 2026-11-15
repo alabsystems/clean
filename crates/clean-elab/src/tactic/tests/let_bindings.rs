@@ -42,8 +42,9 @@ fn test_exact_respects_goal_local_let_binding_value() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: x_fvar,
-            name: "x".to_string(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: Some(Expr::const_(Name::from_string("a"), vec![])),
         }],
@@ -66,8 +67,9 @@ fn test_exact_respects_elab_local_let_binding_value() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: x_fvar,
-            name: "x".to_string(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: Some(Expr::const_(Name::from_string("a"), vec![])),
         }],

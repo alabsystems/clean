@@ -25,8 +25,9 @@ fn test_verify_proof_with_typeclass_projection_types() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -67,8 +68,9 @@ fn test_verify_proof_cert_verifier_projection_gap() {
         env.clone(),
         false_const,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -107,8 +109,9 @@ fn test_verify_proof_rejects_ill_typed_typeclass_proof() {
         env,
         false_const,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],

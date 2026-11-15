@@ -1,0 +1,4 @@
+(assume n0 (not (not (> r 0.0))))
+(assume n1 (not (not (< r 1.0))))
+(step s (cl (not (> r 0.0)) (not (< r 1.0))) :rule la_generic :args (1 1))
+(step done (cl) :rule resolution :premises (s n0 n1))

@@ -104,7 +104,9 @@ fn build_fixture() -> TrackingFixture {
     let state = ProofState::new(env, goal_target);
     let goal = state.current_goal().expect("goal should exist").clone();
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("Test.wrap_id".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("Test.wrap_id"));
     let simp_lemmas = collect_simp_lemmas(&state, &config);
 
     TrackingFixture {
@@ -161,7 +163,7 @@ fn build_recursive_app_result_case() -> (ProofState, SqueezeSimpConfig) {
     config
         .simp_config
         .extra_lemmas
-        .push("Test.wrap_id".to_string());
+        .push(clean_parser::SurfaceName::generated_path("Test.wrap_id"));
     (ProofState::new(env, goal_target), config)
 }
 

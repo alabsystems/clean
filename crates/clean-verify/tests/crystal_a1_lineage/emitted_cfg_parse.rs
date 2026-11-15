@@ -29,6 +29,13 @@ use super::{header_param_ids, id_of, split_commas_top, split_top, target_and_arg
 mod memory;
 use memory::{emitted_gep, emitted_load, emitted_store};
 
+// The program-order CLASSIFIER and the left-hand-side reader, split out on
+// 2026-09-10 when the `ir_lzc` chain's two new mnemonics needed a rename table
+// beside them and this file was over the 500-line convention with it.
+#[path = "emitted_cfg_parse_class.rs"]
+mod class;
+use class::{emitted_class, emitted_results};
+
 /// Every arithmetic and bitwise `binop` opcode trust-ir prints.
 const ARITH: &[&str] = &[
     "add", "sub", "mul", "udiv", "sdiv", "urem", "srem", "shl", "lshr", "ashr", "and", "or", "xor",
@@ -375,20 +382,6 @@ pub(crate) fn parse_emitted(text: &str) -> Cfg {
     }
 }
 
-/// The SSA ids an emitted assignment's left-hand side binds: `%2` -> `[2]`,
-/// `%2, %3` -> `[2, 3]`.
-///
-/// **A list since 2026-08-16.** `mul.overflow` binds two — the wrapped product
-/// and the overflow flag — and it is the shape of nine of the crate's
-/// twenty-one assert-carrying CTFE flips. A bare `id_of("%2, %3")` returns
-/// `None`, which dropped the instruction out of EVERY lane including `order`.
-fn emitted_results(lhs: &str) -> Vec<u32> {
-    split_commas_top(lhs)
-        .iter()
-        .filter_map(|t| id_of(t.trim()))
-        .collect()
-}
-
 /// Record a `const` instruction's VALUE in whichever of the three value lanes
 /// its literal belongs to. A shape none of them can read records nothing here
 /// and is caught by `assert_lanes`'s no-constant-dropped check.
@@ -432,65 +425,4 @@ fn emitted_const_value(
             }
         }
     }
-}
-
-/// The `(class, results)` an emitted line contributes to the program-order lane,
-/// or `None` for anything that is not an instruction (a block header, the
-/// function header, a bare comment, the closing brace).
-///
-/// The class vocabulary is the CLEAN one — `and` and `fdiv` are both `binop`,
-/// `trunc` is `cast` — because the lane is compared against
-/// `IRInst.<ctor>` names. An opcode with no lane at all still gets its own
-/// class rather than being dropped, so the order lane is also where an
-/// unmodelled instruction shows up.
-fn emitted_class(line: &str) -> Option<(String, Vec<u32>)> {
-    if line.is_empty() || line == "}" || line.starts_with("rustcc") || line.starts_with(';') {
-        return None;
-    }
-    // A block header (`bb4(%1: bool):`) is not an instruction, and at this point
-    // `cur` is still the PREVIOUS block, so recording it would mis-attribute it.
-    if line
-        .strip_prefix("bb")
-        .and_then(|r| r.split_once([':', '(']))
-        .and_then(|(n, _)| n.parse::<u32>().ok())
-        .is_some()
-    {
-        return None;
-    }
-    let (head, rs) = match line.split_once(" = ") {
-        Some((lhs, rhs)) => (
-            split_top(rhs).first().cloned().unwrap_or_default(),
-            emitted_results(lhs),
-        ),
-        None => (
-            line.split_whitespace().next().unwrap_or("").to_string(),
-            Vec::new(),
-        ),
-    };
-    if head.is_empty() {
-        return None;
-    }
-    let class = if ARITH.contains(&head.as_str()) {
-        "binop".to_string()
-    } else if CASTS.contains(&head.as_str()) {
-        "cast".to_string()
-    } else if head == "volatile" {
-        // `volatile` is a FLAG, printed as a prefix on `load` (value position)
-        // and on `store` (statement position); the class is the instruction it
-        // prefixes. Reading the flag as an opcode would put a class the Clean
-        // vocabulary has no constructor for into the program-order lane — and
-        // hardwiring `load`, as this arm did until 2026-08-20, would have
-        // called a volatile store a load. (A volatile store is then REFUSED by
-        // `emitted_store`; this arm only keeps the order lane honest about
-        // what it saw before that refusal fires.)
-        let after = line.split_once(" = ").map_or(line, |(_, r)| r);
-        after
-            .split_whitespace()
-            .nth(1)
-            .unwrap_or("volatile")
-            .to_string()
-    } else {
-        head
-    };
-    Some((class, rs))
 }

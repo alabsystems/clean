@@ -116,6 +116,45 @@
 //!   runtime, run it, and a differential test asserts the exit code matches
 //!   `emit_c` across managed/closure/string programs.
 //!
+//! # Codegen license (trust-ir binary v41)
+//!
+//! Clean is a producer INSIDE trust-ir's two-language licensing regime, so
+//! every function this backend emits WITH A BODY carries an affirmative
+//! [`trust_ir::BodyGate`] — never the grandfathered `None`, which a consumer
+//! may permit and which is reserved for pre-v41 content and producers outside
+//! the regime. The claim is decided per function by the one gate this
+//! producer owns, the kernel-decided translation-validation certificate
+//! ([`crate::emit_trust_ir_tv`]):
+//!
+//! * At emit time ([`emit_decl`]) every body is stamped
+//!   `Some(BodyGate::Ungated)` — "no gate has been applied; a codegen
+//!   consumer MUST refuse this body". This is the honest state of every
+//!   module the bare `emit_trust_ir*` entry points return, which have no
+//!   source of truth to certify against.
+//! * [`crate::emit_trust_ir_tv::certify_backend_translation`] upgrades a body
+//!   to `Some(BodyGate::Gated { authority: "clean-kernel-tv" })` at the exact
+//!   moment the in-process kernel accepts that function's translation
+//!   equation — i.e. iff its `TranslationValidation` obligation is `Certified`
+//!   with re-checkable `CleanCic` evidence minted in the same run. Nothing
+//!   else mints `Gated`, so the license and the certificate cannot disagree.
+//! * Bodyless declarations (the Clean-runtime ABI imports, dropped-callee
+//!   externs) are not codegen subjects and keep `None`.
+//!
+//! [`finalize_module`]'s gate stays the STRUCTURAL `validate_module`: an
+//! `Ungated` body is well-formed trust-ir and this backend legitimately emits
+//! it. The consumer-side interlock is
+//! `trust_ir_build::validate_module_for_codegen`, which accepts a module
+//! whose bodies are all `Gated` and refuses an `Ungated` one as
+//! `UngatedBodyForCodegen` — the backend's test suite runs it on both shapes
+//! through this real emitter.
+//!
+//! `Function::name` is normatively the LINK-TIME SYMBOL since v41. For an
+//! ordinary Lean name the symbol IS the readable name and `display_path`
+//! stays `None`; where the symbol is a mangled form (an escaped typed
+//! `__clean_typed_v1_…` wire name, or a dropped callee's C-mangled `l_…`
+//! import) the Clean declaration's human spelling rides in
+//! `Function::display_path` — claim-style metadata, never a linkage identity.
+//!
 //! # Source provenance
 //!
 //! When [`TrustIrConfig::source_file`] is set, the path is interned in the
@@ -128,7 +167,20 @@
 //! through elaboration. Missing provenance degrades cleanly: `None` (the
 //! default) emits a span-less module exactly as before.
 
+use clean_kernel::Name;
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+#[path = "emit_trust_ir_names.rs"]
+pub(crate) mod names;
+
+// Trust plan step 3.2: the carrier back end (the Rust ABI).
+#[path = "emit_trust_ir_carrier.rs"]
+pub(crate) mod carrier;
+
+// WS6.9 (F-102, DG-70 (a)): typed boundary wrappers over the boxed interior.
+#[path = "emit_trust_ir_boundary.rs"]
+pub mod boundary;
+use names::{is_legacy_name, wire_name};
 
 use crate::emit_trust_ir_runtime::RuntimeAbi;
 use crate::ir::{
@@ -141,7 +193,7 @@ use trust_ir::dialect::DialectInst;
 use trust_ir::inst::{BinOp, CastOp, ICmpOp};
 use trust_ir::ty::Ty;
 use trust_ir::value::{BlockId, FuncId, FuncTyId, SourceSpan, ValueId};
-use trust_ir::{Endianness, Module, TargetInfo};
+use trust_ir::{BodyGate, Endianness, Module, TargetInfo};
 use trust_ir_build::{validate_module, FunctionBuilder, ModuleBuilder, ValidationError};
 use trust_ir_conformance::subset::{module_subset_violations, SUBSET_VERSION};
 
@@ -181,6 +233,20 @@ pub enum TrustIrError {
         display_list(_0)
     )]
     Invalid(Vec<ValidationError>),
+    /// The canonical TrustIR wire boundary refuses a field with no binary
+    /// carrier. Preserve the upstream reason instead of erasing it or panicking.
+    #[error("trust-ir backend: {0}")]
+    NoWireIdentity(ValidationError),
+    /// The module builder refused: `ModuleBuilder::build` reports the first
+    /// fault a builder door recorded (an exhausted id space, an instruction
+    /// with no current block, ...). Nothing is emitted; never a panic.
+    #[error("trust-ir backend: the module builder refused: {0}")]
+    Build(#[from] trust_ir_build::BuildError),
+    /// The binary writer has no image for the module (a construct ahead of its
+    /// wire part, the producer-internal `Ty::Error`, a count past the format's
+    /// `u32`). Refused, never a panic.
+    #[error("trust-ir backend: the module has no wire image: {0}")]
+    Unencodable(#[from] trust_ir::BinaryProjectionError),
     /// The finalized module uses constructs outside trust-ir's pinned bridge
     /// conformance subset (`Module::check_conformance_subset`), and the config
     /// opted in to enforcing that handoff gate
@@ -224,6 +290,34 @@ pub enum TrustIrError {
         _0.iter().map(|(n, r)| format!("{n}: {r}")).collect::<Vec<_>>().join("; ")
     )]
     TranslationRefused(Vec<(String, String)>),
+    /// A requested typed boundary export (WS6.9,
+    /// [`boundary::plan_carrier_exports`]) has no total carrier: a recursive
+    /// inductive, `Nat`, `String`, an array, a closure, a polymorphic or
+    /// dependent signature, a carrier-typed result, or a marshal-in helper the
+    /// kernel or the lowering refused. Fail closed: the export is never spelled
+    /// as `Ptr` and called complete.
+    #[error("trust-ir backend: {code}: `{decl}` {reason}", code = boundary::NO_TOTAL_CARRIER)]
+    NoTotalCarrier {
+        /// The source declaration whose export was requested.
+        decl: String,
+        /// Why it has no total carrier.
+        reason: String,
+    },
+    /// A callee the invoker named as IMPORTED
+    /// ([`TrustIrConfig::imported_callees`], WS6.8) cannot be declared at the
+    /// far signature: the client's own lowering of the symbol — the shape
+    /// every client call site is emitted against — is not structurally equal
+    /// to the far `FuncTy` the defining artifact carries
+    /// ([`LinkRefusal::CallShapeDisagreesWithFarSignature`]). Fail-closed: the
+    /// compile is refused, never silently re-boxed, so no module whose call
+    /// sites disagree with the far definition can be written.
+    #[error("trust-ir backend: import of `{symbol}` refused: {why}")]
+    ImportRefused {
+        /// The link-time symbol the client meant to import.
+        symbol: String,
+        /// The measurement that failed.
+        why: crate::emit_trust_ir_link::LinkRefusal,
+    },
 }
 
 /// Join a diagnostic list into one `; `-separated string (a thiserror
@@ -278,7 +372,7 @@ pub struct TrustIrConfig {
     /// which every `ExternCalls` module has, via the Clean-runtime imports.
     /// This backend is host-targeted by construction anyway (`USize` lowers to
     /// `U64`, and the emitted object links against the host Clean runtime), so
-    /// the default is the host ([`host_target_info`]). `None` leaves the module
+    /// the default is the host (`host_target_info`). `None` leaves the module
     /// target-independent, which the validation gate rejects fail-closed in
     /// `ExternCalls` mode.
     pub target_info: Option<TargetInfo>,
@@ -324,6 +418,47 @@ pub struct TrustIrConfig {
     /// `emit_trust_ir*` entry points have no source-of-truth to certify
     /// against and ignore it.
     pub certify_translation: bool,
+    /// Whether those certificates are BOUND (roadmap WS6.7(b), trust-ir
+    /// WS1.12a): each carries a `CertificateBinding` naming the anchor
+    /// environment, the statement, the source declaration with its
+    /// `clean_kernel::Environment::closure_digest`, and the callee symbols
+    /// (see `emit_trust_ir_tv::certify_backend_translation_bound_in_environment`).
+    /// Ignored unless `certify_translation` is on.
+    ///
+    /// Default `true`: the pinned trust-ir carries a binding in every format,
+    /// the binary one at its certificate-binding version (v61), so a bound module
+    /// is a `.tmbc` for `--emit obj` or a `--emit trustir-bin` artifact like
+    /// any other. `false` mints the UNBOUND certificates of the pre-binding
+    /// schema (still with license evidence), which a consumer running
+    /// trust-ir's bound-certificate policy refuses.
+    pub bind_certificates: bool,
+    /// Callees the client IMPORTS rather than defines (WS6.8), keyed by
+    /// link-time symbol, each with the FAR signature — the `FuncTy` of the one
+    /// supplied artifact that defines the symbol (default empty: nothing is
+    /// imported and the whole closure is compiled into one module).
+    ///
+    /// A decl in the slice whose symbol is named here is lowered through the
+    /// pipeline like any other (so every call site is shaped against its real,
+    /// unboxed signature), but its BODY is never emitted: it becomes a
+    /// body-less `External` declaration, the third callee category beside an
+    /// in-slice definition and a boxed extern fallback. Its signature is the
+    /// client's own lowering of the decl, and that lowering must EQUAL the far
+    /// `FuncTy`, or the compile is refused as
+    /// [`TrustIrError::ImportRefused`] with
+    /// [`LinkRefusal::CallShapeDisagreesWithFarSignature`]. The boxed
+    /// `fn(Ptr..) -> Ptr` fallback is never minted for an imported symbol, so
+    /// the import producer's `ClientAlreadyDeclaresSymbol` cannot fire on it.
+    ///
+    /// An entry no decl of the slice carries is ignored. `clean compile
+    /// --link-artifact` passes every symbol the artifacts define
+    /// ([`crate::emit_trust_ir_link::importable_symbols`]), so the auxiliary
+    /// functions the client's pipeline generates from an imported constant
+    /// (its boxed-entry version, a hoisted constant) are declared too, never
+    /// defined a second time.
+    ///
+    /// [`LinkRefusal::CallShapeDisagreesWithFarSignature`]:
+    /// crate::emit_trust_ir_link::LinkRefusal::CallShapeDisagreesWithFarSignature
+    pub imported_callees: BTreeMap<String, trust_ir::ty::FuncTy>,
 }
 
 impl Default for TrustIrConfig {
@@ -336,6 +471,8 @@ impl Default for TrustIrConfig {
             enforce_handoff_subset: false,
             source_file: None,
             certify_translation: true,
+            bind_certificates: true,
+            imported_callees: BTreeMap::new(),
         }
     }
 }
@@ -346,7 +483,7 @@ impl Default for TrustIrConfig {
 /// compiler host's, matching the backend's `USize -> U64` lowering on every
 /// supported host.
 #[must_use]
-pub fn host_target_info() -> TargetInfo {
+pub(crate) fn host_target_info() -> TargetInfo {
     let arch = std::env::consts::ARCH;
     let triple = match std::env::consts::OS {
         "macos" => format!("{arch}-apple-darwin"),
@@ -370,13 +507,112 @@ pub fn host_target_info() -> TargetInfo {
 /// consumes: the magic `b"tMBC"`, a little-endian `u32` version (`1`), then the
 /// binary-serialized module. Lets callers (e.g. the `clean compile --emit obj`
 /// path) produce a trust-cg input without depending on `trust_ir` directly.
-#[must_use]
-pub fn serialize_tmbc(module: &Module) -> Vec<u8> {
+///
+/// # Errors
+/// Refuses any construct the canonical TrustIR wire boundary cannot encode.
+pub fn serialize_tmbc(module: &Module) -> Result<Vec<u8>, TrustIrError> {
+    let payload = serialize_module_bytes(module)?;
     let mut bytes = Vec::with_capacity(8);
     bytes.extend_from_slice(b"tMBC");
     bytes.extend_from_slice(&1u32.to_le_bytes());
-    bytes.extend_from_slice(&trust_ir::binary::serialize_module(module));
-    bytes
+    bytes.extend_from_slice(&payload);
+    Ok(bytes)
+}
+
+/// Serialize a [`Module`] into the LINKABLE artifact: plain
+/// `trust_ir::binary::serialize_module` bytes, with NO container.
+///
+/// The sibling of [`serialize_tmbc`], and deliberately not the same thing. A
+/// `.tmbc` prefixes `b"tMBC"` + a little-endian `u32` to the module, which
+/// `trust_ir::binary::deserialize_module` refuses; and
+/// `trust_ir::Module::stable_digest` — the value a `Module.imports` row records
+/// as the dependency's identity — is computed over the MODULE. So an artifact
+/// meant to be CITED has to be the module bytes themselves, or the file a
+/// consumer reads and the bytes identity is taken over are two different
+/// things and the recorded digest is uncheckable from the file. `.tmbc` stays
+/// for `--emit obj`, because it is what the `trust-cg` CLI consumes.
+///
+/// Lives here for the same reason `serialize_tmbc` does: callers (the `clean
+/// compile --emit trustir-bin` path) get the bytes without taking a direct
+/// `trust_ir` dependency.
+///
+/// # Errors
+/// Refuses a module with no canonical binary identity; no claim is removed to
+/// make an otherwise unencodable module serializable.
+pub fn serialize_module_bytes(module: &Module) -> Result<Vec<u8>, TrustIrError> {
+    require_module_wire_identity(module)?;
+    Ok(trust_ir::binary::serialize_module(module)?)
+}
+
+/// Decode a LINKABLE artifact through the CANONICAL reader.
+///
+/// The counterpart of [`serialize_module_bytes`], and the reason it is here
+/// rather than at each call site: an unknown tag or a trailing byte refuses at
+/// LOAD, so a caller cannot accidentally accept a prefix of a well-formed
+/// module and treat the rest as noise. Also keeps `clean-cli` free of a direct
+/// `trust_ir` dependency, which matters for the one-trust-ir-lock-source
+/// discipline this workspace enforces.
+pub fn deserialize_module_bytes(bytes: &[u8]) -> Result<Module, String> {
+    trust_ir::binary::deserialize_module(bytes).map_err(|e| e.to_string())
+}
+
+/// What `trust-ir validate <file>` decides about a LINKABLE artifact, as a
+/// library call: decode through the canonical reader, then require
+/// `trust_ir_build::validate_module_report` to report zero errors — the
+/// steps, in the order, that `cmd_validate` in `trust-ir-cli` takes at the
+/// pinned revision (`load_module` then `validate_module_report(&module)`,
+/// exit 0 iff `errors()` is empty). What this does NOT reproduce, stated so
+/// nobody reads it as byte-for-byte parity: the CLI's default give-back
+/// certification pass (`certify_module_give_backs`, skipped by
+/// `--no-giveback`) that runs between the two and ATTACHES kernel
+/// certificates the validator then reconfirms (the CLI's own words:
+/// "fail-closed, existing verdict path untouched"), and the CLI's advisory
+/// allocation-bound and obligation-diagnostic reporting, which by its own
+/// contract never changes the exit code. This is therefore the verdict of
+/// `trust-ir validate --no-giveback`, which the packaging smoke treats as
+/// the well-formedness bar; a consumer wanting the give-back pass runs the
+/// CLI.
+///
+/// `Ok` carries the module's function count so a caller can assert the
+/// artifact is non-trivial; `Err` carries the decode error or every
+/// validation error rendered with `Display`, one per line, so a refusal is
+/// legible in a test failure. Two-language roadmap WS6.13: the packaging
+/// smoke asserts a shipped `clean --emit trustir-bin` artifact passes this,
+/// which is the predicate the `trust-ir` CLI in the pack will run.
+pub fn validate_module_bytes(bytes: &[u8]) -> Result<usize, String> {
+    let module = deserialize_module_bytes(bytes)?;
+    let report = trust_ir_build::validate::validate_module_report(&module);
+    let errors = report.errors();
+    if errors.is_empty() {
+        Ok(module.functions.len())
+    } else {
+        Err(errors
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join("\n"))
+    }
+}
+
+/// The module's `trust_ir::Module::stable_digest`, rendered
+/// (`sha256:<64 hex>`).
+///
+/// Exposed so the emit path can REPORT what it produced: whoever records an
+/// import row can then compare this with the digest the importer independently
+/// measures, instead of trusting either in isolation.
+///
+/// # Errors
+/// Refuses a module with no canonical binary identity, exactly as the writers do.
+pub fn module_stable_digest_string(module: &Module) -> Result<String, TrustIrError> {
+    require_module_wire_identity(module)?;
+    Ok(module.stable_digest().to_string())
+}
+
+fn require_module_wire_identity(module: &Module) -> Result<(), TrustIrError> {
+    if let Some(reason) = trust_ir_build::wire_identity_blocker(module) {
+        return Err(TrustIrError::NoWireIdentity(reason));
+    }
+    Ok(())
 }
 
 /// Lower a slice of L5IR declarations into a `trust_ir::Module`.
@@ -395,6 +631,28 @@ pub(crate) fn emit_trust_ir_with_config(
     decls: &[IRDecl],
     config: &TrustIrConfig,
 ) -> Result<Module, TrustIrError> {
+    emit_trust_ir_with_carriers(decls, config, &[])
+}
+
+/// [`emit_trust_ir_with_config`], additionally emitting one typed boundary
+/// wrapper per planned carrier export (WS6.9; [`boundary`]). The helpers each
+/// wrapper calls must be in `decls` (the planner put them in the L5CNF slice
+/// these declarations were compiled from). With no exports this is exactly
+/// [`emit_trust_ir_with_config`].
+pub(crate) fn emit_trust_ir_with_carriers(
+    decls: &[IRDecl],
+    config: &TrustIrConfig,
+    carriers: &[boundary::CarrierExport],
+) -> Result<Module, TrustIrError> {
+    let mut identities = HashSet::new();
+    for decl in decls {
+        if !identities.insert(&decl.name) {
+            return Err(TrustIrError::Unsupported(format!(
+                "duplicate exact declaration identity: {}",
+                wire_name(&decl.name)
+            )));
+        }
+    }
     // SKIP THE PRIMITIVES THEMSELVES (`emit_wasm::lower_module`'s discipline,
     // same rationale, same drift guard). A saturated call to
     // `UIntW.{add,sub,mul}` lowers to the native wrapping `BinOp` below, so the
@@ -412,11 +670,53 @@ pub(crate) fn emit_trust_ir_with_config(
     // table that lowers the call sites, so the skip set and the realized set
     // cannot drift apart. The intermediates' scalar types survive because the
     // boxing pass corrected them while the primitives were still in-slice.
+    //
+    // WS6.10: the twelve fixed-width width conversions
+    // (`UInt{8,16,32,64}.toUInt{8,16,32,64}`, [`uint_conversion_cast_name`])
+    // are dropped the same way so a saturated call takes the native
+    // `zext`/`trunc` arm — EXCEPT when the conversion is referenced as a
+    // function VALUE somewhere in the slice. There is no synthesized boxed
+    // wrapper for a conversion, so a value-referenced one keeps its
+    // compiled-from-source body and every call site stays a call to it
+    // (the pre-WS6.10 shape, never an undefined symbol).
+    let conversion_value_refs = collect_conversion_value_refs(decls);
     let decls: Vec<IRDecl> = decls
         .iter()
-        .filter(|d| uint_arith_binop(&d.name.to_string()).is_none())
+        .filter(|d| uint_arith_binop_name(&d.name).is_none())
+        .filter(|d| {
+            uint_conversion_cast_name(&d.name).is_none() || conversion_value_refs.contains(&d.name)
+        })
         .cloned()
         .collect();
+    let decls: &[IRDecl] = &decls;
+
+    // IMPORTED CALLEES (WS6.8, [`TrustIrConfig::imported_callees`]): their
+    // bodies are never emitted, so none of the whole-slice body walks below
+    // (value-ref wrapper synthesis, the dropped-callee extern pre-pass, the
+    // string pre-pass) may see them — a callee or literal only an imported
+    // body names would otherwise be declared or interned in a module that
+    // never uses it. The decls stay IN the slice, so their names count as
+    // in-slice (no boxed fallback is minted for them) and pass 1 records
+    // their real signature for every call site.
+    let decls: std::borrow::Cow<[IRDecl]> = if config.imported_callees.is_empty() {
+        std::borrow::Cow::Borrowed(decls)
+    } else {
+        std::borrow::Cow::Owned(
+            decls
+                .iter()
+                .map(|d| {
+                    if config.imported_callees.contains_key(&wire_name(&d.name)) {
+                        IRDecl {
+                            body: IRBody::Unreachable,
+                            ..d.clone()
+                        }
+                    } else {
+                        d.clone()
+                    }
+                })
+                .collect(),
+        )
+    };
     let decls: &[IRDecl] = &decls;
 
     // Synthesize native boxed-entry wrappers for fixed-width UInt arithmetic
@@ -493,11 +793,11 @@ pub(crate) fn emit_trust_ir_with_config(
     // and record each decl's lowered shape so `Apply` call sites can align
     // their arguments with the callee's real parameter list (C2; see
     // [`emit_apply_user`]).
-    let mut fn_ids: HashMap<String, FuncId> = HashMap::with_capacity(decls.len());
-    let mut fn_sigs: HashMap<String, FuncTyId> = HashMap::with_capacity(decls.len());
-    let mut fn_shapes: HashMap<String, FnShape> = HashMap::with_capacity(decls.len());
+    let mut fn_ids: HashMap<Name, FuncId> = HashMap::with_capacity(decls.len());
+    let mut fn_sigs: HashMap<Name, FuncTyId> = HashMap::with_capacity(decls.len());
+    let mut fn_shapes: HashMap<Name, FnShape> = HashMap::with_capacity(decls.len());
     for (idx, decl) in decls.iter().enumerate() {
-        let name = decl.name.to_string();
+        let name = decl.name.clone();
         fn_ids.insert(name.clone(), FuncId::new(base + idx as u32));
         let param_tys: Vec<Ty> = decl.params.iter().map(|(_, t)| lower_ty(t)).collect();
         let ret_tys = lower_ret_tys(&decl.return_type);
@@ -506,6 +806,7 @@ pub(crate) fn emit_trust_ir_with_config(
             FnShape {
                 returns_ptr: ret_tys == [Ty::Ptr],
                 params: param_tys.clone(),
+                native_decision: native_uint_decision_op(decl),
             },
         );
         fn_sigs.insert(name, mb.add_func_type(param_tys, ret_tys));
@@ -522,6 +823,12 @@ pub(crate) fn emit_trust_ir_with_config(
 
     // --- Pass 2: declare + emit each function body. ---
     for decl in decls {
+        // An imported callee is DECLARED at the far signature (one
+        // `mb.function` call, like `emit_decl`, so the pass-1 FuncIds hold).
+        if let Some(far) = config.imported_callees.get(&wire_name(&decl.name)) {
+            declare_imported_callee(&mut mb, decl, far, &fn_sigs)?;
+            continue;
+        }
         emit_decl(
             &mut mb,
             decl,
@@ -536,7 +843,11 @@ pub(crate) fn emit_trust_ir_with_config(
         )?;
     }
 
-    finalize_module(mb.build(), config)
+    // WS6.9: the typed boundary wrappers, after every user function so the
+    // FuncIds predicted in pass 1 are untouched.
+    boundary::emit_carrier_wrappers(&mut mb, carriers, decls, &fn_ids, span)?;
+
+    finalize_module(mb.build()?, config)
 }
 
 /// Finalize an emitted module: pin the target, then gate it fail-closed.
@@ -615,26 +926,84 @@ fn build_string_globals(
     }
     let u8_ty = mb.add_type(Ty::U8);
     for (idx, s) in literals.into_iter().enumerate() {
-        let mut bytes = s.clone().into_bytes();
-        bytes.push(0); // NUL terminator for `const char*`
-        let elems: Vec<trust_ir::constant::Constant> = bytes
-            .iter()
-            .map(|b| trust_ir::constant::Constant::Int(i128::from(*b)))
-            .collect();
-        let len = elems.len() as u64;
+        let (initializer, len) = string_global_initializer(&s);
         let gid = trust_ir::value::GlobalId::new(idx as u32);
         mb.add_global(trust_ir::Global {
             name: format!("clean_str_{idx}"),
             ty: Ty::Array(u8_ty, len),
             mutable: false,
-            initializer: Some(trust_ir::constant::Constant::Aggregate(elems)),
+            initializer: Some(initializer),
             linkage: trust_ir::Linkage::Internal,
             tls: None,
             align: None,
+            // trust-ir binary v41 ("ABI/linkage residue") added the three
+            // fields below. Each value is the pre-v41 meaning spelled out, so
+            // the emitted module keeps its v38..v40 wire bytes: the writer
+            // selects v41 only for a module that actually uses a new feature.
+            //
+            // `section: None` — the consumer chooses the output section from
+            // mutability + initializer (an immutable initialized global lands
+            // in read-only data), exactly what every consumer did before the
+            // field existed. Clean source has no section directive to forward.
+            section: None,
+            // `Visibility::Default` is the legacy value, and for an `Internal`
+            // symbol it is moot: linkage already denies every other module a
+            // definition AND a view of it, so there is no hidden-but-external
+            // (staticlib/cdylib) boundary for this global to sit on.
+            visibility: trust_ir::Visibility::Default,
+            // `retained: false` — no `#[used]` semantics. These globals exist
+            // only to be addressed by the `IRExpr::String` arm of the bodies
+            // they were collected from; one that ends up unreferenced (its
+            // literal's body was not emitted) is dead bytes a conformant
+            // consumer is RIGHT to drop. `true` would pin them into every
+            // image and misstate a retention requirement Clean never had.
+            retained: false,
         });
         string_globals.insert(s, gid);
     }
     string_globals
+}
+
+/// The initializer of a string literal's read-only global: the literal's
+/// UTF-8 bytes followed by the NUL terminator a `const char*` consumer reads
+/// to, spelled as trust-ir's str-origin byte carrier,
+/// `Constant::Bytes { utf8: true }`, through its sanctioned constructor
+/// [`Constant::str_bytes`](trust_ir::constant::Constant::str_bytes).
+///
+/// Why this spelling and not a list of `Int` bytes (trust-ir v50,
+/// `docs/SPEC_RATIFICATIONS.md` §3.1 there):
+///
+/// * **The list spelling is not canonical for every literal.** A literal made
+///   only of NULs (`"\0"` is `[0, 0]` with its terminator) is a uniform list,
+///   and §3.1 refuses a uniform `Aggregate` / `Array` / raw
+///   `Bytes { utf8: false }` at an array type (`NonCanonicalUniformArray`), so
+///   the old `Constant::Aggregate` of `Int`s made `validate_module` reject every
+///   module holding one. A `utf8: true` payload carries a checked string claim
+///   that is part of its identity, so it is never a spelling of the uniform
+///   array (`Constant::is_uniform_bytes` is `false` for it) and needs no
+///   content-dependent case.
+/// * **The other canonical spelling is outside the handoff subset.**
+///   `Constant::array` would pick `Constant::Splat` for exactly those
+///   literals, and lowering-target subset v4 excludes a `Splat` at any depth of
+///   a global initializer (`trust_ir::bridge::constant_splat_excluded`) until
+///   the subset-contract bump that admits it with a backend lowering. String
+///   globals exist only in `ExternCalls` mode, where [`finalize_module`]
+///   enforces that subset unconditionally, so that spelling would turn every
+///   all-NUL literal into an [`TrustIrError::OutOfLoweringSubset`] refusal.
+/// * **It is one byte per byte.** The list spelling allocated one boxed
+///   `Constant::Int` node per byte; the carrier holds the bytes themselves,
+///   which is what trust-ir introduced it for (v25), and what the backend
+///   emits verbatim.
+///
+/// The claim is true by construction: `literal` is a Rust `str`, and appending
+/// U+0000 keeps it valid UTF-8. Returns the initializer with its byte count,
+/// the `N` of the global's `[u8; N]` type.
+fn string_global_initializer(literal: &str) -> (trust_ir::constant::Constant, u64) {
+    let mut terminated = String::with_capacity(literal.len() + 1);
+    terminated.push_str(literal);
+    terminated.push('\0'); // NUL terminator for `const char*`
+    let len = terminated.len() as u64;
+    (trust_ir::constant::Constant::str_bytes(&terminated), len)
 }
 
 /// Collect every distinct string literal reachable from `body`. `IRExpr::String`
@@ -708,16 +1077,16 @@ fn declare_extern_fallbacks(
     mb: &mut ModuleBuilder,
     decls: &[IRDecl],
     runtime_present: bool,
-) -> HashMap<String, (FuncId, usize)> {
-    let mut declared: HashMap<String, (FuncId, usize)> = HashMap::new();
+) -> HashMap<Name, (FuncId, usize, FuncTyId)> {
+    let mut declared: HashMap<Name, (FuncId, usize, FuncTyId)> = HashMap::new();
     if !runtime_present {
         return declared;
     }
 
-    let slice_names: HashSet<String> = decls.iter().map(|d| d.name.to_string()).collect();
+    let slice_names: HashSet<Name> = decls.iter().map(|d| d.name.clone()).collect();
     // BTreeMap for a deterministic (reproducible) declaration order.
-    let mut candidates: BTreeMap<String, ExternCandidate> = BTreeMap::new();
-    let mut poisoned: HashSet<String> = HashSet::new();
+    let mut candidates: BTreeMap<Name, ExternCandidate> = BTreeMap::new();
+    let mut poisoned: HashSet<Name> = HashSet::new();
     for decl in decls {
         let mut var_tys: HashMap<VarId, IRType> = decl.params.iter().cloned().collect();
         collect_dropped_callees(
@@ -735,9 +1104,10 @@ fn declare_extern_fallbacks(
     // name mangling is injective so this should be unreachable; it is kept as
     // a cheap defense because a duplicate module function name would only
     // surface later as a whole-module validation failure.
-    let mut symbols: HashMap<String, String> = HashMap::new();
+    let slice_symbols: HashSet<String> = decls.iter().map(|d| wire_name(&d.name)).collect();
+    let mut symbols: HashMap<String, Name> = HashMap::new();
     for (name, cand) in &candidates {
-        if slice_names.contains(&cand.mangled) {
+        if slice_symbols.contains(&cand.mangled) {
             poisoned.insert(name.clone());
         }
         if let Some(prev) = symbols.insert(cand.mangled.clone(), name.clone()) {
@@ -746,6 +1116,9 @@ fn declare_extern_fallbacks(
         }
     }
 
+    // Preserve historical ordinary extern ordering, independently of Name::Ord.
+    let mut candidates: Vec<_> = candidates.into_iter().collect();
+    candidates.sort_by_cached_key(|(name, _)| wire_name(name));
     for (name, cand) in candidates {
         if poisoned.contains(&name) {
             continue;
@@ -773,8 +1146,19 @@ fn declare_extern_fallbacks(
             (None, None) => 0,
         };
         let ty = mb.add_func_type(vec![Ty::Ptr; arity], vec![Ty::Ptr]);
-        let id = mb.function(cand.mangled, ty).build();
-        declared.insert(name, (id, arity));
+        // A bodyless import is not a codegen subject, so it makes no licensing
+        // claim (`body_gate` stays `None`). Its symbol is the C-mangled `l_…`
+        // link name the shim/object exports; the Clean declaration's readable
+        // spelling rides in `display_path` (v41) whenever the two differ.
+        let human = name.to_string();
+        let mut fb = mb.function(cand.mangled.clone(), ty);
+        if cand.mangled != human {
+            fb.set_display_path(human);
+        }
+        let id = fb.build();
+        // The signature id rides along: a v41 `FnDef` constant must carry the
+        // referenced function's OWN signature (see `FnCtx::closure_fn_ptr`).
+        declared.insert(name, (id, arity, ty));
     }
     declared
 }
@@ -802,14 +1186,14 @@ struct ExternCandidate {
 /// over-applications of a certified full arity are legal, anything
 /// ambiguous or under-applied keeps the fail-closed refusal.
 fn record_extern_arity(
-    candidates: &mut BTreeMap<String, ExternCandidate>,
-    poisoned: &mut HashSet<String>,
-    fn_name: &clean_kernel::Name,
+    candidates: &mut BTreeMap<Name, ExternCandidate>,
+    poisoned: &mut HashSet<Name>,
+    fn_name: &Name,
     arity: usize,
     is_value_ref: bool,
     is_full_arity: bool,
 ) {
-    let name = fn_name.to_string();
+    let name = fn_name.clone();
     let entry = candidates
         .entry(name.clone())
         .or_insert_with(|| ExternCandidate {
@@ -849,6 +1233,10 @@ struct FnShape {
     /// possibly a closure): the precondition for lowering an over-applied
     /// call through the runtime `clean_apply_N` chain.
     returns_ptr: bool,
+    /// Exact original declaration shape accepted by the same checker that
+    /// lowers its body. A primitive name must not bypass a known declaration's
+    /// arity/type refusals at a call site.
+    native_decision: Option<ICmpOp>,
 }
 
 /// Walk `body` collecting dropped-callee extern candidates (see
@@ -857,10 +1245,10 @@ struct FnShape {
 /// call-site argument types can be checked statically.
 fn collect_dropped_callees(
     body: &IRBody,
-    slice_names: &HashSet<String>,
+    slice_names: &HashSet<Name>,
     var_tys: &mut HashMap<VarId, IRType>,
-    candidates: &mut BTreeMap<String, ExternCandidate>,
-    poisoned: &mut HashSet<String>,
+    candidates: &mut BTreeMap<Name, ExternCandidate>,
+    poisoned: &mut HashSet<Name>,
 ) {
     match body {
         IRBody::VDecl {
@@ -874,8 +1262,8 @@ fn collect_dropped_callees(
             // certifies the extern signature exactly like an agreeing call
             // site (the fixed args must still be Ptr-typeable).
             if let IRExpr::PartialApply { fn_id, arity, args } = value {
-                let name = fn_id.0.to_string();
-                if !slice_names.contains(&name) && uint_arith_binop(&name).is_none() {
+                let name = fn_id.0.clone();
+                if !slice_names.contains(&name) && !is_native_uint_primitive(&name) {
                     let result_ok = lower_ty(ty) == Ty::Ptr;
                     let args_ok = args.iter().all(|arg| match arg {
                         IRArg::Erased => true,
@@ -896,10 +1284,11 @@ fn collect_dropped_callees(
                 }
             }
             if let IRExpr::Apply { fn_id, args } = value {
-                let name = fn_id.0.to_string();
+                let name = fn_id.0.clone();
                 // Skip in-slice callees (they keep their bodies — never
-                // demoted) and native-arithmetic names (BinOps, never calls).
-                if !slice_names.contains(&name) && uint_arith_binop(&name).is_none() {
+                // demoted) and native-arithmetic / width-conversion names
+                // (BinOps and casts, never calls).
+                if !slice_names.contains(&name) && !is_native_uint_primitive(&name) {
                     let result_ok = lower_ty(ty) == Ty::Ptr;
                     // Erased args are materialized as boxed units at the call
                     // site (Ptr by construction); non-erased args must have a
@@ -972,10 +1361,10 @@ fn collect_dropped_callees(
 fn emit_decl(
     mb: &mut ModuleBuilder,
     decl: &IRDecl,
-    fn_ids: &HashMap<String, FuncId>,
-    fn_sigs: &HashMap<String, FuncTyId>,
-    fn_shapes: &HashMap<String, FnShape>,
-    extern_fallbacks: &HashMap<String, (FuncId, usize)>,
+    fn_ids: &HashMap<Name, FuncId>,
+    fn_sigs: &HashMap<Name, FuncTyId>,
+    fn_shapes: &HashMap<Name, FnShape>,
+    extern_fallbacks: &HashMap<Name, (FuncId, usize, FuncTyId)>,
     abi: &Option<RuntimeAbi>,
     config: &TrustIrConfig,
     string_globals: &HashMap<String, trust_ir::value::GlobalId>,
@@ -983,7 +1372,7 @@ fn emit_decl(
 ) -> Result<(), TrustIrError> {
     let param_tys: Vec<Ty> = decl.params.iter().map(|(_, t)| lower_ty(t)).collect();
     // Reuse the signature interned in pass 1 (falls back to interning if absent).
-    let ty = match fn_sigs.get(&decl.name.to_string()) {
+    let ty = match fn_sigs.get(&decl.name) {
         Some(t) => *t,
         None => {
             let ret_tys = lower_ret_tys(&decl.return_type);
@@ -991,7 +1380,25 @@ fn emit_decl(
         }
     };
 
-    let mut fb = mb.function(decl.name.to_string(), ty);
+    let symbol = wire_name(&decl.name);
+    let human = decl.name.to_string();
+    let mut fb = mb.function(symbol.clone(), ty);
+
+    // Codegen license (v41; module docs "Codegen license"): this body gets an
+    // AFFIRMATIVE claim, and at emit time no gate has run, so the claim is
+    // `Ungated` — a codegen consumer must refuse it. Only the kernel-decided
+    // translation-validation certificate (`emit_trust_ir_tv`) upgrades it to
+    // `Gated`, per function, when the kernel accepts that function's
+    // equation. Never `None`: that is the grandfathered "no claim" state a
+    // consumer may permit, and this producer is inside the regime.
+    fb.set_body_gate(BodyGate::Ungated);
+    // `Function::name` is the LINK-TIME SYMBOL (v41). When the symbol is the
+    // escaped wire encoding rather than the readable Lean name, the human
+    // spelling goes in `display_path` (claim-style; display twins may share
+    // it — the symbol is what keeps them apart).
+    if symbol != human {
+        fb.set_display_path(human);
+    }
 
     // Stamp the decl's span onto every node emitted below (set once; the
     // builder threads it through all emit paths, terminators included).
@@ -1013,6 +1420,7 @@ fn emit_decl(
     let mut ctx = FnCtx {
         fb: &mut fb,
         fn_ids,
+        fn_sigs,
         fn_shapes,
         extern_fallbacks,
         config,
@@ -1034,7 +1442,7 @@ fn emit_decl(
     if let Some(cmp_op) = native_uint_decision_op(decl) {
         let lhs = ctx.value_of(decl.params[0].0)?;
         let rhs = ctx.value_of(decl.params[1].0)?;
-        let result = ctx.fb.icmp(cmp_op, Ty::U64, lhs, rhs);
+        let result = ctx.fb.icmp(cmp_op, lower_ty(&decl.params[0].1), lhs, rhs);
         ctx.fb.ret(vec![result]);
     } else {
         emit_body(&mut ctx, &decl.body)?;
@@ -1044,17 +1452,74 @@ fn emit_decl(
     Ok(())
 }
 
+/// Declare an IMPORTED callee (WS6.8) as a body-less `External` function whose
+/// signature is the client's own lowering of `decl`, after requiring that
+/// lowering to EQUAL the far signature `far`.
+///
+/// The client's lowering is what every client call site was emitted against
+/// ([`emit_apply_user`] passes arguments positionally, with no coercion), and
+/// `validate_module` then holds each call to the declared signature. So the
+/// equality here is exactly "the lowered client call shape is structurally
+/// equal to the far `FuncTy`": when it holds, no call site can disagree with
+/// the far definition; when it does not, the compile is REFUSED
+/// ([`LinkRefusal::CallShapeDisagreesWithFarSignature`]) — never re-boxed.
+///
+/// The declaration makes no licensing claim (`body_gate` stays `None`: it has
+/// no body) and carries no summary. The import producer
+/// ([`crate::emit_trust_ir_link`]) adopts it rather than minting a second one.
+///
+/// [`LinkRefusal::CallShapeDisagreesWithFarSignature`]:
+/// crate::emit_trust_ir_link::LinkRefusal::CallShapeDisagreesWithFarSignature
+fn declare_imported_callee(
+    mb: &mut ModuleBuilder,
+    decl: &IRDecl,
+    far: &trust_ir::ty::FuncTy,
+    fn_sigs: &HashMap<Name, FuncTyId>,
+) -> Result<(), TrustIrError> {
+    let symbol = wire_name(&decl.name);
+    let local = trust_ir::ty::FuncTy {
+        params: decl.params.iter().map(|(_, t)| lower_ty(t)).collect(),
+        returns: lower_ret_tys(&decl.return_type),
+        is_vararg: false,
+        abi: None,
+    };
+    if local != *far {
+        return Err(TrustIrError::ImportRefused {
+            symbol,
+            why: crate::emit_trust_ir_link::LinkRefusal::CallShapeDisagreesWithFarSignature {
+                local: crate::emit_trust_ir_link::render_func_ty(&local),
+                far: crate::emit_trust_ir_link::render_func_ty(far),
+            },
+        });
+    }
+    let ty = match fn_sigs.get(&decl.name) {
+        Some(t) => *t,
+        None => mb.add_func_type(local.params, local.returns),
+    };
+    let human = decl.name.to_string();
+    let mut fb = mb.function(symbol.clone(), ty);
+    if symbol != human {
+        fb.set_display_path(human);
+    }
+    fb.build();
+    Ok(())
+}
+
 /// Per-function lowering context.
 struct FnCtx<'a, 'b> {
     fb: &'a mut FunctionBuilder<'b>,
-    fn_ids: &'a HashMap<String, FuncId>,
+    fn_ids: &'a HashMap<Name, FuncId>,
+    /// Signature id interned for every in-slice user decl (pass 1): what a
+    /// `FnDef` constant naming that decl must be typed with (trust-ir v41).
+    fn_sigs: &'a HashMap<Name, FuncTyId>,
     /// Lowered signature shape of every in-slice user decl (pass 1), for the
     /// `Apply` call-site/parameter alignment (C2; [`emit_apply_user`]).
-    fn_shapes: &'a HashMap<String, FnShape>,
+    fn_shapes: &'a HashMap<Name, FnShape>,
     /// Dropped-callee extern forward-declarations (C1 boundary): callee name →
     /// (the bodyless-`External` all-Ptr import declared by the pre-pass, its
-    /// declared arity). Empty outside `ExternCalls` mode.
-    extern_fallbacks: &'a HashMap<String, (FuncId, usize)>,
+    /// declared arity, its declared signature id — what a `FnDef` naming it
+    /// must be typed with). Empty outside `ExternCalls` mode.
+    extern_fallbacks: &'a HashMap<Name, (FuncId, usize, FuncTyId)>,
     config: &'a TrustIrConfig,
     /// Declared Clean-runtime imports, present in `ExternCalls` mode.
     abi: Option<RuntimeAbi>,
@@ -1082,6 +1547,37 @@ struct JoinPoint {
 }
 
 impl FnCtx<'_, '_> {
+    /// Materialize `callee`'s address as the value `clean_alloc_closure`'s
+    /// `fn` parameter takes (the runtime's canonical `()->()` closure fn-type,
+    /// [`RuntimeAbi::clean_fn_ty`]).
+    ///
+    /// trust-ir binary v41 (typed callbacks, trust-ir 2f28d8d) validates every
+    /// `FnDef` constant against the referenced function's OWN signature id:
+    /// `Const { ty: Func(sig), value: FnDef(callee) }` is rejected with
+    /// `ConstTypeMismatch` unless `sig` is exactly the id `callee` was declared
+    /// with — even when the value is only captured or passed on and never
+    /// applied through a `CallIndirect`. So the address is minted at `sig`
+    /// and then converted to the runtime's fn-type with a `PtrToPtr` cast —
+    /// the honest spelling of C's `(clean_fn)callee`: both sides are thin
+    /// code pointers (`validate_module` accepts `PtrToPtr` between any two
+    /// thin pointer layouts, `Ty::Func` included), the lowering-target
+    /// conformance subset admits `PtrToPtr` (it EXCLUDES `ReifyFnPointer`,
+    /// which the ExternCalls corpus self-gate would refuse), and trust-cg
+    /// lowers it to a register copy. Before v41 the address was minted
+    /// directly at `clean_fn_ty`, a signature the callee never had.
+    fn closure_fn_ptr(&mut self, abi: &RuntimeAbi, callee: FuncId, sig: FuncTyId) -> ValueId {
+        let addr = self.fb.fn_addr(sig, callee);
+        if sig == abi.clean_fn_ty {
+            return addr;
+        }
+        self.fb.cast(
+            CastOp::PtrToPtr,
+            Ty::Func(sig),
+            Ty::Func(abi.clean_fn_ty),
+            addr,
+        )
+    }
+
     /// Resolve the SSA value bound to an L5IR variable.
     fn value_of(&self, var: VarId) -> Result<ValueId, TrustIrError> {
         self.var_values
@@ -1244,7 +1740,9 @@ fn emit_body(ctx: &mut FnCtx, body: &IRBody) -> Result<(), TrustIrError> {
         IRBody::Dec { var, rest } => {
             let operand = ctx.value_of(*var)?;
             // `dec x` is trust-ir `Release`: refcount -1, frees at zero
-            // (Lean `semRelease` — same discipline as `clean_dec`).
+            // (Lean `semRelease`). It lowers to `clean_dec`, which also
+            // leaves a frozen (sticky) count unchanged: a leak in a band
+            // `semRelease`'s unbounded Nat count never reaches.
             ctx.fb.release(operand);
             emit_body(ctx, rest)
         }
@@ -1482,7 +1980,42 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
         IRExpr::Lit(lit) => Ok(emit_literal(ctx, lit)),
 
         IRExpr::Apply { fn_id, args } => {
-            let name = fn_id.0.to_string();
+            let name = fn_id.0.clone();
+            // A saturated canonical UInt decision is an operation in either
+            // ABI. Keep any in-slice primitive body for roots and function
+            // values; it independently lowers to the same checked-width ICmp.
+            let native_target = ctx
+                .fn_shapes
+                .get(&name)
+                .is_none_or(|shape| shape.native_decision.is_some());
+            if args.len() == 2 && native_target {
+                if let Some((op, expected)) = uint_comparison_op(&name) {
+                    if *ty != IRType::Bool {
+                        return Err(TrustIrError::Unsupported(format!("comparison primitive {name} requires the existing Bool result, got {ty:?}")));
+                    }
+                    let [a, b] = args.as_slice() else {
+                        return Err(TrustIrError::Unsupported(format!(
+                            "comparison primitive {name} expects exactly 2 arguments, got {}",
+                            args.len()
+                        )));
+                    };
+                    for arg in [a, b] {
+                        let IRArg::Var(var) = arg else {
+                            return Err(TrustIrError::Unsupported(format!(
+                                "comparison primitive {name} needs a recorded scalar operand"
+                            )));
+                        };
+                        if ctx.var_tys.get(var) != Some(&expected) {
+                            return Err(TrustIrError::Unsupported(format!(
+                                "comparison primitive {name} has a mismatched operand type"
+                            )));
+                        }
+                    }
+                    let lhs = ctx.value_of_arg(a)?;
+                    let rhs = ctx.value_of_arg(b)?;
+                    return Ok(ctx.fb.icmp(op, lower_ty(&expected), lhs, rhs));
+                }
+            }
             // A user declaration always wins; only an OTHERWISE-UNDEFINED
             // fixed-width arithmetic primitive lowers to a native BinOp below.
             if let Some(callee) = ctx.fn_ids.get(&name).copied() {
@@ -1495,12 +2028,14 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             // `args.is_empty()` so saturated calls still take the native-BinOp
             // arm; on a present wrapper so it is only reached when the pre-pass
             // synthesized one.
-            if args.is_empty() && uint_arith_binop(&name).is_some() {
-                if let (Some(&wid), Some(abi)) = (
-                    ctx.fn_ids.get(&uint_arith_wrapper_name(&name)),
+            if args.is_empty() && uint_arith_binop_name(&name).is_some() {
+                let wname = uint_arith_wrapper_name(&name);
+                if let (Some(&wid), Some(&wsig), Some(abi)) = (
+                    ctx.fn_ids.get(&wname),
+                    ctx.fn_sigs.get(&wname),
                     ctx.abi.clone(),
                 ) {
-                    let fn_ptr = ctx.fb.fn_addr(abi.clean_fn_ty, wid);
+                    let fn_ptr = ctx.closure_fn_ptr(&abi, wid, wsig);
                     let arity_c = ctx.fb.iconst(Ty::U32, 2);
                     let nfixed_c = ctx.fb.iconst(Ty::U32, 0);
                     return Ok(ctx
@@ -1516,9 +2051,11 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             // (trust-ir `docs/ub-numerics-policy.md`). Making these native (a) is
             // what the P2 semantics-preservation certificate certifies over
             // (`emit_trust_ir_tv`), and (b) lets trust-cg emit real machine
-            // arithmetic instead of an undefined-extern call. Only reached when
-            // the name is NOT a user decl, so no existing program changes shape.
-            if let Some((op, bty)) = uint_arith_binop(&name) {
+            // arithmetic instead of an undefined-extern call. `.land`/`.lor`
+            // lower to `And`/`Or` the same way (WS6.3; exact for the reason
+            // given on [`uint_arith_binop`]). Only reached when the name is
+            // NOT a user decl, so no existing program changes shape.
+            if let Some((op, bty)) = uint_arith_binop_name(&name) {
                 let declared = lower_ty(ty);
                 if declared != bty {
                     return Err(TrustIrError::Unsupported(format!(
@@ -1537,6 +2074,42 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                 let rhs = ctx.value_of_arg(b)?;
                 return Ok(ctx.fb.binop(op, bty, lhs, rhs));
             }
+            // WS6.10: a saturated fixed-width width conversion
+            // (`UInt8.toUInt64 a`) lowers to ONE native cast — `zext` when
+            // widening, `trunc` when narrowing. Exact, not an approximation:
+            // the kernel defines `<B>.toUInt<C> x := <C>.ofNat (<B>.toNat x)`
+            // (`Environment::uint_conversion_decl`), which is the identity on
+            // the value when widening and reduction mod `2^C` when narrowing —
+            // precisely trust-ir's unsigned `ZExt` / `Trunc`. Both the result
+            // and the operand must already be the scalar widths the table
+            // names; anything else (a boxed operand, a disagreeing declared
+            // type, a wrong arity) is refused, never coerced.
+            if let Some((op, src, dst)) = uint_conversion_cast_name(&name) {
+                let declared = lower_ty(ty);
+                if declared != dst {
+                    return Err(TrustIrError::Unsupported(format!(
+                        "width conversion {name} produces {dst:?} but the \
+                         declaration expects {declared:?}"
+                    )));
+                }
+                let [a] = args.as_slice() else {
+                    return Err(TrustIrError::Unsupported(format!(
+                        "width conversion {name} expects exactly 1 argument, got {}",
+                        args.len()
+                    )));
+                };
+                let operand = match a {
+                    IRArg::Var(v) => ctx.var_tys.get(v).map(lower_ty),
+                    IRArg::Erased => None,
+                };
+                if operand.as_ref() != Some(&src) {
+                    return Err(TrustIrError::Unsupported(format!(
+                        "width conversion {name} takes a {src:?} operand, got {operand:?}"
+                    )));
+                }
+                let x = ctx.value_of_arg(a)?;
+                return Ok(ctx.fb.cast(op, src, dst, x));
+            }
             // C1 EXTERN BOUNDARY (emit_c parity): a callee the #14 dependency
             // boundary dropped from the slice was forward-declared as a
             // bodyless external with the boxed all-Ptr signature by the
@@ -1546,7 +2119,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             // emit_c passes `clean_box(0)`. A callee the pre-pass could not
             // faithfully type is absent here and stays on the fail-closed
             // refusal below.
-            if let (Some(&(callee, arity)), Some(abi)) =
+            if let (Some(&(callee, arity, callee_sig)), Some(abi)) =
                 (ctx.extern_fallbacks.get(&name), ctx.abi.clone())
             {
                 // A 0-arg `Apply` against a declared arity n>0 is a
@@ -1555,7 +2128,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                 // `clean_alloc_closure(sym, n, 0)` — exactly the
                 // `PartialApply` lowering for in-slice callees.
                 if args.is_empty() && arity > 0 {
-                    let fn_ptr = ctx.fb.fn_addr(abi.clean_fn_ty, callee);
+                    let fn_ptr = ctx.closure_fn_ptr(&abi, callee, callee_sig);
                     let arity_c = ctx.fb.iconst(Ty::U32, arity as i128);
                     let nfixed_c = ctx.fb.iconst(Ty::U32, 0);
                     return Ok(ctx
@@ -1600,7 +2173,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                 }
                 return emit_apply_runtime(ctx, &abi, result, extra_vals);
             }
-            Err(TrustIrError::UndefinedFunction(name))
+            Err(TrustIrError::UndefinedFunction(name.to_string()))
         }
 
         IRExpr::Tag(arg) => {
@@ -1720,11 +2293,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             // the constructor fields.
             let slot = ctx.value_of(*var)?;
             let mut operands = vec![slot];
-            for arg in args {
-                if let IRArg::Var(_) = arg {
-                    operands.push(ctx.value_of_arg(arg)?);
-                }
-            }
+            operands.extend(ctor_field_operands(ctx, args)?);
             emit_clean_value_with_ctor_attrs(ctx, "obj.reuse", operands, ctor, Ty::Ptr)
         }
 
@@ -1748,7 +2317,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
             if let (RuntimeLowering::ExternCalls, Some(abi)) =
                 (ctx.config.runtime_lowering, ctx.abi.clone())
             {
-                return Ok(emit_unbox_extern(ctx, &abi, uty, obj));
+                return emit_unbox_extern(ctx, &abi, uty, obj);
             }
             emit_clean_value(ctx, "obj.unbox", vec![obj], &ty_attr(uty), lower_ty(uty))
         }
@@ -1756,7 +2325,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
         IRExpr::String(s) => {
             // ExternCalls mode: take the address of the literal's read-only byte
             // global (built in the string pre-pass) and build a managed string
-            // with `clean_mk_string` — a real, runnable native call.
+            // with its exact byte length — a real, runnable native call.
             if let (RuntimeLowering::ExternCalls, Some(abi)) =
                 (ctx.config.runtime_lowering, ctx.abi.clone())
             {
@@ -1766,7 +2335,8 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
                     ))
                 })?;
                 let ptr = ctx.fb.global_addr(gid);
-                return Ok(ctx.fb.call(abi.clean_mk_string, vec![ptr]));
+                let len = ctx.fb.iconst(Ty::U64, s.len() as i128);
+                return Ok(ctx.fb.call(abi.clean_mk_string_from_bytes, vec![ptr, len]));
             }
             // Dialect mode (no runtime): carry the bytes as a `clean.str.const`
             // op producing a managed string pointer.
@@ -1837,7 +2407,7 @@ fn emit_expr(ctx: &mut FnCtx, expr: &IRExpr, ty: &IRType) -> Result<ValueId, Tru
 ///   no faithful lowering here and is refused fail-closed.
 fn emit_apply_user(
     ctx: &mut FnCtx,
-    name: &str,
+    name: &Name,
     callee: FuncId,
     args: &[IRArg],
 ) -> Result<ValueId, TrustIrError> {
@@ -1926,13 +2496,26 @@ fn emit_ctor(
     args: &[IRArg],
     op: &str,
 ) -> Result<ValueId, TrustIrError> {
+    let operands = ctor_field_operands(ctx, args)?;
+    emit_clean_value_with_ctor_attrs(ctx, op, operands, info, Ty::Ptr)
+}
+
+/// One operand per constructor field, in order. An erased field still
+/// occupies its slot: `emit_c` passes `clean_box(0)` there and
+/// `CtorInfo::num_objects` counts it. Dropping it would leave the variadic
+/// `clean_alloc_ctor` / `clean_reuse` reading an uninitialized pointer, which
+/// is how `(PUnit.unit, 5)` printed a garbage second field and `some
+/// PUnit.unit` crashed (LX0 battery, `layout_punit_*`). The slot gets the same
+/// materialization a call's erased pointer argument gets.
+fn ctor_field_operands(ctx: &mut FnCtx, args: &[IRArg]) -> Result<Vec<ValueId>, TrustIrError> {
     let mut operands = Vec::with_capacity(args.len());
     for arg in args {
-        if let IRArg::Var(_) = arg {
-            operands.push(ctx.value_of_arg(arg)?);
-        }
+        operands.push(match arg {
+            IRArg::Var(_) => ctx.value_of_arg(arg)?,
+            IRArg::Erased => erased_slot_value(ctx),
+        });
     }
-    emit_clean_value_with_ctor_attrs(ctx, op, operands, info, Ty::Ptr)
+    Ok(operands)
 }
 
 /// Lower an `IRLiteral` to a constant SSA value.
@@ -1978,9 +2561,26 @@ fn lower_ty(ty: &IRType) -> Ty {
     }
 }
 
-/// The fixed-width UInt arithmetic primitives that lower to native trust-ir
-/// `BinOp`s (P2 semantics-preservation fragment): `UInt{8,16,32,64}.{add,sub,
-/// mul}` → wrapping `Add`/`Sub`/`Mul` at the matching unsigned width.
+/// The fixed-width UInt primitives that lower to native trust-ir `BinOp`s:
+/// `UInt{8,16,32,64}.{add,sub,mul}` → wrapping `Add`/`Sub`/`Mul` (the P2
+/// semantics-preservation fragment), and `UInt{8,16,32,64}.{land,lor,xor}` →
+/// `And`/`Or`/`Xor` at the matching unsigned width.
+///
+/// `land`/`lor` (WS6.3, F-105) are exact, not approximations: the prelude
+/// defines `<W>.land a b := <W>.ofNat (Nat.land a.toNat b.toNat)` (and `lor`
+/// likewise), both operands are `< 2^w`, so the `Nat` result is too and the
+/// `ofNat` wrap is the identity — bit-for-bit the machine `and`/`or`, which
+/// trust-ir defines for every operand value (no UB side condition, unlike a
+/// shift). Before this, the only route to them was compiling that body from
+/// source down to `Nat.bitwise`, whose unary fuel overflowed the stack on any
+/// operand ≥ 2^63 (the `mask` crash). The TV source reader additionally
+/// requires an original-source equation for XOR, including its UInt wrap;
+/// a matching pair of Nat models alone cannot mint that source binding.
+///
+/// Complement and shifts are NOT here. UInt shift amounts are reduced modulo
+/// width in Lean, while native IR shifts require an in-range amount. Until
+/// shared lowering preserves that reduction and its range evidence, those
+/// calls stay outside this table. No name table grants a carrier or TV license.
 ///
 /// Deliberately EXCLUDED (fail through to `UndefinedFunction`, never guessed):
 /// * `Nat.*` — Nat is arbitrary-precision (lowers to a runtime object); a
@@ -1989,6 +2589,15 @@ fn lower_ty(ty: &IRType) -> Ty {
 ///   target-stable.
 /// * `.div` / `.mod` — division-by-zero has panic/runtime semantics that a
 ///   plain `UDiv`/`URem` BinOp does not model.
+fn uint_arith_binop_name(name: &Name) -> Option<(BinOp, Ty)> {
+    if !is_legacy_name(name) {
+        return None;
+    }
+    uint_arith_binop(&name.to_string())
+}
+
+// The historical text table stays available for its exhaustive width controls;
+// production callers first establish exact structural identity above.
 fn uint_arith_binop(name: &str) -> Option<(BinOp, Ty)> {
     let (prefix, suffix) = name.rsplit_once('.')?;
     let ty = match prefix {
@@ -2002,23 +2611,105 @@ fn uint_arith_binop(name: &str) -> Option<(BinOp, Ty)> {
         "add" => BinOp::Add,
         "sub" => BinOp::Sub,
         "mul" => BinOp::Mul,
+        "land" => BinOp::And,
+        "lor" => BinOp::Or,
+        "xor" => BinOp::Xor,
         _ => return None,
     };
     Some((op, ty))
+}
+
+/// WS6.10: the twelve fixed-width UInt width conversions that lower to ONE
+/// native trust-ir cast — `UInt<B>.toUInt<C>` for distinct `B, C ∈ {8, 16,
+/// 32, 64}`: `ZExt` when `C > B`, `Trunc` when `C < B`. Returns `(op, source
+/// type, target type)`.
+///
+/// Deliberately EXCLUDED, for the reason [`uint_arith_binop_name`] excludes
+/// `USize.*`: the eight `USize` conversions (`USize` is host-pointer-width, so
+/// the cast would not be target-stable — and the native prelude does not
+/// define them either). `Nat` conversions are not width casts at all.
+fn uint_conversion_cast_name(name: &Name) -> Option<(CastOp, Ty, Ty)> {
+    if !is_legacy_name(name) {
+        return None;
+    }
+    uint_conversion_cast(&name.to_string())
+}
+
+// Text table behind [`uint_conversion_cast_name`], kept separately for its
+// exhaustive width controls (as with [`uint_arith_binop`]).
+fn uint_conversion_cast(name: &str) -> Option<(CastOp, Ty, Ty)> {
+    fn width(carrier: &str) -> Option<(u32, Ty)> {
+        Some(match carrier {
+            "UInt8" => (8, Ty::U8),
+            "UInt16" => (16, Ty::U16),
+            "UInt32" => (32, Ty::U32),
+            "UInt64" => (64, Ty::U64),
+            _ => return None,
+        })
+    }
+    let (source, method) = name.rsplit_once('.')?;
+    let (sw, src) = width(source)?;
+    let (dw, dst) = width(method.strip_prefix("to")?)?;
+    let op = match dw.cmp(&sw) {
+        std::cmp::Ordering::Greater => CastOp::ZExt,
+        std::cmp::Ordering::Less => CastOp::Trunc,
+        std::cmp::Ordering::Equal => return None,
+    };
+    Some((op, src, dst))
+}
+
+/// A fixed-width UInt primitive the emitter lowers NATIVELY (a `BinOp` or a
+/// width cast) rather than calling — never a link-time extern candidate.
+fn is_native_uint_primitive(name: &Name) -> bool {
+    uint_arith_binop_name(name).is_some()
+        || uint_conversion_cast_name(name).is_some()
+        || uint_comparison_op(name).is_some()
+}
+
+/// The same checked-width decision primitive vocabulary used by the carrier
+/// emitter, now available to saturated calls in the ordinary runtime ABI.
+fn uint_comparison_op(name: &Name) -> Option<(ICmpOp, IRType)> {
+    use crate::carrier_prims::{carrier_prim, CarrierPrim, ScalarCmp};
+    let CarrierPrim::Cmp(op, width) = carrier_prim(name, false)? else {
+        return None;
+    };
+    let op = match op {
+        ScalarCmp::Eq => ICmpOp::Eq,
+        ScalarCmp::Ult => ICmpOp::Ult,
+        ScalarCmp::Ule => ICmpOp::Ule,
+    };
+    Some((op, width.ir_type()))
+}
+
+/// WS6.10: every width conversion ([`uint_conversion_cast_name`]) referenced
+/// as a function VALUE — a `PartialApply` or a 0-arg `Apply` — anywhere in
+/// `decls`, in-slice or not. Such a conversion keeps its compiled body: the
+/// slice skip in the module emitter drops only the conversions NOT in this set.
+fn collect_conversion_value_refs(decls: &[IRDecl]) -> HashSet<Name> {
+    let mut refs = BTreeSet::new();
+    for d in decls {
+        collect_native_value_refs(
+            &d.body,
+            &|n| uint_conversion_cast_name(n).is_some(),
+            &mut refs,
+        );
+    }
+    refs.into_iter().collect()
 }
 
 /// The deterministic synthetic name of the native BOXED-entry wrapper for a
 /// fixed-width UInt arithmetic primitive `p` (`UInt8.add` → the closure-ABI
 /// entry that unboxes its two operands, applies the native wrapping `BinOp`,
 /// and re-boxes the result). See [`synthesize_uint_arith_wrappers`].
-fn uint_arith_wrapper_name(p: &str) -> String {
-    format!("{p}.__clean_uint_arith_boxed")
+fn uint_arith_wrapper_name(p: &Name) -> Name {
+    p.clone().str("__clean_uint_arith_boxed")
 }
 
 /// The `IRType` of a [`uint_arith_binop`] primitive's operands/result, keyed
 /// by the primitive's UInt-width prefix (mirrors that table's width arm).
-fn uint_arith_ir_ty(p: &str) -> Option<IRType> {
-    match p.rsplit_once('.')?.0 {
+fn uint_arith_ir_ty(p: &Name) -> Option<IRType> {
+    uint_arith_binop_name(p)?;
+    match p.to_string().rsplit_once('.')?.0 {
         "UInt8" => Some(IRType::UInt8),
         "UInt16" => Some(IRType::UInt16),
         "UInt32" => Some(IRType::UInt32),
@@ -2033,46 +2724,57 @@ fn uint_arith_ir_ty(p: &str) -> Option<IRType> {
 /// in the slice (an in-slice decl of that name keeps its own body). A
 /// saturated `Apply` (n≥1 args) is a direct call already lowered to the native
 /// `BinOp` in place, so it is deliberately NOT collected.
-fn collect_uint_value_refs(
+fn collect_uint_value_refs(body: &IRBody, slice_names: &HashSet<Name>, out: &mut BTreeSet<Name>) {
+    collect_native_value_refs(
+        body,
+        &|name| !slice_names.contains(name) && uint_arith_binop_name(name).is_some(),
+        out,
+    );
+}
+
+/// Collect every name satisfying `wanted` that `body` references as a function
+/// VALUE — a `PartialApply` closure or a 0-arg `Apply` (#16 value reference).
+/// A saturated `Apply` (n≥1 args) is a direct call and is NOT collected.
+fn collect_native_value_refs(
     body: &IRBody,
-    slice_names: &HashSet<String>,
-    out: &mut BTreeSet<String>,
+    wanted: &dyn Fn(&Name) -> bool,
+    out: &mut BTreeSet<Name>,
 ) {
-    let note = |value: &IRExpr, out: &mut BTreeSet<String>| {
+    let note = |value: &IRExpr, out: &mut BTreeSet<Name>| {
         let name = match value {
-            IRExpr::PartialApply { fn_id, .. } => fn_id.0.to_string(),
-            IRExpr::Apply { fn_id, args } if args.is_empty() => fn_id.0.to_string(),
+            IRExpr::PartialApply { fn_id, .. } => fn_id.0.clone(),
+            IRExpr::Apply { fn_id, args } if args.is_empty() => fn_id.0.clone(),
             _ => return,
         };
-        if !slice_names.contains(&name) && uint_arith_binop(&name).is_some() {
+        if wanted(&name) {
             out.insert(name);
         }
     };
     match body {
         IRBody::VDecl { value, rest, .. } => {
             note(value, out);
-            collect_uint_value_refs(rest, slice_names, out);
+            collect_native_value_refs(rest, wanted, out);
         }
         IRBody::JDecl {
             body: jp_body,
             rest,
             ..
         } => {
-            collect_uint_value_refs(jp_body, slice_names, out);
-            collect_uint_value_refs(rest, slice_names, out);
+            collect_native_value_refs(jp_body, wanted, out);
+            collect_native_value_refs(rest, wanted, out);
         }
         IRBody::Inc { rest, .. }
         | IRBody::Dec { rest, .. }
         | IRBody::Set { rest, .. }
         | IRBody::SetTag { rest, .. }
         | IRBody::USet { rest, .. }
-        | IRBody::SSet { rest, .. } => collect_uint_value_refs(rest, slice_names, out),
+        | IRBody::SSet { rest, .. } => collect_native_value_refs(rest, wanted, out),
         IRBody::Case { alts, default, .. } => {
             for alt in alts {
-                collect_uint_value_refs(&alt.body, slice_names, out);
+                collect_native_value_refs(&alt.body, wanted, out);
             }
             if let Some(d) = default {
-                collect_uint_value_refs(d, slice_names, out);
+                collect_native_value_refs(d, wanted, out);
             }
         }
         IRBody::Jmp { .. } | IRBody::Ret(_) | IRBody::Unreachable => {}
@@ -2101,12 +2803,14 @@ fn collect_uint_value_refs(
 /// no existing program (where the boxing pass already produced the wrapper)
 /// changes shape.
 fn synthesize_uint_arith_wrappers(decls: &[IRDecl]) -> Vec<IRDecl> {
-    let slice_names: HashSet<String> = decls.iter().map(|d| d.name.to_string()).collect();
-    let mut refs: BTreeSet<String> = BTreeSet::new();
+    let slice_names: HashSet<Name> = decls.iter().map(|d| d.name.clone()).collect();
+    let mut refs: BTreeSet<Name> = BTreeSet::new();
     for d in decls {
         collect_uint_value_refs(&d.body, &slice_names, &mut refs);
     }
     let mut wrappers = Vec::new();
+    let mut refs: Vec<_> = refs.into_iter().collect();
+    refs.sort_by_cached_key(wire_name);
     for p in refs {
         let wname = uint_arith_wrapper_name(&p);
         // Defensive: never shadow an existing in-slice decl.
@@ -2160,7 +2864,7 @@ fn synthesize_uint_arith_wrappers(decls: &[IRDecl]) -> Vec<IRDecl> {
                             var: r,
                             ty: ity.clone(),
                             value: IRExpr::Apply {
-                                fn_id: FnId(clean_kernel::Name::from_string(&p)),
+                                fn_id: FnId(p.clone()),
                                 args: vec![IRArg::Var(ua), IRArg::Var(ub)],
                             },
                             rest: Box::new(IRBody::VDecl {
@@ -2178,7 +2882,7 @@ fn synthesize_uint_arith_wrappers(decls: &[IRDecl]) -> Vec<IRDecl> {
             }),
         };
         wrappers.push(IRDecl {
-            name: clean_kernel::Name::from_string(&wname),
+            name: wname,
             params: vec![(a, IRType::Object), (b, IRType::Object)],
             return_type: IRType::Object,
             body,
@@ -2213,6 +2917,16 @@ fn synthesize_uint_arith_wrappers(decls: &[IRDecl]) -> Vec<IRDecl> {
 /// signed `IntN`, a `Nat`/boxed operand, a non-`Bool` result, a mis-arity)
 /// keeps its generic body.
 fn native_uint_decision_op(decl: &IRDecl) -> Option<ICmpOp> {
+    if let Some((op, scalar)) = uint_comparison_op(&decl.name) {
+        if decl.params.len() == 2
+            && decl.return_type == IRType::Bool
+            && decl.params[0].1 == scalar
+            && decl.params[0].1 == decl.params[1].1
+        {
+            return Some(op);
+        }
+        return None;
+    }
     // Both USize and UInt64 are pinned to a native u64 (`lower_ty`).
     fn is_u64_pinned(t: &IRType) -> bool {
         matches!(t, IRType::USize | IRType::UInt64)
@@ -2222,6 +2936,9 @@ fn native_uint_decision_op(decl: &IRDecl) -> Option<ICmpOp> {
         || !is_u64_pinned(&decl.params[1].1)
         || decl.return_type != IRType::Bool
     {
+        return None;
+    }
+    if !is_legacy_name(&decl.name) {
         return None;
     }
     match decl.name.to_string().as_str() {
@@ -2390,10 +3107,10 @@ fn emit_clean_value_extern(
     };
     let v = match op {
         "obj.tag" => {
-            // clean_obj_tag returns U8; the op's contract (and `switch`
-            // scrutinee) is U32, so zero-extend.
-            let t = ctx.fb.call(abi.clean_obj_tag, vec![obj]);
-            ctx.fb.zext(Ty::U8, Ty::U32, t)
+            // clean_obj_tag returns the whole tag as U32, the op's contract
+            // and the `switch` scrutinee width. (An 8-bit import plus a zext
+            // read boxed tag 299 as 43.)
+            ctx.fb.call(abi.clean_obj_tag, vec![obj])
         }
         "obj.proj" => {
             let idx = ctx.fb.iconst(Ty::U64, attr_u64(attrs, "idx") as i128);
@@ -2410,7 +3127,17 @@ fn emit_clean_value_extern(
             };
             let byte_off = 8 * attr_u64(attrs, "n") + attr_u64(attrs, "offset");
             let off = ctx.fb.iconst(Ty::U32, byte_off as i128);
-            ctx.fb.call(abi.scalar_get[w.idx()], vec![obj, off])
+            let raw = ctx.fb.call(abi.scalar_get[w.idx()], vec![obj, off]);
+            if *result_ty == Ty::Bool {
+                // A `Bool` field is stored as one byte (0 / 1, the runtime's
+                // `uint8_t`); the getter returns `U8`, so read it back as
+                // `raw != 0` — the same spelling `Unbox` uses. Returning the
+                // `U8` at a `Bool` result was invalid IR (WS6.9 review).
+                let zero = ctx.fb.iconst(Ty::U8, 0);
+                ctx.fb.icmp(ICmpOp::Ne, Ty::U8, raw, zero)
+            } else {
+                raw
+            }
         }
         "obj.reset" => ctx.fb.call(abi.clean_reset, vec![obj]),
         // obj.box / obj.unbox are handled in their `IRExpr` arms (they need the
@@ -2431,7 +3158,20 @@ fn emit_box_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, bty: &IRType, scalar: Valu
             let d = ctx.fb.cast(CastOp::FPExt, Ty::F32, Ty::F64, scalar);
             ctx.fb.call(abi.clean_box_float, vec![d])
         }
-        IRType::UInt64 | IRType::USize => ctx.fb.call(abi.clean_box_uint64, vec![scalar]),
+        // WS6.1 producer canonicalization: one value, one boxed spelling. A
+        // `USize` is how a small `Nat` literal is typed (`to_ir::lower`: a Nat
+        // literal below `u32::MAX` is `IRLiteral::USize`), and this runtime's
+        // `Nat` is the tagged immediate below 2^63 (`clean_runtime.h`, RUNG
+        // B). `clean_nat_of_u64` is exactly that spelling — tagged below 2^63,
+        // a heap Nat above — and agrees with the C backend's tagged
+        // `clean_box` for every `USize` below 2^63. It used to be the
+        // always-heap `clean_box_uint64`, so a
+        // small Nat had two boxed spellings and a tagged-only reader got
+        // pointer bits (F-101).
+        IRType::USize => ctx.fb.call(abi.clean_nat_of_u64, vec![scalar]),
+        // A genuine `UInt64` object is heap in Lean's ABI, and every `UInt64`
+        // consumer reads through the dispatching `clean_unbox_uint64`.
+        IRType::UInt64 => ctx.fb.call(abi.clean_box_uint64, vec![scalar]),
         IRType::UInt32 => ctx.fb.call(abi.clean_box_uint32, vec![scalar]),
         IRType::UInt16 => {
             let w = ctx.fb.zext(Ty::U16, Ty::U32, scalar);
@@ -2570,8 +3310,36 @@ fn scalar_carrier_mismatch(op: &str, carrier: &IRType, declared: &IRType) -> Tru
 
 /// `ExternCalls` lowering of `Unbox`: call the matching `clean_unbox*`, then
 /// narrow back to the L5IR scalar width.
-fn emit_unbox_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, uty: &IRType, obj: ValueId) -> ValueId {
-    match uty {
+///
+/// **An unbox may assume only the representation EVERY producer guarantees**
+/// (WS6.1, F-101). For an integer carrier that is "tagged OR heap": a `Nat`
+/// reaches an unbox as the tagged immediate `(v<<1)|1` (`clean_box`,
+/// `clean_nat_of_u64` below 2^63), as a `clean_box_uint64` cell
+/// (`scalar_sz 8`, the raw word), or as a two-limb heap `Nat`
+/// (`scalar_sz 16`, `[lo, hi]`). So every integer and `Bool` unbox reads
+/// through a DISPATCHING reader, never the tagged-only `clean_unbox`
+/// (`ptr >> 1`), which returns pointer bits for a heap cell. Measured
+/// (proof program run 4, `p12_mixed_widths`): `w8 a b := a * b + 1` boxed the
+/// literal `1` with the heap-allocating `clean_box_uint64`, `UInt8.ofNat`
+/// unboxed it with `clean_unbox`, and `w8(16,16)` returned 240, not 1.
+///
+/// The narrow arms read the LOW LIMB (`clean_unbox_uint64`: the tagged value,
+/// or `fields[0]` of either heap shape). That is exact because every consumer
+/// here is mod 2^w with w <= 64 and 2^w divides 2^64, so `lo ≡ n (mod 2^w)`.
+/// `Bool` is only ever produced tagged (`clean_box_uint32`, which never
+/// heap-allocates since `CLEAN_MAX_SMALL = SIZE_MAX >> 1`), so its dispatching
+/// read is a no-cost defence.
+///
+/// Every other type (`Object`/`TObject`/`Struct`/`Union`/`Erased`/`Void`) is
+/// REFUSED: it has no scalar representation to read faithfully, and the old
+/// `_ => clean_unbox` fallthrough emitted a `u64` of pointer bits for it.
+fn emit_unbox_extern(
+    ctx: &mut FnCtx,
+    abi: &RuntimeAbi,
+    uty: &IRType,
+    obj: ValueId,
+) -> Result<ValueId, TrustIrError> {
+    Ok(match uty {
         IRType::Float64 => ctx.fb.call(abi.clean_unbox_float, vec![obj]),
         IRType::Float32 => {
             let d = ctx.fb.call(abi.clean_unbox_float, vec![obj]);
@@ -2580,20 +3348,27 @@ fn emit_unbox_extern(ctx: &mut FnCtx, abi: &RuntimeAbi, uty: &IRType, obj: Value
         IRType::UInt64 | IRType::USize => ctx.fb.call(abi.clean_unbox_uint64, vec![obj]),
         IRType::UInt32 => ctx.fb.call(abi.clean_unbox_uint32, vec![obj]),
         IRType::UInt16 => {
-            let w = ctx.fb.call(abi.clean_unbox, vec![obj]);
+            let w = ctx.fb.call(abi.clean_unbox_uint64, vec![obj]);
             ctx.fb.trunc(Ty::U64, Ty::U16, w)
         }
         IRType::UInt8 => {
-            let w = ctx.fb.call(abi.clean_unbox, vec![obj]);
+            let w = ctx.fb.call(abi.clean_unbox_uint64, vec![obj]);
             ctx.fb.trunc(Ty::U64, Ty::U8, w)
         }
         IRType::Bool => {
-            let w = ctx.fb.call(abi.clean_unbox, vec![obj]);
+            let w = ctx.fb.call(abi.clean_unbox_uint64, vec![obj]);
             let zero = ctx.fb.iconst(Ty::U64, 0);
             ctx.fb.icmp(ICmpOp::Ne, Ty::U64, w, zero)
         }
-        _ => ctx.fb.call(abi.clean_unbox, vec![obj]),
-    }
+        other => return Err(unbox_non_scalar(other)),
+    })
+}
+
+/// The WS6.1 refusal for an `Unbox` at a type with no scalar representation.
+fn unbox_non_scalar(uty: &IRType) -> TrustIrError {
+    TrustIrError::Unsupported(format!(
+        "unbox at non-scalar type {uty:?} has no representation-faithful reader"
+    ))
 }
 
 /// `ExternCalls` lowering of `SSet`: store a scalar field via the width-typed
@@ -2609,6 +3384,16 @@ fn emit_sset_extern(
     match RuntimeAbi::scalar_width(&lower_ty(sty)) {
         Some(w) => {
             let off = ctx.fb.iconst(Ty::U32, byte_off as i128);
+            // A `Bool` field is one byte (0 / 1): the setter takes `U8`, so
+            // widen with `select` exactly as `Box` does. Passing the `Bool`
+            // to the `U8` setter was invalid IR (WS6.9 review).
+            let val = if lower_ty(sty) == Ty::Bool {
+                let one = ctx.fb.iconst(Ty::U8, 1);
+                let zero = ctx.fb.iconst(Ty::U8, 0);
+                ctx.fb.select(Ty::U8, val, one, zero)
+            } else {
+                val
+            };
             ctx.fb
                 .call_void(abi.scalar_set[w.idx()], vec![obj, off, val]);
             true
@@ -2675,6 +3460,7 @@ fn emit_ctor_extern(
 ) -> Result<Option<ValueId>, TrustIrError> {
     let v = match op {
         "obj.ctor" => {
+            ensure_object_operands(op, operands.len(), info)?;
             if operands.is_empty() && info.scalar_size() == 0 {
                 let tag = ctx.fb.iconst(Ty::U64, info.tag as i128);
                 ctx.fb.call(abi.clean_box, vec![tag])
@@ -2692,6 +3478,7 @@ fn emit_ctor_extern(
                 Some((s, f)) => (*s, f),
                 None => return Ok(None),
             };
+            ensure_object_operands(op, fields.len(), info)?;
             let tag = ctx.fb.iconst(Ty::U32, info.tag as i128);
             let nobj = ctx.fb.iconst(Ty::U32, info.num_objects as i128);
             let scalar = ctx.fb.iconst(Ty::U32, info.scalar_size() as i128);
@@ -2704,6 +3491,20 @@ fn emit_ctor_extern(
     Ok(Some(v))
 }
 
+/// The variadic runtime allocators read `num_objects` field pointers off the
+/// call. A call passing fewer would read uninitialized memory, so it is refused
+/// by name rather than emitted.
+fn ensure_object_operands(op: &str, passed: usize, info: &CtorInfo) -> Result<(), TrustIrError> {
+    if passed < info.num_objects as usize {
+        return Err(TrustIrError::Unsupported(format!(
+            "clean.{op} of `{}` passes {passed} field operand(s), but the runtime reads {} \
+             object field(s); a missing field would be an uninitialized read",
+            info.name, info.num_objects
+        )));
+    }
+    Ok(())
+}
+
 /// Box an erased argument as `clean_box_uint64(0)` (an out-of-line symbol) so
 /// closure captures keep a valid managed pointer in every slot.
 fn box_erased(ctx: &mut FnCtx, abi: &RuntimeAbi) -> ValueId {
@@ -2712,8 +3513,9 @@ fn box_erased(ctx: &mut FnCtx, abi: &RuntimeAbi) -> ValueId {
 }
 
 /// `ExternCalls` lowering of `PartialApply` -> `clean_alloc_closure(fn, arity,
-/// num_fixed, captured...)`. The function address is materialized via `fn_addr`
-/// (`Ty::Func`) and bitcast to `Ty::Ptr` so it matches the runtime parameter.
+/// num_fixed, captured...)`. The function address is materialized at the
+/// callee's own signature and converted to the runtime's closure fn-type by
+/// [`FnCtx::closure_fn_ptr`].
 fn emit_partial_apply_extern(
     ctx: &mut FnCtx,
     abi: &RuntimeAbi,
@@ -2721,15 +3523,37 @@ fn emit_partial_apply_extern(
     arity: u16,
     args: &[IRArg],
 ) -> Result<ValueId, TrustIrError> {
-    let name = fn_id.0.to_string();
+    let name = fn_id.0.clone();
     // In-slice callees first; a DROPPED callee closes over its certified
     // extern fallback declaration (C4: e.g. `Iff.symm`'s `PartialApply` of
     // `Iff.mpr`) — the pre-pass only declares it when every reference agreed
     // on the arity, so a declared-arity mismatch here is refused defensively.
-    let callee = match ctx.fn_ids.get(&name) {
-        Some(&id) => id,
-        None => match ctx.extern_fallbacks.get(&name) {
-            Some(&(id, declared_arity)) => {
+    //
+    // The same agreement is REQUIRED of an in-slice callee (a user decl or a
+    // synthesized UInt wrapper): the `PtrToPtr` below erases the callee's
+    // signature into the runtime's `() -> ()` fn-type, after which the
+    // runtime trusts `arity` alone to decide how many arguments
+    // `clean_apply_*` passes. A mismatched `arity` validates (the cast is
+    // legal between any two thin code pointers) and calls the callee at the
+    // wrong arity, so it is refused here rather than emitted (WS6.14 review;
+    // the ir_checker's rule F2b states the same law upstream, but this
+    // backend's public entry points do not run it).
+    let refuse_in_slice_arity = |callee_name: &Name, params: usize| {
+        TrustIrError::Unsupported(format!(
+            "PartialApply of `{name}` with arity {arity}, but its in-slice \
+             callee `{callee_name}` takes {params} parameter(s)"
+        ))
+    };
+    let (callee, callee_sig) = match (ctx.fn_ids.get(&name), ctx.fn_sigs.get(&name)) {
+        (Some(&id), Some(&sig)) => {
+            let params = ctx.fn_shapes.get(&name).map_or(0, |s| s.params.len());
+            if params != arity as usize {
+                return Err(refuse_in_slice_arity(&name, params));
+            }
+            (id, sig)
+        }
+        _ => match ctx.extern_fallbacks.get(&name) {
+            Some(&(id, declared_arity, sig)) => {
                 if declared_arity != arity as usize {
                     return Err(TrustIrError::Unsupported(format!(
                         "PartialApply of dropped callee `{name}` with arity \
@@ -2737,7 +3561,7 @@ fn emit_partial_apply_extern(
                          arity {declared_arity}"
                     )));
                 }
-                id
+                (id, sig)
             }
             // A fixed-width UInt arithmetic primitive referenced as a closure
             // value (`instHAddUInt8`'s `HAdd.mk UInt8.add`): close over its
@@ -2745,15 +3569,24 @@ fn emit_partial_apply_extern(
             // BinOp → box) instead of refusing. The pre-pass
             // ([`synthesize_uint_arith_wrappers`]) guarantees the wrapper is
             // in-slice whenever the reference exists.
-            None => match ctx.fn_ids.get(&uint_arith_wrapper_name(&name)) {
-                Some(&wid) => wid,
-                None => return Err(TrustIrError::UndefinedFunction(name.clone())),
-            },
+            None => {
+                let wname = uint_arith_wrapper_name(&name);
+                match (ctx.fn_ids.get(&wname), ctx.fn_sigs.get(&wname)) {
+                    (Some(&wid), Some(&wsig)) => {
+                        let params = ctx.fn_shapes.get(&wname).map_or(0, |s| s.params.len());
+                        if params != arity as usize {
+                            return Err(refuse_in_slice_arity(&wname, params));
+                        }
+                        (wid, wsig)
+                    }
+                    _ => return Err(TrustIrError::UndefinedFunction(name.to_string())),
+                }
+            }
         },
     };
-    // Materialize the callee's address with the runtime's canonical closure
-    // fn-type, which is exactly `clean_alloc_closure`'s `fn` parameter type — so
-    // it type-checks with no bitcast.
+    // Materialize the callee's address at ITS signature and convert it to the
+    // runtime's canonical closure fn-type (`clean_alloc_closure`'s `fn`
+    // parameter type) — see `FnCtx::closure_fn_ptr` for why v41 needs both.
     //
     // KNOWN ISSUE: passing this `fn_addr` (`GlobalRef`) value as a call argument
     // hits a trust-cg call-arg parallel-move bug that drops the move of the
@@ -2762,7 +3595,7 @@ fn emit_partial_apply_extern(
     // valid and trust-cg compiles it; the fix belongs in trust-cg's call-arg
     // register assignment. Laundering through alloca/store/load does NOT help
     // (trust-cg folds it away), so it is left as the direct, correct lowering.
-    let fn_ptr = ctx.fb.fn_addr(abi.clean_fn_ty, callee);
+    let fn_ptr = ctx.closure_fn_ptr(abi, callee, callee_sig);
     let arity_c = ctx.fb.iconst(Ty::U32, arity as i128);
     let nfixed_c = ctx.fb.iconst(Ty::U32, args.len() as i128);
     let mut call_args = vec![fn_ptr, arity_c, nfixed_c];
@@ -2851,8 +3684,27 @@ fn single_result(results: Vec<ValueId>) -> Result<ValueId, TrustIrError> {
 }
 
 #[cfg(test)]
+#[path = "emit_trust_ir_ctor_erased_tests.rs"]
+mod ctor_erased_tests;
+
+#[cfg(test)]
 #[path = "emit_trust_ir_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "emit_trust_ir_identity_tests.rs"]
+mod identity_tests;
+
+#[cfg(test)]
+#[path = "emit_trust_ir_wire_identity_tests.rs"]
+mod wire_identity_tests;
+
+// Trust plan step 3.2: the core at the Rust ABI (scalar primitives, Rust
+// callees at the carrier ABI, `Nat` through the pinned handle, the
+// per-function determinism digest).
+#[cfg(test)]
+#[path = "emit_trust_ir_rust_abi_tests.rs"]
+mod rust_abi_tests;
 
 // Reference operational semantics for the Perceus reset/reuse discipline,
 // modeled in core trust-ir ops and differentially checked with the reference

@@ -412,7 +412,7 @@ impl LeavesManifest {
 /// Minimal, dependency-free hex codec (the workspace has no `hex` crate; the one
 /// in `shard.rs` is a private module). Lowercase, fixed alphabet.
 pub(crate) mod hexcodec {
-    pub fn encode(bytes: &[u8]) -> String {
+    pub(crate) fn encode(bytes: &[u8]) -> String {
         let mut s = String::with_capacity(bytes.len() * 2);
         for b in bytes {
             s.push(char::from_digit((b >> 4) as u32, 16).unwrap());
@@ -421,7 +421,7 @@ pub(crate) mod hexcodec {
         s
     }
 
-    pub fn decode(s: &str) -> Option<Vec<u8>> {
+    pub(crate) fn decode(s: &str) -> Option<Vec<u8>> {
         if !s.len().is_multiple_of(2) {
             return None;
         }
@@ -443,11 +443,11 @@ mod hex32 {
     use super::hexcodec;
     use serde::{Deserialize, Deserializer, Serializer};
 
-    pub fn serialize<S: Serializer>(bytes: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
+    pub(crate) fn serialize<S: Serializer>(bytes: &[u8; 32], s: S) -> Result<S::Ok, S::Error> {
         s.serialize_str(&hexcodec::encode(bytes))
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<[u8; 32], D::Error> {
         let s = String::deserialize(d)?;
         let v = hexcodec::decode(&s).ok_or_else(|| serde::de::Error::custom("invalid hex"))?;
         v.try_into()

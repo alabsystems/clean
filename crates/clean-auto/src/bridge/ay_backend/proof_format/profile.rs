@@ -187,7 +187,7 @@ impl ProofProfile {
     /// will error at runtime until LRAT verification is added.
     ///
     /// Part of #617: Kernel acceptance policy for theory vs SAT-only proofs.
-    pub fn kernel_critical() -> Self {
+    pub(crate) fn kernel_critical() -> Self {
         Self {
             format: ProofFormat::Lrat { binary: true },
             verification_tier: 2,
@@ -212,7 +212,7 @@ impl ProofProfile {
     ///
     /// Returns `true` if the theory is in `proof_formats::CARCARA_VERIFIED_THEORIES`,
     /// meaning Carcara can verify all proof steps without `trust` rule fallback.
-    pub fn is_fully_verified_theory(theory: &str) -> bool {
+    pub(crate) fn is_fully_verified_theory(theory: &str) -> bool {
         proof_formats::CARCARA_VERIFIED_THEORIES.contains(&theory)
     }
 
@@ -222,7 +222,7 @@ impl ProofProfile {
     ///
     /// Returns `true` if the theory is in `proof_formats::CARCARA_PARTIAL_THEORIES`,
     /// meaning some proof steps may use the `trust` rule and not be verified.
-    pub fn is_partially_supported_theory(theory: &str) -> bool {
+    pub(crate) fn is_partially_supported_theory(theory: &str) -> bool {
         proof_formats::CARCARA_PARTIAL_THEORIES.contains(&theory)
     }
 
@@ -232,7 +232,7 @@ impl ProofProfile {
     ///
     /// Returns `true` if the theory has either full verification support
     /// or partial support. Returns `false` for completely unsupported theories.
-    pub fn has_carcara_support(theory: &str) -> bool {
+    pub(crate) fn has_carcara_support(theory: &str) -> bool {
         Self::is_fully_verified_theory(theory) || Self::is_partially_supported_theory(theory)
     }
 }

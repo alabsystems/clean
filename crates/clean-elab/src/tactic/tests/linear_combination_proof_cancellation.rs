@@ -83,14 +83,16 @@ fn setup_nat_transitivity_goal() -> ProofState {
         make_eq(nat.clone(), nat_var("a"), nat_var("c")),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(nat.clone(), nat_var("a"), nat_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(nat, nat_var("b"), nat_var("c")),
                 value: None,
             },
@@ -118,14 +120,16 @@ fn setup_int_transitivity_goal() -> ProofState {
         make_eq(int.clone(), int_var("a"), int_var("c")),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(int.clone(), int_var("a"), int_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(int, int_var("b"), int_var("c")),
                 value: None,
             },
@@ -141,7 +145,10 @@ fn test_proof_builder_two_hyp_transitivity_goal_uses_cancellation_bridge() {
     let proof = build_linear_combination_eq_proof(
         &state,
         &goal,
-        &[LinearCoeff::one("h1"), LinearCoeff::one("h2")],
+        &[
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+        ],
     )
     .expect("two-hypothesis transitivity goal should reconstruct via cancellation");
 
@@ -177,7 +184,10 @@ fn test_linear_combination_tactic_two_hyp_transitivity_goal_closes_without_trust
 
     linear_combination(
         &mut state,
-        vec![LinearCoeff::one("h1"), LinearCoeff::one("h2")],
+        vec![
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+        ],
     )
     .expect("linear_combination should close the transitivity goal without trustedArith");
 
@@ -212,7 +222,10 @@ fn test_proof_builder_int_transitivity_goal_uses_cancellation_bridge() {
     let proof = build_linear_combination_eq_proof(
         &state,
         &goal,
-        &[LinearCoeff::one("h1"), LinearCoeff::one("h2")],
+        &[
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+        ],
     )
     .expect("Int transitivity goal should reconstruct via cancellation");
 
@@ -248,7 +261,10 @@ fn test_linear_combination_tactic_int_transitivity_goal_closes_without_trusted_a
 
     linear_combination(
         &mut state,
-        vec![LinearCoeff::one("h1"), LinearCoeff::one("h2")],
+        vec![
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+        ],
     )
     .expect("linear_combination should close the Int transitivity goal without trustedArith");
 
@@ -314,14 +330,16 @@ fn setup_rat_fractional_cancellation_goal() -> ProofState {
         make_eq(rat.clone(), goal_lhs, goal_rhs),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(rat.clone(), rat_var("a"), rat_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(rat, rat_var("c"), rat_var("c")),
                 value: None,
             },
@@ -348,7 +366,10 @@ fn test_proof_builder_rat_fractional_cancellation_bridge() {
     let proof = build_linear_combination_eq_proof(
         &state,
         &goal,
-        &[LinearCoeff::new("h1", 1, 2), LinearCoeff::new("h2", 1, 2)],
+        &[
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h1"), 1, 2),
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h2"), 1, 2),
+        ],
     )
     .expect("Rat fractional cancellation should produce a proof via Rat.add_right_cancel");
 
@@ -392,7 +413,10 @@ fn test_linear_combination_tactic_rat_fractional_cancellation_closes_without_tru
 
     linear_combination(
         &mut state,
-        vec![LinearCoeff::new("h1", 1, 2), LinearCoeff::new("h2", 1, 2)],
+        vec![
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h1"), 1, 2),
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h2"), 1, 2),
+        ],
     )
     .expect("linear_combination should close Rat fractional cancellation without trustedArith");
 

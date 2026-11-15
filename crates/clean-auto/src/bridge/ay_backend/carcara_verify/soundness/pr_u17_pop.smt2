@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-fun p () Bool)
+(push 1)
+(assert (not p))
+(pop 1)
+(assert p)
+(check-sat)

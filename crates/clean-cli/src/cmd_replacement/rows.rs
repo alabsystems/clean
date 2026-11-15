@@ -405,9 +405,17 @@ pub(crate) fn replacement_rows() -> Vec<ReplacementRow> {
             "Compiler/runtime/eval closure",
             "Slot 5",
             IssueRef::new(3708, "Restore clean compile file-to-executable pipeline"),
-            ReplacementStatus::Green,
-            "clean compile demos/public/kernel_check_success.lean --decl main --emit c",
-            "reports/compile-runtime-smoke.json",
+            // Measured 2026-09-25 (P0_EXEC): this row was Green on an emit-C
+            // smoke that links, runs and compares nothing, while `clean run`
+            // printed wrong answers at exit 0 (`(7 : Int) / 2` gave `0`, both
+            // arms of a non-final `if` ran). It is now backed by the byte-exact
+            // differential battery against pinned Lean, whose gate is
+            // FAIL-CLOSEDNESS -- every program byte-identical or refused by
+            // name -- not parity, so the row is InProgress until parity is
+            // what the battery measures.
+            ReplacementStatus::InProgress,
+            "cargo test --locked -p clean --test native_exec_battery",
+            "reports/native-exec-battery.json",
             replacement_row_blocker("compile-runtime"),
         ),
         row(

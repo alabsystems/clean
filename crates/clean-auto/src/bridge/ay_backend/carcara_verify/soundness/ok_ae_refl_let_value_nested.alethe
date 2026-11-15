@@ -1,0 +1,3 @@
+(assume nc (not (= (let ((u p)) (let ((u (not u)) (w u)) (or u w))) (let ((v p)) (let ((z (not v)) (w v)) (or z w))))))
+(step s (cl (= (let ((u p)) (let ((u (not u)) (w u)) (or u w))) (let ((v p)) (let ((z (not v)) (w v)) (or z w))))) :rule refl)
+(step done (cl) :rule resolution :premises (nc s))

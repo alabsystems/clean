@@ -1,0 +1,3999 @@
+{
+  "what_this_is": "The rule inventory of the CIC_L specification against pinned Lean 4's kernel sources (self-proof plan unit S7; the proven-core plan's KR2 inventory). Every function, case arm and hardcoded-constant use of the pinned files is claimed by a row; every rule row names the CIC_L items that state it and says specified, partial or unspecified. scripts/check_cic_l_rule_inventory.py re-derives both sides and prints the counts; no count is written here.",
+  "how_to_read": {
+    "status": "specified: the theory has an item that states this rule family, named in cic_l. partial: it states part, and `missing` names the rest. unspecified: no item states it; `groundwork` may name data the theory already has for it. A status is the recorded reading of whoever wrote the row. The gate checks that each named item exists with that kind in that file, and never that it is adequate.",
+    "kind": "rule: deleting the code would change which judgments the kernel accepts as instances of a rule. strategy: the code only orders the rules it names in uses_rules. infrastructure: object plumbing, caches, printing.",
+    "extension": "A family that hardcodes Lean constants beyond the core calculus. plan_requires_derived_rule says whether the self-proof plan requires it as a derived rule (unit S6 for Nat and String literals).",
+    "anchors": "file is relative to upstream.root; lines are 1-based and inclusive; sha256 is of those raw lines. A whole-function anchor has the function's span; a function split between rows has every code line and case arm claimed by some part.",
+    "control": "Plan unit E6. Each constructor item of a rule carrier names its negative control: {theorem, file}, a theorem `<constructor>_control` stating `Refutes .<constructor> ...` (with that premise deleted the judgment derives a statement it refutes as written), or {none: reason} where no single deleted premise lets the judgment derive a statement it can be shown to refute. The gate checks the name and the statement; crates/clean-olean/tests/cic_l_level.rs checks the admitted theorem and what Refutes, Closed and Mutation mean."
+  },
+  "grouping_rule": "One row per rule family, where a family is the unit of specification work: one typing rule per term former, one row per reduction, one per definitional-equality rule, one per stage of inductive admission, one per generated artifact. A dispatch function is split by line range so each arm goes to its family. Where the kernel dispatches on hardcoded constants, constants that share one implementation function share a row, and the row names each of them.",
+  "out_of_scope": "KR2 names four files; inductive.h and quot.h are pinned with them because iota, K, structure eta of a major premise and quotient reduction are defined there. Everything else under src/kernel is outside this inventory, in particular environment.cpp (admission of axioms, definitions, theorems, opaque and mutual definitions), expr.cpp (lit_type), instantiate.cpp, abstract.cpp, local_ctx.cpp, declaration.cpp, equiv_manager.cpp and type_checker.h. A rule those files state is not counted here.",
+  "upstream": {
+    "repository": "https://github.com/leanprover/lean4",
+    "tag": "v4.30.0-rc2",
+    "commit": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "toolchain_file": "theories/cic_l/lean-toolchain",
+    "root": "tests/fixtures/lean_kernel/v4.30.0-rc2",
+    "files": {
+      "src/kernel/type_checker.cpp": {
+        "sha256": "ba68131f435bb85655da31c10d2cfec8cf9b6b1d7a2009bf9f8255af2a91040d",
+        "bytes": 47347
+      },
+      "src/kernel/inductive.cpp": {
+        "sha256": "483fd791504ada6cdf94e9eb63f13c62f5a3a0196367a83ce8cd896ad0408db5",
+        "bytes": 58268
+      },
+      "src/kernel/inductive.h": {
+        "sha256": "0c800b0377e7aa74a8a53a9f98ce61ab9df02ea62f917fc8e59db07189fddc98",
+        "bytes": 6936
+      },
+      "src/kernel/quot.cpp": {
+        "sha256": "16916b73a6297e8f680e758684390fb2df8e7ff99253ffca8f97cb01af16925f",
+        "bytes": 5996
+      },
+      "src/kernel/quot.h": {
+        "sha256": "17105c835e79ccb397194e9663dba71b5515edbc89c9698b0d58a95dc30a8243",
+        "bytes": 3132
+      },
+      "src/kernel/level.cpp": {
+        "sha256": "ca17818de4a7f7c2ceaea3b4c6596fb7dfad0db6305c8100548964bc6459c7f9",
+        "bytes": 17826
+      }
+    }
+  },
+  "spec": {
+    "root": "theories/cic_l",
+    "rule_carriers": [
+      "CICL.CoreJudgmentIn"
+    ]
+  },
+  "rows": [
+    {
+      "id": "infer-sort",
+      "kind": "rule",
+      "title": "A sort has the next sort as its type",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.sort",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.sort_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            289,
+            292
+          ],
+          "sha256": "cc8291997cd981d91f196ccb949ae01db4e02863e45099e804f8229c7ecbf9c3"
+        }
+      ]
+    },
+    {
+      "id": "infer-constant",
+      "kind": "rule",
+      "title": "A constant has its declared type at the given universe arguments",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.constant",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.constant_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.levelSubstitution",
+          "kind": "def",
+          "file": "CICL/CoreTyping.lean"
+        }
+      ],
+      "note": "The safety check and the declared-universe check that sit inside infer_constant are the rows constant-safety and universe-params-declared.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_constant",
+          "lines": [
+            92,
+            99
+          ],
+          "sha256": "5182d3f61c114061fa9c197ef55984c6c831eab6a0867d192b4858b2a02bd4d4"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_constant",
+          "lines": [
+            113,
+            114
+          ],
+          "sha256": "028b63e63cf887a233c4a821a23287431b0af3f1dfbb593de75cbc2d6743d2a8"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            293,
+            293
+          ],
+          "sha256": "f0f733a133398aaa0ac557c451bda7fe8e5124db29657489726c02771d0a5b3e"
+        }
+      ]
+    },
+    {
+      "id": "universe-params-declared",
+      "kind": "rule",
+      "title": "Every universe parameter a checked declaration mentions is one it declares",
+      "status": "specified",
+      "plan_unit": "S0, S1",
+      "cic_l": [
+        {
+          "item": "CICL.Level.Scoped",
+          "kind": "def",
+          "file": "CICL/Level.lean"
+        },
+        {
+          "item": "CICL.Expr.LevelScoped",
+          "kind": "def",
+          "file": "CICL/Expr.lean"
+        },
+        {
+          "item": "CICL.ConstantAdmission",
+          "kind": "structure",
+          "file": "CICL/Signature.lean"
+        },
+        {
+          "item": "CICL.FamilyHeaderView",
+          "kind": "structure",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.ConstructorCertificate",
+          "kind": "structure",
+          "file": "CICL/ConstructorChecks.lean"
+        }
+      ],
+      "note": "The kernel enforces this while inferring a declaration's type and value (m_lparams). The specification states it where a declaration is admitted, as LevelScoped of the whole type and value (ConstantAdmission.typeScoped and valueValid, FamilyHeaderView.universeScoped, ConstructorCertificate.universeScoped), not as a premise of the sort and constant rules. Plan units S0 and S1 restate it as a premise.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::check_level",
+          "lines": [
+            76,
+            82
+          ],
+          "sha256": "0635ca376dc1061f25f93d0c2c6c525763c740ebced76f424fc7e042197203c8"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_constant",
+          "lines": [
+            109,
+            112
+          ],
+          "sha256": "75ecd02ff2272d2c48bb782ec2a59d8e2a08ce24b7fbc638108835c00f99a005"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::check",
+          "lines": [
+            308,
+            311
+          ],
+          "sha256": "7bb6723c438505a937897fc8fcbe0fe4cad1d57fe93827984b17c2debab2e87e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::check_ignore_undefined_universes",
+          "lines": [
+            313,
+            316
+          ],
+          "sha256": "cabdff4deffd33fd60009a7553fb0a57f567fbebd9e6785ce53d8200292f0813"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "get_undef_param",
+          "lines": [
+            274,
+            284
+          ],
+          "sha256": "b0e59a0419f94d17d0180301109ba1de0c7fbb84894557d67e02cb61c30ec527"
+        }
+      ]
+    },
+    {
+      "id": "constant-safety",
+      "kind": "rule",
+      "title": "A safe declaration uses no unsafe or partial constant",
+      "status": "partial",
+      "cic_l": [
+        {
+          "item": "CICL.DefinitionSafety",
+          "kind": "inductive",
+          "file": "CICL/Declaration.lean"
+        },
+        {
+          "item": "CICL.ConstantDecl.Safe",
+          "kind": "def",
+          "file": "CICL/Declaration.lean"
+        },
+        {
+          "item": "CICL.ConstantAdmission",
+          "kind": "structure",
+          "file": "CICL/Signature.lean"
+        }
+      ],
+      "missing": "The specification admits only safe constants (ConstantAdmission.safe), so in a well-formed signature the check holds by exclusion. It states no rule for the declarations the kernel does accept under definition_safety::unsafe or as partial definitions. A recorded decision that those are outside the proved theory closes this row.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_constant",
+          "lines": [
+            100,
+            108
+          ],
+          "sha256": "1d68eb79c9b98e54ef6b5c8076e981dee6198e157b3ee157e2aeb368fed920cb"
+        }
+      ]
+    },
+    {
+      "id": "infer-local-variable",
+      "kind": "rule",
+      "title": "A local variable has the type its context gives it",
+      "status": "partial",
+      "plan_unit": "S1",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.bvar",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.bvar_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.lookupType",
+          "kind": "def",
+          "file": "CICL/CoreTyping.lean"
+        }
+      ],
+      "missing": "The kernel's rule is for free variables of a named local context. The specification states it for de Bruijn indices and proves the free-variable term former untypable (no_free_variable_yet).",
+      "groundwork": [
+        {
+          "item": "CICL.Expr.fvar",
+          "kind": "constructor",
+          "file": "CICL/Expr.lean"
+        },
+        {
+          "item": "CICL.no_free_variable_yet",
+          "kind": "theorem",
+          "file": "CICL/CoreTyping.lean"
+        },
+        {
+          "item": "CICL.WfContext",
+          "kind": "inductive",
+          "file": "CICL/CoreTyping.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_fvar",
+          "lines": [
+            84,
+            90
+          ],
+          "sha256": "a7a340e8e80c900cf80020f14ea2c20769638f404836809de18c6c20d00c577e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            285,
+            285
+          ],
+          "sha256": "81d48f2a7391b8cef87797e6f4c9cb1fd54fc8be4079f5fc266a67d8d669de81"
+        }
+      ]
+    },
+    {
+      "id": "infer-lambda",
+      "kind": "rule",
+      "title": "Lambda typing",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.lam",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.lam_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_lambda",
+          "lines": [
+            116,
+            132
+          ],
+          "sha256": "ea37686042ae2d61354eec2a14e6cbe3b9d3309328ee4b5195dd9b508a3b4e99"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            294,
+            294
+          ],
+          "sha256": "03aab1ebb7a3f6bc5e80d409f92d1c4c4aa2421b1a5bdc9f65c2100018a9b41b"
+        }
+      ]
+    },
+    {
+      "id": "infer-pi",
+      "kind": "rule",
+      "title": "Pi typing at the impredicative maximum of the two sorts",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.pi",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.pi_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_pi",
+          "lines": [
+            134,
+            156
+          ],
+          "sha256": "71bd3665a34a4b54c700e4df60a7ea3fa04b55be8e601efefa320377bbf8c2c5"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            295,
+            295
+          ],
+          "sha256": "4ce1b31ac048578be96066f6f4d0276f99b87d18a7953749b3faa2e02911a512"
+        }
+      ]
+    },
+    {
+      "id": "infer-app",
+      "kind": "rule",
+      "title": "Application typing",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.app",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.app_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_app",
+          "lines": [
+            163,
+            167
+          ],
+          "sha256": "299a10309b00786f7027176614c67857e6350a899b2ec1d745620d702953a330"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_app",
+          "lines": [
+            174,
+            196
+          ],
+          "sha256": "8f1792f4585ccc874fa0940e5edb77c61409e7d80207ee964efd050ca4945208"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            296,
+            296
+          ],
+          "sha256": "4efe4f750bb02fbba6368ba664b35bb1b57651a4065354bf5bf1031c018b6007"
+        }
+      ]
+    },
+    {
+      "id": "infer-let",
+      "kind": "rule",
+      "title": "Let typing",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.letE",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.letE_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_let",
+          "lines": [
+            198,
+            219
+          ],
+          "sha256": "26d2b1087dade519f1bb192218b9e09bda9a4122af968ed79dcced3fbed7efff"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            297,
+            297
+          ],
+          "sha256": "7638cad509e9c28db9de50257837a81dd6689c0284974bc9f227b4446782e3b1"
+        }
+      ]
+    },
+    {
+      "id": "infer-mdata",
+      "kind": "rule",
+      "title": "Metadata is transparent to typing",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.mdata",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.mdata_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            283,
+            283
+          ],
+          "sha256": "d4378fedd2672abf0a6c35518cef68d4e9f6acd7226923aba990ece9e360ed1e"
+        }
+      ]
+    },
+    {
+      "id": "infer-proj",
+      "kind": "rule",
+      "title": "Projection typing, with the restriction on structures in Prop",
+      "status": "unspecified",
+      "plan_unit": "S4",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.Expr.proj",
+          "kind": "constructor",
+          "file": "CICL/Expr.lean"
+        },
+        {
+          "item": "CICL.no_projection_yet",
+          "kind": "theorem",
+          "file": "CICL/CoreTyping.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_proj",
+          "lines": [
+            221,
+            266
+          ],
+          "sha256": "2744b9c33c267404c7e55d2ee6684ed5dc409ad6e563f7b44c152c2c5cd0610e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            284,
+            284
+          ],
+          "sha256": "0193a0283393eeae151d8010288cf11ba4674ad5f02c8a334ca270d2a60413f2"
+        }
+      ]
+    },
+    {
+      "id": "literal-terms",
+      "kind": "rule",
+      "title": "Nat and String literals: their types and their equality",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.Expr.lit",
+          "kind": "constructor",
+          "file": "CICL/Expr.lean"
+        },
+        {
+          "item": "CICL.Literal.natVal",
+          "kind": "constructor",
+          "file": "CICL/Expr.lean"
+        },
+        {
+          "item": "CICL.Literal.strVal",
+          "kind": "constructor",
+          "file": "CICL/Expr.lean"
+        },
+        {
+          "item": "CICL.no_literal_yet",
+          "kind": "theorem",
+          "file": "CICL/CoreTyping.lean"
+        }
+      ],
+      "extension": {
+        "class": "literal",
+        "plan_requires_derived_rule": true
+      },
+      "note": "lit_type, which names the types Nat and String, is defined in expr.cpp, outside the pinned files.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            282,
+            282
+          ],
+          "sha256": "bc6b8190be2990ccee195312283e6edf113da3769027ec1a38f12e512aee1025"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            758,
+            759
+          ],
+          "sha256": "43b0caaacd95ccf8ee5dbd1d12561c663d765780b692e27f3009b76eaca65dc6"
+        }
+      ]
+    },
+    {
+      "id": "type-conversion",
+      "kind": "rule",
+      "title": "A term's type may be exchanged for a definitionally equal one",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.convert",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.convert_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.CoreJudgmentIn.eqConvert",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.eqConvert_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::ensure_sort_core",
+          "lines": [
+            53,
+            62
+          ],
+          "sha256": "7d3c88eb1f6a0ac91368ff6b437a73f25f85b5ff1f6feb8af4fb8e68999834cd"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::ensure_pi_core",
+          "lines": [
+            65,
+            74
+          ],
+          "sha256": "9242f20bee8719b6248498e3e06ed1e664fe6526859aad98cd70819060614e43"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::ensure_sort",
+          "lines": [
+            318,
+            320
+          ],
+          "sha256": "7953d3f887519d1f155f98819968848318f467bcdd59945b54c2e91adc00d062"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::ensure_pi",
+          "lines": [
+            322,
+            324
+          ],
+          "sha256": "c0fa5751eb9be4510a207ccf673d0f64014c42e20fcd883f981e16d19f18ce55"
+        }
+      ]
+    },
+    {
+      "id": "reduce-beta",
+      "kind": "rule",
+      "title": "Beta reduction",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.beta",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.beta_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.CoreHeadStep.beta",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            447,
+            456
+          ],
+          "sha256": "930573f789b6cf460812154fd5e2950676a87f4d65cd0f8f56fc523a2461331d"
+        }
+      ]
+    },
+    {
+      "id": "reduce-zeta",
+      "kind": "rule",
+      "title": "Zeta reduction of a let",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.zeta",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.zeta_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.CoreJudgmentIn.letCong",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+          }
+        },
+        {
+          "item": "CICL.CoreHeadStep.zeta",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        }
+      ],
+      "note": "The kernel has no congruence for let: it compares two lets by zeta-reducing both. letCong is the specification's congruence for the same term former and is cited here for that reason.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            474,
+            476
+          ],
+          "sha256": "cabe5ec483fa3a3d3931cdd35ef4dd60750509c16ce05f5348494b46035237f0"
+        }
+      ]
+    },
+    {
+      "id": "reduce-zeta-local",
+      "kind": "rule",
+      "title": "A let-bound local variable unfolds to its value",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.zetaLocal",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.zetaLocal_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.lookupValue",
+          "kind": "def",
+          "file": "CICL/CoreTyping.lean"
+        },
+        {
+          "item": "CICL.CoreHeadStep.localDefinition",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_fvar",
+          "lines": [
+            348,
+            356
+          ],
+          "sha256": "22cfa2a10d97d2bcef56bdcb889e8a4eb8558540ee01c1c110195e4ee93aa56b"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "is_let_fvar",
+          "lines": [
+            389,
+            396
+          ],
+          "sha256": "a84a2951b108ab83d966fbb32efa20e9d7a1e16b3a057795af79834afbfcf8b0"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            412,
+            416
+          ],
+          "sha256": "85251d9d4bbd0d421645df702bb74c0d73552a55300f88c42c87ecac077b4753"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            434,
+            435
+          ],
+          "sha256": "76f5bfcaeb5e2375bd212aa0a53bda21d76c49e9da1a5e8cc855f6f3412eee9a"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            649,
+            653
+          ],
+          "sha256": "85251d9d4bbd0d421645df702bb74c0d73552a55300f88c42c87ecac077b4753"
+        }
+      ]
+    },
+    {
+      "id": "reduce-mdata",
+      "kind": "rule",
+      "title": "Metadata is transparent to reduction and to equality",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.metadata",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.metadata_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.CoreHeadStep.metadata",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            410,
+            411
+          ],
+          "sha256": "20b8ade9f275d4e7cf030f4db14c321e5b6b929cf8223494ba6bf9437f8e2c01"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            647,
+            648
+          ],
+          "sha256": "e839cd2876bd53daf9ab47e316439c13fa6ba78381daf2f919252cb615724a06"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            749,
+            750
+          ],
+          "sha256": "956578bc6a483327955043eb872c21eea5f2aa540699658c0f741627c25b81ab"
+        }
+      ]
+    },
+    {
+      "id": "reduce-delta",
+      "kind": "rule",
+      "title": "Delta: a definition or theorem unfolds to its value",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.delta",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.delta_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.ConstantDecl.transparent",
+          "kind": "def",
+          "file": "CICL/Declaration.lean"
+        },
+        {
+          "item": "CICL.CoreHeadStep.delta",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        }
+      ],
+      "note": "Which side is unfolded first (reducibility hints) is the strategy row defeq-lazy-delta.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_delta",
+          "lines": [
+            487,
+            495
+          ],
+          "sha256": "0bfa129280100ea0956426aafd54d515512797e91f288229abe12d9b931077b3"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::unfold_definition_core",
+          "lines": [
+            497,
+            518
+          ],
+          "sha256": "66a652b44f522bd91c26eb94dd5452d818aa66715e7a0d814717cd857df358d2"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::unfold_definition",
+          "lines": [
+            521,
+            534
+          ],
+          "sha256": "4f009802b4ab5271fad43441384b04caebd184f2f922b31ae4878b27dc4d0c5e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            673,
+            674
+          ],
+          "sha256": "0da5ec2f72dd44e500f24994512c5514e8e50e8aae66b766e2314a4ff6acece1"
+        }
+      ]
+    },
+    {
+      "id": "reduce-proj",
+      "kind": "rule",
+      "title": "A projection of a constructor application reduces to the field",
+      "status": "unspecified",
+      "plan_unit": "S4",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.Expr.proj",
+          "kind": "constructor",
+          "file": "CICL/Expr.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_proj_core",
+          "lines": [
+            359,
+            374
+          ],
+          "sha256": "325517efe026fb7f60752026cd1edf95503f0a6e52c7ded27756c358a0c6cc6c"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_proj",
+          "lines": [
+            377,
+            387
+          ],
+          "sha256": "a75cf4e55a86dbd1b3fe3395249001dcdbd9e0e8d8fefb6228bf942554026350"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            436,
+            442
+          ],
+          "sha256": "e740b5ff2fe307648966b9b7d99d53dddae5b350676736cf2788ed2f778dcf6f"
+        }
+      ]
+    },
+    {
+      "id": "reduce-iota",
+      "kind": "rule",
+      "title": "Iota: a recursor applied to a constructor reduces by its rule",
+      "status": "unspecified",
+      "plan_unit": "S3",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.RecursorRule",
+          "kind": "structure",
+          "file": "CICL/Declaration.lean"
+        },
+        {
+          "item": "CICL.RecursorDescriptor",
+          "kind": "structure",
+          "file": "CICL/Declaration.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_recursor",
+          "lines": [
+            333,
+            346
+          ],
+          "sha256": "30b59a10606b5ae74ff86635790c7b24acab1e12e3b8e62085be04be13fd800b"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            457,
+            468
+          ],
+          "sha256": "44ce2a7e45d306590a7b59d0b45bc0c7f56435c607776e7986e18358c4d3564f"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_reduce_rec",
+          "lines": [
+            75,
+            87
+          ],
+          "sha256": "2cf9eb86cee7aa9d9f0773bb7016c57f6d21a6817af732bb152edc77c9c13440"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_reduce_rec",
+          "lines": [
+            91,
+            91
+          ],
+          "sha256": "5a2cee9d43552d5241fa3ae79fd32067c7cc6e606c60ed0df4d9c8965715b122"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_reduce_rec",
+          "lines": [
+            98,
+            119
+          ],
+          "sha256": "f991666c45df50025cac9b1e8a27ef6f5a4442e168b1c046fc9057842b84ba14"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "get_rec_rule_for",
+          "lines": [
+            113,
+            121
+          ],
+          "sha256": "9415be9d6ebed6a09b6a115ffb1c302b45d0a86113a7ffa3c28376cb91ea097d"
+        }
+      ]
+    },
+    {
+      "id": "iota-k",
+      "kind": "rule",
+      "title": "K: a major premise of a K-target type is replaced by its nullary constructor",
+      "status": "unspecified",
+      "plan_unit": "S3",
+      "cic_l": [],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "to_cnstr_when_K",
+          "lines": [
+            30,
+            50
+          ],
+          "sha256": "761df0bbf80af154d8f633e42d507561e59988bcd1d6de15445f48e1bbeedb98"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_reduce_rec",
+          "lines": [
+            88,
+            90
+          ],
+          "sha256": "23c644638a1718c2926ef4b55f4e1a0b173d151630ae495ea7c6f85934fc035e"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "get_first_cnstr",
+          "lines": [
+            79,
+            85
+          ],
+          "sha256": "113c0ad47e0f61536d5f888d08edcfe3beff8871a49aac2835a766a7e4b72116"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "mk_nullary_cnstr",
+          "lines": [
+            87,
+            96
+          ],
+          "sha256": "4957e935c9403f26b61638801ba9d704900b11a71f3bb0a84b55ec636219f979"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::init_K_target",
+          "lines": [
+            551,
+            573
+          ],
+          "sha256": "fe7ad7b781c233a7171d41150376cf8ef71b3d9f77926c3b635f72458d3b2950"
+        }
+      ]
+    },
+    {
+      "id": "iota-structure-eta-major",
+      "kind": "rule",
+      "title": "A major premise of a structure type is eta-expanded to a constructor application",
+      "status": "unspecified",
+      "plan_unit": "S3, S4",
+      "cic_l": [],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "to_cnstr_when_structure",
+          "lines": [
+            62,
+            73
+          ],
+          "sha256": "9e26540fb18b148572edab8582e0c7cb3a9f178c89e6b15253a48a440bebb1b7"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_reduce_rec",
+          "lines": [
+            96,
+            97
+          ],
+          "sha256": "ad102a846d017e701ea495294a6a27ba9743eecaf711d893e89935e3ba908eb9"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "expand_eta_struct",
+          "lines": [
+            98,
+            111
+          ],
+          "sha256": "8b41d9c5fd73dd910082859e5170310f4fa386650e4d543510254de1b43772b6"
+        }
+      ]
+    },
+    {
+      "id": "nat-literal-constructor-form",
+      "kind": "rule",
+      "title": "A Nat literal as a major premise is Nat.zero or Nat.succ of a literal",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "extension": {
+        "class": "nat-literal",
+        "plan_requires_derived_rule": true
+      },
+      "constants": [
+        "Nat.succ",
+        "Nat.zero"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "nat_lit_to_constructor",
+          "lines": [
+            1191,
+            1198
+          ],
+          "sha256": "ff82a3a44d01b92318c5488dc34a738987cdd44ad3c7d0fba69ccc9801b22052"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_reduce_rec",
+          "lines": [
+            92,
+            93
+          ],
+          "sha256": "bb472188768d7b3100691cc337a2e230fcfa312b83e13be0dc5e10c4de9f9ce9"
+        }
+      ]
+    },
+    {
+      "id": "string-literal-expansion",
+      "kind": "rule",
+      "title": "A String literal is String.ofList of its characters",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "extension": {
+        "class": "string-literal",
+        "plan_requires_derived_rule": true
+      },
+      "constants": [
+        "Char.ofNat",
+        "List.cons",
+        "List.nil",
+        "String.ofList"
+      ],
+      "note": "List.cons and List.nil are used at the type Char, a constant built inside initialize_inductive.",
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "string_lit_to_constructor",
+          "lines": [
+            1200,
+            1212
+          ],
+          "sha256": "a333298d04d09bd9cc7a0e06913d52665c85c11bb65ba5bb42f2d98ed7f2293f"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_reduce_rec",
+          "lines": [
+            94,
+            95
+          ],
+          "sha256": "5fca0385f7af37d00a9b714a9ea32f8ee1ff24425d0ce8bceeea2e4c4256d71f"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_proj_core",
+          "lines": [
+            360,
+            361
+          ],
+          "sha256": "62e739ec8889ec7b8fa17127e8155bec3a0ae4fcade6ba207b0641879208f443"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::try_string_lit_expansion_core",
+          "lines": [
+            1030,
+            1035
+          ],
+          "sha256": "f0434dac4c9f7095af26076ce5c8975f178bf5245e5a557728b9f9ca1f646383"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::try_string_lit_expansion",
+          "lines": [
+            1037,
+            1041
+          ],
+          "sha256": "b6fe949d64a7a7e85e5ae39543690ff1e87c9fbd4b834a8bf136a625e963d6fb"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1123,
+            1125
+          ],
+          "sha256": "907daa5290b7ae257666ba6a9f0c798e9ce5190116f21e42609e57b3fd1f4076"
+        }
+      ]
+    },
+    {
+      "id": "quot-reduction",
+      "kind": "rule",
+      "title": "Quot.lift and Quot.ind applied to Quot.mk reduce",
+      "status": "unspecified",
+      "plan_unit": "S5",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.QuotientKind",
+          "kind": "inductive",
+          "file": "CICL/Declaration.lean"
+        }
+      ],
+      "constants": [
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/quot.h",
+          "function": "quot_is_rec",
+          "lines": [
+            32,
+            34
+          ],
+          "sha256": "79b08711ffe59dc82ec39ca2072b566bfe23dde96535991e8605e6dfb4a2419f"
+        },
+        {
+          "file": "src/kernel/quot.h",
+          "function": "quot_reduce_rec",
+          "lines": [
+            39,
+            70
+          ],
+          "sha256": "d23d40d850d814a18b73a111d876fb2d83b77405f54ac6e24944484a68726d12"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_recursor",
+          "lines": [
+            334,
+            338
+          ],
+          "sha256": "203e98a7df32f90fd51479e6214265c96f4f3c39793b0b31d74a6a4f47d36776"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            457,
+            468
+          ],
+          "sha256": "44ce2a7e45d306590a7b59d0b45bc0c7f56435c607776e7986e18358c4d3564f"
+        }
+      ]
+    },
+    {
+      "id": "quot-admission",
+      "kind": "rule",
+      "title": "The four quotient constants, admitted once Eq has the expected shape",
+      "status": "unspecified",
+      "plan_unit": "S5",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.QuotientKind",
+          "kind": "inductive",
+          "file": "CICL/Declaration.lean"
+        },
+        {
+          "item": "CICL.ConstantPayload.quotientDecl",
+          "kind": "constructor",
+          "file": "CICL/Declaration.lean"
+        }
+      ],
+      "constants": [
+        "Eq",
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/quot.cpp",
+          "function": "check_eq_type",
+          "lines": [
+            19,
+            45
+          ],
+          "sha256": "1876f37e89a4416b10dbf042e191867312120a538d901656f635e3d796b68e83"
+        },
+        {
+          "file": "src/kernel/quot.cpp",
+          "function": "environment::add_quot",
+          "lines": [
+            47,
+            98
+          ],
+          "sha256": "219e292af5a66818cff7e93db2b7048724692eed4c6e9f45e5ef7eea38ff17d3"
+        }
+      ]
+    },
+    {
+      "id": "native-reduction",
+      "kind": "rule",
+      "title": "Lean.reduceBool and Lean.reduceNat evaluate a constant with compiled code",
+      "status": "unspecified",
+      "cic_l": [],
+      "extension": {
+        "class": "native-evaluation",
+        "plan_requires_derived_rule": false
+      },
+      "constants": [
+        "Lean.reduceBool",
+        "Lean.reduceNat"
+      ],
+      "note": "The plan names no unit that specifies native evaluation. Unit F1 tests that the fenced reference kernel refuses these folds. This row stays open until a recorded decision says the proved theory refuses them.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "reduce_native",
+          "lines": [
+            546,
+            567
+          ],
+          "sha256": "671e0ec73b6b02c33704f81f6fb0f23f1cc95378e29fd1bf90c6ef387bb55ca5"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            667,
+            669
+          ],
+          "sha256": "136bbd5ea707c828af23200cd53478d9e35e1a5883ddf1c739220e5be0f3248a"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_reduction",
+          "lines": [
+            986,
+            990
+          ],
+          "sha256": "224229843d1a0c907e76af15ac6c6467c608c660ef20bf7e2e267a47a2ac77fb"
+        }
+      ]
+    },
+    {
+      "id": "nat-literal-zero-succ",
+      "kind": "rule",
+      "title": "Nat.zero is the literal 0 and Nat.succ of a literal is a literal",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "extension": {
+        "class": "nat-literal",
+        "plan_requires_derived_rule": true
+      },
+      "constants": [
+        "Nat.succ",
+        "Nat.zero"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "is_nat_lit_ext",
+          "lines": [
+            569,
+            569
+          ],
+          "sha256": "a58cce9c1605e66c634f482f58b9c30221a6f33f495d311085fd2fa820a506cf"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "get_nat_val",
+          "lines": [
+            570,
+            574
+          ],
+          "sha256": "ff2a5ddb4366c03558ef640355389c45fc17de8bcab1e96944fc6546647e41a4"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_nat",
+          "lines": [
+            609,
+            618
+          ],
+          "sha256": "06eba66e1846603628edc84fd79a4efb2145b159e07e1c250c9d82c98b534412"
+        }
+      ]
+    },
+    {
+      "id": "nat-binary-arithmetic",
+      "kind": "rule",
+      "title": "Binary Nat operations on literals compute",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "extension": {
+        "class": "nat-literal",
+        "plan_requires_derived_rule": true
+      },
+      "constants": [
+        "Nat.add",
+        "Nat.div",
+        "Nat.gcd",
+        "Nat.land",
+        "Nat.lor",
+        "Nat.mod",
+        "Nat.mul",
+        "Nat.shiftLeft",
+        "Nat.shiftRight",
+        "Nat.sub",
+        "Nat.xor"
+      ],
+      "note": "One derived rule is owed per constant this row names.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_bin_nat_op",
+          "lines": [
+            576,
+            584
+          ],
+          "sha256": "138b38867aeb9685d49c6e199107da0f4b9d2c8c06e21f67c11498c0f784a6e0"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_nat",
+          "lines": [
+            619,
+            624
+          ],
+          "sha256": "7308bc4d850c59cfa18320048eb427a21fb8dcde87c7cc975f178e069ada124e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_nat",
+          "lines": [
+            626,
+            628
+          ],
+          "sha256": "a7250bd6101ca27258a2c6280d4f254ad1a31d8c178bf7a675613742c25c9c2e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_nat",
+          "lines": [
+            631,
+            638
+          ],
+          "sha256": "0b1dbf474e4081309e447363328c065b8943ae5843b5a63f566d29285c2f4baa"
+        }
+      ]
+    },
+    {
+      "id": "nat-pow",
+      "kind": "rule",
+      "title": "Nat.pow on literals computes, below a fixed exponent bound",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "extension": {
+        "class": "nat-literal",
+        "plan_requires_derived_rule": true
+      },
+      "constants": [
+        "Nat.pow"
+      ],
+      "note": "The bound is the macro ReducePowMaxExp, a preprocessor line outside every function.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_pow",
+          "lines": [
+            588,
+            597
+          ],
+          "sha256": "8c24f59141aa10df7f3725948249cb3bd693fdbb701acc279dff80bbf006bd7e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_nat",
+          "lines": [
+            625,
+            625
+          ],
+          "sha256": "a58aea024e70ca5e95c9ecacb7e751273ed1dc79ae0cd4ee930bdaacd5aa183c"
+        }
+      ]
+    },
+    {
+      "id": "nat-binary-predicates",
+      "kind": "rule",
+      "title": "Nat.beq and Nat.ble on literals compute to a Bool constructor",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "extension": {
+        "class": "nat-literal",
+        "plan_requires_derived_rule": true
+      },
+      "constants": [
+        "Nat.beq",
+        "Nat.ble"
+      ],
+      "note": "The results are built by mk_bool_true and mk_bool_false, declared outside the pinned files.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_bin_nat_pred",
+          "lines": [
+            599,
+            607
+          ],
+          "sha256": "152b4b3383cb25f9a0596d91f73d344e7b08f572d81389c8c03bb572c60f2d6e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::reduce_nat",
+          "lines": [
+            629,
+            630
+          ],
+          "sha256": "54544664739f9e154a7800f97437f92c56b87fb3c8616262a458ac412750e585"
+        }
+      ]
+    },
+    {
+      "id": "defeq-nat-offset",
+      "kind": "rule",
+      "title": "Two Nat terms in zero or successor form are compared by their predecessors",
+      "status": "unspecified",
+      "plan_unit": "S6",
+      "cic_l": [],
+      "extension": {
+        "class": "nat-literal",
+        "plan_requires_derived_rule": true
+      },
+      "constants": [
+        "Nat.succ",
+        "Nat.zero"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "is_nat_zero",
+          "lines": [
+            943,
+            945
+          ],
+          "sha256": "4c0bc9b8ca7a53d3b9aa5b09ccd51b6fbda7acf1a59850572f5a59a4b20bba5b"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "is_nat_succ",
+          "lines": [
+            947,
+            959
+          ],
+          "sha256": "916ab8c6d8355a78d97e0e2e25fb5ab7806fa36967ffd33f9bf92045a15274e6"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_offset",
+          "lines": [
+            961,
+            970
+          ],
+          "sha256": "b273bde25251f751ddfdf7324b8df545eb307f90534cb40ffcbf1ecf2a52b1fb"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_reduction",
+          "lines": [
+            975,
+            976
+          ],
+          "sha256": "948d464b9415e4388d68efeae0e90f91b40cbf1116087526296541340619bfc7"
+        }
+      ]
+    },
+    {
+      "id": "defeq-equivalence-closure",
+      "kind": "rule",
+      "title": "Definitional equality is reflexive, symmetric and transitive",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.refl",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.refl_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.CoreJudgmentIn.symm",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.symm_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        },
+        {
+          "item": "CICL.CoreJudgmentIn.trans",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.trans_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            740,
+            742
+          ],
+          "sha256": "b509fe2c1c5b170fca97f83e2efbdbfe07a5c4eaf1392ef3e0a3d88fe7aadec9"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1097,
+            1099
+          ],
+          "sha256": "3472ef56f60984ea4c7f83fdee345810541a6c693826d9d551bdce6ec4f0b67f"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq#3",
+          "lines": [
+            1133,
+            1138
+          ],
+          "sha256": "b2fb0b4ba1afe685f4714b4dbf3f7dcede4e4526dbad9da854f6a70c063c7d7b"
+        }
+      ]
+    },
+    {
+      "id": "defeq-sort",
+      "kind": "rule",
+      "title": "Two sorts are equal when their levels are equivalent",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.sortCong",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.sortCong_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq#1",
+          "lines": [
+            719,
+            725
+          ],
+          "sha256": "546fdae3ef04c73c1ff800e30882f2dc28f9af09fc3bec89db5ec78d516d49cb"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            747,
+            748
+          ],
+          "sha256": "59d7ae56428b020669fea2ce797cc004e54954b46f90257d94aec44841f8855d"
+        }
+      ]
+    },
+    {
+      "id": "level-equivalence",
+      "kind": "rule",
+      "title": "Universe-level equivalence",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.Level.SemEq",
+          "kind": "def",
+          "file": "CICL/Level.lean"
+        },
+        {
+          "item": "CICL.Level.eqv",
+          "kind": "def",
+          "file": "CICL/LevelDecide.lean"
+        },
+        {
+          "item": "CICL.Level.eqv_sound",
+          "kind": "theorem",
+          "file": "CICL/LevelDecide.lean"
+        }
+      ],
+      "note": "The specification states the relation by evaluation (SemEq), and sortCong consumes it. The kernel's normal form and its simplifying constructors are one procedure for that relation; no theorem of the theory relates them to SemEq. Level.eqv is a different, sound procedure whose completeness is not proved.",
+      "anchors": [
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_explicit",
+          "lines": [
+            54,
+            64
+          ],
+          "sha256": "8671495993b62ef23bd2e7029860ede05a33f3fbc1ec566a2abe578172bef2d9"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "to_offset",
+          "lines": [
+            67,
+            74
+          ],
+          "sha256": "2d4e7cd5cb38089add01887518f8022d96b3922aabfc32c0e2c56dc3c8e7910c"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_max#1",
+          "lines": [
+            81,
+            104
+          ],
+          "sha256": "28c74c0de6fe610c688cca58d657bc31e72640b4313d7b9d9c81a63abc1f78e9"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_one",
+          "lines": [
+            110,
+            110
+          ],
+          "sha256": "e4e3d9c4849ecbc304cec308ef7069bbc3ab96ff44fd6216a21a36c0847542c3"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_imax",
+          "lines": [
+            112,
+            123
+          ],
+          "sha256": "964214c7f016592f61bc5fb158b8dc983c6eca004fbeadc6cc31c68347e55cc8"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "operator==",
+          "lines": [
+            125,
+            150
+          ],
+          "sha256": "924df3d6ff9514f906700b1236334f235a85929347036bfe10bf01868e3b9786"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_not_zero",
+          "lines": [
+            160,
+            172
+          ],
+          "sha256": "6fd8593c4c7ee010b7c14ea1eb95568faa678b323e3a537506bf939792bfb43d"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "update_succ",
+          "lines": [
+            286,
+            291
+          ],
+          "sha256": "7c529586e1f6bb973a33c6a8e1fefeed7d042e24b39b9f6c80e39c1b6830685b"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "update_max",
+          "lines": [
+            293,
+            300
+          ],
+          "sha256": "4d2423fa56a736c19b7a10b1dc1cab9011d967e068aace1f5b2fa64149ffcf2c"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_norm_lt",
+          "lines": [
+            380,
+            403
+          ],
+          "sha256": "cb8ef751a34f8d97e6e46ab187bf03ecea72836932afa2f949dc35af7ed1734a"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "push_max_args",
+          "lines": [
+            405,
+            412
+          ],
+          "sha256": "f6f7aa49ffe8fc92dad99d224e08b72beed8cdd9df9a5177bf7ce57f7ae20402"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_max#2",
+          "lines": [
+            414,
+            429
+          ],
+          "sha256": "601b802f6a00e72646436ebc98ce025b52bd8c2204d209e0edcd059f3ef3ca3d"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_succ#2",
+          "lines": [
+            431,
+            437
+          ],
+          "sha256": "bc1db817875f2b242cd08da5bd8568474d76c9c5fb73bf2e3cd977c11559b8d5"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "normalize",
+          "lines": [
+            439,
+            501
+          ],
+          "sha256": "83fa7102fe68bc95e5dd6e0ece6f1f1c2a23f3920e6e80db25b88277df32521f"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_equivalent",
+          "lines": [
+            503,
+            506
+          ],
+          "sha256": "804abe5c41735184b687de95233e7360635caa23d1d1b14b2e3fb27f215bae3a"
+        }
+      ]
+    },
+    {
+      "id": "level-order",
+      "kind": "rule",
+      "title": "Universe-level order",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.Level.SemLE",
+          "kind": "def",
+          "file": "CICL/ConstructorUniverse.lean"
+        },
+        {
+          "item": "CICL.Level.leq",
+          "kind": "def",
+          "file": "CICL/LevelDecide.lean"
+        },
+        {
+          "item": "CICL.Level.leq_sound",
+          "kind": "theorem",
+          "file": "CICL/LevelDecide.lean"
+        }
+      ],
+      "note": "As for level-equivalence: the relation is stated by evaluation (SemLE) and consumed by the constructor universe bound; nothing relates the kernel's is_geq to it.",
+      "anchors": [
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_geq_core",
+          "lines": [
+            508,
+            526
+          ],
+          "sha256": "6e450be2816eef9eb0a4410c92de5615cef6d09a90d5bcc99036de55df847e28"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_geq",
+          "lines": [
+            527,
+            529
+          ],
+          "sha256": "3f61ed8b72b9b80c9ff6d3b608b362297525b06ac6b5ae67d071230675cbe4ad"
+        }
+      ]
+    },
+    {
+      "id": "level-instantiation",
+      "kind": "rule",
+      "title": "Universe parameters are instantiated by universe arguments",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.Level.subst",
+          "kind": "def",
+          "file": "CICL/Level.lean"
+        },
+        {
+          "item": "CICL.levelSubstitution",
+          "kind": "def",
+          "file": "CICL/CoreTyping.lean"
+        },
+        {
+          "item": "CICL.Expr.mapLevels",
+          "kind": "def",
+          "file": "CICL/Expr.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "replace_level_fn::apply",
+          "lines": [
+            246,
+            262
+          ],
+          "sha256": "95090830667066bb8cddb858061a208423e19b767f2d6b131e150c7f837325c3"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "instantiate",
+          "lines": [
+            302,
+            325
+          ],
+          "sha256": "1b1506c3844d7f8fa1d09ace6125c38e5c80945e3b5243578288a6f2f3eae3e2"
+        }
+      ]
+    },
+    {
+      "id": "defeq-constant-levels",
+      "kind": "rule",
+      "title": "The same constant at pairwise equivalent universe arguments is equal",
+      "status": "unspecified",
+      "plan_unit": "S1",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.Level.SemEq",
+          "kind": "def",
+          "file": "CICL/Level.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq#2",
+          "lines": [
+            727,
+            737
+          ],
+          "sha256": "727a94b9394ed55968dfe2d5a7c0f3e348ed6f495cec4763f1c7cbf5d369473b"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1093,
+            1096
+          ],
+          "sha256": "2725edbc7753254b4165957f018c19dad6272f4822288c459093257a6f189eab"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_reduction_step",
+          "lines": [
+            917,
+            930
+          ],
+          "sha256": "769e95cf38bb2f69395719613688015626d601ad4f7e01f010f77da545dcef12"
+        }
+      ]
+    },
+    {
+      "id": "defeq-binder-congruence",
+      "kind": "rule",
+      "title": "Congruence for Pi and lambda",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.piCong",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+          }
+        },
+        {
+          "item": "CICL.CoreJudgmentIn.lamCong",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+          }
+        }
+      ],
+      "constants": [
+        "dontcare"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_binding",
+          "lines": [
+            690,
+            717
+          ],
+          "sha256": "b8cea3b6fecb4cc0f7d20224e90d85363cdbe31907630cdb21eb364ed967c4b5"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            745,
+            746
+          ],
+          "sha256": "9a408567693f8cede759822be640ee83f43522a91c0e295edd0d1fa53f02ca65"
+        }
+      ]
+    },
+    {
+      "id": "defeq-app-congruence",
+      "kind": "rule",
+      "title": "Congruence for application",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.appCong",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "none": "No control: every subterm of the rule is constrained by a component equality and an endpoint typing, so no single deleted premise lets the judgment derive an open, undeclared, untyped or out-of-bound statement. Its Mutation deletes the component equality, whose loss is false only in the set model; refuting what it derives needs that model (plan unit M3)."
+          }
+        },
+        {
+          "item": "CICL.CoreHeadStep.application",
+          "kind": "constructor",
+          "file": "CICL/CoreHeadReduction.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_args",
+          "lines": [
+            767,
+            775
+          ],
+          "sha256": "3d2d6e4ca06019eb05a32688cd41e08228445c570db32f73cd2cf5d4a542a13f"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_app",
+          "lines": [
+            815,
+            832
+          ],
+          "sha256": "7fccfa0a8084c897385ee89435541affc15e3611d63e23805906bc972b33842d"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1113,
+            1116
+          ],
+          "sha256": "df733b0113fd546d7baad8133856359468554080e94b5b2644592f922900e8ef"
+        }
+      ]
+    },
+    {
+      "id": "defeq-eta",
+      "kind": "rule",
+      "title": "Function eta",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.eta",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.eta_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "note": "The symmetric wrapper try_eta_expansion is inline in type_checker.h, which is not pinned.",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::try_eta_expansion_core",
+          "lines": [
+            778,
+            790
+          ],
+          "sha256": "82f5127c6a8fa328f1aeb2624631219345f520f93be3f70863f305578184e302"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1117,
+            1119
+          ],
+          "sha256": "e53ce3c059c8f593e17501ad22e80fc57b704679250bace1367fdc9630de537c"
+        }
+      ]
+    },
+    {
+      "id": "defeq-structure-eta",
+      "kind": "rule",
+      "title": "Structure eta: a term equals the constructor of its projections",
+      "status": "unspecified",
+      "plan_unit": "S4",
+      "cic_l": [],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::try_eta_struct_core",
+          "lines": [
+            793,
+            809
+          ],
+          "sha256": "736f7f73723f1fb5ee43d60bfb4cd05aff1d674fbc25a5fcb6e243ed1db30985"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1120,
+            1122
+          ],
+          "sha256": "471b88bbed026d34a2ddf2a685e448be8ddc1d43b8b6e7467877cee62c7a792a"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "is_non_rec_structure",
+          "lines": [
+            27,
+            32
+          ],
+          "sha256": "385fa9a7943c58c03a2373d9ec2827bd9332b734e68fe06402d89a1a2fb5dc2e"
+        }
+      ]
+    },
+    {
+      "id": "defeq-unit-eta",
+      "kind": "rule",
+      "title": "Two terms of a structure type with no fields are equal",
+      "status": "unspecified",
+      "plan_unit": "S4",
+      "cic_l": [],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_unit_like",
+          "lines": [
+            1044,
+            1054
+          ],
+          "sha256": "92b4ece45b3f21dbb62bc916e0ffe18987e11617742b21fa00555408967fe340"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1126,
+            1128
+          ],
+          "sha256": "6b4be20c6e7e9a05179cf99405bd5547fbe1834a2acbd9c000b5d0231822b9a4"
+        }
+      ]
+    },
+    {
+      "id": "defeq-proof-irrelevance",
+      "kind": "rule",
+      "title": "Two proofs of the same proposition are equal",
+      "status": "specified",
+      "cic_l": [
+        {
+          "item": "CICL.CoreJudgmentIn.proofIrrel",
+          "kind": "constructor",
+          "file": "CICL/CoreTyping.lean",
+          "control": {
+            "theorem": "CICL.NegativeControls.proofIrrel_control",
+            "file": "CICL/NegativeControls.lean"
+          }
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_proof_irrel",
+          "lines": [
+            836,
+            843
+          ],
+          "sha256": "a39dc83f177ca200c0a76749ed5c13dd99c42dc915475995faea88a7354d99b4"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_prop",
+          "lines": [
+            327,
+            329
+          ],
+          "sha256": "a0fcd60fe2d5c28eb85e7d03bd1bff22d18b1216e30cf2a47d7590b8bafdd1d0"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1086,
+            1088
+          ],
+          "sha256": "d6e9f204680a3d2a04a1f193e9334e133c3a0646c35c2604b9627d5a941c9b06"
+        }
+      ]
+    },
+    {
+      "id": "defeq-projection",
+      "kind": "rule",
+      "title": "Congruence for projections at the same field",
+      "status": "unspecified",
+      "plan_unit": "S4",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.Expr.proj",
+          "kind": "constructor",
+          "file": "CICL/Expr.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_proj_reduction",
+          "lines": [
+            1008,
+            1025
+          ],
+          "sha256": "0092ac7b2db07e9320d6a0b8c03582756e5bb1d5df82531c123f3f5b3476b719"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1100,
+            1106
+          ],
+          "sha256": "80a11b99f8f5872e27fb8d6ed62090a4fee3446d774f26ddb33952c3cf49fde4"
+        }
+      ]
+    },
+    {
+      "id": "inductive-headers",
+      "kind": "rule",
+      "title": "Family headers of a mutual block: typed, fresh, shared parameters, one result universe",
+      "status": "specified",
+      "plan_unit": "S2",
+      "cic_l": [
+        {
+          "item": "CICL.HeaderTelescope",
+          "kind": "inductive",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.ParameterAgreement",
+          "kind": "inductive",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.FamilyHeaderView",
+          "kind": "structure",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.BlockHeaderCertificate",
+          "kind": "structure",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.FamilyHeaderView.declaration",
+          "kind": "def",
+          "file": "CICL/InductiveHeaders.lean"
+        }
+      ],
+      "note": "Specified as a stage. The stage is consumed by no admission rule yet: see inductive-admission.",
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::check_inductive_types",
+          "lines": [
+            211,
+            262
+          ],
+          "sha256": "bb9bd218b358f4b994bcca20e7c901126c6dea80f0996b18ebd01ebd1f2463a6"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::declare_inductive_types",
+          "lines": [
+            317,
+            332
+          ],
+          "sha256": "933ed0ea4d6353389c7186d5286d180db5080b8aacc321391064b995f45cc034"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::get_all_inductive_names",
+          "lines": [
+            312,
+            314
+          ],
+          "sha256": "eb6504550e16772fc2dfc592f98898b21c20b914ce799f006995c9c2aac73ab8"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "get_all_inductive_names#1",
+          "lines": [
+            62,
+            68
+          ],
+          "sha256": "55e1c9a4cfaecf301d35de934941c58ce1c6d38f00b69b3d10fa461cf1e71b4e"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "get_all_inductive_names#2",
+          "lines": [
+            71,
+            75
+          ],
+          "sha256": "ea1710371606abd501e0ae48a4dab58184d91793d33a74e86869a4c0deb461ba"
+        }
+      ]
+    },
+    {
+      "id": "inductive-flags",
+      "kind": "rule",
+      "title": "The recursive and reflexive flags of a block",
+      "status": "specified",
+      "plan_unit": "S2",
+      "cic_l": [
+        {
+          "item": "CICL.constructorRecursive",
+          "kind": "def",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.constructorReflexive",
+          "kind": "def",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.InductiveBlock.recursiveFlag",
+          "kind": "def",
+          "file": "CICL/InductiveHeaders.lean"
+        },
+        {
+          "item": "CICL.InductiveBlock.reflexiveFlag",
+          "kind": "def",
+          "file": "CICL/InductiveHeaders.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::is_rec",
+          "lines": [
+            265,
+            286
+          ],
+          "sha256": "d61eec9b9c0fef513e6abce5a34a9772acedd647ffd737042bb24664ca8691a5"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::is_reflexive",
+          "lines": [
+            294,
+            309
+          ],
+          "sha256": "ea9f1562ff044917793c7e4191bfbeca789fc1ef3129b08a905c606c309d1312"
+        }
+      ]
+    },
+    {
+      "id": "inductive-constructors",
+      "kind": "rule",
+      "title": "Constructor types: typed, fresh, parameters first, result the family at its parameters",
+      "status": "specified",
+      "plan_unit": "S2",
+      "cic_l": [
+        {
+          "item": "CICL.ConstructorCertificate",
+          "kind": "structure",
+          "file": "CICL/ConstructorChecks.lean"
+        },
+        {
+          "item": "CICL.ConstructorParameters",
+          "kind": "inductive",
+          "file": "CICL/ConstructorChecks.lean"
+        },
+        {
+          "item": "CICL.ConstructorFields",
+          "kind": "inductive",
+          "file": "CICL/ConstructorChecks.lean"
+        },
+        {
+          "item": "CICL.IsFamilyApplication",
+          "kind": "def",
+          "file": "CICL/InductiveSyntax.lean"
+        },
+        {
+          "item": "CICL.BlockConstructorCertificate",
+          "kind": "structure",
+          "file": "CICL/ConstructorBatch.lean"
+        },
+        {
+          "item": "CICL.constructorStage",
+          "kind": "def",
+          "file": "CICL/ConstructorBatch.lean"
+        },
+        {
+          "item": "CICL.ConstructorCertificate.declaration",
+          "kind": "def",
+          "file": "CICL/ConstructorChecks.lean"
+        }
+      ],
+      "note": "Specified as a stage; see inductive-admission.",
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::check_constructors",
+          "lines": [
+            413,
+            434
+          ],
+          "sha256": "6228b7020998c98be518d75573f65f053b9061216aae8782f5c7c1e761631388"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::check_constructors",
+          "lines": [
+            445,
+            454
+          ],
+          "sha256": "2c8239d9d256ce2d32e52932cf3e2b165a0d0ef0269fea767435b3a6653f4353"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::declare_constructors",
+          "lines": [
+            456,
+            476
+          ],
+          "sha256": "14f841f4185c58ed14fefab56be7e3206fcc272f17cbe0b41c92968f2fd65ce5"
+        }
+      ]
+    },
+    {
+      "id": "inductive-constructor-universe",
+      "kind": "rule",
+      "title": "A constructor field's universe is at most the result's, unless the result is Prop",
+      "status": "specified",
+      "plan_unit": "S2",
+      "cic_l": [
+        {
+          "item": "CICL.Level.ConstructorBound",
+          "kind": "def",
+          "file": "CICL/ConstructorUniverse.lean"
+        },
+        {
+          "item": "CICL.ConstructorFields.field",
+          "kind": "constructor",
+          "file": "CICL/ConstructorChecks.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::check_constructors",
+          "lines": [
+            435,
+            442
+          ],
+          "sha256": "aaaec88e175e2a2a3da4523778ba1429c73ed23b14bd228d3633beaff70a1a1f"
+        }
+      ]
+    },
+    {
+      "id": "inductive-positivity",
+      "kind": "rule",
+      "title": "Strict positivity of the block's families in constructor fields",
+      "status": "specified",
+      "plan_unit": "S2",
+      "cic_l": [
+        {
+          "item": "CICL.PositiveField",
+          "kind": "inductive",
+          "file": "CICL/ConstructorChecks.lean"
+        },
+        {
+          "item": "CICL.MutualApplication",
+          "kind": "def",
+          "file": "CICL/ConstructorChecks.lean"
+        },
+        {
+          "item": "CICL.Expr.Avoids",
+          "kind": "def",
+          "file": "CICL/InductiveSyntax.lean"
+        }
+      ],
+      "note": "For a block with no nested occurrence. Nested occurrences are the row nested-inductive-expansion.",
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::check_constructors",
+          "lines": [
+            443,
+            444
+          ],
+          "sha256": "33001e7b58da0e885c2535cea9d1eb898a6783dae939c31660b5167fcd0d1848"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::is_valid_ind_app#1",
+          "lines": [
+            338,
+            357
+          ],
+          "sha256": "e92070b3f8ddac4e65fdc28002af62649de5e7b8b8ed5ba63e0f516f49ae7b3a"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::is_valid_ind_app#2",
+          "lines": [
+            360,
+            366
+          ],
+          "sha256": "338466d86853a73db0c93c13a42cc4479bcdb8a3a7cd77b4eb220c5bdf3a31ce"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::is_ind_occ",
+          "lines": [
+            369,
+            374
+          ],
+          "sha256": "530dc71f9a3b4bf5e7edf107039ac7732633a21490ed537b778f3b832e2651aa"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::has_ind_occ",
+          "lines": [
+            377,
+            379
+          ],
+          "sha256": "13491e8d04fdd614f553e0904aaf1fd1517a9b5ecdce887d95819dcf1bda8e20"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::check_positivity",
+          "lines": [
+            393,
+            409
+          ],
+          "sha256": "8f79b4d148032568a8c005d141cca7d40cf0b27cbb2aa52d96c7d49e70327926"
+        }
+      ]
+    },
+    {
+      "id": "inductive-admission",
+      "kind": "rule",
+      "title": "A mutual inductive block is admitted when every stage passes, and its constants are added",
+      "status": "unspecified",
+      "plan_unit": "S2",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.InductiveBlock",
+          "kind": "structure",
+          "file": "CICL/Declaration.lean"
+        },
+        {
+          "item": "CICL.ConstantDecl.Ordinary",
+          "kind": "def",
+          "file": "CICL/Declaration.lean"
+        },
+        {
+          "item": "CICL.WfSignature",
+          "kind": "inductive",
+          "file": "CICL/Signature.lean"
+        }
+      ],
+      "note": "WfSignature.insert admits ConstantDecl.Ordinary payloads only, which excludes inductive, constructor, recursor and quotient payloads. The header and constructor certificates exist and are consumed by no admission rule.",
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::operator()",
+          "lines": [
+            778,
+            789
+          ],
+          "sha256": "8de27885d9ca8900bf49b98c560c6b1ebc3d61d32ebc3a34f001effea295db62"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "environment::add_inductive",
+          "lines": [
+            1116,
+            1123
+          ],
+          "sha256": "4707b6def645e95f7b584944d1be1ded827dcf9e4160c4fdcaccda29f7ed608e"
+        }
+      ]
+    },
+    {
+      "id": "recursor-elimination-universe",
+      "kind": "rule",
+      "title": "Whether a recursor eliminates into every universe or into Prop only",
+      "status": "unspecified",
+      "plan_unit": "S3",
+      "cic_l": [],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::elim_only_at_universe_zero",
+          "lines": [
+            479,
+            534
+          ],
+          "sha256": "920e85c1764590abec3c7cc5b8fbb386bc028bf6d6dcdf1bfe1a709a3776cc66"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::init_elim_level",
+          "lines": [
+            537,
+            549
+          ],
+          "sha256": "34f503de4178ccd1bf6edf6d9af281a978827546bfd275a1e31e05e79beae43f"
+        }
+      ]
+    },
+    {
+      "id": "recursor-types",
+      "kind": "rule",
+      "title": "The generated recursor: motives, minor premises, its type",
+      "status": "unspecified",
+      "plan_unit": "S3",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.RecursorDescriptor",
+          "kind": "structure",
+          "file": "CICL/Declaration.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "mk_rec_name",
+          "lines": [
+            22,
+            24
+          ],
+          "sha256": "8bba875ce45f7ad1fe2fb2b200461d4bb3f6b6be3bf5ac9a13faa12f27d42186"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::is_rec_argument",
+          "lines": [
+            383,
+            390
+          ],
+          "sha256": "94536dee3572feaaa2bff10e915a1e65b3422958c1042f2cb56cf8c9e98a995d"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::get_I_indices",
+          "lines": [
+            578,
+            586
+          ],
+          "sha256": "c46d3465860b6b285ce4fba6ca357edcfe1f3522c953f16a5107726e98f02969"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_rec_infos",
+          "lines": [
+            589,
+            674
+          ],
+          "sha256": "f2aa53da26c4ccf90916f5670ae5dd0869af065ac08e7378e6cd9f06fc6299b4"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::get_rec_levels",
+          "lines": [
+            677,
+            682
+          ],
+          "sha256": "60a5c57d19937faca4ee710477c9f596e12958d994e96ba5a2ca408b7802fbdf"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::get_rec_lparams",
+          "lines": [
+            685,
+            690
+          ],
+          "sha256": "53a34bc1b76399d40485c69b8fe4a68ad295215bf4b4aab245f6ec5ec52db566"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::collect_Cs",
+          "lines": [
+            694,
+            697
+          ],
+          "sha256": "0fb5d985e70f1cf33cdb42db596f6ec579147a7a43811bdc028dcbc6a4529dc0"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::collect_minor_premises",
+          "lines": [
+            700,
+            703
+          ],
+          "sha256": "621b886fc63e971e50f68d8a46d7b5f9eed54b88f37ae984944d06c9ea01ebc9"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::declare_recursors",
+          "lines": [
+            752,
+            776
+          ],
+          "sha256": "5ae2a9d2e31c55ac3b11a41b684aa054d9cba961bc64baa48ef46474510f9d89"
+        }
+      ]
+    },
+    {
+      "id": "recursor-rules",
+      "kind": "rule",
+      "title": "The generated computation rule of each constructor",
+      "status": "unspecified",
+      "plan_unit": "S3",
+      "cic_l": [],
+      "groundwork": [
+        {
+          "item": "CICL.RecursorRule",
+          "kind": "structure",
+          "file": "CICL/Declaration.lean"
+        }
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_rec_rules",
+          "lines": [
+            705,
+            749
+          ],
+          "sha256": "20c297117a291cb33492b8cc7808cb8e8507b5cafe56189cf5d807edeb4d06a5"
+        }
+      ]
+    },
+    {
+      "id": "nested-inductive-expansion",
+      "kind": "rule",
+      "title": "A nested occurrence is replaced by an auxiliary family of the same mutual block",
+      "status": "unspecified",
+      "plan_unit": "S3",
+      "cic_l": [],
+      "constants": [
+        "_nested"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::mk_unique_name",
+          "lines": [
+            898,
+            904
+          ],
+          "sha256": "6d6107cd5e94fca4be3dcd1fb9922e2aed233d44242c9fd5b1c8e31b1aad3ccf"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::throw_ill_formed",
+          "lines": [
+            906,
+            908
+          ],
+          "sha256": "257b3e0b812a7558c4ec9948e94952871aa81b601e12a1355a35d78f46987b85"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::replace_params",
+          "lines": [
+            910,
+            913
+          ],
+          "sha256": "03884aa7765645bd582477892dc5634148b3ecc920b3d76ad6526a65c3f5b799"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::is_nested_inductive_app",
+          "lines": [
+            920,
+            952
+          ],
+          "sha256": "50d9b955af55f147c6aa1601bf62d54a570b97d29e01a10577a2feb347865e34"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::instantiate_pi_params",
+          "lines": [
+            954,
+            960
+          ],
+          "sha256": "c48c11e3968a2b9aabb9e71fc7a4426c8ad24c2e48a1bb11aca9bd6f66ca001b"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::replace_if_nested",
+          "lines": [
+            963,
+            1028
+          ],
+          "sha256": "161449719c3c230b735a932e39708b66309bad4d4565b5bec52028ad4c8e491e"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::replace_all_nested",
+          "lines": [
+            1031,
+            1033
+          ],
+          "sha256": "59ecfccdebc0075866c25a45edda6279385e9c8821aa5183452630e7ddcbd2ab"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::get_params",
+          "lines": [
+            1035,
+            1043
+          ],
+          "sha256": "d3b6c5771255b3e14ffcdb66de980a7d7459490550f43cb3661ce2f337f6bf4c"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::operator()",
+          "lines": [
+            1045,
+            1076
+          ],
+          "sha256": "8238eccb996e1d07782b43e72974624432b88dc61308b04318f366b73327fe71"
+        }
+      ]
+    },
+    {
+      "id": "nested-inductive-restore",
+      "kind": "rule",
+      "title": "The constants of the auxiliary block are translated back to the nested form",
+      "status": "unspecified",
+      "plan_unit": "S3",
+      "cic_l": [],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_result::get_nested_if_aux_constructor",
+          "lines": [
+            811,
+            818
+          ],
+          "sha256": "0ff79c5744904b919d8188d539d82b5f8ca07b42235fb56d8dd6c618c74f6b6b"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_result::restore_constructor_name",
+          "lines": [
+            820,
+            826
+          ],
+          "sha256": "6482328503848b994b121125a95c8318204c0b2b83768d997343cba8b2311c26"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_result::restore_nested",
+          "lines": [
+            828,
+            872
+          ],
+          "sha256": "714efda177edb37b5c8d81cfc202d97b76514937a6c07d26c2d78ec046079cb9"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "mk_aux_rec_name_map",
+          "lines": [
+            1088,
+            1114
+          ],
+          "sha256": "3ef7a94c6f5e770be131d32d13675c5f0da16c25226fa93e5dc9ee9428df2371"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "environment::add_inductive",
+          "lines": [
+            1124,
+            1182
+          ],
+          "sha256": "77a1285c7aef0be7d8be9ab80cda1138363db7b95b4a78c688dd554bda163270"
+        }
+      ]
+    },
+    {
+      "id": "whnf-driver",
+      "kind": "strategy",
+      "title": "The weak-head-normal-form loop",
+      "reason": "Chooses which reduction is tried next, returns terms that are already values, reduces the head of an application before its redex, and caches results. Each step it takes is a step of one of the rule rows it names.",
+      "uses_rules": [
+        "reduce-beta",
+        "reduce-zeta",
+        "reduce-zeta-local",
+        "reduce-mdata",
+        "reduce-delta",
+        "reduce-proj",
+        "reduce-iota",
+        "quot-reduction",
+        "native-reduction",
+        "nat-literal-zero-succ",
+        "nat-binary-arithmetic",
+        "nat-pow",
+        "nat-binary-predicates"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            401,
+            409
+          ],
+          "sha256": "cfb3dded7666d96a054c443796470611d50ee5b5b64888c7304e7b13bdb5bb3c"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            417,
+            433
+          ],
+          "sha256": "125a326a7f0d8762451fb7258ed790a470b56d163efb7807b72f21ec8166e7cd"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            443,
+            446
+          ],
+          "sha256": "8494fac29af1959f9c87a66b994b039f8a2263cc2fc3c075e1cc71bffd9f220e"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            469,
+            473
+          ],
+          "sha256": "f413fbd17176748fedb616fe4b42ef0da0f59b20f9c9b86b6dc6d8c104b01f82"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf_core",
+          "lines": [
+            477,
+            483
+          ],
+          "sha256": "769491250117d45f81ff45a619577e9048aa650b84966c33ae2b33dc8440a1a6"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            641,
+            646
+          ],
+          "sha256": "7dcda2df36892edd2b5cb0c11174cab8ca6073e473c0bacc3b4e8b50ae8fe820"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            654,
+            666
+          ],
+          "sha256": "2fb1d064fdd77a4b1a95ae915fc0322b053b28faaf5d11fa2ff065255c0c9a87"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            670,
+            672
+          ],
+          "sha256": "3d8723dfa95ec836dbb4998f1fcee734128cff2f8303232a23705ad4d30c9ceb"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::whnf",
+          "lines": [
+            675,
+            681
+          ],
+          "sha256": "ace5a8147bcbd51397451a133d02b044a99a3f6f0822116e981b9fc7d084a815"
+        }
+      ]
+    },
+    {
+      "id": "defeq-driver",
+      "kind": "strategy",
+      "title": "The order in which definitional-equality rules are tried",
+      "reason": "Sequences the easy cases, weak-head normalization of both sides, and the rule rows it names; answers false when none applies. It adds no equation of its own.",
+      "uses_rules": [
+        "defeq-nat-offset",
+        "defeq-equivalence-closure",
+        "defeq-sort",
+        "defeq-constant-levels",
+        "defeq-binder-congruence",
+        "defeq-app-congruence",
+        "defeq-eta",
+        "defeq-structure-eta",
+        "defeq-unit-eta",
+        "defeq-proof-irrelevance",
+        "defeq-projection",
+        "literal-terms",
+        "reduce-mdata",
+        "string-literal-expansion"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            743,
+            744
+          ],
+          "sha256": "7faf6a4c181476f1f0b42debcc1688f613b73d2268b6c6ac7b59f0a34fd3ead7"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            751,
+            757
+          ],
+          "sha256": "8bc3faddd109d5bdc550558437f280401cf2b6cbb4db67783ed4efecad98ad4b"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::quick_is_def_eq",
+          "lines": [
+            760,
+            763
+          ],
+          "sha256": "2fc26a1234d379b9c4c5a27a920d4fa744449f19e1c5bbaf251711c46ee72406"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1056,
+            1060
+          ],
+          "sha256": "bc7654ddd2b2e4007a0f8a41233daa21652f6dcdfe85c0b9286eab7cc429081b"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1071,
+            1085
+          ],
+          "sha256": "eeabc56c52dac46e553f9fb8ff753d2fa9f090734ebd37dd87070fcce9062b69"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1107,
+            1112
+          ],
+          "sha256": "bebb27119a65a0f428da2cbd8479ddbbeec4c9d8021b5c50a3fe0089e5ac3997"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1129,
+            1131
+          ],
+          "sha256": "5c733bdd0cf349fe0be6c4ea87d39191fcc22ecc2e7e283bdba098dcf316783e"
+        }
+      ]
+    },
+    {
+      "id": "defeq-lazy-delta",
+      "kind": "strategy",
+      "title": "Lazy delta reduction",
+      "reason": "Decides which side of an equation is unfolded first, by reducibility hint, and tries argument-wise comparison of two applications of the same definition before unfolding. Every unfolding is a step of reduce-delta; the argument-wise comparison is application congruence over defeq-constant-levels.",
+      "uses_rules": [
+        "reduce-delta",
+        "reduce-proj",
+        "defeq-app-congruence",
+        "defeq-constant-levels",
+        "defeq-nat-offset",
+        "native-reduction",
+        "nat-literal-zero-succ",
+        "nat-binary-arithmetic",
+        "nat-pow",
+        "nat-binary-predicates"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::try_unfold_proj_app",
+          "lines": [
+            868,
+            875
+          ],
+          "sha256": "fb78ce88f5b6d1cfcac25c947265ad83b18dbdfc7f9b15279ccac52b3bf72d34"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_reduction_step",
+          "lines": [
+            884,
+            941
+          ],
+          "sha256": "d53508c998d340221c3aa5039f475a7d146f7ae686c986194face42f3b9e4df0"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_reduction",
+          "lines": [
+            973,
+            974
+          ],
+          "sha256": "5588e4120a48fc6248dd327ad1b743dfb5ee71d178096e3ad1768d00af9dbc3a"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_reduction",
+          "lines": [
+            977,
+            985
+          ],
+          "sha256": "8ea65c88346130608081f50189e13be7aec3a2f80fc1b1c423f503a5c7a4a60c"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::lazy_delta_reduction",
+          "lines": [
+            991,
+            999
+          ],
+          "sha256": "a8866e1a2222e3cd8256e81c9774eb308f80700352465904a31df8a14a35cb5a"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1089,
+            1092
+          ],
+          "sha256": "0325f8d164aa722b8bf37af850b695f283947bfd87243f69d67caab5cf2c003e"
+        }
+      ]
+    },
+    {
+      "id": "eager-reduction-shortcuts",
+      "kind": "strategy",
+      "title": "The Bool.true shortcut and the eagerReduce mode",
+      "reason": "An argument of the form `eagerReduce _ _` switches a mode in which Nat reduction is tried on open terms and a term compared with Bool.true is fully reduced first; the same shortcut applies to any closed term. Both only choose when whnf is called: the equations they find are whnf steps of the rule rows named here. The names eagerReduce and Bool.true are hardcoded, and nothing here gives either constant a rule.",
+      "uses_rules": [
+        "infer-app",
+        "reduce-beta",
+        "reduce-zeta",
+        "reduce-zeta-local",
+        "reduce-mdata",
+        "reduce-delta",
+        "reduce-proj",
+        "reduce-iota",
+        "quot-reduction",
+        "native-reduction",
+        "nat-literal-zero-succ",
+        "nat-binary-arithmetic",
+        "nat-pow",
+        "nat-binary-predicates"
+      ],
+      "constants": [
+        "Bool.true",
+        "eagerReduce"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "is_eager_reduce",
+          "lines": [
+            159,
+            161
+          ],
+          "sha256": "8cdd9aa8c22cb4a6610a87e6aa184de5aff3c8fb2de24c5c3710f8c69a3a3bb7"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_app",
+          "lines": [
+            168,
+            173
+          ],
+          "sha256": "95230ad7c5b17d3bf05ffa76d245aa0f78679acc12728814cb059ae54f6a7d54"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::is_def_eq_core",
+          "lines": [
+            1061,
+            1070
+          ],
+          "sha256": "16b4b1cdb5aac6ff64fb9509e283855f23c8190942362be8c1d0ed84a07c4b2c"
+        }
+      ]
+    },
+    {
+      "id": "tc-infer-dispatch",
+      "kind": "infrastructure",
+      "title": "Type inference: dispatch, cache, refusals",
+      "reason": "Dispatch on the term former, the result cache, the interrupt check, and the two refusals that delimit the input: a loose bound variable and a metavariable (the specification's Expr has no metavariable former).",
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            270,
+            281
+          ],
+          "sha256": "5a9c4511494afef0e61f8c7f4d23683d715e770f39ceb4f823b1e390d76ced04"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            286,
+            288
+          ],
+          "sha256": "f7a368f4a7dc238dd11b512d6eb9d3adab6435cc4a4830e016942ef3773bb78c"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type_core",
+          "lines": [
+            298,
+            302
+          ],
+          "sha256": "3f55f8a0571e2f35f8582b2d0685a7e1f3e076cb46951d802787f9c07d2d2150"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::infer_type",
+          "lines": [
+            304,
+            306
+          ],
+          "sha256": "aa0f81fc1840e1418e06cc8a07584dfc3bb43c5562e1c005d8bfe810c7978b6b"
+        }
+      ]
+    },
+    {
+      "id": "tc-objects",
+      "kind": "infrastructure",
+      "title": "The type checker's C++ objects, caches and globals",
+      "reason": "Constructors and destructor of the checker and its state, the failure cache, and the tables of hardcoded constants built at start-up. The constants themselves are claimed where they are used.",
+      "constants": [
+        "_kernel_fresh"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::state::state",
+          "lines": [
+            45,
+            46
+          ],
+          "sha256": "3435cd4a93ab40ba441323d24763ebbccce1631701e20a3373d473e6ff1db354"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::type_checker#1",
+          "lines": [
+            1163,
+            1166
+          ],
+          "sha256": "11f9c46ce4935f3c48f7a6249802449bb58e67f4579be7cb4a8d1920a6301c68"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::type_checker#2",
+          "lines": [
+            1168,
+            1171
+          ],
+          "sha256": "1ec8ec617c4c18fc6f0423a35683869a06e649758b85d2739683c9874c103edc"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::type_checker#3",
+          "lines": [
+            1173,
+            1177
+          ],
+          "sha256": "e5e6ca33b4fd6589b54989771c0bbda1a90fc8d0e0f3868e68ae6906674950c4"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::~type_checker",
+          "lines": [
+            1179,
+            1182
+          ],
+          "sha256": "7e57959004e39cac5249d7870d01a117e5299fdedc9c593e74ddf7fa87599be7"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "new_persistent_expr_const",
+          "lines": [
+            1184,
+            1188
+          ],
+          "sha256": "ac6bcea8af001cbb29b5aa6e07f5f03b15659c75f9dfbd26a7a0721a44d6a8b9"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "initialize_type_checker",
+          "lines": [
+            1190,
+            1217
+          ],
+          "sha256": "413b9b5a61f2fc056b11536ef1f43d24cb56d42f1896194e4cf2e2125be1c799"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "finalize_type_checker",
+          "lines": [
+            1219,
+            1243
+          ],
+          "sha256": "f14e703485d6a4a5cf7c1c50fe133ce966a209fb4853062802432abdbab65855"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::failed_before",
+          "lines": [
+            845,
+            855
+          ],
+          "sha256": "dfafdabdffb00985b974315a56287cdba4bfec2b6fab63ba225aa02e016d4412"
+        },
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::cache_failure",
+          "lines": [
+            857,
+            862
+          ],
+          "sha256": "90cab43a030ac41783fc21265727ebf1176889365609cfabc8f9f5a2f5e5dc4f"
+        }
+      ]
+    },
+    {
+      "id": "exported-helpers",
+      "kind": "infrastructure",
+      "title": "Functions the pinned files define and never call",
+      "reason": "Each is exported for callers outside the kernel's checking path (the elaborator, the runtime) and is called by no function in the pinned files: eta_expand builds an eta-expanded term; the is_stuck pair reports why a recursor application did not reduce (the source says it affects the elaborator's effectiveness, not the kernel's correctness); quot_is_decl names the quotient constants.",
+      "constants": [
+        "Quot",
+        "Quot.ind",
+        "Quot.lift",
+        "Quot.mk"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/type_checker.cpp",
+          "function": "type_checker::eta_expand",
+          "lines": [
+            1140,
+            1161
+          ],
+          "sha256": "7a2e66c789d621129aba205ecbebaf1a39677202abf8970f4bb16bb429bf4f82"
+        },
+        {
+          "file": "src/kernel/inductive.h",
+          "function": "inductive_is_stuck",
+          "lines": [
+            121,
+            141
+          ],
+          "sha256": "458dc1b0c8957ef13e82fc46a4a45fd77b07f71b35693c7e2a7041045f26ea58"
+        },
+        {
+          "file": "src/kernel/quot.h",
+          "function": "quot_is_stuck",
+          "lines": [
+            76,
+            95
+          ],
+          "sha256": "123ff064bba6d7ae93a825eadcd41ea0c87d6e1021113a7e66ea1dcaeed9eab2"
+        },
+        {
+          "file": "src/kernel/quot.h",
+          "function": "quot_is_decl",
+          "lines": [
+            28,
+            30
+          ],
+          "sha256": "4ecb449cb3bb4e81f5a5fcb20078ecda91016cf987061180bfb8cebbb0c06407"
+        }
+      ]
+    },
+    {
+      "id": "environment-queries",
+      "kind": "infrastructure",
+      "title": "Lookups of a constant's kind",
+      "reason": "Read what kind of constant a name is in the environment; they state no rule.",
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "is_inductive",
+          "lines": [
+            34,
+            38
+          ],
+          "sha256": "fcaedd2845c415ce8dbc38f14ad1d3726d14b49c42c8be013480b25b2a8bb029"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "is_constructor",
+          "lines": [
+            40,
+            44
+          ],
+          "sha256": "cb407e6b9ce9881703f8a50e6e139d99a84767cfc29b723da482208c4d7519a2"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "is_recursor",
+          "lines": [
+            46,
+            50
+          ],
+          "sha256": "72ec4aaed0e4401c9358a883452be175bf9ae03c9fe6a62f073ce66cd8aeb65d"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "is_constructor_app",
+          "lines": [
+            52,
+            59
+          ],
+          "sha256": "1428dcb5be799ce39a36957d35e9febaca16627c9026b40be9cbf37806cd04e9"
+        }
+      ]
+    },
+    {
+      "id": "inductive-objects",
+      "kind": "infrastructure",
+      "title": "The inductive module's C++ objects and globals",
+      "reason": "Constructors of the helper classes, one-line wrappers around the type checker and the local context, and the start-up tables. The name-generator prefixes are not Lean constants.",
+      "constants": [
+        "_ind_fresh",
+        "_nested_fresh"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::add_inductive_fn",
+          "lines": [
+            162,
+            169
+          ],
+          "sha256": "daf94bb5e14738d786f002482f00bba8386a00d2921389ad058b98f288e1a670"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::tc",
+          "lines": [
+            171,
+            171
+          ],
+          "sha256": "35e08f93d84e9a8c0da57c0228a7124225926401ff13dcb0f589936a8778ac61"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::get_param_type",
+          "lines": [
+            174,
+            176
+          ],
+          "sha256": "0f21d6213ca2b24a872b82bf89fb63b8a1fc977ca4e7db71adaa4993a5732966"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_local_decl",
+          "lines": [
+            178,
+            180
+          ],
+          "sha256": "54607b1e45378df61b5428317b54c0985c87f79fd8a9a4304aecef9b47e9ccb5"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_local_decl_for",
+          "lines": [
+            182,
+            185
+          ],
+          "sha256": "f644707c5b6c0835ec89dd84a61d4056a0039af2aff7756f0384136a390e2f0a"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::whnf",
+          "lines": [
+            187,
+            187
+          ],
+          "sha256": "3dfa8259891aa90280124acbf0bf1c32053c37d6b8eecd5a9f42b3cfc001863e"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::infer_type",
+          "lines": [
+            189,
+            189
+          ],
+          "sha256": "cea4f928a2aaa2649c4be9db3a46c24b837393689d619edffbac5e88d2d3c479"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::is_def_eq",
+          "lines": [
+            191,
+            191
+          ],
+          "sha256": "ccf3d90f265b9a6920a0bf441097e529fee3ab58fc6f9c1dc7afa24a1f076870"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_pi#1",
+          "lines": [
+            193,
+            193
+          ],
+          "sha256": "3ca624ad7d1cc26c9db0c3dcc9441a9e5280ebd6a17bb826c58bcd72d254fced"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_pi#2",
+          "lines": [
+            194,
+            194
+          ],
+          "sha256": "e2ea96ab5c901f35dca6cc6fa7c2ed9f0667d7723086aebbe4f7012071b38c0b"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_lambda#1",
+          "lines": [
+            195,
+            195
+          ],
+          "sha256": "ab78848271a409ae1f4f7ada9423e1a029547a9cf1dcc0b00d5b768b986214b8"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "add_inductive_fn::mk_lambda#2",
+          "lines": [
+            196,
+            196
+          ],
+          "sha256": "bf2e1666c97851d69a840c634aa03c237b1b83fc5a2c9b5d2dcf6e28ccabb057"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_result::elim_nested_inductive_result",
+          "lines": [
+            802,
+            807
+          ],
+          "sha256": "2a3ec6391e4fe9227d9c7de45205ca7a85969470861d3ea94fd49f9c577cf7d5"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "elim_nested_inductive_fn::elim_nested_inductive_fn",
+          "lines": [
+            893,
+            896
+          ],
+          "sha256": "db2a67a3cf078b996b2aa66ee1940a3f269dfea572cb4ef0addadd83e89ca1b9"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "initialize_inductive",
+          "lines": [
+            1215,
+            1237
+          ],
+          "sha256": "9bdd48ada531e863fa3e23897c9d2b9d03a1a3d0b35bf7a06e75d118e1f19b60"
+        },
+        {
+          "file": "src/kernel/inductive.cpp",
+          "function": "finalize_inductive",
+          "lines": [
+            1239,
+            1248
+          ],
+          "sha256": "d562f487c5beb139367a3fd3b7d63a31a96b24b416a2c38a179689a969ebe8a9"
+        }
+      ]
+    },
+    {
+      "id": "quot-objects",
+      "kind": "infrastructure",
+      "title": "The quotient module's globals",
+      "reason": "Build and free the table of the four quotient names.",
+      "anchors": [
+        {
+          "file": "src/kernel/quot.cpp",
+          "function": "initialize_quot",
+          "lines": [
+            100,
+            109
+          ],
+          "sha256": "28b1ef7f5502c199e40a994b769ff896a600f8d442def670a5cf065afe1fb451"
+        },
+        {
+          "file": "src/kernel/quot.cpp",
+          "function": "finalize_quot",
+          "lines": [
+            111,
+            116
+          ],
+          "sha256": "4ed875abe7587c415dd8533eb65dca3fae226ee8eebb1f3860cdfb8567d19fc9"
+        }
+      ]
+    },
+    {
+      "id": "level-objects",
+      "kind": "infrastructure",
+      "title": "The level datatype: constructors, accessors, printing",
+      "reason": "Raw constructors and runtime accessors of the level object, its hash and packed header, a structural total order for containers (is_lt, called by no function in the pinned files), traversal, printing, the exported C entry points and the start-up table. The grammar of levels is CICL.Level; level metavariables have no counterpart there and the kernel refuses them in declarations.",
+      "constants": [
+        "g_level_one",
+        "g_level_zero"
+      ],
+      "anchors": [
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_succ#1",
+          "lines": [
+            33,
+            33
+          ],
+          "sha256": "4e1688ba393e44014e43df958bf8e21ba93ce908c104d1ecf269a1c533ed696d"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_max_core",
+          "lines": [
+            34,
+            34
+          ],
+          "sha256": "4de58a92c810c5d24b4c477e14537cfb289cfa812996a98c866629d86763b34d"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_imax_core",
+          "lines": [
+            35,
+            35
+          ],
+          "sha256": "e9c5dfa4e6627837d947e3173c0bc76eb173b08f3043774aea4ef052319857df"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_univ_param",
+          "lines": [
+            36,
+            36
+          ],
+          "sha256": "e622044fac55972bab2e65fbba07ae1628638b958819d99fd88a89e4cb1ca49a"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_univ_mvar",
+          "lines": [
+            37,
+            37
+          ],
+          "sha256": "8f9acf6525b90f5391f0c366d8e305fbaf650c78676889622f72145c2af59df9"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "level::hash",
+          "lines": [
+            39,
+            39
+          ],
+          "sha256": "f772c7129ed6f542e2ef1363c52310919ce3b7d83f0f55c526b7eda1f5ae6915"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "get_depth",
+          "lines": [
+            40,
+            40
+          ],
+          "sha256": "a626571f30b9dbcb11ec955ddd3fcb465c1252ea0cfa4e79c5584943413b5265"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "has_param#1",
+          "lines": [
+            41,
+            41
+          ],
+          "sha256": "66d4c8653795a2bb5c80fa09907f2fc089b61b82fab1b41bde8958eaeeaf81a8"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "has_mvar#1",
+          "lines": [
+            42,
+            42
+          ],
+          "sha256": "7775900d78ee1e7b4313646d308f96e20131c70654b0b9fe7b0f13ecbed1ad3b"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "lean_level_mk_data",
+          "lines": [
+            44,
+            52
+          ],
+          "sha256": "d8a9eb9fcf35a2c737a6bd22efcd025d0457d7e52d97de16e471aeec9992d7d3"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "to_explicit",
+          "lines": [
+            76,
+            79
+          ],
+          "sha256": "be5e424885ffd0100634f0133d5860b890039bb41d2ad62d967121e0e0f7236f"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_level_zero",
+          "lines": [
+            108,
+            108
+          ],
+          "sha256": "8b80c61b8c1cbde0056e014af8c02842a5be1fb2acd58b9e472b3a53a9c8fc51"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "mk_level_one",
+          "lines": [
+            109,
+            109
+          ],
+          "sha256": "9c4e44ca7a4ba523bf587a51653cd9bf1d67fb76fb42071aa0544e1981b52da2"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "lean_level_eqv",
+          "lines": [
+            152,
+            154
+          ],
+          "sha256": "1660f596e5bc78a571ff6ee7369f29f9b30d09026b23f6553091c51d627d00d4"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "lean_level_eq",
+          "lines": [
+            156,
+            158
+          ],
+          "sha256": "3652bdac03f0b80e0a46b030b7e6ab43e7d89889043b221c5fbd416e7c17a16d"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_lt#1",
+          "lines": [
+            174,
+            200
+          ],
+          "sha256": "9146d828a177ee88339f4ed72cab407cbc90c3649dded67239f279a008587151"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "is_lt#2",
+          "lines": [
+            202,
+            211
+          ],
+          "sha256": "e5faf3a3bed8b7a41f4b3a930fa15874418a4cd87030d5314015dba8dac79b9c"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "levels_has_param",
+          "lines": [
+            213,
+            219
+          ],
+          "sha256": "14a61adf16e1551293cbdbf4add83cc37bf5786969418b29185ef5fd23ad9c60"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "levels_has_mvar",
+          "lines": [
+            221,
+            227
+          ],
+          "sha256": "8b594187f7604f27d70d72ac572295dfeb7822595be10e844dd2c523ed1647b6"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "has_param#2",
+          "lines": [
+            229,
+            229
+          ],
+          "sha256": "a42d04802494c70e74676cbab527c0691837d0706df1ee06ff2b40991e526ff9"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "has_mvar#2",
+          "lines": [
+            230,
+            230
+          ],
+          "sha256": "637a53e23993f380a133d1f44d370548a1f71346d0b85d4289e46168af4c862d"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "for_each_level_fn::apply",
+          "lines": [
+            232,
+            244
+          ],
+          "sha256": "b070fb98fb2e7c427a65dc06ef798b3d729b221e7de886ae01c547370ab428c9"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "occurs",
+          "lines": [
+            264,
+            272
+          ],
+          "sha256": "75dd275643d43f338eacd9bd30482187e1f30bcb758fecf2754ae2d23e850821"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "print_child",
+          "lines": [
+            329,
+            337
+          ],
+          "sha256": "fcad8cb69eb00346b4c3e89b3678cf4a6e7aff069580d70633b5c084e79478c1"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "print#1",
+          "lines": [
+            339,
+            369
+          ],
+          "sha256": "722a7a3d08dc912d4a341c0b37115b684b5723920eaa7f778ab57e048a69a237"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "operator<<",
+          "lines": [
+            371,
+            374
+          ],
+          "sha256": "13b83557650d0827f92e49854f5fce1e6d9ac4f3bc81a1fce781f557a885d563"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "lparams_to_levels",
+          "lines": [
+            530,
+            535
+          ],
+          "sha256": "91b3eab402537610b351acd7e154f4679a030b431f1aa686c419247f867867f9"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "level::level",
+          "lines": [
+            537,
+            538
+          ],
+          "sha256": "b33e4a3a33e7ddf9edba2468f3ec47898f190d941eab19238587a7515f5f3761"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "initialize_level",
+          "lines": [
+            540,
+            545
+          ],
+          "sha256": "fd9f4b7168f84a469826007e80fbedbeeaed147b9623f7fe6d14a92be3809852"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "finalize_level",
+          "lines": [
+            547,
+            550
+          ],
+          "sha256": "d1a1f59946037c9fc9c84e40fb96963e53785e1f20c642eadd40291893795410"
+        },
+        {
+          "file": "src/kernel/level.cpp",
+          "function": "print#2",
+          "lines": [
+            552,
+            552
+          ],
+          "sha256": "79a3cf9228e373bec6d1ad941f710673b3d6fedc3a60ec24a8521a662f569b54"
+        }
+      ]
+    }
+  ]
+}

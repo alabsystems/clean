@@ -1,0 +1,51 @@
+{
+ "chain": "ir_fng",
+ "body": "env::native_reducers_float::reduce_float_neg::{closure#0}",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Read ir_fa.tags.json's `why` first. This is the UNARY member of the float tranche: two parameters instead of three, and the only chained body whose emitted instruction is a `unop`. Until now `unop` had battery rows only from the W2a SYNTHETIC lane (`synth_chains.rs`), whose header names it among \"the constructors no emitted body exercises\". That sentence is now false for `fneg`, which is the whole of what this chain adds -- it does not widen coverage, it changes the KIND of evidence for one operator.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to check the callee namespace (empty lane = a module with no `call`); `ir_mint::project` reads the `interface` block in the other direction and REFUSES a fixture whose header or parameter types are not the pinned ones.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. The sharp slot is the ARITY as much as the width: `bb0(%0: ptr, %1: f64)` is two parameters where every other float chain has three, and a `unop` core module read against a binary interface would mismatch here rather than silently take the wrong operand.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. Both read from reader A's own record: `param_tys_erased: [\"Ptr\", \"F64\"]`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "producer_pin": "TWO reader-A dumps from DIFFERENT producers, stated with its limit, exactly as ir_fbq.tags.json states it. A = aterm store 9192, trustc 321aaeda7 (2026-09-17); B = store 9178, trustc d75f13f97 (2026-09-15). The crate binaries DIFFER and the projected core module is BYTE-IDENTICAL (core_digest d89ed38ce5b1d9a8fb9f9a56ec2924a5b7ba5c68a71a958106a0a0f94ec1cf35 under both). THE LIMIT: the indices did NOT move -- functy.318 under both, and 0 of 3968 common crate entries moved -- so unlike ir_hlb's pair this does NOT test invariance under index drift. An invariance claim is only tested when something moves.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention.",
+  "functy": 318,
+  "functy_note": "Pinned VERBATIM from the emitted header `(functy.318)`; reader A independently records `artifact_functy_id: 318` on BOTH producer dumps. CORRECTED 2026-09-20: an earlier note contrasted this with ir_fa's 381; that is a CROSS-ERA comparison and is void. In the dump this chain was cut from, the four f64->f64 closures carry functy.317. Within that one era: 317 for `(ptr, f64, f64) -> f64`, 318 for this body's `(ptr, f64) -> f64`, 319 for `(ptr, f64, f64) -> bool`. Three signatures, three ids, one era -- which is the claim the pins can actually support.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&{closure environment}",
+    "note": "The closure environment pointer, BOUND AND NEVER READ -- the closure captures nothing."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "f64",
+    "observed_ty": "f64",
+    "rust_type": "f64",
+    "note": "The operand `a`. The ONLY value parameter: this is the unary member of the tranche, and the arity is as load-bearing here as the width."
+   }
+  ],
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and a measurement: the body contains no memory instruction.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and a measurement: the closure calls NOTHING. Reader A's `crate_func_ids_seen` is the single entry [1361] -- the body's own id."
+}

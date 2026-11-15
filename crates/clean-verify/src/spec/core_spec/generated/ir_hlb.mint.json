@@ -3,7 +3,7 @@
  "body": "expr::meta::ExprMeta::has_loose_bvars",
  "second_body": "expr::meta::ExprMeta::loose_bvar_range",
  "core_digest": "2ce58cc08262f605cf22377175a8332d2a6892e9a00d3044f242280dacd03eb5",
- "defs_digest": "05c2425dce14255d6698778c0dfd1fdb4244631d2fa2e8620c25751b71f57fc7",
+ "defs_digest": "0d2784f57229d241408b3a741f246fd55aa5806ee2f180ff9a8e1ac17c356c75",
  "def_count": 6,
  "def_count_note": "ONE interface-only alias (ir_hlb_tself, struct.29 -- the receiver both headers name and neither body's instructions do), then the CALLER's block and func, then the CALLEE's block and func, then the module. THE FIRST MINTED SCRIPT THAT DEFINES TWO FUNCTIONS: the second body's Clean name prefix (ir_lbr) and its own interface come from the tag table's extra_bodies lane, so nothing about the callee is a hand choice inside the specification.",
  "artifact_core_digest": "785811f612dad2137d9077688d5e55e41849214013797d342b25f3266bbfa1ef",

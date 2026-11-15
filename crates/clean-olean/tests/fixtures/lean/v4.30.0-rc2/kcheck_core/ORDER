@@ -1,0 +1,6 @@
+# The advice-replaying checker over its specification, for
+# `crates/clean-olean/tests/kcheck_core.rs` (plan unit C2). The checker's
+# modules import `CICL.*`, so the specification is compiled first. The family
+# has no module of its own.
+theory cic_l
+theory kcheck

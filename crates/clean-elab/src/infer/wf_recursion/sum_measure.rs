@@ -71,6 +71,7 @@
 
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
+use clean_parser::SurfaceName;
 
 use super::{call_sites, encoding, wf_unsupported, ElabCtx};
 use crate::ElabError;
@@ -85,7 +86,7 @@ impl ElabCtx<'_> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn build_wf_sum_definition(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         func_ty: &Expr,
         ret_ty: &Expr,
         func_body: &Expr,
@@ -105,7 +106,7 @@ impl ElabCtx<'_> {
         // context every later refusal is reported against.
         let depth = self.locals.len();
         let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-        let n_fvar = self.push_local("_wf_bound".to_owned(), nat);
+        let n_fvar = self.push_local(SurfaceName::unspellable("_wf_bound", 0), nat);
         let result = self.build_wf_sum_definition_core(
             name,
             func_ty,
@@ -126,7 +127,7 @@ impl ElabCtx<'_> {
     #[allow(clippy::too_many_arguments)]
     fn build_wf_sum_definition_core(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         func_ty: &Expr,
         ret_ty: &Expr,
         func_body: &Expr,
@@ -187,9 +188,9 @@ impl ElabCtx<'_> {
             );
             Expr::pi(BinderInfo::Default, nat.clone(), inner.abstract_fvar(k))
         };
-        let rec_fvar = self.push_local("_wf_rec".to_owned(), rec_ty.clone());
+        let rec_fvar = self.push_local(SurfaceName::unspellable("_wf_rec", 0), rec_ty.clone());
         let hm_ty = lt(measure_expr.clone(), Expr::fvar(n_fvar));
-        let hm_fvar = self.push_local("_wf_measure_lt".to_owned(), hm_ty.clone());
+        let hm_fvar = self.push_local(SurfaceName::unspellable("_wf_measure_lt", 0), hm_ty.clone());
 
         // Open the body: func_body = fun p₀ … pₙ₋₁ => body.
         let mut body_open = func_body.clone();

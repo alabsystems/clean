@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-const s String)
+(declare-const n Int)
+(assert (>= (str.len s) n))
+(assert (not (and (= s (str.++ (str.substr s 0 n) (str.substr s n (- (str.len s) n)))) (= (str.len (str.substr s 0 n)) n))))
+(check-sat)

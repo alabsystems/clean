@@ -713,7 +713,7 @@ fn encode_hints(hints: &[u64]) -> Expr {
 }
 
 /// Encode one LRAT step as `Clean.Res.LratStep.mk clause hints`.
-pub fn encode_lrat_step(step: &LratStepData) -> Expr {
+pub(crate) fn encode_lrat_step(step: &LratStepData) -> Expr {
     Expr::apps(
         Expr::const_str(names::LRAT_STEP_MK),
         [encode_clause_lit(&step.0), encode_hints(&step.1)],
@@ -721,7 +721,7 @@ pub fn encode_lrat_step(step: &LratStepData) -> Expr {
 }
 
 /// Encode an LRAT trace (addition steps only) as `List Clean.Res.LratStep`.
-pub fn encode_lrat_trace(steps: &[LratStepData]) -> Expr {
+pub(crate) fn encode_lrat_trace(steps: &[LratStepData]) -> Expr {
     let mut e = list_nil(Expr::const_str(names::LRAT_STEP));
     for s in steps.iter().rev() {
         e = list_cons(Expr::const_str(names::LRAT_STEP), encode_lrat_step(s), e);

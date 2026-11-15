@@ -76,6 +76,7 @@ use std::collections::HashMap;
 
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
+use clean_parser::SurfaceName;
 
 use super::decreasing::{split_nat_lt, Budget};
 use super::encoding;
@@ -356,7 +357,7 @@ impl ElabCtx<'_> {
     ) -> Option<Expr> {
         let hyp_ty = nle(Expr::fvar(lo), Expr::fvar(hi));
         let depth = self.locals.len();
-        let h = self.push_local("_wf_split_le".to_owned(), hyp_ty.clone());
+        let h = self.push_local(SurfaceName::unspellable("_wf_split_le", 0), hyp_ty.clone());
         let body = self.build_split_branch_core(goal, lo, hi, h, budget);
         while self.locals.len() > depth {
             self.pop_local();
@@ -417,7 +418,8 @@ impl ElabCtx<'_> {
         }
         let mut carried_fvars: Vec<FVarId> = Vec::new();
         for (ty, _) in &carried {
-            carried_fvars.push(self.push_local("_wf_split_carry".to_owned(), ty.clone()));
+            carried_fvars
+                .push(self.push_local(SurfaceName::unspellable("_wf_split_carry", 0), ty.clone()));
         }
 
         // The goal with `hi` substituted, then normalized side by side.

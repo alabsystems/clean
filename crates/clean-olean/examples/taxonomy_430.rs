@@ -48,7 +48,6 @@ fn variant_tag(e: &TypeError) -> &'static str {
         TypeError::InvalidProjFromProp { .. } => "KERNEL:Proj/FromProp",
         TypeError::ModeRequired { .. } => "KERNEL:ModeRequired",
         TypeError::LevelCountMismatch { .. } => "KERNEL:LevelCountMismatch",
-        TypeError::CrossValidationFailure(_) => "KERNEL:CrossValidation",
         TypeError::HeartbeatExceeded { .. } => "LIMIT:Heartbeat",
         TypeError::ExcessiveMemory => "LIMIT:Memory",
         TypeError::DeepRecursion => "LIMIT:DeepRecursion",

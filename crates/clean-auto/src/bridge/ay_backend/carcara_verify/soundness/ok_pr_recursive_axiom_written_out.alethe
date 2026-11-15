@@ -1,0 +1,6 @@
+(assume a0 (forall ((x Int)) (= (f x) (+ (f x) 1))))
+(step t1 (cl (or (not (forall ((x Int)) (= (f x) (+ (f x) 1)))) (= (f 0) (+ (f 0) 1)))) :rule forall_inst :args (0))
+(step t2 (cl (not (forall ((x Int)) (= (f x) (+ (f x) 1)))) (= (f 0) (+ (f 0) 1))) :rule or :premises (t1))
+(step t3 (cl (= (f 0) (+ (f 0) 1))) :rule resolution :premises (t2 a0))
+(step t4 (cl (not (= (f 0) (+ (f 0) 1)))) :rule la_generic :args (1))
+(step t5 (cl) :rule resolution :premises (t3 t4))

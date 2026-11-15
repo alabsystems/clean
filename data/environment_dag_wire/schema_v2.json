@@ -1,0 +1,8236 @@
+{
+  "declarations": [
+    {
+      "epoch": "b59",
+      "items": [
+        "mode: crate::mode::CleanMode",
+        "constants: HashMap<Name, ConstantInfo>",
+        "#[serde(skip)] lazy_source: Option<std::sync::Arc<dyn ConstantSource>>",
+        "#[serde(default)] constant_origins: HashMap<Name, ConstantOrigin>",
+        "#[serde(skip)] declaration_verification: HashMap<Name, DeclarationVerification>",
+        "#[serde(skip)] codata_origins: HashMap<Name, CodataOrigin>",
+        "#[serde(skip)] codata_carriers: hashbrown::HashSet<Name>",
+        "persistent_extensions: HashMap<Name, PersistentEnvExtensionState>",
+        "#[serde(default)] extension_states: persistent_ext::EnvExtensionStates",
+        "inductives: HashMap<Name, InductiveVal>",
+        "constructors: HashMap<Name, ConstructorVal>",
+        "recursors: HashMap<Name, RecursorVal>",
+        "quotients: HashMap<Name, QuotVal>",
+        "quot_init: bool",
+        "eq_init: bool",
+        "heq_init: bool",
+        "propext_init: bool",
+        "funext_init: bool",
+        "quot_sound_init: bool",
+        "iff_init: bool",
+        "prop_eq_lemmas_init: bool",
+        "bool_simp_lemmas_init: bool",
+        "nat_sub_simp_lemmas_init: bool",
+        "decidable_init: bool",
+        "ite_init: bool",
+        "decidable_true_false_inst_init: bool",
+        "classical_init: bool",
+        "and_init: bool",
+        "or_init: bool",
+        "exists_init: bool",
+        "true_false_init: bool",
+        "prod_init: bool",
+        "pprod_init: bool",
+        "sigma_init: bool",
+        "subtype_init: bool",
+        "option_init: bool",
+        "sum_init: bool",
+        "psum_init: bool",
+        "psigma_init: bool",
+        "empty_init: bool",
+        "pempty_init: bool",
+        "bool_init: bool",
+        "nat_init: bool",
+        "ulift_init: bool",
+        "char_init: bool",
+        "string_init: bool",
+        "string_append_init: bool",
+        "list_init: bool",
+        "list_mem_init: bool",
+        "list_perm_init: bool",
+        "multiset_init: bool",
+        "finset_init: bool",
+        "int_init: bool",
+        "uint8_init: bool",
+        "uint16_init: bool",
+        "uint32_init: bool",
+        "uint64_init: bool",
+        "float_init: bool",
+        "unit_init: bool",
+        "punit_init: bool",
+        "plift_init: bool",
+        "fin_init: bool",
+        "array_init: bool",
+        "io_init: bool",
+        "io_ops_init: bool",
+        "state_t_init: bool",
+        "state_m_init: bool",
+        "id_init: bool",
+        "monad_classes_init: bool",
+        "#[serde(default)] fun_id_init: bool",
+        "#[serde(default)] fun_comp_init: bool",
+        "#[serde(default)] fun_flip_init: bool",
+        "#[serde(default)] fun_const_init: bool",
+        "#[serde(default)] functor_class_init: bool",
+        "#[serde(default)] functor_instances_init: bool",
+        "#[serde(default)] seq_classes_init: bool",
+        "#[serde(default)] seq_option_insts_init: bool",
+        "#[serde(default)] pure_bind_classes_init: bool",
+        "#[serde(default)] monad_option_insts_init: bool",
+        "#[serde(default)] monad_id_insts_init: bool",
+        "#[serde(default)] monad_list_insts_init: bool",
+        "#[serde(default)] core_monad_instances_init: bool",
+        "#[serde(default)] lean_init_modeled: bool",
+        "#[serde(default)] lean4_core_strict_monads: bool",
+        "#[serde(default)] handthen_horelse_init: bool",
+        "#[serde(default)] handthen_horelse_option_insts_init: bool",
+        "#[serde(default)] bind_combinators_init: bool",
+        "#[serde(default)] dvd_init: bool",
+        "#[serde(default)] nat_dvd_inst_init: bool",
+        "#[serde(default)] getelem_classes_init: bool",
+        "#[serde(default)] getelem_list_instances_init: bool",
+        "#[serde(default)] insert_singleton_init: bool",
+        "#[serde(default)] list_insert_singleton_inst_init: bool",
+        "except_t_init: bool",
+        "option_t_init: bool",
+        "ordering_init: bool",
+        "option_ops_init: bool",
+        "#[serde(default)] bool_ops_init: bool",
+        "list_ops_init: bool",
+        "list_mapm_init: bool",
+        "for_in_step_init: bool",
+        "for_in_init: bool",
+        "list_for_in_inst_init: bool",
+        "nat_cmp_init: bool",
+        "inhabited_init: bool",
+        "beq_init: bool",
+        "nat_minmax_init: bool",
+        "minmax_class_init: bool",
+        "nat_minmax_inst_init: bool",
+        "ord_init: bool",
+        "decidable_eq_init: bool",
+        "hashable_init: bool",
+        "repr_init: bool",
+        "to_string_init: bool",
+        "le_init: bool",
+        "lt_init: bool",
+        "ge_init: bool",
+        "gt_init: bool",
+        "trans_init: bool",
+        "suppress_lossy_structure_stubs: bool",
+        "#[serde(default)] cumulative: bool",
+        "#[serde(skip)] cumulative_ever: bool",
+        "preorder_init: bool",
+        "partial_order_init: bool",
+        "linear_order_init: bool",
+        "reflexive_init: bool",
+        "antisymm_init: bool",
+        "irrefl_init: bool",
+        "asymm_init: bool",
+        "nat_preorder_init: bool",
+        "nat_partial_order_init: bool",
+        "nat_linear_order_init: bool",
+        "nat_le_reflexive_init: bool",
+        "nat_lt_irrefl_init: bool",
+        "nat_lt_asymm_init: bool",
+        "nat_lt_trans_init: bool",
+        "nat_le_antisymm_init: bool",
+        "nat_le_trans_init: bool",
+        "strict_order_init: bool",
+        "nat_lt_strict_order_init: bool",
+        "nat_trans_lt_le_lt_init: bool",
+        "nat_trans_le_lt_lt_init: bool",
+        "nat_trans_lt_lt_le_init: bool",
+        "nat_lt_or_eq_of_le_init: bool",
+        "nat_lt_of_le_of_ne_init: bool",
+        "nat_not_lt_le_init: bool",
+        "nat_succ_base_init: bool",
+        "nat_succ_lt_init: bool",
+        "nat_lt_trichotomy_init: bool",
+        "nat_decidable_ord_init: bool",
+        "uint_decidable_ord_init: bool",
+        "nat_minmax_lemmas_init: bool",
+        "nat_add_ord_init: bool",
+        "nat_mul_ord_init: bool",
+        "nat_sub_ord_init: bool",
+        "nat_pow_ord_init: bool",
+        "int_arith_init: bool",
+        "int_ord_init: bool",
+        "int_decidable_ord_init: bool",
+        "int_ord_lemmas_init: bool",
+        "int_linear_order_init: bool",
+        "int_sign_abs_init: bool",
+        "int_arith_lemmas_init: bool",
+        "nat_arith_lemmas_init: bool",
+        "int_nat_conv_lemmas_init: bool",
+        "cast_simp_lemmas_init: bool",
+        "zero_init: bool",
+        "one_init: bool",
+        "add_init: bool",
+        "mul_init: bool",
+        "neg_init: bool",
+        "sub_init: bool",
+        "nat_zero_inst_init: bool",
+        "nat_one_inst_init: bool",
+        "nat_add_inst_init: bool",
+        "nat_mul_inst_init: bool",
+        "nat_sub_inst_init: bool",
+        "int_zero_inst_init: bool",
+        "int_one_inst_init: bool",
+        "int_add_inst_init: bool",
+        "int_mul_inst_init: bool",
+        "int_neg_inst_init: bool",
+        "int_sub_inst_init: bool",
+        "hadd_init: bool",
+        "hsub_init: bool",
+        "hmul_init: bool",
+        "hdiv_init: bool",
+        "div_init: bool",
+        "hmod_init: bool",
+        "mod_init: bool",
+        "hpow_init: bool",
+        "pow_init: bool",
+        "nat_hadd_inst_init: bool",
+        "int_hadd_inst_init: bool",
+        "nat_hsub_inst_init: bool",
+        "int_hsub_inst_init: bool",
+        "nat_hmul_inst_init: bool",
+        "int_hmul_inst_init: bool",
+        "float_arith_ops_init: bool",
+        "float_hadd_inst_init: bool",
+        "float_hsub_inst_init: bool",
+        "float_hmul_inst_init: bool",
+        "float_hdiv_inst_init: bool",
+        "float_neg_inst_init: bool",
+        "hand_init: bool",
+        "hor_init: bool",
+        "hxor_init: bool",
+        "hshiftleft_init: bool",
+        "hshiftright_init: bool",
+        "happend_init: bool",
+        "string_happend_inst_init: bool",
+        "list_happend_inst_init: bool",
+        "nat_hand_inst_init: bool",
+        "nat_hor_inst_init: bool",
+        "nat_hxor_inst_init: bool",
+        "nat_hshiftleft_inst_init: bool",
+        "nat_hshiftright_inst_init: bool",
+        "semigroup_init: bool",
+        "add_semigroup_init: bool",
+        "monoid_init: bool",
+        "add_monoid_init: bool",
+        "nat_add_semigroup_inst_init: bool",
+        "int_add_semigroup_inst_init: bool",
+        "nat_add_monoid_inst_init: bool",
+        "int_add_monoid_inst_init: bool",
+        "group_init: bool",
+        "add_group_init: bool",
+        "int_add_group_inst_init: bool",
+        "comm_semigroup_init: bool",
+        "add_comm_semigroup_init: bool",
+        "comm_monoid_init: bool",
+        "add_comm_monoid_init: bool",
+        "comm_group_init: bool",
+        "add_comm_group_init: bool",
+        "nat_add_comm_semigroup_inst_init: bool",
+        "int_add_comm_semigroup_inst_init: bool",
+        "nat_add_comm_monoid_inst_init: bool",
+        "int_add_comm_monoid_inst_init: bool",
+        "int_add_comm_group_inst_init: bool",
+        "semiring_init: bool",
+        "ring_init: bool",
+        "comm_semiring_init: bool",
+        "comm_ring_init: bool",
+        "nat_semiring_inst_init: bool",
+        "int_semiring_inst_init: bool",
+        "int_ring_inst_init: bool",
+        "nat_comm_semiring_inst_init: bool",
+        "int_comm_semiring_inst_init: bool",
+        "int_comm_ring_inst_init: bool",
+        "division_ring_init: bool",
+        "field_init: bool",
+        "integral_domain_init: bool",
+        "int_integral_domain_inst_init: bool",
+        "nat_integral_domain_inst_init: bool",
+        "nontrivial_init: bool",
+        "int_nontrivial_inst_init: bool",
+        "well_founded_init: bool",
+        "wf_recursion_support_init: bool",
+        "euclidean_domain_init: bool",
+        "int_euclidean_domain_inst_init: bool",
+        "int_gcd_init: bool",
+        "nat_gcd_init: bool",
+        "gcd_monoid_init: bool",
+        "nat_gcd_monoid_inst_init: bool",
+        "nat_prime_init: bool",
+        "irreducible_init: bool",
+        "associated_init: bool",
+        "ufm_init: bool",
+        "nat_ufm_inst_init: bool",
+        "prime_init: bool",
+        "is_principal_ideal_ring_init: bool",
+        "polynomial_init: bool",
+        "rat_init: bool",
+        "rat_arith_init: bool",
+        "rat_field_inst_init: bool",
+        "rat_normalize_init: bool",
+        "rat_ord_init: bool",
+        "rat_linear_order_init: bool",
+        "linear_ordered_field_init: bool",
+        "rat_ordered_field_axioms_init: bool",
+        "rat_linear_ordered_field_inst_init: bool",
+        "rat_decidable_ord_init: bool",
+        "#[cfg_attr(not(any(test, feature = \"math-overlays\")), allow(dead_code))] rat_minmax_init: bool",
+        "rat_abs_init: bool",
+        "int_minmax_init: bool",
+        "int_abs_props_init: bool",
+        "nat_abs_diff_init: bool",
+        "rat_dist_init: bool",
+        "int_dist_init: bool",
+        "nat_dist_init: bool",
+        "metric_space_init: bool",
+        "nat_metric_space_init: bool",
+        "int_metric_space_init: bool",
+        "rat_metric_space_init: bool",
+        "metric_ball_init: bool",
+        "metric_continuous_init: bool",
+        "metric_lipschitz_init: bool",
+        "metric_uniform_continuous_init: bool",
+        "metric_cauchy_seq_init: bool",
+        "metric_complete_init: bool",
+        "metric_bounded_init: bool",
+        "metric_compact_init: bool",
+        "metric_totally_bounded_init: bool",
+        "metric_separable_init: bool",
+        "topological_space_init: bool",
+        "topology_continuous_init: bool",
+        "topology_connected_init: bool",
+        "topology_compact_init: bool",
+        "topology_hausdorff_init: bool",
+        "topology_homeomorphism_init: bool",
+        "topology_locally_compact_init: bool",
+        "topology_path_connected_init: bool",
+        "topology_simply_connected_init: bool",
+        "topology_contractible_init: bool",
+        "topology_covering_space_init: bool",
+        "topology_fundamental_group_init: bool",
+        "topology_homotopy_equivalence_init: bool",
+        "topology_retract_init: bool",
+        "topology_fiber_bundle_init: bool",
+        "topology_quotient_init: bool",
+        "topology_subspace_init: bool",
+        "topology_product_init: bool",
+        "topology_higher_homotopy_init: bool",
+        "topology_suspension_init: bool",
+        "topology_vector_bundle_init: bool",
+        "topology_coproduct_init: bool",
+        "topology_cw_init: bool",
+        "topology_simplicial_complex_init: bool",
+        "topology_homology_init: bool",
+        "topology_derham_init: bool",
+        "topology_morse_init: bool",
+        "topology_ktheory_init: bool",
+        "topology_filtration_init: bool",
+        "topology_spectral_init: bool",
+        "topology_sheaf_init: bool",
+        "topology_scheme_init: bool",
+        "topology_cobordism_init: bool",
+        "topology_characteristic_init: bool",
+        "topology_manifold_init: bool",
+        "topology_lie_group_init: bool",
+        "topology_principal_bundle_init: bool",
+        "topology_connection_init: bool",
+        "topology_symplectic_init: bool",
+        "topology_kahler_init: bool",
+        "topology_spin_init: bool",
+        "algebra_linear_init: bool",
+        "nn_verification_init: bool",
+        "module_init: bool",
+        "algebra_init: bool",
+        "submodule_init: bool",
+        "ideal_init: bool",
+        "domain_types_init: bool",
+        "fate_x_order_stubs_init: bool",
+        "category_theory_init: bool",
+        "homological_algebra_init: bool",
+        "number_theory_init: bool",
+        "algebraic_geometry_init: bool",
+        "representation_theory_init: bool",
+        "measure_theory_init: bool",
+        "functional_analysis_init: bool",
+        "information_theory_init: bool",
+        "differential_equations_init: bool",
+        "combinatorics_init: bool",
+        "optimization_init: bool",
+        "computability_init: bool",
+        "set_theory_init: bool",
+        "set_init: bool",
+        "fixed_point_init: bool",
+        "stochastic_processes_init: bool",
+        "formal_logic_init: bool",
+        "cryptography_init: bool",
+        "real_complex_analysis_init: bool",
+        "real_ord_init: bool",
+        "real_linear_order_init: bool",
+        "real_hadd_inst_init: bool",
+        "real_hmul_inst_init: bool",
+        "real_neg_inst_init: bool",
+        "real_hpow_nat_inst_init: bool",
+        "ofnat_init: bool",
+        "ofnat_nat_inst_init: bool",
+        "ofnat_real_inst_init: bool",
+        "ofnat_uint8_inst_init: bool",
+        "ofnat_uint16_inst_init: bool",
+        "ofnat_uint32_inst_init: bool",
+        "ofnat_uint64_inst_init: bool",
+        "usize_init: bool",
+        "ofnat_usize_inst_init: bool",
+        "causal_inference_init: bool",
+        "differential_privacy_init: bool",
+        "graph_theory_init: bool",
+        "computational_geometry_init: bool",
+        "euclidean_geometry_init: bool",
+        "euclidean_angle_init: bool",
+        "concurrency_theory_init: bool",
+        "type_theory_init: bool",
+        "subgroup_init: bool",
+        "subring_init: bool",
+        "subfield_init: bool",
+        "submonoid_init: bool",
+        "fact_init: bool",
+        "odd_init: bool",
+        "nat_card_init: bool",
+        "ring_hom_init: bool",
+        "is_empty_init: bool",
+        "finite_init: bool",
+        "tensor_ml_init: bool",
+        "nn_verification_c002_init: bool",
+        "nn_verify_softmax_c011_init: bool",
+        "nn_verification_c009_init: bool",
+        "nn_verify_abstract_domain_init: bool",
+        "nn_verify_abstract_domain_ibp_init: bool",
+        "nn_verify_types_init: bool",
+        "nn_verify_types_ops_init: bool",
+        "nn_verify_foundation_types_init: bool",
+        "nn_verify_foundation_theorems_init: bool",
+        "nn_verify_farkas_constructive_init: bool",
+        "nn_verify_farkas_list_init: bool",
+        "nn_verify_farkas_to_interval_constructive_init: bool",
+        "fin_sum_init: bool",
+        "nn_verify_relu_init: bool",
+        "nn_verify_proofs_init: bool",
+        "nn_verify_interval_arith_proofs_init: bool",
+        "nn_verify_interval_containment_proofs_init: bool",
+        "nn_verify_interval_primitives_init: bool",
+        "nn_verify_rat_interval_init: bool",
+        "nn_verify_rat_interval_proofs_init: bool",
+        "nn_verify_ibp_linear_init: bool",
+        "nn_verify_rat_ordering_init: bool",
+        "nn_verify_ibp_composition_init: bool",
+        "nn_verify_crown_layernorm_init: bool",
+        "nn_verify_orbit_crown_init: bool",
+        "nn_verify_blockwise_crown_init: bool",
+        "nn_verify_ibp_tightness_init: bool",
+        "nn_verify_ibp_width_zero_init: bool",
+        "nn_verify_tier_a_rat_min_zero_init: bool",
+        "nn_verify_tier_a_rat_le_refl_zero_init: bool",
+        "nn_verify_tier_a_rat_zero_eq_max_init: bool",
+        "nn_verify_tier_a_rat_zero_eq_min_init: bool",
+        "nn_verify_tier_a_rat_max_eq_min_init: bool",
+        "nn_verify_tier_a_rat_min_eq_max_init: bool",
+        "nn_verify_tier_a_rat_max_zero_zero_alt_init: bool",
+        "nn_verify_tier_a_rat_min_zero_zero_alt_init: bool",
+        "nn_verify_tier_a_rat_le_refl_max_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_le_refl_min_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_mul_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_mul_one_zero_init: bool",
+        "nn_verify_tier_a_rat_mul_zero_one_init: bool",
+        "nn_verify_tier_a_rat_add_neg_self_zero_init: bool",
+        "nn_verify_tier_a_rat_add_left_neg_zero_init: bool",
+        "nn_verify_tier_a_rat_mul_neg_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_neg_zero_zero_init: bool",
+        "nn_verify_tier_a_nat_ordering_init: bool",
+        "nat_top_level_ordering_init: bool",
+        "nn_verify_tier_a_rat_min_le_max_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_max_le_min_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_min_min_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_max_max_zero_zero_init: bool",
+        "nn_verify_tier_a_rat_max_min_zero_zero_init: bool",
+        "rat_min_le_max_init: bool",
+        "nn_verify_network_proof_init: bool",
+        "nn_verify_mccormick_init: bool",
+        "nn_verify_elementwise_init: bool",
+        "nn_verify_certified_training_init: bool",
+        "nn_verify_certified_eval_init: bool",
+        "boolean_analysis_init: bool",
+        "boolean_analysis_init_in_progress: bool",
+        "boolean_analysis_foundations_init: bool",
+        "boolean_analysis_order_toolkit_init: bool",
+        "boolean_analysis_order_toolkit_b1b_init: bool",
+        "boolean_analysis_order_toolkit_b1c_init: bool",
+        "boolean_analysis_order_toolkit_b1d_init: bool",
+        "boolean_analysis_ring_identities_init: bool",
+        "boolean_analysis_fourth_power_init: bool",
+        "boolean_analysis_peel_init: bool",
+        "boolean_analysis_peel_compute_init: bool",
+        "boolean_analysis_peel_parts_init: bool",
+        "boolean_analysis_noise_peel_init: bool",
+        "boolean_analysis_noise_extend_bridge_init: bool",
+        "fourier_boolean_init: bool",
+        "resolution_complexity_init: bool",
+        "tree_width_resolution_init: bool",
+        "width_expansion_init: bool",
+        "proof_hierarchy_init: bool",
+        "craig_interpolation_init: bool",
+        "cutting_planes_init: bool",
+        "veripb_checker_init: bool",
+        "abstract_interpretation_init: bool",
+        "abstract_interpretation_framework_init: bool",
+        "labelled_interpolation_minimality_init: bool",
+        "learned_clause_minimality_init: bool",
+        "gf2_polynomial_calculus_init: bool",
+        "pb_pigeonhole_init: bool",
+        "pb_pigeonhole_length_bound_init: bool",
+        "nn_verify_float_rational_init: bool",
+        "nn_verify_zonotope_compress_init: bool",
+        "nn_verify_zonotope_proofs_init: bool",
+        "feasible_interpolation_init: bool",
+        "extension_rule_init: bool",
+        "bounded_width_automatizability_init: bool",
+        "cdcl_soundness_init: bool",
+        "entropy_clause_quality_init: bool",
+        "extension_rule_soundness_init: bool",
+        "isasat_refinement_init: bool",
+        "bcp_loop_refinement_init: bool",
+        "verified_proof_search_init: bool",
+        "structure_fields: HashMap<Name, Vec<Name>>",
+        "#[serde(default)] structure_field_defaults: HashMap<Name, HashMap<Name, Expr>>",
+        "#[serde(default)] structure_parents: HashMap<Name, Vec<(Name, Name)>>",
+        "classes: HashMap<Name, KernelClassInfo>",
+        "instances: HashMap<Name, Vec<KernelInstanceInfo>>",
+        "instance_names: hashbrown::HashSet<Name>",
+        "#[serde(default)] instance_synth_orders: HashMap<Name, Vec<usize>>",
+        "aesop_rules: AesopRuleSet",
+        "aesop_rule_sets: HashMap<Name, AesopRuleSet>",
+        "declared_aesop_rule_sets: hashbrown::HashSet<Name>",
+        "aesop_target_index: HashMap<Name, Vec<AesopRule>>",
+        "aesop_hyps_index: HashMap<Name, Vec<AesopRule>>",
+        "aesop_unindexed_rules: Vec<AesopRule>",
+        "simp_lemmas: HashMap<Name, SimpLemmaInfo>",
+        "simp_registry_revision: u64",
+        "#[serde(default)] export_aliases: HashMap<Name, Name>",
+        "#[serde(default)] export_alias_others: HashMap<Name, Vec<Name>>",
+        "extern_bindings: HashMap<Name, String>",
+        "implemented_by: HashMap<Name, Name>",
+        "#[serde(skip)] native_reducers: HashMap<Name, native_reducers::NativeReducerRegistration>",
+        "#[serde(skip)] kernel_theory: KernelTheory",
+        "#[serde(default)] lean_level_profile: crate::level::LeanLevelProfile",
+        "#[serde(skip)] native_fold_cache: native_fold_authority::NativeFoldAuthorityCache",
+        "export_bindings: HashMap<Name, String>",
+        "deprecated: HashMap<Name, Option<String>>",
+        "inline_hints: hashbrown::HashSet<Name>",
+        "noinline_hints: hashbrown::HashSet<Name>",
+        "always_inline_hints: hashbrown::HashSet<Name>",
+        "#[serde(default)] macro_inline_hints: hashbrown::HashSet<Name>",
+        "#[serde(default)] inline_if_reduce_hints: hashbrown::HashSet<Name>",
+        "#[serde(default)] nospecialize_hints: hashbrown::HashSet<Name>",
+        "specialize_hints: hashbrown::HashSet<Name>",
+        "csimp_lemmas: hashbrown::HashSet<Name>",
+        "congr_lemmas: hashbrown::HashSet<Name>",
+        "ext_lemmas: hashbrown::HashSet<Name>",
+        "#[serde(default)] grind_lemmas: Vec<(Name, GrindAttrKind)>",
+        "refl_lemmas: hashbrown::HashSet<Name>",
+        "symm_lemmas: hashbrown::HashSet<Name>",
+        "#[serde(default)] coercion_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] match_pattern_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] init_fn_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] default_instance_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] derive_handlers: HashMap<Name, Vec<Name>>",
+        "private_decls: hashbrown::HashSet<Name>",
+        "protected_decls: hashbrown::HashSet<Name>",
+        "noncomputable_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] partial_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] unsafe_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] local_instance_decls: hashbrown::HashSet<Name>",
+        "#[serde(default)] instance_seqs: HashMap<Name, u64>",
+        "#[serde(default)] next_instance_seq: u64",
+        "#[serde(default)] registered_namespaces: hashbrown::HashSet<Name>",
+        "#[serde(skip)] prelude_aliases: std::sync::Arc<hashbrown::HashSet<Name>>",
+        "#[serde(default)] param_names: HashMap<Name, Vec<String>>",
+        "#[serde(default)] typed_param_names: HashMap<Name, Vec<Name>>",
+        "#[serde(default)] param_binder_infos: HashMap<Name, Vec<BinderInfo>>",
+        "#[serde(default)] generation: u64",
+        "#[serde(default)] options: HashMap<String, Option<String>>",
+        "#[serde(default)] staged_headers: hashbrown::HashSet<Name>"
+      ],
+      "kind": "struct",
+      "line": 2139,
+      "live_path": "crate::env::Environment",
+      "name": "Environment",
+      "path": "crates/clean-kernel/src/env/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub level_params: Vec<Name>",
+        "pub type_: Expr",
+        "pub value: Option<Expr>",
+        "pub is_reducible: bool",
+        "#[serde(default)] pub reducibility: Reducibility",
+        "#[serde(default)] pub kind: ConstantKind"
+      ],
+      "kind": "struct",
+      "line": 316,
+      "live_path": "crate::env::types::ConstantInfo",
+      "name": "ConstantInfo",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "#[default] Definition",
+        "Theorem",
+        "Opaque",
+        "Axiom"
+      ],
+      "kind": "enum",
+      "line": 302,
+      "live_path": "crate::env::types::ConstantKind",
+      "name": "ConstantKind",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "#[default] Reducible",
+        "Regular(u32)",
+        "Irreducible",
+        "Opaque"
+      ],
+      "kind": "enum",
+      "line": 50,
+      "live_path": "crate::env::types::Reducibility",
+      "name": "Reducibility",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub imported_entries: Vec<Vec<EnvExtensionEntry>>",
+        "pub state: Vec<u8>"
+      ],
+      "kind": "struct",
+      "line": 410,
+      "live_path": "crate::env::types::PersistentEnvExtensionState",
+      "name": "PersistentEnvExtensionState",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub data: EnvExtensionEntryData"
+      ],
+      "kind": "struct",
+      "line": 401,
+      "live_path": "crate::env::types::EnvExtensionEntry",
+      "name": "EnvExtensionEntry",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Scalar(u64)",
+        "Object(Vec<u8>)"
+      ],
+      "kind": "enum",
+      "line": 392,
+      "live_path": "crate::env::types::EnvExtensionEntryData",
+      "name": "EnvExtensionEntryData",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub num_params: usize",
+        "pub out_params: Vec<usize>",
+        "pub semi_out_params: Vec<usize>"
+      ],
+      "kind": "struct",
+      "line": 150,
+      "live_path": "crate::env::types::KernelClassInfo",
+      "name": "KernelClassInfo",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub class_name: Name",
+        "pub priority: u32",
+        "#[serde(default)] pub type_: Option<Expr>",
+        "#[serde(default)] pub value: Option<Expr>"
+      ],
+      "kind": "struct",
+      "line": 166,
+      "live_path": "crate::env::types::KernelInstanceInfo",
+      "name": "KernelInstanceInfo",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Reducible",
+        "Instances",
+        "#[default] Default",
+        "All"
+      ],
+      "kind": "enum",
+      "line": 29,
+      "live_path": "crate::env::types::TransparencyMode",
+      "name": "TransparencyMode",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub priority: SimpPriority"
+      ],
+      "kind": "struct",
+      "line": 285,
+      "live_path": "crate::env::types::SimpLemmaInfo",
+      "name": "SimpLemmaInfo",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "#[default] Default",
+        "Custom(u32)"
+      ],
+      "kind": "enum",
+      "line": 218,
+      "live_path": "crate::env::types::SimpPriority",
+      "name": "SimpPriority",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "#[default] Infer",
+        "EqLhs",
+        "Forward",
+        "Backward",
+        "Cases",
+        "Ext",
+        "Intro",
+        "Unmodeled(String)"
+      ],
+      "kind": "enum",
+      "line": 250,
+      "live_path": "crate::env::types::GrindAttrKind",
+      "name": "GrindAttrKind",
+      "path": "crates/clean-kernel/src/env/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Kernel { trust: OriginTrust }",
+        "Olean { module: Option<String>, trust: OriginTrust, }",
+        "CleanPayload { module: Option<String>, trust: OriginTrust, }"
+      ],
+      "kind": "enum",
+      "line": 87,
+      "live_path": "crate::env::origin::ConstantOrigin",
+      "name": "ConstantOrigin",
+      "path": "crates/clean-kernel/src/env/origin.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "KernelChecked",
+        "OleanUnpinned",
+        "CleanPayloadUnpinned"
+      ],
+      "kind": "enum",
+      "line": 36,
+      "live_path": "crate::env::origin::OriginTrust",
+      "name": "OriginTrust",
+      "path": "crates/clean-kernel/src/env/origin.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub safe_rules: Vec<AesopRule>",
+        "pub unsafe_rules: Vec<AesopRule>",
+        "pub norm_rules: Vec<AesopRule>",
+        "#[serde(default)] pub priority_overrides: HashMap<Name, u32>"
+      ],
+      "kind": "struct",
+      "line": 17,
+      "live_path": "crate::env::aesop::AesopRuleSet",
+      "name": "AesopRuleSet",
+      "path": "crates/clean-kernel/src/env/aesop.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub phase: AesopRulePhase",
+        "pub builder: AesopRuleBuilder",
+        "#[serde(default)] pub builder_args: Vec<Name>",
+        "pub priority: u32",
+        "#[serde(default)] pub index_mode: AesopIndexMode",
+        "#[serde(default)] pub transparency: TransparencyMode"
+      ],
+      "kind": "struct",
+      "line": 32,
+      "live_path": "crate::env::aesop::AesopRule",
+      "name": "AesopRule",
+      "path": "crates/clean-kernel/src/env/aesop.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Safe",
+        "Unsafe",
+        "Norm"
+      ],
+      "kind": "enum",
+      "line": 54,
+      "live_path": "crate::env::aesop::AesopRulePhase",
+      "name": "AesopRulePhase",
+      "path": "crates/clean-kernel/src/env/aesop.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Apply",
+        "Cases",
+        "Constructors",
+        "Destruct",
+        "Forward",
+        "Simp",
+        "Tactic",
+        "Unfold"
+      ],
+      "kind": "enum",
+      "line": 65,
+      "live_path": "crate::env::aesop::AesopRuleBuilder",
+      "name": "AesopRuleBuilder",
+      "path": "crates/clean-kernel/src/env/aesop.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "#[default] Target",
+        "Hyps",
+        "Unindexed"
+      ],
+      "kind": "enum",
+      "line": 91,
+      "live_path": "crate::env::aesop::AesopIndexMode",
+      "name": "AesopIndexMode",
+      "path": "crates/clean-kernel/src/env/aesop.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "states: Vec<Option<Box<dyn ExtensionStateHolder>>>"
+      ],
+      "kind": "struct",
+      "line": 286,
+      "live_path": "crate::env::persistent_ext::EnvExtensionStates",
+      "name": "EnvExtensionStates",
+      "path": "crates/clean-kernel/src/env/persistent_ext.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub level_params: Vec<Name>",
+        "pub type_: Expr",
+        "pub num_params: u32",
+        "pub num_indices: u32",
+        "pub all_names: Vec<Name>",
+        "pub constructor_names: Vec<Name>",
+        "pub is_recursive: bool",
+        "pub is_reflexive: bool",
+        "pub is_large_elim: bool",
+        "pub is_nested: bool"
+      ],
+      "kind": "struct",
+      "line": 64,
+      "live_path": "crate::inductive::InductiveVal",
+      "name": "InductiveVal",
+      "path": "crates/clean-kernel/src/inductive/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub inductive_name: Name",
+        "pub level_params: Vec<Name>",
+        "pub type_: Expr",
+        "pub num_params: u32",
+        "pub num_fields: u32",
+        "pub constructor_idx: u32"
+      ],
+      "kind": "struct",
+      "line": 91,
+      "live_path": "crate::inductive::ConstructorVal",
+      "name": "ConstructorVal",
+      "path": "crates/clean-kernel/src/inductive/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub arg_order: RecursorArgOrder",
+        "pub level_params: Vec<Name>",
+        "pub type_: Expr",
+        "pub inductive_name: Name",
+        "pub num_params: u32",
+        "pub num_indices: u32",
+        "pub num_motives: u32",
+        "pub num_minors: u32",
+        "pub rules: Vec<RecursorRule>",
+        "pub is_k: bool"
+      ],
+      "kind": "struct",
+      "line": 110,
+      "live_path": "crate::inductive::RecursorVal",
+      "name": "RecursorVal",
+      "path": "crates/clean-kernel/src/inductive/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub constructor_name: Name",
+        "pub num_fields: u32",
+        "pub recursive_fields: Vec<bool>",
+        "pub rhs: Expr"
+      ],
+      "kind": "struct",
+      "line": 137,
+      "live_path": "crate::inductive::RecursorRule",
+      "name": "RecursorRule",
+      "path": "crates/clean-kernel/src/inductive/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "MajorAfterMinors",
+        "MajorAfterMotive"
+      ],
+      "kind": "enum",
+      "line": 244,
+      "live_path": "crate::inductive::RecursorArgOrder",
+      "name": "RecursorArgOrder",
+      "path": "crates/clean-kernel/src/inductive/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub name: Name",
+        "pub level_params: Vec<Name>",
+        "pub type_: Expr",
+        "pub kind: QuotKind"
+      ],
+      "kind": "struct",
+      "line": 50,
+      "live_path": "crate::quot::QuotVal",
+      "name": "QuotVal",
+      "path": "crates/clean-kernel/src/quot.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Type",
+        "Mk",
+        "Lift",
+        "Ind",
+        "Sound"
+      ],
+      "kind": "enum",
+      "line": 63,
+      "live_path": "crate::quot::QuotKind",
+      "name": "QuotKind",
+      "path": "crates/clean-kernel/src/quot.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "#[default] Constructive = 0",
+        "Impredicative = 1",
+        "Cubical = 2",
+        "Directed = 3",
+        "Classical = 4",
+        "SetTheoretic = 5"
+      ],
+      "kind": "enum",
+      "line": 55,
+      "live_path": "crate::mode::CleanMode",
+      "name": "CleanMode",
+      "path": "crates/clean-kernel/src/mode.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Lean48",
+        "#[default] Lean430"
+      ],
+      "kind": "enum",
+      "line": 40,
+      "live_path": "crate::level::LeanLevelProfile",
+      "name": "LeanLevelProfile",
+      "path": "crates/clean-kernel/src/level/lean_kernel.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Zero",
+        "Succ(LevelArc)",
+        "Max(LevelArc, LevelArc)",
+        "IMax(LevelArc, LevelArc)",
+        "Param(Name)"
+      ],
+      "kind": "enum",
+      "line": 194,
+      "live_path": "crate::level::Level",
+      "name": "Level",
+      "path": "crates/clean-kernel/src/level/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "inner: NameInner",
+        "cached_hash: u64"
+      ],
+      "kind": "struct",
+      "line": 235,
+      "live_path": "crate::name::Name",
+      "name": "Name",
+      "path": "crates/clean-kernel/src/name.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Anon",
+        "Str(Arc<Name>, Arc<str>)",
+        "Num(Arc<Name>, u64)"
+      ],
+      "kind": "enum",
+      "line": 153,
+      "live_path": "crate::name::NameInner",
+      "name": "NameInner",
+      "path": "crates/clean-kernel/src/name.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub(crate) kind: ExprKind",
+        "meta: ExprMeta",
+        "fvar_upper_bound: u64"
+      ],
+      "kind": "struct",
+      "line": 220,
+      "live_path": "crate::expr::Expr",
+      "name": "Expr",
+      "path": "crates/clean-kernel/src/expr/mod.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "#[default] Default",
+        "Implicit",
+        "StrictImplicit",
+        "InstImplicit"
+      ],
+      "kind": "enum",
+      "line": 26,
+      "live_path": "crate::expr::BinderInfo",
+      "name": "BinderInfo",
+      "path": "crates/clean-kernel/src/expr/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "pub info: BinderInfo",
+        "pub mult: Multiplicity"
+      ],
+      "kind": "struct",
+      "line": 121,
+      "live_path": "crate::expr::BinderData",
+      "name": "BinderData",
+      "path": "crates/clean-kernel/src/expr/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Zero",
+        "One",
+        "#[default] Many"
+      ],
+      "kind": "enum",
+      "line": 53,
+      "live_path": "crate::expr::Multiplicity",
+      "name": "Multiplicity",
+      "path": "crates/clean-kernel/src/expr/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Nat(BigNat)",
+        "String(Arc<str>)"
+      ],
+      "kind": "enum",
+      "line": 438,
+      "live_path": "crate::expr::Literal",
+      "name": "Literal",
+      "path": "crates/clean-kernel/src/expr/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Small(u64)",
+        "Big(Vec<u64>)"
+      ],
+      "kind": "enum",
+      "line": 166,
+      "live_path": "crate::expr::BigNat",
+      "name": "BigNat",
+      "path": "crates/clean-kernel/src/expr/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Bool(bool)",
+        "Nat(u64)",
+        "String(Arc<str>)",
+        "Name(Name)"
+      ],
+      "kind": "enum",
+      "line": 479,
+      "live_path": "crate::expr::MDataValue",
+      "name": "MDataValue",
+      "path": "crates/clean-kernel/src/expr/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "(pub(crate) u64)"
+      ],
+      "kind": "struct",
+      "line": 495,
+      "live_path": "crate::expr::FVarId",
+      "name": "FVarId",
+      "path": "crates/clean-kernel/src/expr/types.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "BVar(u32)",
+        "FVar(FVarId)",
+        "Sort(Level)",
+        "Const( Name, #[serde(with = \"level_vec_serde\")] LevelVec, )",
+        "App(Arc<Expr>, Arc<Expr>)",
+        "Lam(BinderData, Arc<Expr>, Arc<Expr>)",
+        "Pi(BinderData, Arc<Expr>, Arc<Expr>)",
+        "Let(Name, Arc<Expr>, Arc<Expr>, Arc<Expr>, bool)",
+        "Lit(Literal)",
+        "Proj(Name, u32, Arc<Expr>)",
+        "MData(MDataMap, Arc<Expr>)",
+        "SProp",
+        "Squash(Arc<Expr>)",
+        "CubicalInterval",
+        "CubicalI0",
+        "CubicalI1",
+        "CubicalPath { ty: Arc<Expr>, left: Arc<Expr>, right: Arc<Expr>, }",
+        "CubicalPathLam { body: Arc<Expr>, }",
+        "CubicalPathApp { path: Arc<Expr>, arg: Arc<Expr>, }",
+        "CubicalHComp { ty: Arc<Expr>, phi: Arc<Expr>, u: Arc<Expr>, base: Arc<Expr>, }",
+        "CubicalTransp { ty: Arc<Expr>, phi: Arc<Expr>, base: Arc<Expr>, }",
+        "CubicalCoe { ty: Arc<Expr>, r: Arc<Expr>, s: Arc<Expr>, base: Arc<Expr>, }",
+        "ZFCSet(ZFCSetExpr)",
+        "ZFCMem { element: Arc<Expr>, set: Arc<Expr>, }",
+        "ZFCComprehension { domain: Arc<Expr>, pred: Arc<Expr>, }"
+      ],
+      "kind": "enum",
+      "line": 124,
+      "live_path": "crate::expr::ExprKind",
+      "name": "ExprKind",
+      "path": "crates/clean-kernel/src/expr/kind.rs"
+    },
+    {
+      "epoch": "b59",
+      "items": [
+        "Empty",
+        "Singleton(Arc<Expr>)",
+        "Pair(Arc<Expr>, Arc<Expr>)",
+        "Union(Arc<Expr>)",
+        "PowerSet(Arc<Expr>)",
+        "Separation { set: Arc<Expr>, pred: Arc<Expr>, }",
+        "Replacement { set: Arc<Expr>, func: Arc<Expr>, }",
+        "Infinity",
+        "Choice(Arc<Expr>)"
+      ],
+      "kind": "enum",
+      "line": 403,
+      "live_path": "crate::expr::ZFCSetExpr",
+      "name": "ZFCSetExpr",
+      "path": "crates/clean-kernel/src/expr/kind.rs"
+    }
+  ],
+  "environment_fields": [
+    {
+      "attributes": [],
+      "name": "mode",
+      "serialized": true,
+      "type": "crate::mode::CleanMode"
+    },
+    {
+      "attributes": [],
+      "name": "constants",
+      "serialized": true,
+      "type": "HashMap<Name,ConstantInfo>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "lazy_source",
+      "serialized": false,
+      "type": "Option<std::sync::Arc<dynConstantSource>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "constant_origins",
+      "serialized": true,
+      "type": "HashMap<Name,ConstantOrigin>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "declaration_verification",
+      "serialized": false,
+      "type": "HashMap<Name,DeclarationVerification>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "codata_origins",
+      "serialized": false,
+      "type": "HashMap<Name,CodataOrigin>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "codata_carriers",
+      "serialized": false,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "persistent_extensions",
+      "serialized": true,
+      "type": "HashMap<Name,PersistentEnvExtensionState>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "extension_states",
+      "serialized": true,
+      "type": "persistent_ext::EnvExtensionStates"
+    },
+    {
+      "attributes": [],
+      "name": "inductives",
+      "serialized": true,
+      "type": "HashMap<Name,InductiveVal>"
+    },
+    {
+      "attributes": [],
+      "name": "constructors",
+      "serialized": true,
+      "type": "HashMap<Name,ConstructorVal>"
+    },
+    {
+      "attributes": [],
+      "name": "recursors",
+      "serialized": true,
+      "type": "HashMap<Name,RecursorVal>"
+    },
+    {
+      "attributes": [],
+      "name": "quotients",
+      "serialized": true,
+      "type": "HashMap<Name,QuotVal>"
+    },
+    {
+      "attributes": [],
+      "name": "quot_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "eq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "heq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "propext_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "funext_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "quot_sound_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "iff_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "prop_eq_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bool_simp_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_sub_simp_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "decidable_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ite_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "decidable_true_false_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "classical_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "and_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "or_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "exists_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "true_false_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "prod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pprod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "sigma_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subtype_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "option_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "sum_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "psum_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "psigma_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "empty_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pempty_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bool_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ulift_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "char_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "string_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "string_append_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_mem_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_perm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "multiset_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "finset_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint8_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint16_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint32_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint64_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "unit_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "punit_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "plift_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fin_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "array_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "io_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "io_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "state_t_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "state_m_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "id_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "monad_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_id_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_comp_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_flip_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_const_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "functor_class_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "functor_instances_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "seq_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "seq_option_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "pure_bind_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "monad_option_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "monad_id_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "monad_list_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "core_monad_instances_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "lean_init_modeled",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "lean4_core_strict_monads",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "handthen_horelse_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "handthen_horelse_option_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "bind_combinators_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "dvd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "nat_dvd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "getelem_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "getelem_list_instances_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "insert_singleton_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "list_insert_singleton_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "except_t_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "option_t_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "option_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "bool_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_mapm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "for_in_step_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "for_in_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_for_in_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_cmp_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "inhabited_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "beq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_minmax_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "minmax_class_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_minmax_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "decidable_eq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hashable_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "repr_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "to_string_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ge_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "gt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "trans_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "suppress_lossy_structure_stubs",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "cumulative",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "cumulative_ever",
+      "serialized": false,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "preorder_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "partial_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "reflexive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "antisymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "irrefl_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "asymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_preorder_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_partial_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_le_reflexive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_irrefl_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_asymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_trans_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_le_antisymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_le_trans_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "strict_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_strict_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_trans_lt_le_lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_trans_le_lt_lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_trans_lt_lt_le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_or_eq_of_le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_of_le_of_ne_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_not_lt_le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_succ_base_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_succ_lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_trichotomy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_minmax_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_mul_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_sub_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_pow_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_arith_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_ord_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_sign_abs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_arith_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_arith_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_nat_conv_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cast_simp_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "one_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "mul_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "neg_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "sub_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_zero_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_one_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_mul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_sub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_zero_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_one_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_mul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_neg_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_sub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hadd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hsub_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hmul_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hdiv_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "div_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hmod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "mod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hpow_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pow_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hsub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_hsub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_arith_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hsub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hdiv_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_neg_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hand_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hor_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hxor_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hshiftleft_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hshiftright_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "happend_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "string_happend_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_happend_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hand_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hor_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hxor_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hshiftleft_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hshiftright_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_group_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_comm_semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_comm_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_comm_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_comm_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_comm_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_comm_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_comm_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_comm_group_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "semiring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_semiring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_ring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_comm_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_comm_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_comm_ring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "division_ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "field_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "integral_domain_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_integral_domain_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_integral_domain_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nontrivial_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_nontrivial_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "well_founded_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "wf_recursion_support_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "euclidean_domain_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_euclidean_domain_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_gcd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_gcd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "gcd_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_gcd_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_prime_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "irreducible_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "associated_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ufm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_ufm_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "prime_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "is_principal_ideal_ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "polynomial_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_arith_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_field_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_normalize_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "linear_ordered_field_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_ordered_field_axioms_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_linear_ordered_field_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[cfg_attr(not(any(test, feature = \"math-overlays\")), allow(dead_code))]"
+      ],
+      "name": "rat_minmax_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_abs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_minmax_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_abs_props_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_abs_diff_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_dist_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_dist_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_dist_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_ball_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_continuous_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_lipschitz_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_uniform_continuous_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_cauchy_seq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_complete_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_bounded_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_compact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_totally_bounded_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_separable_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topological_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_continuous_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_connected_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_compact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_hausdorff_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_homeomorphism_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_locally_compact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_path_connected_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_simply_connected_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_contractible_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_covering_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_fundamental_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_homotopy_equivalence_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_retract_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_fiber_bundle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_quotient_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_subspace_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_product_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_higher_homotopy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_suspension_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_vector_bundle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_coproduct_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_cw_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_simplicial_complex_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_homology_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_derham_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_morse_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_ktheory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_filtration_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_spectral_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_sheaf_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_scheme_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_cobordism_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_characteristic_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_manifold_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_lie_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_principal_bundle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_connection_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_symplectic_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_kahler_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_spin_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "algebra_linear_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verification_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "module_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "algebra_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "submodule_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ideal_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "domain_types_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fate_x_order_stubs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "category_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "homological_algebra_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "number_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "algebraic_geometry_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "representation_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "measure_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "functional_analysis_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "information_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "differential_equations_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "combinatorics_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "optimization_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "computability_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "set_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "set_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fixed_point_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "stochastic_processes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "formal_logic_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cryptography_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_complex_analysis_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_neg_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_hpow_nat_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_nat_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_real_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint8_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint16_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint32_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint64_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "usize_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_usize_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "causal_inference_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "differential_privacy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "graph_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "computational_geometry_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "euclidean_geometry_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "euclidean_angle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "concurrency_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "type_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subgroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subfield_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "submonoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "odd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_card_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ring_hom_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "is_empty_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "finite_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "tensor_ml_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verification_c002_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_softmax_c011_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verification_c009_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_abstract_domain_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_abstract_domain_ibp_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_types_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_types_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_foundation_types_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_foundation_theorems_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_farkas_constructive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_farkas_list_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_farkas_to_interval_constructive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fin_sum_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_relu_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_interval_arith_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_interval_containment_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_interval_primitives_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_rat_interval_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_rat_interval_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_linear_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_rat_ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_composition_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_crown_layernorm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_orbit_crown_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_blockwise_crown_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_tightness_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_width_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_le_refl_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_zero_eq_max_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_zero_eq_min_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_eq_min_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_eq_max_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_zero_zero_alt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_zero_zero_alt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_le_refl_max_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_le_refl_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_one_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_zero_one_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_add_neg_self_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_add_left_neg_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_neg_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_neg_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_nat_ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_top_level_ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_le_max_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_le_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_max_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_min_le_max_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_network_proof_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_mccormick_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_elementwise_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_certified_training_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_certified_eval_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_init_in_progress",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_foundations_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_b1b_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_b1c_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_b1d_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_ring_identities_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_fourth_power_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_peel_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_peel_compute_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_peel_parts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_noise_peel_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_noise_extend_bridge_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fourier_boolean_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "resolution_complexity_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "tree_width_resolution_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "width_expansion_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "proof_hierarchy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "craig_interpolation_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cutting_planes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "veripb_checker_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "abstract_interpretation_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "abstract_interpretation_framework_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "labelled_interpolation_minimality_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "learned_clause_minimality_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "gf2_polynomial_calculus_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pb_pigeonhole_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pb_pigeonhole_length_bound_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_float_rational_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_zonotope_compress_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_zonotope_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "feasible_interpolation_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "extension_rule_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bounded_width_automatizability_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cdcl_soundness_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "entropy_clause_quality_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "extension_rule_soundness_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "isasat_refinement_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bcp_loop_refinement_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "verified_proof_search_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "structure_fields",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "structure_field_defaults",
+      "serialized": true,
+      "type": "HashMap<Name,HashMap<Name,Expr>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "structure_parents",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<(Name,Name)>>"
+    },
+    {
+      "attributes": [],
+      "name": "classes",
+      "serialized": true,
+      "type": "HashMap<Name,KernelClassInfo>"
+    },
+    {
+      "attributes": [],
+      "name": "instances",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<KernelInstanceInfo>>"
+    },
+    {
+      "attributes": [],
+      "name": "instance_names",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "instance_synth_orders",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<usize>>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_rules",
+      "serialized": true,
+      "type": "AesopRuleSet"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_rule_sets",
+      "serialized": true,
+      "type": "HashMap<Name,AesopRuleSet>"
+    },
+    {
+      "attributes": [],
+      "name": "declared_aesop_rule_sets",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_target_index",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<AesopRule>>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_hyps_index",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<AesopRule>>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_unindexed_rules",
+      "serialized": true,
+      "type": "Vec<AesopRule>"
+    },
+    {
+      "attributes": [],
+      "name": "simp_lemmas",
+      "serialized": true,
+      "type": "HashMap<Name,SimpLemmaInfo>"
+    },
+    {
+      "attributes": [],
+      "name": "simp_registry_revision",
+      "serialized": true,
+      "type": "u64"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "export_aliases",
+      "serialized": true,
+      "type": "HashMap<Name,Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "export_alias_others",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [],
+      "name": "extern_bindings",
+      "serialized": true,
+      "type": "HashMap<Name,String>"
+    },
+    {
+      "attributes": [],
+      "name": "implemented_by",
+      "serialized": true,
+      "type": "HashMap<Name,Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "native_reducers",
+      "serialized": false,
+      "type": "HashMap<Name,native_reducers::NativeReducerRegistration>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "kernel_theory",
+      "serialized": false,
+      "type": "KernelTheory"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "lean_level_profile",
+      "serialized": true,
+      "type": "crate::level::LeanLevelProfile"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "native_fold_cache",
+      "serialized": false,
+      "type": "native_fold_authority::NativeFoldAuthorityCache"
+    },
+    {
+      "attributes": [],
+      "name": "export_bindings",
+      "serialized": true,
+      "type": "HashMap<Name,String>"
+    },
+    {
+      "attributes": [],
+      "name": "deprecated",
+      "serialized": true,
+      "type": "HashMap<Name,Option<String>>"
+    },
+    {
+      "attributes": [],
+      "name": "inline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "noinline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "always_inline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "macro_inline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "inline_if_reduce_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "nospecialize_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "specialize_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "csimp_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "congr_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "ext_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "grind_lemmas",
+      "serialized": true,
+      "type": "Vec<(Name,GrindAttrKind)>"
+    },
+    {
+      "attributes": [],
+      "name": "refl_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "symm_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "coercion_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "match_pattern_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "init_fn_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "default_instance_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "derive_handlers",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [],
+      "name": "private_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "protected_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "noncomputable_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "partial_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "unsafe_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "local_instance_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "instance_seqs",
+      "serialized": true,
+      "type": "HashMap<Name,u64>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "next_instance_seq",
+      "serialized": true,
+      "type": "u64"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "registered_namespaces",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "prelude_aliases",
+      "serialized": false,
+      "type": "std::sync::Arc<hashbrown::HashSet<Name>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "param_names",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<String>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "typed_param_names",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "param_binder_infos",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<BinderInfo>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "generation",
+      "serialized": true,
+      "type": "u64"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "options",
+      "serialized": true,
+      "type": "HashMap<String,Option<String>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "staged_headers",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "matcher_info",
+      "serialized": false,
+      "type": "std::sync::OnceLock<HashMap<Name,Option<MatcherInfo>>>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "simp_cache_identity",
+      "serialized": false,
+      "type": "SimpCacheIdentity"
+    }
+  ],
+  "legacy_3fa_fields": [
+    {
+      "attributes": [],
+      "name": "mode",
+      "serialized": true,
+      "type": "crate::mode::CleanMode"
+    },
+    {
+      "attributes": [],
+      "name": "constants",
+      "serialized": true,
+      "type": "HashMap<Name,ConstantInfo>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "lazy_source",
+      "serialized": false,
+      "type": "Option<std::sync::Arc<dynConstantSource>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "constant_origins",
+      "serialized": true,
+      "type": "HashMap<Name,ConstantOrigin>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "declaration_verification",
+      "serialized": false,
+      "type": "HashMap<Name,DeclarationVerification>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "codata_origins",
+      "serialized": false,
+      "type": "HashMap<Name,CodataOrigin>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "codata_carriers",
+      "serialized": false,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "persistent_extensions",
+      "serialized": true,
+      "type": "HashMap<Name,PersistentEnvExtensionState>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "extension_states",
+      "serialized": true,
+      "type": "persistent_ext::EnvExtensionStates"
+    },
+    {
+      "attributes": [],
+      "name": "inductives",
+      "serialized": true,
+      "type": "HashMap<Name,InductiveVal>"
+    },
+    {
+      "attributes": [],
+      "name": "constructors",
+      "serialized": true,
+      "type": "HashMap<Name,ConstructorVal>"
+    },
+    {
+      "attributes": [],
+      "name": "recursors",
+      "serialized": true,
+      "type": "HashMap<Name,RecursorVal>"
+    },
+    {
+      "attributes": [],
+      "name": "quotients",
+      "serialized": true,
+      "type": "HashMap<Name,QuotVal>"
+    },
+    {
+      "attributes": [],
+      "name": "quot_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "eq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "heq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "propext_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "funext_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "quot_sound_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "iff_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "prop_eq_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bool_simp_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_sub_simp_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "decidable_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ite_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "decidable_true_false_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "classical_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "and_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "or_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "exists_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "true_false_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "prod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pprod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "sigma_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subtype_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "option_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "sum_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "psum_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "psigma_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "empty_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pempty_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bool_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ulift_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "char_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "string_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "string_append_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_mem_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_perm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "multiset_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "finset_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint8_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint16_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint32_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint64_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "unit_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "punit_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "plift_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fin_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "array_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "io_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "io_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "state_t_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "state_m_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "id_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "monad_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_id_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_comp_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_flip_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "fun_const_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "functor_class_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "functor_instances_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "seq_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "seq_option_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "pure_bind_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "monad_option_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "monad_id_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "monad_list_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "core_monad_instances_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "lean_init_modeled",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "lean4_core_strict_monads",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "handthen_horelse_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "handthen_horelse_option_insts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "bind_combinators_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "dvd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "nat_dvd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "getelem_classes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "getelem_list_instances_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "insert_singleton_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "list_insert_singleton_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "except_t_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "option_t_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "option_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "bool_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_mapm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "for_in_step_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "for_in_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_for_in_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_cmp_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "inhabited_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "beq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_minmax_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "minmax_class_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_minmax_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "decidable_eq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hashable_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "repr_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "to_string_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ge_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "gt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "trans_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "suppress_lossy_structure_stubs",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "cumulative",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "cumulative_ever",
+      "serialized": false,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "preorder_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "partial_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "reflexive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "antisymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "irrefl_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "asymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_preorder_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_partial_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_le_reflexive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_irrefl_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_asymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_trans_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_le_antisymm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_le_trans_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "strict_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_strict_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_trans_lt_le_lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_trans_le_lt_lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_trans_lt_lt_le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_or_eq_of_le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_of_le_of_ne_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_not_lt_le_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_succ_base_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_succ_lt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_lt_trichotomy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "uint_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_minmax_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_mul_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_sub_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_pow_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_arith_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_ord_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_sign_abs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_arith_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_arith_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_nat_conv_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cast_simp_lemmas_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "one_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "mul_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "neg_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "sub_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_zero_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_one_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_mul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_sub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_zero_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_one_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_mul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_neg_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_sub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hadd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hsub_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hmul_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hdiv_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "div_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hmod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "mod_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hpow_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pow_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hsub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_hsub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_arith_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hsub_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_hdiv_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "float_neg_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hand_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hor_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hxor_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hshiftleft_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "hshiftright_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "happend_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "string_happend_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "list_happend_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hand_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hor_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hxor_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hshiftleft_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_hshiftright_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_group_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_comm_semigroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_comm_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "add_comm_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_comm_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_comm_semigroup_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_add_comm_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_comm_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_add_comm_group_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "semiring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_semiring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "comm_ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_ring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_comm_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_comm_semiring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_comm_ring_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "division_ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "field_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "integral_domain_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_integral_domain_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_integral_domain_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nontrivial_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_nontrivial_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "well_founded_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "wf_recursion_support_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "euclidean_domain_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_euclidean_domain_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_gcd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_gcd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "gcd_monoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_gcd_monoid_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_prime_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "irreducible_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "associated_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ufm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_ufm_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "prime_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "is_principal_ideal_ring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "polynomial_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_arith_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_field_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_normalize_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "linear_ordered_field_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_ordered_field_axioms_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_linear_ordered_field_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_decidable_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [
+        "#[cfg_attr(not(any(test, feature = \"math-overlays\")), allow(dead_code))]"
+      ],
+      "name": "rat_minmax_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_abs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_minmax_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_abs_props_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_abs_diff_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_dist_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_dist_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_dist_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "int_metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_metric_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_ball_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_continuous_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_lipschitz_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_uniform_continuous_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_cauchy_seq_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_complete_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_bounded_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_compact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_totally_bounded_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "metric_separable_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topological_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_continuous_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_connected_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_compact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_hausdorff_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_homeomorphism_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_locally_compact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_path_connected_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_simply_connected_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_contractible_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_covering_space_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_fundamental_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_homotopy_equivalence_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_retract_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_fiber_bundle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_quotient_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_subspace_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_product_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_higher_homotopy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_suspension_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_vector_bundle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_coproduct_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_cw_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_simplicial_complex_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_homology_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_derham_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_morse_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_ktheory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_filtration_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_spectral_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_sheaf_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_scheme_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_cobordism_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_characteristic_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_manifold_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_lie_group_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_principal_bundle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_connection_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_symplectic_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_kahler_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "topology_spin_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "algebra_linear_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verification_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "module_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "algebra_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "submodule_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ideal_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "domain_types_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fate_x_order_stubs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "category_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "homological_algebra_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "number_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "algebraic_geometry_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "representation_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "measure_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "functional_analysis_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "information_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "differential_equations_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "combinatorics_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "optimization_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "computability_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "set_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "set_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fixed_point_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "stochastic_processes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "formal_logic_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cryptography_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_complex_analysis_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_ord_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_linear_order_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_hadd_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_hmul_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_neg_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "real_hpow_nat_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_nat_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_real_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint8_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint16_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint32_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_uint64_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "usize_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ofnat_usize_inst_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "causal_inference_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "differential_privacy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "graph_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "computational_geometry_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "euclidean_geometry_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "euclidean_angle_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "concurrency_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "type_theory_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subgroup_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subring_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "subfield_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "submonoid_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fact_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "odd_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_card_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "ring_hom_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "is_empty_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "finite_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "tensor_ml_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verification_c002_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_softmax_c011_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verification_c009_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_abstract_domain_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_abstract_domain_ibp_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_types_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_types_ops_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_foundation_types_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_foundation_theorems_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_farkas_constructive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_farkas_list_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_farkas_to_interval_constructive_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fin_sum_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_relu_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_interval_arith_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_interval_containment_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_interval_primitives_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_rat_interval_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_rat_interval_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_linear_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_rat_ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_composition_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_crown_layernorm_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_orbit_crown_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_blockwise_crown_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_tightness_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_ibp_width_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_le_refl_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_zero_eq_max_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_zero_eq_min_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_eq_min_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_eq_max_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_zero_zero_alt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_zero_zero_alt_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_le_refl_max_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_le_refl_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_one_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_zero_one_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_add_neg_self_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_add_left_neg_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_mul_neg_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_neg_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_nat_ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nat_top_level_ordering_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_le_max_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_le_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_min_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_max_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_tier_a_rat_max_min_zero_zero_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "rat_min_le_max_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_network_proof_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_mccormick_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_elementwise_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_certified_training_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_certified_eval_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_init_in_progress",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_foundations_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_b1b_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_b1c_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_order_toolkit_b1d_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_ring_identities_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_fourth_power_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_peel_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_peel_compute_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_peel_parts_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_noise_peel_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "boolean_analysis_noise_extend_bridge_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "fourier_boolean_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "resolution_complexity_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "tree_width_resolution_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "width_expansion_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "proof_hierarchy_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "craig_interpolation_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cutting_planes_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "veripb_checker_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "abstract_interpretation_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "abstract_interpretation_framework_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "labelled_interpolation_minimality_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "learned_clause_minimality_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "gf2_polynomial_calculus_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pb_pigeonhole_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "pb_pigeonhole_length_bound_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_float_rational_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_zonotope_compress_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "nn_verify_zonotope_proofs_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "feasible_interpolation_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "extension_rule_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bounded_width_automatizability_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "cdcl_soundness_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "entropy_clause_quality_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "extension_rule_soundness_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "isasat_refinement_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "bcp_loop_refinement_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "verified_proof_search_init",
+      "serialized": true,
+      "type": "bool"
+    },
+    {
+      "attributes": [],
+      "name": "structure_fields",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "structure_field_defaults",
+      "serialized": true,
+      "type": "HashMap<Name,HashMap<Name,Expr>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "structure_parents",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<(Name,Name)>>"
+    },
+    {
+      "attributes": [],
+      "name": "classes",
+      "serialized": true,
+      "type": "HashMap<Name,KernelClassInfo>"
+    },
+    {
+      "attributes": [],
+      "name": "instances",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<KernelInstanceInfo>>"
+    },
+    {
+      "attributes": [],
+      "name": "instance_names",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "instance_synth_orders",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<usize>>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_rules",
+      "serialized": true,
+      "type": "AesopRuleSet"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_rule_sets",
+      "serialized": true,
+      "type": "HashMap<Name,AesopRuleSet>"
+    },
+    {
+      "attributes": [],
+      "name": "declared_aesop_rule_sets",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_target_index",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<AesopRule>>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_hyps_index",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<AesopRule>>"
+    },
+    {
+      "attributes": [],
+      "name": "aesop_unindexed_rules",
+      "serialized": true,
+      "type": "Vec<AesopRule>"
+    },
+    {
+      "attributes": [],
+      "name": "simp_lemmas",
+      "serialized": true,
+      "type": "HashMap<Name,SimpLemmaInfo>"
+    },
+    {
+      "attributes": [],
+      "name": "simp_registry_revision",
+      "serialized": true,
+      "type": "u64"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "export_aliases",
+      "serialized": true,
+      "type": "HashMap<Name,Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "export_alias_others",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [],
+      "name": "extern_bindings",
+      "serialized": true,
+      "type": "HashMap<Name,String>"
+    },
+    {
+      "attributes": [],
+      "name": "implemented_by",
+      "serialized": true,
+      "type": "HashMap<Name,Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "native_reducers",
+      "serialized": false,
+      "type": "HashMap<Name,NativeReducerFn>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "kernel_theory",
+      "serialized": false,
+      "type": "KernelTheory"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "native_fold_cache",
+      "serialized": false,
+      "type": "native_fold_authority::NativeFoldAuthorityCache"
+    },
+    {
+      "attributes": [],
+      "name": "export_bindings",
+      "serialized": true,
+      "type": "HashMap<Name,String>"
+    },
+    {
+      "attributes": [],
+      "name": "deprecated",
+      "serialized": true,
+      "type": "HashMap<Name,Option<String>>"
+    },
+    {
+      "attributes": [],
+      "name": "inline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "noinline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "always_inline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "macro_inline_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "inline_if_reduce_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "nospecialize_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "specialize_hints",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "csimp_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "congr_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "ext_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "grind_lemmas",
+      "serialized": true,
+      "type": "Vec<(Name,GrindAttrKind)>"
+    },
+    {
+      "attributes": [],
+      "name": "refl_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "symm_lemmas",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "coercion_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "match_pattern_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "init_fn_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "default_instance_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "derive_handlers",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [],
+      "name": "private_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "protected_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [],
+      "name": "noncomputable_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "partial_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "unsafe_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "local_instance_decls",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "instance_seqs",
+      "serialized": true,
+      "type": "HashMap<Name,u64>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "next_instance_seq",
+      "serialized": true,
+      "type": "u64"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "registered_namespaces",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    },
+    {
+      "attributes": [
+        "#[serde(skip)]"
+      ],
+      "name": "prelude_aliases",
+      "serialized": false,
+      "type": "std::sync::Arc<hashbrown::HashSet<Name>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "param_names",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<String>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "typed_param_names",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<Name>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "param_binder_infos",
+      "serialized": true,
+      "type": "HashMap<Name,Vec<BinderInfo>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "generation",
+      "serialized": true,
+      "type": "u64"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "options",
+      "serialized": true,
+      "type": "HashMap<String,Option<String>>"
+    },
+    {
+      "attributes": [
+        "#[serde(default)]"
+      ],
+      "name": "staged_headers",
+      "serialized": true,
+      "type": "hashbrown::HashSet<Name>"
+    }
+  ],
+  "note": "Frozen literal recursive schema data. Generator must not rescan live serde or silently absorb source changes.",
+  "source_epoch": "3564f910787af299e6c33178b03b4ab8803190e5",
+  "wire_schema": 2
+}

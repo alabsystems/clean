@@ -66,7 +66,9 @@ pub fn parse_vo(bytes: &[u8]) -> CoqImportResult<VoFile> {
         });
     }
 
-    let payload_len = usize::try_from(header.data_len).expect("u32 fits in usize");
+    // A length no `usize` can hold cannot be available either: saturate so
+    // the truncation check below refuses it.
+    let payload_len = usize::try_from(header.data_len).unwrap_or(usize::MAX);
     if cursor.remaining() < payload_len {
         return Err(CoqImportError::TruncatedMarshalPayload {
             declared: payload_len,
@@ -112,10 +114,10 @@ impl<'a> Cursor<'a> {
     }
 
     fn read_u32_be(&mut self, context: &'static str) -> CoqImportResult<u32> {
-        let bytes = self.take(4, context)?;
-        Ok(u32::from_be_bytes(
-            bytes.try_into().expect("slice length is 4"),
-        ))
+        let &[b0, b1, b2, b3] = self.take(4, context)? else {
+            return Err(CoqImportError::UnexpectedEof { context });
+        };
+        Ok(u32::from_be_bytes([b0, b1, b2, b3]))
     }
 
     fn take(&mut self, len: usize, context: &'static str) -> CoqImportResult<&'a [u8]> {

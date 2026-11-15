@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import datetime as _dt
 import glob
 import hashlib
 import json
@@ -1048,7 +1049,13 @@ def derive(root: str, git: Git, head: str | None = None, allow_uncommitted: bool
             "artifact exists the tier is UNKNOWN with its reason and the exact command that would "
             "mint it; UNKNOWN never satisfies and never violates the ratchet. `value` is monotone UP "
             "and each `guards` entry is monotone in its stated direction; `--check` fails a "
-            "regression as `regression` and any other drift as `stale`."
+            "regression as `regression` and any other drift as `stale`. The MINT enforces the same "
+            "directions: since 2026-09-14 a bare run REFUSES to write a fallen number and names it, "
+            "because `--check` compares this file against a fresh derivation and re-minting first "
+            "therefore compared the file with itself. A fall lands only through "
+            "`--rebase \"<why>\"`, which records the exact (tier, guard, direction, from, to) it "
+            "forgives in `rebases` and is matched on all five, so a landed rebase can never forgive "
+            "the next fall as well."
         ),
         "outside_the_tcb": (
             "R3 tiers are FIDELITY, not soundness. Clean's parser and elaborator sit outside the "
@@ -1058,6 +1065,7 @@ def derive(root: str, git: Git, head: str | None = None, allow_uncommitted: bool
         ),
         "sources_committed": not allow_uncommitted,
         "generated_at_head": head,
+        "rebases": [],
         "summary": {
             "tiers": len(tiers),
             "measured": len(measured),
@@ -1125,6 +1133,64 @@ def _row_index(doc: dict) -> dict:
             raise TierError("committed artifact: a tier row has no name")
         out[t["name"]] = t
     return out
+
+
+def ratchet_regressions(committed: dict, derived: dict) -> list[dict]:
+    """Every ratcheted number that moved the WRONG WAY, structurally.
+
+    `check_tiers` answers the same question in prose, for a human reading a gate
+    failure. This answers it as records — {tier, guard, direction, from, to} —
+    because the MINT has to act on it: a bare mint used to write whatever it
+    derived, so re-minting before `--check` compared the file with itself and
+    every ratchet passed. Measured 2026-09-14 on the sibling artifact
+    data/spine_scoreboard.json, whose `--ratchet` had exactly this hole.
+    """
+    out: list[dict] = []
+    try:
+        cidx, didx = _row_index(committed), _row_index(derived)
+    except TierError:
+        return out
+    for name, crow in cidx.items():
+        drow = didx.get(name)
+        if drow is None or crow.get("status") != "measured" or drow.get("status") != "measured":
+            continue
+        cval, dval = crow.get("value"), drow.get("value")
+        if isinstance(cval, int) and isinstance(dval, int) and dval < cval:
+            out.append({"tier": name, "guard": None, "direction": "up",
+                        "from": cval, "to": dval})
+        dguards = {g["key"]: g for g in drow.get("guards", []) if isinstance(g, dict)}
+        for cg in crow.get("guards", []):
+            if not isinstance(cg, dict):
+                continue
+            dg = dguards.get(cg.get("key"))
+            if dg is None:
+                continue
+            cv, dv = cg.get("value"), dg.get("value")
+            if not isinstance(cv, int) or not isinstance(dv, int):
+                continue
+            direction = cg.get("direction")
+            if (direction == "up" and dv < cv) or (direction == "down" and dv > cv):
+                out.append({"tier": name, "guard": cg.get("key"),
+                            "direction": direction, "from": cv, "to": dv})
+    return out
+
+
+def rebase_entry_for(ledger: list, rec: dict):
+    """The ledger entry forgiving EXACTLY this move, or None.
+
+    Matched on all five of (tier, guard, direction, from, to): once the rebase is
+    written the committed value IS `to`, so the same entry can never match again,
+    and a later drift to a different value finds no entry at all.
+    """
+    for entry in ledger or []:
+        if not isinstance(entry, dict):
+            continue
+        for row in entry.get("rows") or []:
+            if isinstance(row, dict) and all(
+                    row.get(k) == rec.get(k)
+                    for k in ("tier", "guard", "direction", "from", "to")):
+                return entry
+    return None
 
 
 def check_tiers(committed: dict, derived: dict) -> list[dict]:
@@ -1652,6 +1718,55 @@ def self_test(root: str) -> int:
         ),
     )
 
+    # --- ARM 12: the MINT's half of the ratchet. `--check` compares the
+    # committed file against a fresh derivation, so re-minting first used to
+    # make every ratchet pass vacuously. These arms pin the structural records
+    # the mint refuses on, and the exact-match rule that keeps a landed rebase
+    # from forgiving the NEXT fall as well.
+    lowered = copy.deepcopy(baseline)
+    vrow = next(r for r in lowered["tiers"] if r["name"] == v)
+    committed_high = copy.deepcopy(baseline)
+    chigh = next(r for r in committed_high["tiers"] if r["name"] == v)
+    chigh["value"] = vrow["value"] + 7
+    recs = ratchet_regressions(committed_high, lowered)
+    ok("the mint sees a fallen tier value as a structural regression",
+       any(r["tier"] == v and r["guard"] is None and r["direction"] == "up"
+           and r["from"] == vrow["value"] + 7 and r["to"] == vrow["value"] for r in recs),
+       f"{recs}")
+    ok("a tier that did not fall produces no record",
+       ratchet_regressions(baseline, baseline) == [])
+
+    rec = next(r for r in recs if r["guard"] is None)
+    entry = {"date": "2026-09-14", "reason": "self-test", "rows": [dict(rec)]}
+    ok("a recorded rebase forgives exactly its own (tier, guard, direction, from, to)",
+       rebase_entry_for([entry], rec) is entry)
+    for field, value in (("from", rec["from"] + 1), ("to", rec["to"] - 1),
+                         ("tier", "not-a-tier"), ("direction", "down")):
+        other = dict(rec, **{field: value})
+        ok(f"it forgives nothing when {field} differs",
+           rebase_entry_for([entry], other) is None)
+    ok("an empty ledger forgives nothing", rebase_entry_for([], rec) is None)
+
+    guard_lowered = copy.deepcopy(baseline)
+    guard_committed = copy.deepcopy(baseline)
+    planted = None
+    for crow2, drow2 in zip(guard_committed["tiers"], guard_lowered["tiers"]):
+        for cg, dg in zip(crow2.get("guards", []), drow2.get("guards", [])):
+            if crow2.get("status") != "measured" or not isinstance(cg.get("value"), int):
+                continue
+            if cg.get("direction") == "down" and planted is None:
+                dg["value"] = cg["value"] + 5
+                planted = (crow2["name"], cg["key"], cg["value"], dg["value"])
+    if planted is None:
+        ok("a monotone-down guard that rose is a regression", True,
+           "no measured monotone-down guard in the tree to plant on")
+    else:
+        name2, key2, from2, to2 = planted
+        grecs = ratchet_regressions(guard_committed, guard_lowered)
+        ok("a monotone-down guard that rose is a regression",
+           any(g["tier"] == name2 and g["guard"] == key2
+               and g["from"] == from2 and g["to"] == to2 for g in grecs), f"{grecs}")
+
     if failures:
         print(f"self-test: {failures} arm(s) FAILED", file=sys.stderr)
         return 1
@@ -1677,6 +1792,14 @@ def main() -> int:
         help="with --check: also fail if any measured tier is stale vs the LIVE HEAD",
     )
     ap.add_argument("--self-test", action="store_true", help="run the mutation arms")
+    ap.add_argument(
+        "--rebase",
+        metavar="WHY",
+        default=None,
+        help="record a dated permission for the ratcheted numbers that FELL, by exact "
+             "(tier, guard, direction, from, to), then write. Refuses a reason under 12 "
+             "characters and refuses when nothing regressed.",
+    )
     ap.add_argument("--print", dest="do_print", action="store_true", help="print the tier table")
     ap.add_argument(
         "--allow-uncommitted-sources",
@@ -1768,6 +1891,60 @@ def main() -> int:
     if args.do_print:
         print(table(result))
         return 0
+
+    # THE MINT IS THE RATCHET'S OTHER HALF. --check compares the committed file
+    # against a fresh derivation, so re-minting first made every ratchet pass
+    # vacuously: the file it compares IS the file the mint had just rewritten.
+    # A regression therefore has to be refused HERE, where the lowering happens,
+    # and landed only through a dated --rebase that names the exact move.
+    committed = None
+    if os.path.isfile(out_path):
+        try:
+            with open(out_path, encoding="utf-8") as f:
+                committed = json.load(f)
+        except (OSError, ValueError):
+            committed = None
+    ledger = []
+    if isinstance(committed, dict) and isinstance(committed.get("rebases"), list):
+        ledger = [r for r in committed["rebases"] if isinstance(r, dict)]
+    result["rebases"] = list(ledger)
+
+    regressions = ratchet_regressions(committed or {}, result)
+    fresh = [r for r in regressions if rebase_entry_for(ledger, r) is None]
+
+    if args.rebase is not None:
+        reason = args.rebase.strip()
+        if len(reason) < 12:
+            print(
+                "parity_tiers: --rebase REFUSED — a rebase needs a real reason (>= 12 characters) "
+                "naming WHY a ratcheted number may fall; it is the only thing a reviewer reads",
+                file=sys.stderr)
+            return 1
+        if not fresh:
+            print(
+                f"parity_tiers: --rebase REFUSED — nothing regressed against {OUTPUT_PATH}. "
+                "A rebase records a fall that HAPPENED; it is never issued in advance",
+                file=sys.stderr)
+            return 1
+        result["rebases"] = ledger + [{
+            "date": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d"),
+            "reason": reason,
+            "rows": fresh,
+        }]
+        for r in fresh:
+            where = r["tier"] + (f".guard.{r['guard']}" if r["guard"] else "")
+            print(f"  REBASED {where}: {r['from']} -> {r['to']} (monotone {r['direction']})")
+    elif fresh:
+        for r in fresh:
+            where = r["tier"] + (f".guard.{r['guard']}" if r["guard"] else "")
+            print(f"  REGRESSION {where}: {r['from']} -> {r['to']} (monotone {r['direction']})",
+                  file=sys.stderr)
+        print(
+            f"parity_tiers: REFUSED to write {OUTPUT_PATH} — {len(fresh)} ratcheted number(s) would "
+            "fall. Minting is not a way past a ratchet: fix the regression, or record it with "
+            'scripts/parity_tiers.py --rebase "<why it may fall>"',
+            file=sys.stderr)
+        return 1
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(render(result))

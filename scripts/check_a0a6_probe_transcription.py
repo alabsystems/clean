@@ -37,6 +37,7 @@ must be a commit that exists in this repo, so a fabricated stamp is still
 caught.  Everything else in the file is re-derived from the records.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -770,7 +771,7 @@ def derive(root, stamps):
             "consequence_for_this_probe": "A6.fail_closed is scored PASS on the CONSUMER-perturbation criterion the ten-criteria scorecard actually names (`fail_closed_perturbation_reaching`), and the source-level gap is written into that criterion rather than hidden by it.",
         },
         {
-            "claim": "The reason A0's bodyful reachable closure cannot be closed. CORRECTED 2026-08-26: it is NOT `thir_body` taking a `LocalDefId` -- that is one of two BUILD ITEMS. The FLOOR is that the closure ends at `panic_impl`, which has no body anywhere in core and is supplied at link time by std.",
+            "claim": "The reason A0's bodyful reachable closure cannot be closed. CORRECTED 2026-08-26: it is NOT `thir_body` taking a `LocalDefId` -- that is one of two BUILD ITEMS. CORRECTED AGAIN 2026-09-01 (audit r8 m5): it is NOT `panic_impl` having no body either -- that reading is RETRACTED and was contradicted by this file's own STAYS_FAIL_BY_A_FLOOR field and by CLAUDE.md; std's `#[panic_handler]` IS a four-instruction body. The floor is `_Unwind_RaiseException`, an `unsafe extern \"C-unwind\"` symbol with no Rust body on this target.",
             "status": "The FAIL VERDICT is committed and measured (two independent records). The REASON is prose in this repo -- BOTH the rustc query signature and core/std's panicking sources live in the trust repo, which is not committed here. What changed is which wall the prose names, not its evidential status.",
             "what_IS_committed": [
                 "%s: the target is in one_short_missing_closure_bodies" % P_CEN,
@@ -883,10 +884,15 @@ def derive(root, stamps):
             "%s x clean %s (2026-08-25) and corroborated at three earlier bases.  "
             "Both of the 2026-08-11 FAILs -- A0's flip event and A6's flip-fires "
             "-- are now PASS, with the event's lineage equal to its coverage "
-            "row's at every base.  A0's single remaining FAIL is `bodyful "
-            "reachable closure`, and it is architecturally blocked: rustc has no "
-            "cross-crate THIR.  This is a re-mint by transcription, not a fresh "
-            "measurement."
+            "row's at every base.  A0's single remaining SYNTACTIC-criterion FAIL "
+            "is `bodyful reachable closure` -- and the THIR-API reading of that "
+            "FAIL was REFUTED and retracted (designs/2026-08-26-cross-crate-"
+            "lowering-for-a0.md; owner ruling: under the ratified semantic "
+            "criterion is_zero is A0 6-of-6, record "
+            "data/crystal_a0_census_2026-08-27.json); what the syntactic cell "
+            "still needs is cross-crate instances in the module's spliced "
+            "prefix, a build item (audit r7 minor 9).  This is a re-mint by "
+            "transcription, not a fresh measurement."
         )
         % (rmx_prov["trust_base"], rmx_prov["clean_corpus_rev"]),
         "current": {
@@ -971,6 +977,17 @@ def derive(root, stamps):
 
 
 # ---------------------------------------------------------------- stamp intake
+# AUDIT r14 M14-8. The 2026-08-11 measurement is kept verbatim and cannot be
+# re-derived; it is pinned so an edit to it is reviewable rather than silent.
+HISTORY_SHA256 = "3abee6a28d889e6ff687288b47e7715838bbd79ab2833060bab941797789e113"
+
+
+def _history_digest(hist) -> str:
+    return hashlib.sha256(
+        json.dumps(hist, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
 
@@ -1018,6 +1035,23 @@ def stamps_from(root, probe):
         raise Refuse(
             f"{P_PROBE}: history.measured_2026_08_11.measured_utc_date is "
             f"{hist.get('measured_utc_date')!r} -- the 2026-08-11 run must be kept verbatim"
+        )
+    # AUDIT r14 M14-8: the history block is CARRIED -- read out of the probe and
+    # written straight back -- so `--check` compared it with itself and could
+    # never disagree. Every verdict, compiler id and lineage digest of the
+    # 2026-08-11 run was freely editable with the transcription gate green,
+    # while the file's own headline calls that block VERBATIM. It cannot be
+    # re-derived (the fixture that produced it was session scratch and is not in
+    # the repo, as the block itself records), so what is carried is PINNED:
+    # editing history is now a reviewable act, not a silent one.
+    live = _history_digest(hist)
+    if live != HISTORY_SHA256:
+        raise Refuse(
+            f"{P_PROBE}: history.measured_2026_08_11 hashes to sha256:{live[:12]}, "
+            f"pinned at sha256:{HISTORY_SHA256[:12]}. That block is kept VERBATIM and is "
+            f"not re-derivable from any committed record, so it is pinned instead. If the "
+            f"edit is deliberate, move HISTORY_SHA256 in {os.path.basename(__file__)} in "
+            f"the same change and say why in the commit."
         )
     return d, h, hist
 
@@ -1093,11 +1127,17 @@ def do_mint(root):
 
 # -------------------------------------------------------------------- selftest
 def _selftest(root):
-    """Six arms. A gate nobody has seen fail is `exit 0`."""
+    """Seven arms. A gate nobody has seen fail is `exit 0`."""
     import copy
     import shutil
 
     fails = []
+    # AUDIT r14 M14-8, second half: the summary line below was a HARDCODED
+    # "6/6 arms behave (1 green, 4 red, 1 refusal)". Adding a seventh arm left
+    # it reading six, which is the same carried-not-derived defect this round
+    # found in the history block -- in the sentence a reader uses to decide the
+    # gate is healthy. It is counted now.
+    outcomes: list[str] = []
 
     def arm(name, mutate, expect):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1124,6 +1164,7 @@ def _selftest(root):
                 got = "GREEN" if bad is None else f"RED:{bad[0]}"
             except Refuse as exc:
                 got = f"REFUSE:{exc}"
+            outcomes.append(got)
             if not expect(got):
                 fails.append(f"{name}: got {got}")
 
@@ -1157,6 +1198,14 @@ def _selftest(root):
         return go
 
     arm("baseline is green", lambda w: None, lambda g: g == "GREEN")
+    # AUDIT r14 M14-8: the history block is CARRIED, so before it was pinned an
+    # edit inside it was compared with itself and could never disagree.
+    arm(
+        "a verdict inside the VERBATIM 2026-08-11 history block is edited",
+        jset(P_PROBE, ["history", "measured_2026_08_11", "headline"],
+             lambda was: was + " [EDITED]"),
+        lambda g: g.startswith("REFUSE"),
+    )
     flip = lambda was: not was  # noqa: E731 -- relative, so no arm can be a no-op
     arm(
         "a source record's A0 verdict is flipped",
@@ -1193,7 +1242,13 @@ def _selftest(root):
         for f in fails:
             print(f"  x {f}", file=sys.stderr)
         return 1
-    print("a0a6 probe transcription selftest: 6/6 arms behave (1 green, 4 red, 1 refusal)")
+    _green = sum(1 for o in outcomes if o == "GREEN")
+    _red = sum(1 for o in outcomes if o.startswith("RED"))
+    _refuse = sum(1 for o in outcomes if o.startswith("REFUSE"))
+    print(
+        f"a0a6 probe transcription selftest: {len(outcomes)}/{len(outcomes)} arms behave "
+        f"({_green} green, {_red} red, {_refuse} refusal)"
+    )
     return 0
 
 

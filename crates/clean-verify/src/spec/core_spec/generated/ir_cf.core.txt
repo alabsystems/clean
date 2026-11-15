@@ -1,0 +1,16 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (const (enum 0) (agg (int 0) (phantomdata))))
+            (node (results) (ret (vals 1)))
+          ))
+      ))
+  )
+  (globals)
+)

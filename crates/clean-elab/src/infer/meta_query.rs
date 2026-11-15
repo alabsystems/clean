@@ -77,7 +77,7 @@
 use super::ElabCtx;
 use crate::error::ElabError;
 use clean_kernel::Expr;
-use clean_parser::{DoElem, SurfaceExpr};
+use clean_parser::{DoElem, SurfaceExpr, SurfaceName};
 
 /// Query head identifiers for the single-argument `inferType e` query. Its value
 /// is the inferred type of `e` (a kernel `Expr` computed from elaboration state).
@@ -106,7 +106,10 @@ fn as_unary_query_call<'e>(expr: &'e SurfaceExpr, heads: &[&str]) -> Option<&'e 
         return None;
     }
     let head = query_head_name(func)?;
-    heads.contains(&head.as_str()).then(|| &args[0].expr)
+    heads
+        .iter()
+        .any(|text| head == SurfaceName::generated_path(text))
+        .then(|| &args[0].expr)
 }
 
 /// If `expr` is `inferType e` (or the `Expr.inferType` alias), return `e`.
@@ -132,7 +135,8 @@ fn as_check_type_call(expr: &SurfaceExpr) -> Option<(&SurfaceExpr, &SurfaceExpr)
     }
     let head = query_head_name(func)?;
     QUERY_CHECK_TYPE
-        .contains(&head.as_str())
+        .iter()
+        .any(|text| head == SurfaceName::generated_path(text))
         .then(|| (&args[0].expr, &args[1].expr))
 }
 
@@ -146,14 +150,15 @@ fn is_query_call(expr: &SurfaceExpr) -> bool {
 
 /// Extract the head identifier of a query call: a bare `Ident` (`inferType`) or
 /// the qualified projection `Expr.inferType` rendered as the dotted string.
-fn query_head_name(func: &SurfaceExpr) -> Option<String> {
+fn query_head_name(func: &SurfaceExpr) -> Option<SurfaceName> {
     match func {
-        SurfaceExpr::Ident(_, name) => Some(name.clone()),
+        SurfaceExpr::Ident(_, name) if !name.is_relative_constructor() => Some(name.clone()),
         SurfaceExpr::Proj(_, base, clean_parser::Projection::Named(field)) => {
             let SurfaceExpr::Ident(_, base_name) = base.as_ref() else {
                 return None;
             };
-            Some(format!("{base_name}.{field}"))
+            (!base_name.is_relative_constructor() && !field.is_relative_constructor())
+                .then(|| base_name.append(field))
         }
         _ => None,
     }
@@ -183,7 +188,7 @@ pub(super) fn is_meta_query_body(body: &SurfaceExpr) -> bool {
 fn do_block_binds_query(elems: &[DoElem]) -> bool {
     elems
         .iter()
-        .any(|elem| matches!(elem, DoElem::Let(_, _, val) if is_query_call(val)))
+        .any(|elem| matches!(elem, DoElem::Let(_, _, val) | DoElem::Have(_, _, val) if is_query_call(val)))
 }
 
 impl<'a> ElabCtx<'a> {
@@ -235,7 +240,7 @@ impl<'a> ElabCtx<'a> {
             });
         };
 
-        let mut introduced: Vec<String> = Vec::new();
+        let mut introduced: Vec<SurfaceName> = Vec::new();
         let result = self.run_query_do_block(elems, &mut introduced);
         // Always unbind the names this body introduced, on success or failure, so
         // a value binding never leaks into a later, unrelated elaboration.
@@ -262,7 +267,7 @@ impl<'a> ElabCtx<'a> {
     fn run_query_do_block(
         &mut self,
         elems: &[DoElem],
-        introduced: &mut Vec<String>,
+        introduced: &mut Vec<SurfaceName>,
     ) -> Result<Expr, ElabError> {
         let Some((last, prefix)) = elems.split_last() else {
             return Err(ElabError::Unsupported {
@@ -271,7 +276,7 @@ impl<'a> ElabCtx<'a> {
         };
         for elem in prefix {
             match elem {
-                DoElem::Let(_, binder, val) => {
+                DoElem::Let(_, binder, val) | DoElem::Have(_, binder, val) => {
                     let value = self.eval_query_value(val)?;
                     self.meta_value_bindings.insert(binder.name.clone(), value);
                     introduced.push(binder.name.clone());
@@ -294,7 +299,7 @@ impl<'a> ElabCtx<'a> {
                 }
                 self.elaborate(expr)
             }
-            DoElem::Let(_, binder, val) => {
+            DoElem::Let(_, binder, val) | DoElem::Have(_, binder, val) => {
                 // A trailing `let` with no body has no result to return.
                 let _ = (binder, val);
                 Err(ElabError::Unsupported {
@@ -407,12 +412,12 @@ use clean_parser::SurfaceArg;
 /// the given head, kept here so the recognizer tests can build the surface shapes
 /// without re-deriving them.
 #[cfg(test)]
-fn unary_query_call(head: &str, arg: SurfaceExpr) -> SurfaceExpr {
+fn unary_query_call(head: &'static str, arg: SurfaceExpr) -> SurfaceExpr {
     SurfaceExpr::App(
         clean_parser::Span::dummy(),
         Box::new(SurfaceExpr::Ident(
             clean_parser::Span::dummy(),
-            head.to_owned(),
+            SurfaceName::generated_path(head),
         )),
         vec![SurfaceArg::positional(arg)],
     )
@@ -437,7 +442,7 @@ pub(super) fn check_type_call(e: SurfaceExpr, ty: SurfaceExpr) -> SurfaceExpr {
         clean_parser::Span::dummy(),
         Box::new(SurfaceExpr::Ident(
             clean_parser::Span::dummy(),
-            "checkType".to_owned(),
+            SurfaceName::generated_path("checkType"),
         )),
         vec![SurfaceArg::positional(e), SurfaceArg::positional(ty)],
     )

@@ -1,0 +1,2087 @@
+{
+  "original_capture": "{\n  \"schema_version\": 8,\n  \"producer\": \"TrustIr\",\n  \"input\": {\n    \"RustMir\": {\n      \"body_digest\": {\n        \"algorithm\": \"Sha256\",\n        \"bytes\": [\n          90,\n          64,\n          119,\n          77,\n          9,\n          0,\n          223,\n          209,\n          223,\n          244,\n          62,\n          195,\n          252,\n          119,\n          24,\n          197,\n          243,\n          88,\n          185,\n          170,\n          156,\n          197,\n          63,\n          98,\n          86,\n          198,\n          81,\n          54,\n          234,\n          107,\n          93,\n          245\n        ]\n      }\n    }\n  },\n  \"provenance\": {\n    \"producer_version\": \"0.12.0\",\n    \"source_language\": \"Rust\",\n    \"source_languages\": [\n      \"Rust\",\n      \"TrustIr\"\n    ],\n    \"source_digest\": {\n      \"algorithm\": \"Sha256\",\n      \"bytes\": [\n        90,\n        64,\n        119,\n        77,\n        9,\n        0,\n        223,\n        209,\n        223,\n        244,\n        62,\n        195,\n        252,\n        119,\n        24,\n        197,\n        243,\n        88,\n        185,\n        170,\n        156,\n        197,\n        63,\n        98,\n        86,\n        198,\n        81,\n        54,\n        234,\n        107,\n        93,\n        245\n      ]\n    },\n    \"toolchain\": [\n      {\n        \"name\": \"TrustIr\",\n        \"version\": \"0.12.0\",\n        \"revision\": \"native-request-schema-v1\"\n      }\n    ]\n  },\n  \"serialization\": {\n    \"schema_version\": 8,\n    \"canonical_order\": true,\n    \"sort_unordered_sets\": true,\n    \"messagepack_named_fields\": true,\n    \"unknown_fields\": \"Reject\"\n  },\n  \"diagnostics\": {\n    \"level\": \"Info\",\n    \"include_source_spans\": true,\n    \"include_lineage\": true,\n    \"emit_counterexamples\": true,\n    \"emit_unsat_cores\": true,\n    \"emit_proof_traces\": false,\n    \"max_counterexamples\": 1\n  },\n  \"trust_ir_module_digest\": {\n    \"algorithm\": \"Sha256\",\n    \"bytes\": [\n      233,\n      249,\n      85,\n      221,\n      30,\n      21,\n      22,\n      245,\n      233,\n      69,\n      106,\n      132,\n      163,\n      62,\n      1,\n      117,\n      240,\n      225,\n      229,\n      208,\n      169,\n      171,\n      131,\n      219,\n      73,\n      48,\n      42,\n      234,\n      237,\n      123,\n      84,\n      234\n    ]\n  },\n  \"compiler_facts\": {\n    \"monomorphizations\": [\n      {\n        \"id\": 0,\n        \"source_item\": \"choose\",\n        \"symbol\": \"choose\",\n        \"generic_args\": [],\n        \"function\": 0,\n        \"stable_digest\": {\n          \"algorithm\": \"Sha256\",\n          \"bytes\": [\n            132,\n            26,\n            111,\n            249,\n            47,\n            205,\n            47,\n            138,\n            132,\n            106,\n            11,\n            56,\n            53,\n            30,\n            133,\n            128,\n            78,\n            145,\n            254,\n            52,\n            129,\n            57,\n            55,\n            111,\n            47,\n            225,\n            85,\n            245,\n            222,\n            173,\n            195,\n            223\n          ]\n        }\n      }\n    ],\n    \"obligation_sources\": [\n      {\n        \"obligation\": 0,\n        \"public_obligation_id\": \"vc:semr_branch_source__choose:trust_mc_default_function:0\",\n        \"function\": 0,\n        \"span\": {\n          \"file\": 0,\n          \"line\": 1,\n          \"col\": 0\n        },\n        \"assertion_id\": 2322991278,\n        \"cause\": \"Panic\",\n        \"monomorphization\": 0,\n        \"facts\": [\n          {\n            \"Monomorphization\": 0\n          }\n        ]\n      }\n    ]\n  },\n  \"module\": {\n    \"name\": \"semr_branch_source::choose\",\n    \"functions\": [\n      {\n        \"id\": 0,\n        \"name\": \"choose\",\n        \"ty\": 0,\n        \"entry\": 0,\n        \"blocks\": [\n          {\n            \"id\": 0,\n            \"params\": [\n              [\n                0,\n                \"Bool\"\n              ],\n              [\n                1,\n                \"Bool\"\n              ],\n              [\n                2,\n                \"Bool\"\n              ]\n            ],\n            \"body\": [\n              {\n                \"inst\": {\n                  \"Alloca\": {\n                    \"ty\": \"Bool\",\n                    \"count\": null,\n                    \"align\": null\n                  }\n                },\n                \"results\": [\n                  4\n                ],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"Const\": {\n                    \"ty\": \"Bool\",\n                    \"value\": {\n                      \"Bool\": false\n                    }\n                  }\n                },\n                \"results\": [\n                  5\n                ],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"ICmp\": {\n                    \"op\": \"Eq\",\n                    \"ty\": \"Bool\",\n                    \"lhs\": 0,\n                    \"rhs\": 5\n                  }\n                },\n                \"results\": [\n                  6\n                ],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"CondBr\": {\n                    \"cond\": 6,\n                    \"then_target\": 2,\n                    \"then_args\": [],\n                    \"else_target\": 1,\n                    \"else_args\": []\n                  }\n                },\n                \"results\": [],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              }\n            ]\n          },\n          {\n            \"id\": 1,\n            \"params\": [],\n            \"body\": [\n              {\n                \"inst\": {\n                  \"Copy\": {\n                    \"ty\": \"Bool\",\n                    \"operand\": 1\n                  }\n                },\n                \"results\": [\n                  7\n                ],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"Store\": {\n                    \"ty\": \"Bool\",\n                    \"ptr\": 4,\n                    \"value\": 7,\n                    \"volatile\": false,\n                    \"align\": null\n                  }\n                },\n                \"results\": [],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"Br\": {\n                    \"target\": 3,\n                    \"args\": []\n                  }\n                },\n                \"results\": [],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              }\n            ]\n          },\n          {\n            \"id\": 2,\n            \"params\": [],\n            \"body\": [\n              {\n                \"inst\": {\n                  \"Copy\": {\n                    \"ty\": \"Bool\",\n                    \"operand\": 2\n                  }\n                },\n                \"results\": [\n                  8\n                ],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"Store\": {\n                    \"ty\": \"Bool\",\n                    \"ptr\": 4,\n                    \"value\": 8,\n                    \"volatile\": false,\n                    \"align\": null\n                  }\n                },\n                \"results\": [],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"Br\": {\n                    \"target\": 3,\n                    \"args\": []\n                  }\n                },\n                \"results\": [],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              }\n            ]\n          },\n          {\n            \"id\": 3,\n            \"params\": [],\n            \"body\": [\n              {\n                \"inst\": {\n                  \"Load\": {\n                    \"ty\": \"Bool\",\n                    \"ptr\": 4,\n                    \"volatile\": false,\n                    \"align\": null\n                  }\n                },\n                \"results\": [\n                  9\n                ],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              },\n              {\n                \"inst\": {\n                  \"Return\": {\n                    \"values\": [\n                      9\n                    ]\n                  }\n                },\n                \"results\": [],\n                \"proofs\": [],\n                \"span\": null,\n                \"proof_context\": null\n              }\n            ]\n          }\n        ],\n        \"proofs\": [\n          \"Pure\"\n        ],\n        \"calling_conv\": \"C\",\n        \"linkage\": \"External\",\n        \"attrs\": {\n          \"readonly\": false,\n          \"readnone\": false,\n          \"inlinehint\": false,\n          \"cold\": false,\n          \"params\": [],\n          \"naked\": false,\n          \"target_features\": []\n        },\n        \"summary\": null,\n        \"producer\": \"TrustIr\",\n        \"value_names\": null,\n        \"scopes\": null,\n        \"source_provenance\": null,\n        \"body_gate\": null,\n        \"display_path\": null,\n        \"section\": null,\n        \"visibility\": \"Default\"\n      }\n    ],\n    \"structs\": [],\n    \"enums\": [],\n    \"records\": [],\n    \"closure_types\": [],\n    \"globals\": [],\n    \"func_types\": [\n      {\n        \"params\": [\n          \"Bool\",\n          \"Bool\",\n          \"Bool\"\n        ],\n        \"returns\": [\n          \"Bool\"\n        ],\n        \"is_vararg\": false\n      }\n    ],\n    \"types\": [\n      \"U8\"\n    ],\n    \"proof_obligations\": [\n      {\n        \"id\": 0,\n        \"kind\": \"PanicFreedom\",\n        \"status\": \"Pending\",\n        \"description\": \"default trust-mc typed CHC function admission (public verifier obligation vc:semr_branch_source__choose:trust_mc_default_function:0)\",\n        \"formula\": {\n          \"schema\": \"trust.spec-predicate.v1\",\n          \"payload\": \"{\\\"schema_version\\\":\\\"trust.spec-predicate.v1\\\",\\\"root\\\":{\\\"sort\\\":\\\"bool\\\",\\\"kind\\\":{\\\"node\\\":\\\"bool_literal\\\",\\\"value\\\":false}},\\\"root_sort\\\":\\\"bool\\\"}\",\n          \"smtlib\": \"false\",\n          \"sort\": \"Bool\"\n        },\n        \"function\": 0,\n        \"source\": {\n          \"source_id\": \"vc:semr_branch_source__choose:trust_mc_default_function:0\",\n          \"assertion_id\": \"trust-assertion:vc:semr_branch_source__choose:trust_mc_default_function:0\",\n          \"range\": {\n            \"file\": 0,\n            \"start_line\": 1,\n            \"start_col\": 0,\n            \"end_line\": 3,\n            \"end_col\": 1\n          },\n          \"public\": {\n            \"obligation_id\": \"vc:semr_branch_source__choose:trust_mc_default_function:0\",\n            \"semantic_digest\": {\n              \"algorithm\": \"Sha256\",\n              \"bytes\": [\n                250,\n                246,\n                237,\n                58,\n                145,\n                145,\n                246,\n                188,\n                128,\n                241,\n                61,\n                202,\n                156,\n                248,\n                131,\n                1,\n                6,\n                177,\n                32,\n                202,\n                223,\n                103,\n                109,\n                125,\n                10,\n                178,\n                31,\n                173,\n                174,\n                161,\n                172,\n                49\n              ]\n            }\n          }\n        },\n        \"site\": null\n      }\n    ],\n    \"proof_certificates\": [],\n    \"target_info\": {\n      \"triple\": \"aarch64-apple-darwin\",\n      \"pointer_size\": 8,\n      \"endianness\": \"Little\",\n      \"abi\": null,\n      \"struct_passing\": \"Unclassified\"\n    },\n    \"files\": [\n      \"src/lib.rs\"\n    ],\n    \"obligation_diagnostics\": [],\n    \"spec_modules\": [],\n    \"universes\": [],\n    \"predicates\": [],\n    \"global_asm\": [],\n    \"imports\": [],\n    \"tuple_layouts\": [],\n    \"completeness\": null,\n    \"drop_glue\": []\n  },\n  \"lineage\": {\n    \"schema_version\": 2,\n    \"nodes\": [\n      {\n        \"id\": 0,\n        \"transform\": {\n          \"stage\": \"TrustIrLowering\",\n          \"name\": \"rustc-mir-to-trust_ir\",\n          \"producer\": \"TrustIr\",\n          \"version\": \"native-request-schema-v1\"\n        },\n        \"source_module\": {\n          \"algorithm\": \"Sha256\",\n          \"bytes\": [\n            90,\n            64,\n            119,\n            77,\n            9,\n            0,\n            223,\n            209,\n            223,\n            244,\n            62,\n            195,\n            252,\n            119,\n            24,\n            197,\n            243,\n            88,\n            185,\n            170,\n            156,\n            197,\n            63,\n            98,\n            86,\n            198,\n            81,\n            54,\n            234,\n            107,\n            93,\n            245\n          ]\n        },\n        \"target_module\": {\n          \"algorithm\": \"Sha256\",\n          \"bytes\": [\n            233,\n            249,\n            85,\n            221,\n            30,\n            21,\n            22,\n            245,\n            233,\n            69,\n            106,\n            132,\n            163,\n            62,\n            1,\n            117,\n            240,\n            225,\n            229,\n            208,\n            169,\n            171,\n            131,\n            219,\n            73,\n            48,\n            42,\n            234,\n            237,\n            123,\n            84,\n            234\n          ]\n        },\n        \"obligations\": [\n          0\n        ],\n        \"certificates\": [],\n        \"replay\": {\n          \"engine\": \"Trust.native-admission\",\n          \"invocation\": \"trust-ir-bridge emit-native-verification-bundle --trust_mc-admission-contract trust-mc-native-admission-contract-v1\",\n          \"transcript_digest\": {\n            \"algorithm\": \"Sha256\",\n            \"bytes\": [\n              200,\n              107,\n              13,\n              112,\n              128,\n              28,\n              152,\n              230,\n              121,\n              247,\n              117,\n              149,\n              209,\n              153,\n              40,\n              157,\n              181,\n              240,\n              70,\n              182,\n              64,\n              133,\n              36,\n              132,\n              246,\n              141,\n              63,\n              99,\n              155,\n              104,\n              236,\n              88\n            ]\n          }\n        }\n      }\n    ],\n    \"roots\": [\n      0\n    ]\n  },\n  \"requests\": [\n    {\n      \"TrustMc\": {\n        \"id\": 0,\n        \"mode\": \"Chc\",\n        \"function\": 0,\n        \"obligations\": [\n          0\n        ],\n        \"lineage_roots\": [\n          0\n        ],\n        \"options\": {\n          \"memory_model\": \"TrustIrPlaces\",\n          \"arithmetic_model\": \"FixedWidthBitvectors\",\n          \"bmc\": {\n            \"unwind_limit\": 1,\n            \"unwinding_assertions\": true\n          },\n          \"chc\": {\n            \"engine\": \"Spacer\",\n            \"invariant_source\": \"TrustIrProofObligations\",\n            \"pdr\": {\n              \"enabled\": false,\n              \"generalization\": \"Cubes\"\n            },\n            \"emit_horn_clauses\": true\n          },\n          \"slicing\": \"ObligationBackwardSlice\"\n        },\n        \"diagnostics\": {\n          \"level\": \"Info\",\n          \"include_source_spans\": true,\n          \"include_lineage\": true,\n          \"emit_counterexamples\": true,\n          \"emit_unsat_cores\": true,\n          \"emit_proof_traces\": false,\n          \"max_counterexamples\": 1\n        },\n        \"provenance\": {\n          \"verifier_suite\": \"TrustMc\",\n          \"expected_verifier\": {\n            \"name\": \"trust_mc\",\n            \"version\": \"trust-mc-native-admission-contract-v1\",\n            \"revision\": \"native-request-schema-v1\"\n          },\n          \"solvers\": [\n            {\n              \"name\": \"ay\"\n            }\n          ],\n          \"replay\": {\n            \"engine\": \"trust_mc\",\n            \"invocation\": \"trust_mc-driver native-bundle --mode chc --trust-native-admission-contract trust-mc-native-admission-contract-v1\",\n            \"transcript_digest\": {\n              \"algorithm\": \"Sha256\",\n              \"bytes\": [\n                156,\n                216,\n                150,\n                250,\n                185,\n                144,\n                120,\n                8,\n                216,\n                73,\n                51,\n                229,\n                182,\n                115,\n                71,\n                79,\n                100,\n                6,\n                181,\n                190,\n                49,\n                101,\n                244,\n                74,\n                142,\n                171,\n                26,\n                179,\n                187,\n                43,\n                42,\n                60\n              ]\n            }\n          },\n          \"replay_context\": {\n            \"atoms\": [\n              {\n                \"id\": 0,\n                \"kind\": \"Assertion\",\n                \"formula\": {\n                  \"schema\": \"trust.spec-predicate.v1\",\n                  \"payload\": \"{\\\"schema_version\\\":\\\"trust.spec-predicate.v1\\\",\\\"root\\\":{\\\"sort\\\":\\\"bool\\\",\\\"kind\\\":{\\\"node\\\":\\\"bool_literal\\\",\\\"value\\\":false}},\\\"root_sort\\\":\\\"bool\\\"}\",\n                  \"smtlib\": \"false\",\n                  \"sort\": \"Bool\"\n                },\n                \"payload_digest\": {\n                  \"algorithm\": \"Sha256\",\n                  \"bytes\": [\n                    5,\n                    193,\n                    223,\n                    13,\n                    65,\n                    93,\n                    40,\n                    10,\n                    89,\n                    175,\n                    68,\n                    70,\n                    28,\n                    10,\n                    214,\n                    181,\n                    61,\n                    135,\n                    73,\n                    53,\n                    158,\n                    213,\n                    243,\n                    77,\n                    208,\n                    37,\n                    49,\n                    15,\n                    21,\n                    111,\n                    139,\n                    57\n                  ]\n                },\n                \"obligation\": 0,\n                \"assertion_id\": 2322991278,\n                \"span\": {\n                  \"file\": 0,\n                  \"line\": 1,\n                  \"col\": 0\n                }\n              }\n            ]\n          }\n        }\n      }\n    }\n  ]\n}",
+  "derived_original_bytes": [
+    84,
+    82,
+    85,
+    83,
+    84,
+    95,
+    73,
+    82,
+    38,
+    0,
+    0,
+    0,
+    11,
+    26,
+    115,
+    101,
+    109,
+    114,
+    95,
+    98,
+    114,
+    97,
+    110,
+    99,
+    104,
+    95,
+    115,
+    111,
+    117,
+    114,
+    99,
+    101,
+    58,
+    58,
+    99,
+    104,
+    111,
+    111,
+    115,
+    101,
+    20,
+    97,
+    97,
+    114,
+    99,
+    104,
+    54,
+    52,
+    45,
+    97,
+    112,
+    112,
+    108,
+    101,
+    45,
+    100,
+    97,
+    114,
+    119,
+    105,
+    110,
+    10,
+    115,
+    114,
+    99,
+    47,
+    108,
+    105,
+    98,
+    46,
+    114,
+    115,
+    6,
+    99,
+    104,
+    111,
+    111,
+    115,
+    101,
+    132,
+    1,
+    100,
+    101,
+    102,
+    97,
+    117,
+    108,
+    116,
+    32,
+    116,
+    114,
+    117,
+    115,
+    116,
+    45,
+    109,
+    99,
+    32,
+    116,
+    121,
+    112,
+    101,
+    100,
+    32,
+    67,
+    72,
+    67,
+    32,
+    102,
+    117,
+    110,
+    99,
+    116,
+    105,
+    111,
+    110,
+    32,
+    97,
+    100,
+    109,
+    105,
+    115,
+    115,
+    105,
+    111,
+    110,
+    32,
+    40,
+    112,
+    117,
+    98,
+    108,
+    105,
+    99,
+    32,
+    118,
+    101,
+    114,
+    105,
+    102,
+    105,
+    101,
+    114,
+    32,
+    111,
+    98,
+    108,
+    105,
+    103,
+    97,
+    116,
+    105,
+    111,
+    110,
+    32,
+    118,
+    99,
+    58,
+    115,
+    101,
+    109,
+    114,
+    95,
+    98,
+    114,
+    97,
+    110,
+    99,
+    104,
+    95,
+    115,
+    111,
+    117,
+    114,
+    99,
+    101,
+    95,
+    95,
+    99,
+    104,
+    111,
+    111,
+    115,
+    101,
+    58,
+    116,
+    114,
+    117,
+    115,
+    116,
+    95,
+    109,
+    99,
+    95,
+    100,
+    101,
+    102,
+    97,
+    117,
+    108,
+    116,
+    95,
+    102,
+    117,
+    110,
+    99,
+    116,
+    105,
+    111,
+    110,
+    58,
+    48,
+    41,
+    23,
+    116,
+    114,
+    117,
+    115,
+    116,
+    46,
+    115,
+    112,
+    101,
+    99,
+    45,
+    112,
+    114,
+    101,
+    100,
+    105,
+    99,
+    97,
+    116,
+    101,
+    46,
+    118,
+    49,
+    131,
+    1,
+    123,
+    34,
+    115,
+    99,
+    104,
+    101,
+    109,
+    97,
+    95,
+    118,
+    101,
+    114,
+    115,
+    105,
+    111,
+    110,
+    34,
+    58,
+    34,
+    116,
+    114,
+    117,
+    115,
+    116,
+    46,
+    115,
+    112,
+    101,
+    99,
+    45,
+    112,
+    114,
+    101,
+    100,
+    105,
+    99,
+    97,
+    116,
+    101,
+    46,
+    118,
+    49,
+    34,
+    44,
+    34,
+    114,
+    111,
+    111,
+    116,
+    34,
+    58,
+    123,
+    34,
+    115,
+    111,
+    114,
+    116,
+    34,
+    58,
+    34,
+    98,
+    111,
+    111,
+    108,
+    34,
+    44,
+    34,
+    107,
+    105,
+    110,
+    100,
+    34,
+    58,
+    123,
+    34,
+    110,
+    111,
+    100,
+    101,
+    34,
+    58,
+    34,
+    98,
+    111,
+    111,
+    108,
+    95,
+    108,
+    105,
+    116,
+    101,
+    114,
+    97,
+    108,
+    34,
+    44,
+    34,
+    118,
+    97,
+    108,
+    117,
+    101,
+    34,
+    58,
+    102,
+    97,
+    108,
+    115,
+    101,
+    125,
+    125,
+    44,
+    34,
+    114,
+    111,
+    111,
+    116,
+    95,
+    115,
+    111,
+    114,
+    116,
+    34,
+    58,
+    34,
+    98,
+    111,
+    111,
+    108,
+    34,
+    125,
+    5,
+    102,
+    97,
+    108,
+    115,
+    101,
+    4,
+    66,
+    111,
+    111,
+    108,
+    57,
+    118,
+    99,
+    58,
+    115,
+    101,
+    109,
+    114,
+    95,
+    98,
+    114,
+    97,
+    110,
+    99,
+    104,
+    95,
+    115,
+    111,
+    117,
+    114,
+    99,
+    101,
+    95,
+    95,
+    99,
+    104,
+    111,
+    111,
+    115,
+    101,
+    58,
+    116,
+    114,
+    117,
+    115,
+    116,
+    95,
+    109,
+    99,
+    95,
+    100,
+    101,
+    102,
+    97,
+    117,
+    108,
+    116,
+    95,
+    102,
+    117,
+    110,
+    99,
+    116,
+    105,
+    111,
+    110,
+    58,
+    48,
+    73,
+    116,
+    114,
+    117,
+    115,
+    116,
+    45,
+    97,
+    115,
+    115,
+    101,
+    114,
+    116,
+    105,
+    111,
+    110,
+    58,
+    118,
+    99,
+    58,
+    115,
+    101,
+    109,
+    114,
+    95,
+    98,
+    114,
+    97,
+    110,
+    99,
+    104,
+    95,
+    115,
+    111,
+    117,
+    114,
+    99,
+    101,
+    95,
+    95,
+    99,
+    104,
+    111,
+    111,
+    115,
+    101,
+    58,
+    116,
+    114,
+    117,
+    115,
+    116,
+    95,
+    109,
+    99,
+    95,
+    100,
+    101,
+    102,
+    97,
+    117,
+    108,
+    116,
+    95,
+    102,
+    117,
+    110,
+    99,
+    116,
+    105,
+    111,
+    110,
+    58,
+    48,
+    0,
+    1,
+    3,
+    12,
+    12,
+    12,
+    1,
+    12,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    5,
+    1,
+    0,
+    3,
+    0,
+    0,
+    4,
+    0,
+    3,
+    0,
+    12,
+    1,
+    12,
+    2,
+    12,
+    4,
+    8,
+    12,
+    0,
+    0,
+    1,
+    4,
+    0,
+    0,
+    0,
+    0,
+    25,
+    12,
+    2,
+    0,
+    1,
+    5,
+    0,
+    0,
+    0,
+    0,
+    3,
+    0,
+    12,
+    0,
+    5,
+    1,
+    6,
+    0,
+    0,
+    0,
+    0,
+    16,
+    6,
+    2,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    3,
+    31,
+    12,
+    1,
+    1,
+    7,
+    0,
+    0,
+    0,
+    0,
+    7,
+    12,
+    4,
+    7,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    15,
+    3,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    0,
+    3,
+    31,
+    12,
+    2,
+    1,
+    8,
+    0,
+    0,
+    0,
+    0,
+    7,
+    12,
+    4,
+    8,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    15,
+    3,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    3,
+    0,
+    2,
+    6,
+    12,
+    4,
+    0,
+    0,
+    1,
+    9,
+    0,
+    0,
+    0,
+    0,
+    20,
+    1,
+    9,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    10,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    2,
+    0,
+    0,
+    0,
+    1,
+    0,
+    7,
+    0,
+    4,
+    1,
+    5,
+    6,
+    1,
+    7,
+    1,
+    8,
+    1,
+    0,
+    1,
+    9,
+    10,
+    1,
+    0,
+    1,
+    0,
+    3,
+    1,
+    1,
+    9,
+    0,
+    250,
+    246,
+    237,
+    58,
+    145,
+    145,
+    246,
+    188,
+    128,
+    241,
+    61,
+    202,
+    156,
+    248,
+    131,
+    1,
+    6,
+    177,
+    32,
+    202,
+    223,
+    103,
+    109,
+    125,
+    10,
+    178,
+    31,
+    173,
+    174,
+    161,
+    172,
+    49,
+    0,
+    0,
+    1,
+    1,
+    8,
+    0,
+    0,
+    2,
+    1,
+    2,
+    0,
+    0,
+    0,
+    0
+  ],
+  "bundle": {
+    "schema_version": 8,
+    "producer": "TrustIr",
+    "input": {
+      "RustMir": {
+        "body_digest": {
+          "algorithm": "Sha256",
+          "bytes": [
+            90,
+            64,
+            119,
+            77,
+            9,
+            0,
+            223,
+            209,
+            223,
+            244,
+            62,
+            195,
+            252,
+            119,
+            24,
+            197,
+            243,
+            88,
+            185,
+            170,
+            156,
+            197,
+            63,
+            98,
+            86,
+            198,
+            81,
+            54,
+            234,
+            107,
+            93,
+            245
+          ]
+        }
+      }
+    },
+    "provenance": {
+      "producer_version": "0.12.0",
+      "source_language": "Rust",
+      "source_languages": [
+        "Rust",
+        "TrustIr"
+      ],
+      "source_digest": {
+        "algorithm": "Sha256",
+        "bytes": [
+          90,
+          64,
+          119,
+          77,
+          9,
+          0,
+          223,
+          209,
+          223,
+          244,
+          62,
+          195,
+          252,
+          119,
+          24,
+          197,
+          243,
+          88,
+          185,
+          170,
+          156,
+          197,
+          63,
+          98,
+          86,
+          198,
+          81,
+          54,
+          234,
+          107,
+          93,
+          245
+        ]
+      },
+      "toolchain": [
+        {
+          "name": "TrustIr",
+          "version": "0.12.0",
+          "revision": "native-request-schema-v1"
+        }
+      ]
+    },
+    "serialization": {
+      "schema_version": 8,
+      "canonical_order": true,
+      "sort_unordered_sets": true,
+      "messagepack_named_fields": true,
+      "unknown_fields": "Reject"
+    },
+    "diagnostics": {
+      "level": "Info",
+      "include_source_spans": true,
+      "include_lineage": true,
+      "emit_counterexamples": true,
+      "emit_unsat_cores": true,
+      "emit_proof_traces": false,
+      "max_counterexamples": 1
+    },
+    "trust_ir_module_digest": {
+      "algorithm": "Sha256",
+      "bytes": [
+        27,
+        45,
+        70,
+        160,
+        69,
+        56,
+        184,
+        239,
+        144,
+        160,
+        180,
+        208,
+        127,
+        247,
+        140,
+        250,
+        181,
+        151,
+        17,
+        13,
+        53,
+        95,
+        132,
+        178,
+        140,
+        143,
+        197,
+        6,
+        157,
+        31,
+        114,
+        157
+      ]
+    },
+    "compiler_facts": {
+      "monomorphizations": [
+        {
+          "id": 0,
+          "source_item": "choose",
+          "symbol": "choose",
+          "generic_args": [],
+          "function": 0,
+          "stable_digest": {
+            "algorithm": "Sha256",
+            "bytes": [
+              132,
+              26,
+              111,
+              249,
+              47,
+              205,
+              47,
+              138,
+              132,
+              106,
+              11,
+              56,
+              53,
+              30,
+              133,
+              128,
+              78,
+              145,
+              254,
+              52,
+              129,
+              57,
+              55,
+              111,
+              47,
+              225,
+              85,
+              245,
+              222,
+              173,
+              195,
+              223
+            ]
+          }
+        }
+      ],
+      "obligation_sources": [
+        {
+          "obligation": 0,
+          "public_obligation_id": "vc:semr_branch_source__choose:trust_mc_default_function:0",
+          "function": 0,
+          "span": {
+            "file": 0,
+            "line": 1,
+            "col": 0
+          },
+          "assertion_id": 2322991278,
+          "cause": "Panic",
+          "monomorphization": 0,
+          "facts": [
+            {
+              "Monomorphization": 0
+            }
+          ]
+        },
+        {
+          "obligation": 1,
+          "public_obligation_id": "vc:trust-wp:postcondition:1",
+          "function": 0,
+          "span": {
+            "file": 0,
+            "line": 1,
+            "col": 1
+          },
+          "assertion_id": 1,
+          "cause": "Postcondition"
+        }
+      ]
+    },
+    "module": {
+      "name": "semr_branch_source::choose",
+      "functions": [
+        {
+          "id": 0,
+          "name": "choose",
+          "ty": 0,
+          "entry": 0,
+          "blocks": [
+            {
+              "id": 0,
+              "params": [
+                [
+                  0,
+                  "Bool"
+                ],
+                [
+                  1,
+                  "Bool"
+                ],
+                [
+                  2,
+                  "Bool"
+                ]
+              ],
+              "body": [
+                {
+                  "inst": {
+                    "Alloca": {
+                      "ty": "Bool",
+                      "count": null,
+                      "align": null
+                    }
+                  },
+                  "results": [
+                    4
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Alloca": {
+                      "ty": "Bool",
+                      "count": null,
+                      "align": null
+                    }
+                  },
+                  "results": [
+                    16
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Const": {
+                      "ty": "Bool",
+                      "value": {
+                        "Bool": false
+                      }
+                    }
+                  },
+                  "results": [
+                    5
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "ICmp": {
+                      "op": "Eq",
+                      "ty": "Bool",
+                      "lhs": 0,
+                      "rhs": 5
+                    }
+                  },
+                  "results": [
+                    6
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "CondBr": {
+                      "cond": 6,
+                      "then_target": 2,
+                      "then_args": [],
+                      "else_target": 1,
+                      "else_args": []
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            },
+            {
+              "id": 1,
+              "params": [],
+              "body": [
+                {
+                  "inst": {
+                    "Copy": {
+                      "ty": "Bool",
+                      "operand": 1
+                    }
+                  },
+                  "results": [
+                    7
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Store": {
+                      "ty": "Bool",
+                      "ptr": 4,
+                      "value": 7,
+                      "volatile": false,
+                      "align": null
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Br": {
+                      "target": 3,
+                      "args": []
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            },
+            {
+              "id": 2,
+              "params": [],
+              "body": [
+                {
+                  "inst": {
+                    "Copy": {
+                      "ty": "Bool",
+                      "operand": 2
+                    }
+                  },
+                  "results": [
+                    8
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Store": {
+                      "ty": "Bool",
+                      "ptr": 4,
+                      "value": 8,
+                      "volatile": false,
+                      "align": null
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Br": {
+                      "target": 3,
+                      "args": []
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            },
+            {
+              "id": 3,
+              "params": [],
+              "body": [
+                {
+                  "inst": {
+                    "Store": {
+                      "ty": "Bool",
+                      "ptr": 16,
+                      "value": 5,
+                      "volatile": false,
+                      "align": null
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Load": {
+                      "ty": "Bool",
+                      "ptr": 16,
+                      "volatile": false,
+                      "align": null
+                    }
+                  },
+                  "results": [
+                    17
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Load": {
+                      "ty": "Bool",
+                      "ptr": 4,
+                      "volatile": false,
+                      "align": null
+                    }
+                  },
+                  "results": [
+                    9
+                  ],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                },
+                {
+                  "inst": {
+                    "Return": {
+                      "values": [
+                        9
+                      ]
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            }
+          ],
+          "proofs": [
+            "Pure"
+          ],
+          "calling_conv": "C",
+          "linkage": "External",
+          "attrs": {
+            "readonly": false,
+            "readnone": false,
+            "inlinehint": false,
+            "cold": false,
+            "params": [],
+            "naked": false,
+            "target_features": []
+          },
+          "summary": null,
+          "producer": "TrustIr",
+          "value_names": null,
+          "scopes": null,
+          "source_provenance": null,
+          "body_gate": null,
+          "display_path": null,
+          "section": null,
+          "visibility": "Default"
+        }
+      ],
+      "structs": [],
+      "enums": [],
+      "records": [],
+      "closure_types": [],
+      "globals": [],
+      "func_types": [
+        {
+          "params": [
+            "Bool",
+            "Bool",
+            "Bool"
+          ],
+          "returns": [
+            "Bool"
+          ],
+          "is_vararg": false
+        }
+      ],
+      "types": [
+        "U8"
+      ],
+      "proof_obligations": [
+        {
+          "id": 0,
+          "kind": "PanicFreedom",
+          "status": "Pending",
+          "description": "default trust-mc typed CHC function admission (public verifier obligation vc:semr_branch_source__choose:trust_mc_default_function:0)",
+          "formula": {
+            "schema": "trust.spec-predicate.v1",
+            "payload": "{\"schema_version\":\"trust.spec-predicate.v1\",\"root\":{\"sort\":\"bool\",\"kind\":{\"node\":\"bool_literal\",\"value\":false}},\"root_sort\":\"bool\"}",
+            "smtlib": "false",
+            "sort": "Bool"
+          },
+          "function": 0,
+          "source": {
+            "source_id": "vc:semr_branch_source__choose:trust_mc_default_function:0",
+            "assertion_id": "trust-assertion:vc:semr_branch_source__choose:trust_mc_default_function:0",
+            "range": {
+              "file": 0,
+              "start_line": 1,
+              "start_col": 0,
+              "end_line": 3,
+              "end_col": 1
+            },
+            "public": {
+              "obligation_id": "vc:semr_branch_source__choose:trust_mc_default_function:0",
+              "semantic_digest": {
+                "algorithm": "Sha256",
+                "bytes": [
+                  250,
+                  246,
+                  237,
+                  58,
+                  145,
+                  145,
+                  246,
+                  188,
+                  128,
+                  241,
+                  61,
+                  202,
+                  156,
+                  248,
+                  131,
+                  1,
+                  6,
+                  177,
+                  32,
+                  202,
+                  223,
+                  103,
+                  109,
+                  125,
+                  10,
+                  178,
+                  31,
+                  173,
+                  174,
+                  161,
+                  172,
+                  49
+                ]
+              }
+            }
+          },
+          "site": null
+        },
+        {
+          "id": 1,
+          "kind": "Postcondition",
+          "status": "Pending",
+          "description": "separately attached compiler-memory test postcondition",
+          "formula": {
+            "schema": "trust-wp.pure-expr.v1",
+            "payload": "((c : bool) && ((r : bool) == (l : bool))) || (!(c : bool) && ((r : bool) == (q : bool)))",
+            "smtlib": null,
+            "sort": null,
+            "bindings": [
+              [
+                "c",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "Param": {
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              [
+                "l",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "Param": {
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              [
+                "q",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "Param": {
+                      "index": 2
+                    }
+                  }
+                }
+              ],
+              [
+                "r",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "ResultSlot": {
+                      "index": 0
+                    }
+                  }
+                }
+              ]
+            ]
+          },
+          "function": 0,
+          "source": {
+            "source_id": "test:compiler-memory-post",
+            "assertion_id": "test:assertion:1",
+            "range": null,
+            "public": {
+              "obligation_id": "vc:trust-wp:postcondition:1",
+              "semantic_digest": {
+                "algorithm": "Sha256",
+                "bytes": [
+                  107,
+                  22,
+                  142,
+                  17,
+                  27,
+                  81,
+                  138,
+                  175,
+                  202,
+                  82,
+                  2,
+                  89,
+                  93,
+                  64,
+                  13,
+                  153,
+                  17,
+                  100,
+                  17,
+                  91,
+                  159,
+                  67,
+                  165,
+                  154,
+                  167,
+                  196,
+                  119,
+                  45,
+                  73,
+                  59,
+                  38,
+                  144
+                ]
+              }
+            }
+          },
+          "site": null
+        }
+      ],
+      "proof_certificates": [],
+      "target_info": {
+        "triple": "aarch64-apple-darwin",
+        "pointer_size": 8,
+        "endianness": "Little",
+        "abi": null,
+        "struct_passing": "Unclassified"
+      },
+      "files": [
+        "src/lib.rs"
+      ],
+      "obligation_diagnostics": [],
+      "spec_modules": [],
+      "universes": [],
+      "predicates": [],
+      "global_asm": [],
+      "imports": [],
+      "tuple_layouts": [],
+      "completeness": null,
+      "drop_glue": []
+    },
+    "lineage": {
+      "schema_version": 2,
+      "nodes": [
+        {
+          "id": 0,
+          "transform": {
+            "stage": "TrustIrLowering",
+            "name": "rustc-mir-to-trust_ir",
+            "producer": "TrustIr",
+            "version": "native-request-schema-v1"
+          },
+          "source_module": {
+            "algorithm": "Sha256",
+            "bytes": [
+              90,
+              64,
+              119,
+              77,
+              9,
+              0,
+              223,
+              209,
+              223,
+              244,
+              62,
+              195,
+              252,
+              119,
+              24,
+              197,
+              243,
+              88,
+              185,
+              170,
+              156,
+              197,
+              63,
+              98,
+              86,
+              198,
+              81,
+              54,
+              234,
+              107,
+              93,
+              245
+            ]
+          },
+          "target_module": {
+            "algorithm": "Sha256",
+            "bytes": [
+              233,
+              249,
+              85,
+              221,
+              30,
+              21,
+              22,
+              245,
+              233,
+              69,
+              106,
+              132,
+              163,
+              62,
+              1,
+              117,
+              240,
+              225,
+              229,
+              208,
+              169,
+              171,
+              131,
+              219,
+              73,
+              48,
+              42,
+              234,
+              237,
+              123,
+              84,
+              234
+            ]
+          },
+          "obligations": [
+            0
+          ],
+          "certificates": [],
+          "replay": {
+            "engine": "Trust.native-admission",
+            "invocation": "trust-ir-bridge emit-native-verification-bundle --trust_mc-admission-contract trust-mc-native-admission-contract-v1",
+            "transcript_digest": {
+              "algorithm": "Sha256",
+              "bytes": [
+                200,
+                107,
+                13,
+                112,
+                128,
+                28,
+                152,
+                230,
+                121,
+                247,
+                117,
+                149,
+                209,
+                153,
+                40,
+                157,
+                181,
+                240,
+                70,
+                182,
+                64,
+                133,
+                36,
+                132,
+                246,
+                141,
+                63,
+                99,
+                155,
+                104,
+                236,
+                88
+              ]
+            }
+          }
+        },
+        {
+          "id": 1,
+          "transform": {
+            "stage": "SolverAdapter",
+            "name": "attach-test-postcondition",
+            "producer": "captured-compiler-memory",
+            "version": "1"
+          },
+          "source_module": {
+            "algorithm": "Sha256",
+            "bytes": [
+              233,
+              249,
+              85,
+              221,
+              30,
+              21,
+              22,
+              245,
+              233,
+              69,
+              106,
+              132,
+              163,
+              62,
+              1,
+              117,
+              240,
+              225,
+              229,
+              208,
+              169,
+              171,
+              131,
+              219,
+              73,
+              48,
+              42,
+              234,
+              237,
+              123,
+              84,
+              234
+            ]
+          },
+          "target_module": {
+            "algorithm": "Sha256",
+            "bytes": [
+              27,
+              45,
+              70,
+              160,
+              69,
+              56,
+              184,
+              239,
+              144,
+              160,
+              180,
+              208,
+              127,
+              247,
+              140,
+              250,
+              181,
+              151,
+              17,
+              13,
+              53,
+              95,
+              132,
+              178,
+              140,
+              143,
+              197,
+              6,
+              157,
+              31,
+              114,
+              157
+            ]
+          },
+          "obligations": [
+            1
+          ],
+          "certificates": [],
+          "replay": null,
+          "depends_on": [
+            0
+          ]
+        }
+      ],
+      "roots": [
+        1
+      ]
+    },
+    "requests": [
+      {
+        "TrustWp": {
+          "id": 7,
+          "mode": "WeakestPrecondition",
+          "function": 0,
+          "obligations": [
+            1
+          ],
+          "lineage_roots": [
+            1
+          ],
+          "options": {
+            "heap_model": "RustBorrowGraph",
+            "loop_strategy": "RequireInvariants",
+            "frame_policy": "BorrowRegions",
+            "panic_semantics": "PanicFreeRequired",
+            "max_abduced_preconditions": 8,
+            "emit_verification_conditions": true
+          },
+          "diagnostics": {
+            "level": "Info",
+            "include_source_spans": true,
+            "include_lineage": true,
+            "emit_counterexamples": true,
+            "emit_unsat_cores": true,
+            "emit_proof_traces": false,
+            "max_counterexamples": 1
+          },
+          "provenance": {
+            "verifier_suite": "TrustWp",
+            "expected_verifier": {
+              "name": "trust-wp",
+              "version": "native-schema-v2",
+              "revision": "0cbaad5b"
+            },
+            "solvers": [
+              {
+                "name": "ay",
+                "version": "0.9.0",
+                "revision": "solver-rev",
+                "digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102
+                  ]
+                }
+              }
+            ],
+            "replay": {
+              "engine": "trust-wp",
+              "invocation": "compiler-memory test contract",
+              "transcript_digest": {
+                "algorithm": "Sha256",
+                "bytes": [
+                  233,
+                  249,
+                  85,
+                  221,
+                  30,
+                  21,
+                  22,
+                  245,
+                  233,
+                  69,
+                  106,
+                  132,
+                  163,
+                  62,
+                  1,
+                  117,
+                  240,
+                  225,
+                  229,
+                  208,
+                  169,
+                  171,
+                  131,
+                  219,
+                  73,
+                  48,
+                  42,
+                  234,
+                  237,
+                  123,
+                  84,
+                  234
+                ]
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "requests": [
+    {
+      "api_version": "trust-wp.verify-bundle.v1",
+      "bundle_id": "trust-wp.trust-ir-body-wp.v1:trust-ir-native:semr_branch_source::choose:trust-wp:7",
+      "producer": {
+        "name": "TrustIr",
+        "version": "trust-ir-native-schema-8",
+        "revision": "sha256:1b2d46a04538b8ef90a0b4d07ff78cfab597110d355f84b28c8fc5069d1f729d"
+      },
+      "target": {
+        "crate_name": "semr_branch_source::choose",
+        "package_name": null,
+        "target_triple": "aarch64-apple-darwin"
+      },
+      "obligations": [
+        {
+          "id": "trust-ir-r7-proof-1",
+          "kind": "postcondition",
+          "function": "choose",
+          "location": {
+            "file": "trust-ir://file/0",
+            "line": 1,
+            "column": 1
+          },
+          "metadata": {
+            "native_origin": {
+              "schema": "tmir.native-verification-bundle.v8",
+              "mode": "weakest_precondition",
+              "request_id": 7,
+              "function_id": 0,
+              "obligation_id": 1,
+              "lineage_roots": [
+                1
+              ],
+              "tmir_module_digest": {
+                "algorithm": "sha256",
+                "value": "1b2d46a04538b8ef90a0b4d07ff78cfab597110d355f84b28c8fc5069d1f729d"
+              }
+            },
+            "tmir_source_span": {
+              "file_id": 0,
+              "line": 1,
+              "column": 1
+            },
+            "native_verifier": {
+              "name": "trust-wp",
+              "version": "native-schema-v2",
+              "revision": "0cbaad5b"
+            },
+            "native_replay": {
+              "engine": "trust-wp",
+              "invocation": "compiler-memory test contract",
+              "transcript_digest": {
+                "algorithm": "sha256",
+                "value": "e9f955dd1e1516f5e9456a84a33e0175f0e1e5d0a9ab83db49302aeaed7b54ea"
+              }
+            },
+            "native_solvers": [
+              {
+                "name": "ay",
+                "version": "0.9.0",
+                "revision": "solver-rev",
+                "digest": {
+                  "algorithm": "sha256",
+                  "value": "6666666666666666666666666666666666666666666666666666666666666666"
+                }
+              }
+            ],
+            "tmir_obligation_source": {
+              "cause": "postcondition",
+              "function_id": 0,
+              "assertion_id": 1,
+              "compiler_fact_refs": []
+            },
+            "proof_context": {
+              "assumptions": [],
+              "assertions": []
+            }
+          },
+          "claim": {
+            "format": "trust_formula_v1",
+            "payload": "{\"schema\":\"trust-wp.trust-formula.v1\",\"variables\":[{\"name\":\"__trust_wp_body_v0\",\"sort\":\"bool\"},{\"name\":\"__trust_wp_body_v1\",\"sort\":\"bool\"},{\"name\":\"__trust_wp_body_v2\",\"sort\":\"bool\"}],\"body\":{\"op\":\"and\",\"lhs\":{\"op\":\"implies\",\"lhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v0\"},\"rhs\":{\"bool\":false}},\"rhs\":{\"op\":\"or\",\"lhs\":{\"op\":\"and\",\"lhs\":{\"var\":\"__trust_wp_body_v0\"},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v2\"},\"rhs\":{\"var\":\"__trust_wp_body_v1\"}}},\"rhs\":{\"op\":\"and\",\"lhs\":{\"op\":\"not\",\"expr\":{\"var\":\"__trust_wp_body_v0\"}},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v2\"},\"rhs\":{\"var\":\"__trust_wp_body_v2\"}}}}},\"rhs\":{\"op\":\"implies\",\"lhs\":{\"op\":\"not\",\"expr\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v0\"},\"rhs\":{\"bool\":false}}},\"rhs\":{\"op\":\"or\",\"lhs\":{\"op\":\"and\",\"lhs\":{\"var\":\"__trust_wp_body_v0\"},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v1\"},\"rhs\":{\"var\":\"__trust_wp_body_v1\"}}},\"rhs\":{\"op\":\"and\",\"lhs\":{\"op\":\"not\",\"expr\":{\"var\":\"__trust_wp_body_v0\"}},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v1\"},\"rhs\":{\"var\":\"__trust_wp_body_v2\"}}}}}}}",
+            "digest": null
+          },
+          "summary_facts": []
+        }
+      ],
+      "options": {
+        "require_proof_evidence": true,
+        "timeout_ms": null
+      }
+    }
+  ],
+  "results": [
+    {
+      "api_version": "trust-wp.verify-bundle.v1",
+      "bundle_id": "trust-wp.trust-ir-body-wp.v1:trust-ir-native:semr_branch_source::choose:trust-wp:7",
+      "status": "verified",
+      "aggregate_evidence": {
+        "schema_version": "trust-wp.proof-evidence.v1",
+        "producer": "trust-wp-core.verify_bundle",
+        "format": "trust_wp_verify_bundle_aggregate_v1",
+        "strength": "sound",
+        "digest": {
+          "algorithm": "sha256",
+          "value": "00615f06fae4d884768f2d216a35aecbd247fd55abae3acf6ee92ff4a72a4bb8"
+        },
+        "artifacts": [
+          {
+            "schema_version": "trust-wp.proof-evidence.v1",
+            "id": "trust-wp.proof-evidence.v1/artifact/request-digest/sha256/b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9",
+            "kind": "request_digest",
+            "digest": {
+              "algorithm": "sha256",
+              "value": "b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9"
+            },
+            "description": "canonical verify-bundle request digest",
+            "inline_bytes": {
+              "encoding": "utf8",
+              "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nrequest.api=hex:74727573742d77702e7665726966792d62756e646c652e7631\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f6272616e63685f736f757263653a3a63686f6f73653a74727573742d77703a37\nproducer.name=hex:54727573744972\nproducer.version=hex:74727573742d69722d6e61746976652d736368656d612d38\nproducer.revision=hex:7368613235363a31623264343661303435333862386566393061306234643037666637386366616235393731313064333535663834623238633866633530363964316637323964\ntarget.crate=hex:73656d725f6272616e63685f736f757263653a3a63686f6f7365\ntarget.package=none\ntarget.triple=hex:616172636836342d6170706c652d64617277696e\noptions.require-proof-evidence=true\noptions.timeout-ms=none\nobligation-count=1\nobligation.0.id=hex:74727573742d69722d72372d70726f6f662d31\nobligation.0.kind=hex:706f7374636f6e646974696f6e\nobligation.0.function=hex:63686f6f7365\nobligation.0.location.file=hex:74727573742d69723a2f2f66696c652f30\nobligation.0.location.line=1\nobligation.0.location.column=1\nobligation.0.native-origin=schema=hex:746d69722e6e61746976652d766572696669636174696f6e2d62756e646c652e7638;mode=weakest_precondition;request=7;function=0;obligation=1;lineage-roots=1;tmir-digest=sha256:1b2d46a04538b8ef90a0b4d07ff78cfab597110d355f84b28c8fc5069d1f729d\nobligation.0.tmir-source-span=file-id=0;line=1;column=1\nobligation.0.native-verifier=name=hex:74727573742d7770;version=hex:6e61746976652d736368656d612d7632;revision=hex:3063626161643562;digest=none\nobligation.0.native-replay=engine=hex:74727573742d7770;invocation=hex:636f6d70696c65722d6d656d6f7279207465737420636f6e7472616374;transcript=sha256:e9f955dd1e1516f5e9456a84a33e0175f0e1e5d0a9ab83db49302aeaed7b54ea\nobligation.0.native-solvers=0:name=hex:6179;version=hex:302e392e30;revision=hex:736f6c7665722d726576;digest=sha256:6666666666666666666666666666666666666666666666666666666666666666\nobligation.0.tmir-obligation-source=cause=hex:706f7374636f6e646974696f6e;function=0;assertion=1;monomorphization=none;facts=hex:6e6f6e65\nobligation.0.proof-context.assumptions=0\nobligation.0.proof-context.assertions=0\nobligation.0.proof-context-digest=none\nobligation.0.claim-format=hex:5472757374466f726d756c615631\nobligation.0.claim-digest=none\nobligation.0.claim-payload-digest=sha256:725294c611631c67cb0701d3ed2a6c20cf3a30e09eacabaf5ae3a20fdfa49b61\nobligation.0.summary-count=0\nobligation.0.summary-digest=none\n"
+            }
+          },
+          {
+            "schema_version": "trust-wp.proof-evidence.v1",
+            "id": "trust-wp.proof-evidence.v1/artifact/aggregate-proof-manifest/sha256/ae40500a31751e66c8ef481eca5ef0f1c96f6c316b3e005b9e31baaa632bce44",
+            "kind": "aggregate_proof_manifest",
+            "digest": {
+              "algorithm": "sha256",
+              "value": "ae40500a31751e66c8ef481eca5ef0f1c96f6c316b3e005b9e31baaa632bce44"
+            },
+            "description": "aggregate verify-bundle proof manifest",
+            "inline_bytes": {
+              "encoding": "utf8",
+              "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\naggregate-schema=trust-wp.verify-bundle-aggregate.v1\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f6272616e63685f736f757263653a3a63686f6f73653a74727573742d77703a37\nrequest-digest=sha256:b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9\nobligation-count=1\nobligation.0.id=hex:74727573742d69722d72372d70726f6f662d31\nobligation.0.status=verified\nobligation.0.evidence-format=hex:74727573745f77702e6e61746976652d707572652d7265706c61792e7631\nobligation.0.evidence-strength=sound\nobligation.0.evidence-digest=sha256:97b37c7ae782ed8a02bcf81305e6e0d99c549c4c7c9f16d35040be5d960a21b4\nobligation.0.evidence-wire-digest=sha256:5309ea295caf77b32caf43d4bd7f650099f6b312cc2e7e3a1ef8bbc34c778235\nobligation.0.checked-by=hex:74727573745f77702e6e61746976652d707572652d7265706c61792e7631\nobligation.0.artifact-count=4\nobligation.0.artifact.0.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f726571756573742d6469676573742f7368613235362f62326463373831623438653661663237393766343835613435326663333530646361333734353665343230366335643733633662343834326664663138366439\nobligation.0.artifact.0.kind=request-digest\nobligation.0.artifact.0.digest=sha256:b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9\nobligation.0.artifact.1.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f6e6f726d616c697a65642d6f626c69676174696f6e2f7368613235362f63373565653937393166653365663739656161306135366238616432366562326164636462646363316437646337333361323831653939623636613666623336\nobligation.0.artifact.1.kind=normalized-obligation\nobligation.0.artifact.1.digest=sha256:c75ee9791fe3ef79eaa0a56b8ad26eb2adcdbdcc1d7dc733a281e99b66a6fb36\nobligation.0.artifact.2.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f7265706c61792d6c6f672f7368613235362f35313838303832366663626162373561363635316561303138366237353661653637616266393132643631613531353832613636323332313666363336663565\nobligation.0.artifact.2.kind=replay-log\nobligation.0.artifact.2.digest=sha256:51880826fcbab75a6651ea0186b756ae67abf912d61a51582a6623216f636f5e\nobligation.0.artifact.3.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f736f6c7665722d7472616e7363726970742f7368613235362f64333635376464316638386231646262663863346232396637393762306337636138343466396263363963376165343731643531666632663266323439386562\nobligation.0.artifact.3.kind=solver-transcript\nobligation.0.artifact.3.digest=sha256:d3657dd1f88b1dbbf8c4b29f797b0c7ca844f9bc69c7ae471d51ff2f2f2498eb\n"
+            }
+          }
+        ],
+        "checked_by": "trust-wp.verify-bundle-aggregate.v1"
+      },
+      "obligation_results": [
+        {
+          "obligation_id": "trust-ir-r7-proof-1",
+          "status": {
+            "verified": {
+              "evidence": {
+                "schema_version": "trust-wp.proof-evidence.v1",
+                "producer": "trust-wp-core.verify_bundle",
+                "format": "trust_wp_native_pure_replay_v1",
+                "strength": "sound",
+                "digest": {
+                  "algorithm": "sha256",
+                  "value": "97b37c7ae782ed8a02bcf81305e6e0d99c549c4c7c9f16d35040be5d960a21b4"
+                },
+                "artifacts": [
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/request-digest/sha256/b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9",
+                    "kind": "request_digest",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9"
+                    },
+                    "description": "canonical verify-bundle request digest",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nrequest.api=hex:74727573742d77702e7665726966792d62756e646c652e7631\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f6272616e63685f736f757263653a3a63686f6f73653a74727573742d77703a37\nproducer.name=hex:54727573744972\nproducer.version=hex:74727573742d69722d6e61746976652d736368656d612d38\nproducer.revision=hex:7368613235363a31623264343661303435333862386566393061306234643037666637386366616235393731313064333535663834623238633866633530363964316637323964\ntarget.crate=hex:73656d725f6272616e63685f736f757263653a3a63686f6f7365\ntarget.package=none\ntarget.triple=hex:616172636836342d6170706c652d64617277696e\noptions.require-proof-evidence=true\noptions.timeout-ms=none\nobligation-count=1\nobligation.0.id=hex:74727573742d69722d72372d70726f6f662d31\nobligation.0.kind=hex:706f7374636f6e646974696f6e\nobligation.0.function=hex:63686f6f7365\nobligation.0.location.file=hex:74727573742d69723a2f2f66696c652f30\nobligation.0.location.line=1\nobligation.0.location.column=1\nobligation.0.native-origin=schema=hex:746d69722e6e61746976652d766572696669636174696f6e2d62756e646c652e7638;mode=weakest_precondition;request=7;function=0;obligation=1;lineage-roots=1;tmir-digest=sha256:1b2d46a04538b8ef90a0b4d07ff78cfab597110d355f84b28c8fc5069d1f729d\nobligation.0.tmir-source-span=file-id=0;line=1;column=1\nobligation.0.native-verifier=name=hex:74727573742d7770;version=hex:6e61746976652d736368656d612d7632;revision=hex:3063626161643562;digest=none\nobligation.0.native-replay=engine=hex:74727573742d7770;invocation=hex:636f6d70696c65722d6d656d6f7279207465737420636f6e7472616374;transcript=sha256:e9f955dd1e1516f5e9456a84a33e0175f0e1e5d0a9ab83db49302aeaed7b54ea\nobligation.0.native-solvers=0:name=hex:6179;version=hex:302e392e30;revision=hex:736f6c7665722d726576;digest=sha256:6666666666666666666666666666666666666666666666666666666666666666\nobligation.0.tmir-obligation-source=cause=hex:706f7374636f6e646974696f6e;function=0;assertion=1;monomorphization=none;facts=hex:6e6f6e65\nobligation.0.proof-context.assumptions=0\nobligation.0.proof-context.assertions=0\nobligation.0.proof-context-digest=none\nobligation.0.claim-format=hex:5472757374466f726d756c615631\nobligation.0.claim-digest=none\nobligation.0.claim-payload-digest=sha256:725294c611631c67cb0701d3ed2a6c20cf3a30e09eacabaf5ae3a20fdfa49b61\nobligation.0.summary-count=0\nobligation.0.summary-digest=none\n"
+                    }
+                  },
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/normalized-obligation/sha256/c75ee9791fe3ef79eaa0a56b8ad26eb2adcdbdcc1d7dc733a281e99b66a6fb36",
+                    "kind": "normalized_obligation",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "c75ee9791fe3ef79eaa0a56b8ad26eb2adcdbdcc1d7dc733a281e99b66a6fb36"
+                    },
+                    "description": "normalized typed trust-wp PureExpr obligation",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nreplay-schema=trust_wp.native-pure-replay.v1\nbundle=trust-wp.trust-ir-body-wp.v1:trust-ir-native:semr_branch_source::choose:trust-wp:7\nproducer.name=hex:54727573744972\nproducer.version=hex:74727573742d69722d6e61746976652d736368656d612d38\nproducer.revision=hex:7368613235363a31623264343661303435333862386566393061306234643037666637386366616235393731313064333535663834623238633866633530363964316637323964\ntarget.crate=hex:73656d725f6272616e63685f736f757263653a3a63686f6f7365\ntarget.package=none\ntarget.triple=hex:616172636836342d6170706c652d64617277696e\nobligation=trust-ir-r7-proof-1\nkind=postcondition\nfunction=choose\nlocation.file=hex:74727573742d69723a2f2f66696c652f30\nlocation.line=1\nlocation.column=1\nnative-origin=schema=hex:746d69722e6e61746976652d766572696669636174696f6e2d62756e646c652e7638;mode=weakest_precondition;request=7;function=0;obligation=1;lineage-roots=1;tmir-digest=sha256:1b2d46a04538b8ef90a0b4d07ff78cfab597110d355f84b28c8fc5069d1f729d\ntmir-source-span=file-id=0;line=1;column=1\nnative-verifier=name=hex:74727573742d7770;version=hex:6e61746976652d736368656d612d7632;revision=hex:3063626161643562;digest=none\nnative-replay=engine=hex:74727573742d7770;invocation=hex:636f6d70696c65722d6d656d6f7279207465737420636f6e7472616374;transcript=sha256:e9f955dd1e1516f5e9456a84a33e0175f0e1e5d0a9ab83db49302aeaed7b54ea\nnative-solvers=0:name=hex:6179;version=hex:302e392e30;revision=hex:736f6c7665722d726576;digest=sha256:6666666666666666666666666666666666666666666666666666666666666666\ntmir-obligation-source=cause=hex:706f7374636f6e646974696f6e;function=0;assertion=1;monomorphization=none;facts=hex:6e6f6e65\nproof-context.assumptions=0\nproof-context.assertions=0\nproof-context-digest=none\nclaim-format=TrustFormulaV1\nclaim-digest=none\npredicate=(((__trust_wp_body_v0 == false) ==> ((__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v2)))) && (!(__trust_wp_body_v0 == false) ==> ((__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v2)))))\nsummary-count=0\nsummary-digest=none\n"
+                    }
+                  },
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/replay-log/sha256/51880826fcbab75a6651ea0186b756ae67abf912d61a51582a6623216f636f5e",
+                    "kind": "replay_log",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "51880826fcbab75a6651ea0186b756ae67abf912d61a51582a6623216f636f5e"
+                    },
+                    "description": "native pure predicate replay trace",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nreplay-schema=trust_wp.native-pure-replay.v1\nnormalized-digest=sha256:c75ee9791fe3ef79eaa0a56b8ad26eb2adcdbdcc1d7dc733a281e99b66a6fb36\nsummary-digest=none\nsteps=\ndecode:TrustFormulaV1\nnormalize:(((__trust_wp_body_v0 == false) ==> ((__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v2)))) && (!(__trust_wp_body_v0 == false) ==> ((__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v2)))))\nreplay-rule:boolean-case-split\nresult:verified\n"
+                    }
+                  },
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/solver-transcript/sha256/d3657dd1f88b1dbbf8c4b29f797b0c7ca844f9bc69c7ae471d51ff2f2f2498eb",
+                    "kind": "solver_transcript",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "d3657dd1f88b1dbbf8c4b29f797b0c7ca844f9bc69c7ae471d51ff2f2f2498eb"
+                    },
+                    "description": "native pure replay proof-check transcript over evidence artifact bytes",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "schema=trust-wp.native-pure-proof-check-transcript.v1\napi=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nreplay-schema=trust_wp.native-pure-replay.v1\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f6272616e63685f736f757263653a3a63686f6f73653a74727573742d77703a37\nobligation=hex:74727573742d69722d72372d70726f6f662d31\nchecker=trust_wp.native-pure-replay.v1\nresult=verified\nreplay-steps=4\nchecked-artifacts=3\nartifact.0.id=trust-wp.proof-evidence.v1/artifact/request-digest/sha256/b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9\nartifact.0.kind=request-digest\nartifact.0.declared-digest=sha256:b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9\nartifact.0.transport=inline:utf8\nartifact.0.actual-digest=sha256:b2dc781b48e6af2797f485a452fc350dca37456e4206c5d73c6b4842fdf186d9\nartifact.0.byte-len=2457\nartifact.1.id=trust-wp.proof-evidence.v1/artifact/normalized-obligation/sha256/c75ee9791fe3ef79eaa0a56b8ad26eb2adcdbdcc1d7dc733a281e99b66a6fb36\nartifact.1.kind=normalized-obligation\nartifact.1.declared-digest=sha256:c75ee9791fe3ef79eaa0a56b8ad26eb2adcdbdcc1d7dc733a281e99b66a6fb36\nartifact.1.transport=inline:utf8\nartifact.1.actual-digest=sha256:c75ee9791fe3ef79eaa0a56b8ad26eb2adcdbdcc1d7dc733a281e99b66a6fb36\nartifact.1.byte-len=2225\nartifact.2.id=trust-wp.proof-evidence.v1/artifact/replay-log/sha256/51880826fcbab75a6651ea0186b756ae67abf912d61a51582a6623216f636f5e\nartifact.2.kind=replay-log\nartifact.2.declared-digest=sha256:51880826fcbab75a6651ea0186b756ae67abf912d61a51582a6623216f636f5e\nartifact.2.transport=inline:utf8\nartifact.2.actual-digest=sha256:51880826fcbab75a6651ea0186b756ae67abf912d61a51582a6623216f636f5e\nartifact.2.byte-len=672\n"
+                    }
+                  }
+                ],
+                "checked_by": "trust_wp.native-pure-replay.v1"
+              }
+            }
+          },
+          "diagnostics": [],
+          "metadata": {
+            "solver": {
+              "engine": "trust-wp-core.native-pure-replay",
+              "checker": "trust_wp.native-pure-replay.v1",
+              "claim_format": "TrustFormulaV1",
+              "replay_steps": 4,
+              "assumptions": 0,
+              "assertions": 0
+            },
+            "evidence": {
+              "format": "trust_wp_native_pure_replay_v1",
+              "strength": "sound",
+              "digest": {
+                "algorithm": "sha256",
+                "value": "97b37c7ae782ed8a02bcf81305e6e0d99c549c4c7c9f16d35040be5d960a21b4"
+              },
+              "artifact_count": 4,
+              "checked_by": "trust_wp.native-pure-replay.v1"
+            }
+          }
+        }
+      ],
+      "diagnostics": []
+    }
+  ]
+}

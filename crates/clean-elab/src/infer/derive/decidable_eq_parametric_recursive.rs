@@ -50,8 +50,8 @@ impl<'a> ElabCtx<'a> {
         let b = self.fresh_fvar();
         let fv = Expr::fvar;
         let ind_p = Expr::app(Expr::const_(ind_name.clone(), vec![]), fv(p));
-        let cases_on = Name::from_string(&format!("{ind_name}.casesOn"));
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let cases_on = ind_name.clone().str("casesOn");
+        let rec_name = ind_name.clone().str("rec");
 
         // Helpers.
         let eq = |ty: &Expr, u: &Expr, v: &Expr| {

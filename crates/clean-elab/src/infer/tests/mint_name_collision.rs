@@ -108,7 +108,7 @@ fn elab_source(label: &str, src: &str) -> Vec<(String, Result<(), String>)> {
             }
             Err(error) => {
                 let name = crate::preprocess_ext::decl_name(decl)
-                    .map_or_else(|| format!("<decl {}>", verdicts.len()), str::to_string);
+                    .map_or_else(|| format!("<decl {}>", verdicts.len()), ToString::to_string);
                 verdicts.push((name, Err(format!("{error:?}"))));
             }
         }
@@ -362,15 +362,15 @@ fn test_level_param_role_classifies_declared_minted_and_foreign() {
 
     let env = Environment::with_prelude();
     let mut ctx = crate::infer::ElabCtx::new(&env);
-    ctx.set_decl_universe_params(&["u".to_string()]);
+    ctx.set_decl_universe_params(&[clean_parser::SurfaceName::generated_path("u")]);
 
     assert_eq!(
-        ctx.level_param_role("u"),
+        ctx.level_param_role(&clean_kernel::Name::from_string("u")),
         LevelParamRole::Rigid,
         "a declared `.{{u}}` param is rigid"
     );
     assert_eq!(
-        ctx.level_param_role("nowhere"),
+        ctx.level_param_role(&clean_kernel::Name::from_string("nowhere")),
         LevelParamRole::Foreign,
         "a name this declaration never bound is foreign"
     );
@@ -381,9 +381,8 @@ fn test_level_param_role_classifies_declared_minted_and_foreign() {
     let clean_kernel::Level::Param(minted_name) = &minted else {
         panic!("fresh_universe_param must return a Level::Param, got {minted:?}");
     };
-    let minted_name = minted_name.to_string();
     assert_eq!(
-        ctx.level_param_role(&minted_name),
+        ctx.level_param_role(minted_name),
         LevelParamRole::Minted,
         "`{minted_name}` was minted by this declaration: assignable, not rigid"
     );
@@ -392,7 +391,9 @@ fn test_level_param_role_classifies_declared_minted_and_foreign() {
     // the classifier could still be correct while the two populations shared a
     // spelling — the state that produced p47 and cost p49.
     assert!(
-        crate::level_mint::is_reserved_level_name(&minted_name),
+        clean_parser::SurfaceName::from_name(minted_name.clone())
+            .component_text()
+            .is_some_and(crate::level_mint::is_reserved_level_name),
         "a minted level must be unwritable at the surface; `{minted_name}` is not \
          in the reserved namespace"
     );

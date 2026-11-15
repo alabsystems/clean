@@ -15,54 +15,78 @@ use std::sync::Arc;
 
 const SMALL_LEVEL_PARAM_SUBST_THRESHOLD: usize = 4;
 
-/// Pointer-identity memo for sharing-preserving folds (Track XX).
+/// Per-call pointer-identity memo for substitution folds.
 ///
-/// `instantiate` / `lift` / `instantiate_rev` walk an expression as a TREE. When
-/// the term is a DAG with shared `Arc<Expr>` children — which match lowering
-/// produces in abundance (`compile_ctor_dispatch_alt_chain` duplicates a
-/// fallback alternative into every `casesOn` minor as the SAME `Arc`) — a naive
-/// walk re-folds each shared subtree once PER occurrence, so a DAG that is linear
-/// in distinct nodes is rebuilt as a tree that is EXPONENTIAL in its depth.
-///
-/// Measured (probe): a 25-node DAG balloons to 12.5M nodes after one
-/// `instantiate`; the resulting megaterm then dominates inference, drop, and
-/// (in the parallel re-verify) the per-thread infer-arc memo, stalling the
-/// full-corpus run for hours and spiking RSS to ~100 GB.
-///
-/// The classic Lean `replace_fn` memo (already applied to `Abstractor`, #WW)
-/// keys on the *pointer identity* of the visited node plus the current binder
-/// depth. Shared `Arc`s hit the cache and are folded exactly once, collapsing
-/// the traversal back to linear in DISTINCT nodes AND preserving DAG sharing in
-/// the output (the same `Some(Expr)` is cloned per occurrence, so the rebuilt
-/// children stay `Arc`-shared).
+/// Each `(input node, depth)` is transformed at most once. The former
+/// `Option<Expr>` memo already bounded that work and shared descendants, but
+/// cloning a changed `Expr` and wrapping it in a new Arc at every child edge
+/// duplicated the returned node itself. Retaining its Arc preserves that node's
+/// identity too: one allocation per changed child miss, not per occurrence.
+/// Roots use the unchanged default Expr-valued fold without a memo entry or an
+/// extra Arc allocation. Unchanged children still allocate nothing. This is a
+/// structural ownership improvement, not a timing claim.
 ///
 /// SOUNDNESS: the result of folding a fixed-state folder over a given node at a
-/// given depth is a pure function of `(node-address, depth)` — the only mutable
-/// state, `depth`, is part of the key, and all other folder fields (`val`,
-/// `start`, `amount`, `vals`) are immutable for the call. So a memo hit returns
-/// the identical `Option<Expr>` the unmemoized walk would have produced —
+/// given depth is a pure function of `(node-address, depth)` — the mutable
+/// `depth`/`start` is part of the key; operation parameters (`val`, `vals`,
+/// `amount`, `id`, substitutions) are fixed for the call. So a memo hit returns
+/// the identical optional expression the unmemoized walk would have produced —
 /// same accept/reject, byte-identical output term, NO change to any verdict.
-/// The memo lives only for the duration of one fold call; every visited node is
-/// reachable from `self` (kept alive across the walk), so its address is stable
-/// and cannot be reused while an entry referencing it lives.
+/// The memo lives within one fixed-parameter input scope: one fold call, or
+/// one certificate conversion through `FVarAbstraction`. Every visited node
+/// remains reachable from borrowed inputs for that scope, so its address is
+/// stable and cannot be reused while an entry referencing it lives.
+///
+/// The table is `hashbrown`'s with its default (foldhash) hasher, not
+/// `std`'s SipHash: it is only ever probed and filled, never iterated, so the
+/// hash function decides no output, and its keys are addresses no input
+/// chooses. Measured 2026-09-30 (macOS `sample`, the concurrent `.olean.private`
+/// checks of Mathlib `Order/Basic`'s import header), SipHash in this table's
+/// inserts, probes and growth was about a tenth of the checks' CPU.
 #[derive(Default)]
 struct FoldMemo {
-    map: HashMap<(usize, u32), Option<Expr>>,
+    map: hashbrown::HashMap<(usize, u32), Option<Arc<Expr>>>,
 }
 
 impl FoldMemo {
     #[inline]
-    fn get(&self, expr: &Expr, depth: u32) -> Option<Option<Expr>> {
+    fn get(&self, expr: &Expr, depth: u32) -> Option<Option<Arc<Expr>>> {
         self.map
             .get(&(expr as *const Expr as usize, depth))
             .cloned()
     }
 
     #[inline]
-    fn put(&mut self, expr: &Expr, depth: u32, result: Option<Expr>) -> Option<Expr> {
+    fn put(&mut self, expr: &Expr, depth: u32, result: Option<Arc<Expr>>) -> Option<Arc<Expr>> {
         self.map
             .insert((expr as *const Expr as usize, depth), result.clone());
         result
+    }
+}
+
+/// Shared miss path for the eight private substitution folders. No memo borrow
+/// survives recursive dispatch, and the input depth is captured before it.
+trait MemoizedSubst: ExprFolderOpt {
+    fn fold_memo(&mut self) -> &mut FoldMemo;
+
+    fn memo_depth(&self) -> u32 {
+        0
+    }
+
+    fn fold_shared(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        if !self.should_descend(expr) {
+            return None;
+        }
+        let depth = self.memo_depth();
+        if let Some(cached) = self.fold_memo().get(expr, depth) {
+            return cached;
+        }
+        // This miss path enters the node without `fold_expr_opt`, so it pays
+        // the fold's unit itself (`crate::work_meter`): one per distinct
+        // (node, depth) folded. A memo hit is bounded by its parent's fold.
+        crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
+        let result = stack_safe(|| self.fold_expr_opt_inner(expr)).map(Arc::new);
+        self.fold_memo().put(expr, depth, result)
     }
 }
 
@@ -81,6 +105,16 @@ struct Instantiator<'a> {
     memo: FoldMemo,
 }
 
+impl MemoizedSubst for Instantiator<'_> {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+
+    fn memo_depth(&self) -> u32 {
+        self.depth
+    }
+}
+
 impl ExprFolderOpt for Instantiator<'_> {
     fn should_descend(&self, expr: &Expr) -> bool {
         // O(1) metadata guard: skip if no loose BVars at or above `depth`.
@@ -88,16 +122,16 @@ impl ExprFolderOpt for Instantiator<'_> {
         self.depth < expr.loose_bvar_range()
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        if let Some(cached) = self.memo.get(expr, self.depth) {
-            return cached;
-        }
-        let depth = self.depth;
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.put(expr, depth, result)
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        let saved = self.depth;
+        self.depth = checked_add_u32(self.depth, 1, "instantiate depth");
+        let result = self.fold_shared(expr);
+        self.depth = saved;
+        result
     }
 
     fn fold_bvar_opt(&mut self, idx: u32) -> Option<Expr> {
@@ -149,21 +183,31 @@ struct MultiInstantiator<'a> {
     memo: FoldMemo,
 }
 
+impl MemoizedSubst for MultiInstantiator<'_> {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+
+    fn memo_depth(&self) -> u32 {
+        self.depth
+    }
+}
+
 impl ExprFolderOpt for MultiInstantiator<'_> {
     fn should_descend(&self, expr: &Expr) -> bool {
         self.depth < expr.loose_bvar_range()
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        if let Some(cached) = self.memo.get(expr, self.depth) {
-            return cached;
-        }
-        let depth = self.depth;
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.put(expr, depth, result)
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        let saved = self.depth;
+        self.depth = checked_add_u32(self.depth, 1, "multi-instantiate depth");
+        let result = self.fold_shared(expr);
+        self.depth = saved;
+        result
     }
 
     fn fold_bvar_opt(&mut self, idx: u32) -> Option<Expr> {
@@ -214,21 +258,31 @@ struct Lifter {
     memo: FoldMemo,
 }
 
+impl MemoizedSubst for Lifter {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+
+    fn memo_depth(&self) -> u32 {
+        self.start
+    }
+}
+
 impl ExprFolderOpt for Lifter {
     fn should_descend(&self, expr: &Expr) -> bool {
         self.start < expr.loose_bvar_range()
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        if let Some(cached) = self.memo.get(expr, self.start) {
-            return cached;
-        }
-        let start = self.start;
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.put(expr, start, result)
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        let saved = self.start;
+        self.start = checked_add_u32(self.start, 1, "lift binder start");
+        let result = self.fold_shared(expr);
+        self.start = saved;
+        result
     }
 
     fn fold_bvar_opt(&mut self, idx: u32) -> Option<Expr> {
@@ -273,21 +327,31 @@ struct Lowerer {
     memo: FoldMemo,
 }
 
+impl MemoizedSubst for Lowerer {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+
+    fn memo_depth(&self) -> u32 {
+        self.start
+    }
+}
+
 impl ExprFolderOpt for Lowerer {
     fn should_descend(&self, expr: &Expr) -> bool {
         self.start < expr.loose_bvar_range()
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        if let Some(cached) = self.memo.get(expr, self.start) {
-            return cached;
-        }
-        let start = self.start;
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.put(expr, start, result)
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        let saved = self.start;
+        self.start = checked_add_u32(self.start, 1, "lower binder start");
+        let result = self.fold_shared(expr);
+        self.start = saved;
+        result
     }
 
     fn fold_bvar_opt(&mut self, idx: u32) -> Option<Expr> {
@@ -327,11 +391,11 @@ impl ExprFolderOpt for Lowerer {
 /// abstract_fvar does two things: (1) replace FVar(id) → BVar(depth),
 /// (2) shift BVar(idx >= depth) up by 1.
 ///
-/// PERF (Track WW): match lowering (`compile_ctor_dispatch_alt_chain` +
+/// HISTORY (Track WW): match lowering (`compile_ctor_dispatch_alt_chain` +
 /// `wrap_with_nested_ctor_caseson_with_fallback`) duplicates the accumulated
-/// "fallback" alternative into every non-matching `casesOn` minor. Because
-/// `Expr::clone` is an `Arc` clone, all those duplicates share the SAME
-/// `Arc<Expr>` node — but a naive `abstract_fvar` walk re-traverses each copy,
+/// "fallback" alternative into every non-matching `casesOn` minor. Shared
+/// child Arcs can therefore occur repeatedly; before memoization, a naive
+/// `abstract_fvar` walk re-traversed each occurrence,
 /// turning a chain of N nat/ctor patterns into an `O(branching^N)` traversal
 /// (observed node counts 21K → 694K → 22.9M for `semIntBinOp`, then OOM/timeout).
 ///
@@ -345,16 +409,17 @@ impl ExprFolderOpt for Lowerer {
 /// function of those two values (the only mutable state, `depth`, is part of the
 /// key), so memoization returns the identical `Option<Expr>` the unmemoized walk
 /// would have produced — same accept/reject, byte-identical output term. The
-/// cache lives only for the duration of one `abstract_fvar_at` call; node
-/// addresses are stable for that call because every visited node is reachable
-/// from `self` (kept alive across the walk).
+/// cache lives within one `abstract_fvar_at` call, or the borrowed input scope
+/// of `FVarAbstraction`; child node addresses are stable because those inputs
+/// stay live. Like the other folders, roots use the default uncached
+/// Expr-valued path.
 struct Abstractor {
     id: FVarId,
     depth: u32,
     /// Memo: `(node pointer, depth) -> abstraction result`. `None`-valued
     /// entries record "unchanged" (the `ExprFolderOpt` sharing signal) so a
     /// shared unchanged subtree is also visited only once.
-    memo: HashMap<(usize, u32), Option<Expr>>,
+    memo: FoldMemo,
 }
 
 impl Abstractor {
@@ -362,29 +427,62 @@ impl Abstractor {
         Abstractor {
             id,
             depth,
-            memo: HashMap::new(),
+            memo: FoldMemo::default(),
         }
+    }
+}
+
+/// One fixed-variable abstraction shared by borrowed expression roots.
+///
+/// Certificate metadata fields can share the same child DAG. Keep that child's
+/// transformation across fields while retaining binder depth in every key.
+/// The input lifetime keeps every keyed child allocation alive and immutable
+/// until the last use of this context; temporary expressions cannot leave
+/// dangling identities in the memo. Roots still use the uncached value path.
+/// This context is local to one certificate conversion, not a typing cache.
+pub(crate) struct FVarAbstraction<'input> {
+    folder: Abstractor,
+    input: std::marker::PhantomData<&'input Expr>,
+}
+
+impl<'input> FVarAbstraction<'input> {
+    pub(crate) fn new(id: FVarId) -> Self {
+        Self {
+            folder: Abstractor::new(id, 0),
+            input: std::marker::PhantomData,
+        }
+    }
+
+    pub(crate) fn at(&mut self, expr: &'input Expr, depth: u32) -> Expr {
+        self.folder.depth = depth;
+        expr.fold_opt_or_clone(&mut self.folder)
+    }
+}
+
+impl MemoizedSubst for Abstractor {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+
+    fn memo_depth(&self) -> u32 {
+        self.depth
     }
 }
 
 impl ExprFolderOpt for Abstractor {
     fn should_descend(&self, expr: &Expr) -> bool {
-        expr.has_fvar_quick() || self.depth < expr.loose_bvar_range()
+        expr.may_contain_fvar(self.id) || self.depth < expr.loose_bvar_range()
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        // Pointer-identity memo: shared `Arc<Expr>` duplicates produced by match
-        // lowering are abstracted once. Key includes `depth` because the same
-        // node may be visited at different binder depths (distinct results).
-        let key = (expr as *const Expr as usize, self.depth);
-        if let Some(cached) = self.memo.get(&key) {
-            return cached.clone();
-        }
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.insert(key, result.clone());
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        let saved = self.depth;
+        self.depth = checked_add_u32(self.depth, 1, "abstract_fvar depth");
+        let result = self.fold_shared(expr);
+        self.depth = saved;
         result
     }
 
@@ -436,20 +534,23 @@ struct FVarSubst<'a> {
     memo: FoldMemo,
 }
 
+impl MemoizedSubst for FVarSubst<'_> {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+}
+
 impl ExprFolderOpt for FVarSubst<'_> {
     fn should_descend(&self, expr: &Expr) -> bool {
-        expr.has_fvar_quick()
+        expr.may_contain_fvar(self.id)
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        if let Some(cached) = self.memo.get(expr, 0) {
-            return cached;
-        }
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.put(expr, 0, result)
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
     }
 
     fn fold_fvar_opt(&mut self, id: FVarId) -> Option<Expr> {
@@ -475,20 +576,23 @@ struct LevelParamSubst<'a> {
     memo: FoldMemo,
 }
 
+impl MemoizedSubst for LevelParamSubst<'_> {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+}
+
 impl ExprFolderOpt for LevelParamSubst<'_> {
     fn should_descend(&self, expr: &Expr) -> bool {
         expr.has_level_param_quick()
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        if let Some(cached) = self.memo.get(expr, 0) {
-            return cached;
-        }
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.put(expr, 0, result)
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
     }
 
     fn fold_sort_opt(&mut self, level: &Level) -> Option<Expr> {
@@ -527,20 +631,23 @@ struct LevelParamSubstSlice<'a> {
     memo: FoldMemo,
 }
 
+impl MemoizedSubst for LevelParamSubstSlice<'_> {
+    fn fold_memo(&mut self) -> &mut FoldMemo {
+        &mut self.memo
+    }
+}
+
 impl ExprFolderOpt for LevelParamSubstSlice<'_> {
     fn should_descend(&self, expr: &Expr) -> bool {
         expr.has_level_param_quick()
     }
 
-    fn fold_expr_opt(&mut self, expr: &Expr) -> Option<Expr> {
-        if !self.should_descend(expr) {
-            return None;
-        }
-        if let Some(cached) = self.memo.get(expr, 0) {
-            return cached;
-        }
-        let result = stack_safe(|| self.fold_expr_opt_inner(expr));
-        self.memo.put(expr, 0, result)
+    fn fold_expr_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
+    }
+
+    fn fold_binder_body_arc_opt(&mut self, expr: &Arc<Expr>) -> Option<Arc<Expr>> {
+        self.fold_shared(expr)
     }
 
     fn fold_sort_opt(&mut self, level: &Level) -> Option<Expr> {
@@ -663,6 +770,8 @@ impl Expr {
     /// beta-normal (the caller reuses `self`), `Some(e)` ⇔ `e` is the normal
     /// form of `self`.
     fn beta_normalize_opt(&self) -> Option<Expr> {
+        // One unit per node visited (`crate::work_meter`).
+        crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
         match &self.kind {
             ExprKind::App(f, a) => {
                 let nf = f.beta_normalize_opt();
@@ -893,7 +1002,7 @@ impl Expr {
     /// Infer implicit binder info for the first `num_params` binders of a Pi chain.
     ///
     /// Reference: lean4-ref/src/kernel/expr.cpp:480-496
-    pub(crate) fn infer_implicit_n(&self, num_params: u32, strict: bool) -> Expr {
+    pub fn infer_implicit_n(&self, num_params: u32, strict: bool) -> Expr {
         if num_params == 0 {
             return self.clone();
         }
@@ -936,6 +1045,9 @@ impl Expr {
         if self.loose_bvar_range() <= start {
             return false;
         }
+        // One unit per node the scan enters past its O(1) guard
+        // (`crate::work_meter`).
+        crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
         match &self.kind {
             ExprKind::BVar(idx) => bvar_in_range(*idx, start, end),
             ExprKind::FVar(_) | ExprKind::Sort(_) | ExprKind::Const(_, _) | ExprKind::Lit(_) => {
@@ -1045,75 +1157,102 @@ impl Expr {
     /// many terms (e.g. a dependency-closure BFS) can keep one scratch set instead
     /// of allocating a fresh `HashSet` per node. Adds to (does not clear) `result`.
     pub fn collect_constants_into(&self, result: &mut std::collections::HashSet<Name>) {
-        stack_safe(|| self.collect_constants_into_impl(result));
+        self.collect_names_into(result, false);
+    }
+
+    /// Every global name whose kernel records a check of this expression
+    /// reads: its constants, and the structure each projection names. Adds to
+    /// (does not clear) `result`.
+    pub fn collect_kernel_reads_into(&self, result: &mut std::collections::HashSet<Name>) {
+        self.collect_names_into(result, true);
+    }
+
+    pub(crate) fn collect_names_into(
+        &self,
+        result: &mut std::collections::HashSet<Name>,
+        projections: bool,
+    ) {
+        stack_safe(|| self.collect_names_into_impl(result, projections));
     }
 
     /// Implementation (called via stacker::maybe_grow)
-    fn collect_constants_into_impl(&self, result: &mut std::collections::HashSet<Name>) {
+    fn collect_names_into_impl(
+        &self,
+        result: &mut std::collections::HashSet<Name>,
+        projections: bool,
+    ) {
         match &self.kind {
             ExprKind::Const(name, _) => {
                 result.insert(name.clone());
             }
             ExprKind::BVar(_) | ExprKind::FVar(_) | ExprKind::Sort(_) | ExprKind::Lit(_) => {}
             ExprKind::App(f, a) => {
-                f.collect_constants_into(result);
-                a.collect_constants_into(result);
+                f.collect_names_into(result, projections);
+                a.collect_names_into(result, projections);
             }
             ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-                ty.collect_constants_into(result);
-                body.collect_constants_into(result);
+                ty.collect_names_into(result, projections);
+                body.collect_names_into(result, projections);
             }
             ExprKind::Let(_, ty, val, body, _) => {
-                ty.collect_constants_into(result);
-                val.collect_constants_into(result);
-                body.collect_constants_into(result);
+                ty.collect_names_into(result, projections);
+                val.collect_names_into(result, projections);
+                body.collect_names_into(result, projections);
             }
-            ExprKind::Proj(_, _, e) => e.collect_constants_into(result),
-            ExprKind::MData(_, inner) => inner.collect_constants_into(result),
+            ExprKind::Proj(structure, _, e) => {
+                // The kernel types a projection by the structure's records,
+                // so they are a read of this expression even though no
+                // `Const` node names them.
+                if projections {
+                    result.insert(structure.clone());
+                }
+                e.collect_names_into(result, projections);
+            }
+            ExprKind::MData(_, inner) => inner.collect_names_into(result, projections),
 
             // Impredicative mode extensions
             ExprKind::SProp => {}
-            ExprKind::Squash(inner) => inner.collect_constants_into(result),
+            ExprKind::Squash(inner) => inner.collect_names_into(result, projections),
 
             // Cubical mode extensions
             ExprKind::CubicalInterval | ExprKind::CubicalI0 | ExprKind::CubicalI1 => {}
             ExprKind::CubicalPath { ty, left, right } => {
-                ty.collect_constants_into(result);
-                left.collect_constants_into(result);
-                right.collect_constants_into(result);
+                ty.collect_names_into(result, projections);
+                left.collect_names_into(result, projections);
+                right.collect_names_into(result, projections);
             }
-            ExprKind::CubicalPathLam { body } => body.collect_constants_into(result),
+            ExprKind::CubicalPathLam { body } => body.collect_names_into(result, projections),
             ExprKind::CubicalPathApp { path, arg } => {
-                path.collect_constants_into(result);
-                arg.collect_constants_into(result);
+                path.collect_names_into(result, projections);
+                arg.collect_names_into(result, projections);
             }
             ExprKind::CubicalHComp { ty, phi, u, base } => {
-                ty.collect_constants_into(result);
-                phi.collect_constants_into(result);
-                u.collect_constants_into(result);
-                base.collect_constants_into(result);
+                ty.collect_names_into(result, projections);
+                phi.collect_names_into(result, projections);
+                u.collect_names_into(result, projections);
+                base.collect_names_into(result, projections);
             }
             ExprKind::CubicalTransp { ty, phi, base } => {
-                ty.collect_constants_into(result);
-                phi.collect_constants_into(result);
-                base.collect_constants_into(result);
+                ty.collect_names_into(result, projections);
+                phi.collect_names_into(result, projections);
+                base.collect_names_into(result, projections);
             }
             ExprKind::CubicalCoe { ty, r, s, base } => {
-                ty.collect_constants_into(result);
-                r.collect_constants_into(result);
-                s.collect_constants_into(result);
-                base.collect_constants_into(result);
+                ty.collect_names_into(result, projections);
+                r.collect_names_into(result, projections);
+                s.collect_names_into(result, projections);
+                base.collect_names_into(result, projections);
             }
 
             // SetTheoretic mode extensions
-            ExprKind::ZFCSet(set_expr) => set_expr.collect_constants_into(result),
+            ExprKind::ZFCSet(set_expr) => set_expr.collect_names_into(result, projections),
             ExprKind::ZFCMem { element, set } => {
-                element.collect_constants_into(result);
-                set.collect_constants_into(result);
+                element.collect_names_into(result, projections);
+                set.collect_names_into(result, projections);
             }
             ExprKind::ZFCComprehension { domain, pred } => {
-                domain.collect_constants_into(result);
-                pred.collect_constants_into(result);
+                domain.collect_names_into(result, projections);
+                pred.collect_names_into(result, projections);
             }
         }
     }
@@ -1230,6 +1369,10 @@ impl Expr {
         self.fold_opt_or_clone(&mut folder)
     }
 }
+
+#[cfg(test)]
+#[path = "subst_arc_tests.rs"]
+mod arc_tests;
 
 #[cfg(test)]
 mod dag_sharing_tests {
@@ -1757,3 +1900,6 @@ mod arith_hardening_tests {
         );
     }
 }
+
+#[path = "subst_lean_levels.rs"]
+mod lean_levels;

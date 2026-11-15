@@ -98,12 +98,7 @@ impl<'a> ElabCtx<'a> {
         a_ref: &Expr,
         b_ref: &Expr,
     ) -> Option<Expr> {
-        let short = ind_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let short = clean_parser::SurfaceName::from_name(ind_name.clone()).last_component();
         // Nested restore erases the temporary `Ind._List` mirror and restores
         // every exposed domain to the declared container application.
         let aux_name = Name::from_string("List");
@@ -211,7 +206,7 @@ impl<'a> ElabCtx<'a> {
         }
 
         // `@Ind.rec.{1} motive_Ind [motive_List] minor... a b`
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
         let level_one = Level::succ(Level::zero());
         let mut rec_app = Expr::const_(rec_name, vec![level_one]);
         rec_app = Expr::app(rec_app, motive_ind);
@@ -231,7 +226,7 @@ impl<'a> ElabCtx<'a> {
     fn analyze_ctor_fields(
         &mut self,
         ind_name: &Name,
-        short_ind: &str,
+        short_ind: &clean_parser::SurfaceName,
         ind_type: &Expr,
         aux_type: &Expr,
         ctor: &SurfaceCtor,
@@ -242,7 +237,9 @@ impl<'a> ElabCtx<'a> {
         // (`{ind_name}.{ctor}`); `short_ind` is only for surface-recursion
         // detection in `collect_surface_fields`.
         Some(CtorAnalysis {
-            name: Name::from_string(&format!("{ind_name}.{}", ctor.name)),
+            name: clean_parser::SurfaceName::from_name(ind_name.clone())
+                .append(&ctor.name)
+                .into_name(),
             fields,
         })
     }
@@ -250,7 +247,7 @@ impl<'a> ElabCtx<'a> {
     /// Peel a constructor's surface arrow/Pi telescope, classifying each field.
     fn collect_surface_fields(
         &mut self,
-        short_ind: &str,
+        short_ind: &clean_parser::SurfaceName,
         ind_type: &Expr,
         aux_type: &Expr,
         surf: &SurfaceExpr,
@@ -285,7 +282,7 @@ impl<'a> ElabCtx<'a> {
     /// Classify a single field surface type into a [`FieldKind`].
     fn classify_field(
         &mut self,
-        short_ind: &str,
+        short_ind: &clean_parser::SurfaceName,
         ind_type: &Expr,
         aux_type: &Expr,
         ty: &SurfaceExpr,
@@ -293,16 +290,22 @@ impl<'a> ElabCtx<'a> {
         let ty = peel_paren(ty);
         // Direct self reference: `Ind`.
         if let SurfaceExpr::Ident(_, n) = ty {
-            if n == short_ind {
+            if !n.is_relative_constructor() && n == short_ind {
                 return Some(FieldKind::SelfRec);
             }
         }
         // Restored nested-recursive container: `List Ind`.
         if let SurfaceExpr::App(_, head, args) = ty {
             if let SurfaceExpr::Ident(_, container) = peel_paren(head) {
-                if container == "List" && args.len() == 1 {
+                // The container must RESOLVE to the global `List` (not a
+                // parameter or other binder spelled `List`).
+                if !container.is_relative_constructor()
+                    && container.name() == &Name::anon().str("List")
+                    && self.head_denotes_global(container, "List")
+                    && args.len() == 1
+                {
                     if let SurfaceExpr::Ident(_, n) = peel_paren(&args[0].expr) {
-                        if n == short_ind {
+                        if !n.is_relative_constructor() && n == short_ind {
                             return Some(FieldKind::ListSelf);
                         }
                     }
@@ -416,7 +419,7 @@ impl<'a> ElabCtx<'a> {
         let cases_on_name = if major_is_aux {
             Name::from_string("List.casesOn")
         } else {
-            Name::from_string(&format!("{ind_name}.casesOn"))
+            ind_name.clone().str("casesOn")
         };
 
         // The restored `Ind.casesOn` takes all registered motives and minors.

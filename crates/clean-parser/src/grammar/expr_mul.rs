@@ -36,7 +36,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HMul.hMul".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        crate::SurfaceName::global_path("HMul.hMul"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 saw_prec_70_operator = true;
@@ -45,7 +48,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HDiv.hDiv".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        crate::SurfaceName::global_path("HDiv.hDiv"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 saw_prec_70_operator = true;
@@ -54,7 +60,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HMod.hMod".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        crate::SurfaceName::global_path("HMod.hMod"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 saw_prec_70_operator = true;
@@ -63,7 +72,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "Inter.inter".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        crate::SurfaceName::global_path("Inter.inter"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 saw_prec_70_operator = true;
@@ -83,7 +95,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "SDiff.sdiff".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        crate::SurfaceName::global_path("SDiff.sdiff"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 saw_prec_70_operator = true;

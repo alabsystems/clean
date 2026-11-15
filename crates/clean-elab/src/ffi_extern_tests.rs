@@ -215,14 +215,14 @@ fn test_validate_extern_signature_empty_name_fails() {
 #[test]
 fn test_validate_implemented_by_empty_impl_fails() {
     let env = Environment::new();
-    let result = validate_implemented_by(&name("Foo.bar"), "", &env);
+    let result = validate_implemented_by(&name("Foo.bar"), &Name::anon(), &env);
     assert!(result.is_err());
 }
 
 #[test]
 fn test_validate_implemented_by_missing_decl_fails() {
     let env = Environment::new();
-    let result = validate_implemented_by(&name("NonExistent"), "some_impl", &env);
+    let result = validate_implemented_by(&name("NonExistent"), &name("some_impl"), &env);
     assert!(result.is_err());
 }
 

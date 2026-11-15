@@ -85,8 +85,7 @@ use std::path::{Path, PathBuf};
 use clean_kernel::env::{ConstantInfo, ConstantSource, ProofValueElision, TrustedEnvExt};
 use clean_kernel::Environment;
 use clean_olean::{
-    load_module_with_deps_bounded_shared_with_policy, parse_imports_only, ImportKinds,
-    OleanImportPolicy,
+    load_module_with_deps_bounded_shared_with_policy, ImportKinds, OleanImportPolicy,
 };
 
 use crate::cli::closure_load::{
@@ -247,13 +246,16 @@ fn closure_bfs(
             seen.remove(&module);
             continue;
         };
-        let Ok(bytes) = std::fs::read(&olean) else {
+        if !olean.is_file() {
             seen.remove(&module);
             continue;
-        };
+        }
+        // The imports of the part `lean` reads (R113, `clean_olean::read_artifact`);
+        // a refused artifact enqueues nothing, and the cold load refuses it by name.
+        let read = clean_olean::read_artifact(&module, &olean, clean_olean::ArtifactDepth::Names);
         oleans.insert(module.clone(), olean);
-        if let Ok(imports) = parse_imports_only(&bytes) {
-            for import in imports {
+        if let Ok(read) = read {
+            for import in read.imports {
                 let nm = import.module_name.trim().to_string();
                 if !nm.is_empty() && !seen.contains(&nm) {
                     queue.push_back(nm);

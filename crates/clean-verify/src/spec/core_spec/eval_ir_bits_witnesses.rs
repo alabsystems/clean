@@ -4,14 +4,23 @@
 
 //! `EvalIR` — **the differential ladder for [`super::eval_ir_bits`]**.
 //!
-//! `ir_nat_divmod` is not proved equal to `ir_nat_div` / `ir_nat_rem` and
-//! `ir_nat_mulb` is not proved equal to `ir_nat_mul` — those are two different
+//! `ir_nat_mulb` is not proved equal to `ir_nat_mul` — two different
 //! algorithms agreeing, which in this substrate goes through a loop invariant
-//! plus uniqueness of quotient and is not attempted. **This file is what stands
-//! in for those theorems**: every new operation, run by the KERNEL against the
-//! reference definition at every argument where the reference is affordable,
-//! plus round-trip witnesses at the widths where the reference does not exist
-//! at all.
+//! plus uniqueness and is not attempted. **For `ir_nat_mulb` this file is what
+//! stands in for that theorem**: every new operation, run by the KERNEL against
+//! the reference definition at every argument where the reference is
+//! affordable, plus round-trip witnesses at the widths where the reference does
+//! not exist at all.
+//!
+//! **It no longer stands in for the DIVISION theorems.** `ir_nat_divmod` was
+//! proved to agree with `ir_nat_div` / `ir_nat_rem` on 2026-09-20 — see
+//! `candmodel_dep_pi_probe.rs` and
+//! [`designs/2026-09-20-restoring-division-agrees-with-repeated-subtraction.md`]
+//! — under a positive divisor and `m < dv * 2^4200`. So `ir_nat_divmod_q_w`,
+//! `ir_nat_divmod_r_w` and `ir_nat_divmod_exact_w` below are now CONTROLS on a
+//! theorem rather than substitutes for one: they pin that the two sides really
+//! compute, which a proof about two stuck terms would not. The theorem carries
+//! its own witness at 17/5 for the same reason.
 //!
 //! It is the same evidential bar [`super::eval_ir_float`] sets for its tables,
 //! and it is not a proof. Split from its module only because
@@ -28,28 +37,28 @@
 pub(in crate::spec::core_spec) const BITS_WITNESSES: &[(&str, &str, &str)] = &[
     (
         "ir_nat_dbl_w",
-        "def ir_nat_dbl_w : Eq Nat (ir_nat_dbl 9007199254740991) 18014398509481982 := Eq.refl Nat 18014398509481982",
+        "def ir_nat_dbl_w : @Eq Nat (ir_nat_dbl 9007199254740991) 18014398509481982 := @Eq.refl Nat 18014398509481982",
         "The strict doubling on a 53-bit literal. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_dbl_zero_w",
-        "def ir_nat_dbl_zero_w : Eq Nat (ir_nat_dbl Nat.zero) Nat.zero := Eq.refl Nat Nat.zero",
+        "def ir_nat_dbl_zero_w : @Eq Nat (ir_nat_dbl Nat.zero) Nat.zero := @Eq.refl Nat Nat.zero",
         "2 * 0 = 0, the recursor's base minor. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_dbl_eq_w",
-        "def ir_nat_dbl_eq_w : Eq Nat (ir_nat_dbl 7) (Nat.add 7 7) := ir_nat_dbl_eq 7",
+        "def ir_nat_dbl_eq_w : @Eq Nat (ir_nat_dbl 7) (Nat.add 7 7) := ir_nat_dbl_eq 7",
         "The doubling agreement theorem, INSTANTIATED — so the general lemma is known to have a \
          satisfiable use and not only a well-typed statement. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_shl_w",
-        "def ir_nat_shl_w : Eq Nat (ir_nat_shl 3 10) 3072 := Eq.refl Nat 3072",
+        "def ir_nat_shl_w : @Eq Nat (ir_nat_shl 3 10) 3072 := @Eq.refl Nat 3072",
         "3 << 10. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_shl_mul_w",
-        "def ir_nat_shl_mul_w : Eq Nat (ir_nat_shl 3 10) (ir_nat_mul 3 (ir_nat_pow2 10)) := Eq.refl Nat 3072",
+        "def ir_nat_shl_mul_w : @Eq Nat (ir_nat_shl 3 10) (ir_nat_mul 3 (ir_nat_pow2 10)) := @Eq.refl Nat 3072",
         "*** DIFFERENTIAL: the left shift IS `ir_nat_mul m (2^k)`, run by the kernel. *** The \
          reference side is affordable here because ir_nat_mul recurses on its second argument and \
          2^10 is 1024 additions. At the shifts binary64 alignment needs (up to 2045) the \
@@ -58,62 +67,62 @@ pub(in crate::spec::core_spec) const BITS_WITNESSES: &[(&str, &str, &str)] = &[
     ),
     (
         "ir_nat_shl_zero_w",
-        "def ir_nat_shl_zero_w : Eq Nat (ir_nat_shl 9007199254740991 Nat.zero) 9007199254740991 := Eq.refl Nat 9007199254740991",
+        "def ir_nat_shl_zero_w : @Eq Nat (ir_nat_shl 9007199254740991 Nat.zero) 9007199254740991 := @Eq.refl Nat 9007199254740991",
         "A shift by zero is the identity. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_bitlen_w",
-        "def ir_nat_bitlen_w : Eq Nat (ir_nat_bitlen 9007199254740991) 53 := Eq.refl Nat 53",
+        "def ir_nat_bitlen_w : @Eq Nat (ir_nat_bitlen 9007199254740991) 53 := @Eq.refl Nat 53",
         "2^53 - 1 has 53 bits. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_bitlen_zero_w",
-        "def ir_nat_bitlen_zero_w : Eq Nat (ir_nat_bitlen Nat.zero) Nat.zero := Eq.refl Nat Nat.zero",
+        "def ir_nat_bitlen_zero_w : @Eq Nat (ir_nat_bitlen Nat.zero) Nat.zero := @Eq.refl Nat Nat.zero",
         "Zero has no bits — the case that makes the renormalising shift maximal, and the input \
          the scope document's cost anomaly was wrongly attributed to. DerivedProved, zero \
          axiom_deps.",
     ),
     (
         "ir_nat_bitlen_wide_w",
-        "def ir_nat_bitlen_wide_w : Eq Nat (ir_nat_bitlen (ir_nat_shl 9007199254740991 2045)) 2098 := Eq.refl Nat 2098",
+        "def ir_nat_bitlen_wide_w : @Eq Nat (ir_nat_bitlen (ir_nat_shl 9007199254740991 2045)) 2098 := @Eq.refl Nat 2098",
         "THE WIDEST INTERMEDIATE binary64 addition can build: a 53-bit significand aligned across \
          the maximum exponent distance, 2098 bits, scanned. Both the shift and the scan are \
          O(bits) and this runs. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_divmod_q_w",
-        "def ir_nat_divmod_q_w : Eq Nat (ir_dm_quot (ir_nat_divmod 17 5)) (ir_nat_div 17 5) := Eq.refl Nat 3",
+        "def ir_nat_divmod_q_w : @Eq Nat (ir_dm_quot (ir_nat_divmod 17 5)) (ir_nat_div 17 5) := @Eq.refl Nat 3",
         "*** DIFFERENTIAL: the restoring quotient IS ir_nat_div's quotient. *** Run by the \
          kernel, both sides computed. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_divmod_r_w",
-        "def ir_nat_divmod_r_w : Eq Nat (ir_dm_rem (ir_nat_divmod 17 5)) (ir_nat_rem 17 5) := Eq.refl Nat 2",
+        "def ir_nat_divmod_r_w : @Eq Nat (ir_dm_rem (ir_nat_divmod 17 5)) (ir_nat_rem 17 5) := @Eq.refl Nat 2",
         "*** DIFFERENTIAL: the restoring remainder IS ir_nat_rem. *** DerivedProved, zero \
          axiom_deps.",
     ),
     (
         "ir_nat_divmod_exact_w",
-        "def ir_nat_divmod_exact_w : Eq Nat (ir_dm_rem (ir_nat_divmod 4096 256)) (ir_nat_rem 4096 256) := Eq.refl Nat Nat.zero",
+        "def ir_nat_divmod_exact_w : @Eq Nat (ir_dm_rem (ir_nat_divmod 4096 256)) (ir_nat_rem 4096 256) := @Eq.refl Nat Nat.zero",
         "An exact division: remainder zero on both sides. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_divmod_one_w",
-        "def ir_nat_divmod_one_w : Eq Nat (ir_dm_quot (ir_nat_divmod 9007199254740991 (Nat.succ Nat.zero))) 9007199254740991 := Eq.refl Nat 9007199254740991",
+        "def ir_nat_divmod_one_w : @Eq Nat (ir_dm_quot (ir_nat_divmod 9007199254740991 (Nat.succ Nat.zero))) 9007199254740991 := @Eq.refl Nat 9007199254740991",
         "Division by one at a 53-bit dividend. The reference `ir_nat_div 9007199254740991 1` has \
          a 2^53 quotient and is roughly 39,700 years, so this row has NO reference column — it is \
          precisely the wall this module removes. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_divpow2_w",
-        "def ir_nat_divpow2_w : Eq Nat (ir_dm_quot (ir_nat_divpow2 9218868437227405312 52)) 2047 := Eq.refl Nat 2047",
+        "def ir_nat_divpow2_w : @Eq Nat (ir_dm_quot (ir_nat_divpow2 9218868437227405312 52)) 2047 := @Eq.refl Nat 2047",
         "The binary64 exponent-field extract: 0x7FF0000000000000 / 2^52 = 2047. The reference \
          `ir_nat_div` computes the same 2047 in 0.428 s where this is 0.011 s. DerivedProved, \
          zero axiom_deps.",
     ),
     (
         "ir_nat_divpow2_ref_w",
-        "def ir_nat_divpow2_ref_w : Eq Nat (ir_dm_quot (ir_nat_divpow2 9218868437227405312 52)) (ir_nat_div 9218868437227405312 (ir_nat_pow2 52)) := Eq.refl Nat 2047",
+        "def ir_nat_divpow2_ref_w : @Eq Nat (ir_dm_quot (ir_nat_divpow2 9218868437227405312 52)) (ir_nat_div 9218868437227405312 (ir_nat_pow2 52)) := @Eq.refl Nat 2047",
         "*** DIFFERENTIAL at the widest quotient the reference can still reach. *** Both sides \
          run by the kernel on a 9.2e18 dividend; the reference costs 2047 loop iterations and \
          this costs 53 steps. One doubling of the quotient doubles the reference and leaves this \
@@ -121,34 +130,34 @@ pub(in crate::spec::core_spec) const BITS_WITNESSES: &[(&str, &str, &str)] = &[
     ),
     (
         "ir_nat_divpow2_rem_w",
-        "def ir_nat_divpow2_rem_w : Eq Nat (ir_dm_rem (ir_nat_divpow2 9007199254740991 (Nat.succ Nat.zero))) (Nat.succ Nat.zero) := Eq.refl Nat (Nat.succ Nat.zero)",
+        "def ir_nat_divpow2_rem_w : @Eq Nat (ir_dm_rem (ir_nat_divpow2 9007199254740991 (Nat.succ Nat.zero))) (Nat.succ Nat.zero) := @Eq.refl Nat (Nat.succ Nat.zero)",
         "(2^53 - 1) mod 2 = 1 — the ODDNESS test the ties-to-even rule turns on, at the full \
          significand width. Through ir_nat_rem this is a 2^52 quotient, i.e. unreachable. \
          DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_mulb_w",
-        "def ir_nat_mulb_w : Eq Nat (ir_nat_mulb 12 34) (ir_nat_mul 12 34) := Eq.refl Nat 408",
+        "def ir_nat_mulb_w : @Eq Nat (ir_nat_mulb 12 34) (ir_nat_mul 12 34) := @Eq.refl Nat 408",
         "*** DIFFERENTIAL: shift-and-add multiplication IS ir_nat_mul. *** Affordable on the \
          reference side because 34 repeated additions is 34 steps. DerivedProved, zero \
          axiom_deps.",
     ),
     (
         "ir_nat_mulb_zero_w",
-        "def ir_nat_mulb_zero_w : Eq Nat (ir_nat_mulb 9007199254740991 Nat.zero) (ir_nat_mul 9007199254740991 Nat.zero) := Eq.refl Nat Nat.zero",
+        "def ir_nat_mulb_zero_w : @Eq Nat (ir_nat_mulb 9007199254740991 Nat.zero) (ir_nat_mul 9007199254740991 Nat.zero) := @Eq.refl Nat Nat.zero",
         "Multiplication by zero, both sides. The driver's ascent stops immediately because \
          `hi = 0 < 1`, so the accumulator is never touched. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_mulb_wide_w",
-        "def ir_nat_mulb_wide_w : Eq Nat (ir_nat_mulb 9007199254740991 9007199254740991) 81129638414606663681390495662081 := Eq.refl Nat 81129638414606663681390495662081",
+        "def ir_nat_mulb_wide_w : @Eq Nat (ir_nat_mulb 9007199254740991 9007199254740991) 81129638414606663681390495662081 := @Eq.refl Nat 81129638414606663681390495662081",
         "THE PRODUCT A BINARY64 MULTIPLY NEEDS: (2^53 - 1)^2, a 106-bit exact integer, in 0.042 s. \
          `ir_nat_mul` on the same operands is 2^53 additions and has no reference column here for \
          the same reason ir_nat_divmod_one_w has none. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_mulb_roundtrip_w",
-        "def ir_nat_mulb_roundtrip_w : Eq Nat (ir_dm_quot (ir_nat_divmod 81129638414606663681390495662081 9007199254740991)) 9007199254740991 := Eq.refl Nat 9007199254740991",
+        "def ir_nat_mulb_roundtrip_w : @Eq Nat (ir_dm_quot (ir_nat_divmod 81129638414606663681390495662081 9007199254740991)) 9007199254740991 := @Eq.refl Nat 9007199254740991",
         "…and dividing that 106-bit product back by one factor returns the other, so the \
          multiplication and the division are checked AGAINST EACH OTHER at the width the float \
          path actually uses, where neither has a reference column. DerivedProved, zero \
@@ -156,7 +165,7 @@ pub(in crate::spec::core_spec) const BITS_WITNESSES: &[(&str, &str, &str)] = &[
     ),
     (
         "ir_nat_shl_divpow2_w",
-        "def ir_nat_shl_divpow2_w : Eq Nat (ir_dm_quot (ir_nat_divpow2 (ir_nat_shl 9007199254740991 2045) 2045)) 9007199254740991 := Eq.refl Nat 9007199254740991",
+        "def ir_nat_shl_divpow2_w : @Eq Nat (ir_dm_quot (ir_nat_divpow2 (ir_nat_shl 9007199254740991 2045) 2045)) 9007199254740991 := @Eq.refl Nat 9007199254740991",
         "THE ALIGNMENT ROUND TRIP AT THE EXTREME: shift a 53-bit significand up by 2045 — the \
          maximum binary64 alignment distance, a 2098-bit value — and drop the 2045 bits again. \
          The shift and the drop are inverse, kernel-executed. Through `ir_nat_mul` and \
@@ -164,12 +173,12 @@ pub(in crate::spec::core_spec) const BITS_WITNESSES: &[(&str, &str, &str)] = &[
     ),
     (
         "ir_nat_min_w",
-        "def ir_nat_min_w : Eq Nat (ir_nat_min 53 1022) 53 := Eq.refl Nat 53",
+        "def ir_nat_min_w : @Eq Nat (ir_nat_min 53 1022) 53 := @Eq.refl Nat 53",
         "min. DerivedProved, zero axiom_deps.",
     ),
     (
         "ir_nat_max_w",
-        "def ir_nat_max_w : Eq Nat (ir_nat_max 53 1022) 1022 := Eq.refl Nat 1022",
+        "def ir_nat_max_w : @Eq Nat (ir_nat_max 53 1022) 1022 := @Eq.refl Nat 1022",
         "max. DerivedProved, zero axiom_deps.",
     ),
 ];

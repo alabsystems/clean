@@ -171,7 +171,7 @@ impl Environment {
             .map(|n| Level::param(n.clone()))
             .collect();
         let level_params = cv.level_params.clone();
-        let rel_name = Name::from_string(&format!("{container}.rel"));
+        let rel_name = container.clone().str("rel");
         let constructor_names = cv.constructor_names.clone();
 
         // ── Locals: Ā, B̄, R̄ ───────────────────────────────────────────────
@@ -379,13 +379,10 @@ impl Environment {
                     expected_binders
                 )));
             }
-            let suffix = ctor_name
-                .to_string()
-                .rsplit_once('.')
-                .map(|(_, s)| s.to_string())
-                .unwrap_or_else(|| ctor_name.to_string());
             ctors.push(Constructor {
-                name: Name::from_string(&format!("{rel_name}.{suffix}")),
+                name: ctor_name
+                    .with_parent(rel_name.clone())
+                    .ok_or_else(|| inv(format!("anonymous constructor in {container}")))?,
                 type_: b.finish(ct_full),
             });
         }

@@ -1,0 +1,5 @@
+(assume a0 (not (= (bvadd #b01 #b00) (bvadd #b00 #b01))))
+(step t1 (cl (= (not (= (bvadd #b01 #b00) (bvadd #b00 #b01))) false)) :rule evaluate)
+(step t2 (cl (not (= (not (= (bvadd #b01 #b00) (bvadd #b00 #b01))) false)) (not (not (= (bvadd #b01 #b00) (bvadd #b00 #b01)))) false) :rule equiv_pos2)
+(step t3 (cl (not false)) :rule false)
+(step t4 (cl) :rule resolution :premises (t2 t1 a0 t3))

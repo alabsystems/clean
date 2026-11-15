@@ -1823,6 +1823,11 @@ fn test_native_gate_rejects_provenance_digest_mismatch() {
     let sidecar_bytes = sidecar.to_bytes().expect("serialize provenance sidecar");
     replace_provenance_sidecar(&path, &sidecar_bytes);
     patch_first_constant_header_u32(&path, 28, provenance_idx);
+    // Control: with the matching digest the gate admits the shard, so the
+    // refusal below is the digest's.
+    patch_first_constant_header_u32(&path, 24, sidecar_digest);
+    let admitted = verify_native_shard(&path).expect("matching provenance digest is admitted");
+    assert!(admitted.violations.is_empty(), "{admitted:?}");
     patch_first_constant_header_u32(&path, 24, sidecar_digest ^ 1);
 
     let err = verify_native_shard(&path).expect_err("bad provenance digest should fail closed");

@@ -19,8 +19,10 @@
 //!     invariance -> closed bridge (the rhs-closedness step).
 //!   * `hiota_generic` — the env-GENERIC `iota_step env e e' -> is_closed_at e d
 //!     -> is_closed_at e' d`, proved by inverting `iota_reduct` via the in-tree
-//!     CPS inverter `iota_reduct_some_inv` (five opt_bind levels) and composing
+//!     canonical guarded Type view (five lookups plus actual tail guards), composing
 //!     `apply_spine_preserves_closed` three times over the reduct segments.
+//!     The schematic RHS's structural closedness survives its actual universe
+//!     instantiation by `instL_preserves_closed_at`; raw RHS equality is not assumed.
 //!   * `hiota` — the PINNED form `iota_reduces e e' -> is_closed_at e d ->
 //!     is_closed_at e' d` (carrying `i3 : RecEnvClosed (red_rec the_red_env)` /
 //!     `i4 : RecEnvLiftClosed (red_rec the_red_env)`), the literal shape the beta
@@ -581,12 +583,10 @@ impl Specification {
         })?;
 
         // ================================================================
-        // Type-valued CPS inverters. The in-tree opt_bind_some_inv /
-        // iota_reduct_some_inv conclude in `C : Prop` (they discriminate none
-        // vs some via option_none_ne_some, whose R is a Prop). hiota_generic must
-        // conclude in `is_closed_at e' d`, which is Type-valued, so it needs the
-        // Type-valued mirrors below (none-vs-some discriminated via opt_is_none +
-        // Empty.rec, the Type-valued no-confusion).
+        // Historical Type-valued names remain available. The iota alias now
+        // reuses the earlier canonical guarded Type view; its Type-valued
+        // conclusion is needed because is_closed_at itself lives in Type.
+        // The generic opt_bind alias below is unchanged.
         // ================================================================
 
         // opt_bind_some_inv_T: Type-valued CPS inversion of opt_bind.
@@ -641,30 +641,17 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
 
-        // iota_reduct_some_inv_T: Type-valued mirror of iota_reduct_some_inv
-        // (five nested opt_bind_some_inv_T). Recovers the five intermediate
-        // witnesses + lookup equations + reduct equation, delivered to a
-        // Type-valued continuation.
+        // Preserve the historical Type alias and callback order, but reuse
+        // the canonical guarded view instead of duplicating its lookup proof.
         {
             let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
             let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
             let extras = format!("(list_drop (Nat.succ {major_idx}) (kapp_args e))");
             let fields = "(list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major))";
             let prefix = format!("(list_take {prefix_n} (kapp_args e))");
+            let rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))";
             let reduct = format!(
-                "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} (recrule_rhs rule))))"
-            );
-
-            let l6 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct})");
-            let l5 = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {l6})"
-            );
-            let l4 = format!(
-                "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {l5})"
-            );
-            let l3 = format!("(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e))) {l4})");
-            let l2 = format!(
-                "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {l3})"
+                "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} {rhs})))"
             );
 
             let kont = format!(
@@ -678,32 +665,7 @@ impl Specification {
                  C)"
             );
 
-            let value = format!(
-                "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Type) \
-                 (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) \
-                 (k : {kont}) => \
-                 opt_bind_some_inv_T Name KExpr (kexpr_const_name (kapp_fn e)) {l2} e' C h \
-                 (fun (recname : Name) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-                 (h1r : Eq (OptionType KExpr) ({l2} recname) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_T RecMeta KExpr (recmeta_for env recname) {l3} e' C h1r \
-                 (fun (meta : RecMeta) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h2r : Eq (OptionType KExpr) ({l3} meta) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_T KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e))) {l4} e' C h2r \
-                 (fun (major : KExpr) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-                 (h3r : Eq (OptionType KExpr) ({l4} major) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_T Name KExpr (kexpr_const_name (kapp_fn major)) {l5} e' C h3r \
-                 (fun (cname : Name) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h4r : Eq (OptionType KExpr) ({l5} cname) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_T RecRule KExpr (recrule_for env recname cname) {l6} e' C h4r \
-                 (fun (rule : RecRule) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) ({l6} rule) (OptionType.some KExpr e')) => \
-                 k recname meta major cname rule h1 h2 h3 h4 h5 h5r))))))"
-            );
+            let value = "iota_reduct_some_inv_type".to_string();
 
             self.add_definition(SpecDefinition {
                 name: "iota_reduct_some_inv_T".to_string(),
@@ -713,14 +675,15 @@ impl Specification {
                 ),
                 value_src: Some(value),
                 is_axiom: false,
-                description: "Type-valued mirror of iota_reduct_some_inv: from iota_reduct env e = some e', recover the recursor name, metadata, major premise, constructor name and rule with each lookup equation and the reduct equation, delivered to a Type-valued continuation. Five nested opt_bind_some_inv_T. DerivedProved, zero axiom_deps.".to_string(),
+                description: "Type-valued mirror of iota_reduct_some_inv: from iota_reduct env e = some e', recover the recursor name, metadata, major premise, constructor name and rule with each lookup equation and the reduct equation, delivered to a Type-valued continuation. Canonical guarded view alias; computed RHS uses the stored signature and actual head universes. DerivedProved, zero axiom_deps.".to_string(),
                 category: AxiomCategory::DerivedLemma,
                 proof_status: ProofStatus::DerivedProved,
                 elaborated_type: None,
                 elaborated_value: None,
                 dependencies: Some(HashSet::from([
                     "iota_reduct".to_string(),
-                    "opt_bind_some_inv_T".to_string(),
+                    "iota_reduct_some_inv_type".to_string(),
+                    "recursor_rhs_instance".to_string(),
                     "kexpr_const_name".to_string(),
                     "recmeta_for".to_string(),
                     "recrule_for".to_string(),
@@ -731,7 +694,7 @@ impl Specification {
 
         // ================================================================
         // hiota_generic: the env-generic iota-closedness preservation, via the
-        // Type-valued CPS inverter iota_reduct_some_inv_T (five opt_bind levels).
+        // canonical guarded Type-valued CPS view via the historical alias.
         // ================================================================
         {
             // The arithmetic + reduct sub-terms of iota_reduct (verbatim from its
@@ -742,8 +705,10 @@ impl Specification {
             let extras = format!("(list_drop (Nat.succ {major_idx}) (kapp_args e))");
             let fields = "(list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major))";
             let prefix = format!("(list_take {prefix_n} (kapp_args e))");
+            let rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))";
+            let subst = "(paramSubstN (kconst_params (recmeta_signature meta)) (kexpr_const_levels (kapp_fn e)))";
             let reduct = format!(
-                "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} (recrule_rhs rule))))"
+                "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} {rhs})))"
             );
 
             // The continuation delivered to iota_reduct_some_inv.
@@ -757,17 +722,18 @@ impl Specification {
                  (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e')) => \
                  Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) {reduct} e' \
                  (option_some_inj KExpr {reduct} e' h5r) \
-                 (apply_spine_preserves_closed {extras} (apply_spine {fields} (apply_spine {prefix} (recrule_rhs rule))) d \
+                 (apply_spine_preserves_closed {extras} (apply_spine {fields} (apply_spine {prefix} {rhs})) d \
                  (list_drop_preserves_closed (Nat.succ {major_idx}) (kapp_args e) d (kapp_args_closed e d hc)) \
-                 (apply_spine_preserves_closed {fields} (apply_spine {prefix} (recrule_rhs rule)) d \
+                 (apply_spine_preserves_closed {fields} (apply_spine {prefix} {rhs}) d \
                  (list_drop_preserves_closed (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major) d \
                  (kapp_args_closed major d \
                  (list_head_closed (list_drop {major_idx} (kapp_args e)) major d h3 \
                  (list_drop_preserves_closed {major_idx} (kapp_args e) d (kapp_args_closed e d hc))))) \
-                 (apply_spine_preserves_closed {prefix} (recrule_rhs rule) d \
+                 (apply_spine_preserves_closed {prefix} {rhs} d \
                  (list_take_preserves_closed {prefix_n} (kapp_args e) d (kapp_args_closed e d hc)) \
+                 (instL_preserves_closed_at {subst} (recrule_rhs rule) d \
                  (lift_invariant_closed (recrule_rhs rule) d Nat.zero \
-                 (recenv_lift_closed_rhs env recname cname rule d (Nat.succ Nat.zero) i4 h5)))))"
+                 (recenv_lift_closed_rhs env recname cname rule d (Nat.succ Nat.zero) i4 h5))))))"
             );
 
             let value = format!(
@@ -790,10 +756,10 @@ impl Specification {
                     "Env-generic iota-reduction preserves closedness: iota_step env e e' -> is_closed_at e d ",
                     "-> is_closed_at e' d, conditional on the carried closure interfaces i3 : RecEnvClosed env ",
                     "(unused here, threaded for parity) and i4 : RecEnvLiftClosed env (the rule-rhs is lift-",
-                    "invariant hence closed). DerivedProved by inverting iota_reduct via iota_reduct_some_inv ",
+                    "invariant hence closed at d, then instL_preserves_closed_at proves the actual instance closed). DerivedProved via the canonical guarded iota view ",
                     "(five opt_bind levels), then composing apply_spine_preserves_closed three times over the ",
                     "extras/fields/prefix segments (each closed by list_{drop,take}_preserves_closed + ",
-                    "kapp_args_closed), with the rhs closed via lift_invariant_closed on recenv_lift_closed_rhs. ",
+                    "kapp_args_closed), with schematic RHS closedness projected from recenv_lift_closed_rhs and transported by instL_preserves_closed_at. ",
                     "i3/i4 are TYPE hypotheses, not axioms. Zero axiom_deps. Stage 2B-i."
                 )
                 .to_string(),
@@ -813,6 +779,8 @@ impl Specification {
                     "list_head_closed".to_string(),
                     "apply_spine_preserves_closed".to_string(),
                     "lift_invariant_closed".to_string(),
+                    "instL_preserves_closed_at".to_string(),
+                    "recursor_rhs_instance".to_string(),
                     "option_some_inj".to_string(),
                     "Eq.substType".to_string(),
                     "is_closed_at".to_string(),
@@ -950,11 +918,11 @@ impl Specification {
             let reduct = "(apply_spine (kapp_args e) val)";
             let l3 = format!("(fun (val : KExpr) => OptionType.some KExpr {reduct})");
             let l2 =
-                format!("(fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) {l3})");
+                format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3})");
             let kont = format!(
                 "(forall (dname : Name) (val : KExpr), \
                  Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) -> \
-                 Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val) -> \
+                 Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
                  Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
                  C)"
             );
@@ -966,9 +934,9 @@ impl Specification {
                  (fun (dname : Name) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
                  (h1r : Eq (OptionType KExpr) ({l2} dname) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_T KExpr KExpr (defval_for env dname) {l3} e' C h1r \
+                 opt_bind_some_inv_T KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3} e' C h1r \
                  (fun (val : KExpr) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) ({l3} val) (OptionType.some KExpr e')) => \
                  k dname val h1 h2 h2r))"
             );
@@ -989,7 +957,7 @@ impl Specification {
                     "delta_reduct".to_string(),
                     "opt_bind_some_inv_T".to_string(),
                     "kexpr_const_name".to_string(),
-                    "defval_for".to_string(),
+                    "kdef_value_at".to_string(),
                     "apply_spine".to_string(),
                 ])),
                 axiom_deps: HashSet::new(),
@@ -1012,13 +980,13 @@ impl Specification {
                     "delta_reduct_some_inv_T env e e' (is_closed_at e' d) hstep ",
                     "(fun (dname : Name) (val : KExpr) ",
                     "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) ",
-                    "(h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) ",
+                    "(h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) ",
                     "(h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => ",
                     "Eq.substType KExpr (fun (z : KExpr) => is_closed_at z d) (apply_spine (kapp_args e) val) e' ",
                     "(option_some_inj KExpr (apply_spine (kapp_args e) val) e' h2r) ",
                     "(apply_spine_preserves_closed (kapp_args e) val d (kapp_args_closed e d hc) ",
                     "(lift_invariant_closed val d Nat.zero ",
-                    "(defenv_lift_closed_val env dname val d (Nat.succ Nat.zero) i6 h2))))"
+                    "(defenv_lift_closed_value_at env dname (kexpr_const_levels (kapp_fn e)) val d (Nat.succ Nat.zero) i6 h2))))"
                 )
                 .to_string(),
             ),
@@ -1033,7 +1001,7 @@ impl Specification {
                 "delta_reduct_some_inv_T".to_string(),
                 "DefEnvClosed".to_string(),
                 "DefEnvLiftClosed".to_string(),
-                "defenv_lift_closed_val".to_string(),
+                "defenv_lift_closed_value_at".to_string(),
                 "kapp_args_closed".to_string(),
                 "apply_spine_preserves_closed".to_string(),
                 "lift_invariant_closed".to_string(),

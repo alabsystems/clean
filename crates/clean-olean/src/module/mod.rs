@@ -32,7 +32,9 @@
 mod analysis;
 mod constants;
 mod extensions;
+mod extensions_structure;
 mod readers;
+pub(crate) mod typed_extensions;
 
 #[cfg(test)]
 mod tests;
@@ -41,6 +43,7 @@ pub use analysis::{ArrayAnalysis, ElementInfo, RootAnalysis};
 pub(crate) use extensions::{
     LEAN_ALIAS_EXTENSION, LEAN_CLASS_EXTENSION, LEAN_INSTANCE_EXTENSION, LEAN_SIMP_EXTENSION,
 };
+pub(crate) use extensions_structure::is_structure_extension_name;
 
 use crate::expr::ParsedExpr;
 
@@ -226,7 +229,7 @@ impl DefinitionSafety {
 }
 
 /// Extra data from InductiveVal
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InductiveValData {
     pub num_params: u32,
     pub num_indices: u32,
@@ -241,7 +244,7 @@ pub struct InductiveValData {
 }
 
 /// Extra data from ConstructorVal
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConstructorValData {
     /// Name of the inductive type
     pub induct: String,
@@ -387,7 +390,7 @@ pub enum ConstantKind {
 ///
 /// This enum is marked `#[non_exhaustive]` to allow future data representations
 /// without breaking downstream code. Always include a wildcard arm in match expressions.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum ParsedExtensionEntryData {
     /// Tagged scalar or null pointer value.
@@ -425,7 +428,7 @@ impl ParsedAttrKind {
     /// Returns `None` for tags outside the known range so callers can
     /// distinguish "unknown / malformed" from a recognized kind without
     /// fabricating one.
-    pub fn from_tag(tag: u8) -> Option<Self> {
+    pub(crate) fn from_tag(tag: u8) -> Option<Self> {
         match tag {
             0 => Some(ParsedAttrKind::Global),
             1 => Some(ParsedAttrKind::Local),
@@ -467,6 +470,56 @@ pub struct ParsedInstanceEntry {
     /// determined; `Lean/Meta/SynthInstance.lean:337` consumes it verbatim
     /// when scheduling sub-goals.
     pub synth_order: Vec<u64>,
+}
+
+/// One field of a decoded `Lean.structureExt` entry
+/// (`Lean/Structure.lean`, `StructureFieldInfo`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedStructureField {
+    /// The field's single-component name (`StructureFieldInfo.fieldName`).
+    pub field_name: String,
+    /// The projection function for the field (`StructureFieldInfo.projFn`).
+    pub proj_fn: String,
+    /// For a subobject field (an embedded parent), the parent structure's
+    /// name (`StructureFieldInfo.subobject?`).
+    pub subobject: Option<String>,
+    /// The field's binder info as Lean's `BinderInfo` tag: `default = 0`,
+    /// `implicit = 1`, `strictImplicit = 2`, `instImplicit = 3`.
+    pub binder_info: u8,
+}
+
+/// One parent of a decoded `Lean.structureExt` entry
+/// (`Lean/Structure.lean`, `StructureParentInfo`), in `extends` order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedStructureParent {
+    /// The parent structure's name.
+    pub struct_name: String,
+    /// Whether the parent is represented as a SUBOBJECT field (`toParent`).
+    /// A parent that is not (a diamond resolved by copying) has its fields
+    /// flattened into the child directly.
+    pub subobject: bool,
+    /// The projection reaching the parent (`Child.toParent` for a subobject).
+    pub proj_fn: String,
+}
+
+/// A decoded `Lean.structureExt` entry: one `structure`/`class` declaration's
+/// field table and `extends` parents (`Lean/Structure.lean`,
+/// `StructureInfo`). This is the metadata Lean's own `structure`-instance
+/// elaborator reads to route an inherited field (`le := …` on a
+/// `LinearOrder`) into the right `toParent` subobject; without it an
+/// imported structure had no field-name table and no parents at all.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedStructureEntry {
+    /// The structure's name (`StructureInfo.structName`).
+    pub struct_name: String,
+    /// The DIRECT fields in constructor order (`StructureInfo.fieldNames`):
+    /// a subobject counts as one field, exactly as the constructor sees it.
+    pub field_names: Vec<String>,
+    /// Per-field info, sorted by field name as Lean stores it
+    /// (`StructureInfo.fieldInfo`).
+    pub fields: Vec<ParsedStructureField>,
+    /// Parents in `extends` order (`StructureInfo.parentInfo`).
+    pub parents: Vec<ParsedStructureParent>,
 }
 
 /// A decoded `Lean.classExtension` entry: one type-class declaration persisted
@@ -571,6 +624,8 @@ pub enum ParsedExtensionEntry {
     Instance(ParsedInstanceEntry),
     /// Decoded type-class declaration from `Lean.classExtension`.
     Class(ParsedClassEntry),
+    /// Decoded structure metadata from `Lean.structureExt`.
+    Structure(ParsedStructureEntry),
     /// Decoded `@[simp]` registration from `Lean.Meta.simpExtension`.
     Simp(ParsedSimpEntry),
     /// Decoded `export`/`alias` registration from `Lean.aliasExtension`:

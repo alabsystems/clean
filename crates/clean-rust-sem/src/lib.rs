@@ -56,6 +56,8 @@ pub mod proof_obligation;
 pub mod proof_obligations;
 pub mod shared_memory_model;
 pub mod source;
+pub mod source_identity_kernel;
+pub mod source_word64_addition_kernel;
 pub mod stack;
 pub mod stacked_borrows;
 pub mod stmt;

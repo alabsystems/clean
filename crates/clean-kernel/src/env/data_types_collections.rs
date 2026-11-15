@@ -632,6 +632,81 @@ impl Environment {
         Ok(())
     }
 
+    /// Ensure `Char.ofNat` (with `Char.ofNatAux` and `Char.utf8Size`) is
+    /// available in the form `with_prelude` seeds, so an environment built
+    /// from the focused public initializers can expand string literals.
+    ///
+    /// The kernel lowers a string literal to `String.ofList [Char.ofNat c, …]`
+    /// and fires that expansion only when both heads are the kernel's own
+    /// definitions, decided by content (`native_fold_authority.rs`;
+    /// `TypeChecker::string_literal_admitted`). `init_string` pulls in only the
+    /// `Char` structure (`init_char`), so an environment assembled from it has
+    /// no `Char.ofNat`, the expansion never fires there, and every proof that
+    /// needs a literal's characters is refused. This call adds what such an
+    /// environment lacks and grants nothing a user declaration could: a
+    /// `Char.ofNat` the environment already holds is left in place (the seed
+    /// is lookup-guarded), and if it is not the kernel's own it stays refused.
+    ///
+    /// Installs, through the existing idempotent initializers and
+    /// registrars, what the `init_char_defs` bodies mention, then those three
+    /// definitions:
+    ///
+    /// - `init_bool`: `Bool`, `Bool.rec` (the `Char.utf8Size` fallback);
+    /// - `init_char`: `Char`, `Char.mk`, `Char.toNat`, `Nat.isValidChar`, the
+    ///   BitVec-backed `UInt32` carrier (`UInt32.ofBitVec`, `BitVec.ofNatLT`),
+    ///   `And`/`Or`, and `OfNat`/`HPow` for the numerals;
+    /// - `init_dite`: `dite`, `Decidable`, `Not`;
+    /// - `register_decidable_and_instance` / `register_decidable_or_instance`:
+    ///   `instDecidableAnd`, `instDecidableOr`;
+    /// - `init_nat_decidable_ord`: `Nat.decLt`, `instLTNat`, and the
+    ///   `Nat.ble`/`Nat.le` bridge `Nat.le_of_ble_eq_true`;
+    /// - `register_nat_le_trans_proof`: `Nat.le_trans` (lookup-guarded, so it
+    ///   adds nothing when an earlier step already brought it in).
+    ///
+    /// These are the registrars `with_prelude` uses, in its relative order, and
+    /// each declaration they add is the one `with_prelude` holds under that
+    /// name; `Char.ofNat`'s closure digest is therefore the pinned
+    /// `clean-prelude` row, and no new canonical world is needed. Both are
+    /// measured, not assumed (`char_of_nat_init_tests`).
+    ///
+    /// The two `Decidable` combinators are registered directly rather than
+    /// through `init_decidable_eq`, which also installs a `DecidableEq`
+    /// instance for every carrier already present (`Int`, `String`, `BEq`, …)
+    /// and then latches: through it, what this call leaves would depend on
+    /// whether it ran before or after the caller's other initializers
+    /// (measured on ty's shape: seven constants).
+    ///
+    /// `init_string` does not call this: it runs in `with_prelude`'s core
+    /// phase, before the decidability stack exists, and pulling that stack
+    /// forward would reorder the prelude every pinned digest was minted from,
+    /// for consumers that need the `String` type and never a literal's
+    /// characters.
+    ///
+    /// Import mode (`suppress_lossy_structure_stubs`) installs nothing: `Char`
+    /// is withheld there and the genuine `Char.ofNat` imports through the
+    /// checked `.olean` path, as `init_char_defs` already assumes.
+    ///
+    /// # Contract
+    ///
+    /// ENSURES: Outside import mode, on success `Char.ofNat` is present; when
+    ///          the environment held none before, `Char.ofNatAux`,
+    ///          `Char.ofNat` and `Char.utf8Size` are `with_prelude`'s.
+    /// ENSURES: Idempotent — every step is flag- or lookup-guarded, so a
+    ///          repeated call, or a call on `with_prelude`, adds nothing.
+    pub fn init_char_of_nat(&mut self) -> Result<(), EnvError> {
+        if self.suppress_lossy_structure_stubs {
+            return Ok(());
+        }
+        self.init_bool()?;
+        self.init_char()?;
+        self.init_dite()?;
+        self.register_decidable_and_instance()?;
+        self.register_decidable_or_instance()?;
+        self.init_nat_decidable_ord()?;
+        self.register_nat_le_trans_proof()?;
+        self.init_char_defs()
+    }
+
     /// Check if Char has been initialized
     ///
     /// # Contract
@@ -2280,181 +2355,87 @@ impl Environment {
     /// Initialize `List.mapM` — the monadic list traversal.
     ///
     /// ```text
-    /// List.mapM {m : Type u → Type v} {α β : Type u}
+    /// List.mapM {m : Type u → Type v} [Monad m] {α β : Type u}
     ///   (f : α → m β) (l : List α) : m (List β)
     /// ```
     ///
-    /// Threads the (implicit) monad's `Bind.bind` / `Pure.pure` over the list,
-    /// collecting the results in order.  This is the exact shape
-    /// `Semantics/Control.lean` / `Borrow.lean` use as
-    /// `argIds.mapM Sem.lookupValue`, where
-    /// `Sem = StateT MachineState (Except SemError)`.  Modelled directly on
-    /// `clean`'s do-notation desugaring, which lowers `>>=` / `pure` to the
-    /// bare `Bind.bind` / `Pure.pure` constants (`m` implicit, no `[Monad m]`
-    /// instance argument).
+    /// Lean's binder order (`{m} [Monad m] {α} {β}`); Clean keeps `α` and `β`
+    /// in one universe. The body threads the `[Monad m]` binder's `bind` /
+    /// `pure` projections over the list:
     ///
     ///   mapM f []         = pure []
     ///   mapM f (hd :: tl) = f hd  >>= fun b =>
     ///                       mapM f tl >>= fun bs =>
     ///                       pure (b :: bs)
     ///
-    /// Defined as a genuine `List.rec` elimination — NOT an axiom.  Its only
-    /// non-prelude-inductive dependencies are the `Bind.bind` / `Pure.pure`
-    /// monad-class constants (registered by `init_monad_classes`), so this MUST
-    /// run *after* `init_monad_classes` — hence it lives here in
-    /// `init_prelude_extended` rather than in `init_list_combinators`
-    /// (prelude-core, before the monad classes exist).  With `List.rec`, the
-    /// cons-case induction hypothesis `ih : m (List β)` *is* `mapM f tl`, so the
-    /// recursion is structural and accepted by the kernel's eliminator check.
-    /// Motive returns `m (List β) : Type v`, so we instantiate
-    /// `List.rec.{succ v, u}`.  Idempotent.
+    /// Defined as a genuine `List.rec` elimination — NOT an axiom. Until
+    /// 2026-09-28 it had no `[Monad m]` binder and used the instance-less
+    /// `Pure.pure` / `Bind.bind` AXIOMS, which proved `False`
+    /// (`data_monad_classes.rs`). With `List.rec`, the cons-case induction
+    /// hypothesis `ih : m (List β)` *is* `mapM f tl`, so the recursion is
+    /// structural. Motive returns `m (List β) : Type v`, so `List.rec.{succ
+    /// v, u}`. Idempotent.
     pub fn init_list_mapm(&mut self) -> Result<(), EnvError> {
+        use crate::env::data_monad_classes::monad_inst;
+        use crate::env::monad_term::{cst, lparam, monad_kind, type_at, Tele};
         if self.list_mapm_init {
             return Ok(());
         }
+        self.init_monad_classes()?;
 
-        let u = Name::from_string("u");
-        let v = Name::from_string("v");
-        let u_lvl = Level::param(u.clone());
-        let v_lvl = Level::param(v.clone());
-        let type_u = Expr::from_kind(ExprKind::Sort(Level::succ(u_lvl.clone())));
-        let type_v = Expr::from_kind(ExprKind::Sort(Level::succ(v_lvl.clone())));
-        let list_const_u = Expr::const_(Name::from_string("List"), vec![u_lvl.clone()]);
+        let (u, v) = (lparam("u"), lparam("v"));
+        let list = |a: &Expr| Expr::app(cst("List", std::slice::from_ref(&u)), a.clone());
 
-        let mapm_rec = Expr::const_(
-            Name::from_string("List.rec"),
-            vec![Level::succ(v_lvl.clone()), u_lvl.clone()],
-        );
-        let m_ty = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-        let bind_const = Expr::const_(
-            Name::from_string("Bind.bind"),
-            vec![u_lvl.clone(), v_lvl.clone()],
-        );
-        let pure_const = Expr::const_(
-            Name::from_string("Pure.pure"),
-            vec![u_lvl.clone(), v_lvl.clone()],
-        );
+        let mut t = Tele::new();
+        let m = t.imp(monad_kind(&u, &v));
+        let inst = t.inst(Expr::app(cst("Monad", &[u.clone(), v.clone()]), m.clone()));
+        let mi = monad_inst(&u, &v, &m, &inst);
+        let alpha = t.imp(type_at(&u));
+        let beta = t.imp(type_at(&u));
+        let f = t.arg(Expr::arrow(alpha.clone(), mi.at(beta.clone())));
+        let l = t.arg(list(&alpha));
+        let m_list_beta = mi.at(list(&beta));
 
-        // ── Type ──────────────────────────────────────────────────────
-        // {m} → {α} → {β} → (α → m β) → List α → m (List β)
-        let mapm_type = {
-            let mut b = EnvDeclBuilder::new();
-            let (m_id, m) = b.fresh_local(m_ty.clone());
-            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-            let (beta_id, beta) = b.fresh_local(type_u.clone());
-            let m_beta = Expr::app(m.clone(), beta.clone());
-            let f_ty = Expr::pi(BinderInfo::Default, alpha.clone(), m_beta.clone());
-            let (f_id, _f) = b.fresh_local(f_ty.clone());
-            let list_alpha = Expr::app(list_const_u.clone(), alpha.clone());
-            let (l_id, _l) = b.fresh_local(list_alpha.clone());
-            let list_beta = Expr::app(list_const_u.clone(), beta.clone());
-            let m_list_beta = Expr::app(m.clone(), list_beta.clone());
-            let e = m_list_beta;
-            let e = b.mk_pi(l_id, BinderInfo::Default, list_alpha.clone(), e);
-            let e = b.mk_pi(f_id, BinderInfo::Default, f_ty.clone(), e);
-            let e = b.mk_pi(beta_id, BinderInfo::Implicit, type_u.clone(), e);
-            let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
-            let e = b.mk_pi(m_id, BinderInfo::Implicit, m_ty.clone(), e);
-            b.finish(e)
+        let motive = {
+            let mut t2 = Tele::child(&t);
+            let _ = t2.arg(list(&alpha));
+            t2.lam(m_list_beta.clone())
         };
-
-        // ── Value ─────────────────────────────────────────────────────
-        let mapm_value = {
-            let mut b = EnvDeclBuilder::new();
-            let (m_id, m) = b.fresh_local(m_ty.clone());
-            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-            let (beta_id, beta) = b.fresh_local(type_u.clone());
-            let m_beta = Expr::app(m.clone(), beta.clone());
-            let f_ty = Expr::pi(BinderInfo::Default, alpha.clone(), m_beta.clone());
-            let (f_id, f) = b.fresh_local(f_ty.clone());
-            let list_alpha = Expr::app(list_const_u.clone(), alpha.clone());
-            let (l_id, l) = b.fresh_local(list_alpha.clone());
-
-            let list_beta = Expr::app(list_const_u.clone(), beta.clone());
-            let m_list_beta = Expr::app(m.clone(), list_beta.clone());
-
-            // motive: λ (_ : List α) => m (List β)
-            let (mot_id, _mot) = b.fresh_local(list_alpha.clone());
-            let motive = b.mk_lam(
-                mot_id,
-                BinderInfo::Default,
-                list_alpha.clone(),
-                m_list_beta.clone(),
-            );
-
-            // nil case: @Pure.pure m (List β) (@List.nil β)
-            let list_nil_beta = Expr::app(
-                Expr::const_(Name::from_string("List.nil"), vec![u_lvl.clone()]),
-                beta.clone(),
-            );
-            let nil_case = Expr::apps(
-                pure_const.clone(),
-                [m.clone(), list_beta.clone(), list_nil_beta],
-            );
-
-            // cons case:
-            //   λ (hd : α) (_ : List α) (ih : m (List β)) =>
-            //     @Bind.bind m β (List β) (f hd)
-            //       (fun (bv : β) =>
-            //         @Bind.bind m (List β) (List β) ih
-            //           (fun (bs : List β) =>
-            //             @Pure.pure m (List β) (@List.cons β bv bs)))
-            let (hd_id, hd) = b.fresh_local(alpha.clone());
-            let (tl_id, _tl) = b.fresh_local(list_alpha.clone());
-            let (ih_id, ih) = b.fresh_local(m_list_beta.clone());
-
-            // innermost: fun (bs : List β) => pure (bv :: bs)
-            let (bv_id, bv) = b.fresh_local(beta.clone());
-            let (bs_id, bs) = b.fresh_local(list_beta.clone());
-            let cons_bb = Expr::apps(
-                Expr::const_(Name::from_string("List.cons"), vec![u_lvl.clone()]),
-                [beta.clone(), bv.clone(), bs.clone()],
-            );
-            let pure_cons = Expr::apps(pure_const.clone(), [m.clone(), list_beta.clone(), cons_bb]);
-            let inner_lam = b.mk_lam(bs_id, BinderInfo::Default, list_beta.clone(), pure_cons);
-
-            // middle: @Bind.bind m (List β) (List β) ih (fun bs => …)
-            let bind_ih = Expr::apps(
-                bind_const.clone(),
-                [
-                    m.clone(),
-                    list_beta.clone(),
-                    list_beta.clone(),
-                    ih.clone(),
-                    inner_lam,
-                ],
-            );
-            let mid_lam = b.mk_lam(bv_id, BinderInfo::Default, beta.clone(), bind_ih);
-
-            // outer: @Bind.bind m β (List β) (f hd) (fun bv => …)
-            let f_hd = Expr::app(f.clone(), hd.clone());
-            let bind_fhd = Expr::apps(
-                bind_const.clone(),
-                [m.clone(), beta.clone(), list_beta.clone(), f_hd, mid_lam],
-            );
-
-            let cons_case = b.mk_lam(ih_id, BinderInfo::Default, m_list_beta.clone(), bind_fhd);
-            let cons_case = b.mk_lam(tl_id, BinderInfo::Default, list_alpha.clone(), cons_case);
-            let cons_case = b.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), cons_case);
-
-            // @List.rec α motive nil_case cons_case l
-            let body = Expr::apps(
-                mapm_rec.clone(),
-                [alpha.clone(), motive, nil_case, cons_case, l.clone()],
-            );
-            let e = b.mk_lam(l_id, BinderInfo::Default, list_alpha.clone(), body);
-            let e = b.mk_lam(f_id, BinderInfo::Default, f_ty.clone(), e);
-            let e = b.mk_lam(beta_id, BinderInfo::Implicit, type_u.clone(), e);
-            let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
-            let e = b.mk_lam(m_id, BinderInfo::Implicit, m_ty.clone(), e);
-            b.finish(e)
+        let nil_case = mi.pure(
+            list(&beta),
+            Expr::app(cst("List.nil", std::slice::from_ref(&u)), beta.clone()),
+        );
+        let cons_case = {
+            let mut t2 = Tele::child(&t);
+            let hd = t2.arg(alpha.clone());
+            let _tl = t2.arg(list(&alpha));
+            let ih = t2.arg(m_list_beta.clone());
+            let mid = {
+                let mut t3 = Tele::child(&t2);
+                let bv = t3.arg(beta.clone());
+                let inner = {
+                    let mut t4 = Tele::child(&t3);
+                    let bs = t4.arg(list(&beta));
+                    let cons = Expr::apps(
+                        cst("List.cons", std::slice::from_ref(&u)),
+                        [beta.clone(), bv, bs],
+                    );
+                    t4.lam(mi.pure(list(&beta), cons))
+                };
+                t3.lam(mi.bind(list(&beta), list(&beta), ih, inner))
+            };
+            t2.lam(mi.bind(beta.clone(), list(&beta), Expr::app(f.clone(), hd), mid))
         };
+        let body = Expr::apps(
+            cst("List.rec", &[Level::succ(v.clone()), u.clone()]),
+            [alpha.clone(), motive, nil_case, cons_case, l],
+        );
 
         self.add_decl(Declaration::Definition {
             name: Name::from_string("List.mapM"),
-            level_params: vec![u, v],
-            type_: mapm_type,
-            value: mapm_value,
+            level_params: vec![Name::from_string("u"), Name::from_string("v")],
+            type_: t.pi(m_list_beta.clone()),
+            value: t.lam(body),
             is_reducible: true,
         })?;
 
@@ -2462,6 +2443,10 @@ impl Environment {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "char_of_nat_init_tests.rs"]
+mod char_of_nat_init_tests;
 
 #[cfg(test)]
 mod list_mem_tests {
@@ -3062,23 +3047,18 @@ mod list_combinator_tests {
             .expect("List.mapM registered");
         assert!(info.value.is_some(), "List.mapM must be a Definition");
 
-        // Its axiom closure is exactly the monad-class constants it threads —
-        // no other (e.g. `sorry`) axiom leaks in.
+        // Its axiom closure is EMPTY: `Pure.pure` / `Bind.bind` are class
+        // projections applied to the `[Monad m]` binder since 2026-09-28 (until
+        // then they were value-less axioms that proved `False`, and this test
+        // admitted them into the closure).
         let deps = env
             .axiom_deps(&Name::from_string("List.mapM"))
             .expect("List.mapM registered ⇒ axiom_deps Some");
         let mut dep_names: Vec<String> = deps.iter().map(|n| n.to_string()).collect();
         dep_names.sort();
-        for d in &dep_names {
-            assert!(
-                d == "Bind.bind" || d == "Pure.pure",
-                "List.mapM axiom closure must contain only the monad-class \
-                 constants, found unexpected {d:?} (full set: {dep_names:?})"
-            );
-        }
         assert!(
-            !dep_names.iter().any(|d| d.contains("sorry")),
-            "List.mapM must not depend on any sorry axiom: {dep_names:?}"
+            dep_names.is_empty(),
+            "List.mapM must rest on no non-foundational axiom, found {dep_names:?}"
         );
     }
 

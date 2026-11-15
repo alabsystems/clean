@@ -1,0 +1,7 @@
+(set-logic QF_UFDTLIA)
+(declare-datatype P ((mk (fst Int) (snd Int)) (other (oth Int))))
+(declare-const a Int)
+(declare-const b Int)
+(define-fun mk ((x Int) (y Int)) P (mk y x))
+(assert (not (= (snd (mk a b)) a)))
+(check-sat)

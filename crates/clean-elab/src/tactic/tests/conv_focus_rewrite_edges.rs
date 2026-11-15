@@ -21,19 +21,25 @@ fn assert_no_trusted_fallback(state: &ProofState, tactic_name: &str, before: (u6
     assert_no_trusted_axiom_usage(tactic_name, "focused conv rewrite", before);
 }
 
-fn rw_rule_reverse(name: &str) -> SurfaceRwRule {
+fn rw_rule_reverse(name: &'static str) -> SurfaceRwRule {
     SurfaceRwRule {
         span: Span::dummy(),
         reverse: true,
-        term: SurfaceExpr::Ident(Span::dummy(), name.to_string()),
+        term: SurfaceExpr::Ident(
+            Span::dummy(),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
     }
 }
 
-fn rw_rule_forward(name: &str) -> SurfaceRwRule {
+fn rw_rule_forward(name: &'static str) -> SurfaceRwRule {
     SurfaceRwRule {
         span: Span::dummy(),
         reverse: false,
-        term: SurfaceExpr::Ident(Span::dummy(), name.to_string()),
+        term: SurfaceExpr::Ident(
+            Span::dummy(),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
     }
 }
 
@@ -188,7 +194,11 @@ fn test_conv_goal_compound_nonprop_lhs_reverse_rewrite_zero_trusted_axioms() {
         make_eq_n(y.clone(), x.clone()),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hxy").expect("intro");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro");
     let axiom_before = axiom_snapshot();
 
     let mut ctx = ElabCtx::new(&env);
@@ -248,7 +258,11 @@ fn test_conv_goal_compound_nonprop_lhs_reverse_rewrite_reports_no_progress() {
         make_eq_n(x.clone(), y.clone()),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hxy").expect("intro");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro");
     let axiom_before = axiom_snapshot();
 
     let mut ctx = ElabCtx::new(&env);

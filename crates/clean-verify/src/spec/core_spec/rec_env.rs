@@ -20,7 +20,10 @@
 //!   the spec has no ctor-name->index map; the kernel's `env.get_constructor` has
 //!   no spec equivalent — see the adversarial design review).
 //! - `RecMeta` — the recursor argument-order counts (params/motives/minors/indices
-//!   + a `major_after_minors` flag; only the `MajorAfterMinors` path is modeled).
+//!   + a `major_after_minors` flag) and its stored `KConstSig`. The signature
+//!   records ordered universe parameters and schematic type, not their validity.
+//!   The active iota operation still models only the old MajorAfterMinors path;
+//!   use of the signature for its universe guard/instantiation is the next stage.
 //! - `RecEnv` — a name-keyed association of recursors to their `RecMeta` + rules.
 //!
 //! `rhs` is OPAQUE data: confluence is generic over any deterministic rule set;
@@ -113,15 +116,21 @@ impl Specification {
         )?;
 
         // ---------------------------------------------------------------
-        // RecMeta: recursor argument-order counts. Only the MajorAfterMinors
-        // path is modeled (major_after_minors flag carried for fidelity; K /
-        // MajorAfterMotive / literals deferred).
+        // RecMeta: argument-order counts and the recursor's stored signature.
+        // Appending data preserves the existing projections and old iota
+        // behavior. It does not yet establish universe-sensitive reduction,
+        // signature validity, RHS typing, or the deferred source branches.
         // ---------------------------------------------------------------
         self.add_inductive(
             r"inductive RecMeta : Type
-| mk : Nat → Nat → Nat → Nat → Bool → RecMeta",
+| mk : Nat → Nat → Nat → Nat → Bool → KConstSig → Nat → RecMeta",
             "Recursor argument-order metadata: (num_params, num_motives, num_minors, \
-             num_indices, major_after_minors). Part of #2859 (Increment B).",
+             num_indices, major_after_minors, stored signature, K flag). The ordered \
+             universe parameters and schematic type are data, not a typing/admission \
+             proof. The K flag is the kernel's `rec_val.is_k` (1 = K-like, 0 = not), \
+             stored as a Nat: a Bool field adds nine `Bool` occurrences to the reflected \
+             foundation core and ties `Bool` with `OptionType` in the interning order, \
+             renumbering tags hand-written spec code cites.",
         )?;
 
         // ---------------------------------------------------------------
@@ -176,26 +185,38 @@ impl Specification {
             "The (opaque) reduct lambda of a recursor rule. Part of #2859 (Increment B).",
         )?;
 
-        // RecMeta field projectors (mk num_params num_motives num_minors num_indices major_after_minors).
+        // RecMeta field projectors (mk counts major_after_minors signature).
         self.add_recursive_def(
-            r"def recmeta_num_params (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) => np) mta",
+            r"def recmeta_num_params (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) (_sig : KConstSig) (_kf : Nat) => np) mta",
             "num_params of recursor metadata. Part of #2859 (Increment B).",
         )?;
         self.add_recursive_def(
-            r"def recmeta_num_motives (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) => nm) mta",
+            r"def recmeta_num_motives (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) (_sig : KConstSig) (_kf : Nat) => nm) mta",
             "num_motives of recursor metadata. Part of #2859 (Increment B).",
         )?;
         self.add_recursive_def(
-            r"def recmeta_num_minors (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) => nmin) mta",
+            r"def recmeta_num_minors (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) (_sig : KConstSig) (_kf : Nat) => nmin) mta",
             "num_minors of recursor metadata. Part of #2859 (Increment B).",
         )?;
         self.add_recursive_def(
-            r"def recmeta_num_indices (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) => nidx) mta",
+            r"def recmeta_num_indices (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) (_sig : KConstSig) (_kf : Nat) => nidx) mta",
             "num_indices of recursor metadata. Part of #2859 (Increment B).",
         )?;
         self.add_recursive_def(
-            r"def recmeta_major_after_minors (mta : RecMeta) : Bool := RecMeta.rec (fun (_ : RecMeta) => Bool) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) => maj) mta",
+            r"def recmeta_major_after_minors (mta : RecMeta) : Bool := RecMeta.rec (fun (_ : RecMeta) => Bool) (fun (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) (_sig : KConstSig) (_kf : Nat) => maj) mta",
             "major_after_minors flag of recursor metadata. Part of #2859 (Increment B).",
+        )?;
+        self.add_recursive_def(
+            r"def recmeta_signature (mta : RecMeta) : KConstSig := RecMeta.rec (fun (_ : RecMeta) => KConstSig) (fun (_np : Nat) (_nm : Nat) (_nmin : Nat) (_nidx : Nat) (_maj : Bool) (sig : KConstSig) (_kf : Nat) => sig) mta",
+            "The same stored ordered universe parameters and schematic recursor type. Projecting this record does not prove its validity or RHS typing.",
+        )?;
+        self.add_recursive_def(
+            r"def recmeta_signature_mk (np : Nat) (nm : Nat) (nmin : Nat) (nidx : Nat) (maj : Bool) (sig : KConstSig) (kf : Nat) : Eq KConstSig (recmeta_signature (RecMeta.mk np nm nmin nidx maj sig kf)) sig := Eq.refl KConstSig sig",
+            "The actual metadata projector preserves the complete signature, including ordered parameters and schematic type, for arbitrary counts and layouts.",
+        )?;
+        self.add_recursive_def(
+            r"def recmeta_k_flag (mta : RecMeta) : Nat := RecMeta.rec (fun (_ : RecMeta) => Nat) (fun (_np : Nat) (_nm : Nat) (_nmin : Nat) (_nidx : Nat) (_maj : Bool) (_sig : KConstSig) (kf : Nat) => kf) mta",
+            "The K flag of recursor metadata (the kernel's rec_val.is_k: 1 = K-like). Stored data; what a K flag means is stated by the admission predicate RecKAdmitIn, not by this projector.",
         )?;
 
         // ===============================================================
@@ -257,5 +278,91 @@ impl Specification {
         )?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::spec::Specification;
+    use crate::test_utils::run_with_stack;
+
+    #[test]
+    fn stored_recursor_signature_preserves_order_type_and_old_projections() {
+        run_with_stack(|| {
+            let mut spec = Specification::new_red_env_reflection_seed()
+                .expect("artifact-independent early metadata seed");
+            let params = "(ListType.cons Name Name.anonymous (ListType.cons Name (Name.str Name.anonymous Nat.zero) (ListType.nil Name)))";
+            let ty = "(KExpr.pi (KExpr.sort (Level.param (Name.str Name.anonymous Nat.zero))) (KExpr.sort (Level.param Name.anonymous)))";
+            let signature = format!("(KConstSig.mk {params} {ty})");
+            let metadata = format!("(RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.false {signature} Nat.zero)");
+            for (name, carrier, expression, expected) in [
+                (
+                    "metadata_signature_exact",
+                    "KConstSig",
+                    format!("(recmeta_signature {metadata})"),
+                    signature.clone(),
+                ),
+                (
+                    "metadata_parameters_ordered",
+                    "ListType Name",
+                    format!("(kconst_params (recmeta_signature {metadata}))"),
+                    params.to_owned(),
+                ),
+                (
+                    "metadata_type_schematic",
+                    "KExpr",
+                    format!("(kconst_type (recmeta_signature {metadata}))"),
+                    ty.to_owned(),
+                ),
+                (
+                    "metadata_params_unchanged",
+                    "Nat",
+                    format!("(recmeta_num_params {metadata})"),
+                    "Nat.zero".to_owned(),
+                ),
+                (
+                    "metadata_motives_unchanged",
+                    "Nat",
+                    format!("(recmeta_num_motives {metadata})"),
+                    "(Nat.succ Nat.zero)".to_owned(),
+                ),
+                (
+                    "metadata_minors_unchanged",
+                    "Nat",
+                    format!("(recmeta_num_minors {metadata})"),
+                    "(Nat.succ (Nat.succ Nat.zero))".to_owned(),
+                ),
+                (
+                    "metadata_indices_unchanged",
+                    "Nat",
+                    format!("(recmeta_num_indices {metadata})"),
+                    "Nat.zero".to_owned(),
+                ),
+                (
+                    "metadata_layout_unchanged",
+                    "Bool",
+                    format!("(recmeta_major_after_minors {metadata})"),
+                    "Bool.false".to_owned(),
+                ),
+            ] {
+                spec.add_recursive_def(
+                    &format!("def {name} : Eq ({carrier}) {expression} {expected} := Eq.refl ({carrier}) {expected}"),
+                    "Actual metadata carrier computation; no signature validity or reduction claim.",
+                ).expect("metadata computation proof must check");
+                assert!(crate::spec_axiom_closure::computed_axiom_closure(&spec, name).is_empty());
+            }
+            assert!(crate::spec_axiom_closure::computed_axiom_closure(
+                &spec,
+                "recmeta_signature_mk"
+            )
+            .is_empty());
+            let reversed = "(ListType.cons Name (Name.str Name.anonymous Nat.zero) (ListType.cons Name Name.anonymous (ListType.nil Name)))";
+            for source in [
+                format!("def metadata_forged_order : Eq (ListType Name) (kconst_params (recmeta_signature {metadata})) {reversed} := Eq.refl (ListType Name) {reversed}"),
+                format!("def metadata_forged_erasure : Eq KExpr (kconst_type (recmeta_signature {metadata})) (KExpr.sort Level.zero) := Eq.refl KExpr (KExpr.sort Level.zero)"),
+            ] {
+                assert!(spec.add_recursive_def(&source, "Deliberately false signature control.").is_err());
+            }
+        });
     }
 }

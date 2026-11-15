@@ -124,6 +124,13 @@ impl Iterator for DependencyIterator {
 /// - Dependency walk: <1us/hop (adjacency list)
 /// - Cross-system: <100us (equivalence index)
 pub trait MathverseSearch {
+    /// Look up the last catalogue entry indexed under this exact type arena index.
+    ///
+    /// This raw metadata lookup performs no proof check or trust-policy filtering.
+    /// A hit may be unverified, valueless, or hidden from policy-filtered searches.
+    /// It does not match structurally equal expressions at other arena indices.
+    fn lookup_raw_type_index(&self, type_idx: ExprIdx) -> Option<ConstantIdx>;
+
     fn lookup_name(&self, name: &str) -> Option<MathverseConstantHeader>;
 
     fn search_type(

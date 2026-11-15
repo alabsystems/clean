@@ -51,7 +51,7 @@ pub use cli_premise::{
 /// Top-level `clean auto` aggregator. Nested so sibling verbs (premise
 /// selection, standalone SMT, ATP) can drop in without churn.
 #[derive(Debug, clap::Args)]
-pub struct AutoArgs {
+pub(crate) struct AutoArgs {
     /// Verb under `clean auto`.
     #[command(subcommand)]
     pub command: AutoCommands,
@@ -99,6 +99,9 @@ pub struct AutoProveArgs {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum AutoCliError {
+    /// The kernel refused a declaration while constructing a bundled demo.
+    #[error("demo setup failed: {0}")]
+    DemoSetup(#[from] clean_kernel::KernelEnvError),
     /// Caller passed neither `--demo <NAME>` nor `--list`.
     #[error("`clean auto prove` requires either --demo <NAME> or --list")]
     NoAction,
@@ -133,8 +136,8 @@ pub struct Demo {
     pub name: &'static str,
     /// One-line description printed by `--list`.
     pub description: &'static str,
-    /// Construct the environment and the goal expression.
-    pub build: fn() -> (Environment, Expr),
+    /// Construct the checked environment and goal, returning any setup refusal.
+    pub build: fn() -> Result<(Environment, Expr), AutoCliError>,
 }
 
 /// Return the bundled demo catalog.
@@ -157,9 +160,11 @@ const DEMOS: &[Demo] = &[Demo {
 ///
 /// Mirrors the `setup_env_with_eq` fixture in `crates/clean-auto/src/tests.rs`
 /// so the CLI exercises the same SMT equality lane covered by unit tests.
-fn build_eq_refl_demo() -> (Environment, Expr) {
-    let mut env = Environment::new();
+fn build_eq_refl_demo() -> Result<(Environment, Expr), AutoCliError> {
+    build_eq_refl_demo_in(Environment::new())
+}
 
+fn build_eq_refl_demo_in(mut env: Environment) -> Result<(Environment, Expr), AutoCliError> {
     // Eq : {α : Sort u} → α → α → Prop
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("Eq"),
@@ -173,8 +178,7 @@ fn build_eq_refl_demo() -> (Environment, Expr) {
                 Expr::pi(BinderInfo::Default, Expr::bvar(1), Expr::prop()),
             ),
         ),
-    })
-    .expect("invariant: literal Eq axiom declaration kernel-checks");
+    })?;
 
     // Eq.refl : ∀ {α : Sort u} (a : α), Eq a a
     env.add_decl(Declaration::Axiom {
@@ -201,24 +205,21 @@ fn build_eq_refl_demo() -> (Environment, Expr) {
                 ),
             ),
         ),
-    })
-    .expect("invariant: literal Eq.refl axiom declaration kernel-checks");
+    })?;
 
     // A : Type
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("A"),
         level_params: vec![],
         type_: Expr::type_(),
-    })
-    .expect("invariant: literal A axiom declaration kernel-checks");
+    })?;
 
     // a : A
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("a"),
         level_params: vec![],
         type_: Expr::const_(Name::from_string("A"), vec![]),
-    })
-    .expect("invariant: literal a axiom declaration kernel-checks");
+    })?;
 
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let a = Expr::const_(Name::from_string("a"), vec![]);
@@ -233,7 +234,7 @@ fn build_eq_refl_demo() -> (Environment, Expr) {
         ),
         a,
     );
-    (env, goal)
+    Ok((env, goal))
 }
 
 /// Print the bundled catalog in a human-readable layout.
@@ -247,7 +248,7 @@ pub fn print_catalog() {
 // -- Public entry points ------------------------------------------------------
 
 /// Dispatch entry point for `clean auto prove`. Called from the top-level
-/// `clean-cli` binary via `cmd_auto::handle_auto_prove`.
+/// `clean-cli` binary via `cmd_auto::handle_auto_prove_command`.
 pub fn run(args: AutoProveArgs) -> Result<(), AutoCliError> {
     if args.list {
         print_catalog();
@@ -264,7 +265,7 @@ pub fn run(args: AutoProveArgs) -> Result<(), AutoCliError> {
                 name: name.to_owned(),
             })?;
 
-    let (env, goal) = (demo.build)();
+    let (env, goal) = (demo.build)()?;
     let engine = AutomationEngine::new();
     let start = std::time::Instant::now();
     let outcome = engine.auto_prove(&env, &goal, Duration::from_millis(args.budget), None);

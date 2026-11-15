@@ -9,6 +9,12 @@
 //! share the same implementation without cross-package source paths.
 
 mod authority_source_guard;
+/// The `build.rs` provenance predicate under test (`clean --version`'s sha).
+#[cfg(test)]
+mod build_provenance_tests;
+mod check_env_digest;
+mod check_import_gate;
+mod check_timing;
 mod cli;
 mod cli_args;
 mod cmd_artifacts;
@@ -33,20 +39,38 @@ mod cmd_fold;
 mod cmd_help;
 mod cmd_kernel;
 mod cmd_lake;
+/// `clean lean`: the `lean`-compatible front door (decision R74).
+mod cmd_lean;
 mod cmd_lsp;
 mod cmd_math;
 mod cmd_math_map;
 mod cmd_mathverse;
 mod cmd_native_library;
+mod cmd_native_runtime;
 mod cmd_olean;
 mod cmd_project;
 mod cmd_promote;
 mod cmd_prove;
 mod cmd_release;
+#[cfg(not(target_arch = "wasm32"))]
 mod cmd_repl;
+mod import_binding;
+mod large_stack;
+// rustyline (the REPL's line editor) has no wasm32 port; the interactive
+// REPL is native-only.
+#[cfg(target_arch = "wasm32")]
+mod cmd_repl {
+    pub(crate) fn run() -> anyhow::Result<()> {
+        anyhow::bail!("the interactive REPL is native-only and unavailable on wasm")
+    }
+}
 mod cmd_replacement;
 mod cmd_research;
 mod cmd_run;
+// `clean run --backend trust-cg`: the adapter over clean_native's experimental
+// trust-cg lane (LX0); feature-gated, no default path reaches it.
+#[cfg(feature = "trust-ir-backend")]
+mod cmd_run_trustcg;
 mod cmd_rust_sem;
 #[cfg(feature = "sat-verify")]
 mod cmd_sat_verify;
@@ -58,17 +82,18 @@ pub(crate) mod doc_render;
 mod extract_rust;
 mod factory;
 mod math_project;
-mod native_build;
 pub(crate) mod registry;
 #[cfg(test)]
 mod test_env;
 
 use clap::Parser;
 use clean_auto::cli::AutoCommands;
+#[cfg(not(target_arch = "wasm32"))]
 use clean_server::WebSocketConfig;
 use cli_args::{Cli, Commands, VerifyCommands};
 
 /// Pre-load .olean environment for --init or --stdlib server flags.
+#[cfg(not(target_arch = "wasm32"))]
 fn preload_olean_env(init: bool, stdlib: bool) -> Option<clean_kernel::Environment> {
     if !stdlib && !init {
         return None;
@@ -96,40 +121,68 @@ fn preload_olean_env(init: bool, stdlib: bool) -> Option<clean_kernel::Environme
 }
 
 /// Dispatch the server subcommand (async, isolated so `run` stays small).
-async fn dispatch_server(
-    port: u16,
-    no_gpu: bool,
-    websocket: bool,
-    init: bool,
-    stdlib: bool,
-    theorem_index: Option<std::path::PathBuf>,
-) -> anyhow::Result<()> {
-    let addr = format!("127.0.0.1:{port}").parse()?;
-    let initial_env = preload_olean_env(init, stdlib);
-    let project_theorem_index = theorem_index
+#[cfg(not(target_arch = "wasm32"))]
+async fn dispatch_server(args: clean_server::cli::ServerArgs) -> anyhow::Result<()> {
+    let addr = format!("127.0.0.1:{}", args.port).parse()?;
+    let initial_env = preload_olean_env(args.init, args.stdlib);
+    let project_theorem_index = args
+        .theorem_index
         .as_deref()
         .map(clean_server::proof_state::ProjectTheoremIndexProvider::from_path)
         .transpose()?;
+    // The launch token goes to a 0600 file and standard error; the file
+    // methods are confined to the workspace root (`trust_boundary.rs`).
+    let token_file = Some(args.token_file.map_or(
+        clean_server::TokenFile::RuntimeDir,
+        clean_server::TokenFile::At,
+    ));
 
-    if websocket {
+    if args.websocket {
         let mut config = WebSocketConfig {
             addr,
-            gpu_enabled: !no_gpu,
+            gpu_enabled: !args.no_gpu,
             ..Default::default()
         };
         config.initial_env = initial_env;
         config.project_theorem_index = project_theorem_index;
+        config.allowed_origins = args.allow_origin;
+        config.workspace_root = args.workspace_root;
+        config.token_file = token_file;
         println!("Starting WebSocket server on {}...", config.addr);
-        clean_server::serve_websocket(config).await?;
+        let handle = clean_server::serve_websocket(config).await?;
+        serve_until_interrupted().await?;
+        handle.shutdown();
     } else {
+        if !args.allow_origin.is_empty() {
+            anyhow::bail!(
+                "--allow-origin applies to the WebSocket transport (`--websocket`); the TCP \
+                 transport has no handshake to carry an Origin"
+            );
+        }
         let mut config = clean_server::ServerConfig::new()
             .with_addr(addr)
-            .with_gpu(!no_gpu);
+            .with_gpu(!args.no_gpu);
         config.initial_env = initial_env;
         config.project_theorem_index = project_theorem_index;
+        config.workspace_root = args.workspace_root;
+        config.token_file = token_file;
         println!("Starting TCP server on {}...", config.addr);
-        clean_server::serve(config).await?;
+        let handle = clean_server::serve(config).await?;
+        serve_until_interrupted().await?;
+        handle.shutdown();
     }
+    Ok(())
+}
+
+/// Keeps `clean server` serving until it is interrupted (Ctrl-C).
+///
+/// `serve` and `serve_websocket` start the listener on a task and return its handle, and dropping
+/// the handle shuts the listener down: `clean server` used to drop it at once, so the command
+/// printed its address and exited without serving a request.
+#[cfg(not(target_arch = "wasm32"))]
+async fn serve_until_interrupted() -> anyhow::Result<()> {
+    tokio::signal::ctrl_c().await?;
+    println!("Interrupted; shutting the server down.");
     Ok(())
 }
 
@@ -237,8 +290,20 @@ fn dispatch_sync(command: Commands) -> anyhow::Result<()> {
         Commands::Solver { command } => cmd_solver::handle_solver_command(command)?,
         Commands::Vendor { command } => cmd_vendor::handle_vendor_command(command)?,
         Commands::Olean(args) => cmd_olean::handle_olean_command(args)?,
-        Commands::Compile(args) => cmd_compile::handle_compile_command(args)?,
-        Commands::Run(args) => cmd_run::handle_run_command(args)?,
+        // Both verbs elaborate, lower and emit on recursive walkers; they run
+        // on the deep stack `clean check` takes, not on whatever stack the
+        // shell gave the main thread (`large_stack`'s module doc has the
+        // measurement).
+        Commands::Compile(args) => large_stack::run_on_large_stack("clean-compile", move || {
+            cmd_compile::handle_compile_command(args)
+        })?,
+        Commands::Run(args) => {
+            large_stack::run_on_large_stack("clean-run", move || cmd_run::handle_run_command(args))?
+        }
+        // Reached only through a parse that did not start with `lean` (the
+        // raw-argv path in `run` takes every `clean lean …`); the same door.
+        Commands::Lean(args) => std::process::exit(cmd_lean::run(&args.args)),
+        Commands::NativeRuntime(args) => cmd_native_runtime::handle_native_runtime_command(args)?,
         Commands::Extract(args) => cmd_extract::handle_extract_command(&args)?,
         Commands::SorryTrace(args) => cmd_sorry_trace::handle_sorry_trace_command(args)?,
         Commands::SorryCensus(args) => cmd_sorry_census::handle_sorry_census_command(args)?,
@@ -258,6 +323,7 @@ fn dispatch_sync(command: Commands) -> anyhow::Result<()> {
 /// which the recursive parser / elaborator / kernel-WHNF pipeline can exhaust on
 /// very deep concrete terms (e.g. a transcoded LRAT certificate with thousands of
 /// nested `List.cons` nodes). 1 GiB comfortably absorbs those depths.
+#[cfg(not(target_arch = "wasm32"))]
 const CHECK_THREAD_STACK_SIZE: usize = 1024 * 1024 * 1024;
 
 /// Run the `clean check` pipeline on a dedicated thread with a large stack.
@@ -268,7 +334,10 @@ const CHECK_THREAD_STACK_SIZE: usize = 1024 * 1024 * 1024;
 /// inputs yield identical outputs. The sole effect is that an already-correct but
 /// deeply recursive reduction can finish instead of aborting with a Rust stack
 /// overflow.
+#[cfg(not(target_arch = "wasm32"))]
 fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Result<()> {
+    // Refused before anything is elaborated, as pinned Lean refuses a bad `-D`.
+    let options = check_command_line_options(&args)?;
     let handle = std::thread::Builder::new()
         .name("clean-check".to_string())
         .stack_size(CHECK_THREAD_STACK_SIZE)
@@ -276,9 +345,9 @@ fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Resul
             if args.parse_only {
                 // Parse-only sweep mode: classify per-declaration parse
                 // outcomes without elaborating or kernel-checking anything.
-                cmd_core::parse_only_check(&args.file, args.json)
+                cmd_core::parse_only_check_in_world(&args.file, args.json, args.lean_world)
             } else {
-                cmd_core::check_file_with_json_with_imports(
+                cmd_core::check_file_with_json_with_imports_in_world(
                     &args.file,
                     args.verbose,
                     args.allow_sorry,
@@ -295,6 +364,9 @@ fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Resul
                     // the spawn and armed inside — setting it in `run()` would
                     // arm a thread that never type-checks anything.
                     args.decl_budget,
+                    args.automation_budget,
+                    &options,
+                    args.lean_world,
                 )
             }
         })
@@ -304,8 +376,63 @@ fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Resul
         .map_err(|_| anyhow::anyhow!("clean-check worker thread panicked"))?
 }
 
+/// wasm32 variant: wasm has no `std::thread::spawn`, so the check pipeline
+/// runs directly on the calling thread. The wasm link is expected to set a
+/// large stack instead (the pipeline's recursion is otherwise bounded by
+/// `stacker::maybe_grow` growth segments, which are inert on wasm).
+#[cfg(target_arch = "wasm32")]
+fn run_check_on_large_stack(args: clean_kernel::cli::CheckArgs) -> anyhow::Result<()> {
+    let options = check_command_line_options(&args)?;
+    if args.parse_only {
+        // Parse-only sweep mode: classify per-declaration parse
+        // outcomes without elaborating or kernel-checking anything.
+        cmd_core::parse_only_check_in_world(&args.file, args.json, args.lean_world)
+    } else {
+        cmd_core::check_file_with_json_with_imports_in_world(
+            &args.file,
+            args.verbose,
+            args.allow_sorry,
+            args.prelude,
+            args.json,
+            args.imports_prefer_olean,
+            if args.permissive_imports {
+                clean_elab::ImportPolicy::Permissive
+            } else {
+                clean_elab::ImportPolicy::FailClosed
+            },
+            args.decl_budget,
+            args.automation_budget,
+            &options,
+            args.lean_world,
+        )
+    }
+}
+
+/// `clean check -D …`, validated with pinned Lean's rules and messages
+/// (`clean_elab::command_line_options`). `--parse-only` reads the file path and
+/// `--json` and nothing else (its documented contract), so there the overrides
+/// are not read at all.
+fn check_command_line_options(
+    args: &clean_kernel::cli::CheckArgs,
+) -> anyhow::Result<Vec<clean_elab::command_line_options::CommandLineOption>> {
+    if args.parse_only {
+        return Ok(Vec::new());
+    }
+    let options = clean_elab::command_line_options::parse_command_line_options(&args.define)
+        .map_err(anyhow::Error::new)?;
+    for option in options.iter().filter(|o| !o.is_applied()) {
+        eprintln!(
+            "warning: -D {}: a Lean option Clean does not implement; it cannot change which \
+             declarations are accepted (or is Lean's default), so it was not applied",
+            option.to_arg()
+        );
+    }
+    Ok(options)
+}
+
 /// Run the clean CLI, parsing arguments from the process command line.
 pub async fn run() -> anyhow::Result<()> {
+    clean_elab::oracle_compiler::bind_host_toolchain(option_env!("CFG_VER_HASH"))?;
     // LSP clients frame JSON-RPC on stdio and some (notably tower-lsp's own
     // tests, plus generic LSP extensions) treat any tracing chatter on stderr
     // as a protocol violation or noisy startup warning. Skip the
@@ -313,6 +440,14 @@ pub async fn run() -> anyhow::Result<()> {
     // the same stdio server behind the Lake-compatible editor entry point —
     // so the server starts silently; all other commands opt back in, with
     // diagnostics on stderr so `--json` stdout remains machine-readable.
+    // `clean lean …`, or this binary invoked as `lean`: `lean`'s command line,
+    // read raw (clap's trailing-argument handling would eat the `--` `lean`
+    // reads) and before any tracing subscriber exists, so the front door's
+    // stdout and stderr carry exactly the bytes `lean` would print.
+    let argv: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    if let Some(args) = cmd_lean::front_door_args(&argv) {
+        std::process::exit(cmd_lean::run(&args));
+    }
     let cli = Cli::parse();
     let serves_lsp_on_stdio = matches!(cli.command, Commands::Lsp(_))
         || matches!(
@@ -326,16 +461,12 @@ pub async fn run() -> anyhow::Result<()> {
     }
 
     match cli.command {
-        Commands::Server(args) => {
-            dispatch_server(
-                args.port,
-                args.no_gpu,
-                args.websocket,
-                args.init,
-                args.stdlib,
-                args.theorem_index,
-            )
-            .await
+        #[cfg(not(target_arch = "wasm32"))]
+        Commands::Server(args) => dispatch_server(args).await,
+        // The JSON-RPC server transports (tokio net) are native-only.
+        #[cfg(target_arch = "wasm32")]
+        Commands::Server(_) => {
+            anyhow::bail!("the JSON-RPC server is native-only and unavailable on wasm")
         }
         Commands::Lsp(args) => cmd_lsp::handle_lsp_command(args).await,
         // `lake serve` is the Lake-compatible editor entry point: it runs the
@@ -350,12 +481,21 @@ pub async fn run() -> anyhow::Result<()> {
     }
 }
 
-/// Return the process exit code requested by a command error, when the command
-/// is forwarding an already-executed child process status.
+/// Return the process exit code requested by a command error: a forwarded
+/// child process status, or the 0/1/2 split of `clean olean replay` (2 when it
+/// declined to judge).
 pub fn forwarded_exit_code(err: &anyhow::Error) -> Option<i32> {
-    cmd_lake::native_executable_exit_code(err)
+    cmd_lake::native_executable_exit_code(err).or_else(|| cmd_olean::olean_exit_code(err))
 }
 
+#[cfg(test)]
+mod cmd_core_automation_budget_tests;
+#[cfg(test)]
+mod cmd_core_axiom_tests;
+#[cfg(test)]
+mod cmd_core_driver_tests;
+#[cfg(test)]
+mod cmd_core_options_tests;
 #[cfg(test)]
 mod cmd_core_tests;
 #[cfg(test)]
@@ -413,6 +553,34 @@ pub mod __test_support {
             walk(sub, Vec::new(), &mut out);
         }
         out
+    }
+
+    /// Every clap subcommand as `(space-joined path, owned command)`.
+    ///
+    /// [`collect_clap_paths`] yields only names; the help-truth gate
+    /// (`tests/help_truth.rs`) needs each command's `about`/`long_about` too.
+    /// Commands are cloned so the caller owns them and no borrow of a
+    /// temporary `Command` escapes.
+    #[must_use]
+    pub fn collect_clap_commands() -> Vec<(String, clap::Command)> {
+        let command = <crate::cli_args::Cli as CommandFactory>::command();
+        let mut out = Vec::new();
+        for sub in command.get_subcommands() {
+            walk_with_help(sub, String::new(), &mut out);
+        }
+        out
+    }
+
+    fn walk_with_help(cmd: &clap::Command, prefix: String, out: &mut Vec<(String, clap::Command)>) {
+        let path = if prefix.is_empty() {
+            cmd.get_name().to_owned()
+        } else {
+            format!("{prefix} {}", cmd.get_name())
+        };
+        out.push((path.clone(), cmd.clone()));
+        for sub in cmd.get_subcommands() {
+            walk_with_help(sub, path.clone(), out);
+        }
     }
 
     fn walk(cmd: &clap::Command, prefix: Vec<String>, out: &mut Vec<Vec<String>>) {
@@ -536,6 +704,11 @@ pub mod __test_support {
             // pipeline. Its handler likewise composes the clean-cli compile
             // closure, native build glue, and kernel-side evaluation, so the
             // orchestration belongs to clean-cli rather than one domain crate.
+            // `native-runtime` (two-language roadmap WS6.13) writes the
+            // linkable runtime archive: the `clean-runtime` sources plus the
+            // prelude shim tables of clean-native's `native_build`. Like `run`
+            // and `extract`, the step is clean-native's (LX0(b)) and the verb
+            // is this crate's front door (`cmd_native_runtime`).
             allowed_roots: &[
                 "repl",
                 "sorry-trace",
@@ -543,6 +716,7 @@ pub mod __test_support {
                 "export-cert",
                 "run",
                 "extract",
+                "native-runtime",
             ],
         },
         FeatureSource {
@@ -732,7 +906,8 @@ pub mod __test_support {
     }
 
     /// Return the clap paths that are intentionally meta-only (no descriptor
-    /// expected). Phase 1 treats `features`, `help`, and `repl` as meta.
+    /// expected): `features` and `help` (`registry::META_PATHS`); `repl` is
+    /// descriptor-backed.
     #[must_use]
     pub fn meta_paths() -> Vec<Vec<String>> {
         crate::registry::META_PATHS

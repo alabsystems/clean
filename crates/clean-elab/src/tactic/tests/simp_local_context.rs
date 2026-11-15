@@ -97,8 +97,9 @@ fn setup_no_index_local_state() -> (ProofState, Goal, Expr) {
             Expr::const_(Name::from_string("a"), vec![]),
         ),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: local_eq,
             value: None,
         }],
@@ -119,10 +120,16 @@ fn test_collect_simp_lemmas_resolves_local_extra_lemma() {
         make_p(x.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality hypothesis");
 
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("hxy".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("hxy"));
 
     let lemmas = collect_simp_lemmas(&state, &config);
     let local = lemmas
@@ -162,10 +169,16 @@ fn test_simp_expr_uses_local_proof_backed_extra_lemma() {
         make_eq_n(x.clone(), y.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality hypothesis");
 
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("hxy".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("hxy"));
 
     let goal = state.current_goal().expect("goal should exist").clone();
     let lemmas = collect_simp_lemmas(&state, &config);
@@ -188,7 +201,9 @@ fn test_local_extra_lemma_candidates_use_no_index_at_args_matching() {
     let (state, goal, query) = setup_no_index_local_state();
 
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("h".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("h"));
     let lemmas = collect_simp_lemmas(&state, &config);
 
     assert!(
@@ -224,10 +239,13 @@ fn test_simp_expr_multi_binder_local_extra_lemma_instantiates_proof_arguments() 
         make_eq_n(wrap_app(x.clone()), x.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "h").expect("intro should create the local bindered simp hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should create the local bindered simp hypothesis");
 
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("h".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("h"));
     let goal = state.current_goal().expect("goal should exist").clone();
     let lemmas = collect_simp_lemmas(&state, &config);
     let result = simp_expr(&state, &goal, &wrap_app(x.clone()), &lemmas, &config);
@@ -262,15 +280,18 @@ fn test_simp_with_local_extra_lemma_rewrites_non_dependent_pi_domain() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq_n(x, y.clone()),
             value: None,
         }],
     );
 
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("h".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("h"));
     simp(&mut state, config).expect("simp [h] should rewrite the implication premise");
 
     let goal = state.current_goal().expect("goal should remain open");

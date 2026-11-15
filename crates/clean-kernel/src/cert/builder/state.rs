@@ -77,7 +77,7 @@ impl<'env> CertBuilder<'env> {
 
     /// Attach a shared WHNF cache for batch-style reuse across builders.
     #[must_use]
-    pub fn with_whnf_cache(mut self, whnf_cache: Arc<WhnfCache>) -> Self {
+    pub(crate) fn with_whnf_cache(mut self, whnf_cache: Arc<WhnfCache>) -> Self {
         self.whnf_cache = Some(whnf_cache);
         self
     }
@@ -111,7 +111,7 @@ impl<'env> CertBuilder<'env> {
     }
 
     /// Returns the computed type of the node, or `None` if the ID is invalid.
-    pub fn try_type_of(&self, id: NodeId) -> Option<&Expr> {
+    pub(crate) fn try_type_of(&self, id: NodeId) -> Option<&Expr> {
         self.nodes.get(id.index()).map(|n| &n.computed_type)
     }
 

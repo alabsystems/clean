@@ -26,8 +26,14 @@
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
-# Pin to the toolchain the repo builds with locally (rustc 1.95). Bump in
-# lockstep with the workspace toolchain.
+# STOCK EXCEPTION (Trust ships no x86_64-unknown-linux-gnu toolchain or std for
+# this image; measured `trustc --target x86_64-unknown-linux-gnu` -> E0463
+# "can't find crate for `std`"). NOT the repo's toolchain: the repo pins
+# `channel = "trust"` (owner directive 2026-09-28), and this context COPYs that
+# rust-toolchain.toml in, which a stock image cannot resolve -- and since
+# 2026-09-29 the public export keeps that pin too, so no tree builds this image
+# as written. Owner decision pending: a Trust Linux builder image, or retiring
+# the lane.
 FROM rust:1.95-bookworm AS builder
 
 WORKDIR /build

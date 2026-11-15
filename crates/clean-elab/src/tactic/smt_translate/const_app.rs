@@ -10,27 +10,46 @@
 //! via `classified.rs`. This module retains only the atom-specific leftovers
 //! that are intentionally outside the shared classifier contract:
 //!
-//! - Constructor-form `Real.ofNat` / `Real.ofInt` (concrete integer coercions)
+//! - Concrete `Int.ofNat` / `Int.negSucc` and Real integer coercions
 //! - Default fail-closed fallback for unrecognized constant applications
 
 use super::{
-    try_extract_concrete_int, try_extract_concrete_nat, SmtLibTranslator, SmtSort, TranslateError,
-    TranslatedTerm,
+    nat_literal_decimal, try_extract_concrete_int, try_extract_concrete_nat, SmtLibTranslator,
+    SmtSort, TranslateError, TranslatedTerm,
 };
-use clean_kernel::Expr;
+use clean_kernel::expr::Literal;
+use clean_kernel::{Expr, ExprKind, Name};
 
 impl SmtLibTranslator {
     /// Translate an atom-boundary constant-headed application to SMT-LIB2.
     ///
     /// Called only for expressions that the shared classifier returned as
-    /// `SmtLogicalForm::Atom`. Handles constructor-form Real coercions and
+    /// `SmtLogicalForm::Atom`. Handles canonical concrete Int/Real constructors and
     /// fails closed on anything else.
     pub(super) fn translate_atom_const_app(
         &mut self,
-        name: &str,
+        name: &Name,
         args: &[&Expr],
     ) -> Result<TranslatedTerm, TranslateError> {
-        match (name, args.len()) {
+        let rendered = name.to_string();
+        match (rendered.as_str(), args.len()) {
+            // Canonical Int constructors. Actual OfNat dictionaries are
+            // reduced and kernel-checked by the environment-owning SMT caller.
+            ("Int.ofNat" | "Int.negSucc", 1) if *name == Name::from_string(&rendered) => {
+                let ExprKind::Lit(Literal::Nat(n)) = args[0].strip_mdata().kind() else {
+                    return Err(TranslateError::UnsupportedExpr(format!(
+                        "{name} with non-concrete argument"
+                    )));
+                };
+                Ok(TranslatedTerm {
+                    smt: if rendered == "Int.ofNat" {
+                        nat_literal_decimal(n)
+                    } else {
+                        format!("(- (+ {} 1))", nat_literal_decimal(n))
+                    },
+                    sort: SmtSort::Int,
+                })
+            }
             // Constructor-form Real coercions — concrete integer values only (#2794)
             ("Real.ofNat", 1) => {
                 let n = try_extract_concrete_nat(args[0]).ok_or_else(|| {

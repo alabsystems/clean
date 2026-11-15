@@ -172,7 +172,8 @@ fn main() {
 
     // Emit the actual VerificationReport JSON so we can see the audit-critical
     // honest label that downstream consumers will read. This is built under the
-    // FULL mode, so `validation_mode` MUST read "kernel-verified-full".
+    // FULL mode, so `validation_mode` MUST read "local-assumed-env" — the
+    // level that check actually reaches (see `clean_olean::RecheckLevel`).
     let ext = build_extended_summary_with_mode(
         &root,
         rel_files.len(),
@@ -184,7 +185,12 @@ fn main() {
     let report = build_verification_report(&ext.summary, ext.error_details.as_ref());
     println!("\n=== EMITTED VerificationReport (honest-label fields) ===");
     println!("validation_mode        = {:?}", report.validation_mode);
-    println!("kernel_verified_values = {}", report.kernel_verified_values);
+    println!(
+        "values_rederived_locally = {}",
+        report.values_rederived_locally
+    );
+    println!("recheck_level          = {}", report.recheck_level);
+    println!("dependency_closed      = {}", report.dependency_closed);
     println!(
         "types_ok / types_fail  = {} / {}",
         report.types_ok, report.types_fail
@@ -267,7 +273,7 @@ fn print_totals(root: &Path, t: &Totals) {
         "NOTE: this fixture is a SLICE of the real Lean stdlib, so most failures are UnknownConst \
          (the referenced dep is not in the shard) rather than unsound proofs. The load-bearing, \
          honest signal is that FULL is STRICTLY STRONGER than INFER_ONLY: {} constants pass the \
-         type-only check but FAIL the full add_decl-equivalent check_type on their proof VALUE. \
+         type-only check but FAIL the local assumed-environment check_type on their proof VALUE. \
          Here those {} demotions are UnknownConst-inside-value (the type-only path skipped the \
          nested App args that reference a missing dep), proving type-only OVER-REPORTS vs the \
          genuine kernel oracle — so the two rates must NEVER be labelled interchangeably.",

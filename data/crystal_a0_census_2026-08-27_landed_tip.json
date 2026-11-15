@@ -4,7 +4,8 @@
   "discharge": "data/crystal_a0_discharge.json",
   "trust_rev": "37c4d31d47cd",
   "corpus": "f21d6336bf",
-  "kind": "landed-tip-revalidation"
+  "kind": "landed-tip-revalidation",
+  "remint": "2026-08-30 audit r2 minor 2: re-derived from the SAME digested inputs to add semantic_only_bodies; every total byte-identical to the 2026-08-27 derivation"
  },
  "inputs": {
   "dump_O3": "$HOME/trust/scratchpad/laneRVAL/wc/dump_O3",
@@ -39,6 +40,9 @@
   },
   "a0_complete_semantic": 202
  },
+ "semantic_only_bodies": [
+  "level::Level::is_zero"
+ ],
  "a0_complete_bodies": [
   {
    "def_path": "bitvec_compute::BvNames::new",
@@ -2095,5 +2099,27 @@
   "tc::reduction::cofib::Cofib::is_bot",
   "tc::reduction::cofib::Cofib::is_top::{closure#0}",
   "tc::reduction::int::contains_big_nat_lit"
- ]
+ ],
+ "inputs_sha256": {
+  "note": "audit r2 minor 10 (wf_0a50b8bb): the inputs are bare uncommitted scratchpad paths; these digests pin what the record was derived from so a re-derivation can prove it read the same bytes. Computed 2026-08-30 from the still-present lane files; a key absent here means the file was already gone when the digests were added. Round-3 closure (wf_e15af3e7 minor 5): the discharge table and the clause-b where-file the semantic verdicts also read are digested too -- both git-tracked, both re-derived byte-equal in round 3, pinned here so the closure is complete rather than implied.",
+  "flip_O3": "d7cac2a4edfd81898233f38099a2aabe8583526a2db7b9b58436f819f23d13fd",
+  "flip_O0": "ac8c46a0e21f87419945c4865afa6beb4c558d022f9fc4eeb219691a066f20cf",
+  "dump_O3": {
+   "kind": "directory",
+   "files": {
+    ".clean_kernel.coverage.json.trustc-publish.lock": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "clean_kernel.coverage.json": "685ed057e688d23f8593adaad49884a70f97548dd274a7f033960cb24bb52c0a",
+    "clean_kernel.trust-ir.bin": "2319841ef66ae7bc5e8097b4f391b153be2954caf0f06c7da1868b54b67c998d",
+    "clean_kernel.trust-ir.txt": "eacbd3dc7ad296e0d88767dc35bce1b849f0a5d705fa44956a64cb8f699d9c43"
+   }
+  },
+  "discharge_table": {
+   "path": "data/crystal_a0_discharge.json",
+   "sha256": "dc4dacc8a98ce610209c66e93a14f15c98eeefba2a1bb031ba885e0b2eec3f40"
+  },
+  "clause_b_where": {
+   "path": "crates/clean-verify/src/spec/core_spec/eval_ir_lzb_correct.rs",
+   "sha256": "035d04f9e78b0b89108954072cb1e9dadde4bd40108311f7dcf7ebd3cd237f4c"
+  }
+ }
 }

@@ -102,7 +102,7 @@ fi
 print_plan() {
   echo "=== rebuild_mathlib_kv plan ==================================================="
   echo "  strategy            : $STRATEGY"
-  echo "  clean binary        : ${CLEAN_BIN:-<NOT FOUND — cargo build -p clean-cli --release --bin clean>}"
+  echo "  clean binary        : ${CLEAN_BIN:-<NOT FOUND — targo --unverified build -p clean-cli --release --bin clean>}"
   echo "  mathlib checkout    : ${CHECKOUT:-<NOT FOUND — scripts/setup_mathlib_oleans.sh (or set MATHLIB_CHECKOUT)>}"
   echo "  closure-root        : ${MLLIB:-<n/a>}"
   echo "  LEAN_PATH roots     : $LEAN_PATH_ROOTS"
@@ -127,7 +127,7 @@ if [ "$DRY_RUN" = 1 ]; then
 fi
 
 # ----- preconditions for a real run ------------------------------------------
-[ -n "$CLEAN_BIN" ] || { echo "ERROR: no clean binary; build it: cargo build -p clean-cli --release --bin clean" >&2; exit 1; }
+[ -n "$CLEAN_BIN" ] || { echo "ERROR: no clean binary; build it: targo --unverified build -p clean-cli --release --bin clean" >&2; exit 1; }
 [ -n "$CHECKOUT"  ] || { echo "ERROR: no Mathlib checkout; run scripts/setup_mathlib_oleans.sh (or set MATHLIB_CHECKOUT)" >&2; exit 1; }
 [ -d "$MLROOT"    ] || { echo "ERROR: no Mathlib oleans under $MLROOT" >&2; exit 1; }
 

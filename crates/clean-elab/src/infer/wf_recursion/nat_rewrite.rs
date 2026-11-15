@@ -94,7 +94,7 @@ pub(super) const REQUIRED_CONSTANTS: &[&str] = &[
     "congrArg",
 ];
 
-pub(super) fn cst(name: &str) -> Expr {
+pub(super) fn cst(name: &'static str) -> Expr {
     Expr::const_(Name::from_string(name), vec![])
 }
 
@@ -208,17 +208,16 @@ pub(super) fn strip_mdata(mut e: &Expr) -> &Expr {
 /// The two operands of a `Nat` binary operation, in either spelling the
 /// elaborator produces: the raw `Nat.<op> x y`, or the notation
 /// `@H<Op>.h<op> α β γ inst x y`.
-fn match_bin(e: &Expr, raw: &str, notation: &str) -> Option<(Expr, Expr)> {
+fn match_bin(e: &Expr, raw: &'static str, notation: &'static str) -> Option<(Expr, Expr)> {
     let e = strip_mdata(e);
     let ExprKind::Const(name, _) = strip_mdata(e.get_app_fn()).kind() else {
         return None;
     };
     let args = e.get_app_args();
-    let name = name.to_string();
-    if name == raw && args.len() == 2 {
+    if name == &Name::from_string(raw) && args.len() == 2 {
         return Some((Expr::clone(args[0]), Expr::clone(args[1])));
     }
-    if name == notation && args.len() == 6 {
+    if name == &Name::from_string(notation) && args.len() == 6 {
         return Some((Expr::clone(args[4]), Expr::clone(args[5])));
     }
     None
@@ -239,7 +238,7 @@ pub(super) fn match_mul(e: &Expr) -> Option<(Expr, Expr)> {
 /// `true` when `e` is a spelling of the Nat literal `0`.
 pub(super) fn is_zero(e: &Expr) -> bool {
     let e = strip_mdata(e);
-    if matches!(e.kind(), ExprKind::Const(n, _) if n.to_string() == "Nat.zero") {
+    if matches!(e.kind(), ExprKind::Const(n, _) if n == &Name::from_string("Nat.zero")) {
         return true;
     }
     eval_nat_expr(e) == Some(0)
@@ -260,13 +259,16 @@ pub(super) fn match_positivity(ty: &Expr) -> Option<Expr> {
         return None;
     };
     let args = ty.get_app_args();
-    let name = name.to_string();
-    let (lo, hi) = match name.as_str() {
-        "Nat.lt" if args.len() == 2 => (Expr::clone(args[0]), Expr::clone(args[1])),
-        "LT.lt" if args.len() == 4 => (Expr::clone(args[2]), Expr::clone(args[3])),
-        "Nat.le" if args.len() == 2 => (peel_succ(args[0])?, Expr::clone(args[1])),
-        "LE.le" if args.len() == 4 => (peel_succ(args[2])?, Expr::clone(args[3])),
-        _ => return None,
+    let (lo, hi) = if name == &Name::from_string("Nat.lt") && args.len() == 2 {
+        (Expr::clone(args[0]), Expr::clone(args[1]))
+    } else if name == &Name::from_string("LT.lt") && args.len() == 4 {
+        (Expr::clone(args[2]), Expr::clone(args[3]))
+    } else if name == &Name::from_string("Nat.le") && args.len() == 2 {
+        (peel_succ(args[0])?, Expr::clone(args[1]))
+    } else if name == &Name::from_string("LE.le") && args.len() == 4 {
+        (peel_succ(args[2])?, Expr::clone(args[3]))
+    } else {
+        return None;
     };
     is_zero(&lo).then_some(hi)
 }
@@ -277,7 +279,7 @@ fn peel_succ(e: &Expr) -> Option<Expr> {
     let ExprKind::App(f, a) = e.kind() else {
         return None;
     };
-    matches!(strip_mdata(f).kind(), ExprKind::Const(n, _) if n.to_string() == "Nat.succ")
+    matches!(strip_mdata(f).kind(), ExprKind::Const(n, _) if n == &Name::from_string("Nat.succ"))
         .then(|| Expr::clone(a))
 }
 

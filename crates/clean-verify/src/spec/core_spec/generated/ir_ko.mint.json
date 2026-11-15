@@ -2,7 +2,7 @@
  "prefix": "ir_ko",
  "body": "level::Level::kind_ord",
  "core_digest": "0c0525f0d2b99c8c5b9b467ea0a8b8c4893d81c2b776dee9076e7dca675b83c3",
- "defs_digest": "38fd0f5ae916fc66fe85d30ac7ad5af3943a1a7939e6275787e26a674d95d066",
+ "defs_digest": "b188f70edb24bd148c773442c02c7f2d2b40338fb64c2f50f1138daf46b75e57",
  "def_count": 10,
  "artifact_core_digest": "271f7d6e503f9162c6c8e7deb58ec7f2651971856108c7b158b828bb4cda6bb9",
  "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader. This value equals every column of the level_kind_ord row in generated/ir_mint.producer_ab.json AND the fresh 2026-08-21 projection below -- four dumps, one core text.",

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 /// When a certificate-reconstructed proof term contains embedded `trustedAy`
@@ -97,8 +98,9 @@ fn test_select_verified_certificate_proof_clean_proof_leaves_ledger_zero() {
         setup_certificate_env(),
         prop_p(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(3),
-            name: "hp".to_string(),
+            name: SurfaceName::component("hp", false),
             ty: prop_p(),
             value: None,
         }],

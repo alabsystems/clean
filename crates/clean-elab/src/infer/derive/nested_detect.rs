@@ -23,7 +23,7 @@ use clean_parser::{SurfaceArg, SurfaceCtor, SurfaceExpr};
 /// nested container application referencing the type being defined.
 pub(super) fn any_ctor_has_nested_container(
     env: &Environment,
-    ind_name: &str,
+    ind_name: &Name,
     ctors: &[SurfaceCtor],
 ) -> bool {
     ctors
@@ -33,9 +33,9 @@ pub(super) fn any_ctor_has_nested_container(
 
 /// Walk a surface expression looking for an identifier whose name matches
 /// `ind_name`. Used to detect `List Ty` where `Ty` is the type being defined.
-fn surface_mentions_name(expr: &SurfaceExpr, ind_name: &str) -> bool {
+fn surface_mentions_name(expr: &SurfaceExpr, ind_name: &Name) -> bool {
     match expr {
-        SurfaceExpr::Ident(_, n) => n == ind_name,
+        SurfaceExpr::Ident(_, n) => n.name() == ind_name,
         SurfaceExpr::App(_, head, args) => {
             surface_mentions_name(head, ind_name)
                 || args
@@ -63,7 +63,7 @@ fn surface_mentions_name(expr: &SurfaceExpr, ind_name: &str) -> bool {
 
 /// Walk the Pi/Arrow chain of a constructor type, inspecting each domain
 /// for nested-container applications.
-fn ctor_has_nested_container(env: &Environment, ind_name: &str, expr: &SurfaceExpr) -> bool {
+fn ctor_has_nested_container(env: &Environment, ind_name: &Name, expr: &SurfaceExpr) -> bool {
     match expr {
         SurfaceExpr::Pi(_, binders, body) => {
             for b in binders {
@@ -87,7 +87,7 @@ fn ctor_has_nested_container(env: &Environment, ind_name: &str, expr: &SurfaceEx
 /// Check whether the given type expression IS a nested-container
 /// application: `App(Ident(C), args)` where `C != ind_name`, `C` is a
 /// registered inductive, and some argument mentions `ind_name`.
-fn ty_is_nested_container(env: &Environment, ind_name: &str, ty: &SurfaceExpr) -> bool {
+fn ty_is_nested_container(env: &Environment, ind_name: &Name, ty: &SurfaceExpr) -> bool {
     let ty = match ty {
         SurfaceExpr::Paren(_, inner) => inner.as_ref(),
         other => other,
@@ -102,10 +102,9 @@ fn ty_is_nested_container(env: &Environment, ind_name: &str, ty: &SurfaceExpr) -
             other => other,
         };
         if let SurfaceExpr::Ident(_, container_name) = head {
-            if container_name != ind_name
-                && env
-                    .get_inductive(&Name::from_string(container_name))
-                    .is_some()
+            if !container_name.is_relative_constructor()
+                && container_name.name() != ind_name
+                && env.get_inductive(container_name.name()).is_some()
                 && args
                     .iter()
                     .any(|a: &SurfaceArg| surface_mentions_name(&a.expr, ind_name))
@@ -123,11 +122,11 @@ mod tests {
     use clean_parser::parse_decl_with_tactics;
 
     /// Parse a surface inductive declaration and extract its constructor list.
-    fn parse_ctors(src: &str) -> (String, Vec<SurfaceCtor>) {
+    fn parse_ctors(src: &str) -> (Name, Vec<SurfaceCtor>) {
         let patterns = crate::tactic::builtins::builtin_tactic_patterns();
         let decl = parse_decl_with_tactics(src, &patterns).expect("should parse");
         match decl {
-            clean_parser::SurfaceDecl::Inductive { name, ctors, .. } => (name, ctors),
+            clean_parser::SurfaceDecl::Inductive { name, ctors, .. } => (name.into_name(), ctors),
             other => panic!("expected inductive, got {other:?}"),
         }
     }

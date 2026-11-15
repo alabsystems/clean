@@ -1,0 +1,47 @@
+{
+  "repository": "https://github.com/digama0/lean4lean",
+  "branch": "arena",
+  "commit": "bce3448115f7819fc12d647fadd3bb090666637e",
+  "tree": "4c1d95e28709543db8308c26d2e07d3159a1fa86",
+  "license": "Apache-2.0",
+  "license_sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+  "main_lean_sha256": "562d5cbf77b46720732a33e6b1d93bef8123aec9b57bbd4d317bd3cd3342f8b0",
+  "lake_manifest_sha256": "d84781a6612954d175b39cca5a08910e2d99b5a88b0462a374323f1b713c74a5",
+  "lakefile_sha256": "cf74ad78cb19f565cc4c10873fdab10fdedf86b2b883f9fb073cb2488d05ff82",
+  "lean_toolchain": "leanprover/lean4:v4.33.0-rc2",
+  "lean_toolchain_file_sha256": "0d3c76ccd8772d8bcbe207241421a760312b71a6aa82f84194391fdf5cb026d6",
+  "lean_githash": "d8b18978322de05a8f3dba51ef03cf5461676c17",
+  "dependencies": {
+    "lean4export": {
+      "repository": "https://github.com/leanprover/lean4export",
+      "commit": "a3e35a584f59b390667db7269cd37fca8575e4bf",
+      "input_rev": "v4.30.0"
+    },
+    "batteries": {
+      "repository": "https://github.com/leanprover-community/batteries",
+      "commit": "76e1c118b0700b4ceafe99532e887d6431625e1a",
+      "input_rev": "v4.33.0-rc2"
+    }
+  },
+  "export_parser_sha256": "1f943b5cc776eece6d528937b976509c8bd57d10bc69a39b1c119bfb6d664286",
+  "export_parser_note": "lean4export Export/Parse.lean, byte-identical to the Lean member's reader (lean4export at 12581a6b680d8478175596338eb2d53383a323e3): the two members share their export parser; their kernels differ. It reads mdata records.",
+  "arena": {
+    "repository": "https://github.com/leanprover/lean-kernel-arena",
+    "commit": "5d7ca987618f1136aaa296057b50a2c10c4ce77a",
+    "checker_file": "checkers/lean4lean.yaml",
+    "checker_file_sha256": "aa7567a1719230664007e19e708ec91ba955497ff2a4d4c684fe1cda98e403de",
+    "run": ".lake/build/bin/lean4lean --import \"$IN\""
+  },
+  "binary_sha256": "6d2a0998bf2d2bf91a6db08bc4fd8ed4b35211cd57d2a9734aa21a9ffac87dd7",
+  "binary_linkage": "static Lean runtime; links only /usr/lib/libc++.dylib and /usr/lib/libSystem.B.dylib",
+  "build_command": "lake build lean4lean, outside this repository in a clone at the commit above, with the Lean toolchain named explicitly (elan's leanprover--lean4---v4.33.0-rc2) on an env -i PATH; heavy_gate.sh run 6 q4u-lean4lean-build",
+  "binary_store": "~/.cache/clean-lean4lean/sha256/<binary_sha256>/lean4lean",
+  "runtime_environment": "PATH=/usr/bin:/bin, HOME=TMPDIR=<scratch>, LEAN_ABORT_ON_PANIC=1, under sandbox-exec with network and /Users reads denied",
+  "ax0_statement_sha256": {
+    "Classical.choice": "777126edbb8e685e9e99bd9cecb882f3704035ce661d0afaf94efcf858a798af",
+    "Quot.sound": "320ccc1ad9d854cc52e5da809f483e48119eedc2393fc836eec10f558bb339bd",
+    "propext": "a7e79b053038945b52aea815954028ccddb6bf174abb1aabe40e25cc01297d77"
+  },
+  "ax0_statement_source": "scripts/lean4lean_recheck.py model() over the pinned Lean v4.30.0-rc2 Init export, sha256 2d6910ddbb751d79c7b5688878e5e9ffcadee9299f60ec80f738d567454742f4 (types up to binder names, binder annotations and mdata; universe parameters by position)",
+  "untrusted": "External program built outside this workspace from a public commit; data to the quorum, never vendored; no proof claim"
+}

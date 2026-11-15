@@ -41,11 +41,14 @@ fn transitive_axioms(env: &Environment, expr: &Expr) -> std::collections::BTreeS
     axioms
 }
 
-fn rw_rule_named(name: &str) -> SurfaceRwRule {
+fn rw_rule_named(name: &'static str) -> SurfaceRwRule {
     SurfaceRwRule {
         span: Span::dummy(),
         reverse: false,
-        term: SurfaceExpr::Ident(Span::dummy(), name.to_string()),
+        term: SurfaceExpr::Ident(
+            Span::dummy(),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
     }
 }
 
@@ -124,8 +127,8 @@ fn test_conv_congr_two_args_kernel_checked_no_new_axioms() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "ha").expect("intro ha : a = a'");
-    intro(&mut state, "hb").expect("intro hb : b = b'");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("ha")).expect("intro ha : a = a'");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hb")).expect("intro hb : b = b'");
 
     // The goal is `f a b = f a' b'`. Navigate the RHS-argument structure: the
     // equality's RHS focus is `f a' b'` — but we want to rewrite the LHS `f a b`
@@ -250,7 +253,7 @@ fn test_conv_congr_one_arg_other_refl_kernel_checked() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "ha").expect("intro ha : a = a'");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("ha")).expect("intro ha : a = a'");
 
     let mut ctx = ElabCtx::new(&env);
     ctx.eval(
@@ -330,8 +333,8 @@ fn test_conv_congr_wrong_rewrite_fails_closed() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "ha").expect("intro ha");
-    intro(&mut state, "hb").expect("intro hb");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("ha")).expect("intro ha");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hb")).expect("intro hb");
 
     let mut ctx = ElabCtx::new(&env);
     let result = ctx.eval(
@@ -424,7 +427,7 @@ fn adversarial_ternary_middle_arg_only_kernel_checked() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "hb").expect("intro hb");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hb")).expect("intro hb");
 
     let mut ctx = ElabCtx::new(&env);
     ctx.eval(
@@ -501,7 +504,7 @@ fn adversarial_cannot_close_missing_hypothesis() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "ha").expect("intro ha");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("ha")).expect("intro ha");
 
     let mut ctx = ElabCtx::new(&env);
     let _ = ctx.eval(
@@ -562,7 +565,7 @@ fn adversarial_duplicate_arg_focus_isolation() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "ha").expect("intro ha");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("ha")).expect("intro ha");
 
     let mut ctx = ElabCtx::new(&env);
     let res = ctx.eval(
@@ -659,7 +662,7 @@ fn adversarial_dependent_head_fails_closed() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "ha").expect("intro ha");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("ha")).expect("intro ha");
 
     let mut ctx = ElabCtx::new(&env);
     let res = ctx.eval(
@@ -739,8 +742,8 @@ fn adversarial_head_and_arg_rewrite_kernel_checked() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal_ty.clone());
-    intro(&mut state, "hf").expect("intro hf : h = h2");
-    intro(&mut state, "ha").expect("intro ha : a = a'");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hf")).expect("intro hf : h = h2");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("ha")).expect("intro ha : a = a'");
 
     let mut ctx = ElabCtx::new(&env);
     let res = ctx.eval(

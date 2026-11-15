@@ -26,15 +26,20 @@ fn test_rewrite_replaces_lhs_with_rhs() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
     // After rewrite h, goal should become P(y)
-    let result = rewrite(&mut state, "h", false);
+    let result = rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    );
     assert!(result.is_ok(), "rewrite should succeed");
 
     // Goal should now be P(y)
@@ -62,15 +67,20 @@ fn test_rewrite_rtl_replaces_rhs_with_lhs() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
     // After rewrite h (reverse), goal should become P(x)
-    let result = rewrite(&mut state, "h", true);
+    let result = rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        true,
+    );
     assert!(result.is_ok(), "rewrite_rtl should succeed");
 
     // Goal should now be P(x)
@@ -92,7 +102,11 @@ fn test_rewrite_hypothesis_not_found() {
     let mut state = ProofState::new(env, target);
 
     // Try to rewrite with nonexistent hypothesis
-    let result = rewrite(&mut state, "h", false);
+    let result = rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    );
     assert!(
         result.is_err(),
         "rewrite with missing hypothesis should fail"
@@ -113,15 +127,20 @@ fn test_rewrite_non_equality_fails() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
     );
 
     // Try to rewrite with non-equality hypothesis
-    let result = rewrite(&mut state, "h", false);
+    let result = rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    );
     assert!(
         result.is_err(),
         "rewrite with non-equality hypothesis should fail"
@@ -145,8 +164,9 @@ fn test_rewrite_pattern_not_in_goal_fails() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -154,7 +174,11 @@ fn test_rewrite_pattern_not_in_goal_fails() {
 
     // rewrite should fail because goal doesn't contain x or y, and should
     // expose the exact focused term to agent diagnostics.
-    let result = rewrite(&mut state, "h", false);
+    let result = rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    );
     match result {
         Err(TacticError::RewriteNoMatch {
             rule,
@@ -212,8 +236,9 @@ fn test_rewrite_no_goals_fails() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -223,7 +248,11 @@ fn test_rewrite_no_goals_fails() {
     state.goals.clear();
 
     // Now try rewrite on completed proof
-    let result = rewrite(&mut state, "h", false);
+    let result = rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    );
     assert!(
         matches!(result, Err(TacticError::NoGoals)),
         "rewrite on complete proof should fail with NoGoals"
@@ -289,8 +318,9 @@ fn test_symm_swaps_goal_and_uses_hypothesis() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty,
             value: None,
         }],
@@ -403,14 +433,16 @@ fn test_trans_proof_term_structure() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -463,14 +495,16 @@ fn test_trans_with_hypotheses() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -556,14 +590,16 @@ fn test_calc_trans_from_hypotheses() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -571,7 +607,12 @@ fn test_calc_trans_from_hypotheses() {
     );
 
     // Apply calc_trans with h1 and h2
-    calc_trans(&mut state, "h1", "h2").unwrap();
+    calc_trans(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h1"),
+        &clean_parser::SurfaceName::generated_path("h2"),
+    )
+    .unwrap();
 
     assert!(state.is_complete(), "calc_trans should solve goal directly");
 
@@ -601,21 +642,27 @@ fn test_calc_trans_chain_broken() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
         ],
     );
 
-    let result = calc_trans(&mut state, "h1", "h2");
+    let result = calc_trans(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h1"),
+        &clean_parser::SurfaceName::generated_path("h2"),
+    );
     assert!(
         matches!(result, Err(TacticError::GoalMismatch(ref msg)) if msg.contains("transitivity chain broken")),
         "calc_trans should fail when chain is broken"
@@ -633,7 +680,11 @@ fn test_calc_trans_hypothesis_not_found() {
 
     let mut state = ProofState::new(env, target);
 
-    let result = calc_trans(&mut state, "h1", "h2");
+    let result = calc_trans(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h1"),
+        &clean_parser::SurfaceName::generated_path("h2"),
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(name)) if name == "h1"),
         "calc_trans should fail when hypothesis not found"
@@ -655,14 +706,19 @@ fn test_calc_trans_not_equality() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h1".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h1"),
             ty: h1_ty,
             value: None,
         }],
     );
 
-    let result = calc_trans(&mut state, "h1", "h1");
+    let result = calc_trans(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h1"),
+        &clean_parser::SurfaceName::generated_path("h1"),
+    );
     assert!(
         matches!(result, Err(TacticError::GoalMismatch(msg)) if msg.contains("is not an equality")),
         "calc_trans should fail when hypothesis is not an equality"

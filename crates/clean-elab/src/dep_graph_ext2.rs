@@ -184,7 +184,12 @@ impl ExtDepGraph {
         }
 
         // Find endpoint with maximum distance
-        let (&end, &max_dist) = dist.iter().max_by_key(|(_, &d)| d).expect("non-empty topo");
+        let Some((&end, &max_dist)) = dist.iter().max_by_key(|(_, &d)| d) else {
+            return Ok(CriticalPath {
+                path: Vec::new(),
+                length: 0,
+            });
+        };
 
         // Reconstruct path
         let mut path = vec![end.clone()];

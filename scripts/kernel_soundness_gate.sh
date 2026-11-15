@@ -365,7 +365,7 @@ unset REGEN_BASELINE
 
 echo "--- Lane 1: Expression-level parity (Clean-kernel) ---"
 STEPS=$((STEPS + 1))
-if run_expected_cargo_test 1 cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS" \
+if run_expected_cargo_test 1 targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS" \
     -p clean-kernel --test lean4_parity --features test-utils -- \
     lean4_parity_check; then
     PASS=$((PASS + 1))
@@ -381,7 +381,7 @@ echo ""
 
 echo "--- Lane 2: File-level accept/reject gate (Clean-elab) ---"
 STEPS=$((STEPS + 1))
-if run_expected_output "soundness_gate: PASS" cargo run --locked --message-format=short \
+if run_expected_output "soundness_gate: PASS" targo --unverified run --locked --message-format=short \
     -j "$CARGO_BUILD_JOBS" -p clean-elab --bin soundness_gate; then
     PASS=$((PASS + 1))
     record_lane "elab_soundness_gate" "File-level accept/reject gate (Clean-elab)" "" "soundness_gate: PASS" "true" "true" "passed"

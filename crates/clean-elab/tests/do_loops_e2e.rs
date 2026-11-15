@@ -193,36 +193,51 @@ fn b23_while_loop_loud_reject() {
     );
 }
 
-/// Nested `for` loops — the inner loop in the body is not lowered. LOUD.
+/// Nested `for` loops. Was a LOUD-REJECT guard; the capability landed and the
+/// guard was never retired, so it failed as "descoped shape must be REJECTED,
+/// but it fully checked".
+///
+/// Inverted rather than deleted, and certified by VALUE, not by "it
+/// elaborated": the inner loop contributes 3+4 = 7 per outer iteration over a
+/// two-element list, so the answer must be 14. A lowering that ran the inner
+/// loop once, or hoisted it, would still elaborate and would still be wrong.
 #[test]
-fn b23_nested_for_loud_reject() {
-    expect_loud_reject(
-        "def nf : Option Nat := do\n  let mut s := 0\n  for x in [1, 2] do\n    for y in [3, 4] do\n      s := s + y\n  pure s",
+fn b23_nested_for_value_certified() {
+    expect_pass(
+        "def nf : Option Nat := do\n  let mut s := 0\n  for x in [1, 2] do\n    for y in [3, 4] do\n      s := s + y\n  pure s\n\n\
+         theorem nf_pin : nf = some 14 := rfl",
     );
 }
 
-/// A loop body mutating TWO accumulators — only one is supported. LOUD.
+/// A loop body mutating TWO accumulators. Was a LOUD-REJECT guard; the
+/// capability landed and the guard was never retired.
+///
+/// Certified by value with the two accumulators DISTINGUISHED: `a` sums the
+/// elements (1+2 = 3) while `b` counts iterations (2), so the answer is 5. If
+/// both threaded the same state, or one were dropped, the sum would not be 5.
 #[test]
-fn b23_multi_accumulator_loud_reject() {
-    let e = expect_loud_reject(
-        "def ma : Option Nat := do\n  let mut a := 0\n  let mut b := 0\n  for x in [1, 2] do\n    a := a + x\n    b := b + 1\n  pure (a + b)",
-    );
-    assert!(
-        e.to_lowercase().contains("accumulator") || e.to_lowercase().contains("unsupported"),
-        "expected a typed multi-accumulator descope, got: {e}"
+fn b23_multi_accumulator_value_certified() {
+    expect_pass(
+        "def ma : Option Nat := do\n  let mut a := 0\n  let mut b := 0\n  for x in [1, 2] do\n    a := a + x\n    b := b + 1\n  pure (a + b)\n\n\
+         theorem ma_pin : ma = some 5 := rfl",
     );
 }
 
-/// A non-tail `return` inside the loop body needs the Option-tunneling
+/// A non-tail `return` inside the loop body. Was a LOUD-REJECT guard.
+/// Previously needed the Option-tunneling
 /// accumulator — descoped LOUD (B23 lands accumulate + break/continue).
 #[test]
-fn b23_return_in_for_body_loud_reject() {
-    let e = expect_loud_reject(
-        "def rr (n : Nat) : Option Nat := do\n  let mut s := 0\n  for x in [1, 2, 3] do\n    if x == n then\n      return 99\n    s := s + x\n  pure s",
-    );
-    assert!(
-        e.to_lowercase().contains("return") || e.to_lowercase().contains("unsupported"),
-        "expected a typed early-return descope, got: {e}"
+fn b23_return_in_for_body_value_certified() {
+    // Certified by value at THREE points, because "it elaborated" would not
+    // distinguish a broken early return: it fires mid-loop (rr 2 = 99), it
+    // does NOT fire when nothing matches and the accumulation completes
+    // (rr 9 = 1+2+3 = 6), and it fires on the FIRST element before any
+    // accumulation (rr 1 = 99).
+    expect_pass(
+        "def rr (n : Nat) : Option Nat := do\n  let mut s := 0\n  for x in [1, 2, 3] do\n    if x == n then\n      return 99\n    s := s + x\n  pure s\n\n\
+         theorem rr_mid : rr 2 = some 99 := rfl\n\n\
+         theorem rr_none : rr 9 = some 6 := rfl\n\n\
+         theorem rr_first : rr 1 = some 99 := rfl",
     );
 }
 

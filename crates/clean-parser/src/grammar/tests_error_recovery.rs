@@ -17,18 +17,20 @@ use crate::ParserDiagnosticSeverity;
 fn find_def_scope(
     decls: &[SurfaceDecl],
     target: &str,
-    current_scope: Option<String>,
-) -> Option<Option<String>> {
+    current_scope: Option<crate::SurfaceName>,
+) -> Option<Option<crate::SurfaceName>> {
     for d in decls {
         match d {
-            SurfaceDecl::Def { name, .. } | SurfaceDecl::Theorem { name, .. } if name == target => {
+            SurfaceDecl::Def { name, .. } | SurfaceDecl::Theorem { name, .. }
+                if name.name() == crate::SurfaceName::generated_path(target).name() =>
+            {
                 return Some(current_scope.clone());
             }
             SurfaceDecl::Namespace {
                 name, decls: inner, ..
             } => {
                 let scope = Some(match &current_scope {
-                    Some(outer) => format!("{outer}.{name}"),
+                    Some(outer) => outer.append(name),
                     None => name.clone(),
                 });
                 if let Some(found) = find_def_scope(inner, target, scope) {
@@ -61,7 +63,7 @@ fn test_namespace_body_error_recovery_keeps_following_decl_scoped() {
         .expect("recovered `good` should still be present in the parse tree");
     assert_eq!(
         scope,
-        Some("Foo".to_string()),
+        Some(crate::SurfaceName::generated_path("Foo")),
         "`good` must remain scoped under `Foo` after in-namespace recovery, got scope {scope:?} in {:?}",
         report.decls
     );
@@ -131,7 +133,7 @@ def afterLookup := true
         report.decls
     );
     assert!(
-        matches!(&report.decls[0], SurfaceDecl::Def { name, .. } if name == "lookupRatHint"),
+        matches!(&report.decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("lookupRatHint").name()),
         "lookupRatHint must remain a parsed definition: {:?}",
         report.decls
     );
@@ -202,7 +204,7 @@ fn test_section_body_error_recovery_keeps_following_decl() {
     // `good` must be inside the Section, with no stray top-level def/raw.
     let toplevel_good = decls
         .iter()
-        .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name == "good"));
+        .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("good").name()));
     assert!(
         !toplevel_good,
         "`good` must stay inside the section, not be hoisted to top level: {decls:?}"
@@ -221,7 +223,7 @@ fn test_pre_namespace_error_recovery_resyncs_at_namespace() {
         .expect("`good` should be recovered after resyncing at namespace");
     assert_eq!(
         scope,
-        Some("Foo".to_string()),
+        Some(crate::SurfaceName::generated_path("Foo")),
         "`good` must be scoped under `Foo`, got {scope:?} in {:?}",
         report.decls
     );
@@ -256,19 +258,19 @@ fn test_file_error_recovery_skips_malformed_decls() {
     let decls = Parser::parse_file(input).expect("file-level recovery should not fail");
 
     // We should get at least the two valid defs
-    let def_names: Vec<&str> = decls
+    let def_names: Vec<crate::SurfaceName> = decls
         .iter()
         .filter_map(|d| match d {
-            SurfaceDecl::Def { name, .. } => Some(name.as_str()),
+            SurfaceDecl::Def { name, .. } => Some(name.clone()),
             _ => None,
         })
         .collect();
     assert!(
-        def_names.contains(&"foo"),
+        def_names.contains(&crate::SurfaceName::generated_path("foo")),
         "should recover 'foo', got defs: {def_names:?}"
     );
     assert!(
-        def_names.contains(&"bar"),
+        def_names.contains(&crate::SurfaceName::generated_path("bar")),
         "should recover 'bar', got defs: {def_names:?}"
     );
 
@@ -376,15 +378,15 @@ fn test_do_block_error_recovery_keeps_following_decl() {
     ";
     let decls = Parser::parse_file(input).expect("do-block recovery should not fail");
 
-    let def_names: Vec<&str> = decls
+    let def_names: Vec<crate::SurfaceName> = decls
         .iter()
         .filter_map(|d| match d {
-            SurfaceDecl::Def { name, .. } => Some(name.as_str()),
+            SurfaceDecl::Def { name, .. } => Some(name.clone()),
             _ => None,
         })
         .collect();
     assert!(
-        def_names.contains(&"bar"),
+        def_names.contains(&crate::SurfaceName::generated_path("bar")),
         "do-block recovery must preserve the following `def bar`, got defs: {def_names:?} in {decls:?}"
     );
 }

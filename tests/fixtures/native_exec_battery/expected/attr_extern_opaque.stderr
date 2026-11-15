@@ -1,0 +1,2 @@
+Could not find native implementation of external declaration 'bumpO' (symbols 'l_bumpO___boxed' or 'l_bumpO').
+For declarations from `Init`, `Std`, or `Lean`, you need to set `supportInterpreter := true` in the relevant `lean_exe` statement in your `lakefile.lean`.

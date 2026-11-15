@@ -38,8 +38,9 @@ fn int_fvar(id: u64) -> Expr {
 
 fn int_local(id: u64, name: &str) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: int_type(),
         value: None,
     }
@@ -205,14 +206,16 @@ fn test_omega_int_eq_from_ge_ge() {
     let a = int_fvar(0);
     let b = int_fvar(1);
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".into(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: int_le(b.clone(), a.clone()),
         value: None,
     };
     let h2 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(3),
-        name: "h2".into(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: int_le(a.clone(), b.clone()),
         value: None,
     };
@@ -231,14 +234,16 @@ fn test_omega_int_false_from_contradictory_eq_hyps() {
     let b = int_fvar(1);
     let ab = int_add(a.clone(), b.clone());
     let h1 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h1".into(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: int_eq(ab.clone(), int_lit(3)),
         value: None,
     };
     let h2 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(3),
-        name: "h2".into(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: int_eq(ab, int_lit(5)),
         value: None,
     };
@@ -308,8 +313,9 @@ fn test_omega_int_rejects_a_plus_b_eq_4_from_eq_3() {
     let b = int_fvar(1);
     let ab = int_add(a.clone(), b.clone());
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".into(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: int_eq(ab.clone(), int_lit(3)),
         value: None,
     };

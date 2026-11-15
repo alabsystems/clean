@@ -7,9 +7,9 @@
 use super::{
     convert_expr, decl_to_constant_info, load_module_direct_with_cache,
     load_module_with_deps_bounded, load_module_with_deps_bounded_shared, load_parsed_module,
-    load_parsed_module_with_import_policy, module_name_from_path, parse_load_module,
-    read_and_convert_expr, ExprInternCache, ImportError, ModuleCache, OleanImportPolicy,
-    UnpinnedOleanImportPolicy,
+    load_parsed_module_at_index, load_parsed_module_with_import_policy, module_name_from_path,
+    parse_load_module, read_and_convert_expr, ExprInternCache, ImportError, ModuleCache,
+    OleanImportPolicy, UnpinnedOleanImportPolicy,
 };
 use crate::expr::ParsedExpr;
 use crate::module::{
@@ -23,24 +23,12 @@ use std::collections::HashMap;
 use std::env;
 use std::fs;
 use std::path::Path;
-use std::time::Duration;
 use tempfile::{NamedTempFile, TempDir};
 
 fn write_empty_olean(path: &Path) {
     let parent = path.parent().expect("fixture parent");
     fs::create_dir_all(parent).expect("create fixture directories");
     fs::write(path, []).expect("write olean fixture");
-}
-
-fn dummy_module() -> ParsedModule {
-    ParsedModule {
-        const_names: Vec::new(),
-        constants: Vec::new(),
-        extra_const_names: Vec::new(),
-        imports: Vec::new(),
-        entries: Vec::new(),
-        clean_payload: None,
-    }
 }
 
 fn module_with_extension(extension_name: &str, entry_name: &str) -> ParsedModule {
@@ -320,8 +308,12 @@ fn test_default_search_paths_prefers_mathlib_path() {
     );
 }
 
+/// No installed toolchain is an implicit search root (R38, R81): until
+/// 2026-10-17 this test pinned the elan-wide fallback, which found a
+/// `~/.elan/toolchains/*lean4*` library through `USERPROFILE` when `HOME`
+/// was unset.
 #[test]
-fn test_default_search_paths_uses_userprofile_when_home_missing() {
+fn test_default_search_paths_ignores_elan_toolchains_under_userprofile() {
     let temp_home = TempDir::new().expect("tempdir");
     let toolchain_lib = temp_home
         .path()
@@ -337,14 +329,17 @@ fn test_default_search_paths_uses_userprofile_when_home_missing() {
     );
 
     assert!(
-        !paths.is_empty(),
-        "expected toolchain path from USERPROFILE to be discovered"
+        paths.is_empty(),
+        "an installed toolchain that is not the pin must not be searched: {paths:?}"
     );
-    assert_eq!(paths[0], toolchain_lib);
 }
 
+/// Exit (b) of `formats-import-world-gate`: over a HOME holding the pinned
+/// toolchain beside v4.8.0 and v4.30.0, the search is the pin and nothing
+/// else. Until 2026-10-17 this test asserted the two others followed it as
+/// "compatibility-only fallbacks", sorted by directory name.
 #[test]
-fn test_default_search_paths_prioritizes_exact_pin_among_multiple_toolchains() {
+fn test_default_search_paths_returns_only_the_exact_pin_among_multiple_toolchains() {
     let temp_home = TempDir::new().expect("tempdir");
     let toolchains = temp_home.path().join(".elan/toolchains");
     let old = toolchains.join("leanprover--lean4---v4.8.0/lib/lean");
@@ -362,16 +357,33 @@ fn test_default_search_paths_prioritizes_exact_pin_among_multiple_toolchains() {
         Some(pinned.clone()),
     );
 
-    assert_eq!(paths.first(), Some(&pinned), "exact pin must be first");
-    assert_eq!(
-        paths.iter().filter(|path| *path == &pinned).count(),
-        1,
-        "fallback scan must not duplicate the pin"
+    assert_eq!(paths, vec![pinned], "the exact pin and no other toolchain");
+}
+
+/// With no pin resolved, an installed toolchain is still not a search root:
+/// the search is empty rather than whatever elan happens to hold.
+#[test]
+fn test_default_search_paths_without_pin_ignores_elan_toolchains() {
+    let temp_home = TempDir::new().expect("tempdir");
+    let toolchains = temp_home.path().join(".elan/toolchains");
+    for lib in [
+        toolchains.join("leanprover--lean4---v4.8.0/lib/lean"),
+        toolchains.join("leanprover--lean4---v4.30.0/lib/lean"),
+    ] {
+        write_empty_olean(&lib.join("Init/Prelude.olean"));
+    }
+
+    let mut env_map = HashMap::new();
+    env_map.insert("HOME", temp_home.path().as_os_str().to_os_string());
+    let paths = super::collect_default_search_paths_with_pinned(
+        |key| env_map.get(key).cloned(),
+        |path| fs::read_dir(path),
+        None,
     );
-    assert_eq!(
-        &paths[1..],
-        &[stable, old],
-        "non-authority fallbacks must have deterministic directory ordering"
+
+    assert!(
+        paths.is_empty(),
+        "no installed toolchain stands in for a missing pin: {paths:?}"
     );
 }
 
@@ -547,63 +559,155 @@ fn test_extension_entries_skip_duplicate_module_load() {
 }
 
 #[test]
-fn module_cache_returns_entry_when_mtime_matches() {
-    let cache = ModuleCache::new();
-    let file = NamedTempFile::new().expect("temp file");
-    fs::write(file.path(), b"original").unwrap();
+fn explicit_module_indices_keep_extensions_from_equal_import_count_modules() {
+    let mut env = Environment::new();
+    let first = module_with_extension("Ext.Indexed", "first");
+    let second = module_with_extension("Ext.Indexed", "second");
 
-    cache.insert("Init.Core", file.path(), dummy_module());
+    assert_eq!(
+        first.imports.len(),
+        second.imports.len(),
+        "regression requires the legacy direct-import-count slots to collide"
+    );
 
-    let cached = cache.get("Init.Core", file.path());
-    assert!(cached.is_some(), "expected cache hit for unchanged file");
-    assert_eq!(cache.len(), 1, "entry should remain cached");
+    load_parsed_module_at_index(&mut env, &first, Some("Indexed.First".to_string()), 7)
+        .expect("load first explicit module slot");
+    load_parsed_module_at_index(&mut env, &second, Some("Indexed.Second".to_string()), 11)
+        .expect("load second explicit module slot");
+
+    let extension_name = Name::interned("Ext.Indexed");
+    let first_entries = env
+        .get_persistent_extension_module_entries(&extension_name, 7)
+        .expect("first module extension entries");
+    let second_entries = env
+        .get_persistent_extension_module_entries(&extension_name, 11)
+        .expect("second module extension entries");
+
+    assert_eq!(first_entries.len(), 1);
+    assert_eq!(first_entries[0].name, Name::interned("first"));
+    assert_eq!(second_entries.len(), 1);
+    assert_eq!(second_entries[0].name, Name::interned("second"));
 }
 
 #[test]
-fn module_cache_evicts_when_timestamp_changes() {
-    use std::fs::FileTimes;
-    use std::time::SystemTime;
+fn explicit_module_index_metadata_replay_is_idempotent() {
+    let mut env = Environment::new();
+    let module = module_with_extension("Ext.IndexedReplay", "entry");
 
+    load_parsed_module_at_index(&mut env, &module, Some("Indexed.Replay".to_string()), 13)
+        .expect("first indexed load");
+    load_parsed_module_at_index(&mut env, &module, Some("Indexed.Replay".to_string()), 13)
+        .expect("same-slot metadata replay");
+
+    let entries = env
+        .get_persistent_extension_module_entries(&Name::interned("Ext.IndexedReplay"), 13)
+        .expect("replayed extension entries");
+    assert_eq!(
+        entries.len(),
+        1,
+        "same-slot replay must not duplicate metadata"
+    );
+    assert_eq!(entries[0].name, Name::interned("entry"));
+}
+
+#[test]
+fn module_cache_reuses_identical_captured_content() {
+    use super::module_cache_direct::CapturedModule;
     let cache = ModuleCache::new();
     let file = NamedTempFile::new().expect("temp file");
-    fs::write(file.path(), b"v1").unwrap();
+    let bytes = crate::OleanExporter::export_with_env(
+        &Environment::default(),
+        &[],
+        &[],
+        "0000000000000000000000000000000000000000",
+    )
+    .expect("export");
+    fs::write(file.path(), bytes).expect("write");
+    let captured = CapturedModule::read(file.path()).expect("capture");
+    let path = captured.path.clone();
+    let inserted = cache.insert_direct(path, captured.parse().expect("parse"));
+    let again = CapturedModule::read(file.path()).expect("recapture");
+    let reused = cache.get_direct(&again).expect("content hit");
+    assert!(std::sync::Arc::ptr_eq(&inserted, &reused));
+    assert_eq!(cache.len(), 1);
+}
 
-    cache.insert("Init.Changed", file.path(), dummy_module());
-
-    // Explicitly set mtime 2 seconds in the future instead of sleeping.
-    // This is deterministic regardless of filesystem mtime granularity
-    // (HFS+ has 1-second resolution, NFS can be worse). Part of #1653.
-    let future = SystemTime::now() + Duration::from_secs(2);
-    let times = FileTimes::new().set_modified(future);
+#[test]
+fn module_cache_distinguishes_content_changes_from_mtime_only_changes() {
+    use super::module_cache_direct::CapturedModule;
+    let cache = ModuleCache::new();
+    let file = NamedTempFile::new().expect("temp file");
+    let mut bytes = crate::OleanExporter::export_with_env(
+        &Environment::default(),
+        &[],
+        &[],
+        "0000000000000000000000000000000000000000",
+    )
+    .expect("export");
+    fs::write(file.path(), &bytes).expect("write");
+    let captured = CapturedModule::read(file.path()).expect("capture");
+    cache.insert_direct(captured.path.clone(), captured.parse().expect("parse"));
+    let future = std::time::SystemTime::now() + std::time::Duration::from_secs(2);
     fs::File::options()
         .write(true)
         .open(file.path())
-        .unwrap()
-        .set_times(times)
-        .unwrap();
-
+        .expect("open")
+        .set_times(fs::FileTimes::new().set_modified(future))
+        .expect("mtime");
     assert!(
-        cache.get("Init.Changed", file.path()).is_none(),
-        "stale cache entry should be dropped when mtime changes"
+        cache
+            .get_direct(&CapturedModule::read(file.path()).expect("capture"))
+            .is_some(),
+        "same bytes with a different mtime are still the same cached module"
     );
-    assert_eq!(cache.len(), 0, "stale entry should be removed");
+    bytes.push(0);
+    fs::write(file.path(), bytes).expect("content mutation");
+    fs::File::options()
+        .write(true)
+        .open(file.path())
+        .expect("open")
+        .set_times(fs::FileTimes::new().set_modified(future))
+        .expect("preserve mtime");
+    assert!(
+        cache
+            .get_direct(&CapturedModule::read(file.path()).expect("capture"))
+            .is_none(),
+        "changed bytes at identical mtime must evict the cached bundle"
+    );
+    assert!(cache.is_empty());
 }
 
 #[test]
-fn module_cache_evicts_when_file_is_missing() {
+fn module_cache_cannot_load_a_missing_file_from_retained_metadata() {
+    use super::module_cache_direct::CapturedModule;
     let cache = ModuleCache::new();
-    let file = NamedTempFile::new().expect("temp file");
-    let path = file.path().to_path_buf();
-    fs::write(&path, b"v1").unwrap();
-
-    cache.insert("Init.Missing", &path, dummy_module());
-    fs::remove_file(&path).unwrap();
-
-    assert!(
-        cache.get("Init.Missing", &path).is_none(),
-        "cache should not return entries for missing files"
-    );
-    assert!(cache.is_empty(), "missing file should clear cache entry");
+    let directory = TempDir::new().expect("private root");
+    let path = directory.path().join("Missing.olean");
+    let bytes = crate::OleanExporter::export_with_env(
+        &Environment::default(),
+        &[],
+        &[],
+        "0000000000000000000000000000000000000000",
+    )
+    .expect("export");
+    fs::write(&path, bytes).expect("write");
+    let captured = CapturedModule::read(&path).expect("capture");
+    cache.insert_direct(captured.path.clone(), captured.parse().expect("parse"));
+    fs::remove_file(&path).expect("remove private test fixture");
+    assert!(CapturedModule::read(&path).is_err());
+    let mut env = Environment::default();
+    assert!(super::load_module_with_deps_cached(
+        &mut env,
+        "Missing",
+        &[directory.path().to_path_buf()],
+        &cache
+    )
+    .is_err());
+    assert_eq!(env.constants().count(), 0);
+    // Unused metadata may remain within the bounded cache, but cannot stand in
+    // for an unreadable file. Explicit clear releases it even after removal.
+    cache.clear();
+    assert!(cache.is_empty());
 }
 
 fn sample_definition_decl(is_reducible: bool) -> Declaration {
@@ -2078,6 +2182,14 @@ fn mybool_module() -> ParsedModule {
     // motive b  (motive at BVar 3 under motive/min_f/min_t/major binders)
     let motive_major =
         ParsedExpr::App(Box::new(ParsedExpr::BVar(3)), Box::new(ParsedExpr::BVar(0)));
+    // The iota RHS binds exactly the recursor's own telescope (motive and
+    // minors), so its binder domains ARE these: the imported-family check
+    // compares a rule against the kernel-generated one, domains included.
+    let (rhs_motive, rhs_false_dom, rhs_true_dom) = (
+        motive_dom.clone(),
+        motive_false.clone(),
+        motive_true.clone(),
+    );
     let rec_type = ParsedExpr::ForallE(
         "motive".to_string(),
         Box::new(motive_dom),
@@ -2103,13 +2215,13 @@ fn mybool_module() -> ParsedModule {
     // RHS for the false rule: λ motive. λ min_f. λ min_t. min_f  (BVar 1)
     let rhs_false = ParsedExpr::Lam(
         "motive".to_string(),
-        Box::new(ParsedExpr::Sort(ParsedLevel::Zero)),
+        Box::new(rhs_motive.clone()),
         Box::new(ParsedExpr::Lam(
             "min_f".to_string(),
-            Box::new(ParsedExpr::Sort(ParsedLevel::Zero)),
+            Box::new(rhs_false_dom.clone()),
             Box::new(ParsedExpr::Lam(
                 "min_t".to_string(),
-                Box::new(ParsedExpr::Sort(ParsedLevel::Zero)),
+                Box::new(rhs_true_dom.clone()),
                 Box::new(ParsedExpr::BVar(1)),
                 ParsedBinderInfo::Default,
             )),
@@ -2120,13 +2232,13 @@ fn mybool_module() -> ParsedModule {
     // RHS for the true rule: λ motive. λ min_f. λ min_t. min_t  (BVar 0)
     let rhs_true = ParsedExpr::Lam(
         "motive".to_string(),
-        Box::new(ParsedExpr::Sort(ParsedLevel::Zero)),
+        Box::new(rhs_motive.clone()),
         Box::new(ParsedExpr::Lam(
             "min_f".to_string(),
-            Box::new(ParsedExpr::Sort(ParsedLevel::Zero)),
+            Box::new(rhs_false_dom.clone()),
             Box::new(ParsedExpr::Lam(
                 "min_t".to_string(),
-                Box::new(ParsedExpr::Sort(ParsedLevel::Zero)),
+                Box::new(rhs_true_dom.clone()),
                 Box::new(ParsedExpr::BVar(0)),
                 ParsedBinderInfo::Default,
             )),
@@ -2390,7 +2502,6 @@ fn mynat_module() -> ParsedModule {
 
     let nat_ref = || ParsedExpr::Const("MyNat".to_string(), vec![]);
     let u = || ParsedLevel::Param("u".to_string());
-    let dummy = || ParsedExpr::Sort(ParsedLevel::Zero);
 
     // MyNat : Type
     let ind_type = ParsedExpr::Sort(ParsedLevel::Succ(Box::new(ParsedLevel::Zero)));
@@ -2450,6 +2561,12 @@ fn mynat_module() -> ParsedModule {
         )),
         ParsedBinderInfo::Default,
     );
+    // The iota RHS binds the recursor's own telescope (motive, minors) and
+    // then the constructor's fields, so those are its binder domains: the
+    // imported-family check compares a rule against the kernel-generated one,
+    // domains included.
+    let (rhs_motive, rhs_zero_dom, rhs_succ_dom) =
+        (motive_dom.clone(), motive_zero.clone(), succ_minor.clone());
     let rec_type = ParsedExpr::ForallE(
         "motive".to_string(),
         Box::new(motive_dom),
@@ -2470,13 +2587,13 @@ fn mynat_module() -> ParsedModule {
     // zero rule RHS: λ motive. λ z. λ s. z   (z = BVar 1)
     let rhs_zero = ParsedExpr::Lam(
         "motive".to_string(),
-        Box::new(dummy()),
+        Box::new(rhs_motive.clone()),
         Box::new(ParsedExpr::Lam(
             "z".to_string(),
-            Box::new(dummy()),
+            Box::new(rhs_zero_dom.clone()),
             Box::new(ParsedExpr::Lam(
                 "s".to_string(),
-                Box::new(dummy()),
+                Box::new(rhs_succ_dom.clone()),
                 Box::new(ParsedExpr::BVar(1)),
                 ParsedBinderInfo::Default,
             )),
@@ -2510,16 +2627,16 @@ fn mynat_module() -> ParsedModule {
     );
     let rhs_succ = ParsedExpr::Lam(
         "motive".to_string(),
-        Box::new(dummy()),
+        Box::new(rhs_motive.clone()),
         Box::new(ParsedExpr::Lam(
             "z".to_string(),
-            Box::new(dummy()),
+            Box::new(rhs_zero_dom.clone()),
             Box::new(ParsedExpr::Lam(
                 "s".to_string(),
-                Box::new(dummy()),
+                Box::new(rhs_succ_dom.clone()),
                 Box::new(ParsedExpr::Lam(
                     "field_n".to_string(),
-                    Box::new(dummy()),
+                    Box::new(nat_ref()),
                     Box::new(succ_body),
                     ParsedBinderInfo::Default,
                 )),

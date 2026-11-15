@@ -7,6 +7,8 @@
 //! Separated from registration/dispatch to reduce churn on the hot
 //! `builtins_phase3d_conv` module. Part of #2547.
 
+use clean_parser::SurfaceName;
+
 use crate::tactic::conv_proof::{infer_sort_level, lift_focus_eq_through_path};
 use crate::tactic::{Goal, ProofState, TacticError};
 use clean_kernel::{Expr, Name};
@@ -52,16 +54,17 @@ fn build_hyp_cast_expr(
 pub(super) fn eval_conv_hyps(
     eval: &mut dyn crate::tactic::registry::TacticEval,
     ps: &mut ProofState,
-    names: &[String],
+    names: &[SurfaceName],
     tacs: &[SurfaceTactic],
 ) -> Result<(), TacticError> {
     for name in names {
-        let (old_hyp_ty, local_ctx, hyp_fvar, goal_meta_id, goal_tag) = {
+        let (old_hyp_ty, local_ctx, hyp_fvar, goal_meta_id, goal_tag, case_binders) = {
             let goal = ps.current_goal().ok_or(TacticError::NoGoals)?;
             let decl = goal
                 .local_ctx
                 .iter()
-                .find(|d| d.name == *name)
+                .rev()
+                .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, name))
                 .ok_or_else(|| TacticError::HypothesisNotFound(format!("conv at: '{name}'")))?;
             (
                 decl.ty.clone(),
@@ -69,6 +72,7 @@ pub(super) fn eval_conv_hyps(
                 decl.fvar,
                 goal.meta_id,
                 goal.tag.clone(),
+                goal.case_binders.clone(),
             )
         };
 
@@ -109,6 +113,7 @@ pub(super) fn eval_conv_hyps(
             target: old_hyp_ty.clone(),
             local_ctx: local_ctx.clone(),
             tag: goal_tag.clone(),
+            case_binders,
         };
         let hyp_ty_eq_proof = lift_focus_eq_through_path(
             ps,

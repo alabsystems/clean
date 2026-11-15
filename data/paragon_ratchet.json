@@ -3,15 +3,15 @@
   "cfg_test_module_correction": "2026-07-23: production metrics now resolve direct #[cfg(test)] mod declarations, excluding their external module files and descendants. The prior scanner counted test-only files with names such as lean4_features.rs as production debt.",
   "heuristics": {
     "scope": "all .rs files under crates/<crate>/; excludes */target/* and crates/clean-kernel/src/env/ (another lane owns its content)",
-    "files_over_1000": "every in-scope .rs file with >1000 lines (src, tests, benches, examples) — owner ruling 2026-08-24 raised the organizational threshold from the rust_excellence 500 figure",
-    "unwrap_expect_production": "occurrences of `.unwrap()` and `.expect(` in src/ files only (tests/, benches/, examples/ dirs, files/directories resolved from direct #[cfg(test)] mod declarations including #[path=\"...\"], sibling modules declared behind #[cfg(test)], sibling test files tests.rs/*_tests.rs/tests_*.rs, and sibling test dirs tests_*/ excluded), skipping #[cfg(test)]-gated inline items via a naive brace-depth scanner (string literals and // comments stripped first) and skipping comment text; string contents containing the patterns are not detected — grep heuristic, not a parse",
-    "bare_pub_non_lib": "lines in src/ non-lib.rs files (same test-skip heuristic) matching `pub [async|const|unsafe|extern] fn|struct|enum` — bare pub, not pub(crate)/pub(super); proxy for pub(crate) discipline",
+    "files_over_1000": "every in-scope .rs file with >1000 lines (src, tests, benches, examples) \u2014 owner ruling 2026-08-24 raised the organizational threshold from the rust_excellence 500 figure",
+    "unwrap_expect_production": "occurrences of `.unwrap()` and `.expect(` in src/ files only (tests/, benches/, examples/ dirs, files/directories resolved from direct #[cfg(test)] mod declarations including #[path=\"...\"], sibling modules declared behind #[cfg(test)], sibling test files tests.rs/*_tests.rs/tests_*.rs, and sibling test dirs tests_*/ excluded), skipping #[cfg(test)]-gated inline items via a naive brace-depth scanner (string literals and // comments stripped first) and skipping comment text; string contents containing the patterns are not detected \u2014 grep heuristic, not a parse",
+    "bare_pub_non_lib": "lines in src/ non-lib.rs files (same test-skip heuristic) matching `pub [async|const|unsafe|extern] fn|struct|enum` \u2014 bare pub, not pub(crate)/pub(super); proxy for pub(crate) discipline",
     "allow_dead_code_sites": "inner-attribute lines in src/ files that allow dead_code directly or through cfg_attr (whole-file/module suppressions)"
   },
   "totals": {
-    "files_over_1000": 442,
-    "unwrap_expect_production": 1229,
-    "bare_pub_non_lib": 13402,
+    "files_over_1000": 439,
+    "unwrap_expect_production": 1148,
+    "bare_pub_non_lib": 13410,
     "allow_dead_code_sites": 57
   },
   "crates": {
@@ -24,7 +24,7 @@
     "clean-auto": {
       "files_over_1000": 10,
       "unwrap_expect_production": 62,
-      "bare_pub_non_lib": 763,
+      "bare_pub_non_lib": 647,
       "allow_dead_code_sites": 0
     },
     "clean-autoform": {
@@ -34,9 +34,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-c-sem": {
-      "files_over_1000": 12,
+      "files_over_1000": 11,
       "unwrap_expect_production": 12,
-      "bare_pub_non_lib": 459,
+      "bare_pub_non_lib": 463,
       "allow_dead_code_sites": 0
     },
     "clean-cake": {
@@ -48,19 +48,19 @@
     "clean-ck0": {
       "files_over_1000": 6,
       "unwrap_expect_production": 0,
-      "bare_pub_non_lib": 126,
+      "bare_pub_non_lib": 125,
       "allow_dead_code_sites": 0
     },
     "clean-cli": {
-      "files_over_1000": 20,
-      "unwrap_expect_production": 24,
-      "bare_pub_non_lib": 9,
+      "files_over_1000": 16,
+      "unwrap_expect_production": 17,
+      "bare_pub_non_lib": 10,
       "allow_dead_code_sites": 0
     },
     "clean-compiler": {
-      "files_over_1000": 17,
-      "unwrap_expect_production": 19,
-      "bare_pub_non_lib": 524,
+      "files_over_1000": 18,
+      "unwrap_expect_production": 18,
+      "bare_pub_non_lib": 533,
       "allow_dead_code_sites": 0
     },
     "clean-discovery": {
@@ -70,9 +70,9 @@
       "allow_dead_code_sites": 0
     },
     "clean-elab": {
-      "files_over_1000": 70,
-      "unwrap_expect_production": 261,
-      "bare_pub_non_lib": 1386,
+      "files_over_1000": 72,
+      "unwrap_expect_production": 233,
+      "bare_pub_non_lib": 1295,
       "allow_dead_code_sites": 7
     },
     "clean-features": {
@@ -88,19 +88,19 @@
       "allow_dead_code_sites": 0
     },
     "clean-kernel": {
-      "files_over_1000": 44,
-      "unwrap_expect_production": 158,
-      "bare_pub_non_lib": 1209,
+      "files_over_1000": 45,
+      "unwrap_expect_production": 159,
+      "bare_pub_non_lib": 1230,
       "allow_dead_code_sites": 0
     },
     "clean-lake": {
-      "files_over_1000": 4,
-      "unwrap_expect_production": 5,
-      "bare_pub_non_lib": 126,
+      "files_over_1000": 1,
+      "unwrap_expect_production": 1,
+      "bare_pub_non_lib": 125,
       "allow_dead_code_sites": 0
     },
     "clean-lsp": {
-      "files_over_1000": 6,
+      "files_over_1000": 5,
       "unwrap_expect_production": 0,
       "bare_pub_non_lib": 68,
       "allow_dead_code_sites": 0
@@ -108,7 +108,7 @@
     "clean-macro": {
       "files_over_1000": 3,
       "unwrap_expect_production": 0,
-      "bare_pub_non_lib": 227,
+      "bare_pub_non_lib": 214,
       "allow_dead_code_sites": 0
     },
     "clean-math-project": {
@@ -119,8 +119,8 @@
     },
     "clean-mathverse": {
       "files_over_1000": 95,
-      "unwrap_expect_production": 203,
-      "bare_pub_non_lib": 3583,
+      "unwrap_expect_production": 202,
+      "bare_pub_non_lib": 3584,
       "allow_dead_code_sites": 0
     },
     "clean-mathverse-server": {
@@ -129,27 +129,33 @@
       "bare_pub_non_lib": 21,
       "allow_dead_code_sites": 0
     },
+    "clean-native": {
+      "files_over_1000": 2,
+      "unwrap_expect_production": 1,
+      "bare_pub_non_lib": 33,
+      "allow_dead_code_sites": 0
+    },
     "clean-olean": {
       "files_over_1000": 17,
-      "unwrap_expect_production": 47,
-      "bare_pub_non_lib": 348,
+      "unwrap_expect_production": 12,
+      "bare_pub_non_lib": 456,
       "allow_dead_code_sites": 0
     },
     "clean-parser": {
       "files_over_1000": 9,
-      "unwrap_expect_production": 216,
-      "bare_pub_non_lib": 131,
+      "unwrap_expect_production": 206,
+      "bare_pub_non_lib": 178,
       "allow_dead_code_sites": 0
     },
     "clean-reflect": {
       "files_over_1000": 2,
       "unwrap_expect_production": 1,
-      "bare_pub_non_lib": 28,
+      "bare_pub_non_lib": 29,
       "allow_dead_code_sites": 0
     },
     "clean-runtime": {
       "files_over_1000": 1,
-      "unwrap_expect_production": 44,
+      "unwrap_expect_production": 43,
       "bare_pub_non_lib": 177,
       "allow_dead_code_sites": 0
     },
@@ -161,8 +167,8 @@
     },
     "clean-server": {
       "files_over_1000": 9,
-      "unwrap_expect_production": 4,
-      "bare_pub_non_lib": 420,
+      "unwrap_expect_production": 3,
+      "bare_pub_non_lib": 416,
       "allow_dead_code_sites": 0
     },
     "clean-sys": {
@@ -179,8 +185,8 @@
     },
     "clean-verify": {
       "files_over_1000": 92,
-      "unwrap_expect_production": 75,
-      "bare_pub_non_lib": 2465,
+      "unwrap_expect_production": 80,
+      "bare_pub_non_lib": 2474,
       "allow_dead_code_sites": 50
     }
   },
@@ -191,11 +197,15 @@
     },
     {
       "path": "crates/clean-elab/src/lean4_corpus_tests.rs",
-      "lines": 13689
+      "lines": 13949
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/par_reduces_c.rs",
-      "lines": 9265
+      "lines": 9134
+    },
+    {
+      "path": "crates/clean-parser/src/grammar/tests.rs",
+      "lines": 9049
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/par_reduction.rs",
@@ -203,71 +213,67 @@
     },
     {
       "path": "crates/clean-lsp/src/backend/tests.rs",
-      "lines": 8485
+      "lines": 8566
+    },
+    {
+      "path": "crates/clean-compiler/src/emit_trust_ir_tests.rs",
+      "lines": 8229
     },
     {
       "path": "crates/clean-elab/tests/integration/lean4_phase1_compat.rs",
       "lines": 7098
     },
     {
-      "path": "crates/clean-parser/src/grammar/tests.rs",
-      "lines": 6954
+      "path": "crates/clean-mathverse/src/shard.rs",
+      "lines": 6398
     },
     {
       "path": "crates/clean-rust-sem/src/eval/tests.rs",
       "lines": 6370
     },
     {
-      "path": "crates/clean-mathverse/src/shard.rs",
-      "lines": 6340
-    },
-    {
       "path": "crates/clean-kernel/src/bitvec_coercion.rs",
       "lines": 6279
+    },
+    {
+      "path": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
+      "lines": 6242
     },
     {
       "path": "crates/clean-mathverse/src/hol/isabelle_pure_translate/def_axioms/conj_bundle.rs",
       "lines": 6000
     },
     {
-      "path": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
-      "lines": 5905
+      "path": "crates/clean-elab/src/tactic/tests/core.rs",
+      "lines": 5983
     },
     {
-      "path": "crates/clean-elab/src/tactic/tests/core.rs",
-      "lines": 5693
+      "path": "crates/clean-elab/src/codata_cmd.rs",
+      "lines": 5774
     },
     {
       "path": "crates/clean-mathverse/src/verify/incremental/tests.rs",
-      "lines": 5650
+      "lines": 5739
     },
     {
       "path": "crates/clean-math-project/src/lib.rs",
       "lines": 5640
     },
     {
-      "path": "crates/clean-elab/src/codata_cmd.rs",
-      "lines": 5465
-    },
-    {
-      "path": "crates/clean-verify/src/spec/core_spec/iota_core.rs",
-      "lines": 5339
+      "path": "crates/clean-olean/src/import/load_register.rs",
+      "lines": 5636
     },
     {
       "path": "crates/clean-kernel/src/tc/reduction/kan.rs",
-      "lines": 5241
+      "lines": 5298
     },
     {
       "path": "crates/clean-verify/src/spec/core_spec/complete_development.rs",
-      "lines": 5035
-    },
-    {
-      "path": "crates/clean-compiler/src/emit_trust_ir_tests.rs",
-      "lines": 5022
+      "lines": 5154
     }
   ],
   "generated_by": "scripts/paragon_ratchet.sh --update",
-  "last_updated": "2026-08-28",
+  "last_updated": "2026-11-01",
   "worst_offenders_over_500": [
     {
       "path": "crates/clean-mathverse/src/coq/alpha.rs",
@@ -351,5 +357,121 @@
     }
   ],
   "bare_pub_baseline_2026_08_23": "2026-08-23: bare_pub_non_lib 13699 -> 13703. Seven bare pubs landed on 2026-08-22 and two were removed; of the seven, ONE was narrowable and was narrowed rather than absorbed (ElabCtx::set_unstaged_siblings -> pub(crate); its only caller is crate::module_batch::exec). The remaining four are structurally required and are the whole of this +4: (1) clean-elab infer::UnstagedSibling -- named in lib.rs's `pub use infer::{..}` list, so pub(crate) would not compile; (2) clean-kernel LocalContext::reserve_fvar_floor -- called ACROSS crates from clean-elab infer::demand_local_ctx; (3,4) clean-lake InitArgs::exe_project / ::lib_project -- consumed by the tests/parity_battery integration test THROUGH the crate lib, the same shape as the +2 recorded at 736193d31. files_over_500 was NOT bumped: its +10 was fixed by splitting, and it is back at the 1424 it has held since 736193d31.",
-  "files_over_1000_baseline_2026_08_28": "2026-08-28: files_over_1000 441 -> 442, and it is NOT this commit's. `crates/clean-elab/src/codata_variant_coind.rs` crossed at 1026 lines in 3886de0da (codata VC-6), and origin/main was measured RED on this counter at be87f72e1 BEFORE the simp-emitter commit rebased onto it — so a lane pushed past an uninstalled or bypassed hook (CLAUDE.md records that 59 of 61 worktrees still carry the old scripts/hooks/pre-push). Absorbed here as a RECORD, not an endorsement: the file is the codata lane's active work and splitting it mid-flight would conflict with them. The right fix is theirs, and it is a module split, not a baseline. unwrap_expect_production 1230 -> 1229 is likewise not this commit's: it measured -1 identically with and without these changes."
+  "files_over_1000_baseline_2026_08_28": "2026-08-28: files_over_1000 441 -> 442, and it is NOT this commit's. `crates/clean-elab/src/codata_variant_coind.rs` crossed at 1026 lines in 3886de0da (codata VC-6), and origin/main was measured RED on this counter at be87f72e1 BEFORE the simp-emitter commit rebased onto it \u2014 so a lane pushed past an uninstalled or bypassed hook (CLAUDE.md records that 59 of 61 worktrees still carry the old scripts/hooks/pre-push). Absorbed here as a RECORD, not an endorsement: the file is the codata lane's active work and splitting it mid-flight would conflict with them. The right fix is theirs, and it is a module split, not a baseline. unwrap_expect_production 1230 -> 1229 is likewise not this commit's: it measured -1 identically with and without these changes.",
+  "files_over_1000_baseline_2026_08_30": "2026-08-30: files_over_1000 443 -> 444, and it is NOT this commit's \u2014 same shape as the 2026-08-28 entry above. `crates/clean-elab/src/tactic/drat/tests.rs` is 1011 lines and was ALREADY 1011 at this commit's parent, which is another lane's `7c7659b76`; measured directly by checking out HEAD~1 and running this script there, where it reads GREW +1 with no local changes. The error-render commit touches no file over 1000 that it did not find over 1000. Absorbed as a record: the file is a TEST module and the fix is a split by its owner, not a baseline.",
+  "bare_pub_baseline_2026_08_31": "2026-08-31: bare_pub_non_lib 13402 -> 13404, NOT this commit's \u2014 the third rebase-borne absorb this week (see the 2026-08-28 and 2026-08-30 notes). Measured by checking out this commit's parent `eb6b5a21c` and running the script there with no local changes: it reads GREW +2. The error-render commit adds only `pub(crate)` items, which this counter does not count. Absorbed as a record. The recurrence is itself the finding: three lanes in four days have pushed a paragon-red main, which is what CLAUDE.md predicts while 59 of 61 worktrees still carry the pre-2026-08-23 hook.",
+  "rebase_borne_absorb_2026_09_01": "2026-09-01: files_over_1000 444 -> 446 and bare_pub_non_lib 13404 -> 13405, NEITHER this commit's \u2014 the FOURTH rebase-borne absorb in five days (see the 2026-08-28, 08-30 and 08-31 notes above). Measured by checking out this commit's parent and running the script there with no local changes: both read GREW. The CLI-help commit adds no `pub` item and no file over 1000. The recurrence is the finding, not the numbers: four lanes in five days have pushed a paragon-red main, which is exactly what CLAUDE.md predicts while 59 of 61 worktrees still carry the pre-2026-08-23 hook. The fix is finishing that rollout, not absorbing here a fifth time.",
+  "bare_pub_baseline_2026_09_14": "2026-09-14: bare_pub_non_lib 13374 -> 13396 (+22). 1802d550b (earlier today) narrowed 45 clean-compiler `pub fn`s chosen by grep and reverted the 10 rustc rejected with E0364, on the rule that every narrowing is one the compiler agrees with. The workspace lint leg (`clippy --workspace --all-targets -- -D warnings`), which could not run on this box until the rustup seam was repaired the same day, rejects 22 more: `boxing::explicit_boxing_with_config` is imported by three of the crate's own integration tests (E0603, those targets did not compile), and 21 have no non-test caller in the crate, so at pub(crate) rustc's dead_code lint fires on them and transitively on 31 items (the whole boxing_expensive_const pass, CompilerEnv's three metadata maps, BackTranslationMap/PassTracer's ten methods, BoxingAuxCache::into_decls, compile_default, the explicit_boxing* wrappers). Each of the 22 is back at the exact `pub` it had before that commit; nothing was deleted, allowed, or marked test-only. 13396 is the count the compiler agrees with, 61 under the 13457 that commit set out to fix. The tightened 13374 baseline had locked in a state the lint leg refuses to compile.",
+  "paragon_baseline_2026_09_15b": "2026-09-15: bare_pub_non_lib 13396 -> 13399 (+3) and unwrap_expect_production 1232 -> 1233 (+1), both from crates/clean-olean/src/test_support/ (new, compiled only under `#[cfg(any(test, feature = \"test-support\"))]`), which retired the 57 #[ignore]d tests by compiling their lost fixtures from source with the pinned Lean at test time. The +3 are `compiled_fixture_dir`, `fixture_root` and `run_oracle`: the crate's integration tests reach them only through `pub use` re-exports, and a `pub use` of a `pub(crate)` item is E0364 -- every internal of that module is private (eleven bare pubs narrowed to three). The +1 is the module's ONE `.expect(\"explicit pinned Lean fixture is required\")`, the owner's fail-closed spelling from import/load_parse.rs: an absent toolchain must FAIL the test, never skip it, and that is the whole contract of the module. The scanner counts both because its test-skip rule recognises `#[cfg(test)]` on a module declaration and not `cfg(any(test, feature = ...))`; this module is test-support code in every build that compiles it. Not a way around the metric: the discipline it proxies -- pub(crate) by default, no unwrap in production paths -- holds in that module.",
+  "paragon_baseline_2026_09_17": "2026-09-17: bare_pub_non_lib 13399 -> 13402 (+3), NOT this commit's \u2014 the SIXTH rebase-borne absorb (see the 08-28, 08-30, 08-31, 09-01 and 09-15 notes). Measured the way those notes prescribe and one step further: a detached worktree at origin/main, with no local changes at all, reads the identical GREW +3 and the identical per-crate deltas. So main was already RED at origin and every lane's push was blocked; this commit adds no Rust whatsoever (two documentation files and a re-cited anchor). CORRECTION to the standing explanation those five notes share. They attribute the recurrence to CLAUDE.md's '59 of 61 worktrees still carry the pre-2026-08-23 hook'. That is STALE: `install-git-hooks.sh --status` on this box reports 3 worktrees, 2 covered, 1 uncovered ($HOME/clean-sqbound, pinned below the landing commit). CLAUDE.md no longer carries the claim either \u2014 the 2026-09-15 cut removed it. So the rollout on THIS machine is effectively finished and cannot be the cause any more; a red main is now arriving from a clone this box cannot see (the suite-state projection shows 77 of 231 rows measured on m8Macbo128GB8TB, so at least one other machine pushes here). Re-diagnose there rather than re-citing the worktree fleet a seventh time. The +3 itself was not attributed to files: the span since the baseline commit contains many added and removed bare pubs that net to +3, and picking three out of that is guesswork, so it is absorbed as a RECORD and not as an endorsement.",
+  "paragon_baseline_2026_09_19": "2026-09-19: files_over_1000 446 -> 447 and unwrap_expect_production 1233 -> 1234, NEITHER this commit's \u2014 the SEVENTH rebase-borne absorb (see the 08-28, 08-30, 08-31, 09-01, 09-15 and 09-17 notes). Measured the way those prescribe: a detached worktree at origin/main with no local changes reads the identical GREW on both counters. This commit series adds no Rust at all \u2014 a u2 probe line, a gate demonstration arm, documentation and derived artifacts. NAMED, which the previous absorbs did not do and which is the only thing that makes an absorb actionable by the owner: files_over_1000 is `crates/clean-elab/src/infer/elab_match/nested_ctor.rs`, which crossed at 993 -> 1249 lines; unwrap_expect_production is a production `.expect(\"checked by `stack_is_plan_owned`\")` added in the same lane's work. Both are that lane's to split and to replace with a `?`; absorbing here is a RECORD, not an endorsement, and neither is mine to rewrite mid-flight. The 2026-09-17 note's correction still stands and is now doubly confirmed: the '59 of 61 worktrees carry the old hook' explanation these notes shared is STALE \u2014 this box reports three worktrees, two covered \u2014 so a paragon-red main keeps arriving from a clone this box cannot see. Seven absorbs in three weeks is the finding; the fix is on whichever clone pushes without running this gate, and cannot be made from here.",
+  "bare_pub_baseline_2026_09_20": "2026-09-20: bare_pub_non_lib 13406 -> 13419 (+13), all in crates/clean-olean and all THIS commit series' (the local source-elaboration lane, merged at 690e74157) -- named one by one, and each one a narrowing rustc refuses. The lane added 14; `is_default_fn_name` had no caller outside the crate and is narrowed to pub(crate) in this commit (its two re-exports removed). The 13 that remain, 5+2+3+3: (a) `DefaultFnBinderState` + `default_fn_binder_idx` (import/default_fn_binders.rs) and `ScopedInstanceState` + `scoped_instance_idx` (import/load_register.rs) are read by clean-elab's PRODUCTION paths (infer/elab_struct_default.rs, infer/elab_init.rs) through `env.get_extension`, and `type_binder_names` (import/type_binder_names.rs) by infer/elab_app_support.rs -- cross-crate API, five items; `TypeBinderNameState` + `type_binder_name_idx` are the same extension's state/handle, reached by clean-elab's tests_imported_named_args.rs -- two items. (b) `DefaultFnBinderEntry`, `ScopedInstanceEntry`, `TypeBinderNameEntry` are each the `type Entry = ...` of a `PersistentEnvExtension` impl on one of those pub state types, so pub(crate) is E0446 (private type in public interface); `ScopedInstanceEntry` is also named by clean-elab's instance_priority.rs -- three items. (c) `ParsedStructureEntry`, `ParsedStructureField`, `ParsedStructureParent` (module/mod.rs) are the payload of the pub enum variant `ParsedExtensionEntry::Structure`, beside the already-pub `ParsedInstanceEntry`/`ParsedSimpEntry`/`ParsedClassEntry` -- three items. files_over_1000 did NOT rise: the two files the lane pushed past the line (clean-elab infer/elab_struct_lit.rs 729 -> 1071, clean-olean module/extensions.rs 790 -> 1047) are split in this commit (elab_struct_lit_source.rs, extensions_structure.rs) rather than absorbed.",
+  "bare_pub_baseline_2026_09_21": "2026-09-21: bare_pub_non_lib 13419 -> 13425 (+6), all six the cross-crate API of the six source-elaboration packages merged today (CLAUDE.md classes 49-55), and all six narrowings rustc refuses. clean-olean +5: `value_forall_binder_names` is read by clean-elab's infer/elab_app_named_head.rs (a named argument binds by the binder names of the definition its head's type unfolds to) and `record_value_forall_binder_names` by clean-elab's value_binder_names.rs, so both are cross-crate API; `ValueForallBinderNames` is the former's return type and `ValueBinderNameState` / `ValueBinderNameEntry` are the `PersistentEnvExtension` state and its `type Entry`, where pub(crate) is E0446 (private type in public interface). `value_binder_name_idx` HAD no external caller and is narrowed in this commit, with its two re-exports removed. clean-parser +1: `is_type_ascription_without_type` is read by clean-elab's infer/elab_app.rs and infer/mod.rs (the type-less ascription `(e :)`); `type_ascription_without_type_head` had no external caller and is narrowed here too. files_over_1000 did NOT rise: grammar/tactic_sub.rs crossed at 957 -> 1035 and is split in this commit (tactic_sub_rw_simp.rs takes rw/simp/case/next/first/calc/match/conv), and unwrap_expect_production reads 1231 (1233 before the wave: the packages retired two). CORRECTION to the first form of this note, which claimed a fall of 12: that measurement was taken while grammar/tactic_sub_rw_simp.rs was still UNTRACKED, so the ten `.unwrap()`/`.expect(` calls the split MOVED into it were invisible to a scanner that reads `git ls-files`. Nothing was retired by the split; measure a ratchet after `git add`, never before it.",
+  "paragon_baseline_2026_09_21b": "2026-09-21: bare_pub_non_lib 13425 -> 13426 (+1), NOT this lane's \u2014 the EIGHTH rebase-borne absorb (see the 08-28, 08-30, 08-31, 09-01, 09-15, 09-17 and 09-19 notes), and NAMED as those notes ask: `ElabCtx::open_namespaces_with_hidden`, added by upstream's b6248bf47 (the commit closing the last 16 clean-elab reds), which this lane merged. Measured the way those notes prescribe and verified by authorship: the item is in the merge's origin side and in no commit of this lane.",
+  "bare_pub_baseline_2026_09_21b": "2026-09-21: bare_pub_non_lib 13426 -> 13427 (+1 net), and the net is the point. Wave 3 added four and one was already narrowed back in the same commit series. clean-parser +2, both cross-crate API of the simp-argument package (CLAUDE.md class 56): `SurfaceSimpArg` \u2014 the element type carrying a simp argument's `\u2190`/`-` modifiers \u2014 is read by clean-elab's simp/args.rs and tactic/builtins_phase3d_rewrite.rs, and `GRIND_ONLY_MARKER` by clean-elab's tactic/builtins.rs (the generated name that carries `grind only` through a `[term,*]` list no source identifier can impersonate). clean-elab -1: `grind_with_params`, `GrindConfig::with_env_grind_lemmas` and `with_extra_lemmas` had no caller outside the crate and are pub(crate) here, with the dead re-export removed; `GrindAttrKind` stays pub because clean-kernel's env registries name it. files_over_1000 did NOT rise: tactic/grind.rs crossed at 865 -> 1523 and simp/lemmas.rs at 921 -> 1032, and both are SPLIT in this commit (grind_bridges.rs takes the speculative rewrites, grind_split.rs the case splitting, simp/lemmas_local.rs the local-hypothesis lemma builders) rather than absorbed.",
+  "unwrap_baseline_2026_09_21c": "2026-09-21: unwrap_expect_production 1231 -> 1233 (+2), both in one site and both the SANCTIONED kind. The simp-projection package (CLAUDE.md class 60) moved `ProofState::tc_cache` from a `RefCell` to a `Mutex` so the type-checker cache could be reached from a `&self` path that must be `Sync`, and the three `.lock()` calls in crates/clean-elab/src/tactic/core/type_check.rs carry `.expect(\"tc_cache poisoned\")`. `rust_excellence.md` allows exactly this: \"`.expect(\\\"reason\\\")` is acceptable only for programmer-invariant violations (e.g., mutex poisoning...)\". A poisoned mutex here means a previous panic while the cache was held, which is not a recoverable condition and must not be papered over with a silent fallback \u2014 the cache would be in an unknown state. Two of the three are new; the third replaced an existing borrow.",
+  "unwrap_baseline_2026_09_21d": "2026-09-21: unwrap_expect_production 1233 -> 1234 (+1), NAMED and a HEURISTIC FALSE POSITIVE rather than a new panic site. The single new line is `self.expect(&TokenKind::RBrace)?;` in crates/clean-parser/src/grammar/expr_match.rs, added by the structure-instance PATTERN grammar (CLAUDE.md class 61) to consume the closing brace of `fun | { lt := A_lt, .. } => \u2026`. `Parser::expect` is this crate's own token-expectation method \u2014 it returns `Result` and is propagated with `?`, so it is the OPPOSITE of the `Option::expect` the counter is written to find. The scanner matches the literal text `.expect(` and cannot tell the two apart; measured by diffing the scanner's per-line output between b8316b62c (the last pushed commit) and this tree, which returns exactly this one line. NOT narrowable: every closing brace in a grammar must be consumed, and spelling it any other way would only hide it from the counter. Recorded rather than absorbed silently. The sibling bare_pub regression from the same wave WAS narrowed instead of absorbed \u2014 `SimpSetArgs` is `pub(crate)` now and the compiler agrees \u2014 so bare_pub_non_lib stays at 13427.",
+  "bare_pub_baseline_2026_09_25": "2026-09-25: bare_pub_non_lib +1, and a CORRECTION of unwrap_baseline_2026_09_21d's claim that `SimpSetArgs` could be narrowed because 'the compiler agrees'. It cannot: `OleanCommands::SimpSet(SimpSetArgs)` is a variant field reachable at `pub`, and a `pub(crate)` payload trips the `private_interfaces` lint, which the workspace gate's `clippy -- -D warnings` makes an error (measured on the merged tree: 'type `cli::SimpSetArgs` is more private than the item `cli::OleanCommands::SimpSet::0`'). The narrowing had been checked with `targo --unverified check`, which reports the lint as a warning at most, so the check was the wrong instrument. `SimpSetArgs` is bare `pub` again, like its four siblings in the same enum, and this is the pub-enum-payload case the paragon convention already names as rustc-required.",
+  "bare_pub_baseline_2026_09_25b": "2026-09-25: bare_pub_non_lib 13427 -> 13457 (+30), all of it the cross-crate API of the .olean re-check soundness fix (merge of phase0/P0_SOUND) plus SimpSetArgs (see bare_pub_baseline_2026_09_25). NARROWED FIRST, each confirmed by `clippy --all-targets -- -D warnings` over clean-parser, clean-olean, clean-kernel and clean-mathverse: replay_order's local_closure, mark_unreplayed, structurally_doomed; verify_batch_full's typecheck_constants_full_streaming_in_run and _with_prerequisites; verify_parallel's typecheck_constants_full_parallel_in_run; kernel_theory's lean_theory_structural_exclusion; clean-parser's is_core_lean_identifier_word. REMOVED: KernelTheory::is_permissive (no caller). TEST-ONLY: ReplaySchedule::structural_refusal is #[cfg(test)]. WHAT REMAINS, each with the caller outside its crate that requires `pub`: clean-kernel (+4, env/ is excluded from this scan) \u2014 tc/config.rs TypeChecker::kernel_theory / set_kernel_theory (clean-olean verify_batch_replay.rs, test_support/reducer_differential.rs), expr/used_constants.rs UsedConstants / used_constants_dag (clean-olean replay_order.rs); clean-mathverse (+1) \u2014 Shard::is_lean4_only (bin mathverse_shard verify_commands.rs and verify_corpus_commands.rs); clean-olean (+25) \u2014 replay_order.rs ReplayGraph, ReplaySchedule, ReplayRefusal, ReplayVerdicts, expr_refs, resident_refs, admission_gate and the graph/schedule methods new, insert, contains, refuse, refs, schedule, order, resolve (clean-mathverse verify/sharded.rs and cli/parallel_verify_replay.rs, parallel_verify_cross.rs); replay_families.rs inductive_block_refusals (sharded.rs, parallel_verify_replay.rs); import/load_shadowing.rs lean_accepts_restatement (mathverse per_constant_load.rs); import/stored_families.rs StoredFamilyMembers / stored_family_members (mathverse stamp_family_audit.rs); verify_batch_full.rs typecheck_constants_full_streaming_scoped and verify_batch_replay.rs ReplayScope (mathverse per_constant_load.rs); verify_batch.rs verify_one_module_with_mode_in_run (tests/replay_forged_lanes.rs); test_support reducer_differential module, differential, covered, ReducerDifferential, DIFFERENTIAL_HEARTBEATS (tests/lean_profile_reducer_differential.rs, behind the test-support cfg); cli/mod.rs SimpSetArgs (pub-enum payload).",
+  "paragon_baseline_2026_09_28": "2026-09-28: origin/main at e75141b7b read files_over_1000 446 -> 455 (+9), unwrap_expect_production 1234 -> 1251 (+17) and bare_pub_non_lib 13457 -> 13548 (+91) against the 15716f240 baseline, from the lanes merged since (403ed338c integration merge, module-trust rounds 27-31, recheck-closure round 24, template hygiene, source-elab). PAID IN CODE, NOT ABSORBED: files_over_1000 back to 446 by splitting all nine at module boundaries (template_hygiene.rs 2248 -> 686 + template_hygiene/{patterns,exprs,do_elems,tactics}.rs; project_check_cli.rs 1909 -> 772 + project_check_cli/{codata,credit,isolation}.rs; by_name_census_tests.rs 1788 -> 595 + by_name_census_tests_{scan,reach}.rs, and ea1fb1f38's three consts moved back above the EXPLAINED doc so its #[rustfmt::skip] and doc attach to the table again; module_trust.rs 1682 -> 862 + module_trust/metadata.rs; artifact_ledger.rs 1492 -> 908 + artifact_ledger_tests.rs + artifact_ledger_graph.rs; cmd_project.rs 1436 -> 970 + cmd_project/sources.rs; runtime_declarations.rs 1047 -> 861 + runtime_declarations/refusals.rs; recheck_closed.rs 1026 -> 919 + recheck_closed/level.rs; load.rs 1023 -> 866 + load/cached.rs). unwrap_expect_production back to 1234: all 17 new sites restructured, none left or excused (instance_store's frame stack is non-empty by construction; namespace_open's one-element matches use `<[_; 1]>::try_from` and elab_core's pops the lone candidate; artifact_ledger uses Option::take_if/insert/get_or_insert_with and a `while let` Tarjan pop; template_hygiene's walks use split_first/let-else and a tracked last link; the parser's non-linear tuple pattern folds over split_last). bare_pub_non_lib: 27 of the new items NARROWED or REMOVED, each confirmed by `targo --unverified check --workspace --all-targets` and clippy -D warnings over the touched crates: clean-elab NamespaceState::{resolve_all, is_scope_active, activated_scopes, newly_activated, activate_scoped}, namespace_open::{process_open_scoped, open_activations} (re-exported pub(crate)), register::registration_warning_for_name_in (private), RIntroPattern::with_binders; clean-lake ImportAdmission, ImportAdmitter::{new, admit}, resolve_import, ArtifactSourceBinding, ArtifactBinder, ArtifactBinder::bind, BuildContext::artifact_trace_refusal, and ArtifactBinder::new REMOVED (no caller; Default); clean-macro Syntax::global_ident; clean-olean CleanPayload::{duplicate_declaration, declared_names}, toolchain_identity::pinned_toolchain_name (private) and pinned_toolchain_manifest_len REMOVED (no caller anywhere); clean-parser NameMarks, SurfaceName::without_template_marks, SurfaceName::as_lean_keyword (now pub(crate) and renamed into_lean_keyword, the name clippy::wrong_self_convention asks of a by-value builder), lean_keywords::is_lean_keyword. Nine older bare pubs were narrowed upstream meanwhile (clean-lake fetch_git_package, matches_manifest; clean-olean build_error_summary, default_export_config, is_kernel_verified, read_i32_at, read_module_data_from_ptr_opts, uses_gmp_bignums, verify_one_module_with_mode). WHAT REMAINS (+62 recorded here; measured +64 until the two below were narrowed, +62 after), each with the caller outside its crate that requires `pub`: clean-auto (+1) SmtVerificationResult::unvalidated_model_reason (clean-c-sem auto.rs, clean-server prove_response.rs); clean-elab (+9) FileContext::instance_global_readds (clean-lake build.rs), FileContext::import_visited and imports::effective_import_search_paths (clean-cli import_binding.rs), ElabResult::cited_roots (clean-cli check_import_gate.rs, clean-lake), register::kernel_check_failures_on_this_thread (clean-lake build.rs), register::registration_warning_for_leaf (clean-cli cmd_compile.rs), register::registration_warning_for_leaf_in, register::leaf_domain_axioms and RegistrationWarning::via_suffix (clean-cli cmd_core.rs, crates/clean); clean-kernel (+1) Expr::count_sorry_occurrences (clean-server prove_response.rs); clean-lake (+5 net, 7 new) ImportAdmissionFindings, ImportAdmitter, ImportAdmitter::examine (clean-cli import_binding.rs), FreshModuleArtifacts, BuildContext::build_fresh_artifacts (clean-cli cmd_lake/verify_fresh.rs), build_trace::{trace_path, digest_artifact_parts} (clean-lake integration tests tests/build_trace.rs, tests/module_trust.rs); clean-macro (+1) MacroDef::with_hygiene (clean-elab macro_integration/mod.rs); clean-olean (+20 measured, 27 new, +18 recorded) load_register::{has_global_instance_entry, add_global_instance_entry} (clean-elab instance_store.rs, clean-lake), ImportError::is_inconsistent_artifact (clean-elab imports.rs, clean-lake), import::runtime::{RuntimeExtractionLimits, extract_olean_runtime_parts_with_limits} (clean-olean tests/runtime_declarations.rs), recheck_closed::{recheck_closed, ClosedRecheck, ClosedRecheckOptions, ClosedRecheckReport (pub field ClosedRecheck::report), ClosedRecheckReport::{passed, verdict_sentence}, ClosedRecheckRefusal, ClosedRecheckRefusal::subject, RecheckLevel, RecheckLevel::{token, proves, does_not_prove}} (clean-olean examples measure_recheck_closed.rs and replay_reachability_probe.rs, clean-lake tests/module_trust.rs), promote_origins_after_closed_recheck (kept pub: narrowed it is dead in the lib build, its only callers are extension_binding_tests; the recheck-closure reports record it has no production caller and clean-kernel env/origin.rs names it as the promotion path), ImportedConeGate, ImportedConeVerdict and their new/check/passed/refusal_summary (clean-cli check_import_gate.rs and cmd_core.rs, clean-lake), toolchain_identity::pinned_toolchain_module (clean-lake artifact_binding.rs); clean-parser (+27) surface::expr::{anonymous_constructor_head, is_anonymous_constructor_head}, TemplateOrigin, TemplateSiteId (+of_span), TemplateScope and SurfaceName's template/section/keyword accessors (global_path, global_constant, is_global_reference, with_template_origin, template_origin, template_origin_arc, with_template_scope, template_scope, without_template_scope, as_section_variable, is_lean_keyword, is_section_variable, unspellable, pattern_lambda_binder), and the template-hygiene API (TemplateRefusal + reason, mark_template_free_references, template_free_reference_spellings, instantiate_notation_template, instantiate_unhygienic_notation_template, instantiate_tactic_template) \u2014 every one called from clean-elab. NOT ABSORBED, and why the baseline sits 2 BELOW the measured count: ValidationMode::recheck_level and ValidationMode::rederives_values_locally (clean-olean verify_batch_full.rs, added with d18a4657c/e481d276e) have no caller outside clean-olean (verify_report.rs) and narrow to pub(crate), but that file belongs to the olean-replay-order lane working on it the same day; until they are narrowed this ratchet reads GREW +2, which is the pressure it should apply. NARROWED in the merge of this lane into fix/main-red-legs (both pub(crate); every caller is clean-olean's own verify_report.rs and verify_batch_full.rs tests): the measured count now equals the baseline, 13519.",
+  "bare_pub_baseline_2026_09_30": "+2 bare pub in clean-olean (414 -> 416), cross-crate API the mathverse forged-lanes soundness fix (9e61c1f67) needs: clean_olean::load_module_with_deps_replaying_module (crates/clean-olean/src/import/load/replay_load.rs, re-exported for clean-mathverse's sharded worker, verify/sharded.rs) and ImportError::declaration_names (crates/clean-olean/src/import/mod.rs, read by clean-mathverse's cli/closure_load.rs closure_load_error). Both are called from another crate, so pub(crate) cannot serve.",
+  "bare_pub_baseline_2026_10_02": "2026-10-02: bare_pub_non_lib 13245 -> 13253 (+8), all in crates/clean-compiler/src/rust_abi/ and all the cross-crate API of Trust plan step 3.2 (Clean's compiler at the Rust ABI), which Trust's Clean recorder calls at its next clean pin move: `compile_rust_abi` (the entry point), `RustCallee` (its input), `RustAbiOutput` / `RustAbiRow` / `CoreFunctionDigest` (its output), `CarrierSignature` + `Carrier` (a row's carrier signature, a pub field, so pub(crate) trips private_interfaces) and `RustAbiError` (its error type). NARROWED FIRST: `carrier_signature`, `rust_callee_decl`, `RustExternSig`, every carrier-back-end and carrier-primitive item, and the Rust-ABI pipeline are pub(crate). Ten pub methods in match_exhaustive.rs/tail_call.rs looked like offsets but those modules are #[cfg(test)] and already uncounted.",
+  "bare_pub_baseline_2026_10_03": "2026-10-03: bare_pub_non_lib 13253 -> 13254 (+1), in clean-kernel (1205 -> 1206): TypeChecker::infer_type_with_cert_full (crates/clean-kernel/src/tc/cert/mod.rs), the check-mode (infer_only = false) counterpart of infer_type_with_cert, as infer_type_full is of infer_type. Its caller is the integration test crates/clean-kernel/tests/release_infer_parity.rs, a separate crate, so pub(crate) cannot serve: without it that test can compare the release infer_type body against the certificate body only in infer-only mode, where the App-argument, Lam-domain and Let checks never run, so the ExprLocation those checks report (#3425: AppArg, LamType, LetType, LetVal) would stay uncompared. Nothing narrowed: the change adds no other pub item, and the location helper it uses (expr_loc_snapshot_at) is pub(super).",
+  "bare_pub_baseline_2026_10_05": "2026-10-05: bare_pub_non_lib 13254 -> 13262 (+8), from LX0(a) (designs/2026-09-30-clean-trust-unified-vision.md \u00a75). clean-compiler 523 -> 530 (+7), all in crates/clean-compiler/src/emit_trust_ir_lane.rs, the `clean-compiler-unvalidated` license and the read-only link views. Their one caller is clean-cli's experimental `clean run --backend trust-cg` (crates/clean-cli/src/native_trustcg*.rs), a separate crate, so pub(crate) cannot serve: restamp_ungated_as_unvalidated (mints the license), LicenseCensus (its result), LaneLicenseError (its error type, required pub by its signature), AbiSlot and LinkSignature (the link-check view types), bodyless_declarations and defined_signature (the link-demand and entry-contract checks). clean-cli 9 -> 10 (+1): RunBackend (crates/clean-cli/src/cli/mod.rs), the type of RunArgs' pub `backend` field, which clap's derive and the `clean` crate's argument handling reach. Narrowed in the same change: defined_symbols, which only its tests read, is #[cfg(test)] pub(crate) instead of pub.",
+  "paragon_baseline_2026_10_05": "2026-10-05: unwrap_expect_production 1141 -> 1146 (+5) and bare_pub_non_lib 13262 -> 13272 (+10), all from the integ/phase1-ab merges (rcases patterns e40446760, #guard/#print axioms 886b0b76a), NAMED. unwrap_expect +5 is a HEURISTIC FALSE POSITIVE, as unwrap_baseline_2026_09_21d: every counted line is `self.expect(&TokenKind::..)?`, the parser's Result-returning token matcher, not a panic site -- crates/clean-parser/src/grammar/tactic_rcases.rs 0 -> 6 (the rcases grammar moved out of tactic_sub.rs, 8 -> 3, plus the new `-`/`@`/binder-group/`obtain :` forms) and grammar/decl/test_commands.rs 0 -> 4 (the #guard_msgs spec grammar). bare_pub_non_lib +10, one narrowing taken first (CommandMessage::info -> pub(crate); no caller outside clean-elab): clean-elab +6 = MessageSeverity, CommandMessage, GuardMsgsResult, PrintAxiomsResult (re-exported from lib.rs; GuardMsgsResult and PrintAxiomsResult are payloads of the public CommandOutput, the other two its fields) and ElabResult::checked_leaves / ::is_checked_command (called from clean-cli cmd_project/declarations.rs and clean src/check.rs); clean-parser +4 = GuardMsgsSeverity, GuardMsgsWhitespace, GuardMsgsOrdering, GuardMsgsSpecElt (the spec of the public SurfaceDecl::GuardMsgs variant, re-exported by surface/mod.rs).",
+  "bare_pub_baseline_2026_10_07": "2026-10-07: bare_pub_non_lib +27, from LX0(b) (docs/DECISIONS.md R12): Clean's native core moved out of clean-cli, where these items were pub(crate), into the new crate crates/clean-native, whose callers are clean-cli now and Trust's targo-trust at LX1 \u2014 separate crates, so pub(crate) cannot serve. clean-native +26. native_build (13): is_primitive_denylisted, classify_entry, entry_arity_in_c, emit_entry_c_with_type, build_native_executable_with_source_sink, build_native_binary_in_scratch, keep_scratch, select_shims_for_c_text, mangle_decl_symbol, build_extract_executable, EntryKind, BuiltBinary and its binary() accessor (cmd_run, cmd_lake/build, cmd_extract; classify_entry/entry_arity_in_c/EntryKind are read by cmd_run's end-to-end tests as entry-shape queries). compile (6): compile_to_string, select_lcnf_decl, emit_decls, elaborate_file_to_env, compile_to_trustir_bin, compile_to_object (cmd_compile, cmd_extract). native_trustcg (7, trust-ir-backend only): build_with_receipt (the lane's one entry point), Receipt and its line(), LaneError (its error type), BuiltTrustCg and its binary()/keep() (cmd_run_trustcg). clean-elab +1: ElabResult::unflattened_block_refusal, the K5 guard, moved from clean-cli's cmd_core so the checker paths and the native core share one copy. Nothing else in the move widened: every other moved item stays pub(crate).",
+  "bare_pub_baseline_2026_10_08": "2026-10-08: bare_pub_non_lib +2, from LX1 (docs/DECISIONS.md R13), both in clean-native: native_trustcg::build_with_backend (the lane with the object step supplied by the caller; Trust's targo-trust is the caller, a separate crate) and compile::lean_program_environment (the one program environment, which Trust's .lean front door builds through; a separate crate). The ObjectBackend trait itself is not counted by this metric.",
+  "paragon_baseline_2026_10_07": "2026-10-07, RESTORED 2026-10-08 (the integ/r2 merge dropped the tactic-syntax lane's record): unwrap_expect_production 1146 -> 1152 (+6) and bare_pub_non_lib 13301 -> 13302 (+1), all from the tactic-syntax lane, NAMED. unwrap_expect +6 is a HEURISTIC FALSE POSITIVE, as unwrap_baseline_2026_09_21d and paragon_baseline_2026_10_05: every counted line is `self.expect(&TokenKind::..)?`, the parser's Result-returning token matcher, not a panic site -- crates/clean-parser/src/grammar/expr_exists_kw.rs (`,` after `exists`' explicitBinders; `:` and `)` of a bracketed binder group), grammar/tactic_sub.rs (`:` of `cases h : e`, casesTarget; the `|` opening an inductionAltLHS) and grammar/tactic_sub_alternatives.rs (`:` of the tactic `match h : e`, matchDiscr). bare_pub_non_lib +1: `SimpPhase` (crates/clean-parser/src/surface_tactic.rs), the type of the pub field `SurfaceSimpArg::phase` that clean-elab's simp/args.rs reads, so pub(crate) is E0446/private_interfaces; re-exported from lib.rs beside SurfaceSimpArg. NOT this lane's: clean-elab bare_pub 1264 -> 1265 on the integ/r2 tip (9236c1f3d) before any r2fix-tactic change.",
+  "bare_pub_baseline_2026_10_14": "2026-10-14: bare_pub_non_lib 13302 -> 13303 (+1), in clean-native (28 -> 29): native_runtime::materialize (crates/clean-native/src/native_runtime.rs), the one entry point of the linkable runtime archive `clean native-runtime` writes (two-language roadmap WS6.13). WS6.13 wrote the step in clean-cli, where every item was pub(crate); stacked over LX0(b) (docs/DECISIONS.md R12) the step follows native_build and its shim tables into clean-native, and its caller is clean-cli's cmd_native_runtime front door, a separate crate, so pub(crate) cannot serve. Nothing else widened: RuntimeMember, write_runtime_sources, remove_stale_products, build_runtime_archive and the archive/source records stay pub(crate), and the item's own clean-compiler change is net zero (validate_module_bytes pub, host_target_info narrowed to pub(crate)).",
+  "bare_pub_baseline_2026_10_14b": "2026-10-14: bare_pub_non_lib 13303 -> 13305 (+2), in clean-compiler (530 -> 532), both the public entry of WS6.9's typed boundary carriers (docs/DECISIONS.md R28): `compile_lcnf_to_trust_ir_with_carrier_exports` (crates/clean-compiler/src/pass_manager/pipeline.rs, re-exported from pass_manager beside its siblings compile_lcnf_to_trust_ir and compile_lcnf_to_trust_ir_with_report) and `CarrierExport` (crates/clean-compiler/src/emit_trust_ir_boundary.rs), its returned plan, whose `source` and `symbol` fields are the only public part. The caller is the producer that links the carrier (the WS5.18 Rust-side carrier map, a separate crate in another repository; until it lands the in-crate e2e test a_rust_producer_links_the_typed_carrier stands in), so pub(crate) cannot serve: nothing in the crate calls the entry outside tests, and at pub(crate) rustc's dead_code lint fires on it and transitively on the whole carrier path. NARROWED FIRST: the lane added 13; the other 11 are pub(crate) -- CarrierScalar (and its ty/size), CarrierCtor, CarrierTy, CarrierHelper, CarrierPlan, carrier_symbol, plan_carrier_exports, c_layout and enum_layout -- and CarrierExport's params/ret/helpers fields with them. unwrap_expect_production is unchanged: the lane's seven .expect( sites are refusals (TrustIrError::NoTotalCarrier) instead.",
+  "bare_pub_baseline_2026_10_16": "2026-10-16, re-measured 2026-10-17 at the merge of origin/main 161adb25c into integ/r5: bare_pub_non_lib 13302 -> 13329 (+27) at the round-3/4 lane integration, every item a cross-crate API rustc requires public. (The first record read 13305 -> 13327 (+22): its base was main's stale 13305, which main's own re-measure put at 13302 with no code change, and its sum dropped clean-elab's +2 beyond 20; the per-crate deltas measured on the merged tree are clean-elab 1264 -> 1286 (+22), clean-lake 121 -> 125 (+4), clean-parser 176 -> 177 (+1), and the items are exactly those named below: clean-elab's 12 + 4 + 2 + 2 + 1 + 1.) clean-elab (+20): the G50 `-D` surface clean-cli and clean-lake call -- CommandLineOption (and its parse/new/is_applied/name/value/to_arg), CommandLineOptionError, LeanArgOptions, parse_command_line_options, options_from_lean_args, apply_command_line_options (crates/clean-elab/src/command_line_options.rs); the G21 module-name and private-name surface clean-cli, clean-native, clean-lsp and clean-lake's tests call -- lean_module_name_for_file, entry_module_name, path_module_name, path_module_label (lake_module_name.rs, re-exported from lib.rs), user_facing_name, user_facing_expr (private_names.rs), FileContext::main_module/set_main_module (file_context.rs); the G46 metavariable scan clean-verify's axiom_refutation_gate calls -- MetaState::expr_has_meta (unify/meta_state/scan.rs); and lane T's AssumptionCloser, the type of SimpConfig's public `assumption_closer` field (tactic/simp/types.rs). clean-lake (+4): G50's LeanOption, LeanOptionValue, LeanOption::define_arg (config/lean_options.rs) and ModuleOptions::module_lean_args (module_options.rs), called by clean-cli's cmd_lake. clean-parser (+1): G24's SurfaceRCasesTarget, the AST node clean-elab's rcases reads. NARROWED FIRST: the lanes added 43; the other 21 are pub(crate) -- pinned_lean_option_count (now cfg(test)), cannot_change_acceptance, lean_atoi, private_prefix_of, mk_private_name, is_private_name, is_private_prefix, private_to_user_name, user_facing_text, PrivateNames, is_private_name_from_imported_module, PendingEqLemma, MutualLiftEntry, MutualLiftState (and its get), mutual_lift_idx -- and files_over_1000 is back at 435 by three splits: cmd_core_axiom_tests.rs out of cmd_core_tests.rs, lemmas_builtin_list.rs out of lemmas_builtin.rs, unifier/constructors.rs out of unifier/mod.rs.",
+  "bare_pub_baseline_2026_10_18_world_gate": "2026-10-18, branch lean4-delta/k2-worldgate over e05c6fdd6: bare_pub_non_lib 13302 -> 13311 (+9), all in clean-olean (416 -> 425): `LeanWorldScope` and its eight methods (`new`, `of_environment`, `world`, `admit_part`, `admit_olean_file`, `admit_companions`, `admit_artifact`, `bind_environment`) in crates/clean-olean/src/import/world_scope.rs, the one-world rule for loaders that read parts themselves (docs/DECISIONS.md R81). Each is a cross-crate API rustc requires public: clean-mathverse's per_constant_load.rs, closure_load.rs and closure-shard builder/verifier call them, and crates/clean-olean/tests/olean_world_gate.rs (an external test crate) calls admit_olean_file. The other new public items (read_olean_header, declare_environment_world, environment_world, is_world_refusal) live in lib.rs and are not counted.",
+  "bare_pub_baseline_2026_10_19_world_gate_land": "2026-10-19, lean4-delta/k2-worldgate merged onto origin/main ccb6c1ab0: bare_pub_non_lib 13329 -> 13338 (+9) on the merged tree. clean-olean 416 -> 425 (+9) is the branch's LeanWorldScope and its eight methods, named in bare_pub_baseline_2026_10_18_world_gate. The other two moves were already on main and not refreshed there: clean-compiler 532 -> 533 (+1) is `CompiledBefore` (crates/clean-compiler/src/implemented_by.rs, 5368a105f, the R80 implemented_by order record), and clean-elab 1286 -> 1285 (-1). unwrap_expect_production 1151 -> 1150 (clean-runtime 44 -> 43) is main's too.",
+  "bare_pub_baseline_2026_10_20": "2026-10-20: bare_pub_non_lib 13329 -> 13330 (+1), in clean-compiler (533 -> 534 measured on base ccb6c1ab0 and on this tree; the baseline's per-crate row read 532 with the same total), from docs/DECISIONS.md R149's kernel-meaning entries. Four items that other crates call, so rustc requires them public: `CodeMeaning` (crates/clean-compiler/src/implemented_by.rs, re-exported from lib.rs beside CompiledBefore; clean-native and clean-cli name it); `compile_lcnf_decls_for` and `compile_lcnf_to_trust_ir_with_report_for` (crates/clean-compiler/src/pass_manager/pipeline.rs, re-exported from pass_manager beside their siblings; clean-native's emit_decls and dependency probe and clean-cli's extract C and TV lanes call them); and `constant_to_decl_with_meaning` (crates/clean-compiler/src/to_lcnf/lower.rs, re-exported from lib.rs; clean-native's select_lcnf_decl_routed calls it). The unattributed siblings keep their signatures, since Trust calls clean_compiler::constant_to_decl and builds PipelineConfig, and a meaning field on PipelineConfig would break the struct literals that name every field (crates/clean-compiler/src/compile/mod.rs among them). NARROWED FIRST: R149 added 6 counted items; LcnfContext::with_meaning is pub(crate) (only to_lcnf calls it), FVarIdGen and its new/fresh are pub(crate) (only to_lcnf, to_lcnf_ext and their tests use them; nothing outside clean-compiler, nor Trust's main, names it), and clean-native's emit_decls_with_meaning folded into emit_decls, which takes the meaning (clean-native 29 -> 29). The same --update records unwrap_expect_production 1151 -> 1150, as measured on this tree.",
+  "bare_pub_baseline_2026_10_22_ndjson_front_door": "2026-10-22, branch fix/ndjson-arena (lane N, plan items checkers-ndjson-front-door and checkers-arena-battery) over origin/main 234d00779: bare_pub_non_lib 13338 -> 13351 (+13), all in clean-olean (425 -> 438). Twelve are the NDJSON front door's public surface in crates/clean-olean/src/ndjson/: `check_export_reader` and `check_export_path` (called by the clean_export_check binary, the fuzz target fuzz/fuzz_targets/clean_ndjson.rs and the external test crates tests/ndjson_front_door.rs and tests/kernel_arena_battery.rs, each a separate crate rustc requires the items public for), `ExportCheckOptions` (their argument), `ExportReport` (their result) and the types of its public fields, `ExitClass`, `ExportMeta`, `KernelRuleSet` (ExportMeta.rule_set), `DeclarationRecord`, `DeclarationVerdict`, `FirstRefusal` and `ReaderRefusal`, and `ReviewedLeanVersion` (the element type of the public REVIEWED_LEAN_VERSIONS table, whose `review` field nothing in the crate reads, so narrowing it would only trade the pub for a dead-code allowance). The thirteenth is `OleanCliError::exit_code` (crates/clean-olean/src/cli/mod.rs), which clean-cli's forwarded_exit_code calls through cmd_olean::olean_exit_code. The first draft had 31; the other eighteen (the declaration types of decl.rs, NdjsonError, JsonError, ExportSource, NdjsonSource, check_export, ExportReport::reader_failure, ExitClass::code, KernelRuleSet::world and NdjsonError's helpers) were narrowed to pub(crate). unwrap_expect_production stays flat: the JSON tokenizer's own `expect` helper, which returns Result, was renamed `expect_byte` rather than recorded as a heuristic false positive.",
+  "paragon_baseline_2026_10_23_r131": "2026-10-23, fix/replay-stub-completion (docs/DECISIONS.md R131) over origin/main 1da954169: files_over_1000 435 -> 436 (+1) and bare_pub_non_lib 13338 -> 13371 (+33). Main was red on this ratchet from three landings, none of which re-baselined; R131 fixes the cause it owns and records the rest by owner. (1) R113 (docs/DECISIONS.md R113): crates/clean-olean/src/import/load_parse.rs had grown to 1055 lines; R131 moves its constant-record readers to load_parse/constants.rs (618 lines left), so clean-olean is back at 14 files over 1000. Its four bare pub items stay, each called from outside clean-olean so pub(crate) cannot serve them: read_artifact, ArtifactDepth and ArtifactRead (crates/clean-olean/src/import/artifact.rs; clean-mathverse's olean_bridge, per_constant_load, closure_load, graduate_closure_cache and parallel_verify_cross, and clean-olean's tests/olean_parts_tests.rs and tests/replay_forged_lanes) and ReplayGraph::mark_unreplayed (crates/clean-olean/src/replay_order.rs; clean-mathverse's parallel_verify_replay.rs): clean-olean 425 -> 429, as integ/r6's paragon_baseline_2026_10_23_r113 note records. (2) R107 (KR0): clean-kernel 1206 -> 1227 (+21), its fenced reference entry and digests, called by crates/clean-kernel/tests/reference_entry.rs and clean-olean's tests/reference_entry_{string_drop,fold_controls}.rs; integ/r6's bare_pub_baseline_2026_10_22_r107 note names each. (3) R132 (KR1 slice 1, kr1-slice1): clean-kernel 1227 -> 1230 (+3: is_tripwire, ReferenceKernel::add_inductive_checked and add_quot_checked in crates/clean-kernel/src/reference.rs, called from clean-olean's recheck_closed/reference_base.rs and tests/reference_tripwires.rs) and clean-olean 429 -> 433 (+4: ReferenceBase, its into_kernel and kernel, and reference_base_closed in crates/clean-olean/src/recheck_closed/reference_base.rs, called from tests/reference_base_init.rs); and clean-kernel files_over_1000 44 -> 45, crates/clean-kernel/src/reference.rs at 1326 lines (896 before R132), which is R132's to split. (4) R131's own: clean-olean 433 -> 434 (+1), OleanImportPolicy::refusing_refused_completions (crates/clean-olean/src/import/policy.rs), the re-check lanes' opt-in to refusing a refused stub completion, called from clean-mathverse's cli/closure_load.rs, cli/parallel_verify.rs and verify/sharded.rs and from clean-olean's tests/replay_forged_lanes.rs.",
+  "bare_pub_baseline_2026_10_24_ndjson_land": "2026-10-24, fix/ndjson-arena merged onto origin/main e3228bc5d: bare_pub_non_lib 13371 -> 13384 (+13), clean-olean 434 -> 447 (+13). The thirteen are lane N's, named item by item in bare_pub_baseline_2026_10_22_ndjson_front_door (the NDJSON front door's public surface in crates/clean-olean/src/ndjson/ and OleanCliError::exit_code); the rest of the baseline is main's, as paragon_baseline_2026_10_23_r131 records it. Not absorbed: KR1 increment 3 (967adf5c5, R143) measures +2 unwrap_expect_production and +2 bare_pub_non_lib in clean-olean over main's own baseline, red on origin/main e3228bc5d itself; they are that change's to narrow or record, so this merge leaves them failing the ratchet.",
+  "bare_pub_baseline_2026_10_22_r107": "2026-10-22, integ/r6 after merging origin/main 16e2a8686: bare_pub_non_lib 13342 -> 13363 (+21), all in clean-kernel (1206 -> 1227) and all from main's R107 (KR0, docs/DECISIONS.md), which landed without re-baselining: the same ratchet run on an export of 16e2a8686 itself fails with clean-kernel 1206 -> 1227 against main's 13338. The 21 are R107's fenced entry and its digests (reference.rs: ReferenceKernel and its methods, ReferenceAccepted, ReferenceRefusal, NonLeanKind, TheoryId and its methods, EnvDigest, theory_digest, STRING_LITERAL_EXPANSION_TAG; env/mod.rs: CheckerSettings and checker_settings), the API that the integration tests crates/clean-kernel/tests/reference_entry.rs and crates/clean-olean/tests/reference_entry_{string_drop,fold_controls}.rs call from outside the crate, so pub(crate) cannot serve them. The round-5 lanes add nothing here; their +4 is the 2026-10-17_r6 note.",
+  "paragon_baseline_2026_10_23_r113": "2026-10-23, integ/r6 after merging origin/main 19a3562f3: files_over_1000 435 -> 436 (+1) and bare_pub_non_lib 13363 -> 13367 (+4), all in clean-olean and all from main's R113 (docs/DECISIONS.md), which landed without re-baselining. The same ratchet run on an export of 19a3562f3 fails with clean-olean 14 -> 15 files over 1000 and 425 -> 429 bare pub, beside R107's clean-kernel 1206 -> 1227 (the 2026-10-22_r107 note). The file is crates/clean-olean/src/import/load_parse.rs, at 1055 lines: R113 added 118 lines and removed 12. The four bare pub items are R113's one artifact-reading rule and a replay-graph hook, each called from outside its crate, so pub(crate) cannot serve them: read_artifact, ArtifactDepth and ArtifactRead (crates/clean-olean/src/import/artifact.rs; clean-mathverse and clean-olean's tests/olean_parts_tests.rs call them) and ReplayGraph::mark_unreplayed (crates/clean-olean/src/replay_order.rs; clean-mathverse's cli/parallel_verify_replay.rs calls it). Splitting load_parse.rs is left to R113's owner, so that integ/r6 does not edit code another lane owns and is still changing.",
+  "paragon_baseline_2026_10_23_kr1": "2026-10-23, integ/r6 after merging origin/main 1da954169 (KR1 slice 1, docs/DECISIONS.md R132): files_over_1000 436 -> 437 (+1) and bare_pub_non_lib 13367 -> 13374 (+7), all from KR1, which landed without re-baselining. The same ratchet fails on an export of 1da954169 itself (clean-kernel 44 -> 45 files over 1000, clean-kernel 1206 -> 1230 and clean-olean 425 -> 433 bare pub, the last two including R107's +21 and R113's +4 already noted). KR1's own part: crates/clean-kernel/src/reference.rs grows from 896 to 1326 lines; clean-kernel gains 3 bare pub items and clean-olean 4 (the reference entry's stub-theory and tripwire API, `pub mod reference_base`, `ReferenceBase` and `reference_base_closed`, which crates/clean-olean/tests/reference_base_init.rs and the kernel's integration tests call from outside the crate). The round-6 review's own changes add none.",
+  "paragon_baseline_2026_10_24_integ_r6": "2026-10-24, integ/r6 after merging origin/main be021965d (R131, KR1 increment 3, lane N): files_over_1000 437 -> 436 (R131's split of clean-olean's load_parse.rs; its lower number taken, as the coordinator asked); bare_pub_non_lib 13388 = main's committed 13384 + 4 in clean-elab (1285 on main, 1289 here): integ/r6's own lanes, the count integ/r6's baseline already carried (it measured 13374 against 13374 before these merges). Nothing of main's own growth is absorbed: KR1 increment 3 (967adf5c5) left clean-olean at +2 unwrap_expect_production (12 -> 14) and +2 bare_pub_non_lib over main's committed numbers, main is red on this ratchet by exactly those, and so is integ/r6 after this merge, by the same two and nothing else; they are KR1's to remove or re-baseline.",
+  "bare_pub_baseline_2026_10_25_world_gate_residue": "2026-10-25, fix/world-gate-residue (decision R111, G72) merged onto origin/main be7226a33: bare_pub_non_lib 13388 -> 13396 (+8), the branch's own cross-crate API, measured against the same scan of origin/main. clean-olean +4 (crates/clean-olean/src/import/project_world.rs: `ImportWorld`, `ImportWorldRefusal`, `import_world_for_file`, `search_paths_in_world`, used by clean-elab, clean-cli and clean-native); clean-elab +4 (`FileContext::set_import_context_for_file`, `set_import_context` and `effective_import_search_paths` in crates/clean-elab/src/file_context_imports.rs, and `olean_available_in_world` in imports.rs, used by clean-cli and clean-native); `FileContext::import_world` is pub(crate). files_over_1000 is unchanged: the branch moved FileContext's import-path methods into file_context_imports.rs rather than take file_context.rs past 1000 lines. Not absorbed: main's own +1 unwrap_expect_production (clean-olean 12 -> 14 against its committed 12) and +5 bare_pub_non_lib (clean-elab +2, clean-olean +2, clean-parser +1) from KR1/RM1 stay red, as they are on origin/main be7226a33.",
+  "bare_pub_baseline_2026_10_28_kr1_rm1": "2026-11-01, land/r6-20261028 merged onto origin/main 949ca01ab (docs/DECISIONS.md R175, with R178): against the committed baseline (436 / 1150 / 13396 / 57, last moved by d9acc41bf), the landing tree measures files_over_1000 439, unwrap_expect_production 1148, bare_pub_non_lib 13410 and allow_dead_code_sites 57. Main's own tree measures 440 / 1150 / 13409 / 57, which is the red on main this landing clears. Files over 1,000 lines, main's +4: R163's 1,410-line crates/clean-elab/tests/elab_waiting_numerals_e2e.rs, which R175 splits here (644 and 773 lines; its fixtures and MUTATIONS table move to tests/elab_waiting_numerals/mutations.rs); and three test sources main added after d9acc41bf, absorbed here: crates/clean-olean/tests/vf5_f1_reference.rs (2,344 lines; the VF5 rows of R215 and R216, 59c9dece0 and later), crates/clean-olean/tests/fixtures/lean/v4.30.0-rc2/vf5_f1/blobs/d2b_rows/b3probe.rs (1,432; a recorded probe fixture, 59c9dece0) and crates/clean-olean/tests/semr_reference.rs (1,132; RM4c's SemR reference entry, 135c07a28 and 61da5bf8c). Round 6 grew crates/clean-parser/tests/module_system_b_e2e.rs to 1,133 lines; the landing moved its two new sections to module_system_b_e2e_support/header_tokens.rs (772 and 402 lines today). unwrap/expect: R175 removes the two expects in crates/clean-olean/src/payload_entry.rs's admit_payload (1150 -> 1148). bare pub, +14 over the baseline, each named: (a) five on main's tree when d9acc41bf moved the baseline (13401 there), the KR1 and RM1 items other crates name, so rustc requires them public: PayloadAdmission and admit_payload (crates/clean-olean/src/payload_entry.rs, named by crates/clean-cli/src/check_import_gate_tests.rs), JoinOutcome and take_join_outcomes (crates/clean-elab/src/infer/elab_match/join_point.rs, re-exported from clean-elab's lib.rs and named by tests/rm1_elab_fixes_e2e.rs) and well_founded_measure (crates/clean-parser/src/surface/binder.rs, called by clean-elab); (b) +8 net that main added after d9acc41bf, per file: crates/clean-auto/src/bridge/division_semantics.rs +3 (b52fc67ea's IntDivisionRounding, integer_quotient and integer_remainder), crates/clean-olean/src/import/mod.rs +2 (afa1b0d84's DeferredRecursorStatus and DeferredRecursor), crates/clean-compiler/src/pass_manager/pipeline.rs +2 and to_lcnf/lower.rs +1 with to_lcnf/mod.rs -3 (dae44c12c, dd2cb93ee, a2b31435d), crates/clean-native/src/native_trustcg.rs +2 and native_trustcg_retention.rs +2 (8ff377f00), crates/clean-kernel/src/tc/level_profile.rs +1 (level_sharing_error) with tc/config.rs -1 (set_expr_loc_decl_name), and crates/clean-ck0/src/term_ops.rs -1 (R172, 0817dc9b7); (c) this landing's one, R178's load_module_with_deps_cached_guarded (crates/clean-olean/src/import/load/cached.rs, re-exported from clean-olean's lib.rs and called by crates/clean-server/src/trust_boundary.rs). R177 moves one bare pub within clean-ck0 (def_eq.rs -1, validate/levels.rs +1) and adds none. Per-file counts were taken with the ratchet's own counting code over d9acc41bf, origin/main 949ca01ab and the landing tree (916fcaf2a).",
+  "debt": {
+    "owner": "the 2026-11-06..10 source-IR, replay-census and reflection lanes: files over 1000 by 8d3d123ac, 9270ded1f, 7a92c90b5, 78304fa7b, 8a63663fa, ac5754db2; bare pub by 51c3a0a49, 220597c70, eb7857e41, c0da7e3ab, 44c4a3256, ad4cc375c, 0570e9f88, 396b232d9, 2299440db, 9fd33da95, 87d9b93da, 80db89390; files over 1000 since 2026-11-11, each in a file an active section-9 claim of docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md is editing: C4 (fifth codex worker on m21) for crates/clean-kernel/src/kcheck_trace/core.rs, X2 (Codex E4 worker, e4-x2-followup) for crates/clean-elab/src/file_context.rs and crates/clean-elab/src/tactic/simp/mod.rs, and the E2 follow-up 'pins bind meaning' (Claude pins worker, pins-bind-meaning, whose uncommitted edits are on all three) for crates/clean-olean/tests/cic_l_level.rs, cic_l_level/evidence.rs and cic_l_model.rs",
+    "expires": "2026-11-25",
+    "measured": "RED AT ORIGIN/MAIN c327f9b05 with no local change to crates/ (2026-11-11), against the de30ff733 baseline 439 / 1148 / 13410 / 57: files_over_1000 447 (+8), unwrap_expect_production 1147 (-1), bare_pub_non_lib 13443 (+33: 133 added, 100 removed), allow_dead_code_sites 57. Counted per file with the ratchet's own core over de30ff733 and HEAD; the items are named in debt_2026_11_11_itemization. RE-MEASURED 2026-11-13 by the hook-legs lane over a746cf3143 (origin/main 9d43e1811e plus its own commits): files_over_1000 455 (+8 past this debt's 447) and bare_pub_non_lib 13607 (+164 past 13443). It split the two unclaimed new files over 1000 (crates/clean-lake/tests/module_trust.rs, crates/clean-parser/src/grammar/mod.rs), leaving 453 = 447 + the six claimed files named in debt_2026_11_13_itemization, which this ceiling now caps; it paid the bare pub growth by narrowing 220 items the compiler's unreachable_pub lint (default features, whole workspace, all targets) found unreachable, in files no lane had touched since 2026-11-10, to 13422 under the unchanged ceiling 13443.",
+    "ceilings": {
+      "files_over_1000": 453,
+      "bare_pub_non_lib": 13443
+    }
+  },
+  "debt_2026_11_11_itemization": {
+    "files_over_1000_new": {
+      "crates/clean-compiler/src/emit_trust_ir_tv.rs": "919 -> 1054, 8d3d123ac",
+      "crates/clean-compiler/src/emit_trust_ir_tv_ws6_6_tests.rs": "830 -> 1062, 9270ded1f",
+      "crates/clean-compiler/src/emit_trust_ir_tv_ws6_7_source_pipeline_tests.rs": "new, 1524, 8d3d123ac",
+      "crates/clean-kernel/src/tc/infer.rs": "999 -> 1044, 7a92c90b5 (kernel; SELF_VERIFICATION_CERTIFICATE.md and the crystal chain cite its lines, so a split moves their anchors)",
+      "crates/clean-kernel/src/tc/tests/let_zeta.rs": "916 -> 1021, 78304fa7b",
+      "crates/clean-olean/src/import/artifact_ledger.rs": "962 -> 1013, 8a63663fa",
+      "crates/clean-olean/src/replay_census/tests.rs": "new, 1024, 8a63663fa",
+      "crates/clean-olean/src/verify_batch_full.rs": "866 -> 1031, ac5754db2"
+    },
+    "bare_pub_added_by_file": {
+      "crates/clean-olean/src/replay_census.rs": 15,
+      "crates/clean-olean/src/semr_scalar.rs": 14,
+      "crates/clean-verify/src/source_ir_identity.rs": 13,
+      "crates/clean-verify/src/source_ir_word64_addition.rs": 13,
+      "crates/clean-rust-sem/src/source_identity_kernel.rs": 10,
+      "crates/clean-rust-sem/src/source_word64_addition_kernel.rs": 10,
+      "crates/clean-rust-sem/src/source_word64_addition_kernel/projection.rs": 9,
+      "crates/clean-rust-sem/src/source_identity_kernel/projection.rs": 8,
+      "crates/clean-reflect/src/source_equation.rs": 6,
+      "crates/clean-reflect/src/boxed_entry.rs": 5,
+      "crates/clean-reflect/src/denote.rs": 4,
+      "crates/clean-kernel/src/tc/sharing_invariance.rs": 3,
+      "crates/clean-native/src/native_build_artifact.rs": 3,
+      "crates/clean-verify/src/eval_ir_syntax_epoch.rs": 3,
+      "other 14 files": 17
+    },
+    "bare_pub_removed_by_file": {
+      "crates/clean-verify/src/spec/core_spec/candmodel_construct_r4.rs": 39,
+      "crates/clean-verify/src/spec/core_spec/candmodel_construct_r3.rs": 36,
+      "crates/clean-elab/src/tactic/conv_deep.rs": 9,
+      "crates/clean-elab/src/meta/interpreter.rs": 5,
+      "crates/clean-olean/src/import/value_binder_names.rs": 5,
+      "crates/clean-kernel/src/verify_api.rs": 4,
+      "other 2 files": 2
+    },
+    "bare_pub_added_by_reference": "by a whole-word git grep of each added item's name: 78 named in another crate (some are common method names such as claim/proof/source and only plausibly external), 12 named only by the defining crate's own tests/, 43 named nowhere outside the defining crate's src/. The 43 are the narrowing candidates; several are types in the signatures of exported functions (replay_census is `pub mod` in clean-olean's lib.rs), so each needs a compile check, which the owning lane is placed to run."
+  },
+  "debt_2026_11_13_itemization": {
+    "files_over_1000_new_claimed": {
+      "crates/clean-kernel/src/kcheck_trace/core.rs": "new, 1778; crossed 1000 at 44b5bc2abd (C4)",
+      "crates/clean-elab/src/file_context.rs": "976 -> 1116; crossed at f8440e047d (X2 is editing it)",
+      "crates/clean-elab/src/tactic/simp/mod.rs": "950 -> 1015; crossed at 91c19007ec (X2's successor-case simp)",
+      "crates/clean-olean/tests/cic_l_level.rs": "new, 1876; crossed at 57f4cfee82 (E2 follow-up; M4 and C1 also land here)",
+      "crates/clean-olean/tests/cic_l_level/evidence.rs": "new, 1711; crossed at ddb4348c64 (E2 follow-up)",
+      "crates/clean-olean/tests/cic_l_model.rs": "new, 1278; crossed at 39dd7cc84f (E2 follow-up; the model lane also lands here)"
+    },
+    "files_over_1000_split_unclaimed": {
+      "crates/clean-lake/tests/module_trust.rs": "1146 -> 976: the three real-Lake-artifact tests moved to module_trust/real_artifacts.rs",
+      "crates/clean-parser/src/grammar/mod.rs": "1042 -> 608: the parse entry points moved to grammar/entry_points.rs"
+    },
+    "bare_pub_growth_since_c327f9b05_by_file": {
+      "crates/clean-native/src/external_lean.rs": "+26: d6df60f6e1 +19, 3dc24c7069 +5, fc69ef025a +1, 6cea097393 +1",
+      "crates/clean-kernel/src/kcheck_trace/{core,term,mod}.rs": "+44: 3295cd645a +26, 44b5bc2abd +17, 377950a5e2 +1 (C4)",
+      "crates/clean-olean/src/semr_bool_body.rs": "+16: e56f88a716",
+      "crates/clean-olean/src/import/project_world.rs": "+10: a9717d7799 +7, ffd0b62f6b +3",
+      "crates/clean-reflect/src/scalar_denote.rs": "+9: afd620d38a",
+      "crates/clean-kernel/src/lean_world.rs": "+9: a9717d7799",
+      "crates/clean-elab/src/tactic/goal_observation.rs": "+8: 9c342e7cb8",
+      "crates/clean-ck0/src/export/{mod,target}.rs": "+14: ca66fe054c +7, da28f1c451 +6, 6a186ed61d +1 (ck0 shared terms)",
+      "crates/clean-elab/src/term_info.rs": "+7: 9cd8e661d6 +5, 7f5d31d866 +1, 238e6f44f4 +1",
+      "crates/clean-elab/src/module_driver/setup.rs": "+6",
+      "crates/clean-elab/src/file_context.rs": "+6 (X2)",
+      "other 24 files": "+44, less 30 removed in 4 files (net +169 over the debt's measurement)"
+    },
+    "bare_pub_paid_by": "220 bare pub fn/struct/enum lines became pub(crate) in 47 files of clean-auto, clean-mathverse, clean-verify, clean-elab, clean-compiler, clean-cli, clean-rust-sem, clean-server, clean-fold and clean-tla, each one the unreachable_pub lint reported; the CDCL types the fuzz feature re-exports and four items a private module re-exports by name were left alone, and the crates were re-checked with their non-default features. 185 of those lines are counted by this ratchet; the rest sit in files it reads as cfg(test)."
+  }
 }

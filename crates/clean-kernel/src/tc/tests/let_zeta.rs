@@ -914,3 +914,108 @@ fn test_whnf_let_all_transparency_modes() {
         );
     }
 }
+
+#[test]
+fn checked_dependent_let_type_retains_checked_value_and_scope() {
+    let env = Environment::new();
+    let tc = TypeChecker::new(&env);
+    let term = let_expr(
+        Name::from_string("p"),
+        Expr::type_(),
+        Expr::prop(),
+        Expr::lam(BinderInfo::Default, Expr::bvar(0), Expr::bvar(0)),
+    );
+    let checked = tc.infer_type_full(&term).unwrap();
+    assert!(matches!(checked.kind, ExprKind::Let(..)));
+    assert!(!checked.has_fvar_quick());
+    assert!(!checked.has_loose_bvars_quick());
+    assert!(tc.is_def_eq(&checked, &prop_to_prop()));
+    assert!(tc.infer_type_full(&checked).is_ok());
+    // Infer-only remains the original eager, syntax-compatible rule.
+    assert_eq!(tc.infer_type(&term).unwrap(), prop_to_prop());
+    // A dependent outer lambda must close through the retained inner let.
+    let outer = Expr::lam(
+        BinderInfo::Default,
+        Expr::type_(),
+        let_expr(
+            Name::from_string("q"),
+            Expr::type_(),
+            Expr::bvar(0),
+            Expr::lam(BinderInfo::Default, Expr::bvar(0), Expr::bvar(0)),
+        ),
+    );
+    let checked = tc.infer_type_full(&outer).unwrap();
+    assert!(!checked.has_fvar_quick());
+    assert!(!checked.has_loose_bvars_quick());
+    assert!(tc.infer_type_full(&checked).is_ok());
+    assert!(tc.is_def_eq(&checked, &tc.infer_type(&outer).unwrap()));
+}
+
+#[test]
+fn checked_let_type_keeps_unused_and_invalid_rules() {
+    let env = Environment::new();
+    let tc = TypeChecker::new(&env);
+    let unused = let_expr(
+        Name::from_string("p"),
+        Expr::type_(),
+        Expr::prop(),
+        Expr::prop(),
+    );
+    assert_eq!(tc.infer_type_full(&unused).unwrap(), Expr::type_());
+    let invalid = let_expr(
+        Name::from_string("p"),
+        Expr::prop(),
+        Expr::type_(),
+        Expr::bvar(0),
+    );
+    assert!(tc.infer_type_full(&invalid).is_err());
+    assert!(tc.infer_type(&invalid).is_ok());
+    // Failure must not leak the temporary binder or alter the next result.
+    assert_eq!(tc.infer_type_full(&unused).unwrap(), Expr::type_());
+}
+
+#[test]
+fn checked_dependent_let_certificate_replays_and_rejects_wrong_result() {
+    use crate::cert::{CertVerifier, ProofCert};
+
+    let env = Environment::new();
+    let term = let_expr(
+        Name::from_string("p"),
+        Expr::type_(),
+        Expr::prop(),
+        Expr::lam(BinderInfo::Default, Expr::bvar(0), Expr::bvar(0)),
+    );
+    let outer = Expr::lam(
+        BinderInfo::Default,
+        Expr::type_(),
+        let_expr(
+            Name::from_string("q"),
+            Expr::type_(),
+            Expr::bvar(0),
+            Expr::lam(BinderInfo::Default, Expr::bvar(0), Expr::bvar(0)),
+        ),
+    );
+    for expr in [&term, &outer] {
+        let tc = TypeChecker::new(&env);
+        let checked = tc.infer_type_full(expr).unwrap();
+        let (cert_type, cert) = tc.infer_type_with_cert_full(expr).unwrap();
+        assert_eq!(cert_type, checked);
+        assert!(!cert_type.has_fvar_quick());
+        assert!(!cert_type.has_loose_bvars_quick());
+        assert_eq!(
+            CertVerifier::new(&env).verify(&cert, expr).unwrap(),
+            checked
+        );
+        assert!(tc.infer_type_full(&checked).is_ok());
+    }
+
+    let tc = TypeChecker::new(&env);
+    let (checked, mut cert) = tc.infer_type_with_cert_full(&term).unwrap();
+    assert!(matches!(checked.kind, ExprKind::Let(..)));
+    let ProofCert::Let { result_type, .. } = &mut cert else {
+        panic!("the actual let must retain its certificate rule");
+    };
+    **result_type = Expr::prop();
+    assert!(CertVerifier::new(&env).verify(&cert, &term).is_err());
+    assert_eq!(tc.infer_type_with_cert(&term).unwrap().0, prop_to_prop());
+}

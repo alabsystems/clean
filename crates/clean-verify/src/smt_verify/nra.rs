@@ -433,7 +433,7 @@ fn rational_pow(base: &Rational64, mut exp: u32) -> Rational64 {
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }

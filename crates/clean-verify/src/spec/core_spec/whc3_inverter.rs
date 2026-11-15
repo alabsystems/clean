@@ -32,7 +32,7 @@
 //! rule that out.
 //!
 //! That obligation is taken as a hypothesis rather than by fixing `d`, so **one**
-//! lemma serves both defaults the chain uses — `wh_stuck_ne_step` at five levels
+//! lemma serves both defaults the chain uses — `wh_stuck_ne_step` at six levels
 //! and `wh_starved_ne_step` at the pre-pass — instead of two near-copies free to
 //! drift apart.
 //!
@@ -100,7 +100,7 @@ impl Specification {
                  so from the equation alone nothing follows — d could itself be wstep r. hd is \
                  the caller's proof that it is not. Taking it as a hypothesis rather than fixing \
                  d at wstuck is what lets ONE lemma serve both defaults the iota chain uses: \
-                 five levels supply wh_stuck_ne_step, the pre-pass supplies wh_starved_ne_step. \
+                 six binds supply wh_stuck_ne_step, the pre-pass supplies wh_starved_ne_step. \
                  \
                  By OptionType.rec on o: the none arm reduces opt_step_bind to d and hands h0 to \
                  hd; the some arm reduces it to f w, which IS the continuation's second premise. \
@@ -139,7 +139,7 @@ impl Specification {
         Ok(())
     }
 
-    /// The six-level chain inverter, at one universe.
+    /// The seven-bind chain inverter, at one universe.
     fn add_whc3_inverter_at(&mut self, suffix: &str, univ: &str) -> Result<(), SpecError> {
         let src = Self::whc3_inverter_src(suffix, univ);
         let inv = format!("opt_step_bind_some_inv{suffix}");
@@ -147,8 +147,8 @@ impl Specification {
         debug_assert!(Self::balanced(&src), "whc3 inverter parens");
         debug_assert_eq!(
             src.matches(&format!("{inv} ")).count(),
-            6,
-            "six chain levels, six inversions"
+            7,
+            "six outer lookups and the guarded tail each need inversion"
         );
         debug_assert_eq!(
             src.matches(&format!("({starved} e2 C)")).count(),
@@ -162,7 +162,7 @@ impl Specification {
     /// The inverter's source, built from the SAME layer strings the chain is.
     pub(super) fn whc3_inverter_src(suffix: &str, univ: &str) -> String {
         let mi = MAJOR_IDX;
-        let reduct = Self::whc_reduct();
+        let tail = Self::whc_tail();
         // The SAME layer strings the chain itself is built from — shared, not
         // re-transcribed, so the inversion cannot drift out from under its
         // subject.
@@ -183,7 +183,7 @@ impl Specification {
              (OptionType.some Name cname) -> \
              Eq (OptionType RecRule) (recrule_for env recname cname) \
              (OptionType.some RecRule rule) -> \
-             Eq WhStepR (WhStepR.wstep {reduct}) (WhStepR.wstep e2) -> \
+             Eq (OptionType KExpr) {tail} (OptionType.some KExpr e2) -> \
              C)"
         );
         let src = format!(
@@ -227,27 +227,38 @@ impl Specification {
              (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) \
              (OptionType.some RecRule rule)) \
              (h6r : Eq WhStepR ({l7} rule) (WhStepR.wstep e2)) => \
-             k recname meta major wmajor cname rule h1 h2 h3 hw h4 h5 h6r))))))"
+             {inv} KExpr {tail} WhStepR.wstuck \
+             (fun (result : KExpr) => WhStepR.wstep result) e2 C \
+             ({stuck} e2 C) h6r \
+             (fun (result : KExpr) \
+             (htail : Eq (OptionType KExpr) {tail} (OptionType.some KExpr result)) \
+             (hstep : Eq WhStepR (WhStepR.wstep result) (WhStepR.wstep e2)) => \
+             k recname meta major wmajor cname rule h1 h2 h3 hw h4 h5 \
+               (Eq.trans (OptionType KExpr) {tail} (OptionType.some KExpr result) \
+                 (OptionType.some KExpr e2) htail \
+                 (Eq.cong KExpr (OptionType KExpr) \
+                   (fun (r : KExpr) => OptionType.some KExpr r) result e2 \
+                   (wh_step_inj result e2 hstep))))))))))"
         );
         src
     }
 
     fn whc3_inverter_desc(suffix: &str, univ: &str) -> String {
         format!(
-            "iota_reduct_whc3_some_inv{suffix}: CPS inversion of iota_reduct_whc3's six-level \
+            "iota_reduct_whc3_some_inv{suffix}: CPS inversion of iota_reduct_whc3's seven-bind \
                  opt_step_bind chain, recovering the recursor name, its metadata, the raw major, \
                  ITS WHNF, the constructor name and the rule, together with every lookup equation \
-                 and the reduct identity. The three-way twin of iota_reduct_whc_some_inv, \
+                 and the actual guarded-tail success equation. The three-way twin of iota_reduct_whc_some_inv, \
                  concluding at C : {univ}. \
                  \
                  The six LOOKUP equations are unchanged from the two-way inverter, and that is \
                  not a coincidence: wh still returns OptionType KExpr, so only the CHAIN's result \
                  type moved. What changes is the hypothesis — WhStepR.wstep e2 rather than \
-                 OptionType.some KExpr e2 — and the reduct equation, now between wstep \
-                 constructors, which wh_step_inj exists to strip. \
+                 OptionType.some KExpr e2 — while the final callback exposes the SAME Option-valued guarded-tail \
+                 equation as the two-way inverter; the final bind is inverted separately. \
                  \
-                 Six nested opt_step_bind_some_inv, each supplied with the refutation of its OWN \
-                 default: wh_stuck_ne_step at five levels and wh_starved_ne_step at level four, \
+                 Seven nested opt_step_bind_some_inv, each supplied with the refutation of its OWN \
+                 default: wh_stuck_ne_step at six levels and wh_starved_ne_step at level four, \
                  the pre-pass. That single substitution is where the whole three-way distinction \
                  shows up in the inversion, and it is why an opt_bind-shaped inverter could not \
                  have been reused. \
@@ -286,7 +297,7 @@ mod tests {
                 src.matches(layer.as_str()).count(),
                 2 * (n + 1),
                 "layer {n} appears the wrong number of times — it has drifted \
-                 from the chain, and a six-level CPS inversion cannot survive that"
+                 from the chain, and a seven-bind CPS inversion cannot survive that"
             );
         }
         assert!(Specification::balanced(&src), "inverter parens");
@@ -334,8 +345,8 @@ mod tests {
         );
         assert_eq!(
             l2.matches("WhStepR.wstuck").count(),
-            4,
-            "l2 nests four stuck-defaulting levels below it"
+            5,
+            "l2 nests five stuck-defaulting binds, including the guarded tail"
         );
     }
 }

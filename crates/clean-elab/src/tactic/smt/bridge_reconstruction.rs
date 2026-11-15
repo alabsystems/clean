@@ -313,6 +313,19 @@ pub(super) fn try_bridge_reconstruction_candidate(
         return outcome;
     }
 
+    // A closed arithmetic equality can be kernel-convertible even when the
+    // bridge cannot reconstruct the solver's arithmetic trace. Offer the real
+    // Eq.refl term through the same validation and trust-selection boundary.
+    // This is a proof candidate, never an UNSAT result or a solver trust token.
+    if let Some(proof) = kernel_reflexivity_candidate(state, goal, target)
+        .or_else(|| kernel_assumption_candidate(state, goal, target))
+    {
+        return BridgeProbeOutcome::Candidate(BridgeReconstructionCandidate {
+            trust_subterm_count: count_embedded_trusted_ay_terms(&proof),
+            proof,
+        });
+    }
+
     use clean_auto::bridge::SmtBridge;
 
     let mut bridge = SmtBridge::new(state.env());
@@ -352,6 +365,49 @@ pub(super) fn try_bridge_reconstruction_candidate(
             BridgeProbeOutcome::NoProof
         }
     }
+}
+
+#[cfg(feature = "ay-smt")]
+fn kernel_assumption_candidate(state: &mut ProofState, goal: &Goal, target: &Expr) -> Option<Expr> {
+    // The asserted proposition may have had its actual Int instance peeled.
+    // Preserve its original proof variable and let kernel conversion check the
+    // match. Ordinary hypothesis parameters carry an assumption; a let-valued
+    // local may hide a proof term with separate trust debt and is not selected
+    // by this bounded candidate.
+    for local in &goal.local_ctx {
+        if local.value.is_none() && state.is_def_eq(goal, &local.ty, target) {
+            if let Ok(proof) = validate_proof_term(state, goal, &Expr::fvar(local.fvar), target) {
+                return Some(proof);
+            }
+        }
+    }
+    None
+}
+
+#[cfg(feature = "ay-smt")]
+fn kernel_reflexivity_candidate(
+    state: &mut ProofState,
+    goal: &Goal,
+    target: &Expr,
+) -> Option<Expr> {
+    use clean_kernel::{ExprKind, Name};
+
+    let target = target.strip_mdata();
+    let ExprKind::Const(name, levels) = target.get_app_fn().kind() else {
+        return None;
+    };
+    if *name != Name::from_string("Eq") {
+        return None;
+    }
+    let args = target.get_app_args();
+    let [ty, lhs, _rhs] = args.as_slice() else {
+        return None;
+    };
+    let proof = Expr::apps(
+        Expr::const_(Name::from_string("Eq.refl"), levels.clone()),
+        [(*ty).clone(), (*lhs).clone()],
+    );
+    validate_proof_term(state, goal, &proof, target).ok()
 }
 
 #[cfg(test)]

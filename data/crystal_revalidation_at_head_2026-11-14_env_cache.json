@@ -1,0 +1,37 @@
+{
+ "schema": "clean.crystal.revalidation_at_head/v1",
+ "lane": "env-cache-repair",
+ "measured_utc": "2026-11-14T12:01:35.525759+00:00",
+ "what_this_is": "Fresh measurement-driver control for existing Crystal chains. Source and emitted bytes at the 2026-10-07 rebaseline are unchanged; this record grants no new proof claim.",
+ "producer": {
+  "rebuilt_from_trust_rev": "321aaeda75478038420d97830f14724c33c8dc39",
+  "what": "Immutable atpkg trust/9192 compiler and package sysroot; not a rebuild. seal_driver guard and explicit package sysrootcheck passed. Current Targo rejects historical function_budget_ms policy, so the historical control uses the package own Targo.",
+  "trustc_sha256": "6c513314d5c99778345a2c2a60feef521b2ece2952149095bc9beded93b1206e",
+  "librustc_driver_sha256": "13997326c927b73e5768c42844564d18d7828ab83be55112a8ca62ebc98f446f"
+ },
+ "control": {
+  "clean_kernel.trust-ir.bin": {
+   "got": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+   "lane18_recorded": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+   "verdict": "MATCH"
+  },
+  "clean_kernel.trust-ir.txt": {
+   "got": "d3eee57ad5d17a4e1e4dff3127abf24b99994961a2c6b8fa40b3c4678f1a8292",
+   "lane18_recorded": "d3eee57ad5d17a4e1e4dff3127abf24b99994961a2c6b8fa40b3c4678f1a8292",
+   "verdict": "MATCH"
+  },
+  "clean_kernel.coverage.json": {
+   "got": "5e16957b863616f5ca6bd099d3511c0f9caaaa9f03530a5c9d7ae9cf5be52932",
+   "lane18_recorded": "5e16957b863616f5ca6bd099d3511c0f9caaaa9f03530a5c9d7ae9cf5be52932",
+   "verdict": "MATCH"
+  },
+  "clean_rev": "047ebd0512cd5b1fd9146edb8506a182b09de2ec",
+  "driver": {
+   "scripts/trust_ir_build.sh": "3d0f55041d62ce1e346618b56c6ded35335344249b684d7a9b460758a389c128",
+   "scripts/trust_ir_axes.py": "1030c553dceefd0d3d0dc054a33048265789e474a8f5fecd06c5b1d46b1f1a63"
+  },
+  "recipe": "At 047ebd0512cd5b1fd9146edb8506a182b09de2ec in an owned detached worktree, copy the two pinned measurement scripts from e8f7abfd00a75b7c4af009481944072a3e8a8f08; use trust/9192 Targo and trustc with its own sysroot; TRUST_STAGE1_BIN=<9192>/bin TRUSTC=<9192>/bin/trustc TRUST_IR_BUILD_TARGET_DIR=<owned noindex target> TRUST_IR_BUILD_DUMP=<control-dump> scripts/trust_ir_build.sh --print-only, under build-slot and heavy_gate.",
+  "verdict": "All three historical rebaseline artifacts reproduced byte for byte. No historical fixture or record changed."
+ },
+ "source_rebaseline_record": "data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json"
+}

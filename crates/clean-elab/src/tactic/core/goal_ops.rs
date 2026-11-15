@@ -33,12 +33,22 @@ impl ProofState {
         goal: &Goal,
         kind: SorryKind,
     ) -> Result<Expr, TacticError> {
+        // Low-level tactic callers choose their theory explicitly. A missing
+        // admission signature must fail before creating a placeholder term.
+        if self
+            .env()
+            .get_const(&Name::from_string("sorryAx"))
+            .is_none()
+        {
+            require_const(self.env(), "sorry")?;
+        }
         let target = self.metas.instantiate(&goal.target);
         let target_ty = self.infer_type(goal, &target)?;
         let target_sort = self.whnf(goal, &target_ty);
         let ExprKind::Sort(level) = target_sort.kind() else {
             return Err(TacticError::TypeCheckFailed(format!(
-                "goal target must have a sort, got {target_sort:?}"
+                "goal target must have a sort, got {}",
+                crate::error_render::term(&target_sort)
             )));
         };
 
@@ -198,7 +208,8 @@ impl ProofState {
         let goal_meta_id = goal.meta_id;
         let meta = self.metas.get(goal_meta_id).cloned().ok_or_else(|| {
             TacticError::TypeCheckFailed(format!(
-                "active goal references undeclared metavariable {goal_meta_id:?}"
+                "active goal references undeclared metavariable ?m{}",
+                goal_meta_id.0
             ))
         })?;
 
@@ -214,7 +225,8 @@ impl ProofState {
             && !self.is_def_eq(&goal, &captured_target, &focused_target)
         {
             return Err(TacticError::TypeCheckFailed(format!(
-                "active goal target is not definitionally equal to metavariable {goal_meta_id:?} type"
+                "active goal target is not definitionally equal to metavariable ?m{} type",
+                goal_meta_id.0
             )));
         }
 
@@ -226,14 +238,18 @@ impl ProofState {
                 .find(|(_, captured_fvar, _)| captured_fvar == fvar)
             else {
                 return Err(TacticError::TypeCheckFailed(format!(
-                    "active goal context widens metavariable {goal_meta_id:?} with local {fvar:?}"
+                    "active goal context widens metavariable ?m{} with local {}",
+                    goal_meta_id.0,
+                    crate::error_render::fvar(*fvar, None)
                 )));
             };
             let captured_ty = self.metas.instantiate(captured_ty);
             let focused_ty = self.metas.instantiate(ty);
             if captured_ty != focused_ty && !self.is_def_eq(&goal, &captured_ty, &focused_ty) {
                 return Err(TacticError::TypeCheckFailed(format!(
-                    "active goal retypes local {fvar:?} outside metavariable {goal_meta_id:?} creation scope"
+                    "active goal retypes local {} outside metavariable ?m{} creation scope",
+                    crate::error_render::fvar(*fvar, None),
+                    goal_meta_id.0
                 )));
             }
         }
@@ -260,14 +276,15 @@ impl ProofState {
             self.next_fvar,
         ) {
             return Err(TacticError::TypeCheckFailed(format!(
-                "metavariable {goal_meta_id:?} assignment violates its creation scope: {detail}"
+                "metavariable ?m{} assignment violates its creation scope: {detail}",
+                goal_meta_id.0
             )));
         }
 
         if !self.metas.assign(goal_meta_id, proof) {
             return Err(TacticError::TypeCheckFailed(format!(
-                "failed to assign proof to metavariable {:?}",
-                goal_meta_id
+                "failed to assign proof to metavariable ?m{}",
+                goal_meta_id.0
             )));
         }
         self.pop_current_goal()?;
@@ -325,6 +342,7 @@ impl ProofState {
             meta_id: new_meta_id,
             target: new_target,
             local_ctx: goal.local_ctx,
+            case_binders: goal.case_binders.clone(),
             tag: goal.tag,
         });
 
@@ -395,7 +413,8 @@ impl ProofState {
         );
         let inferred_proof_ty = self.infer_type(&goal, &eq_proof).map_err(|e| {
             TacticError::TypeCheckFailed(format!(
-                "replace_target_eq: cannot infer type of equality proof: {e:?}"
+                "replace_target_eq: cannot infer type of equality proof: {}",
+                e
             ))
         })?;
         if !self.is_def_eq(&goal, &inferred_proof_ty, &expected_eq_ty) {
@@ -427,6 +446,7 @@ impl ProofState {
             meta_id: new_meta_id,
             target: new_target,
             local_ctx: goal.local_ctx,
+            case_binders: goal.case_binders.clone(),
             tag: goal.tag,
         });
 
@@ -463,7 +483,7 @@ impl ProofState {
     ///
     /// ENSURES: `self.goals.is_empty()` is true
     /// ENSURES: TypeChecker cache is invalidated
-    pub fn clear_goals(&mut self) {
+    pub(crate) fn clear_goals(&mut self) {
         self.invalidate_tc_cache();
         self.goals.clear();
     }
@@ -483,7 +503,7 @@ impl ProofState {
     /// ENSURES: All remaining goals have unassigned metavariables
     /// ENSURES: `self.goals.len()` <= previous `self.goals.len()`
     /// ENSURES: TypeChecker cache is invalidated only if goals were pruned
-    pub fn prune_solved_goals(&mut self) {
+    pub(crate) fn prune_solved_goals(&mut self) {
         let before = self.goals.len();
         self.goals
             .retain(|goal| !self.metas.is_assigned(goal.meta_id));
@@ -503,7 +523,7 @@ impl ProofState {
     /// ENSURES: Returned state shares environment and instance data with `self`
     /// ENSURES: `goal.meta_id` exists in the returned state's MetaState
     /// ENSURES: `next_fvar` >= max FVar ID in the goal's local context
-    pub fn clone_with_goal(&self, goal: Goal) -> Self {
+    pub(crate) fn clone_with_goal(&self, goal: Goal) -> Self {
         let goal_meta_id = goal.meta_id;
         // #close_fvars (double `<;>` with `intro`): the floor for `next_fvar`
         // must avoid colliding with FVars ALREADY in this goal's local_ctx, but
@@ -585,6 +605,7 @@ impl ProofState {
             in_conv_body: false,
             options: self.options.clone(),
             namespace_state: self.namespace_state.clone(),
+            instance_visibility: self.instance_visibility.clone(),
         }
     }
 
@@ -628,6 +649,7 @@ impl ProofState {
                 meta_id: root_meta_id,
                 target,
                 local_ctx,
+                case_binders: Vec::new(),
                 tag: None,
             }]),
             metas,
@@ -649,6 +671,7 @@ impl ProofState {
             in_conv_body: false,
             options: self.options.clone(),
             namespace_state: self.namespace_state.clone(),
+            instance_visibility: self.instance_visibility.clone(),
         }
     }
 
@@ -663,7 +686,7 @@ impl ProofState {
     /// REQUIRES: `focused` was created from `self` via `clone_with_goal`
     /// ENSURES: All meta assignments in `focused` are merged into `self`
     /// ENSURES: `self.next_fvar` >= `focused.next_fvar` (monotonically increasing)
-    pub fn merge_meta_state(&mut self, focused: &ProofState) {
+    pub(crate) fn merge_meta_state(&mut self, focused: &ProofState) {
         self.metas.merge_from(&focused.metas);
         self.next_fvar = self.next_fvar.max(focused.next_fvar);
         self.trust_ledger.adopt_branch(&focused.trust_ledger);

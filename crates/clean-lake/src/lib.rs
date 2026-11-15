@@ -13,7 +13,9 @@
 //! - Dependency management
 //! - Parallel builds
 
+pub mod artifact_binding;
 pub mod build;
+pub mod build_trace;
 pub mod cli;
 pub mod config;
 pub mod error;
@@ -21,16 +23,20 @@ pub mod fetch;
 pub mod glob;
 pub(crate) mod interpolate;
 pub mod manifest;
+mod module_options;
 #[cfg(test)]
 mod test_env;
 pub mod toml_config;
 pub mod workspace;
 
-pub use build::{BuildContext, BuildOptions, BuildResult};
+pub use artifact_binding::{ImportAdmissionFindings, ImportAdmitter};
+pub use build::{
+    BuildContext, BuildOptions, BuildResult, FreshModuleArtifacts, CLEAN_OLEAN_GIT_HASH,
+};
 pub use cli::DEFAULT_CLEAN_TOOLCHAIN;
 pub use config::{
-    LakeConfig, LakeScript, LakefileParseMode, LeanExe, LeanLib, LeanTest, PackageConfig,
-    SkippedConstruct,
+    LakeConfig, LakeScript, LakefileParseMode, LeanExe, LeanLib, LeanOption, LeanOptionValue,
+    LeanTest, PackageConfig, SkippedConstruct,
 };
 pub use error::{LakeError, LakeResult};
 pub use fetch::{FetchManager, ResolveResult, ResolvedPackage, UpdateResult, UpdateStatus};

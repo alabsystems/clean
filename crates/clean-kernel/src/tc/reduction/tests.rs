@@ -652,12 +652,11 @@ fn test_projection_reduction_stuck_on_non_constructor() {
 
 /// Create an environment with Nat, Char, List, and String defined.
 fn make_string_env() -> Environment {
-    let mut env = Environment::new();
-    env.init_nat().expect("init Nat");
-    env.init_char().expect("init Char");
-    env.init_list().expect("init List");
-    env.init_string().expect("init String");
-    env
+    // A string literal expands through `String.ofList`/`Char.ofNat` only when
+    // both are the canonical definitions (`env/native_fold_authority.rs`); the
+    // prelude holds them. The hand-assembled `init_*` chain this used before
+    // 2026-09-26 builds closures no world pins.
+    Environment::with_prelude()
 }
 
 #[test]

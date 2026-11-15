@@ -303,15 +303,15 @@ fn test_init_int_hmul_inst() {
 }
 
 // ---------------------------------------------------------------------------
-// Track PP: Int HDiv/HMod instances backed by the Opaque Int.div / Int.mod
-// constants from init_int_arith. `Opaque` is NOT `Axiom`, so the instances are
-// axiom-free (empty axiom_deps) — the kernel-checked instance value
-// `HDiv.mk Int Int Int Int.div` carries no axiom dependency.
+// Int HDiv/HMod instances use the checked Int.ediv / Int.emod definitions,
+// following Lean's Euclidean notation. A Definition is NOT an `Axiom`, so the instances are axiom-free
+// (empty axiom_deps) — the kernel-checked instance value
+// `HDiv.mk Int Int Int Int.ediv` carries no axiom dependency.
 // ---------------------------------------------------------------------------
 
 /// The Int hetero instance must be a kernel-checkable `Definition` whose value
 /// type-checks against its declared type, and must carry an EMPTY axiom
-/// closure (Int.div / Int.mod are `Opaque`, not `Axiom`).
+/// closure (Int.ediv / Int.emod are `Definition`s, not `Axiom`s).
 fn assert_int_hetero_inst_axiom_free(env: &Environment, projection: &str, instance: &str) {
     use crate::tc::TypeChecker;
     let tc = TypeChecker::new(env);
@@ -344,7 +344,7 @@ fn assert_int_hetero_inst_axiom_free(env: &Environment, projection: &str, instan
         .unwrap_or_default();
     assert!(
         deps.is_empty(),
-        "{instance} must have an EMPTY axiom closure (Int.div/Int.mod are Opaque, not Axiom); deps = {deps:?}"
+        "{instance} must have an EMPTY axiom closure (Int.ediv/Int.emod are Definitions, not Axioms); deps = {deps:?}"
     );
 }
 
@@ -352,14 +352,12 @@ fn assert_int_hetero_inst_axiom_free(env: &Environment, projection: &str, instan
 fn test_init_int_hdiv_inst() {
     let mut env = Environment::with_prelude();
     assert_const(&env, "instHDivInt");
-    assert_const(&env, "Int.div");
-    // Int.div must be Opaque (data), never an Axiom — so it never pollutes an
-    // axiom closure.
-    let info = env.get_const(&Name::from_string("Int.div")).unwrap();
+    assert_const(&env, "Int.ediv");
+    let info = env.get_const(&Name::from_string("Int.ediv")).unwrap();
     assert_eq!(
         info.kind,
-        ConstantKind::Opaque,
-        "Int.div must be Opaque, got {:?}",
+        ConstantKind::Definition,
+        "Int.ediv must be a Definition, got {:?}",
         info.kind
     );
     assert_int_hetero_inst_axiom_free(&env, "HDiv.hDiv", "instHDivInt");
@@ -372,12 +370,12 @@ fn test_init_int_hdiv_inst() {
 fn test_init_int_hmod_inst() {
     let mut env = Environment::with_prelude();
     assert_const(&env, "instHModInt");
-    assert_const(&env, "Int.mod");
-    let info = env.get_const(&Name::from_string("Int.mod")).unwrap();
+    assert_const(&env, "Int.emod");
+    let info = env.get_const(&Name::from_string("Int.emod")).unwrap();
     assert_eq!(
         info.kind,
-        ConstantKind::Opaque,
-        "Int.mod must be Opaque, got {:?}",
+        ConstantKind::Definition,
+        "Int.emod must be a Definition, got {:?}",
         info.kind
     );
     assert_int_hetero_inst_axiom_free(&env, "HMod.hMod", "instHModInt");
@@ -560,7 +558,7 @@ fn test_init_nat_hshiftright_inst() {
 fn test_bitwise_hetero_computation() {
     use crate::tc::TypeChecker;
 
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     env.init_nat_hand_inst().unwrap();
     env.init_nat_hor_inst().unwrap();
     env.init_nat_hxor_inst().unwrap();

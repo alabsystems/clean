@@ -210,7 +210,7 @@ pub fn batch_verify_with_threads(
     with_thread_pool(num_threads, || verify_parallel(env, inputs))
 }
 
-pub fn batch_verify_with_stats_threads(
+pub(crate) fn batch_verify_with_stats_threads(
     env: &Environment,
     inputs: Vec<BatchVerifyInput>,
     num_threads: usize,
@@ -221,7 +221,7 @@ pub fn batch_verify_with_stats_threads(
     )
 }
 
-pub fn batch_verify_with_stats_progress<F>(
+pub(crate) fn batch_verify_with_stats_progress<F>(
     env: &Environment,
     inputs: Vec<BatchVerifyInput>,
     threads: usize,

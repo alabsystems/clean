@@ -1,0 +1,23 @@
+{
+ "reader": "A (trust-ir binary -> core), a2project",
+ "dump": "$SCRATCH/crystal-work/dump_A/clean_kernel.trust-ir.bin",
+ "dump_sha256": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+ "module_name": "clean_kernel",
+ "function_name": "mode::CleanMode::has_cubical_layer",
+ "artifact_func_index": 2090,
+ "artifact_func_id": 2090,
+ "artifact_functy_id": 0,
+ "artifact_linkage": "external",
+ "artifact_calling_conv": "rustcc",
+ "artifact_producer": "trust",
+ "core_digest": "8409fe1ae10de05cddaab2250024d5738da984f51d601b30c92594202bf0ea6d",
+ "crate_enum_ids_seen": [17],
+ "encodings_derived": [],
+ "encodings_refused": [],
+ "crate_struct_ids_seen": [],
+ "crate_func_ids_seen": [2090],
+ "crate_func_names_seen": ["mode::CleanMode::has_cubical_layer"],
+ "aligns_erased": ["load:None"],
+ "param_tys_erased": ["Ptr"],
+ "block_param_tys_erased": ["bb4:Bool"]
+}

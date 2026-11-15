@@ -615,11 +615,11 @@ impl Specification {
             let reduct = "(apply_spine (kapp_args e) val)";
             let l3 = format!("(fun (val : KExpr) => OptionType.some KExpr {reduct})");
             let l2 =
-                format!("(fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) {l3})");
+                format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3})");
             let kont = format!(
                 "(forall (dname : Name) (val : KExpr), \
                  Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) -> \
-                 Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val) -> \
+                 Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
                  Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
                  C)"
             );
@@ -631,9 +631,9 @@ impl Specification {
                  (fun (dname : Name) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
                  (h1r : Eq (OptionType KExpr) ({l2} dname) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_type KExpr KExpr (defval_for env dname) {l3} e' C h1r \
+                 opt_bind_some_inv_type KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) {l3} e' C h1r \
                  (fun (val : KExpr) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) ({l3} val) (OptionType.some KExpr e')) => \
                  k dname val h1 h2 h2r))"
             );
@@ -661,7 +661,8 @@ impl Specification {
                     "delta_reduct".to_string(),
                     "opt_bind_some_inv_type".to_string(),
                     "kexpr_const_name".to_string(),
-                    "defval_for".to_string(),
+                    "kdef_value_at".to_string(),
+                    "kexpr_const_levels".to_string(),
                     "apply_spine".to_string(),
                 ])),
                 axiom_deps: HashSet::new(),
@@ -686,7 +687,7 @@ impl Specification {
                     "delta_reduct_some_inv_type env e e' C h ",
                     "(fun (dname : Name) (val : KExpr) ",
                     "(h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) ",
-                    "(h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) ",
+                    "(h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) ",
                     "(h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => ",
                     "option_none_ne_some_type Name dname C ",
                     "(Eq.trans (OptionType Name) (OptionType.none Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) ",
@@ -728,7 +729,7 @@ impl Specification {
                 "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val))"
                     .to_string();
             let f1f = format!(
-                "(fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) {f2f})"
+                "(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn f))) {f2f})"
             );
             let h1f = format!(
                 "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname) \
@@ -739,7 +740,7 @@ impl Specification {
             let hf2f = format!("(Eq.refl (OptionType KExpr) (OptionType.some KExpr {f0v}))");
             let reduct_f = format!(
                 "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn f)) {f1f} dname {f0v} {h1f} \
-                 (opt_bind_some_intro KExpr KExpr (defval_for env dname) {f2f} val {f0v} h2 {hf2f})"
+                 (opt_bind_some_intro KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn f))) {f2f} val {f0v} h2 {hf2f})"
             );
             let beq = format!(
                 "(Eq.trans KExpr b (apply_spine (kapp_args {afa}) val) (KExpr.app {f0v} arg) \
@@ -750,7 +751,7 @@ impl Specification {
             let kont = format!(
                 "(fun (dname : Name) (val : KExpr) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn f))) (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args {afa}) val)) (OptionType.some KExpr b)) => \
                  k {f0v} ({reduct_f}) ({beq}))"
             );

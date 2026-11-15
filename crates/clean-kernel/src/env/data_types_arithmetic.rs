@@ -11,7 +11,7 @@
 
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{Declaration, EnvError, Environment};
-use crate::expr::{BinderInfo, Expr};
+use crate::expr::{BinderInfo, Expr, MDataValue};
 use crate::level::Level;
 use crate::name::Name;
 
@@ -570,14 +570,36 @@ impl Environment {
         // ========================================
         // Int.div / Int.mod : Int → Int → Int
         //
-        // These mirror `Nat.div` / `Nat.mod` (data_types_nat.rs): registered as
-        // `Declaration::Opaque` with a type-correct placeholder body that the
-        // kernel never unfolds. Concrete evaluation is supplied by the
-        // already-registered `Int.div`/`Int.mod` native reducers
-        // (native_reducers_int.rs). `Opaque` is NOT an `Axiom`, so a term
-        // referencing these does not gain an axiom dependency — `env.axiom_deps`
-        // only counts `ConstantKind::Axiom` (axiom_audit.rs). This unblocks the
-        // HDiv/HMod Int instances without introducing any axiom. (Track PP)
+        // Lean 4.8.0's T-rounding division and remainder
+        // (`Init/Data/Int/DivMod.lean`), which is what the kernel's native
+        // `Int.div`/`Int.mod` reducers compute (native_reducers_int.rs:
+        // `checked_div`/`checked_rem`, `x / 0 = 0`, `x % 0 = x`):
+        //
+        //   def div : Int → Int → Int
+        //     | ofNat m, ofNat n =>  ofNat (m / n)
+        //     | ofNat m, -[n +1] => -ofNat (m / succ n)
+        //     | -[m +1], ofNat n => -ofNat (succ m / n)
+        //     | -[m +1], -[n +1] =>  ofNat (succ m / succ n)
+        //
+        //   def mod : Int → Int → Int
+        //     | ofNat m, ofNat n =>  ofNat (m % n)
+        //     | ofNat m, -[n +1] =>  ofNat (m % succ n)
+        //     | -[m +1], ofNat n => -ofNat (succ m % n)
+        //     | -[m +1], -[n +1] => -ofNat (succ m % succ n)
+        //
+        // over the prelude's own `Nat.div`/`Nat.mod`/`Int.neg` definitions.
+        // These used to be `Declaration::Opaque` with the placeholder body
+        // `fun _ _ => 0`, which contradicted the reducers; since clean
+        // 3809edf31 (a fold fires only over a CANONICAL closure, never over an
+        // opaque one) that left `Int.div`/`Int.mod` with no computation at all,
+        // so `12 / 4` did not reduce to `3` anywhere in the default prelude —
+        // Trust's integer-division/remainder denotation and trust-ir's
+        // `semIntBinOp .SDiv/.SRem` evaluation (`castS`, `Int.mod`-based
+        // wrapping) went stuck. As definitions they compute by δ-ι, their
+        // closure digests are pinned in native_fold_canon.tsv (world
+        // `clean-prelude`), and the native reducers fire over them because the
+        // definition says what they compute. A definition carries no axiom, as
+        // the opaque did not.
         //
         // NB: deliberately does NOT register `Int.land`/`Int.lor`/`Int.xor` —
         // trust-ir's Basic.lean *defines its own* `Int.land`/`Int.lor`/`Int.xor`
@@ -594,23 +616,159 @@ impl Environment {
             int_const.clone(),
             Expr::pi(BinderInfo::Default, int_const.clone(), int_const.clone()),
         );
-        let int_binop_placeholder = {
-            let mut b = EnvDeclBuilder::new();
-            let (a_id, _a) = b.fresh_local(int_const.clone());
-            let (b_id, _b) = b.fresh_local(int_const.clone());
-            let zero = Expr::app(int_of_nat.clone(), Expr::nat_lit(0));
-            let e = b.mk_lam(b_id, BinderInfo::Default, int_const.clone(), zero);
-            let e = b.mk_lam(a_id, BinderInfo::Default, int_const.clone(), e);
-            b.finish(e)
-        };
-        for op in ["Int.div", "Int.mod"] {
-            self.add_decl_if_absent(Declaration::Opaque {
+        let nat_div = Expr::const_(Name::from_string("Nat.div"), vec![]);
+        let nat_mod = Expr::const_(Name::from_string("Nat.mod"), vec![]);
+        let neg_of_nat = |x: Expr| Expr::app(int_neg.clone(), Expr::app(int_of_nat.clone(), x));
+        let succ = |x: Expr| Expr::app(nat_succ.clone(), x);
+        // Case order: (ofNat m, ofNat n), (ofNat m, -[n+1]), (-[m+1], ofNat n),
+        // (-[m+1], -[n+1]); `m`/`n` are the constructor payloads.
+        let int_div_value = int_binop_by_sign_cases(|_, case, m, n| {
+            let quot = |a, b| Expr::apps(nat_div.clone(), [a, b]);
+            match case {
+                0 => Expr::app(int_of_nat.clone(), quot(m, n)),
+                1 => neg_of_nat(quot(m, succ(n))),
+                2 => neg_of_nat(quot(succ(m), n)),
+                _ => Expr::app(int_of_nat.clone(), quot(succ(m), succ(n))),
+            }
+        });
+        let int_mod_value = int_binop_by_sign_cases(|_, case, m, n| {
+            let rem = |a, b| Expr::apps(nat_mod.clone(), [a, b]);
+            match case {
+                0 => Expr::app(int_of_nat.clone(), rem(m, n)),
+                1 => Expr::app(int_of_nat.clone(), rem(m, succ(n))),
+                2 => neg_of_nat(rem(succ(m), n)),
+                _ => neg_of_nat(rem(succ(m), succ(n))),
+            }
+        });
+        for (op, value) in [("Int.div", int_div_value), ("Int.mod", int_mod_value)] {
+            self.add_decl_if_absent(Declaration::Definition {
                 name: Name::from_string(op),
                 level_params: vec![],
                 type_: int_binop_ty.clone(),
-                value: int_binop_placeholder.clone(),
+                value,
+                is_reducible: true,
             })?;
         }
+        self.init_int_euclidean()?;
+
+        // `Int.natAbs` and `Int.sign` are Lean 4.8.0's (`Init/Data/Int/Basic.lean`,
+        // `natAbs : Int → Nat | ofNat m => m | -[m+1] => m.succ`; `sign | succ _ => 1
+        // | 0 => 0 | -[_+1] => -1`). Until 2026-10-27 only the test-only
+        // `init_int_sign_abs` declared them, so the default prelude had neither.
+        // ========================================
+        // Int.natAbs : Int → Nat
+        // natAbs (ofNat n) = n
+        // natAbs (negSucc n) = succ n
+        // ========================================
+        // Lean v4.30.0-rc2 spells this argument `(m : @& Int)`
+        // (`Init/Data/Int/Basic.lean`): preserve its borrowed annotation so
+        // first-registered-wins import retains the same serialized type.
+        // This metadata is transparent to the kernel; the proof body stays
+        // the ordinary Int recursor below.
+        let borrowed_int = Expr::mdata(
+            vec![(Name::from_string("borrowed"), MDataValue::Bool(true))],
+            int_const.clone(),
+        );
+        let nat_abs_type = Expr::pi(BinderInfo::Default, borrowed_int, nat_const.clone());
+
+        // motive: λ _ : Int => Nat
+        let nat_abs_motive = Expr::lam(BinderInfo::Default, int_const.clone(), nat_const.clone());
+
+        let nat_abs_value = {
+            let mut b = EnvDeclBuilder::new();
+            let (i_id, i) = b.fresh_local(int_const.clone());
+            // ofNat case: λ n : Nat => n
+            let (n_id, n) = b.fresh_local(nat_const.clone());
+            let of_nat_case = b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), n);
+            // negSucc case: λ n : Nat => succ n
+            let (n2_id, n2) = b.fresh_local(nat_const.clone());
+            let neg_succ_case = b.mk_lam(
+                n2_id,
+                BinderInfo::Default,
+                nat_const.clone(),
+                Expr::app(nat_succ.clone(), n2),
+            );
+            let body = Expr::apps(
+                int_rec.clone(),
+                [nat_abs_motive, of_nat_case, neg_succ_case, i],
+            );
+            let e = b.mk_lam(i_id, BinderInfo::Default, int_const.clone(), body);
+            b.finish(e)
+        };
+
+        self.add_decl_if_absent(Declaration::Definition {
+            name: Name::from_string("Int.natAbs"),
+            level_params: vec![],
+            type_: nat_abs_type,
+            value: nat_abs_value,
+            is_reducible: true,
+        })?;
+
+        // ========================================
+        // Int.sign : Int → Int
+        // sign (ofNat 0) = 0
+        // sign (ofNat (succ n)) = 1
+        // sign (negSucc n) = -1 (i.e., negSucc 0)
+        // ========================================
+        let sign_type = Expr::pi(BinderInfo::Default, int_const.clone(), int_const.clone());
+
+        // sign motive: λ _ : Int => Int
+        let sign_motive = Expr::lam(BinderInfo::Default, int_const.clone(), int_const.clone());
+
+        // ofNat case: λ n : Nat => Nat.rec (ofNat 0) (λ _ _ => ofNat 1) n
+        // sign (ofNat 0) = 0, sign (ofNat (succ _)) = 1
+        let one_nat = Expr::app(nat_succ.clone(), nat_zero.clone());
+        let int_one = Expr::app(int_of_nat.clone(), one_nat);
+        let int_zero = Expr::app(int_of_nat.clone(), nat_zero.clone());
+        let int_neg_one = Expr::app(int_neg_succ.clone(), nat_zero.clone()); // negSucc 0 = -1
+
+        let sign_value = {
+            let mut b = EnvDeclBuilder::new();
+            let (i_id, i) = b.fresh_local(int_const.clone());
+            let nat_to_int_motive =
+                Expr::lam(BinderInfo::Default, nat_const.clone(), int_const.clone());
+
+            // ofNat case: λ n => Nat.rec motive 0 (λ _ _ => 1) n
+            let (n_id, n) = b.fresh_local(nat_const.clone());
+            let (k_id, _k) = b.fresh_local(nat_const.clone());
+            let (ih_id, _ih) = b.fresh_local(int_const.clone());
+            let succ_br = b.mk_lam(
+                ih_id,
+                BinderInfo::Default,
+                int_const.clone(),
+                int_one.clone(),
+            );
+            let succ_br = b.mk_lam(k_id, BinderInfo::Default, nat_const.clone(), succ_br);
+            let of_nat_body = Expr::apps(
+                nat_rec.clone(),
+                [nat_to_int_motive, int_zero.clone(), succ_br, n],
+            );
+            let of_nat_case = b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), of_nat_body);
+
+            // negSucc case: λ _ => -1
+            let (n2_id, _n2) = b.fresh_local(nat_const.clone());
+            let neg_succ_case = b.mk_lam(
+                n2_id,
+                BinderInfo::Default,
+                nat_const.clone(),
+                int_neg_one.clone(),
+            );
+
+            let body = Expr::apps(
+                int_rec.clone(),
+                [sign_motive, of_nat_case, neg_succ_case, i],
+            );
+            let e = b.mk_lam(i_id, BinderInfo::Default, int_const.clone(), body);
+            b.finish(e)
+        };
+
+        self.add_decl_if_absent(Declaration::Definition {
+            name: Name::from_string("Int.sign"),
+            level_params: vec![],
+            type_: sign_type,
+            value: sign_value,
+            is_reducible: true,
+        })?;
 
         // Int.beq : Int → Int → Bool
         //
@@ -868,60 +1026,10 @@ impl Environment {
         self.init_int_arith()?; // Provides Int type, ofNat, negSucc
 
         let int_const = Expr::const_(Name::from_string("Int"), vec![]);
-        let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
-        let nat_zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
-        let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
-        let nat_rec = Expr::const_(
-            Name::from_string("Nat.rec"),
-            vec![Level::succ(Level::zero())],
-        );
         let int_of_nat = Expr::const_(Name::from_string("Int.ofNat"), vec![]);
-        let int_neg_succ = Expr::const_(Name::from_string("Int.negSucc"), vec![]);
-        let int_rec = Expr::const_(
-            Name::from_string("Int.rec"),
-            vec![Level::succ(Level::zero())],
-        );
 
-        // ========================================
-        // Int.natAbs : Int → Nat
-        // natAbs (ofNat n) = n
-        // natAbs (negSucc n) = succ n
-        // ========================================
-        let nat_abs_type = Expr::pi(BinderInfo::Default, int_const.clone(), nat_const.clone());
-
-        // motive: λ _ : Int => Nat
-        let nat_abs_motive = Expr::lam(BinderInfo::Default, int_const.clone(), nat_const.clone());
-
-        let nat_abs_value = {
-            let mut b = EnvDeclBuilder::new();
-            let (i_id, i) = b.fresh_local(int_const.clone());
-            // ofNat case: λ n : Nat => n
-            let (n_id, n) = b.fresh_local(nat_const.clone());
-            let of_nat_case = b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), n);
-            // negSucc case: λ n : Nat => succ n
-            let (n2_id, n2) = b.fresh_local(nat_const.clone());
-            let neg_succ_case = b.mk_lam(
-                n2_id,
-                BinderInfo::Default,
-                nat_const.clone(),
-                Expr::app(nat_succ.clone(), n2),
-            );
-            let body = Expr::apps(
-                int_rec.clone(),
-                [nat_abs_motive, of_nat_case, neg_succ_case, i],
-            );
-            let e = b.mk_lam(i_id, BinderInfo::Default, int_const.clone(), body);
-            b.finish(e)
-        };
-
-        self.add_decl(Declaration::Definition {
-            name: Name::from_string("Int.natAbs"),
-            level_params: vec![],
-            type_: nat_abs_type,
-            value: nat_abs_value,
-            is_reducible: true,
-        })?;
-
+        // `Int.natAbs` and `Int.sign` come from `init_int_arith` (above), which
+        // the default prelude runs too; this test-only builder adds `Int.abs`.
         let int_nat_abs = Expr::const_(Name::from_string("Int.natAbs"), vec![]);
 
         // Note: Int.neg is already defined in init_int()
@@ -949,72 +1057,6 @@ impl Environment {
             is_reducible: true,
         })?;
 
-        // ========================================
-        // Int.sign : Int → Int
-        // sign (ofNat 0) = 0
-        // sign (ofNat (succ n)) = 1
-        // sign (negSucc n) = -1 (i.e., negSucc 0)
-        // ========================================
-        let sign_type = Expr::pi(BinderInfo::Default, int_const.clone(), int_const.clone());
-
-        // sign motive: λ _ : Int => Int
-        let sign_motive = Expr::lam(BinderInfo::Default, int_const.clone(), int_const.clone());
-
-        // ofNat case: λ n : Nat => Nat.rec (ofNat 0) (λ _ _ => ofNat 1) n
-        // sign (ofNat 0) = 0, sign (ofNat (succ _)) = 1
-        let one_nat = Expr::app(nat_succ.clone(), nat_zero.clone());
-        let int_one = Expr::app(int_of_nat.clone(), one_nat);
-        let int_zero = Expr::app(int_of_nat.clone(), nat_zero.clone());
-        let int_neg_one = Expr::app(int_neg_succ.clone(), nat_zero.clone()); // negSucc 0 = -1
-
-        let sign_value = {
-            let mut b = EnvDeclBuilder::new();
-            let (i_id, i) = b.fresh_local(int_const.clone());
-            let nat_to_int_motive =
-                Expr::lam(BinderInfo::Default, nat_const.clone(), int_const.clone());
-
-            // ofNat case: λ n => Nat.rec motive 0 (λ _ _ => 1) n
-            let (n_id, n) = b.fresh_local(nat_const.clone());
-            let (k_id, _k) = b.fresh_local(nat_const.clone());
-            let (ih_id, _ih) = b.fresh_local(int_const.clone());
-            let succ_br = b.mk_lam(
-                ih_id,
-                BinderInfo::Default,
-                int_const.clone(),
-                int_one.clone(),
-            );
-            let succ_br = b.mk_lam(k_id, BinderInfo::Default, nat_const.clone(), succ_br);
-            let of_nat_body = Expr::apps(
-                nat_rec.clone(),
-                [nat_to_int_motive, int_zero.clone(), succ_br, n],
-            );
-            let of_nat_case = b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), of_nat_body);
-
-            // negSucc case: λ _ => -1
-            let (n2_id, _n2) = b.fresh_local(nat_const.clone());
-            let neg_succ_case = b.mk_lam(
-                n2_id,
-                BinderInfo::Default,
-                nat_const.clone(),
-                int_neg_one.clone(),
-            );
-
-            let body = Expr::apps(
-                int_rec.clone(),
-                [sign_motive, of_nat_case, neg_succ_case, i],
-            );
-            let e = b.mk_lam(i_id, BinderInfo::Default, int_const.clone(), body);
-            b.finish(e)
-        };
-
-        self.add_decl(Declaration::Definition {
-            name: Name::from_string("Int.sign"),
-            level_params: vec![],
-            type_: sign_type,
-            value: sign_value,
-            is_reducible: true,
-        })?;
-
         self.int_sign_abs_init = true;
         Ok(())
     }
@@ -1029,4 +1071,54 @@ impl Environment {
     pub(crate) fn has_int_sign_abs(&self) -> bool {
         self.int_sign_abs_init
     }
+}
+
+/// `λ a b : Int => match a, b with` the four constructor pairs, as the
+/// `Int.rec`-on-`Int.rec` term `Int.add`/`Int.mul` use. `case(i, m, n)` is
+/// the body for pair `i` — 0: `ofNat m, ofNat n`; 1: `ofNat m, -[n+1]`;
+/// 2: `-[m+1], ofNat n`; 3: `-[m+1], -[n+1]` — over the payloads `m`, `n`.
+pub(super) fn int_binop_by_sign_cases(
+    case: impl Fn(&mut EnvDeclBuilder, usize, Expr, Expr) -> Expr,
+) -> Expr {
+    let int_const = Expr::const_(Name::from_string("Int"), vec![]);
+    let nat_const = Expr::const_(Name::from_string("Nat"), vec![]);
+    let int_rec = Expr::const_(
+        Name::from_string("Int.rec"),
+        vec![Level::succ(Level::zero())],
+    );
+    let int_to_int = Expr::pi(BinderInfo::Default, int_const.clone(), int_const.clone());
+    let outer_motive = Expr::lam(BinderInfo::Default, int_const.clone(), int_to_int);
+    let inner_motive = Expr::lam(BinderInfo::Default, int_const.clone(), int_const.clone());
+    let mut b = EnvDeclBuilder::new();
+    let (a_id, a) = b.fresh_local(int_const.clone());
+    let (bv_id, bv) = b.fresh_local(int_const.clone());
+    let mut outer_minors = Vec::with_capacity(2);
+    for first in [0, 2] {
+        // λ m : Nat => λ y : Int => Int.rec inner_motive (λ n => …) (λ n => …) y
+        let (m_id, m) = b.fresh_local(nat_const.clone());
+        let (y_id, y) = b.fresh_local(int_const.clone());
+        let mut inner_minors = Vec::with_capacity(2);
+        for index in [first, first + 1] {
+            let (n_id, n) = b.fresh_local(nat_const.clone());
+            let body = case(&mut b, index, m.clone(), n);
+            inner_minors.push(b.mk_lam(n_id, BinderInfo::Default, nat_const.clone(), body));
+        }
+        let [of_nat_minor, neg_succ_minor]: [Expr; 2] =
+            inner_minors.try_into().expect("two inner minors");
+        let body = Expr::apps(
+            int_rec.clone(),
+            [inner_motive.clone(), of_nat_minor, neg_succ_minor, y],
+        );
+        let body = b.mk_lam(y_id, BinderInfo::Default, int_const.clone(), body);
+        outer_minors.push(b.mk_lam(m_id, BinderInfo::Default, nat_const.clone(), body));
+    }
+    let [of_nat_minor, neg_succ_minor]: [Expr; 2] =
+        outer_minors.try_into().expect("two outer minors");
+    let body = Expr::app(
+        Expr::apps(int_rec, [outer_motive, of_nat_minor, neg_succ_minor, a]),
+        bv,
+    );
+    let e = b.mk_lam(bv_id, BinderInfo::Default, int_const.clone(), body);
+    let e = b.mk_lam(a_id, BinderInfo::Default, int_const, e);
+    b.finish(e)
 }

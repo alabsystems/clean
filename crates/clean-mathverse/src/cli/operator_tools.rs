@@ -9,8 +9,8 @@
 //! tree 1:1), the descriptors here document binaries that are intentionally
 //! **not** absorbed into the unified `clean` CLI:
 //!
-//! - `mathverse_convert` (1258 LOC, 9 sub-verbs) — the upstream-ingest tool
-//! - `mathverse_shard` (500+ LOC, 8 sub-verbs) — the canonical shard builder
+//! - `mathverse_convert` (~1900 LOC, 16 sub-verbs) — the upstream-ingest tool
+//! - `mathverse_shard` (11 sub-verbs) — the canonical shard builder
 //!
 //! Both binaries are invoked from pinned paths in release scripts
 //! (`scripts/release_mathverse_shards.sh`, `scripts/download_all_libraries.sh`,
@@ -68,12 +68,16 @@ const MATHVERSE_CONVERT_DESC: FeatureDescriptor = FeatureDescriptor {
     summary: "Build .mathverse shards from 14+ upstream proof-system sources (operator tool)",
     description:
         "Standalone operator binary `mathverse_convert` — NOT wired into the top-level \
-         `clean` CLI because every caller is a release script, and absorbing the \
-         1258-LOC dispatcher would bloat the default `clean` binary with no user \
-         benefit. See `scripts/download_all_libraries.sh` for the canonical \
-         pipeline and `docs/MATHVERSE_RELEASE_CHECKLIST.md` for the full release \
-         flow. Sub-verbs: `mathlib`, `metamath`, `metamath-dir`, `lean4-dir`, \
-         `all`, `stats`, `verify`, `verify-shard`, `refresh`. Invoke via \
+         `clean` CLI as a subcommand, because absorbing its 1900-line dispatcher \
+         would bloat the default `clean` binary with no user benefit. It is still \
+         reachable FROM the `clean` process: `clean mathverse build-library` spawns \
+         it (`mathverse_convert all <data-dir>`), building it first if absent. See \
+         `scripts/download_all_libraries.sh` for the canonical pipeline and \
+         `docs/MATHVERSE_RELEASE_CHECKLIST.md` for the full release flow. \
+         Sub-verbs, all 16: `mathlib`, `metamath`, `metamath-dir`, `build`, \
+         `status`, `update`, `fetch`, `lean4-dir`, `all`, `opentheory`, \
+         `isabelle-binary`, `isabelle-mathlib-bridge`, `stats`, `verify`, \
+         `verify-shard`, `refresh`. Invoke via \
          `cargo run --locked -p clean-mathverse --release --bin mathverse_convert -- <verb> …`.",
     category: Category::OperatorTools,
     stability: Stability::Usable,
@@ -99,12 +103,17 @@ const MATHVERSE_SHARD_DESC: FeatureDescriptor = FeatureDescriptor {
     summary: "Build, verify, and audit .mathverse shards (operator tool)",
     description:
         "Standalone operator binary `mathverse_shard` — the canonical shard \
-         release builder. NOT wired into the top-level `clean` CLI for the \
-         same reason as `mathverse_convert`: every caller is a release script \
-         (`scripts/release_mathverse_shards.sh`, `scripts/prepare_mathverse_release.sh`) \
-         and absorbing the 500+-LOC dispatcher would bloat the default \
-         binary. Sub-verbs: `build`, `build-native`, `verify`, `verify-kernel`, \
-         `verify-incremental`, `audit`, `proof-search`. Invoke via \
+         release builder. NOT wired into the top-level `clean` CLI, and unlike \
+         `mathverse_convert` nothing in the `clean` process spawns it either: \
+         every caller is a script (`scripts/release_mathverse_shards.sh`, \
+         `scripts/prepare_mathverse_release.sh`, and `scripts/coq_refresh.sh`, \
+         which drives `coq-import` in the standing Coq refresh loop). \
+         Sub-verbs, all 11: `build`, \
+         `build-coq`, `build-native`, `verify`, `verify-kernel`, \
+         `verify-incremental`, `coq-import`, `lint-levels`, `stamp`, `audit`, \
+         `proof-search`. NOTE that `stamp` is DESTRUCTIVE: it applies a \
+         kernel-verified manifest to shards on disk in place and does not \
+         re-verify. Invoke via \
          `cargo run --locked -p clean-mathverse --release --bin mathverse_shard -- <verb> …`.",
     category: Category::OperatorTools,
     stability: Stability::Usable,

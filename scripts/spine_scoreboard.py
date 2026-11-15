@@ -14,6 +14,10 @@ Direction vocabulary
   down      monotone non-increasing vs baseline
   frozen    must equal baseline; re-base only via a dated re-measure that
             commits a new baseline (G-SPINE-SET rule for spine-set size)
+
+Every direction above is re-based the same way: `--rebase "<why>"`, which
+records the exact (id, kind, from, to) it forgives and is matched on all four,
+so a landed rebase cannot forgive the next move as well.
   equal_11  absolute: value must equal 11 (the clean-verify axiom census)
   none      reported, not ratcheted (freshness/informational rows)
 
@@ -50,14 +54,30 @@ Usage:
   spine_scoreboard.py             generate + write data/spine_scoreboard.json
                                   (generator mode — same write as --refresh)
   spine_scoreboard.py --refresh   regenerate the committed baseline, stated
-                                  explicitly (the only flag that writes)
+                                  explicitly (writes; see --rebase for a move
+                                  AGAINST a direction, which this cannot make)
+  spine_scoreboard.py --rebase W  record a dated, reasoned permission for the
+                                  rows that moved against their direction, by
+                                  exact (id, kind, from, to), then regenerate.
+                                  Refuses a reason under 12 characters and
+                                  refuses when nothing moved — a rebase records
+                                  a move that HAPPENED, never one in advance,
+                                  and a committed entry can never match twice
   spine_scoreboard.py --ratchet   READ-ONLY: enforce directions vs the
-                                  committed baseline, exit 1 naming the row on
-                                  violation. Never writes — on green it touches
-                                  nothing, on violation it leaves the baseline
-                                  alone, and a missing/unreadable baseline is
-                                  itself a failure (mint one with --refresh and
-                                  commit it; the ratchet cannot mint)
+                                  baseline AT HEAD (`git show HEAD:<artifact>`,
+                                  falling back to the working-tree file only
+                                  when git cannot answer, and saying which it
+                                  used). Reading the working-tree copy was a
+                                  hole: regenerating before ratcheting compared
+                                  the file with itself and every direction row
+                                  passed vacuously — measured 2026-09-14 on a
+                                  real monotone-down violation that the
+                                  pre-push hook had already gone green on.
+                                  Never writes — on green it touches nothing,
+                                  on violation it leaves the baseline alone,
+                                  and a missing/unreadable baseline is itself a
+                                  failure (mint one with --refresh and commit
+                                  it; the ratchet cannot mint)
   spine_scoreboard.py --self-test run the direction/UNKNOWN/missing-producer/
                                   read-only-ratchet arms, plus per-row-class
                                   arms for every producer family (planted
@@ -77,6 +97,7 @@ import hashlib
 import importlib.util
 import io
 import json
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -987,13 +1008,23 @@ def generate_rows(repo_root: Path):
     return rows
 
 
-def build_scoreboard(repo_root: Path):
+def existing_rebases(repo_root: Path):
+    """The rebase ledger already in the artifact, carried forward verbatim."""
+    doc = _load_json(repo_root / SCOREBOARD_REL)
+    if isinstance(doc, dict) and isinstance(doc.get("rebases"), list):
+        return [r for r in doc["rebases"] if isinstance(r, dict)]
+    return []
+
+
+def build_scoreboard(repo_root: Path, new_rebase=None):
     return {
         "schema": "clean.spine.scoreboard/1",
         "_doc": [
             "G-SCORE scoreboard — designs/2026-08-22-spine-and-lattice-program.md §6.",
             "Regenerate: /opt/homebrew/bin/python3.14 scripts/spine_scoreboard.py --refresh",
-            "Ratchet:    scripts/spine_scoreboard.py --ratchet (READ-ONLY; baseline = this file as committed)",
+            "Ratchet:    scripts/spine_scoreboard.py --ratchet (READ-ONLY; baseline = this file AT HEAD)",
+            "Re-base:    scripts/spine_scoreboard.py --rebase \"<why>\" — the ONLY way a row may move",
+            "            against its direction; it records the exact (id, from, to) it forgives.",
             "UNKNOWN is a first-class value, never 0; it neither satisfies nor violates a direction.",
             "Quoting any row of this file from prose is a bug: read the artifact.",
         ],
@@ -1002,6 +1033,7 @@ def build_scoreboard(repo_root: Path):
         "generator": "scripts/spine_scoreboard.py",
         "inputs": {name: _sha256(repo_root / rel)
                    for name, rel in PRODUCERS.items()},
+        "rebases": existing_rebases(repo_root) + ([new_rebase] if new_rebase else []),
         "rows": generate_rows(repo_root),
     }
 
@@ -1010,7 +1042,24 @@ def build_scoreboard(repo_root: Path):
 
 
 def check_directions(current_rows, baseline_rows):
-    """Return (violations, reports); violations name the row."""
+    """Return (violation messages, reports); violations name the row."""
+    records, reports = violation_records(current_rows, baseline_rows)
+    return [r["message"] for r in records], reports
+
+
+def _vrec(row_id, kind, baseline, current, message):
+    return {"id": row_id, "kind": kind, "baseline": baseline,
+            "current": current, "message": message}
+
+
+def violation_records(current_rows, baseline_rows):
+    """Return (violation records, reports).
+
+    A record is {id, kind, baseline, current, message}. The structured form
+    exists so --rebase can name the exact (id, from, to) it forgives and the
+    ratchet can match it exactly; formatting a string and re-parsing it would
+    make the forgiveness depend on prose.
+    """
     violations, reports = [], []
     baseline = {r["id"]: r for r in baseline_rows if isinstance(r, dict)}
     current = {r["id"]: r for r in current_rows}
@@ -1023,16 +1072,18 @@ def check_directions(current_rows, baseline_rows):
             # come from a producer artifact (parity tiers, guards) can move,
             # and when they do it is a dated decision that re-bases the
             # committed scoreboard, not a change the gate should absorb.
-            violations.append(
+            violations.append(_vrec(
+                row_id, "direction", base_row.get("direction"), direction,
                 "%s: direction changed (%s -> %s) — a row's ratchet direction "
                 "is re-based only by regenerating and committing the baseline"
-                % (row_id, base_row.get("direction"), direction))
+                % (row_id, base_row.get("direction"), direction)))
         if direction == "equal_11":
             if val == UNKNOWN:
                 reports.append(f"{row_id}: UNKNOWN (reports; equal-11 not checkable)")
             elif val != CENSUS_TARGET:
-                violations.append(
-                    f"{row_id}: census must equal {CENSUS_TARGET}, got {val}")
+                violations.append(_vrec(
+                    row_id, "equal_11", CENSUS_TARGET, val,
+                    f"{row_id}: census must equal {CENSUS_TARGET}, got {val}"))
             continue
         if base_row is None:
             reports.append(f"{row_id}: new row (no baseline)")
@@ -1044,21 +1095,25 @@ def check_directions(current_rows, baseline_rows):
                 "reports, never satisfies or violates")
             continue
         if direction == "up" and val < bval:
-            violations.append(
-                f"{row_id}: monotone-up row decreased ({bval} -> {val})")
+            violations.append(_vrec(
+                row_id, "up", bval, val,
+                f"{row_id}: monotone-up row decreased ({bval} -> {val})"))
         elif direction == "down" and val > bval:
-            violations.append(
-                f"{row_id}: monotone-down row increased ({bval} -> {val})")
+            violations.append(_vrec(
+                row_id, "down", bval, val,
+                f"{row_id}: monotone-down row increased ({bval} -> {val})"))
         elif direction == "frozen" and val != bval:
-            violations.append(
+            violations.append(_vrec(
+                row_id, "frozen", bval, val,
                 f"{row_id}: frozen row changed ({bval} -> {val}) — re-base "
-                "requires a dated re-measure committed as a new baseline")
+                "requires a dated re-measure committed as a new baseline"))
 
     for row_id in baseline:
         if row_id not in current:
-            violations.append(
+            violations.append(_vrec(
+                row_id, "dropped", baseline[row_id].get("value"), None,
                 f"{row_id}: row present in baseline but missing from "
-                "regenerated scoreboard (rows are never silently dropped)")
+                "regenerated scoreboard (rows are never silently dropped)"))
     return violations, reports
 
 
@@ -1607,6 +1662,136 @@ def self_test():
                rc == 0 and sb_path.read_bytes() != garbage
                and isinstance(_load_json(sb_path), dict))
 
+    # The baseline is HEAD's, and a rebase is the only way past a direction.
+    # These arms need a real git repo, because the hole being pinned is
+    # precisely "the ratchet read the file it was about to be compared with".
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        sb_path = root / SCOREBOARD_REL
+
+        def _git(*argv):
+            return subprocess.run(
+                ["git", "-C", str(root), "-c", "user.name=selftest",
+                 "-c", "user.email=selftest@example.invalid", *argv],
+                capture_output=True, check=False)
+
+        def _commit_baseline(doc):
+            sb_path.parent.mkdir(parents=True, exist_ok=True)
+            sb_path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+            _git("add", "-A")
+            _git("commit", "-q", "-m", "baseline")
+
+        def _write_derived():
+            """Write what the generator DERIVES, bypassing --refresh's guard.
+
+            The arms below need the WORKING TREE to hold a freshly derived
+            scoreboard while HEAD holds a different one -- that state is the
+            whole subject of the baseline rule. Since 2026-09-15 `--refresh`
+            REFUSES to write it (that refusal is itself pinned, two-way, by
+            the arms below), so the setup writes the derived bytes directly.
+            This helper is the SETUP and never the subject; using --refresh
+            here would make the arm depend on the behaviour it is arranging.
+            """
+            doc = build_scoreboard(root)
+            sb_path.parent.mkdir(parents=True, exist_ok=True)
+            sb_path.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
+
+        def _plant_dropped_rows(names):
+            """HEAD gains rows the generator will never produce."""
+            doc = json.loads(sb_path.read_text(encoding="utf-8"))
+            for name in names:
+                doc["rows"].append({"id": name, "value": 1, "direction": "up",
+                                    "producer": "self-test"})
+            _commit_baseline(doc)
+
+        if _git("init", "-q").returncode != 0:
+            expect("ratchet_baseline_is_HEAD_not_the_regenerated_tree", False)
+        else:
+            with contextlib.redirect_stdout(quiet):
+                run_refresh(root)
+            _commit_baseline(json.loads(sb_path.read_text(encoding="utf-8")))
+
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_rebase(root, "tiny")
+            expect("rebase_refuses_a_reason_nobody_could_review",
+                   rc == 1 and "12 characters" in quiet.getvalue())
+
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_rebase(root, "self-test: nothing has moved at all")
+            expect("rebase_refuses_when_nothing_moved",
+                   rc == 1 and "never issued in advance" in quiet.getvalue())
+
+            # THE ARM THIS WHOLE BLOCK EXISTS FOR. HEAD carries a row the
+            # generator does not produce, so the ratchet owes a violation.
+            # Then the working-tree baseline is REGENERATED — which is what
+            # used to make the violation disappear.
+            _plant_dropped_rows(["self.test.head_only"])
+
+            # THE GENERATOR MAY NOT MINT PAST THE RATCHET (2026-09-15). HEAD
+            # now owes a violation, so --refresh must refuse and must leave
+            # the bytes alone. Without this arm the sequence refresh ->
+            # commit -> ratchet is green for ANY move, which is how four rows
+            # -- one of them FROZEN -- reached origin/main with no rebase
+            # record; run_refresh's docstring names them.
+            before_refresh = sb_path.read_bytes()
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_refresh(root)
+            expect("refresh_refuses_to_mint_past_the_ratchet",
+                   rc == 1 and sb_path.read_bytes() == before_refresh
+                   and "self.test.head_only" in quiet.getvalue()
+                   and "NOTHING was written" in quiet.getvalue())
+
+            _write_derived()
+            regenerated = sb_path.read_bytes()
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_ratchet(root)
+            expect("ratchet_baseline_is_HEAD_not_the_regenerated_tree",
+                   rc == 1 and "self.test.head_only" in quiet.getvalue()
+                   and "HEAD:" in quiet.getvalue()
+                   and sb_path.read_bytes() == regenerated)
+
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_rebase(root, "self-test: the row was deliberately retired")
+            ledger = existing_rebases(root)
+            expect("rebase_records_the_exact_row_it_forgives",
+                   rc == 0 and ledger
+                   and [r["id"] for r in ledger[-1]["rows"]] == ["self.test.head_only"]
+                   and ledger[-1]["rows"][0]["kind"] == "dropped")
+
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_ratchet(root)
+            expect("a_recorded_rebase_forgives_its_own_move",
+                   rc == 0 and "REBASED" in quiet.getvalue())
+
+            # ...and the refusal above is not a wall: the OTHER direction of
+            # the same arm. A guard that refuses every refresh would pass the
+            # arm above while making the generator unusable, so the recorded
+            # move must let --refresh write again.
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_refresh(root)
+            expect("refresh_writes_once_a_rebase_records_the_move",
+                   rc == 0 and isinstance(_load_json(sb_path), dict)
+                   and "NOTHING was written" not in quiet.getvalue())
+
+            # ... and forgives NOTHING else: a second retired row is a red
+            # even though the ledger entry beside it is still live.
+            _plant_dropped_rows(["self.test.head_only", "self.test.second"])
+            _write_derived()
+            quiet.truncate(0), quiet.seek(0)
+            with contextlib.redirect_stdout(quiet):
+                rc = run_ratchet(root)
+            out = quiet.getvalue()
+            expect("a_rebase_forgives_only_the_row_it_names",
+                   rc == 1 and "VIOLATION: self.test.second" in out
+                   and "REBASED: self.test.head_only" in out)
+
     if failures:
         print(f"self-test: FAIL ({len(failures)} arm(s)): {', '.join(failures)}")
         return 1
@@ -1615,6 +1800,80 @@ def self_test():
 
 
 # -------------------------------------------------------------------- modes
+
+
+def committed_baseline(repo_root: Path):
+    """(doc, source) — the baseline as HEAD HAS IT, not as the tree has it.
+
+    This function exists because the docstring above it was false for a year.
+    `--ratchet`'s contract is "baseline = this file as committed", and it read
+    the WORKING-TREE file — so anyone who regenerated the scoreboard before
+    ratcheting compared the file with itself and every direction row passed
+    vacuously. Measured 2026-09-14: a real monotone-down violation
+    (`assumption_ledger.verdict_io_lane_b`, 44 -> 65) read GREEN that way and
+    RED against HEAD, and the pre-push hook had already gone green on it.
+
+    The gate runners themselves never regenerate, so the hole needed a human
+    or an agent to walk into it; that is not a reason to leave a gate whose
+    verdict depends on the state of its own output file. Reading HEAD makes
+    the contract true by construction.
+
+    Falls back to the working-tree file only when git cannot answer — no repo,
+    no HEAD, or the path untracked (the synthetic trees the self-test builds
+    are all three) — and the source is PRINTED in every outcome, so a run that
+    could not reach HEAD says so rather than looking like one that did.
+    """
+    rel = SCOREBOARD_REL
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(repo_root), "show", f"HEAD:{rel}"],
+            capture_output=True, check=False,
+        )
+        if proc.returncode == 0:
+            try:
+                return json.loads(proc.stdout.decode("utf-8")), f"HEAD:{rel}"
+            except (ValueError, UnicodeDecodeError):
+                return None, f"HEAD:{rel} (unreadable)"
+    except OSError:
+        pass
+    return _load_json(repo_root / rel), f"{rel} (working tree — not tracked at HEAD)"
+
+
+def stale_input_pins(repo_root: Path, doc: dict) -> list[str]:
+    """Which `inputs` digests in a scoreboard disagree with the live producers.
+
+    WHY THIS EXISTS (measured 2026-09-16). `--refresh` writes an `inputs` block
+    pinning the sha256 of every producer in `PRODUCERS`, and until today NOTHING
+    read it back -- a generator writing a digest that no check validates is the
+    unwatched-artifact-generator class this repo has already been bitten by four
+    times.
+
+    It was not decorative-but-harmless. The derived chain has an ORDER
+    dependency that nothing enforced: `spine_scoreboard` reads
+    `data/parity_tiers.json`, so regenerating the scoreboard BEFORE parity_tiers
+    pins a digest that the very next command invalidates. Caught live in exactly
+    that state -- pinned sha256:7e09ddf32b71, live sha256:efc008d56648, one pin
+    of thirteen -- while `--ratchet` printed `ratchet OK` and said nothing.
+
+    A stale pin does not by itself mean a row is wrong; it means the scoreboard
+    was computed against an input the tree no longer has, so nobody can tell
+    whether the rows describe the current artifacts. That is a refusal, not a
+    warning.
+    """
+    pinned = doc.get("inputs")
+    if not isinstance(pinned, dict):
+        return ["the scoreboard carries no `inputs` block, so nothing says which "
+                "producer versions its rows were computed from"]
+    stale = []
+    for name, rel in PRODUCERS.items():
+        live = _sha256(repo_root / rel)
+        was = pinned.get(name)
+        if was != live:
+            stale.append(
+                f"{name} ({rel}): scoreboard pinned {str(was)[:19]}, tree has "
+                f"{str(live)[:19]}"
+            )
+    return stale
 
 
 def run_ratchet(repo_root: Path):
@@ -1626,35 +1885,185 @@ def run_ratchet(repo_root: Path):
     used to fail hard on a missing baseline (via its save/restore wrapper's
     `cp`), and going read-only must not weaken that. Mint a baseline with
     --refresh and commit it; the ratchet cannot mint one.
+
+    The baseline is read from HEAD when the artifact is tracked; see
+    committed_baseline for why reading the working-tree copy was a hole.
     """
-    out_path = repo_root / SCOREBOARD_REL
-    baseline_doc = _load_json(out_path)
+    baseline_doc, source = committed_baseline(repo_root)
     if not isinstance(baseline_doc, dict) or \
             not isinstance(baseline_doc.get("rows"), list):
         print(f"spine_scoreboard --ratchet: RED — no committed baseline at "
-              f"{SCOREBOARD_REL} (absent or unreadable). --ratchet is "
+              f"{source} (absent or unreadable). --ratchet is "
               "read-only and cannot mint one; regenerate with --refresh and "
               "commit the result")
         return 1
+    # The committed scoreboard must have been computed from the producers the
+    # tree actually holds. Checked BEFORE the direction rules: if the inputs
+    # moved, every row below is a statement about artifacts that are gone, and a
+    # green direction verdict over stale inputs is worth nothing.
     rows = generate_rows(repo_root)
-    violations, reports = check_directions(rows, baseline_doc["rows"])
+    records, reports = violation_records(rows, baseline_doc["rows"])
     for line in reports:
         print(f"  report: {line}")
+    forgiven, violations = [], []
+    ledger = existing_rebases(repo_root)
+    for rec in records:
+        entry = _rebase_for(ledger, rec)
+        (forgiven if entry else violations).append((rec, entry))
+    for rec, entry in forgiven:
+        print(f"  REBASED: {rec['message']}")
+        print(f"           forgiven by the {entry['date']} rebase: {entry['reason']}")
     if violations:
-        for line in violations:
-            print(f"  VIOLATION: {line}")
+        for rec, _ in violations:
+            print(f"  VIOLATION: {rec['message']}")
         print(f"spine_scoreboard --ratchet: RED — {len(violations)} "
-              f"violation(s); baseline {SCOREBOARD_REL} left untouched")
+              f"violation(s); baseline {source} left untouched. A move that is "
+              "DELIBERATE is recorded, never absorbed: "
+              'scripts/spine_scoreboard.py --rebase "<why>"')
+        return 1
+    # AFTER the direction rules, deliberately. When a producer is mutated BOTH
+    # are true -- its row moved AND the pins went stale -- and the direction
+    # violation is the more specific diagnosis, so it must not be masked. This
+    # check is for the case that has no direction violation at all, which is
+    # exactly how it sat silent on main. Found by the gate's own demonstration
+    # arms refusing: ordered first, it made them red for the wrong reason.
+    # Checked against the WORKING-TREE scoreboard, not the HEAD baseline. The
+    # question is "is the scoreboard in this tree consistent with the producers
+    # in this tree", which is what a commit is about to freeze. Comparing HEAD's
+    # pins to a live tree would red on every ordinary in-progress edit and teach
+    # everyone to ignore it -- measured while writing this, which is how the
+    # distinction was found.
+    try:
+        working_doc = json.loads((repo_root / SCOREBOARD_REL).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        working_doc = baseline_doc
+    stale = stale_input_pins(repo_root, working_doc)
+    if stale:
+        for line in stale:
+            print(f"  STALE INPUT: {line}")
+        print("spine_scoreboard --ratchet: RED — the committed scoreboard was "
+              "computed from producer versions the tree no longer has, so its "
+              "rows describe artifacts that have moved. Regenerate it AFTER its "
+              "producers (scripts/spine_scoreboard.py --refresh) and commit "
+              "both. Note the ordering: the scoreboard reads parity_tiers, "
+              "verdict_set and verdict_io_contracts, so it must be re-minted "
+              "LAST of the derived chain.")
         return 1
     unknown = sum(1 for r in rows if r["value"] == UNKNOWN)
+    extra = f", {len(forgiven)} rebased" if forgiven else ""
     print(f"spine_scoreboard: ratchet OK (read-only) — {len(rows)} rows "
-          f"({unknown} UNKNOWN, first-class) vs baseline {SCOREBOARD_REL}")
+          f"({unknown} UNKNOWN, first-class){extra} vs baseline {source}")
+    return 0
+
+
+def _rebase_for(ledger, rec):
+    """The ledger entry that forgives EXACTLY this (id, from, to), or None.
+
+    Matching on all three is what stops a rebase from outliving its move: once
+    the rebase is committed the baseline at HEAD equals `current`, so the same
+    entry can never match again (it would need `baseline == current`), and a
+    later drift to a different value finds no entry at all.
+    """
+    for entry in ledger:
+        for row in entry.get("rows") or []:
+            if (row.get("id") == rec["id"]
+                    and row.get("kind") == rec["kind"]
+                    and row.get("from") == rec["baseline"]
+                    and row.get("to") == rec["current"]):
+                return entry
+    return None
+
+
+def run_rebase(repo_root: Path, reason: str):
+    """Record a dated, reasoned permission for the rows that moved AGAINST
+    their direction, then regenerate. Refuses when nothing moved: a rebase
+    with no violation to forgive is a blank cheque against a future one."""
+    reason = (reason or "").strip()
+    if len(reason) < 12:
+        print("spine_scoreboard --rebase: RED — a rebase needs a real reason "
+              "(>= 12 characters) naming WHY the row may move against its "
+              "direction; it is the only thing a reviewer reads")
+        return 1
+    baseline_doc, source = committed_baseline(repo_root)
+    if not isinstance(baseline_doc, dict) or \
+            not isinstance(baseline_doc.get("rows"), list):
+        print(f"spine_scoreboard --rebase: RED — no baseline at {source}; "
+              "mint one with --refresh and commit it first")
+        return 1
+    rows = generate_rows(repo_root)
+    records, _ = violation_records(rows, baseline_doc["rows"])
+    ledger = existing_rebases(repo_root)
+    fresh = [r for r in records if _rebase_for(ledger, r) is None]
+    if not fresh:
+        print(f"spine_scoreboard --rebase: RED — nothing moves against its "
+              f"direction vs {source}. A rebase records a move that HAPPENED; "
+              "it is never issued in advance")
+        return 1
+    entry = {
+        "date": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d"),
+        "reason": reason,
+        "baseline_source": source,
+        "rows": [{"id": r["id"], "kind": r["kind"],
+                  "from": r["baseline"], "to": r["current"]} for r in fresh],
+    }
+    scoreboard = build_scoreboard(repo_root, new_rebase=entry)
+    out_path = repo_root / SCOREBOARD_REL
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", encoding="utf-8") as fh:
+        json.dump(scoreboard, fh, indent=2)
+        fh.write("\n")
+    for row in entry["rows"]:
+        print(f"  REBASED {row['id']}: {row['from']} -> {row['to']} ({row['kind']})")
+    print(f"spine_scoreboard --rebase: recorded {len(entry['rows'])} row(s) "
+          f"on {entry['date']} -> {SCOREBOARD_REL}")
     return 0
 
 
 def run_refresh(repo_root: Path):
-    """Regenerate + write the baseline artifact (generator mode)."""
+    """Regenerate + write the baseline artifact (generator mode).
+
+    REFUSES to write a row that moves against its committed direction unless a
+    recorded rebase already forgives exactly that move.
+
+    Without this, the ratchet is decoration, and that is not a hypothetical.
+    `--ratchet` reads its baseline from HEAD (see committed_baseline), which
+    closes the compare-the-file-with-itself hole -- but it leaves the other
+    half open, because the GENERATOR could still mint any value and committing
+    the mint moves the very baseline the ratchet reads. The sequence
+    `--refresh` -> commit -> `--ratchet` is green for ANY move, forever.
+
+    Measured on origin/main 2026-09-15, which is why this is a fix and not a
+    precaution: FOUR rows had moved against their declared direction with ZERO
+    rebase records in the artifact -- assumption_ledger.count 27 -> 32
+    (monotone-down), evalir.semdiff_unmeasured 22 -> 24 (monotone-down),
+    evalir.adequacy.declared_delta 11 -> 15 (monotone-down), and
+    evalir.constructor_census 28 -> 30, which is FROZEN and whose own refusal
+    message says "re-base requires a dated re-measure committed as a new
+    baseline". Nothing was bypassed and nobody cheated: the generator wrote
+    them and the ratchet then compared the committed result with itself.
+
+    The sanctioned path for a real move is unchanged and is the one the
+    refusal names: --rebase "<why>", which records the exact (id, kind, from,
+    to) it forgives. A tree with no committed baseline still mints freely --
+    that is bootstrap, not laundering -- and so does one whose baseline is
+    unreadable, which is the pre-existing recovery path.
+    """
     out_path = repo_root / SCOREBOARD_REL
+    baseline_doc, source = committed_baseline(repo_root)
+    if isinstance(baseline_doc, dict) and isinstance(baseline_doc.get("rows"), list):
+        records, _ = violation_records(generate_rows(repo_root), baseline_doc["rows"])
+        ledger = existing_rebases(repo_root)
+        unforgiven = [r for r in records if _rebase_for(ledger, r) is None]
+        if unforgiven:
+            for rec in unforgiven:
+                print(f"  VIOLATION: {rec['message']}")
+            print(f"spine_scoreboard --refresh: RED — {len(unforgiven)} row(s) "
+                  f"move against their committed direction vs {source}, and "
+                  f"NOTHING was written. The generator does not get to mint "
+                  f"past the ratchet: record the move with "
+                  f'scripts/spine_scoreboard.py --rebase "<why>", which writes '
+                  f"the artifact and the reason together.")
+            return 1
     scoreboard = build_scoreboard(repo_root)
     rows = scoreboard["rows"]
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1684,12 +2093,18 @@ def main(argv=None):
     mode.add_argument("--self-test", action="store_true",
                       help="run the direction/UNKNOWN/missing-producer/"
                            "read-only-ratchet arms")
+    mode.add_argument("--rebase", metavar="WHY",
+                      help="record a dated permission for the rows that moved "
+                           "AGAINST their direction, then regenerate; refuses "
+                           "when nothing moved")
     args = parser.parse_args(argv)
 
     if args.self_test:
         return self_test()
     if args.ratchet:
         return run_ratchet(REPO_ROOT)
+    if args.rebase:
+        return run_rebase(REPO_ROOT, args.rebase)
     return run_refresh(REPO_ROOT)
 
 

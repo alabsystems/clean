@@ -57,7 +57,7 @@ use clean_kernel::Environment;
 /// claims. The meter is mechanical: a frontier play ships `SoundnessOnly` and
 /// says so; a decidable play may additionally carry `WithTotality`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Leg {
+pub(crate) enum Leg {
     /// `accept(witness) ⇒ verdict-true` for *this* verdict. Never claims a total
     /// procedure. The universal leg (achievable for every class, incl. liveness).
     SoundnessOnly,
@@ -69,7 +69,7 @@ pub enum Leg {
 /// The verdict an untrusted producer (TY/ay) claims, carried in the envelope so
 /// the gate knows what theorem the witness is supposed to certify.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ClaimedVerdict {
+pub(crate) enum ClaimedVerdict {
     /// A safety/refinement/UNSAT-style "the bad thing cannot happen" verdict.
     Holds,
     /// A liveness `P ⇝ Q` verdict (soundness-leg only, per §8).
@@ -81,7 +81,7 @@ pub enum ClaimedVerdict {
 /// A content hash of a parsed *source* object (design doc §3: certs name hashes
 /// of `spec_src`, not TY's lowered relation). Opaque 32-byte digest.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct SourceHash(pub [u8; 32]);
+pub(crate) struct SourceHash(pub [u8; 32]);
 
 impl SourceHash {
     /// The all-zero digest — used to detect an *unset* (forged/empty) hash slot.
@@ -91,7 +91,7 @@ impl SourceHash {
 
     /// `true` iff this is the sentinel zero digest (i.e. an absent source hash).
     #[must_use]
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         *self == SourceHash::ZERO
     }
 }
@@ -107,7 +107,7 @@ impl SourceHash {
 /// `check…` to `Bool.true`, and applies the meta-theorem. Everything that can be
 /// wrong with the bytes must be caught here and turned into a refusal.
 #[derive(Clone, Debug)]
-pub struct CertEnvelope {
+pub(crate) struct CertEnvelope {
     /// The raw, untrusted witness (e.g. a serialized refutation / ranking / step
     /// list). Opaque to the skeleton; the play's [`MetaTheorem`] parses it.
     pub witness: Vec<u8>,
@@ -130,7 +130,7 @@ pub struct CertEnvelope {
 /// TCB) hold. Constructed ONLY by [`ingest`]; the private field makes that the
 /// single entry point (no bypassing the structural checks).
 #[derive(Clone, Debug)]
-pub struct IngestedCert {
+pub(crate) struct IngestedCert {
     env: CertEnvelope,
     /// De-duplicated, sorted source hashes (so the hash-pin compare is canonical).
     pinned: BTreeSet<SourceHash>,
@@ -139,12 +139,12 @@ pub struct IngestedCert {
 impl IngestedCert {
     /// The validated underlying envelope.
     #[must_use]
-    pub fn envelope(&self) -> &CertEnvelope {
+    pub(crate) fn envelope(&self) -> &CertEnvelope {
         &self.env
     }
     /// The canonical (sorted, de-duplicated) pinned source hashes.
     #[must_use]
-    pub fn pinned_hashes(&self) -> &BTreeSet<SourceHash> {
+    pub(crate) fn pinned_hashes(&self) -> &BTreeSet<SourceHash> {
         &self.pinned
     }
 }
@@ -154,7 +154,7 @@ impl IngestedCert {
 /// Why the shared bridge refused a cert. Fail-closed: any of these is a hard
 /// `Err`; the bridge never downgrades a refusal to a warning.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub enum BridgeError {
+pub(crate) enum BridgeError {
     /// The witness byte vector was empty — nothing to certify.
     #[error("ingest: empty witness (no bytes to check)")]
     EmptyWitness,
@@ -221,7 +221,7 @@ pub enum BridgeError {
 /// # Errors
 /// [`BridgeError::EmptyWitness`] / [`BridgeError::NoSourceHashes`] /
 /// [`BridgeError::ZeroSourceHash`] / [`BridgeError::EmptyResidualTcb`].
-pub fn ingest(env: CertEnvelope) -> Result<IngestedCert, BridgeError> {
+pub(crate) fn ingest(env: CertEnvelope) -> Result<IngestedCert, BridgeError> {
     if env.witness.is_empty() {
         return Err(BridgeError::EmptyWitness);
     }
@@ -249,7 +249,7 @@ pub fn ingest(env: CertEnvelope) -> Result<IngestedCert, BridgeError> {
 ///
 /// # Errors
 /// [`BridgeError::HashMismatch`] if the sets differ.
-pub fn hash_pin(cert: &IngestedCert, expected: &[SourceHash]) -> Result<(), BridgeError> {
+pub(crate) fn hash_pin(cert: &IngestedCert, expected: &[SourceHash]) -> Result<(), BridgeError> {
     let expected_set: BTreeSet<SourceHash> = expected.iter().copied().collect();
     if expected_set != cert.pinned {
         return Err(BridgeError::HashMismatch(format!(
@@ -278,7 +278,7 @@ pub fn hash_pin(cert: &IngestedCert, expected: &[SourceHash]) -> Result<(), Brid
 /// # Errors
 /// [`BridgeError::TheoremNotRegistered`] if `theorem` is absent;
 /// [`BridgeError::NonFoundationalAxioms`] if its closure carries a domain axiom.
-pub fn axiom_deps_subset_foundational(
+pub(crate) fn axiom_deps_subset_foundational(
     env: &Environment,
     theorem: &str,
     allowed_params: &[&str],
@@ -317,7 +317,7 @@ pub fn axiom_deps_subset_foundational(
 /// to witness that the *refuted* obligation is genuinely UNSAT while every
 /// single-clause-dropped obligation is SAT, i.e. the refutation is non-vacuous.
 #[derive(Clone, Debug)]
-pub struct CnfView {
+pub(crate) struct CnfView {
     /// Clauses, each a list of `2·var+pol` literals.
     pub clauses: Vec<Vec<u32>>,
     /// Number of distinct variables (bounds the search).
@@ -339,7 +339,7 @@ pub struct CnfView {
 /// [`BridgeError::NotProbeable`] if the obligation is itself SAT (no refutation
 /// to be non-vacuous about) or empty; [`BridgeError::Vacuous`] if some
 /// clause-drop left it UNSAT.
-pub fn non_vacuity_check(cnf: &CnfView) -> Result<(), BridgeError> {
+pub(crate) fn non_vacuity_check(cnf: &CnfView) -> Result<(), BridgeError> {
     if cnf.clauses.is_empty() {
         return Err(BridgeError::NotProbeable("no clauses".to_string()));
     }
@@ -422,7 +422,7 @@ pub trait MetaTheorem {
 /// REFUSAL (never `Ok`) so the pipeline fails closed on an unimplemented play.
 /// This is the honest placeholder the design doc's "5 gates compile, gate 3 is a
 /// typed TODO" calls for.
-pub struct UnimplementedMeta {
+pub(crate) struct UnimplementedMeta {
     /// Human-readable play tag, surfaced in the refusal.
     pub play: String,
 }
@@ -439,7 +439,7 @@ impl MetaTheorem for UnimplementedMeta {
 // ── 8. the 5-gate pipeline (the shared fail-closed driver) ───────────────────
 
 /// Inputs the shared pipeline needs from a play beyond the envelope itself.
-pub struct PlayInputs<'a, M: MetaTheorem> {
+pub(crate) struct PlayInputs<'a, M: MetaTheorem> {
     /// Source hashes the checker re-derived from `spec_src` (gate 2).
     pub expected_hashes: &'a [SourceHash],
     /// The play's meta-theorem implementation (gate 3).
@@ -463,7 +463,7 @@ pub struct PlayInputs<'a, M: MetaTheorem> {
 ///
 /// # Errors
 /// The first failing gate's [`BridgeError`].
-pub fn run_pipeline<M: MetaTheorem>(
+pub(crate) fn run_pipeline<M: MetaTheorem>(
     env: &mut Environment,
     envelope: CertEnvelope,
     inputs: &PlayInputs<'_, M>,

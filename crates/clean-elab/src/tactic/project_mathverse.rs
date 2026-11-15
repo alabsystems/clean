@@ -609,7 +609,7 @@ fn collect_diagnostics(
     for (old, new) in original.local_ctx.iter().zip(normalized.local_ctx.iter()) {
         let snapshot = ExprSnapshot {
             origin: BlockerOrigin::Hypothesis {
-                name: old.name.clone(),
+                name: old.name.to_string(),
             },
             unsimplified: old.ty.clone(),
             normalized: new.ty.clone(),
@@ -860,15 +860,17 @@ fn render_project_mathverse_failure(
     report: &ProjectMathverseReport,
     blocker_limit: usize,
 ) -> String {
+    // `out` is a `String`, whose `fmt::Write` impl never fails, so each
+    // `write!` result is discarded rather than unwrapped.
     let mut out = String::new();
     match &report.mathverse_result {
         ProjectMathverseOutcome::Closed => out.push_str("closed"),
         ProjectMathverseOutcome::NoProgress => out.push_str("no progress"),
         ProjectMathverseOutcome::MathverseFailed { reason } => {
-            write!(out, "mathverse failed: {reason}").expect("infallible: write to String");
+            let _ = write!(out, "mathverse failed: {reason}");
         }
         ProjectMathverseOutcome::NormalizationFailed { reason } => {
-            write!(out, "normalization failed: {reason}").expect("infallible: write to String");
+            let _ = write!(out, "normalization failed: {reason}");
         }
     }
 
@@ -876,14 +878,13 @@ fn render_project_mathverse_failure(
     if limit > 0 {
         out.push_str("; blockers:");
         for blocker in report.blockers.iter().take(limit) {
-            write!(
+            let _ = write!(
                 out,
                 " {:?} at {}: {}",
                 blocker.kind,
                 render_origin(&blocker.origin),
                 blocker.unsimplified
-            )
-            .expect("infallible: write to String");
+            );
         }
     }
     out

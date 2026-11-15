@@ -119,7 +119,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="$REPO_ROOT/target/release/mm_verify_range"
 if [[ ! -x "$BIN" ]]; then
   echo "building mm_verify_range (release)..." >&2
-  ( cd "$REPO_ROOT" && cargo build --offline --release -p clean-olean --bin mm_verify_range )
+  ( cd "$REPO_ROOT" && targo --unverified build --offline --release -p clean-olean --bin mm_verify_range )
 fi
 
 echo "two-pass: $SETMM  N=$N  workers=$NWORKERS  outdir=$OUTDIR" >&2

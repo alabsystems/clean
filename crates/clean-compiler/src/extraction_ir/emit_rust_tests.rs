@@ -10,7 +10,7 @@
 //! extraction backend that is never executed is a code generator with no
 //! evidence attached.
 //!
-//! `rustc` is invoked directly rather than through cargo, so the emitted crate
+//! `trustc` is invoked directly rather than through cargo, so the emitted crate
 //! is compiled exactly as written — including its `#![forbid(unsafe_code)]`,
 //! which is what turns "safe lazy Rust" from a description into a checked
 //! property.
@@ -31,68 +31,50 @@ fn doubler() -> Corec {
     }
 }
 
-/// Compile `src` with rustc and run it, returning stdout lines.
-///
-/// Returns `None` if rustc is unavailable, so the suite degrades to skipping
-/// rather than failing on a machine without a toolchain. A compile FAILURE is
-/// never a skip — it panics with the compiler's diagnostics.
-/// Invoke `rustc` on an EMITTED program, opting out of Trust verification.
-///
-/// See `clean-elab/src/tactic/native_decide_eval.rs` for the full rationale.
-/// In short: `rustc` resolves through rustup from this repo's
-/// `rust-toolchain.toml`, pinned to `channel = "trust"` since 2026-08-18, so it
-/// ran Trust's obligation checker over these emitted programs and failed the
-/// build on `[overflow:add]` obligations it could not discharge statically.
-/// These programs are extraction ARTIFACTS executed for a differential check,
-/// not verification targets.
-///
-/// Probe rather than assume — the flag is trust-only and its spelling has moved
-/// once already, so fall back to a plain invocation when it is not understood.
-fn rustc_emit(
-    src_path: &std::path::Path,
-    bin_path: &std::path::Path,
-) -> std::io::Result<std::process::Output> {
-    use std::process::Command;
-    let run = |trust_opt_out: bool| {
-        let mut cmd = Command::new("rustc");
-        cmd.arg("--edition=2021").arg("-O");
-        if trust_opt_out {
-            cmd.arg("-Ztrust-verify=off");
-        }
-        cmd.arg("-o").arg(bin_path).arg(src_path).output()
-    };
-    let flag_was_rejected = |stderr: &str| {
-        stderr.contains("only accepted on the nightly compiler")
-            || stderr.contains("unknown unstable option")
-            || stderr.contains("unknown debugging option")
-            || stderr.contains("incorrect value")
-    };
-    let out = run(true)?;
-    if !out.status.success() && flag_was_rejected(&String::from_utf8_lossy(&out.stderr)) {
-        return run(false);
-    }
-    Ok(out)
+/// The compiler for an emitted program: this toolchain's Trust `trustc`,
+/// admitted exactly as Clean admits its oracle compiler
+/// (`clean_elab::oracle_compiler`): the one beside `$CARGO` (Targo exports it
+/// to tests), else beside the Targo that built this crate -- never `$RUSTC` or
+/// PATH. Without one these tests fail; they never skip.
+fn emit_compiler() -> &'static clean_elab::oracle_compiler::OracleCompiler {
+    static COMPILER: std::sync::OnceLock<clean_elab::oracle_compiler::OracleCompiler> =
+        std::sync::OnceLock::new();
+    COMPILER.get_or_init(|| {
+        let cargo = std::env::var_os("CARGO")
+            .map_or_else(|| std::path::PathBuf::from(env!("CARGO")), Into::into);
+        clean_elab::oracle_compiler::admit_beside(&cargo)
+            .unwrap_or_else(|err| panic!("no admitted trustc beside {cargo:?}: {err}"))
+    })
 }
 
-fn compile_and_run(src: &str, stem: &str) -> Option<Vec<String>> {
+/// Compile the EMITTED program at `src_path` with [`emit_compiler`], or panic
+/// with the compiler's diagnostics: a compile failure is never a skip.
+///
+/// `OracleCompiler::compile` (`clean-elab/src/oracle_compiler.rs`) carries the
+/// TRUST OPT-OUT and its rationale. In short: `trustc` is a verifying
+/// compiler, and it ran Trust's obligation checker over these emitted programs
+/// and failed the build on `[overflow:add]` obligations it could not discharge
+/// statically. These programs are extraction ARTIFACTS executed for a
+/// differential check, not verification targets, and there is no retry
+/// without the opt-out.
+fn compile_emitted(src: &str, src_path: &std::path::Path, bin_path: &std::path::Path) {
+    if let Err(err) = emit_compiler().compile(src_path, bin_path) {
+        panic!(
+            "the EMITTED program must compile under #![forbid(unsafe_code)]:\n\
+             {err}\n--- source ---\n{src}"
+        );
+    }
+}
+
+/// Compile `src` with trustc and run it, returning stdout lines.
+fn compile_and_run(src: &str, stem: &str) -> Vec<String> {
     use std::process::Command;
 
     let dir = tempfile::tempdir().expect("tempdir");
     let src_path = dir.path().join(format!("{stem}.rs"));
     let bin_path = dir.path().join(stem);
     std::fs::write(&src_path, src).expect("write source");
-
-    let out = match rustc_emit(&src_path, &bin_path) {
-        Ok(o) => o,
-        // No toolchain on this machine.
-        Err(_) => return None,
-    };
-    assert!(
-        out.status.success(),
-        "the EMITTED program must compile under #![forbid(unsafe_code)]:\n\
-         --- stderr ---\n{}\n--- source ---\n{src}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    compile_emitted(src, &src_path, &bin_path);
 
     let run = Command::new(&bin_path)
         .output()
@@ -102,33 +84,28 @@ fn compile_and_run(src: &str, stem: &str) -> Option<Vec<String>> {
         "the emitted program must run cleanly, stderr:\n{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    Some(
-        String::from_utf8_lossy(&run.stdout)
-            .lines()
-            .map(str::to_string)
-            .collect(),
-    )
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect()
 }
 
 /// Compile, run, and return the `STEPS=` counter the emitted program reports on
 /// stderr: how many tails were actually COMPUTED rather than served from cache.
-fn compile_and_count_steps(src: &str, stem: &str) -> Option<u64> {
+/// A program that reports no counter fails the test.
+fn compile_and_count_steps(src: &str, stem: &str) -> u64 {
     use std::process::Command;
     let dir = tempfile::tempdir().expect("tempdir");
     let src_path = dir.path().join(format!("{stem}.rs"));
     let bin_path = dir.path().join(stem);
     std::fs::write(&src_path, src).expect("write source");
-    let out = rustc_emit(&src_path, &bin_path).ok()?;
-    assert!(
-        out.status.success(),
-        "must compile:\n{}",
-        String::from_utf8_lossy(&out.stderr)
-    );
+    compile_emitted(src, &src_path, &bin_path);
     let run = Command::new(&bin_path).output().expect("run");
     let err = String::from_utf8_lossy(&run.stderr).to_string();
     err.lines()
         .find_map(|l| l.strip_prefix("STEPS="))
         .map(|n| n.trim().parse::<u64>().expect("numeric STEPS"))
+        .unwrap_or_else(|| panic!("the emitted program reported no STEPS= counter:\n{err}"))
 }
 
 /// The emitted program reproduces the values the KERNEL proved.
@@ -140,10 +117,7 @@ fn compile_and_count_steps(src: &str, stem: &str) -> Option<u64> {
 fn emitted_program_matches_the_kernel_proved_values() {
     let c = doubler();
     let src = emit_program(&c, &[0, 1], 4);
-    let Some(lines) = compile_and_run(&src, "doubler_proved") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let lines = compile_and_run(&src, "doubler_proved");
     assert_eq!(lines, vec!["1", "2", "4", "8"]);
 }
 
@@ -158,10 +132,7 @@ fn emitted_program_agrees_with_the_reference_interpreter() {
     let params = [3u64, 5];
     const DEPTH: u64 = 20;
     let src = emit_program(&c, &params, DEPTH);
-    let Some(lines) = compile_and_run(&src, "doubler_diff") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let lines = compile_and_run(&src, "doubler_diff");
     assert_eq!(lines.len(), DEPTH as usize);
     for (k, line) in lines.iter().enumerate() {
         let want = eval_nth(&c, k as u64, &params).expect("no black hole");
@@ -186,10 +157,7 @@ fn emitted_program_advances_the_index() {
         ],
     };
     let src = emit_program(&c, &[7], 6);
-    let Some(lines) = compile_and_run(&src, "index_adv") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let lines = compile_and_run(&src, "index_adv");
     assert_eq!(lines, vec!["7", "8", "9", "10", "11", "12"]);
 }
 
@@ -227,10 +195,7 @@ fn malformed_ir_agrees_between_interpreter_and_binary() {
         step: vec![Op::State(0)],
     };
     let src = emit_program(&c, &[], 3);
-    let Some(lines) = compile_and_run(&src, "malformed") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let lines = compile_and_run(&src, "malformed");
     for (k, line) in lines.iter().enumerate() {
         let want = eval_nth(&c, k as u64, &[]).expect("no black hole");
         assert_eq!(
@@ -257,10 +222,7 @@ fn overflow_is_refused_by_both_sides_at_the_same_depth() {
     // 1 doubled 64 times is exactly 2^64 -- the first unrepresentable value.
     const DEPTH: u64 = 67;
     let src = emit_program(&c, &[0, 1], DEPTH);
-    let Some(lines) = compile_and_run(&src, "overflow") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let lines = compile_and_run(&src, "overflow");
     assert_eq!(lines.len(), DEPTH as usize);
 
     // k = 63 is the last representable layer.
@@ -300,10 +262,7 @@ fn overflow_is_refused_by_both_sides_at_the_same_depth() {
 fn walking_a_shared_stream_computes_each_tail_once() {
     const DEPTH: u64 = 32;
     let src = emit_program(&doubler(), &[0, 1], DEPTH);
-    let Some(steps) = compile_and_count_steps(&src, "memo_steps") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let steps = compile_and_count_steps(&src, "memo_steps");
     assert_eq!(
         steps,
         DEPTH - 1,

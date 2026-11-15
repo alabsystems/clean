@@ -1,0 +1,7 @@
+(set-logic QF_LRA)
+(declare-fun -x () Real)
+(declare-fun /x () Real)
+(assert (= -x 0.5))
+(assert (= -x -1.5))
+(assert (= /x -x))
+(check-sat)

@@ -32,7 +32,7 @@ fn test_desugar_where_single_clause_produces_let_rec() {
     // def foo := bar n where bar (x : Nat) : Nat := x + 1
     let body = mk_ident("bar_call");
     let clause = WhereClause {
-        name: "bar".to_string(),
+        name: SurfaceName::generated_path("bar"),
         params: vec![mk_explicit_binder("x", mk_nat_ty())],
         return_type: Some(mk_nat_ty()),
         body: mk_ident("x_plus_1"),
@@ -44,13 +44,15 @@ fn test_desugar_where_single_clause_produces_let_rec() {
     // Should produce: let rec bar : (x : Nat) → Nat := fun (x : Nat) => x_plus_1 in bar_call
     match &result {
         SurfaceExpr::LetRec(_, binder, val, inner) => {
-            assert_eq!(binder.name, "bar");
+            assert_eq!(binder.name, SurfaceName::generated_path("bar"));
             // binder.ty should be a Pi type
             assert!(binder.ty.is_some());
             // val should be a Lambda
             assert!(matches!(val.as_ref(), SurfaceExpr::Lambda(..)));
             // inner body is the original body
-            assert!(matches!(inner.as_ref(), SurfaceExpr::Ident(_, name) if name == "bar_call"));
+            assert!(
+                matches!(inner.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == &clean_kernel::Name::from_string("bar_call"))
+            );
         }
         other => panic!("expected LetRec, got {other:?}"),
     }
@@ -67,14 +69,14 @@ fn test_desugar_where_multiple_clauses_nested_let_rec() {
     let body = mk_ident("combined_call");
     let clauses = vec![
         WhereClause {
-            name: "bar".to_string(),
+            name: SurfaceName::generated_path("bar"),
             params: vec![mk_explicit_binder("x", mk_nat_ty())],
             return_type: Some(mk_nat_ty()),
             body: mk_ident("x_plus_1"),
             span: dummy_span(),
         },
         WhereClause {
-            name: "baz".to_string(),
+            name: SurfaceName::generated_path("baz"),
             params: vec![mk_explicit_binder("y", mk_nat_ty())],
             return_type: Some(mk_nat_ty()),
             body: mk_ident("bar_y_plus_1"),
@@ -87,12 +89,20 @@ fn test_desugar_where_multiple_clauses_nested_let_rec() {
     // Should produce: let rec bar := ... in (let rec baz := ... in combined_call)
     match &result {
         SurfaceExpr::LetRec(_, binder1, _, inner1) => {
-            assert_eq!(binder1.name, "bar", "outer let rec should be 'bar'");
+            assert_eq!(
+                binder1.name,
+                SurfaceName::generated_path("bar"),
+                "outer let rec should be 'bar'"
+            );
             match inner1.as_ref() {
                 SurfaceExpr::LetRec(_, binder2, _, inner2) => {
-                    assert_eq!(binder2.name, "baz", "inner let rec should be 'baz'");
+                    assert_eq!(
+                        binder2.name,
+                        SurfaceName::generated_path("baz"),
+                        "inner let rec should be 'baz'"
+                    );
                     assert!(
-                        matches!(inner2.as_ref(), SurfaceExpr::Ident(_, name) if name == "combined_call"),
+                        matches!(inner2.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == &clean_kernel::Name::from_string("combined_call")),
                         "innermost body should be original body"
                     );
                 }
@@ -111,7 +121,7 @@ fn test_desugar_where_empty_clauses_returns_body_unchanged() {
     let result = desugar_where(body, &[]);
 
     assert!(
-        matches!(&result, SurfaceExpr::Ident(_, name) if name == "original"),
+        matches!(&result, SurfaceExpr::Ident(_, name) if name.name() == &clean_kernel::Name::from_string("original")),
         "empty clauses should return body unchanged"
     );
 }
@@ -123,7 +133,7 @@ fn test_desugar_where_clause_no_params_no_lambda() {
     // where val : Nat := 42
     let body = mk_ident("use_val");
     let clause = WhereClause {
-        name: "val".to_string(),
+        name: SurfaceName::generated_path("val"),
         params: vec![],
         return_type: Some(mk_nat_ty()),
         body: SurfaceExpr::nat(42),
@@ -134,7 +144,7 @@ fn test_desugar_where_clause_no_params_no_lambda() {
 
     match &result {
         SurfaceExpr::LetRec(_, binder, val, _) => {
-            assert_eq!(binder.name, "val");
+            assert_eq!(binder.name, SurfaceName::generated_path("val"));
             // No params means val is NOT wrapped in a Lambda; the return-type
             // annotation rides as an ascription on the body (the recursive
             // lift reads the helper's return type from it).
@@ -145,7 +155,7 @@ fn test_desugar_where_clause_no_params_no_lambda() {
                         "ascribed body should be the literal clause body"
                     );
                     assert!(
-                        matches!(ty.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat"),
+                        matches!(ty.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("Nat")),
                         "ascription should carry the clause return type"
                     );
                 }
@@ -163,7 +173,7 @@ fn test_desugar_where_clause_no_return_type_leaves_binder_unannotated() {
     // where bar (x : Nat) := x
     let body = mk_ident("use_bar");
     let clause = WhereClause {
-        name: "bar".to_string(),
+        name: SurfaceName::generated_path("bar"),
         params: vec![mk_explicit_binder("x", mk_nat_ty())],
         return_type: None,
         body: mk_ident("x"),
@@ -174,7 +184,7 @@ fn test_desugar_where_clause_no_return_type_leaves_binder_unannotated() {
 
     match &result {
         SurfaceExpr::LetRec(_, binder, val, _) => {
-            assert_eq!(binder.name, "bar");
+            assert_eq!(binder.name, SurfaceName::generated_path("bar"));
             // No annotation: the binder type stays `None` so both the plain
             // `let` lowering and the recursive lift INFER the type from the
             // lambda value (a `Pi(.., Hole)` here would be mistaken for the
@@ -200,7 +210,7 @@ fn test_desugar_where_clause_referencing_outer_params() {
     let body = SurfaceExpr::app(mk_ident("helper"), vec![mk_ident("n")]);
     let helper_body = SurfaceExpr::app(mk_ident("HAdd.hAdd"), vec![mk_ident("x"), mk_ident("n")]);
     let clause = WhereClause {
-        name: "helper".to_string(),
+        name: SurfaceName::generated_path("helper"),
         params: vec![mk_explicit_binder("x", mk_nat_ty())],
         return_type: Some(mk_nat_ty()),
         body: helper_body,
@@ -211,7 +221,7 @@ fn test_desugar_where_clause_referencing_outer_params() {
 
     match &result {
         SurfaceExpr::LetRec(_, binder, val, inner) => {
-            assert_eq!(binder.name, "helper");
+            assert_eq!(binder.name, SurfaceName::generated_path("helper"));
             assert!(matches!(val.as_ref(), SurfaceExpr::Lambda(..)));
             assert!(matches!(inner.as_ref(), SurfaceExpr::App(..)));
         }
@@ -226,7 +236,7 @@ fn test_desugar_where_clause_multiple_binders() {
     // where add (x : Nat) (y : Nat) : Nat := x + y
     let body = mk_ident("use_add");
     let clause = WhereClause {
-        name: "add".to_string(),
+        name: SurfaceName::generated_path("add"),
         params: vec![
             mk_explicit_binder("x", mk_nat_ty()),
             mk_explicit_binder("y", mk_nat_ty()),
@@ -240,7 +250,7 @@ fn test_desugar_where_clause_multiple_binders() {
 
     match &result {
         SurfaceExpr::LetRec(_, binder, val, _) => {
-            assert_eq!(binder.name, "add");
+            assert_eq!(binder.name, SurfaceName::generated_path("add"));
             match binder.ty.as_deref() {
                 Some(SurfaceExpr::Pi(_, params, _)) => {
                     assert_eq!(params.len(), 2, "should have 2 params in Pi type");
@@ -265,19 +275,20 @@ fn test_desugar_where_from_parsed_single_def() {
     let body = mk_ident("call_helper");
     let where_defs = vec![WhereLocalDef {
         span: dummy_span(),
-        name: "helper".to_string(),
+        name: SurfaceName::generated_path("helper"),
         binders: vec![SurfaceBinder::explicit("x", mk_nat_ty())],
         ret_ty: Some(Box::new(mk_nat_ty())),
         body: mk_ident("x_plus_1"),
+        termination: Default::default(),
     }];
 
     let result = desugar_where_from_parsed(&body, &where_defs);
 
     match &result {
         SurfaceExpr::LetRec(_, binder, _, inner) => {
-            assert_eq!(binder.name, "helper");
+            assert_eq!(binder.name, SurfaceName::generated_path("helper"));
             assert!(
-                matches!(inner.as_ref(), SurfaceExpr::Ident(_, n) if n == "call_helper"),
+                matches!(inner.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("call_helper")),
                 "inner should be original body"
             );
         }
@@ -290,7 +301,7 @@ fn test_desugar_where_from_parsed_empty_defs_returns_body() {
     let body = mk_ident("unchanged");
     let result = desugar_where_from_parsed(&body, &[]);
     assert!(
-        matches!(&result, SurfaceExpr::Ident(_, name) if name == "unchanged"),
+        matches!(&result, SurfaceExpr::Ident(_, name) if name.name() == &clean_kernel::Name::from_string("unchanged")),
         "empty where_defs should return body unchanged"
     );
 }
@@ -301,17 +312,19 @@ fn test_desugar_where_from_parsed_multiple_defs() {
     let where_defs = vec![
         WhereLocalDef {
             span: dummy_span(),
-            name: "f".to_string(),
+            name: SurfaceName::generated_path("f"),
             binders: vec![],
             ret_ty: Some(Box::new(mk_nat_ty())),
             body: SurfaceExpr::nat(1),
+            termination: Default::default(),
         },
         WhereLocalDef {
             span: dummy_span(),
-            name: "g".to_string(),
+            name: SurfaceName::generated_path("g"),
             binders: vec![],
             ret_ty: Some(Box::new(mk_nat_ty())),
             body: SurfaceExpr::nat(2),
+            termination: Default::default(),
         },
     ];
 
@@ -320,12 +333,12 @@ fn test_desugar_where_from_parsed_multiple_defs() {
     // Should produce: let rec f := 1 in (let rec g := 2 in call_both)
     match &result {
         SurfaceExpr::LetRec(_, binder1, _, inner1) => {
-            assert_eq!(binder1.name, "f");
+            assert_eq!(binder1.name, SurfaceName::generated_path("f"));
             match inner1.as_ref() {
                 SurfaceExpr::LetRec(_, binder2, _, inner2) => {
-                    assert_eq!(binder2.name, "g");
+                    assert_eq!(binder2.name, SurfaceName::generated_path("g"));
                     assert!(
-                        matches!(inner2.as_ref(), SurfaceExpr::Ident(_, n) if n == "call_both"),
+                        matches!(inner2.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("call_both")),
                     );
                 }
                 other => panic!("expected inner LetRec, got {other:?}"),

@@ -72,17 +72,9 @@ fn mk_mixed_ge_le_chain_case(spec: MixedGeLeCaseSpec) -> ArithmeticE2eCase {
     map.register_var("const3", three.clone(), ty.clone());
     map.register_var("testX", test_x.clone(), ty.clone());
     map.register_var("testY", test_y.clone(), ty);
-    let ge_x_5 = terms.mk_app(
-        Symbol::Named(">=".to_string()),
-        vec![ay_x, ay_five],
-        Sort::Bool,
-    );
+    let ge_x_5 = terms.mk_app(Symbol::Named(">=".into()), vec![ay_x, ay_five], Sort::Bool);
     let lt_xy = terms.mk_lt(ay_x, ay_y);
-    let ge_3_y = terms.mk_app(
-        Symbol::Named(">=".to_string()),
-        vec![ay_three, ay_y],
-        Sort::Bool,
-    );
+    let ge_3_y = terms.mk_app(Symbol::Named(">=".into()), vec![ay_three, ay_y], Sort::Bool);
     let not_ge_x_5 = terms.mk_not(ge_x_5);
     let not_lt_xy = terms.mk_not(lt_xy);
     let not_ge_3_y = terms.mk_not(ge_3_y);

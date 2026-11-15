@@ -334,67 +334,49 @@ fn producer_owned_manifest_identity_helpers_are_public_and_self_consistent() {
             "hardware_vector_contract_set.contract.3.operation.vector.mask_to_bits.composition={CHC_X86_V8_I16_MASK_TO_BITS_COMPOSITION}"
         )
     ));
-    for contract_index in 0..4 {
-        let expected_status = if contract_index == 0 {
-            "deferred"
-        } else {
-            "unavailable"
-        };
-        let expected_reason = if contract_index == 0 {
-            "unsigned_vector_compare_proof_blocked"
-        } else {
-            "unsigned_vector_compare_unavailable"
-        };
+    // The x86-64 vector-compare per-cell rule (`docs/dialects.md`): the
+    // unsigned compares are available on every descriptor, `v16_i8` (contract
+    // index 2) included since 2026-09-28, each on the SSE2 sign-bit bias.
+    let contract_names: Vec<&str> = (0..)
+        .map_while(|index| {
+            manifest_line_value(
+                &hardware_lines,
+                &format!("hardware_vector_contract_set.contract.{index}.contract.name"),
+            )
+        })
+        .collect();
+    assert!(contract_names.contains(&"chc_x86.v16_i8"));
+    for (contract_index, contract_name) in contract_names.iter().enumerate() {
         for unsigned_operation in ["icmp.ult", "icmp.ule", "icmp.ugt", "icmp.uge"] {
             let operation_prefix = format!(
                 "hardware_vector_contract_set.contract.{contract_index}.operation.{unsigned_operation}"
             );
+            let value = |suffix: &str| {
+                manifest_line_value(&hardware_lines, &format!("{operation_prefix}.{suffix}"))
+            };
             assert_eq!(
-                manifest_line_value(&hardware_lines, &format!("{operation_prefix}.status")),
-                Some(expected_status),
-                "CHC x86 manifest must publish unsigned compare status for {operation_prefix}"
+                value("status"),
+                Some("available"),
+                "{contract_name}: {operation_prefix}"
             );
+            assert_eq!(value("reason"), Some("canonical_contract"));
+            assert_eq!(value("fail_closed"), Some("false"), "{operation_prefix}");
+            assert_eq!(value("consumer_policy"), None, "{operation_prefix}");
             assert_eq!(
-                manifest_line_value(&hardware_lines, &format!("{operation_prefix}.reason")),
-                Some(expected_reason),
-                "CHC x86 manifest must publish unsigned compare reason for {operation_prefix}"
+                value("feature_guard"),
+                Some("x86.sse2"),
+                "{contract_name}: the sign-bit bias composition is SSE2 ({operation_prefix})"
             );
-            assert_eq!(
-                manifest_line_value(&hardware_lines, &format!("{operation_prefix}.fail_closed")),
-                Some("true"),
-                "CHC x86 manifest must fail closed for {operation_prefix}"
-            );
-            assert_eq!(
-                manifest_line_value(
-                    &hardware_lines,
-                    &format!("{operation_prefix}.consumer_policy")
-                ),
-                Some(CHC_X86_UNSIGNED_VECTOR_COMPARE_FAIL_CLOSED_POLICY),
-                "CHC x86 manifest must reject unsupported unsigned compare lowering"
-            );
-            assert_eq!(
-                manifest_line_value(
-                    &hardware_lines,
-                    &format!("{operation_prefix}.feature_guard")
-                ),
-                None,
-                "fail-closed unsigned compare row must not claim x86 feature coverage"
-            );
-            assert_eq!(
-                manifest_line_value(
-                    &hardware_lines,
-                    &format!("{operation_prefix}.native_instructions")
-                ),
-                None,
-                "fail-closed unsigned compare row must not claim native instruction coverage"
-            );
-            assert_eq!(
-                manifest_line_value(&hardware_lines, &format!("{operation_prefix}.semantics")),
-                None,
-                "fail-closed unsigned compare row must not claim semantics"
+            assert!(
+                value("composition").is_some_and(|c| c.contains("sign_bit_bias")),
+                "{operation_prefix} must publish its bias composition"
             );
         }
     }
+    assert!(hardware_lines.contains(
+        &"hardware_vector_contract_set.contract.2.operation.icmp.ult.composition=pcmpgtb(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias));sign_bit_bias:splat_i8(0x80)"
+            .to_string()
+    ));
 
     let aggregate_rows = ty_shared_primitive_manifest_rows();
     let aggregate_lines = ty_shared_primitive_manifest_key_value_lines();

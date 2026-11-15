@@ -6,11 +6,12 @@
 
 use super::*;
 
-/// Build a `LocalDecl` with the given fvar id, name, and type.
-pub(super) fn make_local(id: u64, name: &str, ty: Expr) -> LocalDecl {
+/// Build a `LocalDecl` with an explicit fixed fixture name (not source text).
+pub(super) fn make_local(id: u64, name: &'static str, ty: Expr) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::generated_path(name),
         ty,
         value: None,
     }

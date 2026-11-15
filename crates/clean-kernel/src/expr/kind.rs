@@ -144,7 +144,12 @@ pub enum ExprKind {
     /// so a framing change here silently invalidates artifacts on disk.
     Const(
         Name,
-        #[serde(with = "crate::expr::level_vec_serde")] LevelVec,
+        // Path NOT `crate::expr::level_vec_serde`: `use super::*` (line 10) already
+        // brings the module into scope, so the qualification is unnecessary and
+        // `--force-warn unused_qualifications` counts it. Same module, same impls,
+        // so the PERSISTED ENCODING the doc comment above guards is untouched — a
+        // `with =` path names where the impls live, not how the bytes are framed.
+        #[serde(with = "level_vec_serde")] LevelVec,
     ),
     /// Function application
     App(Arc<Expr>, Arc<Expr>),
@@ -294,147 +299,20 @@ pub enum ExprKind {
     },
 }
 
-/// DAG-aware structural equality of two `Arc<Expr>` children: a shared child
-/// (the *same* heap allocation, common in the imported proof DAGs) resolves in
-/// O(1) via `Arc::ptr_eq` instead of re-walking its whole subtree. This is
-/// exactly Lean's `is_eqp` fast path (`kernel/expr.cpp`).
-///
-/// SOUNDNESS: `Arc::ptr_eq(a, b)` is true iff `a` and `b` are the same
-/// allocation, and `Expr` is immutable after construction (`Expr::kind` is
-/// `pub(crate)` precisely to forbid post-hoc mutation — issue #1397). Therefore
-/// `Arc::ptr_eq(a, b) ⇒ **a == **b`, so the short-circuit returns *exactly* the
-/// boolean the structural walk would return — it can never equate two
-/// non-identical terms, it only skips a provably-redundant walk. `arc_eq(a, b)`
-/// is thus definitionally `**a == **b`, only cheaper on shared DAGs. Pinned by
-/// `test_manual_expr_kind_eq_matches_reference` (differential vs a ptr_eq-free
-/// reference equality).
 #[cfg(not(kani))]
-#[inline]
-fn arc_eq(a: &Arc<Expr>, b: &Arc<Expr>) -> bool {
-    Arc::ptr_eq(a, b) || **a == **b
-}
+#[path = "kind/eq_walk.rs"]
+mod eq_walk;
+#[cfg(not(kani))]
+pub(crate) use eq_walk::ExprEqWalk;
 
 /// Manual `PartialEq` for `ExprKind` (non-Kani builds) that mirrors the derived
-/// structural equality *exactly*, with the sole change that every `Arc<Expr>`
-/// child is compared through [`arc_eq`] — adding the `Arc::ptr_eq` short-circuit
-/// so the trusted kernel's structural equality (and hence every `whnf` /
-/// `is_def_eq` structural check) walks the imported proof term as the shared DAG
-/// it is, not as an exponentially-larger tree (see
-/// `designs/2026-07-06-carrier-whnf-perf.md`). Non-`Arc` fields compare with
-/// `==`, identical to the derived impl.
+/// structural equality *exactly*, walking the children as the shared DAGs they
+/// are ([`ExprEqWalk`]) rather than as their exponentially larger tree
+/// expansions (see `designs/2026-07-06-carrier-whnf-perf.md`).
 #[cfg(not(kani))]
 impl PartialEq for ExprKind {
     fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (ExprKind::BVar(a), ExprKind::BVar(b)) => a == b,
-            (ExprKind::FVar(a), ExprKind::FVar(b)) => a == b,
-            (ExprKind::Sort(a), ExprKind::Sort(b)) => a == b,
-            (ExprKind::Const(n1, l1), ExprKind::Const(n2, l2)) => n1 == n2 && l1 == l2,
-            (ExprKind::App(f1, a1), ExprKind::App(f2, a2)) => arc_eq(f1, f2) && arc_eq(a1, a2),
-            (ExprKind::Lam(b1, t1, bo1), ExprKind::Lam(b2, t2, bo2)) => {
-                b1 == b2 && arc_eq(t1, t2) && arc_eq(bo1, bo2)
-            }
-            (ExprKind::Pi(b1, t1, bo1), ExprKind::Pi(b2, t2, bo2)) => {
-                b1 == b2 && arc_eq(t1, t2) && arc_eq(bo1, bo2)
-            }
-            (ExprKind::Let(n1, t1, v1, bo1, d1), ExprKind::Let(n2, t2, v2, bo2, d2)) => {
-                n1 == n2 && arc_eq(t1, t2) && arc_eq(v1, v2) && arc_eq(bo1, bo2) && d1 == d2
-            }
-            (ExprKind::Lit(a), ExprKind::Lit(b)) => a == b,
-            (ExprKind::Proj(n1, i1, e1), ExprKind::Proj(n2, i2, e2)) => {
-                n1 == n2 && i1 == i2 && arc_eq(e1, e2)
-            }
-            (ExprKind::MData(m1, e1), ExprKind::MData(m2, e2)) => m1 == m2 && arc_eq(e1, e2),
-            (ExprKind::SProp, ExprKind::SProp) => true,
-            (ExprKind::Squash(e1), ExprKind::Squash(e2)) => arc_eq(e1, e2),
-            (ExprKind::CubicalInterval, ExprKind::CubicalInterval) => true,
-            (ExprKind::CubicalI0, ExprKind::CubicalI0) => true,
-            (ExprKind::CubicalI1, ExprKind::CubicalI1) => true,
-            (
-                ExprKind::CubicalPath {
-                    ty: t1,
-                    left: l1,
-                    right: r1,
-                },
-                ExprKind::CubicalPath {
-                    ty: t2,
-                    left: l2,
-                    right: r2,
-                },
-            ) => arc_eq(t1, t2) && arc_eq(l1, l2) && arc_eq(r1, r2),
-            (ExprKind::CubicalPathLam { body: b1 }, ExprKind::CubicalPathLam { body: b2 }) => {
-                arc_eq(b1, b2)
-            }
-            (
-                ExprKind::CubicalPathApp { path: p1, arg: a1 },
-                ExprKind::CubicalPathApp { path: p2, arg: a2 },
-            ) => arc_eq(p1, p2) && arc_eq(a1, a2),
-            (
-                ExprKind::CubicalHComp {
-                    ty: t1,
-                    phi: p1,
-                    u: u1,
-                    base: ba1,
-                },
-                ExprKind::CubicalHComp {
-                    ty: t2,
-                    phi: p2,
-                    u: u2,
-                    base: ba2,
-                },
-            ) => arc_eq(t1, t2) && arc_eq(p1, p2) && arc_eq(u1, u2) && arc_eq(ba1, ba2),
-            (
-                ExprKind::CubicalTransp {
-                    ty: t1,
-                    phi: p1,
-                    base: ba1,
-                },
-                ExprKind::CubicalTransp {
-                    ty: t2,
-                    phi: p2,
-                    base: ba2,
-                },
-            ) => arc_eq(t1, t2) && arc_eq(p1, p2) && arc_eq(ba1, ba2),
-            (
-                ExprKind::CubicalCoe {
-                    ty: t1,
-                    r: r1,
-                    s: s1,
-                    base: ba1,
-                },
-                ExprKind::CubicalCoe {
-                    ty: t2,
-                    r: r2,
-                    s: s2,
-                    base: ba2,
-                },
-            ) => arc_eq(t1, t2) && arc_eq(r1, r2) && arc_eq(s1, s2) && arc_eq(ba1, ba2),
-            (ExprKind::ZFCSet(a), ExprKind::ZFCSet(b)) => a == b,
-            (
-                ExprKind::ZFCMem {
-                    element: e1,
-                    set: s1,
-                },
-                ExprKind::ZFCMem {
-                    element: e2,
-                    set: s2,
-                },
-            ) => arc_eq(e1, e2) && arc_eq(s1, s2),
-            (
-                ExprKind::ZFCComprehension {
-                    domain: d1,
-                    pred: p1,
-                },
-                ExprKind::ZFCComprehension {
-                    domain: d2,
-                    pred: p2,
-                },
-            ) => arc_eq(d1, d2) && arc_eq(p1, p2),
-            // Different variants are never equal. Enumerated tuple arms above
-            // are exhaustive over same-variant pairs; any (X, Y) with X≠Y falls
-            // here, matching the derived impl.
-            _ => false,
-        }
+        ExprEqWalk::kinds(self, other)
     }
 }
 
@@ -580,23 +458,28 @@ impl ZFCSetExpr {
         }
     }
 
-    /// Collect all constant names referenced in this ZFC expression
-    pub(crate) fn collect_constants_into(&self, result: &mut std::collections::HashSet<Name>) {
+    /// Collect the constant names referenced in this ZFC expression, and with
+    /// `projections` the structures its projections name.
+    pub(crate) fn collect_names_into(
+        &self,
+        result: &mut std::collections::HashSet<Name>,
+        projections: bool,
+    ) {
         match self {
             ZFCSetExpr::Empty | ZFCSetExpr::Infinity => {}
             ZFCSetExpr::Singleton(e)
             | ZFCSetExpr::Union(e)
             | ZFCSetExpr::PowerSet(e)
             | ZFCSetExpr::Choice(e) => {
-                e.collect_constants_into(result);
+                e.collect_names_into(result, projections);
             }
             ZFCSetExpr::Pair(a, b) => {
-                a.collect_constants_into(result);
-                b.collect_constants_into(result);
+                a.collect_names_into(result, projections);
+                b.collect_names_into(result, projections);
             }
             ZFCSetExpr::Separation { set, pred } | ZFCSetExpr::Replacement { set, func: pred } => {
-                set.collect_constants_into(result);
-                pred.collect_constants_into(result);
+                set.collect_names_into(result, projections);
+                pred.collect_names_into(result, projections);
             }
         }
     }
@@ -1021,7 +904,7 @@ mod arc_eq_tests {
     /// pointer-DISTINCT terms — the case that exercises the structural fallback,
     /// not the `ptr_eq` fast path). Distinct bvar indices per child position so a
     /// swapped-field bug in any arm changes the structure detectably.
-    fn one_of_each_variant() -> Vec<Expr> {
+    pub(super) fn one_of_each_variant() -> Vec<Expr> {
         let bd = BinderData::from(BinderInfo::Default);
         vec![
             Expr::bvar(0),
@@ -1163,6 +1046,175 @@ mod arc_eq_tests {
             *shared, *expanded,
             "shared DAG must equal its tree expansion"
         );
+    }
+
+    /// Build the unevaluated first operand of `depth` call-by-name steps of the
+    /// branch-free gcd map `(a, b) ↦ ((a - b) + (b - a), a - (a - b))` —
+    /// the term shape trust's `gcd_final_probes` refusal controls produced. Each
+    /// step names each operand more than once, so the result is a DAG whose
+    /// tree expansion roughly quadruples per step. Every call allocates afresh, so
+    /// two calls are structurally equal and share NO node across the pair.
+    pub(super) fn gcd_step_operand(depth: usize) -> Expr {
+        let c = |s: &str| Arc::new(Expr::const_(Name::from_string(s), vec![]));
+        let app2 = |f: &Arc<Expr>, x: &Arc<Expr>, y: &Arc<Expr>| {
+            let fx = Arc::new(Expr::from_kind(ExprKind::App(f.clone(), x.clone())));
+            Arc::new(Expr::from_kind(ExprKind::App(fx, y.clone())))
+        };
+        let (add, sub) = (c("Nat.add"), c("Nat.sub"));
+        let mut a = c("a");
+        let mut b = c("b");
+        for _ in 0..depth {
+            let next_a = app2(&add, &app2(&sub, &a, &b), &app2(&sub, &b, &a));
+            let next_b = app2(&sub, &a, &app2(&sub, &a, &b));
+            a = next_a;
+            b = next_b;
+        }
+        (*a).clone()
+    }
+
+    /// **The work bound.** Comparing two independently built but structurally
+    /// equal DAGs must cost work in the size of the DAGs, not of their tree
+    /// expansions. At `DEPTH = 12` the tree walk this replaced makes
+    /// 18,434,053 node visits (measured 2026-09-29 with the memo disabled,
+    /// i.e. `Arc::ptr_eq` alone); the budget below is linear in `DEPTH`, and
+    /// the walk makes 177.
+    /// At `DEPTH = 48` the tree walk would not finish in the life of the
+    /// machine; the second assertion is the liveness row the bound protects.
+    #[test]
+    fn test_independent_twin_dags_compare_in_dag_size_not_tree_size() {
+        const DEPTH: usize = 12;
+        const VISIT_BUDGET: u64 = 32 * DEPTH as u64 + 64;
+        let (left, right) = (gcd_step_operand(DEPTH), gcd_step_operand(DEPTH));
+        let mut walk = ExprEqWalk::test_new();
+        assert!(
+            walk.test_root_exprs(&left, &right),
+            "independently built twins are equal"
+        );
+        eprintln!(
+            "ROW twin-dag depth={DEPTH} visits={} budget={VISIT_BUDGET}",
+            walk.test_visits()
+        );
+        assert!(
+            walk.test_visits() <= VISIT_BUDGET,
+            "structural equality of two {DEPTH}-step twin DAGs made {} node visits, over \
+             the stated budget of {VISIT_BUDGET}: the walk is re-expanding shared subterms \
+             as a tree",
+            walk.test_visits()
+        );
+
+        let (deep_left, deep_right) = (gcd_step_operand(48), gcd_step_operand(48));
+        assert_eq!(
+            deep_left, deep_right,
+            "48-step twins compare equal, and promptly"
+        );
+    }
+
+    /// The memo never equates different terms, within the one walk it lives
+    /// in. The left root is `(P P) a` and the right `(P' P') b`, where `P`
+    /// and `P'` are independently built 12-step twins, each held by both
+    /// application slots (so memoizable). The walk proves `P = P'` once,
+    /// answers the second `P`/`P'` from the memo, and must still return
+    /// `false` at the differing leaf; with the same leaf it returns `true`.
+    /// The roots go through `kind_pair`, so the root metadata pre-filter cannot
+    /// decide the verdict before the memo is consulted.
+    #[test]
+    fn test_proven_pair_memo_does_not_leak_into_unequal_twins() {
+        let (prefix_l, prefix_r) = (
+            Arc::new(gcd_step_operand(12)),
+            Arc::new(gcd_step_operand(12)),
+        );
+        let mut alone = ExprEqWalk::test_new();
+        assert!(
+            alone.test_root_exprs(&prefix_l, &prefix_r),
+            "the twin prefixes are equal"
+        );
+        let proving = alone.test_visits();
+
+        let root = |prefix: &Arc<Expr>, leaf: &str| {
+            let doubled = Expr::from_kind(ExprKind::App(prefix.clone(), prefix.clone()));
+            ExprKind::App(
+                Arc::new(doubled),
+                Arc::new(Expr::const_(Name::from_string(leaf), vec![])),
+            )
+        };
+        let mut unequal = ExprEqWalk::test_new();
+        assert!(
+            !unequal.test_kind_pair(&root(&prefix_l, "a"), &root(&prefix_r, "b")),
+            "a different leaf beside memoized equal prefixes stays unequal"
+        );
+        let mut equal = ExprEqWalk::test_new();
+        assert!(
+            equal.test_kind_pair(&root(&prefix_l, "a"), &root(&prefix_r, "a")),
+            "and the same leaf beside them stays equal"
+        );
+        eprintln!(
+            "ROW memo proving={proving} unequal={} equal={}",
+            unequal.test_visits(),
+            equal.test_visits()
+        );
+        // One proof of the prefix pair, plus the `(P P)` node: the second
+        // prefix pair was answered from the memo, not re-walked.
+        for (what, visits) in [
+            ("unequal", unequal.test_visits()),
+            ("equal", equal.test_visits()),
+        ] {
+            assert!(
+                visits <= proving + 2,
+                "the {what} comparison made {visits} visits against {proving} to prove \
+                 the prefix pair once: it re-walked the second prefix pair instead of \
+                 answering it from the memo"
+            );
+        }
+    }
+
+    /// Verdict parity past the memo threshold. The every-variant battery in
+    /// `test_manual_expr_kind_eq_matches_reference` is far below
+    /// `EXPR_EQ_MEMO_AFTER` completions, so it never reaches the memo; these
+    /// twin DAGs do (the walk asserts its memo was allocated), and the verdict
+    /// must still agree with the independent `Debug`-string oracle, on equal
+    /// twins and on twins that differ in a leaf shared throughout the DAG.
+    #[test]
+    fn test_memo_walk_matches_reference_on_large_twins() {
+        const DEPTH: usize = 7;
+        let oracle = |x: &Expr, y: &Expr| format!("{x:?}") == format!("{y:?}");
+        let other_b = |depth: usize| {
+            // Same map, different second seed: the difference sits under
+            // every shared node that mentions `b`.
+            let c = |s: &str| Arc::new(Expr::const_(Name::from_string(s), vec![]));
+            let app2 = |f: &Arc<Expr>, x: &Arc<Expr>, y: &Arc<Expr>| {
+                let fx = Arc::new(Expr::from_kind(ExprKind::App(f.clone(), x.clone())));
+                Arc::new(Expr::from_kind(ExprKind::App(fx, y.clone())))
+            };
+            let (add, sub) = (c("Nat.add"), c("Nat.sub"));
+            let (mut a, mut b) = (c("a"), c("b'"));
+            for _ in 0..depth {
+                let next_a = app2(&add, &app2(&sub, &a, &b), &app2(&sub, &b, &a));
+                let next_b = app2(&sub, &a, &app2(&sub, &a, &b));
+                a = next_a;
+                b = next_b;
+            }
+            (*a).clone()
+        };
+        let base = gcd_step_operand(DEPTH);
+        let rows = [
+            ("equal twins", gcd_step_operand(DEPTH)),
+            ("different shared seed", other_b(DEPTH)),
+        ];
+        for (what, other) in rows {
+            let mut walk = ExprEqWalk::test_new();
+            let manual_expr = walk.test_root_exprs(&base, &other);
+            let mut kind_walk = ExprEqWalk::test_new();
+            let manual_kind = kind_walk.test_kind_pair(&base.kind, &other.kind);
+            let structural = oracle(&base, &other);
+            assert_eq!(manual_expr, structural, "{what}: Expr walk vs oracle");
+            assert_eq!(manual_kind, structural, "{what}: ExprKind walk vs oracle");
+            if structural {
+                assert!(
+                    walk.test_has_memo() && kind_walk.test_has_memo(),
+                    "{what}: the row must reach the memo to test it"
+                );
+            }
+        }
     }
 
     /// Structural equality itself must be safe on ordinary Rust test-thread

@@ -350,8 +350,9 @@ pub(crate) fn build_trans_chain(
             lookup_trans_rule(current_rel, next_rel).ok_or_else(|| TacticError::InvalidTarget {
                 tactic: "calc_block".into(),
                 detail: format!(
-                    "unsupported calc transitivity step: {:?} followed by {:?}",
-                    current_rel, next_rel
+                    "unsupported calc transitivity step: {} followed by {}",
+                    crate::error_render::opaque(&current_rel),
+                    crate::error_render::opaque(&next_rel)
                 ),
             })?;
 

@@ -17,12 +17,14 @@ use crate::verify_batch::{error_category, BatchSummary, ModuleResult};
 use crate::verify_parallel::ErrorSummary;
 use serde::Serialize;
 use std::collections::BTreeMap;
+#[cfg(any(test, feature = "cli"))]
 use std::io;
+#[cfg(any(test, feature = "cli"))]
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Schema version for forward compatibility.
-const REPORT_VERSION: &str = "1.0";
+const REPORT_VERSION: &str = "2.0";
 
 /// Maximum length of an abbreviated error message in a `FailureDetail`.
 const MAX_ERROR_MSG_LEN: usize = 200;
@@ -62,15 +64,30 @@ pub struct VerificationReport {
     /// `types_fail` / `pass_rate_pct`.
     ///
     /// `"type-only-infer"` => only the TYPE was checked (`infer_type`,
-    /// `infer_only=true`); the proof VALUE was NOT re-checked, so a pass is NOT
-    /// Clean-kernel verification. `"kernel-verified-full"` => `add_decl`-
-    /// equivalent (`infer_sort` on types + `check_type` on values); a pass IS a
-    /// genuine Clean-kernel verification of the proof value. These two numbers
-    /// must never be conflated.
+    /// `infer_only=true`); the proof VALUE was NOT re-derived.
+    /// `"local-assumed-env"` => `infer_sort` on types + `check_type` on values,
+    /// IN THE ENVIRONMENT THAT ALREADY HOLDS EVERY OTHER IMPORTED DECLARATION.
+    /// These two numbers must never be conflated, and NEITHER is
+    /// dependency-closed: see `recheck_level` below.
     pub validation_mode: String,
-    /// `true` iff `validation_mode` is the full `add_decl`-equivalent re-check
-    /// (i.e. `types_ok` counts genuinely kernel-verified proof values).
-    pub kernel_verified_values: bool,
+    /// `true` iff each `types_ok` value was re-derived by `check_type` (rather
+    /// than only its type inferred).
+    ///
+    /// This field was called `kernel_verified_values` through schema 1.0 and
+    /// was documented as "the full `add_decl`-equivalent re-check". It never
+    /// was one: the check re-derives ONE declaration against an environment
+    /// full of unchecked ones. The name now says what it measures.
+    pub values_rederived_locally: bool,
+    /// Which re-check level produced these numbers
+    /// ([`clean_olean::recheck_closed::RecheckLevel::token`]).
+    pub recheck_level: String,
+    /// One sentence naming what a pass at `recheck_level` establishes.
+    pub recheck_level_proves: String,
+    /// One sentence naming what a pass at `recheck_level` does NOT establish.
+    pub recheck_level_does_not_prove: String,
+    /// `true` only when the numbers came from a dependency-closed replay. A
+    /// `Certified`-class claim may cite this report only when this is `true`.
+    pub dependency_closed: bool,
 
     // -- Error breakdown ------------------------------------------------------
     /// Errors grouped by category with counts.
@@ -201,7 +218,18 @@ pub fn build_verification_report(
         constants_skipped: summary.total_skipped,
         pass_rate_pct: summary.pass_rate_pct,
         validation_mode: summary.validation_label.clone(),
-        kernel_verified_values: summary.validation_mode.is_kernel_verified(),
+        values_rederived_locally: summary.validation_mode.rederives_values_locally(),
+        recheck_level: summary.validation_mode.recheck_level().token().to_string(),
+        recheck_level_proves: summary.validation_mode.recheck_level().proves().to_string(),
+        recheck_level_does_not_prove: summary
+            .validation_mode
+            .recheck_level()
+            .does_not_prove()
+            .to_string(),
+        dependency_closed: summary
+            .validation_mode
+            .recheck_level()
+            .may_ground_certified_class(),
         error_categories,
         failures,
         timing_stats,
@@ -215,7 +243,8 @@ pub fn build_verification_report(
 /// Serialize the report to JSON and write it to the given path.
 ///
 /// Creates parent directories if they do not exist.
-pub fn write_report_to_file(report: &VerificationReport, path: &Path) -> io::Result<()> {
+#[cfg(any(test, feature = "cli"))]
+pub(crate) fn write_report_to_file(report: &VerificationReport, path: &Path) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }

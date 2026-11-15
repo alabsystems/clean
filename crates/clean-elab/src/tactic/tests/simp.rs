@@ -76,7 +76,7 @@ fn test_simp_with_assumption() {
     let mut state = ProofState::new(env, target);
 
     // intro h
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // simp should close by assumption
     simp_default(&mut state)
@@ -105,7 +105,7 @@ fn test_simp_only_simplify_mode() {
     let target = Expr::arrow(a_ty.clone(), a_ty);
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // With only_simplify=true, should not try to close the goal
     let mut config = SimpConfig::new();
@@ -241,7 +241,9 @@ fn test_simp_excludes_registered_lemma_when_excluded() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let state = ProofState::new(env, target);
     let mut config = SimpConfig::new();
-    config.exclude.insert("trivial_simp".to_string());
+    config
+        .exclude
+        .insert(clean_parser::SurfaceName::generated_path("trivial_simp"));
 
     let lemmas = collect_simp_lemmas(&state, &config);
     assert!(
@@ -1053,7 +1055,7 @@ fn test_simp_iff_registry_lemma_rewrites_lhs_to_rhs_and_closes() {
     // (via the iff lemma) and close it with `assumption` against hq.
     let goal = Expr::arrow(q, p);
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hq").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hq")).unwrap();
 
     let result = simp_default(&mut state);
     assert!(
@@ -1114,9 +1116,12 @@ fn test_collect_simp_lemmas_includes_iff_lemma_lhs_rhs() {
 }
 
 /// Negative: a one-directional implication `P → Q` is symmetric in NEITHER
-/// direction, so it must NOT be registered as a simp rewrite rule (in
-/// particular, simp must not reverse it). Only `Eq`/`Iff` conclusions become
-/// rewrites; an arrow has no `Eq`/`Iff` head and is dropped.
+/// direction, so simp must never rewrite `P` to `Q` (or back). Lean's
+/// `preprocess` (`SimpTheorems.lean:288-363`) opens the arrow as a binder and
+/// registers the CONDITIONAL rule `Q = True` under the premise `P` — pinned
+/// v4.30.0-rc2 traces `pq_imp:1000: Q ==> True` for `simp [hp]` with
+/// `hp : P`, and `simp [hq]` on a goal `P` with `hq : Q` makes no progress —
+/// so the only rules collected for it rewrite `Q` to `True`.
 #[test]
 fn test_collect_simp_lemmas_does_not_register_implication_as_rewrite() {
     use clean_kernel::env::SimpPriority;
@@ -1126,7 +1131,7 @@ fn test_collect_simp_lemmas_does_not_register_implication_as_rewrite() {
     let q = Expr::const_(Name::from_string("Q"), vec![]);
 
     // pq_imp : P → Q  (an implication, NOT an iff or eq).
-    let imp_ty = Expr::arrow(p, q);
+    let imp_ty = Expr::arrow(p, q.clone());
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("pq_imp"),
         level_params: vec![],
@@ -1140,10 +1145,23 @@ fn test_collect_simp_lemmas_does_not_register_implication_as_rewrite() {
     let config = SimpConfig::new();
 
     let lemmas = collect_simp_lemmas(&state, &config);
+    let rules: Vec<_> = lemmas
+        .iter()
+        .filter(|l| l.name == Name::from_string("pq_imp"))
+        .collect();
     assert!(
-        !lemmas.iter().any(|l| l.name == Name::from_string("pq_imp")),
-        "a one-directional implication must not become a simp rewrite rule"
+        !rules.is_empty(),
+        "Lean registers `P → Q` as the conditional rule `Q = True`"
     );
+    let true_ = Expr::const_(Name::from_string("True"), vec![]);
+    for rule in rules {
+        assert_eq!(
+            (&rule.lhs, &rule.rhs),
+            (&q, &true_),
+            "a one-directional implication may only rewrite its conclusion to `True`, \
+             never `P` to `Q`"
+        );
+    }
 }
 
 /// Negative (soundness): the iff rewrite fires only left-to-right. With
@@ -1175,7 +1193,7 @@ fn test_simp_iff_lemma_not_applied_in_reverse() {
     // tactic reports NoProgress.
     let goal = Expr::arrow(p, q);
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hp").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hp")).unwrap();
 
     let result = simp_default(&mut state);
     assert!(
@@ -1236,7 +1254,7 @@ fn test_simp_iff_lemma_under_forall_binder_rewrites_at_argument() {
     // rewrite the goal R Nat.zero to S Nat.zero and close via assumption.
     let goal = Expr::arrow(s_zero, r_zero);
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hs").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hs")).unwrap();
 
     let result = simp_default(&mut state);
     assert!(

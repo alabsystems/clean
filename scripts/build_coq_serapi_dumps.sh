@@ -65,7 +65,7 @@ fi
 echo "[build_coq_serapi_dumps] toolchain: $("${SERTOP}" --version)"
 echo "[build_coq_serapi_dumps] out: ${OUT_DIR} (jobs=${JOBS})"
 
-cargo build --locked --release -p clean-mathverse --bin mathverse_coq_dump \
+targo --unverified build --locked --release -p clean-mathverse --bin mathverse_coq_dump \
   --manifest-path "${REPO_ROOT}/Cargo.toml"
 
 SELECT=(--stdlib)

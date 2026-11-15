@@ -6,9 +6,18 @@
 //! Extracted from expr.rs as part of #307.
 
 use super::Parser;
-use crate::lexer::{LexError, TokenKind};
+use crate::lexer::TokenKind;
 use crate::surface::*;
 use crate::ParseError;
+
+/// Custom-eliminator attributes whose `local` / `scoped` kinds are lifted to
+/// [`Attribute::Local`] / [`Attribute::Scoped`]. Without the lift the
+/// fallback arm reads the modifier as the attribute NAME and skips the real
+/// one as its argument, so `attribute [local induction_eliminator] e` would
+/// register nothing; lifted, the elaborator refuses the unmodeled kind by name.
+fn is_lifted_eliminator_attr(name: &str) -> bool {
+    matches!(name, "induction_eliminator" | "cases_eliminator")
+}
 
 impl Parser {
     /// Parse one or more binders
@@ -73,18 +82,18 @@ impl Parser {
                     // `(x y z : T)` form already distributes via `explicit_binders`.
                     // Without a trailing `:` each name is an untyped binder, as
                     // before, so `∃ x ∈ S, …` / `∀ a b, …` are unaffected.
-                    let mut run: Vec<(Span, String)> = Vec::new();
+                    let mut run: Vec<(Span, SurfaceName)> = Vec::new();
                     loop {
                         if self.at_binder_run_line_barrier(barrier) {
                             break;
                         }
                         match self.current_kind() {
                             TokenKind::Ident(n) => {
-                                run.push((self.current_span(), n.clone()));
+                                run.push((self.current_span(), self.name_token(n)?));
                                 self.advance();
                             }
                             TokenKind::Underscore => {
-                                run.push((self.current_span(), "_".to_string()));
+                                run.push((self.current_span(), SurfaceName::generated_path("_")));
                                 self.advance();
                             }
                             _ => break,
@@ -135,11 +144,11 @@ impl Parser {
                     loop {
                         match self.current_kind() {
                             TokenKind::Ident(name) => {
-                                names.push((self.current_span(), name.clone()));
+                                names.push((self.current_span(), self.name_token(name)?));
                                 self.advance();
                             }
                             TokenKind::Underscore => {
-                                names.push((self.current_span(), "_".to_string()));
+                                names.push((self.current_span(), SurfaceName::generated_path("_")));
                                 self.advance();
                             }
                             _ => break,
@@ -152,7 +161,7 @@ impl Parser {
                     if names.is_empty() {
                         binders.push(SurfaceBinder {
                             span,
-                            name: "_".to_string(),
+                            name: SurfaceName::generated_path("_"),
                             ty: None,
                             default: None,
                             info: SurfaceBinderInfo::Explicit,
@@ -193,16 +202,11 @@ impl Parser {
         loop {
             match self.current_kind() {
                 TokenKind::Ident(name) => {
-                    names.push((self.current_span(), name.clone()));
+                    names.push((self.current_span(), self.name_token(name)?));
                     self.advance();
                 }
                 TokenKind::Underscore => {
-                    names.push((self.current_span(), "_".to_string()));
-                    self.advance();
-                }
-                TokenKind::Error(LexError::UnexpectedChar(_)) => {
-                    // Error recovery: treat invalid characters as placeholder binder names
-                    names.push((self.current_span(), "_invalid_".to_string()));
+                    names.push((self.current_span(), SurfaceName::generated_path("_")));
                     self.advance();
                 }
                 _ => break,
@@ -223,11 +227,11 @@ impl Parser {
             while self.eat(&TokenKind::Comma) {
                 match self.current_kind() {
                     TokenKind::Ident(name) => {
-                        names.push((self.current_span(), name.clone()));
+                        names.push((self.current_span(), self.name_token(name)?));
                         self.advance();
                     }
                     TokenKind::Underscore => {
-                        names.push((self.current_span(), "_".to_string()));
+                        names.push((self.current_span(), SurfaceName::generated_path("_")));
                         self.advance();
                     }
                     _ => break,
@@ -255,40 +259,43 @@ impl Parser {
         // `quant_binders` and wraps the body. (Previously the guard tokens were
         // skipped and thrown away, silently dropping the hypothesis and turning
         // `∀ (x ∈ S), p` into the strictly stronger `∀ x, p`.)
-        if names.len() == 1
-            && matches!(
-                self.current_kind(),
-                TokenKind::Elem
-                    | TokenKind::NotElem
-                    | TokenKind::Gt
-                    | TokenKind::Ge
-                    | TokenKind::Lt
-                    | TokenKind::Le
-                    | TokenKind::Eq
-                    | TokenKind::Ne
-                    | TokenKind::Subset
-                    | TokenKind::ProperSubset
-            )
-        {
-            let (s, name) = names
-                .into_iter()
-                .next()
-                .expect("invariant: names.len() == 1 checked above");
-            let binder = SurfaceBinder {
-                span: s,
-                name,
-                ty: None,
-                default: None,
-                info: SurfaceBinderInfo::Explicit,
-            };
-            // `try_bounded_guard` consumes the operator, parses the right
-            // operand, and returns the desugared guard referencing `binder`.
-            if let Some(guard) = self.try_bounded_guard(&binder)? {
-                self.pending_binder_guards.push(guard);
+        let names = if matches!(
+            self.current_kind(),
+            TokenKind::Elem
+                | TokenKind::NotElem
+                | TokenKind::Gt
+                | TokenKind::Ge
+                | TokenKind::Lt
+                | TokenKind::Le
+                | TokenKind::Eq
+                | TokenKind::Ne
+                | TokenKind::Subset
+                | TokenKind::ProperSubset
+        ) {
+            // Only a SINGLE name takes a guard; any other count falls through
+            // with `names` unchanged.
+            match <[(Span, SurfaceName); 1]>::try_from(names) {
+                Ok([(s, name)]) => {
+                    let binder = SurfaceBinder {
+                        span: s,
+                        name,
+                        ty: None,
+                        default: None,
+                        info: SurfaceBinderInfo::Explicit,
+                    };
+                    // `try_bounded_guard` consumes the operator, parses the right
+                    // operand, and returns the desugared guard referencing `binder`.
+                    if let Some(guard) = self.try_bounded_guard(&binder)? {
+                        self.pending_binder_guards.push(guard);
+                    }
+                    self.expect(&TokenKind::RParen)?;
+                    return Ok(vec![binder]);
+                }
+                Err(names) => names,
             }
-            self.expect(&TokenKind::RParen)?;
-            return Ok(vec![binder]);
-        }
+        } else {
+            names
+        };
 
         // Type annotation is optional: `(x)` is valid
         let ty = if self.eat(&TokenKind::Colon) {
@@ -330,15 +337,11 @@ impl Parser {
         loop {
             match self.current_kind() {
                 TokenKind::Ident(name) => {
-                    names.push((self.current_span(), name.clone()));
+                    names.push((self.current_span(), self.name_token(name)?));
                     self.advance();
                 }
                 TokenKind::Underscore => {
-                    names.push((self.current_span(), "_".to_string()));
-                    self.advance();
-                }
-                TokenKind::Error(LexError::UnexpectedChar(_)) => {
-                    names.push((self.current_span(), "_invalid_".to_string()));
+                    names.push((self.current_span(), SurfaceName::generated_path("_")));
                     self.advance();
                 }
                 _ => break,
@@ -394,11 +397,11 @@ impl Parser {
         loop {
             match self.current_kind() {
                 TokenKind::Ident(name) => {
-                    names.push((self.current_span(), name.clone()));
+                    names.push((self.current_span(), self.name_token(name)?));
                     self.advance();
                 }
                 TokenKind::Underscore => {
-                    names.push((self.current_span(), "_".to_string()));
+                    names.push((self.current_span(), SurfaceName::generated_path("_")));
                     self.advance();
                 }
                 _ => break,
@@ -432,10 +435,13 @@ impl Parser {
     /// Parse instance binders: `[x : T]` or anonymous `[T]` or `[Ord A]`
     pub(super) fn instance_binders(&mut self) -> Result<Vec<SurfaceBinder>, ParseError> {
         self.expect(&TokenKind::LBracket)?;
+        // Token position right after `[`, to re-parse an ANONYMOUS binder's
+        // type with the general expression parser (below).
+        let type_start = self.pos;
 
         let mut names = Vec::new();
         while let TokenKind::Ident(name) = self.current_kind() {
-            names.push((self.current_span(), name.clone()));
+            names.push((self.current_span(), self.name_token(name)?));
             self.advance();
         }
 
@@ -448,7 +454,7 @@ impl Parser {
             self.expect(&TokenKind::RBracket)?;
             return Ok(vec![SurfaceBinder {
                 span: Span::dummy(),
-                name: "_".to_string(),
+                name: SurfaceName::generated_path("_"),
                 ty: Some(Box::new(ty_expr)),
                 default: None,
                 info: SurfaceBinderInfo::Instance,
@@ -459,36 +465,25 @@ impl Parser {
             let ty = self.expr()?;
             (names, ty)
         } else {
-            // Anonymous instance: names are actually the type expression
-            // e.g., [Add α] where "Add" and "α" were collected as names
-            // Build application: Add α β ...
-            let mut result = SurfaceExpr::Ident(names[0].0, names[0].1.clone());
-            for (span, name) in names.iter().skip(1) {
-                let arg = SurfaceExpr::Ident(*span, name.clone());
-                let app_span = result.span().merge(arg.span());
-                result = SurfaceExpr::App(
-                    app_span,
-                    Box::new(result),
-                    vec![SurfaceArg::positional(arg)],
-                );
-            }
-
-            // Parse remaining arguments until closing bracket (e.g., `[OfNat R 0]`)
-            while !self.check(&TokenKind::RBracket) {
-                let arg = self.atom_expr()?;
-                let app_span = result.span().merge(arg.span());
-                result = SurfaceExpr::App(
-                    app_span,
-                    Box::new(result),
-                    vec![SurfaceArg::positional(arg)],
-                );
-            }
-
+            // Anonymous instance: the whole bracket is the type expression
+            // (`[Add α]`, `[OfNat R 0]`, `[Std.Refl r]`). Re-parse it from
+            // `type_start` with the general expression parser, so it comes
+            // out exactly as `(h : T)` and `: T` produce it. Rebuilding it
+            // from the collected identifier TOKENS — the pre-2026-09-11
+            // path — lost everything but the first component of a dotted
+            // head: the lexer hands `Std.Refl` over as `Std` + `.Refl`, and
+            // only `app_expr` folds that into the `Proj` chain the elaborator
+            // resolves to the constant, so `[Std.Refl r]` reached the
+            // elaborator as `Std` applied to `.Refl` and `r`, and `Std` was
+            // auto-bound (`Std.Refl.compl`, `Std.Irrefl.compl`,
+            // `rel_imp_eq_of_rel_imp_le` in `Mathlib/Order/Basic.lean`).
+            self.pos = type_start;
+            let ty_expr = self.expr()?;
             self.expect(&TokenKind::RBracket)?;
             return Ok(vec![SurfaceBinder {
                 span: names.first().map_or_else(Span::dummy, |(s, _)| *s),
-                name: "_".to_string(),
-                ty: Some(Box::new(result)),
+                name: SurfaceName::generated_path("_"),
+                ty: Some(Box::new(ty_expr)),
                 default: None,
                 info: SurfaceBinderInfo::Instance,
             }]);
@@ -508,191 +503,151 @@ impl Parser {
             .collect())
     }
 
-    /// Parse an identifier
-    pub(super) fn ident(&mut self) -> Result<String, ParseError> {
-        match self.current_kind() {
-            TokenKind::Ident(name) => {
-                let name = name.clone();
-                self.advance();
-                Ok(name)
-            }
-            TokenKind::Error(LexError::UnexpectedChar(_)) => {
-                // Allow invalid characters to be treated as placeholder identifiers
-                // for error recovery in malformed test files
-                self.advance();
-                Ok("_invalid_".to_string())
-            }
-            _ => Err(ParseError::UnexpectedToken {
+    /// One identifier token read as Lean's `rawIdent`, which does NOT
+    /// consult the token table: a Lean keyword spelling is a name here.
+    /// Lean reads an `inductive` constructor this way (`Lean.Parser.Command.
+    /// ctor`: `declModifiers true >> rawIdent`), so `inductive T | nomatch`
+    /// declares `T.nomatch` (measured with Lean 4.8.0: 133 of the 139
+    /// identifier-shaped keywords are accepted there; the other six are
+    /// declaration modifiers).
+    pub(super) fn raw_ident(&mut self) -> Result<SurfaceName, ParseError> {
+        if let TokenKind::Ident(name) = self.current_kind() {
+            let name = SurfaceName::component(name, self.current().ident_escaped);
+            self.advance();
+            return Ok(name);
+        }
+        self.ident()
+    }
+
+    /// Parse one identifier token without flattening its lexical component.
+    pub(super) fn ident(&mut self) -> Result<SurfaceName, ParseError> {
+        if let TokenKind::Ident(name) = self.current_kind() {
+            let name = self.name_token(name)?;
+            self.advance();
+            Ok(name)
+        } else {
+            Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
                 col: self.current_span().start,
                 message: format!("expected identifier, got {:?}", self.current_kind()),
-            }),
+            })
         }
     }
 
-    /// Check if current token can be treated as an identifier in name lists.
+    /// Check whether the token can serve as a name-list component.
     pub(super) fn is_ident_like(&self) -> bool {
-        match self.current_kind() {
-            TokenKind::Ident(_) => true,
-            TokenKind::Error(LexError::UnexpectedChar(_)) => true,
-            other => other.as_keyword_str().is_some(),
-        }
+        matches!(self.current_kind(), TokenKind::Ident(_))
+            || self.current_kind().as_keyword_str().is_some()
     }
 
-    /// Parse an identifier or keyword token in name lists.
-    pub(super) fn ident_like(&mut self) -> Result<String, ParseError> {
-        match self.current_kind() {
-            TokenKind::Ident(name) => {
-                let name = name.clone();
-                self.advance();
-                Ok(name)
-            }
-            TokenKind::Error(LexError::UnexpectedChar(_)) => {
-                self.advance();
-                Ok("_invalid_".to_string())
-            }
-            other => {
-                if let Some(kw_str) = other.as_keyword_str() {
-                    let name = kw_str.to_string();
-                    self.advance();
-                    Ok(name)
-                } else {
-                    Err(ParseError::UnexpectedToken {
-                        line: self.current_line(),
-                        col: self.current_span().start,
-                        message: format!(
-                            "expected identifier or keyword, got {:?}",
-                            self.current_kind()
-                        ),
-                    })
-                }
-            }
+    /// A keyword token is accepted only where the caller's grammar allows it.
+    pub(super) fn ident_like(&mut self) -> Result<SurfaceName, ParseError> {
+        if matches!(self.current_kind(), TokenKind::Ident(_)) {
+            return self.ident();
         }
+        if let Some(keyword) = self.current_kind().as_keyword_str() {
+            let name = SurfaceName::component(keyword, false);
+            self.advance();
+            return Ok(name);
+        }
+        Err(ParseError::UnexpectedToken {
+            line: self.current_line(),
+            col: self.current_span().start,
+            message: format!(
+                "expected identifier or keyword, got {:?}",
+                self.current_kind()
+            ),
+        })
     }
 
     fn qualified_ident_impl(
         &mut self,
         stop_before_universe_params: bool,
-    ) -> Result<String, ParseError> {
-        match self.current_kind() {
-            TokenKind::Ident(name) => {
-                let mut full_name = name.clone();
-                self.advance();
-                while self.check(&TokenKind::Dot) {
-                    if stop_before_universe_params
-                        && matches!(self.peek_kind(1), Some(TokenKind::LBrace))
-                    {
-                        break;
-                    }
-                    self.advance();
-                    match self.current_kind() {
-                        TokenKind::Ident(part) => {
-                            full_name.push('.');
-                            full_name.push_str(part);
-                            self.advance();
-                        }
-                        other => {
-                            if let Some(kw_str) = other.as_keyword_str() {
-                                full_name.push('.');
-                                full_name.push_str(kw_str);
-                                self.advance();
-                            } else {
-                                return Err(ParseError::UnexpectedToken {
-                                    line: self.current_line(),
-                                    col: self.current_span().start,
-                                    message: format!(
-                                        "expected identifier after '.', got {other:?}"
-                                    ),
-                                });
-                            }
-                        }
-                    }
-                }
-                Ok(full_name)
-            }
-            TokenKind::Error(LexError::UnexpectedChar(_)) => {
-                // Allow invalid characters to be treated as placeholder identifiers
-                // for error recovery in malformed test files
-                self.advance();
-                Ok("_invalid_".to_string())
-            }
-            // A KEYWORD token may head a dotted name — `theorem Prop.exists_iff`
-            // (Mathlib Logic/Basic:635) lexes as [Prop][Dot][Ident], and the
-            // dot-SUFFIX loop above already accepts keyword components via
-            // as_keyword_str, so rejecting the HEAD was pure inconsistency
-            // (control: `theorem Foo.rfl` parsed, `theorem Prop.foo` did not).
-            // Guarded on a byte-ADJACENT following Dot (the same contiguity
-            // idiom as the projection postfix), so a bare keyword in this
-            // position still errors exactly as before.
-            other => {
-                if let Some(kw_str) = other.as_keyword_str() {
-                    let head_end = self.current_span().end;
-                    let dot_adjacent = matches!(self.peek_kind(1), Some(TokenKind::Dot))
-                        && self
-                            .tokens
-                            .get(self.pos + 1)
-                            .is_some_and(|d| d.span.start == head_end);
-                    if dot_adjacent {
-                        let mut full_name = kw_str.to_string();
-                        self.advance();
-                        while self.check(&TokenKind::Dot) {
-                            if stop_before_universe_params
-                                && matches!(self.peek_kind(1), Some(TokenKind::LBrace))
-                            {
-                                break;
-                            }
-                            self.advance();
-                            match self.current_kind() {
-                                TokenKind::Ident(part) => {
-                                    full_name.push('.');
-                                    full_name.push_str(part);
-                                    self.advance();
-                                }
-                                other2 => {
-                                    if let Some(kw2) = other2.as_keyword_str() {
-                                        full_name.push('.');
-                                        full_name.push_str(kw2);
-                                        self.advance();
-                                    } else {
-                                        return Err(ParseError::UnexpectedToken {
-                                            line: self.current_line(),
-                                            col: self.current_span().start,
-                                            message: format!(
-                                                "expected identifier after '.', got {other2:?}"
-                                            ),
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                        return Ok(full_name);
-                    }
-                }
-                Err(ParseError::UnexpectedToken {
+    ) -> Result<SurfaceName, ParseError> {
+        let mut name = if matches!(self.current_kind(), TokenKind::Ident(_)) {
+            self.ident()?
+        } else {
+            // Share the keyword-head rule with instance-name lookahead.
+            if self.keyword_name_head().is_none() {
+                return Err(ParseError::UnexpectedToken {
                     line: self.current_line(),
                     col: self.current_span().start,
                     message: format!("expected identifier, got {:?}", self.current_kind()),
-                })
+                });
             }
+            self.ident_like()?
+        };
+        while self.check(&TokenKind::Dot) {
+            if stop_before_universe_params && matches!(self.peek_kind(1), Some(TokenKind::LBrace)) {
+                break;
+            }
+            self.advance();
+            name = name.append(&self.ident_like()?);
         }
+        Ok(name)
     }
 
-    /// Parse a dotted identifier like `Foo.bar.baz`
-    pub(super) fn qualified_ident(&mut self) -> Result<String, ParseError> {
+    /// The keyword spelling of the current token when it may HEAD a dotted name.
+    ///
+    /// `Some("Prop")` for the `Prop` of `Prop.instCompl`; `None` for a bare
+    /// keyword, so `instance Prop : C` still errors rather than declaring an
+    /// instance NAMED `Prop`. Adjacency is byte-level (the same contiguity
+    /// idiom as the projection postfix): `Prop .foo` is not a name.
+    ///
+    /// This is the single definition of that rule. `qualified_ident_impl`
+    /// consumes such a head, and callers that must decide whether a name is
+    /// even present before committing — `instance_decl_with_mods`, whose other
+    /// reading of the same tokens is an ANONYMOUS instance — ask here, so the
+    /// look-ahead and the parse cannot disagree.
+    pub(super) fn keyword_name_head(&self) -> Option<&'static str> {
+        let kw = self.current_kind().as_keyword_str()?;
+        let head_end = self.current_span().end;
+        let dot_adjacent = matches!(self.peek_kind(1), Some(TokenKind::Dot))
+            && self
+                .tokens
+                .get(self.pos + 1)
+                .is_some_and(|d| d.span.start == head_end);
+        dot_adjacent.then_some(kw)
+    }
+
+    /// Parse a structural qualified identifier.
+    pub(super) fn qualified_ident(&mut self) -> Result<SurfaceName, ParseError> {
         self.qualified_ident_impl(false)
     }
 
-    /// Parse a declaration name, stopping before an explicit `.{u v}` universe suffix.
-    pub(super) fn decl_name(&mut self) -> Result<String, ParseError> {
+    /// Stop before the declaration's explicit universe-parameter suffix.
+    pub(super) fn decl_name(&mut self) -> Result<SurfaceName, ParseError> {
+        // `protected theorem rfl` (inside `namespace FactorsThrough`,
+        // `Logic/Function/Basic.lean:816`): Lean compiles a tactic's leading
+        // atom as a NON-reserved symbol, so `rfl` stays an identifier and is
+        // an ordinary declaration name. Clean lexes it as a keyword token;
+        // accept it here, in declaration-name position only (a dotted
+        // `rfl.foo` goes through `keyword_name_head` as before).
+        if matches!(self.current_kind(), TokenKind::Rfl) && self.keyword_name_head().is_none() {
+            self.advance();
+            return Ok(SurfaceName::component("rfl", false));
+        }
         self.qualified_ident_impl(true)
     }
 
-    /// Parse a dotted module path into segments
-    pub(super) fn module_path(&mut self) -> Result<Vec<String>, ParseError> {
-        let mut path = Vec::new();
-        let name = self.qualified_ident()?;
-        path.extend(name.split('.').map(ToString::to_string));
-        Ok(path)
+    /// A module path has the same structural components as a qualified name.
+    pub(super) fn module_path(&mut self) -> Result<SurfaceName, ParseError> {
+        self.qualified_ident()
+    }
+
+    /// Parse exactly one source name. No error-recovery identifier or trailing
+    /// expression can be substituted for an unsupported name.
+    pub(crate) fn parse_name(input: &str) -> Result<SurfaceName, ParseError> {
+        let mut parser = Self::new(input);
+        let name = parser.qualified_ident()?;
+        if !matches!(parser.current_kind(), TokenKind::Eof) {
+            return Err(ParseError::UnexpectedToken {
+                line: parser.current_line(),
+                col: parser.current_span().start,
+                message: format!("trailing input after name: {:?}", parser.current_kind()),
+            });
+        }
+        Ok(name)
     }
 
     /// Parse a level expression
@@ -755,7 +710,7 @@ impl Parser {
                 self.advance();
                 match self.current_kind() {
                     TokenKind::Ident(name) => {
-                        let name = name.clone();
+                        let name = self.name_token(name)?;
                         self.advance();
                         Ok(LevelExpr::Antiquot(name))
                     }
@@ -770,7 +725,7 @@ impl Parser {
                 }
             }
             TokenKind::Ident(name) => {
-                let name = name.clone();
+                let name = self.name_token(name)?;
                 self.advance();
                 // Could be "max" or "imax" special forms. Arguments parse as
                 // ATOMS (Lean's level grammar): `max u v + 1` is
@@ -779,11 +734,11 @@ impl Parser {
                 // different, generally-unequal level; the greedy parse made
                 // `PUnit.{max u v + 1}` silently ill-leveled). An offset
                 // argument still spells with parens: `max (u + 1) v`.
-                if name == "max" {
+                if name.is_unescaped_component("max") {
                     let l1 = self.level_atom()?;
                     let l2 = self.level_atom()?;
                     Ok(LevelExpr::Max(Box::new(l1), Box::new(l2)))
-                } else if name == "imax" {
+                } else if name.is_unescaped_component("imax") {
                     let l1 = self.level_atom()?;
                     let l2 = self.level_atom()?;
                     Ok(LevelExpr::IMax(Box::new(l1), Box::new(l2)))
@@ -794,7 +749,7 @@ impl Parser {
             TokenKind::Underscore => {
                 // Treat universe hole "_" as a level parameter placeholder
                 self.advance();
-                Ok(LevelExpr::Param("_".to_string()))
+                Ok(LevelExpr::Param(SurfaceName::generated_path("_")))
             }
             _ => Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
@@ -837,6 +792,24 @@ impl Parser {
     pub(super) fn single_attribute(&mut self) -> Result<Attribute, ParseError> {
         match self.current_kind().clone() {
             TokenKind::Ident(name) => {
+                // `local simp`: Lean's `attrInstance := attrKind attr`. The
+                // fallback arm below read `local` as the attribute NAME and
+                // skipped `simp` as its argument, so `attribute [local simp]
+                // foo` registered nothing and the `simp` it was written for
+                // made no progress (Mathlib `Logic/Unique.lean:240`,
+                // `attribute [local simp] eq_iff_true_of_subsingleton in`).
+                // Only the kinds whose scoping the elaborator models are
+                // lifted, plus the custom-eliminator attributes it refuses by
+                // name (`is_lifted_eliminator_attr`); see [`Attribute::Local`].
+                if name == "local"
+                    && !self.current().ident_escaped
+                    && (matches!(self.peek_kind(1), Some(TokenKind::Ident(next)) if next == "simp" || next == "csimp" || is_lifted_eliminator_attr(next))
+                        || matches!(self.peek_kind(1), Some(TokenKind::Instance)))
+                {
+                    self.advance();
+                    let inner = self.single_attribute()?;
+                    return Ok(Attribute::Local(Box::new(inner)));
+                }
                 self.advance();
                 match name.as_str() {
                     // === Type class instance attributes ===
@@ -872,6 +845,17 @@ impl Parser {
                     "symm" => {
                         self.skip_attribute_args();
                         Ok(Attribute::Symm)
+                    }
+                    // `@[grind]`, `@[grind =]`, `@[grind ←]`, `@[grind cases]`,
+                    // … — Lean's `grind` attribute with its optional
+                    // `grindMod` (`Lean/Meta/Tactic/Grind/Attr.lean`). The
+                    // modifier decides the DIRECTION the tagged lemma is used
+                    // in, so it is read rather than skipped; anything outside
+                    // the modeled set is carried verbatim.
+                    "grind" => {
+                        let kind = self.parse_grind_attr_kind();
+                        self.skip_attribute_args();
+                        Ok(Attribute::Grind(kind))
                     }
 
                     // === Reducibility attributes ===
@@ -931,11 +915,11 @@ impl Parser {
                         self.skip_attribute_args();
                         Ok(Attribute::Export(export_name.unwrap_or_default()))
                     }
-                    "implemented_by" | "implementedBy" => {
+                    "implemented_by" => {
                         // @[implemented_by name]
-                        let impl_name = self.parse_optional_ident_arg();
+                        let impl_name = self.qualified_ident()?;
                         self.skip_attribute_args();
-                        Ok(Attribute::ImplementedBy(impl_name.unwrap_or_default()))
+                        Ok(Attribute::ImplementedBy(impl_name))
                     }
 
                     // === Documentation/deprecation ===
@@ -947,8 +931,24 @@ impl Parser {
                     }
 
                     // === Other common attributes ===
+                    "expose" | "no_expose" | "defeq" | "backward_defeq" => {
+                        if !matches!(self.current_kind(), TokenKind::Comma | TokenKind::RBracket) {
+                            return Err(ParseError::UnexpectedToken {
+                                line: self.current_line(),
+                                col: self.current_span().start,
+                                message: format!("attribute [{name}] takes no arguments"),
+                            });
+                        }
+                        Ok(Attribute::Unknown(name))
+                    }
                     "csimp" => {
-                        self.skip_attribute_args();
+                        if !matches!(self.current_kind(), TokenKind::Comma | TokenKind::RBracket) {
+                            return Err(ParseError::UnexpectedToken {
+                                line: self.current_line(),
+                                col: self.current_span().start,
+                                message: "Unexpected attribute argument: This attribute takes no arguments".into(),
+                            });
+                        }
                         Ok(Attribute::Csimp)
                     }
                     "match_pattern" | "matchPattern" => {
@@ -994,6 +994,21 @@ impl Parser {
                 }
                 Ok(Attribute::Unknown("-".to_string()))
             }
+            // `scoped instance` (`scoped` is a keyword token): the attribute
+            // kind of Lean's `attrInstance := attrKind attr`. Until this arm
+            // existed `attribute [scoped instance] c` was a PARSE error, the
+            // command became a raw declaration, and the declarations after it
+            // were still checked and credited against a state without `c`
+            // (Lean 4.8.0 activates it on `open N`; round-25 random battery).
+            // Lift the scoped attributes whose activation the elaborator models.
+            TokenKind::Scoped
+                if matches!(self.peek_kind(1), Some(TokenKind::Instance))
+                    || matches!(self.peek_kind(1), Some(TokenKind::Ident(name)) if name == "csimp" || is_lifted_eliminator_attr(name)) =>
+            {
+                self.advance();
+                let inner = self.single_attribute()?;
+                Ok(Attribute::Scoped(Box::new(inner)))
+            }
             // `class` keyword as attribute name: `attribute [class] Unique`
             // is how Mathlib turns a structure into a class after the fact
             // (Logic/Unique.lean:60). The Attribute::Class variant and its
@@ -1017,6 +1032,14 @@ impl Parser {
                             })?;
                     self.advance();
                     Ok(Attribute::InstancePriority(priority))
+                } else if let Some(priority) = self.instance_priority_value() {
+                    // The named priorities (`instance high`, `low`, `mid`,
+                    // `default` — Lean's `prio` syntax). Only the numeral
+                    // was read: `attribute [instance high] c` was a parse
+                    // error, the command a raw declaration, and the
+                    // declarations after it were credited against a state
+                    // without `c` (round-27 extended battery).
+                    Ok(Attribute::InstancePriority(priority))
                 } else {
                     // Just @[instance] without priority means the Lean default
                     // priority (1000; `low` = 100, `high` = 10000). Was 100,
@@ -1029,6 +1052,75 @@ impl Parser {
                 col: self.current_span().start,
                 message: format!("expected attribute name, got {:?}", self.current_kind()),
             }),
+        }
+    }
+
+    /// Read the optional modifier of an `@[grind …]` attribute.
+    ///
+    /// Lean's `getAttrKindCore` (`Lean/Meta/Tactic/Grind/Attr.lean`) maps a
+    /// `grindMod` syntax node to an `AttrKind`; the absent modifier is
+    /// `.infer`. Only the leading token(s) are consumed here — the caller's
+    /// `skip_attribute_args` eats any remainder (`gen`, `eager`, a `symbol`
+    /// priority), so a longer spelling degrades to the modeled prefix or to
+    /// [`GrindAttrKind::Unmodeled`] rather than failing the parse.
+    fn parse_grind_attr_kind(&mut self) -> GrindAttrKind {
+        match self.current_kind().clone() {
+            TokenKind::Eq => {
+                self.advance();
+                // `=_` / `_=_`: an orientation Clean does not model.
+                if self.check(&TokenKind::Underscore) {
+                    self.advance();
+                    return GrindAttrKind::Unmodeled("=_".to_string());
+                }
+                GrindAttrKind::EqLhs
+            }
+            TokenKind::Underscore => {
+                self.advance();
+                GrindAttrKind::Unmodeled("_=_".to_string())
+            }
+            TokenKind::LeftArrow => {
+                self.advance();
+                GrindAttrKind::Backward
+            }
+            TokenKind::Arrow => {
+                self.advance();
+                GrindAttrKind::Forward
+            }
+            TokenKind::Ident(word) => match word.as_str() {
+                "cases" => {
+                    self.advance();
+                    GrindAttrKind::Cases
+                }
+                "ext" => {
+                    self.advance();
+                    GrindAttrKind::Ext
+                }
+                "intro" => {
+                    self.advance();
+                    GrindAttrKind::Intro
+                }
+                // `@[grind gen]` is Lean's `.ematch (.default true)`
+                // (`Attr.lean`, `getAttrKindCore`), an E-match on the whole
+                // term with generalization — NOT the bare attribute's
+                // `.infer`, which is a different arm of the same function.
+                // Clean has no pattern index, so the two collapse to the same
+                // thing here: a name the left-to-right rewriter may use.
+                "gen" => {
+                    self.advance();
+                    GrindAttrKind::Infer
+                }
+                other => {
+                    let recorded = other.to_string();
+                    self.advance();
+                    GrindAttrKind::Unmodeled(recorded)
+                }
+            },
+            // `@[grind]` with no modifier, or a spelling whose first token is
+            // not an identifier (`.`, `<=`, …): Lean's `.infer` is the
+            // no-modifier case, and an unrecognized leading token is recorded
+            // as unmodeled without consuming it — `skip_attribute_args` will.
+            TokenKind::RBracket | TokenKind::Comma => GrindAttrKind::Infer,
+            _ => GrindAttrKind::Unmodeled(String::new()),
         }
     }
 

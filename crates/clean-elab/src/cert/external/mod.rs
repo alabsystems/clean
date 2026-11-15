@@ -9,7 +9,7 @@ mod error;
 mod rational;
 mod verify;
 
-pub use alethe::{verify_alethe_certificate, ExternalAletheCert};
+pub use alethe::{verify_alethe_certificate, verify_alethe_certificate_until, ExternalAletheCert};
 pub use error::{ExternalCertError, ExternalCertErrorCode};
 pub use rational::ExternalRational;
 pub use verify::{

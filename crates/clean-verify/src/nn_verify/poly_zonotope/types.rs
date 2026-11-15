@@ -588,10 +588,10 @@ impl PolyZonotope {
         }
 
         // Quartic terms: qx_{ij} * qy_{kl} * eps_i * eps_j * eps_k * eps_l
-        for idx1 in 0..n_quad {
-            let qx = self.quad_gens[idx1][0].abs();
-            for idx2 in 0..n_quad {
-                let qy = other.quad_gens[idx2][0].abs();
+        for quad_x in &self.quad_gens[..n_quad] {
+            let qx = quad_x[0].abs();
+            for quad_y in &other.quad_gens[..n_quad] {
+                let qy = quad_y[0].abs();
                 ho_remainder += qx * qy;
             }
         }

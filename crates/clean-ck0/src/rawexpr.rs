@@ -34,7 +34,7 @@ pub enum BinderInfo {
 
 /// Untrusted universe level syntax. `Param` is positional, as on the trusted
 /// side, but here the index is unchecked until validation.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RawLevel {
     /// `0`
     Zero,
@@ -58,8 +58,10 @@ pub enum RawLit {
 }
 
 /// Untrusted term syntax. This is the boundary type (design §4.1).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum RawExpr {
+    /// An untrusted shared node; validation checks it at each binder depth.
+    Shared(std::sync::Arc<RawExpr>),
     /// de Bruijn bound variable.
     BVar(u32),
     /// `Sort l`.
@@ -84,3 +86,83 @@ pub enum RawExpr {
     /// Structure projection `e.i` of structure `name`.
     Proj(Name, u32, Box<RawExpr>),
 }
+
+/// Transform-local keys retain the source allocation, preventing address reuse.
+#[cfg(feature = "export")]
+pub(crate) type RawMemo =
+    std::collections::HashMap<*const RawExpr, (std::sync::Arc<RawExpr>, std::sync::Arc<RawExpr>)>;
+
+#[cfg(feature = "export")]
+pub(crate) fn map_shared<E>(
+    raw: &mut RawExpr,
+    memo: &mut RawMemo,
+    transform: impl FnOnce(&mut RawExpr, &mut RawMemo) -> Result<(), E>,
+) -> Result<(), E> {
+    let RawExpr::Shared(original) = raw else {
+        return transform(raw, memo);
+    };
+    let id = std::ptr::from_ref(original.unshared());
+    if let Some((_, image)) = memo.get(&id) {
+        *raw = RawExpr::Shared(image.clone());
+        return Ok(());
+    }
+    let original = original.clone();
+    let mut image = original.unshared().clone();
+    transform(&mut image, memo)?;
+    let image = match image {
+        RawExpr::Shared(node) => node,
+        other => std::sync::Arc::new(other),
+    };
+    memo.insert(id, (original, image.clone()));
+    *raw = RawExpr::Shared(image);
+    Ok(())
+}
+
+impl RawExpr {
+    pub(crate) fn unshared(&self) -> &Self {
+        let mut node = self;
+        while let Self::Shared(child) = node {
+            node = child;
+        }
+        node
+    }
+}
+impl PartialEq for RawExpr {
+    fn eq(&self, other: &Self) -> bool {
+        let mut stack = vec![(self, other)];
+        let mut seen = std::collections::HashSet::new();
+        while let Some((a, b)) = stack.pop() {
+            let (a, b) = (a.unshared(), b.unshared());
+            if std::ptr::eq(a, b) || !seen.insert((std::ptr::from_ref(a), std::ptr::from_ref(b))) {
+                continue;
+            }
+            match (a, b) {
+                (Self::BVar(a), Self::BVar(b)) if a == b => {}
+                (Self::Sort(a), Self::Sort(b)) if a == b => {}
+                (Self::Const(a, x), Self::Const(b, y)) if a == b && x == y => {}
+                (Self::Elim(a, m, x), Self::Elim(b, n, y)) if a == b && m == n && x == y => {}
+                (Self::Lit(a), Self::Lit(b)) if a == b => {}
+                (Self::App(a, b), Self::App(c, d)) => {
+                    stack.extend([(a.as_ref(), c.as_ref()), (b.as_ref(), d.as_ref())])
+                }
+                (Self::Pi(i, a, b), Self::Pi(j, c, d))
+                | (Self::Lam(i, a, b), Self::Lam(j, c, d))
+                    if i == j =>
+                {
+                    stack.extend([(a.as_ref(), c.as_ref()), (b.as_ref(), d.as_ref())])
+                }
+                (Self::Let(a, b, c), Self::Let(d, e, f)) => stack.extend([
+                    (a.as_ref(), d.as_ref()),
+                    (b.as_ref(), e.as_ref()),
+                    (c.as_ref(), f.as_ref()),
+                ]),
+                (Self::Proj(n, i, a), Self::Proj(m, j, b)) if n == m && i == j => {
+                    stack.push((a, b))
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+}
+impl Eq for RawExpr {}

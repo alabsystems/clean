@@ -26,12 +26,14 @@
 //!
 //! * The first minted chain whose ARGUMENT is a by-value ENUM. The parameter
 //!   type the interface pins is `enum#1` — resolved through the tag table's
-//!   INTERFACE-ONLY SourceSystem row (canonical 1, fixture-era crate id 178),
+//!   INTERFACE-ONLY SourceSystem row (canonical 1, fixture-era crate id 178;
+//!   211 since the 2026-10-07 rebaseline),
 //!   the first such row in the tree. The pin has already survived one real
 //!   re-interning in RECORDED form: reader A's 2026-08-21 dump carries the
 //!   same type at `enum.176` with the instruction text byte-identical.
-//! * Both arms of `mint::interning_id` land on ONE chain: `ir_fs_tmode` spells
-//!   13 as `ir_d13` (inside the pool), `ir_fs_tsrc` spells 178 as a literal.
+//! * Both arms of `mint::interning_id` landed on ONE chain until the 2026-10-07
+//!   rebaseline: `ir_fs_tmode` spelled 13 as `ir_d13` (inside the pool),
+//!   `ir_fs_tsrc` 178 as a literal. At 17 and 211 both are literals now; see M3.
 //! * The first minted chain with AGGREGATE constants, so M3/M4 are the first
 //!   check that the shape table's `agg` constant row round-trips through the
 //!   minter AND back out of the elaborated term.
@@ -39,8 +41,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -147,29 +148,33 @@ fn m3_mint_reproduces_the_registered_script() {
     );
 }
 
-/// **Both arms of `mint::interning_id` on one chain.** 13 is inside the
-/// `ir_d0..ir_d16` atom pool and must spell `ir_d13`; 178 is outside it and
-/// must spell a decimal literal — the ir_pv precedent, now with its control on
-/// the same script.
+/// **Both aliases on the LITERAL arm since the 2026-10-07 rebaseline.** Until
+/// then CleanMode was interned at 13 — inside the `ir_d0..ir_d16` atom pool,
+/// spelled `ir_d13` — and SourceSystem at 178, a literal, so this one chain
+/// exercised both arms of `mint::interning_id`. The rebaseline's dump (clean
+/// 047ebd051, trustc 321aaeda7) interns them at 17 and 211: both outside the
+/// pool, so both must spell decimal literals and neither a pool atom. The POOL
+/// arm stays pinned on a real chain by `crystal_a2_mint_ko` (Level at 3) and by
+/// `crystal_a2_mint_pv`'s small-id control.
 #[test]
-fn m3_the_aliases_exercise_both_interning_arms() {
+fn m3_the_aliases_render_on_the_arm_their_ids_select() {
     let lines = ir_mint::mint(&core_a(), PREFIX, &tags())
         .expect("mint")
         .lines;
     assert_eq!(
         lines.first().map(String::as_str),
-        Some("def ir_fs_tmode : IRTy := IRTy.enum_ ir_d13"),
-        "crate id 13 is inside the pool and must render as `ir_d13`"
+        Some("def ir_fs_tmode : IRTy := IRTy.enum_ 17"),
+        "crate id 17 is outside the pool and must render as a literal"
     );
     assert_eq!(
         lines.get(1).map(String::as_str),
-        Some("def ir_fs_tsrc : IRTy := IRTy.enum_ 178"),
-        "crate id 178 is outside the pool and must render as a literal — the INTERFACE-ONLY \
+        Some("def ir_fs_tsrc : IRTy := IRTy.enum_ 211"),
+        "crate id 211 is outside the pool and must render as a literal — the INTERFACE-ONLY \
          SourceSystem alias, registered so the parameter pin is an elaborated term"
     );
     assert!(
-        !ir_mint::IR_FS_DEFS.contains("ir_d178") && !ir_mint::IR_FS_DEFS.contains("IRTy.enum_ 13"),
-        "and never the other arm's spelling:\n{}",
+        !ir_mint::IR_FS_DEFS.contains("ir_d17") && !ir_mint::IR_FS_DEFS.contains("ir_d211"),
+        "and never the pool arm's spelling:\n{}",
         ir_mint::IR_FS_DEFS
     );
 }
@@ -200,19 +205,19 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("const enum.13 { 0 }"),
-        "the emitted body must still name enum.13; if it does not, the artifact was re-interned \
+        FIXTURE.contains("const enum.17 { 0 }"),
+        "the emitted body must still name enum.17; if it does not, the artifact was re-interned \
          and this table needs a one-line REVIEWED re-pin"
     );
     assert!(
-        FIXTURE.contains("bb0(%0: enum.178):"),
-        "and the entry parameter must still be enum.178 — this is the FIXTURE-ERA pin the \
+        FIXTURE.contains("bb0(%0: enum.211):"),
+        "and the entry parameter must still be enum.211 — this is the FIXTURE-ERA pin the \
          canonical `enum#1` resolves through; reader A's 2026-08-21 dump already carries 176, \
          RECORDED in ir_fs.mint.json and compared against nothing"
     );
     assert!(
-        ir_mint::IR_FS_TAGS.contains("\"crate_id\": 13")
-            && ir_mint::IR_FS_TAGS.contains("\"crate_id\": 178"),
+        ir_mint::IR_FS_TAGS.contains("\"crate_id\": 17")
+            && ir_mint::IR_FS_TAGS.contains("\"crate_id\": 211"),
         "and the committed table must record both"
     );
 }
@@ -269,11 +274,11 @@ fn m10_the_committed_fixture_projects_under_its_pinned_interface() {
 fn m10_the_interface_pins_bite() {
     let t = tags();
     for (from, to, slot) in [
-        ("bb0(%0: enum.178):", "bb0(%0: enum.999):", "parameter"),
-        ("bb0(%0: enum.178):", "bb0(%0: u32):", "parameter"),
-        ("bb13(%1: enum.13):", "bb13(%1: u32):", "block parameter"),
+        ("bb0(%0: enum.211):", "bb0(%0: enum.999):", "parameter"),
+        ("bb0(%0: enum.211):", "bb0(%0: u32):", "parameter"),
+        ("bb13(%1: enum.17):", "bb13(%1: u32):", "block parameter"),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.554)", "(functy.555)", "signature index"),
+        ("(functy.518)", "(functy.519)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");

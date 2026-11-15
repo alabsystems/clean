@@ -528,3 +528,119 @@ fn test_native_plain_explicit_param_unaffected() {
         "a required explicit parameter must NOT be auto-defaulted; got: {omitted:?}"
     );
 }
+
+// ===========================================================================
+// Lean fills a trailing optParam whether or not an EXPECTED TYPE is present
+// (`processExplicitArg` with no argument left takes the default arm whenever
+// `explicit` is false, `Lean/Elab/App.lean`). Until 2026-10-07 Clean filled it
+// only when an expected type was present and the defaulted type unified with
+// it, so both directions below diverged. Every fixture is ground-truthed on the
+// pinned v4.30.0-rc2 `lean` binary: the source in `trailing_default_fixture`
+// (with its `example`s) exits 0, and `def h : Nat → Nat := addTrailing
+// Nat.zero` is "Type mismatch … has type Nat but is expected to have type
+// Nat → Nat".
+// ===========================================================================
+
+/// `addTrailing (x : Nat) (y : optParam Nat 3) : Nat := y`, imported-shape.
+fn env_with_add_trailing() -> Environment {
+    let mut env = base_env();
+    let ty = Expr::pi(
+        BinderInfo::Default,
+        const_("Nat"),
+        Expr::pi(BinderInfo::Default, opt_param_nat(nat(3)), const_("Nat")),
+    );
+    let value = Expr::lam(
+        BinderInfo::Default,
+        const_("Nat"),
+        Expr::lam(BinderInfo::Default, const_("Nat"), Expr::bvar(0)),
+    );
+    // SOUNDNESS: test-only synthesis of an imported member with a trailing
+    // raw `optParam Nat 3` parameter, as a real `.olean` encodes
+    // `(x : Nat) (y : Nat := 3)`. Kernel type-checked by `add_decl_structural`.
+    env.add_decl_structural(Declaration::Definition {
+        name: Name::from_string("addTrailing"),
+        level_params: vec![],
+        type_: ty,
+        value,
+        is_reducible: false,
+    })
+    .expect("addTrailing should kernel-check and declare");
+    env
+}
+
+#[test]
+fn test_imported_trailing_optparam_defaulted_without_expected_type() {
+    let mut env = env_with_add_trailing();
+    // No expected type: Lean's `useNoExpected : Nat`, value 3. Before the fix
+    // Clean registered `useNoExpected : optParam Nat 3 → Nat`.
+    elaborate_decls_into(&mut env, "def useNoExpected := addTrailing Nat.zero");
+    let info = env
+        .get_const(&Name::from_string("useNoExpected"))
+        .expect("useNoExpected should be registered");
+    let tc = TypeChecker::new(&env);
+    assert!(
+        tc.is_def_eq(&info.type_, &const_("Nat")),
+        "with no expected type the trailing default must still be filled, so the \
+         declaration's type is Nat, not a function type; got {:?}",
+        info.type_
+    );
+    let value = info.value.clone().expect("useNoExpected is a definition");
+    assert!(
+        tc.is_def_eq(&value, &nat(3)),
+        "the filled default is 3; got head {:?}",
+        whnf_head_const(&env, &value)
+    );
+}
+
+#[test]
+fn test_imported_trailing_optparam_default_mismatches_function_expected_type() {
+    let mut env = env_with_add_trailing();
+    // Lean fills the default and THEN checks: `Nat` is not `Nat → Nat`. Before
+    // the fix Clean left the partial application (`optParam Nat 3 → Nat`,
+    // defeq to `Nat → Nat` because `optParam` is reducible) and accepted it.
+    let refused = try_elaborate_decls_into(&mut env, "def h : Nat → Nat := addTrailing Nat.zero");
+    assert!(
+        refused.is_err(),
+        "`addTrailing Nat.zero` is `Nat` once its default is filled, so it must be \
+         refused against `Nat → Nat`, as Lean refuses it"
+    );
+}
+
+/// A structure-valued function with a trailing optParam, used through a field
+/// access: the `(e).field` / `e |>.field` shapes of upstream
+/// tests/elab/2077.lean (`simpExtension.getState (← getEnv) |>.toUnfold`).
+const TRAILING_DEFAULT_FIXTURE: &str = "structure S where\n\
+     \x20 val : Nat\n\
+     def mkS (n : Nat) (m : optParam Nat 3) : S := ⟨n + m⟩\n\
+     structure Box where\n\
+     \x20 k : Nat\n\
+     def Box.get (b : Box) (n : Nat) (m : optParam Nat 5) : S := ⟨b.k + n + m⟩\n\
+     def bx : Box := ⟨1⟩\n\
+     def r1 := (mkS 4).val\n\
+     def r2 := mkS 4 |>.val\n\
+     def r3 := (bx.get 2).val\n\
+     def r4 := bx.get 2 |>.val\n";
+
+#[test]
+fn test_imported_trailing_optparam_default_feeds_field_access() {
+    let mut env = Environment::with_prelude();
+    register_opt_param(&mut env);
+    if let Err(e) = try_elaborate_decls_into(&mut env, TRAILING_DEFAULT_FIXTURE) {
+        panic!(
+            "a receiver whose trailing optParam is omitted must have its default \
+             filled before the field access, as Lean does: {e}"
+        );
+    }
+    let tc = TypeChecker::new(&env);
+    for (name, want) in [("r1", 7), ("r2", 7), ("r3", 8), ("r4", 8)] {
+        let value = env
+            .get_const(&Name::from_string(name))
+            .and_then(|i| i.value.clone())
+            .unwrap_or_else(|| panic!("{name} should be registered with a value"));
+        assert!(
+            tc.is_def_eq(&value, &nat(want)),
+            "{name} must reduce to {want} (the omitted default included); got head {:?}",
+            whnf_head_const(&env, &value)
+        );
+    }
+}

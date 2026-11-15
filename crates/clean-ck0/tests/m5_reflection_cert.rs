@@ -183,6 +183,19 @@ fn bool_rec(ret: RawExpr, false_case: RawExpr, true_case: RawExpr, scrut: RawExp
 // Base inductives: Bool, Nat, List, Or, False — plus the Step inductive.
 // ===========================================================================
 
+/// `Sort (max 1 u_i)`: a level that is PROVABLY nonzero, as Lean spells
+/// `PSum`/`PProd`'s (`Sort (max 1 u v)`). The list fixture lives here so its
+/// recursor large-eliminates for the reason Lean's kernel accepts
+/// (`is_not_zero`); at `u := 1` it is `Sort 1`, the level every use below
+/// instantiates. A bare `Sort u` list may be `Prop` (`u := 0`), and Lean's
+/// kernel gives a two-constructor `Prop` no large eliminator (2026-10-17).
+fn r_sort_max1_param(i: u32) -> RawExpr {
+    RawExpr::Sort(RawLevel::Max(
+        Box::new(RawLevel::Succ(Box::new(RawLevel::Zero))),
+        Box::new(RawLevel::Param(i)),
+    ))
+}
+
 fn bool_decl() -> InductiveDecl {
     let b = boot(&[("Bool", 0), ("Bool.false", 0), ("Bool.true", 0)]);
     InductiveDecl {
@@ -223,13 +236,16 @@ fn nat_decl() -> InductiveDecl {
 }
 fn list_decl() -> InductiveDecl {
     let b = boot(&[("List", 1), ("List.nil", 1), ("List.cons", 1)]);
-    let ty = vlvl(&b, &r_pi(r_sort_param(0), r_sort_param(0)), 1);
+    let ty = vlvl(&b, &r_pi(r_sort_max1_param(0), r_sort_max1_param(0)), 1);
     let nil_ty = r_pi(
-        r_sort_param(0),
+        r_sort_max1_param(0),
         r_app(r_const_p("List", vec![lparam(0)]), r_bvar(0)),
     );
     let list_a = |db: u32| r_app(r_const_p("List", vec![lparam(0)]), r_bvar(db));
-    let cons_ty = r_pi(r_sort_param(0), r_pi(r_bvar(0), r_pi(list_a(1), list_a(2))));
+    let cons_ty = r_pi(
+        r_sort_max1_param(0),
+        r_pi(r_bvar(0), r_pi(list_a(1), list_a(2))),
+    );
     InductiveDecl {
         name: n("List"),
         num_level_params: 1,

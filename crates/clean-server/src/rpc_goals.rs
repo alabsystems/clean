@@ -15,6 +15,8 @@
 
 use serde::{Deserialize, Serialize};
 
+// Only the native-only dispatch handlers below consume the rpc wire types.
+#[cfg(not(target_arch = "wasm32"))]
 use super::{RequestId, Response, RpcError};
 
 // ============================================================================
@@ -112,6 +114,9 @@ pub struct GetInteractiveDiagnosticsParams {
 /// Handle `Lean.Widget.getInteractiveGoals`.
 ///
 /// Returns empty goals until the elaborator records per-position tactic state.
+// These dispatch-only handlers take `ServerState`, which is native-only
+// (the handler tree sits on tokio); the wire types above stay on wasm.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn handle_get_interactive_goals(
     _state: &crate::handlers::ServerState,
     id: RequestId,
@@ -125,6 +130,7 @@ pub(crate) async fn handle_get_interactive_goals(
 /// Handle `Lean.Widget.getInteractiveDiagnostics`.
 ///
 /// Returns empty diagnostics until the elaborator produces interactive payloads.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn handle_get_interactive_diagnostics(
     _state: &crate::handlers::ServerState,
     id: RequestId,
@@ -140,6 +146,7 @@ pub(crate) async fn handle_get_interactive_diagnostics(
 /// Handle `getPlainGoal`.
 ///
 /// Convenience endpoint returning goals as a single plain-text string.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn handle_get_plain_goal(
     _state: &crate::handlers::ServerState,
     id: RequestId,

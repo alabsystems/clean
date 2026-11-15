@@ -170,6 +170,7 @@ async fn test_get_type() {
     let state = ServerState::new();
     let params = GetTypeParams {
         expr: "fun (x : Type) => x".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_get_type(&state, RequestId::Number(1), params).await;
@@ -492,6 +493,7 @@ async fn test_get_type_invalid_expr_returns_rpc_error() {
     let state = ServerState::new();
     let params = GetTypeParams {
         expr: "@@#$ invalid syntax".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_get_type(&state, RequestId::Number(1), params).await;
@@ -515,6 +517,7 @@ async fn test_get_type_undefined_ident_returns_error() {
     let state = ServerState::new();
     let params = GetTypeParams {
         expr: "unknownIdent999".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_get_type(&state, RequestId::Number(1), params).await;
@@ -797,6 +800,7 @@ async fn test_get_type_of_type() {
     let state = ServerState::new();
     let params = GetTypeParams {
         expr: "Type".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_get_type(&state, RequestId::Number(1), params).await;
@@ -823,6 +827,7 @@ async fn test_get_type_lambda_returns_pi() {
     let state = prelude_state();
     let params = GetTypeParams {
         expr: "fun (x : Nat) => x".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_get_type(&state, RequestId::Number(1), params).await;
@@ -848,6 +853,7 @@ async fn test_get_type_empty_string_returns_error() {
     let state = ServerState::new();
     let params = GetTypeParams {
         expr: String::new(),
+        timeout_ms: None,
     };
 
     let response = handle_get_type(&state, RequestId::Number(1), params).await;

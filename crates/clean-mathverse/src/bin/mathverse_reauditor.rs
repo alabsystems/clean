@@ -21,7 +21,9 @@
 //! Backend selection (offline, `--locked`-clean):
 //!   - default: real Ed25519 over `ring` (`is_asymmetric = true`). A fresh dev
 //!     keypair is generated and its PKCS#8 secret + public key written beside
-//!     the output (secret never committed).
+//!     the output (secret never committed). The verdicts AND the revocation
+//!     list are signed by that one keypair, so `reauditor-pubkey.bin` verifies
+//!     either.
 //!   - `--hmac-dev`: the documented HMAC-SHA256 keyed-hash fallback
 //!     (`is_asymmetric = false`) for environments where even `ring` is
 //!     unavailable. NOT a public-key attestation; a consumer policy must refuse
@@ -53,12 +55,20 @@ fn now_rfc3339_utc() -> String {
     format!("1970-01-01T00:00:00Z+{secs}s")
 }
 
-fn run(core_dir: &Path, out_dir: &Path, use_hmac: bool, commit: &str) -> Result<ReauditReport> {
+/// Returns the report AND the backend that signed its verdicts, so the caller
+/// signs the revocation list with the same key — the one whose public half is
+/// written beside the output.
+fn run(
+    core_dir: &Path,
+    out_dir: &Path,
+    use_hmac: bool,
+    commit: &str,
+) -> Result<(ReauditReport, Box<dyn SigningBackend>)> {
     std::fs::create_dir_all(out_dir)
         .with_context(|| format!("create out dir {}", out_dir.display()))?;
     let verified_at = now_rfc3339_utc();
 
-    let report = if use_hmac {
+    let (report, backend): (ReauditReport, Box<dyn SigningBackend>) = if use_hmac {
         let backend = HmacDevBackend::new(
             "hmac-dev:reauditor",
             b"REPLACE-WITH-ED25519-OR-KMS-secret".to_vec(),
@@ -67,7 +77,8 @@ fn run(core_dir: &Path, out_dir: &Path, use_hmac: bool, commit: &str) -> Result<
             "[reauditor] backend = hmac-sha256 (is_asymmetric=false) — DEV ONLY, not a \
              public-key attestation"
         );
-        reaudit_core(core_dir, &backend, commit, &verified_at)?
+        let report = reaudit_core(core_dir, &backend, commit, &verified_at)?;
+        (report, Box::new(backend))
     } else {
         let (backend, secret) = Ed25519LocalBackend::generate("ed25519-local:reauditor")
             .map_err(|e| anyhow!("ed25519 keygen: {e}"))?;
@@ -84,7 +95,8 @@ fn run(core_dir: &Path, out_dir: &Path, use_hmac: bool, commit: &str) -> Result<
             SigningBackend::is_asymmetric(&backend),
             out_dir.join("reauditor-pubkey.bin").display()
         );
-        reaudit_core(core_dir, &backend, commit, &verified_at)?
+        let report = reaudit_core(core_dir, &backend, commit, &verified_at)?;
+        (report, Box::new(backend))
     };
 
     // Write one signed verdict file per declaration.
@@ -97,7 +109,7 @@ fn run(core_dir: &Path, out_dir: &Path, use_hmac: bool, commit: &str) -> Result<
         std::fs::write(&path, json).with_context(|| format!("write {}", path.display()))?;
     }
 
-    Ok(report)
+    Ok((report, backend))
 }
 
 fn main() -> ExitCode {
@@ -107,8 +119,10 @@ fn main() -> ExitCode {
         eprintln!();
         eprintln!("Re-earns every published KernelVerified claim under <core-dir> via the live");
         eprintln!("kernel and writes one signed mathverse-signed-verdict-v1 per declaration into");
-        eprintln!("<out-dir>/verdicts. A claim that no longer re-earns is appended to a signed");
-        eprintln!("mathverse-revocation-list-v1. Signatures attest provenance, not correctness.");
+        eprintln!("<out-dir>/verdicts. A claim that no longer re-earns is appended to a");
+        eprintln!("mathverse-revocation-list-v1 signed by the same key as the verdicts (public");
+        eprintln!("key: <out-dir>/reauditor-pubkey.bin). Signatures attest provenance, not");
+        eprintln!("correctness.");
         return ExitCode::from(2);
     }
     let core_dir = Path::new(&args[1]);
@@ -121,7 +135,7 @@ fn main() -> ExitCode {
         .cloned()
         .unwrap_or_else(|| "unknown-commit".to_string());
 
-    let report = match run(core_dir, out_dir, use_hmac, &commit) {
+    let (report, backend) = match run(core_dir, out_dir, use_hmac, &commit) {
         Ok(r) => r,
         Err(e) => {
             eprintln!("[reauditor] FATAL: {e:#}");
@@ -134,19 +148,11 @@ fn main() -> ExitCode {
     let mut list = RevocationList::new(verified_at.clone());
     let revoked = report.append_revocations(&mut list, &verified_at, &commit);
     if revoked > 0 {
-        // Re-sign the list with the same backend kind chosen above.
-        let signed_ok = if use_hmac {
-            let backend = HmacDevBackend::new(
-                "hmac-dev:reauditor",
-                b"REPLACE-WITH-ED25519-OR-KMS-secret".to_vec(),
-            );
-            list.sign_with(&backend).is_ok()
-        } else {
-            match Ed25519LocalBackend::generate("ed25519-local:reauditor-revlist") {
-                Ok((backend, _secret)) => list.sign_with(&backend).is_ok(),
-                Err(_) => false,
-            }
-        };
+        // Sign the list with the SAME backend that signed the verdicts. A second,
+        // per-run throwaway keypair used to sign it and its public key was never
+        // written, so nobody could verify `revocation-list.json`; now the one
+        // `reauditor-pubkey.bin` beside the output verifies verdicts and list alike.
+        let signed_ok = list.sign_with(backend.as_ref()).is_ok();
         if signed_ok {
             if let Ok(json) = serde_json::to_vec_pretty(&list) {
                 let _ = std::fs::write(out_dir.join("revocation-list.json"), json);

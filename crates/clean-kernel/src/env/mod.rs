@@ -30,20 +30,41 @@ use serde::{Deserialize, Serialize};
 
 // Extracted sub-modules for organization (see #307)
 mod axiom_audit;
+#[cfg(test)]
+pub(crate) mod axiom_inhabitation;
+#[cfg(any(test, feature = "test-fixtures"))]
+mod builtin_bundle;
 #[cfg(any(test, feature = "math-overlays"))]
 mod carrier_refutation;
+mod checked_metadata;
+mod closure_digest;
 mod codata_origin;
+#[cfg(not(kani))]
+mod content_digest;
+mod data_monad_classes;
+mod data_monad_except;
+mod data_monad_transformers;
 mod decl_add;
 mod decl_emit;
+mod effect;
+mod fact_delta;
+mod import_large_elim;
 mod inductive_info;
 mod init_shared;
+pub(crate) mod monad_term;
 mod origin;
+mod prelude_reuse;
 mod proof_elision;
 mod proof_quality;
+mod quot_admission;
 #[cfg(any(test, feature = "math-overlays"))]
 mod refute_axiom_body;
 mod registration;
+#[cfg(test)]
+mod scratch_admission_tests;
 mod serialization;
+mod simp_cache_identity;
+pub use simp_cache_identity::SimpCacheIdentity;
 #[cfg(test)]
 mod shared_init;
 mod snapshot;
@@ -51,22 +72,43 @@ mod sorry_summary;
 mod sorry_tracer;
 #[cfg(any(test, feature = "math-overlays"))]
 mod soundness_certificate;
+mod stub_upgrade_parallel;
+#[cfg(test)]
+mod stub_upgrade_parallel_tests;
+#[cfg(test)]
+mod stub_upgrade_reuse_tests;
 mod trusted_ext;
 mod unfold;
+mod value_binder_names;
+pub(crate) use axiom_audit::name_has_components;
 pub use axiom_audit::{
-    canonical_ambient_axiom_kind, is_foundational_axiom, is_trust_marker,
-    CanonicalAmbientAxiomKind, CertificationAudit, CertificationIssue, ProofQuality,
-    SoundnessReport,
+    canonical_ambient_axiom_kind, canonical_foundation_declaration,
+    is_canonical_foundational_constant, is_foundational_axiom, is_reserved_ambient_axiom_name,
+    is_sorry_marker, is_trust_marker, prints_as_ambient_axiom, CanonicalAmbientAxiomKind,
+    CertificationAudit, CertificationIssue, DomainAxiomClosure, ProofQuality, ScopedAuditWork,
+    ScopedDeclarationWork, SoundnessReport,
 };
 #[cfg(any(test, feature = "math-overlays"))]
 pub use carrier_refutation::{
     census_carriers, classify_refutation, is_refutable, scan_admitted_axioms, CarrierCensus,
     RefutationOutcome, RefutationScan,
 };
+pub use closure_digest::{ClosureDigestError, CLOSURE_DIGEST_DOMAIN};
 pub use codata_origin::{CodataLane, CodataOrigin};
+#[cfg(not(kani))]
+pub(crate) use content_digest::{
+    closed_term_content_digest, declaration_content_digest, inductive_content_digest,
+    quotient_content_digest,
+};
+#[cfg(not(kani))]
+pub use content_digest::{EnvContentDigest, EnvDigestSection};
 #[cfg(test)]
 use decl_add::find_undef_level_param;
 pub use decl_add::{mm_axiom_only, mm_two_pass_active, set_mm_axiom_only, MmAxiomOnlyGuard};
+pub use effect::EnvEffect;
+pub use fact_delta::{
+    EnvFactDelta, FactDeltaError, ELABORATION_PRIVATE_EXTENSIONS, LOCAL_FACT_DELTA_FORMAT,
+};
 pub use inductive_container_map::{ContainerMapError, ContainerMapOutcome};
 pub use inductive_deep_induction::{DeepIndError, DeepIndOutcome};
 pub use inductive_info::InductiveInfo;
@@ -93,6 +135,7 @@ pub use soundness_certificate::{
     C5ExploitResistance, GoldenTcb, SoundnessCertificate, TrustedBase,
 };
 pub use trusted_ext::TrustedEnvExt;
+pub use value_binder_names::ValueForallBinderNames;
 
 // Sub-modules for domain-specific initialization.
 // Many overlay init methods are defined but not yet wired into the main init
@@ -265,6 +308,7 @@ mod algebra_int_tonat_ofnat_proof;
 mod algebra_int_zero_add_proof;
 mod algebra_int_zero_mul_proof;
 mod algebra_list_char_dec_eq_proof;
+mod algebra_list_dec_eq_proof;
 mod algebra_nat_add_assoc_proof;
 mod algebra_nat_add_comm_proof;
 mod algebra_nat_add_left_cancel_proof;
@@ -1183,6 +1227,7 @@ mod data_bool_ops;
 mod data_collection_ops;
 mod data_control_lazy;
 mod data_dvd;
+mod data_fin_arith;
 mod data_for_in;
 mod data_fun_comp;
 mod data_fun_const;
@@ -1191,6 +1236,7 @@ mod data_fun_id;
 mod data_functor;
 mod data_getelem;
 mod data_getelem_list;
+mod data_inhabited_core;
 mod data_insert_singleton;
 mod data_list_get;
 mod data_list_reverse_map_lemmas;
@@ -1204,14 +1250,19 @@ mod data_typeclasses_beq;
 mod data_typeclasses_beq_list;
 mod data_typeclasses_beq_of_decidable_eq;
 mod data_typeclasses_beq_optstr;
+mod data_typeclasses_beq_prod;
 mod data_typeclasses_hashable;
 mod data_typeclasses_repr;
+mod data_typeclasses_repr_compound;
+mod data_typeclasses_tostring_float;
 mod data_types;
 mod data_types_arithmetic;
 mod data_types_bitvec;
+mod data_types_bitvec_shift;
 mod data_types_bool_simp;
 mod data_types_collections;
 mod data_types_finset;
+mod data_types_int_euclidean;
 mod data_types_int_lemmas;
 mod data_types_list_perm;
 mod data_types_multiset;
@@ -1286,6 +1337,8 @@ mod isasat_refinement_theorems;
 mod labelled_interpolation_minimality;
 #[cfg(any(test, feature = "math-overlays"))]
 mod labelled_interpolation_minimality_theorems;
+mod lean_core_exports;
+mod lean_core_supply;
 #[cfg(any(test, feature = "math-overlays"))]
 mod learned_clause_minimality;
 #[cfg(any(test, feature = "math-overlays"))]
@@ -1294,12 +1347,15 @@ mod logic;
 mod logic_connectives;
 mod logic_decidable;
 mod logic_decidable_instances;
+mod logic_eq_true_props;
 mod logic_iff;
 mod logic_ite;
 mod logic_ite_lemmas;
 mod logic_of_decide;
 mod logic_or;
 mod logic_prop_eq;
+mod logic_simp_congr;
+mod logic_simp_iff;
 mod logic_simp_ite_eq;
 mod logic_true_false;
 mod measure_theory;
@@ -1579,6 +1635,15 @@ mod nn_verify_tier_a_rat_min_le_max_zero_zero;
 mod nn_verify_tier_a_rat_min_min_zero_zero;
 // #3615: canonical `Rat.min_le_max` constructive lemma (general case).
 // Unblocks C004 Phase 2 γ-scale carrier body.
+// The elementary `Nat` floor three independent Rust→Lean conversions stalled
+// on (`reports/` in the Trust repo, a3d's CONVERSION.md §4.3–4.4): `Nat.min`
+// computation, `Nat.mod_eq_of_lt`, `Nat.div_le_self`, and the
+// `UIntN.toNat_lt`/`toNat_div` bridge a division-carrying contract cites.
+mod bootstrap_stubs;
+mod lean_arith_bridges;
+mod lean_nat_spelling;
+mod nat_floor_min_lemmas;
+mod nat_floor_order_lemmas;
 mod nat_irrefl_instance_proof;
 mod nat_le_inversion_proof;
 mod nat_lt_irrefl_proof;
@@ -1729,6 +1794,7 @@ mod order_int;
 mod order_int_dec_le_lt_proof;
 mod order_int_le_total_proof;
 mod order_int_lt_trichotomy_proof;
+mod order_int_minmax_inst;
 mod order_le_lt;
 mod order_lemmas;
 mod order_lemmas_minmax;
@@ -1770,6 +1836,7 @@ mod resolution_complexity_theorems;
 mod set_theory;
 #[cfg(any(test, feature = "math-overlays"))]
 mod stochastic_processes;
+mod stub_theory;
 #[cfg(any(test, feature = "math-overlays"))]
 mod tensor_ml;
 #[cfg(any(test, feature = "math-overlays"))]
@@ -1803,6 +1870,7 @@ mod tree_width_resolution;
 mod tree_width_resolution_theorems;
 #[cfg(any(test, feature = "math-overlays"))]
 mod type_theory;
+mod uint_floor_tonat_lemmas;
 #[cfg(any(test, feature = "math-overlays"))]
 mod verified_proof_search;
 #[cfg(any(test, feature = "math-overlays"))]
@@ -1827,10 +1895,12 @@ mod aesop;
 pub use aesop::{AesopIndexMode, AesopRule, AesopRuleBuilder, AesopRulePhase, AesopRuleSet};
 
 // Core types - extracted for organization (see #1161)
+mod matcher;
 mod types;
+pub use matcher::{MatcherAltInfo, MatcherDetails, MatcherInfo, MatcherOverlap};
 pub use types::{
     collect_fvar_ids_for_diagnostics, ConstantInfo, ConstantKind, Declaration, EnvError,
-    EnvExtensionEntry, EnvExtensionEntryData, KernelClassInfo, KernelInstanceInfo,
+    EnvExtensionEntry, EnvExtensionEntryData, GrindAttrKind, KernelClassInfo, KernelInstanceInfo,
     PersistentEnvExtensionState, Reducibility, SimpLemmaInfo, SimpPriority, TransparencyMode,
     DEFAULT_INSTANCE_PRIORITY, LEAN_DEFAULT_INSTANCE_PRIORITY,
 };
@@ -1853,16 +1923,25 @@ pub use ext_simp::{simp_ext_idx, SimpExtEntry, SimpExtState};
 pub mod ext_instance;
 pub use ext_instance::{instance_ext_idx, InstanceExtEntry, InstanceExtState, InstanceInfo};
 
+// The `@[implemented_by]` order record (session state, exports nothing)
+mod compiled_before;
+pub mod csimp;
+pub mod exposure;
+pub use compiled_before::CompiledBefore;
+
 // General-purpose attribute registry persistent extension
 pub mod ext_attr;
+mod ext_name_payload;
 pub use ext_attr::{attr_ext_idx, AttrExtEntry, AttrExtState, AttrRegistration};
 
 // Elimination analysis for inductive types (Prop-only vs large elimination)
 pub(crate) mod elim_analysis;
 
 // Inductive type construction - extracted for organization (see #1161, #307)
+mod imported_family;
 mod inductive_all_family;
 mod inductive_aux_values;
+mod inductive_aux_values_member;
 mod inductive_below;
 mod inductive_below_minors;
 #[allow(clippy::unnecessary_cast)]
@@ -1882,6 +1961,8 @@ mod inductive_recursor_rules;
 mod inductive_recursor_types;
 mod inductive_recursor_types_mutual;
 mod inductive_rel_family;
+mod inductive_reregistration;
+mod inductive_result_sort;
 mod rec_apply;
 
 // Type class, aesop rule, and attribute registries - extracted for organization (see #1161)
@@ -1894,8 +1975,23 @@ mod carrier_differential_tests;
 // P2 Char seed-shape fidelity vs the v4.30 oracle (carrier-parity A5)
 #[cfg(test)]
 mod carrier_char_fidelity_tests;
+#[cfg(test)]
+mod prelude_template_tests;
+
+mod inductive_lean_replay;
+mod kernel_theory;
+#[cfg(test)]
+mod nat_ble_le_parked_tests;
+#[cfg(test)]
+mod native_fold_attack_tests;
+mod native_fold_authority;
+mod native_fold_canon;
+mod native_fold_digest;
+#[cfg(any(test, feature = "test-fixtures"))]
+pub mod native_fold_review;
 mod native_reducers;
 mod native_reducers_arith;
+
 #[cfg(test)]
 mod native_reducers_arith_tests;
 mod native_reducers_beq_shortcircuit;
@@ -1927,6 +2023,16 @@ mod native_reducers_uint_conv;
 mod reduction_cache;
 #[cfg(test)]
 mod tests_native_reducers_init;
+pub use inductive_lean_replay::{lean_expr_eqv, InductiveReplayMismatch, StoredFamilyMember};
+pub(crate) use kernel_theory::LEAN_KERNEL_NAT_EXTENSIONS;
+pub use kernel_theory::{KernelTheory, LeanTheoryExclusion, LEAN_PROFILE_DIFFERENTIAL_REDUCERS};
+#[cfg(any(test, feature = "test-fixtures"))]
+pub use native_fold_authority::mint_bypass as native_fold_mint_bypass;
+pub use native_fold_authority::{
+    DefinitionVerdict, FoldClosure, FoldDigest, FoldRefusal, FoldRole, FoldVerdict, FoldWorld,
+};
+pub use native_fold_canon::canonical_fold_rows;
+pub(crate) use native_fold_canon::recognized_argument_names;
 pub use native_reducers::NativeReducerFn;
 pub(crate) use native_reducers_string::murmur_hash_64a;
 
@@ -2000,6 +2106,41 @@ pub trait ConstantSource: std::fmt::Debug + Send + Sync {
     fn fresh(&self) -> Option<std::sync::Arc<dyn ConstantSource>> {
         None
     }
+}
+
+/// The prelude template: built once per PROCESS, cloned per `try_with_prelude`.
+/// Never handed out directly — see `Environment::try_with_prelude`.
+///
+/// Process-global rather than thread-local, and the difference is the whole
+/// win: libtest gives every test its OWN thread, so a thread-local template is
+/// rebuilt for every test and only pays off inside a single multi-prelude test.
+/// Measured 2026-09-19 — two one-prelude tests in one process took 21.0 s
+/// thread-local (two full builds) against ~8.5 s expected if they shared.
+/// `Environment` is `Send + Sync` (`ConstantSource` requires both), so the
+/// template can be shared. A race in which two threads both build is harmless:
+/// `set` keeps the first and each caller returns its own environment.
+static PRELUDE_TEMPLATE: std::sync::OnceLock<Environment> = std::sync::OnceLock::new();
+
+/// The environment-wide settings a kernel check reads
+/// ([`Environment::checker_settings`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CheckerSettings {
+    /// The mode every checker is built in.
+    pub mode: crate::mode::CleanMode,
+    /// Which native reducers may fire.
+    pub kernel_theory: KernelTheory,
+    /// Exact source-world universe algebra.
+    pub lean_level_profile: crate::level::LeanLevelProfile,
+    /// Cumulative (Coq/pCIC) subtyping, `Prop ≤ Set ≤ Type`.
+    pub cumulative: bool,
+    /// Whether cumulative subtyping was ever on (sticky).
+    pub cumulative_ever: bool,
+    /// `set_option maxHeartbeats`: the reduction budget.
+    pub max_heartbeats: Option<u32>,
+    /// `set_option tcMaxCacheEntries`: the per-check cache bound.
+    pub max_cache_entries: Option<usize>,
+    /// `set_option profileHeartbeats`: the heartbeat profiler (observes only).
+    pub profile_heartbeats: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -2213,13 +2354,32 @@ pub struct Environment {
     /// builtin-prelude-only — Lean core has no List monad instance)
     #[serde(default)]
     monad_list_insts_init: bool,
-    /// Strict monad-instance gate for the `--prelude lean4-core` check lane
-    /// (Brick B07): when set, the elaborator's monad-materialization pass
-    /// rejects `Pure.pure`/`Bind.bind` stub applications over a concrete monad
-    /// that has no registered `Pure`/`Bind` instance and is not one of the
-    /// stub-modeled Lean-core monads — mirroring real Lean core's
-    /// "failed to synthesize" rejection (e.g. `do` over `List`,
-    /// GAP_SWEEP_2026-07-09 §5 OVER_ACCEPT-01).
+    /// Whether `Id.instMonad` / `instMonadOption` have been registered
+    /// (`data_monad_classes.rs`, 2026-09-28 prelude soundness fix)
+    #[serde(default)]
+    core_monad_instances_init: bool,
+    /// Whether this environment holds Clean's model of Lean 4.8.0 core
+    /// (`Init`): set by the prelude constructors
+    /// ([`Self::try_with_prelude`], [`Self::try_with_prelude_for_import`]) and
+    /// by nothing else, and carried by every clone. A Lean file without
+    /// `prelude` starts from `Init`, where every core name is already
+    /// declared; the elaborator refuses to redeclare one in such an
+    /// environment even when Clean's model lacks it
+    /// (`clean_elab::lean_core_names`). An environment built WITHOUT the
+    /// prelude (`Environment::new()`: a kernel-model harness, a translated
+    /// library, a Lean `prelude` file) holds no core constant, so none is
+    /// declared there — Lean's own rule, which consults the environment.
+    #[serde(default)]
+    lean_init_modeled: bool,
+    /// Strict `--prelude lean4-core` check lane (Brick B07). Its monad half
+    /// no longer needs this flag: since 2026-09-28 `Pure.pure`/`Bind.bind`
+    /// are Lean's class projections (`docs/issues/2026-09-28-prelude-pure-proves-false.md`),
+    /// so a `do` over a monad with no instance fails to synthesize in EVERY
+    /// lane, and the lean4-core lane simply never registers the Clean-native
+    /// `List` monad (`clean-cli` `cmd_core.rs`), which is what rejects `do`
+    /// over `List` there (GAP_SWEEP_2026-07-09 §5 OVER_ACCEPT-01). The flag
+    /// still gates the Mathlib-only `Type*`/`Sort*` spellings
+    /// (`clean-elab` `elab_core.rs`).
     #[serde(default)]
     lean4_core_strict_monads: bool,
     /// Whether the `HAndThen`/`HOrElse` lazy hetero classes have been initialized (Brick P1)
@@ -2341,6 +2501,16 @@ pub struct Environment {
     /// well-typed under Coq's theory and is gated to the Coq lane. Tracking: #3300.
     #[serde(default)]
     cumulative: bool,
+    /// Whether [`Self::set_cumulative`] has EVER turned [`Self::cumulative`]
+    /// on for this environment (or the environment it was cloned from).
+    /// Sticky: turning the flag back off leaves it set, because constants
+    /// admitted while cumulative subtyping was on keep their
+    /// `FullKernelCheck` stamps. The reference entry
+    /// ([`crate::reference::ReferenceKernel::new`]) refuses such a base. Not
+    /// serialized: a deserialized environment starts unset (the reference
+    /// entry's residual for stamps earned under another setting; KR1).
+    #[serde(skip)]
+    cumulative_ever: bool,
     /// Whether Preorder typeclass has been initialized
     preorder_init: bool,
     /// Whether PartialOrder typeclass has been initialized
@@ -3219,6 +3389,10 @@ pub struct Environment {
     /// declaration growth, while any registry mutation — including a
     /// count-and-content-neutral remove/re-add cycle — forces a rebuild.
     simp_registry_revision: u64,
+    /// Transient origin/snapshot tokens for derived simp caches. Fresh after
+    /// restoration; never part of serialized environments or checker inputs.
+    #[serde(skip)]
+    simp_cache_identity: SimpCacheIdentity,
     /// Imported `export` aliases decoded from `Lean.aliasExtension`
     /// (`export Decidable (isTrue …)` → `isTrue ↦ Decidable.isTrue`).
     /// Resolution metadata only: an alias never introduces a constant, it
@@ -3227,6 +3401,14 @@ pub struct Environment {
     /// whose type then rejects the use.
     #[serde(default)]
     export_aliases: HashMap<Name, Name>,
+    /// Every FURTHER target of an alias in `export_aliases`: Lean's
+    /// `aliasExtension` maps an alias to a LIST of declarations
+    /// (`addAliasEntry` adds a target not already there), and a name whose
+    /// aliases denote more than one declaration is ambiguous. The first
+    /// target stays in `export_aliases`; see
+    /// [`Self::export_alias_targets`].
+    #[serde(default)]
+    export_alias_others: HashMap<Name, Vec<Name>>,
     /// Extern bindings (declaration -> C function name)
     extern_bindings: HashMap<Name, String>,
     /// @[implemented_by] bindings (declaration -> implementing function name).
@@ -3241,7 +3423,18 @@ pub struct Environment {
     ///
     /// Reference: Lean 4 type_checker.cpp:988-991 `reduce_native`
     #[serde(skip)]
-    native_reducers: HashMap<Name, NativeReducerFn>,
+    native_reducers: HashMap<Name, native_reducers::NativeReducerRegistration>,
+    /// Which of `native_reducers` a check may use (`kernel_theory.rs`).
+    #[serde(skip)]
+    kernel_theory: KernelTheory,
+    /// Serialized checker input; it must survive snapshots and cloning.
+    #[serde(default)]
+    lean_level_profile: crate::level::LeanLevelProfile,
+    /// Memoized native-fold authority verdicts (`native_fold_authority.rs`):
+    /// a function of this environment's content, so never serialized and
+    /// never carried into a clone.
+    #[serde(skip)]
+    native_fold_cache: native_fold_authority::NativeFoldAuthorityCache,
     /// Export bindings (declaration -> exported C name)
     export_bindings: HashMap<Name, String>,
     /// Deprecated declarations with optional message
@@ -3269,6 +3462,13 @@ pub struct Environment {
     congr_lemmas: hashbrown::HashSet<Name>,
     /// Registered ext lemmas
     ext_lemmas: hashbrown::HashSet<Name>,
+    /// Declarations tagged `@[grind]`, in REGISTRATION order, with the kind the
+    /// annotation carried. A `Vec` rather than a map because grind consumes the
+    /// set as an ordered lemma list and a hash order would make the tactic's
+    /// behaviour depend on the hasher; the set is small and registration
+    /// de-duplicates by name.
+    #[serde(default)]
+    grind_lemmas: Vec<(Name, GrindAttrKind)>,
     /// Registered refl lemmas
     refl_lemmas: hashbrown::HashSet<Name>,
     /// Registered symm lemmas
@@ -3301,10 +3501,64 @@ pub struct Environment {
     /// Declarations marked `unsafe`
     #[serde(default)]
     unsafe_decls: hashbrown::HashSet<Name>,
+    /// Instances declared `local instance`: visible only in the module that
+    /// declares them (and there only until their section/namespace ends,
+    /// which the elaborator's `FileContext` tracks). Recorded HERE, not only
+    /// in the per-file context, because the instance registration itself is
+    /// in the environment and outlives the file: a module elaborated later in
+    /// the same environment (an importer in `clean check`, or any module in
+    /// `clean project check`) must not see it, as Lean never exports it.
+    #[serde(default)]
+    local_instance_decls: hashbrown::HashSet<Name>,
+    /// Each registered instance's POSITION in Lean's instance index: the
+    /// value of [`Self::next_instance_seq`] when the entry was first inserted
+    /// into the global state. Lean 4.8.0 keeps the instances of a
+    /// discrimination-tree leaf in an array (`Meta/DiscrTree.lean`
+    /// `insertVal`): a new entry is PUSHED, and inserting an entry equal to
+    /// one already there (the same instance constant) REPLACES it in place,
+    /// so a re-added instance keeps its position and changes only its
+    /// priority. `SynthInstance.getInstances` then stable-sorts by priority
+    /// and tries the last entry first. `instances` is kept in exactly that
+    /// order — priority descending, then position descending — and an
+    /// in-place priority change needs the position to find its new place
+    /// among the entries of the new priority
+    /// ([`Self::set_instance_priority_in_place`]). Positions are only ever
+    /// compared, never read as counts: two environments that load different
+    /// modules first give the same instance different numbers.
+    #[serde(default)]
+    instance_seqs: HashMap<Name, u64>,
+    /// The position the next entry pushed into Lean's instance index gets
+    /// (see [`Self::instance_seqs`]).
+    #[serde(default)]
+    next_instance_seq: u64,
+    /// Namespaces registered by a `namespace` command (Lean's
+    /// `Environment.registerNamespace`, `namespacesExt`, exported with the
+    /// module), each with its prefixes. Lean's `isNamespace` also holds for
+    /// every proper prefix of a declaration's name (`registerNamePrefixes`),
+    /// which the elaborator reads off the constants; this set adds the
+    /// namespaces a `namespace N … end N` block entered without declaring
+    /// anything directly under them.
+    #[serde(default)]
+    registered_namespaces: hashbrown::HashSet<Name>,
+    /// The prelude's ALIAS definitions: each a definition whose value is
+    /// exactly another constant at its own universe parameters (`def true :=
+    /// Bool.true`), the form Clean's hand-written prelude gives what Lean
+    /// spells as an `export` alias of the one constant. Recorded when the
+    /// prelude is built ([`Self::record_prelude_aliases`]); name resolution
+    /// may read such a definition as the constant it aliases, and ONLY such a
+    /// definition — a user's `def w := N.w` is a distinct constant to Lean
+    /// (`open N` then makes `w` ambiguous). Not serialized: it describes how
+    /// this environment's prelude was built, not a module's content.
+    #[serde(skip)]
+    prelude_aliases: std::sync::Arc<hashbrown::HashSet<Name>>,
     /// Parameter names for constants (binder names from declarations).
     /// Used by the elaborator for named argument matching (#1230).
     #[serde(default)]
     param_names: HashMap<Name, Vec<String>>,
+    /// Exact parameter identities captured from typed producers. Legacy display
+    /// rows do not imply a value here and must never be reparsed into one.
+    #[serde(default)]
+    typed_param_names: HashMap<Name, Vec<Name>>,
     /// Binder kinds parallel to `param_names` (same key, same order/length;
     /// B01, GAP_SWEEP_2026-07-09). Lean-faithful named-argument binding needs
     /// each recorded parameter's explicitness so positional arguments fill
@@ -3341,6 +3595,13 @@ pub struct Environment {
     /// naming a header by unknown-constant. This set is defence in depth.
     #[serde(default)]
     staged_headers: hashbrown::HashSet<Name>,
+    /// Measured match-compiler metadata, used only by frontend reduction.
+    /// Derived lazily from the existing persistent-extension storage.
+    /// Keep the synchronization state out of Environment's inline layout.
+    /// Box clones the cache deeply when environments diverge. Append this
+    /// transient field so existing fields retain their Trust IR ordinals.
+    #[serde(skip)]
+    matcher_info: Box<std::sync::OnceLock<HashMap<Name, Option<MatcherInfo>>>>,
 }
 
 impl Environment {
@@ -3355,6 +3616,12 @@ impl Environment {
     /// Create a new empty environment in Constructive mode (default)
     /// REQUIRES: none (pure constructor)
     /// ENSURES: Returns a fresh Environment with Sorry, trustedArith, trustedAy initialized
+    ///
+    /// The three declarations are seeded with the caller's deadline suspended
+    /// (`tc::deadline`): they are a fixed set, bounded by construction, and a
+    /// deadline that passed would refuse them and fail the `expect`s below,
+    /// which a release build turns into an abort (clean-server's `proveTLA`,
+    /// review of 2026-10-15). Without a deadline nothing changes.
     pub fn new() -> Self {
         let mut env = Self {
             macro_inline_hints: hashbrown::HashSet::default(),
@@ -3362,12 +3629,14 @@ impl Environment {
             nospecialize_hints: hashbrown::HashSet::default(),
             ..Self::default()
         };
-        env.init_sorry()
-            .expect("init_sorry should be infallible in a fresh environment");
-        env.init_trusted_arith()
-            .expect("init_trusted_arith should be infallible in a fresh environment");
-        env.init_trusted_ay()
-            .expect("init_trusted_ay should be infallible in a fresh environment");
+        crate::tc::with_deadline_suspended(|| {
+            env.init_sorry()
+                .expect("init_sorry should be infallible in a fresh environment");
+            env.init_trusted_arith()
+                .expect("init_trusted_arith should be infallible in a fresh environment");
+            env.init_trusted_ay()
+                .expect("init_trusted_ay should be infallible in a fresh environment");
+        });
         // Register built-in native reducers unconditionally.
         // These are pure function registrations with no dependency on declarations.
         // Critical for .olean import: Environment::default() + load_module_with_deps
@@ -3384,6 +3653,16 @@ impl Environment {
     ///
     /// Part of #3210.
     pub fn ensure_native_reducers(&mut self) {
+        self.native_reducers.extend(
+            native_reducers::owned_builtin_registry()
+                .iter()
+                .map(|(name, registration)| (name.clone(), *registration)),
+        );
+    }
+
+    /// Populate the private registry owner. Each family only installs functions;
+    /// no declaration, proof provenance or caller context participates.
+    fn init_builtin_native_reducers(&mut self) {
         self.init_native_reducers();
         self.init_arith_native_reducers();
         self.init_bool_ext_native_reducers();
@@ -3439,11 +3718,106 @@ impl Environment {
     /// instead of panicking. Useful during active declaration migration (#1444)
     /// where init methods may fail with informative `EnvError` values.
     pub fn try_with_prelude() -> Result<Self, EnvError> {
+        // BUILD ONCE PER THREAD, CLONE PER CALL.
+        //
+        // Building the prelude kernel-checks several hundred declarations, and
+        // it is the same work every time — `init_prelude_*` take no input and
+        // read nothing that varies. Measured 2026-09-20 in a debug build, one
+        // construction is ~8.45 s, and that figure IS the test suite: the
+        // trivial `theorem trivial_sorry : True := sorry` takes 8.39 s, a test
+        // building five preludes takes 42.3 s and one building six takes
+        // 50.9 s — linear in the count, with the test bodies costing almost
+        // nothing. `clean-elab::lib::shard::lean4_corpus_tests` spent 2861 s
+        // wall (~22,900 CPU-s across libtest's threads) on ~2,700 of them.
+        //
+        // A clone is a deep copy of the constant maps; it does no checking. The
+        // cached template is never handed out — every caller gets its own
+        // clone and may mutate it freely — so this is observationally identical
+        // to rebuilding, and the declarations are still kernel-checked, once
+        // per thread instead of once per call.
+        //
+        // Process-global, not thread-local: libtest gives every test its OWN
+        // thread, so a per-thread template is rebuilt per TEST and only pays off
+        // inside one multi-prelude test. Measured: two one-prelude tests in one
+        // process cost 21.0 s thread-local, two full builds.
+        //
+        // `try_with_prelude_uncached` is the escape hatch for anything that
+        // must measure or exercise construction itself.
+        // THE TEMPLATE IS NOT ALWAYS ADMISSIBLE, and that is not a detail.
+        // Prelude construction is not a pure function of nothing: it varies
+        // with process-wide controls — proof-quality strict mode, DENY_SORRY
+        // (requested OR already latched), a declaration budget, and Metamath
+        // two-pass/axiom-only contexts. Serving a template built before one of
+        // those latched would hand back an environment that does not match the
+        // process it is used in.
+        //
+        // `prelude_reuse::ordinary_prelude_is_shareable` IS that question, and
+        // it is deliberately the same predicate the sibling reusable-reference
+        // cache uses: two copies of these conditions would drift, and the
+        // failure mode would be silent. When it says no, build fresh and cache
+        // nothing.
+        if !prelude_reuse::ordinary_prelude_is_shareable() {
+            return Self::try_with_prelude_uncached();
+        }
+        if let Some(env) = PRELUDE_TEMPLATE.get() {
+            return Ok(env.clone());
+        }
+        let env = Self::try_with_prelude_uncached()?;
+        let _ = PRELUDE_TEMPLATE.set(env.clone());
+        Ok(env)
+    }
+
+    /// Build the prelude WITHOUT consulting the per-thread cache.
+    ///
+    /// The cache above hands out clones of a template built by this function.
+    /// Use this when construction itself is the subject.
+    pub fn try_with_prelude_uncached() -> Result<Self, EnvError> {
         let mut env = Self::default();
         env.init_prelude_core()?;
         env.init_prelude_algebra()?;
         env.init_prelude_extended()?;
+        // Lean 4.8.0's `Init` `export` aliases whose targets the prelude
+        // declares (`forIn ↦ ForIn.forIn`, G44). Default lane only: the import
+        // prelude below stays byte-identical and an imported module brings its
+        // own alias rows.
+        env.register_lean_core_export_aliases();
+        env.record_prelude_aliases();
         Ok(env)
+    }
+
+    /// Record the prelude's alias definitions (see the `prelude_aliases`
+    /// field). Called once the prelude is built.
+    fn record_prelude_aliases(&mut self) {
+        let aliases: hashbrown::HashSet<Name> = self
+            .constants
+            .values()
+            .filter(|info| {
+                if info.kind != ConstantKind::Definition {
+                    return false;
+                }
+                let Some(value) = info.value.as_ref() else {
+                    return false;
+                };
+                let ExprKind::Const(target, levels) = value.kind() else {
+                    return false;
+                };
+                target != &info.name
+                    && levels.len() == info.level_params.len()
+                    && levels
+                        .iter()
+                        .zip(&info.level_params)
+                        .all(|(level, param)| matches!(level, Level::Param(p) if p == param))
+            })
+            .map(|info| info.name.clone())
+            .collect();
+        self.prelude_aliases = std::sync::Arc::new(aliases);
+    }
+
+    /// Whether `name` is one of the prelude's alias definitions (see the
+    /// `prelude_aliases` field).
+    #[must_use]
+    pub fn is_prelude_alias(&self, name: &Name) -> bool {
+        self.prelude_aliases.contains(name)
     }
 
     /// Build a prelude for `.olean` / `.mathverse` import verification that does
@@ -3469,7 +3843,52 @@ impl Environment {
         env.init_prelude_core()?;
         env.init_prelude_algebra()?;
         env.init_prelude_extended()?;
+        env.record_prelude_aliases();
         Ok(env)
+    }
+
+    /// Whether this environment holds Clean's model of Lean 4.8.0 core
+    /// (`Init`), i.e. was built by a prelude constructor (see the field).
+    #[must_use]
+    pub fn models_lean_init(&self) -> bool {
+        self.lean_init_modeled
+    }
+
+    /// The starting environment of a Lean replay: NO declaration at all.
+    ///
+    /// `leanchecker` replays a module into the environment of its imports and
+    /// nothing else (`Lean/Replay.lean`, `replayFromImports`): a reference to
+    /// any other constant is `(kernel) unknown constant`. The `.olean` re-check
+    /// lanes used to start from [`Self::try_with_prelude_for_import`], whose
+    /// Clean prelude is not Lean's `Init`: it seeds `sorry`, `trustedArith` and
+    /// `trustedAy` (each `{α : Sort u} → α`) and hundreds of hand-written
+    /// declarations that either exist nowhere in Lean or shadow a same-named
+    /// Lean constant with a different type or value, because the importer keeps
+    /// the first declaration of a name. Measured 2026-09-24 on `.olean`s written
+    /// with the kernel bypassed: `per-constant-verify` and `stamp-verified`
+    /// stamped `False := @sorry False` kernel-verified, and a module's own
+    /// `Nat.not_succ_lt_zero : False` was verified as Clean's prelude theorem of
+    /// that name. From this constructor, every constant comes from the `.olean`
+    /// closure the caller loads, or from the replay itself.
+    ///
+    /// Two kernel facilities are installed, both Lean's own: the native
+    /// reducers (name-keyed functions, not declarations; the kernel theory
+    /// decides which may fire) and the canonical quotient (`Quot`, `Quot.mk`,
+    /// `Quot.lift`, `Quot.ind`), which is what Lean's kernel adds for a
+    /// `quotDecl` whatever a stored `quotInfo` says (`Lean/Replay.lean` replays
+    /// a `quotInfo` as `addDecl quotDecl`) and which Lean's import turns on for
+    /// any non-empty import list (`finalizeImport`: `quotInit :=
+    /// !imports.isEmpty`). A loader keeps the resident canonical quotient and
+    /// drops a module's restatement of it.
+    #[must_use]
+    pub fn for_lean_replay() -> Self {
+        let mut env = Self {
+            suppress_lossy_structure_stubs: true,
+            ..Self::default()
+        };
+        env.ensure_native_reducers();
+        env.init_quot();
+        env
     }
 
     /// Whether this environment was built with the lossy `extends`-structure
@@ -3479,10 +3898,8 @@ impl Environment {
         self.suppress_lossy_structure_stubs
     }
 
-    /// Enable the strict monad-instance gate for the `--prelude lean4-core`
-    /// check lane (Brick B07). See the field doc on
-    /// [`Environment::lean4_core_strict_monads`] and
-    /// `clean-elab::infer::elab_monad_materialize` for the enforcement point.
+    /// Enable the strict `--prelude lean4-core` check lane (Brick B07). See
+    /// the field doc on [`Environment::lean4_core_strict_monads`].
     pub fn set_lean4_core_strict_monads(&mut self, strict: bool) {
         self.lean4_core_strict_monads = strict;
     }
@@ -3495,9 +3912,8 @@ impl Environment {
 
     /// Initialize core prelude types: logic, data types, equality.
     fn init_prelude_core(&mut self) -> Result<(), EnvError> {
-        self.init_sorry()?;
-        self.init_trusted_arith()?;
-        self.init_trusted_ay()?;
+        self.lean_init_modeled = true;
+        // Admission markers belong to the opt-in stub theory (F3).
         self.init_eq()?;
         // HEq must be initialized before the first PARAMETERIZED inductive
         // (List/Option/…): under the v4.30 heterogeneous noConfusion
@@ -3726,13 +4142,13 @@ impl Environment {
         self.init_nat_mul_inst()?;
         self.init_nat_sub_inst()?;
         // `+`, `-`, `*`, `/`, `%` over Int, backed by the Int.add/sub/mul
-        // (real `Int.rec`/`Nat.rec` definitions) and Int.div/Int.mod (Opaque,
-        // native-reduced) constants from `init_int_arith`. Without these,
+        // (real `Int.rec`/`Nat.rec` definitions) and Int.div/Int.mod (Lean
+        // 4.8.0's T-rounding definitions) constants from `init_int_arith`. Without these,
         // `a + b * c - a / b % c` over `Int` left every `HAdd/HSub/HMul/HDiv/
         // HMod Int Int Int` instance argument unfilled ("contains free
         // variables"), so trust-ir's Arith.lean integer-semantics block could
         // not elaborate. Axiom-free: each instance is a `HAdd.mk … Int.add`
-        // style `Definition`, and the backing ops are Definition/Opaque, never
+        // style `Definition`, and the backing ops are Definitions, never
         // `Axiom`. (Track PP)
         self.init_int_hadd_inst()?;
         self.init_int_hsub_inst()?;
@@ -3785,69 +4201,8 @@ impl Environment {
         // metavariable ("contains free variables" — trust-ir Aggregate.lean
         // `setUnion`/`seqConcat`). (Track G)
         self.init_list_happend_inst()?;
-        // Register built-in native reducers for @[implemented_by] support.
-        // These provide fast-path computation for Nat.decEq, String.decEq, etc.
-        self.init_native_reducers();
-        // Register arithmetic native reducers for Nat.add/sub/mul/div/mod/pow/blt/
-        // ble/beq and bitwise operations (land/lor/xor/shift), plus UInt32 ops.
-        self.init_arith_native_reducers();
-        // Register Bool.beq and Nat.gcd native reducers (unique to bool_ext;
-        // all other Nat ops are in arith with BigNat support). Part of #3251.
-        self.init_bool_ext_native_reducers();
-        // Register UInt native reducers for UInt8/16/32/64/USize arithmetic,
-        // comparisons (beq/blt/ble), and decidable equality.
-        self.init_uint_native_reducers();
-        // Register UInt/USize conversion reducers for ofNat, cross-width casts, and Fin.val.
-        self.init_uint_conv_native_reducers();
-        // Register platform-dependent native reducers (getNumBits, getIsWindows, etc.).
-        self.init_platform_native_reducers();
-        // Register extended String native reducers for Init/Std TC verification.
-        self.init_string_native_reducers();
-        self.init_string_ext_native_reducers();
-        // Register Char native reducers.
-        self.init_char_native_reducers();
-        // Register Float native reducers for IEEE 754 arithmetic, comparison,
-        // and conversion operations (Float.add, Float.mul, Float.ofScientific, etc.).
-        self.init_float_native_reducers();
-        // Register the exact float→rational decomposition reducers
-        // (Float.toRatExact / Float.ulpExact) — real-IEEE-floats Stage A (#3185).
-        self.init_float_to_rat_native_reducers();
-        // Register Name native reducers for Lean.Name operations
-        // (mkStr, mkNum, beq, hash, toString, append).
-        self.init_name_native_reducers();
-        // Register Decidable instance native reducers for instDecidableNatLt/Le,
-        // instDecidableEqNat/Bool/String, and Fin.decEq.
-        self.init_decidable_native_reducers();
-        // Register extended Decidable native reducers for decide, Decidable combinators
-        // (And, Or, Not), and Int comparison instances.
-        self.init_decidable_ext_native_reducers();
-        // Register instance name aliases (instDecidableEqChar, instDecidableEqUInt8, etc.)
-        // that map to existing *.decEq reducer functions.
-        self.init_decidable_alias_native_reducers();
-        // Register Int native reducers for signed integer arithmetic
-        // (add, sub, mul, div, mod, neg, natAbs, toNat, beq, blt, ble, decEq).
-        self.init_int_native_reducers();
-        // Register signed fixed-width int native reducers (Int8/16/32/64, ISize)
-        self.init_sint_native_reducers();
-        // Register BitVec and UInt/Int BitVec conversion reducers for
-        // toBitVec/ofBitVec/BitVec.ofNat/BitVec.toNat and signed integer
-        // toUInt/ofUInt conversions. Part of #3232.
-        self.init_bitvec_native_reducers();
-        // Register BEq typeclass short-circuit reducer. When BEq.beq is applied
-        // with a known instance (instBEqNat, instBEqString, etc.), the reducer
-        // bypasses the structure projection and delegates directly to the
-        // underlying beq computation. Part of #3210.
-        self.init_beq_shortcircuit_native_reducers();
-        // Register heterogeneous typeclass short-circuit reducers. When HAdd.hAdd,
-        // HSub.hSub, HMul.hMul, etc. are applied with known instances
-        // (instHAddNatNatNat, etc.), the reducer bypasses structure projections
-        // and delegates directly to the underlying computation. Part of #3210.
-        self.init_hetero_shortcircuit_native_reducers();
-        // Register Init-specific native reducers for ite/dite, Ord.compare,
-        // compareOfLessAndEq, List.length, List.getLast!, Array.size.
-        // These short-circuit common Init patterns that cause heartbeat exceeded.
-        // Part of #3210.
-        self.init_init_native_reducers();
+        // Use the same installation owner and exact family roster as new().
+        self.ensure_native_reducers();
         Ok(())
     }
 
@@ -3881,37 +4236,33 @@ impl Environment {
             self.init_comm_ring()?;
         }
         self.init_array()?;
-        self.init_io()?;
+        self.init_monad_classes()?;
         self.init_state_t()?;
         self.init_state_m()?;
-        // WS-LEVEL: the hand-rolled `Except` family is SINGLE-universe — the
-        // `Except` inductive is `Type u → Type u → Type u` (`level_params = [u]`),
-        // and every dependent (`Except.bind`, `ExceptT`, `MonadExcept`, and the
-        // `monad_reduce` native reducers) was written against that one-universe
-        // signature. Lean 4 core's genuine `Except.{u, v}` is TWO-universe
-        // (`Except (ε : Type u) (α : Type v)`). On `.olean` import the loader
-        // dedups by name and this prelude stub SHADOWS the real two-universe
-        // `Except`, so every Mathlib proof referencing `@Except.{u, v}` /
-        // `@Except.ok.{u, v}` / `@Except.error.{u, v}` (2 level args) hits
-        // `LevelCountMismatch { expected: 1, got: 2 }` and fails to kernel-verify
-        // (74 such rows in the mathverse-full-v2 corpus). Because the whole family
-        // is monomorphic-in-`u` and INTERNALLY consistent, the stub cannot be
-        // partially replaced — suppressing just the inductive would leave
-        // `Except.bind`/`ExceptT` referencing a now-two-universe `Except` with one
-        // level (breaking the prelude build). Same lossy-stub shadowing class as
-        // WS17/18/19: in import-verification mode suppress the ENTIRE hand-rolled
-        // family so the genuine Lean `Except`/`ExceptT`/`MonadExcept` register
-        // through the checked import path with their full two-universe signatures.
-        // SOUNDNESS: suppression only ever lets the genuine, fully kernel-checked
-        // Lean declarations import in the stubs' place; nothing here touches
-        // `is_def_eq`/`whnf` or relaxes acceptance. The `monad_reduce` native
-        // reducer is an OPTIMIZATION that pattern-matches on `Except.ok`/`.error`
-        // and falls through to ordinary δ-reduction on a miss, so a two-universe
-        // `Except` simply bypasses the fast path — never a correctness change. The
-        // proof-execution lane (stub NOT suppressed) keeps the single-universe
-        // `Except` family exactly as before.
+        // WS-LEVEL: the hand-rolled `Except` family. Until 2026-10-16 it was
+        // SINGLE-universe (`Except : Type u → Type u → Type u`), so on `.olean`
+        // import (the loader keeps the first declaration of a name) the stub
+        // SHADOWED Lean's two-universe `Except.{u, v}` and every imported term
+        // spelling `@Except.{u, v}` hit `LevelCountMismatch { expected: 1, got:
+        // 2 }` (74 rows in the mathverse-full-v2 corpus); the import prelude
+        // therefore suppresses the ENTIRE family so Lean's `Except` / `ExceptT`
+        // / `MonadExcept` register through the checked import path. The
+        // default lane now declares Lean 4.8.0's two-universe telescope
+        // (`data_monad_control.rs`, trust-ir gap G32), which a source file that
+        // imports an `.olean` on top of the builtin prelude meets
+        // (`import Lean.Data.Json`). The import prelude keeps suppressing it:
+        // the family needs the `Monad` classes, which that prelude withholds so
+        // Lean's own hierarchy imports. SOUNDNESS: suppression only ever lets
+        // the genuine, fully kernel-checked Lean declarations import in the
+        // stubs' place; nothing here touches `is_def_eq`/`whnf` or relaxes
+        // acceptance.
         if !self.suppress_lossy_structure_stubs {
             self.init_except_t()?;
+            // Lean core's `instInhabitedExcept`, `instInhabitedOfMonad` and
+            // `String.instInhabited` (G57; the substrate of `deriving
+            // Inhabited`, G43). Default lane only, like the `Except` family
+            // they extend. The `Nonempty` half follows `init_classical`.
+            self.init_inhabited_core_instances()?;
         }
         self.init_option_t()?;
         self.init_set()?;
@@ -3972,20 +4323,28 @@ impl Environment {
         // only when those parents are seeded, and they pull the parents in
         // transitively. In import mode the real Mathlib structures come from the
         // imported closure, so the whole family is suppressed.
+        //
+        // KR1 increment 3 (R143): the sub-structure names are value-less
+        // placeholders (`Subgroup : Type u`, with no group argument), so they
+        // moved to the opt-in stub theory (`stub_theory.rs`,
+        // `init_mathlib_placeholder_stubs`), which the Mathlib prelude
+        // providers opt into. The parents they pulled in stay in the default
+        // prelude, unchanged.
         if !self.suppress_lossy_structure_stubs {
-            self.init_subgroup()?;
-            self.init_subring()?;
-            self.init_subfield()?;
-            self.init_submonoid()?;
-            self.init_ring_hom()?;
+            self.init_group()?;
+            self.init_ring()?;
+            self.init_field()?;
+            self.init_monoid()?;
         }
         Ok(())
     }
 
     /// Initialize extended prelude: numerics, classical logic, decidability.
     fn init_prelude_extended(&mut self) -> Result<(), EnvError> {
-        self.init_finite()?;
-        self.init_nat_card()?;
+        // `init_finite` / `init_nat_card` (`Finite`, `.Finite`, `.FiniteType`,
+        // `Nat.card`, `Nat.Primes`, each a value-less placeholder) moved to the
+        // opt-in stub theory in KR1 increment 3 (R143).
+        self.init_nat()?;
         // WS18: `Fact` is hand-rolled here as three opaque AXIOMS
         // (`Fact : Prop → Prop`, `Fact.out`, `Fact.mk`; see
         // `algebra_substructures.rs::init_fact`), but Lean 4 / Mathlib's `Fact`
@@ -4000,9 +4359,11 @@ impl Environment {
         // path. SOUNDNESS: identical to the `Finset` case above — suppression
         // only lets the real kernel-checked structure import; the proof-execution
         // lane (stub NOT suppressed) keeps the `Fact` axiom carrier unchanged.
-        if !self.suppress_lossy_structure_stubs {
-            self.init_fact()?;
-        }
+        //
+        // KR1 slice 1 (R132): the stub is no longer in ANY prelude. It moved,
+        // with the `SetTheory.*` constants, to the opt-in stub theory
+        // (`stub_theory.rs`, `Environment::init_stub_theory`), whose axioms a
+        // theorem's closure lists by name.
         self.init_ge()?;
         // `a > b` desugars to `GT.gt a b` (parser, expr_operators.rs). Without
         // registering the `GT.gt` definition the constant is absent, the bare
@@ -4063,25 +4424,21 @@ impl Environment {
             self.init_uint_arith()?;
         }
         self.init_classical()?;
-        self.init_id()?;
-        // Monad/Bind/Pure + the Id/IO/StateM/StateT cluster. In the CLOSURE
-        // lane these heal (value-free axiom carriers are discharged by
-        // `is_axiom_carrier_stub` and `Bind.bind`/`Pure.pure` are replaced by
-        // `upgrade_axiom_stubs`), but the incremental lane has no such healing,
-        // so stamping Init.Prelude itself left the stubs shadowing the genuine
-        // declarations — "existing constant Monad is not checked
-        // inductive-family metadata" plus the Monad.toBind/ReaderT/EStateM/
-        // Lean.Macro taint cascade (~500 rows in that one module). Import mode
-        // suppresses the whole cluster: its only prelude consumers
-        // (`List.mapM`, the `ForIn`/`List.forIn` cluster) are already
-        // suppressed below, and nothing else in the import-mode prelude
-        // references these constants (verified by grep across env/). SOUNDNESS:
-        // suppression only lets the genuine, fully kernel-checked Lean
-        // declarations import in the stubs' place; the proof-execution lane
-        // (default prelude) is byte-identical.
+        // Lean core's `instNonemptyOfInhabited` and `Classical.ofNonempty`
+        // (`data_inhabited_core.rs`; the substrate of `deriving Nonempty`,
+        // G55). Default lane only; an import brings Lean's own.
         if !self.suppress_lossy_structure_stubs {
-            self.init_monad_classes()?;
+            self.init_nonempty_core_instances()?;
         }
+        self.init_id()?;
+        // The Lean-faithful `Applicative` / `Monad` classes and the `Pure.pure`
+        // / `Bind.bind` projections (`data_monad_classes.rs`). Until 2026-09-28
+        // this registered `Pure.pure`, `Bind.bind` and `Monad` as value-less,
+        // instance-less AXIOMS, and the first two proved `False`
+        // (`docs/issues/2026-09-28-prelude-pure-proves-false.md`). Import mode
+        // withholds the hierarchy (inside the init) so the genuine `.olean`
+        // one imports through the checked path.
+        self.init_monad_classes()?;
         // `List.mapM` references the `Bind.bind` / `Pure.pure` monad-class
         // constants registered by `init_monad_classes`, so it must run *after*
         // it (and after `init_list` registered the `List` inductive +
@@ -4167,6 +4524,9 @@ impl Environment {
         // is registered unconditionally (like Option, unlike the Clean-native
         // List lane); import mode withholds it inside the init.
         self.init_monad_id_insts()?;
+        // The Lean-core `Monad Id` / `Monad Option` instances, built from the
+        // leaf instances above (`data_monad_classes.rs`).
+        self.init_core_monad_instances()?;
         self.init_handthen_horelse()?;
         // Brick 3 — `Option` instances behind `>> <|>` (parser RHS unit-thunk
         // lands the operators; these give them something to resolve against).
@@ -4196,6 +4556,19 @@ impl Environment {
         // `propext` via `Bool.not_eq_true`, so this is proved directly by the
         // same `Decidable.rec` casework. Axiom-free. Idempotent.
         self.register_of_not_decide_eq_true()?;
+        // `decide_eq_decide : (decide p = decide q) ↔ (p ↔ q)` — the
+        // CONGRUENCE member of the same family, transcribed from Lean 4
+        // v4.30.0-rc2 `src/Init/PropLemmas.lean:512` (an `Iff`, with IMPLICIT
+        // rather than instance-implicit `Decidable` binders — both details are
+        // Lean's). The `of_decide_*` siblings relate ONE decision to its
+        // proposition and so cannot state anything about TWO decisions over
+        // different propositions — the shape of every "this magic constant is
+        // the right one" contract, e.g. a guard's `depth < 21` proved equal to
+        // the arithmetic `3 * (depth + 1) < 64` that fixes the 21. Proved by
+        // nested `Decidable.rec` casework rather than Lean's `rw` through
+        // `decide_eq_true_iff`, so the closure stays EMPTY (Lean's own proof
+        // would cost `propext`). Axiom-free. Idempotent.
+        self.register_decide_eq_decide()?;
         // Canonical `Decidable True` / `Decidable False` instances. Without
         // them `resolve_decidable(True/False)` falls back to a synthetic sorry
         // and `if True then a else b` never ι-reduces. Must run after
@@ -4221,6 +4594,13 @@ impl Environment {
         // Must run after init_ite + init_decidable + init_true_false. Axiom
         // closure: `ite`/`Decidable.rec`/`Eq.refl`/`absurd`/`False` — empty.
         self.register_ite_pos_neg_lemmas()?;
+        // Lean 4.8 core's `@[simp]` `ite_eq_left_iff` / `ite_eq_right_iff` /
+        // `imp_false` / `Decidable.not_not`, and `forall_congr` (simp's
+        // rewrite-under-a-binder congruence), G39 (ledger (109)). Real
+        // kernel-checked theorems; axiom closure empty except
+        // `forall_congr`'s `{propext}` (FOUNDATIONAL). Must run after
+        // init_ite + init_decidable + init_iff + init_propext.
+        self.register_simp_logic_iff_lemmas()?;
         self.init_decidable_eq()?;
         // Decidable order: registers the axiom-free `instDecidableNatLe` /
         // `instDecidableNatLt` (real `Nat.decLe`/`Nat.decLt` decision procedures)
@@ -4263,6 +4643,11 @@ impl Environment {
         // of falling back to a synthetic `sorry` (trk-rr-intord). Depends on
         // `init_int_ord` (instLEInt/instLTInt) and `init_decidable` above.
         self.init_int_decidable_ord()?;
+        // `Int.instMin` / `Int.instMax` — Lean's `minOfLe` / `maxOfLe` at
+        // `Int` over `instLEInt` / `Int.decLe` just above, so `min (a : Int) b`
+        // synthesizes (`order_int_minmax_inst.rs`). Withheld in import mode,
+        // where the genuine instances import under the same names.
+        self.init_int_minmax_inst()?;
         // BEq (Boolean Equality) typeclass — required by `deriving BEq` on
         // inductives and structures.  Dependencies (Bool, Nat) are already
         // initialised in init_prelude_core.  Part of #3429.
@@ -4311,6 +4696,18 @@ impl Environment {
         // theorem `Nat.testBit_bitwise` and the `Nat.testBit_and/or/xor`
         // corollaries (step 3) are registered alongside.
         self.register_nat_bitwise_def()?;
+        // `Nat.shiftRight` as its real Definition (`fun m n => Nat.iterDiv2 n m`)
+        // in place of the admitted axiom `init_nat` leaves. Native folds fire
+        // only over a canonical DEFINITION (`native_fold_authority.rs`), so
+        // with the axiom `Nat.shiftRight 8 1` would no longer compute here;
+        // with the definition it computes, and is justified. (2026-09-26,
+        // `docs/issues/2026-09-26-kernel-native-fold-by-name.md`.) Import mode
+        // suppresses the Clean-native Nat bitwise cluster it is built on, as
+        // `register_nat_bitwise_def` does, so the genuine `.olean` definitions
+        // import instead.
+        if !self.suppress_lossy_structure_stubs {
+            self.register_nat_shiftright_def()?;
+        }
         self.register_nat_testbit_bitwise_proof()?;
         // Parseval ladder rung 4a: `Nat.testBit_lt_pow` — bit `n` of any
         // `k < 2^n` is `false`. Plain `Nat.rec` on the bit index over the
@@ -4360,6 +4757,7 @@ impl Environment {
         // Idempotent, self-seeding. Zero axioms, `add_decl`-rechecked;
         // olean-supplied under import mode.
         self.register_bitvec_of_nat()?;
+        self.register_bitvec_shifts()?;
         // Universal half-ulp rounding bound, proven constructively down to the
         // foundational axioms (empty domain-axiom closure): the round primitive
         // `Nat.roundHalfEvenMod` (a reducible Definition) plus the two-sided
@@ -4450,6 +4848,44 @@ impl Environment {
             self.register_int_minmax_proofs()?;
             self.register_int_minmax_def_prime()?;
         }
+        // The elementary `Nat` floor (see the `nat_floor_*` module docs). Last
+        // in the chain because it cites the widest set of prelude theorems:
+        // `Nat.div_add_mod` (div/mod lemmas), `Nat.le_antisymm`,
+        // `instDecidableNatLe`, and the whole Fin/BitVec-carrier UInt cluster.
+        // Each of the three initializers is itself import-mode gated.
+        self.init_nat_floor_order_lemmas()?;
+        self.init_nat_floor_min_lemmas()?;
+        self.init_uint_floor_tonat_lemmas()?;
+        // `Nat.lt_of_lt_of_le` and `Nat.lt_trans` were ALREADY kernel-checked
+        // constructive theorems, reachable only through `init_nat_trans_lt_le_lt`
+        // / `init_nat_lt_trans` / `init_smt_bridge_nat_order_lemmas` — none of
+        // which `try_with_prelude` calls. So `clean check` answered
+        // `Unknown identifier` for both while their sibling
+        // `Nat.lt_of_le_of_lt` resolved: an availability gap, not a proof gap.
+        // Register the STANDALONE theorems here (not `init_*`, which would also
+        // build the `Trans` instances) to close it.
+        self.register_nat_lt_of_lt_of_le_proof()?;
+        self.register_nat_lt_trans_proof()?;
+        // Lean 4.8.0 `Init` constants that `simp`/`congr` look up by name and
+        // that a user file may not declare (it is a core name):
+        // `Bool.of_not_eq_true`/`_false`, and the `Subsingleton` class with
+        // `Subsingleton.elim` and `instSubsingletonDecidable`. Default mode
+        // only (see the module).
+        self.register_lean_core_supply()?;
+        // `Bool.and_eq_true`, `decide_eq_true_eq`, `Option.isSome_iff_exists`:
+        // Lean 4.8.0 core lemmas trust-ir's proofs over lifted mutual members
+        // name in `simp` (gap G23, brick B3). Kernel-checked; `propext` only.
+        self.register_eq_true_prop_lemmas()?;
+        // Lean-core `Fin n` arithmetic (`Fin.add`/`sub`/`mul`/`div`/`mod`,
+        // their operator instances, and `instDecidableEqFin` as an instance).
+        // Without them `(3 : Fin 4) + 1` could not be elaborated at `Fin 4`,
+        // and in an `if` branch it was read at `Nat` instead — accepting
+        // `(if True then (3 : Fin 4) + 1 else 0) ≠ 0`, which is false in Lean
+        // (see `data_fin_arith.rs`). LAST in the chain on purpose: every
+        // ingredient is already registered, so the initializers it calls are
+        // no-ops and no existing instance changes its registration order.
+        // Import-mode gated inside.
+        self.init_fin_arith()?;
         Ok(())
     }
 
@@ -4473,11 +4909,64 @@ impl Environment {
         self.mode
     }
 
+    /// Force the mode of an environment the reference entry
+    /// ([`crate::reference::ReferenceKernel`]) has taken ownership of. Crate
+    /// private on purpose: the entry calls it once, in its constructor, and no
+    /// caller outside the crate can change the mode of an environment after
+    /// construction. Bumps `generation` so no cache keyed on it survives.
+    pub(crate) fn force_mode_for_reference_entry(&mut self, mode: crate::mode::CleanMode) {
+        self.mode = mode;
+        self.generation += 1;
+    }
+
     /// Enable/disable CUMULATIVE subtyping (Coq/pCIC) for `add_decl` type
     /// checking. Default `false` (Lean-faithful non-cumulative). Enable ONLY when
     /// re-verifying Coq-sourced declarations. See the `cumulative` field docs.
     pub fn set_cumulative(&mut self, cumulative: bool) {
         self.cumulative = cumulative;
+        self.cumulative_ever |= cumulative;
+    }
+
+    /// Every setting of this environment that the type checkers its checking
+    /// paths build (`add_decl`, `check_decl_readonly_*`, `add_inductive`, the
+    /// eliminator analysis) read. Those paths read the environment-wide flags
+    /// through this snapshot, so a new one is added HERE, and the reference
+    /// entry destructures it with no rest pattern: a new field does not
+    /// compile until the entry classifies it.
+    #[must_use]
+    pub fn checker_settings(&self) -> CheckerSettings {
+        let option = |key: &str| match self.options.get(key) {
+            Some(Some(v)) => Some(v.as_str()),
+            _ => None,
+        };
+        CheckerSettings {
+            mode: self.mode,
+            kernel_theory: self.kernel_theory,
+            lean_level_profile: self.lean_level_profile,
+            cumulative: self.cumulative,
+            cumulative_ever: self.cumulative_ever,
+            max_heartbeats: option("maxHeartbeats").and_then(|v| v.parse::<u32>().ok()),
+            max_cache_entries: option("tcMaxCacheEntries").and_then(|v| v.parse::<usize>().ok()),
+            profile_heartbeats: option("profileHeartbeats")
+                .is_some_and(|v| v == "true" || v == "1"),
+        }
+    }
+
+    /// The universe algebra selected by the source world's admitted identity.
+    #[must_use]
+    pub fn lean_level_profile(&self) -> crate::level::LeanLevelProfile {
+        self.lean_level_profile
+    }
+
+    /// Select an explicit level algebra before checking this source world.
+    /// Importers bind this from their measured world identity, not an
+    /// informative version string. This changes checker semantics and bumps
+    /// the environment generation; it is not a proof/authority upgrade.
+    pub fn set_lean_level_profile(&mut self, profile: crate::level::LeanLevelProfile) {
+        if self.lean_level_profile != profile {
+            self.lean_level_profile = profile;
+            self.generation += 1;
+        }
     }
 
     /// Whether cumulative subtyping is enabled for `add_decl` type checking.
@@ -4543,6 +5032,7 @@ impl Environment {
             simp_registry_revision: 0,
             export_aliases: HashMap::new(),
             param_names: HashMap::with_capacity(capacity / 4),
+            typed_param_names: HashMap::with_capacity(capacity / 4),
             persistent_extensions: HashMap::with_capacity(32),
             extern_bindings: HashMap::with_capacity(capacity / 32),
             implemented_by: HashMap::with_capacity(capacity / 32),
@@ -4582,6 +5072,7 @@ impl Environment {
         self.instance_names.reserve(additional / 8);
         self.simp_lemmas.reserve(additional / 16);
         self.param_names.reserve(additional / 4);
+        self.typed_param_names.reserve(additional / 4);
     }
 
     /// Create a new environment with quotient types initialized
@@ -4915,6 +5406,11 @@ impl Environment {
         self.param_names.get(name).map(|v| v.as_slice())
     }
 
+    /// Exact parameter identities, absent for legacy display-only producers.
+    pub fn get_typed_param_names(&self, name: &Name) -> Option<&[Name]> {
+        self.typed_param_names.get(name).map(Vec::as_slice)
+    }
+
     /// Get the binder kinds parallel to [`Self::get_param_names`] (B01).
     ///
     /// `None` for names-only legacy registrations; consumers must then treat
@@ -4929,6 +5425,7 @@ impl Environment {
     /// Names-only legacy path: records no binder kinds (see
     /// [`Self::set_param_infos`] for the kind-carrying registration).
     pub(crate) fn set_param_names(&mut self, name: Name, names: Vec<String>) {
+        self.typed_param_names.remove(&name);
         self.param_binder_infos.remove(&name);
         self.param_names.insert(name, names);
     }
@@ -4941,9 +5438,29 @@ impl Environment {
     /// recorded here let the elaborator implement that explicit/implicit
     /// distinction for surface declarations.
     pub(crate) fn set_param_infos(&mut self, name: Name, infos: Vec<(String, BinderInfo)>) {
+        self.typed_param_names.remove(&name);
         let (names, kinds): (Vec<String>, Vec<BinderInfo>) = infos.into_iter().unzip();
         self.param_binder_infos.insert(name.clone(), kinds);
         self.param_names.insert(name, names);
+    }
+
+    pub(crate) fn set_typed_param_names(&mut self, name: Name, names: Vec<Name>) {
+        self.param_binder_infos.remove(&name);
+        self.param_names.insert(
+            name.clone(),
+            names.iter().map(ToString::to_string).collect(),
+        );
+        self.typed_param_names.insert(name, names);
+    }
+
+    pub(crate) fn set_typed_param_infos(&mut self, name: Name, infos: Vec<(Name, BinderInfo)>) {
+        let (names, kinds): (Vec<Name>, Vec<BinderInfo>) = infos.into_iter().unzip();
+        self.param_binder_infos.insert(name.clone(), kinds);
+        self.param_names.insert(
+            name.clone(),
+            names.iter().map(ToString::to_string).collect(),
+        );
+        self.typed_param_names.insert(name, names);
     }
 
     /// Register a persistent environment extension (no entries yet).
@@ -4967,6 +5484,10 @@ impl Environment {
         module_idx: usize,
         entries: Vec<EnvExtensionEntry>,
     ) {
+        // The matcher index is derived from these exact persisted entries.
+        // Generic import paths can also update its storage, so invalidate here
+        // rather than relying only on the dedicated registration helper.
+        self.matcher_info.take();
         let state = self.persistent_extensions.entry(name.clone()).or_default();
 
         if state.imported_entries.len() <= module_idx {
@@ -5316,6 +5837,7 @@ impl Environment {
         let removed = self.constants.remove(name).is_some();
         if removed {
             self.declaration_verification.remove(name);
+            self.forget_matcher_info(name);
         }
         removed
     }
@@ -5413,6 +5935,7 @@ impl Environment {
         self.declaration_verification.remove(name);
         self.constant_origins.remove(name);
         self.param_names.remove(name);
+        self.typed_param_names.remove(name);
         self.param_binder_infos.remove(name);
         self.structure_fields.remove(name);
         self.classes.remove(name);
@@ -5424,23 +5947,52 @@ impl Environment {
                 entries.retain(|entry| &entry.name != name);
             }
         }
+        self.instance_seqs.remove(name);
         self.private_decls.remove(name);
         self.protected_decls.remove(name);
         self.noncomputable_decls.remove(name);
         self.partial_decls.remove(name);
         self.unsafe_decls.remove(name);
+        self.local_instance_decls.remove(name);
         self.generation += 1;
         true
     }
 
+    /// Remove a named constant's body without changing its type, kind, universe
+    /// parameters or origin. Returns whether the name already resolves, including
+    /// when its value was previously removed.
+    ///
+    /// A lazy constant is retained as an eager, bodyless shadow so refreshing the
+    /// source's cache cannot restore its body. This materializes only the packet
+    /// already returned by `get_const`; indexed but unavailable names stay absent.
+    /// Exact-payload verification provenance is discarded, never recreated.
     pub fn forget_value(&mut self, name: &Name) -> bool {
+        let mut changed = false;
+        if !self.constants.contains_key(name) {
+            let Some(info) = self.lazy_source.as_ref().and_then(|s| s.get(name)).cloned() else {
+                return false;
+            };
+            // Removal only: the caller supplies a name, not a new packet. Eager
+            // precedence retains the existing type/kind/levels while preventing
+            // later lazy materialization from restoring the removed value.
+            self.constants.insert(name.clone(), info);
+            changed = true;
+        }
         if let Some(ci) = self.constants.get_mut(name) {
-            ci.value = None;
+            changed |= ci.value.take().is_some()
+                || ci.reducibility != Reducibility::Opaque
+                || ci.is_reducible;
             ci.reducibility = Reducibility::Opaque;
+            ci.is_reducible = false;
             // The exact payload that earned any previous verification stamp
             // no longer exists. Missing provenance is the conservative state;
             // certification will report the elided value explicitly.
-            self.declaration_verification.remove(name);
+            changed |= self.declaration_verification.remove(name).is_some();
+            if changed {
+                // Native-fold authority and other content-dependent caches must
+                // observe eager elision even when the constant count stays fixed.
+                self.generation += 1;
+            }
             true
         } else {
             false
@@ -5515,6 +6067,29 @@ impl Environment {
         self.constants.insert(name.clone(), info);
         self.declaration_verification
             .insert(name, DeclarationVerification::Unchecked);
+    }
+
+    /// Overwrite (or insert) inductive-family records directly (test-only),
+    /// bypassing every check. The environment a `.cleancert` bundle carries is
+    /// whatever its author wrote; the bundle re-derivation tests
+    /// (`cert/bundle.rs`) forge one the way such an author would.
+    #[cfg(test)]
+    pub(crate) fn forge_family_records_for_test(
+        &mut self,
+        inductives: Vec<InductiveVal>,
+        constructors: Vec<ConstructorVal>,
+        recursors: Vec<RecursorVal>,
+    ) {
+        for val in inductives {
+            self.inductives.insert(val.name.clone(), val);
+        }
+        for val in constructors {
+            self.constructors.insert(val.name.clone(), val);
+        }
+        for val in recursors {
+            self.recursors.insert(val.name.clone(), val);
+        }
+        self.generation += 1;
     }
 
     /// Cross-crate test-support: insert a fully-formed `ConstantInfo` directly,
@@ -5879,6 +6454,8 @@ mod tests_recursor_authority;
 #[cfg(test)]
 mod tests_trans_lean_shape;
 #[cfg(test)]
+mod tests_v4331_invariants;
+#[cfg(test)]
 mod tests_ws17_import_prelude;
 // Batch 4 (#3551): Rat min/max transitivity / idempotence at ground zero.
 #[cfg(test)]
@@ -5933,6 +6510,8 @@ mod tests_positivity;
 #[cfg(test)]
 mod tests_prelude_axiom_ratchet;
 #[cfg(test)]
+mod tests_prelude_monad_consistency;
+#[cfg(test)]
 mod tests_proof_builder;
 #[cfg(test)]
 mod tests_proof_complexity_proofs;
@@ -5947,7 +6526,11 @@ mod tests_registries;
 #[cfg(test)]
 mod tests_resolution_complexity;
 #[cfg(test)]
+mod tests_set_ops_meaning;
+#[cfg(test)]
 mod tests_shadowing_overlay;
+#[cfg(test)]
+mod tests_shift_bridges;
 #[cfg(test)]
 mod tests_sorry_tracer;
 #[cfg(test)]
@@ -5967,6 +6550,8 @@ mod tests_topology_manifold;
 #[cfg(test)]
 mod tests_tree_width_resolution;
 #[cfg(test)]
+mod tests_trust_marker_closure;
+#[cfg(test)]
 mod tests_verified_proof_search;
 #[cfg(test)]
 mod tests_veripb_checker;
@@ -5974,3 +6559,54 @@ mod tests_veripb_checker;
 mod tests_width_expansion;
 #[cfg(test)]
 mod tests_zonotope_false_axiom_prevention;
+#[cfg(test)]
+mod typed_param_names_tests;
+
+/// Test seams for the reference entry's base re-check (`reference.rs`, R143):
+/// a doctored record that no public door can produce, so each re-check branch
+/// has a test that a mutant of it turns red.
+#[cfg(test)]
+impl Environment {
+    pub(crate) fn test_const_mut(&mut self, name: &Name) -> Option<&mut ConstantInfo> {
+        self.constants.get_mut(name)
+    }
+
+    pub(crate) fn test_inductive_mut(&mut self, name: &Name) -> Option<&mut InductiveVal> {
+        self.inductives.get_mut(name)
+    }
+
+    pub(crate) fn test_constructor_mut(&mut self, name: &Name) -> Option<&mut ConstructorVal> {
+        self.constructors.get_mut(name)
+    }
+
+    pub(crate) fn test_recursor_mut(&mut self, name: &Name) -> Option<&mut RecursorVal> {
+        self.recursors.get_mut(name)
+    }
+
+    pub(crate) fn test_quot_mut(&mut self, name: &Name) -> Option<&mut QuotVal> {
+        self.quotients.get_mut(name)
+    }
+
+    /// Copy every record of `from` (verification stamp included) to `to`:
+    /// a stamped member no admission generated (R161 review).
+    pub(crate) fn test_clone_member(&mut self, from: &Name, to: &Name) {
+        if let Some(mut c) = self.constants.get(from).cloned() {
+            c.name = to.clone();
+            self.constants.insert(to.clone(), c);
+        }
+        if let Some(v) = self.declaration_verification.get(from).cloned() {
+            self.declaration_verification.insert(to.clone(), v);
+        }
+        if let Some(mut c) = self.constructors.get(from).cloned() {
+            c.name = to.clone();
+            self.constructors.insert(to.clone(), c);
+        }
+        if let Some(mut r) = self.recursors.get(from).cloned() {
+            r.name = to.clone();
+            self.recursors.insert(to.clone(), r);
+        }
+    }
+}
+
+/// Bounded lossless Environment DAG data codec; decoding grants no authority.
+pub mod dag_serialization;

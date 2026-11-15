@@ -906,7 +906,10 @@ fn test_certified_proj_rejects_insufficient_type_args() {
     let mut v = CertVerifier::new(&env);
     match v.verify(&forged_cert, &forged_proj) {
         Err(CertError::InvalidCert(msg)) => {
-            assert!(msg.contains("not enough type arguments"), "got: {msg}");
+            assert!(
+                msg.contains("expected 2 type arguments, got 1"),
+                "got: {msg}"
+            );
         }
         Err(other) => panic!("Expected InvalidCert about type arguments, got: {other:?}"),
         Ok(_) => panic!("Should reject insufficient type arguments"),

@@ -1,0 +1,10 @@
+{
+  "_what_this_is": "AUDIT r14 M14-5. Rule R7b in scripts/check_gate_registry.py asks the question R7 cannot -- does a row's pin match the EVIDENCE, not merely the file? It can only ask it of a row whose `demonstrated` block cites a committed reports/*.json that carries a `script_sha256`. Measured 2026-09-02: ONE row of the 64 eligible does. The rule was therefore ~98% inert, and nothing said so: a row that stopped citing its record simply left R7b's reach, silently, and every rule stayed green. This artifact anchors the reach itself. A row named here that stops being record-backed is RED; the set may GROW freely; shrinking it requires editing this file, which is a reviewable act.",
+  "_not_a_target": "This is not a coverage GOAL and reaching 64/64 is not the job. It is an anchor: it makes a DECREASE in R7b's reach loud. The real repair is minting records for more rows, which is per-gate work.",
+  "measured": "2026-09-02",
+  "eligible_at_measurement": 64,
+  "count": 1,
+  "rows": [
+    "source_elab_gate"
+  ]
+}

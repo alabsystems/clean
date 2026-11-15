@@ -34,6 +34,8 @@
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprFolder, FVarId, Level};
 
+use clean_parser::SurfaceName;
+
 use super::ElabCtx;
 use crate::ElabError;
 
@@ -41,7 +43,7 @@ use crate::ElabError;
 #[derive(Debug, Clone)]
 pub(crate) struct MutualPackInfo {
     /// Names of the mutually recursive functions.
-    pub(crate) func_names: Vec<String>,
+    pub(crate) func_names: Vec<SurfaceName>,
     /// Fully elaborated types of each function (Pi types).
     pub(crate) func_types: Vec<Expr>,
     /// Elaborated bodies of each function (Lambda terms).

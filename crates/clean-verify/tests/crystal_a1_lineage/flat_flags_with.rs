@@ -6,18 +6,18 @@
 //! first chained body that BUILDS its returned aggregate.**
 //!
 //! ```text
-//! bb0(%0: struct.1017, %1: struct.1017):
+//! bb0(%0: struct.815, %1: struct.815):
 //!     %2 = extractfield u8 %0, 0
 //!     %3 = extractfield u8 %1, 0
 //!     %4 = or u8 %2, %3
-//!     %5 = const struct.1017 { 0 }
-//!     %6 = insertfield struct.1017 %5, 0, %4
+//!     %5 = const struct.815 { 0 }
+//!     %6 = insertfield struct.815 %5, 0, %4
 //!     ret %6
 //! }
 //! ```
 //!
 //! The sibling of the chained `FlatFlags::contains` — same two-parameter
-//! struct.1017 signature, same two field reads — with the `icmp` half replaced
+//! struct.815 signature, same two field reads — with the `icmp` half replaced
 //! by a WRITE half. That half is what this gate is about: `or`, an aggregate
 //! `const` at a STRUCT type, and `insertfield` were each in no chained body
 //! before this one, and the `insertfields` lane this file exercises landed in
@@ -123,19 +123,19 @@ fn flat_flags_with_proved_module_matches_the_emitted_artifact() {
     assert_eq!(
         emitted.agg_consts,
         BTreeMap::from([(0, vec![(5, 0)])]),
-        "the TEMPLATE: one aggregate constant `const struct.1017 {{ 0 }}` binding %5. The sibling \
+        "the TEMPLATE: one aggregate constant `const struct.815 {{ 0 }}` binding %5. The sibling \
          chain materializes NO constant; this one materializes exactly one and then writes into it"
     );
     assert_eq!(
         emitted.const_tys,
-        BTreeMap::from([(0, vec![(5, "struct1017".to_string())])]),
+        BTreeMap::from([(0, vec![(5, "struct815".to_string())])]),
         "…at the STRUCT type, which routes it through ir_const_agg_eval rather than \
          ir_const_int_eval"
     );
     assert_eq!(
         emitted.insertfields,
-        BTreeMap::from([(0, vec![(6, "struct1017".to_string(), 5, 0, 4)])]),
-        "THE WRITE, every slot: result %6, type struct.1017, source aggregate %5 (the template — \
+        BTreeMap::from([(0, vec![(6, "struct815".to_string(), 5, 0, 4)])]),
+        "THE WRITE, every slot: result %6, type struct.815, source aggregate %5 (the template — \
          not %0, not %1), field index 0, inserted value %4 (the OR — not either field read)"
     );
     assert_eq!(
@@ -398,8 +398,8 @@ fn flat_flags_with_the_write_lane_catches_what_every_old_lane_misses() {
     // same struct, and the exact scenario the lane's doc names.
     assert_only_insertfields_differ(
         &text.replace(
-            "insertfield struct.1017 %5, 0, %4",
-            "insertfield struct.1017 %5, 1, %4",
+            "insertfield struct.815 %5, 0, %4",
+            "insertfield struct.815 %5, 1, %4",
         ),
         "field index 0 -> 1",
     );
@@ -407,8 +407,8 @@ fn flat_flags_with_the_write_lane_catches_what_every_old_lane_misses() {
     // re-wrapped rather than the union.
     assert_only_insertfields_differ(
         &text.replace(
-            "insertfield struct.1017 %5, 0, %4",
-            "insertfield struct.1017 %5, 0, %3",
+            "insertfield struct.815 %5, 0, %4",
+            "insertfield struct.815 %5, 0, %3",
         ),
         "inserted value %4 -> %3",
     );
@@ -416,18 +416,18 @@ fn flat_flags_with_the_write_lane_catches_what_every_old_lane_misses() {
     // same answer at slot 0, but a spine the template did not donate.
     assert_only_insertfields_differ(
         &text.replace(
-            "insertfield struct.1017 %5, 0, %4",
-            "insertfield struct.1017 %0, 0, %4",
+            "insertfield struct.815 %5, 0, %4",
+            "insertfield struct.815 %0, 0, %4",
         ),
         "source aggregate %5 -> %0",
     );
     // Drift 4: the write at a type the artifact does not name.
     assert_only_insertfields_differ(
         &text.replace(
-            "insertfield struct.1017 %5, 0, %4",
+            "insertfield struct.815 %5, 0, %4",
             "insertfield struct.999 %5, 0, %4",
         ),
-        "insertfield type struct.1017 -> struct.999",
+        "insertfield type struct.815 -> struct.999",
     );
 
     // Drift 5: the SIBLING operator. Caught by the pre-existing binop lanes —
@@ -439,8 +439,7 @@ fn flat_flags_with_the_write_lane_catches_what_every_old_lane_misses() {
     assert_eq!(emitted.insertfields, as_and.insertfields);
 
     // Drift 6: a different template value. Caught by agg_consts alone.
-    let tpl_one =
-        parse_emitted(&text.replace("const struct.1017 { 0 }", "const struct.1017 { 1 }"));
+    let tpl_one = parse_emitted(&text.replace("const struct.815 { 0 }", "const struct.815 { 1 }"));
     assert_ne!(emitted.agg_consts, tpl_one.agg_consts);
     assert_eq!(emitted.insertfields, tpl_one.insertfields);
     assert_eq!(emitted.const_tys, tpl_one.const_tys);
@@ -452,13 +451,13 @@ fn flat_flags_with_the_write_lane_catches_what_every_old_lane_misses() {
 
     // Drift 8: hoisting the write above the template that feeds it. Every
     // per-kind lane is bit-identical; only the program-order lane can see it.
-    let good = "rustcc fn @x(functy.489) {\nbb0(%0: struct.1017, %1: struct.1017):\n    %2 = \
+    let good = "rustcc fn @x(functy.460) {\nbb0(%0: struct.815, %1: struct.815):\n    %2 = \
                 extractfield u8 %0, 0\n    %3 = extractfield u8 %1, 0\n    %4 = or u8 %2, %3\n    \
-                %5 = const struct.1017 { 0 }\n    %6 = insertfield struct.1017 %5, 0, %4\n    ret \
+                %5 = const struct.815 { 0 }\n    %6 = insertfield struct.815 %5, 0, %4\n    ret \
                 %6\n}\n";
-    let hoisted = "rustcc fn @x(functy.489) {\nbb0(%0: struct.1017, %1: struct.1017):\n    %2 = \
+    let hoisted = "rustcc fn @x(functy.460) {\nbb0(%0: struct.815, %1: struct.815):\n    %2 = \
                    extractfield u8 %0, 0\n    %3 = extractfield u8 %1, 0\n    %4 = or u8 %2, \
-                   %3\n    %6 = insertfield struct.1017 %5, 0, %4\n    %5 = const struct.1017 { 0 \
+                   %3\n    %6 = insertfield struct.815 %5, 0, %4\n    %5 = const struct.815 { 0 \
                    }\n    ret %6\n}\n";
     let (g, h) = (parse_emitted(good), parse_emitted(hoisted));
     assert_eq!(
@@ -532,7 +531,7 @@ fn flat_flags_with_the_lanes_catch_a_drifted_spec_module_too() {
     );
     assert_ne!(
         emitted.insertfields, at_u8.insertfields,
-        "struct1017 vs uint8 in the write's type slot"
+        "struct815 vs uint8 in the write's type slot"
     );
 
     // The registered module at the sibling's operator — the mutation that

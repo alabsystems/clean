@@ -12,7 +12,7 @@ use super::q_match_pattern_expr;
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, FVarId};
-use clean_parser::{Span, SurfaceExpr, SurfaceMatchArm, SurfacePattern};
+use clean_parser::{Span, SurfaceExpr, SurfaceMatchArm, SurfaceName, SurfacePattern};
 use std::collections::HashMap;
 
 impl<'a> ElabCtx<'a> {
@@ -55,7 +55,7 @@ impl<'a> ElabCtx<'a> {
 
                 let mut alias_fvars = Vec::new();
                 for alias in &aliases {
-                    alias_fvars.push(self.push_local((*alias).to_string(), scrutinee_ty.clone()));
+                    alias_fvars.push(self.push_local((*alias).clone(), scrutinee_ty.clone()));
                 }
 
                 // Elaborate the body with pattern variables in scope.
@@ -109,7 +109,7 @@ impl<'a> ElabCtx<'a> {
                     self.pop_local();
                     let body_abs = body.abstract_fvar(fvar);
                     let arm_expr = Expr::let_named(
-                        Name::from_string(name),
+                        name.name().clone(),
                         scrutinee_ty.clone(),
                         scrutinee.clone(),
                         body_abs,
@@ -120,8 +120,8 @@ impl<'a> ElabCtx<'a> {
 
                 _ => {
                     return Err(ElabError::NotImplemented(format!(
-                        "runtime q-match with pattern: {:?}",
-                        arm.pattern
+                        "runtime q-match with pattern: {}",
+                        crate::error_render::pattern(&arm.pattern)
                     )));
                 }
             }
@@ -141,7 +141,7 @@ impl<'a> ElabCtx<'a> {
         scrutinee: &Expr,
         _scrutinee_ty: &Expr,
         pattern_expr: &SurfaceExpr,
-    ) -> Result<(Expr, Vec<(String, Expr)>), ElabError> {
+    ) -> Result<(Expr, Vec<(SurfaceName, Expr)>), ElabError> {
         // Extract pattern variables
         let pat_vars = self.extract_q_pattern_vars(pattern_expr);
 
@@ -181,14 +181,14 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         scrutinee: Expr,
         pattern: Expr,
-        mvar_map: HashMap<String, FVarId>,
+        mvar_map: HashMap<SurfaceName, FVarId>,
     ) -> Expr {
         use clean_kernel::MDataValue;
 
         // Create a special marker expression for runtime pattern matching
-        // Using MData with a "qq_runtime_check" tag
+        // Using MData with the disjoint typed "qq_runtime_check_v2" tag
         //
-        // The structure is: MData("qq_runtime_check", App(App(scrutinee), pattern))
+        // The structure is: MData("qq_runtime_check_v2", App(App(scrutinee), pattern))
         // This can be interpreted by the runtime system.
 
         // Build the check as a pair: (scrutinee, pattern)
@@ -198,20 +198,24 @@ impl<'a> ElabCtx<'a> {
         let pair = Expr::app(Expr::app(prod_mk, scrutinee), pattern);
 
         // Build metadata with:
-        // 1. Main tag: qq_runtime_check = true
-        // 2. Binding entries: qq_binding_<varname> = fvar_id (as Nat)
+        // 1. Main tag: qq_runtime_check_v2 = true
+        // 2. Binding entries: qq_binding_v2.<exact Name> = fvar_id (as Nat)
         //
         // The runtime uses these binding entries to map variable names to
         // metavariable FVarIds for extracting assignments after isDefEq succeeds.
         let mut metadata = vec![(
-            Name::from_string("qq_runtime_check"),
+            Name::anon().str("qq_runtime_check_v2"),
             MDataValue::Bool(true),
         )];
 
         // Add binding metadata for each pattern variable
-        for (var_name, fvar_id) in &mvar_map {
+        let mut ordered: Vec<_> = mvar_map.iter().collect();
+        ordered.sort_by_key(|(left, _)| *left);
+        for (var_name, fvar_id) in ordered {
             metadata.push((
-                Name::from_string(&format!("qq_binding_{}", var_name)),
+                SurfaceName::generated_path("qq_binding_v2")
+                    .append(var_name)
+                    .into_name(),
                 MDataValue::Nat(fvar_id.as_u64()),
             ));
         }
@@ -220,9 +224,12 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Wrap a body expression with runtime pattern variable bindings
-    fn wrap_with_runtime_bindings(&self, body: Expr, bindings_info: &[(String, Expr)]) -> Expr {
+    fn wrap_with_runtime_bindings(
+        &self,
+        body: Expr,
+        bindings_info: &[(SurfaceName, Expr)],
+    ) -> Expr {
         use clean_kernel::MDataValue;
-        use std::sync::Arc;
 
         // For now, we create let bindings that will be filled in by the runtime
         // The runtime extracts metavariable values after successful isDefEq
@@ -232,21 +239,15 @@ impl<'a> ElabCtx<'a> {
             // Create a placeholder that the runtime will replace
             // Using MData to tag the binding extraction
             let metadata = vec![(
-                Name::from_string("qq_runtime_binding"),
-                MDataValue::String(Arc::from(name.as_str())),
+                Name::anon().str("qq_runtime_binding_v2"),
+                MDataValue::Name(name.name().clone()),
             )];
             let placeholder = Expr::mdata(
                 metadata,
                 Expr::const_(Name::from_string("Lean.Expr.hole"), vec![]),
             );
 
-            result = Expr::let_named(
-                Name::from_string(name),
-                ty.clone(),
-                placeholder,
-                result,
-                false,
-            );
+            result = Expr::let_named(name.name().clone(), ty.clone(), placeholder, result, false);
         }
 
         result
@@ -352,7 +353,7 @@ impl<'a> ElabCtx<'a> {
                         let mut result_expr = body_expr;
                         for (binding_name, val, ty) in result.bindings.into_iter().rev() {
                             result_expr = Expr::let_named(
-                                Name::from_string(&binding_name),
+                                binding_name.name().clone(),
                                 ty,
                                 val,
                                 result_expr,
@@ -376,7 +377,7 @@ impl<'a> ElabCtx<'a> {
                 self.pop_local();
                 let body_abs = body_expr.abstract_fvar(fvar);
                 Ok(Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     scrutinee_ty,
                     scrutinee_expr,
                     body_abs,
@@ -419,7 +420,7 @@ impl<'a> ElabCtx<'a> {
                 ];
 
                 // Create synthetic variable for the scrutinee
-                let synth_var_name = "__letpat_scrutinee".to_string();
+                let synth_var_name = SurfaceName::unspellable("__letpat_scrutinee", 0);
                 let synth_var_expr = SurfaceExpr::Ident(Span::dummy(), synth_var_name.clone());
 
                 // Build match expression using the synthetic variable
@@ -437,7 +438,7 @@ impl<'a> ElabCtx<'a> {
                 // Abstract over the synthetic variable and wrap with let
                 let match_abs = match_result.abstract_fvar(fvar);
                 Ok(Expr::let_named(
-                    Name::from_string(&synth_var_name),
+                    synth_var_name.name().clone(),
                     scrutinee_ty,
                     scrutinee_expr,
                     match_abs,
@@ -445,5 +446,73 @@ impl<'a> ElabCtx<'a> {
                 ))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod typed_tests {
+    use super::*;
+    use crate::meta::{MetaCtx, RuntimeInterpretResult, RuntimeInterpreter};
+    use clean_kernel::Environment;
+    use clean_parser::{QAntiquotContent, SurfaceArg};
+
+    #[test]
+    fn typed_q_pattern_population_keeps_name_twins_and_deduplicates_only_exact_repeats() {
+        let env = Environment::default();
+        let ctx = ElabCtx::new(&env);
+        let names = [
+            SurfaceName::component("x.dot", true),
+            SurfaceName::generated_path("x.dot"),
+            SurfaceName::component("7", true),
+            SurfaceName::from_name(Name::anon().num(7)),
+        ];
+        let anti = |name| SurfaceExpr::QAntiquot {
+            span: Span::dummy(),
+            content: QAntiquotContent::Simple(name),
+        };
+        let expr = SurfaceExpr::App(
+            Span::dummy(),
+            Box::new(anti(names[0].clone())),
+            names[1..]
+                .iter()
+                .chain(std::iter::once(&names[0]))
+                .map(|n| SurfaceArg::positional(anti(n.clone())))
+                .collect(),
+        );
+        let vars = ctx.extract_q_pattern_vars(&expr);
+        assert_eq!(vars.len(), 4);
+        assert_eq!(
+            vars.into_iter().map(|(name, _)| name).collect::<Vec<_>>(),
+            names
+        );
+    }
+
+    #[test]
+    fn actual_typed_q_metadata_producer_connects_to_typed_interpreter() {
+        let env = Environment::default();
+        let mut ctx = ElabCtx::new(&env);
+        let name = SurfaceName::component("x.dot", true);
+        let meta = ctx.metas.fresh(Expr::type_());
+        let id = MetaState::to_fvar(meta);
+        let check = ctx.mk_is_def_eq_check(
+            Expr::prop(),
+            Expr::fvar(id),
+            HashMap::from([(name.clone(), id)]),
+        );
+        let body = ctx.wrap_with_runtime_bindings(Expr::bvar(0), &[(name.clone(), Expr::type_())]);
+        let mut interpreter =
+            RuntimeInterpreter::with_meta_ctx(MetaCtx::with_metas(&env, ctx.metas.clone()));
+        assert!(matches!(
+            interpreter.interpret(&check),
+            RuntimeInterpretResult::Value(_)
+        ));
+        assert_eq!(
+            interpreter.typed_bindings().get(name.name()),
+            Some(&Expr::prop())
+        );
+        assert!(interpreter.bindings().is_empty());
+        assert!(
+            matches!(interpreter.interpret(&body), RuntimeInterpretResult::Value(value) if value == Expr::prop())
+        );
     }
 }

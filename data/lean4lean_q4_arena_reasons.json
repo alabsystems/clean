@@ -1,0 +1,542 @@
+{
+ "schema": "clean.lean4lean-arena-reasons.v1",
+ "checker_commit": "bce3448115f7819fc12d647fadd3bb090666637e",
+ "binary_sha256": "6d2a0998bf2d2bf91a6db08bc4fd8ed4b35211cd57d2a9734aa21a9ffac87dd7",
+ "observed_in": "reports/self-proof-q4-unanimity-2026-11-13/lean4lean-arena-observation.json",
+ "observed_by": "scripts/lean4lean_recheck.py run+policy (ax0 off) over every arena case, 2026-11-14T01:38Z; 122 good accepted at the count model, 53 bad refused, 18 bad panicked",
+ "fixtures": {
+  "bad/bugs/constlevels.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at _test: (kernel) let-declaration type mismatch 'x'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/ctor-num-fields.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/bugs/k-rec-conv.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/bugs/large-elim-param.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at false_proof: (kernel) incorrect number of universe levels parameters for 'MyBool.rec.{1, 0}', #1 expected, #2 provided"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/large-elim-prop-bool.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at pick: (kernel) incorrect number of universe levels parameters for 'NewBool.rec.{1}', #0 expected, #1 provided"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/level-imax-leq.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/bugs/level-imax-normalization.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/bugs/nat-rec-k-lie.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/bugs/nat-rec-rules.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at Nat.beq: (kernel) invalid form for primitive def Nat.beq"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/nested-unused-param.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at E: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/orphan-rec.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inconsistent: (kernel) unknown constant 'rogue'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/proj-non-structure.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at bad: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/proj-of-imax-prop.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at imaxProjBool: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/proj-of-stuck-prop.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at Native64ResultSortOwner: (kernel) type expected"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/proj-of-subst-prop.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at PR14806Subst.observe: (kernel) type expected"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/rec-k-lie.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/bugs/rec-missing-ih.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at Native64TwoHashOwner: (kernel) arg #3 of 'Native64TwoHashOwner.step' has a non valid occurrence of the datatypes being declared"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/bugs/rec-of-subst-prop.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "Lean4Lean.toCtorWhenStruct Lean4Lean.Inductive.Reduce:63:43",
+    "reason": "unreachable code has been reached",
+    "after_kernel_exception": false
+   },
+   "target_evidence": "Lean4Lean panicked before any kernel exception: no kernel verdict; recorded as a panic, never as a refusal"
+  },
+  "bad/other/extra-rec.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inconsistent: (kernel) unknown constant 'rogue'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/other/nat-lit-add-bad.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/other/orphan-ctor.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inconsistent: (kernel) unknown constant 'rogue'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/other/proj-of-prop.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at badFalse: (kernel) application type mismatch"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/perf/refute-cheap-first.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/perf/refute-cheap-last.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/002_badDef.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/009_forallSortBad.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at forallSortBad: (kernel) type expected"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/010_nonTypeType.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at nonTypeType: (kernel) type expected"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/011_nonTypeAxiom.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at nonTypeAxiom: (kernel) type expected"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/012_nonPropThm.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at nonPropThm: (kernel) type of theorem 'nonPropThm' is not a proposition"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/014_selfProof.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at selfProof: (kernel) unknown constant 'selfProof'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/019_tut06_bad01.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at tut06_bad01: (kernel) failed to add declaration to environment, duplicate universe level parameter: 'u'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/046_inductBadNonSort.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductBadNonSort: (kernel) type expected"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/047_inductBadNonSort2.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductBadNonSort2: (kernel) type expected"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/048_inductLevelParam.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductLevelParam: (kernel) failed to add declaration to environment, duplicate universe level parameter: 'u'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/049_inductTooFewParams.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductTooFewParams: (kernel) invalid inductive datatype declaration, incorrect number of parameters"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/050_inductWrongCtorParams.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductWrongCtorParams: (kernel) arg #1 of 'inductWrongCtorParams.mk' does not match inductive datatype parameters"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/051_inductWrongCtorResParams.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductWrongCtorResParams: (kernel) invalid return type for 'inductWrongCtorResParams.mk'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/052_inductWrongCtorResLevel.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductWrongCtorResLevel: (kernel) invalid return type for 'inductWrongCtorResLevel.mk'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/053_inductInIndex.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at inductInIndex: (kernel) invalid return type for 'inductInIndex.mk'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/054_indNeg.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at indNeg: (kernel) arg #1 of 'indNeg.mk' has a non positive occurrence of the datatypes being declared"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/056_reduceCtorType.mk.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at reduceCtorType: (kernel) invalid return type for 'reduceCtorType.mk'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/057_indNegReducible.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at indNegReducible: (kernel) arg #1 of 'indNegReducible.mk' has a non positive occurrence of the datatypes being declared"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/061_typeWithTooHighTypeField.mk.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at typeWithTooHighTypeField: (kernel) universe level of type_of(arg #1) of 'typeWithTooHighTypeField.mk' is too big for the corresponding inductive datatype"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/073_BogusRecursor.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at bogusRecursorFalse: (kernel) incorrect number of universe levels parameters for 'BogusRecursor.rec', #1 expected, #0 provided"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/087_projOutOfRange.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projOutOfRange: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/088_projNotStruct.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projNotStruct: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/090_projProp2.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projProp2: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/092_projProp4.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projProp4: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/093_projProp5.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projProp5: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/094_projProp6.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projProp6: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/096_projIndexData.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projIndexData: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/097_projIndexData2.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at projIndexData2: (kernel) invalid projection"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/100_ruleKbad.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/101_ruleKAcc.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/105_proofIrrelevanceBad.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/111_indexedUnitEta.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/113_indexedStructEta.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/116_funEtaBad.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/117_reflOccLeft.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at reflOccLeft: (kernel) arg #1 of 'reflOccLeft.mk' has a non positive occurrence of the datatypes being declared"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/118_reflOccInIndex.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at reflOccInIndex: (kernel) application type mismatch"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/125_accRecNoEta.ndjson": {
+   "failure": {
+    "kind": "panic",
+    "location": "_private.Lean.Environment.0.Lean.EnvExtension.getStateImpl Lean.Environment:1375:4",
+    "reason": "invalid environment extension has been accessed",
+    "after_kernel_exception": true
+   },
+   "target_evidence": "Lean4Lean panicked in its error renderer after Lean4Lean.Replay.throwKernelException: the kernel raised an exception first, but the message is lost; recorded as a panic, never as a refusal"
+  },
+  "bad/tutorial/132_dup_defs.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "Duplicate declaration: dup_defs"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/133_dup_ind_def.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "Duplicate declaration: dup_ind_def"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/134_dup_ctor_def.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "Duplicate declaration: dup_ctor_def.mk"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/135_dup_rec_def.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "Duplicate declaration: dup_rec_def.rec"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/136_misnamed_rec_user.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at misnamed_rec_user: (kernel) unknown constant 'misnamed_rec.not_rec'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/137_dup_rec_def2.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at dup_rec_def2: (kernel) constant has already been declared 'dup_rec_def2.rec'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/138_dup_ctor_rec.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "Duplicate declaration: dup_ctor_rec.rec"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/139_DupConCon.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "Duplicate declaration: dup_ind_con_con.mk"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/140_falseFromUnsafe.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at falseFromUnsafe: (kernel) unknown constant 'unsafeLoop'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  },
+  "bad/tutorial/141_falseFromPartial.ndjson": {
+   "failure": {
+    "kind": "error",
+    "reason": "at falseFromPartial: (kernel) unknown constant 'partialLoop'"
+   },
+   "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+  }
+ }
+}

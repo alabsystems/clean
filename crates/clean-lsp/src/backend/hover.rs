@@ -46,6 +46,10 @@
 //! to their enclosing declaration rather than to `n : Nat` — term-local hover
 //! needs a local context hover does not have, and is a separate brick.
 
+#[cfg(test)]
+#[path = "hover/typed_name_tests.rs"]
+mod typed_name_tests;
+
 use super::CleanBackend;
 use crate::document::{Document, ElaboratedDecl, ElaboratedDocument};
 use tower_lsp::lsp_types::*;
@@ -103,6 +107,59 @@ impl CleanBackend {
         text: &str,
         offset: usize,
     ) -> Option<(usize, usize, String, String)> {
+        // Use actual token boundaries before the legacy bare-word fallback.
+        // A cursor inside «A.B» must never submit unquoted A.B for lookup.
+        let tokens = clean_parser::lexer::Lexer::tokenize(text);
+        if let Some(mut at) = tokens.iter().position(|token| {
+            token.span.start <= offset
+                && offset < token.span.end
+                && matches!(
+                    token.kind,
+                    clean_parser::lexer::TokenKind::Ident(_) | clean_parser::lexer::TokenKind::Dot
+                )
+        }) {
+            use clean_parser::lexer::TokenKind;
+            if matches!(tokens[at].kind, TokenKind::Dot) {
+                if !tokens.get(at + 1).is_some_and(|next| {
+                    matches!(next.kind, TokenKind::Ident(_))
+                        && tokens[at].span.end == next.span.start
+                }) {
+                    return None;
+                }
+                at += 1;
+            }
+            let mut first = at;
+            let mut last = at;
+            while first >= 2
+                && matches!(tokens[first - 1].kind, TokenKind::Dot)
+                && matches!(tokens[first - 2].kind, TokenKind::Ident(_))
+                && tokens[first - 2].span.end == tokens[first - 1].span.start
+                && tokens[first - 1].span.end == tokens[first].span.start
+            {
+                first -= 2;
+            }
+            while last + 2 < tokens.len()
+                && matches!(tokens[last + 1].kind, TokenKind::Dot)
+                && matches!(tokens[last + 2].kind, TokenKind::Ident(_))
+                && tokens[last].span.end == tokens[last + 1].span.start
+                && tokens[last + 1].span.end == tokens[last + 2].span.start
+            {
+                last += 2;
+            }
+            // Leading-dot constructor syntax is not an ordinary global name.
+            if first > 0
+                && matches!(tokens[first - 1].kind, TokenKind::Dot)
+                && tokens[first - 1].span.end == tokens[first].span.start
+            {
+                return None;
+            }
+            let start = tokens[first].span.start;
+            let end = tokens[last].span.end;
+            let source_name = text.get(start..end)?;
+            // A failed qualified lookup must not borrow an unrelated suffix.
+            let ty = Self::hover_type_of_name(doc, elab, source_name)?;
+            return Some((start, end, source_name.to_owned(), ty));
+        }
         let (bare_start, bare_end) = Self::identifier_span_at(text, offset)?;
         for (start, end) in Self::hover_name_candidates(text, bare_start, bare_end) {
             let name = text.get(start..end)?;
@@ -178,7 +235,13 @@ impl CleanBackend {
     /// which is why the closure is captured at commit time rather than
     /// resolved here.
     fn hover_type_of_name(doc: &Document, elab: &ElaboratedDocument, name: &str) -> Option<String> {
-        if let Some(decl) = elab.declarations.iter().find(|decl| decl.name == name) {
+        let source_name = clean_parser::parse_name(name).ok()?;
+        let identity = source_name.name();
+        if let Some(decl) = elab
+            .declarations
+            .iter()
+            .find(|decl| &decl.identity == identity)
+        {
             return Some(decl.type_str.clone());
         }
 
@@ -186,10 +249,16 @@ impl CleanBackend {
         // name but written under its last segment. Resolve that only when the
         // suffix is unambiguous — two declarations sharing a last segment give
         // no basis for picking one.
-        let mut suffix_matches = elab
-            .declarations
-            .iter()
-            .filter(|decl| decl.name.rsplit('.').next() == Some(name));
+        let mut suffix_matches = elab.declarations.iter().filter(|decl| {
+            let suffix = match decl.identity.inner() {
+                clean_kernel::name::NameInner::Str(_, text) => clean_kernel::Name::anon().str(text),
+                clean_kernel::name::NameInner::Num(_, index) => {
+                    clean_kernel::Name::anon().num(*index)
+                }
+                clean_kernel::name::NameInner::Anon => return false,
+            };
+            &suffix == identity
+        });
         if let Some(decl) = suffix_matches.next() {
             if suffix_matches.next().is_none() {
                 return Some(decl.type_str.clone());
@@ -197,7 +266,7 @@ impl CleanBackend {
         }
 
         let env = doc.imports_env.as_ref()?;
-        let info = env.get_const(&clean_kernel::Name::from_string(name))?;
+        let info = env.get_const(identity)?;
         Some(format!("{}", info.type_))
     }
 

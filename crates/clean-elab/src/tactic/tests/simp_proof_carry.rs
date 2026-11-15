@@ -58,11 +58,15 @@ fn test_simp_rw_local_forward_rewrite_preserves_proof_chain() {
     let h_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let goal = Expr::pi(BinderInfo::Default, h_ty, make_eq(a_ty, a.clone(), a));
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "h").expect("intro should create the local rewrite hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should create the local rewrite hypothesis");
     let axiom_before = axiom_snapshot();
 
-    simp_rw(&mut state, vec!["h".to_string()])
-        .expect("simp_rw should rewrite via the local equality proof");
+    simp_rw(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("h")],
+    )
+    .expect("simp_rw should rewrite via the local equality proof");
 
     assert!(
         state.is_complete(),
@@ -91,11 +95,15 @@ fn test_simp_rw_local_reverse_rewrite_preserves_proof_chain() {
     let h_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let goal = Expr::pi(BinderInfo::Default, h_ty, make_eq(a_ty, b.clone(), b));
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "h").expect("intro should create the local rewrite hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should create the local rewrite hypothesis");
     let axiom_before = axiom_snapshot();
 
-    simp_rw(&mut state, vec!["h".to_string()])
-        .expect("simp_rw should use Eq.symm h for the reverse local rewrite");
+    simp_rw(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("h")],
+    )
+    .expect("simp_rw should use Eq.symm h for the reverse local rewrite");
 
     assert!(
         state.is_complete(),
@@ -129,11 +137,15 @@ fn test_simp_only_multi_binder_local_lemma_preserves_proof_chain() {
     let goal_ty = Expr::pi(BinderInfo::Default, local_eq_ty, target_ty);
     let goal = goal_ty.clone();
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "h").expect("intro should create the local simp hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should create the local simp hypothesis");
     let axiom_before = axiom_snapshot();
 
-    simp_only(&mut state, vec!["h".to_string()])
-        .expect("simp_only should instantiate the local bindered lemma");
+    simp_only(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("h")],
+    )
+    .expect("simp_only should instantiate the local bindered lemma");
 
     assert!(
         state.is_complete(),
@@ -163,11 +175,15 @@ fn test_simp_rw_multi_binder_local_forward_rewrite_preserves_proof_chain() {
     let goal_ty = Expr::pi(BinderInfo::Default, local_eq_ty, target_ty);
     let goal = goal_ty.clone();
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "h").expect("intro should create the local simp_rw hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should create the local simp_rw hypothesis");
     let axiom_before = axiom_snapshot();
 
-    simp_rw(&mut state, vec!["h".to_string()])
-        .expect("simp_rw should instantiate the local bindered rewrite");
+    simp_rw(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("h")],
+    )
+    .expect("simp_rw should instantiate the local bindered rewrite");
 
     assert!(
         state.is_complete(),
@@ -197,10 +213,15 @@ fn test_simp_rw_multi_binder_local_reverse_goal_closes_without_overmatching() {
     let goal_ty = Expr::pi(BinderInfo::Default, local_eq_ty, target_ty);
     let goal = goal_ty.clone();
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "h").expect("intro should create the reverse local simp_rw hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should create the reverse local simp_rw hypothesis");
     let axiom_before = axiom_snapshot();
 
-    simp_rw(&mut state, vec!["h".to_string()]).expect(
+    simp_rw(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("h")],
+    )
+    .expect(
         "simp_rw should close the reverse-oriented goal without overmatching generic reverse rules",
     );
 
@@ -419,8 +440,16 @@ fn test_simp_all_uses_local_equality_hypothesis_for_other_hypotheses() {
         Expr::pi(BinderInfo::Default, make_p(x), make_p(y)),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local rewrite hypothesis");
-    intro(&mut state, "hpx").expect("intro should create the dependent hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local rewrite hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hpx"),
+    )
+    .expect("intro should create the dependent hypothesis");
     let axiom_before = axiom_snapshot();
 
     simp_all(&mut state).expect("simp_all should rewrite hypotheses using local equality proofs");

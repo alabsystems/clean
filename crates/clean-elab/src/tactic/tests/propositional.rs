@@ -12,7 +12,6 @@
 //! - pattern_tactics.rs: rintro, peel, split_ifs tests
 use super::*;
 use crate::tactic::arith_push_neg::push_neg_expr_with_proof;
-use clean_kernel::expr::ExprKind;
 use clean_kernel::level::Level;
 use clean_kernel::tc::TypeChecker;
 
@@ -43,22 +42,11 @@ fn test_contrapose_transforms_goal() {
     let mut state = ProofState::new(env, goal_type);
     contrapose(&mut state).expect("contrapose on P → Q should succeed");
 
-    // New goal should be ¬Q → ¬P
-    // ¬Q = Q → False
-    // ¬P = P → False
+    // New goal should be ¬Q → ¬P, both with the `Not` head as Mathlib's
+    // `contrapose` states them (simp reads a negation off that head only).
     let goal = state.current_goal().unwrap();
-    if let ExprKind::Pi(_, not_q_ty, _) = goal.target.kind() {
-        if let ExprKind::Pi(_, q_ty, false_ty) = not_q_ty.kind() {
-            assert_eq!(**q_ty, q);
-            assert!(
-                matches!(false_ty.kind(), ExprKind::Const(name, _) if name.to_string() == "False")
-            );
-        } else {
-            panic!("Expected ¬Q to be Q → False");
-        }
-    } else {
-        panic!("Expected goal to be Pi type");
-    }
+    let not = |e: Expr| Expr::app(Expr::const_(Name::from_string("Not"), vec![]), e);
+    assert_eq!(goal.target, Expr::arrow(not(q), not(p)));
 }
 
 #[test]
@@ -153,13 +141,16 @@ fn test_make_not() {
     let p = Expr::const_(Name::from_string("P"), vec![]);
     let not_p = make_not(&p);
 
-    // Should be P → False
-    if let ExprKind::Pi(_, dom, cod) = not_p.kind() {
-        assert_eq!(**dom, p);
-        assert!(is_false(cod));
-    } else {
-        panic!("Expected Pi type for Not");
-    }
+    // `Not P`, with the `Not` head Mathlib's `push_neg` states (`¬P ∧ ¬Q`
+    // of `¬(P ∨ Q)`): simp reads a negation off that head only.
+    assert_eq!(
+        not_p,
+        Expr::app(Expr::const_(Name::from_string("Not"), vec![]), p.clone())
+    );
+    // `match_not` still reads it, and the unfolded arrow too.
+    assert_eq!(match_not(&not_p), Some(p.clone()));
+    let arrow = Expr::arrow(p.clone(), Expr::const_(Name::from_string("False"), vec![]));
+    assert_eq!(match_not(&arrow), Some(p));
 }
 
 #[test]
@@ -423,22 +414,24 @@ fn test_tauto_uses_contradiction_in_context() {
 fn test_fresh_hyp_name() {
     let ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: Expr::prop(),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "h1".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h1"),
             ty: Expr::prop(),
             value: None,
         },
     ];
 
     let name = fresh_hyp_name(&ctx, "h");
-    assert_eq!(name, "h2");
+    assert_eq!(name, clean_parser::SurfaceName::generated_path("h2"));
 
     let name2 = fresh_hyp_name(&ctx, "x");
-    assert_eq!(name2, "x");
+    assert_eq!(name2, clean_parser::SurfaceName::generated_path("x"));
 }

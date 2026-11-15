@@ -41,7 +41,17 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BIN="${REPO_ROOT}/target/release/clean"
+# $CLEAN_BIN overrides, matching scripts/source_elab_gate.sh's existing spelling.
+# WHY (measured 2026-09-15): this gate's recorded demonstration is REPLAYED in
+# `check_gate_registry.py --demonstrate`'s sandbox, a symlink farm whose
+# REPO_ROOT has no `target/release/clean` and which does not build one -- a
+# release build of `clean` is far too long for a replay. So every arm reported
+# `no executable clean binary` and the guard correctly refused to move the pin:
+# "the UNMUTATED gate already exits 1 -- a red arm on a red tree proves
+# nothing". The binary is an INPUT to this battery, not its subject (the arms
+# mutate fixtures and this script), so pointing it at a binary built outside the
+# sandbox keeps the demonstration honest and makes it replayable.
+BIN="${CLEAN_BIN:-${REPO_ROOT}/target/release/clean}"
 if [[ "${1:-}" == "--bin" ]]; then
   BIN="${2:?--bin requires a path argument}"
 fi
@@ -201,6 +211,31 @@ pass_probe p18_goal_side_constructed.lean 3
 # mentions the first binder, which comes out well-typed only if abstraction
 # reaches into binder types and not just the conclusion.
 pass_probe p24_goal_side_telescope_no_bridge.lean 10
+# AT EVERY DEPTH (2026-09-10). p24 asks the telescope for the ELABORATOR's
+# goal; p27 asks it for a CANDIDATE's own `[inst]` premise: `Pi.hasLe' :
+# [∀ i, LE (π i)] → LE (∀ i, π i)` with only `[∀ i, Pre (π i)]` in scope
+# (`Pre extends LE`), so the premise is `fun i => Pre.toLE`, built one level
+# down. From 307dc1afb (2026-08-28) a `depth == 0` guard refused exactly that,
+# which is not Lean's rule (SynthInstance.tryResolve opens EVERY sub-goal with
+# forallTelescopeReducing) and is the mechanism behind the five
+# Mathlib/Order/Basic.lean regressions in srcelab-2026-09-02-ge0b3ef7dd.json.
+# Measured before the change: 8 passed / 1 failed (`target` only). The six
+# in-file controls are each one link of the chain on its own.
+pass_probe p27_goal_side_candidate_subgoal.lean 9
+# THE LOCAL SIDE (2026-09-10). A local is an instance because of its TYPE,
+# not its brackets — Lean's withNewLocalInstances is keyed on isClass? of the
+# type. `{_ : Cls α}`, `{inst : Cls α}` and `(h : Cls α)` now count like
+# `[Cls α]`; measured 2/4 before (every non-bracket spelling refused with the
+# instance in the local context), 6/0 after. Mathlib's
+# `uniqueElim_default {_ : Unique ι}` is this shape.
+pass_probe p28_class_typed_local_is_an_instance.lean 6
+# `rfl` ON EVERY @[refl] RELATION (2026-09-10). Lean's `rfl` dispatches on the
+# goal's relation (`Eq.refl`, `Iff.refl`, `HEq.refl`); Clean's applied
+# `Eq.refl` to everything and reported `rigid head/arity mismatch: Eq vs Iff`
+# — the exact failure `Pi.preorder`'s autoParam script `by intros; rfl` hit
+# on Mathlib/Order/Basic.lean once that script ran at all. Measured 2/4
+# before, 6/0 after; `eqRfl`/`iffExact` are the in-file controls.
+pass_probe p29_rfl_closes_iff_and_heq.lean 6
 
 echo "[srcfrontier] CLASS I — the risk axis: MORE candidates must not mean a"
 echo "              WRONG candidate. Selection, refusal, ambiguity, hygiene:"
@@ -212,14 +247,14 @@ echo "              WRONG candidate. Selection, refusal, ambiguity, hygiene:"
 pass_probe p19_control_two_carriers_selected.lean 1
 fail_probe p20_wrong_carrier_refused_MUST_FAIL.lean \
   'failed to synthesize instance Decidable'
-# AMBIGUITY. Half 1 of p21 proves a telescoped local IS a viable candidate for
-# `MyE Nat`; half 2 proves that at a class which ALSO has a global instance,
-# the GLOBAL still wins — measured by `rfl`, which closes only if the global
-# was selected. The candidate-side match runs only after the primary search
-# has returned None, so this is structural, not lucky.
-pass_probe p21_control_global_beats_telescoped_local.lean 10
-# HYGIENE. A telescope binder the goal does not determine is refused rather
-# than emitted as `h ?x` — an unassigned metavariable is carried as a tagged
+# SELECTION (source repair 2026-11-06). With valid reducible aliases, Lean's
+# local dictionary precedes a global dictionary. The rfl control checks the
+# exact local field, while MyE independently checks local availability without
+# a global alternative. Original invalid headers and the old wrong-global
+# equality remain in the dated audit as rejected controls.
+pass_probe p21_control_local_beats_global.lean 10
+# HYGIENE. Ordinary instance lambdas refuse an undetermined telescope binder
+# rather than emitting `h ?x` — an unassigned metavariable is a tagged
 # free variable and would surface far away as the kernel's "Declaration
 # contains free variables".
 fail_probe p22_undetermined_binder_refused_MUST_FAIL.lean \
@@ -239,8 +274,8 @@ pass_probe p23_control_telescoped_local_no_bridge.lean 4
 fail_probe p25_goal_side_arbitrary_argument_MUST_FAIL.lean \
   'failed to synthesize instance `(b : Bool) -> (b1 : Bool) -> MyD (b = b1)`'
 fail_probe p25_goal_side_arbitrary_argument_MUST_FAIL.lean '5 passed, 1 failed'
-# ARITY — the cap (MAX_GOAL_TELESCOPE = 8) refuses the goal WHOLE rather than
-# truncating it. A truncated telescope would emit a lambda of the wrong arity.
+# ARITY — Lean accepts this file; Clean's MAX_GOAL_TELESCOPE = 8 refuses it whole.
+# Truncating would emit a lambda of the wrong arity.
 # The pinned count carries the in-file control: `useNarrow`, the same alias
 # shape at two binders, PASSES in the same file, so what is refused is the
 # arity and not the shape.
@@ -276,6 +311,25 @@ fail_probe p16_sorthead_result_type_MUST_FAIL.lean 'auto-bound implicit'
 fail_probe p30_real_binder_over_applied_MUST_FAIL.lean 'Too many arguments'
 fail_probe p30_real_binder_over_applied_MUST_FAIL.lean 'argument(s) remain'
 
+# --- the Pi-instance premise class (measured 2026-09-15) -------------------
+# Instance synthesis cannot discharge a FORALL-quantified instance premise by
+# applying another instance UNDER the binder. This is the whole of
+# Mathlib/Order/Basic.lean's 72 -> 67 regression: three declarations hit it
+# directly (le_of_strongLT, strongLT_of_strongLT_of_le, le_update_iff) and two
+# more are `alias` cascades of them -- ONE cause, not five.
+#
+# The control is load-bearing and runs FIRST. `piLE` is offered as a candidate
+# in the failing case, so without p27 the refusal could just as well mean "the
+# Pi instance never applies at all", which is a different (and already-closed)
+# claim.
+pass_probe p27_control_pi_instance_direct_premise.lean 3
+pass_probe p29_control_pi_premise_at_depth0.lean 5
+# CLOSED 2026-09-16: was two FAIL pins, now a PASS pin at its exact declaration
+# count. The class it named is fixed at the cause (the `depth == 0` restriction
+# on the goal-side telescope, lifted), and p27/p29 stay as the controls that
+# make this file's verdict mean something rather than merely be green.
+pass_probe p28_pi_instance_premise_under_binder.lean 5
+
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 mkdir -p "$(dirname "$OUT_JSON")"
 INPUTS_PINNED="$INPUTS_PINNED" python3 - "$OUT_JSON" "$GIT_SHA" "$BIN" "$FIX" "${BASH_SOURCE[0]}" <<'PY'
@@ -303,7 +357,8 @@ report = {
                                              "p07", "p13", "p17"],
         "class I (def-based class alias)": ["p08", "p09", "p10", "p11", "p12",
                                             "p18", "p19", "p20", "p21", "p22",
-                                            "p23", "p24", "p25", "p26"],
+                                            "p23", "p24", "p25", "p26", "p27",
+                                            "p28", "p29"],
         "mask 3 (auto-implicit Sort head)": ["p14", "p15", "p16"],
     },
     "scope_note": (
@@ -357,6 +412,21 @@ report = {
         "arity cap refusing whole rather than truncating. Every other probe "
         "verdict is byte-identical across it -- measured, all twenty-two "
         "pre-existing fixtures re-run before and after."
+    ),
+    "stage2_depth_note": (
+        "2026-09-10: resolve_pi_goal_by_abstraction runs at EVERY depth. From "
+        "307dc1afb (2026-08-28) it carried a `depth == 0` guard -- the goal-side "
+        "telescope answered only the elaborator's own goal, never a candidate's "
+        "[inst] premise -- which is not Lean's rule (SynthInstance.tryResolve opens "
+        "every sub-goal with forallTelescopeReducing) and made "
+        "`Pi.hasLe : [forall i, LE (pi i)] -> LE (forall i, pi i)` unusable from "
+        "instance search: the five Mathlib/Order/Basic.lean regressions in "
+        "reports/source-elab/srcelab-2026-09-02-ge0b3ef7dd.json. p27 is new and "
+        "pins the candidate-premise case (8/1 -> 9/0); p25/p26, the two refusals "
+        "inside the abstraction, are unchanged. The safety argument that holds is "
+        "unchanged too: the abstraction is consulted only after the search has "
+        "returned None for that sub-goal, so no previously-resolving goal takes a "
+        "different term."
     ),
 }
 with open(out, "w") as f:

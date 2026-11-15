@@ -11,18 +11,79 @@
 //! `elab_app_support.rs` (#307).
 
 use super::*;
-/// Type-parameter metavar slots of a desugared heterogeneous arithmetic binop
-/// `@HOp.hOp ?α ?β ?γ ?inst`. See `hetero_binop_homogenize_slots`.
+/// Type arguments of a desugared heterogeneous operator application.
 struct HeteroBinopSlots {
     alpha: Expr,
     beta: Expr,
     gamma: Expr,
-    /// True for ops whose `β` collapses onto `α` (`% + - * /` + bitwise);
-    /// false for power / shift (independent exponent / shift-amount type).
+    /// Arithmetic `binop%` joins all three carrier slots.
     homogeneous: bool,
+    /// A shift's actual dictionary slot. Its default bridge must resolve its
+    /// homogeneous-class premise before it can join the amount to the carrier.
+    shift_instance: Option<Expr>,
+}
+
+/// Whether explicit arguments remain to be elaborated after a run of implicit
+/// argument insertion — the one fact Lean's `processStrictImplicitArg`
+/// (`Lean/Elab/App.lean:767-774`) consults:
+/// `if (← hasArgsToProcess) then addImplicitArg argName else finalize`.
+///
+/// A `{x}` or `[x]` binder is always filled; a strict-implicit `⦃x⦄` binder
+/// only while an argument follows, even when `normalizeFunType`'s
+/// `whnfForall` exposed it by unfolding a definition. Measured 2026-09-12 on
+/// `Mathlib/Logic/Function/Basic.lean` and `Mathlib/Data/Subtype.lean`: with
+/// `Function.Injective f := ∀ ⦃a₁ a₂⦄, f a₁ = f a₂ → a₁ = a₂`, every
+/// application or identifier whose type unfolds to it (`I.of_comp_right hg`,
+/// `coe_injective`, `not_involutive.injective`, …) came back as
+/// `f ?a₁ = f ?a₂ → ?a₁ = ?a₂` and failed against `Injective f`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(in crate::infer) enum ArgsFollow {
+    /// An explicit argument is still to come: `⦃x⦄` is filled like `{x}`.
+    Yes,
+    /// No explicit argument remains: insertion stops at the first `⦃x⦄`.
+    No,
+}
+
+impl ArgsFollow {
+    /// `Yes` iff `remaining` explicit arguments are still to be elaborated.
+    pub(in crate::infer) fn from_remaining(remaining: usize) -> Self {
+        if remaining > 0 {
+            Self::Yes
+        } else {
+            Self::No
+        }
+    }
 }
 
 impl<'a> ElabCtx<'a> {
+    /// Static dispatch labels are selected only after structural identity agrees.
+    fn canonical_application_head(name: &SurfaceName) -> Option<&'static str> {
+        if name.is_relative_constructor() {
+            return None;
+        }
+        [
+            "HMod.hMod",
+            "HAdd.hAdd",
+            "HSub.hSub",
+            "HMul.hMul",
+            "HDiv.hDiv",
+            "HAnd.hAnd",
+            "HOr.hOr",
+            "HXor.hXor",
+            "HAppend.hAppend",
+            "HPow.hPow",
+            "HShiftLeft.hShiftLeft",
+            "HShiftRight.hShiftRight",
+            "List.cons",
+            "Array.mk",
+            "some",
+            "Option.some",
+            "Prod.mk",
+        ]
+        .into_iter()
+        .find(|label| name == &SurfaceName::generated_path(label))
+    }
+
     /// True iff `e` (parens unwrapped) is a *bare* structure literal
     /// `{ f := v, … }` — neither an explicit `: T` annotation nor a `with` base.
     /// This is the form that can only elaborate once an expected structure type
@@ -68,8 +129,12 @@ impl<'a> ElabCtx<'a> {
         let SurfaceExpr::Ident(_, head) = Self::unwrap_surface_parens(func) else {
             return Ok(None);
         };
-        let head = head.as_str();
-        if head != "Eq" && head != "Ne" {
+        // Only the GLOBAL `Eq`/`Ne` (the `=`/`≠` desugaring, or a user-written
+        // head that resolves to it): a local bound as `Eq` is the user's own
+        // relation, and rebuilding its application as `@Eq T lhs rhs` proved
+        // `r (fun _ _ => False)` for `def r (Eq : P → P → Prop) : Prop := Eq
+        // {x := 1} (P.mk 1)` (Lean 4.8.0: `False`).
+        if !self.head_denotes_global(head, "Eq") && !self.head_denotes_global(head, "Ne") {
             return Ok(None);
         }
         let lhs_is_lit = Self::is_bare_struct_lit(&args[0].expr);
@@ -80,7 +145,7 @@ impl<'a> ElabCtx<'a> {
         }
         // Require a `<head>` const with exactly one universe parameter so the
         // level we synthesize below matches its signature; otherwise decline.
-        match self.env.get_const(&Name::from_string(head)) {
+        match self.env.get_const(head.name()) {
             Some(c) if c.level_params.len() == 1 => {}
             _ => return Ok(None),
         }
@@ -107,7 +172,7 @@ impl<'a> ElabCtx<'a> {
             (typed_val, lit_val)
         };
         Ok(Some(Expr::apps(
-            Expr::const_(Name::from_string(head), vec![sort_level]),
+            Expr::const_(head.name().clone(), vec![sort_level]),
             [ty, lhs, rhs],
         )))
     }
@@ -144,7 +209,25 @@ impl<'a> ElabCtx<'a> {
         let SurfaceExpr::Ident(_, name) = Self::unwrap_surface_parens(func) else {
             return Ok(None);
         };
-        if name != "Not" {
+        // `!x` reaches here as `not x` and `¬x` as `Not x` (the parser tells
+        // the two spellings apart; Lean: `notation "!" b => not b`,
+        // `notation "¬" p => Not p`). `¬b` over a `Bool` is `Not (b = true)`
+        // — the ordinary coercion path below — and becomes `Bool.not` only
+        // where a `Bool` is EXPECTED (Lean coerces the proposition back with
+        // `decide`; the two agree propositionally). Rewriting every `¬b` into
+        // `Bool.not b` had made `¬(a == b)` a Bool-valued statement, so
+        // `fun h => …` against it had no binder type (`not_beq_of_ne`,
+        // measured 2026-09-12).
+        // Only a head that RESOLVES to the global `not`/`Not`: a local bound
+        // under either spelling is an ordinary function of the user's, and
+        // rewriting its call to `Bool.not` computed `def r (not : Bool → Bool)
+        // (b : Bool) := not b` as negation (`r (fun b => b) true = false` was
+        // accepted; Lean 4.8.0: `true`).
+        let bang = self.head_denotes_global(name, "not");
+        if !bang && !self.head_denotes_global(name, "Not") {
+            return Ok(None);
+        }
+        if !bang && !self.expected_type_is_bool() {
             return Ok(None);
         }
         // `Bool.not` must exist (it does under `with_prelude`); decline cleanly
@@ -174,15 +257,39 @@ impl<'a> ElabCtx<'a> {
             operand_ty.get_app_fn().kind(),
             ExprKind::Const(n, _) if n == &Name::from_string("Bool")
         );
-        if !is_bool {
-            self.metas.pop_scope();
-            return Ok(None);
+        let is_prop = matches!(operand_ty.kind(), ExprKind::Sort(l) if l.is_zero());
+        let bool_not = Expr::const_(Name::from_string("Bool.not"), vec![]);
+        if is_bool {
+            self.metas.commit();
+            return Ok(Some(Expr::app(bool_not, operand)));
         }
-        self.metas.commit();
-        Ok(Some(Expr::app(
-            Expr::const_(Name::from_string("Bool.not"), vec![]),
-            operand,
-        )))
+        if bang && is_prop {
+            // `!p` over a proposition is `!decide p` (Lean's Prop → Bool
+            // coercion); a proposition with no `Decidable` instance is an
+            // error, as in Lean.
+            self.metas.commit();
+            let inst = self.resolve_decidable(&operand)?;
+            let decided = Expr::apps(
+                Expr::const_(Name::from_string("Decidable.decide"), vec![]),
+                [operand, inst],
+            );
+            return Ok(Some(Expr::app(bool_not, decided)));
+        }
+        // Neither a `Bool` nor (for `!`) a proposition: elaborate the
+        // application as written, so any mismatch is reported there.
+        self.metas.pop_scope();
+        Ok(None)
+    }
+
+    /// Whether the expected type, as it stands, is `Bool`.
+    fn expected_type_is_bool(&self) -> bool {
+        self.current_expected_type.as_ref().is_some_and(|ty| {
+            let ty = self.whnf(&self.metas.instantiate(ty));
+            matches!(
+                ty.get_app_fn().kind(),
+                ExprKind::Const(n, _) if n == &Name::from_string("Bool")
+            )
+        })
     }
 
     /// Recover the inductive type of a leading-dot constructor `.suffix` from
@@ -196,13 +303,13 @@ impl<'a> ElabCtx<'a> {
     /// caller hard-fails rather than guessing. This is a *resolution* helper
     /// only — the chosen constructor's actual type is still checked by the
     /// kernel, so an over-eager match cannot weaken soundness.
-    fn resolve_leading_dot_inductive_by_suffix(&self, suffix: &str) -> Option<Name> {
+    fn resolve_leading_dot_inductive_by_suffix(&self, suffix: &SurfaceName) -> Option<Name> {
         let mut found: Option<Name> = None;
         for ind in self.env.inductives() {
             let owns = ind
                 .constructor_names
                 .iter()
-                .any(|ctor| ctor.last_component().as_deref() == Some(suffix));
+                .any(|ctor| SurfaceName::from_name(ctor.clone()).last_component() == *suffix);
             if owns {
                 if found.is_some() {
                     // Ambiguous: more than one inductive has a `.suffix`
@@ -217,16 +324,52 @@ impl<'a> ElabCtx<'a> {
 
     pub(in crate::infer) fn elab_leading_dot_ctor_with_expected_type(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         expected_ty: &Expr,
     ) -> Result<Expr, ElabError> {
-        let Some(ctor_suffix) = name.strip_prefix('.') else {
+        if !name.is_relative_constructor() {
             return Err(ElabError::UnknownIdent(name.to_string()));
-        };
+        }
+        let ctor_suffix = SurfaceName::from_name(name.name().clone());
 
         let expected_ty = self.metas.instantiate(expected_ty);
         let expected_ty = self.metas.instantiate_levels(&expected_ty);
-        let expected_whnf = self.whnf(&expected_ty);
+        // Lean's `resolveDotName`: the head constant of the expected type is
+        // tried BEFORE any unfolding, for any constant (`Function.Injective.piMap`
+        // for `.piMap fun _ ↦ hg : Injective (g ∘ ·)`), and the expected type
+        // of an APPLICATION headed by `.name` is the application's own — the
+        // `∀`-bodied definition `Function.Injective` used to be unfolded first
+        // and the theorem never found (`Injective.comp_left`,
+        // `Surjective.comp_left`, `Bijective.piMap` in
+        // `Mathlib/Logic/Function/Basic.lean`, measured 2026-09-11).
+        if let ExprKind::Const(head, _) = expected_ty.get_app_fn().kind() {
+            let candidate = crate::namespace::append_names(head, ctor_suffix.name());
+            if let Some(info) = self.env.get_const(&candidate) {
+                let levels: Vec<Level> = info
+                    .level_params
+                    .iter()
+                    .map(|_| self.fresh_universe_param())
+                    .collect();
+                return Ok(Expr::const_(candidate, levels));
+            }
+        }
+        // A FUNCTION-typed expected type names the constructor through its
+        // result — Lean's `resolveDotName` runs `withForallBody` — and the
+        // constructor's return type is unified with that result below:
+        // `(.intro _) : p False → ∃ h, p h` is `Exists.intro` with the
+        // predicate solved from `∃ h, p h` (`h.elim (.intro _) (.intro _)`,
+        // `Prop.exists_iff` in `Mathlib/Logic/Basic.lean`, measured
+        // 2026-09-11; the suffix scan found `.intro` ambiguous).
+        let expected_whnf = {
+            let mut result_ty = self.whnf(&expected_ty);
+            loop {
+                let ExprKind::Pi(_, domain, codomain) = result_ty.kind() else {
+                    break result_ty;
+                };
+                let placeholder = self.fresh_meta(domain.as_ref().clone());
+                result_ty = self.whnf(&codomain.instantiate(&placeholder));
+            }
+        };
 
         let ind_name = match expected_whnf.get_app_fn().kind() {
             ExprKind::Const(name, _) => name.clone(),
@@ -242,7 +385,7 @@ impl<'a> ElabCtx<'a> {
             // cannot leak past the kernel re-check. Only an unambiguous suffix
             // is accepted — ambiguity falls through to `UnknownIdent`. (trk-gh)
             _ => self
-                .resolve_leading_dot_inductive_by_suffix(ctor_suffix)
+                .resolve_leading_dot_inductive_by_suffix(&ctor_suffix)
                 .ok_or_else(|| ElabError::UnknownIdent(name.to_string()))?,
         };
 
@@ -252,7 +395,9 @@ impl<'a> ElabCtx<'a> {
             if let Some(ctor) = ind
                 .constructor_names
                 .iter()
-                .find(|ctor| ctor.last_component().as_deref() == Some(ctor_suffix))
+                .find(|ctor| {
+                    SurfaceName::from_name((*ctor).clone()).last_component() == ctor_suffix
+                })
                 .cloned()
             {
                 let levels = match expected_whnf.get_app_fn().kind() {
@@ -285,7 +430,7 @@ impl<'a> ElabCtx<'a> {
                 // `ind_name` (meta-headed expected type) cannot reach this arm:
                 // recovery only returns an inductive that owns the constructor,
                 // so that path stays constructor-only and fail-closed.
-                let ctor = Name::append(&ind_name, ctor_suffix);
+                let ctor = crate::namespace::append_names(&ind_name, ctor_suffix.name());
                 let info = self
                     .env
                     .get_const(&ctor)
@@ -302,7 +447,7 @@ impl<'a> ElabCtx<'a> {
             // Fallback: type is not a registered inductive (e.g., Except is declared
             // as an axiom with its constructors as separate axiom constants). Look up
             // `TypeName.ctor_suffix` directly as a constant in the environment.
-            let ctor = Name::append(&ind_name, ctor_suffix);
+            let ctor = crate::namespace::append_names(&ind_name, ctor_suffix.name());
             let info = self
                 .env
                 .get_const(&ctor)
@@ -378,20 +523,125 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         args: &[SurfaceArg],
     ) -> Result<Expr, ElabError> {
+        self.elab_anonymous_ctor_at(args, false)
+    }
+
+    /// `elab_anonymous_ctor`, told whether it is already INSIDE Lean's
+    /// implicit-lambda loop.
+    ///
+    /// The distinction is Lean's own and is not cosmetic. `useImplicitLambda`
+    /// (`Lean/Elab/Term/TermElabM.lean:1711-1720`) decides whether to ENTER the
+    /// loop and refuses unless the leading binder is `{…}` or `[…]` — a leading
+    /// `⦃y⦄` is not enough, and pinned lean v4.30.0-rc2 really does reject
+    /// `def g : ∀ ⦃y : Nat⦄, Pair := ⟨1, 2⟩` with "the expected type
+    /// `⦃y : Nat⦄ → Pair` is not an inductive type". Once inside,
+    /// `elabImplicitLambda`'s loop (:1774-1788) peels every binder that is not
+    /// EXPLICIT, strict-implicit included, so
+    /// `def g : ∀ {x : Nat} ⦃y : Nat⦄, Pair := ⟨1, 2⟩` elaborates to
+    /// `fun {x} ⦃y⦄ => …` (measured with `#print` at the same pin).
+    fn elab_anonymous_ctor_at(
+        &mut self,
+        args: &[SurfaceArg],
+        in_implicit_lambda: bool,
+    ) -> Result<Expr, ElabError> {
         // 1. Get expected type from context
         let expected_ty = self
             .current_expected_type
             .clone()
             .ok_or(ElabError::AnonymousCtorNoExpectedType)?;
 
+        // 1b. IMPLICIT LAMBDA (Lean's `useImplicitLambda` /
+        //     `elabImplicitLambda`, `Lean/Elab/Term/TermElabM.lean:1711-1790`,
+        //     wired into `elabTermAux` at :1806-1808). When a term's expected
+        //     type is `{a : α} → β` or `[a : α] → β`, Lean introduces one fvar
+        //     per non-explicit leading binder, elaborates the term at the
+        //     residual type, and `mkLambdaFVars` them back — BEFORE the
+        //     per-form elaborator runs. `⟨…⟩` is not on the blocker list
+        //     (`blockImplicitLambda`, :1684-1688), so
+        //     `⟨fun hr ↦ …, fun h' ↦ …⟩` against `∀ {a b}, r a b ↔ f a = b`
+        //     really faces `Iff` and not the `∀` (`forall_existsUnique_iff`,
+        //     `Mathlib/Logic/Function/Basic.lean`).
+        //
+        //     Clean's only implicit-lambda insertion lives in `elab_lambda`
+        //     (Lean's *other* mechanism, `elabFunBinders`) and so never covers
+        //     a non-`fun` surface form. This is the same increment for the one
+        //     form that needs it; it cannot double-insert with `elab_lambda`
+        //     because a `⟨…⟩` is not a lambda, and Lean's blocked forms (`_`,
+        //     `by …`, `@f`, an ascription) never reach this function.
+        //
+        //     A leading STRICT-implicit `{{a}}` does not OPEN the loop, exactly
+        //     as in Lean (`useImplicitLambda`, TermElabM.lean:1719 —
+        //     `unless c.isImplicit || c.isInstImplicit do return .no`), but once
+        //     the loop is open every non-EXPLICIT binder is peeled
+        //     (`elabImplicitLambda`'s loop, :1780 — `if c.isExplicit then …
+        //     else peel`), strict implicits included. Both halves are measured
+        //     against pinned lean v4.30.0-rc2: `∀ ⦃y⦄, Pair := ⟨1,2⟩` is
+        //     REJECTED, `∀ {x} ⦃y⦄, Pair := ⟨1,2⟩` prints `fun {x} ⦃y⦄ => …`.
+        //
+        //     `@`-explicit mode is NOT a blocker here. Lean's
+        //     `blockImplicitLambda` reads the TERM's own syntax (`isExplicit
+        //     stx`), and a `⟨…⟩` is never `@`-marked; the enclosing application
+        //     being `@f` says nothing about its arguments, which Lean
+        //     elaborates with implicit lambdas enabled. Measured: `@h Nat 0
+        //     ⟨1, 2⟩` elaborates to `h 0 fun {x} => { a := 1, b := 2 }`.
+        let expected_whnf_for_lambda = self.whnf(&expected_ty);
+        if let ExprKind::Pi(binder, domain, codomain) = expected_whnf_for_lambda.kind() {
+            let opens_or_continues = match binder.info {
+                BinderInfo::Implicit | BinderInfo::InstImplicit => true,
+                BinderInfo::StrictImplicit => in_implicit_lambda,
+                BinderInfo::Default => false,
+            };
+            if opens_or_continues {
+                let binder = *binder;
+                let domain = domain.as_ref().clone();
+                let codomain = codomain.as_ref().clone();
+                // The synthetic binder carries the inaccessible dagger, so no
+                // source identifier inside the constructor's fields can resolve
+                // to it (capture-freedom, as in `elab_lambda`).
+                let fvar = self.push_local(
+                    SurfaceName::from_name(Name::anon().str("✝implicit")),
+                    domain.clone(),
+                );
+                let is_inst = self.binder_is_local_instance(binder.info, &domain);
+                if is_inst {
+                    self.push_local_instance(fvar, domain.clone());
+                }
+                let residual = {
+                    let codomain = codomain.instantiate(&Expr::fvar(fvar));
+                    let codomain = self.metas.instantiate(&codomain);
+                    self.metas.instantiate_levels(&codomain)
+                };
+                let prev_expected = self.current_expected_type.replace(residual);
+                let inner = self.elab_anonymous_ctor_at(args, true);
+                self.current_expected_type = prev_expected;
+                if is_inst {
+                    self.pop_local_instance();
+                }
+                self.pop_local();
+                let inner = inner?;
+                let inner = self
+                    .metas
+                    .instantiate_levels(&self.metas.instantiate(&inner));
+                let domain = self
+                    .metas
+                    .instantiate_levels(&self.metas.instantiate(&domain));
+                return Ok(Expr::lam(binder, domain, inner.abstract_fvar(fvar)));
+            }
+        }
+
         // 2. Reduce to WHNF and extract head constant
-        let expected_whnf = self.whnf(&expected_ty);
+        let expected_whnf = expected_whnf_for_lambda;
         let _type_args: Vec<Expr> = expected_whnf.get_app_args().into_iter().cloned().collect();
 
         let struct_name = match expected_whnf.get_app_fn().kind() {
             ExprKind::Const(name, _) => name.clone(),
-            other => {
-                return Err(ElabError::AnonymousCtorNotInductive(format!("{other:?}")));
+            // Name the whole expected type, not the bare head kind: the head
+            // alone is what the reader already knows is wrong, and rendering
+            // an `ExprKind` was a Debug dump of it.
+            _ => {
+                return Err(ElabError::AnonymousCtorNotInductive(
+                    crate::error_render::term(&expected_whnf),
+                ));
             }
         };
 
@@ -413,6 +663,13 @@ impl<'a> ElabCtx<'a> {
 
         let ctor_name = ind.constructor_names[0].clone();
         let ctor_name = &ctor_name;
+        // Another module's private structure (G21 B3): Lean refuses `⟨...⟩`
+        // from an importer.
+        self.check_imported_private_ctor(
+            &struct_name,
+            ctor_name,
+            imported_private_access::CtorNotation::Anonymous,
+        )?;
 
         // 4. Build constructor application with universe levels
         // Extract levels from expected type's head constant, or use fresh levels
@@ -542,7 +799,10 @@ impl<'a> ElabCtx<'a> {
             result_ty = self.metas.instantiate(&body_ty);
         }
 
-        let (mut result, mut result_ty) = self.insert_implicit_args(result, &result_ty);
+        // `⟨a, …⟩` is Lean's `C.mk a …` (`elabAnonymousCtor`): its arguments
+        // are what follows the constructor's leading implicits.
+        let (result, result_ty) =
+            self.insert_implicit_args(result, &result_ty, ArgsFollow::from_remaining(args.len()));
 
         // N-ary flattening (Lean 4 `elabAnonymousCtor`, BuiltinNotation.lean):
         // when the constructor has M explicit fields but N > M arguments are
@@ -578,6 +838,34 @@ impl<'a> ElabCtx<'a> {
         let subobject_grouped: Option<Vec<SurfaceArg>> =
             self.flatten_anon_ctor_subobjects(&struct_name, num_fields, args);
 
+        // Lean's own rule FIRST. `elabAnonymousCtor` has no subobject
+        // flattening: when the argument count equals the constructor's explicit
+        // field count it emits `ctor args` as written
+        // (`Lean/Elab/BuiltinNotation.lean:43-100`), so `⟨⟨a⟩, h⟩ : Unique α`
+        // is `Unique.mk ⟨a⟩ h`. The subobject regrouping above also fires on
+        // that count whenever every parent contributes ONE leaf, and wrapped
+        // the already-nested `⟨a⟩` a second time: `⟨⟨a⟩, h⟩ : Unique α` died
+        // "Anonymous constructor ⟨⟩ expected inductive type, got α"
+        // (`unique_iff_existsUnique`, `unique_subtype_iff_existsUnique`, Mathlib
+        // `Logic/Unique.lean`), and `⟨⟨1⟩, 2⟩ : B` for `B extends A` was
+        // refused. The as-written reading is tried in a transaction; when it
+        // fails, every side effect is rolled back and the regrouped reading —
+        // the flat spelling Clean has always accepted — runs as before, so
+        // this only ADDS the reading Lean has.
+        if subobject_grouped.is_some() && args.len() == num_fields {
+            let as_written = self.with_local_scope_rollback(|this| {
+                this.apply_anonymous_ctor_args(
+                    result.clone(),
+                    result_ty.clone(),
+                    args,
+                    &expected_ty,
+                )
+            });
+            if let Ok(term) = as_written {
+                return Ok(term);
+            }
+        }
+
         // N-ary flattening (Lean 4 `elabAnonymousCtor`, BuiltinNotation.lean):
         // when the constructor has M explicit fields but N > M arguments are
         // supplied, the first M-1 arguments fill the first M-1 fields and the
@@ -609,7 +897,10 @@ impl<'a> ElabCtx<'a> {
             let group_span = args[num_fields - 1].span.merge(args[args.len() - 1].span);
             let nested = SurfaceExpr::App(
                 group_span,
-                Box::new(SurfaceExpr::Ident(group_span, "anonymousCtor".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    group_span,
+                    clean_parser::anonymous_constructor_head(),
+                )),
                 args[num_fields - 1..].to_vec(),
             );
             grouped_args = args[..num_fields - 1]
@@ -623,8 +914,23 @@ impl<'a> ElabCtx<'a> {
         };
 
         // 5. Elaborate and apply explicit arguments with expected type context (#173 fix)
-        // Setting expected type for each arg allows unification to solve metavariables
-        // for implicit type parameters (e.g., α := Nat when elaborating 42 in ⟨42, true⟩)
+        self.apply_anonymous_ctor_args(result, result_ty, args, &expected_ty)
+    }
+
+    /// Apply an anonymous constructor's explicit `args` to `result` (the
+    /// constructor already applied to its parameters and leading implicits,
+    /// of type `result_ty`), then unify the result type with `expected_ty`.
+    ///
+    /// Each argument is elaborated against its field's type, which lets
+    /// unification solve the implicit type parameters (`α := Nat` when
+    /// elaborating `42` in `⟨42, true⟩`).
+    fn apply_anonymous_ctor_args(
+        &mut self,
+        mut result: Expr,
+        mut result_ty: Expr,
+        args: &[SurfaceArg],
+        expected_ty: &Expr,
+    ) -> Result<Expr, ElabError> {
         for arg in args {
             // Get expected arg type from result_ty (which is a Pi type)
             result_ty = self.whnf(&result_ty);
@@ -661,7 +967,7 @@ impl<'a> ElabCtx<'a> {
 
         // Unify result type with expected type to solve any remaining metavariables
         let result_ty = self.metas.instantiate(&result_ty);
-        if !self.try_unify(&result_ty, &expected_ty) {
+        if !self.try_unify(&result_ty, expected_ty) {
             return Err(ElabError::TypeMismatch {
                 expected: format!("{expected_ty}"),
                 actual: format!("{result_ty}"),
@@ -728,7 +1034,10 @@ impl<'a> ElabCtx<'a> {
                 };
                 let nested = SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(span, "anonymousCtor".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        clean_parser::anonymous_constructor_head(),
+                    )),
                     slice.to_vec(),
                 );
                 out.push(SurfaceArg::positional(nested));
@@ -842,10 +1151,19 @@ impl<'a> ElabCtx<'a> {
     /// When `explicit_mode` is true (#1231), no implicit arguments are inserted.
     /// This implements the semantics of the @ marker: `@f` requires all arguments
     /// (including implicit ones) to be provided explicitly.
+    ///
+    /// `follow` says whether explicit arguments remain after this run: a
+    /// strict-implicit `⦃x⦄` binder is filled only when one does (see
+    /// [`ArgsFollow`]). When the run stops at a `⦃x⦄` binder, the returned type
+    /// is the FOLDED remaining type (`Function.Injective f`, not its unfolded
+    /// `∀ ⦃a₁ a₂⦄, …`), as Lean's `finalize` re-infers the type instead of
+    /// reusing the `whnfForall`-unfolded `fType` (`Lean/Elab/App.lean`: "it
+    /// may have been unfolded").
     pub(in crate::infer) fn insert_implicit_args(
         &mut self,
         func: Expr,
         func_type: &Expr,
+        follow: ArgsFollow,
     ) -> (Expr, Expr) {
         // In explicit mode, don't insert implicit arguments (#1231)
         if self.explicit_mode {
@@ -853,10 +1171,14 @@ impl<'a> ElabCtx<'a> {
         }
 
         let mut result = func;
-        let mut ty = self.whnf(func_type);
+        let mut folded = self.metas.instantiate(func_type);
+        let mut ty = self.whnf(&folded);
 
         loop {
             match ty.kind() {
+                ExprKind::Pi(bi, _, _) if Self::stops_at_strict_implicit(*bi, follow) => {
+                    return (result, folded);
+                }
                 ExprKind::Pi(bi, arg_ty, body_ty) if Self::is_implicit_binder(*bi) => {
                     let arg_ty_inst = self.metas.instantiate(arg_ty);
 
@@ -868,17 +1190,41 @@ impl<'a> ElabCtx<'a> {
                         if let Some(inst) = self.resolve_instance(&arg_ty_inst) {
                             inst
                         } else {
-                            // Fall back to metavariable if no instance found
-                            self.fresh_meta(arg_ty_inst)
+                            // Fall back to metavariable if no instance found.
+                            // A heterogeneous-operator goal that `resolve_instance`
+                            // POSTPONED (every type argument still open) is recorded
+                            // so the enclosing application can retry it once a
+                            // sibling argument grounds the carrier; every other
+                            // unresolved goal is recorded by nobody and keeps the
+                            // pre-existing leak-then-fail-closed path.
+                            let meta = self.fresh_meta(arg_ty_inst.clone());
+                            if self.instance_search_stuck {
+                                // Lean's "typeclass instance problem is stuck"
+                                // (`Pure ?m`, `Monad ?m`, … with the monad still
+                                // open — `instance::is_monad_family_class`):
+                                // QUEUE it for the declaration-boundary drain
+                                // rather than leaking an unassigned slot. Until
+                                // 2026-09-28 such goals never arose; the monad
+                                // operations were instance-less axioms.
+                                self.record_postponed_stuck_instance(&meta, &arg_ty_inst);
+                            } else {
+                                self.record_postponed_open_carrier_instance(&meta, &arg_ty_inst);
+                            }
+                            meta
                         }
                     } else {
-                        // For regular implicit/strict implicit, use metavariable
-                        self.fresh_meta(arg_ty_inst)
+                        // For regular implicit/strict implicit, use a NATURAL
+                        // metavariable — Lean's `mkFreshExprMVar` for an
+                        // implicit argument (`Lean/Elab/App.lean`
+                        // `addImplicitArg`), whose context `ctxApprox` may
+                        // narrow (`unify::meta_id::MetaKind`).
+                        self.fresh_natural_meta(arg_ty_inst)
                     };
 
                     result = Expr::app(result, arg.clone());
                     // Instantiate the body type with the argument
-                    ty = self.whnf(&self.metas.instantiate(&body_ty.instantiate(&arg)));
+                    folded = self.metas.instantiate(&body_ty.instantiate(&arg));
+                    ty = self.whnf(&folded);
                 }
                 _ => break,
             }
@@ -903,31 +1249,47 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Returns `(applied_expr, remaining_type, pending_instances)` where each
     /// pending entry is `(instance_metavar, instance_goal_type)`.
+    ///
+    /// `follow` is [`Self::insert_implicit_args`]'s strict-implicit stop rule,
+    /// with the same folded-type result when the run stops at a `⦃x⦄` binder.
     pub(in crate::infer) fn insert_implicit_args_deferring_instances(
         &mut self,
         func: Expr,
         func_type: &Expr,
+        follow: ArgsFollow,
     ) -> (Expr, Expr, Vec<(Expr, Expr)>) {
         if self.explicit_mode {
             return (func, func_type.clone(), Vec::new());
         }
 
         let mut result = func;
-        let mut ty = self.whnf(func_type);
+        let mut folded = self.metas.instantiate(func_type);
+        let mut ty = self.whnf(&folded);
         let mut pending = Vec::new();
 
         loop {
             match ty.kind() {
+                ExprKind::Pi(bi, _, _) if Self::stops_at_strict_implicit(*bi, follow) => {
+                    return (result, folded, pending);
+                }
                 ExprKind::Pi(bi, arg_ty, body_ty) if Self::is_implicit_binder(*bi) => {
                     let arg_ty_inst = self.metas.instantiate(arg_ty);
 
-                    let arg = self.fresh_meta(arg_ty_inst.clone());
-                    if bi.info == BinderInfo::InstImplicit {
+                    // An instance slot stays OPAQUE: it is recorded in
+                    // `pending` and assigned later by
+                    // `resolve_deferred_instances`. Every other implicit is a
+                    // NATURAL metavariable (see `insert_implicit_args`).
+                    let arg = if bi.info == BinderInfo::InstImplicit {
+                        let arg = self.fresh_meta(arg_ty_inst.clone());
                         pending.push((arg.clone(), arg_ty_inst));
-                    }
+                        arg
+                    } else {
+                        self.fresh_natural_meta(arg_ty_inst)
+                    };
 
                     result = Expr::app(result, arg.clone());
-                    ty = self.whnf(&self.metas.instantiate(&body_ty.instantiate(&arg)));
+                    folded = self.metas.instantiate(&body_ty.instantiate(&arg));
+                    ty = self.whnf(&folded);
                 }
                 _ => break,
             }
@@ -974,6 +1336,295 @@ impl<'a> ElabCtx<'a> {
         true
     }
 
+    /// [`Self::resolve_deferred_instances`], except that a goal the search
+    /// reports STUCK — `ElabCtx::instance_search_stuck`, Lean's "typeclass
+    /// instance problem is stuck" — is QUEUED for the drain instead of
+    /// failing the caller.
+    ///
+    /// Lean's order is `Lean/Elab/App.lean:496-502`: `finalize` unifies the
+    /// application's type with the expected type and only THEN runs
+    /// `synthesizeAppInstMVars`, so `Preorder ?α` is `Preorder α` before
+    /// synthesis ever runs. Clean's caller has just unified an OPEN expected
+    /// metavariable with the inserted type, which is the same moment — the
+    /// carrier is still open here and the enclosing term is what pins it.
+    ///
+    /// An ABSENT instance still fails the caller, so the speculative path
+    /// rolls back exactly as it did: only the stuck verdict is new.
+    pub(in crate::infer) fn resolve_deferred_instances_postponing_stuck(
+        &mut self,
+        pending: &[(Expr, Expr)],
+    ) -> bool {
+        let mut stuck: Vec<(Expr, Expr)> = Vec::new();
+        for (meta_arg, goal_ty) in pending {
+            let goal_ty = self.whnf(&self.metas.instantiate(goal_ty));
+            match self.resolve_instance(&goal_ty) {
+                Some(inst) => {
+                    let ExprKind::FVar(fvar) = meta_arg.kind() else {
+                        return false;
+                    };
+                    let Some(meta_id) = MetaState::from_fvar(*fvar) else {
+                        return false;
+                    };
+                    if !self.metas.assign(meta_id, inst) {
+                        return false;
+                    }
+                }
+                None => {
+                    if !self.instance_search_stuck {
+                        return false;
+                    }
+                    stuck.push((meta_arg.clone(), goal_ty));
+                }
+            }
+        }
+        for (meta_arg, goal_ty) in stuck {
+            self.record_postponed_stuck_instance(&meta_arg, &goal_ty);
+        }
+        true
+    }
+
+    /// Queue an instance goal the search reported STUCK, for
+    /// [`Self::retry_postponed_open_carrier_instances`].
+    ///
+    /// Distinct from [`Self::record_postponed_open_carrier_instance`], which
+    /// is Lean's default-instance collapse for the heterogeneous-operator
+    /// classes and PINS slots when it drains. Nothing is pinned here: the goal
+    /// is simply re-resolved once the surrounding term has grounded it, and a
+    /// goal that never grounds leaves its metavariable unassigned for the
+    /// fail-closed residual guard in `elab_decl_value` to report — which is
+    /// what Lean does with a synthetic instance metavariable nothing solves.
+    ///
+    /// Refuses a goal with no metavariable left: nothing could ever change its
+    /// answer, so queueing it would only defer a failure the caller should
+    /// report where it happened.
+    pub(in crate::infer) fn record_postponed_stuck_instance(
+        &mut self,
+        meta_arg: &Expr,
+        goal_ty: &Expr,
+    ) {
+        let ExprKind::FVar(fvar) = meta_arg.kind() else {
+            return;
+        };
+        if MetaState::from_fvar(*fvar).is_none() {
+            return;
+        }
+        let goal = self.metas.instantiate(goal_ty);
+        if crate::instances::extract_class_app(&goal).is_none() || !self.has_metavars(&goal) {
+            return;
+        }
+        self.postponed_open_carrier_instances
+            .push((meta_arg.clone(), goal));
+    }
+
+    /// An explicit `_` at an instance-implicit binder whose synthesis failed.
+    ///
+    /// Lean elaborates that `_` as a SYNTHETIC instance metavariable, not a
+    /// user hole (`Lean/Elab/App.lean`, `addInstMVar`), so an unsatisfiable
+    /// goal is reported as "failed to synthesize". Until 2026-09-29 Clean made
+    /// it an ordinary hole: the fail-closed residual guard exempts user holes
+    /// (their goal is agent feedback), so `Empty.elim (@Inhabited.default
+    /// Empty _)` reached the kernel and was refused only as "contains free
+    /// variables". A GROUND goal can never become satisfiable, so it fails
+    /// here; a goal that still mentions a metavariable is queued like any
+    /// stuck instance goal and, if nothing ever solves it, is named by the
+    /// residual guard at declaration close as the instance goal it is.
+    fn explicit_inst_hole_unsynthesized(&mut self, goal_ty: &Expr) -> Result<Expr, ElabError> {
+        let goal = self.metas.instantiate(goal_ty);
+        if !self.has_metavars(&goal) {
+            return Err(ElabError::FailedToSynthesizeInstance {
+                goal: format!("{goal}"),
+                detail: self.instance_failure_detail(&goal),
+            });
+        }
+        let meta = self.fresh_meta(goal.clone());
+        self.record_postponed_stuck_instance(&meta, &goal);
+        Ok(meta)
+    }
+
+    /// Record an instance metavariable whose goal `resolve_instance`
+    /// POSTPONED: a heterogeneous operator goal every one of whose type
+    /// arguments is still an open metavariable (Lean's own refusal — see
+    /// `instance::is_hetero_binop_default_instance_class` for the measured
+    /// message). A no-op for every other unresolved goal, so the pre-existing
+    /// leak-then-fail-closed paths are untouched.
+    pub(in crate::infer) fn record_postponed_open_carrier_instance(
+        &mut self,
+        meta_arg: &Expr,
+        goal_ty: &Expr,
+    ) {
+        let ExprKind::FVar(fvar) = meta_arg.kind() else {
+            return;
+        };
+        if MetaState::from_fvar(*fvar).is_none() {
+            return;
+        }
+        let goal = self.metas.instantiate(goal_ty);
+        let Some((class_name, args)) = crate::instances::extract_class_app(&goal) else {
+            return;
+        };
+        if args.is_empty()
+            || !(instance::is_hetero_binop_default_instance_class(&class_name)
+                || class_name == Name::from_string("DecidableEq"))
+        {
+            return;
+        }
+        // The doc above says "every one of whose type arguments is still an
+        // open metavariable", and until now only the CLASS was checked. The
+        // real postpone condition in `resolve_instance` is the `all(bare
+        // unassigned meta)` test at `instance.rs`'s phase-1 exit, and a goal
+        // that fails it was a genuine resolution FAILURE, never a postponement.
+        //
+        // Queueing such a goal was not merely cosmetic. The drain performs
+        // Lean's default-instance collapse on whatever it holds: it takes the
+        // first metavariable-free linked argument as the carrier and pins every
+        // still-open linked slot onto it, in the GLOBAL `MetaState` with no
+        // enclosing scope — so when resolution then fails anyway, that
+        // speculative assignment is never rolled back. For `def bad (a b :
+        // Widget) := a % b` the partially-determined `HMod Widget Widget ?γ`
+        // was queued, `?γ` was pinned to `Widget`, and the declaration-close
+        // diagnostic then reported a fully GROUND goal and dropped its "the
+        // goal is NOT fully determined" paragraph — the honest half of the
+        // message, and the half that tells the user to ascribe the result type.
+        //
+        // The all-open shapes the drain exists for are untouched: `(· + ·)` and
+        // `fun a b => a + b` are elaborated with every slot open, so they still
+        // record and still drain.
+        if !args.iter().all(|a| {
+            instance::bare_unassigned_meta(&self.metas, &self.metas.instantiate(a)).is_some()
+        }) {
+            return;
+        }
+        self.postponed_open_carrier_instances
+            .push((meta_arg.clone(), goal));
+    }
+
+    /// Is `goal` a heterogeneous-operator instance goal (`HAdd α β γ`, …,
+    /// [`instance::is_hetero_binop_default_instance_class`]) whose INPUT
+    /// arguments are all metavariable-free — every argument but the last, the
+    /// result slot `γ`, which Lean declares `outParam`?
+    ///
+    /// Such a goal is DETERMINED: Lean's `synthesizeInstMVarCore` replaces an
+    /// `outParam` by a fresh metavariable before searching, so an open `γ`
+    /// never makes the problem postponable, and a failed search is reported
+    /// ("failed to synthesize `HAdd (Fin 4) Nat ?m`") where it happens. Nothing
+    /// a later unification can do to `γ` makes an instance exist for inputs
+    /// that already have none — the only thing a later assignment of `γ` could
+    /// do is what it did here: let a sibling numeral default `γ` to `Nat`, after
+    /// which the carrier-first pass read `Nat` off the failed operator and
+    /// re-elaborated the `Fin` leaf through the `Fin → Nat` coercion.
+    ///
+    /// Only the operator classes, whose `outParam` position is fixed by Lean's
+    /// declarations (`class HAdd (α : Type u) (β : Type v) (γ : outParam (Type
+    /// w))`, and likewise for every class in that list), are judged here; any
+    /// other goal keeps the metavariable-free test.
+    pub(in crate::infer) fn hetero_binop_goal_is_determined(&self, goal: &Expr) -> bool {
+        let goal = self.metas.instantiate(goal);
+        let Some((class_name, args)) = crate::instances::extract_class_app(&goal) else {
+            return false;
+        };
+        if !instance::is_hetero_binop_default_instance_class(&class_name) {
+            return false;
+        }
+        let Some((_out_param, inputs)) = args.split_last() else {
+            return false;
+        };
+        !inputs.is_empty()
+            && inputs
+                .iter()
+                .all(|a| !self.has_metavars(&self.metas.instantiate(a)))
+    }
+
+    /// Re-resolve the postponed heterogeneous-operator instance goals whose
+    /// carrier a sibling argument has since grounded.
+    ///
+    /// This is the second half of Lean's rule. Lean postpones
+    /// `HAdd ?b ?a ?g`; its `@[default_instance] instHAdd [Add α] : HAdd α α α`
+    /// (priority `default`) then collapses the three slots onto whichever one
+    /// the rest of the term determined, and only the low-priority
+    /// `@[default_instance 100] instOfNatNat` defaults what is still open. So
+    /// `List.foldl (· + ·) (0 : Int) [1, 2, 3]` is `Int` and
+    /// `List.foldl (· + ·) 0 [1, 2, 3]` is `Nat` — both measured on the pinned
+    /// v4.30.0-rc2. [`Self::pin_open_type_slots`] is that collapse: it assigns
+    /// only OPEN slots and only from a metavariable-free carrier, so it can
+    /// neither reshape a slot the term already pinned nor invent one.
+    ///
+    /// A goal that is still ungrounded stays queued. A goal that never grounds
+    /// leaves its metavariable unassigned and the declaration fails closed,
+    /// which is what Lean's "typeclass instance problem is stuck" is.
+    pub(in crate::infer) fn retry_postponed_open_carrier_instances(&mut self) {
+        if self.postponed_open_carrier_instances.is_empty() {
+            return;
+        }
+        let queue = std::mem::take(&mut self.postponed_open_carrier_instances);
+        let mut still_open: Vec<(Expr, Expr)> = Vec::with_capacity(queue.len());
+        for (meta_arg, goal_ty) in queue {
+            // Solved already — by unification with the surrounding term, or by
+            // an earlier drain. Nothing to do and nothing to re-queue.
+            let meta_id = match self.metas.instantiate(&meta_arg).kind() {
+                ExprKind::FVar(fvar) => MetaState::from_fvar(*fvar),
+                _ => None,
+            };
+            let Some(meta_id) = meta_id else {
+                continue;
+            };
+            if self.metas.is_assigned(meta_id) {
+                continue;
+            }
+
+            let goal = self.metas.instantiate(&goal_ty);
+            let Some((class_name, args)) = crate::instances::extract_class_app(&goal) else {
+                continue;
+            };
+            // A rolled-back elaboration can leave an entry behind whose
+            // metavariable id was re-minted for another metavariable
+            // (`MetaState::pop_scope` restores the id counter). Only a
+            // metavariable whose own type is still a goal of this class is
+            // the one recorded; anything else is dropped, never assigned.
+            let owns_goal = self.metas.get(meta_id).is_some_and(|var| {
+                crate::instances::extract_class_app(&self.metas.instantiate(&var.ty))
+                    .is_some_and(|(owned_class, _)| owned_class == class_name)
+            });
+            if !owns_goal {
+                continue;
+            }
+            // The bridge instance links all three arguments for `+ - * / %`
+            // and the bitwise ops; power and shift keep their own exponent /
+            // shift-amount slot (index 1) free.
+            // The slot collapse belongs to the heterogeneous-operator bridge
+            // (`instHAdd : [Add α] → HAdd α α α` identifies the three slots).
+            // An input-only class has ONE input and nothing to collapse onto
+            // it: its goal is simply re-resolved once the surrounding term has
+            // grounded the carrier.
+            if instance::is_hetero_binop_default_instance_class(&class_name) {
+                let linked: Vec<usize> = if instance::hetero_binop_links_all_arguments(&class_name)
+                {
+                    (0..args.len()).collect()
+                } else {
+                    (0..args.len()).filter(|i| *i != 1).collect()
+                };
+                let carrier = linked
+                    .iter()
+                    .map(|i| self.metas.instantiate(&args[*i]))
+                    .find(|a| !self.has_metavars(a));
+                if let Some(carrier) = carrier {
+                    let targets: Vec<&Expr> = linked.iter().map(|i| &args[*i]).collect();
+                    self.pin_open_type_slots(&targets, &carrier);
+                }
+            }
+
+            let goal = self.whnf(&self.metas.instantiate(&goal));
+            match self.resolve_instance(&goal) {
+                Some(inst) => {
+                    if !self.metas.assign(meta_id, inst) {
+                        still_open.push((meta_arg, goal));
+                    }
+                }
+                None => still_open.push((meta_arg, goal)),
+            }
+        }
+        self.postponed_open_carrier_instances = still_open;
+    }
+
     /// Elaborate a function application with implicit argument insertion.
     ///
     /// For a function `f : {A : Type} → (x : A) → A` and call `f 42`:
@@ -1009,7 +1660,7 @@ impl<'a> ElabCtx<'a> {
         result: &Expr,
     ) -> Option<HeteroBinopSlots> {
         let head = match Self::unwrap_surface_parens(func) {
-            SurfaceExpr::Ident(_, name) => name.as_str(),
+            SurfaceExpr::Ident(_, name) => Self::canonical_application_head(name)?,
             _ => return None,
         };
         let homogeneous = match head {
@@ -1027,7 +1678,6 @@ impl<'a> ElabCtx<'a> {
             "HPow.hPow" | "HShiftLeft.hShiftLeft" | "HShiftRight.hShiftRight" => false,
             _ => return None,
         };
-
         // `@HOp.hOp α β γ inst` — the 1st/2nd/3rd application args are α/β/γ.
         let args = result.get_app_args();
         if args.len() < 3 {
@@ -1038,6 +1688,11 @@ impl<'a> ElabCtx<'a> {
             beta: (*args[1]).clone(),
             gamma: (*args[2]).clone(),
             homogeneous,
+            shift_instance: if matches!(head, "HShiftLeft.hShiftLeft" | "HShiftRight.hShiftRight") {
+                args.get(3).map(|arg| (**arg).clone())
+            } else {
+                None
+            },
         })
     }
 
@@ -1151,12 +1806,17 @@ impl<'a> ElabCtx<'a> {
     ///   * their domains are literally the SAME unassigned metavariable — the
     ///     shape of every homogeneous polymorphic head (`LT.lt`/`LE.le`/`Eq`/
     ///     `BEq.beq : {α} → α → α → …`, and any user function of that shape); or
-    ///   * the head is a recognised HOMOGENEOUS `binop%` desugaring, whose
-    ///     `?α ?β ?γ` are distinct metavariables that Lean's
-    ///     `@[default_instance] instHOp : HOp α α α` forces equal. Power and
-    ///     shift (`homogeneous == false`) keep an independent exponent /
-    ///     shift-amount type and are deliberately excluded, exactly as in the
-    ///     other homogenization passes.
+    ///   * a homogeneous arithmetic `binop%` joins its carrier slots; or
+    ///   * a shift's actual default dictionary resolves before the numeral's
+    ///     lower-priority Nat default. Its generic bridge joins the slots only
+    ///     when its `ShiftLeft`/`ShiftRight` premise resolves. The selected
+    ///     dictionary and universe constraints are retained. `HPow` keeps its
+    ///     independent exponent type.
+    ///
+    /// Only a BARE NUMERAL reaches this pass, so a shift whose amount is a
+    /// typed operand (`a <<< (n : Nat)`) is untouched and still fails closed
+    /// when no heterogeneous instance exists — the shift's `homogeneous` flag
+    /// stays false everywhere else for exactly that reason.
     ///
     /// ## Why this cannot launder a genuine mismatch
     ///
@@ -1193,7 +1853,8 @@ impl<'a> ElabCtx<'a> {
             ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some() => Some(*id),
             _ => None,
         };
-        let homogeneous_binop = hetero_slots.is_some_and(|s| s.homogeneous);
+        let homogeneous_binop =
+            hetero_slots.is_some_and(|s| s.homogeneous || s.shift_instance.is_some());
 
         for (lit_idx, dom) in doms.iter().enumerate() {
             if !Self::arg_is_bare_numeral(&args[lit_idx].expr) {
@@ -1266,12 +1927,15 @@ impl<'a> ElabCtx<'a> {
                 continue;
             }
             match hetero_slots {
-                // A homogeneous `binop%`: α, β and γ all collapse onto the
-                // carrier, exactly as `@[default_instance] instHOp : HOp α α α`
-                // would.
                 Some(slots) if slots.homogeneous => {
                     let targets = [&slots.alpha, &slots.beta, &slots.gamma];
                     self.pin_open_type_slots(&targets, &carrier_type);
+                }
+                Some(slots) if slots.shift_instance.is_some() => {
+                    self.pin_open_type_slots(&[&slots.alpha, &slots.gamma], &carrier_type);
+                    if let Some(instance) = &slots.shift_instance {
+                        self.resolve_shift_numeral_instance(instance);
+                    }
                 }
                 // An ordinary polymorphic head: pin the one shared slot. Every
                 // other position whose domain IS that metavariable follows by
@@ -1279,6 +1943,45 @@ impl<'a> ElabCtx<'a> {
                 _ => self.pin_open_type_slots(&[dom], &carrier_type),
             }
             return;
+        }
+    }
+
+    /// Apply a real shift default before a numeral's lower-priority Nat
+    /// default. Keep the selected dictionary and its universe constraints on
+    /// success. A failed search restores the complete metavariable world,
+    /// local/cached state and defaulting counters before the numeral proceeds.
+    fn resolve_shift_numeral_instance(&mut self, instance: &Expr) {
+        let instance = self.metas.instantiate(instance);
+        let Some(meta) = instance::bare_unassigned_meta(&self.metas, &instance) else {
+            return;
+        };
+        let Some(goal) = self.metas.get(meta).map(|var| var.ty.clone()) else {
+            return;
+        };
+        let saved_metas = self.metas.clone();
+        let saved_scope = self.local_scope_snapshot();
+        let saved_steps = self.instance_search_steps;
+        let saved_stuck = self.instance_search_stuck;
+        let saved_failures = self.failed_local_subgoals.clone();
+        let saved_answers = self.user_default_instance_answers;
+        let saved_deferred = self.deferred_user_default_goals;
+        let saved_postponed = self.postponed_open_carrier_instances.clone();
+        let saved_postponed_do_pure = self.do_pure_obligations.clone();
+        let accepted = self
+            .resolve_instance(&goal)
+            .is_some_and(|value| self.metas.assign(meta, value));
+        if !accepted {
+            self.metas = saved_metas;
+            self.restore_local_scope(saved_scope, true);
+            self.instance_search_steps = saved_steps;
+            self.instance_search_stuck = saved_stuck;
+            self.failed_local_subgoals = saved_failures;
+            self.user_default_instance_answers = saved_answers;
+            self.deferred_user_default_goals = saved_deferred;
+            self.postponed_open_carrier_instances = saved_postponed;
+            self.do_pure_obligations = saved_postponed_do_pure;
+        } else {
+            self.tc_caches.replace(TcCaches::default());
         }
     }
 
@@ -1350,20 +2053,24 @@ impl<'a> ElabCtx<'a> {
             e = inner;
         }
         match e {
-            SurfaceExpr::Ident(_, n) => n.starts_with('.') || n == "List.nil",
+            SurfaceExpr::Ident(_, n) => {
+                n.is_relative_constructor() || n == &SurfaceName::generated_path("List.nil")
+            }
             SurfaceExpr::App(_, head, app_args) => {
                 let mut h = head.as_ref();
                 while let SurfaceExpr::Paren(_, inner) = h {
                     h = inner;
                 }
                 match h {
-                    SurfaceExpr::Ident(_, n) if n.starts_with('.') => true,
+                    SurfaceExpr::Ident(_, n) if n.is_relative_constructor() => true,
                     // Recurse into a tuple spine: `Prod.mk a b` — if any
                     // component itself needs the result type pinned, so does the
                     // enclosing application.
-                    SurfaceExpr::Ident(_, n) if n == "Prod.mk" => app_args
-                        .iter()
-                        .any(|a| Self::arg_needs_result_type_pinned(&a.expr)),
+                    SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("Prod.mk") => {
+                        app_args
+                            .iter()
+                            .any(|a| Self::arg_needs_result_type_pinned(&a.expr))
+                    }
                     _ => false,
                 }
             }
@@ -1394,11 +2101,11 @@ impl<'a> ElabCtx<'a> {
     /// are handled by `binop%`-style homogenization (which deliberately drives
     /// arithmetic coercion, e.g. `(2:Nat) - (5:Nat) : Int`), and pinning the
     /// carrier early here would change that established behavior.
-    fn is_hetero_binop_head(func: &SurfaceExpr) -> bool {
+    pub(super) fn is_hetero_binop_head(func: &SurfaceExpr) -> bool {
         matches!(
             Self::unwrap_surface_parens(func),
             SurfaceExpr::Ident(_, name) if matches!(
-                name.as_str(),
+                Self::canonical_application_head(name).unwrap_or(""),
                 "HMod.hMod" | "HAdd.hAdd" | "HSub.hSub" | "HMul.hMul" | "HDiv.hDiv"
                     | "HAnd.hAnd" | "HOr.hOr" | "HXor.hXor" | "HAppend.hAppend"
                     | "HPow.hPow" | "HShiftLeft.hShiftLeft" | "HShiftRight.hShiftRight"
@@ -1420,7 +2127,9 @@ impl<'a> ElabCtx<'a> {
         }
         match e {
             SurfaceExpr::Ascription(..) => true,
-            SurfaceExpr::Ident(_, n) => !n.starts_with('.') && n != "List.nil",
+            SurfaceExpr::Ident(_, n) => {
+                !n.is_relative_constructor() && n != &SurfaceName::generated_path("List.nil")
+            }
             // Recurse into container/constructor spines so a nested typed-value
             // element still triggers the pre-arg pin at each enclosing level:
             // `#[(1:Nat), …]` is `Array.mk (List.cons (1:Nat) …)` and `some (some
@@ -1435,7 +2144,7 @@ impl<'a> ElabCtx<'a> {
                     h = inner;
                 }
                 matches!(h, SurfaceExpr::Ident(_, n) if matches!(
-                    n.as_str(),
+                    Self::canonical_application_head(n).unwrap_or(""),
                     "List.cons" | "Array.mk" | "some" | "Option.some" | "Prod.mk"
                 )) && app_args.iter().any(|a| Self::arg_is_typed_value(&a.expr))
             }
@@ -1483,6 +2192,112 @@ impl<'a> ElabCtx<'a> {
             // operand slots are *bare* metavars, for which `has_metavars` and
             // head-is-metavar coincide (and this helper is binop-excluded anyway).
             if Self::arg_is_typed_value(&arg.expr) && self.has_metavars(&dom_inst) {
+                found = true;
+            }
+            let meta = self.fresh_meta(dom_inst);
+            cur = self.whnf(&self.metas.instantiate(&body.instantiate(&meta)));
+        }
+        let result_is_safe = walked_all
+            && !matches!(cur.kind(), ExprKind::Pi(_, _, _))
+            && self.has_metavars(&cur)
+            && Self::result_metavars_first_order_linear(&cur);
+        self.metas.pop_scope();
+        found && result_is_safe
+    }
+
+    /// Is `e` a *flex application* `?p w₁ … wₙ` (n ≥ 1) — an application whose
+    /// spine head is an UNASSIGNED metavariable?
+    ///
+    /// Narrower than [`Self::contains_flex_application`], which reports a flex
+    /// application anywhere inside `e` (including under binders). Here we ask
+    /// only about the head of `e` itself, because that is exactly the slot shape
+    /// [`Self::rigid_arg_in_flex_slot`] cannot solve argument-first.
+    fn is_flex_application(metas: &MetaState, e: &Expr) -> bool {
+        matches!(e.kind(), ExprKind::App(_, _))
+            && matches!(e.get_app_fn().kind(),
+                ExprKind::FVar(id) if MetaState::from_fvar(*id)
+                    .is_some_and(|m| metas.get_assignment(m).is_none()))
+    }
+
+    /// An argument whose type is *self-determined*: it is fixed by the argument
+    /// itself (its head constant / local, or an ascription), not read off the
+    /// expected type. A leading-dot constructor, a hole, a bare literal, a
+    /// lambda and `[]` are all expected-type-driven and therefore excluded.
+    ///
+    /// Deliberately head-shaped and not recursive: we only need to know that
+    /// elaborating this argument will produce a type of its own for the slot to
+    /// be checked against.
+    fn arg_type_is_self_determined(e: &SurfaceExpr) -> bool {
+        fn head_ident_is_rigid(e: &SurfaceExpr) -> bool {
+            let mut e = e;
+            while let SurfaceExpr::Paren(_, inner) = e {
+                e = inner;
+            }
+            matches!(e, SurfaceExpr::Ident(_, n) if !n.is_relative_constructor() && n != &SurfaceName::generated_path("List.nil"))
+        }
+        let mut e = e;
+        while let SurfaceExpr::Paren(_, inner) = e {
+            e = inner;
+        }
+        match e {
+            SurfaceExpr::Ascription(..) => true,
+            SurfaceExpr::Ident(..) => head_ident_is_rigid(e),
+            SurfaceExpr::App(_, head, _) => head_ident_is_rigid(head),
+            _ => false,
+        }
+    }
+
+    /// A self-determined argument ([`Self::arg_type_is_self_determined`]) landing
+    /// in a slot whose domain is a FLEX APPLICATION `?p w₁ … wₙ`
+    /// ([`Self::is_flex_application`]) — the one slot shape that can never be
+    /// solved argument-first, so the expected result type must pin it FIRST.
+    ///
+    /// WHY THIS SHAPE IS UNSOLVABLE FROM THE ARGUMENT. `Exists.intro : {α} →
+    /// {p : α → Prop} → (w : α) → p w → Exists p`, applied as
+    /// `Exists.intro (Nat.succ x) (inner1 x)` against an expected `CP (Nat.succ x)`
+    /// where `def CP (y : Nat) : Prop := ∃ a b, a + b = y`. The expected type is
+    /// a `def` application, so its head is `CP`, not `Exists` — nothing pins `?p`
+    /// before the arguments run. The second argument is then checked against
+    /// `?p (Nat.succ x)`, and because the witness is a COMPOUND term that
+    /// constraint is not a Miller pattern: `try_pattern_unify` declines and the
+    /// structural `App`/`App` rule pairs the two spines POSITIONALLY, assigning
+    /// `?p := @Exists Nat` and then failing `Nat.succ x` against the predicate
+    /// lambda ("different shape: Discriminant(5) vs Discriminant(4)"). The
+    /// printed "expected `Exists Nat (Nat.succ x)`" is that poisoned assignment.
+    /// Lean pins the slot from the expected type before any argument is
+    /// elaborated (`propagateExpectedType`, `Elab/App.lean`).
+    ///
+    /// WHY IT IS SAFE TO FIRE HERE, AND ONLY HERE. Two independent narrowings:
+    ///
+    ///   * The slot's head must be an unsolved metavariable *applied to
+    ///     something*. A bare open slot (`?α`) is already handled by
+    ///     [`Self::typed_value_arg_in_open_slot`]; a rigid slot needs no pin.
+    ///   * The walked result type must be reached, still carry metavariables and
+    ///     be FIRST-ORDER LINEAR ([`Self::result_metavars_first_order_linear`]),
+    ///     the shared completeness guard that keeps `congrArg`-style
+    ///     higher-order results (`@Eq ?β (?f a₁) (?f a₂)`) and forced results
+    ///     (`@Eq ?α ?a ?a`) out — those must stay argument-driven.
+    ///
+    /// The block this gates is speculative (it only assigns still-open metas)
+    /// and every elaborated declaration is re-checked by the kernel, so a wrong
+    /// pin can only produce a spurious rejection, never an unsound accept.
+    fn rigid_arg_in_flex_slot(&mut self, func_ty: &Expr, args: &[SurfaceArg]) -> bool {
+        if self.current_expected_type.is_none() {
+            return false;
+        }
+        self.metas.push_scope();
+        let mut cur = self.whnf(&self.metas.instantiate(func_ty));
+        let mut found = false;
+        let mut walked_all = true;
+        for arg in args {
+            let ExprKind::Pi(_, dom, body) = cur.kind() else {
+                walked_all = false;
+                break;
+            };
+            let dom_inst = self.whnf(&self.metas.instantiate(dom));
+            if Self::arg_type_is_self_determined(&arg.expr)
+                && Self::is_flex_application(&self.metas, &dom_inst)
+            {
                 found = true;
             }
             let meta = self.fresh_meta(dom_inst);
@@ -1557,7 +2372,7 @@ impl<'a> ElabCtx<'a> {
     /// their own and the expected metavariable is solved from the finished
     /// result afterwards, as it is for every application that never requested
     /// pre-arg unification.
-    fn expected_is_unassigned_meta(&self) -> bool {
+    pub(super) fn expected_is_unassigned_meta(&self) -> bool {
         let Some(expected) = self.current_expected_type.as_ref() else {
             return false;
         };
@@ -1582,6 +2397,16 @@ impl<'a> ElabCtx<'a> {
             SurfaceExpr::Paren(_, inner) | SurfaceExpr::Explicit(_, inner) => {
                 Self::arg_contains_unascribed_by_block(inner)
             }
+            // `(by tac : _)` — the shape `‹_›` expands to — pins nothing: the
+            // hole is a fresh metavariable the slot has to solve.
+            SurfaceExpr::Ascription(_, inner, ty)
+                if matches!(ty.as_ref(), SurfaceExpr::Hole(_)) =>
+            {
+                Self::arg_contains_unascribed_by_block(inner)
+            }
+            // A leading-dot identifier reads its constructor off the slot type
+            // (`deferrable_leading_dot`): pin the result type first.
+            SurfaceExpr::Ident(_, name) if name.is_relative_constructor() => true,
             SurfaceExpr::App(_, func, app_args) => {
                 Self::arg_contains_unascribed_by_block(func)
                     || app_args
@@ -1591,6 +2416,77 @@ impl<'a> ElabCtx<'a> {
             // An ascription pins the block's type; the slot need not be solved
             // first. Every other shape (identifiers, literals, holes, …) carries
             // no metavar-driven by-block.
+            _ => false,
+        }
+    }
+
+    /// Is `e` itself a `by` block whose goal is the argument slot — bare, in
+    /// parentheses, or ascribed to a hole (`‹_›` parses as
+    /// `(by assumption : _)`)? Such an argument is DEFERRED by the argument
+    /// loop when its slot type still carries metavariables: the slot is
+    /// filled with a placeholder and the block runs once the remaining
+    /// arguments have pinned the type (Lean's postponed
+    /// `SyntheticMVarKind.tactic`). A block ascribed to a real type fixes its
+    /// own goal and is never deferred; a `calc` block is not a tactic block.
+    fn deferrable_by_block(e: &SurfaceExpr) -> bool {
+        match e {
+            SurfaceExpr::ByTactic(..) => true,
+            SurfaceExpr::Paren(_, inner) => Self::deferrable_by_block(inner),
+            SurfaceExpr::Ascription(_, inner, ty)
+                if matches!(ty.as_ref(), SurfaceExpr::Hole(_)) =>
+            {
+                Self::deferrable_by_block(inner)
+            }
+            _ => false,
+        }
+    }
+
+    /// Is `e` a leading-dot identifier (`.intro`, possibly applied:
+    /// `.intro _`) — an argument whose meaning comes entirely from its slot
+    /// type? Lean postpones its elaboration until the expected type is known
+    /// (`elabDotIdent` throws `postpone` on a metavariable), so it is
+    /// deferred exactly like a `by` block (`h.elim (.intro _) (.intro _)`,
+    /// `Prop.exists_iff` in `Mathlib/Logic/Basic.lean`, measured 2026-09-11).
+    fn deferrable_leading_dot(e: &SurfaceExpr) -> bool {
+        match e {
+            SurfaceExpr::Ident(_, name) => name.is_relative_constructor(),
+            SurfaceExpr::Paren(_, inner) => Self::deferrable_leading_dot(inner),
+            SurfaceExpr::App(_, func, _) => Self::deferrable_leading_dot(func),
+            _ => false,
+        }
+    }
+
+    /// Is the head of `ty`, after metavariable instantiation, itself an
+    /// unassigned metavariable? This is Lean's `expectedType.getAppFn.isMVar`
+    /// (`Lean/Elab/BuiltinNotation.lean:54`) — the condition under which
+    /// `elabAnonymousCtor` has nothing to read and postpones.
+    fn expected_type_head_is_meta(&self, ty: &Expr) -> bool {
+        let ty = self.metas.instantiate(ty);
+        matches!(ty.get_app_fn().kind(),
+            ExprKind::FVar(fvar) if MetaState::from_fvar(*fvar).is_some())
+    }
+
+    /// Is `e` an anonymous constructor `⟨…⟩` (possibly parenthesized)?
+    ///
+    /// `⟨…⟩` reads its constructor off the slot type and can say nothing at all
+    /// without one, so Lean postpones it exactly like a `by` block or a
+    /// leading-dot name: `elabAnonymousCtor` opens with
+    /// `tryPostponeIfNoneOrMVar expectedType?`
+    /// (`Lean/Elab/BuiltinNotation.lean:46`) and only throws
+    /// `throwExpTypeUnknown` at :54 once the type is still a metavariable after
+    /// the postponement. `Function.sometimes_eq := dif_pos ⟨a⟩` is the row:
+    /// `dif_pos`'s `{c : Prop}` is open at the moment `⟨a⟩` is reached, and it
+    /// is the application's RESULT type that pins it.
+    ///
+    /// An ASCRIBED anonymous constructor (`(⟨a, b⟩ : T)`) pins its own type and
+    /// is deliberately absent here, as it is from `deferrable_by_block`.
+    fn deferrable_anonymous_ctor(e: &SurfaceExpr) -> bool {
+        match e {
+            SurfaceExpr::Paren(_, inner) => Self::deferrable_anonymous_ctor(inner),
+            SurfaceExpr::App(_, func, _) => matches!(
+                func.as_ref(),
+                SurfaceExpr::Ident(_, n) if n.is_unescaped_component("anonymousCtor")
+            ),
             _ => false,
         }
     }
@@ -1809,7 +2705,7 @@ impl<'a> ElabCtx<'a> {
         loop {
             match cur {
                 SurfaceExpr::Ident(_, n) => {
-                    let name = Name::from_string(n);
+                    let name = n.name().clone();
                     return self.env.get_constructor(&name).map(|_| name);
                 }
                 // `Equivalence.mk` reaches the elaborator as PROJECTION-POSTFIX
@@ -1820,7 +2716,7 @@ impl<'a> ElabCtx<'a> {
                     let SurfaceExpr::Ident(_, ns) = base.as_ref() else {
                         return None;
                     };
-                    let name = Name::from_string(&format!("{ns}.{field}"));
+                    let name = ns.append(field).into_name();
                     return self.env.get_constructor(&name).map(|_| name);
                 }
                 SurfaceExpr::Explicit(_, inner) | SurfaceExpr::Paren(_, inner) => cur = inner,
@@ -2061,6 +2957,33 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
+    /// The candidates of an ambiguous application head, if it is one. Kept
+    /// out of line: `elab_app` is on the recursion path of every nested
+    /// application, and the resolver's frame must not be added to each level
+    /// (`codata_cmd_tests::test_codata_stream_encoding_survives_small_thread_stack`).
+    #[inline(never)]
+    fn ambiguous_head(&self, name: &SurfaceName) -> Option<Vec<Name>> {
+        match self.resolve_ident_target(name) {
+            elab_core::IdentTarget::Ambiguous(candidates) => Some(candidates),
+            _ => None,
+        }
+    }
+
+    /// [`Self::elab_overloaded`] for an application headed by an ambiguous
+    /// identifier (out of line for the same reason as [`Self::ambiguous_head`]).
+    #[inline(never)]
+    fn elab_overloaded_app(
+        &mut self,
+        span: clean_parser::Span,
+        candidates: &[Name],
+        args: &[SurfaceArg],
+    ) -> Result<Expr, ElabError> {
+        let args = args.to_vec();
+        self.elab_overloaded(span, candidates, move |head| {
+            SurfaceExpr::App(span, Box::new(head), args.clone())
+        })
+    }
+
     pub(in crate::infer) fn elab_app(
         &mut self,
         func: &SurfaceExpr,
@@ -2101,7 +3024,47 @@ impl<'a> ElabCtx<'a> {
                 return result;
             }
         }
-        self.elab_app_inner(func, args)
+        // An ambiguous head is resolved by the application it heads (Lean's
+        // overload resolution, `ElabCtx::elab_overloaded`).
+        if let SurfaceExpr::Ident(span, name) = func {
+            if let Some(candidates) = self.ambiguous_head(name) {
+                return self.elab_overloaded_app(*span, &candidates, args);
+            }
+        }
+        // Lean's result-is-outParam defaulting (`elab_let_postpone.rs`).
+        let open_before = self.open_waiting_carriers();
+        let saved_floor = self.settle_floor;
+        let saved_bne = self.bne_beq_head;
+        if let Some(head) = Self::bne_desugaring_beq_head(func, args) {
+            self.bne_beq_head = Some(head);
+        } else if Self::is_lean_binrel_notation_head(func)
+            && !matches!(func, SurfaceExpr::Ident(span, _) if Some(*span) == self.bne_beq_head)
+        {
+            self.settle_floor = Some(self.metas.postponed_numeral_count());
+        }
+        // An operator tree's root plans which leaves a later leaf's
+        // defaulting settles (`elab_binop_leaf.rs`).
+        let plan = self.binop_tree_plan(func, args);
+        let term = match plan {
+            Some(plan) if plan.refuse => Err(ElabError::Unsupported {
+                feature: "an operator tree whose operand Lean elaborates alone (a later operand \
+                          applies the numerals' default instances) is written exactly as one it \
+                          does not"
+                    .to_owned(),
+            }),
+            Some(plan) => {
+                self.binop_tree_plans.push(plan);
+                let term = self.elab_app_inner(func, args);
+                self.binop_tree_plans.pop();
+                term
+            }
+            None => self.elab_app_inner(func, args),
+        };
+        self.settle_floor = saved_floor;
+        self.bne_beq_head = saved_bne;
+        let term = term?;
+        self.settle_at_open_out_param_result(func, args, &term, &open_before)?;
+        Ok(term)
     }
 
     /// Eliminator-style elaboration (`elabAsElim`) for a recursor applied with
@@ -2143,23 +3106,42 @@ impl<'a> ElabCtx<'a> {
         // (motive · MAJOR · minors — the major is applied FIRST). The
         // `RecursorVal` lives under `.rec`; `recOn` reuses the same
         // universe/parameter/minor structure, only reordering the major.
-        let (recursor_name, is_recon) = if let Some(base) = full_name.strip_suffix(".recOn") {
-            (format!("{base}.rec"), true)
-        } else if full_name.ends_with(".rec") {
-            (full_name.clone(), false)
-        } else {
-            return Ok(None);
-        };
-        let recursor_name = Name::from_string(&recursor_name);
+        let (recursor_name, is_recon) =
+            if full_name.last_component() == SurfaceName::generated_path("recOn") {
+                (
+                    full_name
+                        .parent()
+                        .append(&SurfaceName::generated_path("rec"))
+                        .into_name(),
+                    true,
+                )
+            } else if full_name.last_component() == SurfaceName::generated_path("rec") {
+                (full_name.name().clone(), false)
+            } else {
+                return Ok(None);
+            };
         let Some(rec_val) = self.env.get_recursor(&recursor_name).cloned() else {
             return Ok(None);
         };
         // The constant actually applied (`.rec` or `.recOn`).
-        let applied_name = Name::from_string(&full_name);
+        let applied_name = full_name.name().clone();
+        // Only when the head RESOLVES to that recursor: `T.rec` with a local
+        // `T` in scope is a field of that local, not the recursor.
+        if !self.func_denotes_global_name(func, &applied_name) {
+            return Ok(None);
+        }
         // Slice: no indices, exactly one motive (parameters ARE allowed —
         // `List.rec`, `Option.rec`, a user `Pair α` — they precede the motive
         // and are recovered from the major's type by `apply_eliminator_params`).
         if rec_val.num_indices != 0 || rec_val.num_motives != 1 {
+            return Ok(None);
+        }
+        // An EXPLICIT motive (a type with no constructors: `Empty.rec`,
+        // `False.rec`) is the first positional argument, so `Empty.rec x`
+        // passes `x` as the motive (Lean: an application type mismatch). The
+        // count below would take `x` for the major premise.
+        let applied_type = self.env.get_const(&applied_name).map(|c| c.type_.clone());
+        if applied_type.is_none_or(|ty| self.motive_binder_is_explicit(&ty, rec_val.num_params)) {
             return Ok(None);
         }
         // The motive is UNSUPPLIED iff the args are exactly the minors + major.
@@ -2206,7 +3188,7 @@ impl<'a> ElabCtx<'a> {
         };
         let motive = Expr::lam(BinderInfo::Default, t_whnf.clone(), motive_body);
         let levels = self.eliminator_levels(&recursor_name, &t_whnf, &expected)?;
-        let type_name = rec_val.inductive_name.to_string();
+        let type_name = SurfaceName::from_name(rec_val.inductive_name.clone());
         // `@Rec.{levels} params… motive` — the inductive parameters (recovered
         // from the major's type `T`) precede the motive.
         let mut head = Expr::const_(applied_name, levels);
@@ -2238,7 +3220,7 @@ impl<'a> ElabCtx<'a> {
         Ok(Some(result))
     }
 
-    fn elab_app_inner(
+    pub(super) fn elab_app_inner(
         &mut self,
         func: &SurfaceExpr,
         args: &[SurfaceArg],
@@ -2248,9 +3230,22 @@ impl<'a> ElabCtx<'a> {
         // retried binop) skips homogeneous slot pinning; operands and other
         // sub-elaborations behave exactly as on the first attempt.
         let suppress_binop_homogenize = std::mem::take(&mut self.suppress_binop_homogenize);
+        // G28: argument indices whose un-annotated lambda this application
+        // postpones (`elab_app_postpone_lambda.rs`); one-shot, so nested
+        // applications never see the retry's set.
+        let deferred_lambda_args = self.take_deferred_lambda_args();
         // Anonymous ctor `⟨val⟩` (#172) + `pure x` in do-block (#3435).
-        if matches!(func, SurfaceExpr::Ident(_, n) if n == "anonymousCtor") {
+        if matches!(func, SurfaceExpr::Ident(_, n) if clean_parser::is_anonymous_constructor_head(n))
+        {
             return self.elab_anonymous_ctor(args);
+        }
+        // `(e :)`: `e` with no expected type (Lean's type-less
+        // `typeAscription`, `Lean/Elab/BuiltinNotation.lean:433-435`).
+        if matches!(
+            func,
+            SurfaceExpr::Ident(_, n) if clean_parser::is_type_ascription_without_type(n)
+        ) {
+            return self.elab_ascription_without_type(args);
         }
         // Bare `ite` application re-route (ite STEP 2 PART A).
         //
@@ -2282,7 +3277,13 @@ impl<'a> ElabCtx<'a> {
         // so `@ite …`, partial applications, and named-arg calls are untouched.
         if !self.explicit_mode {
             if let SurfaceExpr::Ident(_, n) = func {
-                if n == "ite" && args.len() == 3 && args.iter().all(|a| a.name.is_none()) {
+                // Only the GLOBAL `ite`: a local named `ite` is the user's own
+                // function (`def g (ite : Bool → Nat → Nat → Nat) := ite true 1
+                // 2` proved `g (fun _ _ c => c) = 1`; Lean 4.8.0: `2`).
+                if self.head_denotes_global(n, "ite")
+                    && args.len() == 3
+                    && args.iter().all(|a| a.name.is_none())
+                {
                     return self.elab_if(&args[0].expr, &args[1].expr, &args[2].expr);
                 }
                 // `▸` subst re-route (Brick E2). The parser desugars
@@ -2306,7 +3307,10 @@ impl<'a> ElabCtx<'a> {
                 // computational casts, which is why the arm replicates Lean's
                 // rhs-first-then-lhs-with-symm search exactly (see the module
                 // docs and `tests/brick_e2_subst_e2e.rs`).
-                if n == "Eq.rec" && args.len() == 2 && args.iter().all(|a| a.name.is_none()) {
+                if self.head_denotes_global(n, "Eq.rec")
+                    && args.len() == 2
+                    && args.iter().all(|a| a.name.is_none())
+                {
                     if let Some(subst) = self.try_elab_subst(&args[0].expr, &args[1].expr)? {
                         return Ok(subst);
                     }
@@ -2325,112 +3329,16 @@ impl<'a> ElabCtx<'a> {
         if let Some(elim) = self.try_elab_recursor_as_elim(func, args)? {
             return Ok(elim);
         }
-        // Check for recursive call that should be replaced with IH (#381)
-        // If we're calling the recursive function with a pattern variable that has an IH,
-        // replace the call with the corresponding IH.
-        if let Some(ref ctx) = self.recursive_def_ctx.clone() {
-            // Unwrap parentheses to get the actual function name
-            let func_name = Self::unwrap_surface_parens(func);
-
-            // Check if this is a recursive call - handles both:
-            // - Simple idents: `add p m` (func_name = "add")
-            // - Qualified names: `Nat.add p m` (func_name = Proj("Nat", "add") => "Nat.add")
-            // Fix for #522: qualified recursive calls like Nat.add should be recognized
-            let is_recursive_call = match func_name {
-                SurfaceExpr::Ident(_, name) => {
-                    // A self-call spelled with the full qualified path or a
-                    // namespace-relative dotted prefix is matched by
-                    // `matches_call_name`. A *bare* free-function application head
-                    // (a dot-free Ident, e.g. `maskBitsAux rest …` inside
-                    // `namespace TrustIr.VectorDialect` defining
-                    // `…VectorDialect.maskBitsAux`) is the standard in-namespace
-                    // self-reference: it has no method receiver to qualify it, so
-                    // recognize it by matching the bare name against the enclosing
-                    // def's SHORT name. Scoped to dot-free Idents so a genuinely
-                    // qualified call to a different function is unaffected, and the
-                    // IH only actually substitutes when the decreasing argument is
-                    // a bound recursive pattern var (`ih_map`), keeping the rewrite
-                    // conservative.
-                    ctx.matches_call_name(name) || (!name.contains('.') && name == ctx.short_name())
-                }
-                SurfaceExpr::Proj(_, base, proj) => {
-                    // Try to collect qualified name like "Nat.add" from Proj("Nat", "add"),
-                    // tolerating an enclosing-namespace prefix (Track R).
-                    Self::try_collect_qualified_name(base, proj)
-                        .is_some_and(|qname| ctx.matches_call_name(&qname))
-                }
-                _ => false,
-            };
-
-            // B01: this fast path consumes `args` positionally; a named arg
-            // must instead flow to the standard path where it binds by binder
-            // name (or fails loudly) — never silently by position.
-            if is_recursive_call && !args.is_empty() && args.iter().all(|a| a.name.is_none()) {
-                // Check if the argument at the decreasing position is a pattern var with IH
-                if let Some(dec_arg) = args.get(ctx.decreasing_arg_pos) {
-                    let arg_inner = Self::unwrap_surface_parens(&dec_arg.expr);
-                    if let SurfaceExpr::Ident(_, arg_name) = arg_inner {
-                        if let Some(&ih_fvar) = ctx.ih_map.get(arg_name) {
-                            // Found a recursive call with a pattern var that has IH.
-                            let mut result = Expr::fvar(ih_fvar);
-                            // Apply extra (varying) arguments from the recursive call (#1386).
-                            // With generalized motive, IH has type P1 → P2 → ... → ResultType.
-                            // Explicit extra params come from the recursive call's surface args,
-                            // while implicit params must be replayed from the current local
-                            // context because they are omitted from surface applications.
-                            let mut next_explicit_pos = ctx.decreasing_arg_pos + 1;
-                            for extra_param in &ctx.extra_params {
-                                // Expected type for this extra-param argument: the
-                                // domain of the IH's (partially applied) Pi type.
-                                // Elaborating the surface arg *with* this expected
-                                // type lets type-directed literals resolve — most
-                                // importantly an empty-list `[]` passed at a
-                                // recursive call site (`f insts []`), whose element
-                                // type would otherwise be left a polymorphic
-                                // metavariable and fail the kernel re-check.
-                                let expected_dom = self
-                                    .infer_type(&result)
-                                    .ok()
-                                    .map(|t| self.whnf(&t))
-                                    .and_then(|t| match t.kind() {
-                                        ExprKind::Pi(_, dom, _) => Some(dom.as_ref().clone()),
-                                        _ => None,
-                                    });
-                                let arg_expr = match extra_param.binder_info {
-                                    BinderInfo::Default => {
-                                        let arg = args.get(next_explicit_pos);
-                                        if arg.is_some() {
-                                            next_explicit_pos += 1;
-                                        }
-                                        arg.map(|arg| match &expected_dom {
-                                            Some(dom) => self.elaborate_with_expected_type(
-                                                &arg.expr,
-                                                Some(dom.clone()),
-                                            ),
-                                            None => self.elaborate(&arg.expr),
-                                        })
-                                        .transpose()?
-                                    }
-                                    BinderInfo::Implicit
-                                    | BinderInfo::StrictImplicit
-                                    | BinderInfo::InstImplicit => self
-                                        .lookup_local(&extra_param.name)
-                                        .map(|(fvar, _)| Expr::fvar(fvar)),
-                                };
-                                if let Some(arg_expr) = arg_expr {
-                                    result = Expr::app(result, arg_expr);
-                                }
-                            }
-                            return Ok(result);
-                        }
-                    }
-                }
-            }
+        if let Some(result) = self.try_elab_recursive_call(func, args)? {
+            return Ok(result);
+        }
+        if let Some(result) = self.try_elab_recursive_dot_call(func, args)? {
+            return Ok(result);
         }
 
         // Elaborate the function
         let func_expr = match func {
-            SurfaceExpr::Ident(_, name) if name.starts_with('.') => {
+            SurfaceExpr::Ident(_, name) if name.is_relative_constructor() => {
                 // A leading-dot constructor in application *head* position
                 // (`.ctor arg …`). Prefer the expected type when one is in
                 // scope; otherwise hand `elab_leading_dot_ctor_with_expected_type`
@@ -2446,18 +3354,31 @@ impl<'a> ElabCtx<'a> {
                     .unwrap_or_else(|| self.fresh_meta(Expr::type_()));
                 self.elab_leading_dot_ctor_with_expected_type(name, &expected_ty)?
             }
-            _ => self.elaborate(func)?,
+            _ => self.elaborate_app_head(func, args)?,
+        };
+
+        // Expand a trailing `..` (Lean `Term.ellipsis`) into the explicit
+        // holes it abbreviates, BEFORE named-argument resolution — the marker
+        // carries a reserved `name`, so `resolve_named_args` would otherwise
+        // report it as an unknown parameter. `..` needs the elaborated head's
+        // arity, which is why it happens here and not in the parser.
+        let ellipsis_args;
+        let args = if args.iter().any(SurfaceArg::is_ellipsis) {
+            ellipsis_args = self.expand_app_ellipsis(&func_expr, args)?;
+            &ellipsis_args[..]
+        } else {
+            args
         };
 
         // Resolve named arguments (#1230): if any arg has a name, reorder
         // args to match parameter positions before the main elaboration loop.
         let has_named_args = args.iter().any(|a| a.name.is_some());
         let resolved_args;
-        let args = if has_named_args {
+        let (args, positioned_prefix) = if has_named_args {
             resolved_args = self.resolve_named_args(&func_expr, args)?;
-            &resolved_args[..]
+            (&resolved_args.0[..], resolved_args.1)
         } else {
-            args
+            (args, 0)
         };
 
         // Try to infer the function's type to know about implicit arguments
@@ -2465,39 +3386,20 @@ impl<'a> ElabCtx<'a> {
         let func_type_result = self.infer_type(&func_expr);
 
         if let Ok(func_type) = func_type_result {
-            let (pre_applied_result, pre_applied_type, consumed_implicit_args) =
-                self.try_consume_leading_implicit_args(func_expr.clone(), func_type.clone(), args)?;
-            let remaining_args = &args[consumed_implicit_args..];
-
-            // Decide whether to insert implicit args with metavariables.
-            // If user provided more args than explicit binders, the extra args fill implicit slots.
-            // Example: Ring : {α : Type u} → Type u has 0 explicit binders.
-            //          Ring R provides 1 arg for 0 explicit binders, so R fills the implicit.
-            // Example: id : {A : Type} → A → A has 1 explicit binder.
-            //          id zero provides 1 arg for 1 explicit binder, so we insert meta for A.
-            let num_explicit_binders = Self::count_explicit_binders(&pre_applied_type);
-            // Leading instance-implicit binders whose carrier is pinned only by a
-            // later *explicit* argument (e.g. `[inst : LE ?α]` in
-            // `LE.le {α} [inst] (a b : α)`) must NOT be resolved eagerly: with an
-            // unconstrained `?α`, `resolve_instance` would unify against whichever
-            // `LE` instance is registered first (`instLENat`, pinning `?α := Nat`)
-            // and then the `UInt8` operand mismatches. Defer them so the explicit
-            // args pin `?α` first, then resolve after the arg loop. This mirrors
-            // Lean 4's postponement of typeclass resolution (and the deferred path
-            // already used in `apply_implicit_to_expected_type`).
+            let remaining_args = args;
+            // Only @ or named-slot resolution can authorize positional filling
+            // of implicit binders. Argument count never changes their meaning.
             let mut leading_pending: Vec<(Expr, Expr)> = Vec::new();
-            let (mut result, mut current_type) = if remaining_args.len() <= num_explicit_binders {
-                // User args can be consumed by explicit binders, insert implicits as metas
-                let (r, t, pending) = self.insert_implicit_args_deferring_instances(
-                    pre_applied_result,
-                    &pre_applied_type,
+            let (mut result, mut current_type) = if positioned_prefix == 0 {
+                let (result, ty, pending) = self.insert_implicit_args_deferring_instances(
+                    func_expr.clone(),
+                    &func_type,
+                    ArgsFollow::from_remaining(remaining_args.len()),
                 );
                 leading_pending = pending;
-                (r, t)
+                (result, ty)
             } else {
-                // User provided more args than explicit binders, so some args fill implicits
-                // Don't insert leading implicits - let args fill them directly
-                (pre_applied_result, pre_applied_type)
+                (func_expr.clone(), func_type.clone())
             };
 
             // Push scope so we can retry with Nat literals coerced to Real
@@ -2599,6 +3501,23 @@ impl<'a> ElabCtx<'a> {
             // Suppressed on the B104 heterogeneous retry, which deliberately
             // elaborates each operand at its own type.
             if !self.explicit_mode && !suppress_binop_homogenize {
+                // Lean propagates the expected type before the first explicit
+                // argument (`propagateExpectedType`), so a slot the expected
+                // type pins is not open for a sibling to pin: `min (1 - 7) 9 :
+                // Int` has `α := Int` and is `-6` in Lean 4.8.0; pinning `α`
+                // from the carrier `1 - 7` first made it `Nat` (`0`), and `min
+                // (1 - 7) 9 = 0` was accepted at `Int`. The argument loop
+                // below propagates again; a second unification of the same
+                // pair changes nothing.
+                if !has_named_args
+                    && !Self::is_hetero_binop_head(func)
+                    && !self.result_is_out_param_of_local_instance(&func_type)
+                    && remaining_args
+                        .iter()
+                        .any(|a| Self::arg_is_bare_numeral(&a.expr))
+                {
+                    let _ = self.propagate_expected_type(&current_type, remaining_args);
+                }
                 self.pin_open_slots_from_carrier_operand(
                     &current_type,
                     remaining_args,
@@ -2676,11 +3595,27 @@ impl<'a> ElabCtx<'a> {
                 // via propagateExpectedType). Deliberately narrow — see the
                 // helper's doc for the 33-codata-test regression that a broader
                 // form caused.
-                || self.ctor_flex_slot_needs_expected(func, &current_type, remaining_args);
+                || self.ctor_flex_slot_needs_expected(func, &current_type, remaining_args)
+                // The row above only fires when the expected type is SYNTACTICALLY
+                // headed by the constructor's own inductive. Behind a `def`
+                // (`CP (Nat.succ x)` for `def CP y : Prop := ∃ a b, a + b = y`) the
+                // head is the definition, so nothing pinned `?p` and the argument
+                // check faced the non-pattern `?p (Nat.succ x)`. Fire on the SLOT
+                // shape instead of the head name, under the same first-order-linear
+                // result guard. See the helper's doc.
+                || self.rigid_arg_in_flex_slot(&current_type, remaining_args);
             // An expected type that is itself an unsolved metavariable has
             // nothing to push inward; firing the block would only pin it to a
-            // half-open result. See `expected_is_unassigned_meta`.
-            if needs_pre_arg_unify && !self.expected_is_unassigned_meta() {
+            // half-open result. See `expected_is_unassigned_meta`. A literal
+            // `Prop` is never pushed inward either — Lean's
+            // `propagateExpectedType` skips it (`Prop` is used as a "Bool"),
+            // and this block used to pin `List.head! s`'s carrier to `Prop` in
+            // `(List.head! s : Prop)` with `s : List Bool` (measured
+            // 2026-09-12; Lean accepts it).
+            if needs_pre_arg_unify
+                && !self.expected_is_unassigned_meta()
+                && !self.expected_is_literal_prop()
+            {
                 if let Some(expected) = self.current_expected_type.clone() {
                     let mut ret_ty = self.whnf(&self.metas.instantiate(&current_type));
                     let mut ok = true;
@@ -2786,6 +3721,17 @@ impl<'a> ElabCtx<'a> {
             // Track Nat literals and their positions for potential coercion
             let mut nat_literal_indices: Vec<usize> = Vec::new();
             let mut elaborated_args: Vec<Expr> = Vec::new();
+            // `by` blocks whose slot type still carried metavariables when
+            // their turn came: (placeholder meta, the block, the slot type).
+            // Run after the remaining arguments — see `deferrable_by_block`.
+            let mut deferred_by_blocks: Vec<(Expr, SurfaceExpr, Expr)> = Vec::new();
+            // Lean's `propagateExpected` flag (see `propagate_expected_type`).
+            // Not armed for a heterogeneous arithmetic head (Clean's `binop%`
+            // stand-in), nor when the result is an
+            // `outParam` of the head's own instance binder (Lean's
+            // `addImplicitArg` disarms it there; off under `@`, as in Lean).
+            let mut propagate_expected = !Self::is_hetero_binop_head(func)
+                && (self.explicit_mode || !self.result_is_out_param_of_local_instance(&func_type));
             // Process each explicit argument
             for (idx, arg) in remaining_args.iter().enumerate() {
                 // Check the current type to see if we need more implicit args
@@ -2864,6 +3810,16 @@ impl<'a> ElabCtx<'a> {
                     current_type = self.whnf(&self.metas.instantiate(&body.instantiate(&meta)));
                 }
 
+                // Lean's `processExplicitArg` propagates the expected type
+                // before elaborating each explicit argument until it succeeds.
+                if propagate_expected {
+                    propagate_expected = self.propagate_expected_type_with_positioned_args(
+                        &current_type,
+                        &remaining_args[idx..],
+                        has_named_args,
+                    );
+                }
+
                 // Extract binder info and types to avoid borrow issues
                 let type_info = match current_type.kind() {
                     ExprKind::Pi(bi, arg_ty, body_ty) => {
@@ -2872,7 +3828,7 @@ impl<'a> ElabCtx<'a> {
                     _ => None,
                 };
 
-                if let Some((_bi, expected_arg_ty, _body_ty)) = type_info {
+                if let Some((bi, expected_arg_ty, _body_ty)) = type_info {
                     let local_arg_ty = expected_arg_ty;
 
                     // Elaborate the actual argument with expected type context so
@@ -2892,9 +3848,100 @@ impl<'a> ElabCtx<'a> {
                     } else {
                         None
                     };
-                    let arg_expr = match getelem_hole_goal {
-                        Some(goal) => self.discharge_getelem_valid_hole(&goal),
-                        None => self.elaborate_arg_with_expected_type(
+                    // An explicit `_` handed to an INSTANCE-IMPLICIT binder
+                    // (`@default (∀ i, β i) _`, `@Inhabited.default α _`) is
+                    // synthesized by typeclass resolution, as Lean does for a
+                    // hole in that position; it used to become a plain
+                    // metavariable nothing ever solved, so a `rfl` about
+                    // `@default _ _` reached the kernel with the instance
+                    // unassigned (`Pi.default_def`, `Pi.default_apply` in
+                    // `Mathlib/Logic/Unique.lean`, measured 2026-09-11). A
+                    // failed synthesis is Lean's "failed to synthesize" when
+                    // the goal is ground, and a queued instance goal when it
+                    // is not (`explicit_inst_hole_unsynthesized`).
+                    let inst_hole = getelem_hole_goal.is_none()
+                        && bi.info == BinderInfo::InstImplicit
+                        && matches!(Self::unwrap_surface_parens(&arg.expr), SurfaceExpr::Hole(_));
+                    let synthesized_inst = if inst_hole {
+                        self.resolve_instance(&expected_arg_ty)
+                    } else {
+                        None
+                    };
+                    // Lean postpones a `by` block until the rest of the
+                    // application has been elaborated (`SyntheticMVarKind.tactic`
+                    // in `synthesizeSyntheticMVars`): the block's goal is the
+                    // slot type, and running it while that type still carries
+                    // metavariables hands the tactic a goal it cannot read
+                    // (`Nonempty.elim ‹_› (congr_fun …)` — `‹_›`'s goal is
+                    // `Nonempty ?α`, pinned only by the SECOND argument;
+                    // `Mathlib/Logic/Function/Basic.lean`, measured
+                    // 2026-09-11). Stand a metavariable in the slot now and run
+                    // the block after the loop against the instantiated type.
+                    // An `⟨…⟩` is postponed on a NARROWER condition than a
+                    // `by` block: Lean's `tryPostponeIfNoneOrMVar` +
+                    // `expectedType.getAppFn.isMVar`
+                    // (`Lean/Elab/BuiltinNotation.lean:46,54`) ask whether the
+                    // expected type's HEAD is a metavariable, not whether the
+                    // type mentions one anywhere. `f ⟨a, b⟩` at a slot typed
+                    // `?α × Nat` therefore keeps elaborating eagerly — its head
+                    // is `Prod`, and the fields are what pin `?α`.
+                    let defer_by_block = getelem_hole_goal.is_none()
+                        && !inst_hole
+                        && ((Self::deferrable_by_block(&arg.expr)
+                            || Self::deferrable_leading_dot(&arg.expr))
+                            && self.has_metavars(&expected_arg_ty)
+                            || Self::deferrable_anonymous_ctor(&arg.expr)
+                                && self.expected_type_head_is_meta(&expected_arg_ty));
+                    // G28: an un-annotated lambda whose slot type is still
+                    // open. A retry of this application postpones it (like a
+                    // `by` block); otherwise it is elaborated eagerly as ever,
+                    // watched for field notation on a meta-typed receiver —
+                    // Lean's `tryPostponeIfMVar` (`elab_app_postpone_lambda.rs`).
+                    let lambda_in_open_slot = getelem_hole_goal.is_none()
+                        && !inst_hole
+                        && !defer_by_block
+                        && Self::is_unascribed_lambda_arg(&arg.expr)
+                        && self.has_metavars(&expected_arg_ty);
+                    let defer_lambda = lambda_in_open_slot && deferred_lambda_args.contains(&idx);
+                    let mut lambda_stuck_on_meta = false;
+                    let arg_expr = match (getelem_hole_goal, synthesized_inst) {
+                        (Some(goal), _) => self.discharge_getelem_valid_hole(&goal),
+                        (None, Some(inst)) => Ok(inst),
+                        (None, None) if inst_hole => {
+                            self.explicit_inst_hole_unsynthesized(&expected_arg_ty)
+                        }
+                        (None, None) if defer_by_block || defer_lambda => {
+                            let placeholder = self.fresh_meta(expected_arg_ty.clone());
+                            deferred_by_blocks.push((
+                                placeholder.clone(),
+                                arg.expr.clone(),
+                                expected_arg_ty.clone(),
+                            ));
+                            Ok(placeholder)
+                        }
+                        (None, None) if lambda_in_open_slot => {
+                            let watch = self.begin_field_notation_watch();
+                            let r = self.elaborate_arg_with_expected_type(
+                                &arg.expr,
+                                Some(expected_arg_ty.clone()),
+                            );
+                            lambda_stuck_on_meta = self.end_field_notation_watch(watch);
+                            r
+                        }
+                        // Lean's `binop%` elaborates a compound leaf with no
+                        // expected type and coerces it into the tree's type
+                        // (`elab_binop_leaf.rs`); the slot's type would reach
+                        // inside it otherwise.
+                        (None, None)
+                            if (hetero_binop_slots.as_ref().is_some_and(|s| s.homogeneous)
+                                || Self::is_neg_head(func))
+                                && (self.binop_leaf_forced_alone(&arg.expr)
+                                    || self
+                                        .binop_leaf_settles_alone(&arg.expr, &expected_arg_ty)) =>
+                        {
+                            self.elaborate_arg_with_expected_type(&arg.expr, None)
+                        }
+                        (None, None) => self.elaborate_arg_with_expected_type(
                             &arg.expr,
                             Some(expected_arg_ty.clone()),
                         ),
@@ -2903,6 +3950,11 @@ impl<'a> ElabCtx<'a> {
                         Ok(e) => e,
                         Err(e) => {
                             self.metas.pop_scope();
+                            if lambda_stuck_on_meta && self.lambda_retry_allowed() {
+                                let mut defer = deferred_lambda_args.clone();
+                                defer.push(idx);
+                                return self.elab_app_retry_deferring_lambdas(func, args, defer, e);
+                            }
                             // B104: the operand was elaborated AGAINST the
                             // pinned homogeneous slot type and mismatched
                             // inside its own elaboration (e.g. a nested binop
@@ -2938,16 +3990,44 @@ impl<'a> ElabCtx<'a> {
                         }
                     };
                     let arg_type = self.metas.instantiate(&arg_type);
+                    // A slot that is still a BARE metavariable takes the
+                    // argument's type AS WRITTEN, the way Lean's `?α =?= VM`
+                    // assigns `VM`: whnf would unfold a `def` alias (`VM :=
+                    // Nat → Option Nat`) into the assignment, and field
+                    // notation on a later binder of that type (G28, `acc.set`)
+                    // or instance search at `.instances` transparency (G47)
+                    // could no longer see the alias.
+                    let folded_assigned = self.assign_bare_slot_folded(&arg_type, &expected_arg_ty);
                     let arg_type = self.whnf(&arg_type);
                     let expected_arg_ty = self.whnf(&expected_arg_ty);
 
-                    let ctx = self.build_local_ctx();
-                    let unify_result = {
+                    let unify_result = if folded_assigned {
+                        UnifyResult::Success
+                    } else {
+                        let ctx = self.build_local_ctx();
                         let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
                         unifier.unify(&arg_type, &expected_arg_ty)
                     };
                     let mut final_arg = match unify_result {
                         UnifyResult::Success => arg_expr.clone(),
+                        // The unifier is structural and incomplete: it splits
+                        // `Box1.mk v =?= f n` into `Box1.mk =?= f` and fails,
+                        // where Lean's `ensureHasType` (isDefEq, lazy delta and
+                        // structure eta) accepts. Once `propagate_expected_type`
+                        // has pinned this slot, a def-eq the outer check used to
+                        // settle is met here instead (`iVis_inj_k`, bisected to
+                        // e03668c7d). As `enforce_expr_type` does, the
+                        // elaborator's def-eq decides before coercion or
+                        // refusal: the kernel's checker at elaboration
+                        // transparency (`@[irreducible]` stays folded, B14),
+                        // with universe METAVARIABLES solved through the level
+                        // callback and a rigid `.{u}` never assigned
+                        // (`make_tc`). Unlike Lean's isDefEq, the failed
+                        // unifier attempt's partial assignments are not rolled
+                        // back first; the def-eq is decided under them.
+                        UnifyResult::Failure(_) if self.is_def_eq(&arg_type, &expected_arg_ty) => {
+                            arg_expr.clone()
+                        }
                         UnifyResult::Failure(msg) => {
                             // Try Nat → Real coercion if applicable
                             if let Some(coerced) =
@@ -3120,14 +4200,28 @@ impl<'a> ElabCtx<'a> {
                     // Build the application (consuming final_arg)
                     result = Expr::app(result, final_arg);
 
-                    // Insert any trailing implicit arguments before the next explicit arg
-                    // BUT only if remaining user args fit in remaining explicit binders.
-                    // This prevents over-inserting implicits when user args should fill them.
+                    // Lean's default-instance pass, in argument order: a
+                    // heterogeneous-operator goal postponed inside an EARLIER
+                    // argument (`(· + ·)`, whose binder types were open when
+                    // its body elaborated) is retried now that THIS argument
+                    // may have grounded the carrier —
+                    // `List.foldl (· + ·) 0 [1, 2, 3]` grounds it at the `0`,
+                    // before the list literal is reached. One `is_empty` test
+                    // whenever nothing was postponed, which is every
+                    // application that does not pass an unannotated arithmetic
+                    // function.
+                    self.retry_postponed_open_carrier_instances();
+
+                    // A named-slot prefix is already positioned, including
+                    // holes for omitted implicit slots. Its remaining suffix is
+                    // ordinary positional application and inserts implicits.
                     let remaining_user_args = remaining_args.len() - idx - 1;
-                    let remaining_explicits = Self::count_explicit_binders(&current_type);
-                    if remaining_user_args <= remaining_explicits {
-                        let (new_result, new_type) =
-                            self.insert_implicit_args(result, &current_type);
+                    if idx + 1 >= positioned_prefix {
+                        let (new_result, new_type) = self.insert_implicit_args(
+                            result,
+                            &current_type,
+                            ArgsFollow::from_remaining(remaining_user_args),
+                        );
                         result = new_result;
                         current_type = new_type;
                     }
@@ -3151,38 +4245,48 @@ impl<'a> ElabCtx<'a> {
             }
 
             // Default-argument (`optParam`) insertion at the end of the
-            // application: if the user supplied all positional arguments but the
-            // function type still begins with explicit `optParam α default`
-            // parameters, supply the defaults — but only when an expected type is
-            // present and is reached by doing so. This matches Lean 4's default
-            // insertion in `elabApp` while leaving genuine partial applications
-            // (a function value passed on without an expected result type) alone.
-            // It keys off the raw `optParam` parameter type, so it fires for
-            // imported declarations with no clean-side default metadata.
-            if let Some(expected) = self.current_expected_type.clone() {
-                let current_type_now = self.whnf(&self.metas.instantiate(&current_type));
-                let leads_with_opt_param = matches!(
-                    current_type_now.kind(),
-                    ExprKind::Pi(bi, arg_ty, _)
-                        if !Self::is_implicit_binder(*bi)
-                            && Self::opt_param_default(&self.metas.instantiate(arg_ty)).is_some()
-                );
-                if leads_with_opt_param {
-                    let (defaulted, defaulted_ty) =
-                        self.insert_opt_param_defaults(result.clone(), &current_type_now);
-                    let defaulted_ty_whnf = self.whnf(&self.metas.instantiate(&defaulted_ty));
-                    let expected_whnf = self.whnf(&self.metas.instantiate(&expected));
-                    let matched = {
-                        let ctx = self.build_local_ctx();
-                        let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
-                        matches!(
-                            unifier.unify(&defaulted_ty_whnf, &expected_whnf),
-                            UnifyResult::Success
-                        )
-                    };
-                    if matched {
-                        result = defaulted;
+            // application: once the user's positional arguments are consumed,
+            // every leading explicit `optParam α default` binder receives its
+            // default, and the implicit binders between such defaults are
+            // filled as after any argument. This is Lean's
+            // `processExplicitArg` with no argument left (`Lean/Elab/App.lean`):
+            // `match (← read).explicit, argType.getOptParamDefault?, …` takes
+            // the default arm whenever `explicit` is false, WITH OR WITHOUT an
+            // expected type. It keys off the raw `optParam` parameter type, so it
+            // fires for imported declarations with no clean-side metadata.
+            //
+            // Until 2026-10-07 the default was supplied only when an expected
+            // type was present and the defaulted type unified with it. Both
+            // halves diverged from Lean, measured on the pinned v4.30.0-rc2
+            // binary: with no expected type, `ext.getState env |>.field` saw a
+            // receiver typed `optParam … → S` instead of `S` and refused the
+            // field (upstream tests/elab/2077.lean); and against an expected
+            // function type the partial application was ACCEPTED where Lean
+            // fills the default and reports the mismatch (`def h : Nat → Nat :=
+            // addTwo 1` is a type error in Lean).
+            //
+            // `@f a` supplies NO default: Lean takes the default arm only at
+            // `explicit = false`, and the pinned binary prints `@withOpt 1 :
+            // optParam Nat 5 → Nat` and refuses `def t : Nat := @withOpt 1`.
+            // The `autoParam` twin is the same arm.
+            if !self.explicit_mode {
+                loop {
+                    let current_type_now = self.whnf(&self.metas.instantiate(&current_type));
+                    let leads_with_opt_param = matches!(
+                        current_type_now.kind(),
+                        ExprKind::Pi(bi, arg_ty, _)
+                            if !Self::is_implicit_binder(*bi)
+                                && Self::opt_param_default(&self.metas.instantiate(arg_ty)).is_some()
+                    );
+                    if !leads_with_opt_param {
+                        break;
                     }
+                    let (defaulted, defaulted_ty) =
+                        self.insert_opt_param_defaults(result, &current_type_now);
+                    let (filled, filled_ty) =
+                        self.insert_implicit_args(defaulted, &defaulted_ty, ArgsFollow::No);
+                    result = filled;
+                    current_type = filled_ty;
                 }
             }
 
@@ -3197,6 +4301,22 @@ impl<'a> ElabCtx<'a> {
                 for (meta_arg, goal_ty) in &leading_pending {
                     let goal_ty = self.whnf(&self.metas.instantiate(goal_ty));
                     let resolved = self.resolve_instance(&goal_ty);
+                    // POSTPONED rather than absent: a heterogeneous-operator
+                    // goal with every type argument still open. Record it so
+                    // the enclosing application retries it once a sibling
+                    // argument grounds the carrier. The goal still carries
+                    // metavariables, so the loud GROUND-goal exit below does
+                    // not fire and the pre-existing leak-then-fail-closed path
+                    // is what catches it if nothing ever grounds it.
+                    if resolved.is_none() {
+                        if self.instance_search_stuck {
+                            // Lean's stuck verdict: the surrounding term may
+                            // still ground the carrier (`Lean/Elab/App.lean`
+                            // synthesizes AFTER the expected-type unification).
+                            self.record_postponed_stuck_instance(meta_arg, &goal_ty);
+                        }
+                        self.record_postponed_open_carrier_instance(meta_arg, &goal_ty);
+                    }
                     if let (Some(resolved), ExprKind::FVar(fvar)) = (&resolved, meta_arg.kind()) {
                         if let Some(meta_id) = MetaState::from_fvar(*fvar) {
                             let _ = self.metas.assign(meta_id, resolved.clone());
@@ -3209,10 +4329,24 @@ impl<'a> ElabCtx<'a> {
                     // surfaced as the kernel's opaque "Declaration contains
                     // free variables" rejection (sweep row
                     // classes_instances/p17). Lean: "failed to synthesize".
-                    // Goals that still carry metavariables keep the legacy
-                    // leak-then-fail-closed path: an enclosing elaboration
-                    // context may yet pin them and assign the meta.
-                    if resolved.is_none() && !self.has_metavars(&goal_ty) {
+                    //
+                    // A heterogeneous-operator goal whose INPUTS are ground and
+                    // whose only open slot is the `outParam` result is ground
+                    // for this purpose too (`hetero_binop_goal_is_determined`):
+                    // leaving it postponed is what let `(3 : Fin 4) + 1`, read
+                    // at `HAdd (Fin 4) Nat ?γ` by the B104 retry, have `?γ`
+                    // solved to `Nat` by a sibling numeral and the `Fin` leaf
+                    // coerced — accepting `(if True then (3 : Fin 4) + 1 else
+                    // 0) ≠ 0`, which is false in Lean.
+                    //
+                    // Goals that still carry metavariables in an input keep the
+                    // legacy leak-then-fail-closed path: an enclosing
+                    // elaboration context may yet pin them and assign the meta.
+                    if resolved.is_none()
+                        && (!self.has_metavars(&goal_ty)
+                            || (!self.instance_search_stuck
+                                && self.hetero_binop_goal_is_determined(&goal_ty)))
+                    {
                         let still_unassigned = matches!(
                             self.metas.instantiate(meta_arg).kind(),
                             ExprKind::FVar(fvar) if MetaState::from_fvar(*fvar).is_some()
@@ -3231,13 +4365,112 @@ impl<'a> ElabCtx<'a> {
                             if hetero_binop_slots.as_ref().is_some_and(|s| s.homogeneous) {
                                 return self.elab_app_binop_hetero_fallback(func, args);
                             }
+                            // A determined operator goal still has its open
+                            // `outParam`: name it `?N`, not by its raw fvar id.
+                            let goal = if self.has_metavars(&goal_ty) {
+                                self.render_instance_goal(&goal_ty)
+                            } else {
+                                format!("{goal_ty}")
+                            };
                             return Err(ElabError::FailedToSynthesizeInstance {
-                                goal: format!("{goal_ty}"),
+                                goal,
+                                detail: self.instance_failure_detail(&goal_ty),
                             });
                         }
                     }
                 }
             }
+
+            // Impose the expected RESULT type before resuming anything that
+            // was postponed, which is where Lean does it: a postponed
+            // elaborator is resumed in `synthesizeSyntheticMVars`, run after
+            // the enclosing term's `ensureHasType`, so by then the application
+            // type and the expected type have met. `propagate_expected_type`
+            // cannot stand in for it — it declines whenever the result type
+            // mentions an explicit argument (`body.has_loose_bvars()`), which
+            // is exactly `mydif_pos : {c} -> c -> (t e : Nat) -> MyDite c t e =
+            // t`, the `Function.sometimes_eq` shape. Without this the drain
+            // re-runs `⟨a⟩` against the same open `?c` and reports the very
+            // error the deferral exists to avoid.
+            //
+            // SPECULATIVE and scoped: on failure nothing is assigned and the
+            // behaviour is exactly what it was, so this can only turn an error
+            // into a success. Gated on there being something deferred, so an
+            // application that postponed nothing is untouched.
+            if !deferred_by_blocks.is_empty() {
+                if let Some(expected) = self.current_expected_type.clone() {
+                    let actual = self.metas.instantiate(&current_type);
+                    let expected = self.metas.instantiate(&expected);
+                    self.metas.push_scope();
+                    if self.try_unify(&actual, &expected) {
+                        self.metas.commit();
+                    } else {
+                        self.metas.pop_scope();
+                    }
+                }
+            }
+
+            // Run the `by` blocks deferred in the loop, each against its slot
+            // type as the other arguments (and the expected result type) have
+            // now pinned it. A block whose slot is STILL open runs against the
+            // open metavariable and fails loudly inside the tactic, exactly as
+            // it did before the deferral — never a silently-wrong term.
+            for (placeholder, block, slot_ty) in deferred_by_blocks {
+                let goal_ty = self.metas.instantiate(&slot_ty);
+                let proof =
+                    match self.elaborate_arg_with_expected_type(&block, Some(goal_ty.clone())) {
+                        Ok(p) => p,
+                        Err(e) => {
+                            self.metas.pop_scope();
+                            return Err(e);
+                        }
+                    };
+                // A `by` block's tactic guarantees its goal type; a postponed
+                // lambda (G28) elaborated against the slot does not — its
+                // body's type is whatever it is. Unify it with the slot, as
+                // the eager path does, so an ill-typed argument is refused
+                // HERE ("type mismatch", as Lean says) rather than reaching
+                // the kernel.
+                if Self::is_unascribed_lambda_arg(&block) {
+                    let lam_ty = match self.infer_type(&proof) {
+                        Ok(t) => self.metas.instantiate(&t),
+                        Err(e) => {
+                            self.metas.pop_scope();
+                            return Err(e);
+                        }
+                    };
+                    let slot = self.metas.instantiate(&goal_ty);
+                    if !self.try_unify(&lam_ty, &slot) {
+                        self.metas.pop_scope();
+                        return Err(ElabError::TypeMismatch {
+                            expected: format!("{slot}"),
+                            actual: format!("{lam_ty}"),
+                        });
+                    }
+                }
+                let assigned = match placeholder.kind() {
+                    ExprKind::FVar(fvar) => MetaState::from_fvar(*fvar)
+                        .is_some_and(|meta_id| self.metas.assign(meta_id, proof.clone())),
+                    _ => false,
+                };
+                // The placeholder may already have been solved by a later
+                // unification (e.g. against a sibling argument); the block's
+                // proof must then agree with that solution.
+                if !assigned {
+                    let current = self.metas.instantiate(&placeholder);
+                    if !self.try_unify(&current, &proof) {
+                        self.metas.pop_scope();
+                        return Err(ElabError::TypeMismatch {
+                            expected: format!("{current}"),
+                            actual: format!("{proof}"),
+                        });
+                    }
+                }
+            }
+            // Last chance for a postponed heterogeneous-operator goal:
+            // every argument of this application has been elaborated, so
+            // anything they were going to ground is grounded.
+            self.retry_postponed_open_carrier_instances();
 
             // Commit scope - elaboration succeeded
             self.metas.commit();

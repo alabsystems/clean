@@ -784,7 +784,7 @@ impl Specification {
         let reduct = format!(
             "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args (KExpr.const nm us))) \
              (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) \
-             (apply_spine (list_take {prefix_n} (kapp_args (KExpr.const nm us))) (recrule_rhs rule))))"
+             (apply_spine (list_take {prefix_n} (kapp_args (KExpr.const nm us))) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) us))))"
         );
         // nilhead : list_head (list_drop major_idx (kapp_args (const nm us))) = none.
         let nilhead = format!(
@@ -2094,12 +2094,12 @@ fn app_redex_tri_proof() -> String {
     let r_fa = format!(
         "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args (KExpr.app f a))) \
          (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) \
-         (apply_spine (list_take {prefix_n} (kapp_args (KExpr.app f a))) (recrule_rhs rule))))"
+         (apply_spine (list_take {prefix_n} (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f a)))))))"
     );
     let reduct_m = format!(
         "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args (KExpr.app f' a'))) \
          (apply_spine (list_drop (Nat.sub (list_length (kapp_args a')) (recrule_num_fields rule)) (kapp_args a')) \
-         (apply_spine (list_take {prefix_n} (kapp_args (KExpr.app f' a'))) (recrule_rhs rule))))"
+         (apply_spine (list_take {prefix_n} (kapp_args (KExpr.app f' a'))) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f' a')))))))"
     );
     let goal = "(par_reduces_p env r (topIotaStar env (KExpr.app f' a')))";
 
@@ -2107,7 +2107,7 @@ fn app_redex_tri_proof() -> String {
     let left_leg = "(par_reduces_p_reduct_cong env f f' a a' r recname meta major cname rule \
          disjoint h1 h2 h4 h5 h5r hbnd hidx hf ha)";
     let right_recon = "(par_reduces_p_app_redex env f f' a a' recname meta major cname rule \
-         disjoint h1 h2 h4 h5 hbnd hidx hf ha)";
+         disjoint h1 h2 h4 h5 fields arity hbnd hidx hf ha)";
     let minimal_body = format!(
         "(Eq.substType (OptionType KExpr) \
          (fun (o : OptionType KExpr) => par_reduces_p env r (opt_default o (KExpr.app f' a'))) \
@@ -2124,6 +2124,8 @@ fn app_redex_tri_proof() -> String {
          (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) \
          (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
          (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+         (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true) \
          (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {r_fa}) (OptionType.some KExpr r)) \
          (hbnd : Eq KExpr major a) \
          (hidx : Eq Nat {major_idx} (list_length (kapp_args f))) => \

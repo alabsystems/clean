@@ -114,7 +114,6 @@ impl Specification {
     pub(super) fn add_env_closed_checkers_depth(&mut self) -> Result<(), SpecError> {
         self.add_depth_checker_defs()?;
         self.add_depth_checker_soundness()?;
-        self.add_depth_invariance_bridge()?;
         self.add_depth_env_fold_soundness()?;
         self.add_depth_generic_discharge()?;
         self.add_depth_checker_demo()?;
@@ -200,7 +199,7 @@ impl Specification {
         self.add_recursive_def(
             r"def def_env_closed_b2 (env : DefEnv) : Bool := match env with
 | DefEnv.empty => Bool.true
-| DefEnv.addDef tail dname val => Bool.and (closed_b val) (def_env_closed_b2 tail)",
+| DefEnv.addDef tail dname defn => Bool.and (closed_b (kdef_value defn)) (def_env_closed_b2 tail)",
             "Depth-aware closure checker for a definition environment: every registered \
              definition's value passes closed_b. A concrete env discharges DefEnvClosed by \
              def_env_closed_of_b2 + a single Eq.refl Bool.true. Front #1 Stage 3/4 prerequisite \
@@ -366,7 +365,9 @@ impl Specification {
     /// into `Le (succ i) k` via `lt_to_le_succ` + `le_trans` and closes with
     /// the `inst_bvar_lt` / `lift_bvar_lt` primitives; binder arms step the
     /// bound via `le_succ_succ`).
-    fn add_depth_invariance_bridge(&mut self) -> Result<(), SpecError> {
+    /// Raw structural invariance, needed before universe-aware delta closure.
+    /// The same two checked terms used to register with the later checkers.
+    pub(super) fn add_closed_at_invariance(&mut self) -> Result<(), SpecError> {
         // inst_closed_at_id: is_closed_at e d -> Le d k ->
         // instantiate_at e val k = e.
         self.add_definition(Self::eccd_lemma(
@@ -813,25 +814,25 @@ impl Specification {
              (_hb : Eq Bool (def_env_closed_b2 DefEnv.empty) Bool.true) => \
              option_none_ne_some KExpr defval \
              (Eq Bool (closed_b defval) Bool.true) hlk) \
-             (fun (tail : DefEnv) (dn : Name) (dv : KExpr) \
+             (fun (tail : DefEnv) (dn : Name) (defn : KDefSig) \
              (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> \
              Eq Bool (def_env_closed_b2 tail) Bool.true -> \
              Eq Bool (closed_b defval) Bool.true) \
-             (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn dv) dname) (OptionType.some KExpr defval)) \
-             (hb : Eq Bool (def_env_closed_b2 (DefEnv.addDef tail dn dv)) Bool.true) => \
-             opt_pick_some_inv KExpr (name_eqb dn dname) dv \
+             (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) \
+             (hb : Eq Bool (def_env_closed_b2 (DefEnv.addDef tail dn defn)) Bool.true) => \
+             opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) \
              (defval_for tail dname) defval \
              (Eq Bool (closed_b defval) Bool.true) hlk \
              (fun (_ht : Eq Bool (name_eqb dn dname) Bool.true) \
-             (hval : Eq KExpr dv defval) => \
+             (hval : Eq KExpr (kdef_value defn) defval) => \
              Eq.subst KExpr \
              (fun (z : KExpr) => Eq Bool (closed_b z) Bool.true) \
-             dv defval hval \
-             (band_eq_true_left (closed_b dv) (def_env_closed_b2 tail) hb)) \
+             (kdef_value defn) defval hval \
+             (band_eq_true_left (closed_b (kdef_value defn)) (def_env_closed_b2 tail) hb)) \
              (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) \
              (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => \
              ih htail \
-             (band_eq_true_right (closed_b dv) (def_env_closed_b2 tail) hb))) \
+             (band_eq_true_right (closed_b (kdef_value defn)) (def_env_closed_b2 tail) hb))) \
              env",
             "Fold-membership (def-env level, depth-aware): defval_for env dname = some defval and \
              def_env_closed_b2 env = true imply closed_b defval = true. DefEnv.rec; empty lookup \
@@ -863,32 +864,41 @@ impl Specification {
     /// interface's arbitrary depth/cutoff (`le_zero_n` supplies `Le 0 _`).
     fn add_depth_generic_discharge(&mut self) -> Result<(), SpecError> {
         // rec_env_closed_of_b2: checker-true -> RecEnvClosed.
+        //
+        // REGISTRATION PATH MATTERS HERE, and it is what the keystone test
+        // (`test_depth_soundness_lemmas_are_derived_proved_zero_axioms`) pins:
+        // this lemma and its lift twin go through `add_definition`, which
+        // kernel-checks the value at `add_decl` and records the DerivedProved
+        // status that registration actually earned. f89426583 moved both onto
+        // `add_recursive_def`, which stamps EVERY definition DerivedPending by
+        // construction (declaration_registration.rs, "not verified through the
+        // kernel promote pipeline") and nothing later promotes it -- so a
+        // kernel-checked, zero-closure lemma read DerivedPending. Same value,
+        // same type; only the path is restored.
         self.add_definition(Self::eccd_lemma(
             "rec_env_closed_of_b2",
             "forall (env : RecEnv), \
              Eq Bool (rec_env_closed_b2 env) Bool.true -> RecEnvClosed env",
             "fun (env : RecEnv) (hb : Eq Bool (rec_env_closed_b2 env) Bool.true) => \
              RecEnvClosed.mk env \
-             (fun (rname : Name) (cname : Name) (rule : RecRule) (val : KExpr) (depth : Nat) \
+             (fun (rname : Name) (cname : Name) (rule : RecRule) \
              (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
-             opt_bind_some_inv RecRules RecRule (recrules_for env rname) \
+             opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
-             (Eq KExpr (instantiate_at (recrule_rhs rule) val depth) (recrule_rhs rule)) hlk \
+             (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
              (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
              (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
-             inst_closed_at_id (recrule_rhs rule) Nat.zero \
-             (closed_at_b_sound (recrule_rhs rule) Nat.zero \
+             closed_at_b_sound (recrule_rhs rule) Nat.zero \
              (rec_rules_closed_b2_sound rules cname rule hin \
-             (rec_env_closed_b2_sound env rname rules hrules hb))) \
-             val depth (le_zero_n depth)))",
+             (rec_env_closed_b2_sound env rname rules hrules hb))))",
             "GENERIC depth-aware checker soundness (inst): rec_env_closed_b2 env = true -> \
-             RecEnvClosed env, for ANY env. Decompose the recrule_for lookup (opt_bind_some_inv), \
-             chain the two fold-membership lemmas to the rule's closed_b fact, convert to \
-             is_closed_at _ 0 (closed_at_b_sound), close with the invariance bridge \
-             inst_closed_at_id at the interface's arbitrary depth (le_zero_n). A concrete env — \
-             including the reflected real kernel_core_red_env — now discharges RecEnvClosed by a \
-             single Eq.refl Bool Bool.true. DerivedProved, zero axiom_deps. Front #1 Stage 3/4 \
+             RecEnvClosed env, for ANY env. Generic checker soundness constructs schematic \
+             structural RHS closedness from actual fold membership: decompose the recrule_for \
+             lookup with the Type-valued inverter (opt_bind_some_inv_type returns the inductive \
+             closure witness), chain the two fold-membership lemmas to the rule's closed_b fact, \
+             and convert with closed_at_b_sound to is_closed_at _ 0. No per-instance closure \
+             condition is assumed. DerivedProved, zero axiom_deps. Front #1 Stage 3/4 \
              prerequisite (generic discharge).",
             &[
                 "RecEnvClosed",
@@ -897,41 +907,40 @@ impl Specification {
                 "rec_env_closed_b2_sound",
                 "rec_rules_closed_b2_sound",
                 "closed_at_b_sound",
-                "inst_closed_at_id",
-                "le_zero_n",
-                "opt_bind_some_inv",
+                "opt_bind_some_inv_type",
+                "is_closed_at",
                 "recrule_for",
                 "recrules_for",
                 "recrule_in_rules",
                 "recrule_rhs",
-                "instantiate_at",
             ],
         ))?;
 
-        // rec_env_lift_closed_of_b2: checker-true -> RecEnvLiftClosed.
+        // rec_env_lift_closed_of_b2: checker-true -> RecEnvLiftClosed. Same
+        // membership chain (the lift checker is the alias) to the same
+        // is_closed_at _ 0 witness. Same registration path as
+        // rec_env_closed_of_b2, for the same reason.
         self.add_definition(Self::eccd_lemma(
             "rec_env_lift_closed_of_b2",
             "forall (env : RecEnv), \
              Eq Bool (rec_env_lift_closed_b2 env) Bool.true -> RecEnvLiftClosed env",
             "fun (env : RecEnv) (hb : Eq Bool (rec_env_lift_closed_b2 env) Bool.true) => \
              RecEnvLiftClosed.mk env \
-             (fun (rname : Name) (cname : Name) (rule : RecRule) (cutoff : Nat) (amount : Nat) \
+             (fun (rname : Name) (cname : Name) (rule : RecRule) \
              (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
-             opt_bind_some_inv RecRules RecRule (recrules_for env rname) \
+             opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
-             (Eq KExpr (lift_at (recrule_rhs rule) cutoff amount) (recrule_rhs rule)) hlk \
+             (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
              (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
              (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
-             lift_closed_at_id (recrule_rhs rule) Nat.zero \
-             (closed_at_b_sound (recrule_rhs rule) Nat.zero \
+             closed_at_b_sound (recrule_rhs rule) Nat.zero \
              (rec_rules_closed_b2_sound rules cname rule hin \
-             (rec_env_closed_b2_sound env rname rules hrules hb))) \
-             cutoff amount (le_zero_n cutoff)))",
+             (rec_env_closed_b2_sound env rname rules hrules hb))))",
             "GENERIC depth-aware checker soundness (lift): rec_env_lift_closed_b2 env = true -> \
              RecEnvLiftClosed env, for ANY env. Same fold-membership chain as \
-             rec_env_closed_of_b2 (the lift checker is the closedness alias); the interface \
-             field closes with the lift invariance bridge lift_closed_at_id instead. \
+             rec_env_closed_of_b2 (the lift checker is the closedness alias) to the same \
+             is_closed_at _ 0 witness; no per-instance closure condition is assumed. \
              DerivedProved, zero axiom_deps. Front #1 Stage 3/4 prerequisite (generic discharge).",
             &[
                 "RecEnvLiftClosed",
@@ -940,14 +949,12 @@ impl Specification {
                 "rec_env_closed_b2_sound",
                 "rec_rules_closed_b2_sound",
                 "closed_at_b_sound",
-                "lift_closed_at_id",
-                "le_zero_n",
-                "opt_bind_some_inv",
+                "opt_bind_some_inv_type",
+                "is_closed_at",
                 "recrule_for",
                 "recrules_for",
                 "recrule_in_rules",
                 "recrule_rhs",
-                "lift_at",
             ],
         ))?;
 
@@ -958,12 +965,10 @@ impl Specification {
              Eq Bool (def_env_closed_b2 env) Bool.true -> DefEnvClosed env",
             "fun (env : DefEnv) (hb : Eq Bool (def_env_closed_b2 env) Bool.true) => \
              DefEnvClosed.mk env \
-             (fun (dname : Name) (defval : KExpr) (subval : KExpr) (depth : Nat) \
+             (fun (dname : Name) (defval : KExpr) \
              (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
-             inst_closed_at_id defval Nat.zero \
-             (closed_at_b_sound defval Nat.zero \
-             (def_env_closed_b2_sound env dname defval hlk hb)) \
-             subval depth (le_zero_n depth))",
+             closed_at_b_sound defval Nat.zero \
+             (def_env_closed_b2_sound env dname defval hlk hb))",
             "GENERIC depth-aware checker soundness (inst): def_env_closed_b2 env = true -> \
              DefEnvClosed env, for ANY env. The def-env fold-membership lemma pins the looked-up \
              value's closed_b fact; closed_at_b_sound converts to is_closed_at _ 0; \
@@ -989,12 +994,10 @@ impl Specification {
              Eq Bool (def_env_lift_closed_b2 env) Bool.true -> DefEnvLiftClosed env",
             "fun (env : DefEnv) (hb : Eq Bool (def_env_lift_closed_b2 env) Bool.true) => \
              DefEnvLiftClosed.mk env \
-             (fun (dname : Name) (defval : KExpr) (cutoff : Nat) (amount : Nat) \
+             (fun (dname : Name) (defval : KExpr) \
              (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
-             lift_closed_at_id defval Nat.zero \
-             (closed_at_b_sound defval Nat.zero \
-             (def_env_closed_b2_sound env dname defval hlk hb)) \
-             cutoff amount (le_zero_n cutoff))",
+             closed_at_b_sound defval Nat.zero \
+             (def_env_closed_b2_sound env dname defval hlk hb))",
             "GENERIC depth-aware checker soundness (lift): def_env_lift_closed_b2 env = true -> \
              DefEnvLiftClosed env, for ANY env. Same membership chain as def_env_closed_of_b2 \
              (the lift checker is the closedness alias); closes with lift_closed_at_id. \

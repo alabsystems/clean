@@ -48,7 +48,7 @@ trap 'rm -rf "$TRACE_DIR"' EXIT
 
 if [ ! -x "$CLEAN_BIN" ]; then
   echo "decl_budget_calibrate: no clean binary at $CLEAN_BIN" >&2
-  echo "  build it first:  scripts/heavy_gate.sh run 14 clean-release -- cargo build --locked --release -p clean" >&2
+  echo "  build it first:  scripts/heavy_gate.sh run 14 clean-release -- targo --unverified build --locked --release -p clean" >&2
   exit 1
 fi
 

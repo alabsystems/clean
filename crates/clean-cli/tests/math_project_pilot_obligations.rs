@@ -52,17 +52,21 @@ fn resolve_clean_binary() -> PathBuf {
 
 fn build_clean_binary() -> PathBuf {
     let root = workspace_root();
-    let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
+    // `$CARGO` is targo, which refuses a lane-less `build`: select the lane.
+    let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("targo"));
     let status = Command::new(cargo)
-        .args(["build", "--quiet", "-p", "clean", "--bin", "clean"])
+        .args(["--unverified", "build", "--quiet"])
+        .args(["-p", "clean", "--bin", "clean"])
         .current_dir(&root)
         .env("CARGO_TERM_COLOR", "never")
         .status()
         .expect("cargo build -p clean --bin clean should start");
     assert!(status.success(), "failed to build clean binary: {status}");
 
-    let binary = root
-        .join("target")
+    // The nested build inherits CARGO_TARGET_DIR (a relative one is under `root`).
+    let target_dir =
+        env::var_os("CARGO_TARGET_DIR").map_or_else(|| root.join("target"), |dir| root.join(dir));
+    let binary = target_dir
         .join("debug")
         .join(format!("clean{}", env::consts::EXE_SUFFIX));
     assert!(

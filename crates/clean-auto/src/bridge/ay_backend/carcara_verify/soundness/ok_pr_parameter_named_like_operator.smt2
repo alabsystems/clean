@@ -1,0 +1,5 @@
+(set-logic ALL)
+(define-fun h ((re.all RegLan)) Bool (str.in_re "a" re.all))
+(assert (h (str.to_re "a")))
+(assert (not (str.in_re "a" (str.to_re "a"))))
+(check-sat)

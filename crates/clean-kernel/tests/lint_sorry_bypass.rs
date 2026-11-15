@@ -31,6 +31,15 @@ const ALLOWED_FILES: &[&str] = &[
     "crates/clean-kernel/src/sorry/tests.rs",
     "crates/clean-kernel/src/sorry/mod.rs",
     "crates/clean-kernel/src/expr/sorry.rs",
+    // The recognizer's own regression tests: a module that `expr/sorry.rs`
+    // declares only under `#[cfg(test)]`, so nothing in it reaches a build.
+    // It must build the legacy `sorry` constant directly to pin that the
+    // recognizer still catches it; `create_sorry_term` cannot build that
+    // shape while `sorryAx` is registered, and it bumps the process-global
+    // sorry counters. (The production lint, `cmd_replacement/
+    // sorry_bypass_lint.rs`, reads the fixture's own `#[cfg(test)]`; this
+    // line-based lint cannot.)
+    "crates/clean-kernel/src/expr/sorry_occurrence_tests.rs",
     "crates/clean-kernel/src/env/core.rs",
     // A `#[cfg(test)]` block builds a `sorry`-headed proof term ON PURPOSE to
     // verify `audit_certification` DETECTS it (the auditor's positive case);

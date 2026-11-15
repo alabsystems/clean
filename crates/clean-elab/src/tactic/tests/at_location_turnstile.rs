@@ -49,18 +49,21 @@ impl TacticEval for NoopTacticEval {
     }
 }
 
-fn rw_rule(name: &str) -> SurfaceRwRule {
+fn rw_rule(name: &'static str) -> SurfaceRwRule {
     SurfaceRwRule {
         span: Span::dummy(),
         reverse: false,
-        term: SurfaceExpr::Ident(Span::dummy(), name.to_string()),
+        term: SurfaceExpr::Ident(
+            Span::dummy(),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
     }
 }
 
-fn find_local_decl<'a>(goal: &'a Goal, name: &str) -> &'a LocalDecl {
+fn find_local_decl<'a>(goal: &'a Goal, name: &'static str) -> &'a LocalDecl {
     goal.local_ctx
         .iter()
-        .find(|decl| decl.name == name)
+        .find(|decl| decl.name.name() == &Name::from_string(name))
         .unwrap_or_else(|| panic!("expected local declaration '{name}'"))
 }
 
@@ -113,8 +116,9 @@ fn test_simp_turnstile_location_modifies_hypothesis_and_goal() {
         env,
         goal_reducible,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_reducible,
             value: None,
         }],
@@ -128,9 +132,12 @@ fn test_simp_turnstile_location_modifies_hypothesis_and_goal() {
         .expect("simp should be registered as a compound tactic");
     let tactic = SurfaceTactic::Simp {
         span: Span::dummy(),
+        all: false,
         only: false,
         lemmas: vec![],
-        location: SurfaceTacticLocation::HypsAndGoal(vec!["h".to_string()]),
+        location: SurfaceTacticLocation::HypsAndGoal(vec![
+            clean_parser::SurfaceName::generated_path("h"),
+        ]),
         use_hypotheses: false,
     };
     let mut eval = NoopTacticEval {
@@ -180,8 +187,9 @@ fn test_dsimp_turnstile_arg_modifies_hypothesis_and_goal() {
         env,
         reducible.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: reducible,
             value: None,
         }],
@@ -211,7 +219,7 @@ fn test_dsimp_turnstile_arg_modifies_hypothesis_and_goal() {
     let h = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("hypothesis should remain visible");
     assert_eq!(
         h.ty, expected,
@@ -231,14 +239,16 @@ fn test_rw_turnstile_location_modifies_hypothesis_and_goal() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h_eq".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_eq"),
                 ty: make_eq_n(x.clone(), y.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_target".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_target"),
                 ty: make_p(x.clone()),
                 value: None,
             },
@@ -254,7 +264,9 @@ fn test_rw_turnstile_location_modifies_hypothesis_and_goal() {
     let tactic = SurfaceTactic::Rw(
         Span::dummy(),
         vec![rw_rule("h_eq")],
-        SurfaceTacticLocation::HypsAndGoal(vec!["h_target".to_string()]),
+        SurfaceTacticLocation::HypsAndGoal(vec![clean_parser::SurfaceName::generated_path(
+            "h_target",
+        )]),
     );
     let mut eval = NoopTacticEval {
         metas: MetaState::new(),
@@ -292,8 +304,9 @@ fn test_push_neg_turnstile_arg_modifies_hypothesis_and_goal() {
         env,
         not_not_p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: not_not_p,
             value: None,
         }],
@@ -355,8 +368,9 @@ fn test_unfold_turnstile_arg_modifies_hypothesis_and_goal() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: target,
             value: None,
         }],
@@ -402,14 +416,16 @@ fn test_conv_turnstile_location_modifies_hypothesis_and_goal() {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h_eq".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_eq"),
                 ty: make_eq_n(x.clone(), y.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_target".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_target"),
                 ty: target,
                 value: None,
             },
@@ -421,7 +437,9 @@ fn test_conv_turnstile_location_modifies_hypothesis_and_goal() {
         &mut state,
         &SurfaceTactic::Conv(
             Span::dummy(),
-            SurfaceTacticLocation::HypsAndGoal(vec!["h_target".into()]),
+            SurfaceTacticLocation::HypsAndGoal(vec![clean_parser::SurfaceName::generated_path(
+                "h_target",
+            )]),
             vec![
                 SurfaceTactic::ConvArg(Span::dummy(), -2),
                 SurfaceTactic::Rw(

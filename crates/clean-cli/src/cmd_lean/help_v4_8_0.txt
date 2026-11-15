@@ -1,0 +1,33 @@
+Miscellaneous:
+  --help -h          display this message
+  --features -f      display features compiler provides (eg. LLVM support)
+  --version -v       display version number
+  --githash          display the git commit hash number used to build this binary
+  --run              call the 'main' definition in a file with the remaining arguments
+  --o=oname -o       create olean file
+  --i=iname -i       create ilean file
+  --c=fname -c       name of the C output file
+  --bc=fname -b      name of the LLVM bitcode file
+  --stdin            take input from stdin
+  --root=dir         set package root directory from which the module name of the input file is calculated
+                     (default: current working directory)
+  --trust=num -t     trust level (default: max) 0 means do not trust any macro,
+                     and type check all imported modules
+  --quiet -q         do not print verbose messages
+  --memory=num -M    maximum amount of memory that should be used by Lean
+                     (in megabytes)
+  --timeout=num -T   maximum number of memory allocations per task
+                     this is a deterministic way of interrupting long running tasks
+  --threads=num -j   number of threads used to process lean files
+  --tstack=num -s    thread stack size in Kb
+  --server           start lean in server mode
+  --worker           start lean in server-worker mode
+  --plugin=file      load and initialize Lean shared library for registering linters etc.
+  --load-dynlib=file load shared library to make its symbols available to the interpreter
+  --json             report Lean output (e.g., messages) as JSON (one per line)
+  --deps             just print dependencies of a Lean input
+  --print-prefix     print the installation prefix for Lean and exit
+  --print-libdir     print the installation directory for Lean's built-in libraries and exit
+  --profile          display elaboration/type checking time for each definition/theorem
+  --stats            display environment statistics
+  -D name=value      set a configuration option (see set_option command)

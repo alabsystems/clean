@@ -7,7 +7,8 @@
 //! returning every result through the twelve-value `ret`.
 //!
 //! Plan: `docs/analysis/evalir-completion-plan-2026-08-24.md` §5 W4 — the
-//! LAST lane: with it every one of the 28 `IRInst` constructors has battery
+//! LAST lane of the THIR-lowerer surface: with it every one of that
+//! producer's 28 `IRInst` constructors has battery
 //! rows, and the dispatch's tagged-arm count, counted down in the open
 //! (2 → 1 by W3, 1 → 0 by this wave), reaches zero. The semantics this lane
 //! measures landed in the same wave: `ir_fcmp_eval`'s 12 real predicates over

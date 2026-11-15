@@ -1,0 +1,1 @@
+$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/rejected/structural_clause_wildcard_is_not_a_name.lean:4:31: error(lean.unknownIdentifier): Unknown identifier `_`

@@ -478,11 +478,13 @@ mod reduce_decide_simp_tests {
     /// Standard Nat + Eq + Decidable environment used by the deep-reduction
     /// tests. `Nat.decEq` / `Nat.decLe` are backed by native reducers.
     fn nat_decidable_env() -> Environment {
-        let mut env = Environment::new();
-        env.init_nat().expect("init_nat");
-        env.init_eq().expect("init_eq");
-        env.init_decidable().expect("init_decidable");
-        env
+        // The prelude: its `Nat.decEq`/`Nat.decLe` are the canonical
+        // definitions the kernel's native decision reducers are justified by
+        // (`clean_kernel::env::native_fold_authority`). The hand-assembled
+        // `new() + init_nat + init_eq + init_decidable` this used before
+        // 2026-09-26 builds closures no pinned world holds, so the reducers
+        // (correctly) no longer fire there.
+        Environment::with_prelude()
     }
 
     /// `@Eq.{1} Nat a b`.

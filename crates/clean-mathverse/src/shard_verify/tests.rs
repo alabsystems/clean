@@ -830,15 +830,16 @@ const CANONICAL_FOUNDATIONAL_NAMES: &[&str] = &[
     "propext",
     "Quot.sound",
     "Classical.choice",
-    "Eq.refl",
-    "proofIrrel",
     "Quot",
     "Quot.mk",
     "Quot.ind",
     "Quot.lift",
-    "WellFounded.fix",
-    "String.decEq",
-    "Char.decEq",
+    // NOTE (2026-09-28): `Eq.refl`, `proofIrrel`, `WellFounded.fix`,
+    // `String.decEq` and `Char.decEq` left the kernel's FOUNDATIONAL_AXIOMS —
+    // none is a kernel axiom (`proofIrrel` is declared nowhere; the rest are a
+    // constructor and kernel-checked definitions), and a whitelisted name that
+    // is not a kernel axiom let a USER axiom of that name pass as foundational.
+    // They moved to `NON_FOUNDATIONAL_CANONICAL_NAMES` below.
     // NOTE: `funext`, `Classical.em`, and `Classical.byContradiction` were
     // GENUINELY ELIMINATED from the kernel's FOUNDATIONAL_AXIOMS — they are now
     // kernel-checked `Declaration::Theorem`s (`funext` from `Quot.sound` via
@@ -890,6 +891,13 @@ const NON_FOUNDATIONAL_CANONICAL_NAMES: &[&str] = &[
     "sorry",
     "trustedArith",
     "trustedAy",
+    // Left the whitelist 2026-09-28: not kernel axioms (see the note in
+    // `CANONICAL_FOUNDATIONAL_NAMES`).
+    "Eq.refl",
+    "proofIrrel",
+    "WellFounded.fix",
+    "String.decEq",
+    "Char.decEq",
     "Eq.symm",
     "Eq.trans",
     "Eq.subst",

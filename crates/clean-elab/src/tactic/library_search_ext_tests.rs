@@ -393,7 +393,7 @@ fn test_filter_by_type_head_empty_on_mismatch() {
         LibrarySearchMatchKind::Exact,
         false,
     )];
-    let filtered = TypeFilter::filter_by_type_head(&results, "List");
+    let filtered = TypeFilter::filter_by_type_head(&results, &Name::from_string("List"));
     assert!(filtered.is_empty());
 }
 
@@ -434,7 +434,11 @@ fn test_filter_with_mode_exact_head() {
         LibrarySearchMatchKind::Exact,
         false,
     )];
-    let filtered = TypeFilter::filter_with_mode(&results, "Sort", TypeFilterMode::ExactHead);
+    let filtered = TypeFilter::filter_with_mode(
+        &results,
+        &Name::from_string("Sort"),
+        TypeFilterMode::ExactHead,
+    );
     // Expr::sort is not a const, so head extraction returns None
     assert!(filtered.is_empty());
 }

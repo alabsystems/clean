@@ -1,0 +1,4212 @@
+{
+  "schema": "clean.crystal.e4_conversion_inventory/v1",
+  "what_this_is": "Crystal E4 deliverable R0 (reports/crystal-lane/2026-09-24-remaining-plan/items.json, entry e4-relations): every deployed reduction / conversion / inference family reachable from the release TypeChecker::infer_type, keyed to clean-kernel source, mapped to exactly one of covered (a constructor or registered declaration of the env-indexed target family), excluded (a named precondition), or MISSING. Read-only: nothing here changes the spec or the kernel. Ratchet: scripts/crystal_e4_inventory.py re-derives the function census, the site sets, the target constructor sets and every citation from source, every run.",
+  "plan_alignment": "This is the first slice of the 'explicit coverage inventory for every acceptance path' that plan Milestone 5 calls for (docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md, commit 04371854d); no artifact with that purpose existed in the tree (checked 2026-09-24: the plan and the execution ledger name it, the ledger's 'bounded inventory' is a call census of the literal helper). Scope of THIS slice: the conversion / inference / reduction families under infer_type. Declaration admission (Milestone 3) and the Trust-contract lane's Literal / BigNat / Arc<str> / Name representation (b8264b871, e42b4ed81, 0f2c08b62) are not rows here; the representation obligations they own are named in row notes (R4) rather than duplicated. Milestone 5 should extend THIS file rather than mint another.",
+  "scope": {
+    "entry": "TypeChecker::infer_type, release body (tc/infer.rs, #[cfg(not(debug_assertions))])",
+    "deployed_build": "non-test build; a fn is deployed if its cfg holds for debug or release with test / kani / features off",
+    "classes": {
+      "covered": "a named constructor (or registered declaration) of DefEqIn / DefEqCDPIn / KernelInfersIn / TypingCtxConvIn, or of their successors KernelAcceptsIn / TypingCDPCtxConvIn / TypingProjIn and the typed-conversion KernelAcceptsTcIn / TypingTcIn carries the family; 'via' cites the sub-relation constructor or definition that does the work. Covered is a statement about the RELATION; each note names the implementation/representation obligation still open.",
+      "excluded": "outside the proved fragment by a named precondition: configuration (a represented state can pin it), obligation (stated, NOT discharged), or scope (not reached from infer_type).",
+      "MISSING": "no constructor of the target family carries it; spec cites the relation it is absent from, evidence cites where the tree already records the gap.",
+      "path": "Every row that was MISSING at 2026-09-24 carries `path`: whether the deployed infer_type path the link-4 proof is about TAKES the branch (taken), why, and its rank (1 = closest to infer_type's own frame / most often taken). A MISSING row must be taken (a branch the path does not take is `excluded` with its reason); ranks are unique. The checker enforces both."
+    },
+    "contexts": {
+      "conversion": "reached from is_def_eq (and the whnf it calls); target DefEqIn, or DefEqCDPIn for projection beta",
+      "inference": "an arm of infer_type_fast_inner or an inference helper; target KernelInfersIn (composed to TypingCtxConvIn by kernel_infers_in_sound) or its successor KernelAcceptsIn (composed to TypingProjIn -- TypingCDPCtxConvIn plus the projection rule -- by kernel_accepts_in_sound; KernelInfersIn embeds by kernel_infers_in_to_accepts_in)"
+    },
+    "plumbing": {
+      "call": "a call into another SCANNED function, whose own sites carry the semantics",
+      "context": "local-context bookkeeping (push/pop/open/length); no decision",
+      "heartbeat": "budget ticks; exhaustion only yields false / Err / an unchanged term",
+      "stats": "feature-gated instrumentation",
+      "location": "error-location bookkeeping",
+      "construction": "term / level / container construction or std helpers with no decision",
+      "narrowing": "can only make a step decline, stay stuck, recompute, or reject -- never accept",
+      "rejects": "an Err / false return path; not an acceptance",
+      "config": "a configuration or cache-key field read that decides nothing by itself"
+    }
+  },
+  "precondition_answer": {
+    "question": "Memo D5(b)/\u00a75: is the declarative target 'KernelInfers' closed under the deployed delta/iota reductions?",
+    "answer": "NO -- and the question was mis-posed: KernelInfers is ALGORITHMIC and pinned to the_red_env.",
+    "findings": [
+      "KernelInfers is the algorithmic relation (dependent_sn_richmodel.rs, `inductive KernelInfers`), and its conversion DefEq reduces through delta_reduces / iota_reduces, each of whose sole constructor is pinned to `the_red_env` (typing_def_eq_reduction_families.rs): it cannot represent any deployed environment.",
+      "The deployed iota whnf-reduces the MAJOR (with delta) before rule lookup; the reflected iota_reduct does not (iota_prepass.rs). Even the env-indexed KernelInfersIn's whnf premise (whnf_red_step) has head iota only on a constructor-headed major.",
+      "Smart imax: the deployed Pi arm returns Sort(self.level_imax(l1, l2)): under Extended the smart constructor Level::imax (level/mod.rs), under Lean/LeanReference Lean's mk_imax (R150), while KernelInfers and ImplInfer return raw Level.imax, so Pi(Sort 0, Sort 0) is Sort 1 deployed and Sort (imax 1 1) in the model. KernelInfersIn.pi accepts it through levelEqSem.",
+      "Default state: every TypeChecker constructor sets infer_only = Cell::new(true) (tc/config.rs), under which the release App/Lam/Let arms skip their checks; a soundness conjunct over every represented input is false unless infer_only = false is pinned.",
+      "The right target is the env-indexed family DefEqIn / DefEqCDPIn / TypingCtxConvIn / KernelInfersIn (acceptance_in.rs, with kernel_infers_in_sound); this inventory maps the deployed families onto it.",
+      "Extended target (Crystal E4 increments): KernelAcceptsIn (acceptance_cdp_in/inference.rs), the algorithmic successor of KernelInfersIn, takes every whnf premise as par_reduces_cdp_star -- which carries the major pre-pass and proj-iota -- and every conversion premise as DefEqCDPIn, adds the Proj inference arm, and is sound into TypingProjIn (TypingCDPCtxConvIn plus the projection rule) by kernel_accepts_in_sound. The families par_reduces_cdp does not carry stay MISSING (infer-whnf-premise-residual and the conv-* rows)."
+    ],
+    "citations": [
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/dependent_sn_richmodel.rs",
+        "kind": "absent",
+        "anchor": "KernelInfers",
+        "line": 256,
+        "relation": "KernelInfers"
+      },
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/typing_def_eq_reduction_families.rs",
+        "kind": "text",
+        "anchor": "delta_step (red_def the_red_env) e e' -> delta_reduces e e'",
+        "line": 49
+      },
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/typing_def_eq_reduction_families.rs",
+        "kind": "text",
+        "anchor": "iota_step (red_rec the_red_env) e e' -> iota_reduces e e'",
+        "line": 86
+      },
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/iota_prepass.rs",
+        "kind": "text",
+        "anchor": "The **deployed** kernel whnf-reduces a recursor's major premise before looking",
+        "line": 18
+      },
+      {
+        "file": "docs/plans/SELF_VERIFICATION_EXECUTION_2026-09-08.md",
+        "kind": "text",
+        "anchor": "Production environment",
+        "line": 2144
+      },
+      {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "kind": "text",
+        "anchor": "Ok(Expr::from_kind(ExprKind::Sort(self.level_imax(l1, l2))))",
+        "line": 691
+      },
+      {
+        "file": "crates/clean-kernel/src/level/mod.rs",
+        "kind": "text",
+        "anchor": "pub fn imax(l1: Level, l2: Level) -> Self {",
+        "line": 501
+      },
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/dependent_sn_richmodel.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfers.pi",
+        "line": 259,
+        "relation": "KernelInfers"
+      },
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/impl_infer.rs",
+        "kind": "text",
+        "anchor": "ImplInfer tenv lps n G A S1 n1 -> ImplWhnfTo S1 (ImplExpr.sort l1) ->",
+        "line": 426
+      },
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.pi",
+        "line": 47,
+        "relation": "KernelInfersIn"
+      },
+      {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "kind": "text",
+        "anchor": "infer_only: Cell::new(true),",
+        "line": 569
+      },
+      {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "decl",
+        "anchor": "kernel_infers_in_sound",
+        "line": 119
+      }
+    ]
+  },
+  "exclusion_preconditions": {
+    "infer_only_false": {
+      "kind": "configuration",
+      "statement": "The represented TypeChecker state pins infer_only = false (the check_type / infer_type_full entries do so). Every constructor initialises infer_only = Cell::new(true), and in that state the release App/Lam/Let arms skip the argument, domain and value checks, so an unconditional 'Ok T implies a derivation' conjunct over every represented input is FALSE unless this is pinned.",
+      "cite": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "kind": "text",
+        "anchor": "infer_only: Cell::new(true),",
+        "line": 569
+      }
+    },
+    "release_build": {
+      "kind": "configuration",
+      "statement": "The deployed object is the #[cfg(not(debug_assertions))] body; the debug body (certificate construction; its micro-checker cross-validation was removed by c636c21ce, TG5) is a different program.",
+      "cite": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "kind": "text",
+        "anchor": "This release body is the deployed behavior.",
+        "line": 234
+      }
+    },
+    "cumulative_false": {
+      "kind": "configuration",
+      "statement": "cumulative = false (the default; true only on the Coq lane). Then is_le is exactly is_def_eq.",
+      "cite": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "kind": "text",
+        "anchor": "cumulative: false,",
+        "line": 573
+      }
+    },
+    "no_level_eq_override": {
+      "kind": "configuration",
+      "statement": "level_eq_override = None (the kernel default). The elaborator installs an arbitrary closure for its own TypeCheckers; on that path universe conversion is only as sound as the closure, and no oracle premise exists in the spec.",
+      "cite": {
+        "file": "crates/clean-elab/src/infer/elab_ctx.rs",
+        "kind": "text",
+        "anchor": "tc.set_level_eq_override(move |l1, l2| {",
+        "line": 951
+      }
+    },
+    "lean_nodes_and_mode": {
+      "kind": "configuration",
+      "statement": "mode is not Cubical/Directed (the cubical/directed reductions and conversion are gated on the mode) and the input carries no SProp / Squash / Cubical* / ZFC* node: KExpr has no counterpart for them.",
+      "cite": {
+        "file": "docs/SELF_VERIFICATION_CERTIFICATE.md",
+        "kind": "text",
+        "anchor": "production nodes also have no `KExpr` counterpart.",
+        "line": 1149
+      }
+    },
+    "cache_invariant": {
+      "kind": "obligation",
+      "statement": "Every cache hit returns an answer a fresh computation would justify (def_eq_cache / equiv_manager positives are DefEqIn; whnf/whnf_core/unfold entries are sound traces; type_cache / infer_arc_memo / quick_infer_cache entries satisfy the inference contract, including across infer_only and context changes; infer_arc_memo is pointer-keyed, so also liveness/ABA). Plan Milestone 4 asks for exactly this; no such invariant is stated in the spec. NOT DISCHARGED.",
+      "cite": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      }
+    },
+    "infer_only_conditional": {
+      "kind": "obligation",
+      "statement": "Typed conversion rules and projection typing call infer-only inference (infer_type_infer_only / try_infer_type_quick), which skips argument checks and is sound only for well-typed subjects. The global invariant 'every term reaching is_def_eq is well-typed' is unstated (items.json e4-relations R3). NOT DISCHARGED.",
+      "cite": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "`infer_type` runs in infer-only mode and deliberately skips some checks.",
+        "line": 124
+      }
+    },
+    "scope_admission": {
+      "kind": "scope",
+      "statement": "Reached from declaration admission (constructor field sorts), not from infer_type; plan Milestone 3 owns it.",
+      "cite": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "### Milestone 3",
+        "line": 181
+      }
+    },
+    "scope_elaborator_api": {
+      "kind": "scope",
+      "statement": "whnf_with_transparency is a public API the elaborator calls; neither infer_type nor is_def_eq reaches WhnfMode::WithTransparency.",
+      "cite": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "kind": "text",
+        "anchor": "pub fn whnf_with_transparency(&self, e: &Expr, mode: TransparencyMode) -> Expr {",
+        "line": 404
+      }
+    },
+    "admitted_ctor_telescope": {
+      "kind": "obligation",
+      "statement": "instantiate_params stops early, keeping the un-instantiated type, when the constructor type is not a Pi after whnf before every parameter is consumed. ProjParamsIn has no such arm: it consumes each parameter under a reduction to a Pi. An admitted constructor's type has its parameters as leading Pis, so the stop never fires in a valid environment -- but nothing here establishes that for every constructor R's metadata table carries (plan Milestone 3, admission). NOT DISCHARGED.",
+      "cite": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+        "kind": "text",
+        "anchor": "is NOT an arm (the E4 inventory excludes it under `admitted_ctor_telescope`).",
+        "line": 20
+      }
+    }
+  },
+  "targets": {
+    "DefEqIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+      "line": 20,
+      "constructors": {
+        "refl": 21,
+        "symm": 22,
+        "trans": 23,
+        "raw": 24,
+        "levels": 25,
+        "app": 26,
+        "lam": 27,
+        "pi": 28,
+        "let_": 29,
+        "proj": 30
+      }
+    },
+    "TypingCtxConvIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+      "line": 32,
+      "constructors": {
+        "var": 33,
+        "sort": 34,
+        "pi": 35,
+        "lam": 36,
+        "app": 37,
+        "const": 38,
+        "conv": 39,
+        "let_": 40,
+        "lit_nat": 41,
+        "lit_string": 42
+      }
+    },
+    "KernelInfersIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+      "line": 44,
+      "constructors": {
+        "sort": 45,
+        "bvar": 46,
+        "pi": 47,
+        "lam": 48,
+        "const": 49,
+        "app": 50,
+        "let_": 51,
+        "lit_nat": 52,
+        "lit_string": 53
+      }
+    },
+    "DefEqCDPIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/projection_semantic/conversion.rs",
+      "line": 166,
+      "constructors": {
+        "refl": 167,
+        "symm": 168,
+        "trans": 169,
+        "raw": 170,
+        "levels": 171,
+        "app": 172,
+        "lam": 173,
+        "pi": 174,
+        "let_": 175,
+        "proj": 176
+      }
+    },
+    "TypingCDPCtxConvIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/projection_typing/typing.rs",
+      "line": 10,
+      "constructors": {
+        "var": 11,
+        "sort": 12,
+        "pi": 13,
+        "lam": 14,
+        "app": 15,
+        "const": 16,
+        "conv": 17,
+        "let_": 18,
+        "lit_nat": 19,
+        "lit_string": 20
+      }
+    },
+    "par_reduces_cd": {
+      "file": "crates/clean-verify/src/spec/core_spec/par_reduces_cd.rs",
+      "line": 189,
+      "constructors": {
+        "refl": 190,
+        "beta": 191,
+        "app": 192,
+        "lam": 193,
+        "pi": 194,
+        "forall_": 195,
+        "let_": 196,
+        "iota": 197,
+        "delta": 198,
+        "let_cong": 199,
+        "proj": 200
+      }
+    },
+    "par_reduces_cdp": {
+      "file": "crates/clean-verify/src/spec/core_spec/projection_reduction/relation.rs",
+      "line": 10,
+      "constructors": {
+        "refl": 11,
+        "beta": 12,
+        "app": 13,
+        "lam": 14,
+        "pi": 15,
+        "forall_": 16,
+        "let_": 17,
+        "iota": 18,
+        "delta": 19,
+        "let_cong": 20,
+        "proj": 21,
+        "projection_beta": 22
+      }
+    },
+    "whnf_red_step": {
+      "file": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
+      "line": 4243,
+      "constructors": {
+        "beta": 4244,
+        "delta": 4245,
+        "iota": 4246,
+        "app_left": 4247,
+        "proj": 4248
+      }
+    },
+    "KExprUniverseEq": {
+      "file": "crates/clean-verify/src/spec/core_spec/universe_semantic_bridge.rs",
+      "line": 57,
+      "constructors": {
+        "sort": 58,
+        "bvar": 59,
+        "app": 60,
+        "lam": 61,
+        "pi": 62,
+        "const": 63,
+        "let_": 64,
+        "proj": 65,
+        "lit": 66
+      }
+    },
+    "KernelInfers": {
+      "file": "crates/clean-verify/src/spec/core_spec/dependent_sn_richmodel.rs",
+      "line": 256,
+      "constructors": {
+        "sort": 257,
+        "bvar": 258,
+        "pi": 259,
+        "lam": 260,
+        "const": 261,
+        "app": 262,
+        "let_": 263,
+        "lit_nat": 264,
+        "lit_string": 265
+      },
+      "role": "reference (the_red_env-pinned; NOT a target)"
+    },
+    "TypingCtxConv": {
+      "file": "crates/clean-verify/src/spec/core_spec/dependent_sn_richmodel.rs",
+      "line": 338,
+      "constructors": {
+        "var": 339,
+        "sort": 340,
+        "pi": 341,
+        "lam": 342,
+        "app": 343,
+        "const": 344,
+        "conv": 345,
+        "let_": 346,
+        "lit_nat": 347,
+        "lit_string": 348
+      },
+      "role": "reference (the_red_env-pinned; NOT a target)"
+    },
+    "TypingCtx": {
+      "file": "crates/clean-verify/src/spec/core_spec/dependent_sn_richmodel.rs",
+      "line": 132,
+      "constructors": {
+        "var": 133,
+        "sort": 134,
+        "pi": 135,
+        "lam": 136,
+        "app": 137,
+        "const": 138,
+        "let_": 139
+      },
+      "role": "reference (the_red_env-pinned; NOT a target)"
+    },
+    "KernelAcceptsIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+      "line": 53,
+      "constructors": {
+        "sort": 54,
+        "bvar": 55,
+        "pi": 56,
+        "lam": 57,
+        "const": 58,
+        "app": 59,
+        "let_": 60,
+        "lit_nat": 61,
+        "lit_string": 62,
+        "proj": 63
+      }
+    },
+    "TypingProjIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+      "line": 37,
+      "constructors": {
+        "var": 38,
+        "sort": 39,
+        "pi": 40,
+        "lam": 41,
+        "app": 42,
+        "const": 43,
+        "conv": 44,
+        "let_": 45,
+        "lit_nat": 46,
+        "lit_string": 47,
+        "proj": 48
+      }
+    },
+    "TypingTcIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+      "line": 104,
+      "constructors": {
+        "var": 105,
+        "sort": 106,
+        "pi": 107,
+        "lam": 108,
+        "app": 109,
+        "const": 110,
+        "conv": 111,
+        "let_": 112,
+        "let_def": 113,
+        "lit_nat": 114,
+        "lit_string": 115,
+        "proj": 116,
+        "cdp": 117,
+        "symm": 118,
+        "trans": 119,
+        "app_cong": 120,
+        "lam_cong": 121,
+        "pi_cong": 122,
+        "let_cong": 123,
+        "proj_cong": 124,
+        "proof_irrel": 125,
+        "eta": 126,
+        "unit_like": 127,
+        "struct_eta": 128,
+        "zeta_local": 129,
+        "lit_zero": 130,
+        "lit_succ": 131,
+        "quot_lift": 132,
+        "quot_ind": 133,
+        "k_like": 134,
+        "lit_string_expand": 135
+      }
+    },
+    "KernelAcceptsTcIn": {
+      "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+      "line": 139,
+      "constructors": {
+        "sort": 140,
+        "bvar": 141,
+        "pi": 142,
+        "lam": 143,
+        "const": 144,
+        "app": 145,
+        "let_": 146,
+        "let_def": 147,
+        "lit_nat": 148,
+        "lit_string": 149,
+        "proj": 150,
+        "cdp": 151,
+        "symm": 152,
+        "trans": 153,
+        "app_cong": 154,
+        "lam_cong": 155,
+        "pi_cong": 156,
+        "let_cong": 157,
+        "proj_cong": 158,
+        "proof_irrel": 159,
+        "eta": 160,
+        "unit_like": 161,
+        "struct_eta": 162,
+        "zeta_local": 163,
+        "lit_zero": 164,
+        "lit_succ": 165,
+        "quot_lift": 166,
+        "quot_ind": 167,
+        "k_like": 168,
+        "lit_string_expand": 169
+      }
+    }
+  },
+  "watched_files": [
+    "crates/clean-kernel/src/tc/def_eq/mod.rs",
+    "crates/clean-kernel/src/tc/def_eq/binding.rs",
+    "crates/clean-kernel/src/tc/def_eq/delta.rs",
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs",
+    "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs",
+    "crates/clean-kernel/src/tc/def_eq/structural.rs",
+    "crates/clean-kernel/src/tc/whnf.rs",
+    "crates/clean-kernel/src/tc/whnf_proj.rs",
+    "crates/clean-kernel/src/tc/reduction/mod.rs",
+    "crates/clean-kernel/src/tc/infer.rs",
+    "crates/clean-kernel/src/tc/infer_proj.rs",
+    "crates/clean-kernel/src/tc/eta.rs",
+    "crates/clean-kernel/src/tc/branch_sharing.rs"
+  ],
+  "rows": [
+    {
+      "id": "conv-refl-syntactic",
+      "family": "pointer / structural Expr equality, and equality after partial whnf",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_inner",
+        "line": 296,
+        "anchor": "if a == b {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.refl",
+        "line": 21,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+          "kind": "ctor",
+          "anchor": "DefEqIn.trans",
+          "line": 23,
+          "relation": "DefEqIn"
+        }
+      ],
+      "note": "Equal deployed Exprs translate to one KExpr, so DefEqIn.refl; equality reached after a reduction trace composes with that trace's own rows by DefEqIn.trans.",
+      "inferred": "Expr's PartialEq (clean-kernel expr/mod.rs, expr/kind.rs) is structural and compares binder data, names and mdata that to_kexpr erases, so equal Exprs have equal images; read, not proved"
+    },
+    {
+      "id": "conv-defeq-cache",
+      "family": "def_eq_cache positive hit",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_inner",
+        "line": 309,
+        "anchor": "if let Some(cached) = self.def_eq_cache"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": "A positive cached result is returned without recomputation; negative results are re-derived when an FVar is out of context (narrowing)."
+    },
+    {
+      "id": "conv-equiv-manager",
+      "family": "equiv_manager union-find hit (and its add_equiv write in is_def_eq)",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_inner",
+        "line": 288,
+        "anchor": "self.equiv_manager.borrow_mut().is_equiv(a, b, true)"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": "Soundness needs every union to be a DefEqIn pair and transitivity through the union-find."
+    },
+    {
+      "id": "conv-binding-lam",
+      "family": "Lam/Lam binder comparison (domain, then body under a fresh local)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/binding.rs",
+        "fn": "is_def_eq_binding",
+        "line": 20,
+        "anchor": "ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.lam",
+        "line": 27,
+        "relation": "DefEqIn"
+      },
+      "note": "Binder info and names are ignored on both sides (KExpr has none)."
+    },
+    {
+      "id": "conv-binding-pi",
+      "family": "Pi/Pi binder comparison",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "quick_is_def_eq",
+        "line": 587,
+        "anchor": "(ExprKind::Lam(..), ExprKind::Lam(..)) | (ExprKind::Pi(..), ExprKind::Pi(..))"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.pi",
+        "line": 28,
+        "relation": "DefEqIn"
+      },
+      "note": "Same is_def_eq_binding loop as the Lam row."
+    },
+    {
+      "id": "conv-universe-levels",
+      "family": "Sort/Sort universe conversion (Level::is_def_eq: normalize-equality)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "fn": "levels_eq",
+        "line": 611,
+        "anchor": "self.levels_equiv_in_theory(l1, l2)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.levels",
+        "line": 25,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/universe_semantic_bridge.rs",
+          "kind": "ctor",
+          "anchor": "KExprUniverseEq.sort",
+          "line": 58,
+          "relation": "KExprUniverseEq"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/univ_poly.rs",
+          "kind": "def",
+          "anchor": "levelEqSem",
+          "line": 63
+        }
+      ],
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/universe_geq_core.rs",
+          "kind": "text",
+          "anchor": "Normalization",
+          "line": 9
+        }
+      ],
+      "note": "Relation side settled: DefEqIn.levels over KExprUniverseEq.sort, i.e. semantic levelEqSem. Implementation side OPEN: no in-tree theorem that normalize(l1) == normalize(l2) implies levelEqSem (universe_geq_core.rs says normalization denotation remains open). Since DECISIONS R150 the deployed comparison depends on the kernel theory (tc/level_profile.rs): Clean's Level::is_def_eq under Extended, Lean's is_equivalent (level/lean_kernel.rs, level.cpp@v4.30.0-rc2) under Lean and LeanReference. Both are normalize-equality; the Lean one accepts fewer pairs. The implementation side stays OPEN for both."
+    },
+    {
+      "id": "conv-const-levels",
+      "family": "Const/Const same name, pointwise levels_eq on universe arguments",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_core",
+        "line": 494,
+        "anchor": "if let (ExprKind::Const(n1, ls1), ExprKind::Const(n2, ls2)) = (t_n.kind(), s_n.kind()) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.levels",
+        "line": 25,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/universe_semantic_bridge.rs",
+          "kind": "ctor",
+          "anchor": "KExprUniverseEq.const",
+          "line": 63,
+          "relation": "KExprUniverseEq"
+        }
+      ],
+      "note": "KExprUniverseEq.const via LevelListEqSem; the same normalize-equality implementation obligation as conv-universe-levels."
+    },
+    {
+      "id": "conv-level-eq-override",
+      "family": "levels_eq delegating to an installed level_eq_override closure",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "fn": "levels_eq",
+        "line": 608,
+        "anchor": "if let Some(ref f) = self.level_eq_override {"
+      },
+      "spec": {
+        "file": "crates/clean-elab/src/infer/elab_ctx.rs",
+        "kind": "text",
+        "anchor": "tc.set_level_eq_override(move |l1, l2| {",
+        "line": 951
+      },
+      "exclusion": "no_level_eq_override",
+      "note": "An arbitrary closure; items.json R2(h) proposes an oracle parameter with a soundness premise."
+    },
+    {
+      "id": "conv-mdata-erasure",
+      "family": "MData transparency (quick_is_def_eq arms, whnf MData step)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "quick_is_def_eq",
+        "line": 593,
+        "anchor": "(ExprKind::MData(_, inner1), ExprKind::MData(_, inner2)) => {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/ctx_rep.rs",
+        "kind": "def",
+        "anchor": "to_kexpr_at",
+        "line": 162,
+        "relation": "DefEqIn"
+      },
+      "note": "to_kexpr_at ERASES mdata, so the deployed comparison of an MData node is the comparison of its image; no constructor is consumed."
+    },
+    {
+      "id": "conv-literal-eq",
+      "family": "Lit/Lit literal equality",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "quick_is_def_eq",
+        "line": 609,
+        "anchor": "(ExprKind::Lit(l1), ExprKind::Lit(l2)) => Some(l1 == l2),"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.refl",
+        "line": 21,
+        "relation": "DefEqIn"
+      },
+      "note": "Equal literals have equal images under ANY functional representation, so DefEqIn.refl suffices for acceptance; injectivity of the BigNat / Arc<str> codec (R4) matters only for the `false` answer, which is a rejection."
+    },
+    {
+      "id": "conv-app-congruence",
+      "family": "application spine congruence (head, then arguments; recursor major-first reorder; same-head args-only in lazy delta)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/structural.rs",
+        "fn": "is_def_eq_app_spine",
+        "line": 114,
+        "anchor": "if !self.is_def_eq_impl(a_head, b_head) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.app",
+        "line": 26,
+        "relation": "DefEqIn"
+      },
+      "note": "The recursor reorder only permutes a conjunction of argument comparisons."
+    },
+    {
+      "id": "conv-proj-congruence",
+      "family": "Proj/Proj congruence with equal struct name and index",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/structural.rs",
+        "fn": "is_def_eq_structural",
+        "line": 46,
+        "anchor": "s1 == s2 && i1 == i2 && self.is_def_eq_impl(e1, e2)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.proj",
+        "line": 30,
+        "relation": "DefEqIn"
+      },
+      "note": ""
+    },
+    {
+      "id": "conv-proj-congruence-name-blind",
+      "family": "Phase-4 Proj/Proj comparison accepted on convertible SUBJECTS alone (lazy delta reaches DefEqual, or the is_def_eq(t, s) fallback), only when both projections name the SAME structure (R147; name-blind before it)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_core",
+        "line": 519,
+        "anchor": "if let (ExprKind::Proj(s1, i1, e1), ExprKind::Proj(s2, i2, e2)) = (t_n.kind(), s_n.kind()) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/projection_semantic/conversion.rs",
+        "kind": "ctor",
+        "anchor": "DefEqCDPIn.proj",
+        "line": 176,
+        "relation": "DefEqCDPIn"
+      },
+      "note": "Covered since R147 (Lean v4.33.1, leanprover/lean4#14631): the deployed comparison requires s1 == s2 && i1 == i2, so an accepted pair is proj S i e1 = proj S i e2 with convertible subjects, exactly DefEqCDPIn.proj (one name). Before R147 it never compared S1 and S2, DefEqCDPIn.proj could not carry it, and the row was excluded under the obligation proj_name_agreement (a typing invariant, never discharged), which R147 retired with it. Open: the lazy-delta subject steps are covered only for the families par_reduces_cdp carries, as for conv-proj-field-name-blind."
+    },
+    {
+      "id": "conv-proj-field-name-blind",
+      "family": "Phase-4 Proj/Proj comparison accepted through the extracted FIELDS (both delta-reduced subjects are applications of a constructor of the projections' common structure, fields convertible); the structure names are compared first (R147)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/delta.rs",
+        "fn": "lazy_delta_proj_reduction",
+        "line": 403,
+        "anchor": "if let Some(t_field) = self.reduce_proj_core(&t, struct_name, idx) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/projection_semantic/conversion.rs",
+        "kind": "ctor",
+        "anchor": "DefEqCDPIn.raw",
+        "line": 170,
+        "relation": "DefEqCDPIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/projection_reduction/relation.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cdp.projection_beta",
+          "line": 22,
+          "relation": "par_reduces_cdp"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/name_blind.rs",
+          "kind": "decl",
+          "anchor": "def_eq_cdp_in_proj_field_name_blind",
+          "line": 17
+        }
+      ],
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/name_blind.rs",
+          "kind": "decl",
+          "anchor": "def_eq_cdp_in_proj_name_blind_witness",
+          "line": 54
+        }
+      ],
+      "note": "Since R147 (leanprover/lean4#14631/#14632) the deployed path compares the two structure names in is_def_eq_core and reduce_proj_core extracts a field only from a constructor of that structure. The relation is name-blind and over-approximates it: projection_post_whnf_reduct reads only the index and the subject, so def_eq_cdp_in_proj_field_name_blind relates proj S1 i e1 and proj S2 i e2 from subject conversions, the two projection-beta steps and field conversion, for ANY S1, S2; witnessed with anon vs str anon 1 (name_eqb false). Open: the lazy-delta subject steps are covered only for the families par_reduces_cdp carries."
+    },
+    {
+      "id": "conv-bool-true-reflection",
+      "family": "Bool.true reflection shortcut (whnf one side to Bool.true)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_core",
+        "line": 398,
+        "anchor": "&& is_bool_true_const(&self.whnf(a))"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.trans",
+        "line": 23,
+        "relation": "DefEqIn"
+      },
+      "note": "COMPOSITE: sound exactly as far as the full-whnf trace's families are (their own rows); in practice decide-style proofs route through the native-reducer rows, which are MISSING."
+    },
+    {
+      "id": "conv-delta",
+      "family": "head delta unfolding (lazy delta, whnf Const arm, try_unfold_definition)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs",
+        "fn": "try_unfold_const_in_place",
+        "line": 94,
+        "anchor": "let Some(value) = self.unfold_definition_cached(&const_expr) else {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.raw",
+        "line": 24,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/par_reduces_cd.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cd.delta",
+          "line": 198,
+          "relation": "par_reduces_cd"
+        }
+      ],
+      "note": "par_reduces_cd.delta over red_def R. The Environment (eager map + dyn ConstantSource) to RedEnv representation is R6 and OPEN; reducibility gating only narrows."
+    },
+    {
+      "id": "conv-beta",
+      "family": "multi-argument beta (instantiate_rev)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "fn": "beta_or_iota_step",
+        "line": 688,
+        "anchor": "let mut reduced = inner_body.instantiate_rev(&vals);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.raw",
+        "line": 24,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/par_reduces_cd.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cd.beta",
+          "line": 191,
+          "relation": "par_reduces_cd"
+        }
+      ],
+      "note": "One multi-argument step is a sequence of par_reduces_cd.beta steps."
+    },
+    {
+      "id": "conv-zeta",
+      "family": "let zeta in whnf",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "fn": "whnf_core_inner",
+        "line": 525,
+        "anchor": "WhnfStepResult::Continue(body.instantiate(val))"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.raw",
+        "line": 24,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/par_reduces_cd.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cd.let_",
+          "line": 196,
+          "relation": "par_reduces_cd"
+        }
+      ],
+      "note": ""
+    },
+    {
+      "id": "conv-iota-head",
+      "family": "iota with a constructor-headed major (rule selected by constructor name, RHS instantiated)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/reduction/mod.rs",
+        "fn": "try_iota_reduction",
+        "line": 407,
+        "anchor": "let ctor_val = self.env.get_constructor(ctor_name)?;"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.raw",
+        "line": 24,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/par_reduces_cd.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cd.iota",
+          "line": 197,
+          "relation": "par_reduces_cd"
+        }
+      ],
+      "note": "par_reduces_cd.iota over red_rec R, representation-conditional (RecursorVal rules to RecEnv, R6).",
+      "inferred": "by-name rule selection agrees with the model's iota_step lookup under the environment representation"
+    },
+    {
+      "id": "conv-iota-major-prepass",
+      "family": "full whnf (with delta) of the recursor major before rule lookup",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/reduction/mod.rs",
+        "fn": "try_iota_reduction",
+        "line": 210,
+        "anchor": "self.whnf_impl(&major)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/semantic_wh3_soundness_in.rs",
+        "kind": "decl",
+        "anchor": "whnf_fuel_red_wh3_sound_in",
+        "line": 77,
+        "relation": "DefEqIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/iota_prepass.rs",
+          "kind": "text",
+          "anchor": "The **deployed** kernel whnf-reduces a recursor's major premise before looking",
+          "line": 18
+        }
+      ],
+      "note": "Covered at the CONVERSION level only: the three-way loop with the pre-pass is sound into DefEqIn for an arbitrary R. Two caveats: the loop has no fidelity gate to the shipping is_def_eq, and the inference-side whnf premise does not carry the pre-pass (row infer-whnf-premise-extended)."
+    },
+    {
+      "id": "conv-iota-major-literal",
+      "family": "Nat literal major expanded to constructor form (nat_lit_to_constructor)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/reduction/mod.rs",
+        "fn": "try_iota_reduction",
+        "line": 236,
+        "anchor": "nat::nat_lit_to_constructor(n)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.lit_succ",
+        "line": 165,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_lit_two",
+          "line": 310
+        }
+      ],
+      "note": "nat_lit_to_constructor as two conversion rules keyed on the reflected Nat.zero / Nat.succ (aliases read from the interning table at registration): literal 0 == Nat.zero and literal (n+1) == Nat.succ (literal n). A literal major reaches the constructor-major iota by app congruence (accepts_tc_iota_major_literal). Representation: the BigNat payload to literal_nat code (R4); the rule is Lean's kernel extension and holds for the Prelude Nat.",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.lit_zero",
+          "line": 164,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.lit_succ",
+          "line": 131,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_iota_major_literal",
+          "line": 294
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 3,
+        "why": "try_iota_reduction expands a Nat literal major before rule lookup; any recursor applied to a numeral (Nat.rec / casesOn / match compilation) in a whnf'd type or a compared term takes it. No environment gate."
+      }
+    },
+    {
+      "id": "conv-iota-major-string-literal",
+      "family": "String literal major expanded to constructor form (string_lit_to_constructor, then whnf to String.mk)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/reduction/mod.rs",
+        "fn": "try_iota_reduction",
+        "line": 237,
+        "anchor": "let expanded = string_lit_to_constructor(s);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+        "kind": "decl",
+        "anchor": "accepts_tc_iota_major_string_literal",
+        "line": 215,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_string_lit_iota",
+          "line": 304
+        },
+        {
+          "file": "crates/clean-verify/tests/accepts_tc_string_literal_census.rs",
+          "kind": "text",
+          "anchor": "accepts_tc_forged_string_iota_char",
+          "line": 263
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "literals (constructor normalization)",
+          "line": 118
+        }
+      ],
+      "note": "Split from conv-iota-major-literal (its Nat half). Covered (E4 String, 2026-09-29) by the DERIVED accepts_tc_iota_major_string_literal: the literal major is carried to its expansion by app_cong over lit_string_expand, and the whnf-then-iota the deployed step runs on the expansion is the conversion premise. Witness: String.rec (motive) (fun d => d) \"ab\" reaches the String.mk rule's contractum over the \"ab\" character list at accepts_tc_string_env (delta String.ofList, beta, iota on the reflected String.rec rule); the contractum with a wrong character is refused. The payload decoding and the worlds: see conv-string-literal-expansion (in Lean 4.30 the minor sees UTF-8 bytes, in clean-prelude and Lean 4.8 the Char list).",
+      "path": {
+        "taken": true,
+        "rank": 16,
+        "why": "try_iota_reduction expands a String literal major before rule lookup; taken for a recursor / casesOn applied to a String literal."
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.lit_string_expand",
+          "line": 169,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.app_cong",
+          "line": 154,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.lit_string_expand",
+          "line": 135,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "id": "conv-iota-major-struct-eta",
+      "family": "structure-eta expansion of a non-constructor major (try_eta_struct)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/reduction/mod.rs",
+        "fn": "try_iota_reduction",
+        "line": 266,
+        "anchor": "self.try_eta_struct(&major_induct, &major_whnf)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.struct_eta",
+        "line": 162,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_struct_eta",
+          "line": 197
+        }
+      ],
+      "note": "A reduction step inside whnf, carried as CONVERSION: KernelAcceptsTcIn's whnf premises are conversions of the same family, so the step major == expand_eta_struct(type, major) is struct_eta with t := the expansion, whose field premises are refl (field i IS proj i major); iota on the constructor-headed major is DefEqCDPIn. The witness's t is exactly the expansion of #0 at the one-field structure. The Prop guard (Guard 4) only narrows; since R147 (leanprover/lean4#14843) it asks is_prop, which errs unless the type's type whnfs to a sort, and an error leaves the major as it is. Premises are CHECK-mode derivations of the subjects; the deployed branch infers them in infer-only mode (try_infer_type_quick / infer_type_infer_only), and that the two agree on the subjects that reach is_def_eq is the infer_only_conditional obligation, NOT DISCHARGED.",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.struct_eta",
+          "line": 128,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 7,
+        "why": "try_iota_reduction's try_eta_struct on every recursor whose major is not a constructor application of a structure-like inductive (projections/casesOn on structure variables)."
+      }
+    },
+    {
+      "id": "conv-iota-k-like",
+      "family": "K-like reduction (try_to_cnstr_when_k)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/reduction/mod.rs",
+        "fn": "try_iota_reduction",
+        "line": 198,
+        "anchor": "self.try_to_cnstr_when_k(rec_val, &major, rec_levels)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.k_like",
+        "line": 168,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "Eq.rec (K-extension)",
+          "line": 119
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/k_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_k_like",
+          "line": 80
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/k_witnesses.rs",
+          "kind": "decl",
+          "anchor": "typing_tc_in_k_like_is_proof_irrel",
+          "line": 101
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in.rs",
+          "kind": "decl",
+          "anchor": "accepts_k_iota_witness",
+          "line": 159
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in.rs",
+          "kind": "decl",
+          "anchor": "accepts_k_eq_rec_admitted",
+          "line": 160
+        }
+      ],
+      "note": "items.json R2(f); typed. Covered (E4d, 2026-09-28): one rule per family, KernelAcceptsTcIn.k_like / TypingTcIn.k_like, keyed on RecKAdmitIn R rn I mta cn -- the admission fact as a SYNTACTIC predicate over R (the vacuity firewall forbids a KernelAcceptsTcIn arm to mention TypingTcIn): recmeta_for rn = mta with recmeta_k_flag mta = 1, exactly one rule, for cn with no fields, cn's parent I non-mutual with cn its only constructor and I's type ending in Sort 0 -- what clean main 67288ad33's regenerated recursors guarantee of rec_val.is_k. RecMeta gained the K flag as a Nat field (a Bool field would renumber interning tags 6/7 that hand-written spec text cites); the red-env reflector emits the kernel's is_k there, so the reflected seed's Eq.rec carries flag 1 and is admitted (accepts_k_eq_rec_admitted). The arm mirrors try_to_cnstr_when_k: the major's type M whnfs to W (a conversion premise), W's head is I, the constructor application is cn applied to W's first num_params arguments, its type C is inferred and W == C; conclusion major == ctor app, which the recursor spine carries by app_cong before ordinary iota (accepts_k_iota_witness: a recursor applied to the HYPOTHESIS #0 reduces to its minor). Soundness is one arm of kernel_accepts_tc_in_sound. Justification, stated not assumed: typing_tc_in_k_like_is_proof_irrel derives every TypingTcIn.k_like instance from proof_irrel once W is typed at a sort converting to Sort 0 -- a regularity fact the admission gives for a well-typed major but the deployed step never checks, so it is an obligation of the target's k_like rule, not a premise. Three forged callers are refused (flag 0, an inductive in Type, a constructor with a field).",
+      "path": {
+        "taken": true,
+        "rank": 8,
+        "why": "try_iota_reduction's K conversion whenever rec_val.is_k (Eq.rec / Eq.ndrec and every K-like recursor); taken by every cast / rewrite over an equation proof that is not Eq.refl."
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.k_like",
+          "line": 134,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "text",
+          "anchor": "inductive RecKAdmitIn",
+          "line": 100
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/rec_env.rs",
+          "kind": "def",
+          "anchor": "recmeta_k_flag",
+          "line": 218
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.app_cong",
+          "line": 154,
+          "relation": "KernelAcceptsTcIn"
+        }
+      ]
+    },
+    {
+      "id": "conv-quot",
+      "family": "Quot.lift / Quot.ind reduction",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/reduction/mod.rs",
+        "fn": "try_quot_reduction",
+        "line": 809,
+        "anchor": "crate::quot::try_quot_lift_reduction(head, &args, |expr| self.whnf_impl(expr))"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.quot_lift",
+        "line": 166,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "(model gap) Quot",
+          "line": 115
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/quot_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_quot_lift",
+          "line": 112
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/quot_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_quot_ind",
+          "line": 113
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/quot_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_quot_lift_extra_arg",
+          "line": 115
+        }
+      ],
+      "note": "items.json R2(f). Covered (E4c, 2026-09-27): Lean 4's quot_reduce_rec as one rule per eliminator in both families, KernelAcceptsTcIn.quot_lift / quot_ind and TypingTcIn.quot_lift / quot_ind: Quot.lift A r B f h (Quot.mk A2 r2 a) == f a and Quot.ind A r B f (Quot.mk A2 r2 a) == f a, keyed on the reflected Quot.lift / Quot.ind / Quot.mk (reserved native rule keys of the red-env generator, red_env_reflect::RESERVED_NATIVE_RULE_KEYS, appended at tags 165-167 without renumbering; every key must name a prelude constant). No environment gate on either side, as deployed. The deployed whnf of the major and the trailing arguments are conversions carried by app_cong; soundness is one arm of kernel_accepts_tc_in_sound. Witnessed at every environment: a lift whose major is a beta-redex, a plain ind redex, and a lift under a trailing argument; three forged callers refused (a two-argument Quot.mk, an ind head through the lift rule, the proof argument returned). Divergence, found by reading, not a finding: the deployed try_quot_lift_reduction / try_quot_ind_reduction accept a Quot.mk major with MORE than three arguments (major_args.len() < 3 declines) and take args[2], where Lean requires exactly three; the rules here require three, so an ill-typed over-applied Quot.mk major (Quot r is not a Pi, so a well-typed major never has four) is the only deployed acceptance they do not carry.",
+      "path": {
+        "taken": true,
+        "rank": 13,
+        "why": "beta_or_iota_step's try_quot_reduction, keyed on the Quot.lift / Quot.ind names (no environment gate); taken for quotient eliminators applied to Quot.mk."
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.quot_ind",
+          "line": 167,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.quot_lift",
+          "line": 132,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.quot_ind",
+          "line": 133,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.app_cong",
+          "line": 154,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "id": "conv-native-nat",
+      "family": "native Nat literal arithmetic (reduce_nat; eager_reduce widens it to open terms)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "fn": "whnf_core_inner",
+        "line": 500,
+        "anchor": "} else if let Some(reduced) = self.reduce_nat(e) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+        "kind": "decl",
+        "anchor": "kernel_accepts_tc_in_nat_add_fold",
+        "line": 70,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "(model gap) native-reducers",
+          "line": 117
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_succ_fold",
+          "line": 68
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_pred_fold",
+          "line": 69
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_sub_fold",
+          "line": 71
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_mul_fold",
+          "line": 72
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_pow_fold",
+          "line": 73
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_shiftleft_fold",
+          "line": 74
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_beq_fold",
+          "line": 75
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_ble_fold",
+          "line": 76
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_div_fold",
+          "line": 82
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_mod_fold",
+          "line": 83
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_land_fold",
+          "line": 145
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_lor_fold",
+          "line": 148
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_xor_fold",
+          "line": 151
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_shiftright_fold",
+          "line": 141
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_nat_add_instance_sound",
+          "line": 88
+        },
+        {
+          "file": "crates/clean-verify/tests/accepts_tc_native_fold_census.rs",
+          "kind": "text",
+          "anchor": "const NATIVE_NAT_FOLD_LEMMAS",
+          "line": 27
+        }
+      ],
+      "note": "items.json R2(e): one lemma per operation. Covered (E4d, 2026-09-28) by DERIVED lemmas, no new arm: since clean main df9163459 each reduce_nat fold fires only when the head's delta-closure digest is pinned (env/native_fold_canon.tsv), and for every key the specification world admits a lemma PROVES, over any R holding the canonical closure (and Nat.rec's canonical rules), op (literal a) (literal b) == literal (op a b) by delta / beta / iota (KernelAcceptsTcIn.cdp) and lit_zero / lit_succ alone -- one induction mirroring the definition, the meta-level op on the right being the same definition, empty axiom closure (census acceptance_cdp_in_census). The canonical bodies are reflected from the LIVE environment at registration and the proofs re-checked against them (acceptance_cdp_in/native_nat.rs; minted by scripts/gen_accepts_tc_native_nat.py). Keys and lemmas: succ (the literal rule), pred, add, sub, mul, pow, shiftLeft, beq, ble, div, mod (fuel-bounded divCore / modCore), land / lor / xor (Nat.bitwise over div2 / testBit, with Prod projections by projection-beta and Bool.rec) and shiftRight (registered LATE: the build defines Nat.shiftRight at its end), each with a witness instance and its TypingTcIn corollary through kernel_accepts_tc_in_sound. The deployed fold whnfs each operand to a literal first; that step is an ordinary derivation composed by app_cong / trans. The E4c findings are closed by the kernel gate, not here: Nat.gcd folds only where its digest is pinned, and a value-less axiom head such as with_prelude's Nat.shiftRight gets the verdict HeadNotDefinition (read in env/native_fold_authority.rs; measured for the axioms Int.div / Int.mod in the specification world), so no fold fires on it. RESIDUAL, stated: (1) Nat.gcd, the sixteenth key, is absent from the specification world (pinned only for lean-v4.30.0-rc2), so no lemma is claimed for it; (2) the other pinned worlds' bodies (Clean's own prelude where it differs, Lean's Init) each need their own agreement lemma over their own body; (3) not extracted Rust execution -- the lemma carries the fold's RESULT, and BigNat arithmetic agreeing with the definition is the fold table's pin, not proved here.",
+      "path": {
+        "taken": true,
+        "rank": 4,
+        "why": "whnf_core_inner's App arm tries reduce_nat BEFORE unfolding a Nat.* head and whnf_outer_loop tries it after every delta step; any closed Nat arithmetic in a type takes it. Gated only on the head names and literal arguments."
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.cdp",
+          "line": 151,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.lit_zero",
+          "line": 164,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.lit_succ",
+          "line": 165,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.app_cong",
+          "line": 154,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.trans",
+          "line": 153,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "id": "conv-native-reducers",
+      "family": "registered native reducers (Lean.reduceBool/Nat, decide, UInt ofNat argument normalisation, BitVec, wrapper comparisons)",
+      "context": "conversion",
+      "class": "MISSING",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs",
+        "fn": "reduce_native",
+        "line": 383,
+        "anchor": "let reducer = self.native_reducer_for(name)?;"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "absent",
+        "anchor": "KernelAcceptsTcIn",
+        "line": 139,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "(model gap) native-reducers",
+          "line": 117
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_nat_blt_fold",
+          "line": 77
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_int_tonat_fold",
+          "line": 114
+        },
+        {
+          "file": "crates/clean-verify/tests/accepts_tc_native_fold_census.rs",
+          "kind": "text",
+          "anchor": "kernel_accepts_tc_in_nat_blt_fold",
+          "line": 37
+        }
+      ],
+      "note": "items.json R2(e). registry_reducer_admitted (tc/fold_admission.rs) requires the kernel theory to admit the head AND fold_admitted (a pinned closure digest in env/native_fold_canon.tsv) AND every recognized-argument name to be canonical, so a registered reducer fires only on a head whose closure digest is pinned. MEASURED (E4n, 2026-09-29, over the full Specification via native_fold_verdict, every registered_native_reducer_name plus the reduce_nat/reduce_int keys): 60 registered heads are admitted. E4d's derived lemmas carry 22 (Nat.pred/add/sub/mul/div/mod/pow/beq/ble/land/lor/xor/shiftLeft/shiftRight, Int.add/sub/mul/neg, Bool.not/and/or/xor). E4n adds 2 more DERIVED agreement lemmas, quantified over any R holding the canonical closure, kernel-checked with EMPTY domain and foundational axiom closures (accepts_tc_native_fold_census, generated/accepts_tc_native_nat.json): kernel_accepts_tc_in_nat_blt_fold (Nat.blt a b delta-unfolds to Nat.ble (Nat.succ a) b, closed by the proven Nat.ble fold at (succ a, b)) and kernel_accepts_tc_in_int_tonat_fold (Int.toNat delta+Int.rec-iota to the payload Nat literal on Int.ofNat, to Nat.zero on Int.negSucc). 36 remain, in four measured groups. (1) DERIVABLE, not yet built -- the fold is definitional over the environment (delta/iota to a literal, or an unfolding to the same Decidable.isX constructor whose proof field is bridged by proof irrelevance), a per-head induction like the E4d folds, the next E4n increment: List.length, Bool.beq, Int.ble, BEq.beq (delta to the instance's beq), decide, Decidable.decide, Nat.decEq, Nat.decLe, Nat.decLt, Bool.decEq, Int.decEq, instDecidableAnd, instDecidableNot, instDecidableOr, instDecidableNatLe, instDecidableNatLt, instDecidableEqBool, instDecidableEqInt, instDecidableEqNat. (2) PAYLOAD -- the deployed reducer computes over the bare-Nat-literal PAYLOAD representation of a Fin/BitVec/UInt/Char value; a bare literal is not a model term at that carrier, so the intermediate steps have no KExpr image. The full-constructor iota chain (Fin.mk / BitVec.ofFin / Char.mk) is derivable, but the deployed reducer takes the payload shortcut -- reported as a SOUNDNESS question (the model justifies only the full-constructor equivalent, not the shortcut): Fin.val, BitVec.toNat, BitVec.toFin, UInt32.toNat, UInt32.toBitVec, Char.toNat, and the decEqs whose isFalse witness projects through them -- Char.decEq, instDecidableEqChar, UInt32.decEq, instDecidableEqUInt32, instDecidableEqFin. (3) STRING -- derivable since E4 String (the literal expansion is the model rule KernelAcceptsTcIn.lit_string_expand, conv-string-literal-expansion), not yet built: each fold is lit_string_expand on the operand literals followed by the delta / iota unfolding of String.length / String.beq / String.decEq over the expanded List Char (the Decidable ones bridged by proof irrelevance as in (1)), under StringLitAdmitIn and valid characters; in the Lean 4.30 world the payload is UTF-8 bytes, so each world needs its own lemma: String.beq, String.decEq, String.length, instDecidableEqString. (4) SOUNDNESS -- reduce_ite / reduce_dite (native_reducers_init.rs) return args[3]/args[4] even when the head is OVER-APPLIED (>5 args), DROPPING the trailing argument, so the output is NOT definitional over the input; MEASURED at kernel level, a theorem of type False built from ite at a function-typed carrier kernel-checks with an empty axiom closure in Environment::with_prelude() AND in the full Specification. Reported to the lead; the fix belongs on Clean main (require exact arity or re-apply the dropped args), not on the lane. HPow.hPow is admitted but its reducer dispatches only on instHPowNatNatNat, which is ABSENT from the specification world, so it never fires and needs no derivation.",
+      "path": {
+        "taken": true,
+        "rank": 10,
+        "why": "reduce_native in whnf_core_inner and whnf_outer_loop; taken for every head the environment registers a native reducer for (the builtin prelude registers the arithmetic and UInt families, init_arith_native_reducers / init_uint_native_reducers)."
+      }
+    },
+    {
+      "id": "conv-native-int",
+      "family": "native Int arithmetic (reduce_int) and the closed Int predecessor fold (reduce_int_pred_fold)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "fn": "beta_or_iota_step",
+        "line": 700,
+        "anchor": "self.reduce_int(&app_with_whnf)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+        "kind": "decl",
+        "anchor": "kernel_accepts_tc_in_int_add_fold",
+        "line": 111,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "(model gap) native-reducers",
+          "line": 117
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_int_sub_fold",
+          "line": 113
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_int_mul_fold",
+          "line": 112
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_int_neg_fold",
+          "line": 108
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_int_pred_fold",
+          "line": 115
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/native_nat.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_int_sub_instance_sound",
+          "line": 119
+        },
+        {
+          "file": "crates/clean-verify/tests/accepts_tc_native_fold_census.rs",
+          "kind": "text",
+          "anchor": "const NATIVE_INT_FOLD_LEMMAS",
+          "line": 49
+        }
+      ],
+      "note": "Not named in items.json R2(e); the verifier flagged it. Covered (E4d, 2026-09-28) by DERIVED lemmas, as conv-native-nat: reduce_int fires on Int.add / Int.sub / Int.mul only when fold_admitted (pinned digest), and over any R holding the canonical closure and Int.rec's canonical rules (reflected from the live environment at registration, reflect_recursor_text) each of kernel_accepts_tc_in_int_{add,sub,mul}_fold PROVES op (int literal x) (int literal y) == int literal (op x y), with an int literal the constructor-applied Int.ofNat n / Int.negSucc n the deployed mk_int_expr builds; Int.neg, Int.negOfNat and Int.subNatNat (the closure) get their own lemmas, and every symbolic Int is split into its constructors BEFORE any beta (a stuck literal reader under a binder is not a closed term). reduce_int_pred_fold (Nat.rec (fun _ => Int) z <the pinned predecessor step> count) is kernel_accepts_tc_in_int_pred_fold over R holding Nat.rec and Int.rec, the step pinned node by node as the deployed std_two_ctor_rec check pins it. Empty axiom closures; witness instances with TypingTcIn corollaries. The deployed fold whnfs each operand to a constructor literal first; that step is an ordinary derivation composed by app_cong / trans. RESIDUAL, stated: (1) get_int_whnf also reads a BARE Nat literal operand as Int.ofNat n (Lean's kernel does not); only an ill-typed operand reaches it, and no lemma carries that acceptance; (2) the deployed predecessor-step matcher compares the step's binder types and universe levels loosely, and the lemma is stated for the canonical spelling only; (3) the contains_big_nat_lit scope guard is a narrowing (harmless to a model that carries the fold everywhere); (4) other pinned worlds' bodies are not claimed.",
+      "path": {
+        "taken": true,
+        "rank": 11,
+        "why": "beta_or_iota_step tries reduce_int after iota/quot/nat; taken for Int add/sub/mul on literal operands."
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.cdp",
+          "line": 151,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.app_cong",
+          "line": 154,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.trans",
+          "line": 153,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 125
+        }
+      ]
+    },
+    {
+      "id": "conv-nat-offset",
+      "family": "Nat offset comparison (is_def_eq_offset: zero/succ peeling, literal compare)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/delta.rs",
+        "fn": "lazy_delta_reduction",
+        "line": 88,
+        "anchor": "self.is_def_eq_offset(&t, &s)"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.lit_succ",
+        "line": 165,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_lit_two",
+          "line": 310
+        }
+      ],
+      "note": "is_def_eq_offset peels one successor from each side: literal/literal and succ/succ are refl/congruence, literal (n+1) vs Nat.succ x is accepts_tc_offset_peel. The stuck Nat.add a c peel (nat_add_succ_pred) is Nat.add's own delta/iota step and is carried by DefEqCDPIn only when R carries Nat.add's definition (R6).",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_offset_peel",
+          "line": 275
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.app_cong",
+          "line": 154,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 9,
+        "why": "lazy_delta_reduction calls is_def_eq_offset on every lazy-delta iteration; the literal/succ peel is taken whenever a numeral meets a successor."
+      }
+    },
+    {
+      "id": "conv-proof-irrelevance",
+      "family": "definitional proof irrelevance (is_def_eq_proof_irrel)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_core",
+        "line": 444,
+        "anchor": "let proof_irrel = self.is_def_eq_proof_irrel(&a_n, &b_n);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.proof_irrel",
+        "line": 159,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_proof_irrel",
+          "line": 26
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_proof_irrel_sound",
+          "line": 46
+        }
+      ],
+      "note": "The arm reads the deployed check: a : A, A whnf W, W : S, S whnf Sort 0, b : B, A == B. Sound into Lean 4's typed rule at P := W (TypingTcIn.proof_irrel). Needs the single-family encoding: KernelAcceptsTcIn / TypingTcIn index typing and conversion by a Bool, so a conversion arm can demand a typing. Premises are CHECK-mode derivations of the subjects; the deployed branch infers them in infer-only mode (try_infer_type_quick / infer_type_infer_only), and that the two agree on the subjects that reach is_def_eq is the infer_only_conditional obligation, NOT DISCHARGED. The SProp arm is excluded with the other non-KExpr nodes (lean_nodes_and_mode).",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.proof_irrel",
+          "line": 125,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 2,
+        "why": "is_def_eq_core tries is_def_eq_proof_irrel on every pair that survives the quick checks and phase-1 whnf_core (gated off only in Cubical/Directed, excluded by lean_nodes_and_mode); fires whenever the compared terms are proofs -- every App/Let check whose types mention proofs."
+      }
+    },
+    {
+      "id": "conv-branch-sharing",
+      "family": "recursor branch-sharing congruence (try_branch_sharing_def_eq)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/branch_sharing.rs",
+        "fn": "try_branch_sharing_def_eq",
+        "line": 365,
+        "anchor": "if !self.compare_arg_range(&a_app.args, &b_app.args, 0..shared_prefix_end) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.app",
+        "line": 26,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+          "kind": "ctor",
+          "anchor": "DefEqIn.lam",
+          "line": 27,
+          "relation": "DefEqIn"
+        }
+      ],
+      "note": "Argument-wise congruence of two applications of one recursor; minors compared under peeled matching lambdas (DefEqIn.lam)."
+    },
+    {
+      "id": "conv-branch-sharing-cache",
+      "family": "branch-sharing verified-pair and no-delta whnf cache",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/branch_sharing.rs",
+        "fn": "branch_sharing_compare",
+        "line": 165,
+        "anchor": "std::ptr::eq(a, b)"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": ""
+    },
+    {
+      "id": "conv-proj-iota",
+      "family": "projection of a constructor application (whnf_reduce_proj, reduce_proj_core, try_unfold_proj_app)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf_proj.rs",
+        "fn": "reduce_proj_with_mode",
+        "line": 126,
+        "anchor": "if let Some(ctor_val) = self.env.get_constructor(ctor_name) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/projection_semantic/conversion.rs",
+        "kind": "ctor",
+        "anchor": "DefEqCDPIn.raw",
+        "line": 170,
+        "relation": "DefEqCDPIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/projection_reduction/relation.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cdp.projection_beta",
+          "line": 22,
+          "relation": "par_reduces_cdp"
+        }
+      ],
+      "note": "par_reduces_cdp.projection_beta selects the field of a constructor-headed subject; the preceding subject whnf composes through the CDP star closure. The deployed reducers extract the field only when the constructor belongs to the projection's structure (R147, leanprover/lean4#14632); the relation does not compare it, so it over-approximates. DefEqIn itself has no projection beta: the conversion target for this family is DefEqCDPIn."
+    },
+    {
+      "id": "conv-proj-iota-string-literal",
+      "family": "projection out of a String literal subject (expanded to String.mk first)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf_proj.rs",
+        "fn": "reduce_proj_with_mode",
+        "line": 105,
+        "anchor": "let expanded = string_lit_to_constructor(s);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+        "kind": "decl",
+        "anchor": "accepts_tc_proj_string_literal",
+        "line": 223,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_string_lit_proj",
+          "line": 299
+        },
+        {
+          "file": "crates/clean-verify/tests/accepts_tc_string_literal_census.rs",
+          "kind": "text",
+          "anchor": "accepts_tc_forged_string_proj_length",
+          "line": 257
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "literals (constructor normalization)",
+          "line": 118
+        }
+      ],
+      "note": "Covered (E4 String, 2026-09-29) by the DERIVED accepts_tc_proj_string_literal: the literal subject is carried to its expansion by proj_cong over lit_string_expand, and the deployed whnf-then-project on the expansion is the conversion premise. Witness: Proj(String, 0, \"ab\") converts to the \"ab\" character list at accepts_tc_string_env (delta String.ofList, beta, projection-beta on the reflected String.mk entry); the same projection claimed at a one-character list is refused. Worlds: see conv-string-literal-expansion (in Lean 4.30 field 0 is the UTF-8 ByteArray).",
+      "path": {
+        "taken": true,
+        "rank": 17,
+        "why": "reduce_proj_with_mode on a String-literal subject; taken for a projection out of a String literal."
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.lit_string_expand",
+          "line": 169,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.proj_cong",
+          "line": 158,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.lit_string_expand",
+          "line": 135,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "id": "conv-eta-lambda",
+      "family": "lambda eta (try_eta_expansion_impl)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/eta.rs",
+        "fn": "try_eta_expansion_impl",
+        "line": 62,
+        "anchor": "Expr::app(other.lift_from(0, 1), Expr::bvar(0)),"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.eta",
+        "line": 160,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_eta",
+          "line": 57
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_eta_sound",
+          "line": 70
+        }
+      ],
+      "note": "other : F, F whnf Pi A B, and other == lam A (app (lift other) #0) -- exactly new_s; the comparison of lam_expr with new_s is then the ordinary conversion, composed by trans. Premises are CHECK-mode derivations of the subjects; the deployed branch infers them in infer-only mode (try_infer_type_quick / infer_type_infer_only), and that the two agree on the subjects that reach is_def_eq is the infer_only_conditional obligation, NOT DISCHARGED.",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.eta",
+          "line": 126,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 5,
+        "why": "is_def_eq_structural's Lam-vs-non-Lam arms (no gate); taken whenever a lambda is compared with a non-lambda after lazy delta."
+      }
+    },
+    {
+      "id": "conv-eta-struct",
+      "family": "structure eta in def-eq (try_structure_eta_core)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/structural.rs",
+        "fn": "try_structure_eta_core",
+        "line": 272,
+        "anchor": "let proj = Expr::proj(ctor.inductive_name.clone(), i as u32, s.clone());"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.struct_eta",
+        "line": 162,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_struct_eta",
+          "line": 197
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "accepts_struct_eta_sound",
+          "line": 213
+        }
+      ],
+      "note": "Fieldwise, as deployed: t is a saturated constructor application of a structure-like inductive, s's whnf'd type is headed by that inductive, and proj i s == field i for every field (a Pi premise over the field index). The deployed check does NOT compare t's parameters with s's type, and neither does TypingTcIn.struct_eta, so the target over-approximates Lean here (Lean's try_eta_struct_core first requires is_def_eq of the two inferred types). Premises are CHECK-mode derivations of the subjects; the deployed branch infers them in infer-only mode (try_infer_type_quick / infer_type_infer_only), and that the two agree on the subjects that reach is_def_eq is the infer_only_conditional obligation, NOT DISCHARGED.",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.struct_eta",
+          "line": 128,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "StructCtorIn.mk",
+          "line": 85,
+          "relation": "StructCtorIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 6,
+        "why": "try_structure_eta_expansion runs on every App-vs-App spine failure and in the default arm (no gate); taken whenever a constructor application is compared with a non-constructor of a structure type."
+      }
+    },
+    {
+      "id": "conv-string-literal-expansion",
+      "family": "String literal vs constructor form (try_string_lit_expansion)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/structural.rs",
+        "fn": "try_string_lit_expansion_core",
+        "line": 337,
+        "anchor": "let expanded = string_lit_to_constructor(str_val);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.lit_string_expand",
+        "line": 169,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_lit_string_expand",
+          "line": 289
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_string_lit_constructor",
+          "line": 294
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_string_admit",
+          "line": 284
+        },
+        {
+          "file": "crates/clean-verify/tests/accepts_tc_string_literal_census.rs",
+          "kind": "text",
+          "anchor": "fn string_literal_witnesses_refuse_near_misses",
+          "line": 162
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/generated/kernel_core_red_env.skips.md",
+          "kind": "text",
+          "anchor": "literals (constructor normalization)",
+          "line": 118
+        }
+      ],
+      "note": "items.json R2(d). Covered (E4 String, 2026-09-29): string_lit_to_constructor is ONE rule of both typed families, KernelAcceptsTcIn.lit_string_expand / TypingTcIn.lit_string_expand: literal_string (string_lit_code cs) == String.ofList (List.cons.{0} Char (Char.ofNat (literal c)) ... (List.nil.{0} Char)) (string_lit_expansion cs, keyed on the reflected names), given StringLitAdmitIn R and string_lit_chars_valid cs. The phase-7 step is_def_eq(whnf(expansion), s) is the derived accepts_tc_string_lit_expansion (the rule, then the whnf conversion, then the comparison, by trans); accepts_tc_lit_string_every_payload covers EVERY payload (the decoding is onto). Soundness is one arm of kernel_accepts_tc_in_sound. Witness at the canonical-closure fixture accepts_tc_string_env: \"ab\" to its expansion and on to String.mk [..] by delta / beta; near misses (a wrong character, a wrong length, the String.mk head in place of String.ofList, a surrogate, a swapped order, the seed's tables, an identity String.ofList) refused. REPRESENTATION, discharged: the payload of literal_string IS the character list (literal_string_codec: string_lit_code / string_lit_chars, a bijection proved both ways, string_lit_code_chars and string_lit_chars_code, empty axiom closure), so a deployed Literal::String(s) is literal_string (string_lit_code cs) for cs = s.chars() as scalar values -- the interning premise R4 named is gone; the red-env reflector renders literal leaves through the same codec (render_literal). WORLDS, measured 2026-09-29. The deployed expansion fires only under string_literal_admitted (Nat canonical and String.ofList / Char.ofNat canonical by delta-closure digest, tc/fold_admission.rs). (1) clean-prelude (Environment::with_prelude, the default --prelude builtin): both heads pinned; String is the List Char structure (String.mk the constructor) and String.ofList := fun d => String.mk d, so whnf(expansion) is String.mk [Char.ofNat c, ...]; measured on the deployed kernel: \"ab\" == String.ofList [97,98] and == String.mk [97,98] accepted, a wrong character / length refused, Proj(String, 0, \"ab\") whnfs to the Char.ofNat list. THIS is the world the model's admission fact StringLitAdmitIn pins (records reflected from with_prelude at registration, which refuses registration if the pin table stops admitting them). (2) The specification's own world: String.ofList is pinned (clean-prelude digest) but Char.ofNat is ABSENT from the specification environment, so the deployed kernel never expands a string literal there (measured: \"ab\" == String.ofList [..] refused, Proj(String, 0, \"ab\") stuck); String.rec on a literal still reduces there, by structure eta on the major (a different row). (3) Lean 4.30.0-rc2 (pinned toolchain, measured with Lean.Kernel.whnf / isDefEq): String is the ByteArray structure (String.ofByteArray); the kernel expands a literal to String.ofList [Char.ofNat c, ...] (a discriminating environment where String.ofList and String.mk build different constructors: iota on a literal major takes String.ofList's body) and whnfs it to String.ofByteArray (List.utf8Encode ..) _, so Proj 0 is the UTF-8 ByteArray and String.rec's minor sees bytes (\"\\u00e9\" has size 2). Clean's pin table admits this world too (lean-v4.30.0-rc2 digests), but its bodies differ from clean-prelude's: an environment in it expands deployed and is NOT covered by StringLitAdmitIn's one constructor -- it needs its own admission constructor over Lean 4.30's records. (4) Lean 4.8.0 (pinned toolchain, measured): String is the List Char structure and the kernel expands to the CONSTRUCTOR String.mk [Char.ofNat c, ...] (Proj(String, 0, \"ab\") = List.cons.{0} Char (Char.ofNat 97) ..); String.ofList does not exist there, so the deployed kernel (keyed on String.ofList) never expands in a Lean 4.8 environment -- a completeness gap in the safe direction. (5) The def-eq trigger differs, measured in discriminating environments built from empty: Lean 4.8 expands a literal against a String.mk-headed side (a two-constructor String whose first constructor is String.mk accepts \"ab\" == String.mk [..]) and does not whnf the expansion (with String.mk a definition, a literal major or projection subject stays stuck); Lean 4.30 accepts no such side (the same two-constructor environment refuses it, as it refuses String.ofList- and String.ofByteArray-headed sides), and accepts \"ab\" == String.mk [..] only when String has one constructor, i.e. through structure eta projecting the literal. The deployed kernel expands against ANY constant-headed application (try_string_lit_expansion_core): strictly more complete than either, over the same expansion. ADMISSION RESIDUAL, stated: the deployed digest pins String.ofList's and Char.ofNat's whole delta-closures; StringLitAdmitIn pins String.ofList's record, the String.mk constructor entry and Char.ofNat's record, but not the List / Char inductive shapes String.ofList's digest also covers, nor Char.ofNat's deeper closure (86 constants reached from its value in with_prelude: Char.ofNatAux, dite, the Decidable / Or / And machinery, BitVec.ofNatLT, UInt32.ofBitVec, Char.mk, ...). So a KernelAcceptsTcIn instance can exist in an R whose deeper Char.ofNat closure is not canonical, where the deployed kernel refuses -- an over-approximation of deployed acceptance, the direction link 4 tolerates. RANGE: the rule also requires string_lit_chars_valid cs (every character a Unicode scalar value, Nat.isValidChar); a Rust str holds only those, so every deployed literal satisfies it, and without it the target would identify distinct payloads through Char.ofNat's clamp of invalid code points to 0.",
+      "path": {
+        "taken": true,
+        "rank": 15,
+        "why": "is_def_eq_core phase 7 (no gate); taken only when a String literal meets a constructor-headed application."
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.lit_string_expand",
+          "line": 135,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "text",
+          "anchor": "inductive StringLitAdmitIn",
+          "line": 178
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_string_lit_expansion",
+          "line": 209,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/string_literal.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_lit_string_every_payload",
+          "line": 201
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/literal_string_codec.rs",
+          "kind": "decl",
+          "anchor": "string_lit_code_chars",
+          "line": 94
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ]
+    },
+    {
+      "id": "conv-unit-like",
+      "family": "unit-like structure equality (is_def_eq_unit_like)",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/structural.rs",
+        "fn": "is_def_eq_unit_like",
+        "line": 367,
+        "anchor": "if ctor.num_fields != 0 {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.unit_like",
+        "line": 161,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "note": "UnitLikeIn carries the deployed facts on the whnf'd type: head names a structure-like inductive (one constructor, no indices) whose constructor has no fields; the is_rec flag (not in the metadata) is omitted, which only widens. Witnessed at accepts_unit_env (two distinct variables of a unit type made convertible). Premises are CHECK-mode derivations of the subjects; the deployed branch infers them in infer-only mode (try_infer_type_quick / infer_type_infer_only), and that the two agree on the subjects that reach is_def_eq is the infer_only_conditional obligation, NOT DISCHARGED.",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.unit_like",
+          "line": 127,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "UnitLikeIn.mk",
+          "line": 79,
+          "relation": "UnitLikeIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_unit_like",
+          "line": 111
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "accepts_unit_env_not_seed",
+          "line": 134
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 12,
+        "why": "is_def_eq_core phase 8 (no gate); taken only after structural comparison and String expansion fail on terms of a zero-field structure type."
+      }
+    },
+    {
+      "id": "conv-let-fvar-zeta",
+      "family": "unfolding a let-bound local (FVar with a value in the context), in conversion and in let-body inference",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "fn": "whnf_core_inner",
+        "line": 558,
+        "anchor": "let val_opt = self.ctx.borrow().get(*id).and_then(|d| d.value.clone());"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsTcIn.zeta_local",
+        "line": 163,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_let_zeta",
+          "line": 256
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_witnesses.rs",
+          "kind": "decl",
+          "anchor": "accepts_tc_let_zeta_sound",
+          "line": 267
+        }
+      ],
+      "note": "KernelAcceptsTcIn / TypingTcIn index contexts by ENTRIES (CtxEntryIn): the deployed Let arm's let-local is a defn entry (let_def types the body under it, exactly as ctx_push_let does) and whnf's FVar unfolding is zeta_local: bvar i == lift (value of entry i). The witness is a let body that type-checks ONLY through the value (the argument check Sort 1 == x); the forged caller reading a value off a decl entry is refused. Lean-valid: Lean's kernel checks a let body under a let-decl local. Representation: to_kexpr maps the let-local fvar to the bvar of its defn entry (CtxRep, extended to entries: open).",
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "KernelAcceptsTcIn.let_def",
+          "line": 147,
+          "relation": "KernelAcceptsTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.zeta_local",
+          "line": 129,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "TypingTcIn.let_def",
+          "line": 113,
+          "relation": "TypingTcIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+          "kind": "ctor",
+          "anchor": "CtxEntryIn.defn",
+          "line": 62,
+          "relation": "CtxEntryIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_soundness.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_tc_in_sound",
+          "line": 35
+        }
+      ],
+      "path": {
+        "taken": true,
+        "rank": 1,
+        "why": "infer_type_fast_inner's OWN Let arm pushes the let-local with its value (ctx_push_let) and infers the body under it; any whnf of a body-side type that meets the local unfolds it (whnf_core_inner FVar arm). The one family reached from infer_type's frame itself, unconditionally in check mode."
+      }
+    },
+    {
+      "id": "conv-fvar-eq",
+      "family": "FVar/FVar identity",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_def_eq_core",
+        "line": 507,
+        "anchor": "if let (ExprKind::FVar(i), ExprKind::FVar(j)) = (t_n.kind(), s_n.kind()) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.refl",
+        "line": 21,
+        "relation": "DefEqIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/ctx_rep.rs",
+          "kind": "def",
+          "anchor": "to_kexpr_at",
+          "line": 162
+        }
+      ],
+      "note": "to_kexpr maps one fvar to one bvar."
+    },
+    {
+      "id": "conv-bvar-eq",
+      "family": "BVar/BVar identity",
+      "context": "conversion",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/structural.rs",
+        "fn": "is_def_eq_structural",
+        "line": 12,
+        "anchor": "(ExprKind::BVar(i), ExprKind::BVar(j)) => i == j,"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "DefEqIn.refl",
+        "line": 21,
+        "relation": "DefEqIn"
+      },
+      "note": ""
+    },
+    {
+      "id": "conv-cumulative",
+      "family": "cumulative subtyping is_le (Sort <=, Pi covariance, template inductives)",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "is_le",
+        "line": 230,
+        "anchor": "if !self.cumulative {"
+      },
+      "spec": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "kind": "text",
+        "anchor": "cumulative: false,",
+        "line": 573
+      },
+      "exclusion": "cumulative_false",
+      "note": "Coq lane only."
+    },
+    {
+      "id": "conv-cubical-directed",
+      "family": "cubical / directed conversion and reduction (path, glue, hcomp, transp, coe, HIT iota, directed redexes)",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/structural.rs",
+        "fn": "is_def_eq_structural",
+        "line": 64,
+        "anchor": "if let Some(result) = self.is_def_eq_cubical(a_whnf, b_whnf) {"
+      },
+      "spec": {
+        "file": "docs/SELF_VERIFICATION_CERTIFICATE.md",
+        "kind": "text",
+        "anchor": "production nodes also have no `KExpr` counterpart.",
+        "line": 1149
+      },
+      "exclusion": "lean_nodes_and_mode",
+      "note": ""
+    },
+    {
+      "id": "conv-squash",
+      "family": "Squash/Squash structural equality",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/mod.rs",
+        "fn": "quick_is_def_eq",
+        "line": 606,
+        "anchor": "(ExprKind::Squash(inner1), ExprKind::Squash(inner2)) => {"
+      },
+      "spec": {
+        "file": "docs/SELF_VERIFICATION_CERTIFICATE.md",
+        "kind": "text",
+        "anchor": "production nodes also have no `KExpr` counterpart.",
+        "line": 1149
+      },
+      "exclusion": "lean_nodes_and_mode",
+      "note": ""
+    },
+    {
+      "id": "conv-whnf-caches",
+      "family": "whnf_cache / whnf_core_cache / unfold_cache hits",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "fn": "whnf_impl",
+        "line": 183,
+        "anchor": "if let Some(cached) = self.whnf_cache.borrow_mut().get(e) {"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": ""
+    },
+    {
+      "id": "infer-sort",
+      "family": "Sort arm",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 470,
+        "anchor": "Ok(Expr::from_kind(ExprKind::Sort(Level::succ(l.clone()))))"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.sort",
+        "line": 45,
+        "relation": "KernelInfersIn"
+      },
+      "note": "check_level runs only when infer_only is false and can only reject."
+    },
+    {
+      "id": "infer-fvar",
+      "family": "FVar arm (local context lookup)",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 458,
+        "anchor": ".ok_or(TypeError::UnknownFVar(*id))?;"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.bvar",
+        "line": 46,
+        "relation": "KernelInfersIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/ctx_rep.rs",
+          "kind": "def",
+          "anchor": "to_kexpr_at",
+          "line": 162
+        }
+      ],
+      "note": "Through to_kexpr (fvar to bvar) and the CtxRep context representation (ctx_rep.rs)."
+    },
+    {
+      "id": "infer-const",
+      "family": "Const arm (environment lookup, level instantiation)",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 518,
+        "anchor": "self.instantiate_levels_checked(name, &info.type_, &info.level_params, levels);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.const",
+        "line": 49,
+        "relation": "KernelInfersIn"
+      },
+      "note": "kdecl_type_at tenv; the Environment to KDeclEnv representation is R6 and OPEN. Unsafe/partial checks only reject. Since R150 the instantiation depends on the kernel theory: Clean's collapsing substitution under Extended, Lean's instantiate_lparams (expr/subst_lean_levels.rs: a changed max/imax node rebuilt by mk_max/mk_imax) under Lean and LeanReference, which also refuses (LevelSharingDependent) where Lean's own answer depends on .olean object sharing."
+    },
+    {
+      "id": "infer-app",
+      "family": "App arm with the argument check (is_le)",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 574,
+        "anchor": "let eq = self.is_le(&arg_type, expected_arg_type);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.app",
+        "line": 50,
+        "relation": "KernelInfersIn"
+      },
+      "note": "Only when infer_only is false; is_le is is_def_eq under cumulative_false. The function-type whnf premise is its own pair of rows (infer-whnf-premise-*)."
+    },
+    {
+      "id": "infer-app-arg-skipped",
+      "family": "App arm success with the argument check skipped (infer_only = true)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 593,
+        "anchor": "Ok(result_type.instantiate(a))"
+      },
+      "spec": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "kind": "text",
+        "anchor": "infer_only: Cell::new(true),",
+        "line": 569
+      },
+      "exclusion": "infer_only_false",
+      "note": "The default state: an ill-typed argument is accepted."
+    },
+    {
+      "id": "infer-lam",
+      "family": "Lam arm",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 650,
+        "anchor": "let body_type_abstract = body_type.abstract_fvar(fvar_id);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.lam",
+        "line": 48,
+        "relation": "KernelInfersIn"
+      },
+      "note": "The domain-is-a-sort premise holds only when infer_only is false."
+    },
+    {
+      "id": "infer-lam-domain-skipped",
+      "family": "Lam arm with the domain sort check skipped (infer_only = true)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 620,
+        "anchor": "self.expr_loc_push(ExprPathStep::LamType);"
+      },
+      "spec": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "kind": "text",
+        "anchor": "infer_only: Cell::new(true),",
+        "line": 569
+      },
+      "exclusion": "infer_only_false",
+      "note": ""
+    },
+    {
+      "id": "infer-pi-smart-imax",
+      "family": "Pi arm returning Sort(Level::imax(l1, l2)) through the SMART constructor",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 691,
+        "anchor": "Ok(Expr::from_kind(ExprKind::Sort(self.level_imax(l1, l2))))"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.pi",
+        "line": 47,
+        "relation": "KernelInfersIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+          "kind": "decl",
+          "anchor": "kernel_infers_in_pi_smart",
+          "line": 99
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/kexpr_beq.rs",
+          "kind": "def",
+          "anchor": "level_imax",
+          "line": 211
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/universe_semantic_bridge.rs",
+          "kind": "def",
+          "anchor": "level_imax_eq_sem",
+          "line": 391
+        }
+      ],
+      "evidence": [
+        {
+          "file": "crates/clean-kernel/src/level/mod.rs",
+          "kind": "text",
+          "anchor": "pub fn imax(l1: Level, l2: Level) -> Self {",
+          "line": 501
+        }
+      ],
+      "note": "KernelInfersIn.pi takes any r with levelEqSem (Level.imax u v) r; kernel_infers_in_pi_smart discharges it for the modelled smart constructor level_imax (not yet a source refinement of Level::imax). Raw Level.imax in KernelInfers / ImplInfer is exactly what fails here: Pi(Sort 0, Sort 0) is Sort 1 deployed. Since R150 the Pi sort depends on the kernel theory: the smart Level::imax under Extended, Lean's cheap mk_imax (level/lean_kernel.rs; a raw max when l2 is provably nonzero) under Lean and LeanReference. KernelInfersIn.pi still accepts either through levelEqSem, but kernel_infers_in_pi_smart discharges that only for the smart constructor; the mk_imax arm's levelEqSem obligation is not discharged in-tree."
+    },
+    {
+      "id": "infer-let",
+      "family": "Let arm with the type-sort and value checks",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 726,
+        "anchor": "if !self.is_le(&val_type, ty) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.let_",
+        "line": 51,
+        "relation": "KernelInfersIn"
+      },
+      "note": "Only when infer_only is false. The body is inferred with the let-local's VALUE visible: KernelInfersIn/KernelAcceptsIn type it under a declaration (no value); the successor KernelAcceptsTcIn.let_def types it under a defn entry, and zeta_local unfolds it (conv-let-fvar-zeta)."
+    },
+    {
+      "id": "infer-let-checks-skipped",
+      "family": "Let arm with the type/value checks skipped (infer_only = true)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 699,
+        "anchor": "self.expr_loc_push(ExprPathStep::LetType);"
+      },
+      "spec": {
+        "file": "crates/clean-kernel/src/tc/config.rs",
+        "kind": "text",
+        "anchor": "infer_only: Cell::new(true),",
+        "line": 569
+      },
+      "exclusion": "infer_only_false",
+      "note": ""
+    },
+    {
+      "id": "infer-lit-nat",
+      "family": "Nat literal",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_literal_type",
+        "line": 47,
+        "anchor": "Literal::Nat(_) => Expr::const_(NAME_NAT.clone(), vec![]),"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.lit_nat",
+        "line": 52,
+        "relation": "KernelInfersIn"
+      },
+      "note": "literal_nat_type is the Nat constant with no universe arguments; the BigNat to model-code representation is R4."
+    },
+    {
+      "id": "infer-lit-string",
+      "family": "String literal",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_literal_type",
+        "line": 48,
+        "anchor": "Literal::String(_) => Expr::const_(NAME_STRING.clone(), vec![]),"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.lit_string",
+        "line": 53,
+        "relation": "KernelInfersIn"
+      },
+      "note": "The Arc<str> to model-code (symbol id) representation is R4."
+    },
+    {
+      "id": "infer-proj",
+      "family": "Proj arm (infer_proj_type): subject inference, whnf of its type to a one-constructor structure application named S, universe/argument-count guards, parameter instantiation, dependent field telescope",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 757,
+        "anchor": "let result = self.infer_proj_type(struct_name, *idx, e);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsIn.proj",
+        "line": 63,
+        "relation": "KernelAcceptsIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "ctor",
+          "anchor": "TypingProjIn.proj",
+          "line": 48,
+          "relation": "TypingProjIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "ctor",
+          "anchor": "ProjStructIn.mk",
+          "line": 16,
+          "relation": "ProjStructIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "ctor",
+          "anchor": "ProjParamsIn.cons",
+          "line": 23,
+          "relation": "ProjParamsIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "ctor",
+          "anchor": "ProjFieldIn.next",
+          "line": 32,
+          "relation": "ProjFieldIn"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_in_sound",
+          "line": 105
+        }
+      ],
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/projection.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_in_proj_field_zero",
+          "line": 112
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/projection.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_in_proj_dependent_field",
+          "line": 209
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "decl",
+          "anchor": "typing_cdp_to_proj_in",
+          "line": 72
+        }
+      ],
+      "note": "Covered by a NEW declarative rule: no env-indexed typing judgment had one, so TypingProjIn is TypingCDPCtxConvIn plus Lean 4's primitive-projection rule over the same walks, and the proj case of kernel_accepts_in_sound is the rule itself after converting the subject type. Open, stated: (1) the Prop-structure validation is not a premise of either relation, so the target admits projections of Prop structures Lean refuses -- TypingProjIn is weaker than Lean there; (2) the metatheory of the new rule (subject reduction for projection beta, consistency) is not proved; (3) constructor metadata comes from R, constant types from tenv, and relating both to the deployed Environment is the representation obligation; (4) the premature parameter stop and the cache are separate rows. The Prop walk's lower_loose_bvars and the quick walk agree with projection_field_body on every body."
+    },
+    {
+      "id": "infer-proj-type-cache",
+      "family": "proj_type_cache hit, and the batch fill of every field of a structure",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer_proj.rs",
+        "fn": "infer_proj_type_from_impl",
+        "line": 82,
+        "anchor": "if let Some(cached) = self.proj_type_cache.borrow_mut().get(&proj_expr) {"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": "A cached field type is returned without re-walking the telescope; the batch fill writes every field, keyed by the projection expression."
+    },
+    {
+      "id": "infer-proj-param-premature-stop",
+      "family": "instantiate_params stopping early on a non-Pi constructor type (the remaining parameters discarded)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer_proj.rs",
+        "fn": "instantiate_params",
+        "line": 400,
+        "anchor": "if let ExprKind::Pi(_, _, body) = &result_whnf.kind {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+        "kind": "text",
+        "anchor": "is NOT an arm (the E4 inventory excludes it under `admitted_ctor_telescope`).",
+        "line": 20
+      },
+      "exclusion": "admitted_ctor_telescope",
+      "note": "Reachable only when a constructor type has fewer leading Pis than its declared parameter count."
+    },
+    {
+      "id": "infer-mdata",
+      "family": "MData arm",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 763,
+        "anchor": "self.expr_loc_push(ExprPathStep::MDataExpr);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/ctx_rep.rs",
+        "kind": "def",
+        "anchor": "to_kexpr_at",
+        "line": 162,
+        "relation": "KernelInfersIn"
+      },
+      "note": "to_kexpr_at erases mdata; the inner derivation is the derivation."
+    },
+    {
+      "id": "infer-extended-nodes",
+      "family": "SProp / Squash / Cubical* / ZFC* arms",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 770,
+        "anchor": "ExprKind::CubicalInterval => self.infer_cubical_interval(),"
+      },
+      "spec": {
+        "file": "docs/SELF_VERIFICATION_CERTIFICATE.md",
+        "kind": "text",
+        "anchor": "production nodes also have no `KExpr` counterpart.",
+        "line": 1149
+      },
+      "exclusion": "lean_nodes_and_mode",
+      "note": ""
+    },
+    {
+      "id": "infer-whnf-premise-core",
+      "family": "whnf of an inferred type to expose Pi/Sort, when the trace uses only beta_bd / head-delta / head-iota / app-left / proj-congruence steps",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 538,
+        "anchor": "let f_type_whnf = self.whnf_impl(&f_type);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "KernelInfersIn.app",
+        "line": 50,
+        "relation": "KernelInfersIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
+          "kind": "ctor",
+          "anchor": "whnf_red_step.beta",
+          "line": 4244,
+          "relation": "whnf_red_step"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
+          "kind": "ctor",
+          "anchor": "whnf_red_step.delta",
+          "line": 4245,
+          "relation": "whnf_red_step"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/whnf_progress.rs",
+          "kind": "ctor",
+          "anchor": "whnf_red_step.iota",
+          "line": 4246,
+          "relation": "whnf_red_step"
+        }
+      ],
+      "note": "The whnf_red_step_star premise of KernelInfersIn.app / pi / lam / let_."
+    },
+    {
+      "id": "infer-whnf-premise-extended",
+      "family": "whnf of an inferred type whose trace uses the major pre-pass (full whnf, with delta, of a recursor major before rule lookup) or projection-of-constructor (proj-iota)",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 682,
+        "anchor": "let body_sort_whnf = self.whnf_impl(&body_sort);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+        "kind": "ctor",
+        "anchor": "KernelAcceptsIn.pi",
+        "line": 56,
+        "relation": "KernelAcceptsIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_in_sound",
+          "line": 105
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/projection_reduction/relation.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cdp.iota",
+          "line": 18,
+          "relation": "par_reduces_cdp"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/projection_reduction/relation.rs",
+          "kind": "ctor",
+          "anchor": "par_reduces_cdp.projection_beta",
+          "line": 22,
+          "relation": "par_reduces_cdp"
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/prepass.rs",
+          "kind": "decl",
+          "anchor": "accepts_prepass_trace",
+          "line": 65
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/projection.rs",
+          "kind": "decl",
+          "anchor": "accepts_proj_trace",
+          "line": 40
+        }
+      ],
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/iota_prepass.rs",
+          "kind": "text",
+          "anchor": "The **deployed** kernel whnf-reduces a recursor's major premise before looking",
+          "line": 18
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/prepass.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_in_prepass_pi",
+          "line": 72
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/projection.rs",
+          "kind": "decl",
+          "anchor": "kernel_accepts_in_proj_pi",
+          "line": 47
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/inference.rs",
+          "kind": "decl",
+          "anchor": "kernel_infers_in_to_accepts_in",
+          "line": 176
+        }
+      ],
+      "note": "Every whnf premise of KernelAcceptsIn (pi/lam/app/let_, the successor of KernelInfersIn) is a par_reduces_cdp_star trace: the pre-pass is steps on the major followed by head iota, proj-iota is par_reduces_cdp.projection_beta. Sound into TypingCDPCtxConvIn (kernel_accepts_in_sound), NOT into TypingCtxConvIn: DefEqIn has no projection beta (TypingCtxConvIn embeds by typingctxconv_in_to_cdp_in). Witnessed at two non-seed environments, each needing the new premise: accepts_prepass_env (the major is a definition unfolding to the constructor; head iota and head delta both decline) and projection_metadata_control_env (the 3-way WHNF model leaves the projection stuck). Open: the representation obligation that the deployed whnf_impl result IS such a trace, and the families in infer-whnf-premise-residual."
+    },
+    {
+      "id": "infer-whnf-premise-residual",
+      "family": "whnf of an inferred type whose trace uses a family no KernelAcceptsTcIn conversion arm or derived lemma carries: registered native reducers without a derived lemma, monad reduction",
+      "context": "inference",
+      "class": "MISSING",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_inner",
+        "line": 682,
+        "anchor": "let body_sort_whnf = self.whnf_impl(&body_sort);"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_cdp_in/typed_relations.rs",
+        "kind": "absent",
+        "anchor": "KernelAcceptsTcIn",
+        "line": 139,
+        "relation": "KernelAcceptsTcIn"
+      },
+      "evidence": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/projection_reduction/relation.rs",
+          "kind": "absent",
+          "anchor": "par_reduces_cdp",
+          "line": 10,
+          "relation": "par_reduces_cdp"
+        }
+      ],
+      "note": "The inference-side face of the MISSING conv-* rows of the same families. KernelAcceptsTcIn's whnf premises are conversions of its own family, so every family a conversion arm carries (proof irrelevance and eta cannot occur in a whnf trace; the Nat literal and structure-eta majors, the let-local zeta, Quot and K-like majors can, and are carried) and every fold a derived lemma carries (the E4d native Nat / Int folds of the specification world's canonical heads) reaches this premise through kernel_accepts_tc_in_sound unchanged; the families left are exactly the MISSING conv-* rows. String literal expansion LEFT this residual on 2026-09-29 (E4 String): it is the lit_string_expand rule of KernelAcceptsTcIn, so a whnf trace that expands a String literal (a literal major or projection subject inside the whnf of an inferred type) reaches this premise as a conversion of the same family, like the Nat literal and K-like majors. The family left is exactly conv-native-reducers: conv-monad-reduce left the deployed path when clean main 07af1999b (2026-09-29) deleted the kernel's by-name monad hook and made Pure.pure / Bind.bind instance projections, so its rewrites are ordinary delta / proj / beta / iota steps (row removed at the train-clean-1 merge, 2026-10-14).",
+      "path": {
+        "taken": true,
+        "rank": 18,
+        "why": "The inference-side face of the two remaining MISSING conv-* families (native reducers without a derived lemma, monad reduction): taken exactly when one of them occurs inside the whnf of an inferred type (infer_type_fast_inner's Pi/Sort/App exposure)."
+      }
+    },
+    {
+      "id": "infer-type-cache",
+      "family": "type_cache hit for closed terms (keyed by env hash and mode hash incl. infer_only)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "try_get_cached_type",
+        "line": 326,
+        "anchor": "cache.get(e).cloned()"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": ""
+    },
+    {
+      "id": "infer-arc-memo",
+      "family": "infer_arc_memo hit (keyed by Arc address, infer_only, last context id)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_fast_arc",
+        "line": 339,
+        "anchor": "if let Some((_pin, ty, _cert)) = self.infer_arc_memo.borrow().get(&key) {"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": "Pointer-keyed: needs liveness/ABA as well as answer soundness."
+    },
+    {
+      "id": "infer-quick-infer-cache",
+      "family": "quick_infer_cache hit",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs",
+        "fn": "try_infer_type_quick",
+        "line": 126,
+        "anchor": "if let Some(cached) = self.quick_infer_cache.borrow_mut().get(e) {"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "For example, a cache invariant must establish that every cached answer is a",
+        "line": 210
+      },
+      "exclusion": "cache_invariant",
+      "note": ""
+    },
+    {
+      "id": "infer-only-subinference",
+      "family": "infer-only inference used INSIDE conversion and projection typing (infer_type_infer_only, try_infer_type_quick)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type_infer_only",
+        "line": 268,
+        "anchor": "self.infer_only.set(true);"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "`infer_type` runs in infer-only mode and deliberately skips some checks.",
+        "line": 124
+      },
+      "exclusion": "infer_only_conditional",
+      "note": "Consumed by the typed-conversion arms of KernelAcceptsTcIn (proof_irrel, eta, unit_like, struct_eta; also K, still MISSING) and by projection typing. Those arms take CHECK-mode derivations of their subjects; that the deployed infer-only inference returns the same type on every subject that reaches is_def_eq is this obligation."
+    },
+    {
+      "id": "infer-debug-body",
+      "family": "debug infer_type (certificate construction)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_type@debug",
+        "line": 165,
+        "anchor": "let (ty, _cert) = self.infer_type_with_cert(e)?;"
+      },
+      "spec": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "kind": "text",
+        "anchor": "This release body is the deployed behavior.",
+        "line": 234
+      },
+      "exclusion": "release_build",
+      "note": ""
+    },
+    {
+      "id": "infer-check-type",
+      "family": "check_type: infer in check mode, then is_le against the expected type",
+      "context": "inference",
+      "class": "covered",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "check_type",
+        "line": 822,
+        "anchor": "if self.is_le(&inferred, expected) {"
+      },
+      "spec": {
+        "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+        "kind": "ctor",
+        "anchor": "TypingCtxConvIn.conv",
+        "line": 39,
+        "relation": "TypingCtxConvIn"
+      },
+      "via": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/acceptance_in.rs",
+          "kind": "decl",
+          "anchor": "kernel_infers_in_sound",
+          "line": 119
+        }
+      ],
+      "note": "KernelInfersIn for the inner inference (infer_only pinned false) composed by kernel_infers_in_sound, then conversion to the expected type."
+    },
+    {
+      "id": "infer-sort-admission",
+      "family": "infer_sort / ctor_field_sort_levels (a 'sort' for type formers, imax over Pi)",
+      "context": "inference",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/infer.rs",
+        "fn": "infer_sort_inner",
+        "line": 936,
+        "anchor": "Ok(self.level_imax(arg_level, body_level))"
+      },
+      "spec": {
+        "file": "docs/plans/SELF_VERIFICATION_RUST_LEAN_PLAN_2026-09-22.md",
+        "kind": "text",
+        "anchor": "### Milestone 3",
+        "line": 181
+      },
+      "exclusion": "scope_admission",
+      "note": ""
+    },
+    {
+      "id": "whnf-transparency-api",
+      "family": "whnf_with_transparency and the WithTransparency mode",
+      "context": "conversion",
+      "class": "excluded",
+      "deployed": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "fn": "whnf_core_inner",
+        "line": 550,
+        "anchor": "match self.env.unfold_with_transparency(name, levels, tm) {"
+      },
+      "spec": {
+        "file": "crates/clean-kernel/src/tc/whnf.rs",
+        "kind": "text",
+        "anchor": "pub fn whnf_with_transparency(&self, e: &Expr, mode: TransparencyMode) -> Expr {",
+        "line": 404
+      },
+      "exclusion": "scope_elaborator_api",
+      "note": ""
+    }
+  ],
+  "sites": {
+    "crates/clean-kernel/src/tc/branch_sharing.rs::as_recursor_app": {
+      "ExprKind::Const": "conv-branch-sharing",
+      "env.get_recursor()": "conv-branch-sharing"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::branch_sharing_compare": {
+      "self.branch_sharing_cache": "conv-branch-sharing-cache",
+      "self.branch_sharing_whnf()": "plumbing:call",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.max_cache_entries": "plumbing:config",
+      "std::ptr::eq()": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::branch_sharing_compare_lambdas": {
+      "peel_matching_lambdas()": "conv-binding-lam",
+      "self.branch_sharing_compare()": "plumbing:call",
+      "self.compare_lambda_binder_types()": "plumbing:call",
+      "self.heads_are_same_const()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::branch_sharing_whnf": {
+      "self.branch_sharing_cache": "conv-branch-sharing-cache",
+      "self.max_cache_entries": "plumbing:config",
+      "self.whnf_core_no_delta()": "plumbing:call",
+      "self.with_branch_sharing_cache()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::clear": {
+      "self.entries": "conv-branch-sharing-cache",
+      "self.verified_pairs": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::compare_arg_range": {
+      "self.branch_sharing_compare()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::compare_lambda_binder_types": {
+      "ExprKind::Lam": "conv-binding-lam",
+      "self.branch_sharing_compare()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::compare_minors_range": {
+      "self.branch_sharing_compare_lambdas()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::get": {
+      "crate::work_meter::charge()": "plumbing:heartbeat",
+      "self.entries": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::insert": {
+      "crate::work_meter::charge()": "plumbing:heartbeat",
+      "self.entries": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::is_verified_pair": {
+      "self.verified_pairs": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::len": {
+      "self.entries": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::peel_matching_lambdas": {
+      "ExprKind::Lam": "conv-binding-lam"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::record_verified_pair": {
+      "self.verified_pairs": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::try_branch_sharing_def_eq": {
+      "self.as_recursor_app()": "plumbing:call",
+      "self.branch_sharing_compare()": "plumbing:call",
+      "self.compare_arg_range()": "plumbing:call",
+      "self.compare_minors_range()": "plumbing:call",
+      "self.levels_eq()": [
+        "conv-const-levels",
+        "conv-level-eq-override"
+      ]
+    },
+    "crates/clean-kernel/src/tc/branch_sharing.rs::with_branch_sharing_cache": {
+      "f()": "plumbing:construction",
+      "self.branch_sharing_cache": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/config.rs::levels_eq": {
+      "f()": "conv-level-eq-override",
+      "self.level_eq_override": "conv-level-eq-override",
+      "self.levels_equiv_in_theory()": "conv-universe-levels"
+    },
+    "crates/clean-kernel/src/tc/def_eq/binding.rs::is_def_eq_binding": {
+      "ExprKind::Lam": "conv-binding-lam",
+      "ExprKind::Pi": "conv-binding-pi",
+      "self.ctx_len()": "plumbing:context",
+      "self.ctx_push()": "plumbing:context",
+      "self.ctx_truncate_to()": "plumbing:context",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.open_bvar()": "plumbing:context",
+      "std::mem::discriminant()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::args_failed_before": {
+      "self.args_failure_cache": "plumbing:narrowing",
+      "self.transparency": "plumbing:config"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::cache_args_failure": {
+      "self.args_failure_cache": "plumbing:narrowing",
+      "self.max_cache_entries": "plumbing:config",
+      "self.transparency": "plumbing:config"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::finish_lazy_delta_reduction_step": {
+      "self.quick_is_def_eq()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_proj_reduction": {
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.lazy_delta_reduction_step()": "plumbing:call",
+      "self.reduce_proj_core()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_reduction": {
+      "crate::tc::reduction_stats::record_delta_loop_iter()": "plumbing:stats",
+      "self.eager_reduce": "conv-native-nat",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.is_def_eq_offset()": "conv-nat-offset",
+      "self.lazy_delta_reduction_step()": "plumbing:call",
+      "self.reduce_nat()": "conv-native-nat",
+      "self.reduce_native()": "conv-native-reducers"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_reduction_step": {
+      "self.finish_lazy_delta_reduction_step()": "plumbing:call",
+      "self.get_delta_const()": "conv-delta",
+      "self.lazy_delta_step_both()": "plumbing:call",
+      "self.lazy_delta_step_left_only()": "plumbing:call",
+      "self.lazy_delta_step_no_consts()": "plumbing:call",
+      "self.lazy_delta_step_right_only()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_step_both": {
+      "self.lazy_delta_step_equal()": "plumbing:call",
+      "self.transparency": "plumbing:config",
+      "self.try_unfold_const_in_place()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_step_equal": {
+      "self.args_failed_before()": "plumbing:narrowing",
+      "self.cache_args_failure()": "plumbing:narrowing",
+      "self.is_def_eq_args_only()": "plumbing:call",
+      "self.transparency": "plumbing:config",
+      "self.try_unfold_const_in_place()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_step_left_only": {
+      "self.transparency": "plumbing:config",
+      "self.try_unfold_const_in_place()": "plumbing:call",
+      "self.try_unfold_proj_app()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_step_no_consts": {},
+    "crates/clean-kernel/src/tc/def_eq/delta.rs::lazy_delta_step_right_only": {
+      "self.transparency": "plumbing:config",
+      "self.try_unfold_const_in_place()": "plumbing:call",
+      "self.try_unfold_proj_app()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::extract_bool_value": {
+      "ExprKind::Const": "conv-native-reducers"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::extract_nat_value": {
+      "ExprKind::Const": "conv-native-reducers",
+      "ExprKind::Lit": "conv-native-reducers"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::get_delta_const": {
+      "ExprKind::Const": "conv-delta",
+      "env.get_const()": "conv-delta",
+      "self.native_nat_binop_grind_stuck()": "plumbing:narrowing"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::is_def_eq_args_only": {
+      "ExprKind::Const": [
+        "conv-const-levels",
+        "conv-app-congruence"
+      ],
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.levels_eq()": [
+        "conv-const-levels",
+        "conv-level-eq-override"
+      ]
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::reduce_native": {
+      "ExprKind::App": "conv-native-reducers",
+      "ExprKind::Const": "conv-native-reducers",
+      "ExprKind::Lit": "conv-native-reducers",
+      "Self::reapply_native_surplus()": "conv-native-reducers",
+      "reapply()": "conv-native-reducers",
+      "reducer()": "conv-native-reducers",
+      "self.hardwired_fold_admitted()": "plumbing:narrowing",
+      "self.native_reducer_for()": "conv-native-reducers",
+      "self.native_reducer_spine()": "conv-native-reducers",
+      "self.try_reduce_bool()": "plumbing:call",
+      "self.try_reduce_nat_ext()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call",
+      "wrapper_cmp_needs_operand_whnf()": "conv-native-reducers"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::reduce_proj_core": {
+      "ExprKind::Const": "conv-proj-iota",
+      "ExprKind::Lit": "conv-proj-iota-string-literal",
+      "env.get_constructor()": "conv-proj-iota",
+      "self.string_literal_admitted()": "plumbing:narrowing",
+      "self.whnf_impl()": "conv-proj-iota-string-literal",
+      "string_lit_to_constructor()": "conv-proj-iota-string-literal"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::replace_head_const": {},
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::try_reduce_bool": {
+      "ExprKind::Const": "conv-native-reducers",
+      "Self::extract_bool_value()": "plumbing:call",
+      "self.unfold_definition_cached()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::try_reduce_nat_ext": {
+      "ExprKind::Const": "conv-native-reducers",
+      "Self::extract_nat_value()": "plumbing:call",
+      "self.unfold_definition_cached()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::try_unfold_const_in_place": {
+      "self.reducibility_gate_blocks()": "plumbing:narrowing",
+      "self.replace_head_const()": "plumbing:call",
+      "self.unfold_definition_cached()": "plumbing:call",
+      "self.whnf_core_no_delta()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::try_unfold_proj_app": {
+      "self.whnf_core_no_delta()": "conv-proj-iota"
+    },
+    "crates/clean-kernel/src/tc/def_eq/delta_helpers.rs::wrapper_cmp_needs_operand_whnf": {},
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::all_fvars_in_context": {
+      "ExprKind::App": "plumbing:narrowing",
+      "ExprKind::BVar": "plumbing:narrowing",
+      "ExprKind::Const": "plumbing:narrowing",
+      "ExprKind::CubicalCoe": "plumbing:narrowing",
+      "ExprKind::CubicalHComp": "plumbing:narrowing",
+      "ExprKind::CubicalI0": "plumbing:narrowing",
+      "ExprKind::CubicalI1": "plumbing:narrowing",
+      "ExprKind::CubicalInterval": "plumbing:narrowing",
+      "ExprKind::CubicalPath": "plumbing:narrowing",
+      "ExprKind::CubicalPathApp": "plumbing:narrowing",
+      "ExprKind::CubicalPathLam": "plumbing:narrowing",
+      "ExprKind::CubicalTransp": "plumbing:narrowing",
+      "ExprKind::FVar": "plumbing:narrowing",
+      "ExprKind::Lam": "plumbing:narrowing",
+      "ExprKind::Let": "plumbing:narrowing",
+      "ExprKind::Lit": "plumbing:narrowing",
+      "ExprKind::MData": "plumbing:narrowing",
+      "ExprKind::Pi": "plumbing:narrowing",
+      "ExprKind::Proj": "plumbing:narrowing",
+      "ExprKind::SProp": "plumbing:narrowing",
+      "ExprKind::Sort": "plumbing:narrowing",
+      "ExprKind::Squash": "plumbing:narrowing",
+      "ExprKind::ZFCComprehension": "plumbing:narrowing",
+      "ExprKind::ZFCMem": "plumbing:narrowing",
+      "ExprKind::ZFCSet": "plumbing:narrowing",
+      "crate::work_meter::charge()": "plumbing:heartbeat",
+      "self.ctx": "plumbing:narrowing"
+    },
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::is_bool_true_const": {
+      "ExprKind::Const": "conv-bool-true-reflection"
+    },
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::is_def_eq": {
+      "self.begin_operation()": "plumbing:narrowing",
+      "self.equiv_manager": "conv-equiv-manager",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.level_sharing_recorded()": "plumbing:narrowing",
+      "self.max_cache_entries": "plumbing:config"
+    },
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::is_def_eq_core": {
+      "ExprKind::Const": "conv-const-levels",
+      "ExprKind::FVar": "conv-fvar-eq",
+      "ExprKind::Proj": [
+        "conv-proj-field-name-blind",
+        "conv-proj-congruence-name-blind"
+      ],
+      "crate::tc::reduction_stats::record_core_pair()": "plumbing:stats",
+      "crate::tc::reduction_stats::record_proof_irrel()": "plumbing:stats",
+      "is_bool_true_const()": "conv-bool-true-reflection",
+      "self.eager_reduce": "conv-bool-true-reflection",
+      "self.heartbeat_exhausted()": "plumbing:heartbeat",
+      "self.inc_heartbeat_def_eq()": "plumbing:heartbeat",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.is_def_eq_proof_irrel()": "conv-proof-irrelevance",
+      "self.is_def_eq_structural()": "plumbing:call",
+      "self.is_def_eq_unit_like()": "conv-unit-like",
+      "self.lazy_delta_proj_reduction()": [
+        "conv-proj-field-name-blind",
+        "conv-proj-congruence-name-blind"
+      ],
+      "self.lazy_delta_reduction()": "plumbing:call",
+      "self.levels_eq()": [
+        "conv-universe-levels",
+        "conv-const-levels",
+        "conv-level-eq-override"
+      ],
+      "self.quick_is_def_eq()": "plumbing:call",
+      "self.try_branch_sharing_def_eq()": "conv-branch-sharing",
+      "self.try_string_lit_expansion()": "conv-string-literal-expansion",
+      "self.whnf()": "conv-bool-true-reflection",
+      "self.whnf_core_no_delta()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::is_def_eq_impl": {
+      "self.is_def_eq_inner()": "plumbing:call",
+      "self.metered_scope()": "plumbing:heartbeat",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::is_def_eq_inner": {
+      "crate::tc::reduction_stats::record_defeq_cache()": "plumbing:stats",
+      "self.all_fvars_in_context()": "plumbing:narrowing",
+      "self.def_eq_cache": "conv-defeq-cache",
+      "self.equiv_manager": "conv-equiv-manager",
+      "self.is_def_eq_core()": "plumbing:call",
+      "self.max_cache_entries": "plumbing:config",
+      "self.transparency": "plumbing:config",
+      "std::ptr::eq()": "conv-refl-syntactic"
+    },
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::is_le": {
+      "ExprKind::Pi": "conv-cumulative",
+      "ExprKind::Sort": "conv-cumulative",
+      "self.ctx_len()": "plumbing:context",
+      "self.ctx_push()": "plumbing:context",
+      "self.ctx_truncate_to()": "plumbing:context",
+      "self.cumulative": "conv-cumulative",
+      "self.is_def_eq()": "plumbing:call",
+      "self.is_le()": "conv-cumulative",
+      "self.is_le_template_inductive()": "conv-cumulative",
+      "self.metered_scope()": "plumbing:heartbeat",
+      "self.open_bvar()": "plumbing:context",
+      "self.whnf()": "conv-cumulative",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::quick_is_def_eq": {
+      "ExprKind::Lam": "conv-binding-lam",
+      "ExprKind::Lit": "conv-literal-eq",
+      "ExprKind::MData": "conv-mdata-erasure",
+      "ExprKind::Pi": "conv-binding-pi",
+      "ExprKind::Sort": "conv-universe-levels",
+      "ExprKind::Squash": "conv-squash",
+      "self.equiv_manager": "conv-equiv-manager",
+      "self.is_def_eq_binding()": "plumbing:call",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.levels_eq()": [
+        "conv-universe-levels",
+        "conv-level-eq-override"
+      ]
+    },
+    "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs::infer_type_quick_or_full": {
+      "self.infer_type_infer_only()": "infer-only-subinference",
+      "self.try_infer_type_quick()": "infer-only-subinference"
+    },
+    "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs::is_def_eq_proof_irrel": {
+      "self.infer_type_quick_or_full()": "infer-only-subinference",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.mode": "plumbing:narrowing",
+      "self.type_is_proof_irrelevant()": "conv-proof-irrelevance",
+      "self.type_is_quickly_not_in_prop()": "plumbing:narrowing"
+    },
+    "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs::try_infer_type_quick": {
+      "self.max_cache_entries": "plumbing:config",
+      "self.quick_infer_cache": "infer-quick-infer-cache",
+      "self.try_infer_type_quick_inner()": "plumbing:call",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs::try_infer_type_quick_inner": {
+      "ExprKind::App": "infer-only-subinference",
+      "ExprKind::Const": "infer-only-subinference",
+      "ExprKind::FVar": "infer-only-subinference",
+      "ExprKind::Lam": "infer-only-subinference",
+      "ExprKind::Lit": "infer-only-subinference",
+      "ExprKind::MData": "infer-only-subinference",
+      "ExprKind::Pi": "infer-only-subinference",
+      "ExprKind::Proj": "infer-only-subinference",
+      "ExprKind::SProp": "infer-extended-nodes",
+      "ExprKind::Sort": "infer-only-subinference",
+      "ExprKind::Squash": "infer-extended-nodes",
+      "Level::succ": "infer-only-subinference",
+      "crate::tc::infer::infer_literal_type()": [
+        "infer-lit-nat",
+        "infer-lit-string"
+      ],
+      "self.ctx": "infer-only-subinference",
+      "self.infer_proj_type_from_quick()": "infer-proj",
+      "self.instantiate_type_in_theory()": "infer-only-subinference",
+      "self.mode": "infer-extended-nodes",
+      "self.try_infer_type_quick()": "infer-only-subinference",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs::type_is_proof_irrelevant": {
+      "ExprKind::SProp": "conv-proof-irrelevance",
+      "ExprKind::Sort": "conv-proof-irrelevance",
+      "self.infer_type_quick_or_full()": "infer-only-subinference",
+      "self.whnf_impl()": "conv-proof-irrelevance"
+    },
+    "crates/clean-kernel/src/tc/def_eq/proof_irrel.rs::type_is_quickly_not_in_prop": {
+      "ExprKind::Const": "plumbing:narrowing",
+      "ExprKind::Sort": "plumbing:narrowing"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::heads_are_same_const": {
+      "ExprKind::Const": "conv-branch-sharing-cache"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::is_def_eq_app_spine": {
+      "ExprKind::Const": "conv-app-congruence",
+      "env.get_recursor()": "conv-app-congruence",
+      "self.branch_sharing_cache": "conv-branch-sharing-cache",
+      "self.branch_sharing_compare()": "plumbing:call",
+      "self.heads_are_same_const()": "plumbing:call",
+      "self.is_def_eq_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::is_def_eq_structural": {
+      "ExprKind::App": "conv-app-congruence",
+      "ExprKind::BVar": "conv-bvar-eq",
+      "ExprKind::Const": "conv-const-levels",
+      "ExprKind::FVar": "conv-fvar-eq",
+      "ExprKind::Lam": [
+        "conv-binding-lam",
+        "conv-eta-lambda"
+      ],
+      "ExprKind::Lit": "conv-literal-eq",
+      "ExprKind::Pi": "conv-binding-pi",
+      "ExprKind::Proj": "conv-proj-congruence",
+      "ExprKind::Sort": "conv-universe-levels",
+      "self.is_def_eq_app_spine()": "plumbing:call",
+      "self.is_def_eq_binding()": "plumbing:call",
+      "self.is_def_eq_cubical()": "conv-cubical-directed",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.levels_eq()": [
+        "conv-universe-levels",
+        "conv-const-levels",
+        "conv-level-eq-override"
+      ],
+      "self.try_eta_expansion_impl()": "conv-eta-lambda",
+      "self.try_structure_eta_expansion()": "conv-eta-struct"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::is_def_eq_unit_like": {
+      "ExprKind::Const": "conv-unit-like",
+      "env.get_constructor()": "conv-unit-like",
+      "env.get_inductive()": "conv-unit-like",
+      "self.infer_type_infer_only()": "conv-unit-like",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.is_structure_like()": "plumbing:call",
+      "self.try_infer_type_quick()": "conv-unit-like",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::try_string_lit_expansion": {
+      "self.try_string_lit_expansion_core()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::try_string_lit_expansion_core": {
+      "ExprKind::Const": "conv-string-literal-expansion",
+      "ExprKind::Lit": "conv-string-literal-expansion",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.string_literal_admitted()": "plumbing:narrowing",
+      "self.whnf_impl()": "plumbing:call",
+      "string_lit_to_constructor()": "conv-string-literal-expansion"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::try_structure_eta_core": {
+      "ExprKind::Const": "conv-eta-struct",
+      "env.get_constructor()": "conv-eta-struct",
+      "self.infer_type_infer_only()": "conv-eta-struct",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.is_structure_like()": "plumbing:call",
+      "self.try_infer_type_quick()": "conv-eta-struct",
+      "self.whnf_impl()": "conv-eta-struct"
+    },
+    "crates/clean-kernel/src/tc/def_eq/structural.rs::try_structure_eta_expansion": {
+      "self.try_structure_eta_core()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/eta.rs::expand_eta_struct": {
+      "ExprKind::Const": "conv-iota-major-struct-eta",
+      "env.get_constructor()": "conv-iota-major-struct-eta",
+      "env.get_inductive()": "conv-iota-major-struct-eta"
+    },
+    "crates/clean-kernel/src/tc/eta.rs::is_constructor_app": {
+      "ExprKind::Const": [
+        "conv-iota-major-struct-eta",
+        "conv-iota-k-like"
+      ],
+      "env.get_constructor()": [
+        "conv-iota-major-struct-eta",
+        "conv-iota-k-like"
+      ]
+    },
+    "crates/clean-kernel/src/tc/eta.rs::is_structure_like": {
+      "env.get_inductive()": [
+        "conv-eta-struct",
+        "conv-unit-like",
+        "conv-iota-major-struct-eta"
+      ]
+    },
+    "crates/clean-kernel/src/tc/eta.rs::open_bvar": {
+      "ExprKind::FVar": "plumbing:context"
+    },
+    "crates/clean-kernel/src/tc/eta.rs::try_eta_expansion_impl": {
+      "ExprKind::Pi": "conv-eta-lambda",
+      "self.infer_type_infer_only()": "conv-eta-lambda",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.try_infer_type_quick()": "conv-eta-lambda",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/eta.rs::try_eta_struct": {
+      "self.infer_type_infer_only()": "conv-iota-major-struct-eta",
+      "self.is_constructor_app()": "plumbing:call",
+      "self.is_structure_like()": "plumbing:call",
+      "self.try_eta_struct_core()": "plumbing:call",
+      "self.try_infer_type_quick()": "conv-iota-major-struct-eta",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/eta.rs::try_eta_struct_core": {
+      "ExprKind::Const": "conv-iota-major-struct-eta",
+      "self.expand_eta_struct()": "plumbing:call",
+      "self.is_prop()": "conv-iota-major-struct-eta"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::cache_type_result": {
+      "self.type_cache": "infer-type-cache"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::check_level": {
+      "Level::IMax": "plumbing:rejects",
+      "Level::Max": "plumbing:rejects",
+      "Level::Param": "plumbing:rejects",
+      "Level::Succ": "plumbing:rejects",
+      "Level::Zero": "plumbing:rejects",
+      "self.level_params": "plumbing:rejects"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::check_type": {
+      "self.expr_loc_snapshot()": "plumbing:location",
+      "self.infer_only": "infer-check-type",
+      "self.infer_type()": "plumbing:call",
+      "self.is_le()": "infer-check-type",
+      "self.metered_scope()": "plumbing:heartbeat",
+      "self.tick_heartbeat()": "plumbing:heartbeat"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::ctor_field_sort_levels": {
+      "self.ctor_field_sorts_with()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::ctor_field_sort_levels_infer_only": {
+      "self.ctor_field_sorts_with()": "infer-sort-admission",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::ctor_field_sorts_with": {
+      "ExprKind::Pi": "infer-sort-admission",
+      "self.ctx_pop()": "plumbing:context",
+      "self.ctx_push()": "plumbing:context",
+      "self.open_bvar()": "plumbing:context",
+      "sort_of()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_literal_type": {},
+    "crates/clean-kernel/src/tc/infer.rs::infer_sort": {
+      "self.infer_only": "infer-sort-admission",
+      "self.infer_sort_inner()": "plumbing:call",
+      "self.metered_scope()": "plumbing:heartbeat",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_sort_inner": {
+      "ExprKind::Pi": "infer-sort-admission",
+      "ExprKind::SProp": "infer-sort-admission",
+      "ExprKind::Sort": "infer-sort-admission",
+      "Level::zero": "infer-sort-admission",
+      "self.ctx_pop()": "plumbing:context",
+      "self.ctx_push()": "plumbing:context",
+      "self.expr_loc_snapshot()": "plumbing:location",
+      "self.infer_sort_inner()": "plumbing:call",
+      "self.infer_type()": "plumbing:call",
+      "self.level_imax()": "infer-sort-admission",
+      "self.open_bvar()": "plumbing:context",
+      "self.whnf()": "plumbing:call",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type@debug": {
+      "ExprKind::SProp": "infer-debug-body",
+      "ExprKind::Sort": "infer-debug-body",
+      "self.begin_operation()": "plumbing:narrowing",
+      "self.in_infer_type_assert": "infer-debug-body",
+      "self.infer_type()": "plumbing:call",
+      "self.infer_type_with_cert()": "infer-debug-body",
+      "self.tick_heartbeat()": "plumbing:heartbeat",
+      "self.whnf()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type@release": {
+      "self.begin_operation()": "plumbing:narrowing",
+      "self.infer_type_fast()": "plumbing:call",
+      "self.tick_heartbeat()": "plumbing:heartbeat"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type_fast": {
+      "self.cache_type_result()": "plumbing:call",
+      "self.ctx": "infer-type-cache",
+      "self.infer_type_fast_impl()": "plumbing:call",
+      "self.try_get_cached_type()": "plumbing:call",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type_fast_arc": {
+      "self.infer_arc_memo": "infer-arc-memo",
+      "self.infer_arc_memo_key()": "infer-arc-memo",
+      "self.infer_memo_depth": "infer-arc-memo",
+      "self.infer_type_fast_impl()": "plumbing:call",
+      "self.max_cache_entries": "plumbing:config",
+      "work_stats::record_arc()": "plumbing:stats"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type_fast_impl": {
+      "self.infer_arc_memo": "infer-arc-memo",
+      "self.infer_memo_depth": "infer-arc-memo",
+      "self.infer_type_fast_inner()": "plumbing:call",
+      "self.rebind_closed_memo": "infer-arc-memo",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type_fast_inner": {
+      "ExprKind::App": "infer-app",
+      "ExprKind::BVar": "plumbing:rejects",
+      "ExprKind::Const": "infer-const",
+      "ExprKind::CubicalCoe": "infer-extended-nodes",
+      "ExprKind::CubicalHComp": "infer-extended-nodes",
+      "ExprKind::CubicalI0": "infer-extended-nodes",
+      "ExprKind::CubicalI1": "infer-extended-nodes",
+      "ExprKind::CubicalInterval": "infer-extended-nodes",
+      "ExprKind::CubicalPath": "infer-extended-nodes",
+      "ExprKind::CubicalPathApp": "infer-extended-nodes",
+      "ExprKind::CubicalPathLam": "infer-extended-nodes",
+      "ExprKind::CubicalTransp": "infer-extended-nodes",
+      "ExprKind::FVar": "infer-fvar",
+      "ExprKind::Lam": "infer-lam",
+      "ExprKind::Let": "infer-let",
+      "ExprKind::Lit": [
+        "infer-lit-nat",
+        "infer-lit-string"
+      ],
+      "ExprKind::MData": "infer-mdata",
+      "ExprKind::Pi": [
+        "infer-pi-smart-imax",
+        "infer-app"
+      ],
+      "ExprKind::Proj": "infer-proj",
+      "ExprKind::SProp": "infer-extended-nodes",
+      "ExprKind::Sort": [
+        "infer-sort",
+        "infer-pi-smart-imax",
+        "infer-lam",
+        "infer-let"
+      ],
+      "ExprKind::Squash": "infer-extended-nodes",
+      "ExprKind::ZFCComprehension": "infer-extended-nodes",
+      "ExprKind::ZFCMem": "infer-extended-nodes",
+      "ExprKind::ZFCSet": "infer-extended-nodes",
+      "Level::succ": "infer-sort",
+      "env.get_const()": "infer-const",
+      "env.is_partial()": "plumbing:rejects",
+      "env.is_unsafe()": "plumbing:rejects",
+      "infer_literal_type()": [
+        "infer-lit-nat",
+        "infer-lit-string"
+      ],
+      "is_eager_reduce()": [
+        "conv-native-nat",
+        "conv-bool-true-reflection"
+      ],
+      "self.allow_partial": "plumbing:rejects",
+      "self.allow_unsafe": "plumbing:rejects",
+      "self.check_level()": "plumbing:rejects",
+      "self.ctx": "infer-fvar",
+      "self.ctx_pop()": "plumbing:context",
+      "self.ctx_push()": "plumbing:context",
+      "self.ctx_push_let()": [
+        "infer-let",
+        "conv-let-fvar-zeta"
+      ],
+      "self.eager_reduce": [
+        "conv-native-nat",
+        "conv-bool-true-reflection"
+      ],
+      "self.expr_loc_pop()": "plumbing:location",
+      "self.expr_loc_push()": "plumbing:location",
+      "self.expr_loc_snapshot_at()": "plumbing:location",
+      "self.infer_cubical_coe()": "infer-extended-nodes",
+      "self.infer_cubical_endpoint()": "infer-extended-nodes",
+      "self.infer_cubical_hcomp()": "infer-extended-nodes",
+      "self.infer_cubical_interval()": "infer-extended-nodes",
+      "self.infer_cubical_path()": "infer-extended-nodes",
+      "self.infer_cubical_path_app()": "infer-extended-nodes",
+      "self.infer_cubical_path_lam()": "infer-extended-nodes",
+      "self.infer_cubical_transp()": "infer-extended-nodes",
+      "self.infer_memo_depth": "plumbing:stats",
+      "self.infer_only": [
+        "infer-app-arg-skipped",
+        "infer-lam-domain-skipped",
+        "infer-let-checks-skipped"
+      ],
+      "self.infer_proj_type()": "infer-proj",
+      "self.infer_sprop()": "infer-extended-nodes",
+      "self.infer_squash()": "infer-extended-nodes",
+      "self.infer_type_fast_arc()": "plumbing:call",
+      "self.infer_type_fast_impl()": "plumbing:call",
+      "self.infer_zfc_comprehension()": "infer-extended-nodes",
+      "self.infer_zfc_mem()": "infer-extended-nodes",
+      "self.infer_zfc_set()": "infer-extended-nodes",
+      "self.instantiate_levels_checked()": "infer-const",
+      "self.is_le()": [
+        "infer-app",
+        "infer-let"
+      ],
+      "self.level_imax()": "infer-pi-smart-imax",
+      "self.open_bvar()": "plumbing:context",
+      "self.tick_heartbeat()": "plumbing:heartbeat",
+      "self.whnf_impl()": [
+        "infer-whnf-premise-core",
+        "infer-whnf-premise-extended",
+        "infer-whnf-premise-residual"
+      ],
+      "work_stats::record_operation()": "plumbing:stats",
+      "work_stats::record_visit()": "plumbing:stats"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type_full": {
+      "self.infer_only": "plumbing:config",
+      "self.infer_type()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::infer_type_infer_only": {
+      "self.infer_only": "infer-only-subinference",
+      "self.infer_type()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::is_eager_reduce": {
+      "ExprKind::Const": "conv-native-nat"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::pi_domain_body_quick": {
+      "ExprKind::Pi": "infer-proj",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer.rs::try_get_cached_type": {
+      "self.compute_env_hash()": "infer-type-cache",
+      "self.compute_mode_hash()": "infer-type-cache",
+      "self.type_cache": "infer-type-cache"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::cache_projection_field_types_non_prop": {
+      "self.max_cache_entries": "plumbing:config",
+      "self.pi_domain_body_quick()": "plumbing:call",
+      "self.proj_type_cache": "infer-proj-type-cache"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::cache_projection_field_types_prop": {
+      "self.is_prop()": "plumbing:call",
+      "self.max_cache_entries": "plumbing:config",
+      "self.pi_domain_body_quick()": "plumbing:call",
+      "self.proj_type_cache": "infer-proj-type-cache"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::ensure_sort_is_prop": {
+      "ExprKind::SProp": "infer-proj",
+      "ExprKind::Sort": "infer-proj",
+      "self.expr_loc_snapshot()": "plumbing:location",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::infer_proj_type": {
+      "self.infer_proj_type_from()": "plumbing:call",
+      "self.infer_type_fast_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::infer_proj_type_from": {
+      "self.infer_proj_type_from_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::infer_proj_type_from_impl": {
+      "ExprKind::Const": "infer-proj",
+      "env.get_constructor()": "infer-proj",
+      "env.get_inductive()": "infer-proj",
+      "self.cache_projection_field_types_non_prop()": "plumbing:call",
+      "self.cache_projection_field_types_prop()": "plumbing:call",
+      "self.instantiate_levels_checked()": "infer-proj",
+      "self.instantiate_params()": "plumbing:call",
+      "self.is_prop()": "plumbing:call",
+      "self.proj_type_cache": "infer-proj-type-cache",
+      "self.walk_prop_telescope_to_idx()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::infer_proj_type_from_quick": {
+      "self.infer_proj_type_from_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::instantiate_params": {
+      "ExprKind::Pi": [
+        "infer-proj",
+        "infer-proj-param-premature-stop"
+      ],
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::is_prop": {
+      "self.ensure_sort_is_prop()": "plumbing:call",
+      "self.infer_type_infer_only()": [
+        "infer-proj",
+        "infer-only-subinference"
+      ],
+      "self.try_infer_type_quick()": [
+        "infer-proj",
+        "infer-only-subinference"
+      ],
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/infer_proj.rs::walk_prop_telescope_to_idx": {
+      "self.pi_domain_body_quick()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/reduction/mod.rs::rebuild_recursor_hcomp_system": {
+      "ExprKind::Const": "conv-cubical-directed",
+      "ExprKind::CubicalInterval": "conv-cubical-directed",
+      "interval()": "conv-cubical-directed",
+      "self.cubical_layer_admitted()": "plumbing:narrowing",
+      "self.rebuild_recursor_hcomp_system()": "plumbing:call",
+      "self.whnf_core_no_delta()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/reduction/mod.rs::try_iota_reduction": {
+      "ExprKind::Const": "conv-iota-head",
+      "ExprKind::CubicalHComp": "conv-cubical-directed",
+      "ExprKind::CubicalPath": "conv-cubical-directed",
+      "ExprKind::CubicalPathApp": "conv-cubical-directed",
+      "ExprKind::Lit": [
+        "conv-iota-major-literal",
+        "conv-iota-major-string-literal"
+      ],
+      "Literal::Nat": "conv-iota-major-literal",
+      "Literal::String": "conv-iota-major-string-literal",
+      "crate::tc::reduction_stats::record_iota_grind()": "plumbing:stats",
+      "crate::tc::reduction_stats::record_iota_with_witness()": "plumbing:stats",
+      "env.get_const()": "plumbing:narrowing",
+      "env.get_constructor()": "conv-iota-head",
+      "env.get_recursor()": "conv-iota-head",
+      "get_return_type()": "conv-cubical-directed",
+      "nat::nat_lit_to_constructor()": "conv-iota-major-literal",
+      "self.instantiate_levels_or_record()": "conv-iota-head",
+      "self.kernel_theory()": "plumbing:narrowing",
+      "self.nat_literal_admitted()": "plumbing:narrowing",
+      "self.native_closed_fold_grind_stuck()": "plumbing:narrowing",
+      "self.reduce_int_pred_fold()": "conv-native-int",
+      "self.reduce_path_app_endpoint()": "conv-cubical-directed",
+      "self.string_literal_admitted()": "plumbing:narrowing",
+      "self.try_eta_struct()": "conv-iota-major-struct-eta",
+      "self.try_recursor_over_hcomp()": "conv-cubical-directed",
+      "self.try_to_cnstr_when_k()": "conv-iota-k-like",
+      "self.whnf_core_no_delta()": "conv-iota-major-prepass",
+      "self.whnf_impl()": [
+        "conv-iota-major-prepass",
+        "conv-iota-major-literal",
+        "conv-iota-major-string-literal"
+      ],
+      "string_lit_to_constructor()": "conv-iota-major-string-literal"
+    },
+    "crates/clean-kernel/src/tc/reduction/mod.rs::try_quot_reduction": {
+      "ExprKind::Const": "conv-quot",
+      "crate::quot::try_quot_ind_reduction()": "conv-quot",
+      "crate::quot::try_quot_lift_reduction()": "conv-quot",
+      "env.get_quot()": "plumbing:narrowing",
+      "self.whnf_core_no_delta()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/reduction/mod.rs::try_recursor_over_hcomp": {
+      "ExprKind::CubicalHComp": "conv-cubical-directed",
+      "ExprKind::CubicalI0": "conv-cubical-directed",
+      "ExprKind::Lam": "conv-cubical-directed",
+      "ExprKind::Sort": "conv-cubical-directed",
+      "self.infer_type_infer_only()": "conv-cubical-directed",
+      "self.mode": "conv-cubical-directed",
+      "self.rebuild_recursor_hcomp_system()": "plumbing:call",
+      "self.whnf_core_no_delta()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/reduction/mod.rs::try_to_cnstr_when_k": {
+      "ExprKind::Const": "conv-iota-k-like",
+      "env.get_constructor()": "conv-iota-k-like",
+      "self.infer_type_infer_only()": [
+        "conv-iota-k-like",
+        "infer-only-subinference"
+      ],
+      "self.is_constructor_app()": "plumbing:call",
+      "self.is_def_eq_impl()": "plumbing:call",
+      "self.try_infer_type_quick()": [
+        "conv-iota-k-like",
+        "infer-only-subinference"
+      ],
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::beta_or_iota_step": {
+      "ExprKind::Lam": "conv-beta",
+      "self.native_nat_grind_recursor_stuck()": "plumbing:narrowing",
+      "self.reduce_int()": "conv-native-int",
+      "self.reduce_nat()": "conv-native-nat",
+      "self.reduce_native()": "conv-native-reducers",
+      "self.try_iota_reduction()": "plumbing:call",
+      "self.try_quot_reduction()": "plumbing:call",
+      "self.whnf_recurse()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::reducibility_gate_blocks": {
+      "env.get_const()": "plumbing:narrowing",
+      "env.is_instance()": "plumbing:narrowing",
+      "self.honors_reducibility()": "plumbing:narrowing",
+      "self.transparency()": "plumbing:config"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::try_path_beta_step": {
+      "ExprKind::CubicalPathLam": "conv-cubical-directed",
+      "self.whnf_recurse()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::use_delta_for_iota": {},
+    "crates/clean-kernel/src/tc/whnf.rs::whnf": {
+      "self.ensure_cache_theory()": "plumbing:narrowing",
+      "self.whnf_impl()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::whnf_core_inner": {
+      "ExprKind::App": "plumbing:call",
+      "ExprKind::Const": "conv-delta",
+      "ExprKind::CubicalCoe": "conv-cubical-directed",
+      "ExprKind::CubicalHComp": "conv-cubical-directed",
+      "ExprKind::CubicalPathApp": "conv-cubical-directed",
+      "ExprKind::CubicalTransp": "conv-cubical-directed",
+      "ExprKind::FVar": "conv-let-fvar-zeta",
+      "ExprKind::Let": "conv-zeta",
+      "ExprKind::MData": "conv-mdata-erasure",
+      "ExprKind::Proj": "conv-proj-iota",
+      "Self::beta_or_iota_step()": "plumbing:call",
+      "crate::tc::reduction_stats::record_binop_unfold()": "plumbing:stats",
+      "env.unfold_with_transparency()": "whnf-transparency-api",
+      "self.ctx": "conv-let-fvar-zeta",
+      "self.mode": "conv-cubical-directed",
+      "self.native_nat_binop_grind_stuck()": "plumbing:narrowing",
+      "self.reduce_nat()": "conv-native-nat",
+      "self.reduce_native()": "conv-native-reducers",
+      "self.reducibility_gate_blocks()": "plumbing:narrowing",
+      "self.try_coe_reduction()": "conv-cubical-directed",
+      "self.try_directed_reduction()": "conv-cubical-directed",
+      "self.try_glue_reduction()": "conv-cubical-directed",
+      "self.try_hcomp_reduction()": "conv-cubical-directed",
+      "self.try_interval_connection_reduction()": "conv-cubical-directed",
+      "self.try_path_beta_step()": "conv-cubical-directed",
+      "self.try_sigma_reduction()": "conv-cubical-directed",
+      "self.try_transp_reduction()": "conv-cubical-directed",
+      "self.unfold_definition_cached()": "conv-delta",
+      "self.whnf_reduce_proj()": "conv-proj-iota"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::whnf_core_no_delta": {
+      "self.max_cache_entries": "plumbing:config",
+      "self.metered_scope()": "plumbing:heartbeat",
+      "self.whnf_core_cache": "conv-whnf-caches",
+      "self.whnf_core_inner()": "plumbing:call",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::whnf_impl": {
+      "ExprKind::BVar": "conv-refl-syntactic",
+      "ExprKind::FVar": "conv-let-fvar-zeta",
+      "ExprKind::Lam": "conv-refl-syntactic",
+      "ExprKind::Lit": "conv-refl-syntactic",
+      "ExprKind::Pi": "conv-refl-syntactic",
+      "ExprKind::Sort": "conv-refl-syntactic",
+      "self.ctx": "conv-let-fvar-zeta",
+      "self.heartbeat_exhausted()": "plumbing:heartbeat",
+      "self.inc_heartbeat()": "plumbing:heartbeat",
+      "self.metered_scope()": "plumbing:heartbeat",
+      "self.whnf_cache": "conv-whnf-caches",
+      "self.whnf_inner()": "plumbing:call",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::whnf_inner": {
+      "ExprKind::Const": "plumbing:stats",
+      "crate::tc::reduction_stats::record_whnf_cache()": "plumbing:stats",
+      "self.max_cache_entries": "plumbing:config",
+      "self.whnf_cache": "conv-whnf-caches",
+      "self.whnf_outer_loop()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::whnf_with_transparency": {
+      "self.begin_operation()": "plumbing:narrowing",
+      "self.whnf_with_transparency_impl()": "whnf-transparency-api"
+    },
+    "crates/clean-kernel/src/tc/whnf.rs::whnf_with_transparency_impl": {
+      "self.whnf_core_inner()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/whnf_proj.rs::reduce_proj_with_mode": {
+      "ExprKind::Const": "conv-proj-iota",
+      "ExprKind::Lit": "conv-proj-iota-string-literal",
+      "env.get_constructor()": "conv-proj-iota",
+      "self.string_literal_admitted()": "plumbing:narrowing",
+      "self.whnf_impl()": "plumbing:call",
+      "self.whnf_recurse()": "plumbing:call",
+      "self.whnf_with_transparency_impl()": "whnf-transparency-api",
+      "stack_safe()": "plumbing:construction",
+      "string_lit_to_constructor()": "conv-proj-iota-string-literal"
+    },
+    "crates/clean-kernel/src/tc/whnf_proj.rs::try_unfold_definition": {
+      "ExprKind::Const": "conv-delta",
+      "ExprKind::CubicalPathApp": "conv-cubical-directed",
+      "Self::is_guarded_nat_binop_name()": "plumbing:narrowing",
+      "crate::tc::reduction_stats::record_binop_bare_defer()": "plumbing:stats",
+      "self.native_nat_binop_grind_stuck()": "plumbing:narrowing",
+      "self.reducibility_gate_blocks()": "plumbing:narrowing",
+      "self.try_unfold_definition()": "conv-cubical-directed",
+      "self.unfold_definition_cached()": "conv-delta"
+    },
+    "crates/clean-kernel/src/tc/whnf_proj.rs::unfold_definition_cached": {
+      "ExprKind::Const": "conv-delta",
+      "crate::tc::reduction_stats::record_binop_def_unfold()": "plumbing:stats",
+      "crate::tc::reduction_stats::record_unfold()": "plumbing:stats",
+      "self.max_cache_entries": "plumbing:config",
+      "self.unfold_cache": "conv-whnf-caches",
+      "self.unfold_definition_in_theory()": "conv-delta"
+    },
+    "crates/clean-kernel/src/tc/whnf_proj.rs::whnf_outer_loop": {
+      "self.heartbeat_exhausted()": "plumbing:heartbeat",
+      "self.inc_heartbeat()": "plumbing:heartbeat",
+      "self.max_cache_entries": "plumbing:config",
+      "self.reduce_nat()": "conv-native-nat",
+      "self.reduce_native()": "conv-native-reducers",
+      "self.try_unfold_definition()": "plumbing:call",
+      "self.whnf_cache": "conv-whnf-caches",
+      "self.whnf_core_inner()": "plumbing:call"
+    },
+    "crates/clean-kernel/src/tc/whnf_proj.rs::whnf_recurse": {
+      "self.max_cache_entries": "plumbing:config",
+      "self.whnf_core_cache": "conv-whnf-caches",
+      "self.whnf_core_inner()": "plumbing:call",
+      "self.whnf_impl()": "plumbing:call",
+      "self.whnf_with_transparency_impl()": "whnf-transparency-api",
+      "stack_safe()": "plumbing:construction"
+    },
+    "crates/clean-kernel/src/tc/whnf_proj.rs::whnf_reduce_proj": {
+      "self.reduce_proj_with_mode()": "plumbing:call"
+    }
+  },
+  "unscanned": {
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::new": "DefEqCacheKey constructor: canonical ordering of a cache key; its correctness is part of the cache_invariant obligation (conv-defeq-cache).",
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::eq": "DefEqCacheKey unordered-pair equality; part of the cache_invariant obligation.",
+    "crates/clean-kernel/src/tc/def_eq/mod.rs::hash": "DefEqCacheKey commutative hash; a hash collision is resolved by eq, so it decides nothing."
+  }
+}

@@ -1,23 +1,16 @@
 {
   "schema": "clean.script_selftest_quarantine/v1",
-  "purpose": "Suites under scripts/test_* that are KNOWN RED, so scripts/check_script_selftests.sh can be wired without either curating for green or blocking every push. Two rules keep this from becoming an off switch, both fail-closed: an EXPIRED row fails the gate, and a quarantined suite that starts PASSING fails the gate as a stale row. Anything not listed here must pass.",
-  "discovered": "2026-08-22 — the first time anything ran these suites. Twenty self-tests of the repo's own gate and tooling scripts existed with ZERO callers: not scripts/local_gate.sh, not the justfile, not a git hook, not a data/suite_state row. Both rows below were red at 51c893ce5 and nothing reported it.",
+  "purpose": "Suites (every test_* under scripts/, nested directories included) that are KNOWN RED, so scripts/check_script_selftests.sh can be wired without either curating for green or blocking every push. Two rules keep this from becoming an off switch, both fail-closed: an EXPIRED row fails the gate, and a quarantined suite that starts PASSING fails the gate as a stale row. Anything not listed here must pass.",
+  "discovered": "2026-08-22 \u2014 the first time anything ran these suites. Twenty self-tests of the repo's own gate and tooling scripts existed with ZERO callers: not scripts/local_gate.sh, not the justfile, not a git hook, not a data/suite_state row. Two suites were red at 51c893ce5 and nothing reported it: scripts/test_prove_theorem.sh (6 failed) and scripts/test_publish_mathverse_mirror.sh (4 failed). Their rows expired on 2026-10-22 and were deleted on 2026-10-28, when both suites went green with each failing assertion re-derived against its script (docs/DECISIONS.md R190).",
   "quarantined": [
     {
-      "suite": "scripts/test_prove_theorem.sh",
-      "expires": "2026-10-22",
-      "observed": "8 passed, 6 failed at 51c893ce5 (2026-08-22)",
-      "first_red_seen": "2026-08-22",
-      "reason": "Test 7 'Prompt includes post-run git-status audit' and five siblings assert scripts/prove_theorem.sh emits prompt sections that the current script no longer emits. The self-test is asserting an older contract of a tool it does not own. Whoever owns prove_theorem.sh must decide whether the prompt regressed or the assertion is stale; the auditing lane that wired this gate is not that owner and will not guess.",
-      "owner_action": "Re-derive the six failing assertions against the current scripts/prove_theorem.sh prompt, then either fix the script or update the assertions, and delete this row."
-    },
-    {
-      "suite": "scripts/test_publish_mathverse_mirror.sh",
-      "expires": "2026-10-22",
-      "observed": "16 passed, 4 failed at 51c893ce5 (2026-08-22)",
-      "first_red_seen": "2026-08-22",
-      "reason": "Four assertions about dscan.toml's mirror target fail: the self-test expects a mirror stanza the checked-in dscan.toml does not carry. Same class as the row above — the assertion and the artifact disagree and the auditing lane cannot tell which one moved.",
-      "owner_action": "Reconcile dscan.toml against the four mirror-target assertions, then delete this row."
+      "suite": "scripts/test_resource_transport.py",
+      "expires": "2026-12-10",
+      "observed": "Ran 1 test, FAILED (errors=1) at 976f9ec57 (2026-11-10): setUpClass raises `transport regression requires a real maintained native GNU owner`, under both /opt/homebrew/bin/python3.14 and aterm's python3.14",
+      "reason": "The suite (fe3d50943, 2026-11-09) refuses to run unless MAKEFLAGS/CARGO_MAKEFLAGS/MFLAGS carry `--jobserver-auth=`, i.e. unless a maintained GNU make (>= 4.2) jobserver owns the process. This runner launches each suite directly, and this Mac's only make is GNU 3.81, which speaks `--jobserver-fds` only. The suite was qualified green under Trust's native_serial managed executor instead (reports/2026-11-10-python-resource-transport/green-1, green-2), so it has been red in this gate since it landed. The refusal is the suite's design, not a defect this lane may route around: running it without an owner proves nothing about the transport it tests.",
+      "owner_action": "Give the suite a caller that provides a maintained GNU jobserver owner (or teach this runner to launch it under one), then delete this row; the row fails as STALE the moment the suite passes here.",
+      "max_failed": 1,
+      "max_failed_note": "CAP: the one setUpClass error, read as errors=1 by measured_failures. Any further failure is a refusal."
     }
   ]
 }

@@ -1,0 +1,7 @@
+(assume a0 (and (= __trust_u_x (__trust_c_1_A_A 5)) (not (= (__trust_s_1_A_fld __trust_u_x) 5))))
+(step t1 (cl (= __trust_u_x (__trust_c_1_A_A 5))) :rule and :premises (a0) :args (0))
+(step t2 (cl (not (= (__trust_s_1_A_fld __trust_u_x) 5))) :rule and :premises (a0) :args (1))
+(step t5 (cl (= (__trust_s_1_A_fld (__trust_c_1_A_A 5)) 5)) :rule dt_project)
+(step t6 (cl (= (__trust_s_1_A_fld __trust_u_x) (__trust_s_1_A_fld (__trust_c_1_A_A 5)))) :rule cong :premises (t1))
+(step t7 (cl (= (__trust_s_1_A_fld __trust_u_x) 5)) :rule trans :premises (t6 t5))
+(step t8 (cl) :rule resolution :premises (t2 t7))

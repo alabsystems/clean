@@ -132,3 +132,64 @@ fn test_the_declaration_after_an_import_still_seeds_the_bridges() {
          instance stays reachable through its operator"
     );
 }
+
+#[test]
+fn prelude_in_seeded_environment_is_refused_without_seeding_bridges() {
+    let mut env = Environment::try_with_prelude_for_import().expect("import prelude");
+    let mut context = FileContext::new();
+    assert!(
+        bridges_present(&env).is_empty(),
+        "import prelude leaves bridges to Init"
+    );
+    let declarations = parse_file("prelude\nimport Init.Prelude\n").expect("header fixture");
+    assert!(matches!(
+        &declarations[0],
+        clean_parser::SurfaceDecl::Prelude { .. }
+    ));
+    assert!(
+        elaborate_decl_and_register_with_context(&mut env, &declarations[0], &mut context).is_err(),
+        "a prelude header cannot be accepted in a preseeded environment"
+    );
+    assert!(
+        bridges_present(&env).is_empty(),
+        "rejected header must not seed bridges before import"
+    );
+    let lib = clean_olean::require_pinned_lean_lib_path().expect("pinned Lean");
+    let mut expected = env.clone();
+    clean_olean::load_module_with_deps(&mut expected, "Init.Prelude", &[lib])
+        .expect("real baseline import");
+    elaborate_decl_and_register_with_context(&mut env, &declarations[1], &mut context)
+        .expect("real source import");
+    for name in BRIDGE_CONSTS {
+        let name = Name::from_string(name);
+        let actual = env.get_const(&name).expect("imported bridge");
+        let reference = expected.get_const(&name).expect("baseline bridge");
+        assert_eq!(actual.type_, reference.type_, "{name} type");
+        assert_eq!(actual.value, reference.value, "{name} body");
+        assert_eq!(
+            actual.level_params, reference.level_params,
+            "{name} universes"
+        );
+        assert_eq!(
+            env.instance_priority(&name),
+            expected.instance_priority(&name),
+            "{name} priority"
+        );
+    }
+}
+
+#[test]
+fn ordinary_declaration_after_rejected_header_still_seeds_bridges() {
+    let mut env = Environment::try_with_prelude_for_import().expect("import prelude");
+    let mut context = FileContext::new();
+    let declarations =
+        parse_file("prelude\ntheorem after_header : True := True.intro\n").expect("header fixture");
+    assert!(
+        elaborate_decl_and_register_with_context(&mut env, &declarations[0], &mut context).is_err(),
+        "a prelude header cannot be accepted in a preseeded environment"
+    );
+    assert!(bridges_present(&env).is_empty(), "header does not seed");
+    elaborate_decl_and_register_with_context(&mut env, &declarations[1], &mut context)
+        .expect("ordinary theorem");
+    assert_eq!(bridges_present(&env), BRIDGE_CONSTS);
+}

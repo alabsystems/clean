@@ -57,6 +57,46 @@ pub fn expr_to_ir_type(expr: &Expr) -> Result<IRType, CompilerError> {
     }
 }
 
+/// The IR type of a constructor FIELD, from the field's declared domain.
+///
+/// Everything [`expr_to_ir_type`] accepts, plus a field whose declared type is
+/// a universe (`Sort u`, or `SProp`): a TYPE-valued field such as
+/// `structure Box where α : Type; x : α`. Before this arm the
+/// WHOLE environment's constructor table refused to build at the first such
+/// field, so every program elaborated over `import Lean` was refused at
+/// lowering (`unsupported IR type expression: Sort(..)`), whatever it used.
+///
+/// A type has no runtime content, and Clean's LCNF already says so for the
+/// ARGUMENT that fills such a field: `to_lcnf::lower::classify_expr_arg`
+/// classifies any `Sort`/`SProp`-valued term as `ExprArgClass::Type`, which
+/// lowers to `IRArg::Erased` (`to_ir::lower::lower_arg`). The field is
+/// therefore an OBJECT slot holding the boxed unit `clean_box(0)` -- the
+/// same representation Clean gives a proof-typed field (`h : a = b`, head
+/// `Eq`, `Object` through [`name_to_ir_type`]) and a type-parameter-typed
+/// field fed an erased value (`Prod.mk PUnit.unit x`,
+/// `emit_trust_ir_ctor_erased_tests.rs`). Every reader agrees on that layout:
+/// construction (`lower_ctor_parts`: an erased argument may fill an object
+/// slot, and `num_objects` counts it), projection (`compute_proj_expr` counts
+/// preceding object fields), the recursor/cases field binding (declared
+/// layout), reset/reuse (`rc::reset_reuse::s_transform::get_ctor_layout`
+/// classifies through this function), and both emitters.
+///
+/// Lean's own compiler gives a type field -- and a proof field -- NO slot
+/// (`Lean.IR.CtorFieldInfo.irrelevant`; measured 2026-10-07 with
+/// v4.30.0-rc2: `structure Box where α : Type; n : Nat; b : Bool; m : Nat`
+/// allocates `lean_alloc_ctor(0, 2, 1)` and reads `m` at object index 1).
+/// Clean's runtime is its own and keeps the slot for both classes uniformly;
+/// what is observable -- every value a program computes and prints -- is the
+/// same, which `crates/clean/tests/sort_typed_ctor_field_cli.rs` asserts byte
+/// for byte against Lean's output. Moving to Lean's slot-free layout is a
+/// layout change for proofs and types together, never for one of them.
+pub(crate) fn ctor_field_ir_type(domain: &Expr) -> Result<IRType, CompilerError> {
+    match domain.strip_mdata().kind() {
+        ExprKind::Sort(_) | ExprKind::SProp => Ok(IRType::Object),
+        _ => expr_to_ir_type(domain),
+    }
+}
+
 /// Convert a kernel Expr type to an IRType in RETURN position (a decl's
 /// result type). C4: uniform boxed lowering for polymorphic/dependent shapes.
 ///

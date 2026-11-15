@@ -47,7 +47,7 @@ impl ModuleGlob {
     /// glob for a root). Surrounding whitespace and a leading name backtick are
     /// tolerated. Returns `None` for an empty or unrecognized spec.
     #[must_use]
-    pub fn parse(spec: &str) -> Option<Self> {
+    pub(crate) fn parse(spec: &str) -> Option<Self> {
         let spec = spec.trim();
         if spec.is_empty() {
             return None;

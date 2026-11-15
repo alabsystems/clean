@@ -114,7 +114,7 @@ fn test_invariance_valid_resolvent_still_accepts() {
     );
     assert_eq!(
         verdict.trust_level,
-        StepTrustLevel::KernelVerified,
+        StepTrustLevel::StepChecked,
         "POSITIVE CONTROL: the tautological clause {{Z, ~Z}} IS a valid \
          resolvent of the premise set and must be accepted: {:?}",
         verdict.detail,

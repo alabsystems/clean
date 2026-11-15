@@ -1,13 +1,13 @@
+; synthetic: SYNTHETIC MODULE -- authored for the W3 overflow semdiff lane
+; synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W3).
+; synthetic: No compiler emitted this body; its registered Clean twin is
+; synthetic: ir_w3_os_module (eval_ir_w3_synth.rs). The SIGNED lane: the same
+; synthetic: three-op body as synth_overflow_u8 at i8, because the overflow
+; synthetic: FLAG is the one integer arithmetic where the carrier type's
+; synthetic: signedness changes the answer (trust-ir a4e81b6 dispatches
+; synthetic: signed_overflow vs unsigned_overflow on InterpretInt.signed).
+; synthetic: Do not add it to any emitted-fixture census.
 fn @synth::overflow_i8_probe(functy.923) {
-    ; #synthetic: SYNTHETIC MODULE -- authored for the W3 overflow semdiff lane
-    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W3).
-    ; #synthetic: No compiler emitted this body; its registered Clean twin is
-    ; #synthetic: ir_w3_os_module (eval_ir_w3_synth.rs). The SIGNED lane: the same
-    ; #synthetic: three-op body as synth_overflow_u8 at i8, because the overflow
-    ; #synthetic: FLAG is the one integer arithmetic where the carrier type's
-    ; #synthetic: signedness changes the answer (trust-ir a4e81b6 dispatches
-    ; #synthetic: signed_overflow vs unsigned_overflow on InterpretInt.signed).
-    ; #synthetic: Do not add it to any emitted-fixture census.
 bb0(%0: i8, %1: i8):
     %2, %3 = add.overflow i8 %0, %1
     %4, %5 = sub.overflow i8 %0, %1

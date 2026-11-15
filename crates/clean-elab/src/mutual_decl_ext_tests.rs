@@ -14,7 +14,7 @@ use clean_parser::{TerminationBy, TerminationHints, TerminationKind};
 
 fn mk_entry(name: &str) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: None,
         body: Expr::sort(Level::zero()),
         is_noncomputable: false,
@@ -23,7 +23,7 @@ fn mk_entry(name: &str) -> MutualEntry {
 
 fn mk_entry_noncomp(name: &str) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: None,
         body: Expr::sort(Level::zero()),
         is_noncomputable: true,
@@ -32,7 +32,7 @@ fn mk_entry_noncomp(name: &str) -> MutualEntry {
 
 fn mk_entry_with_type(name: &str, ty: Expr) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: Some(ty),
         body: Expr::sort(Level::zero()),
         is_noncomputable: false,
@@ -186,7 +186,7 @@ fn test_pre_elab_signatures_no_annotation() {
     block.add_entry(mk_entry("f"));
     let sigs = pre_elaborate_signatures(&block);
     assert_eq!(sigs.len(), 1);
-    assert_eq!(sigs[0].name, "f");
+    assert_eq!(sigs[0].name, clean_parser::SurfaceName::generated_path("f"));
     assert_eq!(sigs[0].num_params, 0);
 }
 
@@ -206,9 +206,18 @@ fn test_pre_elab_signatures_preserves_order() {
     block.add_entry(mk_entry("beta"));
     block.add_entry(mk_entry("gamma"));
     let sigs = pre_elaborate_signatures(&block);
-    assert_eq!(sigs[0].name, "alpha");
-    assert_eq!(sigs[1].name, "beta");
-    assert_eq!(sigs[2].name, "gamma");
+    assert_eq!(
+        sigs[0].name,
+        clean_parser::SurfaceName::generated_path("alpha")
+    );
+    assert_eq!(
+        sigs[1].name,
+        clean_parser::SurfaceName::generated_path("beta")
+    );
+    assert_eq!(
+        sigs[2].name,
+        clean_parser::SurfaceName::generated_path("gamma")
+    );
     assert_eq!(sigs[0].index, 0);
     assert_eq!(sigs[1].index, 1);
     assert_eq!(sigs[2].index, 2);
@@ -225,9 +234,15 @@ fn test_forward_ref_from_signatures() {
     let ctx = ForwardRefContext::from_signatures(&sigs);
     assert_eq!(ctx.len(), 2);
     assert!(!ctx.is_empty());
-    assert!(ctx.lookup("f").is_some());
-    assert!(ctx.lookup("g").is_some());
-    assert!(ctx.lookup("h").is_none());
+    assert!(ctx
+        .lookup(&clean_parser::SurfaceName::generated_path("f"))
+        .is_some());
+    assert!(ctx
+        .lookup(&clean_parser::SurfaceName::generated_path("g"))
+        .is_some());
+    assert!(ctx
+        .lookup(&clean_parser::SurfaceName::generated_path("h"))
+        .is_none());
 }
 
 #[test]
@@ -239,10 +254,18 @@ fn test_forward_ref_mark_resolved() {
     let mut ctx = ForwardRefContext::from_signatures(&sigs);
 
     assert_eq!(ctx.unresolved_names().len(), 2);
-    ctx.mark_resolved("f");
+    ctx.mark_resolved(&clean_parser::SurfaceName::generated_path("f"));
     assert_eq!(ctx.unresolved_names().len(), 1);
-    assert!(ctx.lookup("f").unwrap().resolved);
-    assert!(!ctx.lookup("g").unwrap().resolved);
+    assert!(
+        ctx.lookup(&clean_parser::SurfaceName::generated_path("f"))
+            .unwrap()
+            .resolved
+    );
+    assert!(
+        !ctx.lookup(&clean_parser::SurfaceName::generated_path("g"))
+            .unwrap()
+            .resolved
+    );
 }
 
 #[test]
@@ -258,54 +281,75 @@ fn test_forward_ref_empty_context() {
 #[test]
 fn test_unfold_state_initial() {
     let state = UnfoldState::new(5);
-    assert!(state.can_unfold("f"));
-    assert_eq!(state.depth("f"), 0);
+    assert!(state.can_unfold(&clean_parser::SurfaceName::generated_path("f")));
+    assert_eq!(
+        state.depth(&clean_parser::SurfaceName::generated_path("f")),
+        0
+    );
 }
 
 #[test]
 fn test_unfold_state_record_and_check() {
     let mut state = UnfoldState::new(2);
-    assert!(state.record_unfold("f"));
-    assert_eq!(state.depth("f"), 1);
-    assert!(state.can_unfold("f"));
-    assert!(state.record_unfold("f"));
-    assert_eq!(state.depth("f"), 2);
-    assert!(!state.can_unfold("f"));
-    assert!(!state.record_unfold("f"));
+    assert!(state.record_unfold(&clean_parser::SurfaceName::generated_path("f")));
+    assert_eq!(
+        state.depth(&clean_parser::SurfaceName::generated_path("f")),
+        1
+    );
+    assert!(state.can_unfold(&clean_parser::SurfaceName::generated_path("f")));
+    assert!(state.record_unfold(&clean_parser::SurfaceName::generated_path("f")));
+    assert_eq!(
+        state.depth(&clean_parser::SurfaceName::generated_path("f")),
+        2
+    );
+    assert!(!state.can_unfold(&clean_parser::SurfaceName::generated_path("f")));
+    assert!(!state.record_unfold(&clean_parser::SurfaceName::generated_path("f")));
 }
 
 #[test]
 fn test_unfold_state_independent_names() {
     let mut state = UnfoldState::new(1);
-    assert!(state.record_unfold("f"));
-    assert!(!state.can_unfold("f"));
-    assert!(state.can_unfold("g")); // g is independent
+    assert!(state.record_unfold(&clean_parser::SurfaceName::generated_path("f")));
+    assert!(!state.can_unfold(&clean_parser::SurfaceName::generated_path("f")));
+    assert!(state.can_unfold(&clean_parser::SurfaceName::generated_path("g"))); // g is independent
 }
 
 #[test]
 fn test_unfold_state_reset_single() {
     let mut state = UnfoldState::new(2);
-    state.record_unfold("f");
-    state.record_unfold("g");
-    state.reset("f");
-    assert_eq!(state.depth("f"), 0);
-    assert_eq!(state.depth("g"), 1);
+    state.record_unfold(&clean_parser::SurfaceName::generated_path("f"));
+    state.record_unfold(&clean_parser::SurfaceName::generated_path("g"));
+    state.reset(&clean_parser::SurfaceName::generated_path("f"));
+    assert_eq!(
+        state.depth(&clean_parser::SurfaceName::generated_path("f")),
+        0
+    );
+    assert_eq!(
+        state.depth(&clean_parser::SurfaceName::generated_path("g")),
+        1
+    );
 }
 
 #[test]
 fn test_unfold_state_reset_all() {
     let mut state = UnfoldState::new(2);
-    state.record_unfold("f");
-    state.record_unfold("g");
+    state.record_unfold(&clean_parser::SurfaceName::generated_path("f"));
+    state.record_unfold(&clean_parser::SurfaceName::generated_path("g"));
     state.reset_all();
-    assert_eq!(state.depth("f"), 0);
-    assert_eq!(state.depth("g"), 0);
+    assert_eq!(
+        state.depth(&clean_parser::SurfaceName::generated_path("f")),
+        0
+    );
+    assert_eq!(
+        state.depth(&clean_parser::SurfaceName::generated_path("g")),
+        0
+    );
 }
 
 #[test]
 fn test_unfold_state_zero_depth() {
     let state = UnfoldState::new(0);
-    assert!(!state.can_unfold("f"));
+    assert!(!state.can_unfold(&clean_parser::SurfaceName::generated_path("f")));
 }
 
 // ─── TerminationStrategy ────────────────────────────────────────────────────
@@ -347,8 +391,8 @@ fn test_infer_metrics_user_hint_takes_priority() {
         Some(TerminationHints {
             termination_by: Some(TerminationBy {
                 span: clean_parser::Span::dummy(),
-                kind: TerminationKind::Structural("n".to_string()),
-                params: vec!["n".to_string()],
+                kind: TerminationKind::Structural(clean_parser::SurfaceName::generated_path("n")),
+                params: vec![clean_parser::SurfaceName::generated_path("n")],
                 measure: None,
             }),
             decreasing_by: None,
@@ -387,8 +431,14 @@ fn test_encode_wf_mutual_recursive_group() {
     let groups = partition_into_sccs(&block);
     let encoded = encode_wf_mutual(&groups[0], &block).expect("should encode recursive group");
     assert_eq!(encoded.len(), 2);
-    assert_eq!(encoded[0].name, "f");
-    assert_eq!(encoded[1].name, "g");
+    assert_eq!(
+        encoded[0].name,
+        clean_parser::SurfaceName::generated_path("f")
+    );
+    assert_eq!(
+        encoded[1].name,
+        clean_parser::SurfaceName::generated_path("g")
+    );
 }
 
 #[test]

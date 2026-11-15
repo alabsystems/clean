@@ -20,7 +20,9 @@ mod tests_iota_edge;
 #[cfg(test)]
 mod tests_nested_aux_recursor;
 
+#[cfg(test)]
 pub(crate) use nat::string_lit_to_constructor;
+pub(crate) use nat::string_lit_to_constructor_with_head;
 
 /// Well-known names used in Nat, Bool, and String reduction hot paths.
 /// Cached as statics to avoid repeated `Name::from_string` allocation on every call.
@@ -65,6 +67,23 @@ pub(super) mod names {
     pub static LIST_CONS: LazyLock<Name> = LazyLock::new(|| Name::from_string("List.cons"));
     pub static CHAR: LazyLock<Name> = LazyLock::new(|| Name::from_string("Char"));
     pub static CHAR_OF_NAT: LazyLock<Name> = LazyLock::new(|| Name::from_string("Char.ofNat"));
+}
+
+// Count actual rule-name comparisons in tests, independently of elapsed time.
+// Thread-local storage keeps parallel libtest cases from sharing observations.
+#[cfg(test)]
+thread_local! {
+    static IOTA_RULE_PROBES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(super) fn take_iota_rule_probes_for_tests() -> usize {
+    IOTA_RULE_PROBES.with(|count| count.replace(0))
+}
+
+#[cfg(test)]
+fn record_iota_rule_probe_for_tests() {
+    IOTA_RULE_PROBES.with(|count| count.set(count.get() + 1));
 }
 
 impl<'env> TypeChecker<'env> {
@@ -122,6 +141,25 @@ impl<'env> TypeChecker<'env> {
         );
 
         let rec_val = self.env.get_recursor(rec_name)?;
+
+        // Under Lean's theory a VALUE-BEARING auxiliary is a definition, not a
+        // recursor. Clean's own inductive elaboration mirrors `casesOn` /
+        // `recOn` into the rule table so Clean-native reduction is fast, but
+        // in Lean those are definitions built by `mkCasesOn` / `mkRecOn` and
+        // reduce by δ to their value, which the replay checks. Nothing
+        // re-derives the mirrored rules, so a Clean-written .olean carrying a
+        // forged mirror must not steer ι-reduction in the re-check lanes:
+        // decline here and let δ unfold the checked value to the real `.rec`.
+        // Lean-imported .olean files carry no such mirror, so an imported
+        // `casesOn` is unaffected; the extended theory keeps the fast path.
+        if self.kernel_theory() != crate::env::KernelTheory::Extended
+            && self
+                .env
+                .get_const(rec_name)
+                .is_some_and(|constant| constant.value.is_some())
+        {
+            return None;
+        }
 
         #[cfg(feature = "debug-whnf")]
         eprintln!("[try_iota_reduction] found recursor: {:?}", rec_name);
@@ -201,6 +239,11 @@ impl<'env> TypeChecker<'env> {
         // Per Lean 4: nat_lit_to_constructor, string_lit_to_constructor.
         // This allows Nat.rec to reduce on numeric literals like 3.
         let major_whnf: Expr = match &major_whnf.kind {
+            // A literal means `succ^n zero` (resp. `String.ofList […]`) only
+            // over the canonical definitions (`env/native_fold_authority.rs`);
+            // otherwise it is left as it is and the rule does not match.
+            ExprKind::Lit(Literal::Nat(_)) if !self.nat_literal_admitted() => major_whnf,
+            ExprKind::Lit(Literal::String(_)) if !self.string_literal_admitted() => major_whnf,
             ExprKind::Lit(Literal::Nat(n)) => {
                 // GRIND TRACE: this is the recursor-over-large-literal iota step
                 // that drives the carrier-tower grind. Logs the enclosing def-eq
@@ -210,7 +253,7 @@ impl<'env> TypeChecker<'env> {
                 nat::nat_lit_to_constructor(n)
             }
             ExprKind::Lit(Literal::String(s)) => {
-                let expanded = string_lit_to_constructor(s);
+                let expanded = self.expand_admitted_string_literal(s);
                 if use_delta {
                     self.whnf_impl(&expanded)
                 } else {
@@ -423,7 +466,11 @@ impl<'env> TypeChecker<'env> {
             rec_val
                 .rules
                 .get(ctor_val.constructor_idx as usize)
-                .filter(|rule| &rule.constructor_name == ctor_name)
+                .filter(|rule| {
+                    #[cfg(test)]
+                    record_iota_rule_probe_for_tests();
+                    &rule.constructor_name == ctor_name
+                })
         } else {
             None
         };
@@ -432,11 +479,11 @@ impl<'env> TypeChecker<'env> {
             // Nested-aux, twin-skewed, or otherwise non-aligned recursor: locate
             // the rule by constructor name, as Lean's kernel does. No match ⇒
             // stuck.
-            None => match rec_val
-                .rules
-                .iter()
-                .find(|r| &r.constructor_name == ctor_name)
-            {
+            None => match rec_val.rules.iter().find(|r| {
+                #[cfg(test)]
+                record_iota_rule_probe_for_tests();
+                &r.constructor_name == ctor_name
+            }) {
                 Some(rule) => rule,
                 None => {
                     #[cfg(feature = "debug-whnf")]
@@ -488,43 +535,60 @@ impl<'env> TypeChecker<'env> {
         //
         // For legacy non-lambda RHS (e.g., noConfusionType placeholder), fall back to
         // the minor+fields manual approach.
-        let mut result = if rule.rhs.is_lam() {
-            // Step 1: Instantiate universe level parameters in the RHS lambda.
-            // The RHS is: λ params. λ motives. λ minors. λ fields. body
-            // where body = minor_i fields... IH₀... IHₘ
-            let mut result = rule
-                .rhs
-                .instantiate_level_params_direct(&rec_val.level_params, rec_levels);
-
-            // Step 2: Apply params + motives + minors from recursor application args.
+        let extras_start = match rec_val.arg_order {
+            RecursorArgOrder::MajorAfterMinors => args_before_major + 1,
+            RecursorArgOrder::MajorAfterMotive => {
+                args_before_major + 1 + rec_val.num_minors as usize
+            }
+        };
+        let (mut result, extras_applied) = if rule.rhs.is_lam() {
+            // Preserve the existing universe instantiation and sharing checks.
+            let rhs = self.instantiate_levels_or_record(
+                rec_name,
+                &rule.rhs,
+                &rec_val.level_params,
+                rec_levels,
+            )?;
             let n_pm = rec_val.num_params as usize + rec_val.num_motives as usize;
             let n_pmm = n_pm + rec_val.num_minors as usize;
-
+            let mut rhs_args: smallvec::SmallVec<[&Expr; 16]> = smallvec::SmallVec::new();
             match rec_val.arg_order {
                 RecursorArgOrder::MajorAfterMinors => {
                     for i in 0..n_pmm {
-                        result = Expr::app(result, (*args.get(i)?).clone());
+                        rhs_args.push(*args.get(i)?);
                     }
                 }
                 RecursorArgOrder::MajorAfterMotive => {
-                    // Apply params + motives first
                     for i in 0..n_pm {
-                        result = Expr::app(result, (*args.get(i)?).clone());
+                        rhs_args.push(*args.get(i)?);
                     }
-                    // Minors are after the major premise
                     for j in 0..rec_val.num_minors as usize {
-                        let idx = minors_start + j;
-                        result = Expr::app(result, (*args.get(idx)?).clone());
+                        rhs_args.push(*args.get(minors_start + j)?);
                     }
                 }
             }
-
-            // Step 3: Apply constructor fields from major premise (inductive.h:112).
-            for field in &major_args[fields_start..fields_end] {
-                result = Expr::app(result, (*field).clone());
+            rhs_args.extend(major_args[fields_start..fields_end].iter().copied());
+            if hit_path_arg.is_none() {
+                rhs_args.extend(args[extras_start..].iter().copied());
+                // The next core-WHNF iteration would immediately flatten this
+                // lambda application and run this same batched beta step. Avoid
+                // allocating that temporary spine and dispatching it again.
+                let reduced = super::beta::apply_lambdas(&rhs, &rhs_args);
+                let result = if self.native_nat_grind_recursor_stuck(&reduced) {
+                    // Keep the old application when beta's existing arithmetic
+                    // guard would leave it stuck. Do not bypass that guard.
+                    Expr::apps(rhs, rhs_args.iter().map(|arg| (**arg).clone()))
+                } else {
+                    reduced
+                };
+                (result, true)
+            } else {
+                // Path application must still wrap the RHS before extra args.
+                (
+                    Expr::apps(rhs, rhs_args.iter().map(|arg| (**arg).clone())),
+                    false,
+                )
             }
-
-            result
         } else {
             // Legacy fallback for non-lambda RHS (noConfusionType, etc.).
             // Extract minor premise from args and apply fields directly.
@@ -536,7 +600,7 @@ impl<'env> TypeChecker<'env> {
             for field in &major_args[fields_start..fields_end] {
                 result = Expr::app(result, (*field).clone());
             }
-            result
+            (result, false)
         };
 
         // HIT path-constructor iota: re-apply `@ r` to the computed minor result
@@ -549,14 +613,10 @@ impl<'env> TypeChecker<'env> {
         }
 
         // Apply extra arguments after the major premise (inductive.h:113-117).
-        let extras_start = match rec_val.arg_order {
-            RecursorArgOrder::MajorAfterMinors => args_before_major + 1,
-            RecursorArgOrder::MajorAfterMotive => {
-                args_before_major + 1 + rec_val.num_minors as usize
+        if !extras_applied {
+            for extra in &args[extras_start..] {
+                result = Expr::app(result, (*extra).clone());
             }
-        };
-        for extra in &args[extras_start..] {
-            result = Expr::app(result, (*extra).clone());
         }
 
         #[cfg(feature = "debug-whnf")]
@@ -670,6 +730,10 @@ impl<'env> TypeChecker<'env> {
         level: &Level,
         use_delta: bool,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let interval = || Expr::from_kind(ExprKind::CubicalInterval);
         let w = if use_delta {
             self.whnf_impl(u)
@@ -725,6 +789,33 @@ impl<'env> TypeChecker<'env> {
         let is_lift = matches!(&head.kind, ExprKind::Const(name, _) if *name == *crate::quot::names::QUOT_LIFT);
         let is_ind = matches!(&head.kind, ExprKind::Const(name, _) if *name == *crate::quot::names::QUOT_IND);
         if !is_lift && !is_ind {
+            return None;
+        }
+        // SOUNDNESS: these rules are the semantics of the KERNEL-BUILT
+        // quotient primitives (`Environment::init_quot`, the only writer of
+        // `env.quotients`). A constant that merely carries the name — an
+        // imported file record registered as a plain axiom, whose type the
+        // file chose, or a user declaration in an environment without
+        // `init_quot` — gets no quotient reduction. Lean's kernel likewise
+        // builds these four types itself (`quotDecl`) and never takes them
+        // from a file. The head must be the registry's `Lift`/`Ind` and the
+        // `Quot.mk` it eliminates the registry's `Mk`
+        // (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`).
+        let (ExprKind::Const(head_name, _), Some(mk)) =
+            (&head.kind, self.env.get_quot(&crate::quot::names::QUOT_MK))
+        else {
+            return None;
+        };
+        if mk.kind != crate::quot::QuotKind::Mk
+            || !self.env.get_quot(head_name).is_some_and(|q| {
+                q.kind
+                    == if is_lift {
+                        crate::quot::QuotKind::Lift
+                    } else {
+                        crate::quot::QuotKind::Ind
+                    }
+            })
+        {
             return None;
         }
 

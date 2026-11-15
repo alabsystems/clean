@@ -5,7 +5,7 @@
 //! High-level export API, finalization, and payload support.
 
 use super::OleanExporter;
-use crate::error::OleanResult;
+use crate::error::{OleanError, OleanResult};
 use crate::header::{OleanHeader, HEADER_SIZE};
 use crate::module::ParsedExtension;
 use crate::payload::{encode_clean_payload, CleanPayload};
@@ -17,7 +17,7 @@ impl OleanExporter {
     /// Finalize and return the .olean file bytes
     ///
     /// # REQUIRES
-    /// - `git_hash` is <= 40 bytes ASCII (will be padded/truncated by header).
+    /// - `git_hash` is exactly 40 ASCII hexadecimal characters.
     ///
     /// # ENSURES
     /// - Returns bytes with a serialized header and root pointer set.
@@ -40,7 +40,7 @@ impl OleanExporter {
     ///
     /// # ENSURES
     /// - Writes the root pointer into the header root slot.
-    pub fn set_root(&mut self, offset: usize) {
+    pub(crate) fn set_root(&mut self, offset: usize) {
         let ptr = self.offset_to_ptr(offset);
         self.data[HEADER_SIZE..HEADER_SIZE + 8].copy_from_slice(&ptr.to_le_bytes());
     }
@@ -51,7 +51,7 @@ impl OleanExporter {
     /// but is sufficient for dependency tracking.
     ///
     /// # REQUIRES
-    /// - `git_hash` is <= 40 bytes ASCII (header pads/truncates).
+    /// - `git_hash` is exactly 40 ASCII hexadecimal characters.
     ///
     /// # ENSURES
     /// - Returns a valid .olean byte vector with imports/constNames populated.
@@ -77,7 +77,7 @@ impl OleanExporter {
     /// load definitions without needing full Lean 4 ConstantInfo serialization.
     ///
     /// # REQUIRES
-    /// - `git_hash` is <= 40 bytes ASCII (header pads/truncates).
+    /// - `git_hash` is exactly 40 ASCII hexadecimal characters.
     /// - `payload` is a valid `CleanPayload`.
     ///
     /// # ENSURES
@@ -90,7 +90,101 @@ impl OleanExporter {
         git_hash: &str,
         payload: &CleanPayload,
     ) -> OleanResult<Vec<u8>> {
-        let mut exporter = Self::new();
+        Self::export_payload_at_base(
+            super::DEFAULT_BASE_ADDR,
+            imports,
+            const_names,
+            entries,
+            git_hash,
+            payload,
+        )
+    }
+
+    /// Export a companion immediately after the complete preceding file.
+    ///
+    /// Includes the preceding payload/footer in its extent and aligns the new
+    /// base to eight bytes. The predecessor must use this exporter's header
+    /// format and git hash. An aligned zero base is allowed; empty/truncated
+    /// headers, incompatible formats and overflowing extents are errors.
+    /// This is a layout guarantee, not validation of the predecessor's objects,
+    /// payload, or kernel declarations; those still pass through the importer.
+    ///
+    /// The default-base pass measures the exact serialized size before any
+    /// pointer is formed at the successor address. This avoids overflow in the
+    /// existing offset-to-pointer primitives; no pointers or headers are patched
+    /// after serialization. Both passes serialize the same immutable inputs.
+    pub fn export_with_payload_after(
+        previous_bytes: &[u8],
+        imports: &[(&str, bool)],
+        const_names: &[&str],
+        entries: &[ParsedExtension],
+        git_hash: &str,
+        payload: &CleanPayload,
+    ) -> OleanResult<Vec<u8>> {
+        let previous = OleanHeader::parse(previous_bytes)?;
+        let expected = OleanHeader::new(git_hash, super::DEFAULT_BASE_ADDR)?;
+        if (
+            previous.version,
+            previous.flags,
+            &previous.lean_version,
+            previous.git_hash,
+        ) != (
+            expected.version,
+            expected.flags,
+            &expected.lean_version,
+            expected.git_hash,
+        ) {
+            return Err(OleanError::Region(
+                "companion export header format/hash mismatch".into(),
+            ));
+        }
+        if previous_bytes.len() < HEADER_SIZE + 8 || !previous.base_addr.is_multiple_of(8) {
+            return Err(OleanError::Region(
+                "companion export requires a complete, aligned predecessor".into(),
+            ));
+        }
+        let previous_len = u64::try_from(previous_bytes.len())
+            .map_err(|_| OleanError::Region("companion predecessor length exceeds u64".into()))?;
+        let base_addr = previous
+            .base_addr
+            .checked_add(previous_len)
+            .and_then(|end| end.checked_add(7))
+            .map(|end| end & !7)
+            .ok_or_else(|| {
+                OleanError::Region("companion predecessor extent/alignment overflow".into())
+            })?;
+
+        let measured = Self::export_with_payload(imports, const_names, entries, git_hash, payload)?;
+        let measured_len = u64::try_from(measured.len())
+            .map_err(|_| OleanError::Region("companion output length exceeds u64".into()))?;
+        base_addr
+            .checked_add(measured_len)
+            .ok_or_else(|| OleanError::Region("companion output extent overflow".into()))?;
+        let bytes = Self::export_payload_at_base(
+            base_addr,
+            imports,
+            const_names,
+            entries,
+            git_hash,
+            payload,
+        )?;
+        if bytes.len() != measured.len() {
+            return Err(OleanError::Region(
+                "companion serialization changed its measured extent".into(),
+            ));
+        }
+        Ok(bytes)
+    }
+
+    fn export_payload_at_base(
+        base_addr: u64,
+        imports: &[(&str, bool)],
+        const_names: &[&str],
+        entries: &[ParsedExtension],
+        git_hash: &str,
+        payload: &CleanPayload,
+    ) -> OleanResult<Vec<u8>> {
+        let mut exporter = Self::with_base_addr(base_addr);
 
         let module_offset =
             exporter.write_module_data_with_payload(imports, const_names, entries, payload)?;
@@ -109,7 +203,7 @@ impl OleanExporter {
     ///
     /// # REQUIRES
     /// - `env` contains the constants to export.
-    /// - `git_hash` is <= 40 bytes ASCII (header pads/truncates).
+    /// - `git_hash` is exactly 40 ASCII hexadecimal characters.
     ///
     /// # ENSURES
     /// - Returns valid .olean bytes with populated constants array.
@@ -135,7 +229,7 @@ impl OleanExporter {
     ///
     /// # REQUIRES
     /// - `env` contains the constants to export.
-    /// - `git_hash` is <= 40 bytes ASCII (header pads/truncates).
+    /// - `git_hash` is exactly 40 ASCII hexadecimal characters.
     /// - `payload` is a valid `CleanPayload`.
     ///
     /// # ENSURES
@@ -226,7 +320,7 @@ impl OleanExporter {
                 Some(PayloadConstantRef::Constructor(ctor)) => self.write_constructor_info(ctor)?,
                 Some(PayloadConstantRef::Recursor(rec)) => self.write_recursor_info(rec)?,
                 None => {
-                    return Err(crate::error::OleanError::Region(format!(
+                    return Err(OleanError::Region(format!(
                         "payload missing constant info for {name}"
                     )))
                 }

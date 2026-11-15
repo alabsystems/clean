@@ -12,7 +12,11 @@ use crate::Module;
 use crate::constant::Constant;
 use crate::inst::CastOp;
 use crate::ty::{EnumTagRepr, FatPtrKind, Ty};
-use crate::value::{EnumId, StructId, TyId};
+use crate::value::{ClosureTyId, EnumId, StructId, TyId};
+
+mod observed_constant_values;
+mod observed_layout_error;
+mod observed_layout_retirement;
 
 pub const DEFAULT_POINTER_BITS: u32 = 64;
 
@@ -71,6 +75,11 @@ pub enum TyShape {
     /// than guessing. Resolve it with `Module::ty_layout_shape`, which does
     /// delegate to the base.
     Refine,
+    /// Nominal semantic type without a machine representation.
+    Dialect,
+    /// Nominal opaque runtime handle (v43): one pointer word, not pointer-like.
+    Handle,
+    Storage,
 }
 
 impl core::fmt::Display for TyShape {
@@ -107,6 +116,9 @@ impl core::fmt::Display for TyShape {
             TyShape::Record => f.write_str("record"),
             TyShape::Closure => f.write_str("closure"),
             TyShape::Refine => f.write_str("refine"),
+            TyShape::Dialect => f.write_str("dialect"),
+            TyShape::Storage => f.write_str("storage"),
+            TyShape::Handle => f.write_str("handle"),
         }
     }
 }
@@ -186,6 +198,10 @@ impl Ty {
             Ty::Record(_) => TyShape::Record,
             Ty::Closure(_) => TyShape::Closure,
             Ty::Refine(_, _) => TyShape::Refine,
+            Ty::Dialect(_) => TyShape::Dialect,
+            Ty::Handle(_) => TyShape::Handle,
+            Ty::Storage(_) => TyShape::Storage,
+            Ty::Ext(e) => e.unreachable(),
         }
     }
 
@@ -254,12 +270,21 @@ impl Ty {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum PointerMetadataShape {
-    SliceLen { elem: TyId },
+    SliceLen {
+        elem: TyId,
+    },
     StrLen,
-    VTable { trait_id: u32 },
+    VTable {
+        trait_id: u32,
+    },
     /// `usize` length metadata whose data pointer addresses a CONTAINER whose
     /// tail is the DST, not the DST content. See [`FatPtrKind::ContainerLen`].
     ContainerLen,
+    /// Opaque VTABLE-word metadata whose data pointer addresses a CONTAINER
+    /// whose tail is the `dyn`, not the dispatched object. NEVER a length, and
+    /// no trait id: nothing dispatches through it. See
+    /// [`FatPtrKind::ContainerVtable`].
+    ContainerVtable,
 }
 
 impl core::fmt::Display for PointerMetadataShape {
@@ -269,6 +294,7 @@ impl core::fmt::Display for PointerMetadataShape {
             PointerMetadataShape::StrLen => f.write_str("str_len"),
             PointerMetadataShape::VTable { trait_id } => write!(f, "vtable<dyn.{trait_id}>"),
             PointerMetadataShape::ContainerLen => f.write_str("container_len"),
+            PointerMetadataShape::ContainerVtable => f.write_str("container_vtable"),
         }
     }
 }
@@ -280,6 +306,7 @@ impl FatPtrKind {
             FatPtrKind::Str => PointerMetadataShape::StrLen,
             FatPtrKind::TraitObject { trait_id } => PointerMetadataShape::VTable { trait_id },
             FatPtrKind::ContainerLen => PointerMetadataShape::ContainerLen,
+            FatPtrKind::ContainerVtable => PointerMetadataShape::ContainerVtable,
         }
     }
 
@@ -298,7 +325,14 @@ impl PointerMetadataShape {
             PointerMetadataShape::SliceLen { .. }
             | PointerMetadataShape::StrLen
             | PointerMetadataShape::ContainerLen => pointer_sized_unsigned_ty(pointer_bits),
-            PointerMetadataShape::VTable { .. } => Some(Ty::Ptr),
+            // ContainerVtable carries the SAME opaque vtable word as a trait
+            // object -- again the distinction is what the DATA pointer
+            // addresses -- so it is `Ty::Ptr` here and must NEVER fall into
+            // the unsigned-length arm above: a vtable word read as a length
+            // is a type confusion, not a layout.
+            PointerMetadataShape::VTable { .. } | PointerMetadataShape::ContainerVtable => {
+                Some(Ty::Ptr)
+            }
         }
     }
 }
@@ -449,6 +483,18 @@ pub enum TyLayoutKind {
     },
     Unit,
     Never,
+    Tuple {
+        fields: Vec<FieldOffsetShape>,
+    },
+    /// A first-class closure's DECLARED environment frame (wire v58). Fields
+    /// are the captures in CAPTURE order; their offsets are the producer's
+    /// declared image, which `repr(Rust)` may have reordered.
+    Closure {
+        id: ClosureTyId,
+        captures: Vec<FieldOffsetShape>,
+    },
+    /// Geometry only; no initialized value encoding exists.
+    Storage,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -534,6 +580,10 @@ impl core::fmt::Display for TyLayoutKind {
             TyLayoutKind::Struct { id, fields } => {
                 write!(f, "struct.{}[{} fields]", id.0, fields.len())
             }
+            TyLayoutKind::Tuple { fields } => write!(f, "tuple<{} fields>", fields.len()),
+            TyLayoutKind::Closure { id, captures } => {
+                write!(f, "closure<{}, {} captures>", id.index(), captures.len())
+            }
             TyLayoutKind::Enum { id, variants } => {
                 write!(f, "enum.{}[{} variants]", id.0, variants)
             }
@@ -549,6 +599,7 @@ impl core::fmt::Display for TyLayoutKind {
                 lanes,
                 lane_bits,
             } => write!(f, "vector<{lanes} x {elem_shape}, lane={lane_bits}b>"),
+            TyLayoutKind::Storage => f.write_str("storage"),
             TyLayoutKind::Unit => f.write_str("unit"),
             TyLayoutKind::Never => f.write_str("never"),
         }
@@ -578,9 +629,20 @@ pub enum LayoutError {
     /// A declared struct layout contradicted its own size/alignment/offset
     /// evidence, or contained an inline recursive cycle with no finite size.
     StructLayoutIncoherent(StructId),
+    TupleLayoutIncoherent(TyId),
+    TupleLayoutTargetMissing,
+    /// A declared closure layout (wire v58) contradicted its own
+    /// size/alignment/offset evidence, named a closure type that does not
+    /// resolve, or was one of two rows for one closure type.
+    ClosureLayoutIncoherent(ClosureTyId),
+    /// A declared closure layout needs the target's scalar layout to size its
+    /// captures, exactly as a declared tuple layout does.
+    ClosureLayoutTargetMissing,
     /// The module names a target whose scalar ABI alignment is not represented
     /// by TrustIR's built-in layout table. Size-only guesses are not layout
     /// evidence; layout-sensitive consumers must decline this target.
+    /// Must-refuse corpus row `refuse/enum_tag_lane_off_scalar_table` (the
+    /// enum-lane sibling, `EnumTagTargetScalarLayoutUnavailable`, on i686).
     TargetScalarLayoutUnavailable {
         triple: String,
     },
@@ -589,9 +651,59 @@ pub enum LayoutError {
         field: u32,
     },
     EnumLayoutUnavailable(EnumId),
+    /// A `TyId` in the module type table refers to itself, directly or through
+    /// a chain, with no pointer or nominal definition breaking the cycle
+    /// (`types[0] = Array(ty.0, 4)`). Such a type has no finite layout.
+    ///
+    /// This is a SEPARATE defect from [`LayoutError::UnsupportedTyShape`]
+    /// (a shape with no layout RULE) and from [`LayoutError::MissingType`]
+    /// (a dangling index): the entry resolves and its shape is supported, and
+    /// only the cycle makes it unlayoutable. Before this variant existed the
+    /// two `TyId`-resolving arms had no cycle guard at all — the enum and
+    /// struct arms did — so the walk recursed without bound and ABORTED the
+    /// process on a stack overflow rather than returning an error.
+    TyLayoutCycle(TyId),
     UnsupportedTyShape(TyShape),
     SizeOverflow,
     NotPointer(TyShape),
+    /// v43: a layout-sensitive cast names an opaque runtime handle on either
+    /// side. A handle is one pointer word, so a pure size comparison would
+    /// ADMIT `Bitcast Ptr -> Handle`; this variant is what keeps the layout
+    /// evidence from ever saying so. Refused before any width is compared.
+    OpaqueHandleCast {
+        src: TyShape,
+        dst: TyShape,
+    },
+    /// A reinterpret cast (`Bitcast` / `Transmute`) has `bool` or a
+    /// `<N x bool>` — a bool lane — stored by value on either side. A bool
+    /// lane is one BIT of value ([`Ty::bit_width`], what the structural
+    /// validator and the reference interpreter compare) in one BYTE of
+    /// storage ([`Module::ty_layout_shape`], what this evidence compares), so
+    /// the two same-size tests disagree by exactly bits-per-byte and admit
+    /// opposite casts (`bitcast <8 x bool> -> u8` structurally, `-> u64` by
+    /// layout) while the reference interpreter (`eval_bitcast`) and the Lean
+    /// model (`semCast .Bitcast`) execute neither. Refused before any width
+    /// is compared, as [`LayoutError::OpaqueHandleCast`] is. A pointer TO a
+    /// bool lane is not a bool lane (its image is an address), and the
+    /// identity cast is not a reinterpretation.
+    BoolLaneReinterpret {
+        src: TyShape,
+        dst: TyShape,
+    },
+    /// v58: a layout-sensitive cast names a first-class closure BY VALUE on
+    /// either side (directly, or inside an aggregate no pointer breaks). A
+    /// closure value's bits are its captured environment, never a code
+    /// address, and a declared frame (`Module.closure_layouts`) gives it a
+    /// SIZE — which is exactly when a pure width comparison would start to
+    /// ADMIT `Bitcast closure -> Ptr`, laundering the environment into a
+    /// callee the closure-application rule cannot see. Refused before any
+    /// width is compared, declared frame or not: the by-value application
+    /// ruling (`lowering-target-subset.md` G18-2) names this as the rule the
+    /// layout table must keep.
+    ClosureCast {
+        src: TyShape,
+        dst: TyShape,
+    },
     PointerLaneMismatch {
         src_lanes: u8,
         dst_lanes: u8,
@@ -623,6 +735,24 @@ impl core::fmt::Display for LayoutError {
             LayoutError::StructLayoutIncoherent(id) => {
                 write!(f, "struct.{} has incoherent declared layout metadata", id.0)
             }
+            LayoutError::TupleLayoutIncoherent(id) => {
+                write!(
+                    f,
+                    "tuple layout ty.{} has incoherent or ambiguous declared metadata",
+                    id.0
+                )
+            }
+            LayoutError::TupleLayoutTargetMissing => {
+                f.write_str("declared tuple layout requires target information")
+            }
+            LayoutError::ClosureLayoutIncoherent(id) => write!(
+                f,
+                "closure layout closure.{} has incoherent or ambiguous declared metadata",
+                id.index()
+            ),
+            LayoutError::ClosureLayoutTargetMissing => {
+                f.write_str("declared closure layout requires target information")
+            }
             LayoutError::TargetScalarLayoutUnavailable { triple } => write!(
                 f,
                 "target {triple:?} is outside TrustIR's canonical scalar-layout set"
@@ -635,11 +765,34 @@ impl core::fmt::Display for LayoutError {
             LayoutError::EnumLayoutUnavailable(id) => {
                 write!(f, "enum.{} has no concrete enum layout metadata", id.0)
             }
+            LayoutError::TyLayoutCycle(id) => write!(
+                f,
+                "type table entry ty.{} is cyclic; a self-referential type has no finite layout",
+                id.0
+            ),
             LayoutError::UnsupportedTyShape(shape) => {
                 write!(f, "{shape} has no concrete memory layout evidence")
             }
             LayoutError::SizeOverflow => f.write_str("layout size overflow"),
             LayoutError::NotPointer(shape) => write!(f, "{shape} is not pointer-like"),
+            LayoutError::OpaqueHandleCast { src, dst } => write!(
+                f,
+                "{src} -> {dst}: an opaque runtime handle has no cast in or out; its only \
+                 origins are its runtime's pinned entry points"
+            ),
+            LayoutError::BoolLaneReinterpret { src, dst } => write!(
+                f,
+                "{src} -> {dst}: a bool lane is one bit of value in one byte of storage, so \
+                 no bit-image reinterpretation is defined for it (the reference interpreter \
+                 and the Lean model both refuse it); spell int<->bool as trunc/zext and \
+                 obtain a logical <N x bool> mask by comparing"
+            ),
+            LayoutError::ClosureCast { src, dst } => write!(
+                f,
+                "{src} -> {dst}: a first-class closure's bits are its captured environment, \
+                 never a code address, and no cast reinterprets them, declared frame or not; \
+                 apply it through CallIndirect at its closure type"
+            ),
             LayoutError::PointerLaneMismatch {
                 src_lanes,
                 dst_lanes,
@@ -739,358 +892,150 @@ impl Module {
         }
     }
 
-    pub fn ty_layout_shape(&self, ty: &Ty) -> Result<TyLayoutShape, LayoutError> {
-        self.ty_layout_shape_inner(ty, &mut Vec::new(), &mut Vec::new())
+    /// The ALIGNMENT, in bytes, of an enum's tag lane on this module's target.
+    ///
+    /// The tag's **size** is a property of the repr alone
+    /// ([`crate::EnumTagRepr::size_bytes`]); its **alignment** is a property of
+    /// the TARGET, and the two are not the same fact. Every repr spellable
+    /// today is naturally aligned on every target this table covers (the
+    /// canonical set gives the v45 128-bit lanes rustc's 16, WS3.14(b)), so
+    /// this returns the same number as `size_bytes` for all of them — but it
+    /// returns it because the layout authority was ASKED, not because the byte
+    /// count was reused. On a target outside the canonical scalar set the
+    /// authority has no answer and this fails closed with
+    /// [`LayoutError::TargetScalarLayoutUnavailable`]: an unknown ABI is not
+    /// evidence that a declared tag offset is aligned.
+    ///
+    /// (WS2.22 review: an ABI may align an integer below its width — the i386
+    /// System V ABI aligns `i64` to 4 — and rustc aligns `i128` to 16 on
+    /// x86_64/aarch64 while other data layouts use 8. The validator, `shape`
+    /// and the interpreter must therefore agree on where the alignment comes
+    /// from before a 128-bit tag repr can exist; the interpreter already asked
+    /// (`byte_align_in`), and this is the same question for the other two.)
+    pub fn enum_tag_repr_align(&self, repr: crate::EnumTagRepr) -> Result<u64, LayoutError> {
+        let ty = repr.ty();
+        let align_bits = self
+            .ty_layout_shape(&ty)?
+            .align_bits
+            .filter(|bits| *bits != 0 && bits.is_multiple_of(8))
+            .ok_or_else(|| LayoutError::UnsupportedTyShape(ty.shape()))?;
+        Ok(align_bits / 8)
     }
 
-    /// [`Module::ty_layout_shape`] with the enum cycle guard threaded through:
-    /// `enum_visiting` tracks the enum ids currently being laid out, so a
-    /// self-referential enum (an inline `Ty::Enum` cycle not broken by a
-    /// pointer) fails closed with [`LayoutError::EnumLayoutUnavailable`]
-    /// instead of recursing without bound.
-    fn ty_layout_shape_inner(
+    /// Resolve by structural tuple identity, refusing aliases that carry two
+    /// descriptors. Never choose the first of conflicting layout declarations.
+    pub fn tuple_layout_descriptor(
         &self,
         ty: &Ty,
-        enum_visiting: &mut Vec<EnumId>,
-        struct_visiting: &mut Vec<StructId>,
-    ) -> Result<TyLayoutShape, LayoutError> {
+    ) -> Result<Option<&crate::TupleLayoutDescriptor>, LayoutError> {
+        let mut found = None;
+        for desc in &self.tuple_layouts {
+            let declared = self
+                .types
+                .get(desc.tuple_type.as_usize())
+                .ok_or(LayoutError::MissingType(desc.tuple_type))?;
+            if !matches!(declared, Ty::Tuple(_)) {
+                return Err(LayoutError::TupleLayoutIncoherent(desc.tuple_type));
+            }
+            if declared == ty {
+                if found.is_some() {
+                    return Err(LayoutError::TupleLayoutIncoherent(desc.tuple_type));
+                }
+                found = Some(desc);
+            }
+        }
+        Ok(found)
+    }
+
+    /// Resolve the declared layout of `closure`, refusing two rows for one
+    /// closure type. Never choose the first of conflicting declarations.
+    pub fn closure_layout_descriptor(
+        &self,
+        closure: ClosureTyId,
+    ) -> Result<Option<&crate::ClosureLayoutDescriptor>, LayoutError> {
+        let mut found = None;
+        for desc in &self.closure_layouts {
+            if self.closure_type(desc.closure).is_none() {
+                return Err(LayoutError::ClosureLayoutIncoherent(desc.closure));
+            }
+            if desc.closure == closure {
+                if found.is_some() {
+                    return Err(LayoutError::ClosureLayoutIncoherent(desc.closure));
+                }
+                found = Some(desc);
+            }
+        }
+        Ok(found)
+    }
+
+    /// Check every declared closure layout, including unused rows. One
+    /// [`crate::LayoutTable`] answers every row, as for
+    /// [`Module::validate_tuple_layouts`].
+    pub fn validate_closure_layouts(&self) -> Result<(), LayoutError> {
+        self.layout_table().validate_closure_layouts()?;
+        // Origin is producer data, never source authentication. As for nominal
+        // aggregate origins, equal claims must nevertheless agree structurally,
+        // including unused frames. A conflicting spelling cannot hide behind a
+        // second closure arena index.
+        let mut origins = std::collections::BTreeMap::new();
+        for frame in &self.closure_layouts {
+            let Some(origin) = &frame.origin else {
+                continue;
+            };
+            let closure = self
+                .closure_type(frame.closure)
+                .ok_or(LayoutError::ClosureLayoutIncoherent(frame.closure))?;
+            let signature = self.func_type(closure.func);
+            if let Some((previous, captures, previous_function, previous_signature)) =
+                origins.insert(origin, (frame, &closure.captures, closure.func, signature))
+                && (previous.size != frame.size
+                    || previous.align != frame.align
+                    || previous.capture_offsets != frame.capture_offsets
+                    || captures != &closure.captures
+                    || previous_signature != signature
+                    || (signature.is_none() && previous_function != closure.func))
+            {
+                return Err(LayoutError::ClosureLayoutIncoherent(frame.closure));
+            }
+        }
+        Ok(())
+    }
+
+    /// Check every declaration, including unused rows and recursive interiors.
+    /// One [`crate::LayoutTable`] answers every row, so this is O(total
+    /// fields), not a walk per row; a caller that holds a table asks
+    /// [`crate::LayoutTable::validate_tuple_layouts`] instead.
+    pub fn validate_tuple_layouts(&self) -> Result<(), LayoutError> {
+        self.layout_table().validate_tuple_layouts()
+    }
+
+    /// The layout of `ty`: its size, alignment and (for a struct or a
+    /// declared tuple) its field offsets, or why it has none.
+    ///
+    /// Each call lays out what `ty` reaches through a fresh
+    /// [`crate::LayoutTable`], each nominal node once, so it costs O(that
+    /// reach). A caller with many questions about one module asks one table
+    /// ([`Module::layout_table`]) instead, and the whole module costs O(total
+    /// fields). Either way the walk is iterative: no depth limit.
+    pub fn ty_layout_shape(&self, ty: &Ty) -> Result<TyLayoutShape, LayoutError> {
+        if let Some(layout) = self.ty_leaf_layout(ty) {
+            return layout;
+        }
+        crate::LayoutTable::new(self).ty_layout_shape(ty)
+    }
+
+    /// [`Module::ty_layout_shape`] for a type that names no other type by
+    /// value (see [`leaf_layout`]); `None` for the seven that do.
+    fn ty_leaf_layout(&self, ty: &Ty) -> Option<Result<TyLayoutShape, LayoutError>> {
         if ty_uses_scalar_layout_table(ty) && !self.target_has_canonical_scalar_layout() {
-            return Err(LayoutError::TargetScalarLayoutUnavailable {
+            return Some(Err(LayoutError::TargetScalarLayoutUnavailable {
                 triple: self
                     .target_info
                     .as_ref()
                     .map_or_else(String::new, |target| target.triple.clone()),
-            });
+            }));
         }
-        let pointer_bits = self.pointer_bits();
-        match ty {
-            Ty::Bool => Ok(scalar_layout(TyShape::Bool, 8, Some(8))),
-            Ty::I8 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: true,
-                    bits: 8,
-                },
-                8,
-                Some(8),
-            )),
-            Ty::I16 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: true,
-                    bits: 16,
-                },
-                16,
-                Some(16),
-            )),
-            Ty::I32 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: true,
-                    bits: 32,
-                },
-                32,
-                Some(32),
-            )),
-            Ty::I64 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: true,
-                    bits: 64,
-                },
-                64,
-                Some(64),
-            )),
-            Ty::I128 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: true,
-                    bits: 128,
-                },
-                128,
-                Some(128),
-            )),
-            Ty::U8 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: false,
-                    bits: 8,
-                },
-                8,
-                Some(8),
-            )),
-            Ty::U16 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: false,
-                    bits: 16,
-                },
-                16,
-                Some(16),
-            )),
-            Ty::U32 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: false,
-                    bits: 32,
-                },
-                32,
-                Some(32),
-            )),
-            Ty::U64 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: false,
-                    bits: 64,
-                },
-                64,
-                Some(64),
-            )),
-            Ty::U128 => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: false,
-                    bits: 128,
-                },
-                128,
-                Some(128),
-            )),
-            // v25 B1 scalars: pointer-width ints take the target's pointer
-            // width; char is a 32-bit scalar; Error has NO layout (typing
-            // hole - fail closed).
-            Ty::Isize => Ok(scalar_layout(
-                TyShape::PointerInt { signed: true },
-                u64::from(pointer_bits),
-                Some(u64::from(pointer_bits)),
-            )),
-            Ty::Usize => Ok(scalar_layout(
-                TyShape::PointerInt { signed: false },
-                u64::from(pointer_bits),
-                Some(u64::from(pointer_bits)),
-            )),
-            Ty::Char => Ok(scalar_layout(
-                TyShape::Int {
-                    signed: false,
-                    bits: 32,
-                },
-                32,
-                Some(32),
-            )),
-            Ty::Error => Err(LayoutError::UnsupportedTyShape(TyShape::Error)),
-            Ty::F16 => Ok(scalar_layout(TyShape::Float { bits: 16 }, 16, Some(16))),
-            Ty::F32 => Ok(scalar_layout(TyShape::Float { bits: 32 }, 32, Some(32))),
-            Ty::F64 => Ok(scalar_layout(TyShape::Float { bits: 64 }, 64, Some(64))),
-            Ty::Ptr
-            | Ty::Ref(_)
-            | Ty::RefMut(_)
-            | Ty::PtrConst(_)
-            | Ty::PtrMut(_)
-            | Ty::Rc(_)
-            | Ty::Func(_) => Ok(TyLayoutShape {
-                size_bits: u64::from(pointer_bits),
-                align_bits: Some(u64::from(pointer_bits)),
-                kind: TyLayoutKind::ThinPointer,
-            }),
-            Ty::FatPtr(kind) => {
-                let ptr = PointerLayoutShape::fat(pointer_bits, kind.metadata_shape());
-                let size_bits = u64::from(ptr.total_bits().ok_or(LayoutError::SizeOverflow)?);
-                Ok(TyLayoutShape {
-                    size_bits,
-                    align_bits: Some(u64::from(pointer_bits)),
-                    kind: TyLayoutKind::FatPointer(kind.metadata_shape()),
-                })
-            }
-            Ty::Unit => Ok(TyLayoutShape {
-                size_bits: 0,
-                align_bits: Some(8),
-                kind: TyLayoutKind::Unit,
-            }),
-            Ty::Never => Ok(TyLayoutShape {
-                size_bits: 0,
-                align_bits: None,
-                kind: TyLayoutKind::Never,
-            }),
-            Ty::Struct(id) => {
-                if struct_visiting.contains(id) {
-                    // A direct, inline struct cycle has no finite layout. Pointers do
-                    // not recurse through this path, so ordinary recursive Rust data
-                    // structures remain representable.
-                    return Err(LayoutError::StructLayoutIncoherent(*id));
-                }
-                let sd = self
-                    .structs
-                    .iter()
-                    .find(|sd| sd.id == *id)
-                    .ok_or(LayoutError::MissingStruct(*id))?;
-                let size = sd.size.ok_or(LayoutError::MissingStructSize(*id))?;
-                let align = sd.align.ok_or(LayoutError::MissingStructAlign(*id))?;
-                if align == 0 || !align.is_power_of_two() || !size.is_multiple_of(align) {
-                    return Err(LayoutError::StructLayoutIncoherent(*id));
-                }
-                let clamp = match sd.repr {
-                    crate::ty::StructRepr::Packed(packed)
-                        if packed != 0 && packed.is_power_of_two() =>
-                    {
-                        u64::from(packed)
-                    }
-                    crate::ty::StructRepr::Packed(_) => {
-                        return Err(LayoutError::StructLayoutIncoherent(*id));
-                    }
-                    _ => u64::MAX,
-                };
-                if align > clamp {
-                    return Err(LayoutError::StructLayoutIncoherent(*id));
-                }
-
-                struct_visiting.push(*id);
-                let result = (|| {
-                    let mut ranges = Vec::with_capacity(sd.fields.len());
-                    let mut fields = Vec::with_capacity(sd.fields.len());
-                    let mut transparent_carrier = None;
-                    let mut transparent_nontrivial = 0usize;
-                    for (field, def) in sd.fields.iter().enumerate() {
-                        let field_layout =
-                            self.ty_layout_shape_inner(&def.ty, enum_visiting, struct_visiting)?;
-                        let field_size = field_layout
-                            .size_bytes()
-                            .ok_or(LayoutError::StructLayoutIncoherent(*id))?;
-                        let field_align = field_layout
-                            .align_bits
-                            .filter(|bits| *bits != 0 && bits.is_multiple_of(8))
-                            .map(|bits| bits / 8)
-                            .ok_or(LayoutError::StructLayoutIncoherent(*id))?
-                            .max(1)
-                            .min(clamp);
-                        let offset = match def.offset {
-                            Some(offset) => offset,
-                            None if field_size == 0 => 0,
-                            None => {
-                                return Err(LayoutError::MissingFieldOffset {
-                                    struct_id: *id,
-                                    field: field as u32,
-                                });
-                            }
-                        };
-                        if !offset.is_multiple_of(field_align)
-                            || field_align > align
-                            || offset.checked_add(field_size).is_none_or(|end| end > size)
-                        {
-                            return Err(LayoutError::StructLayoutIncoherent(*id));
-                        }
-                        if sd.repr == crate::ty::StructRepr::Transparent
-                            && (field_size != 0 || field_align != 1)
-                        {
-                            transparent_nontrivial += 1;
-                            transparent_carrier = Some((field_size, field_align, offset));
-                        }
-                        ranges.push((offset, field_size));
-                        fields.push(FieldOffsetShape {
-                            field: field as u32,
-                            name: def.name.clone(),
-                            ty_shape: def.ty.shape(),
-                            // A missing offset is information-free only for a ZST;
-                            // canonicalize that placement to byte zero for consumers.
-                            offset_bits: Some(
-                                offset.checked_mul(8).ok_or(LayoutError::SizeOverflow)?,
-                            ),
-                        });
-                    }
-                    for left in 0..ranges.len() {
-                        for right in left + 1..ranges.len() {
-                            if byte_ranges_overlap(
-                                ranges[left].0,
-                                ranges[left].1,
-                                ranges[right].0,
-                                ranges[right].1,
-                            ) {
-                                return Err(LayoutError::StructLayoutIncoherent(*id));
-                            }
-                        }
-                    }
-                    if sd.repr == crate::ty::StructRepr::Transparent {
-                        // rustc's transparent rule is about 1-ZSTs, not size
-                        // alone. A zero-sized field with alignment > 1 is the
-                        // representation-bearing field. The wrapper must match
-                        // that sole carrier exactly (including offset zero); if
-                        // every field is a 1-ZST, the wrapper itself is a 1-ZST.
-                        let (carrier_size, carrier_align, carrier_offset) =
-                            transparent_carrier.unwrap_or((0, 1, 0));
-                        if transparent_nontrivial > 1
-                            || size != carrier_size
-                            || align != carrier_align
-                            || carrier_offset != 0
-                        {
-                            return Err(LayoutError::StructLayoutIncoherent(*id));
-                        }
-                    }
-                    Ok(TyLayoutShape {
-                        size_bits: size.checked_mul(8).ok_or(LayoutError::SizeOverflow)?,
-                        align_bits: Some(align.checked_mul(8).ok_or(LayoutError::SizeOverflow)?),
-                        kind: TyLayoutKind::Struct { id: *id, fields },
-                    })
-                })();
-                struct_visiting.pop();
-                result
-            }
-            Ty::Array(elem, len) => {
-                let elem_ty = self
-                    .types
-                    .get(elem.as_usize())
-                    .ok_or(LayoutError::MissingType(*elem))?;
-                let elem_layout =
-                    self.ty_layout_shape_inner(elem_ty, enum_visiting, struct_visiting)?;
-                Ok(TyLayoutShape {
-                    size_bits: elem_layout
-                        .size_bits
-                        .checked_mul(*len)
-                        .ok_or(LayoutError::SizeOverflow)?,
-                    align_bits: elem_layout.align_bits,
-                    kind: TyLayoutKind::Array {
-                        elem: *elem,
-                        len: *len,
-                        stride_bits: elem_layout.size_bits,
-                    },
-                })
-            }
-            Ty::Vector(elem, lanes) => {
-                let elem_layout =
-                    self.ty_layout_shape_inner(elem, enum_visiting, struct_visiting)?;
-                Ok(TyLayoutShape {
-                    size_bits: elem_layout
-                        .size_bits
-                        .checked_mul(u64::from(*lanes))
-                        .ok_or(LayoutError::SizeOverflow)?,
-                    align_bits: elem_layout.align_bits,
-                    kind: TyLayoutKind::Vector {
-                        elem_shape: elem.shape(),
-                        lanes: *lanes,
-                        lane_bits: elem_layout.size_bits,
-                    },
-                })
-            }
-            // trust-ir's CANONICAL tagged-union layout (see
-            // `Module::enum_layout_shape`). Deliberately NOT a claim of rustc
-            // layout parity: no niche optimization, no variant reordering.
-            Ty::Enum(id) => {
-                let layout = self.enum_layout_shape_inner(*id, enum_visiting, struct_visiting)?;
-                Ok(TyLayoutShape {
-                    size_bits: layout.size_bits,
-                    align_bits: Some(layout.align_bits),
-                    kind: TyLayoutKind::Enum {
-                        id: *id,
-                        variants: layout.discriminants.len(),
-                    },
-                })
-            }
-            Ty::Tuple(elems) if elems.is_empty() => Ok(TyLayoutShape {
-                size_bits: 0,
-                align_bits: Some(8),
-                kind: TyLayoutKind::Unit,
-            }),
-            // REPRESENTATION PRESERVATION, enforced here: a `Refine(b, p)`
-            // lays out EXACTLY as `b` does. This delegation is what makes the
-            // whole typed-value-model change unable to move a byte of any
-            // downstream artifact.
-            Ty::Refine(base, _) => match self.types.get(base.as_usize()) {
-                Some(base_ty) => {
-                    self.ty_layout_shape_inner(base_ty, enum_visiting, struct_visiting)
-                }
-                None => Err(LayoutError::UnsupportedTyShape(TyShape::Refine)),
-            },
-            Ty::Tuple(_) | Ty::Closure(_) | Ty::Set(_, _) | Ty::Sequence(_) | Ty::Record(_) => {
-                Err(LayoutError::UnsupportedTyShape(ty.shape()))
-            }
-        }
+        leaf_layout(ty, self.pointer_bits())
     }
 
     /// Compute trust-ir's **canonical tagged-union layout** for `enum.id`.
@@ -1104,266 +1049,12 @@ impl Module {
     /// [`LayoutError::EnumLayoutUnavailable`]; a variant field whose own
     /// layout is unavailable propagates its error — never a partial or wrong
     /// layout.
+    ///
+    /// Lays out what the enum reaches through a fresh [`crate::LayoutTable`];
+    /// see [`Module::ty_layout_shape`] for the cost and for asking many
+    /// questions of one module.
     pub fn enum_layout_shape(&self, id: EnumId) -> Result<EnumLayoutShape, LayoutError> {
-        self.enum_layout_shape_inner(id, &mut Vec::new(), &mut Vec::new())
-    }
-
-    /// [`Module::enum_layout_shape`] with the shared enum cycle guard.
-    fn enum_layout_shape_inner(
-        &self,
-        id: EnumId,
-        enum_visiting: &mut Vec<EnumId>,
-        struct_visiting: &mut Vec<StructId>,
-    ) -> Result<EnumLayoutShape, LayoutError> {
-        if enum_visiting.contains(&id) {
-            // Inline self-reference (not broken by a pointer): no finite
-            // canonical layout exists.
-            return Err(LayoutError::EnumLayoutUnavailable(id));
-        }
-        let ed = self
-            .enums
-            .iter()
-            .find(|ed| ed.id == id)
-            .ok_or(LayoutError::EnumLayoutUnavailable(id))?;
-        let discriminants = ed
-            .effective_discriminants()
-            .ok_or(LayoutError::EnumLayoutUnavailable(id))?;
-        let tag = ed
-            .canonical_tag_repr()
-            .ok_or(LayoutError::EnumLayoutUnavailable(id))?;
-        let tag_size_bits = u64::from(
-            tag.ty()
-                .bit_width()
-                .expect("enum tag repr is a sized integer"),
-        );
-
-        enum_visiting.push(id);
-        let result = (|| {
-            // Payload region: each variant laid out C-style; the region takes
-            // the max variant size and max variant alignment (min 1 byte).
-            let mut payload_size_bits: u64 = 0;
-            let mut payload_align_bits: u64 = 8;
-            let mut variant_field_sizes = Vec::with_capacity(ed.variants.len());
-            let mut variant_field_aligns = Vec::with_capacity(ed.variants.len());
-            for variant in &ed.variants {
-                let mut offset_bits: u64 = 0;
-                let mut variant_align_bits: u64 = 8;
-                let mut field_sizes = Vec::with_capacity(variant.fields.len());
-                let mut field_aligns = Vec::with_capacity(variant.fields.len());
-                for field_ty in &variant.fields {
-                    let field_layout =
-                        self.ty_layout_shape_inner(field_ty, enum_visiting, struct_visiting)?;
-                    let field_size = field_layout
-                        .size_bytes()
-                        .ok_or(LayoutError::EnumLayoutUnavailable(id))?;
-                    let field_align_bits = field_layout
-                        .align_bits
-                        .ok_or(LayoutError::EnumLayoutUnavailable(id))?
-                        .max(8);
-                    offset_bits = align_up_bits(offset_bits, field_align_bits)?;
-                    offset_bits = offset_bits
-                        .checked_add(field_layout.size_bits)
-                        .ok_or(LayoutError::SizeOverflow)?;
-                    variant_align_bits = variant_align_bits.max(field_align_bits);
-                    field_sizes.push(field_size);
-                    field_aligns.push(field_align_bits / 8);
-                }
-                let variant_size_bits = align_up_bits(offset_bits, variant_align_bits)?;
-                payload_size_bits = payload_size_bits.max(variant_size_bits);
-                payload_align_bits = payload_align_bits.max(variant_align_bits);
-                variant_field_sizes.push(field_sizes);
-                variant_field_aligns.push(field_aligns);
-            }
-
-            let payload_offset_bits = align_up_bits(tag_size_bits, payload_align_bits)?;
-            let mut align_bits = tag_size_bits.max(payload_align_bits);
-            let mut size_bits = align_up_bits(
-                payload_offset_bits
-                    .checked_add(payload_size_bits)
-                    .ok_or(LayoutError::SizeOverflow)?,
-                align_bits,
-            )?;
-            if let Some(desc) = &ed.layout {
-                if desc.align == 0
-                    || !desc.align.is_power_of_two()
-                    || !desc.size.is_multiple_of(desc.align)
-                    || desc.variant_field_offsets.len() != ed.variants.len()
-                {
-                    return Err(LayoutError::EnumLayoutUnavailable(id));
-                }
-                for ((offsets, sizes), aligns) in desc
-                    .variant_field_offsets
-                    .iter()
-                    .zip(&variant_field_sizes)
-                    .zip(&variant_field_aligns)
-                {
-                    if offsets.len() != sizes.len() || offsets.len() != aligns.len() {
-                        return Err(LayoutError::EnumLayoutUnavailable(id));
-                    }
-                    for ((offset, field_size), field_align) in offsets.iter().zip(sizes).zip(aligns)
-                    {
-                        if !offset.is_multiple_of(*field_align)
-                            || *field_align > desc.align
-                            || offset
-                                .checked_add(*field_size)
-                                .is_none_or(|end| end > desc.size)
-                        {
-                            return Err(LayoutError::EnumLayoutUnavailable(id));
-                        }
-                    }
-                    for left in 0..offsets.len() {
-                        for right in left + 1..offsets.len() {
-                            if byte_ranges_overlap(
-                                offsets[left],
-                                sizes[left],
-                                offsets[right],
-                                sizes[right],
-                            ) {
-                                return Err(LayoutError::EnumLayoutUnavailable(id));
-                            }
-                        }
-                    }
-                }
-                match &desc.encoding {
-                    // v37: no tag lane exists, so every tag-PLACEMENT check is
-                    // vacuous — there is no offset to align, nothing to fit
-                    // inside `desc.size`, and nothing that could overlap a
-                    // payload field. The per-field bound above still ran and is
-                    // what makes this encoding safe: the fields must lie inside
-                    // the declared size exactly as for the tagged encodings.
-                    //
-                    // The one check with content is that a variant is
-                    // RECOVERABLE without reading anything, which holds exactly
-                    // when there is one. This mirrors the interpreter and the
-                    // validator: all three must agree, or a shape query would
-                    // report a size for an enum the interpreter refuses to load.
-                    crate::ty::EnumTagEncoding::Untagged => {
-                        if ed.variants.len() != 1 {
-                            return Err(LayoutError::EnumLayoutUnavailable(id));
-                        }
-                    }
-                    crate::ty::EnumTagEncoding::Direct { tag_offset } => {
-                        let tag_size = tag_size_bits / 8;
-                        if tag_size > desc.align
-                            || !tag_offset.is_multiple_of(tag_size)
-                            || tag_offset
-                                .checked_add(tag_size)
-                                .is_none_or(|end| end > desc.size)
-                        {
-                            return Err(LayoutError::EnumLayoutUnavailable(id));
-                        }
-                        for (offsets, sizes) in
-                            desc.variant_field_offsets.iter().zip(&variant_field_sizes)
-                        {
-                            if offsets.iter().zip(sizes).any(|(offset, field_size)| {
-                                byte_ranges_overlap(*tag_offset, tag_size, *offset, *field_size)
-                            }) {
-                                return Err(LayoutError::EnumLayoutUnavailable(id));
-                            }
-                        }
-                    }
-                    crate::ty::EnumTagEncoding::Niche {
-                        untagged_variant,
-                        niche_variants_start,
-                        niche_variants_end,
-                        niche_start,
-                        niche_offset,
-                        niche_ty,
-                    } => {
-                        let variant_count = u32::try_from(ed.variants.len())
-                            .map_err(|_| LayoutError::EnumLayoutUnavailable(id))?;
-                        let niche_size = enum_tag_repr_bytes(*niche_ty);
-                        let niche_bits = u32::try_from(niche_size * 8)
-                            .map_err(|_| LayoutError::EnumLayoutUnavailable(id))?;
-                        let niche_mask = match niche_bits {
-                            0 => return Err(LayoutError::EnumLayoutUnavailable(id)),
-                            128 => u128::MAX,
-                            bits if bits < 128 => (1u128 << bits) - 1,
-                            _ => return Err(LayoutError::EnumLayoutUnavailable(id)),
-                        };
-                        let niche_span = niche_variants_end
-                            .checked_sub(*niche_variants_start)
-                            .map(u128::from)
-                            .ok_or(LayoutError::EnumLayoutUnavailable(id))?;
-                        let extra_untagged = if (*niche_variants_start..=*niche_variants_end)
-                            .contains(untagged_variant)
-                        {
-                            0
-                        } else {
-                            1
-                        };
-                        if *untagged_variant >= variant_count
-                            || *niche_variants_end >= variant_count
-                            || niche_span
-                                .checked_add(1)
-                                .and_then(|covered| covered.checked_add(extra_untagged))
-                                != Some(u128::from(variant_count))
-                            || niche_span > niche_mask
-                            || *niche_start > niche_mask
-                            || niche_size > desc.align
-                            || !niche_offset.is_multiple_of(niche_size)
-                            || niche_offset
-                                .checked_add(niche_size)
-                                .is_none_or(|end| end > desc.size)
-                        {
-                            return Err(LayoutError::EnumLayoutUnavailable(id));
-                        }
-                        let untagged = *untagged_variant as usize;
-                        let lane_end = niche_offset
-                            .checked_add(niche_size)
-                            .ok_or(LayoutError::EnumLayoutUnavailable(id))?;
-                        let lane_is_covered = desc.variant_field_offsets[untagged]
-                            .iter()
-                            .zip(&variant_field_sizes[untagged])
-                            .any(|(field_offset, field_size)| {
-                                *field_size > 0
-                                    && *field_offset <= *niche_offset
-                                    && field_offset
-                                        .checked_add(*field_size)
-                                        .is_some_and(|field_end| field_end >= lane_end)
-                            });
-                        if !lane_is_covered {
-                            return Err(LayoutError::EnumLayoutUnavailable(id));
-                        }
-                        for variant in *niche_variants_start..=*niche_variants_end {
-                            if variant == *untagged_variant {
-                                continue;
-                            }
-                            let variant = variant as usize;
-                            if desc.variant_field_offsets[variant]
-                                .iter()
-                                .zip(&variant_field_sizes[variant])
-                                .any(|(field_offset, field_size)| {
-                                    byte_ranges_overlap(
-                                        *niche_offset,
-                                        niche_size,
-                                        *field_offset,
-                                        *field_size,
-                                    )
-                                })
-                            {
-                                return Err(LayoutError::EnumLayoutUnavailable(id));
-                            }
-                        }
-                    }
-                }
-                size_bits = desc.size.checked_mul(8).ok_or(LayoutError::SizeOverflow)?;
-                align_bits = desc.align.checked_mul(8).ok_or(LayoutError::SizeOverflow)?;
-            }
-            Ok(EnumLayoutShape {
-                id,
-                tag,
-                tag_size_bits,
-                payload_offset_bits,
-                payload_size_bits,
-                size_bits,
-                align_bits,
-                discriminants,
-                descriptor: ed.layout.clone(),
-            })
-        })();
-        enum_visiting.pop();
-        result
+        crate::LayoutTable::new(self).enum_layout_shape(id)
     }
 
     pub fn struct_field_offset_bits(
@@ -1371,29 +1062,122 @@ impl Module {
         struct_id: StructId,
         field: u32,
     ) -> Result<u64, LayoutError> {
-        let layout = self.ty_layout_shape(&Ty::Struct(struct_id))?;
-        let TyLayoutKind::Struct { fields, .. } = layout.kind else {
-            return Err(LayoutError::StructLayoutIncoherent(struct_id));
-        };
-        fields
-            .get(field as usize)
-            .and_then(|field| field.offset_bits)
-            .ok_or(LayoutError::MissingFieldOffset { struct_id, field })
+        crate::LayoutTable::new(self).struct_field_offset_bits(struct_id, field)
     }
 
+    /// Whether `ty` holds a first-class closure (`Ty::Closure`) BY VALUE:
+    /// directly, or inside a tuple / array / vector / refinement / struct /
+    /// enum / record that no pointer, reference or `Rc` breaks. A `Ref`,
+    /// `RefMut`, raw pointer or `Rc` to a closure is an address whose bits are
+    /// an address, so it is not held by value; a `Ty::Func` mentioning a
+    /// closure in its signature is a code address. Named table references are
+    /// followed, every definition of a duplicate id included, so a
+    /// self-holding definition terminates.
+    ///
+    /// This is the closure counterpart of
+    /// [`Module::type_reaches_handle`](crate::Module::type_reaches_handle)
+    /// for the layout-sensitive cast rule; unlike the handle walk it stops at
+    /// pointers, because the hazard is reinterpreting the environment's BYTES,
+    /// not naming the type.
+    ///
+    /// Reachability, decided on the heap over one pass of each definition
+    /// table it meets, so it costs O(the type's by-value reach plus those
+    /// tables); a caller with
+    /// many questions asks one [`crate::LayoutTable`]
+    /// ([`crate::LayoutTable::type_holds_closure_by_value`]), which decides
+    /// each node once (see `reach`'s module docs).
+    #[must_use]
+    pub fn type_contains_storage_by_value(&self, ty: &Ty) -> bool {
+        self.layout_table().type_contains_storage_by_value(ty)
+    }
+
+    pub fn type_holds_closure_by_value(&self, ty: &Ty) -> bool {
+        crate::reach::ReachMemo::default().reaches(self, crate::reach::Reach::ClosureByValue, ty)
+    }
+
+    /// Whether this type carries a `Char` by value, following the canonical
+    /// Char-origin reachability rules. See [`crate::LayoutTable::type_contains_char_by_value`].
+    #[must_use]
+    pub fn type_contains_char_by_value(&self, ty: &Ty) -> bool {
+        self.layout_table().type_contains_char_by_value(ty)
+    }
+
+    /// The layout evidence for a layout-sensitive cast, or why there is none.
+    ///
+    /// Lays out what the two types reach through a fresh
+    /// [`crate::LayoutTable`]; a caller judging many casts of one module asks
+    /// [`crate::LayoutTable::layout_sensitive_cast_evidence`] on one table.
     pub fn layout_sensitive_cast_evidence(
         &self,
         op: CastOp,
         src: &Ty,
         dst: &Ty,
     ) -> Result<CastLayoutEvidence, LayoutError> {
+        self.layout_table()
+            .layout_sensitive_cast_evidence(op, src, dst)
+    }
+}
+
+impl crate::LayoutTable<'_> {
+    /// [`Module::layout_sensitive_cast_evidence`], with the layouts answered
+    /// from (and into) this table.
+    pub fn layout_sensitive_cast_evidence(
+        &self,
+        op: CastOp,
+        src: &Ty,
+        dst: &Ty,
+    ) -> Result<CastLayoutEvidence, LayoutError> {
+        let module = self.module();
         if !op.is_layout_sensitive() {
             return Ok(CastLayoutEvidence::NotLayoutSensitive);
+        }
+        // v43: a handle occupies exactly one pointer word, so the size test
+        // below would accept `Bitcast Ptr -> Handle` — the forgery the type
+        // exists to make impossible. Refuse any handle side outright, before
+        // any layout is compared.
+        //
+        // The predicate must FOLLOW table references, because the layout walk
+        // below does. `Ty::contains_handle` inspects the inline spelling only,
+        // so it answers `false` for `Refine(ty.0, _)` and `Array(ty.0, _)`
+        // while `ty_layout_shape` resolves both to `Scalar(TyShape::Handle)`
+        // at pointer width — measured: with the inline predicate,
+        // `Bitcast Ptr -> Refine(ty.0=handle, _)` returned
+        // `Ok(SameSize { size_bits: 64, .. })`. The validator's transport rule
+        // does refuse such a node independently, but this function's OTHER
+        // caller — `request::digest::validate_cast_fact` — has no transport
+        // rule in front of it, and a matching `NativeCastFact` validated
+        // clean, authenticating `Ptr -> handle` as a compiler fact.
+        // `type_reaches_handle` is the targeted form of the module-aware
+        // predicate the transport rule uses. Both callers query it inside a
+        // per-node loop, so it is asked of this table's reachability memo:
+        // each node is decided once per table, not walked again per cast
+        // (and not by a whole-module `nominal_type_reachability()` build per
+        // call either).
+        if self.type_reaches_handle(src) || self.type_reaches_handle(dst) {
+            return Err(LayoutError::OpaqueHandleCast {
+                src: src.shape(),
+                dst: dst.shape(),
+            });
+        }
+        // v58: a closure with a DECLARED frame has a size, so the same-size
+        // rule below would admit `Bitcast closure -> Ptr` / `Transmute closure
+        // -> U64` — the laundering of a captured environment into a callee
+        // that the closure-application rule cannot see. Refuse it here, before
+        // any width is compared, whether or not a frame is declared, and
+        // through any aggregate that holds the closure by value.
+        if self.type_contains_storage_by_value(src) || self.type_contains_storage_by_value(dst) {
+            return Err(LayoutError::UnsupportedTyShape(TyShape::Storage));
+        }
+        if self.type_holds_closure_by_value(src) || self.type_holds_closure_by_value(dst) {
+            return Err(LayoutError::ClosureCast {
+                src: src.shape(),
+                dst: dst.shape(),
+            });
         }
 
         match op {
             CastOp::PtrToPtr => {
-                let pointer_bits = self.pointer_bits();
+                let pointer_bits = module.pointer_bits();
                 let src_layout = src
                     .pointer_layout_shape(pointer_bits)
                     .ok_or_else(|| LayoutError::NotPointer(src.shape()))?;
@@ -1418,8 +1202,22 @@ impl Module {
                 })
             }
             CastOp::Bitcast | CastOp::Transmute => {
-                let src_layout = self.ty_layout_shape(src)?;
-                let dst_layout = self.ty_layout_shape(dst)?;
+                // A bool lane's storage size (one byte per lane, compared
+                // here) is not its value width (one bit per lane, compared by
+                // the structural validator and the interpreter), so a size
+                // test alone would admit `bitcast <8 x bool> -> u64` here
+                // while the referee refuses it. Refuse by name first, following
+                // by-value table references exactly as `ty_layout_shape` does.
+                if src != dst
+                    && (self.type_stores_bool_lane(src) || self.type_stores_bool_lane(dst))
+                {
+                    return Err(LayoutError::BoolLaneReinterpret {
+                        src: src.shape(),
+                        dst: dst.shape(),
+                    });
+                }
+                let src_layout = self.ty_layout(src)?;
+                let dst_layout = self.ty_layout(dst)?;
                 if src_layout.size_bits != dst_layout.size_bits {
                     return Err(LayoutError::CastSizeMismatch {
                         src_bits: src_layout.size_bits,
@@ -1436,7 +1234,7 @@ impl Module {
                 if !matches!(src, Ty::Func(_)) {
                     return Err(LayoutError::NotFunctionPointerSource(src.shape()));
                 }
-                let pointer_bits = self.pointer_bits();
+                let pointer_bits = module.pointer_bits();
                 let dst_layout = dst
                     .pointer_layout_shape(pointer_bits)
                     .ok_or_else(|| LayoutError::NotPointer(dst.shape()))?;
@@ -1453,7 +1251,33 @@ impl Module {
     }
 }
 
-fn ty_uses_scalar_layout_table(ty: &Ty) -> bool {
+impl Module {
+    /// Whether `ty` STORES a bool lane by value in this module: `bool`
+    /// itself, a `<N x bool>` at any vector nesting, or an array, tuple,
+    /// struct, enum or refinement whose by-value closure reaches one —
+    /// FOLLOWING named table references, because the layout walk does.
+    /// Pointer edges are not followed: a pointer's byte image is an address
+    /// whatever it points at, so `*const <8 x bool>` stores no bool lane.
+    ///
+    /// This is the family for which [`Ty::bit_width`] (one bit per lane) is
+    /// not [`Module::ty_layout_shape`] (one byte per lane), so a same-size
+    /// test between the two is meaningless for it; the reinterpret lane
+    /// refuses it before any width is compared
+    /// ([`LayoutError::BoolLaneReinterpret`]). The inline-only form is
+    /// [`Ty::has_bool_lanes`]. Duplicate named ids contribute every matching
+    /// definition (a duplicate id is itself a validation error, so this only
+    /// widens a refusal on a module that is already rejected).
+    ///
+    /// Reachability, decided on the heap over one pass of each definition
+    /// table it meets, so it costs O(the type's by-value reach plus those
+    /// tables); a caller with many questions asks one [`crate::LayoutTable`]
+    /// ([`crate::LayoutTable::type_stores_bool_lane`]).
+    pub fn type_stores_bool_lane(&self, ty: &Ty) -> bool {
+        crate::reach::ReachMemo::default().reaches(self, crate::reach::Reach::BoolLane, ty)
+    }
+}
+
+pub(crate) fn ty_uses_scalar_layout_table(ty: &Ty) -> bool {
     matches!(
         ty,
         Ty::Bool
@@ -1492,9 +1316,125 @@ fn scalar_layout(shape: TyShape, size_bits: u64, align_bits: Option<u64>) -> TyL
     }
 }
 
+/// The layout of a type that names no other type by value — every `Ty` but
+/// `Struct`, `Enum`, `Array`, `Vector`, `Tuple`, `Closure` and `Refine`, for which this
+/// is `None` and [`crate::LayoutTable`] walks the type graph. The canonical
+/// scalar table is assumed: the caller refuses a type
+/// [`ty_uses_scalar_layout_table`] names on a target outside it first.
+pub(crate) fn leaf_layout(
+    ty: &Ty,
+    pointer_bits: u32,
+) -> Option<Result<TyLayoutShape, LayoutError>> {
+    let int = |signed: bool, bits: u32| {
+        Ok(scalar_layout(
+            TyShape::Int { signed, bits },
+            u64::from(bits),
+            Some(u64::from(bits)),
+        ))
+    };
+    let pointer_width = pointer_bits;
+    let pointer_bits = u64::from(pointer_bits);
+    Some(match ty {
+        Ty::Bool => Ok(scalar_layout(TyShape::Bool, 8, Some(8))),
+        Ty::I8 => int(true, 8),
+        Ty::I16 => int(true, 16),
+        Ty::I32 => int(true, 32),
+        Ty::I64 => int(true, 64),
+        Ty::I128 => int(true, 128),
+        Ty::U8 => int(false, 8),
+        Ty::U16 => int(false, 16),
+        Ty::U32 => int(false, 32),
+        Ty::U64 => int(false, 64),
+        Ty::U128 => int(false, 128),
+        // v25 B1 scalars: pointer-width ints take the target's pointer
+        // width; char is a 32-bit scalar; Error has NO layout (typing
+        // hole - fail closed).
+        Ty::Isize => Ok(scalar_layout(
+            TyShape::PointerInt { signed: true },
+            pointer_bits,
+            Some(pointer_bits),
+        )),
+        Ty::Usize => Ok(scalar_layout(
+            TyShape::PointerInt { signed: false },
+            pointer_bits,
+            Some(pointer_bits),
+        )),
+        Ty::Char => int(false, 32),
+        Ty::Error => Err(LayoutError::UnsupportedTyShape(TyShape::Error)),
+        Ty::Dialect(_) => Err(LayoutError::UnsupportedTyShape(TyShape::Dialect)),
+        // v43: a handle is one pointer-sized SCALAR word. Deliberately not
+        // `TyLayoutKind::ThinPointer` — the layout says how many bytes it
+        // occupies, never that anything may address through it.
+        Ty::Storage(layout) => {
+            if !layout.is_well_formed(pointer_width) {
+                Err(LayoutError::UnsupportedTyShape(TyShape::Storage))
+            } else {
+                Ok(TyLayoutShape {
+                    size_bits: layout.size_bytes * 8,
+                    align_bits: Some(layout.align_bytes * 8),
+                    kind: TyLayoutKind::Storage,
+                })
+            }
+        }
+        Ty::Handle(_) => Ok(scalar_layout(
+            TyShape::Handle,
+            pointer_bits,
+            Some(pointer_bits),
+        )),
+        Ty::F16 => Ok(scalar_layout(TyShape::Float { bits: 16 }, 16, Some(16))),
+        Ty::F32 => Ok(scalar_layout(TyShape::Float { bits: 32 }, 32, Some(32))),
+        Ty::F64 => Ok(scalar_layout(TyShape::Float { bits: 64 }, 64, Some(64))),
+        Ty::Ptr
+        | Ty::Ref(_)
+        | Ty::RefMut(_)
+        | Ty::PtrConst(_)
+        | Ty::PtrMut(_)
+        | Ty::Rc(_)
+        | Ty::Func(_) => Ok(TyLayoutShape {
+            size_bits: pointer_bits,
+            align_bits: Some(pointer_bits),
+            kind: TyLayoutKind::ThinPointer,
+        }),
+        Ty::FatPtr(kind) => {
+            let ptr = PointerLayoutShape::fat(pointer_width, kind.metadata_shape());
+            match ptr.total_bits() {
+                Some(total) => Ok(TyLayoutShape {
+                    size_bits: u64::from(total),
+                    align_bits: Some(pointer_bits),
+                    kind: TyLayoutKind::FatPointer(kind.metadata_shape()),
+                }),
+                None => Err(LayoutError::SizeOverflow),
+            }
+        }
+        Ty::Unit => Ok(TyLayoutShape {
+            size_bits: 0,
+            align_bits: Some(8),
+            kind: TyLayoutKind::Unit,
+        }),
+        Ty::Never => Ok(TyLayoutShape {
+            size_bits: 0,
+            align_bits: None,
+            kind: TyLayoutKind::Never,
+        }),
+        Ty::Set(_, _) | Ty::Sequence(_) | Ty::Record(_) => {
+            Err(LayoutError::UnsupportedTyShape(ty.shape()))
+        }
+        // v58: a closure lays out through its DECLARED frame, which names its
+        // captures' types by value.
+        Ty::Struct(_)
+        | Ty::Enum(_)
+        | Ty::Array(_, _)
+        | Ty::Vector(_, _)
+        | Ty::Tuple(_)
+        | Ty::Closure(_)
+        | Ty::Refine(_, _) => return None,
+        Ty::Ext(e) => e.unreachable(),
+    })
+}
+
 /// Round `offset_bits` up to the next multiple of `align_bits` (nonzero),
 /// failing closed on arithmetic overflow.
-fn align_up_bits(offset_bits: u64, align_bits: u64) -> Result<u64, LayoutError> {
+pub(crate) fn align_up_bits(offset_bits: u64, align_bits: u64) -> Result<u64, LayoutError> {
     debug_assert!(align_bits > 0, "alignment must be nonzero");
     let rem = offset_bits % align_bits;
     if rem == 0 {
@@ -1505,7 +1445,10 @@ fn align_up_bits(offset_bits: u64, align_bits: u64) -> Result<u64, LayoutError> 
         .ok_or(LayoutError::SizeOverflow)
 }
 
-fn byte_ranges_overlap(a_offset: u64, a_size: u64, b_offset: u64, b_size: u64) -> bool {
+/// Whether two byte ranges `(offset, size)` overlap: never when either is
+/// empty, always when a nonempty range's end overflows, else when they
+/// intersect.
+pub fn byte_ranges_overlap(a_offset: u64, a_size: u64, b_offset: u64, b_size: u64) -> bool {
     if a_size == 0 || b_size == 0 {
         return false;
     }
@@ -1518,12 +1461,191 @@ fn byte_ranges_overlap(a_offset: u64, a_size: u64, b_offset: u64, b_size: u64) -
     a_offset < b_end && b_offset < a_end
 }
 
-fn enum_tag_repr_bytes(repr: EnumTagRepr) -> u64 {
-    u64::from(
-        repr.ty()
-            .bit_width()
-            .expect("enum tag repr is a sized integer"),
-    ) / 8
+/// Whether some two of `ranges` (`(offset, size)` in bytes) overlap by
+/// [`byte_ranges_overlap`] — the same answer as testing every pair, in
+/// O(n log n) rather than O(n^2): an empty range overlaps nothing, a nonempty
+/// range whose end overflows overlaps every other nonempty range, and
+/// otherwise a sweep in offset order finds a range that starts before the
+/// furthest end seen so far exactly when some pair overlaps.
+pub fn any_byte_ranges_overlap(ranges: &[(u64, u64)]) -> bool {
+    let mut spans = Vec::with_capacity(ranges.len());
+    let mut overflowing = 0usize;
+    for &(offset, size) in ranges {
+        if size == 0 {
+            continue;
+        }
+        match offset.checked_add(size) {
+            Some(end) => spans.push((offset, end)),
+            None => overflowing += 1,
+        }
+    }
+    if overflowing > 0 {
+        return overflowing + spans.len() >= 2;
+    }
+    spans.sort_unstable();
+    let mut spans = spans.into_iter();
+    let Some((_, mut reach)) = spans.next() else {
+        return false;
+    };
+    for (start, end) in spans {
+        if start < reach {
+            return true;
+        }
+        reach = reach.max(end);
+    }
+    false
+}
+
+/// Every pair `(i, j)`, `i < j`, of `ranges` (`(offset, size)` in bytes)
+/// that overlap by [`byte_ranges_overlap`], in `(i, j)` order — the pairs a
+/// nested loop over `i` and then `j > i` would report, in its order — in
+/// O(n log n + k) for `k` pairs: a nonempty range whose end overflows pairs
+/// with every other nonempty range; the rest are swept in offset order,
+/// each range pairing with the ranges still open at its start; the pairs are
+/// then put in order by two counting passes.
+pub fn overlapping_byte_range_pairs(ranges: &[(u64, u64)]) -> Vec<(usize, usize)> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+
+    let mut spans: Vec<(u64, u64, usize)> = Vec::with_capacity(ranges.len());
+    let mut nonempty: Vec<usize> = Vec::with_capacity(ranges.len());
+    let mut overflowing: Vec<usize> = Vec::new();
+    let mut overflows = vec![false; ranges.len()];
+    for (index, &(offset, size)) in ranges.iter().enumerate() {
+        if size == 0 {
+            continue;
+        }
+        nonempty.push(index);
+        match offset.checked_add(size) {
+            Some(end) => spans.push((offset, end, index)),
+            None => {
+                overflowing.push(index);
+                overflows[index] = true;
+            }
+        }
+    }
+    let mut pairs: Vec<(usize, usize)> = Vec::new();
+    let order = |a: usize, b: usize| if a < b { (a, b) } else { (b, a) };
+    // An overflowing range overlaps every other nonempty range; a pair of two
+    // overflowing ranges is reported once, from its lower index.
+    for &wide in &overflowing {
+        for &other in &nonempty {
+            if other != wide && (other > wide || !overflows[other]) {
+                pairs.push(order(wide, other));
+            }
+        }
+    }
+    spans.sort_unstable();
+    // The ranges open at the sweep point, by end: every one still open when
+    // a range starts overlaps it.
+    let mut open: BinaryHeap<Reverse<(u64, usize)>> = BinaryHeap::new();
+    for (start, end, index) in spans {
+        while let Some(Reverse((open_end, _))) = open.peek() {
+            if *open_end > start {
+                break;
+            }
+            open.pop();
+        }
+        for Reverse((_, other)) in open.iter() {
+            pairs.push(order(*other, index));
+        }
+        open.push(Reverse((end, index)));
+    }
+    // Two stable counting passes, by `j` and then by `i`: `(i, j)` order in
+    // O(n + k).
+    let counting_pass = |pairs: Vec<(usize, usize)>, key: fn(&(usize, usize)) -> usize| {
+        let mut starts = vec![0usize; ranges.len() + 1];
+        for pair in &pairs {
+            starts[key(pair) + 1] += 1;
+        }
+        for index in 1..starts.len() {
+            starts[index] += starts[index - 1];
+        }
+        let mut sorted = vec![(0, 0); pairs.len()];
+        for pair in pairs {
+            let slot = &mut starts[key(&pair)];
+            sorted[*slot] = pair;
+            *slot += 1;
+        }
+        sorted
+    };
+    let pairs = counting_pass(pairs, |pair| pair.1);
+    counting_pass(pairs, |pair| pair.0)
+}
+
+impl Module {
+    /// Is `ty` **uninhabited** — provably without any value?
+    ///
+    /// WS3.14 (F-056). The predicate is deliberately SOUND rather than
+    /// complete: `true` is a claim that grants an exemption (an uninhabited
+    /// enum variant needs no niche encoding), so it answers `true` only when
+    /// the structural rules below derive it in finitely many steps (the
+    /// least solution of the rules read as equations over the nominal nodes,
+    /// see the `inhabit` module):
+    ///
+    /// * `Ty::Never`;
+    /// * an enum every one of whose variants is uninhabited (a zero-variant
+    ///   enum included);
+    /// * a struct, record or tuple with at least one uninhabited field;
+    /// * a NON-EMPTY array of an uninhabited element (`[!; 0]` has a value);
+    /// * a refinement of an uninhabited base.
+    ///
+    /// Everything else — pointers and references to `!` included, which rustc
+    /// also treats as inhabited for layout — answers `false`. A nominal id that
+    /// does not resolve answers `false`, and so does a by-value cycle that
+    /// derives nothing (`struct S { s: S }`): an unresolvable question is
+    /// treated as "inhabited", which keeps every check that the exemption
+    /// would skip. A nominal id with several same-id definitions (a module the
+    /// validator refuses, but the interpreter may be handed unvalidated) is
+    /// uninhabited only when EVERY definition says so.
+    ///
+    /// The answer is order-independent and costs O(what `ty` reaches), on a
+    /// heap stack. A caller with many questions asks one
+    /// [`crate::LayoutTable`] ([`crate::LayoutTable::ty_is_uninhabited`]),
+    /// which decides each node once.
+    pub fn ty_is_uninhabited(&self, ty: &Ty) -> bool {
+        crate::inhabit::InhabitMemo::default().ty_is_uninhabited(self, ty)
+    }
+
+    /// Is this enum `variant` **uninhabited** — does some field of it have no
+    /// value (see [`Module::ty_is_uninhabited`])?
+    ///
+    /// rustc gives such a variant no encoding in a niche layout
+    /// (`enum E { A(char), B(!), C }` reserves one niche value, for `C` only),
+    /// so the niche-coverage rule counts INHABITED variants only. A value of an
+    /// uninhabited variant can never exist: constructing one is refused by the
+    /// validator, and decoding a byte image that names one is refused by the
+    /// interpreter.
+    pub fn variant_is_uninhabited(&self, variant: &crate::ty::EnumVariant) -> bool {
+        crate::inhabit::InhabitMemo::default().variant_is_uninhabited(self, variant)
+    }
+
+    /// The niche-coverage rule, shared by the validator, `shape` and the
+    /// interpreter: the index of the first INHABITED variant of `def` that a
+    /// niche encoding leaves without an encoding — neither the untagged
+    /// variant nor inside `niche_variants_start..=niche_variants_end` — or
+    /// `None` when every inhabited variant is encoded.
+    ///
+    /// An uninhabited variant may be the untagged variant, lie in the niche
+    /// interval, or lie in neither: it never has a value to encode. The caller
+    /// still checks, separately, that both indices and the interval are in
+    /// range and ordered. One inhabitedness memo serves every variant, so the
+    /// rule costs O(what the variants reach), each node decided once.
+    pub fn niche_unencoded_inhabited_variant(
+        &self,
+        def: &crate::ty::EnumDef,
+        untagged_variant: u32,
+        niche_variants_start: u32,
+        niche_variants_end: u32,
+    ) -> Option<usize> {
+        crate::inhabit::InhabitMemo::default().niche_unencoded_inhabited_variant(
+            self,
+            def,
+            untagged_variant,
+            niche_variants_start,
+            niche_variants_end,
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -1541,6 +1663,11 @@ pub enum ConstantShape {
     },
     Array {
         len: usize,
+    },
+    /// v50: `len` copies of one element (`Constant::Splat`). The length is
+    /// the declared `u64`, never a materialized count.
+    Splat {
+        len: u64,
     },
     Vector {
         len: usize,
@@ -1560,6 +1687,8 @@ pub enum ConstantShape {
     FnDef,
     SymbolAddr,
     PhantomData,
+    /// Crystal lane (E3b, v49): an unwritten struct/tuple lane (`Constant::Uninit`).
+    Uninit,
 }
 
 impl core::fmt::Display for ConstantShape {
@@ -1571,6 +1700,7 @@ impl core::fmt::Display for ConstantShape {
             ConstantShape::Bool => f.write_str("bool"),
             ConstantShape::Aggregate { len } => write!(f, "aggregate[{len}]"),
             ConstantShape::Array { len } => write!(f, "array[{len}]"),
+            ConstantShape::Splat { len } => write!(f, "splat[{len}]"),
             ConstantShape::Vector { len } => write!(f, "vector[{len}]"),
             ConstantShape::Sequence { len } => write!(f, "sequence[{len}]"),
             ConstantShape::Set { len } => write!(f, "set[{len}]"),
@@ -1579,6 +1709,7 @@ impl core::fmt::Display for ConstantShape {
             ConstantShape::FnDef => f.write_str("fndef"),
             ConstantShape::SymbolAddr => f.write_str("symaddr"),
             ConstantShape::PhantomData => f.write_str("phantomdata"),
+            ConstantShape::Uninit => f.write_str("uninit"),
         }
     }
 }
@@ -1595,6 +1726,7 @@ impl Constant {
             Constant::Bool(_) => ConstantShape::Bool,
             Constant::Aggregate(v) => ConstantShape::Aggregate { len: v.len() },
             Constant::Array(v) => ConstantShape::Array { len: v.len() },
+            Constant::Splat { len, .. } => ConstantShape::Splat { len: *len },
             Constant::Vector(v) => ConstantShape::Vector { len: v.len() },
             Constant::Sequence(v) => ConstantShape::Sequence { len: v.len() },
             Constant::Set(v) => ConstantShape::Set { len: v.len() },
@@ -1605,6 +1737,8 @@ impl Constant {
             Constant::FnDef(_) => ConstantShape::FnDef,
             Constant::SymbolAddr { .. } => ConstantShape::SymbolAddr,
             Constant::PhantomData => ConstantShape::PhantomData,
+            Constant::Uninit => ConstantShape::Uninit,
+            Constant::Ext(e) => e.unreachable(),
         }
     }
 
@@ -1627,8 +1761,8 @@ impl Constant {
             (Constant::Int(_), Ty::Ptr) => true,
             // v25: a char constant is an Int leaf under Ty::Char (char is NOT
             // an integer type - no arithmetic - but its constants are integer
-            // scalars; the Unicode range is checked by int_value_fits_ty and
-            // the validator).
+            // scalars; the Unicode range is checked by int_value_fits_ty, i.e.
+            // by `value_matches_ty`).
             (Constant::Int(_), Ty::Char) => true,
             // v24: a canonical U128 (value > i128::MAX) only fits the U128
             // type - never a narrower integer, never a pointer (fail closed).
@@ -1637,6 +1771,25 @@ impl Constant {
             // (element-type U8-ness needs the module table and is checked by
             // validate_constant_against_ty, same split as Array constants).
             (Constant::Bytes { data, .. }, Ty::Array(_, n)) => *n == data.len() as u64,
+            // Trust (wave-FS): a NULL FAT POINTER — `(data, metadata)` both zero — is the
+            // only `Ty::FatPtr` constant admitted, and it is admitted ZERO-ONLY. A `&str` /
+            // `&[T]` / `&dyn Tr` leaf inside an aggregate seed has no other representable
+            // originator: `Inst::Const` is the sole way to originate an aggregate, and before
+            // this arm the intersection of the two authorities was EMPTY (no `Ty::FatPtr` arm
+            // here, none in `constant_to_value`, and the interpreter's `(_, PhantomData)`
+            // wildcard is not an escape because THIS function's `PhantomData` arm is
+            // `Ty::Unit`-only). A NONZERO data word would fabricate an address with no
+            // provenance and must stay a type error, exactly as the landed
+            // `(Ty::Ptr, Constant::Int(0)) -> NullPtr` precedent is zero-only.
+            //
+            // WS3.8 (F-049): the NON-NULL `&str` / `&[T]` spelling
+            // `[SymbolAddr { G, addend: k }, Int(n)]` is admitted, but NOT here: it is
+            // a window of one immutable module array global, and only the
+            // module-table-aware walk (`trust-ir-build` `validate_constant_against_ty`)
+            // can check `G`. This table-free authority keeps refusing it.
+            (Constant::Aggregate(elems), Ty::FatPtr(_)) => {
+                matches!(elems.as_slice(), [Constant::Int(0), Constant::Int(0)])
+            }
             (Constant::Float(_), t) if t.is_float() => true,
             (Constant::Bool(_), Ty::Bool) => true,
             (Constant::Aggregate(_), Ty::Tuple(_))
@@ -1657,6 +1810,10 @@ impl Constant {
                 matches!(elems.first(), Some(Constant::Int(_)))
             }
             (Constant::Array(_), Ty::Array(_, _)) => true,
+            // v50: a splat fits an array of EXACTLY its length; its element's
+            // typing needs the module table and is checked by
+            // `validate_constant_against_ty` (the same split as `Array`).
+            (Constant::Splat { len, .. }, Ty::Array(_, n)) => len == n,
             (Constant::Vector(_), Ty::Vector(_, _)) => true,
             (Constant::Sequence(_), Ty::Sequence(_)) => true,
             (Constant::Set(_), Ty::Set(_, _)) => true,
@@ -1667,59 +1824,120 @@ impl Constant {
             // for a data-global pointer (`Ty::Ptr`) or a function pointer
             // (`Ty::Func`). It also appears as an element inside an aggregate
             // initializer, where the enclosing aggregate carries the type.
+            // WS3.8 (F-049): `SymbolAddr { symbol, addend: 0 }` at `Ref(T)` /
+            // `PtrConst(T)` / `PtrMut(T)` is admitted by the module-table-aware walk
+            // (it must name one module-defined global of type `T`), never here.
             (Constant::SymbolAddr { .. }, Ty::Ptr) => true,
             (Constant::SymbolAddr { .. }, Ty::Func(_)) => true,
             (Constant::PhantomData, Ty::Unit) => true,
+            // Crystal lane (E3b): `Constant::Uninit` matches NO type on its own. It stands only as a
+            // direct lane of a struct/tuple aggregate constant, where the arms above accept the
+            // aggregate without inspecting its lanes, and trust-ir-build's placement rule is
+            // what admits it there. A bare `uninit` at any type falls through to `false`.
             _ => false,
         }
     }
 
-    /// Return true when this constant can be represented by the declared type.
+    /// Return true when this constant is a value of the declared type on a
+    /// target whose thin pointers are `pointer_bits` wide.
     ///
-    /// This is stricter than [`Constant::shape_matches_ty`]: integer constants
-    /// are range-checked against the signedness and width of the target `Ty`,
-    /// and vector lanes are checked recursively. `Constant::Int` is currently
-    /// an `i128` payload, so `Ty::U128` accepts only the non-negative subset
-    /// that the payload can represent.
-    pub fn value_matches_ty(&self, ty: &Ty) -> bool {
-        match (self, ty) {
-            (Constant::Int(value), ty) if ty.is_integer() => int_value_fits_ty(*value, ty),
-            // v25 Char: NOT an integer type (no arithmetic), but its constants
-            // are Int leaves whose Unicode-scalar range must still be checked.
-            (Constant::Int(value), Ty::Char) => int_value_fits_ty(*value, &Ty::Char),
-            // v24: canonicality (value > i128::MAX) makes U128-vs-Ty::U128 the
-            // only fitting pair; shape_matches_ty already enforces it, and the
-            // value always fits (u128 IS the declared range).
-            (Constant::U128(_), Ty::U128) => true,
-            (Constant::Bytes { data, .. }, Ty::Array(_, n)) => *n == data.len() as u64,
-            (Constant::Vector(elems), Ty::Vector(elem_ty, lanes)) => {
-                elems.len() == *lanes as usize
-                    && elems.iter().all(|elem| elem.value_matches_ty(elem_ty))
+    /// This is stricter than [`Constant::shape_matches_ty`]: an integer
+    /// constant is range-checked against the signedness and the width of its
+    /// type, and nested vector lanes are checked with a stack-safe borrowed
+    /// walk. Scalar and unary-vector paths allocate no traversal scratch;
+    /// branching retains O(vector depth) sibling iterators, not O(vector
+    /// width) lanes. `Constant::Int` is an `i128` payload, so `Ty::U128`
+    /// accepts only the non-negative subset that the payload can represent.
+    ///
+    /// THE WIDTH IS A PARAMETER, never a default: `isize` / `usize` are
+    /// `pointer_bits` wide, so on wasm32 (`pointer_bits = 32`) `2^32` is no
+    /// `usize` — it is the 64-bit spelling of `0`, which the reference
+    /// interpreter, executing `usize` at 32 bits there, would wrap to `0`. A
+    /// module-aware caller passes [`Module::pointer_bits`] (the target's
+    /// width, and the documented 64-bit default for a target-free module); the
+    /// validator's constant funnel and a verification bundle's const generic
+    /// arguments do (`docs/SPEC_RATIFICATIONS.md` §3.3). A consumer MUST refuse
+    /// a pointer-width constant outside its target's range
+    /// (`refuse/const_usize_beyond_target_width`).
+    pub fn value_matches_ty(&self, ty: &Ty, pointer_bits: u32) -> bool {
+        let mut pending: Vec<(core::slice::Iter<'_, Constant>, &Ty)> = Vec::new();
+        let (mut value, mut ty) = (self, ty);
+        loop {
+            let matches = match (value, ty) {
+                (Constant::Int(integer), ty) if ty.is_integer() => {
+                    int_value_fits_ty(*integer, ty, pointer_bits)
+                }
+                // Char is not an integer type; its integer constants still
+                // require Unicode-scalar range validation.
+                (Constant::Int(integer), Ty::Char) => {
+                    int_value_fits_ty(*integer, &Ty::Char, pointer_bits)
+                }
+                // Canonical integer spelling is a separate check, preserving
+                // the existing local-shape behavior for hand-built U128s.
+                (Constant::U128(_), Ty::U128) => true,
+                (Constant::Bytes { data, .. }, Ty::Array(_, n)) => *n == data.len() as u64,
+                (Constant::Vector(elements), Ty::Vector(element_ty, lanes)) => {
+                    if elements.len() != *lanes as usize {
+                        return false;
+                    }
+                    let mut children = elements.iter();
+                    if let Some(first) = children.next() {
+                        if children.len() != 0 {
+                            pending.push((children, element_ty));
+                        }
+                        value = first;
+                        ty = element_ty;
+                        continue;
+                    }
+                    true
+                }
+                _ => value.shape_matches_ty(ty),
+            };
+            if !matches {
+                return false;
             }
-            _ => self.shape_matches_ty(ty),
+            let Some((siblings, element_ty)) = pending.last_mut() else {
+                return true;
+            };
+            value = siblings.next().expect("only nonempty lanes are suspended");
+            ty = *element_ty;
+            if siblings.len() == 0 {
+                pending.pop();
+            }
         }
     }
 }
 
-fn int_value_fits_ty(value: i128, ty: &Ty) -> bool {
-    match ty {
-        Ty::I8 => value >= i8::MIN as i128 && value <= i8::MAX as i128,
-        Ty::I16 => value >= i16::MIN as i128 && value <= i16::MAX as i128,
-        Ty::I32 => value >= i32::MIN as i128 && value <= i32::MAX as i128,
-        Ty::I64 => value >= i64::MIN as i128 && value <= i64::MAX as i128,
-        Ty::I128 => true,
-        Ty::U8 => value >= 0 && value <= u8::MAX as i128,
-        Ty::U16 => value >= 0 && value <= u16::MAX as i128,
-        Ty::U32 => value >= 0 && value <= u32::MAX as i128,
-        Ty::U64 => value >= 0 && value <= u64::MAX as i128,
-        Ty::U128 => value >= 0,
-        // v25 B1 scalars: pointer-width ints range-check at the 64-bit
-        // reference width (the same fixed convention the interpreter and the
-        // fat-pointer len word use); char range-checks as a Unicode scalar
-        // (the validator enforces the same rule at the constant funnel).
-        Ty::Isize => value >= i64::MIN as i128 && value <= i64::MAX as i128,
-        Ty::Usize => value >= 0 && value <= u64::MAX as i128,
-        Ty::Char => (0..=0x10FFFF).contains(&value) && !(0xD800..=0xDFFF).contains(&value),
+/// Whether `value` is a value of the integer (or `char`) type `ty` when
+/// pointer-width integers are `pointer_bits` wide. ONE rule for every integer
+/// width: the width is [`Ty::bit_width_with`]'s — the width the layout tables
+/// and the reference interpreter (`int_shape_at`) execute the type at — and
+/// the range is that width's signed or unsigned range. `char` is a Unicode
+/// scalar value (`0..=0x10FFFF` minus the surrogates).
+fn int_value_fits_ty(value: i128, ty: &Ty, pointer_bits: u32) -> bool {
+    if matches!(ty, Ty::Char) {
+        return (0..=0x10FFFF).contains(&value) && !(0xD800..=0xDFFF).contains(&value);
+    }
+    if !ty.is_integer() {
+        return false;
+    }
+    ty.bit_width_with(pointer_bits)
+        .is_some_and(|bits| int_value_fits_bits(value, bits, ty.is_signed()))
+}
+
+/// Whether `value` lies in the `bits`-wide signed (`-2^(bits-1) ..
+/// 2^(bits-1)`) or unsigned (`0 .. 2^bits`) range. A width of 0 or above 128
+/// holds nothing (fail closed); 128 bits holds every non-negative `i128` as
+/// an unsigned value and every `i128` as a signed one.
+fn int_value_fits_bits(value: i128, bits: u32, signed: bool) -> bool {
+    match (bits, signed) {
+        (1..=127, true) => {
+            let half = 1i128 << (bits - 1);
+            (-half..half).contains(&value)
+        }
+        (1..=127, false) => value >= 0 && value >> bits == 0,
+        (128, true) => true,
+        (128, false) => value >= 0,
         _ => false,
     }
 }
@@ -1727,9 +1945,58 @@ fn int_value_fits_ty(value: i128, ty: &Ty) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ty::{FatPtrKind, FieldDef, StructDef};
-    use crate::value::{ClosureTyId, EnumId, FuncId, FuncTyId, StructId, TyId};
+    use crate::ty::{EnumDef, EnumVariant, FatPtrKind, FieldDef, SetRepr, StructDef, StructRepr};
+    use crate::value::{ClosureTyId, EnumId, FuncId, FuncTyId, PredId, StructId, TyId};
     use crate::{Endianness, Module, TargetInfo};
+
+    #[test]
+    fn null_fat_pointer_constant_is_admitted_zero_only() {
+        // Trust (wave-FS): the ONLY `Ty::FatPtr` constant is the null fat pointer, and it is
+        // admitted zero-only — the same discipline as the landed
+        // `(Constant::Int(0), Ty::Ptr)` arm, and for the same reason: a nonzero data word
+        // would fabricate an address with no provenance.
+        let zero = || Constant::Aggregate(vec![Constant::Int(0), Constant::Int(0)]);
+        for kind in [
+            FatPtrKind::Str,
+            FatPtrKind::Slice(TyId::new(0)),
+            FatPtrKind::TraitObject { trait_id: 7 },
+            FatPtrKind::ContainerLen,
+            FatPtrKind::ContainerVtable,
+        ] {
+            assert!(
+                zero().shape_matches_ty(&Ty::FatPtr(kind)),
+                "the null fat pointer must fit every fat-pointer kind",
+            );
+        }
+
+        // NONZERO in either word is a type error, not a fabricated pointer.
+        for bad in [
+            Constant::Aggregate(vec![Constant::Int(1), Constant::Int(0)]),
+            Constant::Aggregate(vec![Constant::Int(0), Constant::Int(1)]),
+            Constant::Aggregate(vec![Constant::Int(1), Constant::Int(1)]),
+        ] {
+            assert!(
+                !bad.shape_matches_ty(&Ty::FatPtr(FatPtrKind::Str)),
+                "a nonzero fat-pointer word must stay a type error",
+            );
+        }
+
+        // WRONG ARITY is a type error too: a fat pointer is exactly (data, metadata).
+        for bad in [
+            Constant::Aggregate(vec![]),
+            Constant::Aggregate(vec![Constant::Int(0)]),
+            Constant::Aggregate(vec![Constant::Int(0), Constant::Int(0), Constant::Int(0)]),
+        ] {
+            assert!(
+                !bad.shape_matches_ty(&Ty::FatPtr(FatPtrKind::Str)),
+                "a fat pointer is exactly two words",
+            );
+        }
+
+        // And the arm must not leak into the THIN pointer type, whose own constant is
+        // `Constant::Int(0)` and never an aggregate.
+        assert!(!zero().shape_matches_ty(&Ty::Ptr));
+    }
 
     #[test]
     fn type_shape_classifies_bootstrap_mir_forms() {
@@ -1818,6 +2085,141 @@ mod tests {
         assert_eq!(Ty::I64.pointer_metadata_ty(64), None);
     }
 
+    /// v43: no layout-sensitive cast admits a handle on either side, even
+    /// though a handle and a thin pointer lay out identically.
+    #[test]
+    fn layout_sensitive_casts_refuse_opaque_handles_before_comparing_widths() {
+        let module = Module::new("handle-cast");
+        let handle = Ty::handle("Nat", "trust_bignum::Nat");
+        // Same size and alignment as Ptr — the hazard.
+        let handle_layout = module.ty_layout_shape(&handle).unwrap();
+        let ptr_layout = module.ty_layout_shape(&Ty::Ptr).unwrap();
+        assert_eq!(handle_layout.size_bits, ptr_layout.size_bits);
+        assert_eq!(handle_layout.align_bits, ptr_layout.align_bits);
+        assert!(matches!(
+            handle_layout.kind,
+            TyLayoutKind::Scalar(TyShape::Handle)
+        ));
+        for op in [CastOp::Bitcast, CastOp::Transmute, CastOp::PtrToPtr] {
+            for (src, dst) in [(&Ty::Ptr, &handle), (&handle, &Ty::Ptr), (&handle, &handle)] {
+                assert!(
+                    matches!(
+                        module.layout_sensitive_cast_evidence(op, src, dst),
+                        Err(LayoutError::OpaqueHandleCast { .. })
+                    ),
+                    "{op:?} {src} -> {dst}"
+                );
+            }
+            // Wrapped occurrences are refused too.
+            let boxed = Ty::Tuple(vec![handle.clone()]);
+            assert!(matches!(
+                module.layout_sensitive_cast_evidence(op, &boxed, &boxed),
+                Err(LayoutError::OpaqueHandleCast { .. })
+            ));
+        }
+        // The control: Ptr -> Ptr is still fine.
+        assert!(
+            module
+                .layout_sensitive_cast_evidence(CastOp::Bitcast, &Ty::Ptr, &Ty::Ptr)
+                .is_ok()
+        );
+    }
+
+    /// The guard must follow TABLE references, because the layout walk it
+    /// guards does. Regression: it tested `Ty::contains_handle`, which is
+    /// documented as inline-only, so every spelling that reaches the handle
+    /// through `Module.types` escaped it and the width test then admitted the
+    /// forgery — `Bitcast Ptr -> Refine(ty.0 = handle, _)` returned
+    /// `Ok(SameSize { size_bits: 64, .. })`, a pointer bit-reinterpreted as
+    /// an opaque runtime handle. Inside `validate_module` the transport rule
+    /// refuses such a node independently; `request::digest::validate_cast_fact`
+    /// has nothing in front of it (see the bundle test
+    /// `native_bundle_rejects_a_cast_fact_forging_a_table_backed_handle`).
+    #[test]
+    fn layout_sensitive_casts_refuse_handles_reached_through_the_type_table() {
+        let mut module = Module::new("table-backed-handle-cast");
+        module.types.push(Ty::handle("Nat", "trust_bignum::Nat"));
+        module.types.push(Ty::I64);
+
+        // The hazard is that each of these lays out as ONE POINTER WORD, the
+        // same width as `Ty::Ptr`, so a width comparison cannot tell them
+        // apart. Each reaches the handle only through `ty.0`.
+        let table_backed = [
+            Ty::Refine(TyId::new(0), PredId::new(0)),
+            Ty::Array(TyId::new(0), 1),
+            Ty::Sequence(TyId::new(0)),
+            Ty::Set(TyId::new(0), SetRepr::Boxed),
+            Ty::FatPtr(FatPtrKind::Slice(TyId::new(0))),
+            Ty::Ref(Box::new(Ty::Array(TyId::new(0), 1))),
+        ];
+        for ty in &table_backed {
+            assert!(
+                !ty.contains_handle(),
+                "{ty} must be a TABLE-backed spelling for this test to bite"
+            );
+            assert!(
+                module.type_reaches_handle(ty),
+                "the module-aware predicate must see through the table: {ty}"
+            );
+            for op in [CastOp::Bitcast, CastOp::Transmute, CastOp::PtrToPtr] {
+                for (src, dst) in [(&Ty::Ptr, ty), (ty, &Ty::Ptr)] {
+                    assert!(
+                        matches!(
+                            module.layout_sensitive_cast_evidence(op, src, dst),
+                            Err(LayoutError::OpaqueHandleCast { .. })
+                        ),
+                        "{op:?} {src} -> {dst} escaped the handle guard"
+                    );
+                }
+            }
+        }
+
+        // Through a named STRUCT field, and through an ENUM variant field.
+        module.structs.push(StructDef {
+            id: StructId::new(0),
+            name: "Wrapper".into(),
+            fields: vec![FieldDef {
+                name: "inner".into(),
+                ty: Ty::handle("Nat", "trust_bignum::Nat"),
+                offset: Some(0),
+            }],
+            size: Some(8),
+            align: Some(8),
+            repr: StructRepr::Rust,
+            origin: None,
+        });
+        module.enums.push(EnumDef::new(
+            EnumId::new(0),
+            "Either",
+            vec![EnumVariant {
+                name: "Some".into(),
+                fields: vec![Ty::Struct(StructId::new(0))],
+                field_names: Vec::new(),
+            }],
+        ));
+        for ty in [Ty::Struct(StructId::new(0)), Ty::Enum(EnumId::new(0))] {
+            assert!(!ty.contains_handle());
+            assert!(module.type_reaches_handle(&ty), "{ty}");
+            assert!(matches!(
+                module.layout_sensitive_cast_evidence(CastOp::Bitcast, &Ty::Ptr, &ty),
+                Err(LayoutError::OpaqueHandleCast { .. })
+            ));
+        }
+
+        // A table reference that does NOT reach a handle is still admitted, so
+        // the guard has not degenerated into refusing every table-backed type.
+        let handle_free = Ty::Array(TyId::new(1), 1);
+        assert!(!module.type_reaches_handle(&handle_free));
+        assert!(
+            module
+                .layout_sensitive_cast_evidence(CastOp::Bitcast, &handle_free, &handle_free)
+                .is_ok()
+        );
+        // And a table CYCLE terminates instead of recursing forever.
+        module.types.push(Ty::Array(TyId::new(2), 1));
+        assert!(!module.type_reaches_handle(&Ty::Array(TyId::new(2), 1)));
+    }
+
     #[test]
     fn scalar_layout_evidence_declines_targets_outside_the_canonical_table() {
         let mut i686 = Module::new("i686-layout");
@@ -1843,6 +2245,7 @@ mod tests {
             size: Some(0),
             align: Some(1),
             repr: crate::ty::StructRepr::C,
+            origin: None,
         });
         assert!(i686.ty_layout_shape(&Ty::Struct(StructId::new(0))).is_ok());
 
@@ -1914,6 +2317,7 @@ mod tests {
             align: Some(8),
 
             repr: Default::default(),
+            origin: None,
         });
 
         let layout = module.ty_layout_shape(&Ty::Struct(sid)).unwrap();
@@ -1930,7 +2334,9 @@ mod tests {
         }
         assert_eq!(module.struct_field_offset_bits(sid, 1).unwrap(), 64);
 
-        let u8_id = module.add_type(Ty::U8);
+        let u8_id = module
+            .add_type(Ty::U8)
+            .expect("Module::add_type: test fixture");
         let array = module.ty_layout_shape(&Ty::Array(u8_id, 4)).unwrap();
         assert_eq!(array.size_bits, 32);
         assert_eq!(array.align_bits, Some(8));
@@ -1975,6 +2381,7 @@ mod tests {
             size: Some(size),
             align: Some(align),
             repr,
+            origin: None,
         });
         module
     }
@@ -2130,6 +2537,7 @@ mod tests {
             size: Some(0),
             align: Some(8),
             repr: crate::ty::StructRepr::Rust,
+            origin: None,
         });
         overaligned.add_struct(StructDef {
             id: StructId::new(1),
@@ -2141,12 +2549,121 @@ mod tests {
             size: Some(0),
             align: Some(8),
             repr: crate::ty::StructRepr::Transparent,
+            origin: None,
         });
         let layout = overaligned
             .ty_layout_shape(&Ty::Struct(StructId::new(1)))
             .expect("an over-aligned ZST can be the sole transparent carrier");
         assert_eq!(layout.size_bits, 0);
         assert_eq!(layout.align_bits, Some(64));
+    }
+
+    /// The overlap sweep answers what testing every pair answered, including
+    /// empty ranges (overlap nothing) and a range whose end overflows (overlaps
+    /// every other nonempty range).
+    #[test]
+    fn the_overlap_sweep_is_the_pairwise_test() {
+        let pairwise = |ranges: &[(u64, u64)]| {
+            (0..ranges.len()).any(|left| {
+                (left + 1..ranges.len()).any(|right| {
+                    byte_ranges_overlap(
+                        ranges[left].0,
+                        ranges[left].1,
+                        ranges[right].0,
+                        ranges[right].1,
+                    )
+                })
+            })
+        };
+        let mut state = 0x0bad_5eed_u64;
+        let mut next = |n: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % n
+        };
+        let (mut overlapping, mut disjoint) = (0, 0);
+        for _ in 0..50_000 {
+            let len = next(7) as usize;
+            let ranges: Vec<(u64, u64)> = (0..len)
+                .map(|_| match next(12) {
+                    0 => (u64::MAX - next(4), next(6)),
+                    1 => (next(40), 0),
+                    _ => (next(40), next(9)),
+                })
+                .collect();
+            let expected = pairwise(&ranges);
+            assert_eq!(any_byte_ranges_overlap(&ranges), expected, "{ranges:?}");
+            if expected {
+                overlapping += 1;
+            } else {
+                disjoint += 1;
+            }
+        }
+        assert!(overlapping > 1_000 && disjoint > 1_000);
+    }
+
+    #[test]
+    fn the_overlapping_pairs_are_the_nested_loops_pairs_in_its_order() {
+        let nested = |ranges: &[(u64, u64)]| {
+            let mut pairs = Vec::new();
+            for left in 0..ranges.len() {
+                for right in left + 1..ranges.len() {
+                    if byte_ranges_overlap(
+                        ranges[left].0,
+                        ranges[left].1,
+                        ranges[right].0,
+                        ranges[right].1,
+                    ) {
+                        pairs.push((left, right));
+                    }
+                }
+            }
+            pairs
+        };
+        let mut state = 0x5ca1_ab1e_u64;
+        let mut next = |n: u64| {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state % n
+        };
+        let (mut pairs_seen, mut with_overflow, mut none) = (0usize, 0usize, 0usize);
+        for _ in 0..50_000 {
+            let len = next(11) as usize;
+            let ranges: Vec<(u64, u64)> = (0..len)
+                .map(|_| match next(14) {
+                    0 => (u64::MAX - next(4), next(6)),
+                    1 => (next(40), 0),
+                    2 => (7, 3),
+                    _ => (next(40), next(9)),
+                })
+                .collect();
+            let expected = nested(&ranges);
+            assert_eq!(
+                overlapping_byte_range_pairs(&ranges),
+                expected,
+                "{ranges:?}"
+            );
+            assert_eq!(any_byte_ranges_overlap(&ranges), !expected.is_empty());
+            pairs_seen += expected.len();
+            if ranges
+                .iter()
+                .any(|(offset, size)| *size > 0 && offset.checked_add(*size).is_none())
+            {
+                with_overflow += 1;
+            }
+            none += usize::from(expected.is_empty());
+        }
+        assert!(pairs_seen > 50_000 && with_overflow > 1_000 && none > 1_000);
+        // Wide: n ranges with k = n - 1 overlaps (a chain), and n disjoint.
+        let n = 100_000u64;
+        let chain: Vec<(u64, u64)> = (0..n).map(|i| (i, 2)).collect();
+        let pairs = overlapping_byte_range_pairs(&chain);
+        assert_eq!(pairs.len() as u64, n - 1);
+        assert!(pairs.iter().all(|(left, right)| right - left == 1));
+        let disjoint: Vec<(u64, u64)> = (0..n).rev().map(|i| (i, 1)).collect();
+        assert!(overlapping_byte_range_pairs(&disjoint).is_empty());
     }
 
     #[test]
@@ -2164,6 +2681,73 @@ mod tests {
         assert!(matches!(
             recursive.ty_layout_shape(&Ty::Struct(StructId::new(0))),
             Err(LayoutError::StructLayoutIncoherent(id)) if id == StructId::new(0)
+        ));
+    }
+
+    /// The struct and enum arms had a cycle guard; the two arms that resolve a
+    /// `TyId` through the module type table did NOT, so a self-referential
+    /// entry recursed without bound and ABORTED the process on a stack
+    /// overflow. Measured 2026-08-31: 60 corpus files SIGSEGV'd under the
+    /// producer's validate_module tripwire (192 bodies lost, `modules_invalid`
+    /// left unmeasurable) — a walk that crashes cannot be promoted to a gate.
+    ///
+    /// Written as a CONTRAST: a cyclic array must be refused as a CYCLE, while
+    /// the same shape over a real element must still lay out. Refusing both
+    /// would "fix" the crash by making the arm useless.
+    #[test]
+    fn array_shape_refuses_a_ty_table_cycle_but_still_lays_out_a_real_element() {
+        let mut cyclic = Module::new("cyclic-array");
+        cyclic.types.push(Ty::Array(TyId::new(0), 4));
+        let seed = cyclic.types[0].clone();
+        assert!(matches!(
+            cyclic.ty_layout_shape(&seed),
+            Err(LayoutError::TyLayoutCycle(id)) if id == TyId::new(0)
+        ));
+
+        let mut sound = Module::new("sound-array");
+        let elem = sound
+            .add_type(Ty::U32)
+            .expect("Module::add_type: test fixture");
+        assert_eq!(
+            sound
+                .ty_layout_shape(&Ty::Array(elem, 4))
+                .expect("an array of u32 has a layout")
+                .size_bits,
+            128
+        );
+    }
+
+    /// The cycle need not be direct: `ty.0 -> ty.1 -> ty.0` is the same defect,
+    /// and a guard that only compared against the immediately-enclosing id
+    /// would miss it. The reported id is the one whose re-entry closed the
+    /// cycle, so the message names a real table entry either way.
+    #[test]
+    fn array_shape_refuses_an_indirect_ty_table_cycle() {
+        let mut module = Module::new("indirect-cycle");
+        module.types.push(Ty::Array(TyId::new(1), 2));
+        module.types.push(Ty::Array(TyId::new(0), 2));
+        let seed = module.types[0].clone();
+        assert!(matches!(
+            module.ty_layout_shape(&seed),
+            Err(LayoutError::TyLayoutCycle(_))
+        ));
+    }
+
+    /// `Refine` delegates to its base for layout (representation preservation),
+    /// which is exactly what makes a self-referential base unbounded. It is
+    /// refused as a CYCLE, distinct from the `UnsupportedTyShape(Refine)` a
+    /// DANGLING base id already produced — two different defects with two
+    /// different owners.
+    #[test]
+    fn refine_shape_refuses_a_self_referential_base() {
+        let mut module = Module::new("cyclic-refine");
+        module
+            .types
+            .push(Ty::Refine(TyId::new(0), crate::value::PredId::new(0)));
+        let seed = module.types[0].clone();
+        assert!(matches!(
+            module.ty_layout_shape(&seed),
+            Err(LayoutError::TyLayoutCycle(id)) if id == TyId::new(0)
         ));
     }
 
@@ -2190,8 +2774,11 @@ mod tests {
             align: Some(8),
 
             repr: Default::default(),
+            origin: None,
         });
-        let u64_id = module.add_type(Ty::U64);
+        let u64_id = module
+            .add_type(Ty::U64)
+            .expect("Module::add_type: test fixture");
 
         let evidence = module
             .layout_sensitive_cast_evidence(
@@ -2269,27 +2856,184 @@ mod tests {
 
     #[test]
     fn constant_value_match_range_checks_integer_width_and_signedness() {
-        assert!(Constant::Int(255).value_matches_ty(&Ty::U8));
-        assert!(!Constant::Int(256).value_matches_ty(&Ty::U8));
-        assert!(!Constant::Int(-1).value_matches_ty(&Ty::U8));
-        assert!(Constant::Int(-128).value_matches_ty(&Ty::I8));
-        assert!(!Constant::Int(-129).value_matches_ty(&Ty::I8));
-        assert!(Constant::Int(i128::MAX).value_matches_ty(&Ty::U128));
-        assert!(!Constant::Int(-1).value_matches_ty(&Ty::U128));
+        let at = |c: Constant, ty: Ty| c.value_matches_ty(&ty, DEFAULT_POINTER_BITS);
+        assert!(at(Constant::Int(255), Ty::U8));
+        assert!(!at(Constant::Int(256), Ty::U8));
+        assert!(!at(Constant::Int(-1), Ty::U8));
+        assert!(at(Constant::Int(-128), Ty::I8));
+        assert!(!at(Constant::Int(-129), Ty::I8));
+        assert!(at(Constant::Int(i128::MAX), Ty::U128));
+        assert!(!at(Constant::Int(-1), Ty::U128));
+        assert!(at(Constant::Int(i128::MIN), Ty::I128));
 
+        assert!(at(
+            Constant::Vector(vec![Constant::Int(0), Constant::Int(255)]),
+            Ty::Vector(Box::new(Ty::U8), 2)
+        ));
+        assert!(!at(
+            Constant::Vector(vec![Constant::Int(0), Constant::Int(256)]),
+            Ty::Vector(Box::new(Ty::U8), 2)
+        ));
+    }
+
+    /// The fixed-width table the range rule replaced, kept as the oracle:
+    /// every fixed-width integer type's range is the same at every pointer
+    /// width, and equals its Rust type's `MIN..=MAX`.
+    #[test]
+    fn fixed_width_integer_ranges_are_their_rust_types_at_every_pointer_width() {
+        let cells: [(Ty, i128, i128); 10] = [
+            (Ty::I8, i8::MIN.into(), i8::MAX.into()),
+            (Ty::I16, i16::MIN.into(), i16::MAX.into()),
+            (Ty::I32, i32::MIN.into(), i32::MAX.into()),
+            (Ty::I64, i64::MIN.into(), i64::MAX.into()),
+            (Ty::I128, i128::MIN, i128::MAX),
+            (Ty::U8, 0, u8::MAX.into()),
+            (Ty::U16, 0, u16::MAX.into()),
+            (Ty::U32, 0, u32::MAX.into()),
+            (Ty::U64, 0, u64::MAX.into()),
+            (Ty::U128, 0, i128::MAX),
+        ];
+        for pointer_bits in [8, 16, 32, 64] {
+            for (ty, lo, hi) in &cells {
+                for (value, fits) in [
+                    (*lo, true),
+                    (*hi, true),
+                    (lo.saturating_sub(1), *lo == i128::MIN),
+                    (hi.saturating_add(1), *hi == i128::MAX),
+                ] {
+                    assert_eq!(
+                        Constant::Int(value).value_matches_ty(ty, pointer_bits),
+                        fits,
+                        "{ty} {value} at {pointer_bits}-bit pointers"
+                    );
+                }
+            }
+        }
+    }
+
+    /// `isize` / `usize` have the pointer's width: each end of the range at
+    /// 8, 16, 32 and 64 bits fits, one past either end does not, and a width
+    /// no target has (0, or above 128) holds nothing.
+    #[test]
+    fn pointer_width_integer_ranges_follow_the_pointer_width() {
+        for bits in [8u32, 16, 32, 64] {
+            let half = 1i128 << (bits - 1);
+            let full = 1i128 << bits;
+            for (ty, value, fits) in [
+                (Ty::Usize, 0, true),
+                (Ty::Usize, full - 1, true),
+                (Ty::Usize, full, false),
+                (Ty::Usize, -1, false),
+                (Ty::Isize, -half, true),
+                (Ty::Isize, half - 1, true),
+                (Ty::Isize, half, false),
+                (Ty::Isize, -half - 1, false),
+            ] {
+                assert_eq!(
+                    Constant::Int(value).value_matches_ty(&ty, bits),
+                    fits,
+                    "{ty} {value} at {bits}-bit pointers"
+                );
+            }
+        }
+        // The documented default is the 64-bit reference width.
+        assert!(Constant::Int((1 << 32) - 1).value_matches_ty(&Ty::Usize, DEFAULT_POINTER_BITS));
+        assert!(Constant::Int(1 << 32).value_matches_ty(&Ty::Usize, DEFAULT_POINTER_BITS));
+        assert!(!Constant::Int(1 << 32).value_matches_ty(&Ty::Usize, 32));
+        // A vector lane is checked at the same width (the validator refuses
+        // a pointer-width vector type; the range rule still answers).
+        let lanes = Ty::Vector(Box::new(Ty::Usize), 2);
+        let pair = Constant::Vector(vec![Constant::Int(0), Constant::Int(1 << 32)]);
+        assert!(pair.value_matches_ty(&lanes, 64));
+        assert!(!pair.value_matches_ty(&lanes, 32));
+        for bits in [0, 129, u32::MAX] {
+            assert!(
+                !Constant::Int(0).value_matches_ty(&Ty::Usize, bits),
+                "{bits}"
+            );
+            assert!(
+                !Constant::Int(0).value_matches_ty(&Ty::Isize, bits),
+                "{bits}"
+            );
+        }
+        // `char` is a Unicode scalar value at every pointer width.
+        for bits in [16, 32, 64] {
+            assert!(Constant::Int(0x10FFFF).value_matches_ty(&Ty::Char, bits));
+            assert!(!Constant::Int(0xD800).value_matches_ty(&Ty::Char, bits));
+        }
+    }
+
+    #[test]
+    fn nested_vector_value_matching_is_stack_safe_and_range_faithful() {
+        let mut valid = Constant::Int(255);
+        let mut invalid = Constant::Int(256);
+        let mut ty = Ty::U8;
+        for _ in 0..100_000 {
+            valid = Constant::Vector(vec![valid]);
+            invalid = Constant::Vector(vec![invalid]);
+            ty = Ty::Vector(Box::new(ty), 1);
+        }
+        // Constant/Ty Drop are not made iterative by this local shape change.
+        let valid = Box::leak(Box::new(valid));
+        let invalid = Box::leak(Box::new(invalid));
+        let ty = Box::leak(Box::new(ty));
+        assert!(valid.value_matches_ty(ty, DEFAULT_POINTER_BITS));
+        assert!(!invalid.value_matches_ty(ty, DEFAULT_POINTER_BITS));
+    }
+
+    #[test]
+    fn nested_vector_value_matching_checks_all_lanes_and_preserves_shallow_fallbacks() {
+        let ty = Ty::Vector(Box::new(Ty::Vector(Box::new(Ty::U8), 2)), 2);
+        let valid = Constant::Vector(vec![
+            Constant::Vector(vec![Constant::Int(0), Constant::Int(255)]),
+            Constant::Vector(vec![Constant::Int(10), Constant::Int(20)]),
+        ]);
+        assert!(valid.value_matches_ty(&ty, DEFAULT_POINTER_BITS));
+        let last_invalid = Constant::Vector(vec![
+            Constant::Vector(vec![Constant::Int(0), Constant::Int(255)]),
+            Constant::Vector(vec![Constant::Int(10), Constant::Int(256)]),
+        ]);
+        assert!(!last_invalid.value_matches_ty(&ty, DEFAULT_POINTER_BITS));
         assert!(
-            Constant::Vector(vec![Constant::Int(0), Constant::Int(255)])
-                .value_matches_ty(&Ty::Vector(Box::new(Ty::U8), 2))
+            !Constant::Vector(vec![Constant::Vector(vec![Constant::Int(0)])])
+                .value_matches_ty(&ty, DEFAULT_POINTER_BITS)
         );
         assert!(
-            !Constant::Vector(vec![Constant::Int(0), Constant::Int(256)])
-                .value_matches_ty(&Ty::Vector(Box::new(Ty::U8), 2))
+            Constant::Vector(vec![])
+                .value_matches_ty(&Ty::Vector(Box::new(Ty::Bool), 0), DEFAULT_POINTER_BITS)
         );
+
+        // These checks remain local: table-backed aggregate element validation
+        // and canonical integer spelling are separate existing responsibilities.
+        assert!(
+            Constant::Vector(vec![Constant::Array(vec![Constant::Bool(true)])]).value_matches_ty(
+                &Ty::Vector(Box::new(Ty::Array(TyId(0), 99)), 1),
+                DEFAULT_POINTER_BITS
+            )
+        );
+        assert!(
+            Constant::Vector(vec![Constant::U128(0)])
+                .value_matches_ty(&Ty::Vector(Box::new(Ty::U128), 1), DEFAULT_POINTER_BITS)
+        );
+    }
+
+    #[test]
+    fn wide_nested_vector_value_matching_streams_siblings_and_checks_last_lane() {
+        let mut lanes: Vec<_> = (0..100_000)
+            .map(|_| Constant::Vector(vec![Constant::Int(255)]))
+            .collect();
+        let ty = Ty::Vector(
+            Box::new(Ty::Vector(Box::new(Ty::U8), 1)),
+            lanes.len() as u32,
+        );
+        assert!(Constant::Vector(lanes.clone()).value_matches_ty(&ty, DEFAULT_POINTER_BITS));
+        *lanes.last_mut().expect("last lane") = Constant::Vector(vec![Constant::Int(256)]);
+        assert!(!Constant::Vector(lanes).value_matches_ty(&ty, DEFAULT_POINTER_BITS));
     }
 
     // --- canonical enum layout (tag + max payload) ---
 
-    use crate::ty::{EnumDef, EnumTagRepr, EnumVariant};
+    use crate::ty::EnumTagRepr;
 
     fn module_with_enum(ed: EnumDef) -> Module {
         let mut module = Module::new("enum-layout");
@@ -2560,6 +3304,167 @@ mod container_len_layout_tests {
             FatPtrKind::Str.metadata_shape(),
             "sharing a metadata shape with Str would re-encode the very claim \
              the variant exists to avoid making"
+        );
+    }
+
+    /// v41, the vtable twin. Same CONTRAST shape as the two tests above: the
+    /// layout must match a plain trait-object fat pointer exactly, and the
+    /// identity must NOT.
+    #[test]
+    fn container_vtable_lays_out_like_a_trait_object_but_is_not_one() {
+        let m = Module::new("container_vtable_layout");
+
+        let container = m
+            .ty_layout_shape(&Ty::FatPtr(FatPtrKind::ContainerVtable))
+            .expect("ContainerVtable must resolve — that is the entire point");
+        let dyn_shape = m
+            .ty_layout_shape(&Ty::FatPtr(FatPtrKind::TraitObject { trait_id: 7 }))
+            .expect("trait-object fat pointer resolves");
+
+        assert_eq!(
+            container.size_bytes(),
+            dyn_shape.size_bytes(),
+            "ContainerVtable must lay out exactly like a trait object"
+        );
+        assert_eq!(container.align_bits, dyn_shape.align_bits);
+
+        assert_ne!(
+            FatPtrKind::ContainerVtable.metadata_shape(),
+            FatPtrKind::TraitObject { trait_id: 7 }.metadata_shape(),
+            "sharing a metadata shape with TraitObject would assert the data \
+             pointer addresses the trait object, which is the false claim this \
+             variant exists to avoid making"
+        );
+    }
+
+    /// The OTHER near-miss spelling, and the one v38 alone would have invited:
+    /// `ContainerLen` gets the container claim right but carries pointer-sized
+    /// LENGTH metadata. A consumer switching on the metadata shape would read
+    /// a `usize` where a vtable pointer lives.
+    #[test]
+    fn container_vtable_metadata_is_a_pointer_not_a_length() {
+        assert_eq!(
+            FatPtrKind::ContainerVtable.metadata_ty(64),
+            Some(Ty::Ptr),
+            "vtable metadata is a pointer"
+        );
+        assert_eq!(
+            FatPtrKind::ContainerLen.metadata_ty(64),
+            Some(Ty::U64),
+            "length metadata is a pointer-sized unsigned"
+        );
+        assert_ne!(
+            FatPtrKind::ContainerVtable.metadata_shape(),
+            FatPtrKind::ContainerLen.metadata_shape(),
+        );
+    }
+}
+
+#[cfg(test)]
+mod container_vtable_layout_tests {
+    use super::*;
+    use crate::FatPtrKind;
+
+    /// The defect this variant exists to close, as a CONTRAST: the producer's
+    /// fail-closed spelling for a pointer-to-`dyn`-tailed-container was
+    /// `Ty::Unit`, which is not a pointer at all -- no metadata, no lanes, so
+    /// nothing declared over it had a coherent size. The first-class kind is
+    /// a two-lane fat pointer that lays out EXACTLY like a trait object.
+    #[test]
+    fn container_vtable_lays_out_exactly_like_trait_object() {
+        let m = Module::new("container_vtable_layout");
+        let bits = m.pointer_bits();
+
+        let fail_closed = Ty::Unit;
+        assert_eq!(
+            fail_closed.pointer_metadata_ty(bits),
+            None,
+            "the fail-closed spelling is not pointer-like -- if this changes, \
+             the motivation for FatPtrKind::ContainerVtable changed and this \
+             test should be the thing that says so"
+        );
+
+        let fat = Ty::FatPtr(FatPtrKind::ContainerVtable);
+        let dyn_ptr = Ty::FatPtr(FatPtrKind::TraitObject { trait_id: 7 });
+
+        let shape = m
+            .ty_layout_shape(&fat)
+            .expect("ContainerVtable must resolve -- that is the entire point");
+        let dyn_shape = m
+            .ty_layout_shape(&dyn_ptr)
+            .expect("TraitObject fat pointer resolves");
+        assert_eq!(
+            shape.size_bytes(),
+            dyn_shape.size_bytes(),
+            "ContainerVtable must lay out exactly like TraitObject"
+        );
+        assert_eq!(shape.align_bits, dyn_shape.align_bits);
+        // Two pointer words: 16 bytes / align 8 on the 64-bit default target.
+        assert_eq!(bits, 64);
+        assert_eq!(shape.size_bytes(), Some(16));
+        assert_eq!(shape.align_bits, Some(64));
+
+        let lanes = fat
+            .pointer_layout_shape(bits)
+            .expect("ContainerVtable is a fat pointer");
+        let dyn_lanes = dyn_ptr.pointer_layout_shape(bits).unwrap();
+        assert_eq!(lanes.lane_count(), 2);
+        assert_eq!(lanes.data_bits, dyn_lanes.data_bits);
+        assert_eq!(lanes.metadata_bits, dyn_lanes.metadata_bits);
+        assert_eq!(lanes.total_bits(), dyn_lanes.total_bits());
+        assert_eq!(
+            format!("{lanes}"),
+            "fat(data=64b, metadata=container_vtable:64b)"
+        );
+    }
+
+    /// The metadata half. It is the OPAQUE VTABLE WORD -- the same `Ty::Ptr`
+    /// a trait object carries -- and NEVER the unsigned length the slice-side
+    /// kinds carry. Reading it as a length would be a type confusion.
+    #[test]
+    fn container_vtable_metadata_is_the_vtable_word_never_a_length() {
+        for bits in [32u32, 64] {
+            let vtable_word = FatPtrKind::TraitObject { trait_id: 7 }.metadata_ty(bits);
+            assert_eq!(vtable_word, Some(Ty::Ptr));
+            assert_eq!(
+                FatPtrKind::ContainerVtable.metadata_ty(bits),
+                vtable_word,
+                "ContainerVtable metadata must be the vtable word at {bits} bits"
+            );
+            assert_ne!(
+                FatPtrKind::ContainerVtable.metadata_ty(bits),
+                FatPtrKind::ContainerLen.metadata_ty(bits),
+                "ContainerVtable must not carry the length word ContainerLen does"
+            );
+        }
+        assert_eq!(
+            FatPtrKind::ContainerVtable.metadata_shape(),
+            PointerMetadataShape::ContainerVtable
+        );
+    }
+
+    /// The identity half. Layout equality must NOT become identity equality:
+    /// a container-tail pointer is not a trait-object pointer (it addresses
+    /// the container header and dispatches nothing), and it is not the
+    /// slice-side container kind either. The metadata shapes are what
+    /// downstream consumers switch on.
+    #[test]
+    fn container_vtable_is_neither_trait_object_nor_container_len() {
+        for trait_id in [0u32, 7, u32::MAX] {
+            assert_ne!(
+                FatPtrKind::ContainerVtable.metadata_shape(),
+                FatPtrKind::TraitObject { trait_id }.metadata_shape(),
+                "sharing a metadata shape with TraitObject would re-encode the \
+                 dispatch claim the variant exists to avoid making"
+            );
+        }
+        assert_ne!(
+            FatPtrKind::ContainerVtable.metadata_shape(),
+            FatPtrKind::ContainerLen.metadata_shape()
+        );
+        assert_eq!(
+            format!("{}", Ty::FatPtr(FatPtrKind::ContainerVtable)),
+            "fatptr<container_vtable>"
         );
     }
 }

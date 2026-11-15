@@ -4452,9 +4452,9 @@ fn test_init_bool_retries_from_post_surface_boundary() {
 fn test_constant_info_trust_summary_tracks_registered_provenance() {
     let _serial = crate::test_utils::serial_test_guard();
     let mut env = Environment::default();
-    env.init_bool().unwrap();
-    env.init_trusted_arith().unwrap();
-    env.init_trusted_ay().unwrap();
+    // `init_bool` no longer registers `sorryAx` (bcacce6e0): the admission
+    // fragment registers Bool, both sorry carriers and the solver markers.
+    env.init_admission_stub_theory().unwrap();
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("Issue2562.goal"),
         level_params: vec![],

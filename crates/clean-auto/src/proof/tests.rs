@@ -683,22 +683,6 @@ fn test_congr_preserves_universe_levels() {
         }
         _ => panic!("Expected Congr, got {step:?}"),
     }
-
-    // Also verify Axiom carries universe levels
-    let ax = ProofStep::Axiom(
-        "Eq.rec".to_string(),
-        vec![
-            Level::param(Name::from_string("u_1")),
-            Level::param(Name::from_string("u_2")),
-        ],
-    );
-    match &ax {
-        ProofStep::Axiom(name, levels) => {
-            assert_eq!(name, "Eq.rec");
-            assert_eq!(levels.len(), 2, "Eq.rec should have 2 universe params");
-        }
-        _ => panic!("Expected Axiom, got {ax:?}"),
-    }
 }
 
 /// Verify @Eq.symm.{u} α a b h produces exactly 4 arguments.

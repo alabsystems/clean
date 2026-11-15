@@ -24,8 +24,16 @@ use sha2::{Digest, Sha256};
 use std::time::Instant;
 use tracing::instrument;
 
+use super::core::{answer_with_env, run_with_env, slot_then_env, WorkEnv};
 use super::state::ServerState;
+use super::work::{batch_pool, run_item_until, within, WorkError, WorkPool};
 pub use clean_elab::tactic::execute_simple_tactic;
+use std::sync::Arc;
+use std::time::Duration;
+
+#[cfg(test)]
+#[path = "tactic/typed_names.rs"]
+mod typed_name_tests;
 
 // ============================================================================
 // Request/Response Types
@@ -86,6 +94,9 @@ pub struct GetProofStateParams {
     /// Output format: "llm", "full", or "compact"
     #[serde(default)]
     pub format: proof_state::OutputFormat,
+    /// Optional timeout in milliseconds (the server's default when absent)
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Search request scoped to one cached proof-state goal.
@@ -95,6 +106,10 @@ pub struct ProofStateGoalSearchParams {
     pub state_id: String,
     /// Goal to focus on
     pub goal_id: String,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Explain a failed attempt request.
@@ -144,6 +159,9 @@ pub struct ExtractProofParams {
     /// Format: "term", "tactic_script", or "certificate"
     #[serde(default = "default_proof_format")]
     pub format: String,
+    /// Optional timeout in milliseconds (the server's default when absent)
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Parameters for `proofState.openObligation`.
@@ -361,16 +379,15 @@ pub struct KernelProofExtractionEvidence {
 /// Opens a server-backed proof state from a serialized kernel goal expression.
 /// Pretty-only obligations are intentionally rejected because they cannot be
 /// made into kernel goals without an elaboration context.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_open_obligation(
     state: &ServerState,
     id: RequestId,
     params: OpenObligationParams,
 ) -> Response {
-    use clean_kernel::ExprKind;
-    use elab_tactic::ProofState as InternalProofState;
     use proof_state::{OpenObligationResponse, OutputFormat};
 
+    let start = Instant::now();
     let validation = match params.validate() {
         Ok(validation) => validation,
         Err(err) => {
@@ -396,39 +413,45 @@ pub async fn handle_open_obligation(
         Err(err) => return Response::error(id, err),
     };
 
-    let env = state.env.read().await;
-    let proof_state = InternalProofState::with_elab_context(env.clone(), target, local_ctx);
-    let goal = proof_state
-        .current_goal()
-        .expect("new proof state should contain one goal")
-        .clone();
-    let target_type = match proof_state.infer_type(&goal, &goal.target) {
-        Ok(ty) => ty,
-        Err(err) => {
-            return Response::error(
-                id,
-                open_obligation_invalid_params(
-                    "INVALID_KERNEL_GOAL",
-                    format!("goal.expr is not a valid kernel expression: {err}"),
-                ),
-            );
-        }
+    // The goal is a caller's kernel term, and inferring its type runs the
+    // kernel for as long as the term asks: work on the pool under the request's
+    // deadline. An interrupted check is no verdict on the goal, so it answers
+    // the timeout error and opens nothing. The new state is rendered from the
+    // read hold the check ran under: the snapshot shows the environment the
+    // goal was checked in, and a writer queued during the check is not granted
+    // before the answer (a second read waited for it, outside the timeout).
+    // What the snapshot searches for (its premises are selected from the whole
+    // environment) is found in the same work, on the pool; only the
+    // rendering of the goal is left for here.
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
+    let domain_profile = params.domain_profile;
+    let opened = within(timeout, async {
+        let (slot, held) = slot_then_env(state).await?;
+        let job_held = Arc::clone(&held);
+        let opened = WorkPool::run_in(slot, deadline, move || {
+            let env = &job_held.env;
+            open_obligation_state(env, target, local_ctx).map(|opened| {
+                let search =
+                    proof_state::snapshot_search(&opened, env, OutputFormat::Llm, domain_profile);
+                (opened, search)
+            })
+        })
+        .await?;
+        Ok((held, opened))
+    })
+    .await;
+    let (held, (proof_state, search)) = match opened {
+        Ok((held, Ok(opened))) => (held, opened),
+        Ok((_, Err(error))) => return Response::error(id, error),
+        Err(error) => return Response::error(id, error.into_rpc_error(timeout)),
     };
-    let target_type_whnf = proof_state.whnf(&goal, &target_type);
-    if !matches!(target_type_whnf.kind(), ExprKind::Sort(_) | ExprKind::SProp) {
-        return Response::error(
-            id,
-            open_obligation_invalid_params(
-                "INVALID_KERNEL_GOAL",
-                "goal.expr must itself be a type or proposition",
-            ),
-        );
-    }
+    let env: &clean_kernel::Environment = &held.env;
 
     let state_id = state.proof_cache.insert_open_obligation(
         proof_state,
         Some(params.environment_id.clone()),
-        std::time::Duration::from_secs(params.ttl_sec),
+        Duration::from_secs(params.ttl_sec),
         params.max_states,
         Some(params.trust_policy),
         params.domain_profile,
@@ -447,9 +470,11 @@ pub async fn handle_open_obligation(
         }
     };
 
-    let trust_summary = super::trust_summary_from_proof_state(&env, &state_ref.state);
+    // A new obligation has its one goal open, so its trust summary is its
+    // ledger's: no kernel check.
+    let trust_summary = super::trust_summary_from_proof_state(env, &state_ref.state);
     let initial_snapshot =
-        proof_state::to_api_state(&state_ref, &env, OutputFormat::Llm, Some(trust_summary));
+        proof_state::api_state_with(&state_ref, env, Some(trust_summary), search);
     let result = OpenObligationResponse {
         schema_version: validation.selected_schema,
         state_id: state_id.to_string(),
@@ -468,6 +493,36 @@ pub async fn handle_open_obligation(
         .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
 }
 
+/// The obligation's proof state, once its goal is a type or a proposition.
+/// Runs on the work pool: inferring the goal's type is kernel work.
+fn open_obligation_state(
+    env: &clean_kernel::Environment,
+    target: Expr,
+    local_ctx: Vec<elab_tactic::LocalDecl>,
+) -> Result<elab_tactic::ProofState, RpcError> {
+    use clean_kernel::ExprKind;
+
+    let proof_state = elab_tactic::ProofState::with_elab_context(env.clone(), target, local_ctx);
+    let goal = proof_state
+        .current_goal()
+        .expect("new proof state should contain one goal")
+        .clone();
+    let target_type = proof_state.infer_type(&goal, &goal.target).map_err(|err| {
+        open_obligation_invalid_params(
+            "INVALID_KERNEL_GOAL",
+            format!("goal.expr is not a valid kernel expression: {err}"),
+        )
+    })?;
+    let target_type_whnf = proof_state.whnf(&goal, &target_type);
+    if !matches!(target_type_whnf.kind(), ExprKind::Sort(_) | ExprKind::SProp) {
+        return Err(open_obligation_invalid_params(
+            "INVALID_KERNEL_GOAL",
+            "goal.expr must itself be a type or proposition",
+        ));
+    }
+    Ok(proof_state)
+}
+
 fn open_obligation_local_context(
     local_context: &[proof_state::ObligationLocalHypothesis],
 ) -> Result<Vec<elab_tactic::LocalDecl>, RpcError> {
@@ -475,12 +530,12 @@ fn open_obligation_local_context(
         .iter()
         .enumerate()
         .map(|(idx, hyp)| {
-            if hyp.name.trim().is_empty() {
-                return Err(open_obligation_invalid_params(
+            let name = proof_state::parse_obligation_local_name(&hyp.name).ok_or_else(|| {
+                open_obligation_invalid_params(
                     "INVALID_LOCAL_CONTEXT",
-                    "local_context entries must include a non-empty name",
-                ));
-            }
+                    "local_context entries require a non-relative source identifier; quote literal punctuation with guillemets",
+                )
+            })?;
             let Some(ty) = hyp.type_expr.clone() else {
                 return Err(open_obligation_invalid_params(
                     "PRETTY_ONLY_LOCAL_CONTEXT",
@@ -491,8 +546,9 @@ fn open_obligation_local_context(
             };
 
             Ok(elab_tactic::LocalDecl {
+                binder_info: Default::default(),
                 fvar: clean_kernel::FVarId::new(idx as u64),
-                name: hyp.name.clone(),
+                name,
                 ty,
                 value: hyp.value_expr.clone(),
             })
@@ -518,75 +574,95 @@ fn open_obligation_invalid_params(code: &'static str, message: impl Into<String>
 ///
 /// Creates a new proof state from a theorem statement, returning a state ID
 /// for subsequent tactic operations.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_init_proof_state(
     state: &ServerState,
     id: RequestId,
     params: InitProofStateParams,
 ) -> Response {
-    use elab_tactic::ProofState as InternalProofState;
-    use proof_state::convert_goals;
-
     let start = Instant::now();
-    let _timeout =
-        std::time::Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
+    let theorem = params.theorem;
 
-    // Parse the theorem
-    let surface_expr = match parse_expr_with_tactics_exact(&params.theorem, &state.tactic_patterns)
-    {
-        Ok(expr) => expr,
-        Err(e) => {
-            return Response::error(
-                id,
-                RpcError::invalid_params(format!("failed to parse theorem: {}", e)),
-            );
+    // Parsing, elaboration and the new state's goals are work on the pool,
+    // under the request's deadline; the state is cached here, once the work
+    // has answered.
+    let outcome = tokio::time::timeout(
+        timeout,
+        run_with_env(state, deadline, move |held| {
+            init_proof_state_on_pool(held, &theorem)
+        }),
+    )
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
+    let (proof_state, mut result) = match outcome {
+        Ok(Ok(initialized)) => initialized,
+        Ok(Err(error)) => return Response::error(id, error),
+        Err(WorkError::Interrupted) => {
+            return Response::error(id, RpcError::timeout(timeout.as_millis() as u64))
+        }
+        Err(WorkError::Unavailable(detail)) => {
+            return Response::error(id, RpcError::internal_error(detail))
         }
     };
-
-    // Elaborate the expression
-    let env = state.env.read().await;
-    let target = match elaborate(&env, &surface_expr) {
-        Ok(expr) => expr,
-        Err(e) => {
-            return Response::error(
-                id,
-                RpcError::invalid_params(format!("elaboration failed: {}", e)),
-            );
-        }
-    };
-
-    // Create proof state
-    let proof_state = InternalProofState::new(env.clone(), target);
 
     // Cache it
     let state_id = state
         .proof_cache
-        .insert(proof_state.clone(), params.problem_id, None, 0);
-
-    let goals = convert_goals(&proof_state, &env);
-    let is_solved = proof_state.is_complete();
-    let mathverse_candidates = proof_state::mathverse_candidates_for_state(&proof_state, &env);
-    let trust_summary = super::trust_summary_from_proof_state(&env, &proof_state);
+        .insert(proof_state, params.problem_id, None, 0);
+    result.state_id = state_id.to_string();
     let elapsed = start.elapsed().as_micros() as u64;
-
-    let result = InitProofStateResult {
-        state_id: state_id.to_string(),
-        goals,
-        is_solved,
-        time_us: elapsed,
-        time_ns: Some(ns_from_us(elapsed)),
-        mathverse_candidates,
-        trust_summary: Some(trust_summary),
-    };
+    result.time_us = elapsed;
+    result.time_ns = Some(ns_from_us(elapsed));
 
     Response::success_typed(id.clone(), &result)
         .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
 }
 
+/// Parse and elaborate the theorem and build its proof state, against the
+/// held environment. Runs on the work pool. The result's `state_id` and times
+/// are filled in when the state is cached.
+fn init_proof_state_on_pool(
+    held: &WorkEnv,
+    theorem: &str,
+) -> Result<(elab_tactic::ProofState, InitProofStateResult), RpcError> {
+    use elab_tactic::ProofState as InternalProofState;
+    use proof_state::convert_goals;
+
+    // Parse the theorem
+    let surface_expr = parse_expr_with_tactics_exact(theorem, &held.patterns)
+        .map_err(|e| RpcError::invalid_params(format!("failed to parse theorem: {}", e)))?;
+
+    // Elaborate the expression
+    let env: &clean_kernel::Environment = &held.env;
+    let target = elaborate(env, &surface_expr)
+        .map_err(|e| RpcError::invalid_params(format!("elaboration failed: {}", e)))?;
+
+    // Create proof state
+    let proof_state = InternalProofState::new(env.clone(), target);
+
+    let goals = convert_goals(&proof_state, env);
+    let is_solved = proof_state.is_complete();
+    let mathverse_candidates = proof_state::mathverse_candidates_for_state(&proof_state, env);
+    let trust_summary = super::trust_summary_from_proof_state(env, &proof_state);
+
+    let result = InitProofStateResult {
+        state_id: String::new(),
+        goals,
+        is_solved,
+        time_us: 0,
+        time_ns: None,
+        mathverse_candidates,
+        trust_summary: Some(trust_summary),
+    };
+    Ok((proof_state, result))
+}
+
 /// Handle applyTactic request
 ///
 /// Applies a tactic to a proof state, returning the new state with updated goals.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_apply_tactic(
     state: &ServerState,
     id: RequestId,
@@ -640,21 +716,56 @@ pub async fn handle_apply_tactic(
         }
     };
 
-    // Clone state for modification
-    let mut proof_state = state_ref.state.clone();
-    let env = state.env.read().await;
+    // The cached state, shared with the cache: it holds a whole environment,
+    // so the tactic's work copies it on the pool, never here. Whichever share
+    // goes last frees it off the runtime (`off_runtime.rs`, `Shared`): this
+    // request's, when the cache let the state go while the tactic ran.
+    let cached = state_ref.state.clone();
+    // Every wait is inside the request's timeout, in the pool's lock order
+    // (`work.rs`): a work slot first, then a read hold on the environment,
+    // shared with the tactic's work on the pool. Holding the environment while
+    // waiting for a slot would close a cycle with a queued writer and every
+    // slot holder waiting behind it.
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
+    let acquired = within(
+        timeout.saturating_sub(start.elapsed()),
+        slot_then_env(state),
+    )
+    .await;
+    let (slot, held) = match acquired {
+        Ok(acquired) => acquired,
+        Err(error) => return Response::error(id, error.into_rpc_error(timeout)),
+    };
+    let env: &clean_kernel::Environment = &held.env;
 
     // Goal addressing (C1 Task E): honor `goal_id` even when it names a
     // non-first goal. We resolve it to an index here; index 0 is the current
     // goal (the common case), any other valid index is focused before the
     // tactic runs. Only a goal_id that matches no live goal is rejected.
-    let goal_index = match goal_index_for_id(&proof_state, &params.goal_id) {
+    let goal_index = match goal_index_for_id(&cached, &params.goal_id) {
         Some(index) => index,
         None => {
+            // The cached state may be solved, and a solved state's trust
+            // summary re-checks its closed proof in the kernel: work on the
+            // pool, in the slot taken above, under the request's deadline.
+            let job_held = Arc::clone(&held);
+            let viewed = within(
+                timeout.saturating_sub(start.elapsed()),
+                WorkPool::run_in(slot, deadline, move || {
+                    let env = &job_held.env;
+                    (
+                        super::trust_summary_from_proof_state(env, &cached),
+                        proof_state::mathverse_candidates_for_state(&cached, env),
+                    )
+                }),
+            )
+            .await;
+            let (trust_summary, mathverse_candidates) = match viewed {
+                Ok(viewed) => viewed,
+                Err(error) => return Response::error(id, error.into_rpc_error(timeout)),
+            };
             let elapsed = start.elapsed().as_micros() as u64;
-            let trust_summary = super::trust_summary_from_proof_state(&env, &state_ref.state);
-            let mathverse_candidates =
-                proof_state::mathverse_candidates_for_state(&state_ref.state, &env);
             let api_err = goal_not_current_error(&params.goal_id);
             let result = ApplyTacticResult {
                 success: false,
@@ -681,10 +792,27 @@ pub async fn handle_apply_tactic(
         let rejected = proof_state::constructive_only_rejected_tactic(tactic_str)
             .unwrap_or(tactic_str)
             .to_string();
+        // The cached state has the goal named above, so it is not solved and
+        // its trust summary is its ledger's: no kernel check. Its Mathverse
+        // candidates scan an installed corpus, so the refusal's view is work
+        // on the pool, in the slot taken above, under the request's deadline.
+        let job_held = Arc::clone(&held);
+        let viewed = within(
+            timeout.saturating_sub(start.elapsed()),
+            WorkPool::run_in(slot, deadline, move || {
+                let env = &job_held.env;
+                (
+                    super::trust_summary_from_proof_state(env, &cached),
+                    proof_state::mathverse_candidates_for_state(&cached, env),
+                )
+            }),
+        )
+        .await;
+        let (trust_summary, mathverse_candidates) = match viewed {
+            Ok(viewed) => viewed,
+            Err(error) => return Response::error(id, error.into_rpc_error(timeout)),
+        };
         let elapsed = start.elapsed().as_micros() as u64;
-        let trust_summary = super::trust_summary_from_proof_state(&env, &state_ref.state);
-        let mathverse_candidates =
-            proof_state::mathverse_candidates_for_state(&state_ref.state, &env);
         let api_err = TacticApiError::trust_policy_violation(
             state_ref
                 .trust_policy
@@ -716,15 +844,62 @@ pub async fn handle_apply_tactic(
         return Response::success_typed(id.clone(), &result)
             .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
     }
-    let tactic_result = execute_tactic_on_goal(&mut proof_state, goal_index, tactic_str, &env);
+    // The tactic runs on the work pool, in the slot taken above, under the
+    // request's deadline. It runs on this request's clone of the cached state
+    // (a clone starts with no checker caches), so an interrupted run leaves the
+    // cached state untouched, and nothing it computed is cached or reported.
+    // What the answer reports about the new state is built there too: a tactic
+    // that closed the proof leaves a closed proof term, which the trust summary
+    // re-checks in the kernel (until 2026-10-15 that re-check ran on the
+    // runtime worker after the deadline's work had answered).
+    let job_held = Arc::clone(&held);
+    let job_tactic = tactic_str.to_string();
+    let ran = within(
+        timeout.saturating_sub(start.elapsed()),
+        WorkPool::run_in(slot, deadline, move || {
+            let env = &job_held.env;
+            let mut proof_state = elab_tactic::ProofState::clone(&cached);
+            let result = execute_tactic_on_goal(&mut proof_state, goal_index, &job_tactic, env)
+                .map(|()| {
+                    (
+                        super::trust_summary_from_proof_state(env, &proof_state),
+                        proof_state::mathverse_candidates_for_state(&proof_state, env),
+                        convert_goals(&proof_state, env),
+                    )
+                })
+                // A failed tactic reports the candidates of the state it ran
+                // on: a search too, so it is found here.
+                .map_err(|err| {
+                    (
+                        err,
+                        proof_state::mathverse_candidates_for_state(&cached, env),
+                    )
+                });
+            // The cache shares a state with every reader and never changes it
+            // in place (a tactic runs on a copy), so the checker caches the
+            // tactic built in this one would serve nobody for as long as the
+            // state is cached. They go here, on the pool: `current_goal_mut`
+            // drops them (it invalidates them for a caller about to change the
+            // goal) and changes nothing else. The copy made by `clone` that
+            // was cached before R36 started without them.
+            let _ = proof_state.current_goal_mut();
+            (proof_state, result)
+        }),
+    )
+    .await;
+    let (proof_state, tactic_result) = match ran {
+        Ok(ran) => ran,
+        Err(error) => return Response::error(id, error.into_rpc_error(timeout)),
+    };
 
     let elapsed = start.elapsed().as_micros() as u64;
+    let is_solved = proof_state.is_complete();
 
     match tactic_result {
-        Ok(()) => {
+        Ok((trust_summary, mathverse_candidates, new_goals)) => {
             // State modified successfully - cache the new state with tactic tracking
             let new_state_id = match state.proof_cache.insert_child(
-                proof_state.clone(),
+                proof_state,
                 &state_ref,
                 Some(tactic_str.to_string()),
             ) {
@@ -733,6 +908,31 @@ pub async fn handle_apply_tactic(
                     max_states,
                     live_states,
                 }) => {
+                    // The cached state had the goal the tactic ran on, so it
+                    // is not solved: its trust summary is its ledger's.
+                    let trust_summary =
+                        super::trust_summary_from_proof_state(env, &state_ref.state);
+                    // Its Mathverse candidates scan an installed corpus: work
+                    // for the pool under the request's deadline, never here.
+                    // The tactic's slot is gone with its work, so the refusal
+                    // takes another, after letting the environment go (never
+                    // wait for a slot holding it: `work.rs`'s lock order); the
+                    // scan reads no environment.
+                    drop(held);
+                    let mathverse_candidates =
+                        match refused_state_candidates(state, &state_ref, start, timeout).await {
+                            Ok(candidates) => candidates,
+                            Err(error) => {
+                                return Response::error(id, error.into_rpc_error(timeout))
+                            }
+                        };
+                    // The refused attempt is recorded for the answer that
+                    // names it (`attempt_id`, which `proofState.explainFailure`
+                    // reads). A scan its deadline cut answers the timeout
+                    // error, which names none, so it records none: recorded
+                    // first, it was a failure-cache row no client could look
+                    // up, taking the place of one they could (review of
+                    // 2026-10-19).
                     let api_err = TacticApiError::with_lifecycle_limit(max_states, live_states);
                     let attempt_id = persist_failed_attempt(
                         state,
@@ -742,10 +942,6 @@ pub async fn handle_apply_tactic(
                         tactic_str,
                         api_err.clone(),
                     );
-                    let trust_summary =
-                        super::trust_summary_from_proof_state(&env, &state_ref.state);
-                    let mathverse_candidates =
-                        proof_state::mathverse_candidates_for_state(&state_ref.state, &env);
                     let result = ApplyTacticResult {
                         success: false,
                         new_state_id: params.state_id,
@@ -766,14 +962,11 @@ pub async fn handle_apply_tactic(
                 }
             };
 
-            let trust_summary = super::trust_summary_from_proof_state(&env, &proof_state);
-            let mathverse_candidates =
-                proof_state::mathverse_candidates_for_state(&proof_state, &env);
             let result = ApplyTacticResult {
                 success: true,
                 new_state_id: new_state_id.to_string(),
-                new_goals: convert_goals(&proof_state, &env),
-                is_solved: proof_state.is_complete(),
+                new_goals,
+                is_solved,
                 error: None,
                 attempt_id: None,
                 suggestions: vec![],
@@ -786,11 +979,13 @@ pub async fn handle_apply_tactic(
             Response::success_typed(id.clone(), &result)
                 .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
         }
-        Err(err) => {
-            // Tactic failed on a valid state — return the original state's trust summary
-            let trust_summary = super::trust_summary_from_proof_state(&env, &state_ref.state);
-            let mathverse_candidates =
-                proof_state::mathverse_candidates_for_state(&state_ref.state, &env);
+        Err((err, mathverse_candidates)) => {
+            // The copy the failed tactic ran on holds a whole environment:
+            // freed off the runtime, never dropped here (`off_runtime.rs`).
+            super::free_off_runtime(proof_state);
+            // Tactic failed on a valid state — return the original state's trust
+            // summary (its ledger's: the state had the goal the tactic ran on)
+            let trust_summary = super::trust_summary_from_proof_state(env, &state_ref.state);
             let api_err: TacticApiError = err.into();
             let attempt_id = persist_failed_attempt(
                 state,
@@ -820,10 +1015,34 @@ pub async fn handle_apply_tactic(
     }
 }
 
+/// The Mathverse candidates of the cached state a tactic's new state was
+/// refused under, at the lifecycle limit. With a corpus installed they scan
+/// it: work on the pool, under the request's deadline and inside its timeout
+/// (until R87, 2026-10-17, the scan ran on the runtime). Without
+/// one there is nothing to scan, so no slot is taken (as `getProofState`).
+async fn refused_state_candidates(
+    state: &ServerState,
+    state_ref: &proof_state::ProofStateRef,
+    start: Instant,
+    timeout: Duration,
+) -> Result<Vec<proof_state::MathverseCandidate>, WorkError> {
+    if !crate::mathverse_provider::global().is_loaded() {
+        return Ok(Vec::new());
+    }
+    let refused_under = state_ref.state.clone();
+    within(
+        timeout.saturating_sub(start.elapsed()),
+        state.work.run(start.checked_add(timeout), move || {
+            proof_state::mathverse_candidates_of(&refused_under)
+        }),
+    )
+    .await
+}
+
 /// Handle getProofState request
 ///
 /// Retrieves a proof state with the specified format (llm, full, or compact).
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_get_proof_state(
     state: &ServerState,
     id: RequestId,
@@ -831,6 +1050,7 @@ pub async fn handle_get_proof_state(
 ) -> Response {
     use proof_state::{to_api_state, StateId};
 
+    let start = Instant::now();
     // Parse state ID
     let state_id = match params.state_id.parse::<StateId>() {
         Ok(id) => id,
@@ -856,30 +1076,82 @@ pub async fn handle_get_proof_state(
         }
     };
 
-    let env = state.env.read().await;
-    let trust_summary = super::trust_summary_from_proof_state(&env, &state_ref.state);
-    let api_state = to_api_state(&state_ref, &env, params.format, Some(trust_summary));
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
+    let format = params.format;
+    let solved = state_ref.state.is_complete();
+    let view = move |env: &clean_kernel::Environment| {
+        let trust_summary = super::trust_summary_from_proof_state(env, &state_ref.state);
+        to_api_state(&state_ref, env, format, Some(trust_summary))
+    };
+    // Whether a corpus is installed is read here, before the render: a corpus
+    // installed in between is scanned once on the runtime, by this request
+    // (installing one is an administrative act; the next request takes a slot).
+    let rendered = if solved || proof_state::snapshot_searches(format, solved) {
+        // A solved state's trust summary re-checks its closed proof in the
+        // kernel, and an unsolved state's `llm` snapshot selects premises from
+        // the whole environment (and any snapshot scans an installed Mathverse
+        // corpus): work on the pool under the request's deadline, with the
+        // rendering that reads the same environment (R32, R36).
+        within(
+            timeout,
+            run_with_env(state, deadline, move |held| view(&held.env)),
+        )
+        .await
+    } else {
+        // An unsolved state's trust summary is its ledger's, and its `full`
+        // or `compact` snapshot is rendering bounded by the state: no work
+        // slot (R32), so a busy pool never delays it. Its wait for the
+        // environment is inside the timeout.
+        within(timeout, async {
+            Ok::<_, WorkError>(view(&*state.env.read().await))
+        })
+        .await
+    };
 
-    Response::success_typed(id.clone(), &api_state)
-        .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
+    match rendered {
+        Ok(api_state) => Response::success_typed(id.clone(), &api_state)
+            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string()))),
+        Err(error) => Response::error(id, error.into_rpc_error(timeout)),
+    }
 }
 
 /// Handle proofState.searchTheorems request.
-#[instrument(skip(state))]
+///
+/// The search scores every theorem of the environment: work that grows with
+/// the environment, so it runs on the work pool under the request's deadline,
+/// holding the environment for reading (`core::answer_with_env`).
+#[instrument(skip(state, params))]
 pub async fn handle_search_theorems(
     state: &ServerState,
     id: RequestId,
     params: ProofStateGoalSearchParams,
 ) -> Response {
     let start = Instant::now();
-    let Some((state_ref, env)) = cached_state_and_env(state, &params.state_id).await else {
+    let Some(state_ref) = cached_state(state, &params.state_id) else {
         return Response::error(
             id,
             RpcError::invalid_params(format!("state not found or expired: {}", params.state_id)),
         );
     };
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let index = state.theorem_index.clone();
+    answer_with_env(state, id, start, timeout, move |id, env| {
+        search_theorems_answer(id, env, &state_ref, &index, params, start)
+    })
+    .await
+}
 
-    if !goal_exists(&state_ref.state, &env, &params.goal_id) {
+/// `proofState.searchTheorems`'s work, on the pool.
+fn search_theorems_answer(
+    id: RequestId,
+    env: &clean_kernel::Environment,
+    state_ref: &proof_state::ProofStateRef,
+    index: &proof_state::ProjectTheoremIndexProvider,
+    params: ProofStateGoalSearchParams,
+    start: Instant,
+) -> Response {
+    if !goal_exists(&state_ref.state, env, &params.goal_id) {
         return Response::error(
             id,
             RpcError::invalid_params(format!("goal not found: {}", params.goal_id)),
@@ -890,12 +1162,12 @@ pub async fn handle_search_theorems(
     let guidance = proof_state::llm_guidance_for_goal_and_profile(
         &state_ref.state,
         requested_goal,
-        &env,
+        env,
         state_ref.domain_profile,
     );
-    let mut candidates = state.theorem_index.search_goal(
+    let mut candidates = index.search_goal(
         requested_goal,
-        &env,
+        env,
         state_ref.domain_profile,
         state_ref.trust_policy,
         16,
@@ -928,21 +1200,38 @@ pub async fn handle_search_theorems(
 }
 
 /// Handle proofState.searchTactics request.
-#[instrument(skip(state))]
+///
+/// Its guidance scores the environment's theorems as `searchTheorems` does,
+/// so it runs on the work pool under the request's deadline too.
+#[instrument(skip(state, params))]
 pub async fn handle_search_tactics(
     state: &ServerState,
     id: RequestId,
     params: ProofStateGoalSearchParams,
 ) -> Response {
     let start = Instant::now();
-    let Some((state_ref, env)) = cached_state_and_env(state, &params.state_id).await else {
+    let Some(state_ref) = cached_state(state, &params.state_id) else {
         return Response::error(
             id,
             RpcError::invalid_params(format!("state not found or expired: {}", params.state_id)),
         );
     };
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_with_env(state, id, start, timeout, move |id, env| {
+        search_tactics_answer(id, env, &state_ref, params, start)
+    })
+    .await
+}
 
-    if !goal_exists(&state_ref.state, &env, &params.goal_id) {
+/// `proofState.searchTactics`'s work, on the pool.
+fn search_tactics_answer(
+    id: RequestId,
+    env: &clean_kernel::Environment,
+    state_ref: &proof_state::ProofStateRef,
+    params: ProofStateGoalSearchParams,
+    start: Instant,
+) -> Response {
+    if !goal_exists(&state_ref.state, env, &params.goal_id) {
         return Response::error(
             id,
             RpcError::invalid_params(format!("goal not found: {}", params.goal_id)),
@@ -951,7 +1240,7 @@ pub async fn handle_search_tactics(
 
     let guidance = proof_state::llm_guidance_for_state_and_profile(
         &state_ref.state,
-        &env,
+        env,
         state_ref.domain_profile,
     );
     let elapsed = start.elapsed().as_micros() as u64;
@@ -970,7 +1259,7 @@ pub async fn handle_search_tactics(
 }
 
 /// Handle proofState.close request.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_close_proof_state(
     state: &ServerState,
     id: RequestId,
@@ -997,7 +1286,7 @@ pub async fn handle_close_proof_state(
 }
 
 /// Handle proofState.retain request.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_retain_proof_state(
     state: &ServerState,
     id: RequestId,
@@ -1012,7 +1301,7 @@ pub async fn handle_retain_proof_state(
             );
         }
     };
-    let ttl = params.ttl_sec.map(std::time::Duration::from_secs);
+    let ttl = params.ttl_sec.map(Duration::from_secs);
     let Some(lifecycle) = state.proof_cache.retain(&state_id, ttl) else {
         return Response::error(
             id,
@@ -1031,7 +1320,7 @@ pub async fn handle_retain_proof_state(
 }
 
 /// Handle proofState.explainFailure request.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_explain_failure(
     state: &ServerState,
     id: RequestId,
@@ -1110,26 +1399,16 @@ fn persist_failed_attempt(
     };
     state
         .proof_cache
-        .insert_failure(
-            failure,
-            state_ref
-                .ttl_remaining
-                .max(std::time::Duration::from_secs(1)),
-        )
+        .insert_failure(failure, state_ref.ttl_remaining.max(Duration::from_secs(1)))
         .to_string()
 }
 
-async fn cached_state_and_env(
-    state: &ServerState,
-    state_id: &str,
-) -> Option<(proof_state::ProofStateRef, clean_kernel::Environment)> {
-    let parsed = match state_id.parse::<proof_state::StateId>() {
-        Ok(id) => id,
-        Err(_) => return None,
-    };
-    let state_ref = state.proof_cache.get(&parsed)?;
-    let env = state.env.read().await.clone();
-    Some((state_ref, env))
+/// The cached proof state `state_id`, if it is live. The searches used to
+/// copy the whole environment beside it here, on the runtime; they read it on
+/// the pool now.
+fn cached_state(state: &ServerState, state_id: &str) -> Option<proof_state::ProofStateRef> {
+    let parsed = state_id.parse::<proof_state::StateId>().ok()?;
+    state.proof_cache.get(&parsed)
 }
 
 fn goal_exists(
@@ -1211,13 +1490,13 @@ fn goal_not_current_error(goal_id: &str) -> proof_state::TacticApiError {
 /// - "tactic_script": List of tactics that produced the proof
 /// - "certificate": Cryptographic certificate for independent verification
 /// - "all": All of the above
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_extract_proof(
     state: &ServerState,
     id: RequestId,
     params: ExtractProofParams,
 ) -> Response {
-    use proof_state::{pp_expr, StateId};
+    use proof_state::StateId;
 
     let start = Instant::now();
 
@@ -1253,11 +1532,6 @@ pub async fn handle_extract_proof(
         );
     }
 
-    let env = state.env.read().await;
-
-    // Get the closed proof term (FVars converted to BVars for proper verification)
-    let proof_expr_opt = state_ref.state.closed_proof();
-
     // Reconstruct tactic script if requested
     let tactic_script = if params.format == "tactic_script" || params.format == "all" {
         let script = state.proof_cache.reconstruct_tactic_script(&state_id);
@@ -1270,15 +1544,59 @@ pub async fn handle_extract_proof(
         None
     };
 
+    // The kernel re-checks the closed proof against the goal (and builds its
+    // certificate when asked): work on the pool under the request's deadline.
+    // A check the deadline cut short is no verdict, so the request answers the
+    // timeout error, never `verified: false`.
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
+    let format = params.format;
+    let extracted = within(
+        timeout,
+        run_with_env(state, deadline, move |held| {
+            extract_proof_on_pool(&held.env, &state_ref, &format, tactic_script, start)
+        }),
+    )
+    .await;
+    match extracted {
+        Ok(Ok(Extracted::Proof(result))) => Response::success_typed(id.clone(), &result)
+            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string()))),
+        Ok(Ok(Extracted::Evidence(evidence))) => Response::success_typed(id.clone(), &evidence)
+            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string()))),
+        Ok(Err(error)) => Response::error(id, error),
+        Err(error) => Response::error(id, error.into_rpc_error(timeout)),
+    }
+}
+
+/// What `extractProof` answers: the proof in the requested format, or kernel
+/// evidence for it.
+enum Extracted {
+    Proof(ExtractProofResult),
+    Evidence(Box<KernelProofExtractionEvidence>),
+}
+
+/// Re-check the solved state's closed proof against its goal in the kernel and
+/// build the answer in `format`. Runs on the work pool.
+fn extract_proof_on_pool(
+    env: &clean_kernel::Environment,
+    state_ref: &proof_state::ProofStateRef,
+    format: &str,
+    tactic_script: Option<Vec<String>>,
+    start: Instant,
+) -> Result<Extracted, RpcError> {
+    use proof_state::pp_expr;
+
+    // Get the closed proof term (FVars converted to BVars for proper verification)
+    let proof_expr_opt = state_ref.state.closed_proof();
+
     // Always verify proof term via kernel type-checking against goal type (#2157, #2200).
     // Certificate generation is gated on format; verification is unconditional.
     let goal_type = state_ref.state.goal_type();
-    let wants_certificate = params.format == "certificate"
-        || params.format == "all"
-        || params.format == "kernel_evidence";
+    let wants_certificate =
+        format == "certificate" || format == "all" || format == "kernel_evidence";
     let (certificate, verified) = if let Some(ref proof_term) = proof_expr_opt {
         use clean_kernel::TypeChecker;
-        let tc = TypeChecker::with_mode(&env, env.mode());
+        let tc = TypeChecker::with_mode(env, env.mode());
         if let Some(ref target) = goal_type {
             if wants_certificate {
                 match tc.infer_type_with_cert(proof_term) {
@@ -1310,32 +1628,29 @@ pub async fn handle_extract_proof(
         time_ns: Some(ns_from_us(elapsed)),
     };
     let trust_summary = super::verify::trust_summary_from_ledger_with_closed_proof(
+        env,
         state_ref.state.trust_ledger(),
         proof_expr_opt.as_ref(),
         verified,
         0,
     );
 
-    if params.format == "kernel_evidence" {
-        let result = match kernel_proof_extraction_evidence(
-            &state_ref,
+    if format == "kernel_evidence" {
+        return kernel_proof_extraction_evidence(
+            state_ref,
             proof_expr_opt.as_ref(),
             goal_type.as_ref(),
-            certificate.clone(),
-            verification.clone(),
-            trust_summary.clone(),
-        ) {
-            Ok(evidence) => evidence,
-            Err(err) => return Response::error(id, err),
-        };
-        return Response::success_typed(id.clone(), &result)
-            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+            certificate,
+            verification,
+            trust_summary,
+        )
+        .map(|evidence| Extracted::Evidence(Box::new(evidence)));
     }
 
-    let result = ExtractProofResult {
+    Ok(Extracted::Proof(ExtractProofResult {
         is_solved: true,
-        proof_term: proof_expr_opt.as_ref().map(|p| pp_expr(p, &env)),
-        proof_expr: if params.format == "certificate" || params.format == "all" {
+        proof_term: proof_expr_opt.as_ref().map(|p| pp_expr(p, env)),
+        proof_expr: if format == "certificate" || format == "all" {
             proof_expr_opt.clone()
         } else {
             None
@@ -1344,10 +1659,7 @@ pub async fn handle_extract_proof(
         certificate,
         verification,
         trust_summary: Some(trust_summary),
-    };
-
-    Response::success_typed(id.clone(), &result)
-        .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
+    }))
 }
 
 fn kernel_proof_extraction_evidence(
@@ -1509,191 +1821,82 @@ fn kernel_evidence_error(code: &'static str, message: impl Into<String>) -> RpcE
 /// Handle batchApplyTactic request
 ///
 /// Applies multiple tactics in parallel using rayon, useful for beam search
-/// and tree exploration in LLM-guided proof search.
-#[instrument(skip(state))]
+/// and tree exploration in LLM-guided proof search. The batch runs on the work
+/// pool under its global timeout (`timeout_ms`; the server's default per item
+/// otherwise): each tactic runs under the deadline on the thread that applies
+/// it, none starts after it, and a batch the deadline interrupted answers the
+/// timeout error and caches nothing.
+#[instrument(skip(state, params))]
 pub async fn handle_batch_apply_tactic(
     state: &ServerState,
     id: RequestId,
     params: BatchApplyTacticParams,
 ) -> Response {
-    use proof_state::{convert_goals, StateId, TacticApiError};
-    use rayon::prelude::*;
+    use proof_state::StateId;
 
     let start = Instant::now();
+    let timeout = Duration::from_millis(
+        params
+            .timeout_ms
+            .unwrap_or(state.default_timeout_ms * params.items.len().max(1) as u64),
+    );
+    let deadline = start.checked_add(timeout);
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    let threads = params.threads.unwrap_or(cores).clamp(1, cores);
+    let total = params.items.len();
 
-    // Configure thread pool if specified
-    let pool = params.threads.map(|n| {
-        rayon::ThreadPoolBuilder::new()
-            .num_threads(n.max(1))
-            .build()
-            .ok()
-    });
+    // Each item's proof state is read from the cache here: the work never
+    // touches the cache. A snapshot's state is a clone, with no checker caches.
+    let items: Vec<(BatchTacticItem, Option<proof_state::ProofStateRef>)> = params
+        .items
+        .into_iter()
+        .map(|item| {
+            let cached = item
+                .state_id
+                .parse::<StateId>()
+                .ok()
+                .and_then(|state_id| state.proof_cache.get(&state_id));
+            (item, cached)
+        })
+        .collect();
 
-    // Get environment snapshot (shared across all items)
-    let env = state.env.read().await.clone();
-    let cache = &state.proof_cache;
-
-    // Process a single item
-    let process_item = |item: &BatchTacticItem| -> BatchTacticItemResult {
-        let item_start = Instant::now();
-
-        // Parse state ID
-        let state_id = match item.state_id.parse::<StateId>() {
-            Ok(id) => id,
-            Err(_) => {
-                return BatchTacticItemResult {
-                    id: item.id.clone(),
-                    success: false,
-                    new_state_id: None,
-                    new_goals: vec![],
-                    is_solved: false,
-                    error: Some(TacticApiError::invalid_state_id(&item.state_id)),
-                    time_us: item_start.elapsed().as_micros() as u64,
-                    time_ns: None,
-                    mathverse_candidates: vec![],
-                    trust_summary: None,
-                };
-            }
-        };
-
-        // Get state from cache
-        let state_ref = match cache.get(&state_id) {
-            Some(s) => s,
-            None => {
-                return BatchTacticItemResult {
-                    id: item.id.clone(),
-                    success: false,
-                    new_state_id: None,
-                    new_goals: vec![],
-                    is_solved: false,
-                    error: Some(TacticApiError::invalid_state_id(&item.state_id)),
-                    time_us: item_start.elapsed().as_micros() as u64,
-                    time_ns: None,
-                    mathverse_candidates: vec![],
-                    trust_summary: None,
-                };
-            }
-        };
-
-        // Clone state for modification
-        let mut proof_state = state_ref.state.clone();
-
-        // Execute tactic
-        let tactic_str = item.tactic.trim();
-        if !proof_state::trust_policy_allows_tactic(state_ref.trust_policy, tactic_str) {
-            let rejected = proof_state::constructive_only_rejected_tactic(tactic_str)
-                .unwrap_or(tactic_str)
-                .to_string();
-            let elapsed = item_start.elapsed().as_micros() as u64;
-            let trust_summary =
-                super::verify::trust_summary_from_proof_state(&env, &state_ref.state);
-            let mathverse_candidates =
-                proof_state::mathverse_candidates_for_state(&state_ref.state, &env);
-            return BatchTacticItemResult {
-                id: item.id.clone(),
-                success: false,
-                new_state_id: None,
-                new_goals: vec![],
-                is_solved: false,
-                error: Some(TacticApiError::trust_policy_violation(
-                    state_ref
-                        .trust_policy
-                        .unwrap_or(proof_state::ObligationTrustPolicy::ConstructiveOnly),
-                    rejected,
-                )),
-                time_us: elapsed,
-                time_ns: Some(ns_from_us(elapsed)),
-                mathverse_candidates,
-                trust_summary: Some(trust_summary),
-            };
+    let outcome = tokio::time::timeout(
+        timeout,
+        run_with_env(state, deadline, move |held| {
+            batch_apply_on_pool(held, items, threads, deadline)
+        }),
+    )
+    .await
+    .unwrap_or(Err(WorkError::Interrupted))
+    .and_then(std::convert::identity);
+    let (mut results, children) = match outcome {
+        Ok(Some(applied)) => applied,
+        Ok(None) | Err(WorkError::Interrupted) => {
+            return Response::error(id, RpcError::timeout(timeout.as_millis() as u64))
         }
-        // Goal addressing (C1 Task E): resolve the requested goal_id to an
-        // index, rejecting an id that names no live goal. Index 0 is the
-        // current goal; any other valid index is focused before the tactic runs.
-        let goal_index = match goal_index_for_id(&proof_state, &item.goal_id) {
-            Some(index) => index,
-            None => {
-                let elapsed = item_start.elapsed().as_micros() as u64;
-                let trust_summary =
-                    super::verify::trust_summary_from_proof_state(&env, &state_ref.state);
-                let mathverse_candidates =
-                    proof_state::mathverse_candidates_for_state(&state_ref.state, &env);
-                return BatchTacticItemResult {
-                    id: item.id.clone(),
-                    success: false,
-                    new_state_id: None,
-                    new_goals: vec![],
-                    is_solved: false,
-                    error: Some(goal_not_current_error(&item.goal_id)),
-                    time_us: elapsed,
-                    time_ns: Some(ns_from_us(elapsed)),
-                    mathverse_candidates,
-                    trust_summary: Some(trust_summary),
-                };
-            }
-        };
-        let tactic_result = execute_tactic_on_goal(&mut proof_state, goal_index, tactic_str, &env);
-
-        let elapsed = item_start.elapsed().as_micros() as u64;
-
-        match tactic_result {
-            Ok(()) => {
-                // Cache the new state with tactic tracking
-                let new_state_id = cache.insert_with_tactic_policy_domain_and_metadata(
-                    proof_state.clone(),
-                    state_ref.problem_id.clone(),
-                    Some(state_id),
-                    state_ref.step_number + 1,
-                    Some(tactic_str.to_string()),
-                    state_ref.trust_policy,
-                    state_ref.domain_profile,
-                    state_ref.metadata.clone(),
-                );
-
-                let trust_summary =
-                    super::verify::trust_summary_from_proof_state(&env, &proof_state);
-                let mathverse_candidates =
-                    proof_state::mathverse_candidates_for_state(&proof_state, &env);
-                BatchTacticItemResult {
-                    id: item.id.clone(),
-                    success: true,
-                    new_state_id: Some(new_state_id.to_string()),
-                    new_goals: convert_goals(&proof_state, &env),
-                    is_solved: proof_state.is_complete(),
-                    error: None,
-                    time_us: elapsed,
-                    time_ns: Some(ns_from_us(elapsed)),
-                    mathverse_candidates,
-                    trust_summary: Some(trust_summary),
-                }
-            }
-            Err(err) => {
-                // Tactic failed on a valid state — return original state's trust summary
-                let trust_summary =
-                    super::verify::trust_summary_from_proof_state(&env, &state_ref.state);
-                let mathverse_candidates =
-                    proof_state::mathverse_candidates_for_state(&state_ref.state, &env);
-                BatchTacticItemResult {
-                    id: item.id.clone(),
-                    success: false,
-                    new_state_id: None,
-                    new_goals: vec![],
-                    is_solved: false,
-                    error: Some(err.into()),
-                    time_us: elapsed,
-                    time_ns: Some(ns_from_us(elapsed)),
-                    mathverse_candidates,
-                    trust_summary: Some(trust_summary),
-                }
-            }
+        Err(WorkError::Unavailable(detail)) => {
+            return Response::error(id, RpcError::internal_error(detail))
         }
     };
 
-    // Execute in parallel
-    let results: Vec<BatchTacticItemResult> = match pool {
-        Some(Some(pool)) => pool.install(|| params.items.par_iter().map(process_item).collect()),
-        _ => params.items.par_iter().map(process_item).collect(),
-    };
+    // Cache the new states with tactic tracking, now that the batch has answered.
+    for child in children {
+        let new_state_id = state
+            .proof_cache
+            .insert_with_tactic_policy_domain_and_metadata(
+                child.state,
+                child.problem_id,
+                Some(child.parent_id),
+                child.step_number,
+                Some(child.tactic),
+                child.trust_policy,
+                child.domain_profile,
+                child.metadata,
+            );
+        if let Some(result) = results.get_mut(child.position) {
+            result.new_state_id = Some(new_state_id.to_string());
+        }
+    }
 
     // Compute stats
     let succeeded = results.iter().filter(|r| r.success).count();
@@ -1703,9 +1906,9 @@ pub async fn handle_batch_apply_tactic(
     let result = BatchApplyTacticResult {
         results,
         stats: BatchTacticStats {
-            total: params.items.len(),
+            total,
             succeeded,
-            failed: params.items.len() - succeeded,
+            failed: total - succeeded,
             solved,
             wall_time_us: wall_time,
             wall_time_ns: Some(ns_from_us(wall_time)),
@@ -1714,4 +1917,229 @@ pub async fn handle_batch_apply_tactic(
 
     Response::success_typed(id.clone(), &result)
         .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
+}
+
+/// A state a batch item's tactic produced, cached once the batch has answered:
+/// it fills `results[position].new_state_id`.
+struct BatchChild {
+    position: usize,
+    state: elab_tactic::ProofState,
+    problem_id: Option<String>,
+    parent_id: proof_state::StateId,
+    step_number: u32,
+    tactic: String,
+    trust_policy: Option<proof_state::ObligationTrustPolicy>,
+    domain_profile: proof_state::ObligationDomainProfile,
+    metadata: Option<proof_state::ProofStateMetadata>,
+}
+
+/// Apply every item's tactic against the held environment, in parallel. Runs
+/// on the work pool. `None` when the deadline interrupted an item or left one
+/// unstarted.
+fn batch_apply_on_pool(
+    held: &WorkEnv,
+    items: Vec<(BatchTacticItem, Option<proof_state::ProofStateRef>)>,
+    threads: usize,
+    deadline: Option<Instant>,
+) -> Result<Option<(Vec<BatchTacticItemResult>, Vec<BatchChild>)>, WorkError> {
+    use proof_state::{convert_goals, TacticApiError};
+    use rayon::prelude::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    // A pool of this batch's own (the requested size, the cores otherwise, no
+    // more threads than items), never rayon's global one (`work::batch_pool`).
+    let pool = batch_pool(threads, items.len())?;
+
+    let env: &clean_kernel::Environment = &held.env;
+
+    // Process a single item
+    let process_item = |position: usize,
+                        item: &BatchTacticItem,
+                        cached: &Option<proof_state::ProofStateRef>|
+     -> (BatchTacticItemResult, Option<BatchChild>) {
+        let item_start = Instant::now();
+
+        // The item's state, read from the cache before the batch started
+        let Some(state_ref) = cached else {
+            return (
+                BatchTacticItemResult {
+                    id: item.id.clone(),
+                    success: false,
+                    new_state_id: None,
+                    new_goals: vec![],
+                    is_solved: false,
+                    error: Some(TacticApiError::invalid_state_id(&item.state_id)),
+                    time_us: item_start.elapsed().as_micros() as u64,
+                    time_ns: None,
+                    mathverse_candidates: vec![],
+                    trust_summary: None,
+                },
+                None,
+            );
+        };
+
+        // Copy the state for modification (on the batch's pool: it holds a
+        // whole environment).
+        let mut proof_state = elab_tactic::ProofState::clone(&state_ref.state);
+
+        // Execute tactic
+        let tactic_str = item.tactic.trim();
+        if !proof_state::trust_policy_allows_tactic(state_ref.trust_policy, tactic_str) {
+            let rejected = proof_state::constructive_only_rejected_tactic(tactic_str)
+                .unwrap_or(tactic_str)
+                .to_string();
+            let elapsed = item_start.elapsed().as_micros() as u64;
+            let trust_summary =
+                super::verify::trust_summary_from_proof_state(env, &state_ref.state);
+            let mathverse_candidates =
+                proof_state::mathverse_candidates_for_state(&state_ref.state, env);
+            return (
+                BatchTacticItemResult {
+                    id: item.id.clone(),
+                    success: false,
+                    new_state_id: None,
+                    new_goals: vec![],
+                    is_solved: false,
+                    error: Some(TacticApiError::trust_policy_violation(
+                        state_ref
+                            .trust_policy
+                            .unwrap_or(proof_state::ObligationTrustPolicy::ConstructiveOnly),
+                        rejected,
+                    )),
+                    time_us: elapsed,
+                    time_ns: Some(ns_from_us(elapsed)),
+                    mathverse_candidates,
+                    trust_summary: Some(trust_summary),
+                },
+                None,
+            );
+        }
+        // Goal addressing (C1 Task E): resolve the requested goal_id to an
+        // index, rejecting an id that names no live goal. Index 0 is the
+        // current goal; any other valid index is focused before the tactic runs.
+        let goal_index = match goal_index_for_id(&proof_state, &item.goal_id) {
+            Some(index) => index,
+            None => {
+                let elapsed = item_start.elapsed().as_micros() as u64;
+                let trust_summary =
+                    super::verify::trust_summary_from_proof_state(env, &state_ref.state);
+                let mathverse_candidates =
+                    proof_state::mathverse_candidates_for_state(&state_ref.state, env);
+                return (
+                    BatchTacticItemResult {
+                        id: item.id.clone(),
+                        success: false,
+                        new_state_id: None,
+                        new_goals: vec![],
+                        is_solved: false,
+                        error: Some(goal_not_current_error(&item.goal_id)),
+                        time_us: elapsed,
+                        time_ns: Some(ns_from_us(elapsed)),
+                        mathverse_candidates,
+                        trust_summary: Some(trust_summary),
+                    },
+                    None,
+                );
+            }
+        };
+        let tactic_result = execute_tactic_on_goal(&mut proof_state, goal_index, tactic_str, env);
+
+        let elapsed = item_start.elapsed().as_micros() as u64;
+
+        match tactic_result {
+            Ok(()) => {
+                let trust_summary =
+                    super::verify::trust_summary_from_proof_state(env, &proof_state);
+                let mathverse_candidates =
+                    proof_state::mathverse_candidates_for_state(&proof_state, env);
+                let result = BatchTacticItemResult {
+                    id: item.id.clone(),
+                    success: true,
+                    // Filled in when the new state is cached.
+                    new_state_id: None,
+                    new_goals: convert_goals(&proof_state, env),
+                    is_solved: proof_state.is_complete(),
+                    error: None,
+                    time_us: elapsed,
+                    time_ns: Some(ns_from_us(elapsed)),
+                    mathverse_candidates,
+                    trust_summary: Some(trust_summary),
+                };
+                // The child is cached, and nothing reads a cached state's
+                // checker caches (every change copies the state first, and a
+                // copy starts without them): they go here, on the batch's
+                // pool, as `applyTactic`'s do. Until R87 the
+                // children kept theirs.
+                let _ = proof_state.current_goal_mut();
+                let child = BatchChild {
+                    position,
+                    state: proof_state,
+                    problem_id: state_ref.problem_id.clone(),
+                    parent_id: state_ref.id,
+                    step_number: state_ref.step_number + 1,
+                    tactic: tactic_str.to_string(),
+                    trust_policy: state_ref.trust_policy,
+                    domain_profile: state_ref.domain_profile,
+                    metadata: state_ref.metadata.clone(),
+                };
+                (result, Some(child))
+            }
+            Err(err) => {
+                // Tactic failed on a valid state — return original state's trust summary
+                let trust_summary =
+                    super::verify::trust_summary_from_proof_state(env, &state_ref.state);
+                let mathverse_candidates =
+                    proof_state::mathverse_candidates_for_state(&state_ref.state, env);
+                (
+                    BatchTacticItemResult {
+                        id: item.id.clone(),
+                        success: false,
+                        new_state_id: None,
+                        new_goals: vec![],
+                        is_solved: false,
+                        error: Some(err.into()),
+                        time_us: elapsed,
+                        time_ns: Some(ns_from_us(elapsed)),
+                        mathverse_candidates,
+                        trust_summary: Some(trust_summary),
+                    },
+                    None,
+                )
+            }
+        }
+    };
+
+    // The deadline is thread-local: install it on the thread applying each
+    // tactic, and start none after it.
+    let interrupted = AtomicBool::new(false);
+    let process_until = |(position, (item, cached)): (
+        usize,
+        &(BatchTacticItem, Option<proof_state::ProofStateRef>),
+    )| {
+        let started = !interrupted.load(Ordering::Relaxed)
+            && !deadline.is_some_and(|deadline| Instant::now() >= deadline);
+        let applied = if started {
+            run_item_until(deadline, || process_item(position, item, cached))
+        } else {
+            None
+        };
+        if applied.is_none() {
+            interrupted.store(true, Ordering::Relaxed);
+        }
+        applied
+    };
+
+    // Execute in parallel
+    let applied: Vec<Option<(BatchTacticItemResult, Option<BatchChild>)>> =
+        pool.install(|| items.par_iter().enumerate().map(process_until).collect());
+    let Some(applied) = applied.into_iter().collect::<Option<Vec<_>>>() else {
+        return Ok(None);
+    };
+    let mut results = Vec::with_capacity(applied.len());
+    let mut children = Vec::new();
+    for (result, child) in applied {
+        results.push(result);
+        children.extend(child);
+    }
+    Ok(Some((results, children)))
 }

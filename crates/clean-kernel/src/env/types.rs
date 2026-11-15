@@ -146,7 +146,7 @@ impl Reducibility {
 ///
 /// This stores information about type classes defined via `add_inductive()`.
 /// The elaborator's InstanceTable can be populated from this data.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KernelClassInfo {
     /// Name of the type class (e.g., `HAdd`)
     pub name: Name,
@@ -162,7 +162,7 @@ pub struct KernelClassInfo {
 ///
 /// Stores information about instances registered via kernel init functions.
 /// The elaborator's InstanceTable can be populated from this data.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct KernelInstanceInfo {
     /// Name of the instance definition (e.g., `instHAddNat`)
     pub name: Name,
@@ -233,8 +233,55 @@ impl SimpPriority {
     }
 }
 
+/// How a declaration was tagged with Lean's `@[grind]` attribute.
+///
+/// Lean's `Lean.Meta.Grind.AttrKind` (`Lean/Meta/Tactic/Grind/Attr.lean`) is a
+/// larger family; this records the shapes Clean can act on and keeps every
+/// other spelling verbatim in [`GrindAttrKind::Unmodeled`]. **Recording an
+/// unmodeled kind is deliberate**: `@[grind ←]`, `@[grind cases]` and
+/// `@[grind ext]` all occur in Mathlib, they elaborate today, and rejecting one
+/// would wall a whole file for an annotation Clean merely does not use yet.
+///
+/// Only [`GrindAttrKind::Infer`] and [`GrindAttrKind::EqLhs`] are USED, because
+/// only those two say "rewrite/unfold left to right", which is the one thing
+/// Clean's grind can do with an environment lemma. Handing a `←` lemma to a
+/// left-to-right rewriter would apply it backwards.
+#[derive(Clone, Debug, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum GrindAttrKind {
+    /// Bare `@[grind]` — Lean's `AttrKind.infer`: for a definition, its
+    /// equations; for a theorem, an E-matching theorem on its LHS.
+    #[default]
+    Infer,
+    /// `@[grind =]` — E-match on the equation's left-hand side.
+    EqLhs,
+    /// `@[grind →]` — forward reasoning.
+    Forward,
+    /// `@[grind ←]` — backward reasoning.
+    Backward,
+    /// `@[grind cases]` (and `cases eager`).
+    Cases,
+    /// `@[grind ext]`.
+    Ext,
+    /// `@[grind intro]`.
+    Intro,
+    /// Any other modifier, kept verbatim (`=_`, `_=_`, `usr`, `symbol 100`, …).
+    Unmodeled(String),
+}
+
+impl GrindAttrKind {
+    /// Does this kind name a LEFT-TO-RIGHT equation Clean's grind may use as a
+    /// rewrite or delta-unfold?
+    ///
+    /// Everything else is recorded and unused — see the type's own doc for why
+    /// that is the fail-closed answer rather than a rejection.
+    #[must_use]
+    pub fn is_left_to_right_equation(&self) -> bool {
+        matches!(self, GrindAttrKind::Infer | GrindAttrKind::EqLhs)
+    }
+}
+
 /// Information about a registered simp lemma
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SimpLemmaInfo {
     /// Name of the lemma
     pub name: Name,
@@ -265,7 +312,7 @@ pub enum ConstantKind {
 }
 
 /// Information about a constant
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConstantInfo {
     /// Name of the constant
     pub name: Name,
@@ -341,7 +388,7 @@ impl ConstantInfo {
 }
 
 /// Opaque data stored inside a persistent environment extension entry.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum EnvExtensionEntryData {
     /// Tagged scalar or null pointer value.
     Scalar(u64),
@@ -350,7 +397,7 @@ pub enum EnvExtensionEntryData {
 }
 
 /// A single persistent environment extension entry.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct EnvExtensionEntry {
     /// Entry key name
     pub name: Name,
@@ -359,7 +406,7 @@ pub struct EnvExtensionEntry {
 }
 
 /// Persistent env extension state (Lean 4-style).
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct PersistentEnvExtensionState {
     /// Entries imported per module index.
     pub imported_entries: Vec<Vec<EnvExtensionEntry>>,
@@ -420,6 +467,19 @@ pub enum Declaration {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum EnvError {
+    /// A canonical source declaration bundle failed checked admission.
+    #[error("canonical builtin declaration bundle: {detail}")]
+    BuiltinBundle {
+        /// Record, expression, shape or checked-body refusal detail.
+        detail: String,
+    },
+    /// The ordinary-prelude reuse boundary could not construct a complete
+    /// environment or refused an incompatible ambient construction policy.
+    #[error("ordinary prelude unavailable: {detail}")]
+    PreludeInitialization {
+        /// Construction, worker, reentrancy, or policy refusal detail.
+        detail: String,
+    },
     /// A declaration with this name already exists
     #[error("Duplicate declaration: {0}")]
     DuplicateName(Name),
@@ -429,6 +489,17 @@ pub enum EnvError {
     /// Referenced inductive type not found
     #[error("Unknown inductive: {0}")]
     UnknownInductive(Name),
+    /// An imported inductive-family record (inductive, constructor or
+    /// recursor) disagrees with what this kernel derives from the imported
+    /// family. Lean's replay refuses the same records
+    /// (`Lean.Replay.checkPostponedConstructors` / `checkPostponedRecursors`).
+    #[error("imported family record {name} refused: {detail}")]
+    ImportedFamilyRecordMismatch {
+        /// The constant whose record was refused.
+        name: Name,
+        /// Which field disagreed, or why no derived counterpart exists.
+        detail: String,
+    },
     /// Type is not a structure (structures have exactly one constructor)
     #[error("Not a structure (expected exactly one constructor): {0}")]
     NotStructure(Name),

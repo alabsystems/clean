@@ -18,10 +18,14 @@ use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr};
 
 /// Helper: add an axiom constant with `Type` as its type.
-fn add_const(env: &mut Environment, name: &str) {
-    let n = Name::from_string(name);
+fn add_const(env: &mut Environment, name: &'static str) {
+    add_named_const(env, Name::from_string(name));
+}
+
+/// Dynamic test fixtures construct their namespace and final component separately.
+fn add_named_const(env: &mut Environment, name: Name) {
     let decl = Declaration::Axiom {
-        name: n,
+        name,
         level_params: vec![],
         type_: Expr::type_(),
     };
@@ -76,7 +80,7 @@ fn test_classify_ambiguity_mixed_conflict() {
         },
         ResolutionCandidate {
             name: Name::from_string("Custom.add"),
-            source: ResolutionSource::Alias("add".to_string()),
+            source: ResolutionSource::Alias(Name::from_string("add")),
         },
     ];
     let report = classify_ambiguity("add", &candidates);
@@ -136,10 +140,10 @@ fn test_traverse_namespace_basic() {
         traverse_namespace(&Name::from_string("Nat"), &env, &config).expect("traversal succeeds");
 
     assert!(!nodes.is_empty());
-    let names: Vec<String> = nodes.iter().map(|n| n.name.to_string()).collect();
-    assert!(names.contains(&"Nat.add".to_string()));
-    assert!(names.contains(&"Nat.mul".to_string()));
-    assert!(names.contains(&"Nat.sub".to_string()));
+    let names: Vec<Name> = nodes.iter().map(|n| n.name.clone()).collect();
+    assert!(names.contains(&Name::from_string("Nat.add")));
+    assert!(names.contains(&Name::from_string("Nat.mul")));
+    assert!(names.contains(&Name::from_string("Nat.sub")));
 }
 
 #[test]
@@ -153,10 +157,10 @@ fn test_traverse_namespace_nested() {
     let nodes =
         traverse_namespace(&Name::from_string("Foo"), &env, &config).expect("traversal succeeds");
 
-    let names: Vec<String> = nodes.iter().map(|n| n.name.to_string()).collect();
-    assert!(names.contains(&"Foo.Bar".to_string()));
-    assert!(names.contains(&"Foo.Bar.baz".to_string()));
-    assert!(names.contains(&"Foo.other".to_string()));
+    let names: Vec<Name> = nodes.iter().map(|n| n.name.clone()).collect();
+    assert!(names.contains(&Name::from_string("Foo.Bar")));
+    assert!(names.contains(&Name::from_string("Foo.Bar.baz")));
+    assert!(names.contains(&Name::from_string("Foo.other")));
 }
 
 #[test]
@@ -173,18 +177,18 @@ fn test_traverse_namespace_with_prefix_filter() {
     let nodes =
         traverse_namespace(&Name::from_string("Nat"), &env, &config).expect("traversal succeeds");
 
-    let names: Vec<String> = nodes.iter().map(|n| n.name.to_string()).collect();
-    assert!(names.contains(&"Nat.add".to_string()));
-    assert!(names.contains(&"Nat.addOne".to_string()));
+    let names: Vec<Name> = nodes.iter().map(|n| n.name.clone()).collect();
+    assert!(names.contains(&Name::from_string("Nat.add")));
+    assert!(names.contains(&Name::from_string("Nat.addOne")));
     // mul should not appear
-    assert!(!names.contains(&"Nat.mul".to_string()));
+    assert!(!names.contains(&Name::from_string("Nat.mul")));
 }
 
 #[test]
 fn test_traverse_namespace_max_results() {
     let mut env = Environment::new();
     for i in 0..20 {
-        add_const(&mut env, &format!("Big.item{i}"));
+        add_named_const(&mut env, Name::anon().str("Big").str(format!("item{i}")));
     }
 
     let config = TraversalConfig {
@@ -216,8 +220,8 @@ fn test_traverse_namespace_root() {
     let config = TraversalConfig::default();
     let nodes = traverse_namespace(&Name::anon(), &env, &config).expect("traversal succeeds");
 
-    let names: Vec<String> = nodes.iter().map(|n| n.name.to_string()).collect();
-    assert!(names.contains(&"topLevel".to_string()));
+    let names: Vec<Name> = nodes.iter().map(|n| n.name.clone()).collect();
+    assert!(names.contains(&Name::from_string("topLevel")));
 }
 
 #[test]
@@ -457,7 +461,7 @@ fn test_completion_from_current_namespace() {
     let candidates = get_completion_candidates("al", &state, &env, 100);
     assert!(candidates
         .iter()
-        .any(|c| c.name.to_string() == "MyNs.alpha"));
+        .any(|c| c.name == Name::from_string("MyNs.alpha")));
 }
 
 #[test]
@@ -471,9 +475,9 @@ fn test_completion_from_open_namespace() {
     state.open_namespace(Name::from_string("Nat"));
 
     let candidates = get_completion_candidates("add", &state, &env, 100);
-    let names: Vec<String> = candidates.iter().map(|c| c.name.to_string()).collect();
-    assert!(names.contains(&"Nat.add".to_string()));
-    assert!(names.contains(&"Nat.addOne".to_string()));
+    let names: Vec<Name> = candidates.iter().map(|c| c.name.clone()).collect();
+    assert!(names.contains(&Name::from_string("Nat.add")));
+    assert!(names.contains(&Name::from_string("Nat.addOne")));
 }
 
 #[test]
@@ -484,16 +488,16 @@ fn test_completion_global_prefix() {
 
     let state = NamespaceState::new();
     let candidates = get_completion_candidates("Nat", &state, &env, 100);
-    let names: Vec<String> = candidates.iter().map(|c| c.name.to_string()).collect();
-    assert!(names.contains(&"Nat.add".to_string()));
-    assert!(names.contains(&"NatHelper.stuff".to_string()));
+    let names: Vec<Name> = candidates.iter().map(|c| c.name.clone()).collect();
+    assert!(names.contains(&Name::from_string("Nat.add")));
+    assert!(names.contains(&Name::from_string("NatHelper.stuff")));
 }
 
 #[test]
 fn test_completion_max_results() {
     let mut env = Environment::new();
     for i in 0..20 {
-        add_const(&mut env, &format!("Ns.item{i}"));
+        add_named_const(&mut env, Name::anon().str("Ns").str(format!("item{i}")));
     }
 
     let state = NamespaceState::new();
@@ -544,11 +548,11 @@ fn test_import_impact_new_names() {
 
     let impact = analyze_import_impact(&Name::from_string("Nat"), &mut resolver, &state, &env);
 
-    assert_eq!(impact.namespace.to_string(), "Nat");
+    assert_eq!(impact.namespace.clone(), Name::from_string("Nat"));
     assert_eq!(impact.new_names.len(), 2);
-    let names: Vec<String> = impact.new_names.iter().map(|n| n.to_string()).collect();
-    assert!(names.contains(&"Nat.add".to_string()));
-    assert!(names.contains(&"Nat.mul".to_string()));
+    let names: Vec<Name> = impact.new_names.to_vec();
+    assert!(names.contains(&Name::from_string("Nat.add")));
+    assert!(names.contains(&Name::from_string("Nat.mul")));
 }
 
 #[test]
@@ -670,7 +674,7 @@ fn test_format_source_open_namespace() {
 
 #[test]
 fn test_format_source_alias() {
-    let s = format_source(&ResolutionSource::Alias("h".to_string()));
+    let s = format_source(&ResolutionSource::Alias(Name::from_string("h")));
     assert!(s.contains("alias"));
     assert!(s.contains("h"));
 }

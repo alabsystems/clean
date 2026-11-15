@@ -90,16 +90,16 @@ impl ElabCtx<'_> {
         let (name, _, ty) = self.locals.iter().rev().find(|(_, fvar, _)| *fvar == id)?;
         let ty = self.metas.instantiate(ty);
         let ty = self.metas.instantiate_levels(&ty);
-        let value = self.locals.let_value(id).map(|value| {
+        let value = self.locals.reduction_value(id).map(|value| {
             let value = self.metas.instantiate(value);
             self.metas.instantiate_levels(&value)
         });
         Some(LocalDecl {
             id,
-            name: Name::from_string(name),
+            name: name.name().clone(),
             type_: ty,
             value,
-            bi: BinderInfo::Default.into(),
+            bi: self.locals.binder_info(id),
         })
     }
 
@@ -230,12 +230,19 @@ mod tests {
         let env = Environment::new();
         let mut ctx = ElabCtx::new(&env);
         // a : Prop,  m : ?t  where ?t : Type,  b : m  (b's type mentions the meta)
-        let a = ctx.push_local("a".to_string(), Expr::prop());
+        let a = ctx.push_local(clean_parser::SurfaceName::generated_path("a"), Expr::prop());
         let t = ctx.metas.fresh(Expr::type_());
         let t_fvar = MetaState::to_fvar(t);
-        let m = ctx.push_local("m".to_string(), Expr::fvar(t_fvar));
-        let b = ctx.push_local("b".to_string(), Expr::fvar(m));
-        let unrelated = ctx.push_local("u".to_string(), Expr::prop());
+        let m = ctx.push_local(
+            clean_parser::SurfaceName::generated_path("m"),
+            Expr::fvar(t_fvar),
+        );
+        let b = ctx.push_local(
+            clean_parser::SurfaceName::generated_path("b"),
+            Expr::fvar(m),
+        );
+        let unrelated =
+            ctx.push_local(clean_parser::SurfaceName::generated_path("u"), Expr::prop());
 
         let only_b = ctx.demand_local_ctx(&[&Expr::fvar(b)]);
         assert!(only_b.get(b).is_some());
@@ -265,10 +272,16 @@ mod tests {
         // mint an id the elaborator has already bound to an unreachable local.
         let env = Environment::new();
         let mut ctx = ElabCtx::new(&env);
-        let reachable = ctx.push_local("r".to_string(), Expr::prop());
+        let reachable =
+            ctx.push_local(clean_parser::SurfaceName::generated_path("r"), Expr::prop());
         let mut hidden = Vec::new();
         for i in 0..8 {
-            hidden.push(ctx.push_local(format!("h{i}"), Expr::prop()));
+            hidden.push(ctx.push_local(
+                clean_parser::SurfaceName::from_name(
+                    clean_kernel::Name::anon().str(format!("h{i}")),
+                ),
+                Expr::prop(),
+            ));
         }
         let mut demand = ctx.demand_local_ctx(&[&Expr::fvar(reachable)]);
         assert_eq!(demand.len(), 1, "only the reachable local is emitted");
@@ -300,9 +313,14 @@ mod tests {
     fn test_demand_local_ctx_emits_let_values_and_their_closure() {
         let env = Environment::new();
         let mut ctx = ElabCtx::new(&env);
-        let a = ctx.push_local("a".to_string(), Expr::prop());
+        let a = ctx.push_local(clean_parser::SurfaceName::generated_path("a"), Expr::prop());
         let x = ctx.fresh_fvar();
-        ctx.push_local_let_with_fvar("x".to_string(), x, Expr::prop(), Expr::fvar(a));
+        ctx.push_local_let_with_fvar(
+            clean_parser::SurfaceName::generated_path("x"),
+            x,
+            Expr::prop(),
+            Expr::fvar(a),
+        );
         let c = ctx.demand_local_ctx(&[&Expr::fvar(x)]);
         let decl = c.get(x).expect("let-local x is emitted");
         assert_eq!(decl.value, Some(Expr::fvar(a)));

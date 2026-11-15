@@ -80,7 +80,7 @@ fn test_match_as_lit_inner_supported() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -89,10 +89,10 @@ fn test_match_as_lit_inner_supported() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "x".to_string(),
+                    SurfaceName::generated_path("x"),
                     Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "x".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
@@ -115,7 +115,7 @@ fn test_match_as_numeral_add_inner_supported() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -124,13 +124,13 @@ fn test_match_as_numeral_add_inner_supported() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "x".to_string(),
+                    SurfaceName::generated_path("x"),
                     Box::new(SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         1,
                     )),
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
@@ -153,7 +153,7 @@ fn test_match_as_numeral_add_offset_two_inner_supported() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -162,13 +162,13 @@ fn test_match_as_numeral_add_offset_two_inner_supported() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "x".to_string(),
+                    SurfaceName::generated_path("x"),
                     Box::new(SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         2,
                     )),
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
@@ -191,7 +191,7 @@ fn test_match_as_ctor_inner_supported() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -200,13 +200,13 @@ fn test_match_as_ctor_inner_supported() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "whole".to_string(),
+                    SurfaceName::generated_path("whole"),
                     Box::new(SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
-                        vec![SurfacePattern::Var("k".to_string())],
+                        SurfaceName::generated_path("Nat.succ"),
+                        vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
                     )),
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
@@ -228,7 +228,7 @@ fn test_match_as_ctor_inner_supported() {
 fn test_match_as_nested_multifield_ctor_inner_with_bare_names_supported() {
     use clean_parser::{Span, SurfaceExpr, SurfaceMatchArm, SurfacePattern};
     let env = option_prod_nat_bool_axiom_env("opt");
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "opt".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("opt"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -237,24 +237,24 @@ fn test_match_as_nested_multifield_ctor_inner_with_bare_names_supported() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "whole".to_string(),
+                    SurfaceName::generated_path("whole"),
                     Box::new(SurfacePattern::Ctor(
-                        "some".to_string(),
+                        SurfaceName::generated_path("some"),
                         vec![SurfacePattern::Ctor(
-                            "mk".to_string(),
+                            SurfaceName::generated_path("mk"),
                             vec![
-                                SurfacePattern::Var("x".to_string()),
-                                SurfacePattern::Ctor("true".to_string(), vec![]),
+                                SurfacePattern::Var(SurfaceName::generated_path("x")),
+                                SurfacePattern::Ctor(SurfaceName::generated_path("true"), vec![]),
                             ],
                         )],
                     )),
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "whole".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("whole")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Wildcard,
-                body: SurfaceExpr::Ident(Span::dummy(), "opt".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("opt")),
             },
         ],
     );
@@ -278,7 +278,7 @@ fn test_match_as_nested_multifield_ctor_inner_with_bare_names_supported() {
 fn test_match_as_nested_multifield_ctor_inner_rejects_non_nat_numeric_bool_field() {
     use clean_parser::{Span, SurfaceExpr, SurfaceMatchArm, SurfacePattern};
     let env = option_prod_nat_bool_axiom_env("opt");
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "opt".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("opt"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -287,27 +287,27 @@ fn test_match_as_nested_multifield_ctor_inner_rejects_non_nat_numeric_bool_field
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "whole".to_string(),
+                    SurfaceName::generated_path("whole"),
                     Box::new(SurfacePattern::Ctor(
-                        "some".to_string(),
+                        SurfaceName::generated_path("some"),
                         vec![SurfacePattern::Ctor(
-                            "mk".to_string(),
+                            SurfaceName::generated_path("mk"),
                             vec![
-                                SurfacePattern::Var("x".to_string()),
+                                SurfacePattern::Var(SurfaceName::generated_path("x")),
                                 SurfacePattern::NumeralAdd(
-                                    Box::new(SurfacePattern::Var("k".to_string())),
+                                    Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                                     2,
                                 ),
                             ],
                         )],
                     )),
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "whole".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("whole")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Wildcard,
-                body: SurfaceExpr::Ident(Span::dummy(), "opt".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("opt")),
             },
         ],
     );
@@ -325,7 +325,7 @@ fn test_match_as_or_inner_supported_when_branches_supported() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -333,16 +333,16 @@ fn test_match_as_or_inner_supported_when_branches_supported() {
         vec![SurfaceMatchArm {
             span: Span::dummy(),
             pattern: SurfacePattern::As(
-                "whole".to_string(),
+                SurfaceName::generated_path("whole"),
                 Box::new(SurfacePattern::Or(
                     Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
                     Box::new(SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         1,
                     )),
                 )),
             ),
-            body: SurfaceExpr::Ident(Span::dummy(), "whole".to_string()),
+            body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("whole")),
         }],
     );
 
@@ -364,17 +364,23 @@ fn test_elab_do_match_as_pattern_lit_inner_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::As(
-                        "whole".to_string(),
+                        SurfaceName::generated_path("whole"),
                         Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "whole".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("whole"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -407,20 +413,26 @@ fn test_elab_do_match_as_pattern_numeral_add_inner_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::As(
-                        "whole".to_string(),
+                        SurfaceName::generated_path("whole"),
                         Box::new(SurfacePattern::NumeralAdd(
-                            Box::new(SurfacePattern::Var("k".to_string())),
+                            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                             1,
                         )),
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("k"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -453,20 +465,26 @@ fn test_elab_do_match_as_pattern_ctor_inner_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::As(
-                        "whole".to_string(),
+                        SurfaceName::generated_path("whole"),
                         Box::new(SurfacePattern::Ctor(
-                            "Nat.succ".to_string(),
-                            vec![SurfacePattern::Var("k".to_string())],
+                            SurfaceName::generated_path("Nat.succ"),
+                            vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
                         )),
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("k"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -497,26 +515,35 @@ fn test_elab_do_match_as_pattern_nested_multifield_ctor_inner_with_bare_names_su
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "opt".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("opt"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::As(
-                        "whole".to_string(),
+                        SurfaceName::generated_path("whole"),
                         Box::new(SurfacePattern::Ctor(
-                            "some".to_string(),
+                            SurfaceName::generated_path("some"),
                             vec![SurfacePattern::Ctor(
-                                "mk".to_string(),
+                                SurfaceName::generated_path("mk"),
                                 vec![
-                                    SurfacePattern::Var("x".to_string()),
-                                    SurfacePattern::Ctor("true".to_string(), vec![]),
+                                    SurfacePattern::Var(SurfaceName::generated_path("x")),
+                                    SurfacePattern::Ctor(
+                                        SurfaceName::generated_path("true"),
+                                        vec![],
+                                    ),
                                 ],
                             )],
                         )),
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "whole".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("whole"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -524,7 +551,10 @@ fn test_elab_do_match_as_pattern_nested_multifield_ctor_inner_with_bare_names_su
                     patterns: vec![SurfacePattern::Wildcard],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "opt".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("opt"),
+                        )),
                     )],
                 },
             ],
@@ -550,20 +580,25 @@ fn test_elab_do_match_as_pattern_nested_multifield_ctor_inner_rejects_non_nat_nu
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "opt".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("opt"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::As(
-                        "whole".to_string(),
+                        SurfaceName::generated_path("whole"),
                         Box::new(SurfacePattern::Ctor(
-                            "some".to_string(),
+                            SurfaceName::generated_path("some"),
                             vec![SurfacePattern::Ctor(
-                                "mk".to_string(),
+                                SurfaceName::generated_path("mk"),
                                 vec![
-                                    SurfacePattern::Var("x".to_string()),
+                                    SurfacePattern::Var(SurfaceName::generated_path("x")),
                                     SurfacePattern::NumeralAdd(
-                                        Box::new(SurfacePattern::Var("k".to_string())),
+                                        Box::new(SurfacePattern::Var(SurfaceName::generated_path(
+                                            "k",
+                                        ))),
                                         2,
                                     ),
                                 ],
@@ -572,7 +607,10 @@ fn test_elab_do_match_as_pattern_nested_multifield_ctor_inner_rejects_non_nat_nu
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "whole".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("whole"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -580,7 +618,10 @@ fn test_elab_do_match_as_pattern_nested_multifield_ctor_inner_rejects_non_nat_nu
                     patterns: vec![SurfacePattern::Wildcard],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "opt".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("opt"),
+                        )),
                     )],
                 },
             ],
@@ -605,22 +646,28 @@ fn test_elab_do_match_as_pattern_or_inner_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![DoMatchArm {
                 span: Span::dummy(),
                 patterns: vec![SurfacePattern::As(
-                    "whole".to_string(),
+                    SurfaceName::generated_path("whole"),
                     Box::new(SurfacePattern::Or(
                         Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
                         Box::new(SurfacePattern::NumeralAdd(
-                            Box::new(SurfacePattern::Var("k".to_string())),
+                            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                             1,
                         )),
                     )),
                 )],
                 body: vec![DoElem::Expr(
                     Span::dummy(),
-                    Box::new(SurfaceExpr::Ident(Span::dummy(), "whole".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        Span::dummy(),
+                        SurfaceName::generated_path("whole"),
+                    )),
                 )],
             }],
         )],

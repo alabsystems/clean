@@ -12,17 +12,21 @@ use clean_parser::{Span, SurfaceArg, SurfaceExpr};
 // Helpers
 // =============================================================================
 
-fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::new(0, 0), name.to_owned())
+fn ident(name: clean_parser::SurfaceName) -> SurfaceExpr {
+    SurfaceExpr::Ident(Span::new(0, 0), name)
 }
 
 fn hole() -> SurfaceExpr {
     SurfaceExpr::Hole(Span::new(0, 0))
 }
 
-fn simple_macro(name: &str, template: SurfaceExpr, scoping: MacroScoping) -> MacroDef {
+fn simple_macro(
+    name: clean_parser::SurfaceName,
+    template: SurfaceExpr,
+    scoping: MacroScoping,
+) -> MacroDef {
     MacroDef {
-        name: name.to_owned(),
+        name,
         pattern: vec![MacroPatternPart::Expr],
         expansion_template: template,
         scoping,
@@ -32,9 +36,9 @@ fn simple_macro(name: &str, template: SurfaceExpr, scoping: MacroScoping) -> Mac
 // Test scaffolding not exercised by every including build — kept per the 2026-07-30
 // keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
 #[allow(dead_code)]
-fn empty_macro(name: &str, template: SurfaceExpr) -> MacroDef {
+fn empty_macro(name: clean_parser::SurfaceName, template: SurfaceExpr) -> MacroDef {
     MacroDef {
-        name: name.to_owned(),
+        name,
         pattern: vec![],
         expansion_template: template,
         scoping: MacroScoping::Term,
@@ -48,11 +52,23 @@ fn empty_macro(name: &str, template: SurfaceExpr) -> MacroDef {
 #[test]
 fn test_traced_expand_simple() {
     let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("neg", ident("Bool.not"), MacroScoping::Term));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("neg"),
+        ident(clean_parser::SurfaceName::generated_path("Bool.not")),
+        MacroScoping::Term,
+    ));
 
-    let trace = traced_expand(&reg, "neg", &[ident("x")]).expect("should expand");
+    let trace = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("neg"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+    )
+    .expect("should expand");
     assert_eq!(trace.steps.len(), 1);
-    assert_eq!(trace.steps[0].macro_name, "neg");
+    assert_eq!(
+        trace.steps[0].macro_name,
+        clean_parser::SurfaceName::generated_path("neg")
+    );
     assert_eq!(trace.steps[0].arg_count, 1);
     assert_eq!(trace.steps[0].depth, 0);
     assert_eq!(trace.max_depth, 0);
@@ -61,7 +77,11 @@ fn test_traced_expand_simple() {
 #[test]
 fn test_traced_expand_unknown_macro_returns_error() {
     let reg = MacroRegistry::empty();
-    let result = traced_expand(&reg, "nonexistent", &[ident("x")]);
+    let result = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+    );
     assert!(result.is_err());
     let err = result.unwrap_err();
     assert!(matches!(err, MacroAnalysisError::ExpansionFailed { .. }));
@@ -70,12 +90,19 @@ fn test_traced_expand_unknown_macro_returns_error() {
 #[test]
 fn test_traced_expand_preserves_final_expr() {
     let reg = MacroRegistry::new(); // has check, eval, print
-    let trace = traced_expand(&reg, "check", &[ident("Nat")]).expect("should expand");
+    let trace = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("check"),
+        &[ident(clean_parser::SurfaceName::generated_path("Nat"))],
+    )
+    .expect("should expand");
     // Final expr should be an App of #check to Nat
     match &trace.final_expr {
         SurfaceExpr::App(_, func, args) => {
             match func.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "#check"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name, &clean_parser::SurfaceName::generated_path("#check"))
+                }
                 other => panic!("expected Ident func, got {other:?}"),
             }
             assert_eq!(args.len(), 1);
@@ -87,9 +114,19 @@ fn test_traced_expand_preserves_final_expr() {
 #[test]
 fn test_traced_expand_recursive_single_step() {
     let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("wrap", ident("wrapper"), MacroScoping::Term));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("wrap"),
+        ident(clean_parser::SurfaceName::generated_path("wrapper")),
+        MacroScoping::Term,
+    ));
 
-    let trace = traced_expand_recursive(&reg, "wrap", &[ident("x")], 5).expect("should expand");
+    let trace = traced_expand_recursive(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("wrap"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+        5,
+    )
+    .expect("should expand");
     assert_eq!(trace.steps.len(), 1);
     assert_eq!(trace.max_depth, 0);
 }
@@ -99,25 +136,62 @@ fn test_traced_expand_recursive_follows_chain() {
     let mut reg = MacroRegistry::empty();
     // "outer" expands to App(ident("inner"), [arg])
     // We need "outer" to produce an expression whose head is "inner"
-    reg.register(simple_macro("outer", ident("inner"), MacroScoping::Term));
-    reg.register(simple_macro("inner", ident("base"), MacroScoping::Term));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("outer"),
+        ident(clean_parser::SurfaceName::generated_path("inner")),
+        MacroScoping::Term,
+    ));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("inner"),
+        ident(clean_parser::SurfaceName::generated_path("base")),
+        MacroScoping::Term,
+    ));
 
-    let trace = traced_expand_recursive(&reg, "outer", &[ident("x")], 5).expect("should expand");
+    let trace = traced_expand_recursive(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("outer"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+        5,
+    )
+    .expect("should expand");
     // Should have 2 steps: outer -> inner
     assert!(trace.steps.len() >= 2);
-    assert_eq!(trace.steps[0].macro_name, "outer");
-    assert_eq!(trace.steps[1].macro_name, "inner");
+    assert_eq!(
+        trace.steps[0].macro_name,
+        clean_parser::SurfaceName::generated_path("outer")
+    );
+    assert_eq!(
+        trace.steps[1].macro_name,
+        clean_parser::SurfaceName::generated_path("inner")
+    );
 }
 
 #[test]
 fn test_traced_expand_recursive_depth_exceeded() {
     let mut reg = MacroRegistry::empty();
     // Create a chain: a -> b -> c, with max_depth=0
-    reg.register(simple_macro("a", ident("b"), MacroScoping::Term));
-    reg.register(simple_macro("b", ident("c"), MacroScoping::Term));
-    reg.register(simple_macro("c", ident("done"), MacroScoping::Term));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("a"),
+        ident(clean_parser::SurfaceName::generated_path("b")),
+        MacroScoping::Term,
+    ));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("b"),
+        ident(clean_parser::SurfaceName::generated_path("c")),
+        MacroScoping::Term,
+    ));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("c"),
+        ident(clean_parser::SurfaceName::generated_path("done")),
+        MacroScoping::Term,
+    ));
 
-    let result = traced_expand_recursive(&reg, "a", &[ident("x")], 0);
+    let result = traced_expand_recursive(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("a"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+        0,
+    );
     // depth=0 should succeed for the first step but the recursive call
     // at depth=1 would exceed. The first expansion at depth 0 succeeds.
     // It tries to recurse into "b" at depth=1 which is > max_depth=0.
@@ -135,7 +209,11 @@ fn test_traced_expand_recursive_depth_exceeded() {
 #[test]
 fn test_classify_terminal_macro() {
     let reg = MacroRegistry::empty();
-    let def = simple_macro("foo", ident("bar"), MacroScoping::Term);
+    let def = simple_macro(
+        clean_parser::SurfaceName::generated_path("foo"),
+        ident(clean_parser::SurfaceName::generated_path("bar")),
+        MacroScoping::Term,
+    );
     assert_eq!(classify_macro(&reg, &def), MacroPattern::Terminal);
 }
 
@@ -143,7 +221,7 @@ fn test_classify_terminal_macro() {
 fn test_classify_identity_macro() {
     let reg = MacroRegistry::empty();
     let def = MacroDef {
-        name: "id".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("id"),
         pattern: vec![MacroPatternPart::Expr],
         expansion_template: hole(),
         scoping: MacroScoping::Term,
@@ -155,9 +233,9 @@ fn test_classify_identity_macro() {
 fn test_classify_self_recursive_macro() {
     let reg = MacroRegistry::empty();
     let def = MacroDef {
-        name: "rec".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("rec"),
         pattern: vec![MacroPatternPart::Expr],
-        expansion_template: ident("rec"),
+        expansion_template: ident(clean_parser::SurfaceName::generated_path("rec")),
         scoping: MacroScoping::Term,
     };
     assert_eq!(classify_macro(&reg, &def), MacroPattern::SelfRecursive);
@@ -166,8 +244,16 @@ fn test_classify_self_recursive_macro() {
 #[test]
 fn test_classify_delegates_to_other() {
     let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("target", ident("impl"), MacroScoping::Term));
-    let def = simple_macro("wrapper", ident("target"), MacroScoping::Term);
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("target"),
+        ident(clean_parser::SurfaceName::generated_path("impl")),
+        MacroScoping::Term,
+    ));
+    let def = simple_macro(
+        clean_parser::SurfaceName::generated_path("wrapper"),
+        ident(clean_parser::SurfaceName::generated_path("target")),
+        MacroScoping::Term,
+    );
     assert_eq!(classify_macro(&reg, &def), MacroPattern::DelegatesToOther);
 }
 
@@ -187,7 +273,7 @@ fn test_classify_terminal_no_names() {
     let reg = MacroRegistry::empty();
     // A macro with a literal template (no idents)
     let def = MacroDef {
-        name: "lit".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("lit"),
         pattern: vec![],
         expansion_template: SurfaceExpr::Lit(Span::new(0, 0), clean_parser::SurfaceLit::Nat(42)),
         scoping: MacroScoping::Term,
@@ -202,7 +288,11 @@ fn test_classify_terminal_no_names() {
 #[test]
 fn test_hygiene_clean_macro_no_issues_above_info() {
     let reg = MacroRegistry::empty();
-    let def = simple_macro("clean", ident("helper"), MacroScoping::Term);
+    let def = simple_macro(
+        clean_parser::SurfaceName::generated_path("clean"),
+        ident(clean_parser::SurfaceName::generated_path("helper")),
+        MacroScoping::Term,
+    );
     let issues = validate_hygiene(&reg, &def);
     // Should have no warnings or errors (may have info)
     let non_info: Vec<_> = issues
@@ -219,9 +309,9 @@ fn test_hygiene_clean_macro_no_issues_above_info() {
 fn test_hygiene_self_reference_warning() {
     let reg = MacroRegistry::empty();
     let def = MacroDef {
-        name: "loop".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("loop"),
         pattern: vec![MacroPatternPart::Expr],
-        expansion_template: ident("loop"),
+        expansion_template: ident(clean_parser::SurfaceName::generated_path("loop")),
         scoping: MacroScoping::Term,
     };
     let issues = validate_hygiene(&reg, &def);
@@ -236,7 +326,11 @@ fn test_hygiene_self_reference_warning() {
 #[test]
 fn test_hygiene_common_name_info() {
     let reg = MacroRegistry::empty();
-    let def = simple_macro("uses_nat", ident("Nat"), MacroScoping::Term);
+    let def = simple_macro(
+        clean_parser::SurfaceName::generated_path("uses_nat"),
+        ident(clean_parser::SurfaceName::generated_path("Nat")),
+        MacroScoping::Term,
+    );
     let issues = validate_hygiene(&reg, &def);
     let infos: Vec<_> = issues
         .iter()
@@ -251,7 +345,7 @@ fn test_hygiene_unbound_holes_error() {
     let reg = MacroRegistry::empty();
     // Template has a hole but pattern has no Expr slots
     let def = MacroDef {
-        name: "bad".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("bad"),
         pattern: vec![MacroPatternPart::Keyword("kw".to_owned())],
         expansion_template: hole(),
         scoping: MacroScoping::Term,
@@ -301,12 +395,23 @@ fn test_stats_new_is_empty() {
 fn test_stats_record_single_expansion() {
     let mut stats = ExpansionStats::new();
     let reg = MacroRegistry::new();
-    let trace = traced_expand(&reg, "check", &[ident("x")]).unwrap();
+    let trace = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("check"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+    )
+    .unwrap();
     stats.record(&trace);
 
     assert_eq!(stats.total_expansions(), 1);
-    assert_eq!(stats.count_for("check"), 1);
-    assert_eq!(stats.count_for("eval"), 0);
+    assert_eq!(
+        stats.count_for(&clean_parser::SurfaceName::generated_path("check")),
+        1
+    );
+    assert_eq!(
+        stats.count_for(&clean_parser::SurfaceName::generated_path("eval")),
+        0
+    );
 }
 
 #[test]
@@ -315,165 +420,80 @@ fn test_stats_accumulate_multiple_expansions() {
     let reg = MacroRegistry::new();
 
     for _ in 0..5 {
-        let trace = traced_expand(&reg, "check", &[ident("x")]).unwrap();
+        let trace = traced_expand(
+            &reg,
+            &clean_parser::SurfaceName::generated_path("check"),
+            &[ident(clean_parser::SurfaceName::generated_path("x"))],
+        )
+        .unwrap();
         stats.record(&trace);
     }
     for _ in 0..3 {
-        let trace = traced_expand(&reg, "eval", &[ident("y")]).unwrap();
+        let trace = traced_expand(
+            &reg,
+            &clean_parser::SurfaceName::generated_path("eval"),
+            &[ident(clean_parser::SurfaceName::generated_path("y"))],
+        )
+        .unwrap();
         stats.record(&trace);
     }
 
     assert_eq!(stats.total_expansions(), 8);
-    assert_eq!(stats.count_for("check"), 5);
-    assert_eq!(stats.count_for("eval"), 3);
+    assert_eq!(
+        stats.count_for(&clean_parser::SurfaceName::generated_path("check")),
+        5
+    );
+    assert_eq!(
+        stats.count_for(&clean_parser::SurfaceName::generated_path("eval")),
+        3
+    );
 }
 
 #[test]
 fn test_stats_max_depth_tracking() {
     let mut stats = ExpansionStats::new();
     let reg = MacroRegistry::new();
-    let trace = traced_expand(&reg, "check", &[ident("x")]).unwrap();
+    let trace = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("check"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+    )
+    .unwrap();
     stats.record(&trace);
 
-    assert_eq!(stats.max_depth_for("check"), 0);
-    assert_eq!(stats.max_depth_for("unknown"), 0);
+    assert_eq!(
+        stats.max_depth_for(&clean_parser::SurfaceName::generated_path("check")),
+        0
+    );
+    assert_eq!(
+        stats.max_depth_for(&clean_parser::SurfaceName::generated_path("unknown")),
+        0
+    );
 }
 
 #[test]
 fn test_stats_reset() {
     let mut stats = ExpansionStats::new();
     let reg = MacroRegistry::new();
-    let trace = traced_expand(&reg, "check", &[ident("x")]).unwrap();
+    let trace = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("check"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+    )
+    .unwrap();
     stats.record(&trace);
     assert_eq!(stats.total_expansions(), 1);
 
     stats.reset();
     assert_eq!(stats.total_expansions(), 0);
-    assert_eq!(stats.count_for("check"), 0);
-}
-
-// =============================================================================
-// Dependency graph tests
-// =============================================================================
-
-#[test]
-fn test_dep_graph_empty_registry() {
-    let reg = MacroRegistry::empty();
-    let graph = MacroDependencyGraph::build(&reg);
-    assert!(graph.edges.is_empty());
-    assert!(graph.reverse_edges.is_empty());
-}
-
-#[test]
-fn test_dep_graph_independent_macros() {
-    let reg = MacroRegistry::new(); // check, eval, print — all independent
-    let graph = MacroDependencyGraph::build(&reg);
-
-    assert_eq!(graph.edges.len(), 3);
-    // All builtins should have zero dependencies on each other
-    for deps in graph.edges.values() {
-        assert!(deps.is_empty());
-    }
-}
-
-#[test]
-fn test_dep_graph_with_delegation() {
-    let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("base", ident("impl"), MacroScoping::Term));
-    reg.register(simple_macro("wrapper", ident("base"), MacroScoping::Term));
-
-    let graph = MacroDependencyGraph::build(&reg);
-
-    let wrapper_deps = graph.dependencies_of("wrapper");
-    assert!(
-        wrapper_deps.contains("base"),
-        "wrapper should depend on base"
-    );
-
-    let base_deps = graph.dependencies_of("base");
-    assert!(base_deps.is_empty(), "base should have no deps");
-
-    let base_dependents = graph.dependents_of("base");
-    assert!(base_dependents.contains("wrapper"));
-}
-
-#[test]
-fn test_dep_graph_leaves_and_roots() {
-    let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("base", ident("impl"), MacroScoping::Term));
-    reg.register(simple_macro("wrapper", ident("base"), MacroScoping::Term));
-
-    let graph = MacroDependencyGraph::build(&reg);
-
-    let leaves = graph.leaves();
-    assert!(leaves.contains("base"), "base should be a leaf (no deps)");
-
-    let roots = graph.roots();
-    assert!(
-        roots.contains("wrapper"),
-        "wrapper should be a root (no dependents)"
+    assert_eq!(
+        stats.count_for(&clean_parser::SurfaceName::generated_path("check")),
+        0
     );
 }
 
-#[test]
-fn test_dep_graph_no_cycle_in_independent() {
-    let reg = MacroRegistry::new();
-    let graph = MacroDependencyGraph::build(&reg);
-    assert!(graph.detect_cycle().is_none());
-}
-
-#[test]
-fn test_dep_graph_no_cycle_in_chain() {
-    let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("a", ident("b"), MacroScoping::Term));
-    reg.register(simple_macro("b", ident("c"), MacroScoping::Term));
-    reg.register(simple_macro("c", ident("end"), MacroScoping::Term));
-
-    let graph = MacroDependencyGraph::build(&reg);
-    assert!(graph.detect_cycle().is_none());
-}
-
-#[test]
-fn test_dep_graph_detects_cycle() {
-    let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("x", ident("y"), MacroScoping::Term));
-    reg.register(simple_macro("y", ident("x"), MacroScoping::Term));
-
-    let graph = MacroDependencyGraph::build(&reg);
-    let cycle = graph.detect_cycle();
-    assert!(cycle.is_some(), "should detect x <-> y cycle");
-    let cycle = cycle.unwrap();
-    assert!(cycle.contains(&"x".to_owned()));
-    assert!(cycle.contains(&"y".to_owned()));
-}
-
-#[test]
-fn test_dep_graph_topological_order_independent() {
-    let reg = MacroRegistry::new();
-    let graph = MacroDependencyGraph::build(&reg);
-    let order = graph.topological_order();
-    assert!(order.is_some());
-    let order = order.unwrap();
-    assert_eq!(order.len(), 3);
-}
-
-#[test]
-fn test_dep_graph_topological_order_cycle_returns_none() {
-    let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("x", ident("y"), MacroScoping::Term));
-    reg.register(simple_macro("y", ident("x"), MacroScoping::Term));
-
-    let graph = MacroDependencyGraph::build(&reg);
-    assert!(graph.topological_order().is_none());
-}
-
-#[test]
-fn test_dep_graph_dependencies_of_unknown() {
-    let reg = MacroRegistry::new();
-    let graph = MacroDependencyGraph::build(&reg);
-    let deps = graph.dependencies_of("nonexistent");
-    assert!(deps.is_empty());
-}
+#[path = "macro_cmd_ext_dependency_graph_tests.rs"]
+mod dependency_graph_tests;
 
 // =============================================================================
 // Template extraction tests
@@ -481,10 +501,14 @@ fn test_dep_graph_dependencies_of_unknown() {
 
 #[test]
 fn test_extract_template_simple_ident() {
-    let def = simple_macro("neg", ident("Bool.not"), MacroScoping::Term);
+    let def = simple_macro(
+        clean_parser::SurfaceName::generated_path("neg"),
+        ident(clean_parser::SurfaceName::generated_path("Bool.not")),
+        MacroScoping::Term,
+    );
     let desc = extract_template(&def);
 
-    assert_eq!(desc.name, "neg");
+    assert_eq!(desc.name, clean_parser::SurfaceName::generated_path("neg"));
     assert_eq!(desc.parameters.len(), 1);
     assert_eq!(desc.parameters[0], "expr_0");
     assert_eq!(desc.scoping, MacroScoping::Term);
@@ -494,7 +518,7 @@ fn test_extract_template_simple_ident() {
 #[test]
 fn test_extract_template_hole() {
     let def = MacroDef {
-        name: "id".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("id"),
         pattern: vec![MacroPatternPart::Expr],
         expansion_template: hole(),
         scoping: MacroScoping::Term,
@@ -506,14 +530,14 @@ fn test_extract_template_hole() {
 #[test]
 fn test_extract_template_mixed_pattern() {
     let def = MacroDef {
-        name: "ite".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("ite"),
         pattern: vec![
             MacroPatternPart::Keyword("if".to_owned()),
             MacroPatternPart::Expr,
             MacroPatternPart::Keyword("then".to_owned()),
             MacroPatternPart::Expr,
         ],
-        expansion_template: ident("ite"),
+        expansion_template: ident(clean_parser::SurfaceName::generated_path("ite")),
         scoping: MacroScoping::Term,
     };
     let desc = extract_template(&def);
@@ -526,13 +550,13 @@ fn test_extract_template_mixed_pattern() {
 #[test]
 fn test_extract_template_with_optional_and_sepby() {
     let def = MacroDef {
-        name: "args".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("args"),
         pattern: vec![
             MacroPatternPart::Ident,
             MacroPatternPart::OptionalExpr,
             MacroPatternPart::SepByExpr(",".to_owned()),
         ],
-        expansion_template: ident("apply"),
+        expansion_template: ident(clean_parser::SurfaceName::generated_path("apply")),
         scoping: MacroScoping::Command,
     };
     let desc = extract_template(&def);
@@ -558,7 +582,7 @@ fn test_extract_all_templates_builtin_count() {
 fn test_optimization_identity_hint() {
     let mut reg = MacroRegistry::empty();
     reg.register(MacroDef {
-        name: "id".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("id"),
         pattern: vec![MacroPatternPart::Expr],
         expansion_template: hole(),
         scoping: MacroScoping::Term,
@@ -573,19 +597,33 @@ fn test_optimization_identity_hint() {
         !inline_hints.is_empty(),
         "expected inline hint for identity macro"
     );
-    assert_eq!(inline_hints[0].macro_name, "id");
+    assert_eq!(
+        inline_hints[0].macro_name,
+        clean_parser::SurfaceName::generated_path("id")
+    );
 }
 
 #[test]
 fn test_optimization_merge_delegate_hint() {
     let mut reg = MacroRegistry::empty();
-    reg.register(simple_macro("base", ident("impl"), MacroScoping::Term));
-    reg.register(simple_macro("wrapper", ident("base"), MacroScoping::Term));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("base"),
+        ident(clean_parser::SurfaceName::generated_path("impl")),
+        MacroScoping::Term,
+    ));
+    reg.register(simple_macro(
+        clean_parser::SurfaceName::generated_path("wrapper"),
+        ident(clean_parser::SurfaceName::generated_path("base")),
+        MacroScoping::Term,
+    ));
 
     let hints = suggest_optimizations(&reg);
     let merge_hints: Vec<_> = hints
         .iter()
-        .filter(|h| h.kind == OptimizationKind::MergeDelegate && h.macro_name == "wrapper")
+        .filter(|h| {
+            h.kind == OptimizationKind::MergeDelegate
+                && h.macro_name == clean_parser::SurfaceName::generated_path("wrapper")
+        })
         .collect();
     assert!(
         !merge_hints.is_empty(),
@@ -597,12 +635,12 @@ fn test_optimization_merge_delegate_hint() {
 fn test_optimization_keyword_only_simplify() {
     let mut reg = MacroRegistry::empty();
     reg.register(MacroDef {
-        name: "kw_only".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("kw_only"),
         pattern: vec![
             MacroPatternPart::Keyword("do".to_owned()),
             MacroPatternPart::Keyword("stuff".to_owned()),
         ],
-        expansion_template: ident("action"),
+        expansion_template: ident(clean_parser::SurfaceName::generated_path("action")),
         scoping: MacroScoping::Command,
     });
 
@@ -622,14 +660,17 @@ fn test_optimization_no_hints_for_clean_macros() {
     let mut reg = MacroRegistry::empty();
     // A well-defined macro with no obvious optimizations
     reg.register(MacroDef {
-        name: "check2".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("check2"),
         pattern: vec![MacroPatternPart::Expr, MacroPatternPart::Expr],
-        expansion_template: ident("custom_check"),
+        expansion_template: ident(clean_parser::SurfaceName::generated_path("custom_check")),
         scoping: MacroScoping::Command,
     });
 
     let hints = suggest_optimizations(&reg);
-    let relevant: Vec<_> = hints.iter().filter(|h| h.macro_name == "check2").collect();
+    let relevant: Vec<_> = hints
+        .iter()
+        .filter(|h| h.macro_name == clean_parser::SurfaceName::generated_path("check2"))
+        .collect();
     assert!(
         relevant.is_empty(),
         "expected no hints for clean macro, got: {relevant:?}"
@@ -643,8 +684,10 @@ fn test_optimization_no_hints_for_clean_macros() {
 #[test]
 fn test_error_display_expansion_failed() {
     let err = MacroAnalysisError::ExpansionFailed {
-        name: "foo".to_owned(),
-        source: crate::macro_cmd::MacroError::UnknownMacro("foo".to_owned()),
+        name: clean_parser::SurfaceName::generated_path("foo"),
+        source: crate::macro_cmd::MacroError::UnknownMacro(
+            clean_parser::SurfaceName::generated_path("foo"),
+        ),
     };
     let msg = err.to_string();
     assert!(msg.contains("foo"));
@@ -654,7 +697,7 @@ fn test_error_display_expansion_failed() {
 #[test]
 fn test_error_display_depth_exceeded() {
     let err = MacroAnalysisError::DepthExceeded {
-        name: "deep".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("deep"),
         max_depth: 10,
     };
     let msg = err.to_string();
@@ -665,7 +708,11 @@ fn test_error_display_depth_exceeded() {
 #[test]
 fn test_error_display_cycle_detected() {
     let err = MacroAnalysisError::CycleDetected {
-        cycle: vec!["a".to_owned(), "b".to_owned(), "a".to_owned()],
+        cycle: vec![
+            clean_parser::SurfaceName::generated_path("a"),
+            clean_parser::SurfaceName::generated_path("b"),
+            clean_parser::SurfaceName::generated_path("a"),
+        ],
     };
     let msg = err.to_string();
     assert!(msg.contains("cycle"));
@@ -674,7 +721,7 @@ fn test_error_display_cycle_detected() {
 #[test]
 fn test_error_display_hygiene_violation() {
     let err = MacroAnalysisError::HygieneViolation {
-        macro_name: "bad".to_owned(),
+        macro_name: clean_parser::SurfaceName::generated_path("bad"),
         detail: "captured variable".to_owned(),
     };
     let msg = err.to_string();
@@ -691,7 +738,7 @@ fn test_classify_macro_empty_template_names() {
     let reg = MacroRegistry::empty();
     // Literal template — no names
     let def = MacroDef {
-        name: "num".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("num"),
         pattern: vec![],
         expansion_template: SurfaceExpr::Lit(Span::new(0, 0), clean_parser::SurfaceLit::Nat(0)),
         scoping: MacroScoping::Term,
@@ -704,16 +751,16 @@ fn test_dep_graph_self_reference_not_edge() {
     let mut reg = MacroRegistry::empty();
     // Self-referencing macro should NOT have a self-edge in the dep graph
     reg.register(MacroDef {
-        name: "self_ref".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("self_ref"),
         pattern: vec![MacroPatternPart::Expr],
-        expansion_template: ident("self_ref"),
+        expansion_template: ident(clean_parser::SurfaceName::generated_path("self_ref")),
         scoping: MacroScoping::Term,
     });
 
     let graph = MacroDependencyGraph::build(&reg);
-    let deps = graph.dependencies_of("self_ref");
+    let deps = graph.dependencies_of(&clean_parser::SurfaceName::generated_path("self_ref"));
     assert!(
-        !deps.contains("self_ref"),
+        !deps.contains(&clean_parser::SurfaceName::generated_path("self_ref")),
         "self-reference should not create dep edge"
     );
 }
@@ -722,12 +769,14 @@ fn test_dep_graph_self_reference_not_edge() {
 fn test_hygiene_multiple_common_names() {
     let reg = MacroRegistry::empty();
     let def = MacroDef {
-        name: "multi".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("multi"),
         pattern: vec![MacroPatternPart::Expr],
         expansion_template: SurfaceExpr::App(
             Span::new(0, 0),
-            Box::new(ident("Nat")),
-            vec![SurfaceArg::positional(ident("Bool"))],
+            Box::new(ident(clean_parser::SurfaceName::generated_path("Nat"))),
+            vec![SurfaceArg::positional(ident(
+                clean_parser::SurfaceName::generated_path("Bool"),
+            ))],
         ),
         scoping: MacroScoping::Term,
     };
@@ -744,10 +793,17 @@ fn test_stats_output_size_tracked() {
     let mut stats = ExpansionStats::new();
     let reg = MacroRegistry::new();
 
-    let trace = traced_expand(&reg, "check", &[ident("x")]).unwrap();
+    let trace = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("check"),
+        &[ident(clean_parser::SurfaceName::generated_path("x"))],
+    )
+    .unwrap();
     stats.record(&trace);
 
-    let size = stats.output_sizes.get("check");
+    let size = stats
+        .output_sizes
+        .get(&clean_parser::SurfaceName::generated_path("check"));
     assert!(size.is_some(), "output size should be tracked");
     assert!(*size.unwrap() > 0, "output size should be positive");
 }
@@ -755,12 +811,14 @@ fn test_stats_output_size_tracked() {
 #[test]
 fn test_extract_template_app_structure() {
     let def = MacroDef {
-        name: "app_macro".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("app_macro"),
         pattern: vec![MacroPatternPart::Expr],
         expansion_template: SurfaceExpr::App(
             Span::new(0, 0),
-            Box::new(ident("f")),
-            vec![SurfaceArg::positional(ident("g"))],
+            Box::new(ident(clean_parser::SurfaceName::generated_path("f"))),
+            vec![SurfaceArg::positional(ident(
+                clean_parser::SurfaceName::generated_path("g"),
+            ))],
         ),
         scoping: MacroScoping::Term,
     };
@@ -775,16 +833,23 @@ fn test_extract_template_app_structure() {
 fn test_traced_expand_hole_template() {
     let mut reg = MacroRegistry::empty();
     reg.register(MacroDef {
-        name: "pass".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("pass"),
         pattern: vec![MacroPatternPart::Expr],
         expansion_template: hole(),
         scoping: MacroScoping::Term,
     });
 
-    let trace = traced_expand(&reg, "pass", &[ident("val")]).expect("should expand");
+    let trace = traced_expand(
+        &reg,
+        &clean_parser::SurfaceName::generated_path("pass"),
+        &[ident(clean_parser::SurfaceName::generated_path("val"))],
+    )
+    .expect("should expand");
     // Hole template substitutes first arg
     match &trace.final_expr {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "val"),
+        SurfaceExpr::Ident(_, name) => {
+            assert_eq!(name, &clean_parser::SurfaceName::generated_path("val"))
+        }
         other => panic!("expected Ident, got {other:?}"),
     }
 }

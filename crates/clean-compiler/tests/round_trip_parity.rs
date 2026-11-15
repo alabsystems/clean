@@ -14,14 +14,58 @@ mod test_helpers;
 
 use clean_compiler::emit_c::emit_c;
 use clean_compiler::emit_rust::emit_rust;
-use clean_compiler::ir::{FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRType, JoinPointId};
-use test_helpers::{arg, assert_both_contain, mixed_ctor, name, obj_ctor, simple_fn, var};
+use clean_compiler::ir::{FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRType, JoinPointId, VarId};
+use test_helpers::{arg, mixed_ctor, name, obj_ctor, var};
 
 /// Helper: emit both C and Rust from the same decl.
 fn emit_both(decl: &IRDecl) -> (String, String) {
     let c = emit_c(std::slice::from_ref(decl)).unwrap();
     let r = emit_rust(std::slice::from_ref(decl)).unwrap();
     (c, r)
+}
+
+// `simple_fn` and `assert_both_contain` live here, not in `test_helpers`: this
+// is their only user, and every other binary that includes `test_helpers`
+// compiled them as dead code (`-W dead-code` under the workspace lints).
+
+/// Build a function that computes one expression and returns it.
+///
+/// `params` are `(var_id, type)` pairs.
+/// `result_var` is the VarId for the VDecl that holds the expression result.
+fn simple_fn(
+    fname: &str,
+    params: &[(u32, IRType)],
+    ret_ty: IRType,
+    result_var: u32,
+    expr: IRExpr,
+) -> IRDecl {
+    IRDecl {
+        name: name(fname),
+        params: params.iter().map(|(v, t)| (VarId(*v), t.clone())).collect(),
+        return_type: ret_ty.clone(),
+        body: IRBody::VDecl {
+            var: VarId(result_var),
+            ty: ret_ty,
+            value: expr,
+            rest: Box::new(IRBody::Ret(IRArg::Var(VarId(result_var)))),
+        },
+    }
+}
+
+/// Parity check: verify a pattern appears in both C and Rust output.
+fn assert_both_contain(c_code: &str, rust_code: &str, pattern: &str) {
+    assert!(
+        c_code.contains(pattern),
+        "C emitter missing pattern: {}\n---C output---\n{}",
+        pattern,
+        c_code
+    );
+    assert!(
+        rust_code.contains(pattern),
+        "Rust emitter missing pattern: {}\n---Rust output---\n{}",
+        pattern,
+        rust_code
+    );
 }
 
 // ════════════════════════════════════════════════════════════════════════════

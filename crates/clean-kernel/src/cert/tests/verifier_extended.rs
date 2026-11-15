@@ -19,6 +19,7 @@ use crate::expr::{BigNat, BinderInfo, Expr, ExprKind, FVarId, Literal, MDataValu
 use crate::inductive::{ConstructorVal, InductiveVal};
 use crate::level::Level;
 use crate::name::Name;
+use crate::tc::TypeChecker;
 use std::sync::Arc;
 
 fn empty_env() -> Environment {
@@ -232,11 +233,12 @@ fn env_with_my_pair() -> Environment {
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
     let my_pair_const = Expr::from_kind(ExprKind::Const(struct_name.clone(), vec![].into()));
 
-    // MyPair : Prop (lives in Prop since both fields are Prop)
+    // These fields store propositions, not proofs: Prop : Type. The intended
+    // data pair therefore lives in Type and permits projecting either field.
     env.register_inductive(InductiveVal {
         name: struct_name.clone(),
         level_params: vec![],
-        type_: prop.clone(),
+        type_: Expr::type_(),
         num_params: 0,
         num_indices: 0,
         all_names: vec![struct_name.clone()],
@@ -325,6 +327,24 @@ fn env_with_my_box() -> Environment {
 // Proj tests
 // =========================================================================
 
+fn assert_projection_typed(
+    env: &Environment,
+    id: FVarId,
+    inner_type: &Expr,
+    projection: &Expr,
+    field_type: &Expr,
+) {
+    let mut tc = TypeChecker::new(env);
+    assert!(tc.infer_type_full(inner_type).unwrap().is_sort());
+    tc.local_context_mut().push_with_id(
+        id,
+        Name::from_string("projection_fixture"),
+        inner_type.clone(),
+        BinderInfo::Default,
+    );
+    assert_eq!(tc.infer_type_full(projection).unwrap(), *field_type);
+}
+
 #[test]
 fn test_verify_proj_basic_fst() {
     let env = env_with_my_pair();
@@ -343,6 +363,7 @@ fn test_verify_proj_basic_fst() {
 
     // Proj(MyPair, 0, p) — project first field
     let proj_expr = Expr::proj(struct_name.clone(), 0, p_expr.clone());
+    assert_projection_typed(&env, fvar_p, &my_pair_type, &proj_expr, &prop);
 
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
@@ -377,6 +398,7 @@ fn test_verify_proj_basic_snd() {
     let p_expr = Expr::from_kind(ExprKind::FVar(fvar_p));
 
     let proj_expr = Expr::proj(struct_name.clone(), 1, p_expr.clone());
+    assert_projection_typed(&env, fvar_p, &my_pair_type, &proj_expr, &prop);
 
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
@@ -403,9 +425,9 @@ fn test_verify_proj_polymorphic() {
     let struct_name = Name::from_string("MyBox");
     let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
 
-    // MyBox applied at universe 0: MyBox.{0} Prop
+    // Prop : Sort 1, so the type-correct application is MyBox.{1} Prop.
     let my_box_prop = Expr::app(
-        Expr::const_(struct_name.clone(), vec![Level::zero()]),
+        Expr::const_(struct_name.clone(), vec![Level::succ(Level::zero())]),
         prop.clone(),
     );
 
@@ -415,6 +437,7 @@ fn test_verify_proj_polymorphic() {
 
     // Proj(MyBox, 0, b) — project the val field
     let proj_expr = Expr::proj(struct_name.clone(), 0, b_expr.clone());
+    assert_projection_typed(&env, fvar_b, &my_box_prop, &proj_expr, &prop);
 
     let cert = ProofCert::Proj {
         struct_name: struct_name.clone(),
@@ -430,7 +453,7 @@ fn test_verify_proj_polymorphic() {
     let ty = verifier
         .verify(&cert, &proj_expr)
         .expect("Polymorphic Proj should verify");
-    assert_eq!(ty, prop, "MyBox.{{0}} Prop projected val should be Prop");
+    assert_eq!(ty, prop, "MyBox.{{1}} Prop projected val should be Prop");
 }
 
 #[test]

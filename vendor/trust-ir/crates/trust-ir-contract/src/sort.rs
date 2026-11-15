@@ -8,6 +8,7 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // Copyright 2026 Andrew Yates | License: Apache 2.0
 
+use crate::formula::escape_smtlib_symbol;
 use serde::{Deserialize, Serialize};
 
 /// SMT sorts.
@@ -70,6 +71,28 @@ pub enum Sort {
         /// Empty for a by-name recursive reference (see the type-level doc).
         constructors: Vec<(String, Vec<(String, Sort)>)>,
     },
+    /// The SMT-LIB `Real` sort: the ordered field of the reals, as used by the
+    /// `QF_LRA` / `LRA` logics.
+    ///
+    /// A `Real`-sorted variable ranges over ℝ, NOT ℤ — an ordering atom over
+    /// `Real` variables is a statement about real-valued solutions, and a
+    /// consumer must never apply integer reasoning (strict-bound tightening
+    /// `x < 1 ⇒ x ≤ 0`, integrality cuts, `Int` rounding of literals) to it.
+    /// Rational literals are carried by [`crate::Formula::Rat`]. A producer
+    /// spells an integer constant in a `Real` position as a `Rat` with
+    /// denominator `1` (`Formula::rat_from_int`): sort checkers are entitled
+    /// to REJECT an [`crate::Formula::Int`] literal or `Int`-sorted variable
+    /// mixed into a `Real` atom rather than silently promote it, because the
+    /// promotion would decide which domain the atom ranges over.
+    ///
+    /// For a LINEAR system with rational coefficients, feasibility over ℝ and
+    /// over ℚ coincide, so a kernel-checked refutation may be carried over an
+    /// exact-rational carrier; the sort name follows SMT-LIB, which has no
+    /// separate `Rat`.
+    ///
+    /// Appended after `Datatype` so the variant index of every existing sort is
+    /// unchanged (bincode-style index-based encodings of `Sort` stay stable).
+    Real,
 }
 
 /// IEEE-754 rounding modes (SMT-LIB `RoundingMode` theory). The five-letter
@@ -139,8 +162,17 @@ impl Sort {
             // sort identifier). The `(declare-datatype …)` that DEFINES it must be
             // emitted separately, BEFORE any `(declare-fun … () <name>)` that uses
             // it — see `Sort::datatype_declarations`.
-            Sort::Datatype { name, .. } => name.clone(),
+            Sort::Datatype { name, .. } => escape_smtlib_symbol(name),
+            Sort::Real => "Real".to_string(),
         }
+    }
+
+    /// True iff this sort is the SMT-LIB `Real` sort. Used by SMT-logic
+    /// selection (`QF_LRA` / `QF_LIRA` instead of `QF_LIA`) and by consumers
+    /// that must refuse integer-only reasoning on real-valued variables.
+    #[must_use]
+    pub fn is_real(&self) -> bool {
+        matches!(self, Sort::Real)
     }
 
     /// If this sort is (or transitively contains) datatype definitions, return
@@ -188,19 +220,27 @@ impl Sort {
                 let ctor_strs: Vec<String> = constructors
                     .iter()
                     .map(|(ctor, fields)| {
+                        let ctor = escape_smtlib_symbol(ctor);
                         if fields.is_empty() {
                             format!("({ctor})")
                         } else {
                             let field_strs: Vec<String> = fields
                                 .iter()
-                                .map(|(fname, fsort)| format!("({fname} {})", fsort.to_smtlib()))
+                                .map(|(fname, fsort)| {
+                                    format!(
+                                        "({} {})",
+                                        escape_smtlib_symbol(fname),
+                                        fsort.to_smtlib()
+                                    )
+                                })
                                 .collect();
                             format!("({ctor} {})", field_strs.join(" "))
                         }
                     })
                     .collect();
                 out.push(format!(
-                    "(declare-datatype {name} ({}))",
+                    "(declare-datatype {} ({}))",
+                    escape_smtlib_symbol(name),
                     ctor_strs.join(" ")
                 ));
             }
@@ -224,6 +264,59 @@ impl Sort {
 #[cfg(test)]
 mod datatype_sort_tests {
     use super::*;
+
+    #[test]
+    fn datatype_symbols_are_escaped_in_declarations_and_recursive_references() {
+        let reference = Sort::Datatype {
+            name: "source::Tree α".into(),
+            constructors: Vec::new(),
+        };
+        let tree = Sort::Datatype {
+            name: "source::Tree α".into(),
+            constructors: vec![
+                (
+                    "source::Leaf".into(),
+                    vec![("leaf value".into(), Sort::Int)],
+                ),
+                (
+                    "source::Next".into(),
+                    vec![("next node".into(), reference.clone())],
+                ),
+            ],
+        };
+        assert_eq!(reference.to_smtlib(), "|source::Tree α|");
+        assert_eq!(tree.to_smtlib(), reference.to_smtlib());
+        assert_eq!(
+            tree.datatype_declarations(),
+            [
+                "(declare-datatype |source::Tree α| ((|source::Leaf| (|leaf value| Int)) (|source::Next| (|next node| |source::Tree α|))))"
+            ]
+        );
+        assert_eq!(
+            Sort::Array(Box::new(Sort::Int), Box::new(tree)).to_smtlib(),
+            "(Array Int |source::Tree α|)"
+        );
+        assert!(reference.datatype_declarations().is_empty());
+    }
+
+    #[test]
+    fn nested_datatype_symbols_are_escaped_without_changing_dependency_order() {
+        let inner = Sort::Datatype {
+            name: "inner type".into(),
+            constructors: vec![("empty node".into(), vec![])],
+        };
+        let outer = Sort::Datatype {
+            name: "outer type".into(),
+            constructors: vec![("wrap node".into(), vec![("inner field".into(), inner)])],
+        };
+        assert_eq!(
+            outer.datatype_declarations(),
+            [
+                "(declare-datatype |inner type| ((|empty node|)))",
+                "(declare-datatype |outer type| ((|wrap node| (|inner field| |inner type|))))",
+            ]
+        );
+    }
 
     fn bv(w: u32) -> Sort {
         Sort::BitVec(w)
@@ -322,5 +415,62 @@ mod datatype_sort_tests {
         assert!(Sort::Int.datatype_declarations().is_empty());
         assert!(bv(64).datatype_declarations().is_empty());
         assert!(!Sort::Int.contains_datatype());
+        assert!(Sort::Real.datatype_declarations().is_empty());
+        assert!(!Sort::Real.contains_datatype());
+    }
+}
+
+#[cfg(test)]
+mod real_sort_tests {
+    use super::*;
+
+    #[test]
+    fn real_sort_renders_as_smtlib_real() {
+        assert_eq!(Sort::Real.to_smtlib(), "Real");
+        assert_eq!(
+            Sort::Array(Box::new(Sort::Int), Box::new(Sort::Real)).to_smtlib(),
+            "(Array Int Real)"
+        );
+    }
+
+    #[test]
+    fn real_is_a_distinct_sort_from_int() {
+        // The whole point of the sort: an Int-keyed consumer must not match it.
+        assert_ne!(Sort::Real, Sort::Int);
+        assert!(Sort::Real.is_real());
+        assert!(!Sort::Int.is_real());
+        assert!(!Sort::Bool.is_real());
+    }
+
+    #[test]
+    fn real_sort_is_appended_after_every_existing_variant() {
+        // Index-based encodings of `Sort` must not renumber existing variants:
+        // `Real` sorts strictly after the last pre-existing variant.
+        let datatype_ref = Sort::Datatype {
+            name: "T".into(),
+            constructors: Vec::new(),
+        };
+        for earlier in [
+            Sort::Bool,
+            Sort::Int,
+            Sort::BitVec(1),
+            Sort::Array(Box::new(Sort::Int), Box::new(Sort::Int)),
+            Sort::Float { eb: 8, sb: 24 },
+            Sort::RoundingMode,
+            datatype_ref,
+        ] {
+            assert!(
+                earlier < Sort::Real,
+                "{earlier:?} must order before Sort::Real"
+            );
+        }
+    }
+
+    #[test]
+    fn real_sort_round_trips_through_serde() {
+        let json = serde_json::to_string(&Sort::Real).expect("serialize");
+        assert_eq!(json, "\"Real\"");
+        let back: Sort = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, Sort::Real);
     }
 }

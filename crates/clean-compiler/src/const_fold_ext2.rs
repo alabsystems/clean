@@ -1141,9 +1141,14 @@ fn strip_uint_prefix(op: &str) -> Option<&str> {
 /// semantics match `native_eval::eval_int_binop` / `eval_unaryop` exactly:
 ///
 /// * `land`/`lor`/`xor`: bitwise, masked to width.
-/// * `shiftLeft`/`shiftRight`: if the shift amount is `>= bit_width` the result
-///   is `0` (matching the runtime's saturating guard, and avoiding Rust's
-///   shift-overflow panic); otherwise shift then mask.
+/// * `shiftLeft`/`shiftRight`: the shift AMOUNT is reduced modulo the bit width
+///   first — Lean 4's `UInt{N}.shiftLeft a b = ⟨a.toBitVec <<< (UInt{N}.mod b
+///   N).toBitVec⟩` (`src/Init/Data/UInt/Basic.lean`), so `(1 : UInt8) <<< 8 = 1`
+///   and `(1 : UInt8) <<< 9 = 2` — then shift, then mask. The reduced amount is
+///   `< bit_width <= 64`, so Rust's shift-overflow panic is unreachable. (This
+///   used to answer `0` for an amount `>= bit_width`. That agreed with the
+///   runtime of the day and with nothing else: not Lean, and not the kernel,
+///   which proves the mod-width values by `rfl`.)
 /// * `complement`: `(!v)` masked to width.
 ///
 /// Returns `None` for any unrecognized op, mismatched widths, or non-fixed-width
@@ -1165,20 +1170,8 @@ pub(crate) fn fold_bitwise(op: &str, args: &[IRLiteral]) -> Option<IRLiteral> {
                 "land" => a & b,
                 "lor" => a | b,
                 "xor" | "lxor" => a ^ b,
-                "shiftLeft" => {
-                    if b >= u64::from(lhs.bits) {
-                        0
-                    } else {
-                        a.wrapping_shl(b as u32)
-                    }
-                }
-                "shiftRight" => {
-                    if b >= u64::from(lhs.bits) {
-                        0
-                    } else {
-                        a >> b
-                    }
-                }
+                "shiftLeft" => a.wrapping_shl((b % u64::from(lhs.bits)) as u32),
+                "shiftRight" => a >> (b % u64::from(lhs.bits)),
                 _ => return None,
             };
             Some((lhs.rewrap)(result & mask))

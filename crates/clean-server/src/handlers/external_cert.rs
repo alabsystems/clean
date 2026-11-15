@@ -9,12 +9,13 @@
 //! for verifying Farkas certificates (proving linear constraint infeasibility) and
 //! entailment certificates (proving bound derivability).
 
+use super::external_cert_alethe::verify_blocking;
 use super::state::ServerState;
 use super::types::ns_from_us;
 use crate::rpc::{RequestId, Response, RpcError};
 use clean_elab::cert::external::{
-    verify_alethe_certificate, verify_entailment_certificate, verify_farkas_certificate,
-    ExternalCertError, ExternalCertificate,
+    verify_alethe_certificate_until, verify_entailment_certificate, verify_farkas_certificate,
+    ExternalCertError, ExternalCertErrorCode, ExternalCertificate,
 };
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -111,7 +112,8 @@ pub struct VerifyEntailmentCertResult {
 pub struct BatchVerifyExternalCertParams {
     /// List of certificates to verify in parallel.
     pub certificates: Vec<BatchExternalCertItem>,
-    /// Number of threads for parallel verification (0 = rayon default pool).
+    /// Number of threads for parallel verification (0 = rayon default pool), at most one per
+    /// available core: a larger request is served with that many.
     #[serde(default)]
     pub threads: usize,
     /// Optional timeout in milliseconds for the entire batch.
@@ -182,7 +184,7 @@ pub struct BatchExternalCertStats {
 ///
 /// Verifies that the provided Farkas coefficients yield a contradiction,
 /// proving infeasibility of the linear constraint system.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_verify_farkas_certificate(
     state: &ServerState,
     id: RequestId,
@@ -190,11 +192,14 @@ pub async fn handle_verify_farkas_certificate(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
 
     let result = tokio::time::timeout(timeout, async {
         apply_test_delay().await;
         match params.certificate {
-            ExternalCertificate::Farkas(cert) => verify_farkas_certificate(&cert),
+            ExternalCertificate::Farkas(cert) => {
+                verify_blocking(state, deadline, move || verify_farkas_certificate(&cert)).await
+            }
             _ => Err(ExternalCertError::invalid_schema(
                 "expected farkas_certificate".to_string(),
             )),
@@ -221,7 +226,7 @@ pub async fn handle_verify_farkas_certificate(
                 Response::error(RequestId::Null, RpcError::internal_error(e.to_string()))
             })
         }
-        Ok(Err(err)) => {
+        Ok(Err(err)) if err.code != ExternalCertErrorCode::Timeout => {
             state
                 .metrics
                 .record_request("verify_farkas_certificate", false, elapsed_us);
@@ -237,7 +242,8 @@ pub async fn handle_verify_farkas_certificate(
                 Response::error(RequestId::Null, RpcError::internal_error(e.to_string()))
             })
         }
-        Err(_) => {
+        // The response's timeout fired, or the work ran past its deadline.
+        Ok(Err(_)) | Err(_) => {
             state
                 .metrics
                 .record_request("verify_farkas_certificate", false, elapsed_us);
@@ -250,7 +256,7 @@ pub async fn handle_verify_farkas_certificate(
 ///
 /// Verifies that the provided coefficients prove the claimed bound
 /// is derivable from the constraint system.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_verify_entailment_certificate(
     state: &ServerState,
     id: RequestId,
@@ -258,11 +264,17 @@ pub async fn handle_verify_entailment_certificate(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
 
     let result = tokio::time::timeout(timeout, async {
         apply_test_delay().await;
         match params.certificate {
-            ExternalCertificate::Entailment(cert) => verify_entailment_certificate(&cert),
+            ExternalCertificate::Entailment(cert) => {
+                verify_blocking(state, deadline, move || {
+                    verify_entailment_certificate(&cert)
+                })
+                .await
+            }
             _ => Err(ExternalCertError::invalid_schema(
                 "expected entailment_certificate".to_string(),
             )),
@@ -290,7 +302,7 @@ pub async fn handle_verify_entailment_certificate(
                 Response::error(RequestId::Null, RpcError::internal_error(e.to_string()))
             })
         }
-        Ok(Err(err)) => {
+        Ok(Err(err)) if err.code != ExternalCertErrorCode::Timeout => {
             state
                 .metrics
                 .record_request("verify_entailment_certificate", false, elapsed_us);
@@ -307,7 +319,8 @@ pub async fn handle_verify_entailment_certificate(
                 Response::error(RequestId::Null, RpcError::internal_error(e.to_string()))
             })
         }
-        Err(_) => {
+        // The response's timeout fired, or the work ran past its deadline.
+        Ok(Err(_)) | Err(_) => {
             state
                 .metrics
                 .record_request("verify_entailment_certificate", false, elapsed_us);
@@ -320,7 +333,7 @@ pub async fn handle_verify_entailment_certificate(
 ///
 /// Verifies certificates in parallel using Rayon, returning per-item
 /// results and aggregate statistics.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_verify_certificates_batch(
     state: &ServerState,
     id: RequestId,
@@ -328,6 +341,8 @@ pub async fn handle_verify_certificates_batch(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    // Items not started by the deadline are not verified, and an Alethe check stops at it.
+    let deadline = start.checked_add(timeout);
 
     let result = tokio::time::timeout(timeout, async {
         apply_test_delay().await;
@@ -346,18 +361,21 @@ pub async fn handle_verify_certificates_batch(
         }
 
         let items = params.certificates;
-        let threads = params.threads;
-        let results = if threads > 0 {
-            rayon::ThreadPoolBuilder::new()
-                .num_threads(threads)
-                .build()
-                .map_err(|e| ExternalCertError::invalid_schema(e.to_string()))?
-                .install(|| verify_external_items(items))
-        } else {
-            verify_external_items(items)
-        };
-
-        Ok::<_, ExternalCertError>(results)
+        // The client's count, capped at the cores: a pool of its asking costs a thread each.
+        let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+        let threads = params.threads.min(cores);
+        verify_blocking(state, deadline, move || {
+            Ok(if threads > 0 {
+                rayon::ThreadPoolBuilder::new()
+                    .num_threads(threads)
+                    .build()
+                    .map_err(|e| ExternalCertError::invalid_schema(e.to_string()))?
+                    .install(|| verify_external_items(items, deadline))
+            } else {
+                verify_external_items(items, deadline)
+            })
+        })
+        .await
     })
     .await;
 
@@ -372,13 +390,14 @@ pub async fn handle_verify_certificates_batch(
                 Response::error(RequestId::Null, RpcError::internal_error(e.to_string()))
             })
         }
-        Ok(Err(err)) => {
+        Ok(Err(err)) if err.code != ExternalCertErrorCode::Timeout => {
             state
                 .metrics
                 .record_request("verify_certificates_batch", false, elapsed_us);
             Response::error(id, RpcError::invalid_params(err.detail))
         }
-        Err(_) => {
+        // The response's timeout fired, or the work ran past its deadline.
+        Ok(Err(_)) | Err(_) => {
             state
                 .metrics
                 .record_request("verify_certificates_batch", false, elapsed_us);
@@ -390,7 +409,10 @@ pub async fn handle_verify_certificates_batch(
 /// Verify a batch of external certificates in parallel using rayon.
 ///
 /// Returns per-item results with timing and aggregate statistics.
-fn verify_external_items(items: Vec<BatchExternalCertItem>) -> BatchVerifyExternalCertResult {
+fn verify_external_items(
+    items: Vec<BatchExternalCertItem>,
+    deadline: Option<Instant>,
+) -> BatchVerifyExternalCertResult {
     use rayon::prelude::*;
 
     let start = Instant::now();
@@ -399,12 +421,18 @@ fn verify_external_items(items: Vec<BatchExternalCertItem>) -> BatchVerifyExtern
         .map(|item| {
             let item_start = Instant::now();
             let result = match item.certificate {
+                _ if deadline.is_some_and(|deadline| item_start >= deadline) => {
+                    Err(ExternalCertError {
+                        code: ExternalCertErrorCode::Timeout,
+                        detail: "not started before the deadline".to_string(),
+                    })
+                }
                 ExternalCertificate::Farkas(cert) => verify_farkas_certificate(&cert).map(|_| ()),
                 ExternalCertificate::Entailment(cert) => {
                     verify_entailment_certificate(&cert).map(|_| ())
                 }
                 ExternalCertificate::Alethe(cert) => {
-                    verify_alethe_certificate(&cert).and_then(|valid| {
+                    verify_alethe_certificate_until(&cert, deadline).and_then(|valid| {
                         if valid {
                             Ok(())
                         } else {

@@ -14,7 +14,7 @@ use super::{
 };
 use clean_parser::{
     DeclModifiers, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr,
-    TerminationHints, UniverseExpr,
+    SurfaceName, TerminationHints, UniverseExpr,
 };
 
 /// The paco/accumulation companions (`P.acc`, `P.coind_upto`) — a CHILD
@@ -26,8 +26,29 @@ mod paco;
 
 // ── surface-term builders ────────────────────────────────────────────────
 
+/// Generated binder text only (a global constant goes through [`global`]).
+/// Source-derived names use `typed_ident` without any rendering or reparsing.
 pub(super) fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), name.to_string())
+    SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path(name))
+}
+
+/// A generated reference to the GLOBAL constant `path`
+/// ([`SurfaceName::global_path`]). The generated terms sit inside the user's
+/// own binders (the predicate's parameters and each constructor's binders),
+/// so a constant written as a plain generated identifier (`ident`) was
+/// captured by a user binder of the same spelling; [`ident`] is only for the
+/// binders the generator itself introduces.
+pub(super) fn global(path: &str) -> SurfaceExpr {
+    SurfaceExpr::Ident(Span::dummy(), SurfaceName::global_path(path))
+}
+
+/// `global(path) args…`.
+pub(super) fn global_napp(path: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
+    app(global(path), args)
+}
+
+pub(super) fn typed_ident(name: &SurfaceName) -> SurfaceExpr {
+    SurfaceExpr::Ident(Span::dummy(), name.clone())
 }
 
 /// Application that FLATTENS a nested head: `app(app(f, [a]), [b])` is
@@ -62,6 +83,24 @@ fn binder(name: &str, ty: SurfaceExpr, info: SurfaceBinderInfo) -> SurfaceBinder
     SurfaceBinder::new(name, Some(ty), info)
 }
 
+fn typed_binder(name: &SurfaceName, ty: SurfaceExpr, info: SurfaceBinderInfo) -> SurfaceBinder {
+    SurfaceBinder::new_typed(name.clone(), Some(ty), info)
+}
+
+pub(super) fn lam_typed(names: &[SurfaceName], body: SurfaceExpr) -> SurfaceExpr {
+    if names.is_empty() {
+        return body;
+    }
+    SurfaceExpr::Lambda(
+        Span::dummy(),
+        names
+            .iter()
+            .map(|name| SurfaceBinder::new_typed(name.clone(), None, SurfaceBinderInfo::Explicit))
+            .collect(),
+        Box::new(body),
+    )
+}
+
 /// `fun n₁ n₂ … => body` with untyped binders (solved from the expected type).
 pub(super) fn lam(names: &[&str], body: SurfaceExpr) -> SurfaceExpr {
     if names.is_empty() {
@@ -78,11 +117,11 @@ pub(super) fn lam(names: &[&str], body: SurfaceExpr) -> SurfaceExpr {
 }
 
 pub(super) fn and(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
-    napp("And", vec![a, b])
+    global_napp("And", vec![a, b])
 }
 
 fn or(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
-    napp("Or", vec![a, b])
+    global_napp("Or", vec![a, b])
 }
 
 /// Right-nested combination of a non-empty list (`p₁ ∘ (p₂ ∘ (… ∘ pⱼ))`).
@@ -95,7 +134,7 @@ pub(super) fn right_nest(
 }
 
 fn mk_def(
-    name: String,
+    name: SurfaceName,
     binders: Vec<SurfaceBinder>,
     ty: SurfaceExpr,
     val: SurfaceExpr,
@@ -115,7 +154,7 @@ fn mk_def(
 }
 
 fn mk_theorem(
-    name: String,
+    name: SurfaceName,
     binders: Vec<SurfaceBinder>,
     ty: SurfaceExpr,
     proof: SurfaceExpr,
@@ -154,13 +193,13 @@ impl IndexEquation {
     /// never `0 = Nat.succ k` (a different type; a statement-level test
     /// pins it).
     fn prop(&self) -> SurfaceExpr {
-        napp("Eq", vec![self.written.clone(), ident(&self.row)])
+        global_napp("Eq", vec![self.written.clone(), typed_ident(&self.row)])
     }
 
     /// The intro theorem's proof of this equation at the instantiated
     /// target (`vᵢ := written`): `Eq.refl written`.
     fn refl(&self) -> SurfaceExpr {
-        napp("Eq.refl", vec![self.written.clone()])
+        global_napp("Eq.refl", vec![self.written.clone()])
     }
 }
 
@@ -189,7 +228,7 @@ impl DisjunctPlan {
     fn body(&self, rel_head: &SurfaceExpr) -> SurfaceExpr {
         let conj = right_nest(self.conjuncts(rel_head), and);
         self.exists_binders.iter().rev().fold(conj, |acc, b| {
-            napp(
+            global_napp(
                 "Exists",
                 vec![SurfaceExpr::Lambda(
                     Span::dummy(),
@@ -265,7 +304,7 @@ impl DisjunctPlan {
                     }
                 })
                 .collect(),
-            |a, b| napp("And.intro", vec![a, b]),
+            |a, b| global_napp("And.intro", vec![a, b]),
         )
     }
 
@@ -275,7 +314,7 @@ impl DisjunctPlan {
     /// keeping binder-free proof terms byte-stable.
     fn exists_intro_nest(&self, conj_proof: SurfaceExpr) -> SurfaceExpr {
         self.exists_binders.iter().rev().fold(conj_proof, |acc, b| {
-            napp("Exists.intro", vec![ident(&b.name), acc])
+            global_napp("Exists.intro", vec![typed_ident(&b.name), acc])
         })
     }
 
@@ -313,8 +352,8 @@ pub(super) fn exists_elim_nest(
                 "Exists.elim",
                 vec![
                     h,
-                    lam(
-                        &[b.name.as_str(), hex.as_str()],
+                    lam_typed(
+                        &[b.name.clone(), SurfaceName::component(&hex, false)],
                         exists_elim_nest(rest, ident(&hex), inner),
                     ),
                 ],
@@ -325,14 +364,14 @@ pub(super) fn exists_elim_nest(
 
 impl Shape {
     /// The shared index-binder row (see the field doc on [`Shape`]).
-    fn idx_names(&self) -> &[String] {
+    fn idx_names(&self) -> &[SurfaceName] {
         &self.idx_names
     }
 
     /// The declaration-parameter row as arguments (`p₁ … pₖ`). Empty for
     /// every pre-rung shape.
     fn param_args(&self) -> Vec<SurfaceExpr> {
-        self.params.iter().map(|b| ident(&b.name)).collect()
+        self.params.iter().map(|b| typed_ident(&b.name)).collect()
     }
 
     /// The declaration-parameter row as binders at the requested info
@@ -362,8 +401,8 @@ impl Shape {
     /// `name p⃗ args…` — apply a companion to the FIXED parameter row
     /// first. [`app`] flattens, so at zero parameters this is byte-stable
     /// with the pre-rung `napp`.
-    fn papp(&self, name: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
-        app(app(ident(name), self.param_args()), args)
+    fn papp(&self, name: &SurfaceName, args: Vec<SurfaceExpr>) -> SurfaceExpr {
+        app(app(typed_ident(name), self.param_args()), args)
     }
 
     /// `P.F p⃗ rel` — the one-step functor at the fixed row.
@@ -384,12 +423,12 @@ impl Shape {
         self.idx_names()
             .iter()
             .zip(&self.idx_tys)
-            .map(|(v, t)| binder(v, t.clone(), info))
+            .map(|(v, t)| typed_binder(v, t.clone(), info))
             .collect()
     }
 
     fn var_args(&self) -> Vec<SurfaceExpr> {
-        self.idx_names().iter().map(|v| ident(v)).collect()
+        self.idx_names().iter().map(typed_ident).collect()
     }
 
     /// `head v₁ … vₙ`.
@@ -416,29 +455,30 @@ impl Shape {
         )
     }
 
-    fn f_name(&self) -> String {
-        format!("{}.F", self.qname)
+    fn f_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("F", false))
     }
-    fn coind_name(&self) -> String {
-        format!("{}.coind", self.qname)
+    fn coind_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("coind", false))
     }
-    fn mono_name(&self) -> String {
-        format!("{}.F_mono", self.qname)
+    fn mono_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("F_mono", false))
     }
-    fn unfold_name(&self) -> String {
-        format!("{}.unfold", self.qname)
+    fn unfold_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("unfold", false))
     }
-    fn fold_name(&self) -> String {
-        format!("{}.fold", self.qname)
+    fn fold_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("fold", false))
     }
-    fn cases_name(&self) -> String {
-        format!("{}.cases", self.qname)
+    fn cases_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("cases", false))
     }
-    fn acc_name(&self) -> String {
-        format!("{}.acc", self.qname)
+    fn acc_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("acc", false))
     }
-    fn upto_name(&self) -> String {
-        format!("{}.coind_upto", self.qname)
+    fn upto_name(&self) -> SurfaceName {
+        self.qname
+            .append(&SurfaceName::component("coind_upto", false))
     }
 }
 
@@ -449,10 +489,10 @@ impl Shape {
 pub(super) fn conjunct(h: SurfaceExpr, i: usize, j: usize) -> SurfaceExpr {
     let mut acc = h;
     for _ in 0..i {
-        acc = napp("And.right", vec![acc]);
+        acc = global_napp("And.right", vec![acc]);
     }
     if i + 1 < j {
-        acc = napp("And.left", vec![acc]);
+        acc = global_napp("And.left", vec![acc]);
     }
     acc
 }
@@ -464,10 +504,10 @@ pub(super) fn conjunct(h: SurfaceExpr, i: usize, j: usize) -> SurfaceExpr {
 fn inject(i: usize, k: usize, proof: SurfaceExpr) -> SurfaceExpr {
     let mut acc = proof;
     if i + 1 < k {
-        acc = napp("Or.inl", vec![acc]);
+        acc = global_napp("Or.inl", vec![acc]);
     }
     for _ in 0..i {
-        acc = napp("Or.inr", vec![acc]);
+        acc = global_napp("Or.inr", vec![acc]);
     }
     acc
 }
@@ -500,11 +540,11 @@ fn or_elim_cascade(
 
 /// The shared `fun v⃗ hyp => …` binder row of a generated proof lambda: the
 /// index names followed by ONE generated hypothesis name.
-fn lam_names_of<'a>(s: &'a Shape, hyp: &'a str) -> Vec<&'a str> {
+fn lam_names_of(s: &Shape, hyp: &str) -> Vec<SurfaceName> {
     s.idx_names()
         .iter()
-        .map(String::as_str)
-        .chain(std::iter::once(hyp))
+        .cloned()
+        .chain(std::iter::once(SurfaceName::component(hyp, false)))
         .collect()
 }
 
@@ -518,7 +558,7 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
     // the same row through `Shape::papp`/`Shape::f_applied`).
     let gfp = || s.papp(&s.qname, Vec::new());
     // `fun v⃗ h_coind => …` — the shared binder row of every generated proof.
-    let lam_names: Vec<&str> = lam_names_of(s, HYP_H);
+    let lam_names: Vec<SurfaceName> = lam_names_of(s, HYP_H);
 
     // ── 1. the one-step functor ────────────────────────────────────────
     // def P.F (p⃗ : A⃗) (R : T⃗ → Prop) (v⃗ : T⃗) : Prop
@@ -544,7 +584,7 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
         s.qname.clone(),
         s.with_params(s.idx_binders(SurfaceBinderInfo::Explicit)),
         prop(),
-        napp(
+        global_napp(
             "Exists",
             vec![SurfaceExpr::Lambda(
                 Span::dummy(),
@@ -565,13 +605,13 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
             binder(HYP_POST, post_of(ident(REL_R)), SurfaceBinderInfo::Explicit),
         ]),
         s.forall_vars(arrow(s.applied(ident(REL_R)), s.applied(gfp()))),
-        lam(
+        lam_typed(
             &lam_names,
-            napp(
+            global_napp(
                 "Exists.intro",
                 vec![
                     ident(REL_R),
-                    napp("And.intro", vec![ident(HYP_POST), ident(HYP_H)]),
+                    global_napp("And.intro", vec![ident(HYP_POST), ident(HYP_H)]),
                 ],
             ),
         ),
@@ -585,7 +625,7 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
     // Sound by construction: every recursive premise is a POSITIVE,
     // fully-applied occurrence (the envelope enforces it), so each disjunct
     // is rebuilt through `hle` and re-injected at ITS OWN `Or` position.
-    let mono_val = lam(
+    let mono_val = lam_typed(
         &lam_names,
         or_elim_cascade(0, k, ident(HYP_H), &|i, h| {
             inject(i, k, s.disjuncts[i].mono_image(&h))
@@ -613,8 +653,8 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
     // theorem P.unfold : ∀ v⃗, P v⃗ → P.F P v⃗ :=
     //   fun v⃗ h => Exists.elim h (fun R hR =>
     //     P.F_mono R P (P.coind R hR.left) v⃗ (hR.left v⃗ hR.right))
-    let post_hyp = napp("And.left", vec![ident(HYP_HR)]);
-    let carrier_hyp = napp("And.right", vec![ident(HYP_HR)]);
+    let post_hyp = global_napp("And.left", vec![ident(HYP_HR)]);
+    let carrier_hyp = global_napp("And.right", vec![ident(HYP_HR)]);
     let mut mono_args = vec![
         ident(REL_R),
         gfp(),
@@ -629,7 +669,7 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
         s.unfold_name(),
         s.with_params(Vec::new()),
         s.forall_vars(arrow(s.applied(gfp()), s.applied(s.f_applied(gfp())))),
-        lam(
+        lam_typed(
             &lam_names,
             napp(
                 "Exists.elim",
@@ -656,7 +696,7 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
             &s.coind_name(),
             vec![
                 f_gfp(),
-                lam(&lam_names, s.papp(&s.mono_name(), fold_mono_args)),
+                lam_typed(&lam_names, s.papp(&s.mono_name(), fold_mono_args)),
             ],
         ),
     );
@@ -698,8 +738,8 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
     // whole-row implicit header, ∃-binders group, no `Eq.refl`s.
     for (i, plan) in s.disjuncts.iter().enumerate() {
         let declared = plan.declared_premises(&gfp());
-        let hyp_names: Vec<String> = (0..declared.len())
-            .map(|c| format!("hprem_coind{c}"))
+        let hyp_names: Vec<SurfaceName> = (0..declared.len())
+            .map(|c| SurfaceName::component(format!("hprem_coind{c}"), false))
             .collect();
         let target = app(gfp(), plan.target_args.clone());
         let chain = declared
@@ -711,21 +751,21 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
             plan.equations
                 .iter()
                 .map(IndexEquation::refl)
-                .chain(hyp_names.iter().map(|h| ident(h)))
+                .chain(hyp_names.iter().map(typed_ident))
                 .collect(),
-            |a, b| napp("And.intro", vec![a, b]),
+            |a, b| global_napp("And.intro", vec![a, b]),
         );
-        let lam_refs: Vec<&str> = plan
+        let lam_refs: Vec<SurfaceName> = plan
             .intro_binders
             .iter()
-            .map(|b| b.name.as_str())
-            .chain(hyp_names.iter().map(String::as_str))
+            .map(|b| b.name.clone())
+            .chain(hyp_names.iter().cloned())
             .collect();
         let header: Vec<SurfaceBinder> = plan
             .fresh_rows
             .iter()
             .map(|&r| {
-                binder(
+                typed_binder(
                     &s.idx_names[r],
                     s.idx_tys[r].clone(),
                     SurfaceBinderInfo::Implicit,
@@ -733,10 +773,10 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
             })
             .collect();
         decls.push(mk_theorem(
-            format!("{}.{}", s.qname, plan.ctor),
+            s.qname.append(&plan.ctor),
             s.with_params(header),
             ctor_ty,
-            lam(
+            lam_typed(
                 &lam_refs,
                 s.papp(
                     &s.fold_name(),
@@ -810,7 +850,7 @@ pub(super) fn generate(s: &Shape) -> Vec<SurfaceDecl> {
                     ident(&arm_names[i]),
                     plan.exists_binders
                         .iter()
-                        .map(|b| ident(&b.name))
+                        .map(|b| typed_ident(&b.name))
                         .chain((0..j).map(|c| conjunct(hconj.clone(), c, j)))
                         .collect(),
                 )

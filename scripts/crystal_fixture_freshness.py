@@ -130,6 +130,15 @@ fixture that is committed and asserted against but is not a chain.  A `*.trust-i
 in the fixtures directory that appears in NEITHER table is a fixture nothing checks;
 `crystal_a1_lineage/freshness.rs` fails closed on exactly that.
 
+It ALSO compares every MODULE-TABLE fixture in `EXTRA_ROWS` (suffix
+`.trust-ir-rows.txt`): rows of the emitted module that are not a function body
+--- a `global ... @<name> ...` line and the `type ty.N = ...` alias its element
+type names.  Those rows have no coverage body, so they get ONLY the text verdict
+(IDENTICAL / NUMBERING-ONLY / STRUCTURAL) and are written under the report's
+`rows` key --- an addition to schema v1, never a change to `bodies`, whose set
+`crystal_fixture_rebaseline.py` and `crystal_chain_revalidation.py` both pin.
+`crystal_a1_lineage/freshness_closure.rs` closes the rows suffix over that table.
+
 `<dump-dir>` is a `TRUST_IR_BUILD_DUMP` directory --- it must contain
 `clean_kernel.trust-ir.txt` and `clean_kernel.coverage.json`, and
 `clean_kernel.build.log` if flip events are to be checked.  Produce one with:
@@ -212,6 +221,46 @@ EXTRA_BODIES: dict[str, str] = {
     "loose_bvar_range_callee": "expr::meta::ExprMeta::loose_bvar_range",
 }
 
+# MODULE-TABLE fixtures: fixture stem -> the stem of the BODY fixture that
+# reaches the row through `global_addr` (a key of EXTRA_BODIES / BODIES).
+# These are rows of the module that are not function bodies.
+# `level_is_zero_deref_globals` is the promoted string constant the deref
+# body's panic path reaches through `global_addr` -- the `type ty.N = u8`
+# alias line and the `global internal @__trust_promoted_N [ty.N x 34] =
+# array[...]` line, both copied verbatim from the dump (2026-09-09,
+# dump-control, rev18 producer).
+#
+# The value is a BODY STEM and not the global's name on purpose.
+# `@__trust_promoted_N` is a per-BUILD number: at the 2026-09-09 HEAD dump the
+# deref body's string had moved 4557 -> 4567 and `@__trust_promoted_4557` was a
+# DIFFERENT 17-byte global, so a table that pinned the number was red on the
+# CONTROL (a "STRUCTURAL" verdict for a whole-crate renumbering, which is the
+# exact 2026-08-20 failure `classify`'s docstring records).  The rows loop
+# therefore DERIVES the live name: it finds the referencing body by its
+# signature, reads the one `global_addr @global.N` it carries, and compares the
+# fixture against `@__trust_promoted_N` -- so a renumbered name is
+# NUMBERING-ONLY (`global-index`) and only changed BYTES are STRUCTURAL.
+#
+# A THIRD table, not a widening of EXTRA_BODIES, for three measured reasons:
+# a global has no `clean_kernel.coverage.json` body row, so the bodies loop's
+# `rows.get(def_path)` half would be red by construction; its first line is not
+# a `rustcc fn` header, so `signature_of` would SystemExit on it; and
+# `crystal_fixture_rebaseline.py::validate_body_set` and
+# `crystal_chain_revalidation.py` both refuse a report whose `bodies` set is
+# not exactly BODIES | EXTRA_BODIES.  So these rows are compared by their own
+# loop below, which runs ONLY the text verdict and writes report["rows"].
+#
+# The fixture suffix is `.trust-ir-rows.txt`, NOT `.trust-ir.txt`: that keeps
+# it out of `check_crystal_fixture_pins.py`'s glob and out of the 21-row
+# rebaseline record that gate reads, and `crystal_a1_lineage/freshness_closure.rs`
+# closes the rows suffix over THIS table the way it closes bodies over the two
+# tables above -- a `*.trust-ir-rows.txt` that appears here in no row fails
+# that test (it reads the KEYS only; the value is this script's business).
+EXTRA_ROWS: dict[str, str] = {
+    "level_is_zero_deref_globals": "level_is_zero_deref_callee",
+}
+ROWS_SUFFIX = ".trust-ir-rows.txt"
+
 # The emitted signature each body is found by in the dump text.  Derived from the
 # fixture's own first line rather than hard-coded, so a rename fails loudly.
 LINEAGE_FIXTURE = {"level_is_zero": "level_is_zero.a0.json"}
@@ -230,7 +279,12 @@ def _norm_functy(s: str) -> str:
 
 
 def _norm_tytable(s: str) -> str:
-    return re.sub(r"\b(enum|struct|tuple|array)\.\d+", r"\1.X", s)
+    # `ty.N` is the module's type-ALIAS table (`type ty.N = ...`, and the
+    # `[ty.N x LEN]` element type of a global row); it renumbers with the
+    # crate exactly as the aggregate tables do.  No function-body fixture
+    # carries a `ty.N` token (measured 2026-09-09 over every *.trust-ir.txt),
+    # so widening the class here changes no body verdict.
+    return re.sub(r"\b(enum|struct|tuple|array|ty)\.\d+", r"\1.X", s)
 
 
 def _norm_callee(s: str) -> str:
@@ -238,7 +292,13 @@ def _norm_callee(s: str) -> str:
 
 
 def _norm_global(s: str) -> str:
-    return re.sub(r"@global\.\d+", "@global.X", s)
+    # Two spellings of a global index, kept DISTINCT under normalisation: a
+    # numbered `@global.N` reference and a promoted constant's
+    # `@__trust_promoted_N` name (note the underscore before the digits --
+    # `@__trust_promoted_4557` in the dump).  A row that moves from one
+    # spelling to the other is a real change, not renumbering.
+    s = re.sub(r"@global\.\d+", "@global.X", s)
+    return re.sub(r"@__trust_promoted_\d+", "@__trust_promoted_X", s)
 
 
 def _strip_loc(s: str) -> str:
@@ -340,6 +400,31 @@ def selftest_classifier() -> None:
             "%12 = call @func.3890(%10)  ; #loc: 390 548 34",
             ("STRUCTURAL",),
         ),
+        # Module-table rows (EXTRA_ROWS): a promoted constant's name and the
+        # `ty.N` alias of its element type are both whole-crate numbering, and
+        # the classes compose in normaliser order.
+        (
+            "global internal @__trust_promoted_4557 [ty.0 x 34] = array[ 108, 105 ]",
+            "global internal @__trust_promoted_4601 [ty.2 x 34] = array[ 108, 105 ]",
+            ("type-table-index", "global-index"),
+        ),
+        (
+            "type ty.0 = u8",
+            "type ty.2 = u8",
+            ("type-table-index",),
+        ),
+        # The element count or a payload byte is the row's CONTENT.
+        (
+            "global internal @__trust_promoted_4557 [ty.0 x 34] = array[ 108, 105 ]",
+            "global internal @__trust_promoted_4601 [ty.0 x 35] = array[ 108, 105 ]",
+            ("STRUCTURAL",),
+        ),
+        # A promoted name is not a numbered global: the spelling is kept.
+        (
+            "%2 = global_addr @global.4557  ; #loc: 389 61 20",
+            "%2 = global_addr @__trust_promoted_4557  ; #loc: 389 61 20",
+            ("STRUCTURAL",),
+        ),
     ]
     for old, new, expected in cases:
         got = classify(old, new)
@@ -375,6 +460,231 @@ def extract(dump_text: str, sig: str) -> list[str]:
     return out
 
 
+def extract_rows(dump_text: str, name: str) -> list[str]:
+    """Every module-table global row `global ... @<name> ...` in the dump.
+
+    Each hit is returned as text in FIXTURE order: the `type ty.N = ...` alias
+    line that the row's `[ty.N x LEN]` element type names FIRST, then the
+    global line itself, each newline-terminated.  The dump prints its type
+    table before its globals and the fixture is a verbatim copy of both lines,
+    so this order is byte-identical to the fixture's.  A hit whose alias line
+    is absent or ambiguous is returned as the global line alone, which the
+    caller then reads as a line-count STRUCTURAL drift rather than as a match.
+    """
+    lines = dump_text.splitlines()
+    aliases: dict[str, list[str]] = {}
+    for line in lines:
+        m = re.match(r"type (ty\.\d+) = ", line)
+        if m:
+            aliases.setdefault(m.group(1), []).append(line)
+    pat = re.compile(r"\s@" + re.escape(name) + r"(?=\s|$)")
+    out: list[str] = []
+    for line in lines:
+        if not line.startswith("global ") or not pat.search(line):
+            continue
+        m = re.search(r"\[(ty\.\d+) x \d+\]", line)
+        alias = aliases.get(m.group(1), []) if m else []
+        parts = ([alias[0]] if len(alias) == 1 else []) + [line]
+        out.append("".join(f"{p}\n" for p in parts))
+    return out
+
+
+def drift_classes(fx: str, live: str) -> dict[str, list[str]]:
+    """Line-by-line drift ledger of a fixture against its live text.
+
+    A line-count change is STRUCTURAL outright; otherwise every differing line
+    is ledgered under each class `classify` returns for it.  Shared by the
+    bodies loop and the module-table rows loop so both hand out the same
+    IDENTICAL / NUMBERING-ONLY / STRUCTURAL verdict.
+    """
+    fl, ll = fx.splitlines(), live.splitlines()
+    classes: dict[str, list[str]] = {}
+    if len(fl) != len(ll):
+        classes["STRUCTURAL"] = [f"line count {len(fl)} -> {len(ll)}"]
+        return classes
+    for a, b in zip(fl, ll):
+        if a != b:
+            for cls in classify(a, b):
+                classes.setdefault(cls, []).append(f"{a.strip()}  ->  {b.strip()}")
+    return classes
+
+
+_GLOBAL_REF = re.compile(r"global_addr @global\.(\d+)")
+_PROMOTED_NAME = re.compile(r"@(__trust_promoted_\d+)(?=\s|$)")
+
+
+def promoted_global_refs(body_text: str) -> list[str]:
+    """The `@global.N` indices a body reaches through `global_addr`, in order."""
+    return _GLOBAL_REF.findall(body_text)
+
+
+def compare_rows_fixture(
+    dump_text: str, stem: str, body_stem: str, fx: str, body_fixture_text: str
+) -> tuple[dict[str, object], list[str], list[str]]:
+    """The module-table verdict for ONE `EXTRA_ROWS` fixture.
+
+    Returns `(entry, red, amber)`.  The row's identity anchor is DERIVED from
+    the live dump, never read off the fixture: the referencing body is found by
+    its signature, the single `global_addr @global.N` it carries names the live
+    row, and the fixture is compared against `@__trust_promoted_N`.  Every way
+    that derivation can fail is its OWN verdict (`NO REFERENCING BODY`,
+    `AMBIGUOUS REFERENCING BODY`, `NO GLOBAL REFERENCE`, `AMBIGUOUS GLOBAL
+    REFERENCE`, `ABSENT FROM DUMP`, `AMBIGUOUS IN DUMP`) -- red, but named as a
+    lookup failure so it can never be mistaken for the STRUCTURAL verdict,
+    which is reserved for a genuine content change in a row that WAS found.
+    `entry["global"]` is the live name compared against; `entry["fixture_global"]`
+    is the name the fixture pins, so the JSON says which row was compared.
+    """
+    red: list[str] = []
+    amber: list[str] = []
+    pinned = _PROMOTED_NAME.findall(fx)
+    entry: dict[str, object] = {
+        "referencing_body": body_stem,
+        "fixture_global": pinned[0] if len(pinned) == 1 else None,
+        "global": None,
+        "at_head": None,
+        "at_head_reason": "module-table row, no coverage body",
+    }
+    if len(pinned) != 1:
+        entry["verdict"] = "MALFORMED FIXTURE"
+        red.append(f"{stem}: the fixture names {len(pinned)} promoted globals, expected 1")
+        return entry, red, amber
+    live_bodies = extract(dump_text, signature_of(body_fixture_text))
+    if len(live_bodies) != 1:
+        entry["verdict"] = (
+            "NO REFERENCING BODY" if not live_bodies else "AMBIGUOUS REFERENCING BODY"
+        )
+        red.append(
+            f"{stem}: {entry['verdict']} -- the dump carries {len(live_bodies)} bodies with "
+            f"the signature of {body_stem}, expected 1; the row cannot be located"
+        )
+        return entry, red, amber
+    refs = promoted_global_refs(live_bodies[0])
+    if len(refs) != 1:
+        entry["verdict"] = "NO GLOBAL REFERENCE" if not refs else "AMBIGUOUS GLOBAL REFERENCE"
+        red.append(
+            f"{stem}: {entry['verdict']} -- the live {body_stem} body carries {len(refs)} "
+            f"`global_addr @global.N` instructions, expected 1; the row cannot be located"
+        )
+        return entry, red, amber
+    gname = f"__trust_promoted_{refs[0]}"
+    entry["global"] = gname
+    found = extract_rows(dump_text, gname)
+    if len(found) != 1:
+        entry["verdict"] = "ABSENT FROM DUMP" if not found else "AMBIGUOUS IN DUMP"
+        red.append(
+            f"{stem}: {entry['verdict']} -- the dump carries {len(found)} global rows named "
+            f"@{gname} (derived from the live {body_stem} body), expected 1"
+        )
+        return entry, red, amber
+    live = found[0]
+    if fx == live:
+        entry["verdict"] = "IDENTICAL"
+        entry["classes"] = []
+        return entry, red, amber
+    classes = drift_classes(fx, live)
+    entry["classes"] = sorted(classes)
+    entry["detail"] = classes
+    entry["diff"] = "".join(
+        difflib.unified_diff(
+            fx.splitlines(keepends=True),
+            live.splitlines(keepends=True),
+            fromfile=f"fixture {stem}{ROWS_SUFFIX}",
+            tofile="live dump",
+        )
+    )
+    if "STRUCTURAL" in classes:
+        entry["verdict"] = "STRUCTURAL"
+        red.append(
+            f"{stem}: STRUCTURAL drift (row @{gname}) -- " + "; ".join(classes["STRUCTURAL"][:3])
+        )
+    else:
+        entry["verdict"] = "NUMBERING-ONLY"
+        amber.append(f"{stem}: {', '.join(sorted(classes))} (row @{gname})")
+    return entry, red, amber
+
+
+def selftest_rows_loop() -> None:
+    """END-TO-END selftest of the module-table rows lane, run on every invocation.
+
+    Not a `classify` pair: this drives `compare_rows_fixture` over a synthetic
+    dump snippet, so the verdicts the loop can actually hand out are the ones
+    pinned.  The row whose fixture-pinned number is also a DIFFERENT live
+    global (the 2026-09-09 HEAD shape) must read NUMBERING-ONLY, because the
+    name is derived from the referencing body and not looked up by number.
+    """
+    body_fx = (
+        "rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45) {\n"
+        "  bb0:\n"
+        "    %2 = global_addr @global.4557  ; #loc: 391 61 20\n"
+        "}\n"
+    )
+    rows_fx = (
+        "type ty.0 = u8\n"
+        "global internal @__trust_promoted_4557 [ty.0 x 3] = array[ 1, 2, 3 ]\n"
+    )
+
+    def dump(ty: str, n: str, payload: str, *, body: bool = True, decoy: bool = False) -> str:
+        text = f"type {ty} = u8\ntype ty.9 = u16\n"
+        if decoy:
+            # The fixture's OLD number is now a different global entirely.
+            text += "global internal @__trust_promoted_4557 [ty.9 x 2] = array[ 7, 7 ]\n"
+        text += f"global internal @__trust_promoted_{n} [{ty} x 3] = array[ {payload} ]\n"
+        if body:
+            text += "rustcc fn @<other::Thing>::f(functy.1) {\n  bb0:\n    ret\n}\n"
+            text += body_fx.replace("@global.4557", f"@global.{n}")
+        return text
+
+    cases: list[tuple[str, str, str, list[str], str]] = [
+        # (label, dump, expected verdict, expected classes, expected colour)
+        ("control", dump("ty.0", "4557", "1, 2, 3"), "IDENTICAL", [], "green"),
+        (
+            "renumbered",
+            dump("ty.2", "4601", "1, 2, 3", decoy=True),
+            "NUMBERING-ONLY",
+            ["global-index", "type-table-index"],
+            "amber",
+        ),
+        (
+            "bytes changed",
+            dump("ty.2", "4601", "1, 2, 4", decoy=True),
+            "STRUCTURAL",
+            ["STRUCTURAL", "type-table-index"],
+            "red",
+        ),
+        ("no body", dump("ty.0", "4557", "1, 2, 3", body=False), "NO REFERENCING BODY", [], "red"),
+        (
+            "absent row",
+            dump("ty.0", "4557", "1, 2, 3").replace("@__trust_promoted_4557 [", "@__trust_promoted_4558 ["),
+            "ABSENT FROM DUMP",
+            [],
+            "red",
+        ),
+    ]
+    for label, text, verdict, classes, colour in cases:
+        entry, red, amber = compare_rows_fixture(
+            text, "rows_selftest", "rows_selftest_callee", rows_fx, body_fx
+        )
+        got = (entry.get("verdict"), list(entry.get("classes") or []))
+        want = (verdict, classes)
+        if got != want:
+            raise RuntimeError(f"rows-lane selftest {label!r}: expected {want}, got {got}")
+        got_colour = "red" if red else ("amber" if amber else "green")
+        if got_colour != colour:
+            raise RuntimeError(
+                f"rows-lane selftest {label!r}: expected {colour}, got {got_colour} "
+                f"(red={red!r}, amber={amber!r})"
+            )
+        if colour == "red" and verdict != "STRUCTURAL" and any("STRUCTURAL" in r for r in red):
+            raise RuntimeError(f"rows-lane selftest {label!r}: a lookup failure was labelled STRUCTURAL")
+    # The derived name, not the fixture's number, is what the JSON reports.
+    entry, _r, _a = compare_rows_fixture(
+        dump("ty.2", "4601", "1, 2, 3", decoy=True), "s", "c", rows_fx, body_fx
+    )
+    if (entry["global"], entry["fixture_global"]) != ("__trust_promoted_4601", "__trust_promoted_4557"):
+        raise RuntimeError(f"rows-lane selftest: derived/pinned names wrong: {entry!r}")
+
+
 def dump_provenance(path: Path) -> str:
     """Return a stable directory label, never a machine-local path.
 
@@ -402,6 +712,7 @@ def selftest_dump_provenance() -> None:
 
 def main() -> int:
     selftest_classifier()
+    selftest_rows_loop()
     selftest_dump_provenance()
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("dump", type=Path, help="a TRUST_IR_BUILD_DUMP directory")
@@ -475,17 +786,7 @@ def main() -> int:
             entry["verdict"] = "IDENTICAL"
             entry["classes"] = []
         else:
-            fl, ll = fx.splitlines(), live.splitlines()
-            classes: dict[str, list[str]] = {}
-            if len(fl) != len(ll):
-                classes["STRUCTURAL"] = [f"line count {len(fl)} -> {len(ll)}"]
-            else:
-                for a, b in zip(fl, ll):
-                    if a != b:
-                        for cls in classify(a, b):
-                            classes.setdefault(cls, []).append(
-                                f"{a.strip()}  ->  {b.strip()}"
-                            )
+            classes = drift_classes(fx, live)
             entry["classes"] = sorted(classes)
             entry["detail"] = classes
             entry["diff"] = "".join(
@@ -548,6 +849,47 @@ def main() -> int:
             if pinned.get("lineage") and pinned["lineage"] != row.get("lineage"):
                 amber.append(f"{stem}: lineage digest moved (per-BUILD identity, expected)")
 
+    # MODULE-TABLE rows: text verdict only.  Never `signature_of` (no `rustcc
+    # fn` header), never `rows.get` (no coverage body), never report["bodies"]
+    # (its set is pinned by two other scripts).  `at_head` is recorded as null
+    # with the reason, so a reader of the JSON sees an absence stated rather
+    # than a field forgotten.
+    report["rows"] = {}
+    for stem, body_stem in EXTRA_ROWS.items():
+        fx_path = FIXTURES / f"{stem}{ROWS_SUFFIX}"
+        body_path = FIXTURES / f"{body_stem}.trust-ir.txt"
+        if not fx_path.is_file():
+            red.append(f"{stem}: fixture {fx_path} is missing")
+            report["rows"][stem] = {  # type: ignore[index]
+                "referencing_body": body_stem,
+                "verdict": "MISSING FIXTURE",
+                "at_head": None,
+                "at_head_reason": "module-table row, no coverage body",
+            }
+            continue
+        if (body_stem not in BODIES and body_stem not in EXTRA_BODIES) or not body_path.is_file():
+            red.append(
+                f"{stem}: NO REFERENCING BODY -- EXTRA_ROWS names {body_stem!r}, which is not a "
+                f"committed body fixture ({body_path})"
+            )
+            report["rows"][stem] = {  # type: ignore[index]
+                "referencing_body": body_stem,
+                "verdict": "NO REFERENCING BODY",
+                "at_head": None,
+                "at_head_reason": "module-table row, no coverage body",
+            }
+            continue
+        rentry, r_red, r_amber = compare_rows_fixture(
+            dump_text,
+            stem,
+            body_stem,
+            fx_path.read_text(encoding="utf-8"),
+            body_path.read_text(encoding="utf-8"),
+        )
+        report["rows"][stem] = rentry  # type: ignore[index]
+        red.extend(r_red)
+        amber.extend(r_amber)
+
     print("== crystal chain fixture freshness ==")
     print("dump: %s" % args.dump)
     for stem, e in report["bodies"].items():  # type: ignore[union-attr]
@@ -565,6 +907,17 @@ def main() -> int:
                     head.get("markers_exact"),
                     "yes" if head.get("flip_event") else "no",
                 ),
+            )
+        )
+    for stem, e in report["rows"].items():  # type: ignore[union-attr]
+        print(
+            "  %-22s %-16s %s"
+            % (
+                stem,
+                e.get("verdict", "?"),
+                ("classes=" + (",".join(e.get("classes") or []) or "-"))
+                + "  module-table row (live @%s, fixture @%s, via %s; no coverage body)"
+                % (e.get("global"), e.get("fixture_global"), e.get("referencing_body")),
             )
         )
     if args.json:
@@ -587,10 +940,19 @@ def main() -> int:
         print("\nRED:")
         for r in red:
             print("  %s" % r)
-        print(
-            "\nA STRUCTURAL drift means the spec module and its refinement theorem may no\n"
-            "longer describe the emitted program. Re-DERIVE — do not re-record the fixture."
-        )
+        structural = [r for r in red if "STRUCTURAL drift" in r or "instr_count moved" in r]
+        if structural:
+            print(
+                "\nA STRUCTURAL drift means the spec module and its refinement theorem may no\n"
+                "longer describe the emitted program. Re-DERIVE — do not re-record the fixture."
+            )
+        if len(structural) != len(red):
+            print(
+                "\nA lookup failure (MISSING / ABSENT FROM DUMP / AMBIGUOUS / NO REFERENCING BODY /\n"
+                "no coverage row) means the fixture could not be COMPARED at all: it says nothing\n"
+                "about whether an instruction moved. Check the dump is a complete clean-kernel\n"
+                "dump from the producer this script's header names before reading it as drift."
+            )
         return 1
     if amber and args.strict:
         print("\n--strict: numbering drift is a failure in this mode.")

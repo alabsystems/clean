@@ -26,6 +26,8 @@
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId};
 
+use clean_parser::SurfaceName;
+
 use super::decreasing::nat_lt_goal;
 use super::encoding::contains_fvar;
 use super::measure_wf::measure_at;
@@ -213,7 +215,9 @@ impl ElabCtx<'_> {
                         "a self-reference occurs inside a binder type",
                     ));
                 }
-                let hyp_name = format!("_wf_hyp{}", self.locals.len());
+                let hyp_name = SurfaceName::from_name(
+                    Name::anon().str("_wf_hyp").num(self.locals.len() as u64),
+                );
                 let fv = self.push_local(hyp_name, Expr::clone(ty));
                 let opened = body.instantiate(&Expr::fvar(fv));
                 let rewritten = self.transform_rec_calls_proved(&opened, cfg);
@@ -228,7 +232,7 @@ impl ElabCtx<'_> {
                     ));
                 }
                 let new_val = self.transform_rec_calls_proved(val, cfg)?;
-                let fv = self.push_local(name.to_string(), Expr::clone(ty));
+                let fv = self.push_local(SurfaceName::from_name(name.clone()), Expr::clone(ty));
                 let opened = body.instantiate(&Expr::fvar(fv));
                 let rewritten = self.transform_rec_calls_proved(&opened, cfg);
                 self.pop_local();

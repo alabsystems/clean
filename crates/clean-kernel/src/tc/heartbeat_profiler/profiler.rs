@@ -114,27 +114,38 @@ impl HeartbeatProfiler {
     /// always credited.
     #[inline]
     pub(crate) fn tick(&self, category: HeartbeatProfileCategory, name: Option<&Name>) {
+        self.tick_by(category, name, 1);
+    }
+
+    /// Record `amount` consumed heartbeats in the given category at once
+    /// (kernel work converted into heartbeats); attribution as for [`Self::tick`].
+    pub(crate) fn tick_by(
+        &self,
+        category: HeartbeatProfileCategory,
+        name: Option<&Name>,
+        amount: u64,
+    ) {
         self.total_ticks
-            .set(self.total_ticks.get().saturating_add(1));
+            .set(self.total_ticks.get().saturating_add(amount));
 
         {
             let mut category_counts = self.category_counts.borrow_mut();
             let heartbeats = category_counts.entry(category).or_insert(0);
-            *heartbeats = heartbeats.saturating_add(1);
+            *heartbeats = heartbeats.saturating_add(amount);
         }
 
         let effective_name = name.cloned().or_else(|| self.active_name.borrow().clone());
         if let Some(name) = effective_name {
             let mut name_counts = self.name_counts.borrow_mut();
             let heartbeats = name_counts.entry(name).or_insert(0);
-            *heartbeats = heartbeats.saturating_add(1);
+            *heartbeats = heartbeats.saturating_add(amount);
         }
 
         let active_tactic = self.tactic_stack.borrow().last().cloned();
         if let Some(tactic) = active_tactic {
             let mut tactic_counts = self.tactic_counts.borrow_mut();
             let entry = tactic_counts.entry(tactic).or_insert(0);
-            *entry = entry.saturating_add(1);
+            *entry = entry.saturating_add(amount);
         }
 
         let active_pos = self.position_stack.borrow().last().copied();
@@ -148,7 +159,7 @@ impl HeartbeatProfiler {
                 pos
             };
             let entry = position_counts.entry(key).or_insert(0);
-            *entry = entry.saturating_add(1);
+            *entry = entry.saturating_add(amount);
         }
     }
 

@@ -170,7 +170,7 @@ impl AttrMacro for ImplementedByAttrMacro {
     fn expand(&self, _decl_name: &Name, attr: &Attribute) -> Result<AttrMacroResult, ElabError> {
         match attr {
             Attribute::ImplementedBy(name) => Ok(AttrMacroResult::RegisterImplementedBy {
-                impl_name: name.clone(),
+                impl_name: name.name().clone(),
             }),
             _ => Err(ElabError::Unsupported {
                 feature: "implementedBy attribute requires a name argument".to_owned(),

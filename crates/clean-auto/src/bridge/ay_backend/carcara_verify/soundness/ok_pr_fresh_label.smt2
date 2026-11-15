@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-fun x () Int)
+(declare-fun y () Int)
+(assert (= y (! 5 :named five)))
+(assert (not (= five 5)))
+(check-sat)

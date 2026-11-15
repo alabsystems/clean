@@ -49,7 +49,7 @@ use registration::{
 };
 // The declaration router (`infer::elaborate_decl`) reuses the `(cat| …)` head
 // recognition to route `(tactic| …)` macros to tactic-position registration.
-pub(crate) use registration::quotation_category_head;
+pub(crate) use registration::{macro_template_spellings, quotation_category_head};
 
 use clean_macro::registry::SyntaxCategoryRegistry;
 use clean_macro::{
@@ -57,7 +57,8 @@ use clean_macro::{
     Syntax, SyntaxKind, SyntaxQuote,
 };
 use clean_parser::{
-    LevelExpr, MacroArm, NotationItem, NotationKind, SurfaceArg, SurfaceExpr, SyntaxPatternItem,
+    LevelExpr, MacroArm, NotationItem, NotationKind, QAntiquotContent, Span, SurfaceArg,
+    SurfaceExpr, SurfaceName, SyntaxPatternItem,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -86,8 +87,8 @@ enum SimpleNotationLookup<'a> {
 // Types only used by tests via `use super::*`
 #[cfg(test)]
 use clean_parser::{
-    Projection, QAntiquotContent, QQuotationKind, Span, SurfaceBinder, SurfaceBinderInfo,
-    SurfaceFieldAssign, SurfaceLit, SurfaceMatchArm, SurfacePattern, UniverseExpr,
+    Projection, QQuotationKind, SurfaceBinder, SurfaceBinderInfo, SurfaceFieldAssign, SurfaceLit,
+    SurfaceMatchArm, SurfacePattern, UniverseExpr,
 };
 
 /// A `scoped notation` held against its declaring namespace (Lean attrKind
@@ -98,7 +99,7 @@ use clean_parser::{
 struct ScopedNotation {
     /// Full declaring namespace path (e.g. `"Foo.Bar"`). Never empty: a
     /// root-level `scoped notation` is rejected at the declaration site.
-    namespace: String,
+    namespace: SurfaceName,
     /// The lowered macro definition, built eagerly at declaration time so a
     /// registration error surfaces at the declaration (fail closed) rather
     /// than at some later activation.
@@ -106,7 +107,7 @@ struct ScopedNotation {
     /// For nullary literal notation (`scoped notation "x" => e`): the bare
     /// identifier alias, gated exactly like `simple_notations` but only while
     /// the declaring namespace is active.
-    simple_alias: Option<(String, SimpleNotationAlias)>,
+    simple_alias: Option<(SurfaceName, SimpleNotationAlias)>,
 }
 
 /// Macro expansion context for elaboration
@@ -121,13 +122,13 @@ pub struct MacroCtx {
     /// Statistics from last expansion
     last_stats: Option<clean_macro::expand::ExpansionStats>,
     /// File-scoped aliases for nullary notation parsed as bare identifiers.
-    simple_notations: HashMap<String, SimpleNotationAlias>,
+    simple_notations: HashMap<SurfaceName, SimpleNotationAlias>,
     /// Active lexical section-variable identities, synchronized from the
     /// FileContext before each declaration is elaborated.
     active_variable_ids: HashSet<u64>,
     /// Innermost active identity for each spelling, used when a notation is
     /// registered to record exactly which binding its expansion captures.
-    active_variable_by_name: HashMap<String, u64>,
+    active_variable_by_name: HashMap<SurfaceName, u64>,
     /// `scoped notation` declarations, tagged with their declaring namespace.
     /// Kept OUT of `registry`; active ones are merged into
     /// `effective_registry` on every activation-state change.
@@ -135,15 +136,23 @@ pub struct MacroCtx {
     /// Activation frames for `open Ns` / `open scoped Ns`. One frame per
     /// namespace / section / `open … in` scope; the root frame (index 0,
     /// always present) holds file-level activations.
-    scoped_activation_frames: Vec<Vec<String>>,
+    scoped_activation_frames: Vec<Vec<SurfaceName>>,
     /// The current namespace path (empty at root). The current namespace and
     /// every dot-prefix of it activate their scoped notations implicitly,
     /// mirroring Lean's `activeScopes` (currNamespace + its prefixes).
-    current_namespace: String,
+    current_namespace: SurfaceName,
     /// Cache: `registry` plus the currently-active scoped notations. `None`
     /// when no scoped notation is active (the common case), so `expand` pays
     /// nothing for files without scoped notation.
     effective_registry: Option<MacroRegistry>,
+    /// The `notation` command being registered, while the elaborator
+    /// registers it ([`MacroCtx::set_template_site`]): the site its
+    /// template's free references carry (`clean_parser::TemplateOrigin::site`).
+    template_site: Option<clean_parser::TemplateSiteId>,
+    /// Whether the template being registered carries its expansions' macro
+    /// scope ([`MacroCtx::set_template_hygiene`]): `false` under `set_option
+    /// hygiene false`.
+    template_hygienic: bool,
 }
 
 impl Default for MacroCtx {
@@ -159,7 +168,7 @@ impl MacroCtx {
     }
 
     /// Create with a custom registry
-    pub fn with_registry(registry: MacroRegistry) -> Self {
+    pub(crate) fn with_registry(registry: MacroRegistry) -> Self {
         Self {
             registry,
             categories: SyntaxCategoryRegistry::new(),
@@ -168,9 +177,11 @@ impl MacroCtx {
             simple_notations: HashMap::new(),
             active_variable_ids: HashSet::new(),
             active_variable_by_name: HashMap::new(),
+            template_site: None,
+            template_hygienic: true,
             scoped_notations: Vec::new(),
             scoped_activation_frames: vec![Vec::new()],
-            current_namespace: String::new(),
+            current_namespace: SurfaceName::from_name(clean_kernel::Name::anon()),
             effective_registry: None,
         }
     }
@@ -219,22 +230,22 @@ impl MacroCtx {
 
     /// Set the current namespace path (empty at root). The current namespace
     /// and its dot-prefixes implicitly activate their scoped notations.
-    pub fn set_current_namespace(&mut self, namespace: &str) {
-        if self.current_namespace != namespace {
-            self.current_namespace = namespace.to_owned();
+    pub(crate) fn set_current_namespace(&mut self, namespace: &SurfaceName) {
+        if &self.current_namespace != namespace {
+            self.current_namespace = namespace.clone();
             self.rebuild_effective_registry();
         }
     }
 
     /// Push a new activation frame (namespace / section / `open … in` scope).
-    pub fn push_scoped_activation_frame(&mut self) {
+    pub(crate) fn push_scoped_activation_frame(&mut self) {
         self.scoped_activation_frames.push(Vec::new());
     }
 
     /// Pop the innermost activation frame, deactivating the `open` /
     /// `open scoped` activations made inside it. The root frame is never
     /// popped — an unbalanced pop clears it instead of underflowing.
-    pub fn pop_scoped_activation_frame(&mut self) {
+    pub(crate) fn pop_scoped_activation_frame(&mut self) {
         if self.scoped_activation_frames.len() > 1 {
             self.scoped_activation_frames.pop();
         } else if let Some(root) = self.scoped_activation_frames.last_mut() {
@@ -247,26 +258,29 @@ impl MacroCtx {
     /// (`open Ns` / `open scoped Ns`). Activating a namespace that declared
     /// no scoped notation is a harmless no-op, matching Lean's tolerant
     /// `open scoped` of an arbitrary namespace.
-    pub fn activate_scoped_namespace(&mut self, namespace: &str) {
-        if namespace.is_empty() {
+    pub(crate) fn activate_scoped_namespace(&mut self, namespace: &SurfaceName) {
+        if namespace.name().is_anon() {
             return;
         }
         if let Some(frame) = self.scoped_activation_frames.last_mut() {
-            frame.push(namespace.to_owned());
+            frame.push(namespace.clone());
         }
         self.rebuild_effective_registry();
     }
 
     /// Whether `namespace`'s scoped notations are active: it is the current
     /// namespace, a dot-prefix of it, or explicitly activated by an `open`.
-    fn scoped_namespace_active(&self, namespace: &str) -> bool {
-        let current = self.current_namespace.as_str();
-        if current == namespace
-            || (current.len() > namespace.len()
-                && current.starts_with(namespace)
-                && current.as_bytes()[namespace.len()] == b'.')
-        {
-            return true;
+    fn scoped_namespace_active(&self, namespace: &SurfaceName) -> bool {
+        let mut current = self.current_namespace.name();
+        loop {
+            if current == namespace.name() {
+                return true;
+            }
+            match current.inner() {
+                clean_kernel::name::NameInner::Str(prefix, _)
+                | clean_kernel::name::NameInner::Num(prefix, _) => current = prefix,
+                clean_kernel::name::NameInner::Anon => break,
+            }
         }
         self.scoped_activation_frames
             .iter()
@@ -299,7 +313,7 @@ impl MacroCtx {
     /// source position.  Later entries with the same spelling are innermost.
     pub(crate) fn set_active_variable_bindings(
         &mut self,
-        bindings: impl IntoIterator<Item = (String, u64)>,
+        bindings: impl IntoIterator<Item = (SurfaceName, u64)>,
     ) {
         self.active_variable_ids.clear();
         self.active_variable_by_name.clear();
@@ -328,7 +342,7 @@ impl MacroCtx {
     /// by `names`, recursively.  Declaration preprocessing uses this closure so
     /// a theorem mentioning `A`, where `notation "A" => id x`, includes the
     /// captured section binder `x` in its kernel telescope.
-    pub(crate) fn close_over_simple_notation_dependencies(&self, names: &mut HashSet<String>) {
+    pub(crate) fn close_over_simple_notation_dependencies(&self, names: &mut HashSet<SurfaceName>) {
         loop {
             let mut introduced = HashSet::new();
             for name in names.iter() {
@@ -363,7 +377,7 @@ impl MacroCtx {
 
     /// Look up a nullary-notation alias for a bare identifier: the file-scoped
     /// table first, then ACTIVE scoped-notation aliases.
-    fn lookup_simple_notation(&self, name: &str) -> Option<SimpleNotationLookup<'_>> {
+    fn lookup_simple_notation(&self, name: &SurfaceName) -> Option<SimpleNotationLookup<'_>> {
         if let Some(alias) = self.simple_notations.get(name) {
             return Some(self.alias_expansion(alias));
         }
@@ -372,18 +386,78 @@ impl MacroCtx {
                 .simple_alias
                 .as_ref()
                 .filter(|(literal, _)| {
-                    literal.as_str() == name && self.scoped_namespace_active(&scoped.namespace)
+                    literal == name && self.scoped_namespace_active(&scoped.namespace)
                 })
                 .map(|(_, alias)| self.alias_expansion(alias))
         })
     }
 
+    /// Name the `notation` command whose template is about to be registered
+    /// (`None` once it is): its free references then carry that site, and
+    /// resolve to what the elaborator recorded there.
+    pub(crate) fn set_template_site(&mut self, site: Option<clean_parser::TemplateSiteId>) {
+        self.template_site = site;
+    }
+
+    /// Whether the template about to be registered is hygienic (`true`
+    /// unless declared under `set_option hygiene false`, where Lean's
+    /// quotation adds no macro scope and pre-resolves nothing: its names
+    /// resolve at each use, and its binders capture).
+    pub(crate) fn set_template_hygiene(&mut self, hygienic: bool) {
+        self.template_hygienic = hygienic;
+    }
+
+    /// A macro template over the operand variables `operands` with its free
+    /// references marked hygienic against the CURRENT declaration site
+    /// ([`clean_parser::mark_template_free_references`]): the namespace, the
+    /// section variables in scope, and the site the elaborator recorded.
+    pub(crate) fn mark_template(
+        &self,
+        template: &SurfaceExpr,
+        operands: &[SurfaceName],
+        site: clean_parser::TemplateSiteId,
+    ) -> Result<SurfaceExpr, clean_parser::TemplateRefusal> {
+        let section_variables: Vec<SurfaceName> =
+            self.active_variable_by_name.keys().cloned().collect();
+        clean_parser::mark_template_free_references(
+            template,
+            operands,
+            self.current_namespace.name(),
+            &section_variables,
+            Some(site),
+        )
+    }
+
+    /// Lower a macro's expansion template with its free references marked
+    /// hygienic against the CURRENT declaration site: the namespace and the
+    /// section variables in scope where the macro is declared.
+    fn expansion_quote(
+        &self,
+        expansion: &SurfaceExpr,
+    ) -> Result<SyntaxQuote, MacroRegistrationError> {
+        if !self.template_hygienic {
+            return surface_expr_to_syntax_quote(expansion);
+        }
+        let section_variables: Vec<SurfaceName> =
+            self.active_variable_by_name.keys().cloned().collect();
+        let namespace = self.current_namespace.name().clone();
+        registration::surface_expr_to_expansion_quote(
+            expansion,
+            &registration::TemplateSite {
+                namespace: &namespace,
+                section_variables: &section_variables,
+                site: self.template_site,
+            },
+        )
+    }
+
     /// Register a `macro_rules` declaration into the registry.
-    pub fn register_macro_rules(
+    pub(crate) fn register_macro_rules(
         &mut self,
-        name: Option<&str>,
+        name: Option<&SurfaceName>,
         arms: &[MacroArm],
     ) -> Result<(), MacroRegistrationError> {
+        let mut refused = None;
         for (idx, arm) in arms.iter().enumerate() {
             let pattern_quote = surface_expr_to_syntax_quote(&arm.pattern)?;
             // A *computed* (`do`-block) RHS is evaluated at registration time to
@@ -391,10 +465,20 @@ impl MacroCtx {
             // computed body outside that subset DEFERS with a registration error
             // rather than being mis-lowered as a pure template. A pure-template
             // RHS returns `None` here and keeps the existing fast path unchanged.
+            // A template the hygiene walk refuses registers a refusing
+            // expansion, so a use is refused rather than read as other syntax,
+            // and the declaration reports the refusal.
             let expansion_quote =
                 match computed_body::evaluate_computed_macro_body(&arm.pattern, &arm.expansion) {
                     Some(result) => result?,
-                    None => surface_expr_to_syntax_quote(&arm.expansion)?,
+                    None => match self.expansion_quote(&arm.expansion) {
+                        Err(MacroRegistrationError::TemplateRefused(reason)) => {
+                            let quote = registration::refused_expansion_quote(&reason);
+                            refused.get_or_insert(MacroRegistrationError::TemplateRefused(reason));
+                            quote
+                        }
+                        other => other?,
+                    },
                 };
 
             let macro_name = name.map_or_else(|| format!("macro_rules_{idx}"), ToString::to_string);
@@ -417,18 +501,34 @@ impl MacroCtx {
                 target_kind,
                 pattern_quote.syntax.clone(),
                 expansion_quote,
-            );
+            )
+            .with_hygiene(self.template_hygienic);
             self.registry.register(def);
         }
 
         self.rebuild_effective_registry();
-        Ok(())
+        refused.map_or(Ok(()), Err)
     }
 
     /// Register a new syntax category (`declare_syntax_cat`).
-    pub fn register_syntax_category(&mut self, name: &str) {
+    pub(crate) fn register_syntax_category(&mut self, name: &str) {
         use clean_macro::registry::SyntaxCategory;
         self.categories.register(SyntaxCategory::new(name));
+    }
+
+    /// Register a source category only when its typed name is one string component.
+    /// Escaping does not change category identity; qualification and numeric Name
+    /// components cannot be represented by the current category-label protocol.
+    pub(crate) fn register_typed_syntax_category(
+        &mut self,
+        name: &SurfaceName,
+    ) -> Result<(), MacroRegistrationError> {
+        let label = name
+            .component_text()
+            .filter(|_| !name.is_relative_constructor())
+            .ok_or(MacroRegistrationError::SyntaxCategoryName)?;
+        self.register_syntax_category(label);
+        Ok(())
     }
 
     /// Check if a syntax category exists.
@@ -440,9 +540,9 @@ impl MacroCtx {
     ///
     /// This creates a macro that matches the syntax pattern and produces
     /// an AST node in the specified category.
-    pub fn register_syntax(
+    pub(crate) fn register_syntax(
         &mut self,
-        name: Option<&str>,
+        name: Option<&SurfaceName>,
         precedence: Option<u32>,
         pattern: &[SyntaxPatternItem],
         category: &str,
@@ -454,7 +554,10 @@ impl MacroCtx {
         let target_kind = pattern_kind_from_items(pattern);
 
         // For syntax declarations, the expansion just wraps in the category
-        let expansion = SyntaxQuote::new(pattern_syntax.clone(), SyntaxKind::app(category));
+        let expansion = SyntaxQuote::new(
+            pattern_syntax.clone(),
+            SyntaxKind::from_name(clean_kernel::Name::anon().str(category)),
+        );
 
         let macro_name = name.map_or_else(
             || format!("syntax_{}", pattern_to_name(pattern)),
@@ -475,12 +578,38 @@ impl MacroCtx {
     /// nullary literal form) the bare-identifier alias. Shared by the global
     /// and scoped registration paths so both fail closed at the declaration.
     fn build_notation_def(
+        &self,
         kind: NotationKind,
         precedence: Option<u32>,
         pattern: &[NotationItem],
         expansion: &SurfaceExpr,
-    ) -> Result<(MacroDef, Option<(String, SurfaceExpr)>), MacroRegistrationError> {
-        let expansion_quote = surface_expr_to_syntax_quote(expansion)?;
+    ) -> Result<(MacroDef, Option<(SurfaceName, SurfaceExpr)>), MacroRegistrationError> {
+        // The template's free references resolve where the notation is
+        // declared, never to a binder at the use site; its pattern variables
+        // are the operands (`clean_parser::mark_template_free_references`).
+        let operands: Vec<SurfaceName> = pattern
+            .iter()
+            .filter_map(|item| match item {
+                NotationItem::Variable(v) => Some(v.clone()),
+                NotationItem::Literal(_) => None,
+            })
+            .collect();
+        let section_variables: Vec<SurfaceName> =
+            self.active_variable_by_name.keys().cloned().collect();
+        let marked;
+        let expansion = if self.template_hygienic {
+            marked = clean_parser::mark_template_free_references(
+                expansion,
+                &operands,
+                self.current_namespace.name(),
+                &section_variables,
+                self.template_site,
+            )
+            .map_err(|refusal| MacroRegistrationError::refused(&refusal))?;
+            &marked
+        } else {
+            expansion
+        };
 
         // Build pattern syntax from notation items
         let (pattern_syntax, target_kind, var_names) = notation_pattern_to_syntax(kind, pattern);
@@ -488,28 +617,57 @@ impl MacroCtx {
         // Create macro name from pattern literals
         let macro_name = notation_to_name(kind, pattern);
 
-        // Build the actual expansion: apply the expansion expression to variables
+        // A `notation` template is a quotation over its operand variables: a
+        // use SUBSTITUTES the caller's syntax for them
+        // (`clean_parser::instantiate_notation_template`, with each operand an
+        // antiquotation), never applies the template to it. Where an operand
+        // stands in an identifier-only position (a binder, a pattern variable),
+        // which an antiquotation cannot fill in Clean's surface syntax, the
+        // registered expansion refuses every use instead. The fixed-arity
+        // commands (`infixl " ** " => f`) name no operands: their head is
+        // applied to them, which is their expansion in Lean.
         let actual_expansion = if var_names.is_empty() {
-            expansion_quote
+            surface_expr_to_syntax_quote(expansion)?
+        } else if matches!(kind, NotationKind::Notation) {
+            let antiquotations: Vec<SurfaceExpr> = var_names
+                .iter()
+                .map(|var| SurfaceExpr::QAntiquot {
+                    span: Span::dummy(),
+                    content: QAntiquotContent::Simple(var.clone()),
+                })
+                .collect();
+            let instantiated = if self.template_hygienic {
+                clean_parser::instantiate_notation_template(expansion, &var_names, &antiquotations)
+            } else {
+                clean_parser::instantiate_unhygienic_notation_template(
+                    expansion,
+                    &var_names,
+                    &antiquotations,
+                )
+            };
+            match instantiated {
+                Ok(instantiated) => surface_expr_to_syntax_quote(&instantiated)?,
+                Err(refusal) => registration::refused_expansion_quote(refusal.reason()),
+            }
         } else {
-            // The expansion becomes: expansion var1 var2 ...
-            let base = expansion_quote.syntax;
-            let applied = var_names.iter().fold(base, |acc, var| {
+            let base = surface_expr_to_syntax_quote(expansion)?;
+            let applied = var_names.iter().fold(base.syntax, |acc, var| {
                 Syntax::mk_app(acc, vec![Syntax::mk_antiquot(var)])
             });
-            SyntaxQuote::new(applied, expansion_quote.category)
+            SyntaxQuote::new(applied, base.category)
         };
 
-        let mut def = MacroDef::new(macro_name, target_kind, pattern_syntax, actual_expansion);
+        let mut def = MacroDef::new(macro_name, target_kind, pattern_syntax, actual_expansion)
+            .with_hygiene(self.template_hygienic);
         if let Some(prec) = precedence {
             def = def.with_priority(prec as i32);
         }
 
         let simple_alias = if matches!(kind, NotationKind::Notation) && var_names.is_empty() {
             match pattern {
-                [NotationItem::Literal(literal)] => {
-                    Some((literal.trim().to_owned(), expansion.clone()))
-                }
+                [NotationItem::Literal(literal)] => clean_parser::parse_name(literal.trim())
+                    .ok()
+                    .map(|name| (name, expansion.clone())),
                 _ => None,
             }
         } else {
@@ -520,14 +678,14 @@ impl MacroCtx {
     }
 
     /// Register a `notation` declaration (infixl, infixr, prefix, postfix, or notation).
-    pub fn register_notation(
+    pub(crate) fn register_notation(
         &mut self,
         kind: NotationKind,
         precedence: Option<u32>,
         pattern: &[NotationItem],
         expansion: &SurfaceExpr,
     ) -> Result<(), MacroRegistrationError> {
-        let (def, simple_alias) = Self::build_notation_def(kind, precedence, pattern, expansion)?;
+        let (def, simple_alias) = self.build_notation_def(kind, precedence, pattern, expansion)?;
         self.registry.register(def);
         if let Some((literal, alias_expansion)) = simple_alias {
             let alias = self.capture_simple_alias(alias_expansion);
@@ -541,19 +699,19 @@ impl MacroCtx {
     /// definition is lowered eagerly (fail closed at the declaration) but
     /// only joins the live registry while `namespace` is active — the current
     /// namespace, an ancestor of it, or activated by `open` / `open scoped`.
-    pub fn register_scoped_notation(
+    pub(crate) fn register_scoped_notation(
         &mut self,
-        namespace: &str,
+        namespace: &SurfaceName,
         kind: NotationKind,
         precedence: Option<u32>,
         pattern: &[NotationItem],
         expansion: &SurfaceExpr,
     ) -> Result<(), MacroRegistrationError> {
-        let (def, simple_alias) = Self::build_notation_def(kind, precedence, pattern, expansion)?;
+        let (def, simple_alias) = self.build_notation_def(kind, precedence, pattern, expansion)?;
         let simple_alias = simple_alias
             .map(|(literal, expansion)| (literal, self.capture_simple_alias(expansion)));
         self.scoped_notations.push(ScopedNotation {
-            namespace: namespace.to_owned(),
+            namespace: namespace.clone(),
             def,
             simple_alias,
         });
@@ -562,13 +720,22 @@ impl MacroCtx {
     }
 
     /// Register a `macro` declaration (simple form with single pattern).
-    pub fn register_macro(
+    pub(crate) fn register_macro(
         &mut self,
         pattern: &[SyntaxPatternItem],
         _category: &str,
         expansion: &SurfaceExpr,
     ) -> Result<(), MacroRegistrationError> {
-        let expansion_quote = surface_expr_to_syntax_quote(expansion)?;
+        // A template the hygiene walk refuses registers a refusing expansion,
+        // so a use is refused rather than read as other syntax, and the
+        // declaration reports the refusal.
+        let (expansion_quote, refused) = match self.expansion_quote(expansion) {
+            Err(MacroRegistrationError::TemplateRefused(reason)) => (
+                registration::refused_expansion_quote(&reason),
+                Some(MacroRegistrationError::TemplateRefused(reason)),
+            ),
+            other => (other?, None),
+        };
         let macro_name = format!("macro_{}", pattern_to_name(pattern));
 
         // A `macro "kw" a b : cat => rhs` command declares a leading-keyword syntax
@@ -586,16 +753,17 @@ impl MacroCtx {
         if let Some((keyword, vars)) = leading_keyword_macro_form(pattern) {
             let pattern_syntax = Syntax::mk_app(
                 Syntax::ident(&keyword),
-                vars.iter().map(|v| Syntax::mk_antiquot(v)).collect(),
+                vars.iter().map(Syntax::mk_antiquot).collect(),
             );
             let target_kind = pattern_syntax
                 .kind()
                 .cloned()
                 .unwrap_or_else(SyntaxKind::app_kind);
-            let def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion_quote);
+            let def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion_quote)
+                .with_hygiene(self.template_hygienic);
             self.registry.register(def);
             self.rebuild_effective_registry();
-            return Ok(());
+            return refused.map_or(Ok(()), Err);
         }
 
         // Fallback for shapes without a plain-application use site (nullary keyword,
@@ -604,11 +772,12 @@ impl MacroCtx {
         // mis-expanding — never silently wrong.
         let pattern_syntax = syntax_pattern_to_syntax(pattern);
         let target_kind = pattern_kind_from_items(pattern);
-        let def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion_quote);
+        let def = MacroDef::new(macro_name, target_kind, pattern_syntax, expansion_quote)
+            .with_hygiene(self.template_hygienic);
         self.registry.register(def);
 
         self.rebuild_effective_registry();
-        Ok(())
+        refused.map_or(Ok(()), Err)
     }
 }
 
@@ -619,9 +788,11 @@ impl MacroCtx {
 /// and for the nullary keyword form (`macro "kw" : term => …`) whose bare-ident use
 /// site resolves before macro expansion — those have no plain-application use site to
 /// key on and are left to the fallback (loud `UnknownIdent`, never mis-expansion).
-fn leading_keyword_macro_form(pattern: &[SyntaxPatternItem]) -> Option<(String, Vec<String>)> {
-    let mut keyword: Option<String> = None;
-    let mut vars: Vec<String> = Vec::new();
+fn leading_keyword_macro_form(
+    pattern: &[SyntaxPatternItem],
+) -> Option<(SurfaceName, Vec<SurfaceName>)> {
+    let mut keyword: Option<SurfaceName> = None;
+    let mut vars: Vec<SurfaceName> = Vec::new();
     let mut seen_var = false;
     for item in pattern {
         match item {
@@ -632,7 +803,7 @@ fn leading_keyword_macro_form(pattern: &[SyntaxPatternItem]) -> Option<(String, 
                 if keyword.is_some() || seen_var {
                     return None;
                 }
-                keyword = Some(lit.trim().to_owned());
+                keyword = Some(clean_parser::parse_name(lit.trim()).ok()?);
             }
             SyntaxPatternItem::Variable { name, .. } => {
                 seen_var = true;
@@ -701,7 +872,7 @@ pub(crate) fn syntax_to_level(syntax: &Syntax) -> Option<LevelExpr> {
         "levelParam" => syntax
             .child(0)?
             .as_ident()
-            .map(|s| LevelExpr::Param(s.to_string())),
+            .map(|s| LevelExpr::Param(s.clone())),
         "levelSucc" => Some(LevelExpr::Succ(Box::new(syntax_to_level(
             syntax.child(0)?,
         )?))),
@@ -716,7 +887,7 @@ pub(crate) fn syntax_to_level(syntax: &Syntax) -> Option<LevelExpr> {
         "levelAntiquot" => syntax
             .child(0)?
             .as_ident()
-            .map(|s| LevelExpr::Antiquot(s.to_string())),
+            .map(|s| LevelExpr::Antiquot(s.clone())),
         _ => None,
     }
 }
@@ -747,16 +918,40 @@ pub fn expand_surface_macros(
     syntax_to_surface(&expanded).ok_or(MacroExpansionError::ConversionFailed)
 }
 
+/// Replace every active simple-notation alias in `expr`.
+///
+/// Every level of the walk is a `stack_safe` checkpoint. The walk recurses
+/// over the SURFACE term, and `ElabCtx::elaborate` runs it BEFORE reaching its
+/// own checkpoint, so unguarded it extended the stretch `elaborate` →
+/// `elab_app_inner` → `elaborate_with_expected_type` → `elaborate` →
+/// `expand_macros` by one iterator-adapter tower per nesting level. Measured
+/// 2026-09-20 on a debug build: six levels of application nesting under that
+/// stretch outgrew the 256 KB red zone (`MIN_STACK_RED_ZONE`), and
+/// `codata_cmd_tests::test_codata_stream_encoding_survives_small_thread_stack`
+/// aborted the whole test process with a stack overflow inside this function
+/// (crash report: ~110 frames of this walk above the last `maybe_grow`).
+/// Whether it faulted depended on where the previous checkpoint happened to
+/// land — two sibling builds of the same walk passed — which is what an
+/// inter-checkpoint stretch near the red zone looks like.
 fn expand_simple_notation_aliases(
+    ctx: &MacroCtx,
+    expr: &SurfaceExpr,
+) -> Result<SurfaceExpr, MacroExpansionError> {
+    crate::stack_safe(|| expand_simple_notation_aliases_unguarded(ctx, expr))
+}
+
+/// One level of [`expand_simple_notation_aliases`]; recursion goes back through
+/// the guarded entry.
+fn expand_simple_notation_aliases_unguarded(
     ctx: &MacroCtx,
     expr: &SurfaceExpr,
 ) -> Result<SurfaceExpr, MacroExpansionError> {
     match expr {
         SurfaceExpr::Ident(_, name) => match ctx.lookup_simple_notation(name) {
             Some(SimpleNotationLookup::Active(expansion)) => Ok(expansion.clone()),
-            Some(SimpleNotationLookup::Expired) => {
-                Err(MacroExpansionError::ExpiredNotationCapture(name.clone()))
-            }
+            Some(SimpleNotationLookup::Expired) => Err(
+                MacroExpansionError::ExpiredNotationCapture(name.to_string()),
+            ),
             None => Ok(expr.clone()),
         },
         SurfaceExpr::App(span, func, args) => Ok(SurfaceExpr::App(

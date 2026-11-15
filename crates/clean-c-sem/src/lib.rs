@@ -79,6 +79,13 @@ pub mod examples;
 pub mod expr;
 pub mod memory;
 pub mod noreturn;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod parser;
+// wasm32: tree-sitter has no wasm build (its build script needs a C sysroot),
+// so the parser surface is a stub whose entry points return
+// `ParseError::NativeOnly`.
+#[cfg(target_arch = "wasm32")]
+#[path = "parser/wasm_stub.rs"]
 pub mod parser;
 pub mod sep;
 pub mod shared_memory_model;

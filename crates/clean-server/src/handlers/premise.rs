@@ -7,9 +7,16 @@
 //! This module contains handlers for selecting relevant premises for goals:
 //! - Single goal premise selection (getPremises)
 //! - Batch premise selection (batchGetPremises)
+//!
+//! Both run on the server's work pool under the request's deadline
+//! (`work.rs`). Selection makes few kernel calls, so the batch also reads the
+//! clock between goals and stops once the deadline has passed; a single goal's
+//! selection runs to its end (it is a scan of the environment) in its pool slot.
 
+use super::core::{run_with_env, WorkEnv};
 use super::state::ServerState;
 use super::types::ns_from_us;
+use super::work::{past, WorkError};
 use crate::progress::ProgressSender;
 use crate::rpc::{RequestId, Response, RpcError};
 use clean_elab::elaborate;
@@ -184,7 +191,7 @@ pub struct BatchGetPremisesStats {
 ///
 /// Selects relevant premises for a goal using MePo/MaSh/Hybrid algorithms.
 /// Designed for integration with LLM theorem provers (verification-guided search).
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_get_premises(
     state: &ServerState,
     id: RequestId,
@@ -192,9 +199,16 @@ pub async fn handle_get_premises(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
 
-    let result =
-        tokio::time::timeout(timeout, async { get_premises_impl(state, &params).await }).await;
+    let result = tokio::time::timeout(
+        timeout,
+        run_with_env(state, deadline, move |held| {
+            get_premises_impl(held, &params)
+        }),
+    )
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
 
     let elapsed_us = start.elapsed().as_micros() as u64;
     let elapsed_ms = elapsed_us / 1000;
@@ -217,7 +231,13 @@ pub async fn handle_get_premises(
                 .record_request("getPremises", false, elapsed_us);
             Response::error(id, e)
         }
-        Err(_) => {
+        Err(WorkError::Unavailable(detail)) => {
+            state
+                .metrics
+                .record_request("getPremises", false, elapsed_us);
+            Response::error(id, RpcError::internal_error(detail))
+        }
+        Err(WorkError::Interrupted) => {
             state
                 .metrics
                 .record_request("getPremises", false, elapsed_us);
@@ -226,20 +246,20 @@ pub async fn handle_get_premises(
     }
 }
 
-async fn get_premises_impl(
-    state: &ServerState,
+fn get_premises_impl(
+    held: &WorkEnv,
     params: &GetPremisesParams,
 ) -> Result<GetPremisesResult, RpcError> {
     use clean_auto::premise::{HybridSelector, MaShSelector, MePoSelector, PremiseDatabase};
 
     // Parse the goal expression
-    let goal_surface = parse_expr_with_tactics_exact(&params.goal, &state.tactic_patterns)
+    let goal_surface = parse_expr_with_tactics_exact(&params.goal, &held.patterns)
         .map_err(|e| RpcError::lean_parse_error(format!("Failed to parse goal: {e}")))?;
 
-    let env = state.env.read().await;
+    let env: &clean_kernel::Environment = &held.env;
 
     // Elaborate the goal
-    let goal_expr = elaborate(&env, &goal_surface)
+    let goal_expr = elaborate(env, &goal_surface)
         .map_err(|e| RpcError::elaboration_error(format!("Failed to elaborate goal: {e}")))?;
 
     // Build premise database from environment
@@ -318,7 +338,7 @@ async fn get_premises_impl(
 ///
 /// Retrieves premise recommendations for multiple goals in a single request.
 /// Uses shared premise database to avoid redundant construction.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_batch_get_premises(
     state: &ServerState,
     id: RequestId,
@@ -329,16 +349,19 @@ pub async fn handle_batch_get_premises(
     let item_count = params.items.len() as u64;
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms * 10));
 
+    let deadline = start.checked_add(timeout);
+
     let result = tokio::time::timeout(timeout, async {
-        batch_get_premises_impl(state, &params, progress.clone()).await
+        batch_get_premises(state, params, progress.clone(), deadline).await
     })
-    .await;
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
 
     let elapsed_us = start.elapsed().as_micros() as u64;
     let elapsed_ms = elapsed_us / 1000;
 
     match result {
-        Ok(Ok(mut batch_result)) => {
+        Ok(mut batch_result) => {
             batch_result.time_ms = elapsed_ms;
             batch_result.time_ns = Some(ns_from_us(elapsed_us));
             let all_succeeded = batch_result.results.iter().all(|r| r.success);
@@ -349,13 +372,13 @@ pub async fn handle_batch_get_premises(
             Response::success_typed(id.clone(), &batch_result)
                 .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
         }
-        Ok(Err(e)) => {
+        Err(WorkError::Unavailable(detail)) => {
             state
                 .metrics
                 .record_request("batchGetPremises", false, elapsed_us);
-            Response::error(id, e)
+            Response::error(id, RpcError::internal_error(detail))
         }
-        Err(_) => {
+        Err(WorkError::Interrupted) => {
             state
                 .metrics
                 .record_request("batchGetPremises", false, elapsed_us);
@@ -364,40 +387,24 @@ pub async fn handle_batch_get_premises(
     }
 }
 
-async fn batch_get_premises_impl(
+/// Run the batch on the work pool, streaming each goal's result to
+/// `progress` as it is found.
+async fn batch_get_premises(
     state: &ServerState,
-    params: &BatchGetPremisesParams,
+    params: BatchGetPremisesParams,
     progress: Option<ProgressSender>,
-) -> Result<BatchGetPremisesResult, RpcError> {
-    use clean_auto::premise::{HybridSelector, MaShSelector, MePoSelector, PremiseDatabase};
-
-    let env = state.env.read().await;
-
-    // Build premise database once for all items
-    let mut premise_db = PremiseDatabase::new();
-    for info in env.constants() {
-        premise_db.add(info.name.clone(), info.type_.clone());
-    }
-
-    let candidates_scanned = premise_db.len();
-
+    deadline: Option<Instant>,
+) -> Result<BatchGetPremisesResult, WorkError> {
+    let total = params.items.len();
     if let Some(progress) = progress.as_ref() {
         progress
             .notify(
-                format!(
-                    "Batch premise selection started ({} goals)",
-                    params.items.len()
-                ),
+                format!("Batch premise selection started ({total} goals)"),
                 Some(0),
                 None,
             )
             .await;
     }
-
-    let total = params.items.len();
-    let mut results = Vec::with_capacity(total);
-    let mut succeeded = 0;
-    let mut failed = 0;
 
     // Adaptive progress frequency
     let progress_interval = if total <= 100 {
@@ -410,16 +417,85 @@ async fn batch_get_premises_impl(
         total / 200
     };
 
-    for (idx, item) in params.items.iter().enumerate() {
+    let (selected, mut each_selected) = tokio::sync::mpsc::unbounded_channel();
+    let work = run_with_env(state, deadline, move |held| {
+        batch_get_premises_impl(held, &params, deadline, |result| {
+            // The request may have stopped listening; the batch goes on.
+            let _ = selected.send(result.clone());
+        })
+    });
+    let report = async {
+        let mut completed = 0usize;
+        while let Some(result) = each_selected.recv().await {
+            completed += 1;
+            let Some(progress) = progress.as_ref() else {
+                continue;
+            };
+            let should_report =
+                completed % progress_interval == 0 || completed == total || completed == 1;
+            if should_report {
+                let percentage = (completed * 100)
+                    .checked_div(total)
+                    .map_or(100, |p| p.min(100) as u8);
+
+                progress
+                    .notify(
+                        format!("Selected {}/{} ({})", completed, total, result.id),
+                        Some(percentage),
+                        Some(json!({
+                            "id": result.id,
+                            "success": result.success,
+                            "error": result.error,
+                        })),
+                    )
+                    .await;
+            }
+        }
+    };
+    let (finished, ()) = tokio::join!(work, report);
+    finished?.ok_or(WorkError::Interrupted)
+}
+
+/// Select premises for each goal against the held environment. Runs on the
+/// work pool. Selection makes few kernel calls, so the clock is read before and
+/// after each goal: `None` once the request's deadline has passed, and a goal
+/// it passed during is not reported.
+fn batch_get_premises_impl(
+    held: &WorkEnv,
+    params: &BatchGetPremisesParams,
+    deadline: Option<Instant>,
+    on_result: impl Fn(&BatchGetPremisesItemResult),
+) -> Option<BatchGetPremisesResult> {
+    use clean_auto::premise::{HybridSelector, MaShSelector, MePoSelector, PremiseDatabase};
+
+    let env: &clean_kernel::Environment = &held.env;
+
+    // Build premise database once for all items
+    let mut premise_db = PremiseDatabase::new();
+    for info in env.constants() {
+        premise_db.add(info.name.clone(), info.type_.clone());
+    }
+
+    let candidates_scanned = premise_db.len();
+
+    let total = params.items.len();
+    let mut results = Vec::with_capacity(total);
+    let mut succeeded = 0;
+    let mut failed = 0;
+
+    for item in &params.items {
+        if past(deadline) {
+            return None;
+        }
         let item_start = Instant::now();
 
         // Parse the goal
-        let goal_result = parse_expr_with_tactics_exact(&item.goal, &state.tactic_patterns);
+        let goal_result = parse_expr_with_tactics_exact(&item.goal, &held.patterns);
 
         let (success, premises, error) = match goal_result {
             Ok(goal_surface) => {
                 // Elaborate the goal
-                match elaborate(&env, &goal_surface) {
+                match elaborate(env, &goal_surface) {
                     Ok(goal_expr) => {
                         // Select premises based on method
                         let selected = match params.method.as_str() {
@@ -475,6 +551,11 @@ async fn batch_get_premises_impl(
             Err(e) => (false, None, Some(format!("Failed to parse goal: {e}"))),
         };
 
+        // A goal the deadline may have cut short is no answer: not reported,
+        // and the batch answers the timeout error.
+        if past(deadline) {
+            return None;
+        }
         let time_us = item_start.elapsed().as_micros() as u64;
 
         if success {
@@ -483,40 +564,19 @@ async fn batch_get_premises_impl(
             failed += 1;
         }
 
-        results.push(BatchGetPremisesItemResult {
+        let result = BatchGetPremisesItemResult {
             id: item.id.clone(),
             success,
             premises,
-            error: error.clone(),
+            error,
             time_us,
             time_ns: Some(ns_from_us(time_us)),
-        });
-
-        if let Some(progress) = progress.as_ref() {
-            let completed = idx + 1;
-            let should_report =
-                completed % progress_interval == 0 || completed == total || completed == 1;
-            if should_report {
-                let percentage = (completed * 100)
-                    .checked_div(total)
-                    .map_or(100, |p| p.min(100) as u8);
-
-                progress
-                    .notify(
-                        format!("Selected {}/{} ({})", completed, total, item.id),
-                        Some(percentage),
-                        Some(json!({
-                            "id": item.id,
-                            "success": success,
-                            "error": error,
-                        })),
-                    )
-                    .await;
-            }
-        }
+        };
+        on_result(&result);
+        results.push(result);
     }
 
-    Ok(BatchGetPremisesResult {
+    Some(BatchGetPremisesResult {
         results,
         stats: BatchGetPremisesStats {
             total,

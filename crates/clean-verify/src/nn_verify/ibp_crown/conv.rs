@@ -222,10 +222,9 @@ pub fn conv_forward_interval(
             let mut lower = weight.bias[oc];
             let mut upper = weight.bias[oc];
             let mut k = 0;
-            for ic in 0..params.in_channels {
-                for kh in 0..params.kernel_height {
-                    for kw in 0..params.kernel_width {
-                        let w = weight.kernel[oc][ic][kh][kw];
+            for input_kernel in &weight.kernel[oc][..params.in_channels] {
+                for kernel_row in &input_kernel[..params.kernel_height] {
+                    for &w in &kernel_row[..params.kernel_width] {
                         let iv = &col[k];
                         if w >= 0.0 {
                             lower += w * iv.lower;
@@ -288,14 +287,15 @@ pub fn verify_conv_ibp_sound(
         for ow in 0..out_w {
             for oc in 0..params.out_channels {
                 let mut val = weight.bias[oc];
-                for ic in 0..ic_count {
-                    for kh in 0..params.kernel_height {
-                        for kw in 0..params.kernel_width {
+                for (ic, input_kernel) in weight.kernel[oc][..ic_count].iter().enumerate() {
+                    for (kh, kernel_row) in input_kernel[..params.kernel_height].iter().enumerate()
+                    {
+                        for (kw, &w) in kernel_row[..params.kernel_width].iter().enumerate() {
                             let ih = (oh * params.stride_h + kh) as isize - params.pad_h as isize;
                             let iw = (ow * params.stride_w + kw) as isize - params.pad_w as isize;
                             if ih >= 0 && (ih as usize) < in_h && iw >= 0 && (iw as usize) < in_w {
                                 let idx = (ih as usize * in_w + iw as usize) * ic_count + ic;
-                                val += weight.kernel[oc][ic][kh][kw] * concrete[idx];
+                                val += w * concrete[idx];
                             }
                         }
                     }
@@ -340,15 +340,17 @@ pub fn conv_to_linear_matrix(
             for oc in 0..params.out_channels {
                 let out_idx = (oh * out_w + ow) * params.out_channels + oc;
                 bias.push(weight.bias[oc]);
-                for ic in 0..params.in_channels {
-                    for kh in 0..params.kernel_height {
-                        for kw in 0..params.kernel_width {
+                for (ic, input_kernel) in weight.kernel[oc][..params.in_channels].iter().enumerate()
+                {
+                    for (kh, kernel_row) in input_kernel[..params.kernel_height].iter().enumerate()
+                    {
+                        for (kw, &w) in kernel_row[..params.kernel_width].iter().enumerate() {
                             let ih = (oh * params.stride_h + kh) as isize - params.pad_h as isize;
                             let iw = (ow * params.stride_w + kw) as isize - params.pad_w as isize;
                             if ih >= 0 && (ih as usize) < in_h && iw >= 0 && (iw as usize) < in_w {
                                 let in_idx =
                                     (ih as usize * in_w + iw as usize) * params.in_channels + ic;
-                                matrix[out_idx][in_idx] = weight.kernel[oc][ic][kh][kw];
+                                matrix[out_idx][in_idx] = w;
                             }
                         }
                     }
@@ -415,8 +417,11 @@ pub fn depthwise_conv_interval(
             for ch in 0..channels {
                 let mut lower = weight.bias[ch];
                 let mut upper = weight.bias[ch];
-                for kh in 0..params.kernel_height {
-                    for kw in 0..params.kernel_width {
+                for (kh, kernel_row) in weight.kernel[ch][0][..params.kernel_height]
+                    .iter()
+                    .enumerate()
+                {
+                    for (kw, &w) in kernel_row[..params.kernel_width].iter().enumerate() {
                         let ih = (oh * params.stride_h + kh) as isize - params.pad_h as isize;
                         let iw = (ow * params.stride_w + kw) as isize - params.pad_w as isize;
                         let iv = if ih >= 0
@@ -428,7 +433,6 @@ pub fn depthwise_conv_interval(
                         } else {
                             Interval::point(0.0)
                         };
-                        let w = weight.kernel[ch][0][kh][kw];
                         if w >= 0.0 {
                             lower += w * iv.lower;
                             upper += w * iv.upper;
@@ -468,4 +472,77 @@ pub fn conv_lipschitz_bound(
         .map(|v| v * v)
         .sum();
     frob_sq.sqrt()
+}
+
+#[cfg(test)]
+mod strict_lint_controls {
+    use super::*;
+
+    fn fixture() -> (IntervalTensor, ConvWeight, ConvParams) {
+        let input = IntervalTensor::new(vec![Interval::point(1.0); 4], 1, 4, 1);
+        let weight = ConvWeight {
+            kernel: vec![vec![vec![vec![1e16, 1.0, -1e16, 3.0]]]],
+            bias: vec![0.0],
+        };
+        let params = ConvParams {
+            kernel_height: 1,
+            kernel_width: 4,
+            in_channels: 1,
+            out_channels: 1,
+            stride_h: 1,
+            stride_w: 1,
+            pad_h: 0,
+            pad_w: 0,
+        };
+        (input, weight, params)
+    }
+
+    #[test]
+    fn strict_lint_convolution_preserves_floating_accumulation_order() {
+        let (input, weight, params) = fixture();
+        // Ordered f64 accumulation gives 3; regrouping the first three
+        // products can give 4. This checks the observable arithmetic order.
+        for result in [
+            conv_forward_interval(&input, &weight, &params),
+            depthwise_conv_interval(&input, &weight, &params),
+        ] {
+            assert_eq!(result.data.len(), 1);
+            assert_eq!(result.data[0].lower.to_bits(), 3.0_f64.to_bits());
+            assert_eq!(result.data[0].upper.to_bits(), 3.0_f64.to_bits());
+        }
+        let (matrix, bias) = conv_to_linear_matrix(1, 4, &weight, &params);
+        assert_eq!(matrix, vec![vec![1e16, 1.0, -1e16, 3.0]]);
+        assert_eq!(bias, vec![0.0]);
+        verify_conv_ibp_sound(
+            &input,
+            &input.data.iter().map(|iv| iv.lower).collect::<Vec<_>>(),
+            &weight,
+            &params,
+        )
+        .expect("the exact concrete result is enclosed");
+    }
+
+    #[test]
+    fn strict_lint_short_convolution_weights_cannot_truncate_bounds() {
+        let (input, weight, params) = fixture();
+        let mut channels = weight.clone();
+        channels.kernel[0].clear();
+        let mut rows = weight.clone();
+        rows.kernel[0][0].clear();
+        let mut columns = weight;
+        let _ = columns.kernel[0][0][0].pop();
+        for short in [channels, rows, columns] {
+            assert!(
+                std::panic::catch_unwind(|| conv_forward_interval(&input, &short, &params))
+                    .is_err()
+            );
+            assert!(
+                std::panic::catch_unwind(|| depthwise_conv_interval(&input, &short, &params))
+                    .is_err()
+            );
+            assert!(
+                std::panic::catch_unwind(|| conv_to_linear_matrix(1, 4, &short, &params)).is_err()
+            );
+        }
+    }
 }

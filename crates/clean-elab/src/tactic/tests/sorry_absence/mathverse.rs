@@ -43,20 +43,23 @@ fn test_mathverse_parity_fail_closed_without_non_kernel_terms() {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_even".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_even"),
                 ty: even_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_odd".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_odd"),
                 ty: odd_ty,
                 value: None,
             },

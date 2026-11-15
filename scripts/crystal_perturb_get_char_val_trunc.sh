@@ -210,9 +210,9 @@ expect PASS "P12 reverted"
 
 echo
 echo "== P13: THE ARTIFACT SIDE — the cast deleted =="
-sub "$GC_FIX" "    %2 = trunc u64 %1 to u32  ; #loc: 349 120 60" "    ; #loc: 349 120 60"
+sub "$GC_FIX" "    %2 = trunc u64 %1 to u32  ; #loc: 161 120 60" "    ; #loc: 161 120 60"
 expect FAIL "P13 mutated: the emitted body has no cast"; reason
-sub "$GC_FIX" "    ; #loc: 349 120 60" "    %2 = trunc u64 %1 to u32  ; #loc: 349 120 60"
+sub "$GC_FIX" "    ; #loc: 161 120 60" "    %2 = trunc u64 %1 to u32  ; #loc: 161 120 60"
 expect PASS "P13 reverted"
 
 echo

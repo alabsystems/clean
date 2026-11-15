@@ -50,7 +50,7 @@ pub fn suggest(
 
     // Get the head name if it's a constant
     let head_name = if let ExprKind::Const(name, _) = target_head.kind() {
-        Some(name.to_string())
+        Some(name.clone())
     } else {
         None
     };
@@ -58,7 +58,7 @@ pub fn suggest(
     // Check for specific goal shapes
 
     // 1. Equality goals
-    if head_name.as_deref() == Some("Eq") {
+    if head_name.as_ref() == Some(&clean_kernel::Name::from_string("Eq")) {
         suggestions.push(TacticSuggestion {
             tactic: "rfl".to_string(),
             confidence: 0.9,
@@ -92,7 +92,7 @@ pub fn suggest(
     }
 
     // 2. Conjunction goals (And)
-    if head_name.as_deref() == Some("And") {
+    if head_name.as_ref() == Some(&clean_kernel::Name::from_string("And")) {
         suggestions.push(TacticSuggestion {
             tactic: "constructor".to_string(),
             confidence: 0.95,
@@ -106,7 +106,7 @@ pub fn suggest(
     }
 
     // 3. Disjunction goals (Or)
-    if head_name.as_deref() == Some("Or") {
+    if head_name.as_ref() == Some(&clean_kernel::Name::from_string("Or")) {
         suggestions.push(TacticSuggestion {
             tactic: "left".to_string(),
             confidence: 0.5,
@@ -120,7 +120,7 @@ pub fn suggest(
     }
 
     // 4. Existential goals (Exists)
-    if head_name.as_deref() == Some("Exists") {
+    if head_name.as_ref() == Some(&clean_kernel::Name::from_string("Exists")) {
         suggestions.push(TacticSuggestion {
             tactic: "use _".to_string(),
             confidence: 0.8,
@@ -143,7 +143,7 @@ pub fn suggest(
     }
 
     // 6. False goal
-    if head_name.as_deref() == Some("False") {
+    if head_name.as_ref() == Some(&clean_kernel::Name::from_string("False")) {
         suggestions.push(TacticSuggestion {
             tactic: "contradiction".to_string(),
             confidence: 0.8,
@@ -157,7 +157,7 @@ pub fn suggest(
     }
 
     // 7. Negation goals (Not)
-    if head_name.as_deref() == Some("Not") {
+    if head_name.as_ref() == Some(&clean_kernel::Name::from_string("Not")) {
         suggestions.push(TacticSuggestion {
             tactic: "intro h".to_string(),
             confidence: 0.9,
@@ -286,11 +286,27 @@ pub fn apply_search_and_apply(state: &mut ProofState) -> TacticResult {
 /// support for the bracketed exclude syntax, which is out of scope here.
 pub fn rewrite_search_and_apply(state: &mut ProofState) -> TacticResult {
     // Collect a few candidates so we can skip suggestion-only `Iff` hits and
-    // apply the first genuinely `Eq`-rewritable one (its `rw [...]` suggestion).
+    // apply the first genuinely `Eq`-rewritable one. Reclassify its actual
+    // proof type; a rendered UI suggestion is not a semantic discriminator.
     let results = rewrite_search(state, 8)?;
 
-    match results.iter().find(|r| r.suggestion.starts_with("rw [")) {
-        Some(result) => rewrite(state, &result.name.to_string(), false),
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    match results.iter().find(|result| {
+        state
+            .infer_type(&goal, &result.expr)
+            .ok()
+            .is_some_and(|ty| {
+                matches!(
+                    super::simple::classify_rewrite_head(&ty),
+                    Some(super::simple::RewriteHead::Eq)
+                )
+            })
+    }) {
+        Some(result) => rewrite(
+            state,
+            &clean_parser::SurfaceName::from_name(result.name.clone()),
+            false,
+        ),
         None => Err(TacticError::SearchExhausted {
             tactic: "rw?".into(),
             detail: "no applicable rewrite found".into(),
@@ -311,45 +327,43 @@ pub fn hint(state: &ProofState) -> Result<Vec<String>, TacticError> {
     let target_head = target.get_app_fn();
 
     if let ExprKind::Const(name, _) = target_head.kind() {
-        let name_str = name.to_string();
-
-        match name_str.as_str() {
-            "Eq" => {
+        match super::atomic_name(name) {
+            Some("Eq") => {
                 hints.push(
                     "This is an equality goal. Try: rfl, simp, cert_simp, ring, cert_mathverse, mathverse, or rewrite"
                         .to_string(),
                 );
             }
-            "And" => {
+            Some("And") => {
                 hints.push(
                     "This is a conjunction. Use `constructor` or `split` to prove each part"
                         .to_string(),
                 );
             }
-            "Or" => {
+            Some("Or") => {
                 hints.push(
                     "This is a disjunction. Use `left` or `right` to choose which side to prove"
                         .to_string(),
                 );
             }
-            "Exists" => {
+            Some("Exists") => {
                 hints.push(
                     "This is an existential. Use `use <witness>` to provide a witness".to_string(),
                 );
             }
-            "Not" | "False" => {
+            Some("Not" | "False") => {
                 hints.push("This is a negation/falsity goal. Try `intro` to assume the hypothesis, then derive a contradiction".to_string());
             }
-            "True" => {
+            Some("True") => {
                 hints.push("This is trivially true. Use `trivial` or `constructor`".to_string());
             }
-            "Iff" => {
+            Some("Iff") => {
                 hints
                     .push("This is an iff. Use `constructor` to prove both directions".to_string());
             }
             _ => {
                 hints.push(format!(
-                    "Goal head is `{name_str}`. Check if there's a relevant lemma or constructor"
+                    "Goal head is `{name}`. Check if there's a relevant lemma or constructor"
                 ));
             }
         }

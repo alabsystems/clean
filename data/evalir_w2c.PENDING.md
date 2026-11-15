@@ -34,7 +34,9 @@ agreement row — is UNKNOWN until a big machine runs it.** Per
 * `crates/clean-verify/tests/fixtures/synth/synth_callindirect.trust-ir.txt`
   + `synth_callindirect_c11.trust-ir.txt` + `synth_callindirect_id.trust-ir.txt`
   + `synth_globaladdr.trust-ir.txt` — the authored E2 twins, each
-  self-declaring `SYNTHETIC MODULE` in `; #synthetic:` directive lines
+  self-declaring `SYNTHETIC MODULE` in top-level `; synthetic:` comment
+  lines above the `fn` header (were `; #synthetic:` directives until
+  trust-ir's strict parser refused them; evalir_w2a.PENDING.md 6(a))
   (the `crystal_a1_lineage` freshness-closure invariant; its spec-free test
   re-run here: green, 17 passed).
 * `crates/clean-verify/tests/crystal_a3_semdiff/w2c_chains.rs` — **2 chains

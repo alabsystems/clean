@@ -264,14 +264,16 @@ fn test_error_proj_struct_name_mismatch() {
     );
 }
 
-/// Test that projection on unknown inductive type triggers UnknownConst error.
+/// Test that projection on unknown inductive type triggers UnknownInductive error.
 ///
-/// After #2208 changed `is_prop` to return `Result<bool, TypeError>` (propagating
-/// errors via `?`), the `is_prop` call in `infer_proj_type_from_impl` fires before
-/// the `get_inductive` lookup. Since the const doesn't exist in the environment at
-/// all, `infer_type(Const("NonExistent.Struct"))` fails with `UnknownConst` inside
-/// `is_prop`, and that error propagates out before the projection-specific
-/// `UnknownInductive` check is reached.
+/// `infer_proj_type_from_impl` looks the structure up before it asks `is_prop`,
+/// in Lean's `infer_proj` order (`is_prop(type)` only after the argument-count
+/// check), so a name the environment does not hold fails the lookup with
+/// `UnknownInductive`. Until the order moved (2026-10-19), `is_prop` ran first and
+/// its `infer_type(Const("NonExistent.Struct"))` failed with `UnknownConst`. Lean
+/// itself reports "unknown constant" here, from `env().get`; Clean's
+/// `UnknownInductive` covers a missing name and a non-inductive one alike. Both are
+/// errors, so no projection is accepted either way.
 #[test]
 fn test_error_unknown_inductive() {
     let env = Environment::new();
@@ -291,11 +293,11 @@ fn test_error_unknown_inductive() {
     let proj = Expr::proj(unknown_ind.clone(), 0, fvar);
     let result = tc.infer_type(&proj);
 
-    // Since #2208, is_prop propagates errors: infer_type on the unknown const
-    // fails with UnknownConst before get_inductive can produce UnknownInductive.
+    // The structure lookup comes before `is_prop` (Lean's order), so the missing
+    // name is reported by the lookup.
     assert!(
-        matches!(result, Err(TypeError::UnknownConst(ref name)) if *name == unknown_ind),
-        "Expected UnknownConst for {unknown_ind}, got {result:?}"
+        matches!(result, Err(TypeError::UnknownInductive(ref name)) if *name == unknown_ind),
+        "Expected UnknownInductive for {unknown_ind}, got {result:?}"
     );
 }
 
@@ -702,6 +704,71 @@ fn test_location_type_mismatch_via_check_type() {
         // Location field should exist (may be None at top level)
         let _ = location;
     }
+}
+
+/// An ill-typed application ARGUMENT is located at the argument, with the
+/// same trail from both `infer_type` bodies.
+///
+/// Goal: `∀ x : Prop, K BAD x` with `K : Prop → Prop → Prop` and `BAD := Prop`
+/// (whose type is `Type`, not `Prop`). The mismatch is in `K BAD`, the
+/// function of the outer application, at its argument: `[PiBody, AppFn,
+/// AppArg]`. The debug body (`tc/cert/infer_core.rs`) always pushed `AppArg`
+/// before the snapshot; the release body (`infer_type_fast_inner`) stopped at
+/// `[PiBody, AppFn]`, so the location named the application rather than the
+/// ill-typed subterm and a downstream consumer had to normalize the trail per
+/// build profile. This test has no `debug_assertions` gate: it runs against
+/// whichever body the profile compiles.
+#[test]
+fn test_location_app_arg_mismatch_points_at_argument() {
+    use crate::env::Declaration;
+    use crate::tc::expr_location::ExprPathStep;
+
+    let mut env = Environment::new();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("K"),
+        level_params: vec![],
+        type_: Expr::pi(
+            BinderInfo::Default,
+            Expr::prop(),
+            Expr::pi(BinderInfo::Default, Expr::prop(), Expr::prop()),
+        ),
+    })
+    .unwrap();
+
+    let k = Expr::const_(Name::from_string("K"), vec![]);
+    let bad = Expr::prop();
+    let goal = Expr::pi(
+        BinderInfo::Default,
+        Expr::prop(),
+        Expr::app(Expr::app(k, bad), Expr::bvar(0)),
+    );
+    let expected = vec![
+        ExprPathStep::PiBody,
+        ExprPathStep::AppFn,
+        ExprPathStep::AppArg,
+    ];
+
+    let steps_of = |result: Result<(), TypeError>, entry: &str| {
+        let err = result.expect_err(entry);
+        let TypeError::TypeMismatch { location, .. } = err else {
+            panic!("{entry}: expected TypeMismatch, got {err:?}");
+        };
+        location
+            .unwrap_or_else(|| panic!("{entry}: TypeMismatch carries no location"))
+            .steps
+    };
+
+    let tc = TypeChecker::new(&env);
+    assert_eq!(
+        steps_of(tc.infer_sort(&goal).map(drop), "infer_sort"),
+        expected
+    );
+
+    let tc = TypeChecker::new(&env);
+    assert_eq!(
+        steps_of(tc.infer_type_full(&goal).map(drop), "infer_type_full"),
+        expected
+    );
 }
 
 /// Test that set_expr_loc_decl_name includes the declaration name in errors.

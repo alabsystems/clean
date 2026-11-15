@@ -5,8 +5,8 @@
 use super::*;
 use clean_kernel::Name;
 
-fn kernel_evidence(trusted_ay_subterms: usize) -> KernelProofEvidence {
-    KernelProofEvidence {
+fn bridge_evidence(trusted_ay_subterms: usize) -> SmtBridgeEvidence {
+    SmtBridgeEvidence {
         proof: Expr::const_(Name::from_string("kernelProof"), vec![]),
         trusted_ay_subterms,
     }
@@ -204,9 +204,9 @@ fn test_verification_summary() {
 
     summary.add(
         "kernel".to_string(),
-        ProofStatus::KernelVerified(kernel_evidence(0)),
+        ProofStatus::SmtBridgeChecked(bridge_evidence(0)),
     );
-    summary.add("structural".to_string(), ProofStatus::StructuralProved);
+    summary.add("structural".to_string(), ProofStatus::StructuralMatched);
     summary.add(
         "unverified".to_string(),
         ProofStatus::Unverified("reconstruction missing".to_string()),
@@ -219,8 +219,8 @@ fn test_verification_summary() {
 
     assert_eq!(summary.total, 5);
     assert_eq!(summary.proved, 2);
-    assert_eq!(summary.kernel_verified, 1);
-    assert_eq!(summary.structural_proved, 1);
+    assert_eq!(summary.smt_bridge_checked, 1);
+    assert_eq!(summary.structural_matched, 1);
     assert_eq!(summary.unverified, 1);
     assert_eq!(summary.failed, 1);
     assert_eq!(summary.unknown, 1);
@@ -231,25 +231,36 @@ fn test_verification_summary() {
 
 #[test]
 fn test_proof_status_helper_methods_distinguish_strict_success() {
-    let fully_verified = ProofStatus::KernelVerified(kernel_evidence(0));
-    let trusted_kernel = ProofStatus::KernelVerified(kernel_evidence(2));
-    let structural = ProofStatus::StructuralProved;
+    let fully_verified = ProofStatus::SmtBridgeChecked(bridge_evidence(0));
+    let trusted_bridge = ProofStatus::SmtBridgeChecked(bridge_evidence(2));
+    let structural = ProofStatus::StructuralMatched;
     let unverified = ProofStatus::Unverified("reconstruction missing".to_string());
 
+    assert_eq!(fully_verified.display_marker(), "B");
+    assert_eq!(fully_verified.display_text(), "SMT bridge checked");
+    assert_eq!(trusted_bridge.display_marker(), "B!");
+    assert!(trusted_bridge
+        .display_text()
+        .contains("2 embedded trustedAy subterms"));
     assert!(fully_verified.is_established());
-    assert!(fully_verified.is_kernel_verified());
+    assert!(fully_verified.is_smt_bridge_checked());
     assert!(fully_verified.is_fully_verified());
 
-    assert!(trusted_kernel.is_established());
-    assert!(trusted_kernel.is_kernel_verified());
-    assert!(!trusted_kernel.is_fully_verified());
+    assert!(trusted_bridge.is_established());
+    assert!(trusted_bridge.is_smt_bridge_checked());
+    assert!(!trusted_bridge.is_fully_verified());
 
+    assert_eq!(structural.display_marker(), "S");
+    assert_eq!(
+        structural.display_text(),
+        "structural match; no kernel check"
+    );
     assert!(structural.is_established());
-    assert!(!structural.is_kernel_verified());
+    assert!(!structural.is_smt_bridge_checked());
     assert!(!structural.is_fully_verified());
 
     assert!(!unverified.is_established());
-    assert!(!unverified.is_kernel_verified());
+    assert!(!unverified.is_smt_bridge_checked());
     assert!(!unverified.is_fully_verified());
 }
 
@@ -291,7 +302,7 @@ fn test_unverified_fallback_yields_structural_success_when_independent_proof_exi
         ProofStatus::Unverified("reconstruction missing".to_string()),
     );
 
-    assert_eq!(status, ProofStatus::StructuralProved);
+    assert_eq!(status, ProofStatus::StructuralMatched);
 }
 
 #[test]

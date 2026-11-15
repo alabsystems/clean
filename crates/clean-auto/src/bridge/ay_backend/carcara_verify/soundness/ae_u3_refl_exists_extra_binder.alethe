@@ -1,0 +1,3 @@
+(assume nc (not (= (exists ((x Bool) (y Bool)) (and x y)) (exists ((x Bool)) (and x y)))))
+(step s (cl (= (exists ((x Bool) (y Bool)) (and x y)) (exists ((x Bool)) (and x y)))) :rule refl)
+(step done (cl) :rule resolution :premises (nc s))

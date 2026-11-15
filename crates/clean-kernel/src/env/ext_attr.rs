@@ -56,16 +56,15 @@ pub struct AttrExtEntry {
 
 impl AttrExtEntry {
     fn encode_payload(&self) -> Vec<u8> {
-        let attr_name = self.attr_name.to_string();
-        let priority = self.priority.to_string();
-        let mut payload = Vec::with_capacity(attr_name.len() + 1 + priority.len());
-        payload.extend_from_slice(attr_name.as_bytes());
-        payload.push(b':');
-        payload.extend_from_slice(priority.as_bytes());
-        payload
+        super::ext_name_payload::encode(&self.attr_name, self.priority)
     }
 
     fn decode_payload(bytes: &[u8]) -> Option<(Name, u32)> {
+        if super::ext_name_payload::is_versioned(bytes) {
+            return super::ext_name_payload::decode(bytes);
+        }
+        // Explicit legacy compatibility: display-string payloads do not carry
+        // exact typed identity. Never used for a malformed versioned payload.
         let payload = std::str::from_utf8(bytes).ok()?;
         let (attr_name, priority) = payload.rsplit_once(':')?;
         let priority = priority.parse::<u32>().ok()?;

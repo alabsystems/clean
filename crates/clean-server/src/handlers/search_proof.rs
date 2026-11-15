@@ -12,15 +12,21 @@
 //! - `decompose_then_search` — wrap goal as sorry sketch, run fillSorries +
 //!   composeProof loop
 //! - `auto_then_sorry` — try `auto_only` first, fall back to sorry filling
+//!
+//! Every strategy's work runs on the server's work pool under the request's
+//! deadline (`handlers/work.rs`; `fillSorries` does its own).
 
+use super::core::{run_with_env, WorkEnv};
 use super::prove_result_from_smt_verification;
 use super::state::ServerState;
 use super::types::ProveStatus;
 use super::verify::TrustSummary;
+use super::work::WorkError;
 use crate::proof_state::MathverseCandidate;
 use crate::rpc::{RequestId, Response, RpcError};
 use clean_auto::bridge::SmtBridge;
 use clean_elab::elaborate;
+use clean_kernel::Environment;
 use clean_parser::parse_expr_with_tactics_exact;
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -122,7 +128,7 @@ pub struct SearchProofResult {
 }
 
 /// Handle the `searchProof` JSON-RPC method.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_search_proof(
     state: &ServerState,
     id: RequestId,
@@ -170,7 +176,7 @@ async fn search_proof_impl(
     timeout: Duration,
 ) -> Result<SearchProofResult, RpcError> {
     match params.strategy {
-        SearchStrategy::AutoOnly => search_auto_only(state, params, start).await,
+        SearchStrategy::AutoOnly => search_auto_only(state, params, start, timeout).await,
         SearchStrategy::DecomposeThenSearch => {
             search_decompose(state, params, start, timeout).await
         }
@@ -180,35 +186,54 @@ async fn search_proof_impl(
     }
 }
 
-/// `auto_only` strategy: run SMT bridge automation cascade.
+/// `auto_only` strategy: run SMT bridge automation cascade, on the work pool
+/// under the request's deadline.
 async fn search_auto_only(
     state: &ServerState,
     params: &SearchProofParams,
-    _start: Instant,
+    start: Instant,
+    timeout: Duration,
+) -> Result<SearchProofResult, RpcError> {
+    let theorem = params.theorem.clone();
+    let hypotheses = params.hypotheses.clone();
+    match run_with_env(state, start.checked_add(timeout), move |held| {
+        search_auto_only_on_pool(held, &theorem, &hypotheses)
+    })
+    .await
+    {
+        Ok(result) => result,
+        Err(WorkError::Interrupted) => Err(RpcError::timeout(timeout.as_millis() as u64)),
+        Err(WorkError::Unavailable(detail)) => Err(RpcError::internal_error(detail)),
+    }
+}
+
+fn search_auto_only_on_pool(
+    held: &WorkEnv,
+    theorem: &str,
+    hypotheses: &[String],
 ) -> Result<SearchProofResult, RpcError> {
     let strategy_start = Instant::now();
 
     // Parse the goal
-    let goal_surface = parse_expr_with_tactics_exact(&params.theorem, &state.tactic_patterns)
+    let goal_surface = parse_expr_with_tactics_exact(theorem, &held.patterns)
         .map_err(|e| RpcError::lean_parse_error(format!("Failed to parse theorem: {e}")))?;
 
-    let env = state.env.read().await;
+    let env: &Environment = &held.env;
 
     // Elaborate
-    let goal_expr = elaborate(&env, &goal_surface)
+    let goal_expr = elaborate(env, &goal_surface)
         .map_err(|e| RpcError::elaboration_error(format!("Failed to elaborate theorem: {e}")))?;
 
     // Create SMT bridge
-    let mut bridge = SmtBridge::new(&env);
+    let mut bridge = SmtBridge::new(env);
     let mut dropped_hypotheses = 0u32;
 
-    for (i, hyp_str) in params.hypotheses.iter().enumerate() {
-        let hyp_surface =
-            parse_expr_with_tactics_exact(hyp_str, &state.tactic_patterns).map_err(|e| {
-                RpcError::lean_parse_error(format!("Failed to parse hypothesis {i}: {e}"))
-            })?;
+    for (i, hyp_str) in hypotheses.iter().enumerate() {
+        let hyp_surface = parse_expr_with_tactics_exact(hyp_str, &held.patterns).map_err(|e| {
+            RpcError::lean_parse_error(format!("Failed to parse hypothesis {i}: {e}"))
+        })?;
 
-        let hyp_expr = elaborate(&env, &hyp_surface).map_err(|e| {
+        let hyp_expr = elaborate(env, &hyp_surface).map_err(|e| {
             RpcError::elaboration_error(format!("Failed to elaborate hypothesis {i}: {e}"))
         })?;
 
@@ -219,7 +244,7 @@ async fn search_auto_only(
     if dropped_hypotheses > 0 {
         tracing::warn!(
             dropped = dropped_hypotheses,
-            total = params.hypotheses.len(),
+            total = hypotheses.len(),
             "hypothesis(es) dropped in searchProof auto_only"
         );
     }
@@ -228,7 +253,7 @@ async fn search_auto_only(
 
     match bridge.prove(&goal_expr) {
         Ok(result) => {
-            let prove_result = prove_result_from_smt_verification(&env, &goal_expr, result);
+            let prove_result = prove_result_from_smt_verification(env, &goal_expr, result);
             Ok(SearchProofResult {
                 found: prove_result.found,
                 status: prove_result.status,
@@ -385,7 +410,7 @@ async fn search_auto_then_sorry(
 ) -> Result<SearchProofResult, RpcError> {
     // Phase 1: auto_only
     let auto_start = Instant::now();
-    let auto_result = search_auto_only(state, params, start).await;
+    let auto_result = search_auto_only(state, params, start, timeout).await;
     let auto_ns = auto_start.elapsed().as_nanos() as u64;
 
     match &auto_result {

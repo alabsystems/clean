@@ -10,7 +10,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
-  "functy": 370,
+  "functy": 352,
   "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The producer A/B record has this index at 540/540/368 over its three dumps and reader A's 2026-08-21 laneREG dump says 367 -- the recorded whole-crate drift class. The pin compares reader B's header against the FIXTURE-ERA 370; reader A's value is RECORDED in ir_gc.mint.json, NEVER COMPARED, like observed_ty.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",

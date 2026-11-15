@@ -21,13 +21,14 @@ pub(crate) use refine::count_placeholders;
 pub(crate) use refine::refine_elaborated;
 pub use refine::{refine, refine_placeholder};
 pub(crate) use refine_bridge::{
-    refine_elaborated_from_pending, refine_elaborated_from_pending_with_tags,
+    import_open_term, refine_elaborated_from_pending, refine_eliminator_from_pending_with_tags,
 };
 
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
 use clean_kernel::sorry::SorryKind;
 use clean_kernel::{BinderInfo, Expr, ExprKind, Level};
+use clean_parser::SurfaceName;
 
 use super::combinator::{trivial, try_tactic_preserving_state};
 use super::connective::contradiction;
@@ -135,7 +136,7 @@ fn discharge_trivial_side_goal(state: &mut ProofState) -> bool {
     //    discharged, not split into fresh subgoals. Without this guard,
     //    `constructor` on `⊢ A ∧ B` would "succeed" while leaving `A`, `B` open.
     let goals_before = state.goals.len();
-    if try_tactic_preserving_state(state, |s| {
+    try_tactic_preserving_state(state, |s| {
         constructor(s)?;
         if s.goals.len() < goals_before {
             Ok(())
@@ -144,11 +145,7 @@ fn discharge_trivial_side_goal(state: &mut ProofState) -> bool {
                 combinator: "use:discharge:constructor".into(),
             })
         }
-    }) {
-        return true;
-    }
-
-    false
+    })
 }
 
 /// Single witness version of use
@@ -276,6 +273,10 @@ pub fn dec_trivial(state: &mut ProofState) -> TacticResult {
 /// - Respects `DENY_SORRY=1` environment variable (panics if set)
 /// - Records caller location when location tracking is enabled
 ///
+/// Low-level IR callers must opt into the admission stub theory in their
+/// environment (`Environment::init_admission_stub_theory`). Source frontends
+/// provide that vocabulary in their isolated elaboration advice context.
+///
 /// # Example
 /// ```text
 /// theorem foo : P := by
@@ -360,7 +361,7 @@ pub fn show(state: &mut ProofState, ty: Expr) -> TacticResult {
 /// REQUIRES: `new_type` is definitionally equal to the hypothesis's existing type
 /// ENSURES: On Ok, only that hypothesis type is replaced with `new_type`
 /// ENSURES: On Ok, TypeChecker cache is invalidated
-pub fn change_at(state: &mut ProofState, hyp_name: &str, new_type: Expr) -> TacticResult {
+pub fn change_at(state: &mut ProofState, hyp_name: &SurfaceName, new_type: Expr) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Resolve the hypothesis name first so the shared proof-carry local
@@ -368,7 +369,8 @@ pub fn change_at(state: &mut ProofState, hyp_name: &str, new_type: Expr) -> Tact
     let hyp_fvar = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .map(|decl| decl.fvar)
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
@@ -483,7 +485,7 @@ pub fn norm_beta(state: &mut ProofState) -> TacticResult {
 /// ENSURES: On Ok, the original goal is replaced by two goals
 /// ENSURES: On Ok, the first new goal proves `prop` in the original context
 /// ENSURES: On Ok, the second new goal preserves the original target with `name : prop` appended
-pub fn assert_(state: &mut ProofState, name: &str, prop: Expr) -> TacticResult {
+pub fn assert_(state: &mut ProofState, name: &SurfaceName, prop: Expr) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Create metavariable for the proof of prop
@@ -493,8 +495,9 @@ pub fn assert_(state: &mut ProofState, name: &str, prop: Expr) -> TacticResult {
     let hyp_fvar = state.fresh_fvar();
     let mut new_local_ctx = goal.local_ctx.clone();
     new_local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: name.to_string(),
+        name: name.clone(),
         ty: prop.clone(),
         value: None,
     });
@@ -505,7 +508,8 @@ pub fn assert_(state: &mut ProofState, name: &str, prop: Expr) -> TacticResult {
         meta_id: cont_meta,
         target: goal.target.clone(),
         local_ctx: new_local_ctx,
-        tag: None,
+        tag: goal.tag.clone(),
+        case_binders: goal.case_binders.clone(),
     };
 
     // Create the proof goal for the assertion
@@ -514,6 +518,7 @@ pub fn assert_(state: &mut ProofState, name: &str, prop: Expr) -> TacticResult {
         target: prop.clone(),
         local_ctx: goal.local_ctx.clone(),
         tag: None,
+        case_binders: Vec::new(),
     };
 
     // Build the proof term: (λ (h : prop), ?cont) ?proof
@@ -543,7 +548,7 @@ pub fn assert_(state: &mut ProofState, name: &str, prop: Expr) -> TacticResult {
 ///
 /// REQUIRES: same as `assert_`
 /// ENSURES: On Ok, produces the same two goals as `assert_` but swaps their order
-pub fn assert_after(state: &mut ProofState, name: &str, prop: Expr) -> TacticResult {
+pub fn assert_after(state: &mut ProofState, name: &SurfaceName, prop: Expr) -> TacticResult {
     assert_(state, name, prop)?;
 
     // Swap the two goals so proof is second

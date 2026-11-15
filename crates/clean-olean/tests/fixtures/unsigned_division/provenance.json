@@ -1,0 +1,15 @@
+{
+  "description": "Complete retained raw_megabytes callee capture, not numeric caller or source-publication authority. The native JSON is serialized unchanged through the current shared codec for a distinct derived binary artifact.",
+  "source_evidence": "$HOME/release-evidence/trust-forward-recovery-20261029/NOV3-UNSIGNED-DIVISION-CORRESPONDENCE",
+  "files": {
+    "raw_megabytes.json": "d9676f39f185fda6cd8e37ca68cdbe4293b23ccf7e858ab7fbe070b74ce90f61",
+    "raw_megabytes-body.json": "b722411f7dc86b6e5e00e0ba755aeb306e0948c28d763bc7a2a865961f452fd1",
+    "raw_megabytes-v52.tirb": "26bc4892cd711af617ed34051278a367b33e89d111299cf64bb51078df40fc96"
+  },
+  "derived_wire": {
+    "file": "raw_megabytes-v52.tirb",
+    "version": 52,
+    "source": "Nov3 shared-codec serialization of the unchanged raw_megabytes.json module",
+    "note": "Derived wire artifact, distinct from original compiler JSON; reuse requires current codec byte equality."
+  }
+}

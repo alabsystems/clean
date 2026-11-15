@@ -1,0 +1,4 @@
+(assume h0 (>= (str.len s) n))
+(assume nc (not (and (= s (str.++ (str.substr s 0 n) (str.substr s n (- (str.len s) n)))) (= (str.len (str.substr s 0 n)) n))))
+(step s (cl (and (= s (str.++ (str.substr s 0 n) (str.substr s n (- (str.len s) n)))) (= (str.len (str.substr s 0 n)) n))) :rule string_decompose :premises (h0) :args (false))
+(step done (cl) :rule resolution :premises (nc s))

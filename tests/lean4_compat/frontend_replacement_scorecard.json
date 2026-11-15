@@ -1311,7 +1311,7 @@
       "observed_excluded_without_lean4_diagnostic_artifact_target": 20,
       "observed_excluded_without_clean_diagnostic_artifact_target": 20,
       "observed_profiled_expected_diagnostic_files_requiring_artifact_cross_check": 7,
-      "observed_unique_diagnostic_categories_requiring_artifact_cross_check": 5,
+      "observed_unique_diagnostic_categories_requiring_artifact_cross_check": 4,
       "observed_unique_first_error_signatures_requiring_artifact_cross_check": 7,
       "observed_diagnostic_artifact_cross_checked_files": 5,
       "observed_valid_lean4_diagnostic_artifacts": 19,

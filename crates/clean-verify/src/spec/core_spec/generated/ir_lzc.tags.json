@@ -1,0 +1,135 @@
+{
+ "chain": "ir_lzc",
+ "body": "level::Level::is_zero",
+ "what": "The CRATE-LEVEL interning ids this chain's aggregate types, FUNCTIONS and MODULE-TABLE GLOBALS carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses -- and WHICH of the functions the module DEFINES.",
+ "why": "Read ir_lz.tags.json's `why` first; this table is that chain's WIDER sibling and shares its root body. `ir_lz` projects `level::Level::is_zero` alone, so its module CALLS `<LevelArc as Deref>::deref` and does not define it, and `ir_call_exec` goes `stuck no_func` on the `Max`/`IMax` arms. `ir_lzc` projects the deref's body BESIDE it from the same dump (Phase A of retiring the authored `ir_lzb_deref` model), so the module holds TWO functions and the second one calls TWO DECLARATIONS -- `std::option::Option::<T>::as_deref` and `::expect`, which the crate artifact carries as headers with no body -- and names ONE module-table global, the 34-byte `expect` message. Nothing in the emitted text says which whole-crate index is which function, which the module defines, or what the global's type and linkage are. Reader A sees all of it in the binary; reader B cannot. This table is how reader B is told.",
+ "how_it_is_used": "`ir_mint::project` splits the emitted text into exactly the bodies `extra_bodies` declares (plus the root), reads the module-table PREAMBLE (the `type ty.N = ..` and `global ..` rows) against the `globals` lane, checks each body against its own `interface`, and splices the results into one core module. `ir_mint::mint` reads the aggregate lanes for the alias line, `extra_bodies` for the deref's Clean name prefix, `funcs` for the callee namespace, and `globals` to refuse a `(global k ..)` or `(globaladdr k)` no row pins -- exactly as it refuses an unpinned callee.",
+ "producer_pin": "ONE reader-A dump so far, stated honestly: target/crystal-lane/dump-control (the `ir_lz.b039` laneROT binary, sha256 ce4ac168087ab6cbd61098dcadd9f67395d1eee828d43637cc05254c9cfc40bd), which reproduces ir_lz.core.txt's function 0 BYTE-IDENTICAL, so function 0 of this chain and `ir_lz_func` are the same projection under a different Clean name. The `funcs` ids below are that dump's (3905/3894/7211/6516); a second independent dump is a later measurement, not a precondition. The NAMES are the stable half.",
+ "function_0_note": "Function 0 is RE-MINTED under `ir_lzc_*` names and tied to the frozen `ir_lz_func` by a kernel-checked `Eq.refl` (`ir_lzc_func0_is_the_lz_mint`), so ir_lz and its gates stay byte-frozen. The enum alias is therefore a NEW name, `ir_lzc_tlevel`: reusing `ir_lz_tlevel` would double-register it.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print, PER BODY. The root `interface` object below is COPIED VERBATIM from ir_lz.tags.json:9-34 (same body, same dump, same header); each `extra_bodies` row carries its own.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Both are printed by `Display for Function` only when they are not the default. Read the notes in ir_h2.tags.json.",
+  "functy": 0,
+  "functy_note": "Pinned VERBATIM and re-pinned under review: a body has one header signature, so there is nothing to intern it against, and the emitted text carries no signature table. Read the notes in ir_h2.tags.json.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&level::Level",
+    "note": "The receiver, loaded as `enum.2` at the entry and gep'd into at offsets 8 and 16."
+   }
+  ],
+  "block_params": [
+   { "block": 6, "index": 0, "ssa": 1, "ty": "bool", "observed_ty": "bool", "note": "The outer join." },
+   { "block": 9, "index": 0, "ssa": 2, "ty": "bool", "observed_ty": "bool", "note": "The short-circuit join -- the second join block that makes this body the branching one." }
+  ],
+  "aligns": [ "load:None" ],
+  "clauses": [ "loc", "names", "producer" ]
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 3,
+   "alias": "ir_lzc_tlevel",
+   "rust_type": "level::Level",
+   "note": "The SAME crate id ir_lz.tags.json pins (2), under a NEW alias name so the two chains can be registered side by side."
+  }
+ ],
+ "structs": [],
+ "funcs": [
+  {
+   "canonical": 0,
+   "crate_id": 1961,
+   "name": "level::Level::is_zero",
+   "role": "SELF -- the root body, `(func 0 ...)` of the module. Called RECURSIVELY three times; without this row a text reader cannot tell the recursive call from the call to the deref.",
+   "observed_crate_id_by_producer": { "dump-control-ce4ac168": 3905 }
+  },
+  {
+   "canonical": 1,
+   "crate_id": 1947,
+   "name": "<level::LevelArc as std::ops::Deref>::deref",
+   "role": "The one non-self callee of the root -- and, in THIS chain, ALSO a body of the module (`(func 1 ...)`, extra_bodies prefix `ir_lad`). In ir_lz it is called and not defined; here it is defined and the call RESOLVES, which moves the `stuck no_func` one call deeper, into this body's own `call 2`.",
+   "observed_crate_id_by_producer": { "dump-control-ce4ac168": 3894 }
+  },
+  {
+   "canonical": 2,
+   "crate_id": 4924,
+   "name": "std::option::Option::<T>::as_deref",
+   "defined": false,
+   "observed_functy": 986,
+   "role": "A DECLARATION, not a body: dump-control:120627 is `rustcc fn @std::option::Option::<T>::as_deref(functy.900) {}` -- a header with no instruction, the crate artifact's GENERIC decl path. The crate artifact holds a SECOND declaration under the SAME name at dump-control:118003, functy.947; the two are told apart by crate id (7211) and functy (900), never by name alone. The deref's first instruction is `call 2` to this row, and it is where `ir_call_exec` goes `stuck no_func` in Phase A.",
+   "sidecar_join": {
+    "caller": "<level::LevelArc as std::ops::Deref>::deref",
+    "callee_def_path": "std::option::Option::<T>::as_deref"
+   },
+   "phase_b_note": "The Phase-B extra_bodies row for this canonical will carry `body` = this `name` AND an `instance` key = the sidecar manifest's `resolved` exact instance path (`core::option::Option::<&clean_kernel::level::Level>::as_deref::<__trust_args@..>`). The sidecar body is MATCHED against crate_id AND observed_functy (7211/900); `sidecar_join.{caller, callee_def_path}` is used ONLY to locate the manifest's root row, because that key cannot distinguish 7211 (functy.900) from the functy.947 declaration. Documentary keys (`defined`, `observed_functy`, `sidecar_join`, `phase_b_note`) are ignored by `tags::parse` today, like `observed_ty`."
+  },
+  {
+   "canonical": 3,
+   "crate_id": 4925,
+   "name": "std::option::Option::<T>::expect",
+   "defined": false,
+   "observed_functy": 955,
+   "role": "A DECLARATION, not a body: dump-control:117847 is `rustcc fn @std::option::Option::<T>::expect(functy.896) {}`. The deref's `call 3` passes it the `as_deref` result and the fat pointer built from `(globaladdr 0)` and `const u64 34` -- the 34-byte message `live LevelArc must contain a level`. Not reached in Phase A: the frame is already stuck at `call 2`.",
+   "sidecar_join": {
+    "caller": "<level::LevelArc as std::ops::Deref>::deref",
+    "callee_def_path": "std::option::Option::<T>::expect"
+   },
+   "phase_b_note": "As for canonical 2: the Phase-B extra_bodies row carries `body` = this `name` plus an `instance` key = the manifest's `resolved` path, matched on crate_id AND observed_functy (6516/896 at the control dump; 4925/955 since the 2026-10-07 rebaseline); `sidecar_join` only locates the manifest row."
+  }
+ ],
+ "extra_bodies": [
+  {
+   "canonical": 1,
+   "prefix": "ir_lad",
+   "body": "<level::LevelArc as std::ops::Deref>::deref",
+   "role": "THE DEREF, DEFINED IN THIS MODULE -- the body the authored `ir_lzb_deref` model stands in for. Six instructions, one block: `call 2` (as_deref), `globaladdr 0`, `const u64 34`, `ptrfromparts (fatptr (uint 8)) (uint 64) 2 3`, `call 3` (expect), `ret`. Values below read off dump-control:83740-83751.",
+   "interface": {
+    "linkage": "external",
+    "calling_conv": "rustcc",
+    "functy": 22,
+    "functy_note": "Pinned VERBATIM from the dump-control header `rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45)`; re-pinned under review, like every functy.",
+    "producer": "trust",
+    "params": [
+     {
+      "block": 0,
+      "index": 0,
+      "ssa": 0,
+      "ty": "ptr",
+      "observed_ty": "ptr",
+      "rust_type": "&level::LevelArc",
+      "note": "The receiver: `bb0(%0: ptr)`, `; #names: %0=\"self\"`. Passed straight to `as_deref`."
+     }
+    ],
+    "block_params": [],
+    "block_params_note": "EMPTY, and that is a measurement: the deref is one block with no join.",
+    "aligns": [],
+    "aligns_note": "EMPTY, and that is a measurement: this body performs no load and no store -- the `expect` message is reached by `globaladdr`, not read.",
+    "clauses": [
+     "loc",
+     "names",
+     "producer"
+    ]
+   }
+  }
+ ],
+ "globals": [
+  {
+   "canonical": 0,
+   "crate_id": 1135,
+   "name": "__trust_promoted_1135",
+   "ty": "[u8 x 34]",
+   "observed_ty": "[ty.0 x 34]",
+   "linkage": "internal",
+   "role": "The `expect` message, `live LevelArc must contain a level`, promoted by the producer to a module-table global: dump-control:14998 `global internal @__trust_promoted_4557 [ty.0 x 34] = array[ 108, 105, ... ]` with dump-control:5788 `type ty.0 = u8`. The core module carries it as `(global 0 (agg (int 108) ...))` -- `IRGlobal.mk` has no type slot and no linkage slot, so `ty` and `linkage` are pinned HERE and COMPARED by `project`. `ty` is the RESOLVED form (the element resolved through the `type ty.N = ..` table, which reader B reads from the two-line preamble fixture `level_is_zero_deref_globals.trust-ir-rows.txt` and reader A resolves from the binary's type table); `observed_ty` is the raw token, recorded and never compared, because `ty.0` is a whole-crate type-table index. Its canonical id 0 IS its cell address under `id IS address`, so it SHADOWS heap cell 0 -- the reason ir_lzc's witness heaps put the receiver at cell 40."
+  }
+ ],
+ "rebaseline_2026_10_07_note": "RE-PINNED 2026-10-07 by the source-bound fixture rebaseline at clean 047ebd051 (trustc 321aaeda7): every crate id, functy and global name above moved by NUMBERING only (freshness: callee-index, functy-index, global-index, loc-file-index; zero instructions). is_zero 3905->1961, the deref 3894->1947 (functy 45->22), as_deref 7211->4924 (observed_functy 900->986), expect 6516->4925 (896->955), the promoted message global 4557->1135 (same [ty.0 x 34] bytes). ONE SPELLING CHANGE, recorded rather than hidden: the 321aaeda7 producer names the two bodyless callees `!trust_bodyless_instance::std::option::Option::<T>::as_deref::<definition>-<hex(key)>` (and `...::expect::...`) -- the collision-disambiguated declaration name crate_module.rs `declaration_name` emits when a plain def path is shared by several declarations (this artifact carries three `as_deref` instances, the control dump two under one plain name). The rows keep `name` = the RECOVERED def path, which is exactly the `callee_def_path` the sidecar closure record (data/crystal_sidecar_closure_2026-09-10.json) already pairs with that instance spelling; the declaration each row denotes is pinned, as before, by crate_id AND observed_functy. The dump-control prose in the rows below is the field-81-era record and is kept as such."
+}

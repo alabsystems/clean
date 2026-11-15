@@ -688,7 +688,8 @@ class LiveCargoInvocationTests(unittest.TestCase):
         self.assertEqual(
             mock_run.call_args.args[0],
             [
-                "cargo",
+                "targo",
+                "--unverified",
                 "run",
                 "--locked",
                 "--quiet",

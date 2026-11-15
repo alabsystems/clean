@@ -255,7 +255,7 @@ impl<'env> MicroChecker<'env> {
     /// As [`check_def_eq_result`] but requires both normal forms to be closed
     /// values — used for the rfl reduction stage so an unmodelable recursor
     /// FAILS CLOSED as `Unsupported`.
-    pub fn check_value_eq_result(&self, lhs: &MicroExpr, rhs: &MicroExpr) -> MicroResult {
+    pub(crate) fn check_value_eq_result(&self, lhs: &MicroExpr, rhs: &MicroExpr) -> MicroResult {
         self.check_eq_inner(lhs, rhs, true)
     }
 

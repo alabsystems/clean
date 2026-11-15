@@ -47,8 +47,8 @@ fn positivity_at_creates_dependent_obligation_and_kernel_closed_chain() {
         ),
     );
     let mut state = ProofState::new(env.clone(), original_target.clone());
-    intro(&mut state, "x").expect("introduce x");
-    intro(&mut state, "h").expect("introduce x >= 0");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).expect("introduce x");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).expect("introduce x >= 0");
 
     let original_ctx = state
         .current_goal()
@@ -58,10 +58,15 @@ fn positivity_at_creates_dependent_obligation_and_kernel_closed_chain() {
     let x_fvar = original_ctx[0].fvar;
     let h_fvar = original_ctx[1].fvar;
 
-    let mut config = PositivityAtConfig::new().with_name("h_pos");
+    let mut config =
+        PositivityAtConfig::new().with_name(&clean_parser::SurfaceName::generated_path("h_pos"));
     config.try_stronger = false;
-    positivity_at_with_config(&mut state, "h", config)
-        .expect("positivity_at should create a proof-carrying continuation");
+    positivity_at_with_config(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        config,
+    )
+    .expect("positivity_at should create a proof-carrying continuation");
 
     assert_eq!(state.goals().len(), 2);
     let lemma_goal = &state.goals()[0];
@@ -73,7 +78,10 @@ fn positivity_at_creates_dependent_obligation_and_kernel_closed_chain() {
     assert_eq!(lemma_goal.local_ctx.len(), 2);
     assert_eq!(continuation_goal.target, a_ty);
     assert_eq!(continuation_goal.local_ctx.len(), 3);
-    assert_eq!(continuation_goal.local_ctx[2].name, "h_pos");
+    assert_eq!(
+        continuation_goal.local_ctx[2].name,
+        clean_parser::SurfaceName::generated_path("h_pos")
+    );
     let h_pos_fvar = continuation_goal.local_ctx[2].fvar;
     assert_meta_scope(&state, lemma_goal, &[x_fvar, h_fvar]);
     assert_meta_scope(&state, continuation_goal, &[x_fvar, h_fvar, h_pos_fvar]);
@@ -109,8 +117,16 @@ fn nontriviality_creates_dependent_obligation_and_kernel_closed_chain() {
         Expr::pi(BinderInfo::Default, nontrivial_alpha, a_ty.clone()),
     );
     let mut state = ProofState::new(env.clone(), original_target.clone());
-    intro(&mut state, "alpha").expect("introduce alpha");
-    intro(&mut state, "h_alpha").expect("introduce Nontrivial alpha");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("alpha"),
+    )
+    .expect("introduce alpha");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h_alpha"),
+    )
+    .expect("introduce Nontrivial alpha");
 
     let original_ctx = state
         .current_goal()
@@ -128,7 +144,10 @@ fn nontriviality_creates_dependent_obligation_and_kernel_closed_chain() {
     assert_eq!(lemma_goal.local_ctx.len(), 2);
     assert_eq!(continuation_goal.target, a_ty);
     assert_eq!(continuation_goal.local_ctx.len(), 3);
-    assert_eq!(continuation_goal.local_ctx[2].name, "h_nontrivial");
+    assert_eq!(
+        continuation_goal.local_ctx[2].name,
+        clean_parser::SurfaceName::generated_path("h_nontrivial")
+    );
     let introduced_fvar = continuation_goal.local_ctx[2].fvar;
     assert_meta_scope(&state, lemma_goal, &[alpha_fvar, witness_fvar]);
     assert_meta_scope(
@@ -156,7 +175,7 @@ fn lift_unsupported_fails_closed_without_mutating_state() {
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let original_target = Expr::arrow(a_ty.clone(), a_ty);
     let mut state = ProofState::new(env, original_target);
-    intro(&mut state, "x").expect("introduce x");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).expect("introduce x");
 
     let goal_before = state.current_goal().expect("goal remains").clone();
     let next_fvar_before = state.next_fvar;
@@ -165,9 +184,11 @@ fn lift_unsupported_fails_closed_without_mutating_state() {
 
     let err = lift_with_config(
         &mut state,
-        "x",
+        &clean_parser::SurfaceName::generated_path("x"),
         None,
-        LiftConfig::new().with_name("x_lifted").with_proof("hx"),
+        LiftConfig::new()
+            .with_name(&clean_parser::SurfaceName::generated_path("x_lifted"))
+            .with_proof(&clean_parser::SurfaceName::generated_path("hx")),
     )
     .expect_err("unsupported lift must fail closed");
     match err {

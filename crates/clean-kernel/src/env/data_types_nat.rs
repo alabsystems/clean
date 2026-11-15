@@ -292,7 +292,11 @@ impl Environment {
             self.register_bool_surface()?;
         }
 
-        self.init_sorry_ax()?;
+        // A caller of the legacy admission bootstrap has explicitly opted in.
+        // Merely constructing Bool in the default prelude requests no axioms.
+        if self.get_const(&Name::from_string("sorry")).is_some() {
+            self.init_sorry_ax()?;
+        }
         self.bool_init = true;
         Ok(())
     }
@@ -454,8 +458,8 @@ impl Environment {
         // import-only prelude so the genuine olean definitions register through
         // the checked add_decl path; the default lane is byte-identical. The
         // Nat inductive, Nat.pred (defeq to Lean's match-compiled body — passes
-        // the import dedup), and the value-less upgradeable axioms below stay
-        // in both lanes.
+        // the import dedup) stay in both lanes. Bitwise placeholders are also
+        // withheld from the import base so their definitions can be replayed.
         if !self.suppress_lossy_structure_stubs {
             self.add_decl_if_absent(Declaration::Definition {
                 name: Name::from_string("Nat.add"),
@@ -871,28 +875,33 @@ impl Environment {
         // Nat.xor  : Nat → Nat → Nat (bitwise XOR)
         // Nat.shiftRight : Nat → Nat → Nat
         //
-        // These are registered as axioms here (the low-level `init_nat` path)
-        // and their computation is handled by native reducers registered in
-        // `init_arith_native_reducers`. Part of #3396.
+        // The normal low-level `init_nat` path registers these as axioms.
+        // Native-fold authority does not allow those axioms to compute.
+        // The import path leaves the names to genuine module definitions.
         //
         // Track II: the FULL prelude (`init_prelude`) subsequently DISCHARGES
         // `Nat.land`/`Nat.lor`/`Nat.xor` to real reducible Definitions
         // `Nat.bitwise and/or/xor` via `register_nat_bitwise_def` (a total fuel
-        // fold over `Nat.div2`/`Nat.testBit`). Only `Nat.shiftRight` stays an
-        // axiom. A bare `Environment::new()` (not `with_prelude`) still sees the
-        // admitted axiom forms registered below.
+        // fold over `Nat.div2`/`Nat.testBit`) and discharges `Nat.shiftRight`
+        // through `Nat.iterDiv2`. A bare `Environment::new()` followed by
+        // `init_nat` still sees the axiom forms registered below.
         let nat_binop_type = Expr::pi(
             BinderInfo::Default,
             nat_const.clone(),
             Expr::pi(BinderInfo::Default, nat_const.clone(), nat_const.clone()),
         );
 
-        for name in &["Nat.land", "Nat.lor", "Nat.xor", "Nat.shiftRight"] {
-            self.add_decl_if_absent(Declaration::Axiom {
-                name: Name::from_string(name),
-                level_params: vec![],
-                type_: nat_binop_type.clone(),
-            })?;
+        // An import prelude must leave these names to their real definitions.
+        // Keeping a value-free base here makes dependency-closed replay retain
+        // that axiom, so imported proofs requiring computation cannot check.
+        if !self.suppress_lossy_structure_stubs {
+            for name in &["Nat.land", "Nat.lor", "Nat.xor", "Nat.shiftRight"] {
+                self.add_decl_if_absent(Declaration::Axiom {
+                    name: Name::from_string(name),
+                    level_params: vec![],
+                    type_: nat_binop_type.clone(),
+                })?;
+            }
         }
 
         // Nat.shiftLeft : Nat → Nat → Nat (left shift = multiply by 2^n)
@@ -959,11 +968,13 @@ impl Environment {
             nat_const.clone(),
             Expr::pi(BinderInfo::Default, nat_const.clone(), bool_const),
         );
-        self.add_decl_if_absent(Declaration::Axiom {
-            name: Name::from_string("Nat.testBit"),
-            level_params: vec![],
-            type_: nat_testbit_type,
-        })?;
+        if !self.suppress_lossy_structure_stubs {
+            self.add_decl_if_absent(Declaration::Axiom {
+                name: Name::from_string("Nat.testBit"),
+                level_params: vec![],
+                type_: nat_testbit_type,
+            })?;
+        }
 
         self.nat_init = true;
         Ok(())

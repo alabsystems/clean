@@ -122,7 +122,7 @@ impl Specification {
         // delta_step_app_cong: a head-δ step on `f` lifts to a head-δ step on `app f x`
         // (keeping x). Mirror of delta_lift_commutes: invert via delta_reduct_some_inv,
         // reconstruct via opt_bind_some_intro 2× — head-const lookup survives app
-        // (kapp_fn_app), def-value lookup unchanged (same env), reduct slot closed by
+        // (kapp_fn_app), guarded value lookup unchanged (same head levels), reduct slot closed by
         // delta_reduct_app_eq. UNCONDITIONAL (app changes nothing the lookups depend on).
         {
             let ax = "(KExpr.app f x)";
@@ -130,13 +130,22 @@ impl Specification {
             let f2 = format!(
                 "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args {ax}) val))"
             );
-            let f1 =
-                format!("(fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) {f2})");
+            let query_f = "(kdef_value_at env dname (kexpr_const_levels (kapp_fn f)))";
+            let query_ax = format!("(kdef_value_at env dname (kexpr_const_levels (kapp_fn {ax})))");
+            let f1 = format!("(fun (dname : Name) => opt_bind KExpr KExpr {query_ax} {f2})");
             // Level-1 app-side head lookup: const-name survives app (kapp_fn_app).
             let h1a = format!(
                 "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {ax})) (kexpr_const_name (kapp_fn f)) (OptionType.some Name dname) \
                  (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn {ax}) (kapp_fn f) (kapp_fn_app f x)) \
                  h1)"
+            );
+            // kapp_fn_app preserves the entire head, hence its actual universe
+            // arguments and the arity-checked, instantiated value lookup.
+            let h2a = format!(
+                "(Eq.trans (OptionType KExpr) {query_ax} {query_f} (OptionType.some KExpr val) \
+                 (Eq.cong KExpr (OptionType KExpr) \
+                   (fun (H : KExpr) => kdef_value_at env dname (kexpr_const_levels H)) \
+                   (kapp_fn {ax}) (kapp_fn f) (kapp_fn_app f x)) h2)"
             );
             // Level-2: some (apply_spine (kapp_args (app f x)) val) = some (app f0 x).
             // reduct factors (delta_reduct_app_eq) then app-congs the f0-equation (h2r).
@@ -150,12 +159,12 @@ impl Specification {
             );
             let recon = format!(
                 "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {ax})) {f1} dname {af0x} {h1a} \
-                 (opt_bind_some_intro KExpr KExpr (defval_for env dname) {f2} val {af0x} h2 {hf2})"
+                 (opt_bind_some_intro KExpr KExpr {query_ax} {f2} val {af0x} {h2a} {hf2})"
             );
             let kont = format!(
                 "(fun (dname : Name) (val : KExpr) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) {query_f} (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args f) val)) (OptionType.some KExpr f0)) => \
                  {recon})"
             );
@@ -179,8 +188,8 @@ impl Specification {
                 description: concat!(
                     "Forward app-congruence of head-δ: delta_step env f f0 implies delta_step env (app f x) ",
                     "(app f0 x). Mirror of delta_lift_commutes — invert via delta_reduct_some_inv, reconstruct ",
-                    "via opt_bind_some_intro 2× (head-const lookup survives app via kapp_fn_app, def-value lookup ",
-                    "unchanged, reduct slot closed by delta_reduct_app_eq). UNCONDITIONAL. DerivedProved, zero ",
+                    "via opt_bind_some_intro 2× (whole-head equality from kapp_fn_app preserves the name and ",
+                    "universe arguments, hence guarded instantiated lookup; reduct slot closed by delta_reduct_app_eq). UNCONDITIONAL. DerivedProved, zero ",
                     "axiom_deps. Part of #2859 (Increment H++, delta increment Stage 4)."
                 )
                 .to_string(),
@@ -196,6 +205,8 @@ impl Specification {
                     "opt_bind_some_intro".to_string(),
                     "kapp_fn_app".to_string(),
                     "kexpr_const_name".to_string(),
+                    "kexpr_const_levels".to_string(),
+                    "kdef_value_at".to_string(),
                     "option_some_inj".to_string(),
                     "Eq.cong".to_string(),
                     "Eq.trans".to_string(),
@@ -216,9 +227,10 @@ impl Specification {
             let f2f =
                 "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args f) val))"
                     .to_string();
-            let f1f = format!(
-                "(fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) {f2f})"
-            );
+            let query_f = "(kdef_value_at env dname (kexpr_const_levels (kapp_fn f)))";
+            let query_afa =
+                format!("(kdef_value_at env dname (kexpr_const_levels (kapp_fn {afa})))");
+            let f1f = format!("(fun (dname : Name) => opt_bind KExpr KExpr {query_f} {f2f})");
             // head lookup on f from the app-head lookup (kapp_fn_app, symm).
             let h1f = format!(
                 "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname) \
@@ -226,11 +238,18 @@ impl Specification {
                  (Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) \
                  h1)"
             );
+            let h2f = format!(
+                "(Eq.trans (OptionType KExpr) {query_f} {query_afa} (OptionType.some KExpr val) \
+                 (Eq.cong KExpr (OptionType KExpr) \
+                   (fun (H : KExpr) => kdef_value_at env dname (kexpr_const_levels H)) \
+                   (kapp_fn f) (kapp_fn {afa}) \
+                   (Eq.symm KExpr (kapp_fn {afa}) (kapp_fn f) (kapp_fn_app f arg))) h2)"
+            );
             // reduct slot on f is Eq.refl (f0 := apply_spine (kapp_args f) val).
             let hf2f = format!("(Eq.refl (OptionType KExpr) (OptionType.some KExpr {f0v}))");
             let reduct_f = format!(
                 "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn f)) {f1f} dname {f0v} {h1f} \
-                 (opt_bind_some_intro KExpr KExpr (defval_for env dname) {f2f} val {f0v} h2 {hf2f})"
+                 (opt_bind_some_intro KExpr KExpr {query_f} {f2f} val {f0v} {h2f} {hf2f})"
             );
             // b = app f0 arg : b = apply_spine (kapp_args (app f arg)) val = app f0 arg.
             let beq = format!(
@@ -242,7 +261,7 @@ impl Specification {
             let kont = format!(
                 "(fun (dname : Name) (val : KExpr) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn {afa})) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) {query_afa} (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args {afa}) val)) (OptionType.some KExpr b)) => \
                  k {f0v} ({reduct_f}) ({beq}))"
             );
@@ -267,7 +286,8 @@ impl Specification {
                     "From delta_step env (app f arg) b, recover f0 = apply_spine (kapp_args f) val with ",
                     "delta_step env f f0 and b = app f0 arg, delivered to a continuation. Inverts via ",
                     "delta_reduct_some_inv, reconstructs delta_step env f f0 (opt_bind_some_intro 2×, reduct slot ",
-                    "Eq.refl) and the reduct equation (option_some_inj + delta_reduct_app_eq). The (here, app) ",
+                    "Eq.refl) and the reduct equation (option_some_inj + delta_reduct_app_eq). Whole-head ",
+                    "equality transports actual universe arguments through guarded value lookup. The (here, app) ",
                     "overlap discharger for the single-step strong diamond. DerivedProved, zero axiom_deps. Part ",
                     "of #2859 (Increment H++, delta increment Stage 4)."
                 )
@@ -284,6 +304,8 @@ impl Specification {
                     "opt_bind_some_intro".to_string(),
                     "kapp_fn_app".to_string(),
                     "kexpr_const_name".to_string(),
+                    "kexpr_const_levels".to_string(),
+                    "kdef_value_at".to_string(),
                     "option_some_inj".to_string(),
                     "Eq.refl".to_string(),
                     "Eq.cong".to_string(),

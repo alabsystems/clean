@@ -121,7 +121,7 @@ fn test_every_arm_is_an_aggregate_constant() {
     for s in minted_arms() {
         assert!(
             s.contains("IRInst.const_ ir_fs_tmode (IRConst.aggv (IRConst.vcons (IRConst.int_ "),
-            "every arm must be `const enum.13 {{ k }}`, i.e. IRConst.aggv: {s}"
+            "every arm must be `const enum.17 {{ k }}`, i.e. IRConst.aggv: {s}"
         );
         // The scalar the aggregate WRAPS is fine (that is the tag inside
         // the spine, which the hand `ir_cvar` alias used to hide); a BARE

@@ -15,7 +15,7 @@
 //! This is DISTINCT from CompGeom.* which is for synthetic geometry proofs.
 
 use super::decl_builder::EnvDeclBuilder;
-use crate::env::{Declaration, EnvError, Environment};
+use crate::env::{Declaration, EnvError, Environment, KernelClassInfo};
 use crate::expr::{BinderInfo, Expr};
 use crate::level::Level;
 use crate::name::Name;
@@ -143,6 +143,15 @@ impl Environment {
             level_params: vec![u.clone(), v.clone()],
             type_: inner_product_space_type,
         })?;
+        // This existing overlay formalizes a class type. Preserve that marker
+        // for frontend binder checking; this does not supply its missing
+        // Mathlib structure fields/proofs or certify the overlay's axioms.
+        self.register_class(KernelClassInfo {
+            name: Name::from_string("InnerProductSpace"),
+            num_params: 2,
+            out_params: vec![],
+            semi_out_params: vec![],
+        });
 
         // ================================================================
         // inner : {𝕜 E : Type*} -> [InnerProductSpace 𝕜 E] -> E -> E -> 𝕜
@@ -235,6 +244,15 @@ impl Environment {
             level_params: vec![u.clone()],
             type_: normed_add_comm_group_type,
         })?;
+        // This existing overlay formalizes a class type. Preserve that marker
+        // for frontend binder checking; this does not supply its missing
+        // Mathlib structure fields/proofs or certify the overlay's axioms.
+        self.register_class(KernelClassInfo {
+            name: Name::from_string("NormedAddCommGroup"),
+            num_params: 1,
+            out_params: vec![],
+            semi_out_params: vec![],
+        });
 
         // ================================================================
         // norm : {E : Type u} -> [NormedAddCommGroup E] -> E -> ℝ

@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-fun x () Int)
+(define-fun k () Int x)
+(define-fun h ((x Int)) Int k)
+(assert (not (= (h 5) x)))
+(check-sat)

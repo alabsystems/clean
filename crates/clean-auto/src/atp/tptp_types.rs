@@ -26,7 +26,7 @@ pub enum TptpParseError {
 
 /// The role of a formula in a TPTP problem.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TptpRole {
+pub(crate) enum TptpRole {
     Axiom,
     Hypothesis,
     Conjecture,
@@ -37,7 +37,7 @@ pub enum TptpRole {
 
 /// A first-order formula (FOF).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FofFormula {
+pub(crate) enum FofFormula {
     /// Atomic predicate: `p(t1, ..., tn)` or propositional variable `p`.
     Predicate(String, Vec<FofTerm>),
     /// Equality: `t1 = t2`.
@@ -66,7 +66,7 @@ pub enum FofFormula {
 
 /// A first-order term.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum FofTerm {
+pub(crate) enum FofTerm {
     /// Variable (starts with uppercase in TPTP).
     Var(String),
     /// Function application: `f(t1, ..., tn)` or constant `c`.
@@ -75,7 +75,7 @@ pub enum FofTerm {
 
 /// A single annotated formula in a TPTP problem.
 #[derive(Clone, Debug)]
-pub struct TptpFormula {
+pub(crate) struct TptpFormula {
     pub _name: String,
     pub role: TptpRole,
     pub formula: FofFormula,
@@ -85,13 +85,13 @@ pub struct TptpFormula {
 
 /// A parsed TPTP problem.
 #[derive(Clone, Debug)]
-pub struct TptpProblem {
+pub(crate) struct TptpProblem {
     pub formulas: Vec<TptpFormula>,
 }
 
 impl TptpProblem {
     /// Check whether the problem has a conjecture formula.
-    pub fn has_conjecture(&self) -> bool {
+    pub(crate) fn has_conjecture(&self) -> bool {
         self.formulas.iter().any(|f| f.role == TptpRole::Conjecture)
     }
 }

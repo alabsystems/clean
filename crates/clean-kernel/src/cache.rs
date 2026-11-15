@@ -202,7 +202,7 @@ impl TypeCheckCache {
     /// ENSURES: `result.is_empty() == true`
     /// ENSURES: `result.env_hash() == env_hash`
     /// ENSURES: `result.mode_hash() == mode_hash`
-    pub fn with_hashes(env_hash: u64, mode_hash: u64) -> Self {
+    pub(crate) fn with_hashes(env_hash: u64, mode_hash: u64) -> Self {
         Self {
             results: HashMap::new(),
             current_env_hash: env_hash,
@@ -279,6 +279,9 @@ impl TypeCheckCache {
     /// ENSURES: `self.stats().hits == old(stats().hits) + 1` if cache hit
     /// ENSURES: `self.stats().misses == old(stats().misses) + 1` if cache miss
     pub fn get(&mut self, expr: &Expr) -> Option<&Expr> {
+        // One probe of kernel work (`crate::work_meter`); the key comparison
+        // pays for its own nodes.
+        crate::work_meter::charge(crate::work_meter::Walk::Probe, 1);
         let id = TypeCheckId::new(expr, self.current_env_hash, self.current_mode_hash);
         if self.results.contains_key(&id) {
             self.stats.hits += 1;
@@ -304,6 +307,7 @@ impl TypeCheckCache {
         if self.results.len() >= MAX_CACHE_ENTRIES {
             self.evict();
         }
+        crate::work_meter::charge(crate::work_meter::Walk::Probe, 1);
         let id = TypeCheckId::new(expr, self.current_env_hash, self.current_mode_hash);
         self.results.insert(id, type_);
         self.stats.entries = self.results.len();

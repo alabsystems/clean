@@ -5,7 +5,7 @@
 //! Trust ledger for SMT proof verification.
 //!
 //! Tracks per-step trust classification for the entire proof, providing
-//! a 4-level trust hierarchy: KernelVerified > StructurallyAccepted >
+//! a 4-level trust hierarchy: StepChecked > StructurallyAccepted >
 //! Axiomatic > Trusted.
 
 use std::collections::HashMap;
@@ -17,7 +17,7 @@ use super::dag::{SmtStepId, SmtTheory};
 #[non_exhaustive]
 pub enum StepTrustLevel {
     /// Semantically verified by clean's checker (resolution, EUF, LRA Farkas).
-    KernelVerified,
+    StepChecked,
     /// Structurally accepted (non-empty clause, correct arity) but not
     /// semantically checked. Examples: BV bit-blast, array axioms.
     StructurallyAccepted,
@@ -30,7 +30,7 @@ pub enum StepTrustLevel {
 impl std::fmt::Display for StepTrustLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            StepTrustLevel::KernelVerified => write!(f, "kernel-verified"),
+            StepTrustLevel::StepChecked => write!(f, "step-checked"),
             StepTrustLevel::StructurallyAccepted => write!(f, "structurally-accepted"),
             StepTrustLevel::Axiomatic => write!(f, "axiomatic"),
             StepTrustLevel::Trusted => write!(f, "trusted"),
@@ -66,7 +66,7 @@ pub struct SmtVerifyResult {
 #[derive(Debug, Clone, Default)]
 pub struct SmtVerifyStats {
     pub total_steps: u32,
-    pub kernel_verified: u32,
+    pub step_checked: u32,
     pub structurally_accepted: u32,
     pub axiomatic: u32,
     pub trusted: u32,
@@ -75,21 +75,21 @@ pub struct SmtVerifyStats {
 }
 
 impl SmtVerifyStats {
-    /// Fraction of steps that are kernel-verified, structurally accepted,
+    /// Fraction of steps that are step-checked, structurally accepted,
     /// or axiomatic.
     #[must_use]
     pub fn verification_coverage(&self) -> f64 {
         if self.total_steps == 0 {
             return 1.0;
         }
-        f64::from(self.kernel_verified + self.structurally_accepted + self.axiomatic)
+        f64::from(self.step_checked + self.structurally_accepted + self.axiomatic)
             / f64::from(self.total_steps)
     }
 
     /// True if no trusted or structurally accepted steps exist.
     ///
     /// In SMT-COMP terminology, a proof with `is_fully_verified() == true`
-    /// has verdict "valid": every step was kernel-verified or axiomatic.
+    /// has verdict "valid": every step was step-checked or axiomatic.
     #[must_use]
     pub fn is_fully_verified(&self) -> bool {
         self.trusted == 0 && self.structurally_accepted == 0
@@ -131,9 +131,9 @@ impl std::fmt::Display for SmtVerifyStats {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "total_steps={}, kernel_verified={}, holes={}, axiomatic={}, trusted={}, verdict={}",
+            "total_steps={}, step_checked={}, holes={}, axiomatic={}, trusted={}, verdict={}",
             self.total_steps,
-            self.kernel_verified,
+            self.step_checked,
             self.holes_count(),
             self.axiomatic,
             self.trusted,
@@ -287,7 +287,7 @@ impl TrustLedger {
         };
         for entry in &self.entries {
             match entry.trust_level {
-                StepTrustLevel::KernelVerified => stats.kernel_verified += 1,
+                StepTrustLevel::StepChecked => stats.step_checked += 1,
                 StepTrustLevel::StructurallyAccepted => stats.structurally_accepted += 1,
                 StepTrustLevel::Axiomatic => stats.axiomatic += 1,
                 StepTrustLevel::Trusted => stats.trusted += 1,
@@ -365,12 +365,12 @@ mod tests {
         let mut ledger = TrustLedger::new(4);
         ledger.record(make_verdict(0, StepTrustLevel::Axiomatic));
         ledger.record(make_verdict(1, StepTrustLevel::Axiomatic));
-        ledger.record(make_verdict(2, StepTrustLevel::KernelVerified));
-        ledger.record(make_verdict(3, StepTrustLevel::KernelVerified));
+        ledger.record(make_verdict(2, StepTrustLevel::StepChecked));
+        ledger.record(make_verdict(3, StepTrustLevel::StepChecked));
 
         let stats = ledger.stats();
         assert_eq!(stats.total_steps, 4);
-        assert_eq!(stats.kernel_verified, 2);
+        assert_eq!(stats.step_checked, 2);
         assert_eq!(stats.axiomatic, 2);
         assert_eq!(stats.trusted, 0);
         assert!(stats.is_fully_verified());
@@ -379,9 +379,9 @@ mod tests {
     #[test]
     fn test_trust_ledger_trusted_steps() {
         let mut ledger = TrustLedger::new(3);
-        ledger.record(make_verdict(0, StepTrustLevel::KernelVerified));
+        ledger.record(make_verdict(0, StepTrustLevel::StepChecked));
         ledger.record(make_verdict(1, StepTrustLevel::Trusted));
-        ledger.record(make_verdict(2, StepTrustLevel::KernelVerified));
+        ledger.record(make_verdict(2, StepTrustLevel::StepChecked));
 
         let trusted = ledger.trusted_steps();
         assert_eq!(trusted.len(), 1);
@@ -391,18 +391,9 @@ mod tests {
     #[test]
     fn test_trust_ledger_theory_breakdown() {
         let mut ledger = TrustLedger::new(3);
-        ledger.record_theory(
-            make_verdict(0, StepTrustLevel::KernelVerified),
-            SmtTheory::Euf,
-        );
-        ledger.record_theory(
-            make_verdict(1, StepTrustLevel::KernelVerified),
-            SmtTheory::Lra,
-        );
-        ledger.record_theory(
-            make_verdict(2, StepTrustLevel::KernelVerified),
-            SmtTheory::Euf,
-        );
+        ledger.record_theory(make_verdict(0, StepTrustLevel::StepChecked), SmtTheory::Euf);
+        ledger.record_theory(make_verdict(1, StepTrustLevel::StepChecked), SmtTheory::Lra);
+        ledger.record_theory(make_verdict(2, StepTrustLevel::StepChecked), SmtTheory::Euf);
 
         let breakdown = ledger.theory_breakdown();
         assert_eq!(breakdown[&SmtTheory::Euf].len(), 2);
@@ -419,7 +410,7 @@ mod tests {
     fn test_verification_coverage_mixed() {
         let stats = SmtVerifyStats {
             total_steps: 10,
-            kernel_verified: 6,
+            step_checked: 6,
             structurally_accepted: 2,
             axiomatic: 1,
             trusted: 1,
@@ -431,17 +422,14 @@ mod tests {
 
     #[test]
     fn test_trust_level_display() {
-        assert_eq!(
-            StepTrustLevel::KernelVerified.to_string(),
-            "kernel-verified"
-        );
+        assert_eq!(StepTrustLevel::StepChecked.to_string(), "step-checked");
         assert_eq!(StepTrustLevel::Trusted.to_string(), "trusted");
     }
 
     #[test]
     fn test_trust_level_ordering() {
-        // KernelVerified < StructurallyAccepted < Axiomatic < Trusted
-        assert!(StepTrustLevel::KernelVerified < StepTrustLevel::StructurallyAccepted);
+        // StepChecked < StructurallyAccepted < Axiomatic < Trusted
+        assert!(StepTrustLevel::StepChecked < StepTrustLevel::StructurallyAccepted);
         assert!(StepTrustLevel::StructurallyAccepted < StepTrustLevel::Axiomatic);
         assert!(StepTrustLevel::Axiomatic < StepTrustLevel::Trusted);
     }
@@ -461,12 +449,12 @@ mod tests {
     fn test_ledger_into_verdicts() {
         let mut ledger = TrustLedger::new(2);
         ledger.record(make_verdict(0, StepTrustLevel::Axiomatic));
-        ledger.record(make_verdict(1, StepTrustLevel::KernelVerified));
+        ledger.record(make_verdict(1, StepTrustLevel::StepChecked));
 
         let verdicts = ledger.into_verdicts();
         assert_eq!(verdicts.len(), 2);
         assert_eq!(verdicts[0].trust_level, StepTrustLevel::Axiomatic);
-        assert_eq!(verdicts[1].trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdicts[1].trust_level, StepTrustLevel::StepChecked);
     }
 
     // ---- valid/holey classification tests ----
@@ -485,7 +473,7 @@ mod tests {
     fn test_is_fully_verified_true_with_no_trusted_or_holes() {
         let stats = SmtVerifyStats {
             total_steps: 2,
-            kernel_verified: 1,
+            step_checked: 1,
             axiomatic: 1,
             ..Default::default()
         };
@@ -523,7 +511,7 @@ mod tests {
     fn test_holes_count_returns_structurally_accepted() {
         let stats = SmtVerifyStats {
             total_steps: 4,
-            kernel_verified: 1,
+            step_checked: 1,
             structurally_accepted: 3,
             ..Default::default()
         };
@@ -534,7 +522,7 @@ mod tests {
     fn test_competition_verdict_valid() {
         let stats = SmtVerifyStats {
             total_steps: 2,
-            kernel_verified: 1,
+            step_checked: 1,
             axiomatic: 1,
             ..Default::default()
         };
@@ -555,7 +543,7 @@ mod tests {
     fn test_competition_verdict_invalid() {
         let stats = SmtVerifyStats {
             total_steps: 2,
-            kernel_verified: 1,
+            step_checked: 1,
             trusted: 1,
             ..Default::default()
         };
@@ -566,7 +554,7 @@ mod tests {
     fn test_competition_verdict_invalid_with_holes_and_trusted() {
         let stats = SmtVerifyStats {
             total_steps: 3,
-            kernel_verified: 1,
+            step_checked: 1,
             structurally_accepted: 1,
             trusted: 1,
             ..Default::default()
@@ -578,7 +566,7 @@ mod tests {
     fn test_stats_display_shows_holes() {
         let stats = SmtVerifyStats {
             total_steps: 4,
-            kernel_verified: 1,
+            step_checked: 1,
             structurally_accepted: 2,
             axiomatic: 1,
             ..Default::default()
@@ -592,7 +580,7 @@ mod tests {
     fn test_stats_display_valid_verdict() {
         let stats = SmtVerifyStats {
             total_steps: 3,
-            kernel_verified: 2,
+            step_checked: 2,
             axiomatic: 1,
             ..Default::default()
         };
@@ -607,7 +595,7 @@ mod tests {
     fn test_verdict_all_structurally_accepted_with_resolution_verified_is_holey() {
         let stats = SmtVerifyStats {
             total_steps: 4,
-            kernel_verified: 1,
+            step_checked: 1,
             structurally_accepted: 3,
             axiomatic: 0,
             trusted: 0,
@@ -622,7 +610,7 @@ mod tests {
     fn test_verdict_zero_trusted_zero_accepted_is_valid() {
         let stats = SmtVerifyStats {
             total_steps: 5,
-            kernel_verified: 0,
+            step_checked: 0,
             structurally_accepted: 0,
             axiomatic: 5,
             trusted: 0,
@@ -637,7 +625,7 @@ mod tests {
     fn test_verdict_one_trusted_among_many_verified_strict_invalid() {
         let stats = SmtVerifyStats {
             total_steps: 101,
-            kernel_verified: 100,
+            step_checked: 100,
             structurally_accepted: 0,
             axiomatic: 0,
             trusted: 1,
@@ -652,7 +640,7 @@ mod tests {
     fn test_verdict_mixed_all_three_is_invalid() {
         let stats = SmtVerifyStats {
             total_steps: 8,
-            kernel_verified: 5,
+            step_checked: 5,
             structurally_accepted: 2,
             axiomatic: 0,
             trusted: 1,
@@ -667,7 +655,7 @@ mod tests {
     fn test_competition_verdict_empty_proof() {
         let stats = SmtVerifyStats {
             total_steps: 0,
-            kernel_verified: 0,
+            step_checked: 0,
             structurally_accepted: 0,
             axiomatic: 0,
             trusted: 0,

@@ -35,25 +35,34 @@ class CheckResult:
         self.details = details
 
 
+def _git_environment() -> dict[str, str]:
+    # Explicit cwd chooses the repository; inherited Git location variables
+    # must not redirect repository-scoped health lookups to a different one.
+    return {key: value for key, value in os.environ.items() if key not in {
+        "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+        "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_PREFIX",
+    }}
+
+
 def _resolve_git_common_dir(repo_root: Path = ROOT) -> tuple[Path | None, str | None]:
     try:
         result = subprocess.run(
             ["git", "rev-parse", "--git-common-dir"],
             capture_output=True,
-            text=True,
             timeout=10,
             cwd=repo_root,
+            env=_git_environment(),
         )
-    except FileNotFoundError:
-        return None, "git not found"
+    except OSError as exc:
+        return None, f"could not launch git in {repo_root}: {exc}"
     except subprocess.TimeoutExpired:
         return None, "timeout resolving git common dir"
 
     if result.returncode != 0:
-        output = f"{result.stdout}{result.stderr}".strip()
+        output = os.fsdecode(result.stdout + result.stderr).strip()
         return None, output if output else f"exit {result.returncode}"
 
-    common_dir_text = result.stdout.strip()
+    common_dir_text = os.fsdecode(result.stdout).removesuffix("\n")
     if not common_dir_text:
         return None, "git rev-parse --git-common-dir returned no path"
 
@@ -108,34 +117,10 @@ def check_worktree_gc_logs(
     )
 
 
-def _get_env_with_cargo_path() -> dict[str, str]:
-    """Return environment with common cargo/rustup paths added."""
-    env = os.environ.copy()
-    home = Path.home()
-    rustup_toolchains = home / ".rustup" / "toolchains"
-    toolchain_bins: list[str] = []
-    if rustup_toolchains.exists():
-        toolchain_bins = sorted(
-            str(path / "bin")
-            for path in rustup_toolchains.iterdir()
-            if path.is_dir() and (path / "bin").exists()
-        )
-    extra_paths = [
-        str(home / ".cargo" / "bin"),
-        str(rustup_toolchains / "stable-aarch64-apple-darwin" / "bin"),
-        str(rustup_toolchains / "stable-x86_64-apple-darwin" / "bin"),
-        *toolchain_bins,
-    ]
-    current_path = env.get("PATH", "")
-    for path in extra_paths:
-        if path not in current_path and Path(path).exists():
-            current_path = f"{path}:{current_path}"
-    env["PATH"] = current_path
-    return env
-
-
 def run_cmd(cmd: list[str]) -> tuple[bool, str]:
-    env = _get_env_with_cargo_path()
+    # The caller's PATH, unmodified: prepending ~/.rustup/toolchains/*/bin put
+    # installed STOCK toolchains ahead of Trust (owner directive 2026-09-28).
+    env = os.environ.copy()
     try:
         result = subprocess.run(
             cmd,
@@ -144,8 +129,8 @@ def run_cmd(cmd: list[str]) -> tuple[bool, str]:
             timeout=10,
             env=env,
         )
-    except FileNotFoundError:
-        return False, "not found"
+    except OSError as exc:
+        return False, f"could not launch command: {exc}"
     except subprocess.TimeoutExpired:
         return False, "timeout"
     if result.returncode != 0:
@@ -229,8 +214,9 @@ def _get_git_commit(repo_root: Path = ROOT) -> str:
             text=True,
             timeout=10,
             cwd=repo_root,
+            env=_git_environment(),
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
         return "unknown"
     if result.returncode != 0:
         return "unknown"
@@ -245,8 +231,9 @@ def _get_project_name(repo_root: Path = ROOT) -> str:
             text=True,
             timeout=10,
             cwd=repo_root,
+            env=_git_environment(),
         )
-    except (FileNotFoundError, subprocess.TimeoutExpired):
+    except (OSError, subprocess.TimeoutExpired):
         return repo_root.name
     if result.returncode != 0:
         return repo_root.name
@@ -281,20 +268,22 @@ def run_checks() -> list[CheckResult]:
     else:
         results.append(CheckResult("cargo_lock", CHECK_PASS, "Cargo.lock present"))
 
-    ok, msg = run_cmd(["rustc", "--version"])
+    ok, msg = run_cmd(["trustc", "--version"])
     if ok:
-        results.append(CheckResult("rustc", CHECK_PASS, f"rustc: {msg}"))
+        results.append(CheckResult("trustc", CHECK_PASS, f"trustc: {msg}"))
     else:
         results.append(
-            CheckResult("rustc", CHECK_FAIL, f"rustc --version failed: {msg}")
+            CheckResult("trustc", CHECK_FAIL, f"trustc --version failed: {msg}")
         )
 
-    ok, msg = run_cmd(["cargo", "--version"])
+    # `--unverified --version` is the targo discriminator: upstream cargo
+    # under the name `targo` rejects the flag.
+    ok, msg = run_cmd(["targo", "--unverified", "--version"])
     if ok:
-        results.append(CheckResult("cargo", CHECK_PASS, f"cargo: {msg}"))
+        results.append(CheckResult("targo", CHECK_PASS, f"targo: {msg}"))
     else:
         results.append(
-            CheckResult("cargo", CHECK_FAIL, f"cargo --version failed: {msg}")
+            CheckResult("targo", CHECK_FAIL, f"targo --unverified --version failed: {msg}")
         )
 
     ay_ok, ay_msg, ay_details = check_ay_updates()

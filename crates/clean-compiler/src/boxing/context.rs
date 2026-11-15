@@ -5,8 +5,8 @@
 //! Boxing pass context — tracks variable types, aux decls, and config.
 
 use crate::compiler_env::CompilerEnv;
-use crate::ir::{FnId, IRDecl, IRExpr, IRType, JoinPointId, VarId};
-use clean_kernel::Name;
+use crate::ir::{FnId, IRArg, IRDecl, IRExpr, IRType, JoinPointId, VarId};
+use clean_kernel::{Environment, Name};
 use std::cell::RefCell;
 use std::collections::HashMap;
 
@@ -25,6 +25,9 @@ pub struct BoxingContext<'a> {
     /// Unified compiler environment. When present, `get_decl` delegates here
     /// instead of using the local `decl_index`. Part of #1970.
     env: Option<&'a CompilerEnv>,
+    /// Original source metadata for saturated native calls only. It never
+    /// supplies a body or a declaration for the boxed closure calling path.
+    kernel_env: Option<&'a Environment>,
     aux_decls: Vec<IRDecl>,
     next_var: u32,
     next_aux: u32,
@@ -70,6 +73,7 @@ impl<'a> BoxingContext<'a> {
             decls,
             decl_index,
             env: None,
+            kernel_env: None,
             aux_decls: Vec::new(),
             next_var: max_var + 1,
             next_aux: 0,
@@ -111,6 +115,7 @@ impl<'a> BoxingContext<'a> {
             decls,
             decl_index: HashMap::new(), // unused when env is present
             env: Some(env),
+            kernel_env: None,
             aux_decls: Vec::new(),
             next_var: max_var + 1,
             next_aux: 0,
@@ -123,7 +128,34 @@ impl<'a> BoxingContext<'a> {
     pub fn new_default(decl: &IRDecl, decls: &'a [IRDecl]) -> Self {
         Self::new(decl, decls, &BoxingConfig::new())
     }
-    pub fn mk_fresh_var(&mut self) -> VarId {
+
+    pub(super) fn with_kernel_env(mut self, env: Option<&'a Environment>) -> Self {
+        self.kernel_env = env;
+        self
+    }
+
+    /// Affirmative type agreement only: never synthesize an unbox or a
+    /// scalar cast from an unknown/Object operand using a callee name.
+    pub(crate) fn native_apply_param_types(
+        &self,
+        fn_id: &FnId,
+        args: &[IRArg],
+        result: &IRType,
+    ) -> Option<Vec<IRType>> {
+        let (scalar, expected_result) =
+            super::native_signature::checked_uint_signature(self.kernel_env?, &fn_id.0)?;
+        if *result != expected_result || args.len() != 2 {
+            return None;
+        }
+        for arg in args {
+            let IRArg::Var(var) = arg else { return None };
+            if self.get_var_type(*var) != scalar {
+                return None;
+            }
+        }
+        Some(vec![scalar.clone(), scalar])
+    }
+    pub(crate) fn mk_fresh_var(&mut self) -> VarId {
         let id = VarId(self.next_var);
         self.next_var += 1;
         id
@@ -133,7 +165,7 @@ impl<'a> BoxingContext<'a> {
         self.next_aux += 1;
         id
     }
-    pub fn get_var_type(&self, var: VarId) -> IRType {
+    pub(crate) fn get_var_type(&self, var: VarId) -> IRType {
         self.var_types.get(&var).cloned().unwrap_or_else(|| {
             self.warnings.borrow_mut().push(format!(
                 "unknown VarId {:?} in boxing, defaulting to Object",
@@ -142,42 +174,42 @@ impl<'a> BoxingContext<'a> {
             IRType::Object
         })
     }
-    pub fn set_var_type(&mut self, var: VarId, ty: IRType) {
+    pub(crate) fn set_var_type(&mut self, var: VarId, ty: IRType) {
         self.var_types.insert(var, ty);
     }
-    pub fn get_var_value(&self, var: VarId) -> Option<&IRExpr> {
+    pub(crate) fn get_var_value(&self, var: VarId) -> Option<&IRExpr> {
         self.var_values.get(&var)
     }
-    pub fn set_var_value(&mut self, var: VarId, value: IRExpr) {
+    pub(crate) fn set_var_value(&mut self, var: VarId, value: IRExpr) {
         self.var_values.insert(var, value);
     }
     pub fn result_type(&self) -> &IRType {
         &self.result_type
     }
-    pub fn get_jp_params(&self, jp: JoinPointId) -> Vec<IRType> {
+    pub(crate) fn get_jp_params(&self, jp: JoinPointId) -> Vec<IRType> {
         self.jp_params.get(&jp).cloned().unwrap_or_default()
     }
-    pub fn set_jp_params(&mut self, jp: JoinPointId, params: Vec<IRType>) {
+    pub(crate) fn set_jp_params(&mut self, jp: JoinPointId, params: Vec<IRType>) {
         self.jp_params.insert(jp, params);
     }
     /// Look up a declaration by function ID. O(1) via HashMap index (#1109).
     ///
     /// Delegates to `CompilerEnv` when available (Part of #1970), otherwise
     /// falls back to the local `decl_index`.
-    pub fn get_decl(&self, fn_id: &FnId) -> Option<&IRDecl> {
+    pub(crate) fn get_decl(&self, fn_id: &FnId) -> Option<&IRDecl> {
         if let Some(env) = self.env {
             env.get_decl(&fn_id.0, self.decls)
         } else {
             self.decl_index.get(&fn_id.0).map(|&i| &self.decls[i])
         }
     }
-    pub fn add_aux_decl(&mut self, decl: IRDecl) {
+    pub(crate) fn add_aux_decl(&mut self, decl: IRDecl) {
         self.aux_decls.push(decl);
     }
-    pub fn take_aux_decls(&mut self) -> Vec<IRDecl> {
+    pub(crate) fn take_aux_decls(&mut self) -> Vec<IRDecl> {
         std::mem::take(&mut self.aux_decls)
     }
-    pub fn mk_aux_name(&mut self) -> Name {
+    pub(crate) fn mk_aux_name(&mut self) -> Name {
         let id = self.next_aux_id();
         self.fn_name.clone().str(format!("_boxed_const_{}", id))
     }

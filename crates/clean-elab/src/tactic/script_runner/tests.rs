@@ -251,8 +251,9 @@ fn test_execute_simple_tactic_dispatches_cert_mathverse() {
         env.clone(),
         false_ty,
         vec![elab_tactic::LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".into(),
+            name: SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -301,8 +302,9 @@ fn test_execute_simple_tactic_dispatches_cert_simp() {
         env.clone(),
         Expr::const_(Name::from_string("False"), vec![]),
         vec![elab_tactic::LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".into(),
+            name: SurfaceName::generated_path("h"),
             ty: Expr::const_(Name::from_string("Cert.PB.checkBound"), vec![]),
             value: None,
         }],
@@ -316,7 +318,7 @@ fn test_execute_simple_tactic_dispatches_cert_simp() {
         .expect("cert_simp should simplify without closing this symbolic False goal")
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == SurfaceName::generated_path("h"))
         .expect("hypothesis should remain after simplification");
     assert_ne!(
         h.ty,
@@ -333,8 +335,9 @@ fn test_execute_simple_tactic_clear_removes_hypothesis() {
         env.clone(),
         a.clone(),
         vec![elab_tactic::LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".into(),
+            name: SurfaceName::generated_path("h"),
             ty: a,
             value: None,
         }],
@@ -344,7 +347,9 @@ fn test_execute_simple_tactic_clear_removes_hypothesis() {
 
     let goal = ps.current_goal().expect("goal should remain after clear");
     assert!(
-        goal.local_ctx.iter().all(|d| d.name != "h"),
+        goal.local_ctx
+            .iter()
+            .all(|d| d.name != SurfaceName::generated_path("h")),
         "clear should remove hypothesis h from the local context"
     );
 }
@@ -357,8 +362,9 @@ fn test_execute_simple_tactic_rename_renames_hypothesis() {
         env.clone(),
         a.clone(),
         vec![elab_tactic::LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".into(),
+            name: SurfaceName::generated_path("h"),
             ty: a,
             value: None,
         }],
@@ -369,11 +375,15 @@ fn test_execute_simple_tactic_rename_renames_hypothesis() {
 
     let goal = ps.current_goal().expect("goal should remain after rename");
     assert!(
-        goal.local_ctx.iter().any(|d| d.name == "g"),
+        goal.local_ctx
+            .iter()
+            .any(|d| d.name == SurfaceName::generated_path("g")),
         "rename should introduce the new hypothesis name g"
     );
     assert!(
-        goal.local_ctx.iter().all(|d| d.name != "h"),
+        goal.local_ctx
+            .iter()
+            .all(|d| d.name != SurfaceName::generated_path("h")),
         "rename should retire the old hypothesis name h"
     );
 }
@@ -437,6 +447,7 @@ fn test_execute_simple_tactic_swap_reorders_goals() {
         target: goal_b.clone(),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
 
     execute_simple_tactic(&mut ps, "swap", &env).expect("swap should reorder two goals");

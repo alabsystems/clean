@@ -3,12 +3,31 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Strict-**positivity** checking (design §5.2 #2) — iterative (explicit work
-//! stack, stack-safe past 20k nesting depth), fail-closed. Extracted from
-//! `inductive.rs` to keep both files under the 500-line convention.
+//! stacks, stack-safe past 20k nesting depth and along any chain of
+//! containers), fail-closed. Extracted from `inductive.rs` to keep both files
+//! under the 500-line convention.
+//!
+//! A constructor type is checked in one post-order pass (`strict`): each
+//! subterm in a strictly-positive position answers whether it mentions a block
+//! type, and its parent applies the polarity rule to those answers, so each
+//! node is read a bounded number of times (R176). The rules before R176 asked
+//! each argument of a foreign application whether it mentions a block type by
+//! a walk of its own and then walked it again, about `depth × |D|` for
+//! `C (C (… (C D)))`. A foreign container's slot that must be strictly
+//! positive is an obligation (`variance`), checked once per block whatever the
+//! number of sites that need it; the oracle before R176 enumerated every simple
+//! path through the containers (`2^k` scans for `k` containers that each use
+//! the next one twice) and recursed natively once per container on the path.
 
 use crate::name::Name;
 use crate::term::{Term, TermKind};
 use crate::validate::Env;
+
+mod strict;
+mod variance;
+
+use strict::{scan_telescope, Target};
+use variance::Obligations;
 
 /// True iff `t` mentions `Const(n)` for ANY `n` in `names` (iterative).
 pub(crate) fn term_mentions_any(t: &Term, names: &[Name]) -> bool {
@@ -71,363 +90,70 @@ pub(crate) fn term_mentions(t: &Term, name: &Name) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// Strict positivity (iterative, stack-safe, fail-closed).
+// Strict positivity (iterative, stack-safe, fail-closed, linear).
 // ---------------------------------------------------------------------------
 
-/// One unit of positivity work: check `term` for occurrences of `ind` under the
-/// given *polarity rule*.
-enum PosTask {
-    /// Constructor-type level: walk the Pi telescope; each domain is checked
-    /// strictly-positive, the codomain continues at ctor-type level.
-    CtorType(Term),
-    /// Strict-positive context: `ind` may appear, but never to the left of an
-    /// arrow (any Pi domain encountered here must contain *no* occurrence).
-    StrictPos(Term),
-    /// No-occurrence context: `ind` may not appear at all (the domain of an arrow
-    /// inside a strict-positive position).
-    NoOccur(Term),
-}
-
-/// Strict-positivity check for one constructor type. Explicit work stack (no
-/// native recursion), so it is stack-safe well past 20k nesting depth. Returns
-/// `Err(())` on the first non-strictly-positive / negative occurrence.
+/// The strict-positivity check of one block's constructors: every type in
+/// `block_names` must occur strictly-positively in each constructor type. For
+/// a single-element block this is the M2 check.
 ///
-/// `env` is consulted to resolve the **per-argument variance** of any foreign
-/// container the inductive is nested through (see [`check_positivity_ctor_block`]).
-pub(crate) fn check_positivity_ctor(env: &dyn Env, ind: &Name, ctor_ty: &Term) -> Result<(), ()> {
-    check_positivity_ctor_block(env, std::slice::from_ref(ind), ctor_ty)
-}
-
-/// Block-aware strict positivity: every type in `block_names` must occur
-/// strictly-positively in `ctor_ty`. Mirrors [`check_positivity_ctor`] but the
-/// "self" set is the whole mutual block (a field that puts ANY block type to
-/// the left of an arrow, or inside an argument of a block-type application, is
-/// rejected). For a single-element block this is the M2 check verbatim.
+/// The rules, applied to each Π domain of the constructor's telescope (its
+/// final codomain, the return type, permits any occurrence):
 ///
-/// **Container variance (soundness-critical).** When a block type appears as an
-/// argument of a *foreign* container application `C a0 a1 …` (head `C` is a
-/// known inductive, NOT a block type), the argument is only strict-positive if
-/// the parent occupies a **strictly-positive parameter slot** of `C`. We do NOT
-/// assume every container is covariant: a contravariant slot (e.g. the `X` of
-/// `Hom (X Y) where mk : (X -> Y) -> Hom X Y`) puts the parent in a negative
-/// position. We consult `env` for `C`'s constructors and verify, per slot, that
-/// the parent's slot is strictly-positive in `C`; any non-strictly-positive
-/// slot holding a block occurrence is rejected (fail-closed). This is what
-/// catches a contravariant container nested one (or more) layers inside a
-/// covariant one (`List (Hom (Tree A) (Tree A))`), where the inner container
-/// stays folded and its contravariance would otherwise never be exposed.
-pub(crate) fn check_positivity_ctor_block(
-    env: &dyn Env,
-    block_names: &[Name],
-    ctor_ty: &Term,
-) -> Result<(), ()> {
-    let mut stack: Vec<PosTask> = vec![PosTask::CtorType(ctor_ty.clone())];
-    while let Some(task) = stack.pop() {
-        match task {
-            PosTask::CtorType(t) => {
-                // A Pi splits into a strict-positive domain and a ctor-level
-                // codomain; the return type (non-Pi) permits any occurrence.
-                if let TermKind::Pi(_, dom, codom) = t.kind() {
-                    stack.push(PosTask::CtorType(codom.clone()));
-                    stack.push(PosTask::StrictPos(dom.clone()));
-                }
-            }
-            PosTask::StrictPos(t) => match t.kind() {
-                TermKind::Pi(_, dom, codom) => {
-                    // (A -> B): no block type may appear in A; B continues
-                    // strict-positive.
-                    stack.push(PosTask::StrictPos(codom.clone()));
-                    stack.push(PosTask::NoOccur(dom.clone()));
-                }
-                TermKind::App(_, _) => {
-                    let (head, args) = t.unfold_apps();
-                    let head_is_block = matches!(head.kind(),
-                        TermKind::Const(c) if block_names.iter().any(|n| n == c.name()));
-                    if head_is_block {
-                        // a block type applied to args: each arg must contain no
-                        // occurrence of any block type (a nested/illegal use here
-                        // — nesting is handled by the auxiliary construction
-                        // BEFORE this block-level check runs).
-                        for a in args {
-                            stack.push(PosTask::NoOccur(a));
-                        }
-                    } else if let TermKind::Const(c) = head.kind() {
-                        // Foreign container application `C a0 a1 …`. Continue
-                        // strict-positive into the head, but each argument's
-                        // polarity is governed by `C`'s variance in that slot:
-                        // a block occurrence in a non-strictly-positive slot of
-                        // `C` is rejected (fail-closed). Non-block-mentioning
-                        // args stay strict-positive (their own structure may
-                        // legitimately contain other strict-positive material).
-                        stack.push(PosTask::StrictPos(head.clone()));
-                        for (i, a) in args.iter().enumerate() {
-                            if term_mentions_any(a, block_names) {
-                                let slot_ok = container_param_strictly_positive(
-                                    env,
-                                    c.name(),
-                                    i,
-                                    block_names,
-                                );
-                                if !slot_ok {
-                                    // parent sits in a non-covariant slot of `C`
-                                    // ⇒ negative occurrence. Reject.
-                                    return Err(());
-                                }
-                            }
-                            stack.push(PosTask::StrictPos(a.clone()));
-                        }
-                    } else {
-                        // general application (head is not a Const): every part
-                        // is strict-positive. A block occurrence inside an
-                        // argument here is conservatively allowed only if it is
-                        // itself strict-positive; a block occurrence whose
-                        // polarity we cannot resolve is rejected.
-                        if args.iter().any(|a| term_mentions_any(a, block_names)) {
-                            // Unknown head with a block occurrence in an argument:
-                            // we cannot establish covariance ⇒ fail-closed.
-                            return Err(());
-                        }
-                        stack.push(PosTask::StrictPos(head));
-                        for a in args {
-                            stack.push(PosTask::StrictPos(a));
-                        }
-                    }
-                }
-                TermKind::Lam(_, ty, body) => {
-                    stack.push(PosTask::StrictPos(ty.clone()));
-                    stack.push(PosTask::StrictPos(body.clone()));
-                }
-                TermKind::Let(ty, val, body) => {
-                    stack.push(PosTask::StrictPos(ty.clone()));
-                    stack.push(PosTask::StrictPos(val.clone()));
-                    stack.push(PosTask::StrictPos(body.clone()));
-                }
-                TermKind::Proj(_, _, e) => stack.push(PosTask::StrictPos(e.clone())),
-                TermKind::BVar(_) | TermKind::Sort(_) | TermKind::Lit(_) | TermKind::Elim(_) => {}
-                TermKind::Const(_) => {} // direct occurrence is fine
-            },
-            PosTask::NoOccur(t) => {
-                if term_mentions_any(&t, block_names) {
-                    return Err(());
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
-// Container variance (per-parameter strict positivity of a FOREIGN inductive).
-// ---------------------------------------------------------------------------
-
-/// True iff parameter slot `param_idx` of the already-admitted inductive
-/// `container` is **strictly-positive**: across every constructor of
-/// `container`, the parameter appears only strictly-positively (never to the
-/// left of an arrow, and — recursively — never inside a non-strictly-positive
-/// slot of a deeper container). Fail-closed: any inability to establish this
-/// (unknown container, unresolvable slot, recursion-depth/visited limits)
-/// returns `false`, so the caller rejects the nesting rather than admit it.
+/// * `A → B`: no block type may appear in `A`; `B` continues strictly
+///   positive.
+/// * `I a…` with `I` a block type: no `a` may mention a block type (nesting is
+///   handled by the auxiliary construction BEFORE this check runs).
+/// * `C a…` with `C` any other constant (a foreign container): each `a`
+///   continues strictly positive, and an `a` that mentions a block type must
+///   sit in a **strictly-positive parameter slot** of `C`. We do NOT assume
+///   every container is covariant: a contravariant slot (the `X` of
+///   `Hom (X Y) where mk : (X -> Y) -> Hom X Y`) puts the parent in a negative
+///   position, which is what catches a contravariant container nested inside a
+///   covariant one (`List (Hom (Tree A) (Tree A))`), where the inner container
+///   stays folded. The slot is checked against `env`'s constructors of `C`;
+///   an unknown container, an index slot or any doubt refuses (fail-closed).
+/// * `h a…` with `h` not a constant: no `a` may mention a block type (its
+///   covariance cannot be established), and `h` and each `a` continue
+///   strictly positive.
+/// * `λ`, `let`, projections: each part continues strictly positive.
 ///
-/// This is the variance oracle that exposes a contravariant container even when
-/// it is nested (folded) inside a covariant one.
-fn container_param_strictly_positive(
-    env: &dyn Env,
-    container: &Name,
-    param_idx: usize,
-    _block_names: &[Name],
-) -> bool {
-    let mut visited: Vec<(Name, usize)> = Vec::new();
-    param_pos_in_container(env, container, param_idx, &mut visited)
+/// What it establishes about a container's slots is kept for the block's next
+/// constructor (R176). After a refusal every later check refuses: the slots a
+/// refused check required are recorded as seen without having been shown
+/// strictly positive, so they must never be read as established.
+pub(crate) struct Positivity<'e> {
+    block_names: &'e [Name],
+    obligations: Obligations<'e>,
+    refused: bool,
 }
 
-/// Recursive worker for [`container_param_strictly_positive`]. `visited` breaks
-/// cycles among mutually-referential admitted containers: a `(container, slot)`
-/// already on the stack is treated as strictly-positive (it was admitted, so its
-/// own recursion is positive by construction), preventing nontermination.
-fn param_pos_in_container(
-    env: &dyn Env,
-    container: &Name,
-    param_idx: usize,
-    visited: &mut Vec<(Name, usize)>,
-) -> bool {
-    let key = (container.clone(), param_idx);
-    if visited.contains(&key) {
-        return true;
+impl<'e> Positivity<'e> {
+    /// A check of the block `block_names`, reading containers from `env`.
+    pub(crate) fn new(env: &'e dyn Env, block_names: &'e [Name]) -> Self {
+        Positivity {
+            block_names,
+            obligations: Obligations::new(env),
+            refused: false,
+        }
     }
-    let n_params = match env.inductive_num_params(container) {
-        Some(n) => n,
-        None => return false, // unknown container ⇒ fail-closed
-    };
-    if u32::try_from(param_idx)
-        .map(|p| p >= n_params)
-        .unwrap_or(true)
-    {
-        // The parent is applied at an INDEX (or out-of-range) slot, not a
-        // parameter. Indices are not abstracted by the aux construction and we
-        // cannot certify their variance ⇒ fail-closed.
-        return false;
-    }
-    let ctors = match env.inductive_constructors(container) {
-        Some(cs) => cs,
-        None => return false,
-    };
-    visited.push(key);
-    let ok = ctors.iter().all(|(_, ctor_ty)| {
-        // The parameter `param_idx` is bound by the `param_idx`-th leading Pi of
-        // the ctor type (0 = outermost). Scan the ctor for strict-positivity of
-        // that bound variable.
-        param_pos_in_ctor(env, ctor_ty, param_idx, n_params, visited)
-    });
-    visited.pop();
-    ok
-}
 
-/// Strict-positivity of the bound variable that the `param_idx`-th leading Pi of
-/// `ctor_ty` introduces, scanned over the whole ctor type. `n_params` leading
-/// Pis are the container's parameters; fields follow. Returns `false` on the
-/// first non-strictly-positive use.
-fn param_pos_in_ctor(
-    env: &dyn Env,
-    ctor_ty: &Term,
-    param_idx: usize,
-    n_params: u32,
-    visited: &mut Vec<(Name, usize)>,
-) -> bool {
-    // `level` = number of binders enclosing the current subterm, counted from
-    // the ctor top. The parameter introduced by leading Pi `param_idx` is, at a
-    // point under `level` binders, the de Bruijn index `level - 1 - param_idx`.
-    // We track `level` explicitly; a use of that index left-of-arrow (NoOccur),
-    // or in a non-strictly-positive slot of a deeper container, is a failure.
-    let n_params_usize = usize::try_from(n_params).unwrap_or(usize::MAX);
-    let mut level: usize = 0;
-    let mut cur = ctor_ty.clone();
-    // Descend the parameter Pis (their domains may not mention an earlier param
-    // negatively, but params-of-params are out of scope here: a parameter type
-    // mentioning `param_idx` would itself be a higher-order use; treat any such
-    // mention conservatively via the field scan below by including the domains).
-    let mut domains: Vec<(Term, usize)> = Vec::new();
-    while let TermKind::Pi(_, dom, codom) = cur.kind() {
-        domains.push((dom.clone(), level));
-        level = level.saturating_add(1);
-        cur = codom.clone();
-        if domains.len() >= n_params_usize {
-            // remaining telescope (fields + codomain) scanned below from here.
-            break;
+    /// Check one constructor type. `Err(())` on the first non-strictly-
+    /// positive / negative occurrence, and on every call after one.
+    pub(crate) fn check_ctor(&mut self, ctor_ty: &Term) -> Result<(), ()> {
+        if self.refused {
+            return Err(());
         }
-    }
-    // Scan every parameter domain for strict-positivity of the target variable.
-    // (Parameter domains are themselves left-of-nothing here; a parameter type
-    // mentioning the target left-of-arrow would be a higher-order negative use.)
-    for (dom, lvl) in &domains {
-        if !bvar_pos_strict(env, dom, param_idx, *lvl, visited) {
-            return false;
+        let verdict = scan_telescope(
+            ctor_ty,
+            Target::Block(self.block_names),
+            &mut self.obligations,
+        )
+        .and_then(|()| self.obligations.discharge());
+        if verdict.is_err() {
+            self.refused = true;
         }
-    }
-    // Walk the remaining FIELD telescope at ctor-type polarity: each field domain
-    // is a *strictly-positive* position (the parameter may appear there directly,
-    // e.g. `head : A` in `List.cons`), the codomain continues at ctor-type
-    // polarity. Crucially this is NOT the same as `bvar_pos_strict`, whose Pi
-    // branch treats a domain as left-of-arrow (NoOccur). Conflating the two is
-    // what made the oracle misread a plain field of type `A` as a negative
-    // occurrence (over-rejecting covariant nestings like `List (Box (Tree A))`).
-    bvar_ctortype_strict(env, &cur, param_idx, level, visited)
-}
-
-/// Walk a constructor FIELD telescope at "ctor-type" polarity, checking
-/// strict-positivity of the target parameter variable. Each Pi here introduces a
-/// constructor field: its DOMAIN is a strictly-positive position (checked by
-/// [`bvar_pos_strict`], which allows the target to appear but never left of an
-/// arrow *inside* that field), and its CODOMAIN continues at ctor-type polarity.
-/// The final non-Pi (the constructor's return type) permits any occurrence of the
-/// parameter, so it needs no further scan. Returns `false` on the first violation.
-fn bvar_ctortype_strict(
-    env: &dyn Env,
-    t: &Term,
-    param_idx: usize,
-    level: usize,
-    visited: &mut Vec<(Name, usize)>,
-) -> bool {
-    let mut cur = t.clone();
-    let mut lvl = level;
-    while let TermKind::Pi(_, dom, codom) = cur.kind() {
-        // Field domain: strictly-positive position (target may appear, but not
-        // left-of-arrow within the field, and only in covariant container slots).
-        if !bvar_pos_strict(env, dom, param_idx, lvl, visited) {
-            return false;
-        }
-        lvl = lvl.saturating_add(1);
-        cur = codom.clone();
-    }
-    // Constructor return type: any occurrence of the parameter is fine.
-    true
-}
-
-/// Strict-positivity scan for the parameter variable `param_idx` (introduced by
-/// the `param_idx`-th leading Pi of the enclosing ctor) within `t`, where `t`
-/// sits under `level` binders from the ctor top. Mirrors the StrictPos rules:
-/// the variable may appear, but not left-of-arrow, and inside a deeper container
-/// only in a strictly-positive slot. Returns `false` on any violation.
-fn bvar_pos_strict(
-    env: &dyn Env,
-    t: &Term,
-    param_idx: usize,
-    level: usize,
-    visited: &mut Vec<(Name, usize)>,
-) -> bool {
-    match t.kind() {
-        TermKind::Pi(_, dom, codom) => {
-            // domain is left-of-arrow ⇒ no occurrence of the target permitted.
-            if bvar_mentions(dom, param_idx, level) {
-                return false;
-            }
-            bvar_pos_strict(env, codom, param_idx, level.saturating_add(1), visited)
-        }
-        TermKind::App(_, _) => {
-            let (head, args) = t.unfold_apps();
-            match head.kind() {
-                TermKind::Const(c) => {
-                    for (i, a) in args.iter().enumerate() {
-                        if bvar_mentions(a, param_idx, level) {
-                            // target appears in slot `i` of foreign container `c`:
-                            // that slot must itself be strictly-positive.
-                            if !param_pos_in_container(env, c.name(), i, visited) {
-                                return false;
-                            }
-                        }
-                        if !bvar_pos_strict(env, a, param_idx, level, visited) {
-                            return false;
-                        }
-                    }
-                    true
-                }
-                _ => {
-                    // non-Const head applied to args: if the target appears in any
-                    // argument we cannot certify covariance ⇒ fail-closed.
-                    if args.iter().any(|a| bvar_mentions(a, param_idx, level)) {
-                        return false;
-                    }
-                    bvar_pos_strict(env, &head, param_idx, level, visited)
-                        && args
-                            .iter()
-                            .all(|a| bvar_pos_strict(env, a, param_idx, level, visited))
-                }
-            }
-        }
-        TermKind::Lam(_, ty, body) => {
-            bvar_pos_strict(env, ty, param_idx, level, visited)
-                && bvar_pos_strict(env, body, param_idx, level.saturating_add(1), visited)
-        }
-        TermKind::Let(ty, val, body) => {
-            bvar_pos_strict(env, ty, param_idx, level, visited)
-                && bvar_pos_strict(env, val, param_idx, level, visited)
-                && bvar_pos_strict(env, body, param_idx, level.saturating_add(1), visited)
-        }
-        TermKind::Proj(_, _, e) => bvar_pos_strict(env, e, param_idx, level, visited),
-        TermKind::BVar(_)
-        | TermKind::Sort(_)
-        | TermKind::Lit(_)
-        | TermKind::Elim(_)
-        | TermKind::Const(_) => true,
+        verdict
     }
 }
 
@@ -471,3 +197,6 @@ fn bvar_mentions(t: &Term, param_idx: usize, level: usize) -> bool {
     }
     false
 }
+
+#[cfg(test)]
+mod tests;

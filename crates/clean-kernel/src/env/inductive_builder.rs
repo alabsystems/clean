@@ -12,9 +12,9 @@
 
 use crate::expr::{Expr, ExprKind};
 use crate::inductive::{
-    allows_large_elim, check_positivity, count_pi_args, get_return_type, is_recursive,
-    is_reflexive, mentions_name, validate_inductive, validate_inductive_strict, ConstructorVal,
-    InductiveDecl, InductiveError, InductiveVal,
+    check_positivity, count_pi_args, get_return_type, is_recursive, is_reflexive, mentions_name,
+    validate_inductive, validate_inductive_strict, ConstructorVal, InductiveDecl, InductiveError,
+    InductiveVal,
 };
 use crate::level::Level;
 use crate::name::Name;
@@ -75,6 +75,26 @@ impl Environment {
         self.add_inductive_impl(decl, GeneratedAuxDefs::Skip)
     }
 
+    /// [`Self::add_inductive_core`] on an environment that is discarded on
+    /// failure, so without the transaction snapshot: `self` is consumed, and
+    /// on `Err` whatever prefix of the admission ran is dropped with it,
+    /// unread. On `Ok` the environment is exactly the one
+    /// `add_inductive_core` leaves; the error is the one it returns.
+    ///
+    /// For a scratch copy that exists only to be admitted into
+    /// ([`Self::lean_replay_admit_block`]): there the snapshot was a second
+    /// copy of the whole environment per replayed block, plus its drop on
+    /// success, and nothing ever read it. Measured 2026-09-30 on Mathlib
+    /// `Order/Basic`'s import header, the import re-admits every nested
+    /// family that way, and the copies and drops were ~9% of the import.
+    pub(super) fn into_scratch_with_inductive_core(
+        mut self,
+        decl: InductiveDecl,
+    ) -> Result<Self, EnvError> {
+        self.add_inductive_impl_inner(decl, GeneratedAuxDefs::Skip)?;
+        Ok(self)
+    }
+
     fn add_inductive_impl(
         &mut self,
         decl: InductiveDecl,
@@ -101,11 +121,34 @@ impl Environment {
         }
     }
 
+    /// Families and constructors share a constant namespace, including names
+    /// introduced together in one mutual block. Check it before provisional
+    /// type-checking can overwrite a family with one of its constructors.
+    fn check_inductive_name_disjointness(decl: &InductiveDecl) -> Result<(), EnvError> {
+        let mut names = hashbrown::HashSet::new();
+        for family in &decl.types {
+            if !names.insert(&family.name) {
+                return Err(EnvError::DuplicateName(family.name.clone()));
+            }
+        }
+        for family in &decl.types {
+            for constructor in &family.constructors {
+                if !names.insert(&constructor.name) {
+                    return Err(EnvError::DuplicateName(constructor.name.clone()));
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn add_inductive_impl_inner(
         &mut self,
         mut decl: InductiveDecl,
         aux_defs: GeneratedAuxDefs,
     ) -> Result<(), EnvError> {
+        // This is intra-block uniqueness, not old-environment freshness: a
+        // genuinely identical re-registration below remains an allowed no-op.
+        Self::check_inductive_name_disjointness(&decl)?;
         // Parameterized container-nested inductives are handled by the
         // Lean-parity elimination + restore pipeline below (design
         // 2026-07-02-parameterized-nested-inductives.md; the former
@@ -132,18 +175,12 @@ impl Environment {
         // declaration BEFORE elimination: post-restore the environment stores
         // exactly the user's spelling (round-trip law), and the aux mirrors
         // are erased — so an identical re-add of a nested family must be
-        // recognized here, not after the transform. Predicate semantics
-        // unchanged: fires only when the type AND all of its constructors
-        // are already present; genuine conflicts still error at the
-        // duplicate-name check below.
-        if !decl.types.is_empty()
-            && decl.types.iter().all(|t| {
-                self.inductives.contains_key(&t.name)
-                    && t.constructors
-                        .iter()
-                        .all(|c| self.constructors.contains_key(&c.name))
-            })
-        {
+        // recognized here, not after the transform. Require complete ordered
+        // family/constructor payload agreement, modulo fixed-index promotion
+        // for non-nested blocks. Name membership alone does not validate the
+        // supplied declaration. Later duplicate checks still protect names
+        // introduced by elimination.
+        if self.check_inductive_reregistration(&decl)? {
             return Ok(());
         }
 
@@ -174,6 +211,10 @@ impl Environment {
         {
             decl = transformed;
             nested_aux_entries = entries;
+            // Elimination adds auxiliary families and constructors. They must
+            // satisfy the same namespace invariant before provisional entries
+            // are installed for the transformed block's type-checking.
+            Self::check_inductive_name_disjointness(&decl)?;
         }
         let n_orig = decl.types.len() - nested_aux_entries.len();
 
@@ -206,7 +247,7 @@ impl Environment {
         // and relies on both (INV-TEL(i), design
         // 2026-07-02-parameterized-nested-inductives.md §1.4/§5). Runs AFTER
         // fixed-index promotion, which can raise `num_params`.
-        self.check_block_agreement(&decl)?;
+        let result_levels = self.check_block_agreement(&decl)?;
 
         // [R8] Strict field-occurrence validation on the final block: every
         // embedded block occurrence must be a valid inductive application
@@ -237,10 +278,28 @@ impl Environment {
         // F3 + F2: Type-check inductive types and constructors (#2156).
         // Temporarily registers inductive types as constants so the TypeChecker
         // can resolve self-references in constructor types. On failure, rolls back.
-        self.check_inductive_well_typed(&decl)?;
+        self.check_inductive_well_typed(&decl, &result_levels)?;
 
         // Collect all inductive names up front (for mutual block checks)
         let all_ind_names: Vec<Name> = decl.types.iter().map(|t| t.name.clone()).collect();
+
+        // Lean computes `isRec` and `isReflexive` ONCE for the whole block —
+        // over every constructor of every type, a nested block's auxiliary
+        // types included — and stores the same value on every type
+        // (`inductive.cpp` `declare_inductive_types`, v4.30.0-rc2). Read per
+        // type, the non-recursive member of a recursive mutual block was
+        // non-recursive here, so the kernel gave it the structure and
+        // unit-like eta Lean's `is_non_rec_structure` refuses
+        // (`replay_forged/ReplayForgedMutualEta`), and the `.olean` replay
+        // could not compare a stored flag with the regenerated one.
+        let block_recursive = decl
+            .types
+            .iter()
+            .any(|t| is_recursive(&all_ind_names, &t.constructors));
+        let block_reflexive = decl
+            .types
+            .iter()
+            .any(|t| is_reflexive(&all_ind_names, &t.constructors));
 
         // Recursors are inserted provisionally and earn FullKernelCheck only
         // after every mutual sibling exists, their current values type-check,
@@ -252,13 +311,13 @@ impl Environment {
         // casesOn/recOn generation is gated to originals ([R11]) — the
         // restore pass erases every aux registration afterward, so nothing
         // else may exist for them.
-        for (member_idx, ind_type) in decl.types.iter().enumerate() {
+        for (member_idx, (ind_type, result_level)) in
+            decl.types.iter().zip(&result_levels).enumerate()
+        {
             let is_aux_member = member_idx >= n_orig;
             // Calculate derived properties
             let type_arity = count_pi_args(&ind_type.type_);
             let num_indices = type_arity.saturating_sub(decl.num_params);
-            let recursive = is_recursive(&all_ind_names, &ind_type.constructors);
-            let reflexive = is_reflexive(&all_ind_names, &ind_type.constructors);
 
             let all_names = all_ind_names.clone();
             let ctor_names: Vec<Name> = ind_type
@@ -316,9 +375,12 @@ impl Environment {
             // Compute large_elim AFTER type and constructors are registered,
             // so the TypeChecker can resolve self-references in constructor
             // field types (e.g., Acc.intro's `h : ∀ y, r y x → Acc r y`).
-            let large_elim = allows_large_elim(
+            // Decided on the block's result level up to whnf, never the
+            // syntactic codomain (Lean `m_is_not_zero`).
+            let large_elim = !super::elim_analysis::elim_only_at_universe_zero(
                 self,
-                &ind_type.type_,
+                self.zero_reading(),
+                result_level,
                 &ind_type.constructors,
                 decl.num_params,
                 decl.types.len(),
@@ -333,8 +395,8 @@ impl Environment {
                 num_indices,
                 all_names,
                 constructor_names: ctor_names,
-                is_recursive: recursive,
-                is_reflexive: reflexive,
+                is_recursive: block_recursive,
+                is_reflexive: block_reflexive,
                 is_large_elim: large_elim,
                 // Set true when a constructor uses a container inductive applied
                 // to this type (detected by check_nested_positivity, #2156 F1).
@@ -384,7 +446,7 @@ impl Environment {
             // the structural `casesOn` / `recOn` / `below` (SOUNDNESS-CRITICAL).
             let is_trunc_hit = crate::inductive::is_prop_truncation_shape(&decl);
             let is_susp_hit = crate::inductive::is_suspension_shape(&decl);
-            let rec_name = Name::from_string(&format!("{}.rec", ind_type.name));
+            let rec_name = ind_type.name.clone().str("rec");
             if self.constants.contains_key(&rec_name) || self.recursors.contains_key(&rec_name) {
                 return Err(EnvError::DuplicateName(rec_name));
             }
@@ -396,9 +458,11 @@ impl Environment {
                 self.build_recursor(
                     &ind_type.name,
                     &decl,
+                    result_level,
                     &ctor_infos,
                     &all_ctor_infos,
                     minor_idx_offset,
+                    self.zero_reading(),
                 )?
             };
 
@@ -462,7 +526,7 @@ impl Environment {
             if aux_defs == GeneratedAuxDefs::Skip || is_aux_member {
                 continue;
             }
-            let cases_name = Name::from_string(&format!("{}.casesOn", ind_type.name));
+            let cases_name = ind_type.name.clone().str("casesOn");
             if self.constants.contains_key(&cases_name) || self.recursors.contains_key(&cases_name)
             {
                 return Err(EnvError::DuplicateName(cases_name));
@@ -470,9 +534,11 @@ impl Environment {
             let cases_val = self.build_cases_on(
                 &ind_type.name,
                 &decl,
+                result_level,
                 &ctor_infos,
                 &all_ctor_infos,
                 minor_idx_offset,
+                self.zero_reading(),
             )?;
 
             // Definitional VALUE (residual-to-zero campaign, 2026-07-02): in
@@ -528,7 +594,7 @@ impl Environment {
             generated_recursor_names.push(cases_name);
 
             // Generate and add recOn (recursor with major premise first)
-            let rec_on_name = Name::from_string(&format!("{}.recOn", ind_type.name));
+            let rec_on_name = ind_type.name.clone().str("recOn");
             if self.constants.contains_key(&rec_on_name)
                 || self.recursors.contains_key(&rec_on_name)
             {
@@ -537,9 +603,12 @@ impl Environment {
             let rec_on_val = self.build_rec_on(
                 &ind_type.name,
                 &decl,
+                result_level,
                 &ctor_infos,
                 &all_ctor_infos,
                 minor_idx_offset,
+                &rec_ty_for_aux,
+                self.zero_reading(),
             )?;
 
             // recOn value: same reordering wrapper; minors pass through
@@ -637,7 +706,7 @@ impl Environment {
         // constructor. The same predicate gates late regeneration, preventing
         // the repair path from reinterpreting a rejected block as a singleton.
         let generate_no_confusion = aux_defs == GeneratedAuxDefs::Generate
-            && Self::no_confusion_block_eligibility(&effective_decl).is_ok();
+            && self.no_confusion_block_eligibility(&effective_decl).is_ok();
         if generate_no_confusion {
             let prerequisites_ready = self
                 .no_confusion_prerequisite_issue(&effective_decl)
@@ -658,7 +727,7 @@ impl Environment {
                     let occupied_target = effective_types.iter().find_map(|ind_type| {
                         ["noConfusionType", "noConfusion"]
                             .into_iter()
-                            .map(|suffix| Name::from_string(&format!("{}.{suffix}", ind_type.name)))
+                            .map(|suffix| ind_type.name.clone().str(suffix))
                             .find(|name| self.get_const(name).is_some())
                     });
                     if let Some(occupied) = occupied_target {
@@ -738,7 +807,7 @@ impl Environment {
             // `effective_types`; restore validates and stamps them directly.
             for ind_type in effective_types {
                 for suffix in generated_suffixes {
-                    let rec_name = Name::from_string(&format!("{}.{}", ind_type.name, suffix));
+                    let rec_name = ind_type.name.clone().str(suffix);
                     // HITs generate only a bespoke `rec`; their `casesOn`/`recOn`
                     // are intentionally absent. Validate the recursors that exist.
                     if self.get_recursor(&rec_name).is_none() {
@@ -852,52 +921,30 @@ impl Environment {
     ///    consumes; every Lean-elaborated or aux-mirrored block is
     ///    byte-identical here);
     /// 2. every constructor likewise opens with the shared telescope;
-    /// 3. all members' result sorts are equivalent levels (`is_geq` both
-    ///    ways — Lean `is_equivalent`).
+    /// 3. all members' result sorts are equivalent levels: Lean's
+    ///    `is_equivalent` under the Lean theories (`tc/level_profile.rs`,
+    ///    `docs/DECISIONS.md` R150; `replay_forged/ReplayForgedMutualLevel`),
+    ///    and `is_geq` both ways under `Extended`, which is semantic equality
+    ///    and so admits blocks Lean refuses.
     ///
     /// Clean historically had NONE of these; inputs violating them fed the
     /// recursor generator outside its contract (design
     /// `2026-07-02-parameterized-nested-inductives.md` §1.4/§5).
-    /// The result sort level of a type former, up to whnf.
     ///
-    /// `get_return_type` strips the Pi telescope syntactically. A well-formed
-    /// type former's codomain is a sort, but Coq-sourced records legitimately
-    /// produce codomains that are sorts only up-to-reduction: `LetIn(T := …) in
-    /// Sort u` (ζ — the `Order.POrder`/…/`Num.normed_mixin_of` `mixin_of`
-    /// records) or `Const(c)` where `c` unfolds to a sort (δ — the
-    /// `predArgType`-style `set_type`/`perm_type`/`sdprod_by` carriers). Lean/Coq
-    /// kernels check an inductive's arity codomain up to conversion; a purely
-    /// syntactic `Sort` match rejected these valid records ("type former does not
-    /// end in a sort") once the HB primitive-projection re-dump made them
-    /// value-bearing. The fast path (already a syntactic `Sort`) is bit-identical
-    /// to the previous behaviour — `whnf(Sort u) = Sort u` — so this only ever
-    /// ACCEPTS strictly more (monotone; 0-regression on any decl that already
-    /// passed the syntactic check).
-    fn return_sort_level(tc: &crate::tc::TypeChecker<'_>, ty: &Expr) -> Option<Level> {
-        let ret = get_return_type(ty);
-        if let ExprKind::Sort(l) = &ret.kind {
-            return Some(l.clone());
-        }
-        // Reduce only when the syntactic codomain is not already a sort (fast
-        // path above keeps the existing hot behaviour untouched).
-        match tc.whnf(ret).kind() {
-            ExprKind::Sort(l) => Some(l.clone()),
-            _ => None,
-        }
-    }
-
-    fn check_block_agreement(&self, decl: &InductiveDecl) -> Result<(), EnvError> {
+    /// The result levels are found as Lean's loop finds them, up to whnf
+    /// between binders (`Environment::member_result_level`), and returned in
+    /// member order: they are the one source every later decision reads (the
+    /// per-field universe bound, large elimination, K, noConfusion, below).
+    /// Coq-sourced records legitimately have codomains that are sorts only up
+    /// to reduction — `LetIn(T := …) in Sort u` (ζ, the HB `mixin_of`
+    /// records) or `Const(c)` with `c` unfolding to a sort (δ, the
+    /// `predArgType`-style carriers) — and so does
+    /// `def MyProp : Type := Prop; inductive B : MyProp`, whose level is `0`.
+    fn check_block_agreement(&self, decl: &InductiveDecl) -> Result<Vec<Level>, EnvError> {
         let p = decl.num_params as usize;
         let Some(first) = decl.types.first() else {
-            return Ok(());
+            return Ok(Vec::new());
         };
-
-        // A whnf-capable checker for the result-sort extraction: a Coq record
-        // whose arity codomain is a sort only up to ζ/δ (`return_sort_level`)
-        // must be reduced under the ambient environment. Cumulative on the Coq
-        // lane, a no-op for whnf on the Lean/olean lane.
-        let mut tc = crate::tc::TypeChecker::with_mode(self, self.mode);
-        tc.set_cumulative(self.cumulative);
 
         // Reference telescope + result level from the first member.
         let mut reference: Vec<&Expr> = Vec::with_capacity(p);
@@ -911,11 +958,9 @@ impl Environment {
                 _ => return Err(EnvError::Inductive(InductiveError::InvalidParams)),
             }
         }
-        let Some(first_level) = Self::return_sort_level(&tc, &first.type_) else {
-            return Err(EnvError::Inductive(InductiveError::InvalidType(format!(
-                "type former of {} does not end in a sort",
-                first.name
-            ))));
+        let result_levels = self.block_result_levels(decl)?;
+        let Some(first_level) = result_levels.first() else {
+            return Ok(result_levels);
         };
 
         let check_prefix = |name: &Name, ty: &Expr| -> Result<(), EnvError> {
@@ -937,15 +982,19 @@ impl Environment {
             Ok(())
         };
 
-        for member in &decl.types {
+        for (member, level) in decl.types.iter().zip(&result_levels) {
             check_prefix(&member.name, &member.type_)?;
-            let Some(level) = Self::return_sort_level(&tc, &member.type_) else {
-                return Err(EnvError::Inductive(InductiveError::InvalidType(format!(
-                    "type former of {} does not end in a sort",
-                    member.name
-                ))));
+            // Lean's `is_equivalent` under the Lean theories
+            // (`tc/level_profile.rs`); `is_geq` both ways under `Extended`.
+            let same_universe = match self.kernel_theory().level_construction() {
+                crate::level::LevelConstruction::Clean => {
+                    Level::is_geq(level, first_level) && Level::is_geq(first_level, level)
+                }
+                crate::level::LevelConstruction::LeanKernel => {
+                    self.levels_equiv_in_theory(level, first_level)
+                }
             };
-            if !(Level::is_geq(&level, &first_level) && Level::is_geq(&first_level, &level)) {
+            if !same_universe {
                 return Err(EnvError::Inductive(InductiveError::InvalidType(format!(
                     "mutual member {} lives in a different universe than {} \
                      (Lean requires equivalent result levels across a block)",
@@ -956,7 +1005,7 @@ impl Environment {
                 check_prefix(&ctor.name, &ctor.type_)?;
             }
         }
-        Ok(())
+        Ok(result_levels)
     }
 
     /// Type-check inductive types and constructors using the TypeChecker (#2156 F3+F2).
@@ -968,7 +1017,11 @@ impl Environment {
     /// Also performs universe constraint checking (#2156 F2): for non-Prop inductives,
     /// verifies that the constructor type's sort does not exceed the inductive type's
     /// sort, which ensures all constructor field sorts are within bounds.
-    fn check_inductive_well_typed(&mut self, decl: &InductiveDecl) -> Result<(), EnvError> {
+    fn check_inductive_well_typed(
+        &mut self,
+        decl: &InductiveDecl,
+        result_levels: &[Level],
+    ) -> Result<(), EnvError> {
         // Step 1: Temporarily register all inductive types as constants.
         // The TypeChecker needs these to resolve Const references to the types
         // being defined (e.g., recursive references in constructor types).
@@ -1008,7 +1061,7 @@ impl Environment {
         }
 
         // Step 2: Run type checking (immutable borrow of self)
-        let result = self.do_inductive_type_check(decl);
+        let result = self.do_inductive_type_check(decl, result_levels);
 
         // Step 3: Remove temporary registrations regardless of success/failure.
         // They will be re-added properly by the main registration loop.
@@ -1027,7 +1080,7 @@ impl Environment {
     /// *path* constructor (a constructor whose return type is a `CubicalPath`,
     /// e.g. S¹'s `loop`). Used to skip `noConfusion` generation, which would be
     /// unsound for path constructors.
-    fn has_path_constructor(ind_type: &crate::inductive::InductiveType) -> bool {
+    pub(crate) fn has_path_constructor(ind_type: &crate::inductive::InductiveType) -> bool {
         ind_type
             .constructors
             .iter()
@@ -1038,8 +1091,13 @@ impl Environment {
     ///
     /// Requires that the inductive types are already registered as constants
     /// (even temporarily) so the TypeChecker can resolve references.
-    fn do_inductive_type_check(&self, decl: &InductiveDecl) -> Result<(), EnvError> {
-        let mut tc = crate::tc::TypeChecker::with_mode(self, self.mode);
+    fn do_inductive_type_check(
+        &self,
+        decl: &InductiveDecl,
+        result_levels: &[Level],
+    ) -> Result<(), EnvError> {
+        let settings = self.checker_settings();
+        let mut tc = crate::tc::TypeChecker::with_mode(self, settings.mode);
         // Coq lane: cumulative subtyping (`Prop ≤ Set ≤ Type`), mirroring
         // `decl_add.rs` — an inductive whose constructor fields apply a
         // collapsed-universe constant at a `Prop` argument (the Berardi
@@ -1047,7 +1105,7 @@ impl Environment {
         // env re-checks every other Coq declaration with. No-op (identical to
         // the non-cumulative check) when the env flag is off, i.e. the
         // Lean/olean lane.
-        tc.set_cumulative(self.cumulative);
+        tc.set_cumulative(settings.cumulative);
 
         // F3 + F2: Single-pass type checking and universe constraint verification.
         //
@@ -1066,7 +1124,7 @@ impl Environment {
         // The previous whole-type comparison (ctor_sort ≤ ind_sort) was unsound
         // because imax semantics collapse field contributions when the codomain
         // is Prop, masking per-field violations (#2362).
-        for ind_type in &decl.types {
+        for (ind_type, result_level) in decl.types.iter().zip(result_levels) {
             // F3: Verify inductive type expression is well-typed
             let _ = tc
                 .infer_sort(&ind_type.type_)
@@ -1075,21 +1133,17 @@ impl Environment {
                     source: e,
                 })?;
 
-            // Extract the result sort level from the inductive's return type,
-            // up to whnf: a Coq record whose codomain is a sort only up to ζ/δ
-            // (`LetIn(T:=…) in Sort`, `Const(def=Type)`) still contributes its
-            // real result level to the per-field F2 bound. On the current
-            // (type-only stand-in) corpus no value-bearing inductive reaches
-            // here with such a codomain — `check_block_agreement` used to reject
-            // it earlier — so this is 0-regression and only tightens F2 once the
-            // HB re-dump makes those records value-bearing.
-            let result_level = match Self::return_sort_level(&tc, &ind_type.type_) {
-                Some(l) => l,
-                None => continue,
-            };
+            // The result level is the one `check_block_agreement` found up to
+            // whnf (Lean's `m_result_level`): a Coq record whose codomain is a
+            // sort only up to ζ/δ (`LetIn(T:=…) in Sort`, `Const(def=Type)`)
+            // contributes its real level to the per-field F2 bound, and a
+            // δ-`Prop` codomain is exempt from it exactly as `Prop` is.
 
             // F2 applies only to non-Prop inductives
-            let check_universe = !result_level.is_zero();
+            // Lean skips the bound only for a result level that IS `0`
+            // (`is_zero`, inductive.cpp:439), Clean's `Extended` for one that
+            // evaluates to `0` everywhere.
+            let check_universe = !self.level_is_zero_in_theory(result_level);
 
             for ctor in &ind_type.constructors {
                 // F3: Verify constructor type expression is well-typed
@@ -1110,7 +1164,7 @@ impl Environment {
                             source: e,
                         })?;
                     for field_sort in &field_sorts {
-                        if !Level::is_geq(&result_level, field_sort) {
+                        if !self.level_geq_in_theory(result_level, field_sort) {
                             return Err(EnvError::Inductive(InductiveError::UniverseMismatch(
                                 ctor.name.clone(),
                             )));

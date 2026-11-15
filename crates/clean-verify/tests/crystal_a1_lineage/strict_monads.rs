@@ -7,14 +7,14 @@
 //!
 //! ```text
 //! bb0(%0: ptr, %1: bool):
-//!     %2 = load struct.441, ptr %0
-//!     %3 = insertfield struct.441 %2, 81, %1
-//!     store struct.441 %3, ptr %0
+//!     %2 = load struct.586, ptr %0
+//!     %3 = insertfield struct.586 %2, 83, %1
+//!     store struct.586 %3, ptr %0
 //!     ret
 //! ```
 //!
 //! This body is why the `insertfields` and `stores` lanes exist (added
-//! 2026-08-20, AHEAD of the chain): before them, `insertfield … 80` wrote a
+//! 2026-08-20, AHEAD of the chain): before them, `insertfield … 82` wrote a
 //! DIFFERENT field and differed in no compared lane, and a `store` of %2
 //! instead of %3 — writing back the UNMODIFIED aggregate, deleting the whole
 //! mutation — was visible only to `order` as a class token whose operands
@@ -65,26 +65,26 @@ fn strict_monads_proved_module_matches_the_emitted_artifact() {
     );
     assert_eq!(
         emitted.load_tys,
-        BTreeMap::from([(0, vec![(2, "struct441".to_string(), false)])]),
-        "…at struct.441, non-volatile: {:?}",
+        BTreeMap::from([(0, vec![(2, "struct586".to_string(), false)])]),
+        "…at struct.586, non-volatile: {:?}",
         emitted.load_tys
     );
     // *** THE FIRST OF THE TWO LANES THIS CHAIN EXISTS FOR. ***
     assert_eq!(
         emitted.insertfields,
-        BTreeMap::from([(0, vec![(3, "struct441".to_string(), 2, 81, 1)])]),
-        "one insertfield: (result %3, struct.441, source %2, FIELD 81, value %1). The field \
+        BTreeMap::from([(0, vec![(3, "struct586".to_string(), 2, 83, 1)])]),
+        "one insertfield: (result %3, struct.586, source %2, FIELD 83, value %1). The field \
          index is the semantic payload — `ir_if_at` bounds-checks it and `ir_vals_set` rewrites \
-         exactly that slot — and 81 is where this artifact lays out \
+         exactly that slot — and 83 is where this artifact lays out \
          lean4_core_strict_monads. Found {:?}",
         emitted.insertfields
     );
     // *** AND THE SECOND: the first `store` in any chained body. ***
     assert_eq!(
         emitted.stores,
-        BTreeMap::from([(0, vec![(0, "struct441".to_string(), 3)])]),
-        "one store: (POINTER %0, struct.441, value %3) — pointer FIRST on both sides although \
-         the artifact prints `store struct.441 %3, ptr %0`. It stores the REWRITTEN aggregate \
+        BTreeMap::from([(0, vec![(0, "struct586".to_string(), 3)])]),
+        "one store: (POINTER %0, struct.586, value %3) — pointer FIRST on both sides although \
+         the artifact prints `store struct.586 %3, ptr %0`. It stores the REWRITTEN aggregate \
          %3 back through the SAME pointer the load read. Found {:?}",
         emitted.stores
     );
@@ -181,23 +181,23 @@ fn strict_monads_the_write_lanes_catch_what_every_old_lane_misses() {
     for (what, from, to) in [
         (
             "a different FIELD INDEX — writes a different field of the same Environment",
-            "insertfield struct.441 %2, 81, %1",
-            "insertfield struct.441 %2, 80, %1",
+            "insertfield struct.586 %2, 83, %1",
+            "insertfield struct.586 %2, 82, %1",
         ),
         (
             "a different INSERTED VALUE — writes the receiver pointer into the flag slot",
-            "insertfield struct.441 %2, 81, %1",
-            "insertfield struct.441 %2, 81, %0",
+            "insertfield struct.586 %2, 83, %1",
+            "insertfield struct.586 %2, 83, %0",
         ),
         (
             "a different SOURCE aggregate for the rewrite",
-            "insertfield struct.441 %2, 81, %1",
-            "insertfield struct.441 %0, 81, %1",
+            "insertfield struct.586 %2, 83, %1",
+            "insertfield struct.586 %0, 83, %1",
         ),
         (
             "a different insertfield TYPE — a module the compiler did not emit",
-            "insertfield struct.441 %2, 81, %1",
-            "insertfield struct.5 %2, 81, %1",
+            "insertfield struct.586 %2, 83, %1",
+            "insertfield struct.5 %2, 83, %1",
         ),
     ] {
         let mutated = text.replace(from, to);
@@ -213,17 +213,17 @@ fn strict_monads_the_write_lanes_catch_what_every_old_lane_misses() {
         (
             "storing %2 — the UNMODIFIED aggregate. This deletes the whole mutation and \
              differed in NO lane before `stores` existed",
-            "store struct.441 %3, ptr %0",
-            "store struct.441 %2, ptr %0",
+            "store struct.586 %3, ptr %0",
+            "store struct.586 %2, ptr %0",
         ),
         (
             "storing through a DIFFERENT pointer — the mutation lands on another object",
-            "store struct.441 %3, ptr %0",
-            "store struct.441 %3, ptr %2",
+            "store struct.586 %3, ptr %0",
+            "store struct.586 %3, ptr %2",
         ),
         (
             "a different store TYPE",
-            "store struct.441 %3, ptr %0",
+            "store struct.586 %3, ptr %0",
             "store struct.5 %3, ptr %0",
         ),
     ] {
@@ -251,7 +251,7 @@ fn strict_monads_the_write_lanes_catch_what_every_old_lane_misses() {
     // Deleting the store outright IS visible to `order` (the class vanishes) —
     // that was exactly the pre-lane blindness boundary: presence yes, operands no.
     let deleted =
-        parse_emitted(&text.replace("    store struct.441 %3, ptr %0  ; #loc: 368 3479 8\n", ""));
+        parse_emitted(&text.replace("    store struct.586 %3, ptr %0  ; #loc: 180 3784 8\n", ""));
     assert_ne!(
         deleted.stores, real.stores,
         "the store lane loses its entry"
@@ -276,9 +276,9 @@ fn strict_monads_the_lanes_catch_a_drifted_spec_module_too() {
     assert_eq!(emitted.stores, good.stores);
     assert_eq!(emitted.rets, good.rets);
 
-    // Field index 80: the registered module proves a theorem about the wrong field.
+    // Field index 82: the registered module proves a theorem about the wrong field.
     let wrong_field = parse_clean(
-        &src.replace("ir_d2 81 ir_d1", "ir_d2 80 ir_d1"),
+        &src.replace("ir_d2 83 ir_d1", "ir_d2 82 ir_d1"),
         "def ir_sm_b",
     );
     assert_ne!(emitted.insertfields, wrong_field.insertfields);
@@ -300,7 +300,7 @@ fn strict_monads_the_lanes_catch_a_drifted_spec_module_too() {
     );
     assert_ne!(
         emitted.stores, swapped.stores,
-        "(ptr, ty, val) = (0, struct441, 3) must not equal (3, struct441, 0)"
+        "(ptr, ty, val) = (0, struct586, 3) must not equal (3, struct586, 0)"
     );
     assert_eq!(emitted.insertfields, swapped.insertfields);
 
@@ -350,8 +350,8 @@ fn strict_monads_the_lanes_catch_a_drifted_spec_module_too() {
 fn strict_monads_a_volatile_store_is_refused_not_dropped() {
     let text = fixture("strict_monads.trust-ir.txt");
     let mutated = text.replace(
-        "store struct.441 %3, ptr %0",
-        "volatile store struct.441 %3, ptr %0",
+        "store struct.586 %3, ptr %0",
+        "volatile store struct.586 %3, ptr %0",
     );
     assert_ne!(mutated, text);
     let err = std::panic::catch_unwind(|| parse_emitted(&mutated))

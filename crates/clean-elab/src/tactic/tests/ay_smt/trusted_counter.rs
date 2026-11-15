@@ -33,6 +33,7 @@ fn test_ay_prop_de_morgan_and() {
         env,
         ay_make_or(ay_make_not(p.clone()), ay_make_not(q.clone())),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
             name: "h".to_string(),
             ty: ay_make_not(ay_make_and(p, q)),

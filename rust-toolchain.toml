@@ -1,29 +1,13 @@
-# The PUBLIC snapshot's toolchain pin. Copied over the export's
-# rust-toolchain.toml by transforms.sh; the private repo keeps channel = "trust".
-#
-# WHY THIS FILE EXISTS. The private repo pins the Trust toolchain, whose
-# in-compilation verifier is FAIL-CLOSED, and pairs it with the
-# `-Ztrust-verify=off` opt-out in .cargo/config.toml — which that file itself
-# calls "the other half of the pin". Unlike nn (whose boundary simply does not
-# export .cargo/config.toml), Clean's publish/manifest.txt exports the whole
-# `.cargo/` directory, so BOTH halves must be swapped in the export:
-#
-#   rust-toolchain.toml   -> this file (a public clone has no rustup toolchain
-#                            named `trust` to resolve at all)
-#   .cargo/config.toml    -> publish/public-cargo-config.toml (a stock compiler
-#                            rejects the nightly-only `-Ztrust-verify=off` on
-#                            EVERY unit — including on the publication host's
-#                            own aarch64-apple-darwin public-clone gate)
-#
-# Same shape nn and aterm use (publish/public-rust-toolchain.toml there).
-# Stock upstream, pinned rather than floating so the snapshot is reproducible,
-# and so the engine's anonymous CHECK_CMD (`cargo check --locked --workspace
-# --all-targets --all-features && scripts/check_public_release_libraries.sh`)
-# is a property of the candidate, not of the operator's rustup default.
-# 1.97.1 is the toolchain the repo last gated green on before the trust flip
-# (workspace clippy + local_gate + 51/51 pinned suite), and satisfies the
-# workspace MSRV (rust-version = "1.90").
+# The Trust toolchain. Owner directive 2026-09-28: ALab systems build with
+# Trust. This file selects the compiler only; the lane is chosen per command by
+# `targo --unverified <verb>` or `targo trust <verb>`. The public snapshot keeps
+# this pin: a public user installs aterm, and atpkg installs Trust. Clean's source
+# must still compile with no Trust-only feature load-bearing, for two readers that
+# never see this file: the trust bootstrap compiles Clean at stage0 with the seed
+# trust's src/stage0 pins -- an older Trust build (never stock Rust since the owner's
+# 2026-09-29 directive; until then the owner's Mac used a stock-Rust "genesis"
+# stage0 there, quarantined that day) -- and deploy/'s Linux x86_64 Docker builds are a
+# STOCK EXCEPTION (Trust ships no x86_64-linux std). The stable -> trust flip
+# history this header used to carry: `git show 7330fa6ce:rust-toolchain.toml`.
 [toolchain]
-channel = "1.97.1"
-profile = "minimal"
-components = ["rustfmt", "clippy"]
+channel = "trust"

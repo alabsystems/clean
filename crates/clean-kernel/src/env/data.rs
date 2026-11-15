@@ -1563,6 +1563,83 @@ impl Environment {
                 })?;
             }
 
+            // ---- List.isEmpty ----
+            // `l.isEmpty` — whether a list has no elements. Transcribed from
+            // Lean v4.30.0-rc2 `src/Init/Data/List/Basic.lean`:
+            //
+            //     def isEmpty : List α → Bool
+            //       | []     => true
+            //       | _ :: _ => false
+            //
+            // The same `List.rec` fold as List.head? above, with motive
+            // `fun _ => Bool` (nil ↦ Bool.true, cons _ _ _ ↦ Bool.false).
+            // Reducible + axiom-free, no native reducer to coexist with.
+            // Without it `l.isEmpty` failed LOUD with UnknownIdent (measured on
+            // the owner's AySoundness/Lrat.lean, 2026-09-16). Withheld in
+            // import mode like the other accessors.
+            //
+            // The motive lands in `Bool : Type`, so this `List.rec` is
+            // instantiated at motive universe `1` — NOT the `succ u` of the
+            // shared `list_rec` above, whose motives land in `Type u`. Reusing
+            // that one here is ill-typed for every `u != 0`.
+            if !self.suppress_lossy_structure_stubs
+                && self.get_const(&Name::from_string("List.isEmpty")).is_none()
+            {
+                self.init_bool()?;
+                let bool_c = Expr::const_(Name::from_string("Bool"), vec![]);
+                let list_rec_bool = Expr::const_(
+                    Name::from_string("List.rec"),
+                    vec![Level::succ(Level::zero()), level_u.clone()],
+                );
+                let is_empty_type = {
+                    let mut b = EnvDeclBuilder::new();
+                    let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                    let list_a = Expr::app(list_c.clone(), alpha.clone());
+                    let (l_id, _l) = b.fresh_local(list_a.clone());
+                    let e = b.mk_pi(l_id, BinderInfo::Default, list_a.clone(), bool_c.clone());
+                    let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                    b.finish(e)
+                };
+                let is_empty_value = {
+                    let mut b = EnvDeclBuilder::new();
+                    let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+                    let list_a = Expr::app(list_c.clone(), alpha.clone());
+                    let (l_id, l) = b.fresh_local(list_a.clone());
+                    // motive: fun (_ : List α) => Bool
+                    let (mw_id, _mw) = b.fresh_local(list_a.clone());
+                    let motive =
+                        b.mk_lam(mw_id, BinderInfo::Default, list_a.clone(), bool_c.clone());
+                    // nil case: Bool.true
+                    let nil_case = Expr::const_(Name::from_string("Bool.true"), vec![]);
+                    // cons case: fun (_hd : α) (_tl : List α) (_ih : Bool) => Bool.false
+                    let (hd_id, _hd) = b.fresh_local(alpha.clone());
+                    let (tl_id, _tl) = b.fresh_local(list_a.clone());
+                    let (ih_id, _ih) = b.fresh_local(bool_c.clone());
+                    let cons_case = b.mk_lam(
+                        ih_id,
+                        BinderInfo::Default,
+                        bool_c.clone(),
+                        Expr::const_(Name::from_string("Bool.false"), vec![]),
+                    );
+                    let cons_case = b.mk_lam(tl_id, BinderInfo::Default, list_a.clone(), cons_case);
+                    let cons_case = b.mk_lam(hd_id, BinderInfo::Default, alpha.clone(), cons_case);
+                    let body = Expr::apps(
+                        list_rec_bool,
+                        [alpha.clone(), motive, nil_case, cons_case, l.clone()],
+                    );
+                    let e = b.mk_lam(l_id, BinderInfo::Default, list_a.clone(), body);
+                    let e = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+                    b.finish(e)
+                };
+                self.add_decl(Declaration::Definition {
+                    name: Name::from_string("List.isEmpty"),
+                    level_params: vec![u.clone()],
+                    type_: is_empty_type,
+                    value: is_empty_value,
+                    is_reducible: true,
+                })?;
+            }
+
             // ---- List.getLastD ----
             // R151: `l.getLastD d` — the last element of a list, or the default
             // on the empty list. Composed from the already-registered List.headD

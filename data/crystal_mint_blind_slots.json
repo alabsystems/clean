@@ -1,5 +1,5 @@
 {
- "what": "THE COMPLETE LIST of fields the crystal-A2 mint pipeline does not fold into the committed core module: everything the emitted artifact carries that the minted and registered `ir_<chain>_module` does not. One list, so the finite set is visible at once instead of being rediscovered one counterexample at a time. A row records what CLOSED it: `kind` is `compared` when the slot is erased from the module but pinned in the chain's tag table and checked by `ir_mint::project`, `refused` when reading it is now a hard error, `erased` when it is a justified erasure, and `unwitnessed` when one reader structurally cannot see it. As of 2026-08-20 there are SEVEN `compared`, TWO `refused` and TWO `unwitnessed`, and no row is `erased`.",
+ "what": "THE COMPLETE LIST of fields the crystal-A2 mint pipeline does not fold into the committed core module: everything the emitted artifact carries that the minted and registered `ir_<chain>_module` does not. One list, so the finite set is visible at once instead of being rediscovered one counterexample at a time. A row records what CLOSED it: `kind` is `compared` when the slot is erased from the module but pinned in the chain's tag table and checked by `ir_mint::project`, `refused` when reading it is now a hard error, `erased` when it is a justified erasure, and `unwitnessed` when one reader structurally cannot see it. The census is DERIVED, never typed: as of 2026-09-10 there are TEN `compared`, ONE `refused` and TWO `unwitnessed`, and no row is `erased`. The sentence this replaces read SEVEN/TWO/TWO `as of 2026-08-20` and was already stale by one before `global-index` moved -- which is why `m9_the_header_census_matches_the_rows` now counts them.",
  "why": "Each row below is a claim boundary. `read_by` names the lane that reads the row, or says NOTHING. An unwritten claim boundary is how the 2026-08-20 callee-namespace collision survived: it was an erasure nobody had written down, in a slot two writers each assumed the other owned. Writing them down is what made the closures possible at all -- a row that carries a CONSTRUCTED WITNESS (a pair of emitted bodies denoting different programs that the gate accepted as one) is a row that can be turned into a runnable acceptance test.\n\nThe second lesson of 2026-08-20 is sharper and is the reason `cc-and-linkage` reads the way it does: a row can be WRONG. That row said for months that the producer printed neither the calling convention nor the linkage, and therefore that no text reader could ever witness either. The producer prints both. Nobody had opened `trust_ir::display`. A claim boundary written from memory is a claim boundary that can rot into an excuse, so every `erased` and `unwitnessed` row now owes a citation to the producer's own source, quoted, and not a recollection of it.",
  "how_this_file_is_kept_true": "`crystal_a2_mint`'s blind-slot lane parses this file and, for every row, asserts that each `anchors` entry still occurs VERBATIM in the named source file. A change that closes an erasure therefore BREAKS the row that claims it -- which is what happened twice on 2026-08-20: the first closure broke four anchors, and the second broke `spans-and-tags`'s `strip_comment` signature the moment the clause reader started returning content as well as kinds. The file could not be quietly outlived either time. Rows carrying a `witness` name a test that CONSTRUCTS the indistinguishable pair; for a `compared` or `refused` row that test asserts the pair is REJECTED, and it is the acceptance test for the closure.",
  "not_covered_by_this_file": "Fields that are not erased but are UNWITNESSED BY ONE READER are a different thing and live in the mint record's ledger (`ir_<chain>.mint.json`) plus `mask_text_unwitnessed`. `switch.exhaustive_enum_unreachable` is the only such field today; it is listed here too, marked `kind: unwitnessed`, so one read covers both categories.",
@@ -89,29 +89,37 @@
   },
   {
    "id": "global-index",
-   "kind": "refused",
-   "slot": "WHICH global a `global_addr` addresses, and the module's global list entire.",
-   "artifact_carries": "`global_addr @global.4527` -- a whole-crate global-table index. Globals print as `@__trust_promoted_N`, so even the artifact text carries no name for one.",
-   "core_carries": "Nothing: a `global_addr` is no longer readable at all.",
-   "erased_by": "Nothing, any more. Reader B REFUSES a `global_addr` outright rather than interning it into a module whose `(globals)` list is hard-coded empty.",
+   "kind": "compared",
+   "slot": "WHICH global a `global_addr` addresses; the module's global list entire; and the global's NAME, TYPE and LINKAGE.",
+   "artifact_carries": "`global_addr @global.4557` -- a whole-crate global-table index -- plus a module-table row that DOES carry the other three: `global internal @__trust_promoted_4557 [ty.0 x 34] = array[ 108, 105, ... ]`, beside the `type ty.0 = u8` row that resolves the element type.",
+   "core_carries": "`(globaladdr 0)` -- a canonical POSITION in this module's own global list, not a crate index -- and `(global 0 (agg (int 108) ...))`, the 34 initializer bytes. `IRGlobal.mk : Nat -> IRConst -> IRGlobal` has no name slot, no type slot and no linkage slot, so those three are carried by neither the instruction nor the list.",
+   "erased_by": "`Emitted::global_index`, which maps the crate id to a canonical index under the chain's tag-table `globals` lane and records nothing else, and `mint_globals`, which renders each entry as index-plus-bytes through `IRGlobal.mk`. Neither can carry a name, a type or a linkage. A BARE read -- no globals namespace -- still emits the hard-coded empty list and still REFUSES the instruction outright, because a canonical index into an empty list denotes nothing.",
    "anchors": [
     {
      "file": "crates/clean-verify/src/ir_mint/emitted.rs",
-     "text": "pub(super) fn r_global(&mut self, id: u32) -> Result<u32, EmittedError> {"
+     "text": "pub(super) fn global_index(&mut self, id: u32) -> Result<u32, EmittedError> {"
     },
     {
      "file": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
      "text": "Sx::tag(\"globals\", vec![]),"
     },
     {
+     "file": "crates/clean-verify/src/ir_mint/interface_globals.rs",
+     "text": "pub(super) fn check_globals("
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/mint_globals.rs",
+     "text": "clean: \"IRGlobal.mk\","
+    },
+    {
      "file": "scripts/crystal_a2_project/src/main.rs",
-     "text": "out.push_str(\"  (globals)\\n\");"
+     "text": "out.push_str(\"  (globals\");"
     }
    ],
-   "consequence": "CLOSED 2026-08-20 by REFUSAL, which is the honest close for a slot with no inhabitant. `mint` already refused a non-empty global list and `decode` already refused a module with globals in it, so a body with a global could never have been minted -- it could only have been read into an incoherent core module where `(globaladdr 0)` named an entry the module does not declare. Reader B now stops at the read. The moment a chain genuinely carries a global, this refusal is the thing that has to be lifted, deliberately, together with projecting the global list.",
-   "read_by": "`crystal_a2_mint`'s blind-slot lane, which measures that all eleven chained bodies are still global-free AND that a constructed body carrying one is now refused.",
-   "witness": "the_global_slot_is_now_a_refusal_on_every_chained_fixture",
-   "live_on_chains": "none of the eleven"
+   "consequence": "REFUSAL LIFTED 2026-09-09, on exactly one path, which is what the 2026-08-20 close said in its own last sentence would have to happen: `The moment a chain genuinely carries a global, this refusal is the thing that has to be lifted, deliberately, together with projecting the global list.` `ir_lzc` is that chain -- its deref body builds the `expect` message out of `@__trust_promoted_4557` -- so the list is now PROJECTED and this slot is COMPARED rather than refused. `check_globals` accounts every observed `global_addr`, every tag-table pin and every module-table declaration against one another in four directions, each refusal naming its slot (`global declaration` / `global linkage` / `global type`), and `mint_globals` splices the list in the order `ir_global_find` walks. What stays ERASED from the core module is exactly what `IRGlobal.mk` has no slot for -- name, type, linkage -- and those are COMPARED against the tag table instead of carried, the `param-type` pattern one namespace over. A bare read is unchanged and still refuses. RESIDUAL: a producer that pinned a wrong type or linkage CONSISTENTLY with its own fixture would not be caught here. That is the general shape of every `compared` row in this file, and it is bounded by the producer rather than by `project`.",
+   "read_by": "`crystal_a2_mint`'s blind-slot lane -- the witness below carries all three faces (latent on the eleven, refused bare, compared under a table) -- and its `globals` lane, `crystal_a2_mint/globals.rs`, which is nine constructed refusals each asserting the SLOT it names. Plus `crystal_a2_mint_lzc`'s M7 against the committed tag artifact and its `m10_the_interface_pins_bite`, which mutates the fixture's `type ty.0 = u8`, its `[ty.0 x 34]` and its `global internal @` and requires a refusal for each.",
+   "witness": "the_global_slot_is_refused_bare_and_compared_under_a_tag_table",
+   "live_on_chains": "ir_lzc only -- the first chain whose module carries a non-empty `(globals)` list. The eleven older chained bodies are still global-free, measured in the witness."
   },
   {
    "id": "functy-index",
@@ -328,6 +336,41 @@
    "witness": "usize_is_refused_unpinned_and_the_site_count_separates_the_u64_twin",
    "consequence": "Without the pin, NOTHING resolves: both text readers refuse the token by name, so a chain whose body contains `usize` cannot join the mint at all until its table states the width as a reviewed target fact. With the pin, the resolved core is one module for `usize` and `u64` twins -- and the pinned SITE COUNT is the acceptance check that separates them, so the erasure is bounded to a count-preserving positional exchange between a usize and a real u64, which no chained body exhibits (the one chained usize body has one cast and no u64).",
    "read_by": "Reader A: `Projector::ty`, `Ty::Usize` arm (scripts/crystal_a2_project/src/main.rs), resolved under `--usize-bits`, recorded as `usize_bits` + `usize_sites_resolved` in the provenance JSON. Reader B: `Reader::ty`, the `\"usize\"` arm (src/ir_mint/emitted.rs), resolved through `read_with_pins`, counted into `ObservedTags::usize_seen`. The pin: `Tags::usize_pin` (src/ir_mint/tags.rs), compared by `project` (src/ir_mint/interface.rs)."
+  },
+  {
+   "id": "aggregate-id",
+   "kind": "compared",
+   "slot": "WHICH crate aggregate a body's `enum.N` / `struct.N` denotes.",
+   "artifact_carries": "`load enum.6, ptr %0` -- a whole-crate TYPE-table index, the same kind of index `@func.N` and `@global.N` are.",
+   "core_carries": "`(enum 0)` -- a canonical index assigned by FIRST-SEEN order within ONE body, counting from 0. It carries no crate identity at all.",
+   "erased_by": "`Reader::intern`, which hands out canonical aggregate indices in first-seen order with NO reference to the tag table. The canonical index in the core still carries no crate identity -- that half is unchanged and is why this row survives as `compared` rather than being deleted. What changed is that `interface_aggregates::check_aggregates` now COMPARES every observed index against the lane, so the identity the core drops is checked beside it.",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/ir_mint/emitted.rs",
+     "text": "fn intern(map: &mut BTreeMap<u32, u32>, id: u32) -> u32 {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/tags.rs",
+     "text": "pub(crate) fn alias_defs(&self) -> Vec<String> {"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/tags.rs",
+     "text": "\"def {alias} : IRTy := IRTy.enum_ {}\","
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface.rs",
+     "text": "slot: format!(\"callee {canonical} (`{name}`)\"),"
+    },
+    {
+     "file": "crates/clean-verify/src/ir_mint/interface_aggregates.rs",
+     "text": "pub(super) fn check_aggregates(bodies: &[ObservedTags], tags: &Tags) -> Result<(), InterfaceError> {"
+    }
+   ],
+   "consequence": "FOUND 2026-09-10 by an adversarial design review of the Phase-B five-body module, MEASURED with a constructed pair the same day, and CLOSED by comparison the same day. What it was: `project` related an observed aggregate id to the lane NOWHERE -- measured, `interface.rs` mentioned neither lane -- while the lane's crate id is what reaches the committed proof, because `alias_defs` writes `def <alias> : IRTy := IRTy.enum_ ir_d<crate_id>` and `ir_lzc.defs.txt` line 1 is `def ir_lzc_tlevel : IRTy := IRTy.enum_ ir_d2`. Two bodies naming `enum.2` and `enum.7` projected to ONE core under a table pinning 2, both minting `IRTy.enum_ ir_d2`. Why eighteen chains survived it, as a CONSTRUCTION and not a defence: each was assembled from ONE artifact, so first-seen order and the lane's order are the same walk. That argument does not survive a module assembled from TWO artifacts with independent type numbering, which is what the Phase-B module is -- its crate bodies name `enum.2` and its sidecar bodies name `enum.0` and `enum.1`, all three claiming canonical 0. `check_aggregates` now refuses in four directions: two bodies disagreeing about what a canonical index denotes; an observed index no row pins; an observed index whose raw id disagrees with the row's `crate_id`; and a pinned row NOTHING reaches. The last one reads the UNION of instruction and INTERFACE positions, and that is not a detail -- a first cut reading instruction positions alone refused the committed `ir_hlb` chain, whose `structs` pin (`ir_hlb_tself`, `struct.29`) is named only by the root's parameter type. Running a new refusal against the whole corpus is what caught it. All 20 committed tables pass unchanged.",
+   "justification": "Not an erasure any more, so no justification is owed. The canonical index in the core still carries no crate identity -- that is why the row stays rather than being deleted -- but the identity is now COMPARED against the lane in four directions rather than assumed from a one-artifact construction argument. The RESIDUAL is the general shape of every `compared` row here: a producer that pinned a wrong crate id CONSISTENTLY with its own bodies is not caught, and that is bounded by the producer rather than by `project`.",
+   "read_by": "`ir_mint::interface_aggregates::check_aggregates`, called by `project` before the globals check, on every chain. Plus `crystal_a2_mint`'s blind-slot lane: the witness below is the constructed pair that USED to pass, now asserting the refusal, beside the pin-over-nothing direction and the parameter-reached control that the `ir_hlb` chain forced.",
+   "witness": "the_aggregate_id_a_body_names_is_compared_and_the_pair_is_now_refused",
+   "live_on_chains": "all twenty, and now checked on all twenty. It was harmless on each by construction; it would not have been on any module assembled from more than one artifact."
   }
  ],
  "justification_standard": "A row that stays `erased` or `unwitnessed` must justify itself with a KERNEL-CHECKED THEOREM, a MEASURED FACT, or a QUOTED LINE of the producer's source -- never with a recollection. The standard for a theorem is `ir_ty_is_agg_enum_any` (`spec/core_spec/eval_ir_ops.rs`), which proves `ir_ty_is_agg (IRTy.enum_ n) = Bool.true` at EVERY whole-crate id and is why a type-table renumbering cannot reach the value the machine computes; `ir_exec_switch_exh_irrelevant`, `ir_exec_callind_conv_irrelevant` and `ir_exec_callind_sig_irrelevant` (`spec/core_spec/eval_ir_machine.rs`) are the same standard for three dropped operands. And a theorem must be about THE OBJECT THE ROW IS ABOUT: `functy-index` cited `ir_exec_callind_sig_irrelevant` for four months, which proves something true about `callindirect`'s operand and nothing at all about the function's own header signature. That mismatch is what let a variadic and a non-variadic function be accepted as one program."

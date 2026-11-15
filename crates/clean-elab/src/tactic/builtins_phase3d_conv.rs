@@ -15,6 +15,8 @@
 //! Goal-path and hypothesis-path orchestration live in child modules
 //! to reduce churn on this hot registration file. Part of #2547.
 
+use clean_parser::SurfaceName;
+
 use std::sync::Arc;
 
 use super::conv::{ConvPosition, ConvState};
@@ -89,6 +91,11 @@ pub(crate) fn run_conv_body(
     for tac in tacs {
         if let SurfaceTactic::Named { name, args, .. } = tac {
             if name == "congr" && args.is_empty() {
+                // Serviced here instead of through `eval`, so record it on the
+                // attribution trace explicitly — otherwise a later `unsolved
+                // goals` in this block would be blamed on `conv` and the
+                // conv-mode `congr` would be invisible in the diagnostic.
+                eval.note_tactic(tac);
                 super::conv_ext::conv_congr(conv_ps)?;
                 continue;
             }
@@ -130,7 +137,7 @@ fn compound_conv() -> CompoundTacticEntry {
                 }
                 SurfaceTacticLocation::Wildcard => {
                     goal::eval_conv_goal(eval, ps, tacs)?;
-                    let hyp_names: Vec<String> = ps
+                    let hyp_names: Vec<SurfaceName> = ps
                         .current_goal()
                         .map(|g| g.local_ctx.iter().map(|d| d.name.clone()).collect())
                         .unwrap_or_default();

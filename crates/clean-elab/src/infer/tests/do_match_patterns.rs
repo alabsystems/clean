@@ -64,7 +64,10 @@ fn test_elab_do_match_nat_zero_pattern_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -104,7 +107,10 @@ fn test_elab_do_match_numeral_add_one_pattern_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -117,12 +123,15 @@ fn test_elab_do_match_numeral_add_one_pattern_supported() {
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         1,
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("k"),
+                        )),
                     )],
                 },
             ],
@@ -147,17 +156,23 @@ fn test_elab_do_match_ctor_pattern_return_unit_elaborates() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
-                        vec![SurfacePattern::Var("k".to_string())],
+                        SurfaceName::generated_path("Nat.succ"),
+                        vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
                     )],
                     body: vec![DoElem::Return(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "Unit.unit".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("Unit.unit"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -165,7 +180,10 @@ fn test_elab_do_match_ctor_pattern_return_unit_elaborates() {
                     patterns: vec![SurfacePattern::Wildcard],
                     body: vec![DoElem::Return(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "Unit.unit".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("Unit.unit"),
+                        )),
                     )],
                 },
             ],
@@ -197,7 +215,10 @@ fn test_elab_do_match_nonzero_nat_literal_pattern_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -231,6 +252,10 @@ fn test_elab_do_match_nonzero_nat_literal_pattern_supported() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -254,7 +279,10 @@ fn test_elab_do_match_numeral_add_offset_two_pattern_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -267,12 +295,15 @@ fn test_elab_do_match_numeral_add_offset_two_pattern_supported() {
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         2,
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("k"),
+                        )),
                     )],
                 },
                 // Cover the otherwise-missing `1` case with a real fallback.
@@ -289,6 +320,10 @@ fn test_elab_do_match_numeral_add_offset_two_pattern_supported() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -312,17 +347,23 @@ fn test_elab_do_match_numeral_add_pattern_requires_nat_scrutinee() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "b".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("b"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         1,
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("k"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -330,7 +371,10 @@ fn test_elab_do_match_numeral_add_pattern_requires_nat_scrutinee() {
                     patterns: vec![SurfacePattern::Wildcard],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "b".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("b"),
+                        )),
                     )],
                 },
             ],
@@ -361,12 +405,15 @@ fn test_elab_do_match_ctor_nested_literal_pattern_elaborates() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
+                        SurfaceName::generated_path("Nat.succ"),
                         vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
                     )],
                     body: vec![DoElem::Expr(
@@ -387,6 +434,10 @@ fn test_elab_do_match_ctor_nested_literal_pattern_elaborates() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -411,14 +462,17 @@ fn test_elab_do_match_ctor_nested_numeral_add_pattern_elaborates() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
+                        SurfaceName::generated_path("Nat.succ"),
                         vec![SurfacePattern::NumeralAdd(
-                            Box::new(SurfacePattern::Var("k".to_string())),
+                            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                             1,
                         )],
                     )],
@@ -440,6 +494,10 @@ fn test_elab_do_match_ctor_nested_numeral_add_pattern_elaborates() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -456,11 +514,17 @@ fn test_elab_do_match_recursive_nested_ctor_pattern_elaborates() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "opt".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("opt"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
-                    patterns: vec![SurfacePattern::Ctor("Option.none".to_string(), vec![])],
+                    patterns: vec![SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Option.none"),
+                        vec![],
+                    )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
                         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
@@ -469,15 +533,18 @@ fn test_elab_do_match_recursive_nested_ctor_pattern_elaborates() {
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::Ctor(
-                        "Option.some".to_string(),
+                        SurfaceName::generated_path("Option.some"),
                         vec![SurfacePattern::Ctor(
-                            "Option.some".to_string(),
-                            vec![SurfacePattern::Var("x".to_string())],
+                            SurfaceName::generated_path("Option.some"),
+                            vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
                         )],
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("x"),
+                        )),
                     )],
                 },
                 // Cover `Option.some Option.none` with a real fallback. The
@@ -496,6 +563,10 @@ fn test_elab_do_match_recursive_nested_ctor_pattern_elaborates() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx
         .elaborate(&surface)
         .expect("recursive nested ctor do-match should elaborate");
@@ -517,16 +588,22 @@ fn test_elab_do_match_as_pattern_var_inner_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![DoMatchArm {
                 span: Span::dummy(),
                 patterns: vec![SurfacePattern::As(
-                    "h".to_string(),
-                    Box::new(SurfacePattern::Var("x".to_string())),
+                    SurfaceName::generated_path("h"),
+                    Box::new(SurfacePattern::Var(SurfaceName::generated_path("x"))),
                 )],
                 body: vec![DoElem::Expr(
                     Span::dummy(),
-                    Box::new(SurfaceExpr::Ident(Span::dummy(), "h".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        Span::dummy(),
+                        SurfaceName::generated_path("h"),
+                    )),
                 )],
             }],
         )],
@@ -552,16 +629,22 @@ fn test_elab_do_match_as_pattern_wildcard_inner_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![DoMatchArm {
                 span: Span::dummy(),
                 patterns: vec![SurfacePattern::As(
-                    "h".to_string(),
+                    SurfaceName::generated_path("h"),
                     Box::new(SurfacePattern::Wildcard),
                 )],
                 body: vec![DoElem::Expr(
                     Span::dummy(),
-                    Box::new(SurfaceExpr::Ident(Span::dummy(), "h".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        Span::dummy(),
+                        SurfaceName::generated_path("h"),
+                    )),
                 )],
             }],
         )],
@@ -588,13 +671,19 @@ fn test_elab_do_match_or_pattern_expands_to_separate_arms() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![DoMatchArm {
                 span: Span::dummy(),
                 patterns: vec![SurfacePattern::Or(
-                    Box::new(SurfacePattern::Ctor("Nat.zero".to_string(), vec![])),
                     Box::new(SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
+                        SurfaceName::generated_path("Nat.zero"),
+                        vec![],
+                    )),
+                    Box::new(SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Nat.succ"),
                         vec![SurfacePattern::Wildcard],
                     )),
                 )],

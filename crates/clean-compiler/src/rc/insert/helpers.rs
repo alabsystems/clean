@@ -43,14 +43,29 @@ pub(super) fn process_let_value(
             code
         }
 
-        // Projection: track derivation for borrowed propagation
+        // Projection: track derivation for borrowed propagation.
+        //
+        // A projection is a BORROWED read of the structure. When it is the
+        // structure's last use (a non-param local, dead in `rest`), the
+        // structure is released right after the field was inc'd — Lean's
+        // `ExplicitRC` rule for `proj`. Without it the structure was never
+        // released: a leak the WS6.2 linearity verifier refuses (the
+        // `some v` arm of `List.instGetElem?NatLtLength`, whose `Option`
+        // cell outlived its only projection). Params keep their death `dec`
+        // on every return path instead ([`super::insert_rc_return`]).
         LetValue::Proj { structure, .. } => {
             ctx.derived_from.insert(decl.fvar_id, *structure);
             if live.is_borrowed(*structure) {
                 live.mark_borrowed(decl.fvar_id);
             }
+            let structure_dies_here = !live.is_live(*structure)
+                && !ctx.is_param(*structure)
+                && ctx.needs_rc(*structure, live);
             live.mark_live(*structure);
             let mut result_rest = rest;
+            if structure_dies_here {
+                result_rest = wrap_dec(*structure, result_rest, ctx);
+            }
             if was_live && ctx.needs_rc(decl.fvar_id, live) {
                 result_rest = wrap_inc(decl.fvar_id, result_rest, ctx);
             }

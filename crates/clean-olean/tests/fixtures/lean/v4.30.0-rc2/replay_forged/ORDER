@@ -1,0 +1,132 @@
+# Every artifact but the module sources (each a bare name below) is minted by the generator
+# (README.md); the pinned Lean compiles and checks each module source.
+# `run <script> <args...>` is the test-support helper's `lean --run` step; cwd
+# is the copied family directory, so the outputs land beside this file's copy.
+run GenReplayForged.lean ReplayForged.olean forged
+run GenReplayForged.lean ReplayForged3.olean forged3
+run GenReplayForged.lean ReplayForged4.olean forged4
+run GenReplayForged.lean ReplayForged5.olean forged5
+run GenReplayForged.lean ReplayCrossA.olean crossA
+run GenReplayForged.lean ReplayCrossB.olean crossB
+run GenReplayForged.lean ReplayHonest.olean honest
+run GenReplayForged.lean ReplayHonestUnsafe.olean honestUnsafe
+run GenReplayForged.lean ReplayHonest4.olean honest4
+run GenReplayForged.lean ReplayPrelude.olean prelude
+run GenReplayForged.lean ReplayPreludeUse.olean preludeUse
+run GenReplayForged.lean ReplayRedeclare.olean redeclare
+run GenReplayForged.lean ReplayForgedRec.olean forgedRec
+run GenReplayForged.lean ReplayForgedRule.olean forgedRule
+run GenReplayForged.lean ReplayForgedCtor.olean forgedCtor
+run GenReplayForged.lean ReplayForgedQuot.olean forgedQuot
+run GenReplayForged.lean ReplayForgedStr.olean forgedStr
+run GenReplayForged.lean ReplayHonestStr.olean honestStr
+run GenReplayForged.lean ReplayForgedThmType.olean forgedThmType
+run GenReplayForged.lean ReplayForgedProjIdx.olean forgedProjIdx
+run GenReplayForged.lean ReplayForgedUniv.olean forgedUniv
+run GenReplayForged.lean ReplayForgedDupUniv.olean forgedDupUniv
+run GenReplayForged.lean ReplayHonestUniv.olean honestUniv
+run GenReplayForged.lean ReplayForgedLamType.olean forgedLamType
+run GenReplayForged.lean ReplayHonestBoolAx.olean honestBoolAx
+run GenReplayForged.lean ReplayForgedBoolDef.olean forgedBoolDef
+run GenReplayForged.lean ReplayForgedQuotRedecl.olean forgedQuotRedecl
+run GenReplayForged.lean ReplayForgedQuotIndAxiom.olean forgedQuotIndAxiom
+run GenReplayForged.lean ReplayHonestPropAx.olean honestPropAx
+run GenReplayForged.lean ReplayForgedThmOverAx.olean forgedThmOverAx
+run GenReplayForged.lean ReplayHonestIndAx.olean honestIndAx
+run GenReplayForged.lean ReplayForgedIndOverAx.olean forgedIndOverAx
+run GenReplayForged.lean ReplayForgedPriv.olean forgedPriv
+run GenReplayForged.lean ReplayForgedPrivBad.olean forgedPrivBad
+run GenReplayForged.lean ReplayHonestPriv.olean honestPriv
+run GenReplayForged.lean ReplayHonestOpaqueAx.olean honestOpaqueAx
+run GenReplayForged.lean ReplayForgedOpaqueDef.olean forgedOpaqueDef
+run GenReplayForged.lean ReplayForgedOpaqueUse.olean forgedOpaqueUse
+run GenReplayForged.lean ReplayForgedQuotDef.olean forgedQuotDef
+run GenReplayForged.lean ReplayForgedIte.olean forgedIte
+run GenReplayForged.lean ReplayHonestIte.olean honestIte
+run GenReplayForged.lean ReplayHonestDeltaProp.olean honestDeltaProp
+run GenReplayForged.lean ReplayForgedDeltaPropLargeElim.olean forgedDeltaPropLargeElim
+run GenReplayForged.lean ReplayHonestSortU.olean honestSortU
+run GenReplayForged.lean ReplayForgedSortULargeElim.olean forgedSortULargeElim
+run GenReplayForged.lean ReplayForgedAllGhost.olean forgedAllGhost
+run GenReplayForged.lean ReplayForgedAllOther.olean forgedAllOther
+run GenReplayForged.lean ReplayForgedIsRec.olean forgedIsRec
+run GenReplayForged.lean ReplayForgedMutualEta.olean forgedMutualEta
+run GenReplayForged.lean ReplayHonestIndFlags.olean honestIndFlags
+run GenReplayForged.lean ReplayHonestDepNested.olean honestDepNested
+run GenReplayForged.lean ReplayForgedDepNestedRefl.olean forgedDepNestedRefl
+run GenReplayForged.lean ReplayForgedPowCap.olean forgedPowCap
+run GenReplayForged.lean ReplayForgedLevelJoin.olean forgedLevelJoin
+run GenReplayForged.lean ReplayHonestLevelAssoc.olean honestLevelAssoc
+run GenReplayForged.lean ReplayForgedLevelAssoc.olean forgedLevelAssoc
+run GenReplayForged.lean ReplayForgedMutualLevel.olean forgedMutualLevel
+run GenReplayForged.lean ReplayForgedPowCapOuter.olean forgedPowCapOuter
+run GenReplayForged.lean ReplayForgedShlCap.olean forgedShlCap
+run GenReplayForged.lean ReplayMisplacedServer.olean misplacedServer
+run GenReplayForged.lean ReplayMisplacedServerPlain.olean misplacedServerPlain
+run GenReplayForged.lean ReplayHonestServerParts.olean honestServerParts
+run GenReplayForged.lean ReplayMisplacedOlean.olean misplacedOlean
+# Parts that disagree (a value; an import list), and a misplaced family in a DEPENDENCY: each
+# dependency is minted before the module that imports it.
+run GenReplayForged.lean ReplayPartsValDis.olean partsValDis
+run GenReplayForged.lean ReplayPartsValDep.olean partsValDep
+run GenReplayForged.lean ReplayPartsValDepUser.olean partsValDepUser
+run GenReplayForged.lean ReplayPartsImpE.olean partsImpE
+run GenReplayForged.lean ReplayPartsImpF.olean partsImpF
+run GenReplayForged.lean ReplayPartsImpD.olean partsImpD
+run GenReplayForged.lean ReplayPartsImpT.olean partsImpT
+run GenReplayForged.lean ReplayMisplacedDep.olean misplacedDep
+run GenReplayForged.lean ReplayMisplacedDepUser.olean misplacedDepUser
+run GenReplayForged.lean ReplayHonestDep.olean honestDep
+run GenReplayForged.lean ReplayHonestDepUser.olean honestDepUser
+# R131: value-free stubs a later part completes (each dependency before its user), and the two
+# placement halves no other family reaches.
+run GenReplayForged.lean ReplayStubRefused.olean stubRefused
+run GenReplayForged.lean ReplayStubHonest.olean stubHonest
+run GenReplayForged.lean ReplayStubRefusedDep.olean stubRefusedDep
+run GenReplayForged.lean ReplayStubRefusedDepUser.olean stubRefusedDepUser
+run GenReplayForged.lean ReplayStubPlainDep.olean stubPlainDep
+run GenReplayForged.lean ReplayStubPlainDepUser.olean stubPlainDepUser
+run GenReplayForged.lean ReplayStubPlainPrivDep.olean stubPlainPrivDep
+run GenReplayForged.lean ReplayStubPlainPrivDepUser.olean stubPlainPrivDepUser
+run GenReplayForged.lean ReplayStubPlainHonest.olean stubPlainHonest
+run GenReplayForged.lean ReplayStubPlainHonestUser.olean stubPlainHonestUser
+run GenReplayForged.lean ReplayStubPlainTgt.olean stubPlainTgt
+run GenReplayForged.lean ReplayMisplacedOleanOnlyDep.olean misplacedOleanOnlyDep
+run GenReplayForged.lean ReplayMisplacedOleanOnlyDepUser.olean misplacedOleanOnlyDepUser
+run GenReplayForged.lean ReplayMisplacedPrivPlainDep.olean misplacedPrivPlainDep
+run GenReplayForged.lean ReplayMisplacedPrivPlainDepUser.olean misplacedPrivPlainDepUser
+# R142: values the authoritative part states that the loader never makes resident.
+run GenReplayForged.lean ReplayStubMv.olean stubMv
+run GenReplayForged.lean ReplayStubFv.olean stubFv
+run GenReplayForged.lean ReplayShadowAx.olean shadowAx
+run GenReplayForged.lean ReplayShadowStub.olean shadowStub
+run GenReplayForged.lean ReplayShadowStubUser.olean shadowStubUser
+run GenReplayForged.lean ReplayShadowThm.olean shadowThm
+run GenReplayForged.lean ReplayQuotIndThm.olean forgedQuotIndThm
+# honestIsPropStuck (#14807; Lean accepts it; Clean refuses it since the is_prop guard). The base module
+# (Init.WF closure, Lean's kernel checks it) is compiled first; the generator then adds the
+# stuck-carrier exploit tail over it. Both module SOURCES below are compiled before the run.
+ReplayIsPropStuckBase
+run GenReplayForged.lean ReplayIsPropStuck.olean honestIsPropStuck
+# Module SOURCES: compiled by the pinned `lean -o` (Lean's kernel checks each).
+ReplayHonestInd
+ReplayHonestDepNestedDeep
+# An honest family whose sort is an IMPORTED definition (decision R147): two module SOURCES,
+# the base first. `per-constant-verify` once refused the family (its demand walk registered it
+# before the definition was resident); Lean's kernel checks every declaration.
+ReplayHonestSortDefBase
+ReplayHonestSortDef
+# Universe levels (DECISIONS R150): forged and honest level equalities, the object-sharing
+# probe, and a module SOURCE whose WF compilation packs an `imax` tower (`lean -o`).
+run GenReplayForged.lean ReplayForgedLevelSubsumption.olean forgedLevelSubsumption
+run GenReplayForged.lean ReplayHonestLevelEquiv.olean honestLevelEquiv
+run GenReplayForged.lean ReplayLevelSharing.olean levelSharing
+run GenReplayForged.lean ReplayHonestLevelImport.olean honestLevelImport
+run GenReplayForged.lean ReplayForgedLevelImport.olean forgedLevelImport
+run GenReplayForged.lean ReplayHonestLevelImportUse.olean honestLevelImportUse
+ReplayHonestWfLevels
+# Universe levels on the projection, delta, iota and recursor paths (DECISIONS R150, 2026-10-20
+# review round), and a module SOURCE whose `delta` proof keeps a raw projection (`lean -o`).
+run GenReplayForged.lean ReplayForgedLevelReach.olean forgedLevelReach
+run GenReplayForged.lean ReplayHonestLevelReach.olean honestLevelReach
+ReplayHonestLevelProj

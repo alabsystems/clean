@@ -52,6 +52,28 @@ fn prop() -> Expr {
     Expr::from_kind(ExprKind::Sort(Level::zero()))
 }
 
+#[test]
+fn parameter_markers_are_checked_reducible_identities() {
+    let env = Environment::with_prelude();
+    let tc = TypeChecker::new(&env);
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    for marker in ["outParam", "semiOutParam"] {
+        let info = env
+            .get_const(&Name::from_string(marker))
+            .expect("prelude marker");
+        assert_eq!(info.kind, crate::env::ConstantKind::Definition);
+        assert!(info.is_reducible);
+        assert!(info.value.is_some());
+        assert_eq!(info.level_params.len(), 1);
+        let application = Expr::app(
+            Expr::const_(Name::from_string(marker), vec![Level::succ(Level::zero())]),
+            nat.clone(),
+        );
+        assert!(tc.is_def_eq(&application, &nat), "{marker}");
+        assert!(tc.infer_type(&application).is_ok(), "{marker}");
+    }
+}
+
 /// Lean's six universe arguments for a `Prop`-valued relation on a `Type 0`
 /// carrier: `Trans.{0, 0, 0, 1, 1, 1}`.
 fn lean_trans_levels() -> Vec<Level> {

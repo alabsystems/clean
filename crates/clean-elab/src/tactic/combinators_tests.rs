@@ -45,13 +45,15 @@ fn multi_goal_state(env: Environment) -> ProofState {
         meta_id: meta_b,
         target: b,
         local_ctx: vec![],
-        tag: Some("goal_B".into()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal_B")),
+        case_binders: Vec::new(),
     });
     ps.goals.push_back(Goal {
         meta_id: meta_c,
         target: c,
         local_ctx: vec![],
-        tag: Some("goal_C".into()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal_C")),
+        case_binders: Vec::new(),
     });
     ps
 }

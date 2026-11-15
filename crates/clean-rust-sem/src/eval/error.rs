@@ -10,7 +10,7 @@ use thiserror::Error;
 /// This sits alongside the crate-wide error type so the evaluator can migrate
 /// hot paths away from raw strings without forcing a whole-module conversion.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
-pub enum EvalError {
+pub(crate) enum EvalError {
     #[error("type error in {context}: expected {expected}, got {actual}")]
     TypeError {
         expected: String,

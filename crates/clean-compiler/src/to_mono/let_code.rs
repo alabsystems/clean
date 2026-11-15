@@ -38,6 +38,19 @@ pub fn letvalue_to_mono(
 ) -> LetValueTransform {
     match value {
         LetValue::Const { name, args, .. } => {
+            // The actual constructor's second field is a proof. Force its
+            // argument erased before RC, even when local proof inference was
+            // unavailable while lowering an open source term.
+            if *name == Name::from_string("String.ofByteArray")
+                && crate::string_layout::has_byte_array_string_layout(env)
+                && args.len() == 2
+            {
+                return LetValueTransform::Simple(LetValue::Const {
+                    name: name.clone(),
+                    levels: vec![],
+                    args: vec![arg_to_mono(&args[0], state), Arg::Erased],
+                });
+            }
             // Decidable.isTrue → Bool.true
             if *name == special_names::decidable_is_true() {
                 return LetValueTransform::Simple(LetValue::Const {
@@ -216,6 +229,16 @@ pub fn letvalue_to_mono(
         }
 
         LetValue::Ctor { name, args, .. } => {
+            if *name == Name::from_string("String.ofByteArray")
+                && crate::string_layout::has_byte_array_string_layout(env)
+                && args.len() == 2
+            {
+                return LetValueTransform::Simple(LetValue::Const {
+                    name: name.clone(),
+                    levels: vec![],
+                    args: vec![arg_to_mono(&args[0], state), Arg::Erased],
+                });
+            }
             // Nat.zero → Lit(Nat(0)) - same as Const case
             if *name == special_names::nat_zero() {
                 return LetValueTransform::Simple(LetValue::nat(0));
@@ -296,6 +319,24 @@ pub fn letvalue_to_mono(
             // If structure is a type param, projection is erased
             if state.is_type_param(*structure) {
                 return LetValueTransform::Simple(LetValue::Erased);
+            }
+
+            // Flat String extraction allocates a fresh ByteArray. Rewrite
+            // before RC so it is treated as a call, not a borrowed cell field.
+            if (*type_name == Name::from_string("String")
+                || *type_name == Name::from_string("String.ofByteArray"))
+                && crate::string_layout::has_byte_array_string_layout(env)
+            {
+                if *idx == 0 {
+                    return LetValueTransform::Simple(LetValue::Const {
+                        name: Name::from_string("String.toByteArray"),
+                        levels: vec![],
+                        args: vec![Arg::FVar(*structure)],
+                    });
+                }
+                if *idx == 1 {
+                    return LetValueTransform::Simple(LetValue::Erased);
+                }
             }
 
             // Trivial structure projection: if the structure is trivial and we're

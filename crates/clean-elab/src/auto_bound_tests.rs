@@ -9,22 +9,27 @@ use std::collections::HashSet;
 use super::auto_bound::*;
 use clean_kernel::expr::{BinderInfo, ExprKind};
 use clean_kernel::Expr;
+use clean_parser::SurfaceName;
+
+fn fixture_name(name: &'static str) -> SurfaceName {
+    SurfaceName::generated_path(name)
+}
 use clean_parser::{LevelExpr, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, UniverseExpr};
 
 // =============================================================================
 // Helper
 // =============================================================================
 
-fn empty_scope() -> HashSet<String> {
+fn empty_scope() -> HashSet<SurfaceName> {
     HashSet::new()
 }
 
-fn scope_with(names: &[&str]) -> HashSet<String> {
-    names.iter().map(|s| (*s).to_owned()).collect()
+fn scope_with(names: &[&'static str]) -> HashSet<SurfaceName> {
+    names.iter().map(|s| fixture_name(s)).collect()
 }
 
-fn names_of(vars: &[AutoBoundVar]) -> Vec<&str> {
-    vars.iter().map(|v| v.name.as_str()).collect()
+fn names_of(vars: &[AutoBoundVar]) -> Vec<SurfaceName> {
+    vars.iter().map(|v| v.name.clone()).collect()
 }
 
 // =============================================================================
@@ -128,7 +133,7 @@ fn test_collect_type_var_from_ident() {
 
     let (vars, univs) = collector.finish();
     assert_eq!(vars.len(), 1);
-    assert_eq!(vars[0].name, "\u{03B1}");
+    assert_eq!(vars[0].name, SurfaceName::generated_path("\u{03B1}"));
     assert!(matches!(vars[0].kind, AutoBoundKind::TypeVar { .. }));
     assert_eq!(vars[0].binder_info, BinderInfo::Implicit);
     assert!(univs.is_empty());
@@ -148,8 +153,11 @@ fn test_collect_multiple_greek_vars() {
     collector.collect_from_expr(&expr);
 
     let (vars, _) = collector.finish();
-    let names: Vec<&str> = names_of(&vars);
-    assert_eq!(names, vec!["\u{03B1}", "\u{03B2}"]);
+    let names: Vec<SurfaceName> = names_of(&vars);
+    assert_eq!(
+        names,
+        vec![fixture_name("\u{03B1}"), fixture_name("\u{03B2}")]
+    );
 }
 
 // =============================================================================
@@ -164,9 +172,9 @@ fn test_collect_universe_var_from_ident() {
 
     let (vars, univs) = collector.finish();
     assert_eq!(vars.len(), 1);
-    assert_eq!(vars[0].name, "u");
+    assert_eq!(vars[0].name, SurfaceName::generated_path("u"));
     assert!(matches!(vars[0].kind, AutoBoundKind::UniverseVar));
-    assert_eq!(univs, vec!["u"]);
+    assert_eq!(univs, vec![fixture_name("u")]);
 }
 
 #[test]
@@ -175,12 +183,12 @@ fn test_collect_universe_from_level_param() {
     // Sort u
     let expr = SurfaceExpr::Universe(
         clean_parser::Span::dummy(),
-        UniverseExpr::Sort(Box::new(LevelExpr::Param("u".to_owned()))),
+        UniverseExpr::Sort(Box::new(LevelExpr::Param(SurfaceName::generated_path("u")))),
     );
     collector.collect_from_expr(&expr);
 
     let (vars, univs) = collector.finish();
-    assert_eq!(univs, vec!["u"]);
+    assert_eq!(univs, vec![fixture_name("u")]);
     assert_eq!(vars.len(), 1);
     assert!(matches!(vars[0].kind, AutoBoundKind::UniverseVar));
 }
@@ -191,12 +199,12 @@ fn test_collect_universe_from_type_level() {
     // Type v
     let expr = SurfaceExpr::Universe(
         clean_parser::Span::dummy(),
-        UniverseExpr::TypeLevel(Box::new(LevelExpr::Param("v".to_owned()))),
+        UniverseExpr::TypeLevel(Box::new(LevelExpr::Param(SurfaceName::generated_path("v")))),
     );
     collector.collect_from_expr(&expr);
 
     let (_, univs) = collector.finish();
-    assert_eq!(univs, vec!["v"]);
+    assert_eq!(univs, vec![fixture_name("v")]);
 }
 
 // =============================================================================
@@ -272,8 +280,15 @@ fn test_ordering_preserved() {
     collector.collect_from_expr(&SurfaceExpr::ident("\u{03B2}"));
 
     let (vars, _) = collector.finish();
-    let names: Vec<&str> = names_of(&vars);
-    assert_eq!(names, vec!["\u{03B3}", "\u{03B1}", "\u{03B2}"]);
+    let names: Vec<SurfaceName> = names_of(&vars);
+    assert_eq!(
+        names,
+        vec![
+            fixture_name("\u{03B3}"),
+            fixture_name("\u{03B1}"),
+            fixture_name("\u{03B2}")
+        ]
+    );
 }
 
 #[test]
@@ -302,7 +317,7 @@ fn test_mixed_type_and_universe_vars() {
     );
     let body = SurfaceExpr::Universe(
         clean_parser::Span::dummy(),
-        UniverseExpr::Sort(Box::new(LevelExpr::Param("u".to_owned()))),
+        UniverseExpr::Sort(Box::new(LevelExpr::Param(SurfaceName::generated_path("u")))),
     );
     let expr = SurfaceExpr::lambda(vec![binder], body);
     collector.collect_from_expr(&expr);
@@ -310,11 +325,11 @@ fn test_mixed_type_and_universe_vars() {
     let (vars, univs) = collector.finish();
     // α is a type var, u is a universe var
     assert_eq!(vars.len(), 2);
-    assert_eq!(vars[0].name, "\u{03B1}");
+    assert_eq!(vars[0].name, SurfaceName::generated_path("\u{03B1}"));
     assert!(matches!(vars[0].kind, AutoBoundKind::TypeVar { .. }));
-    assert_eq!(vars[1].name, "u");
+    assert_eq!(vars[1].name, SurfaceName::generated_path("u"));
     assert!(matches!(vars[1].kind, AutoBoundKind::UniverseVar));
-    assert_eq!(univs, vec!["u"]);
+    assert_eq!(univs, vec![fixture_name("u")]);
 }
 
 // =============================================================================
@@ -335,9 +350,12 @@ fn test_nested_app_scanning() {
     collector.collect_from_expr(&expr);
 
     let (vars, _) = collector.finish();
-    let names: Vec<&str> = names_of(&vars);
+    let names: Vec<SurfaceName> = names_of(&vars);
     // f is not Greek/universe so not collected
-    assert_eq!(names, vec!["\u{03B1}", "\u{03B2}"]);
+    assert_eq!(
+        names,
+        vec![fixture_name("\u{03B1}"), fixture_name("\u{03B2}")]
+    );
 }
 
 #[test]
@@ -351,8 +369,11 @@ fn test_arrow_scanning() {
     collector.collect_from_expr(&expr);
 
     let (vars, _) = collector.finish();
-    let names: Vec<&str> = names_of(&vars);
-    assert_eq!(names, vec!["\u{03B1}", "\u{03B2}"]);
+    let names: Vec<SurfaceName> = names_of(&vars);
+    assert_eq!(
+        names,
+        vec![fixture_name("\u{03B1}"), fixture_name("\u{03B2}")]
+    );
 }
 
 #[test]
@@ -369,8 +390,11 @@ fn test_pi_scanning() {
     collector.collect_from_expr(&expr);
 
     let (vars, _) = collector.finish();
-    let names: Vec<&str> = names_of(&vars);
-    assert_eq!(names, vec!["\u{03B1}", "\u{03B2}"]);
+    let names: Vec<SurfaceName> = names_of(&vars);
+    assert_eq!(
+        names,
+        vec![fixture_name("\u{03B1}"), fixture_name("\u{03B2}")]
+    );
 }
 
 #[test]
@@ -386,7 +410,7 @@ fn test_ascription_scanning() {
 
     let (vars, _) = collector.finish();
     assert_eq!(vars.len(), 1);
-    assert_eq!(vars[0].name, "\u{03B1}");
+    assert_eq!(vars[0].name, SurfaceName::generated_path("\u{03B1}"));
 }
 
 // =============================================================================
@@ -431,7 +455,7 @@ fn test_all_bound_no_results() {
 fn test_wrap_with_type_var() {
     let body = Expr::const_str("result");
     let vars = vec![AutoBoundVar {
-        name: "\u{03B1}".to_owned(),
+        name: SurfaceName::generated_path("\u{03B1}"),
         kind: AutoBoundKind::TypeVar { universe: None },
         binder_info: BinderInfo::Implicit,
     }];
@@ -452,9 +476,9 @@ fn test_wrap_with_type_var() {
 fn test_wrap_with_instance_var() {
     let body = Expr::const_str("result");
     let vars = vec![AutoBoundVar {
-        name: "inst".to_owned(),
+        name: SurfaceName::generated_path("inst"),
         kind: AutoBoundKind::InstanceVar {
-            class_name: "Inhabited".to_owned(),
+            class_name: SurfaceName::generated_path("Inhabited"),
         },
         binder_info: BinderInfo::InstImplicit,
     }];
@@ -474,7 +498,7 @@ fn test_wrap_with_instance_var() {
 fn test_wrap_universe_var_skipped() {
     let body = Expr::const_str("result");
     let vars = vec![AutoBoundVar {
-        name: "u".to_owned(),
+        name: SurfaceName::generated_path("u"),
         kind: AutoBoundKind::UniverseVar,
         binder_info: BinderInfo::Implicit,
     }];
@@ -489,12 +513,12 @@ fn test_wrap_multiple_vars_ordering() {
     let body = Expr::const_str("result");
     let vars = vec![
         AutoBoundVar {
-            name: "\u{03B1}".to_owned(),
+            name: SurfaceName::generated_path("\u{03B1}"),
             kind: AutoBoundKind::TypeVar { universe: None },
             binder_info: BinderInfo::Implicit,
         },
         AutoBoundVar {
-            name: "\u{03B2}".to_owned(),
+            name: SurfaceName::generated_path("\u{03B2}"),
             kind: AutoBoundKind::TypeVar { universe: None },
             binder_info: BinderInfo::Implicit,
         },
@@ -517,23 +541,41 @@ fn test_wrap_multiple_vars_ordering() {
 
 #[test]
 fn test_add_universe_params_basic() {
-    let mut levels = vec!["u".to_owned()];
-    AutoBoundCollector::add_universe_params(&mut levels, &["v".to_owned(), "w".to_owned()]);
-    assert_eq!(levels, vec!["u", "v", "w"]);
+    let mut levels = vec![fixture_name("u")];
+    AutoBoundCollector::add_universe_params(
+        &mut levels,
+        &[
+            SurfaceName::generated_path("v"),
+            SurfaceName::generated_path("w"),
+        ],
+    );
+    assert_eq!(
+        levels,
+        vec![fixture_name("u"), fixture_name("v"), fixture_name("w")]
+    );
 }
 
 #[test]
 fn test_add_universe_params_no_duplicates() {
-    let mut levels = vec!["u".to_owned(), "v".to_owned()];
-    AutoBoundCollector::add_universe_params(&mut levels, &["v".to_owned(), "w".to_owned()]);
-    assert_eq!(levels, vec!["u", "v", "w"]);
+    let mut levels = vec![fixture_name("u"), fixture_name("v")];
+    AutoBoundCollector::add_universe_params(
+        &mut levels,
+        &[
+            SurfaceName::generated_path("v"),
+            SurfaceName::generated_path("w"),
+        ],
+    );
+    assert_eq!(
+        levels,
+        vec![fixture_name("u"), fixture_name("v"), fixture_name("w")]
+    );
 }
 
 #[test]
 fn test_add_universe_params_empty() {
     let mut levels = Vec::new();
-    AutoBoundCollector::add_universe_params(&mut levels, &["u".to_owned()]);
-    assert_eq!(levels, vec!["u"]);
+    AutoBoundCollector::add_universe_params(&mut levels, &[SurfaceName::generated_path("u")]);
+    assert_eq!(levels, vec![fixture_name("u")]);
 }
 
 // =============================================================================
@@ -543,14 +585,14 @@ fn test_add_universe_params_empty() {
 #[test]
 fn test_surface_binders_type_var() {
     let vars = vec![AutoBoundVar {
-        name: "\u{03B1}".to_owned(),
+        name: SurfaceName::generated_path("\u{03B1}"),
         kind: AutoBoundKind::TypeVar { universe: None },
         binder_info: BinderInfo::Implicit,
     }];
 
     let binders = auto_bound_surface_binders(&vars);
     assert_eq!(binders.len(), 1);
-    assert_eq!(binders[0].name, "\u{03B1}");
+    assert_eq!(binders[0].name, SurfaceName::generated_path("\u{03B1}"));
     assert_eq!(binders[0].info, SurfaceBinderInfo::Implicit);
     assert!(binders[0].ty.is_some());
 }
@@ -558,7 +600,7 @@ fn test_surface_binders_type_var() {
 #[test]
 fn test_surface_binders_universe_var_skipped() {
     let vars = vec![AutoBoundVar {
-        name: "u".to_owned(),
+        name: SurfaceName::generated_path("u"),
         kind: AutoBoundKind::UniverseVar,
         binder_info: BinderInfo::Implicit,
     }];
@@ -570,9 +612,9 @@ fn test_surface_binders_universe_var_skipped() {
 #[test]
 fn test_surface_binders_instance_var() {
     let vars = vec![AutoBoundVar {
-        name: "inst".to_owned(),
+        name: SurfaceName::generated_path("inst"),
         kind: AutoBoundKind::InstanceVar {
-            class_name: "Inhabited".to_owned(),
+            class_name: SurfaceName::generated_path("Inhabited"),
         },
         binder_info: BinderInfo::InstImplicit,
     }];
@@ -592,7 +634,7 @@ fn test_collect_from_type_delegates_to_expr() {
     collector.collect_from_type(&SurfaceExpr::ident("\u{03B1}"));
     let (vars, _) = collector.finish();
     assert_eq!(vars.len(), 1);
-    assert_eq!(vars[0].name, "\u{03B1}");
+    assert_eq!(vars[0].name, SurfaceName::generated_path("\u{03B1}"));
 }
 
 // =============================================================================
@@ -606,12 +648,12 @@ fn test_collect_level_succ() {
     let expr = SurfaceExpr::Universe(
         clean_parser::Span::dummy(),
         UniverseExpr::Sort(Box::new(LevelExpr::Succ(Box::new(LevelExpr::Param(
-            "u".to_owned(),
+            SurfaceName::generated_path("u"),
         ))))),
     );
     collector.collect_from_expr(&expr);
     let (_, univs) = collector.finish();
-    assert_eq!(univs, vec!["u"]);
+    assert_eq!(univs, vec![fixture_name("u")]);
 }
 
 #[test]
@@ -621,11 +663,11 @@ fn test_collect_level_max() {
     let expr = SurfaceExpr::Universe(
         clean_parser::Span::dummy(),
         UniverseExpr::Sort(Box::new(LevelExpr::Max(
-            Box::new(LevelExpr::Param("u".to_owned())),
-            Box::new(LevelExpr::Param("v".to_owned())),
+            Box::new(LevelExpr::Param(SurfaceName::generated_path("u"))),
+            Box::new(LevelExpr::Param(SurfaceName::generated_path("v"))),
         ))),
     );
     collector.collect_from_expr(&expr);
     let (_, univs) = collector.finish();
-    assert_eq!(univs, vec!["u", "v"]);
+    assert_eq!(univs, vec![fixture_name("u"), fixture_name("v")]);
 }

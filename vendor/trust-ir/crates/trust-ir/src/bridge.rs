@@ -38,7 +38,7 @@
 //!    [`ConformanceSubset::CURRENT`]. The AUTHORITY for the in/out boundary
 //!    is `lowering-target-subset.md` (repo root) with its machine-readable
 //!    mirror `trust_ir_conformance::subset`; this classifier restates the
-//!    same v2 boundary for in-process producers, and the conformance crate's
+//!    same v3 boundary for in-process producers, and the conformance crate's
 //!    bridge-agreement gate (`tests/bridge_subset_agreement.rs`) pins the two
 //!    spellings verdict- and version-identical, so neither can drift alone.
 //!    The *wire-format* corpus a producer must round-trip bit-for-bit is the
@@ -55,9 +55,14 @@
 
 use std::collections::BTreeMap;
 
+mod observed_borrows;
+pub use observed_borrows::{borrow_result_ty_observed, borrow_result_types_observed};
+
+use crate::reach::{Reach, ReachMemo};
+
 use crate::{
-    BlockId, CastOp, FuncId, Function, Inst, InstrNode, Module, ProofAnnotation, SourceSpan, Ty,
-    ValueId, inst::SelectConditionTypeError,
+    BlockId, CastOp, Constant, FuncId, Function, Inst, InstrNode, Module, ProofAnnotation,
+    SourceSpan, Ty, ValueId, inst::SelectConditionTypeError,
 };
 
 /// Origin of a typed SSA value inside a function.
@@ -175,23 +180,38 @@ impl core::fmt::Display for VectorSelectContractError {
 /// stays inside it is guaranteed a backend can lower it and the proof layer can
 /// reason about it.
 ///
-/// # Excluded constructs (subset v2 — `lowering-target-subset.md` is the authority)
+/// # Excluded constructs (subset v5 — `lowering-target-subset.md` is the authority)
 ///
-/// The boundary is the ratified lowering-target subset v2 (repo-root doc;
+/// The boundary is the ratified lowering-target subset v5 (repo-root doc;
 /// machine mirror `trust_ir_conformance::subset`, agreement pinned by that
 /// crate's `bridge_subset_agreement` gate):
 ///
-/// - **Types**: [`Ty::F16`] (rounding semantics pending), pointer-width
-///   integers / `char` pending their depth-ledger adoption, producer-only
+/// - **Module target** (v5 structural condition5): target-free/default64,
+///   explicit little-endian64, or canonical little-endian wasm32/4-byte
+///   pointers. Big-endian, other32-bit ABIs and malformed sizes stay out as
+///   whole modules ([`SubsetSite::ModuleTarget`]), including empty bodies.
+/// - **Char origin** (v4 structural condition 6): a [`Ty::Char`] value may
+///   originate only from a range-validated `Const` or from `Cast ZExt` of a
+///   `U8` ([`ConformanceSubset::char_origin_excluded`]). A `Transmute` /
+///   `Bitcast` / other cast into `Char`, or a `Load` / `AtomicLoad` /
+///   `LoadSlot` at a `Char`-carrying type, is out of subset.
+/// - **Types**: [`Ty::F16`] (subset/native admission pending), producer-only
 ///   [`Ty::Error`], and [`Ty::Refine`] (never ratified into the subset;
 ///   fail-closed until a version bump admits it). First-class [`Ty::FatPtr`]
-///   is admitted on the model's pinned 64-bit little-endian target in v2.
+///   has been admitted since v2 (on the pinned target, now condition 5); the
+///   v25 B1 scalars [`Ty::Isize`] / [`Ty::Usize`] / [`Ty::Char`] since v4.
 /// - **Casts**: [`CastOp::ReifyFnPointer`] (fn-item partial) and
 ///   [`CastOp::FPToSISat`] / [`CastOp::FPToUISat`] (no proven bridge/ay
-///   lowering). [`CastOp::Transmute`] is in-subset **scalar-to-scalar only**
-///   (structural condition); [`CastOp::PtrToPtr`] is fully in-subset.
-/// - **Instructions**: [`Inst::Resume`], [`Inst::LandingPad`],
-///   [`Inst::CoroSuspend`] — host-unwinding / coroutine depth-ledger partials.
+///   lowering). [`CastOp::Transmute`] is in-subset **integer/pointer
+///   scalar-to-scalar only** (`I8`–`I128` / `U8`–`U128` / `Ptr` on BOTH
+///   sides — v3 removed `F32` / `F64` / `Bool`, which the executable model
+///   mistranslated at the destination; use `Bitcast` for int↔float);
+///   [`CastOp::PtrToPtr`] is fully in-subset.
+/// - **Instructions**: [`Inst::Dealloc`] (dropped in v2, G18-1: the format
+///   states neither the allocation origin nor the layout a release needs;
+///   this classifier only caught up in v3 — F-042), [`Inst::Resume`],
+///   [`Inst::LandingPad`], [`Inst::CoroSuspend`] — host-unwinding /
+///   coroutine depth-ledger partials.
 /// - **Dialect ops**: [`Inst::DialectOp`] except the six proven fast-4
 ///   `vector.*` ops (`pack_lanes`, `extract_lane`, `insert_lane`,
 ///   `mask_to_bits`, `reduce`, `shuffle`).
@@ -218,68 +238,6 @@ pub struct ConformanceSubset {
     pub version: u32,
 }
 
-fn ty_contains_fat_ptr(ty: &Ty) -> bool {
-    match ty {
-        Ty::FatPtr(_) => true,
-        Ty::Vector(elem, _)
-        | Ty::Ref(elem)
-        | Ty::RefMut(elem)
-        | Ty::PtrConst(elem)
-        | Ty::PtrMut(elem)
-        | Ty::Rc(elem) => ty_contains_fat_ptr(elem),
-        Ty::Tuple(elems) => elems.iter().any(ty_contains_fat_ptr),
-        _ => false,
-    }
-}
-
-fn inst_contains_fat_ptr(inst: &Inst) -> bool {
-    match inst {
-        Inst::Cast { src_ty, dst_ty, .. } => {
-            ty_contains_fat_ptr(src_ty) || ty_contains_fat_ptr(dst_ty)
-        }
-        Inst::PtrData { ptr_ty, .. } => ty_contains_fat_ptr(ptr_ty),
-        Inst::PtrMetadata {
-            ptr_ty,
-            metadata_ty,
-            ..
-        }
-        | Inst::PtrFromParts {
-            ptr_ty,
-            metadata_ty,
-            ..
-        } => ty_contains_fat_ptr(ptr_ty) || ty_contains_fat_ptr(metadata_ty),
-        Inst::BinOp { ty, .. }
-        | Inst::SeqMapAddK { ty, .. }
-        | Inst::SeqMapNot { ty, .. }
-        | Inst::SeqMap { ty, .. }
-        | Inst::UnOp { ty, .. }
-        | Inst::Overflow { ty, .. }
-        | Inst::ICmp { ty, .. }
-        | Inst::FCmp { ty, .. }
-        | Inst::Load { ty, .. }
-        | Inst::Store { ty, .. }
-        | Inst::Alloca { ty, .. }
-        | Inst::HeapAlloc { ty, .. }
-        | Inst::AtomicLoad { ty, .. }
-        | Inst::AtomicStore { ty, .. }
-        | Inst::AtomicRMW { ty, .. }
-        | Inst::CmpXchg { ty, .. }
-        | Inst::ExtractField { ty, .. }
-        | Inst::InsertField { ty, .. }
-        | Inst::ExtractElement { ty, .. }
-        | Inst::InsertElement { ty, .. }
-        | Inst::Const { ty, .. }
-        | Inst::Undef { ty }
-        | Inst::Copy { ty, .. }
-        | Inst::Select { ty, .. }
-        | Inst::LoadSlot { ty, .. } => ty_contains_fat_ptr(ty),
-        Inst::GEP { pointee_ty, .. } => ty_contains_fat_ptr(pointee_ty),
-        Inst::OpenFrame { def } => def.slots.iter().any(|slot| ty_contains_fat_ptr(&slot.ty)),
-        Inst::DialectOp(op) => op.result_tys.iter().any(ty_contains_fat_ptr),
-        _ => false,
-    }
-}
-
 fn ptr_trio_ty_supported(ty: &Ty) -> bool {
     matches!(
         ty,
@@ -293,13 +251,101 @@ fn ptr_trio_ty_supported(ty: &Ty) -> bool {
     )
 }
 
-fn module_supports_fat_ptr_layout(module: &Module) -> bool {
-    module.pointer_bits() == crate::shape::DEFAULT_POINTER_BITS
-        && module
-            .target_info
-            .as_ref()
-            .is_none_or(|target| target.endianness == crate::Endianness::Little)
+/// Structural condition5, expanded in v5: preserve the legacy64-bit
+/// little-endian model and select the proved32-bit model for wasm32 only.
+/// No word-size inference admits another32-bit scalar ABI. Read raw target
+/// fields; `pointer_bits` has a fallback that must not admit malformed sizes.
+/// The independent conformance mirror is pinned verdict-identical by tests.
+fn module_targets_pinned_byte_model(module: &Module) -> bool {
+    module.target_info.as_ref().is_none_or(|target| {
+        target.endianness == crate::Endianness::Little
+            && (target.pointer_size == PINNED_POINTER_SIZE_BYTES
+                || (target.pointer_size == 4 && target.triple.split('-').next() == Some("wasm32")))
+    })
 }
+
+/// True when a value of `ty` CARRIES a `Char` by value — `Char` itself, a
+/// vector of them, or a tuple with one inside.
+///
+/// Deliberately NOT true through a pointer arm (`Ref` / `RefMut` /
+/// `PtrConst` / `PtrMut` / `Rc`): loading a `&char` produces a POINTER, not a
+/// `Char`, so subset v4 condition 6 has nothing to say about it and refusing
+/// it would over-refuse. This is the INLINE surface only: a named aggregate
+/// (`Struct` / `Enum` / `Array` / `Record` / `Sequence` / `Set` / `Closure`)
+/// names its members through a module table, which is resolved by
+/// [`ty_carries_char_value_in`] — the form the module walk uses.
+///
+/// Mirrors `trust_ir_conformance::subset::ty_carries_char_value`.
+fn ty_carries_char_value(ty: &Ty) -> bool {
+    match ty {
+        Ty::Char => true,
+        Ty::Vector(inner, _) => ty_carries_char_value(inner),
+        Ty::Tuple(xs) => xs.iter().any(ty_carries_char_value),
+        _ => false,
+    }
+}
+
+/// True when a value of `ty` CARRIES a `Char` by value, **resolving named
+/// aggregates through the module tables** (WS2.17 review).
+///
+/// [`ty_carries_char_value`] sees the inline type surface only, which lets a
+/// producer spell the refused origin one level down — `load { char }` or
+/// `load [char; 1]` followed by an `ExtractField` / `ExtractElement` makes a
+/// `Char` out of arbitrary memory bytes while every single instruction looks
+/// in-subset. Condition 6 is about the ORIGIN of a `Char`, so the walk must
+/// follow the member tables the load actually reads.
+///
+/// Pointer arms still stop the walk (a `&{char}` is a pointer, not a char).
+/// An id that resolves to nothing answers **true** (a dangling table
+/// reference is a malformed module, and the subset verdict fails closed), and
+/// so does a type that reaches a by-value cycle (`struct S { s: S }`, an
+/// infinitely large type the validator refuses on its own). There is no
+/// depth limit: `reach`'s memo decides each node once per `memo` (its
+/// `Reach::CharValue` predicate), on the heap, so a module walk asking it of
+/// every load costs O(the module). It replaced a native recursion with a
+/// 24-level budget that answered "carries a `Char`" when the budget ran out,
+/// refusing every char-free type nested 24 levels deep and walking a shared
+/// sub-type once per path.
+///
+/// Mirrors `trust_ir_conformance::subset::CharCarriers`, which decides the
+/// same predicate by another algorithm.
+fn ty_carries_char_value_in(module: &Module, memo: &mut ReachMemo, ty: &Ty) -> bool {
+    memo.reaches(module, Reach::CharValue, ty)
+}
+
+/// Reason string for a `Char` produced by anything but the two admitted
+/// origins (subset v4 condition 6).
+const CHAR_ORIGIN_VIOLATION: &str = "a `Char` may originate only from a range-validated `Const` or `Cast ZExt` of a `U8` \
+     (subset v4 condition 6)";
+
+/// Reason string for a `Char` read out of memory (subset v4 condition 6).
+const CHAR_LOAD_VIOLATION: &str = "a `Char` may not be READ FROM MEMORY: its Unicode-scalar-value invariant is not \
+     re-established by a load (subset v4 condition 6)";
+
+/// The executable model's pointer width in bytes: eight little-endian bytes
+/// per pointer (`TrustIr/State/Memory.lean`), i.e. `DEFAULT_POINTER_BITS / 8`.
+const PINNED_POINTER_SIZE_BYTES: u32 = crate::shape::DEFAULT_POINTER_BITS / 8;
+
+/// Reason string for a `CallIndirect` whose callee is a `Ty::Closure` value —
+/// closure APPLICATION (subset structural condition 4).
+///
+/// The format admits the application (G18-2) and the reference interpreter
+/// executes it by spreading the captures as leading arguments, but the Lean
+/// executable model's `CallIndirect` resolves a function-POINTER value and has
+/// no closure-application rule, so the construct is not covered as emitted.
+/// Condition 4 has said so since G18-2 (2026-09-01), but neither checker
+/// enforced it: the codegen refusal was the construct's only gate, and no
+/// subset fixture applied a closure until the v58 `closure_layout` golden did
+/// — which the Lean executable differential then refused as a type error.
+/// Closure INTRODUCTION and capture PROJECTION are untouched. The mirror
+/// (`trust_ir_conformance::subset`) reports this same text.
+pub const CLOSURE_APPLICATION_VIOLATION: &str = "CallIndirect over a Ty::Closure callee (closure \
+     application) is outside the subset: the Lean executable model's CallIndirect resolves a \
+     function-pointer value and has no closure-application rule (subset condition 4)";
+
+/// Reason string for a module that fails [`module_targets_pinned_byte_model`].
+const MODULE_TARGET_VIOLATION: &str = "module target is outside the executable model's pinned byte models (subset v5 condition 5: \
+     `target_info` absent, or little-endian with pointer_size == 8, or wasm32 with pointer_size == 4)";
 
 impl Default for ConformanceSubset {
     fn default() -> Self {
@@ -321,9 +367,20 @@ const SUBSET_DIALECT_OPS: &[&str] = &[
 
 /// The scalar types a `Transmute` may reinterpret between — the Lean `semCast`
 /// scalar partial (`lowering-target-subset.md` §"Structural conditions",
-/// condition 1): `I8`–`I128` / `U8`–`U128` / `F32` / `F64` / `Bool` / `Ptr`.
+/// condition 1): `I8`–`I128` / `U8`–`U128` / `Ptr`.
 /// Mirrors `trust_ir_conformance::subset::is_transmute_scalar`.
-fn transmute_scalar_ty(ty: &Ty) -> bool {
+///
+/// **v3 narrows this on BOTH sides** (soundness erratum, F-036/F-042 review).
+/// v2 also admitted `F32` / `F64` / `Bool`, which the executable model cannot
+/// byte-reinterpret: Lean's `semCast .Transmute` only accepts an `.int` /
+/// `.ptr` *operand*, so a float or bool SOURCE was already refused, while a
+/// float or bool DESTINATION was MISTRANSLATED — it asked only
+/// `getTyWidth dstTy`, so `transmute u32 -> f32` bound an *integer* value at
+/// a float type and `transmute u8 -> bool` bound `.int 1 v` with `v` possibly
+/// greater than 1. The narrowing and the Lean destination gate land together;
+/// the sanctioned replacement for an int↔float reinterpret is `Bitcast`,
+/// which both engines model through the IEEE bit pattern.
+pub(crate) fn transmute_scalar_ty(ty: &Ty) -> bool {
     matches!(
         ty,
         Ty::I8
@@ -336,16 +393,111 @@ fn transmute_scalar_ty(ty: &Ty) -> bool {
             | Ty::U32
             | Ty::U64
             | Ty::U128
-            | Ty::F32
-            | Ty::F64
-            | Ty::Bool
             | Ty::Ptr
     )
 }
 
 impl ConformanceSubset {
     /// The current pinned subset. Frontends target this version.
-    pub const CURRENT: Self = Self { version: 2 };
+    ///
+    /// v3 (2026-09-19) is a breaking SHRINK under the bump policy's
+    /// "soundness hole" clause: `Transmute` loses its float/bool operands on
+    /// both sides, `Inst::Dealloc` is refused here as well as by the
+    /// machine-readable mirror (the v2 `Dealloc` drop this classifier never
+    /// read), and the whole module must target the pinned 64-bit
+    /// little-endian byte model.
+    ///
+    /// v4 (2026-09-22, WS2.17) is an EXPANSION under the bump policy: the
+    /// three v25 B1 scalars `Isize` / `Usize` / `Char` enter the type subset,
+    /// and one structural condition is ADDED
+    /// ([`ConformanceSubset::char_origin_excluded`], condition 6). Every v3
+    /// module is a valid v4 module — condition 6 can only fire on a `Char`,
+    /// which no v3 module could carry. `FPToSISat` / `FPToUISat` stay
+    /// excluded: their ay bit-blast encoding is still fail-closed, so the
+    /// interpreter/solver cross-check their admission is gated on does not
+    /// exist yet.
+    /// v5 adds the target-indexed wasm32 model. No construct allowlist or
+    /// unrelated structural exclusion changes; the default64 path is retained.
+    pub const CURRENT: Self = Self { version: 5 };
+
+    /// Reason an instruction violates subset v4 structural **condition 6** —
+    /// a `Char` value may originate only from a range-validated `Const` or
+    /// from `Cast ZExt` of a `U8` — or `None`.
+    ///
+    /// `Ty::Char` is a 32-bit carrier whose inhabitants are the Unicode
+    /// scalar values (`0..=0x10FFFF` minus the surrogates `0xD800..=0xDFFF`),
+    /// so admitting the TYPE is only sound while every way of MAKING one
+    /// re-establishes that invariant. `Const` is checked by
+    /// `validate_module`; `ZExt` from `U8` holds by construction (every `u8`
+    /// is a Unicode scalar value). A `Transmute` / `Bitcast` into `Char`
+    /// reinterprets an arbitrary 32-bit pattern, a `Trunc` drops high bits
+    /// from one, and a `Load` / `AtomicLoad` / `LoadSlot` reads bytes the
+    /// model cannot constrain — all three are refused here. The reference
+    /// interpreter independently reports an invalid `Char` as UB at every
+    /// bind site, so an out-of-subset module still fails closed.
+    ///
+    /// Mirrors `trust_ir_conformance::subset::char_origin_violation`; the
+    /// conformance crate's `bridge_subset_agreement` gate pins the two
+    /// verdict-identical.
+    pub fn char_origin_excluded(inst: &Inst) -> Option<&'static str> {
+        match inst {
+            Inst::Cast {
+                op, src_ty, dst_ty, ..
+            } if ty_carries_char_value(dst_ty) => {
+                (!(*op == CastOp::ZExt && *src_ty == Ty::U8 && *dst_ty == Ty::Char))
+                    .then_some(CHAR_ORIGIN_VIOLATION)
+            }
+            Inst::Load { ty, .. } | Inst::AtomicLoad { ty, .. } | Inst::LoadSlot { ty, .. }
+                if ty_carries_char_value(ty) =>
+            {
+                Some(CHAR_LOAD_VIOLATION)
+            }
+            _ => None,
+        }
+    }
+
+    /// Condition 6 with the module's member tables RESOLVED — the form the
+    /// module walk ([`ConformanceSubset::check`]) uses (WS2.17 review).
+    ///
+    /// [`ConformanceSubset::char_origin_excluded`] classifies one instruction
+    /// from its inline types alone, which is all a caller without a module
+    /// can do. That is not enough for the memory arm: `load { char }` or
+    /// `load [char; 1]` reads a `Char` out of arbitrary bytes, and a
+    /// following `ExtractField` / `ExtractElement` hands it to the rest of
+    /// the program — with every single instruction looking in-subset, because
+    /// the member type lives in a module table the inline surface never
+    /// names. Resolving the tables closes that spelling. The cast arm needs
+    /// no resolution: a cast's `dst_ty` is inline by construction.
+    ///
+    /// This one-shot form decides what the instruction's type reaches (plus
+    /// one pass over each definition table it meets); the module walk
+    /// ([`ConformanceSubset::check`]) asks one memo for every instruction,
+    /// so a whole module costs O(its types) however many loads share them.
+    ///
+    /// Mirrors `trust_ir_conformance::subset::char_origin_violation_in`.
+    pub fn char_origin_excluded_in(module: &Module, inst: &Inst) -> Option<&'static str> {
+        Self::char_origin_excluded_with(module, &mut ReachMemo::default(), inst)
+    }
+
+    /// [`ConformanceSubset::char_origin_excluded_in`] over `memo`, a
+    /// reachability memo for `module` that a pass shares.
+    fn char_origin_excluded_with(
+        module: &Module,
+        memo: &mut ReachMemo,
+        inst: &Inst,
+    ) -> Option<&'static str> {
+        if let Some(reason) = Self::char_origin_excluded(inst) {
+            return Some(reason);
+        }
+        match inst {
+            Inst::Load { ty, .. } | Inst::AtomicLoad { ty, .. } | Inst::LoadSlot { ty, .. }
+                if ty_carries_char_value_in(module, memo, ty) =>
+            {
+                Some(CHAR_LOAD_VIOLATION)
+            }
+            _ => None,
+        }
+    }
 
     /// Reason a construct is outside the conformance subset.
     ///
@@ -353,15 +505,22 @@ impl ConformanceSubset {
     /// type (recursing into element/aggregate types) is fully in-subset.
     pub fn ty_excluded(ty: &Ty) -> Option<&'static str> {
         match ty {
-            Ty::F16 => Some("Ty::F16 has only partial Lean semantics (rounding pending)"),
-            // v25 B1 scalars: name-level Lean parity landed with the format;
-            // EXECUTABLE Lean semantics (pointer-width arithmetic, char range)
-            // are the B1 depth-ledger follow-up - out of subset until then.
-            Ty::Isize | Ty::Usize => {
-                Some("Ty::Isize/Usize executable Lean semantics pending (B1 depth ledger)")
-            }
-            Ty::Char => Some("Ty::Char executable Lean semantics pending (B1 depth ledger)"),
+            Ty::Storage(_) => Some("storage-only type has no by-value Core lowering"),
+            Ty::F16 => Some("Ty::F16 awaits versioned subset admission and native lowering"),
             Ty::Error => Some("Ty::Error is producer-internal and never wire-legal"),
+            Ty::Dialect(_) => {
+                Some("dialect types require explicit semantic legalization before Core lowering")
+            }
+            // v43: one pointer word at the machine level, but its meaning lives
+            // in a linked runtime the reference interpreter cannot execute
+            // in-format (only HOST-ASSISTED, through a trusted `HostCalls`
+            // model — WS2.12 — which is no origin for proof purposes) and the
+            // Lean model does not define, so no module carrying one is in the
+            // proven subset.
+            Ty::Handle(_) => Some(
+                "handle types are runtime-opaque: no interpreter or Lean origin; outside the proven \
+                 subset",
+            ),
             Ty::FatPtr(_) => None,
             // Composite types are in-subset iff their components are. Recurse so
             // e.g. `Tuple(F16, I32)` or `Vector<F16>` is correctly rejected.
@@ -388,6 +547,15 @@ impl ConformanceSubset {
             | Ty::F32
             | Ty::F64
             | Ty::Bool
+            // v4 (WS2.17): the v25 B1 scalars. `Isize`/`Usize` execute at the
+            // Lean model's 64-bit pin, which v3's structural condition 5
+            // already pins the whole module to; `Char` is admitted together
+            // with structural condition 6
+            // ([`ConformanceSubset::char_origin_excluded`]), which is what
+            // keeps its Unicode-scalar-value invariant true at every origin.
+            | Ty::Isize
+            | Ty::Usize
+            | Ty::Char
             | Ty::Ptr
             | Ty::Unit
             | Ty::Never
@@ -404,9 +572,10 @@ impl ConformanceSubset {
             // does not list it; the machine allowlist refuses it fail-closed).
             // Admitting it is an expansion under the doc's bump policy — do
             // not re-include it here without a version bump in BOTH spellings.
-            Ty::Refine(_, _) => {
-                Some("Ty::Refine is not ratified into lowering-target subset v2 (fail-closed)")
-            }
+            Ty::Refine(_, _) => Some(
+                "Ty::Refine is not ratified into the lowering-target subset (fail-closed; never admitted, v2 or v3)",
+            ),
+            Ty::Ext(e) => e.unreachable(),
         }
     }
 
@@ -445,8 +614,20 @@ impl ConformanceSubset {
 
     /// Reason an [`Inst`] is outside the subset, or `None` if in-subset.
     ///
-    /// Inspects the instruction's *own* opcode plus the inline types it carries.
+    /// Inspects its opcode and inline types at the legacy default64 width.
+    /// Module checks select the actual module width before checking metadata.
     pub fn inst_excluded(inst: &Inst) -> Option<&'static str> {
+        Self::inst_excluded_at(inst, crate::shape::DEFAULT_POINTER_BITS)
+    }
+
+    fn inst_excluded_at(inst: &Inst, pointer_bits: u32) -> Option<&'static str> {
+        // Subset v4 structural condition 6 runs FIRST: a `Char` origin that
+        // does not re-establish the Unicode-scalar-value invariant is out of
+        // subset for that reason, not for its operand types (which are all
+        // in-subset since v4 admitted `Char`).
+        if let Some(reason) = Self::char_origin_excluded(inst) {
+            return Some(reason);
+        }
         match inst {
             Inst::Cast {
                 op, src_ty, dst_ty, ..
@@ -482,11 +663,11 @@ impl ConformanceSubset {
                 })
                 .or_else(|| {
                     (ptr_ty
-                        .pointer_metadata_ty(crate::shape::DEFAULT_POINTER_BITS)
+                        .pointer_metadata_ty(pointer_bits)
                         .as_ref()
                         != Some(metadata_ty))
                     .then_some(
-                        "pointer-trio metadata type does not match the canonical 64-bit lane",
+                        "pointer-trio metadata type does not match the canonical target-width lane",
                     )
                 }),
             Inst::DialectOp(op) => {
@@ -497,15 +678,135 @@ impl ConformanceSubset {
                 }
                 op.result_tys.iter().find_map(Self::ty_excluded)
             }
-            Inst::CoroSuspend { .. } => Some(
-                "Inst::CoroSuspend: the whole-module resume state-machine theorem is open (B3 depth ledger)",
+            // Dropped from the subset in v2 (G18-1, `lowering-target-subset.md`
+            // §"Deallocation"): the instruction names ONE field, `ptr`, so it
+            // states neither the `AllocOrigin` nor the layout a correct release
+            // needs, and trust-cg fails closed on it. The machine-readable
+            // mirror dropped it then; this classifier did not, which made the
+            // "verdict-identical" claim false (F-042). Aligned in v3.
+            Inst::Dealloc { .. } => Some(
+                "Inst::Dealloc: dropped from the subset in v2 (G18-1) — the format states neither the AllocOrigin nor the layout a release needs",
             ),
+            // The resume state-machine theorem LANDED (WS2.25,
+            // `CoroGen.coro_two_state_roundtrip` in the Lean package); the
+            // instruction stays excluded until a subset version bump admits
+            // it with the WS2.1 validator arm as its precondition.
+            Inst::CoroSuspend { .. } => Some(
+                "Inst::CoroSuspend: proved (WS2.25 resume state-machine theorem) but not yet admitted — awaits a subset version bump (B3 depth ledger)",
+            ),
+            // WS3.20 (F-057): the bulk-memory pair has Lean semantics
+            // (`semMemCopy` / `semMemSet`, Semantics/Memory.lean) and executes
+            // in the reference interpreter, but ADMITTING a new opcode is a
+            // subset-contract expansion (`lowering-target-subset.md`,
+            // "Versioning and bump policy": allowlist + doc + SUBSET_VERSION in
+            // lockstep, consumer lowering in trust-cg). Until that bump lands
+            // they are outside the subset — fail closed, never silently in.
+            Inst::MemCopy { .. } => Some(
+                "Inst::MemCopy: not yet admitted to the lowering-target subset (WS3.20 landed the semantics; admission is a subset-contract bump with the consumer)",
+            ),
+            Inst::MemSet { .. } => Some(
+                "Inst::MemSet: not yet admitted to the lowering-target subset (WS3.20 landed the semantics; admission is a subset-contract bump with the consumer)",
+            ),
+            // Amendment D (wire v55, `docs/SPEC_RATIFICATIONS.md` §20): a drop
+            // RESOLVES through the module drop-glue table and executes in both
+            // models as a call of its glue (Lean: `stepNWithContext_resolveDrops`);
+            // an unresolved one is refused by both. No backend lowers a drop
+            // yet, so both spellings of the subset exclude it by name until the
+            // v5 expansion (the inline-type fallthrough below would otherwise
+            // admit it).
+            Inst::Drop { .. } => Some(
+                "Inst::Drop: executes in both models as a call of its drop_glue row (§20, stepNWithContext_resolveDrops); awaiting a backend lowering",
+            ),
+            // Its unwinding twin, the same (and, like `Invoke`, its unwind edge
+            // is unlowered).
+            Inst::DropInvoke { .. } => Some(
+                "Inst::DropInvoke: executes in both models as an invoke of its drop_glue row (§20, stepNWithContext_resolveDrops); awaiting a backend lowering",
+            ),
+            // Amendment D, Part 2 (wire v56, §21): `CallIndirect`'s unwinding
+            // twin. Both models execute it (its unwind edge under
+            // `PanicStrategy::Unwind` only); no backend lowers it, and, like
+            // `Invoke`, it is gated by `LandingPad`'s exclusion. Excluded by
+            // name until the v5 expansion.
+            Inst::InvokeIndirect { .. } => Some(
+                "Inst::InvokeIndirect: executes in both models (§21; its unwind edge under PanicStrategy::Unwind); awaiting a backend lowering",
+            ),
+            // Crystal lane (D3): the WEAK form of an allowlisted variant. A weak
+            // compare-exchange may fail spuriously, a nondeterministic choice
+            // neither executable model makes, so both refuse it; a strong
+            // `CmpXchg` falls through to the inline-type check as before.
+            Inst::CmpXchg { weak: true, .. } => Some(
+                "Inst::CmpXchg weak: spurious failure is nondeterministic; both executable models refuse it",
+            ),
+            // Crystal lane (E3b): a `Const` carrying an UNWRITTEN lane. Both
+            // executable models define it, but no backend lowers it (the Trust
+            // callee sidecar emits it for execution only). Both spellings of
+            // the subset exclude it (structural condition 8).
+            Inst::Const { value, .. }
+                if value
+                    .try_visit_constants(|c| {
+                        if matches!(c, crate::Constant::Uninit) {
+                            core::ops::ControlFlow::Break(())
+                        } else {
+                            core::ops::ControlFlow::Continue(())
+                        }
+                    })
+                    .is_break() =>
+            {
+                Some(
+                    "Inst::Const carrying an unwritten lane (uninit): executable in both models, lowered by no backend",
+                )
+            }
+            // Amendment D, Part 2 (§21): both models execute a pad and
+            // `Resume` under `PanicStrategy::Unwind` (selector 1 catch-all, 0
+            // cleanup, typed catch refused); no consumer lowers a
+            // panic=unwind build yet, so both stay excluded by name.
             Inst::LandingPad { .. } => Some(
-                "Inst::LandingPad: taken-unwind-edge selector dispatch is unmodelled (B3 depth ledger)",
+                "Inst::LandingPad: modelled under PanicStrategy::Unwind (§21: selector 1 catch-all, 0 cleanup, typed catch refused); awaiting admission with a panic=unwind lowering",
             ),
             Inst::Resume { .. } => Some(
-                "Inst::Resume: host unwinding is structured `unsupported.host_unwind` in the executable model (B3 depth ledger)",
+                "Inst::Resume: modelled under PanicStrategy::Unwind (§21: re-raises the exception at its operand's address); awaiting admission with a panic=unwind lowering",
             ),
+            // Amendment P (wire v54): the sited check with an unwind edge
+            // landed with its wire tag and the semantics of both engines, but
+            // no consumer lowers it (trust-cg compiles only panic=abort and has
+            // no EH lowering for it), and "admitting an opcode no consumer
+            // lowers is not admission". Outside the subset BY NAME until a
+            // subset bump admits it with the lowering. A plain sited `Assert`
+            // is inside, whatever its kind and site.
+            Inst::AssertInvoke { .. } => Some(
+                "Inst::AssertInvoke: not yet admitted to the lowering-target subset (amendment P landed the wire tag and both engines' semantics; no consumer lowers its unwind edge yet; admission is a subset-contract bump with the lowering)",
+            ),
+            // WS3.5: the register-level aggregate seed landed after subset v3
+            // was cut, without its wire tag (since landed: Inst tag 60, the
+            // v51 INST wire batch) and without a backend lowering (trust-cg
+            // refuses it until WS7). Its Lean semantics are an honest partial
+            // too: enum and record construction fail closed
+            // (`unsupported.enum_def_table`), since the Lean machine state
+            // carries no definition tables. Admission is a later subset bump
+            // once the lowering and the Lean depth land; until then it is
+            // outside, whatever its lane types are.
+            Inst::MakeAggregate { .. } => Some(
+                "Inst::MakeAggregate: no backend lowering, and enum/record construction is an honest Lean partial (B3 depth ledger); admission is a subset-contract bump (the v51 INST wire batch landed its wire tag)",
+            ),
+            Inst::MakeClosure { .. } => Some(
+                "Inst::MakeClosure: runtime closure construction awaits native lowering and operational Lean closure semantics before subset admission",
+            ),
+            // v50: the constant-size uniform array landed with its wire tag,
+            // Lean semantics (`semArraySplat`, `List.replicate`) and a lazy
+            // reference-interpreter value, but NOT with a backend lowering, and
+            // admitting a new opcode is a subset-contract expansion
+            // (`lowering-target-subset.md`, "Versioning and bump policy"). So
+            // it is outside the subset — explicitly, never by default — until
+            // that bump lands with the trust-cg lowering.
+            Inst::ArraySplat { .. } => Some(
+                "Inst::ArraySplat: not yet admitted to the lowering-target subset (v50 landed the wire tag, Lean and interpreter semantics; admission is a subset-contract bump with the trust-cg lowering)",
+            ),
+            // The constant twin, wherever a constant is emitted: a
+            // `Constant::Splat` at any depth of an `Inst::Const` value is
+            // outside the subset for the same reason. The walk visits each
+            // written node once (a splat's element is one child), so it is
+            // proportional to the constant's text.
+            Inst::Const { ty, value } => constant_splat_excluded(value).or_else(|| Self::ty_excluded(ty)),
             // Every other instruction is in-subset, but each one that carries an
             // inline `Ty` must still have that type be in-subset (e.g. a `Load`
             // of an `F16`). Surface that type via `Inst::result_tys` plus the
@@ -534,6 +835,7 @@ impl ConformanceSubset {
             | Inst::AtomicStore { ty, .. }
             | Inst::AtomicRMW { ty, .. }
             | Inst::CmpXchg { ty, .. }
+            | Inst::MakeAggregate { ty, .. }
             | Inst::ExtractField { ty, .. }
             | Inst::InsertField { ty, .. }
             | Inst::ExtractElement { ty, .. }
@@ -565,7 +867,10 @@ impl ConformanceSubset {
                 "ProofAnnotation::Custom is producer-defined and not pinned by the subset contract",
             ),
             ProofAnnotation::FreshSymbolicHavoc => Some(
-                "ProofAnnotation::FreshSymbolicHavoc is not ratified into lowering-target subset v2 (fail-closed)",
+                "ProofAnnotation::FreshSymbolicHavoc is not ratified into the lowering-target subset (fail-closed; never admitted, v2 or v3)",
+            ),
+            ProofAnnotation::RegionHavocStore => Some(
+                "ProofAnnotation::RegionHavocStore is not ratified into the lowering-target subset (fail-closed; never admitted, v2 or v3)",
             ),
             #[cfg(feature = "clean-expr")]
             ProofAnnotation::Goal(_) => Some(
@@ -623,13 +928,32 @@ impl ConformanceSubset {
     /// `bridge_subset_agreement` gate.
     pub fn check(&self, module: &Module) -> Result<(), Vec<SubsetViolation>> {
         let mut violations = Vec::new();
-        let fat_ptr_layout_supported = module_supports_fat_ptr_layout(module);
+        // Condition 6's `Char`-by-value verdicts, decided once per type node
+        // for the whole module.
+        let mut char_memo = ReachMemo::default();
+        // Condition 5 is a WHOLE-MODULE property, so it is reported once, with
+        // no function/block site, and it holds even for a module with no
+        // functions at all (its type table and globals are still emitted
+        // against a byte model the proven semantics do not describe).
+        if !module_targets_pinned_byte_model(module) {
+            violations.push(SubsetViolation {
+                function: None,
+                block: None,
+                instruction_index: None,
+                site: SubsetSite::ModuleTarget,
+                reason: MODULE_TARGET_VIOLATION,
+            });
+        }
         for function in &module.functions {
+            // Condition 4 needs the callee's TYPE, which only the function's
+            // value typing gives; computed once, and only for a function that
+            // has an indirect call at all.
+            let mut value_types: Option<BTreeMap<ValueId, Ty>> = None;
             for (proof_index, proof) in function.proofs.iter().enumerate() {
                 if let Some(reason) = Self::proof_annotation_excluded(proof) {
                     violations.push(SubsetViolation {
-                        function: function.id,
-                        block: function.entry,
+                        function: Some(function.id),
+                        block: Some(function.entry),
                         instruction_index: None,
                         site: SubsetSite::FunctionProof { proof_index },
                         reason,
@@ -638,16 +962,10 @@ impl ConformanceSubset {
             }
             for block in &function.blocks {
                 for (param_index, (_value, ty)) in block.params.iter().enumerate() {
-                    let reason = Self::ty_excluded(ty).or_else(|| {
-                        (!fat_ptr_layout_supported && ty_contains_fat_ptr(ty))
-                        .then_some(
-                            "Ty::FatPtr conformance is pinned to the 64-bit little-endian executable model",
-                        )
-                    });
-                    if let Some(reason) = reason {
+                    if let Some(reason) = Self::ty_excluded(ty) {
                         violations.push(SubsetViolation {
-                            function: function.id,
-                            block: block.id,
+                            function: Some(function.id),
+                            block: Some(block.id),
                             instruction_index: None,
                             site: SubsetSite::BlockParamType { param_index },
                             reason,
@@ -655,26 +973,45 @@ impl ConformanceSubset {
                     }
                 }
                 for (instruction_index, node) in block.body.iter().enumerate() {
-                    let reason = Self::inst_excluded(&node.inst).or_else(|| {
-                        (!fat_ptr_layout_supported && inst_contains_fat_ptr(&node.inst))
-                        .then_some(
-                            "fat-pointer instruction conformance is pinned to the 64-bit little-endian executable model",
-                        )
-                    });
-                    if let Some(reason) = reason {
+                    // Condition 6 runs against the RESOLVED member tables
+                    // here (WS2.17 review): `inst_excluded` alone sees the
+                    // inline type surface, which `load { char }` escapes.
+                    if let Some(reason) =
+                        Self::char_origin_excluded_with(module, &mut char_memo, &node.inst)
+                            .or_else(|| Self::inst_excluded_at(&node.inst, module.pointer_bits()))
+                    {
                         violations.push(SubsetViolation {
-                            function: function.id,
-                            block: block.id,
+                            function: Some(function.id),
+                            block: Some(block.id),
                             instruction_index: Some(instruction_index),
                             site: SubsetSite::Instruction,
                             reason,
                         });
                     }
+                    // Condition 4: closure APPLICATION is outside the subset.
+                    if let Inst::CallIndirect { callee, .. } = &node.inst {
+                        let types = value_types.get_or_insert_with(|| {
+                            function
+                                .typed_values(module)
+                                .into_iter()
+                                .map(|entry| (entry.value, entry.ty))
+                                .collect()
+                        });
+                        if matches!(types.get(callee), Some(Ty::Closure(_))) {
+                            violations.push(SubsetViolation {
+                                function: Some(function.id),
+                                block: Some(block.id),
+                                instruction_index: Some(instruction_index),
+                                site: SubsetSite::Instruction,
+                                reason: CLOSURE_APPLICATION_VIOLATION,
+                            });
+                        }
+                    }
                     for (proof_index, proof) in node.proofs.iter().enumerate() {
                         if let Some(reason) = Self::proof_annotation_excluded(proof) {
                             violations.push(SubsetViolation {
-                                function: function.id,
-                                block: block.id,
+                                function: Some(function.id),
+                                block: Some(block.id),
                                 instruction_index: Some(instruction_index),
                                 site: SubsetSite::InstructionProof { proof_index },
                                 reason,
@@ -692,7 +1029,7 @@ impl ConformanceSubset {
     }
 }
 
-/// Where in a function a conformance-subset violation was found.
+/// Where a conformance-subset violation was found.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SubsetSite {
@@ -706,14 +1043,21 @@ pub enum SubsetSite {
     /// `SubsetViolation::block` carries the function's entry block (the site
     /// is function-scoped; the variant is the discriminator).
     FunctionProof { proof_index: usize },
+    /// The MODULE, not a construct inside it, is out of subset: subset v3
+    /// structural condition5 (the selected64-bit or wasm32 little-endian byte model).
+    /// `function` and `block` are `None` — the violation has no site.
+    ModuleTarget,
 }
 
 /// A single out-of-subset construct, located precisely for diagnostics.
+///
+/// `function` / `block` are `None` exactly for [`SubsetSite::ModuleTarget`],
+/// which is a property of the whole module and names no construct.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SubsetViolation {
-    pub function: FuncId,
-    pub block: BlockId,
+    pub function: Option<FuncId>,
+    pub block: Option<BlockId>,
     /// Instruction index within the block when `site` is an instruction.
     pub instruction_index: Option<usize>,
     pub site: SubsetSite,
@@ -723,35 +1067,42 @@ pub struct SubsetViolation {
 
 impl core::fmt::Display for SubsetViolation {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        // The sited variants print the bare id (`FuncId(0)`, `BlockId(0)`),
+        // never the `Option` wrapper: `function` / `block` are `None` only
+        // for `ModuleTarget`, which has its own arm.
+        let function = self
+            .function
+            .map_or_else(|| "?".to_string(), |id| format!("{id:?}"));
+        let block = self
+            .block
+            .map_or_else(|| "?".to_string(), |id| format!("{id:?}"));
         match self.site {
+            SubsetSite::ModuleTarget => {
+                write!(f, "conformance-subset violation in module: {}", self.reason)
+            }
             SubsetSite::BlockParamType { param_index } => write!(
                 f,
-                "conformance-subset violation in function {:?}, block {:?}, block-param {}: {}",
-                self.function, self.block, param_index, self.reason
+                "conformance-subset violation in function {function}, block {block}, block-param {param_index}: {}",
+                self.reason
             ),
             SubsetSite::Instruction => write!(
                 f,
-                "conformance-subset violation in function {:?}, block {:?}, instruction {}: {}",
-                self.function,
-                self.block,
+                "conformance-subset violation in function {function}, block {block}, instruction {}: {}",
                 self.instruction_index
                     .map_or_else(|| "?".to_string(), |i| i.to_string()),
                 self.reason
             ),
             SubsetSite::InstructionProof { proof_index } => write!(
                 f,
-                "conformance-subset violation in function {:?}, block {:?}, instruction {}, proof {}: {}",
-                self.function,
-                self.block,
+                "conformance-subset violation in function {function}, block {block}, instruction {}, proof {proof_index}: {}",
                 self.instruction_index
                     .map_or_else(|| "?".to_string(), |i| i.to_string()),
-                proof_index,
                 self.reason
             ),
             SubsetSite::FunctionProof { proof_index } => write!(
                 f,
-                "conformance-subset violation in function {:?}, function-level proof {}: {}",
-                self.function, proof_index, self.reason
+                "conformance-subset violation in function {function}, function-level proof {proof_index}: {}",
+                self.reason
             ),
         }
     }
@@ -1041,10 +1392,11 @@ pub fn borrow_result_ty(operand_ty: Option<&Ty>) -> Ty {
 /// walk follows `operand_of` FIRST and UNCONDITIONALLY, and consults `known`
 /// only on reaching a value no borrow defines.
 ///
-/// A malformed borrow cycle (`%1 = Borrow %1`) has no root. The walk is bounded
-/// by the number of borrow results, so it TERMINATES and answers `Ty::Ptr`
-/// rather than looping; the cycle itself is a dominance/SSA defect that the
-/// passes owning that question report.
+/// A malformed borrow cycle (`%1 = Borrow %1`) has no root. Visiting marks
+/// detect cycles, and memoized terminal root identities collapse shared paths.
+/// Each distinct borrow edge is expanded once; cycles and their incoming
+/// prefixes answer `Ty::Ptr`. The cycle itself is a dominance/SSA defect that
+/// the passes owning that question report. Callback answers are not cached.
 ///
 /// Returns owned pairs rather than mutating a map: that ends the borrow `known`
 /// holds before the caller mutates the map `known` reads.
@@ -1064,40 +1416,105 @@ pub fn borrow_result_types(
         }
     }
 
-    // Phase B: collapse each chain to its root, then apply the shared rule.
-    let bound = operand_of.len();
+    // Cache root identities, not the callback's answers. Each borrow edge is
+    // expanded once, while `known` still runs once per acyclic result in the
+    // original sorted order (including repeated roots and missing types).
+    let mut roots = BorrowRoots::default();
     let mut resolved = Vec::with_capacity(operand_of.len());
     for result in operand_of.keys() {
-        let mut cursor = *result;
-        let mut steps = 0usize;
-        let root = loop {
-            match operand_of.get(&cursor) {
-                Some(operand) => {
-                    steps += 1;
-                    if steps > bound {
-                        // Pigeonhole: more hops than there are borrow results
-                        // means a cycle, which has no root to type from.
-                        break None;
-                    }
-                    cursor = *operand;
-                }
-                None => break Some(cursor),
-            }
-        };
+        let root = roots.resolve(*result, &operand_of);
         let operand_ty = root.and_then(known);
         resolved.push((*result, borrow_result_ty(operand_ty.as_ref())));
     }
-
     resolved
+}
+
+#[derive(Clone, Copy)]
+enum BorrowRoot {
+    Visiting,
+    Resolved(Option<ValueId>),
+}
+
+#[derive(Default)]
+struct BorrowRoots {
+    memo: BTreeMap<ValueId, BorrowRoot>,
+    path: Vec<ValueId>,
+    #[cfg(test)]
+    expanded: usize,
+}
+
+impl BorrowRoots {
+    fn resolve(
+        &mut self,
+        result: ValueId,
+        operands: &BTreeMap<ValueId, ValueId>,
+    ) -> Option<ValueId> {
+        self.path.clear();
+        let mut cursor = result;
+        let root = loop {
+            match self.memo.get(&cursor) {
+                Some(BorrowRoot::Resolved(root)) => break *root,
+                Some(BorrowRoot::Visiting) => break None,
+                None => {}
+            }
+            match operands.get(&cursor) {
+                None => break Some(cursor),
+                Some(operand) => {
+                    self.memo.insert(cursor, BorrowRoot::Visiting);
+                    self.path.push(cursor);
+                    #[cfg(test)]
+                    {
+                        self.expanded += 1;
+                    }
+                    cursor = *operand;
+                }
+            }
+        };
+        for value in self.path.drain(..) {
+            self.memo.insert(value, BorrowRoot::Resolved(root));
+        }
+        root
+    }
+}
+
+#[cfg(test)]
+mod borrow_root_cache_tests;
+
+/// Exclusion reason for a constant that carries a `Constant::Splat` anywhere
+/// (v50): outside the lowering-target subset until a subset-contract bump
+/// admits the uniform array with a backend lowering. Shared with the
+/// conformance mirror (`trust_ir_conformance::subset`), which applies it to
+/// global initializers as well. The walk visits each WRITTEN node once — a
+/// splat's element is one child — so it costs the constant's text, not its
+/// length.
+pub fn constant_splat_excluded(constant: &Constant) -> Option<&'static str> {
+    constant
+        .try_visit_constants(|node| {
+            if matches!(node, Constant::Splat { .. }) {
+                core::ops::ControlFlow::Break(())
+            } else {
+                core::ops::ControlFlow::Continue(())
+            }
+        })
+        .is_break()
+        .then_some(
+            "Constant::Splat: not yet admitted to the lowering-target subset (v50 landed the wire tag, Lean and interpreter semantics; admission is a subset-contract bump with the trust-cg lowering)",
+        )
 }
 
 fn inst_result_tys(inst: &Inst, module: &Module) -> Vec<Ty> {
     match inst {
+        Inst::MakeClosure { ty, .. } => vec![Ty::Closure(*ty)],
+        // Trust (wave-DS): a drop RUNS a destructor and yields nothing; so
+        // does its unwinding twin (amendment D).
+        Inst::Drop { .. } | Inst::DropInvoke { .. } => Vec::new(),
         Inst::BinOp { ty, .. }
         | Inst::UnOp { ty, .. }
         | Inst::Load { ty, .. }
         | Inst::AtomicLoad { ty, .. }
         | Inst::AtomicRMW { ty, .. }
+        | Inst::MakeAggregate { ty, .. }
+        | Inst::ArraySplat { ty, .. }
         | Inst::ExtractField { ty, .. }
         | Inst::InsertField { ty, .. }
         | Inst::ExtractElement { ty, .. }
@@ -1137,12 +1554,17 @@ fn inst_result_tys(inst: &Inst, module: &Module) -> Vec<Ty> {
         Inst::Borrow { .. } | Inst::BorrowMut { .. } => vec![borrow_result_ty(None)],
         // Invoke produces the callee's return values on the normal edge,
         // exactly like a direct `Call`.
-        Inst::Call { callee, .. } | Inst::Invoke { callee, .. } => module
+        Inst::Call { callee, .. } | Inst::CallCannotUnwind { callee, .. }
+        | Inst::Invoke { callee, .. } => module
             .function_by_id(*callee)
             .and_then(|callee| module.func_type(callee.ty))
             .map(|ty| ty.returns.clone())
             .unwrap_or_default(),
-        Inst::CallIndirect { sig, .. } => module
+        // `InvokeIndirect` produces its callee's returns on the normal edge,
+        // exactly like `CallIndirect` (amendment D, Part 2).
+        Inst::CallIndirect { sig, .. }
+        | Inst::CallIndirectCannotUnwind { sig, .. }
+        | Inst::InvokeIndirect { sig, .. } => module
             .func_type(*sig)
             .map(|ty| ty.returns.clone())
             .unwrap_or_default(),
@@ -1159,11 +1581,14 @@ fn inst_result_tys(inst: &Inst, module: &Module) -> Vec<Ty> {
         | Inst::Return { .. }
         | Inst::Assume { .. }
         | Inst::Assert { .. }
+        | Inst::AssertInvoke { .. }
         | Inst::Unreachable
         | Inst::EndBorrow { .. }
         | Inst::Retain { .. }
         | Inst::Release { .. }
         | Inst::Dealloc { .. }
+        | Inst::MemCopy { .. }
+        | Inst::MemSet { .. }
         | Inst::CloseFrame { .. }
         | Inst::CoroSuspend { .. }
         // Resume produces no result.
@@ -1174,7 +1599,7 @@ fn inst_result_tys(inst: &Inst, module: &Module) -> Vec<Ty> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{BinOp, Constant, FuncTy, ProofAnnotation};
+    use crate::{BinOp, FuncTy, ProofAnnotation};
 
     fn v(index: u32) -> ValueId {
         ValueId::new(index)
@@ -1187,20 +1612,28 @@ mod tests {
     #[test]
     fn typed_values_include_params_results_and_producer_metadata() {
         let mut module = Module::new("bridge-metadata");
-        let callee_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::U64, Ty::Bool],
-            is_vararg: false,
-        });
-        let caller_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let callee_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::U64, Ty::Bool],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let caller_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut callee = Function::new(FuncId::new(0), "callee", callee_ty, b(0));
         callee.blocks.push(crate::Block::new(b(0)));
-        module.add_function(callee);
+        module
+            .try_add_function(callee)
+            .expect("Module::try_add_function: test fixture");
 
         let mut caller = Function::new(FuncId::new(1), "caller", caller_ty, b(1));
         let mut block = crate::Block::new(b(1)).with_param(v(0), Ty::I32);
@@ -1243,7 +1676,9 @@ mod tests {
             .with_result(v(6)),
         );
         caller.blocks.push(block);
-        module.add_function(caller);
+        module
+            .try_add_function(caller)
+            .expect("Module::try_add_function: test fixture");
 
         let metadata = module
             .typed_values_for_function(FuncId::new(1))
@@ -1303,11 +1738,14 @@ mod tests {
     fn vector_select_contract_accepts_compare_to_zero_condition() {
         let v4i32 = Ty::Vector(Box::new(Ty::I32), 4);
         let mut module = Module::new("vector-select-valid");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![v4i32.clone(), v4i32.clone(), v4i32.clone()],
-            returns: vec![v4i32.clone()],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![v4i32.clone(), v4i32.clone(), v4i32.clone()],
+                returns: vec![v4i32.clone()],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "select_valid", ft, b(0));
         let mut block = crate::Block::new(b(0))
             .with_param(v(0), v4i32.clone())
@@ -1332,7 +1770,9 @@ mod tests {
             .with_result(v(4)),
         );
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         module
             .validate_vector_select_contracts()
@@ -1343,11 +1783,14 @@ mod tests {
     fn vector_select_contract_rejects_physical_i32_mask_condition() {
         let v4i32 = Ty::Vector(Box::new(Ty::I32), 4);
         let mut module = Module::new("vector-select-invalid");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![v4i32.clone(), v4i32.clone(), v4i32.clone()],
-            returns: vec![v4i32.clone()],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![v4i32.clone(), v4i32.clone(), v4i32.clone()],
+                returns: vec![v4i32.clone()],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "select_invalid", ft, b(0));
         let mut block = crate::Block::new(b(0))
             .with_param(v(0), v4i32.clone())
@@ -1363,7 +1806,9 @@ mod tests {
             .with_result(v(3)),
         );
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let errors = module
             .validate_vector_select_contracts()
@@ -1399,16 +1844,22 @@ mod tests {
         let file = 0u32;
 
         // fn#0 `inc`: x: i32 -> i32, returns x + 1, every node carries a span.
-        let inc_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let main_ty = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let inc_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let main_ty = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut inc = Function::new(FuncId::new(0), "inc", inc_ty, b(0));
         let mut blk = crate::Block::new(b(0)).with_param(v(0), Ty::I32);
@@ -1447,7 +1898,9 @@ mod tests {
             }),
         );
         inc.blocks.push(blk);
-        module.add_function(inc);
+        module
+            .try_add_function(inc)
+            .expect("Module::try_add_function: test fixture");
 
         // fn#1 `main`: () -> i32, calls inc(41).
         let mut main = Function::new(FuncId::new(1), "main", main_ty, b(0));
@@ -1484,7 +1937,9 @@ mod tests {
             }),
         );
         main.blocks.push(blk);
-        module.add_function(main);
+        module
+            .try_add_function(main)
+            .expect("Module::try_add_function: test fixture");
 
         module
     }
@@ -1497,7 +1952,7 @@ mod tests {
         module
             .check_conformance_subset()
             .expect("worked-example module is in-subset");
-        assert_eq!(ConformanceSubset::CURRENT.version, 2);
+        assert_eq!(ConformanceSubset::CURRENT.version, 5);
 
         // Step 1c: per-instruction provenance is recoverable. Every produced
         // value carries the threaded span (no node was emitted span-less).
@@ -1533,12 +1988,16 @@ mod tests {
 
         // Binary codec round-trip preserves the module (including threaded spans
         // and the debug-info file table).
-        let bytes = crate::binary::serialize_module(&module);
+        let bytes =
+            crate::binary::serialize_module(&module).expect("serialize_module: test fixture");
         let back = crate::binary::deserialize_module(&bytes).expect("binary round-trips");
         assert_eq!(back, module);
         // Idempotent re-encode is byte-identical (the wire-format guarantee a
         // downstream consumer pins against).
-        assert_eq!(crate::binary::serialize_module(&back), bytes);
+        assert_eq!(
+            crate::binary::serialize_module(&back).expect("serialize_module: test fixture"),
+            bytes
+        );
 
         // JSON round-trip via serde.
         let json = serde_json::to_string(&module).expect("serialize json");
@@ -1553,11 +2012,14 @@ mod tests {
     #[test]
     fn conformance_subset_rejects_partial_semantics_constructs_with_locations() {
         let mut module = Module::new("out-of-subset");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![Ty::Ptr],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Ptr],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "bad", ft, b(0));
         // A block param typed F16 (out of subset).
         let mut blk = crate::Block::new(b(0))
@@ -1574,9 +2036,17 @@ mod tests {
             })
             .with_result(v(2)),
         );
-        // A pointer-width integer value (depth-ledger adoption still pending).
-        blk.body
-            .push(InstrNode::new(Inst::Undef { ty: Ty::Usize }).with_result(v(3)));
+        // A `Char` read out of memory: v4 admits the TYPE but condition 6
+        // refuses this ORIGIN (an in-subset opcode at an in-subset type).
+        blk.body.push(
+            InstrNode::new(Inst::Load {
+                ty: Ty::Char,
+                ptr: v(0),
+                volatile: false,
+                align: None,
+            })
+            .with_result(v(3)),
+        );
         // A Load of an F16 — in-subset opcode, out-of-subset inline type.
         blk.body.push(
             InstrNode::new(Inst::Load {
@@ -1588,7 +2058,9 @@ mod tests {
             .with_result(v(4)),
         );
         func.blocks.push(blk);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let violations = module
             .check_conformance_subset()
@@ -1605,11 +2077,10 @@ mod tests {
                 .iter()
                 .any(|x| x.instruction_index == Some(0) && x.reason.contains("Transmute"))
         );
-        // Usize at instruction 1.
+        // Char load at instruction 1 (v4 condition 6, not a type exclusion).
         assert!(
-            violations
-                .iter()
-                .any(|x| x.instruction_index == Some(1) && x.reason.contains("Usize"))
+            violations.iter().any(|x| x.instruction_index == Some(1)
+                && x.reason.contains("may not be READ FROM MEMORY"))
         );
         // F16 Load at instruction 2 (inline-type exclusion on an in-subset op).
         assert!(
@@ -1618,10 +2089,432 @@ mod tests {
                 .any(|x| x.instruction_index == Some(2) && x.reason.contains("F16"))
         );
 
-        // Violations are precisely located + Display-able.
+        // Violations are precisely located + Display-able. The sited
+        // variants print the BARE ids: `function` / `block` became `Option`s
+        // in v3 (for `ModuleTarget`), and the diagnostic must not leak the
+        // wrapper (`Some(FuncId(0))`) for a construct that does have a site.
         let any = &violations[0];
-        assert_eq!(any.function, FuncId::new(0));
-        assert!(!any.to_string().is_empty());
+        assert_eq!(any.function, Some(FuncId::new(0)));
+        let rendered = any.to_string();
+        assert!(
+            rendered.contains("in function FuncId(0), block BlockId(0)"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("Some("), "{rendered}");
+    }
+
+    /// Subset v4 POSITIVE: the three v25 B1 scalars are in the type subset,
+    /// alone and nested, and a `usize` body is subset-clean.
+    #[test]
+    fn subset_v4_admits_the_b1_scalars() {
+        assert!(ConformanceSubset::ty_excluded(&Ty::Isize).is_none());
+        assert!(ConformanceSubset::ty_excluded(&Ty::Usize).is_none());
+        assert!(ConformanceSubset::ty_excluded(&Ty::Char).is_none());
+        assert!(ConformanceSubset::ty_excluded(&Ty::Tuple(vec![Ty::Usize, Ty::Char])).is_none());
+        assert!(ConformanceSubset::ty_excluded(&Ty::RefMut(Box::new(Ty::Isize))).is_none());
+
+        // `fn(usize) -> usize { x + 1 }`, the shape every Rust slice index
+        // lowers to. No target_info => condition 5's default byte model.
+        let mut module = Module::new("usize_add_one");
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Usize],
+                returns: vec![Ty::Usize],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let mut func = Function::new(FuncId::new(0), "usize_add_one", ft, b(0));
+        let mut blk = crate::Block::new(b(0)).with_param(v(0), Ty::Usize);
+        blk.body.push(
+            InstrNode::new(Inst::Const {
+                ty: Ty::Usize,
+                value: Constant::Int(1),
+            })
+            .with_result(v(1)),
+        );
+        blk.body.push(
+            InstrNode::new(Inst::BinOp {
+                op: crate::inst::BinOp::Add,
+                ty: Ty::Usize,
+                lhs: v(0),
+                rhs: v(1),
+            })
+            .with_result(v(2)),
+        );
+        blk.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
+        func.blocks.push(blk);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .check_conformance_subset()
+            .expect("a usize body is inside subset v4");
+    }
+
+    /// v5 admits the same usize body on canonical wasm32, while an unknown
+    ///32-bit scalar ABI remains a whole-module refusal.
+    #[test]
+    fn subset_v5_usize_on_wasm32_is_admitted_but_i686_stays_refused() {
+        let mut module = Module::new("usize_wasm32");
+        module.target_info = Some(crate::TargetInfo {
+            triple: "wasm32-unknown-unknown".into(),
+            pointer_size: 4,
+            endianness: crate::Endianness::Little,
+            abi: None,
+            struct_passing: Default::default(),
+        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Usize],
+                returns: vec![Ty::Usize],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let mut func = Function::new(FuncId::new(0), "usize_id", ft, b(0));
+        let mut blk = crate::Block::new(b(0)).with_param(v(0), Ty::Usize);
+        blk.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(0)] }));
+        func.blocks.push(blk);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
+
+        module
+            .check_conformance_subset()
+            .expect("v5 selects the proved32-bit model");
+        module.target_info.as_mut().expect("target").triple = "i686-unknown-linux-gnu".into();
+        let violations = module
+            .check_conformance_subset()
+            .expect_err("i686 has no admitted scalar ABI");
+        assert!(
+            violations
+                .iter()
+                .any(|x| x.site == SubsetSite::ModuleTarget
+                    && x.reason.contains("pinned byte model")),
+            "{violations:?}"
+        );
+        // Right reason: the TYPE is not what refused it.
+        assert!(
+            !violations.iter().any(|x| x.reason.contains("Usize")),
+            "`Usize` must be in-subset in v4; only the target refuses this \
+             module: {violations:?}"
+        );
+    }
+
+    /// Subset v4 condition 6, positive + negative twins + the over-refusal
+    /// control, on ONE mutation axis: the cast that makes the `Char`.
+    #[test]
+    fn subset_v4_char_origin_condition() {
+        let zext_u8 = |dst: Ty| Inst::Cast {
+            op: CastOp::ZExt,
+            src_ty: Ty::U8,
+            dst_ty: dst,
+            operand: v(0),
+        };
+        // POSITIVE: the one admitted computed origin.
+        assert!(ConformanceSubset::inst_excluded(&zext_u8(Ty::Char)).is_none());
+
+        // NEGATIVE TWINS, each one mutation from the positive.
+        for (what, inst) in [
+            (
+                "bitcast u32 -> char",
+                Inst::Cast {
+                    op: CastOp::Bitcast,
+                    src_ty: Ty::U32,
+                    dst_ty: Ty::Char,
+                    operand: v(0),
+                },
+            ),
+            (
+                "zext u16 -> char (wider source)",
+                Inst::Cast {
+                    op: CastOp::ZExt,
+                    src_ty: Ty::U16,
+                    dst_ty: Ty::Char,
+                    operand: v(0),
+                },
+            ),
+            (
+                "trunc u32 -> char",
+                Inst::Cast {
+                    op: CastOp::Trunc,
+                    src_ty: Ty::U32,
+                    dst_ty: Ty::Char,
+                    operand: v(0),
+                },
+            ),
+        ] {
+            let reason = ConformanceSubset::inst_excluded(&inst)
+                .unwrap_or_else(|| panic!("{what} must be out of subset"));
+            assert!(
+                reason.contains("subset v4 condition 6"),
+                "{what}: wrong reason `{reason}`"
+            );
+        }
+
+        // NEGATIVE TWINS on the memory axis.
+        for (what, inst) in [
+            (
+                "load char",
+                Inst::Load {
+                    ty: Ty::Char,
+                    ptr: v(0),
+                    volatile: false,
+                    align: None,
+                },
+            ),
+            (
+                "atomic load char",
+                Inst::AtomicLoad {
+                    ty: Ty::Char,
+                    ptr: v(0),
+                    ordering: crate::inst::Ordering::SeqCst,
+                },
+            ),
+            (
+                "load <4 x char>",
+                Inst::Load {
+                    ty: Ty::Vector(Box::new(Ty::Char), 4),
+                    ptr: v(0),
+                    volatile: false,
+                    align: None,
+                },
+            ),
+        ] {
+            let reason = ConformanceSubset::inst_excluded(&inst)
+                .unwrap_or_else(|| panic!("{what} must be out of subset"));
+            assert!(
+                reason.contains("may not be READ FROM MEMORY"),
+                "{what}: wrong reason `{reason}`"
+            );
+        }
+
+        // MUTATION CONTROL — condition 6 must not over-refuse. None of these
+        // produces a `Char` value, so the rule has nothing to say about them.
+        for (what, inst) in [
+            (
+                "zext char -> u32 (char is the SOURCE)",
+                Inst::Cast {
+                    op: CastOp::ZExt,
+                    src_ty: Ty::Char,
+                    dst_ty: Ty::U32,
+                    operand: v(0),
+                },
+            ),
+            (
+                "load &char (a POINTER, not a char)",
+                Inst::Load {
+                    ty: Ty::Ref(Box::new(Ty::Char)),
+                    ptr: v(0),
+                    volatile: false,
+                    align: None,
+                },
+            ),
+            (
+                "load u32 (the carrier, spelled honestly)",
+                Inst::Load {
+                    ty: Ty::U32,
+                    ptr: v(0),
+                    volatile: false,
+                    align: None,
+                },
+            ),
+            (
+                "store char (a store produces no value)",
+                Inst::Store {
+                    ty: Ty::Char,
+                    ptr: v(0),
+                    value: v(1),
+                    volatile: false,
+                    align: None,
+                },
+            ),
+        ] {
+            assert!(
+                ConformanceSubset::inst_excluded(&inst).is_none(),
+                "{what} must stay IN subset v4"
+            );
+        }
+    }
+
+    /// WS2.17 REVIEW — subset v4 condition 6 must resolve the module's
+    /// MEMBER TABLES, not just the inline type surface.
+    ///
+    /// `load { char }` / `load [char; 2]` / `load E` reads a `Char` out of
+    /// arbitrary memory bytes, and one `ExtractField` / `ExtractElement`
+    /// later that `Char` is an ordinary SSA value — while every instruction
+    /// on its own names only a `Ty::Struct` / `Ty::Array` / `Ty::Enum`, which
+    /// the inline classifier says nothing about. Before this fix the module
+    /// below was reported IN SUBSET, so condition 6's rule ("a `Char` may
+    /// originate only from …") was one indirection away from vacuous.
+    #[test]
+    fn subset_v4_char_origin_resolves_named_aggregates() {
+        use crate::value::{EnumId, RecordId, StructId};
+
+        /// `fn f(p: ptr) { load <ty> }` — one load, so the only thing that
+        /// can be out of subset is that load.
+        fn module_loading(name: &str, prepare: impl FnOnce(&mut Module) -> Ty) -> Module {
+            let mut module = Module::new(name);
+            let ty = prepare(&mut module);
+            let ft = module
+                .add_func_type(FuncTy {
+                    params: vec![Ty::Ptr],
+                    returns: vec![],
+                    abi: None,
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let mut func = Function::new(FuncId::new(0), "f", ft, b(0));
+            let mut blk = crate::Block::new(b(0)).with_param(v(0), Ty::Ptr);
+            blk.body.push(
+                InstrNode::new(Inst::Load {
+                    ty,
+                    ptr: v(0),
+                    volatile: false,
+                    align: None,
+                })
+                .with_result(v(1)),
+            );
+            blk.body
+                .push(InstrNode::new(Inst::Return { values: vec![] }));
+            func.blocks.push(blk);
+            module
+                .try_add_function(func)
+                .expect("Module::try_add_function: test fixture");
+            module
+        }
+
+        let char_field = |name: &str| crate::FieldDef {
+            name: name.into(),
+            ty: Ty::Char,
+            offset: None,
+        };
+        let i32_field = |name: &str| crate::FieldDef {
+            name: name.into(),
+            ty: Ty::I32,
+            offset: None,
+        };
+
+        // NEGATIVE TWINS: a `Char` reached through each member table.
+        let through_struct = module_loading("via_struct", |m| {
+            let id = m.add_struct(crate::StructDef {
+                id: StructId::new(0),
+                name: "S".into(),
+                fields: vec![i32_field("n"), char_field("c")],
+                size: None,
+                align: None,
+                repr: Default::default(),
+                origin: None,
+            });
+            Ty::Struct(id)
+        });
+        let through_array = module_loading("via_array", |m| {
+            let elem = m
+                .add_type(Ty::Char)
+                .expect("Module::add_type: test fixture");
+            Ty::Array(elem, 2)
+        });
+        let through_enum = module_loading("via_enum", |m| {
+            let id = m.add_enum(
+                crate::EnumDef::new(
+                    EnumId::new(0),
+                    "E",
+                    vec![
+                        crate::EnumVariant {
+                            name: "N".into(),
+                            fields: vec![Ty::I32],
+                            field_names: Vec::new(),
+                        },
+                        crate::EnumVariant {
+                            name: "C".into(),
+                            fields: vec![Ty::Char],
+                            field_names: Vec::new(),
+                        },
+                    ],
+                )
+                .with_discriminants(vec![Some(0), Some(1)]),
+            );
+            Ty::Enum(id)
+        });
+        let through_record = module_loading("via_record", |m| {
+            let id = m.add_record(crate::RecordDef {
+                id: RecordId::new(0),
+                name: "R".into(),
+                fields: vec![char_field("c")],
+            });
+            Ty::Record(id)
+        });
+        // Two indirections deep, and behind a Vector lane: the walk must
+        // recurse, not peek one level.
+        let two_deep = module_loading("via_array_of_struct", |m| {
+            let sid = m.add_struct(crate::StructDef {
+                id: StructId::new(0),
+                name: "S".into(),
+                fields: vec![char_field("c")],
+                size: None,
+                align: None,
+                repr: Default::default(),
+                origin: None,
+            });
+            let elem = m
+                .add_type(Ty::Struct(sid))
+                .expect("Module::add_type: test fixture");
+            Ty::Array(elem, 3)
+        });
+
+        for (what, module) in [
+            ("load { i32, char }", &through_struct),
+            ("load [char; 2]", &through_array),
+            ("load enum with a char payload", &through_enum),
+            ("load record { c: char }", &through_record),
+            ("load [{ char }; 3]", &two_deep),
+        ] {
+            let Err(violations) = module.check_conformance_subset() else {
+                panic!("{what} must be OUT of subset v4 (condition 6)");
+            };
+            assert!(
+                violations
+                    .iter()
+                    .any(|x| x.reason.contains("may not be READ FROM MEMORY")),
+                "{what}: wrong reason {violations:?}"
+            );
+        }
+
+        // OVER-REFUSAL CONTROLS, one mutation from the twins above.
+        let no_char = module_loading("no_char", |m| {
+            let id = m.add_struct(crate::StructDef {
+                id: StructId::new(0),
+                name: "S".into(),
+                fields: vec![i32_field("n")],
+                size: None,
+                align: None,
+                repr: Default::default(),
+                origin: None,
+            });
+            Ty::Struct(id)
+        });
+        no_char
+            .check_conformance_subset()
+            .expect("a struct with no char member stays in subset v4");
+        // A POINTER to a char-bearing struct is a pointer, not a char.
+        let pointer_to_char_struct = module_loading("ptr_to_struct", |m| {
+            let id = m.add_struct(crate::StructDef {
+                id: StructId::new(0),
+                name: "S".into(),
+                fields: vec![char_field("c")],
+                size: None,
+                align: None,
+                repr: Default::default(),
+                origin: None,
+            });
+            Ty::Ref(Box::new(Ty::Struct(id)))
+        });
+        pointer_to_char_struct
+            .check_conformance_subset()
+            .expect("loading a &S is loading a POINTER, not a char");
     }
 
     #[test]
@@ -1645,7 +2538,7 @@ mod tests {
     }
 
     #[test]
-    fn conformance_subset_v2_admits_fat_pointer_trio_on_64_bit_only() {
+    fn legacy_fat_pointer_trio_retains_target_and_metadata_refusals() {
         let fat = Ty::FatPtr(crate::FatPtrKind::Str);
         let wrong_metadata = Inst::PtrMetadata {
             ptr_ty: fat.clone(),
@@ -1654,15 +2547,18 @@ mod tests {
         };
         assert!(
             ConformanceSubset::inst_excluded(&wrong_metadata)
-                .is_some_and(|reason| reason.contains("canonical 64-bit")),
+                .is_some_and(|reason| reason.contains("canonical target-width")),
             "v2 must reject a non-canonical fat-pointer metadata lane"
         );
         let mut module = Module::new("fatptr-subset-v2");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![fat.clone(), Ty::Ptr, Ty::U64],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![fat.clone(), Ty::Ptr, Ty::U64],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "fat", ft, b(0));
         let mut block = crate::Block::new(b(0))
             .with_param(v(0), fat.clone())
@@ -1696,12 +2592,25 @@ mod tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         module
             .check_conformance_subset()
             .expect("v2 admits first-class fat pointers on the default 64-bit target");
 
+        // v3: the pinned-target requirement is a MODULE-level condition
+        // (structural condition 5), reported once at `SubsetSite::ModuleTarget`
+        // with no function/block site — the v2 per-construct fat-pointer
+        // reason is gone because the module condition subsumes it.
+        let is_module_target = |violation: &SubsetViolation| {
+            violation.site == SubsetSite::ModuleTarget
+                && violation.function.is_none()
+                && violation.block.is_none()
+                && violation.instruction_index.is_none()
+                && violation.reason == MODULE_TARGET_VIOLATION
+        };
         module.target_info = Some(crate::TargetInfo {
             triple: "i686-unknown-linux-gnu".into(),
             pointer_size: 4,
@@ -1711,12 +2620,17 @@ mod tests {
         });
         let violations = module
             .check_conformance_subset()
-            .expect_err("v2 must fail closed on non-64-bit fat pointers");
-        assert!(
+            .expect_err("v3 must fail closed on a non-64-bit module");
+        assert_eq!(violations.len(), 3, "{violations:?}");
+        assert_eq!(violations.iter().filter(|v| is_module_target(v)).count(), 1);
+        assert_eq!(
             violations
                 .iter()
-                .any(|violation| violation.reason.contains("pinned to the 64-bit")),
-            "{violations:?}"
+                .filter(|v| v.site == SubsetSite::Instruction
+                    && v.reason.contains("canonical target-width lane"))
+                .count(),
+            2,
+            "the raw32-bit target also makes both U64 metadata declarations wrong: {violations:?}"
         );
 
         let target = module.target_info.as_mut().expect("target");
@@ -1724,13 +2638,27 @@ mod tests {
         target.endianness = crate::Endianness::Big;
         let violations = module
             .check_conformance_subset()
-            .expect_err("v2 must fail closed on big-endian fat pointers");
-        assert!(
-            violations
-                .iter()
-                .any(|violation| violation.reason.contains("little-endian")),
-            "{violations:?}"
-        );
+            .expect_err("v3 must fail closed on a big-endian module");
+        assert_eq!(violations.len(), 1, "{violations:?}");
+        assert!(is_module_target(&violations[0]), "{violations:?}");
+
+        // Mutation control: an explicit x86_64 little-endian pin is the
+        // pinned byte model and stays IN, exactly like the target-free module.
+        let target = module.target_info.as_mut().expect("target");
+        target.triple = "x86_64-unknown-linux-gnu".into();
+        target.endianness = crate::Endianness::Little;
+        module
+            .check_conformance_subset()
+            .expect("an explicit 64-bit little-endian pin is the model's byte model");
+
+        // Fail closed on a malformed pointer size: `Module::pointer_bits`
+        // would fall back to the 64-bit default on overflow, so condition 5
+        // must read the pinned size directly.
+        module.target_info.as_mut().expect("target").pointer_size = u32::MAX;
+        let violations = module
+            .check_conformance_subset()
+            .expect_err("a malformed pointer size is not the pinned byte model");
+        assert!(is_module_target(&violations[0]), "{violations:?}");
     }
 
     // ── Fat-borrow result typing ──────────────────────────────────────────
@@ -1756,18 +2684,23 @@ mod tests {
     /// parameter, `%1 = Borrow %0`, and nothing else.
     fn module_borrowing_a_param(operand_ty: Ty) -> Module {
         let mut module = Module::new("borrow-result-ty");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![operand_ty.clone()],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![operand_ty.clone()],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "borrows", ft, b(0));
         let mut block = crate::Block::new(b(0)).with_param(v(0), operand_ty);
         block
             .body
             .push(InstrNode::new(Inst::Borrow { ptr: v(0) }).with_result(v(1)));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
         module
     }
 
@@ -1843,11 +2776,14 @@ mod tests {
     fn a_fat_operand_defined_in_a_later_listed_block_still_resolves() {
         let fat = Ty::FatPtr(crate::FatPtrKind::Str);
         let mut module = Module::new("borrow-block-order");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![fat.clone()],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![fat.clone()],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         // entry is bb0, but bb1 is LISTED first.
         let mut func = Function::new(FuncId::new(0), "late_operand", ft, b(0));
         let mut bb1 = crate::Block::new(b(1));
@@ -1856,7 +2792,9 @@ mod tests {
         func.blocks.push(bb1);
         func.blocks
             .push(crate::Block::new(b(0)).with_param(v(0), fat.clone()));
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         assert_eq!(ty_of(&module, v(1)), Some(fat));
     }
@@ -1876,11 +2814,14 @@ mod tests {
     fn a_borrow_of_a_borrow_collapses_to_the_chain_root() {
         let fat = Ty::FatPtr(crate::FatPtrKind::Str);
         let mut module = Module::new("borrow-chain");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![fat.clone()],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![fat.clone()],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "reborrow", ft, b(0));
         let mut block = crate::Block::new(b(0)).with_param(v(0), fat.clone());
         block
@@ -1890,7 +2831,9 @@ mod tests {
             .body
             .push(InstrNode::new(Inst::BorrowMut { ptr: v(1) }).with_result(v(2)));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         assert_eq!(ty_of(&module, v(1)), Some(fat.clone()));
         assert_eq!(ty_of(&module, v(2)), Some(fat));
@@ -1910,11 +2853,14 @@ mod tests {
     #[test]
     fn a_borrow_cycle_terminates_at_ptr() {
         let mut module = Module::new("borrow-cycle");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "cyclic", ft, b(0));
         let mut block = crate::Block::new(b(0));
         block
@@ -1924,7 +2870,9 @@ mod tests {
             .body
             .push(InstrNode::new(Inst::Borrow { ptr: v(1) }).with_result(v(2)));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         assert_eq!(ty_of(&module, v(1)), Some(Ty::Ptr));
         assert_eq!(ty_of(&module, v(2)), Some(Ty::Ptr));
@@ -1950,11 +2898,14 @@ mod tests {
         let fat = Ty::FatPtr(crate::FatPtrKind::Str);
         let v4i32 = Ty::Vector(Box::new(Ty::I32), 4);
         let mut module = Module::new("borrow-select-cond");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![fat.clone(), v4i32.clone(), v4i32.clone()],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![fat.clone(), v4i32.clone(), v4i32.clone()],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "fat_cond", ft, b(0));
         let mut block = crate::Block::new(b(0))
             .with_param(v(0), fat.clone())
@@ -1974,7 +2925,9 @@ mod tests {
             .with_result(v(4)),
         );
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let errors = module
             .validate_vector_select_contracts()
@@ -1986,13 +2939,13 @@ mod tests {
         assert_eq!(reported.actual_cond_ty, Some(fat));
     }
 
-    /// The ratified v2 verdicts on every construct where this classifier
+    /// The ratified v2/v3 verdicts on every construct where this classifier
     /// historically drifted from `lowering-target-subset.md`. The machine
     /// cross-check against `trust_ir_conformance::subset` lives in that
     /// crate's `bridge_subset_agreement` gate; these are the core-crate
     /// statements of the same verdicts.
     #[test]
-    fn ratified_v2_boundary_verdicts() {
+    fn ratified_boundary_verdicts() {
         // Scalar-to-scalar Transmute is IN (Lean semCast scalar partial).
         assert!(
             ConformanceSubset::inst_excluded(&Inst::Cast {
@@ -2042,6 +2995,45 @@ mod tests {
             })
             .is_some()
         );
+        // v3 (F-042): `Dealloc` left the subset in v2 (G18-1) but this
+        // classifier still admitted it through the inline-type fallthrough.
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::Dealloc { ptr: v(0) })
+                .is_some_and(|reason| reason.contains("Inst::Dealloc") && reason.contains("G18-1"))
+        );
+        // v3 (F-036 review): `Transmute` is integer/pointer scalar only on
+        // BOTH sides — a float or bool source OR destination is OUT, named
+        // as the structural condition. The destination cases are the
+        // mistranslation control (Lean bound an int at a float/bool type).
+        for (src_ty, dst_ty) in [
+            (Ty::F32, Ty::U32),
+            (Ty::U32, Ty::F32),
+            (Ty::F64, Ty::U64),
+            (Ty::U8, Ty::Bool),
+            (Ty::Bool, Ty::U8),
+        ] {
+            assert!(
+                ConformanceSubset::inst_excluded(&Inst::Cast {
+                    op: CastOp::Transmute,
+                    src_ty: src_ty.clone(),
+                    dst_ty: dst_ty.clone(),
+                    operand: v(0),
+                })
+                .is_some_and(|reason| reason.contains("scalar-to-scalar")),
+                "Transmute {src_ty} -> {dst_ty} must be out of subset v3"
+            );
+        }
+        // Mutation control: the same reinterpretation spelled as `Bitcast`
+        // stays IN — it is the sanctioned int<->float carrier.
+        assert!(
+            ConformanceSubset::inst_excluded(&Inst::Cast {
+                op: CastOp::Bitcast,
+                src_ty: Ty::U32,
+                dst_ty: Ty::F32,
+                operand: v(0),
+            })
+            .is_none()
+        );
         // A ratified fast-4 vector op is IN; any other dialect op is OUT.
         let allowed = crate::DialectInst::new("vector", "reduce").with_result_ty(Ty::I32);
         assert!(ConformanceSubset::inst_excluded(&Inst::DialectOp(Box::new(allowed))).is_none());
@@ -2056,11 +3048,14 @@ mod tests {
         );
         // Custom proof annotations are refused, located at their site.
         let mut module = Module::new("custom-proof");
-        let ft = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut func = Function::new(FuncId::new(0), "tagged", ft, b(0));
         let mut block = crate::Block::new(b(0));
         block.body.push(
@@ -2075,7 +3070,9 @@ mod tests {
             .body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
         let violations = module
             .check_conformance_subset()
             .expect_err("Custom proof tags are outside the pinned vocabulary");

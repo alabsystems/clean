@@ -1,0 +1,289 @@
+{
+ "chain": "ir_lzd",
+ "body": "level::Level::is_zero",
+ "what": "The FIVE-BODY module: the designated target together with the real bodies of every function it can reach. Two artifacts, one module -- `level::Level::is_zero` and `<level::LevelArc as std::ops::Deref>::deref` from the crate module, and `Option::as_deref`, `Option::expect` and `<Arc<Level> as Deref>::deref` from the callee sidecar's bundle, whose function ids reader A relocated above the crate module's and whose bodies it retargeted the crate DECLARATIONS to. Nine calls, every one naming a canonical index this module defines. No authored function.",
+ "producer_pin": "reader A, scripts/crystal_a2_project, from dump-sidecar-O3's clean_kernel.trust-ir.bin merged with callees/clean_kernel.callees.trust-ir.bin and joined through callees/clean_kernel.callees.manifest.json. Both digests and both retargets are in ir_lzd.core.prov.json.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "functy": 0,
+  "producer": "trust",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr"
+   }
+  ],
+  "block_params": [
+   {
+    "block": 6,
+    "index": 0,
+    "ssa": 1,
+    "ty": "bool"
+   },
+   {
+    "block": 9,
+    "index": 0,
+    "ssa": 2,
+    "ty": "bool"
+   }
+  ],
+  "aligns": [
+   "load:None"
+  ],
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 6,
+   "alias": "ir_lzd_tlevel",
+   "rust_type": "level::Level"
+  },
+  {
+   "canonical": 1,
+   "crate_id": 0,
+   "alias": "ir_lzd_topt_ref",
+   "rust_type": "Option<&level::Level>"
+  },
+  {
+   "canonical": 2,
+   "crate_id": 1,
+   "alias": "ir_lzd_topt_arc",
+   "rust_type": "Option<Arc<level::Level>>"
+  }
+ ],
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 3,
+   "alias": "ir_lzd_tarc",
+   "rust_type": "alloc::sync::Arc"
+  },
+  {
+   "canonical": 1,
+   "crate_id": 0,
+   "alias": "ir_lzd_tnonnull",
+   "rust_type": "core::ptr::NonNull"
+  }
+ ],
+ "funcs": [
+  {
+   "canonical": 0,
+   "crate_id": 1815,
+   "name": "level::Level::is_zero"
+  },
+  {
+   "canonical": 1,
+   "crate_id": 1801,
+   "name": "<level::LevelArc as std::ops::Deref>::deref"
+  },
+  {
+   "canonical": 2,
+   "crate_id": 5618,
+   "name": "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>",
+   "id_source": "sidecar bundle member 1, relocated by +5617"
+  },
+  {
+   "canonical": 3,
+   "crate_id": 5617,
+   "name": "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>",
+   "id_source": "sidecar bundle member 0, relocated by +5617"
+  },
+  {
+   "canonical": 4,
+   "crate_id": 5619,
+   "name": "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>",
+   "id_source": "sidecar bundle member 2, relocated by +5617; reached only from as_deref"
+  }
+ ],
+ "extra_bodies": [
+  {
+   "canonical": 1,
+   "prefix": "ir_lzd_f1",
+   "body": "<level::LevelArc as std::ops::Deref>::deref",
+   "interface": {
+    "linkage": "external",
+    "calling_conv": "rustcc",
+    "functy": 22,
+    "producer": "trust",
+    "params": [
+     {
+      "block": 0,
+      "index": 0,
+      "ssa": 0,
+      "ty": "ptr"
+     }
+    ],
+    "block_params": [],
+    "aligns": [],
+    "clauses": [
+     "loc",
+     "names",
+     "producer"
+    ]
+   },
+   "prefix_note": "Chain-scoped. The first cut used `ir_lad`, which COLLIDES: `ir_lzc` already registers `ir_lad_b0` and `ir_lad_func` for the same body, and the kernel refused the duplicate at build time. Every prefix here is `ir_lzd_`-scoped so a second chain over the same function can never shadow a first."
+  },
+  {
+   "canonical": 2,
+   "prefix": "ir_lzd_f2",
+   "body": "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>",
+   "interface": {
+    "linkage": "external",
+    "calling_conv": "ccc",
+    "functy": 1,
+    "producer": "trust-ir",
+    "params": [
+     {
+      "block": 0,
+      "index": 0,
+      "ssa": 0,
+      "ty": "ptr"
+     }
+    ],
+    "block_params": [],
+    "aligns": [
+     "alloca:None",
+     "load:None",
+     "store:None",
+     "load:None",
+     "store:None"
+    ],
+    "clauses": [
+     "producer",
+     "proof"
+    ]
+   },
+   "prefix_note": "Chain-scoped. The first cut used `ir_lad2`, which COLLIDES: `ir_lzc` already registers `ir_lad_b0` and `ir_lad_func` for the same body, and the kernel refused the duplicate at build time. Every prefix here is `ir_lzd_`-scoped so a second chain over the same function can never shadow a first."
+  },
+  {
+   "canonical": 3,
+   "prefix": "ir_lzd_f3",
+   "body": "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>",
+   "interface": {
+    "linkage": "external",
+    "calling_conv": "ccc",
+    "functy": 0,
+    "producer": "trust-ir",
+    "params": [
+     {
+      "block": 0,
+      "index": 0,
+      "ssa": 0,
+      "ty": "enum#1"
+     },
+     {
+      "block": 0,
+      "index": 1,
+      "ssa": 1,
+      "ty": "fatptr<str>"
+     }
+    ],
+    "block_params": [],
+    "aligns": [],
+    "clauses": [
+     "producer",
+     "proof"
+    ]
+   },
+   "prefix_note": "Chain-scoped. The first cut used `ir_lad3`, which COLLIDES: `ir_lzc` already registers `ir_lad_b0` and `ir_lad_func` for the same body, and the kernel refused the duplicate at build time. Every prefix here is `ir_lzd_`-scoped so a second chain over the same function can never shadow a first."
+  },
+  {
+   "canonical": 4,
+   "prefix": "ir_lzd_f4",
+   "body": "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>",
+   "interface": {
+    "linkage": "external",
+    "calling_conv": "ccc",
+    "functy": 2,
+    "producer": "trust-ir",
+    "params": [
+     {
+      "block": 0,
+      "index": 0,
+      "ssa": 0,
+      "ty": "ptr"
+     }
+    ],
+    "block_params": [],
+    "aligns": [
+     "load:None"
+    ],
+    "clauses": [
+     "producer",
+     "proof"
+    ]
+   },
+   "prefix_note": "Chain-scoped. The first cut used `ir_lad4`, which COLLIDES: `ir_lzc` already registers `ir_lad_b0` and `ir_lad_func` for the same body, and the kernel refused the duplicate at build time. Every prefix here is `ir_lzd_`-scoped so a second chain over the same function can never shadow a first."
+  }
+ ],
+ "globals": [
+  {
+   "canonical": 0,
+   "crate_id": 1055,
+   "name": "__trust_promoted_1055",
+   "ty": "[u8 x 34]",
+   "observed_ty": "[ty.0 x 34]",
+   "linkage": "internal"
+  }
+ ],
+ "usize": {
+  "bits": 64,
+  "sites": 0,
+  "isize_sites": 2
+ },
+ "encodings": [
+  {
+   "canonical": 1,
+   "crate_id": 0,
+   "kind": "nicheptr",
+   "none_variant": 0,
+   "some_variant": 1,
+   "payload": "(ptr)",
+   "first_named_by": 5618,
+   "table": "merge@5617",
+   "decl": "core::option::Option"
+  },
+  {
+   "canonical": 2,
+   "crate_id": 1,
+   "kind": "nicheptr",
+   "none_variant": 0,
+   "some_variant": 1,
+   "payload": "(struct 0)",
+   "first_named_by": 5618,
+   "table": "merge@5617",
+   "decl": "core::option::Option"
+  },
+  {
+   "canonical": 0,
+   "crate_id": 3,
+   "kind": "ptrwrap",
+   "slot": 0,
+   "fields": 3,
+   "payload": "(struct 1)",
+   "first_named_by": 5619,
+   "table": "merge@5617",
+   "decl": "alloc::sync::Arc"
+  },
+  {
+   "canonical": 1,
+   "crate_id": 0,
+   "kind": "ptrwrap",
+   "slot": 0,
+   "fields": 1,
+   "payload": "(ptr)",
+   "first_named_by": 5619,
+   "table": "merge@5617",
+   "decl": "core::ptr::non_null::NonNull"
+  }
+ ],
+ "encodings_note": "DERIVED, never typed: copied verbatim from reader A's `encodings_derived`, which reads the artifact's own `EnumLayoutDescriptor`s and `StructDef`s and refuses clause by clause. `IREnc`'s rule is that a hand-typed row is never a pin, and the command that derives these is `scripts/crystal_lzd_project.sh` -- it reproduces this chain's core digest byte for byte, so the rows can be RE-DERIVED and not merely read. Four rows, two of each kind. The two niche rows are the two `Option`s; the two wrapper rows are `Arc` (3 fields, only slot 0 non-ZST) and `NonNull` (1 field), and WITHOUT them the derived path's `extractfield struct.0 %1, 0` in `Arc::deref` has no aggregate to extract from -- the heap holds one pointer WORD. A field counts as a ZST only when its own `StructDef.size` is `Some(0)`, measured, never inferred from a name; a struct with two non-ZST fields is REFUSED rather than having one of them picked. `first_named_by`/`table`/`decl` record WHICH artifact answered each row, because the raw aggregate ids COLLIDE across the two merged artifacts -- the crate module's `enum.1` is `InductiveError` and the sidecar's is `Option<Arc<Level>>` -- and every row here resolved through the sidecar (`merge@5617`), which its `decl` names. The refusal beside them is recorded too: `Level` itself is niche-encoded (5 variants, niched 0..3 from 3, `Param` untagged at 4) and `IREnc.nicheptr` is two-variant only, so no row is derivable for it and none is invented."
+}

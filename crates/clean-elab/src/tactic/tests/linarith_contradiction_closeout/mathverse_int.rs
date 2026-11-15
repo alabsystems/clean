@@ -28,8 +28,9 @@ fn test_mathverse_delegation_int_contradiction_produces_false_proof() {
         env.clone(),
         false_const,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],

@@ -9,25 +9,47 @@
 //!
 //! The uncached path (`load_olean_file`, `load_module_with_deps`) uses the
 //! direct binary-to-Expr conversion (#2428), bypassing `ParsedExpr` entirely.
-//! The cached and parallel paths still use `ParsedModule` for cache compatibility.
+//! Cached and parallel loading use the same direct conversion with content-bound
+//! module bundles. The public ParsedModule conversion APIs remain separate.
 
-use super::load_parse::{parse_load_module, parse_load_module_incremental};
+use super::load_parse::{parse_load_module, parse_load_module_incremental, LoadModule};
 use super::load_register::{
-    load_module_direct_with_cache_and_policy, load_parsed_module_with_cache,
+    load_module_direct_with_cache_and_policy, load_module_part_direct, refresh_artifact_families,
+    DeferredRecursors, PartEntries,
 };
-use super::parse::{parse_imports_only, parse_module, parse_module_incremental};
-use super::path::{module_name_from_path, resolve_module_path};
+use super::module_cache_direct::read_optional;
+use super::path::{
+    legacy_module_name, module_name_from_path, module_visit_key, resolve_typed_module_path,
+};
 use super::{
-    estimate_module_graph_size, ExprInternCache, ImportError, LoadSummary, ModuleCache,
-    OleanImportPolicy,
+    estimate_module_graph_size, ExprInternCache, ImportError, LoadSummary, OleanImportPolicy,
 };
-use crate::module::ParsedModule;
 use clean_kernel::env::Environment;
+use clean_kernel::name::Name;
 use hashbrown::HashSet;
-use rayon::prelude::*;
-use std::collections::VecDeque;
 use std::path::PathBuf;
-use std::sync::Arc;
+
+mod cached;
+
+#[cfg(test)]
+mod deferred_recursors_tests;
+pub use cached::{
+    load_module_with_deps_cached, load_module_with_deps_cached_guarded,
+    load_module_with_deps_parallel, load_modules_with_deps_checked,
+    load_modules_with_deps_checked_with_limits, load_typed_module_with_deps_cached,
+    load_typed_module_with_deps_parallel, CapturedModuleBytes, ModuleCaptureLimits,
+};
+
+#[cfg(test)]
+mod deadline_load_tests;
+mod graph_limit;
+mod replay_load;
+#[cfg(test)]
+mod typed_traversal_tests;
+
+pub use replay_load::load_module_with_deps_replaying_module;
+
+use graph_limit::{enforce_module_graph_limit, enforce_typed_module_graph_limit_with_loaded};
 
 /// Load an .olean file from disk into the given environment.
 ///
@@ -67,16 +89,35 @@ pub fn load_olean_file_with_import_policy(
         source,
     })?;
     let module_name = module_name_from_path(path);
-    let load_module = parse_load_module(bytes)?;
+    super::world_gate::check_part_bytes(
+        env,
+        module_name.as_deref().unwrap_or("<unnamed module>"),
+        &bytes,
+    )?;
+    let load_module = parse_load_module(bytes)?.read_from(path);
+    super::clean_payload_requirement::check_load_module(env, &load_module, module_name.as_deref())?;
     policy.check_load_module(&load_module, module_name.as_deref())?;
     let mut intern_cache = ExprInternCache::default();
-    load_module_direct_with_cache_and_policy(
+    // One file is the whole load of its artifact here: a stub it leaves for
+    // a later part to complete has no later part.
+    let artifact = module_name.clone();
+    super::artifact_ledger::begin_artifact_load(env, &artifact, load_module.is_module)?;
+    let mut summary = load_module_direct_with_cache_and_policy(
         env,
         &load_module,
         module_name,
         &mut intern_cache,
         policy,
-    )
+    )?;
+    let completion = super::artifact_ledger::finish_artifact_load(env, &artifact)?;
+    let authoritative = (!load_module.is_module).then_some((&load_module, 0));
+    super::restatement_evidence::complete(
+        env,
+        completion,
+        authoritative,
+        std::slice::from_mut(&mut summary),
+    );
+    Ok(summary)
 }
 
 /// Load a module by name along with all of its imports (depth-first).
@@ -85,7 +126,7 @@ pub fn load_olean_file_with_import_policy(
 ///
 /// `module` should be a dot-separated Lean module name like `Init.Core`.
 /// `search_paths` should contain directories that hold `.olean` files, typically
-/// something like `~/.elan/toolchains/<toolchain>/lib/lean`.
+/// the repository-pinned toolchain's `lib/lean`.
 ///
 /// # REQUIRES
 /// - `module` is a valid dot-separated module name (e.g., "Init.Core", "Mathlib.Data.List")
@@ -121,6 +162,26 @@ pub fn load_module_with_deps_with_import_policy(
     search_paths: &[PathBuf],
     policy: OleanImportPolicy,
 ) -> Result<Vec<LoadSummary>, ImportError> {
+    load_typed_module_with_deps_with_import_policy(
+        env,
+        &legacy_module_name(module)?,
+        search_paths,
+        policy,
+        policy,
+    )
+}
+
+/// The closure load behind [`load_module_with_deps_with_import_policy`]:
+/// `module`'s own parts under `own_policy`, every import under `policy`
+/// ([`load_module_with_deps_replaying_module`] is the one caller that splits
+/// them).
+fn load_typed_module_with_deps_with_import_policy(
+    env: &mut Environment,
+    module: &Name,
+    search_paths: &[PathBuf],
+    policy: OleanImportPolicy,
+    own_policy: OleanImportPolicy,
+) -> Result<Vec<LoadSummary>, ImportError> {
     // Ensure native reducers are registered. These are critical for type
     // checking .olean constants that depend on native functions like
     // System.Platform.getNumBits, Nat.decEq, String.decEq, etc.
@@ -131,7 +192,7 @@ pub fn load_module_with_deps_with_import_policy(
     // Pre-allocate for the full import graph. Init has ~320 modules with ~57K
     // constants; Std adds ~200 modules with ~80K constants. Reserving upfront
     // avoids ~log2(N) HashMap resizing rounds during loading. Part of #3133.
-    let estimated_constants = estimate_module_graph_size(module);
+    let estimated_constants = estimate_module_graph_size(&module.to_string());
     if estimated_constants > 0 {
         env.reserve_capacity(estimated_constants);
     }
@@ -144,14 +205,16 @@ pub fn load_module_with_deps_with_import_policy(
     // Pre-size for typical Init/Std module graphs (~64K unique hash buckets).
     // Part of #3133.
     let mut intern_cache = ExprInternCache::with_capacity(65536);
-    load_module_recursive(
+    load_typed_module_recursive(
         env,
         module,
         search_paths,
         &mut visited,
+        &mut HashSet::new(),
         &mut summaries,
         &mut intern_cache,
         policy,
+        own_policy,
     )?;
     // Regenerate noConfusionType/noConfusion for inductives where these were
     // loaded as axioms (no value) from the .olean. This happens when the
@@ -180,12 +243,14 @@ pub fn load_module_with_deps_with_import_policy(
     // unlocking clean-auto's typeclass-projection law lane on real Mathlib. The
     // pass is idempotent (skips already-registered structures) and only appends
     // search metadata — never TCB (#olean-structure-field-names).
+    // The DECODED `Lean.structureExt` tables and parents first — parked per
+    // module while their structures were still served lazily — so a decoded
+    // table wins over a recovered one.
+    super::load_register::flush_pending_structure_metadata(env)?;
     super::load_register::register_structure_fields_from_projections(env);
-    // When the policy deferred the O(env) heuristic instance backfill (to avoid
-    // the O(modules × env) quadratic across a large closure), run it ONCE now that
-    // every module — and thus every real `@[instance]`/`@[class]` decoded per
-    // module — is present. The result is identical to the per-module schedule
-    // (additive + idempotent, real registrations already won first-writer).
+    // Compatibility policy: retry explicit retained instance records now that
+    // the closure's constants are available. The former type-shape heuristic
+    // invented registrations and is not an admissible fallback for lost data.
     if policy.defer_global_instance_backfill() {
         super::load_register::finalize_global_instance_backfill(env);
     }
@@ -194,6 +259,11 @@ pub fn load_module_with_deps_with_import_policy(
 
 /// [`load_module_with_deps`] but sharing the caller's `visited` set ACROSS calls
 /// and WITHOUT the per-call post-load fixups.
+///
+/// Keep `visited` with its Environment and treat its entries as opaque completed
+/// keys. Ordinary dotted module keys remain compatible; quoted components use
+/// an injective internal encoding instead of ambiguous display strings. A
+/// failed module is not inserted; completed descendants may remain on error.
 ///
 /// The cumulative batch verifier loads thousands of modules into one growing
 /// `Environment`. With the plain [`load_module_with_deps`] (a fresh `visited`
@@ -326,6 +396,10 @@ pub fn load_modules_with_deps_with_import_policy(
     // See the note in `load_module_with_deps_with_import_policy`: recover
     // structure field-name tables once, after the whole union closure (and its
     // lazily-served law projections) is materialized.
+    // The DECODED `Lean.structureExt` tables and parents first — parked per
+    // module while their structures were still served lazily — so a decoded
+    // table wins over a recovered one.
+    super::load_register::flush_pending_structure_metadata(env)?;
     super::load_register::register_structure_fields_from_projections(env);
     Ok(summaries)
 }
@@ -342,7 +416,7 @@ pub fn load_module_with_deps_bounded(
     search_paths: &[PathBuf],
     max_modules: usize,
 ) -> Result<Vec<LoadSummary>, ImportError> {
-    enforce_module_graph_limit(module, search_paths, max_modules)?;
+    enforce_module_graph_limit(env, module, search_paths, max_modules)?;
     load_module_with_deps(env, module, search_paths)
 }
 
@@ -364,7 +438,7 @@ pub fn load_module_with_deps_bounded(
 /// and idempotent on duplicates. Sharing `visited` only suppresses redundant
 /// *re-loads* of modules already registered; it never changes which constants
 /// end up in `env`. The bounded guard
-/// ([`enforce_module_graph_limit_with_loaded`]) is still applied per call — with
+/// (`graph_limit::enforce_module_graph_limit_with_loaded`) is still applied per call — with
 /// already-loaded subgraphs treated as leaves — so any single target's NEW
 /// closure depth stays capped.
 ///
@@ -407,23 +481,87 @@ pub fn load_module_with_deps_bounded_shared_with_policy(
     visited: &mut HashSet<String>,
     policy: OleanImportPolicy,
 ) -> Result<Vec<LoadSummary>, ImportError> {
-    enforce_module_graph_limit_with_loaded(module, search_paths, max_modules, visited)?;
+    load_typed_module_with_deps_bounded_shared_with_policy(
+        env,
+        &legacy_module_name(module)?,
+        search_paths,
+        max_modules,
+        visited,
+        policy,
+    )
+}
+
+/// Exact typed-name counterpart of the bounded loader. This preserves the
+/// existing import policy; typed identity does not grant kernel admission.
+pub fn load_typed_module_with_deps_bounded(
+    env: &mut Environment,
+    module: &Name,
+    search_paths: &[PathBuf],
+    max_modules: usize,
+) -> Result<Vec<LoadSummary>, ImportError> {
+    enforce_typed_module_graph_limit_with_loaded(
+        env,
+        module,
+        search_paths,
+        max_modules,
+        &HashSet::new(),
+    )?;
+    load_typed_module_with_deps_with_import_policy(
+        env,
+        module,
+        search_paths,
+        OleanImportPolicy::default(),
+        OleanImportPolicy::default(),
+    )
+}
+
+/// Share the existing injective internal visit keys without rendering/reparsing
+/// the source module Name. Limits and registration policy are unchanged.
+pub fn load_typed_module_with_deps_bounded_shared(
+    env: &mut Environment,
+    module: &Name,
+    search_paths: &[PathBuf],
+    max_modules: usize,
+    visited: &mut HashSet<String>,
+) -> Result<Vec<LoadSummary>, ImportError> {
+    load_typed_module_with_deps_bounded_shared_with_policy(
+        env,
+        module,
+        search_paths,
+        max_modules,
+        visited,
+        OleanImportPolicy::default(),
+    )
+}
+
+fn load_typed_module_with_deps_bounded_shared_with_policy(
+    env: &mut Environment,
+    module: &Name,
+    search_paths: &[PathBuf],
+    max_modules: usize,
+    visited: &mut HashSet<String>,
+    policy: OleanImportPolicy,
+) -> Result<Vec<LoadSummary>, ImportError> {
+    enforce_typed_module_graph_limit_with_loaded(env, module, search_paths, max_modules, visited)?;
 
     env.ensure_native_reducers();
-    let estimated_constants = estimate_module_graph_size(module);
+    // This display-based estimate affects capacity only, never lookup/identity.
+    let estimated_constants = estimate_module_graph_size(&module.to_string());
     if estimated_constants > 0 {
         env.reserve_capacity(estimated_constants);
     }
 
     let mut summaries = Vec::new();
     let mut intern_cache = ExprInternCache::with_capacity(65536);
-    load_module_recursive(
+    load_typed_module_recursive(
         env,
         module,
         search_paths,
         visited,
+        &mut HashSet::new(),
         &mut summaries,
         &mut intern_cache,
+        policy,
         policy,
     )?;
     // Capture the auto-generated noConfusion/noConfusionType constants: they are
@@ -438,194 +576,260 @@ pub fn load_module_with_deps_bounded_shared_with_policy(
         summaries.push(s);
     }
     env.ensure_native_reducers();
+    // The shared loader deliberately skips the O(env) post-load fixups, but
+    // the decoded `Lean.structureExt` tables parked per module (while their
+    // structures were still served lazily) cost only their own length to
+    // apply, and without this the frontend's `clean check --imports-prefer-olean`
+    // path — which is THIS loader — never registered a field table or a parent
+    // for any olean-imported structure (measured 2026-09-10 on
+    // `Mathlib/Order/Defs/PartialOrder`: `Preorder` had no `lt_iff_le_not_ge`
+    // and no `toLE`/`toLT` parents while the eager loader's test had both).
+    super::load_register::flush_pending_structure_metadata(env)?;
     Ok(summaries)
 }
 
-fn enforce_module_graph_limit(
-    module: &str,
-    search_paths: &[PathBuf],
-    max_modules: usize,
-) -> Result<(), ImportError> {
-    enforce_module_graph_limit_with_loaded(module, search_paths, max_modules, &HashSet::new())
+/// Every constant name the parts of the `.olean` at `path` store — the base
+/// part, `.olean.server` and `.olean.private` — read with the parsers the
+/// loader registers them with ([`load_companions_direct`]), without converting
+/// an expression. `leanchecker` replays the constants of the most private part,
+/// which subsume the others' (`LeanChecker.lean`, `replayFromImports`); the
+/// union returned here is that set. `clean olean replay` accounts for each.
+#[cfg(any(feature = "cli", test))]
+pub(crate) fn stored_constant_names(path: &std::path::Path) -> Result<Vec<String>, ImportError> {
+    let base = parse_load_module(std::fs::read(path)?)?;
+    let server = read_optional(&path.with_extension("olean.server"))?;
+    let private = read_optional(&path.with_extension("olean.private"))?;
+    let mut names: Vec<String> = base.constants.iter().map(|c| c.name.clone()).collect();
+    if let Some(bytes) = server.as_ref() {
+        let part = parse_load_module_incremental(&base.bytes, None, bytes.clone())?;
+        names.extend(part.constants.iter().map(|c| c.name.clone()));
+    }
+    if let Some(bytes) = private {
+        let part = parse_load_module_incremental(&base.bytes, server.as_deref(), bytes)?;
+        names.extend(part.constants.iter().map(|c| c.name.clone()));
+    }
+    names.retain(|name| !name.is_empty());
+    names.sort();
+    names.dedup();
+    Ok(names)
 }
 
-/// Bounded import-graph discovery that treats every module in `already_loaded`
-/// as a leaf: it neither resolves its path nor descends into its imports, and
-/// it does not count against `max_modules`.
-///
-/// This is the shared-env analog of [`enforce_module_graph_limit`]: when many
-/// target closures are accumulated into one cumulative env, a subgraph an
-/// earlier target already loaded must NOT be re-walked (no redundant header
-/// reads) and must NOT recount against this target's budget. The cap then bounds
-/// only the *new* modules this target contributes, which is the correct
-/// per-target depth guard for the cumulative load.
-fn enforce_module_graph_limit_with_loaded(
-    module: &str,
-    search_paths: &[PathBuf],
-    max_modules: usize,
-    already_loaded: &HashSet<String>,
-) -> Result<(), ImportError> {
-    // A root already fully loaded by an earlier target contributes nothing new.
-    if already_loaded.contains(module) {
-        return Ok(());
-    }
-
-    let mut discovered = HashSet::new();
-    let mut pending = VecDeque::from([module.to_string()]);
-
-    while let Some(current) = pending.pop_front() {
-        // Skip subgraphs already resident in the cumulative env: they were
-        // walked and registered by a prior target, so re-reading their headers
-        // here would re-do O(shared closure) work per target — exactly what the
-        // shared-env cache exists to avoid.
-        if already_loaded.contains(&current) {
-            continue;
-        }
-        if !discovered.insert(current.clone()) {
-            continue;
-        }
-
-        if discovered.len() > max_modules {
-            return Err(ImportError::UnsupportedModule {
-                module: module.to_string(),
-                reason: format!(
-                    "import graph exceeds the bounded loader limit of {max_modules} modules \
-                     while discovering {current}; full Lean module loading is not yet \
-                     supported on the frontend import path"
-                ),
-            });
-        }
-
-        let path = resolve_module_path(&current, search_paths)?;
-        let bytes = std::fs::read(&path).map_err(|source| ImportError::FileUnreadable {
-            path: path.clone(),
-            source,
-        })?;
-        for import in parse_imports_only(&bytes)? {
-            if !import.module_name.is_empty()
-                && !discovered.contains(&import.module_name)
-                && !already_loaded.contains(&import.module_name)
-            {
-                pending.push_back(import.module_name);
-            }
-        }
-    }
-
-    Ok(())
-}
-
-/// Load .olean.server and .olean.private companions for a module using the
-/// direct binary-to-Expr path. Server files contain server-only constants
-/// (e.g., casesOn for test/internal inductives). Private files contain
-/// private/match helper constants. Server is loaded first since private may
-/// reference server constants. Both use incremental region parsing. Part of #3134.
-fn load_companions_direct(
-    env: &mut Environment,
+/// Read and parse a module's `.olean.server` and `.olean.private`
+/// companions against its base bytes, before anything of the artifact is
+/// registered. A module-system artifact's private part holds every declaration
+/// (its proofs and private declarations included) and is the part a consumer
+/// that is not a `module` reads; its `.olean` and server part restate subsets
+/// of it. A non-module artifact is read through its `.olean`, so its companions
+/// may only restate names the `.olean` declares (R113, `artifact.rs`; `clean
+/// lake build` writes empty companions). Both use incremental region parsing.
+/// Part of #3134. A companion of a refused world is refused by name, as its
+/// base part is (R81).
+fn read_companions_direct(
+    env: &Environment,
+    label: &str,
     path: &std::path::Path,
     base_bytes: &[u8],
+) -> Result<(Option<LoadModule>, Option<LoadModule>), ImportError> {
+    let server = read_optional(&path.with_extension("olean.server"))?;
+    let private = read_optional(&path.with_extension("olean.private"))?;
+    for (bytes, suffix) in [(&server, "._server"), (&private, "._private")] {
+        if let Some(bytes) = bytes {
+            super::world_gate::check_part_bytes(env, &format!("{label}{suffix}"), bytes)?;
+        }
+    }
+    let server_module = server
+        .as_ref()
+        .map(|bytes| parse_load_module_incremental(base_bytes, None, bytes.clone()))
+        .transpose()?;
+    let private_module = private
+        .map(|bytes| parse_load_module_incremental(base_bytes, server.as_deref(), bytes))
+        .transpose()?;
+    Ok((server_module, private_module))
+}
+
+/// How a consumer that is not itself a `module` — every file Clean checks —
+/// reads the parts of one artifact, after `lean` v4.30.0-rc2
+/// (`Environment.lean`): `findOLeanParts` loads the `.olean`, the
+/// `.olean.server` when present, and the `.olean.private` only beside the
+/// server part; `ImportedModule.mainModule?` at `OLeanLevel.private` is the
+/// private part of a module-system artifact (its `.olean` says `isModule`)
+/// and the `.olean` of any other; and `finalizeImport` imports that one
+/// part's constants and environment-extension entries
+/// (`setImportedEntries` over `mainModule?`), its import list included
+/// (`goRec` walks `mainModule?.imports`).
+///
+/// So a module-system artifact is read through its private part, which
+/// must be there with its server part (`lean`: "missing data file"), and
+/// any other artifact through its `.olean`. The returned roles say which
+/// part's elaborator tables are registered; every part's declarations still
+/// load, under rule 4 of `artifact_ledger`. A module-system artifact's parts
+/// must state one import list: `lean` follows the private part's, Clean the
+/// `.olean`'s. Any other artifact's imports are its `.olean`'s alone, for
+/// `lean` and for Clean, so a companion's list is not compared (Clean's own
+/// `lake build` writes companions whose lists differ).
+fn read_plan(
     module: &str,
+    base: &LoadModule,
+    server: Option<&LoadModule>,
+    private: Option<&LoadModule>,
+) -> Result<[PartEntries; 3], ImportError> {
+    // R113's artifact rule (`artifact.rs`), the one every re-check lane reads
+    // through, before anything of the artifact registers: one header, one
+    // record per name, and no name the authoritative part lacks.
+    super::artifact::check_artifact_parts(
+        module,
+        base,
+        server,
+        private,
+        super::artifact::ArtifactDepth::Records,
+    )?;
+    // Rule 4 for the tables Clean reads, over all the parts at once.
+    super::artifact_ledger::check_artifact_entries(
+        &Some(module.to_string()),
+        base.is_module,
+        &[
+            Some(base.entries.as_slice()),
+            server.map(|p| p.entries.as_slice()),
+            private.map(|p| p.entries.as_slice()),
+        ],
+    )?;
+    Ok(if base.is_module {
+        [
+            PartEntries::Compared,
+            PartEntries::Compared,
+            PartEntries::Read,
+        ]
+    } else {
+        [
+            PartEntries::Read,
+            PartEntries::Compared,
+            PartEntries::Compared,
+        ]
+    })
+}
+
+/// Load the parts of the artifact `module`, in level order, as one load of
+/// it (`artifact_ledger`): its `.olean` under the label `module`, its
+/// companions under `module._server` / `module._private`.
+#[allow(clippy::too_many_arguments)]
+fn load_artifact_parts(
+    env: &mut Environment,
+    module: &str,
+    base: &LoadModule,
+    server: Option<&LoadModule>,
+    private: Option<&LoadModule>,
     summaries: &mut Vec<LoadSummary>,
     intern_cache: &mut ExprInternCache,
     policy: OleanImportPolicy,
 ) -> Result<(), ImportError> {
-    let server_path = path.with_extension("olean.server");
-    if server_path.exists() {
-        if let Ok(server_bytes) = std::fs::read(&server_path) {
-            if let Ok(server_module) = parse_load_module_incremental(base_bytes, None, server_bytes)
-            {
-                let server_module_name = format!("{}._server", module);
-                policy.check_load_module(&server_module, Some(&server_module_name))?;
-                if let Ok(s) = load_module_direct_with_cache_and_policy(
-                    env,
-                    &server_module,
-                    Some(server_module_name),
-                    intern_cache,
-                    policy,
-                ) {
-                    summaries.push(s);
+    let roles = read_plan(module, base, server, private)?;
+    // Check every actual parsed part before beginning any artifact mutation.
+    super::clean_payload_requirement::check_artifact_parts(env, module, base, server, private)?;
+    let artifact = Some(module.to_string());
+    super::artifact_ledger::begin_artifact_load(env, &artifact, base.is_module)?;
+    let first_part = summaries.len();
+    // read_plan has validated the complete artifact, including private-part
+    // presence, one exact record per name and companion consistency. Defer
+    // only dependencies genuinely absent from BOTH earlier parts.
+    let mut deferred = private.filter(|_| base.is_module).map(|private| {
+        let early: HashSet<_> = base
+            .constants
+            .iter()
+            .chain(server.into_iter().flat_map(|part| &part.constants))
+            .map(|constant| &constant.kernel_name)
+            .collect();
+        DeferredRecursors::new(
+            module,
+            private
+                .constants
+                .iter()
+                .filter(|constant| !early.contains(&constant.kernel_name))
+                .map(|constant| constant.kernel_name.clone())
+                .collect(),
+        )
+    });
+    for ((suffix, part), role) in [
+        ("", Some(base)),
+        ("._server", server),
+        ("._private", private),
+    ]
+    .into_iter()
+    .zip(roles)
+    {
+        let Some(part) = part else { continue };
+        let label = format!("{module}{suffix}");
+        policy.check_load_module(part, Some(&label))?;
+        // A companion is a part of the artifact `module`, not an artifact
+        // of its own (see `artifact_ledger`).
+        let summary_ordinal = summaries.len();
+        summaries.push(load_module_part_direct(
+            env,
+            part,
+            Some(label),
+            artifact.clone(),
+            intern_cache,
+            policy,
+            role,
+            if role == PartEntries::Compared {
+                deferred.as_mut().map(|queue| (queue, summary_ordinal))
+            } else {
+                None
+            },
+        )?);
+    }
+    if let Some(private) = private.filter(|_| base.is_module) {
+        refresh_artifact_families(
+            env,
+            &artifact,
+            private
+                .constants
+                .iter()
+                .filter(|constant| matches!(constant.kind, crate::ConstantKind::Inductive))
+                .map(|constant| constant.kernel_name.clone()),
+        );
+    }
+    if let Some(deferred) = deferred {
+        deferred.finish(env, summaries)?;
+    }
+    // R142: every declaration the authoritative part states with a value is
+    // resident as this artifact's own, with it. A re-check lane's load refuses
+    // the import otherwise; a replay load records it for the replay to refuse.
+    if policy.checks_authoritative_values() {
+        let authoritative = if base.is_module { private } else { Some(base) };
+        if let Some(part) = authoritative {
+            let parts = summaries.get(first_part..).unwrap_or_default();
+            let unmet = super::authoritative_values::unmet(env, &artifact, part, parts, policy);
+            if policy.refuses_refused_completions() {
+                if let Some((name, reason)) = unmet.first() {
+                    return Err(ImportError::AuthoritativeValueNotResident {
+                        module: module.to_string(),
+                        name: name.to_string(),
+                        reason: reason.clone(),
+                    });
+                }
+            }
+            if let Some(summary) = summaries.last_mut() {
+                for (name, reason) in unmet {
+                    if !summary.refused_completions.iter().any(|(n, _)| *n == name) {
+                        summary.refused_completions.push((name, reason));
+                    }
                 }
             }
         }
     }
-    let private_path = path.with_extension("olean.private");
-    if server_path.exists() && private_path.exists() {
-        if let Ok(private_bytes) = std::fs::read(&private_path) {
-            let server_bytes = std::fs::read(&server_path).ok();
-            if let Ok(private_module) =
-                parse_load_module_incremental(base_bytes, server_bytes.as_deref(), private_bytes)
-            {
-                let private_module_name = format!("{}._private", module);
-                policy.check_load_module(&private_module, Some(&private_module_name))?;
-                if let Ok(s) = load_module_direct_with_cache_and_policy(
-                    env,
-                    &private_module,
-                    Some(private_module_name),
-                    intern_cache,
-                    policy,
-                ) {
-                    summaries.push(s);
-                }
-            }
-        }
-    }
+    let completion = super::artifact_ledger::finish_artifact_load(env, &artifact)?;
+    let authoritative = if base.is_module {
+        private.map(|part| (part, 1 + usize::from(server.is_some())))
+    } else {
+        Some((base, 0))
+    };
+    super::restatement_evidence::complete(
+        env,
+        completion,
+        authoritative,
+        &mut summaries[first_part..],
+    );
     Ok(())
-}
-
-/// Load .olean.server and .olean.private companions using the cached/parsed
-/// module path. Same semantics as `load_companions_direct` but works with
-/// `ParsedModule` and `ModuleCache`. Part of #3134.
-fn load_companions_cached(
-    env: &mut Environment,
-    path: &std::path::Path,
-    module: &str,
-    summaries: &mut Vec<LoadSummary>,
-    cache: &ModuleCache,
-    intern_cache: &mut ExprInternCache,
-) {
-    let server_path = path.with_extension("olean.server");
-    if server_path.exists() {
-        let server_key = format!("{}._server", module);
-        let server_parsed: Option<Arc<ParsedModule>> =
-            if let Some(cached) = cache.get(&server_key, &server_path) {
-                Some(cached)
-            } else if let Ok(server_bytes) = std::fs::read(&server_path) {
-                let base_bytes = std::fs::read(path).ok();
-                let base = base_bytes.as_deref().unwrap_or(&[]);
-                parse_module_incremental(base, None, &server_bytes)
-                    .ok()
-                    .map(|parsed| cache.insert(&server_key, &server_path, parsed))
-            } else {
-                None
-            };
-        if let Some(sp) = server_parsed {
-            if let Ok(s) = load_parsed_module_with_cache(env, &sp, Some(server_key), intern_cache) {
-                summaries.push(s);
-            }
-        }
-    }
-    let private_path = path.with_extension("olean.private");
-    if server_path.exists() && private_path.exists() {
-        let private_key = format!("{}._private", module);
-        let private_parsed: Option<Arc<ParsedModule>> =
-            if let Some(cached) = cache.get(&private_key, &private_path) {
-                Some(cached)
-            } else if let Ok(private_bytes) = std::fs::read(&private_path) {
-                let base_bytes = std::fs::read(path).ok();
-                let server_bytes = std::fs::read(&server_path).ok();
-                let base = base_bytes.as_deref().unwrap_or(&[]);
-                parse_module_incremental(base, server_bytes.as_deref(), &private_bytes)
-                    .ok()
-                    .map(|parsed| cache.insert(&private_key, &private_path, parsed))
-            } else {
-                None
-            };
-        if let Some(pp) = private_parsed {
-            if let Ok(s) = load_parsed_module_with_cache(env, &pp, Some(private_key), intern_cache)
-            {
-                summaries.push(s);
-            }
-        }
-    }
 }
 
 fn load_module_recursive(
@@ -637,284 +841,90 @@ fn load_module_recursive(
     intern_cache: &mut ExprInternCache,
     policy: OleanImportPolicy,
 ) -> Result<(), ImportError> {
-    if !visited.insert(module.to_string()) {
-        return Ok(());
-    }
-
-    let path = resolve_module_path(module, search_paths)?;
-    let bytes = std::fs::read(&path)?;
-    let load_module = parse_load_module(bytes)?;
-    policy.check_load_module(&load_module, Some(module))?;
-
-    for import in &load_module.imports {
-        if !import.module_name.is_empty() {
-            load_module_recursive(
-                env,
-                &import.module_name,
-                search_paths,
-                visited,
-                summaries,
-                intern_cache,
-                policy,
-            )?;
-        }
-    }
-
-    let summary = load_module_direct_with_cache_and_policy(
+    load_typed_module_recursive(
         env,
-        &load_module,
-        Some(module.to_string()),
-        intern_cache,
-        policy,
-    )?;
-    summaries.push(summary);
-    load_companions_direct(
-        env,
-        &path,
-        &load_module.bytes,
-        module,
+        &legacy_module_name(module)?,
+        search_paths,
+        visited,
+        &mut HashSet::new(),
         summaries,
         intern_cache,
         policy,
-    )?;
-
-    Ok(())
+        policy,
+    )
 }
 
-/// Load a module by name along with all of its imports, using a cache.
-///
-/// Like `load_module_with_deps` but uses the provided cache to avoid
-/// re-parsing modules. The cache persists across calls and automatically
-/// invalidates entries when file modification times change.
-///
-/// Note: The cached path still uses `ParsedModule` for cache compatibility.
-/// The cache stores `ParsedModule` which includes `ParsedExpr` trees.
-/// For the uncached path, use `load_module_with_deps` which uses the direct
-/// binary-to-Expr conversion (#2428).
-///
-/// # REQUIRES
-/// - Same as `load_module_with_deps`
-/// - `cache` must be a valid `ModuleCache` (may be empty or contain prior entries)
-///
-/// # ENSURES
-/// - Same guarantees as `load_module_with_deps`
-/// - Cache hit: returns cached parsed module (avoids re-parsing)
-/// - Cache miss: parses module and inserts into cache
-/// - Stale cache (mtime changed): invalidates entry and re-parses
-pub fn load_module_with_deps_cached(
+/// Load `module`'s imports (recursively, under `policy`), then `module`'s own
+/// parts under `own_policy`.
+fn load_typed_module_recursive(
     env: &mut Environment,
-    module: &str,
-    search_paths: &[PathBuf],
-    cache: &ModuleCache,
-) -> Result<Vec<LoadSummary>, ImportError> {
-    env.ensure_native_reducers();
-    let estimated_constants = estimate_module_graph_size(module);
-    if estimated_constants > 0 {
-        env.reserve_capacity(estimated_constants);
-    }
-    let mut visited = HashSet::new();
-    let mut summaries = Vec::new();
-    let mut intern_cache = ExprInternCache::with_capacity(65536);
-    load_module_recursive_cached(
-        env,
-        module,
-        search_paths,
-        &mut visited,
-        &mut summaries,
-        cache,
-        &mut intern_cache,
-    )?;
-    env.regenerate_missing_no_confusion();
-    env.ensure_native_reducers();
-    Ok(summaries)
-}
-
-fn load_module_recursive_cached(
-    env: &mut Environment,
-    module: &str,
+    module: &Name,
     search_paths: &[PathBuf],
     visited: &mut HashSet<String>,
+    visiting: &mut HashSet<Name>,
     summaries: &mut Vec<LoadSummary>,
-    cache: &ModuleCache,
     intern_cache: &mut ExprInternCache,
+    policy: OleanImportPolicy,
+    own_policy: OleanImportPolicy,
 ) -> Result<(), ImportError> {
-    if !visited.insert(module.to_string()) {
+    let key = module_visit_key(module)?;
+    if visited.contains(&key) {
         return Ok(());
     }
-
-    let path = resolve_module_path(module, search_paths)?;
-
-    // Try cache first - now returns Arc<ParsedModule> to avoid expensive clones
-    let parsed: Arc<ParsedModule> = if let Some(cached) = cache.get(module, &path) {
-        cached
-    } else {
-        // Parse and cache - insert returns Arc to avoid clone
+    if !visiting.insert(module.clone()) {
+        return Err(ImportError::UnsupportedModule {
+            module: format!("{module:?}"),
+            reason: "module dependency cycle in typed import graph".into(),
+        });
+    }
+    // On failure, completed descendants may remain in the Environment. Only
+    // successful complete modules enter the shared visited set; an in-progress
+    // ancestor is not a completed dependency, and a retry must see failures.
+    let result = (|| {
+        // A load past its caller's deadline stops before each module.
+        super::deadline::check()?;
+        let path = resolve_typed_module_path(module, search_paths)?;
         let bytes = std::fs::read(&path)?;
-        let parsed = parse_module(&bytes)?;
-        cache.insert(module, &path, parsed)
-    };
+        let label = module.to_string();
+        // A module of a refused world is refused by name before its imports
+        // are walked, not by whatever they fail with first (R81).
+        super::world_gate::check_part_bytes(env, &label, &bytes)?;
+        let load_module = parse_load_module(bytes)?.read_from(&path);
+        super::clean_payload_requirement::check_load_module(env, &load_module, Some(&label))?;
+        own_policy.check_load_module(&load_module, Some(&label))?;
 
-    for import in &parsed.imports {
-        if !import.module_name.is_empty() {
-            load_module_recursive_cached(
+        for import in &load_module.typed_imports {
+            load_typed_module_recursive(
                 env,
                 &import.module_name,
                 search_paths,
                 visited,
+                visiting,
                 summaries,
-                cache,
                 intern_cache,
+                policy,
+                policy,
             )?;
         }
+
+        // Every part is read before anything of the artifact registers.
+        let (server, private) = read_companions_direct(env, &label, &path, &load_module.bytes)?;
+        let server = server.map(|part| part.read_from(&path));
+        let private = private.map(|part| part.read_from(&path));
+        load_artifact_parts(
+            env,
+            &label,
+            &load_module,
+            server.as_ref(),
+            private.as_ref(),
+            summaries,
+            intern_cache,
+            own_policy,
+        )
+    })();
+    visiting.remove(module);
+    if result.is_ok() {
+        visited.insert(key);
     }
-
-    // Borrow the Arc<ParsedModule> directly — no deep clone needed (#2383).
-    let summary =
-        load_parsed_module_with_cache(env, &parsed, Some(module.to_string()), intern_cache)?;
-    summaries.push(summary);
-    load_companions_cached(env, &path, module, summaries, cache, intern_cache);
-
-    Ok(())
-}
-
-/// Load a module and dependencies with parallel I/O and parsing.
-/// Functionally equivalent to `load_module_with_deps_cached` but parses in
-/// parallel via rayon, then loads sequentially in topological order.
-pub fn load_module_with_deps_parallel(
-    env: &mut Environment,
-    module: &str,
-    search_paths: &[PathBuf],
-    cache: &ModuleCache,
-) -> Result<Vec<LoadSummary>, ImportError> {
-    env.ensure_native_reducers();
-    let estimated_constants = estimate_module_graph_size(module);
-    if estimated_constants > 0 {
-        env.reserve_capacity(estimated_constants);
-    }
-    // Phase 1: Discover all modules and collect their paths
-    let mut to_discover: Vec<String> = vec![module.to_string()];
-    let mut discovered: HashSet<String> = HashSet::new();
-    let mut module_bytes: Vec<(String, PathBuf, Vec<u8>)> = Vec::new();
-
-    while let Some(mod_name) = to_discover.pop() {
-        if !discovered.insert(mod_name.clone()) {
-            continue;
-        }
-
-        let path = resolve_module_path(&mod_name, search_paths)?;
-
-        // Check if already in cache
-        if let Some(cached) = cache.get(&mod_name, &path) {
-            for import in &cached.imports {
-                if !import.module_name.is_empty() && !discovered.contains(&import.module_name) {
-                    to_discover.push(import.module_name.clone());
-                }
-            }
-            continue;
-        }
-
-        // Read file and extract imports for discovery (keep bytes for later parsing)
-        let bytes = std::fs::read(&path)?;
-        let imports = parse_imports_only(&bytes)?;
-
-        module_bytes.push((mod_name.clone(), path, bytes));
-
-        for import in imports {
-            if !import.module_name.is_empty() && !discovered.contains(&import.module_name) {
-                to_discover.push(import.module_name.clone());
-            }
-        }
-    }
-
-    // Phase 2: Parse all modules in parallel. Also parse server/private companions.
-    let parsed_modules: Vec<Result<Vec<(String, PathBuf, ParsedModule)>, ImportError>> =
-        module_bytes
-            .into_par_iter()
-            .map(|(name, path, bytes)| {
-                let mut results = Vec::with_capacity(3);
-                results.push((name.clone(), path.clone(), parse_module(&bytes)?));
-                let server_path = path.with_extension("olean.server");
-                if server_path.exists() {
-                    if let Ok(sb) = std::fs::read(&server_path) {
-                        if let Ok(sp) = parse_module_incremental(&bytes, None, &sb) {
-                            results.push((format!("{}._server", name), server_path.clone(), sp));
-                        }
-                    }
-                }
-                let private_path = path.with_extension("olean.private");
-                if server_path.exists() && private_path.exists() {
-                    if let Ok(pb) = std::fs::read(&private_path) {
-                        let sb = std::fs::read(&server_path).ok();
-                        if let Ok(pp) = parse_module_incremental(&bytes, sb.as_deref(), &pb) {
-                            results.push((format!("{}._private", name), private_path, pp));
-                        }
-                    }
-                }
-                Ok(results)
-            })
-            .collect();
-
-    for result in parsed_modules {
-        for (name, path, parsed) in result? {
-            cache.insert(&name, &path, parsed);
-        }
-    }
-
-    // Phase 3: Load modules in topological order (post-order DFS)
-    let mut visited = HashSet::new();
-    let mut summaries = Vec::new();
-    let mut intern_cache = ExprInternCache::with_capacity(65536);
-
-    fn load_in_order(
-        env: &mut Environment,
-        module: &str,
-        search_paths: &[PathBuf],
-        visited: &mut HashSet<String>,
-        summaries: &mut Vec<LoadSummary>,
-        cache: &ModuleCache,
-        intern_cache: &mut ExprInternCache,
-    ) -> Result<(), ImportError> {
-        if !visited.insert(module.to_string()) {
-            return Ok(());
-        }
-
-        let path = resolve_module_path(module, search_paths)?;
-        let parsed = cache
-            .get(module, &path)
-            .expect("module should be in cache after parallel parse");
-
-        for import in &parsed.imports {
-            if !import.module_name.is_empty() {
-                load_in_order(
-                    env,
-                    &import.module_name,
-                    search_paths,
-                    visited,
-                    summaries,
-                    cache,
-                    intern_cache,
-                )?;
-            }
-        }
-
-        let summary =
-            load_parsed_module_with_cache(env, &parsed, Some(module.to_string()), intern_cache)?;
-        summaries.push(summary);
-        load_companions_cached(env, &path, module, summaries, cache, intern_cache);
-
-        Ok(())
-    }
-
-    load_in_order(
-        env,
-        module,
-        search_paths,
-        &mut visited,
-        &mut summaries,
-        cache,
-        &mut intern_cache,
-    )?;
-    env.regenerate_missing_no_confusion();
-    env.ensure_native_reducers();
-    Ok(summaries)
+    result
 }

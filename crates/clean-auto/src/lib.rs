@@ -130,7 +130,8 @@
 //!         // SMT found an UNSAT core but proof reconstruction hit a trust boundary.
 //!     }
 //!     AutomationOutcome::Refuted { source, .. } => {
-//!         // The solver found a counterexample / refutation.
+//!         // A validated counterexample (no engine produces one today; an SMT
+//!         // model of the bridge's abstraction arrives as `Unknown`).
 //!     }
 //!     AutomationOutcome::Unknown { source, reason, .. } => {
 //!         // The strategy timed out or could not decide.
@@ -201,12 +202,15 @@ mod engine_induction_assembly;
 mod engine_induction_aux;
 mod engine_induction_match;
 mod engine_induction_rewrite;
+#[cfg(test)]
+mod engine_induction_tests;
 pub mod engine_router;
 pub mod interval;
 pub mod norms;
 pub mod oracle;
 pub mod premise;
 pub(crate) mod proof;
+mod search_stop;
 #[cfg(test)]
 #[cfg(test)]
 pub(crate) mod test_support;
@@ -248,6 +252,53 @@ pub(crate) mod superposition;
     reason = "#2386 narrows theories to pub(crate); internal types awaiting consolidation"
 )]
 pub(crate) mod theories;
+pub(crate) mod work_budget;
+
+// ----------------------------------------------------------------------------
+// Declaration-scoped automation work budget (Lean's `maxHeartbeats` shape).
+// The mechanism and its measured motivation are documented in
+// `work_budget.rs`; these are its cross-crate entry points (the elaborator
+// refills it per declaration and charges `simp`/`grind` work to it, and
+// `clean check` arms it).
+// ----------------------------------------------------------------------------
+
+/// Set the per-declaration automation work limit on THIS thread and start a
+/// fresh declaration. `0` disables the budget (the default on every thread).
+pub fn set_automation_budget(limit: u64) {
+    work_budget::set_limit(limit);
+}
+
+/// Refill the automation budget for the next declaration (no-op while
+/// disabled).
+pub fn begin_automation_declaration() {
+    work_budget::begin_declaration();
+}
+
+/// The configured per-declaration automation limit; `0` when disabled.
+#[must_use]
+pub fn automation_budget_limit() -> u64 {
+    work_budget::limit()
+}
+
+/// Automation work units spent in the current declaration; `0` when disabled.
+#[must_use]
+pub fn automation_work_used() -> u64 {
+    work_budget::used()
+}
+
+/// The site whose charge exhausted the current declaration's automation
+/// budget (`"superposition"`, `"simp"`, `"grind"`), if one has.
+#[must_use]
+pub fn automation_budget_exhausted_at() -> Option<&'static str> {
+    work_budget::exhausted_at()
+}
+
+/// Charge `units` of automation work done at `site` to the current
+/// declaration. `false` means the budget is spent and the caller must stop.
+#[must_use]
+pub fn charge_automation_work(site: &'static str, units: u64) -> bool {
+    work_budget::charge(site, units)
+}
 
 // Ay SMT solver backend lives under bridge/ay_backend/; the supported
 // public cross-crate surface is bridge/ay_contract.
@@ -263,6 +314,7 @@ pub use cdcl::{CdclSolver, Lit, SolveResult, Var};
 pub use engine::AutomationEngine;
 pub use engine_api::{AutomationOutcome, AutomationQuery, AutomationRequest, AutomationSource};
 pub use engine_batch::{BatchProveResult, BatchProveStats};
+pub use engine_induction::InductionSearch;
 pub use engine_router::{classify_goal, engine_plan, route_goal, GoalClass, RoutedEngine};
 pub use proof_result::ProofResult;
 pub use smtlib_builder::{

@@ -301,3 +301,114 @@ fn test_structure_eta_prop_excluded() {
     // With proof irrelevance, p = q for any p, q : PropStruct,
     // so eta expansion is unnecessary for correctness.
 }
+
+/// SOUNDNESS PIN (structure eta, 2026-09-25). Structure eta must NOT identify a
+/// constructor of `S a` with a term of `S b` when the parameters differ
+/// (`a ≠ b`), even if the fields coincide. Lean's `try_eta_struct_core` guards
+/// this with `is_def_eq(infer_type(t), infer_type(s))`; clean previously checked
+/// only the HEAD of the other side's type, so with a subsingleton (`Unit`) field
+/// the fieldwise check passed and eta wrongly accepted `S.mk 0 unit : S 0 ≡ s :
+/// S 1`. This test pins the corrected behaviour (reject the cross-parameter
+/// identification, keep the same-parameter one). See
+/// docs/issues/2026-09-25-kernel-monad-hook-soundness.md.
+#[test]
+fn test_structure_eta_rejects_mismatched_parameters() {
+    use crate::inductive::{Constructor, InductiveDecl, InductiveType};
+
+    let mut env = Environment::new();
+    env.init_nat().unwrap();
+
+    // A unit-like structure `MyUnit` with a single 0-field constructor.
+    let unit_name = Name::from_string("EtaUnit");
+    env.add_inductive(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: unit_name.clone(),
+            type_: Expr::type_(),
+            constructors: vec![Constructor {
+                name: Name::from_string("EtaUnit.mk"),
+                type_: Expr::const_(unit_name.clone(), Vec::<Level>::new()),
+            }],
+        }],
+    })
+    .unwrap();
+
+    // `structure SParam (n : Nat) where u : EtaUnit`
+    //   SParam     : Nat → Type
+    //   SParam.mk  : (n : Nat) → EtaUnit → SParam n   (num_params=1, num_fields=1)
+    let nat = Expr::const_(Name::from_string("Nat"), Vec::<Level>::new());
+    let s_name = Name::from_string("SParamEta");
+    let myunit = Expr::const_(unit_name.clone(), Vec::<Level>::new());
+    let ctor_ty = Expr::pi(
+        BinderInfo::Default,
+        nat.clone(),
+        Expr::pi(
+            BinderInfo::Default,
+            myunit.clone(),
+            Expr::app(
+                Expr::const_(s_name.clone(), Vec::<Level>::new()),
+                Expr::bvar(1),
+            ),
+        ),
+    );
+    env.add_inductive(InductiveDecl {
+        level_params: vec![],
+        num_params: 1,
+        types: vec![InductiveType {
+            name: s_name.clone(),
+            type_: Expr::pi(BinderInfo::Default, nat.clone(), Expr::type_()),
+            constructors: vec![Constructor {
+                name: Name::from_string("SParamEta.mk"),
+                type_: ctor_ty,
+            }],
+        }],
+    })
+    .unwrap();
+
+    let zero = Expr::const_(Name::from_string("Nat.zero"), Vec::<Level>::new());
+    let one = Expr::app(
+        Expr::const_(Name::from_string("Nat.succ"), Vec::<Level>::new()),
+        zero.clone(),
+    );
+    // s : SParamEta 1  (opaque axiom).
+    let s_one_ty = Expr::app(
+        Expr::const_(s_name.clone(), Vec::<Level>::new()),
+        one.clone(),
+    );
+    env.add_decl(crate::env::Declaration::Axiom {
+        name: Name::from_string("sParamOne"),
+        level_params: vec![],
+        type_: s_one_ty,
+    })
+    .unwrap();
+
+    let tc = TypeChecker::new(&env);
+    let unit_mk = Expr::const_(Name::from_string("EtaUnit.mk"), Vec::<Level>::new());
+    let s = Expr::const_(Name::from_string("sParamOne"), Vec::<Level>::new());
+
+    // t0 := SParamEta.mk 0 unit : SParamEta 0. Must NOT be def-eq to s : SParamEta 1.
+    let t0 = Expr::apps(
+        Expr::const_(Name::from_string("SParamEta.mk"), Vec::<Level>::new()),
+        vec![zero.clone(), unit_mk.clone()],
+    );
+    assert!(
+        !tc.is_def_eq(&t0, &s),
+        "structure eta must NOT identify SParamEta.mk 0 unit (: S 0) with s (: S 1)"
+    );
+    assert!(
+        !tc.is_def_eq(&s, &t0),
+        "structure eta must NOT identify s (: S 1) with SParamEta.mk 0 unit (: S 0)"
+    );
+
+    // Control: same parameter — eta must STILL succeed (completeness preserved).
+    let t1 = Expr::apps(
+        Expr::const_(Name::from_string("SParamEta.mk"), Vec::<Level>::new()),
+        vec![one.clone(), unit_mk],
+    );
+    assert!(
+        tc.is_def_eq(&t1, &s),
+        "structure eta must still identify SParamEta.mk 1 unit (: S 1) with s (: S 1)"
+    );
+    assert!(tc.is_def_eq(&s, &t1));
+}

@@ -507,11 +507,16 @@ fn assert_rw_fixture_row_closes_without_fallback(row: RwFixtureRow) {
     let target = make_eq_n(parity_var(row.target_lhs), parity_var(row.target_rhs));
     let goal_ty = Expr::pi(BinderInfo::Default, h_ty, target);
     let mut state = ProofState::new(env, goal_ty.clone());
-    intro(&mut state, "h").expect("rw fixture should introduce the local equality");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("rw fixture should introduce the local equality");
     let axiom_before = axiom_snapshot();
 
-    rewrite(&mut state, "h", row.reverse)
-        .unwrap_or_else(|err| panic!("rw fixture row {} should rewrite: {err:?}", row.id));
+    rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        row.reverse,
+    )
+    .unwrap_or_else(|err| panic!("rw fixture row {} should rewrite: {err:?}", row.id));
     rfl(&mut state)
         .unwrap_or_else(|err| panic!("rw fixture row {} should close with rfl: {err:?}", row.id));
     assert!(
@@ -681,8 +686,11 @@ fn test_tactic_parity_high_value_rows_have_executable_checks() {
 
     for spec in HIGH_VALUE_EXECUTABLE_CHECKS {
         let row = row_block(&source, spec.tactic);
+        // The registry spells the driver the repository runs (owner directive
+        // 2026-09-28: `targo`, unverified lane); 75ab2ef31 moved the YAML and
+        // not this expectation, which then failed on every row.
         let command = format!(
-            "command: cargo test -p clean-elab {} --lib -- --exact",
+            "command: targo --unverified test -p clean-elab {} --lib -- --exact",
             spec.module_path
         );
 
@@ -711,7 +719,7 @@ fn test_tactic_parity_high_value_rows_have_executable_checks() {
         );
         assert!(
             row.contains(&command),
-            "{} row must expose exact cargo test command: {}",
+            "{} row must expose the exact `targo --unverified test` command: {}",
             spec.tactic,
             command
         );

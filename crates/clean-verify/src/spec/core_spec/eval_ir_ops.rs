@@ -6,7 +6,7 @@
 //!
 //! Everything here is a pure function from [`IRScalar`] operands to an
 //! `IRStepResult`; nothing touches the machine. The machine transitions and
-//! the 28-arm instruction dispatch live in [`super::eval_ir_machine`].
+//! the 30-arm instruction dispatch live in [`super::eval_ir_machine`].
 //!
 //! Every operator alphabet is dispatched **exhaustively** — 20 `IRBinOp`, 9
 //! `IRUnOp`, 10 `IRICmpOp`, 12 `IRFCmpOp`, 17 `IRCastOp`. Arms outside the
@@ -46,36 +46,36 @@ impl Specification {
     fn add_eval_ir_coercions(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             r"def ir_as_int (v : IRScalar) : IROption Nat := match v with
-| IRScalar.undef_ => IROption.none Nat
-| IRScalar.bool_ b => IROption.none Nat
-| IRScalar.int_ n => IROption.some Nat n
-| IRScalar.float_ n => IROption.none Nat
-| IRScalar.unit_ => IROption.none Nat
-| IRScalar.ptr_ a => IROption.none Nat
-| IRScalar.nullptr_ => IROption.none Nat
-| IRScalar.fat_ d md => IROption.none Nat
-| IRScalar.fnptr_ f => IROption.none Nat
-| IRScalar.aggv sp => IROption.none Nat
-| IRScalar.vnil => IROption.none Nat
-| IRScalar.vcons x rest => IROption.none Nat",
+| IRScalar.undef_ => @IROption.none Nat
+| IRScalar.bool_ b => @IROption.none Nat
+| IRScalar.int_ n => @IROption.some Nat n
+| IRScalar.float_ n => @IROption.none Nat
+| IRScalar.unit_ => @IROption.none Nat
+| IRScalar.ptr_ a => @IROption.none Nat
+| IRScalar.nullptr_ => @IROption.none Nat
+| IRScalar.fat_ d md => @IROption.none Nat
+| IRScalar.fnptr_ f => @IROption.none Nat
+| IRScalar.aggv sp => @IROption.none Nat
+| IRScalar.vnil => @IROption.none Nat
+| IRScalar.vcons x rest => @IROption.none Nat",
             "Integer view of a value. A pointer is deliberately NOT an integer: reading an \
              address as a number requires an explicit Cast ptrtoint, exactly as in trust-ir.",
         )?;
 
         self.add_recursive_def(
             r"def ir_as_bool (v : IRScalar) : IROption Bool := match v with
-| IRScalar.undef_ => IROption.none Bool
-| IRScalar.bool_ b => IROption.some Bool b
-| IRScalar.int_ n => IROption.none Bool
-| IRScalar.float_ n => IROption.none Bool
-| IRScalar.unit_ => IROption.none Bool
-| IRScalar.ptr_ a => IROption.none Bool
-| IRScalar.nullptr_ => IROption.none Bool
-| IRScalar.fat_ d md => IROption.none Bool
-| IRScalar.fnptr_ f => IROption.none Bool
-| IRScalar.aggv sp => IROption.none Bool
-| IRScalar.vnil => IROption.none Bool
-| IRScalar.vcons x rest => IROption.none Bool",
+| IRScalar.undef_ => @IROption.none Bool
+| IRScalar.bool_ b => @IROption.some Bool b
+| IRScalar.int_ n => @IROption.none Bool
+| IRScalar.float_ n => @IROption.none Bool
+| IRScalar.unit_ => @IROption.none Bool
+| IRScalar.ptr_ a => @IROption.none Bool
+| IRScalar.nullptr_ => @IROption.none Bool
+| IRScalar.fat_ d md => @IROption.none Bool
+| IRScalar.fnptr_ f => @IROption.none Bool
+| IRScalar.aggv sp => @IROption.none Bool
+| IRScalar.vnil => @IROption.none Bool
+| IRScalar.vcons x rest => @IROption.none Bool",
             "Boolean view of a value. i1 is a genuine Bool here, not an integer of width one.",
         )?;
 
@@ -105,7 +105,7 @@ impl Specification {
         self.add_recursive_def(
             r"def ir_scalar_code (v : IRScalar) : Nat := match v with
 | IRScalar.undef_ => Nat.zero
-| IRScalar.bool_ b => Bool.rec (fun (_ : Bool) => Nat) Nat.zero (Nat.succ Nat.zero) b
+| IRScalar.bool_ b => @Bool.rec (fun (_ : Bool) => Nat) Nat.zero (Nat.succ Nat.zero) b
 | IRScalar.int_ n => n
 | IRScalar.float_ n => n
 | IRScalar.unit_ => Nat.zero
@@ -150,9 +150,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_eqb (a : IRScalar) (b : IRScalar) : IROption Bool := ",
-                "Bool.rec (fun (_ : Bool) => IROption Bool) ",
-                "(IROption.none Bool) ",
-                "(IROption.some Bool (Bool.and (ir_nat_eqb (ir_scalar_tag a) (ir_scalar_tag b)) ",
+                "@Bool.rec (fun (_ : Bool) => IROption Bool) ",
+                "(@IROption.none Bool) ",
+                "(@IROption.some Bool (Bool.and (ir_nat_eqb (ir_scalar_tag a) (ir_scalar_tag b)) ",
                 "(ir_nat_eqb (ir_scalar_code a) (ir_scalar_code b)))) ",
                 "(Bool.and (ir_scalar_cmpable a) (ir_scalar_cmpable b))",
             ),
@@ -166,9 +166,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_int2 (f : Nat -> Nat -> IRStepResult) (a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
-                "(fun (x : Nat) => IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "(fun (x : Nat) => @IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (y : Nat) => f x y) (ir_as_int b)) ",
                 "(ir_as_int a)",
@@ -180,7 +180,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_int1 (f : Nat -> IRStepResult) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (x : Nat) => f x) (ir_as_int a)",
             ),
@@ -190,9 +190,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_bitop (f : Bool -> Bool -> Bool) (a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
+                "@IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.unmodelled IRFault.bitlevel)) ",
-                "(fun (x : Bool) => IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
+                "(fun (x : Bool) => @IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.unmodelled IRFault.bitlevel)) ",
                 "(fun (y : Bool) => IRStepResult.value (IRScalar.bool_ (f x y))) (ir_as_bool b)) ",
                 "(ir_as_bool a)",
@@ -205,7 +205,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_bool_result (o : IROption Bool) : IRStepResult := ",
-                "IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
+                "@IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_bool)) ",
                 "(fun (x : Bool) => IRStepResult.value (IRScalar.bool_ x)) o",
             ),
@@ -215,7 +215,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_bool_result_neg (o : IROption Bool) : IRStepResult := ",
-                "IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
+                "@IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_bool)) ",
                 "(fun (x : Bool) => IRStepResult.value (IRScalar.bool_ (Bool.not x))) o",
             ),
@@ -224,24 +224,30 @@ impl Specification {
 
         self.add_recursive_def(
             r"def ir_ty_int_width (t : IRTy) : IROption Nat := match t with
-| IRTy.bool_ => IROption.none Nat
-| IRTy.int_ w => IROption.some Nat w
-| IRTy.uint_ w => IROption.some Nat w
-| IRTy.float_ w => IROption.none Nat
-| IRTy.ptr_ => IROption.none Nat
-| IRTy.ref_ p => IROption.none Nat
-| IRTy.refmut_ p => IROption.none Nat
-| IRTy.rawconst_ p => IROption.none Nat
-| IRTy.rawmut_ p => IROption.none Nat
-| IRTy.rc_ p => IROption.none Nat
-| IRTy.fatptr_ p => IROption.none Nat
-| IRTy.unit_ => IROption.none Nat
-| IRTy.never_ => IROption.none Nat
-| IRTy.tuple_ n => IROption.none Nat
-| IRTy.array_ e n => IROption.none Nat
-| IRTy.struct_ n => IROption.none Nat
-| IRTy.enum_ n => IROption.none Nat
-| IRTy.func_ n => IROption.none Nat",
+| IRTy.bool_ => @IROption.none Nat
+| IRTy.int_ w => @IROption.some Nat w
+| IRTy.uint_ w => @IROption.some Nat w
+| IRTy.float_ w => @IROption.none Nat
+| IRTy.ptr_ => @IROption.none Nat
+| IRTy.ref_ p => @IROption.none Nat
+| IRTy.refmut_ p => @IROption.none Nat
+| IRTy.rawconst_ p => @IROption.none Nat
+| IRTy.rawmut_ p => @IROption.none Nat
+| IRTy.rc_ p => @IROption.none Nat
+| IRTy.fatptr_ p => @IROption.none Nat
+| IRTy.unit_ => @IROption.none Nat
+| IRTy.never_ => @IROption.none Nat
+| IRTy.tuple_ n => @IROption.none Nat
+| IRTy.array_ e n => @IROption.none Nat
+| IRTy.struct_ n => @IROption.none Nat
+| IRTy.enum_ n => @IROption.none Nat
+| IRTy.func_ n => @IROption.none Nat
+| IRTy.usize_ bits => @IROption.none Nat
+| IRTy.fatstr_ => @IROption.none Nat
+| IRTy.fatslice_ element => @IROption.none Nat
+| IRTy.fatdyn_ traitId => @IROption.none Nat
+| IRTy.containerlen_ => @IROption.none Nat
+| IRTy.containervtable_ => @IROption.none Nat",
             "Return the bit width of a signed or unsigned machine-integer type. Every other type \
              is rejected rather than silently receiving Nat arithmetic.",
         )?;
@@ -265,7 +271,13 @@ impl Specification {
 | IRTy.array_ e n => Bool.true
 | IRTy.struct_ n => Bool.true
 | IRTy.enum_ n => Bool.true
-| IRTy.func_ n => Bool.false",
+| IRTy.func_ n => Bool.false
+| IRTy.usize_ bits => Bool.false
+| IRTy.fatstr_ => Bool.false
+| IRTy.fatslice_ element => Bool.false
+| IRTy.fatdyn_ traitId => Bool.false
+| IRTy.containerlen_ => Bool.false
+| IRTy.containervtable_ => Bool.false",
             "Is this type one whose values are aggregates — a tuple, array, struct or enum? The \
              four ID-named aggregate forms, and only those. `func_` is a FUNCTION type, not an \
              aggregate; the pointer-like family is thin- or fat-pointer-shaped. Used by \
@@ -295,8 +307,8 @@ impl Specification {
         // is a naming drift and not a proof problem — re-derived here rather
         // than re-recorded in each chain's fixture.
         self.add_recursive_def(
-            "def ir_ty_is_agg_enum_any (n : Nat) : Eq Bool (ir_ty_is_agg (IRTy.enum_ n)) Bool.true \
-             := Eq.refl Bool Bool.true",
+            "def ir_ty_is_agg_enum_any (n : Nat) : @Eq Bool (ir_ty_is_agg (IRTy.enum_ n)) Bool.true \
+             := @Eq.refl Bool Bool.true",
             "ir_ty_is_agg_enum_any: an ENUM type is an aggregate at EVERY whole-crate id. The \
              kernel iota-reduces the match on the constructor, so `n` never appears in the \
              answer. This is what makes an emitted `const enum.K { j }` mean the same value \
@@ -304,8 +316,8 @@ impl Specification {
              independent of the type table. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            "def ir_ty_is_agg_struct_any (n : Nat) : Eq Bool (ir_ty_is_agg (IRTy.struct_ n)) \
-             Bool.true := Eq.refl Bool Bool.true",
+            "def ir_ty_is_agg_struct_any (n : Nat) : @Eq Bool (ir_ty_is_agg (IRTy.struct_ n)) \
+             Bool.true := @Eq.refl Bool Bool.true",
             "ir_ty_is_agg_struct_any: the same for STRUCT ids, which is the form the fourth \
              chain's `ir_fc_tflags` carries. DerivedProved, zero axiom_deps.",
         )?;
@@ -316,11 +328,12 @@ impl Specification {
         // surface syntax is single-scrutinee non-recursive dispatch — the same
         // reason `ir_vals_get` / `ir_vals_len` are explicit `IRScalar.rec`s.
         // The seven scalar minors compute exactly what the previous `match`
-        // computed, arm for arm.
+        // computed, arm for arm. `phantomdata` was appended 2026-09-16 as the
+        // eleventh minor; see eval_ir_syntax.rs for why it is not an alias of unit_.
         self.add_recursive_def(
             concat!(
                 "def ir_const_value (c : IRConst) : IRScalar := ",
-                "IRConst.rec (fun (_ : IRConst) => IRScalar) ",
+                "@IRConst.rec (fun (_ : IRConst) => IRScalar) ",
                 "(fun (n : Nat) => IRScalar.int_ n) ",
                 "(fun (b : Bool) => IRScalar.bool_ b) ",
                 "IRScalar.unit_ ",
@@ -332,6 +345,10 @@ impl Specification {
                 "IRScalar.vnil ",
                 "(fun (_a : IRConst) (_b : IRConst) (iha : IRScalar) (ihb : IRScalar) => ",
                 "IRScalar.vcons iha ihb) ",
+                // phantomdata: the ELEVENTH minor, and it is last because the
+                // constructor is declared last -- recursor minor order IS
+                // declaration order. A zero-sized marker has one value.
+                "IRScalar.unit_ ",
                 "c",
             ),
             "Materialize a constant as a value. Total: every IRConst constructor has a value. \
@@ -350,7 +367,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_const_int_eval (t : IRTy) (n : Nat) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => IRStepResult.value (IRScalar.int_ (ir_wrap w n))) ",
                 "(ir_ty_int_width t)",
@@ -362,7 +379,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_const_agg_eval (t : IRTy) (sp : IRConst) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_agg)) ",
                 "(IRStepResult.value (IRScalar.aggv (ir_const_value sp))) ",
                 "(ir_ty_is_agg t)",
@@ -388,7 +405,8 @@ impl Specification {
 | IRConst.func_ f => IRStepResult.value (IRScalar.fnptr_ f)
 | IRConst.aggv sp => ir_const_agg_eval t sp
 | IRConst.vnil => IRStepResult.fault (IROutcome.type_error IRFault.not_agg)
-| IRConst.vcons a b => IRStepResult.fault (IROutcome.type_error IRFault.not_agg)",
+| IRConst.vcons a b => IRStepResult.fault (IROutcome.type_error IRFault.not_agg)
+| IRConst.phantomdata => IRStepResult.value IRScalar.unit_",
             "The Const instruction's typed evaluator. Integer constants are canonicalized modulo \
              2^w; every other scalar constant retains its exact value-domain constructor; an \
              `aggv` is materialized at its declared aggregate type by ir_const_agg_eval. The \
@@ -401,12 +419,12 @@ impl Specification {
         Ok(())
     }
 
-    /// BinOp (20/20) and UnOp (9/9).
+    /// All twenty canonical typed IRBinOp and nine IRUnOp constructors.
     fn add_eval_ir_arith(&mut self) -> Result<(), SpecError> {
         self.add_recursive_def(
             concat!(
                 "def ir_div_checked (x : Nat) (y : Nat) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.value (IRScalar.int_ (ir_nat_div x y))) ",
                 "(IRStepResult.fault (IROutcome.ub IRFault.div_zero)) ",
                 "(ir_nat_eqb y Nat.zero)",
@@ -417,7 +435,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_rem_checked (x : Nat) (y : Nat) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.value (IRScalar.int_ (ir_nat_rem x y))) ",
                 "(IRStepResult.fault (IROutcome.ub IRFault.div_zero)) ",
                 "(ir_nat_eqb y Nat.zero)",
@@ -490,7 +508,7 @@ impl Specification {
             r"def ir_overflow_flag_s (op : IROverflowOp) (w : Nat) (x : Nat) (y : Nat) : Bool := match op with
 | IROverflowOp.addoverflow => Bool.and (Bool.not (ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y))) (ir_bool_xor (ir_sign_bit w (Nat.add x y)) (ir_sign_bit w x))
 | IROverflowOp.suboverflow => Bool.and (ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y)) (ir_bool_xor (ir_sign_bit w (ir_sub_wrap w x y)) (ir_sign_bit w x))
-| IROverflowOp.muloverflow => Bool.rec (fun (_ : Bool) => Bool) (ir_nat_leb (ir_nat_pow2 (Nat.pred w)) (ir_nat_mul (ir_signed_magnitude w x) (ir_signed_magnitude w y))) (ir_nat_ltb (ir_nat_pow2 (Nat.pred w)) (ir_nat_mul (ir_signed_magnitude w x) (ir_signed_magnitude w y))) (ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y))",
+| IROverflowOp.muloverflow => @Bool.rec (fun (_ : Bool) => Bool) (ir_nat_leb (ir_nat_pow2 (Nat.pred w)) (ir_nat_mul (ir_signed_magnitude w x) (ir_signed_magnitude w y))) (ir_nat_ltb (ir_nat_pow2 (Nat.pred w)) (ir_nat_mul (ir_signed_magnitude w x) (ir_signed_magnitude w y))) (ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y))",
             "Overflow's SIGNED flag, trust-ir's signed_overflow (a4e81b6 \
              interpret.rs:6147-6157: checked signed arithmetic escaping \
              [-2^(w-1), 2^(w-1)-1]) phrased over two's-complement bit patterns. Add/sub use \
@@ -508,7 +526,7 @@ impl Specification {
             concat!(
                 "def ir_overflow_flag (op : IROverflowOp) (sgn : Bool) (w : Nat) ",
                 "(x : Nat) (y : Nat) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) ",
+                "@Bool.rec (fun (_ : Bool) => Bool) ",
                 "(ir_overflow_flag_u op w x y) (ir_overflow_flag_s op w x y) sgn",
             ),
             "Overflow's flag, selected by the carrier type's signedness — the one place the \
@@ -524,84 +542,84 @@ impl Specification {
         // at every registration). Each vector is checked against
         // unsigned_overflow / signed_overflow / eval_int_binop by hand.
         self.add_recursive_def(
-            "def ir_exact_ovf_add_wrap : Eq Nat (ir_overflow_value IROverflowOp.addoverflow 4 15 1) 0 := Eq.refl Nat 0",
+            "def ir_exact_ovf_add_wrap : @Eq Nat (ir_overflow_value IROverflowOp.addoverflow 4 15 1) 0 := @Eq.refl Nat 0",
             "Differential vector: width-4 checked add's VALUE wraps exactly as the wrapping \
              add does — 15 + 1 is 0.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_add_flag_u : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.false 4 15 1) Bool.true := Eq.refl Bool Bool.true",
+            "def ir_exact_ovf_add_flag_u : @Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.false 4 15 1) Bool.true := @Eq.refl Bool Bool.true",
             "Differential vector: unsigned 15 + 1 escapes width 4, flag true.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_add_flag_u_boundary : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.false 4 8 7) Bool.false := Eq.refl Bool Bool.false",
+            "def ir_exact_ovf_add_flag_u_boundary : @Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.false 4 8 7) Bool.false := @Eq.refl Bool Bool.false",
             "Boundary from below: unsigned 8 + 7 is exactly the width-4 maximum 15 — no \
              overflow, so the flag's threshold is 2^w and not 2^w - 1.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_sub_borrow : Eq Nat (ir_overflow_value IROverflowOp.suboverflow 4 0 1) 15 := Eq.refl Nat 15",
+            "def ir_exact_ovf_sub_borrow : @Eq Nat (ir_overflow_value IROverflowOp.suboverflow 4 0 1) 15 := @Eq.refl Nat 15",
             "Differential vector: width-4 checked sub's VALUE borrows through the wrap — \
              0 - 1 is 15.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_sub_flag_u : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.false 4 0 1) Bool.true := Eq.refl Bool Bool.true",
+            "def ir_exact_ovf_sub_flag_u : @Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.false 4 0 1) Bool.true := @Eq.refl Bool Bool.true",
             "Differential vector: unsigned 0 - 1 borrows, flag true (lhs < rhs, trust-ir's \
              exact condition).",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_sub_flag_u_eq : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.false 4 5 5) Bool.false := Eq.refl Bool Bool.false",
+            "def ir_exact_ovf_sub_flag_u_eq : @Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.false 4 5 5) Bool.false := @Eq.refl Bool Bool.false",
             "Boundary: equal operands do not borrow — the condition is strictly-less, not \
              less-or-equal.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_mul_wrap : Eq Nat (ir_overflow_value IROverflowOp.muloverflow 4 4 4) 0 := Eq.refl Nat 0",
+            "def ir_exact_ovf_mul_wrap : @Eq Nat (ir_overflow_value IROverflowOp.muloverflow 4 4 4) 0 := @Eq.refl Nat 0",
             "Differential vector: width-4 checked mul's VALUE wraps — 4 * 4 is 16, residue 0.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_mul_flag_u : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.false 4 4 4) Bool.true := Eq.refl Bool Bool.true",
+            "def ir_exact_ovf_mul_flag_u : @Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.false 4 4 4) Bool.true := @Eq.refl Bool Bool.true",
             "Differential vector: unsigned 4 * 4 escapes width 4 at exactly 2^w, flag true.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_mul_flag_u_boundary : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.false 4 3 5) Bool.false := Eq.refl Bool Bool.false",
+            "def ir_exact_ovf_mul_flag_u_boundary : @Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.false 4 3 5) Bool.false := @Eq.refl Bool Bool.false",
             "Boundary from below: unsigned 3 * 5 is exactly the maximum 15 — no overflow.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_add_min : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.true 4 8 15) Bool.true := Eq.refl Bool Bool.true",
+            "def ir_exact_ovf_s_add_min : @Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.true 4 8 15) Bool.true := @Eq.refl Bool Bool.true",
             "Signed MIN edge: i4(-8) + i4(-1) is -9, below the signed minimum — flag true \
              (both operands negative, wrapped result 7 non-negative: the sign rule fires).",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_add_min_value : Eq Nat (ir_overflow_value IROverflowOp.addoverflow 4 8 15) 7 := Eq.refl Nat 7",
+            "def ir_exact_ovf_s_add_min_value : @Eq Nat (ir_overflow_value IROverflowOp.addoverflow 4 8 15) 7 := @Eq.refl Nat 7",
             "Signed MIN edge, the VALUE half: the same -9 wraps to bit pattern 7 — the pair \
              (7, true) is exactly what trust-ir binds for this input.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_add_mixed : Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.true 4 8 1) Bool.false := Eq.refl Bool Bool.false",
+            "def ir_exact_ovf_s_add_mixed : @Eq Bool (ir_overflow_flag IROverflowOp.addoverflow Bool.true 4 8 1) Bool.false := @Eq.refl Bool Bool.false",
             "Signed no-overflow: i4(-8) + i4(1) is -7, in range — mixed signs can never \
              overflow an addition, which is the sign rule's first conjunct.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_sub_min : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.true 4 8 1) Bool.true := Eq.refl Bool Bool.true",
+            "def ir_exact_ovf_s_sub_min : @Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.true 4 8 1) Bool.true := @Eq.refl Bool Bool.true",
             "Signed MIN edge: i4(-8) - i4(1) is -9 — flag true (signs differ and the wrapped \
              result 7 leaves the minuend's sign).",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_sub_min_neg : Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.true 4 8 15) Bool.false := Eq.refl Bool Bool.false",
+            "def ir_exact_ovf_s_sub_min_neg : @Eq Bool (ir_overflow_flag IROverflowOp.suboverflow Bool.true 4 8 15) Bool.false := @Eq.refl Bool Bool.false",
             "Signed no-overflow at MIN: i4(-8) - i4(-1) is -7, in range — the checked sub's \
              flag is about the RESULT'S range, not about touching MIN.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_mul_min : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.true 4 8 15) Bool.true := Eq.refl Bool Bool.true",
+            "def ir_exact_ovf_s_mul_min : @Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.true 4 8 15) Bool.true := @Eq.refl Bool Bool.true",
             "Signed MIN edge: i4(-8) * i4(-1) is +8, past the signed maximum 7 — the MIN * -1 \
              asymmetry that makes signed negation partial, caught by the non-negative branch's \
              2^(w-1) - 1 bound.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_mul_min_value : Eq Nat (ir_overflow_value IROverflowOp.muloverflow 4 8 15) 8 := Eq.refl Nat 8",
+            "def ir_exact_ovf_s_mul_min_value : @Eq Nat (ir_overflow_value IROverflowOp.muloverflow 4 8 15) 8 := @Eq.refl Nat 8",
             "Signed MIN edge, the VALUE half: +8 wraps back to bit pattern 8 (which reads as \
              -8) — the pair (8, true) matching trust-ir's wrapping_mul & mask.",
         )?;
         self.add_recursive_def(
-            "def ir_exact_ovf_s_mul_min_ok : Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.true 4 8 1) Bool.false := Eq.refl Bool Bool.false",
+            "def ir_exact_ovf_s_mul_min_ok : @Eq Bool (ir_overflow_flag IROverflowOp.muloverflow Bool.true 4 8 1) Bool.false := @Eq.refl Bool Bool.false",
             "Signed no-overflow at MIN: i4(-8) * i4(1) is -8, exactly the signed minimum — in \
              range, flag false: the negative branch's bound is 2^(w-1), one wider than the \
              non-negative branch's.",
@@ -611,7 +629,7 @@ impl Specification {
             concat!(
                 "def ir_int2_wrap (f : Nat -> Nat -> Nat -> Nat) (t : IRTy) ",
                 "(a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => ir_int2 (fun (x : Nat) (y : Nat) => ",
                 "IRStepResult.value (IRScalar.int_ (f w x y))) a b) ",
@@ -626,7 +644,7 @@ impl Specification {
             concat!(
                 "def ir_int1_wrap (f : Nat -> Nat -> Nat) (t : IRTy) ",
                 "(a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => ir_int1 (fun (x : Nat) => ",
                 "IRStepResult.value (IRScalar.int_ (f w x))) a) ",
@@ -639,7 +657,7 @@ impl Specification {
             concat!(
                 "def ir_int2_width_result (f : Nat -> Nat -> Nat -> IRStepResult) (t : IRTy) ",
                 "(a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => ir_int2 (fun (x : Nat) (y : Nat) => ",
                 "f w (ir_wrap w x) (ir_wrap w y)) a b) (ir_ty_int_width t)",
@@ -651,8 +669,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_sdiv_bits (w : Nat) (x : Nat) (y : Nat) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
-                "(Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "(@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.value (IRScalar.int_ (ir_signed_encode w ",
                 "(ir_bool_xor (ir_sign_bit w x) (ir_sign_bit w y)) ",
                 "(ir_nat_div (ir_signed_magnitude w x) (ir_signed_magnitude w y))))) ",
@@ -670,8 +688,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_srem_bits (w : Nat) (x : Nat) (y : Nat) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
-                "(Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "(@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.value (IRScalar.int_ (ir_signed_encode w ",
                 "(ir_sign_bit w x) ",
                 "(ir_nat_rem (ir_signed_magnitude w x) (ir_signed_magnitude w y))))) ",
@@ -689,7 +707,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_shl_bits (w : Nat) (x : Nat) (amount : Nat) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.ub IRFault.shift_oob)) ",
                 "(IRStepResult.value (IRScalar.int_ ",
                 "(ir_wrap w (ir_nat_mul x (ir_nat_pow2 amount))))) ",
@@ -701,7 +719,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_lshr_bits (w : Nat) (x : Nat) (amount : Nat) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.ub IRFault.shift_oob)) ",
                 "(IRStepResult.value (IRScalar.int_ ",
                 "(ir_nat_div x (ir_nat_pow2 amount)))) ",
@@ -721,7 +739,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_ashr_bits (w : Nat) (x : Nat) (amount : Nat) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.ub IRFault.shift_oob)) ",
                 "(IRStepResult.value (IRScalar.int_ (ir_ashr_value w x amount))) ",
                 "(ir_nat_ltb amount w)",
@@ -748,7 +766,13 @@ impl Specification {
 | IRTy.array_ e n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.struct_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.enum_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
-| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
+| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
             "Typed And/Or/Xor: exact Bool behavior at i1 and exact width-bounded bit behavior for \
              integer carriers.",
         )?;
@@ -772,7 +796,13 @@ impl Specification {
 | IRTy.array_ e n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.struct_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.enum_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
-| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
+| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
             "Run an unsigned integer operation on canonical width-w residues. Both signed- and \
              unsigned-declared integer types carry the same width-w bit patterns; the opcode, \
              rather than the carrier type, selects unsigned interpretation.",
@@ -830,70 +860,70 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_add_wraps : Eq IRStepResult (ir_binop_eval IRBinOp.add ir_u2 (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) (IRStepResult.value (IRScalar.int_ (Nat.succ Nat.zero))) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ Nat.zero)))",
+            "def ir_exact_add_wraps : @Eq IRStepResult (ir_binop_eval IRBinOp.add ir_u2 (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) (IRStepResult.value (IRScalar.int_ (Nat.succ Nat.zero))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ Nat.zero)))",
             "Kernel-executed width-2 addition witness: 3 + 2 wraps to 1.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_sub_wraps : Eq IRStepResult (ir_binop_eval IRBinOp.sub ir_u2 (IRScalar.int_ Nat.zero) (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero))))",
+            "def ir_exact_sub_wraps : @Eq IRStepResult (ir_binop_eval IRBinOp.sub ir_u2 (IRScalar.int_ Nat.zero) (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero))))",
             "Kernel-executed width-2 subtraction witness: 0 - 2 wraps to 2.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_mul_wraps : Eq IRStepResult (ir_binop_eval IRBinOp.mul ir_u2 (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero))))",
+            "def ir_exact_mul_wraps : @Eq IRStepResult (ir_binop_eval IRBinOp.mul ir_u2 (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))) (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero)))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ Nat.zero))))",
             "Kernel-executed width-2 multiplication witness: 3 * 2 wraps to 2.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_sdiv_negative : Eq IRStepResult (ir_binop_eval IRBinOp.sdiv ir_i4 (IRScalar.int_ 13) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 15)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 15))",
+            "def ir_exact_sdiv_negative : @Eq IRStepResult (ir_binop_eval IRBinOp.sdiv ir_i4 (IRScalar.int_ 13) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 15)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 15))",
             "Differential vector from trust-ir::eval_int_binop: i4(-3) / i4(2) truncates toward \
              zero to the bit pattern 15 (-1).",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_srem_negative : Eq IRStepResult (ir_binop_eval IRBinOp.srem ir_i4 (IRScalar.int_ 13) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 15)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 15))",
+            "def ir_exact_srem_negative : @Eq IRStepResult (ir_binop_eval IRBinOp.srem ir_i4 (IRScalar.int_ 13) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 15)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 15))",
             "Differential vector: signed remainder retains the dividend sign.",
         )?;
 
         self.add_recursive_def(
-            "def ir_sdiv_min_overflow : Eq IRStepResult (ir_binop_eval IRBinOp.sdiv ir_i4 (IRScalar.int_ 8) (IRScalar.int_ 15)) (IRStepResult.fault (IROutcome.ub IRFault.div_overflow)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.div_overflow))",
+            "def ir_sdiv_min_overflow : @Eq IRStepResult (ir_binop_eval IRBinOp.sdiv ir_i4 (IRScalar.int_ 8) (IRScalar.int_ 15)) (IRStepResult.fault (IROutcome.ub IRFault.div_overflow)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.div_overflow))",
             "Differential UB vector: i4::MIN / -1 is signed division overflow.",
         )?;
 
         self.add_recursive_def(
-            "def ir_sdiv_zero_ub : Eq IRStepResult (ir_binop_eval IRBinOp.sdiv ir_i4 (IRScalar.int_ 8) (IRScalar.int_ 0)) (IRStepResult.fault (IROutcome.ub IRFault.div_zero)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.div_zero))",
+            "def ir_sdiv_zero_ub : @Eq IRStepResult (ir_binop_eval IRBinOp.sdiv ir_i4 (IRScalar.int_ 8) (IRScalar.int_ 0)) (IRStepResult.fault (IROutcome.ub IRFault.div_zero)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.div_zero))",
             "Differential UB vector: signed division by zero is never a value.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_shl : Eq IRStepResult (ir_binop_eval IRBinOp.shl ir_i4 (IRScalar.int_ 3) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 12)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 12))",
+            "def ir_exact_shl : @Eq IRStepResult (ir_binop_eval IRBinOp.shl ir_i4 (IRScalar.int_ 3) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 12)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 12))",
             "Differential vector: width-four 3 << 2 is 12.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_lshr : Eq IRStepResult (ir_binop_eval IRBinOp.lshr ir_i4 (IRScalar.int_ 12) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 3)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))",
+            "def ir_exact_lshr : @Eq IRStepResult (ir_binop_eval IRBinOp.lshr ir_i4 (IRScalar.int_ 12) (IRScalar.int_ 2)) (IRStepResult.value (IRScalar.int_ 3)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))",
             "Differential vector: logical right shift fills with zeroes.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_ashr : Eq IRStepResult (ir_binop_eval IRBinOp.ashr ir_i4 (IRScalar.int_ 12) (IRScalar.int_ 1)) (IRStepResult.value (IRScalar.int_ 14)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 14))",
+            "def ir_exact_ashr : @Eq IRStepResult (ir_binop_eval IRBinOp.ashr ir_i4 (IRScalar.int_ 12) (IRScalar.int_ 1)) (IRStepResult.value (IRScalar.int_ 14)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 14))",
             "Differential vector: i4(-4) >> 1 sign-fills to i4(-2), bit pattern 14.",
         )?;
 
         self.add_recursive_def(
-            "def ir_shift_oversize_ub : Eq IRStepResult (ir_binop_eval IRBinOp.shl ir_i4 (IRScalar.int_ 1) (IRScalar.int_ 4)) (IRStepResult.fault (IROutcome.ub IRFault.shift_oob)) := Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.shift_oob))",
+            "def ir_shift_oversize_ub : @Eq IRStepResult (ir_binop_eval IRBinOp.shl ir_i4 (IRScalar.int_ 1) (IRScalar.int_ 4)) (IRStepResult.fault (IROutcome.ub IRFault.shift_oob)) := @Eq.refl IRStepResult (IRStepResult.fault (IROutcome.ub IRFault.shift_oob))",
             "Differential UB vector: a shift amount equal to the integer width is out of range.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_integer_and : Eq IRStepResult (ir_binop_eval IRBinOp.and_ ir_i4 (IRScalar.int_ 10) (IRScalar.int_ 12)) (IRStepResult.value (IRScalar.int_ 8)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 8))",
+            "def ir_exact_integer_and : @Eq IRStepResult (ir_binop_eval IRBinOp.and_ ir_i4 (IRScalar.int_ 10) (IRScalar.int_ 12)) (IRStepResult.value (IRScalar.int_ 8)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 8))",
             "Differential vector: 0b1010 AND 0b1100 is 0b1000.",
         )?;
 
         self.add_recursive_def(
             concat!(
                 "def ir_not_eval (t : IRTy) (a : IRScalar) : IRStepResult := match t with ",
-                "| IRTy.bool_ => IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
+                "| IRTy.bool_ => @IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_bool)) ",
                 "(fun (x : Bool) => IRStepResult.value (IRScalar.bool_ (Bool.not x))) (ir_as_bool a) ",
                 "| IRTy.int_ w => ir_int1 (fun (x : Nat) => IRStepResult.value (IRScalar.int_ (ir_nat_bitnot w x))) a ",
@@ -907,7 +937,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_ctpop_eval (t : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => ir_int1 (fun (x : Nat) => IRStepResult.value ",
                 "(IRScalar.int_ (ir_wrap w (ir_nat_ctpop w x)))) a) (ir_ty_int_width t)",
@@ -937,12 +967,12 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_integer_not : Eq IRStepResult (ir_unop_eval IRUnOp.not_ ir_i4 (IRScalar.int_ 10)) (IRStepResult.value (IRScalar.int_ 5)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 5))",
+            "def ir_exact_integer_not : @Eq IRStepResult (ir_unop_eval IRUnOp.not_ ir_i4 (IRScalar.int_ 10)) (IRStepResult.value (IRScalar.int_ 5)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 5))",
             "Differential vector: NOT 0b1010 at width four is 0b0101.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_integer_ctpop : Eq IRStepResult (ir_unop_eval IRUnOp.ctpop ir_i4 (IRScalar.int_ 11)) (IRStepResult.value (IRScalar.int_ 3)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))",
+            "def ir_exact_integer_ctpop : @Eq IRStepResult (ir_unop_eval IRUnOp.ctpop ir_i4 (IRScalar.int_ 11)) (IRStepResult.value (IRScalar.int_ 3)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 3))",
             "Differential vector: ctpop(0b1011) is three.",
         )?;
 
@@ -957,7 +987,7 @@ impl Specification {
             concat!(
                 "def ir_int_cmp (f : Nat -> Nat -> Bool) (t : IRTy) ",
                 "(a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => ir_int2 (fun (x : Nat) (y : Nat) => ",
                 "IRStepResult.value (IRScalar.bool_ (f (ir_wrap w x) (ir_wrap w y)))) a b) ",
@@ -986,7 +1016,13 @@ impl Specification {
 | IRTy.array_ e n => ir_bool_result (ir_eqb a b)
 | IRTy.struct_ n => ir_bool_result (ir_eqb a b)
 | IRTy.enum_ n => ir_bool_result (ir_eqb a b)
-| IRTy.func_ n => ir_bool_result (ir_eqb a b)",
+| IRTy.func_ n => ir_bool_result (ir_eqb a b)
+| IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
             "Typed equality. Integer operands compare canonical width-w bit patterns; the \
              existing exact comparable-value relation handles bools, unit, and pointer-shaped \
              values used by the crystal.",
@@ -1011,7 +1047,13 @@ impl Specification {
 | IRTy.array_ e n => ir_bool_result_neg (ir_eqb a b)
 | IRTy.struct_ n => ir_bool_result_neg (ir_eqb a b)
 | IRTy.enum_ n => ir_bool_result_neg (ir_eqb a b)
-| IRTy.func_ n => ir_bool_result_neg (ir_eqb a b)",
+| IRTy.func_ n => ir_bool_result_neg (ir_eqb a b)
+| IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
             "Typed inequality, with the same integer canonicalization as ir_icmp_eq.",
         )?;
 
@@ -1019,7 +1061,7 @@ impl Specification {
             concat!(
                 "def ir_signed_cmp (relation : Nat -> Nat -> Nat -> Bool) ",
                 "(t : IRTy) (a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => ir_int2 (fun (x : Nat) (y : Nat) => ",
                 "IRStepResult.value (IRScalar.bool_ (relation w x y))) a b) ",
@@ -1064,7 +1106,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_icmp_ult_walk (w : Nat) (x : Nat) (y : Nat) : ",
-                "Eq IRStepResult ",
+                "@Eq IRStepResult ",
                 "(ir_icmp_eval IRICmpOp.ult (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
                 "(IRStepResult.value (IRScalar.bool_ ",
                 "(ir_nat_ltb_walk (ir_wrap w x) (ir_wrap w y)))) := ",
@@ -1084,7 +1126,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_icmp_ugt_walk (w : Nat) (x : Nat) (y : Nat) : ",
-                "Eq IRStepResult ",
+                "@Eq IRStepResult ",
                 "(ir_icmp_eval IRICmpOp.ugt (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
                 "(IRStepResult.value (IRScalar.bool_ ",
                 "(ir_nat_ltb_walk (ir_wrap w y) (ir_wrap w x)))) := ",
@@ -1101,7 +1143,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_icmp_ule_walk (w : Nat) (x : Nat) (y : Nat) : ",
-                "Eq IRStepResult ",
+                "@Eq IRStepResult ",
                 "(ir_icmp_eval IRICmpOp.ule (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
                 "(IRStepResult.value (IRScalar.bool_ ",
                 "(ir_nat_leb_walk (ir_wrap w x) (ir_wrap w y)))) := ",
@@ -1118,7 +1160,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_icmp_uge_walk (w : Nat) (x : Nat) (y : Nat) : ",
-                "Eq IRStepResult ",
+                "@Eq IRStepResult ",
                 "(ir_icmp_eval IRICmpOp.uge (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
                 "(IRStepResult.value (IRScalar.bool_ ",
                 "(ir_nat_leb_walk (ir_wrap w y) (ir_wrap w x)))) := ",
@@ -1134,7 +1176,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_icmp_eq_walk (w : Nat) (x : Nat) (y : Nat) : ",
-                "Eq IRStepResult ",
+                "@Eq IRStepResult ",
                 "(ir_icmp_eval IRICmpOp.eq_ (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
                 "(IRStepResult.value (IRScalar.bool_ ",
                 "(ir_nat_eqb_walk (ir_wrap w x) (ir_wrap w y)))) := ",
@@ -1152,7 +1194,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_icmp_ne_walk (w : Nat) (x : Nat) (y : Nat) : ",
-                "Eq IRStepResult ",
+                "@Eq IRStepResult ",
                 "(ir_icmp_eval IRICmpOp.ne_ (IRTy.uint_ w) (IRScalar.int_ x) (IRScalar.int_ y)) ",
                 "(IRStepResult.value (IRScalar.bool_ (Bool.not ",
                 "(ir_nat_eqb_walk (ir_wrap w x) (ir_wrap w y))))) := ",
@@ -1167,12 +1209,12 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_slt_sign_boundary : Eq IRStepResult (ir_icmp_eval IRICmpOp.slt ir_i4 (IRScalar.int_ 8) (IRScalar.int_ 7)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))",
+            "def ir_exact_slt_sign_boundary : @Eq IRStepResult (ir_icmp_eval IRICmpOp.slt ir_i4 (IRScalar.int_ 8) (IRScalar.int_ 7)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))",
             "Differential vector: i4::MIN is signed-less-than i4::MAX across the sign boundary.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_sgt_negative_pair : Eq IRStepResult (ir_icmp_eval IRICmpOp.sgt ir_i4 (IRScalar.int_ 15) (IRScalar.int_ 8)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))",
+            "def ir_exact_sgt_negative_pair : @Eq IRStepResult (ir_icmp_eval IRICmpOp.sgt ir_i4 (IRScalar.int_ 15) (IRScalar.int_ 8)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))",
             "Differential vector: i4(-1) is signed-greater-than i4(-8).",
         )?;
 
@@ -1193,9 +1235,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_trunc_int (sw : Nat) (dst : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
-                "(fun (dw : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "(fun (dw : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
                 "(ir_int1 (fun (x : Nat) => IRStepResult.value (IRScalar.int_ (ir_wrap dw x))) a) ",
                 "(ir_nat_leb dw sw)) (ir_ty_int_width dst)",
             ),
@@ -1206,8 +1248,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_trunc_bool (sw : Nat) (a : IRScalar) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
-                "(ir_int1 (fun (x : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "(ir_int1 (fun (x : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "(IRStepResult.value (IRScalar.bool_ Bool.true)) ",
                 "(IRStepResult.value (IRScalar.bool_ Bool.false)) ",
                 "(ir_nat_eqb (ir_wrap (Nat.succ Nat.zero) x) Nat.zero)) a) ",
@@ -1238,6 +1280,12 @@ impl Specification {
   | IRTy.struct_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
   | IRTy.enum_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
   | IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.uint_ sw => match dst with
   | IRTy.bool_ => ir_trunc_bool sw a
   | IRTy.int_ dw => ir_trunc_int sw dst a
@@ -1257,6 +1305,12 @@ impl Specification {
   | IRTy.struct_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
   | IRTy.enum_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
   | IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+  | IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.bool_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.float_ w => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.ptr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
@@ -1272,16 +1326,22 @@ impl Specification {
 | IRTy.array_ e n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.struct_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.enum_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
-| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
+| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
             "Typed truncation from a machine integer to a narrower machine integer or Bool.",
         )?;
 
         self.add_recursive_def(
             concat!(
                 "def ir_zext_int (sw : Nat) (dst : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
-                "(fun (dw : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "(fun (dw : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
                 "(ir_int1 (fun (x : Nat) => IRStepResult.value ",
                 "(IRScalar.int_ (ir_wrap dw (ir_wrap sw x)))) a) (ir_nat_leb sw dw)) ",
                 "(ir_ty_int_width dst)",
@@ -1293,14 +1353,14 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_zext_bool (dst : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
-                "(fun (dw : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
-                "(IROption.rec Bool ",
+                "(fun (dw : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "(@IROption.rec Bool ",
                 "(fun (_ : IROption Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_bool)) ",
                 "(fun (b : Bool) => IRStepResult.value (IRScalar.int_ ",
-                "(Bool.rec (fun (_ : Bool) => Nat) Nat.zero (Nat.succ Nat.zero) b))) ",
+                "(@Bool.rec (fun (_ : Bool) => Nat) Nat.zero (Nat.succ Nat.zero) b))) ",
                 "(ir_as_bool a)) (ir_nat_leb (Nat.succ Nat.zero) dw)) (ir_ty_int_width dst)",
             ),
             "Exact zero extension from Bool/i1 to a non-zero-width integer carrier.",
@@ -1325,7 +1385,13 @@ impl Specification {
 | IRTy.array_ e n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.struct_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
 | IRTy.enum_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
-| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
+| IRTy.func_ n => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.usize_ bits => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatstr_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatslice_ element => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.fatdyn_ traitId => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containerlen_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)
+| IRTy.containervtable_ => IRStepResult.fault (IROutcome.type_error IRFault.not_int)",
             "Typed zero extension. It remains distinct from the exact sign-extension operation \
              below, so the two cast opcodes cannot be conflated.",
         )?;
@@ -1333,7 +1399,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_sext_value (sw : Nat) (dw : Nat) (value : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) (ir_wrap sw value) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) (ir_wrap sw value) ",
                 "(Nat.add (ir_wrap sw value) ",
                 "(Nat.sub (ir_nat_pow2 dw) (ir_nat_pow2 sw))) ",
                 "(ir_sign_bit sw value)",
@@ -1344,9 +1410,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_sext_int (sw : Nat) (dst : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
-                "(fun (dw : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "(fun (dw : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
                 "(ir_int1 (fun (x : Nat) => IRStepResult.value ",
                 "(IRScalar.int_ (ir_wrap dw (ir_sext_value sw dw x)))) a) ",
                 "(ir_nat_leb sw dw)) (ir_ty_int_width dst)",
@@ -1357,13 +1423,13 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_sext_bool (dst : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
-                "(fun (dw : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
-                "(IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
+                "(fun (dw : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "(@IROption.rec Bool (fun (_ : IROption Bool) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_bool)) ",
                 "(fun (bit : Bool) => IRStepResult.value (IRScalar.int_ ",
-                "(Bool.rec (fun (_ : Bool) => Nat) Nat.zero ",
+                "(@Bool.rec (fun (_ : Bool) => Nat) Nat.zero ",
                 "(Nat.pred (ir_nat_pow2 dw)) bit))) (ir_as_bool a)) ",
                 "(ir_nat_leb (Nat.succ Nat.zero) dw)) (ir_ty_int_width dst)",
             ),
@@ -1402,7 +1468,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_ptrtoint_eval (dst : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "(IRStepResult.fault (IROutcome.type_error IRFault.not_int)) ",
                 "(fun (w : Nat) => ir_ptrtoint_width w a) (ir_ty_int_width dst)",
             ),
@@ -1469,7 +1535,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_bitcast_int (sw : Nat) (dw : Nat) (a : IRScalar) : IRStepResult := ",
-                "Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
+                "@Bool.rec (fun (_ : Bool) => IRStepResult) ir_width_fault ",
                 "(ir_int1 (fun (x : Nat) => IRStepResult.value ",
                 "(IRScalar.int_ (ir_wrap dw x))) a) (ir_nat_eqb sw dw)",
             ),
@@ -1482,8 +1548,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_bitcast_eval (src : IRTy) (dst : IRTy) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ir_width_fault ",
-                "(fun (sw : Nat) => IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ir_width_fault ",
+                "(fun (sw : Nat) => @IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_width_fault (fun (dw : Nat) => ir_bitcast_int sw dw a) (ir_ty_int_width dst)) ",
                 "(ir_ty_int_width src)",
             ),
@@ -1529,51 +1595,51 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_trunc_low_bit : Eq IRStepResult (ir_cast_eval IRCastOp.trunc ir_u2 IRTy.bool_ (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))",
+            "def ir_exact_trunc_low_bit : @Eq IRStepResult (ir_cast_eval IRCastOp.trunc ir_u2 IRTy.bool_ (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))",
             "Kernel-executed cast witness: truncating two-bit 3 to i1 keeps the low bit.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_zext_canonicalizes : Eq IRStepResult (ir_cast_eval IRCastOp.zext ir_u2 ir_u4 (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))))) (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))",
+            "def ir_exact_zext_canonicalizes : @Eq IRStepResult (ir_cast_eval IRCastOp.zext ir_u2 ir_u4 (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))))) (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))",
             "Kernel-executed cast witness: zero-extension first canonicalizes 7 at source width \
              two, producing 3 at destination width four.",
         )?;
 
         self.add_recursive_def(
-            "def ir_exact_sext_negative : Eq IRStepResult (ir_cast_eval IRCastOp.sext ir_u2 ir_u4 (IRScalar.int_ 3)) (IRStepResult.value (IRScalar.int_ 15)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 15))",
+            "def ir_exact_sext_negative : @Eq IRStepResult (ir_cast_eval IRCastOp.sext ir_u2 ir_u4 (IRScalar.int_ 3)) (IRStepResult.value (IRScalar.int_ 15)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ 15))",
             "Differential vector: sign-extending two-bit -1 (pattern 3) to four bits yields the \
              all-ones pattern 15.",
         )?;
 
         self.add_recursive_def(
-            "def ir_inttoptr_fails_closed : Eq IRStepResult (ir_cast_eval IRCastOp.inttoptr ir_u4 IRTy.ptr_ (IRScalar.int_ Nat.zero)) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
+            "def ir_inttoptr_fails_closed : @Eq IRStepResult (ir_cast_eval IRCastOp.inttoptr ir_u4 IRTy.ptr_ (IRScalar.int_ Nat.zero)) ir_width_fault := @Eq.refl IRStepResult ir_width_fault",
             "Kernel-executed negative witness: integer zero does not manufacture a dereferenceable \
              pointer in the abstract provenance model.",
         )?;
 
         // ── the bitcast fragment, pinned from BOTH sides by execution ────
         self.add_recursive_def(
-            "def ir_exact_bitcast_same_width_is_identity (n : Nat) : Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) (IRScalar.int_ n)) (IRStepResult.value (IRScalar.int_ (ir_wrap 32 n))) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (ir_wrap 32 n)))",
+            "def ir_exact_bitcast_same_width_is_identity (n : Nat) : @Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 32) (IRScalar.int_ n)) (IRStepResult.value (IRScalar.int_ (ir_wrap 32 n))) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.int_ (ir_wrap 32 n)))",
             "Kernel-executed bitcast witness, for EVERY bit pattern: i32 -> u32 is the canonical \
              width-32 pattern, i.e. the identity on an already-canonical operand. This is the \
              fragment the tenth chain needed and the whole of what was added.",
         )?;
 
         self.add_recursive_def(
-            "def ir_bitcast_width_mismatch_fails_closed (a : IRScalar) : Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 64) a) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
+            "def ir_bitcast_width_mismatch_fails_closed (a : IRScalar) : @Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.int_ 32) (IRTy.uint_ 64) a) ir_width_fault := @Eq.refl IRStepResult ir_width_fault",
             "FAIL-CLOSED, for EVERY scalar: a bitcast between different widths is still the tagged \
              unmodelled width_bounded outcome. The refusal was NARROWED, not lifted.",
         )?;
 
         self.add_recursive_def(
-            "def ir_bitcast_float_still_refused (a : IRScalar) : Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.float_ 64) (IRTy.uint_ 64) a) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
+            "def ir_bitcast_float_still_refused (a : IRScalar) : @Eq IRStepResult (ir_cast_eval IRCastOp.bitcast (IRTy.float_ 64) (IRTy.uint_ 64) a) ir_width_fault := @Eq.refl IRStepResult ir_width_fault",
             "FAIL-CLOSED, for EVERY scalar: bitcast f64 -> u64 is still refused, at the SAME width, \
              because ir_ty_int_width declines IRTy.float_. This is the case the original blanket \
              refusal's stated reason is about, and it is unchanged.",
         )?;
 
         self.add_recursive_def(
-            "def ir_transmute_still_refused (a : IRScalar) : Eq IRStepResult (ir_cast_eval IRCastOp.transmute (IRTy.float_ 64) (IRTy.uint_ 64) a) ir_width_fault := Eq.refl IRStepResult ir_width_fault",
+            "def ir_transmute_still_refused (a : IRScalar) : @Eq IRStepResult (ir_cast_eval IRCastOp.transmute (IRTy.float_ 64) (IRTy.uint_ 64) a) ir_width_fault := @Eq.refl IRStepResult ir_width_fault",
             "FAIL-CLOSED, for EVERY scalar: transmute::<f64, u64> -- the counterexample the cast \
              module's own comment names -- is a DIFFERENT IRCastOp constructor and is entirely \
              untouched by the bitcast fragment.",

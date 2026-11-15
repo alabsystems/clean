@@ -230,6 +230,33 @@ fn test_nested_mutual_fold_single_element() {
     assert_reduces_to_nat(&env, Expr::app(const0("Tree.size"), node), 9);
 }
 
+/// Each erased major must satisfy the CALLED member's source signature, not
+/// merely have some induction hypothesis in the fused minor.
+#[test]
+fn test_nested_mutual_fold_rejects_wrong_member_domains() {
+    for code in [
+        TREE_FOLD.replace("Tree.sizeList ts", "Tree.size ts"),
+        TREE_FOLD.replace("Tree.size t +", "Tree.sizeList t +"),
+    ] {
+        let mut env = Environment::with_prelude();
+        let decls = parse_file(&code).expect("wrong-member control must parse");
+        let mut error = None;
+        for decl in &decls {
+            assert!(!matches!(decl, clean_parser::SurfaceDecl::RawDecl { .. }));
+            if let Err(actual) = elaborate_decl_and_register(&mut env, decl) {
+                error = Some(actual);
+                break;
+            }
+        }
+        assert!(
+            matches!(error, Some(crate::ElabError::TypeMismatch { .. })),
+            "wrong source member domain must fail type checking: {error:?}"
+        );
+        assert!(env.get_const(&Name::from_string("Tree.size")).is_none());
+        assert!(env.get_const(&Name::from_string("Tree.sizeList")).is_none());
+    }
+}
+
 /// The fusion must not regress an ordinary plain-ident mutual block over the
 /// SAME inductive (Nat) — that still lowers through the product-packing path.
 #[test]

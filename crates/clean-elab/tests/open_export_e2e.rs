@@ -747,3 +747,65 @@ theorem pin_term_open_scoped : zs = 3 := rfl
     .expect("`open scoped Foo in Foo.x` must elaborate and certify `zs = 3`");
     assert_axiom_free(&env, &["zs", "pin_term_open_scoped"]);
 }
+
+/// lean4 `tests/elab/explicitOpenDeclIssue.lean`: Lean's `resolveOpenDecls`
+/// reads an explicit `open Foo (Bar)` as a PREFIX too — `Bar.a` names
+/// `Foo.Bar.a` (`id.replacePrefix openedId resolvedId`) — so `| Bar.a =>` is
+/// that constructor by ordinary name resolution, in a pattern as in a term,
+/// and so is `Qux.a` after `open Foo renaming Bar → Qux`. Were `Bar.a` read
+/// as a binder, `isB`'s first arm would be a catch-all and `isB_b` would not
+/// reduce; the bare-identifier refusal fired on it before the prefix rule.
+#[test]
+fn test_explicit_open_prefix_resolves_dotted_names() {
+    let env = elaborate_module(
+        r"
+namespace Foo
+inductive Bar
+  | a : Bar
+  | b : Bar
+end Foo
+open Foo (Bar)
+def isB : Bar → Bool
+  | Bar.a => true
+  | Bar.b => false
+theorem isB_a : isB Foo.Bar.a = true := rfl
+theorem isB_b : isB Foo.Bar.b = false := rfl
+theorem bar_a_term : (Bar.a : Bar) = Foo.Bar.a := rfl
+",
+    )
+    .expect("`Bar.a` after `open Foo (Bar)` must name `Foo.Bar.a`");
+    assert_axiom_free(&env, &["isB", "isB_a", "isB_b", "bar_a_term"]);
+
+    let env = elaborate_module(
+        r"
+namespace Foo
+inductive Bar
+  | a : Bar
+  | b : Bar
+end Foo
+open Foo renaming Bar → Qux
+def isQ : Qux → Bool
+  | Qux.a => true
+  | Qux.b => false
+theorem isQ_b : isQ Foo.Bar.b = false := rfl
+",
+    )
+    .expect("`Qux.a` after `open Foo renaming Bar → Qux` must name `Foo.Bar.a`");
+    assert_axiom_free(&env, &["isQ", "isQ_b"]);
+
+    // No explicit open, no prefix: `Bar.a` stays unresolved, and the bare
+    // pattern identifier is refused as before.
+    expect_rejected(
+        r"
+namespace Foo
+inductive Bar
+  | a : Bar
+  | b : Bar
+end Foo
+def isB : Foo.Bar → Bool
+  | Bar.a => true
+  | Bar.b => false
+",
+        "`Bar.a` with no `open` in force",
+    );
+}

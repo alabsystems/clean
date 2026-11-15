@@ -9,25 +9,31 @@ use std::collections::HashSet;
 use clean_parser::{OpenPath, Span, SurfaceArg, SurfaceDecl, SurfaceExpr, SurfaceLit};
 
 use crate::preprocess_ext::*;
+use clean_kernel::Name;
+use clean_parser::SurfaceName;
+
+fn fixture_name(name: &'static str) -> SurfaceName {
+    SurfaceName::generated_path(name)
+}
 
 fn span() -> Span {
     Span { start: 0, end: 0 }
 }
 
-fn mk_def(name: &str, refs: Vec<&str>) -> SurfaceDecl {
+fn mk_def(name: &'static str, refs: Vec<&'static str>) -> SurfaceDecl {
     // Build a body that references the given names via nested Ident nodes.
     let body = if refs.is_empty() {
         SurfaceExpr::Lit(span(), SurfaceLit::Nat(0))
     } else {
         // Chain idents as a nested App: f(a)(b)(c)...
-        let mut expr = SurfaceExpr::Ident(span(), refs[0].to_string());
+        let mut expr = SurfaceExpr::Ident(span(), fixture_name(refs[0]));
         for r in &refs[1..] {
             expr = SurfaceExpr::App(
                 span(),
                 Box::new(expr),
                 vec![SurfaceArg {
                     span: span(),
-                    expr: SurfaceExpr::Ident(span(), r.to_string()),
+                    expr: SurfaceExpr::Ident(span(), fixture_name(r)),
                     name: None,
                 }],
             );
@@ -37,7 +43,7 @@ fn mk_def(name: &str, refs: Vec<&str>) -> SurfaceDecl {
 
     SurfaceDecl::Def {
         span: span(),
-        name: name.to_string(),
+        name: fixture_name(name),
         universe_params: Vec::new(),
         binders: Vec::new(),
         ty: None,
@@ -49,11 +55,11 @@ fn mk_def(name: &str, refs: Vec<&str>) -> SurfaceDecl {
     }
 }
 
-fn mk_def_with_universes(name: &str, univs: Vec<&str>) -> SurfaceDecl {
+fn mk_def_with_universes(name: &'static str, univs: Vec<&'static str>) -> SurfaceDecl {
     SurfaceDecl::Def {
         span: span(),
-        name: name.to_string(),
-        universe_params: univs.into_iter().map(String::from).collect(),
+        name: fixture_name(name),
+        universe_params: univs.into_iter().map(fixture_name).collect(),
         binders: Vec::new(),
         ty: None,
         val: Box::new(SurfaceExpr::Lit(span(), SurfaceLit::Nat(0))),
@@ -64,14 +70,14 @@ fn mk_def_with_universes(name: &str, univs: Vec<&str>) -> SurfaceDecl {
     }
 }
 
-fn mk_theorem(name: &str, ty_ref: &str, proof_ref: &str) -> SurfaceDecl {
+fn mk_theorem(name: &'static str, ty_ref: &'static str, proof_ref: &'static str) -> SurfaceDecl {
     SurfaceDecl::Theorem {
         span: span(),
-        name: name.to_string(),
+        name: fixture_name(name),
         universe_params: Vec::new(),
         binders: Vec::new(),
-        ty: Box::new(SurfaceExpr::Ident(span(), ty_ref.to_string())),
-        proof: Box::new(SurfaceExpr::Ident(span(), proof_ref.to_string())),
+        ty: Box::new(SurfaceExpr::Ident(span(), fixture_name(ty_ref))),
+        proof: Box::new(SurfaceExpr::Ident(span(), fixture_name(proof_ref))),
         attrs: Vec::new(),
         termination: Default::default(),
         modifiers: Default::default(),
@@ -79,32 +85,36 @@ fn mk_theorem(name: &str, ty_ref: &str, proof_ref: &str) -> SurfaceDecl {
     }
 }
 
-fn mk_axiom(name: &str, ty_ref: &str) -> SurfaceDecl {
+fn mk_axiom(name: &'static str, ty_ref: &'static str) -> SurfaceDecl {
     SurfaceDecl::Axiom {
         span: span(),
-        name: name.to_string(),
+        name: fixture_name(name),
         universe_params: Vec::new(),
         binders: Vec::new(),
-        ty: Box::new(SurfaceExpr::Ident(span(), ty_ref.to_string())),
+        ty: Box::new(SurfaceExpr::Ident(span(), fixture_name(ty_ref))),
         attrs: Vec::new(),
         modifiers: Default::default(),
     }
 }
 
-fn mk_example(body_ref: &str) -> SurfaceDecl {
+fn mk_example(body_ref: &'static str) -> SurfaceDecl {
     SurfaceDecl::Example {
         span: span(),
         binders: Vec::new(),
         ty: None,
-        val: Box::new(SurfaceExpr::Ident(span(), body_ref.to_string())),
+        val: Box::new(SurfaceExpr::Ident(span(), fixture_name(body_ref))),
     }
 }
 
-fn mk_open(ns_parts: Vec<&str>) -> SurfaceDecl {
+fn mk_open(ns_parts: Vec<&'static str>) -> SurfaceDecl {
     SurfaceDecl::Open {
         span: span(),
         paths: vec![OpenPath {
-            path: ns_parts.into_iter().map(String::from).collect(),
+            path: SurfaceName::from_name(
+                ns_parts
+                    .into_iter()
+                    .fold(Name::anon(), |name, part| name.str(part)),
+            ),
             names: Vec::new(),
             hiding: Vec::new(),
             renaming: Vec::new(),
@@ -141,7 +151,7 @@ fn test_extract_docstrings_line_comment() {
 #[test]
 fn test_extract_docstrings_empty_comments() {
     let decls = vec![mk_def("x", vec![])];
-    let comments: Vec<&str> = vec![];
+    let comments: Vec<&'static str> = vec![];
     let docs = extract_docstrings(&comments, &decls);
     assert!(docs.is_empty());
 }
@@ -213,8 +223,8 @@ fn test_detect_mutual_groups_simple_cycle() {
     let groups = detect_mutual_groups(&decls);
     assert_eq!(groups.len(), 1);
     assert_eq!(groups[0].names.len(), 2);
-    assert!(groups[0].names.contains(&"a".to_string()));
-    assert!(groups[0].names.contains(&"b".to_string()));
+    assert!(groups[0].names.contains(&SurfaceName::generated_path("a")));
+    assert!(groups[0].names.contains(&SurfaceName::generated_path("b")));
 }
 
 #[test]
@@ -272,7 +282,7 @@ fn test_collect_universe_params_single() {
     let decls = vec![mk_def_with_universes("foo", vec!["u"])];
     let params = collect_universe_params(&decls);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].name, "u");
+    assert_eq!(params[0].name, SurfaceName::generated_path("u"));
     assert_eq!(params[0].decl_name, "foo");
 }
 
@@ -290,11 +300,17 @@ fn test_collect_universe_params_multiple() {
 fn test_collect_universe_params_theorem() {
     let decl = SurfaceDecl::Theorem {
         span: span(),
-        name: "thm".to_string(),
-        universe_params: vec!["u".to_string()],
+        name: SurfaceName::generated_path("thm"),
+        universe_params: vec![SurfaceName::generated_path("u")],
         binders: Vec::new(),
-        ty: Box::new(SurfaceExpr::Ident(span(), "Prop".to_string())),
-        proof: Box::new(SurfaceExpr::Ident(span(), "sorry".to_string())),
+        ty: Box::new(SurfaceExpr::Ident(
+            span(),
+            SurfaceName::generated_path("Prop"),
+        )),
+        proof: Box::new(SurfaceExpr::Ident(
+            span(),
+            SurfaceName::generated_path("sorry"),
+        )),
         attrs: Vec::new(),
         termination: Default::default(),
         modifiers: Default::default(),
@@ -302,7 +318,7 @@ fn test_collect_universe_params_theorem() {
     };
     let params = collect_universe_params(&[decl]);
     assert_eq!(params.len(), 1);
-    assert_eq!(params[0].name, "u");
+    assert_eq!(params[0].name, SurfaceName::generated_path("u"));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -321,7 +337,7 @@ fn test_validate_attributes_with_attrs() {
     use clean_parser::Attribute;
     let decl = SurfaceDecl::Def {
         span: span(),
-        name: "x".to_string(),
+        name: SurfaceName::generated_path("x"),
         universe_params: Vec::new(),
         binders: Vec::new(),
         ty: None,
@@ -342,9 +358,9 @@ fn test_validate_attributes_with_attrs() {
 #[test]
 fn test_resolve_namespaces_simple() {
     let decls = vec![mk_def("foo", vec!["add"])];
-    let opened = vec!["Nat".to_string()];
+    let opened = vec![fixture_name("Nat")];
     let mut known = HashSet::new();
-    known.insert("Nat.add".to_string());
+    known.insert(fixture_name("Nat.add"));
 
     let (resolved, count) = resolve_namespaces(&decls, &opened, &known);
     assert_eq!(count, 1);
@@ -354,8 +370,8 @@ fn test_resolve_namespaces_simple() {
 #[test]
 fn test_resolve_namespaces_no_match() {
     let decls = vec![mk_def("foo", vec!["unknown_fn"])];
-    let opened = vec!["Nat".to_string()];
-    let known: HashSet<String> = HashSet::new();
+    let opened = vec![fixture_name("Nat")];
+    let known: HashSet<SurfaceName> = HashSet::new();
 
     let (_, count) = resolve_namespaces(&decls, &opened, &known);
     assert_eq!(count, 0);
@@ -364,9 +380,9 @@ fn test_resolve_namespaces_no_match() {
 #[test]
 fn test_resolve_namespaces_already_qualified() {
     let decls = vec![mk_def("foo", vec!["Nat.add"])];
-    let opened = vec!["Nat".to_string()];
+    let opened = vec![fixture_name("Nat")];
     let mut known = HashSet::new();
-    known.insert("Nat.add".to_string());
+    known.insert(fixture_name("Nat.add"));
 
     let (_, count) = resolve_namespaces(&decls, &opened, &known);
     // Already qualified, should not be re-resolved.
@@ -376,9 +392,9 @@ fn test_resolve_namespaces_already_qualified() {
 #[test]
 fn test_resolve_namespaces_theorem() {
     let decls = vec![mk_theorem("thm", "Prop", "rfl")];
-    let opened = vec!["Eq".to_string()];
+    let opened = vec![fixture_name("Eq")];
     let mut known = HashSet::new();
-    known.insert("Eq.rfl".to_string());
+    known.insert(fixture_name("Eq.rfl"));
 
     let (_, count) = resolve_namespaces(&decls, &opened, &known);
     assert_eq!(count, 1); // "rfl" → "Eq.rfl"
@@ -399,21 +415,21 @@ fn test_expand_imports_none() {
 fn test_expand_imports_single() {
     let decls = vec![mk_open(vec!["Nat"])];
     let opened = expand_imports(&decls);
-    assert_eq!(opened, vec!["Nat"]);
+    assert_eq!(opened, vec![fixture_name("Nat")]);
 }
 
 #[test]
 fn test_expand_imports_nested() {
     let decls = vec![mk_open(vec!["Lean", "Data", "List"])];
     let opened = expand_imports(&decls);
-    assert_eq!(opened, vec!["Lean.Data.List"]);
+    assert_eq!(opened, vec![fixture_name("Lean.Data.List")]);
 }
 
 #[test]
 fn test_expand_imports_multiple() {
     let decls = vec![mk_open(vec!["Nat"]), mk_open(vec!["Int"])];
     let opened = expand_imports(&decls);
-    assert_eq!(opened, vec!["Nat", "Int"]);
+    assert_eq!(opened, vec![fixture_name("Nat"), fixture_name("Int")]);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -427,7 +443,7 @@ fn test_desugar_example() {
     assert_eq!(count, 1);
     assert_eq!(desugared.len(), 1);
     assert!(
-        matches!(&desugared[0], SurfaceDecl::Def { name, .. } if name.starts_with("_example_"))
+        matches!(&desugared[0], SurfaceDecl::Def { name, .. } if name.name() == &Name::anon().str("_example_1"))
     );
 }
 
@@ -437,7 +453,9 @@ fn test_desugar_passthrough() {
     let (desugared, count) = desugar_decls(&decls);
     assert_eq!(count, 0);
     assert_eq!(desugared.len(), 1);
-    assert!(matches!(&desugared[0], SurfaceDecl::Def { name, .. } if name == "x"));
+    assert!(
+        matches!(&desugared[0], SurfaceDecl::Def { name, .. } if name.name() == &Name::anon().str("x"))
+    );
 }
 
 #[test]
@@ -469,8 +487,8 @@ fn test_order_by_deps_simple_chain() {
     assert_eq!(ordered.len(), 2);
     // "a" should come before "b"
     let names: Vec<_> = ordered.iter().filter_map(|d| decl_name(d)).collect();
-    assert_eq!(names[0], "a");
-    assert_eq!(names[1], "b");
+    assert_eq!(names[0].name(), &Name::anon().str("a"));
+    assert_eq!(names[1].name(), &Name::anon().str("b"));
     assert!(reordered > 0);
 }
 
@@ -511,10 +529,22 @@ fn test_order_by_deps_diamond() {
     let (ordered, _) = order_by_deps(&decls).expect("should succeed");
     let names: Vec<_> = ordered.iter().filter_map(|d| decl_name(d)).collect();
     // "a" must come before "b" and "c"; "b" and "c" before "d"
-    let pos_a = names.iter().position(|n| *n == "a").expect("a must exist");
-    let pos_b = names.iter().position(|n| *n == "b").expect("b must exist");
-    let pos_c = names.iter().position(|n| *n == "c").expect("c must exist");
-    let pos_d = names.iter().position(|n| *n == "d").expect("d must exist");
+    let pos_a = names
+        .iter()
+        .position(|n| n.name() == &Name::anon().str("a"))
+        .expect("a must exist");
+    let pos_b = names
+        .iter()
+        .position(|n| n.name() == &Name::anon().str("b"))
+        .expect("b must exist");
+    let pos_c = names
+        .iter()
+        .position(|n| n.name() == &Name::anon().str("c"))
+        .expect("c must exist");
+    let pos_d = names
+        .iter()
+        .position(|n| n.name() == &Name::anon().str("d"))
+        .expect("d must exist");
     assert!(pos_a < pos_b);
     assert!(pos_a < pos_c);
     assert!(pos_b < pos_d);
@@ -610,19 +640,19 @@ fn test_stats_populated_by_pipeline() {
 #[test]
 fn test_decl_name_def() {
     let d = mk_def("foo", vec![]);
-    assert_eq!(decl_name(&d), Some("foo"));
+    assert_eq!(decl_name(&d), Some(&fixture_name("foo")));
 }
 
 #[test]
 fn test_decl_name_theorem() {
     let d = mk_theorem("thm", "Prop", "sorry");
-    assert_eq!(decl_name(&d), Some("thm"));
+    assert_eq!(decl_name(&d), Some(&fixture_name("thm")));
 }
 
 #[test]
 fn test_decl_name_axiom() {
     let d = mk_axiom("ax", "Nat");
-    assert_eq!(decl_name(&d), Some("ax"));
+    assert_eq!(decl_name(&d), Some(&fixture_name("ax")));
 }
 
 #[test]
@@ -644,30 +674,30 @@ fn test_decl_name_example() {
 fn test_collect_idents_nested_app() {
     let expr = SurfaceExpr::App(
         span(),
-        Box::new(SurfaceExpr::Ident(span(), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(span(), SurfaceName::generated_path("f"))),
         vec![SurfaceArg {
             span: span(),
-            expr: SurfaceExpr::Ident(span(), "x".to_string()),
+            expr: SurfaceExpr::Ident(span(), SurfaceName::generated_path("x")),
             name: None,
         }],
     );
     let mut idents = HashSet::new();
     collect_idents(&expr, &mut idents);
-    assert!(idents.contains("f"));
-    assert!(idents.contains("x"));
+    assert!(idents.contains(&SurfaceName::generated_path("f")));
+    assert!(idents.contains(&SurfaceName::generated_path("x")));
 }
 
 #[test]
 fn test_collect_idents_arrow() {
     let expr = SurfaceExpr::Arrow(
         span(),
-        Box::new(SurfaceExpr::Ident(span(), "A".to_string())),
-        Box::new(SurfaceExpr::Ident(span(), "B".to_string())),
+        Box::new(SurfaceExpr::Ident(span(), SurfaceName::generated_path("A"))),
+        Box::new(SurfaceExpr::Ident(span(), SurfaceName::generated_path("B"))),
     );
     let mut idents = HashSet::new();
     collect_idents(&expr, &mut idents);
-    assert!(idents.contains("A"));
-    assert!(idents.contains("B"));
+    assert!(idents.contains(&SurfaceName::generated_path("A")));
+    assert!(idents.contains(&SurfaceName::generated_path("B")));
 }
 
 #[test]
@@ -675,9 +705,12 @@ fn test_collect_idents_lambda() {
     let expr = SurfaceExpr::Lambda(
         span(),
         Vec::new(),
-        Box::new(SurfaceExpr::Ident(span(), "body".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            span(),
+            SurfaceName::generated_path("body"),
+        )),
     );
     let mut idents = HashSet::new();
     collect_idents(&expr, &mut idents);
-    assert!(idents.contains("body"));
+    assert!(idents.contains(&SurfaceName::generated_path("body")));
 }

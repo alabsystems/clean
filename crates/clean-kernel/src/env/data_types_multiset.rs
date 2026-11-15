@@ -735,6 +735,16 @@ impl Environment {
                 type_: mem_cons_type,
                 value: mem_cons_value,
             })?;
+            // Lean 4.8.0 `Init` tags it `@[simp]` (`(← getSimpTheorems).isLemma`
+            // on the pinned binary). Registered here, with the declaration, so
+            // the attribute behaves as an attribute: `simp only` leaves it out,
+            // `attribute [-simp] List.mem_cons` erases it (trust-ir G25,
+            // ledger class (94)). The statement is 4.8.0's own
+            // (`∀ {α} {a b : α} {l}, a ∈ b :: l ↔ a = b ∨ a ∈ l`).
+            self.register_simp_lemma(
+                Name::from_string("List.mem_cons"),
+                crate::env::SimpPriority::Default,
+            );
         }
 
         // ════════════════════════════════════════════════════════════════

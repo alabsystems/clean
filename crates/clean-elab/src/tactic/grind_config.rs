@@ -37,6 +37,24 @@ pub struct GrindConfig {
     pub use_arithmetic_closers: bool,
     /// Timeout in milliseconds for the automation engine (default: 100).
     pub automation_timeout_ms: u64,
+    /// Names supplied by the tactic's own parameter list — `grind [f, g]`.
+    ///
+    /// Lean passes these to the same machinery `@[grind]` registers into
+    /// (`Lean/Meta/Tactic/Grind/EMatchTheoremParam.lean`). Clean seeds them
+    /// into the preprocessing `simp`'s `extra_lemmas`, which delta-unfolds a
+    /// name that resolves to a definition and rewrites with one that resolves
+    /// to an equation. Empty by default: a bare `grind` supplies none.
+    pub extra_lemmas: Vec<clean_parser::SurfaceName>,
+    /// Whether preprocessing may also seed the ENVIRONMENT's `@[grind]` set.
+    ///
+    /// Off by default, and turned on only for the retry pass in
+    /// [`crate::tactic::grind::grind_with_params`]. The ambient set unfolds
+    /// definitions (`Function.update`) that `@[simp]` lemmas are stated over in
+    /// their FOLDED form, so seeding it unconditionally could take a goal the
+    /// folded lemmas already close and hand the closers an unfolded one they
+    /// do not. Running it only after the unwidened pass has failed makes the
+    /// widening strictly additive.
+    pub use_env_grind_lemmas: bool,
 }
 
 impl Default for GrindConfig {
@@ -55,6 +73,8 @@ impl Default for GrindConfig {
             use_automation: true,
             use_arithmetic_closers: true,
             automation_timeout_ms: 100,
+            extra_lemmas: Vec::new(),
+            use_env_grind_lemmas: false,
         }
     }
 }
@@ -116,6 +136,20 @@ impl GrindConfig {
     #[must_use]
     pub fn with_automation_timeout_ms(mut self, ms: u64) -> Self {
         self.automation_timeout_ms = ms;
+        self
+    }
+
+    /// The names from the tactic's own `[...]` parameter list.
+    #[must_use]
+    pub(crate) fn with_extra_lemmas(mut self, lemmas: Vec<clean_parser::SurfaceName>) -> Self {
+        self.extra_lemmas = lemmas;
+        self
+    }
+
+    /// Whether the environment's `@[grind]` set is seeded into preprocessing.
+    #[must_use]
+    pub(crate) fn with_env_grind_lemmas(mut self, enabled: bool) -> Self {
+        self.use_env_grind_lemmas = enabled;
         self
     }
 }

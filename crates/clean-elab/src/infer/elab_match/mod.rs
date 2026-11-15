@@ -10,12 +10,27 @@
 //! Sub-modules split per #307.
 
 mod alias_patterns;
+mod catch_all_reach;
 mod ctor_order;
 mod helpers;
 mod if_let;
+mod join_point;
+#[cfg(any(test, debug_assertions))]
+pub use join_point::take_join_outcomes;
+pub use join_point::JoinOutcome;
 mod match_arms;
+mod match_pattern_unfold;
+mod name_classification;
 mod nested_ctor;
+mod packed_motive;
 mod rec_arm;
+mod rec_column_split;
+mod row_reach;
+mod shared_alt;
+mod signature;
+
+#[cfg(test)]
+mod typed_name_tests;
 
 use super::*;
 use crate::tactic::bvar_ops::lift_bvars;
@@ -23,8 +38,22 @@ pub(in crate::infer) use alias_patterns::{
     expand_do_or_match_arms, expand_or_match_arms, prepend_do_alias_binding,
     wrap_alias_surface_body,
 };
+pub(in crate::infer) use row_reach::{redundant_alternative, RowReach};
+pub(in crate::infer) use shared_alt::{SharedAltBinding, SharedCatchAlls};
+pub(in crate::infer) use signature::complete_signature_inductive;
 
 pub(in crate::infer) type ExtraParamBinding = (FVarId, BinderInfo, Expr);
+
+/// A row of the constructor-field decision tree
+/// (`ElabCtx::build_column_split_surface`): its remaining column patterns, its
+/// pending `let` bindings `(user variable, column ident)`, its body, and the
+/// alternative it came from (its `RowReach` origin).
+pub(in crate::infer) type ColumnSplitRow = (
+    Vec<SurfacePattern>,
+    Vec<(SurfaceName, SurfaceName)>,
+    SurfaceExpr,
+    usize,
+);
 
 /// Authenticated metadata for a match eliminator application.
 ///
@@ -37,6 +66,23 @@ pub(in crate::infer) type ExtraParamBinding = (FVarId, BinderInfo, Expr);
 pub(in crate::infer) struct MatchEliminatorMetadata {
     pub major_after_motive: bool,
     pub recursor: clean_kernel::RecursorVal,
+    /// The eliminator is Lean's imported `casesOn` for ONE member of a
+    /// multi-motive (mutual or nested) family: it takes that member's motive
+    /// and minors only (`Lean.Json.casesOn` over the four-motive `Json.rec`,
+    /// G33), unlike Clean's native `casesOn`, which takes every motive and
+    /// minor of the block.
+    pub member_cases_on: bool,
+}
+
+impl MatchEliminatorMetadata {
+    /// The motive slots the eliminator's own telescope takes.
+    pub(in crate::infer) fn eliminator_num_motives(&self) -> usize {
+        if self.member_cases_on {
+            1
+        } else {
+            self.recursor.num_motives as usize
+        }
+    }
 }
 
 pub(in crate::infer) struct NestedPatternFieldPlan {
@@ -56,17 +102,43 @@ pub(in crate::infer) enum NestedPatternPlan {
     CasesOn {
         field_expr: Expr,
         field_ty: Expr,
-        target_ctor_name: String,
+        target_ctor_name: SurfaceName,
         target_fields: Vec<NestedPatternFieldPlan>,
     },
 }
 
+fn typed_ident(name: SurfaceName) -> SurfaceExpr {
+    SurfaceExpr::Ident(clean_parser::Span::dummy(), name)
+}
+
+fn typed_let(name: SurfaceName, value: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
+    SurfaceExpr::Let(
+        clean_parser::Span::dummy(),
+        SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit),
+        Box::new(value),
+        Box::new(body),
+    )
+}
+
+/// Generated binder spelling with exact component boundaries. A numeric or
+/// anonymous input uses a disjoint internal family, not a decimal string.
+fn generated_prefixed_name(prefix: &str, source: &SurfaceName) -> SurfaceName {
+    if let Some((first, rest)) = source.split_first() {
+        if let clean_kernel::name::NameInner::Str(_, text) = first.name().inner() {
+            return SurfaceName::from_name(Name::anon().str(format!("{prefix}{text}")))
+                .append(&SurfaceName::from_name(rest.into_name()));
+        }
+    }
+    SurfaceName::from_name(Name::anon().num(0x4d41_5443).str(prefix))
+        .append(&SurfaceName::from_name(source.name().clone()))
+}
+
 fn ensure_nat_pattern_scrutinee(
     context: &str,
-    type_name: &str,
+    type_name: &SurfaceName,
     pattern_kind: &str,
 ) -> Result<(), ElabError> {
-    if type_name == "Nat" {
+    if type_name.name() == &Name::anon().str("Nat") {
         Ok(())
     } else {
         Err(ElabError::NotImplemented(format!(
@@ -77,14 +149,15 @@ fn ensure_nat_pattern_scrutinee(
 
 pub(in crate::infer) fn ensure_supported_literal_pattern(
     context: &str,
-    type_name: &str,
+    type_name: &SurfaceName,
     lit: &SurfaceLit,
 ) -> Result<(), ElabError> {
     ensure_nat_pattern_scrutinee(context, type_name, "literal")?;
     match lit {
         SurfaceLit::Nat(_) => Ok(()),
         _ => Err(ElabError::NotImplemented(format!(
-            "{context}: only Nat literal patterns are currently supported, got {lit:?}"
+            "{context}: only Nat literal patterns are currently supported, got {}",
+            crate::error_render::lit(lit)
         ))),
     }
 }
@@ -96,12 +169,12 @@ impl<'a> ElabCtx<'a> {
     /// reconstruct erased helper motives or minors.
     pub(in crate::infer) fn match_eliminator_metadata(
         &self,
-        type_name: &str,
+        type_name: &SurfaceName,
         eliminator_name: &Name,
         is_cases_on: bool,
     ) -> Result<MatchEliminatorMetadata, ElabError> {
         if let Some(rec) = self.env.get_recursor(eliminator_name) {
-            if rec.inductive_name != Name::from_string(type_name) {
+            if rec.inductive_name != type_name.name().clone() {
                 return Err(ElabError::InternalInvariant(format!(
                     "recursor metadata `{eliminator_name}` identifies inductive `{}` instead of match scrutinee `{type_name}`",
                     rec.inductive_name
@@ -114,6 +187,7 @@ impl<'a> ElabCtx<'a> {
                 major_after_motive: rec.arg_order
                     == clean_kernel::RecursorArgOrder::MajorAfterMotive,
                 recursor: rec.clone(),
+                member_cases_on: false,
             });
         }
 
@@ -126,7 +200,7 @@ impl<'a> ElabCtx<'a> {
         // In an imported environment `T.casesOn` is a definition whose value
         // reorders `T.rec` arguments.  Its wrapper layout is fixed by Lean, but
         // all arity/rule information must still come from the genuine `.rec`.
-        let rec_name = Name::from_string(&format!("{type_name}.rec"));
+        let rec_name = type_name.name().clone().str("rec");
         let recursor = self
             .env
             .get_recursor(&rec_name)
@@ -137,7 +211,7 @@ impl<'a> ElabCtx<'a> {
                 actual: "missing".to_string(),
             })?
             .clone();
-        if recursor.inductive_name != Name::from_string(type_name) {
+        if recursor.inductive_name != type_name.name().clone() {
             return Err(ElabError::InternalInvariant(format!(
                 "recursor metadata `{rec_name}` identifies inductive `{}` instead of imported cases family `{type_name}`",
                 recursor.inductive_name
@@ -147,9 +221,16 @@ impl<'a> ElabCtx<'a> {
         let ind_info = self.authenticate_inductive_metadata(&recursor.inductive_name)?;
         let minor_rules = self.recursor_minor_rules(ind_info, &recursor)?;
         self.authenticate_imported_cases_on_cached(eliminator_name, &rec_name, &minor_rules)?;
+        // Lean's member wrapper (one motive) or a block wrapper (every
+        // motive, Clean's own shape): the authenticated telescope decides.
+        let member_cases_on = self
+            .env
+            .get_const(eliminator_name)
+            .is_some_and(|cases| Environment::cases_on_is_member_shaped(&cases.type_, &recursor));
         Ok(MatchEliminatorMetadata {
             major_after_motive: true,
             recursor,
+            member_cases_on,
         })
     }
 
@@ -185,11 +266,15 @@ impl<'a> ElabCtx<'a> {
         // body can still refer to it (it equals the scrutinee).
         let default_body: SurfaceExpr = match &default_arm.pattern {
             SurfacePattern::Wildcard => default_arm.body.clone(),
-            SurfacePattern::Var(name) if !name.contains('.') => SurfaceExpr::let_expr(
-                name.clone(),
-                scrutinee_surface.clone(),
-                default_arm.body.clone(),
-            ),
+            SurfacePattern::Var(name)
+                if name.parent().is_anonymous() && !name.is_relative_constructor() =>
+            {
+                typed_let(
+                    name.clone(),
+                    scrutinee_surface.clone(),
+                    default_arm.body.clone(),
+                )
+            }
             _ => return None,
         };
 
@@ -225,7 +310,10 @@ impl<'a> ElabCtx<'a> {
             // cond := BEq.beq scrutinee <lit>   (a `Bool`, eliminated via Bool.rec)
             let cond = SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "BEq.beq".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("BEq.beq"),
+                )),
                 vec![
                     SurfaceArg::positional(scrutinee_surface.clone()),
                     SurfaceArg::positional(SurfaceExpr::Lit(Span::dummy(), lit)),
@@ -250,7 +338,10 @@ pub(in crate::infer) fn desugar_nonzero_nat_lit(k: u64) -> SurfacePattern {
     if k == 0 {
         SurfacePattern::Lit(SurfaceLit::Nat(0))
     } else {
-        SurfacePattern::Ctor("Nat.succ".to_string(), vec![desugar_nonzero_nat_lit(k - 1)])
+        SurfacePattern::Ctor(
+            SurfaceName::generated_path("Nat.succ"),
+            vec![desugar_nonzero_nat_lit(k - 1)],
+        )
     }
 }
 
@@ -266,7 +357,7 @@ pub(in crate::infer) fn desugar_nat_numeral_add_pattern(
         inner_pat.clone()
     } else {
         SurfacePattern::Ctor(
-            "Nat.succ".to_string(),
+            SurfaceName::generated_path("Nat.succ"),
             vec![desugar_nat_numeral_add_pattern(inner_pat, k - 1)],
         )
     }
@@ -297,23 +388,24 @@ pub(in crate::infer) fn normalize_nested_nat_numeral_add_pattern(
 
 pub(in crate::infer) fn numeral_add_pattern_binder_name(
     context: &str,
-    type_name: &str,
+    type_name: &SurfaceName,
     inner_pat: &SurfacePattern,
     k: u64,
-) -> Result<String, ElabError> {
+) -> Result<SurfaceName, ElabError> {
     ensure_nat_pattern_scrutinee(context, type_name, "numeral-add")?;
     match inner_pat {
         SurfacePattern::Var(name) => Ok(name.clone()),
-        SurfacePattern::Wildcard => Ok("_".to_string()),
+        SurfacePattern::Wildcard => Ok(SurfaceName::generated_path("_")),
         _ => Err(ElabError::NotImplemented(format!(
-            "{context}: unsupported inner pattern for `n + {k}`: {inner_pat:?}"
+            "{context}: unsupported inner pattern for `n + {k}`: {}",
+            crate::error_render::pattern(inner_pat)
         ))),
     }
 }
 
 pub(in crate::infer) fn ensure_ctor_pattern_arity(
     context: &str,
-    full_ctor: &str,
+    full_ctor: &SurfaceName,
     expected_fields: Option<usize>,
     actual_fields: usize,
 ) -> Result<(), ElabError> {
@@ -337,7 +429,7 @@ pub(in crate::infer) fn ensure_ctor_pattern_arity(
 /// error. The reported `expected` is the maximum the slot can hold.
 pub(in crate::infer) fn ensure_ctor_pattern_arity_at_most(
     context: &str,
-    full_ctor: &str,
+    full_ctor: &SurfaceName,
     max_fields: usize,
     actual_fields: usize,
 ) -> Result<(), ElabError> {
@@ -400,9 +492,7 @@ pub(in crate::infer) fn generalize_with_extra_params(
 /// with the scrutinee's type arguments first, so each `Auxᵢ` here is a closed term
 /// even for a parametric primary (e.g. `Rose α`). Returns fewer than `num_motives`
 /// entries (caller rejects the result) if the telescope is malformed.
-// Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
-// keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-#[allow(dead_code)]
+// Caller: the mutual structural lift (`infer/mutual_lift/slots.rs`).
 pub(in crate::infer) fn motive_domains_from_rec_type(
     rec_type: &Expr,
     num_motives: usize,
@@ -438,15 +528,17 @@ impl<'a> ElabCtx<'a> {
     /// registration.
     fn lower_single_catchall_match_arm(
         &mut self,
-        discr_hyp: Option<&str>,
-        pattern_var: Option<&str>,
+        discr_hyp: Option<&SurfaceName>,
+        pattern_var: Option<&SurfaceName>,
         body: &SurfaceExpr,
         scrutinee_ty: &Expr,
         scrutinee_expr: &Expr,
     ) -> Result<Expr, ElabError> {
         // `x✝` mirrors Lean's inaccessible pattern variable for `| _ =>`.
-        let var_name = pattern_var.unwrap_or("x✝");
-        let fvar = self.push_local(var_name.to_string(), scrutinee_ty.clone());
+        let var_name = pattern_var
+            .cloned()
+            .unwrap_or_else(|| SurfaceName::generated_path("x✝"));
+        let fvar = self.push_local(var_name.clone(), scrutinee_ty.clone());
         let hyp_binding = match discr_hyp {
             Some(h) => {
                 let u = self.infer_sort(scrutinee_ty)?;
@@ -462,8 +554,8 @@ impl<'a> ElabCtx<'a> {
                     Expr::const_(Name::from_string("Eq.refl"), vec![u]),
                     [scrutinee_ty.clone(), scrutinee_expr.clone()],
                 );
-                let h_fvar = self.push_local(h.to_string(), eq_ty.clone());
-                Some((h.to_string(), h_fvar, eq_ty, refl))
+                let h_fvar = self.push_local(h.clone(), eq_ty.clone());
+                Some((h.clone(), h_fvar, eq_ty, refl))
             }
             None => None,
         };
@@ -473,7 +565,7 @@ impl<'a> ElabCtx<'a> {
         if let Some((h_name, h_fvar, eq_ty, refl)) = hyp_binding {
             self.pop_local();
             inner = Expr::let_named(
-                Name::from_string(&h_name),
+                h_name.name().clone(),
                 eq_ty,
                 refl,
                 inner.abstract_fvar(h_fvar),
@@ -484,7 +576,7 @@ impl<'a> ElabCtx<'a> {
         let inner = inner.abstract_fvar(fvar);
         let non_dep = pattern_var.is_none() && discr_hyp.is_none();
         Ok(Expr::let_named(
-            Name::from_string(var_name),
+            var_name.name().clone(),
             scrutinee_ty.clone(),
             scrutinee_expr.clone(),
             inner,
@@ -505,7 +597,7 @@ impl<'a> ElabCtx<'a> {
     /// see [`Self::elab_match_with_scrutinee_hyp`].
     pub(in crate::infer) fn elab_match(
         &mut self,
-        discr_hyp: Option<&str>,
+        discr_hyp: Option<&SurfaceName>,
         scrutinee: &SurfaceExpr,
         arms: &[clean_parser::SurfaceMatchArm],
     ) -> Result<Expr, ElabError> {
@@ -522,6 +614,9 @@ impl<'a> ElabCtx<'a> {
         // concrete result never flows into `?m`. Clearing here is the Lean-faithful
         // order (elaborate the discriminant on its own, then the result type drives
         // the arms); it is restored immediately for `branch_ty`/arm elaboration.
+        for arm in arms {
+            self.check_pattern_linear(&arm.pattern)?;
+        }
         let saved_scrutinee_expected = self.current_expected_type.take();
         let scrutinee_expr = self.elaborate(scrutinee)?;
         let scrutinee_ty = self.infer_type(&scrutinee_expr)?;
@@ -586,14 +681,11 @@ impl<'a> ElabCtx<'a> {
 
         let type_name = self.get_type_name(&scrutinee_ty_whnf)?;
 
-        let ind = self
-            .env
-            .get_inductive(&Name::from_string(&type_name))
-            .ok_or_else(|| {
-                ElabError::NotImplemented(format!(
-                    "empty match: `{type_name}` is not an inductive type"
-                ))
-            })?;
+        let ind = self.env.get_inductive(type_name.name()).ok_or_else(|| {
+            ElabError::NotImplemented(format!(
+                "empty match: `{type_name}` is not an inductive type"
+            ))
+        })?;
 
         // A zero-minor recursor only discharges a type that is uninhabited *by
         // construction* (no constructors). A type WITH constructors demands real
@@ -635,7 +727,7 @@ impl<'a> ElabCtx<'a> {
             expected.clone(),
         );
 
-        let rec_name = Name::from_string(&format!("{type_name}.rec"));
+        let rec_name = type_name.name().clone().str("rec");
         let levels = self.eliminator_levels(&rec_name, &scrutinee_ty_whnf, &expected)?;
         let mut elim = Expr::const_(rec_name, levels);
         // params… then the motive; zero minors (zero constructors); zero indices;
@@ -691,7 +783,7 @@ impl<'a> ElabCtx<'a> {
         };
         let num_params = t_whnf.get_app_num_args();
 
-        let nc_name = Name::from_string(&format!("{tname}.noConfusion"));
+        let nc_name = tname.clone().str("noConfusion");
         let nc_arity = self
             .env
             .get_const(&nc_name)
@@ -826,7 +918,7 @@ impl<'a> ElabCtx<'a> {
     /// silently dropped.
     pub(in crate::infer) fn elab_match_with_scrutinee_hyp(
         &mut self,
-        discr_hyp: Option<&str>,
+        discr_hyp: Option<&SurfaceName>,
         scrutinee_expr: Expr,
         scrutinee_ty: Expr,
         scrutinee_surface: Option<&SurfaceExpr>,
@@ -845,7 +937,7 @@ impl<'a> ElabCtx<'a> {
 
     fn elab_match_with_scrutinee_hyp_inner(
         &mut self,
-        discr_hyp: Option<&str>,
+        discr_hyp: Option<&SurfaceName>,
         scrutinee_expr: Expr,
         scrutinee_ty: Expr,
         scrutinee_surface: Option<&SurfaceExpr>,
@@ -874,8 +966,33 @@ impl<'a> ElabCtx<'a> {
 
         // Pre-expand Or-pattern arms: `| p1 | p2 => body` becomes two arms
         // with the same body. This must happen before casesOn construction.
-        let expanded_arms = expand_or_match_arms(arms);
+        let expanded_arms = expand_or_match_arms(arms)
+            .into_iter()
+            .map(|mut arm| {
+                arm.pattern = self.normalize_match_pattern_names(&arm.pattern, &scrutinee_ty)?;
+                Ok(arm)
+            })
+            .collect::<Result<Vec<_>, ElabError>>()?;
         let arms = &expanded_arms;
+        // Lean refuses an alternative no value selects; behind a catch-all
+        // every alternative is one (G62, `catch_all_reach.rs`).
+        if let Some(alt) =
+            self.first_alternative_after_catch_all(arms.iter().map(|arm| &arm.pattern))
+        {
+            return Err(redundant_alternative("the match", alt));
+        }
+
+        // A catch-all arm is elaborated once, as a join point, instead of
+        // once per constructor it covers (`join_point`).
+        if let Some(lowered) = self.try_lower_match_with_join_point(
+            &scrutinee_expr,
+            &scrutinee_ty,
+            scrutinee_surface,
+            discr_hyp.is_some(),
+            arms,
+        )? {
+            return Ok(lowered);
+        }
 
         // Check for simple single-arm cases first
         if arms.len() == 1 {
@@ -946,9 +1063,10 @@ impl<'a> ElabCtx<'a> {
                     if !self.is_def_eq(&pattern_expr, &scrutinee_expr) {
                         return Err(ElabError::TypeMismatch {
                             expected: format!(
-                                "inaccessible pattern definitionally equal to {scrutinee_expr:?}"
+                                "inaccessible pattern definitionally equal to {}",
+                                crate::error_render::term(&scrutinee_expr)
                             ),
-                            actual: format!("{pattern_expr}"),
+                            actual: crate::error_render::term(&pattern_expr),
                         });
                     }
                     let body_expr = self.elaborate_with_expected_type(
@@ -1016,8 +1134,8 @@ impl<'a> ElabCtx<'a> {
                         pattern: arm.pattern.clone(),
                         body: SurfaceExpr::Lambda(
                             arm.span,
-                            vec![SurfaceBinder::new(
-                                h.to_string(),
+                            vec![SurfaceBinder::new_typed(
+                                h.clone(),
                                 None,
                                 SurfaceBinderInfo::Explicit,
                             )],
@@ -1045,17 +1163,33 @@ impl<'a> ElabCtx<'a> {
         // returns `None` (falls through) whenever the scrutinee is unavailable or
         // the arms are not a literal-pattern + trailing catch-all shape, so
         // genuine inductive matches are unaffected.
-        if type_name != "Nat" && !arms.is_empty() {
-            if let Some(h) = discr_hyp {
-                // The BEq/ite cascade lowering has no per-branch equation to
-                // offer — refuse loud rather than bind `h` to the wrong thing.
-                return Err(ElabError::MatchDiscrHypUnsupported {
-                    hyp: h.to_string(),
-                    shape: format!("literal-pattern match on `{type_name}`"),
-                });
-            }
+        //
+        // The `discr_hyp` refusal below sits INSIDE the branch that has actually
+        // built a cascade, not above it. It used to sit above, and the guard
+        // above it used to read `type_name == "String" || type_name == "Char"`;
+        // `120282d41` (2026-07-15) widened that to "anything but Nat" for the
+        // `discr_hyp = None` path it was testing and hoisted the refusal over
+        // the shape test by leaving it where it was. From then on a genuine
+        // CONSTRUCTOR match under `match h :` — `| none => .. | some k => ..`,
+        // `| true => .. | false => ..` — was refused with a message naming a
+        // "literal-pattern match" shape its arms do not have, instead of
+        // reaching the casesOn/equation-wrapped-motive path that handles it.
+        // `build_literal_match_cascade` is the only real shape test (it returns
+        // `None` for every constructor pattern), so the refusal belongs after
+        // it has said yes.
+        if type_name.name() != &Name::anon().str("Nat") && !arms.is_empty() {
             if let Some(scrutinee_surface) = scrutinee_surface {
                 if let Some(cascade) = Self::build_literal_match_cascade(scrutinee_surface, arms) {
+                    if let Some(h) = discr_hyp {
+                        // The BEq/ite cascade lowering has no per-branch equation
+                        // to offer — refuse loud rather than bind `h` to the
+                        // wrong thing. Reached only once the arms are KNOWN to be
+                        // the literal-pattern shape the message names.
+                        return Err(ElabError::MatchDiscrHypUnsupported {
+                            hyp: h.to_string(),
+                            shape: format!("literal-pattern match on `{type_name}`"),
+                        });
+                    }
                     return self.elaborate_with_expected_type(
                         &cascade,
                         self.current_expected_type.clone(),
@@ -1066,8 +1200,23 @@ impl<'a> ElabCtx<'a> {
 
         // Check if this match is on the decreasing argument of a recursive def (#381)
         // If so, use T.rec instead of T.casesOn to get the inductive hypothesis
-        let use_rec =
-            scrutinee_surface.is_some_and(|scrutinee| self.is_match_on_decreasing_arg(scrutinee));
+        let use_rec = scrutinee_surface
+            .is_some_and(|scrutinee| self.is_match_on_decreasing_arg(scrutinee))
+            && self.recursive_def_ctx.as_ref().is_some_and(|ctx| {
+                ctx.decreasing_binder_index()
+                    .and_then(|index| ctx.parameters.get(index))
+                    // The major premise must BE the decreasing parameter's
+                    // local, not merely convertible to it: the recursion-site
+                    // check (`recursion_site`) finds this recursor again in
+                    // the elaborated body by that local, and a `let` alias of
+                    // the parameter is gone (abstracted) by then.
+                    .is_some_and(|p| {
+                        matches!(
+                            self.metas.instantiate(&scrutinee_expr).kind(),
+                            ExprKind::FVar(id) if *id == p.fvar
+                        )
+                    })
+            });
         if use_rec {
             if let Some(h) = discr_hyp {
                 // `T.rec` folds induction hypotheses and extra params into the
@@ -1087,7 +1236,10 @@ impl<'a> ElabCtx<'a> {
         // dependent `fun (x : T) => R[scrutinee := x]`, so the kernel accepts each
         // minor premise `mᵢ : R[scrutinee := ctorᵢ]` (which differ per branch).
         //
-        // We detect this when the scrutinee elaborated to a bare local `FVar` that
+        // Packed multi-discriminant tuples also generalize their distinct local
+        // leaves through projections (`packed_motive`), so their minors refine
+        // the original components rather than proving an unspecialized goal.
+        // For a single discriminant we detect a bare local `FVar` that
         // genuinely occurs in the (instantiated) expected type. Abstracting that
         // fvar yields the motive body `R[scrutinee := BVar(0)]`; if abstraction
         // leaves the type unchanged the expected type is constant in the scrutinee
@@ -1096,52 +1248,54 @@ impl<'a> ElabCtx<'a> {
         // Restricted to `casesOn` (not `use_rec`): recursive defs fold extra
         // params into the motive via a separate mechanism, and combining a
         // value-dependent motive with induction hypotheses is a distinct case.
+        // Discover the new motive BEFORE replacing the enclosing match's
+        // state. A rejected packed type family must not leak cleared motive
+        // state into a caller that handles the elaboration error.
+        let dependent_motive = if use_rec {
+            None
+        } else if let Some(expected) = self.current_expected_type.clone() {
+            let expected = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(&expected));
+            if let ExprKind::FVar(scrutinee_fvar) = scrutinee_expr.kind() {
+                let body = expected.abstract_fvar(*scrutinee_fvar);
+                (body != expected).then_some(body)
+            } else {
+                self.packed_match_motive(&scrutinee_expr, &scrutinee_ty, &expected)?
+            }
+        } else {
+            None
+        };
         let saved_dependent_motive = self.match_dependent_motive.take();
         let saved_dependent_motive_indices =
             std::mem::replace(&mut self.match_dependent_motive_indices, 0);
         let saved_index_discriminating_punit = self.match_index_discriminating_punit.take();
-        if !use_rec {
-            if let ExprKind::FVar(scrutinee_fvar) = scrutinee_expr.kind() {
-                if let Some(expected) = self.current_expected_type.clone() {
-                    let expected = self
-                        .metas
-                        .instantiate_levels(&self.metas.instantiate(&expected));
-                    let motive_body = expected.abstract_fvar(*scrutinee_fvar);
-                    if motive_body != expected {
-                        self.match_dependent_motive = Some(motive_body);
-                    }
-                }
-            }
-        }
+        let saved_recursive_ctx = self.recursive_def_ctx.clone();
+        // For a `.rec` lowering: the eliminator, the major premise's argument
+        // position and the parameters recursive calls may change, recorded as
+        // a recursion site once the lowering succeeds.
+        let mut rec_site: Option<(Name, usize, Vec<FVarId>)> = None;
+        let rec_major: Option<FVarId> = match self.metas.instantiate(&scrutinee_expr).kind() {
+            ExprKind::FVar(id) if use_rec => Some(*id),
+            _ => None,
+        };
+        self.match_dependent_motive = dependent_motive;
 
         // Lower the rest of the match with the (possibly dependent) motive in
         // scope, restoring the saved motive on every exit so nested/sibling
         // matches never observe a stale motive.
         let lowered = (|| {
-            // Collect extra param info for varying-parameter support (#1386).
-            // When the recursive function has params after the decreasing arg (e.g.,
-            // `lift_at (e : KExpr) (cutoff : Nat) (amount : Nat)`), we fold them into
-            // the motive so IHs can express results with different param values.
+            // Generalize movable binders on BOTH sides of the major argument,
+            // retaining the dependency order of the declaration telescope.
             let extra_param_info: Vec<ExtraParamBinding> = if use_rec {
-                if let Some(ref ctx) = self.recursive_def_ctx {
-                    ctx.extra_params
-                        .iter()
-                        .filter_map(|param| {
-                            self.lookup_local(&param.name)
-                                .map(|(fvar, ty)| (fvar, param.binder_info, ty.clone()))
-                        })
-                        .collect()
-                } else {
-                    vec![]
-                }
+                self.generalize_recursive_parameters(&scrutinee_ty)?
             } else {
                 vec![]
             };
-
             let eliminator_name = if use_rec {
-                Name::from_string(&format!("{type_name}.rec"))
+                type_name.name().clone().str("rec")
             } else {
-                Name::from_string(&format!("{type_name}.casesOn"))
+                type_name.name().clone().str("casesOn")
             };
             // Annotated discriminant: resolve the ground expected type C up
             // front — the equation-wrapped motive and the shared branch type
@@ -1192,7 +1346,7 @@ impl<'a> ElabCtx<'a> {
                 // even when the motive is scrutinee-dependent.
                 let scrutinee_is_indexed = self
                     .env
-                    .get_inductive(&Name::from_string(&type_name))
+                    .get_inductive(type_name.name())
                     .is_some_and(|ind| ind.num_indices > 0);
                 let from_expected = if let Some(c) = &hyp_expected {
                     Some(c.clone())
@@ -1239,15 +1393,19 @@ impl<'a> ElabCtx<'a> {
                 &type_name,
                 branch_ty,
             )?;
-            // Create eliminator with motive + inductive universe levels (#422).
+            // Generalizing a Type-valued parameter raises the motive's sort.
+            // Select the recursor universe from the actual Pi telescope, not
+            // just its final result (e.g. `(A : Type) -> A -> Nat : Type 1`).
+            let generalized_result =
+                generalize_with_extra_params(branch_ty.clone(), &extra_param_info);
             let elim_levels =
-                self.eliminator_levels(&eliminator_name, &scrutinee_ty, &branch_ty)?;
+                self.eliminator_levels(&eliminator_name, &scrutinee_ty, &generalized_result)?;
 
             // Index count and scrutinee decomposition for indexed inductives (#796).
             // Return a proper error if the inductive is not registered (#422 safety).
             let ind_info = self
                 .env
-                .get_inductive(&Name::from_string(&type_name))
+                .get_inductive(type_name.name())
                 .cloned()
                 .ok_or_else(|| {
                     ElabError::NotImplemented(format!(
@@ -1354,6 +1512,14 @@ impl<'a> ElabCtx<'a> {
             // For indexed inductives (#796), the motive takes index parameters
             // before the major premise:
             //   (fun (idx₀ : I₀) ... (idxₙ : Iₙ) (x : T idx₀ ... idxₙ) => R)
+            if use_rec && num_indices == 0 {
+                if let ExprKind::FVar(major) = scrutinee_expr.kind() {
+                    let body = generalized_result.abstract_fvar(*major);
+                    if body != generalized_result {
+                        self.match_dependent_motive = Some(body);
+                    }
+                }
+            }
             let motive = if num_indices > 0 && index_args.len() == num_indices {
                 // Dependent-return over the index: when the match's expected type
                 // varies with the index (e.g. `match v : IVec n with … : IVec n`),
@@ -1366,9 +1532,15 @@ impl<'a> ElabCtx<'a> {
                 //
                 // `match_dependent_motive` (+ `_indices`) is set so each arm
                 // recovers its own `motive idx(ctorᵢ)… (ctorᵢ fields…)` expected
-                // type in `arm_branch_ty`. `extra_param_info` is empty here (only
-                // populated for `use_rec`, which never sets a dependent motive).
-                let indexed_dep_body = if !use_rec {
+                // type in `arm_branch_ty`. Recursive motives abstract the whole
+                // generalized telescope, including index-dependent domains.
+                let indexed_dep_body = if use_rec {
+                    self.build_indexed_dependent_motive_body(
+                        &generalized_result,
+                        &index_args,
+                        &scrutinee_expr,
+                    )
+                } else {
                     self.current_expected_type.clone().and_then(|expected| {
                         self.build_indexed_dependent_motive_body(
                             &expected,
@@ -1376,8 +1548,6 @@ impl<'a> ElabCtx<'a> {
                             &scrutinee_expr,
                         )
                     })
-                } else {
-                    None
                 };
                 if let Some(ref dep_body) = indexed_dep_body {
                     self.match_dependent_motive = Some(dep_body.clone());
@@ -1500,14 +1670,18 @@ impl<'a> ElabCtx<'a> {
             // match only targets the primary type.  The authenticated recursor count is
             // essential here: restore erases helper types from `all_names`, while the
             // eliminator still carries their motive slots.
-            let num_motives = eliminator_metadata.recursor.num_motives as usize;
+            let num_motives = eliminator_metadata.eliminator_num_motives();
             if num_motives == 0 {
                 return Err(ElabError::InternalInvariant(format!(
                     "match eliminator `{eliminator_name}` declares no motives"
                 )));
             }
-            let selected_motive_idx =
-                self.selected_motive_index(&ind_info, num_motives, "plain mutual-inductive match")?;
+            // Lean's member `casesOn` has the one motive slot (G33).
+            let selected_motive_idx = if eliminator_metadata.member_cases_on {
+                0
+            } else {
+                self.selected_motive_index(&ind_info, num_motives, "plain mutual-inductive match")?
+            };
 
             // Supply every remaining motive from the eliminator's authoritative
             // telescope.  Nested-inductive restore intentionally erases helper
@@ -1564,6 +1738,15 @@ impl<'a> ElabCtx<'a> {
                 for idx_arg in &index_args {
                     result = Expr::app(result, idx_arg.clone());
                 }
+                if use_rec {
+                    // Read after the minors are elaborated: which parameters
+                    // their recursive calls change is known only now.
+                    rec_site = Some((
+                        eliminator_name.clone(),
+                        result.get_app_num_args(),
+                        self.recursive_changing_params(),
+                    ));
+                }
                 result = Expr::app(result, scrutinee_expr.clone());
             }
 
@@ -1576,6 +1759,7 @@ impl<'a> ElabCtx<'a> {
             // to properly unify their result types with the expected branch type.
             let saved_expected = self.current_expected_type.clone();
             self.set_expected_type(Some(branch_ty.clone()));
+            let args_before_minors = result.get_app_args().len();
 
             // Set by the `use_rec` telescope path when it has already emitted a
             // minor for every constructor in a nested mutual block, so the
@@ -1583,15 +1767,20 @@ impl<'a> ElabCtx<'a> {
             let mut nested_minors_already_supplied = false;
             let mut primary_alts: Vec<Expr> = Vec::new();
             let mut applied_primary_minor_names: Vec<Option<Name>> = Vec::new();
+            // `let`-bound shared right-hand sides the minors name (G76); in
+            // scope from here to the finished eliminator.
+            let mut shared_alt_bindings: Vec<SharedAltBinding> = Vec::new();
 
             if !use_rec {
-                if let Some(ordered_alts) = self.try_build_ctor_ordered_match_alts(
+                if let Some((ordered_alts, bindings)) = self.try_build_ctor_ordered_match_alts(
                     arms,
                     &type_name,
                     &scrutinee_ty,
                     &branch_ty,
                     &extra_param_info,
                 )? {
+                    self.push_shared_alt_bindings(&bindings);
+                    shared_alt_bindings = bindings;
                     for (index, alt) in ordered_alts.into_iter().enumerate() {
                         primary_alts.push(alt);
                         applied_primary_minor_names
@@ -1611,7 +1800,7 @@ impl<'a> ElabCtx<'a> {
                         primary_alts.push(alt);
                         applied_primary_minor_names.push(
                             self.top_level_ctor_target_name(&type_name, &arm.pattern)
-                                .map(|name| Name::from_string(&name)),
+                                .map(|name| name.name().clone()),
                         );
                     }
                     // A constructor may target at most ONE arm.
@@ -1686,7 +1875,7 @@ impl<'a> ElabCtx<'a> {
                         primary_alts.push(alt);
                         applied_primary_minor_names.push(
                             self.top_level_ctor_target_name(&type_name, &arm.pattern)
-                                .map(|name| Name::from_string(&name)),
+                                .map(|name| name.name().clone()),
                         );
                     }
                 }
@@ -1712,9 +1901,10 @@ impl<'a> ElabCtx<'a> {
                 )?;
                 if primary_alts.len() != primary_range.len() {
                     return Err(ElabError::InternalInvariant(format!(
-                        "plain multi-motive match compiled {} primary alternatives for authenticated range {primary_range:?}",
+                        "plain multi-motive match compiled {} primary alternatives for authenticated range {}",
                         primary_alts.len()
-                    )));
+                    ,
+                crate::error_render::opaque(&primary_range))));
                 }
 
                 let default_branch_value: Option<Expr> = if aux_punit_unit.is_none() {
@@ -1798,6 +1988,23 @@ impl<'a> ElabCtx<'a> {
             }
 
             self.set_expected_type(saved_expected);
+            if use_rec {
+                let mut motive_and_minors = vec![motive.clone()];
+                motive_and_minors.extend(
+                    result
+                        .get_app_args()
+                        .iter()
+                        .skip(args_before_minors)
+                        .map(|arg| (*arg).clone()),
+                );
+                // Values the `.rec` minors must not read (see
+                // `recursive_minor_forbidden_fvars`), computed now that the
+                // minors are elaborated and every recursive call has shown
+                // which generalized parameters it changes; the arm scopes have
+                // popped their locals again.
+                let rec_forbidden = self.recursive_minor_forbidden_fvars();
+                self.check_recursive_minors_closed(&rec_forbidden, &motive_and_minors)?;
+            }
             // For the `MajorAfterMinors` layout (`.rec`, or any recursor still
             // declaring it), the indices and major premise come AFTER the minors
             // (#796): motive → minors → indices → major. For the `MajorAfterMotive`
@@ -1806,6 +2013,15 @@ impl<'a> ElabCtx<'a> {
             if !major_after_motive {
                 for idx_arg in &index_args {
                     result = Expr::app(result, idx_arg.clone());
+                }
+                if use_rec {
+                    // Read after the minors are elaborated: which parameters
+                    // their recursive calls change is known only now.
+                    rec_site = Some((
+                        eliminator_name.clone(),
+                        result.get_app_num_args(),
+                        self.recursive_changing_params(),
+                    ));
                 }
                 result = Expr::app(result, scrutinee_expr);
             }
@@ -1821,11 +2037,24 @@ impl<'a> ElabCtx<'a> {
                 result = Expr::app(result, refl);
             }
 
-            Ok(result)
+            self.bind_shared_alts(result, &shared_alt_bindings)
         })();
         self.match_dependent_motive = saved_dependent_motive;
         self.match_dependent_motive_indices = saved_dependent_motive_indices;
         self.match_index_discriminating_punit = saved_index_discriminating_punit;
+        if let (Ok(_), Some((eliminator, major_index, changing)), Some(major), Some(ctx)) =
+            (&lowered, rec_site, rec_major, saved_recursive_ctx.as_ref())
+        {
+            self.record_structural_rec_site(recursion_site::StructuralRecSite {
+                func: ctx.func_name.clone(),
+                major_name: ctx.decreasing_arg_name.clone(),
+                eliminator,
+                major_index,
+                major,
+                changing,
+            });
+        }
+        self.recursive_def_ctx = saved_recursive_ctx;
         lowered
     }
 }

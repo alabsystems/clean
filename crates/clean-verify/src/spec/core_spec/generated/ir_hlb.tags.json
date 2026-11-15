@@ -11,7 +11,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
-  "functy": 435,
+  "functy": 410,
   "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. Reader A says 432 on the 2026-08-21 laneREG dump and 438 on the 2026-08-23 laneF8 dump where the fixture says 435 -- the recorded whole-crate drift class, instruction text byte-identical on all three. The pin compares reader B's header against the FIXTURE-ERA 435.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
@@ -21,7 +21,7 @@
     "index": 0,
     "ssa": 0,
     "ty": "struct#0",
-    "observed_ty": "struct.29",
+    "observed_ty": "struct.765",
     "rust_type": "self: ExprMeta",
     "note": "The receiver, BY VALUE. A u64 newtype arriving as a one-field aggregate -- which is why this chain performs no load and carries no heap premise. The core module holds only the SSA id, so this row is the only witness that the argument is the aggregate `EncodesExprMeta` destructures."
    }
@@ -45,7 +45,7 @@
    "interface": {
     "linkage": "external",
     "calling_conv": "rustcc",
-    "functy": 433,
+    "functy": 408,
     "functy_note": "Fixture-era. Reader A says 430 on the laneREG dump and 436 on the laneF8 dump -- the same drift class as the caller's 435 -> 432 -> 438, instruction text byte-identical on all three.",
     "producer": "trust",
     "params": [
@@ -54,7 +54,7 @@
       "index": 0,
       "ssa": 0,
       "ty": "struct#0",
-      "observed_ty": "struct.29",
+      "observed_ty": "struct.765",
       "rust_type": "self: ExprMeta",
       "note": "The SAME canonical struct the caller takes, and the sameness is the payload: the caller passes its own %0 straight through, so a callee whose receiver were a different type would be a different program through an identical CFG."
      }
@@ -76,7 +76,7 @@
  "structs": [
   {
    "canonical": 0,
-   "crate_id": 29,
+   "crate_id": 765,
    "alias": "ir_hlb_tself",
    "rust_type": "expr::meta::ExprMeta",
    "role": "INTERFACE-ONLY, like ir_fc_tflags and ir_fs_tsrc: the struct occurs in BOTH headers and in NO instruction of either body (the callee's extractfield names the u64 it reads, not the aggregate it reads from). The alias is minted so the pin is a registered term rather than a comment, and the value-addressed semantics never consults it."
@@ -85,7 +85,7 @@
  "funcs": [
   {
    "canonical": 0,
-   "crate_id": 3658,
+   "crate_id": 1730,
    "name": "expr::meta::ExprMeta::has_loose_bvars",
    "role": "SELF -- the root body, `(func 0 ...)` of the module. Its emitted text names its own id NOWHERE, so without this row a text reader cannot tell its own index from its callee's.",
    "observed_crate_id_by_producer": {
@@ -95,7 +95,7 @@
   },
   {
    "canonical": 1,
-   "crate_id": 3657,
+   "crate_id": 1729,
    "name": "expr::meta::ExprMeta::loose_bvar_range",
    "role": "The one callee -- and, uniquely so far, ALSO a body of this module. `call @func.3657` in the caller's text is the only place either id appears at all.",
    "observed_crate_id_by_producer": {

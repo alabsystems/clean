@@ -21,7 +21,7 @@ use crate::smt_verify::trust::SmtVerifyStats;
 fn test_competition_verdict_valid_literal_string() {
     let stats = SmtVerifyStats {
         total_steps: 1,
-        kernel_verified: 1,
+        step_checked: 1,
         ..Default::default()
     };
     // Must be the literal "valid" — not "VALID", "Valid", or "valid."
@@ -72,10 +72,10 @@ fn test_is_fully_verified_rejects_structurally_accepted_only() {
 
 #[test]
 fn test_classification_mixed_structurally_and_kernel_is_holey() {
-    // Mix of kernel_verified and structurally_accepted (no trusted): holey.
+    // Mix of step_checked and structurally_accepted (no trusted): holey.
     let stats = SmtVerifyStats {
         total_steps: 10,
-        kernel_verified: 7,
+        step_checked: 7,
         structurally_accepted: 3,
         ..Default::default()
     };
@@ -90,7 +90,7 @@ fn test_classification_one_trusted_among_many_verified_is_invalid() {
     // per SMT-COMP strict classification rules.
     let stats = SmtVerifyStats {
         total_steps: 101,
-        kernel_verified: 100,
+        step_checked: 100,
         trusted: 1,
         ..Default::default()
     };

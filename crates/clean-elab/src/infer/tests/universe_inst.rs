@@ -134,18 +134,33 @@ fn test_universe_inst_level_mismatch_too_many() {
 }
 
 #[test]
-fn test_universe_inst_level_mismatch_too_few() {
-    // MyPair.{1} should fail: MyPair has 2 universe params, got 1
+fn test_universe_inst_partial_list_fills_the_rest() {
+    // MyPair.{1}: MyPair has 2 universe params and one is given. As in Lean's
+    // `mkConst`, the given level fills the first parameter and the second is
+    // left to inference (pinned Lean v4.30.0-rc2: `@P2.{0}` for a two-level
+    // `P2` checks as `Prop → Sort u_1 → …`). Breadth class (65).
     let env = poly_env();
-    let err = elab_with_env(&env, "@MyPair.{1}").unwrap_err();
-    match err {
-        ElabError::UniverseLevelMismatch {
-            expected, actual, ..
-        } => {
-            assert_eq!(expected, 2);
-            assert_eq!(actual, 1);
+    let expr = elab_with_env(&env, "@MyPair.{1}").expect("a partial universe list elaborates");
+    match expr.kind() {
+        ExprKind::Const(name, levels) => {
+            assert_eq!(name, &Name::from_string("MyPair"));
+            assert_eq!(levels.len(), 2, "every parameter gets a level: {levels:?}");
+            assert_eq!(
+                levels[0],
+                Level::succ(Level::zero()),
+                "the given level comes first"
+            );
+            assert!(
+                matches!(levels[1], Level::Param(_)),
+                "the missing level is a fresh one left to inference, got {:?}",
+                levels[1]
+            );
+            assert_ne!(
+                levels[1], levels[0],
+                "the missing level is not the given one"
+            );
         }
-        other => panic!("expected UniverseLevelMismatch, got {other}"),
+        other => panic!("expected Const, got {other:?}"),
     }
 }
 

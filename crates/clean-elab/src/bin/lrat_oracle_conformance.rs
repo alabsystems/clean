@@ -5,7 +5,9 @@
 //! LRAT oracle-conformance gate binary.
 //!
 //! Runs clean's native LRAT verifiers against an external oracle on a
-//! maintained proof corpus. See `designs/2026-03-14-936-lrat-oracle-conformance-gate.md`.
+//! maintained proof corpus. Deprecated in favour of `clean kernel lrat-conform`
+//! (`docs/cli/kernel-lrat-conform.md`, #3443); the logic lives in
+//! `clean_elab::tactic::drat::oracle_conformance`.
 //!
 //! Usage:
 //!   cargo run -p clean-elab --bin lrat_oracle_conformance -- [OPTIONS]

@@ -1303,7 +1303,7 @@ impl Specification {
                     "(par_reduces_c_list_append env (kapp_args f) (kapp_args f') ",
                     "(ListType.cons KExpr a (ListType.nil KExpr)) (ListType.cons KExpr a' (ListType.nil KExpr)) ",
                     "hf ",
-                    "(par_reduces_c_list.cons env a a' (ListType.nil KExpr) (ListType.nil KExpr) ha (par_reduces_c_list.nil env)))))"
+                    "(par_reduces_c_list.cons env a a' (ListType.nil KExpr) (ListType.nil KExpr) ha (par_reduces_c_list.nil env))))"
                 )
                 .to_string(),
             ),
@@ -1392,36 +1392,7 @@ impl Specification {
         // par_reduces_c_list spine-congruence motive is in Type); this mirrors it with
         // C : Type via Empty.rec (which targets any sort) on the opt_is_none
         // discriminator transported along the false none = some equation.
-        self.add_definition(SpecDefinition {
-            name: "option_none_ne_some_type".to_string(),
-            type_src: concat!(
-                "forall (b : Type) (r : b) (C : Type), ",
-                "Eq (OptionType b) (OptionType.none b) (OptionType.some b r) -> C"
-            )
-            .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (b : Type) (r : b) (C : Type) ",
-                    "(h : Eq (OptionType b) (OptionType.none b) (OptionType.some b r)) => ",
-                    "Empty.rec (fun (_ : Empty) => C) ",
-                    "(Eq.substType (OptionType b) (opt_is_none b) ",
-                    "(OptionType.none b) (OptionType.some b r) h Nat.zero)"
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "Type-valued OptionType no-confusion: none /= some, discharging a Type-valued goal C. Empty discriminator (none -> Nat inhabited by zero, some -> Empty) transported along the false equation via opt_is_none + Empty.rec (any sort). The Type-valued sibling of option_none_ne_some, needed where the goal is in Type (par_reduces_c_list). DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "opt_is_none".to_string(),
-                "Eq.substType".to_string(),
-                "Empty.rec".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
+        // Registered earlier by add_iota_option_type_views.
 
         // par_reduces_c_spine_cong (TASK C): under the const-head guard and the
         // not-a-redex guard, a par_reduces_c step is a SPINE congruence — its spine
@@ -1895,54 +1866,7 @@ impl Specification {
         // ================================================================
 
         // opt_bind_some_inv_type: Type-valued sibling of opt_bind_some_inv.
-        self.add_definition(SpecDefinition {
-            name: "opt_bind_some_inv_type".to_string(),
-            type_src: concat!(
-                "forall (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (r : b) (C : Type), ",
-                "Eq (OptionType b) (opt_bind a b o f) (OptionType.some b r) -> ",
-                "(forall (w : a), Eq (OptionType a) o (OptionType.some a w) -> ",
-                "Eq (OptionType b) (f w) (OptionType.some b r) -> C) -> ",
-                "C"
-            )
-            .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (a : Type) (b : Type) (o : OptionType a) (f : a -> OptionType b) (r : b) (C : Type) ",
-                    "(h : Eq (OptionType b) (opt_bind a b o f) (OptionType.some b r)) ",
-                    "(k : forall (w : a), Eq (OptionType a) o (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) => ",
-                    "OptionType.rec a ",
-                    "(fun (o0 : OptionType a) => ",
-                    "Eq (OptionType b) (opt_bind a b o0 f) (OptionType.some b r) -> ",
-                    "(forall (w : a), Eq (OptionType a) o0 (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) -> C) ",
-                    "(fun (h0 : Eq (OptionType b) (opt_bind a b (OptionType.none a) f) (OptionType.some b r)) ",
-                    "(k0 : forall (w : a), Eq (OptionType a) (OptionType.none a) (OptionType.some a w) -> ",
-                    "Eq (OptionType b) (f w) (OptionType.some b r) -> C) => ",
-                    "option_none_ne_some_type b r C h0) ",
-                    "(fun (w : a) ",
-                    "(h0 : Eq (OptionType b) (opt_bind a b (OptionType.some a w) f) (OptionType.some b r)) ",
-                    "(k0 : forall (w0 : a), Eq (OptionType a) (OptionType.some a w) (OptionType.some a w0) -> ",
-                    "Eq (OptionType b) (f w0) (OptionType.some b r) -> C) => ",
-                    "k0 w (Eq.refl (OptionType a) (OptionType.some a w)) h0) ",
-                    "o h k"
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "Type-valued sibling of opt_bind_some_inv (C : Type): CPS inversion of opt_bind into a Type-valued continuation, via OptionType.rec (large-eliminating) + option_none_ne_some_type for the absurd none case. The leaf of the Type-valued inverter tower the (a)-join (par_strips_witness_c_star, a Type inductive) needs. DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "opt_bind".to_string(),
-                "OptionType.rec".to_string(),
-                "option_none_ne_some_type".to_string(),
-                "Eq.refl".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
+        // Registered earlier by add_iota_option_type_views.
 
         // NOTE: there is intentionally NO `nat_le_succ_or_type` /
         // `iota_reduct_app_inner_type`. `Le : Nat -> Nat -> Prop` is a two-ctor
@@ -1957,91 +1881,31 @@ impl Specification {
 
         // iota_reduct_some_inv_type: Type-valued sibling of iota_reduct_some_inv —
         // 5 nested opt_bind_some_inv_type (verbatim shape, C : Type).
-        {
-            let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
-            let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
-            let extras = format!("(list_drop (Nat.succ {major_idx}) (kapp_args e))");
-            let fields = "(list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major))";
-            let prefix = format!("(list_take {prefix_n} (kapp_args e))");
-            let reduct = format!(
-                "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} (recrule_rhs rule))))"
-            );
-            let l6 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct})");
-            let l5 = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {l6})"
-            );
-            let l4 = format!(
-                "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {l5})"
-            );
-            let l3 = format!("(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e))) {l4})");
-            let l2 = format!(
-                "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {l3})"
-            );
-            let kont = format!(
-                "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) -> \
-                 Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
-                 Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major) -> \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-                 Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-                 Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
-                 C)"
-            );
-            let value = format!(
-                "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Type) \
-                 (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) \
-                 (k : {kont}) => \
-                 opt_bind_some_inv_type Name KExpr (kexpr_const_name (kapp_fn e)) {l2} e' C h \
-                 (fun (recname : Name) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-                 (h1r : Eq (OptionType KExpr) ({l2} recname) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_type RecMeta KExpr (recmeta_for env recname) {l3} e' C h1r \
-                 (fun (meta : RecMeta) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h2r : Eq (OptionType KExpr) ({l3} meta) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_type KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e))) {l4} e' C h2r \
-                 (fun (major : KExpr) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-                 (h3r : Eq (OptionType KExpr) ({l4} major) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_type Name KExpr (kexpr_const_name (kapp_fn major)) {l5} e' C h3r \
-                 (fun (cname : Name) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h4r : Eq (OptionType KExpr) ({l5} cname) (OptionType.some KExpr e')) => \
-                 opt_bind_some_inv_type RecRule KExpr (recrule_for env recname cname) {l6} e' C h4r \
-                 (fun (rule : RecRule) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) ({l6} rule) (OptionType.some KExpr e')) => \
-                 k recname meta major cname rule h1 h2 h3 h4 h5 h5r))))))"
-            );
-            let type_src = format!(
-                "forall (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Type), \
-                 Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e') -> {kont} -> C"
-            );
-            self.add_definition(SpecDefinition {
-                name: "iota_reduct_some_inv_type".to_string(),
-                type_src,
-                value_src: Some(value),
-                is_axiom: false,
-                description: "Type-valued sibling of iota_reduct_some_inv (C : Type): CPS inversion of iota_reduct's 5-level opt_bind chain into a Type-valued continuation, via 5 nested opt_bind_some_inv_type. The Type-valued decomposition the (a)-join boundary inverter consumes. DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
-                category: AxiomCategory::DerivedLemma,
-                proof_status: ProofStatus::DerivedProved,
-                elaborated_type: None,
-                elaborated_value: None,
-                dependencies: Some(HashSet::from([
-                    "iota_reduct".to_string(),
-                    "opt_bind_some_inv_type".to_string(),
-                    "kexpr_const_name".to_string(),
-                    "recmeta_for".to_string(),
-                    "recrule_for".to_string(),
-                ])),
-                axiom_deps: HashSet::new(),
-            })?;
-        }
+        // The canonical guarded Type-valued iota view is already registered.
+
+        // A constant-headed non-redex retains its complete spine head, including
+        // the universe list. Name equality alone cannot transport RHS instances.
+        self.add_recursive_def(
+            r"def par_reduces_c_preserves_kapp_fn_nr (env : RecEnv) (f : KExpr) (f' : KExpr) (nm : Name) (hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name nm)) (hnr : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) (h : par_reduces_c env f f') : Eq KExpr (kapp_fn f) (kapp_fn f') :=
+ par_reduces_c.rec env (fun (s : KExpr) (t : KExpr) (_h : par_reduces_c env s t) => Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env s) (OptionType.none KExpr) -> Eq KExpr (kapp_fn s) (kapp_fn t))
+ (fun (s : KExpr) (_g : Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env s) (OptionType.none KExpr)) => Eq.refl KExpr (kapp_fn s))
+ (fun (A : KExpr) (A' : KExpr) (body : KExpr) (body' : KExpr) (arg : KExpr) (arg' : KExpr) (_hA : par_reduces_c env A A') (_hbody : par_reduces_c env body body') (_harg : par_reduces_c env arg arg') (_ihA : Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env A) (OptionType.none KExpr) -> Eq KExpr (kapp_fn A) (kapp_fn A')) (_ihbody : Eq (OptionType Name) (kexpr_const_name (kapp_fn body)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env body) (OptionType.none KExpr) -> Eq KExpr (kapp_fn body) (kapp_fn body')) (_iharg : Eq (OptionType Name) (kexpr_const_name (kapp_fn arg)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env arg) (OptionType.none KExpr) -> Eq KExpr (kapp_fn arg) (kapp_fn arg')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app (KExpr.lam A body) arg))) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.app (KExpr.lam A body) arg)) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.app (KExpr.lam A body) arg)) (kapp_fn (instantiate body' arg'))) g)
+ (fun (g0 : KExpr) (g0' : KExpr) (b : KExpr) (b' : KExpr) (_hg : par_reduces_c env g0 g0') (_hb : par_reduces_c env b b') (ihg : Eq (OptionType Name) (kexpr_const_name (kapp_fn g0)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env g0) (OptionType.none KExpr) -> Eq KExpr (kapp_fn g0) (kapp_fn g0')) (_ihb : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env b) (OptionType.none KExpr) -> Eq KExpr (kapp_fn b) (kapp_fn b')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app g0 b))) (OptionType.some Name nm)) (nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.app g0 b)) (OptionType.none KExpr)) => Eq.trans KExpr (kapp_fn (KExpr.app g0 b)) (kapp_fn g0) (kapp_fn (KExpr.app g0' b')) (kapp_fn_app g0 b) (Eq.trans KExpr (kapp_fn g0) (kapp_fn g0') (kapp_fn (KExpr.app g0' b')) (ihg (Eq.subst KExpr (fun (x : KExpr) => Eq (OptionType Name) (kexpr_const_name x) (OptionType.some Name nm)) (kapp_fn (KExpr.app g0 b)) (kapp_fn g0) (kapp_fn_app g0 b) g) (iota_reduct_app_none env g0 b nr)) (Eq.symm KExpr (kapp_fn (KExpr.app g0' b')) (kapp_fn g0') (kapp_fn_app g0' b'))))
+ (fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) (_hdom : par_reduces_c env dom dom') (_hbody : par_reduces_c env body body') (_ihdom : Eq (OptionType Name) (kexpr_const_name (kapp_fn dom)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env dom) (OptionType.none KExpr) -> Eq KExpr (kapp_fn dom) (kapp_fn dom')) (_ihbody : Eq (OptionType Name) (kexpr_const_name (kapp_fn body)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env body) (OptionType.none KExpr) -> Eq KExpr (kapp_fn body) (kapp_fn body')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.lam dom body))) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.lam dom body)) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.lam dom body)) (kapp_fn (KExpr.lam dom' body'))) g)
+ (fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) (_hdom : par_reduces_c env dom dom') (_hbody : par_reduces_c env body body') (_ihdom : Eq (OptionType Name) (kexpr_const_name (kapp_fn dom)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env dom) (OptionType.none KExpr) -> Eq KExpr (kapp_fn dom) (kapp_fn dom')) (_ihbody : Eq (OptionType Name) (kexpr_const_name (kapp_fn body)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env body) (OptionType.none KExpr) -> Eq KExpr (kapp_fn body) (kapp_fn body')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.pi dom body))) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.pi dom body)) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.pi dom body)) (kapp_fn (KExpr.pi dom' body'))) g)
+ (fun (dom : KExpr) (dom' : KExpr) (body : KExpr) (body' : KExpr) (_hdom : par_reduces_c env dom dom') (_hbody : par_reduces_c env body body') (_ihdom : Eq (OptionType Name) (kexpr_const_name (kapp_fn dom)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env dom) (OptionType.none KExpr) -> Eq KExpr (kapp_fn dom) (kapp_fn dom')) (_ihbody : Eq (OptionType Name) (kexpr_const_name (kapp_fn body)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env body) (OptionType.none KExpr) -> Eq KExpr (kapp_fn body) (kapp_fn body')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.forall_ dom body))) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.forall_ dom body)) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.forall_ dom body)) (kapp_fn (KExpr.forall_ dom' body'))) g)
+ (fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) (_hty : par_reduces_c env ty ty') (_hval : par_reduces_c env val val') (_hbody : par_reduces_c env body body') (_ihty : Eq (OptionType Name) (kexpr_const_name (kapp_fn ty)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env ty) (OptionType.none KExpr) -> Eq KExpr (kapp_fn ty) (kapp_fn ty')) (_ihval : Eq (OptionType Name) (kexpr_const_name (kapp_fn val)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env val) (OptionType.none KExpr) -> Eq KExpr (kapp_fn val) (kapp_fn val')) (_ihbody : Eq (OptionType Name) (kexpr_const_name (kapp_fn body)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env body) (OptionType.none KExpr) -> Eq KExpr (kapp_fn body) (kapp_fn body')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.let_ ty val body))) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.let_ ty val body)) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.let_ ty val body)) (kapp_fn (instantiate body' val'))) g)
+ (fun (s : KExpr) (t : KExpr) (hstep : iota_step env s t) (_g : Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (OptionType.some Name nm)) (hn : Eq (OptionType KExpr) (iota_reduct env s) (OptionType.none KExpr)) => option_none_ne_some KExpr t (Eq KExpr (kapp_fn s) (kapp_fn t)) (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (iota_reduct env s) (OptionType.some KExpr t) (Eq.symm (OptionType KExpr) (iota_reduct env s) (OptionType.none KExpr) hn) hstep))
+ (fun (ty : KExpr) (ty' : KExpr) (val : KExpr) (val' : KExpr) (body : KExpr) (body' : KExpr) (_hty : par_reduces_c env ty ty') (_hval : par_reduces_c env val val') (_hbody : par_reduces_c env body body') (_ihty : Eq (OptionType Name) (kexpr_const_name (kapp_fn ty)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env ty) (OptionType.none KExpr) -> Eq KExpr (kapp_fn ty) (kapp_fn ty')) (_ihval : Eq (OptionType Name) (kexpr_const_name (kapp_fn val)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env val) (OptionType.none KExpr) -> Eq KExpr (kapp_fn val) (kapp_fn val')) (_ihbody : Eq (OptionType Name) (kexpr_const_name (kapp_fn body)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env body) (OptionType.none KExpr) -> Eq KExpr (kapp_fn body) (kapp_fn body')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.let_ ty val body))) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.let_ ty val body)) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.let_ ty val body)) (kapp_fn (KExpr.let_ ty' val' body'))) g)
+ (fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) (_hsub : par_reduces_c env sub sub') (_ihsub : Eq (OptionType Name) (kexpr_const_name (kapp_fn sub)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (iota_reduct env sub) (OptionType.none KExpr) -> Eq KExpr (kapp_fn sub) (kapp_fn sub')) (g : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.proj s i sub))) (OptionType.some Name nm)) (_nr : Eq (OptionType KExpr) (iota_reduct env (KExpr.proj s i sub)) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.proj s i sub)) (kapp_fn (KExpr.proj s i sub'))) g)
+ f f' h hhead hnr",
+            "Complete constant spine-head preservation for a non-redex parallel step, by the actual ten-arm par_reduces_c induction; no name-only or output-equality assumption.",
+        )?;
 
         // iota_reduct_app_minimal_boundary_idx_type: Type-valued sibling of
-        // iota_reduct_app_minimal_boundary_idx. VERBATIM copy of the committed
-        // proof except C : Type, routed through iota_reduct_some_inv_type /
-        // nat_le_succ_or_type / iota_reduct_app_inner_type / option_none_ne_some_type.
+        // iota_reduct_app_minimal_boundary_idx. Both actual Boolean guards are
+        // retained by the canonical Type-valued full view. The boundary identities
+        // are still proved in Prop; no multi-constructor Prop is eliminated into Type.
         {
             let major_idx_of = |m: &str| -> String {
                 format!("(Nat.add (Nat.add (Nat.add (recmeta_num_params {m}) (recmeta_num_motives {m})) (recmeta_num_minors {m})) (recmeta_num_indices {m}))")
@@ -2050,7 +1914,7 @@ impl Specification {
                 format!("(Nat.add (Nat.add (recmeta_num_params {m}) (recmeta_num_motives {m})) (recmeta_num_minors {m}))")
             };
             let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
+            let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))";
             let major_idx = major_idx_of("meta");
             let prefix_n = prefix_of("meta");
             let len_f = "(list_length (kapp_args f))";
@@ -2066,6 +1930,15 @@ impl Specification {
                  (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) {nf}) (kapp_args major)) \
                  (apply_spine (list_take {prefix_n} {kargs_app}) {p_rhs})))"
             );
+            let arity_f = "(nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f))))";
+            let arity_app = "(nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a)))))";
+            let reduct_app_actual = reduct_app.replace(
+                "(kexpr_const_levels (kapp_fn f))",
+                "(kexpr_const_levels (kapp_fn (KExpr.app f a)))",
+            );
+            let arity_to_f = "(Eq.subst KExpr (fun (head : KExpr) => Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels head))) Bool.true) (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a) harity_app)".to_string();
+            let reduct_to_f = "(Eq.cong KExpr KExpr (fun (head : KExpr) => iota_contractum meta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels head))) (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a))".to_string();
+            let returned_some = format!("(Eq.cong KExpr (OptionType KExpr) (fun (x : KExpr) => OptionType.some KExpr x) {reduct_app} e1 (Eq.symm KExpr e1 {reduct_app} (Eq.trans KExpr e1 {reduct_app_actual} {reduct_app} returned {reduct_to_f})))");
             let k_type = format!(
                 "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
                  Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname) -> \
@@ -2073,6 +1946,8 @@ impl Specification {
                  Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major) -> \
                  Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
                  Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
+                 Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true -> \
+                 Eq Bool {arity_f} Bool.true -> \
                  Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1) -> \
                  Eq KExpr major a -> Eq Nat {major_idx} {len_f} -> C)"
             );
@@ -2166,15 +2041,17 @@ impl Specification {
                  (hsome : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1)) \
                  (hnone : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) \
                  (C : Type) (k : {k_type}) => \
-                 iota_reduct_some_inv_type env (KExpr.app f a) e1 C hsome \
+                 iota_reduct_full_inv_type env (KExpr.app f a) e1 C hsome \
                  (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
                  (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
                  (h3 : {h3_type}) \
                  (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
                  (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1)) => \
-                 k recname meta major cname rule h1 h2 h3 h4 h5 h5r {major_eq_a_final} {idx_eq})"
+                 (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+                 (harity_app : Eq Bool {arity_app} Bool.true) \
+                 (returned : Eq KExpr e1 {reduct_app_actual}) => \
+                 k recname meta major cname rule h1 h2 h3 h4 h5 hfields {arity_to_f} {returned_some} {major_eq_a_final} {idx_eq})"
             );
             let type_src = format!(
                 "forall (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr), \
@@ -2194,7 +2071,7 @@ impl Specification {
                 elaborated_value: None,
                 dependencies: Some(HashSet::from([
                     "iota_reduct".to_string(),
-                    "iota_reduct_some_inv_type".to_string(),
+                    "iota_reduct_full_inv_type".to_string(),
                     "iota_reduct_app_inner".to_string(),
                     "list_head_drop_some_le_succ".to_string(),
                     "list_head_drop_len_append".to_string(),
@@ -2248,7 +2125,10 @@ impl Specification {
             let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
             let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
             let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
+            let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))";
+            let p_rhs_prime = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f\' a\'))))";
+            let arity_f = "(nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f))))";
+            let arity_target = "(nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f\' a\')))))";
             let fa_p = "(KExpr.app f' a')";
             let kargs_fap = "(kapp_args (KExpr.app f' a'))";
             let kargs_fap_snoc =
@@ -2262,36 +2142,13 @@ impl Specification {
                 format!(
                     "(apply_spine (list_drop (Nat.succ {major_idx}) {kargs_fap}) \
                      (apply_spine (list_drop (Nat.sub (list_length (kapp_args {ms})) {nf}) (kapp_args {ms})) \
-                     (apply_spine (list_take {prefix_n} {kargs_fap}) {p_rhs})))"
+                     (apply_spine (list_take {prefix_n} {kargs_fap}) {p_rhs_prime})))"
                 )
             };
             // m: the delivered reduct (major := a').
             let reduct_m = mk_reduct_app("a'");
-            // The reduct with the generic major binder (for the L3 continuation slot).
-            let reduct_majvar = mk_reduct_app("major");
-
-            // The inst-side (here: app f' a' side) opt_bind continuations f1..f5 with
-            // e := app f' a'; f4sub/f5sub carry major := a'.
-            let f5 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct_majvar})");
-            let f4 = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {f5})"
-            );
-            let f3 = format!(
-                "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {f4})"
-            );
-            let f2 = format!(
-                "(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} {kargs_fap})) {f3})"
-            );
-            let f1 = format!(
-                "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {f2})"
-            );
-            let f5sub = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct_m})");
-            let f4sub = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {f5sub})"
-            );
-
             // ============================================================
-            // iota_reduct_par_app_recon — the opt_bind_some_intro 5x rebuild.
+            // iota_reduct_par_app_recon — the canonical five-lookup reconstruction.
             // Takes the (app f' a')-side lookups as explicit hypotheses (so the
             // glue lemma below supplies them from the boundary witnesses):
             //   recname/meta/cname/rule + the five lookups for (app f' a'):
@@ -2300,17 +2157,12 @@ impl Specification {
             //     hL3 : head (drop major_idx (kapp_args (app f' a'))) = some a'
             //     hL4 : kexpr_const_name (kapp_fn a') = some cname
             //     hL5 : recrule_for env recname cname = some rule
-            // and rebuilds iota_reduct env (app f' a') = some (reduct over a').
+            // Together with the actual field/arity guards, reconstructs the
+            // once-instantiated reduct. Five successful lookups alone are insufficient.
             // ============================================================
             {
-                let hf6 =
-                    format!("(Eq.refl (OptionType KExpr) (OptionType.some KExpr {reduct_m}))");
                 let recon_body = format!(
-                    "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {fa_p})) {f1} recname {reduct_m} hL1 \
-                     (opt_bind_some_intro RecMeta KExpr (recmeta_for env recname) {f2} meta {reduct_m} hL2 \
-                     (opt_bind_some_intro KExpr KExpr (list_head (list_drop {major_idx} {kargs_fap})) {f3} a' {reduct_m} hL3 \
-                     (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn a')) {f4sub} cname {reduct_m} hL4 \
-                     (opt_bind_some_intro RecRule KExpr (recrule_for env recname cname) {f5sub} rule {reduct_m} hL5 {hf6}))))"
+                    "iota_reduct_full_recon env {fa_p} {reduct_m} recname meta a' cname rule hL1 hL2 hL3 hL4 hL5 hfields harity (Eq.refl KExpr {reduct_m})"
                 );
                 let recon_type = format!(
                     "forall (env : RecEnv) (f' : KExpr) (a' : KExpr) (recname : Name) (meta : RecMeta) (cname : Name) (rule : RecRule), \
@@ -2319,6 +2171,8 @@ impl Specification {
                      Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f' a')))) (OptionType.some KExpr a') -> \
                      Eq (OptionType Name) (kexpr_const_name (kapp_fn a')) (OptionType.some Name cname) -> \
                      Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
+                     Eq Bool (iota_fields_ok rule (kapp_args a')) Bool.true -> \
+                     Eq Bool {arity_target} Bool.true -> \
                      Eq (OptionType KExpr) (iota_reduct env (KExpr.app f' a')) (OptionType.some KExpr {reduct_m})"
                 );
                 let recon_value = format!(
@@ -2327,7 +2181,9 @@ impl Specification {
                      (hL2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
                      (hL3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f' a')))) (OptionType.some KExpr a')) \
                      (hL4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn a')) (OptionType.some Name cname)) \
-                     (hL5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) => \
+                     (hL5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+                     (hfields : Eq Bool (iota_fields_ok rule (kapp_args a')) Bool.true) \
+                     (harity : Eq Bool {arity_target} Bool.true) => \
                      {recon_body}"
                 );
                 self.add_definition(SpecDefinition {
@@ -2342,7 +2198,7 @@ impl Specification {
                     elaborated_value: None,
                     dependencies: Some(HashSet::from([
                         "iota_reduct".to_string(),
-                        "opt_bind_some_intro".to_string(),
+                        "iota_reduct_full_recon".to_string(),
                         "kexpr_const_name".to_string(),
                         "kapp_fn".to_string(),
                         "kapp_args".to_string(),
@@ -2400,6 +2256,13 @@ impl Specification {
                 "(par_reduces_c_preserves_head_const_nr env a a' cname {head_a} ha_none ha)"
             );
 
+            // The head equality preserves actual universe arguments; field availability
+            // is transported from the same major spine length, never assumed anew.
+            let head_full = format!("(Eq.trans KExpr (kapp_fn f) (kapp_fn f') (kapp_fn (KExpr.app f' a')) (par_reduces_c_preserves_kapp_fn_nr env f f' recname {head_f} hf_none hf) (Eq.symm KExpr (kapp_fn (KExpr.app f' a')) (kapp_fn f') (kapp_fn_app f' a')))");
+            let arity_target_proof = format!("(Eq.subst KExpr (fun (head : KExpr) => Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels head))) Bool.true) (kapp_fn f) (kapp_fn (KExpr.app f' a')) {head_full} harity)");
+            let major_len = format!("(Eq.trans Nat (list_length (kapp_args major)) (list_length (kapp_args a)) (list_length (kapp_args a')) (Eq.cong KExpr Nat (fun (x : KExpr) => list_length (kapp_args x)) major a hbnd) (par_reduces_c_list_length_eq env (kapp_args a) (kapp_args a') (par_reduces_c_spine_cong env a a' cname {head_a} ha_none ha)))");
+            let fields_target_proof = format!("(Eq.subst Nat (fun (n : Nat) => Eq Bool (nat_eqb (Nat.sub {nf} n) Nat.zero) Bool.true) (list_length (kapp_args major)) (list_length (kapp_args a')) {major_len} hfields)");
+
             // The continuation passed to iota_reduct_app_minimal_boundary_idx.
             let kont_lambda = format!(
                 "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
@@ -2408,11 +2271,13 @@ impl Specification {
                  (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) \
                  (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
                  (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+                 (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+                 (harity : Eq Bool {arity_f} Bool.true) \
                  (h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) {nf}) (kapp_args major)) (apply_spine (list_take {prefix_n} (kapp_args (KExpr.app f a))) {p_rhs})))) (OptionType.some KExpr e1)) \
                  (hbnd : Eq KExpr major a) \
                  (hidx : Eq Nat {major_idx} {len_f}) => \
                  kcont {reduct_m} \
-                 (iota_reduct_par_app_recon env f' a' recname meta cname rule {h_l1} h2 {h_l3} {h_l4} h5))"
+                 (iota_reduct_par_app_recon env f' a' recname meta cname rule {h_l1} h2 {h_l3} {h_l4} h5 {fields_target_proof} {arity_target_proof}))"
             );
 
             let value = format!(
@@ -2541,15 +2406,17 @@ impl Specification {
                 let prefix_take_cong = format!(
                     "(list_take_par_c env {prefix_n} {kargs_fa} {kargs_fap} {whole_spine_cong})"
                 );
+                let rhs_equal = format!("(Eq.cong KExpr KExpr (fun (head : KExpr) => recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels head)) (kapp_fn f) (kapp_fn (KExpr.app f' a')) {head_full})");
+                let rhs_parallel = format!("(Eq.substType KExpr (fun (x : KExpr) => par_reduces_c env {p_rhs} x) {p_rhs} {p_rhs_prime} {rhs_equal} (par_reduces_c.refl env {p_rhs}))");
                 let inner_spine = format!(
-                    "(apply_spine_par_c env (list_take {prefix_n} {kargs_fa}) (list_take {prefix_n} {kargs_fap}) {p_rhs} {p_rhs} {prefix_take_cong} (par_reduces_c.refl env {p_rhs}))"
+                    "(apply_spine_par_c env (list_take {prefix_n} {kargs_fa}) (list_take {prefix_n} {kargs_fap}) {p_rhs} {p_rhs_prime} {prefix_take_cong} {rhs_parallel})"
                 );
 
                 // Middle apply_spine: fields layer over the inner spine head.
                 let middle_spine = format!(
                     "(apply_spine_par_c env (list_drop {major_drop_idx_maj} (kapp_args major)) (list_drop {major_drop_idx_ap} (kapp_args a')) \
                      (apply_spine (list_take {prefix_n} {kargs_fa}) {p_rhs}) \
-                     (apply_spine (list_take {prefix_n} {kargs_fap}) {p_rhs}) \
+                     (apply_spine (list_take {prefix_n} {kargs_fap}) {p_rhs_prime}) \
                      {middle_drop_cong} {inner_spine})"
                 );
 
@@ -2560,7 +2427,7 @@ impl Specification {
                 let outer_spine = format!(
                     "(apply_spine_par_c env (list_drop (Nat.succ {major_idx}) {kargs_fa}) (list_drop (Nat.succ {major_idx}) {kargs_fap}) \
                      (apply_spine (list_drop {major_drop_idx_maj} (kapp_args major)) (apply_spine (list_take {prefix_n} {kargs_fa}) {p_rhs})) \
-                     (apply_spine (list_drop {major_drop_idx_ap} (kapp_args a')) (apply_spine (list_take {prefix_n} {kargs_fap}) {p_rhs})) \
+                     (apply_spine (list_drop {major_drop_idx_ap} (kapp_args a')) (apply_spine (list_take {prefix_n} {kargs_fap}) {p_rhs_prime})) \
                      {outer_drop_cong} {middle_spine})"
                 );
 
@@ -2698,7 +2565,7 @@ impl Specification {
             {
                 // The recon-rebuilt right-leg reduct identity (= reduct_m).
                 let recon_right = format!(
-                    "(iota_reduct_par_app_recon env f' a' recname meta cname rule {h_l1} h2 {h_l3} {h_l4} h5)"
+                    "(iota_reduct_par_app_recon env f' a' recname meta cname rule {h_l1} h2 {h_l3} {h_l4} h5 {fields_target_proof} {arity_target_proof})"
                 );
                 // Right leg: app f' a' ⇒_c reduct_m (par_reduces_c.iota; iota_step
                 // env (app f' a') reduct_m IS iota_reduct (app f' a') = some
@@ -2727,6 +2594,8 @@ impl Specification {
                      (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) \
                      (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
                      (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+                     (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+                     (harity : Eq Bool {arity_f} Bool.true) \
                      (h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) {nf}) (kapp_args major)) (apply_spine (list_take {prefix_n} (kapp_args (KExpr.app f a))) {p_rhs})))) (OptionType.some KExpr e1)) \
                      (hbnd : Eq KExpr major a) \
                      (hidx : Eq Nat {major_idx} {len_f}) => \
@@ -2830,7 +2699,7 @@ impl Specification {
                     "(_h3 : Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (OptionType.some KExpr major)) ",
                     "(_h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) ",
                     "(_h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) ",
-                    "(_h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))) (OptionType.some KExpr e')) => ",
+                    "(_h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))))) (OptionType.some KExpr e')) => ",
                     "option_none_ne_some_type Name recname C ",
                     "(Eq.trans (OptionType Name) (OptionType.none Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) ",
                     "(Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.none Name) hnone) h1))"
@@ -3100,7 +2969,7 @@ impl Specification {
                     "(_h3 : Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) ",
                     "(_h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) ",
                     "(_h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) ",
-                    "(_h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule))))) (OptionType.some KExpr e1)) => ",
+                    "(_h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f a)))))))) (OptionType.some KExpr e1)) => ",
                     "par_strips_c_iota_app_minimal env f f' a a' e1 recname ",
                     "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname) ",
                     "(Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn (KExpr.app f a)) (Eq.symm KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a))) h1) ",
@@ -6593,7 +6462,7 @@ fn par_strips_c_iota_app_full_proof() -> String {
             "(_h3 : Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) ",
             "(_h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) ",
             "(_h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) ",
-            "(_h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule))))) (OptionType.some KExpr e1)) => ",
+            "(_h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f a)))))))) (OptionType.some KExpr e1)) => ",
             "par_strips_c_iota_app_minimal env f f' a a' e1 recname ",
             "{head_eq_f} hfn (hmaj_nr hfn) h_e1 hf ha))"
         ),

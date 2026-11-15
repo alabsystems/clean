@@ -494,7 +494,10 @@ impl ExtTacticInterpreter {
         if let (Some(started_at), Some(timeout)) = (self.run_started_at, self.config.timeout) {
             if started_at.elapsed() > timeout {
                 return Err(TacticError::Timeout {
-                    detail: format!("timeout exceeded after {:?}", timeout),
+                    detail: format!(
+                        "timeout exceeded after {}",
+                        crate::error_render::opaque(&timeout)
+                    ),
                 });
             }
         }

@@ -9,9 +9,9 @@
 //! would be worse than no header at all), and instances are frozen into the
 //! resolution table at header time rather than when their declaration lands.
 //!
-//! Every case is written so the FORWARD direction is the interesting one: the
-//! user is declared before the thing it uses. Under source order each of these
-//! is an unknown identifier.
+//! The forward cases declare the user before the thing it uses. Under source
+//! order each of these is an unknown identifier. The alias-prefix case instead
+//! exercises a target published before planning the alias command.
 
 use clean_elab::module_batch::{elaborate_module, BatchOptions, SourceUnit, UnitId};
 use clean_kernel::env::Environment;
@@ -41,6 +41,46 @@ fn assert_registered(env: &Environment, names: &[&str]) {
             "`{name}` is not in the published environment"
         );
     }
+}
+
+#[test]
+fn alias_keeps_declared_prefix_metadata_when_target_returns_a_function() {
+    let mut env = Environment::with_prelude();
+    let mut file_ctx = clean_elab::FileContext::new();
+    // Alias commands elaborate during planning, before queued value bodies.
+    // Publish the exact target first, then exercise alias registration and its
+    // named-argument consumer together through the public batch interface.
+    for source in [
+        "def original (n : Nat) : Nat → Nat := fun m => n\n",
+        "\
+alias prefixBatchAlias := original
+example : prefixBatchAlias (n := 2) 3 = 2 := rfl
+",
+    ] {
+        let decls = parse_file(source).expect("prefix fixture must parse");
+        let units = [SourceUnit {
+            id: UnitId(0),
+            decls: &decls,
+        }];
+        let outcome = elaborate_module(&mut env, &mut file_ctx, &units, BatchOptions::islands());
+        assert!(
+            outcome.committed,
+            "prefix alias batch was refused: {}",
+            outcome.render_rejections()
+        );
+    }
+    let alias = Name::from_string("prefixBatchAlias");
+    assert_eq!(
+        env.get_typed_param_names(&alias),
+        Some([Name::from_string("n")].as_slice()),
+        "the returned function argument is outside the declared metadata prefix"
+    );
+    assert_eq!(
+        env.get_const(&alias).expect("alias").type_,
+        env.get_const(&Name::from_string("original"))
+            .expect("target")
+            .type_
+    );
 }
 
 /// An `inductive` used by a declaration written BEFORE it.
@@ -140,4 +180,56 @@ def answer : Nat := 42
          not through a value-free signature: {report}"
     );
     assert_registered(&env, &["answer", "answer_is_42"]);
+}
+
+/// Consumers must receive the original anonymous judgment, not reconstruct a
+/// potentially different elaboration from its source after the batch.
+#[test]
+fn test_anonymous_proof_judgments_survive_batch_reporting() {
+    use clean_kernel::{Expr, Level, ReferenceKernel};
+    let mut env = Environment::with_prelude();
+    let mut ctx = clean_elab::FileContext::new();
+    let decls = parse_file("def retained_n : Nat := 1\nexample : retained_n = 1 := rfl\n")
+        .expect("fixture parses");
+    let units = [SourceUnit {
+        id: UnitId(0),
+        decls: &decls,
+    }];
+    let outcome = elaborate_module(&mut env, &mut ctx, &units, BatchOptions::islands());
+    assert!(outcome.committed, "{}", outcome.render_rejections());
+    let judgments: Vec<_> = outcome
+        .decls
+        .iter()
+        .flat_map(|d| &d.checked_judgments)
+        .collect();
+    assert_eq!(judgments.len(), 1);
+    let reference = ReferenceKernel::new(env).expect("base admitted");
+    reference
+        .check_closed_term(&judgments[0].type_, &judgments[0].value)
+        .expect("original example rechecks");
+    let wrong_goal = Expr::apps(
+        Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+        [Expr::const_str("Nat"), Expr::nat_lit(1), Expr::nat_lit(2)],
+    );
+    assert!(
+        reference
+            .check_closed_term(&wrong_goal, &judgments[0].value)
+            .is_err(),
+        "the retained proof cannot be substituted for a different judgment"
+    );
+}
+
+#[test]
+fn test_a_refused_anonymous_proof_retains_no_successful_judgment() {
+    let mut env = Environment::with_prelude();
+    let mut ctx = clean_elab::FileContext::new();
+    let decls = parse_file("example : (1 : Nat) = 2 := rfl\n").expect("fixture parses");
+    let units = [SourceUnit {
+        id: UnitId(0),
+        decls: &decls,
+    }];
+    let outcome = elaborate_module(&mut env, &mut ctx, &units, BatchOptions::islands());
+    assert!(!outcome.committed);
+    assert!(!outcome.is_clean());
+    assert!(outcome.decls.iter().all(|d| d.checked_judgments.is_empty()));
 }

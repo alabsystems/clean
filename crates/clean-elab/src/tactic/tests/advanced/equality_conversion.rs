@@ -57,14 +57,20 @@ fn test_change_at_updates_hypothesis() {
     // Add a hypothesis
     let fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a.clone(),
         value: None,
     });
 
     // Changing to the same type (trivially def-eq) should succeed
-    change_at(&mut state, "h", a.clone()).unwrap();
+    change_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        a.clone(),
+    )
+    .unwrap();
     assert_eq!(state.goals[0].local_ctx[0].ty, a);
 }
 
@@ -78,14 +84,19 @@ fn test_change_at_rejects_non_defeq() {
     // Add a hypothesis with type A
     let fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a,
         value: None,
     });
 
     // Changing to unrelated type B must fail
-    let result = change_at(&mut state, "h", b);
+    let result = change_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        b,
+    );
     assert!(
         matches!(result, Err(TacticError::GoalMismatch(ref s)) if s.contains("not definitionally equal"))
     );
@@ -98,7 +109,11 @@ fn test_change_at_fails_on_missing_hyp() {
     let b = Expr::const_(Name::from_string("B"), vec![]);
     let mut state = ProofState::new(env, a);
 
-    let result = change_at(&mut state, "nonexistent", b);
+    let result = change_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        b,
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -121,14 +136,19 @@ fn test_change_at_soundness_rejects_false_injection() {
     // Add hypothesis h : A
     let fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a,
         value: None,
     });
 
     // Attempting to change h to False must fail — False is not def-eq to A
-    let result = change_at(&mut state, "h", false_ty);
+    let result = change_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        false_ty,
+    );
     assert!(
         result.is_err(),
         "change_at must reject False injection (soundness)"
@@ -172,29 +192,40 @@ fn test_change_at_with_multiple_hypotheses_targets_correct_one() {
     // Add two hypotheses
     let fvar1 = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: fvar1,
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: a.clone(),
         value: None,
     });
     let fvar2 = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: fvar2,
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: b.clone(),
         value: None,
     });
 
     // Change h1 to same type (trivially def-eq)
-    change_at(&mut state, "h1", a.clone()).unwrap();
+    change_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h1"),
+        a.clone(),
+    )
+    .unwrap();
 
     // Verify h1 was changed and h2 was NOT touched
     assert_eq!(state.goals[0].local_ctx[0].ty, a);
     assert_eq!(state.goals[0].local_ctx[1].ty, b);
 
     // Attempting to change h2 to type A (not def-eq to B) must fail
-    let err =
-        change_at(&mut state, "h2", a).expect_err("change_at with non-def-eq type should fail");
+    let err = change_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h2"),
+        a,
+    )
+    .expect_err("change_at with non-def-eq type should fail");
     assert!(
         matches!(err, TacticError::GoalMismatch(_)),
         "expected GoalMismatch for non-def-eq type change, got: {err:?}"
@@ -275,8 +306,9 @@ fn test_change_at_accepts_delta_reducible_nested_subexpr() {
         env,
         goal_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: f_my_a,
             value: None,
         }],
@@ -287,7 +319,11 @@ fn test_change_at_accepts_delta_reducible_nested_subexpr() {
         Expr::const_(Name::from_string("Fam"), vec![]),
         Expr::const_(Name::from_string("A"), vec![]),
     );
-    let result = change_at(&mut state, "h", f_a.clone());
+    let result = change_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        f_a.clone(),
+    );
     assert!(
         result.is_ok(),
         "change_at should accept delta-reducible nested subexpressions (#1846), got: {result:?}"
@@ -541,7 +577,12 @@ fn test_assert_creates_two_goals() {
 
     assert_eq!(state.goals.len(), 1);
 
-    assert_(&mut state, "h", b.clone()).unwrap();
+    assert_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        b.clone(),
+    )
+    .unwrap();
 
     // Should have 2 goals: first to prove B, second the original with h : B
     assert_eq!(state.goals.len(), 2);
@@ -555,7 +596,12 @@ fn test_assert_after_creates_goals_in_reverse_order() {
     let b = Expr::const_(Name::from_string("B"), vec![]);
     let mut state = ProofState::new(env, a.clone());
 
-    assert_after(&mut state, "h", b.clone()).unwrap();
+    assert_after(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        b.clone(),
+    )
+    .unwrap();
 
     // Should have 2 goals: first the original with h : B, second to prove B
     assert_eq!(state.goals.len(), 2);
@@ -571,14 +617,19 @@ fn test_assert_adds_hypothesis() {
     let b = Expr::const_(Name::from_string("B"), vec![]);
     let mut state = ProofState::new(env, a);
 
-    assert_(&mut state, "h", b.clone()).unwrap();
+    assert_(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        b.clone(),
+    )
+    .unwrap();
 
     // The second goal (continuation) should have h in context
     let cont_goal = &state.goals[1];
     assert!(cont_goal
         .local_ctx
         .iter()
-        .any(|d| d.name == "h" && d.ty == b));
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("h") && d.ty == b));
 }
 
 // =========================================================================
@@ -591,7 +642,7 @@ fn test_set_ext_fails_on_non_equality() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, a);
 
-    let result = set_ext(&mut state, "x");
+    let result = set_ext(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(matches!(result, Err(TacticError::GoalMismatch(ref s)) if s.contains("equality")));
 }
 
@@ -676,13 +727,16 @@ fn test_set_ext_creates_pointwise_iff_goal() {
     );
 
     let mut state = ProofState::new(env, goal_ty);
-    set_ext(&mut state, "x").unwrap();
+    set_ext(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     let goal = state
         .current_goal()
         .expect("set_ext should leave one subgoal");
     assert_eq!(goal.local_ctx.len(), 1, "set_ext should intro one binder");
-    assert_eq!(goal.local_ctx[0].name, "x");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x")
+    );
     assert_eq!(goal.local_ctx[0].ty, a_ty);
 
     let x = Expr::fvar(goal.local_ctx[0].fvar);
@@ -736,256 +790,19 @@ fn test_simp_rw_hyps_conversion() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, a);
 
-    // Test that string slice conversion works
-    let result = simp_rw_hyps(&mut state, vec!["h1", "h2"]);
-    // Will fail because lemmas don't exist, but conversion should work
+    // Test that both exact fixture hypothesis names reach the lookup.
+    let result = simp_rw_hyps(
+        &mut state,
+        vec![
+            &clean_parser::SurfaceName::generated_path("h1"),
+            &clean_parser::SurfaceName::generated_path("h2"),
+        ],
+    );
+    // Will fail because lemmas don't exist, but name transport should work.
     assert!(matches!(result, Err(TacticError::NoProgress { .. })));
 }
 
 // Conv position tests: see conv.rs
 
-// =========================================================================
-// decide_eq Tests
-// =========================================================================
-
-#[test]
-fn test_decide_eq_fails_on_non_equality_non_decidable() {
-    let env = setup_env();
-    let a = Expr::const_(Name::from_string("A"), vec![]);
-    let mut state = ProofState::new(env, a);
-
-    let result = decide_eq(&mut state);
-    assert!(matches!(result, Err(TacticError::GoalMismatch(_))));
-}
-
-#[test]
-fn test_decide_eq_on_equal_nat_literals() {
-    // setup_env() lacks Eq/rfl infrastructure, so decide_eq must fail even on 5 = 5
-    let env = setup_env();
-    let five = Expr::nat_lit(5);
-    let eq_goal = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
-                Expr::const_(Name::from_string("Nat"), vec![]),
-            ),
-            five.clone(),
-        ),
-        five.clone(),
-    );
-    let mut state = ProofState::new(env, eq_goal);
-
-    let result = decide_eq(&mut state);
-    // Without Eq.refl in the environment, decide_eq cannot construct a reflexivity proof
-    assert!(
-        matches!(result, Err(TacticError::EnvironmentMissing { ref constant }) if constant == "rfl" || constant == "Eq.refl"),
-        "decide_eq should fail without Eq infrastructure, got: {result:?}"
-    );
-    assert!(
-        !state.is_complete(),
-        "goal should remain open after decide_eq failure"
-    );
-}
-
-#[test]
-fn test_decide_eq_on_different_nat_literals() {
-    let env = setup_env();
-    let five = Expr::nat_lit(5);
-    let six = Expr::nat_lit(6);
-    let eq_goal = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
-                Expr::const_(Name::from_string("Nat"), vec![]),
-            ),
-            five,
-        ),
-        six,
-    );
-    let mut state = ProofState::new(env, eq_goal);
-
-    let result = decide_eq(&mut state);
-    assert!(
-        matches!(result, Err(TacticError::ArithmeticFailed { ref tactic, .. }) if tactic == "decide_eq"),
-        "should be ArithmeticFailed from decide_eq, got: {result:?}"
-    );
-}
-
-#[test]
-fn test_match_decidable_eq_pattern() {
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let five = Expr::nat_lit(5);
-    let six = Expr::nat_lit(6);
-
-    // Build: Decidable (Eq Nat 5 6)
-    let eq_expr = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
-                nat_ty.clone(),
-            ),
-            five.clone(),
-        ),
-        six.clone(),
-    );
-    let decidable_expr = Expr::app(
-        Expr::const_(Name::from_string("Decidable"), vec![]),
-        eq_expr,
-    );
-
-    let result = match_decidable_eq(&decidable_expr);
-    let result = result.expect("expected Some");
-    let (ty, lhs, rhs) = result;
-    assert_eq!(ty, nat_ty);
-    assert_eq!(lhs, five);
-    assert_eq!(rhs, six);
-}
-
-#[test]
-fn test_decide_eq_is_false_has_implicit_prop_arg() {
-    // Regression test for #2461 F3: Decidable.isFalse must include the implicit
-    // {p : Prop} argument. Without it, the proof term is ill-typed:
-    //   App(Decidable.isFalse, ne_proof)                — 1 arg, WRONG
-    //   App(App(Decidable.isFalse, eq_prop), ne_proof)  — 2 args, CORRECT
-    //
-    // Part of #302: decide_eq now requires the kernel noConfusion path for
-    // Nat disequality instead of falling back to trustedAy.
-    let mut env = Environment::new();
-    env.init_eq().unwrap();
-    env.init_true_false().unwrap();
-    env.init_nat().unwrap();
-    env.init_decidable().unwrap();
-
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let five = Expr::nat_lit(5);
-    let six = Expr::nat_lit(6);
-    let eq_expr = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
-                nat_ty,
-            ),
-            five,
-        ),
-        six,
-    );
-    let decidable_goal = Expr::app(
-        Expr::const_(Name::from_string("Decidable"), vec![]),
-        eq_expr,
-    );
-    let mut state = ProofState::new(env, decidable_goal);
-
-    let result = decide_eq(&mut state);
-    assert!(result.is_ok(), "decide_eq should solve Decidable (5 = 6)");
-    assert!(state.is_complete(), "goal should be closed");
-
-    let proof = state
-        .proof_term()
-        .expect("completed state should have proof term");
-    let head = proof.get_app_fn();
-    let args = proof.get_app_args();
-
-    if let ExprKind::Const(name, _) = head.kind() {
-        assert_eq!(
-            name.to_string(),
-            "Decidable.isFalse",
-            "proof head should be Decidable.isFalse, got: {name}",
-        );
-    } else {
-        panic!(
-            "proof head should be Const (Decidable.isFalse), got: {:?}",
-            head.kind()
-        );
-    }
-
-    assert_eq!(
-        args.len(),
-        2,
-        "Decidable.isFalse needs 2 args (implicit {{p}} + ne_proof), got {} (#2461 F3)",
-        args.len()
-    );
-}
-
-#[test]
-fn test_decidable_type_check() {
-    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-    let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
-    let custom = Expr::const_(Name::from_string("CustomType"), vec![]);
-
-    assert!(decidable_type_check(&nat));
-    assert!(decidable_type_check(&bool_ty));
-    assert!(!decidable_type_check(&custom));
-}
-
-#[test]
-fn test_eval_to_nat_literals() {
-    let five = Expr::nat_lit(5);
-    let zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
-
-    assert_eq!(eval_to_nat(&five), Some(5));
-    assert_eq!(eval_to_nat(&zero), Some(0));
-}
-
-#[test]
-fn test_eval_to_nat_succ() {
-    let zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
-    let succ_zero = Expr::app(Expr::const_(Name::from_string("Nat.succ"), vec![]), zero);
-
-    assert_eq!(eval_to_nat(&succ_zero), Some(1));
-}
-
-/// Smoke test for decide_eq with FVar hypotheses in the goal context.
-///
-/// Verifies that decide_eq doesn't crash or produce wrong errors when the
-/// goal target contains FVars from local hypotheses. The is_def_eq check
-/// for `n = n` passes via structural identity (def_eq.rs:238: `a == b`)
-/// regardless of context, so this test exercises the overall code path
-/// (match_equality → is_def_eq → rfl) rather than specifically testing
-/// local context availability.
-///
-/// A stronger test of the #2212 fix would need non-identical expressions
-/// that are definitionally equal only with FVar type information (e.g.,
-/// eta-expanded FVars or projection reduction over FVar types).
-///
-/// Re: #2212, #2229
-#[test]
-fn test_decide_eq_equality_with_fvar_hypothesis() {
-    let env = setup_env();
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-
-    // Create hypothesis n : Nat in goal context
-    let n_fvar = FVarId::new(42);
-    let local_decl = LocalDecl {
-        fvar: n_fvar,
-        name: "n".to_string(),
-        ty: nat_ty.clone(),
-        value: None,
-    };
-
-    // Goal: ⊢ n = n (where n is a local FVar)
-    let n_expr = Expr::fvar(n_fvar);
-    let eq_goal = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
-                nat_ty,
-            ),
-            n_expr.clone(),
-        ),
-        n_expr,
-    );
-    let mut state = ProofState::with_context(env, eq_goal, vec![local_decl]);
-
-    let result = decide_eq(&mut state);
-    // is_def_eq(n, n) passes via structural identity, then rfl() is called.
-    // rfl fails because setup_env() lacks Eq.refl infrastructure, but the
-    // error should come from the rfl path, not the "cannot evaluate equality"
-    // fallthrough (which would indicate is_def_eq returned false).
-    if let Err(ref e) = result {
-        let msg = e.to_string();
-        assert!(
-            !msg.contains("cannot evaluate equality"),
-            "decide_eq fell through to eval_to_nat instead of taking rfl path: {msg}"
-        );
-    }
-}
+#[path = "equality_conversion_decide_eq.rs"]
+mod decide_eq_tests;

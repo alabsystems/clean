@@ -14,7 +14,7 @@ use crate::dep_graph::DependencyGraph;
 use crate::error::ElabError;
 use crate::mutual_decl::MutualBlock;
 use clean_kernel::{Expr, Level};
-use clean_parser::{TerminationHints, TerminationKind};
+use clean_parser::{SurfaceName, TerminationHints, TerminationKind};
 use std::collections::HashMap;
 
 /// Configuration for extended mutual declaration elaboration.
@@ -130,7 +130,7 @@ pub(crate) fn partition_into_sccs(block: &MutualBlock) -> Vec<MutualSccGroup> {
 /// Pre-elaborated type signature for a mutual declaration.
 #[derive(Debug, Clone)]
 pub(crate) struct PreElabSignature {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) index: usize,
     pub(crate) ty: Expr,
     pub(crate) num_params: usize,
@@ -262,7 +262,7 @@ fn find_match_scrutinee_bvar(expr: &Expr, num_params: usize) -> Option<usize> {
     }
 }
 
-fn infer_wf_measure(body: &Expr, name: &str) -> Option<String> {
+fn infer_wf_measure(body: &Expr, name: &SurfaceName) -> Option<String> {
     let mut params = 0usize;
     let mut current = body;
     while let clean_kernel::ExprKind::Lam(_, _, inner) = current.kind() {
@@ -310,7 +310,7 @@ pub(crate) fn encode_wf_mutual(
 // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[allow(dead_code)]
 pub(crate) struct WfEncodedDef {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) original_index: usize,
     pub(crate) encoded_type: Expr,
     pub(crate) encoded_body: Expr,
@@ -320,7 +320,7 @@ pub(crate) struct WfEncodedDef {
 /// Forward reference context for mutual block elaboration.
 #[derive(Debug, Clone)]
 pub(crate) struct ForwardRefContext {
-    entries: HashMap<String, ForwardRef>,
+    entries: HashMap<SurfaceName, ForwardRef>,
 }
 
 /// A forward reference to a sibling declaration.
@@ -353,22 +353,22 @@ impl ForwardRefContext {
         Self { entries }
     }
 
-    pub(crate) fn lookup(&self, name: &str) -> Option<&ForwardRef> {
+    pub(crate) fn lookup(&self, name: &SurfaceName) -> Option<&ForwardRef> {
         self.entries.get(name)
     }
 
-    pub(crate) fn mark_resolved(&mut self, name: &str) {
+    pub(crate) fn mark_resolved(&mut self, name: &SurfaceName) {
         if let Some(entry) = self.entries.get_mut(name) {
             entry.resolved = true;
         }
     }
 
     #[must_use]
-    pub(crate) fn unresolved_names(&self) -> Vec<&str> {
+    pub(crate) fn unresolved_names(&self) -> Vec<&SurfaceName> {
         self.entries
             .iter()
             .filter(|(_, v)| !v.resolved)
-            .map(|(k, _)| k.as_str())
+            .map(|(k, _)| k)
             .collect()
     }
 
@@ -386,7 +386,7 @@ impl ForwardRefContext {
 /// Unfolding state for controlled reduction within mutual blocks.
 #[derive(Debug, Clone)]
 pub(crate) struct UnfoldState {
-    depths: HashMap<String, u32>,
+    depths: HashMap<SurfaceName, u32>,
     max_depth: u32,
 }
 
@@ -400,12 +400,12 @@ impl UnfoldState {
     }
 
     #[must_use]
-    pub(crate) fn can_unfold(&self, name: &str) -> bool {
+    pub(crate) fn can_unfold(&self, name: &SurfaceName) -> bool {
         self.depths.get(name).copied().unwrap_or(0) < self.max_depth
     }
 
-    pub(crate) fn record_unfold(&mut self, name: &str) -> bool {
-        let depth = self.depths.entry(name.to_string()).or_insert(0);
+    pub(crate) fn record_unfold(&mut self, name: &SurfaceName) -> bool {
+        let depth = self.depths.entry(name.clone()).or_insert(0);
         if *depth < self.max_depth {
             *depth += 1;
             true
@@ -414,7 +414,7 @@ impl UnfoldState {
         }
     }
 
-    pub(crate) fn reset(&mut self, name: &str) {
+    pub(crate) fn reset(&mut self, name: &SurfaceName) {
         self.depths.remove(name);
     }
 
@@ -423,7 +423,7 @@ impl UnfoldState {
     }
 
     #[must_use]
-    pub(crate) fn depth(&self, name: &str) -> u32 {
+    pub(crate) fn depth(&self, name: &SurfaceName) -> u32 {
         self.depths.get(name).copied().unwrap_or(0)
     }
 }
@@ -485,10 +485,10 @@ pub(crate) fn validate_scc_structure(
             .iter()
             .any(|&i| block.declarations[i].is_noncomputable);
         if has_comp && has_noncomp {
-            let names: Vec<&str> = group
+            let names: Vec<String> = group
                 .indices
                 .iter()
-                .map(|&i| block.declarations[i].name.as_str())
+                .map(|&i| block.declarations[i].name.to_string())
                 .collect();
             return Err(ElabError::Unsupported {
                 feature: format!(

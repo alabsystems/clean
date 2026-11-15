@@ -1,0 +1,23 @@
+; synthetic: SYNTHETIC MODULE -- authored for the WAT byte-profile atomic
+; synthetic: semdiff lane (tests/crystal_a3_semdiff/wat_chains.rs). No compiler
+; synthetic: emitted this body; its Clean twin is the ByteV1 context
+; synthetic: wat_u64_ctx that wat_chains.rs generates with the same SSA ids.
+; synthetic: The bool selector routes between the initialized fetch-add (store
+; synthetic: the start word, fetch-add the increment, reload the slot) and a
+; synthetic: fetch-add whose read half meets the fresh, never-stored slot, so
+; synthetic: one body pins the returned OLD word, the WRITTEN new word and the
+; synthetic: uninitialized-read UB edge. Do not add it to any emitted-fixture
+; synthetic: census.
+fn @synth::atomic_u64_probe(functy.928) {
+bb0(%0: u64, %1: u64, %2: bool):
+    %3 = alloca u64
+    condbr %2, bb1, bb2
+bb1:
+    store u64 %0, ptr %3
+    %4 = atomicrmw add relaxed u64 ptr %3, %1
+    %5 = load u64, ptr %3
+    ret %4, %5
+bb2:
+    %6 = atomicrmw add relaxed u64 ptr %3, %1
+    ret %6, %6
+}

@@ -11,7 +11,7 @@
 //! 2. **sort / level eq** on canonical levels;
 //! 3. **congruence under binders** (`Pi`/`Lam`/`Let`, context push/pop) and on
 //!    `App`/`Proj`/`Const`/`Elim`/`Lit` heads;
-//! 4. **β / δ / ζ / native** reduction via [`crate::whnf`] (lazy: only when the
+//! 4. **β / δ / ζ / native** reduction via [`crate::whnf()`] (lazy: only when the
 //!    cheap structural compare fails) — both sides to whnf, then re-compare;
 //! 5. **function-η** (`λ x. f x ≡ f`);
 //! 6. **structure-η** (`s ≡ S.mk s.1 s.2 …`);
@@ -26,7 +26,7 @@
 //!
 //! `a ≡ b` by irrelevance **iff** `is_def_eq(typeof(a), typeof(b))` *and* that
 //! common type `: Prop`. The shortcut never skips re-inferring the sort of the
-//! bridged subterm — [`is_def_eq_proof_irrel`] re-infers `typeof(a)`, checks it
+//! bridged subterm — `is_def_eq_proof_irrel` re-infers `typeof(a)`, checks it
 //! is in `Prop`, and confirms `typeof(a) ≡ typeof(b)`.
 //!
 //! ## η / structure-η / proj interaction order
@@ -43,7 +43,11 @@ use crate::name::Name;
 use crate::rawexpr::BinderInfo;
 use crate::term::{Term, TermKind};
 use crate::validate::Env;
-use crate::whnf::whnf;
+mod eta;
+#[cfg(test)]
+mod memo_tests;
+use crate::whnf::whnf_in_context;
+use eta::{try_eta, try_struct_eta};
 
 /// Decide whether `a` and `b` are definitionally equal in `env`.
 ///
@@ -54,7 +58,26 @@ pub fn is_def_eq(
     b: &Term,
     budget: &mut Budget,
 ) -> Result<bool, BudgetError> {
+    let _scope = crate::whnf::DecisionScope::enter();
     is_def_eq_at(env, &mut Ctx::new(), a, b, budget)
+}
+
+/// [`is_def_eq`] under an explicit local context `ctx` (de Bruijn binder
+/// types, innermost last; `infer`'s convention). `infer` compares types of
+/// open terms through this, so the type-directed rules (structure-η, proof
+/// irrelevance, K-like reduction, structure η at a recursor's major) can type
+/// the bound variables those terms mention (R147, R162; until then `infer`
+/// compared argument types under binders in the EMPTY context, where these
+/// rules fail closed on any open term).
+pub(crate) fn is_def_eq_in_context(
+    env: &dyn Env,
+    ctx: &[Term],
+    a: &Term,
+    b: &Term,
+    budget: &mut Budget,
+) -> Result<bool, BudgetError> {
+    let _scope = crate::whnf::DecisionScope::enter();
+    is_def_eq_at(env, &mut ctx.to_vec(), a, b, budget)
 }
 
 /// The local context for congruence under binders: binder types (de Bruijn,
@@ -72,12 +95,29 @@ fn is_def_eq_at(
     budget: &mut Budget,
 ) -> Result<bool, BudgetError> {
     budget.step()?;
+    let _frame = crate::whnf::ReductionFrame::enter()?;
 
-    // (1) pointer / structural-hash fast accept.
+    // (1) pointer / structural-hash fast accept, then this decision's earlier
+    // answer for the pair (`crate::whnf`'s conversion cache).
     if a == b {
         return Ok(true);
     }
+    if let Some(equal) = crate::whnf::cached_def_eq(ctx, a, b) {
+        return Ok(equal);
+    }
+    let equal = is_def_eq_uncached(env, ctx, a, b, budget)?;
+    crate::whnf::remember_def_eq(ctx, a, b, equal);
+    Ok(equal)
+}
 
+/// [`is_def_eq_at`]'s rules, past its fast accepts.
+fn is_def_eq_uncached(
+    env: &dyn Env,
+    ctx: &mut Ctx,
+    a: &Term,
+    b: &Term,
+    budget: &mut Budget,
+) -> Result<bool, BudgetError> {
     // (2) cheap structural congruence *before* reducing (lazy δ): try to match
     // heads without unfolding. If that conclusively succeeds, accept.
     if structural_congruence(env, ctx, a, b, budget)? {
@@ -85,8 +125,8 @@ fn is_def_eq_at(
     }
 
     // (3) reduce both sides to whnf and compare heads.
-    let a_w = whnf(env, a, budget)?;
-    let b_w = whnf(env, b, budget)?;
+    let a_w = whnf_in_context(env, ctx, a, budget)?;
+    let b_w = whnf_in_context(env, ctx, b, budget)?;
 
     // (2) sort/level eq on canonical levels.
     if let (TermKind::Sort(la), TermKind::Sort(lb)) = (a_w.kind(), b_w.kind()) {
@@ -96,6 +136,19 @@ fn is_def_eq_at(
     // structural congruence on the reduced terms.
     if structural_congruence(env, ctx, &a_w, &b_w, budget)? {
         return Ok(true);
+    }
+
+    // A `Nat` literal against a `Nat` constructor application (R162).
+    if let Some(r) = try_nat_lit_ctor(env, ctx, &a_w, &b_w, budget)? {
+        return Ok(r);
+    }
+
+    // K-like reduction (R162): a stuck eliminator of a K-target whose major
+    // premise has the constructor's type is the eliminator of the constructor.
+    for (x, y) in [(&a_w, &b_w), (&b_w, &a_w)] {
+        if let Some(x2) = k_like_major(env, ctx, x, budget)? {
+            return is_def_eq_at(env, ctx, &x2, y, budget);
+        }
     }
 
     // (5) function-η.
@@ -123,6 +176,149 @@ fn is_def_eq_at(
 
     // exhausted the relation -> provably unequal *within budget*.
     Ok(false)
+}
+
+/// A `Nat` literal against a whnf'd `Nat.zero` or `Nat.succ x`: Lean's kernel
+/// reads the literal as its constructor form (`0` is `Nat.zero`, `n + 1` is
+/// `Nat.succ n`), so `Lit 0 ≡ Nat.zero`, `Lit (n+1) ≡ Nat.succ x` iff `Lit n ≡
+/// x`, and a literal never equals the other constructor. `None` when neither
+/// side is a literal facing a `Nat` constructor (the caller goes on). The literal
+/// is never expanded on its own: `Nat.succ (Lit n)` whnf's back to a literal.
+fn try_nat_lit_ctor(
+    env: &dyn Env,
+    ctx: &mut Ctx,
+    a: &Term,
+    b: &Term,
+    budget: &mut Budget,
+) -> Result<Option<bool>, BudgetError> {
+    let lit_of = |t: &Term| match t.kind() {
+        TermKind::Lit(crate::term::Lit::Nat(n)) => Some(n.clone()),
+        _ => None,
+    };
+    let (lit, other) = match (lit_of(a), lit_of(b)) {
+        (Some(n), None) => (n, b),
+        (None, Some(n)) => (n, a),
+        _ => return Ok(None),
+    };
+    let (head, args) = other.unfold_apps();
+    let TermKind::Const(c) = head.kind() else {
+        return Ok(None);
+    };
+    if *c.name() == Name::from_dotted("Nat.zero") && args.is_empty() {
+        return Ok(Some(lit.is_zero()));
+    }
+    if *c.name() == Name::from_dotted("Nat.succ") && args.len() == 1 {
+        if lit.is_zero() {
+            return Ok(Some(false));
+        }
+        // Native arithmetic: the work meter charges the predecessor's size
+        // before it is built (R166).
+        let one = crate::BigNat::one();
+        budget.charge(crate::bignat::result_words::sum(&lit, &one))?;
+        let pred = Term::lit(crate::term::Lit::Nat(lit.sub(&one)));
+        return is_def_eq_at(env, ctx, &pred, &args[0], budget).map(Some);
+    }
+    Ok(None)
+}
+
+/// Lean's K-like reduction, applied where `ck0` has a context. Since the
+/// round-5 merge, `whnf` applies the same rule at a recursor's major
+/// (`major_is_k_constructor`), so both sides usually arrive here reduced. The
+/// eliminator of an inductive `I` that is a K-target — `I` lives in `Prop` and
+/// has exactly one constructor `C`, with no fields — whose saturated major
+/// premise `m` is not `C` itself: when `m : I ps is` and `C ps : I ps is'` with
+/// the two types definitionally equal, `m` is replaced by `C ps` (proof
+/// irrelevance makes them equal; the replacement lets the ι-rule fire). `None`
+/// when `e` is not such an application or any step does not hold (the
+/// eliminator stays stuck: fail-closed).
+pub(crate) fn k_like_major(
+    env: &dyn Env,
+    ctx: &mut Ctx,
+    e: &Term,
+    budget: &mut Budget,
+) -> Result<Option<Term>, BudgetError> {
+    let (head, args) = e.unfold_apps();
+    let TermKind::Elim(eref) = head.kind() else {
+        return Ok(None);
+    };
+    let ind = eref.inductive().clone();
+    let (Some(shape), Some(rules)) = (env.recursor_shape(&ind), env.recursor_rules(&ind)) else {
+        return Ok(None);
+    };
+    if shape.num_motives != 1 {
+        return Ok(None);
+    }
+    let [rule] = rules.as_slice() else {
+        return Ok(None);
+    };
+    if rule.num_fields != 0 {
+        return Ok(None);
+    }
+    // `I : (params) → (indices) → Prop`.
+    let Some(mut ty) = env.const_type(&ind) else {
+        return Ok(None);
+    };
+    while let TermKind::Pi(_, _, body) = ty.kind() {
+        let next = body.clone();
+        ty = next;
+    }
+    match ty.kind() {
+        TermKind::Sort(l) if l.is_zero() => {}
+        _ => return Ok(None),
+    }
+    let to_usize = |x: u32| usize::try_from(x).unwrap_or(usize::MAX);
+    let np = to_usize(shape.num_params);
+    let major_pos = np
+        .checked_add(to_usize(shape.num_motives))
+        .and_then(|x| x.checked_add(to_usize(shape.num_minors)))
+        .and_then(|x| x.checked_add(to_usize(shape.num_indices)));
+    let Some(major_pos) = major_pos else {
+        return Ok(None);
+    };
+    let Some(major) = args.get(major_pos) else {
+        return Ok(None);
+    };
+    let major_w = whnf_in_context(env, ctx, major, budget)?;
+    if let TermKind::Const(c) = major_w.unfold_apps().0.kind() {
+        if *c.name() == rule.constructor {
+            return Ok(None); // the ι-rule's own case
+        }
+    }
+    let major_ty = match infer_in_context(env, ctx, major, budget) {
+        Ok(t) => t,
+        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
+        Err(_) => return Ok(None),
+    };
+    let major_ty = whnf_in_context(env, ctx, &major_ty, budget)?;
+    let (ty_head, ty_args) = major_ty.unfold_apps();
+    let TermKind::Const(ty_ref) = ty_head.kind() else {
+        return Ok(None);
+    };
+    if *ty_ref.name() != ind || Some(ty_args.len()) != np.checked_add(to_usize(shape.num_indices)) {
+        return Ok(None);
+    }
+    let Ok(ctor) =
+        crate::term::ConstRef::mk(env, rule.constructor.clone(), ty_ref.levels().to_vec())
+    else {
+        return Ok(None);
+    };
+    let ctor_app = Term::apply(Term::const_ref(ctor), &ty_args[..np]);
+    let ctor_ty = match infer_in_context(env, ctx, &ctor_app, budget) {
+        Ok(t) => t,
+        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
+        Err(_) => return Ok(None),
+    };
+    if !is_def_eq_at(env, ctx, &ctor_ty, &major_ty, budget)? {
+        return Ok(None);
+    }
+    let mut new_args = args.clone();
+    new_args[major_pos] = ctor_app;
+    Ok(Some(whnf_in_context(
+        env,
+        ctx,
+        &Term::apply(head, &new_args),
+        budget,
+    )?))
 }
 
 /// Structural congruence: equal heads with recursively-def-eq children. Does not
@@ -201,141 +397,6 @@ fn structural_congruence(
     }
 }
 
-/// function-η: `λ x. body ≡ other` iff `other` is a function and
-/// `λ x. body ≡ λ x. other x`. Symmetric (tries either side as the lambda).
-fn try_eta(
-    env: &dyn Env,
-    ctx: &mut Ctx,
-    a: &Term,
-    b: &Term,
-    budget: &mut Budget,
-) -> Result<Option<bool>, BudgetError> {
-    match (a.kind(), b.kind()) {
-        (TermKind::Lam(bi, dom, _), _) if !matches!(b.kind(), TermKind::Lam(_, _, _)) => {
-            Ok(Some(eta_one(env, ctx, *bi, dom, a, b, budget)?))
-        }
-        (_, TermKind::Lam(bi, dom, _)) if !matches!(a.kind(), TermKind::Lam(_, _, _)) => {
-            Ok(Some(eta_one(env, ctx, *bi, dom, b, a, budget)?))
-        }
-        _ => Ok(None),
-    }
-}
-
-/// `lam` is a `Lam(bi, dom, _)`; `other` is a non-lambda. Compare
-/// `lam ≡ λ (x:dom). other x` (η-expanding `other`).
-fn eta_one(
-    env: &dyn Env,
-    ctx: &mut Ctx,
-    bi: BinderInfo,
-    dom: &Term,
-    lam: &Term,
-    other: &Term,
-    budget: &mut Budget,
-) -> Result<bool, BudgetError> {
-    // λ (x:dom). (other↑1) (BVar 0)
-    let expanded = Term::lam(bi, dom.clone(), Term::app(other.lift(1), Term::bvar(0)));
-    is_def_eq_at(env, ctx, lam, &expanded, budget)
-}
-
-/// structure-η: if one side's whnf'd *type* is a single-constructor structure
-/// and the other side is not already that constructor applied, expand it to
-/// `S.mk (proj0) … (projn)` and compare fieldwise. M2: runs UNDER BINDERS too
-/// (`infer` is now context-aware), so structure-η fires wherever the corpus
-/// needs it, not only at the top level.
-fn try_struct_eta(
-    env: &dyn Env,
-    ctx: &mut Ctx,
-    a: &Term,
-    b: &Term,
-    budget: &mut Budget,
-) -> Result<Option<bool>, BudgetError> {
-    // Try expanding `a` to match `b`'s structure shape, then vice versa.
-    if let Some(r) = struct_eta_one(env, ctx, a, b, budget)? {
-        return Ok(Some(r));
-    }
-    struct_eta_one(env, ctx, b, a, budget)
-}
-
-/// Expand `e` (the candidate to be η-expanded) into constructor form and compare
-/// to `other`. Returns `Some(result)` if `e`'s type is a structure *and* the
-/// expansion is licensed (Lean-faithful gating — see below), else `None`.
-///
-/// ## Lean-faithful gating (totality + soundness-preserving)
-///
-/// Structure-η exists to decide `s ≡ S.mk f0 … fn`: η-expand the NEUTRAL side
-/// `s` to `S.mk (proj0 s) … (projn s)` so it matches the CONSTRUCTOR-headed
-/// side. It is therefore fired ONLY when `other` (already whnf'd by the caller)
-/// is headed by this structure's constructor `S.mk`. This mirrors Lean's kernel
-/// `isDefEqEtaStruct`, which η-expands a term solely to match a constructor.
-///
-/// Two genuinely distinct NEUTRAL terms of a structure type (e.g. opaque
-/// `p q : Pair Nat Nat`, neither `Pair.mk`-headed) need NO η: η-expanding both
-/// and comparing fieldwise reduces (via `Proj` congruence) `p.i ≡ q.i` back to
-/// `p ≡ q`, an unbounded native recursion that overflows the stack. Gating on a
-/// constructor-headed `other` makes the path TOTAL — two neutrals fall through
-/// to the structural/neutral comparison, which terminates — WITHOUT changing any
-/// real outcome: the only def-eqs structure-η ever decided are `neutral ≡
-/// S.mk …`, and those still fire. (Soundness-preserving: this can only make
-/// fewer η-accepts; it never blesses two distinct terms.)
-fn struct_eta_one(
-    env: &dyn Env,
-    ctx: &[Term],
-    e: &Term,
-    other: &Term,
-    budget: &mut Budget,
-) -> Result<Option<bool>, BudgetError> {
-    // Determine e's structure type (in the current local context).
-    let e_ty = match infer_in_context(env, ctx, e, budget) {
-        Ok(t) => t,
-        Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
-        Err(_) => return Ok(None),
-    };
-    let e_ty = whnf(env, &e_ty, budget)?;
-    let (head, ty_args) = e_ty.unfold_apps();
-    let TermKind::Const(ty_cref) = head.kind() else {
-        return Ok(None);
-    };
-    let Some(info) = env.structure_info(ty_cref.name()) else {
-        return Ok(None);
-    };
-    // Don't η-expand a term already headed by the same constructor (would loop).
-    let (e_head, _) = e.unfold_apps();
-    if let TermKind::Const(c) = e_head.kind() {
-        if *c.name() == info.ctor {
-            return Ok(None);
-        }
-    }
-    // LEAN-FAITHFUL GATING (totality): only η-expand `e` to MATCH a constructor.
-    // Fire iff `other` is headed by this structure's constructor `S.mk`; two
-    // neutrals (other not mk-headed) need no η and are compared structurally,
-    // which terminates. This is what kills the runaway recursion on distinct
-    // neutral structure terms (e.g. `p q : Pair Nat Nat`) — fail-closed: `None`
-    // falls through to the structural/neutral comparison.
-    let (other_head, _) = other.unfold_apps();
-    let other_is_ctor = matches!(
-        other_head.kind(),
-        TermKind::Const(c) if *c.name() == info.ctor
-    );
-    if !other_is_ctor {
-        return Ok(None);
-    }
-    // Build S.mk params... (proj_0 e) ... (proj_{n-1} e).
-    let mut ctor = Term::const_ref(crate::ConstRef::mk(
-        env,
-        info.ctor.clone(),
-        ty_cref.levels().to_vec(),
-    )?);
-    let num_params = usize::try_from(info.num_params).unwrap_or(usize::MAX);
-    for p in ty_args.iter().take(num_params) {
-        ctor = Term::app(ctor, p.clone());
-    }
-    for field in 0..info.num_fields {
-        ctor = Term::app(ctor, Term::proj(ty_cref.name().clone(), field, e.clone()));
-    }
-    let mut ctx_vec = ctx.to_vec();
-    Ok(Some(is_def_eq_at(env, &mut ctx_vec, &ctor, other, budget)?))
-}
-
 impl From<crate::term::TermError> for BudgetError {
     fn from(_: crate::term::TermError) -> Self {
         // A structure-η constructor build whose levels mismatch the constructor
@@ -389,7 +450,7 @@ fn type_is_prop(
     budget: &mut Budget,
 ) -> Result<bool, BudgetError> {
     // A Sort is never in Prop (Sort l : Sort (succ l) which is never Sort 0).
-    let ty_w = whnf(env, ty, budget)?;
+    let ty_w = whnf_in_context(env, ctx, ty, budget)?;
     if matches!(ty_w.kind(), TermKind::Sort(_)) {
         return Ok(false);
     }
@@ -398,18 +459,8 @@ fn type_is_prop(
         Err(InferError::OutOfBudget) => return Err(BudgetError::OutOfBudget),
         Err(_) => return Ok(false),
     };
-    let sort = whnf(env, &sort, budget)?;
+    let sort = whnf_in_context(env, ctx, &sort, budget)?;
     Ok(matches!(sort.kind(), TermKind::Sort(l) if l.is_zero()))
-}
-
-/// Re-export for test ergonomics: build a `Const` with a dotted name and no
-/// levels (used by tests building Prop-typed proof terms).
-#[must_use]
-#[doc(hidden)]
-pub fn dotted_const_no_levels(env: &dyn Env, name: &str) -> Option<Term> {
-    crate::ConstRef::mk(env, Name::from_dotted(name), Vec::new())
-        .ok()
-        .map(Term::const_ref)
 }
 
 #[cfg(kani)]

@@ -64,6 +64,9 @@ pub mod cfg;
 pub mod cli;
 #[cfg(any(test, feature = "proof-import"))]
 pub mod coq_import;
+pub mod diagnostic;
+#[cfg(feature = "kcheck-trace")]
+pub mod kcheck_trace;
 // Compile-time pin for the enum discriminants the crystal chains prove about.
 // Not behind a feature: the `const _: () = assert!(…)` blocks are the tripwire,
 // and a tripwire that only arms under a feature is not one. This is deliberately
@@ -77,6 +80,7 @@ pub mod flat;
 #[cfg(any(test, feature = "proof-import"))]
 pub mod hol_light_import;
 pub mod inductive;
+pub mod lean_world;
 pub mod level;
 #[cfg(test)]
 mod level_scaling_tests;
@@ -88,6 +92,18 @@ pub mod micro;
 #[cfg(any(test, kani))]
 pub(crate) mod micro_contracts;
 pub mod mode;
+// The self-verification MODEL, embedded as `clean { }` islands (embed memo
+// `designs/2026-08-28-embedding-the-kernel-model.md`, owner ruling 5 taken for
+// in-place islands). GENERATED from `crates/clean-verify/spec/*.clean` by
+// `scripts/model_islands.py --render`; the `model-islands` gate leg refuses drift
+// and re-checks that every declaration registers and none is prelude-aliased.
+//
+// Gated because `clean { }` is Trust syntax that stock rustc cannot parse — and
+// rustc never parses a cfg-gated-out module FILE, so an ordinary build, the public
+// snapshot and every non-Trust consumer are untouched (measured: stable 1.97.1
+// with the cfg off exits 0).
+#[cfg(clean_trust_islands)]
+mod model_islands;
 pub mod name;
 #[cfg(any(test, feature = "proof-import"))]
 pub mod open_theory;
@@ -97,6 +113,8 @@ mod serde_budget;
 #[cfg(any(test, feature = "proof-import"))]
 pub use open_theory as opentheory;
 pub mod quot;
+#[cfg(not(kani))] // content digests are cfg(not(kani))
+pub mod reference; // KR0: the fenced Lean-reference entry (`ReferenceKernel`)
 pub mod sem_memory_model;
 pub mod sem_memory_trait;
 pub mod separation_logic;
@@ -106,15 +124,21 @@ pub mod tc; // Type checker (definitional equality, WHNF, type inference)
 pub mod test_utils;
 pub mod vc_protocol;
 pub mod verify_api;
+pub mod work_meter; // Kernel work units: what every structural walk charges
 
 pub use env::proof_search::{search_proof, ProofSearchResult};
 pub use env::{
     canonical_ambient_axiom_kind,
+    canonical_foundation_declaration,
+    is_canonical_foundational_constant,
     is_foundational_axiom,
+    is_reserved_ambient_axiom_name,
+    is_sorry_marker,
     is_trust_marker,
     // Metamath two-pass PASS-1 axiom-only flag (verification-skip, see decl_add)
     mm_axiom_only,
     mm_two_pass_active,
+    prints_as_ambient_axiom,
     set_mm_axiom_only,
     AesopIndexMode,
     AesopRule,
@@ -170,6 +194,8 @@ pub use env::{
     PersistentExtState,
     ProofQuality,
     Reducibility,
+    ScopedAuditWork,
+    ScopedDeclarationWork,
     SimpExtEntry,
     SimpExtState,
     SorrySummary,
@@ -185,8 +211,8 @@ pub use expr::{
     Multiplicity,
 };
 pub use inductive::{
-    allows_large_elim, Constructor, ConstructorVal, InductiveDecl, InductiveError, InductiveType,
-    InductiveVal, RecursorArgOrder, RecursorRule, RecursorVal,
+    allows_large_elim, allows_large_elim_without_env, Constructor, ConstructorVal, InductiveDecl,
+    InductiveError, InductiveType, InductiveVal, RecursorArgOrder, RecursorRule, RecursorVal,
 };
 pub use level::Level;
 pub use name::Name;
@@ -212,6 +238,11 @@ pub use tc::{
 
 pub use cache::{TypeCheckCache, TypeCheckCacheStats, TypeCheckId};
 pub use mode::{AxiomId, CleanMode, ModeError, SourceSystem};
+#[cfg(not(kani))]
+pub use reference::{
+    is_tripwire, EnvDigest, NonLeanKind, ReferenceAccepted, ReferenceKernel, ReferenceRefusal,
+    TheoryId, TRIPWIRE_AXIOMS,
+};
 
 /// Domain-prefixed alias for collision-free imports.
 ///
@@ -232,3 +263,6 @@ pub use tc::TypeError as KernelTypeError;
 ///
 /// Use `KernelLocalDecl` when importing from multiple crates with `LocalDecl` types.
 pub use tc::LocalDecl as KernelLocalDecl;
+
+/// Shared source-world decision type; artifact identities are measured by clean-olean.
+pub use lean_world::{LeanWorld, LeanWorldState, UnknownLeanWorld};

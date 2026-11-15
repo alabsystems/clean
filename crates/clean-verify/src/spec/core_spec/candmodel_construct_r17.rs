@@ -163,12 +163,29 @@
 //!   information shapes erase — `proj s i sub` reads the `i`-th field of a
 //!   structure, and `Sk` records neither field count nor field shapes — and
 //!   nothing here proves or refutes it.
-//! * **No `xval`-side re-derivation of R14/R15's SEMANTIC lemmas.**
-//!   `r17_xval_irrel` is the derivation-irrelevance theorem; `val_lift`,
-//!   `val_psub`, `val_step_sem`, `val_star_sem` and `val_conv` are stated and
-//!   proved for **`sval`** in R14-R16 and are NOT restated for `xval`. What
-//!   transfers today is the embedding `r17_wk_wkc` and the shape-level
-//!   agreement `r17_shapeOf_agrees_on_wk`; the semantic transfer
+//! * **CLOSED 2026-09-17 by R18 — the semantic transfer, and the stack over
+//!   it.** `r18_xval_sval` proves `xval (wk_wkc h) r = sval h r` at every `WK`
+//!   derivation and valuation, and `r18_xval_lift` / `r18_xval_psub` /
+//!   `r18_xval_inst` / `r18_xval_step` / `r18_xval_step_star` /
+//!   `r18_xval_conv` carry R14's and R16's semantic lemmas onto `xval`. Two
+//!   things about that rung belong here rather than there. First, it wrote no
+//!   new semantic machinery: every arm of the transfer is `r14_val_lift`'s arm
+//!   with the lifting stripped out, so R13's funext and R14's two congruence
+//!   helpers were exactly and only what it needed. Second, **it is where this
+//!   rung's subsingleton pays.** `wkc_lift` at an embedded derivation and the
+//!   embedding of `wk_lift` derive one judgment by different routes;
+//!   `r17_wkc_deriv_unique`, through `r17_xval_irrel`, identifies them in ONE
+//!   application instead of a commutation induction — the first consumer it has
+//!   had outside this file, and the concrete reason it was worth keeping when
+//!   `r17_conv_verdict` measured that a conversion rule would cost it. SCOPE:
+//!   the transferred stack quantifies over `h : WK`, so it reaches no `konst`-
+//!   or `let_`-headed `WKC` derivation; `r18_lift_at_wkc_probe` is refused by
+//!   the kernel and pins that. WAS: **No `xval`-side re-derivation of R14/R15's
+//!   SEMANTIC lemmas.** `r17_xval_irrel` is the derivation-irrelevance theorem;
+//!   `val_lift`, `val_psub`, `val_step_sem`, `val_star_sem` and `val_conv` are
+//!   stated and proved for **`sval`** in R14-R16 and are NOT restated for
+//!   `xval`. What transfers today is the embedding `r17_wk_wkc` and the
+//!   shape-level agreement `r17_shapeOf_agrees_on_wk`; the semantic transfer
 //!   (`xval (wk_wkc h) r = sval h r`) is the named next item.
 //! * **R10's `cr3` refutation, R11's `candInterp` conversion refutation and
 //!   R12's TWO HORNS are untouched and still stand.** Nothing here is about
@@ -192,7 +209,7 @@
 //! **No longer on the list:** `const` and `let_` themselves, and the whole
 //! weakening / substitution / instantiation / subject-reduction / shape-
 //! uniqueness / derivation-uniqueness / interpretation-irrelevance stack over
-//! them.
+//! them — and, since R18, the SEMANTIC stack too, on the embedded fragment.
 //!
 //! ## Census
 //!
@@ -531,7 +548,7 @@ fn meta(name: &str) -> (&'static [&'static str], &'static str) {
         ),
         "r17_konst_witness" => (
             &["WKC.konst", "r12_piEnv", "the_red_env"],
-            "The konst rule at R9/R10's REAL reflected dead constant (kcre_name_12): both \
+            "The konst rule at R9/R10's REAL reflected dead constant (fixture_def_env_name): both \
              inertness premises hold by Eq.refl over the live the_red_env. R9's \
              synTyC_konst_dead_witness and R11's r11_interp_const_pi_witness are the precedent; \
              this is the same constant, now shape-typed on the lineage that has the metatheory.",

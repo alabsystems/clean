@@ -197,6 +197,13 @@ fn check_proof(
     manifest: &HarnessManifest,
     violations: &mut Vec<SpecLinkViolation>,
 ) {
+    // v46: a `CleanTheorem` binding is resolved against this module's own
+    // `Certified` CleanCic evidence, never against the build's kani manifest
+    // (`crate::spec::validate_clean_theorem_bindings`). Running L1 on it would
+    // demand a kani harness that by construction does not exist.
+    if !matches!(proof.kind, crate::spec::ProofKind::Kani) {
+        return;
+    }
     if proof.machine != container || proof.proof_name.trim().is_empty() {
         return;
     }
@@ -252,6 +259,7 @@ mod tests {
             }],
             origin: SpecOrigin::Embedded,
             enforcement: crate::spec::SpecEnforcementMode::DesignOnly,
+            temporal: Vec::new(),
         }
     }
 

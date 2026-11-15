@@ -1,0 +1,6006 @@
+{
+ "schema": "clean.kernel-arena-round-table.v1",
+ "round": "2026-09",
+ "doi": "10.5281/zenodo.22944094",
+ "arena_commit": "5d7ca987618f1136aaa296057b50a2c10c4ce77a",
+ "archive": {
+  "file": "lean-arena-round-2026-09-tests.tar.gz",
+  "sha256": "98a69742b538296c5f413d0527dfeef8c4d1815fe64b12c8623cd33de63bee0d",
+  "files": 193
+ },
+ "results_json_sha256": "c48cab650e1bcfbb4231221d0b68820880a077ac67b37e435bf1a4aa9caff9f7",
+ "license": "Apache-2.0 (The Lean Kernel Arena contributors, Zenodo record 22944094)",
+ "paranoid_kernels": [
+  "official",
+  "lean4lean",
+  "nanoda",
+  "con-leche",
+  "con-ron"
+ ],
+ "consensus_rule": "the common verdict of the paranoid kernels that accepted or rejected the test (a decline, error or timeout is no verdict); 'split' when they disagree, 'none' when none judged it",
+ "tests": [
+  {
+   "path": "bad/bugs/constlevels.ndjson",
+   "arena_name": "bugs/constlevels",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "2fa6a967f15f76cfdcea3ef1992ff31a4cc4aa647b0f8fabf0ff61eedb3afbf1",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/ctor-num-fields.ndjson",
+   "arena_name": "bugs/ctor-num-fields",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "8a6aa0949892f59986fde474bfdc2a1887416b370e1148cd27e608a40f2eb94b",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/k-rec-conv.ndjson",
+   "arena_name": "bugs/k-rec-conv",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "32570fea94f7a2655de489427200c35f2e1ffa7ec9d46b82c531195eaacd5ef3",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/large-elim-param.ndjson",
+   "arena_name": "bugs/large-elim-param",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "df7d23ff199c4956620f3b1b4d17976c6bbe99ec6c1b5a4e803a7f9f415e331f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/large-elim-prop-bool.ndjson",
+   "arena_name": "bugs/large-elim-prop-bool",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "2ba29719a2a300ff80e72920b66355785764ac53500719eec7bf459d174262cf",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/level-imax-leq.ndjson",
+   "arena_name": "bugs/level-imax-leq",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "497eaa80a214386c679356c33a72c8beab5019c4938494b1608e3772a2756191",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/level-imax-normalization.ndjson",
+   "arena_name": "bugs/level-imax-normalization",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "d368d5569321b717b7ec95bd1f4fa5bbd7d6e1f8d6ebdf1a0644dc8bc76bc2ec",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/nat-rec-k-lie.ndjson",
+   "arena_name": "bugs/nat-rec-k-lie",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "5a49d132bb0c7dca091baa481333f5e97e390fde72c8ec18c6124a690ec47d7c",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/nat-rec-rules.ndjson",
+   "arena_name": "bugs/nat-rec-rules",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "934e59fdc4f2a978605c4a44e90b94b57e9940f3828620c0db337b7125cdd169",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/nested-unused-param.ndjson",
+   "arena_name": "bugs/nested-unused-param",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "0510cceb7cc66b39792a4d1589cbcee499b1ba56837203030a3324fb6355a618",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/orphan-rec.ndjson",
+   "arena_name": "bugs/orphan-rec",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "738f28bc1175d70faf09f4b45ae7ca92e8b8d397f6c5d0183240cd695f6d7bc4",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/proj-non-structure.ndjson",
+   "arena_name": "bugs/proj-non-structure",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "d67fc8c67eb839ec41b5caa7744ba38c0866872a1e5a3e3cad55700e403340cf",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/proj-of-imax-prop.ndjson",
+   "arena_name": "bugs/proj-of-imax-prop",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "964f1ed8642fbb87eea5f9ce1b17c2fbf9489be344d33ca479a9bc4ec4a770c9",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/proj-of-stuck-prop.ndjson",
+   "arena_name": "bugs/proj-of-stuck-prop",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "a2fc30b56ba4b26e7e5fccc53c6b63a73e083761b3b7f4caa4d462fde84ee711",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/proj-of-subst-prop.ndjson",
+   "arena_name": "bugs/proj-of-subst-prop",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "1c9d8a266c198b7d4a1cfbe3fffd2de2d2b75e603fb3cedfa5d5309f7b295b9d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/rec-k-lie.ndjson",
+   "arena_name": "bugs/rec-k-lie",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "baf41fbd040f172ad06afa78f9994b4501ebcd91e46c4a13e79227ccd246a188",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/rec-missing-ih.ndjson",
+   "arena_name": "bugs/rec-missing-ih",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "8a240552317ba17d44d175c10531e5f988f55569db5eff734701735ce598fa73",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/bugs/rec-of-subst-prop.ndjson",
+   "arena_name": "bugs/rec-of-subst-prop",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "fa498cf880a5390e65c3990e8361829a5012de4fae133dbfcd6a81af26f74ca8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/other/extra-rec.ndjson",
+   "arena_name": "other/extra-rec",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "eab650028a71177bd4d9fcb6a84b4e92dd91cf4e7af67023af458d18729be0e2",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/other/nat-lit-add-bad.ndjson",
+   "arena_name": "other/nat-lit-add-bad",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "0577e646a71f69a3f1829184c41fb8c7090da1f14d4c1c950508206b02d9df37",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/other/orphan-ctor.ndjson",
+   "arena_name": "other/orphan-ctor",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "2c9b12979ea3da11272d6eca4b0a39523a863d6fb501daf61c4edb8996a97daa",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/other/proj-of-prop.ndjson",
+   "arena_name": "other/proj-of-prop",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "7ec1cb24885cae045ccb842f1fc786869ed708a19fa289f92b410297a299f5d5",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/perf/refute-cheap-first.ndjson",
+   "arena_name": "perf/refute-cheap-first",
+   "outcome": "reject",
+   "timeout_s": 50,
+   "sha256": "a1f15a2ccfc57c1475e5a3d98034017f9297d355a8452ebe3ef3cfb4b293ad36",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/perf/refute-cheap-last.ndjson",
+   "arena_name": "perf/refute-cheap-last",
+   "outcome": "reject",
+   "timeout_s": 50,
+   "sha256": "c0bd59565940fc41816942f6d32a9612af85290a41f8595ba900ac916b4ea9eb",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/002_badDef.ndjson",
+   "arena_name": "tutorial/002_badDef",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "d1342aceb5741fc040523d3b4bd5e1ae3160dc17213d1dc0f6d766559a93a227",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/009_forallSortBad.ndjson",
+   "arena_name": "tutorial/009_forallSortBad",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "36eef2fa43e86af2d031a9cb9ec8fbd452dd7e50d3444997fe71003cc7295051",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/010_nonTypeType.ndjson",
+   "arena_name": "tutorial/010_nonTypeType",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "18cba14f24723f0325721cdd1a5699e45b61bcce7ed94f2bded0f42c848ba4c4",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/011_nonTypeAxiom.ndjson",
+   "arena_name": "tutorial/011_nonTypeAxiom",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "687a8966b2727b26143b3340e8bead862b9057e5b4ec1ee7fc51a2a6e7211dc6",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/012_nonPropThm.ndjson",
+   "arena_name": "tutorial/012_nonPropThm",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "07c030b1e9ee321bb537f4f82f5238087cbed199f5e4f8673650c3190e54a33a",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/014_selfProof.ndjson",
+   "arena_name": "tutorial/014_selfProof",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "f39b1bba5099649997a6c7cd49c870f91dfc86432979eafae58692d236142499",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/019_tut06_bad01.ndjson",
+   "arena_name": "tutorial/019_tut06_bad01",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "9c5c0329065ef0b470c7b43a365c30a0098697dbeb8d69f2c2bea2e345ab9533",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/046_inductBadNonSort.ndjson",
+   "arena_name": "tutorial/046_inductBadNonSort",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "372f6a167433b45749fa38f14ad3a2e8ca4e0dae8762812c0b9f288e9f68499f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/047_inductBadNonSort2.ndjson",
+   "arena_name": "tutorial/047_inductBadNonSort2",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "95836e7bee5fbd00d1d16d88cea2defa8dfb2387fc0e400d200b59715716a0d9",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/048_inductLevelParam.ndjson",
+   "arena_name": "tutorial/048_inductLevelParam",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "732e2fc946ab308a819366bc5395865a69235098e1a401ec1a059d05d89ef06e",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/049_inductTooFewParams.ndjson",
+   "arena_name": "tutorial/049_inductTooFewParams",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "5d54c2cc017f35b26744f8b5ca4438bdddd8f254f3023948a542b70e5da72827",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/050_inductWrongCtorParams.ndjson",
+   "arena_name": "tutorial/050_inductWrongCtorParams",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "20214ec1a31221884548d3e91b689b9569fd7588af2fb0e219754b683041ac10",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/051_inductWrongCtorResParams.ndjson",
+   "arena_name": "tutorial/051_inductWrongCtorResParams",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "5506566449cc2f3c83f417007bf15a7a0101c458c450d77a23cfd4c2423910c4",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/052_inductWrongCtorResLevel.ndjson",
+   "arena_name": "tutorial/052_inductWrongCtorResLevel",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "3f29bd3a753caa056cc45c20cd8aeb734bc44cfc6b3828a6c6ec855737f596f3",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/053_inductInIndex.ndjson",
+   "arena_name": "tutorial/053_inductInIndex",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "8dc9a9997862a5f25b76520f5d69a146664ad9f0364dd350732a7f76e4190763",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/054_indNeg.ndjson",
+   "arena_name": "tutorial/054_indNeg",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "89592d2e05e7ea518cf550eb18b99d1172b63b96b90abf1454b7102300eda843",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/056_reduceCtorType.mk.ndjson",
+   "arena_name": "tutorial/056_reduceCtorType.mk",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "bd087620c8685a48789b4bf46c373f4c81475b6d1c3b6081cf16d83a4a216a26",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/057_indNegReducible.ndjson",
+   "arena_name": "tutorial/057_indNegReducible",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "c573634d126fe5c386474f89e2993cc97888af3ce0efcab176887751ea36643f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/061_typeWithTooHighTypeField.mk.ndjson",
+   "arena_name": "tutorial/061_typeWithTooHighTypeField.mk",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "d2ab0a56844b0739dd5b75d35894eca8766a7c41b8097873ba018d341622c70d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/073_BogusRecursor.ndjson",
+   "arena_name": "tutorial/073_BogusRecursor",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "7f166e26d8b79ca496b066644bbe199faefa4c5fb3c6ded01e35ff4ec628a309",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/087_projOutOfRange.ndjson",
+   "arena_name": "tutorial/087_projOutOfRange",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "5db4d2e7e00fe46443daade14664b6227b8e55e8dca58791d7d551242caf5b86",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/088_projNotStruct.ndjson",
+   "arena_name": "tutorial/088_projNotStruct",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "2ddb5f53a6f8b459b7dd6c2daa9bb794613295dccec07999573b2c99cc9cb076",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/090_projProp2.ndjson",
+   "arena_name": "tutorial/090_projProp2",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "44b31dd5644566e41670210e8584792b2819f9b64bb8d356948cdee674e82906",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/092_projProp4.ndjson",
+   "arena_name": "tutorial/092_projProp4",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "1dbc013754ba41dae8c0449252708027e7f59fd8523d0896f2c8aae65d942b29",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/093_projProp5.ndjson",
+   "arena_name": "tutorial/093_projProp5",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "9ca0433a35a24516035c5be845c2f0c0fbc78231b1e2625797ee01da9271b2d0",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/094_projProp6.ndjson",
+   "arena_name": "tutorial/094_projProp6",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "38567094775dea24a0742cc4fceec671ef17a3825574326d1290bafa02166f84",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/096_projIndexData.ndjson",
+   "arena_name": "tutorial/096_projIndexData",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "96d23422f47630509730fc9fee4c87a79bd300d3edb15626e68c1604f7e6798e",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/097_projIndexData2.ndjson",
+   "arena_name": "tutorial/097_projIndexData2",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "0536b5c0a55c24e69dbcd5734c31404de3e5d28c8469a72e2d593694fb10ffcf",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/100_ruleKbad.ndjson",
+   "arena_name": "tutorial/100_ruleKbad",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "cf80eb3fa8d1cffc0a17c46730b20166688ea8346e299b19e3036cfc6462c4cf",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/101_ruleKAcc.ndjson",
+   "arena_name": "tutorial/101_ruleKAcc",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "0a053ed771c6f0c171d231137f8000efe5f48f8d5d30cfd9863fe44e55a1d4d2",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/105_proofIrrelevanceBad.ndjson",
+   "arena_name": "tutorial/105_proofIrrelevanceBad",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "9423911316ad18c0ec158f1f004f9e79c3a0f9580bb6a1a0f798cf04066e5a27",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/111_indexedUnitEta.ndjson",
+   "arena_name": "tutorial/111_indexedUnitEta",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "f1b07164d2f71bbeb2de6af4e9163c4b1bcceb4751e89b4b0dc2e0faa40c5d1d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/113_indexedStructEta.ndjson",
+   "arena_name": "tutorial/113_indexedStructEta",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "0962411896c8365fc85581c7e64f3f4ece34399be025be408b43003d71a0400d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/116_funEtaBad.ndjson",
+   "arena_name": "tutorial/116_funEtaBad",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "55235f26d78f88177dcfd394ea5fcba4ff213cb5b1a515b8eb3fbba2c87bacce",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/117_reflOccLeft.ndjson",
+   "arena_name": "tutorial/117_reflOccLeft",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "d26c150c31cc883d135ab9de30f06ad8ff3e1f7f6cba86035585eacd829afefc",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/118_reflOccInIndex.ndjson",
+   "arena_name": "tutorial/118_reflOccInIndex",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "4bb99bd31dd9c65f772e5e0e10124f8c1e4c228d103b1c03f1dd04b2767c4ff5",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/125_accRecNoEta.ndjson",
+   "arena_name": "tutorial/125_accRecNoEta",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "29935bfbbb964aaaaf8fc4b0e88544dfdd1cac36418570d0e20f963b11e2d09e",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/132_dup_defs.ndjson",
+   "arena_name": "tutorial/132_dup_defs",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "0d69ddde24113c345588219b0053ca8a0370e18ba18872ce59803f4895463a03",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/133_dup_ind_def.ndjson",
+   "arena_name": "tutorial/133_dup_ind_def",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "70fde6123e2b0df80e53bbfb04315e65597bd8d0db045163b86f4923bce78966",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/134_dup_ctor_def.ndjson",
+   "arena_name": "tutorial/134_dup_ctor_def",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "de6dad67add6f014fac5006c2b55364fe37c164fefd3c51f3d557b49b559e20c",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/135_dup_rec_def.ndjson",
+   "arena_name": "tutorial/135_dup_rec_def",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "102a441dfc370bc13f953d324760e4d9215ef001ce30e239f017bc7d28e9b475",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/136_misnamed_rec_user.ndjson",
+   "arena_name": "tutorial/136_misnamed_rec_user",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "99d9b3d8ae70064274d124b394ad535294442c5685668b2655b3f52a433f0721",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/137_dup_rec_def2.ndjson",
+   "arena_name": "tutorial/137_dup_rec_def2",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "e35b447e1b3c59febd59c235fc38212831e255611a5b5da92dc3a82edba6e869",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/138_dup_ctor_rec.ndjson",
+   "arena_name": "tutorial/138_dup_ctor_rec",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "c57c2a115cdc8a09c84fd4591faa76b40bae8faeab8a0fcccaf108bd66244f46",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/139_DupConCon.ndjson",
+   "arena_name": "tutorial/139_DupConCon",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "6682b4599f21a9389c9d79ae7520d49ed4d0c06bfe419860fadf206926e1deb3",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-ron": {
+     "status": "rejected",
+     "exit_code": 1
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/140_falseFromUnsafe.ndjson",
+   "arena_name": "tutorial/140_falseFromUnsafe",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "ef646a5368b95ad4021069a0c9906a6b5e11c0abcfd22673821e6bd20f26e0a8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "bad/tutorial/141_falseFromPartial.ndjson",
+   "arena_name": "tutorial/141_falseFromPartial",
+   "outcome": "reject",
+   "timeout_s": null,
+   "sha256": "cd249a6f8e59fa74e15b325996a9c786a17936993dfddb6e5bc2335914af31fd",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "lean4lean": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "nanoda": {
+     "status": "rejected",
+     "exit_code": 1
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "reject"
+  },
+  {
+   "path": "good/corner-cases/proof-param-ok.ndjson",
+   "arena_name": "corner-cases/proof-param-ok",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "7f9b3c07a64b441f8dd0f7dd2912274241fdb17118953fb089f796fdd1590af4",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/init-prelude.ndjson",
+   "arena_name": "init-prelude",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "fc440bd35aa4ecb244836eef0c2e31c578ac4460f42665f4e8305cbc2cd2104d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/other/level-index-out-of-order.ndjson",
+   "arena_name": "other/level-index-out-of-order",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "7db8148079e2e8160a1a4c71258ad11b17ce18edfa84ab1e12eae937ec9538d1",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/other/nat-lit-add.ndjson",
+   "arena_name": "other/nat-lit-add",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "f30784ee87c3d61f73ca7036295dea1034f1d8796b574ab232ab45999cae7faa",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/other/nat-lit-ble.ndjson",
+   "arena_name": "other/nat-lit-ble",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "61df335b150f5fe3adca828bcf534db472a3a913620a6696f082bd2ed4c76d60",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/other/nat-lit-sub.ndjson",
+   "arena_name": "other/nat-lit-sub",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "96f26299503d0cb6e0586160daa88b4bb7d24ffb8dddee872e9f0c6d61847487",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/other/sparse-name-index.ndjson",
+   "arena_name": "other/sparse-name-index",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "3279c9c8ae24d5b3a8433ddee5d4a421c4e15e3cd84117fb4873d1284112b96d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/app-lam.ndjson",
+   "arena_name": "perf/app-lam",
+   "outcome": "accept",
+   "timeout_s": 100,
+   "sha256": "3f7b7a595dc29b0e289c9031c4edaef42d0e12b8aee3cbb48cf15cb715adc09a",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/args-before-unfold.ndjson",
+   "arena_name": "perf/args-before-unfold",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "11844c0ce9aa3ac50be0ae85c0138b1efeb909b913108b532573433254e89b0d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/beta-ladder.ndjson",
+   "arena_name": "perf/beta-ladder",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "0b17ce0ad997f3443a7549d5c2fe062bc6d592ad89ecc00ecedd5a91834f15a1",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/church-numerals.ndjson",
+   "arena_name": "perf/church-numerals",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "1234703fc7082cdf99eaf7ecd18fe09f1e11191c9c5b4ffcc5c159c50595927a",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/discarded-argument-match.ndjson",
+   "arena_name": "perf/discarded-argument-match",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "b57411e156c572e2b0e4bd25033fb0f689198d684715600ac7f855cccca1edca",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/discarded-argument.ndjson",
+   "arena_name": "perf/discarded-argument",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "8d3448f9d00a00f40b34b11ec17d5abe230f76c2578c37fd735dfaf914707bd2",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/folded-constant-first.ndjson",
+   "arena_name": "perf/folded-constant-first",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "22cd194a4e1142b0790776f01292108301b078d9e6b7a20a6a9227e55b61715c",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/folded-constant-last.ndjson",
+   "arena_name": "perf/folded-constant-last",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "2e7b6fc088f09ed018066a524894258498c7e57fbcde04852920c18838386854",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/fueled-chain.ndjson",
+   "arena_name": "perf/fueled-chain",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "b4bcef85caa20a9f80c390f2415fae9ddb28966c8da64a2e03fc6ec72c1d041d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/grind-ring-5.ndjson",
+   "arena_name": "perf/grind-ring-5",
+   "outcome": "accept",
+   "timeout_s": 60,
+   "sha256": "f0fd36e8ad0f6e224c4be968a991d4f0643280230abe0275578e018aff0ac0f8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/identical-nesting.ndjson",
+   "arena_name": "perf/identical-nesting",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "38da6395264b5761687f5a3e7c2444b96eb59b095d7dc0ba368f39415ebf8b69",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/irrelevance-before-evaluation.ndjson",
+   "arena_name": "perf/irrelevance-before-evaluation",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "f79e283acead6adf345f3139e3c15d754867efe27ffafc1c8dedc7035b9ca04d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/let-ladder.ndjson",
+   "arena_name": "perf/let-ladder",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "b7f15b7399cd86b2a7c8b5c0c72d395a7cfc37a949d7e49520fd354dc4842305",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/magma-list-deep-n21.ndjson",
+   "arena_name": "perf/magma-list-deep-n21",
+   "outcome": "accept",
+   "timeout_s": 80,
+   "sha256": "2283048c8f82883fd5a7a59a20601b58256568c82561dff3304f38ad4d57fc75",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/magma-list-deep-n36.ndjson",
+   "arena_name": "perf/magma-list-deep-n36",
+   "outcome": "accept",
+   "timeout_s": 390,
+   "sha256": "8adb6a65960f41fd8fdc8447b70b942075448ecd5155c1c3ed0b7adb954da34f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/magma-list-pair-n21.ndjson",
+   "arena_name": "perf/magma-list-pair-n21",
+   "outcome": "accept",
+   "timeout_s": 260,
+   "sha256": "9536b3bb1529418dd3ff735dc3d288641c20cf6a71a01716647f62088e0ba0e2",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/magma-list-pair-n7.ndjson",
+   "arena_name": "perf/magma-list-pair-n7",
+   "outcome": "accept",
+   "timeout_s": 60,
+   "sha256": "c3894b9ba91947cd23c7e6263813868a31dc8092123bbc5962379732ef99e906",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/repeated-subproblem.ndjson",
+   "arena_name": "perf/repeated-subproblem",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "97ec5a16351fb60e171f67ff3ff292e4a166a59bc7af3772cc782f77ec26dfc8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/shared-subterm.ndjson",
+   "arena_name": "perf/shared-subterm",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "2df9f9fbfb7167bb9e0d004ff25afd99fa434113fc343f130eb459661f40e29b",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/shift-cascade.ndjson",
+   "arena_name": "perf/shift-cascade",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "ece47e6c9082d05db8a3063bb164a0f64124f25760023b87803aea2d82911691",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/perf/unroll-versus-evaluate.ndjson",
+   "arena_name": "perf/unroll-versus-evaluate",
+   "outcome": "accept",
+   "timeout_s": 50,
+   "sha256": "815d75fa70b6c06f4164e86ff77050b9679162f3be939c6757bd66f73f432203",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/001_basicDef.ndjson",
+   "arena_name": "tutorial/001_basicDef",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "82023f63efe0d75e9966621bfc69033ccd1333e8d0d989b3d54a79859e9da0ce",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/003_arrowType.ndjson",
+   "arena_name": "tutorial/003_arrowType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "5c89ad23548a25281adaaaa705193f3d3846902f93e0a6740e3b95566706ae52",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/004_dependentType.ndjson",
+   "arena_name": "tutorial/004_dependentType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "9c1601d4a39c4393a31cb6372c6d78dc245db79e385e359a80573b5bbfb09f83",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/005_constType.ndjson",
+   "arena_name": "tutorial/005_constType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "b193eee0eb8419ffdf4287c220b346d6f7f90460d8e32bef631309551626d042",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/006_betaReduction.ndjson",
+   "arena_name": "tutorial/006_betaReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "3320f6f67cd55b2bae9112ea9b0d002f231e88ec4fb3c3f3c8fd4e750b13ce78",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/007_betaReduction2.ndjson",
+   "arena_name": "tutorial/007_betaReduction2",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "fb85e6eb84319dce9fed8acacb08cab2c5a54b67960112bc9de3eac22fc5a909",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/008_forallSortWhnf.ndjson",
+   "arena_name": "tutorial/008_forallSortWhnf",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "b4af42800421f4ac5ec7e699a706bdd82f9f1324a5d2d49769fb340bf36e6a48",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/013_thmProof.ndjson",
+   "arena_name": "tutorial/013_thmProof",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "5e4664a6d4f05afbeff4e0af19681e88b2817c48787a9a281c4ba95d80483333",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/015_levelComp1.ndjson",
+   "arena_name": "tutorial/015_levelComp1",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "2e6b6016ac241c9e1dd01ee86782f21adabd928bca24880b60619de453bec0c3",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/016_levelComp2.ndjson",
+   "arena_name": "tutorial/016_levelComp2",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "aa971f4ba7603e183ebcf90a8ac92241f5fa2a96fbc6659e45380f52de3ffd6e",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/017_levelComp3.ndjson",
+   "arena_name": "tutorial/017_levelComp3",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "e11ecbb09540778e2d2d0084d7759ce1c1483ca7f02168b87e1ec8bd1bf2c5cd",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/018_levelParams.ndjson",
+   "arena_name": "tutorial/018_levelParams",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "d78d458ea81bb210c80d3915976a03536f1b267879207f3604745b777014a167",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/020_levelComp4.ndjson",
+   "arena_name": "tutorial/020_levelComp4",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "39dced2925dcce7f66539f47f408d276b48d57638b4bfefc47860eed2f710a58",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/021_levelComp5.ndjson",
+   "arena_name": "tutorial/021_levelComp5",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "31910166228cf46f68dbaa876d1c155734475b0f3f7a15c2a82f5535e8c150f8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/022_imax1.ndjson",
+   "arena_name": "tutorial/022_imax1",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "8fe3d41b913c8717847bc4a544e6b947bb5a1b616d80dbe19859d465ff225d57",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/023_imax2.ndjson",
+   "arena_name": "tutorial/023_imax2",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "9d7fdab95e9ac1f87e19055e3133b98173f90d94c641870dc49cff6db2d1061f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/024_levelMaxComm.ndjson",
+   "arena_name": "tutorial/024_levelMaxComm",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "8a2ed8095cf9f69fcebb1e8b695944599cd524b42334cd6ff3051a5deebe7134",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/025_levelMaxAssoc.ndjson",
+   "arena_name": "tutorial/025_levelMaxAssoc",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "2e97e820cfffa0f890ea70f7c3ea7f7e1636568196f3fc738868249644f9f229",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/026_levelMaxIdem.ndjson",
+   "arena_name": "tutorial/026_levelMaxIdem",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "1ee0d884c19ef76feb4ba77f5448507da2f8d983a688f4e8711d61784f50e571",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/027_levelMaxAbsorb.ndjson",
+   "arena_name": "tutorial/027_levelMaxAbsorb",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "87fab97e0b524a64e21ebe2adbadb407b381d1bee45cd2060e4a24055d554b11",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/028_inferVar.ndjson",
+   "arena_name": "tutorial/028_inferVar",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "2ed39c087f88481185d28085d7d2ba2f2985426da70062bfe4e6dd987af46110",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/029_defEqLambda.ndjson",
+   "arena_name": "tutorial/029_defEqLambda",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "7a28d11e2a035c2d0d97c75d5cb0bb12e16be1c5502b9975aa08775e1928ba92",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/030_peano1.ndjson",
+   "arena_name": "tutorial/030_peano1",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "fe92f67341850f0c222c43cd99e9f17904cdb003654f394890f49df431ceaf7d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/031_peano2.ndjson",
+   "arena_name": "tutorial/031_peano2",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "63c8aec3c8457d2f4e76476b1d503647fb58d998b0dc2176cacc5efd814586e0",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/032_peano3.ndjson",
+   "arena_name": "tutorial/032_peano3",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "e731f91828d3bb6186205233ba8ba94dd54bdf21e7b9a06e020f789be70ad55d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/033_letType.ndjson",
+   "arena_name": "tutorial/033_letType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "1222e60968ee37505bbb4952811a9645af2307f2a85e7f3d2d6fa2a7f1d5e667",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/034_letTypeDep.ndjson",
+   "arena_name": "tutorial/034_letTypeDep",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "eca16eea9573a481f232edfd0ff84a02ae208c1f379d967a56aec75f86fc7ca1",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/035_letRed.ndjson",
+   "arena_name": "tutorial/035_letRed",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "b3d5e6f1f6e45721973e4e7167fbe0a92abbdcd69f039112eac70ab25c028acc",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/036_empty.ndjson",
+   "arena_name": "tutorial/036_empty",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "030852937308e66cb90de3b8de7cd336f3d825e81c87c5be5cc1fe33c6d54356",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/037_boolType.ndjson",
+   "arena_name": "tutorial/037_boolType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "02053d077abf5a63594d1025f9ef2f90dfff65f331503aa3b7486bbbb997b3e8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/038_twoBool.ndjson",
+   "arena_name": "tutorial/038_twoBool",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "91a1f7379e22ebbec710ce6b43b7e0750be258ace8fc22d0b889fb76b57010de",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/039_andType.ndjson",
+   "arena_name": "tutorial/039_andType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "d81009480e131d451da9e625fe9a90fff92fbee08d324aefd6fde3c3b89979e1",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/040_prodType.ndjson",
+   "arena_name": "tutorial/040_prodType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "a74e83890dce34014ef7dc8f1f6e7baf56d481df2a776d886462c789c529741d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/041_pprodType.ndjson",
+   "arena_name": "tutorial/041_pprodType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "9f2f275784ba923bc3a050c5f1856ad0d18c83d31ff107a5cd663d4cceaec98a",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/042_pUnitType.ndjson",
+   "arena_name": "tutorial/042_pUnitType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "acc7a70c97888e02e2b92e583b370803db0bdac1ddc38f9ff036831459d3a891",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/043_eqType.ndjson",
+   "arena_name": "tutorial/043_eqType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "d45ed54cc74be3d7d92aae6bacc040420ba33f23fa034b4497edb389e089afdc",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/044_natDef.ndjson",
+   "arena_name": "tutorial/044_natDef",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "95d33f871f126e234740e05d9291a1cedcc6a2d01522aedc3122b25aab17ab95",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/045_rbTreeDef.ndjson",
+   "arena_name": "tutorial/045_rbTreeDef",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "d9781f44fcb7e46ff06da1c8a273a4fec4ae989e4114d6668720bd5b87c20b79",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/055_reduceCtorParam.mk.ndjson",
+   "arena_name": "tutorial/055_reduceCtorParam.mk",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "16d146c5ef39743b6a95f21043a43b890e22d72792fd9436e37396765124a7a2",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/058_predWithTypeField.ndjson",
+   "arena_name": "tutorial/058_predWithTypeField",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "5af1ed8df583ce1857bc0852679e04f6024b8de4f1eb2ceba91cc7ed5b6ecb6c",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/059_typeWithTypeField.ndjson",
+   "arena_name": "tutorial/059_typeWithTypeField",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "5c2c36c26f88438688db304bc33d039eb8ce78522e6d3fa53e54a2ae1b14426c",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/060_typeWithTypeFieldPoly.ndjson",
+   "arena_name": "tutorial/060_typeWithTypeFieldPoly",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "a1bb69e5739372ba607b2ed8766cda7373c71a4286788e87ccb07c0749c257be",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/062_emptyRec.ndjson",
+   "arena_name": "tutorial/062_emptyRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "13190ea3d49b78a7ab755381e7867862262bae35f54c9f8e9f588b495957d7ff",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/063_boolRec.ndjson",
+   "arena_name": "tutorial/063_boolRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "2e760d8bfe1ccbb4e0d5139bb26ad0fed2fab02ea7612a2b246fec201f58d4a1",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/064_twoBoolRec.ndjson",
+   "arena_name": "tutorial/064_twoBoolRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "db0e10d735a9a2438ee353c095f8b0d53847d78e5910adee5218925048c8e2e6",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/065_andRec.ndjson",
+   "arena_name": "tutorial/065_andRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "0cbe7714825cbf646d860e051ab8744174230b6d8c65120bee8683927926c02c",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/066_prodRec.ndjson",
+   "arena_name": "tutorial/066_prodRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "0b53e85fe97b23530b00b05ba89c1c860bf4519a0ef41f314e84114dd5df2cea",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/067_pprodRec.ndjson",
+   "arena_name": "tutorial/067_pprodRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "894d4388fcf6a58cad8c4047493abde7edbfd04facb8aeffbbc9673604a2e13e",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/068_punitRec.ndjson",
+   "arena_name": "tutorial/068_punitRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "331c4d8a6de6accecf264219290e102544368dffd5eec64e3587716e3b4880ea",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/069_eqRec.ndjson",
+   "arena_name": "tutorial/069_eqRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "693007cd24f0763cc6c7776840bdc05539645a0e35897af2688bde984f2551e2",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/070_nRec.ndjson",
+   "arena_name": "tutorial/070_nRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "2cd9396449787ce0aec6ed6348b9a0c1eeb21262b72181e3872cf19ed7c67a45",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/071_rbTreeRef.ndjson",
+   "arena_name": "tutorial/071_rbTreeRef",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "d3695868bbbea387aacddf4af324f467fc36c606051415308aa8e0d03f6c650c",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/072_boolPropRec.ndjson",
+   "arena_name": "tutorial/072_boolPropRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "25b41ff38e681eab9d6bc8f0bc7565378d8a54bc5b135ef3bf95d80eccea5b04",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/074_existsRec.ndjson",
+   "arena_name": "tutorial/074_existsRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "f50c9cc865f06f98bcbf39a55d6e149e9ee0a87f374b686f0d734dab6b9d22b8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/075_typeSingletonRecReduction.ndjson",
+   "arena_name": "tutorial/075_typeSingletonRecReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "7407a2ceb9d10d9ea28583eaa808b54b3f4fdd2c5cc8d5568424e32f27571d65",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/076_sortElimPropRec.ndjson",
+   "arena_name": "tutorial/076_sortElimPropRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "36ee61d2cc67052078e756bc7457b5cfaaebd85da1a96c232946e183a479a522",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/077_sortElimProp2Rec.ndjson",
+   "arena_name": "tutorial/077_sortElimProp2Rec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "a70294fd3579d1cc5dabaa0a47579820a6e6dbd83e165e9f60362112abf2ebbe",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/078_boolRecEqns.ndjson",
+   "arena_name": "tutorial/078_boolRecEqns",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "77cb6eab3518ba916595ef8e1a58daaad404e25a293a409b01fa18d5252fc814",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/079_prodRecEqns.ndjson",
+   "arena_name": "tutorial/079_prodRecEqns",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "8c723172049fcdb9db3668bdb5035ee9dfe9dfc7c2eb42163de44748194d4097",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/080_nRecReduction.ndjson",
+   "arena_name": "tutorial/080_nRecReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "1d780f803e22a66fee03182961e37aac1525a3d5766d0193a287da3096b3b648",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/081_listRecReduction.ndjson",
+   "arena_name": "tutorial/081_listRecReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "a0849feb4092ce8e4ccea78a8cd60abd87b0c52a2296561ea534b0d4262b0a53",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/082_RBTree.id_spec.ndjson",
+   "arena_name": "tutorial/082_RBTree.id_spec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "064e14578ae7d66ba118a532ca4ab4e5b484293e3d417fd2eae6fa5ad14ef67f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/083_And.right.ndjson",
+   "arena_name": "tutorial/083_And.right",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "efa843e3b8cc007a0933fd2d89df28a6c5765b167e9ffbb441f4ec8143008212",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/084_Prod.snd.ndjson",
+   "arena_name": "tutorial/084_Prod.snd",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "7c9951ed92178b60820ebaac2a1deb69ae650aa1f7bbbf84e05b32238af7557a",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/085_PProd.snd.ndjson",
+   "arena_name": "tutorial/085_PProd.snd",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "206132d26ab0a1f34d2dce5a7e1881e745a113e59faf5bdfcf74d308aa462256",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/086_PSigma.snd.ndjson",
+   "arena_name": "tutorial/086_PSigma.snd",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "915270c38f148d3de02b357e8cad6913b3ab1ab7ac611a53e45a649aaac5544e",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/089_projProp1.ndjson",
+   "arena_name": "tutorial/089_projProp1",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "9102fd7c60e2796c11b8ecaa208363c3095ac324d3cf3f3c29ec82c67bfa401e",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/091_projProp3.ndjson",
+   "arena_name": "tutorial/091_projProp3",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "e32c2399717e657b1f24296ee1a5e78a9592d8f90ca84a6a6a104395ef06ddf1",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/095_projDataIndexRec.ndjson",
+   "arena_name": "tutorial/095_projDataIndexRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "b416173b8862d956e302ece51bdf2ed5dbf1e519ac3c709f2d1d2b5400d88b80",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/098_projRed.ndjson",
+   "arena_name": "tutorial/098_projRed",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "ee406aec30851a1bd7f8a491c13ccb54712f198f2951ed518b47de95cbf42d70",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/099_ruleK.ndjson",
+   "arena_name": "tutorial/099_ruleK",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "9c06a9ca2b5d6dadc1575796a858d5285695d4401cceaaf77d9c26fbc426f1da",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/102_aNatLit.ndjson",
+   "arena_name": "tutorial/102_aNatLit",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "d275cb43710dcb6df9e08de59e66e84cb4fc1eb71382c8f33308b838056e87be",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/103_natLitEq.ndjson",
+   "arena_name": "tutorial/103_natLitEq",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "749491a9044aa7df27cbc7afa32d08dc4d5feaea1eb19c28cd98790d7db8adf8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/104_proofIrrelevance.ndjson",
+   "arena_name": "tutorial/104_proofIrrelevance",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "f98c56cc9577ce1e3bac4dd0b6a49593924d5953f45dd2d25c44a84971d3bcea",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/106_proofIrrelevanceWhnf.ndjson",
+   "arena_name": "tutorial/106_proofIrrelevanceWhnf",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "724ea566fd355aa187a5fe00efddff4b41df00951e7e4363f323f11853888d71",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/107_proofIrrelevanceUnderBinder.ndjson",
+   "arena_name": "tutorial/107_proofIrrelevanceUnderBinder",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "2413a64fd681d48cd584dff944b05613b1ba35edf1ab664addd867774a351f71",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "declined",
+     "exit_code": 2
+    },
+    "con-ron": {
+     "status": "declined",
+     "exit_code": 2
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/108_unitEta1.ndjson",
+   "arena_name": "tutorial/108_unitEta1",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "eb25dbed39c8c19e6c1ea7b7c0332941e0249c96154bff155f8805d04151da78",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/109_unitEta2.ndjson",
+   "arena_name": "tutorial/109_unitEta2",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "0102ea0fac3148dfcd800dcccd53237b3dd196186659a3d811761da4bedbc91f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/110_unitEta3.ndjson",
+   "arena_name": "tutorial/110_unitEta3",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "22a713f36ca06b000c93140a92e9a5e2c85abb769924764b3f1e764cb199be0b",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/112_structEta.ndjson",
+   "arena_name": "tutorial/112_structEta",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "e47bd6975be97f3218b31e85071af1e0cec4279f5a6478abb12e3e1c574c35c2",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/114_funEta.ndjson",
+   "arena_name": "tutorial/114_funEta",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "f4e38147fd95133f0ce4bf66dbb9c433704df341f4732012ca1b7d26e1246225",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/115_funEtaDep.ndjson",
+   "arena_name": "tutorial/115_funEtaDep",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "28a07e484e8720dfc991c1074a3881d1c16ead16b75c9a8743c1cd46a21bec5d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/119_reduceCtorParamRefl.mk.ndjson",
+   "arena_name": "tutorial/119_reduceCtorParamRefl.mk",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "0289b5264d284c7c2b61033465d39461ddce70a0cdd909ee658d85bf10f544ee",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/120_reduceCtorParamRefl2.mk.ndjson",
+   "arena_name": "tutorial/120_reduceCtorParamRefl2.mk",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "8997c0d3a515185fb3518393dbe78e44471455f622ac7bf9e82c68bff51bb2cd",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/121_rTreeRec.ndjson",
+   "arena_name": "tutorial/121_rTreeRec",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "6207d2f2f68b24ff37fba20c4ac3849571deb8d3105bc9cefd37ba4f28dc2d7f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/122_rtreeRecReduction.ndjson",
+   "arena_name": "tutorial/122_rtreeRecReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "1d4eacdbbdbe3edc8ea1faf3526eef09beadbbd2843b5dba67262f405b781330",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/123_accRecType.ndjson",
+   "arena_name": "tutorial/123_accRecType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "d94022372034a2e572249b9704b812beb90a5437a660bda59fd7439d61d55da7",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/124_accRecReduction.ndjson",
+   "arena_name": "tutorial/124_accRecReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "3ea1584059e9bb2ed3f9dbea8e58c9c6f78592f80a20c5cb159ae92bb9079f7f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/126_quotMkType.ndjson",
+   "arena_name": "tutorial/126_quotMkType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "b160ff5b97509ad3029f1895bfe1153f9e03f1a33c99ec50ee1bb87d3406f69d",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/127_quotIndType.ndjson",
+   "arena_name": "tutorial/127_quotIndType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "997935987ef6b1920cc0065465ccb50eb1668bf69159eebbd58dd88b6dc2e2fb",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/128_quotLiftType.ndjson",
+   "arena_name": "tutorial/128_quotLiftType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "317a04eff4dabf9edf601736e243d2788aeaa2d7972099dff4bb777b4f51fc3f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/129_quotSoundType.ndjson",
+   "arena_name": "tutorial/129_quotSoundType",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "38c9bdfaaf1e3cd494a7725a4eb9bc231d5ce61f097a5b98e38c469799f7400f",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/130_quotLiftReduction.ndjson",
+   "arena_name": "tutorial/130_quotLiftReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "ae980cf502f90c84131b1705850c1acf18a969fdc1fe511b9b8eb769adbd79c8",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  },
+  {
+   "path": "good/tutorial/131_quotIndReduction.ndjson",
+   "arena_name": "tutorial/131_quotIndReduction",
+   "outcome": "accept",
+   "timeout_s": null,
+   "sha256": "0053779f82af2dfc35cd6c866a66be4496008589b11c22e6b80e91835957bedd",
+   "lean_version": "4.29.1",
+   "paranoid": {
+    "official": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "lean4lean": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "nanoda": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-leche": {
+     "status": "accepted",
+     "exit_code": 0
+    },
+    "con-ron": {
+     "status": "accepted",
+     "exit_code": 0
+    }
+   },
+   "consensus": "accept"
+  }
+ ]
+}

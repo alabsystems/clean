@@ -44,6 +44,8 @@ pub(crate) fn all_features() -> Vec<&'static FeatureDescriptor> {
     v.extend(clean_elab::cli::FEATURES);
     v.extend(clean_lake::cli::FEATURES);
     v.extend(crate::cli::FEATURES);
+    // `clean lean` — the `lean`-compatible front door (decision R74).
+    v.extend(crate::cmd_lean::FEATURES);
     v.extend(crate::cli::bench::FEATURES);
     v.extend(crate::cli::promote::FEATURES);
     v.extend(crate::cmd_research::FEATURES);

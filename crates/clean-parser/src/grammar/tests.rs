@@ -5,17 +5,22 @@
 use super::*;
 use crate::AttributeCommandAttr;
 use crate::LevelExpr;
+use crate::{Span, SurfaceArg};
 
 #[test]
 fn test_parse_ident() {
     let expr = Parser::parse_expr("x").unwrap();
-    assert!(matches!(expr, SurfaceExpr::Ident(_, s) if s == "x"));
+    assert!(
+        matches!(expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+    );
 }
 
 #[test]
 fn test_parse_escaped_ident() {
     let expr = Parser::parse_expr("«if»").unwrap();
-    assert!(matches!(expr, SurfaceExpr::Ident(_, s) if s == "if"));
+    assert!(
+        matches!(expr, SurfaceExpr::Ident(_, s) if s.same_syntax(&crate::SurfaceName::component("if", true)))
+    );
 }
 
 #[test]
@@ -59,8 +64,8 @@ fn test_parse_type_parenthesized_level_expr() {
             ) if matches!(
                 level.as_ref(),
                 LevelExpr::Max(lhs, rhs)
-                    if matches!(lhs.as_ref(), LevelExpr::Param(lhs) if lhs == "u")
-                        && matches!(rhs.as_ref(), LevelExpr::Param(rhs) if rhs == "v")
+                    if matches!(lhs.as_ref(), LevelExpr::Param(lhs) if (lhs).name() == crate::SurfaceName::generated_path("u").name())
+                        && matches!(rhs.as_ref(), LevelExpr::Param(rhs) if (rhs).name() == crate::SurfaceName::generated_path("v").name())
             )
         ),
         "expected `Type (max u v)` to parse as a universe level expression, got {expr:?}"
@@ -78,7 +83,9 @@ fn test_parse_app() {
     let expr = Parser::parse_expr("f x y").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, s) if s == "f"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("f").name())
+            );
             assert_eq!(args.len(), 2);
         }
         _ => panic!("expected App"),
@@ -90,8 +97,12 @@ fn test_parse_arrow() {
     let expr = Parser::parse_expr("A -> B").unwrap();
     match expr {
         SurfaceExpr::Arrow(_, left, right) => {
-            assert!(matches!(*left, SurfaceExpr::Ident(_, s) if s == "A"));
-            assert!(matches!(*right, SurfaceExpr::Ident(_, s) if s == "B"));
+            assert!(
+                matches!(*left, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("A").name())
+            );
+            assert!(
+                matches!(*right, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("B").name())
+            );
         }
         _ => panic!("expected Arrow"),
     }
@@ -103,7 +114,9 @@ fn test_parse_arrow_unicode() {
     // Should be right associative: A → (B → C)
     match expr {
         SurfaceExpr::Arrow(_, left, right) => {
-            assert!(matches!(*left, SurfaceExpr::Ident(_, s) if s == "A"));
+            assert!(
+                matches!(*left, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("A").name())
+            );
             assert!(matches!(*right, SurfaceExpr::Arrow(_, _, _)));
         }
         _ => panic!("expected Arrow"),
@@ -116,8 +129,13 @@ fn test_parse_lambda() {
     match expr {
         SurfaceExpr::Lambda(_, binders, body) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
-            assert!(matches!(*body, SurfaceExpr::Ident(_, s) if s == "x"));
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert!(
+                matches!(*body, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+            );
         }
         _ => panic!("expected Lambda"),
     }
@@ -155,14 +173,23 @@ fn test_parse_lambda_tuple_paren_destructures_to_single_param_match() {
                     assert_eq!(arms.len(), 1);
                     match &arms[0].pattern {
                         SurfacePattern::Ctor(name, fields) => {
-                            assert_eq!(name, "Prod.mk");
+                            assert_eq!(
+                                (name).name(),
+                                crate::SurfaceName::generated_path("Prod.mk").name()
+                            );
                             assert_eq!(fields.len(), 2);
-                            assert!(matches!(&fields[0], SurfacePattern::Var(s) if s == "a"));
-                            assert!(matches!(&fields[1], SurfacePattern::Var(s) if s == "b"));
+                            assert!(
+                                matches!(&fields[0], SurfacePattern::Var(s) if (s).name() == crate::SurfaceName::generated_path("a").name())
+                            );
+                            assert!(
+                                matches!(&fields[1], SurfacePattern::Var(s) if (s).name() == crate::SurfaceName::generated_path("b").name())
+                            );
                         }
                         other => panic!("expected Prod.mk pattern, got {other:?}"),
                     }
-                    assert!(matches!(arms[0].body, SurfaceExpr::Ident(_, ref s) if s == "a"));
+                    assert!(
+                        matches!(arms[0].body, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("a").name())
+                    );
                 }
                 other => panic!("expected Match body, got {other:?}"),
             }
@@ -184,7 +211,7 @@ fn test_parse_lambda_tuple_angle_destructures_to_single_param_match() {
                     assert!(matches!(
                         &arms[0].pattern,
                         SurfacePattern::Ctor(name, fields)
-                            if name == "Prod.mk" && fields.len() == 2
+                            if (name).name() == crate::SurfaceName::generated_path("Prod.mk").name() && fields.len() == 2
                     ));
                 }
                 other => panic!("expected Match body, got {other:?}"),
@@ -194,24 +221,49 @@ fn test_parse_lambda_tuple_angle_destructures_to_single_param_match() {
     }
 }
 
+/// Lambda arity of an interleaved pattern lambda: one binder per `fun`
+/// layer, walking through the single-arm `match` each pattern position opens.
+fn interleaved_arity(expr: &SurfaceExpr) -> usize {
+    match expr {
+        SurfaceExpr::PatternMatchLambda(_, bs, body) | SurfaceExpr::Lambda(_, bs, body) => {
+            bs.len() + interleaved_arity(body)
+        }
+        SurfaceExpr::Match(_, _, _, arms) if arms.len() == 1 => interleaved_arity(&arms[0].body),
+        _ => 0,
+    }
+}
+
 #[test]
 fn test_parse_lambda_mixed_binder_and_tuple_keeps_param_order() {
     // `fun x (a, b) => x` — an ordinary binder followed by a tuple binder.
-    // Arity is 2 (x and the tuple), with only the tuple pattern-matched.
+    // Arity is 2 (x and the tuple), with only the tuple pattern-matched:
+    // `fun x => fun _dx.0 => match _dx.0 with | (a, b) => x` (`_dx.0` is
+    // unspellable, `SurfaceName::unspellable`).
     let expr = Parser::parse_expr("fun x (a, b) => x").expect("mixed binder/tuple lambda parses");
+    assert_eq!(interleaved_arity(&expr), 2, "x and the tuple");
     match expr {
         SurfaceExpr::PatternMatchLambda(_, binders, body) => {
-            assert_eq!(binders.len(), 2);
-            assert_eq!(binders[0].name, "x");
-            // The second binder is the fresh scrutinee for the tuple.
+            assert_eq!(binders.len(), 1);
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            // The next layer binds the fresh scrutinee and matches on it.
             match *body {
-                SurfaceExpr::Match(_, _, scrutinee, arms) => {
-                    assert!(
-                        matches!(*scrutinee, SurfaceExpr::Ident(_, ref s) if *s == binders[1].name)
-                    );
-                    assert_eq!(arms.len(), 1);
+                SurfaceExpr::Lambda(_, inner_binders, inner) => {
+                    assert_eq!(inner_binders.len(), 1);
+                    match *inner {
+                        SurfaceExpr::Match(_, _, scrutinee, arms) => {
+                            assert!(matches!(
+                                *scrutinee,
+                                SurfaceExpr::Ident(_, ref s) if *s == inner_binders[0].name
+                            ));
+                            assert_eq!(arms.len(), 1);
+                        }
+                        other => panic!("expected Match under the tuple binder, got {other:?}"),
+                    }
                 }
-                other => panic!("expected Match body, got {other:?}"),
+                other => panic!("expected the tuple binder's lambda, got {other:?}"),
             }
         }
         other => panic!("expected PatternMatchLambda, got {other:?}"),
@@ -220,18 +272,26 @@ fn test_parse_lambda_mixed_binder_and_tuple_keeps_param_order() {
 
 #[test]
 fn test_parse_lambda_two_tuple_binders_nests_matches() {
-    // `fun (a, b) (c, d) => a` — two tuple binders desugar to nested matches
-    // with two fresh scrutinee binders.
+    // `fun (a, b) (c, d) => a` — two tuple binders: each position is bound
+    // and destructured before the next one is bound (the second position's
+    // type may depend on the first, destructured).
     let expr = Parser::parse_expr("fun (a, b) (c, d) => a").expect("two-tuple lambda parses");
+    assert_eq!(interleaved_arity(&expr), 2);
     match expr {
         SurfaceExpr::PatternMatchLambda(_, binders, body) => {
-            assert_eq!(binders.len(), 2);
-            // Outer match is over the first scrutinee; its arm body is the
-            // inner match over the second scrutinee.
+            assert_eq!(binders.len(), 1);
             match *body {
                 SurfaceExpr::Match(_, _, _, arms) => {
                     assert_eq!(arms.len(), 1);
-                    assert!(matches!(arms[0].body, SurfaceExpr::Match(_, _, _, _)));
+                    // The arm body binds the SECOND position and matches on it.
+                    let SurfaceExpr::Lambda(_, inner_binders, inner) = &arms[0].body else {
+                        panic!(
+                            "expected the second position's lambda, got {:?}",
+                            arms[0].body
+                        );
+                    };
+                    assert_eq!(inner_binders.len(), 1);
+                    assert!(matches!(**inner, SurfaceExpr::Match(_, _, _, _)));
                 }
                 other => panic!("expected outer Match, got {other:?}"),
             }
@@ -254,7 +314,7 @@ fn test_parse_array_literal_desugars_to_array_mk_of_list() {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "Array.mk"),
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Array.mk").name()),
                 "array literal head must be Array.mk, got {func:?}"
             );
             assert_eq!(args.len(), 1, "Array.mk takes one (backing List) argument");
@@ -262,7 +322,7 @@ fn test_parse_array_literal_desugars_to_array_mk_of_list() {
             match &args[0].expr {
                 SurfaceExpr::App(_, cons, cons_args) => {
                     assert!(
-                        matches!(**cons, SurfaceExpr::Ident(_, ref s) if s == "List.cons"),
+                        matches!(**cons, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("List.cons").name()),
                         "backing list head must be List.cons, got {cons:?}"
                     );
                     assert_eq!(cons_args.len(), 2, "List.cons is head + tail");
@@ -285,10 +345,12 @@ fn test_parse_empty_array_literal_desugars_to_array_mk_nil() {
     let expr = Parser::parse_expr("#[]").expect("empty array literal parses");
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "Array.mk"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Array.mk").name())
+            );
             assert_eq!(args.len(), 1);
             assert!(
-                matches!(&args[0].expr, SurfaceExpr::Ident(_, s) if s == "List.nil"),
+                matches!(&args[0].expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("List.nil").name()),
                 "empty array backing must be List.nil"
             );
         }
@@ -306,9 +368,13 @@ fn test_parse_forward_pipe_application_desugars_to_call() {
     let expr = Parser::parse_expr("n |> f").expect("forward pipe parses");
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "f"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("f").name())
+            );
             assert_eq!(args.len(), 1);
-            assert!(matches!(&args[0].expr, SurfaceExpr::Ident(_, s) if s == "n"));
+            assert!(
+                matches!(&args[0].expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("n").name())
+            );
         }
         other => panic!("expected App(f, n), got {other:?}"),
     }
@@ -320,8 +386,12 @@ fn test_parse_forward_pipe_projection_desugars_to_proj() {
     let expr = Parser::parse_expr("n |>.succ").expect("forward pipe projection parses");
     match expr {
         SurfaceExpr::Proj(_, base, proj) => {
-            assert!(matches!(*base, SurfaceExpr::Ident(_, ref s) if s == "n"));
-            assert!(matches!(proj, Projection::Named(ref f) if f == "succ"));
+            assert!(
+                matches!(*base, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("n").name())
+            );
+            assert!(
+                matches!(proj, Projection::Named(ref f) if (f).name() == crate::SurfaceName::generated_path("succ").name())
+            );
         }
         other => panic!("expected Proj(n, succ), got {other:?}"),
     }
@@ -333,12 +403,18 @@ fn test_parse_forward_pipe_is_left_associative() {
     let expr = Parser::parse_expr("n |> f |> g").expect("chained forward pipe parses");
     match expr {
         SurfaceExpr::App(_, outer, outer_args) => {
-            assert!(matches!(*outer, SurfaceExpr::Ident(_, ref s) if s == "g"));
+            assert!(
+                matches!(*outer, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("g").name())
+            );
             assert_eq!(outer_args.len(), 1);
             match &outer_args[0].expr {
                 SurfaceExpr::App(_, inner, inner_args) => {
-                    assert!(matches!(**inner, SurfaceExpr::Ident(_, ref s) if s == "f"));
-                    assert!(matches!(&inner_args[0].expr, SurfaceExpr::Ident(_, s) if s == "n"));
+                    assert!(
+                        matches!(**inner, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("f").name())
+                    );
+                    assert!(
+                        matches!(&inner_args[0].expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("n").name())
+                    );
                 }
                 other => panic!("expected inner App(f, n), got {other:?}"),
             }
@@ -371,7 +447,10 @@ fn test_parse_multi_pattern_match_lambda_tuples_patterns() {
                     for arm in &arms {
                         match &arm.pattern {
                             SurfacePattern::Ctor(name, fields) => {
-                                assert_eq!(name, "Prod.mk");
+                                assert_eq!(
+                                    (name).name(),
+                                    crate::SurfaceName::generated_path("Prod.mk").name()
+                                );
                                 assert_eq!(fields.len(), 2);
                             }
                             other => panic!("expected Prod.mk tuple pattern, got {other:?}"),
@@ -397,12 +476,15 @@ fn test_parse_three_pattern_match_lambda_right_nests_prod() {
             match *body {
                 SurfaceExpr::Match(_, _, _, arms) => match &arms[0].pattern {
                     SurfacePattern::Ctor(name, fields) => {
-                        assert_eq!(name, "Prod.mk");
+                        assert_eq!(
+                            (name).name(),
+                            crate::SurfaceName::generated_path("Prod.mk").name()
+                        );
                         assert_eq!(fields.len(), 2);
                         // The tail is itself a Prod.mk (right-nested).
                         assert!(matches!(
                             &fields[1],
-                            SurfacePattern::Ctor(n, f) if n == "Prod.mk" && f.len() == 2
+                            SurfacePattern::Ctor(n, f) if (n).name() == crate::SurfaceName::generated_path("Prod.mk").name() && f.len() == 2
                         ));
                     }
                     other => panic!("expected right-nested Prod.mk, got {other:?}"),
@@ -427,7 +509,7 @@ fn test_parse_single_pattern_match_lambda_unchanged() {
                     assert_eq!(arms.len(), 2);
                     // Not tupled: the first arm's pattern is a bare literal.
                     assert!(
-                        !matches!(&arms[0].pattern, SurfacePattern::Ctor(n, _) if n == "Prod.mk"),
+                        !matches!(&arms[0].pattern, SurfacePattern::Ctor(n, _) if (n).name() == crate::SurfaceName::generated_path("Prod.mk").name()),
                         "single-pattern arm must not be tupled"
                     );
                 }
@@ -447,7 +529,10 @@ fn test_parse_lambda_single_typed_binder_stays_plain_lambda() {
     match expr {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(binders[0].ty.is_some(), "binder keeps its type annotation");
         }
         other => panic!("expected plain Lambda, got {other:?}"),
@@ -466,7 +551,10 @@ fn test_parse_lambda_multi_binder_shares_type_annotation() {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 3, "three names bind three params");
             for (i, name) in ["a", "b", "c"].iter().enumerate() {
-                assert_eq!(&binders[i].name, name);
+                assert_eq!(
+                    binders[i].name.name(),
+                    crate::SurfaceName::generated_path(name).name()
+                );
                 assert!(
                     binders[i].ty.is_some(),
                     "every name in `a b c : Nat` must carry the shared type, incl. `{name}`"
@@ -485,7 +573,10 @@ fn test_parse_lambda_paren_single_name_stays_plain_lambda() {
     match expr {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
         }
         other => panic!("expected plain Lambda, got {other:?}"),
     }
@@ -502,7 +593,7 @@ fn test_parse_match_lambda_angle_pattern_parses() {
                 assert!(matches!(
                     &arms[0].pattern,
                     SurfacePattern::Ctor(name, fields)
-                        if name == "Prod.mk" && fields.len() == 2
+                        if (name).name() == crate::SurfaceName::generated_path("Prod.mk").name() && fields.len() == 2
                 ));
             }
             other => panic!("expected Match body, got {other:?}"),
@@ -541,12 +632,12 @@ fn test_parse_match_discr_hyp_binds_name() {
     match expr {
         SurfaceExpr::Match(_, hyp, scrut, arms) => {
             assert_eq!(
-                hyp.as_deref(),
-                Some("h"),
+                hyp.as_ref(),
+                Some(&crate::SurfaceName::generated_path("h")),
                 "hypothesis name must be recorded"
             );
             assert!(
-                matches!(&*scrut, SurfaceExpr::Ident(_, n) if n == "n"),
+                matches!(&*scrut, SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("n").name()),
                 "scrutinee must be the bare term after `h : `, got {scrut:?}"
             );
             assert_eq!(arms.len(), 2);
@@ -562,7 +653,7 @@ fn test_parse_match_discr_hyp_underscore_binder() {
         .expect("underscore-annotated discriminant parses");
     match expr {
         SurfaceExpr::Match(_, hyp, _, _) => {
-            assert_eq!(hyp.as_deref(), Some("_"));
+            assert_eq!(hyp.as_ref(), Some(&crate::SurfaceName::generated_path("_")));
         }
         other => panic!("expected Match, got {other:?}"),
     }
@@ -649,7 +740,10 @@ fn test_parse_ctor_ellipsis_pattern_parses() {
     match expr {
         SurfaceExpr::Match(_, _, _, arms) => match &arms[0].pattern {
             SurfacePattern::Ctor(name, args) => {
-                assert_eq!(name, "Br");
+                assert_eq!(
+                    (name).name(),
+                    crate::SurfaceName::generated_path("Br").name()
+                );
                 assert_eq!(args.len(), 1, "single trailing ellipsis arg");
                 assert!(matches!(args[0], SurfacePattern::Ellipsis));
             }
@@ -668,9 +762,14 @@ fn test_parse_ctor_leading_pattern_then_ellipsis() {
     match expr {
         SurfaceExpr::Match(_, _, _, arms) => match &arms[0].pattern {
             SurfacePattern::Ctor(name, args) => {
-                assert_eq!(name, "Br");
+                assert_eq!(
+                    (name).name(),
+                    crate::SurfaceName::generated_path("Br").name()
+                );
                 assert_eq!(args.len(), 2);
-                assert!(matches!(&args[0], SurfacePattern::Var(v) if v == "x"));
+                assert!(
+                    matches!(&args[0], SurfacePattern::Var(v) if (v).name() == crate::SurfaceName::generated_path("x").name())
+                );
                 assert!(matches!(args[1], SurfacePattern::Ellipsis));
             }
             other => panic!("expected Ctor pattern, got {other:?}"),
@@ -685,8 +784,13 @@ fn test_parse_forall() {
     match expr {
         SurfaceExpr::Pi(_, binders, body) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
-            assert!(matches!(*body, SurfaceExpr::Ident(_, s) if s == "x"));
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert!(
+                matches!(*body, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+            );
         }
         _ => panic!("expected Pi"),
     }
@@ -697,9 +801,14 @@ fn test_parse_let() {
     let expr = Parser::parse_expr("let x := 1 in x").unwrap();
     match expr {
         SurfaceExpr::Let(_, binder, val, body) => {
-            assert_eq!(binder.name, "x");
+            assert_eq!(
+                (binder.name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(matches!(*val, SurfaceExpr::Lit(_, SurfaceLit::Nat(1))));
-            assert!(matches!(*body, SurfaceExpr::Ident(_, s) if s == "x"));
+            assert!(
+                matches!(*body, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+            );
         }
         _ => panic!("expected Let"),
     }
@@ -729,7 +838,10 @@ fn test_parse_let_without_in_newline_body() {
     let expr = Parser::parse_expr("let x := 1\nx + x").expect("let-without-in should parse");
     match expr {
         SurfaceExpr::Let(_, binder, val, body) => {
-            assert_eq!(binder.name, "x");
+            assert_eq!(
+                (binder.name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(
                 matches!(*val, SurfaceExpr::Lit(_, SurfaceLit::Nat(1))),
                 "value should be just `1`, not `1` applied to the body"
@@ -753,7 +865,10 @@ fn test_parse_let_without_in_anon_ctor_body() {
     let expr = Parser::parse_expr("let k := 7\n⟨k, k⟩").expect("let-⟨⟩-body should parse");
     match expr {
         SurfaceExpr::Let(_, binder, val, _body) => {
-            assert_eq!(binder.name, "k");
+            assert_eq!(
+                (binder.name).name(),
+                crate::SurfaceName::generated_path("k").name()
+            );
             assert!(
                 matches!(*val, SurfaceExpr::Lit(_, SurfaceLit::Nat(7))),
                 "value should be `7`, not `7` applied to the ⟨⟩ body, got {val:?}"
@@ -770,7 +885,10 @@ fn test_parse_let_without_in_body_is_ident() {
     let expr = Parser::parse_expr("let y := 2\nx + y").expect("let-without-in ident body");
     match expr {
         SurfaceExpr::Let(_, binder, val, _body) => {
-            assert_eq!(binder.name, "y");
+            assert_eq!(
+                (binder.name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
             assert!(matches!(*val, SurfaceExpr::Lit(_, SurfaceLit::Nat(2))));
         }
         other => panic!("expected Let, got {other:?}"),
@@ -783,8 +901,13 @@ fn test_parse_chained_let_without_in() {
     let expr = Parser::parse_expr("let x := 1\nlet y := 2\nx + y").expect("chained let-without-in");
     match expr {
         SurfaceExpr::Let(_, b1, _, body) => {
-            assert_eq!(b1.name, "x");
-            assert!(matches!(*body, SurfaceExpr::Let(_, ref b2, _, _) if b2.name == "y"));
+            assert_eq!(
+                (b1.name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert!(
+                matches!(*body, SurfaceExpr::Let(_, ref b2, _, _) if (b2.name).name() == crate::SurfaceName::generated_path("y").name())
+            );
         }
         other => panic!("expected nested Let, got {other:?}"),
     }
@@ -796,7 +919,10 @@ fn test_parse_let_without_in_value_is_application() {
     let expr = Parser::parse_expr("let r := f a\ng x").expect("let app value, app body");
     match expr {
         SurfaceExpr::Let(_, binder, val, body) => {
-            assert_eq!(binder.name, "r");
+            assert_eq!(
+                (binder.name).name(),
+                crate::SurfaceName::generated_path("r").name()
+            );
             assert!(matches!(*val, SurfaceExpr::App(_, _, _)), "value is `f a`");
             assert!(matches!(*body, SurfaceExpr::App(_, _, _)), "body is `g x`");
         }
@@ -812,12 +938,17 @@ fn test_parse_let_without_in_multiline_value_continuation() {
     let expr = Parser::parse_expr("let x := f\n  a\nx").expect("multi-line value continuation");
     match expr {
         SurfaceExpr::Let(_, binder, val, body) => {
-            assert_eq!(binder.name, "x");
+            assert_eq!(
+                (binder.name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(
                 matches!(*val, SurfaceExpr::App(_, _, _)),
                 "value should be the application `f a` spanning two lines"
             );
-            assert!(matches!(*body, SurfaceExpr::Ident(_, s) if s == "x"));
+            assert!(
+                matches!(*body, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+            );
         }
         other => panic!("expected Let, got {other:?}"),
     }
@@ -835,9 +966,15 @@ fn test_parse_if() {
     let expr = Parser::parse_expr("if c then t else e").unwrap();
     match expr {
         SurfaceExpr::If(_, cond, then_br, else_br) => {
-            assert!(matches!(*cond, SurfaceExpr::Ident(_, s) if s == "c"));
-            assert!(matches!(*then_br, SurfaceExpr::Ident(_, s) if s == "t"));
-            assert!(matches!(*else_br, SurfaceExpr::Ident(_, s) if s == "e"));
+            assert!(
+                matches!(*cond, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("c").name())
+            );
+            assert!(
+                matches!(*then_br, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("t").name())
+            );
+            assert!(
+                matches!(*else_br, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("e").name())
+            );
         }
         _ => panic!("expected If"),
     }
@@ -848,7 +985,9 @@ fn test_parse_paren() {
     let expr = Parser::parse_expr("(x)").unwrap();
     match expr {
         SurfaceExpr::Paren(_, inner) => {
-            assert!(matches!(*inner, SurfaceExpr::Ident(_, s) if s == "x"));
+            assert!(
+                matches!(*inner, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+            );
         }
         _ => panic!("expected Paren"),
     }
@@ -859,8 +998,12 @@ fn test_parse_ascription() {
     let expr = Parser::parse_expr("(x : Nat)").unwrap();
     match expr {
         SurfaceExpr::Ascription(_, expr, ty) => {
-            assert!(matches!(*expr, SurfaceExpr::Ident(_, s) if s == "x"));
-            assert!(matches!(*ty, SurfaceExpr::Ident(_, s) if s == "Nat"));
+            assert!(
+                matches!(*expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+            );
+            assert!(
+                matches!(*ty, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Nat").name())
+            );
         }
         _ => panic!("expected Ascription"),
     }
@@ -872,8 +1015,12 @@ fn test_show_from_term_produces_ascription() {
     let expr = Parser::parse_expr("show True from h").unwrap();
     match expr {
         SurfaceExpr::Ascription(_, value, ty) => {
-            assert!(matches!(*value, SurfaceExpr::Ident(_, ref s) if s == "h"));
-            assert!(matches!(*ty, SurfaceExpr::Ident(_, ref s) if s == "True"));
+            assert!(
+                matches!(*value, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("h").name())
+            );
+            assert!(
+                matches!(*ty, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("True").name())
+            );
         }
         other => panic!("expected Ascription, got {other:?}"),
     }
@@ -891,7 +1038,9 @@ fn test_show_by_tactic_produces_ascription_of_by_tactic() {
                 matches!(*value, SurfaceExpr::ByTactic(_, _)),
                 "expected the justification to be a ByTactic block, got {value:?}"
             );
-            assert!(matches!(*ty, SurfaceExpr::Ident(_, ref s) if s == "True"));
+            assert!(
+                matches!(*ty, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("True").name())
+            );
         }
         other => panic!("expected Ascription, got {other:?}"),
     }
@@ -908,7 +1057,9 @@ fn test_show_by_tactic_with_relation_type_keeps_full_type() {
             // `a = b` desugars to an `Eq a b` application.
             match *ty {
                 SurfaceExpr::App(_, ref head, ref args) => {
-                    assert!(matches!(**head, SurfaceExpr::Ident(_, ref s) if s == "Eq"));
+                    assert!(
+                        matches!(**head, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Eq").name())
+                    );
                     assert_eq!(args.len(), 2);
                 }
                 other => panic!("expected Eq application as type, got {other:?}"),
@@ -940,7 +1091,10 @@ fn test_parse_def() {
     let decl = Parser::parse_decl("def id (x : Type) := x").unwrap();
     match decl {
         SurfaceDecl::Def { name, binders, .. } => {
-            assert_eq!(name, "id");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("id").name()
+            );
             assert_eq!(binders.len(), 1);
         }
         _ => panic!("expected Def"),
@@ -952,7 +1106,10 @@ fn test_parse_theorem() {
     let decl = Parser::parse_decl("theorem foo : Prop := Prop").unwrap();
     match decl {
         SurfaceDecl::Theorem { name, .. } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
         }
         _ => panic!("expected Theorem"),
     }
@@ -965,8 +1122,14 @@ fn test_parse_complex() {
     match expr {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 2);
-            assert_eq!(binders[0].name, "A");
-            assert_eq!(binders[1].name, "x");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("A").name()
+            );
+            assert_eq!(
+                (binders[1].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
         }
         _ => panic!("expected Lambda"),
     }
@@ -983,20 +1146,29 @@ fn test_parse_file() {
     assert_eq!(decls.len(), 3);
 
     match &decls[0] {
-        SurfaceDecl::Def { name, .. } => assert_eq!(name, "id"),
+        SurfaceDecl::Def { name, .. } => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("id").name()
+        ),
         _ => panic!("expected Def"),
     }
 
     match &decls[1] {
         SurfaceDecl::Def { name, binders, .. } => {
-            assert_eq!(name, "const");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("const").name()
+            );
             assert_eq!(binders.len(), 3);
         }
         _ => panic!("expected Def"),
     }
 
     match &decls[2] {
-        SurfaceDecl::Axiom { name, .. } => assert_eq!(name, "myAxiom"),
+        SurfaceDecl::Axiom { name, .. } => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("myAxiom").name()
+        ),
         _ => panic!("expected Axiom"),
     }
 }
@@ -1015,7 +1187,10 @@ fn test_parse_greek_implicit_binders() {
     assert_eq!(decls.len(), 1, "expected 1 inductive declaration");
     match &decls[0] {
         SurfaceDecl::Inductive { name, ty, .. } => {
-            assert_eq!(name, "Imf");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Imf").name()
+            );
             assert!(
                 matches!(
                     ty.as_ref(),
@@ -1031,8 +1206,8 @@ fn test_parse_greek_implicit_binders() {
                         ) if matches!(
                             level.as_ref(),
                             LevelExpr::Max(lhs, rhs)
-                                if matches!(lhs.as_ref(), LevelExpr::Param(lhs) if lhs == "u")
-                                    && matches!(rhs.as_ref(), LevelExpr::Param(rhs) if rhs == "v")
+                                if matches!(lhs.as_ref(), LevelExpr::Param(lhs) if (lhs).name() == crate::SurfaceName::generated_path("u").name())
+                                    && matches!(rhs.as_ref(), LevelExpr::Param(rhs) if (rhs).name() == crate::SurfaceName::generated_path("v").name())
                         )
                     )
                 ),
@@ -1051,20 +1226,26 @@ fn test_parse_constructor_binder_syntax_preserves_binders() {
 
     match &decls[0] {
         SurfaceDecl::Inductive { name, ctors, .. } => {
-            assert_eq!(name, "Foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Foo").name()
+            );
             assert_eq!(ctors.len(), 1, "expected a single constructor");
 
             match &ctors[0].ty {
                 SurfaceExpr::Pi(_, binders, body) => {
                     assert_eq!(binders.len(), 1, "expected one constructor binder");
-                    assert_eq!(binders[0].name, "n");
+                    assert_eq!(
+                        (binders[0].name).name(),
+                        crate::SurfaceName::generated_path("n").name()
+                    );
                     assert!(
-                        matches!(binders[0].ty.as_deref(), Some(SurfaceExpr::Ident(_, ty)) if ty == "Nat"),
+                        matches!(binders[0].ty.as_deref(), Some(SurfaceExpr::Ident(_, ty)) if (ty).name() == crate::SurfaceName::generated_path("Nat").name()),
                         "expected constructor binder type Nat, got {:?}",
                         binders[0].ty
                     );
                     assert!(
-                        matches!(body.as_ref(), SurfaceExpr::Ident(_, ind) if ind == "Foo"),
+                        matches!(body.as_ref(), SurfaceExpr::Ident(_, ind) if (ind).name() == crate::SurfaceName::generated_path("Foo").name()),
                         "expected constructor result type Foo, got {body:?}"
                     );
                 }
@@ -1083,13 +1264,19 @@ fn test_parse_constructor_bare_binders_before_colon() {
 
     match &decls[0] {
         SurfaceDecl::Inductive { name, ctors, .. } => {
-            assert_eq!(name, "Eq");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Eq").name()
+            );
             assert_eq!(ctors.len(), 1, "expected a single constructor");
 
             match &ctors[0].ty {
                 SurfaceExpr::Pi(_, binders, body) => {
                     assert_eq!(binders.len(), 1, "expected one constructor binder");
-                    assert_eq!(binders[0].name, "a");
+                    assert_eq!(
+                        (binders[0].name).name(),
+                        crate::SurfaceName::generated_path("a").name()
+                    );
                     assert!(
                         binders[0].ty.is_none(),
                         "expected bare constructor binder to remain untyped, got {:?}",
@@ -1117,10 +1304,19 @@ fn test_parse_structure_simple() {
     .unwrap();
     match decl {
         SurfaceDecl::Structure { name, fields, .. } => {
-            assert_eq!(name, "Point");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Point").name()
+            );
             assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
         }
         _ => panic!("expected Structure"),
     }
@@ -1139,12 +1335,24 @@ fn test_parse_structure_colon_eq_fields() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Point");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Point").name()
+            );
             assert_eq!(binders.len(), 1);
             assert_eq!(fields.len(), 3, "(x y : A) expands to two fields");
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
-            assert_eq!(fields[2].name, "label");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
+            assert_eq!(
+                (fields[2].name).name(),
+                crate::SurfaceName::generated_path("label").name()
+            );
         }
         _ => panic!("expected Structure"),
     }
@@ -1163,11 +1371,20 @@ fn test_parse_structure_colon_eq_extends_and_ctor() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Bar");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Bar").name()
+            );
             assert_eq!(extends.len(), 1);
-            assert_eq!(ctor_name.as_deref(), Some("mk"));
+            assert_eq!(
+                ctor_name.as_ref(),
+                Some(&crate::SurfaceName::generated_path("mk"))
+            );
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "bar");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("bar").name()
+            );
         }
         _ => panic!("expected Structure"),
     }
@@ -1184,11 +1401,20 @@ fn test_parse_class_colon_eq_fields() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Cls");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Cls").name()
+            );
             assert_eq!(extends.len(), 1);
             assert_eq!(fields.len(), 2, "(u v : Unit) expands to two fields");
-            assert_eq!(fields[0].name, "u");
-            assert_eq!(fields[1].name, "v");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("u").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("v").name()
+            );
         }
         _ => panic!("expected Class"),
     }
@@ -1209,13 +1435,28 @@ fn test_parse_structure_with_params() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Pair");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Pair").name()
+            );
             assert_eq!(binders.len(), 2);
-            assert_eq!(binders[0].name, "A");
-            assert_eq!(binders[1].name, "B");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("A").name()
+            );
+            assert_eq!(
+                (binders[1].name).name(),
+                crate::SurfaceName::generated_path("B").name()
+            );
             assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "fst");
-            assert_eq!(fields[1].name, "snd");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("fst").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("snd").name()
+            );
         }
         _ => panic!("expected Structure"),
     }
@@ -1230,7 +1471,10 @@ fn test_parse_structure_with_type() {
     .unwrap();
     match decl {
         SurfaceDecl::Structure { name, ty, .. } => {
-            assert_eq!(name, "MyType");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("MyType").name()
+            );
             let _ty = ty
                 .as_ref()
                 .expect("structure with 'extends' should have type annotation");
@@ -1239,8 +1483,31 @@ fn test_parse_structure_with_type() {
     }
 }
 
+/// A DOTLESS `{u}` after a declaration name is an IMPLICIT BINDER, never a
+/// universe list.
+///
+/// This test previously asserted `universe_params == ["u"]` here. That encoded a
+/// behaviour Lean does not have. Measured on the pinned `lean` v4.30.0-rc2 with
+/// `set_option pp.parens true`:
+///
+/// ```text
+/// structure C {u} (A : Type u) where
+///   val : A
+/// -- error: Failed to infer type of binder `u`
+/// ```
+///
+/// Lean reads that `{u}` as an implicit *term* binder and then fails, because a
+/// term binder cannot be used as a universe level. It does not read it as a
+/// universe list. Treating it as one refused every ordinary untyped implicit
+/// binder (`def f {a} (x : a) : a := x`, which Lean accepts and auto-binds as
+/// `def f.{u_1} : {a : Sort u_1} → a → a`) and cost the pinned Mathlib SOURCE
+/// slice 326/784 -> 301/775.
+///
+/// Clean parses the binder group rather than rejecting it; the "cannot infer"
+/// half is the elaborator's call, not the parser's. What this test pins is the
+/// parser's classification: binder, not universe param.
 #[test]
-fn test_parse_structure_with_universe_params() {
+fn test_parse_structure_dotless_brace_is_implicit_binder_not_universe_params() {
     let decl = Parser::parse_decl(
         r"structure Container {u} (A : Type u) where
               data : A",
@@ -1254,10 +1521,73 @@ fn test_parse_structure_with_universe_params() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Container");
-            assert_eq!(universe_params.len(), 1);
-            assert_eq!(universe_params[0], "u");
-            assert_eq!(binders.len(), 1);
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Container").name()
+            );
+            assert!(
+                universe_params.is_empty(),
+                "dotless `{{u}}` is an implicit binder, not a universe list; \
+                 Lean spells universe binders `.{{u}}` only. Got {universe_params:?}"
+            );
+            // `{u}` and `(A : Type u)` are both binders now.
+            assert_eq!(binders.len(), 2, "got binders {binders:?}");
+            assert_eq!(
+                binders[0].name.name(),
+                crate::SurfaceName::generated_path("u").name()
+            );
+            assert_eq!(binders[0].info, SurfaceBinderInfo::Implicit);
+            assert!(
+                binders[0].ty.is_none(),
+                "untyped implicit binder carries no ascription"
+            );
+            assert_eq!(
+                binders[1].name.name(),
+                crate::SurfaceName::generated_path("A").name()
+            );
+            assert_eq!(fields.len(), 1);
+        }
+        _ => panic!("expected Structure"),
+    }
+}
+
+/// Positive control for the real universe spelling, beside the negative above.
+///
+/// Pinned `lean` v4.30.0-rc2 accepts this and reports the universe param:
+///
+/// ```text
+/// structure D.{u} (A : (Type u)) : (Type u)
+/// constructor:
+///   D.mk.{u} {A : (Type u)} (val : A) : (D A)
+/// ```
+#[test]
+fn test_parse_structure_with_dot_universe_params() {
+    let decl = Parser::parse_decl(
+        r"structure Container.{u} (A : Type u) where
+              data : A",
+    )
+    .unwrap();
+    match decl {
+        SurfaceDecl::Structure {
+            name,
+            universe_params,
+            binders,
+            fields,
+            ..
+        } => {
+            assert_eq!(
+                name.name(),
+                crate::SurfaceName::generated_path("Container").name()
+            );
+            assert_eq!(
+                universe_params,
+                vec![crate::SurfaceName::generated_path("u")]
+            );
+            assert_eq!(binders.len(), 1, "got binders {binders:?}");
+            assert_eq!(
+                binders[0].name.name(),
+                crate::SurfaceName::generated_path("A").name()
+            );
             assert_eq!(fields.len(), 1);
         }
         _ => panic!("expected Structure"),
@@ -1281,21 +1611,30 @@ fn test_parse_structure_dependent_field() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Sigma");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Sigma").name()
+            );
             assert_eq!(binders.len(), 2);
             assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "fst");
-            assert_eq!(fields[1].name, "snd");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("fst").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("snd").name()
+            );
             // Verify the second field type is an application B fst
             match &fields[1].ty {
                 SurfaceExpr::App(_, func, args) => {
                     assert!(
-                        matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "B"),
+                        matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("B").name()),
                         "Expected function to be B, got {func:?}"
                     );
                     assert_eq!(args.len(), 1, "Expected one argument (fst)");
                     assert!(
-                        matches!(&args[0].expr, SurfaceExpr::Ident(_, name) if name == "fst"),
+                        matches!(&args[0].expr, SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("fst").name()),
                         "Expected arg to be fst, got {:?}",
                         args[0].expr
                     );
@@ -1322,17 +1661,20 @@ fn test_parse_structure_dependent_field_projection_arg() {
             match &fields[1].ty {
                 SurfaceExpr::App(_, func, args) => {
                     assert!(
-                        matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "B"),
+                        matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("B").name()),
                         "Expected function to be B, got {func:?}"
                     );
                     assert_eq!(args.len(), 1, "Expected one argument (fst.snd)");
                     match &args[0].expr {
                         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                             assert!(
-                                matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if name == "fst"),
+                                matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("fst").name()),
                                 "Expected base to be fst, got {base:?}"
                             );
-                            assert_eq!(field, "snd");
+                            assert_eq!(
+                                (field).name(),
+                                crate::SurfaceName::generated_path("snd").name()
+                            );
                         }
                         other => panic!("expected projection arg, got {other:?}"),
                     }
@@ -1358,11 +1700,20 @@ fn test_parse_class_simple() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Add");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Add").name()
+            );
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "α");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("α").name()
+            );
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "add");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("add").name()
+            );
         }
         _ => panic!("expected Class"),
     }
@@ -1379,11 +1730,23 @@ fn test_parse_class_multiple_methods() {
     .unwrap();
     match decl {
         SurfaceDecl::Class { name, fields, .. } => {
-            assert_eq!(name, "Ord");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Ord").name()
+            );
             assert_eq!(fields.len(), 3);
-            assert_eq!(fields[0].name, "lt");
-            assert_eq!(fields[1].name, "le");
-            assert_eq!(fields[2].name, "gt");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("lt").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("le").name()
+            );
+            assert_eq!(
+                (fields[2].name).name(),
+                crate::SurfaceName::generated_path("gt").name()
+            );
         }
         _ => panic!("expected Class"),
     }
@@ -1403,10 +1766,16 @@ fn test_parse_class_with_default() {
             fields,
             ..
         } => {
-            assert_eq!(name, "Inhabited");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Inhabited").name()
+            );
             assert_eq!(binders.len(), 1);
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "default");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("default").name()
+            );
         }
         _ => panic!("expected Class"),
     }
@@ -1427,18 +1796,23 @@ fn test_parse_instance_named() {
             fields,
             ..
         } => {
-            assert_eq!(name, Some("instAddNat".to_string()));
+            assert_eq!(name, Some(crate::SurfaceName::generated_path("instAddNat")));
             assert!(binders.is_empty());
             // class_type should be `Add Nat`
             match class_type.as_ref() {
                 SurfaceExpr::App(_, func, args) => {
-                    assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "Add"));
+                    assert!(
+                        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Add").name())
+                    );
                     assert_eq!(args.len(), 1);
                 }
                 _ => panic!("expected App"),
             }
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "add");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("add").name()
+            );
         }
         _ => panic!("expected Instance"),
     }
@@ -1461,6 +1835,39 @@ fn test_parse_instance_anonymous() {
         }
         _ => panic!("expected Instance"),
     }
+}
+
+/// `@[implemented_by]` / `@[extern]` on an instance are carried for the
+/// elaborator, which binds the instance constant as Lean does, and so is
+/// `@[default_instance]`, which registers it for open-goal defaulting. Every
+/// other attribute on an instance is still not carried; before, these were
+/// dropped too, and compiled code ran the instance's own value.
+#[test]
+fn test_parse_instance_carries_compiler_attrs_only() {
+    let compiler_attrs_of = |source: &str| match Parser::parse_decl(source) {
+        Ok(SurfaceDecl::Instance { compiler_attrs, .. }) => compiler_attrs,
+        other => panic!("expected an instance: {source}: {other:?}"),
+    };
+    let attrs = compiler_attrs_of(
+        "@[implemented_by instFast, simp] instance instSlow : Inhabited Nat := ⟨0⟩",
+    );
+    assert!(
+        matches!(attrs.as_slice(), [crate::Attribute::ImplementedBy(target)]
+            if target.to_string() == "instFast"),
+        "{attrs:?}"
+    );
+    let attrs = compiler_attrs_of("@[extern \"clean_sym\"] instance : Inhabited Nat := ⟨0⟩");
+    assert!(
+        matches!(attrs.as_slice(), [crate::Attribute::Extern(sym)] if sym == "clean_sym"),
+        "{attrs:?}"
+    );
+    let attrs = compiler_attrs_of("@[simp, reducible] instance : Inhabited Nat := ⟨0⟩");
+    assert!(attrs.is_empty(), "{attrs:?}");
+    let attrs = compiler_attrs_of("@[default_instance] instance : Inhabited Nat := ⟨0⟩");
+    assert!(
+        matches!(attrs.as_slice(), [crate::Attribute::DefaultInstance { .. }]),
+        "{attrs:?}"
+    );
 }
 
 #[test]
@@ -1503,9 +1910,18 @@ fn test_parse_instance_multiple_fields() {
     match decl {
         SurfaceDecl::Instance { fields, .. } => {
             assert_eq!(fields.len(), 3);
-            assert_eq!(fields[0].name, "lt");
-            assert_eq!(fields[1].name, "le");
-            assert_eq!(fields[2].name, "gt");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("lt").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("le").name()
+            );
+            assert_eq!(
+                (fields[2].name).name(),
+                crate::SurfaceName::generated_path("gt").name()
+            );
         }
         _ => panic!("expected Instance"),
     }
@@ -1524,17 +1940,20 @@ fn test_parse_instance_field_projection_arg() {
             match &fields[0].val {
                 SurfaceExpr::App(_, func, args) => {
                     assert!(
-                        matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "f"),
+                        matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("f").name()),
                         "Expected function to be f, got {func:?}"
                     );
                     assert_eq!(args.len(), 1);
                     match &args[0].expr {
                         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                             assert!(
-                                matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if name == "x"),
+                                matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("x").name()),
                                 "Expected base to be x, got {base:?}"
                             );
-                            assert_eq!(field, "y");
+                            assert_eq!(
+                                (field).name(),
+                                crate::SurfaceName::generated_path("y").name()
+                            );
                         }
                         other => panic!("expected projection arg, got {other:?}"),
                     }
@@ -1560,8 +1979,14 @@ fn test_parse_instance_lambda_field_bounded_at_next_field() {
     };
     // BOTH fields must be present; `tag` must not be dropped.
     assert_eq!(fields.len(), 2, "expected render and tag, got {fields:?}");
-    assert_eq!(fields[0].name, "render");
-    assert_eq!(fields[1].name, "tag");
+    assert_eq!(
+        (fields[0].name).name(),
+        crate::SurfaceName::generated_path("render").name()
+    );
+    assert_eq!(
+        (fields[1].name).name(),
+        crate::SurfaceName::generated_path("tag").name()
+    );
 
     // render := fun _ => Nat.succ Nat.zero  (lambda body bounded; no `tag` arg)
     let SurfaceExpr::Lambda(_, binders, body) = &fields[0].val else {
@@ -1574,7 +1999,7 @@ fn test_parse_instance_lambda_field_bounded_at_next_field() {
     };
     assert!(
         matches!(func.as_ref(), SurfaceExpr::Proj(_, base, Projection::Named(f))
-            if f == "succ" && matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat")),
+            if (f).name() == crate::SurfaceName::generated_path("succ").name() && matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Nat").name())),
         "expected head Nat.succ, got {func:?}"
     );
     assert_eq!(
@@ -1604,9 +2029,18 @@ fn test_parse_instance_multiple_lambda_fields() {
         panic!("expected Instance");
     };
     assert_eq!(fields.len(), 3, "expected f, h, n, got {fields:?}");
-    assert_eq!(fields[0].name, "f");
-    assert_eq!(fields[1].name, "h");
-    assert_eq!(fields[2].name, "n");
+    assert_eq!(
+        (fields[0].name).name(),
+        crate::SurfaceName::generated_path("f").name()
+    );
+    assert_eq!(
+        (fields[1].name).name(),
+        crate::SurfaceName::generated_path("h").name()
+    );
+    assert_eq!(
+        (fields[2].name).name(),
+        crate::SurfaceName::generated_path("n").name()
+    );
 
     for (idx, expected_head) in [(0usize, "g"), (1usize, "k")] {
         let SurfaceExpr::Lambda(_, binders, body) = &fields[idx].val else {
@@ -1620,7 +2054,7 @@ fn test_parse_instance_multiple_lambda_fields() {
             panic!("expected lambda {idx} body to be an application, got {body:?}");
         };
         assert!(
-            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == expected_head),
+            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == crate::SurfaceName::generated_path(expected_head).name()),
             "lambda {idx} head should be {expected_head}, got {func:?}"
         );
         assert_eq!(
@@ -1648,12 +2082,18 @@ fn test_parse_instance_lambda_field_last_in_block() {
         panic!("expected Instance");
     };
     assert_eq!(fields.len(), 2, "expected tag and render, got {fields:?}");
-    assert_eq!(fields[0].name, "tag");
+    assert_eq!(
+        (fields[0].name).name(),
+        crate::SurfaceName::generated_path("tag").name()
+    );
     assert!(matches!(
         &fields[0].val,
         SurfaceExpr::Lit(_, SurfaceLit::Nat(3))
     ));
-    assert_eq!(fields[1].name, "render");
+    assert_eq!(
+        (fields[1].name).name(),
+        crate::SurfaceName::generated_path("render").name()
+    );
     let SurfaceExpr::Lambda(_, binders, body) = &fields[1].val else {
         panic!("expected render to be a lambda, got {:?}", fields[1].val);
     };
@@ -1679,21 +2119,31 @@ fn test_parse_instance_let_field_value_not_truncated() {
         panic!("expected Instance");
     };
     assert_eq!(fields.len(), 2, "expected v and tag, got {fields:?}");
-    assert_eq!(fields[0].name, "v");
+    assert_eq!(
+        (fields[0].name).name(),
+        crate::SurfaceName::generated_path("v").name()
+    );
     let SurfaceExpr::Let(_, binder, val, body) = &fields[0].val else {
         panic!("expected v to be a let-expression, got {:?}", fields[0].val);
     };
-    assert_eq!(binder.name, "x", "let binder name should be x");
+    assert_eq!(
+        (binder.name).name(),
+        crate::SurfaceName::generated_path("x").name(),
+        "let binder name should be x"
+    );
     assert!(
         matches!(val.as_ref(), SurfaceExpr::Proj(_, base, Projection::Named(f))
-            if f == "zero" && matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat")),
+            if (f).name() == crate::SurfaceName::generated_path("zero").name() && matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Nat").name())),
         "let value should be Nat.zero, got {val:?}"
     );
     assert!(
-        matches!(body.as_ref(), SurfaceExpr::Ident(_, n) if n == "x"),
+        matches!(body.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("x").name()),
         "let body should be the bare ident x, got {body:?}"
     );
-    assert_eq!(fields[1].name, "tag");
+    assert_eq!(
+        (fields[1].name).name(),
+        crate::SurfaceName::generated_path("tag").name()
+    );
     assert!(
         matches!(&fields[1].val, SurfaceExpr::Lit(_, SurfaceLit::Nat(3))),
         "expected tag := 3, got {:?}",
@@ -1716,7 +2166,10 @@ fn test_parse_instance_struct_literal_field_value() {
         panic!("expected Instance");
     };
     assert_eq!(fields.len(), 2, "expected cfg and tag, got {fields:?}");
-    assert_eq!(fields[0].name, "cfg");
+    assert_eq!(
+        (fields[0].name).name(),
+        crate::SurfaceName::generated_path("cfg").name()
+    );
     let SurfaceExpr::StructLit {
         fields: inner_fields,
         ..
@@ -1732,7 +2185,10 @@ fn test_parse_instance_struct_literal_field_value() {
         2,
         "nested struct literal must keep both a and b, got {inner_fields:?}"
     );
-    assert_eq!(fields[1].name, "tag");
+    assert_eq!(
+        (fields[1].name).name(),
+        crate::SurfaceName::generated_path("tag").name()
+    );
     assert!(
         matches!(&fields[1].val, SurfaceExpr::Lit(_, SurfaceLit::Nat(3))),
         "expected tag := 3, got {:?}",
@@ -1754,7 +2210,10 @@ fn test_parse_instance_lambda_field_bare_proj_body_bounded() {
         panic!("expected Instance");
     };
     assert_eq!(fields.len(), 2, "expected render and tag, got {fields:?}");
-    assert_eq!(fields[0].name, "render");
+    assert_eq!(
+        (fields[0].name).name(),
+        crate::SurfaceName::generated_path("render").name()
+    );
     let SurfaceExpr::Lambda(_, binders, body) = &fields[0].val else {
         panic!("expected render to be a lambda, got {:?}", fields[0].val);
     };
@@ -1762,10 +2221,13 @@ fn test_parse_instance_lambda_field_bare_proj_body_bounded() {
     // Body must be the bare projection Nat.zero (NOT an App applying `tag`).
     assert!(
         matches!(body.as_ref(), SurfaceExpr::Proj(_, base, Projection::Named(f))
-            if f == "zero" && matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat")),
+            if (f).name() == crate::SurfaceName::generated_path("zero").name() && matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Nat").name())),
         "expected lambda body to be the bare projection Nat.zero, got {body:?}"
     );
-    assert_eq!(fields[1].name, "tag");
+    assert_eq!(
+        (fields[1].name).name(),
+        crate::SurfaceName::generated_path("tag").name()
+    );
     assert!(
         matches!(&fields[1].val, SurfaceExpr::Lit(_, SurfaceLit::Nat(3))),
         "expected tag := 3, got {:?}",
@@ -1787,7 +2249,10 @@ fn test_parse_instance_nested_lambda_field_bounded() {
         panic!("expected Instance");
     };
     assert_eq!(fields.len(), 2, "expected render and tag, got {fields:?}");
-    assert_eq!(fields[0].name, "render");
+    assert_eq!(
+        (fields[0].name).name(),
+        crate::SurfaceName::generated_path("render").name()
+    );
 
     // Outer lambda `fun _ => <inner>`.
     let SurfaceExpr::Lambda(_, outer_binders, outer_body) = &fields[0].val else {
@@ -1814,7 +2279,7 @@ fn test_parse_instance_nested_lambda_field_bounded() {
         panic!("expected innermost body to be an application, got {inner_body:?}");
     };
     assert!(
-        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "g"),
+        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("g").name()),
         "expected innermost head g, got {func:?}"
     );
     assert_eq!(
@@ -1824,7 +2289,10 @@ fn test_parse_instance_nested_lambda_field_bounded() {
          swallowed through the nested lambda: {args:?}"
     );
 
-    assert_eq!(fields[1].name, "tag");
+    assert_eq!(
+        (fields[1].name).name(),
+        crate::SurfaceName::generated_path("tag").name()
+    );
     assert!(
         matches!(&fields[1].val, SurfaceExpr::Lit(_, SurfaceLit::Nat(3))),
         "expected tag := 3, got {:?}",
@@ -1874,7 +2342,10 @@ fn test_parse_class_with_outparam() {
     .unwrap();
     match decl {
         SurfaceDecl::Class { name, binders, .. } => {
-            assert_eq!(name, "HAdd");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("HAdd").name()
+            );
             assert_eq!(binders.len(), 3);
             // First two parameters are regular Types
             assert!(matches!(
@@ -1940,7 +2411,10 @@ fn test_parse_class_with_semioutparam() {
     .unwrap();
     match decl {
         SurfaceDecl::Class { name, binders, .. } => {
-            assert_eq!(name, "Coe");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Coe").name()
+            );
             assert_eq!(binders.len(), 2);
             // First parameter is semiOutParam Type
             assert!(
@@ -1970,7 +2444,10 @@ fn test_parse_class_with_both_param_types() {
     .unwrap();
     match decl {
         SurfaceDecl::Class { name, binders, .. } => {
-            assert_eq!(name, "HCoe");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("HCoe").name()
+            );
             assert_eq!(binders.len(), 3);
             // First parameter is semiOutParam
             assert!(
@@ -2091,10 +2568,16 @@ fn test_parse_structure_with_deriving_single() {
             deriving,
             ..
         } => {
-            assert_eq!(name, "Point");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Point").name()
+            );
             assert_eq!(fields.len(), 2);
             assert_eq!(deriving.len(), 1);
-            assert_eq!(deriving[0], "Repr");
+            assert_eq!(
+                (deriving[0]).name(),
+                crate::SurfaceName::generated_path("Repr").name()
+            );
         }
         _ => panic!("expected Structure"),
     }
@@ -2111,11 +2594,23 @@ fn test_parse_structure_with_deriving_multiple() {
     .unwrap();
     match decl {
         SurfaceDecl::Structure { name, deriving, .. } => {
-            assert_eq!(name, "Point");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Point").name()
+            );
             assert_eq!(deriving.len(), 3);
-            assert_eq!(deriving[0], "Repr");
-            assert_eq!(deriving[1], "BEq");
-            assert_eq!(deriving[2], "Hashable");
+            assert_eq!(
+                (deriving[0]).name(),
+                crate::SurfaceName::generated_path("Repr").name()
+            );
+            assert_eq!(
+                (deriving[1]).name(),
+                crate::SurfaceName::generated_path("BEq").name()
+            );
+            assert_eq!(
+                (deriving[2]).name(),
+                crate::SurfaceName::generated_path("Hashable").name()
+            );
         }
         _ => panic!("expected Structure"),
     }
@@ -2143,8 +2638,11 @@ deriving Repr
 
     match &decls[1] {
         SurfaceDecl::Structure { name, deriving, .. } => {
-            assert_eq!(name, "Point");
-            assert_eq!(deriving, &["Repr"]);
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Point").name()
+            );
+            assert_eq!(deriving, &[crate::SurfaceName::generated_path("Repr")]);
         }
         other => panic!("expected following structure with deriving Repr, got {other:?}"),
     }
@@ -2160,7 +2658,7 @@ local notation "foo" => Nat
     assert_eq!(decls.len(), 2, "expected import plus local notation");
     match &decls[0] {
         SurfaceDecl::Import { paths, .. } => {
-            assert_eq!(paths, &vec![vec!["Mathlib".to_string()]]);
+            assert_eq!(paths, &vec![crate::SurfaceName::generated_path("Mathlib")]);
         }
         other => panic!("expected Import, got {other:?}"),
     }
@@ -2190,7 +2688,10 @@ end Mathbot
         SurfaceDecl::Open { scoped, paths, .. } => {
             assert!(*scoped);
             assert_eq!(paths.len(), 1);
-            assert_eq!(paths[0].path, vec!["BigOperators".to_string()]);
+            assert_eq!(
+                paths[0].path,
+                crate::SurfaceName::generated_path("BigOperators")
+            );
         }
         other => panic!("expected Open, got {other:?}"),
     }
@@ -2201,7 +2702,10 @@ end Mathbot
     );
     match &decls[3] {
         SurfaceDecl::Namespace { name, decls, .. } => {
-            assert_eq!(name, "Mathbot");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Mathbot").name()
+            );
             assert_eq!(decls.len(), 1);
         }
         other => panic!("expected Namespace, got {other:?}"),
@@ -2250,7 +2754,7 @@ def bar : Nat := 1
     let decls = Parser::parse_file(code).expect("Namespace without end should parse");
     assert_eq!(decls.len(), 1, "expected 1 namespace declaration");
     assert!(
-        matches!(&decls[0], SurfaceDecl::Namespace { name, .. } if name == "Foo"),
+        matches!(&decls[0], SurfaceDecl::Namespace { name, .. } if (name).name() == crate::SurfaceName::generated_path("Foo").name()),
         "expected Namespace named 'Foo', got {:?}",
         decls[0]
     );
@@ -2268,7 +2772,10 @@ fn test_namespace_simple_with_end() {
     );
     match &decls[0] {
         SurfaceDecl::Namespace { name, decls, .. } => {
-            assert_eq!(name, "Foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Foo").name()
+            );
             assert_eq!(decls.len(), 1);
         }
         other => panic!("expected Namespace, got {other:?}"),
@@ -2288,7 +2795,10 @@ fn test_namespace_compound_two_segments() {
     );
     match &decls[0] {
         SurfaceDecl::Namespace { name, decls, .. } => {
-            assert_eq!(name, "Foo.Bar");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Foo.Bar").name()
+            );
             assert_eq!(decls.len(), 1);
         }
         other => panic!("expected Namespace, got {other:?}"),
@@ -2306,7 +2816,10 @@ fn test_namespace_compound_three_segments() {
     );
     match &decls[0] {
         SurfaceDecl::Namespace { name, decls, .. } => {
-            assert_eq!(name, "Foo.Bar.Baz");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Foo.Bar.Baz").name()
+            );
             assert_eq!(decls.len(), 1);
         }
         other => panic!("expected Namespace, got {other:?}"),
@@ -2314,15 +2827,42 @@ fn test_namespace_compound_three_segments() {
 }
 
 #[test]
-fn test_namespace_compound_end_leaf_only_accepted() {
-    // Preserve lenient behavior: `end Baz` is accepted as the close of
-    // `namespace Foo.Bar.Baz`. The Lean 4 elaborator itself would warn,
-    // but clean-parser should not produce a RawDecl recovery node here.
-    let code = "namespace Foo.Bar.Baz\ndef qux : Nat := 1\nend Baz";
+fn test_namespace_compound_end_leaf_only_closes_only_the_leaf() {
+    // `end Baz` is accepted as the close of `namespace Foo.Bar.Baz` — and it
+    // closes ONLY `Baz`, leaving `Foo.Bar` open for whatever follows.
+    //
+    // This test previously asserted a single `Namespace("Foo.Bar.Baz")` node
+    // and commented that "the Lean 4 elaborator itself would warn". Both
+    // halves are wrong. Ground truth, Lean 4.30.0-rc2, exit 0 with no
+    // diagnostic of any kind (`set_option pp.fullNames true`):
+    //
+    //   namespace Foo.Bar.Baz / def qux := 1 / end Baz
+    //   def after := 2 / end Foo.Bar
+    //     => Foo.Bar.Baz.qux : Nat
+    //        Foo.Bar.after : Nat        -- NOT `after`, NOT `Foo.Bar.Baz.after`
+    //
+    // The parser normalises that into the balanced tree meaning the same
+    // thing, so `after` sits in `Foo.Bar` and `qux` in `Foo.Bar.Baz`.
+    let code =
+        "namespace Foo.Bar.Baz\ndef qux : Nat := 1\nend Baz\ndef after : Nat := 2\nend Foo.Bar";
     let decls = Parser::parse_file(code).expect("leaf-only end should be accepted");
     assert_eq!(decls.len(), 1, "got {decls:?}");
     match &decls[0] {
-        SurfaceDecl::Namespace { name, .. } => assert_eq!(name, "Foo.Bar.Baz"),
+        SurfaceDecl::Namespace { name, decls, .. } => {
+            assert_eq!(
+                name.name(),
+                crate::SurfaceName::generated_path("Foo.Bar").name(),
+                "`end Baz` leaves `Foo.Bar` open"
+            );
+            assert_eq!(decls.len(), 2, "the inner block, then `after`: {decls:?}");
+            match &decls[0] {
+                SurfaceDecl::Namespace { name, .. } => assert_eq!(
+                    name.name(),
+                    crate::SurfaceName::generated_path("Baz").name()
+                ),
+                other => panic!("expected the closed inner Namespace, got {other:?}"),
+            }
+        }
         other => panic!("expected Namespace, got {other:?}"),
     }
 }
@@ -2344,7 +2884,10 @@ end Mathbot.Outer";
     );
     match &decls[0] {
         SurfaceDecl::Namespace { name, decls, .. } => {
-            assert_eq!(name, "Mathbot.Outer");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Mathbot.Outer").name()
+            );
             assert_eq!(decls.len(), 1, "expected one inner namespace");
             match &decls[0] {
                 SurfaceDecl::Namespace {
@@ -2352,7 +2895,10 @@ end Mathbot.Outer";
                     decls: inner_decls,
                     ..
                 } => {
-                    assert_eq!(inner_name, "Inner.Deep");
+                    assert_eq!(
+                        (inner_name).name(),
+                        crate::SurfaceName::generated_path("Inner.Deep").name()
+                    );
                     assert_eq!(inner_decls.len(), 1);
                 }
                 other => panic!("expected inner Namespace, got {other:?}"),
@@ -2369,7 +2915,10 @@ fn test_namespace_compound_eof_no_end() {
     let decls = Parser::parse_file(code).expect("compound namespace without end should parse");
     assert_eq!(decls.len(), 1, "got {decls:?}");
     match &decls[0] {
-        SurfaceDecl::Namespace { name, .. } => assert_eq!(name, "Foo.Bar"),
+        SurfaceDecl::Namespace { name, .. } => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("Foo.Bar").name()
+        ),
         other => panic!("expected Namespace, got {other:?}"),
     }
 }
@@ -2428,7 +2977,7 @@ fn test_parse_syntax_with_name() {
     let decl = Parser::parse_decl(r#"syntax [myAdd] term "+" term : term"#).unwrap();
     match decl {
         SurfaceDecl::Syntax { name, category, .. } => {
-            assert_eq!(name, Some("myAdd".to_string()));
+            assert_eq!(name, Some(crate::SurfaceName::generated_path("myAdd")));
             assert_eq!(category, "term");
         }
         _ => panic!("expected Syntax"),
@@ -2440,7 +2989,10 @@ fn test_parse_declare_syntax_cat() {
     let decl = Parser::parse_decl("declare_syntax_cat myCategory").unwrap();
     match decl {
         SurfaceDecl::DeclareSyntaxCat { name, .. } => {
-            assert_eq!(name, "myCategory");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("myCategory").name()
+            );
         }
         _ => panic!("expected DeclareSyntaxCat"),
     }
@@ -2458,7 +3010,9 @@ fn test_parse_macro_simple() {
         } => {
             assert_eq!(pattern.len(), 1); // "hello"
             assert_eq!(category, "term");
-            assert!(matches!(*expansion, SurfaceExpr::Ident(_, ref n) if n == "x"));
+            assert!(
+                matches!(*expansion, SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("x").name())
+            );
         }
         _ => panic!("expected Macro"),
     }
@@ -2584,7 +3138,9 @@ fn test_parse_q_type_quotation() {
             ..
         } => {
             assert_eq!(kind, QQuotationKind::Type);
-            assert!(matches!(*inner, SurfaceExpr::Ident(_, s) if s == "Nat"));
+            assert!(
+                matches!(*inner, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Nat").name())
+            );
             assert!(
                 type_annot.is_none(),
                 "type quotation should not have type annotation, got {type_annot:?}"
@@ -2629,7 +3185,9 @@ fn test_parse_q_type_quotation_with_annotation() {
             ..
         } => {
             assert_eq!(kind, QQuotationKind::Type);
-            assert!(matches!(*inner, SurfaceExpr::Ident(_, s) if s == "α"));
+            assert!(
+                matches!(*inner, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("α").name())
+            );
             let annot = type_annot.expect("type quotation with annotation should have type_annot");
             assert!(matches!(
                 *annot,
@@ -2684,7 +3242,9 @@ fn test_parse_q_space_paren_is_application_not_quotation() {
     // A bare `q (x)` (space) is `q` applied to `(x)`, not a quotation.
     match Parser::parse_expr("q (x)").expect("`q (x)` should parse") {
         SurfaceExpr::App(_, head, args) => {
-            assert!(matches!(*head, SurfaceExpr::Ident(_, ref n) if n == "q"));
+            assert!(
+                matches!(*head, SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("q").name())
+            );
             assert_eq!(args.len(), 1);
         }
         other => panic!("expected `q` applied to `(x)`, got {other:?}"),
@@ -2714,7 +3274,9 @@ fn test_parse_q_value_quotation_with_type() {
             assert!(matches!(*inner, SurfaceExpr::Lit(_, SurfaceLit::Nat(42))));
             let annot =
                 type_annot.expect("value quotation with type annotation should have type_annot");
-            assert!(matches!(*annot, SurfaceExpr::Ident(_, s) if s == "Nat"));
+            assert!(
+                matches!(*annot, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Nat").name())
+            );
         }
         _ => panic!("expected QQuotation, got {expr:?}"),
     }
@@ -2729,7 +3291,9 @@ fn test_parse_q_antiquot_simple() {
             assert_eq!(kind, QQuotationKind::Value);
             match *inner {
                 SurfaceExpr::QAntiquot { content, .. } => {
-                    assert!(matches!(content, QAntiquotContent::Simple(s) if s == "x"));
+                    assert!(
+                        matches!(content, QAntiquotContent::Simple(s) if (s).name() == crate::SurfaceName::generated_path("x").name())
+                    );
                 }
                 _ => panic!("expected QAntiquot inside QQuotation, got {inner:?}"),
             }
@@ -2772,8 +3336,13 @@ fn test_parse_q_antiquot_typed() {
             match *inner {
                 SurfaceExpr::QAntiquot { content, .. } => match content {
                     QAntiquotContent::Typed { name, ty } => {
-                        assert_eq!(name, "n");
-                        assert!(matches!(*ty, SurfaceExpr::Ident(_, s) if s == "Nat"));
+                        assert_eq!(
+                            (name).name(),
+                            crate::SurfaceName::generated_path("n").name()
+                        );
+                        assert!(
+                            matches!(*ty, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Nat").name())
+                        );
                     }
                     _ => panic!("expected Typed antiquotation, got {content:?}"),
                 },
@@ -2798,7 +3367,10 @@ fn test_parse_q_antiquot_splice_star() {
                         separator,
                         at_least_one,
                     } => {
-                        assert_eq!(name, "xs");
+                        assert_eq!(
+                            (name).name(),
+                            crate::SurfaceName::generated_path("xs").name()
+                        );
                         assert_eq!(separator, None);
                         assert!(!at_least_one, "* should mean zero or more");
                     }
@@ -2825,7 +3397,10 @@ fn test_parse_q_antiquot_splice_plus() {
                         separator,
                         at_least_one,
                     } => {
-                        assert_eq!(name, "xs");
+                        assert_eq!(
+                            (name).name(),
+                            crate::SurfaceName::generated_path("xs").name()
+                        );
                         assert_eq!(separator, None);
                         assert!(at_least_one, "+ should mean one or more");
                     }
@@ -2852,7 +3427,10 @@ fn test_parse_q_antiquot_splice_with_separator() {
                         separator,
                         at_least_one,
                     } => {
-                        assert_eq!(name, "xs");
+                        assert_eq!(
+                            (name).name(),
+                            crate::SurfaceName::generated_path("xs").name()
+                        );
                         assert_eq!(separator, Some(",".to_string()));
                         assert!(!at_least_one);
                     }
@@ -2881,20 +3459,24 @@ fn test_parse_q_with_application_and_antiquots() {
                     match *func {
                         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                             assert!(
-                                matches!(*base, SurfaceExpr::Ident(_, ref s) if s == "Nat"),
+                                matches!(*base, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Nat").name()),
                                 "Base should be Nat"
                             );
-                            assert_eq!(field, "add", "Field should be 'add'");
+                            assert_eq!(
+                                (field).name(),
+                                crate::SurfaceName::generated_path("add").name(),
+                                "Field should be 'add'"
+                            );
                         }
                         _ => panic!("expected Proj, got {func:?}"),
                     }
                     assert_eq!(args.len(), 2);
                     // Both args should be QAntiquot
                     assert!(
-                        matches!(&args[0].expr, SurfaceExpr::QAntiquot { content: QAntiquotContent::Simple(s), .. } if s == "a")
+                        matches!(&args[0].expr, SurfaceExpr::QAntiquot { content: QAntiquotContent::Simple(s), .. } if (s).name() == crate::SurfaceName::generated_path("a").name())
                     );
                     assert!(
-                        matches!(&args[1].expr, SurfaceExpr::QAntiquot { content: QAntiquotContent::Simple(s), .. } if s == "b")
+                        matches!(&args[1].expr, SurfaceExpr::QAntiquot { content: QAntiquotContent::Simple(s), .. } if (s).name() == crate::SurfaceName::generated_path("b").name())
                     );
                 }
                 _ => panic!("expected App inside QQuotation, got {inner:?}"),
@@ -2913,17 +3495,20 @@ fn test_parse_q_projection_attaches_to_last_arg() {
             match *inner {
                 SurfaceExpr::App(_, func, args) => {
                     assert!(
-                        matches!(*func, SurfaceExpr::Ident(_, ref name) if name == "f"),
+                        matches!(*func, SurfaceExpr::Ident(_, ref name) if (name).name() == crate::SurfaceName::generated_path("f").name()),
                         "Expected function to be f, got {func:?}"
                     );
                     assert_eq!(args.len(), 1);
                     match &args[0].expr {
                         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                             assert!(
-                                matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if name == "x"),
+                                matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("x").name()),
                                 "Expected base to be x, got {base:?}"
                             );
-                            assert_eq!(field, "y");
+                            assert_eq!(
+                                (field).name(),
+                                crate::SurfaceName::generated_path("y").name()
+                            );
                         }
                         other => panic!("expected projection arg, got {other:?}"),
                     }
@@ -2940,7 +3525,7 @@ fn test_parse_q_alone_as_identifier() {
     // Just `q` without parens should be an identifier
     let expr = Parser::parse_expr("q").unwrap();
     assert!(
-        matches!(expr, SurfaceExpr::Ident(_, ref s) if s == "q"),
+        matches!(expr, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("q").name()),
         "expected identifier 'q', got {expr:?}"
     );
 }
@@ -2950,7 +3535,7 @@ fn test_parse_uppercase_q_alone_as_identifier() {
     // Just `Q` without parens should be an identifier
     let expr = Parser::parse_expr("Q").unwrap();
     assert!(
-        matches!(expr, SurfaceExpr::Ident(_, ref s) if s == "Q"),
+        matches!(expr, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Q").name()),
         "expected identifier 'Q', got {expr:?}"
     );
 }
@@ -2961,7 +3546,7 @@ fn test_parse_def_with_q_quotation() {
     let code = "def mkAdd (a : Q(Nat)) (b : Q(Nat)) : Q(Nat) := q(Nat.add $a $b)";
     let decl = Parser::parse_decl(code).expect("Should parse def with Qq");
     assert!(
-        matches!(decl, SurfaceDecl::Def { ref name, .. } if name == "mkAdd"),
+        matches!(decl, SurfaceDecl::Def { ref name, .. } if (name).name() == crate::SurfaceName::generated_path("mkAdd").name()),
         "expected Def named 'mkAdd', got {decl:?}"
     );
 }
@@ -3060,7 +3645,7 @@ match e with
             if let SurfacePattern::QPattern(inner) = &arms[0].pattern {
                 // Should be App(f, [QAntiquot($x)])
                 assert!(
-                    matches!(&**inner, SurfaceExpr::App(_, func, _) if matches!(&**func, SurfaceExpr::Ident(_, name) if name == "f")),
+                    matches!(&**inner, SurfaceExpr::App(_, func, _) if matches!(&**func, SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("f").name())),
                     "q-pattern should be application of f, got {:?}",
                     inner
                 );
@@ -3083,7 +3668,7 @@ def isAdd (e : Q(Nat)) : Bool :=
 "#;
     let decl = Parser::parse_decl(code).expect("Should parse def with q-pattern match");
     assert!(
-        matches!(decl, SurfaceDecl::Def { ref name, .. } if name == "isAdd"),
+        matches!(decl, SurfaceDecl::Def { ref name, .. } if (name).name() == crate::SurfaceName::generated_path("isAdd").name()),
         "expected Def named 'isAdd', got {decl:?}"
     );
 }
@@ -3099,7 +3684,7 @@ def getAddArgs (e : Q(Nat)) : Option (Q(Nat)) :=
 "#;
     let decl = Parser::parse_decl(code).expect("Should parse def extracting q-pattern args");
     assert!(
-        matches!(decl, SurfaceDecl::Def { ref name, .. } if name == "getAddArgs"),
+        matches!(decl, SurfaceDecl::Def { ref name, .. } if (name).name() == crate::SurfaceName::generated_path("getAddArgs").name()),
         "expected Def named 'getAddArgs', got {decl:?}"
     );
 }
@@ -3116,7 +3701,7 @@ match e with
     match expr {
         SurfaceExpr::Match(_, _, _, arms) => {
             assert!(
-                matches!(&arms[0].pattern, SurfacePattern::Var(name) if name == "q"),
+                matches!(&arms[0].pattern, SurfacePattern::Var(name) if (name).name() == crate::SurfaceName::generated_path("q").name()),
                 "first arm should be Var('q'), got {:?}",
                 arms[0].pattern
             );
@@ -3427,17 +4012,17 @@ fn test_parse_membership_operator() {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(&*func, SurfaceExpr::Ident(_, s) if s == "Membership.mem"),
+                matches!(&*func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Membership.mem").name()),
                 "expected Membership.mem function"
             );
             assert_eq!(args.len(), 2, "expected 2 arguments");
             // First arg should be S (the set), second should be x (the element)
             assert!(
-                matches!(&args[0].expr, SurfaceExpr::Ident(_, s) if s == "S"),
+                matches!(&args[0].expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("S").name()),
                 "first arg should be S"
             );
             assert!(
-                matches!(&args[1].expr, SurfaceExpr::Ident(_, s) if s == "x"),
+                matches!(&args[1].expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("x").name()),
                 "second arg should be x"
             );
         }
@@ -3453,7 +4038,7 @@ fn test_parse_not_membership_operator() {
     match expr {
         SurfaceExpr::App(_, outer_func, outer_args) => {
             assert!(
-                matches!(&*outer_func, SurfaceExpr::Ident(_, s) if s == "Not"),
+                matches!(&*outer_func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Not").name()),
                 "expected Not function"
             );
             assert_eq!(outer_args.len(), 1, "Not should have 1 argument");
@@ -3462,7 +4047,7 @@ fn test_parse_not_membership_operator() {
             match &outer_args[0].expr {
                 SurfaceExpr::App(_, inner_func, inner_args) => {
                     assert!(
-                        matches!(&**inner_func, SurfaceExpr::Ident(_, s) if s == "Membership.mem"),
+                        matches!(&**inner_func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Membership.mem").name()),
                         "inner should be Membership.mem"
                     );
                     assert_eq!(inner_args.len(), 2, "Membership.mem should have 2 args");
@@ -3478,11 +4063,15 @@ fn test_parse_not_membership_operator() {
 fn test_lattice_top_bot() {
     // ⊤ should parse as Top.top (Mathlib convention)
     let expr = Parser::parse_expr("⊤").unwrap();
-    assert!(matches!(expr, SurfaceExpr::Ident(_, s) if s == "Top.top"));
+    assert!(
+        matches!(expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Top.top").name())
+    );
 
     // ⊥ should parse as Bot.bot (Mathlib convention)
     let expr = Parser::parse_expr("⊥").unwrap();
-    assert!(matches!(expr, SurfaceExpr::Ident(_, s) if s == "Bot.bot"));
+    assert!(
+        matches!(expr, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("Bot.bot").name())
+    );
 
     // Should work in definitions
     let decls = Parser::parse_file("def test : Prop := ⊤ = ⊤ ∧ ⊥ = ⊥").unwrap();
@@ -3494,20 +4083,22 @@ fn test_postfix_bang_keeps_explicit_application_as_prefix_not_argument() {
     let expr = Parser::parse_expr("f !@g").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(&*func, SurfaceExpr::Ident(_, s) if s == "f"));
+            assert!(
+                matches!(&*func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("f").name())
+            );
             assert_eq!(args.len(), 1, "expected one argument after f");
             match &args[0].expr {
                 SurfaceExpr::App(_, not_func, not_args) => {
                     assert!(
-                        matches!(&**not_func, SurfaceExpr::Ident(_, s) if s == "Not"),
-                        "expected prefix Not argument"
+                        matches!(&**not_func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("not").name()),
+                        "expected prefix `not` (Lean: `notation:max \"!\" b:40 => not b`)"
                     );
                     assert_eq!(not_args.len(), 1, "Not should wrap exactly one expression");
                     assert!(
                         matches!(
                             &not_args[0].expr,
                             SurfaceExpr::Explicit(_, inner)
-                                if matches!(&**inner, SurfaceExpr::Ident(_, s) if s == "g")
+                                if matches!(&**inner, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("g").name())
                         ),
                         "expected explicit application target @g inside Not"
                     );
@@ -3556,7 +4147,10 @@ fn test_struct_literal_single_field() {
     match expr {
         SurfaceExpr::StructLit { fields, .. } => {
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "x");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
         }
         _ => panic!("Expected StructLit"),
     }
@@ -3569,8 +4163,14 @@ fn test_struct_literal_multiple_fields() {
     match expr {
         SurfaceExpr::StructLit { fields, .. } => {
             assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
         }
         _ => panic!("Expected StructLit"),
     }
@@ -3614,7 +4214,10 @@ fn test_struct_literal_trailing_comma_single() {
     match expr {
         SurfaceExpr::StructLit { fields, .. } => {
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "x");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
         }
         _ => panic!("Expected StructLit"),
     }
@@ -3627,8 +4230,14 @@ fn test_struct_literal_trailing_comma_multiple() {
     match expr {
         SurfaceExpr::StructLit { fields, .. } => {
             assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
         }
         _ => panic!("Expected StructLit"),
     }
@@ -3645,12 +4254,15 @@ fn test_struct_update_syntax_single_field() {
             assert!(base.is_some(), "Should have base expression");
             let base_expr = base.unwrap();
             assert!(
-                matches!(*base_expr, SurfaceExpr::Ident(_, ref name) if name == "s"),
+                matches!(*base_expr, SurfaceExpr::Ident(_, ref name) if (name).name() == crate::SurfaceName::generated_path("s").name()),
                 "Base should be identifier 's'"
             );
             // Should have one field update
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "x");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
         }
         _ => panic!("Expected StructLit with base"),
     }
@@ -3665,13 +4277,19 @@ fn test_struct_update_syntax_multiple_fields() {
             assert!(base.is_some(), "Should have base expression");
             let base_expr = base.unwrap();
             assert!(
-                matches!(*base_expr, SurfaceExpr::Ident(_, ref name) if name == "s"),
+                matches!(*base_expr, SurfaceExpr::Ident(_, ref name) if (name).name() == crate::SurfaceName::generated_path("s").name()),
                 "Base should be identifier 's'"
             );
             // Should have two field updates
             assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                (fields[1].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
         }
         _ => panic!("Expected StructLit with base"),
     }
@@ -3691,7 +4309,10 @@ fn test_struct_update_with_projection_base() {
                 "Base should be a projection"
             );
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "x");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
         }
         _ => panic!("Expected StructLit with projection base"),
     }
@@ -3711,7 +4332,10 @@ fn test_struct_update_with_application_base() {
                 "Base should be an application"
             );
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "y");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
         }
         _ => panic!("Expected StructLit with application base"),
     }
@@ -3727,7 +4351,7 @@ fn test_struct_update_empty_fields() {
             assert!(base.is_some(), "Should have base expression");
             let base_expr = base.unwrap();
             assert!(
-                matches!(*base_expr, SurfaceExpr::Ident(_, ref name) if name == "s"),
+                matches!(*base_expr, SurfaceExpr::Ident(_, ref name) if (name).name() == crate::SurfaceName::generated_path("s").name()),
                 "Base should be identifier 's'"
             );
             // Should have zero field updates
@@ -3746,7 +4370,10 @@ fn test_struct_update_with_parenthesized_base() {
             assert!(base.is_some(), "Should have base expression");
             // Base is (s), which parses as Paren wrapper or just s
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "x");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
         }
         _ => panic!("Expected StructLit with parenthesized base"),
     }
@@ -3762,7 +4389,10 @@ fn test_struct_update_nested() {
             assert!(base.is_some(), "Outer should have base expression");
             // Outer has field y := 2
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "y");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
             // Base should be inner struct update
             let base_expr = base.unwrap();
             match *base_expr {
@@ -3773,7 +4403,10 @@ fn test_struct_update_nested() {
                 } => {
                     assert!(inner_base.is_some(), "Inner should have base expression");
                     assert_eq!(inner_fields.len(), 1);
-                    assert_eq!(inner_fields[0].name, "x");
+                    assert_eq!(
+                        (inner_fields[0].name).name(),
+                        crate::SurfaceName::generated_path("x").name()
+                    );
                 }
                 _ => panic!("Inner base should be StructLit"),
             }
@@ -3795,7 +4428,10 @@ fn test_struct_update_with_type_annotation() {
         } => {
             assert!(base.is_some(), "Should have base expression");
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "x");
+            assert_eq!(
+                (fields[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(struct_type.is_some(), "Should have type annotation");
         }
         _ => panic!("Expected StructLit with type annotation"),
@@ -3813,14 +4449,20 @@ fn test_set_builder_simple() {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             match *func {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "setOf"),
+                SurfaceExpr::Ident(_, name) => assert_eq!(
+                    (name).name(),
+                    crate::SurfaceName::generated_path("setOf").name()
+                ),
                 _ => panic!("Expected setOf identifier"),
             }
             assert_eq!(args.len(), 1);
             match &args[0].expr {
                 SurfaceExpr::Lambda(_, binders, body) => {
                     assert_eq!(binders.len(), 1);
-                    assert_eq!(binders[0].name, "x");
+                    assert_eq!(
+                        (binders[0].name).name(),
+                        crate::SurfaceName::generated_path("x").name()
+                    );
                     assert!(
                         binders[0].ty.is_none(),
                         "untyped lambda binder should have no type, got {:?}",
@@ -3842,17 +4484,26 @@ fn test_set_builder_typed_binder() {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             match *func {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "setOf"),
+                SurfaceExpr::Ident(_, name) => assert_eq!(
+                    (name).name(),
+                    crate::SurfaceName::generated_path("setOf").name()
+                ),
                 _ => panic!("Expected setOf identifier"),
             }
             assert_eq!(args.len(), 1);
             match &args[0].expr {
                 SurfaceExpr::Lambda(_, binders, _) => {
                     assert_eq!(binders.len(), 1);
-                    assert_eq!(binders[0].name, "x");
+                    assert_eq!(
+                        (binders[0].name).name(),
+                        crate::SurfaceName::generated_path("x").name()
+                    );
                     let ty = binders[0].ty.as_ref().expect("expected binder type");
                     match **ty {
-                        SurfaceExpr::Ident(_, ref name) => assert_eq!(name, "Nat"),
+                        SurfaceExpr::Ident(_, ref name) => assert_eq!(
+                            (name).name(),
+                            crate::SurfaceName::generated_path("Nat").name()
+                        ),
                         _ => panic!("Expected Nat type"),
                     }
                 }
@@ -3879,7 +4530,10 @@ fn test_set_builder_separation_membership() {
         _ => panic!("expected setOf application, got {expr:?}"),
     };
     match *func {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "setOf"),
+        SurfaceExpr::Ident(_, name) => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("setOf").name()
+        ),
         other => panic!("expected setOf identifier, got {other:?}"),
     }
     assert_eq!(args.len(), 1);
@@ -3888,7 +4542,10 @@ fn test_set_builder_separation_membership() {
         other => panic!("expected lambda argument, got {other:?}"),
     };
     assert_eq!(binders.len(), 1);
-    assert_eq!(binders[0].name, "x");
+    assert_eq!(
+        (binders[0].name).name(),
+        crate::SurfaceName::generated_path("x").name()
+    );
     assert!(
         binders[0].ty.is_none(),
         "separation binder is untyped, got {:?}",
@@ -3900,7 +4557,10 @@ fn test_set_builder_separation_membership() {
         other => panic!("expected `And` application body, got {other:?}"),
     };
     match &**and_head {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "And"),
+        SurfaceExpr::Ident(_, name) => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("And").name()
+        ),
         other => panic!("expected `And` head, got {other:?}"),
     }
     assert_eq!(and_args.len(), 2, "And takes membership ∧ predicate");
@@ -3910,16 +4570,27 @@ fn test_set_builder_separation_membership() {
         other => panic!("expected `Membership.mem` application, got {other:?}"),
     };
     match &**mem_head {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "Membership.mem"),
+        SurfaceExpr::Ident(_, name) => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("Membership.mem").name()
+        ),
         other => panic!("expected `Membership.mem` head, got {other:?}"),
     }
     assert_eq!(mem_args.len(), 2);
     match &mem_args[0].expr {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "s", "mem's first arg is the set `s`"),
+        SurfaceExpr::Ident(_, name) => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("s").name(),
+            "mem's first arg is the set `s`"
+        ),
         other => panic!("expected set `s`, got {other:?}"),
     }
     match &mem_args[1].expr {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "x", "mem's second arg is the element `x`"),
+        SurfaceExpr::Ident(_, name) => assert_eq!(
+            (name).name(),
+            crate::SurfaceName::generated_path("x").name(),
+            "mem's second arg is the element `x`"
+        ),
         other => panic!("expected element `x`, got {other:?}"),
     }
     // Second conjunct: the predicate `p x` must be preserved (not a Hole).
@@ -3938,7 +4609,9 @@ fn test_set_builder_separation_complex_set_expr() {
         Parser::parse_expr("{n ∈ Finset.range k | n = 0}").expect("separation with applied set");
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref n) if n == "setOf"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("setOf").name())
+            );
             assert_eq!(args.len(), 1);
             assert!(matches!(&args[0].expr, SurfaceExpr::Lambda(..)));
         }
@@ -3995,6 +4668,7 @@ fn test_nested_braces_complex_rejected() {
 // Property-based tests (#175)
 // =========================================================================
 
+use super::tests_name_strategy::name_strategy;
 use proptest::prelude::*;
 
 proptest! {
@@ -4013,32 +4687,10 @@ proptest! {
 
     /// Parsing identifiers always succeeds and produces Ident
     #[test]
-    fn prop_ident_parses(name in "[a-zA-Z_][a-zA-Z0-9_]{0,10}") {
-        // Filter out keywords (comprehensive list)
-        let keywords = [
-            "_",
-            // Declarations
-            "def", "theorem", "lemma", "example", "abbrev", "structure",
-            "class", "instance", "inductive", "axiom", "constant", "variable",
-            "opaque", "partial", "private", "protected", "scoped", "local",
-            // Control flow
-            "fun", "forall", "let", "in", "if", "then", "else", "match",
-            "with", "where", "do", "return", "by", "have", "show", "calc",
-            // Types
-            "Type", "Prop", "Sort",
-            // Literals/operators
-            "true", "false", "and", "or", "not",
-            // Module system
-            "open", "section", "namespace", "end", "import", "export",
-            "universe", "attribute", "syntax", "macro", "mutual", "unsafe",
-        ];
-        if keywords.contains(&name.as_str()) {
-            return Ok(());
-        }
-
+    fn prop_ident_parses(name in name_strategy("[a-zA-Z_][a-zA-Z0-9_]{0,10}")) {
         let expr = Parser::parse_expr(&name)?;
         prop_assert!(
-            matches!(&expr, SurfaceExpr::Ident(_, s) if s == &name),
+            matches!(&expr, SurfaceExpr::Ident(_, s) if s.name() == crate::SurfaceName::component(&name, false).name()),
             "Expected Ident('{}'), got {:?}",
             name, expr
         );
@@ -4058,17 +4710,7 @@ proptest! {
 
     /// Lambda expressions with valid identifiers parse successfully
     #[test]
-    fn prop_lambda_parses(name in "[a-z][a-z0-9]{0,5}") {
-        // Skip keywords that would cause parse failures
-        let keywords = [
-            "fun", "let", "in", "if", "do", "by", "end", "and", "or", "not",
-            "match", "with", "where", "return", "have", "show", "calc", "else", "then",
-            "rfl", // Reflexivity keyword (TokenKind::Rfl)
-        ];
-        if keywords.contains(&name.as_str()) {
-            return Ok(());
-        }
-
+    fn prop_lambda_parses(name in name_strategy("[a-z][a-z0-9]{0,5}")) {
         let input = format!("fun {name} => {name}");
         let expr = Parser::parse_expr(&input)?;
         prop_assert!(
@@ -4124,15 +4766,7 @@ proptest! {
 
     /// Forall expressions parse correctly
     #[test]
-    fn prop_forall_parses(name in "[a-z][a-z0-9]{0,4}") {
-        let keywords = [
-            "fun", "let", "in", "if", "do", "by", "end", "and", "or", "not",
-            "match", "with", "where", "return", "have", "show", "calc", "else", "then", "forall",
-        ];
-        if keywords.contains(&name.as_str()) {
-            return Ok(());
-        }
-
+    fn prop_forall_parses(name in name_strategy("[a-z][a-z0-9]{0,4}")) {
         let input = format!("forall ({name} : Prop), {name}");
         let expr = Parser::parse_expr(&input)?;
         prop_assert!(
@@ -4188,7 +4822,9 @@ fn test_qualified_name_in_nested_constructor_call() {
     let decls =
         Parser::parse_file(code).expect("Should parse qualified name in nested constructor");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4213,7 +4849,9 @@ fn test_multiple_qualified_names_in_nested_call() {
     let code = r#"def f := Foo.bar (Nat.succ (Nat.zero)) (List.cons x (List.nil))"#;
     let decls = Parser::parse_file(code).expect("Should parse multiple nested qualified names");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "f"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("f").name())
+    );
 }
 
 // =============================================================================
@@ -4226,7 +4864,9 @@ fn test_qualified_name_type_keyword() {
     let code = r#"def test := Option.Type"#;
     let decls = Parser::parse_file(code).expect("Should parse Type as qualified name part");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4235,7 +4875,9 @@ fn test_qualified_name_sort_keyword() {
     let code = r#"def test := Level.Sort"#;
     let decls = Parser::parse_file(code).expect("Should parse Sort as qualified name part");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4244,7 +4886,9 @@ fn test_qualified_name_match_keyword() {
     let code = r#"def test := Foo.match"#;
     let decls = Parser::parse_file(code).expect("Should parse match as qualified name part");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4253,7 +4897,9 @@ fn test_qualified_name_do_keyword() {
     let code = r#"def test := Monad.do"#;
     let decls = Parser::parse_file(code).expect("Should parse do as qualified name part");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4262,7 +4908,9 @@ fn test_qualified_name_return_keyword() {
     let code = r#"def test := Monad.return"#;
     let decls = Parser::parse_file(code).expect("Should parse return as qualified name part");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4271,7 +4919,9 @@ fn test_qualified_name_prop_keyword() {
     let code = r#"def test := Logic.Prop"#;
     let decls = Parser::parse_file(code).expect("Should parse Prop as qualified name part");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4281,7 +4931,9 @@ fn test_multi_level_qualified_name_with_keyword() {
     let decls =
         Parser::parse_file(code).expect("Should parse multi-level qualified name with keyword");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4292,8 +4944,16 @@ fn test_keyword_projection_verifies_value() {
     match Parser::parse_expr(code).expect("Should parse Nat.rec") {
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => match base.as_ref() {
             SurfaceExpr::Ident(_, name) => {
-                assert_eq!(name, "Nat", "Base should be 'Nat'");
-                assert_eq!(field, "rec", "Field should be 'rec'");
+                assert_eq!(
+                    (name).name(),
+                    crate::SurfaceName::generated_path("Nat").name(),
+                    "Base should be 'Nat'"
+                );
+                assert_eq!(
+                    (field).name(),
+                    crate::SurfaceName::generated_path("rec").name(),
+                    "Field should be 'rec'"
+                );
             }
             other => panic!("Expected Ident base, got {other:?}"),
         },
@@ -4308,7 +4968,9 @@ fn test_keyword_after_keyword_in_qualified_name() {
     let decls =
         Parser::parse_file(code).expect("Should parse keyword after keyword in qualified name");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 // =============================================================================
@@ -4324,7 +4986,7 @@ fn test_open_command_with_keyword_segment() {
     match &decls[0] {
         SurfaceDecl::Open { paths, .. } => {
             assert_eq!(paths.len(), 1);
-            assert_eq!(paths[0].path, vec!["Nat".to_string(), "rec".to_string()]);
+            assert_eq!(paths[0].path, crate::SurfaceName::generated_path("Nat.rec"));
         }
         other => panic!("Expected Open decl, got {other:?}"),
     }
@@ -4339,8 +5001,14 @@ fn test_open_command_with_keyword_names_list() {
     match &decls[0] {
         SurfaceDecl::Open { paths, .. } => {
             assert_eq!(paths.len(), 1);
-            assert_eq!(paths[0].path, vec!["Nat".to_string()]);
-            assert_eq!(paths[0].names, vec!["rec".to_string(), "match".to_string()]);
+            assert_eq!(paths[0].path, crate::SurfaceName::generated_path("Nat"));
+            assert_eq!(
+                paths[0].names,
+                vec![
+                    crate::SurfaceName::generated_path("rec"),
+                    crate::SurfaceName::generated_path("match")
+                ]
+            );
         }
         other => panic!("Expected Open decl, got {other:?}"),
     }
@@ -4356,7 +5024,10 @@ fn test_open_scoped_with_keyword_segment() {
         SurfaceDecl::Open { scoped, paths, .. } => {
             assert!(*scoped);
             assert_eq!(paths.len(), 1);
-            assert_eq!(paths[0].path, vec!["Foo".to_string(), "match".to_string()]);
+            assert_eq!(
+                paths[0].path,
+                crate::SurfaceName::generated_path("Foo.match")
+            );
         }
         other => panic!("Expected Open decl, got {other:?}"),
     }
@@ -4370,7 +5041,10 @@ fn test_print_command_with_keyword_segment() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Print { name, .. } => {
-            assert_eq!(name, "Nat.rec");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Nat.rec").name()
+            );
         }
         other => panic!("Expected Print decl, got {other:?}"),
     }
@@ -4385,7 +5059,7 @@ fn test_attribute_command_with_keyword_segment() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Attribute { names, .. } => {
-            assert_eq!(names, &vec!["Nat.rec".to_string()]);
+            assert_eq!(names, &vec![crate::SurfaceName::generated_path("Nat.rec")]);
         }
         other => panic!("Expected Attribute decl, got {other:?}"),
     }
@@ -4399,7 +5073,7 @@ fn test_attribute_command_removal_syntax() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Attribute { attrs, names, .. } => {
-            assert_eq!(names, &vec!["Nat.rec".to_string()]);
+            assert_eq!(names, &vec![crate::SurfaceName::generated_path("Nat.rec")]);
             assert_eq!(
                 attrs,
                 &vec![AttributeCommandAttr::Remove("simp".to_string())]
@@ -4418,7 +5092,7 @@ fn test_import_with_keyword_segment() {
     match &decls[0] {
         SurfaceDecl::Import { paths, .. } => {
             assert_eq!(paths.len(), 1);
-            assert_eq!(paths[0], vec!["Foo".to_string(), "match".to_string()]);
+            assert_eq!(paths[0], crate::SurfaceName::generated_path("Foo.match"));
         }
         other => panic!("Expected Import decl, got {other:?}"),
     }
@@ -4442,8 +5116,16 @@ fn test_lowercase_qualified_name_in_def() {
         match val.as_ref() {
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => match base.as_ref() {
                 SurfaceExpr::Ident(_, name) => {
-                    assert_eq!(name, "foo", "Base should be 'foo'");
-                    assert_eq!(field, "bar", "Field should be 'bar'");
+                    assert_eq!(
+                        (name).name(),
+                        crate::SurfaceName::generated_path("foo").name(),
+                        "Base should be 'foo'"
+                    );
+                    assert_eq!(
+                        (field).name(),
+                        crate::SurfaceName::generated_path("bar").name(),
+                        "Field should be 'bar'"
+                    );
                 }
                 other => panic!("Expected Ident base, got {other:?}"),
             },
@@ -4463,13 +5145,25 @@ fn test_lowercase_multi_segment_qualified_name() {
     if let SurfaceDecl::Def { val, .. } = &decls[0] {
         match val.as_ref() {
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
-                assert_eq!(field, "baz", "Outer field should be 'baz'");
+                assert_eq!(
+                    (field).name(),
+                    crate::SurfaceName::generated_path("baz").name(),
+                    "Outer field should be 'baz'"
+                );
                 match base.as_ref() {
                     SurfaceExpr::Proj(_, inner_base, Projection::Named(inner_field)) => {
-                        assert_eq!(inner_field, "bar", "Inner field should be 'bar'");
+                        assert_eq!(
+                            (inner_field).name(),
+                            crate::SurfaceName::generated_path("bar").name(),
+                            "Inner field should be 'bar'"
+                        );
                         match inner_base.as_ref() {
                             SurfaceExpr::Ident(_, name) => {
-                                assert_eq!(name, "foo", "Base should be 'foo'");
+                                assert_eq!(
+                                    (name).name(),
+                                    crate::SurfaceName::generated_path("foo").name(),
+                                    "Base should be 'foo'"
+                                );
                             }
                             other => panic!("Expected Ident base, got {other:?}"),
                         }
@@ -4494,13 +5188,25 @@ fn test_mixed_case_nested_projections() {
     if let SurfaceDecl::Def { val, .. } = &decls[0] {
         match val.as_ref() {
             SurfaceExpr::Proj(_, outer_base, Projection::Named(outer_field)) => {
-                assert_eq!(outer_field, "baz", "Outer field should be 'baz'");
+                assert_eq!(
+                    (outer_field).name(),
+                    crate::SurfaceName::generated_path("baz").name(),
+                    "Outer field should be 'baz'"
+                );
                 match outer_base.as_ref() {
                     SurfaceExpr::Proj(_, inner_base, Projection::Named(inner_field)) => {
-                        assert_eq!(inner_field, "Bar", "Inner field should be 'Bar'");
+                        assert_eq!(
+                            (inner_field).name(),
+                            crate::SurfaceName::generated_path("Bar").name(),
+                            "Inner field should be 'Bar'"
+                        );
                         match inner_base.as_ref() {
                             SurfaceExpr::Ident(_, name) => {
-                                assert_eq!(name, "foo", "Base should be 'foo'");
+                                assert_eq!(
+                                    (name).name(),
+                                    crate::SurfaceName::generated_path("foo").name(),
+                                    "Base should be 'foo'"
+                                );
                             }
                             other => panic!("Expected Ident base, got {other:?}"),
                         }
@@ -4525,8 +5231,16 @@ fn test_uppercase_base_with_lowercase_segment() {
         match val.as_ref() {
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => match base.as_ref() {
                 SurfaceExpr::Ident(_, name) => {
-                    assert_eq!(name, "Foo", "Base should be 'Foo'");
-                    assert_eq!(field, "bar", "Field should be 'bar'");
+                    assert_eq!(
+                        (name).name(),
+                        crate::SurfaceName::generated_path("Foo").name(),
+                        "Base should be 'Foo'"
+                    );
+                    assert_eq!(
+                        (field).name(),
+                        crate::SurfaceName::generated_path("bar").name(),
+                        "Field should be 'bar'"
+                    );
                 }
                 other => panic!("Expected Ident base, got {other:?}"),
             },
@@ -4547,8 +5261,16 @@ fn test_internal_segment_as_projection() {
         match val.as_ref() {
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => match base.as_ref() {
                 SurfaceExpr::Ident(_, name) => {
-                    assert_eq!(name, "foo", "Base should be 'foo'");
-                    assert_eq!(field, "_private", "Field should be '_private'");
+                    assert_eq!(
+                        (name).name(),
+                        crate::SurfaceName::generated_path("foo").name(),
+                        "Base should be 'foo'"
+                    );
+                    assert_eq!(
+                        (field).name(),
+                        crate::SurfaceName::generated_path("_private").name(),
+                        "Field should be '_private'"
+                    );
                 }
                 other => panic!("Expected Ident base, got {other:?}"),
             },
@@ -4569,8 +5291,16 @@ fn test_keyword_segment_as_projection() {
         match val.as_ref() {
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => match base.as_ref() {
                 SurfaceExpr::Ident(_, name) => {
-                    assert_eq!(name, "foo", "Base should be 'foo'");
-                    assert_eq!(field, "rec", "Field should be 'rec'");
+                    assert_eq!(
+                        (name).name(),
+                        crate::SurfaceName::generated_path("foo").name(),
+                        "Base should be 'foo'"
+                    );
+                    assert_eq!(
+                        (field).name(),
+                        crate::SurfaceName::generated_path("rec").name(),
+                        "Field should be 'rec'"
+                    );
                 }
                 other => panic!("Expected Ident base, got {other:?}"),
             },
@@ -4588,7 +5318,9 @@ fn test_lowercase_qualified_name_in_expression() {
     let decls =
         Parser::parse_file(code).expect("Should parse lowercase qualified name in application");
     assert_eq!(decls.len(), 1);
-    assert!(matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "test"));
+    assert!(
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("test").name())
+    );
 }
 
 #[test]
@@ -4625,7 +5357,9 @@ fn test_def_with_escaped_name() {
     let decls = Parser::parse_file(code).unwrap();
     assert_eq!(decls.len(), 1);
     match &decls[0] {
-        SurfaceDecl::Def { name, .. } => assert_eq!(name, "match"),
+        SurfaceDecl::Def { name, .. } => {
+            assert!(name.same_syntax(&crate::SurfaceName::component("match", true)))
+        }
         other => panic!("Expected Def, got {other:?}"),
     }
 }
@@ -4636,7 +5370,13 @@ fn test_def_with_escaped_qualified_name() {
     let decls = Parser::parse_file(code).unwrap();
     assert_eq!(decls.len(), 1);
     match &decls[0] {
-        SurfaceDecl::Def { name, .. } => assert_eq!(name, "foo.bar"),
+        SurfaceDecl::Def { name, .. } => {
+            assert!(name.same_syntax(&crate::SurfaceName::component("foo.bar", true)));
+            assert_ne!(
+                name.name(),
+                crate::SurfaceName::generated_path("foo.bar").name()
+            );
+        }
         other => panic!("Expected Def, got {other:?}"),
     }
 }
@@ -4647,7 +5387,10 @@ fn test_def_with_escaped_segment_in_qualified_name() {
     let decls = Parser::parse_file(code).unwrap();
     assert_eq!(decls.len(), 1);
     match &decls[0] {
-        SurfaceDecl::Def { name, .. } => assert_eq!(name, "Foo.match"),
+        SurfaceDecl::Def { name, .. } => assert!(name.same_syntax(
+            &crate::SurfaceName::component("Foo", false)
+                .append(&crate::SurfaceName::component("match", true))
+        )),
         other => panic!("Expected Def, got {other:?}"),
     }
 }
@@ -4664,8 +5407,14 @@ fn test_def_with_dot_universe_params() {
             binders,
             ..
         } => {
-            assert_eq!(name, "foo");
-            assert_eq!(universe_params, &vec!["u".to_string()]);
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
+            assert_eq!(
+                universe_params,
+                &vec![crate::SurfaceName::generated_path("u")]
+            );
             assert_eq!(binders.len(), 2);
         }
         other => panic!("Expected Def, got {other:?}"),
@@ -4684,9 +5433,97 @@ fn test_def_with_qualified_dot_universe_params() {
             binders,
             ..
         } => {
-            assert_eq!(name, "Foo.bar");
-            assert_eq!(universe_params, &vec!["u".to_string()]);
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Foo.bar").name()
+            );
+            assert_eq!(
+                universe_params,
+                &vec![crate::SurfaceName::generated_path("u")]
+            );
             assert_eq!(binders.len(), 2);
+        }
+        other => panic!("Expected Def, got {other:?}"),
+    }
+}
+
+/// The reproducer for the dotless-universe-list regression, at `def` position.
+///
+/// `def idA {alpha} (x : alpha) : alpha := x` is an ordinary untyped implicit
+/// binder. Pinned `lean` v4.30.0-rc2, `set_option pp.parens true`:
+///
+/// ```text
+/// def f.{u_1} : {a : (Sort u_1)} → (a → a) :=
+/// fun {a} x => x
+/// ```
+///
+/// i.e. `a` is a term binder and the universe is AUTO-BOUND — there is no
+/// declared universe list at all. Clean used to read `{alpha}` as an explicit
+/// universe list and reject the declaration with "the explicit universe list
+/// `.{alpha}` is closed: elaboration left 1 undetermined universe level".
+#[test]
+fn test_def_dotless_brace_is_implicit_binder_not_universe_params() {
+    let code = "def idA {alpha} (x : alpha) : alpha := x";
+    let decls = Parser::parse_file(code).unwrap();
+    assert_eq!(decls.len(), 1);
+    match &decls[0] {
+        SurfaceDecl::Def {
+            name,
+            universe_params,
+            binders,
+            ..
+        } => {
+            assert_eq!(
+                name.name(),
+                crate::SurfaceName::generated_path("idA").name()
+            );
+            assert!(
+                universe_params.is_empty(),
+                "dotless `{{alpha}}` is an implicit binder, not a universe list; \
+                 got {universe_params:?}"
+            );
+            assert_eq!(binders.len(), 2, "got binders {binders:?}");
+            assert_eq!(
+                binders[0].name.name(),
+                crate::SurfaceName::generated_path("alpha").name()
+            );
+            assert_eq!(binders[0].info, SurfaceBinderInfo::Implicit);
+            assert!(binders[0].ty.is_none());
+            assert_eq!(
+                binders[1].name.name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+        }
+        other => panic!("Expected Def, got {other:?}"),
+    }
+}
+
+/// Multi-name dotless group stays a single implicit binder group.
+///
+/// Pinned lean: `def h {a b} (x : a) (y : b) : a := x` =>
+/// `def h.{u_1, u_2} : {a : (Sort u_1)} → ({b : (Sort u_2)} → (a → (b → a)))`.
+#[test]
+fn test_def_dotless_multi_name_brace_is_implicit_binders() {
+    let code = "def h {a b} (x : a) (y : b) : a := x";
+    let decls = Parser::parse_file(code).unwrap();
+    match &decls[0] {
+        SurfaceDecl::Def {
+            universe_params,
+            binders,
+            ..
+        } => {
+            assert!(universe_params.is_empty(), "got {universe_params:?}");
+            assert_eq!(binders.len(), 4, "got binders {binders:?}");
+            assert_eq!(
+                binders[0].name.name(),
+                crate::SurfaceName::generated_path("a").name()
+            );
+            assert_eq!(
+                binders[1].name.name(),
+                crate::SurfaceName::generated_path("b").name()
+            );
+            assert_eq!(binders[0].info, SurfaceBinderInfo::Implicit);
+            assert_eq!(binders[1].info, SurfaceBinderInfo::Implicit);
         }
         other => panic!("Expected Def, got {other:?}"),
     }
@@ -4699,7 +5536,9 @@ fn test_check_with_escaped_name() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Check { expr, .. } => match expr.as_ref() {
-            SurfaceExpr::Ident(_, name) => assert_eq!(name, "simp"),
+            SurfaceExpr::Ident(_, name) => {
+                assert!(name.same_syntax(&crate::SurfaceName::component("simp", true)))
+            }
             other => panic!("Expected Ident, got {other:?}"),
         },
         other => panic!("Expected Check, got {other:?}"),
@@ -4715,7 +5554,10 @@ fn test_open_with_escaped_segment() {
         SurfaceDecl::Open { paths, scoped, .. } => {
             assert!(!scoped);
             assert_eq!(paths.len(), 1);
-            assert_eq!(paths[0].path, vec!["Foo".to_string(), "match".to_string()]);
+            assert!(paths[0].path.same_syntax(
+                &crate::SurfaceName::component("Foo", false)
+                    .append(&crate::SurfaceName::component("match", true))
+            ));
         }
         other => panic!("Expected Open, got {other:?}"),
     }
@@ -4723,15 +5565,36 @@ fn test_open_with_escaped_segment() {
 
 #[test]
 fn test_namespace_with_escaped_segment() {
+    // An escaped segment is just a segment: `end «match»` names ONE component
+    // of `Foo.«match»`, so it closes `match` and leaves `Foo` open.
+    //
+    // Ground truth, Lean 4.30.0-rc2 (`set_option pp.fullNames true`):
+    //
+    //   namespace Foo.«match» / def bar := 1 / end «match»
+    //   def after := 2 / end Foo
+    //     => Foo.match.bar : Nat
+    //        Foo.after : Nat
     let code = r#"namespace Foo.«match»
 def bar : Nat := 1
-end «match»"#;
+end «match»
+def after : Nat := 2
+end Foo"#;
     let decls = Parser::parse_file(code).unwrap();
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Namespace { name, decls, .. } => {
-            assert_eq!(name, "Foo.match");
-            assert_eq!(decls.len(), 1);
+            assert!(
+                name.same_syntax(&crate::SurfaceName::component("Foo", false)),
+                "`end «match»` leaves `Foo` open"
+            );
+            assert_eq!(decls.len(), 2, "the inner block, then `after`: {decls:?}");
+            match &decls[0] {
+                SurfaceDecl::Namespace { name, decls, .. } => {
+                    assert!(name.same_syntax(&crate::SurfaceName::component("match", true)));
+                    assert_eq!(decls.len(), 1);
+                }
+                other => panic!("Expected the closed inner Namespace, got {other:?}"),
+            }
         }
         other => panic!("Expected Namespace, got {other:?}"),
     }
@@ -4746,8 +5609,11 @@ fn test_export_single_name() {
         SurfaceDecl::Export {
             namespace, names, ..
         } => {
-            assert_eq!(namespace, &["Morning", "Sky"]);
-            assert_eq!(names, &["star"]);
+            assert_eq!(
+                namespace,
+                &crate::SurfaceName::generated_path("Morning.Sky")
+            );
+            assert_eq!(names, &[crate::SurfaceName::generated_path("star")]);
         }
         other => panic!("Expected Export, got {other:?}"),
     }
@@ -4762,8 +5628,15 @@ fn test_export_multiple_names() {
         SurfaceDecl::Export {
             namespace, names, ..
         } => {
-            assert_eq!(namespace, &["Nat"]);
-            assert_eq!(names, &["add", "mul", "succ"]);
+            assert_eq!(namespace, &crate::SurfaceName::generated_path("Nat"));
+            assert_eq!(
+                names,
+                &[
+                    crate::SurfaceName::generated_path("add"),
+                    crate::SurfaceName::generated_path("mul"),
+                    crate::SurfaceName::generated_path("succ")
+                ]
+            );
         }
         other => panic!("Expected Export, got {other:?}"),
     }
@@ -4788,7 +5661,10 @@ fn test_opaque_without_value() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Opaque { name, val, .. } => {
-            assert_eq!(name, "myConstant");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("myConstant").name()
+            );
             assert!(
                 val.is_none(),
                 "opaque without value should have val=None, got {val:?}"
@@ -4805,7 +5681,10 @@ fn test_opaque_with_value() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Opaque { name, val, .. } => {
-            assert_eq!(name, "secretImpl");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("secretImpl").name()
+            );
             let _val = val.as_ref().expect("opaque with value should have val");
         }
         other => panic!("Expected Opaque, got {other:?}"),
@@ -4821,7 +5700,10 @@ fn test_opaque_with_binders() {
         SurfaceDecl::Opaque {
             name, binders, val, ..
         } => {
-            assert_eq!(name, "mapImpl");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("mapImpl").name()
+            );
             assert_eq!(binders.len(), 2); // (α β : Type) is two binders
             assert!(
                 val.is_none(),
@@ -4843,8 +5725,8 @@ fn test_deriving_instance_single_class_single_type() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::DerivingInstance { classes, types, .. } => {
-            assert_eq!(classes, &["Repr"]);
-            assert_eq!(types, &["MyType"]);
+            assert_eq!(classes, &[crate::SurfaceName::generated_path("Repr")]);
+            assert_eq!(types, &[crate::SurfaceName::generated_path("MyType")]);
         }
         other => panic!("Expected DerivingInstance, got {other:?}"),
     }
@@ -4857,8 +5739,14 @@ fn test_deriving_instance_multiple_classes_single_type() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::DerivingInstance { classes, types, .. } => {
-            assert_eq!(classes, &["Repr", "BEq"]);
-            assert_eq!(types, &["MyType"]);
+            assert_eq!(
+                classes,
+                &[
+                    crate::SurfaceName::generated_path("Repr"),
+                    crate::SurfaceName::generated_path("BEq")
+                ]
+            );
+            assert_eq!(types, &[crate::SurfaceName::generated_path("MyType")]);
         }
         other => panic!("Expected DerivingInstance, got {other:?}"),
     }
@@ -4871,8 +5759,14 @@ fn test_deriving_instance_multiple_types() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::DerivingInstance { classes, types, .. } => {
-            assert_eq!(classes, &["Hashable"]);
-            assert_eq!(types, &["Type1", "Type2"]);
+            assert_eq!(classes, &[crate::SurfaceName::generated_path("Hashable")]);
+            assert_eq!(
+                types,
+                &[
+                    crate::SurfaceName::generated_path("Type1"),
+                    crate::SurfaceName::generated_path("Type2")
+                ]
+            );
         }
         other => panic!("Expected DerivingInstance, got {other:?}"),
     }
@@ -4885,8 +5779,14 @@ fn test_deriving_instance_qualified_names() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::DerivingInstance { classes, types, .. } => {
-            assert_eq!(classes, &["Std.Repr", "MyLib.BEq"]);
-            assert_eq!(types, &["Data.MyType"]);
+            assert_eq!(
+                classes,
+                &[
+                    crate::SurfaceName::generated_path("Std.Repr"),
+                    crate::SurfaceName::generated_path("MyLib.BEq")
+                ]
+            );
+            assert_eq!(types, &[crate::SurfaceName::generated_path("Data.MyType")]);
         }
         other => panic!("Expected DerivingInstance, got {other:?}"),
     }
@@ -4907,7 +5807,10 @@ inductive MicroExpr : Type
     match &decls[0] {
         SurfaceDecl::Inductive { ctors, .. } => {
             assert_eq!(ctors.len(), 1);
-            assert_eq!(ctors[0].name, "opaque_");
+            assert_eq!(
+                (ctors[0].name).name(),
+                crate::SurfaceName::generated_path("opaque_").name()
+            );
         }
         other => panic!("Expected Inductive, got {other:?}"),
     }
@@ -4926,10 +5829,19 @@ fn test_parse_coinductive_basic() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Coinductive { name, ctors, .. } => {
-            assert_eq!(name, "Stream");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Stream").name()
+            );
             assert_eq!(ctors.len(), 2);
-            assert_eq!(ctors[0].name, "nil");
-            assert_eq!(ctors[1].name, "cons");
+            assert_eq!(
+                (ctors[0].name).name(),
+                crate::SurfaceName::generated_path("nil").name()
+            );
+            assert_eq!(
+                (ctors[1].name).name(),
+                crate::SurfaceName::generated_path("cons").name()
+            );
         }
         other => panic!("Expected Coinductive, got {other:?}"),
     }
@@ -4944,10 +5856,19 @@ fn test_parse_coinductive_pipe_style() {
     assert_eq!(decls.len(), 1);
     match &decls[0] {
         SurfaceDecl::Coinductive { name, ctors, .. } => {
-            assert_eq!(name, "Colist");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("Colist").name()
+            );
             assert_eq!(ctors.len(), 2);
-            assert_eq!(ctors[0].name, "conil");
-            assert_eq!(ctors[1].name, "cocons");
+            assert_eq!(
+                (ctors[0].name).name(),
+                crate::SurfaceName::generated_path("conil").name()
+            );
+            assert_eq!(
+                (ctors[1].name).name(),
+                crate::SurfaceName::generated_path("cocons").name()
+            );
         }
         other => panic!("Expected Coinductive, got {other:?}"),
     }
@@ -4968,7 +5889,10 @@ termination_by n";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert!(
                 termination.termination_by.is_some(),
                 "termination_by should be parsed, not consumed by expression parser"
@@ -4992,12 +5916,15 @@ termination_by n => n";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "fib");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("fib").name()
+            );
             let tb = termination
                 .termination_by
                 .as_ref()
                 .expect("termination_by should be present");
-            assert_eq!(tb.params, vec!["n"]);
+            assert_eq!(tb.params, vec![crate::SurfaceName::generated_path("n")]);
         }
         other => panic!("Expected Def, got {other:?}"),
     }
@@ -5014,7 +5941,10 @@ decreasing_by simp_arith";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert!(
                 termination.decreasing_by.is_some(),
                 "decreasing_by should be parsed"
@@ -5039,7 +5969,10 @@ decreasing_by all_goals simp_arith";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "ack");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("ack").name()
+            );
             let _tb = termination
                 .termination_by
                 .as_ref()
@@ -5068,7 +6001,10 @@ termination_by x";
             termination,
             ..
         } => {
-            assert_eq!(name, "f");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("f").name()
+            );
             // val should be `g x`, NOT `g x termination_by x`
             match val.as_ref() {
                 SurfaceExpr::App(_, func, args) => {
@@ -5078,7 +6014,9 @@ termination_by x";
                         1,
                         "termination_by was wrongly consumed as argument"
                     );
-                    assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "g"));
+                    assert!(
+                        matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("g").name())
+                    );
                 }
                 _ => panic!("Expected App, got {val:?}"),
             }
@@ -5106,7 +6044,10 @@ termination_by m n => (m, n)";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "ack");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("ack").name()
+            );
             assert!(
                 termination.decreasing_by.is_some(),
                 "decreasing_by should be parsed in reversed order"
@@ -5133,7 +6074,10 @@ def bar : Nat := 42";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             let _tb = termination
                 .termination_by
                 .as_ref()
@@ -5143,7 +6087,10 @@ def bar : Nat := 42";
     }
     match &decls[1] {
         SurfaceDecl::Def { name, .. } => {
-            assert_eq!(name, "bar");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("bar").name()
+            );
         }
         other => panic!("Expected Def, got {other:?}"),
     }
@@ -5160,12 +6107,18 @@ termination_by structural xs";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "sum");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("sum").name()
+            );
             let tb = termination
                 .termination_by
                 .as_ref()
                 .expect("termination_by should be present");
-            assert_eq!(tb.kind, TerminationKind::Structural("xs".to_string()));
+            assert_eq!(
+                tb.kind,
+                TerminationKind::Structural(crate::SurfaceName::generated_path("xs"))
+            );
             assert!(tb.measure.is_none(), "structural should have no measure");
         }
         other => panic!("Expected Def, got {other:?}"),
@@ -5183,7 +6136,10 @@ termination_by?";
         SurfaceDecl::Def {
             name, termination, ..
         } => {
-            assert_eq!(name, "fib");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("fib").name()
+            );
             let tb = termination
                 .termination_by
                 .as_ref()
@@ -5253,7 +6209,13 @@ termination_by _ _ => m + n";
                 .termination_by
                 .as_ref()
                 .expect("valid legacy hint should be retained");
-            assert_eq!(hint.params, vec!["_", "_"]);
+            assert_eq!(
+                hint.params,
+                vec![
+                    crate::SurfaceName::generated_path("_"),
+                    crate::SurfaceName::generated_path("_")
+                ]
+            );
             assert!(hint.measure.is_some());
         }
         other => panic!("Expected Def, got {other:?}"),
@@ -5268,7 +6230,9 @@ fn test_parse_subset_operator() {
     let expr = Parser::parse_expr("A ⊆ B").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "HasSubset.Subset"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("HasSubset.Subset").name())
+            );
             assert_eq!(args.len(), 2);
         }
         _ => panic!("expected App(HasSubset.Subset, ...)"),
@@ -5281,7 +6245,9 @@ fn test_parse_proper_subset_operator() {
     let expr = Parser::parse_expr("f a ⊂ f b").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "HasSSubset.SSubset"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("HasSSubset.SSubset").name())
+            );
             assert_eq!(args.len(), 2);
         }
         _ => panic!("expected App(HasSSubset.SSubset, ...)"),
@@ -5294,7 +6260,9 @@ fn test_parse_union_operator() {
     let expr = Parser::parse_expr("A ∪ B").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "Union.union"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Union.union").name())
+            );
             assert_eq!(args.len(), 2);
         }
         _ => panic!("expected App(Union.union, ...)"),
@@ -5307,7 +6275,9 @@ fn test_parse_inter_operator() {
     let expr = Parser::parse_expr("A ∩ B").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "Inter.inter"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Inter.inter").name())
+            );
             assert_eq!(args.len(), 2);
         }
         _ => panic!("expected App(Inter.inter, ...)"),
@@ -5320,7 +6290,9 @@ fn test_parse_set_difference_operator() {
     let expr = Parser::parse_expr("T \\ U").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "SDiff.sdiff"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("SDiff.sdiff").name())
+            );
             assert_eq!(args.len(), 2);
         }
         _ => panic!("expected App(SDiff.sdiff, ...)"),
@@ -5332,12 +6304,14 @@ fn test_parse_set_difference_then_intersection() {
     let expr = Parser::parse_expr("A \\ B ∩ C").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "Inter.inter"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Inter.inter").name())
+            );
             assert_eq!(args.len(), 2);
             match &args[0].expr {
                 SurfaceExpr::App(_, inner_func, inner_args) => {
                     assert!(
-                        matches!(**inner_func, SurfaceExpr::Ident(_, ref s) if s == "SDiff.sdiff")
+                        matches!(**inner_func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("SDiff.sdiff").name())
                     );
                     assert_eq!(inner_args.len(), 2);
                 }
@@ -5352,7 +6326,9 @@ fn test_parse_set_difference_then_intersection() {
 fn test_parse_empty_set_atom() {
     // ∅ as atom → EmptyCollection.emptyCollection
     let expr = Parser::parse_expr("∅").unwrap();
-    assert!(matches!(expr, SurfaceExpr::Ident(_, ref s) if s == "EmptyCollection.emptyCollection"));
+    assert!(
+        matches!(expr, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("EmptyCollection.emptyCollection").name())
+    );
 }
 
 #[test]
@@ -5361,7 +6337,9 @@ fn test_parse_compose_operator() {
     let expr = Parser::parse_expr("f ∘ g").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "Function.comp"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Function.comp").name())
+            );
             assert_eq!(args.len(), 2);
         }
         _ => panic!("expected App(Function.comp, ...)"),
@@ -5374,13 +6352,15 @@ fn test_parse_inter_union_precedence() {
     let expr = Parser::parse_expr("A ∪ B ∩ C").unwrap();
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(*func, SurfaceExpr::Ident(_, ref s) if s == "Union.union"));
+            assert!(
+                matches!(*func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Union.union").name())
+            );
             assert_eq!(args.len(), 2);
             // Second arg should be Inter.inter B C
             match &args[1].expr {
                 SurfaceExpr::App(_, inner_func, inner_args) => {
                     assert!(
-                        matches!(**inner_func, SurfaceExpr::Ident(_, ref s) if s == "Inter.inter")
+                        matches!(**inner_func, SurfaceExpr::Ident(_, ref s) if (s).name() == crate::SurfaceName::generated_path("Inter.inter").name())
                     );
                     assert_eq!(inner_args.len(), 2);
                 }
@@ -5452,7 +6432,7 @@ fn test_parse_empty_set_in_expression() {
 }
 
 /// Render an expr's head-constant spine for compact structural assertions.
-fn head_name(e: &SurfaceExpr) -> Option<&str> {
+fn head_name(e: &SurfaceExpr) -> Option<&crate::SurfaceName> {
     match e {
         SurfaceExpr::App(_, f, _) => match f.as_ref() {
             SurfaceExpr::Ident(_, n) => Some(n),
@@ -5468,7 +6448,11 @@ fn test_anon_sigma_multi_ident_group_right_nests() {
     // nested Sigma per ident, NOT `Prod (a b : Nat) t`.
     let expr =
         Parser::parse_expr("(a b : Nat) × Fin (a + b)").expect("multi-ident anon sigma parses");
-    assert_eq!(head_name(&expr), Some("Sigma"), "outer head: {expr:?}");
+    assert_eq!(
+        head_name(&expr),
+        Some(&crate::SurfaceName::generated_path("Sigma")),
+        "outer head: {expr:?}"
+    );
     // Inner body: Sigma (fun a => Sigma (fun b => ...)).
     let SurfaceExpr::App(_, _, args) = &expr else {
         panic!("expected App, got {expr:?}");
@@ -5476,8 +6460,15 @@ fn test_anon_sigma_multi_ident_group_right_nests() {
     let SurfaceExpr::Lambda(_, binders, body) = &args[0].expr else {
         panic!("expected outer lambda, got {:?}", args[0].expr);
     };
-    assert_eq!(binders[0].name, "a");
-    assert_eq!(head_name(body), Some("Sigma"), "inner head: {body:?}");
+    assert_eq!(
+        (binders[0].name).name(),
+        crate::SurfaceName::generated_path("a").name()
+    );
+    assert_eq!(
+        head_name(body),
+        Some(&crate::SurfaceName::generated_path("Sigma")),
+        "inner head: {body:?}"
+    );
 }
 
 #[test]
@@ -5486,7 +6477,11 @@ fn test_anon_sigma_non_binder_ascription_stays_prod() {
     // a plain Prod of an ascription (matches Lean, whose binder-group macro
     // only fires on binderIdent groups).
     let expr = Parser::parse_expr("(f 1 : T) × b").expect("non-binder ascription × parses");
-    assert_eq!(head_name(&expr), Some("Prod"), "got {expr:?}");
+    assert_eq!(
+        head_name(&expr),
+        Some(&crate::SurfaceName::generated_path("Prod")),
+        "got {expr:?}"
+    );
 }
 
 #[test]
@@ -5498,14 +6493,17 @@ fn test_exists_unique_desugar_single_explicit_arg() {
         panic!("expected App, got {expr:?}");
     };
     assert!(
-        matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n == "ExistsUnique"),
+        matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("ExistsUnique").name()),
         "head must be ExistsUnique: {expr:?}"
     );
     assert_eq!(args.len(), 1, "one explicit arg (the predicate): {expr:?}");
     let SurfaceExpr::Lambda(_, binders, _) = &args[0].expr else {
         panic!("predicate must be a lambda, got {:?}", args[0].expr);
     };
-    assert_eq!(binders[0].name, "x");
+    assert_eq!(
+        (binders[0].name).name(),
+        crate::SurfaceName::generated_path("x").name()
+    );
     assert!(binders[0].ty.is_some(), "binder keeps its type ascription");
 }
 
@@ -5649,7 +6647,7 @@ fn test_parse_slice_indexing_desugars_to_to_subarray() {
     match result {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(&*func, SurfaceExpr::Ident(_, n) if n.as_str() == "Array.toSubarray"),
+                matches!(&*func, SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("Array.toSubarray").name()),
                 "slice head should be Array.toSubarray, got {func:?}"
             );
             assert_eq!(args.len(), 3, "xs[1:3] ⇒ toSubarray xs 1 3 (3 args)");
@@ -5661,7 +6659,7 @@ fn test_parse_slice_indexing_desugars_to_to_subarray() {
     match open {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(&*func, SurfaceExpr::Ident(_, n) if n.as_str() == "Array.toSubarray"),
+                matches!(&*func, SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("Array.toSubarray").name()),
                 "open-slice head should be Array.toSubarray, got {func:?}"
             );
             assert_eq!(args.len(), 2, "xs[1:] ⇒ toSubarray xs 1 (2 args)");
@@ -5837,9 +6835,15 @@ fn test_parse_where_local_defs_single() {
         SurfaceDecl::Def {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert_eq!(where_decls.len(), 1, "should have 1 where local def");
-            assert_eq!(where_decls[0].name, "helper");
+            assert_eq!(
+                (where_decls[0].name).name(),
+                crate::SurfaceName::generated_path("helper").name()
+            );
             assert_eq!(where_decls[0].binders.len(), 1, "helper has 1 binder");
             assert!(
                 where_decls[0].ret_ty.is_some(),
@@ -5860,10 +6864,19 @@ fn test_parse_where_local_defs_multiple() {
         SurfaceDecl::Def {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert_eq!(where_decls.len(), 2, "should have 2 where local defs");
-            assert_eq!(where_decls[0].name, "x");
-            assert_eq!(where_decls[1].name, "y");
+            assert_eq!(
+                (where_decls[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                (where_decls[1].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
         }
         other => panic!("Expected Def, got {other:?}"),
     }
@@ -5879,7 +6892,10 @@ fn test_parse_where_local_defs_no_where() {
         SurfaceDecl::Def {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "bar");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("bar").name()
+            );
             assert!(where_decls.is_empty(), "no where clause means empty vec");
         }
         other => panic!("Expected Def, got {other:?}"),
@@ -5895,9 +6911,15 @@ fn test_parse_theorem_where_local_defs() {
         SurfaceDecl::Theorem {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert_eq!(where_decls.len(), 1, "should have 1 where local def");
-            assert_eq!(where_decls[0].name, "helper");
+            assert_eq!(
+                (where_decls[0].name).name(),
+                crate::SurfaceName::generated_path("helper").name()
+            );
             assert!(where_decls[0].binders.is_empty(), "helper has no params");
         }
         other => panic!("Expected Theorem, got {other:?}"),
@@ -5918,7 +6940,10 @@ fn test_parse_set_option_file_scope() {
         SurfaceDecl::SetOption {
             name, value, body, ..
         } => {
-            assert_eq!(name, "maxHeartbeats");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("maxHeartbeats").name()
+            );
             assert_eq!(value.as_deref(), Some("400000"));
             assert!(body.is_none(), "file-scope should have no body");
         }
@@ -5936,7 +6961,10 @@ fn test_parse_set_option_in_decl() {
         SurfaceDecl::SetOption {
             name, value, body, ..
         } => {
-            assert_eq!(name, "maxHeartbeats");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("maxHeartbeats").name()
+            );
             assert_eq!(value.as_deref(), Some("400000"));
             assert!(body.is_some(), "per-decl should have a body");
             // Inner declaration should be a Def
@@ -5955,7 +6983,10 @@ fn test_parse_set_option_bool_in_decl() {
         SurfaceDecl::SetOption {
             name, value, body, ..
         } => {
-            assert_eq!(name, "pp.all");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("pp.all").name()
+            );
             assert!(value.is_none(), "boolean toggle has no value");
             assert!(body.is_some(), "per-decl should have a body");
         }
@@ -6032,8 +7063,13 @@ fn test_parse_integer_projection_is_proj_not_float() {
     let expr = Parser::parse_expr("x.field").expect("should parse named projection");
     match expr {
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
-            assert!(matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if n == "x"));
-            assert_eq!(field, "field");
+            assert!(
+                matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("x").name())
+            );
+            assert_eq!(
+                (field).name(),
+                crate::SurfaceName::generated_path("field").name()
+            );
         }
         other => panic!("expected projection, got {other:?}"),
     }
@@ -6120,7 +7156,10 @@ fn test_parse_lambda_typed_binder_with_brace_subterm_stays_plain_lambda() {
     match expr {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 1, "arity 1: a single typed binder");
-            assert_eq!(binders[0].name, "x");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(binders[0].ty.is_some(), "binder keeps its type annotation");
         }
         other => panic!("expected plain Lambda, got {other:?}"),
@@ -6139,8 +7178,14 @@ fn test_parse_lambda_typed_brace_binder_then_plain_binder_keeps_arity() {
     match expr {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 2);
-            assert_eq!(binders[0].name, "x");
-            assert_eq!(binders[1].name, "y");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                (binders[1].name).name(),
+                crate::SurfaceName::generated_path("y").name()
+            );
         }
         other => panic!("expected plain Lambda, got {other:?}"),
     }
@@ -6205,12 +7250,11 @@ fn test_parse_lambda_paren_binder_then_angle_binder_keeps_arity() {
     // across two distinct bracket types in sequence.
     let expr =
         Parser::parse_expr("fun (a, b) ⟨c, d⟩ => a").expect("paren tuple then angle tuple parses");
-    match expr {
-        SurfaceExpr::PatternMatchLambda(_, binders, _) => {
-            assert_eq!(binders.len(), 2, "two destructuring params");
-        }
-        other => panic!("expected PatternMatchLambda, got {other:?}"),
-    }
+    assert!(
+        matches!(expr, SurfaceExpr::PatternMatchLambda(..)),
+        "expected PatternMatchLambda, got {expr:?}"
+    );
+    assert_eq!(interleaved_arity(&expr), 2, "two destructuring params");
 }
 
 #[test]
@@ -6239,7 +7283,10 @@ fn test_parse_lambda_typed_binder_with_forall_comma_stays_plain_lambda() {
     match expr {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 1, "single typed binder, not a tuple");
-            assert_eq!(binders[0].name, "ih");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("ih").name()
+            );
             assert!(binders[0].ty.is_some(), "binder keeps its forall type");
         }
         other => panic!("expected plain Lambda, got {other:?}"),
@@ -6256,8 +7303,14 @@ fn test_parse_lambda_plain_then_forall_typed_binder_keeps_arity() {
     match expr {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 2);
-            assert_eq!(binders[0].name, "j");
-            assert_eq!(binders[1].name, "ih");
+            assert_eq!(
+                (binders[0].name).name(),
+                crate::SurfaceName::generated_path("j").name()
+            );
+            assert_eq!(
+                (binders[1].name).name(),
+                crate::SurfaceName::generated_path("ih").name()
+            );
         }
         other => panic!("expected plain Lambda, got {other:?}"),
     }
@@ -6308,7 +7361,10 @@ fn test_doc_comment_associates_with_following_def() {
     assert_eq!(decls.len(), 1);
     let def_span = match &decls[0] {
         SurfaceDecl::Def { span, name, .. } => {
-            assert_eq!(name, "f");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("f").name()
+            );
             *span
         }
         other => panic!("expected def, got {other:?}"),
@@ -6327,7 +7383,11 @@ fn test_doc_comment_associates_with_following_theorem() {
     let thm_span = decls
         .iter()
         .find_map(|d| match d {
-            SurfaceDecl::Theorem { span, name, .. } if name == "t" => Some(*span),
+            SurfaceDecl::Theorem { span, name, .. }
+                if (name).name() == crate::SurfaceName::generated_path("t").name() =>
+            {
+                Some(*span)
+            }
             _ => None,
         })
         .expect("theorem t present");
@@ -6344,7 +7404,11 @@ fn test_doc_comment_associates_with_following_inductive() {
     let ind_span = decls
         .iter()
         .find_map(|d| match d {
-            SurfaceDecl::Inductive { span, name, .. } if name == "Color" => Some(*span),
+            SurfaceDecl::Inductive { span, name, .. }
+                if (name).name() == crate::SurfaceName::generated_path("Color").name() =>
+            {
+                Some(*span)
+            }
             _ => None,
         })
         .expect("inductive Color present");
@@ -6380,14 +7444,22 @@ fn test_doc_comments_associate_to_respective_decls() {
     let a_span = decls
         .iter()
         .find_map(|d| match d {
-            SurfaceDecl::Def { span, name, .. } if name == "a" => Some(*span),
+            SurfaceDecl::Def { span, name, .. }
+                if (name).name() == crate::SurfaceName::generated_path("a").name() =>
+            {
+                Some(*span)
+            }
             _ => None,
         })
         .expect("def a present");
     let b_span = decls
         .iter()
         .find_map(|d| match d {
-            SurfaceDecl::Def { span, name, .. } if name == "b" => Some(*span),
+            SurfaceDecl::Def { span, name, .. }
+                if (name).name() == crate::SurfaceName::generated_path("b").name() =>
+            {
+                Some(*span)
+            }
             _ => None,
         })
         .expect("def b present");
@@ -6397,10 +7469,17 @@ fn test_doc_comments_associate_to_respective_decls() {
 
 #[test]
 fn test_repeated_doc_comments_last_one_wins() {
-    // When several doc comments precede the same declaration, the last wins
-    // (matching Lean).
+    // File parsing refuses stacked docs. Preserve the raw attachment helper's
+    // original input and all assertions independently of grammar acceptance.
     let src = "/-- first -/\n/-- second -/\ndef f := 1";
-    let (decls, docs) = Parser::parse_file_with_docs(src).expect("parses");
+    let err = Parser::parse_file_with_docs(src).expect_err("stacked declaration docs are refused");
+    assert!(matches!(err, ParseError::ModuleSyntaxRefused { .. }));
+    // Plain block comments preserve the declaration's byte spans, while the
+    // lexer supplies the original captured doc comments to associate_docs.
+    let plain_comments = src.replace("/--", "/- ");
+    let decls = Parser::parse_file(&plain_comments).expect("plain comments parse");
+    let (_, raw_docs, _) = Lexer::tokenize_with_all_docs(src);
+    let docs = associate_docs(&decls, raw_docs);
     assert_eq!(decls.len(), 1);
     assert_eq!(docs.len(), 1, "the two docs collapse onto one decl");
     assert_eq!(docs[0].text, "second");
@@ -6408,8 +7487,15 @@ fn test_repeated_doc_comments_last_one_wins() {
 
 #[test]
 fn test_trailing_doc_comment_with_no_decl_is_dropped() {
-    let (decls, docs) =
-        Parser::parse_file_with_docs("def f := 1\n/-- trailing doc -/").expect("parses");
+    let source = "def f := 1\n/-- trailing doc -/";
+    let err = Parser::parse_file_with_docs(source)
+        .expect_err("file parsing must refuse the unfinished declaration-doc prefix");
+    assert!(matches!(err, ParseError::ModuleSyntaxRefused { .. }));
+    // Keep the raw association helper's original case and both assertions.
+    // A dropped attachment must not make the file parser accept bad input.
+    let decls = vec![Parser::parse_decl(source).expect("the intentional prefix API")];
+    let (_, raw_docs, _) = Lexer::tokenize_with_all_docs(source);
+    let docs = associate_docs(&decls, raw_docs);
     assert_eq!(decls.len(), 1);
     assert!(docs.is_empty(), "doc with no following decl is dropped");
 }
@@ -6425,7 +7511,7 @@ fn test_parse_functor_map_operator() {
     match expr {
         SurfaceExpr::App(_, head, args) => {
             assert!(
-                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n == "Functor.map"),
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Functor.map").name()),
                 "head is Functor.map, got {head:?}"
             );
             assert_eq!(args.len(), 2, "Functor.map f (g x) — two args");
@@ -6452,15 +7538,15 @@ fn test_alias_after_def_value_is_not_swallowed() {
         "two decls: the def and the alias, got {decls:?}"
     );
     assert!(
-        matches!(&decls[0], SurfaceDecl::Def { name, .. } if name == "base"),
+        matches!(&decls[0], SurfaceDecl::Def { name, .. } if (name).name() == crate::SurfaceName::generated_path("base").name()),
         "first decl is `def base`, got {:?}",
         decls[0]
     );
-    // The alias desugars to a real `def` named `plainAlias` — NOT a mashed
-    // RawDecl error-recovery node.
+    // The alias keeps its target and written name for telescope-preserving
+    // elaboration, rather than collapsing into a recovery node.
     assert!(
-        matches!(&decls[1], SurfaceDecl::Def { name, .. } if name == "plainAlias"),
-        "second decl is the desugared `def plainAlias`, got {:?}",
+        matches!(&decls[1], SurfaceDecl::Alias { names, target, .. } if names.len() == 1 && names[0].0.is_unescaped_component("plainAlias") && target.is_unescaped_component("base")),
+        "second decl preserves `alias plainAlias := base`, got {:?}",
         decls[1]
     );
     assert!(
@@ -6476,16 +7562,19 @@ fn test_consecutive_aliases_parse_separately() {
     )
     .expect("consecutive aliases parse");
     assert_eq!(decls.len(), 4, "def + 2 aliases + def, got {decls:?}");
-    let names: Vec<&str> = decls
+    let names: Vec<crate::SurfaceName> = decls
         .iter()
         .filter_map(|d| match d {
-            SurfaceDecl::Def { name, .. } => Some(name.as_str()),
+            SurfaceDecl::Def { name, .. } => Some(name.clone()),
+            SurfaceDecl::Alias { names, .. } => names.first().map(|(name, _)| name.clone()),
             _ => None,
         })
         .collect();
     assert_eq!(
         names,
-        vec!["base", "firstA", "secondA", "after"],
+        ["base", "firstA", "secondA", "after"]
+            .map(crate::SurfaceName::generated_path)
+            .to_vec(),
         "each alias registers its own def and the trailing def survives"
     );
 }
@@ -6526,7 +7615,7 @@ fn test_plain_ascription_without_cdot_unchanged() {
         other => other,
     };
     assert!(
-        matches!(inner, SurfaceExpr::Ascription(_, v, _) if matches!(v.as_ref(), SurfaceExpr::Ident(_, n) if n == "x")),
+        matches!(inner, SurfaceExpr::Ascription(_, v, _) if matches!(v.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("x").name())),
         "plain `(x : Nat)` must stay `Ascription(Ident x, Nat)`, got {inner:?}"
     );
 }
@@ -6543,7 +7632,7 @@ fn test_approx_operator_parses_as_hasequiv() {
     match &expr {
         SurfaceExpr::App(_, head, args) => {
             assert!(
-                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n == "HasEquiv.Equiv"),
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("HasEquiv.Equiv").name()),
                 "head must be HasEquiv.Equiv, got {head:?}"
             );
             assert_eq!(args.len(), 2, "`a ≈ b` — two args, got {args:?}");
@@ -6558,11 +7647,11 @@ fn test_approx_distinct_from_equiv_iso() {
     let approx = Parser::parse_expr("a ≈ b").expect("≈ parses");
     let equiv = Parser::parse_expr("a ≃ b").expect("≃ parses");
     assert!(
-        matches!(&approx, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if n == "HasEquiv.Equiv")),
+        matches!(&approx, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("HasEquiv.Equiv").name())),
         "≈ → HasEquiv.Equiv"
     );
     assert!(
-        matches!(&equiv, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if n == "Equiv")),
+        matches!(&equiv, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Equiv").name())),
         "≃ → Equiv (unchanged), got {equiv:?}"
     );
 }
@@ -6577,7 +7666,7 @@ fn test_postfix_inv_parses_as_inv_inv() {
     match &expr {
         SurfaceExpr::App(_, head, args) => {
             assert!(
-                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n == "Inv.inv"),
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Inv.inv").name()),
                 "head must be Inv.inv, got {head:?}"
             );
             assert_eq!(args.len(), 1, "`x⁻¹` — one arg, got {args:?}");
@@ -6592,9 +7681,11 @@ fn test_postfix_inv_chains() {
     let expr = Parser::parse_expr("x⁻¹⁻¹").expect("`x⁻¹⁻¹` parses");
     match &expr {
         SurfaceExpr::App(_, head, args) => {
-            assert!(matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n == "Inv.inv"));
             assert!(
-                matches!(&args[0].expr, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if n == "Inv.inv")),
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Inv.inv").name())
+            );
+            assert!(
+                matches!(&args[0].expr, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Inv.inv").name())),
                 "inner must also be Inv.inv, got {:?}",
                 args[0].expr
             );
@@ -6609,10 +7700,10 @@ fn test_postfix_inv_chains() {
 // precedence would SILENTLY misparse; this battery pins the grouping. (The full
 // 961-test suite separately guards that existing `+`/`*`/`::` parses are
 // unchanged by the new chain level.)
-fn app_head(e: &SurfaceExpr) -> Option<&str> {
+fn app_head(e: &SurfaceExpr) -> Option<&crate::SurfaceName> {
     match e {
         SurfaceExpr::App(_, h, _) => match h.as_ref() {
-            SurfaceExpr::Ident(_, n) => Some(n.as_str()),
+            SurfaceExpr::Ident(_, n) => Some(n),
             _ => None,
         },
         _ => None,
@@ -6620,7 +7711,7 @@ fn app_head(e: &SurfaceExpr) -> Option<&str> {
 }
 /// Head-ident of the `i`-th argument of an application (type inferred to avoid
 /// naming `SurfaceArg`).
-fn nth_arg_head(e: &SurfaceExpr, i: usize) -> Option<&str> {
+fn nth_arg_head(e: &SurfaceExpr, i: usize) -> Option<&crate::SurfaceName> {
     match e {
         SurfaceExpr::App(_, _, a) => app_head(&a.get(i)?.expr),
         _ => None,
@@ -6631,30 +7722,52 @@ fn nth_arg_head(e: &SurfaceExpr, i: usize) -> Option<&str> {
 fn test_sup_inf_parse_and_precedence() {
     // a ⊔ b → Max.max a b
     let e = Parser::parse_expr("a ⊔ b").expect("⊔ parses");
-    assert_eq!(app_head(&e), Some("Max.max"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Max.max"))
+    );
     // a ⊓ b → Min.min a b
     let e = Parser::parse_expr("a ⊓ b").expect("⊓ parses");
-    assert_eq!(app_head(&e), Some("Min.min"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Min.min"))
+    );
     // a ⊔ b ⊓ c → Max.max a (Min.min b c)   [⊓ tighter than ⊔]
     let e = Parser::parse_expr("a ⊓ b").expect("x");
     let _ = e;
     let e = Parser::parse_expr("a ⊔ b ⊓ c").expect("mixed parses");
-    assert_eq!(app_head(&e), Some("Max.max"), "outer is ⊔");
-    assert_eq!(nth_arg_head(&e, 1), Some("Min.min"), "RHS is ⊓ (tighter)");
-    // a + b ⊔ c → HAdd a (Max.max b c)   [⊔ tighter than +]
-    let e = Parser::parse_expr("a + b ⊔ c").expect("mixed + parses");
-    assert_eq!(app_head(&e), Some("HAdd.hAdd"), "outer is +");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Max.max")),
+        "outer is ⊔"
+    );
     assert_eq!(
         nth_arg_head(&e, 1),
-        Some("Max.max"),
+        Some(&crate::SurfaceName::generated_path("Min.min")),
+        "RHS is ⊓ (tighter)"
+    );
+    // a + b ⊔ c → HAdd a (Max.max b c)   [⊔ tighter than +]
+    let e = Parser::parse_expr("a + b ⊔ c").expect("mixed + parses");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("HAdd.hAdd")),
+        "outer is +"
+    );
+    assert_eq!(
+        nth_arg_head(&e, 1),
+        Some(&crate::SurfaceName::generated_path("Max.max")),
         "RHS is ⊔ (tighter than +)"
     );
     // a ⊔ b * c → Max.max a (HMul b c)   [* tighter than ⊔]
     let e = Parser::parse_expr("a ⊔ b * c").expect("mixed * parses");
-    assert_eq!(app_head(&e), Some("Max.max"), "outer is ⊔");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Max.max")),
+        "outer is ⊔"
+    );
     assert_eq!(
         nth_arg_head(&e, 1),
-        Some("HMul.hMul"),
+        Some(&crate::SurfaceName::generated_path("HMul.hMul")),
         "RHS is * (tighter than ⊔)"
     );
 }
@@ -6663,10 +7776,13 @@ fn test_sup_inf_parse_and_precedence() {
 fn test_existing_arith_precedence_unchanged_by_sup_inf() {
     // a + b * c → HAdd a (HMul b c) — MUST be unchanged by the new chain level.
     let e = Parser::parse_expr("a + b * c").expect("a+b*c parses");
-    assert_eq!(app_head(&e), Some("HAdd.hAdd"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("HAdd.hAdd"))
+    );
     assert_eq!(
         nth_arg_head(&e, 1),
-        Some("HMul.hMul"),
+        Some(&crate::SurfaceName::generated_path("HMul.hMul")),
         "* still binds tighter than +"
     );
 }
@@ -6681,7 +7797,7 @@ fn test_big_sup_inf_binder_desugar() {
     match &e {
         SurfaceExpr::App(_, head, args) => {
             assert!(
-                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n == "iSup"),
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("iSup").name()),
                 "head iSup, got {head:?}"
             );
             assert!(
@@ -6693,7 +7809,7 @@ fn test_big_sup_inf_binder_desugar() {
     }
     let e = Parser::parse_expr("⨅ i, f i").expect("⨅ parses");
     assert!(
-        matches!(&e, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if n == "iInf"))
+        matches!(&e, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("iInf").name()))
     );
 }
 
@@ -6703,11 +7819,13 @@ fn test_big_sup_multi_binder_nests() {
     let e = Parser::parse_expr("⨆ i j, f i").expect("multi-binder ⨆ parses");
     match &e {
         SurfaceExpr::App(_, head, args) => {
-            assert!(matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n == "iSup"));
+            assert!(
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("iSup").name())
+            );
             // The lambda body is itself an iSup application.
             if let SurfaceExpr::Lambda(_, _, body) = &args[0].expr {
                 assert!(
-                    matches!(body.as_ref(), SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if n == "iSup")),
+                    matches!(body.as_ref(), SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("iSup").name())),
                     "nested iSup"
                 );
             } else {
@@ -6726,13 +7844,20 @@ fn test_big_sup_multi_binder_nests() {
 #[test]
 fn test_setprod_parse_and_precedence() {
     let e = Parser::parse_expr("a ×ˢ b").expect("×ˢ parses");
-    assert_eq!(app_head(&e), Some("SProd.sprod"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("SProd.sprod"))
+    );
     // a * b ×ˢ c → HMul a (SProd b c)   [×ˢ (82) tighter than * (70)]
     let e = Parser::parse_expr("a * b ×ˢ c").expect("mixed parses");
-    assert_eq!(app_head(&e), Some("HMul.hMul"), "outer is *");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("HMul.hMul")),
+        "outer is *"
+    );
     assert_eq!(
         nth_arg_head(&e, 1),
-        Some("SProd.sprod"),
+        Some(&crate::SurfaceName::generated_path("SProd.sprod")),
         "RHS is ×ˢ (tighter than *)"
     );
 }
@@ -6741,24 +7866,35 @@ fn test_setprod_parse_and_precedence() {
 fn test_setprod_distinct_from_prod_and_psigma() {
     // `×` (Prod type) and `×'` (PSigma) must still parse as before, unaffected.
     let prod = Parser::parse_expr("A × B").expect("× parses");
-    assert_eq!(app_head(&prod), Some("Prod"), "× still Prod, got {prod:?}");
+    assert_eq!(
+        app_head(&prod),
+        Some(&crate::SurfaceName::generated_path("Prod")),
+        "× still Prod, got {prod:?}"
+    );
 }
 
 // Regression: category-morphism composition `f ≫ g` (CategoryStruct.comp,
 // scoped infixr:80) — fundamental across CategoryTheory. Right-associative:
 // `f ≫ g ≫ h` = `CategoryStruct.comp f (CategoryStruct.comp g h)`. The full
 // 967+ suite guards that existing `^`/`*`/`×ˢ` parses are unchanged by the new
-// chain level (pow_expr operands rerouted through comp_expr).
+// chain level (`≫` and `^` share `caret_expr`).
 #[test]
 fn test_cat_comp_parses_right_assoc() {
     let e = Parser::parse_expr("f ≫ g").expect("≫ parses");
-    assert_eq!(app_head(&e), Some("CategoryStruct.comp"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("CategoryStruct.comp"))
+    );
     // f ≫ g ≫ h → comp f (comp g h)
     let e = Parser::parse_expr("f ≫ g ≫ h").expect("chained ≫ parses");
-    assert_eq!(app_head(&e), Some("CategoryStruct.comp"), "outer comp");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("CategoryStruct.comp")),
+        "outer comp"
+    );
     assert_eq!(
         nth_arg_head(&e, 1),
-        Some("CategoryStruct.comp"),
+        Some(&crate::SurfaceName::generated_path("CategoryStruct.comp")),
         "RHS is comp (right-assoc)"
     );
 }
@@ -6771,12 +7907,19 @@ fn test_cat_comp_parses_right_assoc() {
 #[test]
 fn test_hom_arrow_parses_right_assoc() {
     let e = Parser::parse_expr("a ⟶ b").expect("⟶ parses");
-    assert_eq!(app_head(&e), Some("Quiver.Hom"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Quiver.Hom"))
+    );
     let e = Parser::parse_expr("a ⟶ b ⟶ c").expect("chained ⟶ parses");
-    assert_eq!(app_head(&e), Some("Quiver.Hom"), "outer Hom");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Quiver.Hom")),
+        "outer Hom"
+    );
     assert_eq!(
         nth_arg_head(&e, 1),
-        Some("Quiver.Hom"),
+        Some(&crate::SurfaceName::generated_path("Quiver.Hom")),
         "RHS is Hom (right-assoc)"
     );
 }
@@ -6786,11 +7929,14 @@ fn test_hom_arrow_does_not_disturb_ordinary_exprs() {
     // A plain expression with no `⟶` is unchanged by the new top-of-chain level.
     let e = Parser::parse_expr("f x").expect("application parses");
     assert!(
-        matches!(&e, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if n == "f"))
+        matches!(&e, SurfaceExpr::App(_, h, _) if matches!(h.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("f").name()))
     );
     // Arithmetic still groups correctly.
     let e = Parser::parse_expr("a + b").expect("+ parses");
-    assert_eq!(app_head(&e), Some("HAdd.hAdd"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("HAdd.hAdd"))
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -6827,7 +7973,11 @@ fn iff_arg(e: &SurfaceExpr, i: usize) -> Option<&SurfaceExpr> {
 fn test_iff_looser_than_arrow_on_the_left() {
     // `a → b ↔ b` is `(a → b) ↔ b`, NOT `a → (b ↔ b)`.
     let e = Parser::parse_expr("a → b ↔ b").expect("a → b ↔ b parses");
-    assert_eq!(app_head(&e), Some("Iff"), "top level is ↔, not →");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Iff")),
+        "top level is ↔, not →"
+    );
     assert!(
         matches!(iff_arg(&e, 0), Some(SurfaceExpr::Arrow(..))),
         "left operand of ↔ is the arrow `a → b`"
@@ -6838,7 +7988,11 @@ fn test_iff_looser_than_arrow_on_the_left() {
 fn test_iff_looser_than_arrow_on_the_right() {
     // `a ↔ b → a` is `a ↔ (b → a)`, NOT `(a ↔ b) → a`.
     let e = Parser::parse_expr("a ↔ b → a").expect("a ↔ b → a parses");
-    assert_eq!(app_head(&e), Some("Iff"), "top level is ↔, not →");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Iff")),
+        "top level is ↔, not →"
+    );
     assert!(
         matches!(iff_arg(&e, 1), Some(SurfaceExpr::Arrow(..))),
         "right operand of ↔ keeps the arrow `b → a`"
@@ -6850,7 +8004,10 @@ fn test_iff_between_two_arrows() {
     // The `Mathlib/Logic/Basic.lean:202` shape:
     // `¬a → b ↔ ¬b → a` is `(¬a → b) ↔ (¬b → a)`.
     let e = Parser::parse_expr("¬a → b ↔ ¬b → a").expect("not_imp_comm statement parses");
-    assert_eq!(app_head(&e), Some("Iff"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Iff"))
+    );
     assert!(
         matches!(iff_arg(&e, 0), Some(SurfaceExpr::Arrow(..))),
         "left side is `¬a → b`"
@@ -6866,7 +8023,10 @@ fn test_arrow_stays_right_associative_before_iff() {
     // `a → b → c ↔ d` is `(a → (b → c)) ↔ d`: the codomain still collects
     // further arrows (level 25 ≥ 25), it just stops at `↔` (20).
     let e = Parser::parse_expr("a → b → c ↔ d").expect("a → b → c ↔ d parses");
-    assert_eq!(app_head(&e), Some("Iff"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Iff"))
+    );
     let Some(SurfaceExpr::Arrow(_, _, codomain)) = iff_arg(&e, 0) else {
         panic!("left operand of ↔ is an arrow");
     };
@@ -6888,7 +8048,11 @@ fn test_iff_inside_arrow_codomain_when_parenthesized() {
     while let SurfaceExpr::Paren(_, i) = inner {
         inner = i.as_ref();
     }
-    assert_eq!(app_head(inner), Some("Iff"), "codomain is the ↔");
+    assert_eq!(
+        app_head(inner),
+        Some(&crate::SurfaceName::generated_path("Iff")),
+        "codomain is the ↔"
+    );
 }
 
 #[test]
@@ -6918,13 +8082,21 @@ fn test_and_or_arrow_grouping_unchanged_by_iff_fix() {
     let SurfaceExpr::Arrow(_, domain, _) = &e else {
         panic!("`a ∧ b → c` is an arrow");
     };
-    assert_eq!(app_head(domain.as_ref()), Some("And"), "domain is `a ∧ b`");
+    assert_eq!(
+        app_head(domain.as_ref()),
+        Some(&crate::SurfaceName::generated_path("And")),
+        "domain is `a ∧ b`"
+    );
 
     let e = Parser::parse_expr("a ∨ b → c").expect("a ∨ b → c parses");
     let SurfaceExpr::Arrow(_, domain, _) = &e else {
         panic!("`a ∨ b → c` is an arrow");
     };
-    assert_eq!(app_head(domain.as_ref()), Some("Or"), "domain is `a ∨ b`");
+    assert_eq!(
+        app_head(domain.as_ref()),
+        Some(&crate::SurfaceName::generated_path("Or")),
+        "domain is `a ∨ b`"
+    );
 
     let e = Parser::parse_expr("a → b ∧ c").expect("a → b ∧ c parses");
     let SurfaceExpr::Arrow(_, _, codomain) = &e else {
@@ -6932,7 +8104,7 @@ fn test_and_or_arrow_grouping_unchanged_by_iff_fix() {
     };
     assert_eq!(
         app_head(codomain.as_ref()),
-        Some("And"),
+        Some(&crate::SurfaceName::generated_path("And")),
         "codomain is `b ∧ c`"
     );
 }
@@ -6942,13 +8114,1028 @@ fn test_iff_with_tighter_connective_in_the_arrow_codomain() {
     // `a → b ∧ a ↔ b` is `(a → (b ∧ a)) ↔ b`: the codomain takes the `∧` and
     // stops at the `↔`.
     let e = Parser::parse_expr("a → b ∧ a ↔ b").expect("a → b ∧ a ↔ b parses");
-    assert_eq!(app_head(&e), Some("Iff"));
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Iff"))
+    );
     let Some(SurfaceExpr::Arrow(_, _, codomain)) = iff_arg(&e, 0) else {
         panic!("left operand of ↔ is `a → b ∧ a`");
     };
     assert_eq!(
         app_head(codomain.as_ref()),
-        Some("And"),
+        Some(&crate::SurfaceName::generated_path("And")),
         "the ∧ stayed inside the codomain"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Lean `Term.ellipsis` — the trailing `f ..` application ellipsis.
+//
+// `..` is overloaded three ways in this grammar (application ellipsis, the
+// `a..b` range operator, and the structInst/pattern `{ x := y, .. }`), so
+// these pin BOTH directions: the forms that must now parse as an ellipsis
+// argument, and the forms that must still reach the other two parsers
+// untouched.
+// ---------------------------------------------------------------------------
+
+/// The ellipsis argument of an application, if `expr` is `App` and its last
+/// argument is the `..` marker.
+fn app_ellipsis_arity(expr: &SurfaceExpr) -> Option<(crate::SurfaceName, usize, bool)> {
+    // A dotted head like `Subsingleton.elim` parses as
+    // `Proj(Ident("Subsingleton"), Named("elim"))`, not as one dotted `Ident`;
+    // preserve both spellings as the exact structural name.
+    fn head_name(e: &SurfaceExpr) -> Option<crate::SurfaceName> {
+        match e {
+            SurfaceExpr::Ident(_, n) => Some(n.clone()),
+            SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
+                Some(head_name(base)?.append(field))
+            }
+            _ => None,
+        }
+    }
+    match expr {
+        SurfaceExpr::App(_, head, args) => {
+            let trailing = args.last().is_some_and(SurfaceArg::is_ellipsis);
+            Some((head_name(head)?, args.len(), trailing))
+        }
+        _ => None,
+    }
+}
+
+#[test]
+fn test_parse_app_ellipsis_bare_head() {
+    // `Subsingleton.elim ..` (Mathlib/Logic/Function/Basic.lean:135). Before
+    // this the whole declaration collapsed to
+    // "parser recovery produced raw declaration: error-recovery".
+    let expr = Parser::parse_expr("Subsingleton.elim ..").expect("`f ..` parses");
+    let (head, argc, trailing) = app_ellipsis_arity(&expr).expect("an application");
+    assert_eq!(
+        head.name(),
+        crate::SurfaceName::generated_path("Subsingleton.elim").name()
+    );
+    assert_eq!(argc, 1, "the ellipsis is the only argument");
+    assert!(trailing, "the single argument is the `..` marker");
+}
+
+#[test]
+fn test_parse_app_ellipsis_after_explicit_args() {
+    // `..` may follow real arguments: they are kept, the marker is appended.
+    let expr = Parser::parse_expr("f a b ..").expect("`f a b ..` parses");
+    let (head, argc, trailing) = app_ellipsis_arity(&expr).expect("an application");
+    assert_eq!(head.name(), crate::SurfaceName::generated_path("f").name());
+    assert_eq!(argc, 3, "two explicit args plus the marker");
+    assert!(trailing);
+    match &expr {
+        SurfaceExpr::App(_, _, args) => {
+            assert!(
+                matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("a").name())
+            );
+            assert!(
+                matches!(&args[1].expr, SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("b").name())
+            );
+            assert!(!args[0].is_ellipsis() && !args[1].is_ellipsis());
+        }
+        other => panic!("expected App, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_parse_app_ellipsis_inside_parens() {
+    // `inferInstanceAs (Decidable (Or ..))` — Mathlib/Logic/Basic.lean:237.
+    // The `..` is followed by `)`, not by a term.
+    let expr = Parser::parse_expr("inferInstanceAs (Decidable (Or ..))").expect("`(Or ..)` parses");
+    // Walk to the innermost application.
+    fn find_or(e: &SurfaceExpr) -> Option<&SurfaceExpr> {
+        match e {
+            SurfaceExpr::App(_, head, args) => {
+                if matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("Or").name())
+                {
+                    return Some(e);
+                }
+                find_or(head).or_else(|| args.iter().find_map(|a| find_or(&a.expr)))
+            }
+            SurfaceExpr::Paren(_, inner) => find_or(inner),
+            _ => None,
+        }
+    }
+    let or_app = find_or(&expr).expect("the `Or ..` application survives");
+    let (head, argc, trailing) = app_ellipsis_arity(or_app).expect("an application");
+    assert_eq!(head.name(), crate::SurfaceName::generated_path("Or").name());
+    assert_eq!(argc, 1);
+    assert!(trailing);
+}
+
+#[test]
+fn test_parse_app_ellipsis_before_comma_in_anon_ctor() {
+    // `⟨update_self .., fun _ hj ↦ …⟩` — Mathlib/Logic/Function/Basic.lean:599.
+    // The `..` is followed by `,`, which must end the ellipsis, NOT swallow
+    // the sibling component.
+    let expr = Parser::parse_expr("⟨update_self .., h⟩").expect("`⟨f .., h⟩` parses");
+    match &expr {
+        SurfaceExpr::App(_, head, args) => {
+            assert!(
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("anonymousCtor").name())
+            );
+            assert_eq!(args.len(), 2, "two components, the `..` did not eat `h`");
+            let (h, argc, trailing) =
+                app_ellipsis_arity(&args[0].expr).expect("first component is an application");
+            assert_eq!(
+                h.name(),
+                crate::SurfaceName::generated_path("update_self").name()
+            );
+            assert_eq!(argc, 1);
+            assert!(trailing);
+            assert!(
+                matches!(&args[1].expr, SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("h").name())
+            );
+        }
+        other => panic!("expected anonymousCtor App, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_parse_range_operator_is_not_an_app_ellipsis() {
+    // MUTATION GUARD (the convenient approximation): if the ellipsis branch
+    // dropped its "next token does not start an atom" test, `a..b` — Clean's
+    // `Set.Icc` range operator, used in `∫ x in a..b` — would silently become
+    // `App(a, [ellipsis])` followed by a dangling `b`. Both spellings must
+    // still reach the operator chain.
+    for src in ["a..b", "a .. b"] {
+        let expr = Parser::parse_expr(src).unwrap_or_else(|e| panic!("{src} parses: {e:?}"));
+        match &expr {
+            SurfaceExpr::App(_, head, args) => {
+                assert!(
+                    matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("Set.Icc").name()),
+                    "{src} must stay the range operator, got head {head:?}"
+                );
+                assert_eq!(args.len(), 2, "{src}: Set.Icc a b");
+                assert!(
+                    args.iter().all(|a| !a.is_ellipsis()),
+                    "{src} must contain no ellipsis marker"
+                );
+            }
+            other => panic!("{src}: expected Set.Icc application, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_parse_struct_inst_ellipsis_is_not_an_app_ellipsis() {
+    // MUTATION GUARD: the structInst `optEllipsis` sits immediately before
+    // `}`. If the app-ellipsis branch took it, the field value `y` would gain
+    // a phantom trailing argument and the struct literal would lose its
+    // "remaining fields are defaulted" marker.
+    // Both spellings: the pinned lean4 v4.30.0-rc2 accepts `{ a := 5, .. }`
+    // AND `{ a := 5 .. }`. The comma-less one is the sharp case — it is the
+    // only place an app-argument `..` and the structInst `..` compete for the
+    // same token.
+    for src in ["{ x := y, .. }", "{ x := y .. }"] {
+        let expr = Parser::parse_expr(src).unwrap_or_else(|e| panic!("{src} parses: {e:?}"));
+        match &expr {
+            SurfaceExpr::StructLit { fields, .. } => {
+                assert_eq!(fields.len(), 1, "{src}");
+                assert_eq!(
+                    fields[0].name.name(),
+                    crate::SurfaceName::generated_path("x").name(),
+                    "{src}"
+                );
+                assert!(
+                    matches!(&fields[0].val, SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("y").name()),
+                    "{src}: the field value must stay a bare identifier, not gain a \
+                     phantom ellipsis argument; got {:?}",
+                    fields[0].val
+                );
+            }
+            other => panic!("{src}: expected StructLit, got {other:?}"),
+        }
+    }
+}
+
+#[test]
+fn test_parse_glued_ellipsis_is_never_an_app_ellipsis() {
+    // MUTATION GUARD for `ws_before`. GROUND TRUTH, pinned lean4 v4.30.0-rc2:
+    //   example ... := (t2..)
+    //   error: unexpected token '..'; expected ')', ',' or ':'
+    // so a `..` glued to the head is NOT an application ellipsis in Lean
+    // either (its `argument` parser carries `checkWsBefore`). Clean must not
+    // silently accept what Lean rejects: `(Or..)` may fail to parse, but it
+    // must never yield `Or` applied to the ellipsis marker.
+    if let Ok(expr) = Parser::parse_expr("(Or..)") {
+        fn has_ellipsis(e: &SurfaceExpr) -> bool {
+            match e {
+                SurfaceExpr::App(_, head, args) => {
+                    args.iter().any(SurfaceArg::is_ellipsis)
+                        || has_ellipsis(head)
+                        || args.iter().any(|a| has_ellipsis(&a.expr))
+                }
+                SurfaceExpr::Paren(_, inner) => has_ellipsis(inner),
+                _ => false,
+            }
+        }
+        assert!(
+            !has_ellipsis(&expr),
+            "glued `Or..` must not become an application ellipsis, got {expr:?}"
+        );
+    }
+}
+
+#[test]
+fn test_parse_app_ellipsis_requires_whitespace_before() {
+    // Lean's `argument` parser carries `checkWsBefore`, so a glued `f..` is
+    // never an application ellipsis. Here it stays the range operator's left
+    // operand, exactly as before this change.
+    let expr = Parser::parse_expr("f..g").expect("`f..g` parses");
+    match &expr {
+        SurfaceExpr::App(_, head, args) => {
+            assert!(
+                matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == crate::SurfaceName::generated_path("Set.Icc").name())
+            );
+            assert!(args.iter().all(|a| !a.is_ellipsis()));
+        }
+        other => panic!("expected Set.Icc application, got {other:?}"),
+    }
+}
+
+#[test]
+fn typed_partial_namespace_end_preserves_quoted_outer_components() {
+    let quoted = Parser::parse_file(
+        "namespace «A.B».C.D\ndef inside : Nat := 1\nend C.D\ndef after : Nat := 2\nend «A.B»",
+    )
+    .unwrap();
+    let hierarchical = Parser::parse_file(
+        "namespace A.B.C.D\ndef inside : Nat := 1\nend C.D\ndef after : Nat := 2\nend A.B",
+    )
+    .unwrap();
+    assert_eq!(quoted.len(), 1);
+    assert_eq!(hierarchical.len(), 1);
+    let SurfaceDecl::Namespace {
+        name: quoted_name,
+        decls,
+        ..
+    } = &quoted[0]
+    else {
+        panic!("expected the still-open quoted outer namespace");
+    };
+    assert!(quoted_name.same_syntax(&crate::SurfaceName::component("A.B", true)));
+    assert_eq!(decls.len(), 2);
+    let SurfaceDecl::Namespace {
+        name, decls: inner, ..
+    } = &decls[0]
+    else {
+        panic!("expected closed two-component inner namespace");
+    };
+    assert!(name.same_syntax(
+        &crate::SurfaceName::component("C", false)
+            .append(&crate::SurfaceName::component("D", false))
+    ));
+    assert_eq!(inner.len(), 1);
+    assert!(
+        matches!(&inner[0], SurfaceDecl::Def { name, .. } if name.is_unescaped_component("inside"))
+    );
+    assert!(
+        matches!(&decls[1], SurfaceDecl::Def { name, .. } if name.is_unescaped_component("after"))
+    );
+    let SurfaceDecl::Namespace {
+        name: hierarchical_name,
+        decls,
+        ..
+    } = &hierarchical[0]
+    else {
+        panic!("expected two-component outer namespace");
+    };
+    assert!(hierarchical_name.same_syntax(
+        &crate::SurfaceName::component("A", false)
+            .append(&crate::SurfaceName::component("B", false))
+    ));
+    assert_ne!(quoted_name.name(), hierarchical_name.name());
+    assert_eq!(decls.len(), 2);
+}
+
+#[test]
+fn typed_section_quoted_local_does_not_consume_the_local_modifier() {
+    let quoted = Parser::parse_file(
+        "section «local»\ndef inside : Nat := 1\nend «local»\ndef outside : Nat := 2",
+    )
+    .unwrap();
+    assert_eq!(quoted.len(), 2);
+    let SurfaceDecl::Section {
+        name: Some(name),
+        decls,
+        ..
+    } = &quoted[0]
+    else {
+        panic!("escaped local must remain the section's actual name");
+    };
+    assert!(name.same_syntax(&crate::SurfaceName::component("local", true)));
+    assert_eq!(decls.len(), 1);
+    assert!(
+        matches!(&quoted[1], SurfaceDecl::Def { name, .. } if name.is_unescaped_component("outside"))
+    );
+
+    let ordinary =
+        Parser::parse_file("section\nlocal instance localInst : Inhabited Nat := ⟨0⟩\nend")
+            .unwrap();
+    let [SurfaceDecl::Section {
+        name: None, decls, ..
+    }] = ordinary.as_slice()
+    else {
+        panic!("unescaped local belongs to the inner declaration modifier");
+    };
+    let [SurfaceDecl::Instance { modifiers, .. }] = decls.as_slice() else {
+        panic!("expected one actual local instance");
+    };
+    assert_eq!(modifiers.scope, crate::DeclScope::Local);
+}
+
+#[test]
+fn typed_application_ellipsis_is_not_a_quoted_named_argument() {
+    for (source, expected) in [("f ..", true), ("f («..» := x)", false)] {
+        let SurfaceExpr::App(_, _, args) = Parser::parse_expr(source).unwrap() else {
+            panic!("expected actual application: {source}");
+        };
+        assert_eq!(args.len(), 1);
+        assert_eq!(args[0].is_ellipsis(), expected);
+        let name = args[0]
+            .name
+            .as_ref()
+            .expect("both forms carry their distinct typed syntax");
+        if expected {
+            assert_eq!(
+                name.source_spelling(),
+                None,
+                "numeric marker is outside source identifier space"
+            );
+            let relative = name.clone().with_relative_constructor();
+            assert!(!SurfaceArg::named(relative, SurfaceExpr::Hole(Span::dummy())).is_ellipsis());
+        } else {
+            assert!(name.same_syntax(&crate::SurfaceName::component("..", true)));
+        }
+    }
+    for name in [
+        crate::SurfaceName::component("..", false),
+        crate::SurfaceName::component("..", true),
+        crate::SurfaceName::from_name(
+            clean_kernel::Name::anon()
+                .str("..")
+                .str("application-ellipsis"),
+        ),
+        crate::SurfaceName::component(u64::MAX.to_string(), true)
+            .append(&crate::SurfaceName::component("application-ellipsis", true)),
+    ] {
+        assert!(!SurfaceArg::named(name, SurfaceExpr::Hole(Span::dummy())).is_ellipsis());
+    }
+}
+
+#[test]
+fn typed_instance_priority_keywords_require_unescaped_source_tokens() {
+    for (value, expected) in [
+        ("low", 100),
+        ("mid", 500),
+        ("default", 1000),
+        ("high", 10000),
+    ] {
+        let source = format!("instance (priority := {value}) : Inhabited Nat := ⟨0⟩");
+        let SurfaceDecl::Instance {
+            priority, binders, ..
+        } = Parser::parse_decl(&source).unwrap()
+        else {
+            panic!("expected actual instance for {value}");
+        };
+        assert_eq!(priority, Some(expected));
+        assert!(binders.is_empty());
+
+        let mut parser = Parser::new(&format!("«{value}»"));
+        let start = parser.pos;
+        assert_eq!(parser.instance_priority_value(), None);
+        assert_eq!(
+            parser.pos, start,
+            "quoted identifier is not consumed as a priority keyword"
+        );
+    }
+    let SurfaceDecl::Instance {
+        priority, binders, ..
+    } = Parser::parse_decl("instance («priority» := 500) : Inhabited Nat := ⟨0⟩").unwrap()
+    else {
+        panic!("expected instance with a named default binder");
+    };
+    assert_eq!(priority, None);
+    assert_eq!(
+        binders.len(),
+        1,
+        "quoted priority must not be discarded as an option"
+    );
+    assert!(binders[0]
+        .name
+        .same_syntax(&crate::SurfaceName::component("priority", true)));
+    assert!(matches!(
+        binders[0].default.as_deref(),
+        Some(SurfaceExpr::Lit(_, SurfaceLit::Nat(500)))
+    ));
+
+    // Existing option handling still skips unrecognized value syntax. Record
+    // that source outcome explicitly: this is not a claim of Lean parity or
+    // a fully validated priority option, merely refusal to grant `mid`'s 500.
+    let SurfaceDecl::Instance {
+        priority, binders, ..
+    } = Parser::parse_decl("instance (priority := «mid») : Inhabited Nat := ⟨0⟩").unwrap()
+    else {
+        panic!("existing unknown-option skip path changed");
+    };
+    assert_eq!(priority, None);
+    assert!(binders.is_empty());
+}
+
+// Historical input controls retained across the c7 parser reconciliation.
+// These are not aliases for the newer tests above: they keep the original
+// input scenarios and explicitly check the corrected namespace/brace shapes.
+#[test]
+fn test_namespace_compound_end_leaf_only_accepted() {
+    let code = "namespace Foo.Bar.Baz\ndef qux : Nat := 1\nend Baz";
+    let decls = Parser::parse_file(code).expect("leaf-only end at EOF should be accepted");
+    assert_eq!(decls.len(), 1, "got {decls:?}");
+    let SurfaceDecl::Namespace {
+        name: outer,
+        decls: outer_decls,
+        ..
+    } = &decls[0]
+    else {
+        panic!("expected normalized outer namespace, got {:?}", decls[0]);
+    };
+    assert_eq!(
+        outer.name(),
+        crate::SurfaceName::generated_path("Foo.Bar").name()
+    );
+    assert_eq!(outer_decls.len(), 1);
+    let SurfaceDecl::Namespace {
+        name: inner,
+        decls: inner_decls,
+        ..
+    } = &outer_decls[0]
+    else {
+        panic!("expected closed inner namespace, got {:?}", outer_decls[0]);
+    };
+    let full_owner = outer.append(inner);
+    assert_eq!(
+        full_owner.name(),
+        crate::SurfaceName::generated_path("Foo.Bar.Baz").name()
+    );
+    assert_eq!(inner_decls.len(), 1);
+    let SurfaceDecl::Def { name, .. } = &inner_decls[0] else {
+        panic!("expected retained definition, got {:?}", inner_decls[0]);
+    };
+    assert_eq!(
+        full_owner.append(name).name(),
+        crate::SurfaceName::generated_path("Foo.Bar.Baz.qux").name()
+    );
+}
+
+#[test]
+fn test_parse_structure_with_universe_params() {
+    // The old input omitted the dot and misclassified `{u}` as a universe
+    // list. Retain that input as a term-binder control, and retain the original
+    // universe assertions on the explicit universe-syntax counterpart.
+    for (source, explicit_universes) in [
+        (
+            "structure Container {u} (A : Type u) where\n              data : A",
+            false,
+        ),
+        (
+            "structure Container.{u} (A : Type u) where\n              data : A",
+            true,
+        ),
+    ] {
+        let SurfaceDecl::Structure {
+            name,
+            universe_params,
+            binders,
+            fields,
+            ..
+        } = Parser::parse_decl(source).expect("both brace forms should parse")
+        else {
+            panic!("expected Structure for {source}");
+        };
+        assert_eq!(
+            name.name(),
+            crate::SurfaceName::generated_path("Container").name()
+        );
+        assert_eq!(fields.len(), 1);
+        if explicit_universes {
+            assert_eq!(universe_params.len(), 1);
+            assert_eq!(
+                universe_params[0].name(),
+                crate::SurfaceName::generated_path("u").name()
+            );
+            assert_eq!(binders.len(), 1);
+        } else {
+            assert!(
+                universe_params.is_empty(),
+                "dotless braces are not universe parameters"
+            );
+            assert_eq!(binders.len(), 2);
+            assert_eq!(
+                binders[0].name.name(),
+                crate::SurfaceName::generated_path("u").name()
+            );
+            assert_eq!(binders[0].info, SurfaceBinderInfo::Implicit);
+            assert!(binders[0].ty.is_none());
+        }
+        assert_eq!(
+            binders.last().unwrap().name.name(),
+            crate::SurfaceName::generated_path("A").name()
+        );
+    }
+}
+
+/// Structure-instance PATTERNS: `{ f := p, .. }`.
+///
+/// Lean parses `Lean.Parser.Term.structInst` in pattern position with no extra
+/// grammar (patterns ARE terms there); Clean's pattern parser is a closed token
+/// set, so the form needs its own arm and its own surface node. The rows this
+/// closes are `Mathlib/Order/Basic.lean`'s `Preorder.toLE_injective` (L435) and
+/// `LinearOrder.toPartialOrder_injective` (L451), which died in parser recovery
+/// with "expected pattern, got LBrace".
+mod struct_instance_patterns {
+    use super::*;
+
+    fn first_arm_pattern(src: &str) -> SurfacePattern {
+        match Parser::parse_expr(src).expect("struct-instance pattern parses") {
+            SurfaceExpr::Match(_, _, _, arms) => arms[0].pattern.clone(),
+            SurfaceExpr::PatternMatchLambda(_, _, body) => match body.as_ref() {
+                SurfaceExpr::Match(_, _, _, arms) => arms[0].pattern.clone(),
+                other => panic!("expected Match inside the pattern lambda, got {other:?}"),
+            },
+            other => panic!("expected Match, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_instance_pattern_named_field_and_ellipsis() {
+        let pattern = first_arm_pattern("match f with | { a := x, .. } => x");
+        match pattern {
+            SurfacePattern::StructInst {
+                fields,
+                ellipsis,
+                ty,
+            } => {
+                assert_eq!(fields.len(), 1);
+                assert_eq!(
+                    fields[0].0.name(),
+                    crate::SurfaceName::generated_path("a").name()
+                );
+                assert!(
+                    matches!(&fields[0].1, SurfacePattern::Var(v) if v.name() == crate::SurfaceName::generated_path("x").name())
+                );
+                assert!(ellipsis, "the trailing `..` must be recorded");
+                assert!(ty.is_none());
+            }
+            other => panic!("expected StructInst pattern, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_instance_pattern_without_ellipsis_records_none() {
+        let pattern = first_arm_pattern("match f with | { a := x, b := y } => x");
+        match pattern {
+            SurfacePattern::StructInst {
+                fields, ellipsis, ..
+            } => {
+                assert_eq!(fields.len(), 2);
+                assert!(!ellipsis, "no `..` was written");
+            }
+            other => panic!("expected StructInst pattern, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_instance_pattern_bare_ident_abbreviates_itself() {
+        let pattern = first_arm_pattern("match f with | { a, .. } => a");
+        match pattern {
+            SurfacePattern::StructInst { fields, .. } => {
+                assert_eq!(fields.len(), 1);
+                assert!(
+                    matches!(&fields[0].1, SurfacePattern::Var(v) if v.name() == fields[0].0.name())
+                );
+            }
+            other => panic!("expected StructInst pattern, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_instance_pattern_ascription_is_kept() {
+        let pattern = first_arm_pattern("match f with | { a := x, .. : Foo } => x");
+        match pattern {
+            SurfacePattern::StructInst { ty, .. } => {
+                assert!(ty.is_some(), "the `: S` ascription must be preserved");
+            }
+            other => panic!("expected StructInst pattern, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_instance_pattern_nested_pattern_in_a_field() {
+        let pattern = first_arm_pattern("match f with | { a := Foo.mk y, .. } => y");
+        match pattern {
+            SurfacePattern::StructInst { fields, .. } => {
+                assert!(matches!(&fields[0].1, SurfacePattern::Ctor(_, args) if args.len() == 1));
+            }
+            other => panic!("expected StructInst pattern, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_parse_struct_instance_pattern_in_a_pattern_lambda_position() {
+        // The Mathlib shape: `fun | { … }, { … } => …`, two pattern positions.
+        let expr = Parser::parse_expr("fun | { a := x, .. }, { a := y, .. } => x")
+            .expect("a multi-position pattern lambda over struct instances parses");
+        assert!(
+            matches!(expr, SurfaceExpr::PatternMatchLambda(..)),
+            "expected a pattern lambda"
+        );
+    }
+
+    #[test]
+    fn test_parse_struct_instance_pattern_with_source_is_refused() {
+        // Lean: "Invalid struct instance pattern: `with` is not allowed in
+        // patterns" (`Lean/Elab/PatternVar.lean:306-307`).
+        let err = Parser::parse_expr("match f with | { s with a := x } => x")
+            .expect_err("a `with` SOURCE is not a pattern");
+        assert!(
+            format!("{err:?}").contains("with"),
+            "the refusal must name `with`; got {err:?}"
+        );
+    }
+
+    #[test]
+    fn test_parse_term_struct_literal_is_unchanged() {
+        // CONTROL: the TERM-level `{ … }` parser is untouched by the pattern arm.
+        let expr = Parser::parse_expr("{ a := 1, b := 2 }").expect("a struct literal still parses");
+        assert!(matches!(expr, SurfaceExpr::StructLit { .. }));
+    }
+
+    /// Lean's `structInstFields` is a `sepByIndent`, so the comma between two
+    /// fields is OPTIONAL — a newline separates them just as well. This is not
+    /// a hypothetical spelling: `Mathlib/Order/Basic.lean:455-459`
+    /// (`LinearOrder.toPartialOrder_injective`, one of the two declarations the
+    /// `{ … }` pattern arm exists for) writes `toDecidableLT := A_decidableLT`
+    /// and `min := A_min` on consecutive lines with no comma between them.
+    #[test]
+    fn test_parse_struct_instance_pattern_newline_separated_fields() {
+        let pattern = first_arm_pattern("match f with\n| { a := x\n    b := y, .. } => x");
+        match pattern {
+            SurfacePattern::StructInst {
+                fields, ellipsis, ..
+            } => {
+                assert_eq!(
+                    fields.len(),
+                    2,
+                    "a newline must separate two fields, got {fields:?}"
+                );
+                // The value of `a` must be the BARE variable `x`, never the
+                // constructor application `x b` — the failure mode the
+                // `in_struct_pattern_field` boundary guard exists to prevent.
+                assert!(
+                    matches!(&fields[0].1, SurfacePattern::Var(v) if v.name() == crate::SurfaceName::generated_path("x").name()),
+                    "the first field's value must stop at `x`, got {:?}",
+                    fields[0].1
+                );
+                assert!(ellipsis);
+            }
+            other => panic!("expected StructInst pattern, got {other:?}"),
+        }
+    }
+
+    /// The real `Mathlib/Order/Basic.lean:451-462` shape: two positions, both
+    /// brace patterns, mixed comma and newline separation. A single-arm
+    /// multi-position pattern lambda is desugared by the parser into the
+    /// interleaved `fun _dx0 => match _dx0 with | p => fun _dx1 => …` nest
+    /// (closed class 15), so this asserts on the whole tree rather than on an
+    /// arm's pattern list.
+    #[test]
+    fn test_parse_struct_instance_pattern_mathlib_two_position_shape() {
+        let src = "fun\n  | { le := A_le, lt := A_lt,\n      toDecidableLE := A_dle, toDecidableEq := A_deq, toDecidableLT := A_dlt\n      min := A_min, max := A_max, .. },\n    { le := B_le, lt := B_lt,\n      toDecidableLE := B_dle, toDecidableEq := B_deq, toDecidableLT := B_dlt\n      min := B_min, max := B_max, .. } => trivial";
+        let expr = Parser::parse_expr(src).expect("the Mathlib two-position brace pattern parses");
+        let rendered = format!("{expr:?}");
+        assert_eq!(
+            rendered.matches("StructInst").count(),
+            2,
+            "both positions must be structure-instance patterns; got {rendered}"
+        );
+        // Every field value must have survived as its OWN binder. `A_dlt`
+        // followed on the next line by `min :=` is the case the boundary guard
+        // exists for: without it the value reads as the application `A_dlt min`
+        // and `min` never becomes a field.
+        for name in [
+            "A_le", "A_lt", "A_dle", "A_deq", "A_dlt", "A_min", "A_max", "B_le", "B_lt", "B_dle",
+            "B_deq", "B_dlt", "B_min", "B_max",
+        ] {
+            assert!(
+                rendered.contains(name),
+                "field value `{name}` was lost; got {rendered}"
+            );
+        }
+    }
+
+    /// CONTROL for the boundary guard's SCOPE: the flag is saved and restored
+    /// around each field value, so a LATER arm's ordinary constructor pattern
+    /// still collects its arguments. A guard left latched would silently turn
+    /// `Foo.mk y` into the nullary `Foo.mk` and drop the binder.
+    #[test]
+    fn test_boundary_guard_is_restored_after_a_brace_pattern() {
+        let pattern = first_arm_pattern("match f with | { a := Foo.mk y, .. } => y");
+        match pattern {
+            SurfacePattern::StructInst { fields, .. } => match &fields[0].1 {
+                SurfacePattern::Ctor(_, args) => assert_eq!(
+                    args.len(),
+                    1,
+                    "the field value's constructor keeps its argument"
+                ),
+                other => panic!("expected a constructor pattern in the field, got {other:?}"),
+            },
+            other => panic!("expected StructInst pattern, got {other:?}"),
+        }
+
+        let expr = Parser::parse_expr("match f with | { a := x, .. } => x | Foo.mk y => y")
+            .expect("a brace arm followed by an ordinary constructor arm parses");
+        let arms = match &expr {
+            SurfaceExpr::Match(_, _, _, arms) => arms.clone(),
+            other => panic!("expected Match, got {other:?}"),
+        };
+        assert_eq!(arms.len(), 2);
+        match &arms[1].pattern {
+            SurfacePattern::Ctor(_, args) => assert_eq!(
+                args.len(),
+                1,
+                "the arm AFTER a brace pattern still collects its argument"
+            ),
+            other => panic!("expected a constructor pattern in arm 2, got {other:?}"),
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // ADVERSARIAL REVIEW ADDITIONS (W3E review pass)
+    // -----------------------------------------------------------------------
+
+    /// MALFORMED INPUTS must be a loud parse ERROR, never a hang. The field
+    /// loop has three exits (`}`, `:`, `..`) and otherwise demands an
+    /// identifier; every shape below misses all four, so the only safe answer
+    /// is `Err`. A test that hangs here is the finding.
+    #[test]
+    fn test_parse_struct_instance_pattern_malformed_inputs_are_errors_not_hangs() {
+        for src in [
+            "match f with | { a := } => x",
+            "match f with | { 3 := y } => x",
+            "match f with | { a := x",
+            "match f with | { , } => x",
+            "match f with | { a := x, .. , } => x",
+        ] {
+            assert!(
+                Parser::parse_expr(src).is_err(),
+                "malformed struct-instance pattern must be a parse error: {src}"
+            );
+        }
+    }
+
+    /// The guard must not OVER-trigger: inside a field value a constructor
+    /// still takes its own arguments, and only an identifier followed by `:=`
+    /// ends the value. A guard that stopped at every identifier would bind
+    /// `Foo.mk` with no arguments and silently change the pattern.
+    #[test]
+    fn test_parse_struct_instance_pattern_field_value_keeps_its_own_arguments() {
+        match first_arm_pattern("match f with | { a := Foo.mk x y, b := z } => x") {
+            SurfacePattern::StructInst { fields, .. } => {
+                assert_eq!(fields.len(), 2, "two fields");
+                match &fields[0].1 {
+                    SurfacePattern::Ctor(_, args) => assert_eq!(
+                        args.len(),
+                        2,
+                        "the field value's constructor keeps BOTH arguments: {:?}",
+                        fields[0].1
+                    ),
+                    other => panic!("expected a constructor field value, got {other:?}"),
+                }
+                assert!(
+                    matches!(&fields[1].1, SurfacePattern::Var(_)),
+                    "the second field's value is its own variable: {:?}",
+                    fields[1].1
+                );
+            }
+            other => panic!("expected StructInst, got {other:?}"),
+        }
+    }
+
+    /// The Mathlib layout, one position, DESTRUCTURED rather than rendered.
+    ///
+    /// `test_parse_struct_instance_pattern_mathlib_two_position_shape` asserts
+    /// that each of the fourteen names appears in the debug rendering, which
+    /// does NOT falsify the failure mode it names: if `A_dlt` / newline /
+    /// `min := A_min` were read as the application `A_dlt min`, both `A_dlt`
+    /// and `min` would still appear in that rendering. Counting the FIELDS and
+    /// requiring each value to be a lone binder is what distinguishes the two.
+    #[test]
+    fn test_parse_struct_instance_pattern_comma_less_layout_counts_its_fields() {
+        let src = "match f with | { le := A_le, lt := A_lt,\n      toDecidableLE := A_dle, toDecidableEq := A_deq, toDecidableLT := A_dlt\n      min := A_min, max := A_max, .. } => trivial";
+        match first_arm_pattern(src) {
+            SurfacePattern::StructInst {
+                fields, ellipsis, ..
+            } => {
+                assert!(ellipsis, "the literal ends with `..`");
+                let names: Vec<String> = fields.iter().map(|(n, _)| n.to_string()).collect();
+                assert_eq!(
+                    names,
+                    vec![
+                        "le",
+                        "lt",
+                        "toDecidableLE",
+                        "toDecidableEq",
+                        "toDecidableLT",
+                        "min",
+                        "max"
+                    ],
+                    "every field NAME must survive, `min` included"
+                );
+                for (name, value) in &fields {
+                    assert!(
+                        matches!(value, SurfacePattern::Var(_)),
+                        "field `{name}`'s value is a lone binder, not an application: {value:?}"
+                    );
+                }
+            }
+            other => panic!("expected StructInst, got {other:?}"),
+        }
+    }
+
+    /// `{ }` and `{ .. }` are the field loop's two immediate exits. Both must
+    /// PARSE (pinned lean accepts both shapes syntactically and reports the
+    /// missing fields, or none, during elaboration).
+    #[test]
+    fn test_parse_struct_instance_pattern_empty_and_ellipsis_only() {
+        match first_arm_pattern("match f with | { } => x") {
+            SurfacePattern::StructInst {
+                fields, ellipsis, ..
+            } => {
+                assert!(fields.is_empty(), "`{{ }}` names no field");
+                assert!(!ellipsis, "`{{ }}` carries no ellipsis");
+            }
+            other => panic!("expected StructInst, got {other:?}"),
+        }
+        match first_arm_pattern("match f with | { .. } => x") {
+            SurfacePattern::StructInst {
+                fields, ellipsis, ..
+            } => {
+                assert!(fields.is_empty(), "`{{ .. }}` names no field");
+                assert!(ellipsis, "`{{ .. }}` carries the ellipsis");
+            }
+            other => panic!("expected StructInst, got {other:?}"),
+        }
+    }
+}
+
+// Regression: `^` is `infixr:80` and the shifts `<<<`/`>>>` are `infixl:75`
+// (Lean 4.8.0 `Init/Notation.lean:280-282`), so `^` binds tighter on either
+// side of a shift. The parser had all three at 75 with `^`'s right operand at
+// 75, so `9 ^ 2 <<< 2` was `9 ^ (2 <<< 2)` and `clean check` accepted
+// `(6 &&& 9 ^ 2 <<< 2 : Nat) ≠ 4 := by decide`, which Lean refutes.
+#[test]
+fn test_pow_binds_tighter_than_shift_on_both_sides() {
+    let pow = crate::SurfaceName::generated_path("HPow.hPow");
+    let shl = crate::SurfaceName::generated_path("HShiftLeft.hShiftLeft");
+    let shr = crate::SurfaceName::generated_path("HShiftRight.hShiftRight");
+    // a ^ b <<< c → HShiftLeft (HPow a b) c
+    let e = Parser::parse_expr("a ^ b <<< c").expect("parses");
+    assert_eq!(app_head(&e), Some(&shl), "outer is <<<: {e:?}");
+    assert_eq!(nth_arg_head(&e, 0), Some(&pow), "LHS is ^: {e:?}");
+    // a <<< b ^ c → HShiftLeft a (HPow b c)
+    let e = Parser::parse_expr("a <<< b ^ c").expect("parses");
+    assert_eq!(app_head(&e), Some(&shl), "outer is <<<: {e:?}");
+    assert_eq!(nth_arg_head(&e, 1), Some(&pow), "RHS is ^: {e:?}");
+    // a ^ b >>> c → HShiftRight (HPow a b) c
+    let e = Parser::parse_expr("a ^ b >>> c").expect("parses");
+    assert_eq!(app_head(&e), Some(&shr), "outer is >>>: {e:?}");
+    assert_eq!(nth_arg_head(&e, 0), Some(&pow), "LHS is ^: {e:?}");
+    // Shifts stay left-associative: a <<< b >>> c → HShiftRight (HShiftLeft a b) c
+    let e = Parser::parse_expr("a <<< b >>> c").expect("parses");
+    assert_eq!(app_head(&e), Some(&shr), "{e:?}");
+    assert_eq!(nth_arg_head(&e, 0), Some(&shl), "{e:?}");
+    // `^` stays right-associative: a ^ b ^ c → HPow a (HPow b c)
+    let e = Parser::parse_expr("a ^ b ^ c").expect("parses");
+    assert_eq!(app_head(&e), Some(&pow), "{e:?}");
+    assert_eq!(nth_arg_head(&e, 1), Some(&pow), "{e:?}");
+    assert!(nth_arg_head(&e, 0).is_none(), "LHS is the atom a: {e:?}");
+    // `-` (prefix:75) takes the whole shift: -a <<< b → Neg (HShiftLeft a b)
+    let e = Parser::parse_expr("-a <<< b").expect("parses");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("Neg.neg")),
+        "{e:?}"
+    );
+    assert_eq!(nth_arg_head(&e, 0), Some(&shl), "{e:?}");
+    // `2 ^ -3` stays refused, as in Lean.
+    assert!(Parser::parse_expr("2 ^ -3").is_err());
+}
+
+// Regression: `≫` and `^` are both `infixr:80`, so each takes the other as its
+// right operand (Lean's Pratt parser parses the right operand at level 80):
+// `a ≫ b ^ c` = `a ≫ (b ^ c)` and `a ^ b ≫ c` = `a ^ (b ≫ c)`. `≫` used to
+// sit below `^` in the chain, so `a ≫ b ^ c` parsed as `(a ≫ b) ^ c`.
+#[test]
+fn test_cat_comp_and_pow_associate_right_together() {
+    let comp = crate::SurfaceName::generated_path("CategoryStruct.comp");
+    let pow = crate::SurfaceName::generated_path("HPow.hPow");
+    let e = Parser::parse_expr("a ≫ b ^ c").expect("parses");
+    assert_eq!(app_head(&e), Some(&comp), "outer is ≫: {e:?}");
+    assert_eq!(nth_arg_head(&e, 1), Some(&pow), "RHS is ^: {e:?}");
+    assert!(nth_arg_head(&e, 0).is_none(), "LHS is the atom a: {e:?}");
+    let e = Parser::parse_expr("a ^ b ≫ c").expect("parses");
+    assert_eq!(app_head(&e), Some(&pow), "outer is ^: {e:?}");
+    assert_eq!(nth_arg_head(&e, 1), Some(&comp), "RHS is ≫: {e:?}");
+    // Both still bind tighter than a shift.
+    let e = Parser::parse_expr("a ≫ b <<< c").expect("parses");
+    assert_eq!(
+        app_head(&e),
+        Some(&crate::SurfaceName::generated_path("HShiftLeft.hShiftLeft")),
+        "{e:?}"
+    );
+    assert_eq!(nth_arg_head(&e, 0), Some(&comp), "{e:?}");
+}
+
+#[test]
+fn term_have_and_let_keep_distinct_binding_origins() {
+    let transparent = Parser::parse_expr("let n : Nat := 7; n").expect("term let parses");
+    let opaque = Parser::parse_expr("have n : Nat := 7; n").expect("term have parses");
+    assert!(matches!(transparent, SurfaceExpr::Let(..)));
+    let SurfaceExpr::Have(_, binder, value, body) = opaque else {
+        panic!("term have must retain its own origin");
+    };
+    assert_eq!(binder.name.name(), &clean_kernel::Name::from_string("n"));
+    assert!(binder.ty.is_some());
+    assert!(matches!(*value, SurfaceExpr::Lit(_, SurfaceLit::Nat(7))));
+    assert!(matches!(*body, SurfaceExpr::Ident(_, name) if name.name() == binder.name.name()));
+}
+
+#[test]
+fn term_let_newline_have_keeps_its_binding_origin() {
+    for source in [
+        "let n := 7\nhave h : n = 7 := by rfl\nTrue.intro",
+        "let n : Int := 7\nhave h : n = 7 := by rfl\nTrue.intro",
+    ] {
+        let expression = Parser::parse_expr(source).expect("newline have is the let continuation");
+        let SurfaceExpr::Let(_, n, value, body) = expression else {
+            panic!("the outer binding must remain a genuine let");
+        };
+        assert_eq!(n.name.name(), &clean_kernel::Name::from_string("n"));
+        assert!(matches!(*value, SurfaceExpr::Lit(_, SurfaceLit::Nat(7))));
+        let SurfaceExpr::Have(_, h, value, body) = *body else {
+            panic!("the continuation must retain its opaque have origin");
+        };
+        assert_eq!(h.name.name(), &clean_kernel::Name::from_string("h"));
+        assert!(h.ty.is_some());
+        assert!(matches!(*value, SurfaceExpr::ByTactic(_, _)));
+        assert!(
+            matches!(*body, SurfaceExpr::Proj(_, base, Projection::Named(field)) if field.name() == &clean_kernel::Name::from_string("intro") && matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == &clean_kernel::Name::from_string("True")))
+        );
+    }
+}
+
+#[test]
+fn term_let_have_continuation_requires_a_separator() {
+    let expression = Parser::parse_expr("let n := 7; have h : True := True.intro; n")
+        .expect("the explicit separator permits a have continuation");
+    assert!(
+        matches!(expression, SurfaceExpr::Let(_, _, _, body) if matches!(body.as_ref(), SurfaceExpr::Have(..)))
+    );
+    assert!(Parser::parse_expr("let n := 7 have h : True := True.intro; n").is_err());
+}
+
+#[test]
+fn term_let_do_value_stops_before_newline_have_without_recovery() {
+    let source = "theorem probe : True :=\n  let computed : Nat := Id.run do\n    let mut x : Nat := 0\n    for _ in [0, 1] do\n      have h : True := True.intro\n      x := x + 1\n    return x\n  have checked : computed = 2 := by rfl\n  True.intro\n";
+    let report = Parser::parse_file_with_diagnostics(source).expect("the complete source parses");
+    assert!(report.diagnostics.is_empty(), "{:?}", report.diagnostics);
+    let [SurfaceDecl::Theorem { proof, .. }] = report.decls.as_slice() else {
+        panic!(
+            "no RawDecl/recovered fragment may replace the theorem: {:?}",
+            report.decls
+        );
+    };
+    let SurfaceExpr::Let(_, computed, value, body) = proof.as_ref() else {
+        panic!("the actual computed let must remain outermost");
+    };
+    assert_eq!(
+        computed.name.name(),
+        &clean_kernel::Name::from_string("computed")
+    );
+    assert!(
+        matches!(value.as_ref(), SurfaceExpr::App(_, _, args) if args.len() == 1 && matches!(&args[0].expr, SurfaceExpr::Do(..)))
+    );
+    let SurfaceExpr::Have(_, checked, value, body) = body.as_ref() else {
+        panic!("the have following the do value is the actual term continuation");
+    };
+    assert_eq!(
+        checked.name.name(),
+        &clean_kernel::Name::from_string("checked")
+    );
+    assert!(matches!(value.as_ref(), SurfaceExpr::ByTactic(_, _)));
+    assert!(
+        matches!(body.as_ref(), SurfaceExpr::Proj(_, base, Projection::Named(field)) if field.name() == &clean_kernel::Name::from_string("intro") && matches!(base.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == &clean_kernel::Name::from_string("True")))
     );
 }

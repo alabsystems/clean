@@ -44,6 +44,13 @@
 //!
 //! `silent` is the only verdict a user cannot act on, and the ratchet baseline
 //! for it is **0**: a probe that reaches `silent` fails the gate outright.
+//!
+//! `unnamed` is the **attribution** dimension and is ratcheted the same way. A
+//! tactic that fails without naming itself is *effectively* hidden: the reader
+//! cannot tell whether `omega` ran and gave up or was never reached. It is
+//! ratcheted twice over — on the aggregate count (`baseline_unnamed`) and,
+//! because a count alone cannot see a one-for-one swap, on the exact set of
+//! `(token, label)` rows allowed to be unattributed (`known_unnamed_rows`).
 //! Probes marked `intentional_sorry` (`sorry`, `admit`) are excluded from the
 //! count — writing `sorry` and being told the declaration uses a sorry IS the
 //! diagnostic.
@@ -97,12 +104,28 @@ fn read_json(path: &Path) -> serde_json::Value {
 /// `rewrite`. Tactic spellings carry `?`, `!` and `'`, so those count as part
 /// of the word.
 fn names_token(haystack: &str, token: &str) -> bool {
-    fn word_char(c: char) -> bool {
-        c.is_alphanumeric() || c == '_' || c == '?' || c == '!' || c == '\''
+    /// Characters that always continue an identifier.
+    fn ident_char(c: char) -> bool {
+        c.is_alphanumeric() || c == '_'
+    }
+    /// Characters a tactic spelling may END with (`rw?`, `simp!`, `let'`).
+    fn suffix_char(c: char) -> bool {
+        matches!(c, '?' | '!' | '\'')
     }
     if token.is_empty() {
         return false;
     }
+    // Kept byte-identical to `names_tactic` in
+    // `crates/clean-elab/src/infer/tactic_trace.rs`, which the elaborator uses to
+    // decide whether a diagnostic ALREADY names its tactic. If the gate's
+    // predicate and the production predicate drift, the census stops measuring
+    // the thing the elaborator is deciding.
+    //
+    // A trailing suffix character continues the word only when the token does
+    // NOT already carry one: `simp` must not be credited by `simp?`, but `rw?`
+    // *must* be credited by `unknown tactic 'rw?'`, whose next character is the
+    // closing quote.
+    let token_has_suffix = token.chars().next_back().is_some_and(suffix_char);
     let mut from = 0usize;
     while let Some(rel) = haystack[from..].find(token) {
         let start = from + rel;
@@ -110,8 +133,11 @@ fn names_token(haystack: &str, token: &str) -> bool {
         let before_ok = haystack[..start]
             .chars()
             .next_back()
-            .is_none_or(|c| !word_char(c));
-        let after_ok = haystack[end..].chars().next().is_none_or(|c| !word_char(c));
+            .is_none_or(|c| !ident_char(c));
+        let after_ok = haystack[end..]
+            .chars()
+            .next()
+            .is_none_or(|c| !ident_char(c) && (token_has_suffix || !suffix_char(c)));
         if before_ok && after_ok {
             return true;
         }
@@ -193,12 +219,15 @@ fn run_probe(source: &str, token: &str) -> ProbeOutcome {
                     sorried = true;
                 }
             }
-            // `{err:?}`, not `{err}`: this is byte-for-byte the diagnostic
-            // `clean check` puts in its JSON report (`cmd_core.rs`:
-            // `format!("elaboration error: {e:?}")`). The Display form drops
-            // the payload, so `TacticFailed(UnknownTactic("bv_omega"))` would
-            // be scored as not naming its tactic when the user in fact sees the
-            // name. The census must grade the string the user sees.
+            // `{err:?}`, not `{err}`: the Debug form carries every payload
+            // field, so `TacticFailed(UnknownTactic("bv_omega"))` is scored as
+            // naming its tactic. This is also the rendering the elaborator's
+            // own attribution predicate reads (`attribute_tactic_failure` in
+            // `infer/elab_tactic.rs`), so gate and production grade one string.
+            // NOTE: since 2026-08-27 `clean check` itself prints the Display
+            // form (`cmd_core.rs`, "THE SINGLE RENDERING SITE"); the Debug
+            // string is a superset of it, so a row graded `unnamed` here is
+            // unnamed on the terminal too — the converse is not measured.
             Err(err) => messages.push(format!("elaboration error: {err:?}")),
         }
     }
@@ -354,6 +383,47 @@ fn silent_tactic_census_is_current_and_ratcheted() {
          {base_unnamed} -> {live_unnamed}. Unnamed tokens: {}",
         value["unnamed_tokens"]
     );
+    // ROW-level attribution pin. The aggregate above cannot see a one-for-one
+    // swap: fix one probe, break another, and `unnamed` is flat. A probe that
+    // names the tactic today may never stop naming it.
+    let pinned: BTreeSet<(String, String)> = ratchet["known_unnamed_rows"]
+        .as_array()
+        .expect(
+            "ratchet has `known_unnamed_rows`; without it a tactic can lose its \
+             name as long as another gains one. Run \
+             scripts/check_silent_tactic_ratchet.py --update.",
+        )
+        .iter()
+        .map(|row| {
+            (
+                row[0].as_str().unwrap_or_default().to_owned(),
+                row[1].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .collect();
+    let regressed: Vec<_> = value["rows"]
+        .as_array()
+        .expect("census rows")
+        .iter()
+        .filter(|row| row["verdict"] == "unnamed")
+        .map(|row| {
+            (
+                row["token"].as_str().unwrap_or_default().to_owned(),
+                row["label"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
+        .filter(|key| !pinned.contains(key))
+        .collect();
+    assert!(
+        regressed.is_empty(),
+        "these probes USED to name the tactic that failed and no longer do: \
+         {regressed:?}. A tactic that fails without naming itself is effectively \
+         hidden — a reader cannot tell whether it ran and gave up or was never \
+         reached. Attribution is added at the `by`-block boundary in \
+         `ElabCtx::attribute_tactic_failure`, from the dispatch trace in \
+         `crates/clean-elab/src/infer/tactic_trace.rs`; a new dispatch path that \
+         bypasses `eval_tactic` shows up here."
+    );
     if live_silent < base_silent || live_unnamed < base_unnamed {
         eprintln!(
             "PROGRESS: silent {base_silent} -> {live_silent}, unnamed \
@@ -451,9 +521,12 @@ fn historically_silent_constructs_name_themselves() {
             Verdict::Silent,
             "`{token}` degraded to a SILENT synthetic sorry — nothing named it.\n{source}"
         );
-        assert_eq!(
-            outcome.verdict,
-            Verdict::Loud,
+        // A construct that now genuinely PASSES (`simp [*]` since b1045ba58,
+        // bare `dsimp` since 9e15d634a) is not a regression of this set: the
+        // anti-regression is against a silent sorry and against an UNNAMED
+        // failure, never against the tactic learning to close the goal.
+        assert!(
+            matches!(outcome.verdict, Verdict::Loud | Verdict::Pass),
             "`{token}` failed without a diagnostic naming it (got {:?}): {}",
             outcome.verdict,
             outcome.detail

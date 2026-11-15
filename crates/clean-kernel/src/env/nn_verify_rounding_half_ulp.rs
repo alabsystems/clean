@@ -124,8 +124,16 @@ impl Environment {
         //               the load-bearing case); error = ulp/2 (the floor binds).
         //   tie       : q an exact midpoint; ties-to-even; error = ulp/2 (boundary).
         //   exact     : q already on the grid: error 0.
-        for case in HALF_ULP_DISCHARGE_CASES {
-            self.register_half_ulp_discharge_case(case)?;
+        // SOUNDNESS (2026-09-26): each discharge computes `Rat.roundToNearestEven`
+        // through its native reducer, and the constant is an OPAQUE placeholder
+        // (`register_round_to_nearest_even_opaque`) that no definition backs. A
+        // native fold now needs a canonical definition (`native_fold_authority.rs`,
+        // `docs/issues/2026-09-26-kernel-native-fold-by-name.md`), so the
+        // per-constant discharges register only where the round is justified.
+        if self.native_fold_authorized(&Name::from_string("Rat.roundToNearestEven")) {
+            for case in HALF_ULP_DISCHARGE_CASES {
+                self.register_half_ulp_discharge_case(case)?;
+            }
         }
 
         Ok(())

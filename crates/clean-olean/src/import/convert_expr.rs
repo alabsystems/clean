@@ -32,14 +32,21 @@ pub(crate) fn convert_binder_info(info: ParsedBinderInfo) -> BinderInfo {
     }
 }
 
+/// A stored level, node for node. `max`/`imax` are built verbatim, never through
+/// Clean's collapsing smart constructors: Lean's kernel reads the stored level as
+/// it is, and a collapse here decides level equalities pinned Lean refuses
+/// (DECISIONS R150, `clean_kernel` `level/lean_kernel.rs`).
 pub(crate) fn convert_level(name: &str, level: &ParsedLevel) -> Result<Level, ImportError> {
     match level {
         ParsedLevel::Zero => Ok(Level::zero()),
         ParsedLevel::Succ(l) => Ok(Level::succ(convert_level(name, l)?)),
-        ParsedLevel::Max(l, r) => Ok(Level::max(convert_level(name, l)?, convert_level(name, r)?)),
-        ParsedLevel::IMax(l, r) => Ok(Level::imax(
-            convert_level(name, l)?,
-            convert_level(name, r)?,
+        ParsedLevel::Max(l, r) => Ok(Level::Max(
+            convert_level(name, l)?.into(),
+            convert_level(name, r)?.into(),
+        )),
+        ParsedLevel::IMax(l, r) => Ok(Level::IMax(
+            convert_level(name, l)?.into(),
+            convert_level(name, r)?.into(),
         )),
         // Level parameters often reuse names like "u", "v" across many constants
         ParsedLevel::Param(n) => Ok(Level::param(Name::interned(n))),
@@ -72,10 +79,26 @@ enum ConvertWork<'a> {
     BuildPi(BinderInfo),
     /// Build Let from top 3 results, carrying binder name and nonDep flag
     BuildLet(Name, bool),
-    /// Build MData from top result
-    BuildMData,
+    /// Build MData (with Lean's payload) from top result
+    BuildMData(&'a MDataMap),
     /// Build Proj from top result
     BuildProj(Name, u32),
+}
+
+/// Pop one converted child off an iterative converter's results stack.
+///
+/// Every `Build*` work item is pushed BEFORE the work items that produce its
+/// children, so by the time it runs its children sit on top of `results`. An
+/// empty stack is therefore a converter bug; it is reported as a conversion
+/// error naming the constant instead of a panic.
+pub(super) fn pop_converted(
+    results: &mut SmallVec<[Arc<Expr>; 32]>,
+    name: &str,
+) -> Result<Arc<Expr>, ImportError> {
+    results.pop().ok_or_else(|| ImportError::ExprConversion {
+        name: name.to_string(),
+        message: "converter results stack underflow (stack balance invariant)".to_string(),
+    })
 }
 
 /// Look up or insert an expression in the intern cache.
@@ -209,8 +232,8 @@ pub(crate) fn convert_expr(
                     work.push(ConvertWork::Process(val));
                     work.push(ConvertWork::Process(ty));
                 }
-                ParsedExpr::MData(inner) => {
-                    work.push(ConvertWork::BuildMData);
+                ParsedExpr::MData(map, inner) => {
+                    work.push(ConvertWork::BuildMData(map));
                     work.push(ConvertWork::Process(inner));
                 }
                 ParsedExpr::Proj(struct_name, idx, inner) => {
@@ -228,37 +251,37 @@ pub(crate) fn convert_expr(
                 }
             },
             ConvertWork::BuildApp => {
-                let arg = results.pop().expect("stack balance invariant");
-                let func = results.pop().expect("stack balance invariant");
+                let arg = pop_converted(&mut results, name)?;
+                let func = pop_converted(&mut results, name)?;
                 let kind = ExprKind::App(func, arg);
                 results.push(do_intern!(intern, Expr::from_kind(kind)));
             }
             ConvertWork::BuildLam(info) => {
-                let body = results.pop().expect("stack balance invariant");
-                let ty = results.pop().expect("stack balance invariant");
+                let body = pop_converted(&mut results, name)?;
+                let ty = pop_converted(&mut results, name)?;
                 let kind = ExprKind::Lam(info.into(), ty, body);
                 results.push(do_intern!(intern, Expr::from_kind(kind)));
             }
             ConvertWork::BuildPi(info) => {
-                let body = results.pop().expect("stack balance invariant");
-                let ty = results.pop().expect("stack balance invariant");
+                let body = pop_converted(&mut results, name)?;
+                let ty = pop_converted(&mut results, name)?;
                 let kind = ExprKind::Pi(info.into(), ty, body);
                 results.push(do_intern!(intern, Expr::from_kind(kind)));
             }
             ConvertWork::BuildLet(let_name, nondep) => {
-                let body = results.pop().expect("stack balance invariant");
-                let val = results.pop().expect("stack balance invariant");
-                let ty = results.pop().expect("stack balance invariant");
+                let body = pop_converted(&mut results, name)?;
+                let val = pop_converted(&mut results, name)?;
+                let ty = pop_converted(&mut results, name)?;
                 let kind = ExprKind::Let(let_name, ty, val, body, nondep);
                 results.push(do_intern!(intern, Expr::from_kind(kind)));
             }
-            ConvertWork::BuildMData => {
-                let inner = results.pop().expect("stack balance invariant");
-                let kind = ExprKind::MData(MDataMap::new(), inner);
+            ConvertWork::BuildMData(map) => {
+                let inner = pop_converted(&mut results, name)?;
+                let kind = ExprKind::MData(map.clone(), inner);
                 results.push(do_intern!(intern, Expr::from_kind(kind)));
             }
             ConvertWork::BuildProj(struct_name, idx) => {
-                let inner = results.pop().expect("stack balance invariant");
+                let inner = pop_converted(&mut results, name)?;
                 let kind = ExprKind::Proj(struct_name, idx, inner);
                 results.push(do_intern!(intern, Expr::from_kind(kind)));
             }
@@ -272,7 +295,7 @@ pub(crate) fn convert_expr(
         cache_hits,
         unique_exprs,
     };
-    let result_arc = results.pop().expect("stack balance invariant");
+    let result_arc = pop_converted(&mut results, name)?;
     Ok((
         Arc::try_unwrap(result_arc).unwrap_or_else(|arc| (*arc).clone()),
         stats,

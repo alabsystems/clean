@@ -1,0 +1,1099 @@
+{
+  "repository": "https://github.com/ufmg-smite/carcara",
+  "revision": "d62d45cf972875b3c1463b287e9a86536b56551d",
+  "scope": "Complete carcara, carcara-macros and test-generator crates plus upstream license, README and formatter configuration. CLI and benchmark corpus are not included.",
+  "files": [
+    {
+      "path": "Cargo.lock",
+      "bytes": 19437,
+      "sha256": "04bf1ea5aa3f8dc94b7d5884ba7ea851bce7be266034696a8f547f41e338b3f8",
+      "local": {
+        "bytes": 12695,
+        "sha256": "e0a54974974c50b32a22defec29209af905a4c821615bc4b0cb738e41c67d318"
+      }
+    },
+    {
+      "path": "Cargo.toml",
+      "bytes": 225,
+      "sha256": "3f1e4987a1560ab2cda19dcbb391bb37ad6ac331022ec4b4b25a1fbb281feae6",
+      "local": {
+        "bytes": 98,
+        "sha256": "69293f4942f07f608a8127cbb1518e55d3ffa3390c213cd08c86cabd0061b647"
+      }
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 9723,
+      "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+    },
+    {
+      "path": "README.md",
+      "bytes": 1223,
+      "sha256": "c980f2d53f78511e320dee4efd58e8373203c18008e0905c7b937faaba7b2617"
+    },
+    {
+      "path": "carcara-macros/Cargo.toml",
+      "bytes": 185,
+      "sha256": "5780acbcfeb5cf8743eb5c36f886a9730cc78c2ca752569116b5c018917bd1f9"
+    },
+    {
+      "path": "carcara-macros/src/lib.rs",
+      "bytes": 25689,
+      "sha256": "9d75fafcdb24c1a47c581454263e1e77c11b29f3bbaa92e5e215b9dcc99c8aef"
+    },
+    {
+      "path": "carcara/Cargo.toml",
+      "bytes": 698,
+      "sha256": "7323d90abb1675a3195f88000cead7df8741b6a155e71a3bf05b25f43cb85254"
+    },
+    {
+      "path": "carcara/clippy.toml",
+      "bytes": 96,
+      "sha256": "575b98095af7c7ae375eca1a5dd1cf64e227c4a95edd54a8765c1b039dd5d376"
+    },
+    {
+      "path": "carcara/src/ast/context.rs",
+      "bytes": 10083,
+      "sha256": "0a5808899881aabb6e08a22c0b1ec22b6e4f42fcc329a15e359dfaf6248756f4",
+      "local": {
+        "bytes": 10490,
+        "sha256": "41b5d23374266c9d61e2ea5b684e7f316ee56db9b6b886e573fa5941a6d83a43"
+      }
+    },
+    {
+      "path": "carcara/src/ast/evaluate.rs",
+      "bytes": 23054,
+      "sha256": "4f324b4a90490b4ff846e2ec77f6b8d47f25007c9a44db62163c4fc289f73bbc",
+      "local": {
+        "bytes": 32518,
+        "sha256": "c9e83f5219446341a9012782a4280d48a7ff367643b91ba4de5696f6531eac1f"
+      }
+    },
+    {
+      "path": "carcara/src/ast/iter.rs",
+      "bytes": 3632,
+      "sha256": "0bd68a386acf8989d02325493c664185ac67ec576abded76e9eff09df95e84a8"
+    },
+    {
+      "path": "carcara/src/ast/macros.rs",
+      "bytes": 12208,
+      "sha256": "c5b1b78f97888c79cccd100f392715d6c2b92355d51ce741b4f6d65c5760263b"
+    },
+    {
+      "path": "carcara/src/ast/mod.rs",
+      "bytes": 1216,
+      "sha256": "bf5b217a9095f1b6b92bcf600af5967d4fb54bafbedcfcbfeabc3d80a18683e3"
+    },
+    {
+      "path": "carcara/src/ast/node.rs",
+      "bytes": 18013,
+      "sha256": "20b6b25fea05c96cbd0608115c59c7e5acb993d52be28ed6f1c469aeb255621f"
+    },
+    {
+      "path": "carcara/src/ast/polyeq.rs",
+      "bytes": 35688,
+      "sha256": "e850615e4fcbd84b90c953a12da932dda205bf8934e642c0b37b084de0ff01c4",
+      "local": {
+        "bytes": 62004,
+        "sha256": "f82ee178acfba303efcbcb3af9e7fcab97818221a94523cf42f64d3c145bc876"
+      }
+    },
+    {
+      "path": "carcara/src/ast/pool/advanced.rs",
+      "bytes": 4698,
+      "sha256": "b6f1e7326d38cc5189517ea69493de9bd16ecf5eb4e47450f0ae4b5cd2838205",
+      "local": {
+        "bytes": 5608,
+        "sha256": "49939c2d3cac8b650f34a07c4a4f3355b06f537a98458caf45597fdbb8d0b1a6"
+      }
+    },
+    {
+      "path": "carcara/src/ast/pool/mod.rs",
+      "bytes": 25530,
+      "sha256": "981cf6bc222c8d770141eb2f3d5d49c008871d8c55d7978f2d87ec80015c0ea6",
+      "local": {
+        "bytes": 31120,
+        "sha256": "a977b45b25ca52eda12eec1f6b9d56e9d621f51a16328ebb3d68fc9e5f6c5e30"
+      }
+    },
+    {
+      "path": "carcara/src/ast/pool/storage.rs",
+      "bytes": 2526,
+      "sha256": "c36839d037a4ccabdbca8fb4b8e4a8a5e280510fa76fb14e091c3d644a1fc262",
+      "local": {
+        "bytes": 2683,
+        "sha256": "8770e77aa2ed5cb153c4d9a22b28d86766f5e31fcc7f4a4547a2762ae3847f7c"
+      }
+    },
+    {
+      "path": "carcara/src/ast/printer.rs",
+      "bytes": 27977,
+      "sha256": "d8c9f9aacd59da826e4656a364039c5aa8149a103295c1244bcb84c95a1cf00f",
+      "local": {
+        "bytes": 47863,
+        "sha256": "4c33392a17de615d71edd8281466887a1e975c14ed28d4e29596e72e9da8b8e3"
+      }
+    },
+    {
+      "path": "carcara/src/ast/problem.rs",
+      "bytes": 1188,
+      "sha256": "ed8de58ced88e0290c1fa07582fc5bb85677a9257088464263faf5c6717f1af8",
+      "local": {
+        "bytes": 1560,
+        "sha256": "48905ef618eff8c74efb5c2980a3f910fcd515f225d80b5a4da21239b13c9ce9"
+      }
+    },
+    {
+      "path": "carcara/src/ast/proof.rs",
+      "bytes": 5157,
+      "sha256": "f412b1a6baaf4c5a262b00ba65df809137c63c8c7bcccbb86a7f22eea7ff7ab9"
+    },
+    {
+      "path": "carcara/src/ast/rare_rules.rs",
+      "bytes": 3818,
+      "sha256": "1431ccf867a599be3f2bd45de262c31f8fbc394c0a7cd43136b3fce758863855"
+    },
+    {
+      "path": "carcara/src/ast/rc.rs",
+      "bytes": 4787,
+      "sha256": "66bcf94a16f66f2c4e471fd52f3885ca4ba64d43af1ac6543a76651ac6bfa327",
+      "local": {
+        "bytes": 5036,
+        "sha256": "43079ca61aa49bcee46851833c45fc7b97bc1338855f39ba5bc4b63ef915d863"
+      }
+    },
+    {
+      "path": "carcara/src/ast/sort.rs",
+      "bytes": 8807,
+      "sha256": "cd3aa4cbf3f3557b515780197367d0663d7ed28e308e48c3a41aa77d2382ae8d",
+      "local": {
+        "bytes": 9439,
+        "sha256": "bc9325a8023f2fcb1077c20c6ec0480bceeca9ec7a1f7935db25318aff4fd32e"
+      }
+    },
+    {
+      "path": "carcara/src/ast/substitution.rs",
+      "bytes": 25067,
+      "sha256": "ab67bbe0233b42212575c49fee3f38f855f90119d576455604c8cff4c34d8d15",
+      "local": {
+        "bytes": 29630,
+        "sha256": "0968aeb5e792e829de9c7a2e4b55167767f83c4df98d6fe8aab36f6fb9483695"
+      }
+    },
+    {
+      "path": "carcara/src/ast/term.rs",
+      "bytes": 37897,
+      "sha256": "e5bbab2a68ea234cc446a2181f455cd027e24c513f0ef68f77ff91341f308219",
+      "local": {
+        "bytes": 43946,
+        "sha256": "cfc9ca026fbae6792fc7217a1bada3cdc05d8fead197521c31be77a0b65ddeb2"
+      }
+    },
+    {
+      "path": "carcara/src/ast/tests.rs",
+      "bytes": 5448,
+      "sha256": "f40b818aa00a384b63e3cc25f114612cdba949c43536ea3760a19e38e27997e1",
+      "local": {
+        "bytes": 49656,
+        "sha256": "290f9c3fde9caa1b826f9176bc1b8a03d035e35a2171154debacc76e4dde6aa5"
+      }
+    },
+    {
+      "path": "carcara/src/automata/dsu.rs",
+      "bytes": 2459,
+      "sha256": "db8f169bcf7466cdf363950ad3e7ee008b1385b9bbac39be9b3af93786746631"
+    },
+    {
+      "path": "carcara/src/automata/mod.rs",
+      "bytes": 48488,
+      "sha256": "d40598202399214b1a5d16868720e45ea59d383831d7214b1ad968ffeea6712d"
+    },
+    {
+      "path": "carcara/src/automata/operations.rs",
+      "bytes": 17556,
+      "sha256": "cb19901f91966a11b1e2cec85fa02073d6c430bc293176d87609d7da85380d8d"
+    },
+    {
+      "path": "carcara/src/automata/parser.rs",
+      "bytes": 5819,
+      "sha256": "ccaf8c50367883b74f0cb73196baf0fa21fc83675b9fb4d45a0bc4a7bfb4bf99"
+    },
+    {
+      "path": "carcara/src/automata/utils.rs",
+      "bytes": 8932,
+      "sha256": "7a60a7dc3a19202f0c62ba13bde4679f2eabe7b0614b1d09716571b97fec6a2f"
+    },
+    {
+      "path": "carcara/src/benchmarking/metrics.rs",
+      "bytes": 11606,
+      "sha256": "1a585cb6e7be05a3022aae113ac4e77c21001d56945dc6a8be1b39009db3b931"
+    },
+    {
+      "path": "carcara/src/benchmarking/mod.rs",
+      "bytes": 17224,
+      "sha256": "95f85be555e2f63a468b74c007d17e6568e9d9292d182d06d3bbdfa1ac8fd4aa"
+    },
+    {
+      "path": "carcara/src/benchmarking/tests.rs",
+      "bytes": 4889,
+      "sha256": "4b92164bd25ef64fd3bb422e28792c000cfb784eb95cf23796e04cef59c91f4a"
+    },
+    {
+      "path": "carcara/src/checker/error.rs",
+      "bytes": 16335,
+      "sha256": "e9da079ec46150cfc03e01af6b507668ef079789323b6ac726097eacb43e86a0",
+      "local": {
+        "bytes": 18278,
+        "sha256": "2620d105dd99425795857665bd7f48f79c3c4e79770c27342e07a1168d9147df"
+      }
+    },
+    {
+      "path": "carcara/src/checker/mod.rs",
+      "bytes": 11202,
+      "sha256": "e51af61338c91c9f90aa9ebc097f163d9572ed602a60f2a57aa390908d7f28f1",
+      "local": {
+        "bytes": 15817,
+        "sha256": "dbad4b32fc0504e4b713bffaadd189383a08c4e3184040886599db9d8fd57230"
+      }
+    },
+    {
+      "path": "carcara/src/checker/parallel/mod.rs",
+      "bytes": 15745,
+      "sha256": "852fbe0ae66aa0f3952946396813e956709d5f26f6bbc8e09bbcc30dfb7424ae",
+      "local": {
+        "bytes": 16347,
+        "sha256": "35f6004ed6185820381361808570c9a6754386591b5fef0a97de0856fe01992e"
+      }
+    },
+    {
+      "path": "carcara/src/checker/parallel/scheduler.rs",
+      "bytes": 14702,
+      "sha256": "158da3c35f7a87791c198eee077f55503e2ef9a8a7f433a81a179387b3fa6d09"
+    },
+    {
+      "path": "carcara/src/checker/rules/arrays.rs",
+      "bytes": 3160,
+      "sha256": "0b8f3e7fa34da6db099dab7d36895feef15179974a774733fdea649fbdb92b4a",
+      "local": {
+        "bytes": 4009,
+        "sha256": "1def37fe51b570b3ef363bbb1c172b2f87814794d442e63b1b36cc1ef62ab5b5"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/bitvectors.rs",
+      "bytes": 24646,
+      "sha256": "0455317e758e1dad2a0aea68a4c2714909416340a33648dbb2f9add08bb3e62b",
+      "local": {
+        "bytes": 37803,
+        "sha256": "1f5f64d6dcbd1103bc22f9427e45e9df6cdcd32a2a6be85f8fd134fd25de6531"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/clausification.rs",
+      "bytes": 14315,
+      "sha256": "93e6ab39e7d95f38108188e3452960196d1f1151dea47b0acd5279ec583909df",
+      "local": {
+        "bytes": 60842,
+        "sha256": "44c081d655f93af12b883e258401d4fc083828d5763b2552b949f00422712fa0"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/congruence.rs",
+      "bytes": 9745,
+      "sha256": "70cd8e8bf82df878155ed0df166d4d7d814191a3eb6e5d6f5338d6d4fa55a6da"
+    },
+    {
+      "path": "carcara/src/checker/rules/cutting_planes.rs",
+      "bytes": 25161,
+      "sha256": "91d9019a3d59d5f9e2bf7ac7607c33f68e065f021f8e23f2b9337e5062c54fe6",
+      "local": {
+        "bytes": 29506,
+        "sha256": "3f8d18318263bdbef0cba2e3a647638d473a67ee44e766bd542cef51f7d1c419"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/drup.rs",
+      "bytes": 622,
+      "sha256": "de9535d2a9c22abe9867d625057509ca2c784febb115c9bfe9a39552006dcfa0"
+    },
+    {
+      "path": "carcara/src/checker/rules/extras.rs",
+      "bytes": 15914,
+      "sha256": "9a6b2b1b6ed5d16c8b60bebdf89b2d037fd9a62cf10d04525823620c196f12a2",
+      "local": {
+        "bytes": 21038,
+        "sha256": "156d2c0adbbb8943673090c98575f3364eebd34b8b77470ce0cd7482926173c4"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/linear_arithmetic.rs",
+      "bytes": 17319,
+      "sha256": "f924fe3b2663d92db60211a42d4c451e2c03db89e2a6db9a756cb4a52c5da21a",
+      "local": {
+        "bytes": 18363,
+        "sha256": "82c7f903e0272c937400ac638f680165da7d9df0a0ea0811648039294de3057d"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/mod.rs",
+      "bytes": 5255,
+      "sha256": "2b996907069dbd142e5e572642a0561f119d867acc2d1c2fd3b72a285146cc29",
+      "local": {
+        "bytes": 6627,
+        "sha256": "f947806b0dd024e88b9602fd70f3941a06e0e823e6c10f642f64128ad30038ef"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/pb_blasting.rs",
+      "bytes": 22831,
+      "sha256": "fb1c1463ba2d69332748b54842c0ee4dda384f2dcd0ea0102f80722dc73f3a5b",
+      "local": {
+        "bytes": 28163,
+        "sha256": "c416121d418a4de6c77db24d099c87a27726e7c39070404153717e0ac05ac4f9"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/polynomial.rs",
+      "bytes": 8423,
+      "sha256": "c252fa08491be8cdc5e86f528ca9d6974f7bf5b3236f739cba84f52523108f2c",
+      "local": {
+        "bytes": 13943,
+        "sha256": "f8a92f6a240c46735954ea2c6b4daf92b62571facb64da182073178f0a565ae9"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/quantifier.rs",
+      "bytes": 20513,
+      "sha256": "1fe5c1fb405f95ff1aa2d469003146aab52f7319fcf5602538795b1807299bea",
+      "local": {
+        "bytes": 30472,
+        "sha256": "9d4b7e0c109d58a394d63776c450b18d06a8eb1dc14d775083e68b45499aafe9"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/rare.rs",
+      "bytes": 3125,
+      "sha256": "2cae86ac4270ccf58e9860b2993f3f742370efe87920fd486e725b8f3056cbb1"
+    },
+    {
+      "path": "carcara/src/checker/rules/reflexivity.rs",
+      "bytes": 2376,
+      "sha256": "603e7da270ecad729dea694b3e7f18833b98156f0c24044c6f30d573febfdb72"
+    },
+    {
+      "path": "carcara/src/checker/rules/resolution.rs",
+      "bytes": 9659,
+      "sha256": "caf0244b0634e5bb4f044529eebb21c8d5068a5ce7e338dcba0d7bee2832b25d",
+      "local": {
+        "bytes": 14521,
+        "sha256": "116f20510e97f1ef7ac13ba0cbaf937bac248c3a56842a556705af24f9d2d579"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/simplification.rs",
+      "bytes": 33158,
+      "sha256": "abbc6be4008f9385cb2a3a00318ca0f6aaa0dbf3f074abef2028832136b07e72",
+      "local": {
+        "bytes": 39003,
+        "sha256": "07750d3edfe9e7b19098d298bad82341c9541c139bbd0fdcfca28c573780ee30"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/strings.rs",
+      "bytes": 52730,
+      "sha256": "fd71c8dced3043da19f5eab8b7ad4cbeac1f6767ea586c42810cbe5458783fab",
+      "local": {
+        "bytes": 105231,
+        "sha256": "ab4a30cea50357b5656d3d76430124cc0a6917a0e74c6e84fb651f0f40f2f11f"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/subproof.rs",
+      "bytes": 15509,
+      "sha256": "de4b7a95392f449dcf4c64e85e7138d26435e782c0dc3564c2b9a898371fe4f0",
+      "local": {
+        "bytes": 24068,
+        "sha256": "1bb648e2411a32aba2e5ad9e2aa7be8bb1c290dbd37274793f513c22dd57418c"
+      }
+    },
+    {
+      "path": "carcara/src/checker/rules/tautology.rs",
+      "bytes": 14670,
+      "sha256": "e60a10c94be30fd6beeb2c9975f3943b0cfefbc19f5b564e54778c2d7a043be0"
+    },
+    {
+      "path": "carcara/src/checker/rules/transitivity.rs",
+      "bytes": 2756,
+      "sha256": "956419cbac3e469723ba034fb0383603b890c038c6765438049795f2a5f9a839"
+    },
+    {
+      "path": "carcara/src/checker/sat_refutation.rs",
+      "bytes": 19650,
+      "sha256": "13ee6112aa539a6c29b86417d33135df17d75959767d83aa3c57aa864d8d69b8"
+    },
+    {
+      "path": "carcara/src/checker/shared.rs",
+      "bytes": 16614,
+      "sha256": "872a427f2927f573b4bd8d160f357bfe1e0e9a61a7c8429d714058a7671473eb",
+      "local": {
+        "bytes": 19860,
+        "sha256": "98b46b6375e313079abfe553d681fcc1adcf258826b4cdf079aa65095582a5dc"
+      }
+    },
+    {
+      "path": "carcara/src/drup.rs",
+      "bytes": 11608,
+      "sha256": "7d425e819d2e20db2a57511889d9dd18c482b620a0b8141a3f167ab73701e1f5",
+      "local": {
+        "bytes": 53847,
+        "sha256": "510f3552227fe82c1a2a3b6084911ccb5bcb41a86d487c2acce67f79a2613f2f"
+      }
+    },
+    {
+      "path": "carcara/src/elaborator/error.rs",
+      "bytes": 1008,
+      "sha256": "4b24cdaed757c2d45978d259dd3d18f17b6eeaaaa0ac75aa450a7c4246426515"
+    },
+    {
+      "path": "carcara/src/elaborator/hole.rs",
+      "bytes": 1863,
+      "sha256": "d544ec4948afbbc91dea543c68b3d6c089d435a36d8a0e98d03cdac8f2345e7c"
+    },
+    {
+      "path": "carcara/src/elaborator/local/congruence.rs",
+      "bytes": 16632,
+      "sha256": "58860cc859fdd5091e7febc8380832fb0f2bf974c8b4eb4cb389b4693e9321f0"
+    },
+    {
+      "path": "carcara/src/elaborator/local/eq_mp.rs",
+      "bytes": 2645,
+      "sha256": "397413d214367e3f3071ef140bbafc59ec0578d234e80d2b315affd0d6a4d0d1"
+    },
+    {
+      "path": "carcara/src/elaborator/local/farkas.rs",
+      "bytes": 783,
+      "sha256": "9ad6c9307196ac88d7d5a98eea5803b49fd74d2cd48e77f2c1c4447319a533c4",
+      "local": {
+        "bytes": 873,
+        "sha256": "ed80527536de808ec884225e60047857f5fd1bb503c51a04a6eb24635430131b"
+      }
+    },
+    {
+      "path": "carcara/src/elaborator/local/mod.rs",
+      "bytes": 93,
+      "sha256": "02498e7fbc4780d17dd5d543d97fabb4aa1709ff9747764f5428c8cda279dd1e"
+    },
+    {
+      "path": "carcara/src/elaborator/local/resolution.rs",
+      "bytes": 6362,
+      "sha256": "ecd4992f5973a12b05de8785b5c3ef266ab8b150ea874d96df3073fa1d19aece"
+    },
+    {
+      "path": "carcara/src/elaborator/local/transitivity.rs",
+      "bytes": 8843,
+      "sha256": "e02f12e90e7a5ded4a826c7d7b11a368f51551c14742866c49dc1787829ed37e"
+    },
+    {
+      "path": "carcara/src/elaborator/mod.rs",
+      "bytes": 16444,
+      "sha256": "6ed5be18427e0949f3ef498b456bf190b5ddf8e60e88aa3d4fa3f2e9e401fc00"
+    },
+    {
+      "path": "carcara/src/elaborator/polyeq/clausification.rs",
+      "bytes": 1926,
+      "sha256": "f80c45c15bf3f6a3d989f965bacea99b294ec5d5d3d0137f345722b5836d22c7",
+      "local": {
+        "bytes": 2021,
+        "sha256": "2889f20a767698ad4b6ac8022fff82254af2dcce4234b16b85a8a0a9dcfba8d0"
+      }
+    },
+    {
+      "path": "carcara/src/elaborator/polyeq/mod.rs",
+      "bytes": 19070,
+      "sha256": "d0e032516de5606afa7356b48bd8d78eb6dacb1518696a174f9c83066277ec08"
+    },
+    {
+      "path": "carcara/src/elaborator/polyeq/quantifiers.rs",
+      "bytes": 4243,
+      "sha256": "58ddef20d9e2755a174d2c7ddaca86362939429aca5ae45bb43708f2b7c24750"
+    },
+    {
+      "path": "carcara/src/elaborator/polyeq/reflexivity.rs",
+      "bytes": 4602,
+      "sha256": "64177ba244d512274c0af800915263c4c39a487bf6fa757a69f09b15f6e245e3"
+    },
+    {
+      "path": "carcara/src/elaborator/polyeq/subproof.rs",
+      "bytes": 1579,
+      "sha256": "568a7620de99e4c90650357803a2e08b0b93c3bb81f8b239f82534292cfc1ff4"
+    },
+    {
+      "path": "carcara/src/elaborator/polyeq/tautology.rs",
+      "bytes": 2702,
+      "sha256": "c88ee9231e8e877908daa43997c2bd55148149b1ebe22f18879e18c7becea962"
+    },
+    {
+      "path": "carcara/src/elaborator/reordering.rs",
+      "bytes": 3747,
+      "sha256": "0ee4d439558dc3b26a6bfa04055ed395917eaea5bf3435ba2aad75d086f2ee02"
+    },
+    {
+      "path": "carcara/src/elaborator/sat_refutation.rs",
+      "bytes": 12746,
+      "sha256": "a81d7420ee88d18959c883ef3682b2c3c9fdce8e01dc1c16367245d212f75c45"
+    },
+    {
+      "path": "carcara/src/elaborator/uncrowding.rs",
+      "bytes": 16331,
+      "sha256": "4f30c5b9fc677c8c3fa4f9df9d04d728ea909957fc84d7083091b8d060fd860f"
+    },
+    {
+      "path": "carcara/src/external.rs",
+      "bytes": 21156,
+      "sha256": "1f0cbfecc3016d597e17a18c23480ddca9dbe0399b8bd4c17c3fa1aef7ec19df"
+    },
+    {
+      "path": "carcara/src/lib.rs",
+      "bytes": 11815,
+      "sha256": "3dba3795bcb7256983ac622e68d6d73af5be3e1fe6c3ed68bdafb94699a4384e"
+    },
+    {
+      "path": "carcara/src/parser/datatypes.rs",
+      "bytes": 14344,
+      "sha256": "e47b20b567f70cb052f75315d13a4bf05b8595affc682462c4ccc06193ea0c46",
+      "local": {
+        "bytes": 17493,
+        "sha256": "bbe8ba8a8035a47072953a43706dd68371bc303eb704ff157e0ebad348fdf856"
+      }
+    },
+    {
+      "path": "carcara/src/parser/error.rs",
+      "bytes": 9653,
+      "sha256": "da4c137a1ffb8c3b381b0695289c872322df18ae2f6e13d490af6898e0a566ea",
+      "local": {
+        "bytes": 16548,
+        "sha256": "dc3cdce93925b4588e5ffb3f36d17475742a96fdee01328c33847c86df8129ef"
+      }
+    },
+    {
+      "path": "carcara/src/parser/lexer.rs",
+      "bytes": 23931,
+      "sha256": "84e9cb021c6ebd009ec67404b92407cbbc8223b2e28de42e687e9a8827753e17",
+      "local": {
+        "bytes": 30255,
+        "sha256": "714898eb0fa7b70b17b6ab15aa6a8ff480f5dd623e4c5a3ce64723cab2009f4a"
+      }
+    },
+    {
+      "path": "carcara/src/parser/mod.rs",
+      "bytes": 96947,
+      "sha256": "636746bbc66c4a3ee6d4fca43c8524d1ca608ef6706b958ffcb130a2be76e366",
+      "local": {
+        "bytes": 164917,
+        "sha256": "be9b6216e15cdfd65c5709968729499efcae3ae8d6b9585f58c580220f79d499"
+      }
+    },
+    {
+      "path": "carcara/src/parser/rare/mod.rs",
+      "bytes": 4113,
+      "sha256": "00b36d8656fad9ab337396cd83af5275c3d401ed1ed00989e4debf4e43a399f3"
+    },
+    {
+      "path": "carcara/src/parser/tests.rs",
+      "bytes": 26381,
+      "sha256": "9bd470d300cab361e85ccf8e0a376695f093ac46ce5314200c24954826443e1d",
+      "local": {
+        "bytes": 43303,
+        "sha256": "fba9f4d76bbaea63cfce3d44ff643fa0aafeb54c65c6d86aeaeecbfc0a6a0e57"
+      }
+    },
+    {
+      "path": "carcara/src/rare/mod.rs",
+      "bytes": 20887,
+      "sha256": "363f1ed41aba590dcfbe7ece26aa03501a80fce2fac8b6d95fe2d0437fa3a1f0",
+      "local": {
+        "bytes": 21262,
+        "sha256": "39f37348593a4d12f3f3d173fa3eed163d2d99f00857d4fb027d9d028e951a98"
+      }
+    },
+    {
+      "path": "carcara/src/resolution.rs",
+      "bytes": 9974,
+      "sha256": "fb494bf747ed42cefee3c4771359265594ec2f25d37627110b822280b00147d7",
+      "local": {
+        "bytes": 10153,
+        "sha256": "72e14840e6375835236b50529cf78f0a696fea1c4d7d380410ac96ef6d7cfecc"
+      }
+    },
+    {
+      "path": "carcara/src/slice.rs",
+      "bytes": 21006,
+      "sha256": "f86f97dd582bbf6cdfd0a095987fe52717584eed0cd07556d2ee2f49d3ff75b5"
+    },
+    {
+      "path": "carcara/src/translation/eunoia/alethe_2_eunoia.rs",
+      "bytes": 38233,
+      "sha256": "6c025a126b1cf5f104ecbf7d41fe54b0dd0497571c1f0d24a31ef665e48af8ab",
+      "local": {
+        "bytes": 38389,
+        "sha256": "ee98d20d1db3eeae388f283726d03d8d0943f60b31753403eae8ee9b24c447b2"
+      }
+    },
+    {
+      "path": "carcara/src/translation/eunoia/alethe_signature/mod.rs",
+      "bytes": 16,
+      "sha256": "f8241847a43950933d9852072b6fd0647418d38c07806e4bb744b65c4538cf88"
+    },
+    {
+      "path": "carcara/src/translation/eunoia/alethe_signature/theory.rs",
+      "bytes": 7519,
+      "sha256": "4e14f8b84e5ed01948af7940086e832d49ffda92df4ce5f2fba97fc169d6fd5d"
+    },
+    {
+      "path": "carcara/src/translation/eunoia/ast.rs",
+      "bytes": 9215,
+      "sha256": "e78900dbf0a2dec845c2309f6c52c20d839c8cc6f53395d3224d8b74a6de1893"
+    },
+    {
+      "path": "carcara/src/translation/eunoia/mod.rs",
+      "bytes": 81,
+      "sha256": "0362a2c66834f0a2041813a4264af5739dd8b9d2b41ca817987d7617e78d5834"
+    },
+    {
+      "path": "carcara/src/translation/eunoia/printer.rs",
+      "bytes": 15910,
+      "sha256": "4175ab6c2495390142e36f6f88e302761d57ce1c9f08bf2556d2ee4a702406d2"
+    },
+    {
+      "path": "carcara/src/translation/mod.rs",
+      "bytes": 18736,
+      "sha256": "4b4af00ae04f955cf58aa147c078710a1325426fdff7d5a197ece1aea1a6009a"
+    },
+    {
+      "path": "carcara/src/utils.rs",
+      "bytes": 9420,
+      "sha256": "da11a2387bdf480ea3fbaad909ad5ed3acf2ca6b573946186cbc94c958bd2d29",
+      "local": {
+        "bytes": 17187,
+        "sha256": "cf84ea2c79deb3a4cde40b48ec9519c89f9fb63b8e0bde03d321bcc2bd0431d6"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/arrays.rs",
+      "bytes": 4795,
+      "sha256": "759bea29ed13a8f21e908f28bd523c5d30464902840e73c0e888de8b517fae98",
+      "local": {
+        "bytes": 5862,
+        "sha256": "0d746861f33910c05e8500fa6808b0bd56d77647058c521f0372fb2021d6c0d1"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/bitvectors.rs",
+      "bytes": 9402,
+      "sha256": "669a10580ae3a139fe5614452c46e562fb342a394e11caf4f8fcd16a7ee446c6",
+      "local": {
+        "bytes": 21208,
+        "sha256": "be56b6d586e16a731969ffb8af1a92541ee1f12c6e265143e5efe6bc93bca5a6"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/clausification.rs",
+      "bytes": 18326,
+      "sha256": "c8fd7ff7b31d12a5706229f9b2ea94cb2b8c7f7659ba15ca2c03b0b79742bd48"
+    },
+    {
+      "path": "carcara/tests/rules/congruence.rs",
+      "bytes": 9716,
+      "sha256": "db832ffffe08502ff60cb956bbbaebc36c6f576ca3c39615ebeb3e9874e804bf"
+    },
+    {
+      "path": "carcara/tests/rules/cutting_planes.rs",
+      "bytes": 22516,
+      "sha256": "74c559350b491252b91987fa9869626506b1c3ad33e2ec19dc532e60b6710c1e",
+      "local": {
+        "bytes": 26439,
+        "sha256": "c8c2a50302a908846385b3670e79a7bf2708717cfec1be9694411c735ab9ba22"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/drup.rs",
+      "bytes": 3511,
+      "sha256": "b2ab9aeb3a25bc3766ea37985a8ff59c9b97075035870ca56590b76824c78d79",
+      "local": {
+        "bytes": 5089,
+        "sha256": "ddd873357742d45e4cc99624cde219cb098df5fba6d7527cbec3d1df60c8b81b"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/extras.rs",
+      "bytes": 19766,
+      "sha256": "d3b2c37abd9b8def38cc488d51d5e98148098913194ef0fd77d843513998f92f",
+      "local": {
+        "bytes": 30816,
+        "sha256": "ae9444ab7aaf3baa17ca5a9d7640e2ecfdf883e3b385bea7f3f7799f2c22cac7"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/linear_arithmetic.rs",
+      "bytes": 5636,
+      "sha256": "0cdc90e33535b92c0b8b157640dddc7bd2555194f61a30791eb9ca85e7c9e27d",
+      "local": {
+        "bytes": 7608,
+        "sha256": "328a055a42d414eeaf23f65af0fe10c4749fa59a67c6c93864a329d3385f18ab"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/mod.rs",
+      "bytes": 3501,
+      "sha256": "0c72b2c45e0dd1bbcf2493639224ecaed1de9c40c212c098b33ef2b8ba184871",
+      "local": {
+        "bytes": 3633,
+        "sha256": "cbd75f3c5e7c3ae02e8e6f998dc7e73938877d1643f0560557c16972304032da"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/pb_blasting.rs",
+      "bytes": 186065,
+      "sha256": "f1be3148d9f925db976ecc0cadb8592b552858471d0229cebf885b66603cc78f",
+      "local": {
+        "bytes": 188938,
+        "sha256": "a21dc6d2bbda4b09956b4f1a51d0102d15ed394c44fd0a1249c3025c9bc33707"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/polynomial.rs",
+      "bytes": 1262,
+      "sha256": "b708864baf12658a556f535a67de2c8470fcd544f56874aa0b4bb828986ebe9b"
+    },
+    {
+      "path": "carcara/tests/rules/quantifier.rs",
+      "bytes": 14382,
+      "sha256": "1b9807a2fa97156996f0af33c70218757567eca988bb521f1f5d23f95158a62a",
+      "local": {
+        "bytes": 17378,
+        "sha256": "fd01546d3d531c9836ee0f339fba10c67ea1829f3fc2b8fea79a03b0624bfd14"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/rare.rs",
+      "bytes": 11104,
+      "sha256": "34afd5d390dcab3ea0c18da6175b6c02f7a7212eee588bddac38ccce569bbef1"
+    },
+    {
+      "path": "carcara/tests/rules/reflexivity.rs",
+      "bytes": 4972,
+      "sha256": "ecf64215b06e0390e7cfee96cd9fa2c1c8f5817379add53b8fd6f7a024b64840",
+      "local": {
+        "bytes": 10915,
+        "sha256": "3d9e2fa591072e63948fa215a2421653c646b833fb92d8873554b38f2c1acce2"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/resolution.rs",
+      "bytes": 13301,
+      "sha256": "95182deb34fef87fb62c451acc048a71d6fcc49c1dae35fc873d6b0a3ddf3578",
+      "local": {
+        "bytes": 14838,
+        "sha256": "125e53d078e2363fd1d535faaef51938175083f37593693b690ab1d3acd5626c"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/simplification.rs",
+      "bytes": 36390,
+      "sha256": "eeded298468462915647f478a6b162f49c7103f2817b411d25c3faeb1565c822",
+      "local": {
+        "bytes": 41005,
+        "sha256": "75df6c19e306aeaf7e055c7851c763bdc285eed1fc8f043d706314bafbf14ed5"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/strings.rs",
+      "bytes": 143656,
+      "sha256": "4a92b34faf49cf729e640359c565acec1a6efe6d0c99d4a7a5f5f1b0be3c0315",
+      "local": {
+        "bytes": 154612,
+        "sha256": "090ed2c911b977100b37ea7548729aabf46f855dc4fa184b1b05c892857f37ff"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/subproof.rs",
+      "bytes": 15960,
+      "sha256": "023cb9e032d5ddcf172bf912ba8bdce988a12db1031d9143f63077c05c4e9f00",
+      "local": {
+        "bytes": 30212,
+        "sha256": "f1c0a03244d03f271a4662dfbdff6b54b234dbb7bf0dac3fcfe2c6852d1a82b0"
+      }
+    },
+    {
+      "path": "carcara/tests/rules/tautology.rs",
+      "bytes": 30604,
+      "sha256": "08429fed5f2fae04969d2bc3a97b50b58b08263d9516a5c4bb25b86e3e45b7b1"
+    },
+    {
+      "path": "carcara/tests/rules/transitivity.rs",
+      "bytes": 3880,
+      "sha256": "861b8cd58648e98823ed30f5d4ae1d8358efcd7b36745f3f0e21ebfa4a4539ed"
+    },
+    {
+      "path": "carcara/tests/test_example_files.rs",
+      "bytes": 4473,
+      "sha256": "11be23b872b6ff4f3a746bb6a6d0617f62eaf926e52dcadf0fe817d012e6387f"
+    },
+    {
+      "path": "carcara/tests/test_proof.rs",
+      "bytes": 903,
+      "sha256": "2693f7ca8434c03ba10430a8d2312854e902279f7b6c298c3f11e9bd06f1cb83",
+      "local": {
+        "bytes": 3940,
+        "sha256": "68daa185977cb687f164f810c6ea51f9da0c7ae1e0d6e05a17fef9dbe059dfa1"
+      }
+    },
+    {
+      "path": "carcara/tests/test_rules.rs",
+      "bytes": 11,
+      "sha256": "128a190b4ee72361428b2d2382e3a68e129c878372ec586e9c66d44a58a7b39b"
+    },
+    {
+      "path": "rustfmt.toml",
+      "bytes": 22,
+      "sha256": "1467a311e499b25e553f136c0363224438eefe3689ed2643c1521faefc134cfb"
+    },
+    {
+      "path": "test-generator/Cargo.toml",
+      "bytes": 254,
+      "sha256": "0cd0c4f3f4910d7ce636e82c8898e1bed50bf844e981b34ea7d96074903fe71b"
+    },
+    {
+      "path": "test-generator/src/lib.rs",
+      "bytes": 2812,
+      "sha256": "5066006e6b0dc0cfa0b9ec83c663fd845e032c5c2ca1f8986e0180977c946756"
+    }
+  ],
+  "local_files": [
+    {
+      "path": "carcara/src/ast/polyeq_oracle.rs",
+      "bytes": 39068,
+      "sha256": "d3077bf3187cc5d4dbd8b93960d30590e2bb13c51bb8339ad6f6cca26304af3c"
+    },
+    {
+      "path": "carcara/src/ast/pool/free_vars.rs",
+      "bytes": 78028,
+      "sha256": "46d32f170e586bb1a51c9f8dca5e25c3249041448f3ab64a634d0aa5bc4a8da6"
+    },
+    {
+      "path": "carcara/src/checker/budget.rs",
+      "bytes": 14477,
+      "sha256": "1bdb131fad54414d43837add7f132cb716005046b28d3aae744f9529a4aef832"
+    },
+    {
+      "path": "carcara/src/checker/deadline.rs",
+      "bytes": 4851,
+      "sha256": "0222cdcd4aae90a8ff48e81fa6c9842efe5dcd1634317622506f7120be1646f9"
+    },
+    {
+      "path": "carcara/src/checker/rules/datatypes.rs",
+      "bytes": 7949,
+      "sha256": "40819323353ac72d0bda6d07067ee823a687e51dba5d7e803d67478e8c9145bb"
+    },
+    {
+      "path": "carcara/src/checker/scoping.rs",
+      "bytes": 7821,
+      "sha256": "c9d0c50066902c7349e8c5e1d00226d5eb1afb6dccf12ef6cc15ccff74908ab6"
+    },
+    {
+      "path": "carcara/tests/free_variables.rs",
+      "bytes": 15820,
+      "sha256": "50484d9037598e17ba58d01058be7d37ee0209978615c4d4180ec825b2ef859c"
+    },
+    {
+      "path": "carcara/tests/malformed_steps.rs",
+      "bytes": 25761,
+      "sha256": "b9d7481ac9600e5ca563162da8ceaab66b4bfea208b10d5ef320dc0e82a2926b"
+    },
+    {
+      "path": "carcara/tests/problem_reading.rs",
+      "bytes": 65359,
+      "sha256": "61003472537d52917777b75eb41c08eeab69c18b8b64c1e744e0ebb330fb0c6c"
+    },
+    {
+      "path": "carcara/tests/resource_budget.rs",
+      "bytes": 53255,
+      "sha256": "296e8ebe2331f09031df74a44a33a1f716ca0c142aefcc7c55e0403f104beb8a"
+    },
+    {
+      "path": "carcara/tests/rules/datatypes.rs",
+      "bytes": 30077,
+      "sha256": "5d312a5d8a07cb2dc52ccc350974af2921c4e483bb40920110517f18728c498e"
+    },
+    {
+      "path": "soundness/Cargo.toml",
+      "bytes": 495,
+      "sha256": "5339d178679c3d9609775c1e711ebf90d5da4700e1fa8e9f6701fed06b334df2"
+    },
+    {
+      "path": "soundness/src/datatypes.rs",
+      "bytes": 8682,
+      "sha256": "49c385794c9d24242a0bea4989ed9d198bb0a183f1da446857df65a8e80cee86"
+    },
+    {
+      "path": "soundness/src/eval.rs",
+      "bytes": 61308,
+      "sha256": "9083b559d6e6c49a5f40538ffbccd459778247b70efb2f45facb96a57e86ce6f"
+    },
+    {
+      "path": "soundness/src/gen.rs",
+      "bytes": 80133,
+      "sha256": "26002ab9226b5b6bb5fbeaf28e5c0defa7365a893af3c4626fe6fc2522beca96"
+    },
+    {
+      "path": "soundness/src/lib.rs",
+      "bytes": 922,
+      "sha256": "188d4f13f8a217212cde3d2d628135ac19507a6e43b0fa1cf4761c41fc6222cc"
+    },
+    {
+      "path": "soundness/src/literals.rs",
+      "bytes": 4497,
+      "sha256": "d67711b3876db396bbce410d9086fc32b57c8777faab7c5a1334cd6662bda33d"
+    },
+    {
+      "path": "soundness/src/main.rs",
+      "bytes": 4131,
+      "sha256": "005004fa696c5aa4db2bb9d5b093b1b37b9a2b19ff4007c51afb5da2141d82bf"
+    },
+    {
+      "path": "soundness/src/model.rs",
+      "bytes": 18325,
+      "sha256": "4097cc1ab4d0fa8fa98d5ba44b7d819564eaa078d042f3fde3cdbbef49e9e90d"
+    },
+    {
+      "path": "soundness/src/mutate.rs",
+      "bytes": 25898,
+      "sha256": "4ada482a4d5cd5d31f0e8e824aab53d97497d10d12ba27c9d1fb288e8b76242c"
+    },
+    {
+      "path": "soundness/src/oracle.rs",
+      "bytes": 27793,
+      "sha256": "c12d393eca6d33c5ef5884f8bd30518bc328907f0381c856fe869bb46b7c2a7f"
+    },
+    {
+      "path": "soundness/src/regex.rs",
+      "bytes": 5525,
+      "sha256": "1592b7ff0182026f6801203bc215adcf6a1a0e9e9551e1d337d5695c5a666d65"
+    },
+    {
+      "path": "soundness/src/run.rs",
+      "bytes": 11570,
+      "sha256": "850ec4eb1c5d0550d4864526076823f2542b68257925b3335619859e8c5e1f7a"
+    },
+    {
+      "path": "soundness/src/seeds.rs",
+      "bytes": 6856,
+      "sha256": "dab9370fa9fd4e6669d9b95bdc0437f40cd0c2250c0e9da457819800ddca72bd"
+    },
+    {
+      "path": "soundness/src/sexp.rs",
+      "bytes": 3502,
+      "sha256": "b4d4592a06e4dcc0192b98d95b500354a362ab002615685caffe76573b28c5d6"
+    },
+    {
+      "path": "soundness/src/sort.rs",
+      "bytes": 2444,
+      "sha256": "d79b639a5ee5ac6357cc4ad8a3c48755b317813700d0476fc3f5bd07b1237ae3"
+    },
+    {
+      "path": "soundness/src/value.rs",
+      "bytes": 9977,
+      "sha256": "8feb33e6aabbe3e0bcf46bbffe399b988c462d7dd7dd8ffa58dac3cf8edbeed0"
+    },
+    {
+      "path": "soundness/src/worker.rs",
+      "bytes": 6984,
+      "sha256": "90cfd30b8860bcb933b4083fa04b20223c52b8eccd2070ed7e9535fcb7fef165"
+    },
+    {
+      "path": "soundness/src/zero_extend.rs",
+      "bytes": 6540,
+      "sha256": "a947183134e52f4b6e74c6b672e63123e09eb934a6f11b20c067f9a3fc3d1659"
+    },
+    {
+      "path": "soundness/tests/battery.rs",
+      "bytes": 2108,
+      "sha256": "d0455006a2d44460f6a181875c383d4157d883df49102f025d3ea4d8cd255493"
+    },
+    {
+      "path": "carcara/src/checker/rules/simplification/bv_eq.rs",
+      "bytes": 5591,
+      "sha256": "a645dbd69338c342a7ef5318fc7f52a64e12d6f6f18cba223b1dc06ef4e8816b"
+    },
+    {
+      "path": "carcara/src/checker/rules/simplification/bv_eq/tests.rs",
+      "bytes": 4819,
+      "sha256": "8589b1a4d69b2ec1b21a4c8374d8070f1a1c31fadedcecf5bc63be2e38a61abf"
+    },
+    {
+      "path": "carcara/tests/bv_offset_dialect.rs",
+      "bytes": 8724,
+      "sha256": "a70b2b7e35d4b7ea2b319e1f961c5264da5b3ce0640a62f35a0047b29dc41cc0"
+    },
+    {
+      "path": "carcara/src/checker/rules/bv_offset_spines.rs",
+      "bytes": 9068,
+      "sha256": "99c10b7937487c9c3254e60de09b7f2a509346d86c1cd6a044f224eca720dcb4"
+    },
+    {
+      "path": "carcara/src/checker/rules/bv_offset_spines/tests.rs",
+      "bytes": 9458,
+      "sha256": "acd6c904491f8563ee9b73e823aed0f20f5d625b84573f1e58ddd6d10b59c834"
+    },
+    {
+      "path": "carcara/tests/bv_offset_spines.rs",
+      "bytes": 10787,
+      "sha256": "249e37811d38d20302468e0744fba79ee8e9f59b3c155ce30dca177c1e383926"
+    },
+    {
+      "path": "carcara/src/checker/rules/bv_reconstruct.rs",
+      "bytes": 13442,
+      "sha256": "046002a460f61e1d873ddb8a47aaf868bb1201592c47c0945f841a4bc0e7432a"
+    },
+    {
+      "path": "carcara/src/checker/rules/bv_reconstruct/tests.rs",
+      "bytes": 3449,
+      "sha256": "b1808fe07bc02db4008f58a40dac23836644a40b337b54b522187fec3aeb4dd2"
+    },
+    {
+      "path": "carcara/tests/bv_reconstruct.rs",
+      "bytes": 5802,
+      "sha256": "c9a77aaf98c9e42871928f829a2d20b9cbb637b425e461c4aedfbc9b0c76781a"
+    },
+    {
+      "path": "carcara/examples/array_const_select_fresh_exports.rs",
+      "bytes": 3177,
+      "sha256": "b5d25ac3054bdab995905f3aa697efa2d4b497453ba80b358f0e39d414478880"
+    },
+    {
+      "path": "carcara/src/checker/rules/array_const_select.rs",
+      "bytes": 3962,
+      "sha256": "3362924d2813a691e35adb3051b70b30aa1f16ca992d9638f4d75a32ddbe143a"
+    },
+    {
+      "path": "carcara/src/checker/rules/array_const_select/tests.rs",
+      "bytes": 3497,
+      "sha256": "26a213e2235e529585c97b1256088f3da9bc76f260fa46ce3e56a974535541c5"
+    },
+    {
+      "path": "carcara/tests/array_const_select.rs",
+      "bytes": 6197,
+      "sha256": "37562d4ac153ea72c8b5b3016f71bd4e6340bf9802fe1e41c8d8000f3085db3d"
+    },
+    {
+      "path": "carcara/tests/fixtures/array_const_select_v1/original-p10-row2.smt2",
+      "bytes": 1745,
+      "sha256": "3e92f6dd6ea2748224fe1817df2e5926261ec04f9db0b6865bdf1965dad1c8d8"
+    },
+    {
+      "path": "carcara/tests/fixtures/array_const_select_v1/original-p10-row2.alethe",
+      "bytes": 3954,
+      "sha256": "9a8991828062db5b69cd68c7960141b5c88ab77a4d044bb4778e60878230adfb"
+    }
+  ]
+}

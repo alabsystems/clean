@@ -22,7 +22,12 @@ use clean_features::{Category, Example, FeatureDescriptor, RefKind, Reference, S
 pub struct EvalArgs {
     /// Expression to evaluate.
     pub expr: String,
-    /// Show verbose output.
+    /// Also print the parsed surface AST, the elaborated kernel term, and
+    /// timing.
+    ///
+    /// The descriptor below already said this; the flag help said "Show
+    /// verbose output", which is the flag name with a verb in front of it and
+    /// tells a reader nothing about whether it is the flag they want.
     #[arg(short, long)]
     pub verbose: bool,
 }
@@ -35,11 +40,16 @@ pub const FEATURES: &[FeatureDescriptor] = &[FeatureDescriptor {
     path: &["eval"],
     summary: "Elaborate a single expression and report its inferred type",
     description: "\
-Parse the expression argument, run the elaborator against an empty \
-environment, and use the kernel type-checker to infer the expression's \
-type. The command prints both the input expression and the inferred type; \
-pass `--verbose` to also see the parsed surface AST, elaborated kernel \
-term, and timing information.\n\n\
+Parse the expression argument, run the elaborator against the kernel's \
+minimal environment, and use the kernel type-checker to infer the \
+expression's type. Minimal is not empty: it carries the native reducers and \
+THREE axioms — `sorry`, `trustedArith` and `trustedAy` — each typed \
+`{α : Sort u} → α` and therefore an inhabitant of every type, so an \
+expression that reaches one of them type-checks at anything. It carries no \
+prelude, so any name beyond the native operations is unknown. The command \
+prints both the input expression and the inferred type; pass `--verbose` to \
+also see the parsed surface AST, elaborated kernel term, and timing \
+information.\n\n\
 `eval` is a lightweight probe. For checking entire source files with their \
 declarations and imports use `clean check`; for an interactive session use \
 `clean repl`.",
@@ -52,7 +62,7 @@ declarations and imports use `clean check`; for an interactive session use \
         },
         Example {
             cmd: "clean eval --verbose \"Nat.succ Nat.zero\"",
-            what: "show parse, elaboration, and inference steps for `Nat.succ 0`",
+            what: "show parse, elaboration, and inference steps (runs in the minimal env: names beyond its native ops and the three axioms are unknown)",
         },
     ],
     see_also: &["check", "repl"],

@@ -58,7 +58,7 @@ fn test_gcongr_discharges_assumption_and_refl_subgoals() {
     );
     let hyp = tc_app::nat_le_tc(nat_const("a"), nat_const("b"));
     let mut state = ProofState::new(env, Expr::arrow(hyp, conclusion));
-    intro(&mut state, "h").expect("intro h");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).expect("intro h");
 
     gcongr(&mut state).expect("gcongr should decompose a + 1 ≤ b + 1");
     assert!(
@@ -80,7 +80,7 @@ fn test_gcongr_discharges_shared_operand_subgoal() {
     );
     let hyp = tc_app::nat_le_tc(nat_const("a"), nat_const("b"));
     let mut state = ProofState::new(env, Expr::arrow(hyp, conclusion));
-    intro(&mut state, "h").expect("intro h");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).expect("intro h");
 
     gcongr(&mut state).expect("gcongr should decompose a + c ≤ b + c");
     assert!(

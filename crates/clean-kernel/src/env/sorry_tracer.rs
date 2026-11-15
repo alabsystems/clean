@@ -19,7 +19,7 @@ use crate::expr::{Expr, ExprKind};
 use crate::name::Name;
 use hashbrown::{HashMap, HashSet};
 
-use super::axiom_audit::is_foundational_axiom;
+use super::axiom_audit::is_canonical_foundational_constant;
 use super::types::{ConstantInfo, ConstantKind};
 use super::Environment;
 
@@ -50,7 +50,10 @@ pub(super) fn is_sorry_axiom(info: &ConstantInfo) -> bool {
     // Rat ring / field axiom batches (#3551/#3555), and Nat.le_refl — causing
     // the sorry tracer to classify those as sorry obligations while
     // `proof_quality()` classified the same names as foundational.
-    !is_foundational_axiom(&info.name)
+    // Content, not name: only the kernel's canonical declaration of a
+    // foundational name is exempt (a user `axiom propext : False` in an
+    // environment without the kernel's own is an obligation).
+    !is_canonical_foundational_constant(info)
 }
 
 /// Collect all `Expr::Const` names referenced in an expression tree.

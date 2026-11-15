@@ -2129,7 +2129,8 @@ fn test_lawful_functor_and_monad_laws() {
 
 #[test]
 fn test_mathverse_linear_arithmetic_types() {
-    // Validate Mathverse decision procedure types (linear integer arithmetic)
+    // Validate Lean's Omega decision procedure types (linear integer arithmetic).
+    // Clean's crate branding does not rename the external Lean module.
     use clean_kernel::tc::TypeChecker;
 
     let Some(lib_path) = require_olean_lean() else {
@@ -2138,13 +2139,12 @@ fn test_mathverse_linear_arithmetic_types() {
     };
 
     let mut env = Environment::default();
-    let summaries =
-        load_module_with_deps(&mut env, "Init.Mathverse", std::slice::from_ref(&lib_path))
-            .expect("Failed to load Init.Mathverse with dependencies");
+    let summaries = load_module_with_deps(&mut env, "Init.Omega", std::slice::from_ref(&lib_path))
+        .expect("Failed to load Init.Omega with dependencies");
 
     let total_added: usize = summaries.iter().map(|s| s.added_constants).sum();
     println!(
-        "Init.Mathverse: {} modules, {} constants added",
+        "Init.Omega: {} modules, {} constants added",
         summaries.len(),
         total_added
     );
@@ -2152,10 +2152,10 @@ fn test_mathverse_linear_arithmetic_types() {
     let tc = TypeChecker::new(&env);
     let mut type_successes = 0;
 
-    // Core Mathverse types - internal implementation types vary significantly between Lean4
+    // Core Omega types - internal implementation types vary significantly between Lean4
     // versions (4.13 uses Int.Linear.*, 4.27+ restructured the module). Instead of
     // hardcoding internal type names, we just verify the module loads successfully
-    // and that the stable arithmetic lemmas that mathverse relies on type-check.
+    // and that the stable arithmetic lemmas that Omega relies on type-check.
     // Type names checked opportunistically (may or may not exist depending on version)
     for type_name in [
         "Int.Linear.Poly",
@@ -2177,9 +2177,9 @@ fn test_mathverse_linear_arithmetic_types() {
             println!("  {type_name} not found (may not exist in this Lean version)");
         }
     }
-    println!("  Found {type_successes} internal mathverse types (varies by Lean version)");
+    println!("  Found {type_successes} internal Omega types (varies by Lean version)");
 
-    // Mathverse-relevant arithmetic lemmas - these are stable across versions
+    // Omega-relevant arithmetic lemmas - these are stable across versions
     let mut lemma_successes = 0;
     for lemma_name in [
         "Int.sub_add_cancel",
@@ -2203,7 +2203,7 @@ fn test_mathverse_linear_arithmetic_types() {
     // Module loads successfully (non-zero constants added) - this is the key validation
     assert!(
         total_added > 1000,
-        "Expected Init.Mathverse to load substantial content, got only {total_added} constants"
+        "Expected Init.Omega to load substantial content, got only {total_added} constants"
     );
     assert!(
         lemma_successes >= 4,

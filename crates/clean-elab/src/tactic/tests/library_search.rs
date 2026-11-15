@@ -73,8 +73,9 @@ fn test_library_search_with_exact_match() {
         env,
         a.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::component("h", false),
             ty: a.clone(),
             value: None,
         }],

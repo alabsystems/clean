@@ -162,14 +162,16 @@ fn equality_goal_state_with_sort_local() -> (ProofState, Expr) {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "T".to_string(),
+                name: clean_parser::SurfaceName::generated_path("T"),
                 ty: Expr::type_(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: target.clone(),
                 value: None,
             },
@@ -224,8 +226,9 @@ fn test_superposition_fallback_returns_bootstrap_error_in_cubical_mode() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(7),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: target.clone(),
             value: None,
         }],

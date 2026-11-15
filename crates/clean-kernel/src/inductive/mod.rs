@@ -60,7 +60,7 @@ pub struct InductiveDecl {
 }
 
 /// Information stored in the environment about an inductive type
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InductiveVal {
     /// Name of the inductive type
     pub name: Name,
@@ -87,7 +87,7 @@ pub struct InductiveVal {
 }
 
 /// Information stored in the environment about a constructor
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConstructorVal {
     /// Name of the constructor
     pub name: Name,
@@ -106,7 +106,7 @@ pub struct ConstructorVal {
 }
 
 /// Information stored in the environment about a recursor
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RecursorVal {
     /// Name of the recursor (e.g., "Nat.rec")
     pub name: Name,
@@ -133,7 +133,7 @@ pub struct RecursorVal {
 }
 
 /// A recursor rule: how the recursor computes on a constructor
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RecursorRule {
     /// Constructor this rule applies to
     pub constructor_name: Name,
@@ -1426,6 +1426,13 @@ fn mentions_any_name_in_args_impl(expr: &Expr, names: &[Name]) -> bool {
 /// - The inductive is in Prop with 1 constructor where all non-param fields
 ///   are either in Prop or appear as index arguments (singleton elimination)
 ///
+/// "In Prop" is decided on the result level of `inductive_type` UP TO WHNF,
+/// by Lean's `check_inductive_types` loop (`Environment::type_former_result_level`):
+/// `def MyProp : Type := Prop; inductive B : MyProp | t | f` is a `Prop`
+/// family with two constructors, so it does NOT large-eliminate. A type
+/// former that is not a sort even after reduction gets `false` (no large
+/// eliminator): no admission accepts such a family.
+///
 /// # Contract
 ///
 /// REQUIRES: `env` contains the inductive type and its constructors as registered constants
@@ -1437,6 +1444,7 @@ fn mentions_any_name_in_args_impl(expr: &Expr, names: &[Name]) -> bool {
 /// ENSURES: Returns `false` for `Nonempty`-like Prop inductives with non-Prop fields
 /// ENSURES: Returns `false` for mutual Prop predicates (Lean 4 inductive.cpp:486-489)
 /// ENSURES: Returns `true` for any Type-valued inductive (always allows large elim)
+/// ENSURES: Returns `false` when `inductive_type` does not reduce to a sort-valued telescope
 pub fn allows_large_elim(
     env: &crate::Environment,
     inductive_type: &Expr,
@@ -1444,14 +1452,46 @@ pub fn allows_large_elim(
     num_params: u32,
     num_types: usize,
 ) -> bool {
+    let Some(result_level) = env.type_former_result_level(inductive_type) else {
+        return false;
+    };
     !crate::env::elim_analysis::elim_only_at_universe_zero(
         env,
-        inductive_type,
+        env.zero_reading(),
+        &result_level,
         constructors,
         num_params,
         num_types,
     )
 }
+
+/// [`allows_large_elim`]'s answer when it does not depend on the environment,
+/// or `None` when it does.
+///
+/// Only one shape reads the environment: a single-constructor family, alone in
+/// its block, whose result level is not provably nonzero -- its constructor's
+/// fields are type-checked, which needs the family resident. Every other
+/// answer follows from the family's result level, its constructor count and
+/// its block size. This runs the very ladder `allows_large_elim` runs first
+/// (`env::elim_analysis`), so `Some(b)` here is exactly what
+/// `allows_large_elim` returns for any environment in which the family's
+/// type former has result level `result_level` up to whnf.
+#[must_use]
+pub fn allows_large_elim_without_env(
+    result_level: &crate::level::Level,
+    num_constructors: usize,
+    num_types: usize,
+) -> Option<bool> {
+    crate::env::elim_analysis::elim_only_at_universe_zero_without_env(
+        result_level,
+        num_constructors,
+        num_types,
+    )
+    .map(|only_at_zero| !only_at_zero)
+}
+
+mod head_beta;
+pub(crate) use head_beta::{head_beta, head_beta_spine};
 
 mod strict;
 pub(crate) use strict::validate_inductive_strict;

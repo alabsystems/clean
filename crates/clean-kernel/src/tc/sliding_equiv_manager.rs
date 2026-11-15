@@ -53,6 +53,7 @@ pub(crate) struct SlidingEquivManager {
     current: EquivManager,
     previous: EquivManager,
     stats: SlidingEquivStats,
+    disabled: bool,
 }
 
 impl Default for SlidingEquivManager {
@@ -67,11 +68,15 @@ impl SlidingEquivManager {
             current: EquivManager::new(),
             previous: EquivManager::new(),
             stats: SlidingEquivStats::default(),
+            disabled: false,
         }
     }
 
     /// Check if two expressions are known-equivalent in either generation.
     pub(crate) fn is_equiv(&mut self, a: &Expr, b: &Expr, use_hash: bool) -> bool {
+        if self.disabled {
+            return false;
+        }
         if self.current.is_equiv(a, b, use_hash) {
             self.stats.hits_current += 1;
             return true;
@@ -86,6 +91,9 @@ impl SlidingEquivManager {
 
     /// Record that two expressions are definitionally equal (current generation only).
     pub(crate) fn add_equiv(&mut self, a: &Expr, b: &Expr) {
+        if self.disabled {
+            return;
+        }
         self.current.add_equiv(a, b);
     }
 
@@ -108,6 +116,12 @@ impl SlidingEquivManager {
     pub(crate) fn clear(&mut self) {
         self.current.clear();
         self.previous.clear();
+    }
+
+    /// Do not close a sharing-replay comparison using an earlier encounter.
+    pub(crate) fn disable_for_sharing_replay(&mut self) {
+        self.clear();
+        self.disabled = true;
     }
 
     /// Total entries across both generations.

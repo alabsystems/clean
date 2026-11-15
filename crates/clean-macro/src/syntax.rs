@@ -14,6 +14,7 @@
 //! - `missing`: A placeholder for missing/erroneous syntax
 
 use clean_kernel::name::Name;
+use clean_parser::SurfaceName;
 use std::sync::Arc;
 
 /// Source location information for syntax
@@ -127,7 +128,7 @@ impl SyntaxKind {
         Self::app("scientific")
     }
     /// Character literal kind, e.g. `'a'`.
-    pub fn char_lit() -> Self {
+    pub(crate) fn char_lit() -> Self {
         Self::app("char")
     }
     pub fn paren() -> Self {
@@ -139,13 +140,13 @@ impl SyntaxKind {
     pub fn fun() -> Self {
         Self::app("fun")
     }
-    pub fn forall_kind() -> Self {
+    pub(crate) fn forall_kind() -> Self {
         Self::app("forall")
     }
     pub fn arrow() -> Self {
         Self::app("arrow")
     }
-    pub fn let_kind() -> Self {
+    pub(crate) fn let_kind() -> Self {
         Self::app("let")
     }
     pub fn hole() -> Self {
@@ -159,7 +160,7 @@ impl SyntaxKind {
     }
     /// Kind for a fresh-name marker introduced by a computed macro body's
     /// `mkFreshId`/`addMacroScope` binder (see [`Syntax::mk_fresh_marker`]).
-    pub fn fresh_marker() -> Self {
+    pub(crate) fn fresh_marker() -> Self {
         Self::app("fresh_marker")
     }
     pub fn antiquot_splice() -> Self {
@@ -200,7 +201,7 @@ pub enum Syntax {
     Atom(SourceInfo, String),
 
     /// An identifier
-    Ident(SourceInfo, String),
+    Ident(SourceInfo, SurfaceName),
 
     /// Missing/erroneous syntax (placeholder)
     Missing(SourceInfo),
@@ -219,7 +220,11 @@ impl Syntax {
     }
 
     /// Create a syntax node with source info
-    pub fn node_with_info(info: SourceInfo, kind: SyntaxKind, children: Vec<Syntax>) -> Self {
+    pub(crate) fn node_with_info(
+        info: SourceInfo,
+        kind: SyntaxKind,
+        children: Vec<Syntax>,
+    ) -> Self {
         Syntax::Node(Box::new(SyntaxNode {
             info,
             kind,
@@ -238,13 +243,31 @@ impl Syntax {
     }
 
     /// Create an identifier
-    pub fn ident(name: &str) -> Self {
-        Syntax::Ident(SourceInfo::dummy(), name.to_string())
+    pub fn ident(name: &SurfaceName) -> Self {
+        Syntax::Ident(SourceInfo::dummy(), name.clone())
+    }
+
+    /// A fixed compiler-authored path or protocol tag, never user spelling.
+    pub fn generated_ident(name: &str) -> Self {
+        Self::ident(&SurfaceName::generated_path(name))
+    }
+
+    /// A macro template's reference to the GLOBAL constant `name`
+    /// ([`SurfaceName::global_path`]): hygienic, as Lean's quotation
+    /// identifiers are, so a binder the user wrote at the use site under the
+    /// same spelling never captures it. `if c then a else b` expands to
+    /// `ite c a b` through this; as a plain generated identifier its `ite`
+    /// resolved to a user's local `ite`, and `def f (ite : Bool → Nat → Nat →
+    /// Nat) (g : Nat → Nat) (b : Bool) := g (if b then 1 else 2)` called the
+    /// local (measured 2026-09-26: `f (fun _ a b => a + b) id true = 3`
+    /// accepted by `rfl`; Lean 4.8.0: `1`).
+    pub(crate) fn global_ident(name: &str) -> Self {
+        Self::ident(&SurfaceName::global_path(name))
     }
 
     /// Create an identifier with source info
-    pub fn ident_with_info(info: SourceInfo, name: &str) -> Self {
-        Syntax::Ident(info, name.to_string())
+    pub fn ident_with_info(info: SourceInfo, name: &SurfaceName) -> Self {
+        Syntax::Ident(info, name.clone())
     }
 
     /// Create missing syntax
@@ -360,11 +383,23 @@ impl Syntax {
     }
 
     /// Get the identifier name if this is an ident
-    pub fn as_ident(&self) -> Option<&str> {
+    pub fn as_ident(&self) -> Option<&SurfaceName> {
         match self {
             Syntax::Ident(_, n) => Some(n),
             _ => None,
         }
+    }
+
+    /// Read a compiler-authored single-component protocol tag. This is not a
+    /// conversion for source names; escaped/qualified/numeric names refuse.
+    pub fn as_ident_tag(&self) -> Option<&str> {
+        let name = self.as_ident()?;
+        if name.is_relative_constructor()
+            || name.component_syntax() != [clean_parser::NameComponentSyntax::Generated]
+        {
+            return None;
+        }
+        name.component_text()
     }
 
     /// Get the first child
@@ -453,7 +488,7 @@ impl Syntax {
                 )
             }
             Syntax::Atom(_, v) => format!("\"{v}\""),
-            Syntax::Ident(_, n) => n.clone(),
+            Syntax::Ident(_, n) => n.to_string(),
             Syntax::Missing(_) => "_".to_string(),
         }
     }
@@ -556,12 +591,16 @@ impl Syntax {
     }
 
     /// Create an antiquotation node for `$name`
-    pub fn mk_antiquot(name: &str) -> Self {
+    pub fn mk_antiquot(name: &SurfaceName) -> Self {
         Syntax::node(SyntaxKind::antiquot(), vec![Syntax::ident(name)])
     }
 
+    pub fn generated_antiquot(name: &str) -> Self {
+        Self::mk_antiquot(&SurfaceName::generated_path(name))
+    }
+
     /// Create a typed antiquotation node for `$name:category`
-    pub(crate) fn mk_antiquot_typed(name: &str, category: &str) -> Self {
+    pub(crate) fn mk_antiquot_typed(name: &SurfaceName, category: &SurfaceName) -> Self {
         Syntax::node(
             SyntaxKind::antiquot_typed(),
             vec![Syntax::ident(name), Syntax::ident(category)],
@@ -569,12 +608,12 @@ impl Syntax {
     }
 
     /// Create a splice antiquotation for `$[items]*`
-    pub(crate) fn mk_antiquot_splice(name: &str) -> Self {
+    pub(crate) fn mk_antiquot_splice(name: &SurfaceName) -> Self {
         Syntax::node(SyntaxKind::antiquot_splice(), vec![Syntax::ident(name)])
     }
 
     /// Create a typed splice antiquotation for `$[items:category]*`
-    pub(crate) fn mk_antiquot_splice_typed(name: &str, category: &str) -> Self {
+    pub(crate) fn mk_antiquot_splice_typed(name: &SurfaceName, category: &SurfaceName) -> Self {
         Syntax::node(
             SyntaxKind::antiquot_splice_typed(),
             vec![Syntax::ident(name), Syntax::ident(category)],
@@ -591,7 +630,7 @@ impl Syntax {
     /// [`crate::quotation::SyntaxQuote::substitute_hygienic`]. This is what makes
     /// `mkFreshId` yield a new id per application rather than the one frozen at
     /// registration time. The `prefix` seeds the gensym for readable names.
-    pub fn mk_fresh_marker(prefix: &str) -> Self {
+    pub fn mk_fresh_marker(prefix: &SurfaceName) -> Self {
         Syntax::node(SyntaxKind::fresh_marker(), vec![Syntax::ident(prefix)])
     }
 
@@ -604,7 +643,7 @@ impl Syntax {
     }
 
     /// The prefix carried by a fresh-name marker node, if this is one.
-    pub(crate) fn fresh_marker_prefix(&self) -> Option<&str> {
+    pub(crate) fn fresh_marker_prefix(&self) -> Option<&SurfaceName> {
         if self.is_fresh_marker() {
             self.children().first().and_then(Syntax::as_ident)
         } else {
@@ -627,18 +666,31 @@ mod tests {
     fn test_syntax_node_children() {
         let node = Syntax::node(
             SyntaxKind::app_kind(),
-            vec![Syntax::ident("f"), Syntax::ident("x"), Syntax::ident("y")],
+            vec![
+                Syntax::generated_ident("f"),
+                Syntax::generated_ident("x"),
+                Syntax::generated_ident("y"),
+            ],
         );
         assert_eq!(node.children().len(), 3);
-        assert_eq!(node.child(0).unwrap().as_ident(), Some("f"));
-        assert_eq!(node.child(1).unwrap().as_ident(), Some("x"));
-        assert_eq!(node.child(2).unwrap().as_ident(), Some("y"));
+        assert_eq!(
+            node.child(0).unwrap().as_ident(),
+            Some(&SurfaceName::generated_path("f"))
+        );
+        assert_eq!(
+            node.child(1).unwrap().as_ident(),
+            Some(&SurfaceName::generated_path("x"))
+        );
+        assert_eq!(
+            node.child(2).unwrap().as_ident(),
+            Some(&SurfaceName::generated_path("y"))
+        );
     }
 
     #[test]
     fn test_syntax_pretty_print() {
         let app = Syntax::mk_app(
-            Syntax::ident("Nat.add"),
+            Syntax::generated_ident("Nat.add"),
             vec![Syntax::mk_num(1), Syntax::mk_num(2)],
         );
         let pretty = app.pretty();
@@ -666,8 +718,11 @@ mod tests {
     #[test]
     fn test_antiquot_collection() {
         let syntax = Syntax::mk_app(
-            Syntax::ident("f"),
-            vec![Syntax::mk_antiquot("x"), Syntax::mk_antiquot("y")],
+            Syntax::generated_ident("f"),
+            vec![
+                Syntax::generated_antiquot("x"),
+                Syntax::generated_antiquot("y"),
+            ],
         );
         let antiquots = syntax.collect_antiquots();
         assert_eq!(antiquots.len(), 2);
@@ -675,8 +730,14 @@ mod tests {
 
     #[test]
     fn test_syntax_replace() {
-        let syntax = Syntax::mk_app(Syntax::ident("f"), vec![Syntax::ident("x")]);
-        let replaced = syntax.replace(&|s| s.as_ident() == Some("x"), &|_| Syntax::ident("y"));
+        let syntax = Syntax::mk_app(
+            Syntax::generated_ident("f"),
+            vec![Syntax::generated_ident("x")],
+        );
+        let replaced = syntax.replace(
+            &|s| s.as_ident() == Some(&SurfaceName::generated_path("x")),
+            &|_| Syntax::generated_ident("y"),
+        );
         let pretty = replaced.pretty();
         assert!(pretty.contains('y'));
         assert!(!pretty.contains(" x"));
@@ -684,38 +745,50 @@ mod tests {
 
     #[test]
     fn test_mk_arrow() {
-        let arr = Syntax::mk_arrow(Syntax::ident("Nat"), Syntax::ident("Bool"));
+        let arr = Syntax::mk_arrow(
+            Syntax::generated_ident("Nat"),
+            Syntax::generated_ident("Bool"),
+        );
         assert_eq!(arr.kind(), Some(&SyntaxKind::arrow()));
         assert_eq!(arr.children().len(), 2);
     }
 
     #[test]
     fn test_mk_lambda() {
-        let lam = Syntax::mk_lambda(vec![Syntax::ident("x")], Syntax::ident("x"));
+        let lam = Syntax::mk_lambda(
+            vec![Syntax::generated_ident("x")],
+            Syntax::generated_ident("x"),
+        );
         assert_eq!(lam.kind(), Some(&SyntaxKind::fun()));
         assert_eq!(lam.children().len(), 2);
     }
 
     #[test]
     fn test_is_antiquot_typed() {
-        let typed = Syntax::mk_antiquot_typed("x", "term");
+        let typed = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("term"),
+        );
         assert!(typed.is_antiquot());
         assert!(typed.is_antiquot_typed());
         assert!(!typed.is_antiquot_splice());
 
-        let untyped = Syntax::mk_antiquot("x");
+        let untyped = Syntax::generated_antiquot("x");
         assert!(untyped.is_antiquot());
         assert!(!untyped.is_antiquot_typed());
     }
 
     #[test]
     fn test_is_antiquot_splice_typed() {
-        let typed_splice = Syntax::mk_antiquot_splice_typed("xs", "term");
+        let typed_splice = Syntax::mk_antiquot_splice_typed(
+            &SurfaceName::generated_path("xs"),
+            &SurfaceName::generated_path("term"),
+        );
         assert!(typed_splice.is_antiquot());
         assert!(typed_splice.is_antiquot_typed());
         assert!(typed_splice.is_antiquot_splice());
 
-        let untyped_splice = Syntax::mk_antiquot_splice("xs");
+        let untyped_splice = Syntax::mk_antiquot_splice(&SurfaceName::generated_path("xs"));
         assert!(untyped_splice.is_antiquot());
         assert!(!untyped_splice.is_antiquot_typed());
         assert!(untyped_splice.is_antiquot_splice());
@@ -738,11 +811,17 @@ mod tests {
     #[test]
     fn test_collect_typed_antiquots() {
         let syntax = Syntax::mk_app(
-            Syntax::ident("f"),
+            Syntax::generated_ident("f"),
             vec![
-                Syntax::mk_antiquot_typed("x", "term"),
-                Syntax::mk_antiquot("y"),
-                Syntax::mk_antiquot_splice_typed("zs", "tactic"),
+                Syntax::mk_antiquot_typed(
+                    &SurfaceName::generated_path("x"),
+                    &SurfaceName::generated_path("term"),
+                ),
+                Syntax::generated_antiquot("y"),
+                Syntax::mk_antiquot_splice_typed(
+                    &SurfaceName::generated_path("zs"),
+                    &SurfaceName::generated_path("tactic"),
+                ),
             ],
         );
         let antiquots = syntax.collect_antiquots();
@@ -751,16 +830,22 @@ mod tests {
 
     #[test]
     fn test_is_simple_antiquot_excludes_typed_splices() {
-        let typed_splice = Syntax::mk_antiquot_splice_typed("xs", "term");
+        let typed_splice = Syntax::mk_antiquot_splice_typed(
+            &SurfaceName::generated_path("xs"),
+            &SurfaceName::generated_path("term"),
+        );
         assert!(!typed_splice.is_simple_antiquot());
 
-        let untyped_splice = Syntax::mk_antiquot_splice("xs");
+        let untyped_splice = Syntax::mk_antiquot_splice(&SurfaceName::generated_path("xs"));
         assert!(!untyped_splice.is_simple_antiquot());
 
-        let typed = Syntax::mk_antiquot_typed("x", "term");
+        let typed = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("term"),
+        );
         assert!(typed.is_simple_antiquot());
 
-        let untyped = Syntax::mk_antiquot("x");
+        let untyped = Syntax::generated_antiquot("x");
         assert!(untyped.is_simple_antiquot());
     }
 }

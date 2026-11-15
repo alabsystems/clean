@@ -38,12 +38,13 @@
 //!
 //! as fully kernel-checked single-constructor structures (no axioms), plus
 //! `Option` (and, builtin-prelude-only, `List`) instances with real
-//! `Option.some`/`Option.bind`/`List.rec` bodies. The elaborator's
-//! materialization pass (`clean-elab::infer::elab_monad_materialize`) then
-//! rewrites stub applications `Pure.pure m α v` / `Bind.bind m α β ma f` over
-//! a concrete monad `m` with a registered instance into the instance-projected
-//! form `(Proj Pure 0 inst) α v` / `(Proj Bind 0 inst) α β ma f`. The kernel
-//! reduces those with its ORDINARY machinery — delta on the instance
+//! `Option.some`/`Option.bind`/`List.rec` bodies. B07's elaborator
+//! materialization pass rewrote stub applications into the instance-projected
+//! form `(Proj Pure 0 inst) α v` / `(Proj Bind 0 inst) α β ma f`; since
+//! 2026-09-28 the elaborator emits `@Pure.pure m inst α v` directly (the pass
+//! is deleted, the stubs are gone — see below), and δ on the projection
+//! constant reaches the same form. The kernel reduces it with its ORDINARY
+//! machinery — delta on the instance
 //! definition, proj-of-mk iota, beta, then recursor iota on
 //! `Option.bind`/`List.rec` — exactly the reduction sequence Lean's kernel
 //! performs on its own elaboration output (`src/kernel/type_checker.cpp`:
@@ -52,15 +53,15 @@
 //! equalities are introduced anywhere: every step is derivable from the
 //! registered environment.
 //!
-//! # Why the projection CONSTANTS are not registered here
+//! # The projection constants
 //!
-//! The natural projection names `Pure.pure` / `Bind.bind` are owned by the
-//! legacy instance-less axiom stubs, which the generic prelude lanes
-//! (`List.forIn`, `List.mapM`, `Bind.kleisli*`, the StateT/ExceptT do-control
-//! stack) still spell their telescopes against. Replacing the stubs with
-//! `[inst]`-carrying projections is the (larger) follow-up migration; until
-//! then the materialization pass emits primitive `Proj` nodes directly, which
-//! the kernel treats identically to Lean's compiled projections.
+//! `Pure.pure` / `Bind.bind` are registered as genuine `[self : Pure f]` /
+//! `[self : Bind m]` projections by `data_monad_classes.rs`, together with
+//! Lean's `Applicative` / `Monad` classes. Until 2026-09-28 those names were
+//! owned by instance-less AXIOMS that proved `False`
+//! (`docs/issues/2026-09-28-prelude-pure-proves-false.md`); the leaf instances
+//! below are now also the `Pure` / `Bind` fields of `Id.instMonad`,
+//! `instMonadOption` and `instMonadList`.
 //!
 //! # Lean-core fidelity of the `List` gating
 //!
@@ -253,12 +254,11 @@ impl Environment {
     ///
     /// Lean fidelity note: upstream Lean derives these through the single
     /// `instMonadOption : Monad Option` (`Init/Prelude.lean`; `pure := some`,
-    /// `bind := Option.bind`); Clean's prelude has no real `Monad`/`Applicative`
-    /// hierarchy yet (`Monad` is still an opaque carrier axiom), so the two
-    /// leaf-class instances (definitionally equal to Lean's derived
-    /// `Monad.toPure`/`Monad.toBind` chain on `Option`) are registered directly
-    /// under Clean-native names — the same policy as `instSeq*Option` in
-    /// `data_seq_classes.rs`.
+    /// `bind := Option.bind`). Clean registers the two leaf-class instances
+    /// under Clean-native names (the same policy as `instSeq*Option` in
+    /// `data_seq_classes.rs`) and, since 2026-09-28, assembles Lean's
+    /// `instMonadOption` from them (`data_monad_classes.rs`), so its derived
+    /// `Monad.toPure`/`Monad.toBind` chain on `Option` reduces to these.
     ///
     /// IMPORT MODE (`suppress_lossy_structure_stubs`): withheld — the genuine
     /// olean closure carries Lean's own `Monad Option` instance chain.
@@ -343,16 +343,17 @@ impl Environment {
     /// These are the leaf-class projections of Lean's single core
     /// `instance : Monad Id := { pure := fun x => x, bind := fun x f => f x }`
     /// (`Init/Prelude.lean`). With `Id` now a reducible def (`Id α ≡ α`,
-    /// `data_monad.rs::init_id`), the elaborator's materialization pass
-    /// (`clean-elab::infer::elab_monad_materialize`) rewrites `Pure.pure Id α v`
-    /// / `Bind.bind Id α β ma f` into instance-projected form and the kernel
-    /// reduces it through ORDINARY delta + proj-of-mk iota + beta:
+    /// `data_monad.rs::init_id`), `@Pure.pure Id inst α v` /
+    /// `@Bind.bind Id inst α β ma f` (the instance being `Id.instMonad`'s
+    /// field, which IS this leaf) reduce through ORDINARY delta + proj-of-mk
+    /// iota + beta:
     /// `pure v ↦ v`, `bind ma f ↦ f ma`. Composed with the identity `Id.run`,
     /// `Id.run (pure 5)` reduces to `5` — the do p13/p14 value pin. Lean's
     /// kernel performs the identical sequence on its own elaboration output;
     /// no new definitional equality is introduced. Registered directly under
-    /// Clean-native leaf names because Clean's `Monad` is still an opaque
-    /// carrier axiom — the same policy as `instPureOption`/`instBindOption`.
+    /// Clean-native leaf names (the same policy as
+    /// `instPureOption`/`instBindOption`); `Id.instMonad` is assembled from
+    /// them by `data_monad_classes.rs`.
     ///
     /// IMPORT MODE (`suppress_lossy_structure_stubs`): withheld — the genuine
     /// olean closure carries Lean's own `instMonadId`-derived chain.
@@ -539,6 +540,8 @@ impl Environment {
             b.finish(r)
         };
         self.add_monad_op_instance("instBindList", "Bind", &u, &uu, &list_const, bind_field)?;
+        // `instMonadList` (Clean-native, `data_monad_classes.rs`).
+        self.init_list_monad_instance()?;
 
         self.monad_list_insts_init = true;
         Ok(())
@@ -610,8 +613,8 @@ mod tests {
         )
     }
 
-    /// `(Proj Bind 0 instBindOption) α β ma f` — the exact shape the
-    /// elaborator's materialization pass emits for a do-block bind.
+    /// `(Proj Bind 0 instBindOption) α β ma f` — what δ on the `Bind.bind`
+    /// projection makes of a do-block bind over `Option`.
     fn bind_app(ma: Expr, f: Expr) -> Expr {
         let inst = Expr::const_(Name::from_string("instBindOption"), vec![Level::zero()]);
         let head = Expr::proj(Name::from_string("Bind"), 0, inst);
@@ -717,8 +720,8 @@ mod tests {
         env
     }
 
-    /// `(Proj Pure 0 instPureId) Nat v` — the shape the materialization pass
-    /// emits for `pure v` over `Id`.
+    /// `(Proj Pure 0 instPureId) Nat v` — what δ on the `Pure.pure`
+    /// projection makes of `pure v` over `Id`.
     fn id_pure_app(v: Expr) -> Expr {
         let inst = Expr::const_(Name::from_string("instPureId"), vec![Level::zero()]);
         let head = Expr::proj(Name::from_string("Pure"), 0, inst);

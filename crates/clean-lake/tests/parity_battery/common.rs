@@ -56,9 +56,11 @@ pub(crate) fn sorted(mut names: Vec<String>) -> Vec<String> {
 /// `.olean.private`) exists for `module` and the base part is non-empty.
 pub(crate) fn assert_olean_triple(ws: &Workspace, module: &str) {
     for path in [
-        ws.olean_path(module),
-        ws.olean_server_path(module),
-        ws.olean_private_path(module),
+        ws.olean_path(module).expect("valid module output path"),
+        ws.olean_server_path(module)
+            .expect("valid server output path"),
+        ws.olean_private_path(module)
+            .expect("valid private output path"),
     ] {
         assert!(
             path.exists(),
@@ -66,7 +68,7 @@ pub(crate) fn assert_olean_triple(ws: &Workspace, module: &str) {
             path.display()
         );
     }
-    let base_len = fs::metadata(ws.olean_path(module))
+    let base_len = fs::metadata(ws.olean_path(module).expect("valid module output path"))
         .expect("stat base .olean")
         .len();
     assert!(base_len > 0, "base .olean for {module} must not be empty");

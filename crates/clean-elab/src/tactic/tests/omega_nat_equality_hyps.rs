@@ -39,8 +39,9 @@ fn nat_fvar(id: u64) -> Expr {
 
 fn nat_local(id: u64, name: &str) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: nat_type(),
         value: None,
     }
@@ -63,8 +64,9 @@ fn nat_eq(l: Expr, r: Expr) -> Expr {
 
 fn eq_hyp(id: u64, name: &str, l: Expr, r: Expr) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: nat_eq(l, r),
         value: None,
     }
@@ -444,8 +446,9 @@ fn nat_sub(a: Expr, b: Expr) -> Expr {
 
 fn ge_hyp(id: u64, name: &str, a: Expr, b: Expr) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: nat_ge(a, b),
         value: None,
     }

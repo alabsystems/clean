@@ -63,7 +63,7 @@
 
 use clean_parser::{
     Projection, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr,
-    SurfaceMatchArm, SurfacePattern,
+    SurfaceMatchArm, SurfaceName, SurfacePattern,
 };
 
 /// If `decl` is a recursion-through-projection `def`, return the desugared
@@ -108,7 +108,7 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
     if binder.info != SurfaceBinderInfo::Explicit {
         return None;
     }
-    let binder_name = binder.name.as_str();
+    let binder_name = &binder.name;
 
     // Body must be `match b.<field> with <arms>` (peel redundant parens).
     let body = peel_parens(val);
@@ -127,8 +127,8 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
     // The function's self-name. For a namespaced def the name is the fully
     // dotted string (e.g. "Box.len"); recursive calls appear either as that
     // ident or as a `Proj` spelling of the same dotted path.
-    let self_name = name.as_str();
-    let aux_name = format!("{self_name}.go");
+    let self_name = name;
+    let aux_name = self_name.append(&SurfaceName::generated_path("go"));
 
     // Rewrite every recursive call `F { <field> := X }` -> `F.go X` across all
     // arm bodies. If ANY recursive call is present but does not match the
@@ -166,7 +166,7 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
     let ret_ty = ty.as_deref()?;
     let aux_ty = SurfaceExpr::Arrow(
         Span::dummy(),
-        Box::new(SurfaceExpr::ident(&ind_name)),
+        Box::new(SurfaceExpr::Ident(Span::dummy(), ind_name.clone())),
         Box::new(ret_ty.clone()),
     );
     // Equation-form value: a single-`_x` pattern-match lambda over the arms,
@@ -174,11 +174,18 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
     // which `normalize_equation_def` recognizes and lowers via `Ind.rec`.
     let aux_val = SurfaceExpr::PatternMatchLambda(
         Span::dummy(),
-        vec![SurfaceBinder::new("_x", None, SurfaceBinderInfo::Explicit)],
+        vec![SurfaceBinder::new_typed(
+            SurfaceName::pattern_lambda_binder(),
+            None,
+            SurfaceBinderInfo::Explicit,
+        )],
         Box::new(SurfaceExpr::Match(
             Span::dummy(),
             None,
-            Box::new(SurfaceExpr::ident("_x")),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::pattern_lambda_binder(),
+            )),
             new_arms,
         )),
     );
@@ -198,10 +205,10 @@ pub(crate) fn desugar_projection_recursion(decl: &SurfaceDecl) -> Option<Vec<Sur
     // Wrapper def: `def F (b : S) : Ret := F.go b.<field>`.
     let wrapper_body = SurfaceExpr::App(
         Span::dummy(),
-        Box::new(SurfaceExpr::ident(&aux_name)),
+        Box::new(SurfaceExpr::Ident(Span::dummy(), aux_name.clone())),
         vec![SurfaceArg::positional(SurfaceExpr::Proj(
             Span::dummy(),
-            Box::new(SurfaceExpr::ident(binder_name)),
+            Box::new(SurfaceExpr::Ident(Span::dummy(), binder_name.clone())),
             Projection::Named(field.clone()),
         ))],
     );
@@ -230,11 +237,11 @@ fn peel_parens(e: &SurfaceExpr) -> &SurfaceExpr {
 }
 
 /// Recognize `<ident>.<named-field>` and return `(binder_name, field_name)`.
-fn match_projection_of(e: &SurfaceExpr) -> Option<(&str, String)> {
+fn match_projection_of(e: &SurfaceExpr) -> Option<(&SurfaceName, SurfaceName)> {
     match peel_parens(e) {
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
             if let SurfaceExpr::Ident(_, name) = peel_parens(base) {
-                Some((name.as_str(), field.clone()))
+                Some((name, field.clone()))
             } else {
                 None
             }
@@ -251,19 +258,22 @@ fn match_projection_of(e: &SurfaceExpr) -> Option<(&str, String)> {
 /// prefix. All structural arms must agree; wildcard / plain-variable arms are
 /// permitted (they impose no constraint). Returns `None` if no constructor
 /// pattern is present or the heads disagree.
-fn inductive_from_arms(arms: &[SurfaceMatchArm]) -> Option<String> {
-    let mut ind: Option<String> = None;
+fn inductive_from_arms(arms: &[SurfaceMatchArm]) -> Option<SurfaceName> {
+    let mut ind: Option<SurfaceName> = None;
     for arm in arms {
         let ctor_name = match &arm.pattern {
-            SurfacePattern::Ctor(name, _) => Some(name.as_str()),
-            SurfacePattern::Var(name) if name.contains('.') => Some(name.as_str()),
+            SurfacePattern::Ctor(name, _) => Some(name),
+            SurfacePattern::Var(name) if !name.parent().is_anonymous() => Some(name),
             _ => None,
         };
         if let Some(ctor_name) = ctor_name {
-            let head = ctor_name.rsplit_once('.').map(|(h, _)| h)?;
+            let head = ctor_name.parent();
+            if head.is_anonymous() {
+                return None;
+            }
             match &ind {
                 None => ind = Some(head.to_owned()),
-                Some(existing) if existing == head => {}
+                Some(existing) if *existing == head => {}
                 Some(_) => return None, // disagreeing heads
             }
         }
@@ -273,9 +283,9 @@ fn inductive_from_arms(arms: &[SurfaceMatchArm]) -> Option<String> {
 
 /// Rewrites recursive calls `F { field := X }` into `F.go X` within arm bodies.
 struct CallRewriter<'a> {
-    self_name: &'a str,
-    field: &'a str,
-    aux_name: &'a str,
+    self_name: &'a SurfaceName,
+    field: &'a SurfaceName,
+    aux_name: &'a SurfaceName,
     /// Set when a recursive call to `self_name` was found that does NOT match
     /// the `{ field := X }` rebuild shape — signals "outside the sound
     /// envelope", and the caller bails.
@@ -294,7 +304,7 @@ impl<'a> CallRewriter<'a> {
                         self.saw_handled_rec_call = true;
                         return SurfaceExpr::App(
                             *span,
-                            Box::new(SurfaceExpr::ident(self.aux_name)),
+                            Box::new(SurfaceExpr::Ident(Span::dummy(), self.aux_name.clone())),
                             vec![SurfaceArg::positional(self.rewrite(&inner))],
                         );
                     }
@@ -349,7 +359,7 @@ impl<'a> CallRewriter<'a> {
         match func {
             SurfaceExpr::Ident(_, name) => name == self.self_name,
             SurfaceExpr::Proj(_, _, _) => {
-                qualified_name_from_proj(func).as_deref() == Some(self.self_name)
+                qualified_name_from_proj(func).as_ref() == Some(self.self_name)
             }
             SurfaceExpr::Paren(_, inner) => self.is_self_ref(inner),
             _ => false,
@@ -374,7 +384,7 @@ impl<'a> CallRewriter<'a> {
         let [field_assign] = fields.as_slice() else {
             return None;
         };
-        if field_assign.name != self.field {
+        if &field_assign.name != self.field {
             return None;
         }
         Some(field_assign.val.clone())
@@ -384,12 +394,12 @@ impl<'a> CallRewriter<'a> {
 /// Collect a dotted qualified name from a `Proj` spine, e.g.
 /// `Proj(Ident("Box"), Named("len"))` -> `"Box.len"`. Returns `None` for
 /// indexed projections or non-ident bases.
-fn qualified_name_from_proj(e: &SurfaceExpr) -> Option<String> {
+fn qualified_name_from_proj(e: &SurfaceExpr) -> Option<SurfaceName> {
     match e {
         SurfaceExpr::Ident(_, name) => Some(name.clone()),
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
             let base_name = qualified_name_from_proj(base)?;
-            Some(format!("{base_name}.{field}"))
+            Some(base_name.append(field))
         }
         SurfaceExpr::Paren(_, inner) => qualified_name_from_proj(inner),
         _ => None,

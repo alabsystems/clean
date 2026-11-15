@@ -6,7 +6,23 @@
 //!
 //! Warning detection (sorry, deprecated, unused variables) lives in `super::warnings`.
 
+use clean_kernel::{name::NameInner, Name};
+use clean_parser::SurfaceName;
 use std::collections::HashSet;
+
+/// Keep the structural head, never the prefix of a displayed dotted string.
+/// A quoted `«A.B»` is one component; the head of ordinary `A.B` is `A`.
+fn name_head(name: &SurfaceName) -> Name {
+    let mut current = name.name();
+    loop {
+        match current.inner() {
+            NameInner::Str(parent, _) | NameInner::Num(parent, _) if !parent.is_anon() => {
+                current = parent;
+            }
+            _ => return current.clone(),
+        }
+    }
+}
 
 /// Parse text into a ParsedDocument (test-only)
 #[cfg(test)]
@@ -59,15 +75,14 @@ pub(crate) fn parse_lean_text(text: &str) -> crate::document::ParsedDocument {
 }
 
 /// Collect all identifiers used in a surface expression
-pub(crate) fn collect_used_idents(expr: &clean_parser::SurfaceExpr, used: &mut HashSet<String>) {
+pub(crate) fn collect_used_idents(expr: &clean_parser::SurfaceExpr, used: &mut HashSet<Name>) {
     use clean_parser::SurfaceExpr;
 
     match expr {
         SurfaceExpr::Ident(_, name) => {
-            // Split qualified names and add the first component
-            // e.g., "Nat.add" -> we care about "Nat", not local variable references
-            let first_part = name.split('.').next().unwrap_or(name);
-            used.insert(first_part.to_string());
+            if !name.is_relative_constructor() {
+                used.insert(name_head(name));
+            }
         }
         SurfaceExpr::App(_, func, args) => {
             collect_used_idents(func, used);
@@ -103,7 +118,9 @@ pub(crate) fn collect_used_idents(expr: &clean_parser::SurfaceExpr, used: &mut H
             collect_used_idents(left, used);
             collect_used_idents(right, used);
         }
-        SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::LetRec(_, binder, val, body) => {
+        SurfaceExpr::Let(_, binder, val, body)
+        | SurfaceExpr::Have(_, binder, val, body)
+        | SurfaceExpr::LetRec(_, binder, val, body) => {
             if let Some(ty) = &binder.ty {
                 collect_used_idents(ty, used);
             }
@@ -155,17 +172,17 @@ pub(crate) fn collect_used_idents(expr: &clean_parser::SurfaceExpr, used: &mut H
             use clean_parser::QAntiquotContent;
             match content {
                 QAntiquotContent::Simple(name) => {
-                    used.insert(name.clone());
+                    used.insert(name.name().clone());
                 }
                 QAntiquotContent::Expr(e) => {
                     collect_used_idents(e, used);
                 }
                 QAntiquotContent::Typed { name, ty } => {
-                    used.insert(name.clone());
+                    used.insert(name.name().clone());
                     collect_used_idents(ty, used);
                 }
                 QAntiquotContent::Splice { name, .. } => {
-                    used.insert(name.clone());
+                    used.insert(name.name().clone());
                 }
             }
         }
@@ -224,8 +241,8 @@ pub(crate) fn collect_used_idents(expr: &clean_parser::SurfaceExpr, used: &mut H
         // the sub-term's name resolution); recurse into the sub-term too.
         SurfaceExpr::OpenIn { paths, body, .. } => {
             for path in paths {
-                if let Some(head) = path.path.first() {
-                    used.insert(head.clone());
+                if !path.path.name().is_anon() {
+                    used.insert(name_head(&path.path));
                 }
             }
             collect_used_idents(body, used);
@@ -241,10 +258,13 @@ pub(crate) fn collect_used_idents(expr: &clean_parser::SurfaceExpr, used: &mut H
 }
 
 /// Recurse into a do-element to collect used identifiers
-fn collect_used_idents_do_elem(elem: &clean_parser::DoElem, used: &mut HashSet<String>) {
+fn collect_used_idents_do_elem(elem: &clean_parser::DoElem, used: &mut HashSet<Name>) {
     use clean_parser::DoElem;
     match elem {
-        DoElem::Bind(_, _, action) | DoElem::Let(_, _, action) | DoElem::LetMut(_, _, action) => {
+        DoElem::Bind(_, _, action)
+        | DoElem::Let(_, _, action)
+        | DoElem::Have(_, _, action)
+        | DoElem::LetMut(_, _, action) => {
             collect_used_idents(action, used);
         }
         DoElem::LetRec(_, bindings) => {
@@ -350,14 +370,14 @@ fn collect_used_idents_do_elem(elem: &clean_parser::DoElem, used: &mut HashSet<S
         }
         DoElem::Break(_) | DoElem::Continue(_) => {}
         DoElem::Reassign(_, name, val) => {
-            used.insert(name.clone());
+            used.insert(name.name().clone());
             collect_used_idents(val, used);
         }
         DoElem::PatternReassign(_, pat, val) => {
             let mut names = Vec::new();
             pat.collect_var_names(&mut names);
             for name in names {
-                used.insert(name);
+                used.insert(name.into_name());
             }
             collect_used_idents(val, used);
         }
@@ -366,7 +386,7 @@ fn collect_used_idents_do_elem(elem: &clean_parser::DoElem, used: &mut HashSet<S
 
 /// Location of an identifier in source
 pub(crate) struct IdentLocation {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) start: usize,
     pub(crate) end: usize,
 }
@@ -400,7 +420,9 @@ pub(crate) fn collect_ident_locations(
             collect_ident_locations(left, locations);
             collect_ident_locations(right, locations);
         }
-        SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::LetRec(_, binder, val, body) => {
+        SurfaceExpr::Let(_, binder, val, body)
+        | SurfaceExpr::Have(_, binder, val, body)
+        | SurfaceExpr::LetRec(_, binder, val, body) => {
             collect_locations_from_binders(std::slice::from_ref(binder), locations);
             collect_ident_locations(val, locations);
             collect_ident_locations(body, locations);
@@ -547,7 +569,10 @@ fn collect_ident_locations_do_elem(
 ) {
     use clean_parser::DoElem;
     match elem {
-        DoElem::Bind(_, _, action) | DoElem::Let(_, _, action) | DoElem::LetMut(_, _, action) => {
+        DoElem::Bind(_, _, action)
+        | DoElem::Let(_, _, action)
+        | DoElem::Have(_, _, action)
+        | DoElem::LetMut(_, _, action) => {
             collect_ident_locations(action, locations);
         }
         DoElem::LetRec(_, bindings) => {

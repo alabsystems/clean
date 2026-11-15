@@ -166,11 +166,19 @@ def _extract_report(text: str) -> dict:
     if i < 0:
         raise SystemExit("no JSON object in input")
     obj, _ = json.JSONDecoder().raw_decode(text[i:])
-    if obj.get("schema_version") == "Clean-check-report-v1":
+    # v1: the committed dated artifacts; v2 (2026-09-28) changed only the
+    # meaning of `trust_summary.sorry_axioms`, which this classifier never
+    # reads (cmd_core.rs `CHECK_REPORT_SCHEMA_VERSION`). The gate's own report
+    # parser was taught v2 in the bump; this reader was not, so the gate
+    # stopped at `failed:classify-error` on every v2 report.
+    if obj.get("schema_version") in CHECK_REPORT_VERSIONS:
         return obj
-    if obj.get("report", {}).get("schema_version") == "Clean-check-report-v1":
+    if obj.get("report", {}).get("schema_version") in CHECK_REPORT_VERSIONS:
         return obj["report"]
-    raise SystemExit("input is not a Clean-check-report-v1 (nor an evidence file)")
+    raise SystemExit("input is not a Clean-check-report-v1/v2 (nor an evidence file)")
+
+
+CHECK_REPORT_VERSIONS = ("Clean-check-report-v1", "Clean-check-report-v2")
 
 
 def _self_test() -> int:
@@ -218,7 +226,21 @@ def _self_test() -> int:
     if len(set(CLASSES)) != len(CLASSES) or CLASSES[-1] != "other":
         print("FAIL: CLASSES malformed", file=sys.stderr)
         bad += 1
-    print(f"srcelab_classify self-test: {len(cases) + 2 - bad}/{len(cases) + 2} pass")
+    # the report reader accepts v1 and v2, bare or inside an evidence file,
+    # and refuses any other version
+    for version in ("Clean-check-report-v1", "Clean-check-report-v2"):
+        for wrap in (lambda r: r, lambda r: {"report": r}):
+            text = "noise\n" + json.dumps(wrap({"schema_version": version, "success_count": 1}))
+            if _extract_report(text).get("success_count") != 1:
+                print(f"FAIL: {version} report not read", file=sys.stderr)
+                bad += 1
+    try:
+        _extract_report(json.dumps({"schema_version": "Clean-check-report-v9"}))
+        print("FAIL: a v9 report was read", file=sys.stderr)
+        bad += 1
+    except SystemExit:
+        pass
+    print(f"srcelab_classify self-test: {len(cases) + 7 - bad}/{len(cases) + 7} pass")
     return 1 if bad else 0
 
 
@@ -237,7 +259,14 @@ def main() -> int:
         ap.error("one of --report / --stdout / --self-test is required")
     with open(src, encoding="utf-8", errors="replace") as f:
         report = _extract_report(f.read())
-    out = summarize(report.get("errors", []))
+    # BOTH arrays, and this is not optional. `Clean-check-report-v1` used to
+    # carry parser recovery notes inside `errors`; they now live in their own
+    # `parser_recovery` array, because counting them as declaration failures made
+    # `clean check` print `Checked 207 declarations` / `69 passed, 146 failed`.
+    # The classifier's `parser_recovery` CLASS is unchanged and its histogram
+    # must stay comparable across files minted either side of that split, so it
+    # reads both. `.get` with a default keeps older artifacts working.
+    out = summarize(list(report.get("errors", [])) + list(report.get("parser_recovery", [])))
     out["decl_count"] = report.get("decl_count", 0)
     out["success_count"] = report.get("success_count", 0)
     out["failed_count"] = report.get("failed_count", 0)

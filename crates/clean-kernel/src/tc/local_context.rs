@@ -232,24 +232,15 @@ impl LocalContext {
         self.decls.is_empty()
     }
 
-    /// Truncate context back to `target_len` entries, popping from the end.
-    ///
-    /// Used by iterative binder comparison (`is_def_eq_binding`) to batch-restore
-    /// context state after processing N consecutive binders. Equivalent to calling
-    /// `pop()` `self.len() - target_len` times but avoids per-entry Option checks.
-    ///
-    /// # Contract
-    ///
-    /// REQUIRES: `target_len <= self.len()`
-    /// ENSURES: `self.len() == target_len`
-    /// ENSURES: All FVarIds beyond `target_len` are removed from the index
-    pub(crate) fn truncate_to(&mut self, target_len: usize) {
-        while self.decls.len() > target_len {
-            if let Some(decl) = self.decls.pop() {
-                self.index_by_id.remove(&decl.id);
-            }
-        }
-    }
+    // NOTE: there is deliberately no `truncate_to` batch pop here.
+    //
+    // There was one, documented as the batch-restore for `is_def_eq_binding`.
+    // The arc-memo work moved that consumer to `TypeChecker::ctx_truncate_to`
+    // (`tc/config.rs`), which pops one entry at a time *and* calls
+    // `memo.retire_scope(decl.id)` for each. A batch pop at this level cannot
+    // do that — it has no access to the memo — so re-adding one would give
+    // callers a truncation that silently skips memo retirement, which is the
+    // invariant that path exists to maintain. Truncate through the checker.
 
     /// Iterate over all local declarations
     ///

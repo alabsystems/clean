@@ -142,3 +142,78 @@ fn test_compound_first_propagates_last_branch_error() {
     );
     assert_eq!(eval.calls, 2, "the final branch should still run");
 }
+
+#[test]
+fn case_rejects_relative_or_anonymous_selector_and_binder_before_dispatch() {
+    let ordinary = clean_parser::parse_name("h").unwrap();
+    for invalid in [
+        ordinary.clone().with_relative_constructor(),
+        SurfaceName::default(),
+    ] {
+        for (tag, binders) in [
+            (invalid.clone(), vec![]),
+            (ordinary.clone(), vec![invalid.clone()]),
+        ] {
+            let mut state = test_state();
+            state.current_goal_mut().unwrap().tag = Some(ordinary.clone());
+            let before = state.current_goal().unwrap().meta_id;
+            let mut eval = StubEval {
+                calls: 0,
+                results: VecDeque::new(),
+                metas: MetaState::new(),
+            };
+            let tactic = SurfaceTactic::Case(Span::dummy(), tag, binders, vec![]);
+            assert!(matches!(
+                (compound_case().handler)(&mut eval, &mut state, &tactic),
+                Err(TacticError::InvalidTarget { .. })
+            ));
+            assert_eq!(eval.calls, 0);
+            assert_eq!(state.goals.len(), 1);
+            assert_eq!(state.current_goal().unwrap().meta_id, before);
+            assert_eq!(state.current_goal().unwrap().tag, Some(ordinary.clone()));
+        }
+    }
+}
+
+#[test]
+fn case_dispatch_accepts_quoted_literal_leading_dot_and_underscore() {
+    for spelling in ["«.h»", "«_»"] {
+        let tag = clean_parser::parse_name(spelling).unwrap();
+        let mut state = test_state();
+        state.current_goal_mut().unwrap().tag = Some(tag.clone());
+        let mut eval = StubEval {
+            calls: 0,
+            results: VecDeque::from([Ok(())]),
+            metas: MetaState::new(),
+        };
+        let tactic = SurfaceTactic::Case(Span::dummy(), tag, vec![], vec![]);
+        (compound_case().handler)(&mut eval, &mut state, &tactic).unwrap();
+        assert_eq!(eval.calls, 1);
+        assert!(state.goals.is_empty());
+    }
+}
+
+#[test]
+fn failed_case_body_restores_unrelated_open_goals() {
+    let selected = clean_parser::parse_name("selected").unwrap();
+    let mut state = test_state();
+    state.current_goal_mut().unwrap().tag = Some(selected.clone());
+    let mut other = state.current_goal().unwrap().clone();
+    other.meta_id = state.fresh_meta(Expr::prop());
+    other.tag = Some(clean_parser::parse_name("other").unwrap());
+    let other_id = other.meta_id;
+    state.goals.push_back(other);
+    let first_id = state.current_goal().unwrap().meta_id;
+    let mut eval = StubEval {
+        calls: 0,
+        results: VecDeque::from([Err(TacticError::no_progress("assumption"))]),
+        metas: MetaState::new(),
+    };
+    let tactic = SurfaceTactic::Case(Span::dummy(), selected, vec![], vec![]);
+    assert!((compound_case().handler)(&mut eval, &mut state, &tactic).is_err());
+    assert_eq!(eval.calls, 1);
+    assert_eq!(state.goals.len(), 2);
+    assert_eq!(state.goals[0].meta_id, first_id);
+    assert_eq!(state.goals[1].meta_id, other_id);
+    assert!(state.metas.get(other_id).unwrap().assignment.is_none());
+}

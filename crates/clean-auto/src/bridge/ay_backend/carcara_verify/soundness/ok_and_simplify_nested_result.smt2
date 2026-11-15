@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const p Bool)
+(declare-const q Bool)
+(assert (not (= (and true (and p q)) (and p q))))
+(check-sat)

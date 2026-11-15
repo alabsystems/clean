@@ -8,7 +8,6 @@ use super::*;
 use crate::env::{Declaration, Environment};
 use crate::expr::BinderInfo;
 use crate::level::Level;
-use crate::micro::CrossValidationError;
 use crate::name::Name;
 use crate::tc::{TcCaches, TypeError};
 use crate::ExprKind;
@@ -305,35 +304,6 @@ fn test_invalid_expressions() {
     // valid_indices should only return valid indices
     let indices = verifier.valid_indices(&exprs);
     assert_eq!(indices, vec![0, 2]);
-}
-
-#[test]
-fn test_cross_validation_failure_maps_to_batch_failure() {
-    let err = TypeError::CrossValidationFailure(Box::new(CrossValidationError::Disagreement {
-        expr: "Sort(0)".to_string(),
-        main_type: "Sort(1)".to_string(),
-        micro_type: "Sort(2)".to_string(),
-    }));
-
-    let result = BatchVerifier::infer_result_to_batch_result(Err(err), 123);
-
-    assert!(!result.valid);
-    assert!(
-        result.inferred_type.is_none(),
-        "failed batch result should have no inferred_type"
-    );
-    assert_eq!(result.time_ns, 123);
-    let msg = result
-        .error
-        .expect("failed result should include error message");
-    assert!(
-        msg.contains("Cross-validation failure"),
-        "expected TypeError wrapper in message, got: {msg}"
-    );
-    assert!(
-        msg.contains("MICRO-CHECKER DISAGREEMENT"),
-        "expected disagreement payload in message, got: {msg}"
-    );
 }
 
 #[test]

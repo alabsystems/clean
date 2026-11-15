@@ -75,7 +75,8 @@ pub const SNAPSHOT_VERSION: u32 = 2;
 /// it is baked into the binary at compile time, a rebuilt binary with a
 /// different layout will reject snapshots written by the old binary as long as
 /// this string was bumped alongside the layout change.
-pub const ENV_SCHEMA_FINGERPRINT: &str = "clean-env-bincode-v1";
+// v2 adds the serialized source-world universe algebra.
+pub const ENV_SCHEMA_FINGERPRINT: &str = "clean-env-bincode-v2";
 
 /// The writer's claim about the re-verification that preceded a snapshot
 /// write: *what* was re-verified, *how much* passed, and *when*.
@@ -89,8 +90,9 @@ pub const ENV_SCHEMA_FINGERPRINT: &str = "clean-env-bincode-v1";
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnapshotAttestation {
     /// What was re-verified, named precisely (e.g.
-    /// `"typecheck_constants_full: add_decl-equivalent re-verify of the Init
-    /// closure"`). A claim a reader can locate in source, not a mood.
+    /// `"typecheck_constants_full (local-assumed-env): … of the Init
+    /// closure"`). A claim a reader can locate in source, not a mood — and
+    /// one that names the level it ran, never a stronger one.
     pub scope: String,
     /// How many declarations passed the re-check in the verifying run.
     pub decls_verified: u64,

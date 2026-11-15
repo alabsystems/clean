@@ -7,6 +7,7 @@
 //! Verify safety properties for all inputs up to a bound.
 //!
 //! Run with: cargo kani --features kani -p clean-kernel
+//! STOCK EXCEPTION (Trust lacks kani; measured `targo kani` -> `error: no such command`; kani drives its own pinned nightly).
 //!
 //! ## Design Note: Example-Based vs Symbolic Testing
 //!

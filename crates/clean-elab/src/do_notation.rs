@@ -28,7 +28,7 @@
 //! Reference: Lean 4 `src/Lean/Elab/Do/Basic.lean`
 
 use crate::ElabError;
-use clean_parser::{Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr};
+use clean_parser::{Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName};
 
 // ---------------------------------------------------------------------------
 // DoElement: standalone do-element representation
@@ -45,14 +45,20 @@ pub(crate) enum DoElement {
     /// Monadic bind: `let name ← action` or bare `action` (with `name = None`).
     /// Desugars to: `Bind.bind action (fun name => rest)`
     Bind {
-        name: Option<String>,
+        name: Option<SurfaceName>,
         action: Box<SurfaceExpr>,
     },
 
     /// Pure let binding: `let name := value`.
     /// Desugars to: `let name := value in rest`
     Let {
-        name: String,
+        name: SurfaceName,
+        value: Box<SurfaceExpr>,
+    },
+
+    /// Opaque value binding. Its full parsed binder is retained.
+    Have {
+        binder: SurfaceBinder,
         value: Box<SurfaceExpr>,
     },
 
@@ -60,7 +66,7 @@ pub(crate) enum DoElement {
     /// For surface desugaring, treated identically to `Let` (mutable variable
     /// lifting is handled during elaboration, not here).
     LetMut {
-        name: String,
+        name: SurfaceName,
         value: Box<SurfaceExpr>,
     },
 
@@ -84,7 +90,7 @@ pub(crate) enum DoElement {
     /// For-in loop: `for var in collection do body`.
     /// Desugars to: `ForIn.forIn collection () (fun var _ => do body; Pure.pure (ForInStep.yield ()))`
     ForIn {
-        var: String,
+        var: SurfaceName,
         collection: Box<SurfaceExpr>,
         body: Vec<DoElement>,
     },
@@ -95,9 +101,9 @@ pub(crate) enum DoElement {
 // ---------------------------------------------------------------------------
 
 /// Build `Bind.bind action (fun name => body)`.
-fn mk_bind(name: &str, action: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
+fn mk_bind(name: &SurfaceName, action: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
     let bind = SurfaceExpr::ident("Bind.bind");
-    let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+    let binder = SurfaceBinder::new_typed(name.clone(), None, SurfaceBinderInfo::Explicit);
     let continuation = SurfaceExpr::lambda(vec![binder], body);
     SurfaceExpr::app(bind, vec![action, continuation])
 }
@@ -109,8 +115,8 @@ fn mk_pure(val: SurfaceExpr) -> SurfaceExpr {
 }
 
 /// Build `let name := val in body`.
-fn mk_let(name: &str, val: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
-    let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+fn mk_let(name: &SurfaceName, val: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
+    let binder = SurfaceBinder::new_typed(name.clone(), None, SurfaceBinderInfo::Explicit);
     SurfaceExpr::Let(Span::dummy(), binder, Box::new(val), Box::new(body))
 }
 
@@ -163,9 +169,11 @@ fn desugar_terminal(elem: &DoElement) -> Result<SurfaceExpr, ElabError> {
         DoElement::Return(expr) => Ok(mk_pure(*expr.clone())),
         // Terminal bind: degenerate case, return the action itself.
         DoElement::Bind { action, .. } => Ok(*action.clone()),
-        DoElement::Let { .. } | DoElement::LetMut { .. } => Err(ElabError::NotImplemented(
-            "do block cannot end with a let binding (no continuation)".into(),
-        )),
+        DoElement::Let { .. } | DoElement::Have { .. } | DoElement::LetMut { .. } => {
+            Err(ElabError::NotImplemented(
+                "do block cannot end with a let binding (no continuation)".into(),
+            ))
+        }
         DoElement::If {
             cond,
             then_branch,
@@ -188,13 +196,25 @@ fn desugar_compound(first: &DoElement, rest: &[DoElement]) -> Result<SurfaceExpr
     let rest_expr = desugar_do_block(rest)?;
     match first {
         DoElement::Bind { name, action } => {
-            let bind_name = name.as_deref().unwrap_or("_");
-            Ok(mk_bind(bind_name, *action.clone(), rest_expr))
+            let bind_name = name
+                .clone()
+                .unwrap_or_else(|| SurfaceName::generated_path("_"));
+            Ok(mk_bind(&bind_name, *action.clone(), rest_expr))
         }
         DoElement::Let { name, value } | DoElement::LetMut { name, value } => {
             Ok(mk_let(name, *value.clone(), rest_expr))
         }
-        DoElement::Action(expr) => Ok(mk_bind("_", *expr.clone(), rest_expr)),
+        DoElement::Have { binder, value } => Ok(SurfaceExpr::Have(
+            Span::dummy(),
+            binder.clone(),
+            value.clone(),
+            Box::new(rest_expr),
+        )),
+        DoElement::Action(expr) => Ok(mk_bind(
+            &SurfaceName::generated_path("_"),
+            *expr.clone(),
+            rest_expr,
+        )),
         // Non-terminal return: pure the value; rest is unreachable.
         DoElement::Return(expr) => Ok(mk_pure(*expr.clone())),
         DoElement::If {
@@ -205,7 +225,11 @@ fn desugar_compound(first: &DoElement, rest: &[DoElement]) -> Result<SurfaceExpr
             let then_expr = desugar_do_block(then_branch)?;
             let else_expr = desugar_else_branch(else_branch)?;
             let if_expr = mk_if(*cond.clone(), then_expr, else_expr);
-            Ok(mk_bind("_", if_expr, rest_expr))
+            Ok(mk_bind(
+                &SurfaceName::generated_path("_"),
+                if_expr,
+                rest_expr,
+            ))
         }
         DoElement::ForIn {
             var,
@@ -213,7 +237,11 @@ fn desugar_compound(first: &DoElement, rest: &[DoElement]) -> Result<SurfaceExpr
             body,
         } => {
             let for_expr = desugar_for_in(var, collection, body)?;
-            Ok(mk_bind("_", for_expr, rest_expr))
+            Ok(mk_bind(
+                &SurfaceName::generated_path("_"),
+                for_expr,
+                rest_expr,
+            ))
         }
     }
 }
@@ -253,7 +281,7 @@ fn desugar_else_branch(else_branch: &[DoElement]) -> Result<SurfaceExpr, ElabErr
 /// # ENSURES
 /// - Returns a `SurfaceExpr` equivalent to `ForIn.forIn collection init step_fn`
 pub(crate) fn desugar_for_in(
-    var: &str,
+    var: &SurfaceName,
     collection: &SurfaceExpr,
     body: &[DoElement],
 ) -> Result<SurfaceExpr, ElabError> {
@@ -272,10 +300,10 @@ pub(crate) fn desugar_for_in(
     let yield_pure = mk_pure(yield_step);
 
     // Combine body with yield: bind body (_ => yield_pure)
-    let step_body = mk_bind("_", body_expr, yield_pure);
+    let step_body = mk_bind(&SurfaceName::generated_path("_"), body_expr, yield_pure);
 
     // Step function: fun var _ => step_body
-    let var_binder = SurfaceBinder::new(var, None, SurfaceBinderInfo::Explicit);
+    let var_binder = SurfaceBinder::new_typed(var.clone(), None, SurfaceBinderInfo::Explicit);
     let acc_binder = SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit);
     let step_fn = SurfaceExpr::lambda(vec![var_binder, acc_binder], step_body);
 
@@ -331,7 +359,7 @@ pub(crate) fn desugar_while(
         vec![SurfaceExpr::ident("PUnit.unit")],
     );
     let yield_pure = mk_pure(yield_step);
-    let then_expr = mk_bind("_", body_expr, yield_pure);
+    let then_expr = mk_bind(&SurfaceName::generated_path("_"), body_expr, yield_pure);
 
     // Else branch: Pure.pure (ForInStep.done ())
     let done_step = SurfaceExpr::app(
@@ -369,7 +397,7 @@ pub(crate) fn from_parser_do_elems(elems: &[clean_parser::DoElem]) -> Vec<DoElem
 fn from_parser_do_elem(elem: &clean_parser::DoElem) -> DoElement {
     match elem {
         clean_parser::DoElem::Bind(_, binder, action) => DoElement::Bind {
-            name: if binder.name == "_" {
+            name: if binder.name.is_unescaped_component("_") {
                 None
             } else {
                 Some(binder.name.clone())
@@ -379,6 +407,11 @@ fn from_parser_do_elem(elem: &clean_parser::DoElem) -> DoElement {
 
         clean_parser::DoElem::Let(_, binder, val) => DoElement::Let {
             name: binder.name.clone(),
+            value: val.clone(),
+        },
+
+        clean_parser::DoElem::Have(_, binder, val) => DoElement::Have {
+            binder: binder.clone(),
             value: val.clone(),
         },
 
@@ -427,6 +460,7 @@ fn from_parser_do_elem(elem: &clean_parser::DoElem) -> DoElement {
                 // Already handled above
                 clean_parser::DoElem::Bind(s, _, _)
                 | clean_parser::DoElem::Let(s, _, _)
+                | clean_parser::DoElem::Have(s, _, _)
                 | clean_parser::DoElem::LetMut(s, _, _)
                 | clean_parser::DoElem::Return(s, _)
                 | clean_parser::DoElem::Expr(s, _)

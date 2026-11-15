@@ -80,15 +80,15 @@ has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|branches|has_cubical_layer.trust-ir.txt|br bb4(%4)|br bb2(%4)
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|param_blocks|has_cubical_layer.trust-ir.txt|bb4(%1: bool):|bb4:
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|extracts|has_cubical_layer.trust-ir.txt|extractfield u8 %2, 0|extractfield u8 %2, 1
-has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|loads|has_cubical_layer.trust-ir.txt|load enum.13, ptr %0|load enum.13, ptr %1
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|loads|has_cubical_layer.trust-ir.txt|load enum.17, ptr %0|load enum.17, ptr %1
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|rets|has_cubical_layer.trust-ir.txt|ret %1|ret %0
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|const_tys|has_cubical_layer.trust-ir.txt|%4 = const bool true|%9 = const bool true
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|edge_args|has_cubical_layer.trust-ir.txt|br bb4(%5)|br bb4(%4)
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|block_params|has_cubical_layer.trust-ir.txt|bb4(%1: bool):|bb4(%9: bool):
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|switch_on|has_cubical_layer.trust-ir.txt|switch %3 [|switch %2 [
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|entry_params|has_cubical_layer.trust-ir.txt|bb0(%0: ptr):|bb0(%9: ptr):
-has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys|has_cubical_layer.trust-ir.txt|load enum.13, ptr %0|load enum.2, ptr %0
-has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys_volatile|has_cubical_layer.trust-ir.txt|%2 = load enum.13|%2 = volatile load enum.13
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys|has_cubical_layer.trust-ir.txt|load enum.17, ptr %0|load enum.2, ptr %0
+has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|load_tys_volatile|has_cubical_layer.trust-ir.txt|%2 = load enum.17|%2 = volatile load enum.17
 has_cubical_layer|has_cubical_layer::proved_module_matches_the_emitted_artifact|extract_tys|has_cubical_layer.trust-ir.txt|extractfield u8 %2, 0|extractfield u16 %2, 0
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|blocks|level_kind_ord.trust-ir.txt|ret %1|ret %1\nbb99:
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|int_consts|level_kind_ord.trust-ir.txt|const u8 3|const u8 7
@@ -97,7 +97,7 @@ level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifa
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|branches|level_kind_ord.trust-ir.txt|br bb6(%4)|br bb1(%4)
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|param_blocks|level_kind_ord.trust-ir.txt|bb6(%1: u8):|bb6:
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|extracts|level_kind_ord.trust-ir.txt|extractfield u8 %2, 0|extractfield u8 %2, 1
-level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|loads|level_kind_ord.trust-ir.txt|load enum.2, ptr %0|load enum.2, ptr %1
+level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|loads|level_kind_ord.trust-ir.txt|load enum.3, ptr %0|load enum.3, ptr %1
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|rets|level_kind_ord.trust-ir.txt|ret %1|ret %0
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|const_tys|level_kind_ord.trust-ir.txt|const u8 0|const u32 0
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|edge_args|level_kind_ord.trust-ir.txt|br bb6(%5)|br bb6(%4)
@@ -105,18 +105,18 @@ level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifa
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|switch_on|level_kind_ord.trust-ir.txt|switch %3 [|switch %2 [
 level_kind_ord|level_kind_ord::kind_ord_proved_module_matches_the_emitted_artifact|entry_params|level_kind_ord.trust-ir.txt|bb0(%0: ptr):|bb0(%9: ptr):
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|blocks|from_source_system.trust-ir.txt|ret %1|ret %1\nbb99:
-from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|agg_consts|from_source_system.trust-ir.txt|const enum.13 { 2 }|const enum.13 { 7 }
+from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|agg_consts|from_source_system.trust-ir.txt|const enum.17 { 2 }|const enum.17 { 7 }
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|cases|from_source_system.trust-ir.txt|0: bb1|7: bb1
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|default|from_source_system.trust-ir.txt|default: bb12|default: bb11
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|branches|from_source_system.trust-ir.txt|br bb13(%3)|br bb1(%3)
-from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|param_blocks|from_source_system.trust-ir.txt|bb13(%1: enum.13):|bb13:
+from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|param_blocks|from_source_system.trust-ir.txt|bb13(%1: enum.17):|bb13:
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|extracts|from_source_system.trust-ir.txt|extractfield u8 %0, 0|extractfield u8 %0, 1
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|rets|from_source_system.trust-ir.txt|ret %1|ret %0
-from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|const_tys|from_source_system.trust-ir.txt|%3 = const enum.13 { 0 }|%9 = const enum.13 { 0 }
+from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|const_tys|from_source_system.trust-ir.txt|%3 = const enum.17 { 0 }|%9 = const enum.17 { 0 }
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|edge_args|from_source_system.trust-ir.txt|br bb13(%4)|br bb13(%3)
-from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|block_params|from_source_system.trust-ir.txt|bb13(%1: enum.13):|bb13(%9: enum.13):
+from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|block_params|from_source_system.trust-ir.txt|bb13(%1: enum.17):|bb13(%9: enum.17):
 from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|switch_on|from_source_system.trust-ir.txt|switch %2 [|switch %0 [
-from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|entry_params|from_source_system.trust-ir.txt|bb0(%0: enum.178):|bb0(%9: enum.178):
+from_source_system|from_source_system::from_source_system_proved_module_matches_the_emitted_artifact|entry_params|from_source_system.trust-ir.txt|bb0(%0: enum.211):|bb0(%9: enum.211):
 flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|blocks|flat_flags_contains.trust-ir.txt|ret %6|ret %6\nbb99:
 flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|extracts|flat_flags_contains.trust-ir.txt|extractfield u8 %0, 0|extractfield u8 %0, 1
 flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|icmps|flat_flags_contains.trust-ir.txt|icmp eq u8 %4, %5|icmp eq u8 %5, %4
@@ -124,7 +124,7 @@ flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_match
 flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|binop_tys|flat_flags_contains.trust-ir.txt|and u8|and u16
 flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|icmp_tys|flat_flags_contains.trust-ir.txt|icmp eq u8|icmp eq u16
 flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|rets|flat_flags_contains.trust-ir.txt|ret %6|ret %0
-flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|entry_params|flat_flags_contains.trust-ir.txt|bb0(%0: struct.1017, %1: struct.1017):|bb0(%0: struct.1017, %9: struct.1017):
+flat_flags_contains|flat_flags_contains::flat_flags_contains_proved_module_matches_the_emitted_artifact|entry_params|flat_flags_contains.trust-ir.txt|bb0(%0: struct.815, %1: struct.815):|bb0(%0: struct.815, %9: struct.815):
 bvar_in_range|bvar_in_range::bvar_in_range_proved_module_matches_the_emitted_artifact|blocks|bvar_in_range.trust-ir.txt|ret %3|ret %3\nbb99:
 bvar_in_range|bvar_in_range::bvar_in_range_proved_module_matches_the_emitted_artifact|consts|bvar_in_range.trust-ir.txt|const bool false|const bool true
 bvar_in_range|bvar_in_range::bvar_in_range_proved_module_matches_the_emitted_artifact|int_consts|bvar_in_range.trust-ir.txt|const u32 4294967295|const u32 4294967294
@@ -152,18 +152,18 @@ is_valid_char|is_valid_char::is_valid_char_proved_module_matches_the_emitted_art
 is_valid_char|is_valid_char::is_valid_char_proved_module_matches_the_emitted_artifact|block_params|is_valid_char.trust-ir.txt|bb6(%2: bool):|bb6(%9: bool):
 is_valid_char|is_valid_char::is_valid_char_proved_module_matches_the_emitted_artifact|entry_params|is_valid_char.trust-ir.txt|bb0(%0: u64):|bb0(%9: u64):
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|blocks|expr_path_step_clone.trust-ir.txt|ret %1|ret %1\nbb99:
-expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|consts|expr_path_step_clone.trust-ir.txt|%4 = const enum.184 { 0 }|%4 = const enum.184 { 0 }\n    %90 = const bool true
-expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|agg_consts|expr_path_step_clone.trust-ir.txt|const enum.184 { 2 }|const enum.184 { 7 }
+expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|consts|expr_path_step_clone.trust-ir.txt|%4 = const enum.225 { 0 }|%4 = const enum.225 { 0 }\n    %90 = const bool true
+expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|agg_consts|expr_path_step_clone.trust-ir.txt|const enum.225 { 2 }|const enum.225 { 7 }
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|cases|expr_path_step_clone.trust-ir.txt|0: bb1|7: bb1
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|default|expr_path_step_clone.trust-ir.txt|default: bb11|default: bb10
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|branches|expr_path_step_clone.trust-ir.txt|br bb12(%4)|br bb1(%4)
-expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|param_blocks|expr_path_step_clone.trust-ir.txt|bb12(%1: enum.184):|bb12:
+expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|param_blocks|expr_path_step_clone.trust-ir.txt|bb12(%1: enum.225):|bb12:
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|extracts|expr_path_step_clone.trust-ir.txt|extractfield u8 %2, 0|extractfield u8 %2, 1
-expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|loads|expr_path_step_clone.trust-ir.txt|load enum.184, ptr %0|load enum.184, ptr %1
+expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|loads|expr_path_step_clone.trust-ir.txt|load enum.225, ptr %0|load enum.225, ptr %1
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|rets|expr_path_step_clone.trust-ir.txt|ret %1|ret %0
-expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|const_tys|expr_path_step_clone.trust-ir.txt|%4 = const enum.184 { 0 }|%9 = const enum.184 { 0 }
+expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|const_tys|expr_path_step_clone.trust-ir.txt|%4 = const enum.225 { 0 }|%9 = const enum.225 { 0 }
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|edge_args|expr_path_step_clone.trust-ir.txt|br bb12(%5)|br bb12(%4)
-expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|block_params|expr_path_step_clone.trust-ir.txt|bb12(%1: enum.184):|bb12(%9: enum.184):
+expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|block_params|expr_path_step_clone.trust-ir.txt|bb12(%1: enum.225):|bb12(%9: enum.225):
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|switch_on|expr_path_step_clone.trust-ir.txt|switch %3 [|switch %2 [
 expr_path_step_clone|expr_path_step_clone::expr_path_step_clone_proved_module_matches_the_emitted_artifact|entry_params|expr_path_step_clone.trust-ir.txt|bb0(%0: ptr):|bb0(%9: ptr):
 float_div|float_div::float_div_proved_module_matches_the_emitted_artifact|blocks|float_div.trust-ir.txt|ret %3|ret %3\nbb99:

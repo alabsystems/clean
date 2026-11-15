@@ -147,13 +147,13 @@ fn test_desugar_pattern_reassign_prod() {
     let ctx = ElabCtx::new(&env);
     let span = Span::new(0, 0);
     let pat = SurfacePattern::Ctor(
-        "Prod.mk".to_string(),
+        SurfaceName::generated_path("Prod.mk"),
         vec![
-            SurfacePattern::Var("a".to_string()),
-            SurfacePattern::Var("b".to_string()),
+            SurfacePattern::Var(SurfaceName::generated_path("a")),
+            SurfacePattern::Var(SurfaceName::generated_path("b")),
         ],
     );
-    let val = SurfaceExpr::Ident(span, "expr".to_string());
+    let val = SurfaceExpr::Ident(span, SurfaceName::generated_path("expr"));
     let rest = vec![];
     let elems = ctx.desugar_pattern_reassign(span, &pat, &val, &rest);
     // Should produce: let __reassign_tmp := expr; a := Prod.fst __reassign_tmp; b := Prod.snd __reassign_tmp
@@ -170,11 +170,11 @@ fn test_desugar_pattern_reassign_prod() {
     );
     // Remaining elements should be Reassign for each variable
     assert!(
-        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == "a"),
+        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("a")),
         "second element should be Reassign for 'a'"
     );
     assert!(
-        matches!(&elems[2], DoElem::Reassign(_, name, _) if name == "b"),
+        matches!(&elems[2], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("b")),
         "third element should be Reassign for 'b'"
     );
 }
@@ -188,10 +188,10 @@ fn test_desugar_pattern_reassign_as_pattern() {
     let span = Span::new(0, 0);
     // As("n", Var("a")) — simulates `let n@a := expr`
     let pat = SurfacePattern::As(
-        "n".to_string(),
-        Box::new(SurfacePattern::Var("a".to_string())),
+        SurfaceName::generated_path("n"),
+        Box::new(SurfacePattern::Var(SurfaceName::generated_path("a"))),
     );
-    let val = SurfaceExpr::Ident(span, "expr".to_string());
+    let val = SurfaceExpr::Ident(span, SurfaceName::generated_path("expr"));
     let elems = ctx.desugar_pattern_reassign(span, &pat, &val, &[]);
     // Should produce: let __reassign_tmp := expr; n := __reassign_tmp; a := __reassign_tmp
     assert!(
@@ -200,11 +200,11 @@ fn test_desugar_pattern_reassign_as_pattern() {
         elems.len()
     );
     assert!(
-        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == "n"),
+        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("n")),
         "second element should be Reassign for 'n' (the As binding)"
     );
     assert!(
-        matches!(&elems[2], DoElem::Reassign(_, name, _) if name == "a"),
+        matches!(&elems[2], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("a")),
         "third element should be Reassign for 'a' (the inner pattern)"
     );
 }
@@ -217,8 +217,11 @@ fn test_desugar_pattern_reassign_numeral_add() {
     let ctx = ElabCtx::new(&env);
     let span = Span::new(0, 0);
     // NumeralAdd(Var("m"), 1) — simulates `let (m + 1) := expr`
-    let pat = SurfacePattern::NumeralAdd(Box::new(SurfacePattern::Var("m".to_string())), 1);
-    let val = SurfaceExpr::Ident(span, "expr".to_string());
+    let pat = SurfacePattern::NumeralAdd(
+        Box::new(SurfacePattern::Var(SurfaceName::generated_path("m"))),
+        1,
+    );
+    let val = SurfaceExpr::Ident(span, SurfaceName::generated_path("expr"));
     let elems = ctx.desugar_pattern_reassign(span, &pat, &val, &[]);
     // Should produce: let __reassign_tmp := expr; m := __reassign_tmp
     assert!(
@@ -227,7 +230,7 @@ fn test_desugar_pattern_reassign_numeral_add() {
         elems.len()
     );
     assert!(
-        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == "m"),
+        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("m")),
         "second element should be Reassign for 'm' (the inner variable)"
     );
 }
@@ -240,13 +243,13 @@ fn test_desugar_pattern_reassign_as_with_numeral_add() {
     let ctx = ElabCtx::new(&env);
     let span = Span::new(0, 0);
     let pat = SurfacePattern::As(
-        "n".to_string(),
+        SurfaceName::generated_path("n"),
         Box::new(SurfacePattern::NumeralAdd(
-            Box::new(SurfacePattern::Var("m".to_string())),
+            Box::new(SurfacePattern::Var(SurfaceName::generated_path("m"))),
             1,
         )),
     );
-    let val = SurfaceExpr::Ident(span, "expr".to_string());
+    let val = SurfaceExpr::Ident(span, SurfaceName::generated_path("expr"));
     let elems = ctx.desugar_pattern_reassign(span, &pat, &val, &[]);
     // Should produce: let __reassign_tmp := expr; n := __reassign_tmp; m := __reassign_tmp
     assert!(
@@ -255,11 +258,11 @@ fn test_desugar_pattern_reassign_as_with_numeral_add() {
         elems.len()
     );
     assert!(
-        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == "n"),
+        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("n")),
         "second element should be Reassign for 'n'"
     );
     assert!(
-        matches!(&elems[2], DoElem::Reassign(_, name, _) if name == "m"),
+        matches!(&elems[2], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("m")),
         "third element should be Reassign for 'm'"
     );
 }
@@ -271,13 +274,13 @@ fn test_desugar_pattern_reassign_wildcard_skipped() {
     let ctx = ElabCtx::new(&env);
     let span = Span::new(0, 0);
     let pat = SurfacePattern::Ctor(
-        "Prod.mk".to_string(),
+        SurfaceName::generated_path("Prod.mk"),
         vec![
-            SurfacePattern::Var("a".to_string()),
+            SurfacePattern::Var(SurfaceName::generated_path("a")),
             SurfacePattern::Wildcard,
         ],
     );
-    let val = SurfaceExpr::Ident(span, "expr".to_string());
+    let val = SurfaceExpr::Ident(span, SurfaceName::generated_path("expr"));
     let elems = ctx.desugar_pattern_reassign(span, &pat, &val, &[]);
     // Should produce: let __reassign_tmp := expr; a := Prod.fst __reassign_tmp
     // Wildcard produces no reassign
@@ -287,7 +290,7 @@ fn test_desugar_pattern_reassign_wildcard_skipped() {
         elems.len()
     );
     assert!(
-        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == "a"),
+        matches!(&elems[1], DoElem::Reassign(_, name, _) if name == &SurfaceName::generated_path("a")),
         "second element should be Reassign for 'a'"
     );
 }

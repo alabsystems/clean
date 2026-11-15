@@ -13,7 +13,7 @@
 //!
 //! Reference: ~/lean4-ref/src/Lean/Elab/Do/InferControlInfo.lean
 
-use clean_parser::DoElem;
+use clean_parser::{DoElem, SurfaceName};
 use std::collections::HashSet;
 
 /// Control flow effects detected in a do-block before elaboration.
@@ -35,7 +35,7 @@ pub(crate) struct ControlInfo {
     /// 0 means all paths exit via control flow (dead code after this block).
     pub(crate) num_regular_exits: usize,
     /// Names of mutable variables that are reassigned in this block.
-    pub(crate) reassigns: HashSet<String>,
+    pub(crate) reassigns: HashSet<SurfaceName>,
 }
 
 impl ControlInfo {
@@ -62,7 +62,7 @@ impl ControlInfo {
     }
 
     /// Pure element that records a single mutable variable name.
-    fn with_reassign(name: String) -> Self {
+    fn with_reassign(name: SurfaceName) -> Self {
         let mut info = Self::pure();
         info.reassigns.insert(name);
         info
@@ -124,6 +124,7 @@ pub(crate) fn infer_control_info_elem(elem: &DoElem) -> ControlInfo {
         DoElem::Expr(_, _)
         | DoElem::Bind(_, _, _)
         | DoElem::Let(_, _, _)
+        | DoElem::Have(_, _, _)
         | DoElem::LetRec(_, _)
         | DoElem::DbgTrace(_, _) => ControlInfo::pure(),
         // LetMut is pure — only Reassign adds to reassigns (InferControlInfo.lean:97)
@@ -262,6 +263,7 @@ fn elem_contains_return_for_outer_continuation(elem: &DoElem) -> bool {
         | DoElem::Expr(_, _)
         | DoElem::Bind(_, _, _)
         | DoElem::Let(_, _, _)
+        | DoElem::Have(_, _, _)
         | DoElem::LetRec(_, _)
         | DoElem::LetMut(_, _, _)
         | DoElem::Reassign(_, _, _)
@@ -275,13 +277,52 @@ fn elem_contains_return_for_outer_continuation(elem: &DoElem) -> bool {
 /// Only such returns trigger `elab_do_early_return` via the `[Return, rest @ ..]`
 /// dispatch pattern in `elab_do_elems`. Returns at the end of the sequence are
 /// terminal and handled by `elab_pure` instead.
+///
+/// The branches of a TERMINAL `if`/`match` are tail positions of the block
+/// too, so their own last returns are terminal while a return FOLLOWED by
+/// more elements inside them is not: `if a then return 1 else ⏎ if b then
+/// return 2 ⏎ return 4` (Lean 4.8: `ecol false false = 4`). Missing that one
+/// elaborated the inner `if` as a `Unit` statement around `return 2 : m Nat`,
+/// which the kernel refused ("expected Unit, got Nat") — and where the
+/// monad's value IS `Unit`, the `return` silently fell through to the next
+/// element instead of leaving the block.
 pub(crate) fn has_top_level_non_terminal_return(elems: &[DoElem]) -> bool {
-    for (i, elem) in elems.iter().enumerate() {
-        if i < elems.len() - 1 && elem_contains_return_for_outer_continuation(elem) {
-            return true;
-        }
-    }
-    false
+    crate::stack_safe(|| {
+        let Some((last, init)) = elems.split_last() else {
+            return false;
+        };
+        init.iter().any(elem_contains_return_for_outer_continuation)
+            || match last {
+                DoElem::If(_, _, then_branch, else_branch)
+                | DoElem::IfLet(_, _, _, then_branch, else_branch)
+                | DoElem::IfDecidable(_, _, _, then_branch, else_branch) => {
+                    has_top_level_non_terminal_return(then_branch)
+                        || else_branch
+                            .as_deref()
+                            .is_some_and(has_top_level_non_terminal_return)
+                }
+                DoElem::Match(_, _, arms) => arms
+                    .iter()
+                    .any(|arm| has_top_level_non_terminal_return(&arm.body)),
+                // A terminal `try`: its body's and handlers' values are the
+                // block's value, so their own terminal returns need no tunnel,
+                // and a return anywhere else in them is an early return of
+                // the block (G54: `try (if b then return ()); pure 2 catch …`
+                // elaborated `return ()` as a discarded `pure ()`, unchecked
+                // against the block's result type). A return in a `finally`
+                // body never yields the block's value.
+                DoElem::TryCatch(_, try_body, catches, finally_body) => {
+                    has_top_level_non_terminal_return(try_body)
+                        || catches
+                            .iter()
+                            .any(|clause| has_top_level_non_terminal_return(&clause.body))
+                        || finally_body
+                            .as_deref()
+                            .is_some_and(seq_contains_return_for_outer_continuation)
+                }
+                _ => false,
+            }
+    })
 }
 
 #[cfg(test)]
@@ -294,7 +335,10 @@ mod tests {
     }
 
     fn dummy_expr() -> Box<SurfaceExpr> {
-        Box::new(SurfaceExpr::Ident(dummy_span(), "x".to_string()))
+        Box::new(SurfaceExpr::Ident(
+            dummy_span(),
+            SurfaceName::generated_path("x"),
+        ))
     }
 
     fn dummy_binder(name: &str) -> SurfaceBinder {
@@ -338,11 +382,11 @@ mod tests {
     fn test_reassign_records_name() {
         let info = infer_control_info_elem(&DoElem::Reassign(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
             dummy_expr(),
         ));
         assert_eq!(info.num_regular_exits, 1);
-        assert!(info.reassigns.contains("x"));
+        assert!(info.reassigns.contains(&SurfaceName::generated_path("x")));
     }
 
     #[test]
@@ -424,7 +468,7 @@ mod tests {
 
         let reassign_info = infer_control_info_elem(&DoElem::Reassign(
             dummy_span(),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
             dummy_expr(),
         ));
         assert!(reassign_info.needs_control_stack());
@@ -443,7 +487,7 @@ mod tests {
         let catch_body = vec![DoElem::Return(dummy_span(), dummy_expr())];
         let catch_clause = clean_parser::DoCatchClause {
             span: dummy_span(),
-            binder: "e".to_string(),
+            binder: SurfaceName::generated_path("e"),
             exc_type: None,
             body: catch_body,
         };
@@ -495,6 +539,40 @@ mod tests {
         assert!(
             !has_top_level_non_terminal_return(&elems),
             "terminal match branch returns should still avoid EarlyReturn wrapping"
+        );
+    }
+
+    #[test]
+    fn test_has_top_level_non_terminal_return_sees_a_guard_inside_a_terminal_branch() {
+        // `if a then return 1 else ⏎ if b then return 2 ⏎ return 4`: the
+        // else-branch's guard return is followed by `return 4` IN that branch.
+        let ret = || DoElem::Return(dummy_span(), dummy_expr());
+        let guard = DoElem::If(dummy_span(), dummy_expr(), vec![ret()], None);
+        let terminal_if = |else_branch: Vec<DoElem>| {
+            vec![DoElem::If(
+                dummy_span(),
+                dummy_expr(),
+                vec![ret()],
+                Some(else_branch),
+            )]
+        };
+        assert!(
+            has_top_level_non_terminal_return(&terminal_if(vec![guard.clone(), ret()])),
+            "a guard return inside a terminal branch is not terminal"
+        );
+        let in_arm = vec![DoElem::Match(
+            dummy_span(),
+            vec![*dummy_expr()],
+            vec![wildcard_arm(vec![guard, ret()]), wildcard_arm(vec![ret()])],
+        )];
+        assert!(
+            has_top_level_non_terminal_return(&in_arm),
+            "a guard return inside a terminal match arm is not terminal"
+        );
+        // Control: a branch that only ends in a return stays terminal.
+        assert!(
+            !has_top_level_non_terminal_return(&terminal_if(vec![ret()])),
+            "a terminal branch's own last return is terminal"
         );
     }
 }

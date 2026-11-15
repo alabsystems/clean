@@ -8,7 +8,6 @@
 
 use crate::error::ElabError;
 use crate::structure_extend::flatten_parents;
-use clean_kernel::env::KernelClassInfo;
 use clean_kernel::{
     BinderInfo, Constructor, Declaration, Environment, Expr, InductiveDecl, InductiveType, Level,
     Name, TypeChecker,
@@ -48,7 +47,10 @@ fn kernel_registration_failed(
         },
         clean_kernel::EnvError::TheoremTypeNotProp { name, sort } => ElabError::KernelCheckFailed {
             name,
-            detail: format!("type must be Prop, inferred sort {sort:?}"),
+            detail: format!(
+                "type must be Prop, inferred sort {}",
+                crate::error_render::level(&sort)
+            ),
         },
         other => ElabError::KernelRegistrationFailed {
             operation: operation.into(),
@@ -310,12 +312,7 @@ pub(crate) fn elaborate_structure(
         generate_projections(&def.name, &def.universe_params, &def.params, &fields, env);
 
     if def.is_class {
-        env.register_class(KernelClassInfo {
-            name: def.name.clone(),
-            num_params: def.params.len(),
-            out_params: Vec::new(),
-            semi_out_params: Vec::new(),
-        });
+        crate::class_attribute::register_new_declaration(env, &def.name)?;
     }
 
     Ok(projections)

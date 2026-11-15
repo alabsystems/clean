@@ -32,10 +32,12 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 
 use clean_kernel::{Environment, Name};
 
-use super::exec::{elaborate_node, introduced_names, referenced_names, register_node, OptionScope};
+use super::exec::{
+    elaborate_node, introduced_names, referenced_names, register_node,
+    split_logged_source_rejections, OptionScope,
+};
 use super::plan::{NodeClass, NodeStatus, Plan};
 use super::{BatchOptions, BatchRejection, HeaderAgreement, PublishAuditIssue};
-use crate::register;
 
 /// Phase 4 — elaborate and register every remaining declaration.
 pub(super) fn elaborate_bodies(
@@ -68,8 +70,8 @@ pub(super) fn elaborate_bodies(
         for index in pending {
             staging_options.enter(staging, &plan.nodes[index]);
             let elaboration = elaborate_node(&*staging, &plan.nodes[index], &siblings);
-            let result = match elaboration.result {
-                Ok(result) => result,
+            let (result, logged_deriving) = match elaboration.result {
+                Ok(result) => split_logged_source_rejections(&plan.nodes[index], result),
                 Err(error) => {
                     // Deferred, not refused. A body can fail simply because a
                     // dependency is still a signature rather than a definition
@@ -123,17 +125,20 @@ pub(super) fn elaborate_bodies(
 
             // COMMIT. Registration goes into the authoritative environment,
             // which has never held a header.
-            if let Err(error) = register_node(publish, node, &result, elaboration.attributes) {
-                let rejection = BatchRejection::Elaboration {
-                    name: node.name.clone(),
-                    site: node.site(),
-                    error: Box::new(error),
-                };
-                rejections.push(rejection.clone());
-                node.status = NodeStatus::Refused(rejection);
-                progressed = true;
-                continue;
-            }
+            let publication = match register_node(publish, node, &result, elaboration.attributes) {
+                Ok(publication) => publication,
+                Err(error) => {
+                    let rejection = BatchRejection::Elaboration {
+                        name: node.name.clone(),
+                        site: node.site(),
+                        error: Box::new(error),
+                    };
+                    rejections.push(rejection.clone());
+                    node.status = NodeStatus::Refused(rejection);
+                    progressed = true;
+                    continue;
+                }
+            };
 
             node.introduces = introduces.clone();
             node.depends_on = referenced
@@ -141,6 +146,7 @@ pub(super) fn elaborate_bodies(
                 .filter(|name| !introduces.contains(name))
                 .collect();
             node.status = NodeStatus::Registered;
+            rejections.extend(logged_deriving);
             progressed = true;
 
             // Mirror into staging so LATER bodies see a real definition where a
@@ -151,7 +157,7 @@ pub(super) fn elaborate_bodies(
             for name in &introduces {
                 staging.discharge_staged_header(name);
             }
-            if let Err(error) = register::register_elab_result(staging, &result) {
+            if let Err(error) = publication.mirror_into(staging) {
                 // The same declaration was just accepted by the authoritative
                 // kernel check, so this can only be a staging-side bookkeeping
                 // failure. Report it rather than continue with a staging
@@ -197,6 +203,7 @@ pub(super) fn elaborate_bodies(
         node.hole_contexts = elaboration.hole_contexts;
         match elaboration.result {
             Ok(result) => {
+                let (result, logged_deriving) = split_logged_source_rejections(node, result);
                 if let Err(error) = register_node(publish, node, &result, elaboration.attributes) {
                     let rejection = BatchRejection::Elaboration {
                         name: node.name.clone(),
@@ -206,7 +213,24 @@ pub(super) fn elaborate_bodies(
                     rejections.push(rejection.clone());
                     node.status = NodeStatus::Refused(rejection);
                 } else {
+                    // Keep the original terms for a consumer's stricter audit;
+                    // never elaborate an anonymous proof a second time.
+                    let mut leaves = Vec::new();
+                    result.leaf_decls(&mut leaves);
+                    node.checked_judgments = leaves
+                        .into_iter()
+                        .filter_map(|leaf| match leaf {
+                            crate::ElabResult::Example { ty, val } => {
+                                Some(super::CheckedJudgment {
+                                    type_: ty.clone(),
+                                    value: val.clone(),
+                                })
+                            }
+                            _ => None,
+                        })
+                        .collect();
                     node.status = NodeStatus::LexicalOrCommand;
+                    rejections.extend(logged_deriving);
                 }
             }
             Err(error) => {
@@ -243,7 +267,7 @@ fn unstaged_siblings(plan: &Plan) -> Vec<crate::infer::UnstagedSibling> {
             node.name
                 .as_ref()
                 .map(|name| crate::infer::UnstagedSibling {
-                    name: name.to_string(),
+                    name: name.clone(),
                     reason: header_absence_phrase(node.no_header),
                 })
         })
@@ -313,6 +337,7 @@ fn registered_signature<'a>(
 ) -> Option<(&'a [Name], &'a clean_kernel::Expr)> {
     use crate::infer::ElabResult;
     match result {
+        ElabResult::Diagnosed { result, .. } => registered_signature(result, name),
         ElabResult::Definition {
             name: found,
             universe_params,

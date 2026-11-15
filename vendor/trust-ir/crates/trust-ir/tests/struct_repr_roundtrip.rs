@@ -48,6 +48,7 @@ fn module_with_reprs() -> Module {
             size: None,
             align: None,
             repr,
+            origin: None,
         });
     }
     m
@@ -66,7 +67,7 @@ fn struct_repr_display() {
 #[test]
 fn struct_repr_binary_round_trip() {
     let m = module_with_reprs();
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("binary round trip");
     let got: Vec<_> = back.structs.iter().map(|s| s.repr).collect();
     let want: Vec<_> = m.structs.iter().map(|s| s.repr).collect();
@@ -86,7 +87,20 @@ fn struct_repr_text_round_trip() {
         !text.contains("repr=rust"),
         "default repr must not be emitted"
     );
-    let reparsed = trust_ir::parser::parse_module(&text).expect("text round trip");
+    // Roadmap WS4.2: field names/offsets are not carried by text, so the dump
+    // is `#lossy`-marked and refused; the repr is checked on the loss-free
+    // projection (fields reduced to their types).
+    if !trust_ir::text_loss::text_losses(&m).is_empty() {
+        assert!(trust_ir::parser::parse_module(&text).is_err());
+    }
+    let mut carried = m.clone();
+    for sd in &mut carried.structs {
+        for field in &mut sd.fields {
+            field.name.clear();
+            field.offset = None;
+        }
+    }
+    let reparsed = trust_ir::parser::parse_module(&format!("{carried}")).expect("text round trip");
     let got: Vec<_> = reparsed.structs.iter().map(|s| s.repr).collect();
     let want: Vec<_> = m.structs.iter().map(|s| s.repr).collect();
     assert_eq!(got, want);

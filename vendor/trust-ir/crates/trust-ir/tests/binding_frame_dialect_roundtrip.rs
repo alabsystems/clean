@@ -38,11 +38,14 @@ fn b(n: u32) -> BlockId {
 /// a multi-slot frame so slot indexing is covered.
 fn module_with_binding_frame() -> Module {
     let mut module = Module::new("frame_rt");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![Ty::I64, Ty::Bool],
-        returns: vec![Ty::I64],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![Ty::I64, Ty::Bool],
+            returns: vec![Ty::I64],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "exists_lower", ft, b(0));
     let mut block = Block::new(b(0));
     block.params.push((v(0), Ty::I64));
@@ -96,7 +99,9 @@ fn module_with_binding_frame() -> Module {
         .body
         .push(InstrNode::new(Inst::Return { values: vec![v(5)] }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -105,11 +110,14 @@ fn module_with_binding_frame() -> Module {
 /// but it must still round-trip opaquely (issue #58 acceptance).
 fn module_with_unknown_dialect_op() -> Module {
     let mut module = Module::new("unknown_dialect_rt");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![Ty::Ptr, Ty::I64],
-        returns: vec![Ty::Ptr, Ty::Bool],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![Ty::Ptr, Ty::I64],
+            returns: vec![Ty::Ptr, Ty::Bool],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "f", ft, b(0));
     let mut block = Block::new(b(0));
     block.params.push((v(0), Ty::Ptr));
@@ -140,14 +148,16 @@ fn module_with_unknown_dialect_op() -> Module {
         values: vec![v(2), v(3)],
     }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
 // --- Binary roundtrip ---
 
 fn binary_round_trip(module: &Module) {
-    let bytes = trust_ir::binary::serialize_module(module);
+    let bytes = trust_ir::binary::serialize_module(module).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("deserialize");
     assert_eq!(module, &back, "binary round-trip mismatch");
 }
@@ -212,7 +222,8 @@ fn unknown_dialect_op_serde_round_trip() {
 #[test]
 fn unknown_dialect_op_preserves_fields_through_binary() {
     let module = module_with_unknown_dialect_op();
-    let bytes = trust_ir::binary::serialize_module(&module);
+    let bytes =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("deserialize");
 
     // Fish out the DialectOp node from the round-tripped module and check

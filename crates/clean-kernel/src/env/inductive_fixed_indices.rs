@@ -287,22 +287,6 @@ pub(crate) fn fresh_univ_name(existing: &[Name]) -> Name {
     unreachable!("infinite loop should find a fresh name")
 }
 
-/// Check if a type is a "prop former" — its type, after stripping all Pi
-/// binders, ends in `Sort(Zero)` (i.e., `Prop`).
-///
-/// Lean 4 skips noConfusion generation for prop-valued inductive types
-/// (see `Lean/Meta/Constructions/NoConfusion.lean:359`).
-pub(crate) fn is_prop_former_type(type_: &Expr) -> bool {
-    let mut cur = type_;
-    loop {
-        match &cur.kind {
-            ExprKind::Pi(_, _, body) => cur = body,
-            ExprKind::Sort(level) => return level.is_zero(),
-            _ => return false,
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -803,6 +787,165 @@ mod tests {
         assert_eq!(
             new_num_params, 2,
             "HEq must NOT promote — constructor arity (2) < index arg positions (2,3)"
+        );
+    }
+
+    /// `mutual MIA : Nat → Type | a (n : Nat) : MIA n; MIB : Bool → Type | b (x : Bool) : MIB x end`.
+    fn mia_mib_block() -> InductiveDecl {
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let bool_ = Expr::const_(Name::from_string("Bool"), vec![]);
+        let ty1 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
+        let mia = Expr::const_(Name::from_string("MIA"), vec![]);
+        let mib = Expr::const_(Name::from_string("MIB"), vec![]);
+        InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![
+                InductiveType {
+                    name: Name::from_string("MIA"),
+                    type_: Expr::pi(BinderInfo::Default, nat.clone(), ty1.clone()),
+                    constructors: vec![Constructor {
+                        name: Name::from_string("MIA.a"),
+                        type_: Expr::pi(BinderInfo::Default, nat, Expr::app(mia, Expr::bvar(0))),
+                    }],
+                },
+                InductiveType {
+                    name: Name::from_string("MIB"),
+                    type_: Expr::pi(BinderInfo::Default, bool_.clone(), ty1),
+                    constructors: vec![Constructor {
+                        name: Name::from_string("MIB.b"),
+                        type_: Expr::pi(BinderInfo::Default, bool_, Expr::app(mib, Expr::bvar(0))),
+                    }],
+                },
+            ],
+        }
+    }
+
+    /// `abbrev MyNat := Nat; inductive Foo : MyNat → Prop | mk (n : Nat) : Foo n`: one fixed
+    /// index whose domain is `MyNat` on the type and `Nat` on the constructor, defeq but not
+    /// syntactically equal. Pinned Lean promotes it (`#print Foo`: `number of parameters: 1`).
+    fn foo_mynat_block() -> InductiveDecl {
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let mynat = Expr::const_(Name::from_string("MyNat"), vec![]);
+        let prop = Expr::from_kind(ExprKind::Sort(Level::zero()));
+        let foo = Expr::const_(Name::from_string("Foo"), vec![]);
+        InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: Name::from_string("Foo"),
+                type_: Expr::pi(BinderInfo::Default, mynat, prop),
+                constructors: vec![Constructor {
+                    name: Name::from_string("Foo.mk"),
+                    type_: Expr::pi(BinderInfo::Default, nat, Expr::app(foo, Expr::bvar(0))),
+                }],
+            }],
+        }
+    }
+
+    /// Promotion checks only that each type has a `Pi` at the fixed position, not Lean's
+    /// `isDomainDefEq` (finding B5, OPEN, `docs/DECISIONS.md` R113). On `Foo` that is what Lean
+    /// does (Lean promotes: `Nat` and `MyNat` are defeq). R113's first round compared the domains
+    /// STRUCTURALLY instead; that kept `nparams = 0` for `Foo`, so the frontend admitted a
+    /// recursor Lean never generates (review finding P5), and it was reverted.
+    #[test]
+    fn test_fixed_indices_defeq_domain_promotes_as_lean_does() {
+        assert_eq!(
+            fixed_indices_to_params(&foo_mynat_block()),
+            1,
+            "Foo's fixed index is promoted, as Lean's fixedIndicesToParams promotes it"
+        );
+    }
+
+    /// Known gap B5, pinned: on `MIA`/`MIB` (domains `Nat` and `Bool`, not defeq) Lean keeps
+    /// `nparams = 0`; Clean promotes one index (this test), and admission then refuses the
+    /// honest block by name (below). The day promotion is defeq-aware this goes red.
+    #[test]
+    fn test_fixed_indices_mutual_differing_domains_still_promote_known_gap_b5() {
+        assert_eq!(fixed_indices_to_params(&mia_mib_block()), 1);
+    }
+
+    /// The admission refuses both blocks rather than admit a recursor shape Lean does not
+    /// generate: `check_block_agreement` compares the promoted domains structurally, so `Foo`
+    /// (`MyNat` vs `Nat`) and `MIA`/`MIB` (`Nat` vs `Bool`) are refused, naming the member.
+    /// Pinned Lean accepts both (`MIA`/`MIB`: `leanchecker` rc 0 on `HonestD.olean`; `Foo`:
+    /// nparams 1), so these are false refusals in the safe direction (B5, OPEN).
+    #[test]
+    fn test_admission_refuses_a_promoted_block_whose_domains_differ_known_gap_b5() {
+        let mut env = crate::env::Environment::with_prelude();
+        let err = env
+            .add_inductive(mia_mib_block())
+            .expect_err("MIA/MIB is refused until promotion is defeq-aware (B5)");
+        assert!(
+            err.to_string()
+                .contains("disagrees with the block's shared parameter telescope"),
+            "{err}"
+        );
+
+        let mut env = crate::env::Environment::with_prelude();
+        env.add_decl(crate::env::Declaration::Definition {
+            name: Name::from_string("MyNat"),
+            level_params: vec![],
+            type_: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+            value: Expr::const_(Name::from_string("Nat"), vec![]),
+            is_reducible: true,
+        })
+        .expect("abbrev MyNat := Nat");
+        let err = env
+            .add_inductive(foo_mynat_block())
+            .expect_err("Foo is refused rather than admitted with nparams = 0 (P5)");
+        assert!(
+            err.to_string()
+                .contains("disagrees with the block's shared parameter telescope"),
+            "{err}"
+        );
+    }
+
+    /// Control: a mutual block whose index domains AGREE still promotes the
+    /// shared fixed-index prefix, as Lean does.
+    #[test]
+    fn test_fixed_indices_mutual_matching_domains_promote() {
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let ty1 = Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero())));
+        let mk_type = |ctor_head: &str| {
+            let head = Expr::const_(Name::from_string(ctor_head), vec![]);
+            (
+                Expr::pi(BinderInfo::Default, nat.clone(), ty1.clone()),
+                Expr::pi(
+                    BinderInfo::Default,
+                    nat.clone(),
+                    Expr::app(head, Expr::bvar(0)),
+                ),
+            )
+        };
+        let (na_type, na_ctor) = mk_type("NA");
+        let (nb_type, nb_ctor) = mk_type("NB");
+        let decl = InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![
+                InductiveType {
+                    name: Name::from_string("NA"),
+                    type_: na_type,
+                    constructors: vec![Constructor {
+                        name: Name::from_string("NA.a"),
+                        type_: na_ctor,
+                    }],
+                },
+                InductiveType {
+                    name: Name::from_string("NB"),
+                    type_: nb_type,
+                    constructors: vec![Constructor {
+                        name: Name::from_string("NB.b"),
+                        type_: nb_ctor,
+                    }],
+                },
+            ],
+        };
+        assert_eq!(
+            fixed_indices_to_params(&decl),
+            1,
+            "a mutual block with matching index domains promotes the shared fixed index"
         );
     }
 }

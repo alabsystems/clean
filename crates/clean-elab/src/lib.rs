@@ -69,10 +69,15 @@ pub(crate) mod auto_bound_ext;
 pub(crate) mod auto_param_ext;
 pub mod cert;
 pub mod check_cmd;
+mod class_attribute;
 #[cfg(feature = "cli")]
 pub mod cli;
 pub(crate) mod coercion;
+mod csimp_attribute;
 pub(crate) mod decl_attributes;
+mod definition_attrs;
+pub mod source_diagnostics;
+mod source_kind;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -82,6 +87,7 @@ pub(crate) mod coercion_ext;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod coercion_ext2;
 pub mod command_elab;
+pub mod command_line_options;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -92,6 +98,8 @@ pub mod command_elab_registry;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod command_elab_registry_ext;
 pub(crate) mod commands;
+pub(crate) mod guard_msgs;
+pub(crate) mod reduce_command;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -190,6 +198,14 @@ pub(crate) mod eval_cmd_ext2;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod ffi_extern;
+// Which elaboration run added a declaration: Lean's imported-module check
+// for the `attribute [..]` command.
+pub(crate) mod declared_here;
+mod source_family_authority;
+mod source_prelude;
+// `@[implemented_by]`: resolution in Lean's order, and the command form's
+// order record.
+pub(crate) mod implemented_by;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 pub(crate) mod codata_cmd;
@@ -208,6 +224,8 @@ pub(crate) mod file_context;
 pub mod header;
 pub(crate) mod hetero_bridge_seed;
 pub(crate) mod imports;
+pub(crate) mod lake_module_name;
+pub mod private_names;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -221,7 +239,9 @@ pub(crate) mod inductive_ext2;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod inductive_ext_elab;
 pub(crate) mod infer;
+pub(crate) mod instance_alias;
 pub(crate) mod instance_priority;
+pub(crate) mod instance_store;
 mod state_generation;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
@@ -241,6 +261,7 @@ pub(crate) mod instances_ext;
 pub mod interactive_goals;
 pub mod io_bridge;
 pub(crate) mod io_monad;
+pub mod term_info;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -249,6 +270,10 @@ pub(crate) mod io_monad_ext;
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod io_monad_ext2;
+/// Lean's refusals outside its kernel: compilation, `#eval`, the safe context.
+pub(crate) mod lean_compile_checks;
+/// Lean 4.8.0 core constants, for the duplicate-declaration check.
+pub(crate) mod lean_core_names;
 pub(crate) mod level_mint;
 pub(crate) mod level_params;
 pub(crate) mod level_role;
@@ -311,6 +336,8 @@ pub(crate) mod mutual_inductive;
 // Unwired roadmap prototype (2026-08-04): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors the pattern already used for pattern_match_ext / error_recovery*.
 pub mod module_batch;
+// The per-declaration loop `clean check`, `clean lake build` and the LSP share.
+pub mod module_driver;
 #[cfg(test)]
 pub(crate) mod mutual_inductive_ext;
 pub(crate) mod mutual_recursion_desugar;
@@ -354,6 +381,7 @@ pub(crate) mod notation_scope_ext;
 pub(crate) mod notation_scope_ext2;
 pub mod options_registry;
 pub(crate) mod options_registry_ext;
+pub mod oracle_compiler;
 #[cfg(test)]
 #[cfg(test)]
 mod test_env;
@@ -364,6 +392,7 @@ pub(crate) mod pattern_match_ext;
 mod prelude_providers;
 pub(crate) mod preprocess;
 pub(crate) mod preprocess_ext;
+pub(crate) mod print_axioms;
 pub(crate) mod print_cmd;
 pub(crate) mod proj_recursion;
 pub mod register;
@@ -372,6 +401,7 @@ pub mod register;
 #[cfg_attr(not(test), allow(dead_code))]
 pub(crate) mod register_ext;
 pub(crate) mod registration_warning;
+pub(crate) mod section_var_selection;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -441,6 +471,7 @@ pub(crate) mod unify;
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
 #[cfg(test)]
 pub(crate) mod unify_ext;
+pub(crate) mod value_binder_names;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -455,6 +486,7 @@ pub(crate) mod variable_cmd_ext;
 pub(crate) mod where_clause;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
+pub(crate) mod universe_occurrence;
 #[cfg(test)]
 pub(crate) mod where_clause_ext;
 pub(crate) mod where_desugar;
@@ -468,6 +500,7 @@ pub(crate) mod error_recovery;
 pub(crate) mod error_recovery_ext;
 #[cfg(test)]
 pub(crate) mod error_recovery_ext2;
+pub(crate) mod error_render;
 // Value-type half of `error_recovery_ext`, split out for the 500-line rule.
 // Same cfg(test) gate as its parent: the recovery prototypes compile only with
 // their unit tests until the live pipeline owns their trust policy.
@@ -520,6 +553,9 @@ pub(crate) mod test_support;
 mod error_recovery_tests;
 
 #[cfg(test)]
+mod tests_error_render_ratchet;
+
+#[cfg(test)]
 #[path = "error_recovery_ext_tests.rs"]
 mod error_recovery_ext_tests;
 
@@ -536,6 +572,10 @@ mod info_tree_tests;
 mod subobject_projection_tests;
 
 #[cfg(test)]
+#[path = "structure_proj_binder_info_tests.rs"]
+mod structure_proj_binder_info_tests;
+
+#[cfg(test)]
 #[path = "info_tree_ext_tests.rs"]
 mod info_tree_ext_tests;
 
@@ -543,24 +583,43 @@ mod info_tree_ext_tests;
 #[path = "include_omit_semantics_tests.rs"]
 mod include_omit_semantics_tests;
 
-use clean_kernel::Name;
+#[cfg(test)]
+#[path = "imported_export_alias_tests.rs"]
+mod imported_export_alias_tests;
 
 // Re-export extracted types at crate root for backwards compatibility
+/// The Lean world a run's imports resolve in (G72), for callers that set a
+/// [`FileContext`]'s with [`FileContext::set_import_context`].
+pub use clean_olean::{import_world_for_file, ImportWorld, ImportWorldRefusal};
 use derive_handlers::register_user_derive_handler;
 pub use error::{ElabElabError, ElabError};
 pub use file_context::FileContext;
 pub use header::{elaborate_decl_headers_with_context, DeclHeader};
+pub use implemented_by::ImplementedByDefect;
 pub use imports::{
-    lake_import_search_paths_for_file, nearest_lake_root_for_file, olean_available_for_module,
-    process_import_batch_with_search_paths, process_imports, process_imports_with_policy,
-    resolve_intra_project_import, ImportPolicy,
+    effective_import_search_paths, lake_import_search_paths_for_file, nearest_lake_root_for_file,
+    olean_available_for_module, olean_available_in_world, process_import_batch_with_search_paths,
+    process_imports, process_imports_with_policy, resolve_intra_project_import, ImportPolicy,
+};
+pub use lake_module_name::{
+    entry_module_name, lean_module_name_for_file, path_module_label, path_module_name,
 };
 pub use preprocess::preprocess_decl_with_context;
-#[cfg(not(test))]
-use register::register_elab_result;
 #[cfg(test)]
 pub(crate) use register::register_elab_result;
 pub use register::{kernel_check_failure_count, register_aesop_rule};
+
+impl FileContext {
+    /// Whether imports may search external `.olean` paths.
+    ///
+    /// Trust's Clean-island stand-in import census reads this policy to claim
+    /// nothing about a file whose imports a real artifact may have served.
+    /// Reading the policy does not change it or authorize an import.
+    #[must_use]
+    pub fn external_import_search_enabled(&self) -> bool {
+        self.external_import_search_enabled_impl()
+    }
+}
 
 // =============================================================================
 // Stack overflow protection for deep recursion
@@ -614,15 +673,25 @@ pub use check_cmd::CheckResult as EnhancedCheckResult;
 pub use check_cmd::{check_expression, check_name};
 pub use commands::{CheckResult, EvalResult, PrintResult};
 pub use eval_cmd::{eval_expression, EvalResult as EnhancedEvalResult};
+pub use guard_msgs::{result_messages, CommandMessage, GuardMsgsResult, MessageSeverity};
+pub(crate) use infer::mutual_lift::{mutual_lift_idx, MutualLiftState};
+/// Test seam: the match join-point outcomes this thread recorded
+/// (`infer::elab_match::join_point`).
+#[cfg(any(test, debug_assertions))]
+#[doc(hidden)]
+pub use infer::take_join_outcomes;
 pub use infer::{
     ClassRegistration, CommandOutput, DerivedInstance, ElabCtx, ElabResult, HoleContext,
+    JoinOutcome,
 };
 pub use instances::{ClassInfo, InstanceInfo, InstanceTable, DEFAULT_PRIORITY};
 pub use macro_integration::{
     expand_surface_macros, surface_to_syntax, syntax_to_surface, MacroCtx, MacroExpansionError,
 };
 pub use meta::{FreshMVarQ, MetaCtx, SynthInstanceQResult, TransparencyMode};
+pub use print_axioms::PrintAxiomsResult;
 pub use print_cmd::{print_declaration, DeclKind, PrintResult as EnhancedPrintResult};
+pub use reduce_command::ReduceResult;
 pub use registration_warning::{
     RegisteredElabResult, RegistrationWarning, RegistrationWarningKind,
 };
@@ -636,6 +705,63 @@ pub use unify::{MetaId, MetaState, MetaVar, Unifier, UnifyResult};
 ///
 /// Use `ElabLocalDecl` when importing from multiple crates with `LocalDecl` types.
 pub use tactic::LocalDecl as ElabLocalDecl;
+
+// Per-declaration timing for `clean check --json`, off unless a caller arms it.
+// The recorder is crate-private; its public surface is the four items below,
+// defined here at the crate root rather than re-exported from the module.
+pub(crate) mod decl_timing;
+// Per-declaration refill of the automation work budget (`clean_auto`'s
+// `maxHeartbeats`-shaped budget) and the named error it leaves behind.
+pub(crate) mod decl_work_budget;
+
+/// What a [`DeclTiming`] record timed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum DeclTimingKind {
+    /// An `import` command: loading (and converting) its module closure.
+    Import,
+    /// A declaration the user wrote (`def`, `theorem`, `instance`, …).
+    Declaration,
+    /// Any other command (`open`, `variable`, `attribute`, `#check`, …).
+    Command,
+}
+
+/// Wall time the elaborator spent on one declaration, kernel check included.
+///
+/// Recorded per OUTERMOST non-container declaration -- see `decl_timing.rs`
+/// for what that means for `section`/`namespace` members, desugarings and
+/// `mutual` blocks.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct DeclTiming {
+    /// Namespace-qualified name, `[anonymous]` for an unnamed instance or
+    /// example, `mutual(a, b)` for a mutual block.
+    pub name: String,
+    /// Whether this was an `import`, a declaration, or another command.
+    pub kind: DeclTimingKind,
+    /// Byte offset of the declaration's span in the source it was parsed from.
+    pub byte_start: usize,
+    /// Wall time from entering the elaborator to registering the result.
+    pub elapsed: std::time::Duration,
+    /// Automation work units the declaration spent against its budget
+    /// (`clean_auto::automation_work_used`); `0` when the budget is disabled.
+    /// Deterministic, unlike `elapsed`: the calibration input for
+    /// `clean check --automation-budget`.
+    pub automation_work: u64,
+}
+
+/// Arm per-declaration timing on THIS thread, discarding anything left from an
+/// earlier run. Off unless called; see [`take_decl_timings`].
+pub fn begin_decl_timing() {
+    decl_timing::begin();
+}
+
+/// Disarm per-declaration timing on this thread and return the records made
+/// since [`begin_decl_timing`], in elaboration order.
+#[must_use]
+pub fn take_decl_timings() -> Vec<DeclTiming> {
+    decl_timing::take()
+}
 
 /// Common imports for elaboration users.
 ///
@@ -663,6 +789,13 @@ pub mod prelude {
     };
 }
 
+fn source_elaboration_advice(
+    env: &clean_kernel::Environment,
+) -> Result<clean_kernel::Environment, ElabError> {
+    clean_kernel::tc::with_declaration_budget_suspended(|| env.bootstrap_stub_advice())
+        .map_err(|e| register::map_add_decl_error("bootstrap stub advice", e))
+}
+
 /// Elaborate surface syntax to kernel expression
 ///
 /// # REQUIRES
@@ -673,12 +806,22 @@ pub mod prelude {
 /// - On success, returns kernel `Expr` with de Bruijn indices
 /// - Metavariables are resolved during elaboration
 /// - Universe levels are inferred and resolved
+///
+/// Optional bootstrap vocabulary is elaboration advice only: `env` is not
+/// extended. To check the returned IR, opt into its required stub fragments or
+/// use the mutable elaboration-and-registration entry point.
 pub fn elaborate(
     env: &clean_kernel::Environment,
     surface: &clean_parser::SurfaceExpr,
 ) -> Result<clean_kernel::Expr, ElabError> {
-    let mut ctx = ElabCtx::new(env);
-    ctx.elaborate(surface)
+    let advice = source_elaboration_advice(env)?;
+    let mut ctx = ElabCtx::new(&advice);
+    let result = (|| {
+        let expr = ctx.elaborate(surface)?;
+        ctx.finish_required_do_obligations()?;
+        Ok(ctx.metas.instantiate_levels(&ctx.metas.instantiate(&expr)))
+    })();
+    result.map_err(|error: ElabError| error.with_ident_suggestions(&advice))
 }
 
 /// Elaborate a surface declaration to a kernel declaration result
@@ -689,12 +832,17 @@ pub fn elaborate(
 /// # ENSURES
 /// - On success, returns `ElabResult` variant matching declaration type
 /// - Declaration name is extracted and validated
+///
+/// Like [`elaborate`], this is source advice, not registration. The mutable
+/// entry point prepares any requested optional fragments and checks the result.
 pub fn elaborate_decl(
     env: &clean_kernel::Environment,
     decl: &clean_parser::SurfaceDecl,
 ) -> Result<ElabResult, ElabError> {
-    let mut ctx = ElabCtx::new(env);
+    let advice = source_elaboration_advice(env)?;
+    let mut ctx = ElabCtx::new(&advice);
     ctx.elab_decl(decl)
+        .map_err(|error| error.with_ident_suggestions(&advice))
 }
 
 /// Elaborate a declaration (without kernel registration) and return both the
@@ -716,8 +864,14 @@ pub fn elaborate_decl_capturing_holes(
     env: &clean_kernel::Environment,
     decl: &clean_parser::SurfaceDecl,
 ) -> (Result<ElabResult, ElabError>, Vec<HoleContext>) {
-    let mut ctx = ElabCtx::new(env);
-    let result = ctx.elab_decl(decl);
+    let advice = match source_elaboration_advice(env) {
+        Ok(advice) => advice,
+        Err(error) => return (Err(error), Vec::new()),
+    };
+    let mut ctx = ElabCtx::new(&advice);
+    let result = ctx
+        .elab_decl(decl)
+        .map_err(|error| error.with_ident_suggestions(&advice));
     let hole_contexts = ctx.collect_hole_contexts();
     (result, hole_contexts)
 }
@@ -778,6 +932,13 @@ pub fn elaborate_decl_and_register(
 ///
 /// # ENSURES
 /// - On success, declaration is added to `env`
+/// - When a `deriving` class fails, the structure or inductive is still
+///   added (with every instance its clause did derive) and the call returns
+///   `Ok`: an [`ElabResult::Multiple`] whose first leaf is the type and whose
+///   later leaves are one [`ElabResult::Failed`] per failed class, each
+///   carrying [`ElabError::DerivingHandlerFailed`] — Lean declares the type
+///   before it runs the handlers and logs a handler's error
+///   (`infer::deriving_log`)
 /// - Namespace state from `open`/`export` is persisted in `file_ctx`
 pub fn elaborate_decl_and_register_with_context(
     env: &mut clean_kernel::Environment,
@@ -813,7 +974,9 @@ pub fn elaborate_decl_and_register_with_context_and_warning(
 /// - `decl` is a valid surface declaration
 ///
 /// # ENSURES
-/// - On success, declaration is added to `env`
+/// - On success, declaration is added to `env`. Source-compiler errors are
+///   carried by `ElabResult::Diagnosed` without revoking that registration;
+///   consumers must inspect `ElabResult::source_error_message` as well.
 /// - Warning is computed only after successful registration
 /// - If attribute registration fails, no stale warning is returned
 pub fn elaborate_decl_and_register_with_warning(
@@ -851,20 +1014,56 @@ fn failed_inner_leaf(
     inner: &clean_parser::SurfaceDecl,
     error: ElabError,
 ) -> ElabResult {
-    let short = preprocess_ext::decl_name(inner).unwrap_or("");
+    let short = preprocess_ext::decl_name(inner)
+        .cloned()
+        .unwrap_or_default();
     let ns = fc.namespace_state().current_namespace();
-    let qualified = if short.is_empty() {
+    let qualified = if short.is_anonymous() {
         ns.to_string()
     } else if ns.is_anon() {
         short.to_string()
     } else {
-        format!("{ns}.{short}")
+        short
+            .qualify_under(&clean_parser::SurfaceName::from_name(ns.clone()))
+            .to_string()
     };
     ElabResult::Failed {
         name: qualified,
         decl: Box::new(inner.clone()),
         error: Box::new(error),
     }
+}
+
+/// The namespaces entering `target` from `state`'s current namespace
+/// activates for the first time: `target` and each of its ancestors below the
+/// current namespace that is not already active, outermost first.
+fn newly_entered_namespaces(
+    state: &namespace::NamespaceState,
+    target: &clean_kernel::name::Name,
+) -> Vec<clean_kernel::name::Name> {
+    entered_namespace_chain(state, target)
+        .into_iter()
+        .filter(|ns| !state.is_scope_active(ns))
+        .collect()
+}
+
+/// Every namespace `namespace target` enters from the current one, outermost
+/// first: Lean's `addScopes` pushes one scope per component and runs
+/// `activateScoped` on each (`Lean/Elab/BuiltinCommand.lean`), a no-op in a
+/// state where it is already active.
+fn entered_namespace_chain(
+    state: &namespace::NamespaceState,
+    target: &clean_kernel::name::Name,
+) -> Vec<clean_kernel::name::Name> {
+    let current = state.current_namespace().clone();
+    let mut chain = Vec::new();
+    let mut prefix = target.clone();
+    while !prefix.is_anon() && prefix != current {
+        chain.push(prefix.clone());
+        prefix = namespace::parent_name(&prefix);
+    }
+    chain.reverse();
+    chain
 }
 
 /// Record `local instance` / `scoped instance` registrations from a
@@ -883,39 +1082,75 @@ fn failed_inner_leaf(
 ///
 /// `Multiple` results (namespace/section blocks) are walked recursively;
 /// every other result kind carries no instance scope.
-pub(crate) fn record_instance_scopes(fc: &mut FileContext, result: &ElabResult) {
+///
+/// Both are ALSO recorded in the environment, which holds the instance
+/// registration itself and outlives the file: a module elaborated later in the
+/// same environment (an importer under `clean check`, any module under `clean
+/// project check`) starts with a fresh `FileContext` and used to see another
+/// module's `local instance` as global and its `scoped instance` without
+/// `open` (`P: namespace N; scoped instance i3 : C := ⟨3⟩; end N`,
+/// `M: import P; theorem m : C.v = 3 := rfl` passed; Lean 4.8.0 rejects it).
+/// A `scoped instance` goes into the same table the `.olean` loader fills for
+/// an imported one ([`clean_olean::ScopedInstanceState`]), with its entry in
+/// `scopedEntries` order; a `local instance` is marked local in the
+/// environment. Either is in a scope's instance state only through that
+/// scope's own entries (`crate::instance_store`).
+pub(crate) fn record_instance_scopes(
+    fc: &mut FileContext,
+    env: &mut clean_kernel::Environment,
+    result: &ElabResult,
+) {
     use clean_parser::DeclScope;
     match result {
         ElabResult::Instance {
             name, modifiers, ..
         } => match modifiers.scope {
-            DeclScope::Local => fc.record_local_instance(name.clone()),
+            // `register_elab_result` registered it; its only entry is the
+            // local (or scoped) one, so it is marked before the entry is
+            // added to the instance state.
+            DeclScope::Local => {
+                env.mark_local_instance(name.clone());
+                fc.record_local_instance(env, name.clone());
+            }
             DeclScope::Scoped => {
                 let ns = fc.namespace_state().current_namespace().clone();
-                fc.record_scoped_instance(name.clone(), ns);
+                fc.record_scoped_instance(name.clone(), ns.clone());
+                env.get_ext_state_mut::<clean_olean::ScopedInstanceState>(
+                    clean_olean::scoped_instance_idx(),
+                )
+                .scope_of
+                .insert(name.clone(), ns.clone());
+                if let Some(priority) = env.instance_priority(name) {
+                    fc.instance_store_mut().add_scoped(env, &ns, name, priority);
+                }
             }
             DeclScope::Default => {}
         },
         ElabResult::Multiple(results) => {
             for inner in results {
-                record_instance_scopes(fc, inner);
+                record_instance_scopes(fc, env, inner);
             }
         }
         _ => {}
     }
 }
 
-/// Track AA: like [`elaborate_decl_and_register_inner`] but installs an optional
-/// auxiliary-arm source on the `ElabCtx` before elaborating `decl`. Used to fuse
-/// a nested-mutual fold's primary def through `T.rec` with the sibling's arms
-/// filling the auxiliary minors. `aux_source` is `(container_short, aux_arms,
-/// member_names)`; `None` leaves the standard path byte-for-byte unchanged.
-fn elaborate_decl_and_register_inner_with_aux(
+/// Prepare fixed elaborator-session support before processing a declaration.
+///
+/// This does not elaborate or register `decl`. Callers attributing environment
+/// additions to a source declaration can call this before taking their census;
+/// the normal elaborator entry repeats the same idempotent preparation. Imports
+/// retain their bridge-seeding suppression so imported definitions and instance
+/// priorities are not pre-empted by session support.
+pub fn prepare_declaration_environment(
     env: &mut clean_kernel::Environment,
     decl: &clean_parser::SurfaceDecl,
-    mut file_ctx: Option<&mut FileContext>,
-    aux_source: Option<(String, Vec<clean_parser::SurfaceMatchArm>, Vec<String>)>,
-) -> Result<RegisteredElabResult, ElabError> {
+) {
+    if source_prelude::is_bare_module(env)
+        || matches!(decl, clean_parser::SurfaceDecl::Prelude { .. })
+    {
+        return;
+    }
     env.init_pprod().ok();
     // B101: seed the Lean-core `instHAdd`/`instHMul`/`instHSub` bridge
     // instances (kernel-checked; idempotent; skipped when the constants
@@ -923,7 +1158,7 @@ fn elaborate_decl_and_register_inner_with_aux(
     // instances are reachable through their operators.
     //
     // NOT while elaborating an `import`. This call runs once per declaration,
-    // and an `import` IS a declaration handled further down this function — so
+    // and an `import` IS a declaration handled by the elaborator afterward — so
     // seeding here pre-empted the very import that supplies Lean's genuine
     // `instHAdd`/`instHSub`/`instHMul`. The seed registers them at
     // `BRIDGE_INSTANCE_PRIORITY` (50, deliberately below the prelude's fused
@@ -935,6 +1170,10 @@ fn elaborate_decl_and_register_inner_with_aux(
     // `instHSub Nat instSubNat`. `HDiv`/`HMod`, which have no bridge here, kept
     // Lean's stack and were the only Nat operators that matched their own
     // imported lemmas.
+    //
+    // A rejected raw command can precede those imports too. It must not
+    // install substitute bridges
+    // before the real import gets a chance to supply its declarations.
     //
     // The seed stays self-healing: it is idempotent and runs again on the NEXT
     // declaration, so a file whose imports do not supply the bridge constants
@@ -951,16 +1190,139 @@ fn elaborate_decl_and_register_inner_with_aux(
     // `--decl-budget`, which trips the seed's `debug_assert!` — an assertion
     // whose real subject is "did a co-tenant reshape the prelude classes",
     // not "was there fuel left". Measured 2026-08-27 at `--decl-budget 1`.
-    if !matches!(decl, clean_parser::SurfaceDecl::Import { .. }) {
+    if !matches!(
+        decl,
+        clean_parser::SurfaceDecl::Import { .. } | clean_parser::SurfaceDecl::RawDecl { .. }
+    ) {
         clean_kernel::tc::with_declaration_budget_suspended(|| {
             hetero_bridge_seed::seed_hetero_bridges(env);
         });
+    }
+}
+
+/// The session support [`prepare_declaration_environment`] installs before a
+/// non-`import` declaration, installed up front.
+///
+/// A caller that compares what two elaborations of the same source ADD to
+/// their environments (`clean project check` re-elaborating an import next to
+/// its importer's other imports) calls this on the base first, so the
+/// comparison sees the source's declarations and not whichever run happened
+/// to install `PProd` or the bridge instances first. Idempotent.
+pub fn prepare_session_environment(env: &mut clean_kernel::Environment) {
+    if source_prelude::is_bare_module(env) {
+        return;
+    }
+    env.init_pprod().ok();
+    clean_kernel::tc::with_declaration_budget_suspended(|| {
+        hetero_bridge_seed::seed_hetero_bridges(env);
+    });
+}
+
+/// Track AA: like [`elaborate_decl_and_register_inner`] but installs an optional
+/// auxiliary-arm source on the `ElabCtx` before elaborating `decl`. Used to fuse
+/// a nested-mutual fold's primary def through `T.rec` with the sibling's arms
+/// filling the auxiliary minors. `aux_source` is `(container_name, aux_arms,
+/// member_signatures)`; `None` leaves the standard path unchanged.
+fn elaborate_decl_and_register_inner_with_aux(
+    env: &mut clean_kernel::Environment,
+    decl: &clean_parser::SurfaceDecl,
+    file_ctx: Option<&mut FileContext>,
+    aux_source: Option<(
+        clean_parser::SurfaceName,
+        Vec<clean_parser::SurfaceMatchArm>,
+        Vec<(clean_parser::SurfaceName, clean_parser::SurfaceExpr)>,
+    )>,
+) -> Result<RegisteredElabResult, ElabError> {
+    // Records on drop (every early return below included) when
+    // `begin_decl_timing` armed this thread; inert otherwise.
+    let _leaf_timer = decl_timing::LeafTimer::start(decl, file_ctx.as_deref());
+    // Refills the automation work budget at the same OUTERMOST entry, and
+    // names the budget in a failure its exhaustion caused (Lean's
+    // `maxHeartbeats`, one window per command; see `decl_work_budget.rs`).
+    let work_scope = decl_work_budget::LeafWorkScope::enter(decl);
+    let result = elaborate_decl_and_register_leaf(env, decl, file_ctx, aux_source);
+    // The declaration's error is the REPORTED one: only now is the
+    // nearest-theorem "did you mean" scan worth its cost
+    // (`ElabError::UnknownIdentDeferred`).
+    work_scope.finish(result.map_err(|error| error.with_ident_suggestions(env)))
+}
+
+/// The body of [`elaborate_decl_and_register_inner_with_aux`], behind its
+/// timing record and automation-budget scope. Never call this directly: the
+/// scope is what refills the budget per declaration.
+fn elaborate_decl_and_register_leaf(
+    env: &mut clean_kernel::Environment,
+    decl: &clean_parser::SurfaceDecl,
+    mut file_ctx: Option<&mut FileContext>,
+    aux_source: Option<(
+        clean_parser::SurfaceName,
+        Vec<clean_parser::SurfaceMatchArm>,
+        Vec<(clean_parser::SurfaceName, clean_parser::SurfaceExpr)>,
+    )>,
+) -> Result<RegisteredElabResult, ElabError> {
+    let mismatched_world = file_ctx
+        .as_deref()
+        .map(FileContext::lean_world)
+        .transpose()
+        .map_err(|error| ElabError::SourceWorld(error.to_string()))?
+        .filter(|world| {
+            matches!(
+                world,
+                clean_kernel::LeanWorld::Lean435 | clean_kernel::LeanWorld::Lean436Rc2
+            ) && clean_olean::environment_world(env) != Some(world.tag())
+        });
+    if let Some(world) = mismatched_world {
+        return Err(ElabError::SourceWorld(format!(
+            "{world} source requires its own declared genuine Init environment"
+        )));
+    }
+    if let clean_parser::SurfaceDecl::Import { paths, .. } = decl {
+        if let Some(context) = file_ctx.as_deref() {
+            for path in paths {
+                if let Some(reason) = context.import_source_refusal(path.name()) {
+                    return Err(ElabError::UnresolvedImport {
+                        module: path.name().to_string(),
+                        reason: format!("source elaboration refused: {reason}"),
+                    });
+                }
+            }
+        }
+    }
+    prepare_declaration_environment(env, decl);
+    if matches!(
+        decl,
+        clean_parser::SurfaceDecl::Variable {
+            visibility: Some(_),
+            ..
+        }
+    ) {
+        let world = match file_ctx.as_deref() {
+            Some(context) => context
+                .lean_world()
+                .map_err(|error| ElabError::SourceWorld(error.to_string()))?,
+            None => clean_kernel::lean_world::LeanWorld::ORACLE,
+        };
+        if !world.variable_visibility() {
+            return Err(ElabError::SourceWorld(format!(
+                "{world} does not admit public/private variable"
+            )));
+        }
+    }
+    // A scope that ended without an environment at hand (a `namespace … end`
+    // leaves through `exit_local_scope`) only queued its `local simp` lemmas;
+    // unregister them before this declaration can see them.
+    if let Some(fc) = file_ctx.as_deref_mut() {
+        fc.retire_local_attributes(env);
+        fc.refresh_compiler_module(env);
+        // Every `private` name already in the environment belongs to another
+        // module (see `FileContext::foreign_private_decls`).
+        fc.note_foreign_private_decls(env, false);
     }
 
     // Handle declare_aesop_rule_sets directly (before creating immutable borrow)
     if let clean_parser::SurfaceDecl::DeclareAesopRuleSets { names, .. } = decl {
         for name in names {
-            let n = Name::from_string(name);
+            let n = name.name().clone();
             env.declare_aesop_rule_set(n);
         }
         return Ok(RegisteredElabResult {
@@ -990,11 +1352,25 @@ fn elaborate_decl_and_register_inner_with_aux(
             .unwrap_or(true);
         if !external_enabled {
             // Clean-native authority check: skip Lake/.olean search and
-            // initialize only Clean's built-in module preludes.
+            // initialize only Clean's built-in module preludes — plus the
+            // caller's satisfied-from-source record, which this branch used to
+            // drop on the floor (it built its own resolution over an EMPTY
+            // set) while the `.olean` path honored it. Same resolution class,
+            // same ordering (satisfied -> prelude -> refuse) as
+            // `finish_unresolved`; see
+            // `process_imports_clean_native_with_satisfied`.
             let policy = file_ctx
                 .as_ref()
                 .map_or_else(ImportPolicy::default, |fc| fc.import_policy());
-            imports::process_imports_clean_native(env, paths, policy)?;
+            match file_ctx.as_ref() {
+                Some(fc) => imports::process_imports_clean_native_with_satisfied(
+                    env,
+                    paths,
+                    policy,
+                    fc.imports_satisfied_from_source(),
+                )?,
+                None => imports::process_imports_clean_native(env, paths, policy)?,
+            }
         } else if let Some(fc) = file_ctx.as_deref_mut() {
             // Use Lake-discovered search paths if available, and thread the
             // file's persistent `import_visited` set, unresolved-import policy
@@ -1005,6 +1381,15 @@ fn elaborate_decl_and_register_inner_with_aux(
             imports::process_imports_for_file(env, paths, fc)?;
         } else {
             process_imports(env, paths)?;
+        }
+        // What the import brought in is another module's.
+        if let Some(fc) = file_ctx.as_deref_mut() {
+            fc.note_foreign_private_decls(env, true);
+            for path in paths {
+                fc.record_compiler_import(path.name());
+            }
+            // The import may just have restored transitive module metadata.
+            fc.refresh_compiler_module(env);
         }
         return Ok(RegisteredElabResult {
             result: ElabResult::Skipped,
@@ -1022,20 +1407,33 @@ fn elaborate_decl_and_register_inner_with_aux(
         // wrapped/subsequent decls must still elaborate. A KNOWN option with a
         // wrongly-typed value stays a loud error. See
         // `validate_command_option_lenient`.
-        let _known = options_registry::validate_command_option_lenient(name, value.as_deref())?;
+        let name = options_registry::surface_option_key(name)?;
+        let _known = options_registry::validate_command_option_lenient(&name, value.as_deref())?;
         if let Some(inner_decl) = body {
             // Per-declaration scoping: `set_option ... in <decl>`
             // Save previous value, set the option, elaborate the body, then restore.
-            let prev = env.get_option(name).cloned();
+            let prev = env.get_option(&name).cloned();
             env.set_option(name.clone(), value.clone());
-            let result = elaborate_decl_and_register_inner(env, inner_decl, file_ctx);
+            // The file context's options are re-applied to the env before
+            // every ordinary declaration, so a file-scope value (or a `-D`
+            // override) would otherwise overwrite this one for the very
+            // declaration it scopes. Install it there too, outside the
+            // section rollback stack, and put the previous entry back after.
+            let prev_file = file_ctx
+                .as_deref_mut()
+                .map(|fc| fc.replace_option_unscoped(&name, Some(value.clone())));
+            let result =
+                elaborate_decl_and_register_inner(env, inner_decl, file_ctx.as_deref_mut());
+            if let (Some(fc), Some(prev_file)) = (file_ctx.as_deref_mut(), prev_file) {
+                fc.replace_option_unscoped(&name, prev_file);
+            }
             // Restore previous option state
             match prev {
                 Some(old_value) => {
                     env.set_option(name.clone(), old_value);
                 }
                 None => {
-                    env.remove_option(name);
+                    env.remove_option(&name);
                 }
             }
             return result;
@@ -1050,6 +1448,31 @@ fn elaborate_decl_and_register_inner_with_aux(
             result: ElabResult::Skipped,
             warning: None,
             hole_contexts: Vec::new(),
+        });
+    }
+
+    // `#guard_msgs (spec)? in cmd` (Lean 4.8.0 `elabGuardMsgs`): `cmd` runs
+    // through this same elaborate-and-register pipeline, so whatever it
+    // declares stays registered (Lean keeps a command's effects whatever its
+    // messages) and a kernel refusal at registration is one of the messages
+    // compared. A registration warning survives a match: a `#guard_msgs` that
+    // expects Lean's `declaration uses 'sorry'` does not launder the sorry
+    // out of the trust census.
+    if let clean_parser::SurfaceDecl::GuardMsgs { doc, spec, cmd, .. } = decl {
+        let (outcome, warning, hole_contexts) =
+            match elaborate_decl_and_register_inner(env, cmd, file_ctx) {
+                Ok(registered) => (
+                    Ok(registered.result),
+                    registered.warning,
+                    registered.hole_contexts,
+                ),
+                Err(error) => (Err(error), None, Vec::new()),
+            };
+        let result = guard_msgs::conclude(doc.as_deref(), spec, outcome, warning.as_ref())?;
+        return Ok(RegisteredElabResult {
+            result,
+            warning,
+            hole_contexts,
         });
     }
 
@@ -1071,7 +1494,13 @@ fn elaborate_decl_and_register_inner_with_aux(
     // every successful inner still flows through `add_decl`'s real kernel check.
     // No kernel/TCB code is touched. Matches Lean, which reports per-declaration
     // and continues.
-    if let clean_parser::SurfaceDecl::Section { decls, .. } = decl {
+    if let clean_parser::SurfaceDecl::Section {
+        decls,
+        noncomputable,
+        ..
+    } = decl
+    {
+        let _noncomputable = lean_compile_checks::NoncomputableSectionScope::enter(*noncomputable);
         let mut results = Vec::new();
         let mut hole_contexts = Vec::new();
         // As in the namespace arm: when there is no persistent FileContext, use a
@@ -1080,7 +1509,7 @@ fn elaborate_decl_and_register_inner_with_aux(
         let fc_ref: &mut FileContext = match file_ctx {
             Some(ref mut fc) => fc,
             None => {
-                temp_fc = FileContext::new();
+                temp_fc = FileContext::scratch();
                 &mut temp_fc
             }
         };
@@ -1110,7 +1539,28 @@ fn elaborate_decl_and_register_inner_with_aux(
             // Nested sections self-manage their scope through this same arm, so
             // pass them through raw — mirroring how the namespace arm never
             // preprocesses its inners.
-            let processed = if matches!(inner, clean_parser::SurfaceDecl::Section { .. }) {
+            //
+            // The same holds for a nested NAMESPACE, and until 2026-09-11 this
+            // guard did not say so: `preprocess_decl_with_context` pushes a
+            // section frame for a `Namespace` too (`preprocess.rs`), the
+            // namespace arm below pushed its own and popped only that one, so
+            // the stray frame sat on top when THIS section ended and
+            // `exit_section` popped the stray instead of the section's own
+            // frame — every `variable` of a section containing a `namespace …
+            // end` block survived its `end`. Measured: `section S; variable
+            // (n : Nat); namespace A; end A; end S; def f : Nat := n` was
+            // ACCEPTED, and in `Mathlib/Order/Basic.lean` the `section
+            // Preorder`'s `[Preorder α]` (whose `namespace
+            // Mathlib.Tactic.GCongr` block sits inside it) leaked into `section
+            // PartialOrder`, where every `a ≤ b` then resolved to the stale
+            // `Preorder` local while the lemmas it was proved from expected
+            // the `PartialOrder` one — some twenty `Type mismatch … fvar#1 vs
+            // PartialOrder.0.…` rows.
+            let processed = if matches!(
+                inner,
+                clean_parser::SurfaceDecl::Section { .. }
+                    | clean_parser::SurfaceDecl::Namespace { .. }
+            ) {
                 None
             } else {
                 Some(preprocess_decl_with_context(inner, fc_ref))
@@ -1161,13 +1611,26 @@ fn elaborate_decl_and_register_inner_with_aux(
         let fc_ref: &mut FileContext = match file_ctx {
             Some(ref mut fc) => fc,
             None => {
-                temp_fc = FileContext::new();
+                temp_fc = FileContext::scratch();
                 &mut temp_fc
             }
         };
+        let resolved = name.qualify_under(&clean_parser::SurfaceName::from_name(
+            fc_ref.namespace_state().current_namespace().clone(),
+        ));
+        let resolved = resolved.into_name();
+        // Entering `namespace A.B` activates the scoped entries of `A` and
+        // `A.B` (Lean pushes one scope per component and activates each) —
+        // the ones not already active are added to the instance state now.
+        let entered_scopes = newly_entered_namespaces(fc_ref.namespace_state(), &resolved);
+        let entered_chain = entered_namespace_chain(fc_ref.namespace_state(), &resolved);
+        // Lean's `addScope` registers each namespace it enters
+        // (`Environment.registerNamespace`), so `open` / `resolveNamespace`
+        // find it even when nothing is declared directly under it.
+        env.register_namespace(&resolved);
         fc_ref
             .namespace_state_mut()
-            .enter_namespace(Name::from_string(name));
+            .enter_resolved_namespace(resolved);
         // The namespace block is an alias-scope boundary (Lean pushes a Scope
         // per `namespace`; `end` pops it and discards its `open` decls). An
         // `open` inside the block must not leak past `end Foo` (gap sweep B13);
@@ -1191,6 +1654,11 @@ fn elaborate_decl_and_register_inner_with_aux(
         // through `preprocess_decl_with_context` so Variable inners accumulate
         // and later inners get the USED closure prepended, and restore on exit.
         fc_ref.enter_section();
+        for ns in &entered_scopes {
+            fc_ref.namespace_state_mut().activate_scoped(ns.clone());
+        }
+        fc_ref.activate_scoped_instances(env, &entered_chain);
+        fc_ref.activate_scoped_csimp(env, &entered_chain)?;
         for inner in decls {
             // COLLECT per-inner outcomes instead of `?`-aborting on the first
             // failure (the namespace-ABORT bug). A sibling failure must NOT drop
@@ -1229,6 +1697,7 @@ fn elaborate_decl_and_register_inner_with_aux(
         }
         fc_ref.macro_ctx_mut().pop_scoped_activation_frame();
         fc_ref.exit_local_scope();
+        fc_ref.retire_local_attributes(env);
         fc_ref.namespace_state_mut().pop_scope();
         fc_ref.namespace_state_mut().exit_namespace();
         fc_ref.exit_section_restoring_env_options(env);
@@ -1329,9 +1798,9 @@ fn elaborate_decl_and_register_inner_with_aux(
 
             // Primary def: fused through `T.rec` with the auxiliary-arm source.
             let aux_source = Some((
-                fold.container_short.clone(),
+                fold.container_name.clone(),
                 fold.aux_arms.clone(),
-                fold.member_names.clone(),
+                fold.member_signatures.clone(),
             ));
             let prim_result = elaborate_decl_and_register_inner_with_aux(
                 env,
@@ -1365,6 +1834,87 @@ fn elaborate_decl_and_register_inner_with_aux(
         }
     }
 
+    // `open … in cmd` / `set_option … in cmd` is Lean's `section cmd₁ cmd₂
+    // end` (`Lean/Elab/BuiltinCommand.lean` `expandInCmd`): the elaborator
+    // scopes the names and options of the inner command itself, and the
+    // INSTANCE STATE is scoped here — a pushed state, with the namespaces the
+    // `open` activates activated in it, into which the inner command's
+    // attributes are applied, popped afterwards. So a `local` entry or an
+    // `-instance` inside it ends with it, while a global or scoped entry
+    // reaches every state (measured on Lean 4.8.0: `open N in attribute
+    // [-instance] ib` leaves `ib` in force after it).
+    let in_scope = file_ctx
+        .as_deref()
+        .and_then(|fc| in_command_activations(env, fc, decl));
+    match (in_scope, file_ctx.as_deref_mut()) {
+        (Some(activated), Some(fc)) => {
+            fc.enter_local_scope();
+            fc.activate_scoped_instances(env, &activated);
+            let result = fc.activate_scoped_csimp(env, &activated).and_then(|()| {
+                elaborate_general_and_register(env, decl, Some(&mut *fc), aux_source)
+            });
+            fc.exit_local_scope();
+            fc.retire_local_attributes(env);
+            result
+        }
+        _ => elaborate_general_and_register(env, decl, file_ctx, aux_source),
+    }
+}
+
+/// The namespaces whose scoped entries an `open … in` chain around `decl`
+/// activates (`open N in open P in cmd`, `set_option … in cmd` among them),
+/// or `None` when `decl` is not such a command.
+fn in_command_activations(
+    env: &clean_kernel::Environment,
+    fc: &FileContext,
+    decl: &clean_parser::SurfaceDecl,
+) -> Option<Vec<clean_kernel::name::Name>> {
+    let mut ns_state = fc.namespace_state().clone();
+    let mut activated = Vec::new();
+    let mut current = decl;
+    let mut wrapped = false;
+    loop {
+        match current {
+            clean_parser::SurfaceDecl::Open {
+                paths,
+                scoped,
+                body: Some(inner),
+                ..
+            } => {
+                wrapped = true;
+                ns_state.push_scope();
+                activated.extend(namespace::open_activations(
+                    env,
+                    paths,
+                    *scoped,
+                    &mut ns_state,
+                ));
+                current = inner;
+            }
+            clean_parser::SurfaceDecl::SetOption {
+                body: Some(inner), ..
+            } => {
+                wrapped = true;
+                current = inner;
+            }
+            _ => break,
+        }
+    }
+    wrapped.then_some(activated)
+}
+
+/// Elaborate one ordinary declaration and register it with its attributes
+/// (the general arm of [`elaborate_decl_and_register_inner_with_aux`]).
+fn elaborate_general_and_register(
+    env: &mut clean_kernel::Environment,
+    decl: &clean_parser::SurfaceDecl,
+    mut file_ctx: Option<&mut FileContext>,
+    aux_source: Option<(
+        clean_parser::SurfaceName,
+        Vec<clean_parser::SurfaceMatchArm>,
+        Vec<(clean_parser::SurfaceName, clean_parser::SurfaceExpr)>,
+    )>,
+) -> Result<RegisteredElabResult, ElabError> {
     // Apply file-level option overrides to the environment before elaboration
     // so that options set in earlier declarations (including section-scoped ones)
     // are visible during type checking and elaboration.
@@ -1372,7 +1922,11 @@ fn elaborate_decl_and_register_inner_with_aux(
         fc.apply_options_to_env(env);
     }
 
-    let mut ctx = ElabCtx::new(env);
+    // Untrusted elaboration advice retains the native execution/admission
+    // vocabulary. Only structural references in its emitted kernel terms may
+    // request those explicit stub fragments in the actual registration context.
+    let advice = source_elaboration_advice(env)?;
+    let mut ctx = ElabCtx::new(&advice);
 
     // Track AA: install the fused nested-mutual fold's auxiliary-arm source (if
     // any) so the nested-recursor minor builder fills the auxiliary minors with
@@ -1381,7 +1935,16 @@ fn elaborate_decl_and_register_inner_with_aux(
 
     // Inject persisted namespace state and namespace prefix from FileContext
     if let Some(ref file_ctx) = file_ctx {
+        if file_ctx.import_world().is_some() {
+            ctx.set_source_world(
+                file_ctx
+                    .lean_world()
+                    .map_err(|error| ElabError::SourceWorld(error.to_string()))?,
+            );
+        }
         ctx.set_namespace_state(file_ctx.namespace_state().clone());
+        ctx.set_tactic_goal_capture(file_ctx.tactic_goal_capture());
+        ctx.set_term_info_capture(file_ctx.term_info_capture());
         // U2 rung-4 explicitness channel: the file's `universe` names, so the
         // elaborator can tell a merged file-scope name from one the
         // declaration itself wrote after its name. `preprocess_decl_with_context`
@@ -1391,15 +1954,29 @@ fn elaborate_decl_and_register_inner_with_aux(
         // Instance scope state (B99): retired `local instance`s, `scoped
         // instance` namespaces, and the `@[default_instance]` table. All
         // empty unless the file actually used those forms.
+        let instance_view = file_ctx.instance_view(env);
         ctx.set_instance_scope_state(
-            file_ctx.dead_local_instances().clone(),
+            instance_view.hidden(),
             file_ctx.scoped_instance_map().clone(),
             file_ctx.default_instance_entries(),
         );
+        ctx.set_instance_view(instance_view);
+        ctx.set_foreign_private_decls(file_ctx.foreign_private_decls());
     }
+    // This file's `export` aliases so far; one this declaration makes is
+    // registered in the environment below.
+    let exports_before = file_ctx
+        .as_deref()
+        .map_or(0, |fc| fc.namespace_state().exports().len());
+    // The namespaces whose scoped entries are active before this declaration;
+    // an `open` it makes activates more (see below).
+    let scopes_active_before = file_ctx
+        .as_deref()
+        .map(|fc| fc.namespace_state().activated_scopes().to_vec())
+        .unwrap_or_default();
 
     if let Some(ref mut file_ctx) = file_ctx {
-        let active_variable_bindings: Vec<(String, u64)> = file_ctx
+        let active_variable_bindings: Vec<(clean_parser::SurfaceName, u64)> = file_ctx
             .active_variable_bindings()
             .map(|(name, id)| (name.to_owned(), id))
             .collect();
@@ -1414,9 +1991,16 @@ fn elaborate_decl_and_register_inner_with_aux(
         // declaration, so without this a registered term elaborator is dropped
         // before the next declaration can call it.
         ctx.set_user_term_elabs(file_ctx.take_user_term_elabs());
+        // `preprocess_decl_with_context` could not scan THIS declaration, so
+        // it prepended every section variable and asked for the unused ones
+        // to be dropped from the elaborated term (`infer::section_prune`).
+        if let Some(request) = file_ctx.take_pending_section_prune(decl.span()) {
+            ctx.set_section_prune_request(request);
+        }
     }
 
     let result = ctx.elab_decl(decl);
+    let section_prune = ctx.take_section_prune_outcome();
 
     if let Some(ref mut file_ctx) = file_ctx {
         file_ctx.replace_macro_ctx(ctx.take_macro_ctx());
@@ -1424,6 +2008,7 @@ fn elaborate_decl_and_register_inner_with_aux(
         file_ctx.replace_user_term_elabs(ctx.take_user_term_elabs());
     }
 
+    ctx.finish_term_info();
     let result = result?;
 
     // Snapshot the hole contexts (expected types + locals for user-written `_`
@@ -1444,10 +2029,47 @@ fn elaborate_decl_and_register_inner_with_aux(
     // also records instance scope state into it — B99).
     if let Some(fc) = file_ctx.as_deref_mut() {
         *fc.namespace_state_mut() = ns_state;
+        // Lean's `export` adds its aliases to the ENVIRONMENT
+        // (`aliasExtension`, `addAlias`): global, persistent and exported,
+        // so an importer resolves them too (round-25 `export_root`: with a
+        // root `x` and `export N (x)` in B, `x` is ambiguous in B's importer
+        // as in B).
+        let new_exports: Vec<(clean_kernel::Name, clean_kernel::Name)> = fc
+            .namespace_state()
+            .exports()
+            .iter()
+            .skip(exports_before)
+            .map(|alias| (alias.short.clone(), alias.target.clone()))
+            .collect();
+        for (short, target) in new_exports {
+            env.register_export_alias(short, target);
+        }
+        // An `open` / `open scoped` / `open … hiding` activated namespaces:
+        // Lean adds their scoped instances to the state NOW, so each is the
+        // newest of its tier (`P: namespace N; scoped instance i3 …`,
+        // `Q: instance i4 …`, `M: import P; import Q; open N` takes i3).
+        let activated = fc.namespace_state().newly_activated(&scopes_active_before);
+        fc.activate_scoped_instances(env, &activated);
+        fc.activate_scoped_csimp(env, &activated)?;
     }
 
+    // A `deriving` class that failed is an error beside its type, not instead
+    // of it (Lean adds the type before running any handler): the type
+    // registers without it, and the failure is reported as its own failed
+    // leaf of the returned result (`infer::deriving_log`).
+    let (result, logged_deriving_failures) = infer::split_logged_deriving_failures(result);
+
     // First register the declaration itself (so attributes can reference it)
-    register_elab_result(env, &result)?;
+    source_family_authority::register_source(env, &result)?;
+    // ... and which run added it: an `attribute [implemented_by]` or
+    // `attribute [extern]` command may name only the run's own declarations
+    // (Lean's imported-module check, `crate::declared_here`), with or
+    // without a file context.
+    declared_here::record_declared(
+        env,
+        declared_here::ElabUnit::of(file_ctx.as_deref()),
+        register::leaf_own_names(&result),
+    );
 
     // Record `local` / `scoped` instance scope state into the FileContext
     // (B99). Must run AFTER successful registration (a rejected declaration
@@ -1455,24 +2077,82 @@ fn elaborate_decl_and_register_inner_with_aux(
     // just-persisted namespace state for the declaring namespace of `scoped`
     // instances.
     if let Some(fc) = file_ctx.as_deref_mut() {
-        record_instance_scopes(fc, &result);
+        record_instance_scopes(fc, env, &result);
     }
 
     // Compute the warning after register_elab_result succeeds but before
     // returning, so we only report on actually-registered declarations.
     let warning = register::registration_warning_for_result(env, &result);
 
-    // Register parameter names for named argument support (#1230)
-    register::register_param_names(env, decl);
+    // Register parameter names for named argument support (#1230) — of the
+    // telescope as registered, so a pruned section binder takes its name with
+    // it and named arguments still line up with the binders.
+    let pruned_decl = section_prune
+        .as_ref()
+        .and_then(|outcome| decl_without_pruned_section_binders(decl, &result, outcome));
+    register::register_param_names(env, pruned_decl.as_ref().unwrap_or(decl), &result);
 
+    definition_attrs::record_definitions(env, file_ctx.as_deref(), decl, &result)?;
     // Now register attributes that reference the declaration.
     collected_attributes.apply(env, file_ctx)?;
+    clean_kernel::env::csimp::record_compiled(env, register::leaf_own_names(&result));
 
+    // Every checker walks the leaves, so a logged failure is counted and
+    // reported exactly like a failed member of a `namespace` block.
+    let result = if logged_deriving_failures.is_empty() {
+        result
+    } else {
+        let mut results = Vec::with_capacity(logged_deriving_failures.len() + 1);
+        results.push(result);
+        results.extend(logged_deriving_failures);
+        ElabResult::Multiple(results)
+    };
+
+    let result = lean_compile_checks::diagnose_registered(
+        env,
+        result,
+        module_driver::surface_decl_span(decl),
+    );
     Ok(RegisteredElabResult {
         result,
         warning,
         hole_contexts,
     })
+}
+
+/// `decl` without the section binders `outcome` dropped from its elaborated
+/// telescope — when the pruning ran on the very declaration `result`
+/// registers and dropped something; `None` otherwise (the surface binders
+/// then already match the registered telescope).
+fn decl_without_pruned_section_binders(
+    decl: &clean_parser::SurfaceDecl,
+    result: &ElabResult,
+    outcome: &infer::section_prune::SectionPruneOutcome,
+) -> Option<clean_parser::SurfaceDecl> {
+    let registered = match result.primary_leaf() {
+        Some(
+            ElabResult::Definition { name, .. }
+            | ElabResult::Theorem { name, .. }
+            | ElabResult::Axiom { name, .. },
+        ) => name,
+        _ => return None,
+    };
+    if *registered != outcome.decl || outcome.kept.iter().all(|kept| *kept) {
+        return None;
+    }
+    let mut pruned = decl.clone();
+    let (clean_parser::SurfaceDecl::Def { binders, .. }
+    | clean_parser::SurfaceDecl::Theorem { binders, .. }
+    | clean_parser::SurfaceDecl::Axiom { binders, .. }) = &mut pruned
+    else {
+        return None;
+    };
+    if binders.len() < outcome.kept.len() {
+        return None;
+    }
+    let mut kept = outcome.kept.iter();
+    binders.retain(|_| kept.next().copied().unwrap_or(true));
+    Some(pruned)
 }
 
 #[cfg(test)]
@@ -1494,6 +2174,10 @@ mod let_tactic_body_visible_tests;
 #[cfg(test)]
 #[path = "decidable_eq_fielded_tests.rs"]
 mod decidable_eq_fielded_tests;
+
+#[cfg(test)]
+#[path = "decidable_eq_list_field_tests.rs"]
+mod decidable_eq_list_field_tests;
 
 #[cfg(test)]
 #[path = "decidable_eq_trackt_tests.rs"]
@@ -1521,6 +2205,9 @@ mod mutual_inductive_elab_tests;
 
 #[cfg(test)]
 mod codata_cmd_tests;
+
+#[cfg(test)]
+mod codata_declared_results_tests;
 
 #[cfg(test)]
 mod codata_variant_tests;
@@ -1577,6 +2264,9 @@ mod wave0_tests;
 mod tests_close_fvars_seq_focus;
 
 #[cfg(test)]
+mod tests_mathbot_task_tactics;
+
+#[cfg(test)]
 mod tests_instance_candidate_hygiene;
 
 #[cfg(test)]
@@ -1584,6 +2274,97 @@ mod tests_instance_open_carrier_postpone;
 
 #[cfg(test)]
 mod tests_lean_fidelity_shapes;
+
+#[cfg(test)]
+mod tests_expected_type_shape;
+
+#[cfg(test)]
+mod tests_expected_type_shape_review;
+#[cfg(test)]
+mod tests_instance_binders;
+
+#[cfg(test)]
+mod tests_lean_core_exports;
+
+#[cfg(test)]
+mod tests_cases_nested_block;
+#[cfg(test)]
+mod tests_do_lane_r5_lift;
+#[cfg(test)]
+mod tests_do_lane_r5_match;
+#[cfg(test)]
+mod tests_except_universes;
+#[cfg(test)]
+mod tests_review_r6;
+
+#[cfg(test)]
+mod tests_assumption_unify_congr_rfl;
+#[cfg(test)]
+mod tests_by_block_head_shapes;
+#[cfg(test)]
+mod tests_congr_n;
+#[cfg(test)]
+mod tests_decl_modifier_attrs;
+#[cfg(test)]
+mod tests_deferred_by_block;
+#[cfg(test)]
+mod tests_dot_ident_head;
+#[cfg(test)]
+mod tests_double_quoted_name;
+#[cfg(test)]
+mod tests_explicit_app_partial;
+#[cfg(test)]
+mod tests_function_dot_receiver_slot;
+#[cfg(test)]
+mod tests_grind_ite_split;
+#[cfg(test)]
+mod tests_implicit_lambda_term;
+
+#[cfg(test)]
+mod tests_grind_attr_params;
+#[cfg(test)]
+mod tests_grind_ext_heq;
+#[cfg(test)]
+mod tests_grind_preprocess;
+#[cfg(test)]
+mod tests_grind_refutation;
+#[cfg(test)]
+mod tests_inhabit_parent_instances;
+#[cfg(test)]
+mod tests_inst_hole;
+#[cfg(test)]
+mod tests_instance_universe_finalize;
+#[cfg(test)]
+mod tests_leading_dot_deferred;
+#[cfg(test)]
+mod tests_pattern_field_head_beta;
+#[cfg(test)]
+mod tests_pattern_lambda_interleave;
+#[cfg(test)]
+mod tests_refine_hole_under_lambda;
+#[cfg(test)]
+mod tests_rw_term_metas;
+#[cfg(test)]
+mod tests_section_scope_e2e;
+#[cfg(test)]
+mod tests_simp_dite_collapse;
+#[cfg(test)]
+mod tests_simp_prop_hyp;
+#[cfg(test)]
+mod tests_struct_named_defaults;
+#[cfg(test)]
+mod tests_structure_field_local_instances;
+#[cfg(test)]
+mod tests_subst_dependent;
+#[cfg(test)]
+mod tests_support_imported_core;
+#[cfg(test)]
+mod tests_tactic_surface_fixes;
+#[cfg(test)]
+mod tests_tactic_term_no_expected;
+
+#[cfg(test)]
+mod tests_unify_eta_meta;
 
 #[cfg(test)]
 mod tests_cases_imported_cases_on;
@@ -1606,6 +2387,9 @@ mod attribute_wiring_tests;
 
 #[cfg(test)]
 mod calc_generic_relation_tests;
+
+#[cfg(test)]
+mod calc_trans_class_tests;
 
 #[cfg(test)]
 mod structure_cmd_tests;
@@ -1904,5 +2688,191 @@ mod preprocess_ext_tests;
 mod register_ext_tests;
 
 #[cfg(test)]
+mod tests_elab_surface_fixes;
+#[cfg(test)]
+mod tests_imported_named_args;
+#[cfg(test)]
+mod tests_imported_tactic_macro;
+#[cfg(test)]
 #[path = "variable_cmd_ext_tests.rs"]
 mod variable_cmd_ext_tests;
+
+#[cfg(test)]
+mod tests_section_variable_inclusion;
+
+#[cfg(test)]
+mod tests_section_variable_inclusion_ext;
+
+#[cfg(test)]
+mod tests_section_variable_inclusion_inst;
+
+#[cfg(test)]
+mod tests_section_variable_inclusion_adv;
+
+#[cfg(test)]
+mod tests_section_variable_inclusion_adv2;
+
+#[cfg(test)]
+mod tests_bullet_app_boundary;
+
+#[cfg(test)]
+mod tests_ascription_without_type;
+
+#[cfg(test)]
+mod tests_anon_ctor_one_field;
+
+#[cfg(test)]
+mod tests_anon_ctor_subobject_as_written;
+
+#[cfg(test)]
+mod tests_local_simp_attribute;
+
+#[cfg(test)]
+mod tests_nested_ctor_dependent_motive;
+
+#[cfg(test)]
+mod tests_single_equation_lowering;
+
+#[cfg(test)]
+mod tests_rcases_target_equation;
+
+#[cfg(test)]
+mod tests_tactic_syntax_forms;
+
+#[cfg(test)]
+mod tests_instance_eqns_attribute_in;
+
+#[cfg(test)]
+mod tests_rcases_typed_pattern;
+
+#[cfg(test)]
+mod tests_simp_lemma_levels;
+
+#[cfg(test)]
+mod tests_simp_prop_lemmas;
+
+#[cfg(test)]
+mod tests_simp_instance_args;
+
+#[cfg(test)]
+mod tests_rintro_rfl;
+
+#[cfg(test)]
+mod tests_simp_at_false;
+
+#[cfg(test)]
+mod tests_simp_lemma_rows;
+
+#[cfg(test)]
+mod tests_simp_lemma_adversarial;
+
+#[cfg(test)]
+mod tests_simp_lemma_sources;
+
+#[cfg(test)]
+mod tests_pkg4_unifier;
+
+#[cfg(test)]
+mod tests_pkg4_level_occurs;
+
+#[cfg(test)]
+mod tests_pkg4_proof_meta;
+
+#[cfg(test)]
+mod tests_pkg4_review;
+
+#[cfg(test)]
+mod tests_fin_ofnat_signature_drift;
+
+#[cfg(test)]
+mod tests_elab_app_binders;
+
+#[cfg(test)]
+#[path = "tests_instance_alias_keying.rs"]
+mod tests_instance_alias_keying;
+
+#[cfg(test)]
+#[path = "tests_attribute_target_scope.rs"]
+mod tests_attribute_target_scope;
+#[cfg(test)]
+#[path = "tests_implemented_by_scope.rs"]
+mod tests_implemented_by_scope;
+#[cfg(test)]
+#[path = "tests_implemented_by_validation.rs"]
+mod tests_implemented_by_validation;
+#[cfg(test)]
+#[path = "tests_instance_state_scoping.rs"]
+mod tests_instance_state_scoping;
+#[cfg(test)]
+#[path = "tests_private_defs.rs"]
+mod tests_private_defs;
+#[cfg(test)]
+#[path = "tests_private_families.rs"]
+mod tests_private_families;
+#[cfg(test)]
+#[path = "tests_private_names.rs"]
+mod tests_private_names;
+#[cfg(test)]
+#[path = "tests_private_print.rs"]
+mod tests_private_print;
+#[cfg(test)]
+#[path = "tests_reduce_command.rs"]
+mod tests_reduce_command;
+#[cfg(test)]
+#[path = "tests_term_name_resolution.rs"]
+mod tests_term_name_resolution;
+
+#[cfg(test)]
+#[path = "tests_alias_goal_opening.rs"]
+mod tests_alias_goal_opening;
+
+#[cfg(test)]
+#[path = "tests_alias_class_locals.rs"]
+mod tests_alias_class_locals;
+
+#[cfg(test)]
+#[path = "tests_alias_iff_unreduced.rs"]
+mod tests_alias_iff_unreduced;
+
+#[cfg(test)]
+#[path = "tests_structure_level_params.rs"]
+mod tests_structure_level_params;
+
+#[cfg(test)]
+#[path = "tests_level_zero_succ_refuted.rs"]
+mod tests_level_zero_succ_refuted;
+
+#[cfg(test)]
+#[path = "tests_sort_star_rigid.rs"]
+mod tests_sort_star_rigid;
+
+#[cfg(test)]
+#[path = "tests_meta_assign_folded_spelling.rs"]
+mod tests_meta_assign_folded_spelling;
+
+#[cfg(test)]
+#[path = "tests_classical_scope_simp.rs"]
+mod tests_classical_scope_simp;
+
+#[cfg(test)]
+#[path = "tests_local_instance_ambiguity.rs"]
+mod tests_local_instance_ambiguity;
+
+#[cfg(test)]
+#[path = "tests_imported_max_level_instance.rs"]
+mod tests_imported_max_level_instance;
+
+#[cfg(test)]
+#[path = "tests_local_instance_ambiguity_adversarial.rs"]
+mod tests_local_instance_ambiguity_adversarial;
+
+#[cfg(test)]
+#[path = "tests_w3c_review_adversarial.rs"]
+mod tests_w3c_review_adversarial;
+
+#[cfg(test)]
+#[path = "tests_decl_timing.rs"]
+mod tests_decl_timing;
+
+#[cfg(test)]
+mod tests_source_placeholder_authority;

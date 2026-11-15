@@ -14,7 +14,7 @@
 //! These reproduce root causes B and C from
 //! `docs/SOUNDNESS_FINDINGS_CLEAN_VERIFY_2026-07.md`. The invariant this module
 //! pins: **a "verified refutation / discharged obligation" verdict requires the
-//! empty clause to be FULLY kernel-verified; a holey proof is never `valid` /
+//! empty clause to be FULLY step-checked; a holey proof is never `valid` /
 //! `CertificateVerdict::Valid` / `s VERIFIED` / a discharged contract.**
 //!
 //! Structure of each test:
@@ -260,8 +260,8 @@ fn test_falsify_boolean_catchall_fabricates_contradiction_is_holey() {
 // over-tightening that rejects real refutations.
 // ---------------------------------------------------------------------------
 
-/// A genuinely-valid, fully kernel-verified refutation: assume p, assume ¬p,
-/// resolve to the empty clause. Every step is axiomatic or kernel-verified.
+/// A genuinely-valid, fully step-checked refutation: assume p, assume ¬p,
+/// resolve to the empty clause. Every step is axiomatic or step-checked.
 fn build_genuinely_valid_refutation() -> SmtProofDag {
     let mut dag = SmtProofDag::new();
     let p = bool_var(&mut dag, "p");
@@ -288,7 +288,7 @@ fn test_correct_path_valid_refutation_still_verifies() {
     );
     assert!(
         result.stats.is_fully_verified(),
-        "genuine refutation must be fully kernel-verified (stats: {})",
+        "genuine refutation must be fully step-checked (stats: {})",
         result.stats,
     );
     assert_eq!(result.stats.structurally_accepted, 0);

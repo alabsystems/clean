@@ -74,12 +74,12 @@ else
     CLEAN_BIN="$TARGET_DIR/debug/clean"
 fi
 
-run_logged cargo-build-clean cargo build --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean --bin clean
-run_logged cli-replacement-unit cargo test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli cmd_replacement --lib
-run_logged cli-docs-drift cargo test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli --test docs_drift
-run_logged cli-feature-coverage cargo test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli --test feature_coverage
-run_logged cli-lake-delegation cargo test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli --test lake_replacement_delegation
-run_logged mathverse-native-gate cargo test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-mathverse --test native_gate_integration
+run_logged cargo-build-clean targo --unverified build --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean --bin clean
+run_logged cli-replacement-unit targo --unverified test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli cmd_replacement --lib
+run_logged cli-docs-drift targo --unverified test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli --test docs_drift
+run_logged cli-feature-coverage targo --unverified test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli --test feature_coverage
+run_logged cli-lake-delegation targo --unverified test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-cli --test lake_replacement_delegation
+run_logged mathverse-native-gate targo --unverified test --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-mathverse --test native_gate_integration
 
 run_json_report replacement-status "$CLEAN_BIN" replacement status --json
 run_json_report replacement-tactic-parity "$CLEAN_BIN" replacement tactic-parity --json

@@ -18,20 +18,19 @@ impl Parser {
                 match stmt {
                     syn::Stmt::Local(local) => stmts.push(self.parse_local(local)?),
                     syn::Stmt::Item(item) => {
-                        // `type` aliases are resolved structurally via the alias
-                        // table (collected above) but are still emitted as items
-                        // so the block AST records them. Other purely
-                        // declarative items (`use`, `mod`, macros, ...) are
-                        // skipped: they have no runtime representation here.
-                        if !matches!(
+                        // Keep supported items in the semantic AST. Only
+                        // explicit noncomputational declarations and unexpanded
+                        // macro DEFINITIONS may be omitted. An invocation can
+                        // generate computational items, so parse/refuse it;
+                        // an unsupported nested module must not lose its bodies.
+                        let declaration_only = matches!(
                             item,
                             syn::Item::Use(_)
-                                | syn::Item::Macro(_)
                                 | syn::Item::ExternCrate(_)
-                                | syn::Item::Mod(_)
                                 | syn::Item::ForeignMod(_)
                                 | syn::Item::TraitAlias(_)
-                        ) {
+                        ) || matches!(item,syn::Item::Macro(mac) if mac.ident.is_some());
+                        if !declaration_only {
                             let parsed_item = self.with_isolated_type_params(|parser| {
                                 parser.parse_item(item.clone())
                             })?;
@@ -47,11 +46,8 @@ impl Parser {
                         }
                     }
                     syn::Stmt::Macro(stmt_mac) => {
-                        if Self::builtin_macro_dispatch_name(&stmt_mac.mac.path).is_none() {
-                            // Unrecognized macros in statement position are
-                            // silently skipped, matching the Item::Macro filter.
-                            continue;
-                        }
+                        // The shared macro parser names unsupported invocations.
+                        // Never erase a statement that may return, panic or write.
                         let parsed = self.parse_macro_invocation(&stmt_mac.mac)?;
                         if idx == last_idx && stmt_mac.semi_token.is_none() {
                             expr = Some(Box::new(parsed));

@@ -429,8 +429,9 @@ fn test_aesop_hyp_simplification_enables_assumption() {
         env,
         goal,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],

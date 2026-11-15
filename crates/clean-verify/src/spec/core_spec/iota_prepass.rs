@@ -178,10 +178,15 @@ impl Specification {
         self.add_whc_inverter()?;
         self.add_whc_recmeta_none()?;
         self.add_whc_reassembly()?;
+        self.add_whc_none_reassembly()?;
         self.add_whc_no_major()?;
         self.add_whc_no_head()?;
         self.add_wh_no_redex()?;
         self.add_starvation_witness()?;
+        // Immediately after the witness it is built from, deliberately: the
+        // refutation IS that witness's prose consequence, and the two must not
+        // be able to drift apart.
+        self.add_faithful_hnf_refutation()?;
         self.add_monotonicity_refutation()?;
         self.add_three_way_step()?;
         Ok(())
@@ -457,7 +462,7 @@ impl Specification {
             "(fun (ty : KExpr) (b : KExpr) (_cty : WhStepR) (_cb : WhStepR) => WhStepR.wstuck)",
             "(fun (ty : KExpr) (b : KExpr) (_cty : WhStepR) (_cb : WhStepR) => WhStepR.wstuck)",
             "(fun (n : Name) (us : ListType Level) => opt_step_bind KExpr \
-                 (defval_for (red_def renv) n) WhStepR.wstuck (fun (v : KExpr) => WhStepR.wstep v))",
+                 (kdef_value_at (red_def renv) n us) WhStepR.wstuck (fun (v : KExpr) => WhStepR.wstep v))",
             "(fun (ty : KExpr) (v : KExpr) (b : KExpr) (_c1 : WhStepR) (_c2 : WhStepR) (_c3 : WhStepR) \
                  => WhStepR.wstep (instantiate b v))",
             // proj carries starvation up from its subterm rather than losing it
@@ -504,14 +509,14 @@ impl Specification {
     /// The ι chain, three ways.
     ///
     /// Built level-for-level against `whc_chain`, with every `opt_bind` becoming
-    /// an `opt_step_bind` carrying a default. Five levels default to `wstuck`;
+    /// an `opt_step_bind` carrying a default. Six binds default to `wstuck`, including the guarded tail;
     /// the pre-pass level defaults to `wstarved`. That one asymmetry is the
     /// whole change — a starved pre-pass now says so, instead of being
     /// indistinguishable from ι having nothing to do.
     /// The six continuation levels of `iota_reduct_whc3`'s `opt_step_bind` chain,
     /// built in ONE place — the three-way twin of `whc_chain`.
     ///
-    /// Shared by the chain and its inverter. A six-level CPS inversion cannot
+    /// Shared by the chain and its inverter. A seven-bind CPS inversion cannot
     /// survive its subject drifting out from under it, and re-transcribing the
     /// layers is exactly how that happens; `whc_chain` exists for the same
     /// reason on the two-way side.
@@ -520,9 +525,12 @@ impl Specification {
     /// chain binds the recursor name with `l2`'s own lambda.
     pub(super) fn whc3_layers() -> [String; 6] {
         let mi = MAJOR_IDX;
-        let reduct = Self::whc_reduct();
+        let tail = Self::whc_tail();
         // Innermost first, mirroring whc_chain exactly.
-        let l7 = format!("(fun (rule : RecRule) => WhStepR.wstep {reduct})");
+        let l7 = format!(
+            "(fun (rule : RecRule) => opt_step_bind KExpr {tail} WhStepR.wstuck \
+             (fun (result : KExpr) => WhStepR.wstep result))"
+        );
         let l6 = format!(
             "(fun (cname : Name) => opt_step_bind RecRule \
              (recrule_for env recname cname) WhStepR.wstuck {l7})"
@@ -560,15 +568,15 @@ impl Specification {
         );
         debug_assert_eq!(
             src.matches("WhStepR.wstuck").count(),
-            5,
-            "the other five levels fail as genuinely stuck"
+            6,
+            "the six other binds, including the guarded tail, report stuck"
         );
         self.add_recursive_def(
             &src,
             "iota_reduct_whc3: the iota chain, reporting WHY it declined. Level-for-level against \
-             iota_reduct_whc, with each opt_bind replaced by opt_step_bind and a default. Five \
-             levels default to wstuck — no head name, no metadata, no major premise, a \
-             non-constructor major, no matching rule — and exactly ONE, the pre-pass, defaults to \
+             iota_reduct_whc, with each opt_bind replaced by opt_step_bind and a default. Six \
+             binds default to wstuck — no head name, no metadata, no major premise, a \
+             non-constructor major, no matching rule, or a declined guarded tail — and exactly ONE, the pre-pass, defaults to \
              wstarved. \
              \
              That single asymmetry is the entire semantic content of the repair. In the two-way \
@@ -691,6 +699,82 @@ impl Specification {
              carries for exactly this kind of reason). Discovering that the missing hypothesis is \
              convergence rather than fidelity is the substantive result of this increment. \
              DerivedProved, zero axiom_deps.",
+        )?;
+        Ok(())
+    }
+
+    /// **THE PROSE ABOVE, AS A KERNEL OBJECT.**
+    ///
+    /// `whnf_fuel_red_wh_starves`'s own description asserts, in prose, that
+    /// "hnf is FALSE for the faithful loop as well, and no improvement in
+    /// fidelity can repair it". That is a claim of exactly the kind
+    /// `hnf_is_false` exists to stop being made in prose — an unproved sentence
+    /// sitting beside a proof, typographically indistinguishable from one.
+    ///
+    /// This is that sentence as a term, and it costs one line: it is
+    /// `hnf_is_false` with `whnf_fuel_red` replaced by `whnf_fuel_red_wh` and
+    /// `cx_whnf_stuck` replaced by `whnf_fuel_red_wh_starves`. Both refuting
+    /// ingredients already existed and neither mentions a loop —
+    /// `cx_not_nf_head` is a fact about the TERM `cx_stuck`, not about whatever
+    /// reducer emitted it, so it refutes any loop that emits it.
+    ///
+    /// ## What this SEPARATES — the reason it is not a restatement
+    ///
+    /// The two refutations have **different causes**, and the distinction is
+    /// the whole content:
+    ///
+    /// * `hnf_is_false` fails because the DEPLOYED loop has no ι pre-pass at
+    ///   all, so `cx_stuck` is stuck permanently as far as that loop can ever
+    ///   see. A **fidelity** defect — the loop is not the reduction relation.
+    /// * `hnf_wh_is_false` fails at a loop that HAS the pre-pass and DOES
+    ///   reduce `cx_stuck`, at fuel 2 (`reduce_once_red_wh_fires`). It fails
+    ///   only because the pre-pass is the loop at one less fuel, so at fuel 1
+    ///   the budget is exhausted mid-decision and `opt_bind` reports that as ι
+    ///   declining. A **fuel** defect.
+    ///
+    /// So repairing fidelity cannot rescue `hnf`: the faithful loop is a
+    /// counterexample to the repaired premise too. That is what the prose
+    /// claimed, and until now nothing checked it — which matters because the
+    /// deployed-faithful loop (`def_eq_fuel_wh`) is the one the certificate's
+    /// completeness row points at.
+    ///
+    /// **What it does NOT say.** Not that the faithful loop is wrong, and not
+    /// that the goal is unreachable. `hnf` is refuted in its NAIVE form only:
+    /// the missing hypothesis is CONVERGENCE — that the result is stable under
+    /// more fuel — which is exactly what `add_hnf_conv` goes on to carry. This
+    /// brick is the reason that hypothesis is mandatory rather than a
+    /// conservative choice.
+    fn add_faithful_hnf_refutation(&mut self) -> Result<(), SpecError> {
+        self.add_recursive_def(
+            "def hnf_wh_is_false (hnfw : forall (m : Nat) (e : KExpr) (r : KExpr), \
+             Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env m e) \
+             (OptionType.some KExpr r) -> nf_head r) : Empty := \
+             cx_not_nf_head (hnfw (Nat.succ Nat.zero) cx_stuck cx_stuck \
+             whnf_fuel_red_wh_starves)",
+            "hnf_wh_is_false: THE SECOND REFUTATION, and the one that shows the first was not \
+             about fidelity. whnf_fuel_red_wh_starves' description asserted IN PROSE that hnf is \
+             false for the faithful loop as well and that no improvement in fidelity can repair \
+             it. This is that sentence as a kernel-checked term; it was the only unbacked claim \
+             left in this module. \
+             \
+             ONE LINE, because cx_not_nf_head is a fact about the TERM cx_stuck rather than about \
+             the reducer that produced it: hnf_is_false with whnf_fuel_red swapped for \
+             whnf_fuel_red_wh and cx_whnf_stuck swapped for whnf_fuel_red_wh_starves. \
+             \
+             WHY IT IS NOT A RESTATEMENT: the two refutations fail for different reasons. \
+             hnf_is_false fails because the DEPLOYED loop has no iota pre-pass, so cx_stuck is \
+             permanently stuck as far as it can see — a fidelity defect. This one fails at a loop \
+             that HAS the pre-pass and DOES reduce cx_stuck at fuel 2 \
+             (reduce_once_red_wh_fires); it fails only because the pre-pass is the loop at one \
+             less fuel, so at fuel 1 the budget runs out mid-decision and opt_bind reports \
+             exhaustion as iota declining — a FUEL defect. Repairing fidelity therefore cannot \
+             rescue hnf, and the deployed-faithful loop def_eq_fuel_wh inherits the refutation. \
+             \
+             WHAT IT DOES NOT SAY: not that the faithful loop is wrong, and not that the capstone \
+             is unreachable. The NAIVE hnf is refuted; the missing hypothesis is CONVERGENCE — \
+             stability under more fuel — which add_hnf_conv goes on to carry. This is why that \
+             hypothesis is mandatory rather than merely conservative. DerivedProved, zero \
+             axiom_deps.",
         )?;
         Ok(())
     }
@@ -898,21 +982,10 @@ impl Specification {
     fn add_step_defeq_bricks(&mut self) -> Result<(), SpecError> {
         let mi = MAJOR_IDX;
         let sp = "(KExpr.app f wmajor)";
-        let reduct = |mtv: &str, mjv: &str, rlv: &str| {
-            let miv = format!(
-                "(Nat.add (Nat.add (Nat.add (recmeta_num_params {mtv}) \
-                 (recmeta_num_motives {mtv})) (recmeta_num_minors {mtv})) \
-                 (recmeta_num_indices {mtv}))"
-            );
-            let prev = format!(
-                "(Nat.add (Nat.add (recmeta_num_params {mtv}) (recmeta_num_motives {mtv})) \
-                 (recmeta_num_minors {mtv}))"
-            );
+        let tail = |mtv: &str, mjv: &str, rlv: &str| {
             format!(
-                "(apply_spine (list_drop (Nat.succ {miv}) (kapp_args {sp})) \
-                 (apply_spine (list_drop (Nat.sub (list_length (kapp_args {mjv})) \
-                 (recrule_num_fields {rlv})) (kapp_args {mjv})) \
-                 (apply_spine (list_take {prev} (kapp_args {sp})) (recrule_rhs {rlv}))))"
+                "(iota_contractum_at {mtv} {rlv} (kexpr_const_levels (kapp_fn {sp})) \
+                 (kapp_args {sp}) (kapp_args {mjv}))"
             )
         };
 
@@ -926,17 +999,17 @@ impl Specification {
 
         self.add_recursive_def(
             "def defeq_of_const_delta (n : Name) (us : ListType Level) (v : KExpr) \
-             (h : Eq (OptionType KExpr) (defval_for (red_def the_red_env) n) \
+             (h : Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) n us) \
              (OptionType.some KExpr v)) : DefEq (KExpr.const n us) v := \
              DefEq.delta (KExpr.const n us) v (delta_reduces.mk (KExpr.const n us) v \
              (opt_bind_some_intro Name KExpr \
              (kexpr_const_name (kapp_fn (KExpr.const n us))) \
              (fun (dname : Name) => opt_bind KExpr KExpr \
-             (defval_for (red_def the_red_env) dname) \
+             (kdef_value_at (red_def the_red_env) dname us) \
              (fun (val : KExpr) => OptionType.some KExpr \
              (apply_spine (kapp_args (KExpr.const n us)) val))) \
              n v (Eq.refl (OptionType Name) (OptionType.some Name n)) \
-             (opt_bind_some_intro KExpr KExpr (defval_for (red_def the_red_env) n) \
+             (opt_bind_some_intro KExpr KExpr (kdef_value_at (red_def the_red_env) n us) \
              (fun (val : KExpr) => OptionType.some KExpr \
              (apply_spine (kapp_args (KExpr.const n us)) val)) \
              v v h (Eq.refl (OptionType KExpr) (OptionType.some KExpr v)))))",
@@ -970,7 +1043,7 @@ impl Specification {
                  (h5 : Eq (OptionType RecRule) \
                  (recrule_for (red_rec the_red_env) recname cname) \
                  (OptionType.some RecRule rule)) \
-                 (hred : Eq (OptionType KExpr) (OptionType.some KExpr {r_meta_wmajor_rule}) \
+                 (hred : Eq (OptionType KExpr) ({r_meta_wmajor_rule}) \
                  (OptionType.some KExpr e2)) : \
                  iota_step (red_rec the_red_env) {sp} e2 := \
                  opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {sp})) \
@@ -981,7 +1054,7 @@ impl Specification {
                  (fun (mj : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn mj)) \
                  (fun (cn : Name) => opt_bind RecRule KExpr \
                  (recrule_for (red_rec the_red_env) rn cn) \
-                 (fun (rl : RecRule) => OptionType.some KExpr {r_mt_mj_rl}))))) \
+                 (fun (rl : RecRule) => {r_mt_mj_rl}))))) \
                  recname e2 h1 \
                  (opt_bind_some_intro RecMeta KExpr \
                  (recmeta_for (red_rec the_red_env) recname) \
@@ -990,34 +1063,34 @@ impl Specification {
                  (fun (mj : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn mj)) \
                  (fun (cn : Name) => opt_bind RecRule KExpr \
                  (recrule_for (red_rec the_red_env) recname cn) \
-                 (fun (rl : RecRule) => OptionType.some KExpr {r_mt_mj_rl})))) \
+                 (fun (rl : RecRule) => {r_mt_mj_rl})))) \
                  meta e2 h2 \
                  (opt_bind_some_intro KExpr KExpr \
                  (list_head (list_drop {mi} (kapp_args {sp}))) \
                  (fun (mj : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn mj)) \
                  (fun (cn : Name) => opt_bind RecRule KExpr \
                  (recrule_for (red_rec the_red_env) recname cn) \
-                 (fun (rl : RecRule) => OptionType.some KExpr {r_meta_mj_rl}))) \
+                 (fun (rl : RecRule) => {r_meta_mj_rl}))) \
                  wmajor e2 (minimal_major_is_last meta f wmajor hlenmi) \
                  (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn wmajor)) \
                  (fun (cn : Name) => opt_bind RecRule KExpr \
                  (recrule_for (red_rec the_red_env) recname cn) \
-                 (fun (rl : RecRule) => OptionType.some KExpr {r_meta_wmajor_rl})) \
+                 (fun (rl : RecRule) => {r_meta_wmajor_rl})) \
                  cname e2 h4 \
                  (opt_bind_some_intro RecRule KExpr \
                  (recrule_for (red_rec the_red_env) recname cname) \
-                 (fun (rl : RecRule) => OptionType.some KExpr {r_meta_wmajor_rl}) \
+                 (fun (rl : RecRule) => {r_meta_wmajor_rl}) \
                  rule e2 h5 hred))))",
                 mi_mt = "(Nat.add (Nat.add (Nat.add (recmeta_num_params mt) \
                          (recmeta_num_motives mt)) (recmeta_num_minors mt)) \
                          (recmeta_num_indices mt))",
-                r_meta_wmajor_rule = reduct("meta", "wmajor", "rule"),
-                r_mt_mj_rl = reduct("mt", "mj", "rl"),
-                r_meta_mj_rl = reduct("meta", "mj", "rl"),
-                r_meta_wmajor_rl = reduct("meta", "wmajor", "rl"),
+                r_meta_wmajor_rule = tail("meta", "wmajor", "rule"),
+                r_mt_mj_rl = tail("mt", "mj", "rl"),
+                r_meta_mj_rl = tail("meta", "mj", "rl"),
+                r_meta_wmajor_rl = tail("meta", "wmajor", "rl"),
             ),
             "whc_fires_plain_minimal: THE POSITIONAL OBLIGATION — for a spine carrying exactly \
-             major_idx arguments, the pre-pass's five lookups are enough to fire a PLAIN iota on \
+             major_idx arguments, the pre-pass's lookups plus actual guarded-tail success fire a PLAIN iota on \
              the swapped spine. \
              \
              The mirror image of iota_reduct_whc_some_inv: six nested eliminations there, five \
@@ -1154,15 +1227,11 @@ impl Specification {
     /// both from one function is what stops the chain being transcribed twice
     /// and drifting — the same discipline `join_sources` applies to the
     /// confluence join.
-    pub(super) fn whc_reduct() -> String {
-        let mi = MAJOR_IDX;
-        let pre = PREFIX_N;
-        format!(
-            "(apply_spine (list_drop (Nat.succ {mi}) (kapp_args e)) \
-             (apply_spine (list_drop (Nat.sub (list_length (kapp_args wmajor)) \
-             (recrule_num_fields rule)) (kapp_args wmajor)) \
-             (apply_spine (list_take {pre} (kapp_args e)) (recrule_rhs rule))))"
-        )
+    /// Actual shared tail, using recursor head universes and the reduced major.
+    pub(super) fn whc_tail() -> String {
+        "(iota_contractum_at meta rule (kexpr_const_levels (kapp_fn e)) \
+         (kapp_args e) (kapp_args wmajor))"
+            .to_string()
     }
 
     fn whc_layers(recname: &str) -> [String; 6] {
@@ -1183,8 +1252,8 @@ impl Specification {
     /// once is what stops those four drifting apart.
     fn whc_chain(recname: &str) -> ([String; 6], [String; 6]) {
         let mi = MAJOR_IDX;
-        let reduct = Self::whc_reduct();
-        let b7 = format!("OptionType.some KExpr {reduct}");
+        let tail = Self::whc_tail();
+        let b7 = tail;
         let l7 = format!("(fun (rule : RecRule) => {b7})");
         let b6 = format!("opt_bind RecRule KExpr (recrule_for env {recname} cname) {l7}");
         let l6 = format!("(fun (cname : Name) => {b6})");
@@ -1234,7 +1303,7 @@ impl Specification {
              \
              The shallowest of the chain's three structural exits, completing the family with the \
              missing-metadata exit at level two and the under-application exit at level three. \
-             Every STRUCTURAL reason iota can decline is one of these; starvation, which is about \
+             These are the three early structural exits; later constructor/rule/tail refusals are separate. Starvation is about \
              budget rather than shape, is the separate phenomenon that makes plain fuel \
              monotonicity false. DerivedProved, zero axiom_deps.",
         )?;
@@ -1323,10 +1392,259 @@ impl Specification {
     /// results" — cannot be stated cleanly, because the major is extracted
     /// *inside* the chain and `MAJOR_IDX` depends on `meta`, which is recovered
     /// inside it too; there is no way to name the agreement point from outside.
+    /// The DECLINE counterparts of `iota_reduct_whc_some_of_facts`: the same
+    /// congruence chain, stopped at the level that fails.
+    ///
+    /// `iota_reduct_whc_none_of_no_head` / `_no_recmeta` / `_no_major` already
+    /// cover the first three levels. These are the three AFTER the pre-pass,
+    /// and they exist for one consumer: the `app` arm of a three-way-to-two-way
+    /// step transfer, where the pre-pass SUCCEEDS (its result is transported by
+    /// the continuation hypothesis) and the chain must be shown to decline at
+    /// the SAME later level the three-way chain declined at.
+    ///
+    /// Each is `iota_reduct_whc_some_of_facts`'s proof truncated: transport the
+    /// scrutinees that succeed, then transport the failing one to `none`, at
+    /// which point `opt_bind` reduces to `none` definitionally and the chain
+    /// ends. No new argument — the same six `Eq.cong`s, fewer of them.
+    pub(super) fn whc_none_reassembly_sources() -> Vec<(String, String)> {
+        let mi = MAJOR_IDX;
+        let tail = Self::whc_tail();
+        let ([l2, l3, l4, l5, l6, l7], [b2, b3, b4, b5, b6, b7]) = Self::whc_chain("recname");
+        let o = "OptionType KExpr";
+        let none = "(OptionType.none KExpr)";
+        let cong = |ty: &str, var: &str, layer: &str, from: &str, to: &str, h: &str| {
+            format!(
+                "(Eq.cong (OptionType {ty}) ({o}) \
+                 (fun ({var} : OptionType {ty}) => opt_bind {ty} KExpr {var} {layer}) \
+                 {from} {to} {h})"
+            )
+        };
+        // The four transports that SUCCEED in every variant here.
+        let c1 = cong(
+            "Name",
+            "on",
+            &l2,
+            "(kexpr_const_name (kapp_fn e))",
+            "(OptionType.some Name recname)",
+            "h1",
+        );
+        let c2 = cong(
+            "RecMeta",
+            "om",
+            &l3,
+            "(recmeta_for env recname)",
+            "(OptionType.some RecMeta meta)",
+            "h2",
+        );
+        let c3 = cong(
+            "KExpr",
+            "oj",
+            &l4,
+            &format!("(list_head (list_drop {mi} (kapp_args e)))"),
+            "(OptionType.some KExpr major)",
+            "h3",
+        );
+        let c4 = cong(
+            "KExpr",
+            "ow",
+            &l5,
+            "(wh major)",
+            "(OptionType.some KExpr wmajor)",
+            "hw",
+        );
+        let c5 = cong(
+            "Name",
+            "oc",
+            &l6,
+            "(kexpr_const_name (kapp_fn wmajor))",
+            "(OptionType.some Name cname)",
+            "h4",
+        );
+
+        // Shared binder prefixes, longest-first so each variant takes exactly
+        // the facts it consumes and no more.
+        let bind_head = format!(
+            "(env : RecEnv) (wh : KExpr -> OptionType KExpr) (e : KExpr) (recname : Name) \
+             (meta : RecMeta) (major : KExpr) (wmajor : KExpr) \
+             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
+             (OptionType.some Name recname)) \
+             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) \
+             (OptionType.some RecMeta meta)) \
+             (h3 : Eq ({o}) (list_head (list_drop {mi} (kapp_args e))) \
+             (OptionType.some KExpr major)) \
+             (hw : Eq ({o}) (wh major) (OptionType.some KExpr wmajor))"
+        );
+        let bind_cname = "(cname : Name) \
+             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (OptionType.some Name cname))"
+            .to_string();
+
+        // Fold a list of (from, to, cong) into a right-nested Eq.trans ending at
+        // `last`, exactly as the some-variant does.
+        let chain = |steps: Vec<(String, String, String)>, last: String| {
+            let mut proof = last;
+            for (from, to, c) in steps.into_iter().rev() {
+                proof = format!("(Eq.trans ({o}) {from} {to} {none} {c} {proof})");
+            }
+            proof
+        };
+
+        // (a) the pre-pass RESULT has no constant head — level 6 declines.
+        let c5n = cong(
+            "Name",
+            "oc",
+            &l6,
+            "(kexpr_const_name (kapp_fn wmajor))",
+            // NOT the shared `none`: this scrutinee is `OptionType Name`, and
+            // the shared binding is `OptionType KExpr` — which is the CHAIN's
+            // result type, not this transport's. Getting that wrong is the one
+            // mistake the paren and parse guards cannot see, because the string
+            // is well formed and only the kernel types it.
+            "(OptionType.none Name)",
+            "hnc",
+        );
+        let src_a = format!(
+            "def iota_reduct_whc_none_of_no_wmajor_head {bind_head} \
+             (hnc : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
+             (OptionType.none Name)) : \
+             Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
+            proof = chain(
+                vec![
+                    (
+                        "(iota_reduct_whc env wh e)".to_string(),
+                        format!("({b2})"),
+                        c1.clone()
+                    ),
+                    (format!("({b2})"), format!("({b3})"), c2.clone()),
+                    (format!("({b3})"), format!("({b4})"), c3.clone()),
+                    (format!("({b4})"), format!("({b5})"), c4.clone()),
+                ],
+                c5n,
+            ),
+        );
+
+        // (b) no RULE for that constructor at that recursor — level 7 declines.
+        let c6n = cong(
+            "RecRule",
+            "orr",
+            &l7,
+            "(recrule_for env recname cname)",
+            "(OptionType.none RecRule)",
+            "hnr",
+        );
+        let src_b = format!(
+            "def iota_reduct_whc_none_of_no_rule {bind_head} {bind_cname} \
+             (hnr : Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (OptionType.none RecRule)) : \
+             Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
+            proof = chain(
+                vec![
+                    (
+                        "(iota_reduct_whc env wh e)".to_string(),
+                        format!("({b2})"),
+                        c1.clone()
+                    ),
+                    (format!("({b2})"), format!("({b3})"), c2.clone()),
+                    (format!("({b3})"), format!("({b4})"), c3.clone()),
+                    (format!("({b4})"), format!("({b5})"), c4.clone()),
+                    (format!("({b5})"), format!("({b6})"), c5.clone()),
+                ],
+                c6n,
+            ),
+        );
+
+        // (c) every lookup succeeds and the GUARDED TAIL still declines --
+        // fields short, or the universe arity guard.
+        let c6 = cong(
+            "RecRule",
+            "orr",
+            &l7,
+            "(recrule_for env recname cname)",
+            "(OptionType.some RecRule rule)",
+            "h5",
+        );
+        let src_c = format!(
+            "def iota_reduct_whc_none_of_tail_none {bind_head} {bind_cname} \
+             (rule : RecRule) \
+             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) \
+             (OptionType.some RecRule rule)) \
+             (htail : Eq ({o}) {tail} {none}) : \
+             Eq ({o}) (iota_reduct_whc env wh e) {none} := {proof}",
+            proof = chain(
+                vec![
+                    (
+                        "(iota_reduct_whc env wh e)".to_string(),
+                        format!("({b2})"),
+                        c1
+                    ),
+                    (format!("({b2})"), format!("({b3})"), c2),
+                    (format!("({b3})"), format!("({b4})"), c3),
+                    (format!("({b4})"), format!("({b5})"), c4),
+                    (format!("({b5})"), format!("({b6})"), c5),
+                    (format!("({b6})"), format!("({b7})"), c6),
+                ],
+                "htail".to_string(),
+            ),
+        );
+
+        vec![
+            (
+                src_a,
+                "iota_reduct_whc_none_of_no_wmajor_head: the chain declines because the \
+                     PRE-PASS RESULT has no constant head. Four transports then one to none, at \
+                     which point opt_bind reduces definitionally and the chain ends. Truncated \
+                     iota_reduct_whc_some_of_facts, not a new argument.",
+            ),
+            (
+                src_b,
+                "iota_reduct_whc_none_of_no_rule: the chain declines because the recursor has \
+                     no rule for the constructor the pre-pass produced. Five transports then one \
+                     to none.",
+            ),
+            (
+                src_c,
+                "iota_reduct_whc_none_of_tail_none: every lookup succeeds and the GUARDED TAIL \
+                     still declines -- fields short, or the universe-arity guard. Six transports \
+                     then the caller's own tail equation. \
+                     \
+                     WHY THESE THREE AND NOT SIX: the first three levels are already covered by \
+                     iota_reduct_whc_none_of_no_head / _no_recmeta / _no_major. These are the \
+                     three AFTER the pre-pass, which is where a three-way-to-two-way step \
+                     transfer needs them -- there the pre-pass SUCCEEDS, its result carried by \
+                     the continuation hypothesis, and the two-way chain must decline at the same \
+                     later level the three-way one did.",
+            ),
+        ]
+        .into_iter()
+        .map(|(s, d)| (s, d.to_string()))
+        .collect()
+    }
+
+    /// Registered after the some-variant, whose chain these truncate.
+    ///
+    /// HISTORY, kept because it cost a cycle: these were wired straight in and
+    /// the first failed to elaborate, aborting the whole spec build so that
+    /// `axiom_ratchet` reported only the constant's NAME. Unwiring and
+    /// appending to an already-built spec
+    /// (`test_whc_none_reassembly_elaborates`) named the constant AND the
+    /// error in one run — `expected OptionType Name, got KExpr vs Name`, a
+    /// transport target taken from the shared `none` binding, which is the
+    /// CHAIN's result type rather than that scrutinee's. Note what did not
+    /// catch it: the paren and parse guards passed, because the string is
+    /// well-formed and the defect is in the term's types, which only the kernel
+    /// sees.
+    fn add_whc_none_reassembly(&mut self) -> Result<(), SpecError> {
+        for (src, desc) in Self::whc_none_reassembly_sources() {
+            debug_assert!(Self::balanced(&src), "whc none reassembly parens");
+            self.add_recursive_def(&src, &desc)?;
+        }
+        Ok(())
+    }
+
     fn add_whc_reassembly(&mut self) -> Result<(), SpecError> {
         let mi = MAJOR_IDX;
-        let reduct = Self::whc_reduct();
-        let ([l2, l3, l4, l5, l6, l7], [b2, b3, b4, b5, b6, _b7]) = Self::whc_chain("recname");
+        let tail = Self::whc_tail();
+        let ([l2, l3, l4, l5, l6, l7], [b2, b3, b4, b5, b6, b7]) = Self::whc_chain("recname");
         let o = "OptionType KExpr";
         // Each step rewrites one scrutinee; `hole` names the option being rewritten.
         let cong = |ty: &str, var: &str, layer: &str, from: &str, to: &str, h: &str| {
@@ -1382,9 +1700,9 @@ impl Specification {
             "(OptionType.some RecRule rule)",
             "h5",
         );
-        let goal = format!("(OptionType.some KExpr {reduct})");
-        // Right-nested: iota -> b2 -> b3 -> b4 -> b5 -> b6 -> the reduct.
-        let mut proof = c6;
+        let goal = "(OptionType.some KExpr result)";
+        // Six lookup transports reach the tail; its actual success reaches result.
+        let mut proof = format!("(Eq.trans ({o}) ({b6}) ({b7}) {goal} {c6} htail)");
         for (from, to, c) in [
             (format!("({b5})"), format!("({b6})"), c5),
             (format!("({b4})"), format!("({b5})"), c4),
@@ -1401,7 +1719,7 @@ impl Specification {
         let src = format!(
             "def iota_reduct_whc_some_of_facts (env : RecEnv) \
              (wh : KExpr -> OptionType KExpr) (e : KExpr) (recname : Name) (meta : RecMeta) \
-             (major : KExpr) (wmajor : KExpr) (cname : Name) (rule : RecRule) \
+             (major : KExpr) (wmajor : KExpr) (cname : Name) (rule : RecRule) (result : KExpr) \
              (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) \
              (OptionType.some Name recname)) \
              (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) \
@@ -1412,13 +1730,14 @@ impl Specification {
              (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) \
              (OptionType.some Name cname)) \
              (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) \
-             (OptionType.some RecRule rule)) : \
+             (OptionType.some RecRule rule)) \
+             (htail : Eq ({o}) {tail} {goal}) : \
              Eq ({o}) (iota_reduct_whc env wh e) {goal} := {proof}"
         );
         debug_assert!(Self::balanced(&src), "whc reassembly parens");
         self.add_recursive_def(
             &src,
-            "iota_reduct_whc_some_of_facts: the six lookups, run FORWARD, rebuild the iota reduct \
+            "iota_reduct_whc_some_of_facts: six lookups and the actual guarded-tail success rebuild the result \
              — the converse of iota_reduct_whc_some_inv. Six Eq.cong chained by transitivity, \
              each rewriting one opt_bind scrutinee to some so the bind fires and the chain \
              advances a level. \
@@ -1514,7 +1833,7 @@ impl Specification {
         binder_inv: &str,
     ) -> Result<(), SpecError> {
         let mi = MAJOR_IDX;
-        let reduct = Self::whc_reduct();
+        let tail = Self::whc_tail();
         // l2 binds `recname` itself, so the inner levels must use that same name.
         let [l2, l3, l4, l5, l6, l7] = Self::whc_layers("recname");
         let kont = format!(
@@ -1530,7 +1849,7 @@ impl Specification {
              (OptionType.some Name cname) -> \
              Eq (OptionType RecRule) (recrule_for env recname cname) \
              (OptionType.some RecRule rule) -> \
-             Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
+             Eq (OptionType KExpr) {tail} (OptionType.some KExpr e') -> \
              C)"
         );
         let src = format!(
@@ -1576,8 +1895,8 @@ impl Specification {
             &src,
             "iota_reduct_whc_some_inv: the CPS inversion of iota_reduct_whc's SIX-level opt_bind \
              chain, recovering the recursor name, its metadata, the raw major, ITS WHNF, the \
-             constructor name and the rule, together with every lookup equation and the reduct \
-             identity. Six nested opt_bind_some_inv_type, mirroring \
+             constructor name and the rule, together with every lookup equation and actual shared-tail \
+             success. Six nested opt_bind_some_inv_type, mirroring \
              iota_reduct_some_inv_type's five. \
              \
              This is the brick every soundness argument for the faithful loop needs, and the two \
@@ -1745,15 +2064,7 @@ impl Specification {
     /// The reduct, keyed on the WHNF'd major premise (`wmajor`), matching the
     /// kernel: it takes the constructor's fields off the reduced major, not the
     /// unreduced one.
-    fn wh_reduct() -> String {
-        format!(
-            "(apply_spine (list_drop (Nat.succ {MAJOR_IDX}) (kapp_args e)) \
-             (apply_spine (list_drop (Nat.sub (list_length (kapp_args wmajor)) \
-             (recrule_num_fields rule)) (kapp_args wmajor)) \
-             (apply_spine (list_take {PREFIX_N} (kapp_args e)) (recrule_rhs rule))))"
-        )
-    }
-
+    ///
     /// The pre-pass reduct in CONTINUATION form: the whnf used on the major
     /// premise is a parameter, not a fuel count.
     ///
@@ -1764,19 +2075,11 @@ impl Specification {
     /// than one level, and it is the difference between fixing the original
     /// counterexample and fixing the nested one.
     fn iota_reduct_whc_src() -> String {
+        let [l2, ..] = Self::whc_layers("recname");
         format!(
             "def iota_reduct_whc (env : RecEnv) (wh : KExpr -> OptionType KExpr) (e : KExpr) : \
              OptionType KExpr := \
-             opt_bind Name KExpr (kexpr_const_name (kapp_fn e)) (fun (recname : Name) => \
-             opt_bind RecMeta KExpr (recmeta_for env recname) \
-             (fun (meta : RecMeta) => \
-             opt_bind KExpr KExpr (list_head (list_drop {MAJOR_IDX} (kapp_args e))) \
-             (fun (major : KExpr) => \
-             opt_bind KExpr KExpr (wh major) (fun (wmajor : KExpr) => \
-             opt_bind Name KExpr (kexpr_const_name (kapp_fn wmajor)) (fun (cname : Name) => \
-             opt_bind RecRule KExpr (recrule_for env recname cname) \
-             (fun (rule : RecRule) => OptionType.some KExpr {reduct}))))))",
-            reduct = Self::wh_reduct(),
+             opt_bind Name KExpr (kexpr_const_name (kapp_fn e)) {l2}"
         )
     }
 
@@ -2175,20 +2478,155 @@ mod tests {
     /// reduce with the wrong arguments — and would still typecheck.
     #[test]
     fn test_reduct_uses_the_reduced_major() {
-        let reduct = Specification::wh_reduct();
+        let tail = Specification::whc_tail();
         assert_eq!(
-            reduct.matches("kapp_args wmajor").count(),
-            2,
-            "both field-extraction sites must read the REDUCED major"
+            tail.matches("kapp_args wmajor").count(),
+            1,
+            "the shared tail receives the REDUCED major arguments"
         );
         assert!(
-            !reduct.contains("kapp_args major)"),
+            !tail.contains("kapp_args major)"),
             "no site may read the unreduced major"
         );
         assert_eq!(
-            reduct.matches("kapp_args e").count(),
-            2,
-            "the spine prefix and the post-major arguments still come from e"
+            tail.matches("kapp_args e").count(),
+            1,
+            "the shared tail receives the entire original argument spine"
+        );
+        assert!(tail.contains("kexpr_const_levels (kapp_fn e)"));
+        assert!(!tail.contains("kexpr_const_levels (kapp_fn wmajor)"));
+    }
+
+    /// ITERATION TOOL for the decline counterparts, and the reason they are
+    /// UNWIRED.
+    ///
+    /// Registered directly, the first of the three failed to elaborate and took
+    /// the whole spec build with it — `axiom_ratchet` reported only the
+    /// constant's NAME, nineteen minutes from a verdict. Appending to an
+    /// already-built spec reports every failure with its own message, which is
+    /// what this repo's iteration recipe says to do and what I did not do.
+    #[test]
+    fn test_whc_none_reassembly_elaborates() {
+        crate::test_utils::run_with_stack(|| {
+            let mut spec = crate::test_utils::build_spec_with_stack();
+            // Once the stage is WIRED the spec already carries these, and
+            // re-registering would fail on the duplicate name rather than on
+            // anything about the terms. The ladder's scratch tests guard the
+            // same way; this one did not, and reported a false RED the moment
+            // its subjects went live.
+            if spec
+                .env()
+                .get_const(&clean_kernel::Name::from_string(
+                    "iota_reduct_whc_none_of_no_wmajor_head",
+                ))
+                .is_some()
+            {
+                return;
+            }
+            let mut failures: Vec<String> = Vec::new();
+            for (src, _desc) in Specification::whc_none_reassembly_sources() {
+                let name = src
+                    .split_whitespace()
+                    .nth(1)
+                    .unwrap_or("<unnamed>")
+                    .to_string();
+                if let Err(e) = spec.add_recursive_def(&src, "whc none reassembly scratch") {
+                    failures.push(format!("{name}: {e}"));
+                }
+            }
+            assert!(
+                failures.is_empty(),
+                "whc none reassembly failures ({}):\n{}",
+                failures.len(),
+                failures.join("\n")
+            );
+        });
+    }
+
+    /// The faithful refutation must register AFTER the witness it consumes.
+    ///
+    /// Registration is sequential and a backwards order does not fail to
+    /// compile — it breaks the whole spec build at elaboration, nineteen
+    /// minutes away. Same class as the boundary/minimal-spine check above.
+    #[test]
+    fn test_faithful_refutation_follows_its_witness() {
+        let src = include_str!("iota_prepass.rs");
+        let body = src
+            .split("pub(super) fn add_iota_prepass")
+            .nth(1)
+            .expect("the registration function");
+        let witness = body
+            .find("self.add_starvation_witness()")
+            .expect("starvation witness registration");
+        let refutation = body
+            .find("self.add_faithful_hnf_refutation()")
+            .expect("faithful refutation registration");
+        assert!(
+            witness < refutation,
+            "hnf_wh_is_false consumes whnf_fuel_red_wh_starves, so the witness registers first"
+        );
+    }
+
+    /// THE POINT OF THE SECOND REFUTATION, pinned.
+    ///
+    /// `hnf_wh_is_false` is worth having only because it refutes `hnf` at a
+    /// DIFFERENT loop than `hnf_is_false` does — the faithful one, which has
+    /// the ι pre-pass and really does reduce `cx_stuck` at fuel 2. If an edit
+    /// ever pointed it back at `whnf_fuel_red`, it would become a duplicate of
+    /// the first refutation while still reading as a separate result, and
+    /// nothing else in the tree would notice.
+    #[test]
+    fn test_faithful_refutation_targets_the_faithful_loop() {
+        let src = include_str!("iota_prepass.rs");
+        let body = src
+            .split("fn add_faithful_hnf_refutation")
+            .nth(1)
+            .expect("the refutation registrar")
+            .split("fn ")
+            .next()
+            .expect("its body");
+        let decl = body
+            .split("\"def hnf_wh_is_false")
+            .nth(1)
+            .expect("the declaration")
+            .split(":= \\")
+            .next()
+            .expect("its type");
+        assert!(
+            decl.contains("whnf_fuel_red_wh the_red_env"),
+            "the refutation must quantify over the FAITHFUL loop"
+        );
+        assert!(
+            !decl.contains("(whnf_fuel_red the_red_env"),
+            "the refutation points at the DEPLOYED loop — it is now a duplicate of hnf_is_false"
+        );
+        assert!(
+            body.contains("whnf_fuel_red_wh_starves"),
+            "the refutation no longer goes through the fuel-starvation witness"
+        );
+        assert!(
+            body.contains("cx_not_nf_head"),
+            "the refutation no longer goes through the nf_head refutation"
+        );
+    }
+
+    /// The prose this brick was written to retire must still be the prose it
+    /// retires. If `whnf_fuel_red_wh_starves` stops claiming hnf is false for
+    /// the faithful loop, `hnf_wh_is_false` has lost its stated premise and the
+    /// reading order of this module is broken.
+    #[test]
+    fn test_the_refuted_prose_claim_is_still_there() {
+        let src = include_str!("iota_prepass.rs");
+        let witness = src
+            .split("fn add_starvation_witness")
+            .nth(1)
+            .expect("the witness registrar")
+            .split("fn ")
+            .next()
+            .expect("its body");
+        assert!(
+            witness.contains("hnf is FALSE for the faithful loop as well"),
+            "the starvation witness no longer makes the claim hnf_wh_is_false converts into a term"
         );
     }
 }

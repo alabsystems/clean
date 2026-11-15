@@ -84,18 +84,56 @@ fail() { echo "kv invariance gate: FAIL — $2" >&2; verdict "failed:$1"; exit 1
 # divergence the old lazy_closure_verdict_matches_eager (both legs from the lazy
 # source) cannot. This makes the gate run real work instead of SKIP-green.
 echo "kv invariance gate: running always-on independent-parity unit tests (Minimal.olean seed)..."
-cargo test -p clean-mathverse --lib v3_closure_binding_tests >/dev/null 2>&1 \
-  || fail seed-unit-tests "always-on v3 closure-binding / independent-parity unit tests failed"
-echo "kv invariance gate: always-on independent-parity unit tests PASS."
+# The output is KEPT, and the two failure modes are told apart.
+#
+# This used to be `>/dev/null 2>&1 || fail seed-unit-tests "... unit tests
+# failed"`, which reports a test failure whenever CARGO could not run -- a build
+# error, a poisoned toolchain, a full disk, or simply another lane holding the
+# build-directory lock. Measured 2026-09-15: a concurrent demonstration made
+# this line fail, the gate said "unit tests failed", and `--repin` refused the
+# whole row on that basis; run alone minutes later the same command is
+# `15 passed; 0 failed`. A gate that cannot say "I could not run" will eventually
+# be believed when it says "it failed".
+_seed_log="$(mktemp "${TMPDIR:-/tmp}/kv_invariance_seed.XXXXXX")"
+if targo --unverified test -p clean-mathverse --lib v3_closure_binding_tests > "$_seed_log" 2>&1; then
+  echo "kv invariance gate: always-on independent-parity unit tests PASS."
+  rm -f "$_seed_log"
+elif grep -q "^test result:" "$_seed_log"; then
+  # libtest reported, so the tests genuinely ran and genuinely failed.
+  _tail="$(tail -5 "$_seed_log")"; rm -f "$_seed_log"
+  fail seed-unit-tests "always-on v3 closure-binding / independent-parity unit tests FAILED: $_tail"
+else
+  # No libtest verdict at all: cargo never got as far as running them.
+  _tail="$(tail -5 "$_seed_log")"; rm -f "$_seed_log"
+  fail seed-unit-tests-unrunnable "the seed unit tests could not be RUN (no libtest verdict in cargo's output -- a build error, a busy build-directory lock, or a toolchain problem; this is NOT a test failure): $_tail"
+fi
 
-CLEAN_BIN="${CLEAN_BIN:-}"
-[ -z "$CLEAN_BIN" ] && [ -x target/release/clean ] && CLEAN_BIN=target/release/clean
-[ -z "$CLEAN_BIN" ] && [ -x target/debug/clean ] && CLEAN_BIN=target/debug/clean
-[ -z "$CLEAN_BIN" ] && CLEAN_BIN="$(command -v clean 2>/dev/null || true)"
-[ -n "$CLEAN_BIN" ]      || skip no-binary "no clean binary (cargo build --release --bin clean)"
 [ -n "$TARGET" ]         || skip no-target "set KV_GATE_TARGET (prereq: Phase-1 CLEAN_LAZY_CLOSURE loader)"
 [ -n "$CLOSURE_ROOT" ]   || skip no-closure-root "set KV_GATE_CLOSURE_ROOT (the .olean closure root)"
 [ -d "$CLOSURE_SHARDS" ] || skip no-closure-shards "set KV_GATE_CLOSURE_SHARDS to the closure .mathverse shards (prereq: build closure-as-shards)"
+
+# Resolve the `clean` binary this gate judges the loader with, and REFUSE one
+# that cannot be shown to be built from this checkout. This row claims soundness
+# and is already DEMONSTRATED, which is exactly why the old resolution mattered:
+# the three lines that used to sit here (release, then debug, then
+# `command -v clean`) had no freshness check, so a signed-off soundness row
+# could have been measuring a property of a different kernel. Shared with
+# scripts/kv_ratchet_gate.sh, which carried the identical three lines.
+# Placed AFTER the no-target / no-closure-root / no-closure-shards checks and
+# BEFORE any real work, for the reason spelled out at length in the sibling
+# scripts/kv_ratchet_gate.sh: a refusal must not fire on a tree where the gate
+# was never going to run the binary, and must outrank any later deferral.
+#
+# Sourced by the relative path: this script cd's to the repo root at the top.
+# shellcheck source=scripts/lib/clean_binary_under_test.sh
+. scripts/lib/clean_binary_under_test.sh
+resolve_clean_binary_under_test
+case "$?" in
+  0) CLEAN_BIN="$CLEAN_BIN_UNDER_TEST" ;;
+  2) skip no-binary "$CLEAN_BIN_REASON" ;;
+  3) fail stale-binary "$CLEAN_BIN_REASON" ;;
+  *) fail stale-binary "the binary-under-test resolver returned an unexpected status" ;;
+esac
 
 OUT="$(mktemp -d "${TMPDIR:-/tmp}/kv_invariance_gate.XXXXXX")"
 trap 'rm -rf "$OUT"' EXIT

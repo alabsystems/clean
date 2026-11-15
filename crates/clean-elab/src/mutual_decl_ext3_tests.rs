@@ -15,7 +15,7 @@ use clean_kernel::{BinderInfo, Expr, Level};
 
 fn mk_entry(name: &str) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: None,
         body: Expr::sort(Level::zero()),
         is_noncomputable: false,
@@ -24,7 +24,7 @@ fn mk_entry(name: &str) -> MutualEntry {
 
 fn mk_entry_noncomp(name: &str) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: None,
         body: Expr::sort(Level::zero()),
         is_noncomputable: true,
@@ -33,7 +33,7 @@ fn mk_entry_noncomp(name: &str) -> MutualEntry {
 
 fn mk_entry_with_type(name: &str, ty: Expr) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: Some(ty),
         body: Expr::sort(Level::zero()),
         is_noncomputable: false,
@@ -42,7 +42,7 @@ fn mk_entry_with_type(name: &str, ty: Expr) -> MutualEntry {
 
 fn mk_entry_with_body(name: &str, body: Expr) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: None,
         body,
         is_noncomputable: false,
@@ -110,7 +110,10 @@ fn test_find_cycles_self_loop() {
     let cycles = find_cycles(&block);
     assert_eq!(cycles.len(), 1);
     assert_eq!(cycles[0].kind, CycleKind::SelfLoop);
-    assert_eq!(cycles[0].names, vec!["f"]);
+    assert_eq!(
+        cycles[0].names,
+        vec![clean_parser::SurfaceName::generated_path("f")]
+    );
 }
 
 #[test]
@@ -278,7 +281,10 @@ fn test_type_deps_no_refs() {
     block.add_entry(mk_entry("f"));
     let deps = collect_type_dependencies(&block);
     assert_eq!(deps.len(), 1);
-    assert_eq!(deps[0].decl_name, "f");
+    assert_eq!(
+        deps[0].decl_name,
+        clean_parser::SurfaceName::generated_path("f")
+    );
     assert!(deps[0].type_refs.is_empty());
 }
 
@@ -288,7 +294,10 @@ fn test_type_deps_body_const_ref() {
     let body = Expr::app(Expr::const_str("Nat.add"), Expr::bvar(0));
     block.add_entry(mk_entry_with_body("f", body));
     let deps = collect_type_dependencies(&block);
-    assert_eq!(deps[0].body_refs, vec!["Nat.add"]);
+    assert_eq!(
+        deps[0].body_refs,
+        vec![clean_kernel::Name::from_string("Nat.add")]
+    );
 }
 
 #[test]
@@ -301,7 +310,9 @@ fn test_type_deps_type_ref() {
     );
     block.add_entry(mk_entry_with_type("f", ty));
     let deps = collect_type_dependencies(&block);
-    assert!(deps[0].type_refs.contains(&"Nat".to_string()));
+    assert!(deps[0]
+        .type_refs
+        .contains(&clean_kernel::Name::from_string("Nat")));
 }
 
 #[test]
@@ -311,9 +322,15 @@ fn test_type_deps_preserves_order() {
     block.add_entry(mk_entry("beta"));
     let deps = collect_type_dependencies(&block);
     assert_eq!(deps[0].decl_index, 0);
-    assert_eq!(deps[0].decl_name, "alpha");
+    assert_eq!(
+        deps[0].decl_name,
+        clean_parser::SurfaceName::generated_path("alpha")
+    );
     assert_eq!(deps[1].decl_index, 1);
-    assert_eq!(deps[1].decl_name, "beta");
+    assert_eq!(
+        deps[1].decl_name,
+        clean_parser::SurfaceName::generated_path("beta")
+    );
 }
 
 // ─── Stratification analysis ────────────────────────────────────────────────
@@ -384,7 +401,10 @@ fn test_stratification_layer_names_populated() {
     for layer in &result.layers {
         assert!(!layer.decl_names.is_empty());
         for name in &layer.decl_names {
-            assert!(name == "alpha" || name == "beta");
+            assert!(
+                name.name() == &clean_kernel::Name::from_string("alpha")
+                    || name.name() == &clean_kernel::Name::from_string("beta")
+            );
         }
     }
 }

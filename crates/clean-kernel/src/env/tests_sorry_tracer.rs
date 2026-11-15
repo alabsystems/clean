@@ -7,7 +7,10 @@
 //! Extracted from `sorry_tracer.rs` to keep that file under the 500-line
 //! project limit after the drift regression tests added for #3560.
 
-use super::axiom_audit::{is_foundational_axiom, ADMITTED_DOMAIN_AXIOMS, FOUNDATIONAL_AXIOMS};
+use super::axiom_audit::{
+    canonical_certification_foundation, is_foundational_axiom, ADMITTED_DOMAIN_AXIOMS,
+    FOUNDATIONAL_AXIOMS,
+};
 use super::sorry_tracer::{is_sorry_axiom, SorryTracer};
 use super::types::{ConstantInfo, ConstantKind, Reducibility};
 use super::Environment;
@@ -62,6 +65,22 @@ fn synth_axiom_info(name: &str) -> ConstantInfo {
         Name::from_string(name),
         vec![],
         Expr::prop(),
+        None,
+        Reducibility::Regular(0),
+        ConstantKind::Axiom,
+    )
+}
+
+/// The kernel's CANONICAL declaration of a foundational name, as a stored
+/// constant (exact statement and universe arity).
+fn canonical_axiom_info(name: &str) -> ConstantInfo {
+    let name = Name::from_string(name);
+    let (level_params, type_) = canonical_certification_foundation(&name)
+        .unwrap_or_else(|| panic!("{name} has a canonical declaration"));
+    ConstantInfo::new_with_reducibility(
+        name,
+        level_params,
+        type_,
         None,
         Reducibility::Regular(0),
         ConstantKind::Axiom,
@@ -544,8 +563,19 @@ fn test_sorry_tracer_uses_canonical_foundational_whitelist() {
 
     for &name in FOUNDATIONAL_AXIOMS {
         let n = Name::from_string(name);
-        let info = synth_axiom_info(name);
         let is_admitted = ADMITTED_DOMAIN_AXIOMS.contains(&name);
+        // Foundational is the kernel's CANONICAL declaration, never the name:
+        // a stand-in with a foundational name is a sorry obligation.
+        let info = if is_admitted {
+            synth_axiom_info(name)
+        } else {
+            assert!(
+                is_sorry_axiom(&synth_axiom_info(name)),
+                "a stand-in `{name} : Prop` is NOT the kernel's foundation and must be \
+                 a sorry obligation"
+            );
+            canonical_axiom_info(name)
+        };
 
         if is_admitted {
             // #integrity-audit: admitted DOMAIN axioms are mathematically

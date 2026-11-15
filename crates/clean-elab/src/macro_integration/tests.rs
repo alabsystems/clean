@@ -6,6 +6,156 @@ use super::*;
 use clean_parser::{parse_decl, parse_expr, DoElem, SurfaceDecl, SurfaceExpr};
 
 #[test]
+fn application_ellipsis_and_quoted_named_argument_survive_actual_macro_roundtrip() {
+    for (source, expected) in [("f ..", true), ("f («..» := x)", false)] {
+        let expression = parse_expr(source).unwrap();
+        let SurfaceExpr::App(_, _, before) = &expression else {
+            panic!("expected application");
+        };
+        let Some(SurfaceExpr::App(_, _, after)) =
+            syntax_to_surface(&surface_to_syntax(&expression))
+        else {
+            panic!("actual macro argument transport failed");
+        };
+        assert_eq!(before.len(), 1);
+        assert_eq!(after.len(), 1);
+        assert_eq!(before[0].is_ellipsis(), expected);
+        assert_eq!(after[0].is_ellipsis(), expected);
+        assert!(before[0]
+            .name
+            .as_ref()
+            .unwrap()
+            .same_syntax(after[0].name.as_ref().unwrap()));
+        if !expected {
+            assert!(after[0]
+                .name
+                .as_ref()
+                .unwrap()
+                .same_syntax(&SurfaceName::component("..", true)));
+        }
+    }
+}
+
+#[test]
+fn structural_source_names_survive_macro_roundtrips_without_keyword_reinterpretation() {
+    for spelling in ["«A.B»", "A.B", "«7»", "«λ 星»", "«Type»", "«Prop»"] {
+        let expected = clean_parser::parse_name(spelling).unwrap();
+        let span = Span::new(17, 31);
+        let expr = SurfaceExpr::Ident(span, expected.clone());
+        let syntax = surface_to_syntax(&expr);
+        assert!(syntax.as_ident().unwrap().same_syntax(&expected));
+        let Some(SurfaceExpr::Ident(actual_span, actual_name)) = syntax_to_surface(&syntax) else {
+            panic!("{spelling} was not retained as an identifier");
+        };
+        assert_eq!(actual_span, span);
+        assert!(actual_name.same_syntax(&expected));
+    }
+    for (spelling, universe) in [("Type", UniverseExpr::Type), ("Prop", UniverseExpr::Prop)] {
+        let syntax = Syntax::ident(&SurfaceName::component(spelling, false));
+        let Some(SurfaceExpr::Universe(_, actual)) = syntax_to_surface(&syntax) else {
+            panic!("unescaped universe keyword must remain syntax");
+        };
+        assert!(matches!(
+            (actual, universe),
+            (UniverseExpr::Type, UniverseExpr::Type) | (UniverseExpr::Prop, UniverseExpr::Prop)
+        ));
+    }
+    for universe in ["Prop", "Type", "Type 2", "Sort 0"] {
+        let original = parse_expr(&format!("({universe} → {universe})")).unwrap();
+        let expanded = expand_surface_macros(&mut MacroCtx::new(), &original).unwrap();
+        let SurfaceExpr::Paren(_, before) = &original else {
+            panic!("parenthesized source");
+        };
+        let SurfaceExpr::Paren(_, after) = &expanded else {
+            panic!("parenthesized expansion");
+        };
+        let SurfaceExpr::Arrow(_, before_domain, before_codomain) = before.as_ref() else {
+            panic!("source arrow");
+        };
+        let SurfaceExpr::Arrow(_, after_domain, after_codomain) = after.as_ref() else {
+            panic!("expanded arrow");
+        };
+        for (before, after) in [
+            (before_domain.as_ref(), after_domain.as_ref()),
+            (before_codomain.as_ref(), after_codomain.as_ref()),
+        ] {
+            assert!(matches!(before, SurfaceExpr::Universe(..)));
+            assert_eq!(before.span(), after.span());
+            assert_eq!(format!("{before:?}"), format!("{after:?}"));
+        }
+    }
+}
+
+#[test]
+fn typed_macro_scope_activation_distinguishes_escaped_component_and_qualification() {
+    let escaped = SurfaceName::component("A.B", true);
+    let qualified = SurfaceName::generated_path("A.B");
+    let mut ctx = MacroCtx::new();
+    let expansion = SurfaceExpr::Ident(Span::dummy(), SurfaceName::component("value", false));
+    ctx.register_scoped_notation(
+        &escaped,
+        NotationKind::Notation,
+        None,
+        &[NotationItem::Literal("alias".into())],
+        &expansion,
+    )
+    .unwrap();
+    ctx.set_current_namespace(&qualified);
+    let alias = SurfaceName::component("alias", false);
+    assert!(ctx.lookup_simple_notation(&alias).is_none());
+    ctx.set_current_namespace(&escaped.append(&SurfaceName::component("Child", false)));
+    assert!(ctx.lookup_simple_notation(&alias).is_some());
+    ctx.set_current_namespace(&qualified);
+    ctx.activate_scoped_namespace(&escaped);
+    assert!(ctx.lookup_simple_notation(&alias).is_some());
+}
+
+#[test]
+fn binder_level_and_projection_roundtrips_preserve_typed_numeric_components() {
+    let name = SurfaceName::component("A.B", true)
+        .append(&SurfaceName::from_name(clean_kernel::Name::anon().num(7)));
+    let binder = SurfaceBinder {
+        span: Span::dummy(),
+        name: name.clone(),
+        ty: None,
+        default: None,
+        info: SurfaceBinderInfo::Explicit,
+    };
+    let expression = SurfaceExpr::Lambda(
+        Span::dummy(),
+        vec![binder],
+        Box::new(SurfaceExpr::Ident(Span::dummy(), name.clone())),
+    );
+    let Some(SurfaceExpr::Lambda(_, binders, body)) =
+        syntax_to_surface(&surface_to_syntax(&expression))
+    else {
+        panic!("lambda did not roundtrip");
+    };
+    assert!(binders[0].name.same_syntax(&name));
+    let SurfaceExpr::Ident(_, body_name) = body.as_ref() else {
+        panic!("binder reference lost");
+    };
+    assert!(body_name.same_syntax(&name));
+    let Some(LevelExpr::Param(level_name)) =
+        syntax_to_level(&level_to_syntax(&LevelExpr::Param(name.clone())))
+    else {
+        panic!("level did not roundtrip");
+    };
+    assert!(level_name.same_syntax(&name));
+    let projection = SurfaceExpr::Proj(
+        Span::dummy(),
+        Box::new(expression),
+        Projection::Named(name.clone()),
+    );
+    let Some(SurfaceExpr::Proj(_, _, Projection::Named(field_name))) =
+        syntax_to_surface(&surface_to_syntax(&projection))
+    else {
+        panic!("projection did not roundtrip");
+    };
+    assert!(field_name.same_syntax(&name));
+}
+
+#[test]
 fn test_macro_ctx_creation() {
     let ctx = MacroCtx::new();
     assert!(!ctx.registry().is_empty());
@@ -13,10 +163,10 @@ fn test_macro_ctx_creation() {
 
 #[test]
 fn test_surface_to_syntax_ident() {
-    let expr = SurfaceExpr::Ident(Span::dummy(), "foo".to_string());
+    let expr = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("foo"));
     let syntax = surface_to_syntax(&expr);
     assert!(syntax.is_ident());
-    assert_eq!(syntax.as_ident(), Some("foo"));
+    assert_eq!(syntax.as_ident(), Some(&SurfaceName::generated_path("foo")));
 }
 
 #[test]
@@ -29,8 +179,11 @@ fn test_surface_to_syntax_lit_nat() {
 
 #[test]
 fn test_surface_to_syntax_app() {
-    let func = SurfaceExpr::Ident(Span::dummy(), "f".to_string());
-    let arg = SurfaceArg::positional(SurfaceExpr::Ident(Span::dummy(), "x".to_string()));
+    let func = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("f"));
+    let arg = SurfaceArg::positional(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("x"),
+    ));
     let expr = SurfaceExpr::App(Span::dummy(), Box::new(func), vec![arg]);
 
     let syntax = surface_to_syntax(&expr);
@@ -40,9 +193,9 @@ fn test_surface_to_syntax_app() {
 
 #[test]
 fn test_surface_to_syntax_if() {
-    let cond = SurfaceExpr::Ident(Span::dummy(), "cond".to_string());
-    let then_br = SurfaceExpr::Ident(Span::dummy(), "then".to_string());
-    let else_br = SurfaceExpr::Ident(Span::dummy(), "else".to_string());
+    let cond = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("cond"));
+    let then_br = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("then"));
+    let else_br = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("else"));
     let expr = SurfaceExpr::If(
         Span::dummy(),
         Box::new(cond),
@@ -57,10 +210,12 @@ fn test_surface_to_syntax_if() {
 
 #[test]
 fn test_syntax_to_surface_ident() {
-    let syntax = Syntax::ident("bar");
+    let syntax = Syntax::generated_ident("bar");
     let surface = syntax_to_surface(&syntax).unwrap();
     match surface {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "bar"),
+        SurfaceExpr::Ident(_, name) => {
+            assert_eq!(name.name(), SurfaceName::generated_path("bar").name())
+        }
         _ => panic!("expected ident"),
     }
 }
@@ -78,14 +233,16 @@ fn test_syntax_to_surface_num() {
 #[test]
 fn test_syntax_to_surface_app() {
     let syntax = Syntax::mk_app(
-        Syntax::ident("f"),
-        vec![Syntax::ident("x"), Syntax::ident("y")],
+        Syntax::generated_ident("f"),
+        vec![Syntax::generated_ident("x"), Syntax::generated_ident("y")],
     );
     let surface = syntax_to_surface(&syntax).unwrap();
     match surface {
         SurfaceExpr::App(_, func, args) => {
             match func.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "f"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("f").name())
+                }
                 _ => panic!("expected ident"),
             }
             assert_eq!(args.len(), 2);
@@ -96,19 +253,21 @@ fn test_syntax_to_surface_app() {
 
 #[test]
 fn test_roundtrip_simple() {
-    let original = SurfaceExpr::Ident(Span::dummy(), "test".to_string());
+    let original = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("test"));
     let syntax = surface_to_syntax(&original);
     let recovered = syntax_to_surface(&syntax).unwrap();
 
     match recovered {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "test"),
+        SurfaceExpr::Ident(_, name) => {
+            assert_eq!(name.name(), SurfaceName::generated_path("test").name())
+        }
         _ => panic!("roundtrip failed"),
     }
 }
 
 #[test]
 fn test_roundtrip_app() {
-    let func = SurfaceExpr::Ident(Span::dummy(), "add".to_string());
+    let func = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("add"));
     let arg1 = SurfaceArg::positional(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1)));
     let arg2 = SurfaceArg::positional(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(2)));
     let original = SurfaceExpr::App(Span::dummy(), Box::new(func), vec![arg1, arg2]);
@@ -119,7 +278,9 @@ fn test_roundtrip_app() {
     match recovered {
         SurfaceExpr::App(_, func, args) => {
             match func.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "add"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("add").name())
+                }
                 _ => panic!("expected ident"),
             }
             assert_eq!(args.len(), 2);
@@ -136,9 +297,9 @@ fn test_if_expansion() {
     let syntax = Syntax::node(
         SyntaxKind::if_then_else(),
         vec![
-            Syntax::ident("condition"),
-            Syntax::ident("thenBranch"),
-            Syntax::ident("elseBranch"),
+            Syntax::generated_ident("condition"),
+            Syntax::generated_ident("thenBranch"),
+            Syntax::generated_ident("elseBranch"),
         ],
     );
 
@@ -150,7 +311,10 @@ fn test_if_expansion() {
     assert_eq!(expanded.kind(), Some(&SyntaxKind::app_kind()));
 
     // First child should be "ite"
-    assert_eq!(expanded.child(0).unwrap().as_ident(), Some("ite"));
+    assert_eq!(
+        expanded.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("ite"))
+    );
 }
 
 #[test]
@@ -159,7 +323,11 @@ fn test_macro_stats() {
 
     let syntax = Syntax::node(
         SyntaxKind::if_then_else(),
-        vec![Syntax::ident("c"), Syntax::ident("t"), Syntax::ident("e")],
+        vec![
+            Syntax::generated_ident("c"),
+            Syntax::generated_ident("t"),
+            Syntax::generated_ident("e"),
+        ],
     );
 
     let _ = ctx.expand(syntax).unwrap();
@@ -197,7 +365,10 @@ fn test_register_macro_rules_from_decl() {
     assert!(stats.expansions > 0);
 
     assert_eq!(expanded.kind(), Some(&SyntaxKind::app_kind()));
-    assert_eq!(expanded.child(0).unwrap().as_ident(), Some("id"));
+    assert_eq!(
+        expanded.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("id"))
+    );
 }
 
 #[test]
@@ -217,6 +388,41 @@ fn test_register_syntax_category() {
 }
 
 #[test]
+fn typed_syntax_category_ingress_does_not_reparse_dotted_or_numeric_components() {
+    let mut ctx = MacroCtx::new();
+    let escaped = SurfaceName::component("a.b", true);
+    ctx.register_typed_syntax_category(&escaped).unwrap();
+    assert!(ctx.has_syntax_category("a.b"));
+    assert!(ctx
+        .register_typed_syntax_category(&SurfaceName::generated_path("a.b"))
+        .is_err());
+    assert!(ctx
+        .register_typed_syntax_category(&SurfaceName::from_name(clean_kernel::Name::anon().num(1)))
+        .is_err());
+    assert!(ctx
+        .register_typed_syntax_category(
+            &SurfaceName::component("a.b", true).with_relative_constructor()
+        )
+        .is_err());
+
+    let pattern = [SyntaxPatternItem::Literal("unique_category_keyword".into())];
+    ctx.register_syntax(None, None, &pattern, "a.b").unwrap();
+    let def = ctx
+        .registry
+        .get_by_kind(&pattern_kind_from_items(&pattern))
+        .first()
+        .expect("registered syntax");
+    assert_eq!(
+        def.replacement.category.name(),
+        &clean_kernel::Name::anon().str("a.b")
+    );
+    assert_ne!(
+        def.replacement.category.name(),
+        SurfaceName::generated_path("a.b").name()
+    );
+}
+
+#[test]
 fn test_register_syntax_declaration() {
     let mut ctx = MacroCtx::new();
 
@@ -224,13 +430,18 @@ fn test_register_syntax_declaration() {
     let pattern = vec![
         SyntaxPatternItem::Literal("mykey".to_string()),
         SyntaxPatternItem::Variable {
-            name: "x".to_string(),
+            name: SurfaceName::generated_path("x"),
             category: Some("term".to_string()),
         },
     ];
 
-    ctx.register_syntax(Some("mykey_syntax"), Some(50), &pattern, "term")
-        .unwrap();
+    ctx.register_syntax(
+        Some(&SurfaceName::generated_path("mykey_syntax")),
+        Some(50),
+        &pattern,
+        "term",
+    )
+    .unwrap();
 
     // Check that the macro was registered
     assert!(
@@ -245,11 +456,11 @@ fn test_register_notation_infixl() {
 
     // Register: infixl:65 " +++ " => myAdd
     let pattern = vec![
-        NotationItem::Variable("a".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("a")),
         NotationItem::Literal(" +++ ".to_string()),
-        NotationItem::Variable("b".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("b")),
     ];
-    let expansion = SurfaceExpr::Ident(Span::dummy(), "myAdd".to_string());
+    let expansion = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("myAdd"));
 
     ctx.register_notation(NotationKind::Infixl, Some(65), &pattern, &expansion)
         .unwrap();
@@ -268,9 +479,9 @@ fn test_register_notation_prefix() {
     // Register: prefix:max "!!!" => myNot
     let pattern = vec![
         NotationItem::Literal("!!!".to_string()),
-        NotationItem::Variable("x".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("x")),
     ];
-    let expansion = SurfaceExpr::Ident(Span::dummy(), "myNot".to_string());
+    let expansion = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("myNot"));
 
     ctx.register_notation(NotationKind::Prefix, Some(1024), &pattern, &expansion)
         .unwrap();
@@ -285,49 +496,52 @@ fn test_register_notation_prefix() {
 #[test]
 fn test_nullary_notation_capture_requires_same_lexical_variable() {
     let mut ctx = MacroCtx::new();
-    ctx.set_active_variable_bindings([("x".to_string(), 41)]);
+    ctx.set_active_variable_bindings([(SurfaceName::generated_path("x"), 41)]);
     let pattern = vec![NotationItem::Literal("A".to_string())];
-    let expansion = SurfaceExpr::Ident(Span::dummy(), "x".to_string());
+    let expansion = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x"));
     ctx.register_notation(NotationKind::Notation, None, &pattern, &expansion)
         .expect("nullary notation should register");
 
     assert!(
         matches!(
-            ctx.lookup_simple_notation("A"),
-            Some(SimpleNotationLookup::Active(SurfaceExpr::Ident(_, name))) if name == "x"
+            ctx.lookup_simple_notation(&SurfaceName::generated_path("A")),
+            Some(SimpleNotationLookup::Active(SurfaceExpr::Ident(_, name))) if name.name() == SurfaceName::generated_path("x").name()
         ),
         "alias is active while its captured section variable is active"
     );
-    let mut dependencies = HashSet::from(["A".to_string()]);
+    let mut dependencies = HashSet::from([SurfaceName::generated_path("A")]);
     ctx.close_over_simple_notation_dependencies(&mut dependencies);
     assert!(
-        dependencies.contains("x"),
+        dependencies.contains(&SurfaceName::generated_path("x")),
         "section-binder use analysis must see identifiers introduced by the alias"
     );
 
     ctx.set_active_variable_bindings(std::iter::empty());
     assert!(
         matches!(
-            ctx.lookup_simple_notation("A"),
+            ctx.lookup_simple_notation(&SurfaceName::generated_path("A")),
             Some(SimpleNotationLookup::Expired)
         ),
         "expired alias must remain registered as an unavailable hygienic capture"
     );
 
-    ctx.set_active_variable_bindings([("x".to_string(), 99)]);
+    ctx.set_active_variable_bindings([(SurfaceName::generated_path("x"), 99)]);
     assert!(
         matches!(
-            ctx.lookup_simple_notation("A"),
+            ctx.lookup_simple_notation(&SurfaceName::generated_path("A")),
             Some(SimpleNotationLookup::Expired)
         ),
         "same spelling in a later scope must not reactivate the captured alias"
     );
 
-    ctx.set_active_variable_bindings([("x".to_string(), 41), ("x".to_string(), 99)]);
+    ctx.set_active_variable_bindings([
+        (SurfaceName::generated_path("x"), 41),
+        (SurfaceName::generated_path("x"), 99),
+    ]);
     assert!(
         matches!(
-            ctx.lookup_simple_notation("A"),
-            Some(SimpleNotationLookup::Active(SurfaceExpr::Ident(_, name))) if name == "x"
+            ctx.lookup_simple_notation(&SurfaceName::generated_path("A")),
+            Some(SimpleNotationLookup::Active(SurfaceExpr::Ident(_, name))) if name.name() == SurfaceName::generated_path("x").name()
         ),
         "an inner shadow must not retire the still-live captured outer binding"
     );
@@ -337,47 +551,59 @@ fn test_nullary_notation_capture_requires_same_lexical_variable() {
 fn test_scoped_notation_gated_by_current_namespace_and_activation() {
     let mut ctx = MacroCtx::new();
     let pattern = vec![NotationItem::Literal("two".to_string())];
-    let expansion = SurfaceExpr::Ident(Span::dummy(), "Two.mk".to_string());
+    let expansion = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("Two.mk"));
 
-    ctx.register_scoped_notation("Foo", NotationKind::Notation, None, &pattern, &expansion)
-        .expect("scoped nullary notation should lower");
+    ctx.register_scoped_notation(
+        &SurfaceName::generated_path("Foo"),
+        NotationKind::Notation,
+        None,
+        &pattern,
+        &expansion,
+    )
+    .expect("scoped nullary notation should lower");
 
     // Inert at root: not in the base registry, alias not visible.
     assert!(
-        ctx.lookup_simple_notation("two").is_none(),
+        ctx.lookup_simple_notation(&SurfaceName::generated_path("two"))
+            .is_none(),
         "scoped notation must be INERT at root without activation"
     );
 
     // Active while the declaring namespace is current …
-    ctx.set_current_namespace("Foo");
+    ctx.set_current_namespace(&SurfaceName::generated_path("Foo"));
     assert!(
-        ctx.lookup_simple_notation("two").is_some(),
+        ctx.lookup_simple_notation(&SurfaceName::generated_path("two"))
+            .is_some(),
         "scoped notation must be active inside its declaring namespace"
     );
     // … or an ancestor of the current namespace.
-    ctx.set_current_namespace("Foo.Bar");
+    ctx.set_current_namespace(&SurfaceName::generated_path("Foo.Bar"));
     assert!(
-        ctx.lookup_simple_notation("two").is_some(),
+        ctx.lookup_simple_notation(&SurfaceName::generated_path("two"))
+            .is_some(),
         "scoped notation must be active in child namespaces"
     );
     // A non-dot-boundary prefix must NOT activate (Foo vs Foobar).
-    ctx.set_current_namespace("Foobar");
+    ctx.set_current_namespace(&SurfaceName::generated_path("Foobar"));
     assert!(
-        ctx.lookup_simple_notation("two").is_none(),
+        ctx.lookup_simple_notation(&SurfaceName::generated_path("two"))
+            .is_none(),
         "`Foobar` must not activate `Foo`'s scoped notation"
     );
 
     // `open` activation is frame-bounded.
-    ctx.set_current_namespace("");
+    ctx.set_current_namespace(&SurfaceName::generated_path(""));
     ctx.push_scoped_activation_frame();
-    ctx.activate_scoped_namespace("Foo");
+    ctx.activate_scoped_namespace(&SurfaceName::generated_path("Foo"));
     assert!(
-        ctx.lookup_simple_notation("two").is_some(),
+        ctx.lookup_simple_notation(&SurfaceName::generated_path("two"))
+            .is_some(),
         "activation must make the scoped notation visible"
     );
     ctx.pop_scoped_activation_frame();
     assert!(
-        ctx.lookup_simple_notation("two").is_none(),
+        ctx.lookup_simple_notation(&SurfaceName::generated_path("two"))
+            .is_none(),
         "popping the frame must deactivate the scoped notation"
     );
 }
@@ -386,14 +612,20 @@ fn test_scoped_notation_gated_by_current_namespace_and_activation() {
 fn test_scoped_infix_joins_effective_registry_only_when_active() {
     let mut ctx = MacroCtx::new();
     let pattern = vec![
-        NotationItem::Variable("a".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("a")),
         NotationItem::Literal(" +++ ".to_string()),
-        NotationItem::Variable("b".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("b")),
     ];
-    let expansion = SurfaceExpr::Ident(Span::dummy(), "myAdd".to_string());
+    let expansion = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("myAdd"));
 
-    ctx.register_scoped_notation("Foo", NotationKind::Infixl, Some(65), &pattern, &expansion)
-        .expect("scoped infixl should lower");
+    ctx.register_scoped_notation(
+        &SurfaceName::generated_path("Foo"),
+        NotationKind::Infixl,
+        Some(65),
+        &pattern,
+        &expansion,
+    )
+    .expect("scoped infixl should lower");
 
     // The BASE registry never holds the scoped def.
     assert!(
@@ -411,7 +643,7 @@ fn test_scoped_infix_joins_effective_registry_only_when_active() {
     );
 
     // Active: the effective registry holds the scoped def.
-    ctx.set_current_namespace("Foo");
+    ctx.set_current_namespace(&SurfaceName::generated_path("Foo"));
     let effective = ctx
         .effective_registry
         .as_ref()
@@ -425,7 +657,7 @@ fn test_scoped_infix_joins_effective_registry_only_when_active() {
     );
 
     // Deactivate: the effective registry is dropped again.
-    ctx.set_current_namespace("");
+    ctx.set_current_namespace(&SurfaceName::generated_path(""));
     assert!(
         ctx.effective_registry.is_none(),
         "deactivation must drop the effective registry"
@@ -440,16 +672,19 @@ fn test_register_macro_declaration() {
     let pattern = vec![
         SyntaxPatternItem::Literal("unless".to_string()),
         SyntaxPatternItem::Variable {
-            name: "cond".to_string(),
+            name: SurfaceName::generated_path("cond"),
             category: Some("term".to_string()),
         },
         SyntaxPatternItem::Literal("then".to_string()),
         SyntaxPatternItem::Variable {
-            name: "body".to_string(),
+            name: SurfaceName::generated_path("body"),
             category: Some("term".to_string()),
         },
     ];
-    let expansion = SurfaceExpr::Ident(Span::dummy(), "expanded_unless".to_string());
+    let expansion = SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("expanded_unless"),
+    );
 
     ctx.register_macro(&pattern, "term", &expansion).unwrap();
 
@@ -463,12 +698,12 @@ fn test_syntax_pattern_to_syntax_simple() {
     let pattern = vec![
         SyntaxPatternItem::Literal("if".to_string()),
         SyntaxPatternItem::Variable {
-            name: "cond".to_string(),
+            name: SurfaceName::generated_path("cond"),
             category: Some("term".to_string()),
         },
         SyntaxPatternItem::Literal("then".to_string()),
         SyntaxPatternItem::Variable {
-            name: "body".to_string(),
+            name: SurfaceName::generated_path("body"),
             category: None,
         },
     ];
@@ -482,16 +717,22 @@ fn test_syntax_pattern_to_syntax_simple() {
 #[test]
 fn test_notation_pattern_to_syntax() {
     let items = vec![
-        NotationItem::Variable("a".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("a")),
         NotationItem::Literal("+".to_string()),
-        NotationItem::Variable("b".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("b")),
     ];
 
     let (syntax, kind, vars) = notation_pattern_to_syntax(NotationKind::Infixl, &items);
 
     assert!(syntax.is_node());
     assert_eq!(kind, SyntaxKind::app("+"));
-    assert_eq!(vars, vec!["a", "b"]);
+    assert_eq!(
+        vars,
+        vec![
+            SurfaceName::generated_path("a"),
+            SurfaceName::generated_path("b")
+        ]
+    );
 }
 
 #[test]
@@ -499,7 +740,7 @@ fn test_pattern_to_name() {
     let pattern = vec![
         SyntaxPatternItem::Literal("unless".to_string()),
         SyntaxPatternItem::Variable {
-            name: "cond".to_string(),
+            name: SurfaceName::generated_path("cond"),
             category: None,
         },
     ];
@@ -511,9 +752,9 @@ fn test_pattern_to_name() {
 #[test]
 fn test_notation_to_name() {
     let items = vec![
-        NotationItem::Variable("a".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("a")),
         NotationItem::Literal(" + ".to_string()),
-        NotationItem::Variable("b".to_string()),
+        NotationItem::Variable(SurfaceName::generated_path("b")),
     ];
 
     let name = notation_to_name(NotationKind::Infixl, &items);
@@ -530,10 +771,13 @@ fn test_roundtrip_universe_inst() {
     // Foo.{u, v} — explicit universe level arguments
     let expr = SurfaceExpr::UniverseInst(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "Foo".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("Foo"),
+        )),
         vec![
-            LevelExpr::Param("u".to_string()),
-            LevelExpr::Param("v".to_string()),
+            LevelExpr::Param(SurfaceName::generated_path("u")),
+            LevelExpr::Param(SurfaceName::generated_path("v")),
         ],
     );
     let syntax = surface_to_syntax(&expr);
@@ -542,12 +786,18 @@ fn test_roundtrip_universe_inst() {
     match recovered {
         SurfaceExpr::UniverseInst(_, inner, levels) => {
             match inner.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "Foo"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("Foo").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             assert_eq!(levels.len(), 2);
-            assert!(matches!(&levels[0], LevelExpr::Param(p) if p == "u"));
-            assert!(matches!(&levels[1], LevelExpr::Param(p) if p == "v"));
+            assert!(
+                matches!(&levels[0], LevelExpr::Param(p) if p.name() == SurfaceName::generated_path("u").name())
+            );
+            assert!(
+                matches!(&levels[1], LevelExpr::Param(p) if p.name() == SurfaceName::generated_path("v").name())
+            );
         }
         other => panic!("expected UniverseInst, got {other:?}"),
     }
@@ -558,21 +808,30 @@ fn test_roundtrip_universe_inst_succ_level() {
     // Foo.{u+1} — universe with successor level
     let expr = SurfaceExpr::UniverseInst(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "Bar".to_string())),
-        vec![LevelExpr::Succ(Box::new(LevelExpr::Param("u".to_string())))],
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("Bar"),
+        )),
+        vec![LevelExpr::Succ(Box::new(LevelExpr::Param(
+            SurfaceName::generated_path("u"),
+        )))],
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::UniverseInst(_, inner, levels) => {
             match inner.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "Bar"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("Bar").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             assert_eq!(levels.len(), 1);
             match &levels[0] {
                 LevelExpr::Succ(inner) => {
-                    assert!(matches!(inner.as_ref(), LevelExpr::Param(p) if p == "u"));
+                    assert!(
+                        matches!(inner.as_ref(), LevelExpr::Param(p) if p.name() == SurfaceName::generated_path("u").name())
+                    );
                 }
                 other => panic!("expected Succ, got {other:?}"),
             }
@@ -586,7 +845,7 @@ fn test_roundtrip_pattern_match_lambda() {
     // fun | x => x — pattern match lambda
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "x".to_string(),
+        name: SurfaceName::generated_path("x"),
         ty: None,
         default: None,
         info: SurfaceBinderInfo::Explicit,
@@ -594,7 +853,10 @@ fn test_roundtrip_pattern_match_lambda() {
     let expr = SurfaceExpr::PatternMatchLambda(
         Span::dummy(),
         vec![binder],
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     assert_eq!(syntax.kind(), Some(&SyntaxKind::app("patternMatchLambda")));
@@ -602,9 +864,14 @@ fn test_roundtrip_pattern_match_lambda() {
     match recovered {
         SurfaceExpr::PatternMatchLambda(_, binders, body) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
+            assert_eq!(
+                binders[0].name.name(),
+                SurfaceName::generated_path("x").name()
+            );
             match body.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "x"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("x").name())
+                }
                 other => panic!("expected Ident body, got {other:?}"),
             }
         }
@@ -617,10 +884,10 @@ fn test_roundtrip_lambda() {
     // fun (x : Nat) => x
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "x".to_string(),
+        name: SurfaceName::generated_path("x"),
         ty: Some(Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "Nat".to_string(),
+            SurfaceName::generated_path("Nat"),
         ))),
         default: None,
         info: SurfaceBinderInfo::Explicit,
@@ -628,22 +895,34 @@ fn test_roundtrip_lambda() {
     let expr = SurfaceExpr::Lambda(
         Span::dummy(),
         vec![binder],
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Lambda(_, binders, body) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
+            assert_eq!(
+                binders[0].name.name(),
+                SurfaceName::generated_path("x").name()
+            );
             match binders[0].ty.as_deref() {
                 Some(SurfaceExpr::Ident(_, ty_name)) => {
-                    assert_eq!(ty_name, "Nat", "binder type should be Nat");
+                    assert_eq!(
+                        ty_name.name(),
+                        SurfaceName::generated_path("Nat").name(),
+                        "binder type should be Nat"
+                    );
                 }
                 other => panic!("expected Some(Ident(\"Nat\")) binder type, got {other:?}"),
             }
             match body.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "x"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("x").name())
+                }
                 other => panic!("expected Ident body, got {other:?}"),
             }
         }
@@ -656,24 +935,35 @@ fn test_roundtrip_pi() {
     // forall (x : A), B
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "x".to_string(),
-        ty: Some(Box::new(SurfaceExpr::Ident(Span::dummy(), "A".to_string()))),
+        name: SurfaceName::generated_path("x"),
+        ty: Some(Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("A"),
+        ))),
         default: None,
         info: SurfaceBinderInfo::Explicit,
     };
     let expr = SurfaceExpr::Pi(
         Span::dummy(),
         vec![binder],
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "B".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("B"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Pi(_, binders, body) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
+            assert_eq!(
+                binders[0].name.name(),
+                SurfaceName::generated_path("x").name()
+            );
             match body.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "B"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("B").name())
+                }
                 other => panic!("expected Ident body, got {other:?}"),
             }
         }
@@ -686,19 +976,29 @@ fn test_roundtrip_arrow() {
     // A → B
     let expr = SurfaceExpr::Arrow(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "A".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "B".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("A"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("B"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Arrow(_, from, to) => {
             match from.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "A"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("A").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match to.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "B"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("B").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -711,7 +1011,7 @@ fn test_roundtrip_let() {
     // let x := 42 in x
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "x".to_string(),
+        name: SurfaceName::generated_path("x"),
         ty: None,
         default: None,
         info: SurfaceBinderInfo::Explicit,
@@ -720,19 +1020,24 @@ fn test_roundtrip_let() {
         Span::dummy(),
         binder,
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42))),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Let(_, b, val, body) => {
-            assert_eq!(b.name, "x");
+            assert_eq!(b.name.name(), SurfaceName::generated_path("x").name());
             match val.as_ref() {
                 SurfaceExpr::Lit(_, SurfaceLit::Nat(n)) => assert_eq!(*n, 42),
                 other => panic!("expected Nat lit, got {other:?}"),
             }
             match body.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "x"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("x").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -745,7 +1050,7 @@ fn test_roundtrip_let_rec() {
     // let rec f := body in result
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "f".to_string(),
+        name: SurfaceName::generated_path("f"),
         ty: None,
         default: None,
         info: SurfaceBinderInfo::Explicit,
@@ -753,20 +1058,30 @@ fn test_roundtrip_let_rec() {
     let expr = SurfaceExpr::LetRec(
         Span::dummy(),
         binder,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "body".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "result".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("body"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("result"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::LetRec(_, b, val, body) => {
-            assert_eq!(b.name, "f");
+            assert_eq!(b.name.name(), SurfaceName::generated_path("f").name());
             match val.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "body"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("body").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match body.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "result"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("result").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -779,19 +1094,29 @@ fn test_roundtrip_ascription() {
     // (e : T)
     let expr = SurfaceExpr::Ascription(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "e".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "T".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("e"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("T"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Ascription(_, e, t) => {
             match e.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "e"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("e").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match t.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "T"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("T").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -804,13 +1129,18 @@ fn test_roundtrip_explicit() {
     // @f
     let expr = SurfaceExpr::Explicit(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("f"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Explicit(_, inner) => match inner.as_ref() {
-            SurfaceExpr::Ident(_, name) => assert_eq!(name, "f"),
+            SurfaceExpr::Ident(_, name) => {
+                assert_eq!(name.name(), SurfaceName::generated_path("f").name())
+            }
             other => panic!("expected Ident, got {other:?}"),
         },
         other => panic!("expected Explicit, got {other:?}"),
@@ -822,16 +1152,21 @@ fn test_roundtrip_named_arg() {
     // (name := expr)
     let expr = SurfaceExpr::NamedArg(
         Span::dummy(),
-        "name".to_string(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "val".to_string())),
+        SurfaceName::generated_path("name"),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("val"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::NamedArg(_, name, val) => {
-            assert_eq!(name, "name");
+            assert_eq!(name.name(), SurfaceName::generated_path("name").name());
             match val.as_ref() {
-                SurfaceExpr::Ident(_, v) => assert_eq!(v, "val"),
+                SurfaceExpr::Ident(_, v) => {
+                    assert_eq!(v.name(), SurfaceName::generated_path("val").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -844,13 +1179,18 @@ fn test_roundtrip_out_param() {
     // outParam T
     let expr = SurfaceExpr::OutParam(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "T".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("T"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::OutParam(_, inner) => match inner.as_ref() {
-            SurfaceExpr::Ident(_, name) => assert_eq!(name, "T"),
+            SurfaceExpr::Ident(_, name) => {
+                assert_eq!(name.name(), SurfaceName::generated_path("T").name())
+            }
             other => panic!("expected Ident, got {other:?}"),
         },
         other => panic!("expected OutParam, got {other:?}"),
@@ -862,13 +1202,18 @@ fn test_roundtrip_semi_out_param() {
     // semiOutParam T
     let expr = SurfaceExpr::SemiOutParam(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "T".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("T"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::SemiOutParam(_, inner) => match inner.as_ref() {
-            SurfaceExpr::Ident(_, name) => assert_eq!(name, "T"),
+            SurfaceExpr::Ident(_, name) => {
+                assert_eq!(name.name(), SurfaceName::generated_path("T").name())
+            }
             other => panic!("expected Ident, got {other:?}"),
         },
         other => panic!("expected SemiOutParam, got {other:?}"),
@@ -880,24 +1225,39 @@ fn test_roundtrip_if_then_else() {
     // if c then t else e
     let expr = SurfaceExpr::If(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "c".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "t".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "e".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("c"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("t"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("e"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::If(_, cond, then_br, else_br) => {
             match cond.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "c"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("c").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match then_br.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "t"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("t").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match else_br.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "e"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("e").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -910,26 +1270,43 @@ fn test_roundtrip_if_let() {
     // if let pat := scrutinee then t else e
     let expr = SurfaceExpr::IfLet(
         Span::dummy(),
-        SurfacePattern::Var("x".to_string()),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "scrutinee".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "t".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "e".to_string())),
+        SurfacePattern::Var(SurfaceName::generated_path("x")),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("scrutinee"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("t"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("e"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::IfLet(_, pat, scrut, then_br, else_br) => {
-            assert!(matches!(pat, SurfacePattern::Var(ref n) if n == "x"));
+            assert!(
+                matches!(pat, SurfacePattern::Var(ref n) if n.name() == SurfaceName::generated_path("x").name())
+            );
             match scrut.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "scrutinee"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("scrutinee").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match then_br.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "t"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("t").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match else_br.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "e"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("e").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -942,26 +1319,41 @@ fn test_roundtrip_if_decidable() {
     // if h : p then t else e
     let expr = SurfaceExpr::IfDecidable(
         Span::dummy(),
-        "h".to_string(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "p".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "t".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "e".to_string())),
+        SurfaceName::generated_path("h"),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("p"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("t"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("e"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::IfDecidable(_, witness, prop, then_br, else_br) => {
-            assert_eq!(witness, "h");
+            assert_eq!(witness.name(), SurfaceName::generated_path("h").name());
             match prop.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "p"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("p").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match then_br.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "t"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("t").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match else_br.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "e"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("e").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -974,13 +1366,16 @@ fn test_roundtrip_match() {
     // match x with | y => y
     let arm = SurfaceMatchArm {
         span: Span::dummy(),
-        pattern: SurfacePattern::Var("y".to_string()),
-        body: SurfaceExpr::Ident(Span::dummy(), "y".to_string()),
+        pattern: SurfacePattern::Var(SurfaceName::generated_path("y")),
+        body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("y")),
     };
     let expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         vec![arm],
     );
     let syntax = surface_to_syntax(&expr);
@@ -988,11 +1383,15 @@ fn test_roundtrip_match() {
     match recovered {
         SurfaceExpr::Match(_, _, scrutinee, arms) => {
             match scrutinee.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "x"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("x").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             assert_eq!(arms.len(), 1);
-            assert!(matches!(&arms[0].pattern, SurfacePattern::Var(ref n) if n == "y"));
+            assert!(
+                matches!(&arms[0].pattern, SurfacePattern::Var(ref n) if n.name() == SurfaceName::generated_path("y").name())
+            );
         }
         other => panic!("expected Match, got {other:?}"),
     }
@@ -1003,18 +1402,25 @@ fn test_roundtrip_proj_named() {
     // e.field
     let expr = SurfaceExpr::Proj(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "e".to_string())),
-        Projection::Named("field".to_string()),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("e"),
+        )),
+        Projection::Named(SurfaceName::generated_path("field")),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Proj(_, inner, proj) => {
             match inner.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "e"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("e").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
-            assert!(matches!(proj, Projection::Named(ref n) if n == "field"));
+            assert!(
+                matches!(proj, Projection::Named(ref n) if n.name() == SurfaceName::generated_path("field").name())
+            );
         }
         other => panic!("expected Proj, got {other:?}"),
     }
@@ -1025,7 +1431,10 @@ fn test_roundtrip_proj_index() {
     // e.0
     let expr = SurfaceExpr::Proj(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "e".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("e"),
+        )),
         Projection::Index(0),
     );
     let syntax = surface_to_syntax(&expr);
@@ -1033,7 +1442,9 @@ fn test_roundtrip_proj_index() {
     match recovered {
         SurfaceExpr::Proj(_, inner, proj) => {
             match inner.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "e"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("e").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             assert!(matches!(proj, Projection::Index(0)));
@@ -1047,13 +1458,18 @@ fn test_roundtrip_paren() {
     // (x)
     let expr = SurfaceExpr::Paren(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Paren(_, inner) => match inner.as_ref() {
-            SurfaceExpr::Ident(_, name) => assert_eq!(name, "x"),
+            SurfaceExpr::Ident(_, name) => {
+                assert_eq!(name.name(), SurfaceName::generated_path("x").name())
+            }
             other => panic!("expected Ident, got {other:?}"),
         },
         other => panic!("expected Paren, got {other:?}"),
@@ -1094,13 +1510,15 @@ fn test_roundtrip_universe_type() {
 fn test_roundtrip_universe_sort() {
     let expr = SurfaceExpr::Universe(
         Span::dummy(),
-        UniverseExpr::Sort(Box::new(LevelExpr::Param("u".to_string()))),
+        UniverseExpr::Sort(Box::new(LevelExpr::Param(SurfaceName::generated_path("u")))),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Universe(_, UniverseExpr::Sort(level)) => {
-            assert!(matches!(level.as_ref(), LevelExpr::Param(p) if p == "u"));
+            assert!(
+                matches!(level.as_ref(), LevelExpr::Param(p) if p.name() == SurfaceName::generated_path("u").name())
+            );
         }
         other => panic!("expected Universe(Sort), got {other:?}"),
     }
@@ -1111,26 +1529,43 @@ fn test_roundtrip_let_pattern() {
     // let q($pat) := scrutinee | fallback in body
     let expr = SurfaceExpr::LetPattern(
         Span::dummy(),
-        SurfacePattern::Var("x".to_string()),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "scrutinee".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "fallback".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "body".to_string())),
+        SurfacePattern::Var(SurfaceName::generated_path("x")),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("scrutinee"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("fallback"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("body"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::LetPattern(_, pat, scrut, fallback, body) => {
-            assert!(matches!(pat, SurfacePattern::Var(ref n) if n == "x"));
+            assert!(
+                matches!(pat, SurfacePattern::Var(ref n) if n.name() == SurfaceName::generated_path("x").name())
+            );
             match scrut.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "scrutinee"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("scrutinee").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match fallback.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "fallback"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("fallback").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match body.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "body"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("body").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -1144,7 +1579,10 @@ fn test_roundtrip_qq_quotation() {
     let expr = SurfaceExpr::QQuotation {
         span: Span::dummy(),
         kind: QQuotationKind::Value,
-        inner: Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        inner: Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         type_annot: None,
     };
     let syntax = surface_to_syntax(&expr);
@@ -1158,7 +1596,9 @@ fn test_roundtrip_qq_quotation() {
         } => {
             assert!(matches!(kind, QQuotationKind::Value));
             match inner.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "x"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("x").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             assert!(
@@ -1176,10 +1616,13 @@ fn test_roundtrip_qq_quotation_type() {
     let expr = SurfaceExpr::QQuotation {
         span: Span::dummy(),
         kind: QQuotationKind::Type,
-        inner: Box::new(SurfaceExpr::Ident(Span::dummy(), "alpha".to_string())),
+        inner: Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("alpha"),
+        )),
         type_annot: Some(Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "Nat".to_string(),
+            SurfaceName::generated_path("Nat"),
         ))),
     };
     let syntax = surface_to_syntax(&expr);
@@ -1193,12 +1636,18 @@ fn test_roundtrip_qq_quotation_type() {
         } => {
             assert!(matches!(kind, QQuotationKind::Type));
             match inner.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "alpha"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("alpha").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
             match type_annot.as_deref() {
                 Some(SurfaceExpr::Ident(_, name)) => {
-                    assert_eq!(name, "Nat", "type annotation should be Nat");
+                    assert_eq!(
+                        name.name(),
+                        SurfaceName::generated_path("Nat").name(),
+                        "type annotation should be Nat"
+                    );
                 }
                 other => panic!("expected Some(Ident(\"Nat\")) type annot, got {other:?}"),
             }
@@ -1212,13 +1661,15 @@ fn test_roundtrip_q_antiquot_simple() {
     // $x
     let expr = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
-        content: QAntiquotContent::Simple("x".to_string()),
+        content: QAntiquotContent::Simple(SurfaceName::generated_path("x")),
     };
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::QAntiquot { content, .. } => {
-            assert!(matches!(content, QAntiquotContent::Simple(ref n) if n == "x"));
+            assert!(
+                matches!(content, QAntiquotContent::Simple(ref n) if n.name() == SurfaceName::generated_path("x").name())
+            );
         }
         other => panic!("expected QAntiquot, got {other:?}"),
     }
@@ -1231,7 +1682,7 @@ fn test_roundtrip_q_antiquot_expr() {
         span: Span::dummy(),
         content: QAntiquotContent::Expr(Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "e".to_string(),
+            SurfaceName::generated_path("e"),
         ))),
     };
     let syntax = surface_to_syntax(&expr);
@@ -1239,7 +1690,9 @@ fn test_roundtrip_q_antiquot_expr() {
     match recovered {
         SurfaceExpr::QAntiquot { content, .. } => match content {
             QAntiquotContent::Expr(inner) => match inner.as_ref() {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "e"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("e").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             },
             other => panic!("expected Expr antiquot, got {other:?}"),
@@ -1254,8 +1707,11 @@ fn test_roundtrip_q_antiquot_typed() {
     let expr = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Typed {
-            name: "x".to_string(),
-            ty: Box::new(SurfaceExpr::Ident(Span::dummy(), "Nat".to_string())),
+            name: SurfaceName::generated_path("x"),
+            ty: Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("Nat"),
+            )),
         },
     };
     let syntax = surface_to_syntax(&expr);
@@ -1263,9 +1719,11 @@ fn test_roundtrip_q_antiquot_typed() {
     match recovered {
         SurfaceExpr::QAntiquot { content, .. } => match content {
             QAntiquotContent::Typed { name, ty } => {
-                assert_eq!(name, "x");
+                assert_eq!(name.name(), SurfaceName::generated_path("x").name());
                 match ty.as_ref() {
-                    SurfaceExpr::Ident(_, n) => assert_eq!(n, "Nat"),
+                    SurfaceExpr::Ident(_, n) => {
+                        assert_eq!(n.name(), SurfaceName::generated_path("Nat").name())
+                    }
                     other => panic!("expected Ident, got {other:?}"),
                 }
             }
@@ -1281,7 +1739,7 @@ fn test_roundtrip_q_antiquot_splice() {
     let expr = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: Some(",".to_string()),
             at_least_one: false,
         },
@@ -1295,7 +1753,7 @@ fn test_roundtrip_q_antiquot_splice() {
                 separator,
                 at_least_one,
             } => {
-                assert_eq!(name, "xs");
+                assert_eq!(name.name(), SurfaceName::generated_path("xs").name());
                 assert_eq!(separator, Some(",".to_string()));
                 assert!(!at_least_one);
             }
@@ -1315,13 +1773,13 @@ fn test_roundtrip_struct_lit() {
         fields: vec![
             SurfaceFieldAssign {
                 span: Span::dummy(),
-                name: "x".to_string(),
-                val: SurfaceExpr::Ident(Span::dummy(), "val1".to_string()),
+                name: SurfaceName::generated_path("x"),
+                val: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("val1")),
             },
             SurfaceFieldAssign {
                 span: Span::dummy(),
-                name: "y".to_string(),
-                val: SurfaceExpr::Ident(Span::dummy(), "val2".to_string()),
+                name: SurfaceName::generated_path("y"),
+                val: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("val2")),
             },
         ],
     };
@@ -1343,10 +1801,18 @@ fn test_roundtrip_struct_lit() {
                 "struct literal with no spread should have no base"
             );
             assert_eq!(fields.len(), 2);
-            assert_eq!(fields[0].name, "x");
-            assert_eq!(fields[1].name, "y");
+            assert_eq!(
+                fields[0].name.name(),
+                SurfaceName::generated_path("x").name()
+            );
+            assert_eq!(
+                fields[1].name.name(),
+                SurfaceName::generated_path("y").name()
+            );
             match &fields[0].val {
-                SurfaceExpr::Ident(_, name) => assert_eq!(name, "val1"),
+                SurfaceExpr::Ident(_, name) => {
+                    assert_eq!(name.name(), SurfaceName::generated_path("val1").name())
+                }
                 other => panic!("expected Ident, got {other:?}"),
             }
         }
@@ -1361,13 +1827,16 @@ fn test_roundtrip_struct_lit_with_base() {
         span: Span::dummy(),
         struct_type: Some(Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "MyStruct".to_string(),
+            SurfaceName::generated_path("MyStruct"),
         ))),
-        base: Some(Box::new(SurfaceExpr::Ident(Span::dummy(), "s".to_string()))),
+        base: Some(Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("s"),
+        ))),
         fields: vec![SurfaceFieldAssign {
             span: Span::dummy(),
-            name: "x".to_string(),
-            val: SurfaceExpr::Ident(Span::dummy(), "val".to_string()),
+            name: SurfaceName::generated_path("x"),
+            val: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("val")),
         }],
     };
     let syntax = surface_to_syntax(&expr);
@@ -1381,7 +1850,11 @@ fn test_roundtrip_struct_lit_with_base() {
         } => {
             match struct_type.as_deref() {
                 Some(SurfaceExpr::Ident(_, name)) => {
-                    assert_eq!(name, "MyStruct", "struct_type should be MyStruct");
+                    assert_eq!(
+                        name.name(),
+                        SurfaceName::generated_path("MyStruct").name(),
+                        "struct_type should be MyStruct"
+                    );
                 }
                 other => {
                     panic!("expected Some(Ident(\"MyStruct\")) struct_type, got {other:?}")
@@ -1389,12 +1862,19 @@ fn test_roundtrip_struct_lit_with_base() {
             }
             match base.as_deref() {
                 Some(SurfaceExpr::Ident(_, name)) => {
-                    assert_eq!(name, "s", "base should be s");
+                    assert_eq!(
+                        name.name(),
+                        SurfaceName::generated_path("s").name(),
+                        "base should be s"
+                    );
                 }
                 other => panic!("expected Some(Ident(\"s\")) base, got {other:?}"),
             }
             assert_eq!(fields.len(), 1);
-            assert_eq!(fields[0].name, "x");
+            assert_eq!(
+                fields[0].name.name(),
+                SurfaceName::generated_path("x").name()
+            );
         }
         other => panic!("expected StructLit, got {other:?}"),
     }
@@ -1405,22 +1885,31 @@ fn test_roundtrip_implicit_binder() {
     // fun {x : A} => x — implicit binder roundtrip
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "x".to_string(),
-        ty: Some(Box::new(SurfaceExpr::Ident(Span::dummy(), "A".to_string()))),
+        name: SurfaceName::generated_path("x"),
+        ty: Some(Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("A"),
+        ))),
         default: None,
         info: SurfaceBinderInfo::Implicit,
     };
     let expr = SurfaceExpr::Lambda(
         Span::dummy(),
         vec![binder],
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "x");
+            assert_eq!(
+                binders[0].name.name(),
+                SurfaceName::generated_path("x").name()
+            );
             assert!(matches!(binders[0].info, SurfaceBinderInfo::Implicit));
         }
         other => panic!("expected Lambda, got {other:?}"),
@@ -1432,22 +1921,31 @@ fn test_roundtrip_instance_binder() {
     // fun [inst : A] => x — instance binder roundtrip
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "inst".to_string(),
-        ty: Some(Box::new(SurfaceExpr::Ident(Span::dummy(), "A".to_string()))),
+        name: SurfaceName::generated_path("inst"),
+        ty: Some(Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("A"),
+        ))),
         default: None,
         info: SurfaceBinderInfo::Instance,
     };
     let expr = SurfaceExpr::Lambda(
         Span::dummy(),
         vec![binder],
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
     );
     let syntax = surface_to_syntax(&expr);
     let recovered = syntax_to_surface(&syntax).unwrap();
     match recovered {
         SurfaceExpr::Lambda(_, binders, _) => {
             assert_eq!(binders.len(), 1);
-            assert_eq!(binders[0].name, "inst");
+            assert_eq!(
+                binders[0].name.name(),
+                SurfaceName::generated_path("inst").name()
+            );
             assert!(matches!(binders[0].info, SurfaceBinderInfo::Instance));
         }
         other => panic!("expected Lambda, got {other:?}"),
@@ -1458,15 +1956,19 @@ fn test_roundtrip_instance_binder() {
 fn test_roundtrip_level_max() {
     // Level: max u v
     let level = LevelExpr::Max(
-        Box::new(LevelExpr::Param("u".to_string())),
-        Box::new(LevelExpr::Param("v".to_string())),
+        Box::new(LevelExpr::Param(SurfaceName::generated_path("u"))),
+        Box::new(LevelExpr::Param(SurfaceName::generated_path("v"))),
     );
     let syntax = level_to_syntax(&level);
     let recovered = syntax_to_level(&syntax).unwrap();
     match recovered {
         LevelExpr::Max(a, b) => {
-            assert!(matches!(a.as_ref(), LevelExpr::Param(p) if p == "u"));
-            assert!(matches!(b.as_ref(), LevelExpr::Param(p) if p == "v"));
+            assert!(
+                matches!(a.as_ref(), LevelExpr::Param(p) if p.name() == SurfaceName::generated_path("u").name())
+            );
+            assert!(
+                matches!(b.as_ref(), LevelExpr::Param(p) if p.name() == SurfaceName::generated_path("v").name())
+            );
         }
         other => panic!("expected Max, got {other:?}"),
     }
@@ -1476,14 +1978,16 @@ fn test_roundtrip_level_max() {
 fn test_roundtrip_level_imax() {
     // Level: imax u v
     let level = LevelExpr::IMax(
-        Box::new(LevelExpr::Param("u".to_string())),
+        Box::new(LevelExpr::Param(SurfaceName::generated_path("u"))),
         Box::new(LevelExpr::Lit(0)),
     );
     let syntax = level_to_syntax(&level);
     let recovered = syntax_to_level(&syntax).unwrap();
     match recovered {
         LevelExpr::IMax(a, b) => {
-            assert!(matches!(a.as_ref(), LevelExpr::Param(p) if p == "u"));
+            assert!(
+                matches!(a.as_ref(), LevelExpr::Param(p) if p.name() == SurfaceName::generated_path("u").name())
+            );
             assert!(matches!(b.as_ref(), LevelExpr::Lit(0)));
         }
         other => panic!("expected IMax, got {other:?}"),
@@ -1500,10 +2004,12 @@ fn test_roundtrip_level_lit() {
 
 #[test]
 fn test_roundtrip_level_antiquot() {
-    let level = LevelExpr::Antiquot("u".to_string());
+    let level = LevelExpr::Antiquot(SurfaceName::generated_path("u"));
     let syntax = level_to_syntax(&level);
     let recovered = syntax_to_level(&syntax).unwrap();
-    assert!(matches!(recovered, LevelExpr::Antiquot(ref s) if s == "u"));
+    assert!(
+        matches!(recovered, LevelExpr::Antiquot(ref s) if s.name() == SurfaceName::generated_path("u").name())
+    );
 }
 
 // Self-audit: missing roundtrip tests found in audit of 5c2c97479
@@ -1566,16 +2072,18 @@ fn test_roundtrip_pattern_wildcard() {
 #[test]
 fn test_roundtrip_pattern_ctor() {
     let pattern = SurfacePattern::Ctor(
-        "Some".to_string(),
-        vec![SurfacePattern::Var("x".to_string())],
+        SurfaceName::generated_path("Some"),
+        vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
     );
     let syntax = surface_pattern_to_syntax(&pattern);
     let recovered = syntax_to_pattern(&syntax).unwrap();
     match recovered {
         SurfacePattern::Ctor(name, args) => {
-            assert_eq!(name, "Some");
+            assert_eq!(name.name(), SurfaceName::generated_path("Some").name());
             assert_eq!(args.len(), 1);
-            assert!(matches!(&args[0], SurfacePattern::Var(n) if n == "x"));
+            assert!(
+                matches!(&args[0], SurfacePattern::Var(n) if n.name() == SurfaceName::generated_path("x").name())
+            );
         }
         other => panic!("expected Ctor pattern, got {other:?}"),
     }
@@ -1589,22 +2097,24 @@ fn test_roundtrip_pattern_ctor() {
 fn test_roundtrip_pattern_as() {
     // As-pattern: x@pat — previously corrupted to Ctor("asPattern", ...)
     let pattern = SurfacePattern::As(
-        "x".to_string(),
+        SurfaceName::generated_path("x"),
         Box::new(SurfacePattern::Ctor(
-            "Some".to_string(),
-            vec![SurfacePattern::Var("y".to_string())],
+            SurfaceName::generated_path("Some"),
+            vec![SurfacePattern::Var(SurfaceName::generated_path("y"))],
         )),
     );
     let syntax = surface_pattern_to_syntax(&pattern);
     let recovered = syntax_to_pattern(&syntax).unwrap();
     match recovered {
         SurfacePattern::As(name, inner) => {
-            assert_eq!(name, "x");
+            assert_eq!(name.name(), SurfaceName::generated_path("x").name());
             match inner.as_ref() {
                 SurfacePattern::Ctor(ctor_name, args) => {
-                    assert_eq!(ctor_name, "Some");
+                    assert_eq!(ctor_name.name(), SurfaceName::generated_path("Some").name());
                     assert_eq!(args.len(), 1);
-                    assert!(matches!(&args[0], SurfacePattern::Var(n) if n == "y"));
+                    assert!(
+                        matches!(&args[0], SurfacePattern::Var(n) if n.name() == SurfaceName::generated_path("y").name())
+                    );
                 }
                 other => panic!("expected Ctor inner pattern, got {other:?}"),
             }
@@ -1617,9 +2127,12 @@ fn test_roundtrip_pattern_as() {
 fn test_roundtrip_pattern_or() {
     // Or-pattern: pat1 | pat2 — previously corrupted to Ctor("orPattern", ...)
     let pattern = SurfacePattern::Or(
-        Box::new(SurfacePattern::Ctor("None".to_string(), vec![])),
         Box::new(SurfacePattern::Ctor(
-            "Some".to_string(),
+            SurfaceName::generated_path("None"),
+            vec![],
+        )),
+        Box::new(SurfacePattern::Ctor(
+            SurfaceName::generated_path("Some"),
             vec![SurfacePattern::Wildcard],
         )),
     );
@@ -1629,14 +2142,14 @@ fn test_roundtrip_pattern_or() {
         SurfacePattern::Or(left, right) => {
             match left.as_ref() {
                 SurfacePattern::Ctor(name, args) => {
-                    assert_eq!(name, "None");
+                    assert_eq!(name.name(), SurfaceName::generated_path("None").name());
                     assert!(args.is_empty());
                 }
                 other => panic!("expected Ctor(None) left, got {other:?}"),
             }
             match right.as_ref() {
                 SurfacePattern::Ctor(name, args) => {
-                    assert_eq!(name, "Some");
+                    assert_eq!(name.name(), SurfaceName::generated_path("Some").name());
                     assert_eq!(args.len(), 1);
                     assert!(matches!(&args[0], SurfacePattern::Wildcard));
                 }
@@ -1656,7 +2169,10 @@ fn test_roundtrip_do_repeat() {
             Span::dummy(),
             vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "action".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("action"),
+                )),
             )],
         )],
     );
@@ -1670,7 +2186,10 @@ fn test_roundtrip_do_repeat() {
                     assert_eq!(body.len(), 1);
                     match &body[0] {
                         DoElem::Expr(_, inner) => match inner.as_ref() {
-                            SurfaceExpr::Ident(_, name) => assert_eq!(name, "action"),
+                            SurfaceExpr::Ident(_, name) => assert_eq!(
+                                name.name(),
+                                SurfaceName::generated_path("action").name()
+                            ),
                             other => panic!("expected Ident, got {other:?}"),
                         },
                         other => panic!("expected Expr elem, got {other:?}"),
@@ -1690,10 +2209,16 @@ fn test_roundtrip_do_while() {
         Span::dummy(),
         vec![DoElem::While(
             Span::dummy(),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "cond".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("cond"),
+            )),
             vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "body".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("body"),
+                )),
             )],
         )],
     );
@@ -1705,7 +2230,9 @@ fn test_roundtrip_do_while() {
             match &elems[0] {
                 DoElem::While(_, cond, body) => {
                     match cond.as_ref() {
-                        SurfaceExpr::Ident(_, name) => assert_eq!(name, "cond"),
+                        SurfaceExpr::Ident(_, name) => {
+                            assert_eq!(name.name(), SurfaceName::generated_path("cond").name())
+                        }
                         other => panic!("expected Ident cond, got {other:?}"),
                     }
                     assert_eq!(body.len(), 1);
@@ -1756,11 +2283,17 @@ fn test_roundtrip_do_bind_return() {
             DoElem::Bind(
                 Span::dummy(),
                 SurfaceBinder::new("x".to_string(), None, SurfaceBinderInfo::Explicit),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "getLine".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("getLine"),
+                )),
             ),
             DoElem::Return(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("x"),
+                )),
             ),
         ],
     );
@@ -1771,9 +2304,11 @@ fn test_roundtrip_do_bind_return() {
             assert_eq!(elems.len(), 2);
             match &elems[0] {
                 DoElem::Bind(_, binder, action) => {
-                    assert_eq!(binder.name, "x");
+                    assert_eq!(binder.name.name(), SurfaceName::generated_path("x").name());
                     match action.as_ref() {
-                        SurfaceExpr::Ident(_, name) => assert_eq!(name, "getLine"),
+                        SurfaceExpr::Ident(_, name) => {
+                            assert_eq!(name.name(), SurfaceName::generated_path("getLine").name())
+                        }
                         other => panic!("expected Ident, got {other:?}"),
                     }
                 }
@@ -1781,7 +2316,9 @@ fn test_roundtrip_do_bind_return() {
             }
             match &elems[1] {
                 DoElem::Return(_, expr) => match expr.as_ref() {
-                    SurfaceExpr::Ident(_, name) => assert_eq!(name, "x"),
+                    SurfaceExpr::Ident(_, name) => {
+                        assert_eq!(name.name(), SurfaceName::generated_path("x").name())
+                    }
                     other => panic!("expected Ident, got {other:?}"),
                 },
                 other => panic!("expected Return, got {other:?}"),
@@ -1804,7 +2341,10 @@ fn test_roundtrip_do_let_expr() {
             ),
             DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "y".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("y"),
+                )),
             ),
         ],
     );
@@ -1815,7 +2355,7 @@ fn test_roundtrip_do_let_expr() {
             assert_eq!(elems.len(), 2);
             match &elems[0] {
                 DoElem::Let(_, binder, val) => {
-                    assert_eq!(binder.name, "y");
+                    assert_eq!(binder.name.name(), SurfaceName::generated_path("y").name());
                     match val.as_ref() {
                         SurfaceExpr::Lit(_, SurfaceLit::Nat(n)) => assert_eq!(*n, 42),
                         other => panic!("expected Nat lit, got {other:?}"),
@@ -1825,7 +2365,9 @@ fn test_roundtrip_do_let_expr() {
             }
             match &elems[1] {
                 DoElem::Expr(_, inner) => match inner.as_ref() {
-                    SurfaceExpr::Ident(_, name) => assert_eq!(name, "y"),
+                    SurfaceExpr::Ident(_, name) => {
+                        assert_eq!(name.name(), SurfaceName::generated_path("y").name())
+                    }
                     other => panic!("expected Ident, got {other:?}"),
                 },
                 other => panic!("expected Expr, got {other:?}"),
@@ -1847,22 +2389,31 @@ fn test_roundtrip_do_try_finally() {
             // try body
             vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "action".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("action"),
+                )),
             )],
             // catch clauses
             vec![DoCatchClause {
                 span: Span::dummy(),
-                binder: "e".to_string(),
+                binder: SurfaceName::generated_path("e"),
                 exc_type: None,
                 body: vec![DoElem::Expr(
                     Span::dummy(),
-                    Box::new(SurfaceExpr::Ident(Span::dummy(), "handler".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        Span::dummy(),
+                        SurfaceName::generated_path("handler"),
+                    )),
                 )],
             }],
             // finally body
             Some(vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "cleanup".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("cleanup"),
+                )),
             )]),
         )],
     );
@@ -1877,21 +2428,30 @@ fn test_roundtrip_do_try_finally() {
                     assert_eq!(try_body.len(), 1);
                     match &try_body[0] {
                         DoElem::Expr(_, inner) => match inner.as_ref() {
-                            SurfaceExpr::Ident(_, name) => assert_eq!(name, "action"),
+                            SurfaceExpr::Ident(_, name) => assert_eq!(
+                                name.name(),
+                                SurfaceName::generated_path("action").name()
+                            ),
                             other => panic!("expected Ident, got {other:?}"),
                         },
                         other => panic!("expected Expr in try body, got {other:?}"),
                     }
                     // Catch clauses
                     assert_eq!(catches.len(), 1);
-                    assert_eq!(catches[0].binder, "e");
+                    assert_eq!(
+                        catches[0].binder.name(),
+                        SurfaceName::generated_path("e").name()
+                    );
                     assert_eq!(catches[0].body.len(), 1);
                     // Finally body
                     let fin = finally_body.as_ref().expect("expected finally body");
                     assert_eq!(fin.len(), 1);
                     match &fin[0] {
                         DoElem::Expr(_, inner) => match inner.as_ref() {
-                            SurfaceExpr::Ident(_, name) => assert_eq!(name, "cleanup"),
+                            SurfaceExpr::Ident(_, name) => assert_eq!(
+                                name.name(),
+                                SurfaceName::generated_path("cleanup").name()
+                            ),
                             other => panic!("expected Ident in finally, got {other:?}"),
                         },
                         other => panic!("expected Expr in finally, got {other:?}"),
@@ -1956,9 +2516,18 @@ fn test_macro_rules_binop_template_instantiates_both_operands() {
     assert_eq!(expanded.kind(), Some(&SyntaxKind::app_kind()));
     let children = expanded.children();
     assert_eq!(children.len(), 3, "expected `(app HAdd.hAdd foo foo)`");
-    assert_eq!(children[0].as_ident(), Some("HAdd.hAdd"));
-    assert_eq!(children[1].as_ident(), Some("foo"));
-    assert_eq!(children[2].as_ident(), Some("foo"));
+    assert_eq!(
+        children[0].as_ident(),
+        Some(&SurfaceName::generated_path("HAdd.hAdd"))
+    );
+    assert_eq!(
+        children[1].as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
+    assert_eq!(
+        children[2].as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
 
     // And it converts back to a surface application identical to writing `foo + foo`.
     let back = syntax_to_surface(&expanded).expect("should convert back to surface");
@@ -1978,8 +2547,14 @@ fn test_macro_rules_function_template_instantiates_arg() {
 
     let expanded = ctx.expand(syntax).expect("myMacro should expand");
     assert_eq!(expanded.kind(), Some(&SyntaxKind::app_kind()));
-    assert_eq!(expanded.child(0).unwrap().as_ident(), Some("id"));
-    assert_eq!(expanded.child(1).unwrap().as_ident(), Some("foo"));
+    assert_eq!(
+        expanded.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("id"))
+    );
+    assert_eq!(
+        expanded.child(1).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
 }
 
 #[test]
@@ -1993,13 +2568,13 @@ fn test_macro_rules_multi_arm_selects_matching_arm() {
     let a = ctx
         .expand(surface_to_syntax(&parse_expr("pickA a b").unwrap()))
         .expect("pickA should expand");
-    assert_eq!(a.as_ident(), Some("a"));
+    assert_eq!(a.as_ident(), Some(&SurfaceName::generated_path("a")));
 
     // `pickB a b` selects the second arm => `$y` => `b`.
     let b = ctx
         .expand(surface_to_syntax(&parse_expr("pickB a b").unwrap()))
         .expect("pickB should expand");
-    assert_eq!(b.as_ident(), Some("b"));
+    assert_eq!(b.as_ident(), Some(&SurfaceName::generated_path("b")));
 }
 
 #[test]
@@ -2033,13 +2608,15 @@ fn test_macro_rules_mkfreshid_distinct_per_expansion() {
 
     // Collect the fresh binder/use idents from each `fun` expansion. The two
     // markers share the prefix `f`, so within one expansion they coincide.
-    let id_of = |s: &Syntax| -> String {
+    let id_of = |s: &Syntax| -> SurfaceName {
         // Find the first ident leaf that carries the fresh prefix `x` (the gensym
         // seed used for the marker) — robust to the surrounding `fun` shape.
-        fn first_fresh(s: &Syntax) -> Option<String> {
+        fn first_fresh(s: &Syntax) -> Option<SurfaceName> {
             if let Some(name) = s.as_ident() {
-                if name.starts_with("x_") {
-                    return Some(name.to_string());
+                if name.component_syntax().len() > 1
+                    && name.to_string().starts_with("x._macro_fresh.")
+                {
+                    return Some(name.clone());
                 }
             }
             for c in s.children() {
@@ -2073,8 +2650,14 @@ fn test_macro_rules_static_template_unchanged_alongside_fresh() {
         r2.pretty(),
         "non-gensym macro must be unaffected by the fresh-name path"
     );
-    assert_eq!(r1.child(0).unwrap().as_ident(), Some("id"));
-    assert_eq!(r1.child(1).unwrap().as_ident(), Some("foo"));
+    assert_eq!(
+        r1.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("id"))
+    );
+    assert_eq!(
+        r1.child(1).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
 }
 
 #[test]
@@ -2092,7 +2675,10 @@ fn test_macro_rules_nonmatching_input_is_left_unexpanded() {
     let expanded = ctx
         .expand(input.clone())
         .expect("expansion should not fail");
-    assert_eq!(expanded.child(0).unwrap().as_ident(), Some("other"));
+    assert_eq!(
+        expanded.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("other"))
+    );
 }
 
 #[test]
@@ -2121,7 +2707,7 @@ fn test_macro_rules_computed_body_unsupported_defers_honestly() {
                 // If it did register, it must not be the fabricated `$x` template.
                 assert_ne!(
                     expanded.pretty(),
-                    Syntax::ident("foo").pretty(),
+                    Syntax::generated_ident("foo").pretty(),
                     "computed macro body must not be faked as a pure `$x` template"
                 );
             }
@@ -2152,8 +2738,14 @@ fn test_macro_rules_computed_return_quotation_matches_direct_parse() {
     );
     // And the concrete shape is `(app id foo)`.
     assert_eq!(computed_out.kind(), Some(&SyntaxKind::app_kind()));
-    assert_eq!(computed_out.child(0).unwrap().as_ident(), Some("id"));
-    assert_eq!(computed_out.child(1).unwrap().as_ident(), Some("foo"));
+    assert_eq!(
+        computed_out.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("id"))
+    );
+    assert_eq!(
+        computed_out.child(1).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
 }
 
 #[test]
@@ -2205,8 +2797,14 @@ fn test_macro_rules_computed_if_literal_selects_quotation_branch() {
     let input = surface_to_syntax(&parse_expr("pick foo").unwrap());
     let out = computed.expand(input).expect("computed if should expand");
     assert_eq!(out.kind(), Some(&SyntaxKind::app_kind()));
-    assert_eq!(out.child(0).unwrap().as_ident(), Some("a"));
-    assert_eq!(out.child(1).unwrap().as_ident(), Some("foo"));
+    assert_eq!(
+        out.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("a"))
+    );
+    assert_eq!(
+        out.child(1).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
 }
 
 #[test]
@@ -2220,9 +2818,18 @@ fn test_macro_rules_pure_template_still_works_unchanged() {
     assert_eq!(expanded.kind(), Some(&SyntaxKind::app_kind()));
     let children = expanded.children();
     assert_eq!(children.len(), 3, "expected `(app HAdd.hAdd foo foo)`");
-    assert_eq!(children[0].as_ident(), Some("HAdd.hAdd"));
-    assert_eq!(children[1].as_ident(), Some("foo"));
-    assert_eq!(children[2].as_ident(), Some("foo"));
+    assert_eq!(
+        children[0].as_ident(),
+        Some(&SurfaceName::generated_path("HAdd.hAdd"))
+    );
+    assert_eq!(
+        children[1].as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
+    assert_eq!(
+        children[2].as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
 }
 
 #[test]
@@ -2320,10 +2927,13 @@ fn test_macro_rules_computed_monadic_bind_nonquotation_action_defers_honestly() 
     let pattern = SurfaceExpr::SyntaxQuote(Span::dummy(), "(bad $x)".to_string());
     let action = SurfaceExpr::App(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "expandFn".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("expandFn"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             Span::dummy(),
-            "foo".to_string(),
+            SurfaceName::generated_path("foo"),
         ))],
     );
     let bind = DoElem::Bind(
@@ -2333,7 +2943,10 @@ fn test_macro_rules_computed_monadic_bind_nonquotation_action_defers_honestly() 
     );
     let ret = DoElem::Return(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "y".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("y"),
+        )),
     );
     let expansion = SurfaceExpr::Do(Span::dummy(), vec![bind, ret]);
     let arm = MacroArm {
@@ -2430,8 +3043,14 @@ fn test_macro_rules_computed_if_false_skips_throw_error_branch() {
         .expand(surface_to_syntax(&parse_expr("pick foo").unwrap()))
         .expect("the else quotation branch should expand");
     assert_eq!(out.kind(), Some(&SyntaxKind::app_kind()));
-    assert_eq!(out.child(0).unwrap().as_ident(), Some("a"));
-    assert_eq!(out.child(1).unwrap().as_ident(), Some("foo"));
+    assert_eq!(
+        out.child(0).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("a"))
+    );
+    assert_eq!(
+        out.child(1).unwrap().as_ident(),
+        Some(&SurfaceName::generated_path("foo"))
+    );
 }
 
 #[test]
@@ -2529,4 +3148,99 @@ fn test_surface_quote_tactic_head_unparseable_body_errors_loudly() {
         matches!(result, Err(MacroRegistrationError::QuotationParse(_))),
         "unparseable `(tactic| …)` body must error loudly, got {result:?}"
     );
+}
+
+/// A structure-instance pattern must survive the surface → syntax → surface
+/// round trip intact.
+///
+/// A form the macro pass cannot reproduce comes back as a bare identifier named
+/// after its node kind — that is how `open X in e` became the identifier
+/// `openIn` (closed class 42) — so this is pinned rather than assumed.
+#[test]
+fn test_roundtrip_pattern_struct_instance_with_ellipsis() {
+    let pattern = SurfacePattern::StructInst {
+        fields: vec![(
+            SurfaceName::generated_path("a"),
+            SurfacePattern::Var(SurfaceName::generated_path("x")),
+        )],
+        ellipsis: true,
+        ty: None,
+    };
+    let syntax = surface_pattern_to_syntax(&pattern);
+    let recovered = syntax_to_pattern(&syntax).expect("struct-instance pattern round-trips");
+    match recovered {
+        SurfacePattern::StructInst {
+            fields,
+            ellipsis,
+            ty,
+        } => {
+            assert_eq!(fields.len(), 1);
+            assert_eq!(fields[0].0.name(), SurfaceName::generated_path("a").name());
+            assert!(ellipsis, "the `..` flag must survive the round trip");
+            assert!(ty.is_none());
+        }
+        other => panic!("expected StructInst pattern, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_roundtrip_pattern_struct_instance_without_ellipsis() {
+    let pattern = SurfacePattern::StructInst {
+        fields: vec![(SurfaceName::generated_path("a"), SurfacePattern::Wildcard)],
+        ellipsis: false,
+        ty: None,
+    };
+    let syntax = surface_pattern_to_syntax(&pattern);
+    let recovered = syntax_to_pattern(&syntax).expect("struct-instance pattern round-trips");
+    match recovered {
+        SurfacePattern::StructInst {
+            fields, ellipsis, ..
+        } => {
+            assert_eq!(fields.len(), 1);
+            assert!(
+                !ellipsis,
+                "a literal with no `..` must not gain one in the round trip"
+            );
+        }
+        other => panic!("expected StructInst pattern, got {other:?}"),
+    }
+}
+
+#[test]
+fn term_have_origin_and_typed_binder_survive_actual_macro_roundtrip() {
+    let source = parse_expr("have «n.x» : Nat := 7; «n.x»").expect("typed have parses");
+    let Some(SurfaceExpr::Have(_, binder, value, body)) =
+        syntax_to_surface(&surface_to_syntax(&source))
+    else {
+        panic!("actual macro transport erased term-have origin");
+    };
+    assert_eq!(binder.info, SurfaceBinderInfo::Explicit);
+    assert!(binder.ty.is_some());
+    assert!(matches!(*value, SurfaceExpr::Lit(_, SurfaceLit::Nat(7))));
+    let SurfaceExpr::Ident(_, name) = *body else {
+        panic!("have body reference must survive");
+    };
+    assert!(binder.name.same_syntax(&name));
+    assert!(binder
+        .name
+        .same_syntax(&SurfaceName::component("n.x", true)));
+}
+
+#[test]
+fn do_have_origin_and_typed_binder_survive_actual_macro_roundtrip() {
+    let source = parse_expr("do have n : Nat := 7; return n").expect("typed do-have parses");
+    let Some(SurfaceExpr::Do(_, elems)) = syntax_to_surface(&surface_to_syntax(&source)) else {
+        panic!("actual macro transport erased do");
+    };
+    let DoElem::Have(_, binder, value) = &elems[0] else {
+        panic!("actual macro transport erased do-have origin");
+    };
+    assert_eq!(elems.len(), 2);
+    assert_eq!(binder.info, SurfaceBinderInfo::Explicit);
+    assert!(binder.ty.is_some());
+    assert!(matches!(
+        value.as_ref(),
+        SurfaceExpr::Lit(_, SurfaceLit::Nat(7))
+    ));
+    assert!(matches!(&elems[1], DoElem::Return(_, _)));
 }

@@ -102,6 +102,36 @@ fn test_elimref_wrong_ind_levels_arity_rejected() {
     assert_eq!(ok.levels().len(), 3);
 }
 
+/// Regression (fix4 C7, `ElimRef::mk` built its vector with an
+/// `UnboundedAllocation` row): the derived vector is now built in the
+/// caller's `ind_levels` allocation, so pin the exact order — motive level
+/// first, then each supplied level in place — not only the length.
+#[test]
+fn test_elimref_derived_levels_order_is_motive_then_ind_levels() {
+    let eq = Name::from_dotted("Eq");
+    let large = MinimalEnv::new().with_inductive(eq.clone(), 2, true);
+    let e = ElimRef::mk(
+        &large,
+        eq.clone(),
+        Level::param(9),
+        vec![Level::param(1), Level::param(2)],
+    )
+    .expect("correct arity");
+    assert_eq!(
+        e.levels(),
+        &[Level::param(9), Level::param(1), Level::param(2)][..]
+    );
+    let small = MinimalEnv::new().with_inductive(eq.clone(), 2, false);
+    let e = ElimRef::mk(
+        &small,
+        eq,
+        Level::param(9),
+        vec![Level::param(1), Level::param(2)],
+    )
+    .expect("correct arity");
+    assert_eq!(e.levels(), &[Level::param(1), Level::param(2)][..]);
+}
+
 #[test]
 fn test_elimref_unknown_inductive_rejected() {
     let env = MinimalEnv::new();

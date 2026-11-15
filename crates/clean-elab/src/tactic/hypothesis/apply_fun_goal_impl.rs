@@ -125,12 +125,14 @@ pub(super) fn apply_fun_goal(state: &mut ProofState, func: Expr) -> TacticResult
     let tag = goal.tag.clone();
     state.close_goal(&goal, old_goal_proof)?;
     state.goals.push_front(Goal {
+        case_binders: goal.case_binders.clone(),
         meta_id: inj_meta_id,
         target: injective_goal,
         local_ctx: local_ctx.clone(),
         tag: tag.clone(),
     });
     state.goals.push_front(Goal {
+        case_binders: goal.case_binders.clone(),
         meta_id: new_eq_meta_id,
         target: new_target,
         local_ctx,

@@ -11,6 +11,17 @@ use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
 
+/// The concrete fixed-width UInt carriers the prelude overlay defines
+/// arithmetic and conversions over (`USize` is deliberately absent — see
+/// [`Environment::uint_conversion_decl`]).
+pub(crate) const FIXED_WIDTH_UINTS: [&str; 4] = ["UInt8", "UInt16", "UInt32", "UInt64"];
+
+/// `("UInt16", "UInt8")` → `"UInt16.toUInt8"`: the Lean 4 name of a width
+/// conversion.
+pub(crate) fn uint_conversion_name(source: &str, target: &str) -> String {
+    format!("{source}.to{target}")
+}
+
 #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Environment {
     /// Shared helper for init_uint{8,16,32,64}/init_usize: creates the v4.30
@@ -567,11 +578,66 @@ impl Environment {
     /// under `with_prelude()`. This is the same ordering `instHAndNat`
     /// (registered even earlier) already relies on.
     ///
+    /// ## `xor`, `shiftLeft`, `shiftRight` — transcribed from Lean v4.30.0-rc2
+    ///
+    /// `src/Init/Data/UInt/Basic.lean` (identical at every width, `<w>` the bit
+    /// width):
+    ///
+    /// ```text
+    /// protected def UInt8.xor        (a b : UInt8) : UInt8 := ⟨a.toBitVec ^^^ b.toBitVec⟩
+    /// protected def UInt8.shiftLeft  (a b : UInt8) : UInt8 := ⟨a.toBitVec <<< (UInt8.mod b 8).toBitVec⟩
+    /// protected def UInt8.shiftRight (a b : UInt8) : UInt8 := ⟨a.toBitVec >>> (UInt8.mod b 8).toBitVec⟩
+    /// ```
+    ///
+    /// with, from `src/Init/Data/BitVec/Basic.lean`, `BitVec.xor x y =
+    /// (x.toNat ^^^ y.toNat)#'_`, `BitVec.shiftLeft x s = BitVec.ofNat n
+    /// (x.toNat <<< s)`, `BitVec.ushiftRight x s = (x.toNat >>> s)#'_`, `x <<< (y
+    /// : BitVec _) = x <<< y.toNat`, and `BitVec.umod x y = (x.toNat % y.toNat)#'_`.
+    /// Read through `.toNat`, in this overlay's existing `ofNat ∘ Nat.op ∘ toNat`
+    /// idiom, that is:
+    ///
+    /// ```text
+    /// <Name>.xor        a b := <Name>.ofNat (Nat.xor a.toNat b.toNat)
+    /// <Name>.shiftLeft  a b := <Name>.ofNat (Nat.shiftLeft a.toNat (Nat.mod b.toNat <w>))
+    /// <Name>.shiftRight a b := <Name>.ofNat (Nat.div a.toNat (Nat.pow 2 (Nat.mod b.toNat <w>)))
+    /// ```
+    ///
+    /// **The shift amount is reduced MODULO THE WIDTH** — `(1 : UInt8) <<< 8 = 1`
+    /// and `(1 : UInt64) <<< 65 = 2`, neither `0` nor a trap. That is Lean's
+    /// semantics, not Rust's (`<<` by `>= width` panics or is masked per build
+    /// profile), and it is the one place a plausible-looking body would be
+    /// wrong. `shiftLeft` then wraps mod `2^w` through `.ofNat` (it is the only
+    /// one of the three that can overflow); `xor` and `shiftRight` results are
+    /// `<= max(a.toNat, b.toNat)`, so their `.ofNat` is the identity.
+    ///
+    /// `shiftRight` is stated through `Nat.div`/`Nat.pow` rather than
+    /// `Nat.shiftRight`, and that is deliberate. `Nat.shiftRight` is still a bare
+    /// AXIOM on the `with_prelude` path (`data_types_nat.rs`: "Only
+    /// `Nat.shiftRight` stays an axiom"; its discharge,
+    /// `register_nat_shiftright_def`, runs only for the soundness certificate and
+    /// the clean-verify spec build), so a body through it would make
+    /// `<Name>.shiftRight` the one axiom-BEARING constant in this overlay. Lean
+    /// core proves `Nat.shiftRight_eq_div_pow : m >>> n = m / 2 ^ n`
+    /// (`src/Init/Data/Nat/Bitwise/Basic.lean`), so the two bodies denote the
+    /// same function; this one is built from two real definitions and is
+    /// axiom-free under every construction path.
+    ///
+    /// The per-width native reducers keyed on these three names
+    /// (`reduce_small_shift_left` & co.) already reduce the amount mod the width
+    /// and are pinned against these bodies at the edges (amount `0`, `w - 1`,
+    /// `w`, `w + 1`, the maximum value) by
+    /// `test_uint_xor_shift_bodies_agree_with_native_reducers`.
+    ///
     /// The caller (`init_uint_arith`) requires a concrete-width `<Name>` already
     /// initialized (its `.toNat`/`.ofNat`/`.size`) plus `init_nat`. `USize` is
     /// deliberately excluded: its width is platform-abstract and the native
     /// prelude has no canonical `USize.ofNat` to ground these definitions.
     fn init_one_uint_arith(&mut self, name: &str) -> Result<(), EnvError> {
+        // Fail closed on anything but the four concrete widths: the shift
+        // bodies below bake the width in as a literal, and a guessed width
+        // would be a silently wrong machine operation.
+        let width = Self::fixed_uint_width(name)
+            .ok_or_else(|| EnvError::UnknownInductive(Name::from_string(name)))?;
         let ty = Expr::const_(Name::from_string(name), vec![]);
         let to_nat = Expr::const_(Name::from_string(&format!("{name}.toNat")), vec![]);
         let of_nat = Expr::const_(Name::from_string(&format!("{name}.ofNat")), vec![]);
@@ -618,6 +684,21 @@ impl Environment {
         let mod_val = mk_binop(&|x, y| Expr::apps(nat_mod.clone(), [x, y]));
         let land_val = mk_binop(&|x, y| Expr::apps(nat_land.clone(), [x, y]));
         let lor_val = mk_binop(&|x, y| Expr::apps(nat_lor.clone(), [x, y]));
+        let nat_xor = Expr::const_(Name::from_string("Nat.xor"), vec![]);
+        let nat_shl = Expr::const_(Name::from_string("Nat.shiftLeft"), vec![]);
+        let nat_pow = Expr::const_(Name::from_string("Nat.pow"), vec![]);
+        let xor_val = mk_binop(&|x, y| Expr::apps(nat_xor.clone(), [x, y]));
+        // The shift AMOUNT, reduced mod the width — Lean's `(<Name>.mod b <w>)`.
+        let nat_mod_c = nat_mod.clone();
+        let amount = move |y: Expr| Expr::apps(nat_mod_c.clone(), [y, Expr::nat_lit(width)]);
+        let amount_l = amount.clone();
+        let shl_val = mk_binop(&|x, y| Expr::apps(nat_shl.clone(), [x, amount_l(y)]));
+        let nat_div_c = nat_div.clone();
+        let shr_val = mk_binop(&|x, y| {
+            // x / 2^(y % w)  ==  x >>> (y % w)   (`Nat.shiftRight_eq_div_pow`)
+            let pow = Expr::apps(nat_pow.clone(), [Expr::nat_lit(2), amount(y)]);
+            Expr::apps(nat_div_c.clone(), [x, pow])
+        });
 
         for (op, value) in [
             ("add", add_val),
@@ -627,6 +708,9 @@ impl Environment {
             ("mod", mod_val),
             ("land", land_val),
             ("lor", lor_val),
+            ("xor", xor_val),
+            ("shiftLeft", shl_val),
+            ("shiftRight", shr_val),
         ] {
             self.ensure_exact_checked_decl(Declaration::Definition {
                 name: Name::from_string(&format!("{name}.{op}")),
@@ -637,6 +721,56 @@ impl Environment {
             })?;
         }
         Ok(())
+    }
+
+    /// WS6.10: the ONE canonical spelling of the fixed-width conversion
+    /// `<source>.toUInt<N>` (`target = "UInt<N>"`), the declaration
+    /// [`Self::init_uint_conversions`] registers for every ordered pair of
+    /// distinct fixed widths:
+    ///
+    /// ```text
+    /// <source>.to<target> : <source> → <target>
+    ///   := fun x => <target>.ofNat (<source>.toNat x)
+    /// ```
+    ///
+    /// This is Lean 4's meaning of the conversion (`UInt16.toUInt8 300 = 44`,
+    /// `UInt8.toUInt64 255 = 255`): `<target>.ofNat` wraps mod `2^target`, so
+    /// NARROWING truncates and WIDENING is exact because `<source>.toNat x <
+    /// 2^source <= 2^target`. Built from the carrier's own `.toNat` / `.ofNat`,
+    /// so it adds no axiom and is kernel-checked at registration.
+    ///
+    /// Why it has to exist: the kernel has named NATIVE REDUCERS for these
+    /// twelve names (`native_reducers_uint_conv.rs`) but, before this, no
+    /// constant carried them — `def widen (a : UInt8) : UInt64 := a.toUInt64`
+    /// failed with "Unknown identifier" (F-107, `GENERAL.p12b_width_conversion`).
+    /// With the definition present the reducers are an ACCELERATION of a real
+    /// definition, and `native_reducers_uint_conv_tests.rs` checks every one
+    /// against this body's δ-unfolding. Because the registration goes through
+    /// this same function, the test's "canonical body" and the registered
+    /// constant cannot drift apart into two spellings of one name.
+    ///
+    /// The eight `USize` conversions stay OUT, for the reason every other
+    /// constant of this overlay excludes `USize`: its width is platform-
+    /// abstract and the native prelude has no canonical `USize.ofNat`.
+    pub(crate) fn uint_conversion_decl(source: &str, target: &str) -> Declaration {
+        let src_ty = Expr::const_(Name::from_string(source), vec![]);
+        let dst_ty = Expr::const_(Name::from_string(target), vec![]);
+        let src_to_nat = Expr::const_(Name::from_string(&format!("{source}.toNat")), vec![]);
+        let dst_of_nat = Expr::const_(Name::from_string(&format!("{target}.ofNat")), vec![]);
+        let value = {
+            let mut b = EnvDeclBuilder::new();
+            let (x_id, x) = b.fresh_local(src_ty.clone());
+            let body = Expr::app(dst_of_nat, Expr::app(src_to_nat, x));
+            let e = b.mk_lam(x_id, BinderInfo::Default, src_ty.clone(), body);
+            b.finish(e)
+        };
+        Declaration::Definition {
+            name: Name::from_string(&uint_conversion_name(source, target)),
+            level_params: vec![],
+            type_: Expr::pi(BinderInfo::Default, src_ty, dst_ty),
+            value,
+            is_reducible: true,
+        }
     }
 
     /// Trust: wrapping machine arithmetic + `HAdd`/`HSub`/`HMul`/`HDiv`/`HMod`/
@@ -656,14 +790,50 @@ impl Environment {
     /// reducers for `UInt{N}.div/.mod/.land/.lor` were already registered; only
     /// the backing constants and the instances were missing.
     ///
-    /// `^^^` (`HXor`), `<<<` (`HShiftLeft`) and `>>>` (`HShiftRight`) are
-    /// deliberately NOT added here. `Nat.shiftRight` is still an admitted axiom
-    /// in the prelude (`register_nat_shiftright_def` is not on the
-    /// `with_prelude` path), so a `UInt{N}.shiftRight` built on it would be
-    /// axiom-BEARING, unlike every other constant in this overlay; and the shift
-    /// classes are `homogeneous: false` in the elaborator's binop desugaring
-    /// (independent shift-amount slot), so they are a different elaboration
-    /// problem, not a missing-instance one.
+    /// MEASURED GAP THIS CLOSES (2026-09-16): `a ^^^ b`, `a <<< b`, `a >>> b`
+    /// and `a.toUInt64` did not elaborate at any UInt width (`failed to
+    /// synthesize instance HXor UInt64 UInt64 UInt64`; `Unknown projection field
+    /// toUInt64 on structure UInt8`), so a hash, a checksum, a bit-pack or any
+    /// mixed-width helper could not even be STATED against this prelude — in a
+    /// definition or in a theorem.
+    ///
+    /// This comment used to say `^^^`/`<<<`/`>>>` were deliberately left out,
+    /// for two reasons. Both were re-examined rather than inherited:
+    ///
+    /// * *"`Nat.shiftRight` is an admitted axiom on the `with_prelude` path, so
+    ///   `UInt{N}.shiftRight` would be axiom-bearing."* Still true of
+    ///   `Nat.shiftRight`, and the reason `UInt{N}.shiftRight` is NOT built on
+    ///   it — see `init_one_uint_arith`. The overlay stays axiom-free
+    ///   (`test_uint8_defs_axiom_free_and_arith_overlay_axiom_free`).
+    /// * *"The shift classes are `homogeneous: false` in the elaborator, so it
+    ///   is a different elaboration problem."* Half right, and the half that
+    ///   was right needed a second fix rather than a refusal. `homogeneous:
+    ///   false` is correct — Lean does not route `<<<`/`>>>` through `binop%`
+    ///   either (`src/Init/Notation.lean` gives only `^^^` a `binop%` rule) —
+    ///   and the MEASURED failure (`a <<< b`, two variables) had all three slots
+    ///   already resolved to `UInt64`, so for it the missing instance was the
+    ///   whole story. A NUMERAL amount (`a <<< 3`, `(1 : UInt64) <<< 65`) was
+    ///   not: it defaulted to `Nat` and asked for `HShiftLeft UInt64 Nat
+    ///   UInt64`, which exists in neither prelude. Lean types it at the carrier
+    ///   because `@[default_instance] instance [ShiftLeft α] : HShiftLeft α α α`
+    ///   outranks `@[default_instance 100] instOfNatNat`; Clean now does the
+    ///   same by resolving the actual dictionary in the numeral pass
+    ///   (`ElabCtx::resolve_shift_numeral_instance`), so the homogeneous
+    ///   premise is checked and a typed Nat operand keeps its own type.
+    ///
+    /// Instances are registered directly at `H{Xor,ShiftLeft,ShiftRight} W W W`,
+    /// the shape Lean reaches through its `@[default_instance]` bridges
+    /// (`instance [ShiftLeft α] : HShiftLeft α α α`, `src/Init/Prelude.lean`) and
+    /// the shape every other row of this table already uses.
+    ///
+    /// The conversions are the F-107 half of that gap (WS6.10,
+    /// `GENERAL.p12b_width_conversion`): the twelve fixed-width
+    /// `UInt{8,16,32,64}.toUInt{8,16,32,64}` had named native reducers and NO
+    /// constant, so `a.toUInt64` was "Unknown identifier". Each is now a real
+    /// definition, registered by `init_uint_conversions` from the one canonical
+    /// spelling [`Self::uint_conversion_decl`]. In IMPORT MODE the guard below
+    /// skips them with the rest of the overlay: the genuine Lean declarations
+    /// enter through checked import instead.
     pub fn init_uint_arith(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE: the UInt carrier family is deliberately withheld so the
         // genuine Lean declarations can enter through checked import. Arithmetic
@@ -684,6 +854,9 @@ impl Environment {
         self.init_hmod()?;
         self.init_hand()?;
         self.init_hor()?;
+        self.init_hxor()?;
+        self.init_hshiftleft()?;
+        self.init_hshiftright()?;
         // Arithmetic literals (`x + 1`) require the OfNat resolver entry for
         // the actual carrier width, not merely the UInt64 instance.
         self.init_ofnat_uint8()?;
@@ -691,8 +864,11 @@ impl Environment {
         self.init_ofnat_uint32()?;
         self.init_ofnat_uint64()?;
 
-        for name in ["UInt8", "UInt16", "UInt32", "UInt64"] {
+        for name in FIXED_WIDTH_UINTS {
             self.init_one_uint_arith(name)?;
+            for (class, op) in [("ShiftLeft", "shiftLeft"), ("ShiftRight", "shiftRight")] {
+                self.add_homogeneous_shift_instance(class, name, &format!("{name}.{op}"))?;
+            }
             for (class, ctor, op) in [
                 ("HAdd", "HAdd.mk", "add"),
                 ("HSub", "HSub.mk", "sub"),
@@ -701,6 +877,9 @@ impl Environment {
                 ("HMod", "HMod.mk", "mod"),
                 ("HAnd", "HAnd.mk", "land"),
                 ("HOr", "HOr.mk", "lor"),
+                ("HXor", "HXor.mk", "xor"),
+                ("HShiftLeft", "HShiftLeft.mk", "shiftLeft"),
+                ("HShiftRight", "HShiftRight.mk", "shiftRight"),
             ] {
                 let inst_name = format!("inst{class}{name}");
                 self.add_homogeneous_hetero_instance(
@@ -721,6 +900,97 @@ impl Environment {
                     value: None,
                 };
                 self.ensure_exact_instance(instance)?;
+            }
+        }
+        self.init_uint_conversions()?;
+        Ok(())
+    }
+
+    /// Bit width of a concrete fixed-width UInt carrier, `None` for anything
+    /// else — `USize` included, on purpose: its width is
+    /// `System.Platform.numBits`, opaque in the kernel exactly as in Lean, so no
+    /// literal stands for it.
+    fn fixed_uint_width(name: &str) -> Option<u64> {
+        match name {
+            "UInt8" => Some(8),
+            "UInt16" => Some(16),
+            "UInt32" => Some(32),
+            "UInt64" => Some(64),
+            _ => None,
+        }
+    }
+
+    /// Trust: the twelve fixed-width conversions `UInt{N}.toUInt{M}` (`N != M`)
+    /// and the four `Nat.toUInt{N}` abbreviations — the everyday `as u64` /
+    /// `as u8`. Transcribed from Lean v4.30.0-rc2
+    /// `src/Init/Data/UInt/BasicAux.lean`:
+    ///
+    /// ```text
+    /// abbrev Nat.toUInt8 := UInt8.ofNat
+    /// def UInt64.toUInt8 (a : UInt64) : UInt8  := a.toNat.toUInt8          -- narrowing
+    /// def UInt8.toUInt64 (a : UInt8)  : UInt64 :=
+    ///   ⟨⟨a.toNat, Nat.lt_trans a.toBitVec.isLt (by decide)⟩⟩              -- widening
+    /// ```
+    ///
+    /// Both directions are declared here as ONE body,
+    ///
+    /// ```text
+    /// UInt{N}.toUInt{M} a := UInt{M}.ofNat (UInt{N}.toNat a)
+    /// ```
+    ///
+    /// For NARROWING that is Lean's body verbatim once the `Nat.toUInt{M}`
+    /// abbreviation is unfolded: truncation, `a.toNat % 2^M`. For WIDENING
+    /// Lean's body carries `a.toNat` with a bound proof instead of reducing it;
+    /// the two agree on every value because `a.toNat < 2^N <= 2^M` makes
+    /// `a.toNat % 2^M = a.toNat` — zero-extension, and the `%` never bites. The
+    /// proof-carrying spelling is not used because it would need `BitVec.isLt`
+    /// and a `decide` on `2^N < 2^M` assembled by hand for no change in value;
+    /// the deviation is definitional shape only, the same one every arithmetic
+    /// row of this overlay already has against Lean's `⟨a.toBitVec + …⟩`.
+    ///
+    /// The native reducers keyed on these names (`native_reducers_uint_conv.rs`:
+    /// `n % 2^M` narrowing, identity widening) compute the same function and
+    /// are pinned against these bodies by
+    /// `test_uint_conversion_bodies_agree_with_native_reducers` and, over every
+    /// width pair at both widths' boundary values plus a wrong-width mutation
+    /// control, by `native_reducers_uint_conv_tests.rs` (WS6.10). Like the
+    /// arithmetic reducers they accept only a bare `Nat` literal operand, so
+    /// they decline on a well-typed `UInt{N}` term and the body is what reduces.
+    ///
+    /// The twelve `UInt{N}.toUInt{M}` bodies are built by ONE function,
+    /// [`Self::uint_conversion_decl`], so the constant the prelude registers
+    /// and the canonical shape the tests compare against are the same
+    /// spelling by construction (this landed twice on divergent lines — the
+    /// `^^^`/`<<<`/`>>>` batch and WS6.10 — with byte-identical bodies; the
+    /// merge kept one builder rather than two agreeing copies).
+    ///
+    /// `USize` conversions stay absent: the target (or source) width is opaque.
+    fn init_uint_conversions(&mut self) -> Result<(), EnvError> {
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        for to in FIXED_WIDTH_UINTS {
+            let to_ty = Expr::const_(Name::from_string(to), vec![]);
+            let of_nat = Expr::const_(Name::from_string(&format!("{to}.ofNat")), vec![]);
+            // abbrev Nat.toUInt{M} := UInt{M}.ofNat, at Lean's type
+            // `(n : @& Nat) → UInt{M}`: the borrowed-argument annotation is
+            // `mdata {borrowed := true}` on the binder domain in the stored
+            // type (pinned v4.30.0-rc2, `repr` of `Nat.toUInt8`'s type), and
+            // the collision census compares the stored type.
+            self.ensure_exact_checked_decl(Declaration::Definition {
+                name: Name::from_string(&format!("Nat.to{to}")),
+                level_params: vec![],
+                type_: Expr::pi(
+                    BinderInfo::Default,
+                    crate::env::lean_nat_spelling::LeanNat::borrowed(nat.clone()),
+                    to_ty.clone(),
+                ),
+                value: of_nat.clone(),
+                is_reducible: true,
+            })?;
+            for from in FIXED_WIDTH_UINTS {
+                if from == to {
+                    continue;
+                }
+                self.ensure_exact_checked_decl(Self::uint_conversion_decl(from, to))?;
             }
         }
         Ok(())
@@ -1026,6 +1296,118 @@ mod carrier_fidelity_tests {
         }
     }
 
+    /// Census every shift dictionary, including quantified bridges. The four
+    /// BitVec dictionaries have exact Nat or independently sized BitVec inputs;
+    /// every other prelude dictionary remains homogeneous. No entry is skipped.
+    #[test]
+    fn test_prelude_shift_instance_carriers_are_exact() {
+        let env = Environment::with_prelude();
+        let mut checked = 0usize;
+        let mut bitvec_checked = 0usize;
+        for class in ["HShiftLeft", "HShiftRight"] {
+            let class_name = Name::from_string(class);
+            for inst in env.get_class_instances(&class_name) {
+                let info = env.get_const(&inst.name).unwrap_or_else(|| {
+                    panic!(
+                        "instance {} is registered for {class} but has no declaration",
+                        inst.name
+                    )
+                });
+                let mut ty = &info.type_;
+                let mut parameters = Vec::new();
+                while let ExprKind::Pi(binder, parameter, body) = ty.kind() {
+                    parameters.push((binder.info, parameter.clone()));
+                    ty = body;
+                }
+                assert!(
+                    is_const(ty.get_app_fn(), class),
+                    "instance {} must be a {class} application, got head {:?}",
+                    inst.name,
+                    ty.get_app_fn().kind(),
+                );
+                let args = ty.get_app_args();
+                assert_eq!(
+                    args.len(),
+                    3,
+                    "instance {} : {class} must take exactly 3 type arguments, got {}",
+                    inst.name,
+                    args.len(),
+                );
+                let bitvec_nat_name = format!("BitVec.inst{class}Nat");
+                let bitvec_name = format!("BitVec.inst{class}");
+                let name = inst.name.to_string();
+                if name == bitvec_nat_name || name == bitvec_name {
+                    assert_eq!(args[0], args[2], "BitVec result preserves its width");
+                    assert!(is_const(args[0].get_app_fn(), "BitVec"));
+                    let bitvec_amount = name == bitvec_name;
+                    assert_eq!(parameters.len(), if bitvec_amount { 2 } else { 1 });
+                    for (binder, parameter) in &parameters {
+                        assert_eq!(*binder, BinderInfo::Implicit);
+                        assert_eq!(
+                            parameter.as_ref(),
+                            &Expr::const_(Name::from_string("Nat"), vec![])
+                        );
+                    }
+                    assert_eq!(
+                        args[0].get_app_args().as_slice(),
+                        &[&Expr::bvar(if bitvec_amount { 1 } else { 0 })]
+                    );
+                    if bitvec_amount {
+                        assert!(is_const(args[1].get_app_fn(), "BitVec"));
+                        assert_eq!(args[1].get_app_args().as_slice(), &[&Expr::bvar(0)]);
+                    } else {
+                        assert_eq!(args[1], &Expr::const_(Name::from_string("Nat"), vec![]));
+                    }
+                    bitvec_checked += 1;
+                } else {
+                    assert!(
+                        args[0] == args[1] && args[1] == args[2],
+                        "HETEROGENEOUS prelude shift instance {} : {class} {:?} {:?} {:?}; \
+                     keep the full heterogeneous amount semantics explicit.",
+                        inst.name,
+                        args[0].kind(),
+                        args[1].kind(),
+                        args[2].kind(),
+                    );
+                }
+                checked += 1;
+            }
+        }
+        assert_eq!(bitvec_checked, 4, "both amount types at both shift classes");
+        // Non-vacuity: the invariant is only worth anything if the prelude
+        // actually registers shift instances for it to range over (4 widths x
+        // 2 classes at the time of writing).
+        assert!(
+            checked >= 8 + bitvec_checked,
+            "expected at least 8 non-BitVec shift instances plus {bitvec_checked} BitVec instances, \
+             saw {checked} -- a vacuous pass means the lookup, not the prelude, changed",
+        );
+
+        // POSITIVE CONTROL for the predicate itself. `instHPowIntNat : HPow
+        // Int Nat Int` (`env/algebra_hetero.rs`, via `add_hetero3_instance`) is
+        // a genuinely heterogeneous instance this same prelude DOES register,
+        // so the `args[0] == args[1] == args[2]` test above is measured to
+        // discriminate rather than assumed to: if it could not tell the two
+        // apart, this assertion would fail and the guard above would be
+        // passing vacuously on shape.
+        let mut hetero_seen = 0usize;
+        for inst in env.get_class_instances(&Name::from_string("HPow")) {
+            let Some(info) = env.get_const(&inst.name) else {
+                continue;
+            };
+            let args = info.type_.get_app_args();
+            if args.len() == 3 && !(args[0] == args[1] && args[1] == args[2]) {
+                hetero_seen += 1;
+            }
+        }
+        assert!(
+            hetero_seen >= 1,
+            "positive control: expected at least one HETEROGENEOUS HPow instance \
+             (instHPowIntNat : HPow Int Nat Int) so the homogeneity test above is \
+             measured to have teeth; saw {hetero_seen}",
+        );
+    }
+
     /// FIDELITY: `UInt<w>.ofBitVec`'s constructor argument type is `BitVec <w>`
     /// (NOT `Fin _`), and `UInt<w>.toBitVec`'s result type is `BitVec <w>`.
     #[test]
@@ -1125,7 +1507,28 @@ mod carrier_fidelity_tests {
             );
         }
         for w in ["UInt8", "UInt16", "UInt32", "UInt64"] {
-            for op in ["add", "sub", "mul", "div", "mod", "land", "lor"] {
+            for op in [
+                "add",
+                "sub",
+                "mul",
+                "div",
+                "mod",
+                "land",
+                "lor",
+                "xor",
+                "shiftLeft",
+                "shiftRight",
+            ]
+            .into_iter()
+            .map(String::from)
+            .chain(
+                // The cross-width conversions are part of the same overlay and
+                // carry the same obligation.
+                ["UInt8", "UInt16", "UInt32", "UInt64"]
+                    .into_iter()
+                    .filter(|to| *to != w)
+                    .map(|to| format!("to{to}")),
+            ) {
                 let cname = format!("{w}.{op}");
                 let name = Name::from_string(&cname);
                 let info = env
@@ -1146,7 +1549,18 @@ mod carrier_fidelity_tests {
             }
         }
         // USize is width-abstract: NO arithmetic constant may exist for it.
-        for op in ["add", "sub", "mul", "div", "mod", "land", "lor"] {
+        for op in [
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "mod",
+            "land",
+            "lor",
+            "xor",
+            "shiftLeft",
+            "shiftRight",
+        ] {
             assert!(
                 env.get_const(&Name::from_string(&format!("USize.{op}")))
                     .is_none(),
@@ -1252,6 +1666,368 @@ mod carrier_fidelity_tests {
         }
     }
 
+    // ── xor / shiftLeft / shiftRight / toUInt{M} ───────────────────────────
+
+    /// `(carrier, bit width)`.
+    const BIT_WIDTHS: [(&str, u32); 4] =
+        [("UInt8", 8), ("UInt16", 16), ("UInt32", 32), ("UInt64", 64)];
+
+    fn uint_of(carrier: &str, n: u64) -> Expr {
+        Expr::app(
+            Expr::const_(Name::from_string(&format!("{carrier}.ofNat")), vec![]),
+            Expr::nat_lit(n),
+        )
+    }
+
+    fn uint_binop(carrier: &str, op: &str, a: u64, b: u64) -> Expr {
+        Expr::apps(
+            Expr::const_(Name::from_string(&format!("{carrier}.{op}")), vec![]),
+            [uint_of(carrier, a), uint_of(carrier, b)],
+        )
+    }
+
+    fn uint_to_nat(carrier: &str, e: Expr) -> Expr {
+        Expr::app(
+            Expr::const_(Name::from_string(&format!("{carrier}.toNat")), vec![]),
+            e,
+        )
+    }
+
+    fn max_of(bits: u32) -> u64 {
+        if bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
+        }
+    }
+
+    /// Lean 4's semantics, written independently of BOTH things under test (the
+    /// declared bodies and the native reducers), in `u128` so nothing here can
+    /// wrap by accident: shift amount mod the width, result mod `2^width`.
+    fn lean_model(op: &str, bits: u32, a: u64, b: u64) -> u64 {
+        let modulus = 1u128 << bits;
+        let amount = u128::from(b) % u128::from(bits);
+        let r = match op {
+            "xor" => u128::from(a ^ b),
+            "shiftLeft" => (u128::from(a) << amount) % modulus,
+            "shiftRight" => u128::from(a) >> amount,
+            other => panic!("no model for {other}"),
+        };
+        u64::try_from(r).expect("result fits the carrier")
+    }
+
+    /// Facts that are TRUE in Lean 4 (each is `by decide` / `rfl` there), and
+    /// for each one a CLOSE NEGATIVE TWIN the kernel must refuse. The twins are
+    /// not arbitrary wrong numbers: each is the answer a plausible WRONG
+    /// semantics would give — shift-by-width-is-zero (`checked_shl`), Rust's
+    /// unmasked shift, a non-wrapping left shift, `or` in place of `xor`.
+    #[test]
+    fn test_uint_xor_shift_values_match_lean_and_reject_near_misses() {
+        let env = Environment::with_prelude();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        // (carrier, op, a, b, Lean's answer, the near-miss that must be refused)
+        let cases: &[(&str, &str, u64, u64, u64, u64)] = &[
+            // xor — `0xF0F0 ^^^ 0xFF00 = 0x0FF0` is probe 07d; twin is `|||`.
+            ("UInt64", "xor", 0xF0F0, 0xFF00, 0x0FF0, 0xFFF0),
+            ("UInt8", "xor", 0xFF, 0xFF, 0, 0xFF),
+            ("UInt8", "xor", 0xAA, 0x55, 0xFF, 0),
+            ("UInt64", "xor", u64::MAX, 1, u64::MAX - 1, u64::MAX),
+            // shiftLeft — amount is taken MOD THE WIDTH. `1 <<< 65 = 2` is probe
+            // 07e; the twin `0` is what `checked_shl(..).unwrap_or(0)` answers.
+            ("UInt64", "shiftLeft", 1, 3, 8, 4),
+            ("UInt64", "shiftLeft", 1, 65, 2, 0),
+            ("UInt64", "shiftLeft", 1, 64, 1, 0),
+            ("UInt8", "shiftLeft", 1, 8, 1, 0),
+            ("UInt8", "shiftLeft", 1, 254, 64, 0),
+            // ... and the RESULT wraps mod 2^w; the twin is the unwrapped value.
+            ("UInt8", "shiftLeft", 0xFF, 1, 0xFE, 0x1FE),
+            ("UInt8", "shiftLeft", 0x81, 1, 0x02, 0x102),
+            ("UInt64", "shiftLeft", u64::MAX, 63, 1 << 63, u64::MAX),
+            ("UInt16", "shiftLeft", 1, 17, 2, 0),
+            ("UInt32", "shiftLeft", 1, 33, 2, 0),
+            // shiftRight — same amount rule; logical (zero-filling).
+            ("UInt64", "shiftRight", 0xF0, 4, 0x0F, 0xF0),
+            ("UInt64", "shiftRight", 8, 67, 1, 0),
+            ("UInt64", "shiftRight", u64::MAX, 64, u64::MAX, 0),
+            ("UInt64", "shiftRight", u64::MAX, 63, 1, u64::MAX),
+            ("UInt8", "shiftRight", 0x80, 7, 1, 0xFF),
+            ("UInt8", "shiftRight", 0x80, 8, 0x80, 0),
+            ("UInt8", "shiftRight", 0x80, 9, 0x40, 0),
+            ("UInt16", "shiftRight", 0x8000, 16, 0x8000, 0),
+            ("UInt32", "shiftRight", 0x8000_0000, 32, 0x8000_0000, 0),
+        ];
+        for &(carrier, op, a, b, expected, near_miss) in cases {
+            let bits = BIT_WIDTHS
+                .iter()
+                .find(|(c, _)| *c == carrier)
+                .expect("known carrier")
+                .1;
+            assert_eq!(
+                lean_model(op, bits, a, b),
+                expected,
+                "test table is wrong about Lean: {carrier}.{op} {a} {b}"
+            );
+            assert_ne!(
+                expected, near_miss,
+                "a twin equal to the answer tests nothing"
+            );
+            let term = uint_binop(carrier, op, a, b);
+            assert!(
+                tc.is_def_eq(&term, &uint_of(carrier, expected)),
+                "{carrier}.{op} {a:#x} {b} must reduce to {expected:#x}"
+            );
+            // The twin is compared at `Nat`, through `.toNat`, NOT by wrapping it
+            // into the carrier: `UInt8.ofNat 0x1FE` IS `0xFE`, so a carrier-level
+            // comparison would silently turn the "did not wrap" twin into the
+            // right answer and the refusal below into a false alarm.
+            let as_nat = uint_to_nat(carrier, term);
+            assert!(tc.is_def_eq(&as_nat, &Expr::nat_lit(expected)));
+            assert!(
+                !tc.is_def_eq(&as_nat, &Expr::nat_lit(near_miss)),
+                "({carrier}.{op} {a:#x} {b}).toNat = {near_miss:#x} is FALSE in Lean \
+                 and must be refused"
+            );
+        }
+    }
+
+    /// The per-width native reducers have been keyed on `UInt{N}.xor`,
+    /// `.shiftLeft` and `.shiftRight` since before any constant carried those
+    /// names. Declaring the constants is what makes a disagreement possible, so
+    /// the three are pinned against each other at every width and every edge:
+    /// the DECLARED BODY (kernel reduction), the NATIVE REDUCER (called
+    /// directly, on the bare literals it accepts), and an independent model of
+    /// Lean. A reducer that disagreed with its body would give one ground term
+    /// two values.
+    #[test]
+    fn test_uint_xor_shift_bodies_agree_with_native_reducers() {
+        use crate::env::native_reducers_uint as nr;
+        type Reducer = fn(&[&Expr]) -> Option<Expr>;
+        let reducers: [(&str, [(&str, Reducer); 3]); 4] = [
+            (
+                "UInt8",
+                [
+                    ("xor", nr::reduce_uint8_xor),
+                    ("shiftLeft", nr::reduce_uint8_shl),
+                    ("shiftRight", nr::reduce_uint8_shr),
+                ],
+            ),
+            (
+                "UInt16",
+                [
+                    ("xor", nr::reduce_uint16_xor),
+                    ("shiftLeft", nr::reduce_uint16_shl),
+                    ("shiftRight", nr::reduce_uint16_shr),
+                ],
+            ),
+            (
+                "UInt32",
+                [
+                    ("xor", nr::reduce_uint32_xor),
+                    ("shiftLeft", nr::reduce_uint32_shl),
+                    ("shiftRight", nr::reduce_uint32_shr),
+                ],
+            ),
+            (
+                "UInt64",
+                [
+                    ("xor", nr::reduce_uint64_xor),
+                    ("shiftLeft", nr::reduce_uint64_shl),
+                    ("shiftRight", nr::reduce_uint64_shr),
+                ],
+            ),
+        ];
+        let env = Environment::with_prelude();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        for ((carrier, ops), (_, bits)) in reducers.iter().zip(BIT_WIDTHS) {
+            let max = max_of(bits);
+            let w = u64::from(bits);
+            let values = [0, 1, 0x5A, max >> 1, (max >> 1) + 1, max];
+            // Amounts: none, one, the last in-range, exactly the width, past it,
+            // a multiple of it, and the largest the carrier can express.
+            let amounts = [0, 1, w - 1, w, w + 1, 2 * w, max];
+            for (op, reducer) in ops {
+                for a in values {
+                    for b in amounts.into_iter().filter(|b| *b <= max) {
+                        let model = lean_model(op, bits, a, b);
+                        let (la, lb) = (Expr::nat_lit(a), Expr::nat_lit(b));
+                        let native = reducer(&[&la, &lb])
+                            .unwrap_or_else(|| panic!("{carrier}.{op} reducer declined"));
+                        assert_eq!(
+                            native,
+                            Expr::nat_lit(model),
+                            "NATIVE {carrier}.{op} {a:#x} {b} disagrees with Lean"
+                        );
+                        let body = uint_to_nat(carrier, uint_binop(carrier, op, a, b));
+                        assert!(
+                            tc.is_def_eq(&body, &Expr::nat_lit(model)),
+                            "BODY {carrier}.{op} {a:#x} {b} must be {model:#x}"
+                        );
+                        assert!(
+                            !tc.is_def_eq(&body, &Expr::nat_lit(model ^ 1)),
+                            "BODY {carrier}.{op} {a:#x} {b} must not also be {:#x}",
+                            model ^ 1
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    fn uint_conv(from: &str, to: &str, a: u64) -> Expr {
+        Expr::app(
+            Expr::const_(Name::from_string(&format!("{from}.to{to}")), vec![]),
+            uint_of(from, a),
+        )
+    }
+
+    /// `toUInt{M}`: widening is zero-extension (the value is unchanged),
+    /// narrowing is truncation (`a.toNat % 2^M`). Negative twins: a widening
+    /// that sign-extends, a narrowing that saturates or keeps the HIGH byte.
+    #[test]
+    fn test_uint_conversions_zero_extend_and_truncate() {
+        let env = Environment::with_prelude();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        // (from, to, a, Lean's answer, near-miss)
+        let cases: &[(&str, &str, u64, u64, u64)] = &[
+            // probe 06c / 06d
+            ("UInt8", "UInt64", 200, 200, u64::MAX - 55), // not sign-extended
+            ("UInt64", "UInt8", 0x1234, 0x34, 0x12),      // low byte, not high
+            ("UInt64", "UInt8", 0x1234, 0x34, 0xFF),      // truncates, not saturates
+            ("UInt8", "UInt16", 0xFF, 0xFF, 0xFFFF),
+            ("UInt8", "UInt32", 0x80, 0x80, 0xFFFF_FF80),
+            ("UInt16", "UInt32", 0xFFFF, 0xFFFF, 0xFFFF_FFFF),
+            ("UInt16", "UInt64", 0x8000, 0x8000, 0xFFFF_FFFF_FFFF_8000),
+            ("UInt32", "UInt64", 0xFFFF_FFFF, 0xFFFF_FFFF, u64::MAX),
+            ("UInt16", "UInt8", 0x0100, 0, 1),
+            ("UInt16", "UInt8", 0xFFFF, 0xFF, 0),
+            ("UInt32", "UInt8", 0xDEAD_BEEF, 0xEF, 0xDE),
+            ("UInt32", "UInt16", 0xDEAD_BEEF, 0xBEEF, 0xDEAD),
+            ("UInt64", "UInt16", u64::MAX, 0xFFFF, 0),
+            ("UInt64", "UInt32", 0x1_0000_0000, 0, 1),
+            ("UInt64", "UInt32", u64::MAX, 0xFFFF_FFFF, 0),
+        ];
+        for &(from, to, a, expected, near_miss) in cases {
+            let term = uint_conv(from, to, a);
+            let ty = tc
+                .infer_type(&term)
+                .unwrap_or_else(|e| panic!("{from}.to{to} must type-check: {e:?}"));
+            assert!(is_const(&ty, to), "{from}.to{to} : {to}, got {ty:?}");
+            assert!(
+                tc.is_def_eq(&term, &uint_of(to, expected)),
+                "{from}.to{to} {a:#x} must be {expected:#x}"
+            );
+            assert!(
+                !tc.is_def_eq(&term, &uint_of(to, near_miss)),
+                "{from}.to{to} {a:#x} = {near_miss:#x} is FALSE in Lean"
+            );
+        }
+        // Round trip: widen-then-narrow is the identity; narrow-then-widen is
+        // NOT (it loses the high bits) — the twin that keeps this honest.
+        let up_down = Expr::app(
+            Expr::const_(Name::from_string("UInt64.toUInt8"), vec![]),
+            uint_conv("UInt8", "UInt64", 0xAB),
+        );
+        assert!(tc.is_def_eq(&up_down, &uint_of("UInt8", 0xAB)));
+        let down_up = Expr::app(
+            Expr::const_(Name::from_string("UInt8.toUInt64"), vec![]),
+            uint_conv("UInt64", "UInt8", 0x1AB),
+        );
+        assert!(tc.is_def_eq(&down_up, &uint_of("UInt64", 0xAB)));
+        assert!(!tc.is_def_eq(&down_up, &uint_of("UInt64", 0x1AB)));
+        // `Nat.toUInt8` is Lean's abbreviation for `UInt8.ofNat`, wrap included.
+        let nat_to = Expr::app(
+            Expr::const_(Name::from_string("Nat.toUInt8"), vec![]),
+            Expr::nat_lit(300),
+        );
+        assert!(tc.is_def_eq(&nat_to, &uint_of("UInt8", 44)));
+        assert!(!tc.is_def_eq(&nat_to, &uint_of("UInt8", 255)));
+        // No same-width conversion and nothing at USize: neither exists in the
+        // source these were transcribed from / the width is opaque.
+        for absent in [
+            "UInt8.toUInt8",
+            "UInt64.toUInt64",
+            "USize.toUInt8",
+            "UInt8.toUSize",
+        ] {
+            assert!(
+                env.get_const(&Name::from_string(absent)).is_none(),
+                "{absent} must not be declared by this overlay"
+            );
+        }
+    }
+
+    /// Same three-way pin as the shifts, for the conversion reducers
+    /// (`native_reducers_uint_conv.rs`): `n % 2^M` narrowing, identity widening.
+    #[test]
+    fn test_uint_conversion_bodies_agree_with_native_reducers() {
+        use crate::env::native_reducers_uint_conv as nc;
+        type Reducer = fn(&[&Expr]) -> Option<Expr>;
+        let table: [(&str, &str, Reducer); 12] = [
+            ("UInt16", "UInt8", nc::reduce_uint16_to_uint8),
+            ("UInt32", "UInt8", nc::reduce_uint32_to_uint8),
+            ("UInt32", "UInt16", nc::reduce_uint32_to_uint16),
+            ("UInt64", "UInt8", nc::reduce_uint64_to_uint8),
+            ("UInt64", "UInt16", nc::reduce_uint64_to_uint16),
+            ("UInt64", "UInt32", nc::reduce_uint64_to_uint32),
+            ("UInt8", "UInt16", nc::reduce_uint8_to_uint16),
+            ("UInt8", "UInt32", nc::reduce_uint8_to_uint32),
+            ("UInt8", "UInt64", nc::reduce_uint8_to_uint64),
+            ("UInt16", "UInt32", nc::reduce_uint16_to_uint32),
+            ("UInt16", "UInt64", nc::reduce_uint16_to_uint64),
+            ("UInt32", "UInt64", nc::reduce_uint32_to_uint64),
+        ];
+        let bits_of = |c: &str| BIT_WIDTHS.iter().find(|(n, _)| *n == c).expect("known").1;
+        let env = Environment::with_prelude();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        for (from, to, reducer) in table {
+            let (fb, tb) = (bits_of(from), bits_of(to));
+            let from_max = max_of(fb);
+            for a in [0, 1, 0xFF, 0x100, from_max >> 1, from_max - 1, from_max] {
+                let a = a.min(from_max);
+                let model = if tb >= 64 { a } else { a % (1u64 << tb) };
+                let lit = Expr::nat_lit(a);
+                let native =
+                    reducer(&[&lit]).unwrap_or_else(|| panic!("{from}.to{to} reducer declined"));
+                assert_eq!(
+                    native,
+                    Expr::nat_lit(model),
+                    "NATIVE {from}.to{to} {a:#x} disagrees with Lean"
+                );
+                let body = uint_to_nat(to, uint_conv(from, to, a));
+                assert!(
+                    tc.is_def_eq(&body, &Expr::nat_lit(model)),
+                    "BODY {from}.to{to} {a:#x} must be {model:#x}"
+                );
+                assert!(!tc.is_def_eq(&body, &Expr::nat_lit(model ^ 1)));
+            }
+        }
+    }
+
+    /// The width helper fails CLOSED: an unknown carrier is an error, never a
+    /// guessed width baked into a shift body.
+    #[test]
+    fn test_uint_arith_refuses_a_carrier_with_no_fixed_width() {
+        let mut env = Environment::new();
+        env.init_nat().expect("Nat");
+        env.init_uint_types().expect("UInt carriers");
+        // (`Nat` would be the wrong third witness: `Nat.shiftLeft` is a real
+        // constant of its own, so its presence says nothing about this gate.)
+        for bogus in ["USize", "UInt128", "Bool"] {
+            let error = env
+                .init_one_uint_arith(bogus)
+                .expect_err("no fixed width, no machine arithmetic");
+            assert!(
+                matches!(error, EnvError::UnknownInductive(ref n) if n.to_string() == bogus),
+                "unexpected error for {bogus}: {error:?}"
+            );
+            assert!(
+                env.get_const(&Name::from_string(&format!("{bogus}.shiftLeft")))
+                    .is_none(),
+                "{bogus}.shiftLeft must not have been declared"
+            );
+        }
+    }
+
     /// Retry after an intentionally half-completed first width. The exact
     /// declaration gate must resume rather than duplicate/fail, and repeated
     /// complete calls must not duplicate resolver entries.
@@ -1286,6 +2062,9 @@ mod carrier_fidelity_tests {
                 ("HMod", "mod"),
                 ("HAnd", "land"),
                 ("HOr", "lor"),
+                ("HXor", "xor"),
+                ("HShiftLeft", "shiftLeft"),
+                ("HShiftRight", "shiftRight"),
             ] {
                 assert!(
                     env.get_const(&Name::from_string(&format!("{width}.{op}")))
@@ -1352,14 +2131,36 @@ mod carrier_fidelity_tests {
     #[test]
     fn test_usize_arithmetic_is_honestly_unwired() {
         let env = Environment::with_prelude();
-        for op in ["add", "sub", "mul", "div", "mod", "land", "lor"] {
+        for op in [
+            "add",
+            "sub",
+            "mul",
+            "div",
+            "mod",
+            "land",
+            "lor",
+            "xor",
+            "shiftLeft",
+            "shiftRight",
+        ] {
             assert!(
                 env.get_const(&Name::from_string(&format!("USize.{op}")))
                     .is_none(),
                 "USize.{op} must stay absent until platform width is bound"
             );
         }
-        for class in ["HAdd", "HSub", "HMul", "HDiv", "HMod", "HAnd", "HOr"] {
+        for class in [
+            "HAdd",
+            "HSub",
+            "HMul",
+            "HDiv",
+            "HMod",
+            "HAnd",
+            "HOr",
+            "HXor",
+            "HShiftLeft",
+            "HShiftRight",
+        ] {
             assert!(
                 !env.is_instance(&Name::from_string(&format!("inst{class}USize"))),
                 "inst{class}USize must not claim portable fixed-width semantics"

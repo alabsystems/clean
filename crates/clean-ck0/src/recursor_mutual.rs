@@ -30,12 +30,15 @@
 //!   params    : BVar(ni_t+M+N+1) ..
 //! ```
 
-use crate::inductive::{count_pi, pi_domains_with_info, AdmitError};
+use crate::inductive::{count_pi, pi_domains_with_info, AdmitError, InductiveDecl};
 use crate::level::Level;
 use crate::mutual::{gather_block_ctor_infos, BlockCtorInfo, MutualBlock};
 use crate::name::Name;
 use crate::rawexpr::BinderInfo;
-use crate::recursor::{IotaRule, RecursorData};
+use crate::recursor::{
+    check_derived_depth, check_rule_width, check_telescope_width, IotaRule, RecursorData,
+    MAX_DERIVED_ARITY, MAX_INDUCTIVE_WIDTH,
+};
 use crate::term::{ConstRef, Term, TermKind};
 use crate::validate::Env;
 
@@ -47,6 +50,25 @@ pub(crate) fn build_block_recursors(
     large_elim: bool,
 ) -> Result<Vec<RecursorData>, AdmitError> {
     let nlp = block.num_level_params();
+    if nlp > MAX_DERIVED_ARITY {
+        return Err(AdmitError::Derivation {
+            ind: block
+                .decls
+                .first()
+                .map_or_else(Name::anonymous, |d| d.name.clone()),
+            detail: format!("too many universe level params ({nlp} > {MAX_DERIVED_ARITY})"),
+        });
+    }
+    let num_types = block.decls.len();
+    if num_types > MAX_INDUCTIVE_WIDTH {
+        return Err(AdmitError::Derivation {
+            ind: block
+                .decls
+                .first()
+                .map_or_else(Name::anonymous, |d| d.name.clone()),
+            detail: format!("too many types in the block ({num_types} > {MAX_INDUCTIVE_WIDTH})"),
+        });
+    }
     let (rec_num_levels, motive_univ, ind_level_subst) = if large_elim {
         let ind_subst: Vec<Level> = (0..nlp)
             .map(|i| Level::param(i.saturating_add(1)))
@@ -58,16 +80,33 @@ pub(crate) fn build_block_recursors(
     };
     let _ = ind_sorts;
 
-    let ctor_infos = gather_block_ctor_infos(block, &ind_level_subst)?;
+    let ctor_infos = gather_block_ctor_infos(env, block, &ind_level_subst)?;
     let block_names = block.type_names();
+    // R166: every rule of the block binds the block's parameters, motives and
+    // minors and its constructor's fields; refused before anything is built
+    // when the widest cannot fit the depth bound.
+    let max_fields = ctor_infos.iter().map(|c| c.num_fields).max().unwrap_or(0);
+    check_rule_width(
+        block.num_params(),
+        u32::try_from(num_types).unwrap_or(u32::MAX),
+        u32::try_from(ctor_infos.len()).unwrap_or(u32::MAX),
+        max_fields,
+    )
+    .map_err(|detail| AdmitError::Derivation {
+        ind: block
+            .decls
+            .first()
+            .map_or_else(Name::anonymous, |d| d.name.clone()),
+        detail,
+    })?;
 
-    let mut recursors = Vec::with_capacity(block.decls.len());
+    let mut recursors = Vec::with_capacity(num_types);
     for (target_idx, decl) in block.decls.iter().enumerate() {
         let derr = |detail: String| AdmitError::Derivation {
             ind: decl.name.clone(),
             detail,
         };
-        let rec_name = Name::from_dotted(&format!("{}.rec", decl.name));
+        let rec_name = decl.name.str("rec");
         let cx = BlockCx {
             block,
             block_names: &block_names,
@@ -75,7 +114,17 @@ pub(crate) fn build_block_recursors(
             ind_level_subst: &ind_level_subst,
             motive_univ: &motive_univ,
         };
-        let rec_ty = build_mutual_recursor_type(&cx, target_idx).map_err(&derr)?;
+        // R166: refused before anything is built when the telescope (the whole
+        // block's motives and minors) cannot fit the depth bound.
+        check_telescope_width(
+            cx.num_params(),
+            cx.num_types(),
+            cx.num_minors(),
+            cx.num_indices_of(decl),
+        )
+        .map_err(derr)?;
+        let rec_ty = build_mutual_recursor_type(&cx, target_idx, decl).map_err(derr)?;
+        check_derived_depth(&rec_ty).map_err(derr)?;
 
         let num_params = block.num_params();
         let type_arity = count_pi(&decl.type_);
@@ -87,7 +136,8 @@ pub(crate) fn build_block_recursors(
         let mut rules = Vec::new();
         for ci in ctor_infos.iter().filter(|c| c.owner_type_idx == target_idx) {
             let rhs = crate::recursor_mutual_rhs::build_mutual_rule_rhs(&cx, rec_num_levels, ci)
-                .map_err(&derr)?;
+                .map_err(derr)?;
+            check_derived_depth(&rhs).map_err(derr)?;
             rules.push(IotaRule {
                 constructor: ci.name.clone(),
                 num_fields: ci.num_fields,
@@ -134,9 +184,8 @@ impl BlockCx<'_> {
     pub(crate) fn num_minors(&self) -> u32 {
         u32::try_from(self.ctor_infos.len()).unwrap_or(u32::MAX)
     }
-    /// Number of indices of block type `idx`.
-    pub(crate) fn num_indices_of(&self, idx: usize) -> u32 {
-        let d = &self.block.decls[idx];
+    /// Number of indices of block type `d` (one of `self.block.decls`).
+    pub(crate) fn num_indices_of(&self, d: &InductiveDecl) -> u32 {
         count_pi(&d.type_).saturating_sub(self.num_params())
     }
 }
@@ -145,18 +194,24 @@ impl BlockCx<'_> {
 // Recursor type: params -> motives(N) -> minors(M) -> indices_t -> major_t -> C.
 // ---------------------------------------------------------------------------
 
-fn build_mutual_recursor_type(cx: &BlockCx<'_>, target_idx: usize) -> Result<Term, String> {
+/// `target` is `cx.block.decls[target_idx]`; the caller holds both from one
+/// `enumerate`, so neither is looked up by the other.
+fn build_mutual_recursor_type(
+    cx: &BlockCx<'_>,
+    target_idx: usize,
+    target: &InductiveDecl,
+) -> Result<Term, String> {
     let np = cx.num_params();
     let nt = cx.num_types();
     let nm = cx.num_minors();
-    let target = &cx.block.decls[target_idx];
-    let ni = cx.num_indices_of(target_idx);
+    let ni = cx.num_indices_of(target);
 
     // Parameter + (target) index binders, level-shifted into the rec telescope.
     let param_binders: Vec<(BinderInfo, Term)> = pi_domains_with_info(&target.type_, np)
         .into_iter()
-        .map(|(bi, t)| (bi, t.instantiate_levels(cx.ind_level_subst)))
-        .collect();
+        .map(|(bi, t)| t.instantiate_levels(cx.ind_level_subst).map(|t| (bi, t)))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
     let mut after_params = target.type_.clone();
     for _ in 0..np {
         if let TermKind::Pi(_, _, codom) = after_params.kind() {
@@ -165,8 +220,9 @@ fn build_mutual_recursor_type(cx: &BlockCx<'_>, target_idx: usize) -> Result<Ter
     }
     let index_binders: Vec<(BinderInfo, Term)> = pi_domains_with_info(&after_params, ni)
         .into_iter()
-        .map(|(bi, t)| (bi, t.instantiate_levels(cx.ind_level_subst)))
-        .collect();
+        .map(|(bi, t)| t.instantiate_levels(cx.ind_level_subst).map(|t| (bi, t)))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
 
     // --- conclusion: motive_target indices major ---
     // target motive bvar (from innermost, after major+indices+minors):
@@ -232,10 +288,12 @@ fn build_mutual_recursor_type(cx: &BlockCx<'_>, target_idx: usize) -> Result<Ter
     }
 
     // --- motives (N) ---
-    let mut motive_types = Vec::with_capacity(cx.block.decls.len());
-    for j in 0..cx.block.decls.len() {
-        motive_types.push(build_mutual_motive_type(cx, j)?);
-    }
+    let motive_types = cx
+        .block
+        .decls
+        .iter()
+        .map(|d| build_mutual_motive_type(cx, d))
+        .collect::<Result<Vec<_>, _>>()?;
     for (j, mty) in motive_types.iter().enumerate().rev() {
         let j_u32 = u32::try_from(j).map_err(|_| "motive count".to_string())?;
         let lifted = if j_u32 > 0 {
@@ -255,10 +313,9 @@ fn build_mutual_recursor_type(cx: &BlockCx<'_>, target_idx: usize) -> Result<Ter
 
 /// Motive type for block type `j`: `(indices_j) -> (T_j params indices) -> Sort u`.
 /// Params are bound outside the motive entirely.
-fn build_mutual_motive_type(cx: &BlockCx<'_>, j: usize) -> Result<Term, String> {
+fn build_mutual_motive_type(cx: &BlockCx<'_>, d: &InductiveDecl) -> Result<Term, String> {
     let np = cx.num_params();
-    let d = &cx.block.decls[j];
-    let ni = cx.num_indices_of(j);
+    let ni = cx.num_indices_of(d);
     let mut after_params = d.type_.clone();
     for _ in 0..np {
         if let TermKind::Pi(_, _, codom) = after_params.kind() {
@@ -267,8 +324,9 @@ fn build_mutual_motive_type(cx: &BlockCx<'_>, j: usize) -> Result<Term, String> 
     }
     let index_binders: Vec<(BinderInfo, Term)> = pi_domains_with_info(&after_params, ni)
         .into_iter()
-        .map(|(bi, t)| (bi, t.instantiate_levels(cx.ind_level_subst)))
-        .collect();
+        .map(|(bi, t)| t.instantiate_levels(cx.ind_level_subst).map(|t| (bi, t)))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
 
     let mut mtype = Term::sort(cx.motive_univ.clone());
     // major: (T_j params indices) -> Sort u. Under the ni index binders, index i
@@ -362,11 +420,7 @@ pub(crate) fn lift_from(t: &Term, cutoff: u32, amount: u32) -> Term {
     }
 }
 
-fn kernel_check(
-    env: &dyn Env,
-    decl: &crate::inductive::InductiveDecl,
-    rec: &RecursorData,
-) -> Result<(), AdmitError> {
+fn kernel_check(env: &dyn Env, decl: &InductiveDecl, rec: &RecursorData) -> Result<(), AdmitError> {
     let mut budget = crate::mutual::admission_budget();
     crate::infer::infer_sort_in_context(env, &[], &rec.type_, &mut budget).map_err(|e| {
         AdmitError::Derivation {

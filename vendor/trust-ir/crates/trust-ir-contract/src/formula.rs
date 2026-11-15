@@ -7,6 +7,7 @@
 // Copyright 2026 Andrew Yates | License: Apache 2.0
 
 use crate::fx::FxHashSet;
+use crate::rat::RatLit;
 use serde::{Deserialize, Serialize};
 
 // Re-export Sort under the formula module path so `crate::formula::Sort`
@@ -467,9 +468,136 @@ pub enum Formula {
         args: Vec<Formula>,
         sort: Sort,
     },
+
+    /// An EXACT rational literal `num / den` of sort [`Sort::Real`]. The
+    /// payload [`RatLit`] carries the canonical decimal digit strings and
+    /// ENFORCES their syntax on construction and deserialization (see its
+    /// docs for the exact grammar and the producer-side reducedness contract).
+    ///
+    /// SEMANTICS: a `Rat` literal denotes a real number — the value the SMT-LIB
+    /// term `(/ num den)` denotes in the `Reals` theory. It is NOT an `Int`
+    /// term: `check_formula_sort`-style checkers sort it as `Real`, and an
+    /// ordering atom mixing it with an `Int`-sorted variable or literal is
+    /// ill-sorted; a producer spells an integer constant in a `Real` position
+    /// as [`Formula::rat_from_int`].
+    ///
+    /// Appended after `FnApp` so the variant index of every existing formula is
+    /// unchanged (index-based encodings of `Formula` stay stable); the newtype
+    /// payload encodes exactly as a two-string struct variant would.
+    Rat(RatLit),
+
+    /// The CONSTANT ARRAY of sort `(Array index_sort elem_sort)` that maps
+    /// every index to `value`: `λ i. value`, written in SMT-LIB as
+    /// `((as const (Array I E)) v)`. `value` is an `elem_sort`-sorted term,
+    /// evaluated once, and it may be symbolic.
+    ///
+    /// This is how a verifier states a uniform array `[v; N]` at a cost that
+    /// does not depend on `N`: `N` does not occur in the term at all. The
+    /// alternatives cost `N` (a chain of `N` `Store`s) or lose `v` (a free
+    /// base array). It is also the neutral base for a store chain: `Store`s
+    /// over `ConstArray(v)` give an array that is `v` everywhere except at the
+    /// stored indices.
+    ///
+    /// Both sorts are carried, not inferred, because SMT-LIB needs the
+    /// qualified sort `(Array I E)` and has no sort inference to recover `E`
+    /// from `v`. `Ctor`, `FnApp` and `FpToSbv` carry sorts for the same
+    /// reason. Carrying the two component sorts, rather than one full `Sort`,
+    /// means a non-array result sort cannot be represented. A consumer that
+    /// needs only the index sort, such as ay's
+    /// `const_array(index_sort, value)`, reads `index_sort` and gets the
+    /// element sort from `value`. A `Datatype` named in either sort must be
+    /// declared, exactly as for a `Var` of that sort.
+    ///
+    /// SEMANTICS: `select(ConstArray { value: v, .. }, i) = v` for EVERY `i`.
+    /// That includes indices at and beyond a Rust array's length, which a
+    /// store chain over a free base leaves unconstrained. So a producer that
+    /// models `[v; N]` this way pins the out-of-bounds lanes too. That is sound
+    /// as long as the out-of-bounds reads are obligated separately and two
+    /// Rust arrays are compared lane by lane over `0..N`, never by SMT array
+    /// equality, since two arrays that agree on `0..N` can differ beyond it.
+    /// `as const` is not in the SMT-LIB 2.6 `ArraysEx` signature. It is the
+    /// de-facto extension that ay, Z3 and cvc5 all accept, so a text consumer
+    /// whose solver lacks it must refuse the node, never approximate it.
+    ///
+    /// Appended after `Rat`, so every existing variant keeps its index and
+    /// index-based encodings of `Formula` stay stable. Formula is not on the
+    /// trust-ir wire. A `ProofFormula` carries it only as the opaque
+    /// `trust-types.Formula@1` JSON payload, which trust-types owns. JSON for
+    /// every formula without this node is unchanged, and a reader older than
+    /// this variant refuses a payload that contains it instead of
+    /// misreading it.
+    ConstArray {
+        index_sort: Sort,
+        elem_sort: Sort,
+        value: Box<Formula>,
+    },
 }
 
 impl Formula {
+    /// Checked constructor for an exact rational literal [`Formula::Rat`].
+    ///
+    /// Returns `None` unless both strings are in the canonical decimal syntax
+    /// [`RatLit`] documents: `num` = `-?[1-9][0-9]*` or `0`, `den` =
+    /// `[1-9][0-9]*`. Reducedness is not checked (see [`RatLit`]).
+    ///
+    /// ```
+    /// use trust_ir_contract::Formula;
+    ///
+    /// let half = Formula::rat("1", "2").expect("canonical");
+    /// assert_eq!(half.to_smtlib(), "(/ 1 2)");
+    /// assert_eq!(Formula::rat("-7", "3").unwrap().to_smtlib(), "(/ (- 7) 3)");
+    /// assert_eq!(Formula::rat("5", "1").unwrap().to_smtlib(), "5");
+    /// assert!(Formula::rat("01", "2").is_none(), "leading zero");
+    /// assert!(Formula::rat("1", "0").is_none(), "zero denominator");
+    /// assert!(Formula::rat("-0", "1").is_none(), "negative zero");
+    /// assert!(Formula::rat("1", "-2").is_none(), "sign belongs on the numerator");
+    /// ```
+    #[must_use]
+    pub fn rat(num: &str, den: &str) -> Option<Formula> {
+        RatLit::new(num, den).map(Formula::Rat)
+    }
+
+    /// An exact rational literal with the value of the integer `n`
+    /// (`den = "1"`), for embedding an integer constant into a `Real`-sorted
+    /// term without going through [`Formula::Int`].
+    #[must_use]
+    pub fn rat_from_int(n: i128) -> Formula {
+        Formula::Rat(RatLit::from_int(n))
+    }
+
+    /// The constant array [`Formula::ConstArray`] of sort
+    /// `(Array index_sort elem_sort)` mapping every index to `value`.
+    ///
+    /// ```
+    /// use trust_ir_contract::{Formula, Sort};
+    ///
+    /// // `[7u8; N]` for ANY N: the length does not occur in the term.
+    /// let splat = Formula::const_array(
+    ///     Sort::Int,
+    ///     Sort::BitVec(8),
+    ///     Formula::BitVec { value: 7, width: 8 },
+    /// );
+    /// assert_eq!(splat.to_smtlib(), "((as const (Array Int (_ BitVec 8))) (_ bv7 8))");
+    /// ```
+    #[must_use]
+    pub fn const_array(index_sort: Sort, elem_sort: Sort, value: Formula) -> Formula {
+        Formula::ConstArray {
+            index_sort,
+            elem_sort,
+            value: Box::new(value),
+        }
+    }
+
+    /// The `(num, den)` decimal strings of a [`Formula::Rat`] literal, else
+    /// `None`.
+    #[must_use]
+    pub fn rat_parts(&self) -> Option<(&str, &str)> {
+        match self {
+            Formula::Rat(lit) => Some((lit.num(), lit.den())),
+            _ => None,
+        }
+    }
+
     /// Collect references to all direct sub-formulas.
     #[must_use]
     pub fn children(&self) -> Vec<&Formula> {
@@ -478,6 +606,7 @@ impl Formula {
             Formula::Bool(_)
             | Formula::Int(_)
             | Formula::UInt(_)
+            | Formula::Rat { .. }
             | Formula::BitVec { .. }
             | Formula::Var(..)
             | Formula::SymVar(..) => {
@@ -586,6 +715,10 @@ impl Formula {
 
             // Uninterpreted function application: the argument terms.
             Formula::FnApp { args, .. } => args.iter().collect(),
+
+            // Constant array: the one element term (the sorts are not
+            // sub-formulas).
+            Formula::ConstArray { value, .. } => vec![value],
         }
     }
 
@@ -598,6 +731,7 @@ impl Formula {
             Formula::Bool(_)
             | Formula::Int(_)
             | Formula::UInt(_)
+            | Formula::Rat { .. }
             | Formula::BitVec { .. }
             | Formula::Var(..)
             | Formula::SymVar(..) => self,
@@ -801,7 +935,541 @@ impl Formula {
                 args: args.into_iter().map(&mut *f).collect(),
                 sort,
             },
+
+            // Constant array: map the element term; preserve both sorts.
+            Formula::ConstArray {
+                index_sort,
+                elem_sort,
+                value,
+            } => Formula::ConstArray {
+                index_sort,
+                elem_sort,
+                value: Box::new(f(*value)),
+            },
         }
+    }
+
+    // ── Node shells: the split/rebuild pair the hash-consed DAG is built on ──
+    //
+    // A SHELL is a node with its children stripped: the node's own payload
+    // (operator, widths, sorts, names, bindings) and nothing of its children.
+    // A fixed-arity child slot holds the placeholder `Formula::Bool(true)`;
+    // the child LIST of an n-ary node (`And`, `Or`, `Pred`, `Ctor`, `FnApp`)
+    // is empty, so a shell costs its payload, not a placeholder per child,
+    // and the arity is carried beside it (`crate::formula_dag::Shell`).
+    // `crate::formula_dag` keys its nodes on (shell, arity, child ids).
+    //
+    // The owned split and the rebuild are `map_children` itself (plus
+    // `nary_args_mut` for the n-ary child list), so they cover exactly the
+    // variants `map_children` covers. The borrowed split (`shell_clone`) is
+    // the one other per-variant match; it is exhaustive (no wildcard, so a
+    // new variant does not compile until it has an arm), and
+    // `tests/formula_dag.rs` holds it equal to the `map_children` split for a
+    // witness of EVERY variant, a list a serde-derived census keeps complete
+    // (`crate::formula_census`).
+
+    /// The placeholder a shell holds in each fixed-arity child slot.
+    pub(crate) fn shell_hole() -> Formula {
+        Formula::Bool(true)
+    }
+
+    /// The child list of an n-ary node (`And`, `Or`, `Pred`, `Ctor`,
+    /// `FnApp`: the variants whose arity the variant does not fix), or `None`.
+    ///
+    /// Exhaustive on purpose (no wildcard): a new variant cannot compile
+    /// until it says whether its children are a list.
+    #[allow(clippy::too_many_lines)] // one arm per variant, by design
+    pub(crate) fn nary_args_mut(&mut self) -> Option<&mut Vec<Formula>> {
+        match self {
+            Formula::And(args)
+            | Formula::Or(args)
+            | Formula::Pred(_, args)
+            | Formula::Ctor { args, .. }
+            | Formula::FnApp { args, .. } => Some(args),
+            Formula::Bool(_)
+            | Formula::Int(_)
+            | Formula::UInt(_)
+            | Formula::BitVec { .. }
+            | Formula::Var(..)
+            | Formula::SymVar(..)
+            | Formula::Not(_)
+            | Formula::Implies(..)
+            | Formula::Eq(..)
+            | Formula::Lt(..)
+            | Formula::Le(..)
+            | Formula::Gt(..)
+            | Formula::Ge(..)
+            | Formula::Add(..)
+            | Formula::Sub(..)
+            | Formula::Mul(..)
+            | Formula::Div(..)
+            | Formula::Rem(..)
+            | Formula::Neg(_)
+            | Formula::BvAdd(..)
+            | Formula::BvSub(..)
+            | Formula::BvMul(..)
+            | Formula::BvUDiv(..)
+            | Formula::BvSDiv(..)
+            | Formula::BvURem(..)
+            | Formula::BvSRem(..)
+            | Formula::BvAnd(..)
+            | Formula::BvOr(..)
+            | Formula::BvXor(..)
+            | Formula::BvNot(..)
+            | Formula::BvShl(..)
+            | Formula::BvLShr(..)
+            | Formula::BvAShr(..)
+            | Formula::BvULt(..)
+            | Formula::BvULe(..)
+            | Formula::BvSLt(..)
+            | Formula::BvSLe(..)
+            | Formula::BvToInt(..)
+            | Formula::IntToBv(..)
+            | Formula::BvExtract { .. }
+            | Formula::BvConcat(..)
+            | Formula::BvZeroExt(..)
+            | Formula::BvSignExt(..)
+            | Formula::FpConst { .. }
+            | Formula::FpNaN { .. }
+            | Formula::FpInf { .. }
+            | Formula::FpZero { .. }
+            | Formula::FpRoundingMode(_)
+            | Formula::FpAdd(..)
+            | Formula::FpSub(..)
+            | Formula::FpMul(..)
+            | Formula::FpDiv(..)
+            | Formula::FpFma(..)
+            | Formula::FpSqrt(..)
+            | Formula::FpRem(..)
+            | Formula::FpNeg(_)
+            | Formula::FpAbs(_)
+            | Formula::FpMin(..)
+            | Formula::FpMax(..)
+            | Formula::FpEq(..)
+            | Formula::FpLt(..)
+            | Formula::FpLe(..)
+            | Formula::FpGt(..)
+            | Formula::FpGe(..)
+            | Formula::FpIsNaN(_)
+            | Formula::FpIsInfinite(_)
+            | Formula::FpIsZero(_)
+            | Formula::FpIsNormal(_)
+            | Formula::FpIsSubnormal(_)
+            | Formula::FpIsNegative(_)
+            | Formula::FpIsPositive(_)
+            | Formula::FpFromBits { .. }
+            | Formula::FpToSbv { .. }
+            | Formula::FpToUbv { .. }
+            | Formula::FpFromSbv { .. }
+            | Formula::FpFromUbv { .. }
+            | Formula::FpConvert { .. }
+            | Formula::FpToIeeeBv(_)
+            | Formula::Ite(..)
+            | Formula::Forall(..)
+            | Formula::Exists(..)
+            | Formula::Select(..)
+            | Formula::Store(..)
+            | Formula::Sel { .. }
+            | Formula::IsCtor { .. }
+            | Formula::Rat(_)
+            | Formula::ConstArray { .. } => None,
+        }
+    }
+
+    /// Split an owned node into its shell and its children (in
+    /// [`Formula::children`] order), moving the children out. Built on
+    /// [`Formula::map_children`]; an n-ary node's shell has an empty child
+    /// list.
+    pub(crate) fn split_children(self) -> (Formula, Vec<Formula>) {
+        let mut kids = Vec::new();
+        let mut shell = self.map_children(&mut |child| {
+            kids.push(child);
+            Formula::shell_hole()
+        });
+        if let Some(args) = shell.nary_args_mut() {
+            args.clear();
+        }
+        (shell, kids)
+    }
+
+    /// Put `kids` (in [`Formula::children`] order) into the child slots of
+    /// this shell: the inverse of [`Formula::split_children`].
+    ///
+    /// # Panics
+    ///
+    /// If `kids.len()` is not the shell's arity, or `self` is not a shell (an
+    /// n-ary node whose child list is not empty). This is fail-closed on
+    /// purpose: a missing child must never become a placeholder (`true`),
+    /// and a surplus one must never be dropped. Every caller establishes the
+    /// arity first (`Shell::rebuild` checks it and returns an error;
+    /// `FormulaDag::expand` holds it by construction).
+    pub(crate) fn fill_children(mut self, kids: Vec<Formula>) -> Formula {
+        if let Some(args) = self.nary_args_mut() {
+            assert!(
+                args.is_empty(),
+                "fill_children: an n-ary shell holds no child list"
+            );
+            *args = kids;
+            return self;
+        }
+        let expected = kids.len();
+        let mut kids = kids.into_iter();
+        let mut filled = 0usize;
+        let node = self.map_children(&mut |hole| {
+            debug_assert_eq!(hole, Formula::shell_hole());
+            filled += 1;
+            kids.next()
+                .expect("fill_children: fewer children than the shell's arity")
+        });
+        assert!(
+            kids.next().is_none(),
+            "fill_children: {expected} children for a shell of arity {filled}"
+        );
+        node
+    }
+
+    /// This node's shell without cloning any child: the payload is cloned,
+    /// every fixed-arity child slot holds the placeholder and an n-ary child
+    /// list is empty. Equal to the shell [`Formula::split_children`] returns
+    /// for a clone of `self`.
+    #[allow(clippy::too_many_lines)] // one arm per variant, by design
+    pub(crate) fn shell_clone(&self) -> Formula {
+        fn h() -> Box<Formula> {
+            Box::new(Formula::shell_hole())
+        }
+        match self {
+            // Leaves
+            Formula::Bool(b) => Formula::Bool(*b),
+            Formula::Int(n) => Formula::Int(*n),
+            Formula::UInt(n) => Formula::UInt(*n),
+            Formula::BitVec { value, width } => Formula::BitVec {
+                value: *value,
+                width: *width,
+            },
+            Formula::Var(name, sort) => Formula::Var(name.clone(), sort.clone()),
+            Formula::SymVar(sym, sort) => Formula::SymVar(*sym, sort.clone()),
+            Formula::Rat(lit) => Formula::Rat(lit.clone()),
+
+            // Boolean connectives
+            Formula::Not(_) => Formula::Not(h()),
+            Formula::And(_) => Formula::And(Vec::new()),
+            Formula::Or(_) => Formula::Or(Vec::new()),
+            Formula::Implies(..) => Formula::Implies(h(), h()),
+
+            // Comparisons and integer arithmetic
+            Formula::Eq(..) => Formula::Eq(h(), h()),
+            Formula::Lt(..) => Formula::Lt(h(), h()),
+            Formula::Le(..) => Formula::Le(h(), h()),
+            Formula::Gt(..) => Formula::Gt(h(), h()),
+            Formula::Ge(..) => Formula::Ge(h(), h()),
+            Formula::Add(..) => Formula::Add(h(), h()),
+            Formula::Sub(..) => Formula::Sub(h(), h()),
+            Formula::Mul(..) => Formula::Mul(h(), h()),
+            Formula::Div(..) => Formula::Div(h(), h()),
+            Formula::Rem(..) => Formula::Rem(h(), h()),
+            Formula::Neg(_) => Formula::Neg(h()),
+
+            // Bitvector arithmetic and comparisons
+            Formula::BvAdd(_, _, w) => Formula::BvAdd(h(), h(), *w),
+            Formula::BvSub(_, _, w) => Formula::BvSub(h(), h(), *w),
+            Formula::BvMul(_, _, w) => Formula::BvMul(h(), h(), *w),
+            Formula::BvUDiv(_, _, w) => Formula::BvUDiv(h(), h(), *w),
+            Formula::BvSDiv(_, _, w) => Formula::BvSDiv(h(), h(), *w),
+            Formula::BvURem(_, _, w) => Formula::BvURem(h(), h(), *w),
+            Formula::BvSRem(_, _, w) => Formula::BvSRem(h(), h(), *w),
+            Formula::BvAnd(_, _, w) => Formula::BvAnd(h(), h(), *w),
+            Formula::BvOr(_, _, w) => Formula::BvOr(h(), h(), *w),
+            Formula::BvXor(_, _, w) => Formula::BvXor(h(), h(), *w),
+            Formula::BvNot(_, w) => Formula::BvNot(h(), *w),
+            Formula::BvShl(_, _, w) => Formula::BvShl(h(), h(), *w),
+            Formula::BvLShr(_, _, w) => Formula::BvLShr(h(), h(), *w),
+            Formula::BvAShr(_, _, w) => Formula::BvAShr(h(), h(), *w),
+            Formula::BvULt(_, _, w) => Formula::BvULt(h(), h(), *w),
+            Formula::BvULe(_, _, w) => Formula::BvULe(h(), h(), *w),
+            Formula::BvSLt(_, _, w) => Formula::BvSLt(h(), h(), *w),
+            Formula::BvSLe(_, _, w) => Formula::BvSLe(h(), h(), *w),
+
+            // Bitvector conversions
+            Formula::BvToInt(_, w, signed) => Formula::BvToInt(h(), *w, *signed),
+            Formula::IntToBv(_, w) => Formula::IntToBv(h(), *w),
+            Formula::BvExtract { high, low, .. } => Formula::BvExtract {
+                inner: h(),
+                high: *high,
+                low: *low,
+            },
+            Formula::BvConcat(..) => Formula::BvConcat(h(), h()),
+            Formula::BvZeroExt(_, bits) => Formula::BvZeroExt(h(), *bits),
+            Formula::BvSignExt(_, bits) => Formula::BvSignExt(h(), *bits),
+
+            // Floating point — leaves
+            Formula::FpConst { bits, eb, sb } => Formula::FpConst {
+                bits: *bits,
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpNaN { eb, sb } => Formula::FpNaN { eb: *eb, sb: *sb },
+            Formula::FpInf { neg, eb, sb } => Formula::FpInf {
+                neg: *neg,
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpZero { neg, eb, sb } => Formula::FpZero {
+                neg: *neg,
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpRoundingMode(rm) => Formula::FpRoundingMode(*rm),
+
+            // Floating point — operators
+            Formula::FpAdd(..) => Formula::FpAdd(h(), h(), h()),
+            Formula::FpSub(..) => Formula::FpSub(h(), h(), h()),
+            Formula::FpMul(..) => Formula::FpMul(h(), h(), h()),
+            Formula::FpDiv(..) => Formula::FpDiv(h(), h(), h()),
+            Formula::FpFma(..) => Formula::FpFma(h(), h(), h(), h()),
+            Formula::FpSqrt(..) => Formula::FpSqrt(h(), h()),
+            Formula::FpRem(..) => Formula::FpRem(h(), h()),
+            Formula::FpNeg(_) => Formula::FpNeg(h()),
+            Formula::FpAbs(_) => Formula::FpAbs(h()),
+            Formula::FpMin(..) => Formula::FpMin(h(), h()),
+            Formula::FpMax(..) => Formula::FpMax(h(), h()),
+            Formula::FpEq(..) => Formula::FpEq(h(), h()),
+            Formula::FpLt(..) => Formula::FpLt(h(), h()),
+            Formula::FpLe(..) => Formula::FpLe(h(), h()),
+            Formula::FpGt(..) => Formula::FpGt(h(), h()),
+            Formula::FpGe(..) => Formula::FpGe(h(), h()),
+            Formula::FpIsNaN(_) => Formula::FpIsNaN(h()),
+            Formula::FpIsInfinite(_) => Formula::FpIsInfinite(h()),
+            Formula::FpIsZero(_) => Formula::FpIsZero(h()),
+            Formula::FpIsNormal(_) => Formula::FpIsNormal(h()),
+            Formula::FpIsSubnormal(_) => Formula::FpIsSubnormal(h()),
+            Formula::FpIsNegative(_) => Formula::FpIsNegative(h()),
+            Formula::FpIsPositive(_) => Formula::FpIsPositive(h()),
+            Formula::FpFromBits { eb, sb, .. } => Formula::FpFromBits {
+                bits: h(),
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpToSbv { width, eb, sb, .. } => Formula::FpToSbv {
+                rm: h(),
+                value: h(),
+                width: *width,
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpToUbv { width, eb, sb, .. } => Formula::FpToUbv {
+                rm: h(),
+                value: h(),
+                width: *width,
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpFromSbv { eb, sb, .. } => Formula::FpFromSbv {
+                rm: h(),
+                value: h(),
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpFromUbv { eb, sb, .. } => Formula::FpFromUbv {
+                rm: h(),
+                value: h(),
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpConvert { eb, sb, .. } => Formula::FpConvert {
+                rm: h(),
+                value: h(),
+                eb: *eb,
+                sb: *sb,
+            },
+            Formula::FpToIeeeBv(_) => Formula::FpToIeeeBv(h()),
+
+            // Conditional, quantifiers, arrays
+            Formula::Ite(..) => Formula::Ite(h(), h(), h()),
+            Formula::Forall(bindings, _) => Formula::Forall(bindings.clone(), h()),
+            Formula::Exists(bindings, _) => Formula::Exists(bindings.clone(), h()),
+            Formula::Select(..) => Formula::Select(h(), h()),
+            Formula::Store(..) => Formula::Store(h(), h(), h()),
+
+            // Applications and datatype terms
+            Formula::Pred(name, _) => Formula::Pred(*name, Vec::new()),
+            Formula::Ctor { ctor, sort, .. } => Formula::Ctor {
+                ctor: ctor.clone(),
+                args: Vec::new(),
+                sort: sort.clone(),
+            },
+            Formula::Sel {
+                datatype,
+                field,
+                field_sort,
+                ..
+            } => Formula::Sel {
+                datatype: datatype.clone(),
+                field: field.clone(),
+                field_sort: field_sort.clone(),
+                arg: h(),
+            },
+            Formula::IsCtor { datatype, ctor, .. } => Formula::IsCtor {
+                datatype: datatype.clone(),
+                ctor: ctor.clone(),
+                arg: h(),
+            },
+            Formula::FnApp { func, sort, .. } => Formula::FnApp {
+                func: func.clone(),
+                args: Vec::new(),
+                sort: sort.clone(),
+            },
+            Formula::ConstArray {
+                index_sort,
+                elem_sort,
+                ..
+            } => Formula::ConstArray {
+                index_sort: index_sort.clone(),
+                elem_sort: elem_sort.clone(),
+                value: h(),
+            },
+        }
+    }
+
+    /// Whether this node BINDS variable names in (some of) its children —
+    /// today exactly the quantifiers. Under such a node, a symbol spelled
+    /// like a name it binds denotes the bound variable, so one DAG node can
+    /// mean two different things on the two sides of the binder; a sharing
+    /// printer may move a subterm across it only when the subterm mentions
+    /// none of the names it binds (`crate::formula_dag`).
+    #[must_use]
+    pub fn binds_variables(&self) -> bool {
+        self.bound_variables().is_some()
+    }
+
+    /// The variables this node binds (name and sort, in binding order), or
+    /// `None` for a node that binds nothing. A binder's own children are
+    /// not part of the answer: this reads the node's payload only.
+    ///
+    /// Exhaustive on purpose (no wildcard): a new binding variant cannot
+    /// compile until this answers for it, and [`Formula::binds_variables`]
+    /// is defined from it, so the two cannot disagree.
+    #[must_use]
+    #[allow(clippy::too_many_lines)] // one arm per variant, by design
+    pub fn bound_variables(&self) -> Option<&[(crate::Symbol, Sort)]> {
+        match self {
+            Formula::Forall(bindings, _) | Formula::Exists(bindings, _) => Some(bindings),
+            Formula::Bool(_)
+            | Formula::Int(_)
+            | Formula::UInt(_)
+            | Formula::BitVec { .. }
+            | Formula::Var(..)
+            | Formula::SymVar(..)
+            | Formula::Not(_)
+            | Formula::And(_)
+            | Formula::Or(_)
+            | Formula::Implies(..)
+            | Formula::Eq(..)
+            | Formula::Lt(..)
+            | Formula::Le(..)
+            | Formula::Gt(..)
+            | Formula::Ge(..)
+            | Formula::Add(..)
+            | Formula::Sub(..)
+            | Formula::Mul(..)
+            | Formula::Div(..)
+            | Formula::Rem(..)
+            | Formula::Neg(_)
+            | Formula::BvAdd(..)
+            | Formula::BvSub(..)
+            | Formula::BvMul(..)
+            | Formula::BvUDiv(..)
+            | Formula::BvSDiv(..)
+            | Formula::BvURem(..)
+            | Formula::BvSRem(..)
+            | Formula::BvAnd(..)
+            | Formula::BvOr(..)
+            | Formula::BvXor(..)
+            | Formula::BvNot(..)
+            | Formula::BvShl(..)
+            | Formula::BvLShr(..)
+            | Formula::BvAShr(..)
+            | Formula::BvULt(..)
+            | Formula::BvULe(..)
+            | Formula::BvSLt(..)
+            | Formula::BvSLe(..)
+            | Formula::BvToInt(..)
+            | Formula::IntToBv(..)
+            | Formula::BvExtract { .. }
+            | Formula::BvConcat(..)
+            | Formula::BvZeroExt(..)
+            | Formula::BvSignExt(..)
+            | Formula::FpConst { .. }
+            | Formula::FpNaN { .. }
+            | Formula::FpInf { .. }
+            | Formula::FpZero { .. }
+            | Formula::FpRoundingMode(_)
+            | Formula::FpAdd(..)
+            | Formula::FpSub(..)
+            | Formula::FpMul(..)
+            | Formula::FpDiv(..)
+            | Formula::FpFma(..)
+            | Formula::FpSqrt(..)
+            | Formula::FpRem(..)
+            | Formula::FpNeg(_)
+            | Formula::FpAbs(_)
+            | Formula::FpMin(..)
+            | Formula::FpMax(..)
+            | Formula::FpEq(..)
+            | Formula::FpLt(..)
+            | Formula::FpLe(..)
+            | Formula::FpGt(..)
+            | Formula::FpGe(..)
+            | Formula::FpIsNaN(_)
+            | Formula::FpIsInfinite(_)
+            | Formula::FpIsZero(_)
+            | Formula::FpIsNormal(_)
+            | Formula::FpIsSubnormal(_)
+            | Formula::FpIsNegative(_)
+            | Formula::FpIsPositive(_)
+            | Formula::FpFromBits { .. }
+            | Formula::FpToSbv { .. }
+            | Formula::FpToUbv { .. }
+            | Formula::FpFromSbv { .. }
+            | Formula::FpFromUbv { .. }
+            | Formula::FpConvert { .. }
+            | Formula::FpToIeeeBv(_)
+            | Formula::Ite(..)
+            | Formula::Select(..)
+            | Formula::Store(..)
+            | Formula::Pred(..)
+            | Formula::Ctor { .. }
+            | Formula::Sel { .. }
+            | Formula::IsCtor { .. }
+            | Formula::FnApp { .. }
+            | Formula::Rat(_)
+            | Formula::ConstArray { .. } => None,
+        }
+    }
+
+    /// Drop a formula of any depth without recursion.
+    ///
+    /// The derived `Drop` of `Formula` recurses once per level, so a tree a
+    /// million levels deep (which [`crate::formula_dag::FormulaDag::expand`]
+    /// can return) overflows a thread's stack when it goes out of scope.
+    /// This detaches the children onto a heap stack with
+    /// [`Formula::map_children`] and drops each node once its slots hold only
+    /// leaves.
+    pub fn drop_iterative(self) {
+        let mut stack = vec![self];
+        while let Some(node) = stack.pop() {
+            // The returned shell's children are leaf placeholders, so it
+            // drops in constant depth.
+            drop(node.split_children_into(&mut stack));
+        }
+    }
+
+    /// [`Formula::split_children`] that pushes the children onto `sink`
+    /// (in order) instead of returning them.
+    fn split_children_into(self, sink: &mut Vec<Formula>) -> Formula {
+        self.map_children(&mut |child| {
+            sink.push(child);
+            Formula::shell_hole()
+        })
     }
 
     /// Recursively visit all sub-formulas depth-first (pre-order).
@@ -898,14 +1566,27 @@ impl Formula {
                 Formula::Var(_, Sort::BitVec(_)) | Formula::SymVar(_, Sort::BitVec(_)) => {
                     found = true;
                 }
+                // A constant array's carried sorts are written into the term
+                // (`(as const (Array I E))`), so a bitvector sort there is a
+                // bitvector type the formula mentions, even where `value`
+                // itself is not a bitvector term (an `Int` element over a
+                // `(_ BitVec 64)` index, or an element read out of another
+                // array).
+                Formula::ConstArray {
+                    index_sort,
+                    elem_sort,
+                    ..
+                } if sort_mentions_bitvec(index_sort) || sort_mentions_bitvec(elem_sort) => {
+                    found = true;
+                }
                 _ => {}
             }
         });
         found
     }
 
-    /// Check if this formula contains array theory operations (Select/Store)
-    /// or array-typed variables.
+    /// Check if this formula contains array theory operations
+    /// (Select/Store/ConstArray) or array-typed variables.
     ///
     /// Cheap structural check for trust_wp translatability.
     #[must_use]
@@ -916,7 +1597,9 @@ impl Formula {
                 return;
             }
             match f {
-                Formula::Select(..) | Formula::Store(..) => found = true,
+                Formula::Select(..) | Formula::Store(..) | Formula::ConstArray { .. } => {
+                    found = true;
+                }
                 Formula::Var(_, Sort::Array(_, _)) | Formula::SymVar(_, Sort::Array(_, _)) => {
                     found = true;
                 }
@@ -1044,19 +1727,46 @@ impl Formula {
     }
 }
 
+/// Whether `sort` is a bitvector sort or an array sort with one inside it. A
+/// datatype is opaque here, as for a `Var` of datatype sort.
+fn sort_mentions_bitvec(sort: &Sort) -> bool {
+    match sort {
+        Sort::BitVec(_) => true,
+        Sort::Array(index, elem) => sort_mentions_bitvec(index) || sort_mentions_bitvec(elem),
+        _ => false,
+    }
+}
+
 // ---------------------------------------------------------------------------
 // SMT-LIB2 text serialization (moved from trust-types' formula/smtlib.rs).
 // ---------------------------------------------------------------------------
 
-/// `2^width` as an exact decimal string, overflow-free for any width. `1u128 <<
-/// width` is undefined behaviour for `width >= 128` (the i128/u128 case): in
-/// release builds it masks the shift amount and yields a wrong value (`1u128 <<
-/// 128 == 1`), in debug it panics. Used to build the signed `BvToInt` correction
-/// term, where a wrong `2^width` would mistranslate negative values and could
-/// surface as a false-PROVE.
-fn pow2_decimal(width: u32) -> String {
-    let mut digits: Vec<u8> = vec![1]; // little-endian decimal digits of 2^0
-    for _ in 0..width {
+/// `multiplier * 2^exp`, less one when `minus_one`, as an exact decimal string.
+///
+/// The exact-decimal family exists because `1u128 << n` is only defined for
+/// `n <= 127`: in release builds Rust MASKS the shift amount and silently
+/// yields a wrong value (`1u128 << 128 == 1`), in debug it panics. Every
+/// SMT-LIB literal built from a `width` field has to be exact at every width
+/// the contract can carry, because a wrong constant is a wrong PROBLEM, not a
+/// crash — the solver answers the question it was asked.
+///
+/// Doubling on little-endian decimal digits, so the cost is quadratic in
+/// `exp` and the result is exact wherever the emitted text is itself
+/// constructible (a `2^exp` literal is about `0.302 * exp` digits long).
+/// `multiplier` must be non-zero for `minus_one` to be meaningful; zero is
+/// answered with `"0"` rather than borrowing past the end.
+fn scaled_pow2_decimal(multiplier: u32, exp: u32, minus_one: bool) -> String {
+    if multiplier == 0 {
+        return "0".to_string();
+    }
+    // Little-endian decimal digits of `multiplier`.
+    let mut digits: Vec<u8> = Vec::new();
+    let mut m = multiplier;
+    while m > 0 {
+        digits.push((m % 10) as u8);
+        m /= 10;
+    }
+    for _ in 0..exp {
         let mut carry = 0u8;
         for d in digits.iter_mut() {
             let v = *d * 2 + carry;
@@ -1068,7 +1778,30 @@ fn pow2_decimal(width: u32) -> String {
             carry /= 10;
         }
     }
+    if minus_one {
+        // `multiplier >= 1` so the value is >= 1 and the borrow terminates
+        // inside the digit vector.
+        let mut i = 0;
+        while i < digits.len() {
+            if digits[i] > 0 {
+                digits[i] -= 1;
+                break;
+            }
+            digits[i] = 9;
+            i += 1;
+        }
+        while digits.len() > 1 && digits[digits.len() - 1] == 0 {
+            digits.pop();
+        }
+    }
     digits.iter().rev().map(|d| char::from(b'0' + d)).collect()
+}
+
+/// `2^width` as an exact decimal string, overflow-free for any width. Used to
+/// build the signed `BvToInt` correction term, where a wrong `2^width` would
+/// mistranslate negative values and could surface as a false-PROVE.
+fn pow2_decimal(width: u32) -> String {
+    scaled_pow2_decimal(1, width, false)
 }
 
 /// Escape an SMT-LIB symbol when it is not a valid simple symbol.
@@ -1083,7 +1816,59 @@ pub fn escape_smtlib_symbol(name: &str) -> String {
 }
 
 fn is_simple_smtlib_symbol(name: &str) -> bool {
-    if name.is_empty() {
+    // SMT-LIB 2.6 §3.1: a simple symbol cannot start with a digit,
+    // even when the whole spelling is not a Rust integer (or overflows one).
+    if name.is_empty() || name.as_bytes()[0].is_ascii_digit() {
+        return false;
+    }
+    // Reserved tokens must be quoted in identifier positions. Predefined
+    // theory symbols such as `true` are not lexical reserved words.
+    if matches!(
+        name,
+        "BINARY"
+            | "DECIMAL"
+            | "HEXADECIMAL"
+            | "NUMERAL"
+            | "STRING"
+            | "_"
+            | "!"
+            | "as"
+            | "let"
+            | "exists"
+            | "forall"
+            | "match"
+            | "par"
+            | "assert"
+            | "check-sat"
+            | "check-sat-assuming"
+            | "declare-const"
+            | "declare-datatype"
+            | "declare-datatypes"
+            | "declare-fun"
+            | "declare-sort"
+            | "define-fun"
+            | "define-fun-rec"
+            | "define-funs-rec"
+            | "define-sort"
+            | "echo"
+            | "exit"
+            | "get-assertions"
+            | "get-assignment"
+            | "get-info"
+            | "get-model"
+            | "get-option"
+            | "get-proof"
+            | "get-unsat-assumptions"
+            | "get-unsat-core"
+            | "get-value"
+            | "pop"
+            | "push"
+            | "reset"
+            | "reset-assertions"
+            | "set-info"
+            | "set-logic"
+            | "set-option"
+    ) {
         return false;
     }
     if name.parse::<i128>().is_ok() || name.parse::<u128>().is_ok() {
@@ -1118,24 +1903,208 @@ impl Formula {
     ///
     /// This is the canonical serializer used by all crates (trust-router,
     /// trust_vcgen, trust-cegar). Covers every Formula variant.
+    ///
+    /// The spelling of every node lives in exactly one place,
+    /// [`Formula::write_smtlib_node`]; this tree printer is its trivial
+    /// instance (every child slot is the child's own full text), and
+    /// [`crate::formula_dag::FormulaDag::to_smtlib`] is its sharing instance.
+    /// The walk is iterative, so the depth of the formula is bounded by memory,
+    /// not by the thread's stack.
     #[must_use]
     pub fn to_smtlib(&self) -> String {
+        let mut out = String::new();
+        self.write_smtlib(&mut out);
+        out
+    }
+
+    /// Append [`Formula::to_smtlib`]'s text to `out`.
+    ///
+    /// Iterative: an explicit stack of frames replaces recursion. Each frame
+    /// holds one node's own spelling (rendered once by
+    /// [`Formula::write_smtlib_node`]), the positions in it where child texts
+    /// go, and the node's children; the frames on the stack share three
+    /// arenas that are truncated as frames pop, so the working memory is
+    /// proportional to the depth of the walk plus the spellings and child
+    /// lists along it, and an n-ary node costs O(n), not O(n) per slot.
+    pub fn write_smtlib(&self, out: &mut String) {
+        struct Frame {
+            text_start: usize,
+            text_end: usize,
+            emitted: usize,
+            slot_start: usize,
+            slot_next: usize,
+            slot_end: usize,
+            kid_start: usize,
+        }
+
+        /// The arenas the frames on the stack share. Each is truncated to a
+        /// frame's start when the frame pops (frames are LIFO), so a level of
+        /// the walk holds no allocation of its own.
+        struct Arenas<'a> {
+            /// The frames' own spellings.
+            text: String,
+            /// The frames' child slots: (position in `text`, child index).
+            slots: Vec<(usize, usize)>,
+            /// The frames' children, so a slot finds its child in O(1) (an
+            /// n-ary node is not re-listed per slot).
+            kids: Vec<&'a Formula>,
+        }
+
+        fn push<'a>(stack: &mut Vec<Frame>, node: &'a Formula, arenas: &mut Arenas<'a>) {
+            let text_start = arenas.text.len();
+            let slot_start = arenas.slots.len();
+            let kid_start = arenas.kids.len();
+            let slots = &mut arenas.slots;
+            node.write_smtlib_node(&mut arenas.text, &mut |i, out| slots.push((out.len(), i)));
+            arenas.kids.extend(node.children());
+            stack.push(Frame {
+                text_start,
+                text_end: arenas.text.len(),
+                emitted: text_start,
+                slot_start,
+                slot_next: slot_start,
+                slot_end: arenas.slots.len(),
+                kid_start,
+            });
+        }
+
+        let mut arenas = Arenas {
+            text: String::new(),
+            slots: Vec::new(),
+            kids: Vec::new(),
+        };
+        let mut stack: Vec<Frame> = Vec::new();
+        push(&mut stack, self, &mut arenas);
+        while let Some(top) = stack.last_mut() {
+            if top.slot_next < top.slot_end {
+                let (pos, child) = arenas.slots[top.slot_next];
+                top.slot_next += 1;
+                out.push_str(&arenas.text[top.emitted..pos]);
+                top.emitted = pos;
+                let kid = arenas.kids[top.kid_start + child];
+                push(&mut stack, kid, &mut arenas);
+            } else {
+                out.push_str(&arenas.text[top.emitted..top.text_end]);
+                let (text_start, slot_start, kid_start) =
+                    (top.text_start, top.slot_start, top.kid_start);
+                stack.pop();
+                arenas.text.truncate(text_start);
+                arenas.slots.truncate(slot_start);
+                arenas.kids.truncate(kid_start);
+            }
+        }
+    }
+
+    /// Append THIS node's SMT-LIB2 spelling to `out`, calling `child(i, out)`
+    /// at each place where the text of child `i` (in [`Formula::children`]
+    /// order) belongs.
+    ///
+    /// This is the single source of the SMT-LIB spelling of every variant.
+    /// The node's own children are never read: only their number is (an
+    /// empty `And` is `true`, a one-element `And` is its element, a nullary
+    /// `Pred` is a bare symbol). So the same function spells a tree node (the
+    /// callback prints the child subtree), a [`crate::formula_dag::Shell`]
+    /// (through [`crate::formula_dag::Shell::write_smtlib_node`], which
+    /// supplies the arity a shell's empty n-ary child list does not hold),
+    /// and a sharing printer's node (the callback prints a `let`-bound name).
+    ///
+    /// A child may be called more than once: the truncating `Div`/`Rem`, the
+    /// signed `BvToInt` and the saturating `FpToSbv`/`FpToUbv` spell an
+    /// operand several times. A tree printer repeats the operand's text; a
+    /// sharing printer counts the calls and binds the operand once.
+    ///
+    /// ```
+    /// use trust_ir_contract::{Formula, Sort};
+    ///
+    /// let x = Formula::Var("x".into(), Sort::Int);
+    /// let f = Formula::Rem(Box::new(x), Box::new(Formula::Int(3)));
+    /// let mut calls = Vec::new();
+    /// let mut own = String::new();
+    /// f.write_smtlib_node(&mut own, &mut |i, out| {
+    ///     calls.push(i);
+    ///     out.push_str(["A", "B"][i]);
+    /// });
+    /// assert_eq!(own, "(ite (>= A 0) (mod A B) (- (mod (- A) B)))");
+    /// assert_eq!(calls, [0, 0, 1, 0, 1]);
+    /// assert_eq!(f.to_smtlib(), "(ite (>= x 0) (mod x 3) (- (mod (- x) 3)))");
+    /// ```
+    pub fn write_smtlib_node(&self, out: &mut String, child: &mut dyn FnMut(usize, &mut String)) {
+        self.write_smtlib_node_with(None, out, child);
+    }
+
+    /// [`Formula::write_smtlib_node`] for a SHELL (see
+    /// `crate::formula_dag::Shell`): an n-ary node's (`And`, `Or`, `Pred`,
+    /// `Ctor`, `FnApp`) child count is `arity`, not the length of its child
+    /// list, which a shell keeps empty. Every other variant fixes its own
+    /// arity and ignores `arity`.
+    pub(crate) fn write_smtlib_shell(
+        &self,
+        arity: usize,
+        out: &mut String,
+        child: &mut dyn FnMut(usize, &mut String),
+    ) {
+        self.write_smtlib_node_with(Some(arity), out, child);
+    }
+
+    /// The one spelling of every variant. `nary` overrides the child count
+    /// of an n-ary node (a shell's); `None` reads it from the child list.
+    #[allow(clippy::too_many_lines)] // one arm per variant, by design
+    fn write_smtlib_node_with(
+        &self,
+        nary: Option<usize>,
+        out: &mut String,
+        child: &mut dyn FnMut(usize, &mut String),
+    ) {
+        /// `(head c0)`.
+        fn app1(out: &mut String, child: &mut dyn FnMut(usize, &mut String), head: &str) {
+            out.push('(');
+            out.push_str(head);
+            out.push(' ');
+            child(0, out);
+            out.push(')');
+        }
+        /// `(head c0 c1 … c{n-1})`.
+        fn app(out: &mut String, child: &mut dyn FnMut(usize, &mut String), head: &str, n: usize) {
+            out.push('(');
+            out.push_str(head);
+            for i in 0..n {
+                out.push(' ');
+                child(i, out);
+            }
+            out.push(')');
+        }
+        /// The truncated remainder `trem(a, b) = ite(a >= 0, mod(a,b),
+        /// -mod(-a,b))`, operands at child slots 0 and 1.
+        fn trem(out: &mut String, child: &mut dyn FnMut(usize, &mut String)) {
+            out.push_str("(ite (>= ");
+            child(0, out);
+            out.push_str(" 0) (mod ");
+            child(0, out);
+            out.push(' ');
+            child(1, out);
+            out.push_str(") (- (mod (- ");
+            child(0, out);
+            out.push_str(") ");
+            child(1, out);
+            out.push_str(")))");
+        }
+
         match self {
             // Literals
-            Formula::Bool(true) => "true".to_string(),
-            Formula::Bool(false) => "false".to_string(),
-            Formula::UInt(n) => n.to_string(),
+            Formula::Bool(true) => out.push_str("true"),
+            Formula::Bool(false) => out.push_str("false"),
+            Formula::UInt(n) => out.push_str(&n.to_string()),
             Formula::Int(n) => {
                 if *n < 0 {
                     let abs = n.unsigned_abs();
-                    format!("(- {abs})")
+                    out.push_str(&format!("(- {abs})"));
                 } else {
-                    n.to_string()
+                    out.push_str(&n.to_string());
                 }
             }
             Formula::BitVec { value, width } => {
                 if *value >= 0 {
-                    format!("(_ bv{value} {width})")
+                    out.push_str(&format!("(_ bv{value} {width})"));
                 } else {
                     // Use u128 for two's complement to handle width=128 correctly.
                     // i128 mask overflows at width=128; u128::MAX is the correct all-ones mask.
@@ -1145,51 +2114,39 @@ impl Formula {
                         u128::MAX
                     };
                     let twos_comp = (*value as u128) & mask;
-                    format!("(_ bv{twos_comp} {width})")
+                    out.push_str(&format!("(_ bv{twos_comp} {width})"));
                 }
             }
 
             // Variables
-            Formula::Var(name, _sort) => escape_smtlib_symbol(name),
-            Formula::SymVar(sym, _sort) => escape_smtlib_symbol(sym.as_str()),
+            Formula::Var(name, _sort) => out.push_str(&escape_smtlib_symbol(name)),
+            Formula::SymVar(sym, _sort) => out.push_str(&escape_smtlib_symbol(sym.as_str())),
 
             // Boolean connectives
-            Formula::Not(inner) => format!("(not {})", inner.to_smtlib()),
-            Formula::And(terms) => {
-                if terms.is_empty() {
-                    "true".to_string()
-                } else if terms.len() == 1 {
-                    terms[0].to_smtlib()
-                } else {
-                    let parts: Vec<String> = terms.iter().map(|t| t.to_smtlib()).collect();
-                    format!("(and {})", parts.join(" "))
-                }
-            }
-            Formula::Or(terms) => {
-                if terms.is_empty() {
-                    "false".to_string()
-                } else if terms.len() == 1 {
-                    terms[0].to_smtlib()
-                } else {
-                    let parts: Vec<String> = terms.iter().map(|t| t.to_smtlib()).collect();
-                    format!("(or {})", parts.join(" "))
-                }
-            }
-            Formula::Implies(a, b) => {
-                format!("(=> {} {})", a.to_smtlib(), b.to_smtlib())
-            }
+            Formula::Not(_) => app1(out, child, "not"),
+            Formula::And(terms) => match nary.unwrap_or(terms.len()) {
+                0 => out.push_str("true"),
+                1 => child(0, out),
+                n => app(out, child, "and", n),
+            },
+            Formula::Or(terms) => match nary.unwrap_or(terms.len()) {
+                0 => out.push_str("false"),
+                1 => child(0, out),
+                n => app(out, child, "or", n),
+            },
+            Formula::Implies(..) => app(out, child, "=>", 2),
 
             // Comparisons
-            Formula::Eq(a, b) => format!("(= {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::Lt(a, b) => format!("(< {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::Le(a, b) => format!("(<= {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::Gt(a, b) => format!("(> {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::Ge(a, b) => format!("(>= {} {})", a.to_smtlib(), b.to_smtlib()),
+            Formula::Eq(..) => app(out, child, "=", 2),
+            Formula::Lt(..) => app(out, child, "<", 2),
+            Formula::Le(..) => app(out, child, "<=", 2),
+            Formula::Gt(..) => app(out, child, ">", 2),
+            Formula::Ge(..) => app(out, child, ">=", 2),
 
             // Integer arithmetic
-            Formula::Add(a, b) => format!("(+ {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::Sub(a, b) => format!("(- {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::Mul(a, b) => format!("(* {} {})", a.to_smtlib(), b.to_smtlib()),
+            Formula::Add(..) => app(out, child, "+", 2),
+            Formula::Sub(..) => app(out, child, "-", 2),
+            Formula::Mul(..) => app(out, child, "*", 2),
             // Rust integer `/` and `%` are TRUNCATED (quotient toward zero; the
             // remainder takes the sign of the dividend). SMT-LIB integer `div`/`mod`
             // are EUCLIDEAN (`mod` is always non-negative; `div` floors toward -inf),
@@ -1201,43 +2158,41 @@ impl Formula {
             // `div`/`mod`, so the encoding is correct for both signed and unsigned.
             // (Division by zero is governed by a separate div-by-zero VC, so the
             // unconstrained `mod`/`div` value at b==0 is not relied upon here.)
-            Formula::Rem(a, b) => {
-                let a = a.to_smtlib();
-                let b = b.to_smtlib();
-                // trem(a,b) = ite(a >= 0, mod(a,b), -mod(-a,b))
-                format!("(ite (>= {a} 0) (mod {a} {b}) (- (mod (- {a}) {b})))")
-            }
-            Formula::Div(a, b) => {
-                let a = a.to_smtlib();
-                let b = b.to_smtlib();
+            Formula::Rem(..) => trem(out, child),
+            Formula::Div(..) => {
                 // a == b*tdiv + trem, so tdiv = (a - trem)/b is an EXACT division
                 // (remainder 0) where Euclidean `div` agrees with truncation.
-                let trem = format!("(ite (>= {a} 0) (mod {a} {b}) (- (mod (- {a}) {b})))");
-                format!("(div (- {a} {trem}) {b})")
+                out.push_str("(div (- ");
+                child(0, out);
+                out.push(' ');
+                trem(out, child);
+                out.push_str(") ");
+                child(1, out);
+                out.push(')');
             }
-            Formula::Neg(inner) => format!("(- {})", inner.to_smtlib()),
+            Formula::Neg(_) => app1(out, child, "-"),
 
             // Bitvector arithmetic
-            Formula::BvAdd(a, b, _) => format!("(bvadd {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvSub(a, b, _) => format!("(bvsub {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvMul(a, b, _) => format!("(bvmul {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvUDiv(a, b, _) => format!("(bvudiv {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvSDiv(a, b, _) => format!("(bvsdiv {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvURem(a, b, _) => format!("(bvurem {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvSRem(a, b, _) => format!("(bvsrem {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvAnd(a, b, _) => format!("(bvand {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvOr(a, b, _) => format!("(bvor {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvXor(a, b, _) => format!("(bvxor {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvNot(inner, _) => format!("(bvnot {})", inner.to_smtlib()),
-            Formula::BvShl(a, b, _) => format!("(bvshl {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvLShr(a, b, _) => format!("(bvlshr {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvAShr(a, b, _) => format!("(bvashr {} {})", a.to_smtlib(), b.to_smtlib()),
+            Formula::BvAdd(..) => app(out, child, "bvadd", 2),
+            Formula::BvSub(..) => app(out, child, "bvsub", 2),
+            Formula::BvMul(..) => app(out, child, "bvmul", 2),
+            Formula::BvUDiv(..) => app(out, child, "bvudiv", 2),
+            Formula::BvSDiv(..) => app(out, child, "bvsdiv", 2),
+            Formula::BvURem(..) => app(out, child, "bvurem", 2),
+            Formula::BvSRem(..) => app(out, child, "bvsrem", 2),
+            Formula::BvAnd(..) => app(out, child, "bvand", 2),
+            Formula::BvOr(..) => app(out, child, "bvor", 2),
+            Formula::BvXor(..) => app(out, child, "bvxor", 2),
+            Formula::BvNot(..) => app1(out, child, "bvnot"),
+            Formula::BvShl(..) => app(out, child, "bvshl", 2),
+            Formula::BvLShr(..) => app(out, child, "bvlshr", 2),
+            Formula::BvAShr(..) => app(out, child, "bvashr", 2),
 
             // Bitvector comparisons
-            Formula::BvULt(a, b, _) => format!("(bvult {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvULe(a, b, _) => format!("(bvule {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvSLt(a, b, _) => format!("(bvslt {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvSLe(a, b, _) => format!("(bvsle {} {})", a.to_smtlib(), b.to_smtlib()),
+            Formula::BvULt(..) => app(out, child, "bvult", 2),
+            Formula::BvULe(..) => app(out, child, "bvule", 2),
+            Formula::BvSLt(..) => app(out, child, "bvslt", 2),
+            Formula::BvSLe(..) => app(out, child, "bvsle", 2),
 
             // Bitvector conversions
             //
@@ -1246,171 +2201,108 @@ impl Formula {
             // set. We emit the SMT-LIB-standard name (`bv2nat`). A legacy spelling
             // (`bv2int`) exists in some non-standard solver dialects, but `ay`
             // recognizes only the standard form.
-            Formula::BvToInt(inner, width, signed) => {
-                let inner_smt = inner.to_smtlib();
+            Formula::BvToInt(_, width, signed) => {
                 if *signed {
                     let two_to_width = pow2_decimal(*width);
-                    format!(
-                        "(ite (bvsge {inner_smt} (_ bv0 {width})) \
-                         (bv2nat {inner_smt}) \
-                         (- (bv2nat {inner_smt}) {two_to_width}))"
-                    )
+                    out.push_str("(ite (bvsge ");
+                    child(0, out);
+                    out.push_str(&format!(" (_ bv0 {width})) (bv2nat "));
+                    child(0, out);
+                    out.push_str(") (- (bv2nat ");
+                    child(0, out);
+                    out.push_str(&format!(") {two_to_width}))"));
                 } else {
-                    format!("(bv2nat {inner_smt})")
+                    app1(out, child, "bv2nat");
                 }
             }
-            Formula::IntToBv(inner, width) => {
-                format!("((_ int2bv {width}) {})", inner.to_smtlib())
+            Formula::IntToBv(_, width) => app1(out, child, &format!("(_ int2bv {width})")),
+            Formula::BvExtract { high, low, .. } => {
+                app1(out, child, &format!("(_ extract {high} {low})"));
             }
-            Formula::BvExtract { inner, high, low } => {
-                format!("((_ extract {high} {low}) {})", inner.to_smtlib())
-            }
-            Formula::BvConcat(a, b) => format!("(concat {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::BvZeroExt(inner, bits) => {
-                format!("((_ zero_extend {bits}) {})", inner.to_smtlib())
-            }
-            Formula::BvSignExt(inner, bits) => {
-                format!("((_ sign_extend {bits}) {})", inner.to_smtlib())
-            }
+            Formula::BvConcat(..) => app(out, child, "concat", 2),
+            Formula::BvZeroExt(_, bits) => app1(out, child, &format!("(_ zero_extend {bits})")),
+            Formula::BvSignExt(_, bits) => app1(out, child, &format!("(_ sign_extend {bits})")),
 
             // Conditional
-            Formula::Ite(cond, then, els) => {
-                format!(
-                    "(ite {} {} {})",
-                    cond.to_smtlib(),
-                    then.to_smtlib(),
-                    els.to_smtlib()
-                )
-            }
+            Formula::Ite(..) => app(out, child, "ite", 3),
 
             // Quantifiers
-            Formula::Forall(bindings, body) => {
-                let params: Vec<String> = bindings
-                    .iter()
-                    .map(|(name, sort)| {
-                        format!(
-                            "({} {})",
-                            escape_smtlib_symbol(name.as_str()),
-                            sort.to_smtlib()
-                        )
-                    })
-                    .collect();
-                format!("(forall ({}) {})", params.join(" "), body.to_smtlib())
-            }
-            Formula::Exists(bindings, body) => {
-                let params: Vec<String> = bindings
-                    .iter()
-                    .map(|(name, sort)| {
-                        format!(
-                            "({} {})",
-                            escape_smtlib_symbol(name.as_str()),
-                            sort.to_smtlib()
-                        )
-                    })
-                    .collect();
-                format!("(exists ({}) {})", params.join(" "), body.to_smtlib())
+            Formula::Forall(bindings, _) | Formula::Exists(bindings, _) => {
+                out.push_str(if matches!(self, Formula::Forall(..)) {
+                    "(forall ("
+                } else {
+                    "(exists ("
+                });
+                for (i, (name, sort)) in bindings.iter().enumerate() {
+                    if i > 0 {
+                        out.push(' ');
+                    }
+                    out.push('(');
+                    out.push_str(&escape_smtlib_symbol(name.as_str()));
+                    out.push(' ');
+                    out.push_str(&sort.to_smtlib());
+                    out.push(')');
+                }
+                out.push_str(") ");
+                child(0, out);
+                out.push(')');
             }
 
             // Arrays
-            Formula::Select(arr, idx) => {
-                format!("(select {} {})", arr.to_smtlib(), idx.to_smtlib())
-            }
-            Formula::Store(arr, idx, val) => {
-                format!(
-                    "(store {} {} {})",
-                    arr.to_smtlib(),
-                    idx.to_smtlib(),
-                    val.to_smtlib()
-                )
-            }
+            Formula::Select(..) => app(out, child, "select", 2),
+            Formula::Store(..) => app(out, child, "store", 3),
 
             // ── IEEE-754 floating point (SMT-LIB FloatingPoint theory) ──────
             Formula::FpConst { bits, eb, sb } => {
-                format!("((_ to_fp {eb} {sb}) (_ bv{bits} {}))", eb + sb)
+                out.push_str(&format!("((_ to_fp {eb} {sb}) (_ bv{bits} {}))", eb + sb));
             }
-            Formula::FpNaN { eb, sb } => format!("(_ NaN {eb} {sb})"),
+            Formula::FpNaN { eb, sb } => out.push_str(&format!("(_ NaN {eb} {sb})")),
             Formula::FpInf { neg, eb, sb } => {
                 if *neg {
-                    format!("(_ -oo {eb} {sb})")
+                    out.push_str(&format!("(_ -oo {eb} {sb})"));
                 } else {
-                    format!("(_ +oo {eb} {sb})")
+                    out.push_str(&format!("(_ +oo {eb} {sb})"));
                 }
             }
             Formula::FpZero { neg, eb, sb } => {
                 if *neg {
-                    format!("(_ -zero {eb} {sb})")
+                    out.push_str(&format!("(_ -zero {eb} {sb})"));
                 } else {
-                    format!("(_ +zero {eb} {sb})")
+                    out.push_str(&format!("(_ +zero {eb} {sb})"));
                 }
             }
-            Formula::FpRoundingMode(rm) => rm.to_smtlib().to_string(),
-            Formula::FpAdd(rm, a, b) => {
-                format!(
-                    "(fp.add {} {} {})",
-                    rm.to_smtlib(),
-                    a.to_smtlib(),
-                    b.to_smtlib()
-                )
-            }
-            Formula::FpSub(rm, a, b) => {
-                format!(
-                    "(fp.sub {} {} {})",
-                    rm.to_smtlib(),
-                    a.to_smtlib(),
-                    b.to_smtlib()
-                )
-            }
-            Formula::FpMul(rm, a, b) => {
-                format!(
-                    "(fp.mul {} {} {})",
-                    rm.to_smtlib(),
-                    a.to_smtlib(),
-                    b.to_smtlib()
-                )
-            }
-            Formula::FpDiv(rm, a, b) => {
-                format!(
-                    "(fp.div {} {} {})",
-                    rm.to_smtlib(),
-                    a.to_smtlib(),
-                    b.to_smtlib()
-                )
-            }
-            Formula::FpFma(rm, a, b, c) => format!(
-                "(fp.fma {} {} {} {})",
-                rm.to_smtlib(),
-                a.to_smtlib(),
-                b.to_smtlib(),
-                c.to_smtlib()
-            ),
-            Formula::FpSqrt(rm, a) => {
-                format!("(fp.sqrt {} {})", rm.to_smtlib(), a.to_smtlib())
-            }
-            Formula::FpRem(a, b) => format!("(fp.rem {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpNeg(a) => format!("(fp.neg {})", a.to_smtlib()),
-            Formula::FpAbs(a) => format!("(fp.abs {})", a.to_smtlib()),
-            Formula::FpMin(a, b) => format!("(fp.min {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpMax(a, b) => format!("(fp.max {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpEq(a, b) => format!("(fp.eq {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpLt(a, b) => format!("(fp.lt {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpLe(a, b) => format!("(fp.leq {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpGt(a, b) => format!("(fp.gt {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpGe(a, b) => format!("(fp.geq {} {})", a.to_smtlib(), b.to_smtlib()),
-            Formula::FpIsNaN(a) => format!("(fp.isNaN {})", a.to_smtlib()),
-            Formula::FpIsInfinite(a) => format!("(fp.isInfinite {})", a.to_smtlib()),
-            Formula::FpIsZero(a) => format!("(fp.isZero {})", a.to_smtlib()),
-            Formula::FpIsNormal(a) => format!("(fp.isNormal {})", a.to_smtlib()),
-            Formula::FpIsSubnormal(a) => format!("(fp.isSubnormal {})", a.to_smtlib()),
-            Formula::FpIsNegative(a) => format!("(fp.isNegative {})", a.to_smtlib()),
-            Formula::FpIsPositive(a) => format!("(fp.isPositive {})", a.to_smtlib()),
-            Formula::FpFromBits { bits, eb, sb } => {
-                format!("((_ to_fp {eb} {sb}) {})", bits.to_smtlib())
+            Formula::FpRoundingMode(rm) => out.push_str(rm.to_smtlib()),
+            Formula::FpAdd(..) => app(out, child, "fp.add", 3),
+            Formula::FpSub(..) => app(out, child, "fp.sub", 3),
+            Formula::FpMul(..) => app(out, child, "fp.mul", 3),
+            Formula::FpDiv(..) => app(out, child, "fp.div", 3),
+            Formula::FpFma(..) => app(out, child, "fp.fma", 4),
+            Formula::FpSqrt(..) => app(out, child, "fp.sqrt", 2),
+            Formula::FpRem(..) => app(out, child, "fp.rem", 2),
+            Formula::FpNeg(_) => app1(out, child, "fp.neg"),
+            Formula::FpAbs(_) => app1(out, child, "fp.abs"),
+            Formula::FpMin(..) => app(out, child, "fp.min", 2),
+            Formula::FpMax(..) => app(out, child, "fp.max", 2),
+            Formula::FpEq(..) => app(out, child, "fp.eq", 2),
+            Formula::FpLt(..) => app(out, child, "fp.lt", 2),
+            Formula::FpLe(..) => app(out, child, "fp.leq", 2),
+            Formula::FpGt(..) => app(out, child, "fp.gt", 2),
+            Formula::FpGe(..) => app(out, child, "fp.geq", 2),
+            Formula::FpIsNaN(_) => app1(out, child, "fp.isNaN"),
+            Formula::FpIsInfinite(_) => app1(out, child, "fp.isInfinite"),
+            Formula::FpIsZero(_) => app1(out, child, "fp.isZero"),
+            Formula::FpIsNormal(_) => app1(out, child, "fp.isNormal"),
+            Formula::FpIsSubnormal(_) => app1(out, child, "fp.isSubnormal"),
+            Formula::FpIsNegative(_) => app1(out, child, "fp.isNegative"),
+            Formula::FpIsPositive(_) => app1(out, child, "fp.isPositive"),
+            Formula::FpFromBits { eb, sb, .. } => {
+                app1(out, child, &format!("(_ to_fp {eb} {sb})"));
             }
             // FP -> BV bit reinterpret (inverse of `to_fp` on a bit pattern). The
             // result width is inferred by the solver from the inner FP sort, so no
             // width index is carried. The concrete solver lowering / bijection
             // axioms are applied by the `trust-types` ay bridge downstream.
-            Formula::FpToIeeeBv(a) => format!("(fp.to_ieee_bv {})", a.to_smtlib()),
+            Formula::FpToIeeeBv(_) => app1(out, child, "fp.to_ieee_bv"),
             // The saturating conversions lower to a COMPLETE guarded
             // expansion, never the bare SMT operator: `fp.to_sbv`/`fp.to_ubv`
             // are UNSPECIFIED for NaN and out-of-range inputs, while these
@@ -1427,48 +2319,60 @@ impl Formula {
             // MIN — where the guard may fire on x == MIN exactly, but the
             // clamp value IS the true conversion there, so the answer is
             // unchanged.
-            Formula::FpToSbv {
-                rm,
-                value,
-                width,
-                eb,
-                sb,
-            } => {
+            //
+            // The clamp CONSTANTS are built with `scaled_pow2_decimal`, not
+            // `1u128 << n`. `width` is a `u32` and nothing in this contract
+            // bounds it, while a u128 shift is defined only to 127 — so the
+            // shift spelling was exact only to width 125 (signed, whose
+            // widest shift count is `w + 2`) and 127 (unsigned). Above that
+            // it panicked in debug and, worse, MASKED the shift count in
+            // release: `1u128 << 128 == 1`, a silently wrong bound with no
+            // diagnostic. The native lane (trust's `ay_bridge`
+            // `fp_to_bv_saturating`) has always computed these same constants
+            // in bignum arithmetic, so the two lanes used to clamp
+            // DIFFERENTLY above width 125/127. They no longer do: these
+            // constants are now exact at every width, constant for constant
+            // and literal-width for literal-width.
+            //
+            // Child slots: 0 is the rounding mode, 1 the operand `x`, which
+            // the expansion spells four times.
+            Formula::FpToSbv { width, eb, sb, .. } => {
                 let w = *width;
-                let x = value.to_smtlib();
-                let rm = rm.to_smtlib();
+                // Width 0 is not a legal SMT-LIB bitvector width and every
+                // consumer refuses it upstream; saturate rather than
+                // underflow so this formatter stays total.
+                let hi = w.saturating_sub(1);
                 // 2^(w-1) as an unsigned (w+1)-bit literal, in the operand's format.
                 let pos = format!(
                     "((_ to_fp_unsigned {eb} {sb}) RNE (_ bv{} {}))",
-                    1u128 << (w - 1),
+                    pow2_decimal(hi),
                     w + 1
                 );
-                // -(2^(w-1)) - 1 as a signed (w+2)-bit literal.
-                let min_minus_one = (1u128 << (w + 2)) - (1u128 << (w - 1)) - 1;
+                // -(2^(w-1)) - 1 as a signed (w+2)-bit literal. In two's
+                // complement on w+2 bits that is 2^(w+2) - 2^(w-1) - 1, i.e.
+                // 7 * 2^(w-1) - 1.
+                let min_minus_one = scaled_pow2_decimal(7, hi, true);
                 let neg = format!("((_ to_fp {eb} {sb}) RNE (_ bv{min_minus_one} {}))", w + 2);
-                let max_bv = format!("(_ bv{} {w})", (1u128 << (w - 1)) - 1);
-                let min_bv = format!("(_ bv{} {w})", 1u128 << (w - 1));
-                format!(
-                    "(ite (fp.isNaN {x}) (_ bv0 {w}) \
-                     (ite (fp.geq {x} {pos}) {max_bv} \
-                     (ite (fp.leq {x} {neg}) {min_bv} \
-                     ((_ fp.to_sbv {w}) {rm} {x}))))"
-                )
+                let max_bv = format!("(_ bv{} {w})", scaled_pow2_decimal(1, hi, true));
+                let min_bv = format!("(_ bv{} {w})", pow2_decimal(hi));
+                out.push_str("(ite (fp.isNaN ");
+                child(1, out);
+                out.push_str(&format!(") (_ bv0 {w}) (ite (fp.geq "));
+                child(1, out);
+                out.push_str(&format!(" {pos}) {max_bv} (ite (fp.leq "));
+                child(1, out);
+                out.push_str(&format!(" {neg}) {min_bv} ((_ fp.to_sbv {w}) "));
+                child(0, out);
+                out.push(' ');
+                child(1, out);
+                out.push_str("))))");
             }
-            Formula::FpToUbv {
-                rm,
-                value,
-                width,
-                eb,
-                sb,
-            } => {
+            Formula::FpToUbv { width, eb, sb, .. } => {
                 let w = *width;
-                let x = value.to_smtlib();
-                let rm = rm.to_smtlib();
                 // 2^w as an unsigned (w+1)-bit literal.
                 let pos = format!(
                     "((_ to_fp_unsigned {eb} {sb}) RNE (_ bv{} {}))",
-                    1u128 << w,
+                    pow2_decimal(w),
                     w + 1
                 );
                 // -1.0 in the operand's format.
@@ -1476,29 +2380,25 @@ impl Formula {
                     "(fp.neg ((_ to_fp_unsigned {eb} {sb}) RNE (_ bv1 {})))",
                     w + 1
                 );
-                let max_bv = format!("(_ bv{} {w})", (1u128 << w) - 1);
-                format!(
-                    "(ite (fp.isNaN {x}) (_ bv0 {w}) \
-                     (ite (fp.geq {x} {pos}) {max_bv} \
-                     (ite (fp.leq {x} {neg_one}) (_ bv0 {w}) \
-                     ((_ fp.to_ubv {w}) {rm} {x}))))"
-                )
+                let max_bv = format!("(_ bv{} {w})", scaled_pow2_decimal(1, w, true));
+                out.push_str("(ite (fp.isNaN ");
+                child(1, out);
+                out.push_str(&format!(") (_ bv0 {w}) (ite (fp.geq "));
+                child(1, out);
+                out.push_str(&format!(" {pos}) {max_bv} (ite (fp.leq "));
+                child(1, out);
+                out.push_str(&format!(" {neg_one}) (_ bv0 {w}) ((_ fp.to_ubv {w}) "));
+                child(0, out);
+                out.push(' ');
+                child(1, out);
+                out.push_str("))))");
             }
-            Formula::FpFromSbv { rm, value, eb, sb } => format!(
-                "((_ to_fp {eb} {sb}) {} {})",
-                rm.to_smtlib(),
-                value.to_smtlib()
-            ),
-            Formula::FpFromUbv { rm, value, eb, sb } => format!(
-                "((_ to_fp_unsigned {eb} {sb}) {} {})",
-                rm.to_smtlib(),
-                value.to_smtlib()
-            ),
-            Formula::FpConvert { rm, value, eb, sb } => format!(
-                "((_ to_fp {eb} {sb}) {} {})",
-                rm.to_smtlib(),
-                value.to_smtlib()
-            ),
+            Formula::FpFromSbv { eb, sb, .. } | Formula::FpConvert { eb, sb, .. } => {
+                app(out, child, &format!("(_ to_fp {eb} {sb})"), 2);
+            }
+            Formula::FpFromUbv { eb, sb, .. } => {
+                app(out, child, &format!("(_ to_fp_unsigned {eb} {sb})"), 2);
+            }
 
             // Uninterpreted predicate application (EUF). Lowers to a bare symbol
             // when nullary, or `(name arg1 ..)` otherwise. The symbol's
@@ -1507,11 +2407,9 @@ impl Formula {
             // solver (no axioms).
             Formula::Pred(name, args) => {
                 let sym = escape_smtlib_symbol(name.as_str());
-                if args.is_empty() {
-                    sym
-                } else {
-                    let parts: Vec<String> = args.iter().map(Formula::to_smtlib).collect();
-                    format!("({} {})", sym, parts.join(" "))
+                match nary.unwrap_or(args.len()) {
+                    0 => out.push_str(&sym),
+                    n => app(out, child, &sym, n),
                 }
             }
 
@@ -1522,26 +2420,24 @@ impl Formula {
             // constructors/selectors/testers.
             Formula::Ctor { ctor, args, sort } => {
                 let ctor_sym = escape_smtlib_symbol(ctor);
-                if args.is_empty() {
+                let n = nary.unwrap_or(args.len());
+                if n == 0 {
                     // A nullary constructor is a bare constant, not a 0-ary
                     // application; qualify it with its datatype sort
                     // (`(as C Sort)`) so constructors shared across datatype
                     // families are unambiguous — matches the in-process ay path.
-                    format!("(as {} {})", ctor_sym, sort.to_smtlib())
+                    out.push_str(&format!("(as {} {})", ctor_sym, sort.to_smtlib()));
                 } else {
-                    let parts: Vec<String> = args.iter().map(Formula::to_smtlib).collect();
-                    format!("({} {})", ctor_sym, parts.join(" "))
+                    app(out, child, &ctor_sym, n);
                 }
             }
-            Formula::Sel { field, arg, .. } => {
-                format!("({} {})", escape_smtlib_symbol(field), arg.to_smtlib())
-            }
-            Formula::IsCtor { ctor, arg, .. } => {
-                format!(
-                    "((_ is {}) {})",
-                    escape_smtlib_symbol(ctor),
-                    arg.to_smtlib()
-                )
+            Formula::Sel { field, .. } => app1(out, child, &escape_smtlib_symbol(field)),
+            Formula::IsCtor { ctor, .. } => {
+                app1(
+                    out,
+                    child,
+                    &format!("(_ is {})", escape_smtlib_symbol(ctor)),
+                );
             }
 
             // Uninterpreted function application (EUF). Lowers like `Pred` —
@@ -1549,14 +2445,112 @@ impl Formula {
             // result-sorted `declare-fun` is the backend's job.
             Formula::FnApp { func, args, .. } => {
                 let sym = escape_smtlib_symbol(func);
-                if args.is_empty() {
-                    sym
-                } else {
-                    let parts: Vec<String> = args.iter().map(Formula::to_smtlib).collect();
-                    format!("({} {})", sym, parts.join(" "))
+                match nary.unwrap_or(args.len()) {
+                    0 => out.push_str(&sym),
+                    n => app(out, child, &sym, n),
                 }
             }
+
+            // Exact rational literal (`Reals` theory): `(/ n d)`, `(- n)` for a
+            // negative numerator, a bare numeral when integral.
+            Formula::Rat(lit) => out.push_str(&lit.to_smtlib()),
+
+            // Constant array: the sort-qualified `const` of the full array
+            // sort, applied to the element. Spelled from the two carried sorts
+            // directly; the text is exactly `Sort::Array(I, E).to_smtlib()`
+            // (a test holds the two spellings together) without cloning
+            // either sort into one.
+            Formula::ConstArray {
+                index_sort,
+                elem_sort,
+                ..
+            } => {
+                let head = format!(
+                    "(as const (Array {} {}))",
+                    index_sort.to_smtlib(),
+                    elem_sort.to_smtlib()
+                );
+                app1(out, child, &head);
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod rat_literal_tests {
+    use super::*;
+
+    #[test]
+    fn rat_to_smtlib_is_a_reals_theory_term() {
+        assert_eq!(Formula::rat("1", "2").unwrap().to_smtlib(), "(/ 1 2)");
+        assert_eq!(Formula::rat("-1", "2").unwrap().to_smtlib(), "(/ (- 1) 2)");
+        assert_eq!(Formula::rat("0", "1").unwrap().to_smtlib(), "0");
+        assert_eq!(Formula::rat("-3", "1").unwrap().to_smtlib(), "(- 3)");
+        assert_eq!(Formula::rat_from_int(-9).to_smtlib(), "(- 9)");
+        assert_eq!(
+            Formula::rat_from_int(i128::MIN).to_smtlib(),
+            "(- 170141183460469231731687303715884105728)"
+        );
+        // The literal is opaque to the SMT symbol escaper: digits only.
+        let big = "340282366920938463463374607431768211457"; // 2^128 + 1
+        assert_eq!(
+            Formula::rat(big, "3").unwrap().to_smtlib(),
+            format!("(/ {big} 3)")
+        );
+    }
+
+    #[test]
+    fn rat_is_a_leaf_for_children_and_map_children() {
+        let r = Formula::rat("7", "3").unwrap();
+        assert!(r.children().is_empty());
+        let mapped = r.clone().map_children(&mut |_| Formula::Bool(false));
+        assert_eq!(mapped, r);
+        assert_eq!(r.rat_parts(), Some(("7", "3")));
+        assert_eq!(Formula::Int(7).rat_parts(), None);
+        assert!(r.free_variables().is_empty());
+    }
+
+    #[test]
+    fn rat_round_trips_through_serde_and_is_structurally_compared() {
+        let r = Formula::rat("-22", "7").unwrap();
+        let json = serde_json::to_string(&r).expect("serialize");
+        // The newtype payload is invisible on the wire: exactly the shape a
+        // `Rat { num, den }` struct variant would have.
+        assert_eq!(json, r#"{"Rat":{"num":"-22","den":"7"}}"#);
+        let back: Formula = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, r);
+        // Structural, not value, equality: reducedness is the producer's job.
+        assert_ne!(
+            Formula::rat("2", "4").unwrap(),
+            Formula::rat("1", "2").unwrap()
+        );
+    }
+
+    /// A malformed literal cannot be smuggled in through deserialization: the
+    /// same canonical-syntax check that guards the constructor guards the
+    /// wire, so every `Formula::Rat` that exists parses exactly.
+    #[test]
+    fn rat_deserialization_rejects_non_canonical_digits() {
+        for text in [
+            r#"{"Rat":{"num":"01","den":"2"}}"#,
+            r#"{"Rat":{"num":"1","den":"0"}}"#,
+            r#"{"Rat":{"num":"-0","den":"1"}}"#,
+            r#"{"Rat":{"num":"1","den":"-2"}}"#,
+            r#"{"Rat":{"num":"0x10","den":"1"}}"#,
+        ] {
+            assert!(
+                serde_json::from_str::<Formula>(text).is_err(),
+                "{text} must be refused at the wire"
+            );
+        }
+        // …while a canonical one inside a larger formula still round-trips.
+        let f = Formula::Le(
+            Box::new(Formula::Var("x".into(), Sort::Real)),
+            Box::new(Formula::rat("7", "3").unwrap()),
+        );
+        let json = serde_json::to_string(&f).expect("serialize");
+        let back: Formula = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(back, f);
     }
 }
 
@@ -1604,6 +2598,33 @@ mod truncation_tests {
         // The bug being fixed: `1u128 << 128` masks to 1 in release / panics in
         // debug. The correct value is 2^128.
         assert_eq!(pow2_decimal(128), "340282366920938463463374607431768211456");
+    }
+
+    #[test]
+    fn scaled_pow2_decimal_multiplies_and_borrows_exactly() {
+        use super::scaled_pow2_decimal;
+        // multiplier only
+        assert_eq!(scaled_pow2_decimal(7, 0, false), "7");
+        assert_eq!(scaled_pow2_decimal(7, 3, false), "56");
+        // the minus-one borrow, including the all-nines chain and the
+        // leading-zero strip it leaves behind
+        assert_eq!(scaled_pow2_decimal(1, 0, true), "0");
+        assert_eq!(scaled_pow2_decimal(1, 4, true), "15");
+        assert_eq!(scaled_pow2_decimal(5, 1, true), "9"); // 10 - 1, borrows
+        assert_eq!(scaled_pow2_decimal(125, 3, true), "999"); // 1000 - 1
+        // the shape the signed FP clamp needs: 2^(w+2) - 2^(w-1) - 1 is
+        // 7 * 2^(w-1) - 1. Cross-checked against u128 at w = 8.
+        assert_eq!(
+            scaled_pow2_decimal(7, 7, true),
+            ((1u128 << 10) - (1u128 << 7) - 1).to_string()
+        );
+        // past the u128 ceiling
+        assert_eq!(
+            scaled_pow2_decimal(7, 127, true),
+            "1190988284223284622121811126011188740095"
+        );
+        // zero multiplier is answered, not borrowed past
+        assert_eq!(scaled_pow2_decimal(0, 9, true), "0");
     }
 
     #[test]
@@ -1923,6 +2944,182 @@ mod fp_tests {
         assert!(!renamed.free_variables().contains("a"));
         assert_eq!(renamed.to_smtlib(), "(fp.to_ieee_bv ((_ to_fp 11 53) b))");
     }
+
+    // ------------------------------------------------------------------
+    // Saturating FP -> BV clamp constants.
+    //
+    // The guarded expansion's bounds used to be built with `1u128 << n`.
+    // `width` is a `u32` and nothing in this contract bounds it, while a u128
+    // shift is defined only to 127 — and the two arms shift by different
+    // amounts, so the old spelling was exact only to w = 125 (signed, whose
+    // widest shift count is `w + 2`) and w = 127 (unsigned, which shifts by
+    // `w`). Past those bounds it panicked in debug and MASKED the shift count
+    // in release (`1u128 << 128 == 1`), emitting a silently wrong bound.
+    //
+    // Two obligations, one test each:
+    //   1. where the shift was defined, the text is BYTE-IDENTICAL to before;
+    //   2. above it, the text is now exact.
+    // ------------------------------------------------------------------
+
+    /// The full signed expansion, assembled from the three decimal constants
+    /// it carries: `pos` = 2^(w-1) (a w+1-bit literal), `min_minus_one` =
+    /// 2^(w+2) - 2^(w-1) - 1 (a w+2-bit literal), `max` = 2^(w-1) - 1. The
+    /// clamp value on the low side is `pos` again, at width w.
+    fn expected_sbv(w: u32, pos: &str, min_minus_one: &str, max: &str) -> String {
+        format!(
+            "(ite (fp.isNaN x) (_ bv0 {w}) \
+             (ite (fp.geq x ((_ to_fp_unsigned {EB} {SB}) RNE (_ bv{pos} {}))) (_ bv{max} {w}) \
+             (ite (fp.leq x ((_ to_fp {EB} {SB}) RNE (_ bv{min_minus_one} {}))) (_ bv{pos} {w}) \
+             ((_ fp.to_sbv {w}) RNE x))))",
+            w + 1,
+            w + 2
+        )
+    }
+
+    /// The full unsigned expansion: `pos` = 2^w (a w+1-bit literal), `max` =
+    /// 2^w - 1. The low guard is -1.0, built from a 1-valued w+1-bit literal.
+    fn expected_ubv(w: u32, pos: &str, max: &str) -> String {
+        format!(
+            "(ite (fp.isNaN x) (_ bv0 {w}) \
+             (ite (fp.geq x ((_ to_fp_unsigned {EB} {SB}) RNE (_ bv{pos} {}))) (_ bv{max} {w}) \
+             (ite (fp.leq x (fp.neg ((_ to_fp_unsigned {EB} {SB}) RNE (_ bv1 {})))) (_ bv0 {w}) \
+             ((_ fp.to_ubv {w}) RNE x))))",
+            w + 1,
+            w + 1
+        )
+    }
+
+    fn sbv_text(w: u32) -> String {
+        Formula::FpToSbv {
+            rm: rne(),
+            value: fv("x"),
+            width: w,
+            eb: EB,
+            sb: SB,
+        }
+        .to_smtlib()
+    }
+
+    fn ubv_text(w: u32) -> String {
+        Formula::FpToUbv {
+            rm: rne(),
+            value: fv("x"),
+            width: w,
+            eb: EB,
+            sb: SB,
+        }
+        .to_smtlib()
+    }
+
+    #[test]
+    fn clamp_text_is_byte_identical_where_the_u128_shift_was_defined() {
+        // Signed: the widest shift count is `w + 2`, so `w <= 125`.
+        for w in 1u32..=125 {
+            let pos = (1u128 << (w - 1)).to_string();
+            let min_minus_one = ((1u128 << (w + 2)) - (1u128 << (w - 1)) - 1).to_string();
+            let max = ((1u128 << (w - 1)) - 1).to_string();
+            assert_eq!(
+                sbv_text(w),
+                expected_sbv(w, &pos, &min_minus_one, &max),
+                "signed width {w} must be unchanged"
+            );
+        }
+        // Unsigned: the only shift count is `w`, so `w <= 127`.
+        for w in 1u32..=127 {
+            let pos = (1u128 << w).to_string();
+            let max = ((1u128 << w) - 1).to_string();
+            assert_eq!(
+                ubv_text(w),
+                expected_ubv(w, &pos, &max),
+                "unsigned width {w} must be unchanged"
+            );
+        }
+    }
+
+    #[test]
+    fn clamp_constants_are_exact_above_the_u128_bound() {
+        // (width, 2^(w-1), 7*2^(w-1) - 1, 2^(w-1) - 1), computed off-machine.
+        // 126 and 127 are the two widths the signed arm used to get wrong
+        // while the unsigned arm was still right; 128 and up were wrong in
+        // both.
+        let signed: &[(u32, &str, &str, &str)] = &[
+            (
+                126,
+                "42535295865117307932921825928971026432",
+                "297747071055821155530452781502797185023",
+                "42535295865117307932921825928971026431",
+            ),
+            (
+                127,
+                "85070591730234615865843651857942052864",
+                "595494142111642311060905563005594370047",
+                "85070591730234615865843651857942052863",
+            ),
+            (
+                128,
+                "170141183460469231731687303715884105728",
+                "1190988284223284622121811126011188740095",
+                "170141183460469231731687303715884105727",
+            ),
+            (
+                200,
+                "803469022129495137770981046170581301261101496891396417650688",
+                "5624283154906465964396867323194069108827710478239774923554815",
+                "803469022129495137770981046170581301261101496891396417650687",
+            ),
+        ];
+        for (w, pos, min_minus_one, max) in signed {
+            assert_eq!(
+                sbv_text(*w),
+                expected_sbv(*w, pos, min_minus_one, max),
+                "signed width {w}"
+            );
+        }
+
+        // (width, 2^w, 2^w - 1).
+        let unsigned: &[(u32, &str, &str)] = &[
+            (
+                128,
+                "340282366920938463463374607431768211456",
+                "340282366920938463463374607431768211455",
+            ),
+            (
+                200,
+                "1606938044258990275541962092341162602522202993782792835301376",
+                "1606938044258990275541962092341162602522202993782792835301375",
+            ),
+        ];
+        for (w, pos, max) in unsigned {
+            assert_eq!(
+                ubv_text(*w),
+                expected_ubv(*w, pos, max),
+                "unsigned width {w}"
+            );
+        }
+    }
+
+    /// `width` is a `u32`, so the contract carries widths far past any machine
+    /// integer. 1024 is well above the 1000 the u128 spelling could not have
+    /// reached by any margin, and the emitted literal is the exact 2^1023.
+    #[test]
+    fn clamp_constants_are_exact_at_a_four_figure_width() {
+        let pow_1023 = "89884656743115795386465259539451236680898848947115328636715040578866337902750481566354238661203768010560056939935696678829394884407208311246423715319737062188883946712432742638151109800623047059726541476042502884419075341171231440736956555270413618581675255342293149119973622969239858152417678164812112068608";
+        let seven_1023_minus_one = "629192597201810567705256816776158656766291942629807300457005284052064365319253370964479670628426376073920398579549876751805764190850458178724966007238159435322187626987029198467057768604361329418085790332297520190933527388198620085158695886892895330071726787396052043839815360784679007066923747153684784480255";
+        let pow_1023_minus_one = "89884656743115795386465259539451236680898848947115328636715040578866337902750481566354238661203768010560056939935696678829394884407208311246423715319737062188883946712432742638151109800623047059726541476042502884419075341171231440736956555270413618581675255342293149119973622969239858152417678164812112068607";
+        assert_eq!(
+            sbv_text(1024),
+            expected_sbv(1024, pow_1023, seven_1023_minus_one, pow_1023_minus_one),
+            "signed width 1024"
+        );
+
+        let pow_1024 = "179769313486231590772930519078902473361797697894230657273430081157732675805500963132708477322407536021120113879871393357658789768814416622492847430639474124377767893424865485276302219601246094119453082952085005768838150682342462881473913110540827237163350510684586298239947245938479716304835356329624224137216";
+        let pow_1024_minus_one = "179769313486231590772930519078902473361797697894230657273430081157732675805500963132708477322407536021120113879871393357658789768814416622492847430639474124377767893424865485276302219601246094119453082952085005768838150682342462881473913110540827237163350510684586298239947245938479716304835356329624224137215";
+        assert_eq!(
+            ubv_text(1024),
+            expected_ubv(1024, pow_1024, pow_1024_minus_one),
+            "unsigned width 1024"
+        );
+    }
 }
 
 #[cfg(test)]
@@ -2115,5 +3312,210 @@ mod fnapp_tests {
             f, back,
             "function applications must round-trip losslessly through serde"
         );
+    }
+}
+
+#[cfg(test)]
+mod const_array_tests {
+    //! `Formula::ConstArray`, the constant-size uniform array `[v; N]`: the
+    //! SMT-LIB text it lowers to, its walks, its serde shape, and that its
+    //! size does not depend on `N`. The solver-side meaning (select of it is
+    //! its value, stores over it) is checked against ay in
+    //! `trust-ir-ay/tests/formula_const_array.rs`.
+    use super::*;
+
+    fn bv8(value: i128) -> Formula {
+        Formula::BitVec { value, width: 8 }
+    }
+
+    fn arr_var(name: &str, index: Sort, elem: Sort) -> Formula {
+        Formula::Var(name.into(), Sort::Array(Box::new(index), Box::new(elem)))
+    }
+
+    #[test]
+    fn const_array_lowers_to_sort_qualified_const() {
+        let int_int = Formula::const_array(Sort::Int, Sort::Int, Formula::Int(7));
+        assert_eq!(int_int.to_smtlib(), "((as const (Array Int Int)) 7)");
+
+        let bv = Formula::const_array(Sort::BitVec(64), Sort::BitVec(8), bv8(-1));
+        assert_eq!(
+            bv.to_smtlib(),
+            "((as const (Array (_ BitVec 64) (_ BitVec 8))) (_ bv255 8))"
+        );
+
+        // The qualifier is spelled from the two carried sorts; it must be
+        // exactly the full array sort's own spelling, nested arrays included.
+        let inner = Sort::Array(Box::new(Sort::Int), Box::new(Sort::Bool));
+        let nested = Formula::const_array(
+            Sort::BitVec(32),
+            inner.clone(),
+            arr_var("row", Sort::Int, Sort::Bool),
+        );
+        let full = Sort::Array(Box::new(Sort::BitVec(32)), Box::new(inner));
+        assert_eq!(
+            nested.to_smtlib(),
+            format!("((as const {}) row)", full.to_smtlib())
+        );
+    }
+
+    #[test]
+    fn select_and_store_over_a_const_array_render() {
+        let base = Formula::const_array(Sort::Int, Sort::BitVec(8), bv8(7));
+        let k = Formula::Var("k".into(), Sort::Int);
+        let read = Formula::Select(Box::new(base.clone()), Box::new(k.clone()));
+        assert_eq!(
+            read.to_smtlib(),
+            "(select ((as const (Array Int (_ BitVec 8))) (_ bv7 8)) k)"
+        );
+        let written = Formula::Store(Box::new(base), Box::new(Formula::Int(3)), Box::new(bv8(9)));
+        assert_eq!(
+            written.to_smtlib(),
+            "(store ((as const (Array Int (_ BitVec 8))) (_ bv7 8)) 3 (_ bv9 8))"
+        );
+    }
+
+    #[test]
+    fn const_array_walks_reach_the_element_and_keep_the_sorts() {
+        let v = Formula::Var("v".into(), Sort::BitVec(8));
+        let f = Formula::const_array(Sort::Int, Sort::BitVec(8), v);
+        assert_eq!(
+            f.children().len(),
+            1,
+            "the element term is the one sub-formula"
+        );
+        assert!(f.free_variables().contains("v"));
+
+        let renamed = f.rename_var("v", "w");
+        assert!(renamed.free_variables().contains("w"));
+        assert!(!renamed.free_variables().contains("v"));
+        assert_eq!(
+            renamed.to_smtlib(),
+            "((as const (Array Int (_ BitVec 8))) w)"
+        );
+
+        // map rebuilds bottom-up and preserves both sorts.
+        let mapped = renamed.map(&mut |g| match g {
+            Formula::Var(name, sort) if name == "w" => {
+                assert_eq!(sort, Sort::BitVec(8));
+                bv8(0)
+            }
+            other => other,
+        });
+        assert_eq!(
+            mapped,
+            Formula::const_array(Sort::Int, Sort::BitVec(8), bv8(0))
+        );
+
+        let mut seen = 0;
+        mapped.visit(&mut |_| seen += 1);
+        assert_eq!(seen, 2, "visit sees the array and its element");
+    }
+
+    #[test]
+    fn const_array_is_an_array_term() {
+        assert!(Formula::const_array(Sort::Int, Sort::Int, Formula::Int(0)).has_arrays());
+        // Nested inside another term too.
+        let eq = Formula::Eq(
+            Box::new(Formula::Var("x".into(), Sort::Int)),
+            Box::new(Formula::Select(
+                Box::new(Formula::const_array(Sort::Int, Sort::Int, Formula::Int(0))),
+                Box::new(Formula::Int(1)),
+            )),
+        );
+        assert!(eq.has_arrays());
+    }
+
+    #[test]
+    fn const_array_bitvector_sorts_count_as_bitvector_types() {
+        // No bitvector anywhere.
+        assert!(!Formula::const_array(Sort::Int, Sort::Int, Formula::Int(0)).has_bitvectors());
+        // A bitvector INDEX sort is written into the term even though the
+        // element is an `Int`.
+        assert!(
+            Formula::const_array(Sort::BitVec(64), Sort::Int, Formula::Int(0)).has_bitvectors()
+        );
+        // A bitvector ELEMENT sort whose value is not itself a bitvector term
+        // (a read out of an array variable, which `has_bitvectors` does not
+        // flag on its own).
+        let read = Formula::Select(
+            Box::new(arr_var("src", Sort::Int, Sort::BitVec(8))),
+            Box::new(Formula::Int(0)),
+        );
+        assert!(!read.has_bitvectors());
+        assert!(Formula::const_array(Sort::Int, Sort::BitVec(8), read).has_bitvectors());
+        // …and one nested inside an array element sort.
+        let rows = Sort::Array(Box::new(Sort::BitVec(16)), Box::new(Sort::Int));
+        assert!(
+            Formula::const_array(Sort::Int, rows, arr_var("r", Sort::BitVec(16), Sort::Int))
+                .has_bitvectors()
+        );
+    }
+
+    #[test]
+    fn const_array_serde_shape_and_round_trip() {
+        let f = Formula::const_array(Sort::Int, Sort::BitVec(8), bv8(7));
+        let json = serde_json::to_string(&f).expect("serialize const array");
+        assert_eq!(
+            json,
+            r#"{"ConstArray":{"index_sort":"Int","elem_sort":{"BitVec":8},"value":{"BitVec":{"value":7,"width":8}}}}"#
+        );
+        let back: Formula = serde_json::from_str(&json).expect("deserialize const array");
+        assert_eq!(back, f);
+
+        // Inside a store chain and an equation, with a symbolic element.
+        let seed = Formula::Eq(
+            Box::new(arr_var("arr$v0", Sort::Int, Sort::BitVec(8))),
+            Box::new(Formula::Store(
+                Box::new(Formula::const_array(
+                    Sort::Int,
+                    Sort::BitVec(8),
+                    Formula::Var("v".into(), Sort::BitVec(8)),
+                )),
+                Box::new(Formula::Int(0)),
+                Box::new(bv8(1)),
+            )),
+        );
+        let json = serde_json::to_string(&seed).expect("serialize seed");
+        let back: Formula = serde_json::from_str(&json).expect("deserialize seed");
+        assert_eq!(back, seed);
+    }
+
+    /// `[v; N]` stated with a const array is the same term for every `N`:
+    /// the length never enters it. A read at the last lane adds one index
+    /// literal, whatever `N` is.
+    #[test]
+    fn uniform_array_statement_is_constant_size_in_n() {
+        fn node_count(f: &Formula) -> usize {
+            let mut n = 0;
+            f.visit(&mut |_| n += 1);
+            n
+        }
+        let arr = || arr_var("arr$v0", Sort::Int, Sort::BitVec(8));
+        let seed = || {
+            Formula::Eq(
+                Box::new(arr()),
+                Box::new(Formula::const_array(
+                    Sort::Int,
+                    Sort::BitVec(8),
+                    Formula::Var("v".into(), Sort::BitVec(8)),
+                )),
+            )
+        };
+        let reference = seed();
+        let mut sizes = Vec::new();
+        for n in [2_u64, 64, 65, 1 << 20, 1 << 40, u64::MAX] {
+            let stated = seed();
+            assert_eq!(
+                stated, reference,
+                "the statement of [v; {n}] does not mention {n}"
+            );
+            let last = Formula::Select(Box::new(arr()), Box::new(Formula::UInt(u128::from(n - 1))));
+            sizes.push((node_count(&stated), node_count(&last)));
+        }
+        assert!(
+            sizes.windows(2).all(|w| w[0] == w[1]),
+            "node counts must not depend on N: {sizes:?}"
+        );
+        assert_eq!(sizes[0], (4, 3));
     }
 }

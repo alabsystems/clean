@@ -62,12 +62,14 @@ fn unreachable_translate_negated_forms() -> Vec<LogicalForm> {
             ty: nat_ty.clone(),
             lhs: lhs.clone(),
             rhs: rhs.clone(),
+            int_rounding: None,
             original: lhs.clone(),
         },
         LogicalForm::Mod {
             ty: nat_ty.clone(),
             lhs: lhs.clone(),
             rhs: rhs.clone(),
+            int_rounding: None,
             original: lhs.clone(),
         },
         LogicalForm::Neg {

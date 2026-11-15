@@ -5,13 +5,13 @@
 //! Unit tests for the native verification request module.
 
 use super::*;
-use crate::ProofLineageNode;
 use crate::{
     Block, BlockId, FuncTy, Function, ICmpOp, InstrNode, ObligationKind, ProofEvidence,
     ProofFormula, ProofObligation, ProofObligationSourceIdentity, ProofObligationSourceRange,
     ProofReplayIdentity, ProofStatus, ProofTransform, ProofTransformStage,
     PublicObligationIdentity, Ty, ValueId,
 };
+use crate::{Pred, PredId, ProofLineageNode};
 
 /// Known-answer tests for the hand-rolled SHA-256 (the digest behind every
 /// manifest/proof identity). Vectors are from FIPS 180-4 / the NIST CAVP
@@ -108,6 +108,156 @@ fn native_bundle_rejects_module_tamper_even_when_lineage_repeats_forged_digest()
 }
 
 #[test]
+fn native_bundle_validate_refuses_completeness_before_hashing_and_retains_other_diagnostics() {
+    let plain = source_generation_authority_bundle();
+    plain.validate().expect("unclaimed bundle control");
+    for claim in [
+        crate::ModuleCompleteness::Complete,
+        crate::ModuleCompleteness::Partial(vec![]),
+        crate::ModuleCompleteness::Partial(vec![crate::UnloweredRow {
+            symbol: "unlowered".into(),
+            display_path: None,
+            reason: "synthetic refusal".into(),
+        }]),
+    ] {
+        let mut bundle = plain.clone();
+        bundle.module.completeness = Some(claim);
+        bundle.schema_version = 0;
+        bundle.requests.clear();
+        let before = bundle.clone();
+        let errors = bundle.validate().expect_err("claim has no wire identity");
+        assert!(errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity { location, construct }
+                if location == "module" && *construct == "Module.completeness"
+        )));
+        assert!(errors.contains(&NativeVerificationBundleError::UnsupportedSchemaVersion(0)));
+        assert!(errors.contains(&NativeVerificationBundleError::EmptyRequests));
+        assert!(
+            !errors.iter().any(|error| matches!(
+                error,
+                NativeVerificationBundleError::TrustIrModuleDigestMismatch { .. }
+            )),
+            "no invented expected digest for an unencodable module"
+        );
+        assert_eq!(bundle, before, "claim and evidence remain intact");
+    }
+}
+
+#[test]
+fn native_bundle_validate_hashes_a_bound_module_without_unbinding_it() {
+    // Since binary v61 a CertificateBinding has a wire carrier, so a bound
+    // module HAS an identity: the bundle validates once its recorded module
+    // digest is the bound module's, and hashing never erases the binding.
+    let plain = source_generation_authority_bundle();
+    plain.validate().expect("unbound bundle control");
+    let mut bundle = plain.clone();
+    bundle.module.proof_certificates.push(ProofCertificate {
+        obligation: ProofId::new(73),
+        prover: "synthetic transport fixture; not certified".into(),
+        evidence: ProofEvidence::CleanCic {
+            term: vec![],
+            context: vec![],
+            lineage: digest(10),
+            kernel_recheck: Some(crate::CleanCicKernelRecheck {
+                module: "TransportFixture".into(),
+                theorems: vec![],
+                anchor: "transport-fixture".into(),
+                allowed_axioms: vec![],
+                binding: Some(Box::new(crate::CertificateBinding::new(
+                    digest(11),
+                    digest(12),
+                ))),
+            }),
+        },
+        assurance: None,
+    });
+    // The completeness claim still has no carrier: exactly ONE carrier is
+    // reported now, and it is not the binding.
+    bundle.module.completeness = Some(crate::ModuleCompleteness::Complete);
+    let errors = bundle
+        .validate()
+        .expect_err("the completeness claim has no carrier");
+    let no_identity: Vec<&NativeVerificationBundleError> = errors
+        .iter()
+        .filter(|error| {
+            matches!(
+                error,
+                NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity { .. }
+            )
+        })
+        .collect();
+    assert!(
+        matches!(
+            no_identity.as_slice(),
+            [NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity { construct, .. }]
+                if *construct == "Module.completeness"
+        ),
+        "{errors:?}"
+    );
+    bundle.module.completeness = None;
+    // The recorded digest is still the UNBOUND module's: a stale identity.
+    assert!(
+        bundle
+            .validate()
+            .expect_err("stale digest")
+            .iter()
+            .any(|error| matches!(
+                error,
+                NativeVerificationBundleError::TrustIrModuleDigestMismatch { .. }
+            ))
+    );
+    // Re-stamp the module identity everywhere the bundle records it (the
+    // envelope, the lineage roots, the evidence bundles), as any producer
+    // that changes the module must.
+    refresh_native_bundle_module_identity(&mut bundle);
+    assert_ne!(
+        bundle.trust_ir_module_digest, plain.trust_ir_module_digest,
+        "the binding is part of the module identity"
+    );
+    let before = bundle.clone();
+    bundle
+        .validate()
+        .expect("a bound module has a wire identity");
+    assert_eq!(bundle, before, "validation never erases the binding");
+}
+
+/// D1a (kind i): the bundle's identity pre-check is the writer in check mode,
+/// so it refuses the producer-internal `Ty::Error` by name. Its old
+/// hand-written probe list omitted it, and `validate` then panicked inside
+/// `stable_digest`.
+#[test]
+fn native_bundle_validate_refuses_a_producer_internal_type_before_hashing() {
+    let plain = source_generation_authority_bundle();
+    plain.validate().expect("encodable bundle control");
+    let mut bundle = plain.clone();
+    bundle.module.types.push(crate::ty::Ty::Error);
+    let before = bundle.clone();
+    let errors = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| bundle.validate()))
+        .expect("a refusal, never a panic")
+        .expect_err("a Ty::Error module has no wire identity");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity { construct, .. }
+                if construct.contains("Ty::Error")
+        )),
+        "{errors:?}"
+    );
+    assert!(
+        !errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustIrModuleDigestMismatch { .. }
+        )),
+        "no invented expected digest for an unencodable module"
+    );
+    assert_eq!(
+        bundle, before,
+        "the module is not edited to compute an identity"
+    );
+}
+
+#[test]
 fn artifact_resolution_rejects_noncryptographic_digest_before_lookup() {
     let bundle = native_bundle();
     let legacy = ProofDigest::trust_ir_stable("legacy.artifact.identity", b"artifact");
@@ -125,20 +275,102 @@ fn artifact_resolution_rejects_noncryptographic_digest_before_lookup() {
     );
 }
 
-fn native_bundle() -> NativeVerificationBundle {
+/// `validate_cast_fact` is the SECOND caller of
+/// `Module::layout_sensitive_cast_evidence`, and unlike `validate_module` it
+/// has no transport rule in front of it: whatever evidence the computed
+/// result agrees with is authenticated as a compiler fact and handed to
+/// ty/ay/TrustCg. So the guard inside that function is load-bearing here, and
+/// it must follow TABLE references — `Ty::contains_handle` is inline-only, so
+/// before the fix this exact bundle validated with no `evidence` complaint,
+/// recording that a raw pointer may be bit-reinterpreted as an opaque runtime
+/// handle.
+#[test]
+fn native_bundle_rejects_a_cast_fact_forging_a_table_backed_handle() {
+    let mut bundle = native_bundle();
+    // `ty.0` IS the handle; `Ty::Refine(ty.0, _)` never spells it inline, yet
+    // lays out as one pointer word — the same width as `Ty::Ptr`.
+    bundle
+        .module
+        .types
+        .push(Ty::handle("Nat", "trust_bignum::Nat"));
+    bundle.module.predicates.push(Pred::Top);
+    let forged = Ty::Refine(TyId::new(0), PredId::new(0));
+    assert!(!forged.contains_handle());
+    assert_eq!(
+        bundle
+            .module
+            .ty_layout_shape(&forged)
+            .expect("refine over a handle lays out")
+            .size_bits,
+        bundle
+            .module
+            .ty_layout_shape(&Ty::Ptr)
+            .expect("ptr lays out")
+            .size_bits,
+    );
+
+    // Everything the mutation itself changes (the recomputed module digest) is
+    // held constant by measuring the SAME bundle with and without the fact, so
+    // the difference is attributable to the fact alone.
+    let baseline = format!("{:?}", bundle.validate());
+
+    let fact = NativeCompilerFactId::new(40);
+    bundle.compiler_facts.casts.push(NativeCastFact {
+        id: fact,
+        function: FuncId::new(0),
+        result: None,
+        op: CastOp::Bitcast,
+        source_ty: Ty::Ptr,
+        target_ty: forged,
+        evidence: CastLayoutEvidence::SameSize {
+            size_bits: 64,
+            src_align_bits: Some(64),
+            dst_align_bits: Some(64),
+        },
+        span: None,
+        obligations: Vec::new(),
+    });
+
+    let errors = bundle
+        .validate()
+        .expect_err("a Ptr -> handle cast fact must fail closed");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::InvalidCompilerFact {
+                fact: NativeCompilerFactRef::Cast(id),
+                field: "evidence",
+            } if *id == fact
+        )),
+        "the forged cast evidence was authenticated; adding the fact changed \
+         nothing about admission.\n  without the fact: {baseline}\n  with it: {errors:?}"
+    );
+}
+
+pub(super) fn native_bundle() -> NativeVerificationBundle {
     let source_digest = digest(0xA1);
     let mut module = Module::new("trust_native_request");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![Ty::I32],
-        returns: vec![Ty::I32],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![Ty::I32],
+            returns: vec![Ty::I32],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut function = Function::new(FuncId::new(0), "checked_add", ft, BlockId::new(0));
     function
         .blocks
         .push(Block::new(BlockId::new(0)).with_param(ValueId::new(0), Ty::I32));
-    module.add_function(function);
-    let source_file = module.intern_file("checked_add.rs");
+    // A tRust-lowered body: schema 8 makes the bundle's language set cover
+    // it (`Rust`), so the fixture stamps what the shipping producer stamps.
+    function.producer = Some(Producer::TRust);
+    module
+        .try_add_function(function)
+        .expect("Module::try_add_function: test fixture");
+    let source_file = module
+        .intern_file("checked_add.rs")
+        .expect("Module::intern_file: test fixture");
 
     module.proof_obligations.push(
         ProofObligation::new(
@@ -200,6 +432,8 @@ fn native_bundle() -> NativeVerificationBundle {
         obligation: ProofId::new(0),
         prover: "trust_vc".to_string(),
         evidence: ProofEvidence::LeanProof("exact TrustVc.MIR.borrow_sound".to_string()),
+
+        assurance: None,
     };
     module.proof_certificates.push(cert.clone());
     let trust_ir_digest = module.stable_digest();
@@ -241,6 +475,7 @@ fn native_bundle() -> NativeVerificationBundle {
     bundle.provenance = NativeBundleProvenance {
         producer_version: "trust-test@1".to_string(),
         source_language: NativeSourceLanguage::Rust,
+        source_languages: BTreeSet::from([NativeSourceLanguage::Rust]),
         source_artifact: Some("checked_add.rs".to_string()),
         source_digest: Some(source_digest),
         toolchain: vec![
@@ -388,6 +623,35 @@ fn source_generation_authority_bundle() -> NativeVerificationBundle {
     let mut bundle = native_bundle();
     remove_unreplayed_trust_vc_fixture(&mut bundle);
     bundle
+}
+
+#[path = "tests/validated_view.rs"]
+mod validated_view;
+
+#[test]
+fn native_bundle_rejects_ambiguous_v6_identity_without_authority_fallback() {
+    let mut bundle = source_generation_authority_bundle();
+    bundle.validate().expect("current bundle is valid");
+    assert_eq!(NativeVerificationBundle::SCHEMA_VERSION, 8);
+    bundle.schema_version = 6;
+    bundle.serialization.schema_version = 6;
+    let errors = bundle
+        .validate()
+        .expect_err("v6 requires producer regeneration");
+    assert!(errors.contains(&NativeVerificationBundleError::UnsupportedSchemaVersion(6)));
+    // v7 (the pre-two-language schema) is refused the same way: exact match,
+    // never a best-effort upgrade of a bundle whose language set is absent.
+    bundle.schema_version = 7;
+    bundle.serialization.schema_version = 7;
+    let errors = bundle.validate().expect_err("v7 is not v8");
+    assert!(errors.contains(&NativeVerificationBundleError::UnsupportedSchemaVersion(7)));
+    assert!(
+        errors.contains(&NativeVerificationBundleError::UnsupportedSerializationSchemaVersion(7))
+    );
+    assert!(matches!(
+        SourceGenerationAuthority::mint_from_live_lowering(&mut bundle),
+        Err(SourceGenerationAuthorityMintError::InvalidBundle(_))
+    ));
 }
 
 #[test]
@@ -538,6 +802,7 @@ fn add_native_direct_enum_fact(bundle: &mut NativeVerificationBundle) {
         discriminants: Vec::new(),
         repr: None,
         layout: None,
+        origin: None,
     });
     bundle.compiler_facts.adt_layouts.push(NativeAdtLayoutFact {
         id: NativeCompilerFactId::new(20),
@@ -599,6 +864,7 @@ fn add_native_niche_enum_fact(bundle: &mut NativeVerificationBundle) {
         discriminants: Vec::new(),
         repr: None,
         layout: None,
+        origin: None,
     });
     bundle.compiler_facts.adt_layouts.push(NativeAdtLayoutFact {
         id: NativeCompilerFactId::new(21),
@@ -6908,19 +7174,29 @@ fn hardware_vector_contract_descriptors_emit_sidecar_ready_rows() {
     assert!(lines.contains(&"hardware_vector_contract.operation.21=icmp.ugt".to_string()));
     assert!(lines.contains(&"hardware_vector_contract.operation.22=icmp.uge".to_string()));
     assert!(
-        lines.contains(&"hardware_vector_contract.operation.icmp.ult.status=deferred".to_string())
+        lines.contains(&"hardware_vector_contract.operation.icmp.ult.status=available".to_string())
     );
     assert!(lines.contains(
-            &"hardware_vector_contract.operation.icmp.ult.reason=unsigned_vector_compare_proof_blocked"
+        &"hardware_vector_contract.operation.icmp.ult.reason=canonical_contract".to_string()
+    ));
+    assert!(
+        lines
+            .contains(&"hardware_vector_contract.operation.icmp.ult.fail_closed=false".to_string())
+    );
+    assert!(lines.contains(
+        &"hardware_vector_contract.operation.icmp.ult.feature_guard=x86.sse2".to_string()
+    ));
+    assert!(lines.contains(
+            &"hardware_vector_contract.operation.icmp.ult.composition=pcmpgtd(pxor(rhs,sign_bit_bias),pxor(lhs,sign_bit_bias));sign_bit_bias:splat_i32(0x80000000)"
                 .to_string()
         ));
     assert!(
-        lines.contains(&"hardware_vector_contract.operation.icmp.ult.fail_closed=true".to_string())
+        !lines
+            .iter()
+            .any(|line| line
+                .starts_with("hardware_vector_contract.operation.icmp.ult.consumer_policy=")),
+        "an available cell publishes no fail-closed consumer policy"
     );
-    assert!(lines.contains(
-            &"hardware_vector_contract.operation.icmp.ult.consumer_policy=fail_closed_reject_lowering"
-                .to_string()
-        ));
     assert!(
         lines
             .contains(&"hardware_vector_contract.operation.binop.add.status=available".to_string())
@@ -7110,90 +7386,415 @@ fn chc_x86_operation_contract_rows_cover_all_listed_operations() {
     );
 }
 
+/// Every integer vector compare predicate, in `ICmpOp` order.
+const CHC_X86_ALL_ICMP_OPS: [ICmpOp; 10] = [
+    ICmpOp::Eq,
+    ICmpOp::Ne,
+    ICmpOp::Ult,
+    ICmpOp::Ule,
+    ICmpOp::Ugt,
+    ICmpOp::Uge,
+    ICmpOp::Slt,
+    ICmpOp::Sle,
+    ICmpOp::Sgt,
+    ICmpOp::Sge,
+];
+
+/// The fail-closed cells of the x86-64 vector-compare admission rule
+/// (`docs/dialects.md`, decided 2026-09-27), listed per cell, never as a
+/// count. Empty since 2026-09-28: the four unsigned `<16 x i8>` compares, the
+/// last fail-closed cells, are certified on ground (b), the certificate rule
+/// `CHC_X86_ICMP_CERTIFICATE_RULE`. A cell that turns fail-closed is listed here
+/// in the same change as its status row and its must-refuse corpus row.
+const CHC_X86_FAIL_CLOSED_ICMP_CELLS: &[(&str, ICmpOp)] = &[];
+
+fn chc_x86_icmp_cell_is_fail_closed(contract: &str, op: ICmpOp) -> bool {
+    CHC_X86_FAIL_CLOSED_ICMP_CELLS
+        .iter()
+        .any(|(cell, cell_op)| *cell == contract && *cell_op == op)
+}
+
+fn chc_x86_icmp_is_unsigned(op: ICmpOp) -> bool {
+    matches!(op, ICmpOp::Ult | ICmpOp::Ule | ICmpOp::Ugt | ICmpOp::Uge)
+}
+
 #[test]
 fn chc_x86_manifest_covers_every_vector_icmp_op_or_fails_closed() {
-    let icmp_ops = [
-        ICmpOp::Eq,
-        ICmpOp::Ne,
-        ICmpOp::Ult,
-        ICmpOp::Ule,
-        ICmpOp::Ugt,
-        ICmpOp::Uge,
-        ICmpOp::Slt,
-        ICmpOp::Sle,
-        ICmpOp::Sgt,
-        ICmpOp::Sge,
-    ];
-    let descriptors = chc_x86_hardware_vector_contract_descriptors();
-
-    for descriptor in descriptors {
+    for descriptor in chc_x86_hardware_vector_contract_descriptors() {
         let rows = descriptor.manifest_rows();
         let value_for = |key: &str| {
             rows.iter()
                 .find(|row| row.key == key)
                 .map(|row| row.value.as_str())
         };
+        let cell = descriptor.contract_name;
 
-        for op in icmp_ops {
+        for op in CHC_X86_ALL_ICMP_OPS {
             let operation = format!("icmp.{op}");
             assert!(
                 descriptor.operations.contains(&operation.as_str()),
-                "{} must explicitly list vector ICmp operation {operation}",
-                descriptor.contract_name
+                "{cell} must explicitly list vector ICmp operation {operation}"
             );
 
             let prefix = format!("hardware_vector_contract.operation.{operation}");
-            let status = value_for(&format!("{prefix}.status"))
-                .expect("each listed ICmp operation must publish a status");
-            let fail_closed = value_for(&format!("{prefix}.fail_closed"))
-                .expect("each listed ICmp operation must publish fail_closed");
-            let is_unsigned = matches!(op, ICmpOp::Ult | ICmpOp::Ule | ICmpOp::Ugt | ICmpOp::Uge);
+            let field = |suffix: &str| value_for(&format!("{prefix}.{suffix}"));
+            let status = field("status").expect("each listed ICmp operation must publish a status");
 
-            if is_unsigned {
-                let expected_status = if descriptor.contract_name == "chc_x86.v4_i32" {
-                    "deferred"
-                } else {
-                    "unavailable"
-                };
-                let expected_reason = if descriptor.contract_name == "chc_x86.v4_i32" {
-                    "unsigned_vector_compare_proof_blocked"
-                } else {
-                    "unsigned_vector_compare_unavailable"
-                };
-                assert_eq!(
-                    status, expected_status,
-                    "{} {operation} must not claim proven TrustIr lowering",
-                    descriptor.contract_name
+            if chc_x86_icmp_cell_is_fail_closed(cell, op) {
+                assert_ne!(
+                    status, "available",
+                    "{cell} {operation}: a fail-closed cell must not claim a lowering"
                 );
-                assert_eq!(
-                    value_for(&format!("{prefix}.reason")),
-                    Some(expected_reason)
+                assert_ne!(
+                    field("reason"),
+                    Some("canonical_contract"),
+                    "{cell} {operation}: a fail-closed cell names why"
                 );
-                assert_eq!(fail_closed, "true");
+                assert_eq!(field("fail_closed"), Some("true"), "{cell} {operation}");
                 assert_eq!(
-                    value_for(&format!("{prefix}.consumer_policy")),
-                    Some(CHC_X86_UNSIGNED_VECTOR_COMPARE_FAIL_CLOSED_POLICY)
+                    field("consumer_policy"),
+                    Some(CHC_X86_UNSIGNED_VECTOR_COMPARE_FAIL_CLOSED_POLICY),
+                    "{cell} {operation}"
                 );
-                assert_eq!(value_for(&format!("{prefix}.feature_guard")), None);
-                assert_eq!(value_for(&format!("{prefix}.native_instructions")), None);
-                assert_eq!(value_for(&format!("{prefix}.semantics")), None);
+                for evidence in [
+                    "feature_guard",
+                    "native_instructions",
+                    "semantics",
+                    "composition",
+                ] {
+                    assert_eq!(
+                        field(evidence),
+                        None,
+                        "{cell} {operation}: a fail-closed cell publishes no lowering evidence \
+                         ({evidence})"
+                    );
+                }
+                continue;
+            }
+
+            assert_eq!(status, "available", "{cell} {operation}");
+            assert_eq!(
+                field("reason"),
+                Some("canonical_contract"),
+                "{cell} {operation}"
+            );
+            assert_eq!(field("fail_closed"), Some("false"), "{cell} {operation}");
+            assert_eq!(field("consumer_policy"), None, "{cell} {operation}");
+            let guard = field("feature_guard").expect("an available cell publishes its guard");
+            let native = field("native_instructions")
+                .expect("an available cell publishes its native instructions");
+            let composition = field("composition")
+                .expect("an available icmp cell publishes the composition the backend emits");
+            assert!(field("semantics").is_some(), "{cell} {operation}");
+
+            if chc_x86_icmp_is_unsigned(op) {
+                assert_eq!(
+                    guard, CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
+                    "{cell} {operation}: the sign-bit bias composition is SSE2"
+                );
+                assert!(
+                    composition.contains("pxor(lhs,sign_bit_bias)")
+                        && composition.contains("pxor(rhs,sign_bit_bias)")
+                        && composition.contains("sign_bit_bias:splat_"),
+                    "{cell} {operation}: an available unsigned cell publishes the pxor sign-bit \
+                     bias it is certified over, got {composition}"
+                );
+                assert!(native.contains("pxor"), "{cell} {operation}: {native}");
+            }
+
+            // The ground partition: ground (a), the instruction model, is ONE
+            // compare in identity operand order; every other available cell
+            // (ground (b), certificate) is a composition, never that shape.
+            let model_ground =
+                CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS.contains(&operation.as_str());
+            assert_eq!(
+                model_ground,
+                matches!(op, ICmpOp::Eq | ICmpOp::Sgt),
+                "{cell} {operation}: the instruction-model ground is exactly eq and sgt"
+            );
+            let identity = format!("{native}(lhs,rhs)");
+            if model_ground {
+                assert!(
+                    !native.contains(';')
+                        && (native.starts_with("pcmpeq") || native.starts_with("pcmpgt")),
+                    "{cell} {operation}: an instruction-model cell is ONE pcmpeq*/pcmpgt*, got \
+                     {native}"
+                );
+                assert_eq!(composition, identity, "{cell} {operation}");
             } else {
-                assert_eq!(status, "available");
-                assert_eq!(
-                    value_for(&format!("{prefix}.reason")),
-                    Some("canonical_contract")
+                assert_ne!(
+                    composition, identity,
+                    "{cell} {operation}: a certificate-ground cell must not be the bare \
+                     instruction-model shape"
                 );
-                assert_eq!(fail_closed, "false");
-                assert!(value_for(&format!("{prefix}.feature_guard")).is_some());
-                assert!(value_for(&format!("{prefix}.native_instructions")).is_some());
-                assert!(value_for(&format!("{prefix}.semantics")).is_some());
+            }
+        }
+    }
+}
+
+/// The certificate ground is code, and well-formed code: exact revisions, the
+/// digests of the certifying binaries, one `{query}`/`{proof}` placeholder
+/// each, `--strict-proofs` with an Alethe proof, and the verdicts a
+/// re-run must see. trust-cg's certificate gate reads this constant from the
+/// trust-ir it pins (through its query-dump example), so a malformed row here
+/// would otherwise surface only there. A revision or digest that repeats one
+/// hex digit (`000…0`) is a placeholder, not a value, and is refused.
+#[test]
+fn chc_x86_icmp_certificate_rule_is_well_formed() {
+    let rule = CHC_X86_ICMP_CERTIFICATE_RULE;
+    let lower_hex = |text: &str, len: usize| {
+        text.len() == len
+            && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+            && text.bytes().any(|b| b != text.as_bytes()[0])
+    };
+    for build in [rule.ay, rule.clean] {
+        assert!(
+            lower_hex(build.rev, 40),
+            "{}: rev {:?}",
+            build.package,
+            build.rev
+        );
+        let version: Vec<_> = build.version.split('.').collect();
+        assert!(
+            version.len() == 3
+                && version
+                    .iter()
+                    .all(|part| !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit())),
+            "{}: version {:?}",
+            build.package,
+            build.version
+        );
+        assert_eq!(
+            build.build_args.get(..2),
+            Some(&["-p", build.package][..]),
+            "{}",
+            build.package
+        );
+        assert!(
+            !build.certifying_sha256.is_empty()
+                && build
+                    .certifying_sha256
+                    .iter()
+                    .all(|digest| lower_hex(digest, 64)),
+            "{}: certifying digests {:?}",
+            build.package,
+            build.certifying_sha256
+        );
+    }
+    let count = |args: &[&str], item: &str| args.iter().filter(|arg| **arg == item).count();
+    assert_eq!(count(rule.ay_args, "{query}"), 1);
+    assert_eq!(count(rule.ay_args, "{proof}"), 1);
+    assert_eq!(count(rule.ay_args, "--strict-proofs"), 1);
+    assert!(
+        rule.ay_args
+            .windows(2)
+            .any(|pair| pair == ["--proof-format", "alethe"])
+    );
+    assert_eq!(rule.ay_verdict, "unsat");
+    assert_eq!(
+        rule.ay_certificate_report,
+        &[
+            ("unproved_steps", "0"),
+            ("foreign_assumes", "no"),
+            ("trust_free", "yes")
+        ]
+    );
+    assert_eq!(rule.unchecked_proof_rules, &["hole", "lia_generic"]);
+    assert_eq!(count(rule.clean_args, "{certificate}"), 1);
+    assert!(rule.clean_args.starts_with(&["cert", "verify-external"]));
+    assert_eq!(rule.clean_proof_status, "fully verified");
+}
+
+/// Every cell the reader answers carries its ground: an available cell the
+/// instruction-model ground exactly when its operation is in
+/// `CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS`, every other available cell the
+/// ONE certificate rule, and a fail-closed cell none.
+#[test]
+fn chc_x86_vector_icmp_cells_answer_their_ground() {
+    for descriptor in chc_x86_hardware_vector_contract_descriptors() {
+        for op in CHC_X86_ALL_ICMP_OPS {
+            let cell =
+                chc_x86_vector_icmp_cell_status(descriptor.element_bits, descriptor.lane_count, op)
+                    .expect("a covered shape is answered");
+            let ground =
+                chc_x86_vector_icmp_cell_ground(descriptor.element_bits, descriptor.lane_count, op);
+            let operation = format!("icmp.{op}");
+            let model = CHC_X86_ICMP_INSTRUCTION_MODEL_OPERATIONS.contains(&operation.as_str());
+            match (cell.fail_closed(), ground) {
+                (true, None) => {}
+                (false, Some(ChcX86IcmpGround::InstructionModel)) => {
+                    assert!(
+                        model,
+                        "{} {operation}: not an instruction-model op",
+                        descriptor.contract_name
+                    )
+                }
+                (false, Some(ChcX86IcmpGround::Certificate(rule))) => {
+                    assert!(
+                        !model,
+                        "{} {operation}: a model op answered a certificate",
+                        descriptor.contract_name
+                    );
+                    assert_eq!(
+                        *rule, CHC_X86_ICMP_CERTIFICATE_RULE,
+                        "{} {operation}",
+                        descriptor.contract_name
+                    );
+                }
+                (fail_closed, ground) => panic!(
+                    "{} {operation}: fail_closed={fail_closed} with ground {ground:?}",
+                    descriptor.contract_name
+                ),
             }
         }
     }
 }
 
 #[test]
-fn chc_x86_narrow_compare_mask_contracts_are_sse2_signed_only() {
+fn chc_x86_vector_icmp_cell_status_reads_the_published_rows() {
+    let parse_status = |code: &str| match code {
+        "available" => HardwareVectorContractStatus::Available,
+        "deferred" => HardwareVectorContractStatus::Deferred,
+        "unavailable" => HardwareVectorContractStatus::Unavailable,
+        other => panic!("unpublished status code {other}"),
+    };
+    let parse_reason = |code: &str| match code {
+        "canonical_contract" => HardwareVectorContractReason::CanonicalContract,
+        "unsigned_vector_compare_proof_blocked" => {
+            HardwareVectorContractReason::UnsignedVectorCompareProofBlocked
+        }
+        "unsigned_vector_compare_unavailable" => {
+            HardwareVectorContractReason::UnsignedVectorCompareUnavailable
+        }
+        other => panic!("unpublished reason code {other}"),
+    };
+    for descriptor in chc_x86_hardware_vector_contract_descriptors() {
+        let rows = descriptor.manifest_rows();
+        let value_for = |key: String| {
+            rows.iter()
+                .find(|row| row.key == key)
+                .map(|row| row.value.as_str())
+                .unwrap_or_else(|| panic!("{key} is not published"))
+        };
+        for op in CHC_X86_ALL_ICMP_OPS {
+            let prefix = format!("hardware_vector_contract.operation.icmp.{op}");
+            // The guard is part of the verdict: an available cell is lowerable
+            // only on a target with it, and a fail-closed cell publishes none.
+            let published_status = parse_status(value_for(format!("{prefix}.status")));
+            let published_reason = parse_reason(value_for(format!("{prefix}.reason")));
+            let published_guard = rows
+                .iter()
+                .find(|row| row.key == format!("{prefix}.feature_guard"))
+                .map(|row| row.value.as_str());
+            let answered =
+                chc_x86_vector_icmp_cell_status(descriptor.element_bits, descriptor.lane_count, op)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "{} icmp.{op}: a covered shape must be answered",
+                            descriptor.contract_name
+                        )
+                    });
+            assert_eq!(
+                (answered.status, answered.reason, answered.feature_guard),
+                (published_status, published_reason, published_guard),
+                "{} icmp.{op}: the reader must answer the published row, guard included",
+                descriptor.contract_name
+            );
+            assert_eq!(
+                answered.feature_guard.is_some(),
+                answered.status == HardwareVectorContractStatus::Available,
+                "{} icmp.{op}: an answered guard exists exactly on an available cell",
+                descriptor.contract_name
+            );
+            assert_eq!(
+                answered.fail_closed(),
+                chc_x86_icmp_cell_is_fail_closed(descriptor.contract_name, op),
+                "{} icmp.{op}",
+                descriptor.contract_name
+            );
+        }
+    }
+    // Shapes no descriptor covers are NOT governed: `(8, 8)` shares its lane
+    // count with `v8_i16` and its width with `v16_i8`, and a bool lane is one
+    // bit wide.
+    for (bits, count) in [(16, 4), (8, 32), (32, 2), (8, 8), (1, 16), (64, 4)] {
+        for op in CHC_X86_ALL_ICMP_OPS {
+            assert_eq!(
+                chc_x86_vector_icmp_cell_status(bits, count, op),
+                None,
+                "<{count} x i{bits}> icmp.{op} is covered by no descriptor"
+            );
+        }
+    }
+    assert_eq!(
+        chc_x86_vector_icmp_cell_status(1, 16, ICmpOp::Eq),
+        chc_x86_vector_icmp_cell_status(
+            Ty::Bool.bit_width().expect("bool has a width"),
+            16,
+            ICmpOp::Eq
+        ),
+        "the bool-lane probe is the width trust-ir gives a bool lane"
+    );
+    // The guards a status-only reading would drop: `pcmpeqq` is SSE4.1 and
+    // `pcmpgtq` SSE4.2, so the v2_i64 signed cells are NOT baseline-SSE2
+    // lowerable, while the sign-bit-bias unsigned cells are.
+    let guard = |bits, count, op| {
+        chc_x86_vector_icmp_cell_status(bits, count, op).and_then(|cell| cell.feature_guard)
+    };
+    assert_eq!(guard(64, 2, ICmpOp::Eq), Some("x86.sse4.1"));
+    assert_eq!(guard(64, 2, ICmpOp::Slt), Some("x86.sse4.2"));
+    assert_eq!(
+        guard(64, 2, ICmpOp::Ult),
+        Some(CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD)
+    );
+    // The unsigned `<16 x i8>` cells, fail-closed until 2026-09-28, answer
+    // available on the SSE2 sign-bit bias like every other unsigned cell.
+    for op in [ICmpOp::Ult, ICmpOp::Ule, ICmpOp::Ugt, ICmpOp::Uge] {
+        assert_eq!(
+            guard(8, 16, op),
+            Some(CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD),
+            "<16 x i8> icmp.{op}"
+        );
+    }
+}
+
+/// The reason vocabulary is a stable sidecar contract: every
+/// `HardwareVectorContractReason` code is published, in declaration order, in
+/// `HARDWARE_VECTOR_CONTRACT_REASON_CODES`, and every reason a manifest row
+/// carries is in it. `unsigned_vector_compare_proof_blocked` stays in the
+/// vocabulary although no published row carries it since the four unsigned
+/// `<16 x i8>` cells were certified (2026-09-28): a sidecar row minted before
+/// then still parses. This pins both halves of that sentence.
+#[test]
+fn hardware_vector_reason_vocabulary_keeps_the_unemitted_proof_blocked_code() {
+    let codes = [
+        HardwareVectorContractReason::CanonicalContract,
+        HardwareVectorContractReason::UnsignedVectorCompareProofBlocked,
+        HardwareVectorContractReason::UnsignedVectorCompareUnavailable,
+    ]
+    .map(HardwareVectorContractReason::code);
+    assert_eq!(codes.as_slice(), HARDWARE_VECTOR_CONTRACT_REASON_CODES);
+
+    let emitted: BTreeSet<String> = chc_x86_hardware_vector_contract_manifest_rows()
+        .into_iter()
+        .filter(|row| row.key.ends_with(".reason"))
+        .map(|row| row.value)
+        .collect();
+    for reason in &emitted {
+        assert!(
+            HARDWARE_VECTOR_CONTRACT_REASON_CODES.contains(&reason.as_str()),
+            "manifest reason {reason} is not in the published vocabulary"
+        );
+    }
+    assert!(
+        !emitted.contains(HardwareVectorContractReason::UnsignedVectorCompareProofBlocked.code()),
+        "a row carries unsigned_vector_compare_proof_blocked again: restate the enum's rustdoc \
+         and docs/dialects.md, and give the cell its must-refuse corpus row"
+    );
+}
+
+#[test]
+fn chc_x86_narrow_compare_mask_contracts_are_sse2() {
     let narrow_contracts = [
         (
             CHC_X86_V16_I8_HARDWARE_VECTOR_CONTRACT_DESCRIPTOR,
@@ -7212,11 +7813,12 @@ fn chc_x86_narrow_compare_mask_contracts_are_sse2_signed_only() {
             CHC_X86_V8_I16_MASK_TO_BITS_SEMANTICS,
         ),
     ];
-    let unsupported_unsigned = ["icmp.ult", "icmp.ule", "icmp.ugt", "icmp.uge"];
+    let unsigned = [ICmpOp::Ult, ICmpOp::Ule, ICmpOp::Ugt, ICmpOp::Uge];
 
     for (descriptor, rows, status_rows, eq_instruction, gt_instruction, mask_semantics) in
         narrow_contracts
     {
+        let cell = descriptor.contract_name;
         assert_eq!(descriptor.status_code(), "available");
         assert!(!descriptor.fail_closed());
         assert_eq!(descriptor.total_bits, 128);
@@ -7225,71 +7827,89 @@ fn chc_x86_narrow_compare_mask_contracts_are_sse2_signed_only() {
             row_operations.as_slice(),
             &descriptor.operations[..row_operations.len()]
         );
-        for op in unsupported_unsigned {
-            assert!(
-                descriptor.operations.contains(&op),
-                "{} must explicitly list unsigned compare operation {op}",
-                descriptor.contract_name
-            );
-            let status_row = status_rows
-                .iter()
-                .find(|row| row.operation == op)
-                .expect("narrow unsigned compare must have a fail-closed status row");
-            assert_eq!(status_row.status, HardwareVectorContractStatus::Unavailable);
-            assert_eq!(
-                status_row.reason,
-                HardwareVectorContractReason::UnsignedVectorCompareUnavailable
-            );
-            assert!(status_row.fail_closed());
-        }
 
         for row in rows {
             assert_eq!(
                 row.feature_guard, CHC_X86_TRUST_CG_GENERIC_VECTOR_FEATURE_GUARD,
-                "{} {} must stay SSE2-only",
-                descriptor.contract_name, row.operation
+                "{cell} {} must stay SSE2-only",
+                row.operation
             );
             assert_ne!(
                 row.feature_guard, CHC_X86_V4_I32_MUL_FEATURE_GUARD,
-                "{} {} must not require SSE4.1",
-                descriptor.contract_name, row.operation
+                "{cell} {} must not require SSE4.1",
+                row.operation
             );
             assert_ne!(
                 row.feature_guard, CHC_X86_V2_I64_ICMP_SIGNED_ORDER_FEATURE_GUARD,
-                "{} {} must not require SSE4.2",
-                descriptor.contract_name, row.operation
-            );
-            assert!(
-                !unsupported_unsigned.contains(&row.operation),
-                "{} must not publish available unsigned row {}",
-                descriptor.contract_name,
+                "{cell} {} must not require SSE4.2",
                 row.operation
             );
         }
 
+        // The sign-bit bias the narrow unsigned compositions start from.
+        let bits = descriptor.element_bits as usize;
+        let bias = format!(
+            "sign_bit_bias:splat_i{bits}(0x8{})",
+            "0".repeat(bits / 4 - 1)
+        );
         let manifest_rows = descriptor.manifest_rows();
-        for op in unsupported_unsigned {
-            let prefix = format!("hardware_vector_contract.operation.{op}");
+        for op in unsigned {
+            let operation = format!("icmp.{op}");
+            assert!(
+                descriptor.operations.contains(&operation.as_str()),
+                "{cell} must explicitly list unsigned compare operation {operation}"
+            );
+            let contract_row = rows.iter().find(|row| row.operation == operation);
+            let status_row = status_rows.iter().find(|row| row.operation == operation);
             let value_for = |suffix: &str| {
-                let key = format!("{prefix}.{suffix}");
+                let key = format!("hardware_vector_contract.operation.{operation}.{suffix}");
                 manifest_rows
                     .iter()
                     .find(|row| row.key == key)
                     .map(|row| row.value.as_str())
             };
-            assert_eq!(value_for("status"), Some("unavailable"));
-            assert_eq!(
-                value_for("reason"),
-                Some("unsigned_vector_compare_unavailable")
-            );
-            assert_eq!(value_for("fail_closed"), Some("true"));
-            assert_eq!(
-                value_for("consumer_policy"),
-                Some(CHC_X86_UNSIGNED_VECTOR_COMPARE_FAIL_CLOSED_POLICY)
-            );
-            assert_eq!(value_for("feature_guard"), None);
-            assert_eq!(value_for("native_instructions"), None);
-            assert_eq!(value_for("semantics"), None);
+            if chc_x86_icmp_cell_is_fail_closed(cell, op) {
+                assert!(contract_row.is_none(), "{cell} {operation} is fail-closed");
+                let status_row = status_row.expect("a fail-closed cell has a status row");
+                assert!(status_row.fail_closed(), "{cell} {operation}");
+                assert_ne!(
+                    status_row.reason,
+                    HardwareVectorContractReason::CanonicalContract,
+                    "{cell} {operation}: a fail-closed cell names why"
+                );
+                assert_eq!(value_for("status"), Some(status_row.status.code()));
+                assert_eq!(value_for("reason"), Some(status_row.reason.code()));
+                assert_eq!(value_for("fail_closed"), Some("true"));
+                assert_eq!(
+                    value_for("consumer_policy"),
+                    Some(CHC_X86_UNSIGNED_VECTOR_COMPARE_FAIL_CLOSED_POLICY)
+                );
+                assert_eq!(value_for("feature_guard"), None);
+                assert_eq!(value_for("native_instructions"), None);
+                assert_eq!(value_for("semantics"), None);
+            } else {
+                assert!(status_row.is_none(), "{cell} {operation} is available");
+                let row = contract_row.expect("an available cell has a contract row");
+                assert!(
+                    row.native_instructions.contains(gt_instruction)
+                        && row.native_instructions.contains("pxor"),
+                    "{cell} {operation}: {gt_instruction} over pxor-biased lanes, got {}",
+                    row.native_instructions
+                );
+                assert!(
+                    row.composition.contains(&bias),
+                    "{cell} {operation}: {} must name {bias}",
+                    row.composition
+                );
+                if matches!(op, ICmpOp::Ule | ICmpOp::Uge) {
+                    assert!(
+                        row.composition
+                            .contains(&format!("{eq_instruction}(lhs,rhs)")),
+                        "{cell} {operation}: an inclusive compare ORs the UNBIASED equality"
+                    );
+                }
+                assert_eq!(value_for("status"), Some("available"));
+            }
         }
 
         let eq = rows
@@ -7323,8 +7943,7 @@ fn chc_x86_narrow_compare_mask_contracts_are_sse2_signed_only() {
                 || mask_to_bits
                     .composition
                     .contains("compact_duplicate_byte_bits"),
-            "{} mask extraction must document lane-to-bit ordering",
-            descriptor.contract_name
+            "{cell} mask extraction must document lane-to-bit ordering"
         );
     }
 }
@@ -7454,19 +8073,23 @@ fn chc_x86_hardware_vector_contract_manifest_is_deterministic() {
             .contains(&"hardware_vector_contract_set.contract.0.operation.22=icmp.uge".to_string())
     );
     assert!(lines.contains(
-        &"hardware_vector_contract_set.contract.0.operation.icmp.ult.status=deferred".to_string()
+        &"hardware_vector_contract_set.contract.0.operation.icmp.ult.status=available".to_string()
     ));
-    assert!(lines.contains(
-            &"hardware_vector_contract_set.contract.0.operation.icmp.ult.reason=unsigned_vector_compare_proof_blocked"
+    assert!(
+        lines.contains(
+            &"hardware_vector_contract_set.contract.0.operation.icmp.ult.reason=canonical_contract"
                 .to_string()
-        ));
+        )
+    );
     assert!(lines.contains(
-        &"hardware_vector_contract_set.contract.0.operation.icmp.ult.fail_closed=true".to_string()
+        &"hardware_vector_contract_set.contract.0.operation.icmp.ult.fail_closed=false".to_string()
     ));
-    assert!(lines.contains(
-            &"hardware_vector_contract_set.contract.0.operation.icmp.ult.consumer_policy=fail_closed_reject_lowering"
+    assert!(
+        lines.contains(
+            &"hardware_vector_contract_set.contract.0.operation.icmp.ult.feature_guard=x86.sse2"
                 .to_string()
-        ));
+        )
+    );
     assert!(
         lines.contains(
             &"hardware_vector_contract_set.contract.0.operation.binop.shl.feature_guard=x86.sse2"
@@ -7542,16 +8165,22 @@ fn chc_x86_hardware_vector_contract_manifest_is_deterministic() {
         lines
             .contains(&"hardware_vector_contract_set.contract.1.operation.15=icmp.ult".to_string())
     );
+    assert!(lines.contains(
+        &"hardware_vector_contract_set.contract.1.operation.icmp.ult.status=available".to_string()
+    ));
     assert!(
         lines.contains(
-            &"hardware_vector_contract_set.contract.1.operation.icmp.ult.status=unavailable"
+            &"hardware_vector_contract_set.contract.1.operation.icmp.ult.reason=canonical_contract"
                 .to_string()
         )
     );
-    assert!(lines.contains(
-            &"hardware_vector_contract_set.contract.1.operation.icmp.ult.reason=unsigned_vector_compare_unavailable"
+    // SSE2 dword halves, NOT the SSE4.2 `pcmpgtq` guard of the signed rows.
+    assert!(
+        lines.contains(
+            &"hardware_vector_contract_set.contract.1.operation.icmp.ult.feature_guard=x86.sse2"
                 .to_string()
-        ));
+        )
+    );
     assert!(
         lines.contains(
             &"hardware_vector_contract_set.contract.1.operation.icmp.eq.feature_guard=x86.sse4.1"
@@ -7639,12 +8268,27 @@ fn chc_x86_hardware_vector_contract_manifest_is_deterministic() {
     assert!(
         lines.contains(&"hardware_vector_contract_set.contract.2.operation.7=icmp.ult".to_string())
     );
+    assert!(lines.contains(
+        &"hardware_vector_contract_set.contract.2.operation.icmp.ult.status=available".to_string()
+    ));
     assert!(
         lines.contains(
-            &"hardware_vector_contract_set.contract.2.operation.icmp.ult.status=unavailable"
+            &"hardware_vector_contract_set.contract.2.operation.icmp.ult.reason=canonical_contract"
                 .to_string()
         )
     );
+    assert!(lines.contains(
+        &"hardware_vector_contract_set.contract.2.operation.icmp.ugt.native_instructions=mov_imm_sign_bit;movd_to_xmm;pshufd;pxor;pxor;pcmpgtb"
+            .to_string()
+    ));
+    assert!(lines.contains(
+        &"hardware_vector_contract_set.contract.2.operation.icmp.ugt.composition=pcmpgtb(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias));sign_bit_bias:splat_i8(0x80)"
+            .to_string()
+    ));
+    assert!(lines.contains(
+        &"hardware_vector_contract_set.contract.2.operation.icmp.uge.composition=or(pcmpgtb(pxor(lhs,sign_bit_bias),pxor(rhs,sign_bit_bias)),pcmpeqb(lhs,rhs));sign_bit_bias:splat_i8(0x80)"
+            .to_string()
+    ));
     assert!(
         lines.contains(
             &"hardware_vector_contract_set.contract.2.operation.icmp.eq.feature_guard=x86.sse2"
@@ -7696,12 +8340,9 @@ fn chc_x86_hardware_vector_contract_manifest_is_deterministic() {
     assert!(
         lines.contains(&"hardware_vector_contract_set.contract.3.operation.7=icmp.ult".to_string())
     );
-    assert!(
-        lines.contains(
-            &"hardware_vector_contract_set.contract.3.operation.icmp.ult.status=unavailable"
-                .to_string()
-        )
-    );
+    assert!(lines.contains(
+        &"hardware_vector_contract_set.contract.3.operation.icmp.ult.status=available".to_string()
+    ));
     assert!(
         lines.contains(
             &"hardware_vector_contract_set.contract.3.operation.icmp.eq.feature_guard=x86.sse2"
@@ -10250,7 +10891,10 @@ fn native_bundle_rejects_function_request_for_cross_function_obligation() {
     other
         .blocks
         .push(Block::new(BlockId::new(1)).with_param(ValueId::new(10), Ty::I32));
-    bundle.module.add_function(other);
+    bundle
+        .module
+        .try_add_function(other)
+        .expect("Module::try_add_function: test fixture");
 
     if let NativeVerificationRequest::TrustMc(request) = &mut bundle.requests[1] {
         request.function = FuncId::new(1);
@@ -10278,7 +10922,10 @@ fn native_bundle_rejects_source_map_cast_fact_from_another_function() {
     other
         .blocks
         .push(Block::new(BlockId::new(1)).with_param(ValueId::new(10), Ty::I32));
-    bundle.module.add_function(other);
+    bundle
+        .module
+        .try_add_function(other)
+        .expect("Module::try_add_function: test fixture");
     bundle.compiler_facts.casts.push(NativeCastFact {
         id: NativeCompilerFactId::new(10),
         function: FuncId::new(1),
@@ -10875,6 +11522,65 @@ fn native_bundle_rejects_out_of_range_monomorphization_const_arg() {
     )));
 }
 
+/// A `usize` / `isize` const generic argument is a constant of its type ON
+/// THE BUNDLE MODULE'S TARGET, checked by the same range rule as every
+/// constant (`Constant::value_matches_ty` at `Module::pointer_bits`): on
+/// wasm32 `2^32` is no `usize` and `2^31` no `isize`, while each end of the
+/// 32-bit range is admitted; a target-free module keeps the documented 64-bit
+/// default, where `2^32` is a `usize`.
+#[test]
+fn native_bundle_checks_a_pointer_width_const_arg_at_the_target_width() {
+    let wasm32 = TargetInfo {
+        triple: "wasm32-unknown-unknown".to_string(),
+        pointer_size: 4,
+        endianness: Endianness::Little,
+        abi: None,
+        struct_passing: Default::default(),
+    };
+    let const_arg_refused = |target: Option<&TargetInfo>, ty: Ty, value: i128| {
+        let mut bundle = native_bundle();
+        bundle.module.target_info = target.cloned();
+        bundle.compiler_facts.monomorphizations[0]
+            .generic_args
+            .push(NativeGenericArg::Const {
+                ty,
+                value: Constant::Int(value),
+            });
+        bundle.validate().err().is_some_and(|errors| {
+            errors.iter().any(|err| {
+                matches!(
+                    err,
+                    NativeVerificationBundleError::InvalidCompilerFact {
+                        fact: NativeCompilerFactRef::Monomorphization(NativeMonomorphizationId(0)),
+                        field: "generic_args[].const",
+                    }
+                )
+            })
+        })
+    };
+    let two32 = 1i128 << 32;
+    let two31 = 1i128 << 31;
+    for (ty, value, refused) in [
+        (Ty::Usize, two32, true),
+        (Ty::Usize, two32 - 1, false),
+        (Ty::Isize, two31, true),
+        (Ty::Isize, -two31 - 1, true),
+        (Ty::Isize, -two31, false),
+        (Ty::Isize, two31 - 1, false),
+    ] {
+        assert_eq!(
+            const_arg_refused(Some(&wasm32), ty.clone(), value),
+            refused,
+            "const generic {ty} {value} on wasm32"
+        );
+    }
+    assert!(
+        !const_arg_refused(None, Ty::Usize, two32),
+        "a target-free module keeps the 64-bit default"
+    );
+    assert!(const_arg_refused(None, Ty::Usize, 1i128 << 64));
+}
+
 #[test]
 fn native_bundle_rejects_stale_trust_vc_certificate_digest() {
     let mut bundle = native_bundle();
@@ -10902,6 +11608,8 @@ fn native_bundle_rejects_trust_vc_certificate_for_pending_obligation() {
         obligation: ProofId::new(1),
         prover: "trust_vc".to_string(),
         evidence: ProofEvidence::LeanProof("exact stale_pending_certificate".to_string()),
+
+        assurance: None,
     };
     let pending_ref = pending_cert.lineage_ref();
     bundle.module.proof_certificates.push(pending_cert);
@@ -10938,6 +11646,8 @@ fn native_bundle_rejects_forged_discharged_smt_proof() {
         obligation: ProofId::new(0),
         prover: "trust_vc".to_string(),
         evidence: ProofEvidence::SmtProof(b"(forged opaque solver output)".to_vec()),
+
+        assurance: None,
     };
     let forged_ref = forged.lineage_ref();
     bundle.module.proof_certificates[0] = forged;
@@ -11005,6 +11715,8 @@ fn native_bundle_rejects_lineage_only_certified_trust_vc_certificate() {
             lineage,
             kernel_recheck: None,
         },
+
+        assurance: None,
     };
     let clean_ref = clean_cic.lineage_ref();
     bundle.module.proof_certificates.push(clean_cic);
@@ -12130,4 +12842,910 @@ fn native_bundle_stable_digest_covers_trust_vc_function() {
         changed.stable_digest(),
         "the request identity change is not covered by the bundle digest"
     );
+}
+
+// ---------------------------------------------------------------------------
+// TrustVc `DischargeProofObligations` admission.
+//
+// Discharge asks trust-vc to PRODUCE a proof rather than to check one, so the
+// per-obligation certificate requirement that governs import/merge would refuse
+// every well-formed discharge request. `validate_trust_vc_request` is mode-aware
+// for exactly that first loop; the certificate loop that follows it is
+// unconditional, so a malformed discharge request is refused MORE precisely,
+// never less.
+// ---------------------------------------------------------------------------
+
+/// `native_bundle()` with request 0 rebuilt as a well-formed discharge request:
+/// mode swapped, certificates dropped, and `function` naming the module
+/// function its obligation is actually sourced to.
+///
+/// The fixture's TrustVc request deliberately leaves `function: None` (it is an
+/// import request, for which naming a function is optional). A discharge
+/// request must set it: `Some(f)` is what arms `MissingFunction` and
+/// `RequestObligationFunctionMismatch`.
+///
+/// # The MODULE obligations are re-sited too, and that was not cosmetic
+///
+/// `native_bundle()` builds its obligations with neither `function` nor
+/// `site`, while the compiler-fact sidecar rows declare `function:
+/// Some(FuncId(0))`. Naming a function therefore satisfied
+/// `RequestObligationFunctionMismatch` — which reads the SIDECAR — while the
+/// module obligations remained unscoped, and this fixture blessed a bundle
+/// that the receiving engine refuses outright (trust-vc scopes a discharge
+/// request by the obligation's own site, because that is what it lowers).
+/// Setting `function` and `site` here makes the positive test exercise a shape
+/// a real consumer accepts, and is what
+/// `TrustVcDischargeObligationNotSitedInFunction` now requires.
+fn discharge_native_bundle() -> NativeVerificationBundle {
+    let mut bundle = native_bundle();
+    let function = FuncId::new(0);
+    for (index, obligation) in bundle.module.proof_obligations.iter_mut().enumerate() {
+        obligation.function = Some(function);
+        obligation.site = Some(crate::proof::ObligationSite::new(
+            function,
+            BlockId::new(0),
+            index as u32,
+        ));
+    }
+    let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    request.mode = TrustVcVerificationMode::DischargeProofObligations;
+    request.certificates.clear();
+    request.function = Some(function);
+    refresh_native_bundle_module_identity(&mut bundle);
+    bundle
+}
+
+#[test]
+fn native_bundle_accepts_certificate_less_discharge_request() {
+    let bundle = discharge_native_bundle();
+    let NativeVerificationRequest::TrustVc(request) = &bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    assert_eq!(
+        request.mode,
+        TrustVcVerificationMode::DischargeProofObligations
+    );
+    assert!(
+        request.certificates.is_empty(),
+        "a discharge request carries no certificates by construction"
+    );
+
+    // Before the mode split this returned
+    // `MissingTrustVcEvidenceForObligation` for ProofId(0) and the WHOLE bundle
+    // was rejected, so no engine could ever be handed this request.
+    bundle
+        .validate()
+        .expect("a well-formed certificate-less discharge request is admissible");
+}
+
+#[test]
+fn native_bundle_rejects_discharge_request_without_function() {
+    let mut bundle = discharge_native_bundle();
+    let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    request.function = None;
+
+    let errors = bundle
+        .validate()
+        .expect_err("an unscoped discharge request is refused");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::MissingTrustVcDischargeFunction(NativeRequestId(0))
+        )),
+        "got: {errors:?}"
+    );
+}
+
+#[test]
+fn native_bundle_rejects_discharge_request_carrying_a_certificate() {
+    let mut bundle = discharge_native_bundle();
+    let cert_ref = bundle.module.proof_certificates[0].lineage_ref();
+    let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    // A valid, known, in-lineage certificate for a requested obligation: the
+    // ONLY thing wrong with it is that a discharge request must not carry one.
+    request.certificates.push(cert_ref);
+
+    let errors = bundle
+        .validate()
+        .expect_err("a discharge request must not smuggle in an import");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustVcDischargeRequestCarriesCertificate {
+                request: NativeRequestId(0),
+                obligation: ProofId(0),
+                prover,
+            } if prover == "trust_vc"
+        )),
+        "got: {errors:?}"
+    );
+    // The certificate loop stays UNCONDITIONAL, so the smuggled certificate is
+    // also judged on its own merits: a discharge request that carries one gets
+    // strictly MORE refusals than an import request carrying the same thing.
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustVcCertificateNotDischarged {
+                request: NativeRequestId(0),
+                obligation: ProofId(0),
+                status: ProofStatus::Discharged,
+                ..
+            }
+        )),
+        "the unconditional certificate loop must still run in discharge mode: {errors:?}"
+    );
+}
+
+#[test]
+fn native_bundle_rejects_discharge_request_citing_a_foreign_obligation() {
+    let mut bundle = discharge_native_bundle();
+
+    // A second module function, and obligation 1 re-sourced to it.
+    let ft = bundle
+        .module
+        .add_func_type(FuncTy {
+            params: vec![Ty::I32],
+            returns: vec![Ty::I32],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
+    let mut other = Function::new(FuncId::new(1), "unrelated", ft, BlockId::new(0));
+    other
+        .blocks
+        .push(Block::new(BlockId::new(0)).with_param(ValueId::new(0), Ty::I32));
+    bundle
+        .module
+        .try_add_function(other)
+        .expect("Module::try_add_function: test fixture");
+    bundle.compiler_facts.obligation_sources[1].function = Some(FuncId::new(1));
+    bundle.compiler_facts.obligation_sources[1].monomorphization = None;
+    bundle.compiler_facts.obligation_sources[1].facts.clear();
+    refresh_native_bundle_module_identity(&mut bundle);
+
+    let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    request.obligations.push(ProofId::new(1));
+
+    let errors = bundle
+        .validate()
+        .expect_err("a discharge request may not reach outside the function it names");
+    // NOTE: this bundle would ALSO have been rejected before the mode split,
+    // via the blanket missing-certificate error. The assertion is deliberately
+    // on the SPECIFIC variant, which is what the scoping argument rests on.
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::RequestObligationFunctionMismatch {
+                request: NativeRequestId(0),
+                obligation: ProofId(1),
+                expected: FuncId(0),
+                actual: Some(FuncId(1)),
+            }
+        )),
+        "got: {errors:?}"
+    );
+    assert!(
+        !errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::MissingTrustVcEvidenceForObligation { .. }
+        )),
+        "discharge mode must not re-acquire the import-mode certificate demand: {errors:?}"
+    );
+}
+
+#[test]
+fn native_bundle_rejects_discharge_request_naming_an_absent_function() {
+    let mut bundle = discharge_native_bundle();
+    let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    request.function = Some(FuncId::new(7));
+
+    let errors = bundle
+        .validate()
+        .expect_err("a discharge request naming no module function is refused");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::MissingFunction {
+                request: NativeRequestId(0),
+                function: FuncId(7),
+            }
+        )),
+        "got: {errors:?}"
+    );
+}
+
+#[test]
+fn native_bundle_rejects_discharge_request_with_no_obligations() {
+    let mut bundle = discharge_native_bundle();
+    let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    request.obligations.clear();
+
+    let errors = bundle
+        .validate()
+        .expect_err("the mode split must open no empty-request hole");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::EmptyRequestObligations(NativeRequestId(0))
+        )),
+        "got: {errors:?}"
+    );
+}
+
+#[test]
+fn native_bundle_rejects_discharge_evidence_carrying_a_certificate_artifact_kind() {
+    let mut bundle = discharge_native_bundle();
+    let evidence = bundle
+        .evidence_bundle_for_request(
+            &bundle.requests[0],
+            vec![NativeEvidenceArtifact::new(
+                "trust_vc-import.lean",
+                NativeEvidenceArtifactKind::TrustVcCertificateImport,
+                digest(0xC0),
+            )],
+        )
+        .expect("TrustVc evidence binds to the discharge request");
+    bundle.evidence_bundles = vec![evidence];
+
+    let errors = bundle
+        .validate()
+        .expect_err("a DERIVED certificate is not a RECEIVED one");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::EvidenceArtifactSuiteMismatch {
+                request: NativeRequestId(0),
+                suite: NativeVerifierSuite::TrustVc,
+                kind: NativeEvidenceArtifactKind::TrustVcCertificateImport,
+            }
+        )),
+        "got: {errors:?}"
+    );
+}
+
+/// The mode split's whole risk is that the import loop changes while being
+/// moved. This pins the variant AND its rendered string.
+#[test]
+fn native_bundle_import_request_missing_a_certificate_reports_the_same_error() {
+    for mode in [
+        TrustVcVerificationMode::ImportProofCertificates,
+        TrustVcVerificationMode::MergeProofCertificates,
+    ] {
+        let mut bundle = native_bundle();
+        let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+            panic!("fixture request 0 is TrustVc");
+        };
+        request.mode = mode;
+        request.certificates.clear();
+
+        let errors = bundle
+            .validate()
+            .expect_err("certificate-checking modes still demand a certificate per obligation");
+        let missing = errors
+            .iter()
+            .find(|error| {
+                matches!(
+                    error,
+                    NativeVerificationBundleError::MissingTrustVcEvidenceForObligation {
+                        request: NativeRequestId(0),
+                        obligation: ProofId(0),
+                    }
+                )
+            })
+            .unwrap_or_else(|| panic!("{mode:?} lost its missing-evidence refusal: {errors:?}"));
+        assert_eq!(
+            missing.to_string(),
+            "native verification request 0 has no TrustVc certificate evidence for obligation 0",
+            "{mode:?} rendered diagnostic moved"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Discharge-mode scoping is about the MODULE obligation, not only the sidecar
+// ---------------------------------------------------------------------------
+
+/// REPRODUCED, then closed: naming a function used NOT to be "the whole
+/// scoping story".
+///
+/// `RequestObligationFunctionMismatch` compares the request's function to
+/// `compiler_facts.obligation_source(o).function`, a producer-declared SIDECAR
+/// row. The module obligation it names can be unsited — `ProofObligation::site`
+/// is `Option` and `function` is documented `None` for legacy/unscoped
+/// obligations — and this crate's own discharge fixture was built that way,
+/// so trust-ir blessed a bundle whose obligations point at no body at all.
+/// trust-vc refuses that shape outright, because the site is what it lowers.
+#[test]
+fn native_bundle_rejects_discharge_request_citing_an_unsited_obligation() {
+    let mut bundle = discharge_native_bundle();
+    for obligation in &mut bundle.module.proof_obligations {
+        obligation.function = None;
+        obligation.site = None;
+    }
+    refresh_native_bundle_module_identity(&mut bundle);
+
+    let errors = bundle
+        .validate()
+        .expect_err("an unsited obligation is not an obligation about a body");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustVcDischargeObligationNotSitedInFunction {
+                request: NativeRequestId(0),
+                obligation: ProofId(0),
+                expected: FuncId(0),
+                actual: None,
+            }
+        )),
+        "{errors:?}"
+    );
+    // The SIDECAR check is satisfied here, which is exactly why it was not
+    // enough on its own: the sidecar rows still say `function: Some(FuncId(0))`.
+    assert!(
+        !errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::RequestObligationFunctionMismatch { .. }
+        )),
+        "the sidecar agrees; the refusal must come from the module obligation: {errors:?}"
+    );
+}
+
+/// The other direction: the sidecar says `FuncId(0)` and the module says the
+/// site is in another function. Both refusals fire, and neither on its own
+/// would have caught both shapes.
+#[test]
+fn native_bundle_rejects_discharge_request_whose_obligation_is_sited_elsewhere() {
+    let mut bundle = discharge_native_bundle();
+    let foreign = FuncId::new(3);
+    for obligation in &mut bundle.module.proof_obligations {
+        obligation.function = Some(foreign);
+        obligation.site = Some(crate::proof::ObligationSite::new(
+            foreign,
+            BlockId::new(0),
+            0,
+        ));
+    }
+    refresh_native_bundle_module_identity(&mut bundle);
+
+    let errors = bundle
+        .validate()
+        .expect_err("an obligation sited in another function is out of scope");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustVcDischargeObligationNotSitedInFunction {
+                request: NativeRequestId(0),
+                expected: FuncId(0),
+                actual: Some(FuncId(3)),
+                ..
+            }
+        )),
+        "{errors:?}"
+    );
+}
+
+/// The scoping check is DISCHARGE-ONLY. An import request over the same
+/// unsited obligations is untouched by it, and keeps exactly the refusals it
+/// had — this is the regression pin on the mode split's second half.
+/// GUARD, not gating evidence: this passed before the check was added too.
+/// It pins that the discharge-only check stayed discharge-only.
+#[test]
+fn an_import_request_is_not_subject_to_the_discharge_site_requirement() {
+    // `native_bundle()`'s obligations carry neither `function` nor `site`, and
+    // its request 0 is an import.
+    let bundle = native_bundle();
+    let errors = bundle
+        .validate()
+        .expect_err("the fixture's certificate is deliberately unreplayable");
+    assert!(
+        !errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustVcDischargeObligationNotSitedInFunction { .. }
+        )),
+        "the discharge scoping check must not fire for an import request: {errors:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// One obligation cannot be both imported and discharged
+// ---------------------------------------------------------------------------
+
+/// REPRODUCED, then closed: a bundle carrying an `ImportProofCertificates`
+/// request and a `DischargeProofObligations` request that CITE THE SAME
+/// OBLIGATION was structurally admissible.
+///
+/// That bundle says two different things about where the obligation's
+/// authority comes from, and nothing downstream reconciles them: Trust's
+/// import boundary folds admitted certificates without reading the report
+/// verdict at all, so a trust-vc refutation in the discharge half would be
+/// invisible beside an admitted certificate in the import half. The ambiguity
+/// is refused here, where it is visible, rather than resolved silently
+/// somewhere that cannot see both halves.
+#[test]
+fn native_bundle_rejects_an_obligation_both_imported_and_discharged() {
+    let mut bundle = discharge_native_bundle();
+    let NativeVerificationRequest::TrustVc(discharge) = &bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    let mut import = discharge.clone();
+    import.id = NativeRequestId::new(9);
+    import.mode = TrustVcVerificationMode::ImportProofCertificates;
+    import.certificates = vec![bundle.module.proof_certificates[0].lineage_ref()];
+    import.obligations = vec![ProofId::new(0)];
+    bundle
+        .requests
+        .push(NativeVerificationRequest::TrustVc(import));
+
+    let errors = bundle
+        .validate()
+        .expect_err("one obligation cannot be both imported and discharged");
+    assert!(
+        errors.iter().any(|error| matches!(
+            error,
+            NativeVerificationBundleError::TrustVcObligationBothImportedAndDischarged {
+                obligation: ProofId(0),
+                importing: NativeRequestId(9),
+                discharging: NativeRequestId(0),
+            }
+        )),
+        "{errors:?}"
+    );
+}
+
+/// TWO DISCHARGE REQUESTS over the same obligation are NOT refused by that
+/// rule, and that is deliberate: both halves are asking the same question of
+/// the same engine, so there is no ambiguity about which is authority (neither
+/// is — a discharge answer is advisory). Pinned so the collision rule is not
+/// quietly widened into "no obligation twice".
+/// GUARD, not gating evidence: passes before the collision rule existed.
+#[test]
+fn two_discharge_requests_over_one_obligation_do_not_collide() {
+    let mut bundle = discharge_native_bundle();
+    let NativeVerificationRequest::TrustVc(discharge) = &bundle.requests[0] else {
+        panic!("fixture request 0 is TrustVc");
+    };
+    let mut second = discharge.clone();
+    second.id = NativeRequestId::new(9);
+    bundle
+        .requests
+        .push(NativeVerificationRequest::TrustVc(second));
+
+    if let Err(errors) = bundle.validate() {
+        assert!(
+            !errors.iter().any(|error| matches!(
+                error,
+                NativeVerificationBundleError::TrustVcObligationBothImportedAndDischarged { .. }
+            )),
+            "{errors:?}"
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------
+// The one refusal in the split function that had no test anywhere
+// ---------------------------------------------------------------------------
+
+/// `TrustedCertificateRejected` sits BELOW the mode split, in the still
+/// unconditional certificate loop, and had no test in this crate or in
+/// trust-ir-conformance — so the claim that every import/merge refusal keeps
+/// its exact behaviour held for it by inspection alone. Both modes, variant
+/// and rendered string.
+/// GUARD, not gating evidence: the BEHAVIOUR is unchanged by this round.
+/// The defect it closes is in the evidence, not the code — this refusal had
+/// no test anywhere, so "every import/merge refusal keeps its exact
+/// behaviour" held for it by inspection alone.
+#[test]
+fn native_bundle_rejects_trusted_certificate_evidence_when_the_request_says_so() {
+    for mode in [
+        TrustVcVerificationMode::ImportProofCertificates,
+        TrustVcVerificationMode::MergeProofCertificates,
+    ] {
+        let mut bundle = native_bundle();
+        bundle.module.proof_certificates[0].evidence =
+            ProofEvidence::Trusted("hand-audited".to_string());
+        let certificate = bundle.module.proof_certificates[0].lineage_ref();
+        bundle.lineage.nodes[0].certificates = vec![certificate.clone()];
+        let NativeVerificationRequest::TrustVc(request) = &mut bundle.requests[0] else {
+            panic!("fixture request 0 is TrustVc");
+        };
+        request.mode = mode;
+        request.options.trusted_evidence = TrustVcTrustedEvidencePolicy::Reject;
+        request.certificates = vec![certificate];
+        refresh_native_bundle_module_identity(&mut bundle);
+
+        let errors = bundle
+            .validate()
+            .expect_err("a request that rejects trusted evidence must refuse it");
+        let rejection = errors
+            .iter()
+            .find(|error| {
+                matches!(
+                    error,
+                    NativeVerificationBundleError::TrustedCertificateRejected { .. }
+                )
+            })
+            .unwrap_or_else(|| panic!("{mode:?}: {errors:?}"));
+        assert_eq!(
+            rejection.to_string(),
+            // MEASURED, not quoted from the review, which had it as
+            // "... evidence for obligation 0/trust_vc". The word "for
+            // obligation" is not in bundle.rs's Display arm.
+            "native verification request 0 rejects trusted certificate evidence 0/trust_vc"
+        );
+    }
+}
+
+// These controls exercise the public native bundle boundary without trying to
+// hash a module whose pending wire carrier is exactly what must be refused.
+fn native_bundle_wire_identity_fixture() -> NativeVerificationBundle {
+    let mut bundle = source_generation_authority_bundle();
+    bundle.module.functions[0].blocks[0]
+        .body
+        .push(InstrNode::new(Inst::Return {
+            values: vec![ValueId::new(0)],
+        }));
+    let ty = bundle
+        .module
+        .add_func_type(FuncTy {
+            params: vec![],
+            returns: vec![],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
+    let mut function = Function::new(
+        FuncId::new(1),
+        "unused_wire_identity_subject",
+        ty,
+        BlockId::new(0),
+    );
+    function.scopes = Some(vec![crate::ScopeData::new(None, None)]);
+    // Schema 8: every function must be covered by the bundle's languages.
+    function.producer = Some(Producer::TRust);
+    let mut block = Block::new(BlockId::new(0));
+    for (index, value) in [7, 9].into_iter().enumerate() {
+        block.body.push(
+            InstrNode::new(Inst::Const {
+                ty: Ty::I64,
+                value: Constant::Int(value),
+            })
+            .with_result(ValueId::new(index as u32)),
+        );
+    }
+    block
+        .body
+        .push(InstrNode::new(Inst::Return { values: vec![] }));
+    function.blocks.push(block);
+    bundle
+        .module
+        .try_add_function(function)
+        .expect("Module::try_add_function: test fixture");
+    refresh_native_bundle_module_identity(&mut bundle);
+    bundle
+        .validate()
+        .expect("ordinary complete bodies retain native validation");
+    bundle
+}
+
+/// v51 (the INST wire batch): a `MakeAggregate` HAS a wire tag now, so a
+/// bundle carrying one is hashed, never refused as unencodable.
+fn add_native_bundle_make_aggregate(bundle: &mut NativeVerificationBundle) {
+    bundle.module.functions[1].blocks[0].body.insert(
+        2,
+        InstrNode::new(Inst::MakeAggregate {
+            ty: Ty::Tuple(vec![Ty::I64, Ty::I64]),
+            variant: None,
+            fields: vec![ValueId::new(0), ValueId::new(1)],
+        })
+        .with_result(ValueId::new(2)),
+    );
+}
+
+fn add_native_bundle_unencoded_inline_chain(bundle: &mut NativeVerificationBundle) {
+    bundle.module.functions[1]
+        .scopes
+        .as_mut()
+        .unwrap()
+        .push(crate::ScopeData {
+            parent: Some(0),
+            span: None,
+            inlined_at: Some(crate::InlinedAt {
+                span: SourceSpan {
+                    file: 0,
+                    line: 12,
+                    col: 5,
+                },
+                callee: "dependency::inlined_callee".to_string(),
+            }),
+        });
+    bundle.module.functions[1].blocks[0]
+        .body
+        .last_mut()
+        .unwrap()
+        .scope = Some(1);
+}
+
+#[test]
+fn native_bundle_wire_identity_keeps_ordinary_digest_and_validation() {
+    let bundle = native_bundle_wire_identity_fixture();
+    let before = bundle.clone();
+    assert_eq!(bundle.validate(), Ok(()));
+    assert_eq!(bundle.module.stable_digest(), bundle.trust_ir_module_digest);
+    assert_eq!(
+        bundle, before,
+        "validation must not rewrite the identity image"
+    );
+}
+
+fn native_bundle_inline_chain_refusal() -> NativeVerificationBundleError {
+    NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity {
+        location: "function 'unused_wire_identity_subject' lexical scope #1".into(),
+        construct: "ScopeData.inlined_at",
+    }
+}
+
+#[test]
+fn native_bundle_wire_identity_hashes_every_inst_wire_batch_member() {
+    // v51: the instructions that used to be refused before hashing (the ONE
+    // probe list, `Inst::binary_wire_gap`, is empty now) are hashed like any
+    // other: with the identity refreshed the bundle validates, and a stale
+    // identity is a digest MISMATCH, i.e. a digest was computed rather than
+    // the module refused as unencodable.
+    let members = [
+        Inst::MakeAggregate {
+            ty: Ty::Tuple(vec![Ty::I64, Ty::I64]),
+            variant: None,
+            fields: vec![ValueId::new(0), ValueId::new(1)],
+        },
+        Inst::MemCopy {
+            dst: ValueId::new(0),
+            src: ValueId::new(1),
+            bytes: ValueId::new(0),
+            overlap: false,
+        },
+        Inst::MemSet {
+            dst: ValueId::new(0),
+            byte: ValueId::new(1),
+            bytes: ValueId::new(0),
+        },
+        Inst::BinOp {
+            op: crate::BinOp::RotL,
+            ty: Ty::I64,
+            lhs: ValueId::new(0),
+            rhs: ValueId::new(1),
+        },
+        Inst::UnOp {
+            op: crate::UnOp::CtLz,
+            ty: Ty::I64,
+            operand: ValueId::new(0),
+        },
+    ];
+    for inst in members {
+        assert_eq!(inst.binary_wire_gap(), None, "{inst:?}");
+        let mut bundle = native_bundle_wire_identity_fixture();
+        let stale = bundle.trust_ir_module_digest;
+        bundle.module.functions[1].blocks[0]
+            .body
+            .insert(2, InstrNode::new(inst.clone()));
+        let computed = bundle.module.stable_digest();
+        assert_ne!(computed, stale, "{inst:?} is part of the identity");
+        // `expected` is the digest the module HAS, `actual` the one recorded.
+        assert_eq!(
+            bundle.validate(),
+            Err(vec![
+                NativeVerificationBundleError::TrustIrModuleDigestMismatch {
+                    expected: computed,
+                    actual: stale,
+                }
+            ]),
+            "{inst:?}: a stale identity is a mismatch, not a refusal"
+        );
+        refresh_native_bundle_module_identity(&mut bundle);
+        let before = bundle.clone();
+        assert_eq!(bundle.validate(), Ok(()), "{inst:?}");
+        assert_eq!(bundle, before, "the construct is retained, never erased");
+    }
+}
+
+#[test]
+fn native_bundle_wire_identity_refuses_inline_chain_before_hashing() {
+    let mut bundle = native_bundle_wire_identity_fixture();
+    add_native_bundle_unencoded_inline_chain(&mut bundle);
+    assert_eq!(bundle.module.first_inlined_scope_chain(), Some((1, 1)));
+    assert_eq!(
+        bundle.validate(),
+        Err(vec![native_bundle_inline_chain_refusal()]),
+    );
+}
+
+#[test]
+fn native_bundle_wire_identity_refuses_the_scope_chain_beside_a_tagged_instruction() {
+    // Before v51 the MakeAggregate was reported first; now it has a wire
+    // tag and only the inlining chain, which still has no carrier, refuses.
+    let mut bundle = native_bundle_wire_identity_fixture();
+    add_native_bundle_unencoded_inline_chain(&mut bundle);
+    add_native_bundle_make_aggregate(&mut bundle);
+    assert_eq!(
+        bundle.validate(),
+        Err(vec![native_bundle_inline_chain_refusal()]),
+    );
+}
+
+#[test]
+fn native_bundle_wire_identity_retains_earlier_header_refusals() {
+    let mut bundle = native_bundle_wire_identity_fixture();
+    bundle.schema_version = NativeVerificationBundle::SCHEMA_VERSION - 1;
+    add_native_bundle_unencoded_inline_chain(&mut bundle);
+    assert_eq!(
+        bundle.validate(),
+        Err(vec![
+            NativeVerificationBundleError::UnsupportedSchemaVersion(
+                NativeVerificationBundle::SCHEMA_VERSION - 1,
+            ),
+            native_bundle_inline_chain_refusal(),
+        ]),
+    );
+}
+
+#[test]
+fn native_bundle_wire_identity_hashes_a_malformed_aggregate_without_panicking() {
+    // The writer does not validate: a MakeAggregate the validator would
+    // refuse (`InvalidMakeAggregate`) still has bytes, so hashing it is
+    // total. Module well-formedness is `validate_module`'s job, not the
+    // identity's.
+    let mut bundle = native_bundle_wire_identity_fixture();
+    add_native_bundle_make_aggregate(&mut bundle);
+    let Inst::MakeAggregate { ty, fields, .. } =
+        &mut bundle.module.functions[1].blocks[0].body[2].inst
+    else {
+        unreachable!("fixture construction is explicit");
+    };
+    *ty = Ty::I64;
+    fields.clear();
+    refresh_native_bundle_module_identity(&mut bundle);
+    assert_eq!(bundle.validate(), Ok(()));
+}
+
+/// The spec side of an x86-64 vector-compare cell is carried by the published
+/// PHYSICAL mask: `chc_x86_vector_icmp_spec` answers an image of
+/// `lane_count` lanes of `lane_bits` bits, each the all-ones or the zero lane,
+/// and the lane shape it is asked for IS the one `physical_mask_ty` publishes
+/// (`logical_mask_ty` is the `<n x bool>` it carries). The spec and the
+/// lowering-row reader answer on exactly the cells the status reader does: the
+/// spec wherever a descriptor governs the shape, the row wherever the cell is
+/// available. Mutation: publish v8_i16's `physical_mask_ty` as `<16 x i8>`.
+#[test]
+fn chc_x86_spec_carrier_is_the_published_physical_mask_ty() {
+    use crate::bv_meaning::{BvVector, Concrete, all_ones, vector_icmp};
+    let parse = |ty: &str| -> (u32, u32) {
+        let inner = ty
+            .strip_prefix('<')
+            .and_then(|t| t.strip_suffix('>'))
+            .unwrap_or_else(|| panic!("{ty} is not a vector type"));
+        let (count, elem) = inner
+            .split_once(" x ")
+            .unwrap_or_else(|| panic!("{ty} is not <n x T>"));
+        let bits = elem
+            .strip_prefix('i')
+            .and_then(|b| b.parse().ok())
+            .unwrap_or_else(|| panic!("{ty} has no integer lane"));
+        (bits, count.parse().expect("a lane count"))
+    };
+    for descriptor in chc_x86_hardware_vector_contract_descriptors() {
+        let name = descriptor.contract_name;
+        let (bits, count) = parse(descriptor.physical_mask_ty);
+        assert_eq!(
+            (bits, count),
+            (descriptor.element_bits, descriptor.lane_count),
+            "{name}: the physical mask has one lane per element, as wide as the element"
+        );
+        assert_eq!(
+            descriptor.logical_mask_ty,
+            format!("<{count} x bool>"),
+            "{name}"
+        );
+        let total = bits * count;
+        // Lanes alternate between "lhs lane above rhs lane" and "equal", so
+        // every predicate holds on some lanes and fails on others.
+        let lhs_lanes: Vec<u128> = (0..count).map(|i| if i % 2 == 0 { 1 } else { 5 }).collect();
+        let rhs_lanes: Vec<u128> = (0..count).map(|_| 5).collect();
+        let pack = |lanes: &[u128]| {
+            lanes
+                .iter()
+                .enumerate()
+                .fold(0u128, |acc, (i, l)| acc | (l << (i as u32 * bits)))
+        };
+        for op in CHC_X86_ALL_ICMP_OPS {
+            let mut c = Concrete;
+            let lhs = c.bv_const(pack(&lhs_lanes), total);
+            let rhs = c.bv_const(pack(&rhs_lanes), total);
+            let spec = chc_x86_vector_icmp_spec(&mut c, bits, count, op, &lhs, &rhs)
+                .unwrap_or_else(|| panic!("{name} icmp.{op}: a governed cell has a spec"));
+            assert_eq!(
+                spec.1, total,
+                "{name} icmp.{op}: the spec image is the physical mask"
+            );
+            let holds = vector_icmp(&mut c, op, bits, count, &lhs, &rhs);
+            for (i, held) in holds.iter().enumerate() {
+                let lane = (spec.0 >> (i as u32 * bits)) & all_ones(bits);
+                let expected = if *held { all_ones(bits) } else { 0 };
+                assert_eq!(lane, expected, "{name} icmp.{op} lane {i}");
+            }
+            let cell = chc_x86_vector_icmp_cell_status(bits, count, op).expect("governed");
+            let row = chc_x86_vector_icmp_lowering_row(bits, count, op);
+            assert_eq!(
+                row.is_some(),
+                cell.status == HardwareVectorContractStatus::Available,
+                "{name} icmp.{op}: a lowering row exactly on an available cell"
+            );
+            if let Some(row) = row {
+                assert_eq!(row.operation, format!("icmp.{op}"), "{name}");
+                assert_eq!(
+                    Some(row.feature_guard),
+                    cell.feature_guard,
+                    "{name} icmp.{op}"
+                );
+            }
+        }
+    }
+    // Ungoverned shapes have no spec and no row (the operands are never read).
+    let mut c = Concrete;
+    let dummy = c.bv_const(0, 128);
+    for (bits, count) in [(16, 4), (8, 32), (32, 2), (8, 8), (1, 16), (64, 4)] {
+        for op in CHC_X86_ALL_ICMP_OPS {
+            assert_eq!(chc_x86_vector_icmp_cell_status(bits, count, op), None);
+            assert!(
+                chc_x86_vector_icmp_spec(&mut c, bits, count, op, &dummy, &dummy).is_none(),
+                "<{count} x i{bits}> icmp.{op} is ungoverned, so it has no spec"
+            );
+            assert!(chc_x86_vector_icmp_lowering_row(bits, count, op).is_none());
+        }
+    }
+}
+
+/// Every `icmp.ne` row builds its all-ones operand with `pcmpeqd`, whatever
+/// the lane width: the x86-64 ISel materialises the block's all-ones vector
+/// with one `PCMPEQD x, x` for every shape, and trust-cg's obligation models
+/// it as `pcmpeqd(lhs, lhs)`. So `ne` is the shape's equality compare, then
+/// `pcmpeqd`, then `pxor`. Until 2026-09-30 the `<16 x i8>` and `<8 x i16>`
+/// rows published `pcmpeqb;pcmpeqb;pxor` and `pcmpeqw;pcmpeqw;pxor`, which
+/// no lowering emits.
+#[test]
+fn chc_x86_icmp_ne_rows_build_the_all_ones_with_pcmpeqd() {
+    for descriptor in chc_x86_hardware_vector_contract_descriptors() {
+        let name = descriptor.contract_name;
+        let eq = chc_x86_vector_icmp_lowering_row(
+            descriptor.element_bits,
+            descriptor.lane_count,
+            ICmpOp::Eq,
+        )
+        .unwrap_or_else(|| panic!("{name}: icmp.eq is available"));
+        let ne = chc_x86_vector_icmp_lowering_row(
+            descriptor.element_bits,
+            descriptor.lane_count,
+            ICmpOp::Ne,
+        )
+        .unwrap_or_else(|| panic!("{name}: icmp.ne is available"));
+        assert!(
+            !eq.native_instructions.contains(';'),
+            "{name}: icmp.eq is one compare"
+        );
+        assert_eq!(
+            ne.native_instructions,
+            format!("{};pcmpeqd;pxor", eq.native_instructions),
+            "{name}: icmp.ne is eq, the pcmpeqd all-ones, then pxor"
+        );
+    }
 }

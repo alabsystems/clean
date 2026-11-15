@@ -22,17 +22,20 @@
 //! elaborate or silently capture a parameter of the same name and mint a
 //! well-typed, wrong carrier.
 
-use crate::codata_cmd::{ident, mentions, plain_app, punit_ty};
+use crate::codata_cmd::GlobalPath;
+use crate::codata_cmd::{ident, mentions, plain_app, punit_ty_p};
 use crate::codata_variant::{unsupported, CtorArg};
 use crate::ElabError;
-use clean_parser::{LevelExpr, Projection, Span, SurfaceArg, SurfaceBinder, SurfaceExpr};
+use clean_parser::{
+    LevelExpr, Projection, Span, SurfaceArg, SurfaceBinder, SurfaceExpr, SurfaceName,
+};
 
 /// A non-recursive constructor argument, resolved.
 #[derive(Debug)]
 pub(crate) struct PayloadPlan<'a> {
     /// The binder name the generated constructor uses. Source binder name
     /// when the clause named it; a fresh `a<i>` for arrow-style arguments.
-    pub(crate) arg_name: String,
+    pub(crate) arg_name: SurfaceName,
     /// A SECOND binder name for the same argument, used where the generated
     /// declaration mentions the constructor TWICE — `T.Cⱼ x = T.Cₖ y → False`
     /// and `T.Cₖ x = T.Cₖ y → x = y` (VC-5). Fresh against the parameters,
@@ -41,7 +44,7 @@ pub(crate) struct PayloadPlan<'a> {
     /// Without it, `T.Ret_inj` for `| Ret : (r : R) → T` would bind `r`
     /// twice, the second shadowing the first, and the theorem would degrade
     /// to the vacuous `r = r`.
-    pub(crate) alt_name: String,
+    pub(crate) alt_name: SurfaceName,
     /// The argument's type — one factor of `Pₖ`.
     pub(crate) ty: &'a SurfaceExpr,
     /// How this payload is recovered from the bound SHAPE value inside
@@ -73,11 +76,18 @@ pub(crate) struct FamilyPlan<'a> {
 /// A recursive constructor argument, resolved.
 #[derive(Debug)]
 pub(crate) struct ChildPlan<'a> {
-    pub(crate) arg_name: String,
+    pub(crate) arg_name: SurfaceName,
     /// The second binder name — see [`PayloadPlan::alt_name`].
-    pub(crate) alt_name: String,
-    /// `None` for a bare `T p⃗` child (position `PUnit.{1}`).
+    pub(crate) alt_name: SurfaceName,
+    /// `None` for a bare `T p⃗` child (position `PUnit.{1}`/`PUnit.{u+1}`).
     pub(crate) family: Option<FamilyPlan<'a>>,
+    /// A bare child's position type, at the declaration's level: `PUnit.{1}`
+    /// monomorphically, `PUnit.{u+1}` under `codata T.{u}`.
+    ///
+    /// Stored rather than rebuilt by [`Self::domain_in_args`] so that lifting
+    /// the surface to a universe parameter did not have to thread `poly`
+    /// through those `&self` accessors and their ten callers.
+    pub(crate) unit_pos: SurfaceExpr,
 }
 
 impl ChildPlan<'_> {
@@ -85,7 +95,7 @@ impl ChildPlan<'_> {
     pub(crate) fn domain_in_args(&self) -> SurfaceExpr {
         match &self.family {
             Some(f) => f.source.clone(),
-            None => punit_ty(),
+            None => self.unit_pos.clone(),
         }
     }
 
@@ -94,7 +104,7 @@ impl ChildPlan<'_> {
     pub(crate) fn domain_in_shape(&self) -> SurfaceExpr {
         match &self.family {
             Some(f) => f.in_shape.clone(),
-            None => punit_ty(),
+            None => self.unit_pos.clone(),
         }
     }
 }
@@ -108,7 +118,7 @@ pub(crate) enum ArgPlan<'a> {
 }
 
 impl<'a> ArgPlan<'a> {
-    pub(crate) fn arg_name(&self) -> &str {
+    pub(crate) fn arg_name(&self) -> &SurfaceName {
         match self {
             ArgPlan::Payload(p) => &p.arg_name,
             ArgPlan::Child(c) => &c.arg_name,
@@ -116,7 +126,7 @@ impl<'a> ArgPlan<'a> {
     }
 
     /// The second binder name — see [`PayloadPlan::alt_name`].
-    pub(crate) fn alt_name(&self) -> &str {
+    pub(crate) fn alt_name(&self) -> &SurfaceName {
         match self {
             ArgPlan::Payload(p) => &p.alt_name,
             ArgPlan::Child(c) => &c.alt_name,
@@ -124,7 +134,7 @@ impl<'a> ArgPlan<'a> {
     }
 
     /// Both names this argument can be bound under.
-    fn both_names(&self) -> [&str; 2] {
+    fn both_names(&self) -> [&SurfaceName; 2] {
         [self.arg_name(), self.alt_name()]
     }
 }
@@ -133,7 +143,7 @@ impl<'a> ArgPlan<'a> {
 /// generator needs, with no environment consulted and no name looked up.
 #[derive(Debug)]
 pub(crate) struct VariantCtorPlan<'a> {
-    pub(crate) name: &'a str,
+    pub(crate) name: &'a SurfaceName,
     /// Arguments in source order.
     pub(crate) args: Vec<ArgPlan<'a>>,
     /// `Pₖ` — right-nested `PProd` of the payload types, `PUnit.{1}` when
@@ -150,7 +160,7 @@ pub(crate) struct VariantCtorPlan<'a> {
     /// value to. Fresh against the parameters, this constructor's argument
     /// names, and every identifier occurring in its child domains, so a
     /// projection can never capture.
-    pub(crate) shape_var: String,
+    pub(crate) shape_var: SurfaceName,
 }
 
 impl<'a> VariantCtorPlan<'a> {
@@ -199,10 +209,10 @@ impl<'a> VariantCtorPlan<'a> {
 
     /// Every binder name this constructor can occupy, in either naming —
     /// what a LATER constructor's alternates must stay clear of.
-    pub(crate) fn occupied_names(&self) -> Vec<String> {
+    pub(crate) fn occupied_names(&self) -> Vec<SurfaceName> {
         self.args
             .iter()
-            .flat_map(|a| a.both_names().map(str::to_string))
+            .flat_map(|a| a.both_names().map(SurfaceName::clone))
             .collect()
     }
 }
@@ -218,32 +228,32 @@ impl<'a> VariantCtorPlan<'a> {
 #[derive(Debug)]
 pub(crate) struct GenNames {
     /// The shape argument of `mkStep`.
-    pub(crate) shape_arg: String,
+    pub(crate) shape_arg: SurfaceName,
     /// The position argument of `mkStep`'s child function and of the
     /// child laws.
-    pub(crate) pos_arg: String,
+    pub(crate) pos_arg: SurfaceName,
     /// The child-function argument of `mkStep`.
-    pub(crate) child_arg: String,
+    pub(crate) child_arg: SurfaceName,
     /// The carrier argument of `head`.
-    pub(crate) value_arg: String,
+    pub(crate) value_arg: SurfaceName,
     /// The corecursor's state TYPE (`S`) — VC-4.
-    pub(crate) state_arg: String,
+    pub(crate) state_arg: SurfaceName,
     /// The container index a corecursion step is generic over (`j`) — VC-4.
-    pub(crate) index_arg: String,
+    pub(crate) index_arg: SurfaceName,
     /// The coalgebra argument of `corec` (`g`) — VC-4.
-    pub(crate) coalg_arg: String,
+    pub(crate) coalg_arg: SurfaceName,
     /// The initial state of `corec` (`s`) — VC-4.
-    pub(crate) init_arg: String,
+    pub(crate) init_arg: SurfaceName,
     /// The fallback value of a payload retraction (`d`) — VC-5. A retraction
     /// out of the shape has to be TOTAL, so every branch other than the
     /// constructor's own returns this.
-    pub(crate) default_arg: String,
+    pub(crate) default_arg: SurfaceName,
     /// The equation hypothesis of a discrimination/injectivity companion
     /// (`h`) — VC-5.
-    pub(crate) eq_arg: String,
+    pub(crate) eq_arg: SurfaceName,
     /// Scrutinee names for the `Sum.rec` towers, by depth — deep enough for
     /// both `posF`'s tag tower and the widest constructor's child dispatch.
-    pub(crate) scruts: Vec<String>,
+    pub(crate) scruts: Vec<SurfaceName>,
 }
 
 /// A validated variant codata declaration, with the whole lowering
@@ -251,13 +261,17 @@ pub(crate) struct GenNames {
 /// environment is consulted anywhere in this module.
 #[derive(Debug)]
 pub(crate) struct VariantShape<'a> {
-    pub(crate) name: &'a str,
+    pub(crate) name: &'a SurfaceName,
     pub(crate) binders: &'a [SurfaceBinder],
     pub(crate) ctors: Vec<VariantCtorPlan<'a>>,
     /// The shape functor's value type: right-nested `Sum` of the `Pₖ`
     /// (the bare `P₁` when there is one constructor, which is exactly the
     /// record lane's label type).
     pub(crate) shape_ty: SurfaceExpr,
+    /// The declared universe parameter, if any (`codata T.{u}`). Every
+    /// generated declaration head is stamped with it, and every pinned level
+    /// in the lowering (`PUnit`, `PEmpty`, `Type`) is spelled against it.
+    pub(crate) poly: Option<&'a SurfaceName>,
     pub(crate) gen_names: GenNames,
     /// Was the coinductive companion tier requested (`deriving Coind`)?
     ///
@@ -281,13 +295,26 @@ impl VariantShape<'_> {
 pub(crate) fn pempty_ty() -> SurfaceExpr {
     SurfaceExpr::UniverseInst(
         Span::dummy(),
-        Box::new(ident("PEmpty")),
+        Box::new(ident(GlobalPath("PEmpty"))),
         vec![LevelExpr::Lit(1)],
     )
 }
 
+/// `PEmpty.{1}` (mono) or `PEmpty.{u+1}` (polymorphic) — the position type
+/// of a childless constructor, at the level matching `Type`/`Type u`.
+pub(crate) fn pempty_ty_p(poly: Option<&SurfaceName>) -> SurfaceExpr {
+    match poly {
+        Some(u) => SurfaceExpr::UniverseInst(
+            Span::dummy(),
+            Box::new(ident(GlobalPath("PEmpty"))),
+            vec![LevelExpr::Succ(Box::new(LevelExpr::Param(u.clone())))],
+        ),
+        None => pempty_ty(),
+    }
+}
+
 /// Right-nested `head a (head b c)`; the bare element for one part.
-pub(crate) fn nest_right(head: &str, parts: Vec<SurfaceExpr>) -> Option<SurfaceExpr> {
+pub(crate) fn nest_right(head: GlobalPath, parts: Vec<SurfaceExpr>) -> Option<SurfaceExpr> {
     parts
         .into_iter()
         .rev()
@@ -296,7 +323,7 @@ pub(crate) fn nest_right(head: &str, parts: Vec<SurfaceExpr>) -> Option<SurfaceE
 
 /// The `PProd` VALUE of a payload list (`PUnit.unit` when empty).
 fn pack_pprod(vals: Vec<SurfaceExpr>) -> SurfaceExpr {
-    nest_right("PProd.mk", vals).unwrap_or_else(|| ident("PUnit.unit"))
+    nest_right(GlobalPath("PProd.mk"), vals).unwrap_or_else(|| ident(GlobalPath("PUnit.unit")))
 }
 
 /// Inject `v` at position `k` of a right-nested `n`-ary `Sum`.
@@ -305,15 +332,15 @@ pub(crate) fn inject_sum(k: usize, n: usize, v: SurfaceExpr) -> SurfaceExpr {
         return v;
     }
     if k == 0 {
-        return plain_app("Sum.inl", vec![v]);
+        return plain_app(GlobalPath("Sum.inl"), vec![v]);
     }
-    plain_app("Sum.inr", vec![inject_sum(k - 1, n - 1, v)])
+    plain_app(GlobalPath("Sum.inr"), vec![inject_sum(k - 1, n - 1, v)])
 }
 
 /// The projection chain recovering payload `i` of `k` from `base`:
 /// `base` (k = 1), `base.1` / `base.2` (k = 2), `base.1` / `base.2.1` /
 /// `base.2.2` (k = 3), … — the right-nested `PProd` path.
-pub(crate) fn projection_path(base: &str, i: usize, k: usize) -> SurfaceExpr {
+pub(crate) fn projection_path(base: &SurfaceName, i: usize, k: usize) -> SurfaceExpr {
     let mut e = ident(base);
     for _ in 0..i {
         e = SurfaceExpr::Proj(Span::dummy(), Box::new(e), Projection::Index(2));
@@ -329,7 +356,7 @@ pub(crate) fn projection_path(base: &str, i: usize, k: usize) -> SurfaceExpr {
 /// are bound: the parameters, the constructor argument names, the shape
 /// binders, and everything named inside a `Pₖ` or `Qₖ`.
 pub(crate) fn gen_names(binders: &[SurfaceBinder], plans: &[VariantCtorPlan<'_>]) -> GenNames {
-    let mut used: Vec<String> = binders.iter().map(|b| b.name.clone()).collect();
+    let mut used: Vec<SurfaceName> = binders.iter().map(|b| b.name.clone()).collect();
     let mut depth = plans.len();
     for c in plans {
         used.push(c.shape_var.clone());
@@ -340,7 +367,7 @@ pub(crate) fn gen_names(binders: &[SurfaceBinder], plans: &[VariantCtorPlan<'_>]
         depth = depth.max(c.children().count());
     }
     let mut mint = |base: &str| {
-        let n = fresh_name(base, &used);
+        let n = fresh_name(&SurfaceName::component(base, false), &used);
         used.push(n.clone());
         n
     };
@@ -352,7 +379,7 @@ pub(crate) fn gen_names(binders: &[SurfaceBinder], plans: &[VariantCtorPlan<'_>]
     let pos_arg = mint("b");
     let child_arg = mint("f");
     let value_arg = mint("x");
-    let scruts: Vec<String> = (0..depth.max(1)).map(|i| mint(&format!("s{i}"))).collect();
+    let scruts: Vec<SurfaceName> = (0..depth.max(1)).map(|i| mint(&format!("s{i}"))).collect();
     GenNames {
         shape_arg,
         pos_arg,
@@ -371,9 +398,9 @@ pub(crate) fn gen_names(binders: &[SurfaceBinder], plans: &[VariantCtorPlan<'_>]
 /// One resolved argument mid-flight: a payload plus the SOURCE name it can
 /// be referenced by, or a child plus its domain as written.
 enum Slot<'a> {
-    Payload(Option<&'a str>, PayloadPlan<'a>),
+    Payload(Option<&'a SurfaceName>, PayloadPlan<'a>),
     /// `(domain as written, primary binder name, alternate binder name)`.
-    Child(Option<&'a SurfaceExpr>, String, String),
+    Child(Option<&'a SurfaceExpr>, SurfaceName, SurfaceName),
 }
 
 /// Turn the classified telescope into the fully-resolved plan: argument
@@ -386,36 +413,37 @@ enum Slot<'a> {
 /// primary names and constructor `k`'s under the alternates, so the
 /// alternates are the side that has to give way.
 pub(crate) fn resolve_ctor<'a>(
-    name: &str,
-    param_names: &[&str],
-    cname: &'a str,
+    poly: Option<&SurfaceName>,
+    name: &SurfaceName,
+    param_names: &[&SurfaceName],
+    cname: &'a SurfaceName,
     classified: Vec<CtorArg<'a>>,
-    occupied: &[String],
+    occupied: &[SurfaceName],
 ) -> Result<VariantCtorPlan<'a>, ElabError> {
     // Argument names first: the source binder name where the clause gave
     // one, else a fresh `a<i>` that cannot collide with a parameter, with
     // another argument, or with anything named inside a child domain.
-    let mut used: Vec<String> = param_names.iter().map(|p| (*p).to_string()).collect();
+    let mut used: Vec<SurfaceName> = param_names.iter().map(|p| (*p).clone()).collect();
     for arg in &classified {
         match arg {
             CtorArg::Payload { name: Some(n), .. }
             | CtorArg::Child { name: Some(n) }
-            | CtorArg::ChildFamily { name: Some(n), .. } => used.push((*n).to_string()),
+            | CtorArg::ChildFamily { name: Some(n), .. } => used.push((*n).clone()),
             _ => {}
         }
         if let CtorArg::ChildFamily { domain, .. } = arg {
             collect_idents(domain, &mut used);
         }
     }
-    let arg_names: Vec<String> = classified
+    let arg_names: Vec<SurfaceName> = classified
         .iter()
         .enumerate()
         .map(|(i, arg)| match arg {
             CtorArg::Payload { name: Some(n), .. }
             | CtorArg::Child { name: Some(n) }
-            | CtorArg::ChildFamily { name: Some(n), .. } => (*n).to_string(),
+            | CtorArg::ChildFamily { name: Some(n), .. } => (*n).clone(),
             _ => {
-                let fresh = fresh_name(&format!("a{i}"), &used);
+                let fresh = fresh_name(&SurfaceName::component(format!("a{i}"), false), &used);
                 used.push(fresh.clone());
                 fresh
             }
@@ -424,7 +452,7 @@ pub(crate) fn resolve_ctor<'a>(
 
     // The shape binder `posF`'s branch introduces. Fresh against the same
     // set, so `s.2.1` in a rewritten domain can never capture.
-    let shape_var = fresh_name("s", &used);
+    let shape_var = fresh_name(&SurfaceName::component("s", false), &used);
 
     // The ALTERNATE naming (VC-5): a second binder name per argument, fresh
     // against this constructor's own names AND every earlier constructor's,
@@ -433,10 +461,10 @@ pub(crate) fn resolve_ctor<'a>(
     let mut alt_used = used.clone();
     alt_used.push(shape_var.clone());
     alt_used.extend(occupied.iter().cloned());
-    let alt_names: Vec<String> = arg_names
+    let alt_names: Vec<SurfaceName> = arg_names
         .iter()
         .map(|n| {
-            let fresh = fresh_name(&format!("{n}0"), &alt_used);
+            let fresh = fresh_name(&fresh_suffix(n, "0"), &alt_used);
             alt_used.push(fresh.clone());
             fresh
         })
@@ -449,8 +477,11 @@ pub(crate) fn resolve_ctor<'a>(
             _ => None,
         })
         .collect();
-    let payload_ty = nest_right("PProd", payload_tys.iter().map(|t| (*t).clone()).collect())
-        .unwrap_or_else(punit_ty);
+    let payload_ty = nest_right(
+        GlobalPath("PProd"),
+        payload_tys.iter().map(|t| (*t).clone()).collect(),
+    )
+    .unwrap_or_else(|| punit_ty_p(poly));
 
     // Pass 1 — the payload plans, each carrying the projection path that
     // recovers it from the bound shape value.
@@ -481,17 +512,17 @@ pub(crate) fn resolve_ctor<'a>(
     // the alternate telescope's (payload → its alternate binder). Only
     // NAMED payloads can be referenced, so only those enter either
     // substitution.
-    let subs: Vec<(String, SurfaceExpr)> = slots
+    let subs: Vec<(SurfaceName, SurfaceExpr)> = slots
         .iter()
         .filter_map(|s| match s {
-            Slot::Payload(Some(src), plan) => Some(((*src).to_string(), plan.projection.clone())),
+            Slot::Payload(Some(src), plan) => Some(((*src).clone(), plan.projection.clone())),
             _ => None,
         })
         .collect();
-    let alt_subs: Vec<(String, SurfaceExpr)> = slots
+    let alt_subs: Vec<(SurfaceName, SurfaceExpr)> = slots
         .iter()
         .filter_map(|s| match s {
-            Slot::Payload(Some(src), plan) => Some(((*src).to_string(), ident(&plan.alt_name))),
+            Slot::Payload(Some(src), plan) => Some(((*src).clone(), ident(&plan.alt_name))),
             _ => None,
         })
         .collect();
@@ -503,6 +534,7 @@ pub(crate) fn resolve_ctor<'a>(
                 arg_name,
                 alt_name,
                 family: None,
+                unit_pos: punit_ty_p(poly),
             })),
             Slot::Child(Some(domain), arg_name, alt_name) => {
                 let in_shape = subst_idents(name, cname, domain, &subs, &mut Vec::new())?;
@@ -530,6 +562,7 @@ pub(crate) fn resolve_ctor<'a>(
                 args.push(ArgPlan::Child(ChildPlan {
                     arg_name,
                     alt_name,
+                    unit_pos: punit_ty_p(poly),
                     family: Some(FamilyPlan {
                         source: domain,
                         in_shape,
@@ -548,12 +581,15 @@ pub(crate) fn resolve_ctor<'a>(
         })
         .collect();
     let pos_ty_in_shape = nest_right(
-        "Sum",
+        GlobalPath("Sum"),
         children.iter().map(|c| c.domain_in_shape()).collect(),
     )
-    .unwrap_or_else(pempty_ty);
-    let pos_ty_in_args = nest_right("Sum", children.iter().map(|c| c.domain_in_args()).collect())
-        .unwrap_or_else(pempty_ty);
+    .unwrap_or_else(|| pempty_ty_p(poly));
+    let pos_ty_in_args = nest_right(
+        GlobalPath("Sum"),
+        children.iter().map(|c| c.domain_in_args()).collect(),
+    )
+    .unwrap_or_else(|| pempty_ty_p(poly));
 
     Ok(VariantCtorPlan {
         name: cname,
@@ -565,12 +601,26 @@ pub(crate) fn resolve_ctor<'a>(
     })
 }
 
+/// Fresh binder naming keeps the structural parent and edits only a terminal
+/// string. Non-string generated identities retain their original constructor
+/// under a new generated component; no display spelling is parsed.
+fn fresh_suffix(base: &SurfaceName, suffix: &str) -> SurfaceName {
+    match base.name().inner() {
+        clean_kernel::name::NameInner::Str(_, text) => base.parent().append(
+            &SurfaceName::from_name(clean_kernel::Name::anon().str(format!("{text}{suffix}"))),
+        ),
+        _ => base.append(&SurfaceName::from_name(
+            clean_kernel::Name::anon().str(suffix),
+        )),
+    }
+}
+
 /// A name equal to `base` when that is unused, else `base0`, `base1`, ….
-fn fresh_name(base: &str, used: &[String]) -> String {
-    let mut candidate = base.to_string();
+fn fresh_name(base: &SurfaceName, used: &[SurfaceName]) -> SurfaceName {
+    let mut candidate = base.clone();
     let mut i = 0usize;
     while used.contains(&candidate) {
-        candidate = format!("{base}{i}");
+        candidate = fresh_suffix(base, &i.to_string());
         i += 1;
     }
     candidate
@@ -579,7 +629,7 @@ fn fresh_name(base: &str, used: &[String]) -> String {
 /// Every identifier occurring in `expr`, over exactly the node set
 /// [`subst_idents`] traverses (so a name chosen fresh against this list
 /// cannot be captured by a rewrite that succeeds).
-fn collect_idents(expr: &SurfaceExpr, out: &mut Vec<String>) {
+fn collect_idents(expr: &SurfaceExpr, out: &mut Vec<SurfaceName>) {
     match expr {
         SurfaceExpr::Ident(_, id) => out.push(id.clone()),
         SurfaceExpr::App(_, h, args) => {
@@ -620,13 +670,13 @@ fn collect_idents(expr: &SurfaceExpr, out: &mut Vec<String>) {
 /// free in `posF` — the exact silent miscompile this brick exists to
 /// prevent. A constructor with no payloads never calls this.
 fn subst_idents(
-    name: &str,
-    cname: &str,
+    name: &SurfaceName,
+    cname: &SurfaceName,
     expr: &SurfaceExpr,
-    subs: &[(String, SurfaceExpr)],
-    shadowed: &mut Vec<String>,
+    subs: &[(SurfaceName, SurfaceExpr)],
+    shadowed: &mut Vec<SurfaceName>,
 ) -> Result<SurfaceExpr, ElabError> {
-    let rec = |e: &SurfaceExpr, sh: &mut Vec<String>| subst_idents(name, cname, e, subs, sh);
+    let rec = |e: &SurfaceExpr, sh: &mut Vec<SurfaceName>| subst_idents(name, cname, e, subs, sh);
     Ok(match expr {
         SurfaceExpr::Ident(_, id) => {
             if !shadowed.iter().any(|b| b == id) {
@@ -702,7 +752,10 @@ fn subst_idents(
 /// A short name for the expression form, for the refusal above.
 fn expr_form(expr: &SurfaceExpr) -> &'static str {
     match expr {
-        SurfaceExpr::Let(..) | SurfaceExpr::LetRec(..) | SurfaceExpr::LetPattern(..) => "let",
+        SurfaceExpr::Let(..)
+        | SurfaceExpr::Have(..)
+        | SurfaceExpr::LetRec(..)
+        | SurfaceExpr::LetPattern(..) => "let",
         SurfaceExpr::If(..) | SurfaceExpr::IfLet(..) | SurfaceExpr::IfDecidable(..) => "if",
         SurfaceExpr::Match(..) | SurfaceExpr::PatternMatchLambda(..) => "match",
         _ => "unsupported form",

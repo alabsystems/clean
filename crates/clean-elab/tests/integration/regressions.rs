@@ -248,13 +248,14 @@ fn test_module_algebra_all_initialization() {
 fn test_issue134_typeclass_instance_implicit_simple_case() {
     let mut env = Environment::new();
 
-    // Set up minimal typeclass infrastructure
-    check_and_add_decl(&mut env, "axiom Ring : Type → Type").unwrap();
+    // Set up minimal typeclass infrastructure. `Ring` is a real class: pinned
+    // Lean refuses `[inst : Ring R]` over an axiom `Ring : Type → Type`
+    // (`test_issue134_instance_binder_over_axiom_refused`).
+    check_and_add_decl(&mut env, "class Ring (α : Type) : Type").unwrap();
     check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
     check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
 
-    // Simple case: instance implicit with axiomatic Ring
-    // This currently passes, but we keep the test to catch regressions.
+    // Simple case: instance implicit over a fieldless class.
     let result = check_and_add_decl(
         &mut env,
         "theorem test_typeclass (R : Type) [inst : Ring R] : True := True.intro",
@@ -267,23 +268,50 @@ fn test_issue134_typeclass_instance_implicit_simple_case() {
     );
 }
 
+/// Negative control for issue #134 case 1: an axiom is not a class, so an
+/// instance-implicit binder over it is refused, as pinned Lean refuses it.
+#[test]
+fn test_issue134_instance_binder_over_axiom_refused() {
+    let mut env = Environment::new();
+    check_and_add_decl(&mut env, "axiom Ring : Type → Type").unwrap();
+    check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
+    check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
+    let err = check_and_add_decl(
+        &mut env,
+        "theorem test_typeclass (R : Type) [inst : Ring R] : True := True.intro",
+    )
+    .expect_err("`[inst : Ring R]` over an axiom must be refused");
+    assert!(
+        err.contains("not a class instance"),
+        "expected the non-class binder refusal, got: {err}"
+    );
+}
+
 /// Issue #134 case 2: Type constructor with implicit parameters
 ///
-/// Prod has implicit type parameters: Prod : {α : Type} → {β : Type} → Type
-/// When applied explicitly as `Prod Nat Nat`, metavars are created for the
-/// implicit params and should unify with Nat, but they escape uninstantiated.
+/// `Prod : {A : Type} → {B : Type} → A → B → Type` has implicit type
+/// parameters fixed by its explicit arguments. Applying it as `Prod zero zero`
+/// creates metavars for the implicit params, which must unify with `Nat` and
+/// not escape uninstantiated. (The test once declared
+/// `Prod : {A : Type} → {B : Type} → Type` and wrote `Prod Nat Nat`, which
+/// over-applies a `Type`; pinned Lean refuses that, and so does
+/// `test_issue134_type_constructor_over_application_refused`.)
 #[test]
 fn test_issue134_type_constructor_application() {
     let mut env = Environment::new();
 
     // Minimal setup: Nat and a polymorphic type constructor
     check_and_add_decl(&mut env, "axiom Nat : Type").unwrap();
+    check_and_add_decl(&mut env, "axiom zero : Nat").unwrap();
     // Prod with implicit params (simplified - real Prod has universe polymorphism)
-    check_and_add_decl(&mut env, "axiom Prod : {A : Type} → {B : Type} → Type").unwrap();
+    check_and_add_decl(
+        &mut env,
+        "axiom Prod : {A : Type} → {B : Type} → A → B → Type",
+    )
+    .unwrap();
 
-    // This fails with NotAFunction(Sort(...)) because the implicit args
-    // create metavars that aren't resolved, causing the function type to be mishandled
-    let result = check_and_add_decl(&mut env, "def foo := Prod Nat Nat");
+    // The implicit args become metavars solved by unifying with `zero : Nat`.
+    let result = check_and_add_decl(&mut env, "def foo := Prod zero zero");
 
     assert!(
         result.is_ok(),
@@ -301,21 +329,42 @@ fn test_issue134_type_constructor_in_param_type() {
     let mut env = Environment::new();
 
     check_and_add_decl(&mut env, "axiom Nat : Type").unwrap();
-    check_and_add_decl(&mut env, "axiom Prod : {A : Type} → {B : Type} → Type").unwrap();
+    check_and_add_decl(&mut env, "axiom zero : Nat").unwrap();
+    check_and_add_decl(
+        &mut env,
+        "axiom Prod : {A : Type} → {B : Type} → A → B → Type",
+    )
+    .unwrap();
     check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
     check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
 
-    // def test (p : Prod Nat Nat) : True := True.intro
-    // The `Prod Nat Nat` in the parameter type creates metavars that escape
+    // The `Prod zero zero` in the parameter type creates metavars for the
+    // implicit params that must be instantiated before the kernel sees them.
     let result = check_and_add_decl(
         &mut env,
-        "def test_param (p : Prod Nat Nat) : True := True.intro",
+        "def test_param (p : Prod zero zero) : True := True.intro",
     );
 
     assert!(
         result.is_ok(),
         "Type constructor in parameter type should elaborate. Got: {:?}",
         result.err()
+    );
+}
+
+/// Negative control for issue #134 cases 2 and 3: with only implicit
+/// parameters, `Prod` elaborates to a `Type`, so `Prod Nat Nat` over-applies
+/// it. Pinned Lean refuses this ("Function expected").
+#[test]
+fn test_issue134_type_constructor_over_application_refused() {
+    let mut env = Environment::new();
+    check_and_add_decl(&mut env, "axiom Nat : Type").unwrap();
+    check_and_add_decl(&mut env, "axiom Prod : {A : Type} → {B : Type} → Type").unwrap();
+    let err = check_and_add_decl(&mut env, "def foo := Prod Nat Nat")
+        .expect_err("`Prod Nat Nat` over-applies a `Type` and must be refused");
+    assert!(
+        err.contains("Too many arguments"),
+        "expected the over-application refusal, got: {err}"
     );
 }
 
@@ -352,14 +401,16 @@ fn test_issue134_fvarid_sentinel_analysis() {
 /// creates a metavariable that escapes uninstantiated.
 ///
 /// Simple case with independent typeclasses WORKS:
-/// - `axiom TC1 : Type → Type`
-/// - `axiom TC2 : Type → Type`
+/// - `class TC1 (α : Type) : Type`
+/// - `class TC2 (α : Type) : Type`
 /// - `theorem (R : Type) [TC1 R] [TC2 R] : True` -- OK
 ///
 /// Issue #139 closure test: Nested instance-implicit binders in typeclass signatures.
 ///
-/// TC2 has signature `{α : Type} → [TC1 α] → Prop` which means when we write
-/// `[inst2 : TC2 R]`, the elaborator needs to resolve the inner `[TC1 α]` parameter.
+/// TC2 is `class TC2 (α : Type) [TC1 α] : Prop`, so when we write
+/// `[inst2 : TC2 R]`, the elaborator needs to resolve the inner `[TC1 R]` parameter.
+/// (The test once declared TC1/TC2 as axioms, with TC2 taking `α` implicitly;
+/// pinned Lean refuses both the non-class binders and `TC2 R`.)
 /// This test verifies that local instance-implicit binders (`inst1 : TC1 R`) are
 /// searched during nested instance resolution.
 ///
@@ -369,10 +420,10 @@ fn test_issue134_fvarid_sentinel_analysis() {
 fn test_issue139_nested_instance_implicit_in_signature() {
     let mut env = Environment::new();
 
-    // TC1 is simple: Type → Type
-    check_and_add_decl(&mut env, "axiom TC1 : Type → Type").unwrap();
-    // TC2 depends on TC1 via nested instance-implicit: {α : Type} → [TC1 α] → Prop
-    check_and_add_decl(&mut env, "axiom TC2 : {α : Type} → [TC1 α] → Prop").unwrap();
+    // TC1 is simple: a fieldless class over a type
+    check_and_add_decl(&mut env, "class TC1 (α : Type) : Type").unwrap();
+    // TC2 depends on TC1 via a nested instance-implicit parameter
+    check_and_add_decl(&mut env, "class TC2 (α : Type) [TC1 α] : Prop").unwrap();
     check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
     check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
 
@@ -397,9 +448,9 @@ fn test_issue139_nested_instance_implicit_in_signature() {
 fn test_issue139_baseline_independent_instances() {
     let mut env = Environment::new();
 
-    // Both typeclasses have simple Type → Type signatures (no nested instances)
-    check_and_add_decl(&mut env, "axiom TC1 : Type → Type").unwrap();
-    check_and_add_decl(&mut env, "axiom TC2 : Type → Type").unwrap();
+    // Both typeclasses are simple classes over a type (no nested instances)
+    check_and_add_decl(&mut env, "class TC1 (α : Type) : Type").unwrap();
+    check_and_add_decl(&mut env, "class TC2 (α : Type) : Type").unwrap();
     check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
     check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
 
@@ -416,12 +467,36 @@ fn test_issue139_baseline_independent_instances() {
     );
 }
 
+/// Negative control for issue #139: TC1/TC2 as axioms are not classes, so
+/// instance-implicit binders over them are refused, as pinned Lean refuses
+/// them.
+#[test]
+fn test_issue139_instance_binders_over_axioms_refused() {
+    let mut env = Environment::new();
+    check_and_add_decl(&mut env, "axiom TC1 : Type → Type").unwrap();
+    check_and_add_decl(&mut env, "axiom TC2 : Type → Type").unwrap();
+    check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
+    check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
+    let err = check_and_add_decl(
+        &mut env,
+        "theorem independent (R : Type) [inst1 : TC1 R] [inst2 : TC2 R] : True := True.intro",
+    )
+    .expect_err("instance binders over axioms must be refused");
+    assert!(
+        err.contains("not a class instance"),
+        "expected the non-class binder refusal, got: {err}"
+    );
+}
+
 /// Issue #140: Typeclass inheritance with `extends` clause
 ///
 /// FATE-X problems typically use:
 /// `{R : Type} [CommRing R] [IsDomain R] [UniqueFactorizationMonoid R]`
 ///
-/// Where IsDomain has signature: `{α : Type} → [Ring α] → Prop` (needs Ring from CommRing)
+/// Where IsDomain is `class IsDomain (α : Type) [Ring α] : Prop` (needs Ring from CommRing)
+/// (The test once declared IsDomain as an axiom `{α : Type} → [Ring α] → Prop`,
+/// so `IsDomain R` over-applied a `Prop`; pinned Lean refuses that, as does
+/// `test_issue140_axiom_is_domain_over_application_refused`.)
 /// When CommRing extends Ring, the CommRing.toRing instance should satisfy the Ring requirement.
 ///
 /// Tests typeclass inheritance via `extends` clause.
@@ -448,7 +523,7 @@ fn test_issue140_typeclass_inheritance_extends() {
     .unwrap();
 
     // IsDomain requires [Ring α] - has nested instance-implicit
-    check_and_add_decl(&mut env, "axiom IsDomain : {α : Type} → [Ring α] → Prop").unwrap();
+    check_and_add_decl(&mut env, "class IsDomain (α : Type) [Ring α] : Prop").unwrap();
     check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
     check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
 
@@ -463,6 +538,33 @@ fn test_issue140_typeclass_inheritance_extends() {
         result.is_ok(),
         "FATE-X pattern with typeclass inheritance should elaborate. Got: {:?}",
         result.err()
+    );
+}
+
+/// Negative control for issue #140: with `IsDomain` an axiom taking `α`
+/// implicitly, `IsDomain R` over-applies a `Prop`. Pinned Lean refuses this
+/// ("Function expected").
+#[test]
+fn test_issue140_axiom_is_domain_over_application_refused() {
+    let mut env = Environment::new();
+    check_and_add_decl(
+        &mut env,
+        "class Ring (α : Type) where
+           add : α → α → α
+           mul : α → α → α",
+    )
+    .unwrap();
+    check_and_add_decl(&mut env, "axiom IsDomain : {α : Type} → [Ring α] → Prop").unwrap();
+    check_and_add_decl(&mut env, "axiom True : Prop").unwrap();
+    check_and_add_decl(&mut env, "axiom True.intro : True").unwrap();
+    let err = check_and_add_decl(
+        &mut env,
+        "theorem fatex_bad {R : Type} [inst1 : Ring R] [inst2 : IsDomain R] : True := True.intro",
+    )
+    .expect_err("`IsDomain R` over-applies a `Prop` and must be refused");
+    assert!(
+        err.contains("Too many arguments"),
+        "expected the over-application refusal, got: {err}"
     );
 }
 

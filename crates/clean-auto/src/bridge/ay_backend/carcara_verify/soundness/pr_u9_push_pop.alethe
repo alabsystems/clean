@@ -1,0 +1,4 @@
+(assume h (and p (not p)))
+(step t1 (cl p) :rule and :premises (h) :args (0))
+(step t2 (cl (not p)) :rule and :premises (h) :args (1))
+(step t3 (cl) :rule resolution :premises (t1 t2))

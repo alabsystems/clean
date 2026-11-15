@@ -161,11 +161,11 @@ inputs:
       executable_checks:
         - id: simp-proof-carry
           source: crates/clean-elab/src/tactic/tests/simp_proof_carry.rs
-          command: cargo test -p clean-elab tactic::tests::simp_proof_carry::test_simp_transitivity_chain_no_trusted_arith --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::simp_proof_carry::test_simp_transitivity_chain_no_trusted_arith --lib -- --exact
           proves: simp closes a transitivity chain with a kernel-checked proof and no trusted arithmetic fallback.
         - id: simp-all-opaque-fail-closed
           source: crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
-          command: cargo test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_simp_lane_executable_fixture_fails_closed_without_fallback --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_simp_lane_executable_fixture_fails_closed_without_fallback --lib -- --exact
           proves: simp_all fails closed on an opaque target instead of fabricating a proof or sorry fallback.
       lean4_corpus_evidence:
         bucket: simp-all-opaque-fail-closed-fixture
@@ -190,11 +190,11 @@ inputs:
       executable_checks:
         - id: rw-checked-rewrite
           source: crates/clean-elab/src/tactic/tests/conv_proof_carry.rs
-          command: cargo test -p clean-elab tactic::tests::conv_proof_carry::test_conv_rw_direct_path_uses_checked_rewrite --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::conv_proof_carry::test_conv_rw_direct_path_uses_checked_rewrite --lib -- --exact
           proves: rw uses a kernel-checked rewrite on the direct path rather than a trusted equality.
         - id: rw-parity-fixture
           source: crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
-          command: cargo test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_rw_lane_executable_fixture_closes_without_fallback --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_rw_lane_executable_fixture_closes_without_fallback --lib -- --exact
           proves: the rw fixture rows close with a kernel-valid proof and no trusted-arith / sorry fallback.
       lean4_corpus_evidence:
         bucket: rw-local-equality-fixture
@@ -219,7 +219,7 @@ inputs:
       executable_checks:
         - id: ring-parity-fixture
           source: crates/clean-elab/src/tactic/tests/tactic_parity_registry.rs
-          command: cargo test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_ring_lane_executable_fixture_closes_without_fallback --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::tactic_parity_registry::test_tactic_parity_ring_lane_executable_fixture_closes_without_fallback --lib -- --exact
           proves: ring_nf closes a commutativity goal with a kernel-valid proof and no trusted-arith / sorry fallback.
       lean4_corpus_evidence:
         bucket: ring-nat-normalization-fixture
@@ -244,7 +244,7 @@ inputs:
       executable_checks:
         - id: norm-num-fail-closed
           source: crates/clean-elab/src/tactic/tests/advanced/algebraic_reasoning_ext.rs
-          command: cargo test -p clean-elab tactic::tests::advanced::algebraic_reasoning_ext::test_norm_num_at_fails_closed_on_non_defeq_rewrite --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::advanced::algebraic_reasoning_ext::test_norm_num_at_fails_closed_on_non_defeq_rewrite --lib -- --exact
           proves: norm_num at fails closed on a non-defeq rewrite instead of fabricating a rewrite.
       lean4_corpus_evidence:
         bucket: norm-num-at-fail-closed-fixture
@@ -270,11 +270,11 @@ inputs:
       executable_checks:
         - id: mathverse-proof-carry
           source: crates/clean-elab/src/tactic/tests/mathverse_proof_carry.rs
-          command: cargo test -p clean-elab tactic::tests::mathverse_proof_carry::test_mathverse_avoids_trusted_arith_on_contradictory_nat_le --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::mathverse_proof_carry::test_mathverse_avoids_trusted_arith_on_contradictory_nat_le --lib -- --exact
           proves: mathverse avoids trusted arithmetic when discharging a contradictory Nat.le goal.
         - id: mathverse-certified-arithmetic-fail-closed
           source: crates/clean-elab/src/tactic/tests/certified_arithmetic_fail_closed.rs
-          command: cargo test -p clean-elab tactic::tests::certified_arithmetic_fail_closed::test_mathverse_certified_arithmetic_fail_closed_without_trusted_axioms --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::certified_arithmetic_fail_closed::test_mathverse_certified_arithmetic_fail_closed_without_trusted_axioms --lib -- --exact
           proves: mathverse certified arithmetic fails closed without trusted axioms when the replay is rejected.
       lean4_corpus_evidence:
         bucket: mathverse-certified-arithmetic-fail-closed-fixture
@@ -299,7 +299,7 @@ inputs:
       executable_checks:
         - id: linarith-proof-carry
           source: crates/clean-elab/src/tactic/tests/linarith_proof_type/term_soundness.rs
-          command: cargo test -p clean-elab tactic::tests::linarith_proof_type::term_soundness::test_linarith_end_to_end_no_trusted_arith_fallback --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::linarith_proof_type::term_soundness::test_linarith_end_to_end_no_trusted_arith_fallback --lib -- --exact
           proves: linarith builds an end-to-end kernel proof with no trusted-arith fallback.
     - tactic: nlinarith
       proof_behavior: proof-carrying
@@ -312,7 +312,7 @@ inputs:
       executable_checks:
         - id: nlinarith-certified-unsat-fail-closed
           source: crates/clean-elab/src/tactic/tests/nlinarith_proof_carry.rs
-          command: cargo test -p clean-elab tactic::tests::nlinarith_proof_carry::test_certified_nlinarith_outcome_distinguishes_fail_closed_unsat --lib -- --exact
+          command: targo --unverified test -p clean-elab tactic::tests::nlinarith_proof_carry::test_certified_nlinarith_outcome_distinguishes_fail_closed_unsat --lib -- --exact
           proves: certified nlinarith distinguishes a fail-closed unsat outcome instead of trusting the SMT result.
       lean4_corpus_evidence:
         bucket: nlinarith-certified-unsat-fail-closed-fixture

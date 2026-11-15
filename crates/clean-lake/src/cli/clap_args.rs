@@ -101,13 +101,18 @@ pub enum LakeCommands {
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
-        /// Command and arguments to run in the Lake environment
+        /// Command and arguments to run in the Lake environment. A Lean
+        /// toolchain program (`lean`, `lake`, `leanchecker`, `leanexport`,
+        /// `lean4export`, `leanc`, `leanir`, `leanmake`, `leanpkg`) is refused
+        /// by name, naming the Clean verb to use instead
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
         command: Vec<String>,
     },
     /// Run a Lean executable target
     Run {
-        /// Executable target name (defaults to @\[default_target\] or first executable)
+        /// Executable target name (defaults to @\[default_target\], or the SINGLE
+        /// declared executable; several executables with no default is refused,
+        /// naming them)
         target: Option<String>,
         /// Arguments to pass to the executable
         #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
@@ -183,7 +188,9 @@ pub enum LakeCommands {
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Check if tests would pass without running
+    /// Check that the test targets resolve and ELABORATE, then list them —
+    /// no test body is executed, so a test that would fail at runtime still
+    /// passes this check
     CheckTest {
         /// Target to check (default: all tests)
         target: Option<String>,
@@ -191,7 +198,8 @@ pub enum LakeCommands {
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Check if linting would pass without running
+    /// Check that the lint targets resolve and ELABORATE, then list them —
+    /// the lint engine is not run and no lint finding is produced
     CheckLint {
         /// Target to check (default: all targets)
         target: Option<String>,
@@ -199,24 +207,31 @@ pub enum LakeCommands {
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Pack .olean files into an archive
+    /// Pack .olean files into a pack DIRECTORY (files + manifest.json) —
+    /// no archive file is produced; the command prints the `tar` invocation
+    /// to compress it yourself
     Pack {
-        /// Output archive file
+        /// Output pack directory (created; not an archive file)
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Unpack .olean files from an archive
+    /// Unpack .olean files from a pack DIRECTORY (as `pack` writes: files + manifest.json)
     Unpack {
-        /// Input archive file
+        /// Input pack directory (a tarball must be extracted first)
         archive: PathBuf,
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Upload build artifacts to Reservoir
+    /// NOT IMPLEMENTED — collects the artifact list, then refuses.
+    ///
+    /// With artifacts present, every non-`--dry-run` path ends in an error
+    /// (TODO #421); a build directory holding no `.olean`/`.ilean` reports
+    /// "No artifacts found to upload." and exits 0. Use `--dry-run` to list
+    /// what would be sent.
     Upload {
         /// Show verbose output
         #[arg(short, long)]
@@ -225,8 +240,9 @@ pub enum LakeCommands {
         #[arg(long)]
         dry_run: bool,
     },
-    /// Verify that built `.olean` artifacts are content-fresh vs their `.lean` source
-    /// (Cake's content-hash freshness — the import-list signature). Fail-closed on stale.
+    /// Verify that built `.olean` artifacts are exactly what their current `.lean` source
+    /// builds to: Cake's import signature AND byte-identity with a fresh scratch build.
+    /// Fail-closed on a stale, rewritten or non-reproducible artifact.
     VerifyFresh {
         /// Project source root holding the `.lean` files (e.g. `crown-proofs/lean`).
         #[arg(long)]
@@ -235,7 +251,7 @@ pub enum LakeCommands {
         #[arg(long, value_delimiter = ',')]
         module: Vec<String>,
         /// `.olean` search-path roots (repeatable). Defaults to
-        /// `<source_root>/.lake/build/lib/lean`.
+        /// `<source_root>/.lake/build/lib/lean`, then `<source_root>/.lake/build/lib`.
         #[arg(long)]
         olean_search_path: Vec<PathBuf>,
         /// Emit JSON instead of the human-readable report.
@@ -296,13 +312,18 @@ pub enum ScriptCommands {
 /// Nested `lake cache ...` subcommands.
 #[derive(Debug, Subcommand)]
 pub enum CacheCommands {
-    /// Get cached .olean files
+    /// Report on the local cache; does NOT fetch anything.
+    ///
+    /// Prints the command to run (`clean lake exe cache get`) when a cache
+    /// executable is present, and otherwise entry counts or setup advice. No
+    /// file is downloaded, copied or unpacked on any path. The summary read
+    /// "Get cached .olean files" until 2026-08-31.
     Get {
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Upload .olean files to cache
+    /// Copy .olean files into the LOCAL `.lake/cache`. Not a cloud upload.
     Put {
         /// Show verbose output
         #[arg(short, long)]

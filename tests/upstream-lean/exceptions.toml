@@ -1,0 +1,41 @@
+# Per-probe exception ledger for the upstream-Lean drop-in invariant.
+#
+# Author: Andrew Yates | Copyright 2026 Andrew Yates | License: Apache-2.0
+#
+# Mirrors trust/tests/upstream-rust/test-exceptions.toml. `run_upstream_lean.py`
+# may accept an observed outcome that differs from a probe's pinned `expected`
+# ONLY when a matching ACTIVE row appears here. Keep rows narrow: one probe, one
+# observed outcome, one owner, one issue, one expiry.
+#
+# EMPTY, deliberately. A row exists to waive an OBSERVED failure; no run has
+# been performed, so no failure has been observed, so no row is justified. It is
+# seeded empty rather than pre-populated for the same reason baseline.toml's
+# statuses are `unknown`.
+#
+# ROW SCHEMA — every field required unless marked optional.
+#
+#   id            stable exception identifier, dotted
+#   probe_id      the corpus.toml probe this may waive; must exist and be active
+#   observed      the outcome being waived: "rejected" | "empty" | "timeout"
+#                 NOTE: "crashed" is NOT waivable. A panic or signal on valid
+#                 upstream input is a defect that needs an owner, not a row —
+#                 the runner refuses such a waiver. This mirrors the standing
+#                 refusal recorded in the Rust ledger for the issue-94923 SIGBUS.
+#   kind          expected_fail | expected_skip | intentional_divergence
+#                 | environmental_skip
+#   status        active | resolved | superseded  (only `active` gates)
+#   owner         team or person responsible for retiring it
+#   reason        concise prose; say what was measured and when
+#   issue         tracker URL or `local:<path>` anchor
+#   reviewed_on   YYYY-MM-DD
+#   expires_on    YYYY-MM-DD, strictly after reviewed_on and after today
+#   introduced_by optional: local commit that introduced the divergence
+#
+# A row whose probe produced the EXPECTED outcome is a STALE WAIVER and fails
+# the runner. This is deliberately stricter than the Rust-side ledger, whose own
+# closing note records that nothing there ever reports a row that covered no
+# failure — which is how 71 rows came to waive a defect fixed thirteen days
+# before they were written.
+
+schema_version = "0.1.0"
+exceptions = []

@@ -7,6 +7,9 @@ version = "0.0.0"
 publish = false
 edition = "2021"
 
+# Compiles under `targo --unverified check` (measured). Running the targets is a
+# STOCK EXCEPTION (Trust lacks the ASan runtime cargo-fuzz links; measured
+# `trustc -Zsanitizer=address` -> `ld: library 'rustc-trust_rt.asan' not found`).
 [package.metadata]
 cargo-fuzz = true
 
@@ -37,6 +40,14 @@ bench = false
 [[bin]]
 name = "clean_olean"
 path = "fuzz_targets/clean_olean.rs"
+test = false
+doc = false
+bench = false
+
+# lean4export NDJSON front door fuzz target (`clean olean replay --from-export`)
+[[bin]]
+name = "clean_ndjson"
+path = "fuzz_targets/clean_ndjson.rs"
 test = false
 doc = false
 bench = false

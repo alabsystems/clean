@@ -11,12 +11,46 @@
 //! these handlers also need `elaborate` and `infer_type` from the `TacticEval`
 //! trait to process type annotations and value expressions.
 
+use clean_parser::SurfaceName;
+
 use std::sync::Arc;
 
-use super::registry::{CompoundTacticEntry, TacticRegistry};
-use super::{ProofState, TacticError};
+use super::registry::{CompoundTacticEntry, TacticEval, TacticRegistry};
+use super::{ProofState, RIntroPattern, TacticError};
 use clean_kernel::Expr;
-use clean_parser::SurfaceTactic;
+use clean_parser::{SurfaceExpr, SurfaceTactic};
+
+/// Destructure `hyp_name` by the pattern text: through the typed-pattern path
+/// when the pattern wrote any types (`⟨f, rfl : r = _⟩`), else straight to
+/// the engine.
+fn destruct_pattern(
+    eval: &mut dyn TacticEval,
+    ps: &mut ProofState,
+    hyp_name: &SurfaceName,
+    pattern: &str,
+    pattern_types: &[SurfaceExpr],
+    pattern_binders: &[(SurfaceName, SurfaceName)],
+) -> Result<(), TacticError> {
+    let parsed = RIntroPattern::parse(pattern)?.with_binders(pattern_binders);
+    destruct_parsed_pattern(eval, ps, hyp_name, parsed, pattern_types)?;
+    // `RCases.finish`: the `-` components go once the whole pattern has run.
+    super::pattern::finish_rcases_clears(ps);
+    Ok(())
+}
+
+/// [`destruct_pattern`] on an already-parsed pattern.
+pub(super) fn destruct_parsed_pattern(
+    eval: &mut dyn TacticEval,
+    ps: &mut ProofState,
+    hyp_name: &SurfaceName,
+    pattern: RIntroPattern,
+    pattern_types: &[SurfaceExpr],
+) -> Result<(), TacticError> {
+    if pattern_types.is_empty() {
+        return super::pattern::destruct_named_hypothesis_pattern(ps, hyp_name, pattern);
+    }
+    super::builtins_rcases_typed::destruct_with_types(eval, ps, hyp_name, pattern, pattern_types)
+}
 
 /// Register expression-dependent compound tactics into the registry.
 ///
@@ -28,8 +62,9 @@ pub(crate) fn register_phase3d_elab_tactics(registry: &mut TacticRegistry) {
     registry.register_compound(compound_have());
     registry.register_compound(compound_let());
     registry.register_compound(compound_suffices());
+    registry.register_compound(super::builtins_replace::compound_replace());
     registry.register_compound(compound_obtain());
-    registry.register_compound(compound_rcases());
+    registry.register_compound(super::builtins_rcases_target::compound_rcases());
     registry.register_compound(compound_rintro());
     registry.register_compound(super::builtins_phase3d_match::compound_match());
 }
@@ -66,7 +101,8 @@ fn compound_have() -> CompoundTacticEntry {
             // matching Lean's `haveIdLhs` default (`elabHaveCore`); a named
             // `have h : T := e` keeps `h`. Previously the anonymous case defaulted
             // to `h`, leaving a subsequent `exact this` unbound. (B105)
-            let h = name.as_deref().unwrap_or("this");
+            let default_name = SurfaceName::generated_path("this");
+            let h = name.as_ref().unwrap_or(&default_name);
             match ty {
                 // `have h : T := proof` / `have h : T by tacs` — typed.
                 Some(ty) => {
@@ -110,12 +146,28 @@ fn compound_have() -> CompoundTacticEntry {
                             sub_ps.closed_proof()
                         }
                     };
-                    super::have_(ps, h, ty_expr, proof_expr)
+                    super::have_(ps, h, ty_expr.clone(), proof_expr)?;
+                    // `have h : ∀ {n m : Nat}, … := …` — the binder names live
+                    // only in the surface type; hand them to the evaluator so
+                    // `h (n := a)` can bind by name (Lean reads them off the
+                    // hypothesis's type). The new hypothesis is the last local
+                    // of the continuation goal `have_` pushed.
+                    let introduced = ps.goals.iter().find_map(|goal| {
+                        goal.local_ctx
+                            .last()
+                            .filter(|decl| decl.name == *h && decl.ty == ty_expr)
+                            .map(|decl| decl.fvar)
+                    });
+                    if let Some(fvar) = introduced {
+                        eval.note_local_forall_binder_names(fvar, ty, &ty_expr);
+                    }
+                    Ok(())
                 }
                 // `have h := proof` — type inferred from the proof term. Only a
-                // direct term carries a type to infer; a tactic block has no
-                // seed type, so reject it (matching Lean, which requires `: T`
-                // for `have h := by ...`).
+                // term carries a type to infer. The parser represents an
+                // inferred `:= by ...` as a term-level ByTactic, allowing its
+                // goal type to be inferred from its proof without borrowing
+                // the enclosing theorem's expected type.
                 None => {
                     let SurfaceTactic::Term(_, e) = proof_tac.as_ref() else {
                         return Err(TacticError::InvalidTarget {
@@ -125,7 +177,11 @@ fn compound_have() -> CompoundTacticEntry {
                                 .into(),
                         });
                     };
-                    let proof_expr = eval.elaborate(e)?;
+                    // No ascription, so there is no expected type: Lean's
+                    // `have h := e` goes through `elabTermEnsuringType` with
+                    // `expectedType? = none`. The ascribed form above keeps
+                    // using `elaborate_expected`, which is where `T` belongs.
+                    let proof_expr = eval.elaborate_no_expected(e)?;
                     let inferred_ty = eval.infer_type(&proof_expr)?;
                     super::have_(ps, h, inferred_ty, Some(proof_expr))
                 }
@@ -196,7 +252,12 @@ fn compound_suffices() -> CompoundTacticEntry {
                 });
             };
             let ty_expr = eval.elaborate(ty)?;
-            let h = name.as_deref().unwrap_or("h");
+            // "If `h :` is omitted, the name `this` is used"
+            // (`Init/Tactics.lean:871-873`). This defaulted to `h`, so
+            // `suffices P by …` followed by `… at this` found nothing
+            // (Mathlib `Logic/Function/Basic.lean:277`).
+            let default_name = SurfaceName::generated_path("this");
+            let h = name.as_ref().unwrap_or(&default_name);
             // `have_(.., None)` pushes [lemma_goal (T), cont_goal (original, h:T)].
             // The continuation goal is the one whose target is the original goal
             // and whose context carries `h : T` — that is exactly where Lean's
@@ -249,7 +310,12 @@ fn compound_obtain() -> CompoundTacticEntry {
         name: "obtain".into(),
         handler: Arc::new(|eval, ps, tac| {
             let SurfaceTactic::Obtain {
-                pattern, ty, term, ..
+                pattern,
+                ty,
+                term,
+                pattern_types,
+                pattern_binders,
+                ..
             } = tac
             else {
                 return Err(TacticError::InvalidTarget {
@@ -258,6 +324,16 @@ fn compound_obtain() -> CompoundTacticEntry {
                 });
             };
 
+            let Some(term) = term else {
+                return obtain_none(
+                    eval,
+                    ps,
+                    ty.as_deref(),
+                    pattern,
+                    pattern_types,
+                    pattern_binders,
+                );
+            };
             // Elaborate the scrutinee term (kernel-checked elaboration).
             let term_expr = eval.elaborate(term)?;
 
@@ -282,7 +358,14 @@ fn compound_obtain() -> CompoundTacticEntry {
                         .unwrap_or(false);
                     if is_local_hyp {
                         let hyp_name = super::builtins::expr_to_hyp_name(ps, &term_expr)?;
-                        return super::destruct_named_hypothesis(ps, &hyp_name, pattern);
+                        return destruct_pattern(
+                            eval,
+                            ps,
+                            &hyp_name,
+                            pattern,
+                            pattern_types,
+                            pattern_binders,
+                        );
                     }
                 }
             }
@@ -325,51 +408,44 @@ fn compound_obtain() -> CompoundTacticEntry {
             // Introduce the scrutinee as a fresh anonymous hypothesis. Use a
             // name unlikely to collide with user hypotheses so the subsequent
             // destructure targets exactly this binder.
-            let tmp_name = format!("_obtain{}", ps.next_fvar);
+            let tmp_name = generated_tactic_binder("obtain", ps.next_fvar);
             super::have_(ps, &tmp_name, hyp_ty, Some(term_expr))?;
 
             // Destructure per the parsed pattern via the kernel-checked engine.
-            super::destruct_named_hypothesis(ps, &tmp_name, pattern)
+            destruct_pattern(eval, ps, &tmp_name, pattern, pattern_types, pattern_binders)
         }),
     }
 }
 
-/// `rcases h with ⟨hp, hq⟩` — destructure an EXISTING hypothesis in place.
+/// `obtain pat : T` with no `:= e` — Lean's `obtainNone`
+/// (`Lean/Elab/Tactic/RCases.lean`): assert `T` as a new goal, assume it, and
+/// match the assumption against `pat`. The goal for `T` comes FIRST, then the
+/// goals the pattern leaves.
 ///
-/// Identical to the destructure half of `obtain` but WITHOUT the `have_`/copy
-/// step: the scrutinee `h` is an already-introduced hypothesis, so we resolve it
-/// to its binder name and feed it straight to the same kernel-checked pattern
-/// engine (`destruct_named_hypothesis`) that backs `obtain`, `rintro`, and
-/// `cases ... with`.
-///
-/// SOUNDNESS: the goal is only ever transformed via `destruct_named_hypothesis`
-/// (kernel-checked `cases`); no raw FVars are pushed and no new trust surface is
-/// introduced. A pattern that does not match the hypothesis's structure (e.g.
-/// too many components) surfaces as a `TacticError`, never a panic, and the
-/// resulting proof term is rechecked by `add_decl`.
-fn compound_rcases() -> CompoundTacticEntry {
-    CompoundTacticEntry {
-        name: "rcases".into(),
-        handler: Arc::new(|eval, ps, tac| {
-            let SurfaceTactic::RCases { term, pattern, .. } = tac else {
-                return Err(TacticError::InvalidTarget {
-                    tactic: "rcases".into(),
-                    detail: "unexpected syntax variant".into(),
-                });
-            };
-
-            // Resolve the scrutinee to the name of an existing hypothesis.
-            // Elaborate the surface term (a hypothesis reference) to a kernel
-            // Expr, then map FVar/Const back to its local-context binder name —
-            // the same resolution the registry `rcases_handler` performs.
-            let term_expr = eval.elaborate(term)?;
-            let hyp_name = super::builtins::expr_to_hyp_name(ps, &term_expr)?;
-
-            // Destructure the EXISTING hypothesis per the parsed pattern via the
-            // kernel-checked engine. No `have_` step: `h` already exists.
-            super::destruct_named_hypothesis(ps, &hyp_name, pattern)
-        }),
-    }
+/// SOUNDNESS: `T` is introduced by the kernel-checked `have_` with no proof,
+/// which leaves `⊢ T` as a goal the proof must still close; the destructure is
+/// the same kernel-checked engine as every other `obtain`.
+fn obtain_none(
+    eval: &mut dyn TacticEval,
+    ps: &mut ProofState,
+    ty: Option<&SurfaceExpr>,
+    pattern: &str,
+    pattern_types: &[SurfaceExpr],
+    pattern_binders: &[(SurfaceName, SurfaceName)],
+) -> Result<(), TacticError> {
+    let ty = ty.ok_or_else(|| TacticError::MissingArgument {
+        tactic: "obtain".into(),
+        expected: "a type `: T` or a value `:= e`".into(),
+    })?;
+    let ty_expr = eval.elaborate(ty)?;
+    let assumed = generated_tactic_binder("obtain", ps.next_fvar);
+    // `have_(.., None)` leaves [⊢ T, ⊢ goal with `assumed : T`].
+    super::have_(ps, &assumed, ty_expr, None)?;
+    let lemma = ps.goals.pop_front().ok_or(TacticError::NoGoals)?;
+    let destructured =
+        destruct_pattern(eval, ps, &assumed, pattern, pattern_types, pattern_binders);
+    ps.goals.push_front(lemma);
+    destructured
 }
 
 /// `rintro pat₁ pat₂ …` — recursive intro with destructuring patterns.
@@ -393,57 +469,41 @@ fn compound_rcases() -> CompoundTacticEntry {
 fn compound_rintro() -> CompoundTacticEntry {
     CompoundTacticEntry {
         name: "rintro".into(),
-        handler: Arc::new(|_eval, ps, tac| {
-            let SurfaceTactic::RIntro { patterns, .. } = tac else {
+        handler: Arc::new(|eval, ps, tac| {
+            let SurfaceTactic::RIntro {
+                patterns,
+                pattern_types,
+                pattern_binders,
+                ..
+            } = tac
+            else {
                 return Err(TacticError::InvalidTarget {
                     tactic: "rintro".into(),
                     detail: "unexpected syntax variant".into(),
                 });
             };
 
-            for pattern in patterns {
-                let pattern = pattern.trim();
-
-                // A bare-name (or wildcard) pattern is a plain `intro` under the
-                // chosen name; routing it through the `intro` + destructure path
-                // would needlessly re-resolve, so handle it directly. A `_`
-                // pattern introduces a fresh anonymous binder.
-                if pattern == "_" {
-                    let fresh = format!("_rintro{}", ps.next_fvar);
-                    super::intro(ps, &fresh)?;
+            let parsed = patterns
+                .iter()
+                .map(|pattern| {
+                    RIntroPattern::parse(pattern).map(|parsed| parsed.with_binders(pattern_binders))
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            for pattern in parsed {
+                if let RIntroPattern::Name(name) = &pattern {
+                    super::intro(ps, name)?;
                     continue;
                 }
-                // A pattern that destructs — an anonymous constructor `⟨...⟩`/`<...>`
-                // OR a top-level `|` alternation (`rintro (hp | hq)`, captured as
-                // `hp | hq` after the parser strips the grouping parens) — must
-                // route through the kernel-checked `intro` + `destruct_named_hypothesis`
-                // engine. A bare identifier is a plain `intro`. `has_top_level_pipe`
-                // detects the alternation without splitting a `|` nested inside
-                // brackets (`⟨h | h'⟩`), which is part of the field, not a
-                // top-level alternation.
-                if !pattern.starts_with('\u{27E8}')
-                    && !pattern.starts_with('<')
-                    && !has_top_level_pipe(pattern)
-                {
-                    // Plain identifier: intro under that exact name. `intro` itself
-                    // rejects a non-Pi goal with a `TacticError`.
-                    super::intro(ps, pattern)?;
-                    continue;
-                }
-
-                // Destructuring pattern `⟨...⟩` / `(hp | hq)`: intro a fresh binder, then
-                // re-resolve it BY NAME in the current goal and destructure. The
-                // fresh name is unlikely to collide with user hypotheses so the
-                // subsequent destructure targets exactly this binder.
-                let fresh = format!("_rintro{}", ps.next_fvar);
+                // A typed pattern `(h : t)` destructs through the typed-pattern
+                // path like any other non-name pattern; a bare identifier was a
+                // plain `intro` above.
+                let fresh = generated_tactic_binder("rintro", ps.next_fvar);
                 super::intro(ps, &fresh)?;
+                if matches!(pattern, RIntroPattern::Wildcard) {
+                    continue;
+                }
 
-                // Re-resolve the just-introduced binder's ACTUAL name from the
-                // current goal (the last decl) rather than assuming `fresh`:
-                // `intro` may collision-rename, and — more importantly — reading
-                // the name back from the now-current goal guarantees we never feed
-                // a stale FVar/name from before the `intro` mutation. This is the
-                // by-name re-resolution that fixes the `UnknownFVar` bug.
+                // Recover the actual binder after intro/collision handling.
                 let introduced = ps
                     .current_goal()
                     .and_then(|g| g.local_ctx.last())
@@ -453,31 +513,25 @@ fn compound_rintro() -> CompoundTacticEntry {
                             "rintro: introduced hypothesis vanished from goal".into(),
                         )
                     })?;
-                super::destruct_named_hypothesis(ps, &introduced, pattern)?;
+                destruct_parsed_pattern(eval, ps, &introduced, pattern, pattern_types)?;
             }
 
+            // `RCases.finish` runs once, after the last pattern: a `-` binder
+            // is cleared with whatever later binder depends on it.
+            super::pattern::finish_rcases_clears(ps);
             Ok(())
         }),
     }
 }
 
-/// True iff `pattern` contains a `|` alternation at bracket depth 0.
-///
-/// A `|` nested inside `⟨⟩`/`<>`/`()`/`[]` belongs to an enclosed sub-pattern
-/// (e.g. the `q ∨ r` field in `⟨hp, hq | hr⟩`) and is NOT a top-level
-/// alternation. Used by `rintro` dispatch to decide whether a pattern needs the
-/// case-split engine. Mirrors the depth-0 scan in `RIntroPattern::parse`.
-fn has_top_level_pipe(pattern: &str) -> bool {
-    let mut depth: i32 = 0;
-    for c in pattern.chars() {
-        match c {
-            '\u{27E8}' | '<' | '(' | '[' => depth += 1,
-            '\u{27E9}' | '>' | ')' | ']' => depth -= 1,
-            '|' if depth == 0 => return true,
-            _ => {}
-        }
-    }
-    false
+/// An internal binder cannot collide with an authored quoted string.
+fn generated_tactic_binder(family: &str, index: u64) -> SurfaceName {
+    SurfaceName::from_name(
+        clean_kernel::Name::anon()
+            .num(0x5441_4354)
+            .str(family)
+            .num(index),
+    )
 }
 
 /// Create a sub-ProofState for proving an intermediate lemma.
@@ -566,9 +620,12 @@ mod tests {
         let handler = compound_let();
         let tactic = SurfaceTactic::Let(
             Span::dummy(),
-            "x".into(),
+            SurfaceName::generated_path("x"),
             None,
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "value".into())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("value"),
+            )),
         );
 
         let result = (handler.handler)(&mut eval, &mut state, &tactic);

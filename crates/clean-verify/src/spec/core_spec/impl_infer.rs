@@ -307,17 +307,20 @@ impl Specification {
         // `Expr::const_(NAME_NAT, vec![])` / `NAME_STRING` with ZERO environment
         // validation (tc/infer.rs:647-650) — it does not check that `Nat` or
         // `String` is even declared. Modelled exactly that way: two distinct
-        // interned names, no env premise.
+        // interned names, no env premise. These aliases share the generated
+        // reduction-environment's validated builtin-name table, rather than
+        // inventing independent numeric identifiers.
         self.add_recursive_def(
-            r"def impl_name_nat : Name := Name.str Name.anonymous Nat.zero",
-            "The interned name `Nat` the release Lit arm returns for Literal::Nat \
-             (NAME_NAT, tc/infer.rs:648). The spec's Name encodes string segments \
-             as Nat ids; only its DISTINCTNESS from impl_name_string is load-bearing.",
+            r"def impl_name_nat : Name := literal_builtin_nat_name",
+            "The canonical Nat builtin alias shared with the declarative literal \
+             model and generated reduction-environment name table. This bounded \
+             name agreement is not the universal production source attachment.",
         )?;
         self.add_recursive_def(
-            r"def impl_name_string : Name := Name.str Name.anonymous (Nat.succ Nat.zero)",
-            "The interned name `String` the release Lit arm returns for \
-             Literal::String (NAME_STRING, tc/infer.rs:649).",
+            r"def impl_name_string : Name := literal_builtin_string_name",
+            "The canonical String builtin alias shared with the declarative literal \
+             model and generated reduction-environment name table; no declaration \
+             or environment-validity premise is smuggled in by reserving its tag.",
         )?;
         self.add_recursive_def(
             r"def impl_lit_type (l : ImplLit) : ImplExpr := match l with
@@ -363,6 +366,30 @@ impl Specification {
         // Every premise below is an OPERATION the deployed arm performs, in the
         // order it performs it. Nothing here asserts a typing judgment — that is
         // the layer-2 job, and asserting it here is precisely model B's defect.
+        //
+        // SCOPE CORRECTION, audit r17 M16-10 (2026-09-02). Two premises of the
+        // `const` arm — `impl_const_unsafe ci = false` and
+        // `impl_const_partial ci = false` — are NOT operations the DEPLOYED arm
+        // performs. The gate exists (`tc/infer.rs:401,404`) but is unreachable
+        // from declaration admission: all four `TypeChecker` constructors default
+        // `allow_unsafe: true, allow_partial: true` (`tc/mod.rs:794,845,896,952`)
+        // and `env/decl_add.rs:846` never lowers them. Measured: `add_decl` on a
+        // well-typed `def uses : Prop := evil` with `evil` marked unsafe returns
+        // `Ok(())`, while `check_decl_readonly_strict` on the same declaration
+        // returns `Err(UnsafeDeclaration)`. So `const` is modelled on the
+        // safe-constant SUBSET of the deployed arm, and the honest deployed
+        // count is 9 modelled + 1 partial, not 10 modelled.
+        //
+        // This is architecture, not an oversight to flip: `Declaration` carries
+        // no safety flag and `clean-elab/src/register.rs:586-587` marks a
+        // declaration AFTER `add_decl_with_kernel_check`, so a strict `add_decl`
+        // would reject a legitimate `unsafe def foo := bar` at the moment `foo`
+        // is not yet marked. Lean 4 rejects the reference
+        // (`type_checker.cpp:100-108`); closing the gap means giving
+        // `Declaration` its own unsafe/partial intent. OPEN, owner decision.
+        // Characterised by `unsafe_const_in_arg_rejects` /
+        // `partial_const_in_arg_rejects`, which asserted this backstop and were
+        // VACUOUS — both passed with the gate deleted at both sites.
         self.add_inductive(
             concat!(
                 "inductive ImplInfer (tenv : Name -> OptionType ImplConstInfo) (lps : ListType Name) : Nat -> LCtx -> ImplExpr -> ImplExpr -> Nat -> Type\n",

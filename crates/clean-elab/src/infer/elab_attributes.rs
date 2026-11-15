@@ -8,8 +8,13 @@
 //! Collected attributes are retrieved via `take_*` methods after elaboration.
 
 use crate::attribute_ext2::supports_file_scope_attribute_removal;
+use crate::declared_here::AttributeSite;
+use crate::implemented_by::ImplementedByUse;
+use crate::namespace::NamespaceState;
 use crate::ElabError;
-use clean_kernel::env::{Reducibility, SimpPriority as KernelSimpPriority};
+use clean_kernel::env::{
+    GrindAttrKind as KernelGrindAttrKind, Reducibility, SimpPriority as KernelSimpPriority,
+};
 use clean_kernel::name::Name;
 use clean_parser::{Attribute, AttributeCommandAttr, SimpPriority as ParserSimpPriority};
 
@@ -17,9 +22,9 @@ use super::{ElabCtx, ElabResult};
 
 /// Attribute names that the parser surfaces as [`Attribute::Unknown`] but which
 /// are legitimate Lean 4 / Mathlib attributes (or attribute-scope modifiers)
-/// that Clean recognizes but does not yet model. Every modeled attribute is a
-/// dedicated [`Attribute`] variant, so `Unknown` only carries names outside the
-/// parser's table. A name that is neither a modeled variant nor in this set is
+/// that Clean recognizes but does not yet model. Modeled attributes use dedicated
+/// variants or named handlers in `definition_attrs`. A name that is neither
+/// modeled nor in this set is
 /// a hard error, matching Lean's `unknown attribute` diagnostic
 /// (`src/Lean/Attributes.lean`, gap sweep B21 / p14).
 pub(crate) const KNOWN_UNMODELED_ATTRS: &[&str] = &[
@@ -76,7 +81,17 @@ pub(crate) const KNOWN_UNMODELED_ATTRS: &[&str] = &[
     "measurability",
     "continuity",
     "aesop_unfold",
+    // DECLARATION-GENERATING, and tolerated as a no-op only because Clean
+    // cannot act on them: each mints a SECOND declaration that the rest of the
+    // file then names. Skipping the generation makes those names unknown
+    // identifiers hundreds of lines from their cause — `Mathlib/Order/Basic.lean`
+    // carries `@[to_dual]` on 116 of its 204 declarations and uses `Eq.ge`,
+    // `LE.le.trans'` and `LE.le.trans_lt'`, which nothing else in Mathlib
+    // produces. Pinned by `crates/clean-elab/tests/to_dual_attribute_pin_e2e.rs`;
+    // read its module doc before moving either name to a fail-closed list,
+    // because the refusal is a ratchet re-arm and not a cleanup.
     "to_additive",
+    "to_dual",
     "ext_iff",
     "pp_nodot",
     "pp_using_anonymous_constructor",
@@ -89,37 +104,80 @@ pub(crate) fn is_known_unmodeled_attr(name: &str) -> bool {
     KNOWN_UNMODELED_ATTRS.contains(&name)
 }
 
+/// Map the parser's `@[grind …]` modifier onto the kernel registry's kind.
+///
+/// One-to-one on the modeled kinds; the unmodeled spellings stay verbatim so a
+/// later increment can read what the annotation actually said rather than
+/// guessing from the fact that Clean ignored it.
+fn grind_kind_to_kernel(kind: &clean_parser::GrindAttrKind) -> KernelGrindAttrKind {
+    match kind {
+        clean_parser::GrindAttrKind::Infer => KernelGrindAttrKind::Infer,
+        clean_parser::GrindAttrKind::EqLhs => KernelGrindAttrKind::EqLhs,
+        clean_parser::GrindAttrKind::Forward => KernelGrindAttrKind::Forward,
+        clean_parser::GrindAttrKind::Backward => KernelGrindAttrKind::Backward,
+        clean_parser::GrindAttrKind::Cases => KernelGrindAttrKind::Cases,
+        clean_parser::GrindAttrKind::Ext => KernelGrindAttrKind::Ext,
+        clean_parser::GrindAttrKind::Intro => KernelGrindAttrKind::Intro,
+        clean_parser::GrindAttrKind::Unmodeled(text) => {
+            KernelGrindAttrKind::Unmodeled(text.clone())
+        }
+    }
+}
+
 impl<'a> ElabCtx<'a> {
-    /// Tolerate unknown attributes as no-ops — the Lean-drop-in behavior.
+    /// Refuse an attribute name Clean neither models nor explicitly recognizes.
     ///
-    /// Every attribute Clean MODELS is a dedicated [`Attribute`] variant (`simp`,
-    /// `ext`, `class`, `instance`, `reducible`, …) and is honored normally; only
-    /// the parser's [`Attribute::Unknown`] fallbacks reach here. Real Lean core +
-    /// Mathlib register hundreds of attributes via macros/plugins that Clean's
-    /// finite set does not enumerate (`@[grind]`, `@[mfld_simps]`, `@[nolint]`,
-    /// `@[gcongr]`, `@[simps]`, custom `register_simp_attr`/`register_label_attr`
-    /// names, …). A declaration carrying one MUST still elaborate — Clean cannot
-    /// act on an attribute it does not model, so ignoring it is the only sound
-    /// option, and the declaration itself is still fully kernel-re-checked. The
-    /// original strict B21 rejection (`unknown attribute '[…]'`) walled real
-    /// Mathlib source outright.
-    ///
-    /// (Slightly more lenient than a fully-provisioned Lean, which rejects an
-    /// attribute registered by NO module — the scalable drop-in stance while
-    /// Clean's attribute set is incomplete. `is_known_unmodeled_attr` is retained
-    /// for callers that still want the recognized-name check.)
+    /// Unknown names must not gain semantics by resembling a modeled attribute,
+    /// or silently succeed as no-ops. Recognized but unmodeled names retain their
+    /// existing policy; this check does not implement their handlers or establish
+    /// that an upstream module registered them. Dynamic attribute registration
+    /// remains a separate metaprogramming gap.
     pub(crate) fn ensure_known_attributes(&self, attrs: &[Attribute]) -> Result<(), ElabError> {
         for attr in attrs {
-            if let Attribute::Unknown(name) = attr {
-                if !is_known_unmodeled_attr(name) {
-                    tracing::debug!(
-                        attribute = %name,
-                        "tolerating unknown (unmodeled) attribute as a no-op (drop-in)"
-                    );
+            match attr {
+                Attribute::Unknown(name) => {
+                    if !is_known_unmodeled_attr(name)
+                        && !crate::definition_attrs::modeled_name(name)
+                    {
+                        return Err(ElabError::UnknownAttribute { name: name.clone() });
+                    }
                 }
+                // `local` / `scoped` custom eliminators: Lean's
+                // `customEliminatorExt` is a scoped extension, so a local
+                // registration applies until the section ends and a scoped
+                // one wherever its namespace is open. Clean models only the
+                // global kind; dropping the modifier (or the attribute) would
+                // run `induction` with a different eliminator than Lean's.
+                Attribute::Local(_) | Attribute::Scoped(_) => {
+                    if let Some(written) =
+                        crate::tactic::custom_eliminator::scoped_eliminator_attr(attr)
+                    {
+                        return Err(ElabError::Unsupported {
+                            feature: format!(
+                                "`{written}`: only the global kind of this attribute is modeled"
+                            ),
+                        });
+                    }
+                }
+                _ => {}
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn collect_syntactic_defeq(
+        &mut self,
+        name: &Name,
+        value: &clean_parser::SurfaceExpr,
+    ) {
+        if crate::definition_attrs::bare_rfl(value) {
+            self.collected_definition_attrs
+                .push(crate::definition_attrs::NamedAttribute {
+                    name: name.clone(),
+                    attribute: "defeq".into(),
+                    site: AttributeSite::Declaration,
+                });
+        }
     }
 
     /// Collect all attributes for a declaration and store in context for later registration.
@@ -127,6 +185,20 @@ impl<'a> ElabCtx<'a> {
     /// This wires parsed @[attr] annotations to Environment::register_* methods.
     /// The collected attributes are retrieved via take_* methods after elaboration.
     pub(crate) fn collect_attributes(&mut self, name: &Name, attrs: &[Attribute]) {
+        self.collect_attributes_at(name, attrs, AttributeSite::Declaration, &[]);
+    }
+
+    /// [`Self::collect_attributes`], saying where the attributes were written
+    /// (on the declaration, or by an `attribute [..] name` command) and which
+    /// constants registered with the declaration Lean has not added yet when
+    /// it applies them (the later members of a `mutual` block).
+    pub(crate) fn collect_attributes_at(
+        &mut self,
+        name: &Name,
+        attrs: &[Attribute],
+        site: AttributeSite,
+        not_yet_declared: &[Name],
+    ) {
         for attr in attrs {
             match attr {
                 Attribute::Aesop(aesop_attr) => {
@@ -139,6 +211,17 @@ impl<'a> ElabCtx<'a> {
                 | Attribute::Refl
                 | Attribute::Symm
                 | Attribute::Csimp => self.collect_simp_lemma_attr(name, attr),
+
+                // `@[grind]` feeds the GRIND registry and nothing else. It is
+                // deliberately not routed through `collect_simp_lemma_attr`:
+                // Mathlib tags lemmas `@[grind]` that are deliberately not
+                // `@[simp]`, so leaking them into the ambient simp set would
+                // change every `simp` in the file (Lean confines `@[grind]`
+                // equations to grind's own E-graph).
+                Attribute::Grind(kind) => {
+                    self.collected_grind
+                        .push((name.clone(), grind_kind_to_kernel(kind)));
+                }
 
                 Attribute::Reducible | Attribute::Semireducible | Attribute::Irreducible => {
                     self.collect_reducibility_attr(name, attr);
@@ -154,7 +237,7 @@ impl<'a> ElabCtx<'a> {
 
                 Attribute::Extern(extern_name) => {
                     self.collected_extern
-                        .push((name.clone(), extern_name.clone()));
+                        .push((name.clone(), extern_name.clone(), site));
                 }
                 Attribute::Export(export_name) => {
                     self.collected_export
@@ -163,9 +246,19 @@ impl<'a> ElabCtx<'a> {
                 Attribute::Deprecated(msg) => {
                     self.collected_deprecated.push((name.clone(), msg.clone()));
                 }
-                Attribute::ImplementedBy(impl_name) => {
-                    self.collected_implemented_by
-                        .push((name.clone(), impl_name.clone()));
+                // Captured with the scope Lean resolves it in, and resolved
+                // when applied, against the environment the declaration was
+                // registered into (`crate::implemented_by`).
+                Attribute::ImplementedBy(written) => {
+                    let scope = self.implemented_by_scope(site);
+                    self.collected_implemented_by.push(ImplementedByUse {
+                        decl: name.clone(),
+                        written: written.clone(),
+                        site,
+                        scope,
+                        foreign_private: self.foreign_private_decls.clone(),
+                        not_yet_declared: not_yet_declared.into(),
+                    });
                 }
                 Attribute::Coe => {
                     self.collected_coe.push(name.clone());
@@ -194,12 +287,86 @@ impl<'a> ElabCtx<'a> {
                     self.collected_instance_attrs
                         .push((name.clone(), *priority));
                 }
-                // Handled elsewhere — not through the collected_* + take_* pattern
-                Attribute::Class => {}
+                Attribute::Class => self.collected_class_attrs.push(name.clone()),
+                Attribute::Unknown(attr_name)
+                    if crate::definition_attrs::modeled_name(attr_name) =>
+                {
+                    self.collected_definition_attrs
+                        .push(crate::definition_attrs::NamedAttribute {
+                            name: name.clone(),
+                            attribute: attr_name.clone(),
+                            site,
+                        });
+                }
                 Attribute::Unknown(attr_name) if attr_name == "derive_handler" => {
                     self.collected_derive_handler.push(name.clone());
                 }
                 Attribute::Unknown(_) => {}
+                // `local simp`: register the lemma and mark it for retirement
+                // when the enclosing section/namespace ends (the registrar
+                // hands the mark to the `FileContext`). A lemma that is
+                // ALREADY a simp lemma is left alone: the local attribute
+                // adds nothing, and retiring it at the scope's end would take
+                // away the global attribute it had before.
+                // Refused by `ensure_known_attributes`; recorded here as well
+                // so a declaration path that never ran that check still fails
+                // at application (`definition_attrs::apply`) instead of
+                // dropping the attribute.
+                Attribute::Local(_) | Attribute::Scoped(_)
+                    if crate::tactic::custom_eliminator::scoped_eliminator_attr(attr).is_some() =>
+                {
+                    if let Some(written) =
+                        crate::tactic::custom_eliminator::scoped_eliminator_attr(attr)
+                    {
+                        let named = crate::definition_attrs::NamedAttribute {
+                            name: name.clone(),
+                            attribute: written,
+                            site,
+                        };
+                        self.collected_definition_attrs.push(named);
+                    }
+                }
+                Attribute::Local(inner) => {
+                    if matches!(inner.as_ref(), Attribute::Csimp) {
+                        self.collected_local_csimp.push(name.clone());
+                    }
+                    if matches!(inner.as_ref(), Attribute::Simp { .. })
+                        && !self.env.is_simp_lemma(name)
+                    {
+                        self.collect_simp_lemma_attr(name, inner);
+                        self.collected_local_simp.push(name.clone());
+                    }
+                    // `local instance`: in the current scope's instance state
+                    // only (applied at register time, where the scope is).
+                    if let Attribute::InstancePriority(priority) = inner.as_ref() {
+                        self.collected_scoped_instance_attrs.push((
+                            name.clone(),
+                            *priority,
+                            super::ScopedInstanceAttr::Local,
+                        ));
+                    }
+                }
+                // `scoped instance`: an instance wherever the CURRENT
+                // namespace is active. Lean refuses it at the root
+                // ("scoped attributes must be used inside namespaces"), and
+                // so does registration when the namespace is anonymous.
+                Attribute::Scoped(inner) => {
+                    if matches!(inner.as_ref(), Attribute::Csimp) {
+                        self.collected_scoped_csimp.push((
+                            name.clone(),
+                            self.namespace_state.current_namespace().clone(),
+                        ));
+                    }
+                    if let Attribute::InstancePriority(priority) = inner.as_ref() {
+                        self.collected_scoped_instance_attrs.push((
+                            name.clone(),
+                            *priority,
+                            super::ScopedInstanceAttr::Scoped(
+                                self.namespace_state.current_namespace().clone(),
+                            ),
+                        ));
+                    }
+                }
             }
         }
     }
@@ -223,6 +390,23 @@ impl<'a> ElabCtx<'a> {
             Attribute::Csimp => self.collected_csimp.push(name.clone()),
             _ => {}
         }
+    }
+
+    /// The scope an `@[implemented_by]` target resolves in: the use's own,
+    /// with the namespace pinned Lean opens around the declaration entered
+    /// (`Self::decl_site_namespace`: `N` for `def N.d` and `private def N.d`,
+    /// nothing for `def _root_.N.d`, a `mutual` block's common prefix). The
+    /// command form resolves where it is written.
+    fn implemented_by_scope(&self, site: AttributeSite) -> NamespaceState {
+        let mut scope = self.namespace_state.clone();
+        if site == AttributeSite::Declaration {
+            if let Some(opened) = &self.decl_site_namespace {
+                if opened != scope.current_namespace() {
+                    scope.enter_resolved_namespace(opened.clone());
+                }
+            }
+        }
+        scope
     }
 
     /// Collect reducibility attributes (reducible, semireducible, irreducible).
@@ -254,45 +438,50 @@ impl<'a> ElabCtx<'a> {
     pub(super) fn elab_attribute_command(
         &mut self,
         attrs: &[AttributeCommandAttr],
-        names: &[String],
+        names: &[clean_parser::SurfaceName],
     ) -> Result<ElabResult, ElabError> {
         for name_str in names {
-            let name = Name::from_string(name_str);
-            let resolved = if self.env.get_const(&name).is_some() {
-                Some(name)
-            } else if let Some(qualified) = self.namespace_state.resolve(name_str) {
-                if self.env.get_const(qualified).is_some() {
-                    Some(qualified.clone())
-                } else {
-                    None
+            // Resolved in THIS module's scope, Lean's way (namespace first,
+            // then root/`open`/alias together, ambiguity refused): see
+            // `resolve_global_const_no_overload`.
+            let resolved_name = match crate::name_resolution::resolve_global_const_no_overload(
+                name_str,
+                &self.namespace_state,
+                self.env,
+                &self.foreign_private_decls,
+            ) {
+                Ok(resolved) => resolved,
+                Err(crate::name_resolution::GlobalConstResolution::Unknown) => {
+                    return Err(ElabError::UnknownIdent(format!(
+                        "attribute target '{}' not found in environment",
+                        name_str
+                    )));
                 }
-            } else {
-                None
-            };
-            let Some(resolved_name) = resolved else {
-                return Err(ElabError::UnknownIdent(format!(
-                    "attribute target '{}' not found in environment",
-                    name_str
-                )));
+                Err(crate::name_resolution::GlobalConstResolution::Ambiguous(candidates)) => {
+                    return Err(ElabError::UnknownIdent(format!(
+                        "ambiguous attribute target '{}', possible interpretations: [{}]",
+                        name_str,
+                        candidates
+                            .iter()
+                            .map(ToString::to_string)
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )));
+                }
             };
             for attr in attrs {
                 match attr {
                     AttributeCommandAttr::Add(attr) => {
                         // B21: `attribute [unknownAttr] foo` is a loud error too.
                         self.ensure_known_attributes(std::slice::from_ref(attr))?;
-                        // `attribute [class] Unique` — Mathlib's after-the-fact
-                        // class registration (Logic/Unique.lean:60). The
-                        // `collect_attributes` sink deliberately no-ops on
-                        // `Class` ("handled elsewhere"), but for the STANDALONE
-                        // command there is no elsewhere: register the structure
-                        // as a class exactly as `structure … class` does
-                        // (structure_cmd.rs), taking num_params from the
-                        // already-registered inductive. Without this the whole
-                        // file cascades ("`Unique` is not a class").
-                        if matches!(attr, Attribute::Class) {
-                            self.collected_class_attrs.push(resolved_name.clone());
-                        }
-                        self.collect_attributes(&resolved_name, std::slice::from_ref(attr));
+                        // Class attributes follow the same register-time
+                        // validation as declaration-form attributes.
+                        self.collect_attributes_at(
+                            &resolved_name,
+                            std::slice::from_ref(attr),
+                            AttributeSite::AttributeCommand,
+                            &[],
+                        );
                     }
                     AttributeCommandAttr::Remove(attr_name) => {
                         if !supports_file_scope_attribute_removal(attr_name) {

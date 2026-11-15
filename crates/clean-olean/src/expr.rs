@@ -188,8 +188,9 @@ pub enum ParsedExpr {
     ),
     /// Literal
     Lit(ParsedLiteral),
-    /// Metadata
-    MData(Box<ParsedExpr>),
+    /// Metadata: Lean's `KVMap` payload, carried losslessly
+    /// (`region/mdata.rs`), and the wrapped expression.
+    MData(clean_kernel::expr::MDataMap, Box<ParsedExpr>),
     /// Projection
     Proj(String, u64, Box<ParsedExpr>),
 }
@@ -208,7 +209,7 @@ impl ParsedExpr {
             ParsedExpr::ForallE(_, _, _, _) => "forallE",
             ParsedExpr::LetE(_, _, _, _, _) => "letE",
             ParsedExpr::Lit(_) => "lit",
-            ParsedExpr::MData(_) => "mdata",
+            ParsedExpr::MData(..) => "mdata",
             ParsedExpr::Proj(_, _, _) => "proj",
         }
     }
@@ -227,7 +228,7 @@ impl ParsedExpr {
                 1 + t.depth().max(b.depth())
             }
             ParsedExpr::LetE(_, t, v, b, _) => 1 + t.depth().max(v.depth()).max(b.depth()),
-            ParsedExpr::MData(e) | ParsedExpr::Proj(_, _, e) => 1 + e.depth(),
+            ParsedExpr::MData(_, e) | ParsedExpr::Proj(_, _, e) => 1 + e.depth(),
         }
     }
 }
@@ -244,8 +245,8 @@ enum ExprWork {
     BuildForallE(String, ParsedBinderInfo),
     /// Build LetE from top 3 results
     BuildLetE(String, bool),
-    /// Build MData from top result
-    BuildMData,
+    /// Build MData (with its decoded payload) from top result
+    BuildMData(clean_kernel::expr::MDataMap),
     /// Build Proj from top result
     BuildProj(String, u64),
 }
@@ -294,13 +295,10 @@ impl<'a> CompactedRegion<'a> {
                     match header.tag {
                         expr_tags::BVAR => {
                             let idx_ptr = self.read_u64_at(field_base)?;
-                            let idx = if is_scalar(idx_ptr) {
-                                unbox_scalar(idx_ptr)
-                            } else if is_ptr(idx_ptr) {
-                                self.read_nat_value(idx_ptr)?
-                            } else {
-                                0
-                            };
+                            // Match the direct reader's non-truncating Nat ABI:
+                            // null is not zero, and malformed/oversized boxed
+                            // indices must not become an unrelated BVar.
+                            let idx = self.read_kernel_nat_u64(idx_ptr)?;
                             results.push(ParsedExpr::BVar(idx));
                         }
 
@@ -389,8 +387,9 @@ impl<'a> CompactedRegion<'a> {
                         }
 
                         expr_tags::MDATA => {
+                            let map = self.read_mdata_map(self.read_u64_at(field_base)?)?;
                             let expr_ptr = self.read_u64_at(field_base + 8)?;
-                            work.push(ExprWork::BuildMData);
+                            work.push(ExprWork::BuildMData(map));
                             work.push(ExprWork::Parse(expr_ptr));
                         }
 
@@ -399,13 +398,11 @@ impl<'a> CompactedRegion<'a> {
                             let idx_ptr = self.read_u64_at(field_base + 8)?;
                             let struct_ptr = self.read_u64_at(field_base + 16)?;
                             let type_name = self.resolve_name_ptr(type_name_ptr)?;
-                            let idx = if is_scalar(idx_ptr) {
-                                unbox_scalar(idx_ptr)
-                            } else if is_ptr(idx_ptr) {
-                                self.read_nat_value(idx_ptr).unwrap_or(0)
-                            } else {
-                                0
-                            };
+                            // Lean's `to_proj_idx` (decision R147): the index is
+                            // exactly the stored Nat or a refusal. A low limb of a
+                            // heap Nat, or 0 for a null or unreadable one, would be
+                            // a different projection.
+                            let idx = self.read_kernel_nat_u64(idx_ptr)?;
                             work.push(ExprWork::BuildProj(type_name, idx));
                             work.push(ExprWork::Parse(struct_ptr));
                         }
@@ -473,11 +470,11 @@ impl<'a> CompactedRegion<'a> {
                     ));
                 }
 
-                ExprWork::BuildMData => {
+                ExprWork::BuildMData(map) => {
                     let inner = results.pop().ok_or(OleanError::ExprStackUnderflow {
                         operation: "MData inner",
                     })?;
-                    results.push(ParsedExpr::MData(Box::new(inner)));
+                    results.push(ParsedExpr::MData(map, Box::new(inner)));
                 }
 
                 ExprWork::BuildProj(name, idx) => {
@@ -692,7 +689,8 @@ impl<'a> CompactedRegion<'a> {
     }
 
     /// Find expression-like objects in the file (exploratory)
-    pub fn find_expr_objects(&self) -> Vec<(usize, u8, u8)> {
+    #[cfg(test)]
+    pub(crate) fn find_expr_objects(&self) -> Vec<(usize, u8, u8)> {
         let mut results = Vec::new();
 
         let mut offset = 64;
@@ -722,6 +720,98 @@ impl<'a> CompactedRegion<'a> {
         results
     }
 }
+
+// BigNat type for handling arbitrary-precision natural numbers from .olean files
+// Added for issue #1163 - Fix big integer (MPZ) truncation
+
+/// A big natural number that can hold arbitrary-precision values.
+///
+/// Lean 4 uses GMP for big integers. This type handles both small values
+/// (fitting in u64) and arbitrarily large values (multiple 64-bit limbs).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum BigNat {
+    /// Small value that fits in u64.
+    Small(u64),
+    /// Large value with multiple limbs (little-endian, lowest limb first).
+    Big(Vec<u64>),
+}
+
+impl BigNat {
+    /// Create a BigNat from a u64 value.
+    #[inline]
+    pub fn from_u64(val: u64) -> Self {
+        BigNat::Small(val)
+    }
+
+    /// Create a BigNat from a vector of limbs (little-endian).
+    pub fn from_limbs(limbs: Vec<u64>) -> Self {
+        match limbs.len() {
+            0 => BigNat::Small(0),
+            1 => BigNat::Small(limbs[0]),
+            _ => {
+                let mut limbs = limbs;
+                while limbs.len() > 1 && limbs.last() == Some(&0) {
+                    limbs.pop();
+                }
+                if limbs.len() == 1 {
+                    BigNat::Small(limbs[0])
+                } else {
+                    BigNat::Big(limbs)
+                }
+            }
+        }
+    }
+
+    /// Try to convert to u64, returning None if too large.
+    #[inline]
+    pub fn to_u64(&self) -> Option<u64> {
+        match self {
+            BigNat::Small(v) => Some(*v),
+            BigNat::Big(_) => None,
+        }
+    }
+
+    /// Get the limbs (little-endian).
+    pub fn limbs(&self) -> &[u64] {
+        match self {
+            BigNat::Small(v) => std::slice::from_ref(v),
+            BigNat::Big(limbs) => limbs,
+        }
+    }
+}
+
+impl Default for BigNat {
+    fn default() -> Self {
+        BigNat::Small(0)
+    }
+}
+
+impl From<u64> for BigNat {
+    fn from(val: u64) -> Self {
+        BigNat::Small(val)
+    }
+}
+
+impl std::fmt::Display for BigNat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BigNat::Small(v) => write!(f, "{}", v),
+            BigNat::Big(limbs) => {
+                write!(f, "0x")?;
+                for limb in limbs.iter().rev() {
+                    write!(f, "{:016x}", limb)?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod bvar_tests;
+
+#[cfg(test)]
+mod proj_tests;
 
 #[cfg(test)]
 mod tests {
@@ -836,7 +926,7 @@ mod tests {
         );
         // MData (metadata wraps expression, kind() returns "mdata")
         assert_eq!(
-            ParsedExpr::MData(Box::new(ParsedExpr::BVar(0))).kind(),
+            ParsedExpr::MData(Vec::new(), Box::new(ParsedExpr::BVar(0))).kind(),
             "mdata"
         );
         // Proj
@@ -1815,91 +1905,5 @@ mod tests {
             ),
             "tag 12 must be rejected as an invalid Expr tag"
         );
-    }
-}
-
-// BigNat type for handling arbitrary-precision natural numbers from .olean files
-// Added for issue #1163 - Fix big integer (MPZ) truncation
-
-/// A big natural number that can hold arbitrary-precision values.
-///
-/// Lean 4 uses GMP for big integers. This type handles both small values
-/// (fitting in u64) and arbitrarily large values (multiple 64-bit limbs).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum BigNat {
-    /// Small value that fits in u64.
-    Small(u64),
-    /// Large value with multiple limbs (little-endian, lowest limb first).
-    Big(Vec<u64>),
-}
-
-impl BigNat {
-    /// Create a BigNat from a u64 value.
-    #[inline]
-    pub fn from_u64(val: u64) -> Self {
-        BigNat::Small(val)
-    }
-
-    /// Create a BigNat from a vector of limbs (little-endian).
-    pub fn from_limbs(limbs: Vec<u64>) -> Self {
-        match limbs.len() {
-            0 => BigNat::Small(0),
-            1 => BigNat::Small(limbs[0]),
-            _ => {
-                let mut limbs = limbs;
-                while limbs.len() > 1 && limbs.last() == Some(&0) {
-                    limbs.pop();
-                }
-                if limbs.len() == 1 {
-                    BigNat::Small(limbs[0])
-                } else {
-                    BigNat::Big(limbs)
-                }
-            }
-        }
-    }
-
-    /// Try to convert to u64, returning None if too large.
-    #[inline]
-    pub fn to_u64(&self) -> Option<u64> {
-        match self {
-            BigNat::Small(v) => Some(*v),
-            BigNat::Big(_) => None,
-        }
-    }
-
-    /// Get the limbs (little-endian).
-    pub fn limbs(&self) -> &[u64] {
-        match self {
-            BigNat::Small(v) => std::slice::from_ref(v),
-            BigNat::Big(limbs) => limbs,
-        }
-    }
-}
-
-impl Default for BigNat {
-    fn default() -> Self {
-        BigNat::Small(0)
-    }
-}
-
-impl From<u64> for BigNat {
-    fn from(val: u64) -> Self {
-        BigNat::Small(val)
-    }
-}
-
-impl std::fmt::Display for BigNat {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            BigNat::Small(v) => write!(f, "{}", v),
-            BigNat::Big(limbs) => {
-                write!(f, "0x")?;
-                for limb in limbs.iter().rev() {
-                    write!(f, "{:016x}", limb)?;
-                }
-                Ok(())
-            }
-        }
     }
 }

@@ -1,7 +1,8 @@
 // Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
-//! Multi-step add_decl closure theorem for #461.
+//! Closure of witnessed modeled fresh-extension steps (#461).
+//! The empty chain validates no supplied re-registration input.
 
 use std::collections::HashSet;
 
@@ -32,10 +33,10 @@ impl Specification {
             r"inductive KernelAddDeclChain : KEnv -> KEnv -> Type
 | refl : forall (env : KEnv), KernelAddDeclChain env env
 | step : forall (env : KEnv) (mid : KEnv) (env' : KEnv), KernelAddDeclChain env mid -> KernelAddDeclAccepts mid env' -> KernelAddDeclChain env env'",
-            "Reflexive-transitive closure of successful production-kernel declaration \
-             additions. Faithful inductive (formerly 4 hand axioms: type, refl, step, \
-             and a hand-written recursor): refl is the empty chain, step extends a \
-             chain with one more successful production add_decl.",
+            "Reflexive-transitive closure of witnessed KernelAddDeclAccepts steps. \
+             Genuine inductive (formerly 4 hand axioms: type, refl, step and recursor): \
+             refl is the empty modeled chain, not validation of a re-registration input; \
+             step appends supplied fresh-extension evidence, not an actual Rust result.",
         )?;
 
         self.add_definition(SpecDefinition {
@@ -107,12 +108,12 @@ impl Specification {
             ),
             is_axiom: false,
             description: concat!(
-                "Closure theorem for implementation declaration additions: any ",
-                "KernelAddDeclChain preserves both KernelStateMatchesSpec and ",
-                "EnvSound by structural recursion over the successful add_decl ",
-                "trace and repeated application of KernelAddDeclSound. This ",
-                "turns the one-step inductive theorem into an arbitrary-sequence ",
-                "transport lemma without adding new trusted assumptions. Part of #461."
+                "Conditional closure theorem for witnessed model extensions: any ",
+                "KernelAddDeclChain preserves KernelStateMatchesSpec and EnvSound ",
+                "by structural recursion and repeated application of KernelAddDeclSound. ",
+                "This transports the one-step model theorem across a witnessed chain ",
+                "without establishing actual execution-to-evidence correspondence or ",
+                "validation of a reused input. Part of #461."
             )
             .to_string(),
             category: AxiomCategory::DerivedLemma,

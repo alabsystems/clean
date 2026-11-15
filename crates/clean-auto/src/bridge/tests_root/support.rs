@@ -24,7 +24,7 @@ fn collect_hypothesis_ids_inner(step: &ProofStep, ids: &mut Vec<FVarId>) {
                 collect_hypothesis_ids_inner(arg, ids);
             }
         }
-        ProofStep::Refl(_) | ProofStep::Axiom(..) | ProofStep::Propositional(..) => {}
+        ProofStep::Refl(_) | ProofStep::Propositional(..) => {}
     }
 }
 

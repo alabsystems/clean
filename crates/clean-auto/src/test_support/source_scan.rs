@@ -34,7 +34,10 @@
 //! The integration test in `tests/` reaches this file through
 //! `#[path = "../src/test_support/source_scan.rs"]`: an integration test is a
 //! separate crate and cannot see `pub(crate)` items, and a second copy of the
-//! lexer is exactly what this module exists to prevent.
+//! lexer is exactly what this module exists to prevent. For the same reason
+//! `clean-cli`'s `clean check` census (`crates/clean-cli/src/cmd_core_driver_tests.rs`)
+//! includes this file by path, so it must stay self-contained: `std` only, no
+//! `crate::` paths.
 
 /// Blank every non-code byte of `text`, preserving line geometry.
 ///

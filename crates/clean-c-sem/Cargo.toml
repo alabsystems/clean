@@ -1,6 +1,6 @@
 [package]
 name = "clean-c-sem"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "C semantics formalization for Clean verification"
 license = "Apache-2.0"
@@ -17,9 +17,14 @@ clean-features.workspace = true
 clap.workspace = true
 serde = { workspace = true }
 thiserror.workspace = true
+tracing.workspace = true
+
+# Native-only: the tree-sitter build scripts compile C against a host sysroot
+# that wasm32-wasip1 builds do not have. The wasm parser surface is a stub
+# (src/parser/wasm_stub.rs).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tree-sitter = "0.26"
 tree-sitter-c = "0.24"
-tracing.workspace = true
 
 [dev-dependencies]
 clean-rust-sem = { workspace = true }

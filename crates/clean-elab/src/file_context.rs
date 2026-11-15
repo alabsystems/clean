@@ -6,12 +6,13 @@
 //! opened namespaces across declarations within a single file.
 
 use crate::imports::ImportPolicy;
+use crate::infer::section_prune::SectionPruneRequest;
 use crate::infer::user_term::UserTermElab;
 use crate::macro_integration::MacroCtx;
 use crate::namespace::NamespaceState;
 use crate::tactic::TacticRegistry;
 use clean_kernel::name::Name;
-use clean_parser::SurfaceBinder;
+use clean_parser::{Span, SurfaceBinder, SurfaceName};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
@@ -22,7 +23,7 @@ use std::path::PathBuf;
 /// never qualifies: the parser turns `[Decidable P]` into a binder whose `ty`
 /// is the class application, so `[…]` always carries a type here.
 fn is_binder_annotation_update(binder: &SurfaceBinder) -> bool {
-    binder.ty.is_none() && binder.default.is_none() && binder.name != "_"
+    binder.ty.is_none() && binder.default.is_none() && !binder.name.is_unescaped_component("_")
 }
 
 /// File-level context for tracking accumulated `variable` declarations and
@@ -47,6 +48,11 @@ fn is_binder_annotation_update(binder: &SurfaceBinder) -> bool {
 /// ```
 #[derive(Default, Clone)]
 pub struct FileContext {
+    /// New module-system header, distinct from the legacy main module name.
+    module_system: bool,
+    /// Opt-in IDE observations; absent for ordinary compiler/checker callers.
+    tactic_goal_capture: Option<crate::tactic::TacticGoalCapture>,
+    term_info_capture: Option<crate::term_info::TermInfoCapture>,
     /// Accumulated variables from `variable` commands
     variables: Vec<SurfaceBinder>,
     /// Stable lexical identity for each entry in `variables`.
@@ -58,7 +64,7 @@ pub struct FileContext {
     /// Monotone source of lexical variable identities (zero is never used).
     next_variable_scope_id: u64,
     /// Accumulated universe parameter names from `universe` commands
-    universe_params: Vec<String>,
+    universe_params: Vec<SurfaceName>,
     /// Section scope stack - each entry is the index into `variables` at section start
     section_stack: Vec<usize>,
     /// Section variables forced into every following declaration by `include`.
@@ -67,11 +73,11 @@ pub struct FileContext {
     /// `include x` overrides that for the rest of the scope and `omit x`
     /// cancels it. Names, not binders: `include` names a variable that
     /// `variables` already holds.
-    included_variables: Vec<String>,
+    included_variables: Vec<SurfaceName>,
     /// Section scope stack for `included_variables` — one snapshot per
     /// `enter_section`, restored on `exit_section`, so an `include` dies with
     /// its section exactly as the `variable` it names does.
-    included_section_stack: Vec<Vec<String>>,
+    included_section_stack: Vec<Vec<SurfaceName>>,
     /// Binder annotations of the ALREADY-ACCUMULATED variables at section start,
     /// one snapshot per open section, parallel to `section_stack`.
     ///
@@ -111,10 +117,17 @@ pub struct FileContext {
     /// This allows `elaborate_decl_and_register_inner` to flatten namespace
     /// blocks and register each inner declaration individually, so that later
     /// declarations within the same namespace can reference earlier ones.
-    namespace_prefix: String,
+    namespace_prefix: SurfaceName,
+    /// One exact prefix per entered block; a block may contain multiple components.
+    namespace_prefix_stack: Vec<SurfaceName>,
     /// Extra .olean search paths associated with this file, such as Lake
     /// project and package build outputs discovered by `clean check`.
     import_search_paths: Vec<PathBuf>,
+    /// The Lean world this file's imports resolve in, or why they cannot
+    /// resolve in any (gap G72), set by [`Self::set_import_context_for_file`].
+    /// `None` resolves them in the checkout's pin, as for a file outside any
+    /// project.
+    import_world: Option<Result<clean_olean::ImportWorld, clean_olean::ImportWorldRefusal>>,
     /// Disable external `.olean` import search for Clean-native authority
     /// checks that must not depend on Lean/Lake/Mathlib artifacts.
     disable_external_import_search: bool,
@@ -127,7 +140,12 @@ pub struct FileContext {
     /// is resolved — the declarations are in the environment — even though the
     /// project has no compiled `.olean` for it, so the fail-closed policy must
     /// not refuse it.
-    imports_satisfied_from_source: HashSet<String>,
+    imports_satisfied_from_source: HashSet<Name>,
+    /// Source modules this run tried but did not finish successfully. A failed
+    /// source import must never fall back to an artifact or a builtin provider.
+    imports_refused_from_source: HashMap<Name, String>,
+    /// Direct imports whose compiler metadata is available to this source file.
+    compiler_imports: HashSet<Name>,
     /// Modules already loaded into the environment by an earlier `import` in
     /// this file, threaded across every `import` declaration so a Mathlib
     /// file's large overlapping `.olean` closures (Lean.Elab.*, Lean.Server.*,
@@ -144,32 +162,92 @@ pub struct FileContext {
     /// ([`Self::enter_local_scope`]). `local instance`s record the depth they
     /// were declared at and are retired when that depth is exited (B99).
     local_scope_depth: usize,
-    /// `local instance`s currently in force, with the `local_scope_depth`
-    /// they were declared at. Depth-0 entries (file-level `local instance`)
-    /// stay for the rest of the file — Lean's `local` file scope.
-    live_local_instances: Vec<(Name, usize)>,
-    /// `local instance`s whose declaring scope has ENDED. Injected into each
-    /// declaration's `ElabCtx` as hidden instances so resolution never picks
-    /// them again — the env-side registration is append-only, so visibility
-    /// is filtered here rather than deregistered (B99; the r82
-    /// `instprio_local_section_shadow` leak proved 9 outside the section
-    /// where Lean proves 5).
-    dead_local_instances: HashSet<Name>,
+    /// Lean's INSTANCE STATE for this module: one state per open scope
+    /// (section / namespace block), each a copy of the enclosing one when
+    /// pushed and discarded at `end`, over the environment's global instance
+    /// table (see [`crate::instance_store`]). Pushed and popped with
+    /// [`Self::local_scope_depth`].
+    instance_store: crate::instance_store::InstanceStore,
+    /// `local simp` lemmas currently in force, with the `local_scope_depth`
+    /// they were declared at (depth 0 stays for the rest of the file).
+    live_local_simp_lemmas: Vec<(Name, usize)>,
+    /// `local simp` lemmas whose scope has ended and which
+    /// [`Self::retire_local_attributes`] has yet to unregister.
+    ended_local_simp_lemmas: Vec<Name>,
+    live_local_csimp: Vec<(clean_kernel::env::csimp::LocalRule, usize)>,
+    ended_local_csimp: Vec<clean_kernel::env::csimp::LocalRule>,
+    active_csimp_namespaces: Vec<(Name, usize)>,
     /// `scoped instance`s: instance name → declaring namespace. Visible only
     /// while the declaring namespace is the current namespace (or an
     /// ancestor of it) or is `open`ed — checked dynamically at resolution
     /// time so `open Foo in def …` sees them (B99; the r82
     /// `instprio_scoped_open_in` leak proved 2 without any `open`).
     scoped_instances: HashMap<Name, Name>,
+    /// The `private` declarations of OTHER modules: every name the
+    /// environment marked `private` before this file's first own declaration
+    /// (taken again after each `import`, so a source import elaborated into
+    /// the same environment counts as another module). Lean mangles a private
+    /// name with its module (`_private.P.0.c`) and resolves only the current
+    /// module's, so none of these is reachable from this file; Clean keeps the
+    /// plain name, so they are filtered by this set instead. `None` until the
+    /// first declaration is elaborated.
+    foreign_private_decls: Option<std::sync::Arc<HashSet<Name>>>,
     /// `@[default_instance]` registrations: (instance, class, priority) in
     /// declaration order. Consulted when a type-class goal still has an open
     /// (metavariable) input — Lean's default-instance mechanism (B99; the
     /// r82 `instprio_default_instance_mvar` gap proved 3 where Lean's
     /// defaulting proves 4).
     default_instances: Vec<(Name, Name, u32)>,
+    /// The section-variable pruning [`crate::preprocess_decl_with_context`]
+    /// asked for the declaration it just rewrote, keyed by that declaration's
+    /// span: its scan was incomplete, so it prepended every section variable
+    /// and the elaboration of that same declaration drops the unused ones
+    /// (`crate::infer::section_prune`). Overwritten by every preprocess and
+    /// consumed by the next elaboration, so it never outlives the declaration.
+    pending_section_prune: Option<(Span, SectionPruneRequest)>,
+    /// The elaboration run this context belongs to: a new context is a new
+    /// run, its clones and lexical snapshots stay in it, and
+    /// [`Self::fork_run`] starts another. Registration
+    /// records each declaration with it, and the `attribute [..]` command may
+    /// bind `implemented_by` or `extern` only to a declaration of its own run
+    /// (`crate::declared_here`).
+    elab_unit: crate::declared_here::ElabUnit,
 }
 
+// A prepared `FileContext` can be shared across threads: a driver may
+// elaborate a prelude once into a `static` and hand each check (on its own
+// large-stack worker) an owned copy. A non-`Send`/`Sync` field -- an `Rc` in
+// `foreign_private_decls` did it once -- would force that cache per thread,
+// re-elaborating the prelude on every worker; Trust's temporal lanes still
+// keep theirs per thread for that old reason. Such a copy MUST be made with
+// `FileContext::fork_run`, not `clone`: a clone stays in the prelude's
+// elaboration run, so the check's `attribute [implemented_by]` or
+// `attribute [extern]` command could bind a prelude declaration, which Lean
+// refuses as imported (`crate::declared_here`). Trust's lanes still clone
+// (`docs/DECISIONS.md` R80 item 2).
+const _: fn() = || {
+    fn shared_across_threads<T: Send + Sync>() {}
+    shared_across_threads::<FileContext>();
+};
+
 impl FileContext {
+    /// Observe actual term elaboration without changing checking policy.
+    pub fn set_term_info_capture(&mut self, capture: Option<crate::term_info::TermInfoCapture>) {
+        self.term_info_capture = capture;
+    }
+
+    pub(crate) fn term_info_capture(&self) -> Option<crate::term_info::TermInfoCapture> {
+        self.term_info_capture.clone()
+    }
+
+    /// Observe actual normal tactic states without changing checking policy.
+    pub fn set_tactic_goal_capture(&mut self, capture: Option<crate::tactic::TacticGoalCapture>) {
+        self.tactic_goal_capture = capture;
+    }
+
+    pub(crate) fn tactic_goal_capture(&self) -> Option<crate::tactic::TacticGoalCapture> {
+        self.tactic_goal_capture.clone()
+    }
     /// Create a new empty file context
     ///
     /// # ENSURES
@@ -198,7 +276,8 @@ impl FileContext {
     /// imports O(union) — and they are not lexical: a snapshot is never used to
     /// process an `import`, which the plan phase applies in authored order
     /// against the caller's own context. `disable_external_import_search`,
-    /// `import_policy` and `imports_satisfied_from_source` ARE carried: they are
+    /// `import_policy`, `imports_satisfied_from_source` and source refusals ARE
+    /// carried: they are
     /// import POLICY and per-file resolution FACT, not caches — dropping the
     /// last one would make a snapshot refuse an import the run demonstrably
     /// resolved from source.
@@ -211,7 +290,7 @@ impl FileContext {
     /// whether the approach scales to a Mathlib-sized file. The transient is
     /// freed before the next snapshot is taken.
     #[must_use]
-    pub fn lexical_snapshot(&self) -> Self {
+    pub(crate) fn lexical_snapshot(&self) -> Self {
         let mut snapshot = self.clone();
         snapshot.import_search_paths = Vec::new();
         snapshot.import_visited = hashbrown::HashSet::new();
@@ -223,12 +302,16 @@ impl FileContext {
     /// # ENSURES
     /// - `current_variables().len()` increases by `binders.len()`
     /// - Variables are appended (order preserved)
-    pub fn add_variables(&mut self, binders: &[SurfaceBinder]) {
+    pub(crate) fn add_variables(&mut self, binders: &[SurfaceBinder]) {
         for _ in binders {
             self.next_variable_scope_id = self.next_variable_scope_id.saturating_add(1);
             self.variable_scope_ids.push(self.next_variable_scope_id);
         }
-        self.variables.extend(binders.iter().cloned());
+        self.variables.extend(
+            binders
+                .iter()
+                .map(crate::section_scope::section_variable_binder),
+        );
     }
 
     /// Apply one source-level `variable` command, Lean-4 style.
@@ -295,7 +378,7 @@ impl FileContext {
     ///
     /// # ENSURES
     /// - `current_universe_params().len()` increases by `names.len()`
-    pub fn add_universe_params(&mut self, names: &[String]) {
+    pub(crate) fn add_universe_params(&mut self, names: &[SurfaceName]) {
         self.universe_params.extend(names.iter().cloned());
     }
 
@@ -304,7 +387,7 @@ impl FileContext {
     ///
     /// # ENSURES
     /// - Each name is in `included_variables` (idempotent, order preserved)
-    pub(crate) fn include_variables(&mut self, names: &[String]) {
+    pub(crate) fn include_variables(&mut self, names: &[SurfaceName]) {
         for name in names {
             if !self.included_variables.iter().any(|n| n == name) {
                 self.included_variables.push(name.clone());
@@ -316,13 +399,32 @@ impl FileContext {
     ///
     /// # ENSURES
     /// - None of `names` is in `included_variables`
-    pub(crate) fn omit_variables(&mut self, names: &[String]) {
+    pub(crate) fn omit_variables(&mut self, names: &[SurfaceName]) {
         self.included_variables.retain(|n| !names.contains(n));
     }
 
     /// Section variables currently forced in by `include`.
-    pub(crate) fn included_variables(&self) -> &[String] {
+    pub(crate) fn included_variables(&self) -> &[SurfaceName] {
         &self.included_variables
+    }
+
+    /// Record (or, with `None`, clear) the section-variable pruning the
+    /// declaration at `span` needs — see `pending_section_prune`.
+    pub(crate) fn set_pending_section_prune(
+        &mut self,
+        span: Span,
+        request: Option<SectionPruneRequest>,
+    ) {
+        self.pending_section_prune = request.map(|request| (span, request));
+    }
+
+    /// The pruning recorded for the declaration at `span`, if any. Anything
+    /// recorded for a different declaration is discarded.
+    pub(crate) fn take_pending_section_prune(&mut self, span: Span) -> Option<SectionPruneRequest> {
+        match self.pending_section_prune.take() {
+            Some((recorded, request)) if recorded == span => Some(request),
+            _ => None,
+        }
     }
 
     /// Enter a section (push scope marker)
@@ -332,7 +434,7 @@ impl FileContext {
     /// - Saves the outer variables' binder annotations for later restoration
     /// - Saves option scope boundary for rollback
     /// - Nested sections are supported (stack-based)
-    pub fn enter_section(&mut self) {
+    pub(crate) fn enter_section(&mut self) {
         self.included_section_stack
             .push(self.included_variables.clone());
         self.section_binder_infos
@@ -340,7 +442,7 @@ impl FileContext {
         self.section_stack.push(self.variables.len());
         self.universe_section_stack.push(self.universe_params.len());
         self.option_section_stack.push(Vec::new());
-        self.local_scope_depth += 1;
+        self.enter_local_scope();
     }
 
     /// Exit a section (pop scope and truncate variables)
@@ -352,7 +454,7 @@ impl FileContext {
     /// - Options set since last `enter_section()` are restored
     /// - `local instance`s declared in the section are retired (B99)
     /// - No-op if section stack is empty
-    pub fn exit_section(&mut self) {
+    pub(crate) fn exit_section(&mut self) {
         if let Some(saved) = self.included_section_stack.pop() {
             self.included_variables = saved;
         }
@@ -390,31 +492,153 @@ impl FileContext {
     /// scoping is handled by the namespace machinery (B99).
     pub(crate) fn enter_local_scope(&mut self) {
         self.local_scope_depth += 1;
+        self.instance_store.push_scope();
     }
 
-    /// Exit a `local`-attribute scope: retire every `local instance` declared
-    /// at a depth deeper than the remaining scope. Retired instances move to
-    /// [`Self::dead_local_instances`] and stay hidden for the rest of the
-    /// file (the env registration is append-only). Counterpart of
+    /// Exit a `local`-attribute scope: its instance state is discarded (Lean's
+    /// `popScope`) — a `local instance` declared there is out of the state
+    /// again, an instance erased there is back. Counterpart of
     /// [`Self::enter_local_scope`]; also invoked by [`Self::exit_section`].
     pub(crate) fn exit_local_scope(&mut self) {
         self.local_scope_depth = self.local_scope_depth.saturating_sub(1);
         let depth = self.local_scope_depth;
-        let mut idx = 0;
-        while idx < self.live_local_instances.len() {
-            if self.live_local_instances[idx].1 > depth {
-                let (name, _) = self.live_local_instances.swap_remove(idx);
-                self.dead_local_instances.insert(name);
-            } else {
-                idx += 1;
-            }
+        let (ended, live): (Vec<_>, Vec<_>) = std::mem::take(&mut self.live_local_simp_lemmas)
+            .into_iter()
+            .partition(|(_, declared_at)| *declared_at > depth);
+        self.live_local_simp_lemmas = live;
+        self.ended_local_simp_lemmas
+            .extend(ended.into_iter().map(|(name, _)| name));
+        let (ended, live): (Vec<_>, Vec<_>) = std::mem::take(&mut self.live_local_csimp)
+            .into_iter()
+            .partition(|(_, at)| *at > depth);
+        self.live_local_csimp = live;
+        self.active_csimp_namespaces.retain(|(_, at)| *at <= depth);
+        self.ended_local_csimp
+            .extend(ended.into_iter().map(|(token, _)| token));
+        self.instance_store.pop_scope();
+    }
+
+    /// Record a `local simp` lemma at the current local-scope depth. It is
+    /// unregistered once that scope has ended; see
+    /// [`Self::retire_local_attributes`].
+    pub(crate) fn record_local_simp_lemma(&mut self, name: Name) {
+        self.live_local_simp_lemmas
+            .push((name, self.local_scope_depth));
+    }
+
+    /// Keep a local compiler-rule identity until its declaring scope ends.
+    pub(crate) fn record_local_csimp(&mut self, token: clean_kernel::env::csimp::LocalRule) {
+        self.live_local_csimp.push((token, self.local_scope_depth));
+    }
+
+    /// Retire local simp and compiler-simplification attributes at scope end.
+    ///
+    /// Ending a scope ([`Self::exit_local_scope`]) has no environment at
+    /// hand, so it only queues the lemmas; this drains the queue. It runs when
+    /// a section or namespace closes and again before the next declaration
+    /// elaborates, so no later `simp` sees a lemma past its scope — Lean's
+    /// `attribute [local simp] foo in <cmd>` is `section … end` around the one
+    /// command (`Lean/Elab/BuiltinCommand.lean:516-519`).
+    pub(crate) fn retire_local_attributes(&mut self, env: &mut clean_kernel::Environment) {
+        for token in std::mem::take(&mut self.ended_local_csimp) {
+            clean_kernel::env::csimp::retire_local(env, token);
+        }
+        for name in std::mem::take(&mut self.ended_local_simp_lemmas) {
+            env.unregister_simp_lemma(&name);
         }
     }
 
-    /// Record a `local instance` at the current local-scope depth (B99).
-    pub(crate) fn record_local_instance(&mut self, name: Name) {
-        self.live_local_instances
-            .push((name, self.local_scope_depth));
+    /// Lean's instance state for this module (see [`Self::instance_store`]).
+    pub(crate) fn instance_store_mut(&mut self) -> &mut crate::instance_store::InstanceStore {
+        &mut self.instance_store
+    }
+
+    /// The instances this module gave a global entry while they already had
+    /// one, in order (see `InstanceStore::global_readds`): part of what the
+    /// module exports to an importer.
+    #[must_use]
+    pub fn instance_global_readds(&self) -> Vec<Name> {
+        self.instance_store.global_readds().to_vec()
+    }
+
+    /// The current scope's instance state, for an elaboration context.
+    #[must_use]
+    pub(crate) fn instance_view(
+        &self,
+        env: &clean_kernel::Environment,
+    ) -> crate::instance_store::InstanceView {
+        self.instance_store.view(env)
+    }
+
+    /// Record a `local instance` declaration (B99): a local entry in the
+    /// current scope's state, until that scope ends. The environment
+    /// registers it and marks it local first.
+    pub(crate) fn record_local_instance(
+        &mut self,
+        env: &mut clean_kernel::Environment,
+        name: Name,
+    ) {
+        let Some(priority) = env.instance_priority(&name) else {
+            return;
+        };
+        self.instance_store.add_local(env, &name, priority);
+    }
+
+    /// Activate the `scoped` entries of namespaces that just became active
+    /// (`namespaces`, each newly activated by `open` / `namespace`): Lean's
+    /// `activateScoped` on the current scope's state, which adds them in
+    /// order unless the namespace is already active there.
+    pub(crate) fn activate_scoped_instances(
+        &mut self,
+        env: &mut clean_kernel::Environment,
+        namespaces: &[Name],
+    ) {
+        for ns in namespaces {
+            self.instance_store.activate(env, ns);
+        }
+    }
+
+    /// Activate namespace compiler rules once in this scope's inherited view.
+    pub(crate) fn activate_scoped_csimp(
+        &mut self,
+        env: &mut clean_kernel::Environment,
+        namespaces: &[Name],
+    ) -> Result<(), crate::ElabError> {
+        for ns in namespaces {
+            if self
+                .active_csimp_namespaces
+                .iter()
+                .any(|(name, _)| name == ns)
+            {
+                continue;
+            }
+            let tokens =
+                clean_kernel::env::csimp::activate_namespace(env, ns).ok_or_else(|| {
+                    crate::ElabError::Unsupported {
+                        feature: "compiler attribute activation identity exhausted".into(),
+                    }
+                })?;
+            self.active_csimp_namespaces
+                .push((ns.clone(), self.local_scope_depth));
+            for token in tokens {
+                self.record_local_csimp(token);
+            }
+        }
+        Ok(())
+    }
+
+    /// A scoped definition added while its namespace is already active.
+    pub(crate) fn activate_new_scoped_csimp(
+        &mut self,
+        env: &mut clean_kernel::Environment,
+        namespace: &Name,
+        theorem: &Name,
+    ) -> Result<(), crate::ElabError> {
+        if self.namespace_state.is_scope_active(namespace) {
+            let token = crate::csimp_attribute::register_local(env, theorem)?;
+            self.record_local_csimp(token);
+        }
+        Ok(())
     }
 
     /// Record a `scoped instance` with its declaring namespace (B99).
@@ -422,16 +646,38 @@ impl FileContext {
         self.scoped_instances.insert(name, namespace);
     }
 
+    /// Drop `name`'s `scoped` declaration from this file's map (a global
+    /// `attribute [instance]` made it an instance everywhere).
+    pub(crate) fn forget_scoped_instance(&mut self, name: &Name) {
+        self.scoped_instances.remove(name);
+    }
+
     /// Record a `@[default_instance]` registration (declaration order) (B99).
     pub(crate) fn record_default_instance(&mut self, name: Name, class: Name, priority: u32) {
         self.default_instances.push((name, class, priority));
     }
 
-    /// `local instance`s whose declaring scope has ended — hidden from
-    /// resolution for the rest of the file (B99).
+    /// Take the snapshot of other modules' `private` declarations (see
+    /// [`Self::foreign_private_decls`]). `refresh` retakes it (after an
+    /// `import`); otherwise it is taken only once, before the file's first
+    /// own declaration.
+    pub(crate) fn note_foreign_private_decls(
+        &mut self,
+        env: &clean_kernel::Environment,
+        refresh: bool,
+    ) {
+        if refresh || self.foreign_private_decls.is_none() {
+            self.foreign_private_decls = Some(std::sync::Arc::new(
+                env.private_decl_names().cloned().collect(),
+            ));
+        }
+    }
+
+    /// The `private` declarations of other modules, which this file cannot
+    /// name (empty before the first declaration).
     #[must_use]
-    pub(crate) fn dead_local_instances(&self) -> &HashSet<Name> {
-        &self.dead_local_instances
+    pub(crate) fn foreign_private_decls(&self) -> std::sync::Arc<HashSet<Name>> {
+        self.foreign_private_decls.clone().unwrap_or_default()
     }
 
     /// `scoped instance` → declaring namespace map (B99).
@@ -460,7 +706,10 @@ impl FileContext {
     /// `set_option`), so the section frame's recorded previous values are exactly
     /// the env's previous values; applying the same rollback to the env restores
     /// it precisely.
-    pub fn exit_section_restoring_env_options(&mut self, env: &mut clean_kernel::Environment) {
+    pub(crate) fn exit_section_restoring_env_options(
+        &mut self,
+        env: &mut clean_kernel::Environment,
+    ) {
         if let Some(rollback) = self.option_section_stack.last() {
             for (key, prev_value) in rollback.iter().rev() {
                 match prev_value {
@@ -470,6 +719,7 @@ impl FileContext {
             }
         }
         self.exit_section();
+        self.retire_local_attributes(env);
     }
 
     /// Get currently accumulated variables
@@ -477,7 +727,7 @@ impl FileContext {
     /// # ENSURES
     /// - Returns all variables in scope (may be empty)
     #[must_use]
-    pub fn current_variables(&self) -> &[SurfaceBinder] {
+    pub(crate) fn current_variables(&self) -> &[SurfaceBinder] {
         &self.variables
     }
 
@@ -486,7 +736,7 @@ impl FileContext {
     /// # ENSURES
     /// - Returns all universe params in scope (may be empty)
     #[must_use]
-    pub fn current_universe_params(&self) -> &[String] {
+    pub(crate) fn current_universe_params(&self) -> &[SurfaceName] {
         &self.universe_params
     }
 
@@ -495,7 +745,7 @@ impl FileContext {
     /// # ENSURES
     /// - Returns `current_variables().len() > 0`
     #[must_use]
-    pub fn has_variables(&self) -> bool {
+    pub(crate) fn has_variables(&self) -> bool {
         !self.variables.is_empty()
     }
 
@@ -512,7 +762,7 @@ impl FileContext {
     ///
     /// Used to initialize `ElabCtx` with persisted open/export aliases.
     #[must_use]
-    pub fn namespace_state(&self) -> &NamespaceState {
+    pub(crate) fn namespace_state(&self) -> &NamespaceState {
         &self.namespace_state
     }
 
@@ -520,7 +770,7 @@ impl FileContext {
     ///
     /// Used to update the persisted state after elaboration of `open`/`export`
     /// commands.
-    pub fn namespace_state_mut(&mut self) -> &mut NamespaceState {
+    pub(crate) fn namespace_state_mut(&mut self) -> &mut NamespaceState {
         &mut self.namespace_state
     }
 
@@ -538,12 +788,12 @@ impl FileContext {
 
     /// Active section-variable spellings paired with stable lexical identities.
     /// Kept parallel to `variables` by `add_variables`/`exit_section`.
-    pub(crate) fn active_variable_bindings(&self) -> impl Iterator<Item = (&str, u64)> {
+    pub(crate) fn active_variable_bindings(&self) -> impl Iterator<Item = (&SurfaceName, u64)> {
         debug_assert_eq!(self.variables.len(), self.variable_scope_ids.len());
         self.variables
             .iter()
             .zip(self.variable_scope_ids.iter().copied())
-            .map(|(binder, id)| (binder.name.as_str(), id))
+            .map(|(binder, id)| (&binder.name, id))
     }
 
     /// Mutable access to the persisted macro context, for the driver's
@@ -612,6 +862,21 @@ impl FileContext {
         self.options.insert(name, value);
     }
 
+    /// Set (`Some`) or clear (`None`) one file-level option entry WITHOUT
+    /// recording it for section rollback, returning the previous entry. For
+    /// `set_option … in <decl>`, which scopes the value to one declaration and
+    /// restores the previous entry itself.
+    pub(crate) fn replace_option_unscoped(
+        &mut self,
+        name: &str,
+        value: Option<Option<String>>,
+    ) -> Option<Option<String>> {
+        match value {
+            Some(value) => self.options.insert(name.to_string(), value),
+            None => self.options.remove(name),
+        }
+    }
+
     /// Get a file-level option value.
     ///
     /// Returns `Some(&value)` if the option has been set (value may be `None`
@@ -632,7 +897,7 @@ impl FileContext {
     ///
     /// Called before elaborating each declaration so the environment
     /// reflects the current file-level option state.
-    pub fn apply_options_to_env(&self, env: &mut clean_kernel::Environment) {
+    pub(crate) fn apply_options_to_env(&self, env: &mut clean_kernel::Environment) {
         for (name, value) in &self.options {
             env.set_option(name.clone(), value.clone());
         }
@@ -642,108 +907,78 @@ impl FileContext {
     ///
     /// The prefix is used by `elaborate_decl_and_register_inner` to qualify
     /// declaration names when flattening namespace blocks.
-    pub fn enter_namespace(&mut self, name: &str) {
-        if self.namespace_prefix.is_empty() {
-            self.namespace_prefix = name.to_owned();
-        } else {
-            self.namespace_prefix = format!("{}.{}", self.namespace_prefix, name);
-        }
+    pub fn enter_namespace(&mut self, name: &SurfaceName) {
+        self.namespace_prefix_stack
+            .push(self.namespace_prefix.clone());
+        self.namespace_prefix = name.qualify_under(&self.namespace_prefix);
     }
 
-    /// Exit the current namespace, restoring the parent prefix.
+    /// Restore the prefix at the start of the namespace block.
     pub fn exit_namespace(&mut self) {
-        if let Some(dot_pos) = self.namespace_prefix.rfind('.') {
-            self.namespace_prefix.truncate(dot_pos);
-        } else {
-            self.namespace_prefix.clear();
-        }
+        self.namespace_prefix = self.namespace_prefix_stack.pop().unwrap_or_default();
     }
 
-    /// Get the current namespace prefix.
-    ///
-    /// Returns an empty string when at the root (no namespace active).
+    /// Exact current namespace, anonymous at the root.
     #[must_use]
-    pub fn namespace_prefix(&self) -> &str {
+    pub fn namespace_prefix(&self) -> &SurfaceName {
         &self.namespace_prefix
     }
 
-    /// Replace the file-level import search paths used for `.olean` loading.
-    pub fn set_import_search_paths(&mut self, paths: Vec<PathBuf>) {
-        self.import_search_paths = paths;
+    /// Name the module this file is — Lean's `env.mainModule`, the name its
+    /// importers write (`import Pkg.A`). Its `private` theorems and axioms are
+    /// then registered as `_private.<module>.0.<name>` and their plain names
+    /// resolve in this file only (G21,
+    /// `designs/2026-10-08-private-name-mangling.md`). A context never named
+    /// keeps the plain-name regime (`docs/DECISIONS.md`, 2026-10-08).
+    pub fn set_main_module(&mut self, module: Name) {
+        if !module.is_anon() {
+            self.namespace_state_mut().set_main_module(module);
+        }
     }
 
-    /// Get the file-level import search paths used for `.olean` loading.
+    /// The module this file is, when [`Self::set_main_module`] named it.
     #[must_use]
-    pub fn import_search_paths(&self) -> &[PathBuf] {
-        &self.import_search_paths
+    pub fn main_module(&self) -> Option<&Name> {
+        self.namespace_state().main_module()
     }
 
-    /// Get a mutable reference to the persistent set of modules already loaded
-    /// by this file's earlier `import` declarations.
-    ///
-    /// Threaded into [`clean_olean::load_module_with_deps_bounded_shared`] so a
-    /// file's overlapping `.olean` closures are read once across all its
-    /// imports rather than re-read per top-level import.
-    pub fn import_visited_mut(&mut self) -> &mut hashbrown::HashSet<String> {
-        &mut self.import_visited
+    /// The elaboration run this context belongs to (`crate::declared_here`).
+    pub(crate) fn elab_unit(&self) -> crate::declared_here::ElabUnit {
+        self.elab_unit
     }
 
-    /// Disable external `.olean` import search for this file context.
-    ///
-    /// When set, `Import` declarations only initialize Clean's built-in
-    /// module preludes; they do not consult Lean / Lake / Mathlib `.olean`
-    /// artifacts as semantic authority.
-    pub fn disable_external_import_search(&mut self) {
-        self.disable_external_import_search = true;
-    }
-
-    /// Whether imports may search external `.olean` paths.
+    /// A copy of this context in a NEW elaboration run: what a driver that
+    /// elaborated a prelude once hands each consumer (Trust's temporal lanes
+    /// cache the prelude's `(Environment, FileContext)` and give every check a
+    /// copy). The prelude's declarations are then imported to the consumer, as
+    /// a module's are in Lean, so its `attribute [implemented_by]` and
+    /// `attribute [extern]` commands may not name one ("... because it is in
+    /// an imported module", `crate::declared_here`), and two consumers' runs
+    /// are distinct. A plain `clone` keeps the run, which a lexical snapshot of
+    /// the same file needs (`crate::module_batch`); it is the wrong copy for a
+    /// consumer.
     #[must_use]
-    pub fn external_import_search_enabled(&self) -> bool {
-        !self.disable_external_import_search
+    pub fn fork_run(&self) -> Self {
+        Self {
+            elab_unit: crate::declared_here::ElabUnit::fresh(),
+            tactic_goal_capture: None,
+            term_info_capture: None,
+            ..self.clone()
+        }
     }
 
-    /// Set what this file's `import` statements do when a module resolves to
-    /// nothing real. Defaults to [`ImportPolicy::FailClosed`].
-    pub fn set_import_policy(&mut self, policy: ImportPolicy) {
-        self.import_policy = policy;
-    }
-
-    /// The unresolved-import policy in force for this file.
+    /// A temporary context for a block elaborated without one (a `namespace`
+    /// or `section` reached with no `FileContext`): it belongs to the run of
+    /// every caller without one, so what was declared before the block is
+    /// its own.
     #[must_use]
-    pub fn import_policy(&self) -> ImportPolicy {
-        self.import_policy
-    }
-
-    /// Record that `module`'s declarations are already in the environment
-    /// because this run elaborated its intra-project `.lean` source.
-    ///
-    /// Without this, a perfectly ordinary multi-file project with no compiled
-    /// artifacts would fail closed on its own internal imports: `clean check`
-    /// elaborates `Foo.lean` in its first pass, and the second pass then finds
-    /// no `Foo.olean` anywhere. The import IS resolved; the missing artifact is
-    /// expected.
-    pub fn mark_import_satisfied_from_source(&mut self, module: &str) {
-        self.imports_satisfied_from_source
-            .insert(module.to_string());
-    }
-
-    /// Whether `module` was recorded by [`Self::mark_import_satisfied_from_source`].
-    #[must_use]
-    pub fn import_satisfied_from_source(&self, module: &str) -> bool {
-        self.imports_satisfied_from_source.contains(module)
-    }
-
-    /// The two per-file loader records the import path needs together: the
-    /// `visited` memo it mutates, and the read-only set of modules already
-    /// satisfied from source. Returned as a pair so callers do not have to
-    /// clone either to satisfy the borrow checker.
-    pub fn import_loader_state_mut(
-        &mut self,
-    ) -> (&mut hashbrown::HashSet<String>, &HashSet<String>) {
-        (
-            &mut self.import_visited,
-            &self.imports_satisfied_from_source,
-        )
+    pub(crate) fn scratch() -> Self {
+        Self {
+            elab_unit: crate::declared_here::ElabUnit::UNSCOPED,
+            ..Self::default()
+        }
     }
 }
+
+#[path = "file_context_imports.rs"]
+mod import_context;

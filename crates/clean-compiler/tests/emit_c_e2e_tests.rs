@@ -12,8 +12,12 @@
 //! and because these tests have a different focus (runtime correctness vs
 //! emitter parity).
 
+mod runtime_fixture;
+
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
+
+use runtime_fixture::MaterializedRuntime;
 
 /// Monotonic counter for unique temp directory names across parallel tests.
 static E2E_RT_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -31,16 +35,6 @@ fn find_c_compiler() -> Option<String> {
         }
     }
     None
-}
-
-/// Path to clean_runtime include directory (contains clean_runtime.h).
-fn runtime_include_dir() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/include")
-}
-
-/// Path to clean_runtime.c implementation.
-fn runtime_c_source() -> std::path::PathBuf {
-    std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/src/clean_runtime.c")
 }
 
 /// Compile raw C source against clean_runtime, run, and return stdout.
@@ -68,12 +62,14 @@ fn compile_and_run_c_raw(c_source: &str) -> Option<String> {
 
     std::fs::write(&source_path, c_source).expect("write source");
 
+    // Embedded runtime, not a compile-time path (see runtime_fixture.rs).
+    let runtime = MaterializedRuntime::materialize();
     let compile = Command::new(&cc)
         .arg("-o")
         .arg(&binary_path)
         .arg(&source_path)
-        .arg(runtime_c_source())
-        .arg(format!("-I{}", runtime_include_dir().display()))
+        .arg(runtime.c_source())
+        .arg(format!("-I{}", runtime.include_dir().display()))
         .arg("-lm")
         .arg("-std=c11")
         .output()

@@ -1444,7 +1444,7 @@ fn test_lazy_delta_proj_reduction_iteration_cap_fires() {
     let chain_end = Expr::const_(prev_name, vec![]);
     let base = Expr::const_(base_name, vec![]);
     assert!(
-        !tc.lazy_delta_proj_reduction(&chain_end, &base, 0),
+        !tc.lazy_delta_proj_reduction(&chain_end, &base, &Name::from_string("Nat"), 0),
         "chain of {} definitions should exceed the 10,000 \
          MAX_PROJ_DELTA_ITERATIONS cap and return false (not def-eq) \
          rather than looping unboundedly",
@@ -1600,5 +1600,99 @@ fn test_lazy_delta_proj_reduction_early_equality() {
     assert!(
         whnf_calls < 20,
         "Expected fewer than 20 WHNF calls for equal-alias projections, got {whnf_calls}"
+    );
+}
+
+/// Two one-field `Bool` structures `DistA`/`DistB`, an axiom `x : DistA`, and
+/// the definitions the projection def-eq tests compare through.
+fn two_bool_structures_env() -> Environment {
+    use crate::inductive::{Constructor, InductiveDecl, InductiveType};
+
+    let mut env = Environment::new();
+    env.init_bool().expect("init_bool should succeed");
+    let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
+    for s in ["DistA", "DistB"] {
+        let name = Name::from_string(s);
+        env.add_inductive(InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: name.clone(),
+                type_: Expr::type_(),
+                constructors: vec![Constructor {
+                    name: Name::from_string(&format!("{s}.mk")),
+                    type_: Expr::pi(
+                        BinderInfo::Default,
+                        bool_ty.clone(),
+                        Expr::const_(name, vec![]),
+                    ),
+                }],
+            }],
+        })
+        .unwrap_or_else(|e| panic!("env setup: structure {s}: {e:?}"));
+    }
+    let dist_a = Expr::const_(Name::from_string("DistA"), vec![]);
+    let dist_b = Expr::const_(Name::from_string("DistB"), vec![]);
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("dist_x"),
+        level_params: vec![],
+        type_: dist_a.clone(),
+    })
+    .expect("env setup: axiom dist_x : DistA");
+    let tt = Expr::const_(Name::from_string("Bool.true"), vec![]);
+    let x = Expr::const_(Name::from_string("dist_x"), vec![]);
+    add_def(&mut env, "dist_dx", dist_a.clone(), x);
+    let mk = |s: &str| Expr::app(Expr::const_(Name::from_string(s), vec![]), tt.clone());
+    add_def(&mut env, "dist_da", dist_a.clone(), mk("DistA.mk"));
+    add_def(&mut env, "dist_da2", dist_a, mk("DistA.mk"));
+    add_def(&mut env, "dist_db", dist_b, mk("DistB.mk"));
+    env
+}
+
+/// Lean v4.33.1 (leanprover/lean4#14631, #14632): def-eq phase 4 compares
+/// `t.idx =?= s.idx` only when both name the SAME structure, the equivalence
+/// cache compares the structure name, and `lazy_delta_proj_reduction` extracts
+/// fields only from constructors of that structure. Clean compared the index
+/// alone in all three. Each pair below differs only in a structure name, and a
+/// same-name control beside it must stay def-eq, so a guard that refuses every
+/// projection comparison fails the test.
+#[test]
+fn projections_of_different_structures_are_not_equated() {
+    let env = two_bool_structures_env();
+    let c = |n: &str| Expr::const_(Name::from_string(n), vec![]);
+    let pa = |e: Expr| Expr::proj(Name::from_string("DistA"), 0, e);
+    let pb = |e: Expr| Expr::proj(Name::from_string("DistB"), 0, e);
+
+    // (1) Same projected term, different structure names: before the guard the
+    // equivalence cache's structural fallback answered true.
+    assert!(
+        TypeChecker::new(&env).is_def_eq(&pa(c("dist_x")), &pa(c("dist_x"))),
+        "control: DistA.0 x =?= DistA.0 x"
+    );
+    assert!(
+        !TypeChecker::new(&env).is_def_eq(&pa(c("dist_x")), &pb(c("dist_x"))),
+        "DistA.0 x =?= DistB.0 x must be false"
+    );
+
+    // (2) Projected terms equal only after delta (`dist_dx := dist_x`): the
+    // phase-4 lazy step on the projected terms answered true before the guard.
+    assert!(
+        TypeChecker::new(&env).is_def_eq(&pa(c("dist_x")), &pa(c("dist_dx"))),
+        "control: DistA.0 x =?= DistA.0 dx"
+    );
+    assert!(
+        !TypeChecker::new(&env).is_def_eq(&pa(c("dist_x")), &pb(c("dist_dx"))),
+        "DistA.0 x =?= DistB.0 dx must be false"
+    );
+
+    // (3) Same structure name on both sides, but one projected term unfolds to
+    // a DistB constructor: `reduce_proj_core` extracted its field by index.
+    assert!(
+        TypeChecker::new(&env).is_def_eq(&pa(c("dist_da")), &pa(c("dist_da2"))),
+        "control: DistA.0 da =?= DistA.0 da2"
+    );
+    assert!(
+        !TypeChecker::new(&env).is_def_eq(&pa(c("dist_da")), &pa(c("dist_db"))),
+        "DistA.0 da =?= DistA.0 db (db unfolds to a DistB constructor) must be false"
     );
 }

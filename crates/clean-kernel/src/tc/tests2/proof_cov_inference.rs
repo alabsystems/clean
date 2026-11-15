@@ -8,6 +8,8 @@
 //! - `is_prop` quick path (Sort(0) inferred directly)
 //! - `is_prop` full inference fallback (Pi types that fail `try_infer_type_quick`)
 //! - `is_prop` returns Err on inference failure (#2208)
+//! - `is_prop` returns Err(ExpectedSort) when the type of the type is not a sort
+//!   (leanprover/lean4#14807), on both paths
 
 use super::*;
 
@@ -101,11 +103,16 @@ fn test_is_prop_pi_full_inference_fallback() {
         "P n should be in Prop since P : Nat → Prop"
     );
 
-    // P itself (Nat → Prop) should NOT be a proposition
-    // typeof(Nat → Prop) = Sort(1) (Type)
+    // P itself has type `Nat → Prop`, which is not a sort. Before the
+    // `is_prop`-requires-a-sort guard (leanprover/lean4#14807) this answered
+    // `Ok(false)` ("not a proposition"); the guard makes it err at
+    // `ensure_sort`, matching Lean v4.33.1's `is_prop`. (This flips the
+    // former `!is_prop(P)` assertion, which the guard makes false — see
+    // `kernel-defensive-invariants-v4331`.)
     assert!(
-        !tc.is_prop(&p_const).expect("is_prop should succeed for P"),
-        "P : Nat → Prop is a type, not a proposition"
+        matches!(tc.is_prop(&p_const), Err(TypeError::ExpectedSort { .. })),
+        "is_prop(P) with P : Nat → Prop (type not a sort) must be Err(ExpectedSort), got {:?}",
+        tc.is_prop(&p_const)
     );
 }
 
@@ -139,5 +146,87 @@ fn test_is_prop_unknown_const_returns_error() {
     assert!(
         tc.is_prop(&unknown).is_err(),
         "Unknown constant should cause is_prop to return Err"
+    );
+}
+
+// ===== is_prop requires a Sort (Lean 4 v4.33.1, leanprover/lean4#14807) =====
+// Lean's `is_prop` is `ensure_sort(infer_type(e))`: a type-of-type that does
+// not whnf to a sort is an ill-formed type, so `is_prop` errors instead of
+// answering "not a proposition". `Ok(false)` there would let projection typing
+// skip its Prop-only field guard.
+
+/// `A : Type` and `a : A`, the smallest environment with a term whose inferred
+/// type is not a sort.
+fn env_with_a_term_of_a_non_sort_type() -> Environment {
+    use crate::env::Declaration;
+
+    let mut env = Environment::new();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("A"),
+        level_params: vec![],
+        type_: Expr::type_(),
+    })
+    .expect("env setup: add axiom A : Type");
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("a"),
+        level_params: vec![],
+        type_: Expr::const_(Name::from_string("A"), vec![]),
+    })
+    .expect("env setup: add axiom a : A");
+    env
+}
+
+/// `is_prop a` with `a : A`: the type of `a` is the constant `A`, which does
+/// not whnf to a sort. Quick inference answers here, so this is the quick path.
+#[test]
+fn is_prop_errors_on_a_non_sort_type_of_type() {
+    let env = env_with_a_term_of_a_non_sort_type();
+    let tc = TypeChecker::new(&env);
+    let a = Expr::const_(Name::from_string("a"), vec![]);
+    assert!(
+        tc.try_infer_type_quick(&a).is_some(),
+        "subject: quick inference must answer for `a`, so this test drives the quick path"
+    );
+    let result = tc.is_prop(&a);
+    assert!(
+        matches!(result, Err(TypeError::ExpectedSort { .. })),
+        "is_prop(a) with a : A (A not a sort) must be Err(ExpectedSort), got {result:?}"
+    );
+}
+
+/// `is_prop (fun (x : A) => x)`: quick inference declines (its body is a loose
+/// bound variable), so this drives the full-inference path. The inferred type
+/// `A → A` is a Pi, not a sort.
+#[test]
+fn is_prop_errors_on_a_non_sort_type_of_type_full_inference_path() {
+    let env = env_with_a_term_of_a_non_sort_type();
+    let tc = TypeChecker::new(&env);
+    let a_ty = Expr::const_(Name::from_string("A"), vec![]);
+    let id_a = Expr::lam(BinderInfo::Default, a_ty, Expr::bvar(0));
+    assert!(
+        tc.try_infer_type_quick(&id_a).is_none(),
+        "subject: quick inference must decline `fun x : A => x`, so this test drives the full path"
+    );
+    let result = tc.is_prop(&id_a);
+    assert!(
+        matches!(result, Err(TypeError::ExpectedSort { .. })),
+        "is_prop(fun x : A => x) must be Err(ExpectedSort), got {result:?}"
+    );
+}
+
+/// Negative control: `SProp` is a sort in Clean (the type-of-type invariant in
+/// `tc/infer.rs` admits `Sort | SProp`), so the sort requirement does not refuse
+/// a strict proposition; its `is_prop` verdict is the one it had before.
+#[test]
+fn is_prop_accepts_sprop_as_a_sort() {
+    use crate::mode::CleanMode;
+
+    let env = Environment::with_mode(CleanMode::Impredicative);
+    let tc = TypeChecker::with_mode(&env, CleanMode::Impredicative);
+    let squash_prop = Expr::from_kind(ExprKind::Squash(std::sync::Arc::new(Expr::prop())));
+    let result = tc.is_prop(&squash_prop);
+    assert!(
+        matches!(result, Ok(false)),
+        "is_prop(Squash Prop) (type SProp) must stay Ok(false), got {result:?}"
     );
 }

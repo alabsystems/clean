@@ -8,9 +8,10 @@
 //!
 //! Eight files under `tactic/` used to import `super::smt::decide` (four
 //! directly, four through the `pub use smt::{… decide …}` re-export in
-//! `tactic/mod.rs`), bypassing the ladder the `decide` *token* is registered to
-//! in `builtins.rs`. `smt::decide` answers
-//! `SmtFailed { detail: "found counterexample — goal is not valid" }` on TRUE
+//! `tactic/mod.rs`), bypassing the ladder the `decide` *token* was then
+//! registered to in `builtins.rs`. (Since DECISIONS R127 the token runs Lean's
+//! procedure, `decide_lean`; this ladder stays the internal rung guarded here.) `smt::decide` answers `SmtFailed` (before 2026-09-28 with
+//! the unvalidated detail "found counterexample — goal is not valid") on TRUE
 //! ground goals, so `norm_num`, `native_decide`, `positivity`, `norm_cast` and
 //! the `decide` rung inside `omega`/`linarith`/`nlinarith` all refuted goals
 //! that plain `by decide` proves on the identical prelude.

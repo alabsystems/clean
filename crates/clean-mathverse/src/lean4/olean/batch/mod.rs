@@ -172,13 +172,14 @@ impl Lean4BatchImporter {
         path: &Path,
         writer: &mut ShardWriter,
     ) -> MathverseResult<ImportStats> {
-        // MUST be the proof-merging parse, not the public-only `parse_module_file`.
-        // Under Lean's module system a public `.olean` stores every theorem as a
-        // value-less, axiom-shaped stub and the proof lives in `.olean.private`;
-        // parsing the base alone therefore imports AXIOMS where the source has
-        // PROOFS. `parse_target_module_with_proofs` is best-effort and returns the
-        // base module unchanged when no companion exists, so this is a strict
-        // superset of the old behaviour for every non-module-system import.
+        // MUST be the authoritative-part read, not the public-only
+        // `parse_module_file`. Under Lean's module system a public `.olean`
+        // stores every theorem as a value-less, axiom-shaped stub and the proof
+        // lives in `.olean.private`; parsing the base alone therefore imports
+        // AXIOMS where the source has PROOFS. `parse_target_module_with_proofs`
+        // reads the `.olean.private` of a module-system artifact and the
+        // `.olean` of any other, and refuses an artifact whose parts disagree
+        // (docs/DECISIONS.md R113).
         let module = parse_target_module_with_proofs(path)?;
         import_module(&module, writer)
     }

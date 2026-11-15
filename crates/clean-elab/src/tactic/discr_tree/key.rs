@@ -19,7 +19,7 @@ pub(crate) enum DiscrKey {
 }
 
 /// Indexing mode for path construction.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Default)]
 pub(crate) enum IndexMode {
     #[default]
     Normal,

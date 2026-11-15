@@ -653,13 +653,16 @@ fn test_rust_pipeline_compilation() {
     let full_rust = build_compilable_source(&rust_code);
     std::fs::write(tmp_dir.join("src").join("lib.rs"), &full_rust).expect("write lib.rs");
 
-    let output = std::process::Command::new("cargo")
+    // targo (`$CARGO` under targo) refuses a lane-less nested `check`.
+    let driver = std::env::var_os("CARGO").unwrap_or_else(|| "targo".into());
+    let output = std::process::Command::new(driver)
+        .arg("--unverified")
         .arg("check")
         .arg("--manifest-path")
         .arg(tmp_dir.join("Cargo.toml"))
         .env("CARGO_TARGET_DIR", tmp_dir.join("target"))
         .output()
-        .expect("run cargo check");
+        .expect("run targo --unverified check");
 
     let _ = std::fs::remove_dir_all(&tmp_dir);
 
@@ -751,9 +754,9 @@ pub type CleanObj = LeanObj;
 #[inline] pub unsafe fn clean_box(n: usize) -> *mut CleanObj { clean_runtime::native::box_val(n) }
 #[inline] pub unsafe fn clean_unbox(o: *mut CleanObj) -> usize { clean_runtime::native::unbox_val(o as *const CleanObj) }
 #[inline] pub unsafe fn clean_inc(o: *mut CleanObj) { clean_runtime::native::inc(o) }
-#[inline] pub unsafe fn clean_inc_n(o: *mut CleanObj, n: u32) { clean_runtime::native::inc_n(o, n) }
+#[inline] pub unsafe fn clean_inc_n(o: *mut CleanObj, n: usize) { clean_runtime::native::inc_n(o, n) }
 #[inline] pub unsafe fn clean_dec(o: *mut CleanObj) { clean_runtime::native::dec(o) }
-#[inline] pub unsafe fn clean_obj_tag(o: *const CleanObj) -> u8 { clean_runtime::native::obj_tag(o) }
+#[inline] pub unsafe fn clean_obj_tag(o: *const CleanObj) -> u32 { clean_runtime::native::obj_tag(o) }
 
 // -- Constructor field access (object fields) --
 #[inline] pub unsafe fn clean_ctor_get(o: *const CleanObj, idx: usize) -> *mut CleanObj { clean_runtime::native::ctor_get(o, idx) }

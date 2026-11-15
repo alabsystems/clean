@@ -1,0 +1,5 @@
+(assume a0 (exists ((|false| Bool)) |false|))
+(step t1 (cl (= (exists ((|false| Bool)) |false|) false)) :rule evaluate)
+(step t2 (cl (not (= (exists ((|false| Bool)) |false|) false)) (not (exists ((|false| Bool)) |false|)) false) :rule equiv_pos2)
+(step t3 (cl (not false)) :rule false)
+(step t4 (cl) :rule resolution :premises (t2 t1 a0 t3))

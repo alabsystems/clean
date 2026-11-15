@@ -39,6 +39,37 @@ use crate::level::Level;
 use crate::name::Name;
 
 impl Environment {
+    /// Register the whole `ite` simplification surface: `eq_self`, `ite_true`,
+    /// `ite_false`, `if_pos`, `if_neg`.
+    ///
+    /// `init_ite` gives an environment the `ite` CONSTANT; it does not give simp
+    /// the lemmas that let it step through one. Without `eq_self` a rewritten
+    /// condition `n = n` never becomes `True`, so `if_pos` cannot fire and simp
+    /// descends into the `Decidable` instance instead of taking the branch —
+    /// which, for a DEPENDENT constructor like `Decidable.isTrue`, is where the
+    /// congruence descent gets stuck. `init_prelude_extended` registers both
+    /// halves together for that reason; this is the same pair for an
+    /// environment assembled piecewise.
+    ///
+    /// Idempotent; axiom-free beyond `propext` (FOUNDATIONAL) for `eq_self`.
+    pub fn init_simp_ite_lemmas(&mut self) -> Result<(), EnvError> {
+        self.register_simp_ite_eq_lemmas()?;
+        self.register_ite_pos_neg_lemmas()?;
+        Ok(())
+    }
+
+    /// Register Lean 4.8 core's `@[simp]` logic lemmas the builtin prelude
+    /// carries beside the `ite` pair (`imp_false`, `not_false_eq_true`,
+    /// `not_true_eq_false`, `Decidable.not_not`, `ite_eq_left_iff`,
+    /// `ite_eq_right_iff`, `forall_congr`; decision R50) — for an environment
+    /// assembled piecewise, as [`Self::init_simp_ite_lemmas`] is. Without them
+    /// a bare `simp` that rewrites `C₁ = C₂` to `False` (Lean's `simpCtorEq`,
+    /// which runs on every call) stops at `False → False` instead of closing
+    /// it. Idempotent.
+    pub fn init_simp_logic_lemmas(&mut self) -> Result<(), EnvError> {
+        self.register_simp_logic_iff_lemmas()
+    }
+
     /// Register `eq_self`, `ite_true`, `ite_false`. Idempotent; axiom-free
     /// beyond `propext` (FOUNDATIONAL) for `eq_self`.
     pub(crate) fn register_simp_ite_eq_lemmas(&mut self) -> Result<(), EnvError> {

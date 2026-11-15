@@ -174,7 +174,7 @@ pub enum BvComputeBlastError {
 }
 
 /// Outcome of a successful solver-backed computational reconstruction.
-pub struct BvComputeBlastReconstruction {
+pub(crate) struct BvComputeBlastReconstruction {
     /// Kernel proof term of type `False` (open in the negated-goal FVar).
     pub proof_term: Expr,
     /// FVarId of the negated-goal hypothesis `h : Not (bvEq lhs rhs)`.
@@ -1307,7 +1307,7 @@ pub(crate) fn reconstruct_bv_compute_blast_with_context(
 
 /// Build the kernel `Clean.BV4` application `bvAdd x y` (or `bvSub`) from operand
 /// refs (width-4 convenience; equivalent to [`bv_binop`] at width 4).
-pub fn bv4_binop(
+pub(crate) fn bv4_binop(
     op: ay_proof::bv_blast_export::BvOp,
     args: [OperandRef; 2],
     a: &Expr,

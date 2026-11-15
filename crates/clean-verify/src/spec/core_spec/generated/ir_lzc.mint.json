@@ -1,0 +1,70 @@
+{
+ "prefix": "ir_lzc",
+ "body": "level::Level::is_zero",
+ "second_body": "<level::LevelArc as std::ops::Deref>::deref",
+ "role": "PHASE A OF RETIRING THE AUTHORED DEREF. `ir_lz` projects `level::Level::is_zero` ALONE, so its module calls `<LevelArc as Deref>::deref` at canonical 1 and does not define it, and the A4 sentence over that module is REFUTED (`ir_lz_minted_refutes_a4_on_max`). What stands in for the deref today is the AUTHORED model `ir_lzb_deref` (eval_ir_lzb.rs) -- the chain's residual, and the thing this chain begins to retire. `ir_lzc` projects the deref's REAL body beside the root from the SAME dump, so the module holds two functions and the call resolves; what moves is WHERE `ir_call_exec` goes stuck -- one call deeper, at the deref's own `call 2` into `std::option::Option::<T>::as_deref`, which the crate artifact carries as a DECLARATION with no body. A4 IS NOT CLAIMED over this module and no theorem here asserts it: the two declarations are exactly what Phase B derives through the callee sidecar. This record is the mint's half; the specification's is eval_ir_lzc.rs (S9).",
+ "core_digest": "eb35bd4baf91ef923e10b5c3d8764a6a48a265ec69172a30531295a10d9d8f72",
+ "defs_digest": "1a69c74f026395783b19340c575ad1bab8ceac092bb9b5eaa2edd4db2853269f",
+ "def_count": 16,
+ "def_count_note": "ONE alias (ir_lzc_tlevel, enum.2 -- a NEW name for the SAME crate id ir_lz_tlevel pins, so the two chains register side by side), then the FIRST NON-EMPTY GLOBAL LINE the mint has ever produced (ir_lzc_g0), then the root's ten blocks and its func, then the deref's one block and its func under the tag table's `ir_lad` prefix, then the module. The globals line lands between the aliases and the first block because a block may take a global's address and the module line names every global; a chain with no global emits no line there and keeps the literal `(IRList.nil IRGlobal)`, which every earlier chain's M3 asserts byte for byte.",
+ "artifact_core_digest": "a26abb83a1a294e8622b9ddb0c81658c8d0ba73a363697997d82455feb009671",
+ "artifact_core_digest_note": "Reader A's OWN digest of the projection, printed by scripts/crystal_a2_project and taken over the domain-separated `clean.ir_mint.core.v1` prefix. `core_digest` above is ir_mint::digest of the same text under this crate's domain, which is a different constant; the two are recorded side by side rather than reconciled, because a reader that could not disagree with itself is not a second reader.",
+ "reader_a": {
+  "dump": "$SCRATCH/crystal-work/dump_A/clean_kernel.trust-ir.bin",
+  "dump_sha256": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+  "dump_note": "RE-PROJECTED 2026-10-07 at the source-bound rebaseline (clean 047ebd051, trustc 321aaeda7): the binary is the one every 2026-10-07 fixture's `current_source_bound_pin` names (sha256 052660686e21...83b3b; byte-identical to the dump at 612be4626), projected by the same committed reader A with the same command. Core digest, core text and every interface fact are unchanged; the crate ids moved (3905/3894/7211/6516 -> 1961/1947/4924/4925, global 4557 -> 1135) and the producer now spells the two DECLARATIONS as collision-disambiguated `!trust_bodyless_instance::<def-path>::<definition>-<hex(key)>` names, because this artifact carries three `as_deref` instances. The tag table keeps the def path (`sidecar_join.callee_def_path`); M7 recovers it exactly. PREVIOUSLY: The SAME binary as target/crystal-lane/dump-control/clean_kernel.trust-ir.bin, measured: `shasum -a 256` on that path prints ce4ac168…c9cfc40bd, which is the sha256 generated/ir_lz.b039.prov.json already records for the laneROT path. It is also the binary data/crystal_revalidation_at_head_2026-09-09_lane18r.json proved its rebuilt producer BY: that record's `control.clean_kernel.trust-ir.bin` reproduces ce4ac168…c9cfc40bd byte for byte from a producer rebuilt at trust c4e667ca51, which is what makes this dump's producer a NAMED one rather than a path on a box.",
+  "command": "a2project <dump> 'level::Level::is_zero' <out> ir_lzc --with '<level::LevelArc as std::ops::Deref>::deref'",
+  "command_note": "`--with` projects an ADDITIONAL function into the same core module under ONE interning namespace, root first -- the flag `has_loose_bvars` introduced, used here for the second time. It is what makes the root's `(call 1 …)` and the deref's `(func 1 …)` the same numeral BY CONSTRUCTION.",
+  "rebuilt_from_the_committed_reader": "MEASURED 2026-09-10, not inherited. `cargo build --locked --release --manifest-path scripts/crystal_a2_project/Cargo.toml` (the COMMITTED reader A and its committed standalone lock, trust-ir rev 4803c40d) rebuilt the binary, and the command above over the dump named here reproduced generated/ir_lzc.core.txt AND generated/ir_lzc.core.prov.json BYTE-IDENTICAL, printing a26abb83…b009671 as its own digest. The scratchpad copy of a2project that first measured this chain is therefore not what the committed artifacts rest on; the committed reader is.",
+  "chain_functions": [
+   {
+    "module_index": 0,
+    "canonical": 0,
+    "name": "level::Level::is_zero",
+    "artifact_func_id": 1961,
+    "artifact_functy_id": 0,
+    "linkage": "external",
+    "calling_conv": "rustcc"
+   },
+   {
+    "module_index": 1,
+    "canonical": 1,
+    "name": "<level::LevelArc as std::ops::Deref>::deref",
+    "artifact_func_id": 1947,
+    "artifact_functy_id": 22,
+    "linkage": "external",
+    "calling_conv": "rustcc"
+   }
+  ],
+  "artifact_producer": "trust",
+  "crate_enum_ids_seen": [3],
+  "crate_struct_ids_seen": [],
+  "crate_func_ids_seen": [1961, 1947, 4924, 4925],
+  "crate_func_names_seen": [
+   "level::Level::is_zero",
+   "<level::LevelArc as std::ops::Deref>::deref",
+   "!trust_bodyless_instance::std::option::Option::<T>::as_deref::d9e4897297e644f6566e272e35e17dd6-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a61735f64657265667c636f6e63726574652d76313a303164396534383937323937653634346636353636653237326533356531376464363030303030303030303030303030303030313031303632336666396337366237383262646432306637313231393931393035333534303030303030303030303030303030303230363639616532653730653932363366313839383465333634663334303761396261303030303030303030303030303030303036323366663963373662373832626464326439626366393830626436666136343230303030303030303030303030303030",
+   "!trust_bodyless_instance::std::option::Option::<T>::expect::d9e4897297e644f615ad4b2e39f5688b-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a6578706563747c636f6e63726574652d76313a303164396534383937323937653634346636313561643462326533396635363838623030303030303030303030303030303030313031306130303036363961653265373065393236336631383938346533363466333430376139626130303030303030303030303030303030"
+  ],
+  "crate_global_ids_seen": [1135],
+  "crate_global_names_seen": ["__trust_promoted_1135"],
+  "global_tys_erased": ["[ty.0 x 34]"],
+  "global_tys_resolved": ["[u8 x 34]"],
+  "global_tys_note": "`global_tys_erased` is the RAW token the module table prints, recorded and never compared, because `ty.0` is a whole-crate type-table index that renumbers like every other crate-level id. `global_tys_resolved` is reader A resolving that index through the BINARY's own type table -- its independent knowledge of the element type -- and M7 compares it against the tag table's pin (`globals[0].ty`, `[u8 x 34]`), which reader B reaches by a different route entirely: the `type ty.0 = u8` row of the committed module-table preamble fixture. The element width is therefore a TWO-READER fact rather than a single-witness one.",
+  "global_linkages_erased": ["internal"],
+  "global_flags_refused": ["mutable", "tls", "align"],
+  "global_flags_refused_note": "`IRGlobal.mk : Nat -> IRConst -> IRGlobal` has no slot for thread-local storage, mutability or alignment, and trust-ir's `Display for Module` prints each only when set. BOTH readers refuse a global carrying one BY NAME -- reader A in its globals walk (scripts/crystal_a2_project/src/main.rs), reader B in `emitted_globals::global_row` -- so a `mut` global cannot reach a core module through either, rather than projecting to the same bytes as an immutable one.",
+  "type_table_resolved": ["ty.0=u8"],
+  "aligns_erased": ["load:None"],
+  "param_tys_erased": ["Ptr", "Ptr"],
+  "block_param_tys_erased": ["bb6:Bool", "bb9:Bool"]
+ },
+ "text_unwitnessed": [
+  "bb0#2 switch arg4"
+ ],
+ "text_unwitnessed_note": "ONE slot, and it is the ROOT's -- the same one ir_lz's record carries, because function 0 of this chain IS that projection: the entry block's switch carries `exhaustive_enum_unreachable`, which trust-ir's Display never prints, and reader A reads it as FALSE. The DEREF body adds none: it carries no switch, so every one of its six instructions is fully witnessed by the emitted text and M2 compares them exactly.",
+ "producer_dumps_observed": 1,
+ "producer_dumps_note": "ONE dump, stated as one and NOT inherited from ir_lz. `ir_lz`'s record says two (a152 and b039); this chain was projected from the b039 binary only, and the second projection ir_lz has is of function 0 ALONE -- it says nothing about the deref body, the global, or the two functions sharing one interning namespace, which are exactly what is new here. A second independent dump is a later measurement, not a precondition. What IS established across producers is the root: function 0 of generated/ir_lzc.core.txt is BYTE-IDENTICAL to the `(func 0 …)` block of generated/ir_lz.core.txt (asserted by crystal_a2_mint_lzc.rs::m1), and that block carries ir_lz's two-dump record.",
+ "declarations_note": "CANONICAL 2 AND 3 ARE DECLARATIONS, NOT BODIES. `std::option::Option::<T>::as_deref` (crate id 7211, functy.900, dump-control:120627) and `std::option::Option::<T>::expect` (crate id 6516, functy.896, dump-control:117847) are printed by the crate artifact as three lines -- `rustcc fn @<name>(functy.N) {`, `    ; #producer: trust`, `}` -- a header and one annotation clause with ZERO instructions, the generic-decl path. The module therefore defines two functions and NAMES four, and `ir_call_exec` goes `stuck no_func` at the deref's `call 2`. The crate artifact holds a SECOND declaration named `std::option::Option::<T>::as_deref` at dump-control:118003 under functy.947, so NAME ALONE does not identify the callee: the Phase-B join matches a sidecar body against crate_id AND functy (7211/900, 6516/896), and the `sidecar_join` key in the tag table's funcs rows (`caller` + `callee_def_path`) only locates the manifest row. Phase B is what gives these two bodies; Phase A pins their identity so that it can.",
+ "a4_note": "NOT CLAIMED. The A4 statement is about the deployed kernel's `Level::is_zero` executing to a value; this module still halts stuck one call deeper than ir_lz's does. Nothing in this record, in generated/ir_lzc.defs.txt, or in the specification registered from it asserts A4 or A5 over `ir_lzc_module`. The chain's proved content in Phase A is representation equality with the artifact (M1-M3, M7, M8, M10) plus, with S9, the replay of the mint and the `Eq.refl` tying function 0 to the frozen `ir_lz_func`."
+}

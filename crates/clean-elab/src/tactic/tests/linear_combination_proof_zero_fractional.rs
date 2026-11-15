@@ -36,20 +36,23 @@ fn setup_nat_transitivity_goal_with_unused_refl_hyp() -> ProofState {
         make_eq(nat.clone(), nat_var("a"), nat_var("c")),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(nat.clone(), nat_var("a"), nat_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(nat.clone(), nat_var("b"), nat_var("c")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h3".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: make_eq(nat, nat_var("c"), nat_var("c")),
                 value: None,
             },
@@ -77,20 +80,23 @@ fn setup_int_transitivity_goal_with_unused_refl_hyp() -> ProofState {
         make_eq(int.clone(), int_var("a"), int_var("c")),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(int.clone(), int_var("a"), int_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(int.clone(), int_var("b"), int_var("c")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h3".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: make_eq(int, int_var("c"), int_var("c")),
                 value: None,
             },
@@ -105,9 +111,9 @@ fn test_linear_combination_tactic_nat_zero_fractional_coeff_keeps_cancellation_b
     linear_combination(
         &mut state,
         vec![
-            LinearCoeff::one("h1"),
-            LinearCoeff::one("h2"),
-            LinearCoeff::new("h3", 0, 2),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h3"), 0, 2),
         ],
     )
     .expect("zero-valued fractional Nat coeff should not block cancellation recovery");
@@ -134,9 +140,9 @@ fn test_linear_combination_tactic_int_zero_fractional_coeff_keeps_cancellation_b
     linear_combination(
         &mut state,
         vec![
-            LinearCoeff::one("h1"),
-            LinearCoeff::one("h2"),
-            LinearCoeff::new("h3", 0, 2),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h3"), 0, 2),
         ],
     )
     .expect("zero-valued fractional Int coeff should not block cancellation recovery");

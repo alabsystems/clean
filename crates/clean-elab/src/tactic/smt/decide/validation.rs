@@ -40,7 +40,7 @@ pub(in crate::tactic::smt) fn validate_proof_term(
 
     // Try to infer the type of the proof
     let inferred_type = tc.infer_type(&instantiated_proof).map_err(|e| {
-        TacticError::TypeCheckFailed(format!("proof term failed type inference: {e:?}"))
+        TacticError::TypeCheckFailed(format!("proof term failed type inference: {e}"))
     })?;
     // `infer_type` runs infer-only (application arguments are NOT checked
     // against binder domains), so an ill-typed bridge term such as
@@ -49,7 +49,7 @@ pub(in crate::tactic::smt) fn validate_proof_term(
     // argument is validated before the term can close a goal.
     tc.check_type(&instantiated_proof, &inferred_type)
         .map_err(|e| {
-            TacticError::TypeCheckFailed(format!("proof term failed full kernel check: {e:?}"))
+            TacticError::TypeCheckFailed(format!("proof term failed full kernel check: {e}"))
         })?;
 
     // Normalize both sides through typeclass projections before comparing.

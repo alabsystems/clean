@@ -41,7 +41,7 @@ use super::{match_equality, TacticError};
 /// Records the navigation path at the time of the rewrite, plus the
 /// before/after expressions and the proof that `before = after`.
 #[derive(Debug, Clone)]
-pub struct ConvRewrite {
+pub(crate) struct ConvRewrite {
     /// Navigation path at the time of the rewrite
     // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
     // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
@@ -65,7 +65,7 @@ pub struct ConvRewrite {
 /// the Lean 4 conv DSL (`lhs`, `rhs`, `arg N`, `ext x`, `enter`).
 /// Tracks all rewrites applied during the session so callers can build
 /// composite congruence proofs.
-pub struct DeepConvState {
+pub(crate) struct DeepConvState {
     /// Inner conv state (handles position tracking and expression replacement)
     inner: ConvState,
     /// History of rewrites applied during this conv session
@@ -86,7 +86,7 @@ impl DeepConvState {
     /// no rewrites have been applied
     ///
     /// ENSURES: on Err, `goal` is not a well-formed equality
-    pub fn new(goal: &Expr) -> Result<Self, TacticError> {
+    pub(crate) fn new(goal: &Expr) -> Result<Self, TacticError> {
         // Validate that this is an equality
         let _eq = match_equality(goal)?;
         Ok(DeepConvState {
@@ -100,7 +100,7 @@ impl DeepConvState {
     /// an equality). Use this when navigating within a non-equality context.
     ///
     /// ENSURES: `current_expr()` returns `expr`, navigation depth is 0
-    pub fn new_unchecked(expr: Expr) -> Self {
+    pub(crate) fn new_unchecked(expr: Expr) -> Self {
         DeepConvState {
             inner: ConvState::new(expr),
             rewrites: Vec::new(),
@@ -115,7 +115,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is an equality expression
     ///
     /// ENSURES: on Ok, focus is the LHS of the equality; on Err, state unchanged
-    pub fn enter_lhs(&mut self) -> Result<(), TacticError> {
+    pub(crate) fn enter_lhs(&mut self) -> Result<(), TacticError> {
         self.inner.go(ConvPosition::EqLhs)
     }
 
@@ -126,7 +126,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is an equality expression
     ///
     /// ENSURES: on Ok, focus is the RHS of the equality; on Err, state unchanged
-    pub fn enter_rhs(&mut self) -> Result<(), TacticError> {
+    pub(crate) fn enter_rhs(&mut self) -> Result<(), TacticError> {
         self.inner.go(ConvPosition::EqRhs)
     }
 
@@ -140,7 +140,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is an application with at least `n + 1` arguments
     ///
     /// ENSURES: on Ok, focus is the nth argument; on Err, state unchanged
-    pub fn enter_arg(&mut self, n: usize) -> Result<(), TacticError> {
+    pub(crate) fn enter_arg(&mut self, n: usize) -> Result<(), TacticError> {
         // Compute arg count and steps_down before mutating self.inner
         let (_total_args, steps_down) = {
             let args = self.inner.focus.get_app_args();
@@ -173,7 +173,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is an application
     ///
     /// ENSURES: on Ok, focus is the function head; on Err, state unchanged
-    pub fn enter_fun(&mut self) -> Result<(), TacticError> {
+    pub(crate) fn enter_fun(&mut self) -> Result<(), TacticError> {
         self.inner.go(ConvPosition::AppFn)
     }
 
@@ -185,7 +185,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is a Lambda or Pi expression
     ///
     /// ENSURES: on Ok, focus is the binder body; on Err, state unchanged
-    pub fn ext(&mut self, name: &str) -> Result<(), TacticError> {
+    pub(crate) fn ext(&mut self, name: &str) -> Result<(), TacticError> {
         match self.inner.focus.kind() {
             ExprKind::Lam(_, _, _) | ExprKind::Pi(_, _, _) => {
                 self.ext_vars.push(name.to_string());
@@ -208,7 +208,7 @@ impl DeepConvState {
     ///
     /// ENSURES: on Ok, focus is `new_expr` and the rewrite is recorded;
     /// on Err(NoProgress), `new_expr` equals current focus (no change)
-    pub fn apply_rewrite(&mut self, new_expr: Expr, proof: Expr) -> Result<(), TacticError> {
+    pub(crate) fn apply_rewrite(&mut self, new_expr: Expr, proof: Expr) -> Result<(), TacticError> {
         let before = self.inner.focus.clone();
         if before == new_expr {
             return Err(TacticError::no_progress("conv apply_rewrite"));
@@ -225,36 +225,36 @@ impl DeepConvState {
     }
 
     /// Get a reference to the current focused expression.
-    pub fn current_expr(&self) -> &Expr {
+    pub(crate) fn current_expr(&self) -> &Expr {
         &self.inner.focus
     }
 
     /// Get the current navigation depth (number of position steps from root).
     #[must_use]
-    pub fn depth(&self) -> usize {
+    pub(crate) fn depth(&self) -> usize {
         self.inner.path.len()
     }
 
     /// Get the current navigation path.
     #[must_use]
-    pub fn path(&self) -> &ConvPath {
+    pub(crate) fn path(&self) -> &ConvPath {
         &self.inner.path
     }
 
     /// Get the list of rewrites applied so far.
     #[must_use]
-    pub fn rewrites(&self) -> &[ConvRewrite] {
+    pub(crate) fn rewrites(&self) -> &[ConvRewrite] {
         &self.rewrites
     }
 
     /// Get the bound variable names introduced via `ext`.
     #[must_use]
-    pub fn ext_vars(&self) -> &[String] {
+    pub(crate) fn ext_vars(&self) -> &[String] {
         &self.ext_vars
     }
 
     /// Get a reference to the original (root) expression.
-    pub fn original(&self) -> &Expr {
+    pub(crate) fn original(&self) -> &Expr {
         &self.inner.original
     }
 
@@ -264,7 +264,7 @@ impl DeepConvState {
     /// ENSURES: the returned expression is the original with all focused
     /// rewrites applied at their respective positions. The rewrite list
     /// can be used to build composite congruence proofs.
-    pub fn close(self) -> (Expr, Vec<ConvRewrite>) {
+    pub(crate) fn close(self) -> (Expr, Vec<ConvRewrite>) {
         let result = self.inner.finish();
         (result, self.rewrites)
     }
@@ -276,7 +276,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is a Lambda or Pi expression
     ///
     /// ENSURES: on Ok, focus is the binder type; on Err, state unchanged
-    pub fn enter_binder_type(&mut self) -> Result<(), TacticError> {
+    pub(crate) fn enter_binder_type(&mut self) -> Result<(), TacticError> {
         match self.inner.focus.kind() {
             ExprKind::Lam(_, _, _) | ExprKind::Pi(_, _, _) => {
                 self.inner.go(ConvPosition::BinderType)
@@ -295,7 +295,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is a Let expression
     ///
     /// ENSURES: on Ok, focus is the let value; on Err, state unchanged
-    pub fn enter_let_value(&mut self) -> Result<(), TacticError> {
+    pub(crate) fn enter_let_value(&mut self) -> Result<(), TacticError> {
         match self.inner.focus.kind() {
             ExprKind::Let(_, _, _, _, _) => self.inner.go(ConvPosition::LetValue),
             _ => Err(TacticError::InvalidTarget {
@@ -312,7 +312,7 @@ impl DeepConvState {
     /// REQUIRES: current focus is a Let expression
     ///
     /// ENSURES: on Ok, focus is the let body; on Err, state unchanged
-    pub fn enter_let_body(&mut self) -> Result<(), TacticError> {
+    pub(crate) fn enter_let_body(&mut self) -> Result<(), TacticError> {
         match self.inner.focus.kind() {
             ExprKind::Let(_, _, _, _, _) => self.inner.go(ConvPosition::LetBody),
             _ => Err(TacticError::InvalidTarget {

@@ -820,15 +820,22 @@ fn test_char_mk_from_scalar_carrier_is_alias() {
         false,
     );
     let ir = lower_decl_with_env_ok(&decl, &HashMap::new(), &char_mk_ctor_env(), &HashMap::new());
-    // The construction emits nothing: the body is a direct return of the
-    // carrier param's own VarId.
+    // The construction emits no instruction of its own: the body returns the
+    // carrier param's own VarId. The one statement before it is the release
+    // of the OTHER operand the constructor would have stored (`valid`, typed
+    // `Nat` here so it is a runtime object): LCNF RC balanced it for being
+    // consumed by `Char.mk`, and the alias no longer consumes it (WS6.2).
     let param_var = ir.params[0].0;
+    let valid_var = ir.params[1].0;
     match &ir.body {
-        IRBody::Ret(IRArg::Var(v)) => assert_eq!(
-            *v, param_var,
-            "Char.mk over a UInt32 carrier must alias the carrier value"
-        ),
-        other => panic!("expected bare Ret of the carrier var, got {other:?}"),
+        IRBody::Dec { var, rest } if *var == valid_var => match rest.as_ref() {
+            IRBody::Ret(IRArg::Var(v)) => assert_eq!(
+                *v, param_var,
+                "Char.mk over a UInt32 carrier must alias the carrier value"
+            ),
+            other => panic!("expected a Ret of the carrier var, got {other:?}"),
+        },
+        other => panic!("expected `dec valid; ret carrier`, got {other:?}"),
     }
 }
 
@@ -1652,6 +1659,46 @@ fn test_erased_fvar_returns_error() {
     );
 }
 
+// A ZERO-argument `LetValue::FVar` is a pure alias (`let y := x; y`) — the
+// shape `to_lcnf::expr_to_let_value` mints for a bare variable in value
+// position since 2026-09-15. It must lower to NO instruction, the alias
+// resolving to the source's own `VarId`: never to a `ClosureApply` with no
+// arguments, which was correct only through `clean_apply_0`'s runtime identity
+// on a non-closure and would have handed an unboxed scalar source to it as a
+// `clean_obj*`.
+#[test]
+fn test_zero_arg_fvar_let_is_a_pure_alias() {
+    let decl = Decl::new(
+        name("alias"),
+        vec![],
+        nat_type(),
+        vec![Param::new(fvar(0), name("x"), nat_type())],
+        Code::let_bind(
+            LetDecl::new(
+                fvar(1),
+                name("y"),
+                nat_type(),
+                LetValue::FVar {
+                    fvar: fvar(0),
+                    args: vec![],
+                },
+            ),
+            Code::ret(fvar(1)),
+        ),
+        false,
+    );
+
+    let ir = lower_decl_ok(&decl);
+    match &ir.body {
+        IRBody::Ret(IRArg::Var(returned)) => assert_eq!(
+            *returned,
+            VarId(0),
+            "the alias must return the SOURCE parameter's own VarId, emitting nothing"
+        ),
+        other => panic!("expected a bare `Ret` of the aliased parameter, got {other:?}"),
+    }
+}
+
 // Part of #1936 - Multi-arg FVar application (proof_coverage)
 #[test]
 fn test_fvar_multi_arg_closure_apply() {
@@ -2131,19 +2178,20 @@ fn test_ctor_all_scalar_no_objects() {
 
 // Proof_coverage: Ctor with erased (proof) arg preceding scalar field.
 //
-// When L5CNF Ctor args include Arg::Erased (proof term) before a scalar
-// field, lower_ctor_args filters the Erased arg but field_types retains
-// the proof field's type (IRType::Object). align_ctor_field_types filters
-// field_types to match non-erased args, so partition_ctor_fields correctly
-// identifies the UInt64 value as scalar and generates an SSet.
-//
-// This test verifies correct behavior when a proof field comes before
-// a scalar field. The test models:
+// The erased proof KEEPS its declared object slot (filled with a boxed unit)
+// and the UInt64 lands in the scalar area after that one object slot, so
+// partition_ctor_fields still pairs every value with its own field type and
+// generates an SSet. The layout is the DECLARED one, because that is the one
+// every reader computes: a projection of `data` goes through
+// `compute_proj_expr` over the declared `[Object, UInt64]`, i.e. scalar area
+// after ONE object. Until 2026-09-25 the producer dropped the proof slot here
+// (field_types [UInt64], zero objects), so the object it built and the offset
+// its readers used disagreed; the same drop made `((PUnit.unit, 5)).2` print
+// `1` at exit 0 through `clean run` (pinned Lean: `5`).
 //   structure ProofFirst where (proof : Prop_val) (data : UInt64)
 //   field_types = [Object, UInt64], args = [Erased, FVar(data)]
-//   After alignment: field_types = [UInt64], args = [Var(data)]
-//   Result: Ctor has 0 object args, SSet generated for UInt64 scalar.
-// Fix: Part of #2123 (Bug 1).
+//   Result: Ctor carries the erased object slot, SSet for the UInt64 scalar.
+// Fix: Part of #2123 (Bug 1); slot kept by P0_EXEC.
 #[test]
 fn test_ctor_erased_before_scalar_misalignment() {
     let mut ctor_env = HashMap::new();
@@ -2192,15 +2240,16 @@ fn test_ctor_erased_before_scalar_misalignment() {
         } => {
             match value {
                 IRExpr::Ctor { info, args } => {
-                    // After alignment, field_types excludes the erased proof field.
-                    assert_eq!(info.field_types, vec![IRType::UInt64]);
+                    // The erased proof keeps its declared object slot.
+                    assert_eq!(info.field_types, vec![IRType::Object, IRType::UInt64]);
                     assert_eq!(info.num_scalars, 1);
-                    assert_eq!(info.num_objects, 0);
-                    // No object args — the UInt64 value is split into SSet.
+                    assert_eq!(info.num_objects, 1);
+                    // The one object arg is the erased proof's boxed unit; the
+                    // UInt64 value is split into SSet.
                     assert_eq!(
-                        args.len(),
-                        0,
-                        "UInt64 data should be extracted as scalar, not kept as object arg"
+                        args,
+                        &vec![IRArg::Erased],
+                        "the erased proof fills its object slot; UInt64 data is an SSet"
                     );
                 }
                 other => panic!("Expected Ctor, got {:?}", other),

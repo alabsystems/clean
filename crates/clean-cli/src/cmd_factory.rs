@@ -244,7 +244,7 @@ and route proof work through trust-visible Lean tooling.",
                 why: "validate the next candidate in a clean worktree, optionally run verification, and fast-forward with compare-and-swap",
             },
             GuideCommand {
-                cmd: "clean auto premise --goal '<goal>' --top-k 20",
+                cmd: "clean auto premise --goal '<goal>' --limit 20",
                 why: "current lightweight theorem-search path for goal-shaped premise shortlists",
             },
             GuideCommand {
@@ -688,13 +688,19 @@ fn ay_remote_main() -> Result<String, String> {
     Ok(revision)
 }
 
+/// The Trust toolchain (owner directive 2026-09-28): `trustc`, and `targo`
+/// probed with `--unverified --version`, the flag upstream cargo installed
+/// under the name `targo` rejects.
 fn check_local_toolchain() -> HealthCheck {
-    local_toolchain_check_from_versions(command_version("rustc"), command_version("cargo"))
+    local_toolchain_check_from_versions(
+        command_version("trustc", &["--version"]),
+        command_version("targo", &["--unverified", "--version"]),
+    )
 }
 
-fn command_version(program: &str) -> Result<String, String> {
+fn command_version(program: &str, args: &[&str]) -> Result<String, String> {
     let output = Command::new(program)
-        .arg("--version")
+        .args(args)
         .output()
         .map_err(|error| format!("{program} not available: {error}"))?;
 
@@ -706,33 +712,34 @@ fn command_version(program: &str) -> Result<String, String> {
     .trim()
     .to_owned();
 
+    let invocation = format!("{program} {}", args.join(" "));
     if output.status.success() {
         if text.is_empty() {
-            Ok(format!("{program} --version returned no output"))
+            Ok(format!("{invocation} returned no output"))
         } else {
             Ok(text)
         }
     } else if text.is_empty() {
-        Err(format!("{program} --version exited with {}", output.status))
+        Err(format!("{invocation} exited with {}", output.status))
     } else {
         Err(text)
     }
 }
 
 fn local_toolchain_check_from_versions(
-    rustc: Result<String, String>,
-    cargo: Result<String, String>,
+    trustc: Result<String, String>,
+    targo: Result<String, String>,
 ) -> HealthCheck {
     let mut versions = Vec::new();
     let mut failures = Vec::new();
 
-    match rustc {
+    match trustc {
         Ok(version) => versions.push(version),
-        Err(message) => failures.push(format!("rustc --version failed: {message}")),
+        Err(message) => failures.push(format!("trustc --version failed: {message}")),
     }
-    match cargo {
+    match targo {
         Ok(version) => versions.push(version),
-        Err(message) => failures.push(format!("cargo --version failed: {message}")),
+        Err(message) => failures.push(format!("targo --unverified --version failed: {message}")),
     }
 
     if failures.is_empty() {
@@ -1530,30 +1537,32 @@ mod tests {
     }
 
     #[test]
-    fn local_toolchain_passes_when_rustc_and_cargo_versions_are_available() {
+    fn local_toolchain_passes_when_trustc_and_targo_versions_are_available() {
         let check = local_toolchain_check_from_versions(
-            Ok("rustc 1.93.0".to_owned()),
-            Ok("cargo 1.93.0".to_owned()),
+            Ok("rustc 1.99.0-dev (321aaeda7 2026-09-17) (trustc 0.1.0)".to_owned()),
+            Ok("targo 1.99.0-dev (321aaeda7 2026-09-17) (targo 0.1.0)".to_owned()),
         );
 
         assert_eq!(check.status, CHECK_PASS);
         assert!(check.message.contains("local Rust toolchain available"));
-        assert!(check.message.contains("rustc 1.93.0"));
-        assert!(check.message.contains("cargo 1.93.0"));
+        assert!(check.message.contains("(trustc 0.1.0)"));
+        assert!(check.message.contains("(targo 0.1.0)"));
     }
 
     #[test]
-    fn local_toolchain_fails_closed_when_rustc_or_cargo_is_missing() {
+    fn local_toolchain_fails_closed_when_trustc_or_targo_is_missing() {
         let check = local_toolchain_check_from_versions(
-            Err("rustc not available".to_owned()),
-            Ok("cargo 1.93.0".to_owned()),
+            Err("trustc not available".to_owned()),
+            Ok("targo 1.99.0-dev (321aaeda7 2026-09-17) (targo 0.1.0)".to_owned()),
         );
 
         assert_eq!(check.status, CHECK_FAIL);
         assert!(check.message.contains("local Rust toolchain unavailable"));
-        assert!(check.message.contains("rustc --version failed"));
-        assert!(check.message.contains("rustc not available"));
-        assert!(!check.message.contains("cargo --version failed"));
+        assert!(check.message.contains("trustc --version failed"));
+        assert!(check.message.contains("trustc not available"));
+        assert!(!check
+            .message
+            .contains("targo --unverified --version failed"));
     }
 
     #[test]

@@ -55,6 +55,8 @@ mod or_pattern_surface;
 mod phase1_corpus_common;
 #[path = "integration/putnam_bench.rs"]
 mod putnam_bench;
+#[path = "integration/rcases_clear_surface.rs"]
+mod rcases_clear_surface;
 #[path = "integration/rcases_surface.rs"]
 mod rcases_surface;
 #[path = "integration/refine_holes_surface.rs"]
@@ -148,13 +150,20 @@ mod smt_api_surface {
         let source_path = compile_dir.join("snippet.rs");
         fs::write(&source_path, source).expect("snippet source should be writable");
 
-        // Compile with the same compiler Cargo used for this test binary.  A
-        // bare PATH lookup can select an unrelated stable rustc while Cargo is
-        // driving the pinned Trust toolchain, and that compiler cannot consume
-        // the test's rlib metadata.  Cargo exports RUSTC to test processes;
-        // retain a plain `rustc` fallback for direct/non-Cargo execution.
-        let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        // Compile with the same compiler Targo used for this test binary: an
+        // unrelated compiler cannot consume the test's rlib metadata. `RUSTC`
+        // when exported, else the `trustc` beside `$CARGO` (targo exports its
+        // own path), else `trustc` on PATH -- never a stock `rustc` (owner
+        // directive 2026-09-28). The snippet is a throwaway API-surface probe,
+        // not a verification target, so it opts out of Trust verification.
+        let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| {
+            std::env::var_os("CARGO")
+                .map(|cargo| PathBuf::from(cargo).with_file_name("trustc"))
+                .filter(|trustc| trustc.is_file())
+                .map_or_else(|| "trustc".into(), PathBuf::into_os_string)
+        });
         let output = Command::new(rustc)
+            .arg("-Ztrust-verify=off")
             .arg("--crate-type")
             .arg("lib")
             .arg("--edition")
@@ -169,7 +178,7 @@ mod smt_api_surface {
             .arg("-L")
             .arg(format!("dependency={}", deps_dir.display()))
             .output()
-            .expect("Cargo's rustc should be runnable from integration tests");
+            .expect("Targo's trustc should be runnable from integration tests");
 
         let _ = fs::remove_dir_all(&compile_dir);
         output

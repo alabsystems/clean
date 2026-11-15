@@ -17,14 +17,14 @@
 //! `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d0) IRConst.vnil))` spine
 //! where the hand line named `ir_cvar ir_d0`, and names its OWN
 //! `ir_fw_tflags` alias where the hand line borrowed the sibling chain's
-//! `ir_fc_tflags` (both delta to `IRTy.struct_ 1017`). `ir_fw_func` and
+//! `ir_fc_tflags` (both delta to `IRTy.struct_ 815`). `ir_fw_func` and
 //! `ir_fw_module` minted byte-identical; the `ir_fw_tflags` alias line is
 //! minted-only. NO semantic divergence.
 //!
 //! **What is new here relative to the nine earlier minted chains:**
 //!
 //! * The first minted chain whose STRUCT the module ITSELF names — the
-//!   template `const struct.1017 { 0 }` and the insertfield — so the tag
+//!   template `const struct.815 { 0 }` and the insertfield — so the tag
 //!   table's struct row is a REAL aggregate row (its sibling `contains` pins
 //!   the same crate entry interface-only), and M4 is the first read-back of a
 //!   struct alias out of a registered term.
@@ -36,8 +36,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -150,7 +149,7 @@ fn m3_mint_reproduces_the_registered_script() {
             .lines
             .first()
             .map(String::as_str),
-        Some("def ir_fw_tflags : IRTy := IRTy.struct_ 1017"),
+        Some("def ir_fw_tflags : IRTy := IRTy.struct_ 815"),
     );
     assert!(
         !ir_mint::IR_FW_DEFS.contains("ir_fc_tflags"),
@@ -184,16 +183,16 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("const struct.1017 { 0 }") && FIXTURE.contains("insertfield struct.1017"),
-        "the emitted body must still name struct.1017 in its instructions; if not, the artifact \
+        FIXTURE.contains("const struct.815 { 0 }") && FIXTURE.contains("insertfield struct.815"),
+        "the emitted body must still name struct.815 in its instructions; if not, the artifact \
          was re-interned and this table needs a one-line REVIEWED re-pin"
     );
     assert!(
-        FIXTURE.contains("bb0(%0: struct.1017, %1: struct.1017):"),
+        FIXTURE.contains("bb0(%0: struct.815, %1: struct.815):"),
         "and both parameters must still be the same struct"
     );
     assert!(
-        ir_mint::IR_FW_TAGS.contains("\"crate_id\": 1017"),
+        ir_mint::IR_FW_TAGS.contains("\"crate_id\": 815"),
         "and the committed table must record it"
     );
 }
@@ -231,17 +230,17 @@ fn m10_the_interface_pins_bite() {
     let t = tags();
     for (from, to, slot) in [
         (
-            "bb0(%0: struct.1017, %1: struct.1017):",
-            "bb0(%0: struct.1017, %1: struct.999):",
+            "bb0(%0: struct.815, %1: struct.815):",
+            "bb0(%0: struct.815, %1: struct.999):",
             "parameter",
         ),
         (
-            "bb0(%0: struct.1017, %1: struct.1017):",
-            "bb0(%0: u32, %1: struct.1017):",
+            "bb0(%0: struct.815, %1: struct.815):",
+            "bb0(%0: u32, %1: struct.815):",
             "parameter",
         ),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.489)", "(functy.490)", "signature index"),
+        ("(functy.460)", "(functy.461)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");

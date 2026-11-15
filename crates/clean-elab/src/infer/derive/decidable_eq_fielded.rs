@@ -63,12 +63,7 @@ impl<'a> ElabCtx<'a> {
         ind_type: &Expr,
         ctors: &[SurfaceCtor],
     ) -> Option<Expr> {
-        let short = ind_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let short = clean_parser::SurfaceName::from_name(ind_name.clone()).last_component();
 
         // Analyze every ctor; bail if any field is recursive or lacks a closed
         // `DecidableEq` instance. Ctors may carry any number of NON-recursive
@@ -93,7 +88,7 @@ impl<'a> ElabCtx<'a> {
         }
 
         let level_one = Level::succ(Level::zero());
-        let cases_on = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on = ind_name.clone().str("casesOn");
         let decidable = Expr::const_(Name::from_string("Decidable"), vec![]);
         let eq_const = Expr::const_(Name::from_string("Eq"), vec![level_one.clone()]);
 
@@ -139,7 +134,7 @@ impl<'a> ElabCtx<'a> {
     fn analyze_fielded_ctor(
         &mut self,
         ind_name: &Name,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         ctor: &SurfaceCtor,
     ) -> Option<FieldedCtor> {
@@ -152,7 +147,9 @@ impl<'a> ElabCtx<'a> {
         // constant and the whole instance fails the kernel check. Use the full
         // `ind_name`; `short` stays only for surface-type recursion detection.
         Some(FieldedCtor {
-            name: Name::from_string(&format!("{ind_name}.{}", ctor.name)),
+            name: clean_parser::SurfaceName::from_name(ind_name.clone())
+                .append(&ctor.name)
+                .into_name(),
             fields,
         })
     }
@@ -161,7 +158,7 @@ impl<'a> ElabCtx<'a> {
     /// resolve a closed `DecidableEq` instance.
     fn collect_decidable_fields(
         &mut self,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         surf: &SurfaceExpr,
         out: &mut Vec<(Expr, Expr)>,
@@ -193,7 +190,7 @@ impl<'a> ElabCtx<'a> {
     /// `None` if recursive / unresolved.
     fn field_decidable(
         &mut self,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         ty: &SurfaceExpr,
     ) -> Option<(Expr, Expr)> {
@@ -289,7 +286,7 @@ impl<'a> ElabCtx<'a> {
         fc_b: &FieldedCtor,
         a_applied: &Expr,
     ) -> Expr {
-        let no_conf = Name::from_string(&format!("{ind_name}.noConfusion"));
+        let no_conf = ind_name.clone().str("noConfusion");
         let false_const = Expr::const_(Name::from_string("False"), vec![]);
         let is_false = Expr::const_(Name::from_string("Decidable.isFalse"), vec![]);
         let eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
@@ -542,7 +539,7 @@ impl<'a> ElabCtx<'a> {
         k: usize,
     ) -> Expr {
         let is_false = Expr::const_(Name::from_string("Decidable.isFalse"), vec![]);
-        let no_conf = Name::from_string(&format!("{ind_name}.noConfusion"));
+        let no_conf = ind_name.clone().str("noConfusion");
         let false_const = Expr::const_(Name::from_string("False"), vec![]);
         let level_one = Level::succ(Level::zero());
 
@@ -742,7 +739,7 @@ fn apply_fields(head: &Expr, fvars: &[FVarId]) -> Expr {
 
 /// Whether a surface type mentions identifier `name` (used to reject recursive
 /// fields, where DecidableEq would need structural recursion).
-fn surface_mentions(expr: &SurfaceExpr, name: &str) -> bool {
+fn surface_mentions(expr: &SurfaceExpr, name: &clean_parser::SurfaceName) -> bool {
     match expr {
         SurfaceExpr::Ident(_, n) => n == name,
         SurfaceExpr::App(_, h, args) => {

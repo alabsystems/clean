@@ -19,6 +19,7 @@ use super::*;
 use crate::tactic::smt::{ay_lra, AyConfig};
 use crate::tactic::tc_app::nat_le_tc;
 use clean_kernel::Level;
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 // ── Environment setup ───────────────────────────────────────────────────────
@@ -182,32 +183,37 @@ fn test_ay_lra_nat_transitivity() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_id,
-                name: "a".into(),
+                name: SurfaceName::component("a", false),
                 ty: nat_type.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: b_id,
-                name: "b".into(),
+                name: SurfaceName::component("b", false),
                 ty: nat_type.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: c_id,
-                name: "c".into(),
+                name: SurfaceName::component("c", false),
                 ty: nat_type,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: SurfaceName::component("h1", false),
                 ty: nat_le_tc(a.clone(), b.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: SurfaceName::component("h2", false),
                 ty: nat_le_tc(b, c),
                 value: None,
             },
@@ -243,20 +249,23 @@ fn test_ay_lra_int_direct_le() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_id,
-                name: "a".into(),
+                name: SurfaceName::component("a", false),
                 ty: int_type(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: b_id,
-                name: "b".into(),
+                name: SurfaceName::component("b", false),
                 ty: int_type(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: SurfaceName::component("h1", false),
                 ty: int_le(a, b),
                 value: None,
             },
@@ -310,32 +319,37 @@ fn test_linarith_nat_transitivity_with_ay_fallback() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_id,
-                name: "a".into(),
+                name: SurfaceName::component("a", false),
                 ty: nat_type.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: b_id,
-                name: "b".into(),
+                name: SurfaceName::component("b", false),
                 ty: nat_type.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: c_id,
-                name: "c".into(),
+                name: SurfaceName::component("c", false),
                 ty: nat_type,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: SurfaceName::component("h1", false),
                 ty: nat_le_tc(a.clone(), b.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: SurfaceName::component("h2", false),
                 ty: nat_le_tc(b, c),
                 value: None,
             },
@@ -364,8 +378,9 @@ fn test_linarith_concrete_contradiction() {
         env,
         false_target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: SurfaceName::component("h", false),
             ty: h_ty,
             value: None,
         }],

@@ -87,13 +87,13 @@ pub(crate) struct TailCallAnalysis {
 impl TailCallAnalysis {
     /// True if any tail calls (self or mutual) were detected.
     #[must_use]
-    pub fn has_tail_calls(&self) -> bool {
+    pub(crate) fn has_tail_calls(&self) -> bool {
         !self.tail_call_vars.is_empty()
     }
 
     /// Total number of tail calls detected.
     #[must_use]
-    pub fn tail_call_count(&self) -> usize {
+    pub(crate) fn tail_call_count(&self) -> usize {
         self.stats.self_tail_calls + self.stats.mutual_tail_calls
     }
 }

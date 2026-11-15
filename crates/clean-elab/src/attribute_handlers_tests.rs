@@ -122,7 +122,7 @@ fn test_handle_default_instance_with_default_priority() {
     let info = registry
         .get_default_instance(&name)
         .expect("info should exist");
-    assert_eq!(info.priority, DEFAULT_INSTANCE_PRIORITY);
+    assert_eq!(info.priority, DEFAULT_INSTANCE_ATTR_PRIORITY);
     assert_eq!(info.name, name);
     assert_eq!(registry.default_instance_count(), 1);
 }
@@ -170,7 +170,7 @@ fn test_handle_default_instance_duplicate_returns_error() {
     let info = registry
         .get_default_instance(&name)
         .expect("info should exist");
-    assert_eq!(info.priority, DEFAULT_INSTANCE_PRIORITY);
+    assert_eq!(info.priority, DEFAULT_INSTANCE_ATTR_PRIORITY);
 }
 
 // ========================================================================

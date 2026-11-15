@@ -9,9 +9,10 @@ use crate::bridge::QuantifierOrigin;
 use crate::engine_api::AutomationRequest;
 use crate::premise::{MePoSelector, PremiseDatabase, PremiseId};
 use crate::proof_result::ProofResult;
+use crate::search_stop::SearchStop;
 use clean_kernel::{Environment, Expr, FVarId, LocalContext};
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Native automation engine
 ///
@@ -259,12 +260,14 @@ impl AutomationEngine {
         self.try_superposition_prove_with_fvars_until(env, goal, hypotheses, None)
     }
 
-    /// [`Self::try_superposition_prove_with_fvars`] with a wall-clock `deadline`.
+    /// [`Self::try_superposition_prove_with_fvars`] under a caller's backstop.
     ///
-    /// The saturation loop polls `deadline` and bails (no proof) the moment it is
-    /// reached, so a pipeline caller that threads its remaining budget cannot be
-    /// trapped in a runaway saturation. `None` is the unbounded (iteration-only)
-    /// behavior. Soundness is unchanged — a deadline only forgoes a proof, never
+    /// The saturation loop polls `stop`'s backstop after each step's count
+    /// charge and bails (no proof) once it has fired, so a caller that threads
+    /// its remaining budget cannot be trapped in a runaway saturation. The poll
+    /// latches in `stop`, so the caller can tell a run its counts ended from one
+    /// the clock cut short. `None` is the iteration-bounded behavior with no
+    /// clock. Soundness is unchanged: a backstop only forgoes a proof, never
     /// fabricates one (the reconstructed term is still kernel-re-checked
     /// downstream).
     pub(crate) fn try_superposition_prove_with_fvars_until(
@@ -272,7 +275,7 @@ impl AutomationEngine {
         env: &Environment,
         goal: &Expr,
         hypotheses: &[(Expr, FVarId)],
-        deadline: Option<Instant>,
+        stop: Option<&SearchStop>,
     ) -> Option<ProofResult> {
         use crate::bridge::superposition_clausify::GoalClausifier;
         use crate::bridge::superposition_reconstruction::SuperpositionReconstructor;
@@ -309,7 +312,7 @@ impl AutomationEngine {
             prover.add_clause(literals.clone());
         }
 
-        let result = prover.prove_until(10_000, deadline);
+        let result = prover.prove_until(10_000, stop);
         match result {
             ProverResult::Unsatisfiable(trace) => {
                 let symbol_map = clausifier.into_symbol_map();

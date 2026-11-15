@@ -4,6 +4,8 @@
 
 //! dsimp tactic: Definitional simplification.
 
+use clean_parser::SurfaceName;
+
 use std::sync::Arc;
 
 use crate::stack_safe;
@@ -49,7 +51,7 @@ impl DsimpConfig {
 
     /// Simplify at hypotheses too
     #[must_use]
-    pub fn at_all(mut self) -> Self {
+    pub(crate) fn at_all(mut self) -> Self {
         self.at_hyps = true;
         self
     }
@@ -316,7 +318,8 @@ pub(crate) fn shift_bvars_dsimp(expr: &Expr, delta: i32, cutoff: u32) -> Expr {
 /// REQUIRES: `hyp_name` names a local hypothesis in the current goal
 /// ENSURES: On Ok, only the named hypothesis type is replaced by its `dsimp` normal form
 /// ENSURES: On Ok, the goal target is unchanged
-pub fn dsimp_at(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn dsimp_at(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
+    super::names::require_binding_name(hyp_name, "dsimp")?;
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }

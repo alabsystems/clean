@@ -22,7 +22,10 @@ fn test_parse_do_try_catch_finally_braced() {
                     assert_eq!(try_body.len(), 1, "try body should have one element");
                     assert!(matches!(&try_body[0], DoElem::Return(_, _)));
                     assert_eq!(catches.len(), 1, "should have one catch clause");
-                    assert_eq!(catches[0].binder, "e");
+                    assert_eq!(
+                        (catches[0].binder).name(),
+                        crate::SurfaceName::generated_path("e").name()
+                    );
                     assert_eq!(
                         catches[0].body.len(),
                         1,

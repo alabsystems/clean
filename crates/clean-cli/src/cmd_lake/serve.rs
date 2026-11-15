@@ -97,8 +97,14 @@ pub(crate) async fn lake_serve(dir: Option<PathBuf>, _forwarded: &[String]) -> a
         // the LSP backend resolve against the process cwd — mirror that.
         std::env::set_current_dir(&ctx.root)
             .with_context(|| format!("failed to enter project root {}", ctx.root.display()))?;
-        clean_lsp::run_server().await;
-        Ok(())
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            clean_lsp::run_server().await?;
+            Ok(())
+        }
+        // The LSP stdio server (tower-lsp + tokio) is native-only.
+        #[cfg(target_arch = "wasm32")]
+        anyhow::bail!("the LSP stdio server is native-only and unavailable on wasm")
     })
     .await
 }

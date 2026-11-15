@@ -136,9 +136,15 @@ impl<'a> MetaExtCtx<'a> {
                 limit: self.config.max_metas,
             });
         }
-        let state_locals: Vec<(String, FVarId, Expr)> = locals
+        let state_locals: Vec<(clean_parser::SurfaceName, FVarId, Expr)> = locals
             .iter()
-            .map(|(n, fv, e)| (n.to_string(), *fv, e.clone()))
+            .map(|(n, fv, e)| {
+                (
+                    clean_parser::SurfaceName::from_name(n.clone()),
+                    *fv,
+                    e.clone(),
+                )
+            })
             .collect();
         let id = self.metas.fresh_with_locals(ty, state_locals);
         self.local_contexts.insert(id, locals);

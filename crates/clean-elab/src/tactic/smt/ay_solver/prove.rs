@@ -114,7 +114,7 @@ fn solve_and_reconstruct(
             direct_proof: None,
             solver_verification: None,
         }),
-        Ok(AyProofResult::Unknown) => Err(AyError::Unknown),
+        Ok(AyProofResult::Unknown { .. }) => Err(AyError::Unknown),
         Err(AyError::VerificationFailed(ref msg)) => {
             tracing::debug!("proof verification deferred to tactic-level trust enforcement: {msg}");
             Ok(SmtProveOutcome {

@@ -29,10 +29,9 @@ pub use gate::{
     render_verified_labels, Reusability, VerifiedLabels, VERIFIED_FORMAT_HEADER,
 };
 pub use kernel_verify::{
-    kernel_verify_database, kernel_verify_database_prefix,
-    kernel_verify_database_prefix_count_only, kernel_verify_database_prefix_streaming,
-    kernel_verify_pass1_types, kernel_verify_theorem, kernel_verify_two_pass_range,
-    KernelVerifyOutcome, KernelVerifyReport,
+    kernel_verify_database, kernel_verify_database_prefix_count_only,
+    kernel_verify_database_prefix_streaming, kernel_verify_pass1_types, kernel_verify_theorem,
+    kernel_verify_two_pass_range, KernelVerifyOutcome, KernelVerifyReport,
 };
 pub use parser::{parse_database, parse_database_file};
 pub use resolve::resolve_database;

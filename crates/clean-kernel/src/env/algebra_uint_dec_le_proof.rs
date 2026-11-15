@@ -414,12 +414,20 @@ impl Environment {
     /// ```text
     /// <T>.le a b := @LE.le (BitVec w) (instLEBitVec w) a.toBitVec b.toBitVec
     /// <T>.lt a b := @LT.lt (BitVec w) (instLTBitVec w) a.toBitVec b.toBitVec
-    /// <T>.decLe a b := dite (Nat.ble a.toNat b.toNat = true) (isTrue …) (isFalse …)
-    /// <T>.decLt a b := dite (Nat.ble a.toNat.succ b.toNat = true) (isTrue …) (isFalse …)
+    /// <T>.decLe a b := Nat.decLe a.toNat b.toNat
+    /// <T>.decLt a b := Nat.decLt a.toNat b.toNat
     /// ```
     /// All value-def-eq to the oracle (the `Decidable` proof arguments are
-    /// proof-irrelevant; the `Nat.ble`/`instDecidableEqBool` discriminants and
-    /// `LE.le`/`instLEBitVec` structure match). Axiom-free.
+    /// proof-irrelevant; the `LE.le`/`instLEBitVec` structure matches, and the
+    /// decision is the `Nat` one on the `toNat` images). Axiom-free — the two
+    /// `Nat` leaves are the kernel-checked, `sorry`-free
+    /// `algebra_nat_dec_le_proof.rs` definitions.
+    ///
+    /// The two decision leaves changed shape on 2026-09-20: this branch used
+    /// to re-derive a bespoke `dite` over `Nat.ble` rather than calling
+    /// `Nat.decLe`/`Nat.decLt`, which left `instDecidable<T>Lt a b` and
+    /// `instDecidableNatLt a.toNat b.toNat` NOT definitionally equal. See the
+    /// long note at the `build_dec` closure below for what that broke.
     fn register_wrapper_dec_le_lt_bitvec(
         &mut self,
         name: &str,
@@ -434,45 +442,23 @@ impl Environment {
         self.init_le()?;
         self.init_lt()?;
         self.init_decidable()?;
-        self.init_dite()?; // dite
         self.init_bitvec()?; // BitVec.toNat, instLEBitVec, instLTBitVec
-        self.register_nat_ble_le_lemmas()?; // Nat.le_of_ble_eq_true, Nat.ble_eq_true_of_le
+                             // The axiom-free `Nat` decision procedures backing the leaves — the
+                             // same dependency the Nat-carrier branch of this builder declares.
+        self.register_nat_dec_le_lt_proof()?;
 
         let zero = Level::zero();
-        let one = Level::succ(Level::zero());
         let _nat = Expr::const_(Name::from_string("Nat"), vec![]);
         let ty_c = Expr::const_(Name::from_string(name), vec![]);
-        let bool_c = Expr::const_(Name::from_string("Bool"), vec![]);
-        let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
         let bitvec_w = Expr::app(
             Expr::const_(Name::from_string("BitVec"), vec![]),
             width.clone(),
         );
         let to_bitvec = Expr::const_(Name::from_string(&format!("{name}.toBitVec")), vec![]);
         let bitvec_to_nat = Expr::const_(Name::from_string("BitVec.toNat"), vec![]);
-        let nat_le = Expr::const_(Name::from_string("Nat.le"), vec![]);
-        let nat_succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
-        let nat_ble = Expr::const_(Name::from_string("Nat.ble"), vec![]);
-        let dite = Expr::const_(Name::from_string("dite"), vec![one.clone()]);
+        let nat_dec_le = Expr::const_(Name::from_string("Nat.decLe"), vec![]);
+        let nat_dec_lt = Expr::const_(Name::from_string("Nat.decLt"), vec![]);
         let dec = Expr::const_(Name::from_string("Decidable"), vec![]);
-        let is_true = Expr::const_(Name::from_string("Decidable.isTrue"), vec![]);
-        let is_false = Expr::const_(Name::from_string("Decidable.isFalse"), vec![]);
-        let inst_dec_eq_bool = Expr::const_(Name::from_string("instDecidableEqBool"), vec![]);
-        let eq_bool = |l: Expr, r: Expr| {
-            Expr::apps(
-                Expr::const_(Name::from_string("Eq"), vec![one.clone()]),
-                [bool_c.clone(), l, r],
-            )
-        };
-        let not_ = |p: Expr| {
-            Expr::pi(
-                BinderInfo::Default,
-                p,
-                Expr::const_(Name::from_string("False"), vec![]),
-            )
-        };
-        let le_of_ble = Expr::const_(Name::from_string("Nat.le_of_ble_eq_true"), vec![]);
-        let ble_eq_true_of_le = Expr::const_(Name::from_string("Nat.ble_eq_true_of_le"), vec![]);
 
         // a.toNat := @BitVec.toNat width (@<T>.toBitVec a)
         let to_nat = |a: &Expr| -> Expr {
@@ -567,22 +553,53 @@ impl Environment {
             })?;
         }
 
-        // ── <T>.decLe / <T>.decLt : the dite forms ──
-        // `succ_lhs = false` builds decLe (`ble a.toNat b.toNat`); `true` builds
-        // decLt (`ble a.toNat.succ b.toNat` ≡ `Nat.lt a.toNat b.toNat`).
+        // ── <T>.decLe / <T>.decLt ──
+        //   <T>.decLe := fun (a b : <T>) => Nat.decLe a.toNat b.toNat
+        //   <T>.decLt := fun (a b : <T>) => Nat.decLt a.toNat b.toNat
+        //
+        // BYTE-FOR-BYTE the shape the Nat-carrier branch of this same builder
+        // uses (`register_wrapper_dec_le_lt_proof_carrier`, "<name>.decLe :=
+        // fun a b => Nat.decLe (<T>.val a) (<T>.val b)"), with `a.toNat` in
+        // place of `<T>.val a`. Before 2026-09-20 this branch instead re-derived
+        // a bespoke `dite` over `Nat.ble`, and that was the whole defect:
+        // `Decidable` is Type-valued, so conversion must genuinely unfold the
+        // two decision procedures, and a `dite`-over-`ble` wrapper NEVER meets
+        // the `Bool.rec` dispatcher `Nat.decLe`/`Nat.decLt` are built from
+        // (`algebra_nat_dec_le_proof.rs`). `instDecidable<T>Lt a b` and
+        // `instDecidableNatLt a.toNat b.toNat` were therefore not definitionally
+        // equal — measured with NO literal anywhere.
+        //
+        // That mattered because instance search reaches BOTH. `decide (d < 21)`
+        // binds its proposition to `decide`'s implicit `{p : Prop}`, and the
+        // assignment stores the weak-head-normalised prop, so the `Decidable`
+        // goal is already `Nat.le (Nat.succ (BitVec.toNat w d.toBitVec)) …`.
+        // Recovering `instDecidable<T>Lt` from that goal means INVERTING
+        // `BitVec.toNat w (<T>.toBitVec ?b)`, which succeeds while `?b`'s
+        // partner is a variable and fails once it is `<T>.ofNat 21` — whnf
+        // collapses that operand to a numeral before the congruence step — so
+        // the search falls through to `instDecidableNatLt`. With the two
+        // decision procedures now one term, that fall-through is harmless:
+        // whichever instance is picked, the kernel sees the same decision, and
+        // the natural island spelling `decide (d < 21)` is definitionally the
+        // carrier's own decision. (`clean-elab/tests/
+        // uint_literal_decide_instance_e2e.rs` pins both the convergence and the
+        // negative twins.)
+        //
+        // The declared result still goes THROUGH the order-class projection
+        // (`@LE.le.{0} <T> instLE<T> a b` / `@LT.lt.{0} <T> instLT<T> a b`)
+        // — Lean's exact serialized spelling. `.olean` import is
+        // first-registered-wins, so a bare `Decidable (<T>.le a b)` here would
+        // permanently shadow Lean's real statement (prelude-collision census
+        // `bare_spelled` class). The class form δ-unfolds through
+        // `LE.le`/`instLE<T>` to `<T>.le a b` and on through `instLEBitVec` to
+        // `Nat.le a.toNat b.toNat`, which is exactly `Nat.decLe a.toNat
+        // b.toNat`'s type — `add_decl` kernel-checks that, so a drift in the
+        // BitVec order stack is a hard build error here, not a silent accept.
         let build_dec = |succ_lhs: bool| -> (Expr, Expr) {
-            // The declared result goes THROUGH the order-class projection
-            // (`@LE.le.{0} <T> instLE<T> a b` / `@LT.lt.{0} <T> instLT<T> a b`)
-            // — Lean's exact serialized spelling. `.olean` import is
-            // first-registered-wins, so a bare `Decidable (<T>.le a b)` here
-            // would permanently shadow Lean's real statement
-            // (prelude-collision census `bare_spelled` class). The class form
-            // δ-unfolds through `LE.le`/`instLE<T>` to `<T>.le a b`, so the
-            // same `dite` value still checks.
-            let (proj, inst_name) = if succ_lhs {
-                ("LT.lt", inst_lt_name.as_str())
+            let (proj, inst_name, nat_dec) = if succ_lhs {
+                ("LT.lt", inst_lt_name.as_str(), nat_dec_lt.clone())
             } else {
-                ("LE.le", inst_le_name.as_str())
+                ("LE.le", inst_le_name.as_str(), nat_dec_le.clone())
             };
             let ty = {
                 let mut b = EnvDeclBuilder::new();
@@ -608,45 +625,8 @@ impl Environment {
                 let mut b = EnvDeclBuilder::new();
                 let (a_id, a) = b.fresh_local(ty_c.clone());
                 let (bv_id, bv) = b.fresh_local(ty_c.clone());
-                let lhs = if succ_lhs {
-                    Expr::app(nat_succ.clone(), to_nat(&a))
-                } else {
-                    to_nat(&a)
-                };
-                let rhs = to_nat(&bv);
-                // Nat.le lhs rhs  (the decided Prop; ≡ <T>.le/lt a b)
-                let le_prop = Expr::apps(nat_le.clone(), [lhs.clone(), rhs.clone()]);
-                let alpha = Expr::app(dec.clone(), le_prop.clone());
-                // c := Eq Bool (Nat.ble lhs rhs) Bool.true
-                let ble = Expr::apps(nat_ble.clone(), [lhs.clone(), rhs.clone()]);
-                let cond = eq_bool(ble.clone(), bool_true.clone());
-                let inst = Expr::apps(inst_dec_eq_bool.clone(), [ble.clone(), bool_true.clone()]);
-                // then: fun (h : c) => Decidable.isTrue le_prop (Nat.le_of_ble_eq_true lhs rhs h)
-                let then_b = {
-                    let mut c = EnvDeclBuilder::child_of(&b);
-                    let (h_id, h) = c.fresh_local(cond.clone());
-                    let proof = Expr::apps(le_of_ble.clone(), [lhs.clone(), rhs.clone(), h]);
-                    let body = Expr::apps(is_true.clone(), [le_prop.clone(), proof]);
-                    c.finish_child(c.mk_lam(h_id, BinderInfo::Default, cond.clone(), body))
-                };
-                // else: fun (h : ¬c) => Decidable.isFalse le_prop
-                //         (fun (hle : Nat.le lhs rhs) => h (Nat.ble_eq_true_of_le lhs rhs hle))
-                let else_b = {
-                    let mut c = EnvDeclBuilder::child_of(&b);
-                    let (h_id, h) = c.fresh_local(not_(cond.clone()));
-                    let disproof = {
-                        let mut g = EnvDeclBuilder::child_of(&c);
-                        let (hle_id, hle) = g.fresh_local(le_prop.clone());
-                        let ble_true =
-                            Expr::apps(ble_eq_true_of_le.clone(), [lhs.clone(), rhs.clone(), hle]);
-                        let body = Expr::app(h.clone(), ble_true);
-                        g.finish_child(g.mk_lam(hle_id, BinderInfo::Default, le_prop.clone(), body))
-                    };
-                    let body = Expr::apps(is_false.clone(), [le_prop.clone(), disproof]);
-                    c.finish_child(c.mk_lam(h_id, BinderInfo::Default, not_(cond.clone()), body))
-                };
-                let dite_e = Expr::apps(dite.clone(), [alpha, cond, inst, then_b, else_b]);
-                let e = b.mk_lam(bv_id, BinderInfo::Default, ty_c.clone(), dite_e);
+                let body = Expr::apps(nat_dec, [to_nat(&a), to_nat(&bv)]);
+                let e = b.mk_lam(bv_id, BinderInfo::Default, ty_c.clone(), body);
                 let e = b.mk_lam(a_id, BinderInfo::Default, ty_c.clone(), e);
                 b.finish(e)
             };

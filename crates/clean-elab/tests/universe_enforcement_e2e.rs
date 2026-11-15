@@ -18,9 +18,13 @@
 //!   * universes/p12: `Type _` level holes now elaborate (levelMVarToParam).
 //!   * universes/p09: `Type*` is Mathlib-only — loud-rejected under the strict
 //!     `--prelude lean4-core` lane, accepted in the builtin (extension) lane.
-//!   * universes/p20: a partial universe-instance list (`ULift.up.{1}` — two
-//!     level params, one supplied) is a loud, typed `UniverseLevelMismatch`
+//!   * universes/p20: a partial universe-instance list (`ULift.{1}` — two
+//!     level params, one supplied) was a loud, typed `UniverseLevelMismatch`
 //!     instead of an `UnknownIdent`/`UniverseInstNotConst` + silent sorryAx.
+//!     Since 2026-09-30 it ELABORATES as Lean's does (the given levels fill
+//!     the leading parameters, the rest are inferred; breadth class (65)), and
+//!     the pins are the two refusals pinned Lean keeps: a given level that
+//!     contradicts the expected type, and too many levels.
 
 use clean_elab::{
     elaborate_decl_and_register, preprocess_decl_with_context, ElabResult, FileContext,
@@ -144,20 +148,40 @@ fn test_explicit_level_two_id_loud_rejects() {
     );
 }
 
-// ── universes/p20 — partial universe-instance list is a loud typed error ─────
+// ── universes/p20 — a partial universe-instance list, as Lean reads it ──────
 
 #[test]
-fn test_partial_universe_instance_list_loud_rejects() {
-    // `ULift.up` has TWO level params; supplying one is a partial list. It must
-    // be a LOUD `UniverseLevelMismatch`, not an UnknownIdent + silent sorryAx.
-    let err = run_module("def liftedNat : Type 1 := ULift.{1} Nat", Lane::Lean4Core)
-        .expect_err("partial universe-instance list must loud-reject");
+fn test_partial_universe_instance_list_fills_the_rest() {
+    // `ULift` has TWO level params; one is supplied. Pinned Lean v4.30.0-rc2
+    // accepts `def liftedNat : Type 1 := ULift.{1} Nat`: `r := 1` is given and
+    // `s` is inferred from `Nat : Type`. Breadth class (65).
+    run_module("def liftedNat : Type 1 := ULift.{1} Nat", Lane::Lean4Core)
+        .expect("a partial universe-instance list elaborates, as in Lean");
+}
+
+#[test]
+fn test_partial_universe_instance_list_enforces_the_given_level() {
+    // The negative control for the test above: the given level is not ignored.
+    // `ULift.{1} Nat : Type 1`, so pinned Lean rejects it at `Type` ("Type
+    // mismatch ... expected to have type Type").
+    let err = run_module("def liftedNat : Type := ULift.{1} Nat", Lane::Lean4Core)
+        .expect_err("`ULift.{1} Nat` is not a `Type`");
+    assert!(!err.contains("sorry"), "must not degrade to sorryAx: {err}");
+}
+
+#[test]
+fn test_too_many_universe_levels_loud_rejects() {
+    // Pinned Lean: "too many explicit universe levels".
+    let err = run_module(
+        "def liftedNat : Type 1 := ULift.{1, 0, 0} Nat",
+        Lane::Lean4Core,
+    )
+    .expect_err("three levels for a two-level constant must loud-reject");
     assert!(
         err.to_lowercase().contains("universe level count mismatch")
             || err.contains("UniverseLevelMismatch"),
         "expected a universe-level-count mismatch, got: {err}"
     );
-    // And crucially: not laundered into a sorry axiom.
     assert!(!err.contains("sorry"), "must not degrade to sorryAx: {err}");
 }
 
@@ -236,4 +260,138 @@ fn test_sort_star_accepts_in_builtin_prelude() {
         Lane::Builtin,
     )
     .expect("`Sort*` must still accept in the builtin extension lane");
+}
+
+// Omitted inductive result sorts are inferred even without a written `.{u}`.
+// Pinned Lean's result levels for this fixture are checked below, including
+// a phantom parameter and a dependent constructor field.
+#[test]
+fn omitted_inductive_result_sorts_match_lean() {
+    use clean_kernel::{Level, Name};
+
+    let env = run_module(
+        include_str!("fixtures/omitted_inductive_sort/accepted.lean"),
+        Lane::Lean4Core,
+    )
+    .expect("omitted sorts must infer from actual constructor fields");
+    let u = Level::param(Name::from_string("u"));
+    let v = Level::param(Name::from_string("v"));
+    for (name, expected) in [
+        ("AutoBox", Level::succ(u.clone())),
+        ("TypeBox", Level::succ(Level::succ(Level::zero()))),
+        ("Flag", Level::succ(Level::zero())),
+        ("Phantom", Level::succ(Level::zero())),
+        ("DepBox", Level::succ(Level::max(u.clone(), v))),
+        ("Tree", Level::succ(u.clone())),
+        ("ListedBox", Level::succ(u)),
+        ("SmallBox", Level::succ(Level::zero())),
+        ("Proposition", Level::zero()),
+    ] {
+        assert_inductive_sort(&env, name, expected);
+    }
+}
+
+#[test]
+fn explicit_small_inductive_sort_remains_a_constraint() {
+    for source in [
+        include_str!("fixtures/omitted_inductive_sort/rejected_poly.lean"),
+        include_str!("fixtures/omitted_inductive_sort/rejected_type.lean"),
+        include_str!("fixtures/omitted_inductive_sort/rejected_mutual.lean"),
+    ] {
+        let error = run_module(source, Lane::Lean4Core)
+            .expect_err("an explicit result sort must not be enlarged");
+        assert!(error.contains("Universe level mismatch"), "{error}");
+    }
+}
+
+fn assert_inductive_sort(env: &Environment, name: &str, expected: clean_kernel::Level) {
+    use clean_kernel::{ExprKind, Name};
+    let ind = env.get_inductive(&Name::from_string(name)).expect(name);
+    let mut ty = &ind.type_;
+    while let ExprKind::Pi(_, _, body) = ty.kind() {
+        ty = body;
+    }
+    let ExprKind::Sort(actual) = ty.kind() else {
+        panic!("{name}: result is not a sort: {ty:?}");
+    };
+    assert_eq!(actual.normalize(), expected.normalize(), "{name}");
+    assert!(env
+        .axiom_deps(&Name::from_string(name))
+        .expect(name)
+        .is_empty());
+}
+
+#[test]
+fn omitted_mutual_inductive_result_sorts_match_lean() {
+    use clean_kernel::Level;
+    let env = run_module(
+        include_str!("fixtures/omitted_inductive_sort/mutual.lean"),
+        Lane::Lean4Core,
+    )
+    .expect("mutual omitted sorts must be inferred without treating them as Mathlib Type*");
+    for name in ["Even", "Odd"] {
+        assert_inductive_sort(&env, name, Level::succ(Level::zero()));
+    }
+    for name in ["HighA", "HighB"] {
+        assert_inductive_sort(&env, name, Level::succ(Level::succ(Level::zero())));
+    }
+}
+
+#[test]
+fn implicit_parameters_from_binder_types_are_in_the_constructor_header() {
+    use clean_kernel::Name;
+    let env = run_module(
+        include_str!("fixtures/inductive_header_parameters/positive.lean"),
+        Lane::Lean4Core,
+    )
+    .expect("implicit types from parameter annotations must be supplied to self references");
+    // These are the registered counts printed by pinned Lean, including
+    // its promotion of uniform indices to parameters.
+    for (name, parameters, indices) in [
+        ("Witness", 3, 0),
+        ("ViaAlias", 3, 0),
+        ("Both", 6, 0),
+        ("HeaderIndex", 2, 1),
+        ("Bounded", 2, 0),
+    ] {
+        let ind = env.get_inductive(&Name::from_string(name)).expect(name);
+        assert_eq!(ind.num_params, parameters, "{name}");
+        assert_eq!(ind.num_indices, indices, "{name}");
+    }
+    for name in [
+        "witnessZero",
+        "aliasZero",
+        "bothZero",
+        "headerZero",
+        "witnessElim",
+    ] {
+        assert_empty_closure(&env, name);
+        assert!(env
+            .get_const(&Name::from_string(name))
+            .expect(name)
+            .value
+            .is_some());
+    }
+}
+
+#[test]
+fn implicit_header_parameters_remain_uniform_and_indices_remain_checked() {
+    let changed = run_module(
+        include_str!("fixtures/inductive_header_parameters/changed_parameter.lean"),
+        Lane::Lean4Core,
+    )
+    .expect_err("a constructor may not replace its declared predicate parameter");
+    assert!(
+        changed.contains("parameter") && changed.contains("does not match"),
+        "{changed}"
+    );
+    let false_index = run_module(
+        include_str!("fixtures/inductive_header_parameters/false_index.lean"),
+        Lane::Lean4Core,
+    )
+    .expect_err("a zero-index constructor cannot prove the one-index proposition");
+    assert!(
+        false_index.to_lowercase().contains("mismatch"),
+        "{false_index}"
+    );
 }

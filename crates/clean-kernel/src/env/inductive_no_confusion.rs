@@ -20,10 +20,10 @@ use crate::inductive::{
 use crate::level::Level;
 use crate::name::Name;
 use crate::tc::{LocalContext, TypeChecker};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
-use super::inductive_fixed_indices::{fresh_univ_name, ind_const_with_levels, is_prop_former_type};
+use super::inductive_fixed_indices::{fresh_univ_name, ind_const_with_levels};
 use super::types::{ConstantInfo, ConstantKind, EnvError, Reducibility};
 use super::{ConstantSource, Declaration, DeclarationVerification, Environment};
 
@@ -129,13 +129,12 @@ impl Environment {
     /// reinterpret the block under a weaker declaration than the kernel
     /// originally checked.
     pub(crate) fn no_confusion_block_eligibility(
+        &self,
         decl: &InductiveDecl,
     ) -> Result<(), NoConfusionRegenerationIssue> {
         for member in &decl.types {
-            if is_prop_former_type(&member.type_) {
-                return Err(NoConfusionRegenerationIssue::PropValued {
-                    member: member.name.clone(),
-                });
+            if let Some(issue) = self.no_confusion_prop_issue(&member.name, &member.type_) {
+                return Err(issue);
             }
             if count_pi_args(&member.type_) > decl.num_params {
                 return Err(NoConfusionRegenerationIssue::Indexed {
@@ -156,12 +155,57 @@ impl Environment {
         Ok(())
     }
 
+    /// Why `member`, of type former `type_`, makes its block ineligible for
+    /// noConfusion on account of its result sort, if it does. The sort is
+    /// read up to whnf (`Environment::type_former_is_prop`), as Lean's
+    /// `isPropFormerType` reads it: a `δ`-`Prop` family
+    /// (`def MyProp : Type := Prop; inductive B : MyProp`) is a `Prop` family
+    /// and gets none, a `δ`-`Type` family gets one. A type former that is not
+    /// a sort even after reduction gets none either.
+    fn no_confusion_prop_issue(
+        &self,
+        member: &Name,
+        type_: &Expr,
+    ) -> Option<NoConfusionRegenerationIssue> {
+        match self.type_former_is_prop(type_) {
+            Some(false) => None,
+            Some(true) => Some(NoConfusionRegenerationIssue::PropValued {
+                member: member.clone(),
+            }),
+            None => Some(NoConfusionRegenerationIssue::GenerationFailed {
+                member: member.clone(),
+                detail: "type former does not end in a sort, even up to whnf".to_string(),
+            }),
+        }
+    }
+
     /// Reconstruct a complete, ordered mutual declaration from stored kernel
     /// metadata. No missing constructor/member is filtered out: any mismatch
     /// fails closed before candidate construction or environment mutation.
+    /// Constructor keys grouped by the inductive that owns them: the inverse
+    /// ownership relation [`Self::reconstruct_no_confusion_block`] validates,
+    /// built ONCE per regeneration pass. That pass used to walk the WHOLE
+    /// constructor table for every block it reconstructed — quadratic in the
+    /// closure, and paid once per `import` declaration (measured 2026-09-23 at
+    /// 16% of a sample at t=950 s of a `Mathlib/Order/Basic.lean` import,
+    /// `reports/lean4-replacement-audit-2026-09-24/performance.json`). The
+    /// regeneration loop only ever writes constants and verification stamps,
+    /// never constructors, so one index serves the whole pass.
+    pub(super) fn constructor_owners(&self) -> HashMap<Name, Vec<Name>> {
+        let mut owners: HashMap<Name, Vec<Name>> = HashMap::new();
+        for (key, constructor) in &self.constructors {
+            owners
+                .entry(constructor.inductive_name.clone())
+                .or_default()
+                .push(key.clone());
+        }
+        owners
+    }
+
     fn reconstruct_no_confusion_block(
         &self,
         seed: &Name,
+        owners: &HashMap<Name, Vec<Name>>,
     ) -> Result<InductiveDecl, NoConfusionRegenerationDiagnostic> {
         let fail = |block: &[Name], detail: String| NoConfusionRegenerationDiagnostic {
             block: block.to_vec(),
@@ -204,7 +248,7 @@ impl Environment {
         // mutual member can itself be named `T.noConfusion`).
         for member in &block_names {
             for suffix in ["noConfusionType", "noConfusion"] {
-                let target = Name::from_string(&format!("{member}.{suffix}"));
+                let target = member.clone().str(suffix);
                 if self.inductives.contains_key(&target)
                     || self.constructors.contains_key(&target)
                     || self.recursors.contains_key(&target)
@@ -252,12 +296,10 @@ impl Environment {
                     format!("{member_name} disagrees on block levels or parameter count"),
                 ));
             }
-            if is_prop_former_type(&member.type_) {
+            if let Some(issue) = self.no_confusion_prop_issue(member_name, &member.type_) {
                 return Err(NoConfusionRegenerationDiagnostic {
                     block: block_names.clone(),
-                    issue: NoConfusionRegenerationIssue::PropValued {
-                        member: member_name.clone(),
-                    },
+                    issue,
                 });
             }
             if member.num_indices > 0 || count_pi_args(&member.type_) > num_params {
@@ -345,8 +387,12 @@ impl Environment {
         // silently omitted from the reconstructed declaration and the repair
         // would generate a principle for a weaker block than the environment
         // actually records.
-        for (constructor_key, constructor) in &self.constructors {
-            if unique_members.contains(&constructor.inductive_name) {
+        for constructor_key in block_names
+            .iter()
+            .filter_map(|member| owners.get(member))
+            .flatten()
+        {
+            if let Some(constructor) = self.constructors.get(constructor_key) {
                 if &constructor.name != constructor_key {
                     return Err(fail(
                         &block_names,
@@ -373,18 +419,17 @@ impl Environment {
             num_params,
             types,
         };
-        Self::no_confusion_block_eligibility(&decl).map_err(|issue| {
-            NoConfusionRegenerationDiagnostic {
+        self.no_confusion_block_eligibility(&decl)
+            .map_err(|issue| NoConfusionRegenerationDiagnostic {
                 block: block_names.clone(),
                 issue,
-            }
-        })?;
+            })?;
         Ok(decl)
     }
 
     fn no_confusion_pair_requires_regeneration(&self, member: &Name) -> bool {
-        let nct_name = Name::from_string(&format!("{member}.noConfusionType"));
-        let nc_name = Name::from_string(&format!("{member}.noConfusion"));
+        let nct_name = member.clone().str("noConfusionType");
+        let nc_name = member.clone().str("noConfusion");
         let member_needs_repair = |name: &Name| {
             self.constants.get(name).is_none_or(|constant| {
                 constant.value.is_none()
@@ -401,7 +446,7 @@ impl Environment {
 
         // Source environments using the legacy casesOn recursor layout need a
         // canonical pair rebuilt against the registered recursor metadata.
-        let cases_on_name = Name::from_string(&format!("{member}.casesOn"));
+        let cases_on_name = member.clone().str("casesOn");
         self.recursors
             .get(&cases_on_name)
             .is_some_and(|recursor| recursor.arg_order == RecursorArgOrder::MajorAfterMinors)
@@ -728,7 +773,7 @@ impl Environment {
         // For casesOn, the universe is bumped: succ u (eliminating into Sort u,
         // which itself lives in Sort (succ u)).
 
-        let cases_on_name = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on_name = ind_name.clone().str("casesOn");
 
         // casesOn level params: first is the motive universe (succ u here),
         // rest are the inductive's level params.
@@ -1190,7 +1235,7 @@ impl Environment {
             .clone();
         let mut companion_idx = 1usize;
         while minor_names.len() < rec.num_minors as usize {
-            let companion_name = Name::from_string(&format!("{first}.rec_{companion_idx}"));
+            let companion_name = first.clone().str(format!("rec_{companion_idx}"));
             let companion = self.recursors.get(&companion_name).ok_or_else(|| {
                 EnvError::Inductive(InductiveError::NestedRestoreInvariant(format!(
                     "{cases_on_name} declares {} minors, but restored companion {companion_name} is missing",
@@ -1591,32 +1636,23 @@ impl Environment {
         // Collect parameter binders from the inductive type definition.
         let param_binders = self.collect_pi_binders(&ind_type.type_, num_params);
 
-        // Compute the inductive's sort level (for Eq and Eq.ndrec universe args).
-        let ind_sort_level = {
-            let mut cur = ind_type.type_.clone();
-            for _ in 0..type_arity {
-                if let ExprKind::Pi(_, _, body) = &cur.kind {
-                    cur = (**body).clone();
-                } else {
-                    break;
-                }
-            }
-            if let ExprKind::Sort(level) = &cur.kind {
-                level.clone()
-            } else {
-                return Err(EnvError::InductiveCodomainNotSort {
-                    name: ind_name.clone(),
-                    num_params,
-                });
-            }
-        };
+        // The inductive's sort level (for Eq and Eq.ndrec universe args), up
+        // to whnf by the helper every elimination decision reads: a δ-`Type`
+        // family (`def MyType : Type 1 := Type; inductive D : MyType`) gets
+        // its `noConfusion`, as in Lean.
+        let ind_sort_level = self
+            .type_former_level_at_arity(&ind_type.type_, type_arity)
+            .ok_or_else(|| EnvError::InductiveCodomainNotSort {
+                name: ind_name.clone(),
+                num_params,
+            })?;
         let eq_const = Expr::const_(Name::from_string("Eq"), vec![ind_sort_level.clone()]);
 
         // noConfusionType const needs all level params (result_univ + ind levels)
         let mut no_conf_type_levels = vec![Level::param(result_univ_name.clone())];
         no_conf_type_levels.extend(decl.level_params.iter().map(|p| Level::param(p.clone())));
         let no_conf_type_const = Expr::const_(
-            Name::from_string(&format!("{ind_name}.noConfusionType")),
+            ind_name.clone().str("noConfusionType"),
             no_conf_type_levels.clone(),
         );
 
@@ -1921,7 +1957,7 @@ impl Environment {
 
         let punit_u = Expr::const_(Name::from_string("PUnit"), vec![result_univ.clone()]);
         let punit_unit_u = Expr::const_(Name::from_string("PUnit.unit"), vec![result_univ.clone()]);
-        let cases_on_name = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on_name = ind_name.clone().str("casesOn");
         let mut cases_levels = vec![Level::param(result_univ_name.clone())];
         cases_levels.extend(decl.level_params.iter().map(|p| Level::param(p.clone())));
         let cases_params: Vec<Expr> = (0..n).map(|i| Expr::bvar(n + 3 - i)).collect();
@@ -2042,13 +2078,14 @@ impl Environment {
         let mut seeds: Vec<Name> = self.inductives.keys().cloned().collect();
         seeds.sort();
         let mut visited = HashSet::with_capacity(seeds.len());
+        let owners = self.constructor_owners();
 
         for seed in seeds {
             if visited.contains(&seed) {
                 continue;
             }
 
-            let reconstructed = self.reconstruct_no_confusion_block(&seed);
+            let reconstructed = self.reconstruct_no_confusion_block(&seed, &owners);
             let decl = match reconstructed {
                 Ok(decl) => decl,
                 Err(diagnostic) => {
@@ -2129,19 +2166,9 @@ impl Environment {
                 detail: "member absent from reconstructed mutual declaration".to_owned(),
             })?;
 
-        let fallback_level = {
-            let mut current = member_type.type_.clone();
-            for _ in 0..count_pi_args(&member_type.type_) {
-                let ExprKind::Pi(_, _, body) = &current.kind else {
-                    break;
-                };
-                current = (**body).clone();
-            }
-            match &current.kind {
-                ExprKind::Sort(level) => Some(level.clone()),
-                _ => None,
-            }
-        };
+        // The family's result level up to whnf, by the helper every other
+        // elimination decision reads (`Environment::type_former_result_level`).
+        let fallback_level = self.type_former_result_level(&member_type.type_);
 
         let nct_result = self
             .build_no_confusion_type(member, decl)
@@ -2173,8 +2200,8 @@ impl Environment {
                 detail: format!("noConfusion: {error}"),
             })?;
 
-        let nct_name = Name::from_string(&format!("{member}.noConfusionType"));
-        let nc_name = Name::from_string(&format!("{member}.noConfusion"));
+        let nct_name = member.clone().str("noConfusionType");
+        let nc_name = member.clone().str("noConfusion");
         Ok(NoConfusionCandidate {
             member: member.clone(),
             nct_name: nct_name.clone(),
@@ -2906,7 +2933,7 @@ mod regeneration_tests {
         let (mut env, members) = even_odd_env();
         env.init_eq().expect("initialize equality and heal fixture");
         let decl = env
-            .reconstruct_no_confusion_block(&members[0])
+            .reconstruct_no_confusion_block(&members[0], &env.constructor_owners())
             .expect("reconstruct complete mutual block");
         let candidates: Vec<_> = members
             .iter()
@@ -3028,9 +3055,49 @@ mod regeneration_tests {
             ],
         };
         assert_eq!(
-            Environment::no_confusion_block_eligibility(&decl),
+            Environment::default().no_confusion_block_eligibility(&decl),
             Err(NoConfusionRegenerationIssue::HigherInductive { member: hit })
         );
+    }
+
+    /// The inverse ownership check reads the per-pass owner index
+    /// (`constructor_owners`) instead of the whole constructor table per
+    /// block: an orphan constructor owned by a block member but missing from
+    /// its ordered list must still fail the block before any mutation, and an
+    /// unrelated block must still be repaired in the same pass.
+    #[test]
+    fn test_orphan_owned_constructor_fails_block_through_owner_index() {
+        let (mut env, members) = even_odd_env();
+        env.init_eq().expect("initialize equality and heal fixture");
+        let orphan = Name::from_string("TxnEven.orphan");
+        let template = env
+            .constructors
+            .get(&Name::from_string("TxnEven.zero"))
+            .expect("fixture constructor")
+            .clone();
+        env.constructors.insert(
+            orphan.clone(),
+            crate::inductive::ConstructorVal {
+                name: orphan.clone(),
+                ..template
+            },
+        );
+        let owners = env.constructor_owners();
+        assert!(owners
+            .get(&members[0])
+            .is_some_and(|keys| keys.contains(&orphan)));
+        let generation_before = env.generation();
+        let report = env.regenerate_missing_no_confusion_with_report();
+        assert!(report.diagnostics.iter().any(|diagnostic| {
+            diagnostic.block == members
+                && matches!(
+                    &diagnostic.issue,
+                    NoConfusionRegenerationIssue::InvalidBlockMetadata { detail }
+                        if detail.contains("TxnEven.orphan")
+                            && detail.contains("absent from its ordered constructor_names list")
+                )
+        }));
+        assert_eq!(env.generation(), generation_before);
     }
 
     #[test]

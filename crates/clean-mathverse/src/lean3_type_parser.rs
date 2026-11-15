@@ -572,7 +572,7 @@ impl<'w> Parser<'w> {
 /// expression index. Returns `None` on parse failure or empty input;
 /// callers should treat that as "skip this declaration", never as a
 /// licence to emit a placeholder.
-pub fn parse_lean3_type(src: &str, writer: &mut ShardWriter) -> Option<u32> {
+pub(crate) fn parse_lean3_type(src: &str, writer: &mut ShardWriter) -> Option<u32> {
     let toks = lex(src);
     if toks.is_empty() {
         return None;

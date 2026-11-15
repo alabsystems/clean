@@ -20,13 +20,13 @@ impl Var {
 
     /// Get the raw variable index as u32
     #[inline]
-    pub fn raw(self) -> u32 {
+    pub(crate) fn raw(self) -> u32 {
         self.0
     }
 
     /// Get the variable index
     #[inline]
-    pub fn index(self) -> usize {
+    pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
 }
@@ -50,7 +50,7 @@ impl Lit {
 
     /// Create a literal from variable and sign (true = positive)
     #[inline]
-    pub fn new(var: Var, sign: bool) -> Self {
+    pub(crate) fn new(var: Var, sign: bool) -> Self {
         if sign {
             Self::pos(var)
         } else {
@@ -60,20 +60,20 @@ impl Lit {
 
     /// Get the underlying variable
     #[inline]
-    pub fn var(self) -> Var {
+    pub(crate) fn var(self) -> Var {
         Var(self.0 >> 1)
     }
 
     /// Check if this is a positive literal
     #[inline]
-    pub fn is_pos(self) -> bool {
+    pub(crate) fn is_pos(self) -> bool {
         (self.0 & 1) == 0
     }
 
     /// Check if this is a negative literal
     #[inline]
     #[cfg_attr(not(test), allow(dead_code))]
-    pub fn is_neg(self) -> bool {
+    pub(crate) fn is_neg(self) -> bool {
         (self.0 & 1) == 1
     }
 
@@ -81,13 +81,13 @@ impl Lit {
     #[inline]
     #[must_use]
     #[allow(clippy::should_implement_trait)]
-    pub fn not(self) -> Self {
+    pub(crate) fn not(self) -> Self {
         Lit(self.0 ^ 1)
     }
 
     /// Get the raw index (for array indexing, 2 entries per variable)
     #[inline]
-    pub fn index(self) -> usize {
+    pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
 }
@@ -114,17 +114,17 @@ impl ClauseRef {
 
     /// Get the raw clause index as u32
     #[inline]
-    pub fn raw(self) -> u32 {
+    pub(crate) fn raw(self) -> u32 {
         self.0
     }
 
     #[inline]
-    pub fn index(self) -> usize {
+    pub(crate) fn index(self) -> usize {
         self.0 as usize
     }
 
     #[inline]
-    pub fn is_valid(self) -> bool {
+    pub(crate) fn is_valid(self) -> bool {
         self != Self::INVALID
     }
 }
@@ -141,7 +141,7 @@ pub(super) fn clause_ref_at(len: usize) -> ClauseRef {
 
 /// A clause is a disjunction of literals
 #[derive(Clone, Debug)]
-pub struct Clause {
+pub(crate) struct Clause {
     /// The literals in this clause (first two are watched)
     pub(crate) lits: Vec<Lit>,
     /// Is this a learned clause?
@@ -162,7 +162,7 @@ pub struct Clause {
 
 impl Clause {
     /// Create a new clause
-    pub fn new(lits: Vec<Lit>, learned: bool) -> Self {
+    pub(crate) fn new(lits: Vec<Lit>, learned: bool) -> Self {
         Self {
             lits,
             learned,
@@ -174,7 +174,7 @@ impl Clause {
     }
 
     /// Create a new learned clause with origin tracking
-    pub fn new_learned(lits: Vec<Lit>, origins: Vec<u32>) -> Self {
+    pub(crate) fn new_learned(lits: Vec<Lit>, origins: Vec<u32>) -> Self {
         Self {
             lits,
             learned: true,
@@ -188,7 +188,7 @@ impl Clause {
 
 /// The value assigned to a variable
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LBool {
+pub(crate) enum LBool {
     True,
     False,
     Undef,
@@ -199,7 +199,7 @@ impl LBool {
     #[inline]
     #[must_use]
     #[allow(clippy::should_implement_trait)]
-    pub fn not(self) -> Self {
+    pub(crate) fn not(self) -> Self {
         match self {
             LBool::True => LBool::False,
             LBool::False => LBool::True,
@@ -252,7 +252,7 @@ pub enum SolveResult {
 
 /// Solver statistics
 #[derive(Clone, Debug, Default)]
-pub struct SolverStats {
+pub(crate) struct SolverStats {
     pub(crate) conflicts: u64,
     pub(crate) decisions: u64,
     pub(crate) propagations: u64,

@@ -51,21 +51,24 @@ impl<'a> TacticM<'a> {
     }
 
     /// `intro name` — introduce the binder of a `∀`/`→` goal as `name`.
-    pub fn intro(&mut self, name: &str) -> Result<&mut Self, TacticError> {
+    pub fn intro(&mut self, name: &clean_parser::SurfaceName) -> Result<&mut Self, TacticError> {
         super::intro(self.ps, name)?;
         Ok(self)
     }
 
     /// `intro n1 n2 …` — introduce several binders at once, in order.
-    pub fn intros(&mut self, names: &[&str]) -> Result<&mut Self, TacticError> {
-        super::intros(self.ps, names.iter().map(|s| (*s).to_string()).collect())?;
+    pub fn intros(
+        &mut self,
+        names: &[&clean_parser::SurfaceName],
+    ) -> Result<&mut Self, TacticError> {
+        super::intros(self.ps, names.iter().map(|s| (*s).clone()).collect())?;
         Ok(self)
     }
 
     /// `intro name`, returning the introduced hypothesis's [`FVarId`] so a script
     /// can refer to it later (e.g. `exact`/`apply` that hypothesis). Unlike the
     /// chaining combinators this yields the fvar rather than `&mut Self`.
-    pub fn intro_get(&mut self, name: &str) -> Result<FVarId, TacticError> {
+    pub fn intro_get(&mut self, name: &clean_parser::SurfaceName) -> Result<FVarId, TacticError> {
         super::intro(self.ps, name)?;
         self.ps
             .current_goal()
@@ -73,7 +76,7 @@ impl<'a> TacticM<'a> {
                 g.local_ctx
                     .iter()
                     .rev()
-                    .find(|d| d.name == name)
+                    .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, name))
                     .map(|d| d.fvar)
             })
             .ok_or_else(|| TacticError::HypothesisNotFound(name.to_string()))
@@ -209,11 +212,11 @@ mod tests {
         }
     }
 
-    fn prop_axiom_env(names: &[&str]) -> Environment {
+    fn prop_axiom_env(names: &[&clean_parser::SurfaceName]) -> Environment {
         let mut env = Environment::new();
         for name in names {
             env.add_decl(Declaration::Axiom {
-                name: Name::from_string(name),
+                name: name.name().clone(),
                 level_params: vec![],
                 type_: Expr::prop(),
             })
@@ -224,12 +227,12 @@ mod tests {
 
     #[test]
     fn tacticm_intro_assumption_proves_p_implies_p() {
-        let env = prop_axiom_env(&["P"]);
+        let env = prop_axiom_env(&[&clean_parser::SurfaceName::generated_path("P")]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let mut ps = ProofState::new(env, Expr::arrow(p.clone(), p));
 
         let mut tac = TacticM::new(&mut ps);
-        tac.intro("h")
+        tac.intro(&clean_parser::SurfaceName::generated_path("h"))
             .expect("intro on `P → P`")
             .assumption()
             .expect("assumption closes `P` from `h : P`");
@@ -243,7 +246,10 @@ mod tests {
 
     #[test]
     fn tacticm_intros_multiple_binders_then_exact() {
-        let env = prop_axiom_env(&["P", "Q"]);
+        let env = prop_axiom_env(&[
+            &clean_parser::SurfaceName::generated_path("P"),
+            &clean_parser::SurfaceName::generated_path("Q"),
+        ]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let q = Expr::const_(Name::from_string("Q"), vec![]);
         // Goal: `P → Q → P`.
@@ -251,14 +257,18 @@ mod tests {
         let mut ps = ProofState::new(env, goal);
 
         let mut tac = TacticM::new(&mut ps);
-        tac.intros(&["hp", "hq"]).expect("intros hp hq");
+        tac.intros(&[
+            &clean_parser::SurfaceName::generated_path("hp"),
+            &clean_parser::SurfaceName::generated_path("hq"),
+        ])
+        .expect("intros hp hq");
         let hp = tac
             .state()
             .current_goal()
             .expect("goal `P` remains")
             .local_ctx
             .iter()
-            .find(|d| d.name == "hp")
+            .find(|d| d.name == clean_parser::SurfaceName::generated_path("hp"))
             .expect("hp introduced")
             .fvar;
         tac.exact(Expr::fvar(hp)).expect("exact hp closes P");
@@ -268,12 +278,13 @@ mod tests {
 
     #[test]
     fn tacticm_exact_with_introduced_hyp_proves_p_implies_p() {
-        let env = prop_axiom_env(&["P"]);
+        let env = prop_axiom_env(&[&clean_parser::SurfaceName::generated_path("P")]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let mut ps = ProofState::new(env, Expr::arrow(p.clone(), p));
 
         let mut tac = TacticM::new(&mut ps);
-        tac.intro("h").expect("intro on `P → P`");
+        tac.intro(&clean_parser::SurfaceName::generated_path("h"))
+            .expect("intro on `P → P`");
         // Recover the introduced hypothesis's fvar (FVarId is Copy, so the borrow
         // on `tac` ends before the `exact` call).
         let h = tac
@@ -282,7 +293,7 @@ mod tests {
             .expect("goal `P` remains")
             .local_ctx
             .iter()
-            .find(|d| d.name == "h")
+            .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
             .expect("intro added `h`")
             .fvar;
         tac.exact(Expr::fvar(h))
@@ -293,7 +304,7 @@ mod tests {
 
     #[test]
     fn tacticm_eval_seq_threads_state_through_evaluator() {
-        let env = prop_axiom_env(&["P"]);
+        let env = prop_axiom_env(&[&clean_parser::SurfaceName::generated_path("P")]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let mut ps = ProofState::new(env, Expr::arrow(p.clone(), p));
 
@@ -317,7 +328,10 @@ mod tests {
 
     #[test]
     fn tacticm_apply_then_assumption_solves_modus_ponens() {
-        let env = prop_axiom_env(&["P", "Q"]);
+        let env = prop_axiom_env(&[
+            &clean_parser::SurfaceName::generated_path("P"),
+            &clean_parser::SurfaceName::generated_path("Q"),
+        ]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let q = Expr::const_(Name::from_string("Q"), vec![]);
         // Goal: `P → (P → Q) → Q`.
@@ -326,9 +340,9 @@ mod tests {
         let mut ps = ProofState::new(env, goal);
 
         let mut tac = TacticM::new(&mut ps);
-        tac.intro("hp")
+        tac.intro(&clean_parser::SurfaceName::generated_path("hp"))
             .expect("intro hp : P")
-            .intro("h")
+            .intro(&clean_parser::SurfaceName::generated_path("h"))
             .expect("intro h : P → Q");
         let h = tac
             .state()
@@ -336,7 +350,7 @@ mod tests {
             .expect("goal `Q` remains")
             .local_ctx
             .iter()
-            .find(|d| d.name == "h")
+            .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
             .expect("h was introduced")
             .fvar;
         // `apply h` reduces goal `Q` to premise `P`; `assumption` closes it with hp.
@@ -361,13 +375,15 @@ mod tests {
         reg.register(
             "intro_assumption",
             |_args: &[SurfaceTactic], ps: &mut ProofState| {
-                TacticM::new(ps).intro("h")?.assumption()?;
+                TacticM::new(ps)
+                    .intro(&clean_parser::SurfaceName::generated_path("h"))?
+                    .assumption()?;
                 Ok(())
             },
             "intro then assumption, composed through TacticM",
         );
 
-        let env = prop_axiom_env(&["P"]);
+        let env = prop_axiom_env(&[&clean_parser::SurfaceName::generated_path("P")]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let mut ps = ProofState::new(env, Expr::arrow(p.clone(), p));
         reg.dispatch("intro_assumption", &[], &mut ps)
@@ -381,12 +397,14 @@ mod tests {
 
     #[test]
     fn tacticm_intro_get_returns_hyp_for_exact() {
-        let env = prop_axiom_env(&["P"]);
+        let env = prop_axiom_env(&[&clean_parser::SurfaceName::generated_path("P")]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let mut ps = ProofState::new(env, Expr::arrow(p.clone(), p));
 
         let mut tac = TacticM::new(&mut ps);
-        let h = tac.intro_get("h").expect("intro_get h : P");
+        let h = tac
+            .intro_get(&clean_parser::SurfaceName::generated_path("h"))
+            .expect("intro_get h : P");
         tac.exact(Expr::fvar(h)).expect("exact h closes P");
 
         assert!(tac.is_solved(), "intro_get + exact should solve `P → P`");
@@ -427,15 +445,18 @@ mod tests {
             "mp",
             |_args: &[SurfaceTactic], ps: &mut ProofState| {
                 let mut tac = TacticM::new(ps);
-                tac.intro("hp")?;
-                let h = tac.intro_get("h")?;
+                tac.intro(&clean_parser::SurfaceName::generated_path("hp"))?;
+                let h = tac.intro_get(&clean_parser::SurfaceName::generated_path("h"))?;
                 tac.apply(Expr::fvar(h))?.assumption()?;
                 Ok(())
             },
             "modus ponens via an imperative TacticM script",
         );
 
-        let env = prop_axiom_env(&["P", "Q"]);
+        let env = prop_axiom_env(&[
+            &clean_parser::SurfaceName::generated_path("P"),
+            &clean_parser::SurfaceName::generated_path("Q"),
+        ]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let q = Expr::const_(Name::from_string("Q"), vec![]);
         // Goal: `P → (P → Q) → Q`.
@@ -452,14 +473,18 @@ mod tests {
 
     #[test]
     fn tacticm_main_target_tracks_goal() {
-        let env = prop_axiom_env(&["P", "Q"]);
+        let env = prop_axiom_env(&[
+            &clean_parser::SurfaceName::generated_path("P"),
+            &clean_parser::SurfaceName::generated_path("Q"),
+        ]);
         let p = Expr::const_(Name::from_string("P"), vec![]);
         let q = Expr::const_(Name::from_string("Q"), vec![]);
         let mut ps = ProofState::new(env, Expr::arrow(p, q.clone()));
 
         let mut tac = TacticM::new(&mut ps);
         // Before intro the target is `P → Q`; after, it is `Q`.
-        tac.intro("h").expect("intro on `P → Q`");
+        tac.intro(&clean_parser::SurfaceName::generated_path("h"))
+            .expect("intro on `P → Q`");
         assert_eq!(tac.main_target(), Some(q));
         assert!(!tac.is_solved(), "goal `Q` is not closed by intro alone");
     }

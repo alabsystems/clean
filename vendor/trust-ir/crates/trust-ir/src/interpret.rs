@@ -9,10 +9,31 @@
 //! It deliberately covers a bounded subset: constants, integer arithmetic,
 //! integer comparisons, select, aggregate/vector element operations, basic
 //! block control flow, bounded direct/indirect function calls, executable
-//! integer/float casts, scalar/vector float operations, and simple
-//! allocation-aware memory operations. Dialect ops, intentionally excluded
-//! casts/float widths, borrow/ARC, binding frames, and multi-threaded atomics
-//! return stable unsupported codes instead of pretending to execute.
+//! integer/float casts, scalar/vector float operations at every carried
+//! width (binary16 included, WS2.15: computed at a wider precision and
+//! rounded ONCE by [`f64_to_f16_bits`]), and simple allocation-aware memory
+//! operations. Dialect ops, intentionally excluded casts, borrow/ARC, binding
+//! frames, and multi-threaded atomics return stable unsupported codes instead
+//! of pretending to execute. A
+//! VARIADIC signature is two cases (WS2.15): a call to a variadic
+//! declaration is a host call carrying the full argument list, and a
+//! variadic definition is refused (`SignatureMismatch`, "non-executable
+//! vararg signature") because no instruction reads a variadic argument. A
+//! variadic declaration of a symbol the installed host models at a FIXED
+//! arity is refused with the same code and reason, because it is a forged
+//! signature and not an unmodelled symbol ([`HostCalls::models_fixed_arity`]).
+//!
+//! A call to a BODYLESS declaration is not executable in-format: it is
+//! `UnsupportedCall` unless an installed [`HostCalls`] model serves it
+//! ([`Interpreter::with_host`], WS2.12). A host model is a trusted-base row,
+//! not evidence, so every run it serves is counted in
+//! [`InterpretOutcome::host_calls`]; runtime handles (`Ty::Handle`) exist only
+//! as host-minted, transport-only [`InterpretValueKind::Handle`] values. A
+//! reference-counting runtime's entry points are the one host-served shape
+//! that touches memory: the host only CLASSIFIES them ([`HostCalls::rc_op`],
+//! WS2.13) and the interpreter counts its own `HeapAlloc { origin }` cells.
+//! The reference models of the pinned runtimes live in `trust-ir-build`
+//! (`host::PinnedHandleHost`), keyed by the validator's pin tables.
 //!
 //! Alignment gap with `lean/trust_ir-semantics`: Lean remains the source of truth
 //! for the full operational semantics, especially memory, permission state,
@@ -26,15 +47,42 @@
 //! flags are deterministic no-ops in this single-threaded interpreter;
 //! explicit alignment operands and natural scalar/vector alignment are checked.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
+
+mod array_value;
+mod byte_image;
+mod observation_word;
+mod observed;
+#[cfg(test)]
+mod reconciled_execution;
+pub(crate) use observed::btree as observed_btree;
+mod rope;
+mod scalar_bool;
+
+pub use observation_word::{ObservationWord, WordLengthOverflow};
+
+pub use observed::{
+    ExecutionObserver, ExecutionPhase, ExecutionProgress, ExecutionSite, InstructionSite,
+    ObservationRefusal, ObservationStopped, ObservedExit, ObservedReport, ObservedSession,
+    ObservedValueError,
+};
+
+pub use array_value::{
+    ArrayNode, ArrayNodeKind, ArrayStructure, ArrayStructureId, ArrayStructureNode, ArrayValue,
+};
+use byte_image::{ByteStore, Image};
 
 use crate::constant::Constant;
 use crate::dialect::DialectInst;
 use crate::dialect::vector::{self, VectorSpec};
-use crate::inst::{AtomicRMWOp, BinOp, CastOp, FCmpOp, ICmpOp, Inst, OverflowOp, UnOp};
+use crate::inst::{
+    AllocOrigin, AssertKind, AtomicRMWOp, BinOp, CastOp, FCmpOp, ICmpOp, Inst, OverflowOp,
+    PanicLocation, PanicSite, UnOp,
+};
 use crate::node::InstrNode;
-use crate::ty::{FuncTy, Ty};
-use crate::value::{BlockId, FuncId, FuncTyId, GlobalId, TyId, ValueId};
+use crate::ty::{FatPtrKind, FuncTy, Ty};
+use crate::value::{BlockId, EnumId, FuncId, FuncTyId, GlobalId, StructId, TyId, ValueId};
 use crate::{Block, Function, Module};
 
 /// Stable high-level reason codes returned by the interpreter.
@@ -49,18 +97,54 @@ pub enum InterpretErrorCode {
     UnsupportedVectorShape,
     UnsupportedInstruction,
     UnsupportedCast,
+    /// A float operation the interpreter could not compute at the operand's
+    /// precision. Until WS2.15 every `F16` arithmetic, comparison, constant,
+    /// cast, bitcast and image reported it; all of those now execute
+    /// ([`f64_to_f16_bits`]), so the interpreter currently has NO producer of
+    /// this code. It is retained as the stable mirror of the Lean model's
+    /// `unsupported.float` (which refuses observable NaN payloads at every
+    /// width) and for the next width the format carries before the model does.
+    /// Both engines execute binary16; versioned subset/native admission is
+    /// still pending.
     UnsupportedFloat,
     TypeError,
     UndefinedBehavior,
+    /// An `Inst::Assume` condition evaluated to `false` (WS2.11, the
+    /// "Harness inputs" ratification in `docs/SPEC_RATIFICATIONS.md`).
+    ///
+    /// Still an error, and still a refusal: an execution past a false
+    /// assumption has no defined meaning, because the assumption is a premise
+    /// of every proof about the function, so nothing downstream may treat the
+    /// continuation as a result. The distinct code exists so a harness driver
+    /// can classify "this input is outside the assumed domain" (a vacuity
+    /// filter over the universally quantified entry parameters) apart from
+    /// "the program itself hit UB". A POISON assume condition is not this
+    /// code: inspecting poison is [`UndefinedBehavior`]
+    /// (`docs/ub-numerics-policy.md` §4), the same as any other inspection.
+    ///
+    /// NOT a claim about Lean. The Lean executable model does not refuse a
+    /// false assumption at all — `Semantics/Step.lean` runs `Assume` as a
+    /// no-op (`assume_always_succeeds`) for a false condition and a poison one
+    /// alike. That is the pre-existing `Assume` model split recorded in
+    /// `docs/ub-numerics-policy.md` §4; WS2.11 renames the reference
+    /// interpreter's verdict and neither widens nor narrows that split.
+    ///
+    /// [`UndefinedBehavior`]: InterpretErrorCode::UndefinedBehavior
+    AssumeViolated,
     Panic,
     OutOfFuel,
-    /// A single allocation (or the running total) exceeded the interpreter's
-    /// space budget (`InterpretOptions::mem_budget`). This is the *space*
-    /// analogue of `OutOfFuel`: an incapacity/limit code, NOT a trap and NOT a
-    /// lowering defect. It exists so the interpreter is a TOTAL function in
-    /// memory — an in-IR allocation size (e.g. a sampled `Alloca`/`HeapAlloc`
-    /// `count`) can never be turned into an unbounded host allocation that
-    /// wedges the machine. Differential consumers treat it as coverage-only.
+    /// The program's ADDRESS SPACE is exhausted: an allocation whose last
+    /// byte no target pointer can name (a 32-bit target has 4 GiB), or a host
+    /// model's own incapacity (`trust-ir-build`'s bignum model). An
+    /// incapacity code, NOT a trap and NOT a lowering defect; differential
+    /// consumers treat it as coverage-only.
+    ///
+    /// It is no longer a host-memory budget. Allocations are SPARSE
+    /// (`ByteStore`: an allocation of any size is one run until something is
+    /// written, a stored splat stays one run, and a copy shares the nodes it
+    /// copies), so an in-IR allocation size — a sampled `Alloca`/`HeapAlloc`
+    /// `count` included — costs O(1) host memory, and the `mem_budget` cap
+    /// that used to refuse large allocations is gone.
     OutOfMemory,
     MissingFunction,
     InvalidFunctionPointer,
@@ -82,6 +166,7 @@ impl InterpretErrorCode {
             InterpretErrorCode::UnsupportedFloat => "unsupported_float",
             InterpretErrorCode::TypeError => "type_error",
             InterpretErrorCode::UndefinedBehavior => "undefined_behavior",
+            InterpretErrorCode::AssumeViolated => "assume_violated",
             InterpretErrorCode::Panic => "panic",
             InterpretErrorCode::OutOfFuel => "out_of_fuel",
             InterpretErrorCode::OutOfMemory => "out_of_memory",
@@ -109,6 +194,66 @@ pub struct InterpretError {
     pub message: String,
     pub block: Option<BlockId>,
     pub value: Option<ValueId>,
+    /// The structured panic when `code` is [`InterpretErrorCode::Panic`]
+    /// (plan item P): WHICH Rust panic a failed `Inst::Assert` is, and the
+    /// operand values its message prints. `None` for every other code.
+    ///
+    /// Boxed (amendment P): the resolved panic site would otherwise make every
+    /// `InterpretResult` carry it inline.
+    pub panic: Option<Box<InterpretPanic>>,
+}
+
+/// The panic outcome of a failed `Inst::Assert` (plan item P, wire v52):
+/// the assert's [`AssertKind`] with its operands RESOLVED to the values they
+/// held when the check failed. `message()` is the text `core` prints for
+/// that panic, byte for byte, and is also the error's `message`; the Lean
+/// executable model throws the same text (`Semantics/Step.lean`, `.Assert`),
+/// so the two engines agree on WHICH panic, not only that one happened.
+///
+/// Amendment P (wire v54, `docs/SPEC_RATIFICATIONS.md` §19.1): the NORMATIVE
+/// outcome is the tuple (kind, operand values, entry, resolved location) —
+/// two runs agree only if all four agree. The message is the kind's
+/// rendering; the text a program prints is its entry's, which the reference
+/// engines never execute.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterpretPanic {
+    /// The failed assert's kind, its operand `ValueId`s as written.
+    pub kind: AssertKind,
+    /// `[index, len]` (`BoundsCheck`) or `[required, found]`
+    /// (`MisalignedPtr`) as unsigned values; `None` for every other kind.
+    pub operands: Option<[u128; 2]>,
+    /// The failed check's panic site with its location RESOLVED, or `None`
+    /// for an unsited assert (a panic of unknown realization).
+    pub site: Option<InterpretPanicSite>,
+}
+
+/// A failed sited check's realization (amendment P): the entry it calls and
+/// the location it passes, resolved when the check failed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InterpretPanicSite {
+    /// The site's entry, as written (never executed by the interpreter).
+    pub entry: FuncId,
+    /// The location the entry would receive.
+    pub location: PanicLocationValue,
+}
+
+/// A panic location resolved at the failure (amendment P, §19.1 rule 4).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PanicLocationValue {
+    /// Byte `offset` of module global `global`: a `Global(g)` location
+    /// (offset 0, the global NOT materialized), or a `Value` pointer into
+    /// the allocation of a materialized global.
+    Global { global: GlobalId, offset: u64 },
+    /// A live pointer outside every global's allocation.
+    Other,
+}
+
+impl InterpretPanic {
+    /// The panic message `core` prints (`"assertion failed"` for
+    /// `AssertKind::Unspecified`, which has no Rust message).
+    pub fn message(&self) -> String {
+        self.kind.panic_message(self.operands.unwrap_or([0, 0]))
+    }
 }
 
 impl InterpretError {
@@ -118,7 +263,13 @@ impl InterpretError {
             message: message.into(),
             block: None,
             value: None,
+            panic: None,
         }
+    }
+
+    /// The structured panic of a failed assert, if this error is one.
+    pub fn panic(&self) -> Option<&InterpretPanic> {
+        self.panic.as_deref()
     }
 
     pub fn with_block(mut self, block: BlockId) -> Self {
@@ -130,7 +281,34 @@ impl InterpretError {
         self.value = Some(value);
         self
     }
+
+    /// The symbol of the bodyless declaration this error refused to enter
+    /// because no host model served it (WS2.12), or `None` for any other
+    /// error — including a host call refused for another reason, and an error
+    /// a host model itself returned.
+    ///
+    /// The message is owned by this module, so this is the one place its
+    /// shape is parsed: a tool that wants to name the unhosted callee (the
+    /// `trust-ir run` refusal at a pinned trusted-runtime entry point) asks
+    /// here instead of matching diagnostic text.
+    pub fn unhosted_callee(&self) -> Option<&str> {
+        if self.code != InterpretErrorCode::UnsupportedCall {
+            return None;
+        }
+        self.message
+            .strip_prefix(BODYLESS_CALL_PREFIX)?
+            .strip_suffix(NO_HOST_MODEL_SUFFIX)
+            .filter(|name| !name.is_empty())
+    }
 }
+
+/// Prefix of the [`InterpretErrorCode::UnsupportedCall`] message for a call
+/// to a bodyless declaration; the callee symbol follows it.
+const BODYLESS_CALL_PREFIX: &str = "call to bodyless declaration @";
+
+/// Suffix of that message when no host model served the call — the case
+/// [`InterpretError::unhosted_callee`] reports.
+const NO_HOST_MODEL_SUFFIX: &str = ": no host model (declarations are not executable in-format)";
 
 impl core::fmt::Display for InterpretError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -154,27 +332,39 @@ impl std::error::Error for InterpretError {}
 pub type InterpretResult<T> = Result<T, InterpretError>;
 
 /// Execution limits. Fuel is consumed per instruction node; call depth is
-/// consumed per direct or indirect interprocedural call; `mem_budget` bounds
-/// the bytes a single `execute_function` run may allocate.
+/// consumed per direct or indirect interprocedural call.
 ///
-/// `mem_budget` makes the interpreter a TOTAL function in *space*, exactly as
-/// `fuel` makes it total in *time*. Without it, a single `Alloca`/`HeapAlloc`
-/// whose `count` comes from a runtime/sampled value (e.g. an `i128::MAX`
-/// boundary input fed into a real-MIR oracle) is materialized directly as a
-/// host `Vec`, so one instruction can exhaust all RAM+swap and panic the
-/// machine — independent of how much fuel remains. Fuel bounds the *number* of
-/// instructions; it cannot bound the *cost of one*. An allocation that would
-/// breach the budget fails closed with `InterpretErrorCode::OutOfMemory`
-/// (an incapacity, never a verdict) instead of touching the host allocator.
+/// There is deliberately NO memory budget. The host memory a run uses
+/// follows the instructions it EXECUTES, never the sizes, counts or lengths
+/// they name. Byte images and array / vector values are persistent ropes with
+/// shared structure (`interpret::rope`): an allocation is a sparse byte store
+/// (O(1) whatever its size); a `MemSet` or a stored splat is one run; a
+/// `MemCopy` stores the source's image as one run SHARING its nodes (a
+/// doubling copy adds a node, not the bytes); a load decodes the image's
+/// structure (a repeating run is decoded once per period, whatever element
+/// type it is read back at); `ArraySplat` of any length is one node and
+/// `InsertElement` copies one path; lane-wise vector arithmetic runs on the
+/// same structure. The `mem_budget` field that used to refuse allocations
+/// above 256 MiB (because they were materialized as host `Vec`s) was a patch
+/// over that representation and was deleted with it.
+///
+/// What is still proportional to a length is only what the program paid for
+/// or asked for: literal bytes it wrote one by one, the elements of a list it
+/// spelled, a copy that reads `r` separately written runs (O(r · height)
+/// nodes), and a load that reads a repeating run at a stride its period does
+/// not divide, which decodes `min(p, s) / gcd(p, s)` distinct elements for
+/// period `p` and stride `s` — that many DISTINCT values exist, and a
+/// materialized value holds each.
+///
+/// `panic_strategy` names which panic runtime the run models (amendment D,
+/// Part 2, `docs/SPEC_RATIFICATIONS.md` §21). The default is
+/// [`PanicStrategy::Abort`], the panic=abort projection every earlier run
+/// executed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct InterpretOptions {
     pub fuel: u64,
     pub max_call_depth: u64,
-    /// Max bytes one `execute_function` run may allocate across all stack/heap/
-    /// global allocations, before any host memory is touched. Default 256 MiB —
-    /// orders of magnitude above any legitimate interpreted body (these allocate
-    /// at most a few stack slots) yet far below what could wedge a host.
-    pub mem_budget: u64,
+    pub panic_strategy: PanicStrategy,
 }
 
 impl Default for InterpretOptions {
@@ -182,9 +372,36 @@ impl Default for InterpretOptions {
         Self {
             fuel: 10_000,
             max_call_depth: 64,
-            mem_budget: 256 * 1024 * 1024,
+            panic_strategy: PanicStrategy::Abort,
         }
     }
+}
+
+/// Which panic runtime a run models (amendment D, Part 2,
+/// `docs/SPEC_RATIFICATIONS.md` §21 rule 2). Mirrors the Lean model's
+/// `PanicStrategy` (the `strat` argument of `stepNWithContext` /
+/// `evalFunctionInContext`, default `.abort`).
+///
+/// * [`PanicStrategy::Abort`] (the default) is the panic=abort projection
+///   (`docs/ub-numerics-policy.md` §4): a failed `Assert` / `AssertInvoke` is
+///   the terminal panic, and no unwind edge is ever taken.
+/// * [`PanicStrategy::Unwind`]: a failed check RAISES an exception object;
+///   the unwinding leaves every frame up to the first `Invoke`,
+///   `InvokeIndirect`, resolved `DropInvoke` or failing `AssertInvoke`,
+///   which transfers it to its landing pad; `Resume` re-raises it; one that
+///   escapes the entry ends the run as the same `Panic` the Abort run
+///   reports.
+///
+/// A verdict computed under `Unwind` covers panic=unwind and panic=abort
+/// builds (up to its first raise the Abort run IS the Unwind run, §21 rule
+/// 7); one computed under `Abort` covers panic=abort only.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum PanicStrategy {
+    /// The panic=abort projection: unwind edges are never taken.
+    #[default]
+    Abort,
+    /// Unwinding is an exit: raise, catch, landing pads and `Resume`.
+    Unwind,
 }
 
 /// Result of executing a function to a `return` terminator.
@@ -192,6 +409,358 @@ impl Default for InterpretOptions {
 pub struct InterpretOutcome {
     pub returns: Vec<InterpretValue>,
     pub steps: u64,
+    /// How many calls to a bodyless declaration a [`HostCalls`] model served
+    /// during this run (WS2.12). Zero means the run was executed ENTIRELY
+    /// in-format. A nonzero count marks the run HOST-ASSISTED: part of its
+    /// behaviour came from a host model, which is a trusted-base row
+    /// (`TRUST.md` item 9), never from the module's own semantics, so a
+    /// consumer must not present such a run as in-format execution evidence.
+    /// Counted by the interpreter, not by the host, so a host cannot hide a
+    /// call it served. The must-refuse corpus cannot express the presenting
+    /// rule (`refuse/host_assisted_run_not_in_format_evidence`): it is a
+    /// reporting act, not a module; the counter on this type is its rung.
+    pub host_calls: u64,
+}
+
+/// A host model of bodyless declarations (WS2.12): the interpreter's ONLY way
+/// to execute a call whose callee has no body in the module.
+///
+/// # Fail-closed default
+///
+/// A call to a declaration ([`Function::is_declaration`]) is refused with
+/// [`InterpretErrorCode::UnsupportedCall`] ("no host model (declarations are
+/// not executable in-format)") unless an installed host returns `Some` for it.
+/// There is no default behaviour: an interpreter without a host (the default)
+/// executes exactly the in-format subset, and a host that returns `None`
+/// ("not mine") is indistinguishable from no host.
+///
+/// # A host is a TRUSTED model, not evidence
+///
+/// Whatever a host computes is the host's claim about the external symbol, not
+/// a consequence of the module. It is outside the proven subset by construction
+/// (`bridge.rs` keeps `Ty::Handle` excluded, and nothing in this module is
+/// mirrored in Lean). Every run it serves is counted in
+/// [`InterpretOutcome::host_calls`], so host-assisted execution can always be
+/// told apart from in-format execution.
+///
+/// # What the interpreter still checks
+///
+/// The arguments are checked against the declaration's signature before the
+/// host sees them. The host's results are checked against the declared return
+/// types (a mismatch is [`InterpretErrorCode::SignatureMismatch`]), and each
+/// result must be a well-formed value of its type: an integer of exactly the
+/// declared width and signedness (a `char` only a Unicode scalar value), a
+/// `Bool`, an `F16`/`F32`/`F64` bit pattern, `Unit`,
+/// or a LIVE handle this execution minted at exactly the declared
+/// [`crate::ty::HandleTy`]. Any other result type (pointers, aggregates) is
+/// refused with `UnsupportedCall`: a host has no access to interpreter memory,
+/// so a pointer it returned would carry forged provenance. An error a host
+/// returns is re-worded "host model for @name: ...", so a host's claim (say,
+/// `UndefinedBehavior`) is never mistaken for a verdict about the module.
+///
+/// `Sync` so that an [`Interpreter`] holding a host stays `Send + Sync`; a host
+/// keeps its mutable tables in the per-execution [`HostState`], never in
+/// itself.
+///
+/// # Reference-counting runtimes (WS2.13)
+///
+/// A host cannot touch interpreter memory, so it cannot itself model a
+/// runtime whose entry points read and write a refcount through a pointer
+/// (`clean_inc(Ptr)` and its siblings). [`HostCalls::rc_op`] is the second
+/// hook for exactly that: the host only CLASSIFIES a declaration as the
+/// `retain` / `release` / `is_unique` entry of the runtime owning one
+/// [`AllocOrigin`], and the INTERPRETER performs the operation on its own
+/// per-allocation reference count — the same count `Inst::Retain` /
+/// `Inst::Release` / `Inst::IsUnique` maintain — after checking that the
+/// pointer addresses a live cell of that origin at offset 0. The host never
+/// sees the pointer. Such a call is host-assisted too (counted in
+/// [`InterpretOutcome::host_calls`]): which runtime a symbol names is the
+/// host's claim.
+pub trait HostCalls: Sync {
+    /// Execute `callee` (a bodyless declaration, declared with the signature
+    /// `sig`) on `args`. Return `None` when this host does not model `callee`
+    /// — including when it models the symbol but `sig` is not the signature
+    /// its model is written against, so a mis-declared entry point is never
+    /// served under a signature the model did not mean.
+    fn call(
+        &self,
+        callee: &Function,
+        sig: &FuncTy,
+        args: &[InterpretValue],
+        host: &mut HostState,
+    ) -> Option<InterpretResult<Vec<InterpretValue>>>;
+
+    /// Classify `callee` (a bodyless declaration with signature `sig`) as an
+    /// entry point of a reference-counting runtime the interpreter models
+    /// with its own refcounts, or `None` (the default: no such claim). The
+    /// interpreter consults this BEFORE [`HostCalls::call`]; a `Some` answer
+    /// is final, and the pointer argument is never handed to the host.
+    fn rc_op(&self, callee: &Function, sig: &FuncTy) -> Option<HostRcOp> {
+        let _ = (callee, sig);
+        None
+    }
+
+    /// Whether this host models `callee`'s link-time symbol, at `callee`'s
+    /// calling convention, as a FIXED-ARITY entry point, whatever signature
+    /// `callee` declares. The default is `false`, meaning no such claim.
+    ///
+    /// The interpreter asks only about a VARIADIC declaration, and asks
+    /// before [`HostCalls::rc_op`] and [`HostCalls::call`] (WS2.15). A symbol
+    /// has one definition, so a variadic declaration of an entry point the
+    /// host models at a fixed arity declares a type incompatible with it (a
+    /// prototype with an ellipsis is never compatible with one without).
+    /// That call is refused as [`InterpretErrorCode::SignatureMismatch`]
+    /// ("non-executable vararg signature"), and the host is never asked to
+    /// serve it. The refusal names the forgery, where "no host model" would
+    /// misreport a modelled symbol as unmodelled. Any other mis-declaration
+    /// of a modelled symbol stays the host's `None` and becomes
+    /// `UnsupportedCall` (WS2.13).
+    fn models_fixed_arity(&self, callee: &Function) -> bool {
+        let _ = callee;
+        false
+    }
+}
+
+/// Which reference-counting operation a runtime entry point performs
+/// ([`HostCalls::rc_op`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum HostRcRole {
+    /// `Inst::Retain`: increment the cell's count. Signature `(Ptr) -> ()`.
+    Retain,
+    /// `Inst::Release`: decrement the cell's count, freeing it at zero.
+    /// Signature `(Ptr) -> ()`.
+    Release,
+    /// `Inst::IsUnique`: whether the count is exactly one. Signature
+    /// `(Ptr) -> (T)` with `T` an integer type (`1`/`0`) or `Bool`.
+    IsUnique,
+}
+
+/// A host's classification of a bodyless declaration as one operation of the
+/// reference-counting runtime that owns the cells of `origin`
+/// ([`HostCalls::rc_op`], WS2.13).
+///
+/// The interpreter executes it on its own allocation table and refuses, as
+/// [`InterpretErrorCode::UndefinedBehavior`], a pointer that is null, does not
+/// address a live allocation, is not at the allocation's base (a runtime
+/// object pointer names the object, not a field of it), or addresses a cell
+/// that was NOT allocated with `HeapAlloc { origin }` — a `RustHeap` cell or a
+/// stack slot handed to `clean_inc` is the "no ownership transfer between
+/// heaps" convention violated (`TRUST.md` item 13(c)), and this is the one
+/// place it is observable. A declaration whose `sig` is not the shape the
+/// role needs is refused as [`InterpretErrorCode::UnsupportedCall`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct HostRcOp {
+    pub role: HostRcRole,
+    /// The `HeapAlloc` origin whose cells this runtime counts.
+    pub origin: AllocOrigin,
+}
+
+/// One minted runtime handle (WS2.12): its exact identity, the host model that
+/// minted it, whether it has been released, and the model's private payload.
+struct HostHandle {
+    ty: crate::ty::HandleTy,
+    owner: String,
+    released: bool,
+    payload: Box<dyn std::any::Any>,
+}
+
+/// Per-execution state a [`HostCalls`] model keeps between calls (WS2.12).
+///
+/// A fresh `HostState` is created by every [`Interpreter::execute_function`]
+/// run and dropped at its end, so there is no state shared across runs and the
+/// interpreter's determinism is unaffected (the tables are ordered maps and
+/// ids come from a counter).
+///
+/// # Handles
+///
+/// A runtime handle ([`Ty::Handle`]) is opaque: only a host creates one
+/// ([`HostState::mint_handle`]) or consumes one ([`HostState::handle`],
+/// [`HostState::release_handle`]). Three facts close the cross-runtime
+/// confusion a bare numeric id would allow:
+///
+/// 1. ids come from ONE counter shared by every model, so no two handles of
+///    one execution share an id, whichever model minted them;
+/// 2. the table records each id's exact `HandleTy` and owning model, and every
+///    consumer names the `HandleTy` its entry point expects: a handle minted at
+///    another runtime is [`InterpretErrorCode::UndefinedBehavior`] ("handle of
+///    runtime R1 passed to R2"), as is one minted by another model, one never
+///    minted in this execution, one used after its release, and one whose
+///    value type was relabelled after minting;
+/// 3. the interpreter's call boundary compares every argument's type with the
+///    declared parameter type exactly, and a handle value's type is the
+///    `HandleTy` it was minted at.
+pub struct HostState {
+    next_handle_id: u64,
+    handles: BTreeMap<u64, HostHandle>,
+}
+
+impl core::fmt::Debug for HostState {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let handles: Vec<_> = self
+            .handles
+            .iter()
+            .map(|(id, handle)| (id, &handle.ty, &handle.owner, handle.released))
+            .collect();
+        f.debug_struct("HostState")
+            .field("next_handle_id", &self.next_handle_id)
+            .field("handles", &handles)
+            .finish()
+    }
+}
+
+impl HostState {
+    fn new() -> Self {
+        Self {
+            next_handle_id: 0,
+            handles: BTreeMap::new(),
+        }
+    }
+
+    /// Mint a fresh handle of type `ty`, owned by the host model `owner`, with
+    /// `payload` as the model's private representation of the runtime object.
+    pub fn mint_handle<T: std::any::Any>(
+        &mut self,
+        ty: crate::ty::HandleTy,
+        owner: &str,
+        payload: T,
+    ) -> InterpretResult<InterpretValue> {
+        let id = self.next_handle_id;
+        // One id per mint, never reused: when the 64-bit id space is spent
+        // (fuel makes that unreachable in practice) minting fails closed
+        // rather than wrapping onto a live id.
+        self.next_handle_id = self.next_handle_id.checked_add(1).ok_or_else(|| {
+            InterpretError::new(
+                InterpretErrorCode::OutOfMemory,
+                "host handle id space exhausted",
+            )
+        })?;
+        let value = InterpretValue {
+            ty: Ty::Handle(Box::new(ty.clone())),
+            kind: InterpretValueKind::Handle { id },
+        };
+        self.handles.insert(
+            id,
+            HostHandle {
+                ty,
+                owner: owner.to_owned(),
+                released: false,
+                payload: Box::new(payload),
+            },
+        );
+        Ok(value)
+    }
+
+    /// Resolve `value` as a live handle of type `expected` minted by the model
+    /// `requester`, and return that model's payload for it.
+    pub fn handle<T: std::any::Any>(
+        &self,
+        value: &InterpretValue,
+        expected: &crate::ty::HandleTy,
+        requester: &str,
+    ) -> InterpretResult<&T> {
+        let (_, handle) = self.resolve(value, expected, requester)?;
+        handle.payload.downcast_ref::<T>().ok_or_else(|| {
+            InterpretError::new(
+                InterpretErrorCode::TypeError,
+                format!(
+                    "host model {requester}: payload of handle of runtime {} is not the \
+                     type this model reads",
+                    expected.runtime
+                ),
+            )
+        })
+    }
+
+    /// Release the handle `value` (the runtime's `drop`): after this every use
+    /// of it, including a second release, is undefined behaviour.
+    pub fn release_handle(
+        &mut self,
+        value: &InterpretValue,
+        expected: &crate::ty::HandleTy,
+        requester: &str,
+    ) -> InterpretResult<()> {
+        let (id, _) = self.resolve(value, expected, requester)?;
+        let handle = self
+            .handles
+            .get_mut(&id)
+            .expect("resolve returned a recorded handle id");
+        handle.released = true;
+        Ok(())
+    }
+
+    /// How many minted handles are not yet released.
+    pub fn live_handles(&self) -> usize {
+        self.handles.values().filter(|h| !h.released).count()
+    }
+
+    fn resolve(
+        &self,
+        value: &InterpretValue,
+        expected: &crate::ty::HandleTy,
+        requester: &str,
+    ) -> InterpretResult<(u64, &HostHandle)> {
+        let InterpretValueKind::Handle { id } = value.kind else {
+            return Err(InterpretError::new(
+                InterpretErrorCode::TypeError,
+                format!(
+                    "host model {requester}: expected a handle of runtime {}, got a {} value",
+                    expected.runtime, value.ty
+                ),
+            ));
+        };
+        let recorded = self.recorded(id, &value.ty)?;
+        if &recorded.ty != expected {
+            return Err(InterpretError::new(
+                InterpretErrorCode::UndefinedBehavior,
+                format!(
+                    "handle of runtime {} passed to {} (minted as {}, entry point expects {})",
+                    recorded.ty.runtime,
+                    expected.runtime,
+                    Ty::Handle(Box::new(recorded.ty.clone())),
+                    Ty::Handle(Box::new(expected.clone())),
+                ),
+            ));
+        }
+        if recorded.owner != requester {
+            return Err(InterpretError::new(
+                InterpretErrorCode::UndefinedBehavior,
+                format!(
+                    "handle of runtime {} minted by host model {} passed to host model {requester}",
+                    recorded.ty.runtime, recorded.owner
+                ),
+            ));
+        }
+        Ok((id, recorded))
+    }
+
+    /// The live record of handle `id`, whose value claims type `value_ty`.
+    fn recorded(&self, id: u64, value_ty: &Ty) -> InterpretResult<&HostHandle> {
+        let Some(recorded) = self.handles.get(&id) else {
+            return Err(InterpretError::new(
+                InterpretErrorCode::UndefinedBehavior,
+                format!("handle #{id} ({value_ty}) was never minted in this execution"),
+            ));
+        };
+        if !matches!(value_ty, Ty::Handle(ty) if **ty == recorded.ty) {
+            return Err(InterpretError::new(
+                InterpretErrorCode::UndefinedBehavior,
+                format!(
+                    "handle #{id} is typed {value_ty} but was minted as {}",
+                    Ty::Handle(Box::new(recorded.ty.clone()))
+                ),
+            ));
+        }
+        if recorded.released {
+            return Err(InterpretError::new(
+                InterpretErrorCode::UndefinedBehavior,
+                format!(
+                    "handle #{id} of runtime {} used after release",
+                    recorded.ty.runtime
+                ),
+            ));
+        }
+        Ok(recorded)
+    }
 }
 
 /// Fixed-width integer runtime payload.
@@ -254,6 +823,20 @@ pub struct InterpretPointer {
     pub offset: u64,
 }
 
+impl InterpretPointer {
+    /// Is this pointer at offset 0 of the allocation it was derived from —
+    /// the OBJECT BASE a runtime object pointer names? The one predicate the
+    /// reference-counted operations read (SPEC "An ARC operation counts only
+    /// a reference-counted cell", clause 3): the instruction path
+    /// (`MemoryState::arc_allocation_mut`, `MemoryState::is_unique`) and the
+    /// pinned-runtime host path (`MemoryState::check_rc_cell`) both refuse
+    /// any other offset, because the pinned runtime reads its header at the
+    /// object base.
+    pub(crate) fn is_object_base(self) -> bool {
+        self.offset == 0
+    }
+}
+
 /// Typed runtime value used by the reference interpreter.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct InterpretValue {
@@ -267,11 +850,25 @@ pub enum InterpretValueKind {
     FloatBits(u64),
     Bool(bool),
     Ptr(InterpretPointer),
-    Vector(Vec<InterpretValue>),
+    /// A vector value: its lanes, held like an array's elements
+    /// ([`ArrayValue`]) — a vector loaded from a `MemSet` or a stored splat
+    /// is one uniform node whatever its lane count, and lane-wise arithmetic
+    /// runs on that structure.
+    Vector(ArrayValue),
     Aggregate(Vec<InterpretValue>),
-    Array(Vec<InterpretValue>),
-    Sequence(Vec<InterpretValue>),
-    Set(Vec<InterpretValue>),
+    /// An array value: a persistent rope whose uniform and repeating runs are
+    /// single nodes ([`ArrayValue`]), so `ArraySplat` / `Constant::Splat` of
+    /// any length is O(1) and `InsertElement` never copies the array.
+    Array(ArrayValue),
+    /// A sequence value, held like an array ([`ArrayValue`]): `InsertElement`
+    /// copies one root-to-leaf path and shares the rest, so an insert never
+    /// copies the sequence, and the element-wise `SeqMapAddK` / `SeqMapNot`
+    /// map each stored value once.
+    Sequence(ArrayValue),
+    /// A set value: its elements in their constant order, held like a
+    /// sequence (no instruction inserts into a set; the shared
+    /// representation keeps the two collection kinds one payload type).
+    Set(ArrayValue),
     Record(Vec<(String, InterpretValue)>),
     Closure {
         func: FuncId,
@@ -292,17 +889,32 @@ pub enum InterpretValueKind {
     PhantomData,
     NullPtr,
     Unit,
-    /// Handle to an open binding frame (the result of `Inst::OpenFrame`),
-    /// carrying the frame id into `BindSlot`/`LoadSlot`/`CloseFrame`. Not a
-    /// storable value: it is never encoded to or decoded from memory.
-    Frame(u64),
+    /// A binding-frame handle: the result of `Inst::OpenFrame` or of a
+    /// functional `Inst::BindSlot`. The handle IS the frame value (Lean
+    /// `Value.frame`): `slots` is this handle's own immutable snapshot, so a
+    /// `BindSlot` yields a NEW handle with one slot replaced and every older
+    /// handle keeps reading its prior contents. `lineage` names the
+    /// `OpenFrame` the handle descends from; the interpreter tracks which
+    /// lineages are OPEN, and `CloseFrame` through any handle of a lineage
+    /// closes all of them. An unbound slot is `None`. Not a storable value:
+    /// it is never encoded to or decoded from memory.
+    Frame {
+        lineage: u64,
+        /// `Arc`, not `Rc`: an `InterpretOutcome` / `InterpretError` must stay
+        /// `Send` (the `trust-ir run` CLI executes on a worker thread).
+        slots: Arc<[Option<InterpretValue>]>,
+    },
     /// A PARTIALLY-INITIALIZED scalar image — the copy-propagates-poison value
     /// (LLVM `poison` / Miri "uninitialized bytes"). Produced by a non-strict
     /// (plain, non-atomic, non-volatile) scalar `Load` whose byte range covers
     /// one or more never-written bytes — the classic whole-lane copy of an
     /// aggregate that reads struct-tail padding or an inactive niche-enum
     /// variant's payload (the two triage cases). The vector carries every byte
-    /// of the load, `None` for the uninitialized bytes.
+    /// of the load, `None` for the uninitialized bytes. It is ALSO the value
+    /// `Inst::Undef` and a `LoadSlot` of an unbound slot bind at a scalar type
+    /// (every byte `None`): `Undef` is poison, never eager UB
+    /// (ub-numerics-policy §4, roadmap WS2.10). At a non-scalar type both fail
+    /// closed with `UndefinedBehavior` — aggregate poison is not modelled.
     ///
     /// It is an INERT transport value: it may only be moved verbatim by `Copy`
     /// or written back verbatim by a (non-strict) `Store` — both preserve which
@@ -327,11 +939,50 @@ pub enum InterpretValueKind {
     /// The Lean mirror is a no-provenance `Addr` pointer value whose deref alone
     /// is UB; see the follow-up ladder in the commit message.
     DanglingPtr(u64),
+    /// An opaque runtime handle (WS2.12), typed at the exact
+    /// `Ty::Handle(HandleTy)` it was minted at. Only a [`HostCalls`] model
+    /// creates one ([`HostState::mint_handle`]); `id` names its row in that
+    /// execution's [`HostState`]. It is TRANSPORT-ONLY, the v43 transport set:
+    /// `Copy`, `Select`, block arguments, call arguments and returns move it
+    /// verbatim. Every other use (arithmetic, comparison, any cast including
+    /// the identity `Bitcast`, aggregate insertion, `BindSlot`, `Store`) is a
+    /// `TypeError`, and it is never stored to memory,
+    /// so there is no in-memory handle image to forge. Never pointer-like.
+    Handle {
+        id: u64,
+    },
+    /// Crystal lane (E3b): an UNWRITTEN struct/tuple LANE, the runtime image of `Constant::Uninit`.
+    /// `ty` (on the enclosing `InterpretValue`) is the lane's type; there is no payload,
+    /// because there is no value.
+    ///
+    /// It exists ONLY as an element of an `Aggregate` whose own type is a `Ty::Struct` or
+    /// `Ty::Tuple`, and nothing ever binds it as an SSA value. `InsertField` replaces it;
+    /// `ExtractField` of it is undefined behaviour (MIR's typed read of an uninitialised
+    /// place); the enclosing aggregate is transported whole (copy, select arms, block and call
+    /// arguments, returns). A `Store` writes its bytes UNINITIALISED and records them as
+    /// unwritten-lane bytes, and a whole-aggregate `Load` whose only uninitialised COVERED
+    /// bytes (WS2.14's covered-byte mask: padding and an inactive variant's tail are
+    /// don't-care) are such recorded lanes gives the lane back unwritten. Anything else that meets it (an
+    /// encode for a cast, a standalone use) fails closed. A program with no `Constant::Uninit`
+    /// never produces it, so every such program executes exactly as it did before it existed.
+    Uninit,
 }
 
 impl InterpretValue {
+    /// An integer value of `ty`. A pointer-width `ty` (`Isize`/`Usize`) is
+    /// sized at the width of the execution running on this thread, and at the
+    /// 64-bit reference width outside one; [`Self::int_at`] names the width.
     pub fn int(ty: Ty, value: i128) -> InterpretResult<Self> {
-        let (bits, signed) = int_shape(&ty).ok_or_else(|| {
+        Self::int_at(ty, value, EXEC_POINTER_BITS.with(core::cell::Cell::get))
+    }
+
+    /// An integer value of `ty` with pointer-width integers sized at
+    /// `pointer_bits` (WS2.16) — e.g. a wasm32 `usize` is `int_at(Ty::Usize,
+    /// v, 32)`. Entry arguments built with [`Self::int`] are re-narrowed to the
+    /// target width by `execute_function`, so this is needed only to compare
+    /// a result value-for-value.
+    pub fn int_at(ty: Ty, value: i128, pointer_bits: u32) -> InterpretResult<Self> {
+        let (bits, signed) = int_shape_at(&ty, pointer_bits).ok_or_else(|| {
             InterpretError::new(
                 InterpretErrorCode::TypeError,
                 format!("expected integer type, got {ty}"),
@@ -370,8 +1021,8 @@ impl InterpretValue {
         }
     }
 
-    /// The lanes of a vector value (in lane order), or `None` for non-vectors.
-    pub fn as_vector(&self) -> Option<&[InterpretValue]> {
+    /// The lanes of a vector value, or `None` for non-vectors.
+    pub fn as_vector(&self) -> Option<&ArrayValue> {
         match &self.kind {
             InterpretValueKind::Vector(lanes) => Some(lanes),
             _ => None,
@@ -380,10 +1031,30 @@ impl InterpretValue {
 }
 
 /// Deterministic interpreter for the bounded core subset.
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct Interpreter<'m> {
     module: Option<&'m Module>,
     options: InterpretOptions,
+    /// The host model of bodyless declarations (WS2.12); `None` = every call to
+    /// a declaration is `UnsupportedCall`.
+    host: Option<&'m dyn HostCalls>,
+    /// Output-only witness for the format's opposite-signed-zero min/max
+    /// choice. `true` means the actual result selected the left operand.
+    float_zero_choice_observer: Option<&'m (dyn Fn(bool) + Sync)>,
+}
+
+impl core::fmt::Debug for Interpreter<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Interpreter")
+            .field("module", &self.module.map(|module| &module.name))
+            .field("options", &self.options)
+            .field("host", &self.host.map(|_| "<host model>"))
+            .field(
+                "float_zero_choice_observer",
+                &self.float_zero_choice_observer.map(|_| "<choice witness>"),
+            )
+            .finish()
+    }
 }
 
 impl<'m> Interpreter<'m> {
@@ -391,6 +1062,8 @@ impl<'m> Interpreter<'m> {
         Self {
             module: None,
             options: InterpretOptions::default(),
+            host: None,
+            float_zero_choice_observer: None,
         }
     }
 
@@ -398,11 +1071,37 @@ impl<'m> Interpreter<'m> {
         Self {
             module: Some(module),
             options: InterpretOptions::default(),
+            host: None,
+            float_zero_choice_observer: None,
         }
     }
 
     pub fn with_options(mut self, options: InterpretOptions) -> Self {
         self.options = options;
+        self
+    }
+
+    /// Install a host model of bodyless declarations (WS2.12). See
+    /// [`HostCalls`]: a run it serves is host-assisted
+    /// ([`InterpretOutcome::host_calls`] > 0), never in-format evidence.
+    pub fn with_host(mut self, host: &'m dyn HostCalls) -> Self {
+        self.host = Some(host);
+        self
+    }
+
+    /// Observe the actual choices of successful `FMin`/`FMax` operations
+    /// between opposite signed zeros, in execution order, including nested
+    /// calls and every logical lane of a completed vector operation.
+    /// The observer receives `true` when the result has the left operand's
+    /// sign and `false` for the right. Equal-sign zeros and all other inputs
+    /// produce no event. The callback does not choose or replace a result.
+    /// A failed vector operation produces no events for that instruction.
+    ///
+    /// A semantic model can replay this witness while also admitting every
+    /// other choice the format permits. Ordinary execution installs no
+    /// observer and retains the same results, budgets and host-call count.
+    pub fn with_float_zero_choice_observer(mut self, observer: &'m (dyn Fn(bool) + Sync)) -> Self {
+        self.float_zero_choice_observer = Some(observer);
         self
     }
 
@@ -413,12 +1112,29 @@ impl<'m> Interpreter<'m> {
             .unwrap_or(crate::shape::DEFAULT_POINTER_BITS)
     }
 
-    /// The interpreter's executable byte model is the canonical 64-bit,
-    /// little-endian TrustIR layout. A target-free module selects that model;
-    /// an explicit target must match it exactly. In particular, a triple plus
-    /// pointer width does not carry enough information to guess i686/AVR scalar
-    /// ABI alignment, so those modules are transportable but not executable by
-    /// this reference interpreter.
+    /// Pointer width in bytes (`pointer_bits / 8`): the size of a `Ptr`, an
+    /// `Isize`/`Usize`, and each of a fat pointer's two words (WS2.16).
+    fn pointer_bytes(&self) -> u64 {
+        u64::from(self.pointer_bits() / 8)
+    }
+
+    /// The interpreter's executable byte model is a POINTER-WIDTH-PARAMETRIC
+    /// little-endian layout over the canonical scalar table (WS2.16, F-036). A
+    /// target-free module selects the 64-bit reference model; an explicit
+    /// target must be little-endian, sit in the canonical scalar table
+    /// (`Module::target_has_canonical_scalar_layout`), and have 32- or 64-bit
+    /// pointers. That admits wasm32 (`pointer_size == 4`) alongside the 64-bit
+    /// targets: `Ptr`/`Isize`/`Usize` are `pointer_bits / 8` bytes, addresses
+    /// are range-checked to `2^pointer_bits`, fat pointers are two pointer
+    /// words, and GEP faults past the address space. A triple plus pointer
+    /// width still does not carry enough information to guess i686/AVR scalar
+    /// ABI alignment (i686 aligns `i64` to 4), so those modules — and every
+    /// big-endian one — stay transportable but not executable here, refused
+    /// by name with `UnsupportedMemory`.
+    ///
+    /// Executability alone is not subset membership. Subsetv5 also selects
+    /// the target-indexed Lean model for wasm32; unrelated construct
+    /// exclusions remain authoritative (`Module::check_conformance_subset`).
     fn require_reference_execution_layout(&self, block: BlockId) -> InterpretResult<()> {
         let Some(module) = self.module else {
             return Ok(());
@@ -427,7 +1143,7 @@ impl<'m> Interpreter<'m> {
             return Ok(());
         };
         let pointer_bits = self.pointer_bits();
-        if pointer_bits == crate::shape::DEFAULT_POINTER_BITS
+        if matches!(pointer_bits, 32 | 64)
             && target.endianness == crate::Endianness::Little
             && module.target_has_canonical_scalar_layout()
         {
@@ -437,37 +1153,22 @@ impl<'m> Interpreter<'m> {
                 InterpretErrorCode::UnsupportedMemory,
                 block,
                 format!(
-                    "reference execution requires a canonical 64-bit little-endian target layout; got {:?} with {pointer_bits}-bit pointers and {}-endian byte order",
+                    "reference execution requires a canonical-scalar-table target with a 32- or \
+                     64-bit little-endian layout; got {:?} with {pointer_bits}-bit pointers and \
+                     {}-endian byte order",
                     target.triple, target.endianness
                 ),
             ))
         }
     }
 
-    /// The executable memory model represents addresses as 64-bit lanes.
-    /// Refuse a fat-pointer operation on any explicitly narrower/wider target
-    /// instead of silently applying the 16-byte 64-bit layout to it.
+    /// A fat pointer is two pointer words at the executable target's width.
+    /// Every width the executable layout admits (32/64-bit little-endian, see
+    /// [`Self::require_reference_execution_layout`]) is a fat-pointer width,
+    /// so this is that gate — kept as a named hook so every fat-pointer site
+    /// states the dependency.
     fn require_fat_pointer_layout(&self, block: BlockId) -> InterpretResult<()> {
-        self.require_reference_execution_layout(block)?;
-        let pointer_bits = self.pointer_bits();
-        let little_endian = self
-            .module
-            .and_then(|module| module.target_info.as_ref())
-            .is_none_or(|target| target.endianness == crate::Endianness::Little);
-        if pointer_bits == crate::shape::DEFAULT_POINTER_BITS && little_endian {
-            Ok(())
-        } else {
-            Err(err(
-                InterpretErrorCode::UnsupportedMemory,
-                block,
-                format!(
-                    "fat-pointer execution is pinned to the {}-bit little-endian target; \
-                     got {pointer_bits}-bit {}-endian",
-                    crate::shape::DEFAULT_POINTER_BITS,
-                    if little_endian { "little" } else { "big" }
-                ),
-            ))
-        }
+        self.require_reference_execution_layout(block)
     }
 
     fn validate_fat_pointer_value(
@@ -500,7 +1201,9 @@ impl<'m> Interpreter<'m> {
             .ok_or_else(|| type_error(block, format!("{} has no metadata type", value.ty)))?;
         expect_ty(metadata, &canonical, block)?;
         let metadata_shape_matches = match (&canonical, &metadata.kind) {
-            (Ty::U64, InterpretValueKind::Int(int)) => int.bits == 64 && !int.signed,
+            (Ty::U32 | Ty::U64, InterpretValueKind::Int(int)) => {
+                int_shape(&canonical) == Some((int.bits, int.signed))
+            }
             (Ty::Ptr, InterpretValueKind::Ptr(_) | InterpretValueKind::NullPtr) => true,
             _ => false,
         };
@@ -533,31 +1236,170 @@ impl<'m> Interpreter<'m> {
         self.execute_function(function, args)
     }
 
+    /// Keep code words disjoint from every ordinary or observed data allocation.
+    /// Uncalled declarations occupy module positions in the code namespace too.
+    fn initial_memory(&self, block: BlockId) -> InterpretResult<MemoryState> {
+        let pointer_bits = self.pointer_bits();
+        // Function pointers occupy symbolic addresses 1..=function_count.
+        // Reserve that namespace before globals/stack/heap allocations so a
+        // data address can never decode as a registered function pointer.
+        let function_count = self
+            .module
+            .map_or(0, |module| module.functions.len() as u64);
+        let first_data_address = function_count
+            .checked_add(1)
+            .filter(|address| *address <= max_address_for(pointer_bits))
+            .ok_or_else(|| {
+                invalid_function_pointer(
+                    block,
+                    "function address namespace exceeds target pointer width",
+                )
+            })?;
+        Ok(MemoryState {
+            next_addr: 1024.max(first_data_address),
+            max_address: max_address_for(pointer_bits),
+            ..MemoryState::default()
+        })
+    }
+
     pub fn execute_function(
         &self,
         function: &Function,
         args: impl IntoIterator<Item = InterpretValue>,
     ) -> InterpretResult<InterpretOutcome> {
+        // Typed ABI records describe transport that this value interpreter
+        // does not implement yet (fresh by-value copies, extension and hidden
+        // results). Refuse the entire module before executing any body or host
+        // callback, including unused/FnPtr-only typed signatures.
+        if self
+            .module
+            .is_some_and(|module| module.func_types.iter().any(|ty| ty.abi.is_some()))
+        {
+            return Err(err(
+                InterpretErrorCode::UnsupportedCall,
+                function.entry,
+                "typed signature ABI transport is not implemented by the reference interpreter",
+            ));
+        }
+        if self
+            .module
+            .is_some_and(|module| module.first_storage_violation().is_some())
+        {
+            return Err(type_error(
+                function.entry,
+                "storage-only geometry cannot be a typed value or malformed layout",
+            ));
+        }
+        // The public API also accepts an explicitly supplied Function. It may
+        // not borrow the module's policy result for a different body.
+        let empty;
+        let module = match self.module {
+            Some(module) => module,
+            None => {
+                empty = Module::new("standalone-storage-policy");
+                &empty
+            }
+        };
+        let member = module
+            .functions
+            .get(function.id.as_usize())
+            .is_some_and(|candidate| core::ptr::eq(candidate, function));
+        if !member {
+            let layouts = module.layout_table();
+            let mut invalid = false;
+            module.visit_function_storage_violations(function, 0, &layouts, |_| invalid = true);
+            if invalid {
+                return Err(type_error(
+                    function.entry,
+                    "storage-only type is not a value",
+                ));
+            }
+        }
         self.require_reference_execution_layout(function.entry)?;
+        let pointer_bits = self.pointer_bits();
+        // Every pointer-width integer minted during this run (`int_shape`) is
+        // `pointer_bits` wide; the scope restores the enclosing width on exit.
+        let _pointer_width = PointerWidthScope::enter(pointer_bits);
+        let memory = self.initial_memory(function.entry)?;
         let mut state = ExecState {
             values: BTreeMap::new(),
-            memory: MemoryState::with_budget(self.options.mem_budget),
+            memory,
             globals: BTreeMap::new(),
-            frames: BTreeMap::new(),
+            frames: BTreeSet::new(),
             next_frame_id: 0,
             steps: 0,
             remaining_fuel: self.options.fuel,
+            host: HostState::new(),
+            host_calls: 0,
+            drop_glue: self.module.map(Module::drop_glue_index),
+            unwind: UnwindState::default(),
         };
-        let returns = self.execute_function_inner(
-            function,
-            args.into_iter().collect(),
-            &mut state,
-            self.options.max_call_depth,
-        )?;
+        let mut args: Vec<InterpretValue> = args.into_iter().collect();
+        // An embedder builds an entry argument OUTSIDE the run, where
+        // `InterpretValue::int` sizes `Isize`/`Usize` at the 64-bit reference
+        // width. Re-express each at this target's pointer width, refusing (by
+        // `TypeError`) a value the narrower width cannot represent rather than
+        // truncating it.
+        // The sparse walk follows stored payloads, including hostile kind/type
+        // mismatches. Such a payload cannot introduce Char UB into a declared
+        // Char-free entry: it is malformed transport, hence a TypeError. Use
+        // the same by-value reach predicate as the source-origin subset.
+        let layouts = self.module.map(Module::layout_table);
+        let signature = self.module.and_then(|module| module.func_type(function.ty));
+        for (index, arg) in args.iter_mut().enumerate() {
+            let char_allowed = if let (Some(layouts), Some(signature)) = (&layouts, signature) {
+                // A variadic declaration's tail has no fixed formal type.
+                // Preserve its existing dynamic carrier/Unicode checks; this
+                // is not a Char-free declared-parameter absence claim.
+                (function.is_declaration()
+                    && signature.is_vararg
+                    && index >= signature.params.len())
+                    || signature
+                        .params
+                        .get(index)
+                        .is_some_and(|ty| *ty == arg.ty && layouts.type_contains_char_by_value(ty))
+            } else {
+                // Standalone execution has no nominal declaration authority;
+                // retain its existing payload checks, without claiming a
+                // module-scoped Char-free entry contract.
+                self.module.is_none()
+            };
+            narrow_pointer_width_ints(arg, pointer_bits, function.entry, char_allowed)?;
+        }
+        // A handle is minted by a host INSIDE one execution, so none can exist
+        // before it starts. Refusing one in the entry arguments keeps an
+        // embedder-built `Handle { id }` from aliasing the handle a host later
+        // mints under the same id in this run.
+        // The TYPE is checked as well as the payload: a non-handle payload
+        // typed as a handle passes the type-only signature check and would
+        // otherwise be transported (and returned) as if it were one.
+        if let Some(forged) = args.iter().find_map(first_handle) {
+            let what = match forged.kind {
+                InterpretValueKind::Handle { id } => format!("handle #{id}"),
+                _ => format!("a {} value with a non-handle payload", forged.ty),
+            };
+            return Err(ub(
+                function.entry,
+                format!(
+                    "entry argument carries {what}, which was never minted in this execution \
+                     (a handle exists only inside the run whose host minted it)"
+                ),
+            ));
+        }
+        let returns = if function.is_declaration() {
+            // A bodyless ENTRY is a host call too: it has no block 0 to enter,
+            // so reporting `MissingBlock` for it would be a structural code on
+            // well-formed IR.
+            self.check_function_args(function, &args, function.entry)?;
+            self.execute_host_call(function.entry, function, args, &mut state)?
+        } else {
+            self.execute_function_inner(function, args, &mut state, self.options.max_call_depth)?
+        };
 
         Ok(InterpretOutcome {
             returns,
             steps: state.steps,
+            host_calls: state.host_calls,
         })
     }
 
@@ -598,6 +1440,13 @@ impl<'m> Interpreter<'m> {
                         self.check_function_returns(function, &values, block.id)?;
                         return Ok(values);
                     }
+                    Step::Unwind { exception, target } => {
+                        self.enter_landing_pad(function, block.id, exception, target, state)?;
+                        current = target;
+                        incoming = Vec::new();
+                        jumped = true;
+                        break;
+                    }
                 }
             }
 
@@ -619,8 +1468,54 @@ impl<'m> Interpreter<'m> {
         call_depth: u64,
     ) -> InterpretResult<Step> {
         match &node.inst {
+            // Amendment D (`docs/SPEC_RATIFICATIONS.md` §20 rule 3, NORMATIVE): a
+            // drop RESOLVES through the module's drop-glue table, and a resolved
+            // `drop T, %p` IS `call glue(%p)` -- exactly the `Call` path below
+            // (call depth, `MissingFunction`, argument checking: poison or a
+            // partial pointer is UB at the boundary, a bodyless glue is a host
+            // call or `UnsupportedCall`), yielding no value. Resolution comes
+            // FIRST, so an unresolved drop reads nothing. An UNRESOLVED drop
+            // states no destructor and is refused (`UnsupportedInstruction`),
+            // never run as a no-op: that would interpret a DIFFERENT program, in
+            // the direction that invents agreement. The drop has no other
+            // effect: it frees nothing and de-initializes nothing (a glue that
+            // deallocates makes a second drop UB through the existing rules).
+            Inst::Drop { ty, ptr } => {
+                let glue = resolve_drop_glue(state, block, "Drop", ty)?;
+                let args = eval_args(state, block, std::slice::from_ref(ptr))?;
+                let returns = self.execute_direct_call(block, glue, args, state, call_depth)?;
+                bind_results(state, block, node, returns)?;
+                Ok(Step::Continue)
+            }
+            // The unwinding twin, exactly as `Invoke` (below): the glue runs as
+            // for `Drop`, then control takes the normal edge. Under
+            // `PanicStrategy::Abort` `unwind_dest` is never taken; under
+            // `Unwind` an unwinding out of the glue enters it (§21).
+            Inst::DropInvoke {
+                ty,
+                ptr,
+                normal_dest,
+                normal_args,
+                unwind_dest,
+            } => {
+                let glue = resolve_drop_glue(state, block, "DropInvoke", ty)?;
+                let args = eval_args(state, block, std::slice::from_ref(ptr))?;
+                let returns = match self.execute_direct_call(block, glue, args, state, call_depth) {
+                    Ok(returns) => returns,
+                    Err(error) => return self.catch_unwinding(state, error, *unwind_dest),
+                };
+                bind_results(state, block, node, returns)?;
+                Ok(Step::Jump {
+                    target: *normal_dest,
+                    args: eval_args(state, block, normal_args)?,
+                })
+            }
             Inst::Const { ty, value } => {
-                let value = self.constant_to_value(ty, value, block)?;
+                // Crystal lane (E3b): the validator's placement rule, re-checked fail-closed here
+                // so an unvalidated module cannot smuggle an unwritten lane anywhere but a direct
+                // lane of a struct/tuple aggregate constant.
+                check_uninit_lane_placement(ty, value, block)?;
+                let value = self.constant_to_value_in(ty, value, Some(state), block)?;
                 bind_results(state, block, node, [value])?;
                 Ok(Step::Continue)
             }
@@ -649,11 +1544,14 @@ impl<'m> Interpreter<'m> {
                 )?;
                 Ok(Step::Continue)
             }
-            Inst::Undef { .. } => Err(err(
-                InterpretErrorCode::UndefinedBehavior,
-                block,
-                "executing undef would read an undefined value",
-            )),
+            Inst::Undef { ty } => {
+                // `Undef` binds a POISON value (ub-numerics-policy §4, roadmap
+                // WS2.10): executing it is not undefined behaviour; INSPECTING
+                // the value is, at the true use site (`reject_partial`).
+                let poison = self.scalar_poison(ty, block, "undef")?;
+                bind_results(state, block, node, [poison])?;
+                Ok(Step::Continue)
+            }
             Inst::BinOp { op, ty, lhs, rhs } => {
                 let lhs = state.value(block, *lhs)?;
                 let rhs = state.value(block, *rhs)?;
@@ -677,7 +1575,7 @@ impl<'m> Interpreter<'m> {
             Inst::ICmp { op, ty, lhs, rhs } => {
                 let lhs = state.value(block, *lhs)?;
                 let rhs = state.value(block, *rhs)?;
-                let result = self.eval_icmp(*op, ty, lhs, rhs, block)?;
+                let result = self.eval_icmp(*op, ty, lhs, rhs, state, block)?;
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
             }
@@ -707,6 +1605,35 @@ impl<'m> Interpreter<'m> {
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
             }
+            Inst::MakeAggregate {
+                ty,
+                variant,
+                fields,
+            } => {
+                let mut lanes = Vec::with_capacity(fields.len());
+                for field in fields {
+                    lanes.push(state.value(block, *field)?.clone());
+                }
+                let result = self.eval_make_aggregate(ty, *variant, lanes, block)?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
+            Inst::MakeClosure { ty, func, captures } => {
+                let mut values = Vec::with_capacity(captures.len());
+                for capture in captures { values.push(state.value(block, *capture)?.clone()); }
+                let value = self.eval_make_closure(*ty, *func, values, block)?;
+                bind_results(state, block, node, [value])?;
+                Ok(Step::Continue)
+            }
+            // v50: `n` copies of one register value — one uniform node, O(1)
+            // in `n`.
+            Inst::ArraySplat { ty, value } => {
+                let value = state.value(block, *value)?;
+                reject_handle(value, block, "ArraySplat")?;
+                let result = self.eval_array_splat(ty, value, block)?;
+                bind_results(state, block, node, [result])?;
+                Ok(Step::Continue)
+            }
             Inst::ExtractField {
                 ty,
                 aggregate,
@@ -725,6 +1652,7 @@ impl<'m> Interpreter<'m> {
             } => {
                 let aggregate = state.value(block, *aggregate)?;
                 let value = state.value(block, *value)?;
+                reject_handle(value, block, "InsertField")?;
                 let result = self.eval_insert_field(ty, aggregate, *field, value, block)?;
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
@@ -745,6 +1673,7 @@ impl<'m> Interpreter<'m> {
                 let array = state.value(block, *array)?;
                 let index = state.value(block, *index)?;
                 let value = state.value(block, *value)?;
+                reject_handle(value, block, "InsertElement")?;
                 let result = self.eval_insert_element(ty, array, index, value, block)?;
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
@@ -754,37 +1683,31 @@ impl<'m> Interpreter<'m> {
                 // (width-preserving wrap). The canonical forward function of `for x in
                 // &mut l { *x += k }`; the give-back elaborator OBSERVES this fixed semantics.
                 let seq_val = state.value(block, *seq)?;
-                let elems = match &seq_val.kind {
-                    InterpretValueKind::Sequence(elems) => elems.clone(),
-                    _ => {
-                        return Err(type_error(
-                            block,
-                            format!("seq_map_add_k requires a sequence, got {}", seq_val.ty),
-                        ));
-                    }
+                let InterpretValueKind::Sequence(elems) = &seq_val.kind else {
+                    return Err(type_error(
+                        block,
+                        format!("seq_map_add_k requires a sequence, got {}", seq_val.ty),
+                    ));
                 };
-                let mut mapped = Vec::with_capacity(elems.len());
-                for e in elems {
-                    match &e.kind {
-                        InterpretValueKind::Int(i) => {
-                            let inc =
-                                InterpretInt::from_raw(i.bits, i.signed, i.raw.wrapping_add(u128::from(*k)))
-                                    .ok_or_else(|| {
-                                        type_error(block, "seq_map_add_k: invalid integer width")
-                                    })?;
-                            mapped.push(InterpretValue {
-                                ty: e.ty.clone(),
-                                kind: InterpretValueKind::Int(inc),
-                            });
-                        }
-                        _ => {
-                            return Err(type_error(
-                                block,
-                                "seq_map_add_k requires a sequence of integers",
-                            ));
-                        }
+                // Element-wise and pure: each STORED value is mapped once, so a
+                // uniform run costs one addition whatever its length.
+                let mapped = elems.try_map(|e| match &e.kind {
+                    InterpretValueKind::Int(i) => {
+                        let inc =
+                            InterpretInt::from_raw(i.bits, i.signed, i.raw.wrapping_add(u128::from(*k)))
+                                .ok_or_else(|| {
+                                    type_error(block, "seq_map_add_k: invalid integer width")
+                                })?;
+                        Ok(InterpretValue {
+                            ty: e.ty.clone(),
+                            kind: InterpretValueKind::Int(inc),
+                        })
                     }
-                }
+                    _ => Err(type_error(
+                        block,
+                        "seq_map_add_k requires a sequence of integers",
+                    )),
+                })?;
                 bind_results(
                     state,
                     block,
@@ -800,32 +1723,23 @@ impl<'m> Interpreter<'m> {
                 // loopFwd for the boolean-flip loop: negate (Bool.not) every element. The
                 // second observable element op (self-inverse), alongside SeqMapAddK.
                 let seq_val = state.value(block, *seq)?;
-                let elems = match &seq_val.kind {
-                    InterpretValueKind::Sequence(elems) => elems.clone(),
-                    _ => {
-                        return Err(type_error(
-                            block,
-                            format!("seq_map_not requires a sequence, got {}", seq_val.ty),
-                        ));
-                    }
+                let InterpretValueKind::Sequence(elems) = &seq_val.kind else {
+                    return Err(type_error(
+                        block,
+                        format!("seq_map_not requires a sequence, got {}", seq_val.ty),
+                    ));
                 };
-                let mut mapped = Vec::with_capacity(elems.len());
-                for e in elems {
-                    match &e.kind {
-                        InterpretValueKind::Bool(b) => {
-                            mapped.push(InterpretValue {
-                                ty: e.ty.clone(),
-                                kind: InterpretValueKind::Bool(!*b),
-                            });
-                        }
-                        _ => {
-                            return Err(type_error(
-                                block,
-                                "seq_map_not requires a sequence of booleans",
-                            ));
-                        }
-                    }
-                }
+                // Element-wise and pure: each stored value is mapped once.
+                let mapped = elems.try_map(|e| match &e.kind {
+                    InterpretValueKind::Bool(b) => Ok(InterpretValue {
+                        ty: e.ty.clone(),
+                        kind: InterpretValueKind::Bool(!*b),
+                    }),
+                    _ => Err(type_error(
+                        block,
+                        "seq_map_not requires a sequence of booleans",
+                    )),
+                })?;
                 bind_results(
                     state,
                     block,
@@ -882,8 +1796,12 @@ impl<'m> Interpreter<'m> {
                         ));
                     }
                 };
-                let mut mapped = Vec::with_capacity(elems.len());
-                for elem in elems {
+                // One call PER ELEMENT, in order: the element function is
+                // arbitrary code (it allocates, consumes fuel, may fault), so
+                // unlike the fixed maps above it is not mapped once per
+                // stored value. Each result lands in the new sequence as it
+                // is produced.
+                let mapped = ArrayValue::try_from_elements(elems.iter().map(|elem| {
                     // Type guard (fail-closed): the element value must match
                     // the element function's pointee type.
                     if elem.ty != elem_ty {
@@ -899,7 +1817,7 @@ impl<'m> Interpreter<'m> {
                     // Per-element cell: alloc, write the element in. Internal
                     // scratch — exact-size (no heap slack).
                     let cell = self.eval_alloca(&elem_ty, None, None, state, block, false)?;
-                    self.eval_store(&elem_ty, &cell, &elem, None, state, block, false)?;
+                    self.eval_store(&elem_ty, &cell, elem, None, state, block, false)?;
                     // Call fwd(&mut cell) through the standard call machinery
                     // (argument typed as &mut elem so the signature check holds).
                     let arg = InterpretValue {
@@ -908,9 +1826,8 @@ impl<'m> Interpreter<'m> {
                     };
                     self.execute_direct_call(block, *fwd, vec![arg], state, call_depth)?;
                     // Read the mutated element back out of the cell.
-                    let new_elem = self.eval_load(&elem_ty, &cell, None, state, block, false)?;
-                    mapped.push(new_elem);
-                }
+                    self.eval_load(&elem_ty, &cell, None, state, block, false)
+                }))?;
                 bind_results(
                     state,
                     block,
@@ -927,10 +1844,14 @@ impl<'m> Interpreter<'m> {
                 reject_partial(cond, block, "assume")?;
                 match cond.as_bool() {
                     Some(true) => Ok(Step::Continue),
+                    // WS2.11: a false assumption is the harness's vacuity
+                    // filter — the input lies outside the assumed domain. It
+                    // is still an error (UB in the Lean model), but named
+                    // apart from program UB so a driver can classify it.
                     Some(false) => Err(err(
-                        InterpretErrorCode::UndefinedBehavior,
+                        InterpretErrorCode::AssumeViolated,
                         block,
-                        "assume condition evaluated to false",
+                        "assume condition evaluated to false: the input lies outside the assumed domain",
                     )),
                     None => Err(type_error(
                         block,
@@ -938,16 +1859,21 @@ impl<'m> Interpreter<'m> {
                     )),
                 }
             }
-            Inst::Assert { cond } => {
+            Inst::Assert { cond, kind, site } => {
                 let cond = state.value(block, *cond)?;
                 reject_partial(cond, block, "assert")?;
                 match cond.as_bool() {
                     Some(true) => Ok(Step::Continue),
-                    Some(false) => Err(err(
-                        InterpretErrorCode::Panic,
-                        block,
-                        "assert condition evaluated to false",
-                    )),
+                    // §21 rule 3: under `Unwind` the failure RAISES; the
+                    // error travels up the frames as the exception in flight.
+                    Some(false) => {
+                        let error = assert_panic(state, block, kind, site.as_ref())?;
+                        if self.options.panic_strategy == PanicStrategy::Unwind {
+                            let exception = raise_exception(state, block, &error)?;
+                            state.unwind.in_flight = Some(exception);
+                        }
+                        Err(error)
+                    }
                     None => Err(type_error(
                         block,
                         format!("assert requires bool, got {}", cond.ty),
@@ -1019,7 +1945,13 @@ impl<'m> Interpreter<'m> {
                 let slot_index = InterpretValue::int(Ty::I64, i128::from(*state_slot))
                     .map_err(|e| e.with_block(block))?;
                 let slot_ptr =
-                    self.eval_gep(&Ty::I64, &frame_ptr, std::slice::from_ref(&slot_index), block)?;
+                    self.eval_gep(
+                    &Ty::I64,
+                    &frame_ptr,
+                    std::slice::from_ref(&slot_index),
+                    &state.memory,
+                    block,
+                )?;
                 let next = InterpretValue::int(Ty::I64, i128::from(*next_state))
                     .map_err(|e| e.with_block(block))?;
                 self.eval_store(&Ty::I64, &slot_ptr, &next, None, state, block, false)?;
@@ -1037,24 +1969,41 @@ impl<'m> Interpreter<'m> {
                 bind_results(state, block, node, returns)?;
                 Ok(Step::Continue)
             }
+            Inst::CallCannotUnwind { .. } | Inst::CallIndirectCannotUnwind { .. } => {
+                Err(InterpretError::new(InterpretErrorCode::UnsupportedInstruction,
+                    "Inst::CallCannotUnwind/CallIndirectCannotUnwind: no host-unwind boundary model").with_block(block))
+            }
             Inst::Invoke {
                 callee,
                 args,
                 normal_dest,
                 normal_args,
-                unwind_dest: _,
+                unwind_dest,
             } => {
-                // The interpreter models "the callee returns normally" (it does
-                // not raise host exceptions), so an invoke runs the call exactly
-                // like `Inst::Call` and always takes the NORMAL edge; the
-                // `unwind_dest` landing pad is unreachable under interpretation.
-                // The callee's return values bind the invoke's own `node.results`
-                // (the same shape as `Inst::Call`), and control then jumps to
-                // `normal_dest` passing `normal_args`. This is sound for the
-                // non-throwing case the end-to-end harness exercises.
+                // An invoke runs the call exactly like `Inst::Call`: the
+                // callee's return values bind the invoke's own `node.results`,
+                // and control jumps to `normal_dest` passing `normal_args`.
+                // Under `PanicStrategy::Abort` (the default; the panic=abort
+                // projection, `docs/ub-numerics-policy.md` §4 "Unwinding") the
+                // unwind edge is NEVER taken: a callee that traps (a failed
+                // `Assert`, a reached `Unreachable`, any interpreter error)
+                // propagates that trap straight out, and that propagation IS
+                // the panic=abort semantics. Under `PanicStrategy::Unwind`
+                // (§21) an UNWINDING out of the callee, and only that, is
+                // caught below and enters `unwind_dest`; every other error
+                // propagates as before. A verdict computed under `Abort`
+                // covers panic=abort only; `ModuleValidationReport::
+                // unwind_surface` names the functions a panic=unwind consumer
+                // must not rely on it for.
                 let call_args = eval_args(state, block, args)?;
                 let returns =
-                    self.execute_direct_call(block, *callee, call_args, state, call_depth)?;
+                    match self.execute_direct_call(block, *callee, call_args, state, call_depth) {
+                        Ok(returns) => returns,
+                        // §21 rule 4: under `Unwind` an unwinding out of the
+                        // callee is caught here; no result binds and the
+                        // normal-edge arguments are not evaluated.
+                        Err(error) => return self.catch_unwinding(state, error, *unwind_dest),
+                    };
                 bind_results(state, block, node, returns)?;
                 let edge_args = eval_args(state, block, normal_args)?;
                 Ok(Step::Jump {
@@ -1062,30 +2011,117 @@ impl<'m> Interpreter<'m> {
                     args: edge_args,
                 })
             }
+            // Amendment P (wire v54): a sited check with an unwind edge. A
+            // passing check jumps to `normal_dest(normal_args)`. Under
+            // `PanicStrategy::Abort` (the panic=abort projection, exactly as
+            // `Invoke`) a failing one is the terminal sited panic and
+            // `unwind_dest` is never taken; under `Unwind` it raises into
+            // `unwind_dest` (§21).
+            Inst::AssertInvoke {
+                cond,
+                kind,
+                site,
+                normal_dest,
+                normal_args,
+                unwind_dest,
+            } => {
+                let cond = state.value(block, *cond)?;
+                reject_partial(cond, block, "assert")?;
+                match cond.as_bool() {
+                    Some(true) => Ok(Step::Jump {
+                        target: *normal_dest,
+                        args: eval_args(state, block, normal_args)?,
+                    }),
+                    // §21 rules 3-4: under `Unwind` a failing check raises
+                    // and is caught by its own unwind edge, in this frame.
+                    Some(false) => {
+                        let error = assert_panic(state, block, kind, Some(site))?;
+                        if self.options.panic_strategy == PanicStrategy::Unwind {
+                            let exception = raise_exception(state, block, &error)?;
+                            return Ok(Step::Unwind {
+                                exception,
+                                target: *unwind_dest,
+                            });
+                        }
+                        Err(error)
+                    }
+                    None => Err(type_error(
+                        block,
+                        format!("assert requires bool, got {}", cond.ty),
+                    )),
+                }
+            }
             Inst::LandingPad {
                 is_cleanup: _,
                 catch_type_indices: _,
             } => {
-                // A landing pad is only entered via an `Invoke`'s unwind edge,
-                // which interpretation never takes (it models no thrown
-                // exception). If reached directly it yields a NULL exception
-                // pointer and a zero type selector — the produced values are
-                // unobservable because the pad is unreachable under
-                // interpretation, but binding them keeps the interpreter total.
-                let exn_ptr = InterpretValue {
-                    ty: Ty::Ptr,
-                    kind: InterpretValueKind::NullPtr,
+                // §21 rule 5: under `Unwind`, a pad entered by U(e, d) binds
+                // the exception and its selector, and clears the hand.
+                if self.options.panic_strategy == PanicStrategy::Unwind
+                    && let Some((exception, selector)) = state.unwind.in_hand.take()
+                {
+                    let selector = InterpretValue::int(Ty::I32, i128::from(selector))
+                        .map_err(|e| e.with_block(block))?;
+                    bind_results(
+                        state,
+                        block,
+                        node,
+                        [
+                            InterpretValue {
+                                ty: Ty::Ptr,
+                                kind: InterpretValueKind::Ptr(exception),
+                            },
+                            selector,
+                        ],
+                    )?;
+                    return Ok(Step::Continue);
+                }
+                // A landing pad is only entered via an invoke-family unwind edge,
+                // which the panic=abort projection never takes (see the `Invoke`
+                // arm), and which leaves the exception in hand under `Unwind`
+                // (above). Reaching one any other way — a `Br` into a pad block,
+                // a pad in the entry block, a pad mid-block — is a module the
+                // validator refuses (`MisplacedLandingPad`), and the pad's two
+                // results would read registers no unwinder loaded. FAIL CLOSED:
+                // fabricating `(null, 0)` for them would fill a missing value
+                // and let execution continue as if an exception were in hand.
+                Err(err(
+                    InterpretErrorCode::UnsupportedInstruction,
+                    block,
+                    "landingpad entered without an unwind edge (unwinding is not modelled; panic=abort)",
+                ))
+            }
+            // §21 rule 6: under `Unwind`, `Resume` re-raises the exception
+            // whose object is at its operand's ADDRESS; any other value is UB.
+            Inst::Resume { exn } if self.options.panic_strategy == PanicStrategy::Unwind => {
+                let value = state.value(block, *exn)?;
+                reject_partial(value, block, "resume")?;
+                let not_an_exception = || {
+                    ub(
+                        block,
+                        "resume: the value is not an exception object a landing pad produced",
+                    )
                 };
-                let selector = InterpretValue::int(Ty::I32, 0).map_err(|e| e.with_block(block))?;
-                bind_results(state, block, node, [exn_ptr, selector])?;
-                Ok(Step::Continue)
+                let address = match value.kind {
+                    InterpretValueKind::Ptr(pointer) => state
+                        .memory
+                        .address(pointer, block, "resume")
+                        .map_err(|_| not_an_exception())?,
+                    InterpretValueKind::DanglingPtr(address) => address,
+                    _ => return Err(not_an_exception()),
+                };
+                let Some((_, error)) = state.unwind.exceptions.get(&address) else {
+                    return Err(not_an_exception());
+                };
+                let error = error.clone();
+                state.unwind.in_flight = Some(address);
+                Err(error)
             }
             Inst::Resume { exn: _ } => {
-                // `Resume` re-raises an in-flight exception to the host
-                // unwinder. The interpreter does not model host unwinding, and a
-                // resume is only reachable after an unwind edge has been taken
-                // (which never happens here), so reaching it is undefined under
-                // interpretation.
+                // Under `PanicStrategy::Abort`: `Resume` re-raises an in-flight
+                // exception to the host unwinder, and a resume is only
+                // reachable after an unwind edge has been taken (which never
+                // happens under the panic=abort projection), so it is refused.
                 Err(err(
                     InterpretErrorCode::UnsupportedInstruction,
                     block,
@@ -1101,6 +2137,34 @@ impl<'m> Interpreter<'m> {
                     self.execute_indirect_call(block, &callee, *sig, args, state, call_depth)?;
                 bind_results(state, block, node, returns)?;
                 Ok(Step::Continue)
+            }
+            // Amendment D, Part 2 (wire v56): `CallIndirect`'s unwinding twin,
+            // exactly as `Invoke` (above): the call runs as `CallIndirect`'s,
+            // its returns bind this node's results, then control takes the
+            // normal edge. Under `PanicStrategy::Abort` `unwind_dest` is never
+            // taken; under `Unwind` an unwinding out of the callee enters it.
+            Inst::InvokeIndirect {
+                callee,
+                sig,
+                args,
+                normal_dest,
+                normal_args,
+                unwind_dest,
+                ..
+            } => {
+                let callee = state.value(block, *callee)?.clone();
+                let args = eval_args(state, block, args)?;
+                let returns =
+                    match self.execute_indirect_call(block, &callee, *sig, args, state, call_depth)
+                    {
+                        Ok(returns) => returns,
+                        Err(error) => return self.catch_unwinding(state, error, *unwind_dest),
+                    };
+                bind_results(state, block, node, returns)?;
+                Ok(Step::Jump {
+                    target: *normal_dest,
+                    args: eval_args(state, block, normal_args)?,
+                })
             }
             Inst::Load {
                 ty,
@@ -1124,6 +2188,9 @@ impl<'m> Interpreter<'m> {
             } => {
                 let ptr = state.value(block, *ptr)?.clone();
                 let value = state.value(block, *value)?.clone();
+                // WS2.12: `Store` is outside the handle transport set, so there
+                // is never an in-memory handle image to forge.
+                reject_handle(&value, block, "Store")?;
                 self.eval_store(ty, &ptr, &value, *align, state, block, *volatile)?;
                 bind_results(state, block, node, [])?;
                 Ok(Step::Continue)
@@ -1141,19 +2208,33 @@ impl<'m> Interpreter<'m> {
                 ty,
                 count,
                 align,
-                origin: _,
+                origin,
             } => {
                 // Single-threaded model: a heap region is allocated like a stack
                 // region but WITH a readable usable-size slack tail (see
                 // `eval_alloca`'s `heap` path) — the model of `__rust_alloc`'s
                 // over-allocation that hashbrown's group scan reads into. The
-                // `origin` rides in the IR for the backend and the (deferred)
-                // Dealloc origin check. Double-free / use-after-free are already
-                // caught by the shared allocator.
+                // `origin` is RECORDED on the allocation (WS2.13): a pinned
+                // RC-runtime host model (`HostCalls::rc_op`) counts only the
+                // cells of its own origin, so a cell of another heap handed to
+                // it is undefined behaviour here, as it is in the runtime.
+                // `Dealloc` reads the same record: freeing a `SwiftHeap` /
+                // `CleanHeap` cell is undefined behaviour (`MemoryState::
+                // dealloc`), since a reference-counted cell is released by the
+                // `Release` that takes its count to zero. So do the ARC
+                // instructions: `Retain` / `Release` / `IsUnique` count only a
+                // `SwiftHeap` / `CleanHeap` cell, and on a `RustHeap` /
+                // `CMalloc` cell (or any non-heap allocation) they are
+                // undefined behaviour (`arc_allocation_mut`, `is_unique`).
+                // Double-free / use-after-free are already caught by the
+                // shared allocator.
                 let count = count
                     .map(|count| state.value(block, count).cloned())
                     .transpose()?;
                 let result = self.eval_alloca(ty, count.as_ref(), *align, state, block, true)?;
+                if let InterpretValueKind::Ptr(ptr) = &result.kind {
+                    state.memory.record_origin(*ptr, *origin);
+                }
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
             }
@@ -1165,7 +2246,7 @@ impl<'m> Interpreter<'m> {
             } => {
                 let base = state.value(block, *base)?.clone();
                 let indices = eval_args(state, block, indices)?;
-                let result = self.eval_gep(pointee_ty, &base, &indices, block)?;
+                let result = self.eval_gep(pointee_ty, &base, &indices, &state.memory, block)?;
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
             }
@@ -1204,6 +2285,29 @@ impl<'m> Interpreter<'m> {
                 bind_results(state, block, node, [])?;
                 Ok(Step::Continue)
             }
+            // WS3.20 bulk memory (F-057). Byte-granular; see `eval_mem_copy`
+            // / `eval_mem_set` for the value + init-state + provenance rule.
+            Inst::MemCopy {
+                dst,
+                src,
+                bytes,
+                overlap,
+            } => {
+                let dst = state.value(block, *dst)?.clone();
+                let src = state.value(block, *src)?.clone();
+                let bytes = state.value(block, *bytes)?.clone();
+                self.eval_mem_copy(&dst, &src, &bytes, *overlap, state, block)?;
+                bind_results(state, block, node, [])?;
+                Ok(Step::Continue)
+            }
+            Inst::MemSet { dst, byte, bytes } => {
+                let dst = state.value(block, *dst)?.clone();
+                let byte = state.value(block, *byte)?.clone();
+                let bytes = state.value(block, *bytes)?.clone();
+                self.eval_mem_set(&dst, &byte, &bytes, state, block)?;
+                bind_results(state, block, node, [])?;
+                Ok(Step::Continue)
+            }
             // Atomics — single-threaded reference model: with one thread every
             // memory ordering collapses to sequential consistency, so an atomic
             // access is its plain-memory counterpart and a Fence is a no-op.
@@ -1236,17 +2340,35 @@ impl<'m> Interpreter<'m> {
                 bind_results(state, block, node, [old])?;
                 Ok(Step::Continue)
             }
+            // Trust (crystal D3): REFUSED, deliberately, and never stepped as strong. A weak
+            // compare-exchange may fail SPURIOUSLY -- report `false` and store nothing even
+            // when the loaded value equals `expected` -- so its outcome is not a function of
+            // the state. This interpreter is deterministic and has no oracle to choose with;
+            // stepping it as strong would execute ONE of its two legal outcomes and call that
+            // its semantics, deleting the other, which is the unsound direction. Same
+            // discipline, same channel as `Inst::Drop` above, and the Lean executable model
+            // refuses it identically (`error:unsupported.weak_cmpxchg`).
+            Inst::CmpXchg { weak: true, .. } => Err(type_error(
+                block,
+                "Inst::CmpXchg weak: a spurious failure is nondeterministic and the reference \
+                 interpreter has no oracle",
+            )),
             Inst::CmpXchg {
                 ty,
                 ptr,
                 expected,
                 desired,
+                weak: false,
                 ..
             } => {
                 let ptr = state.value(block, *ptr)?.clone();
                 let expected = state.value(block, *expected)?.clone();
                 let desired = state.value(block, *desired)?.clone();
                 let current = self.eval_load(ty, &ptr, None, state, block, true)?;
+                // The comparison INSPECTS `expected`: a poison `expected` is
+                // UB, never a silent "unequal" (roadmap WS2.10 review; Lean
+                // `semCmpXchg` mirrors it).
+                reject_partial(&expected, block, "cmpxchg expected")?;
                 let success = current == expected;
                 if success {
                     self.eval_store(ty, &ptr, &desired, None, state, block, true)?;
@@ -1272,6 +2394,10 @@ impl<'m> Interpreter<'m> {
                 operand,
             } => {
                 let operand = state.value(block, *operand)?.clone();
+                // WS2.12: no cast is handle transport, not even the identity
+                // `Bitcast` at the handle's own type (which `eval_bitcast`
+                // would otherwise pass through verbatim).
+                reject_handle(&operand, block, &op.to_string())?;
                 let result = self.eval_cast(*op, src_ty, dst_ty, &operand, state, block)?;
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
@@ -1279,10 +2405,20 @@ impl<'m> Interpreter<'m> {
             // Borrow / BorrowMut produce a reference to the pointee place: at
             // runtime a reference IS the pointer's address, so a borrow yields
             // the same pointer value. This sequential reference interpreter does
-            // not enforce borrow-checking (that is the validator's / the formal
-            // BorrowProps model's job); it must agree on the runtime value, and
-            // the address of `&x`/`&mut x` is the address of `x`. EndBorrow ends
-            // the lexical region and has no runtime value.
+            // not enforce borrow-checking; it must agree on the runtime value,
+            // and the address of `&x`/`&mut x` is the address of `x`. EndBorrow
+            // ends the lexical region and has no runtime value. The validator
+            // decides borrow STRUCTURE (WS2.7: no `BorrowMut` through a shared
+            // reference, `EndBorrow` only of a borrow); borrow LIVENESS (one
+            // `EndBorrow` per path, no two live `BorrowMut`, no use after
+            // `EndBorrow`) is a producer obligation (TRUST.md item 12), so a
+            // module that breaks it can validate and still run here. The one
+            // liveness consequence decided at run time is the free (SPEC
+            // "Freeing an allocation under a live borrow is undefined
+            // behaviour"): a thin borrow of an address inside a live
+            // allocation's requested bytes raises that allocation's
+            // live-borrow count, an `EndBorrow` naming it lowers it, and only
+            // `Dealloc` reads it. No borrow instruction faults on this account.
             Inst::Borrow { ptr } | Inst::BorrowMut { ptr } => {
                 let pointee = state.value(block, *ptr)?.clone();
                 // A Borrow over a FAT pointer value is the same pure
@@ -1292,11 +2428,14 @@ impl<'m> Interpreter<'m> {
                 // VERBATIM — same ty, both lanes untouched. Neither lane is
                 // read or re-validated here: a `FatPtr` value is validated at
                 // every construction site (`eval_ptr_from_parts` /
-                // `decode_value`), and this arm constructs nothing.
+                // `decode_leaf`), and this arm constructs nothing.
                 let result = if matches!(pointee.kind, InterpretValueKind::FatPtr { .. }) {
                     pointee
                 } else {
                     let ptr = expect_pointer(&pointee, block, "Borrow")?;
+                    if let Some(live) = state.memory.borrow_count_mut(ptr) {
+                        *live = live.saturating_add(1);
+                    }
                     InterpretValue {
                         ty: Ty::Ptr,
                         kind: InterpretValueKind::Ptr(ptr),
@@ -1305,11 +2444,31 @@ impl<'m> Interpreter<'m> {
                 bind_results(state, block, node, [result])?;
                 Ok(Step::Continue)
             }
-            Inst::EndBorrow { .. } => {
+            // Ends one live borrow of the allocation its operand names, by
+            // the same rule the borrow counted it (`borrow_count_mut`). It
+            // reads the operand through `values.get`, not `value`, so it adds
+            // no missing-value fault, and past zero the count stays 0.
+            Inst::EndBorrow { borrow_ptr } => {
+                let ended = match state.values.get(borrow_ptr) {
+                    Some(InterpretValue {
+                        kind: InterpretValueKind::Ptr(ptr),
+                        ..
+                    }) => Some(*ptr),
+                    _ => None,
+                };
+                if let Some(live) = ended.and_then(|p| state.memory.borrow_count_mut(p)) {
+                    *live = live.saturating_sub(1);
+                }
                 bind_results(state, block, node, [])?;
                 Ok(Step::Continue)
             }
-            // ARC reference counting (single-threaded exact counts).
+            // ARC reference counting (single-threaded exact counts), defined
+            // only on a reference-counted cell — a `HeapAlloc { origin:
+            // SwiftHeap | CleanHeap }` result — through a pointer at its
+            // object base. On any other live allocation, and at any other
+            // offset of the cell, each of the three is undefined behaviour
+            // (SPEC "An ARC operation counts only a reference-counted cell";
+            // `arc_allocation_mut`).
             Inst::Retain { ptr } => {
                 let ptr = expect_pointer(state.value(block, *ptr)?, block, "Retain")?;
                 state.memory.retain(ptr, block)?;
@@ -1330,16 +2489,14 @@ impl<'m> Interpreter<'m> {
             }
             // Binding frames — typed scoped slot arrays for quantifier lowering.
             Inst::OpenFrame { def } => {
-                let id = state.next_frame_id;
-                state.next_frame_id = id
+                // Mint a fresh LINEAGE; every slot starts unbound.
+                let lineage = state.next_frame_id;
+                state.next_frame_id = lineage
                     .checked_add(1)
                     .ok_or_else(|| ub(block, "OpenFrame: frame id overflow"))?;
-                state.frames.insert(id, vec![None; def.slots.len()]);
-                let handle = InterpretValue {
-                    ty: Ty::Unit,
-                    kind: InterpretValueKind::Frame(id),
-                };
-                bind_results(state, block, node, [handle])?;
+                state.frames.insert(lineage);
+                let slots: Arc<[Option<InterpretValue>]> = vec![None; def.slots.len()].into();
+                bind_results(state, block, node, [frame_handle(lineage, slots)])?;
                 Ok(Step::Continue)
             }
             Inst::BindSlot {
@@ -1347,12 +2504,22 @@ impl<'m> Interpreter<'m> {
                 slot,
                 value,
             } => {
-                let id = expect_frame(state.value(block, *frame)?, block)?;
+                // FUNCTIONAL update (`inst.rs` `Inst::BindSlot` docs; Lean
+                // `semBindSlot`, `Semantics/Frame.lean`): the result is a NEW
+                // frame handle whose slot `slot` holds `value`, and the input
+                // handle stays valid with its PRIOR slot contents. The
+                // validator's result table (`bridge.rs` `result_tys`) counts
+                // one result for this op, so a builder-emitted node declares
+                // one; an in-place write producing nothing was the measured
+                // disagreement (a validated, in-subset module could not
+                // execute). The new handle stays in the input's LINEAGE, so
+                // closing either closes both.
+                let (lineage, slots) = expect_open_frame(state, block, *frame, "BindSlot")?;
                 let value = state.value(block, *value)?.clone();
-                let slots = state
-                    .frames
-                    .get_mut(&id)
-                    .ok_or_else(|| ub(block, "BindSlot: frame is not open"))?;
+                // WS2.12: a frame slot is not in the handle transport set; a
+                // bound handle would ride inside a `Frame` value exactly as
+                // `InsertField` would put it inside an aggregate.
+                reject_handle(&value, block, "BindSlot")?;
                 let slot_idx = *slot as usize;
                 if slot_idx >= slots.len() {
                     return Err(ub(
@@ -1360,16 +2527,15 @@ impl<'m> Interpreter<'m> {
                         format!("BindSlot: slot {slot} out of range for frame of {} slots", slots.len()),
                     ));
                 }
-                slots[slot_idx] = Some(value);
-                bind_results(state, block, node, [])?;
+                let mut next = slots.to_vec();
+                next[slot_idx] = Some(value);
+                bind_results(state, block, node, [frame_handle(lineage, next.into())])?;
                 Ok(Step::Continue)
             }
             Inst::LoadSlot { frame, slot, ty } => {
-                let id = expect_frame(state.value(block, *frame)?, block)?;
-                let slots = state
-                    .frames
-                    .get(&id)
-                    .ok_or_else(|| ub(block, "LoadSlot: frame is not open"))?;
+                // Reads the HANDLE'S OWN snapshot: an older handle sees the
+                // slots it had, never a later bind made through another one.
+                let (_, slots) = expect_open_frame(state, block, *frame, "LoadSlot")?;
                 let slot_idx = *slot as usize;
                 let value = slots
                     .get(slot_idx)
@@ -1379,21 +2545,121 @@ impl<'m> Interpreter<'m> {
                             format!("LoadSlot: slot {slot} out of range for frame of {} slots", slots.len()),
                         )
                     })?
-                    .clone()
-                    .ok_or_else(|| ub(block, format!("LoadSlot: slot {slot} read before bound")))?;
+                    .clone();
+                // An UNBOUND slot reads as the same scalar poison `Undef`
+                // binds (Lean `initFrame` seeds every slot with `.undef`):
+                // the read itself is not UB, inspecting the value is.
+                let value = match value {
+                    Some(value) => value,
+                    None => self.scalar_poison(
+                        ty,
+                        block,
+                        &format!("LoadSlot: slot {slot} read before bound: poison"),
+                    )?,
+                };
                 expect_ty(&value, ty, block)?;
                 bind_results(state, block, node, [value])?;
                 Ok(Step::Continue)
             }
             Inst::CloseFrame { frame } => {
-                let id = expect_frame(state.value(block, *frame)?, block)?;
-                if state.frames.remove(&id).is_none() {
+                // Closes the LINEAGE: every handle descending from the same
+                // `OpenFrame` is dead afterwards, whichever one was named.
+                let (lineage, _) = expect_frame(state.value(block, *frame)?, block)?;
+                if !state.frames.remove(&lineage) {
                     return Err(ub(block, "CloseFrame: frame is not open (double close)"));
                 }
                 bind_results(state, block, node, [])?;
                 Ok(Step::Continue)
             }
         }
+    }
+
+    /// §21 rule 4, the catch half of an invoke-family terminator: under
+    /// `PanicStrategy::Unwind`, an error that IS the exception in flight is
+    /// caught and transfers to `unwind_dest`; every other error (and every
+    /// error under `Abort`) propagates unchanged.
+    fn catch_unwinding(
+        &self,
+        state: &mut ExecState,
+        error: InterpretError,
+        unwind_dest: BlockId,
+    ) -> InterpretResult<Step> {
+        if self.options.panic_strategy == PanicStrategy::Unwind
+            && let Some(exception) = state.unwind.in_flight.take()
+        {
+            return Ok(Step::Unwind {
+                exception,
+                target: unwind_dest,
+            });
+        }
+        Err(error)
+    }
+
+    /// U(e, d) (§21 rule 5): the landing pad heading `target` decides, first
+    /// match: a clause other than 0 (a typed catch, or a filter) is refused
+    /// (the format has no typeinfo model); a clause 0 (catch-all) puts (e, 1)
+    /// in hand; a cleanup pad puts (e, 0) in hand; a pad with neither
+    /// re-propagates the same exception out of this frame. The selectors are
+    /// trust-cg's convention for functions without typed catches.
+    fn enter_landing_pad(
+        &self,
+        function: &Function,
+        block: BlockId,
+        exception: u64,
+        target: BlockId,
+        state: &mut ExecState,
+    ) -> InterpretResult<()> {
+        let pad = function.block(target).ok_or_else(|| {
+            err(
+                InterpretErrorCode::MissingBlock,
+                block,
+                format!("unwind destination {target} not found"),
+            )
+        })?;
+        let Some(Inst::LandingPad {
+            is_cleanup,
+            catch_type_indices,
+        }) = pad.body.first().map(|node| &node.inst)
+        else {
+            return Err(err(
+                InterpretErrorCode::MalformedInstruction,
+                block,
+                format!("unwind destination {target} does not begin with a landingpad"),
+            ));
+        };
+        let (pointer, raised) = state
+            .unwind
+            .exceptions
+            .get(&exception)
+            .cloned()
+            .ok_or_else(|| {
+                err(
+                    InterpretErrorCode::MalformedInstruction,
+                    block,
+                    "an unwinding carries an exception this run never raised",
+                )
+            })?;
+        if let Some(clause) = catch_type_indices.iter().find(|&&clause| clause != 0) {
+            return Err(err(
+                InterpretErrorCode::UnsupportedInstruction,
+                target,
+                format!(
+                    "landingpad: a typed catch clause (type index {clause}) needs a typeinfo \
+                     model the format does not have"
+                ),
+            ));
+        }
+        let selector = if catch_type_indices.contains(&0) {
+            1
+        } else if *is_cleanup {
+            0
+        } else {
+            // No action: the frame is skipped and the unwinding continues.
+            state.unwind.in_flight = Some(exception);
+            return Err(raised);
+        };
+        state.unwind.in_hand = Some((pointer, selector));
+        Ok(())
     }
 
     fn execute_direct_call(
@@ -1417,6 +2683,233 @@ impl<'m> Interpreter<'m> {
         self.execute_callee(block, callee_function, args, state, call_depth)
     }
 
+    /// Apply a first-class closure value through `Inst::CallIndirect` (G18-2).
+    ///
+    /// # Why this is not a widening of the `Ty::Func` rule
+    ///
+    /// `Ty::Closure` used to be INTRODUCTION-ONLY: a closure could be built
+    /// (`Const` + per-capture `InsertField`) and projected (`ExtractField`
+    /// reads a capture) but never APPLIED, because `execute_indirect_call`
+    /// required `Ty::Func` and `ExtractField` deliberately does NOT expose the
+    /// `func` lane as a field. The code pointer inside a closure value was
+    /// unreachable by construction. This is a SEPARATE arm, reached only when
+    /// the callee's declared type is `Ty::Closure`; the `Ty::Func` arm is
+    /// untouched and is not consulted here. Every obligation the `Ty::Func` arm
+    /// discharges is discharged here too, plus the capture/parameter split.
+    ///
+    /// # The declared `sig` is the APPARENT signature
+    ///
+    /// `CallIndirect { callee, sig, args }` over a closure declares the
+    /// closure's *apparent* signature — the one a caller sees, i.e.
+    /// `ClosureTy.func` — so `args` is checked against it verbatim, by exactly
+    /// the rule that already governs a `Ty::Func` edge. The captured
+    /// environment is NOT in `args`; this ABI supplies it. Reading `sig` as the
+    /// target's PHYSICAL (env-inclusive) signature was considered and rejected:
+    /// it would make `args.len() == sig.params.len()` false at every closure
+    /// call site, which is precisely the existing arity rule this must not
+    /// weaken.
+    ///
+    /// # The ABI: captures are LEADING arguments, spread, in capture order
+    ///
+    /// `ClosureTy` models the environment as N explicit typed values —
+    /// "captures are explicit values, not an implicit env pointer"
+    /// ([`crate::ty::Ty::Closure`]'s own doc, the ty#4145 lesson) — and the
+    /// value model has no env object to point at: `InterpretValueKind::Closure`
+    /// holds the capture VALUES, not an address. So the faithful application
+    /// rule is the spread one: the target function's signature must be
+    /// `captures ++ apparent_params -> apparent_returns`. Synthesizing a
+    /// one-argument env tuple instead would require minting a `Ty::Tuple` that
+    /// appears nowhere in the module — a type the format never stated. A
+    /// producer that wants the pointer-env ABI keeps spelling it exactly as it
+    /// does today (an explicit env struct plus a `Ty::Func` pointer); this
+    /// change does not touch that path.
+    fn eval_make_closure(
+        &self,
+        ty: crate::value::ClosureTyId,
+        func: FuncId,
+        captures: Vec<InterpretValue>,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        let module = self.module_context(block, "MakeClosure")?;
+        let closure = module.closure_type(ty).ok_or_else(|| {
+            type_error(block, format!("MakeClosure: undefined closure type {ty}"))
+        })?;
+        let apparent = module.func_type(closure.func).ok_or_else(|| {
+            signature_mismatch(block, "MakeClosure: undefined apparent signature")
+        })?;
+        let target = self.function_pointer_target(module, func, block)?;
+        let function = module.function_by_id(target).ok_or_else(|| {
+            err(
+                InterpretErrorCode::MissingFunction,
+                block,
+                format!("MakeClosure: undefined function {target}"),
+            )
+        })?;
+        let physical = self
+            .function_signature(function, block)?
+            .expect("module-backed construction has function type context");
+        let params: Vec<Ty> = closure
+            .captures
+            .iter()
+            .chain(&apparent.params)
+            .cloned()
+            .collect();
+        if apparent.is_vararg
+            || physical.is_vararg
+            || physical.params != params
+            || physical.returns != apparent.returns
+            || physical.abi != apparent.abi
+        {
+            return Err(signature_mismatch(
+                block,
+                "MakeClosure: target signature must be captures followed by apparent parameters, with apparent returns",
+            ));
+        }
+        check_signature_values(block, "MakeClosure captures", &captures, &closure.captures)?;
+        for value in &captures {
+            reject_handle(value, block, "MakeClosure")?;
+        }
+        Ok(InterpretValue {
+            ty: Ty::Closure(ty),
+            kind: InterpretValueKind::Closure { func, captures },
+        })
+    }
+
+    fn execute_closure_call(
+        &self,
+        block: BlockId,
+        callee: &InterpretValue,
+        sig: FuncTyId,
+        args: Vec<InterpretValue>,
+        state: &mut ExecState,
+        call_depth: u64,
+    ) -> InterpretResult<Vec<InterpretValue>> {
+        ensure_call_depth(block, call_depth)?;
+        let module = self.module_context(block, "closure call")?;
+
+        // Re-read the closure type id from the callee's DECLARED type rather
+        // than taking it as a parameter: there is exactly one authority for it,
+        // so a caller cannot pass a type id that disagrees with the value.
+        let Ty::Closure(closure_ty_id) = &callee.ty else {
+            return Err(invalid_function_pointer(
+                block,
+                format!("CallIndirect: callee has non-closure type {}", callee.ty),
+            ));
+        };
+        let closure_ty_id = *closure_ty_id;
+        let closure_ty = module.closure_type(closure_ty_id).ok_or_else(|| {
+            type_error(
+                block,
+                format!("CallIndirect: undefined closure type {closure_ty_id}"),
+            )
+        })?;
+
+        // The edge's declared signature must be the closure type's APPARENT
+        // signature, by id — the same strictness the `Ty::Func` arm applies to
+        // `value_sig != sig`. A laxer (structural) rule here would make the
+        // closure edge weaker than the function-pointer edge it sits beside.
+        if closure_ty.func != sig {
+            return Err(signature_mismatch(
+                block,
+                format!(
+                    "CallIndirect: closure value has apparent signature functy.{}, call \
+                     expects functy.{}",
+                    closure_ty.func.0, sig.0
+                ),
+            ));
+        }
+
+        let InterpretValueKind::Closure {
+            func: target,
+            captures,
+        } = &callee.kind
+        else {
+            return Err(invalid_function_pointer(
+                block,
+                format!(
+                    "CallIndirect: value typed {} is not a closure value",
+                    callee.ty
+                ),
+            ));
+        };
+
+        let apparent = module.func_type(sig).ok_or_else(|| {
+            signature_mismatch(
+                block,
+                format!("CallIndirect: undefined function type functy.{}", sig.0),
+            )
+        })?;
+        if apparent.is_vararg {
+            // A closure's apparent signature is never variadic in any
+            // producer; the capture-spread ABI has no place for a variadic
+            // tail, so the edge stays refused by name (WS2.15 opened only the
+            // direct and function-pointer edges to a variadic DECLARATION).
+            return Err(signature_mismatch(
+                block,
+                format!(
+                    "CallIndirect: closure apparent signature functy.{} is variadic, which \
+                     is not executable",
+                    sig.0
+                ),
+            ));
+        }
+
+        let target_id = self.function_pointer_target(module, *target, block)?;
+        let target_function = module.function_by_id(target_id).ok_or_else(|| {
+            err(
+                InterpretErrorCode::MissingFunction,
+                block,
+                format!("CallIndirect: undefined function {target_id}"),
+            )
+        })?;
+        let target_sig = self
+            .function_signature(target_function, block)?
+            .expect("module-backed call has function type context");
+
+        // The physical contract: captures ++ apparent params -> apparent
+        // returns. Checked against the DECLARED closure type's capture list,
+        // not against the runtime capture values, so a closure whose value was
+        // rebuilt by `InsertField` is held to the same signature.
+        let expected_params: Vec<Ty> = closure_ty
+            .captures
+            .iter()
+            .cloned()
+            .chain(apparent.params.iter().cloned())
+            .collect();
+        if target_sig.is_vararg
+            || target_sig.params != expected_params
+            || target_sig.returns != apparent.returns
+        {
+            return Err(signature_mismatch(
+                block,
+                format!(
+                    "CallIndirect: closure target {} declares functy.{} ({}) -> ({}), but \
+                     closure.{} requires ({}) -> ({}) [{} capture(s) then {} apparent \
+                     parameter(s)]",
+                    target_id,
+                    target_function.ty.0,
+                    format_ty_list(&target_sig.params),
+                    format_ty_list(&target_sig.returns),
+                    closure_ty_id.0,
+                    format_ty_list(&expected_params),
+                    format_ty_list(&apparent.returns),
+                    closure_ty.captures.len(),
+                    apparent.params.len(),
+                ),
+            ));
+        }
+
+        // The runtime capture values must still inhabit the declared capture
+        // slots. They are typed at materialization and re-typed by
+        // `eval_insert_field`, so this is a redundancy — kept because it is the
+        // one check that fails closed if either of those paths ever drifts.
+        check_signature_values(block, "closure captures", captures, &closure_ty.captures)?;
+        check_signature_values(block, "CallIndirect arguments", &args, &apparent.params)?;
+
+        let full_args: Vec<InterpretValue> = captures.iter().cloned().chain(args).collect();
+        self.execute_callee(block, target_function, full_args, state, call_depth)
+    }
+
     fn execute_indirect_call(
         &self,
         block: BlockId,
@@ -1426,6 +2919,13 @@ impl<'m> Interpreter<'m> {
         state: &mut ExecState,
         call_depth: u64,
     ) -> InterpretResult<Vec<InterpretValue>> {
+        // G18-2: a `Ty::Closure` callee is applied by `execute_closure_call`,
+        // which supplies the captured environment as leading arguments. The
+        // `Ty::Func` rule below is reached only for a non-closure callee and is
+        // unchanged.
+        if matches!(&callee.ty, Ty::Closure(_)) {
+            return self.execute_closure_call(block, callee, sig, args, state, call_depth);
+        }
         let value_sig = match &callee.ty {
             Ty::Func(sig) => *sig,
             _ => {
@@ -1471,16 +2971,6 @@ impl<'m> Interpreter<'m> {
                 format!("CallIndirect: undefined function type functy.{}", sig.0),
             )
         })?;
-        if expected_sig.is_vararg {
-            return Err(signature_mismatch(
-                block,
-                format!(
-                    "CallIndirect: vararg signature functy.{} is not executable",
-                    sig.0
-                ),
-            ));
-        }
-
         let callee_id = self.function_pointer_target(module, pointer, block)?;
         let callee_function = module.function_by_id(callee_id).ok_or_else(|| {
             err(
@@ -1492,17 +2982,62 @@ impl<'m> Interpreter<'m> {
         let callee_sig = self
             .function_signature(callee_function, block)?
             .expect("module-backed call has function type context");
-        if callee_sig.is_vararg
+        // WS2.15: variadicity is part of the signature the pointer must
+        // agree on, exactly like the parameter and return lists (before this
+        // any vararg edge was refused outright).
+        if callee_sig.is_vararg != expected_sig.is_vararg
             || expected_sig.params != callee_sig.params
             || expected_sig.returns != callee_sig.returns
+            || expected_sig.abi != callee_sig.abi
         {
+            // Name the variadicity disagreement when that is the (only new)
+            // reason, so a pointer type that adds or drops a variadic tail
+            // is refused BY NAME rather than as an anonymous mismatch.
+            let why = if callee_sig.is_vararg != expected_sig.is_vararg {
+                format!(
+                    " (pointer signature functy.{} is {}, callee functy.{} is {})",
+                    sig.0,
+                    if expected_sig.is_vararg {
+                        "variadic"
+                    } else {
+                        "not variadic"
+                    },
+                    callee_function.ty.0,
+                    if callee_sig.is_vararg {
+                        "variadic"
+                    } else {
+                        "not variadic"
+                    },
+                )
+            } else {
+                String::new()
+            };
             return Err(signature_mismatch(
                 block,
-                format!("CallIndirect: indirect call signature mismatch for function {callee_id}"),
+                format!(
+                    "CallIndirect: indirect call signature mismatch for function {callee_id}{why}"
+                ),
             ));
         }
 
-        check_signature_values(block, "CallIndirect arguments", &args, &expected_sig.params)?;
+        if expected_sig.is_vararg {
+            // The same two-way rule as a direct call (`check_function_args`):
+            // a variadic declaration is a host call with the full argument
+            // list, a variadic definition is refused by name.
+            if !callee_function.is_declaration() {
+                return Err(signature_mismatch(
+                    block,
+                    format!(
+                        "CallIndirect: function {callee_id} has non-executable vararg \
+                         signature: it is a variadic DEFINITION, and no instruction reads a \
+                         variadic argument (LIMITATIONS.md)"
+                    ),
+                ));
+            }
+            check_vararg_declaration_args(block, &args, &expected_sig.params)?;
+        } else {
+            check_signature_values(block, "CallIndirect arguments", &args, &expected_sig.params)?;
+        }
         self.execute_callee(block, callee_function, args, state, call_depth)
     }
 
@@ -1515,11 +3050,182 @@ impl<'m> Interpreter<'m> {
         call_depth: u64,
     ) -> InterpretResult<Vec<InterpretValue>> {
         ensure_call_depth(block, call_depth)?;
+        if callee.is_declaration() {
+            // Every caller (direct, indirect, closure, `Invoke`, `SeqMap`) has
+            // already checked `args` against the callee's signature.
+            return self.execute_host_call(block, callee, args, state);
+        }
 
         let caller_values = std::mem::take(&mut state.values);
         let result = self.execute_function_inner(callee, args, state, call_depth - 1);
         state.values = caller_values;
         result
+    }
+
+    /// Execute a call to the bodyless declaration `callee` through the host
+    /// model (WS2.12), or refuse it with `UnsupportedCall`.
+    fn execute_host_call(
+        &self,
+        block: BlockId,
+        callee: &Function,
+        args: Vec<InterpretValue>,
+        state: &mut ExecState,
+    ) -> InterpretResult<Vec<InterpretValue>> {
+        let no_host_model = || {
+            err(
+                InterpretErrorCode::UnsupportedCall,
+                block,
+                format!(
+                    "{BODYLESS_CALL_PREFIX}{}{NO_HOST_MODEL_SUFFIX}",
+                    callee.name
+                ),
+            )
+        };
+        let Some(host) = self.host else {
+            return Err(no_host_model());
+        };
+        // The declared signature is what a host's results are checked
+        // against; without a module there is none, so nothing a host returned
+        // could be checked. Refuse before the host runs.
+        let Some(sig) = self.function_signature(callee, block)? else {
+            return Err(err(
+                InterpretErrorCode::UnsupportedCall,
+                block,
+                format!(
+                    "{BODYLESS_CALL_PREFIX}{}: a host call needs the module's declared \
+                     signature to check the host's results",
+                    callee.name
+                ),
+            ));
+        };
+        // WS2.15 x WS2.13: a variadic declaration is a host call only at its
+        // variadic signature. When the host models this symbol at a FIXED
+        // arity, the declaration has the wrong type for the entry point. It
+        // is refused by name, before the host is asked to serve it
+        // (`HostCalls::models_fixed_arity`). "No host model" would be wrong
+        // here, because the host does model the symbol.
+        if sig.is_vararg && host.models_fixed_arity(callee) {
+            return Err(signature_mismatch(
+                block,
+                format!(
+                    "{BODYLESS_CALL_PREFIX}{name}: non-executable vararg signature {sig}: the \
+                     installed host models @{name} as a fixed-arity entry point, and a variadic \
+                     declaration of it is not that entry point's type",
+                    name = callee.name,
+                    sig = format_sig(sig),
+                ),
+            ));
+        }
+        // A reference-counting entry point is executed HERE, on the
+        // interpreter's own refcounts (`HostCalls::rc_op`): the host names the
+        // runtime, and never sees the pointer.
+        if let Some(op) = host.rc_op(callee, sig) {
+            state.host_calls += 1;
+            let returns = self.execute_host_rc_op(block, callee, sig, op, &args, state)?;
+            self.check_function_returns(callee, &returns, block)?;
+            return Ok(returns);
+        }
+        let Some(result) = host.call(callee, sig, &args, &mut state.host) else {
+            return Err(no_host_model());
+        };
+        state.host_calls += 1;
+        // A host's error is the HOST's claim, not a verdict about the module,
+        // and the error path carries no `host_calls` count, so the message
+        // names the model it came from.
+        let returns = result.map_err(|mut error| {
+            error.message = format!("host model for @{}: {}", callee.name, error.message);
+            if error.block.is_none() {
+                error.with_block(block)
+            } else {
+                error
+            }
+        })?;
+        // A buggy host cannot smuggle an ill-typed value: first the declared
+        // types (SignatureMismatch), then each value's own well-formedness.
+        self.check_function_returns(callee, &returns, block)?;
+        for (index, value) in returns.iter().enumerate() {
+            check_host_result(value, &sig.returns[index], &state.host, block, index)?;
+        }
+        Ok(returns)
+    }
+
+    /// Execute the reference-counting operation a host classified `callee`
+    /// as (WS2.13) on the interpreter's own allocation table. The declared
+    /// signature must be the shape the role needs (`UnsupportedCall`
+    /// otherwise), and the pointer must address a live cell of the runtime's
+    /// origin at its base (`UndefinedBehavior` otherwise) — see [`HostRcOp`].
+    fn execute_host_rc_op(
+        &self,
+        block: BlockId,
+        callee: &Function,
+        sig: &FuncTy,
+        op: HostRcOp,
+        args: &[InterpretValue],
+        state: &mut ExecState,
+    ) -> InterpretResult<Vec<InterpretValue>> {
+        let name = &callee.name;
+        let shape_ok = sig.params.as_slice() == [Ty::Ptr]
+            && !sig.is_vararg
+            && match op.role {
+                HostRcRole::Retain | HostRcRole::Release => sig.returns.is_empty(),
+                HostRcRole::IsUnique => matches!(
+                    sig.returns.as_slice(),
+                    [ty] if *ty == Ty::Bool || int_shape(ty).is_some()
+                ),
+            };
+        if !shape_ok {
+            return Err(err(
+                InterpretErrorCode::UnsupportedCall,
+                block,
+                format!(
+                    "{BODYLESS_CALL_PREFIX}{name}: the host names it the {:?} entry point of the \
+                     {:?} reference-counting runtime, but its declared signature {} is not that \
+                     entry point's shape",
+                    op.role,
+                    op.origin,
+                    format_sig(sig)
+                ),
+            ));
+        }
+        let [arg] = args else {
+            return Err(signature_mismatch(
+                block,
+                format!("host RC call @{name}: expected exactly one argument"),
+            ));
+        };
+        let ptr = match &arg.kind {
+            InterpretValueKind::Ptr(ptr) => *ptr,
+            InterpretValueKind::NullPtr => {
+                return Err(ub(block, format!("@{name}: null object pointer")));
+            }
+            other => {
+                return Err(type_error(
+                    block,
+                    format!("@{name}: expected a pointer argument, got {other:?}"),
+                ));
+            }
+        };
+        state.memory.check_rc_cell(ptr, op.origin, name, block)?;
+        Ok(match op.role {
+            HostRcRole::Retain => {
+                state.memory.retain(ptr, block)?;
+                Vec::new()
+            }
+            HostRcRole::Release => {
+                state.memory.release(ptr, block)?;
+                Vec::new()
+            }
+            HostRcRole::IsUnique => {
+                let unique = state.memory.is_unique(ptr, block)?;
+                let ty = &sig.returns[0];
+                vec![if *ty == Ty::Bool {
+                    InterpretValue::bool(unique)
+                } else {
+                    InterpretValue::int(ty.clone(), i128::from(unique))
+                        .map_err(|error| error.with_block(block))?
+                }]
+            }
+        })
     }
 
     fn module_context(&self, block: BlockId, purpose: &str) -> InterpretResult<&'m Module> {
@@ -1577,13 +3283,25 @@ impl<'m> Interpreter<'m> {
             return Ok(());
         };
         if sig.is_vararg {
-            return Err(signature_mismatch(
-                block,
-                format!(
-                    "function {} has non-executable vararg signature",
-                    function.id.0
-                ),
-            ));
+            // WS2.15: a variadic DECLARATION (`printf`) is a host call with
+            // the full argument list — the host model reads the variadic
+            // tail. A variadic DEFINITION stays refused, by name: no
+            // instruction reads a variadic argument (`va_arg` has no
+            // spelling), so a body could not observe the tail it was passed
+            // and executing it would be executing a different function
+            // (`LIMITATIONS.md`, ratified out of scope).
+            if !function.is_declaration() {
+                return Err(signature_mismatch(
+                    block,
+                    format!(
+                        "function {} has non-executable vararg signature: it is a variadic \
+                         DEFINITION, and no instruction reads a variadic argument \
+                         (LIMITATIONS.md)",
+                        function.id.0
+                    ),
+                ));
+            }
+            return check_vararg_declaration_args(block, args, &sig.params);
         }
         check_signature_values(block, "Call arguments", args, &sig.params)
     }
@@ -1600,10 +3318,25 @@ impl<'m> Interpreter<'m> {
         check_signature_values(block, "Call returns", returns, &sig.returns)
     }
 
+    /// [`Self::constant_to_value_in`] with no execution state: a constant that
+    /// needs one (a WS3.8 symbol address) fails closed.
     fn constant_to_value(
         &self,
         ty: &Ty,
         value: &Constant,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        self.constant_to_value_in(ty, value, None, block)
+    }
+
+    /// Convert a constant to a runtime value. `state` is the execution state a
+    /// WS3.8 non-null pointer constant resolves its global in; `None` (a
+    /// `Switch` case) refuses one.
+    fn constant_to_value_in(
+        &self,
+        ty: &Ty,
+        value: &Constant,
+        mut state: Option<&mut ExecState>,
         block: BlockId,
     ) -> InterpretResult<InterpretValue> {
         match (ty, value) {
@@ -1640,7 +3373,11 @@ impl<'m> Interpreter<'m> {
             // `Closure` are module/linker-local identities the gate refuses
             // syntactically, and an interpreter arm for those would buy no
             // verdicts without first deleting that refusal, which is the
-            // unsound step. Every observation channel for a null is LOUD: a
+            // unsound step. (WS3.8's `SymbolAddr` arms below, at typed
+            // references and `str`/slice fat pointers, leave that refusal in
+            // place: they resolve a MODULE global the validator already
+            // pinned, and there is still no `(Ty::Ptr, SymbolAddr)` arm.)
+            // Every observation channel for a null is LOUD: a
             // deref faults in `expect_pointer`, and a returned `NullPtr`
             // against the oracle's `Ptr(..)` is a cross-kind pair reported as
             // a real divergence. A placeholder that is silently wrong is the
@@ -1649,6 +3386,133 @@ impl<'m> Interpreter<'m> {
                 ty: Ty::Ptr,
                 kind: InterpretValueKind::NullPtr,
             }),
+            // Trust (wave-FS): the NULL FAT POINTER — the `Ty::FatPtr` twin of the
+            // `(Ty::Ptr, Constant::Int(0))` arm directly above, and admitted on the same
+            // ZERO-ONLY terms. `(data, metadata)` are both the integer zero: the data word is
+            // a `NullPtr` exactly as the thin arm produces, and the metadata word is the zero
+            // of the kind's metadata type (a zero length for `Slice`/`Str`/`ContainerLen`, a
+            // null vtable for `TraitObject`/`ContainerVtable`). A NONZERO data word would
+            // fabricate an address with no provenance and stays a type error, which is the
+            // whole reason the thin arm is zero-only too.
+            //
+            // WHY IT IS NEEDED: `Inst::Const` is the only way to ORIGINATE an aggregate, so a
+            // `&str` / `&[T]` / `&dyn Tr` leaf inside an aggregate seed had no representable
+            // originator at all — before this arm neither authority had a `Ty::FatPtr` case
+            // (`shape_matches_ty` has one now; the `(_, PhantomData)` wildcard below was never
+            // an escape, because that function's `PhantomData` arm is `Ty::Unit`-only). The
+            // producer seeds such a field only where the seed is provably OVERWRITTEN before
+            // any read, so the null never denotes a live reference.
+            (Ty::FatPtr(kind), Constant::Aggregate(elems))
+                if matches!(elems.as_slice(), [Constant::Int(0), Constant::Int(0)]) =>
+            {
+                // The metadata word is the ZERO OF ITS OWN TYPE, which is not always an
+                // integer: `Slice`/`Str`/`ContainerLen` carry a pointer-sized unsigned LENGTH,
+                // while `TraitObject` and `ContainerVtable` carry a thin VTABLE POINTER
+                // (`Ty::Ptr`). A null vtable is the honest zero there; writing an integer 0 into
+                // it would be a type confusion. `metadata_ty` returning `None` means the kind has
+                // no representable metadata type at this pointer width, and that FAILS CLOSED
+                // rather than guessing a width.
+                let Some(metadata_ty) = kind.metadata_ty(self.pointer_bits()) else {
+                    return Err(type_error(
+                        block,
+                        "fat-pointer constant: the pointer kind has no representable metadata \
+                         type at this pointer width",
+                    ));
+                };
+                let metadata = match metadata_ty {
+                    Ty::Ptr => InterpretValue {
+                        ty: Ty::Ptr,
+                        kind: InterpretValueKind::NullPtr,
+                    },
+                    int_ty => InterpretValue::int(int_ty, 0)?,
+                };
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::FatPtr {
+                        data: Box::new(InterpretValue {
+                            ty: Ty::Ptr,
+                            kind: InterpretValueKind::NullPtr,
+                        }),
+                        metadata: Box::new(metadata),
+                    },
+                })
+            }
+            // WS3.8 (F-049): a NON-NULL typed-reference constant — the address
+            // of one module global. The value is a real pointer into the
+            // global's own allocation (provenance kept, never a bare integer),
+            // so a deref reads the global's initialized bytes. The validator
+            // owns the admission rule (`PointerConstantRefused`); this arm
+            // re-checks only what it needs to never fabricate an address:
+            // one global of that name, not thread-local, window in bounds.
+            (
+                Ty::Ref(_) | Ty::PtrConst(_) | Ty::PtrMut(_),
+                Constant::SymbolAddr { symbol, addend },
+            ) => {
+                let pointer = self.symbol_pointer(symbol, *addend, 0, state, block)?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Ptr(pointer),
+                })
+            }
+            // WS3.8 (F-049): a NON-NULL `&str` / `&[T]` constant — the data word
+            // points `addend` bytes into one module global, the metadata word
+            // is the element count. Other fat kinds keep the null pair only.
+            (
+                Ty::FatPtr(kind @ (FatPtrKind::Str | FatPtrKind::Slice(_))),
+                Constant::Aggregate(elems),
+            ) if matches!(
+                elems.as_slice(),
+                [Constant::SymbolAddr { .. }, Constant::Int(_)]
+            ) =>
+            {
+                let [
+                    Constant::SymbolAddr { symbol, addend },
+                    Constant::Int(length),
+                ] = elems.as_slice()
+                else {
+                    return Err(type_error(
+                        block,
+                        "fat-pointer constant: expected [symaddr, int]",
+                    ));
+                };
+                let count = u64::try_from(*length).map_err(|_| {
+                    type_error(
+                        block,
+                        format!("fat-pointer constant: negative length {length}"),
+                    )
+                })?;
+                let element_size = match kind {
+                    FatPtrKind::Slice(element) => {
+                        let element = self.resolve_ty(*element, block)?;
+                        self.byte_size(&element, block)?
+                    }
+                    _ => 1,
+                };
+                let extent = count.checked_mul(element_size).ok_or_else(|| {
+                    type_error(block, "fat-pointer constant: window size overflows")
+                })?;
+                let pointer = self.symbol_pointer(symbol, *addend, extent, state, block)?;
+                let Some(metadata_ty) = kind.metadata_ty(self.pointer_bits()) else {
+                    return Err(type_error(
+                        block,
+                        "fat-pointer constant: the pointer kind has no representable metadata \
+                         type at this pointer width",
+                    ));
+                };
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::FatPtr {
+                        data: Box::new(InterpretValue {
+                            ty: Ty::Ptr,
+                            kind: InterpretValueKind::Ptr(pointer),
+                        }),
+                        metadata: Box::new(
+                            InterpretValue::int(metadata_ty, i128::from(count))
+                                .map_err(|e| e.with_block(block))?,
+                        ),
+                    },
+                })
+            }
             // v24: a canonical U128 constant (value > i128::MAX) is only
             // faithfully representable at width 128 - narrower declared
             // types fall through to the type-error arm (fail closed).
@@ -1671,6 +3535,26 @@ impl<'m> Interpreter<'m> {
                 kind: InterpretValueKind::FloatBits(float_bits_from_f64(ty, *value, block)?),
             }),
             (Ty::Vector(elem_ty, lanes), Constant::Vector(values)) => {
+                if !matches!(
+                    elem_ty.as_ref(),
+                    Ty::Bool
+                        | Ty::I8
+                        | Ty::I16
+                        | Ty::I32
+                        | Ty::I64
+                        | Ty::U8
+                        | Ty::U16
+                        | Ty::U32
+                        | Ty::U64
+                        | Ty::F16
+                        | Ty::F32
+                        | Ty::F64
+                ) {
+                    return Err(type_error(
+                        block,
+                        "vector constant requires an admitted scalar lane type",
+                    ));
+                }
                 if *lanes == 0 || values.len() != *lanes as usize {
                     return Err(err(
                         InterpretErrorCode::UnsupportedVectorShape,
@@ -1681,10 +3565,10 @@ impl<'m> Interpreter<'m> {
                         ),
                     ));
                 }
-                let lanes = values
-                    .iter()
-                    .map(|v| self.constant_to_value(elem_ty, v, block))
-                    .collect::<InterpretResult<Vec<_>>>()?;
+                let lanes =
+                    ArrayValue::try_from_elements(values.iter().map(|v| {
+                        self.constant_to_value_in(elem_ty, v, state.as_deref_mut(), block)
+                    }))?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
                     kind: InterpretValueKind::Vector(lanes),
@@ -1704,7 +3588,9 @@ impl<'m> Interpreter<'m> {
                 let values = elem_tys
                     .iter()
                     .zip(values)
-                    .map(|(ty, value)| self.constant_to_value(ty, value, block))
+                    .map(|(ty, value)| {
+                        self.lane_constant_to_value_in(ty, value, state.as_deref_mut(), block)
+                    })
                     .collect::<InterpretResult<Vec<_>>>()?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
@@ -1746,7 +3632,14 @@ impl<'m> Interpreter<'m> {
                     .fields
                     .iter()
                     .zip(values)
-                    .map(|(field, value)| self.constant_to_value(&field.ty, value, block))
+                    .map(|(field, value)| {
+                        self.lane_constant_to_value_in(
+                            &field.ty,
+                            value,
+                            state.as_deref_mut(),
+                            block,
+                        )
+                    })
                     .collect::<InterpretResult<Vec<_>>>()?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
@@ -1760,10 +3653,11 @@ impl<'m> Interpreter<'m> {
             // discriminants), the remaining elements are the selected
             // variant's fields in order. The result is an in-register
             // `Aggregate([tag, fields...])` whose tag lane has the canonical
-            // tag type, so it stores/loads through the tagged-union memory
-            // layout and the tag extracts positionally as field 0.
+            // tag type, and the tag extracts positionally as field 0. A
+            // register value needs no byte layout: even an inactive variant
+            // may carry sequences or other types without a byte image.
             (Ty::Enum(_), Constant::Aggregate(values)) => {
-                let layout = self.enum_layout(ty, block)?;
+                let shape = self.enum_register_shape(ty, block)?;
                 let Some((tag_const, field_consts)) = values.split_first() else {
                     return Err(type_error(
                         block,
@@ -1778,13 +3672,17 @@ impl<'m> Interpreter<'m> {
                         ),
                     ));
                 };
-                let variant_idx = layout.variant_by_discriminant(*disc).ok_or_else(|| {
+                let variant_idx = shape.variant_by_discriminant(*disc).ok_or_else(|| {
                     type_error(
                         block,
                         format!("discriminant {disc} does not name a variant of {ty}"),
                     )
                 })?;
-                let fields = &layout.variant_field_offsets[variant_idx];
+                // WS3.14: the validator refuses this as
+                // `UninhabitedVariantConstructed`; an unvalidated module fails
+                // closed here too.
+                shape.refuse_uninhabited(variant_idx, ty, "Const", block)?;
+                let fields = &shape.definition.variants[variant_idx].fields;
                 if field_consts.len() != fields.len() {
                     return Err(type_error(
                         block,
@@ -1799,11 +3697,16 @@ impl<'m> Interpreter<'m> {
                 }
                 let mut converted = Vec::with_capacity(values.len());
                 converted.push(
-                    InterpretValue::int(layout.tag_ty.clone(), *disc)
+                    InterpretValue::int(shape.tag_ty.clone(), *disc)
                         .map_err(|e| e.with_block(block))?,
                 );
-                for ((_, field_ty), value) in fields.iter().zip(field_consts) {
-                    converted.push(self.constant_to_value(field_ty, value, block)?);
+                for (field_ty, value) in fields.iter().zip(field_consts) {
+                    converted.push(self.constant_to_value_in(
+                        field_ty,
+                        value,
+                        state.as_deref_mut(),
+                        block,
+                    )?);
                 }
                 Ok(InterpretValue {
                     ty: ty.clone(),
@@ -1832,16 +3735,45 @@ impl<'m> Interpreter<'m> {
                         ),
                     ));
                 }
-                let values = data
-                    .iter()
-                    .map(|b| InterpretValue::int(Ty::U8, *b as i128))
-                    .collect::<InterpretResult<Vec<_>>>()?;
+                let values = ArrayValue::try_from_elements(
+                    data.iter().map(|b| InterpretValue::int(Ty::U8, *b as i128)),
+                )?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
                     kind: InterpretValueKind::Array(values),
                 })
             }
-            (Ty::Array(elem, len), Constant::Array(values)) => {
+            // v50 Splat: `len` copies of ONE converted element — a single
+            // uniform node, O(1) in `len`. The element is converted (and so
+            // type-checked) once, exactly as the validator checks it once.
+            (
+                Ty::Array(elem, len),
+                Constant::Splat {
+                    elem: value,
+                    len: count,
+                },
+            ) => {
+                if count != len {
+                    return Err(type_error(
+                        block,
+                        format!(
+                            "splat constant has {count} elements, declared type requires {len}"
+                        ),
+                    ));
+                }
+                let elem_ty = self.resolve_ty(*elem, block)?;
+                let value =
+                    self.constant_to_value_in(&elem_ty, value, state.as_deref_mut(), block)?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Array(ArrayValue::splat(value, *len)),
+                })
+            }
+            // The legacy Aggregate spelling at an array type has the same
+            // element/length contract as Array (validator and §3.1). Keep
+            // strict element conversion: this is not a struct/tuple lane
+            // context and does not admit an Uninit element.
+            (Ty::Array(elem, len), Constant::Array(values) | Constant::Aggregate(values)) => {
                 if values.len() != *len as usize {
                     return Err(type_error(
                         block,
@@ -1852,10 +3784,9 @@ impl<'m> Interpreter<'m> {
                     ));
                 }
                 let elem_ty = self.resolve_ty(*elem, block)?;
-                let values = values
-                    .iter()
-                    .map(|value| self.constant_to_value(&elem_ty, value, block))
-                    .collect::<InterpretResult<Vec<_>>>()?;
+                let values = ArrayValue::try_from_elements(values.iter().map(|value| {
+                    self.constant_to_value_in(&elem_ty, value, state.as_deref_mut(), block)
+                }))?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
                     kind: InterpretValueKind::Array(values),
@@ -1863,10 +3794,9 @@ impl<'m> Interpreter<'m> {
             }
             (Ty::Sequence(elem), Constant::Sequence(values)) => {
                 let elem_ty = self.resolve_ty(*elem, block)?;
-                let values = values
-                    .iter()
-                    .map(|value| self.constant_to_value(&elem_ty, value, block))
-                    .collect::<InterpretResult<Vec<_>>>()?;
+                let values = ArrayValue::try_from_elements(values.iter().map(|value| {
+                    self.constant_to_value_in(&elem_ty, value, state.as_deref_mut(), block)
+                }))?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
                     kind: InterpretValueKind::Sequence(values),
@@ -1874,13 +3804,53 @@ impl<'m> Interpreter<'m> {
             }
             (Ty::Set(elem, _), Constant::Set(values)) => {
                 let elem_ty = self.resolve_ty(*elem, block)?;
-                let values = values
-                    .iter()
-                    .map(|value| self.constant_to_value(&elem_ty, value, block))
-                    .collect::<InterpretResult<Vec<_>>>()?;
+                let values = ArrayValue::try_from_elements(values.iter().map(|value| {
+                    self.constant_to_value_in(&elem_ty, value, state.as_deref_mut(), block)
+                }))?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
                     kind: InterpretValueKind::Set(values),
+                })
+            }
+            // The validator also admits the legacy positional Aggregate
+            // spelling. Resolve field types and names from the declaration,
+            // yielding the same record value as a named Record constant.
+            (Ty::Record(record_id), Constant::Aggregate(fields)) => {
+                let module = self.module.ok_or_else(|| {
+                    type_error(block, "record constants require module type context")
+                })?;
+                let record = module.record_def(*record_id).ok_or_else(|| {
+                    type_error(block, format!("record definition {record_id} not found"))
+                })?;
+                if fields.len() != record.fields.len() {
+                    return Err(type_error(
+                        block,
+                        format!(
+                            "record constant has {} fields, declared type requires {}",
+                            fields.len(),
+                            record.fields.len()
+                        ),
+                    ));
+                }
+                let values = record
+                    .fields
+                    .iter()
+                    .zip(fields)
+                    .map(|(field, value)| {
+                        Ok((
+                            field.name.clone(),
+                            self.constant_to_value_in(
+                                &field.ty,
+                                value,
+                                state.as_deref_mut(),
+                                block,
+                            )?,
+                        ))
+                    })
+                    .collect::<InterpretResult<Vec<_>>>()?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Record(values),
                 })
             }
             (Ty::Record(record_id), Constant::Record(fields)) => {
@@ -1905,7 +3875,14 @@ impl<'m> Interpreter<'m> {
                     ));
                 }
                 let mut values = Vec::with_capacity(fields.len());
+                let mut names = std::collections::BTreeSet::new();
                 for (name, value) in fields {
+                    if !names.insert(name.as_str()) {
+                        return Err(type_error(
+                            block,
+                            format!("record field {name} is duplicated"),
+                        ));
+                    }
                     let field = record
                         .fields
                         .iter()
@@ -1915,7 +3892,7 @@ impl<'m> Interpreter<'m> {
                         })?;
                     values.push((
                         name.clone(),
-                        self.constant_to_value(&field.ty, value, block)?,
+                        self.constant_to_value_in(&field.ty, value, state.as_deref_mut(), block)?,
                     ));
                 }
                 Ok(InterpretValue {
@@ -1948,7 +3925,9 @@ impl<'m> Interpreter<'m> {
                     .captures
                     .iter()
                     .zip(captures)
-                    .map(|(ty, value)| self.constant_to_value(ty, value, block))
+                    .map(|(ty, value)| {
+                        self.constant_to_value_in(ty, value, state.as_deref_mut(), block)
+                    })
                     .collect::<InterpretResult<Vec<_>>>()?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
@@ -1965,20 +3944,38 @@ impl<'m> Interpreter<'m> {
             // `Constant::PhantomData` is the canonical constant spelling for
             // `Ty::Unit` (there is no separate `Constant::Unit`).  Materialize
             // that pair as the interpreter's real unit value so it remains
-            // encodable by `Store` and round-trips through memory.  Retain the
-            // generic phantom marker for any non-Unit metadata use.
+            // encodable by `Store` and round-trips through memory. This is
+            // the only admitted type: a generic marker would let a malformed,
+            // unused constant bypass the validator's Unit-only shape rule.
             (Ty::Unit, Constant::PhantomData) => Ok(InterpretValue {
                 ty: Ty::Unit,
                 kind: InterpretValueKind::Unit,
-            }),
-            (_, Constant::PhantomData) => Ok(InterpretValue {
-                ty: ty.clone(),
-                kind: InterpretValueKind::PhantomData,
             }),
             _ => Err(type_error(
                 block,
                 format!("constant {value:?} does not match declared type {ty}"),
             )),
+        }
+    }
+
+    /// One LANE of a struct/tuple aggregate constant (crystal lane, E3b): an unwritten lane
+    /// (`Constant::Uninit`) becomes `InterpretValueKind::Uninit` at the lane's declared type,
+    /// and every other lane converts exactly as `constant_to_value_in` always converted it.
+    /// Only the two struct/tuple arms call this, so `Constant::Uninit` anywhere else still
+    /// reaches `constant_to_value_in`'s type-error catch-all.
+    fn lane_constant_to_value_in(
+        &self,
+        lane_ty: &Ty,
+        lane: &Constant,
+        state: Option<&mut ExecState>,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        match lane {
+            Constant::Uninit => Ok(InterpretValue {
+                ty: lane_ty.clone(),
+                kind: InterpretValueKind::Uninit,
+            }),
+            other => self.constant_to_value_in(lane_ty, other, state, block),
         }
     }
 
@@ -1994,6 +3991,65 @@ impl<'m> Interpreter<'m> {
             .ty(id)
             .cloned()
             .ok_or_else(|| type_error(block, format!("type id {id} not found")))
+    }
+
+    /// WS3.8: the pointer a `SymbolAddr { symbol, addend }` pointer constant
+    /// denotes — `addend` bytes into the allocation of the ONE module global
+    /// named `symbol`, with `extent` further bytes that must stay inside it.
+    /// Fails closed without execution state, on a missing, repeated or
+    /// thread-local global, and on an out-of-bounds window.
+    fn symbol_pointer(
+        &self,
+        symbol: &str,
+        addend: i64,
+        extent: u64,
+        state: Option<&mut ExecState>,
+        block: BlockId,
+    ) -> InterpretResult<InterpretPointer> {
+        let Some(state) = state else {
+            return Err(type_error(
+                block,
+                format!("symaddr<{symbol}>: a pointer constant needs execution state"),
+            ));
+        };
+        let module = self.module_context(block, "a pointer constant")?;
+        let mut named = module
+            .globals
+            .iter()
+            .enumerate()
+            .filter(|(_, global)| global.name == symbol);
+        let (Some((index, global)), None) = (named.next(), named.next()) else {
+            return Err(type_error(
+                block,
+                format!("symaddr<{symbol}>: does not name exactly one module global"),
+            ));
+        };
+        if global.tls.is_some() {
+            return Err(type_error(
+                block,
+                format!("symaddr<{symbol}>: a thread-local global has no constant address"),
+            ));
+        }
+        let size = self.byte_size(&global.ty, block)?;
+        let offset = u64::try_from(addend)
+            .ok()
+            .filter(|offset| offset.checked_add(extent).is_some_and(|end| end <= size))
+            .ok_or_else(|| {
+                type_error(
+                    block,
+                    format!(
+                        "symaddr<{symbol} + {addend}>: a {extent}-byte window does not fit the \
+                         {size}-byte global"
+                    ),
+                )
+            })?;
+        let index = u32::try_from(index)
+            .map_err(|_| type_error(block, "global index exceeds the id space"))?;
+        let base = self.global_pointer(GlobalId::new(index), state, block)?;
+        Ok(InterpretPointer {
+            allocation: base.allocation,
+            offset: base.offset + offset,
+        })
     }
 
     /// Resolve a module global to a backing pointer, lazily allocating its
@@ -2041,12 +4097,28 @@ impl<'m> Interpreter<'m> {
             .unwrap_or(1);
         let align = natural.max(declared).max(GLOBAL_SECTION_ALIGN);
         let pointer = state.memory.alloc(size, align, block)?;
+        // Cached BEFORE the initializer is evaluated: a WS3.8 pointer constant
+        // in it may take this global's own address (or reach it through a
+        // cycle of globals), and must see this allocation, not allocate again.
+        state.globals.insert(global, pointer);
         if let Some(init) = &def.initializer {
-            let value = self.constant_to_value(&def.ty, init, block)?;
-            let bytes = self.encode_value(&value, state, block)?;
+            // Crystal lane (E3b): a global's bytes are its initializer; an unwritten lane has
+            // no bytes to give it (trust-ir-build refuses the placement too).
+            if constant_mentions_uninit(init) {
+                return Err(type_error(
+                    block,
+                    "GlobalAddr: a global initializer cannot carry an unwritten lane (uninit)",
+                ));
+            }
+            let value = self.constant_to_value_in(&def.ty, init, Some(state), block)?;
+            // A global's image is loaded from the object file, where padding
+            // is ZERO, not uninitialized: the compact image's uncovered bytes
+            // become defined zeros (structurally — a splat initializer of any
+            // length stays one run).
+            let image = self.encode_image(&value, state, block)?.zero_uninit();
             state
                 .memory
-                .write(pointer, &bytes, align, block, "GlobalAddr")?;
+                .write_image(pointer, &image, align, block, "GlobalAddr")?;
         } else {
             // A NO-INITIALIZER global is BSS / `.tbss` (a writable or thread-local
             // static with no explicit initializer, or one initialized to all
@@ -2057,15 +4129,15 @@ impl<'m> Interpreter<'m> {
             // zero-initialized to `Uninitialized` and switched on in `get_or_init`.)
             // Deliberately scoped to GLOBALS only — stack `Alloca` / `HeapAlloc`
             // stay uninitialized so genuine use-of-uninit UB is still caught.
-            state.memory.write(
+            // One zero run, whatever the size.
+            state.memory.write_image(
                 pointer,
-                &vec![0u8; size as usize],
+                &Image::fill(Some(0), size),
                 align,
                 block,
                 "GlobalAddr",
             )?;
         }
-        state.globals.insert(global, pointer);
         Ok(pointer)
     }
 
@@ -2122,14 +4194,27 @@ impl<'m> Interpreter<'m> {
     /// Load a value of `ty` from `ptr`.
     ///
     /// `strict` selects the initialization discipline. A `strict` load (atomic
-    /// or volatile) requires EVERY byte of the access to be initialized — an
-    /// uninitialized byte is undefined behaviour, surfaced with its exact
-    /// offset. A non-strict (plain) scalar load implements copy-propagates-
-    /// poison: if the byte range has any uninitialized byte it yields an inert
-    /// `PartialBytes` transport value instead of faulting, so a whole-lane
-    /// aggregate copy that reads padding or an inactive niche payload can move
-    /// those bytes verbatim to their destination. The value only faults if it
-    /// is later INSPECTED (see `reject_partial`).
+    /// or volatile) requires every COVERED byte of the access to be
+    /// initialized — an uninitialized covered byte is undefined behaviour,
+    /// surfaced with its exact offset. For a scalar every byte is covered. A
+    /// non-strict (plain) scalar load implements copy-propagates-poison: if the
+    /// byte range has any uninitialized byte it yields an inert `PartialBytes`
+    /// transport value instead of faulting, so a whole-lane aggregate copy
+    /// that reads padding or an inactive niche payload can move those bytes
+    /// verbatim to their destination. The value only faults if it is later
+    /// INSPECTED (see `reject_partial`).
+    ///
+    /// WS2.14 (F-030): an aggregate load — strict or not — requires exactly
+    /// the bytes a live field of the decoded value covers to be initialized
+    /// (`first_uninit_covered`: struct/tuple fields, array elements, the enum
+    /// tag lane plus the ACTIVE variant's fields). Padding and the
+    /// inactive-variant tail are don't-care: `decode_image` never reads them,
+    /// so a rustc-style
+    /// field-wise initialization followed by a whole-value move is defined, as
+    /// it is in Rust (`read_volatile::<S>` included). An uninitialized covered
+    /// byte keeps its undefined-behaviour report. The `Array(U8, N)` union
+    /// carrier covers every byte, so a by-value move of a partially initialized
+    /// carrier stays undefined behaviour (F-050 is a separate decision).
     fn eval_load(
         &self,
         ty: &Ty,
@@ -2139,37 +4224,81 @@ impl<'m> Interpreter<'m> {
         block: BlockId,
         strict: bool,
     ) -> InterpretResult<InterpretValue> {
+        if matches!(ty, Ty::Storage(_)) {
+            return Err(type_error(block, "storage-only type has no typed load"));
+        }
         let size = self.byte_size(ty, block)?;
         let natural_align = self.byte_align(ty, block)?;
         let align = checked_align(align.unwrap_or(natural_align), block)?;
         let ptr = expect_pointer(ptr, block, "Load")?;
-        if strict {
-            let bytes = state.memory.read(ptr, size, align, block, "Load")?;
-            return self.decode_value(ty, &bytes, state, block);
+        // A COMPACT image of the range: a load of a stored splat reads one
+        // repeating run, whatever the length.
+        let image = state.memory.read_image(ptr, size, align, block, "Load")?;
+        if image.first_uninit().is_none() {
+            return self.decode_image(ty, &image, state, block);
         }
-        let opt_bytes = state
-            .memory
-            .read_maybe_uninit(ptr, size, align, block, "Load")?;
-        if opt_bytes.iter().all(Option::is_some) {
-            let bytes: Vec<u8> = opt_bytes
-                .into_iter()
-                .map(|b| b.expect("all init"))
-                .collect();
-            return self.decode_value(ty, &bytes, state, block);
-        }
-        // Some byte is uninitialized. A SCALAR load transports the partially-
-        // initialized image as poison; an aggregate/other load keeps the strict
-        // discipline (`read` re-reports the first uninitialized byte with its
-        // exact offset, matching the historical message).
-        if partial_load_ty(ty) {
-            Ok(InterpretValue {
+        // Some byte is uninitialized. A non-strict SCALAR load transports the
+        // partially-initialized image as poison.
+        if !strict && partial_load_ty(ty) {
+            return Ok(InterpretValue {
                 ty: ty.clone(),
-                kind: InterpretValueKind::PartialBytes(opt_bytes),
-            })
-        } else {
-            state.memory.read(ptr, size, align, block, "Load")?;
-            unreachable!("read must fail when read_maybe_uninit saw an uninitialized byte")
+                kind: InterpretValueKind::PartialBytes(image.to_vec()),
+            });
         }
+        // Every other load requires the bytes a live field covers (WS2.14).
+        // The first uninitialized covered byte is reported with its exact
+        // allocation offset, in the historical `read` message.
+        if let Some(index) = self.first_uninit_covered(ty, &image, state, block)? {
+            // Crystal lane (E3b): every uninitialised COVERED byte here may have been left so
+            // by a store of an UNWRITTEN lane; the aggregate then comes back with those lanes
+            // unwritten. Any other uninitialised covered byte keeps the WS2.14 report below.
+            if matches!(ty, Ty::Struct(_) | Ty::Tuple(_))
+                && self.only_unwritten_lanes_uninit(ty, ptr, &image, state, block)?
+            {
+                return self.decode_image_with_unwritten_lanes(ty, &image, state, block);
+            }
+            return Err(ub(
+                block,
+                format!(
+                    "Load: reading uninitialized byte at offset {}",
+                    ptr.offset + index
+                ),
+            ));
+        }
+        // Only uncovered bytes (padding, the inactive-variant tail) are
+        // uninitialized, and `decode_image` never reads them: reading them as
+        // zero is unobservable.
+        self.decode_image(ty, &image, state, block)
+    }
+
+    /// The poison value `Undef` / an unbound `LoadSlot` binds at `ty`
+    /// (roadmap WS2.10): the WHOLLY-uninitialized `PartialBytes` image, exactly
+    /// what a non-strict load of never-written memory yields, so it transports
+    /// and faults on inspection like any other poison value.
+    ///
+    /// Only the [`partial_load_ty`] scalars have a poison carrier. Every other
+    /// type FAILS CLOSED with `UndefinedBehavior`: an aggregate poison value is
+    /// not modelled, and spelling one as a "complete" value would be a lie
+    /// (roadmap §2.2 ruling 5). `what` prefixes the refusal.
+    fn scalar_poison(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        what: &str,
+    ) -> InterpretResult<InterpretValue> {
+        if partial_load_ty(ty) {
+            let size = self.byte_size(ty, block)?;
+            return Ok(InterpretValue {
+                ty: ty.clone(),
+                kind: InterpretValueKind::PartialBytes(vec![None; size as usize]),
+            });
+        }
+        Err(ub(
+            block,
+            format!(
+                "{what} of non-scalar type {ty} is not executable (aggregate poison unmodelled)"
+            ),
+        ))
     }
 
     /// Store `value` of `ty` to `ptr`.
@@ -2192,6 +4321,9 @@ impl<'m> Interpreter<'m> {
     ) -> InterpretResult<()> {
         // Copy-propagates-poison transport: a partially-initialized scalar image
         // moves to memory verbatim (non-strict stores only).
+        if matches!(ty, Ty::Storage(_)) {
+            return Err(type_error(block, "storage-only type has no typed store"));
+        }
         if let InterpretValueKind::PartialBytes(opt_bytes) = &value.kind {
             if strict {
                 return Err(reject_partial_error(block, "Store (atomic/volatile)"));
@@ -2214,6 +4346,40 @@ impl<'m> Interpreter<'m> {
                 .memory
                 .write_maybe_uninit(ptr, opt_bytes, align, block, "Store");
         }
+        // Crystal lane (E3b): an aggregate carrying UNWRITTEN lanes stores those lanes' bytes
+        // uninitialised (recorded as unwritten-lane bytes) and every other byte exactly as the
+        // WS2.14 aggregate store below does: live-field bytes written, padding and an inactive
+        // variant's tail written UNINITIALISED (and not recorded, so they stay don't-care).
+        if value_carries_uninit_lane(value) {
+            if strict {
+                return Err(ub(
+                    block,
+                    "Store (atomic/volatile): the stored aggregate has an unwritten lane (uninit)",
+                ));
+            }
+            expect_ty(value, ty, block)?;
+            let size = self.byte_size(ty, block)?;
+            let natural_align = self.byte_align(ty, block)?;
+            let align = checked_align(align.unwrap_or(natural_align), block)?;
+            let ptr = expect_pointer(ptr, block, "Store")?;
+            // The image is `encode_image`'s (padding uninitialised, WS2.14) with each unwritten
+            // lane one uninitialised run; `lanes` names exactly those runs, and is the record.
+            let mut lanes = Vec::new();
+            let image =
+                self.encode_image_with_unwritten_lanes(value, 0, &mut lanes, state, block)?;
+            if image.len() != size {
+                return Err(type_error(
+                    block,
+                    format!(
+                        "Store: aggregate image is {} bytes, type size is {size}",
+                        image.len()
+                    ),
+                ));
+            }
+            return state
+                .memory
+                .write_with_unwritten_lanes(ptr, &image, &lanes, align, block, "Store");
+        }
         expect_ty(value, ty, block)?;
         if let Ty::FatPtr(kind) = ty {
             self.validate_fat_pointer_value(kind, value, block)?;
@@ -2222,17 +4388,21 @@ impl<'m> Interpreter<'m> {
         let natural_align = self.byte_align(ty, block)?;
         let align = checked_align(align.unwrap_or(natural_align), block)?;
         let ptr = expect_pointer(ptr, block, "Store")?;
-        let bytes = self.encode_value(value, state, block)?;
-        if bytes.len() != size as usize {
+        // WS2.14 (F-030): the image leaves every byte no live field covers
+        // (inter-field padding, the inactive-variant tail) UNINITIALIZED —
+        // see `encode_image`. It is compact: a splat of any length is one
+        // repeating run of the allocation.
+        let image = self.encode_image(value, state, block)?;
+        if image.len() != size {
             return Err(type_error(
                 block,
                 format!(
                     "Store: encoded size {} does not match type size {size}",
-                    bytes.len()
+                    image.len()
                 ),
             ));
         }
-        state.memory.write(ptr, &bytes, align, block, "Store")
+        state.memory.write_image(ptr, &image, align, block, "Store")
     }
 
     /// Compute the new value of an `AtomicRMW`: `old <op> operand`, on integer
@@ -2295,6 +4465,7 @@ impl<'m> Interpreter<'m> {
         pointee_ty: &Ty,
         base: &InterpretValue,
         indices: &[InterpretValue],
+        memory: &MemoryState,
         block: BlockId,
     ) -> InterpretResult<InterpretValue> {
         let elem_size = self.byte_size(pointee_ty, block)?;
@@ -2330,6 +4501,7 @@ impl<'m> Interpreter<'m> {
             let addr = addr
                 .checked_add(delta)
                 .ok_or_else(|| ub(block, "GEP: pointer offset overflow"))?;
+            let addr = memory.check_address(addr, block, "GEP")?;
             return Ok(InterpretValue {
                 ty: Ty::Ptr,
                 kind: InterpretValueKind::DanglingPtr(addr),
@@ -2340,6 +4512,17 @@ impl<'m> Interpreter<'m> {
             .offset
             .checked_add(delta)
             .ok_or_else(|| ub(block, "GEP: pointer offset overflow"))?;
+        // WS2.16: the result must be an address the target can name. At 64
+        // bits this is vacuous (the u64 offset arithmetic above is the whole
+        // check, byte-identical to before); on wasm32 a GEP whose result
+        // lands past `2^32 - 1` is UB rather than a silently wider pointer.
+        if memory.max_address != u64::MAX {
+            let base_address = memory.address(base, block, "GEP")?;
+            let address = base_address
+                .checked_add(delta)
+                .ok_or_else(|| ub(block, "GEP: pointer offset overflow"))?;
+            memory.check_address(address, block, "GEP")?;
+        }
         Ok(InterpretValue {
             ty: Ty::Ptr,
             kind: InterpretValueKind::Ptr(InterpretPointer {
@@ -2359,6 +4542,124 @@ impl<'m> Interpreter<'m> {
         state.memory.dealloc(ptr, block)
     }
 
+    /// `MemCopy` (WS3.20): copy `bytes` bytes from `src` to `dst`.
+    ///
+    /// The copied image is the destination's byte-for-byte replacement —
+    /// VALUE and INIT STATE both (`read_image` / `write_image`, the pair a
+    /// non-strict scalar `Load`+`Store` uses to propagate poison), so an
+    /// uninitialized source byte stays uninitialized at the
+    /// destination and is never laundered into a defined zero. Pointer
+    /// PROVENANCE survives for free: this model stores a pointer as its
+    /// address bytes and recovers provenance on decode by address lookup
+    /// (`resolve_pointer_kind`), so a pointer copied through here still
+    /// dereferences (pinned by `crates/trust-ir/tests/bulk_memory_ops.rs`).
+    ///
+    /// UB (faults): a poison count; either range outside a live allocation
+    /// (`checked_access`, alignment 1 — the copy is byte-granular); and, with
+    /// `overlap == false` (memcpy), source and destination ranges of the SAME
+    /// allocation that overlap. With `overlap == true` (memmove) the copy is
+    /// as-if through a temporary — which it literally is here. A zero count is
+    /// a no-op and does not touch either pointer, matching `memcpy(p, q, 0)`
+    /// on a dangling or null `p`/`q`.
+    fn eval_mem_copy(
+        &self,
+        dst: &InterpretValue,
+        src: &InterpretValue,
+        bytes: &InterpretValue,
+        overlap: bool,
+        state: &mut ExecState,
+        block: BlockId,
+    ) -> InterpretResult<()> {
+        let op = if overlap {
+            "MemCopy(overlap)"
+        } else {
+            "MemCopy"
+        };
+        let count = self.bulk_byte_count(bytes, block, op)?;
+        if count == 0 {
+            return Ok(());
+        }
+        let dst = expect_pointer(dst, block, op)?;
+        let src = expect_pointer(src, block, op)?;
+        if !overlap
+            && dst.allocation == src.allocation
+            && byte_ranges_overlap(dst.offset, count, src.offset, count)
+        {
+            return Err(ub(
+                block,
+                format!(
+                    "MemCopy: source [{}..{}) and destination [{}..{}) overlap and the copy is \
+                     not marked `overlap` (memmove)",
+                    src.offset,
+                    src.offset.saturating_add(count),
+                    dst.offset,
+                    dst.offset.saturating_add(count)
+                ),
+            ));
+        }
+        // Read the whole source image first (bounds-checked), then write it:
+        // the temporary makes an overlapping memmove trivially correct. The
+        // image SHARES the source's nodes and is stored as one run, so a copy
+        // costs O(runs read × height) new nodes, never the dynamic `count`:
+        // copying a region onto its neighbourhood (`<[T]>::repeat`) adds a
+        // node per copy, not the bytes copied.
+        let image = state.memory.read_image(src, count, 1, block, op)?;
+        state.memory.write_image(dst, &image, 1, block, op)
+    }
+
+    /// `MemSet` (WS3.20): write `byte` to each of `bytes` bytes at `dst`.
+    /// Every written byte becomes INITIALIZED with that value (a stored
+    /// pointer whose bytes are overwritten is destroyed, as under a byte
+    /// store). UB (faults): a poison count or fill byte; a range outside a
+    /// live allocation. A zero count is a no-op.
+    fn eval_mem_set(
+        &self,
+        dst: &InterpretValue,
+        byte: &InterpretValue,
+        bytes: &InterpretValue,
+        state: &mut ExecState,
+        block: BlockId,
+    ) -> InterpretResult<()> {
+        let count = self.bulk_byte_count(bytes, block, "MemSet")?;
+        reject_partial(byte, block, "MemSet fill byte")?;
+        expect_ty(byte, &Ty::U8, block)?;
+        let fill = expect_int_value(byte, block)?;
+        if count == 0 {
+            return Ok(());
+        }
+        let dst = expect_pointer(dst, block, "MemSet")?;
+        // Bounds-checked BEFORE any image exists: `count` is attacker-chosen
+        // (a `u64::MAX` fill must fault, never try to allocate).
+        state
+            .memory
+            .fill(dst, fill.raw as u8, count, block, "MemSet")
+    }
+
+    /// The dynamic byte count of a bulk op: an initialized integer of the
+    /// pointer-width unsigned type (`Usize`, or `U64` when the module pins no
+    /// target — the validator's rule; here any unsigned integer value is
+    /// accepted and its magnitude used).
+    fn bulk_byte_count(
+        &self,
+        bytes: &InterpretValue,
+        block: BlockId,
+        op: &str,
+    ) -> InterpretResult<u64> {
+        reject_partial(bytes, block, &format!("{op} byte count"))?;
+        let count = expect_int_value(bytes, block)?;
+        if count.signed {
+            return Err(type_error(
+                block,
+                format!(
+                    "{op}: byte count must be an unsigned integer, got {}",
+                    bytes.ty
+                ),
+            ));
+        }
+        u64::try_from(count.raw)
+            .map_err(|_| ub(block, format!("{op}: byte count {} exceeds u64", count.raw)))
+    }
+
     fn eval_ptr_data(
         &self,
         ptr_ty: &Ty,
@@ -2366,6 +4667,9 @@ impl<'m> Interpreter<'m> {
         block: BlockId,
     ) -> InterpretResult<InterpretValue> {
         expect_ty(ptr, ptr_ty, block)?;
+        // Projecting a pointer's parts inspects it (Lean `semPtrData` has no
+        // poison arm either; roadmap WS2.10 review).
+        reject_partial(ptr, block, "PtrData")?;
         match ptr_ty {
             Ty::Ptr | Ty::PtrConst(_) | Ty::PtrMut(_) | Ty::Ref(_) | Ty::RefMut(_) | Ty::Rc(_) => {
                 Ok(InterpretValue {
@@ -2400,6 +4704,7 @@ impl<'m> Interpreter<'m> {
         block: BlockId,
     ) -> InterpretResult<InterpretValue> {
         expect_ty(ptr, ptr_ty, block)?;
+        reject_partial(ptr, block, "PtrMetadata")?;
         match ptr_ty {
             Ty::Ptr | Ty::PtrConst(_) | Ty::PtrMut(_) | Ty::Ref(_) | Ty::RefMut(_) | Ty::Rc(_) => {
                 if metadata_ty != &Ty::Unit {
@@ -2415,7 +4720,7 @@ impl<'m> Interpreter<'m> {
             }
             // B2: project the metadata lane. The node's declared `metadata_ty` must
             // BE the kind's canonical metadata type (`FatPtrKind::metadata_ty` at the
-            // pinned 64-bit target: a pointer-sized unsigned length for Slice/Str, a
+            // running target: a pointer-sized unsigned length for Slice/Str, a
             // thin Ptr for TraitObject), and the stored lane must carry it.
             Ty::FatPtr(kind) => {
                 self.validate_fat_pointer_value(kind, ptr, block)?;
@@ -2460,6 +4765,11 @@ impl<'m> Interpreter<'m> {
         metadata: &InterpretValue,
         block: BlockId,
     ) -> InterpretResult<InterpretValue> {
+        // Assembling a pointer inspects both parts: a poison data pointer or
+        // metadata word is refused here, as Lean `semPtrFromParts` refuses it
+        // (roadmap WS2.10 review) — never re-labelled as a pointer value.
+        reject_partial(data, block, "PtrFromParts data")?;
+        reject_partial(metadata, block, "PtrFromParts metadata")?;
         match ptr_ty {
             Ty::Ptr | Ty::PtrConst(_) | Ty::PtrMut(_) | Ty::Ref(_) | Ty::RefMut(_) | Ty::Rc(_) => {
                 if metadata_ty != &Ty::Unit {
@@ -2514,28 +4824,102 @@ impl<'m> Interpreter<'m> {
         }
     }
 
+    fn closure_storage_binding(
+        &self,
+        id: crate::ClosureTyId,
+        block: BlockId,
+    ) -> InterpretResult<crate::closure_storage::ClosureStorageBinding<'m>> {
+        let module = self.module_context(block, "closure storage")?;
+        module
+            .closure_storage_binding(id)
+            .map_err(|error| type_error(block, error))
+    }
+
     fn byte_size(&self, ty: &Ty, block: BlockId) -> InterpretResult<u64> {
+        self.byte_size_in(ty, block, &mut Vec::new())
+    }
+
+    /// Run `layout` with `key` marked as being laid out, refusing re-entry.
+    ///
+    /// Roadmap WS2.4 (F-045): a type that contains itself BY VALUE — `struct
+    /// Node { next: Node }`, a `Ty::Array` whose `TyId` resolves back to itself,
+    /// an enum whose variant carries the enum inline — has no finite layout.
+    /// `validate_module` refuses such a module (`InlineAggregateCycle`), but
+    /// modules may be interpreted without validation (binary decode and the
+    /// text parser run no validator), and without this guard `byte_size` →
+    /// `struct_layout` → `aggregate_layout` → `byte_size(field)` recursed until
+    /// the host stack overflowed — a crash, not an error. `visiting` is the
+    /// stack of nominal / table-indexed types on the current layout path, the
+    /// nodes the layout table (`layout_table`) guards against re-entry; re-entry is
+    /// a fail-closed `TypeError`. Only by-value edges push a key: a pointer
+    /// arm returns a fixed size without looking at its pointee, so `*mut Node`
+    /// inside `Node` is never re-entered.
+    fn with_layout_visit<T>(
+        &self,
+        key: LayoutVisit,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+        layout: impl FnOnce(&mut Vec<LayoutVisit>) -> InterpretResult<T>,
+    ) -> InterpretResult<T> {
+        if visiting.contains(&key) {
+            return Err(type_error(
+                block,
+                format!("type {ty} contains itself by value (no finite layout)"),
+            ));
+        }
+        visiting.push(key);
+        let result = layout(visiting);
+        // Pop on EVERY path: `enum_layout`'s niche check probes field sizes with
+        // `is_ok_and` and keeps going after an error, so a leaked key would
+        // poison a sibling's layout.
+        visiting.pop();
+        result
+    }
+
+    fn byte_size_in(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<u64> {
         match ty {
+            Ty::Closure(id) => self
+                .closure_storage_binding(*id, block)
+                .map(|binding| binding.layout.size),
+
+            Ty::Storage(layout) => {
+                if layout.is_well_formed(self.pointer_bits()) {
+                    Ok(layout.size_bytes)
+                } else {
+                    Err(type_error(block, "invalid storage-only layout"))
+                }
+            }
             Ty::Bool => Ok(1),
             Ty::I8 | Ty::U8 => Ok(1),
             Ty::I16 | Ty::U16 | Ty::F16 => Ok(2),
             Ty::I32 | Ty::U32 | Ty::F32 => Ok(4),
             Ty::I64 | Ty::U64 | Ty::F64 => Ok(8),
             Ty::I128 | Ty::U128 => Ok(16),
-            // Pointer-width integers occupy pointer bytes at the pinned 64-bit
-            // reference target (`int_shape` executes them at 64 bits); char is a
+            // Pointer-width integers occupy pointer bytes at the running target
+            // (`int_shape` executes them at its pointer width, WS2.16); char is a
             // 32-bit unsigned carrier. Mirrors `shape::layout`'s PointerInt rules.
-            Ty::Isize | Ty::Usize => Ok(8),
+            Ty::Isize | Ty::Usize => Ok(self.pointer_bytes()),
             Ty::Char => Ok(4),
-            Ty::Ptr | Ty::PtrConst(_) | Ty::PtrMut(_) | Ty::Ref(_) | Ty::RefMut(_) | Ty::Rc(_) => {
-                Ok(8)
-            }
-            // B2: a fat pointer is two pointer lanes at the pinned 64-bit target
-            // (data + metadata), matching `Ty::bit_width_with(64)` = 128 and the
-            // shape module's fat `PointerLayoutShape`.
+            Ty::Func(_)
+            | Ty::Ptr
+            | Ty::PtrConst(_)
+            | Ty::PtrMut(_)
+            | Ty::Ref(_)
+            | Ty::RefMut(_)
+            | Ty::Rc(_) => Ok(self.pointer_bytes()),
+            // B2: a fat pointer is two pointer words (data + metadata),
+            // matching `Ty::bit_width_with(pointer_bits)` and the shape
+            // module's fat `PointerLayoutShape` — 16 bytes at 64 bits, 8 on
+            // wasm32 (WS2.16).
             Ty::FatPtr(_) => {
                 self.require_fat_pointer_layout(block)?;
-                Ok(16)
+                Ok(2 * self.pointer_bytes())
             }
             Ty::Unit => Ok(0),
             Ty::Vector(elem, lanes) => {
@@ -2546,15 +4930,17 @@ impl<'m> Interpreter<'m> {
                         "zero-lane vectors are not executable",
                     ));
                 }
-                self.byte_size(elem, block)?
+                self.byte_size_in(elem, block, visiting)?
                     .checked_mul(u64::from(*lanes))
                     .ok_or_else(|| type_error(block, "vector byte size overflow"))
             }
             Ty::Array(elem, len) => {
                 let elem_ty = self.resolve_ty(*elem, block)?;
-                self.byte_size(&elem_ty, block)?
-                    .checked_mul(*len)
-                    .ok_or_else(|| type_error(block, "array byte size overflow"))
+                self.with_layout_visit(LayoutVisit::Ty(*elem), ty, block, visiting, |visiting| {
+                    self.byte_size_in(&elem_ty, block, visiting)
+                })?
+                .checked_mul(*len)
+                .ok_or_else(|| type_error(block, "array byte size overflow"))
             }
             // A `Ty::Struct` has a finite, in-memory C-style layout: each field
             // is placed at the next offset aligned to the field's natural
@@ -2562,17 +4948,17 @@ impl<'m> Interpreter<'m> {
             // alignment (the max field alignment). This is the heap-faithful
             // counterpart to the SSA `Aggregate` value model: a recursive ADT
             // (e.g. `Box<Level>`) stays finite because its recursive payload
-            // field is a pointer (`Ty::Ptr`, 8 bytes), not an inline struct.
-            Ty::Struct(_) => Ok(self.struct_layout(ty, block)?.size),
+            // field is a pointer (`Ty::Ptr`, one pointer word), not an inline struct.
+            Ty::Struct(_) => Ok(self.struct_layout_in(ty, block, visiting)?.size),
             // A `Ty::Tuple` has the same finite C-style layout as a struct: each
             // element placed at its aligned offset, the total rounded up to the
             // tuple alignment. This is the in-memory counterpart to the
             // in-register `Aggregate` value model and is what lets a tuple be
             // `Alloca`'d / `Store`d / `Load`ed faithfully.
-            Ty::Tuple(_) => Ok(self.tuple_layout(ty, block)?.size),
+            Ty::Tuple(_) => Ok(self.tuple_layout_in(ty, block, visiting)?.size),
             // A `Ty::Enum` has trust-ir's canonical tagged-union layout (tag at
             // offset 0 + shared max-sized payload region) — see `enum_layout`.
-            Ty::Enum(_) => Ok(self.enum_layout(ty, block)?.size),
+            Ty::Enum(_) => Ok(self.enum_layout_in(ty, block, visiting)?.size),
             _ => Err(type_error(block, format!("{ty} has no byte layout"))),
         }
     }
@@ -2635,19 +5021,45 @@ impl<'m> Interpreter<'m> {
     /// synthesized number, which is the defect this path exists to remove.
     ///
     /// This is the single source of layout truth shared by `byte_size`,
-    /// `byte_align`, `encode_value`, and `decode_value`, so the heap round-trip
+    /// `byte_align`, `encode_image`, and `decode_image`, so the heap round-trip
     /// of a struct value (`HeapAlloc`/`Store`/`Load`) is internally consistent.
     fn struct_layout(&self, ty: &Ty, block: BlockId) -> InterpretResult<StructLayout> {
+        self.struct_layout_in(ty, block, &mut Vec::new())
+    }
+
+    /// [`Self::struct_layout`] on a layout path: the struct is marked visiting
+    /// for both the declared and the synthesized branch (a declared layout
+    /// sizes its fields too, so it recurses exactly like the synthesized one).
+    fn struct_layout_in(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<StructLayout> {
         let sid = match ty {
             Ty::Struct(sid) => *sid,
             _ => return Err(type_error(block, format!("{ty} is not a struct"))),
         };
+        self.with_layout_visit(LayoutVisit::Struct(sid), ty, block, visiting, |visiting| {
+            self.struct_layout_unguarded(ty, sid, block, visiting)
+        })
+    }
+
+    fn struct_layout_unguarded(
+        &self,
+        ty: &Ty,
+        sid: StructId,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<StructLayout> {
         let module = self.module_context(block, "struct layout")?;
         let def = module
             .struct_def(sid)
             .ok_or_else(|| type_error(block, format!("struct id {} not found in module", sid.0)))?;
         match (def.size, def.align) {
-            (Some(size), Some(align)) => self.declared_struct_layout(ty, def, size, align, block),
+            (Some(size), Some(align)) => {
+                self.declared_struct_layout(ty, def, size, align, block, visiting)
+            }
             (None, None) => {
                 if let Some(index) = def.fields.iter().position(|field| field.offset.is_some()) {
                     return Err(type_error(
@@ -2657,7 +5069,12 @@ impl<'m> Interpreter<'m> {
                         ),
                     ));
                 }
-                self.aggregate_layout(def.fields.iter().map(|field| &field.ty), block, "struct")
+                self.aggregate_layout(
+                    def.fields.iter().map(|field| &field.ty),
+                    block,
+                    "struct",
+                    visiting,
+                )
             }
             (Some(_), None) | (None, Some(_)) => Err(type_error(
                 block,
@@ -2678,6 +5095,7 @@ impl<'m> Interpreter<'m> {
         size: u64,
         align: u64,
         block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
     ) -> InterpretResult<StructLayout> {
         self.require_reference_execution_layout(block)?;
         if align == 0 || !align.is_power_of_two() || !size.is_multiple_of(align) {
@@ -2733,8 +5151,11 @@ impl<'m> Interpreter<'m> {
         let mut transparent_carrier = None;
         let mut transparent_nontrivial = 0usize;
         for (index, field) in def.fields.iter().enumerate() {
-            let field_size = self.byte_size(&field.ty, block)?;
-            let field_align = self.byte_align(&field.ty, block)?.max(1).min(clamp);
+            let field_size = self.byte_size_in(&field.ty, block, visiting)?;
+            let field_align = self
+                .byte_align_in(&field.ty, block, visiting)?
+                .max(1)
+                .min(clamp);
             let offset = match field.offset {
                 Some(offset) => {
                     if !offset.is_multiple_of(field_align)
@@ -2780,10 +5201,15 @@ impl<'m> Interpreter<'m> {
                     field_offsets[right].0,
                     field_sizes[right],
                 ) {
+                    // WS3.18 (F-050): the refusal names the ratified union
+                    // spelling, because overlapping struct fields are the
+                    // natural (wrong) way a producer spells a union.
                     return Err(type_error(
                         block,
                         format!(
-                            "struct {ty} declared layout has overlapping fields {left} and {right}"
+                            "struct {ty} declared layout has overlapping fields {left} and {right} \
+                             (a union is not a struct: spell it on the byte-overlap carrier, \
+                             lowering-target-subset.md \"Unions\")"
                         ),
                     ));
                 }
@@ -2816,6 +5242,7 @@ impl<'m> Interpreter<'m> {
         })
     }
 
+    /// Declared tuple layout when present; otherwise the legacy internal
     /// C-style layout (field offsets, total size, alignment) of a `Ty::Tuple`,
     /// computed directly from its inline element types. Fields are laid out in
     /// order; each is aligned to its natural alignment; the tuple size is
@@ -2825,14 +5252,76 @@ impl<'m> Interpreter<'m> {
     /// A tuple shares the exact same layout algorithm as a `Ty::Struct` (via
     /// `aggregate_layout`), so the heap/stack round-trip of a tuple value
     /// (`Alloca`/`Store`/`Load`) is internally consistent: `byte_size`,
-    /// `byte_align`, `encode_value`, and `decode_value` all read field offsets
+    /// `byte_align`, `encode_image`, and `decode_image` all read field offsets
     /// from this one source.
+    ///
+    /// # THIS IS trust-ir's CANONICAL LAYOUT, **NOT** rustc's
+    ///
+    /// The same non-parity disclaimer [`EnumLayoutShape`] carries applies here,
+    /// and it was missing: this is declaration ORDER, and rustc REORDERS
+    /// `repr(Rust)` tuple fields. Measured, not supposed:
+    ///
+    /// ```text
+    /// (u8, u64, u8)   rustc:   field0@8  field1@0  field2@9   size 16
+    ///                 here:    field0@0  field1@8  field2@16  size 24
+    /// ```
+    ///
+    /// Every offset and the size disagree. Internal consistency is exactly
+    /// enough for what this function is scoped to — a value written and read
+    /// back through this one layout — and it is a WRONG-VALUE bug the moment a
+    /// tuple offset addresses memory a rustc-derived value also addresses:
+    /// `&mut t.1`, `offset_of!`, an `ExtractField` that lowers to a real MIR
+    /// projection, or any native codegen.
+    ///
+    /// Nothing crosses that line today, because every producer path that would
+    /// need a tuple offset declines earlier — `field_byte_offset` requires
+    /// `ty::Adt(_).is_struct()` before it consults a layout at all, so a tuple
+    /// never reaches `struct_interior_offset_admissible`, the gate that exists
+    /// to make an emitted offset AGREE with a rustc-filled declared descriptor.
+    /// Concrete evidence now lives in `Module::tuple_layouts`. This function
+    /// validates that table before honoring it. With no descriptor, the
+    /// legacy internal image below still supplies no source-layout evidence.
+    ///
+    /// So: do not lift one of those declines and reach for this function. A
+    /// tuple that needs a rustc-faithful ADDRESS needs a declaration first.
     fn tuple_layout(&self, ty: &Ty, block: BlockId) -> InterpretResult<StructLayout> {
+        self.tuple_layout_in(ty, block, &mut Vec::new())
+    }
+
+    /// [`Self::tuple_layout`] on a layout path. A tuple is inline and has no
+    /// identity of its own to mark: a cycle through one must pass through a
+    /// struct, enum or `TyId`, and is caught there.
+    fn tuple_layout_in(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<StructLayout> {
         let elems = match ty {
             Ty::Tuple(elems) => elems,
             _ => return Err(type_error(block, format!("{ty} is not a tuple"))),
         };
-        self.aggregate_layout(elems.iter(), block, "tuple")
+        if let Some(module) = self.module {
+            module
+                .validate_tuple_layouts()
+                .map_err(|error| type_error(block, error.to_string()))?;
+            if let Some(desc) = module
+                .tuple_layout_descriptor(ty)
+                .map_err(|error| type_error(block, error.to_string()))?
+            {
+                return Ok(StructLayout {
+                    size: desc.size,
+                    align: desc.align,
+                    field_offsets: desc
+                        .field_offsets
+                        .iter()
+                        .copied()
+                        .zip(elems.iter().cloned())
+                        .collect(),
+                });
+            }
+        }
+        self.aggregate_layout(elems.iter(), block, "tuple", visiting)
     }
 
     /// The single C-style aggregate layout algorithm shared by `struct_layout`
@@ -2846,13 +5335,14 @@ impl<'m> Interpreter<'m> {
         fields: impl ExactSizeIterator<Item = &'a Ty>,
         block: BlockId,
         kind: &str,
+        visiting: &mut Vec<LayoutVisit>,
     ) -> InterpretResult<StructLayout> {
         let mut offset: u64 = 0;
         let mut max_align: u64 = 1;
         let mut field_offsets = Vec::with_capacity(fields.len());
         for field_ty in fields {
-            let f_align = self.byte_align(field_ty, block)?.max(1);
-            let f_size = self.byte_size(field_ty, block)?;
+            let f_align = self.byte_align_in(field_ty, block, visiting)?.max(1);
+            let f_size = self.byte_size_in(field_ty, block, visiting)?;
             offset = align_up(offset, f_align, block)?;
             field_offsets.push((offset, field_ty.clone()));
             offset = offset
@@ -2888,11 +5378,108 @@ impl<'m> Interpreter<'m> {
     /// enum, or an unlayoutable field type all error before any offset is
     /// committed. As with `struct_layout`, a recursive payload must be broken
     /// by a pointer (`Ty::Ptr`) to stay finite — the M2 `Box`-recursion shape.
+    /// Byte size of an enum payload field under a producer DESCRIPTOR.
+    ///
+    /// WS3.14: a `!` field (rustc's `B(!)`) is size 0 / align 1, as in rustc.
+    /// `Ty::Never` has no byte layout anywhere else — it cannot be allocated,
+    /// stored or loaded — and the canonical enum layout keeps refusing it; the
+    /// descriptor is the only place a producer states where a field of an
+    /// uninhabited variant would sit, and no value of that variant is ever
+    /// encoded or decoded (both directions refuse it).
+    fn descriptor_field_size(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<u64> {
+        match ty {
+            Ty::Never => Ok(0),
+            _ => self.byte_size_in(ty, block, visiting),
+        }
+    }
+
+    /// Byte alignment companion of [`Self::descriptor_field_size`].
+    fn descriptor_field_align(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<u64> {
+        match ty {
+            Ty::Never => Ok(1),
+            _ => self.byte_align_in(ty, block, visiting),
+        }
+    }
+
+    /// Logical enum shape for register construction. Byte size, field offsets
+    /// and physical descriptors are the validator/byte paths' concern; reading
+    /// them here would refuse valid values with non-layoutable payload types.
+    fn enum_register_shape(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+    ) -> InterpretResult<EnumRegisterShape<'m>> {
+        let Ty::Enum(eid) = ty else {
+            return Err(type_error(block, format!("{ty} is not an enum")));
+        };
+        let module = self.module_context(block, "enum value")?;
+        let definition = module
+            .enum_def(*eid)
+            .ok_or_else(|| type_error(block, format!("enum id {} not found in module", eid.0)))?;
+        let discriminants = definition.effective_discriminants().ok_or_else(|| {
+            type_error(
+                block,
+                format!(
+                    "enum {} has no canonical discriminant assignment (duplicate or overflowing values)",
+                    ty
+                ),
+            )
+        })?;
+        let tag = definition.canonical_tag_repr().ok_or_else(|| {
+            type_error(
+                block,
+                format!(
+                    "enum {} has no canonical tag (uninhabited, discriminants beyond 64-bit, or a repr hint too narrow)",
+                    ty
+                ),
+            )
+        })?;
+        Ok(EnumRegisterShape {
+            module,
+            definition,
+            tag_ty: tag.ty(),
+            discriminants,
+        })
+    }
+
     fn enum_layout(&self, ty: &Ty, block: BlockId) -> InterpretResult<EnumLayout> {
+        self.enum_layout_in(ty, block, &mut Vec::new())
+    }
+
+    /// [`Self::enum_layout`] on a layout path: the enum is marked visiting
+    /// while its variant fields (descriptor or canonical) are sized.
+    fn enum_layout_in(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<EnumLayout> {
         let eid = match ty {
             Ty::Enum(eid) => *eid,
             _ => return Err(type_error(block, format!("{ty} is not an enum"))),
         };
+        self.with_layout_visit(LayoutVisit::Enum(eid), ty, block, visiting, |visiting| {
+            self.enum_layout_unguarded(ty, eid, block, visiting)
+        })
+    }
+
+    fn enum_layout_unguarded(
+        &self,
+        ty: &Ty,
+        eid: EnumId,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<EnumLayout> {
         let module = self.module_context(block, "enum layout")?;
         let def = module
             .enum_def(eid)
@@ -2916,8 +5503,17 @@ impl<'m> Interpreter<'m> {
             )
         })?;
         let tag_ty = tag.ty();
-        let tag_size = self.byte_size(&tag_ty, block)?;
-        let tag_align = self.byte_align(&tag_ty, block)?;
+        let tag_size = self.byte_size_in(&tag_ty, block, visiting)?;
+        let tag_align = self.byte_align_in(&tag_ty, block, visiting)?;
+        // One inhabitedness memo for every variant: each node the variants
+        // reach is decided once (`Module::variant_is_uninhabited` per variant
+        // would re-decide what they share).
+        let mut inhabit = crate::inhabit::InhabitMemo::default();
+        let uninhabited_variants: Vec<bool> = def
+            .variants
+            .iter()
+            .map(|variant| inhabit.variant_is_uninhabited(module, variant))
+            .collect();
 
         // A producer-provided descriptor is normative. Modules may be
         // interpreted without validation, so repeat structural checks before
@@ -2940,6 +5536,19 @@ impl<'m> Interpreter<'m> {
                 .zip(&desc.variant_field_offsets)
                 .enumerate()
             {
+                if matches!(desc.encoding, crate::ty::EnumTagEncoding::SingleInhabited { variant } if usize::try_from(variant).ok() != Some(variant_idx))
+                {
+                    if !offsets.is_empty() {
+                        return Err(type_error(
+                            block,
+                            format!(
+                                "enum {ty} inactive variant {variant_idx} has a physical offset row"
+                            ),
+                        ));
+                    }
+                    variant_field_offsets.push(Vec::new());
+                    continue;
+                }
                 if offsets.len() != variant.fields.len() {
                     return Err(type_error(
                         block,
@@ -2952,8 +5561,8 @@ impl<'m> Interpreter<'m> {
                 }
                 let mut fields = Vec::with_capacity(offsets.len());
                 for (field_ty, offset) in variant.fields.iter().zip(offsets) {
-                    let field_size = self.byte_size(field_ty, block)?;
-                    let field_align = self.byte_align(field_ty, block)?;
+                    let field_size = self.descriptor_field_size(field_ty, block, visiting)?;
+                    let field_align = self.descriptor_field_align(field_ty, block, visiting)?;
                     if !offset.is_multiple_of(field_align)
                         || field_align > desc.align
                         || offset
@@ -2971,9 +5580,10 @@ impl<'m> Interpreter<'m> {
                     fields.push((*offset, field_ty.clone()));
                 }
                 for left in 0..fields.len() {
-                    let left_size = self.byte_size(&fields[left].1, block)?;
+                    let left_size = self.descriptor_field_size(&fields[left].1, block, visiting)?;
                     for right in left + 1..fields.len() {
-                        let right_size = self.byte_size(&fields[right].1, block)?;
+                        let right_size =
+                            self.descriptor_field_size(&fields[right].1, block, visiting)?;
                         if byte_ranges_overlap(
                             fields[left].0,
                             left_size,
@@ -3011,6 +5621,31 @@ impl<'m> Interpreter<'m> {
                     }
                     EnumByteView::Untagged { variant: 0 }
                 }
+                crate::ty::EnumTagEncoding::SingleInhabited { variant } => {
+                    let active = usize::try_from(*variant)
+                        .ok()
+                        .filter(|index| *index < def.variants.len())
+                        .ok_or_else(|| {
+                            type_error(
+                                block,
+                                format!("enum {ty} single-inhabited selector is out of range"),
+                            )
+                        })?;
+                    if uninhabited_variants[active]
+                        || uninhabited_variants
+                            .iter()
+                            .enumerate()
+                            .any(|(index, absent)| index != active && !absent)
+                    {
+                        return Err(type_error(
+                            block,
+                            format!(
+                                "enum {ty} single-inhabited selection does not identify exactly one inhabited variant"
+                            ),
+                        ));
+                    }
+                    EnumByteView::Untagged { variant: active }
+                }
                 crate::ty::EnumTagEncoding::Direct { tag_offset } => {
                     if tag_align > desc.align
                         || !tag_offset.is_multiple_of(tag_align)
@@ -3028,7 +5663,8 @@ impl<'m> Interpreter<'m> {
                     }
                     for (variant_idx, fields) in variant_field_offsets.iter().enumerate() {
                         for (field_idx, (field_offset, field_ty)) in fields.iter().enumerate() {
-                            let field_size = self.byte_size(field_ty, block)?;
+                            let field_size =
+                                self.descriptor_field_size(field_ty, block, visiting)?;
                             if byte_ranges_overlap(*tag_offset, tag_size, *field_offset, field_size)
                             {
                                 return Err(type_error(
@@ -3058,8 +5694,8 @@ impl<'m> Interpreter<'m> {
                             format!("enum {ty} has too many variants for a niche encoding"),
                         )
                     })?;
-                    let niche_size = self.byte_size(&niche_ty.ty(), block)?;
-                    let niche_align = self.byte_align(&niche_ty.ty(), block)?;
+                    let niche_size = self.byte_size_in(&niche_ty.ty(), block, visiting)?;
+                    let niche_align = self.byte_align_in(&niche_ty.ty(), block, visiting)?;
                     let niche_bits = (niche_size * 8) as u32;
                     let niche_mask = int_mask(niche_bits).ok_or_else(|| {
                         type_error(block, format!("unsupported niche lane width {niche_bits}"))
@@ -3067,18 +5703,24 @@ impl<'m> Interpreter<'m> {
                     let niche_span = niche_variants_end
                         .checked_sub(*niche_variants_start)
                         .map(u128::from);
-                    let covers_every_variant = niche_span.is_some_and(|span| {
-                        let extra_untagged = if (*niche_variants_start..=*niche_variants_end)
-                            .contains(untagged_variant)
-                        {
-                            0
-                        } else {
-                            1
-                        };
-                        span.checked_add(1)
-                            .and_then(|covered| covered.checked_add(extra_untagged))
-                            == Some(u128::from(variant_count))
-                    });
+                    // WS3.14: every INHABITED variant is the untagged one or
+                    // lies in the niche interval; an uninhabited variant needs
+                    // no encoding (decode below refuses any image naming one).
+                    // The same rule as the validator and `shape`
+                    // (`Module::niche_unencoded_inhabited_variant`), read off
+                    // the verdicts decided above.
+                    let covers_every_variant = niche_span.is_some()
+                        && uninhabited_variants
+                            .iter()
+                            .enumerate()
+                            .all(|(index, uninhabited)| {
+                                *uninhabited
+                                    || u32::try_from(index).is_ok_and(|index| {
+                                        index == *untagged_variant
+                                            || (*niche_variants_start..=*niche_variants_end)
+                                                .contains(&index)
+                                    })
+                            });
                     if *untagged_variant >= variant_count
                         || niche_variants_start > niche_variants_end
                         || *niche_variants_end >= variant_count
@@ -3098,17 +5740,18 @@ impl<'m> Interpreter<'m> {
                     }
                     let untagged_fields = &variant_field_offsets[*untagged_variant as usize];
                     let lane_is_covered = untagged_fields.iter().any(|(field_offset, field_ty)| {
-                        self.byte_size(field_ty, block).is_ok_and(|field_size| {
-                            field_size > 0
-                                && *field_offset <= *niche_offset
-                                && field_offset
-                                    .checked_add(field_size)
-                                    .is_some_and(|field_end| {
-                                        niche_offset
-                                            .checked_add(niche_size)
-                                            .is_some_and(|niche_end| field_end >= niche_end)
-                                    })
-                        })
+                        self.byte_size_in(field_ty, block, visiting)
+                            .is_ok_and(|field_size| {
+                                field_size > 0
+                                    && *field_offset <= *niche_offset
+                                    && field_offset.checked_add(field_size).is_some_and(
+                                        |field_end| {
+                                            niche_offset
+                                                .checked_add(niche_size)
+                                                .is_some_and(|niche_end| field_end >= niche_end)
+                                        },
+                                    )
+                            })
                     });
                     if !lane_is_covered {
                         return Err(type_error(
@@ -3127,7 +5770,8 @@ impl<'m> Interpreter<'m> {
                             .iter()
                             .enumerate()
                         {
-                            let field_size = self.byte_size(field_ty, block)?;
+                            let field_size =
+                                self.descriptor_field_size(field_ty, block, visiting)?;
                             if byte_ranges_overlap(
                                 *niche_offset,
                                 niche_size,
@@ -3162,6 +5806,7 @@ impl<'m> Interpreter<'m> {
                 discriminants,
                 variant_field_offsets,
                 byte_view,
+                uninhabited_variants,
             });
         }
 
@@ -3169,7 +5814,8 @@ impl<'m> Interpreter<'m> {
         let mut payload_align: u64 = 1;
         let mut variant_field_offsets = Vec::with_capacity(def.variants.len());
         for variant in &def.variants {
-            let layout = self.aggregate_layout(variant.fields.iter(), block, "enum variant")?;
+            let layout =
+                self.aggregate_layout(variant.fields.iter(), block, "enum variant", visiting)?;
             payload_size = payload_size.max(layout.size);
             payload_align = payload_align.max(layout.align);
             variant_field_offsets.push(layout.field_offsets);
@@ -3193,12 +5839,13 @@ impl<'m> Interpreter<'m> {
             discriminants,
             variant_field_offsets,
             byte_view: EnumByteView::Direct { tag_offset: 0 },
+            uninhabited_variants,
         })
     }
 
     /// Resolve the C-style layout of an aggregate-typed value, dispatching to
     /// `struct_layout` for `Ty::Struct` and `tuple_layout` for `Ty::Tuple`.
-    /// Shared by `encode_value` and `decode_value` so both directions of the
+    /// Shared by `encode_image` and `decode_image` so both directions of the
     /// memory round-trip agree on field offsets.
     fn aggregate_value_layout(&self, ty: &Ty, block: BlockId) -> InterpretResult<StructLayout> {
         match ty {
@@ -3212,27 +5859,47 @@ impl<'m> Interpreter<'m> {
     }
 
     fn byte_align(&self, ty: &Ty, block: BlockId) -> InterpretResult<u64> {
+        self.byte_align_in(ty, block, &mut Vec::new())
+    }
+
+    fn byte_align_in(
+        &self,
+        ty: &Ty,
+        block: BlockId,
+        visiting: &mut Vec<LayoutVisit>,
+    ) -> InterpretResult<u64> {
         match ty {
+            Ty::Closure(id) => self
+                .closure_storage_binding(*id, block)
+                .map(|binding| binding.layout.align),
+
+            Ty::Storage(layout) => {
+                if layout.is_well_formed(self.pointer_bits()) {
+                    Ok(layout.align_bytes)
+                } else {
+                    Err(type_error(block, "invalid storage-only layout"))
+                }
+            }
             Ty::Bool | Ty::I8 | Ty::U8 => Ok(1),
             Ty::I16 | Ty::U16 | Ty::F16 => Ok(2),
-            // Char is a 32-bit unsigned carrier; isize/usize take pointer
-            // alignment at the pinned 64-bit reference target (with the I64/
-            // Ptr group below). Mirrors `byte_size` and `shape::layout`.
+            // Char is a 32-bit unsigned carrier; isize/usize and every
+            // pointer take pointer alignment at the running target (WS2.16:
+            // 8 at 64 bits, 4 on wasm32). Mirrors `byte_size` and
+            // `shape::layout`.
             Ty::I32 | Ty::U32 | Ty::F32 | Ty::Char => Ok(4),
-            Ty::I64
-            | Ty::U64
-            | Ty::F64
+            Ty::I64 | Ty::U64 | Ty::F64 => Ok(8),
+            Ty::Func(_)
             | Ty::Ptr
             | Ty::PtrConst(_)
             | Ty::PtrMut(_)
             | Ty::Ref(_)
             | Ty::RefMut(_)
-            | Ty::Rc(_) => Ok(8),
-            Ty::Isize | Ty::Usize => Ok(8),
-            // B2: fat pointers align to one pointer lane (8), not their 16-byte size.
+            | Ty::Rc(_) => Ok(self.pointer_bytes()),
+            Ty::Isize | Ty::Usize => Ok(self.pointer_bytes()),
+            // B2: fat pointers align to one pointer word, not their two-word size.
             Ty::FatPtr(_) => {
                 self.require_fat_pointer_layout(block)?;
-                Ok(8)
+                Ok(self.pointer_bytes())
             }
             Ty::I128 | Ty::U128 => Ok(16),
             Ty::Unit => Ok(1),
@@ -3244,25 +5911,98 @@ impl<'m> Interpreter<'m> {
                         "zero-lane vectors are not executable",
                     ));
                 }
-                self.byte_align(elem, block)
+                self.byte_align_in(elem, block, visiting)
             }
             Ty::Array(elem, _) => {
                 let elem_ty = self.resolve_ty(*elem, block)?;
-                self.byte_align(&elem_ty, block)
+                self.with_layout_visit(LayoutVisit::Ty(*elem), ty, block, visiting, |visiting| {
+                    self.byte_align_in(&elem_ty, block, visiting)
+                })
             }
             // Struct alignment is the max of its field alignments (min 1).
-            Ty::Struct(_) => Ok(self.struct_layout(ty, block)?.align),
+            Ty::Struct(_) => Ok(self.struct_layout_in(ty, block, visiting)?.align),
             // Tuple alignment is the max of its element alignments (min 1), so
             // an empty tuple is alignment 1 — matching `Ty::Unit`.
-            Ty::Tuple(_) => Ok(self.tuple_layout(ty, block)?.align),
+            Ty::Tuple(_) => Ok(self.tuple_layout_in(ty, block, visiting)?.align),
             // Enum alignment is max(tag alignment, payload alignment) — see
             // `enum_layout` for the canonical rules.
-            Ty::Enum(_) => Ok(self.enum_layout(ty, block)?.align),
+            Ty::Enum(_) => Ok(self.enum_layout_in(ty, block, visiting)?.align),
             _ => Err(type_error(block, format!("{ty} has no byte alignment"))),
         }
     }
 
-    fn encode_value(
+    /// A pointer's byte image: the low `pointer_bytes` bytes of `address`,
+    /// little-endian (WS2.16). The caller has range-checked `address`.
+    fn pointer_image(&self, address: u64) -> Vec<u8> {
+        address.to_le_bytes()[..self.pointer_bytes() as usize].to_vec()
+    }
+
+    /// Inverse of [`Self::pointer_image`]: read one pointer word.
+    fn pointer_from_image(&self, bytes: &[u8], block: BlockId) -> InterpretResult<u64> {
+        if bytes.len() as u64 != self.pointer_bytes() {
+            return Err(type_error(
+                block,
+                format!(
+                    "Load: pointer image is {} bytes, expected {}",
+                    bytes.len(),
+                    self.pointer_bytes()
+                ),
+            ));
+        }
+        let mut raw = [0u8; 8];
+        raw[..bytes.len()].copy_from_slice(bytes);
+        Ok(u64::from_le_bytes(raw))
+    }
+
+    /// Module-local symbolic code addresses are one target pointer word.
+    /// Zero is null, 1..=functions.len() names the exact module entry. These
+    /// are interpreter addresses, never host executable addresses or raw IDs.
+    fn function_pointer_address(&self, target: FuncId, block: BlockId) -> InterpretResult<u64> {
+        let module = self.module_context(block, "function pointer Store")?;
+        let index = module
+            .functions
+            .iter()
+            .position(|function| function.id == target)
+            .ok_or_else(|| {
+                invalid_function_pointer(
+                    block,
+                    format!("Store: undefined function pointer {target}"),
+                )
+            })?;
+        let address = (index as u64)
+            .checked_add(1)
+            .filter(|address| *address <= max_address_for(self.pointer_bits()))
+            .ok_or_else(|| {
+                invalid_function_pointer(
+                    block,
+                    "Store: function address exceeds target pointer width",
+                )
+            })?;
+        Ok(address)
+    }
+
+    fn function_pointer_from_address(
+        &self,
+        address: u64,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValueKind> {
+        if address == 0 {
+            return Ok(InterpretValueKind::NullPtr);
+        }
+        let module = self.module_context(block, "function pointer Load")?;
+        let index = usize::try_from(address - 1).map_err(|_| {
+            invalid_function_pointer(block, "Load: invalid function pointer address")
+        })?;
+        let function = module.functions.get(index).ok_or_else(|| {
+            invalid_function_pointer(block, "Load: unregistered function pointer address")
+        })?;
+        Ok(InterpretValueKind::FnDef(function.id))
+    }
+
+    /// The byte image of a non-aggregate value (a scalar, pointer, fat
+    /// pointer, unit or vector): every byte initialized. Aggregates go
+    /// through [`Self::encode_image`].
+    fn encode_leaf(
         &self,
         value: &InterpretValue,
         state: &ExecState,
@@ -3274,27 +6014,42 @@ impl<'m> Interpreter<'m> {
                 Ok(int.raw.to_le_bytes()[..byte_len].to_vec())
             }
             InterpretValueKind::Bool(value) => Ok(vec![u8::from(*value)]),
-            InterpretValueKind::Ptr(ptr) => Ok(state
-                .memory
-                .address(*ptr, block, "Store")?
-                .to_le_bytes()
-                .to_vec()),
-            InterpretValueKind::NullPtr => Ok(0u64.to_le_bytes().to_vec()),
+            // A pointer's byte image is its address in `pointer_bytes` LE
+            // bytes (WS2.16); `address` / `check_address` already refused an
+            // address the target width cannot hold, so the slice is lossless.
+            InterpretValueKind::Ptr(ptr) => {
+                let address = state.memory.address(*ptr, block, "Store")?;
+                Ok(self.pointer_image(address))
+            }
+            InterpretValueKind::FnDef(target) => {
+                if !matches!(value.ty, Ty::Func(_)) {
+                    return Err(type_error(
+                        block,
+                        "Store: function pointer has non-function type",
+                    ));
+                }
+                Ok(self.pointer_image(self.function_pointer_address(*target, block)?))
+            }
+            InterpretValueKind::NullPtr => Ok(self.pointer_image(0)),
             // A no-provenance pointer stores its raw integer address verbatim,
             // so a later load reconstructs the same dangling value.
-            InterpretValueKind::DanglingPtr(addr) => Ok(addr.to_le_bytes().to_vec()),
-            // B2: a fat pointer's byte image is its two lanes back to back —
-            // data address (8 LE bytes) then metadata (8 LE bytes: the raw
-            // length int for Slice/Str, the vtable address for TraitObject).
-            // Exact inverse of the `decode_value` FatPtr arm.
+            InterpretValueKind::DanglingPtr(addr) => {
+                let address = state.memory.check_address(*addr, block, "Store")?;
+                Ok(self.pointer_image(address))
+            }
+            // B2: a fat pointer's byte image is its two words back to back —
+            // data address then metadata (the raw length int for Slice/Str,
+            // the vtable address for TraitObject), each `pointer_bytes` LE
+            // bytes. Exact inverse of the `decode_leaf` FatPtr arm.
             InterpretValueKind::FatPtr { data, metadata } => {
-                let mut bytes = self.encode_value(data, state, block)?;
-                bytes.extend(self.encode_value(metadata, state, block)?);
-                if bytes.len() != 16 {
+                let mut bytes = self.encode_leaf(data, state, block)?;
+                bytes.extend(self.encode_leaf(metadata, state, block)?);
+                let expected = 2 * self.pointer_bytes();
+                if bytes.len() as u64 != expected {
                     return Err(type_error(
                         block,
                         format!(
-                            "Store: fat pointer image is {} bytes, expected 16",
+                            "Store: fat pointer image is {} bytes, expected {expected}",
                             bytes.len()
                         ),
                     ));
@@ -3306,6 +6061,85 @@ impl<'m> Interpreter<'m> {
                 let byte_len = self.byte_size(&value.ty, block)? as usize;
                 Ok(bits.to_le_bytes()[..byte_len].to_vec())
             }
+            // A vector is encoded lane by lane, structurally, by
+            // `encode_image`; it has no single leaf image.
+            _ => Err(type_error(
+                block,
+                format!("Store: cannot encode value of type {}", value.ty),
+            )),
+        }
+    }
+
+    /// The byte image a typed `Store` writes for `value`: a COMPACT image
+    /// (`Image`) whose size follows the value's structure, not its length.
+    ///
+    /// WS2.14 (F-030): a typed aggregate value has no padding — it carries no
+    /// byte image beyond its live fields. Every byte no live field covers
+    /// (inter-field padding, the inactive-variant tail of an enum) is
+    /// therefore UNINITIALIZED in the image, never a made-up zero, so a whole
+    /// `Load` of never-written padding followed by this `Store` cannot launder
+    /// uninitialized bytes into defined ones. (The covered bytes are exactly
+    /// the ones [`Self::decode_image`] reads.)
+    ///
+    /// An array or vector is encoded on its value's STRUCTURE
+    /// ([`super::rope::Rope::try_flat_map`]): a run of equal elements is one
+    /// repeat of the element's image, a repeating run of values one repeat of
+    /// the images of its period, and each stored value is encoded once — so
+    /// a splat of any length encodes in O(1) and a store of it is one run of
+    /// the allocation.
+    fn encode_image(
+        &self,
+        value: &InterpretValue,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<Image> {
+        match &value.kind {
+            InterpretValueKind::Closure { func, captures } => {
+                let Ty::Closure(id) = value.ty else {
+                    return Err(type_error(block, "closure value has a non-closure type"));
+                };
+                let binding = self.closure_storage_binding(id, block)?;
+                if *func != binding.target || captures.len() != binding.captures.len() {
+                    return Err(type_error(
+                        block,
+                        "closure Store target or capture count mismatch",
+                    ));
+                }
+                let mut image = ByteStore::new(binding.layout.size, None);
+                for ((capture, ty), offset) in captures
+                    .iter()
+                    .zip(binding.captures)
+                    .zip(&binding.layout.capture_offsets)
+                {
+                    expect_ty(capture, ty, block)?;
+                    image.write(*offset, &self.encode_image(capture, state, block)?);
+                }
+                Ok(image.read(0, binding.layout.size))
+            }
+
+            InterpretValueKind::Array(values) => {
+                let Ty::Array(elem, len) = &value.ty else {
+                    return Err(type_error(
+                        block,
+                        format!("Store: array value carries non-array type {}", value.ty),
+                    ));
+                };
+                if values.len() != *len {
+                    return Err(type_error(
+                        block,
+                        format!(
+                            "Store: array {} has {len} elements but the value has {}",
+                            value.ty,
+                            values.len()
+                        ),
+                    ));
+                }
+                let elem_ty = self.resolve_ty(*elem, block)?;
+                values.rope().try_flat_map(|element| {
+                    expect_ty(element, &elem_ty, block)?;
+                    self.encode_image(element, state, block)
+                })
+            }
             // A `<N x bool>` value is a LOGICAL SIMD mask. Its PHYSICAL byte
             // image — what a reinterpret / bitcast to an integer vector reads,
             // e.g. hashbrown's NEON `Group::match_full`
@@ -3315,34 +6149,41 @@ impl<'m> Interpreter<'m> {
             // vs native) use the all-ones convention: a true lane is `0xFF..`
             // across its whole byte width, a false lane is `0x00..`. Encode a
             // bool-mask vector that way so the reinterpret matches; a plain
-            // integer/float vector encodes lane-by-lane as before.
-            InterpretValueKind::Vector(values) if matches!(&value.ty, Ty::Vector(elem, _) if **elem == Ty::Bool) =>
-            {
-                let lane_bytes = self.byte_size(&Ty::Bool, block)? as usize;
-                let mut bytes = Vec::with_capacity(self.byte_size(&value.ty, block)? as usize);
-                for lane in values {
-                    let set = lane.as_bool().ok_or_else(|| {
-                        type_error(block, "vector bool mask lane is not a bool value")
-                    })?;
-                    let fill = if set { 0xFFu8 } else { 0x00u8 };
-                    bytes.extend(std::iter::repeat_n(fill, lane_bytes));
+            // integer/float vector encodes lane by lane.
+            InterpretValueKind::Vector(lanes) => {
+                let Ty::Vector(elem_ty, lane_count) = &value.ty else {
+                    return Err(type_error(
+                        block,
+                        format!("Store: vector value carries non-vector type {}", value.ty),
+                    ));
+                };
+                if lanes.len() != u64::from(*lane_count) {
+                    return Err(type_error(
+                        block,
+                        format!(
+                            "Store: vector {} has {lane_count} lanes but the value has {}",
+                            value.ty,
+                            lanes.len()
+                        ),
+                    ));
                 }
-                Ok(bytes)
+                let mask = **elem_ty == Ty::Bool;
+                let lane_bytes = self.byte_size(elem_ty, block)?;
+                lanes.rope().try_flat_map(|lane| {
+                    if mask {
+                        let set = lane.as_bool().ok_or_else(|| {
+                            type_error(block, "vector bool mask lane is not a bool value")
+                        })?;
+                        Ok(Image::fill(Some(if set { 0xFF } else { 0x00 }), lane_bytes))
+                    } else {
+                        Ok(Image::init_bytes(&self.encode_leaf(lane, state, block)?))
+                    }
+                })
             }
-            InterpretValueKind::Vector(values) | InterpretValueKind::Array(values) => {
-                let mut bytes = Vec::with_capacity(self.byte_size(&value.ty, block)? as usize);
-                for value in values {
-                    bytes.extend(self.encode_value(value, state, block)?);
-                }
-                Ok(bytes)
-            }
-            // Encode an aggregate value (an `Aggregate` of its fields) to its
-            // C-layout byte image: each field is written at its computed offset;
-            // inter-field padding stays zero. Both `Ty::Struct` (layout from the
-            // module `StructDef`) and `Ty::Tuple` (layout from the inline element
-            // types) share the same offset math, so the field offsets used here
-            // are byte-for-byte identical to those `byte_size` / `decode_value`
-            // compute.
+            // A struct / tuple image: each field's image at its computed
+            // offset on an uninitialized background. `Ty::Struct` (layout from
+            // the module `StructDef`) and `Ty::Tuple` (layout from the inline
+            // element types) share the offset math `decode_image` uses.
             InterpretValueKind::Aggregate(fields)
                 if matches!(value.ty, Ty::Struct(_) | Ty::Tuple(_)) =>
             {
@@ -3358,21 +6199,19 @@ impl<'m> Interpreter<'m> {
                         ),
                     ));
                 }
-                let mut bytes = vec![0u8; layout.size as usize];
+                let mut image = ByteStore::new(layout.size, None);
                 for (field_val, (offset, field_ty)) in fields.iter().zip(&layout.field_offsets) {
                     expect_ty(field_val, field_ty, block)?;
-                    let field_bytes = self.encode_value(field_val, state, block)?;
-                    let start = *offset as usize;
-                    bytes[start..start + field_bytes.len()].copy_from_slice(&field_bytes);
+                    let field_image = self.encode_image(field_val, state, block)?;
+                    image.write(*offset, &field_image);
                 }
-                Ok(bytes)
+                Ok(image.read(0, layout.size))
             }
-            // Encode an enum value (`Aggregate([tag, fields...])`, the tag +
-            // payload convention) to its canonical tagged-union byte image:
-            // the tag at offset 0, the selected variant's fields at their
-            // payload-relative offsets shifted by `payload_offset`, all other
-            // bytes (inter-field padding and the unused tail of the shared
-            // payload region) zero.
+            // An enum value (`Aggregate([tag, fields...])`, the tag + payload
+            // convention) to its canonical tagged-union image: the tag lane
+            // (direct tag bytes, or the niche lane of a niche variant), then
+            // the selected variant's fields at their payload-relative offsets
+            // shifted by `payload_offset`; every other byte uninitialized.
             InterpretValueKind::Aggregate(elems) if matches!(value.ty, Ty::Enum(_)) => {
                 let layout = self.enum_layout(&value.ty, block)?;
                 let Some((tag_val, field_vals)) = elems.split_first() else {
@@ -3389,6 +6228,7 @@ impl<'m> Interpreter<'m> {
                         format!("Store: tag {disc} does not name a variant of {}", value.ty),
                     )
                 })?;
+                layout.refuse_uninhabited(variant_idx, &value.ty, "Store", block)?;
                 let fields = &layout.variant_field_offsets[variant_idx];
                 if field_vals.len() != fields.len() {
                     return Err(type_error(
@@ -3402,7 +6242,7 @@ impl<'m> Interpreter<'m> {
                         ),
                     ));
                 }
-                let mut bytes = vec![0u8; layout.size as usize];
+                let mut image = ByteStore::new(layout.size, None);
                 match &layout.byte_view {
                     // The byte image carries NO tag lane. The value model is
                     // unchanged — the tag is still an operand and was still
@@ -3422,9 +6262,8 @@ impl<'m> Interpreter<'m> {
                         }
                     }
                     EnumByteView::Direct { tag_offset } => {
-                        let tag_bytes = self.encode_value(tag_val, state, block)?;
-                        let start = *tag_offset as usize;
-                        bytes[start..start + tag_bytes.len()].copy_from_slice(&tag_bytes);
+                        let tag_bytes = self.encode_leaf(tag_val, state, block)?;
+                        image.write(*tag_offset, &Image::init_bytes(&tag_bytes));
                     }
                     EnumByteView::Niche {
                         untagged_variant,
@@ -3445,17 +6284,19 @@ impl<'m> Interpreter<'m> {
                                 )
                             })?;
                             let lane_value = niche_start.wrapping_add(relative) & mask;
-                            let start = *niche_offset as usize;
-                            bytes[start..start + *niche_size as usize]
-                                .copy_from_slice(&lane_value.to_le_bytes()[..*niche_size as usize]);
+                            image.write(
+                                *niche_offset,
+                                &Image::init_bytes(
+                                    &lane_value.to_le_bytes()[..*niche_size as usize],
+                                ),
+                            );
                         }
                     }
                 }
                 for (field_val, (rel_offset, field_ty)) in field_vals.iter().zip(fields) {
                     expect_ty(field_val, field_ty, block)?;
-                    let field_bytes = self.encode_value(field_val, state, block)?;
-                    let start = (layout.payload_offset + rel_offset) as usize;
-                    bytes[start..start + field_bytes.len()].copy_from_slice(&field_bytes);
+                    let field_image = self.encode_image(field_val, state, block)?;
+                    image.write(layout.payload_offset + rel_offset, &field_image);
                 }
                 if let EnumByteView::Niche {
                     untagged_variant,
@@ -3467,10 +6308,11 @@ impl<'m> Interpreter<'m> {
                 } = &layout.byte_view
                     && variant_idx == *untagged_variant
                 {
-                    let start = *niche_offset as usize;
+                    let lane = image.read(*niche_offset, *niche_size).to_vec();
                     let mut raw = [0u8; 16];
-                    raw[..*niche_size as usize]
-                        .copy_from_slice(&bytes[start..start + *niche_size as usize]);
+                    for (slot, byte) in raw.iter_mut().zip(&lane) {
+                        *slot = byte.unwrap_or(0);
+                    }
                     let lane_bits = (*niche_size * 8) as u32;
                     let mask = int_mask(lane_bits).ok_or_else(|| {
                         type_error(block, format!("unsupported niche lane width {lane_bits}"))
@@ -3487,16 +6329,343 @@ impl<'m> Interpreter<'m> {
                         ));
                     }
                 }
-                Ok(bytes)
+                Ok(image.read(0, layout.size))
             }
-            _ => Err(type_error(
+            // Crystal lane (E3b): an unwritten lane has no bytes to encode as INITIALISED. A store
+            // takes `encode_image_with_unwritten_lanes` before reaching here; any other encode
+            // (a cast's reinterpretation) would read uninitialised memory.
+            InterpretValueKind::Uninit => Err(ub(
                 block,
-                format!("Store: cannot encode value of type {}", value.ty),
+                format!(
+                    "encoding an unwritten lane (uninit) of type {} as initialized bytes",
+                    value.ty
+                ),
             )),
+            _ => Ok(Image::init_bytes(&self.encode_leaf(value, state, block)?)),
         }
     }
 
+    /// Crystal lane (E3b): the byte image of a value that may carry UNWRITTEN lanes, and the
+    /// byte ranges (`(offset, len)`, relative to the value's first byte at `base`) those lanes
+    /// occupy. An unwritten lane is one uninitialized run of its type's size; a struct/tuple
+    /// aggregate lays its lanes out exactly as [`Self::encode_image`] does (padding
+    /// uninitialized, WS2.14); every other value is `encode_image`'s image. Compact: a lane of
+    /// any size is one run and one recorded range.
+    fn encode_image_with_unwritten_lanes(
+        &self,
+        value: &InterpretValue,
+        base: u64,
+        lanes: &mut Vec<(u64, u64)>,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<Image> {
+        match &value.kind {
+            InterpretValueKind::Uninit => {
+                let size = self.byte_size(&value.ty, block)?;
+                lanes.push((base, size));
+                Ok(Image::fill(None, size))
+            }
+            InterpretValueKind::Aggregate(fields)
+                if matches!(value.ty, Ty::Struct(_) | Ty::Tuple(_))
+                    && fields.iter().any(value_carries_uninit_lane) =>
+            {
+                let layout = self.aggregate_value_layout(&value.ty, block)?;
+                if fields.len() != layout.field_offsets.len() {
+                    return Err(type_error(
+                        block,
+                        format!(
+                            "Store: aggregate {} has {} fields but value has {}",
+                            value.ty,
+                            layout.field_offsets.len(),
+                            fields.len()
+                        ),
+                    ));
+                }
+                let mut image = ByteStore::new(layout.size, None);
+                for (field_val, (offset, field_ty)) in fields.iter().zip(&layout.field_offsets) {
+                    expect_ty(field_val, field_ty, block)?;
+                    let field_image = self.encode_image_with_unwritten_lanes(
+                        field_val,
+                        base + offset,
+                        lanes,
+                        state,
+                        block,
+                    )?;
+                    image.write(*offset, &field_image);
+                }
+                Ok(image.read(0, layout.size))
+            }
+            _ => self.encode_image(value, state, block),
+        }
+    }
+
+    /// Crystal lane (E3b): true iff every uninitialised COVERED byte of `image` (the `ty`
+    /// read at `ptr`) lies in a recorded unwritten lane. Structural: the recorded lanes
+    /// overlapping the range are defined over a copy of the image (one run each) and the
+    /// WS2.14 covered-byte search asked again, so the check costs the image's runs and the
+    /// lanes, never its length. False, without touching the image, when the allocation has
+    /// no recorded lane (every program with no `Constant::Uninit`).
+    fn only_unwritten_lanes_uninit(
+        &self,
+        ty: &Ty,
+        ptr: InterpretPointer,
+        image: &Image,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<bool> {
+        let lanes = state.memory.unwritten_lanes_in(ptr, image.len());
+        if lanes.is_empty() {
+            return Ok(false);
+        }
+        let mut defined = ByteStore::new(image.len(), None);
+        defined.write(0, image);
+        for (start, len) in lanes {
+            defined.write(start, &Image::fill(Some(0), len));
+        }
+        let defined = defined.read(0, image.len());
+        Ok(self
+            .first_uninit_covered(ty, &defined, state, block)?
+            .is_none())
+    }
+
+    /// Crystal lane (E3b): decode a struct/tuple whose uninitialised COVERED bytes are all
+    /// recorded unwritten-lane bytes (the caller checked). A lane whose every byte is
+    /// uninitialised comes back UNWRITTEN; a lane none of whose COVERED bytes is uninitialised
+    /// decodes as [`Self::decode_image`] decodes it (its uncovered bytes — padding, an inactive
+    /// variant's tail — are never read, exactly as the WS2.14 `eval_load` treats them); a
+    /// struct/tuple lane with both recurses; any other lane with an uninitialised covered byte
+    /// is undefined behaviour, exactly the discipline a partially initialised scalar inside an
+    /// aggregate has always met. A zero-sized lane has no bytes and decodes to its type's one
+    /// value. Each lane is a slice of the image (shared nodes), so this costs the lanes and the
+    /// image's runs, never a lane's length.
+    fn decode_image_with_unwritten_lanes(
+        &self,
+        ty: &Ty,
+        image: &Image,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        let layout = self.aggregate_value_layout(ty, block)?;
+        if image.len() != layout.size {
+            return Err(type_error(
+                block,
+                format!(
+                    "Load: byte count {} does not match type size {}",
+                    image.len(),
+                    layout.size
+                ),
+            ));
+        }
+        let mut lanes = Vec::with_capacity(layout.field_offsets.len());
+        for (offset, field_ty) in &layout.field_offsets {
+            let len = self.byte_size(field_ty, block)?;
+            let slice = image.slice(*offset, len);
+            if len > 0 && slice.find_first(Option::is_some).is_none() {
+                lanes.push(InterpretValue {
+                    ty: field_ty.clone(),
+                    kind: InterpretValueKind::Uninit,
+                });
+                continue;
+            }
+            match self.first_uninit_covered(field_ty, &slice, state, block)? {
+                None => lanes.push(self.decode_image(field_ty, &slice, state, block)?),
+                Some(_) if matches!(field_ty, Ty::Struct(_) | Ty::Tuple(_)) => {
+                    lanes.push(
+                        self.decode_image_with_unwritten_lanes(field_ty, &slice, state, block)?,
+                    );
+                }
+                Some(first) => {
+                    return Err(ub(
+                        block,
+                        format!(
+                            "Load: reading uninitialized byte at offset {} of a partially \
+                             written {field_ty} lane",
+                            offset + first
+                        ),
+                    ));
+                }
+            }
+        }
+        Ok(InterpretValue {
+            ty: ty.clone(),
+            kind: InterpretValueKind::Aggregate(lanes),
+        })
+    }
+
+    /// The dense byte image of `value` with every uncovered byte (padding,
+    /// an inactive enum tail) spelled `0`. For tests of the byte funnel; the
+    /// execution paths write [`Self::encode_image`] directly.
+    #[cfg(test)]
+    fn encode_value(
+        &self,
+        value: &InterpretValue,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<Vec<u8>> {
+        Ok(self
+            .encode_image(value, state, block)?
+            .to_vec()
+            .into_iter()
+            .map(|byte| byte.unwrap_or(0))
+            .collect())
+    }
+
+    /// Decode a fully initialized byte image of `ty` (the dense form of
+    /// [`Self::decode_image`]), for tests of the byte funnel.
+    #[cfg(test)]
     fn decode_value(
+        &self,
+        ty: &Ty,
+        bytes: &[u8],
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        self.decode_image(ty, &Image::init_bytes(bytes), state, block)
+    }
+
+    /// Decode a `ty` value from its byte image, reading only the bytes a
+    /// live field covers (an uncovered byte — padding, an inactive enum
+    /// tail — is never read; an UNINITIALIZED covered byte must have been
+    /// refused by the caller, see `first_uninit_covered`, and reads as `0`
+    /// here).
+    ///
+    /// An array or vector decodes on the image's STRUCTURE
+    /// ([`super::rope::Rope::chunk_map`]): a uniform run of memory decodes
+    /// its element once, a repeating run decodes one period of elements —
+    /// whatever element type it is read back at, so a stored `[u16; N]` read
+    /// as `[u8; 2N]` is two decodes — and a copy's shared nodes decode once.
+    /// Only literal bytes decode one element at a time. A zero-size element
+    /// decodes once, whatever the length.
+    fn decode_image(
+        &self,
+        ty: &Ty,
+        image: &Image,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        let size = self.byte_size(ty, block)?;
+        if image.len() != size {
+            return Err(type_error(
+                block,
+                format!(
+                    "Load: byte count {} does not match type size {size}",
+                    image.len()
+                ),
+            ));
+        }
+        match ty {
+            Ty::Closure(id) => {
+                let binding = self.closure_storage_binding(*id, block)?;
+                let mut captures = Vec::with_capacity(binding.captures.len());
+                for (ty, offset) in binding.captures.iter().zip(&binding.layout.capture_offsets) {
+                    let field = image.slice(*offset, self.byte_size(ty, block)?);
+                    captures.push(self.decode_image(ty, &field, state, block)?);
+                }
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Closure {
+                        func: binding.target,
+                        captures,
+                    },
+                })
+            }
+
+            Ty::Array(elem, len) => {
+                let elem_ty = self.resolve_ty(*elem, block)?;
+                let values = self.decode_elements(&elem_ty, *len, image, state, block)?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Array(values),
+                })
+            }
+            Ty::Vector(elem_ty, lanes) => {
+                let values =
+                    self.decode_elements(elem_ty, u64::from(*lanes), image, state, block)?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Vector(values),
+                })
+            }
+            // Decode an aggregate's C-layout image back into an `Aggregate`
+            // value: read each field from its computed offset. `Ty::Struct`
+            // and `Ty::Tuple` use the same layout (via
+            // `aggregate_value_layout`), so this is the exact inverse of
+            // `encode_image` — the field offsets match byte-for-byte.
+            Ty::Struct(_) | Ty::Tuple(_) => {
+                let layout = self.aggregate_value_layout(ty, block)?;
+                let mut values = Vec::with_capacity(layout.field_offsets.len());
+                for (offset, field_ty) in &layout.field_offsets {
+                    let f_size = self.byte_size(field_ty, block)?;
+                    let field = image.slice(*offset, f_size);
+                    values.push(self.decode_image(field_ty, &field, state, block)?);
+                }
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Aggregate(values),
+                })
+            }
+            // Decode an enum's canonical tagged-union image: read the tag
+            // lane, resolve the variant it names, then decode that variant's
+            // fields from the shared payload region — the exact inverse of the
+            // enum `encode_image` arm. A tag value matching no variant
+            // discriminant is a corrupted/foreign image and fails closed
+            // (never a mis-tagged value).
+            Ty::Enum(_) => {
+                let layout = self.enum_layout(ty, block)?;
+                let (variant_idx, tag_val) =
+                    self.enum_image_variant(&layout, ty, image, state, block)?;
+                layout.refuse_uninhabited(variant_idx, ty, "Load", block)?;
+                let fields = &layout.variant_field_offsets[variant_idx];
+                let mut values = Vec::with_capacity(fields.len() + 1);
+                values.push(tag_val);
+                for (rel_offset, field_ty) in fields {
+                    let f_size = self.byte_size(field_ty, block)?;
+                    let field = image.slice(layout.payload_offset + rel_offset, f_size);
+                    values.push(self.decode_image(field_ty, &field, state, block)?);
+                }
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Aggregate(values),
+                })
+            }
+            _ => {
+                let bytes: Vec<u8> = image
+                    .to_vec()
+                    .into_iter()
+                    .map(|byte| byte.unwrap_or(0))
+                    .collect();
+                self.decode_leaf(ty, &bytes, state, block)
+            }
+        }
+    }
+
+    /// The `count` elements of type `elem_ty` an array or vector image holds,
+    /// decoded on the image's structure (see [`Self::decode_image`]).
+    fn decode_elements(
+        &self,
+        elem_ty: &Ty,
+        count: u64,
+        image: &Image,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<ArrayValue> {
+        let stride = self.byte_size(elem_ty, block)?;
+        if count == 0 {
+            return Ok(ArrayValue::from_vec(Vec::new()));
+        }
+        if stride == 0 {
+            let value = self.decode_image(elem_ty, &Image::empty(), state, block)?;
+            return Ok(ArrayValue::splat(value, count));
+        }
+        let rope = image.chunk_map(stride, &mut |element: &Image| {
+            self.decode_image(elem_ty, element, state, block)
+        })?;
+        Ok(ArrayValue::from_rope(rope))
+    }
+
+    /// Decode a non-aggregate value (scalar, pointer, fat pointer, unit)
+    /// from its initialized byte image.
+    fn decode_leaf(
         &self,
         ty: &Ty,
         bytes: &[u8],
@@ -3528,7 +6697,7 @@ impl<'m> Interpreter<'m> {
             | Ty::U64
             | Ty::U128
             // B1 faithful scalars decode through the same `int_shape` register
-            // shape (isize/usize at the pinned 64 bits, char at its 32-bit
+            // shape (isize/usize at the target pointer width, char at its 32-bit
             // carrier) — `byte_size` already sized the image to match.
             | Ty::Isize
             | Ty::Usize
@@ -3554,9 +6723,7 @@ impl<'m> Interpreter<'m> {
                 })
             }
             Ty::Ptr | Ty::PtrConst(_) | Ty::PtrMut(_) | Ty::Ref(_) | Ty::RefMut(_) | Ty::Rc(_) => {
-                let mut raw = [0u8; 8];
-                raw.copy_from_slice(bytes);
-                let addr = u64::from_le_bytes(raw);
+                let addr = self.pointer_from_image(bytes, block)?;
                 // A loaded pointer whose address names no allocation is a
                 // no-provenance value (`DanglingPtr`), not an error — the
                 // provenance check is deferred to dereference (`expect_pointer`).
@@ -3566,15 +6733,21 @@ impl<'m> Interpreter<'m> {
                     kind,
                 })
             }
+            Ty::Func(_) => {
+                let address = self.pointer_from_image(bytes, block)?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: self.function_pointer_from_address(address, block)?,
+                })
+            }
             // B2: decode a fat pointer's two-lane image (byte count pre-checked
-            // as 16 by the size gate above): data address then metadata. The
+            // by the size gate above): data address then metadata. The
             // metadata decodes at the kind's canonical type (pointer-sized
             // unsigned length for Slice/Str, thin Ptr for TraitObject).
             Ty::FatPtr(kind) => {
                 self.require_fat_pointer_layout(block)?;
-                let mut raw = [0u8; 8];
-                raw.copy_from_slice(&bytes[..8]);
-                let addr = u64::from_le_bytes(raw);
+                let word = self.pointer_bytes() as usize;
+                let addr = self.pointer_from_image(&bytes[..word], block)?;
                 // An empty slice / len-0 `&[T]` carries a dangling data lane
                 // (`NonNull::dangling`); resolve it as a no-provenance value.
                 let data_kind = state.memory.resolve_pointer_kind(addr);
@@ -3582,7 +6755,7 @@ impl<'m> Interpreter<'m> {
                 let canonical = kind.metadata_ty(self.pointer_bits()).ok_or_else(|| {
                     type_error(block, format!("Load: {ty} has no metadata type"))
                 })?;
-                let metadata = self.decode_value(&canonical, &bytes[8..], state, block)?;
+                let metadata = self.decode_leaf(&canonical, &bytes[word..], state, block)?;
                 Ok(InterpretValue {
                     ty: ty.clone(),
                     kind: InterpretValueKind::FatPtr {
@@ -3595,147 +6768,199 @@ impl<'m> Interpreter<'m> {
                 ty: Ty::Unit,
                 kind: InterpretValueKind::Unit,
             }),
-            Ty::Vector(elem, lanes) => {
-                let elem_size = self.byte_size(elem, block)? as usize;
-                let mut values = Vec::with_capacity(*lanes as usize);
-                if elem_size == 0 {
-                    for _ in 0..*lanes {
-                        values.push(self.decode_value(elem, &[], state, block)?);
+            _ => Err(type_error(block, format!("Load: cannot decode type {ty}"))),
+        }
+    }
+
+    /// Resolve the active variant (and the logical tag operand) named by an
+    /// enum byte image under `layout`. Reads ONLY the tag lane — the direct tag
+    /// bytes or the niche lane; an untagged image reads nothing. Shared by
+    /// `decode_image` and `first_uninit_covered`, so the variant whose fields a
+    /// load decodes is exactly the variant whose field bytes the WS2.14
+    /// covered-byte rule requires to be initialized. An uninitialized tag-lane
+    /// byte reads as `0` here; the covered-byte rule refuses it first.
+    fn enum_image_variant(
+        &self,
+        layout: &EnumLayout,
+        ty: &Ty,
+        image: &Image,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<(usize, InterpretValue)> {
+        let lane = |offset: u64, size: u64| -> Vec<u8> {
+            image
+                .slice(offset, size)
+                .to_vec()
+                .into_iter()
+                .map(|byte| byte.unwrap_or(0))
+                .collect()
+        };
+        match &layout.byte_view {
+            // No tag lane exists to read: the sole variant IS the answer, and
+            // the tag operand is synthesized from it. This is total — unlike
+            // the tagged arms there is no byte pattern that could name a
+            // variant the enum does not have.
+            EnumByteView::Untagged { variant } => {
+                Ok((*variant, synthesized_tag_value(layout, *variant, block)?))
+            }
+            EnumByteView::Direct { tag_offset } => {
+                let tag_val = self.decode_leaf(
+                    &layout.tag_ty,
+                    &lane(*tag_offset, layout.tag_size),
+                    state,
+                    block,
+                )?;
+                let disc = tag_int_discriminant(expect_int_value(&tag_val, block)?);
+                let variant_idx = layout.variant_by_discriminant(disc).ok_or_else(|| {
+                    type_error(
+                        block,
+                        format!(
+                            "Load: enum tag value {disc} does not match any variant discriminant of {ty}"
+                        ),
+                    )
+                })?;
+                Ok((variant_idx, tag_val))
+            }
+            EnumByteView::Niche {
+                untagged_variant,
+                niche_variants_start,
+                niche_variants_end,
+                niche_start,
+                niche_offset,
+                niche_size,
+            } => {
+                let mut raw = [0u8; 16];
+                raw[..*niche_size as usize].copy_from_slice(&lane(*niche_offset, *niche_size));
+                let lane_bits = (*niche_size * 8) as u32;
+                let mask = int_mask(lane_bits).ok_or_else(|| {
+                    type_error(block, format!("unsupported niche lane width {lane_bits}"))
+                })?;
+                let relative = u128::from_le_bytes(raw).wrapping_sub(*niche_start) & mask;
+                let range_len = u128::from(*niche_variants_end - *niche_variants_start);
+                let variant_idx = if relative <= range_len {
+                    let candidate = *niche_variants_start as usize + relative as usize;
+                    if candidate == *untagged_variant {
+                        return Err(type_error(
+                            block,
+                            format!(
+                                "Load: enum {ty} byte image uses the untagged variant's dead niche value"
+                            ),
+                        ));
                     }
+                    candidate
                 } else {
-                    for chunk in bytes.chunks_exact(elem_size) {
-                        values.push(self.decode_value(elem, chunk, state, block)?);
+                    *untagged_variant
+                };
+                let tag_val = synthesized_tag_value(layout, variant_idx, block)?;
+                Ok((variant_idx, tag_val))
+            }
+        }
+    }
+
+    /// WS2.14 (F-030): the offset of the first UNINITIALIZED byte of a `ty`
+    /// image that a LIVE field of the value covers — a byte `decode_image`
+    /// reads — or `None` when every covered byte is initialized.
+    ///
+    /// - A scalar, pointer, fat pointer or vector covers every byte.
+    /// - A struct / tuple covers the union of its fields' covered bytes, at the
+    ///   declared (or canonical) field offsets; bytes no field covers are
+    ///   padding.
+    /// - An array covers each element's covered bytes (an `Array(U8, N)` union
+    ///   carrier therefore covers every byte: each byte IS an element). It is
+    ///   decided on the image's structure, exactly as `decode_image` decodes
+    ///   it (`Rope::chunk_map`): one answer per distinct element image, so a
+    ///   stored splat is checked once, whatever its length.
+    /// - An enum covers its tag lane (the direct tag bytes, or the niche lane)
+    ///   plus the fields of the ACTIVE variant the tag names. When a tag byte is
+    ///   itself uninitialized the active variant is unknowable, so only the tag
+    ///   lane is covered: a load then reports that byte. Inactive-variant tail
+    ///   bytes and inter-field padding are not covered.
+    ///
+    /// Only bytes a decode never reads are left uncovered, so a load that
+    /// reads them as zero observes nothing it made up; and a typed aggregate
+    /// `Store` that writes them as uninitialized loses nothing the value
+    /// carries.
+    fn first_uninit_covered(
+        &self,
+        ty: &Ty,
+        image: &Image,
+        state: &ExecState,
+        block: BlockId,
+    ) -> InterpretResult<Option<u64>> {
+        match ty {
+            Ty::Closure(id) => {
+                let binding = self.closure_storage_binding(*id, block)?;
+                let mut first: Option<u64> = None;
+                for (ty, offset) in binding.captures.iter().zip(&binding.layout.capture_offsets) {
+                    let field = image.slice(*offset, self.byte_size(ty, block)?);
+                    if let Some(at) = self.first_uninit_covered(ty, &field, state, block)? {
+                        let at = offset + at;
+                        first = Some(first.map_or(at, |first| first.min(at)));
                     }
                 }
-                Ok(InterpretValue {
-                    ty: ty.clone(),
-                    kind: InterpretValueKind::Vector(values),
-                })
+                Ok(first)
+            }
+
+            Ty::Struct(_) | Ty::Tuple(_) => {
+                let layout = self.aggregate_value_layout(ty, block)?;
+                let mut first: Option<u64> = None;
+                for (offset, field_ty) in &layout.field_offsets {
+                    let f_size = self.byte_size(field_ty, block)?;
+                    let field = image.slice(*offset, f_size);
+                    if let Some(at) = self.first_uninit_covered(field_ty, &field, state, block)? {
+                        let at = offset + at;
+                        first = Some(first.map_or(at, |first: u64| first.min(at)));
+                    }
+                }
+                Ok(first)
             }
             Ty::Array(elem, len) => {
                 let elem_ty = self.resolve_ty(*elem, block)?;
-                let elem_size = self.byte_size(&elem_ty, block)? as usize;
-                let mut values = Vec::with_capacity(*len as usize);
-                if elem_size == 0 {
-                    for _ in 0..*len {
-                        values.push(self.decode_value(&elem_ty, &[], state, block)?);
-                    }
-                } else {
-                    for chunk in bytes.chunks_exact(elem_size) {
-                        values.push(self.decode_value(&elem_ty, chunk, state, block)?);
-                    }
+                let stride = self.byte_size(&elem_ty, block)?;
+                if stride == 0 || *len == 0 {
+                    return Ok(None);
                 }
-                Ok(InterpretValue {
-                    ty: ty.clone(),
-                    kind: InterpretValueKind::Array(values),
-                })
+                // One answer per element, on the image's structure; the first
+                // element with an uninitialized covered byte holds the
+                // lowest such offset (elements do not overlap).
+                let answers = image.chunk_map(stride, &mut |element: &Image| {
+                    self.first_uninit_covered(&elem_ty, element, state, block)
+                })?;
+                Ok(answers
+                    .find_first(Option::is_some)
+                    .map(|(index, at)| index * stride + at.expect("found by is_some")))
             }
-            // Decode an aggregate's C-layout byte image back into an `Aggregate`
-            // value: read each field from its computed offset. The byte image
-            // size was already checked against `byte_size(ty)` above, so each
-            // field slice is in range. `Ty::Struct` and `Ty::Tuple` use the same
-            // layout (via `aggregate_value_layout`), so this is the exact inverse
-            // of `encode_value` — the field offsets match byte-for-byte.
-            Ty::Struct(_) | Ty::Tuple(_) => {
-                let layout = self.aggregate_value_layout(ty, block)?;
-                let mut values = Vec::with_capacity(layout.field_offsets.len());
-                for (offset, field_ty) in &layout.field_offsets {
-                    let f_size = self.byte_size(field_ty, block)? as usize;
-                    let start = *offset as usize;
-                    let chunk = &bytes[start..start + f_size];
-                    values.push(self.decode_value(field_ty, chunk, state, block)?);
-                }
-                Ok(InterpretValue {
-                    ty: ty.clone(),
-                    kind: InterpretValueKind::Aggregate(values),
-                })
-            }
-            // Decode an enum's canonical tagged-union byte image: read the tag
-            // at offset 0, resolve the variant it names, then decode that
-            // variant's fields from the shared payload region — the exact
-            // inverse of the enum `encode_value` arm. A tag value matching no
-            // variant discriminant is a corrupted/foreign image and fails
-            // closed (never a mis-tagged value).
             Ty::Enum(_) => {
                 let layout = self.enum_layout(ty, block)?;
-                let (variant_idx, tag_val) = match &layout.byte_view {
-                    // No tag lane exists to read: the sole variant IS the
-                    // answer, and the tag operand is synthesized from it. This
-                    // is total — unlike the tagged arms there is no byte
-                    // pattern that could name a variant the enum does not have.
-                    EnumByteView::Untagged { variant } => {
-                        (*variant, synthesized_tag_value(&layout, *variant, block)?)
-                    }
-                    EnumByteView::Direct { tag_offset } => {
-                        let start = *tag_offset as usize;
-                        let tag_val = self.decode_value(
-                            &layout.tag_ty,
-                            &bytes[start..start + layout.tag_size as usize],
-                            state,
-                            block,
-                        )?;
-                        let disc = tag_int_discriminant(expect_int_value(&tag_val, block)?);
-                        let variant_idx = layout.variant_by_discriminant(disc).ok_or_else(|| {
-                            type_error(
-                                block,
-                                format!(
-                                    "Load: enum tag value {disc} does not match any variant discriminant of {ty}"
-                                ),
-                            )
-                        })?;
-                        (variant_idx, tag_val)
-                    }
+                let tag_lane = match &layout.byte_view {
+                    EnumByteView::Untagged { .. } => None,
+                    EnumByteView::Direct { tag_offset } => Some((*tag_offset, layout.tag_size)),
                     EnumByteView::Niche {
-                        untagged_variant,
-                        niche_variants_start,
-                        niche_variants_end,
-                        niche_start,
                         niche_offset,
                         niche_size,
-                    } => {
-                        let start = *niche_offset as usize;
-                        let mut raw = [0u8; 16];
-                        raw[..*niche_size as usize]
-                            .copy_from_slice(&bytes[start..start + *niche_size as usize]);
-                        let lane_bits = (*niche_size * 8) as u32;
-                        let mask = int_mask(lane_bits).ok_or_else(|| {
-                            type_error(block, format!("unsupported niche lane width {lane_bits}"))
-                        })?;
-                        let relative = u128::from_le_bytes(raw).wrapping_sub(*niche_start) & mask;
-                        let range_len = u128::from(*niche_variants_end - *niche_variants_start);
-                        let variant_idx = if relative <= range_len {
-                            let candidate = *niche_variants_start as usize + relative as usize;
-                            if candidate == *untagged_variant {
-                                return Err(type_error(
-                                    block,
-                                    format!(
-                                        "Load: enum {ty} byte image uses the untagged variant's dead niche value"
-                                    ),
-                                ));
-                            }
-                            candidate
-                        } else {
-                            *untagged_variant
-                        };
-                        let tag_val = synthesized_tag_value(&layout, variant_idx, block)?;
-                        (variant_idx, tag_val)
-                    }
+                        ..
+                    } => Some((*niche_offset, *niche_size)),
                 };
-                let fields = &layout.variant_field_offsets[variant_idx];
-                let mut values = Vec::with_capacity(fields.len() + 1);
-                values.push(tag_val);
-                for (rel_offset, field_ty) in fields {
-                    let f_size = self.byte_size(field_ty, block)? as usize;
-                    let start = (layout.payload_offset + rel_offset) as usize;
-                    let chunk = &bytes[start..start + f_size];
-                    values.push(self.decode_value(field_ty, chunk, state, block)?);
+                if let Some((offset, size)) = tag_lane
+                    && let Some(at) = image.slice(offset, size).first_uninit()
+                {
+                    return Ok(Some(offset + at));
                 }
-                Ok(InterpretValue {
-                    ty: ty.clone(),
-                    kind: InterpretValueKind::Aggregate(values),
-                })
+                let (variant_idx, _) = self.enum_image_variant(&layout, ty, image, state, block)?;
+                layout.refuse_uninhabited(variant_idx, ty, "Load", block)?;
+                let mut first: Option<u64> = None;
+                for (rel_offset, field_ty) in &layout.variant_field_offsets[variant_idx] {
+                    let offset = layout.payload_offset + rel_offset;
+                    let f_size = self.byte_size(field_ty, block)?;
+                    let field = image.slice(offset, f_size);
+                    if let Some(at) = self.first_uninit_covered(field_ty, &field, state, block)? {
+                        let at = offset + at;
+                        first = Some(first.map_or(at, |first: u64| first.min(at)));
+                    }
+                }
+                Ok(first)
             }
-            _ => Err(type_error(block, format!("Load: cannot decode type {ty}"))),
+            _ => Ok(image.first_uninit()),
         }
     }
 
@@ -3756,7 +6981,7 @@ impl<'m> Interpreter<'m> {
         if ty.is_float() {
             return Ok(InterpretValue {
                 ty: ty.clone(),
-                kind: InterpretValueKind::FloatBits(eval_float_binop(
+                kind: InterpretValueKind::FloatBits(self.eval_float_binop(
                     op,
                     ty,
                     expect_float_bits(lhs, block)?,
@@ -3809,19 +7034,20 @@ impl<'m> Interpreter<'m> {
         expect_ty(rhs, ty, block)?;
         let lhs_lanes = expect_vector_lanes(lhs, lane_count, block)?;
         let rhs_lanes = expect_vector_lanes(rhs, lane_count, block)?;
-        let mut lanes = Vec::with_capacity(lane_count as usize);
-        for (lhs, rhs) in lhs_lanes.iter().zip(rhs_lanes) {
+        // Lane-wise, on the operands' structure: a splat operand combines
+        // with each stored lane of the other once.
+        let lanes = lhs_lanes.try_zip_with(rhs_lanes, |lhs, rhs| {
             expect_ty(lhs, elem_ty, block)?;
             expect_ty(rhs, elem_ty, block)?;
             if matches!(elem_ty, Ty::Bool) {
-                lanes.push(InterpretValue::bool(eval_bool_binop(
+                Ok(InterpretValue::bool(eval_bool_binop(
                     op,
                     expect_bool_value(lhs, block)?,
                     expect_bool_value(rhs, block)?,
                     block,
-                )?));
+                )?))
             } else if elem_ty.is_float() {
-                lanes.push(InterpretValue {
+                Ok(InterpretValue {
                     ty: elem_ty.clone(),
                     kind: InterpretValueKind::FloatBits(eval_float_binop(
                         op,
@@ -3830,20 +7056,79 @@ impl<'m> Interpreter<'m> {
                         expect_float_bits(rhs, block)?,
                         block,
                     )?),
-                });
+                })
             } else {
                 let lhs = expect_int_value(lhs, block)?;
                 let rhs = expect_int_value(rhs, block)?;
-                lanes.push(InterpretValue {
+                Ok(InterpretValue {
                     ty: elem_ty.clone(),
                     kind: InterpretValueKind::Int(eval_int_binop(op, lhs, rhs, block)?),
-                });
+                })
+            }
+        })?;
+        // The arithmetic above keeps the rope's compressed traversal. A
+        // requested witness describes logical lanes, so only this optional
+        // observation walks them all (including repeated/splat lanes).
+        if self.float_zero_choice_observer.is_some()
+            && matches!(op, BinOp::FMin | BinOp::FMax)
+            && elem_ty.is_float()
+        {
+            for ((left, right), result) in lhs_lanes.iter().zip(rhs_lanes.iter()).zip(lanes.iter())
+            {
+                if let (
+                    InterpretValueKind::FloatBits(left),
+                    InterpretValueKind::FloatBits(right),
+                    InterpretValueKind::FloatBits(result),
+                ) = (&left.kind, &right.kind, &result.kind)
+                {
+                    self.observe_float_zero_choice(op, elem_ty, *left, *right, *result);
+                }
             }
         }
         Ok(InterpretValue {
             ty: ty.clone(),
             kind: InterpretValueKind::Vector(lanes),
         })
+    }
+
+    fn eval_float_binop(
+        &self,
+        op: BinOp,
+        ty: &Ty,
+        lhs_bits: u64,
+        rhs_bits: u64,
+        block: BlockId,
+    ) -> InterpretResult<u64> {
+        let result = eval_float_binop(op, ty, lhs_bits, rhs_bits, block)?;
+        self.observe_float_zero_choice(op, ty, lhs_bits, rhs_bits, result);
+        Ok(result)
+    }
+
+    fn observe_float_zero_choice(
+        &self,
+        op: BinOp,
+        ty: &Ty,
+        lhs_bits: u64,
+        rhs_bits: u64,
+        result: u64,
+    ) {
+        if matches!(op, BinOp::FMin | BinOp::FMax)
+            && let Some(observer) = self.float_zero_choice_observer
+        {
+            let width = match ty {
+                Ty::F16 => 16,
+                Ty::F32 => 32,
+                Ty::F64 => 64,
+                _ => return,
+            };
+            let sign = 1u64 << (width - 1);
+            let mask = sign | (sign - 1);
+            let left = lhs_bits & mask;
+            let right = rhs_bits & mask;
+            if left & (sign - 1) == 0 && right & (sign - 1) == 0 && left != right {
+                observer(result & mask == left);
+            }
+        }
     }
 
     fn eval_unop(
@@ -3863,37 +7148,34 @@ impl<'m> Interpreter<'m> {
             }
             expect_ty(operand, ty, block)?;
             let lane_values = expect_vector_lanes(operand, *lanes, block)?;
-            let lanes = lane_values
-                .iter()
-                .map(|lane| {
-                    expect_ty(lane, elem_ty, block)?;
-                    if matches!(elem_ty.as_ref(), Ty::Bool) {
-                        if op != UnOp::Not {
-                            return Err(type_error(
-                                block,
-                                format!("{op} is not a boolean unary operation"),
-                            ));
-                        }
-                        Ok(InterpretValue::bool(!expect_bool_value(lane, block)?))
-                    } else if elem_ty.is_float() {
-                        Ok(InterpretValue {
-                            ty: elem_ty.as_ref().clone(),
-                            kind: InterpretValueKind::FloatBits(eval_float_unop(
-                                op,
-                                elem_ty,
-                                expect_float_bits(lane, block)?,
-                                block,
-                            )?),
-                        })
-                    } else {
-                        let int = expect_int_value(lane, block)?;
-                        Ok(InterpretValue {
-                            ty: elem_ty.as_ref().clone(),
-                            kind: InterpretValueKind::Int(eval_int_unop(op, int, block)?),
-                        })
+            let lanes = lane_values.try_map(|lane| {
+                expect_ty(lane, elem_ty, block)?;
+                if matches!(elem_ty.as_ref(), Ty::Bool) {
+                    if op != UnOp::Not {
+                        return Err(type_error(
+                            block,
+                            format!("{op} is not a boolean unary operation"),
+                        ));
                     }
-                })
-                .collect::<InterpretResult<Vec<_>>>()?;
+                    Ok(InterpretValue::bool(!expect_bool_value(lane, block)?))
+                } else if elem_ty.is_float() {
+                    Ok(InterpretValue {
+                        ty: elem_ty.as_ref().clone(),
+                        kind: InterpretValueKind::FloatBits(eval_float_unop(
+                            op,
+                            elem_ty,
+                            expect_float_bits(lane, block)?,
+                            block,
+                        )?),
+                    })
+                } else {
+                    let int = expect_int_value(lane, block)?;
+                    Ok(InterpretValue {
+                        ty: elem_ty.as_ref().clone(),
+                        kind: InterpretValueKind::Int(eval_int_unop(op, int, block)?),
+                    })
+                }
+            })?;
             return Ok(InterpretValue {
                 ty: ty.clone(),
                 kind: InterpretValueKind::Vector(lanes),
@@ -3947,6 +7229,7 @@ impl<'m> Interpreter<'m> {
         ty: &Ty,
         lhs: &InterpretValue,
         rhs: &InterpretValue,
+        state: &ExecState,
         block: BlockId,
     ) -> InterpretResult<InterpretValue> {
         if let Ty::Vector(elem_ty, lanes) = ty {
@@ -3961,24 +7244,22 @@ impl<'m> Interpreter<'m> {
             expect_ty(rhs, ty, block)?;
             let lhs_lanes = expect_vector_lanes(lhs, *lanes, block)?;
             let rhs_lanes = expect_vector_lanes(rhs, *lanes, block)?;
-            let mut result = Vec::with_capacity(*lanes as usize);
-            for (lhs, rhs) in lhs_lanes.iter().zip(rhs_lanes) {
+            let result = lhs_lanes.try_zip_with(rhs_lanes, |lhs, rhs| {
                 expect_ty(lhs, elem_ty, block)?;
                 expect_ty(rhs, elem_ty, block)?;
                 if matches!(elem_ty.as_ref(), Ty::Bool) {
-                    result.push(InterpretValue::bool(eval_bool_icmp(
+                    return Ok(InterpretValue::bool(eval_bool_icmp(
                         op,
                         expect_bool_value(lhs, block)?,
                         expect_bool_value(rhs, block)?,
                     )));
-                    continue;
                 }
-                result.push(InterpretValue::bool(eval_int_icmp(
+                Ok(InterpretValue::bool(eval_int_icmp(
                     op,
                     expect_int_value(lhs, block)?,
                     expect_int_value(rhs, block)?,
-                )));
-            }
+                )))
+            })?;
             return Ok(InterpretValue {
                 ty: ty.comparison_result_ty(),
                 kind: InterpretValueKind::Vector(result),
@@ -3987,6 +7268,28 @@ impl<'m> Interpreter<'m> {
 
         expect_ty(lhs, ty, block)?;
         expect_ty(rhs, ty, block)?;
+        if matches!(ty, Ty::Ptr) {
+            reject_partial(lhs, block, "pointer comparison")?;
+            reject_partial(rhs, block, "pointer comparison")?;
+            let pointer_int = |value: &InterpretValue| -> InterpretResult<InterpretInt> {
+                // Use the same numeric address as PtrToInt, rather than the
+                // allocation id: aliases may carry different provenance.
+                let address = match value.kind {
+                    InterpretValueKind::NullPtr => 0,
+                    InterpretValueKind::Ptr(ptr) => state.memory.address(ptr, block, "ICmp")?,
+                    InterpretValueKind::DanglingPtr(address) => address,
+                    _ => return Err(type_error(block, "ICmp: expected pointer value")),
+                };
+                let address = state.memory.check_address(address, block, "ICmp")?;
+                InterpretInt::from_raw(self.pointer_bits(), false, u128::from(address))
+                    .ok_or_else(|| type_error(block, "ICmp: unsupported target pointer width"))
+            };
+            return Ok(InterpretValue::bool(eval_int_icmp(
+                op,
+                pointer_int(lhs)?,
+                pointer_int(rhs)?,
+            )));
+        }
         if matches!(ty, Ty::Bool) {
             return Ok(InterpretValue::bool(eval_bool_icmp(
                 op,
@@ -4021,18 +7324,17 @@ impl<'m> Interpreter<'m> {
             expect_ty(rhs, ty, block)?;
             let lhs_lanes = expect_vector_lanes(lhs, *lanes, block)?;
             let rhs_lanes = expect_vector_lanes(rhs, *lanes, block)?;
-            let mut result = Vec::with_capacity(*lanes as usize);
-            for (lhs, rhs) in lhs_lanes.iter().zip(rhs_lanes) {
+            let result = lhs_lanes.try_zip_with(rhs_lanes, |lhs, rhs| {
                 expect_ty(lhs, elem_ty, block)?;
                 expect_ty(rhs, elem_ty, block)?;
-                result.push(InterpretValue::bool(eval_float_fcmp(
+                Ok(InterpretValue::bool(eval_float_fcmp(
                     op,
                     elem_ty,
                     expect_float_bits(lhs, block)?,
                     expect_float_bits(rhs, block)?,
                     block,
-                )?));
-            }
+                )?))
+            })?;
             return Ok(InterpretValue {
                 ty: ty.comparison_result_ty(),
                 kind: InterpretValueKind::Vector(result),
@@ -4231,12 +7533,44 @@ impl<'m> Interpreter<'m> {
                     ));
                 }
                 let int = expect_int_value(operand, block)?;
-                let value = if matches!(op, CastOp::UIToFP) {
-                    int.as_unsigned() as f64
-                } else {
-                    int.as_signed() as f64
+                // Round the EXACT integer to the destination width once
+                // (Rust `as`, RNE). An `f32` destination must not go through
+                // an `f64` intermediate: `(2^60 + 2^36 + 1) as f64` rounds to
+                // the binary32 halfway point, which then ties to even and
+                // loses the `+1` that makes the exact value round up
+                // (docs/ub-numerics-policy.md §2; WS2.23 cross-engine table).
+                let bits = match dst_ty {
+                    Ty::F32 => u64::from(
+                        if matches!(op, CastOp::UIToFP) {
+                            int.as_unsigned() as f32
+                        } else {
+                            int.as_signed() as f32
+                        }
+                        .to_bits(),
+                    ),
+                    // WS2.15: an `F16` destination goes through `f64`, and
+                    // that IS a single rounding: an integer below `2^53` is
+                    // exact in binary64, and one at or above it is at or
+                    // above `2^53` after the binary64 rounding (monotone,
+                    // `2^53` representable), which `f64_to_f16_bits` takes to
+                    // `±inf` exactly as the exact value would round (the
+                    // binary16 overflow threshold is `65520`).
+                    Ty::F16 | Ty::F64 => {
+                        let value = if matches!(op, CastOp::UIToFP) {
+                            int.as_unsigned() as f64
+                        } else {
+                            int.as_signed() as f64
+                        };
+                        float_bits_from_f64(dst_ty, value, block)?
+                    }
+                    _ => {
+                        return Err(type_error(
+                            block,
+                            format!("{op}: destination {dst_ty} is not float"),
+                        ));
+                    }
                 };
-                InterpretValueKind::FloatBits(float_bits_from_f64(dst_ty, value, block)?)
+                InterpretValueKind::FloatBits(bits)
             }
             CastOp::PtrToInt => {
                 let (dst_bits, dst_signed) = int_shape(dst_ty).ok_or_else(|| {
@@ -4275,6 +7609,7 @@ impl<'m> Interpreter<'m> {
                         format!("{op}: address {} does not fit u64", int.as_unsigned()),
                     )
                 })?;
+                let address = state.memory.check_address(address, block, "IntToPtr")?;
                 // A nonzero address that names no allocation becomes a legal
                 // no-provenance pointer VALUE (`NonNull::dangling`); the
                 // provenance check is deferred to dereference.
@@ -4321,7 +7656,47 @@ impl<'m> Interpreter<'m> {
                 }
                 self.eval_bitcast(src_ty, dst_ty, operand, state, block)?
             }
-            CastOp::Transmute | CastOp::ReifyFnPointer => {
+            CastOp::Transmute => {
+                // Executed exactly where the Lean `semCast .Transmute` arm
+                // executes (`TrustIr/Semantics/Cast.lean`): over the subset-v3
+                // scalar set (`I8`-`I128` / `U8`-`U128` / `Ptr`), int<->int at
+                // one width, int<->ptr, and ptr<->ptr. Every other shape —
+                // float or bool on EITHER side, aggregates, vectors,
+                // pointer-width ints, `Char` — keeps `UnsupportedCast`, which
+                // is what the Lean model also answers. The sanctioned
+                // replacement for an int<->float reinterpret is `Bitcast`,
+                // which both engines model through the IEEE bit pattern.
+                if !(crate::bridge::transmute_scalar_ty(src_ty)
+                    && crate::bridge::transmute_scalar_ty(dst_ty))
+                {
+                    return Err(err(
+                        InterpretErrorCode::UnsupportedCast,
+                        block,
+                        format!(
+                            "Transmute {src_ty} -> {dst_ty} is outside the executable scalar set \
+                             (I8-I128 / U8-U128 / Ptr)"
+                        ),
+                    ));
+                }
+                let pointer_bits = self.pointer_bits();
+                let src_bits = src_ty.bit_width_with(pointer_bits).ok_or_else(|| {
+                    type_error(block, format!("{op}: source {src_ty} has no bit width"))
+                })?;
+                let dst_bits = dst_ty.bit_width_with(pointer_bits).ok_or_else(|| {
+                    type_error(
+                        block,
+                        format!("{op}: destination {dst_ty} has no bit width"),
+                    )
+                })?;
+                if src_bits != dst_bits {
+                    return Err(type_error(
+                        block,
+                        format!("{op}: bit width mismatch {src_bits} vs {dst_bits}"),
+                    ));
+                }
+                self.eval_bitcast(src_ty, dst_ty, operand, state, block)?
+            }
+            CastOp::ReifyFnPointer => {
                 return Err(err(
                     InterpretErrorCode::UnsupportedCast,
                     block,
@@ -4395,6 +7770,7 @@ impl<'m> Interpreter<'m> {
                             format!("Bitcast: address {} does not fit u64", int.as_unsigned()),
                         )
                     })?;
+                    let address = state.memory.check_address(address, block, "Bitcast")?;
                     Ok(state.memory.resolve_pointer_kind(address))
                 }
                 _ => Err(type_error(
@@ -4436,19 +7812,24 @@ impl<'m> Interpreter<'m> {
             let cond_lanes = expect_vector_lanes(cond, *lanes, block)?;
             let then_lanes = expect_vector_lanes(then_val, *lanes, block)?;
             let else_lanes = expect_vector_lanes(else_val, *lanes, block)?;
-            let mut result = Vec::with_capacity(*lanes as usize);
-            for ((cond, then_val), else_val) in cond_lanes.iter().zip(then_lanes).zip(else_lanes) {
-                match cond.as_bool() {
-                    Some(true) => result.push(then_val.clone()),
-                    Some(false) => result.push(else_val.clone()),
-                    None => {
-                        return Err(type_error(
-                            block,
-                            format!("vector select condition lane must be bool, got {}", cond.ty),
-                        ));
-                    }
-                }
-            }
+            // Lane-wise on the three operands' structure: the arms are paired
+            // first, then each pair is chosen by its condition lane.
+            let arms = then_lanes
+                .rope()
+                .try_zip_with(else_lanes.rope(), |then_val, else_val| {
+                    Ok::<_, InterpretError>((then_val.clone(), else_val.clone()))
+                })?;
+            let result = ArrayValue::from_rope(cond_lanes.rope().try_zip_with(
+                &arms,
+                |cond, (then_val, else_val)| match cond.as_bool() {
+                    Some(true) => Ok(then_val.clone()),
+                    Some(false) => Ok(else_val.clone()),
+                    None => Err(type_error(
+                        block,
+                        format!("vector select condition lane must be bool, got {}", cond.ty),
+                    )),
+                },
+            )?);
             return Ok(InterpretValue {
                 ty: ty.clone(),
                 kind: InterpretValueKind::Vector(result),
@@ -4465,6 +7846,282 @@ impl<'m> Interpreter<'m> {
         }
     }
 
+    /// The ACTIVE variant of an in-register enum value `[tag, fields..]`: its
+    /// name and declared field types, decoded from lane 0 through
+    /// `EnumDef::effective_discriminants` (roadmap WS2.2 item 5).
+    ///
+    /// Only an interpreted `Aggregate` over a `Ty::Enum` reaches this. A tag
+    /// that names no variant cannot arise from `Const` or a memory decode (both
+    /// refuse it), so it is reported as a type error rather than guessed.
+    fn enum_active_variant(
+        &self,
+        enum_ty: &Ty,
+        values: &[InterpretValue],
+        block: BlockId,
+    ) -> InterpretResult<(&'m str, &'m [Ty])> {
+        let Ty::Enum(eid) = enum_ty else {
+            return Err(type_error(block, format!("{enum_ty} is not an enum")));
+        };
+        let module = self.module_context(block, "enum projection")?;
+        let def = module
+            .enum_def(*eid)
+            .ok_or_else(|| type_error(block, format!("enum id {} not found in module", eid.0)))?;
+        let discriminants = def.effective_discriminants().ok_or_else(|| {
+            type_error(
+                block,
+                format!("enum {enum_ty} has no canonical discriminant assignment"),
+            )
+        })?;
+        let tag = values
+            .first()
+            .and_then(InterpretValue::as_int)
+            .ok_or_else(|| {
+                type_error(
+                    block,
+                    format!("enum {enum_ty} value has no integer tag lane"),
+                )
+            })?;
+        let disc = tag_int_discriminant(tag);
+        let variant_idx = discriminants
+            .iter()
+            .position(|d| *d == disc)
+            .ok_or_else(|| {
+                type_error(
+                    block,
+                    format!("enum {enum_ty} value carries tag {disc}, which names no variant"),
+                )
+            })?;
+        let variant = &def.variants[variant_idx];
+        Ok((variant.name.as_str(), variant.fields.as_slice()))
+    }
+
+    /// WS2.2 item 5: lane `field >= 1` of an enum value must be a field of its
+    /// ACTIVE variant, at `access_ty`. Projecting a lane of another variant is
+    /// undefined behaviour (`docs/ub-numerics-policy.md` §4); the validator
+    /// admits any lane SOME variant carries, because which variant is active
+    /// is not a static fact of the type. Honest limit: a lane with the same
+    /// type in the active and the intended variant is invisible here too — the
+    /// flat form states no expected variant.
+    fn check_enum_payload_lane(
+        &self,
+        enum_ty: &Ty,
+        values: &[InterpretValue],
+        field: u32,
+        access_ty: &Ty,
+        block: BlockId,
+    ) -> InterpretResult<()> {
+        let (name, fields) = self.enum_active_variant(enum_ty, values, block)?;
+        let lane_ty = fields.get(field as usize - 1);
+        if lane_ty != Some(access_ty) {
+            let detail = match lane_ty {
+                Some(lane_ty) => {
+                    format!(" (lane {field} of {name} is {lane_ty}; the access is at {access_ty})")
+                }
+                None => format!(" ({name} has {} field(s))", fields.len()),
+            };
+            return Err(err(
+                InterpretErrorCode::UndefinedBehavior,
+                block,
+                format!(
+                    "enum {enum_ty}: lane {field} belongs to no field of active variant \
+                     {name}{detail}"
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    /// WS3.5: build a fully-initialised aggregate VALUE from register lanes.
+    ///
+    /// The result is byte-for-byte the value the corresponding `Const` would
+    /// produce for the same type — `Aggregate`/`Array`/`Record` over the same
+    /// lanes, and for an enum the `[tag, fields..]` image whose lane 0 is
+    /// `discriminants[variant]` at the canonical tag type — so everything
+    /// downstream (`ExtractField`, `Store`/`Load`, the byte funnel) reads it
+    /// identically. The difference is only where the lanes come from: SSA
+    /// values, which `Constant` cannot spell for `Rc`/`&`/`&mut`/`*const`/
+    /// `*mut` (F-049).
+    ///
+    /// `validate_module` refuses every ill-shaped case ahead of this; an
+    /// UNVALIDATED module still fails closed here, never silently building a
+    /// mistyped or partially-initialised value. In particular a poison lane is
+    /// rejected: the result is documented as fully initialised, so it may not
+    /// be assembled out of an uninitialised part.
+    /// `ArraySplat { ty: Array(e, n), value }`: the array whose `n` elements
+    /// are all `value`. Embedding a value in a lane INSPECTS it (a poison
+    /// element is refused, as `make_aggregate` refuses a poison lane); the
+    /// element type is held to `e` exactly. O(1) in `n`: the result is
+    /// [`ArrayValue::splat`], one uniform node.
+    fn eval_array_splat(
+        &self,
+        ty: &Ty,
+        value: &InterpretValue,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        reject_partial(value, block, "array_splat")?;
+        let Ty::Array(elem, len) = ty else {
+            return Err(type_error(
+                block,
+                format!("array_splat builds an array type, got {ty}"),
+            ));
+        };
+        let elem_ty = self.resolve_ty(*elem, block)?;
+        expect_ty(value, &elem_ty, block)?;
+        Ok(InterpretValue {
+            ty: ty.clone(),
+            kind: InterpretValueKind::Array(ArrayValue::splat(value.clone(), *len)),
+        })
+    }
+
+    fn eval_make_aggregate(
+        &self,
+        ty: &Ty,
+        variant: Option<u32>,
+        lanes: Vec<InterpretValue>,
+        block: BlockId,
+    ) -> InterpretResult<InterpretValue> {
+        for lane in &lanes {
+            reject_partial(lane, block, "make_aggregate")?;
+        }
+        let expect_no_variant = |kind: &str| -> InterpretResult<()> {
+            if variant.is_some() {
+                return Err(type_error(
+                    block,
+                    format!("make_aggregate of a {kind} ({ty}) carries no variant index"),
+                ));
+            }
+            Ok(())
+        };
+        let check_arity = |declared: usize| -> InterpretResult<()> {
+            if lanes.len() != declared {
+                return Err(type_error(
+                    block,
+                    format!(
+                        "make_aggregate {ty} has {} lanes, declared type requires {declared}",
+                        lanes.len()
+                    ),
+                ));
+            }
+            Ok(())
+        };
+        let check_lane_tys = |declared: &[Ty]| -> InterpretResult<()> {
+            for (lane, declared) in lanes.iter().zip(declared) {
+                expect_ty(lane, declared, block)?;
+            }
+            Ok(())
+        };
+        match ty {
+            Ty::Tuple(elem_tys) => {
+                expect_no_variant("tuple")?;
+                check_arity(elem_tys.len())?;
+                check_lane_tys(elem_tys)?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Aggregate(lanes),
+                })
+            }
+            Ty::Struct(sid) => {
+                expect_no_variant("struct")?;
+                let module = self.module.ok_or_else(|| {
+                    type_error(block, "make_aggregate of a struct requires module context")
+                })?;
+                let def = module.struct_def(*sid).ok_or_else(|| {
+                    type_error(block, format!("struct id {} not found in module", sid.0))
+                })?;
+                check_arity(def.fields.len())?;
+                let declared: Vec<Ty> = def.fields.iter().map(|f| f.ty.clone()).collect();
+                check_lane_tys(&declared)?;
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Aggregate(lanes),
+                })
+            }
+            Ty::Record(record_id) => {
+                expect_no_variant("record")?;
+                let module = self.module.ok_or_else(|| {
+                    type_error(block, "make_aggregate of a record requires module context")
+                })?;
+                let def = module.record_def(*record_id).ok_or_else(|| {
+                    type_error(block, format!("record definition {record_id} not found"))
+                })?;
+                check_arity(def.fields.len())?;
+                let declared: Vec<Ty> = def.fields.iter().map(|f| f.ty.clone()).collect();
+                check_lane_tys(&declared)?;
+                let named = def
+                    .fields
+                    .iter()
+                    .map(|field| field.name.clone())
+                    .zip(lanes)
+                    .collect();
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Record(named),
+                })
+            }
+            Ty::Array(elem, len) => {
+                expect_no_variant("array")?;
+                check_arity(*len as usize)?;
+                let elem_ty = self.resolve_ty(*elem, block)?;
+                for lane in &lanes {
+                    expect_ty(lane, &elem_ty, block)?;
+                }
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Array(ArrayValue::from_vec(lanes)),
+                })
+            }
+            Ty::Enum(_) => {
+                let Some(variant) = variant else {
+                    return Err(type_error(
+                        block,
+                        format!("make_aggregate of enum {ty} requires a variant index"),
+                    ));
+                };
+                let shape = self.enum_register_shape(ty, block)?;
+                let variant_idx = variant as usize;
+                let Some(variant_def) = shape.definition.variants.get(variant_idx) else {
+                    return Err(type_error(
+                        block,
+                        format!(
+                            "variant {variant} is out of range for {ty} ({} variants)",
+                            shape.definition.variants.len()
+                        ),
+                    ));
+                };
+                // WS3.14: the same refusal `Const` gets. No value of an
+                // uninhabited variant exists, and a niche layout may give it
+                // no encoding at all.
+                shape.refuse_uninhabited(variant_idx, ty, "make_aggregate", block)?;
+                check_arity(variant_def.fields.len())?;
+                check_lane_tys(&variant_def.fields)?;
+                let disc = *shape.discriminants.get(variant_idx).ok_or_else(|| {
+                    type_error(
+                        block,
+                        format!("variant {variant} has no discriminant in {ty}"),
+                    )
+                })?;
+                let mut values = Vec::with_capacity(lanes.len() + 1);
+                values.push(
+                    InterpretValue::int(shape.tag_ty.clone(), disc)
+                        .map_err(|e| e.with_block(block))?,
+                );
+                values.extend(lanes);
+                Ok(InterpretValue {
+                    ty: ty.clone(),
+                    kind: InterpretValueKind::Aggregate(values),
+                })
+            }
+            // Vectors keep `InsertElement`, fat pointers keep `PtrFromParts`,
+            // and closures/sequences/sets/dialects/handles have no lane rule
+            // yet. `validate_module` refuses each by name
+            // (`InvalidMakeAggregate`); an unvalidated module fails closed.
+            _ => Err(type_error(
+                block,
+                format!("make_aggregate does not build {ty}"),
+            )),
+        }
+    }
+
     fn eval_extract_field(
         &self,
         field_ty: &Ty,
@@ -4473,6 +8130,12 @@ impl<'m> Interpreter<'m> {
         block: BlockId,
     ) -> InterpretResult<InterpretValue> {
         reject_partial(aggregate, block, "extract_field")?;
+        if let (Ty::Enum(_), InterpretValueKind::Aggregate(values)) =
+            (&aggregate.ty, &aggregate.kind)
+            && field >= 1
+        {
+            self.check_enum_payload_lane(&aggregate.ty, values, field, field_ty, block)?;
+        }
         let value = match &aggregate.kind {
             InterpretValueKind::Aggregate(values) => values.get(field as usize),
             InterpretValueKind::Record(values) => {
@@ -4502,6 +8165,18 @@ impl<'m> Interpreter<'m> {
                 format!("field {field} is out of bounds for {}", aggregate.ty),
             )
         })?;
+        // Crystal lane (E3b): reading a lane the program never wrote is MIR's typed read of an
+        // uninitialised place -- undefined behaviour, reported where the read happens.
+        if matches!(value.kind, InterpretValueKind::Uninit) {
+            return Err(ub(
+                block,
+                format!(
+                    "extract_field: field {field} of {} is an unwritten lane (uninit); reading \
+                     it is a read of uninitialized memory",
+                    aggregate.ty
+                ),
+            ));
+        }
         expect_ty(value, field_ty, block)?;
         Ok(value.clone())
     }
@@ -4517,6 +8192,24 @@ impl<'m> Interpreter<'m> {
         reject_partial(aggregate, block, "insert_field")?;
         reject_partial(value, block, "insert_field value")?;
         expect_ty(aggregate, aggregate_ty, block)?;
+        if let (Ty::Enum(_), InterpretValueKind::Aggregate(values)) =
+            (&aggregate.ty, &aggregate.kind)
+        {
+            // WS2.2 item 2: a variant is constructed whole with `Const`; a
+            // re-tag would leave the old variant's payload under the new tag.
+            // Lean's `semInsertField` refuses the same write.
+            if field == 0 {
+                return Err(err(
+                    InterpretErrorCode::UndefinedBehavior,
+                    block,
+                    format!(
+                        "insert_field cannot rewrite an enum discriminant (lane 0 of \
+                         {aggregate_ty}); construct the variant with Const"
+                    ),
+                ));
+            }
+            self.check_enum_payload_lane(&aggregate.ty, values, field, &value.ty, block)?;
+        }
         match &aggregate.kind {
             InterpretValueKind::Aggregate(values) => {
                 let Some(existing) = values.get(field as usize) else {
@@ -4592,10 +8285,11 @@ impl<'m> Interpreter<'m> {
     ) -> InterpretResult<InterpretValue> {
         let index = runtime_index(index, block)?;
         let value = match &array.kind {
-            InterpretValueKind::Vector(values)
-            | InterpretValueKind::Array(values)
-            | InterpretValueKind::Sequence(values)
-            | InterpretValueKind::Aggregate(values) => values.get(index),
+            // O(height) whatever the length: a splat answers from its root.
+            InterpretValueKind::Array(values)
+            | InterpretValueKind::Vector(values)
+            | InterpretValueKind::Sequence(values) => values.get(index as u64),
+            InterpretValueKind::Aggregate(values) => values.get(index),
             _ => {
                 return Err(type_error(
                     block,
@@ -4627,9 +8321,18 @@ impl<'m> Interpreter<'m> {
     ) -> InterpretResult<InterpretValue> {
         expect_ty(array, result_ty, block)?;
         let index = runtime_index(index, block)?;
+        // Embedding a value in a lane INSPECTS it, exactly as `insert_field`
+        // does: a poison lane inside an otherwise-defined array / vector /
+        // sequence would carry poison past every top-level check — out of a
+        // call or return (`check_signature_values` sees only the aggregate)
+        // and into a strict store (roadmap WS2.10 review).
+        reject_partial(value, block, "insert_element value")?;
         match &array.kind {
+            // PERSISTENT update: one root-to-leaf path is copied and every
+            // other node is shared with the input (which SSA keeps alive), so
+            // an insert costs O(height), never a copy of the array or vector.
             InterpretValueKind::Vector(values) => {
-                let Some(existing) = values.get(index) else {
+                let Some(existing) = values.get(index as u64) else {
                     return Err(err(
                         InterpretErrorCode::UndefinedBehavior,
                         block,
@@ -4637,15 +8340,16 @@ impl<'m> Interpreter<'m> {
                     ));
                 };
                 expect_ty(value, &existing.ty, block)?;
-                let mut values = values.clone();
-                values[index] = value.clone();
+                let values = values
+                    .set(index as u64, value.clone())
+                    .expect("the index was just found in bounds");
                 Ok(InterpretValue {
                     ty: result_ty.clone(),
                     kind: InterpretValueKind::Vector(values),
                 })
             }
             InterpretValueKind::Array(values) => {
-                let Some(existing) = values.get(index) else {
+                let Some(existing) = values.get(index as u64) else {
                     return Err(err(
                         InterpretErrorCode::UndefinedBehavior,
                         block,
@@ -4653,15 +8357,16 @@ impl<'m> Interpreter<'m> {
                     ));
                 };
                 expect_ty(value, &existing.ty, block)?;
-                let mut values = values.clone();
-                values[index] = value.clone();
+                let values = values
+                    .set(index as u64, value.clone())
+                    .expect("the index was just found in bounds");
                 Ok(InterpretValue {
                     ty: result_ty.clone(),
                     kind: InterpretValueKind::Array(values),
                 })
             }
             InterpretValueKind::Sequence(values) => {
-                let Some(existing) = values.get(index) else {
+                let Some(existing) = values.get(index as u64) else {
                     return Err(err(
                         InterpretErrorCode::UndefinedBehavior,
                         block,
@@ -4669,8 +8374,9 @@ impl<'m> Interpreter<'m> {
                     ));
                 };
                 expect_ty(value, &existing.ty, block)?;
-                let mut values = values.clone();
-                values[index] = value.clone();
+                let values = values
+                    .set(index as u64, value.clone())
+                    .expect("the index was just found in bounds");
                 Ok(InterpretValue {
                     ty: result_ty.clone(),
                     kind: InterpretValueKind::Sequence(values),
@@ -4720,23 +8426,29 @@ impl<'m> Interpreter<'m> {
         let spec = vector::decode_with_operand_tys(op, &operand_tys)
             .map_err(|reason| vector_dialect_error(block, op, reason))?;
 
+        // Every `vector` dialect op is decoded at one of the dialect's FIXED
+        // shapes (at most 16 lanes, `vector::decode_with_operand_tys`), so its
+        // lanes are handled as a dense list here.
         match spec {
             VectorSpec::PackLanes(spec) => {
                 let mut lanes = Vec::with_capacity(spec.lanes as usize);
                 for operand in operands {
                     expect_ty(&operand, &spec.elem_ty, block)?;
+                    // A lane is embedded, so it is inspected: poison may not
+                    // hide inside a vector (see `eval_insert_element`).
+                    reject_partial(&operand, block, &op.qualified_name())?;
                     lanes.push(operand);
                 }
                 Ok(vec![InterpretValue {
                     ty: spec.vector_ty,
-                    kind: InterpretValueKind::Vector(lanes),
+                    kind: InterpretValueKind::Vector(ArrayValue::from_vec(lanes)),
                 }])
             }
             VectorSpec::ExtractLane(spec) => {
                 let vector = &operands[0];
                 expect_ty(vector, &spec.vector_ty, block)?;
                 let lanes = expect_vector_lanes(vector, spec.lanes, block)?;
-                let lane = lanes.get(spec.lane as usize).ok_or_else(|| {
+                let lane = lanes.get(u64::from(spec.lane)).ok_or_else(|| {
                     err(
                         InterpretErrorCode::UnsupportedVectorShape,
                         block,
@@ -4755,19 +8467,20 @@ impl<'m> Interpreter<'m> {
                 let value = &operands[1];
                 expect_ty(vector, &spec.vector_ty, block)?;
                 expect_ty(value, &spec.elem_ty, block)?;
-                let mut lanes = expect_vector_lanes(vector, spec.lanes, block)?.to_vec();
-                let lane = lanes.get_mut(spec.lane as usize).ok_or_else(|| {
-                    err(
-                        InterpretErrorCode::UnsupportedVectorShape,
-                        block,
-                        format!(
-                            "{} lane {} is out of range for runtime vector value",
-                            op.qualified_name(),
-                            spec.lane
-                        ),
-                    )
-                })?;
-                *lane = value.clone();
+                reject_partial(value, block, &op.qualified_name())?;
+                let lanes = expect_vector_lanes(vector, spec.lanes, block)?
+                    .set(u64::from(spec.lane), value.clone())
+                    .ok_or_else(|| {
+                        err(
+                            InterpretErrorCode::UnsupportedVectorShape,
+                            block,
+                            format!(
+                                "{} lane {} is out of range for runtime vector value",
+                                op.qualified_name(),
+                                spec.lane
+                            ),
+                        )
+                    })?;
                 Ok(vec![InterpretValue {
                     ty: spec.vector_ty,
                     kind: InterpretValueKind::Vector(lanes),
@@ -4776,7 +8489,7 @@ impl<'m> Interpreter<'m> {
             VectorSpec::MaskToBits(spec) => {
                 let mask = &operands[0];
                 expect_ty(mask, &spec.mask_ty, block)?;
-                let lanes = expect_vector_lanes(mask, spec.lanes, block)?;
+                let lanes = expect_vector_lanes(mask, spec.lanes, block)?.to_vec();
                 let mut raw = 0u128;
                 for (index, lane) in lanes.iter().enumerate() {
                     match lane.as_bool() {
@@ -4816,7 +8529,7 @@ impl<'m> Interpreter<'m> {
             VectorSpec::Reduce(spec) => {
                 let vector = &operands[0];
                 expect_ty(vector, &spec.vector_ty, block)?;
-                let lanes = expect_vector_lanes(vector, spec.lanes, block)?;
+                let lanes = expect_vector_lanes(vector, spec.lanes, block)?.to_vec();
                 let (bits, signed) = int_shape(&spec.elem_ty).ok_or_else(|| {
                     type_error(
                         block,
@@ -4861,7 +8574,7 @@ impl<'m> Interpreter<'m> {
             VectorSpec::Shuffle(spec) => {
                 let vector = &operands[0];
                 expect_ty(vector, &spec.vector_ty, block)?;
-                let lanes = expect_vector_lanes(vector, spec.lanes, block)?;
+                let lanes = expect_vector_lanes(vector, spec.lanes, block)?.to_vec();
                 // `decode` already range-checked every index against `lanes`,
                 // so each `get` below resolves; the explicit error keeps the
                 // interpreter total even on a hand-built spec.
@@ -4881,7 +8594,7 @@ impl<'m> Interpreter<'m> {
                 }
                 Ok(vec![InterpretValue {
                     ty: spec.vector_ty,
-                    kind: InterpretValueKind::Vector(shuffled),
+                    kind: InterpretValueKind::Vector(ArrayValue::from_vec(shuffled)),
                 }])
             }
             VectorSpec::Fma(spec) => {
@@ -4891,9 +8604,9 @@ impl<'m> Interpreter<'m> {
                 expect_ty(a, &spec.vector_ty, block)?;
                 expect_ty(b, &spec.vector_ty, block)?;
                 expect_ty(c, &spec.vector_ty, block)?;
-                let a_lanes = expect_vector_lanes(a, spec.lanes, block)?;
-                let b_lanes = expect_vector_lanes(b, spec.lanes, block)?;
-                let c_lanes = expect_vector_lanes(c, spec.lanes, block)?;
+                let a_lanes = expect_vector_lanes(a, spec.lanes, block)?.to_vec();
+                let b_lanes = expect_vector_lanes(b, spec.lanes, block)?.to_vec();
+                let c_lanes = expect_vector_lanes(c, spec.lanes, block)?.to_vec();
                 let mut out = Vec::with_capacity(spec.lanes as usize);
                 for index in 0..spec.lanes as usize {
                     let a_bits = expect_float_bits(&a_lanes[index], block)?;
@@ -4931,7 +8644,7 @@ impl<'m> Interpreter<'m> {
                 }
                 Ok(vec![InterpretValue {
                     ty: spec.vector_ty,
-                    kind: InterpretValueKind::Vector(out),
+                    kind: InterpretValueKind::Vector(ArrayValue::from_vec(out)),
                 }])
             }
         }
@@ -4953,14 +8666,52 @@ struct ExecState {
     /// pointer here so repeated `GlobalAddr` of the same global alias the
     /// same storage and stores through a `mutable` global persist.
     globals: BTreeMap<GlobalId, InterpretPointer>,
-    /// Open binding frames (quantifier-lowering scopes) keyed by frame id. Each
-    /// frame is a fixed slot vector sized at `OpenFrame` time; `BindSlot` writes,
-    /// `LoadSlot` reads, `CloseFrame` removes. The `OpenFrame` result value is a
-    /// `Frame(id)` handle.
-    frames: BTreeMap<u64, Vec<Option<InterpretValue>>>,
+    /// The OPEN binding-frame lineages (quantifier-lowering scopes). The slot
+    /// contents live in the handles themselves (`InterpretValueKind::Frame`),
+    /// which are FUNCTIONAL like Lean's `Value.frame`: `OpenFrame` mints a
+    /// lineage, `BindSlot` checks it is open and yields a new handle with one
+    /// slot replaced (the input handle keeps its prior slots), `LoadSlot`
+    /// checks it is open and reads the handle's own snapshot, `CloseFrame`
+    /// removes the lineage (a second close is UB). An unbound slot is `None`:
+    /// loading it is UB here, where the Lean model initialises it to `undef`
+    /// — what an unbound read yields is WS2.10's decision (B3 depth ledger).
+    frames: BTreeSet<u64>,
     next_frame_id: u64,
     steps: u64,
     remaining_fuel: u64,
+    /// The host model's per-execution tables (WS2.12).
+    host: HostState,
+    /// Calls a host model served in this run (`InterpretOutcome::host_calls`).
+    /// Counted here, outside `HostState`, so a host cannot alter it.
+    host_calls: u64,
+    /// The module's drop-glue table, indexed once per run (amendment D,
+    /// `docs/SPEC_RATIFICATIONS.md` §20). `None` without a module: every drop
+    /// is then unresolvable.
+    drop_glue: Option<crate::DropGlueIndex>,
+    /// Exceptions in flight and in hand (amendment D, Part 2, §21); empty for
+    /// every run under `PanicStrategy::Abort`.
+    unwind: UnwindState,
+}
+
+/// The run's exceptions (amendment D, Part 2, `docs/SPEC_RATIFICATIONS.md`
+/// §21). Only `PanicStrategy::Unwind` ever writes it.
+#[derive(Debug, Clone, Default)]
+struct UnwindState {
+    /// Every exception object raised in this run, by the ADDRESS of its
+    /// (dead) one-byte allocation: its pointer and the `Panic` error its raise
+    /// reported. A `Resume` identifies its operand by address, so a stored
+    /// and reloaded exception pointer (a no-provenance pointer once its
+    /// allocation is dead) is the same exception.
+    exceptions: BTreeMap<u64, (InterpretPointer, InterpretError)>,
+    /// The exception being propagated, set by a raise, a `Resume` or a pad
+    /// that re-propagates, and taken by the catch that receives it. No
+    /// instruction runs between the raise and the catch (an error propagates
+    /// through `?` only), so while this is `Some` the error travelling up the
+    /// frames IS that exception's.
+    in_flight: Option<u64>,
+    /// The (exception, selector) the landing pad an unwind edge entered binds
+    /// and clears.
+    in_hand: Option<(InterpretPointer, i32)>,
 }
 
 impl ExecState {
@@ -4994,13 +8745,21 @@ struct MemoryState {
     allocations: BTreeMap<u64, Allocation>,
     next_alloc_id: u64,
     next_addr: u64,
-    /// Bytes this run is permitted to allocate in total (the space analogue of
-    /// fuel). `u64::MAX` means unbounded — only the explicit `with_budget`
-    /// constructor lowers it, so `Default` stays backwards compatible.
-    budget: u64,
-    /// Bytes allocated so far in this run; checked against `budget` *before* any
-    /// host storage is materialized.
-    allocated: u64,
+    /// The highest address this run's pointers can name: `2^pointer_bits - 1`
+    /// (WS2.16). `u64::MAX` at 64 bits, where every check against it is
+    /// vacuous and the model is byte-identical to the pre-WS2.16 one.
+    max_address: u64,
+    /// Crystal lane (E3b): per allocation, the byte RANGES a `Store` left uninitialised because
+    /// the stored aggregate's lane there was UNWRITTEN (`InterpretValueKind::Uninit`), as
+    /// disjoint `start -> end` (exclusive) entries: one entry per lane, whatever its size. A
+    /// later whole-aggregate `Load` whose only uninitialised COVERED bytes are such lanes gives
+    /// the lanes back unwritten; every other uninitialised covered byte keeps the WS2.14
+    /// aggregate-load discipline. Any write over a byte forgets it (a `MemSet` fill and a
+    /// `MemCopy` destination included); a `MemCopy` does NOT carry the record to its
+    /// destination, so a copied unwritten lane reloads as ordinary uninitialised bytes (fail
+    /// closed; pinned by `a_memcopy_does_not_carry_the_unwritten_lane_record`). Empty for every
+    /// program with no `Constant::Uninit`, so no such program's memory behaviour changes.
+    unwritten_lane_bytes: BTreeMap<u64, BTreeMap<u64, u64>>,
 }
 
 impl Default for MemoryState {
@@ -5009,20 +8768,13 @@ impl Default for MemoryState {
             allocations: BTreeMap::new(),
             next_alloc_id: 0,
             next_addr: 1024,
-            budget: u64::MAX,
-            allocated: 0,
+            max_address: u64::MAX,
+            unwritten_lane_bytes: BTreeMap::new(),
         }
     }
 }
 
 impl MemoryState {
-    fn with_budget(budget: u64) -> Self {
-        Self {
-            budget,
-            ..Self::default()
-        }
-    }
-
     /// Exact-size allocation: no usable-size slack. Used for stack `Alloca`,
     /// internal scratch cells, and module globals — their bounds stay strict so
     /// any out-of-bounds or uninitialized read is still caught.
@@ -5063,44 +8815,51 @@ impl MemoryState {
         // program-correct choice for the fill value the author left open.
         const SLACK_FILL: u8 = 0xFF;
 
-        // The total footprint (requested + slack) counts against the budget.
-        let footprint = size.saturating_add(slack);
-        let total = match self.allocated.checked_add(footprint) {
-            Some(total) if total <= self.budget => total,
-            _ => {
-                return Err(err(
-                    InterpretErrorCode::OutOfMemory,
-                    block,
-                    format!(
-                        "allocation of {size} byte(s) would exceed the interpreter \
-                         memory budget of {} byte(s) ({} already allocated)",
-                        self.budget, self.allocated
-                    ),
-                ));
-            }
-        };
-        self.allocated = total;
+        let footprint = size.checked_add(slack).ok_or_else(|| {
+            err(
+                InterpretErrorCode::OutOfMemory,
+                block,
+                format!("allocation of {size} byte(s) plus slack overflows the address space"),
+            )
+        })?;
 
-        let base = align_addr(self.next_addr, align)
-            .ok_or_else(|| ub(block, "Alloca: base address overflow"))?;
+        // Exhausting the ADDRESS SPACE is an incapacity of the model, not UB
+        // in the program (a real allocator returns null / aborts there).
+        let exhausted = || {
+            err(
+                InterpretErrorCode::OutOfMemory,
+                block,
+                format!("allocation of {size} byte(s) exhausts the address space"),
+            )
+        };
+        let base = align_addr(self.next_addr, align).ok_or_else(exhausted)?;
         let id = self.next_alloc_id;
         self.next_alloc_id = self
             .next_alloc_id
             .checked_add(1)
             .ok_or_else(|| ub(block, "Alloca: allocation id overflow"))?;
         let bump = footprint.max(1);
-        self.next_addr = base
-            .checked_add(bump)
-            .ok_or_else(|| ub(block, "Alloca: next address overflow"))?;
-        let byte_len = usize::try_from(footprint)
-            .map_err(|_| ub(block, "Alloca: allocation size does not fit usize"))?;
-        let size_len = size as usize;
-        let mut bytes = vec![None; byte_len];
-        // The slack tail is defined (readable, poison-free); the requested
-        // region stays uninitialized until written.
-        for b in bytes.iter_mut().skip(size_len) {
-            *b = Some(SLACK_FILL);
+        let next_addr = base.checked_add(bump).ok_or_else(exhausted)?;
+        // The allocation's last byte must be nameable by a target pointer
+        // (WS2.16): a 32-bit target has a 4 GiB address space, and an
+        // allocation past it has no address a `Ptr` could store.
+        if next_addr - 1 > self.max_address {
+            return Err(err(
+                InterpretErrorCode::OutOfMemory,
+                block,
+                format!(
+                    "allocation of {size} byte(s) at address {base:#x} exceeds the target's \
+                     address space (highest address {:#x})",
+                    self.max_address
+                ),
+            ));
         }
+        self.next_addr = next_addr;
+        // SPARSE: the requested region is one uninitialized run and the slack
+        // tail one defined run, whatever the size — host memory follows what
+        // the program writes, not what it declares.
+        let mut bytes = ByteStore::new(footprint, None);
+        bytes.write(size, &Image::fill(Some(SLACK_FILL), slack));
         self.allocations.insert(
             id,
             Allocation {
@@ -5111,6 +8870,9 @@ impl MemoryState {
                 alive: true,
                 bytes,
                 ref_count: 1,
+                origin: None,
+                requested: size,
+                live_borrows: 0,
             },
         );
         Ok(InterpretPointer {
@@ -5119,8 +8881,72 @@ impl MemoryState {
         })
     }
 
+    /// Record that the allocation `ptr` names was made by `HeapAlloc` with
+    /// `origin` (WS2.13). Only called right after `alloc_with_slack` returned
+    /// `ptr`, so the allocation exists.
+    fn record_origin(&mut self, ptr: InterpretPointer, origin: AllocOrigin) {
+        if let Some(allocation) = self.allocations.get_mut(&ptr.allocation) {
+            allocation.origin = Some(origin);
+        }
+    }
+
+    /// The precondition of a pinned RC runtime's entry point on its object
+    /// pointer (WS2.13, [`HostRcOp`]): `ptr` addresses a live allocation, at
+    /// its base, that `HeapAlloc { origin }` produced. Anything else is UB in
+    /// the runtime and is refused here by name.
+    fn check_rc_cell(
+        &self,
+        ptr: InterpretPointer,
+        origin: AllocOrigin,
+        entry: &str,
+        block: BlockId,
+    ) -> InterpretResult<()> {
+        let Some(allocation) = self.allocations.get(&ptr.allocation) else {
+            return Err(ub(
+                block,
+                format!("@{entry}: pointer does not reference a known allocation"),
+            ));
+        };
+        if !allocation.alive {
+            return Err(ub(
+                block,
+                format!("@{entry}: pointer references a freed allocation"),
+            ));
+        }
+        if allocation.origin != Some(origin) {
+            let actual = match allocation.origin {
+                Some(other) => format!("a {other:?} heap cell"),
+                None => "a stack or global allocation".to_owned(),
+            };
+            return Err(ub(
+                block,
+                format!(
+                    "@{entry}: pointer addresses {actual}, not a cell of the {origin:?} heap \
+                     this runtime counts (no ownership transfer between heaps)"
+                ),
+            ));
+        }
+        if !ptr.is_object_base() {
+            return Err(ub(
+                block,
+                format!(
+                    "@{entry}: pointer is at offset {} of its allocation, not at the object \
+                     base a runtime object pointer names",
+                    ptr.offset
+                ),
+            ));
+        }
+        Ok(())
+    }
+
     /// ARC `Retain`: increment the pointee allocation's reference count. The
-    /// pointer must address a live allocation at its base (offset 0).
+    /// pointer must address a live reference-counted cell AT ITS OBJECT BASE
+    /// (`arc_allocation_mut`); "the cell" is the allocation the pointer was
+    /// derived from (SPEC "A pointer operand names the allocation it was
+    /// derived from"), and any other offset of it is undefined behaviour, as
+    /// on the pinned runtime path (`check_rc_cell`): one predicate,
+    /// `InterpretPointer::is_object_base` (SPEC "An ARC operation counts only
+    /// a reference-counted cell", clause 3).
     fn retain(&mut self, ptr: InterpretPointer, block: BlockId) -> InterpretResult<()> {
         let allocation = self.arc_allocation_mut(ptr, block, "Retain")?;
         allocation.ref_count = allocation
@@ -5148,7 +8974,8 @@ impl MemoryState {
         Ok(())
     }
 
-    /// ARC `IsUnique`: true iff the pointee allocation has exactly one owner.
+    /// ARC `IsUnique`: true iff the pointee reference-counted cell has exactly
+    /// one owner. The cell rule is `arc_allocation_mut`'s, checked here too.
     fn is_unique(&self, ptr: InterpretPointer, block: BlockId) -> InterpretResult<bool> {
         let allocation = self.allocations.get(&ptr.allocation).ok_or_else(|| {
             ub(
@@ -5159,9 +8986,56 @@ impl MemoryState {
         if !allocation.alive {
             return Err(ub(block, "IsUnique: pointer references a freed allocation"));
         }
+        // SPEC "An ARC operation counts only a reference-counted cell": see
+        // `arc_allocation_mut`, which states the rule for `Retain` / `Release`.
+        if !allocation
+            .origin
+            .is_some_and(AllocOrigin::is_reference_counted)
+        {
+            let actual = match allocation.origin {
+                Some(other) => format!("a {other:?} heap cell"),
+                None => "a stack, global or interpreter-internal allocation".to_owned(),
+            };
+            return Err(ub(
+                block,
+                format!(
+                    "IsUnique: pointer addresses {actual}, not a reference-counted cell \
+                     (Retain / Release / IsUnique are defined only on a HeapAlloc of origin \
+                     SwiftHeap or CleanHeap; Lean requireArcRef)"
+                ),
+            ));
+        }
+        // SPEC "An ARC operation counts only a reference-counted cell",
+        // clause 3: at the cell's object base only (see `arc_allocation_mut`).
+        if !ptr.is_object_base() {
+            return Err(ub(
+                block,
+                format!(
+                    "IsUnique: pointer is at offset {} of its cell, not at the object base a \
+                     runtime object pointer names",
+                    ptr.offset
+                ),
+            ));
+        }
         Ok(allocation.ref_count == 1)
     }
 
+    /// The allocation a `Retain` / `Release` names, after the cell rule: the
+    /// pointer's allocation is known, live, and a REFERENCE-COUNTED CELL — a
+    /// `HeapAlloc { origin: SwiftHeap | CleanHeap }` result. On any other live
+    /// allocation (a stack `Alloca`, a `RustHeap` or `CMalloc` cell, a
+    /// global's reservation, an interpreter-internal cell) the three ARC
+    /// instructions are undefined behaviour (SPEC "An ARC operation counts only
+    /// a reference-counted cell"). Lean's `requireArcRef` refuses the same
+    /// allocations (only an RC-origin `semHeapAlloc` grants `arcRef`), and the
+    /// pinned runtime would read or write a header such a cell does not have.
+    /// "The allocation" is the one the pointer was derived from, and the
+    /// pointer must be at its OBJECT BASE (`InterpretPointer::is_object_base`,
+    /// clause 3 of the same SPEC section): `clean_inc` / `clean_dec` /
+    /// `clean_is_exclusive` read the header at the object pointer they are
+    /// given, so an interior or past-the-end operand has no lowering. The
+    /// offset is checked AFTER the origin, so an operand whose provenance is
+    /// not a reference-counted cell keeps "not a reference-counted cell".
     fn arc_allocation_mut(
         &mut self,
         ptr: InterpretPointer,
@@ -5180,71 +9054,70 @@ impl MemoryState {
                 format!("{op}: pointer references a freed allocation"),
             ));
         }
+        if !allocation
+            .origin
+            .is_some_and(AllocOrigin::is_reference_counted)
+        {
+            let actual = match allocation.origin {
+                Some(other) => format!("a {other:?} heap cell"),
+                None => "a stack, global or interpreter-internal allocation".to_owned(),
+            };
+            return Err(ub(
+                block,
+                format!(
+                    "{op}: pointer addresses {actual}, not a reference-counted cell \
+                     (Retain / Release / IsUnique are defined only on a HeapAlloc of origin \
+                     SwiftHeap or CleanHeap; Lean requireArcRef)"
+                ),
+            ));
+        }
+        if !ptr.is_object_base() {
+            return Err(ub(
+                block,
+                format!(
+                    "{op}: pointer is at offset {} of its cell, not at the object base a runtime \
+                     object pointer names",
+                    ptr.offset
+                ),
+            ));
+        }
         Ok(allocation)
     }
 
-    fn read(
+    /// The compact image of `size` bytes at `ptr`, after the bounds /
+    /// liveness / alignment check (`checked_access`). It shares the covering
+    /// runs' nodes: O(runs touched × height), whatever `size` is — a load of a
+    /// stored splat reads one repeating run.
+    fn read_image(
         &self,
         ptr: InterpretPointer,
         size: u64,
         align: u64,
         block: BlockId,
         op: &str,
-    ) -> InterpretResult<Vec<u8>> {
+    ) -> InterpretResult<Image> {
         let allocation = self.checked_access(ptr, size, align, block, op)?;
-        let start = ptr.offset as usize;
-        let end = start + size as usize;
-        allocation.bytes[start..end]
-            .iter()
-            .enumerate()
-            .map(|(index, byte)| {
-                byte.ok_or_else(|| {
-                    ub(
-                        block,
-                        format!(
-                            "{op}: reading uninitialized byte at offset {}",
-                            start + index
-                        ),
-                    )
-                })
-            })
-            .collect()
+        Ok(allocation.bytes.read(ptr.offset, size))
     }
 
-    /// Read `size` bytes as their raw per-byte init state, WITHOUT failing on
-    /// uninitialized bytes. Performs the same bounds / liveness / alignment
-    /// check as `read`, but returns the byte range verbatim: `Some(b)` for an
-    /// initialized byte, `None` for a never-written one. The copy-propagates-
-    /// poison `Load` path (`eval_load`, non-strict) uses this to decide between
-    /// a fully-initialized decode and a `PartialBytes` transport value.
-    fn read_maybe_uninit(
-        &self,
-        ptr: InterpretPointer,
-        size: u64,
-        align: u64,
-        block: BlockId,
-        op: &str,
-    ) -> InterpretResult<Vec<Option<u8>>> {
-        let allocation = self.checked_access(ptr, size, align, block, op)?;
-        let start = ptr.offset as usize;
-        let end = start + size as usize;
-        Ok(allocation.bytes[start..end].to_vec())
-    }
-
-    fn write(
+    /// Write a compact image VERBATIM at `ptr` (`None` bytes become
+    /// uninitialized), after the same access check as `write`. O(pieces +
+    /// literal bytes): a repeating piece is stored as one run.
+    fn write_image(
         &mut self,
         ptr: InterpretPointer,
-        bytes: &[u8],
+        image: &Image,
         align: u64,
         block: BlockId,
         op: &str,
     ) -> InterpretResult<()> {
-        self.checked_access(ptr, bytes.len() as u64, align, block, op)?;
+        self.checked_access(ptr, image.len(), align, block, op)?;
         let allocation = self.allocations.get_mut(&ptr.allocation).expect("checked");
-        let start = ptr.offset as usize;
-        for (index, byte) in bytes.iter().copied().enumerate() {
-            allocation.bytes[start + index] = Some(byte);
-        }
+        allocation.bytes.write(ptr.offset, image);
+        // Crystal lane (E3b): any write over an unwritten-lane byte writes it, so the
+        // record goes (a `MemSet` fill, a `MemCopy` destination and a poison transport
+        // included: their uninitialised bytes are ordinary uninitialised bytes).
+        self.forget_unwritten_lane_bytes(ptr, image.len());
         Ok(())
     }
 
@@ -5261,13 +9134,118 @@ impl MemoryState {
         block: BlockId,
         op: &str,
     ) -> InterpretResult<()> {
-        self.checked_access(ptr, bytes.len() as u64, align, block, op)?;
-        let allocation = self.allocations.get_mut(&ptr.allocation).expect("checked");
-        let start = ptr.offset as usize;
-        for (index, byte) in bytes.iter().copied().enumerate() {
-            allocation.bytes[start + index] = byte;
+        self.write_image(ptr, &Image::literal(bytes.to_vec()), align, block, op)
+    }
+
+    /// Fill `count` bytes at `ptr` with `byte`, every one INITIALIZED (the
+    /// `MemSet` store, WS3.20). The bounds / liveness check runs BEFORE any
+    /// image is materialized: the count is a DYNAMIC operand a hostile module
+    /// can set to `u64::MAX`, and building a `vec![byte; count]` first would
+    /// abort the process on capacity overflow instead of faulting the module
+    /// (review finding, 2026-09-21). A count that does not fit the allocation
+    /// therefore faults with the ordinary out-of-bounds UB, never allocates.
+    fn fill(
+        &mut self,
+        ptr: InterpretPointer,
+        byte: u8,
+        count: u64,
+        block: BlockId,
+        op: &str,
+    ) -> InterpretResult<()> {
+        // One run, whatever `count` is (the access check proved it fits).
+        self.write_image(ptr, &Image::fill(Some(byte), count), 1, block, op)
+    }
+
+    /// Crystal lane (E3b): store the byte image of an aggregate that carries UNWRITTEN lanes.
+    /// `image` is the image to write (padding and the unwritten lanes already uninitialised);
+    /// `lanes` names the unwritten lanes' byte ranges (`(offset, len)` relative to `ptr`), which
+    /// are recorded as unwritten-lane bytes, so a whole-aggregate reload returns them unwritten.
+    /// Any record the range held before is forgotten first (by the write).
+    fn write_with_unwritten_lanes(
+        &mut self,
+        ptr: InterpretPointer,
+        image: &Image,
+        lanes: &[(u64, u64)],
+        align: u64,
+        block: BlockId,
+        op: &str,
+    ) -> InterpretResult<()> {
+        self.write_image(ptr, image, align, block, op)?;
+        let holes: Vec<(u64, u64)> = lanes
+            .iter()
+            .filter(|(_, len)| *len > 0)
+            .map(|(start, len)| (ptr.offset + start, ptr.offset + start + len))
+            .collect();
+        if !holes.is_empty() {
+            self.unwritten_lane_bytes
+                .entry(ptr.allocation)
+                .or_default()
+                .extend(holes);
         }
         Ok(())
+    }
+
+    /// Forget the unwritten-lane record of `len` bytes at `ptr` (any write over them). The
+    /// recorded ranges are disjoint and sorted, so the ones meeting the write are a suffix of
+    /// those starting before its end: O(ranges met × log ranges), never the byte count.
+    fn forget_unwritten_lane_bytes(&mut self, ptr: InterpretPointer, len: u64) {
+        let Some(holes) = self.unwritten_lane_bytes.get_mut(&ptr.allocation) else {
+            return;
+        };
+        let (lo, hi) = (ptr.offset, ptr.offset.saturating_add(len));
+        let met: Vec<(u64, u64)> = holes
+            .range(..hi)
+            .rev()
+            .take_while(|(_, end)| **end > lo)
+            .map(|(start, end)| (*start, *end))
+            .collect();
+        for (start, end) in met {
+            holes.remove(&start);
+            if start < lo {
+                holes.insert(start, lo);
+            }
+            if end > hi {
+                holes.insert(hi, end);
+            }
+        }
+        if holes.is_empty() {
+            self.unwritten_lane_bytes.remove(&ptr.allocation);
+        }
+    }
+
+    /// The recorded unwritten-lane ranges meeting the `len` bytes at `ptr`, clipped to them
+    /// and relative to `ptr` (`(offset, len)`). Empty for an allocation with no record.
+    fn unwritten_lanes_in(&self, ptr: InterpretPointer, len: u64) -> Vec<(u64, u64)> {
+        let Some(holes) = self.unwritten_lane_bytes.get(&ptr.allocation) else {
+            return Vec::new();
+        };
+        let (lo, hi) = (ptr.offset, ptr.offset.saturating_add(len));
+        let mut met: Vec<(u64, u64)> = holes
+            .range(..hi)
+            .rev()
+            .take_while(|(_, end)| **end > lo)
+            .map(|(start, end)| {
+                let (start, end) = ((*start).max(lo), (*end).min(hi));
+                (start - lo, end - start)
+            })
+            .collect();
+        met.reverse();
+        met
+    }
+
+    /// The live-borrow count a thin `Borrow` / `BorrowMut` / `EndBorrow`
+    /// operand moves (SPEC "Freeing an allocation under a live borrow is
+    /// undefined behaviour", clause 2): the count of the allocation the
+    /// pointer was derived from, and only while that allocation is live and
+    /// the offset lies inside the bytes it requested. Anywhere else (one past
+    /// the end, the heap slack tail, a zero-size or freed allocation) `None`,
+    /// and the instruction moves no count. Never faults: it must stay free of
+    /// every UB site, because trust-cg's fsym call graph follows it.
+    fn borrow_count_mut(&mut self, ptr: InterpretPointer) -> Option<&mut u64> {
+        self.allocations
+            .get_mut(&ptr.allocation)
+            .filter(|a| a.alive && ptr.offset < a.requested)
+            .map(|a| &mut a.live_borrows)
     }
 
     fn dealloc(&mut self, ptr: InterpretPointer, block: BlockId) -> InterpretResult<()> {
@@ -5283,6 +9261,42 @@ impl MemoryState {
         if !allocation.alive {
             return Err(ub(block, "Dealloc: allocation is already dead"));
         }
+        // One meaning for `Dealloc` of a reference-counted cell (SPEC "A
+        // reference-counted cell is released by `Release`, never by
+        // `Dealloc`"): a `SwiftHeap` / `CleanHeap` cell is released only by
+        // the `Release` that takes its count to zero (or, under a host model,
+        // by the call the host classifies as that runtime's release role).
+        // Freeing it here would free it under a live owner. Lean's
+        // `semDealloc` refuses the same cell (its `arcRef` permission cannot
+        // deallocate), so both engines call this undefined behaviour — Lean
+        // for a scalar-typed cell; an aggregate `HeapAlloc` is
+        // `unsupported.layout` there, so for one this check alone decides.
+        if let Some(origin) = allocation
+            .origin
+            .filter(|origin| origin.is_reference_counted())
+        {
+            return Err(ub(
+                block,
+                format!(
+                    "Dealloc of a {origin:?} cell: a reference-counted cell is released only \
+                     by the Release that takes its count to zero (Lean semDealloc)"
+                ),
+            ));
+        }
+        // SPEC "Freeing an allocation under a live borrow is undefined
+        // behaviour": a `Borrow` / `BorrowMut` not yet ended by an `EndBorrow`
+        // forbids the free, as Lean's `semDealloc` refuses a `sharedBorrow n` /
+        // `uniqueBorrow` permission (`Permission.canDealloc`).
+        if allocation.live_borrows > 0 {
+            return Err(ub(
+                block,
+                format!(
+                    "Dealloc: allocation is under a live borrow ({} Borrow / BorrowMut not \
+                     ended by EndBorrow; Lean semDealloc)",
+                    allocation.live_borrows
+                ),
+            ));
+        }
         allocation.alive = false;
         Ok(())
     }
@@ -5297,7 +9311,26 @@ impl MemoryState {
         allocation
             .base
             .checked_add(ptr.offset)
+            .filter(|address| *address <= self.max_address)
             .ok_or_else(|| ub(block, format!("{op}: pointer address overflow")))
+    }
+
+    /// Refuse an address a target pointer cannot hold (WS2.16): past
+    /// `2^pointer_bits - 1` a pointer value has no byte image. Vacuous at 64
+    /// bits.
+    fn check_address(&self, address: u64, block: BlockId, op: &str) -> InterpretResult<u64> {
+        if address <= self.max_address {
+            Ok(address)
+        } else {
+            Err(ub(
+                block,
+                format!(
+                    "{op}: address {address:#x} is outside the target's address space \
+                     (highest address {:#x})",
+                    self.max_address
+                ),
+            ))
+        }
     }
 
     /// Resolve a raw address to a provenance-carrying `InterpretPointer`, or
@@ -5393,12 +9426,36 @@ struct Allocation {
     base: u64,
     size: u64,
     alive: bool,
-    bytes: Vec<Option<u8>>,
-    /// Reference count for the ARC model (`Retain`/`Release`/`IsUnique`). Every
-    /// allocation starts uniquely owned (1). `Retain` increments, `Release`
-    /// decrements (freeing at 0); `IsUnique` is `ref_count == 1`. In this
-    /// single-threaded reference interpreter the count is exact, not atomic.
+    /// The allocation's bytes, SPARSE: runs of compact images tiling
+    /// `[0, size)` (`None` = uninitialized).
+    bytes: ByteStore,
+    /// Reference count for the ARC model (`Retain`/`Release`/`IsUnique`).
+    /// Every allocation carries the field and starts at 1, but only a
+    /// reference-counted cell (`origin` `SwiftHeap` / `CleanHeap`) is ever
+    /// counted: on any other allocation the three instructions are undefined
+    /// behaviour before they read it (`arc_allocation_mut`, `is_unique`), so
+    /// there the field is inert. `Retain` increments, `Release` decrements
+    /// (freeing at 0); `IsUnique` is `ref_count == 1`. In this single-threaded
+    /// reference interpreter the count is exact, not atomic.
     ref_count: u64,
+    /// The `HeapAlloc` origin this cell was allocated with (WS2.13), or `None`
+    /// for a stack slot, a scratch cell or a module global. A pinned RC
+    /// runtime's host model (`HostCalls::rc_op`) counts only the cells of its
+    /// own origin; the ARC instructions count only a `SwiftHeap` / `CleanHeap`
+    /// cell; and `Dealloc` refuses a `SwiftHeap` / `CleanHeap` cell as
+    /// undefined behaviour (it is released by `Release`, as in Lean).
+    origin: Option<AllocOrigin>,
+    /// The bytes the program REQUESTED: `size` without the heap slack tail.
+    /// Only `borrow_count_mut` reads it: a borrow operand is counted only
+    /// inside `[0, requested)`, where Lean's address lookup names this same
+    /// allocation.
+    requested: u64,
+    /// `Borrow` / `BorrowMut` of this allocation not yet ended by an
+    /// `EndBorrow` (SPEC "Freeing an allocation under a live borrow is
+    /// undefined behaviour"): Lean's permission count, read ONLY by
+    /// `Dealloc`, which refuses a nonzero count. Moved by
+    /// `borrow_count_mut`; it saturates and never faults.
+    live_borrows: u64,
 }
 
 enum Step {
@@ -5408,6 +9465,13 @@ enum Step {
         args: Vec<InterpretValue>,
     },
     Return(Vec<InterpretValue>),
+    /// Amendment D, Part 2 (§21 rule 4): an unwinding caught at this
+    /// terminator transfers by U(exception, target) in this frame. Produced
+    /// only under `PanicStrategy::Unwind`.
+    Unwind {
+        exception: u64,
+        target: BlockId,
+    },
 }
 
 fn bind_block_params(
@@ -5428,9 +9492,49 @@ fn bind_block_params(
     }
     for ((value, ty), arg) in block.params.iter().zip(args) {
         expect_ty(&arg, ty, block.id)?;
+        check_char_validity(&arg, block.id)?;
         state.values.insert(*value, arg);
     }
     Ok(())
+}
+
+/// The `Char` validity invariant (subset v4, WS2.17): a `Ty::Char` value must
+/// be a **Unicode scalar value** — `0..=0x10FFFF` minus the surrogate block
+/// `0xD800..=0xDFFF`. Mirrors the Lean `validChar` predicate
+/// (`TrustIr/Basic.lean`).
+///
+/// `Ty::Char`'s 32-bit carrier admits surrogates and values past U+10FFFF,
+/// and nothing in the arithmetic model rules them out, so the invariant is
+/// checked HERE — at every site that binds a value to an SSA name — rather
+/// than at each of the dozen instructions that can produce one. A violation
+/// is UNDEFINED BEHAVIOUR, never a silently-carried integer: the format
+/// promises `char`'s Rust/Lean meaning, and a consumer that indexes a
+/// jump table or a UTF-8 encoder by it would be miscompiled by a surrogate.
+///
+/// The lowering-target subset's structural condition 6
+/// ([`crate::bridge::ConformanceSubset::char_origin_excluded`]) is the
+/// STATIC half of the same invariant: it keeps a conforming producer's
+/// `Char` origins to a range-validated `Const` and `ZExt` of a `U8`, both of
+/// which satisfy this check by construction. This check is the dynamic half,
+/// and it runs on every module the interpreter executes, in subset or not.
+fn check_char_validity(value: &InterpretValue, block: BlockId) -> InterpretResult<()> {
+    if value.ty != Ty::Char {
+        return Ok(());
+    }
+    let InterpretValueKind::Int(int) = &value.kind else {
+        return Ok(());
+    };
+    if u32::try_from(int.raw).is_ok_and(|raw| char::from_u32(raw).is_some()) {
+        return Ok(());
+    }
+    Err(err(
+        InterpretErrorCode::UndefinedBehavior,
+        block,
+        format!(
+            "`char` value {:#x} is not a Unicode scalar value (surrogate, or above U+10FFFF)",
+            int.raw
+        ),
+    ))
 }
 
 fn bind_results(
@@ -5452,6 +9556,7 @@ fn bind_results(
         ));
     }
     for (result, value) in node.results.iter().copied().zip(values) {
+        check_char_validity(&value, block)?;
         state.values.insert(result, value);
     }
     Ok(())
@@ -5476,6 +9581,14 @@ fn expect_ty(value: &InterpretValue, ty: &Ty, block: BlockId) -> InterpretResult
             format!("expected value of type {ty}, got {}", value.ty),
         ))
     }
+}
+
+/// Render a type list as `a, b, c` for a signature-mismatch diagnostic.
+fn format_ty_list(tys: &[Ty]) -> String {
+    tys.iter()
+        .map(|t| format!("{t}"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 fn check_signature_values(
@@ -5509,6 +9622,187 @@ fn check_signature_values(
         }
     }
     Ok(())
+}
+
+/// Check the arguments of a call to a variadic DECLARATION (WS2.15): the
+/// fixed prefix exactly as `check_signature_values` does, and the variadic
+/// tail by what the format actually promises about it — nothing beyond each
+/// value being a whole, non-poison value of its own type. A tail slot has no
+/// declared type, so it cannot carry a runtime handle (the v43 rule is
+/// exact-typed transport only; the validator refuses the same shape as
+/// `InvalidHandleUse`).
+fn check_vararg_declaration_args(
+    block: BlockId,
+    args: &[InterpretValue],
+    fixed: &[Ty],
+) -> InterpretResult<()> {
+    if args.len() < fixed.len() {
+        return Err(signature_mismatch(
+            block,
+            format!(
+                "Call arguments arity mismatch: variadic callee expects at least {}, got {}",
+                fixed.len(),
+                args.len()
+            ),
+        ));
+    }
+    check_signature_values(block, "Call arguments", &args[..fixed.len()], fixed)?;
+    for (offset, value) in args[fixed.len()..].iter().enumerate() {
+        let index = fixed.len() + offset;
+        reject_partial(value, block, "Call arguments")?;
+        if first_handle(value).is_some() {
+            return Err(type_error(
+                block,
+                format!(
+                    "Call arguments: variadic argument {index} carries a runtime handle \
+                     ({}), and a variadic slot has no exact type to transport one at",
+                    value.ty
+                ),
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// Integer representation invariant, shared by host returns and external entry
+/// values. Source-width pointer integers pass their actual source width here.
+fn integer_carrier_matches(int: &InterpretInt, bits: u32, signed: bool) -> bool {
+    int.bits == bits
+        && int.signed == signed
+        && int_mask(bits).is_some_and(|mask| int.raw & !mask == 0)
+}
+
+/// Host result admission additionally requires a Unicode scalar for Char.
+/// At external entry, invalid Unicode retains the existing Char UB contract.
+fn integer_payload_matches(ty: &Ty, int: &InterpretInt, bits: u32, signed: bool) -> bool {
+    integer_carrier_matches(int, bits, signed)
+        && (*ty != Ty::Char
+            || u32::try_from(int.raw).is_ok_and(|raw| char::from_u32(raw).is_some()))
+}
+
+/// Check that `value`, the `index`th result a host model returned, is a
+/// well-formed value of its declared type `declared` (WS2.12). The caller has
+/// already checked `value.ty == declared`; this checks the value's KIND agrees
+/// with its type, which `check_signature_values` does not look at.
+fn check_host_result(
+    value: &InterpretValue,
+    declared: &Ty,
+    host: &HostState,
+    block: BlockId,
+    index: usize,
+) -> InterpretResult<()> {
+    let malformed = || {
+        type_error(
+            block,
+            format!(
+                "host result {index} is not a well-formed {declared} value ({:?})",
+                value.kind
+            ),
+        )
+    };
+    match (declared, &value.kind) {
+        (ty, InterpretValueKind::Int(int)) if int_shape(ty).is_some() => {
+            let (bits, signed) = int_shape(ty).expect("guarded by is_some");
+            if integer_payload_matches(ty, int, bits, signed) {
+                Ok(())
+            } else {
+                Err(malformed())
+            }
+        }
+        (ty, _) if int_shape(ty).is_some() => Err(malformed()),
+        (Ty::Bool, InterpretValueKind::Bool(_)) | (Ty::Unit, InterpretValueKind::Unit) => Ok(()),
+        (Ty::F64, InterpretValueKind::FloatBits(_)) => Ok(()),
+        (Ty::F32, InterpretValueKind::FloatBits(bits)) if *bits <= u64::from(u32::MAX) => Ok(()),
+        // WS2.15: a binary16 result is its 16-bit pattern in the low bits.
+        (Ty::F16, InterpretValueKind::FloatBits(bits)) if *bits <= u64::from(u16::MAX) => Ok(()),
+        (Ty::Bool | Ty::Unit | Ty::F16 | Ty::F32 | Ty::F64, _) => Err(malformed()),
+        (Ty::Handle(_), InterpretValueKind::Handle { id }) => {
+            host.recorded(*id, &value.ty).map_err(|error| {
+                err(
+                    error.code,
+                    block,
+                    format!("host result {index}: {}", error.message),
+                )
+            })?;
+            Ok(())
+        }
+        (Ty::Handle(_), _) => Err(malformed()),
+        _ => Err(err(
+            InterpretErrorCode::UnsupportedCall,
+            block,
+            format!(
+                "host result {index} has type {declared}, which a host model may not return: \
+                 a host has no access to interpreter memory or aggregates, so only integer, \
+                 bool, f32/f64, unit and handle results are admitted"
+            ),
+        )),
+    }
+}
+
+/// The first runtime handle inside `value` (WS2.12): a value whose payload is
+/// a `Handle` OR whose type is `Ty::Handle`, searching every nested value.
+fn first_handle(value: &InterpretValue) -> Option<&InterpretValue> {
+    if matches!(value.ty, Ty::Handle(_)) {
+        return Some(value);
+    }
+    match &value.kind {
+        InterpretValueKind::Handle { .. } => Some(value),
+        // Each distinct stored value once (O(nodes)), never each element.
+        InterpretValueKind::Array(values)
+        | InterpretValueKind::Vector(values)
+        | InterpretValueKind::Sequence(values)
+        | InterpretValueKind::Set(values) => {
+            match values.try_for_each_stored(|value| match first_handle(value) {
+                Some(handle) => core::ops::ControlFlow::Break(handle),
+                None => core::ops::ControlFlow::Continue(()),
+            }) {
+                core::ops::ControlFlow::Break(handle) => Some(handle),
+                core::ops::ControlFlow::Continue(()) => None,
+            }
+        }
+        InterpretValueKind::Aggregate(values)
+        | InterpretValueKind::Closure {
+            captures: values, ..
+        } => values.iter().find_map(first_handle),
+        InterpretValueKind::Record(fields) => {
+            fields.iter().find_map(|(_, value)| first_handle(value))
+        }
+        InterpretValueKind::FatPtr { data, metadata } => {
+            first_handle(data).or_else(|| first_handle(metadata))
+        }
+        InterpretValueKind::Frame { slots, .. } => slots.iter().flatten().find_map(first_handle),
+        InterpretValueKind::Int(_)
+        | InterpretValueKind::FloatBits(_)
+        | InterpretValueKind::Bool(_)
+        | InterpretValueKind::Ptr(_)
+        | InterpretValueKind::FnDef(_)
+        | InterpretValueKind::PhantomData
+        | InterpretValueKind::NullPtr
+        | InterpretValueKind::Unit
+        | InterpretValueKind::PartialBytes(_)
+        | InterpretValueKind::DanglingPtr(_)
+        // Crystal lane (E3b): an unwritten lane holds no value, so no handle.
+        | InterpretValueKind::Uninit => None,
+    }
+}
+
+/// A runtime handle is transport-only (WS2.12): refuse it as the operand of
+/// `op`, which would place it inside an aggregate or a binding frame, give it
+/// a memory image, or reinterpret it by a cast.
+fn reject_handle(value: &InterpretValue, block: BlockId, op: &str) -> InterpretResult<()> {
+    if let InterpretValueKind::Handle { .. } = value.kind {
+        Err(type_error(
+            block,
+            format!(
+                "{op}: a runtime handle ({}) is transport-only (copy, select, branch, call, \
+                 return): it cannot be placed in an aggregate or a binding frame, stored to \
+                 memory, or cast",
+                value.ty
+            ),
+        ))
+    } else {
+        Ok(())
+    }
 }
 
 fn ensure_call_depth(block: BlockId, call_depth: u64) -> InterpretResult<()> {
@@ -5591,11 +9885,34 @@ fn expect_pointer(
     }
 }
 
-/// Extract the binding-frame id from an `OpenFrame` handle value.
-fn expect_frame(value: &InterpretValue, block: BlockId) -> InterpretResult<u64> {
+/// The `OpenFrame` / `BindSlot` result handle: lineage `lineage`, holding
+/// the slot snapshot `slots`.
+///
+/// Typed `Ty::Ptr`, the type every other party gives these results
+/// (`bridge.rs` `InstrNode::result_tys`, the validator's `value_type`, the
+/// `inst.rs` "frame-handle SSA value of type `Ptr`" discipline), so a handle
+/// crosses a `Ptr` block parameter — the documented loop-carried quantifier
+/// lowering — exactly as the validator admits. The handle was once typed
+/// `Ty::Unit`, which made every such edge a `TypeError` here ("expected
+/// value of type ptr, got ()") on a module that validated. The KIND stays
+/// `Frame`: it is still not a pointer to any interpreter operation that
+/// dereferences, compares or stores one (`expect_pointer`, `encode_image`).
+fn frame_handle(lineage: u64, slots: Arc<[Option<InterpretValue>]>) -> InterpretValue {
+    InterpretValue {
+        ty: Ty::Ptr,
+        kind: InterpretValueKind::Frame { lineage, slots },
+    }
+}
+
+/// Extract the lineage and slot snapshot from an `OpenFrame` / `BindSlot`
+/// handle value.
+fn expect_frame(
+    value: &InterpretValue,
+    block: BlockId,
+) -> InterpretResult<(u64, Arc<[Option<InterpretValue>]>)> {
     reject_partial(value, block, "frame handle use")?;
-    match value.kind {
-        InterpretValueKind::Frame(id) => Ok(id),
+    match &value.kind {
+        InterpretValueKind::Frame { lineage, slots } => Ok((*lineage, Arc::clone(slots))),
         _ => Err(type_error(
             block,
             format!("expected a binding-frame handle, got {}", value.ty),
@@ -5603,14 +9920,30 @@ fn expect_frame(value: &InterpretValue, block: BlockId) -> InterpretResult<u64> 
     }
 }
 
+/// [`expect_frame`] on the value `frame`, additionally requiring that the
+/// handle's lineage is still OPEN (a use after `CloseFrame` through ANY handle
+/// of the lineage is UB).
+fn expect_open_frame(
+    state: &ExecState,
+    block: BlockId,
+    frame: ValueId,
+    op: &str,
+) -> InterpretResult<(u64, Arc<[Option<InterpretValue>]>)> {
+    let (lineage, slots) = expect_frame(state.value(block, frame)?, block)?;
+    if !state.frames.contains(&lineage) {
+        return Err(ub(block, format!("{op}: frame is not open")));
+    }
+    Ok((lineage, slots))
+}
+
 fn expect_vector_lanes(
     value: &InterpretValue,
     lanes: u32,
     block: BlockId,
-) -> InterpretResult<&[InterpretValue]> {
+) -> InterpretResult<&ArrayValue> {
     reject_partial(value, block, "vector use")?;
     match &value.kind {
-        InterpretValueKind::Vector(values) if values.len() == lanes as usize => Ok(values),
+        InterpretValueKind::Vector(values) if values.len() == u64::from(lanes) => Ok(values),
         InterpretValueKind::Vector(values) => Err(err(
             InterpretErrorCode::UnsupportedVectorShape,
             block,
@@ -5661,12 +9994,58 @@ fn byte_ranges_overlap(a_offset: u64, a_size: u64, b_offset: u64, b_size: u64) -
     a_offset < b_end && b_offset < a_end
 }
 
+/// A nominal or table-indexed type on the current layout path — the interpreter
+/// twin of `shape`'s struct / enum / `TyId` visiting sets. See
+/// `Interpreter::with_layout_visit` (roadmap WS2.4, F-045).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LayoutVisit {
+    Struct(StructId),
+    Enum(EnumId),
+    Ty(TyId),
+}
+
 /// Computed C-style layout of a `Ty::Struct`: total size, alignment, and the
 /// `(byte offset, field type)` of each field in declaration order.
 struct StructLayout {
     size: u64,
     align: u64,
     field_offsets: Vec<(u64, Ty)>,
+}
+
+/// Logical enum information for register values, independent of whether any
+/// variant has a byte layout. Physical encoding remains `EnumLayout`'s job.
+struct EnumRegisterShape<'m> {
+    module: &'m Module,
+    definition: &'m crate::ty::EnumDef,
+    tag_ty: Ty,
+    discriminants: Vec<i128>,
+}
+
+impl EnumRegisterShape<'_> {
+    fn variant_by_discriminant(&self, disc: i128) -> Option<usize> {
+        self.discriminants.iter().position(|d| *d == disc)
+    }
+
+    fn refuse_uninhabited(
+        &self,
+        variant_idx: usize,
+        ty: &Ty,
+        op: &str,
+        block: BlockId,
+    ) -> InterpretResult<()> {
+        if let Some(variant) = self.definition.variants.get(variant_idx) {
+            let mut inhabit = crate::inhabit::InhabitMemo::default();
+            if inhabit.variant_is_uninhabited(self.module, variant) {
+                return Err(type_error(
+                    block,
+                    format!(
+                        "{op}: enum {ty} variant {variant_idx} is uninhabited; no value of it exists"
+                    ),
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Computed canonical tagged-union layout of a `Ty::Enum` (byte units). See
@@ -5689,6 +10068,10 @@ struct EnumLayout {
     variant_field_offsets: Vec<Vec<(u64, Ty)>>,
     /// Encoding of the enum's byte image.
     byte_view: EnumByteView,
+    /// WS3.14: per variant, whether it is uninhabited
+    /// (`Module::variant_is_uninhabited`). No value of such a variant exists,
+    /// so neither direction of the byte funnel may produce or accept one.
+    uninhabited_variants: Vec<bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -5716,6 +10099,34 @@ impl EnumLayout {
     /// The variant index whose effective discriminant equals `disc`.
     fn variant_by_discriminant(&self, disc: i128) -> Option<usize> {
         self.discriminants.iter().position(|d| *d == disc)
+    }
+
+    /// WS3.14: refuse `variant_idx` when it is uninhabited. An uninhabited
+    /// variant has no value, so a Store of one or a Load of a byte image that
+    /// names one (a direct tag equal to its discriminant, or a niche value in
+    /// its slot of the interval) is an invalid value, never a variant to
+    /// materialize.
+    fn refuse_uninhabited(
+        &self,
+        variant_idx: usize,
+        ty: &Ty,
+        op: &str,
+        block: BlockId,
+    ) -> InterpretResult<()> {
+        if self
+            .uninhabited_variants
+            .get(variant_idx)
+            .copied()
+            .unwrap_or(false)
+        {
+            return Err(type_error(
+                block,
+                format!(
+                    "{op}: enum {ty} variant {variant_idx} is uninhabited; no value of it exists"
+                ),
+            ));
+        }
+        Ok(())
     }
 }
 
@@ -5773,7 +10184,7 @@ fn runtime_index(value: &InterpretValue, block: BlockId) -> InterpretResult<usiz
     })
 }
 
-fn eval_int_binop(
+pub(crate) fn eval_int_binop(
     op: BinOp,
     lhs: InterpretInt,
     rhs: InterpretInt,
@@ -5848,13 +10259,20 @@ fn eval_int_binop(
             let amount = shift_amount(rhs, lhs.bits, block)?;
             (lhs.as_signed() >> amount) as u128
         }
+        // WS3.20 rotates: TOTAL. The amount is reduced modulo the width (Rust
+        // `rotate_left`, LLVM `fshl(x, x, n)`), so unlike the shifts there is
+        // no out-of-range poison. `rotate_at_width` masks to `bits` itself.
+        // MUST agree with `semIntBinOp .RotL/.RotR` (Arith.lean).
+        BinOp::RotL => rotate_at_width(lhs.raw, lhs.bits, rhs.raw, true),
+        BinOp::RotR => rotate_at_width(lhs.raw, lhs.bits, rhs.raw, false),
         BinOp::FAdd
         | BinOp::FSub
         | BinOp::FMul
         | BinOp::FDiv
         | BinOp::FRem
         | BinOp::FMin
-        | BinOp::FMax => {
+        | BinOp::FMax
+        | BinOp::FCopySign => {
             return Err(err(
                 InterpretErrorCode::UnsupportedInstruction,
                 block,
@@ -5871,14 +10289,14 @@ fn eval_int_binop(
 
 fn eval_bool_binop(op: BinOp, lhs: bool, rhs: bool, block: BlockId) -> InterpretResult<bool> {
     match op {
-        BinOp::And => Ok(lhs & rhs),
+        BinOp::And => Ok(scalar_bool::conjunction(lhs, rhs)),
         BinOp::Or => Ok(lhs | rhs),
         BinOp::Xor => Ok(lhs ^ rhs),
         // The dedicated boolean connectives. WITHOUT these arms the catch-all
         // below would reject them on precisely the type they exist for: the
         // validator requires `BAnd`/`BOr`/`BXor` to be Bool-typed, so every
         // well-typed use would land in the error branch.
-        BinOp::BAnd => Ok(lhs & rhs),
+        BinOp::BAnd => Ok(scalar_bool::conjunction(lhs, rhs)),
         BinOp::BOr => Ok(lhs | rhs),
         BinOp::BXor => Ok(lhs ^ rhs),
         _ => Err(type_error(
@@ -5888,12 +10306,27 @@ fn eval_bool_binop(op: BinOp, lhs: bool, rhs: bool, block: BlockId) -> Interpret
     }
 }
 
-fn eval_int_unop(op: UnOp, value: InterpretInt, block: BlockId) -> InterpretResult<InterpretInt> {
+pub(crate) fn eval_int_unop(
+    op: UnOp,
+    value: InterpretInt,
+    block: BlockId,
+) -> InterpretResult<InterpretInt> {
     let mask = int_mask(value.bits).expect("validated integer width");
     let raw = match op {
         UnOp::Neg => 0u128.wrapping_sub(value.raw),
         UnOp::Not => !value.raw,
         UnOp::CtPop => u128::from(value.raw.count_ones()),
+        // WS3.20 bit intrinsics (F-057). All TOTAL at the operand width, and
+        // each MUST agree with its `semIntUnOp` arm in Arith.lean:
+        //   ctlz 0 = cttz 0 = width (the one spelling: no poison operand);
+        //   bswap reverses the width/8 bytes (identity at 8 bits);
+        //   bitreverse reverses all `width` bits.
+        // `value.raw` is already masked to `bits`, so the high `128 - bits`
+        // bits are zero and the leading-zero count is shifted by them.
+        UnOp::CtLz => u128::from(value.raw.leading_zeros() - (128 - value.bits)),
+        UnOp::CtTz => u128::from(value.raw.trailing_zeros().min(value.bits)),
+        UnOp::BSwap => value.raw.swap_bytes() >> (128 - value.bits),
+        UnOp::BitReverse => value.raw.reverse_bits() >> (128 - value.bits),
         UnOp::FNeg => {
             return Err(err(
                 InterpretErrorCode::UnsupportedInstruction,
@@ -5944,7 +10377,7 @@ fn eval_int_unop(op: UnOp, value: InterpretInt, block: BlockId) -> InterpretResu
     })
 }
 
-fn eval_int_overflow(
+pub(crate) fn eval_int_overflow(
     op: OverflowOp,
     lhs: InterpretInt,
     rhs: InterpretInt,
@@ -5975,7 +10408,7 @@ fn eval_int_overflow(
     Ok((result, overflow))
 }
 
-fn eval_int_icmp(op: ICmpOp, lhs: InterpretInt, rhs: InterpretInt) -> bool {
+pub(crate) fn eval_int_icmp(op: ICmpOp, lhs: InterpretInt, rhs: InterpretInt) -> bool {
     match op {
         ICmpOp::Eq => lhs.raw == rhs.raw,
         ICmpOp::Ne => lhs.raw != rhs.raw,
@@ -6023,6 +10456,9 @@ fn eval_float_binop(
                 BinOp::FRem => lhs % rhs,
                 BinOp::FMin => lhs.min(rhs),
                 BinOp::FMax => lhs.max(rhs),
+                // WS3.20: IEEE copySign — exact, quiet, sign bit of `rhs`
+                // (a NaN keeps its payload). Same execution status as `FNeg`.
+                BinOp::FCopySign => lhs.copysign(rhs),
                 _ => {
                     return Err(type_error(
                         block,
@@ -6043,6 +10479,7 @@ fn eval_float_binop(
                 BinOp::FRem => lhs % rhs,
                 BinOp::FMin => lhs.min(rhs),
                 BinOp::FMax => lhs.max(rhs),
+                BinOp::FCopySign => lhs.copysign(rhs),
                 _ => {
                     return Err(type_error(
                         block,
@@ -6052,8 +10489,161 @@ fn eval_float_binop(
             };
             Ok(value.to_bits())
         }
-        Ty::F16 => Err(unsupported_float(block, "f16 arithmetic is not executable")),
+        // WS2.15: binary16 arithmetic, computed in binary32 and rounded ONCE
+        // to binary16. This is the exact IEEE binary16 result, not an
+        // approximation: binary32 carries 24 significand bits and 24 >= 2*11
+        // + 2, so for `+ - * /` the binary32 rounding of the exact result
+        // never lands on a binary16 rounding boundary it was not already on
+        // (Figueroa's innocuous double rounding, the same argument
+        // `docs/ub-numerics-policy.md` §2 makes for the f32-in-f64 case in
+        // reverse). `FRem` is exact in the operands' format, so the binary32
+        // remainder of two binary16 values is already a binary16 value, and
+        // `FMin`/`FMax` return an operand. The final rounding is therefore
+        // the ONLY rounding, and `f16_cross_engine_table` (conformance
+        // `interpret_f16`) pins it at the overflow tie, the subnormal floor
+        // and the signed zeros. `FCopySign` (WS3.20) is a sign-bit
+        // operation on the binary16 pattern itself, exactly like `FNeg` /
+        // `FAbs` in `eval_float_unop`: no rounding, NaN payload kept.
+        Ty::F16 => {
+            if op == BinOp::FCopySign {
+                let magnitude = (lhs_bits as u16) & 0x7FFF;
+                let sign = (rhs_bits as u16) & 0x8000;
+                return Ok(u64::from(magnitude | sign));
+            }
+            let lhs = f16_bits_to_f32(lhs_bits);
+            let rhs = f16_bits_to_f32(rhs_bits);
+            let value = match op {
+                BinOp::FAdd => lhs + rhs,
+                BinOp::FSub => lhs - rhs,
+                BinOp::FMul => lhs * rhs,
+                BinOp::FDiv => lhs / rhs,
+                BinOp::FRem => lhs % rhs,
+                BinOp::FMin => lhs.min(rhs),
+                BinOp::FMax => lhs.max(rhs),
+                _ => {
+                    return Err(type_error(
+                        block,
+                        format!("integer binop {op} on float operands"),
+                    ));
+                }
+            };
+            Ok(u64::from(f64_to_f16_bits(f64::from(value))))
+        }
         _ => Err(type_error(block, format!("expected float type, got {ty}"))),
+    }
+}
+
+/// Widen a binary16 bit pattern (the low 16 bits of an `F16` value's
+/// `FloatBits`) to binary32, exactly.
+fn f16_bits_to_f32(bits: u64) -> f32 {
+    // Exact: every binary16 value (NaN payloads included, see
+    // `f16_bits_to_f64`) is a binary32 value.
+    f16_bits_to_f64(bits as u16) as f32
+}
+
+/// Decode an IEEE 754 binary16 bit pattern to the binary64 value it denotes
+/// (WS2.15). Exact for every pattern: binary16's 11-bit significand and
+/// exponent range `2^-24 ..= 65504` sit inside binary64's. A NaN keeps its
+/// sign, quiet bit and payload, left-aligned into the binary64 fraction (the
+/// compiler-rt `__extendhfsf2` shape), so `f64_to_f16_bits` recovers the
+/// same pattern.
+pub fn f16_bits_to_f64(bits: u16) -> f64 {
+    let negative = bits & 0x8000 != 0;
+    let exponent = (bits >> 10) & 0x1F;
+    let fraction = bits & 0x3FF;
+    let magnitude = match exponent {
+        // Subnormal (or zero): `fraction * 2^-24`, exact in binary64.
+        0 => f64::from(fraction) * 2f64.powi(-24),
+        0x1F if fraction == 0 => f64::INFINITY,
+        0x1F => {
+            let payload = u64::from(fraction) << (52 - 10);
+            return f64::from_bits((u64::from(negative) << 63) | (0x7FFu64 << 52) | payload);
+        }
+        // Normal: `(1 + fraction/2^10) * 2^(exponent - 15)`.
+        exponent => (1.0 + f64::from(fraction) / 1024.0) * 2f64.powi(i32::from(exponent) - 15),
+    };
+    if negative { -magnitude } else { magnitude }
+}
+
+/// Round a binary64 value to the nearest IEEE 754 binary16 bit pattern, ties
+/// to even, with gradual underflow and overflow to `±inf` (WS2.15). This is
+/// the ONE rounding every `F16` result takes; the arithmetic that feeds it
+/// (`eval_float_binop` / `eval_float_unop`) is exact or innocuously
+/// double-rounded, so the result is the correctly rounded binary16 value.
+///
+/// Integer arithmetic throughout (no host `f16` type is used): the binary64
+/// significand is shifted right to 11 bits with a round bit and a sticky bit,
+/// which is what makes the overflow tie observable — `65520` (the exact sum
+/// `65504 + 16`) lies halfway between `65504` (odd significand `0x7FF`) and
+/// `65536` (the first value past the format), so ties-to-even rounds it UP
+/// and the result is `+inf`, while `65512 = 65504 + 8` is below the halfway
+/// point and rounds DOWN to `65504`. A NaN keeps its sign, is quieted, and
+/// keeps the top ten payload bits (compiler-rt `__truncdfhf2`'s shape).
+pub fn f64_to_f16_bits(value: f64) -> u16 {
+    const F16_INFINITY: u16 = 0x7C00;
+    const F16_QUIET: u16 = 0x0200;
+    let bits = value.to_bits();
+    let sign = ((bits >> 63) as u16) << 15;
+    let exponent = ((bits >> 52) & 0x7FF) as i32;
+    let fraction = bits & ((1u64 << 52) - 1);
+    if exponent == 0x7FF {
+        if fraction == 0 {
+            return sign | F16_INFINITY;
+        }
+        let payload = (fraction >> (52 - 10)) as u16 & 0x3FF;
+        return sign | F16_INFINITY | F16_QUIET | payload;
+    }
+    if exponent == 0 {
+        // ±0, or a binary64 subnormal (below 2^-1022, so far below half the
+        // smallest binary16 subnormal 2^-25): rounds to the signed zero.
+        return sign;
+    }
+    // `value = significand * 2^(unbiased - 52)` with the implicit leading 1.
+    let significand = fraction | (1u64 << 52);
+    let unbiased = exponent - 1023;
+    if unbiased > 15 {
+        // `>= 2^16`, past the largest finite binary16 and past the overflow
+        // threshold 65520 by any margin.
+        return sign | F16_INFINITY;
+    }
+    if unbiased >= -14 {
+        // Normal range: keep 11 significand bits (drop 42), then renormalize
+        // a carry out of the top bit (`0x7FF` + 1 rounds to the next binade,
+        // and out of the format when that binade is `2^16`).
+        let (mut mantissa, mut binade) = (round_shift_rne(significand, 42), unbiased);
+        if mantissa == 1 << 11 {
+            mantissa >>= 1;
+            binade += 1;
+        }
+        if binade > 15 {
+            return sign | F16_INFINITY;
+        }
+        return sign | (((binade + 15) as u16) << 10) | (mantissa as u16 & 0x3FF);
+    }
+    // Subnormal range: the result is a whole number of 2^-24 units, so shift
+    // to that scale and round once. A shift past the 53-bit significand
+    // (`unbiased <= -26`, `value < 2^-25`) leaves nothing but the sticky bit,
+    // which rounds to zero; the `>= 64` guard only keeps the shift defined.
+    let shift = 28 - unbiased;
+    if shift >= 64 {
+        return sign;
+    }
+    // A carry into bit 10 is exactly the smallest normal (`0x0400`), which is
+    // the correct pattern for a subnormal that rounded up to `2^-14`.
+    sign | (round_shift_rne(significand, shift) as u16)
+}
+
+/// `significand >> shift`, rounded to nearest with ties to even, for
+/// `1 <= shift <= 63`.
+fn round_shift_rne(significand: u64, shift: i32) -> u64 {
+    debug_assert!((1..=63).contains(&shift));
+    let truncated = significand >> shift;
+    let remainder = significand & ((1u64 << shift) - 1);
+    let half = 1u64 << (shift - 1);
+    if remainder > half || (remainder == half && truncated & 1 == 1) {
+        truncated + 1
+    } else {
+        truncated
     }
 }
 
@@ -6101,7 +10691,31 @@ fn eval_float_unop(op: UnOp, ty: &Ty, operand_bits: u64, block: BlockId) -> Inte
             };
             Ok(value.to_bits())
         }
-        Ty::F16 => Err(unsupported_float(block, "f16 arithmetic is not executable")),
+        // WS2.15: `FNeg`/`FAbs` are sign-bit operations on the binary16
+        // pattern itself (IEEE 754 §5.5.1 — bit-exact, NaN payload kept).
+        // `FSqrt` is computed in binary32 and rounded once (24 >= 2*11 + 2,
+        // the same innocuous-double-rounding argument as `eval_float_binop`);
+        // `FFloor`/`FCeil`/`FTrunc` of a binary16 value are integers no larger
+        // than the operand's binade, so they are binary16 values already and
+        // the final rounding is the identity.
+        Ty::F16 => {
+            let bits = operand_bits as u16;
+            let value = match op {
+                UnOp::FNeg => return Ok(u64::from(bits ^ 0x8000)),
+                UnOp::FAbs => return Ok(u64::from(bits & 0x7FFF)),
+                UnOp::FSqrt => f16_bits_to_f32(operand_bits).sqrt(),
+                UnOp::FFloor => f16_bits_to_f32(operand_bits).floor(),
+                UnOp::FCeil => f16_bits_to_f32(operand_bits).ceil(),
+                UnOp::FTrunc => f16_bits_to_f32(operand_bits).trunc(),
+                _ => {
+                    return Err(type_error(
+                        block,
+                        format!("integer unary op {op} on float operand"),
+                    ));
+                }
+            };
+            Ok(u64::from(f64_to_f16_bits(f64::from(value))))
+        }
         _ => Err(type_error(block, format!("expected float type, got {ty}"))),
     }
 }
@@ -6124,9 +10738,13 @@ fn eval_float_fcmp(
             f64::from_bits(lhs_bits),
             f64::from_bits(rhs_bits),
         )),
-        Ty::F16 => Err(unsupported_float(
-            block,
-            "f16 comparisons are not executable",
+        // WS2.15: the ordered/unordered predicates compare VALUES, and the
+        // binary32 widening is exact, so the binary32 comparison is the
+        // binary16 one (NaN-ness included).
+        Ty::F16 => Ok(eval_fcmp_f32(
+            op,
+            f16_bits_to_f32(lhs_bits),
+            f16_bits_to_f32(rhs_bits),
         )),
         _ => Err(type_error(block, format!("expected float type, got {ty}"))),
     }
@@ -6172,10 +10790,11 @@ fn float_bits_from_f64(ty: &Ty, value: f64, block: BlockId) -> InterpretResult<u
     match ty {
         Ty::F32 => Ok(u64::from((value as f32).to_bits())),
         Ty::F64 => Ok(value.to_bits()),
-        Ty::F16 => Err(unsupported_float(
-            block,
-            "f16 constants require an explicit half-precision codec",
-        )),
+        // WS2.15: a `Constant::Float(f64)` at `F16` (the codec's carrier for
+        // every float width) and an `FPTrunc` into `F16` both narrow the
+        // binary64 value with one RNE rounding. `FPTrunc` from `F32` widens
+        // exactly first, so it is a single rounding too.
+        Ty::F16 => Ok(u64::from(f64_to_f16_bits(value))),
         _ => Err(type_error(block, format!("expected float type, got {ty}"))),
     }
 }
@@ -6184,10 +10803,9 @@ fn float_bits_from_raw(ty: &Ty, raw: u128, block: BlockId) -> InterpretResult<u6
     match ty {
         Ty::F32 => Ok((raw as u32) as u64),
         Ty::F64 => Ok(raw as u64),
-        Ty::F16 => Err(unsupported_float(
-            block,
-            "f16 bitcasts require an explicit half-precision codec",
-        )),
+        // WS2.15: a `Bitcast` into `F16` reinterprets the low 16 bits as the
+        // binary16 pattern, exactly as the `F32` arm takes the low 32.
+        Ty::F16 => Ok(u64::from(raw as u16)),
         _ => Err(type_error(block, format!("expected float type, got {ty}"))),
     }
 }
@@ -6196,10 +10814,10 @@ fn float_as_f64(ty: &Ty, bits: u64, block: BlockId) -> InterpretResult<f64> {
     match ty {
         Ty::F32 => Ok(f32::from_bits(bits as u32) as f64),
         Ty::F64 => Ok(f64::from_bits(bits)),
-        Ty::F16 => Err(unsupported_float(
-            block,
-            "f16 casts require an explicit half-precision codec",
-        )),
+        // WS2.15: exact (every binary16 value is a binary64 value), so an
+        // `FPExt` out of `F16` and a float->int cast from `F16` see the value
+        // itself.
+        Ty::F16 => Ok(f16_bits_to_f64(bits as u16)),
         _ => Err(type_error(block, format!("expected float type, got {ty}"))),
     }
 }
@@ -6258,6 +10876,22 @@ fn signed_div_overflows(bits: u32, lhs: i128, rhs: i128) -> bool {
     lhs == min && rhs == -1
 }
 
+/// Rotate the low `bits` bits of `value` by `amount % bits` positions
+/// (left when `left`, else right). Total: the amount is reduced modulo the
+/// width, and the result is masked to `bits`. The bit-level definition is the
+/// one `semIntBinOp .RotL/.RotR` (Arith.lean) states:
+/// `rotl(x, n) = (x << n | x >> (w - n)) mod 2^w` with `n = amount mod w`.
+fn rotate_at_width(value: u128, bits: u32, amount: u128, left: bool) -> u128 {
+    let mask = int_mask(bits).expect("validated integer width");
+    let value = value & mask;
+    let n = (amount % u128::from(bits)) as u32;
+    if n == 0 {
+        return value;
+    }
+    let (hi_shift, lo_shift) = if left { (n, bits - n) } else { (bits - n, n) };
+    ((value << hi_shift) | (value >> lo_shift)) & mask
+}
+
 fn shift_amount(rhs: InterpretInt, bits: u32, block: BlockId) -> InterpretResult<u32> {
     if rhs.raw >= u128::from(bits) {
         return Err(ub(
@@ -6271,7 +10905,157 @@ fn shift_amount(rhs: InterpretInt, bits: u32, block: BlockId) -> InterpretResult
     Ok(rhs.raw as u32)
 }
 
+thread_local! {
+    /// The pointer width of the execution running on this thread (WS2.16).
+    /// `int_shape` is a free function reached from value constructors that
+    /// carry no interpreter handle (`InterpretValue::int`, host-result
+    /// checks, enum tag synthesis), so the width of `Isize`/`Usize` is read
+    /// from here. Outside any execution it is the 64-bit reference width, so
+    /// every pre-WS2.16 path (and every 64-bit run) is byte-identical.
+    static EXEC_POINTER_BITS: core::cell::Cell<u32> =
+        const { core::cell::Cell::new(crate::shape::DEFAULT_POINTER_BITS) };
+}
+
+/// Sets [`EXEC_POINTER_BITS`] for the lifetime of one execution and restores
+/// the enclosing value on drop, so a host model that re-enters another
+/// interpreter (on another module, at another width) cannot leak its width
+/// into the caller's run.
+struct PointerWidthScope {
+    previous: u32,
+}
+
+impl PointerWidthScope {
+    fn enter(pointer_bits: u32) -> Self {
+        Self {
+            previous: EXEC_POINTER_BITS.with(|bits| bits.replace(pointer_bits)),
+        }
+    }
+}
+
+impl Drop for PointerWidthScope {
+    fn drop(&mut self) {
+        EXEC_POINTER_BITS.with(|bits| bits.set(self.previous));
+    }
+}
+
+/// The highest address a `pointer_bits`-wide pointer can name.
+fn max_address_for(pointer_bits: u32) -> u64 {
+    if pointer_bits >= 64 {
+        u64::MAX
+    } else {
+        (1u64 << pointer_bits) - 1
+    }
+}
+
+/// Validate stored integer carriers and re-express pointer-width integers at
+/// `pointer_bits`, or explain why they do not fit. This is the existing sparse
+/// entry-argument walk, not a new per-instruction/deep-value validation pass.
+fn narrow_pointer_width_ints(
+    value: &mut InterpretValue,
+    pointer_bits: u32,
+    block: BlockId,
+    char_allowed: bool,
+) -> InterpretResult<()> {
+    let malformed = |message: String| type_error(block, format!("entry argument: {message}"));
+    if let Some((bits, signed)) = int_shape_at(&value.ty, pointer_bits) {
+        // Leave poison and unminted handles to the existing ownership/use
+        // guards, which retain their UndefinedBehavior precedence. A stored
+        // integer is checked before ANY signed decode, shift or mask.
+        if matches!(
+            value.kind,
+            InterpretValueKind::PartialBytes(_)
+                | InterpretValueKind::Uninit
+                | InterpretValueKind::Handle { .. }
+        ) {
+            return Ok(());
+        }
+        let InterpretValueKind::Int(int) = &value.kind else {
+            return Err(malformed(format!(
+                "{} value has no integer payload",
+                value.ty
+            )));
+        };
+        let pointer_sized = matches!(value.ty, Ty::Isize | Ty::Usize);
+        // Pointer-width entry integers are self-described at their source
+        // width; fixed-width integers must already match their nominal type.
+        let stored_bits = if pointer_sized { int.bits } else { bits };
+        if !integer_carrier_matches(int, stored_bits, signed) {
+            return Err(malformed(format!(
+                "malformed {} integer payload: {} bits, signed={}, raw={}",
+                value.ty, int.bits, int.signed, int.raw
+            )));
+        }
+        if value.ty == Ty::Char && !char_allowed {
+            return Err(malformed(
+                "Char payload is not declared by this entry parameter".into(),
+            ));
+        }
+        check_char_validity(value, block)?;
+        if pointer_sized && int.bits != pointer_bits {
+            let fits = if signed {
+                let (lo, hi) = signed_bounds(pointer_bits);
+                (lo..=hi).contains(&int.as_signed())
+            } else {
+                int_mask(pointer_bits).is_some_and(|mask| int.raw <= mask)
+            };
+            // An unsigned source's top bit is NOT a sign bit. In particular
+            // u32::MAX must widen to 4294967295, never u64::MAX.
+            let resized = if signed {
+                InterpretInt::from_i128(pointer_bits, true, int.as_signed())
+            } else {
+                InterpretInt::from_raw(pointer_bits, false, int.raw)
+            };
+            let narrowed = resized.filter(|_| fits).ok_or_else(|| {
+                malformed(format!(
+                    "{} value {} does not fit the target's {pointer_bits}-bit pointer width",
+                    value.ty,
+                    if signed {
+                        int.as_signed().to_string()
+                    } else {
+                        int.raw.to_string()
+                    }
+                ))
+            })?;
+            value.kind = InterpretValueKind::Int(narrowed);
+        }
+        return Ok(());
+    }
+    match &mut value.kind {
+        // Each stored node once: O(nodes), never O(len).
+        InterpretValueKind::Array(items)
+        | InterpretValueKind::Vector(items)
+        | InterpretValueKind::Sequence(items)
+        | InterpretValueKind::Set(items) => {
+            *items = items.try_map(|item| {
+                let mut item = item.clone();
+                narrow_pointer_width_ints(&mut item, pointer_bits, block, char_allowed)
+                    .map(|()| item)
+            })?;
+            Ok(())
+        }
+        InterpretValueKind::Aggregate(items)
+        | InterpretValueKind::Closure {
+            captures: items, ..
+        } => items.iter_mut().try_for_each(|item| {
+            narrow_pointer_width_ints(item, pointer_bits, block, char_allowed)
+        }),
+        InterpretValueKind::Record(fields) => fields.iter_mut().try_for_each(|(_, item)| {
+            narrow_pointer_width_ints(item, pointer_bits, block, char_allowed)
+        }),
+        InterpretValueKind::FatPtr { data, metadata } => {
+            narrow_pointer_width_ints(data, pointer_bits, block, char_allowed)?;
+            narrow_pointer_width_ints(metadata, pointer_bits, block, char_allowed)
+        }
+        _ => Ok(()),
+    }
+}
+
 fn int_shape(ty: &Ty) -> Option<(u32, bool)> {
+    int_shape_at(ty, EXEC_POINTER_BITS.with(core::cell::Cell::get))
+}
+
+/// [`int_shape`] at an explicit pointer width.
+fn int_shape_at(ty: &Ty, pointer_bits: u32) -> Option<(u32, bool)> {
     match ty {
         Ty::I8 => Some((8, true)),
         Ty::I16 => Some((16, true)),
@@ -6283,14 +11067,13 @@ fn int_shape(ty: &Ty) -> Option<(u32, bool)> {
         Ty::U32 => Some((32, false)),
         Ty::U64 => Some((64, false)),
         Ty::U128 => Some((128, false)),
-        // v25 B1 scalars: the reference interpreter models the 64-bit
-        // targets (the same fixed pointer width the fat-pointer len word and
-        // trust-mc's HOST_POINTER_BITS use), so pointer-width integers
-        // execute at 64 bits. Char is a 32-bit unsigned carrier; its
-        // 0..=0x10FFFF valid range is the VALIDATOR's claim to check, not an
-        // arithmetic property.
-        Ty::Isize => Some((64, true)),
-        Ty::Usize => Some((64, false)),
+        // v25 B1 scalars: pointer-width integers execute at the running
+        // target's pointer width (WS2.16: 64 on the reference target and
+        // every 64-bit canonical target, 32 on wasm32). Char is a 32-bit
+        // unsigned carrier; its 0..=0x10FFFF valid range is the VALIDATOR's
+        // claim to check, not an arithmetic property.
+        Ty::Isize => Some((pointer_bits, true)),
+        Ty::Usize => Some((pointer_bits, false)),
         Ty::Char => Some((32, false)),
         _ => None,
     }
@@ -6306,13 +11089,11 @@ fn is_pointer_like_ty(ty: &Ty) -> bool {
 /// Low-`bits`-set mask for an integer width, or `None` for `bits == 0` or
 /// `bits > 128`.
 ///
-/// PRECONDITION for the `int_mask(..).expect("validated integer width")` call
-/// sites: `bits` originates from `IntValue` (`from_i128`/`from_raw`), whose
-/// width is one of the closed set {8, 16, 32, 64, 128} taken from the `Ty`
-/// integer variants via `int_shape`. For every value in that set this returns
-/// `Some`, so the `expect`s are unreachable today — they guard against a future
-/// width being added to `IntValue` without an `int_mask` arm, turning a silent
-/// wrong-mask into a loud panic.
+/// Internal decoding requires a validated width: constructors check this,
+/// host returns use `integer_payload_matches`, and external entry carriers
+/// pass `integer_carrier_matches` before any decode, then the Char UB guard.
+/// Pointer source widths remain self-described in 1..=128; fixed-width carriers must match their nominal Ty.
+/// Public InterpretInt fields by themselves do not establish this invariant.
 fn int_mask(bits: u32) -> Option<u128> {
     match bits {
         1..=127 => Some((1u128 << bits) - 1),
@@ -6360,10 +11141,6 @@ fn vector_dialect_error(
     }
 }
 
-fn unsupported_float(block: BlockId, message: impl Into<String>) -> InterpretError {
-    err(InterpretErrorCode::UnsupportedFloat, block, message)
-}
-
 fn invalid_function_pointer(block: BlockId, message: impl Into<String>) -> InterpretError {
     err(InterpretErrorCode::InvalidFunctionPointer, block, message)
 }
@@ -6376,13 +11153,30 @@ fn ub(block: BlockId, message: impl Into<String>) -> InterpretError {
     err(InterpretErrorCode::UndefinedBehavior, block, message)
 }
 
+/// `(p1, p2) -> (r1)` rendering of a signature for diagnostics.
+fn format_sig(sig: &FuncTy) -> String {
+    let list = |tys: &[Ty]| {
+        tys.iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(", ")
+    };
+    format!(
+        "({}{}) -> ({})",
+        list(&sig.params),
+        if sig.is_vararg { ", ..." } else { "" },
+        list(&sig.returns)
+    )
+}
+
 /// The set of load result types that participate in copy-propagates-poison: a
 /// non-strict load of one of these whose byte range has an uninitialized byte
 /// yields a `PartialBytes` transport value instead of faulting. These are the
-/// SCALAR types `decode_value` turns into a single runtime value (integers,
+/// SCALAR types `decode_leaf` turns into a single runtime value (integers,
 /// floats, bool, and thin pointers). Aggregates and fat pointers are excluded —
-/// their loads keep the strict discipline (a decode only touches live field
-/// bytes, and an uninitialized field byte stays undefined behaviour).
+/// their loads require every COVERED byte (WS2.14, `first_uninit_covered`): a
+/// decode only touches live field bytes, padding is don't-care, and an
+/// uninitialized field byte stays undefined behaviour.
 fn partial_load_ty(ty: &Ty) -> bool {
     matches!(
         ty,
@@ -6412,15 +11206,16 @@ fn partial_load_ty(ty: &Ty) -> bool {
     )
 }
 
-/// The undefined-behaviour error raised when a partially-initialized (poison)
-/// value is INSPECTED rather than merely transported. `op` names the true use
-/// site (the arithmetic/comparison/cast/branch/call that consumed it).
+/// The undefined-behaviour error raised when a poison value (a partially-
+/// initialized load, `Undef`, or an unbound `LoadSlot`) is INSPECTED rather
+/// than merely transported. `op` names the true use site (the
+/// arithmetic/comparison/cast/branch/call that consumed it).
 fn reject_partial_error(block: BlockId, op: &str) -> InterpretError {
     ub(
         block,
         format!(
-            "{op}: use of an uninitialized value — a load read uninitialized bytes \
-             (poison); poison may only be copied or stored, never inspected"
+            "{op}: use of an uninitialized value — poison (uninitialized bytes, \
+             `undef`, or an unbound slot) may only be copied or stored, never inspected"
         ),
     )
 }
@@ -6429,15 +11224,424 @@ fn reject_partial_error(block: BlockId, op: &str) -> InterpretError {
 /// content-inspecting operation gates on this so the undefined behaviour is
 /// reported at the true use site, not silently miscomputed.
 fn reject_partial(value: &InterpretValue, block: BlockId, op: &str) -> InterpretResult<()> {
-    if let InterpretValueKind::PartialBytes(_) = value.kind {
-        Err(reject_partial_error(block, op))
+    match value.kind {
+        InterpretValueKind::PartialBytes(_) => Err(reject_partial_error(block, op)),
+        // Crystal lane (E3b): an unwritten lane is never a value of its own. No instruction can bind
+        // one (`ExtractField` of it is UB), so this arm is a defence in depth, not a path.
+        InterpretValueKind::Uninit => Err(ub(
+            block,
+            format!("{op}: use of an unwritten aggregate lane (uninit) as a value"),
+        )),
+        _ => Ok(()),
+    }
+}
+
+/// Crystal lane (E3b): `Constant::Uninit` may stand ONLY as a direct lane of a `Ty::Struct` /
+/// `Ty::Tuple` aggregate constant of an `Inst::Const` -- trust-ir-build's placement rule,
+/// mirrored fail-closed so an unvalidated module cannot reach the lane conversion with one
+/// anywhere else (as the whole constant, one aggregate deeper, or under any other type).
+fn check_uninit_lane_placement(ty: &Ty, value: &Constant, block: BlockId) -> InterpretResult<()> {
+    let direct_lanes: &[Constant] = match (ty, value) {
+        (Ty::Struct(_) | Ty::Tuple(_), Constant::Aggregate(lanes)) => lanes,
+        _ => &[],
+    };
+    let misplaced = if direct_lanes.is_empty() {
+        constant_mentions_uninit(value)
+    } else {
+        direct_lanes
+            .iter()
+            .any(|lane| !matches!(lane, Constant::Uninit) && constant_mentions_uninit(lane))
+    };
+    if misplaced {
+        Err(type_error(
+            block,
+            format!(
+                "Const: `uninit` may stand only as a direct lane of a struct/tuple aggregate \
+                 constant; {ty} constant {value:?} carries one elsewhere"
+            ),
+        ))
     } else {
         Ok(())
     }
 }
 
+/// True iff `constant` or any descendant is `Constant::Uninit`.
+fn constant_mentions_uninit(constant: &Constant) -> bool {
+    constant
+        .try_visit_constants(|c| {
+            if matches!(c, Constant::Uninit) {
+                core::ops::ControlFlow::Break(())
+            } else {
+                core::ops::ControlFlow::Continue(())
+            }
+        })
+        .is_break()
+}
+
+/// True iff `value` is an aggregate that carries an unwritten lane at any depth.
+fn value_carries_uninit_lane(value: &InterpretValue) -> bool {
+    match &value.kind {
+        InterpretValueKind::Uninit => true,
+        InterpretValueKind::Aggregate(lanes) => lanes.iter().any(value_carries_uninit_lane),
+        _ => false,
+    }
+}
+
 fn err(code: InterpretErrorCode, block: BlockId, message: impl Into<String>) -> InterpretError {
     InterpretError::new(code, message).with_block(block)
+}
+
+/// The glue a drop at `ty` runs (amendment D, §20 rule 2): the one drop-glue
+/// row whose key equals `ty`. With no module there is no table
+/// (`UnsupportedInstruction`, deliberately not `module_context`'s
+/// `MissingFunction`, so it matches the Lean model's bare-step
+/// `unsupported.destructor`); with no row the drop is UNRESOLVED
+/// (`UnsupportedInstruction`, never a no-op); two rows can only occur in an
+/// unvalidated module (`MalformedInstruction`).
+fn resolve_drop_glue(
+    state: &ExecState,
+    block: BlockId,
+    op: &str,
+    ty: &Ty,
+) -> InterpretResult<FuncId> {
+    let Some(index) = state.drop_glue.as_ref() else {
+        return Err(err(
+            InterpretErrorCode::UnsupportedInstruction,
+            block,
+            format!("{op}: no module, so no drop-glue table"),
+        ));
+    };
+    match index.resolve(ty) {
+        crate::DropResolution::Resolved(glue) => Ok(glue),
+        crate::DropResolution::Unresolved => Err(err(
+            InterpretErrorCode::UnsupportedInstruction,
+            block,
+            format!(
+                "{op}: {ty} has no drop_glue row (an unresolved drop states no destructor and is \
+                 never run as a no-op)"
+            ),
+        )),
+        crate::DropResolution::Ambiguous => Err(err(
+            InterpretErrorCode::MalformedInstruction,
+            block,
+            format!("{op}: {ty} has more than one drop_glue row"),
+        )),
+    }
+}
+
+/// The panic a FAILED assert of `kind` raises (plan item P). The kind's
+/// operands are read only now, on failure, exactly as the Lean model reads
+/// them: each must be a non-poison integer (a validated module types them
+/// `usize`), and its unsigned value is what the message prints.
+/// §21 rule 3: allocate the exception object of a failed check's `error` (a
+/// fresh one-byte allocation, dead from birth, so every memory operation
+/// through it is UB by the existing rules), record it with the error, and
+/// return its address. Running out of address space here is a non-raise
+/// (`OutOfMemory`), never an unwinding.
+fn raise_exception(
+    state: &mut ExecState,
+    block: BlockId,
+    error: &InterpretError,
+) -> InterpretResult<u64> {
+    let pointer = state.memory.alloc(1, 1, block)?;
+    if let Some(allocation) = state.memory.allocations.get_mut(&pointer.allocation) {
+        allocation.alive = false;
+    }
+    let address = state.memory.address(pointer, block, "raise")?;
+    state
+        .unwind
+        .exceptions
+        .insert(address, (pointer, error.clone()));
+    Ok(address)
+}
+
+fn assert_panic(
+    state: &ExecState,
+    block: BlockId,
+    kind: &AssertKind,
+    site: Option<&PanicSite>,
+) -> InterpretResult<InterpretError> {
+    let operands = match (kind.operands(), kind.operand_roles()) {
+        (Some(ids), Some(roles)) => {
+            let mut values = [0u128; 2];
+            for ((slot, id), role) in values.iter_mut().zip(ids).zip(roles) {
+                let value = state.value(block, id)?;
+                reject_partial(value, block, "assert")?;
+                *slot = value
+                    .as_int()
+                    .map(InterpretInt::as_unsigned)
+                    .ok_or_else(|| {
+                        type_error(
+                            block,
+                            format!(
+                                "assert {} `{role}` requires an integer, got {}",
+                                kind.keyword(),
+                                value.ty
+                            ),
+                        )
+                    })?;
+            }
+            Some(values)
+        }
+        _ => None,
+    };
+    // Amendment P: the location is resolved AFTER the operands, so a bad
+    // operand is the reported fault even when the location is bad too.
+    let site = match site {
+        None => None,
+        Some(site) => Some(InterpretPanicSite {
+            entry: site.entry,
+            location: resolve_panic_location(state, block, &site.location)?,
+        }),
+    };
+    let panic = InterpretPanic {
+        kind: *kind,
+        operands,
+        site,
+    };
+    let mut error = err(InterpretErrorCode::Panic, block, panic.message());
+    error.panic = Some(Box::new(panic));
+    Ok(error)
+}
+
+/// Resolve a FAILED sited check's location (amendment P, wire v54;
+/// `docs/SPEC_RATIFICATIONS.md` §19.1 rule 4). The Lean twin is
+/// `resolvePanicLocation` (`Semantics/Step.lean`).
+///
+/// * `Global(g)` is `Global { global: g, offset: 0 }`: the global is NOT
+///   materialized — no allocation, no initializer read, no state change.
+/// * `Value(v)`: poison is UB; a non-pointer is a `TypeError`; null, a
+///   pointer with no provenance, one into an unknown or freed allocation, or
+///   one outside the bytes its allocation requested is UB ("null or
+///   dangling"). A live pointer into a materialized global's allocation is
+///   that global at its byte offset; any other live pointer is `Other`.
+fn resolve_panic_location(
+    state: &ExecState,
+    block: BlockId,
+    location: &PanicLocation,
+) -> InterpretResult<PanicLocationValue> {
+    let value = match location {
+        PanicLocation::Global(global) => {
+            return Ok(PanicLocationValue::Global {
+                global: *global,
+                offset: 0,
+            });
+        }
+        PanicLocation::Value(value) => state.value(block, *value)?,
+    };
+    reject_partial(value, block, "assert")?;
+    let dangling = || ub(block, "assert: panic location is null or dangling");
+    let pointer = match &value.kind {
+        InterpretValueKind::Ptr(pointer) => *pointer,
+        InterpretValueKind::NullPtr | InterpretValueKind::DanglingPtr(_) => {
+            return Err(dangling());
+        }
+        _ => {
+            return Err(type_error(
+                block,
+                format!("assert panic location requires a pointer, got {}", value.ty),
+            ));
+        }
+    };
+    let live = state
+        .memory
+        .allocations
+        .get(&pointer.allocation)
+        .is_some_and(|allocation| allocation.alive && pointer.offset < allocation.requested);
+    if !live {
+        return Err(dangling());
+    }
+    Ok(state
+        .globals
+        .iter()
+        .find(|(_, base)| base.allocation == pointer.allocation)
+        .map_or(PanicLocationValue::Other, |(global, base)| {
+            PanicLocationValue::Global {
+                global: *global,
+                offset: pointer.offset.saturating_sub(base.offset),
+            }
+        }))
+}
+
+#[cfg(test)]
+mod pointer_comparison_tests {
+    use super::*;
+
+    const OPS: [ICmpOp; 10] = [
+        ICmpOp::Eq,
+        ICmpOp::Ne,
+        ICmpOp::Ult,
+        ICmpOp::Ule,
+        ICmpOp::Ugt,
+        ICmpOp::Uge,
+        ICmpOp::Slt,
+        ICmpOp::Sle,
+        ICmpOp::Sgt,
+        ICmpOp::Sge,
+    ];
+
+    fn state(pointer_bits: u32) -> ExecState {
+        ExecState {
+            values: BTreeMap::new(),
+            memory: MemoryState {
+                max_address: max_address_for(pointer_bits),
+                ..MemoryState::default()
+            },
+            globals: BTreeMap::new(),
+            frames: BTreeSet::new(),
+            next_frame_id: 0,
+            steps: 0,
+            remaining_fuel: u64::MAX,
+            host: HostState::new(),
+            host_calls: 0,
+            drop_glue: None,
+            unwind: UnwindState::default(),
+        }
+    }
+
+    fn pointer(kind: InterpretValueKind) -> InterpretValue {
+        InterpretValue { ty: Ty::Ptr, kind }
+    }
+
+    fn module(pointer_bits: u32) -> Module {
+        let mut module = Module::new("pointer-icmp-width");
+        module.target_info = Some(crate::TargetInfo {
+            triple: if pointer_bits == 32 {
+                "wasm32-unknown-unknown"
+            } else {
+                "x86_64-unknown-linux-gnu"
+            }
+            .into(),
+            pointer_size: pointer_bits / 8,
+            endianness: crate::Endianness::Little,
+            abi: None,
+            struct_passing: Default::default(),
+        });
+        module
+    }
+
+    #[test]
+    fn pointer_icmp_compares_addresses_for_null_live_and_aliases() {
+        let interpreter = Interpreter::new();
+        let mut state = state(64);
+        let block = BlockId(0);
+        let first = state.memory.alloc(8, 1, block).unwrap();
+        let second = state.memory.alloc(8, 1, block).unwrap();
+        let first_address = state.memory.address(first, block, "test").unwrap();
+        let null = pointer(InterpretValueKind::NullPtr);
+        let first_value = pointer(InterpretValueKind::Ptr(first));
+        let alias = first_value.clone();
+        let second_value = pointer(InterpretValueKind::Ptr(second));
+        let one_past = pointer(InterpretValueKind::Ptr(InterpretPointer {
+            offset: 8,
+            ..first
+        }));
+        let raw_alias = pointer(InterpretValueKind::DanglingPtr(first_address));
+        let equal = [
+            true, false, false, true, false, true, false, true, false, true,
+        ];
+        let less = [
+            false, true, true, true, false, false, true, true, false, false,
+        ];
+        let greater = [
+            false, true, false, false, true, true, false, false, true, true,
+        ];
+        for (lhs, rhs, expected) in [
+            (&null, &null, equal),
+            (&null, &first_value, less),
+            (&first_value, &null, greater),
+            (&first_value, &alias, equal),
+            (&first_value, &second_value, less),
+            // Adjacent allocations have distinct ids but the first's end
+            // and the second's start expose the same numeric address.
+            (&one_past, &second_value, equal),
+            (&raw_alias, &first_value, equal),
+        ] {
+            for (op, expected) in OPS.into_iter().zip(expected) {
+                assert_eq!(
+                    interpreter
+                        .eval_icmp(op, &Ty::Ptr, lhs, rhs, &state, block)
+                        .unwrap()
+                        .as_bool(),
+                    Some(expected),
+                    "{op:?}: {lhs:?}, {rhs:?}"
+                );
+            }
+        }
+        // Address exposure, like PtrToInt, does not dereference the pointer.
+        state
+            .memory
+            .allocations
+            .get_mut(&first.allocation)
+            .unwrap()
+            .alive = false;
+        assert_eq!(
+            interpreter
+                .eval_icmp(ICmpOp::Eq, &Ty::Ptr, &first_value, &alias, &state, block)
+                .unwrap()
+                .as_bool(),
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn pointer_icmp_uses_target_width_signed_address_bits() {
+        for bits in [32, 64] {
+            let module = module(bits);
+            let interpreter = Interpreter::with_module(&module);
+            let _width = PointerWidthScope::enter(bits);
+            let mut state = state(bits);
+            state.memory.next_addr = 1u64 << (bits - 1);
+            let block = BlockId(0);
+            let high = pointer(InterpretValueKind::Ptr(
+                state.memory.alloc(1, 1, block).unwrap(),
+            ));
+            let null = pointer(InterpretValueKind::NullPtr);
+            let high_int = interpreter
+                .eval_cast(CastOp::PtrToInt, &Ty::Ptr, &Ty::Usize, &high, &state, block)
+                .unwrap();
+            let zero_int = InterpretValue::int(Ty::Usize, 0).unwrap();
+            for (op, expected) in OPS.into_iter().zip([
+                false, true, false, false, true, true, true, true, false, false,
+            ]) {
+                let direct = interpreter
+                    .eval_icmp(op, &Ty::Ptr, &high, &null, &state, block)
+                    .unwrap();
+                let via_integer = interpreter
+                    .eval_icmp(op, &Ty::Usize, &high_int, &zero_int, &state, block)
+                    .unwrap();
+                assert_eq!(direct.as_bool(), Some(expected), "{bits}-bit {op:?}");
+                assert_eq!(direct, via_integer, "PtrToInt agreement: {bits}-bit {op:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn pointer_icmp_refuses_poison_unknown_allocations_and_out_of_target_addresses() {
+        let module = module(32);
+        let interpreter = Interpreter::with_module(&module);
+        let state = state(32);
+        let null = pointer(InterpretValueKind::NullPtr);
+        for value in [
+            pointer(InterpretValueKind::PartialBytes(vec![None; 4])),
+            pointer(InterpretValueKind::Ptr(InterpretPointer {
+                allocation: 99,
+                offset: 0,
+            })),
+            pointer(InterpretValueKind::DanglingPtr(u64::from(u32::MAX) + 1)),
+        ] {
+            for (lhs, rhs) in [(&value, &null), (&null, &value)] {
+                let error = interpreter
+                    .eval_icmp(ICmpOp::Eq, &Ty::Ptr, lhs, rhs, &state, BlockId(0))
+                    .unwrap_err();
+                assert_eq!(
+                    error.code,
+                    InterpretErrorCode::UndefinedBehavior,
+                    "{value:?}"
+                );
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -6496,12 +11700,765 @@ mod bool_connective_tests {
     fn bool_carrier_accepts_the_connectives() {
         let block = BlockId(0);
         for (a, b) in [(false, false), (false, true), (true, false), (true, true)] {
+            assert_eq!(eval_bool_binop(BinOp::And, a, b, block).unwrap(), a && b);
             assert_eq!(eval_bool_binop(BinOp::BAnd, a, b, block).unwrap(), a && b);
             assert_eq!(eval_bool_binop(BinOp::BOr, a, b, block).unwrap(), a || b);
             assert_eq!(eval_bool_binop(BinOp::BXor, a, b, block).unwrap(), a ^ b);
         }
     }
 }
+
+#[cfg(test)]
+mod assert_panic_kind_tests {
+    //! Plan item P (wire v52): a failed `Inst::Assert` yields
+    //! `Panic { kind }` — the structured `InterpretPanic` and `core`'s exact
+    //! message. Lean twins: `ExecutableFixtures.lean`, `assert_*_message_stable`
+    //! (the same strings, byte for byte).
+
+    use super::*;
+    use crate::inst::AssertOverflowOp;
+    use crate::ty::FuncTy;
+
+    fn v(index: u32) -> ValueId {
+        ValueId::new(index)
+    }
+
+    /// `check(c: bool, a: usize, b: usize)`: one assert of `c` with `kind`
+    /// (operands over `a`/`b`), then return.
+    fn module(kind: AssertKind) -> Module {
+        let mut module = Module::new("assert_panic_kind");
+        let ft = module
+            .add_func_type(FuncTy {
+                abi: None,
+                params: vec![Ty::Bool, Ty::Usize, Ty::Usize],
+                returns: vec![],
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let mut func = Function::new(FuncId::new(0), "check", ft, BlockId::new(0));
+        let mut entry = Block::new(BlockId::new(0));
+        entry
+            .params
+            .extend([(v(0), Ty::Bool), (v(1), Ty::Usize), (v(2), Ty::Usize)]);
+        entry.body.push(InstrNode::new(Inst::Assert {
+            cond: v(0),
+            kind,
+            site: None,
+        }));
+        entry
+            .body
+            .push(InstrNode::new(Inst::Return { values: vec![] }));
+        func.blocks.push(entry);
+        module.functions.push(func);
+        module
+    }
+
+    fn run(kind: AssertKind, cond: bool, a: i128, b: i128) -> InterpretResult<InterpretOutcome> {
+        let module = module(kind);
+        Interpreter::with_module(&module).execute_func(
+            FuncId::new(0),
+            [
+                InterpretValue::bool(cond),
+                InterpretValue::int(Ty::Usize, a).expect("usize"),
+                InterpretValue::int(Ty::Usize, b).expect("usize"),
+            ],
+        )
+    }
+
+    /// Every kind's panic: the code, the structured kind, the resolved
+    /// operands and `core`'s message.
+    #[test]
+    fn a_failed_assert_panics_with_its_kind_and_cores_message() {
+        let bounds = AssertKind::BoundsCheck {
+            index: v(1),
+            len: v(2),
+        };
+        let misaligned = AssertKind::MisalignedPtr {
+            required: v(2),
+            found: v(1),
+        };
+        let mut cases: Vec<(AssertKind, Option<[u128; 2]>, String)> =
+            vec![
+            (AssertKind::Unspecified, None, "assertion failed".into()),
+            (AssertKind::DivByZero, None, "attempt to divide by zero".into()),
+            (
+                AssertKind::RemByZero,
+                None,
+                "attempt to calculate the remainder with a divisor of zero".into(),
+            ),
+            (
+                AssertKind::NullPtr,
+                None,
+                "null pointer dereference occurred".into(),
+            ),
+            (
+                bounds,
+                Some([4097, 8]),
+                "index out of bounds: the len is 8 but the index is 4097".into(),
+            ),
+            (
+                misaligned,
+                Some([8, 4097]),
+                "misaligned pointer dereference: address must be a multiple of 0x8 but is 0x1001"
+                    .into(),
+            ),
+        ];
+        let overflow = [
+            (AssertOverflowOp::Add, "attempt to add with overflow"),
+            (AssertOverflowOp::Sub, "attempt to subtract with overflow"),
+            (AssertOverflowOp::Mul, "attempt to multiply with overflow"),
+            (AssertOverflowOp::Div, "attempt to divide with overflow"),
+            (
+                AssertOverflowOp::Rem,
+                "attempt to calculate the remainder with overflow",
+            ),
+            (AssertOverflowOp::Shl, "attempt to shift left with overflow"),
+            (
+                AssertOverflowOp::Shr,
+                "attempt to shift right with overflow",
+            ),
+            (AssertOverflowOp::Neg, "attempt to negate with overflow"),
+        ];
+        for (op, message) in overflow {
+            cases.push((AssertKind::Overflow(op), None, message.into()));
+        }
+        for (kind, operands, message) in cases {
+            let error = run(kind, false, 4097, 8).expect_err("a false assert panics");
+            assert_eq!(error.code, InterpretErrorCode::Panic, "{kind:?}");
+            assert_eq!(error.message, message, "{kind:?}");
+            let panic = error.panic().expect("a panic carries its kind");
+            assert_eq!(panic.kind, kind);
+            assert_eq!(panic.operands, operands, "{kind:?}");
+            assert_eq!(panic.message(), message);
+        }
+    }
+
+    /// The negative twin: a TRUE assert of every kind continues, and carries
+    /// no panic; only the panic code ever carries one.
+    #[test]
+    fn a_passing_assert_of_any_kind_continues() {
+        for kind in [
+            AssertKind::Unspecified,
+            AssertKind::Overflow(AssertOverflowOp::Add),
+            AssertKind::BoundsCheck {
+                index: v(1),
+                len: v(2),
+            },
+            AssertKind::NullPtr,
+        ] {
+            assert!(run(kind, true, 1, 2).is_ok(), "{kind:?}");
+        }
+        assert_eq!(
+            InterpretError::new(InterpretErrorCode::Panic, "x").panic(),
+            None
+        );
+    }
+
+    /// The operands are read ONLY on failure, as the Lean model reads them: a
+    /// passing check whose operand is poison continues; a failing one is UB
+    /// (inspecting poison), not a panic.
+    #[test]
+    fn kind_operands_are_inspected_only_when_the_check_fails() {
+        let mut module = module(AssertKind::BoundsCheck {
+            index: v(3),
+            len: v(2),
+        });
+        let entry = &mut module.functions[0].blocks[0];
+        entry.body.insert(
+            0,
+            InstrNode::new(Inst::Undef { ty: Ty::Usize }).with_result(v(3)),
+        );
+        let args = |cond: bool| {
+            [
+                InterpretValue::bool(cond),
+                InterpretValue::int(Ty::Usize, 0).expect("usize"),
+                InterpretValue::int(Ty::Usize, 1).expect("usize"),
+            ]
+        };
+        let interpreter = Interpreter::with_module(&module);
+        assert!(interpreter.execute_func(FuncId::new(0), args(true)).is_ok());
+        let error = interpreter
+            .execute_func(FuncId::new(0), args(false))
+            .expect_err("a failing check reads its poison operand");
+        assert_eq!(error.code, InterpretErrorCode::UndefinedBehavior);
+        assert_eq!(error.panic(), None);
+    }
+}
+
+#[cfg(test)]
+mod panic_site_tests {
+    //! Amendment P (wire v54, `docs/SPEC_RATIFICATIONS.md` §19.1): a failed
+    //! sited check is the terminal panic (kind, operand values, entry,
+    //! resolved location); the entry is never executed. Lean twins:
+    //! `ExecutableFixtures.lean`, `assert_site_*_stable` /
+    //! `assert_invoke_*_stable`.
+
+    use super::*;
+    use crate::inst::{PanicLocation, PanicSite};
+    use crate::ty::FuncTy;
+    use crate::{Global, Linkage};
+
+    fn v(index: u32) -> ValueId {
+        ValueId::new(index)
+    }
+
+    fn b(index: u32) -> BlockId {
+        BlockId::new(index)
+    }
+
+    fn global(name: &str, initializer: Option<Constant>) -> Global {
+        Global {
+            name: name.to_owned(),
+            ty: Ty::U64,
+            mutable: false,
+            initializer,
+            linkage: Linkage::Internal,
+            tls: None,
+            align: None,
+            section: None,
+            visibility: Default::default(),
+            retained: false,
+        }
+    }
+
+    /// Function 0 is the bodyless entry `panic_entry(usize, usize, ptr)`;
+    /// function 1 is the bodyless location-only entry `panic_loc(ptr)`;
+    /// global 0 is the location record `loc` (a `u64`, 7).
+    fn base_module(name: &str) -> Module {
+        let mut module = Module::new(name);
+        let two_ops = module
+            .add_func_type(FuncTy {
+                abi: None,
+                params: vec![Ty::Usize, Ty::Usize, Ty::Ptr],
+                returns: vec![],
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let loc_only = module
+            .add_func_type(FuncTy {
+                abi: None,
+                params: vec![Ty::Ptr],
+                returns: vec![],
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        module.functions.push(Function::new(
+            FuncId::new(0),
+            "panic_entry",
+            two_ops,
+            BlockId::new(0),
+        ));
+        module.functions.push(Function::new(
+            FuncId::new(1),
+            "panic_loc",
+            loc_only,
+            BlockId::new(0),
+        ));
+        module.globals.push(global("loc", Some(Constant::Int(7))));
+        module
+    }
+
+    fn bounds() -> AssertKind {
+        AssertKind::BoundsCheck {
+            index: v(1),
+            len: v(2),
+        }
+    }
+
+    fn site(entry: u32, location: PanicLocation) -> PanicSite {
+        PanicSite {
+            entry: FuncId::new(entry),
+            location,
+        }
+    }
+
+    /// Function 2, `check(c: bool, i: usize, n: usize, p: ptr)`: `prelude`,
+    /// then one assert of `c` with `kind` and `site`, then return.
+    fn check_module(kind: AssertKind, site: PanicSite, prelude: Vec<InstrNode>) -> Module {
+        let mut module = base_module("panic_site");
+        let ft = module
+            .add_func_type(FuncTy {
+                abi: None,
+                params: vec![Ty::Bool, Ty::Usize, Ty::Usize, Ty::Ptr],
+                returns: vec![],
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let mut func = Function::new(FuncId::new(2), "check", ft, b(0));
+        let mut entry = Block::new(b(0));
+        entry.params.extend([
+            (v(0), Ty::Bool),
+            (v(1), Ty::Usize),
+            (v(2), Ty::Usize),
+            (v(3), Ty::Ptr),
+        ]);
+        entry.body.extend(prelude);
+        entry.body.push(InstrNode::new(Inst::Assert {
+            cond: v(0),
+            kind,
+            site: Some(site),
+        }));
+        entry
+            .body
+            .push(InstrNode::new(Inst::Return { values: vec![] }));
+        func.blocks.push(entry);
+        module.functions.push(func);
+        module
+    }
+
+    fn args(cond: bool, pointer: InterpretValue) -> [InterpretValue; 4] {
+        [
+            InterpretValue::bool(cond),
+            InterpretValue::int(Ty::Usize, 9).expect("usize"),
+            InterpretValue::int(Ty::Usize, 4).expect("usize"),
+            pointer,
+        ]
+    }
+
+    fn null() -> InterpretValue {
+        InterpretValue {
+            ty: Ty::Ptr,
+            kind: InterpretValueKind::NullPtr,
+        }
+    }
+
+    fn run(module: &Module, cond: bool) -> InterpretResult<InterpretOutcome> {
+        Interpreter::with_module(module).execute_func(FuncId::new(2), args(cond, null()))
+    }
+
+    fn panic_of(error: &InterpretError) -> &InterpretPanic {
+        assert_eq!(error.code, InterpretErrorCode::Panic, "{error:?}");
+        error.panic().expect("a failed assert carries its panic")
+    }
+
+    /// The outcome names the kind, its operand values, the entry and the
+    /// resolved location; the message is the kind's rendering.
+    #[test]
+    fn a_failed_sited_assert_panics_with_its_entry_and_location() {
+        let module = check_module(
+            bounds(),
+            site(0, PanicLocation::Global(GlobalId::new(0))),
+            vec![],
+        );
+        let error = run(&module, false).expect_err("a false check panics");
+        let panic = panic_of(&error);
+        assert_eq!(panic.kind, bounds());
+        assert_eq!(panic.operands, Some([9, 4]));
+        assert_eq!(
+            panic.site,
+            Some(InterpretPanicSite {
+                entry: FuncId::new(0),
+                location: PanicLocationValue::Global {
+                    global: GlobalId::new(0),
+                    offset: 0,
+                },
+            })
+        );
+        assert_eq!(
+            error.message,
+            "index out of bounds: the len is 4 but the index is 9"
+        );
+    }
+
+    /// A location-only entry on an `Unspecified` check: the site is reported
+    /// with the historical message (MIR's coroutine-resume kinds).
+    #[test]
+    fn a_failed_unkinded_sited_assert_reports_its_site() {
+        let module = check_module(
+            AssertKind::Unspecified,
+            site(1, PanicLocation::Global(GlobalId::new(0))),
+            vec![],
+        );
+        let error = run(&module, false).expect_err("a false check panics");
+        let panic = panic_of(&error);
+        assert_eq!(panic.kind, AssertKind::Unspecified);
+        assert_eq!(panic.operands, None);
+        assert_eq!(
+            panic.site.map(|site| site.entry),
+            Some(FuncId::new(1)),
+            "the location-only entry"
+        );
+        assert_eq!(error.message, "assertion failed");
+    }
+
+    /// A passing check reads only its condition: poison operands and a
+    /// poison location are never inspected, and the run returns.
+    #[test]
+    fn a_passing_sited_assert_reads_neither_operands_nor_location() {
+        let poison = |id: u32, ty: Ty| InstrNode::new(Inst::Undef { ty }).with_result(v(id));
+        let module = check_module(
+            AssertKind::BoundsCheck {
+                index: v(10),
+                len: v(11),
+            },
+            site(0, PanicLocation::Value(v(12))),
+            vec![
+                poison(10, Ty::Usize),
+                poison(11, Ty::Usize),
+                poison(12, Ty::Ptr),
+            ],
+        );
+        assert!(run(&module, true).is_ok(), "a true check continues");
+        // The control: the same module failing inspects them (UB).
+        let error = run(&module, false).expect_err("a false check reads its operands");
+        assert_eq!(error.code, InterpretErrorCode::UndefinedBehavior);
+    }
+
+    /// A `Global` location resolves WITHOUT materializing its global: no
+    /// allocation, no initializer read. Two witnesses: an id with no global
+    /// behind it, and a global whose initializer could not be materialized
+    /// (a `SymbolAddr` naming no global) both still yield the panic.
+    #[test]
+    fn a_static_location_is_resolved_without_materializing_its_global() {
+        let module = check_module(
+            AssertKind::DivByZero,
+            site(1, PanicLocation::Global(GlobalId::new(7))),
+            vec![],
+        );
+        let panic = panic_of(&run(&module, false).expect_err("panics")).clone();
+        assert_eq!(
+            panic.site.map(|site| site.location),
+            Some(PanicLocationValue::Global {
+                global: GlobalId::new(7),
+                offset: 0,
+            })
+        );
+        let mut module = check_module(
+            AssertKind::DivByZero,
+            site(1, PanicLocation::Global(GlobalId::new(0))),
+            vec![],
+        );
+        module.globals[0].initializer = Some(Constant::SymbolAddr {
+            symbol: "no_such_symbol".into(),
+            addend: 0,
+        });
+        let error = run(&module, false).expect_err("panics");
+        assert!(panic_of(&error).site.is_some());
+        // The control: ADDRESSING that global does materialize it and fails.
+        let mut addressed = module.clone();
+        addressed.functions[2].blocks[0].body.insert(
+            0,
+            InstrNode::new(Inst::GlobalAddr {
+                global: GlobalId::new(0),
+            })
+            .with_result(v(20)),
+        );
+        let error = run(&addressed, false).expect_err("materializing fails first");
+        assert_ne!(error.code, InterpretErrorCode::Panic, "{error:?}");
+    }
+
+    /// `#[track_caller]` forwarding: the location is the pointer the caller
+    /// passed. One into a materialized global resolves to that global at its
+    /// byte offset.
+    #[test]
+    fn a_value_location_resolves_to_the_global_it_addresses() {
+        for offset in [0u64, 4] {
+            let prelude = vec![
+                InstrNode::new(Inst::GlobalAddr {
+                    global: GlobalId::new(0),
+                })
+                .with_result(v(20)),
+                InstrNode::new(Inst::Const {
+                    ty: Ty::I64,
+                    value: Constant::Int(offset as i128),
+                })
+                .with_result(v(21)),
+                InstrNode::new(Inst::GEP {
+                    pointee_ty: Ty::U8,
+                    base: v(20),
+                    indices: vec![v(21)],
+                    inbounds: true,
+                })
+                .with_result(v(22)),
+            ];
+            let module = check_module(bounds(), site(0, PanicLocation::Value(v(22))), prelude);
+            let panic = panic_of(&run(&module, false).expect_err("panics")).clone();
+            assert_eq!(
+                panic.site.map(|site| site.location),
+                Some(PanicLocationValue::Global {
+                    global: GlobalId::new(0),
+                    offset,
+                }),
+                "offset {offset}"
+            );
+        }
+    }
+
+    /// A live pointer outside every global (a stack slot) resolves to `Other`.
+    #[test]
+    fn a_value_location_outside_every_global_is_other() {
+        let prelude = vec![
+            InstrNode::new(Inst::Alloca {
+                ty: Ty::U64,
+                count: None,
+                align: None,
+            })
+            .with_result(v(20)),
+        ];
+        let module = check_module(bounds(), site(0, PanicLocation::Value(v(20))), prelude);
+        let panic = panic_of(&run(&module, false).expect_err("panics")).clone();
+        assert_eq!(
+            panic.site.map(|site| site.location),
+            Some(PanicLocationValue::Other)
+        );
+    }
+
+    /// On failure a null, dangling or poison location is UB, not a panic; the
+    /// kind's operands are read FIRST, so a poison operand is the reported
+    /// fault even when the location is bad too.
+    #[test]
+    fn a_null_dangling_or_poison_location_on_failure_is_ub() {
+        // Null: the caller passes a null pointer as `p` (%3).
+        let module = check_module(bounds(), site(0, PanicLocation::Value(v(3))), vec![]);
+        let error = run(&module, false).expect_err("UB");
+        assert_eq!(
+            error.code,
+            InterpretErrorCode::UndefinedBehavior,
+            "{error:?}"
+        );
+        assert!(
+            error.message.contains("panic location"),
+            "{}",
+            error.message
+        );
+        assert_eq!(error.panic(), None);
+        // Dangling: a no-provenance address, and a freed heap cell.
+        let dangling = InterpretValue {
+            ty: Ty::Ptr,
+            kind: InterpretValueKind::DanglingPtr(4096),
+        };
+        let error = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(2), args(false, dangling))
+            .expect_err("UB");
+        assert_eq!(
+            error.code,
+            InterpretErrorCode::UndefinedBehavior,
+            "{error:?}"
+        );
+        let freed = vec![
+            InstrNode::new(Inst::HeapAlloc {
+                ty: Ty::U64,
+                count: None,
+                align: None,
+                origin: crate::inst::AllocOrigin::RustHeap,
+            })
+            .with_result(v(20)),
+            InstrNode::new(Inst::Dealloc { ptr: v(20) }),
+        ];
+        let module = check_module(bounds(), site(0, PanicLocation::Value(v(20))), freed);
+        let error = run(&module, false).expect_err("UB");
+        assert_eq!(
+            error.code,
+            InterpretErrorCode::UndefinedBehavior,
+            "{error:?}"
+        );
+        assert!(
+            error.message.contains("panic location"),
+            "{}",
+            error.message
+        );
+        // Poison location.
+        let poison = vec![InstrNode::new(Inst::Undef { ty: Ty::Ptr }).with_result(v(20))];
+        let module = check_module(bounds(), site(0, PanicLocation::Value(v(20))), poison);
+        let error = run(&module, false).expect_err("UB");
+        assert_eq!(
+            error.code,
+            InterpretErrorCode::UndefinedBehavior,
+            "{error:?}"
+        );
+        // Operands first: a poison INDEX with a null location reports the
+        // operand, not the location.
+        let module = check_module(
+            AssertKind::BoundsCheck {
+                index: v(20),
+                len: v(2),
+            },
+            site(0, PanicLocation::Value(v(3))),
+            vec![InstrNode::new(Inst::Undef { ty: Ty::Usize }).with_result(v(20))],
+        );
+        let error = run(&module, false).expect_err("UB");
+        assert_eq!(
+            error.code,
+            InterpretErrorCode::UndefinedBehavior,
+            "{error:?}"
+        );
+        assert!(
+            !error.message.contains("panic location"),
+            "the operand is read before the location: {}",
+            error.message
+        );
+    }
+
+    /// Function 2, `guarded(c: bool, x: usize) -> usize`: bb0 is
+    /// `assert_invoke %c, div_by_zero, panic @func.1 at @global.0 to bb1(%x)
+    /// unwind bb2`; bb1 returns its parameter; bb2 is a cleanup pad that
+    /// resumes.
+    fn assert_invoke_module() -> Module {
+        let mut module = base_module("assert_invoke");
+        let ft = module
+            .add_func_type(FuncTy {
+                abi: None,
+                params: vec![Ty::Bool, Ty::Usize],
+                returns: vec![Ty::Usize],
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let mut func = Function::new(FuncId::new(2), "guarded", ft, b(0));
+        let mut bb0 = Block::new(b(0));
+        bb0.params.extend([(v(0), Ty::Bool), (v(1), Ty::Usize)]);
+        bb0.body.push(InstrNode::new(Inst::AssertInvoke {
+            cond: v(0),
+            kind: AssertKind::DivByZero,
+            site: site(1, PanicLocation::Global(GlobalId::new(0))),
+            normal_dest: b(1),
+            normal_args: vec![v(1)],
+            unwind_dest: b(2),
+        }));
+        let mut bb1 = Block::new(b(1));
+        bb1.params.push((v(2), Ty::Usize));
+        bb1.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
+        let mut bb2 = Block::new(b(2));
+        bb2.body.push(
+            InstrNode::new(Inst::LandingPad {
+                is_cleanup: true,
+                catch_type_indices: vec![],
+            })
+            .with_results(vec![v(3), v(4)]),
+        );
+        bb2.body.push(InstrNode::new(Inst::Resume { exn: v(3) }));
+        func.blocks.extend([bb0, bb1, bb2]);
+        module.functions.push(func);
+        module
+    }
+
+    fn run_guarded(module: &Module, cond: bool) -> InterpretResult<InterpretOutcome> {
+        Interpreter::with_module(module).execute_func(
+            FuncId::new(2),
+            [
+                InterpretValue::bool(cond),
+                InterpretValue::int(Ty::Usize, 42).expect("usize"),
+            ],
+        )
+    }
+
+    #[test]
+    fn assert_invoke_takes_its_normal_edge_when_the_check_passes() {
+        let module = assert_invoke_module();
+        let outcome = run_guarded(&module, true).expect("a true check takes the normal edge");
+        assert_eq!(
+            outcome.returns,
+            vec![InterpretValue::int(Ty::Usize, 42).expect("usize")]
+        );
+    }
+
+    /// The panic=abort projection: a failing `AssertInvoke` is the sited
+    /// panic, and its pad is never entered (entering it would be the
+    /// `UnsupportedInstruction` a directly-entered landing pad is).
+    #[test]
+    fn assert_invoke_failure_is_the_sited_panic_and_never_enters_its_pad() {
+        let module = assert_invoke_module();
+        let error = run_guarded(&module, false).expect_err("a false check panics");
+        let panic = panic_of(&error);
+        assert_eq!(panic.kind, AssertKind::DivByZero);
+        assert_eq!(
+            panic.site,
+            Some(InterpretPanicSite {
+                entry: FuncId::new(1),
+                location: PanicLocationValue::Global {
+                    global: GlobalId::new(0),
+                    offset: 0,
+                },
+            })
+        );
+        assert_eq!(error.message, "attempt to divide by zero");
+    }
+
+    /// A panic raised in a callee leaves through `Call` and `Invoke`
+    /// unchanged: the caller observes the callee's sited outcome.
+    #[test]
+    fn a_sited_panic_propagates_unchanged_through_call_and_invoke() {
+        let mut module = assert_invoke_module();
+        let ft = module
+            .add_func_type(FuncTy {
+                abi: None,
+                params: vec![Ty::Bool, Ty::Usize],
+                returns: vec![Ty::Usize],
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        // fn 3: `call guarded`; fn 4: `invoke guarded`, with a cleanup pad.
+        let mut caller = Function::new(FuncId::new(3), "caller", ft, b(0));
+        let mut bb0 = Block::new(b(0));
+        bb0.params.extend([(v(0), Ty::Bool), (v(1), Ty::Usize)]);
+        bb0.body.push(
+            InstrNode::new(Inst::Call {
+                callee: FuncId::new(2),
+                args: vec![v(0), v(1)],
+            })
+            .with_result(v(2)),
+        );
+        bb0.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
+        caller.blocks.push(bb0);
+        module.functions.push(caller);
+        let mut invoker = Function::new(FuncId::new(4), "invoker", ft, b(0));
+        let mut bb0 = Block::new(b(0));
+        bb0.params.extend([(v(0), Ty::Bool), (v(1), Ty::Usize)]);
+        bb0.body.push(
+            InstrNode::new(Inst::Invoke {
+                callee: FuncId::new(2),
+                args: vec![v(0), v(1)],
+                normal_dest: b(1),
+                normal_args: vec![v(2)],
+                unwind_dest: b(2),
+            })
+            .with_result(v(2)),
+        );
+        let mut bb1 = Block::new(b(1));
+        bb1.params.push((v(3), Ty::Usize));
+        bb1.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(3)] }));
+        let mut bb2 = Block::new(b(2));
+        bb2.body.push(
+            InstrNode::new(Inst::LandingPad {
+                is_cleanup: true,
+                catch_type_indices: vec![],
+            })
+            .with_results(vec![v(4), v(5)]),
+        );
+        bb2.body.push(InstrNode::new(Inst::Resume { exn: v(4) }));
+        invoker.blocks.extend([bb0, bb1, bb2]);
+        module.functions.push(invoker);
+        let direct = run_guarded(&module, false).expect_err("panics");
+        for outer in [3, 4] {
+            let error = Interpreter::with_module(&module)
+                .execute_func(
+                    FuncId::new(outer),
+                    [
+                        InterpretValue::bool(false),
+                        InterpretValue::int(Ty::Usize, 42).expect("usize"),
+                    ],
+                )
+                .expect_err("the callee's panic propagates");
+            assert_eq!(error.code, InterpretErrorCode::Panic);
+            assert_eq!(error.panic, direct.panic, "fn {outer}");
+            assert_eq!(error.message, direct.message, "fn {outer}");
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "interpret_uninit_tests.rs"]
+mod uninit_lane_tests;
+
+#[cfg(test)]
+#[path = "interpret_drop_glue_tests.rs"]
+mod drop_glue_tests;
+
+#[cfg(test)]
+#[path = "interpret_float_choice_tests.rs"]
+mod float_choice_tests;
 
 #[cfg(test)]
 mod tests {
@@ -6530,12 +12487,17 @@ mod tests {
 
     fn module_with_function(function: Function, returns: Vec<Ty>) -> Module {
         let mut module = Module::new("interp-test");
-        module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns,
-            is_vararg: false,
-        });
-        module.add_function(function);
+        module
+            .add_func_type(FuncTy {
+                abi: None,
+                params: Vec::new(),
+                returns,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         module
     }
 
@@ -7763,6 +13725,10 @@ mod tests {
             linkage: crate::Linkage::Internal,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         });
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -7821,6 +13787,540 @@ mod tests {
         );
     }
 
+    /// One meaning for `Dealloc` of a reference-counted cell (SPEC "A
+    /// reference-counted cell is released by `Release`, never by
+    /// `Dealloc`"): `HeapAlloc { origin: CleanHeap | SwiftHeap }` + `Dealloc`
+    /// is undefined behaviour naming the rule, as Lean's `semDealloc` refuses
+    /// the cell's `arcRef` permission (`semDealloc_arcRef_is_ub`). Every other
+    /// allocation keeps its meaning: `RustHeap`, `CMalloc` and a stack
+    /// `Alloca` are freed at their base and the program runs to the loaded
+    /// value.
+    #[test]
+    fn dealloc_of_a_reference_counted_cell_is_undefined_behavior() {
+        use crate::inst::AllocOrigin;
+        // `None` = a stack `Alloca`.
+        let cases: [(Option<AllocOrigin>, bool); 5] = [
+            (Some(AllocOrigin::CleanHeap), true),
+            (Some(AllocOrigin::SwiftHeap), true),
+            (Some(AllocOrigin::RustHeap), false),
+            (Some(AllocOrigin::CMalloc), false),
+            (None, false),
+        ];
+        for (origin, is_ub) in cases {
+            let mut function =
+                Function::new(FuncId::new(0), "free_cell", crate::FuncTyId::new(0), b(0));
+            let mut block = Block::new(b(0));
+            let alloc = match origin {
+                Some(origin) => Inst::HeapAlloc {
+                    ty: Ty::I32,
+                    count: None,
+                    align: Some(4),
+                    origin,
+                },
+                None => Inst::Alloca {
+                    ty: Ty::I32,
+                    count: None,
+                    align: Some(4),
+                },
+            };
+            block.body.push(result(alloc, v(0)));
+            block.body.push(result(
+                Inst::Const {
+                    ty: Ty::I32,
+                    value: Constant::Int(7),
+                },
+                v(1),
+            ));
+            block.body.push(void(Inst::Store {
+                ty: Ty::I32,
+                ptr: v(0),
+                value: v(1),
+                volatile: false,
+                align: Some(4),
+            }));
+            block.body.push(result(
+                Inst::Load {
+                    ty: Ty::I32,
+                    ptr: v(0),
+                    volatile: false,
+                    align: Some(4),
+                },
+                v(2),
+            ));
+            block.body.push(void(Inst::Dealloc { ptr: v(0) }));
+            block.body.push(void(Inst::Return { values: vec![v(2)] }));
+            function.blocks.push(block);
+
+            let module = module_with_function(function, vec![Ty::I32]);
+            let outcome = Interpreter::with_module(&module).execute_func(FuncId::new(0), []);
+            if is_ub {
+                let error = outcome.expect_err("Dealloc of a reference-counted cell is UB");
+                assert_eq!(
+                    error.code,
+                    InterpretErrorCode::UndefinedBehavior,
+                    "{origin:?}: {}",
+                    error.message
+                );
+                assert!(
+                    error.message.contains("reference-counted"),
+                    "{origin:?}: the refusal must name the rule, got: {}",
+                    error.message
+                );
+            } else {
+                let outcome = outcome.unwrap_or_else(|e| {
+                    panic!("{origin:?}: Dealloc of a non-RC allocation executes: {e}")
+                });
+                assert_eq!(int_signed(&outcome.returns[0]), 7, "{origin:?}");
+            }
+        }
+    }
+
+    /// SPEC "Freeing an allocation under a live borrow is undefined
+    /// behaviour": `Dealloc` reads the allocation's live-borrow count, which
+    /// every thin `Borrow` / `BorrowMut` of an address inside its requested
+    /// bytes raises and every `EndBorrow` naming it lowers. Over a stack slot
+    /// and both non-RC heap origins. The one-past-the-end row pins the scope
+    /// clause (for a heap cell that offset is the slack tail, which moves no
+    /// count either), and the extra-`EndBorrow` row pins that `EndBorrow`
+    /// never faults and the count never goes below zero.
+    #[test]
+    fn dealloc_under_a_live_borrow_is_undefined_behavior() {
+        use crate::inst::AllocOrigin;
+        #[derive(Clone, Copy, Debug)]
+        enum Op {
+            /// `Borrow` of the allocation at this byte offset.
+            Shared(u64),
+            /// `BorrowMut` of the allocation at this byte offset.
+            Unique(u64),
+            /// `Borrow` of the n-th borrow value taken so far (a reborrow).
+            Reborrow(usize),
+            /// `EndBorrow` of the n-th borrow value taken so far.
+            End(usize),
+        }
+        use Op::{End, Reborrow, Shared, Unique};
+        let cases: &[(&str, &[Op], bool)] = &[
+            ("shared, live", &[Shared(0)], true),
+            ("unique, live", &[Unique(0)], true),
+            ("interior shared, live", &[Shared(4)], true),
+            ("shared, ended", &[Shared(0), End(0)], false),
+            ("unique, ended", &[Unique(0), End(0)], false),
+            (
+                "two shared, one ended",
+                &[Shared(0), Shared(0), End(0)],
+                true,
+            ),
+            (
+                "two shared, both ended",
+                &[Shared(0), Shared(0), End(1), End(0)],
+                false,
+            ),
+            (
+                "ended, then borrowed again",
+                &[Shared(0), End(0), Unique(0)],
+                true,
+            ),
+            (
+                "reborrow chain, ended",
+                &[Shared(0), Reborrow(0), End(1), End(0)],
+                false,
+            ),
+            (
+                "reborrow chain, outer live",
+                &[Shared(0), Reborrow(0), End(1)],
+                true,
+            ),
+            ("one past the end: not counted", &[Shared(8)], false),
+            (
+                "EndBorrow past zero never faults",
+                &[Shared(0), End(0), End(0)],
+                false,
+            ),
+        ];
+        // `None` = a stack `Alloca`.
+        let regions = [
+            None,
+            Some(AllocOrigin::RustHeap),
+            Some(AllocOrigin::CMalloc),
+        ];
+        for region in regions {
+            for (name, ops, is_ub) in cases {
+                let mut function = Function::new(
+                    FuncId::new(0),
+                    "free_borrowed",
+                    crate::FuncTyId::new(0),
+                    b(0),
+                );
+                let mut block = Block::new(b(0));
+                let alloc = match region {
+                    Some(origin) => Inst::HeapAlloc {
+                        ty: Ty::I64,
+                        count: None,
+                        align: Some(8),
+                        origin,
+                    },
+                    None => Inst::Alloca {
+                        ty: Ty::I64,
+                        count: None,
+                        align: Some(8),
+                    },
+                };
+                block.body.push(result(alloc, v(0)));
+                block.body.push(result(
+                    Inst::Const {
+                        ty: Ty::I64,
+                        value: Constant::Int(7),
+                    },
+                    v(1),
+                ));
+                block.body.push(void(Inst::Store {
+                    ty: Ty::I64,
+                    ptr: v(0),
+                    value: v(1),
+                    volatile: false,
+                    align: Some(8),
+                }));
+                block.body.push(result(
+                    Inst::Load {
+                        ty: Ty::I64,
+                        ptr: v(0),
+                        volatile: false,
+                        align: Some(8),
+                    },
+                    v(2),
+                ));
+                let mut next = 10u32;
+                let mut fresh = || {
+                    next += 1;
+                    v(next)
+                };
+                let mut borrows = Vec::new();
+                for op in ops.iter() {
+                    match *op {
+                        Shared(offset) | Unique(offset) => {
+                            let index = fresh();
+                            block.body.push(result(
+                                Inst::Const {
+                                    ty: Ty::U64,
+                                    value: Constant::Int(i128::from(offset)),
+                                },
+                                index,
+                            ));
+                            let at = fresh();
+                            block.body.push(result(
+                                Inst::GEP {
+                                    pointee_ty: Ty::U8,
+                                    base: v(0),
+                                    indices: vec![index],
+                                    inbounds: false,
+                                },
+                                at,
+                            ));
+                            let borrow = fresh();
+                            let inst = if matches!(op, Shared(_)) {
+                                Inst::Borrow { ptr: at }
+                            } else {
+                                Inst::BorrowMut { ptr: at }
+                            };
+                            block.body.push(result(inst, borrow));
+                            borrows.push(borrow);
+                        }
+                        Reborrow(n) => {
+                            let borrow = fresh();
+                            block
+                                .body
+                                .push(result(Inst::Borrow { ptr: borrows[n] }, borrow));
+                            borrows.push(borrow);
+                        }
+                        End(n) => {
+                            block.body.push(void(Inst::EndBorrow {
+                                borrow_ptr: borrows[n],
+                            }));
+                        }
+                    }
+                }
+                block.body.push(void(Inst::Dealloc { ptr: v(0) }));
+                block.body.push(void(Inst::Return { values: vec![v(2)] }));
+                function.blocks.push(block);
+
+                let module = module_with_function(function, vec![Ty::I64]);
+                let outcome = Interpreter::with_module(&module).execute_func(FuncId::new(0), []);
+                if *is_ub {
+                    let error = match outcome {
+                        Ok(ran) => panic!(
+                            "{region:?}, {name}: Dealloc under a live borrow is UB, but it ran \
+                             to {:?}",
+                            ran.returns
+                        ),
+                        Err(error) => error,
+                    };
+                    assert_eq!(
+                        error.code,
+                        InterpretErrorCode::UndefinedBehavior,
+                        "{region:?}, {name}: {}",
+                        error.message
+                    );
+                    assert!(
+                        error.message.contains("under a live borrow"),
+                        "{region:?}, {name}: the refusal must name the rule, got: {}",
+                        error.message
+                    );
+                } else {
+                    let outcome = outcome.unwrap_or_else(|e| {
+                        panic!("{region:?}, {name}: Dealloc with no live borrow executes: {e}")
+                    });
+                    assert_eq!(int_signed(&outcome.returns[0]), 7, "{region:?}, {name}");
+                }
+            }
+        }
+    }
+
+    /// One meaning for the ARC trio on an allocation that is not
+    /// reference-counted (SPEC "An ARC operation counts only a
+    /// reference-counted cell"): `Retain`, `Release` and `IsUnique` are defined
+    /// only on a `HeapAlloc { origin: SwiftHeap | CleanHeap }` cell. On a stack
+    /// `Alloca`, a `RustHeap` or `CMalloc` cell and a global's reservation each
+    /// is undefined behaviour naming the rule, as Lean's `requireArcRef`
+    /// refuses the `owned` permission those allocations hold. The positive
+    /// rows run the RC life cycle (`Retain`: 1 -> 2, `IsUnique` false,
+    /// `Release`: 2 -> 1, `IsUnique` true, `Release`: 1 -> 0 frees) on both RC
+    /// origins.
+    #[test]
+    fn arc_operation_on_a_non_reference_counted_allocation_is_undefined_behavior() {
+        use crate::inst::AllocOrigin;
+        #[derive(Clone, Copy, Debug)]
+        enum Region {
+            Heap(AllocOrigin),
+            Stack,
+            Global,
+        }
+        #[derive(Clone, Copy, Debug)]
+        enum Op {
+            Retain,
+            Release,
+            IsUnique,
+        }
+        fn region_inst(region: Region) -> Inst {
+            match region {
+                Region::Heap(origin) => Inst::HeapAlloc {
+                    ty: Ty::I32,
+                    count: None,
+                    align: Some(4),
+                    origin,
+                },
+                Region::Stack => Inst::Alloca {
+                    ty: Ty::I32,
+                    count: None,
+                    align: Some(4),
+                },
+                Region::Global => Inst::GlobalAddr {
+                    global: GlobalId::new(0),
+                },
+            }
+        }
+        fn with_global(mut module: Module) -> Module {
+            module.globals.push(crate::Global {
+                name: "CELL".to_string(),
+                ty: Ty::I32,
+                mutable: true,
+                initializer: None,
+                linkage: crate::Linkage::Internal,
+                tls: None,
+                align: None,
+                section: None,
+                visibility: Default::default(),
+                retained: false,
+            });
+            module
+        }
+
+        let non_rc = [
+            Region::Stack,
+            Region::Heap(AllocOrigin::RustHeap),
+            Region::Heap(AllocOrigin::CMalloc),
+            Region::Global,
+        ];
+        for region in non_rc {
+            for op in [Op::Retain, Op::Release, Op::IsUnique] {
+                let mut function =
+                    Function::new(FuncId::new(0), "arc_cell", crate::FuncTyId::new(0), b(0));
+                let mut block = Block::new(b(0));
+                block.body.push(result(region_inst(region), v(0)));
+                let returns = match op {
+                    Op::Retain => {
+                        block.body.push(void(Inst::Retain { ptr: v(0) }));
+                        block.body.push(void(Inst::Return { values: vec![] }));
+                        vec![]
+                    }
+                    Op::Release => {
+                        block.body.push(void(Inst::Release { ptr: v(0) }));
+                        block.body.push(void(Inst::Return { values: vec![] }));
+                        vec![]
+                    }
+                    Op::IsUnique => {
+                        block.body.push(result(Inst::IsUnique { ptr: v(0) }, v(1)));
+                        block.body.push(void(Inst::Return { values: vec![v(1)] }));
+                        vec![Ty::Bool]
+                    }
+                };
+                function.blocks.push(block);
+                let module = with_global(module_with_function(function, returns));
+                let error = Interpreter::with_module(&module)
+                    .execute_func(FuncId::new(0), [])
+                    .expect_err("an ARC operation on a non-reference-counted allocation is UB");
+                assert_eq!(
+                    error.code,
+                    InterpretErrorCode::UndefinedBehavior,
+                    "{region:?} x {op:?}: {}",
+                    error.message
+                );
+                assert!(
+                    error.message.contains("not a reference-counted cell"),
+                    "{region:?} x {op:?}: the refusal must name the rule, got: {}",
+                    error.message
+                );
+            }
+        }
+
+        // The positive rows: the RC life cycle on both RC origins.
+        for origin in [AllocOrigin::CleanHeap, AllocOrigin::SwiftHeap] {
+            let mut function =
+                Function::new(FuncId::new(0), "rc_cell", crate::FuncTyId::new(0), b(0));
+            let mut block = Block::new(b(0));
+            block
+                .body
+                .push(result(region_inst(Region::Heap(origin)), v(0)));
+            block.body.push(void(Inst::Retain { ptr: v(0) }));
+            block.body.push(result(Inst::IsUnique { ptr: v(0) }, v(1)));
+            block.body.push(void(Inst::Release { ptr: v(0) }));
+            block.body.push(result(Inst::IsUnique { ptr: v(0) }, v(2)));
+            block.body.push(void(Inst::Release { ptr: v(0) }));
+            block.body.push(void(Inst::Return {
+                values: vec![v(1), v(2)],
+            }));
+            function.blocks.push(block);
+            let module = module_with_function(function, vec![Ty::Bool, Ty::Bool]);
+            let outcome = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [])
+                .unwrap_or_else(|e| panic!("{origin:?}: the RC life cycle executes: {e}"));
+            assert_eq!(
+                format!("{:?}", outcome.returns[0].kind),
+                "Bool(false)",
+                "{origin:?}: count 2 is not unique"
+            );
+            assert_eq!(
+                format!("{:?}", outcome.returns[1].kind),
+                "Bool(true)",
+                "{origin:?}: count 1 is unique"
+            );
+        }
+    }
+
+    /// SPEC "An ARC operation counts only a reference-counted cell", clause 3
+    /// (decided 2026-09-30): `Retain` / `Release` / `IsUnique` are defined only
+    /// through a pointer at the OBJECT BASE of the reference-counted cell it
+    /// was derived from. Each operation, on a `CleanHeap` and a `SwiftHeap`
+    /// `i64` cell, through the cell's base advanced by 4 bytes (interior), 8
+    /// (one past the end), 20 (inside the heap slack tail) and 32 (past the
+    /// slack, where the next allocation sits), is undefined behaviour naming
+    /// the offset — the refusal the pinned runtime path (`check_rc_cell`)
+    /// already made. The base itself is the positive control.
+    #[test]
+    fn arc_operand_off_its_cell_base_is_undefined_behavior() {
+        use crate::inst::AllocOrigin;
+        #[derive(Clone, Copy, Debug)]
+        enum Op {
+            Retain,
+            Release,
+            IsUnique,
+        }
+        fn run(origin: AllocOrigin, op: Op, offset: i128) -> InterpretResult<InterpretOutcome> {
+            let mut function =
+                Function::new(FuncId::new(0), "arc_offset", crate::FuncTyId::new(0), b(0));
+            let mut block = Block::new(b(0));
+            block.body.push(result(
+                Inst::HeapAlloc {
+                    ty: Ty::I64,
+                    count: None,
+                    align: Some(8),
+                    origin,
+                },
+                v(0),
+            ));
+            // A second cell after the first, so a past-the-slack operand has a
+            // reference-counted neighbour to (wrongly) count.
+            block.body.push(result(
+                Inst::HeapAlloc {
+                    ty: Ty::I64,
+                    count: None,
+                    align: Some(8),
+                    origin,
+                },
+                v(1),
+            ));
+            block.body.push(result(
+                Inst::Const {
+                    ty: Ty::U64,
+                    value: Constant::Int(offset),
+                },
+                v(2),
+            ));
+            block.body.push(result(
+                Inst::GEP {
+                    pointee_ty: Ty::I8,
+                    base: v(0),
+                    indices: vec![v(2)],
+                    inbounds: false,
+                },
+                v(3),
+            ));
+            let returns = match op {
+                Op::Retain => {
+                    block.body.push(void(Inst::Retain { ptr: v(3) }));
+                    block.body.push(void(Inst::Return { values: vec![] }));
+                    vec![]
+                }
+                Op::Release => {
+                    block.body.push(void(Inst::Release { ptr: v(3) }));
+                    block.body.push(void(Inst::Return { values: vec![] }));
+                    vec![]
+                }
+                Op::IsUnique => {
+                    block.body.push(result(Inst::IsUnique { ptr: v(3) }, v(4)));
+                    block.body.push(void(Inst::Return { values: vec![v(4)] }));
+                    vec![Ty::Bool]
+                }
+            };
+            function.blocks.push(block);
+            let module = module_with_function(function, returns);
+            Interpreter::with_module(&module).execute_func(FuncId::new(0), [])
+        }
+
+        for origin in [AllocOrigin::CleanHeap, AllocOrigin::SwiftHeap] {
+            for op in [Op::Retain, Op::Release, Op::IsUnique] {
+                run(origin, op, 0).unwrap_or_else(|e| {
+                    panic!("{origin:?} x {op:?}: the cell's base is the object pointer: {e}")
+                });
+                for offset in [4, 8, 20, 32] {
+                    let error = run(origin, op, offset)
+                        .expect_err("an ARC operand off its cell's base is UB");
+                    assert_eq!(
+                        error.code,
+                        InterpretErrorCode::UndefinedBehavior,
+                        "{origin:?} x {op:?} at +{offset}: {}",
+                        error.message
+                    );
+                    assert!(
+                        error.message.contains(&format!(
+                            "pointer is at offset {offset} of its cell, not at the object base"
+                        )),
+                        "{origin:?} x {op:?} at +{offset}: the refusal must name the rule, got: {}",
+                        error.message
+                    );
+                }
+            }
+        }
+    }
+
     /// A global gets a base honoring more than its byte-image `Ty` alignment: a
     /// `(u64,u64)`-style static lowered to `Array(U8, 24)` reports natural
     /// alignment 1, yet `keys.0` is read with a natural-align-8 `load u64`. The
@@ -7874,7 +14374,9 @@ mod tests {
         function.blocks.push(block);
 
         let mut module = module_with_function(function, vec![Ty::U64]);
-        let u8_ty = module.add_type(Ty::U8);
+        let u8_ty = module
+            .add_type(Ty::U8)
+            .expect("Module::add_type: test fixture");
         module.globals.push(crate::Global {
             name: "KEYS".to_string(),
             ty: Ty::Array(u8_ty, 24),
@@ -7883,6 +14385,10 @@ mod tests {
             linkage: crate::Linkage::Internal,
             tls: None,
             align: None,
+
+            section: None,
+            visibility: Default::default(),
+            retained: false,
         });
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -8279,11 +14785,14 @@ mod tests {
         let fat_ty = Ty::FatPtr(FatPtrKind::Str);
         let meta_ty = Ty::U64;
         let mut module = Module::new("b2");
-        let sig = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![Ty::U8, Ty::U64],
-            is_vararg: false,
-        });
+        let sig = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::U8, Ty::U64],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "b2_fat", sig, b(0));
         let mut block = Block::new(b(0));
         // buffer[2] = {0x61, 0x62}
@@ -8405,11 +14914,14 @@ mod tests {
         });
         let meta_ty = Ty::Ptr;
         let mut module = Module::new("b2_dyn");
-        let sig = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![Ty::U8, Ty::U8],
-            is_vararg: false,
-        });
+        let sig = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::U8, Ty::U8],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "b2_dyn_fat", sig, b(0));
         let mut block = Block::new(b(0));
         // data byte = 0x61; vtable stand-in byte = 0x7f
@@ -8539,12 +15051,62 @@ mod tests {
         assert_eq!(int_signed(&outcome.returns[1]), 0x7f);
     }
 
-    /// The executable fat-pointer model is deliberately the same fixed
-    /// 64-bit model as the Lean semantics. A validator may describe a valid
-    /// 32-bit wire module, but this interpreter must reject that target rather
-    /// than silently execute it with the 64-bit two-lane layout.
+    /// v40 `ContainerVtable` at the constant funnel: the null fat pointer's
+    /// metadata lane is the ZERO OF ITS OWN TYPE. For the dyn-tail container
+    /// kind that type is the vtable word (`Ty::Ptr`), exactly as for
+    /// `TraitObject` -- a `NullPtr`, never an integer 0 -- while the slice-tail
+    /// twin `ContainerLen` gets a zero LENGTH. Pins that the interpreter
+    /// classifies the new kind by what its metadata MEANS, not by name.
     #[test]
-    fn fat_pointer_execution_rejects_non_64_bit_target() {
+    fn container_tail_null_fat_pointer_constants_zero_their_own_metadata_type() {
+        use crate::FatPtrKind;
+        for (kind, want_meta_ty) in [
+            (FatPtrKind::ContainerVtable, Ty::Ptr),
+            (FatPtrKind::TraitObject { trait_id: 7 }, Ty::Ptr),
+            (FatPtrKind::ContainerLen, Ty::U64),
+        ] {
+            let fat_ty = Ty::FatPtr(kind);
+            let mut function = Function::new(FuncId::new(0), "null_fat", FuncTyId::new(0), b(0));
+            let mut block = Block::new(b(0));
+            block.body.push(result(
+                Inst::Const {
+                    ty: fat_ty.clone(),
+                    value: Constant::Aggregate(vec![Constant::Int(0), Constant::Int(0)]),
+                },
+                v(0),
+            ));
+            block.body.push(void(Inst::Return { values: vec![v(0)] }));
+            function.blocks.push(block);
+            let module = module_with_function(function, vec![fat_ty.clone()]);
+
+            let outcome = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [])
+                .unwrap_or_else(|e| panic!("null {kind:?} constant program executes: {e:?}"));
+            let value = &outcome.returns[0];
+            assert_eq!(value.ty, fat_ty);
+            let InterpretValueKind::FatPtr { data, metadata } = &value.kind else {
+                panic!("expected a fat pointer value for {kind:?}, got {value:?}");
+            };
+            assert_eq!(data.kind, InterpretValueKind::NullPtr);
+            assert_eq!(metadata.ty, want_meta_ty, "{kind:?}");
+            match want_meta_ty {
+                Ty::Ptr => assert_eq!(
+                    metadata.kind,
+                    InterpretValueKind::NullPtr,
+                    "{kind:?}: the metadata zero is a null VTABLE, not an integer 0"
+                ),
+                _ => assert_eq!(int_unsigned(metadata), 0, "{kind:?}: a zero LENGTH"),
+            }
+        }
+    }
+
+    /// A validator may describe a valid i686 wire module, but i686 is outside
+    /// the canonical scalar table (its ABI aligns `i64` to 4), so this
+    /// interpreter must reject that target rather than guess its layout —
+    /// WS2.16 admits only canonical-table 32-bit targets (wasm32). Big-endian
+    /// targets stay refused at every width.
+    #[test]
+    fn fat_pointer_execution_rejects_non_canonical_and_big_endian_targets() {
         use crate::FatPtrKind;
 
         let fat_ty = Ty::FatPtr(FatPtrKind::Str);
@@ -8556,11 +15118,14 @@ mod tests {
             abi: None,
             struct_passing: Default::default(),
         });
-        let sig = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let sig = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "fat32", sig, b(0));
         let mut block = Block::new(b(0));
         block.body.push(result(
@@ -8616,11 +15181,14 @@ mod tests {
             abi: None,
             struct_passing: Default::default(),
         });
-        let sig = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let sig = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "scalar32", sig, b(0));
         let mut block = Block::new(b(0));
         block.body.push(void(Inst::Return { values: vec![] }));
@@ -8635,16 +15203,19 @@ mod tests {
     }
 
     #[test]
-    fn fat_pointer_from_parts_rejects_malformed_metadata_shape() {
+    fn external_fat_pointer_parts_metadata_is_rejected_before_the_instruction() {
         use crate::FatPtrKind;
 
         let fat_ty = Ty::FatPtr(FatPtrKind::Str);
         let mut module = Module::new("malformed-fatptr-parts");
-        let sig = module.add_func_type(FuncTy {
-            params: vec![Ty::Ptr, Ty::U64],
-            returns: vec![fat_ty.clone()],
-            is_vararg: false,
-        });
+        let sig = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Ptr, Ty::U64],
+                returns: vec![fat_ty.clone()],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "from_parts", sig, b(0));
         let mut block = Block::new(b(0))
             .with_param(v(0), Ty::Ptr)
@@ -8672,10 +15243,10 @@ mod tests {
         };
         let error = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [data, malformed_metadata])
-            .expect_err("PtrFromParts must reject a malformed internal metadata shape");
+            .expect_err("entry validation must reject malformed external metadata");
         assert_eq!(error.code, InterpretErrorCode::TypeError);
         assert!(
-            error.message.contains("metadata does not inhabit"),
+            error.message == "entry argument: u64 value has no integer payload",
             "{error:?}"
         );
     }
@@ -8694,11 +15265,14 @@ mod tests {
         // "Borrow: expected pointer value, got fatptr<str>".
         let fat_ty = Ty::FatPtr(FatPtrKind::Str);
         let mut module = Module::new("borrow-of-fat");
-        let sig = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![fat_ty.clone(), fat_ty.clone(), Ty::U8, Ty::U64],
-            is_vararg: false,
-        });
+        let sig = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![fat_ty.clone(), fat_ty.clone(), Ty::U8, Ty::U64],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "reborrow", sig, b(0));
         let mut block = Block::new(b(0));
         block.body.push(result(
@@ -8789,16 +15363,19 @@ mod tests {
     }
 
     #[test]
-    fn fat_pointer_store_rejects_malformed_internal_metadata_shape() {
+    fn external_fat_pointer_store_metadata_is_rejected_before_the_instruction() {
         use crate::FatPtrKind;
 
         let fat_ty = Ty::FatPtr(FatPtrKind::Str);
         let mut module = Module::new("malformed-fatptr");
-        let sig = module.add_func_type(FuncTy {
-            params: vec![fat_ty.clone()],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let sig = module
+            .add_func_type(FuncTy {
+                params: vec![fat_ty.clone()],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "store", sig, b(0));
         let mut block = Block::new(b(0)).with_param(v(0), fat_ty.clone());
         block.body.push(result(
@@ -8835,12 +15412,61 @@ mod tests {
         };
         let error = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [malformed])
-            .expect_err("malformed internal metadata must fail closed");
+            .expect_err("entry validation must reject malformed nested external metadata");
         assert_eq!(error.code, InterpretErrorCode::TypeError);
         assert!(
-            error.message.contains("metadata does not inhabit"),
+            error.message == "entry argument: u64 value has no integer payload",
             "{error:?}"
         );
+    }
+
+    #[test]
+    fn fat_pointer_instruction_helpers_reject_malformed_internal_metadata() {
+        // Bypass the external-entry validator deliberately: these are the
+        // exact helpers used by PtrFromParts and Store, which must keep their
+        // own guard even when an internal value has a malformed payload.
+        let interpreter = Interpreter::new();
+        let ty = Ty::FatPtr(crate::FatPtrKind::Str);
+        let data = InterpretValue {
+            ty: Ty::Ptr,
+            kind: InterpretValueKind::NullPtr,
+        };
+        let metadata = InterpretValue {
+            ty: Ty::U64,
+            kind: InterpretValueKind::Bool(true),
+        };
+        let parts_error = interpreter
+            .eval_ptr_from_parts(&ty, &Ty::U64, &data, &metadata, b(0))
+            .expect_err("the instruction must validate its own metadata");
+        assert_eq!(parts_error.code, InterpretErrorCode::TypeError);
+        assert!(parts_error.message.contains("metadata does not inhabit"));
+
+        let malformed = InterpretValue {
+            ty: ty.clone(),
+            kind: InterpretValueKind::FatPtr {
+                data: Box::new(data.clone()),
+                metadata: Box::new(metadata),
+            },
+        };
+        let mut state = ExecState {
+            values: BTreeMap::new(),
+            memory: MemoryState::default(),
+            globals: BTreeMap::new(),
+            frames: BTreeSet::new(),
+            next_frame_id: 0,
+            steps: 0,
+            remaining_fuel: u64::MAX,
+            host: HostState::new(),
+            host_calls: 0,
+            drop_glue: None,
+            unwind: UnwindState::default(),
+        };
+        let store_error = interpreter
+            .eval_store(&ty, &data, &malformed, None, &mut state, b(0), false)
+            .expect_err("metadata validation must precede the invalid null destination");
+        assert_eq!(store_error.code, InterpretErrorCode::TypeError);
+        assert!(store_error.message.contains("metadata does not inhabit"));
+        assert!(state.memory.allocations.is_empty());
     }
 
     /// B6 closure captures round-trip at REGISTER level: a closure value seeds
@@ -8850,21 +15476,29 @@ mod tests {
     #[test]
     fn closure_captures_insert_extract_round_trip() {
         let mut module = Module::new("b6");
-        let callee_sig = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let clo_ty_id = module.add_closure_type(crate::ClosureTy {
-            func: callee_sig,
-            captures: vec![Ty::I32, Ty::Bool],
-        });
+        let callee_sig = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let clo_ty_id = module
+            .add_closure_type(crate::ClosureTy {
+                func: callee_sig,
+                captures: vec![Ty::I32, Ty::Bool],
+            })
+            .expect("Module::add_closure_type: test fixture");
         let clo_ty = Ty::Closure(clo_ty_id);
-        let main_sig = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let main_sig = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         // A body for the closure's FuncId(0) so the module is self-contained.
         let mut callee = Function::new(FuncId::new(0), "clo", callee_sig, b(0));
         let mut cb = Block::new(b(0));
@@ -9399,19 +16033,114 @@ mod tests {
         assert_eq!(int_signed(&outcome.returns[0]), 42);
     }
 
+    /// WS2.18 review: the reference half of the Lean fixtures
+    /// `switch_u128_case_taken_stable` / `switch_symbol_addr_case_refused_stable`
+    /// / `switch_match_before_symbol_addr_case_taken_stable`
+    /// (lean/trust_ir-semantics/TrustIr/Semantics/ExecutableFixtures.lean). A
+    /// `U128` switch whose case is the canonical `Constant::U128` spelling of a
+    /// value above `i128::MAX` is scanned in order: `cases[0]` decides which
+    /// block runs. Returns 1 from the case block, 0 from the default block.
+    fn run_u128_switch(cases: Vec<Constant>) -> InterpretResult<u128> {
+        let big = (1u128 << 127) + 9;
+        let mut function = Function::new(FuncId::new(0), "sw128", crate::FuncTyId::new(0), b(0));
+        let mut entry = Block::new(b(0));
+        entry.body.push(result(
+            Inst::Const {
+                ty: Ty::U128,
+                value: Constant::u128(big),
+            },
+            v(0),
+        ));
+        entry.body.push(void(Inst::Switch {
+            value: v(0),
+            default: b(2),
+            default_args: Vec::new(),
+            cases: cases
+                .into_iter()
+                .map(|value| SwitchCase {
+                    value,
+                    target: b(1),
+                    args: Vec::new(),
+                })
+                .collect(),
+            exhaustive_enum_unreachable: false,
+        }));
+        let mut case_block = Block::new(b(1));
+        case_block.body.push(result(
+            Inst::Const {
+                ty: Ty::U8,
+                value: Constant::Int(1),
+            },
+            v(1),
+        ));
+        case_block
+            .body
+            .push(void(Inst::Return { values: vec![v(1)] }));
+        let mut default_block = Block::new(b(2));
+        default_block.body.push(result(
+            Inst::Const {
+                ty: Ty::U8,
+                value: Constant::Int(0),
+            },
+            v(2),
+        ));
+        default_block
+            .body
+            .push(void(Inst::Return { values: vec![v(2)] }));
+        function.blocks.push(entry);
+        function.blocks.push(case_block);
+        function.blocks.push(default_block);
+        let module = module_with_function(function, vec![Ty::U8]);
+        Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .map(|outcome| int_unsigned(&outcome.returns[0]))
+    }
+
+    #[test]
+    fn switch_takes_a_canonical_u128_case_and_refuses_a_symbol_addr_case() {
+        let big = (1u128 << 127) + 9;
+        let symbol = || Constant::SymbolAddr {
+            symbol: "f".to_string(),
+            addend: 0,
+        };
+        // An equal canonical U128 case is TAKEN (the Lean scan used to miss it).
+        assert_eq!(run_u128_switch(vec![Constant::u128(big)]).expect("runs"), 1);
+        // An unequal one misses to the default edge.
+        assert_eq!(
+            run_u128_switch(vec![Constant::u128(big + 1)]).expect("runs"),
+            0
+        );
+        // A link-time address REACHED by the in-order scan is an error, never a
+        // miss that falls through to a later case or to the default edge ...
+        let error = run_u128_switch(vec![symbol(), Constant::u128(big)])
+            .expect_err("a symbol-address case has no compile-time value");
+        assert_eq!(error.code, InterpretErrorCode::TypeError);
+        // ... while a case that matches before the scan reaches it is taken.
+        assert_eq!(
+            run_u128_switch(vec![Constant::u128(big), symbol()]).expect("runs"),
+            1
+        );
+    }
+
     #[test]
     fn direct_call_executes_callee_frame_and_binds_return() {
         let mut module = Module::new("direct-call");
-        let add_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32, Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let main_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let add_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32, Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let main_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut main = Function::new(FuncId::new(0), "main", main_ty, b(0));
         let mut main_block = Block::new(b(0));
@@ -9459,8 +16188,12 @@ mod tests {
             .push(void(Inst::Return { values: vec![v(2)] }));
         add.blocks.push(add_block);
 
-        module.add_function(main);
-        module.add_function(add);
+        module
+            .try_add_function(main)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .try_add_function(add)
+            .expect("Module::try_add_function: test fixture");
 
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -9690,8 +16423,9 @@ mod tests {
     #[test]
     fn executes_float_ops_and_ordered_unordered_compares() {
         // Lean alignment gap: the formal model uses Lean `Float` (f64) for
-        // float ops. Rust executes f32/f64 directly and keeps f16 unsupported
-        // until both sides share an explicit half-precision codec.
+        // float ops. Rust executes f32/f64 directly; f16 executes too since
+        // WS2.15 (conformance `interpret_f16`) but the Lean model still
+        // refuses it, so `F16` stays outside the proven subset.
         let mut function = Function::new(FuncId::new(0), "floats", crate::FuncTyId::new(0), b(0));
         let mut block = Block::new(b(0));
         block.body.push(result(
@@ -9952,16 +16686,22 @@ mod tests {
     #[test]
     fn indirect_call_executes_registered_function_pointer() {
         let mut module = Module::new("indirect-call");
-        let add_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32, Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let main_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let add_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32, Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let main_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut main = Function::new(FuncId::new(0), "main", main_ty, b(0));
         let mut main_block = Block::new(b(0));
@@ -10018,8 +16758,12 @@ mod tests {
             .push(void(Inst::Return { values: vec![v(2)] }));
         add.blocks.push(add_block);
 
-        module.add_function(main);
-        module.add_function(add);
+        module
+            .try_add_function(main)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .try_add_function(add)
+            .expect("Module::try_add_function: test fixture");
 
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -10031,11 +16775,14 @@ mod tests {
     #[test]
     fn recursive_call_exhausts_shared_fuel() {
         let mut module = Module::new("recursive-fuel");
-        let recurse_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let recurse_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "recurse", recurse_ty, b(0));
         let mut block = Block::new(b(0));
         block.body.push(result(
@@ -10047,7 +16794,9 @@ mod tests {
         ));
         block.body.push(void(Inst::Return { values: vec![v(0)] }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         let error = Interpreter::with_module(&module)
             .with_options(InterpretOptions {
@@ -10064,16 +16813,22 @@ mod tests {
     #[test]
     fn call_depth_limit_has_stable_code() {
         let mut module = Module::new("call-depth");
-        let callee_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let main_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let callee_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let main_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut main = Function::new(FuncId::new(0), "main", main_ty, b(0));
         let mut main_block = Block::new(b(0));
@@ -10103,8 +16858,12 @@ mod tests {
             .push(void(Inst::Return { values: vec![v(0)] }));
         callee.blocks.push(callee_block);
 
-        module.add_function(main);
-        module.add_function(callee);
+        module
+            .try_add_function(main)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .try_add_function(callee)
+            .expect("Module::try_add_function: test fixture");
 
         let error = Interpreter::with_module(&module)
             .with_options(InterpretOptions {
@@ -10144,16 +16903,22 @@ mod tests {
     #[test]
     fn invalid_indirect_function_pointer_has_stable_code() {
         let mut module = Module::new("invalid-pointer");
-        let callee_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let main_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let callee_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let main_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut main = Function::new(FuncId::new(0), "main", main_ty, b(0));
         let mut block = Block::new(b(0));
@@ -10174,7 +16939,9 @@ mod tests {
             v(1),
         ));
         main.blocks.push(block);
-        module.add_function(main);
+        module
+            .try_add_function(main)
+            .expect("Module::try_add_function: test fixture");
 
         let error = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -10187,21 +16954,30 @@ mod tests {
     #[test]
     fn indirect_signature_mismatch_has_stable_code() {
         let mut module = Module::new("signature-mismatch");
-        let callee_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let wrong_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
-        let main_ty = module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let callee_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let wrong_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let main_ty = module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut main = Function::new(FuncId::new(0), "main", main_ty, b(0));
         let mut main_block = Block::new(b(0));
@@ -10230,8 +17006,12 @@ mod tests {
             .push(void(Inst::Return { values: vec![v(0)] }));
         callee.blocks.push(callee_block);
 
-        module.add_function(main);
-        module.add_function(callee);
+        module
+            .try_add_function(main)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .try_add_function(callee)
+            .expect("Module::try_add_function: test fixture");
 
         let error = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -10312,15 +17092,18 @@ mod tests {
             .expect("borrow executes");
         assert_eq!(out.returns[0].as_int().unwrap().as_signed(), 42);
 
-        // ARC: alloca, retain (count 1->2), IsUnique = false, release (2->1),
-        // IsUnique = true.
+        // ARC: a `CleanHeap` cell (the ARC trio is defined only on a
+        // reference-counted cell; on an `Alloca` it is UB, see
+        // `arc_operation_on_a_non_reference_counted_allocation_is_undefined_behavior`),
+        // retain (count 1->2), IsUnique = false, release (2->1), IsUnique = true.
         let mut arc_fn = Function::new(FuncId::new(0), "arc", crate::FuncTyId::new(0), b(0));
         let mut ab = Block::new(b(0));
         ab.body.push(result(
-            Inst::Alloca {
+            Inst::HeapAlloc {
                 ty: Ty::I32,
                 count: None,
                 align: None,
+                origin: crate::inst::AllocOrigin::CleanHeap,
             },
             v(0),
         ));
@@ -10339,8 +17122,13 @@ mod tests {
         assert_eq!(format!("{:?}", out.returns[0].kind), "Bool(false)");
         assert_eq!(format!("{:?}", out.returns[1].kind), "Bool(true)");
 
-        // Binding frame: open a 1-slot frame, bind slot 0 = 7, load it back,
-        // close the frame, return the loaded value.
+        // Binding frame: open a 1-slot frame, bind slot 0 = 7 (producing the
+        // new handle %3), load it back THROUGH THAT HANDLE, close the frame,
+        // return the loaded value. `BindSlot` is functional and yields one
+        // result (`inst.rs`; Lean `semBindSlot`; the validator's result
+        // table) — the earlier spelling of this test bound it as a void node
+        // and read through the pre-bind handle, which no validated module
+        // can do.
         let mut frame_fn = Function::new(FuncId::new(0), "frame", crate::FuncTyId::new(0), b(0));
         let mut fb = Block::new(b(0));
         fb.body.push(result(
@@ -10360,20 +17148,23 @@ mod tests {
             },
             v(1),
         ));
-        fb.body.push(void(Inst::BindSlot {
-            frame: v(0),
-            slot: 0,
-            value: v(1),
-        }));
+        fb.body.push(result(
+            Inst::BindSlot {
+                frame: v(0),
+                slot: 0,
+                value: v(1),
+            },
+            v(3),
+        ));
         fb.body.push(result(
             Inst::LoadSlot {
-                frame: v(0),
+                frame: v(3),
                 slot: 0,
                 ty: Ty::I32,
             },
             v(2),
         ));
-        fb.body.push(void(Inst::CloseFrame { frame: v(0) }));
+        fb.body.push(void(Inst::CloseFrame { frame: v(3) }));
         fb.body.push(void(Inst::Return { values: vec![v(2)] }));
         frame_fn.blocks.push(fb);
         let m = module_with_function(frame_fn, vec![Ty::I32]);
@@ -10383,34 +17174,402 @@ mod tests {
         assert_eq!(out.returns[0].as_int().unwrap().as_signed(), 7);
     }
 
+    /// `BindSlot` is FUNCTIONAL: each bind yields a fresh handle and the
+    /// input handle keeps its prior slot contents (`inst.rs`; Lean
+    /// `loadSlot_bindSlot_same` / `Frame.lean` `bindSlot` is `List.set` on a
+    /// copy). Bind 7 through `%f0` to get `%f1`, then 9 through `%f1` to get
+    /// `%f2`: `%f1` still reads 7, `%f2` reads 9, and the never-bound `%f0`
+    /// slot is still unbound: it reads as poison (roadmap WS2.10, the Lean
+    /// model's `undef`), which faults only when inspected.
     #[test]
-    fn intentionally_excluded_casts_and_float_widths_have_stable_codes() {
+    fn bind_slot_is_functional_and_prior_handles_keep_prior_slots() {
+        fn frame_module(load_from: ValueId) -> Module {
+            let mut f = Function::new(FuncId::new(0), "frame", crate::FuncTyId::new(0), b(0));
+            let mut fb = Block::new(b(0));
+            fb.body.push(result(
+                Inst::OpenFrame {
+                    def: BindingFrameDef::new(
+                        BindingFrameId::new(0),
+                        "q",
+                        vec![BindingSlot::new("i", Ty::I32)],
+                    ),
+                },
+                v(0),
+            ));
+            fb.body.push(result(
+                Inst::Const {
+                    ty: Ty::I32,
+                    value: Constant::Int(7),
+                },
+                v(1),
+            ));
+            fb.body.push(result(
+                Inst::Const {
+                    ty: Ty::I32,
+                    value: Constant::Int(9),
+                },
+                v(2),
+            ));
+            // %3 = bind_slot %0, 0, 7 ; %4 = bind_slot %3, 0, 9
+            fb.body.push(result(
+                Inst::BindSlot {
+                    frame: v(0),
+                    slot: 0,
+                    value: v(1),
+                },
+                v(3),
+            ));
+            fb.body.push(result(
+                Inst::BindSlot {
+                    frame: v(3),
+                    slot: 0,
+                    value: v(2),
+                },
+                v(4),
+            ));
+            fb.body.push(result(
+                Inst::LoadSlot {
+                    frame: load_from,
+                    slot: 0,
+                    ty: Ty::I32,
+                },
+                v(5),
+            ));
+            fb.body.push(void(Inst::CloseFrame { frame: v(4) }));
+            fb.body.push(void(Inst::Return { values: vec![v(5)] }));
+            f.blocks.push(fb);
+            module_with_function(f, vec![Ty::I32])
+        }
+
+        for (handle, expected) in [(v(3), 7), (v(4), 9)] {
+            let out = Interpreter::with_module(&frame_module(handle))
+                .execute_func(FuncId::new(0), [])
+                .expect("bound handle executes");
+            assert_eq!(out.returns[0].as_int().unwrap().as_signed(), expected);
+        }
+
+        // The pre-bind handle was never written: reading it is not "the
+        // latest write" (that would be the in-place model this test retires)
+        // but an unbound slot, which reads as poison (WS2.10). Returning the
+        // poison is an inspection at the call boundary, so it is UB THERE —
+        // never the value 9 (or 7) a later bind wrote through another handle.
+        let error = Interpreter::with_module(&frame_module(v(0)))
+            .execute_func(FuncId::new(0), [])
+            .expect_err("the pre-bind handle's slot is unbound poison");
+        assert_eq!(error.code, InterpretErrorCode::UndefinedBehavior);
+        assert!(
+            error
+                .to_string()
+                .contains("Call returns: use of an uninitialized value"),
+            "unexpected error: {error}"
+        );
+
+        // A void `BindSlot` node — the retired in-place spelling — is a
+        // malformed node, not a silently tolerated one.
+        let mut m = frame_module(v(4));
+        m.functions[0].blocks[0].body[3].results.clear();
+        let error = Interpreter::with_module(&m)
+            .execute_func(FuncId::new(0), [])
+            .expect_err("a result-less bind_slot is malformed");
+        assert_eq!(error.code, InterpretErrorCode::MalformedInstruction);
+    }
+
+    /// One `Transmute` over a constant operand, returning the cast result.
+    fn transmute_module(src_ty: Ty, src: Constant, dst_ty: Ty) -> Module {
         let mut cast_fn = Function::new(FuncId::new(0), "transmute", crate::FuncTyId::new(0), b(0));
         let mut cast_block = Block::new(b(0));
         cast_block.body.push(result(
             Inst::Const {
-                ty: Ty::I32,
-                value: Constant::Int(7),
+                ty: src_ty.clone(),
+                value: src,
             },
             v(0),
         ));
         cast_block.body.push(result(
             Inst::Cast {
                 op: CastOp::Transmute,
-                src_ty: Ty::I32,
-                dst_ty: Ty::I32,
+                src_ty,
+                dst_ty: dst_ty.clone(),
                 operand: v(0),
             },
             v(1),
         ));
+        cast_block
+            .body
+            .push(void(Inst::Return { values: vec![v(1)] }));
         cast_fn.blocks.push(cast_block);
-        let cast_module = module_with_function(cast_fn, vec![Ty::I32]);
+        module_with_function(cast_fn, vec![dst_ty])
+    }
+
+    /// WS2.9 (subset v3): `Transmute` executes exactly where the Lean
+    /// `semCast .Transmute` arm executes — integer/pointer scalars on both
+    /// sides — and answers `UnsupportedCast` everywhere else.
+    #[test]
+    fn transmute_executes_on_the_integer_pointer_scalar_set() {
+        // Positive: i32 -> u32 reinterprets the bit pattern (-1 -> u32::MAX).
+        let module = transmute_module(Ty::I32, Constant::Int(-1), Ty::U32);
+        let outcome = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect("transmute i32 -> u32 executes");
+        assert_eq!(outcome.returns[0].ty, Ty::U32);
+        assert_eq!(int_unsigned(&outcome.returns[0]), u128::from(u32::MAX));
+
+        // Positive: the same-type identity and the int -> ptr reinterpret
+        // (the Lean `transmute_i64_identity_stable` / `transmute_i64_to_ptr_stable`
+        // fixtures) execute too.
+        let module = transmute_module(Ty::I64, Constant::Int(42), Ty::I64);
+        let outcome = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect("transmute i64 -> i64 executes");
+        assert_eq!(int_signed(&outcome.returns[0]), 42);
+        let module = transmute_module(Ty::I64, Constant::Int(42), Ty::Ptr);
+        let outcome = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect("transmute i64 -> ptr executes");
+        assert_eq!(outcome.returns[0].ty, Ty::Ptr);
+
+        // Twins: a float or bool on EITHER side is `UnsupportedCast` — the
+        // destination cases are the Lean mistranslation control (before v3
+        // the model bound an integer at a float/bool type there). The same
+        // reinterpretation spelled as `Bitcast` is the sanctioned carrier.
+        for (src_ty, src, dst_ty) in [
+            (Ty::F32, Constant::Float(1.5), Ty::U32),
+            (Ty::U32, Constant::Int(0x3fc0_0000), Ty::F32),
+            (Ty::U8, Constant::Int(2), Ty::Bool),
+            (Ty::Bool, Constant::Bool(true), Ty::U8),
+        ] {
+            let module = transmute_module(src_ty.clone(), src, dst_ty.clone());
+            let error = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [])
+                .expect_err("float/bool transmute is outside the executable scalar set");
+            assert_eq!(
+                error.code,
+                InterpretErrorCode::UnsupportedCast,
+                "Transmute {src_ty} -> {dst_ty}: {error:?}"
+            );
+            assert_eq!(error.code.as_str(), "unsupported_cast");
+        }
+        // Mutation control: a width mismatch inside the scalar set is a
+        // TYPE error (validator territory), never a silent reinterpret.
+        let module = transmute_module(Ty::I32, Constant::Int(1), Ty::I64);
+        let error = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect_err("transmute i32 -> i64 is a width mismatch");
+        assert_eq!(error.code, InterpretErrorCode::TypeError, "{error:?}");
+    }
+
+    /// `probe() -> dst { p = nullptr; q = ptrtoptr p : ptr -> src; r = transmute q : src -> dst; return r }`
+    /// — a pointer-typed Transmute source reached through the ONE cast that
+    /// mints a typed pointer, so the verdict is about the Transmute alone.
+    fn pointer_transmute_module(src_ty: Ty, dst_ty: Ty) -> Module {
+        let mut cast_fn = Function::new(FuncId::new(0), "transmute", crate::FuncTyId::new(0), b(0));
+        let mut cast_block = Block::new(b(0));
+        cast_block.body.push(result(Inst::NullPtr, v(0)));
+        cast_block.body.push(result(
+            Inst::Cast {
+                op: CastOp::PtrToPtr,
+                src_ty: Ty::Ptr,
+                dst_ty: src_ty.clone(),
+                operand: v(0),
+            },
+            v(1),
+        ));
+        cast_block.body.push(result(
+            Inst::Cast {
+                op: CastOp::Transmute,
+                src_ty,
+                dst_ty: dst_ty.clone(),
+                operand: v(1),
+            },
+            v(2),
+        ));
+        cast_block
+            .body
+            .push(void(Inst::Return { values: vec![v(2)] }));
+        cast_fn.blocks.push(cast_block);
+        module_with_function(cast_fn, vec![dst_ty])
+    }
+
+    /// Review (WS2.9): the pointer member of the executable Transmute set is
+    /// EXACTLY `Ty::Ptr`, in step with the subset's `transmute_scalar_ty` and
+    /// Lean's `transmuteScalarTy`. A "pointer-like" test here would execute
+    /// `*const u8 -> ptr` and `&u8 -> ptr` transmutes that the Lean model
+    /// refuses — evidence for nothing. The thin `ptr -> ptr` transmute is
+    /// executed and transports the pointer value (a null stays null).
+    #[test]
+    fn transmute_pointer_member_is_exactly_thin_ptr() {
+        let module = pointer_transmute_module(Ty::Ptr, Ty::Ptr);
+        let outcome = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect("transmute ptr -> ptr executes");
+        assert_eq!(outcome.returns[0].ty, Ty::Ptr);
+        assert!(
+            matches!(outcome.returns[0].kind, InterpretValueKind::NullPtr),
+            "{:?}",
+            outcome.returns[0]
+        );
+        for (src_ty, dst_ty) in [
+            (Ty::PtrConst(Box::new(Ty::U8)), Ty::Ptr),
+            (Ty::PtrMut(Box::new(Ty::U8)), Ty::Ptr),
+            (Ty::Ref(Box::new(Ty::U8)), Ty::Ptr),
+            (Ty::Ptr, Ty::PtrConst(Box::new(Ty::U8))),
+        ] {
+            let module = pointer_transmute_module(src_ty.clone(), dst_ty.clone());
+            let error = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [])
+                .expect_err("a typed-pointer transmute is outside the executable scalar set");
+            assert_eq!(
+                error.code,
+                InterpretErrorCode::UnsupportedCast,
+                "Transmute {src_ty} -> {dst_ty}: {error:?}"
+            );
+        }
+        // Mutation control: the same typed-pointer retag spelled as
+        // `PtrToPtr` is the sanctioned carrier and executes.
+        let mut retag_fn = Function::new(FuncId::new(0), "retag", crate::FuncTyId::new(0), b(0));
+        let mut block = Block::new(b(0));
+        block.body.push(result(Inst::NullPtr, v(0)));
+        block.body.push(result(
+            Inst::Cast {
+                op: CastOp::PtrToPtr,
+                src_ty: Ty::Ptr,
+                dst_ty: Ty::PtrConst(Box::new(Ty::U8)),
+                operand: v(0),
+            },
+            v(1),
+        ));
+        block.body.push(void(Inst::Return { values: vec![v(1)] }));
+        retag_fn.blocks.push(block);
+        let module = module_with_function(retag_fn, vec![Ty::PtrConst(Box::new(Ty::U8))]);
+        Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect("ptrtoptr ptr -> *const u8 executes");
+    }
+
+    /// Review (WS2.9): a LIVE allocation's address survives
+    /// `transmute ptr -> u64 -> ptr` with its provenance — the re-derived
+    /// pointer is usable for a store and a load, exactly as the Lean model
+    /// (`.ptr addr` -> `.int 64 addr` -> `.ptr addr`) says. A model that
+    /// executed `Transmute` by minting a fresh dangling pointer from the
+    /// integer would refuse the store here (`DanglingPtr`), and one that
+    /// transported the operand unchanged would return a pointer at `u64`.
+    #[test]
+    fn transmute_round_trips_a_live_allocation_address() {
+        let mut function =
+            Function::new(FuncId::new(0), "round_trip", crate::FuncTyId::new(0), b(0));
+        let mut block = Block::new(b(0));
+        block.body.push(result(
+            Inst::Const {
+                ty: Ty::U64,
+                value: Constant::Int(1),
+            },
+            v(0),
+        ));
+        block.body.push(result(
+            Inst::Alloca {
+                ty: Ty::I32,
+                count: Some(v(0)),
+                align: Some(4),
+            },
+            v(1),
+        ));
+        block.body.push(result(
+            Inst::Cast {
+                op: CastOp::Transmute,
+                src_ty: Ty::Ptr,
+                dst_ty: Ty::U64,
+                operand: v(1),
+            },
+            v(2),
+        ));
+        block.body.push(result(
+            Inst::Cast {
+                op: CastOp::Transmute,
+                src_ty: Ty::U64,
+                dst_ty: Ty::Ptr,
+                operand: v(2),
+            },
+            v(3),
+        ));
+        block.body.push(result(
+            Inst::Const {
+                ty: Ty::I32,
+                value: Constant::Int(-7),
+            },
+            v(4),
+        ));
+        block.body.push(void(Inst::Store {
+            ty: Ty::I32,
+            ptr: v(3),
+            value: v(4),
+            volatile: false,
+            align: Some(4),
+        }));
+        block.body.push(result(
+            Inst::Load {
+                ty: Ty::I32,
+                ptr: v(1),
+                volatile: false,
+                align: Some(4),
+            },
+            v(5),
+        ));
+        block.body.push(void(Inst::Return {
+            values: vec![v(5), v(2)],
+        }));
+        function.blocks.push(block);
+        let module = module_with_function(function, vec![Ty::I32, Ty::U64]);
+        let outcome = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect("the re-derived pointer is usable");
+        assert_eq!(int_signed(&outcome.returns[0]), -7);
+        // The integer half IS an integer (not a re-tagged pointer) and is the
+        // allocation's address — a nonzero u64.
+        assert_eq!(outcome.returns[1].ty, Ty::U64);
+        assert!(
+            int_unsigned(&outcome.returns[1]) != 0,
+            "{:?}",
+            outcome.returns[1]
+        );
+
+        // Off-set IDENTITY transmutes (`bool -> bool`, `f64 -> f64`) are
+        // refused: the gate is on the types, never on whether the
+        // reinterpretation would change anything, so `eval_bitcast`'s
+        // `src == dst` transport is unreachable for a type outside the set.
+        // (Lean: `transmute_bool_identity_unsupported_stable` and the f64 twin.)
+        for (ty, value) in [
+            (Ty::Bool, Constant::Bool(true)),
+            (Ty::F64, Constant::Float(1.5)),
+        ] {
+            let module = transmute_module(ty.clone(), value, ty.clone());
+            let error = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [])
+                .expect_err("an identity transmute on an off-set type is refused");
+            assert_eq!(
+                error.code,
+                InterpretErrorCode::UnsupportedCast,
+                "Transmute {ty} -> {ty}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn intentionally_excluded_casts_have_stable_codes_and_f16_executes() {
+        // An aggregate transmute stays outside the executable set (the Lean
+        // model has no byte buffer to reinterpret through).
+        let cast_module = transmute_module(
+            Ty::Tuple(vec![Ty::I32, Ty::I32]),
+            Constant::Aggregate(vec![Constant::Int(1), Constant::Int(2)]),
+            Ty::I64,
+        );
         let error = Interpreter::with_module(&cast_module)
             .execute_func(FuncId::new(0), [])
-            .expect_err("transmute is intentionally excluded");
+            .expect_err("aggregate transmute is intentionally excluded");
         assert_eq!(error.code, InterpretErrorCode::UnsupportedCast);
         assert_eq!(error.code.as_str(), "unsupported_cast");
 
+        // WS2.15: an `F16` constant is no longer `UnsupportedFloat`; the
+        // `Constant::Float(f64)` carrier narrows to the binary16 pattern.
         let mut f16_fn = Function::new(FuncId::new(0), "f16", crate::FuncTyId::new(0), b(0));
         let mut f16_block = Block::new(b(0));
         f16_block.body.push(result(
@@ -10420,13 +17579,95 @@ mod tests {
             },
             v(0),
         ));
+        f16_block
+            .body
+            .push(void(Inst::Return { values: vec![v(0)] }));
         f16_fn.blocks.push(f16_block);
         let f16_module = module_with_function(f16_fn, vec![Ty::F16]);
-        let error = Interpreter::with_module(&f16_module)
+        let outcome = Interpreter::with_module(&f16_module)
             .execute_func(FuncId::new(0), [])
-            .expect_err("f16 has no executable codec");
-        assert_eq!(error.code, InterpretErrorCode::UnsupportedFloat);
-        assert_eq!(error.code.as_str(), "unsupported_float");
+            .expect("an f16 constant executes (WS2.15)");
+        assert_eq!(outcome.returns[0].ty, Ty::F16);
+        assert_eq!(
+            outcome.returns[0].kind,
+            InterpretValueKind::FloatBits(0x3C00),
+            "1.0 at binary16 is 0x3C00"
+        );
+        // The code itself stays stable for the Lean mirror.
+        assert_eq!(
+            InterpretErrorCode::UnsupportedFloat.as_str(),
+            "unsupported_float"
+        );
+    }
+
+    /// WS2.15: the binary16 rounder, at the edges a hardware `as f16` would
+    /// have to get right — kept next to the codec so a change to it is
+    /// reviewed against these first (the conformance `interpret_f16` table
+    /// pins the same edges THROUGH the instructions).
+    #[test]
+    fn f16_codec_edge_vectors() {
+        // Exact decode of every named pattern.
+        for (bits, value) in [
+            (0x0000u16, 0.0f64),
+            (0x3C00, 1.0),
+            (0x3E00, 1.5),
+            (0x4080, 2.25),
+            (0x4380, 3.75),
+            (0x7BFF, 65504.0),
+            (0x0001, 2f64.powi(-24)),
+            (0x03FF, 1023.0 * 2f64.powi(-24)),
+            (0x0400, 2f64.powi(-14)),
+            (0xC000, -2.0),
+        ] {
+            assert_eq!(f16_bits_to_f64(bits), value, "decode {bits:#06x}");
+            assert_eq!(f64_to_f16_bits(value), bits, "encode {value}");
+        }
+        assert_eq!(f64_to_f16_bits(-0.0).to_le_bytes(), [0x00, 0x80]);
+        assert_eq!(f16_bits_to_f64(0x8000).to_bits(), (-0.0f64).to_bits());
+        assert_eq!(f64_to_f16_bits(f64::INFINITY), 0x7C00);
+        assert_eq!(f64_to_f16_bits(f64::NEG_INFINITY), 0xFC00);
+        assert!(f16_bits_to_f64(0x7C00).is_infinite());
+        // Overflow threshold: 65520 is the tie between 65504 and 2^16 and
+        // rounds to even (up, out of the format); anything below it rounds
+        // down to 65504.
+        assert_eq!(f64_to_f16_bits(65520.0), 0x7C00);
+        assert_eq!(f64_to_f16_bits(65519.999), 0x7BFF);
+        assert_eq!(f64_to_f16_bits(65512.0), 0x7BFF);
+        assert_eq!(f64_to_f16_bits(65536.0), 0x7C00);
+        assert_eq!(f64_to_f16_bits(1e300), 0x7C00);
+        // Ties to even inside the format: 1 + 2^-11 is the midpoint between
+        // 1.0 (even) and 1 + 2^-10 (odd) -> 1.0; 1 + 3*2^-11 is the midpoint
+        // between 1 + 2^-10 (odd) and 1 + 2^-9 (even) -> 1 + 2^-9.
+        assert_eq!(f64_to_f16_bits(1.0 + 2f64.powi(-11)), 0x3C00);
+        assert_eq!(f64_to_f16_bits(1.0 + 3.0 * 2f64.powi(-11)), 0x3C02);
+        // Subnormal floor: 2^-25 is the tie between 0 and the smallest
+        // subnormal -> 0 (even); anything above it rounds to 0x0001; below
+        // it (including every binary64 subnormal) rounds to 0.
+        assert_eq!(f64_to_f16_bits(2f64.powi(-25)), 0x0000);
+        assert_eq!(f64_to_f16_bits(2f64.powi(-25) * 1.0001), 0x0001);
+        assert_eq!(f64_to_f16_bits(2f64.powi(-26)), 0x0000);
+        assert_eq!(f64_to_f16_bits(-2f64.powi(-26)), 0x8000);
+        assert_eq!(f64_to_f16_bits(f64::from_bits(1)), 0x0000);
+        // A subnormal that rounds up into the smallest normal.
+        assert_eq!(f64_to_f16_bits(1023.75 * 2f64.powi(-24)), 0x0400);
+        // NaN: sign and quiet bit kept, payload truncated to the top ten
+        // bits, and a signalling payload is quieted.
+        let quiet = f64_to_f16_bits(f64::NAN);
+        assert_eq!(quiet & 0x7C00, 0x7C00);
+        assert_ne!(quiet & 0x03FF, 0);
+        assert_eq!(f64_to_f16_bits(f16_bits_to_f64(0x7E2A)), 0x7E2A);
+        assert_eq!(f64_to_f16_bits(f16_bits_to_f64(0xFE2A)), 0xFE2A);
+        assert_eq!(f64_to_f16_bits(f16_bits_to_f64(0x7C01)), 0x7E01);
+        // Every 16-bit pattern round-trips through binary64 (NaNs quieted).
+        for bits in 0..=u16::MAX {
+            let back = f64_to_f16_bits(f16_bits_to_f64(bits));
+            let expected = if bits & 0x7C00 == 0x7C00 && bits & 0x03FF != 0 {
+                bits | 0x0200
+            } else {
+                bits
+            };
+            assert_eq!(back, expected, "round trip {bits:#06x}");
+        }
     }
 
     #[test]
@@ -10471,20 +17712,26 @@ mod tests {
     /// Regression (2026-06-16 whole-machine OOM): an `Alloca` whose element
     /// count is a large in-IR value used to be materialized directly as
     /// `vec![None; elem*count]`, so a single instruction could exhaust RAM+swap
-    /// and panic the kernel (the failure mode that bricked the dev machine while
-    /// the THIR→trust-ir differential interpreted a real-MIR oracle on boundary
-    /// samples). With the space budget, the interpreter is now TOTAL in memory:
-    /// the allocation fails closed with `OutOfMemory` BEFORE any host bytes are
-    /// touched. This test itself would OOM the test runner if the guard were
-    /// removed — its passing is the proof the guard holds.
+    /// and panic the kernel; a 256 MiB `mem_budget` then refused such an
+    /// allocation. Allocations are SPARSE now (one uninitialized run whatever
+    /// the size), so the cap is gone and the program simply EXECUTES: an
+    /// ~8 TiB `Alloca`, a store to its last element and a load back cost O(1)
+    /// host memory. This test itself would OOM the runner if allocations were
+    /// dense again — its passing is the proof they are not.
     #[test]
-    fn unbounded_alloca_hits_memory_budget_not_host_oom() {
-        let mut function =
-            Function::new(FuncId::new(0), "huge_alloca", crate::FuncTyId::new(0), b(0));
+    fn huge_alloca_is_sparse_and_executes_without_host_oom() {
+        let mut module = Module::new("huge-alloca");
+        let ft = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![Ty::I64],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let mut function = Function::new(FuncId::new(0), "huge_alloca", ft, b(0));
         let mut block = Block::new(b(0));
-        // 2^40 elements of i64 ⇒ ~8 TiB requested — fits u64, passes the
-        // checked_mul overflow guard, and is exactly what a sampled boundary
-        // count would look like reaching `MemoryState::alloc`.
+        // 2^40 elements of i64 ⇒ ~8 TiB requested.
         block.body.push(result(
             Inst::Const {
                 ty: Ty::I64,
@@ -10500,6 +17747,84 @@ mod tests {
             },
             v(1),
         ));
+        block.body.push(result(
+            Inst::Const {
+                ty: Ty::I64,
+                value: Constant::Int((1i128 << 40) - 1),
+            },
+            v(2),
+        ));
+        block.body.push(result(
+            Inst::GEP {
+                pointee_ty: Ty::I64,
+                base: v(1),
+                indices: vec![v(2)],
+                inbounds: true,
+            },
+            v(3),
+        ));
+        block.body.push(result(
+            Inst::Const {
+                ty: Ty::I64,
+                value: Constant::Int(42),
+            },
+            v(4),
+        ));
+        block.body.push(InstrNode::new(Inst::Store {
+            ty: Ty::I64,
+            ptr: v(3),
+            value: v(4),
+            volatile: false,
+            align: None,
+        }));
+        block.body.push(result(
+            Inst::Load {
+                ty: Ty::I64,
+                ptr: v(3),
+                volatile: false,
+                align: None,
+            },
+            v(5),
+        ));
+        block
+            .body
+            .push(InstrNode::new(Inst::Return { values: vec![v(5)] }));
+        function.blocks.push(block);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
+        let outcome = Interpreter::with_module(&module)
+            .execute_func(FuncId::new(0), [])
+            .expect("a sparse 8 TiB allocation executes");
+        assert_eq!(
+            outcome.returns,
+            vec![InterpretValue::int(Ty::I64, 42).unwrap()]
+        );
+    }
+
+    /// What IS still refused is exhausting the ADDRESS SPACE — an allocation
+    /// whose last byte no pointer can name — and it is an incapacity
+    /// (`OutOfMemory`), never undefined behaviour in the program.
+    #[test]
+    fn allocation_past_the_address_space_is_out_of_memory() {
+        let mut function =
+            Function::new(FuncId::new(0), "huge_alloca", crate::FuncTyId::new(0), b(0));
+        let mut block = Block::new(b(0));
+        block.body.push(result(
+            Inst::Const {
+                ty: Ty::U64,
+                value: Constant::Int(u64::MAX as i128),
+            },
+            v(0),
+        ));
+        block.body.push(result(
+            Inst::Alloca {
+                ty: Ty::U8,
+                count: Some(v(0)),
+                align: None,
+            },
+            v(1),
+        ));
         block
             .body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
@@ -10508,14 +17833,14 @@ mod tests {
         let module = module_with_function(function, vec![]);
         let error = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
-            .expect_err("oversized allocation must fail closed, not allocate");
+            .expect_err("no pointer can name the last byte");
 
         assert_eq!(error.code, InterpretErrorCode::OutOfMemory);
         assert_eq!(error.code.as_str(), "out_of_memory");
     }
 
-    /// The budget must not regress legitimate small allocations: a handful of
-    /// elements is far under the default 256 MiB and interprets cleanly.
+    /// A handful of elements interprets cleanly (the historical control of the
+    /// deleted budget, kept as the small-allocation baseline).
     #[test]
     fn bounded_alloca_under_budget_succeeds() {
         let mut function = Function::new(
@@ -10548,7 +17873,7 @@ mod tests {
         let module = module_with_function(function, vec![]);
         Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
-            .expect("a 32-byte allocation is well under the default budget");
+            .expect("a 32-byte allocation executes");
     }
 
     #[test]
@@ -10672,12 +17997,16 @@ mod tests {
             size: None,
             align: None,
             repr: Default::default(),
+            origin: None,
         });
-        module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut function =
             Function::new(FuncId::new(0), "heap_struct", crate::FuncTyId::new(0), b(0));
@@ -10789,7 +18118,9 @@ mod tests {
         ));
         block.body.push(void(Inst::Return { values: vec![v(9)] }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -10832,6 +18163,7 @@ mod tests {
             size: None,
             align: None,
             repr: Default::default(),
+            origin: None,
         });
         let interp = Interpreter::with_module(&module);
         let layout = interp
@@ -10874,6 +18206,7 @@ mod tests {
             size,
             align,
             repr,
+            origin: None,
         }
     }
 
@@ -10964,11 +18297,14 @@ mod tests {
             crate::ty::StructRepr::Rust,
         ));
         let struct_ty = Ty::Struct(crate::value::StructId::new(0));
-        module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::U8, Ty::U64],
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::U8, Ty::U64],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut function = Function::new(
             FuncId::new(0),
@@ -11104,7 +18440,9 @@ mod tests {
             values: vec![v(11), v(12)],
         }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -11915,12 +19253,16 @@ mod tests {
             size: None,
             align: None,
             repr: Default::default(),
+            origin: None,
         });
-        module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns,
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns,
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         module
     }
 
@@ -11967,7 +19309,9 @@ mod tests {
         function.blocks.push(block);
 
         let mut module = struct_const_module(vec![Ty::I8, Ty::I32]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect("struct constant executes");
@@ -12008,6 +19352,7 @@ mod tests {
             size: None,
             align: None,
             repr: Default::default(),
+            origin: None,
         });
         module.add_struct(StructDef {
             id: outer_id,
@@ -12027,12 +19372,16 @@ mod tests {
             size: None,
             align: None,
             repr: Default::default(),
+            origin: None,
         });
-        module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::I32, Ty::I8],
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::I32, Ty::I8],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut function = Function::new(
             FuncId::new(0),
@@ -12108,7 +19457,9 @@ mod tests {
             values: vec![v(4), v(5)],
         }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
@@ -12138,7 +19489,9 @@ mod tests {
         block.body.push(void(Inst::Return { values: vec![] }));
         function.blocks.push(block);
         let mut module = struct_const_module(vec![]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect_err("mismatched struct constant must not interpret")
@@ -12177,7 +19530,9 @@ mod tests {
         block.body.push(void(Inst::Return { values: vec![] }));
         function.blocks.push(block);
         let mut module = struct_const_module(vec![]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let missing = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect_err("unknown struct id must not interpret");
@@ -12209,11 +19564,14 @@ mod tests {
                 },
             ],
         ));
-        module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns,
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns,
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         module
     }
 
@@ -12308,7 +19666,9 @@ mod tests {
         }));
         function.blocks.push(block);
         let mut module = option_enum_module(vec![Ty::U8, Ty::I32]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect("Some round-trips through memory");
@@ -12361,7 +19721,9 @@ mod tests {
         block.body.push(void(Inst::Return { values: vec![v(3)] }));
         function.blocks.push(block);
         let mut module = option_enum_module(vec![Ty::U8]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect("None round-trips through memory");
@@ -12377,10 +19739,14 @@ mod tests {
             values: BTreeMap::new(),
             memory: MemoryState::default(),
             globals: BTreeMap::new(),
-            frames: BTreeMap::new(),
+            frames: BTreeSet::new(),
             next_frame_id: 0,
             steps: 0,
             remaining_fuel: u64::MAX,
+            host: HostState::new(),
+            host_calls: 0,
+            drop_glue: None,
+            unwind: UnwindState::default(),
         };
         let enum_ty = Ty::Enum(crate::value::EnumId::new(0));
 
@@ -12623,10 +19989,14 @@ mod tests {
             values: BTreeMap::new(),
             memory: MemoryState::default(),
             globals: BTreeMap::new(),
-            frames: BTreeMap::new(),
+            frames: BTreeSet::new(),
             next_frame_id: 0,
             steps: 0,
             remaining_fuel: u64::MAX,
+            host: HostState::new(),
+            host_calls: 0,
+            drop_glue: None,
+            unwind: UnwindState::default(),
         };
         let build = |layout: Option<EnumLayoutDescriptor>| {
             let mut module = Module::new("untagged");
@@ -12761,11 +20131,14 @@ mod tests {
             .with_repr(EnumTagRepr::I16),
         );
         let enum_ty = Ty::Enum(EnumId::new(0));
-        module.add_func_type(FuncTy {
-            params: vec![enum_ty.clone()],
-            returns: vec![Ty::I16],
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: vec![enum_ty.clone()],
+                returns: vec![Ty::I16],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "read_tag", crate::FuncTyId::new(0), b(0));
         let mut block = Block::new(b(0));
         block.params.push((v(0), enum_ty.clone()));
@@ -12779,7 +20152,9 @@ mod tests {
         ));
         block.body.push(void(Inst::Return { values: vec![v(1)] }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         // Fieldless variant: Aggregate([tag]) only.
         let neg = InterpretValue {
@@ -12835,17 +20210,22 @@ mod tests {
                 }],
             ));
         }
-        module.add_func_type(FuncTy {
-            params: vec![Ty::Enum(EnumId::new(0))],
-            returns: vec![],
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: vec![Ty::Enum(EnumId::new(0))],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "takes_a", crate::FuncTyId::new(0), b(0));
         let mut block = Block::new(b(0));
         block.params.push((v(0), Ty::Enum(EnumId::new(0))));
         block.body.push(void(Inst::Return { values: vec![] }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         let wrong = InterpretValue {
             ty: Ty::Enum(EnumId::new(1)),
@@ -12890,11 +20270,14 @@ mod tests {
             .with_repr(EnumTagRepr::I16),
         );
         let enum_ty = Ty::Enum(EnumId::new(0));
-        module.add_func_type(FuncTy {
-            params: vec![enum_ty.clone()],
-            returns: vec![],
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: vec![enum_ty.clone()],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "store_it", crate::FuncTyId::new(0), b(0));
         let mut block = Block::new(b(0));
         block.params.push((v(0), enum_ty.clone()));
@@ -12915,7 +20298,9 @@ mod tests {
         }));
         block.body.push(void(Inst::Return { values: vec![] }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
 
         // Tag = 1 (a variant INDEX; neither -5 nor 7 — no variant has disc 1).
         let malformed = InterpretValue {
@@ -13018,7 +20403,9 @@ mod tests {
         }));
         function.blocks.push(block);
         let mut module = option_enum_module(vec![Ty::U8, Ty::I32]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect("producer-convention construct round-trips");
@@ -13089,7 +20476,9 @@ mod tests {
         block.body.push(void(Inst::Return { values: vec![] }));
         function.blocks.push(block);
         let mut module = option_enum_module(vec![]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let err = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect_err("tag/arity-inconsistent enum value must fail at Store");
@@ -13128,11 +20517,14 @@ mod tests {
             )
             .with_discriminants(vec![Some(10)]),
         );
-        module.add_func_type(FuncTy {
-            params: Vec::new(),
-            returns: vec![Ty::U8, Ty::I8],
-            is_vararg: false,
-        });
+        module
+            .add_func_type(FuncTy {
+                params: Vec::new(),
+                returns: vec![Ty::U8, Ty::I8],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let enum_ty = Ty::Enum(EnumId::new(0));
         let mut function =
@@ -13190,7 +20582,9 @@ mod tests {
             values: vec![v(3), v(4)],
         }));
         function.blocks.push(block);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let outcome = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect("sparse-discriminant enum round-trips");
@@ -13215,7 +20609,9 @@ mod tests {
         block.body.push(void(Inst::Return { values: vec![] }));
         function.blocks.push(block);
         let mut module = option_enum_module(vec![]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect_err("mismatched enum constant must not interpret")
@@ -13299,7 +20695,9 @@ mod tests {
         block.body.push(void(Inst::Return { values: vec![] }));
         function.blocks.push(block);
         let mut module = option_enum_module(vec![]);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         let corrupted = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [])
             .expect_err("a tag matching no discriminant must not decode");
@@ -13364,18 +20762,26 @@ mod tests {
     /// single-&mut element function `incr_elem(x: &mut i32) { *x += 1 }`.
     fn seq_map_module() -> Module {
         let mut module = Module::new("seq-map");
-        let i32_id = module.add_type(Ty::I32);
+        let i32_id = module
+            .add_type(Ty::I32)
+            .expect("Module::add_type: test fixture");
         let seq_ty = Ty::Sequence(i32_id);
-        let loop_ty = module.add_func_type(FuncTy {
-            params: vec![seq_ty.clone()],
-            returns: vec![seq_ty.clone()],
-            is_vararg: false,
-        });
-        let elem_fn_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::RefMut(Box::new(Ty::I32))],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let loop_ty = module
+            .add_func_type(FuncTy {
+                params: vec![seq_ty.clone()],
+                returns: vec![seq_ty.clone()],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let elem_fn_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::RefMut(Box::new(Ty::I32))],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut incr_all = Function::new(FuncId::new(0), "incr_all", loop_ty, b(0));
         let mut entry = Block::new(b(0)).with_param(v(0), seq_ty.clone());
@@ -13427,8 +20833,12 @@ mod tests {
         eb.body.push(void(Inst::Return { values: vec![] }));
         incr_elem.blocks.push(eb);
 
-        module.add_function(incr_all);
-        module.add_function(incr_elem);
+        module
+            .try_add_function(incr_all)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .try_add_function(incr_elem)
+            .expect("Module::try_add_function: test fixture");
         module
     }
 
@@ -13469,6 +20879,120 @@ mod tests {
         assert_eq!(mapped, vec![2, 3, 4]);
     }
 
+    /// A sequence is a persistent rope, like an array (2026-09-30): a
+    /// 2^40-element uniform sequence argument costs O(1); `InsertElement`
+    /// copies one root-to-leaf path and leaves its input unchanged;
+    /// `ExtractElement` reads either version; `SeqMapAddK` maps each stored
+    /// value once. (As a `Vec`, this argument could not exist, and every
+    /// insert copied the whole sequence.)
+    ///
+    /// The same program runs first at two small lengths, where the result's
+    /// STORED values are counted: three (a run of ones, the inserted ten,
+    /// a run of ones) whatever the length. An insert or a map that
+    /// materialized element by element would store thousands there and fail
+    /// in milliseconds, before the 2^40 run could grow host memory.
+    #[test]
+    fn a_sequence_insert_is_persistent_and_never_copies() {
+        let run = |len: u64, at: i128| {
+            let mut module = Module::new("seq-persistent");
+            let i32_id = module
+                .add_type(Ty::I32)
+                .expect("Module::add_type: test fixture");
+            let seq_ty = Ty::Sequence(i32_id);
+            let fn_ty = module
+                .add_func_type(FuncTy {
+                    abi: None,
+                    params: vec![seq_ty.clone()],
+                    returns: vec![Ty::I32, Ty::I32, seq_ty.clone()],
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let mut f = Function::new(FuncId::new(0), "f", fn_ty, b(0));
+            let mut entry = Block::new(b(0)).with_param(v(0), seq_ty.clone());
+            entry.body.push(result(
+                Inst::Const {
+                    ty: Ty::U64,
+                    value: Constant::Int(at),
+                },
+                v(1),
+            ));
+            entry.body.push(result(
+                Inst::Const {
+                    ty: Ty::I32,
+                    value: Constant::Int(9),
+                },
+                v(2),
+            ));
+            entry.body.push(result(
+                Inst::InsertElement {
+                    ty: seq_ty.clone(),
+                    array: v(0),
+                    index: v(1),
+                    value: v(2),
+                },
+                v(3),
+            ));
+            entry.body.push(result(
+                Inst::ExtractElement {
+                    ty: Ty::I32,
+                    array: v(3),
+                    index: v(1),
+                },
+                v(4),
+            ));
+            entry.body.push(result(
+                Inst::ExtractElement {
+                    ty: Ty::I32,
+                    array: v(0),
+                    index: v(1),
+                },
+                v(5),
+            ));
+            entry.body.push(result(
+                Inst::SeqMapAddK {
+                    ty: seq_ty.clone(),
+                    seq: v(3),
+                    k: 1,
+                },
+                v(6),
+            ));
+            entry.body.push(void(Inst::Return {
+                values: vec![v(4), v(5), v(6)],
+            }));
+            f.blocks.push(entry);
+            module
+                .try_add_function(f)
+                .expect("Module::try_add_function: test fixture");
+            let zero = InterpretValue::int(Ty::I32, 0).expect("i32");
+            let zeros = InterpretValue {
+                ty: seq_ty,
+                kind: InterpretValueKind::Sequence(ArrayValue::splat(zero, len)),
+            };
+            let outcome = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [zeros])
+                .expect("a persistent insert, two reads and a map");
+            assert_eq!(int_signed(&outcome.returns[0]), 9);
+            assert_eq!(int_signed(&outcome.returns[1]), 0, "the input is unchanged");
+            let InterpretValueKind::Sequence(mapped) = &outcome.returns[2].kind else {
+                panic!("seq_map_add_k returns a sequence: {:?}", outcome.returns[2]);
+            };
+            assert_eq!(mapped.len(), len);
+            assert_eq!(mapped.get(at as u64).map(int_signed), Some(10));
+            assert_eq!(mapped.get(0).map(int_signed), Some(1));
+            assert_eq!(mapped.get(len - 1).map(int_signed), Some(1));
+            assert!(mapped.get(len).is_none());
+            let mut stored = 0usize;
+            let _ = mapped.try_for_each_stored(|_| {
+                stored += 1;
+                core::ops::ControlFlow::<()>::Continue(())
+            });
+            stored
+        };
+        assert_eq!(run(4096, 1234), 3);
+        assert_eq!(run(1 << 16, 40_000), 3);
+        assert_eq!(run(1 << 40, 123_456_789_012), 3);
+    }
+
     /// Lean pin `seq_map_empty_sequence_eval_stable`.
     #[test]
     fn seq_map_empty_sequence_maps_to_empty() {
@@ -13495,10 +21019,13 @@ mod tests {
         let seq_ty = Ty::Sequence(TyId::new(0));
         let bad_seq = InterpretValue {
             ty: seq_ty,
-            kind: InterpretValueKind::Sequence(vec![
-                InterpretValue::int(Ty::I32, 1).expect("i32 element"),
-                InterpretValue::bool(true),
-            ]),
+            kind: InterpretValueKind::Sequence(
+                vec![
+                    InterpretValue::int(Ty::I32, 1).expect("i32 element"),
+                    InterpretValue::bool(true),
+                ]
+                .into(),
+            ),
         };
         let error = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [bad_seq])
@@ -13547,19 +21074,27 @@ mod tests {
     #[test]
     fn seq_map_bad_fwd_signature_has_stable_code() {
         let mut module = Module::new("seq-map-bad-sig");
-        let i32_id = module.add_type(Ty::I32);
+        let i32_id = module
+            .add_type(Ty::I32)
+            .expect("Module::add_type: test fixture");
         let seq_ty = Ty::Sequence(i32_id);
-        let loop_ty = module.add_func_type(FuncTy {
-            params: vec![seq_ty.clone()],
-            returns: vec![seq_ty.clone()],
-            is_vararg: false,
-        });
+        let loop_ty = module
+            .add_func_type(FuncTy {
+                params: vec![seq_ty.clone()],
+                returns: vec![seq_ty.clone()],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         // By-value fn(i32) -> i32: NOT the &mut element form.
-        let by_value_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let by_value_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
 
         let mut incr_all = Function::new(FuncId::new(0), "incr_all", loop_ty, b(0));
         let mut entry = Block::new(b(0)).with_param(v(0), seq_ty.clone());
@@ -13579,8 +21114,12 @@ mod tests {
         ib.body.push(void(Inst::Return { values: vec![v(0)] }));
         identity.blocks.push(ib);
 
-        module.add_function(incr_all);
-        module.add_function(identity);
+        module
+            .try_add_function(incr_all)
+            .expect("Module::try_add_function: test fixture");
+        module
+            .try_add_function(identity)
+            .expect("Module::try_add_function: test fixture");
 
         let error = Interpreter::with_module(&module)
             .execute_func(FuncId::new(0), [i32_seq_value(Ty::Sequence(i32_id), &[1])])
@@ -13593,11 +21132,14 @@ mod tests {
     fn seq_map_non_sequence_operand_has_stable_code() {
         let mut module = seq_map_module();
         // Rewire incr_all to take (and map) an i32 instead of a sequence.
-        let i32_loop_ty = module.add_func_type(FuncTy {
-            params: vec![Ty::I32],
-            returns: vec![Ty::Sequence(TyId::new(0))],
-            is_vararg: false,
-        });
+        let i32_loop_ty = module
+            .add_func_type(FuncTy {
+                params: vec![Ty::I32],
+                returns: vec![Ty::Sequence(TyId::new(0))],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         module.functions[0].ty = i32_loop_ty;
         module.functions[0].blocks[0].params[0].1 = Ty::I32;
         let error = Interpreter::with_module(&module)
@@ -13623,6 +21165,81 @@ mod tests {
         block.body.push(void(Inst::Return { values: vec![v(0)] }));
         function.blocks.push(block);
         module_with_function(function, vec![ty])
+    }
+
+    #[test]
+    fn a_phantom_constant_at_non_unit_is_rejected_before_any_use() {
+        use crate::ty::SetRepr;
+        for ty in [
+            Ty::I8,
+            Ty::I128,
+            Ty::U128,
+            Ty::Bool,
+            Ty::F32,
+            Ty::F64,
+            Ty::Ptr,
+            Ty::FatPtr(FatPtrKind::Str),
+            Ty::Ref(Box::new(Ty::U8)),
+            Ty::Tuple(vec![]),
+            Ty::Array(TyId::new(0), 0),
+            Ty::Sequence(TyId::new(0)),
+            Ty::Set(TyId::new(0), SetRepr::Boxed),
+            Ty::Never,
+        ] {
+            assert!(!Constant::PhantomData.shape_matches_ty(&ty));
+            let mut function =
+                Function::new(FuncId::new(0), "bad_phantom", crate::FuncTyId::new(0), b(0));
+            let mut block = Block::new(b(0));
+            block.body.push(result(
+                Inst::Const {
+                    ty: ty.clone(),
+                    value: Constant::PhantomData,
+                },
+                v(0),
+            ));
+            block.body.push(void(Inst::Return { values: vec![] }));
+            function.blocks.push(block);
+            let module = module_with_function(function, vec![]);
+            let error = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [])
+                .expect_err("an unused constant must still obey its declared type");
+            assert_eq!(
+                error.code,
+                InterpretErrorCode::TypeError,
+                "{ty:?}: {error:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn vector_constants_reject_unadmitted_scalar_lanes_before_any_use() {
+        for elem in [Ty::I128, Ty::U128, Ty::Isize, Ty::Usize, Ty::Char, Ty::Ptr] {
+            let mut function = Function::new(
+                FuncId::new(0),
+                "bad_vector_lane",
+                crate::FuncTyId::new(0),
+                b(0),
+            );
+            let mut block = Block::new(b(0));
+            block.body.push(result(
+                Inst::Const {
+                    ty: Ty::Vector(Box::new(elem.clone()), 2),
+                    value: Constant::Vector(vec![Constant::Int(0), Constant::Int(0)]),
+                },
+                v(0),
+            ));
+            block.body.push(void(Inst::Return { values: vec![] }));
+            function.blocks.push(block);
+            let module = module_with_function(function, vec![]);
+            let error = Interpreter::with_module(&module)
+                .execute_func(FuncId::new(0), [])
+                .expect_err("invalid vector lane type must not create an unused value");
+            assert_eq!(
+                error.code,
+                InterpretErrorCode::TypeError,
+                "{elem:?}: {error:?}"
+            );
+        }
     }
 
     /// THE ACCEPT CONTROL. `shape_matches_ty` has admitted `(Constant::Int(_),
@@ -13683,4 +21300,85 @@ mod tests {
             );
         }
     }
+
+    /// Trust (crystal D3): the WEAK compare-exchange is refused, never stepped as strong, and
+    /// the refusal does not depend on whether the comparison would succeed. The STRONG one
+    /// over the same state steps to `(old, true)` and stores, exactly as before.
+    #[test]
+    fn weak_cmpxchg_is_refused_and_strong_cmpxchg_steps() {
+        let build = |weak: bool| {
+            let mut function = Function::new(FuncId::new(0), "cas", crate::FuncTyId::new(0), b(0));
+            let mut block = Block::new(b(0));
+            block.body.push(result(
+                Inst::Alloca {
+                    ty: Ty::I8,
+                    count: None,
+                    align: None,
+                },
+                v(0),
+            ));
+            block.body.push(result(
+                Inst::Const {
+                    ty: Ty::I8,
+                    value: Constant::Int(7),
+                },
+                v(1),
+            ));
+            block.body.push(void(Inst::Store {
+                ty: Ty::I8,
+                ptr: v(0),
+                value: v(1),
+                volatile: false,
+                align: None,
+            }));
+            block.body.push(result(
+                Inst::Const {
+                    ty: Ty::I8,
+                    value: Constant::Int(9),
+                },
+                v(2),
+            ));
+            block.body.push(
+                InstrNode::new(Inst::CmpXchg {
+                    ty: Ty::I8,
+                    ptr: v(0),
+                    expected: v(1),
+                    desired: v(2),
+                    success: crate::inst::Ordering::SeqCst,
+                    failure: crate::inst::Ordering::SeqCst,
+                    weak,
+                })
+                .with_result(v(3))
+                .with_result(v(4)),
+            );
+            block.body.push(void(Inst::Return { values: vec![v(4)] }));
+            function.blocks.push(block);
+            module_with_function(function, vec![Ty::Bool])
+        };
+
+        let strong = build(false);
+        let outcome = Interpreter::with_module(&strong)
+            .execute_func(FuncId::new(0), [])
+            .expect("a strong compare-exchange steps");
+        assert_eq!(
+            outcome.returns[0].as_bool(),
+            Some(true),
+            "expected == current: it succeeds"
+        );
+
+        let weak = build(true);
+        let err = Interpreter::with_module(&weak)
+            .execute_func(FuncId::new(0), [])
+            .expect_err("a weak compare-exchange must be refused, not stepped as strong");
+        assert_eq!(err.code, InterpretErrorCode::TypeError);
+        assert!(
+            err.message.contains("Inst::CmpXchg weak"),
+            "{}",
+            err.message
+        );
+    }
 }
+
+#[cfg(test)]
+#[path = "interpret/single_inhabited_tests.rs"]
+mod single_inhabited_tests;

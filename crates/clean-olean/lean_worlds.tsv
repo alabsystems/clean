@@ -1,0 +1,22 @@
+# The Lean worlds this build of Clean reads (docs/DECISIONS.md R38, R81).
+#
+# A world is identified by what pinned `lean` compares before it reads an
+# `.olean` part: header version, flags and githash (module.cpp,
+# `lean_compacted_region_read`); the header's lean_version string is
+# informative only. build.rs measures each world's identity from the tracked
+# fixtures named here; an identity is never written by hand. A row's fixtures
+# must agree, and two rows may not share an identity.
+#
+# States (R38): oracle (exactly one, the `lean-toolchain` pin), historical and
+# frontend-only are read without a declaration; measured is read only after
+# `clean_olean::declare_environment_world`; canary is refused by name. Any
+# identity no row carries is refused by name, and an environment reads one
+# world.
+#
+# world	state	toolchain	fixtures (space-separated, workspace-relative)
+v4.30.0-rc2	oracle	leanprover/lean4:v4.30.0-rc2	tests/fixtures/olean/v4.30.0/closure_cache/Init.olean tests/fixtures/olean/v4.30.0/closure_cache/Target.olean tests/fixtures/olean/v4.30.0/module-system/Sigma.olean
+v4.26.0	historical	leanprover/lean4:v4.26.0	tests/fixtures/olean/v4.26.0/custom/StringCompat.olean
+v4.13.0	historical	leanprover/lean4:v4.13.0	tests/fixtures/olean/v4.13.0/stdlib/Init.olean tests/fixtures/olean/v4.13.0/custom/Minimal.olean
+v4.8.0	frontend-only	leanprover/lean4:v4.8.0	tests/fixtures/olean/v4.8.0/witness/FactLib.olean
+v4.35.0	measured	leanprover/lean4:v4.35.0	tests/fixtures/olean/v4.35.0/matcher-metadata/MatcherParity.olean
+v4.36.0-rc2	measured	leanprover/lean4:v4.36.0-rc2	tests/fixtures/olean/v4.36.0-rc2/matcher-metadata/MatcherParity.olean

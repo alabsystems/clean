@@ -91,17 +91,23 @@ const CANDIDATE_NAMES: &[&str] = &[
 
 const DOMAIN_AXIOM: &str = "test_domain_specific_axiom_3536";
 
-/// Seed `env` with every name in `CANDIDATE_NAMES` plus `DOMAIN_AXIOM`,
-/// all registered as `Declaration::Axiom` over `Prop`.
+/// Seed `env` with every name in `CANDIDATE_NAMES` plus `DOMAIN_AXIOM`. A
+/// foundational name is installed as the kernel's CANONICAL declaration
+/// (`canonical_foundation_declaration`); every other name as an `Axiom` over
+/// `Prop`. A stand-in `propext : Prop` would, correctly, classify as a
+/// non-foundational axiom: foundational is the canonical declaration, never
+/// the name (see `test_classifier_stand_in_foundation_is_non_foundational`).
 fn seed_candidates_and_domain_axiom(env: &mut Environment) {
     let prop = clean_kernel::expr::Expr::prop();
     for name in CANDIDATE_NAMES {
-        env.add_decl_structural(Declaration::Axiom {
-            name: Name::from_string(name),
-            level_params: vec![],
-            type_: prop.clone(),
-        })
-        .expect("add candidate axiom");
+        let n = Name::from_string(name);
+        let decl =
+            clean_kernel::canonical_foundation_declaration(&n).unwrap_or(Declaration::Axiom {
+                name: n,
+                level_params: vec![],
+                type_: prop.clone(),
+            });
+        env.add_decl_structural(decl).expect("add candidate axiom");
     }
     env.add_decl_structural(Declaration::Axiom {
         name: Name::from_string(DOMAIN_AXIOM),
@@ -221,6 +227,25 @@ fn test_classifier_rejects_retired_instdecidableeqfin_axiom() {
 }
 
 /// Domain-specific axioms still classify as `NonFoundationalAxiom`.
+/// A declaration that only SHARES a foundational name (`propext : Prop`) is
+/// not the kernel's foundation: it classifies as `NonFoundationalAxiom` and is
+/// rejected, never skipped as foundational (before 2026-09-28 the name alone
+/// decided).
+#[test]
+fn test_classifier_stand_in_foundation_is_non_foundational() {
+    let mut env = Environment::default();
+    env.add_decl_structural(Declaration::Axiom {
+        name: Name::from_string("propext"),
+        level_params: vec![],
+        type_: clean_kernel::expr::Expr::prop(),
+    })
+    .expect("add stand-in propext");
+    assert_eq!(
+        classify_for_native(&env, &Name::from_string("propext"), ConstantKind::Axiom),
+        Some(ExcludeReason::NonFoundationalAxiom),
+    );
+}
+
 #[test]
 fn test_classifier_keeps_domain_axioms_in_non_foundational() {
     let mut env = Environment::default();

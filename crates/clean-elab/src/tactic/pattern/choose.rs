@@ -4,6 +4,9 @@
 
 //! choose tactic: extract witness from an existential hypothesis.
 
+use super::names::local_name_matches;
+use clean_parser::SurfaceName;
+
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, FVarId, Level};
@@ -15,8 +18,8 @@ use super::util::{apply_predicate, try_extract_exists};
 #[derive(Debug, Clone, Default)]
 pub struct ChooseConfig {
     /// Names to use for the witness and proof
-    pub witness_name: Option<String>,
-    pub proof_name: Option<String>,
+    pub witness_name: Option<SurfaceName>,
+    pub proof_name: Option<SurfaceName>,
 }
 
 impl ChooseConfig {
@@ -25,14 +28,14 @@ impl ChooseConfig {
     }
 
     #[must_use]
-    pub fn with_witness_name(mut self, name: &str) -> Self {
-        self.witness_name = Some(name.to_string());
+    pub fn with_witness_name(mut self, name: &SurfaceName) -> Self {
+        self.witness_name = Some(name.clone());
         self
     }
 
     #[must_use]
-    pub fn with_proof_name(mut self, name: &str) -> Self {
-        self.proof_name = Some(name.to_string());
+    pub fn with_proof_name(mut self, name: &SurfaceName) -> Self {
+        self.proof_name = Some(name.clone());
         self
     }
 }
@@ -59,23 +62,26 @@ impl ChooseConfig {
 /// ENSURES: On Err(HypothesisNotFound | GoalMismatch), the goal queue is not advanced
 pub fn choose(
     state: &mut ProofState,
-    hyp_name: &str,
-    witness_name: &str,
-    proof_name: &str,
+    hyp_name: &SurfaceName,
+    witness_name: &SurfaceName,
+    proof_name: &SurfaceName,
 ) -> TacticResult {
+    for name in [hyp_name, witness_name, proof_name] {
+        super::names::require_binding_name(name, "choose")?;
+    }
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
 
     // Extract all needed data from the goal first (before mutations)
-    let (hyp_type, hyp_fvar, goal_target, goal_id, original_ctx) = {
+    let (hyp_type, hyp_fvar, goal_target, goal_id, original_ctx, case_binders) = {
         let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
 
         // Find the hypothesis
         let hyp_idx = goal
             .local_ctx
             .iter()
-            .position(|d| d.name == hyp_name)
+            .rposition(|d| local_name_matches(&d.name, hyp_name))
             .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
         (
@@ -84,6 +90,7 @@ pub fn choose(
             goal.target.clone(),
             goal.meta_id,
             goal.local_ctx.clone(),
+            goal.case_binders.clone(),
         )
     };
 
@@ -100,6 +107,7 @@ pub fn choose(
     // close_goal by supplying all implicit arguments to Exists.elim.
     // (Constructed before minting so the fvar ids below can derive from it.)
     let goal_for_close = Goal {
+        case_binders: case_binders.clone(),
         meta_id: goal_id,
         target: goal_target.clone(),
         local_ctx: original_ctx.clone(),
@@ -120,8 +128,9 @@ pub fn choose(
 
     // Create the witness local declaration
     let witness_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: witness_fvar,
-        name: witness_name.to_string(),
+        name: witness_name.clone(),
         ty: domain.clone(),
         value: None,
     };
@@ -130,8 +139,9 @@ pub fn choose(
     let proof_type = apply_predicate(&predicate, Expr::fvar(witness_fvar));
 
     let proof_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: proof_fvar,
-        name: proof_name.to_string(),
+        name: proof_name.clone(),
         ty: proof_type,
         value: None,
     };
@@ -147,6 +157,7 @@ pub fn choose(
 
     let new_meta_id = state.fresh_meta_in_context(goal_target, &new_ctx);
     let new_goal = Goal {
+        case_binders,
         meta_id: new_meta_id,
         target: goal_for_close.target.clone(),
         local_ctx: new_ctx,
@@ -192,9 +203,9 @@ pub fn choose(
 ///
 /// REQUIRES: same as `choose`
 /// ENSURES: Behaves like `choose(state, hyp_name, "{hyp_name}_witness", "{hyp_name}_spec")`
-pub fn choose_simple(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn choose_simple(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
     // Generate default names based on hypothesis name
-    let witness_name = format!("{hyp_name}_witness");
-    let proof_name = format!("{hyp_name}_spec");
+    let witness_name = super::names::generated_suffix(hyp_name, "_witness");
+    let proof_name = super::names::generated_suffix(hyp_name, "_spec");
     choose(state, hyp_name, &witness_name, &proof_name)
 }

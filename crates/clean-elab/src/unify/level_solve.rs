@@ -36,7 +36,7 @@ use super::unifier::UnifyResult;
 use crate::stack_safe;
 
 /// Level occurs-check: does the parameter `name` appear anywhere in `level`?
-fn level_param_occurs(name: &Name, level: &Level) -> bool {
+pub(crate) fn level_param_occurs(name: &Name, level: &Level) -> bool {
     let mut params = Vec::new();
     level.collect_params(&mut params);
     params.iter().any(|p| p == name)
@@ -56,6 +56,23 @@ fn assign(metas: &mut MetaState, name: Name, level: Level) -> UnifyResult {
 /// acceptance: `MetaState::drain_postponed_levels` re-solves the queue at the
 /// declaration boundary and errors on anything left. A definite conflict fails
 /// here, immediately, exactly as before.
+/// `Some(l')` when `l` is a `Succ` tower in disguise — `l = l' + 1` for every
+/// assignment of its parameters: a literal `Succ`, or a `Max`/`IMax` all of
+/// whose branches are (`max(a+1, b+1) = (max a b)+1`, and `imax(a+1, b+1) =
+/// max(a+1, b+1)` because `b+1` is never zero). `None` for anything else, so
+/// the caller keeps its conservative fallthrough.
+fn peel_succ(l: &Level) -> Option<Level> {
+    match l {
+        Level::Succ(inner) => Some(inner.as_ref().clone()),
+        Level::Max(a, b) | Level::IMax(a, b) => {
+            let a1 = peel_succ(a)?;
+            let b1 = peel_succ(b)?;
+            Some(Level::max(a1, b1))
+        }
+        _ => None,
+    }
+}
+
 pub(crate) fn solve_level_eq(metas: &mut MetaState, l1: &Level, l2: &Level) -> UnifyResult {
     solve_level_eq_impl(metas, l1, l2, true)
 }
@@ -107,6 +124,24 @@ fn solve_level_eq_impl(
                 solve_level_eq_impl(metas, inner1, inner2, may_postpone)
             }
 
+            // `0 =?= succ l` has NO solution — `succ l ≥ 1` whatever `l` is —
+            // so it is refuted outright, never postponed. Lean's `solve`
+            // (`Lean/Meta/LevelDefEq.lean`): `| Level.zero, Level.succ .. =>
+            // return LBool.false`, tried in both orientations. It used to fall
+            // to the tail below, where a `?u` in `succ ?u` made the equation
+            // "undetermined" and it was POSTPONED — accepted for now — so a
+            // Prop-only instance candidate survived its level check at a
+            // `Type`-sorted carrier: `Mathlib/Logic/Function/Basic.lean`'s
+            // `partialInv {α β}` (`Option α` forces `α : Sort (succ ?u)`)
+            // committed `exists_prop_decidable` (`Exists.{0}`) for
+            // `Decidable (∃ a, f a = b)` and died at the declaration-boundary
+            // drain with `unresolved universe level equation after
+            // postponement: Zero =?= Succ(?u_4)`. Refuted here, the candidate
+            // fails and the search moves to the next one, as in Lean.
+            (Level::Zero, Level::Succ(_)) | (Level::Succ(_), Level::Zero) => {
+                UnifyResult::Failure(format!("universe level conflict: {l1} vs {l2}"))
+            }
+
             // Param vs Succ(..), occurs-checked (self-referential equations
             // like `u = Succ(u)` are unsatisfiable and would loop during
             // instantiation without the check).
@@ -137,13 +172,43 @@ fn solve_level_eq_impl(
             // imax(u,u) = u — sound, provisional, kernel-rechecked). Measured:
             // the .{u} codata type def over the two-universe seeds constrains
             // `Type (max ?fam ?idx) =?= Type u` before either meta is pinned.
+            //
+            // That componentwise commitment is GREEDY, and wrong whenever one
+            // operand is later pinned to something else: instance search
+            // pre-checks `Compl.{max ?ι ?π} =?= Compl.{u}` for `Compl (α → Prop)`
+            // through `Pi.instCompl`, where `?ι := u` and `?π := 0` (`Prop :
+            // Type 0`) are the real solution and `max u 0 = u`. Committing
+            // `?π := u` here made the `Prop.instCompl` subgoal fail
+            // (`Mathlib/Order/Basic.lean`: `compl_lt`, `compl_le`, `compl_gt`,
+            // `compl_ge`, `Std.Refl.compl`, `Std.Irrefl.compl`,
+            // `Ne.instIsEquiv_compl`, measured 2026-09-11). So while an operand
+            // is still an unassigned metavariable the equation is POSTPONED
+            // (Lean does the same: `max ?u ?v =?= w` is stuck, not solved), and
+            // the greedy rule runs only at the no-postpone drain, when nothing
+            // else could pin the operands.
             (Level::Param(name), Level::Max(a, b) | Level::IMax(a, b)) => {
                 if metas.is_rigid_level_param(name) {
+                    if may_postpone && metas.level_eq_is_undetermined(&l1, &l2) {
+                        metas.postpone_level_eq(l1.clone(), l2.clone());
+                        return UnifyResult::Success;
+                    }
                     match solve_level_eq_impl(metas, a, &l1, may_postpone) {
                         UnifyResult::Success => solve_level_eq_impl(metas, b, &l1, may_postpone),
                         other => other,
                     }
                 } else if level_param_occurs(name, &l2) {
+                    // `?x =?= max ?x ?y` is SATISFIABLE (`?y ≤ ?x`), not
+                    // circular: the search for `Compl (α → Prop)` through
+                    // `Pi.instCompl` poses it with `?y` still to be pinned by
+                    // the `Prop.instCompl` subgoal (`?y := 0`, then
+                    // `max ?x 0 = ?x`). Refusing it here killed that candidate
+                    // (measured 2026-09-11 with `CLEAN_INSTANCE_TRACE`); it is
+                    // postponed while postponement is allowed and only the
+                    // drain, with every other equation solved, refuses it.
+                    if may_postpone {
+                        metas.postpone_level_eq(l1.clone(), l2.clone());
+                        return UnifyResult::Success;
+                    }
                     UnifyResult::Failure(format!(
                         "occurs check failed for level param {name} in {l2}"
                     ))
@@ -153,11 +218,19 @@ fn solve_level_eq_impl(
             }
             (Level::Max(a, b) | Level::IMax(a, b), Level::Param(name)) => {
                 if metas.is_rigid_level_param(name) {
+                    if may_postpone && metas.level_eq_is_undetermined(&l1, &l2) {
+                        metas.postpone_level_eq(l1.clone(), l2.clone());
+                        return UnifyResult::Success;
+                    }
                     match solve_level_eq_impl(metas, a, &l2, may_postpone) {
                         UnifyResult::Success => solve_level_eq_impl(metas, b, &l2, may_postpone),
                         other => other,
                     }
                 } else if level_param_occurs(name, &l1) {
+                    if may_postpone {
+                        metas.postpone_level_eq(l1.clone(), l2.clone());
+                        return UnifyResult::Success;
+                    }
                     UnifyResult::Failure(format!(
                         "occurs check failed for level param {name} in {l1}"
                     ))
@@ -172,9 +245,17 @@ fn solve_level_eq_impl(
             // Level.normalize performs the same lift; Clean's conservative
             // fallthrough previously missed it (measured on the .{u} seed
             // lift: `Max(Succ .., Succ ..) vs Succ(?u)`).
+            //
+            // The lift is recursive: `max(max(a+1, b+1), c+1)` — the sort of
+            // `α₁ ⊕ α₂ → β` over three `Type*` variables, which `Pi.hasLe`
+            // meets in `Mathlib/Order/Basic.lean`'s `Sum.elim_le_elim_iff` —
+            // is `(max (max a b) c)+1` too, and `imax(a+1, b+1)` is
+            // `max(a+1, b+1)` since its right side is never zero. Measured
+            // 2026-09-11: the one-level form stopped at the nested `max`
+            // with `level mismatch: ?u+1 vs max(max(?a+1, ?b+1), ?c+1)`.
             (Level::Max(a, b), Level::Succ(c)) | (Level::Succ(c), Level::Max(a, b)) => {
-                if let (Level::Succ(a1), Level::Succ(b1)) = (a.as_ref(), b.as_ref()) {
-                    let inner = Level::max(a1.as_ref().clone(), b1.as_ref().clone());
+                if let Some(inner) = peel_succ(&Level::max(a.as_ref().clone(), b.as_ref().clone()))
+                {
                     solve_level_eq_impl(metas, &inner, c, may_postpone)
                 } else if Level::is_def_eq(&l1, &l2) {
                     UnifyResult::Success
@@ -209,6 +290,69 @@ fn solve_level_eq_impl(
             // postponement otherwise. Without the rollback a half-applied split
             // would wrongly constrain every later equation.
             (Level::Max(a, b), Level::Max(c, d)) | (Level::IMax(a, b), Level::IMax(c, d)) => {
+                // `max` is COMMUTATIVE and this split is POSITIONAL, so when
+                // the SWAPPED pairing solves the equation too, committing the
+                // positional one is a CHOICE — and a wrong one half the time.
+                // `imax` is not commutative and is excluded.
+                //
+                // Measured 2026-09-21. Lean's serializer normalises a `max`
+                // into an order that need not be the one Clean's elaborator
+                // built the goal in: on the pinned v4.30.0-rc2,
+                // `#check @instInhabitedProd` prints
+                // `Inhabited.{max (u_2 + 1) (u_1 + 1)} (Prod.{u_1, u_2} α β)`
+                // — `u_2` first in the class level, `u_1` first in `Prod` —
+                // while Clean reads the goal's level off `Prod`'s own result
+                // sort (`env/core.rs`: `Sort (max (u+1) (v+1))`), in source
+                // order. The positional split then solved
+                // `max (?b+1) (?a+1) =?= max (u+1) (v+1)` as `?b := u`,
+                // `?a := v`, the CROSSED solution; the argument unification
+                // that follows posed `Prod.{?a, ?b} ?m0 ?m1 =?= Prod.{u, v}
+                // A A'` and died `cannot assign rigid universe parameter
+                // v := u` (`Mathlib/Logic/Function/Basic.lean`:
+                // `Function.curry_update`, `Function.uncurry_update_update`,
+                // which need `DecidableEq (α × α')` at `{α α' : Type*}`).
+                // Both pairings satisfy the class-level equation, so nothing
+                // at THIS equation can tell them apart — only the arguments
+                // can, which is exactly the situation the neighbouring
+                // `Param`-vs-`Max` arms already postpone.
+                //
+                // Narrow on purpose. The ambiguity test runs only when the
+                // two sides are not ALREADY equal (so nothing would have been
+                // assigned), only when postponement is allowed, only when an
+                // assignable parameter is present, and only when the swapped
+                // pairing really does succeed — from the same state, in its
+                // own rolled-back scope. A candidate whose operands pair only
+                // one way (`HasEquiv.{u,v}`, whose class level no argument
+                // fixes) still takes the split and still commits it.
+                let commutative = matches!((&l1, &l2), (Level::Max(..), Level::Max(..)));
+                let pairing_is_ambiguous = commutative
+                    && may_postpone
+                    && !Level::is_def_eq(&l1, &l2)
+                    && metas.level_eq_is_undetermined(&l1, &l2)
+                    && {
+                        metas.push_scope();
+                        let swapped = matches!(
+                            match solve_level_eq_impl(metas, a, d, false) {
+                                UnifyResult::Success => solve_level_eq_impl(metas, b, c, false),
+                                other => other,
+                            },
+                            UnifyResult::Success
+                        );
+                        metas.pop_scope();
+                        swapped
+                    };
+                if pairing_is_ambiguous {
+                    crate::u2_histogram::u2_hist(
+                        "level-congruence-split",
+                        "solver",
+                        "max pairing ambiguous — postponed",
+                    );
+                    // NOT an acceptance: `drain_postponed_levels` re-solves it
+                    // at the declaration boundary, where the arguments have
+                    // pinned the operands, and refuses what is still open.
+                    metas.postpone_level_eq(l1.clone(), l2.clone());
+                    return UnifyResult::Success;
+                }
                 metas.push_scope();
                 let split = match solve_level_eq_impl(metas, a, c, false) {
                     UnifyResult::Success => solve_level_eq_impl(metas, b, d, false),

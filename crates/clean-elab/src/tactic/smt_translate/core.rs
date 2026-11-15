@@ -9,8 +9,8 @@ use clean_kernel::expr::Literal;
 use clean_kernel::{Expr, ExprKind, FVarId};
 
 use super::{
-    RegisteredFVarDecl, RegisteredFVarKind, SmtFuncDecl, SmtLibTranslator, SmtSort, SmtVarDecl,
-    TranslateError, TranslatedTerm,
+    nat_literal_decimal, RegisteredFVarDecl, RegisteredFVarKind, SmtFuncDecl, SmtLibTranslator,
+    SmtSort, SmtVarDecl, TranslateError, TranslatedTerm,
 };
 
 impl SmtLibTranslator {
@@ -68,7 +68,12 @@ impl SmtLibTranslator {
     ///
     /// Reuses the canonical SMT name and emits at most one declaration for a
     /// given `FVarId`.
-    pub fn register_fvar(&mut self, id: FVarId, sort: SmtSort, original_expr: Expr) -> String {
+    pub(crate) fn register_fvar(
+        &mut self,
+        id: FVarId,
+        sort: SmtSort,
+        original_expr: Expr,
+    ) -> String {
         if let Some(existing) = self.registered_fvars.get(&id) {
             debug_assert_eq!(
                 existing.kind,
@@ -98,7 +103,7 @@ impl SmtLibTranslator {
     /// This preserves the canonical SMT symbol and Lean function type but
     /// intentionally delays `(declare-fun ...)` emission until first use so the
     /// domain sorts come from the translated arguments.
-    pub fn register_callable_fvar(
+    pub(crate) fn register_callable_fvar(
         &mut self,
         id: FVarId,
         result_sort: SmtSort,
@@ -138,7 +143,7 @@ impl SmtLibTranslator {
     /// ENSURES: Returns Ok(s) where s is a valid SMT-LIB2 term string, or
     ///   Err for genuinely unsupported expression kinds.
     ///   Side-effects: may add declarations to `self.declarations` and `self.var_decls`.
-    pub fn translate_expr(&mut self, expr: &Expr) -> Result<String, TranslateError> {
+    pub(crate) fn translate_expr(&mut self, expr: &Expr) -> Result<String, TranslateError> {
         self.translate_expr_typed(expr).map(|term| term.smt)
     }
 
@@ -175,9 +180,7 @@ impl SmtLibTranslator {
                 let head = atom.get_app_fn().strip_mdata();
                 let args = atom.get_app_args();
                 match head.kind() {
-                    ExprKind::Const(name, _) => {
-                        self.translate_atom_const_app(&name.to_string(), &args)
-                    }
+                    ExprKind::Const(name, _) => self.translate_atom_const_app(name, &args),
                     ExprKind::FVar(id) => self.translate_fvar_app(*id, &args),
                     _ => Err(TranslateError::UnsupportedExpr(
                         "unsupported application head for SMT-LIB".to_string(),
@@ -285,7 +288,7 @@ impl SmtLibTranslator {
     fn translate_literal(&mut self, lit: &Literal, original_expr: &Expr) -> TranslatedTerm {
         match lit {
             Literal::Nat(n) => TranslatedTerm {
-                smt: n.to_string(),
+                smt: nat_literal_decimal(n),
                 sort: SmtSort::Int,
             },
             Literal::String(value) => {
@@ -357,7 +360,7 @@ impl SmtLibTranslator {
     }
 
     /// Return collected declarations.
-    pub fn declarations(&self) -> &[String] {
+    pub(crate) fn declarations(&self) -> &[String] {
         &self.declarations
     }
 
@@ -365,17 +368,17 @@ impl SmtLibTranslator {
     ///
     /// Use this to declare variables in AyProofBackend via `fresh_int`/`fresh_bool`
     /// before asserting the translated formula.
-    pub fn var_declarations(&self) -> &[SmtVarDecl] {
+    pub(crate) fn var_declarations(&self) -> &[SmtVarDecl] {
         &self.var_decls
     }
 
     /// Return structured function declarations (name + signature + Lean metadata).
-    pub fn func_declarations(&self) -> &[SmtFuncDecl] {
+    pub(crate) fn func_declarations(&self) -> &[SmtFuncDecl] {
         &self.func_decls
     }
 
     /// Return existential Skolemization metadata recorded so far.
-    pub fn exists_skolemizations(&self) -> &[super::ExistsSkolemization] {
+    pub(crate) fn exists_skolemizations(&self) -> &[super::ExistsSkolemization] {
         &self.exists_skolemizations
     }
 }

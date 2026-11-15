@@ -9,6 +9,7 @@ use crate::tactic::LocalDecl;
 use crate::unify::MetaState;
 use clean_auto::bridge::ay_contract::AyLogic;
 use clean_kernel::{Expr, FVarId, Level, Name};
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 #[test]
@@ -23,8 +24,9 @@ fn test_prove_false_from_exists_contradiction_reconstructs_direct_proof() {
         vec![Level::zero()],
     );
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "hex".to_string(),
+        name: SurfaceName::component("hex", false),
         ty: exists_expr.clone(),
         value: None,
     }];
@@ -91,8 +93,9 @@ fn test_nested_exists_hypothesis_assertion_reconstructs_direct_proof() {
     );
     let exists_expr = mk_exists_prop(Expr::prop(), inner_exists, vec![Level::zero()]);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "hnested".to_string(),
+        name: SurfaceName::component("hnested", false),
         ty: exists_expr.clone(),
         value: None,
     }];

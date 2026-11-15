@@ -1,0 +1,50 @@
+{
+  "_what_this_is": "AUDIT r11 M11-4. The census's guards were pinned by mutation rows, and its verdict COMPOSITION was pinned by nothing: dropping `and bodyful(fid)[0]` from the criteria dict left `--selftest` at 34/34, check_census_arms at all_mutated_or_accounted, and every gate green -- only R7 FRESH fired, and its own printed remedy re-pins the mutated file after replaying the MUTANT's own selftest, which passes. Counting the shapes of refusals cannot catch that. This pins the OUTPUT: the census is run on a committed synthetic dump and its verdict surface must match, so any change that moves a result on these five functions fails, whatever form the change takes.\nThe fixture is built to exercise each path that decides a verdict: a body whose closure is clean (clean::good -> clean::helper), a body that escapes into a declaration and is lifted by the discharge table (clean::escapes -> clean::declared_only), a body with a call_indirect that must fail closed (clean::indirectly), and the body/declaration partition itself.\n\nAUDIT r12 M12-2 widened this fixture. It had four bodies with lowered / spliced / zero_unsupported / derived_agreed / flip_event_O3 all CONSTANT-TRUE, so mutating any of those five criteria to `True` was MISSED -- only bodyful_reachable_closure (the one r11's exploit happened to use) was watched. Measured impact of that gap on real data: `\"flip_event_O3\": True` mints a0_complete_6_of_6 189 -> 1149 in data/crystal_a0_census_2026-08-27.json, the figure CLAUDE.md quotes for the A0 owner ruling, with every gate green. Each criterion is now FALSE on exactly one body so every cell discriminates; the discharge target carries TWO escaping callees, because the real target (level::Level::is_zero) has two and `escapes[:1]` was likewise a missed mutation. A sixth body, clean::partial, escapes to BOTH declarations while the table covers only the first: the full loop refuses it and `escapes[:1]` would wrongly lift it, so the escape-set CARDINALITY discriminates too.\n\nAUDIT r13 M13-7: five PINNED cells still had no discrimination after r12 -- the flip logs contained zero `CTFE compiled from trust` lines (real logs carry 41) so the CTFE/codegen split never ran; flips_O3 and flips_O0 were byte-identical so the argument ORDER was unpinned; and every coverage row carried markers_detail null with no markers_exact and no lineage, so markers_vacuous, markers_exact and a6_event_lineage_equal were constant-FALSE. Measured on real dumps: deleting the CTFE branch mints a0_complete_6_of_6 189 -> 230, forcing markers_vacuous False takes the published non-vacuous figure 36 -> 189, and swapping O0/O3 gives 189 -> 205 -- all with the pin green. The fixture now exercises the CTFE branch, gives O0 a different content from O3, and varies markers and lineage across bodies. The ADEQUACY ASSERTION below is what keeps it that way: every pinned per-body boolean must take BOTH values across the fixture, so the pin cannot silently lose discrimination again.",
+  "a0_complete_bodies": [
+    {
+      "a6_event_lineage_equal": true,
+      "def_index": 100,
+      "def_path": "clean::good",
+      "flip_O0": true,
+      "markers_exact": true,
+      "markers_vacuous": false
+    },
+    {
+      "a6_event_lineage_equal": false,
+      "def_index": 101,
+      "def_path": "clean::helper",
+      "flip_O0": false,
+      "markers_exact": false,
+      "markers_vacuous": true
+    }
+  ],
+  "criteria": [
+    "lowered",
+    "spliced",
+    "zero_unsupported",
+    "derived_agreed",
+    "bodyful_reachable_closure",
+    "flip_event_O3"
+  ],
+  "semantic_only_bodies": [
+    "clean::escapes"
+  ],
+  "totals": {
+    "a0_complete_6_of_6": 2,
+    "a0_complete_semantic": 3,
+    "a0_complete_with_nonvacuous_markers": 1,
+    "a0_complete_with_sidecar": 2,
+    "a0_one_short_5_of_6": 3,
+    "bodies": 6,
+    "closure_closed_only_by_sidecar": 0,
+    "ctfe_flip_O3_bodies": 1,
+    "one_short_missing_criterion": {
+      "bodyful_reachable_closure": 3
+    },
+    "score_distribution": {
+      "1": 1,
+      "5": 3,
+      "6": 2
+    }
+  }
+}

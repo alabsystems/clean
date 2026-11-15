@@ -118,16 +118,19 @@ fn test_auto_prove_with_query_preserves_detailed_outcomes() {
     let query = AutomationQuery::new(&goal, Duration::from_secs(5));
     let outcome = engine.auto_prove_with_query(&env, query);
 
-    assert!(
-        matches!(
-            outcome,
-            AutomationOutcome::Refuted {
-                source: AutomationSource::Smt,
-                ..
-            }
+    // An SMT model of `¬P` is reported as an unvalidated model of the
+    // abstraction, never as a refutation (decide review, 2026-09-28).
+    match &outcome {
+        AutomationOutcome::Unknown {
+            source: AutomationSource::Smt,
+            reason,
+            ..
+        } => assert!(
+            reason.contains("not a refutation"),
+            "AutomationQuery must preserve the labelled SMT verdict, got: {reason}"
         ),
-        "AutomationQuery should preserve SMT refutation, got: {outcome:?}"
-    );
+        other => panic!("expected an SMT `Unknown` carrying the model's label, got: {other:?}"),
+    }
 }
 
 #[test]

@@ -78,8 +78,9 @@ fn test_decide_sorry_count_on_symmetry() {
     // Hypothesis: h : a = b
     let hyp_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let local_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: hyp_ty,
         value: None,
     };
@@ -127,16 +128,18 @@ fn test_decide_sorry_count_on_transitivity() {
     // h1 : a = b
     let h1_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let h1 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: h1_ty,
         value: None,
     };
     // h2 : b = c
     let h2_ty = make_eq(a_ty.clone(), b, c.clone());
     let h2 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: h2_ty,
         value: None,
     };
@@ -179,8 +182,9 @@ fn test_decide_sorry_count_on_congruence() {
 
     // Hypothesis: h : a = b
     let hyp = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: make_eq(a_ty.clone(), a, b),
         value: None,
     };

@@ -12,12 +12,14 @@ use crate::ElabError;
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprFolder, ExprVisitor, FVarId, Level, LevelVec};
 use clean_parser::{
-    Attribute, DeclModifiers, SurfaceBinder, SurfaceExpr, SurfacePattern, TerminationHints,
-    WhereLocalDef,
+    Attribute, DeclModifiers, SurfaceBinder, SurfaceExpr, SurfaceName, SurfacePattern,
+    TerminationHints, WhereLocalDef,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
-use super::{convert_binder_info, ElabCtx, ElabResult, RecursiveDefContext, RecursiveExtraParam};
+use super::elaborate_decl::PrivateNameKind;
+use super::opaque_inhabitant::OpaqueInhabitant;
+use super::{ElabCtx, ElabResult, RecursiveDefContext};
 
 /// Normalize an equation-form declaration into the equivalent named-binder +
 /// explicit-`match` shape, so the already-working structural-recursion lowering
@@ -57,12 +59,36 @@ use super::{convert_binder_info, ElabCtx, ElabResult, RecursiveDefContext, Recur
 /// Also reused by `try_elab_let_rec_lifted` (`infer/elab_core.rs`) to lift an
 /// equation-form `where`/`let rec` helper's hidden `_x` scrutinee binder, so
 /// such a helper routes through the identical structural-recursion lowering.
+///
+/// `Err` when the equations compile to a decision tree that never selects
+/// some equation: Lean 4.8.0 refuses that definition ("redundant
+/// alternative"), so no other lowering may be tried for it.
 pub(in crate::infer) fn normalize_equation_def(
     env: &clean_kernel::Environment,
-    def_name: &str,
+    idents: &PatternIdents<'_>,
+    def_name: &SurfaceName,
     binders: &[SurfaceBinder],
     ty: Option<&SurfaceExpr>,
     val: &SurfaceExpr,
+) -> Result<Option<(Vec<SurfaceBinder>, Option<SurfaceExpr>, SurfaceExpr)>, ElabError> {
+    let mut redundant = None;
+    let lifted = lift_equation_def(env, idents, def_name, binders, ty, val, &mut redundant);
+    match redundant {
+        Some(err) => Err(err),
+        None => Ok(lifted),
+    }
+}
+
+/// [`normalize_equation_def`]'s lifting; a redundant equation is reported
+/// through `redundant` (and the lift is `None`).
+fn lift_equation_def(
+    env: &clean_kernel::Environment,
+    idents: &PatternIdents<'_>,
+    def_name: &SurfaceName,
+    binders: &[SurfaceBinder],
+    ty: Option<&SurfaceExpr>,
+    val: &SurfaceExpr,
+    redundant: &mut Option<ElabError>,
 ) -> Option<(Vec<SurfaceBinder>, Option<SurfaceExpr>, SurfaceExpr)> {
     // Trigger for the equation-def signature the parser emits: a
     // `PatternMatchLambda` value. Leading declaration binders (`def f (op : T)
@@ -81,7 +107,7 @@ pub(in crate::infer) fn normalize_equation_def(
     let [lam_binder] = lam_binders.as_slice() else {
         return None;
     };
-    if lam_binder.name != "_x" {
+    if lam_binder.name != SurfaceName::pattern_lambda_binder() {
         return None;
     }
 
@@ -102,12 +128,27 @@ pub(in crate::infer) fn normalize_equation_def(
     if let SurfaceExpr::Match(_, _, scrut, arms) = &**lam_body {
         if arms
             .iter()
-            .any(|arm| matches!(&arm.pattern, SurfacePattern::Ctor(name, _) if name == "Prod.mk"))
+            .any(|arm| matches!(&arm.pattern, SurfacePattern::Ctor(name, _) if name == &SurfaceName::generated_path("Prod.mk")))
         {
             let is_recursive =
-                !def_name.is_empty() && super::structural::body_mentions_call(val, def_name);
-            let (lifted, ret_ty, body) =
-                normalize_equation_def_multiarg(env, ty, scrut, arms, is_recursive)?;
+                !def_name.is_anonymous() && super::structural::body_mentions_call(val, def_name);
+            let calls = if is_recursive {
+                super::structural::detect_recursion_with_params(def_name, val, &[]).calls
+            } else {
+                Vec::new()
+            };
+            let (lifted, ret_ty, body) = normalize_equation_def_multiarg(
+                env,
+                idents,
+                def_name,
+                binders,
+                ty,
+                scrut,
+                arms,
+                is_recursive,
+                &calls,
+                redundant,
+            )?;
             let mut all_binders = binders.to_vec();
             all_binders.extend(lifted);
             return Some((all_binders, ret_ty, body));
@@ -125,7 +166,8 @@ pub(in crate::infer) fn normalize_equation_def(
     // Lift those exactly like the multiarg branch above: leading binders are
     // prepended and stay in scope; `setup_recursion` resolves the decreasing
     // position past them.
-    let is_recursive = !def_name.is_empty() && super::structural::body_mentions_call(val, def_name);
+    let is_recursive =
+        !def_name.is_anonymous() && super::structural::body_mentions_call(val, def_name);
     if !binders.is_empty() && !is_recursive {
         return None;
     }
@@ -152,7 +194,7 @@ pub(in crate::infer) fn normalize_equation_def(
     let (binder_ty, new_return_ty, dep_name): (
         Option<SurfaceExpr>,
         Option<SurfaceExpr>,
-        Option<String>,
+        Option<SurfaceName>,
     ) = match ty {
         Some(SurfaceExpr::Arrow(_, from, to)) => {
             (Some((**from).clone()), Some((**to).clone()), None)
@@ -165,7 +207,8 @@ pub(in crate::infer) fn normalize_equation_def(
             } else {
                 SurfaceExpr::Pi(*span, rest.to_vec(), body.clone())
             };
-            let name = (!first.name.is_empty() && first.name != "_").then(|| first.name.clone());
+            let name = (!first.name.is_anonymous() && !first.name.is_unescaped_component("_"))
+                .then(|| first.name.clone());
             (from, Some(tail), name)
         }
         // Unannotated (`None`) or a non-arrow type is not an equation def we can
@@ -174,7 +217,7 @@ pub(in crate::infer) fn normalize_equation_def(
     };
 
     let lifted_name = dep_name.unwrap_or_else(|| lam_binder.name.clone());
-    let lifted_binder = SurfaceBinder::new(lifted_name.clone(), binder_ty, lam_binder.info);
+    let lifted_binder = SurfaceBinder::new_typed(lifted_name.clone(), binder_ty, lam_binder.info);
 
     // Rename the parser's synthetic scrutinee (`match _x with …`) to the lifted
     // binder name. `_x` is parser-generated and appears ONLY as the scrutinee
@@ -207,10 +250,25 @@ pub(in crate::infer) fn normalize_equation_def(
 /// multi-argument equation-def case. Returns `None` if the type does not have
 /// at least `n` arrow/Pi domains, or is unannotated/non-arrow (which we never
 /// lift — the binder types must be recoverable from the declaration type).
+/// Each peeled domain also carries its declared `SurfaceBinderInfo`. Dropping
+/// it and re-emitting every lifted binder as `Explicit` silently changes the
+/// declaration's SIGNATURE: `def h : {b : β} → Imf f b → α` would register as
+/// taking `b` explicitly, so the call Lean accepts is rejected and the call
+/// Lean rejects is accepted — with exit 0 and nothing printed. Measured against
+/// Lean v4.30.0-rc2, which prints
+/// `def h : {α : Type u_1} → … → {b : β} → Imf f b → α`.
+/// `Arrow` domains have no binder syntax and are `Explicit`.
 pub(super) fn peel_n_domains(
     ty: &SurfaceExpr,
     n: usize,
-) -> Option<(Vec<(SurfaceExpr, Option<String>)>, SurfaceExpr)> {
+) -> Option<(
+    Vec<(
+        SurfaceExpr,
+        Option<SurfaceName>,
+        clean_parser::SurfaceBinderInfo,
+    )>,
+    SurfaceExpr,
+)> {
     // Each peeled domain carries the DECLARED Pi binder name (when named). A
     // dependent residual return type (`def f6 : (a : Nat) → (b : Bool) → W6 b
     // | …` — the tail is `W6 b`) references those names; lifting the equation
@@ -223,16 +281,17 @@ pub(super) fn peel_n_domains(
     for _ in 0..n {
         match current {
             SurfaceExpr::Arrow(_, from, to) => {
-                domains.push((*from, None));
+                domains.push((*from, None, clean_parser::SurfaceBinderInfo::Explicit));
                 current = *to;
             }
             SurfaceExpr::Pi(span, pi_binders, body) => {
                 let (first, rest) = pi_binders.split_first()?;
-                let declared =
-                    (!first.name.is_empty() && first.name != "_").then(|| first.name.clone());
+                let declared = (!first.name.is_anonymous()
+                    && !first.name.is_unescaped_component("_"))
+                .then(|| first.name.clone());
                 // A Pi binder without an explicit type cannot supply a binder
                 // type; bail rather than fabricate one.
-                domains.push(((**first.ty.as_ref()?).clone(), declared));
+                domains.push(((**first.ty.as_ref()?).clone(), declared, first.info));
                 current = if rest.is_empty() {
                     *body
                 } else {
@@ -257,7 +316,9 @@ fn flatten_prod_pattern(pat: &SurfacePattern) -> Vec<SurfacePattern> {
     let mut current = pat.clone();
     loop {
         match current {
-            SurfacePattern::Ctor(ref name, ref sub) if name == "Prod.mk" && sub.len() == 2 => {
+            SurfacePattern::Ctor(ref name, ref sub)
+                if name == &SurfaceName::generated_path("Prod.mk") && sub.len() == 2 =>
+            {
                 leaves.push(sub[0].clone());
                 current = sub[1].clone();
             }
@@ -283,44 +344,171 @@ pub(super) fn is_structural_pattern(pat: &SurfacePattern) -> bool {
     )
 }
 
-/// Collect every identifier name appearing in a surface expression. Used to
-/// decide whether a residual multiarg return type references a declared Pi
-/// binder name (the dependent case) — over-approximation is safe (worst case a
-/// declared name is adopted where synthetic would also have worked).
-fn collect_free_idents_of(e: &SurfaceExpr) -> std::collections::HashSet<String> {
-    fn walk(e: &SurfaceExpr, out: &mut std::collections::HashSet<String>) {
-        match e {
-            SurfaceExpr::Ident(_, n) => {
-                out.insert(n.clone());
-            }
-            SurfaceExpr::App(_, f, args) => {
-                walk(f, out);
-                for a in args {
-                    walk(&a.expr, out);
-                }
-            }
-            SurfaceExpr::Arrow(_, l, r) | SurfaceExpr::Ascription(_, l, r) => {
-                walk(l, out);
-                walk(r, out);
-            }
-            SurfaceExpr::Paren(_, i)
-            | SurfaceExpr::Proj(_, i, _)
-            | SurfaceExpr::Explicit(_, i)
-            | SurfaceExpr::NamedArg(_, _, i) => walk(i, out),
-            SurfaceExpr::Pi(_, binders, body) | SurfaceExpr::Lambda(_, binders, body) => {
-                for b in binders {
-                    if let Some(t) = &b.ty {
-                        walk(t, out);
-                    }
-                }
-                walk(body, out);
-            }
-            _ => {}
+/// Could `name` occur in this surface expression?
+///
+/// Over-approximates on purpose: every form it cannot decompose answers
+/// `true`, and it is not scope-aware. It is used only to decide whether
+/// [`try_rename_free_ident`] has any work to do (and to let that function
+/// short-circuit forms it could not traverse), so a spurious `true` costs at
+/// most a refusal.
+///
+/// NOTE: this is deliberately NOT used as a safety guard on arm bodies. It runs
+/// on UNEXPANDED surface syntax, so a body of `gee` where `notation "gee" => G`
+/// does not mention `G` as far as this can tell. An earlier attempt guarded
+/// binder-name adoption with exactly that test and silently miscompiled
+/// (`reports/patches/README.md`). The design here never inspects a body at all.
+pub(super) fn expr_may_mention_ident(e: &SurfaceExpr, name: &SurfaceName) -> bool {
+    match e {
+        SurfaceExpr::Ident(_, n) => n == name,
+        SurfaceExpr::Lit(..)
+        | SurfaceExpr::Hole(..)
+        | SurfaceExpr::NamedHole(..)
+        | SurfaceExpr::Universe(..)
+        | SurfaceExpr::SyntheticSorry(..) => false,
+        SurfaceExpr::App(_, f, args) => {
+            expr_may_mention_ident(f, name)
+                || args.iter().any(|a| expr_may_mention_ident(&a.expr, name))
         }
+        SurfaceExpr::Arrow(_, l, r) | SurfaceExpr::Ascription(_, l, r) => {
+            expr_may_mention_ident(l, name) || expr_may_mention_ident(r, name)
+        }
+        SurfaceExpr::Paren(_, i)
+        | SurfaceExpr::Proj(_, i, _)
+        | SurfaceExpr::Explicit(_, i)
+        | SurfaceExpr::NamedArg(_, _, i)
+        | SurfaceExpr::OutParam(_, i)
+        | SurfaceExpr::SemiOutParam(_, i)
+        | SurfaceExpr::UniverseInst(_, i, _) => expr_may_mention_ident(i, name),
+        SurfaceExpr::Pi(_, binders, body) | SurfaceExpr::Lambda(_, binders, body) => {
+            binders.iter().any(|b| {
+                &b.name == name
+                    || b.ty
+                        .as_ref()
+                        .is_some_and(|t| expr_may_mention_ident(t, name))
+            }) || expr_may_mention_ident(body, name)
+        }
+        _ => true,
     }
-    let mut out = std::collections::HashSet::new();
-    walk(e, &mut out);
-    out
+}
+
+/// Could `name` occur in this pattern — bound, as the matched constructor, or
+/// inside an inaccessible/quoted subterm? Same conservative polarity as
+/// [`expr_may_mention_ident`].
+fn pattern_may_mention_ident(p: &SurfacePattern, name: &SurfaceName) -> bool {
+    match p {
+        SurfacePattern::Var(n) => n == name,
+        SurfacePattern::Ctor(cname, args) => {
+            cname == name
+                || cname.last_component().name() == name.name()
+                || args.iter().any(|a| pattern_may_mention_ident(a, name))
+        }
+        SurfacePattern::As(n, inner) => n == name || pattern_may_mention_ident(inner, name),
+        SurfacePattern::Or(a, b) => {
+            pattern_may_mention_ident(a, name) || pattern_may_mention_ident(b, name)
+        }
+        SurfacePattern::NumeralAdd(inner, _) => pattern_may_mention_ident(inner, name),
+        SurfacePattern::Inaccessible(e) | SurfacePattern::QPattern(e) => {
+            expr_may_mention_ident(e, name)
+        }
+        SurfacePattern::StructInst { fields, ty, .. } => {
+            fields
+                .iter()
+                .any(|(_, pat)| pattern_may_mention_ident(pat, name))
+                || ty
+                    .as_ref()
+                    .is_some_and(|ty| expr_may_mention_ident(ty, name))
+        }
+        SurfacePattern::Wildcard | SurfacePattern::Ellipsis | SurfacePattern::Lit(_) => false,
+    }
+}
+
+/// Rename every FREE occurrence of `from` to `to` in a surface TYPE.
+///
+/// Returns `None` if the rewrite cannot be shown safe, in which case the caller
+/// must leave the type alone. Refusing is always safe here: the type then keeps
+/// the declared name, which is exactly the pre-existing behaviour (a dangling
+/// name the kernel reports loudly).
+///
+/// Callers must only ever pass a `to` that cannot be spelled in user source
+/// (the parser-generated `_x` / `_x_arg{n}` family). That is what makes this
+/// capture-free in the target direction: no binder anywhere can already mean
+/// `to`, so renaming into it cannot capture. The only remaining obligation is
+/// not to rename an occurrence of `from` that an inner binder rebinds, which is
+/// why this is scope-aware.
+///
+/// Any form this cannot traverse yields `None` rather than a guess — the
+/// opposite of a silent pass-through.
+fn try_rename_free_ident(
+    e: &SurfaceExpr,
+    from: &SurfaceName,
+    to: &SurfaceName,
+) -> Option<SurfaceExpr> {
+    // Nothing to do — and this also short-circuits every unsupported form that
+    // provably cannot contain the name.
+    if !expr_may_mention_ident(e, from) {
+        return Some(e.clone());
+    }
+    let r = |x: &SurfaceExpr| try_rename_free_ident(x, from, to);
+    Some(match e {
+        SurfaceExpr::Ident(sp, n) => {
+            if n == from {
+                SurfaceExpr::Ident(*sp, to.clone())
+            } else {
+                e.clone()
+            }
+        }
+        SurfaceExpr::App(sp, f, args) => {
+            let mut new_args = Vec::with_capacity(args.len());
+            for a in args {
+                let mut a2 = a.clone();
+                a2.expr = r(&a.expr)?;
+                new_args.push(a2);
+            }
+            SurfaceExpr::App(*sp, Box::new(r(f)?), new_args)
+        }
+        SurfaceExpr::Arrow(sp, l, rr) => SurfaceExpr::Arrow(*sp, Box::new(r(l)?), Box::new(r(rr)?)),
+        SurfaceExpr::Ascription(sp, l, rr) => {
+            SurfaceExpr::Ascription(*sp, Box::new(r(l)?), Box::new(r(rr)?))
+        }
+        SurfaceExpr::Paren(sp, i) => SurfaceExpr::Paren(*sp, Box::new(r(i)?)),
+        SurfaceExpr::Explicit(sp, i) => SurfaceExpr::Explicit(*sp, Box::new(r(i)?)),
+        SurfaceExpr::Proj(sp, i, p) => SurfaceExpr::Proj(*sp, Box::new(r(i)?), p.clone()),
+        SurfaceExpr::NamedArg(sp, n, i) => SurfaceExpr::NamedArg(*sp, n.clone(), Box::new(r(i)?)),
+        SurfaceExpr::OutParam(sp, i) => SurfaceExpr::OutParam(*sp, Box::new(r(i)?)),
+        SurfaceExpr::SemiOutParam(sp, i) => SurfaceExpr::SemiOutParam(*sp, Box::new(r(i)?)),
+        SurfaceExpr::UniverseInst(sp, i, ls) => {
+            SurfaceExpr::UniverseInst(*sp, Box::new(r(i)?), ls.clone())
+        }
+        SurfaceExpr::Pi(sp, binders, body) => {
+            let mut new_binders = Vec::with_capacity(binders.len());
+            let mut shadowed = false;
+            for b in binders {
+                let mut b2 = b.clone();
+                // A binder's own TYPE is still outside its scope.
+                if !shadowed {
+                    if let Some(t) = &b.ty {
+                        b2.ty = Some(Box::new(r(t)?));
+                    }
+                } else if b
+                    .ty
+                    .as_ref()
+                    .is_some_and(|t| expr_may_mention_ident(t, from))
+                {
+                    // Past the rebinding, occurrences belong to the inner
+                    // binder; leaving them alone is correct.
+                }
+                if &b.name == from {
+                    shadowed = true;
+                }
+                new_binders.push(b2);
+            }
+            let new_body = if shadowed { (**body).clone() } else { r(body)? };
+            SurfaceExpr::Pi(*sp, new_binders, Box::new(new_body))
+        }
+        // Types are the only thing this is applied to, so a value-level form
+        // reaching here is outside the envelope: refuse rather than guess.
+        _ => return None,
+    })
 }
 
 /// Lower a multi-argument equation def (parsed as a single `_x` binder matched
@@ -357,14 +545,20 @@ fn collect_free_idents_of(e: &SurfaceExpr) -> std::collections::HashSet<String> 
 /// binders folded into the motive (the existing extra-param machinery).
 fn normalize_equation_def_multiarg(
     env: &clean_kernel::Environment,
+    idents: &PatternIdents<'_>,
+    def_name: &SurfaceName,
+    decl_binders: &[SurfaceBinder],
     ty: Option<&SurfaceExpr>,
     scrut: &SurfaceExpr,
     arms: &[clean_parser::SurfaceMatchArm],
     is_recursive: bool,
+    calls: &[super::structural::RecursiveCall],
+    redundant: &mut Option<ElabError>,
 ) -> Option<(Vec<SurfaceBinder>, Option<SurfaceExpr>, SurfaceExpr)> {
     // The synthetic scrutinee must be the parser's `_x` binder; anything else
     // is not the def-equation tuple shape we recognize.
-    if !matches!(scrut, SurfaceExpr::Ident(_, name) if name == "_x") {
+    if !matches!(scrut, SurfaceExpr::Ident(_, name) if *name == SurfaceName::pattern_lambda_binder())
+    {
         return None;
     }
     let ty = ty?;
@@ -378,52 +572,83 @@ fn normalize_equation_def_multiarg(
         .iter()
         .map(|arm| flatten_prod_pattern(&arm.pattern))
         .collect();
-    let arity = arm_leaves[0].len();
+    let mut arity = arm_leaves[0].len();
     if arity < 2 || arm_leaves.iter().any(|leaves| leaves.len() != arity) {
         return None;
     }
 
     // Peel the declaration domains up front (moved before classification): the
     // nullary-constructor rewrite below needs each column's domain type.
-    let (domains, return_ty) = peel_n_domains(ty, arity)?;
+    let (mut domains, mut return_ty) = peel_n_domains(ty, arity)?;
 
-    // Nullary-constructor ident rewrite. A bare constructor ident pattern
-    // (`true`, `false`, a user inductive's nullary ctor) parses as
-    // `SurfacePattern::Var`, which mis-classifies its column as pass-through:
-    // the normalizer then either bails (differing "names" across arms) or
-    // lifts a binder that shadows nothing — both leaving the def to the
-    // fallback path, where dependent returns dangle and recursion loses its
-    // self-name. When a column's domain type is a bare Ident naming a
-    // registered inductive, rewrite each `Var(name)` leaf in that column to
-    // `Ctor(name, [])` IFF `name` (or its `Type.name` qualification) is a
-    // NULLARY constructor of that inductive — exactly the resolution the
-    // single-scrutinee match elaborator performs downstream. Anything else is
-    // left untouched (a Var that is not a registered nullary ctor remains a
-    // genuine binder).
-    for pos in 0..arity {
-        let SurfaceExpr::Ident(_, type_name) = &domains[pos].0 else {
-            continue;
-        };
-        let Some(ind) = env.get_inductive(&Name::from_string(type_name)) else {
-            continue;
-        };
-        let nullary: Vec<String> = ind
-            .constructor_names
-            .iter()
-            .filter(|c| env.get_constructor(c).is_some_and(|ci| ci.num_fields == 0))
-            .map(|c| c.to_string())
-            .collect();
-        for leaves in arm_leaves.iter_mut() {
-            if let SurfacePattern::Var(name) = &leaves[pos] {
-                let qualified = format!("{type_name}.{name}");
-                if nullary
-                    .iter()
-                    .any(|c| c == name.as_str() || c == qualified.as_str())
-                {
-                    leaves[pos] = SurfacePattern::Ctor(name.clone(), Vec::new());
-                }
-            }
+    // Class (88), brick B4: trailing hypothesis columns typed by an earlier
+    // matched column are generalized into the case split's result type and
+    // bound per alternative, so each is about its alternative's constructor
+    // (`super::equation_dep_columns`). The columns before them are lowered
+    // below exactly as before.
+    let generalized_arms;
+    let mut arms = arms;
+    let generalized = super::equation_dep_columns::generalize_dependent_columns(
+        idents,
+        &domains,
+        &return_ty,
+        &arm_leaves,
+        arms,
+    );
+    let is_generalized = generalized.is_some();
+    if let Some(generalized) = generalized {
+        arity = generalized.keep;
+        domains.truncate(arity);
+        for leaves in &mut arm_leaves {
+            leaves.truncate(arity);
         }
+        return_ty = generalized.return_ty;
+        generalized_arms = generalized.arms;
+        arms = &generalized_arms;
+    }
+
+    // Bare-identifier resolution (see `PatternIdents` and
+    // `rewrite_nullary_ctor_column`). A bare constructor ident pattern
+    // (`true`, `none`, an opened constructor) parses as `SurfacePattern::Var`,
+    // which would mis-classify its column as pass-through; every leaf that
+    // ordinary name resolution makes a constructor — at any depth — is
+    // rewritten to that constructor, exactly as Lean reads it. Anything else
+    // stays a genuine binder, with two exceptions the surface cannot settle:
+    //
+    // * a leaf that names a nullary constructor of its column's own inductive
+    //   only through that inductive's namespace is AMBIGUOUS — Lean binds it,
+    //   the shorthand would test it — and the def is handed to the typed path,
+    //   whose classifier refuses it (a recursive def then fails loudly);
+    // * a leaf in a column whose inductive cannot be read off the surface
+    //   (`abbrev`, type variable, dependent family) that could abbreviate a
+    //   constructor is UNDETERMINED: only after the dependent-family lane
+    //   below has had its chance (it refines such a column per row with a
+    //   kernel whnf probe) is the def handed to the typed path.
+    //
+    // A NESTED leaf that could abbreviate a constructor of its (unknown) field
+    // type sends a non-recursive def to the typed path too. A recursive def
+    // keeps it as a variable: the matrix compiler re-emits every such leaf in
+    // a pattern the typed classifier sees (`compile_pattern_matrix`), so it is
+    // either bound exactly as Lean binds it or refused — never silently tested
+    // or silently bound.
+    let mut undetermined_ctor_columns: Vec<usize> = Vec::new();
+    for (pos, (domain, _, _)) in domains.iter().enumerate() {
+        match rewrite_nullary_ctor_column(idents, Some(domain), &mut arm_leaves, pos) {
+            ColumnIdents::Settled => {}
+            ColumnIdents::Undetermined => undetermined_ctor_columns.push(pos),
+            ColumnIdents::Ambiguous => return None,
+        }
+    }
+    for leaf in arm_leaves.iter_mut().flatten() {
+        *leaf = idents.resolve_ctor_idents(leaf, false);
+    }
+    if !is_recursive
+        && arm_leaves
+            .iter()
+            .flatten()
+            .any(|leaf| idents.has_nested_suspect(leaf, false))
+    {
+        return None;
     }
 
     // Brick 88: dependent type-family second domain (`(n : Nat) → T9 n → R`).
@@ -434,15 +659,20 @@ fn normalize_equation_def_multiarg(
     // RETURN type (dependent-motive lane). All-or-nothing: on any gate
     // failure `arm_leaves` is untouched and everything below runs
     // byte-identically.
-    if let Some(lifted) = super::equation_dep_family::try_emit_dependent_family(
-        env,
-        ty,
-        &domains,
-        &arm_leaves,
-        arms,
-        is_recursive,
-    ) {
-        return Some(lifted);
+    if !is_generalized {
+        if let Some(lifted) = super::equation_dep_family::try_emit_dependent_family(
+            env,
+            ty,
+            &domains,
+            &arm_leaves,
+            arms,
+            is_recursive,
+        ) {
+            return Some(lifted);
+        }
+    }
+    if !undetermined_ctor_columns.is_empty() {
+        return None;
     }
 
     // Identify the structurally-matched positions (those constructor/literal-
@@ -455,6 +685,75 @@ fn normalize_equation_def_multiarg(
             .any(|leaves| is_structural_pattern(&leaves[pos]))
         {
             structural_positions.push(pos);
+        }
+    }
+    // The decreasing column must be the OUTERMOST dispatch. `setup_recursion`
+    // picks the decreasing argument from the self-calls (a position every
+    // call passes a variable at) and preferring the whole-body match
+    // scrutinee, and the `.rec` it lowers to re-runs only what sits below that
+    // match. Leaving a different column outermost put the `.rec` inside a case
+    // split on another argument, so the induction hypothesis reused that
+    // split's pattern variables: `| 0, y => y | x+1, y+1 => f (x-2) y | x+1, 0
+    // => 0` ignored the call's `x-2` and proved `f 1 2 = 0` (measured
+    // 2026-09-25; Lean 4.8.0: `f 1 2 = 1`). Such a lowering is now refused by
+    // `check_recursive_minors_closed`; this ordering lowers it correctly
+    // instead. Reordering the columns of a pattern matrix does not change
+    // which row matches — rows keep their order.
+    if is_recursive && !calls.is_empty() {
+        let explicit = |info: clean_parser::SurfaceBinderInfo| {
+            matches!(info, clean_parser::SurfaceBinderInfo::Explicit)
+        };
+        let lead = decl_binders.iter().filter(|b| explicit(b.info)).count();
+        let call_position = |pos: usize| -> Option<usize> {
+            explicit(domains[pos].2)
+                .then(|| lead + (0..pos).filter(|&q| explicit(domains[q].2)).count())
+        };
+        let current = structural_positions.iter().copied().find(|&pos| {
+            call_position(pos).is_some_and(|at| {
+                calls.iter().all(|call| {
+                    matches!(
+                        call.args.get(at),
+                        Some(super::structural::RecursiveArg::Var(_))
+                    )
+                })
+            })
+        });
+        // "Every call passes a variable here" does not say the variable is a
+        // CHILD of this column's pattern: `| x, _ :: z => f x z | _, _ => 0`
+        // passes the whole first column back unchanged, so recursion on it
+        // cannot resolve the call, while `z` is the tail of the second. Replace
+        // the column only when recursion on it certainly cannot resolve some
+        // call, with the first column on which every call passes a recursive
+        // field of its row's pattern (`structural::classify_descent`; Lean
+        // 4.8.0 keeps the first parameter structural recursion succeeds on).
+        let rows: Vec<super::structural::DescentRow<'_>> = arm_leaves
+            .iter()
+            .zip(arms.iter())
+            .map(|(pats, arm)| super::structural::DescentRow {
+                pats,
+                body: &arm.body,
+            })
+            .collect();
+        let decreasing =
+            super::structural::choose_decreasing_position(current, &structural_positions, |pos| {
+                let Some(at) = call_position(pos) else {
+                    return super::structural::Descent::Unknown;
+                };
+                let column_inductive = surface_type_head(&domains[pos].0)
+                    .and_then(|head| env.get_inductive(head.name()))
+                    .map(|ind| ind.name.clone());
+                super::structural::classify_descent(
+                    env,
+                    def_name,
+                    &rows,
+                    pos,
+                    column_inductive.as_ref(),
+                    at,
+                )
+            });
+        if let Some(pos) = decreasing {
+            structural_positions.retain(|&q| q != pos);
+            structural_positions.insert(0, pos);
         }
     }
     let dec_pos = *structural_positions.first()?;
@@ -476,12 +775,22 @@ fn normalize_equation_def_multiarg(
     // and so left the self-call as a placeholder constant typed at the return
     // type ("Too many arguments: function type … is not a function type" —
     // trust-ir `maskBitsAux`'s `| [], _, acc => …` base arm). (Track G)
-    let mut binder_names: Vec<Option<String>> = vec![None; arity];
+    //
+    // Named after the shared variable ONLY when every arm binds it there. A
+    // lifted binder is in scope for every arm, so an arm with `_` in that
+    // column would read the binder where its body meant something else of
+    // that name: with `def y := 7`, `| 0, y => y | n+1, _ => y` made `k 1 5`
+    // reduce to `5` (measured 2026-09-25; Lean 4.8.0: `7`). Otherwise the
+    // binder keeps its synthetic name and each arm that names the column
+    // binds its variable from it (`column_binds`).
+    let mut binder_names: Vec<Option<SurfaceName>> = vec![None; arity];
+    let mut column_binds: Vec<Vec<(SurfaceName, usize)>> = vec![Vec::new(); arm_leaves.len()];
     for pos in 0..arity {
         if is_structural_col[pos] {
             continue;
         }
-        let mut shared_name: Option<String> = None;
+        let mut shared_name: Option<SurfaceName> = None;
+        let mut every_arm_names = true;
         for leaves in &arm_leaves {
             let this = match &leaves[pos] {
                 SurfacePattern::Var(name) => Some(name.clone()),
@@ -492,7 +801,7 @@ fn normalize_equation_def_multiarg(
             };
             match (&shared_name, this) {
                 // Wildcard arm: no constraint, keep whatever name we have.
-                (_, None) => {}
+                (_, None) => every_arm_names = false,
                 // First named occurrence sets the column's binder name.
                 (None, Some(name)) => shared_name = Some(name),
                 // Subsequent named occurrence must match the established name;
@@ -501,46 +810,130 @@ fn normalize_equation_def_multiarg(
                 (Some(_), Some(_)) => return None,
             }
         }
-        binder_names[pos] = shared_name;
+        if every_arm_names {
+            binder_names[pos] = shared_name;
+        } else if let Some(name) = shared_name {
+            for (arm, leaves) in arm_leaves.iter().enumerate() {
+                if matches!(&leaves[pos], SurfacePattern::Var(n) if *n == name) {
+                    column_binds[arm].push((name.clone(), pos));
+                }
+            }
+        }
     }
 
-    // Build the lifted declaration binders. Structural positions prefer the
-    // DECLARED Pi binder name (so a dependent residual return type like `W6 b`
-    // resolves to the lifted binder — the multiarg form of the single-arg
-    // name-drop fix in `normalize_equation_def`), falling back to synthetic
-    // `_x`/`_x_arg{pos}` for anonymous domains. Pass-through positions reuse
-    // the shared surface variable name, then the declared name, then a fresh
-    // `_`-name (all-wildcard columns, never referenced). COLLISION GUARD: a
-    // declared name is only used for a structural position when no OTHER
-    // lifted binder takes the same name — otherwise the emitted `match <name>`
-    // scrutinee ident could resolve to a different column's binder via
-    // shadowing. On collision the position keeps its synthetic name (the
-    // dangling-name behavior is then no worse than before this fix).
-    let declared_names: Vec<Option<String>> = domains.iter().map(|(_, n)| n.clone()).collect();
-    let synthetic_name = |pos: usize| -> String {
+    // Build the lifted declaration binders. Each keeps the name the ARM BODIES
+    // need (the pass-through pattern name, else the parser-generated synthetic)
+    // and the declared binder's own `SurfaceBinderInfo`; the TYPE is rewritten
+    // below to refer to whatever the binder ended up called.
+    let declared_names: Vec<Option<SurfaceName>> =
+        domains.iter().map(|(_, n, _)| n.clone()).collect();
+    // UNSPELLABLE (`SurfaceName::unspellable`): a lifted binder under a
+    // synthetic name is in scope for every arm body, so a spellable one
+    // (`_x_arg1` used to be a plain string) captured an arm body's reference
+    // to a global of that spelling — `def _x_arg1 := 77`, `| 0, y => y | n+1,
+    // _ => _x_arg1` proved `e1 1 5 = 5` (measured 2026-09-25; Lean 4.8.0:
+    // `77`) — and a pattern variable of that spelling captured the binder.
+    let synthetic_name = |pos: usize| -> SurfaceName {
         if pos == dec_pos {
-            "_x".to_string()
+            SurfaceName::pattern_lambda_binder()
         } else {
-            format!("_x_arg{pos}")
+            SurfaceName::unspellable("_x_arg", pos as u64)
         }
     };
-    // A declared name is only adopted when the residual return type actually
-    // REFERENCES it (the dependent case, which previously failed with the name
-    // dangling). Otherwise every position keeps its pre-existing name choice
-    // (pass-through pattern name / synthetic), so non-dependent defs lift
-    // byte-identically to before.
-    let return_ty_idents = collect_free_idents_of(&return_ty);
-    let mut chosen_names: Vec<String> = Vec::with_capacity(arity);
-    for pos in 0..arity {
-        let declared_if_referenced = declared_names[pos]
-            .clone()
-            .filter(|n| return_ty_idents.contains(n));
-        let candidate = if is_structural_col[pos] {
-            declared_if_referenced
-        } else {
-            binder_names[pos].clone().or(declared_if_referenced)
+    // NAME CHOICE — by renaming the TYPE, never by renaming the binder.
+    //
+    // Two consumers want this one name slot, and in Lean they are DIFFERENT
+    // scopes: the TYPE references a position by its DECLARED Pi binder name,
+    // while the ARM BODIES reference a pass-through position by its PATTERN
+    // variable name. When those disagree no single name satisfies both.
+    //
+    // Four attempts tried to arbitrate — pick one side, guard the choice — and
+    // each fixed its witness and silently miscompiled a shape one step wider.
+    // The fourth established WHY the whole family fails: any guard of the form
+    // "adopt the declared name if no arm body mentions it" reads UNEXPANDED
+    // surface syntax, so with `notation "gee" => G` a body of `gee` does not
+    // mention `G`, the binder takes `G`, and it shadows the global the body
+    // meant. The arm body is not the program, so no syntactic test on it is
+    // sound. See `reports/patches/README.md`.
+    //
+    // So this does not arbitrate and does not inspect bodies at all:
+    //
+    //   * The binder ALWAYS keeps the name the bodies need — the pass-through
+    //     pattern name, or the parser-generated synthetic when there is none.
+    //     A declared name is never adopted, so a binder can never shadow
+    //     anything an arm body meant. That whole class is now unreachable
+    //     rather than guarded.
+    //   * The TYPE is instead rewritten to say what the binder is actually
+    //     called. This is what makes the dependency resolve: `223.lean`'s
+    //     `{b : β} → Imf f b → α` references `b` from the next DOMAIN, so the
+    //     old return-type-only test left it dangling.
+    //
+    // Rewriting is only attempted when the target is the SYNTHETIC name, which
+    // user source cannot spell (`_x` / `_x_arg{n}` are parser-generated), so
+    // the rewrite cannot capture. Positions are processed RIGHT TO LEFT so a
+    // name declared twice binds INNERMOST-first, as Lean does. A rewrite that
+    // cannot be shown safe is skipped, leaving the pre-existing dangling-name
+    // error — loud, not silent.
+    let mut chosen_names: Vec<SurfaceName> = binder_names
+        .iter()
+        .enumerate()
+        .map(|(pos, n)| n.clone().unwrap_or_else(|| synthetic_name(pos)))
+        .collect();
+    for pos in (0..arity).rev() {
+        let Some(declared) = declared_names[pos].clone() else {
+            continue;
         };
-        chosen_names.push(candidate.unwrap_or_else(|| synthetic_name(pos)));
+        let chosen = chosen_names[pos].clone();
+        // Only rewrite toward the position's own synthetic name.
+        if declared == chosen || chosen != synthetic_name(pos) {
+            continue;
+        }
+        // The synthetic names are now unspellable, so no user binder or
+        // global can already mean them. They were once ordinary identifiers
+        // (`def _x_arg0 : Nat := 99`), and rewriting the type INTO a taken
+        // name captured — measured producing a wrong dependent index. The
+        // check stays as defense in depth: it only ever refuses, which leaves
+        // the pre-existing dangling-name error.
+        let target_is_taken = decl_binders.iter().any(|b| {
+            b.name == chosen
+                || b.ty
+                    .as_ref()
+                    .is_some_and(|t| expr_may_mention_ident(t, &chosen))
+        }) || expr_may_mention_ident(ty, &chosen)
+            || arms.iter().any(|a| {
+                expr_may_mention_ident(&a.body, &chosen)
+                    || pattern_may_mention_ident(&a.pattern, &chosen)
+            });
+        if target_is_taken {
+            continue;
+        }
+        let mut rewritten: Vec<(
+            SurfaceExpr,
+            Option<SurfaceName>,
+            clean_parser::SurfaceBinderInfo,
+        )> = Vec::with_capacity(arity);
+        let mut ok = true;
+        for (idx, (dom, nm, info)) in domains.iter().enumerate() {
+            if idx > pos {
+                match try_rename_free_ident(dom, &declared, &chosen) {
+                    Some(d) => rewritten.push((d, nm.clone(), *info)),
+                    None => {
+                        ok = false;
+                        break;
+                    }
+                }
+            } else {
+                rewritten.push((dom.clone(), nm.clone(), *info));
+            }
+        }
+        if !ok {
+            continue;
+        }
+        let Some(new_return) = try_rename_free_ident(&return_ty, &declared, &chosen) else {
+            continue;
+        };
+        domains = rewritten;
+        return_ty = new_return;
     }
     // Resolve duplicates: keep the FIRST occurrence of a name, demote later
     // ones to their synthetic name (pass-through pattern names must win over a
@@ -552,17 +945,51 @@ fn normalize_equation_def_multiarg(
             chosen_names[pos] = synthetic_name(pos);
         }
     }
-    let scrut_binder_name = |pos: usize| -> String { chosen_names[pos].clone() };
+    let scrut_binder_name = |pos: usize| -> SurfaceName { chosen_names[pos].clone() };
     let mut lifted_binders = Vec::with_capacity(arity);
-    for (pos, (domain, _)) in domains.into_iter().enumerate() {
-        lifted_binders.push(SurfaceBinder::new(
+    for (pos, (domain, _, info)) in domains.into_iter().enumerate() {
+        lifted_binders.push(SurfaceBinder::new_typed(
             chosen_names[pos].clone(),
             Some(domain),
-            clean_parser::SurfaceBinderInfo::Explicit,
+            info,
         ));
     }
 
     let dec_span = scrut.span();
+
+    // The per-arm bindings of pass-through columns that kept a synthetic
+    // binder name (see `column_binds`). A structural pattern that binds a
+    // pass-through binder's name would capture that binder's value for every
+    // arm binding read below it: refuse that. (The synthetic binder names are
+    // unspellable, so only a user-named pass-through binder can meet this.)
+    let arm_binds: Vec<Vec<RowBind>> = column_binds
+        .iter()
+        .map(|binds| {
+            binds
+                .iter()
+                .map(|(var, pos)| RowBind {
+                    var: var.clone(),
+                    source: scrut_binder_name(*pos),
+                    suspect: false,
+                })
+                .collect()
+        })
+        .collect();
+    let passthrough_names: Vec<SurfaceName> = (0..arity)
+        .filter(|&pos| !is_structural_col[pos])
+        .map(scrut_binder_name)
+        .collect();
+    if column_binds.iter().any(|binds| !binds.is_empty())
+        && arm_leaves.iter().any(|leaves| {
+            structural_positions.iter().any(|&pos| {
+                passthrough_names
+                    .iter()
+                    .any(|name| pattern_may_mention_ident(&leaves[pos], name))
+            })
+        })
+    {
+        return None;
+    }
 
     if structural_positions.len() == 1 {
         // Slice 2: single structural position. Scrutinize only the decreasing
@@ -572,10 +999,11 @@ fn normalize_equation_def_multiarg(
         let new_arms: Vec<clean_parser::SurfaceMatchArm> = arms
             .iter()
             .zip(arm_leaves.iter())
-            .map(|(arm, leaves)| clean_parser::SurfaceMatchArm {
+            .zip(arm_binds.iter())
+            .map(|((arm, leaves), binds)| clean_parser::SurfaceMatchArm {
                 span: arm.span,
                 pattern: leaves[dec_pos].clone(),
-                body: arm.body.clone(),
+                body: bind_row_variables(binds, arm.body.clone(), arm.span),
             })
             .collect();
         let match_body = SurfaceExpr::Match(
@@ -593,23 +1021,47 @@ fn normalize_equation_def_multiarg(
     // literal, or wildcard (variable / as / or / n+k patterns at a structural
     // top level are outside the envelope and bail) so the column always reduces
     // to "match this scrutinee against these head patterns".
-    let scrut_names: Vec<String> = structural_positions
+    let scrut_names: Vec<SurfaceName> = structural_positions
         .iter()
         .map(|&pos| scrut_binder_name(pos))
         .collect();
     let rows: Vec<MatrixRow> = arm_leaves
         .iter()
         .zip(arms.iter())
-        .map(|(leaves, arm)| MatrixRow {
+        .zip(arm_binds)
+        .enumerate()
+        .map(|(origin, ((leaves, arm), binds))| MatrixRow {
             pats: structural_positions
                 .iter()
                 .map(|&pos| leaves[pos].clone())
                 .collect(),
             body: arm.body.clone(),
             span: arm.span,
+            binds,
+            origin,
         })
         .collect();
-    let match_body = compile_pattern_matrix(&scrut_names, &rows, dec_span, is_recursive)?;
+    // Every lifted binder name is referenced below the emitted binders (the
+    // structural ones by the inner matches, the pass-through ones by the arms'
+    // bindings), so no constructor field may be bound under one of them.
+    let reserved: Vec<SurfaceName> = scrut_names
+        .iter()
+        .chain(passthrough_names.iter())
+        .cloned()
+        .collect();
+    // The `n + k` expansion's engagement gate admits defs the old envelope
+    // could not lower at all: recursive ones, and (class (88)) ones whose
+    // hypothesis columns were generalized above.
+    let match_body = compile_pattern_matrix_checked(
+        idents,
+        def_name,
+        &scrut_names,
+        &rows,
+        dec_span,
+        is_recursive || is_generalized,
+        &reserved,
+        redundant,
+    )?;
     Some((lifted_binders, Some(return_ty), match_body))
 }
 
@@ -624,7 +1076,7 @@ fn unpack_prod_mk_scrutinee(scrut: &SurfaceExpr) -> Option<Vec<&SurfaceExpr>> {
     loop {
         match current {
             SurfaceExpr::App(_, f, args)
-                if matches!(&**f, SurfaceExpr::Ident(_, n) if n == "Prod.mk")
+                if matches!(&**f, SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("Prod.mk"))
                     && args.len() == 2
                     && args.iter().all(|a| a.name.is_none()) =>
             {
@@ -659,13 +1111,42 @@ fn unpack_prod_mk_scrutinee(scrut: &SurfaceExpr) -> Option<Vec<&SurfaceExpr>> {
 /// matches work today via the tuple-`casesOn` path and keep byte-identical
 /// behavior. Every other shape check (`None` return) also falls back to that
 /// pre-existing path, so nothing that elaborated before is rerouted.
+///
+/// `Err` when the rewritten match never selects some alternative (Lean 4.8.0:
+/// "redundant alternative").
 fn normalize_multi_scrutinee_match_body(
-    env: &clean_kernel::Environment,
-    def_name: &str,
+    idents: &PatternIdents<'_>,
+    def_name: &SurfaceName,
     binders: &[SurfaceBinder],
     val: &SurfaceExpr,
+    explicit_structural: Option<&SurfaceName>,
+) -> Result<Option<SurfaceExpr>, ElabError> {
+    let mut redundant = None;
+    let body = nest_multi_scrutinee_match(
+        idents,
+        def_name,
+        binders,
+        val,
+        explicit_structural,
+        &mut redundant,
+    );
+    match redundant {
+        Some(err) => Err(err),
+        None => Ok(body),
+    }
+}
+
+/// [`normalize_multi_scrutinee_match_body`]'s rewrite; a redundant
+/// alternative is reported through `redundant` (and the rewrite is `None`).
+fn nest_multi_scrutinee_match(
+    idents: &PatternIdents<'_>,
+    def_name: &SurfaceName,
+    binders: &[SurfaceBinder],
+    val: &SurfaceExpr,
+    explicit_structural: Option<&SurfaceName>,
+    redundant: &mut Option<ElabError>,
 ) -> Option<SurfaceExpr> {
-    if def_name.is_empty() || binders.is_empty() {
+    if def_name.is_anonymous() || binders.is_empty() {
         return None;
     }
     // The whole body must be a plain match (no `h :` discriminant hypothesis —
@@ -681,7 +1162,7 @@ fn normalize_multi_scrutinee_match_body(
     // shadow-free; a repeated component would re-match a name the outer match
     // may have re-bound).
     let components = unpack_prod_mk_scrutinee(scrut)?;
-    let mut names: Vec<String> = Vec::with_capacity(components.len());
+    let mut names: Vec<SurfaceName> = Vec::with_capacity(components.len());
     for component in components {
         let SurfaceExpr::Ident(_, n) = component else {
             return None;
@@ -704,61 +1185,528 @@ fn normalize_multi_scrutinee_match_body(
     if arm_leaves.iter().any(|leaves| leaves.len() != names.len()) {
         return None;
     }
-    // B83 nullary-ctor ident rewrite, keyed on the BINDER type (the multiarg
-    // path keys on the peeled declaration domain): a bare `true`/`false`/…
+    // Bare-identifier resolution, keyed on the BINDER type (the multiarg path
+    // keys on the peeled declaration domain) — see `PatternIdents` and the
+    // same step in `normalize_equation_def_multiarg`. A bare `true`/`none`/…
     // pattern parses as `SurfacePattern::Var`, which the matrix compiler's
-    // variable rule would silently treat as a catch-all — an always-first-arm
-    // WRONG compile. Resolving registered nullary constructors up front keeps
-    // those columns genuine constructor dispatches.
+    // variable rule would silently treat as a catch-all. This lowering is
+    // recursive-only, so an ambiguous or undetermined column refuses the
+    // lowering (loudly, on the def's own name) rather than guess.
     for (pos, comp_name) in names.iter().enumerate() {
-        let Some(SurfaceExpr::Ident(_, type_name)) = binders
+        let domain = binders
             .iter()
             .find(|b| b.name == *comp_name)
-            .and_then(|b| b.ty.as_deref())
-        else {
-            continue;
-        };
-        let Some(ind) = env.get_inductive(&Name::from_string(type_name)) else {
-            continue;
-        };
-        let nullary: Vec<String> = ind
-            .constructor_names
-            .iter()
-            .filter(|c| env.get_constructor(c).is_some_and(|ci| ci.num_fields == 0))
-            .map(|c| c.to_string())
-            .collect();
-        for leaves in arm_leaves.iter_mut() {
-            if let SurfacePattern::Var(name) = &leaves[pos] {
-                let qualified = format!("{type_name}.{name}");
-                if nullary
+            .and_then(|b| b.ty.as_deref());
+        match rewrite_nullary_ctor_column(idents, domain, &mut arm_leaves, pos) {
+            ColumnIdents::Settled => {}
+            ColumnIdents::Undetermined | ColumnIdents::Ambiguous => return None,
+        }
+    }
+    for leaf in arm_leaves.iter_mut().flatten() {
+        *leaf = idents.resolve_ctor_idents(leaf, false);
+    }
+    // Put the component `setup_recursion` will recurse on FIRST, so the `.rec`
+    // is the outermost dispatch (see the same ordering in
+    // `normalize_equation_def_multiarg`). `match x, y with | 0, y => … | x+1,
+    // y+1 => b 0 y | …` recurses on `y`; compiled `x`-first, the induction
+    // hypothesis ignored the call's `0` and `b 1 2 = 0` was provable (measured
+    // 2026-09-25; Lean 4.8.0: `11`).
+    let explicit_names: Vec<SurfaceName> = binders
+        .iter()
+        .filter(|b| matches!(b.info, clean_parser::SurfaceBinderInfo::Explicit))
+        .map(|b| b.name.clone())
+        .collect();
+    let call_pos = |column: usize| explicit_names.iter().position(|n| *n == names[column]);
+    let decreasing_column =
+        match explicit_structural.and_then(|x| names.iter().position(|n| n == x)) {
+            // `termination_by structural x` names the parameter `setup_recursion`
+            // recurses on; it must be the outermost dispatch too. Before, the
+            // rotation followed the name heuristic instead, left `x` inside a case
+            // split on another column, and `match c, b with | none, z+1 => a + k3 z
+            // z (some 2) | _, _ => 105` with `termination_by structural b` proved
+            // `k3 1 4 none = 112` (measured 2026-09-26; the value is 106).
+            Some(column) => Some(column),
+            None => {
+                let detected =
+                    super::structural::detect_recursion_with_params(def_name, val, &explicit_names);
+                // Where the recursion goes today: the detector's column, or — when
+                // the detector names no column — the first column, which
+                // `setup_recursion` prefers on the normalized body whenever every
+                // call passes a variable there.
+                let current = detected
+                    .decreasing_arg
+                    .and_then(|pos| explicit_names.get(pos))
+                    .and_then(|name| names.iter().position(|n| n == name))
+                    .or_else(|| {
+                        let first = call_pos(0)?;
+                        detected
+                            .calls
+                            .iter()
+                            .all(|call| {
+                                matches!(
+                                    call.args.get(first),
+                                    Some(super::structural::RecursiveArg::Var(_))
+                                )
+                            })
+                            .then_some(0)
+                    });
+                // The detector reads spellings, not where a variable comes from:
+                // `match c, b with | a+1, b+1 => f 4 c a | _, _ => 109` passes `c`
+                // (spelled unlike `b`) at `b`'s position, so it chose `b`, although
+                // no call passes a child of `b` and every call passes `a`, the
+                // predecessor of `c`. Lean 4.8.0 recurses on `c`. Replace a column
+                // only when recursion on it certainly cannot resolve some call
+                // (`structural::classify_descent`).
+                let rows: Vec<super::structural::DescentRow<'_>> = arm_leaves
                     .iter()
-                    .any(|c| c == name.as_str() || c == qualified.as_str())
-                {
-                    leaves[pos] = SurfacePattern::Ctor(name.clone(), Vec::new());
-                }
+                    .zip(arms.iter())
+                    .map(|(pats, arm)| super::structural::DescentRow {
+                        pats,
+                        body: &arm.body,
+                    })
+                    .collect();
+                let column_inductive = |column: usize| -> Option<Name> {
+                    let domain = binders
+                        .iter()
+                        .find(|b| b.name == names[column])
+                        .and_then(|b| b.ty.as_deref())?;
+                    let head = surface_type_head(domain)?;
+                    idents
+                        .env
+                        .get_inductive(head.name())
+                        .map(|ind| ind.name.clone())
+                };
+                let mut candidates: Vec<usize> = (0..names.len())
+                    .filter(|&c| call_pos(c).is_some())
+                    .collect();
+                candidates.sort_by_key(|&c| call_pos(c));
+                super::structural::choose_decreasing_position(current, &candidates, |column| {
+                    match call_pos(column) {
+                        Some(at) => super::structural::classify_descent(
+                            idents.env,
+                            def_name,
+                            &rows,
+                            column,
+                            column_inductive(column).as_ref(),
+                            at,
+                        ),
+                        None => super::structural::Descent::Unknown,
+                    }
+                })
             }
+        };
+    if let Some(column) = decreasing_column.filter(|&column| column > 0) {
+        let name = names.remove(column);
+        names.insert(0, name);
+        for leaves in &mut arm_leaves {
+            let leaf = leaves.remove(column);
+            leaves.insert(0, leaf);
         }
     }
     let rows: Vec<MatrixRow> = arm_leaves
         .into_iter()
         .zip(arms.iter())
-        .map(|(pats, arm)| MatrixRow {
+        .enumerate()
+        .map(|(origin, (pats, arm))| MatrixRow {
             pats,
             body: arm.body.clone(),
             span: arm.span,
+            binds: Vec::new(),
+            origin,
         })
         .collect();
     // `extended: true` — the gate above already restricted us to the
     // recursive (previously-failing) class the B81 extensions target.
-    compile_pattern_matrix(&names, &rows, *span, /*extended=*/ true)
+    compile_pattern_matrix_checked(
+        idents, def_name, &names, &rows, *span, /*extended=*/ true, &names, redundant,
+    )
+}
+
+/// The inductive a surface type names at its head: `T`, `T a b`, `(T a)`.
+fn surface_type_head(ty: &SurfaceExpr) -> Option<&SurfaceName> {
+    match ty {
+        SurfaceExpr::Ident(_, name) => Some(name),
+        SurfaceExpr::App(_, func, _) | SurfaceExpr::Paren(_, func) => surface_type_head(func),
+        _ => None,
+    }
+}
+
+/// How the equation normalizers read a bare pattern identifier: exactly as
+/// Lean 4 does, with no type-directed shorthand.
+///
+/// A bare pattern identifier is a constructor iff ORDINARY name resolution —
+/// locals, the current and opened namespaces, `export`s, the root — resolves
+/// it to one; otherwise it is a pattern variable. `ctors` is that resolution,
+/// computed by the elaborator (`ElabCtx::pattern_idents`) for every bare
+/// identifier in the arms before the surface rewrite runs, because these
+/// normalizers only see the environment.
+///
+/// The scrutinee type's own namespace is NOT consulted. Resolving `c` to `U.c`
+/// because the column has type `U` (the shorthand the rewrite used to apply)
+/// made `| some c => 0 | _ => 1` a constructor test where Lean 4.8.0 reads a
+/// catch-all, and `rfl` proved the false `q (some U.a) = 1` (measured
+/// 2026-09-24/25). An identifier that ONLY that shorthand would resolve is
+/// ambiguous between the two readings; the normalizers then leave the
+/// definition to the typed path, whose pattern classifier refuses it
+/// (`classify_match_pattern_name`), or refuse it themselves.
+///
+/// A bare identifier that resolves to a `@[match_pattern]` global is neither
+/// a constructor nor a binder (Lean's `processId` reads it like a constructor
+/// and unfolds it); `match_patterns` holds those, and every normalizer treats
+/// them as suspects the typed classifier must settle (G29: `| two => …` was
+/// bound as a catch-all where Lean matches the literal `2`).
+///
+/// `ctor_heads` is the same ordinary resolution for every unqualified
+/// constructor-APPLICATION head (`succ` in `| succ a, succ b => …`). The
+/// matrix compiler consults it only for a column no head of which names a
+/// constructor by itself (`canonicalize_column_heads`): inside `namespace Tm`
+/// a `succ` head is `Tm.succ` to Lean although `Nat.succ` shares its short
+/// name, and the environment alone cannot say which is meant.
+pub(in crate::infer) struct PatternIdents<'e> {
+    env: &'e clean_kernel::Environment,
+    ctors: HashMap<SurfaceName, Name>,
+    ctor_heads: HashMap<SurfaceName, Name>,
+    match_patterns: HashSet<SurfaceName>,
+}
+
+impl<'e> PatternIdents<'e> {
+    pub(in crate::infer) fn new(
+        env: &'e clean_kernel::Environment,
+        ctors: HashMap<SurfaceName, Name>,
+        ctor_heads: HashMap<SurfaceName, Name>,
+        match_patterns: HashSet<SurfaceName>,
+    ) -> Self {
+        Self {
+            env,
+            ctors,
+            ctor_heads,
+            match_patterns,
+        }
+    }
+
+    /// The constructor ordinary resolution gives the unqualified
+    /// constructor-application head `name`, if any.
+    fn ctor_head(&self, name: &SurfaceName) -> Option<&Name> {
+        self.ctor_heads.get(name)
+    }
+
+    /// `name` resolves to a `@[match_pattern]` global (see the type's doc).
+    fn match_pattern(&self, name: &SurfaceName) -> bool {
+        self.match_patterns.contains(name)
+    }
+
+    /// The constructor ordinary resolution gives `name`, if any.
+    fn ctor(&self, name: &SurfaceName) -> Option<&Name> {
+        self.ctors.get(name)
+    }
+
+    /// `name` is not a constructor by ordinary resolution, but SOME registered
+    /// inductive has a nullary constructor it could abbreviate. Only a typed
+    /// classification can tell whether the scrutinee type is that inductive.
+    pub(super) fn shorthand_suspect(&self, name: &SurfaceName) -> bool {
+        self.ctor(name).is_none()
+            && (self.match_pattern(name) || name_could_be_nullary_ctor(self.env, name))
+    }
+
+    /// Rewrite every bare identifier that ordinary resolution makes a
+    /// constructor into that constructor pattern (full name) — at the top
+    /// when `top` holds, and in every nested position.
+    pub(super) fn resolve_ctor_idents(&self, pat: &SurfacePattern, top: bool) -> SurfacePattern {
+        let rec = |p: &SurfacePattern| self.resolve_ctor_idents(p, true);
+        match pat {
+            SurfacePattern::Var(name) if top => match self.ctor(name) {
+                Some(ctor) => {
+                    SurfacePattern::Ctor(SurfaceName::from_name(ctor.clone()), Vec::new())
+                }
+                None => pat.clone(),
+            },
+            SurfacePattern::Ctor(name, subs) => {
+                SurfacePattern::Ctor(name.clone(), subs.iter().map(rec).collect())
+            }
+            SurfacePattern::As(name, inner) => {
+                SurfacePattern::As(name.clone(), Box::new(rec(inner)))
+            }
+            SurfacePattern::NumeralAdd(inner, k) => {
+                SurfacePattern::NumeralAdd(Box::new(rec(inner)), *k)
+            }
+            SurfacePattern::Or(a, b) => SurfacePattern::Or(Box::new(rec(a)), Box::new(rec(b))),
+            other => other.clone(),
+        }
+    }
+
+    /// Does a NESTED position (a sub-pattern of a constructor, `as`, `or` or
+    /// `n + k`) hold a shorthand suspect? Run after `resolve_ctor_idents`.
+    fn has_nested_suspect(&self, pat: &SurfacePattern, nested: bool) -> bool {
+        match pat {
+            SurfacePattern::Var(name) => nested && self.shorthand_suspect(name),
+            SurfacePattern::Ctor(_, subs) => {
+                subs.iter().any(|sub| self.has_nested_suspect(sub, true))
+            }
+            SurfacePattern::As(_, inner) | SurfacePattern::NumeralAdd(inner, _) => {
+                self.has_nested_suspect(inner, true)
+            }
+            SurfacePattern::Or(a, b) => {
+                self.has_nested_suspect(a, true) || self.has_nested_suspect(b, true)
+            }
+            SurfacePattern::StructInst { fields, .. } => fields
+                .iter()
+                .any(|(_, sub)| self.has_nested_suspect(sub, true)),
+            SurfacePattern::Wildcard
+            | SurfacePattern::Ellipsis
+            | SurfacePattern::Inaccessible(_)
+            | SurfacePattern::Lit(_)
+            | SurfacePattern::QPattern(_) => false,
+        }
+    }
+}
+
+/// Every bare identifier (`Var`, `as` name excluded) in `pat`, in order.
+pub(in crate::infer) fn collect_pattern_idents(pat: &SurfacePattern, out: &mut Vec<SurfaceName>) {
+    match pat {
+        SurfacePattern::Var(name) => {
+            if !out.contains(name) {
+                out.push(name.clone());
+            }
+        }
+        SurfacePattern::Ctor(_, subs) => subs.iter().for_each(|p| collect_pattern_idents(p, out)),
+        SurfacePattern::As(_, inner) | SurfacePattern::NumeralAdd(inner, _) => {
+            collect_pattern_idents(inner, out)
+        }
+        SurfacePattern::Or(a, b) => {
+            collect_pattern_idents(a, out);
+            collect_pattern_idents(b, out);
+        }
+        _ => {}
+    }
+}
+
+/// Every unqualified constructor-application head in `pat`, in order: the
+/// names `PatternIdents::ctor_heads` resolves. A qualified head (`Nat.succ`)
+/// and a relative one (`.succ`) are left out; neither is read through the
+/// current namespace.
+pub(in crate::infer) fn collect_pattern_ctor_heads(
+    pat: &SurfacePattern,
+    out: &mut Vec<SurfaceName>,
+) {
+    match pat {
+        SurfacePattern::Ctor(name, subs) => {
+            if !name.is_relative_constructor()
+                && name.parent().is_anonymous()
+                && !out.contains(name)
+            {
+                out.push(name.clone());
+            }
+            subs.iter().for_each(|p| collect_pattern_ctor_heads(p, out));
+        }
+        SurfacePattern::As(_, inner) | SurfacePattern::NumeralAdd(inner, _) => {
+            collect_pattern_ctor_heads(inner, out)
+        }
+        SurfacePattern::Or(a, b) => {
+            collect_pattern_ctor_heads(a, out);
+            collect_pattern_ctor_heads(b, out);
+        }
+        _ => {}
+    }
+}
+
+/// The arms of a declaration value's whole-body `match`, peeling the
+/// equation-form `PatternMatchLambda` and plain lambdas.
+pub(in crate::infer) fn whole_body_match_arms(
+    val: &SurfaceExpr,
+) -> &[clean_parser::SurfaceMatchArm] {
+    let mut cur = val;
+    loop {
+        match cur {
+            SurfaceExpr::Lambda(_, _, inner)
+            | SurfaceExpr::PatternMatchLambda(_, _, inner)
+            | SurfaceExpr::Ascription(_, inner, _) => cur = inner,
+            SurfaceExpr::Match(_, _, _, arms) => return arms,
+            _ => return &[],
+        }
+    }
+}
+
+/// Outcome of resolving one equation column's bare identifiers.
+enum ColumnIdents {
+    /// Every `Var` leaf left is a pattern variable.
+    Settled,
+    /// No inductive can be read off the column's surface domain, and a `Var`
+    /// leaf could abbreviate a constructor of whatever it is.
+    Undetermined,
+    /// A `Var` leaf is not a constructor by ordinary resolution but names a
+    /// nullary constructor of the column's own inductive: Lean binds it,
+    /// the type-namespace shorthand would test it.
+    Ambiguous,
+}
+
+/// Resolve the bare-identifier leaves of one equation column before the column
+/// is classified as structural or pass-through.
+///
+/// A bare constructor ident (`none`, `true`, an opened or namespace-local
+/// constructor) parses as `SurfacePattern::Var`. Left as a `Var`, the column
+/// classifier calls it a pass-through binder, and the lowering then DROPS the
+/// test: `| some _, none => 0 | _, _ => 1` compiled to a match on the first
+/// column alone, so `f (some 5) (some 2)` reduced to `0` and `rfl` proved that
+/// false equation (measured 2026-09-24; Lean 4.8.0 evaluates it to `1`).
+///
+/// Each `Var` leaf that ordinary resolution makes a constructor becomes that
+/// constructor pattern (see `PatternIdents`); a leaf of another inductive is
+/// then refused by the typed elaboration of the emitted match. The column's
+/// inductive is the HEAD of its domain (`Option Nat` → `Option`); it is used
+/// only to detect the ambiguous shorthand, never to resolve.
+#[must_use]
+fn rewrite_nullary_ctor_column(
+    idents: &PatternIdents<'_>,
+    domain: Option<&SurfaceExpr>,
+    arm_leaves: &mut [Vec<SurfacePattern>],
+    pos: usize,
+) -> ColumnIdents {
+    let env = idents.env;
+    for leaves in arm_leaves.iter_mut() {
+        leaves[pos] = idents.resolve_ctor_idents(&leaves[pos], true);
+    }
+    let head = domain.and_then(surface_type_head);
+    let inductive = head.and_then(|type_name| {
+        env.get_inductive(type_name.name())
+            .map(|ind| (type_name, ind))
+    });
+    let Some((type_name, ind)) = inductive else {
+        let undetermined = arm_leaves.iter().any(|leaves| {
+            matches!(&leaves[pos], SurfacePattern::Var(name) if idents.shorthand_suspect(name))
+        });
+        return if undetermined {
+            ColumnIdents::Undetermined
+        } else {
+            ColumnIdents::Settled
+        };
+    };
+    let nullary: Vec<Name> = ind
+        .constructor_names
+        .iter()
+        .filter(|c| env.get_constructor(c).is_some_and(|ci| ci.num_fields == 0))
+        .cloned()
+        .collect();
+    let ambiguous = arm_leaves.iter().any(|leaves| {
+        matches!(&leaves[pos], SurfacePattern::Var(name)
+            if idents.match_pattern(name)
+                || (name.parent().is_anonymous()
+                    && nullary.contains(type_name.append(name).name())))
+    });
+    if ambiguous {
+        ColumnIdents::Ambiguous
+    } else {
+        ColumnIdents::Settled
+    }
+}
+
+/// Could this bare pattern identifier denote a nullary constructor of SOME
+/// registered inductive — spelled as its full name, or (when unqualified) as
+/// its last component, the way an opened namespace or the scrutinee type's own
+/// namespace would resolve it? Over-approximates on purpose: it is only used to
+/// REFUSE a lowering, never to build one.
+fn name_could_be_nullary_ctor(env: &clean_kernel::Environment, name: &SurfaceName) -> bool {
+    let last = name.name().last_component();
+    let unqualified = name.parent().is_anonymous();
+    env.constructors().any(|c| {
+        c.num_fields == 0
+            && (c.name == *name.name()
+                || (unqualified && last.is_some() && c.name.last_component() == last))
+    })
 }
 
 /// One row of the structural pattern matrix: the per-structural-column patterns
 /// plus the arm body and source span.
+///
+/// `binds` are the row's pattern variables that the compiler has already
+/// consumed from its columns, each with the scrutinee (or fresh field) name it
+/// is bound from. They are emitted only at the LEAF, around the body of the
+/// row that is selected there ([`bind_row_variables`]) — never while the
+/// decision tree is still being built. A pattern binds all of its variables at
+/// once, from the values being matched; an earlier column's binding wrapped in
+/// place (`let a := b._f0` around `let x := a`) captured a later column's
+/// reference to a scrutinee of the same name, and `match a, b with | x, a+1 =>
+/// v2 x a + x | _, _ => 100` proved `v2 4 1 = 100` (Lean 4.8.0: `104`,
+/// measured 2026-09-25).
+#[derive(Clone)]
 struct MatrixRow {
     pats: Vec<SurfacePattern>,
     body: SurfaceExpr,
     span: clean_parser::Span,
+    binds: Vec<RowBind>,
+    /// The alternative this row came from (0-based, source order). A leaf
+    /// that selects the row records it (`RowReach`), so an alternative no
+    /// leaf selects is refused as Lean refuses it.
+    origin: usize,
+}
+
+/// A pattern variable of a matrix row and the name of the value it binds.
+#[derive(Clone)]
+struct RowBind {
+    var: SurfaceName,
+    source: SurfaceName,
+    /// The variable might abbreviate a constructor of its scrutinee's type
+    /// (`PatternIdents::shorthand_suspect`). It is bound by a one-arm `match`,
+    /// whose pattern the typed classifier sees — it binds exactly when Lean
+    /// binds and refuses the ambiguous shorthand. A `let` would bind it
+    /// without asking.
+    suspect: bool,
+}
+
+/// Open `body` with the row's pattern-variable bindings, all at once.
+///
+/// The sources are top-level scrutinee names and fresh field names, and every
+/// source is read BEFORE any variable is bound: when some variable is spelled
+/// like some source (`| b, a+1` over `match a, b` binds `b` from `a` and `a`
+/// from `b`'s field), each source is first copied into an unspellable
+/// temporary (a numeric name component, which no identifier token can
+/// produce), so no binding can capture another's source.
+fn bind_row_variables(
+    binds: &[RowBind],
+    body: SurfaceExpr,
+    span: clean_parser::Span,
+) -> SurfaceExpr {
+    if binds.is_empty() {
+        return body;
+    }
+    let collides = binds
+        .iter()
+        .any(|b| binds.iter().any(|other| other.source == b.var));
+    let explicit = clean_parser::SurfaceBinderInfo::Explicit;
+    let temp = |i: usize| SurfaceName::from_name(Name::anon().str("_pv").num(i as u64));
+    let mut out = body;
+    for (i, b) in binds.iter().enumerate().rev() {
+        let source = if collides { temp(i) } else { b.source.clone() };
+        out = if b.suspect {
+            SurfaceExpr::Match(
+                span,
+                None,
+                Box::new(SurfaceExpr::Ident(span, source)),
+                vec![clean_parser::SurfaceMatchArm {
+                    span,
+                    pattern: SurfacePattern::Var(b.var.clone()),
+                    body: out,
+                }],
+            )
+        } else {
+            SurfaceExpr::Let(
+                span,
+                SurfaceBinder::new_typed(b.var.clone(), None, explicit),
+                Box::new(SurfaceExpr::Ident(span, source)),
+                Box::new(out),
+            )
+        };
+    }
+    if collides {
+        for (i, b) in binds.iter().enumerate().rev() {
+            out = SurfaceExpr::Let(
+                span,
+                SurfaceBinder::new_typed(temp(i), None, explicit),
+                Box::new(SurfaceExpr::Ident(span, b.source.clone())),
+                Box::new(out),
+            );
+        }
+    }
+    out
 }
 
 /// The head shape a structural column's top-level pattern dispatches on. Two
@@ -766,9 +1714,26 @@ struct MatrixRow {
 #[derive(Clone, PartialEq, Eq, Hash)]
 enum ColHead {
     /// Constructor `name` applied to `arity` sub-patterns.
-    Ctor(String, usize),
+    Ctor(SurfaceName, usize),
     /// A literal pattern, keyed by its surface rendering.
     Lit(String),
+}
+
+/// Whether the explicit `heads` of a column name every constructor of one
+/// inductive (`super::elab_match::complete_signature_inductive`). Heads are
+/// canonical kernel names here (see `canonicalize_column_heads`); a literal
+/// head, a relative head left as written, or a constructor the environment
+/// does not know makes the answer `false`, which keeps the default arm — the
+/// conservative direction.
+fn column_signature_is_complete(env: &clean_kernel::Environment, heads: &[ColHead]) -> bool {
+    let mut named: Vec<&Name> = Vec::with_capacity(heads.len());
+    for head in heads {
+        let ColHead::Ctor(name, _) = head else {
+            return false;
+        };
+        named.push(name.name());
+    }
+    super::elab_match::complete_signature_inductive(env, named).is_some()
 }
 
 /// Whether a column pattern is a "pass-through" (binds the whole scrutinee or
@@ -795,6 +1760,221 @@ fn col_head(pat: &SurfacePattern) -> Result<Option<ColHead>, ()> {
     }
 }
 
+/// The kernel constructor a column-head constructor pattern names, resolved
+/// without a type: an exact constructor name, else `I.name` for the column's
+/// inductive `I` (when some other head already fixed it), else the UNIQUE
+/// registered constructor whose last component is `name` (unqualified or
+/// `.name` spellings only). `None` when no single constructor is named.
+fn resolve_column_ctor(
+    env: &clean_kernel::Environment,
+    name: &SurfaceName,
+    column_inductive: Option<&Name>,
+) -> Option<Name> {
+    let raw = name.name();
+    if !name.is_relative_constructor() && env.get_constructor(raw).is_some() {
+        return Some(raw.clone());
+    }
+    let unqualified = name.is_relative_constructor() || name.parent().is_anonymous();
+    if !unqualified {
+        return None;
+    }
+    let last = raw.last_component()?;
+    if let Some(ind) = column_inductive {
+        let qualified = ind.clone().str(&last);
+        if env.get_constructor(&qualified).is_some() {
+            return Some(qualified);
+        }
+    }
+    let mut found = env
+        .constructors()
+        .filter(|c| c.name.last_component().as_deref() == Some(last.as_str()));
+    let first = found.next()?;
+    found.next().is_none().then(|| first.name.clone())
+}
+
+/// Canonicalize the FIRST column of a pattern matrix before its heads are
+/// classified, or refuse (`None`).
+///
+/// `compile_pattern_matrix` treats two heads as the same arm iff they compare
+/// equal, and treats distinct heads as DISJOINT. Two spellings broke that and
+/// each let `rfl` prove a false equation (measured 2026-09-24, Lean 4.8.0
+/// disagreeing):
+///
+/// * the same constructor spelled two ways — `| some 5, 0 => 0 | Option.some 6,
+///   0 => 1 | _, _ => 2` made `Option.some` an unreachable second arm after
+///   `some`, so `f (some 6) 0` reduced to `2`;
+/// * a Nat literal beside `Nat.succ` — `| some (Nat.succ (Nat.succ _)), 0 => 0
+///   | some 1, 0 => 1 | _, _ => 2` made the literal `1` an arm AFTER the
+///   `Nat.succ` arm that already captures it, so `f (some 1) 0` reduced to `2`.
+///   (`n + k` rows expand to exactly this shape on the recursive path.)
+///
+/// So: every constructor head is rewritten to its full kernel name (bail if it
+/// names no single constructor, or the column's heads span several
+/// inductives, or one constructor appears with different sub-pattern counts);
+/// if the column is `Nat` and dispatches on a constructor, every literal head
+/// `k` becomes `Nat.zero` / `Nat.succ (k-1)`; a literal beside a non-`Nat`
+/// constructor bails. A column of literals and pass-throughs alone is left as
+/// it is: distinct literals are disjoint heads.
+///
+/// The unfolding is ONE layer per call, and it recurs only while the column
+/// still mixes literals with `Nat.zero`/`Nat.succ` heads. Those heads come from
+/// the rows' own syntax, so the nesting it produces is bounded by the deepest
+/// `Nat.succ`/`n + k` tower written in the column — not by the literal: `|
+/// 1000 => … | Nat.succ 7 => …` peels once, after which `999` and `7` are both
+/// literals again.
+///
+/// A column NO head of which names a constructor by itself — every head is a
+/// short name several inductives own, such as a lone `succ` beside
+/// `Nat.succ` and a user's `Tm.succ` — used to bail here, which dropped a
+/// recursive definition onto the path that never installs its own name (the
+/// refusal read "`same` is the name being defined …"; measured 2026-11-12 on
+/// `| lit m, lit n => … | succ a, succ b => same a b | _, _ => …` inside
+/// `namespace Tm`, whose second column under the `succ` arm holds `succ`
+/// alone). Such a column's inductive is now the one ORDINARY name resolution
+/// gives its heads (`PatternIdents::ctor_heads`), which is how Lean reads
+/// them. The column's type is still not consulted, so a head that only the
+/// type would resolve bails as before, and a column some head already fixes
+/// is untouched. A head ordinary resolution sends to the wrong inductive
+/// (`succ n` over `Nat` inside `namespace Tm`) is emitted under that name and
+/// the typed elaboration of the emitted match refuses it, as Lean does.
+fn canonicalize_column_heads(
+    idents: &PatternIdents<'_>,
+    mut rows: Vec<MatrixRow>,
+) -> Option<Vec<MatrixRow>> {
+    let env = idents.env;
+    let nat = Name::from_string("Nat");
+    // Pass 1: fix the column's inductive from the heads that name a
+    // constructor exactly.
+    let mut column_inductive: Option<Name> = None;
+    for row in &rows {
+        if let Some(SurfacePattern::Ctor(name, _)) = row.pats.first() {
+            if let Some(ctor) = resolve_column_ctor(env, name, None) {
+                let ind = env.get_constructor(&ctor)?.inductive_name.clone();
+                match &column_inductive {
+                    None => column_inductive = Some(ind),
+                    Some(prev) if *prev == ind => {}
+                    Some(_) => return None,
+                }
+            }
+        }
+    }
+    // Pass 1b: no head fixed the inductive; let ordinary resolution of the
+    // unqualified heads fix it (see the function's doc). Heads it sends to two
+    // inductives name no single column type, so the lowering bails.
+    if column_inductive.is_none() {
+        for row in &rows {
+            if let Some(SurfacePattern::Ctor(name, _)) = row.pats.first() {
+                if let Some(ctor) = idents.ctor_head(name) {
+                    let ind = env.get_constructor(ctor)?.inductive_name.clone();
+                    match &column_inductive {
+                        None => column_inductive = Some(ind),
+                        Some(prev) if *prev == ind => {}
+                        Some(_) => return None,
+                    }
+                }
+            }
+        }
+    }
+    // A column whose constructor heads are ALL relative (`.int`, `.bool`) and
+    // fix no inductive by themselves — `.int` with both `Value.int` and
+    // `Constant.int` in scope (trust-ir's `semVectorIntBinOp`) — has no
+    // canonical spelling without the column's type, which this untyped pass
+    // does not see. It needs none: inside one column every `.c` elaborates to
+    // `T.c` for the column's single type `T`, and `c ↦ T.c` is injective, so
+    // equal spellings are the same constructor and distinct spellings distinct
+    // ones — the disjointness the dispatch below relies on. Such heads stay as
+    // written and the emitted arm resolves them against the real column type.
+    // A literal beside them still bails (below), as the column may not be
+    // `Nat`. Bailing here used to drop the whole definition onto the tuple
+    // lowering, which cannot compile a nested head under a recursive column.
+    let relative_only = column_inductive.is_none()
+        && rows.iter().all(|row| match row.pats.first() {
+            Some(SurfacePattern::Ctor(name, _)) => name.is_relative_constructor(),
+            _ => true,
+        });
+    // Pass 2: rewrite every constructor head to its canonical name.
+    let mut arities: HashMap<Name, usize> = HashMap::new();
+    let mut has_ctor = false;
+    let mut has_lit = false;
+    for row in &mut rows {
+        match row.pats.first_mut() {
+            Some(SurfacePattern::Ctor(name, subs)) if relative_only => {
+                if *arities.entry(name.name().clone()).or_insert(subs.len()) != subs.len() {
+                    return None;
+                }
+                has_ctor = true;
+            }
+            Some(SurfacePattern::Ctor(name, subs)) => {
+                let ctor = resolve_column_ctor(env, name, column_inductive.as_ref())?;
+                let ind = env.get_constructor(&ctor)?.inductive_name.clone();
+                if column_inductive.get_or_insert_with(|| ind.clone()) != &ind {
+                    return None;
+                }
+                if *arities.entry(ctor.clone()).or_insert(subs.len()) != subs.len() {
+                    return None;
+                }
+                *name = SurfaceName::from_name(ctor);
+                has_ctor = true;
+            }
+            Some(SurfacePattern::Lit(_)) => has_lit = true,
+            _ => {}
+        }
+    }
+    if !(has_ctor && has_lit) {
+        return Some(rows);
+    }
+    if column_inductive.as_ref() != Some(&nat) {
+        return None;
+    }
+    for row in &mut rows {
+        if let Some(pat @ SurfacePattern::Lit(_)) = row.pats.first_mut() {
+            let SurfacePattern::Lit(clean_parser::SurfaceLit::Nat(k)) = pat else {
+                return None;
+            };
+            let k = *k;
+            *pat = if k == 0 {
+                SurfacePattern::Ctor(SurfaceName::generated_path("Nat.zero"), Vec::new())
+            } else {
+                SurfacePattern::Ctor(
+                    SurfaceName::generated_path("Nat.succ"),
+                    vec![SurfacePattern::Lit(clean_parser::SurfaceLit::Nat(k - 1))],
+                )
+            };
+        }
+    }
+    Some(rows)
+}
+
+/// [`compile_pattern_matrix`] over a definition's whole equation list, with
+/// Lean 4.8.0's redundancy check (`reportMatcherResultErrors`,
+/// `src/Lean/Elab/Match.lean`): when the decision tree selects some equation
+/// at no leaf, that equation is "redundant alternative" and the definition is
+/// refused — reported through `redundant`, with `None` for the tree. The tree
+/// splits each column exactly (see `elab_match::RowReach`), so an equation it
+/// never selects is one every value of which an earlier equation matches.
+/// `rows[i].origin` must be `i`.
+fn compile_pattern_matrix_checked(
+    idents: &PatternIdents<'_>,
+    def_name: &SurfaceName,
+    scruts: &[SurfaceName],
+    rows: &[MatrixRow],
+    span: clean_parser::Span,
+    extended: bool,
+    reserved: &[SurfaceName],
+    redundant: &mut Option<ElabError>,
+) -> Option<SurfaceExpr> {
+    let mut reach = super::elab_match::RowReach::new(rows.len());
+    let tree = compile_pattern_matrix(idents, scruts, rows, span, extended, reserved, &mut reach)?;
+    if let Some(row) = reach.first_unreached() {
+        *redundant = Some(super::elab_match::redundant_alternative(
+            &format!("`{def_name}`"),
+            row,
+        ));
+        return None;
+    }
+    Some(tree)
+}
+
 /// Textbook ML pattern-matrix compiler specialized for the structural columns
 /// of a multi-argument equation def. Produces a nested single-scrutinee
 /// `SurfaceExpr::Match` decision tree that is semantically equivalent to the
@@ -806,27 +1986,43 @@ fn col_head(pat: &SurfacePattern) -> Result<Option<ColHead>, ()> {
 /// (first-match-wins), exactly as Lean's equation compiler orders arms.
 ///
 /// Binding faithfulness: rather than alpha-renaming arm bodies (which would
-/// require a full surface substitution pass), we preserve a column pattern's
-/// *variable* bindings by re-emitting the original pattern as a single-arm
-/// `match scrut with | <pat> => …` (the variable rule). A constructor column
+/// require a full surface substitution pass), a column pattern's *variable*
+/// bindings are recorded on the row (`MatrixRow::binds`) and emitted together
+/// at the leaf, around the body (`bind_row_variables`). A constructor column
 /// peels into fresh field-scrutinee columns bound by fresh names in the arm
 /// pattern; each row's original sub-patterns then flow into those fresh columns,
-/// so a sub-pattern like a list tail `xs` re-binds via the variable rule exactly
-/// where the surface program expects it.
+/// so a sub-pattern like a list tail `xs` is bound from its field at the leaf.
+/// No binder a row did not write is ever in scope for its body.
 ///
 /// Returns `None` (bailing the whole lowering) when any column pattern is
 /// outside `col_head`'s envelope, so we never emit a term that silently
 /// reorders or drops a binding.
+///
+/// `reserved` are the TOP-LEVEL scrutinee names (and, for equation defs, the
+/// lifted pass-through binder names). They are referenced by name below every
+/// binder this compiler emits (the inner `match <name> with`, and the leaf
+/// binding a whole-scrutinee variable row becomes), so no
+/// emitted binder may be spelled like one: a constructor field bound under its
+/// row's own name `y` inside `match y with | Nat.succ y => …` captured every
+/// later `y`, and `match x, y with | 0, y => y + 10 | x+1, y+1 => b 0 y | x+1,
+/// 0 => x` reduced `b 1 2` to `10` (measured 2026-09-25; Lean 4.8.0: `11`).
+/// Such a field gets a fresh name and its row variable is re-bound from it.
 fn compile_pattern_matrix(
-    scruts: &[String],
+    idents: &PatternIdents<'_>,
+    scruts: &[SurfaceName],
     rows: &[MatrixRow],
     span: clean_parser::Span,
     extended: bool,
+    reserved: &[SurfaceName],
+    reach: &mut super::elab_match::RowReach,
 ) -> Option<SurfaceExpr> {
     // No columns left: every structural position matched. The first remaining
     // row wins (first-match-wins arm ordering).
     if scruts.is_empty() {
-        return rows.first().map(|r| r.body.clone());
+        return rows.first().map(|r| {
+            reach.reach(r.origin);
+            bind_row_variables(&r.binds, r.body.clone(), r.span)
+        });
     }
     if rows.is_empty() {
         return None;
@@ -844,8 +2040,8 @@ fn compile_pattern_matrix(
     //     column): a row binding the WHOLE scrutinee to `x` alongside
     //     constructor heads matches every head. The scrutinee is a named
     //     lifted def binder that stays in scope inside the emitted match arms,
-    //     so `x`'s binding is preserved by opening the row body with
-    //     `let x := <scrutinee>` and demoting the row's head to a wildcard
+    //     so `x`'s binding is recorded on the row (bound from the scrutinee at
+    //     the leaf) and the row's head is demoted to a wildcard
     //     pass-through — included in every constructor arm AND the default
     //     arm by the specialization below. (The prior mixed-column guard
     //     bailed the whole lowering here, dropping everyday defs like
@@ -857,62 +2053,58 @@ fn compile_pattern_matrix(
             SurfacePattern::NumeralAdd(inner, k) => {
                 let mut expanded = (**inner).clone();
                 for _ in 0..*k {
-                    expanded = SurfacePattern::Ctor("Nat.succ".to_string(), vec![expanded]);
+                    expanded = SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Nat.succ"),
+                        vec![expanded],
+                    );
                 }
                 expanded
             }
             other => other.clone(),
         }
     }
-    // ENGAGEMENT GATE: the two extensions below only fire for defs the OLD
+    // ENGAGEMENT GATE: the numeral-add expansion only fires for defs the OLD
     // envelope could not lower at all (recursive multiarg equation defs, which
-    // previously died UnknownIdent on their own name). For every other def the
-    // old semantics are restored EXACTLY — non-extended rows pass through
-    // unchanged, and the old mixed-column guard below bails as before — so
-    // previously-working defs take a byte-identical path.
+    // previously died UnknownIdent on their own name).
+    //
+    // The variable-row rewrite fires on every path. The non-extended path used
+    // to bail on ANY whole-scrutinee variable row (the guard below), which
+    // handed the def to the tuple path; since the literal/`succ`
+    // canonicalization (`canonicalize_column_heads`) turns `| 42, '0' | succ
+    // x, '0'` into a column of a literal beside such a row, that path refused
+    // the nested `Char` literal — a correct definition lost (measured
+    // 2026-09-25). The rewrite is the same on both paths.
     let rewritten_rows: Vec<MatrixRow> = rows
         .iter()
         .map(|r| {
-            if !extended {
-                return MatrixRow {
-                    pats: r.pats.clone(),
-                    body: r.body.clone(),
-                    span: r.span,
-                };
+            let mut row = r.clone();
+            if extended {
+                row.pats[0] = expand_numeral_add(&row.pats[0]);
             }
-            let mut pats = r.pats.clone();
-            pats[0] = expand_numeral_add(&pats[0]);
-            match pats[0].clone() {
-                SurfacePattern::Var(x) => {
-                    pats[0] = SurfacePattern::Wildcard;
-                    MatrixRow {
-                        pats,
-                        body: SurfaceExpr::Let(
-                            r.span,
-                            SurfaceBinder::new(x, None, clean_parser::SurfaceBinderInfo::Explicit),
-                            Box::new(SurfaceExpr::Ident(r.span, scruts[0].clone())),
-                            Box::new(r.body.clone()),
-                        ),
-                        span: r.span,
-                    }
-                }
-                _ => MatrixRow {
-                    pats,
-                    body: r.body.clone(),
-                    span: r.span,
-                },
+            if let SurfacePattern::Var(x) = row.pats[0].clone() {
+                // Recorded, not wrapped here: see `MatrixRow::binds`.
+                row.pats[0] = SurfacePattern::Wildcard;
+                row.binds.push(RowBind {
+                    suspect: idents.shorthand_suspect(&x),
+                    var: x,
+                    source: scruts[0].clone(),
+                });
             }
+            row
         })
         .collect();
+    // Head canonicalization (see `canonicalize_column_heads`): the dispatch
+    // below compares heads by NAME, so every constructor head must be spelled
+    // the one way the kernel names it, and a Nat literal must be the
+    // constructor it denotes whenever the column also dispatches on
+    // `Nat.zero`/`Nat.succ`. Outside that envelope the lowering bails.
+    let rewritten_rows = canonicalize_column_heads(idents, rewritten_rows)?;
     let rows = &rewritten_rows[..];
 
-    // Old mixed-column guard, kept verbatim for the non-extended path: a
-    // constructor column with a whole-scrutinee `Var` row bails the lowering
-    // (the extended path rewrote such rows to let-bound wildcards above).
-    if !extended
-        && rows
-            .iter()
-            .any(|r| matches!(&r.pats[0], SurfacePattern::Var(_)))
+    // The variable-row rewrite above removed every whole-scrutinee `Var` row.
+    if rows
+        .iter()
+        .any(|r| matches!(&r.pats[0], SurfacePattern::Var(_)))
     {
         return None;
     }
@@ -924,13 +2116,9 @@ fn compile_pattern_matrix(
         .ok()?;
 
     // Variable rule: the first column dispatches on no constructor — every row
-    // is a pass-through (variable / wildcard) there. The column binds (or
-    // ignores) the scrutinee but does not branch. If *any* row binds a real
-    // variable, re-emit that binding via a single-arm `match scrut with | x => …`
-    // so the body's reference to `x` resolves to the scrutinee. We use the first
-    // row's binder (rows are tried in order; for a pure variable column they all
-    // succeed, so binding the first row's name and continuing with the remaining
-    // columns is faithful). A pure wildcard/ellipsis column is simply dropped.
+    // is a wildcard / ellipsis there (whole-scrutinee variables were recorded
+    // as row bindings above, row by row, so no row's name is lost).
+    // The column does not branch and is dropped.
     if heads.iter().all(Option::is_none) {
         let rest_scruts = &scruts[1..];
         let rest_rows: Vec<MatrixRow> = rows
@@ -939,23 +2127,19 @@ fn compile_pattern_matrix(
                 pats: r.pats[1..].to_vec(),
                 body: r.body.clone(),
                 span: r.span,
+                binds: r.binds.clone(),
+                origin: r.origin,
             })
             .collect();
-        let inner = compile_pattern_matrix(rest_scruts, &rest_rows, span, extended)?;
-        // Bind the first row's variable (if it is one) to the scrutinee.
-        if let SurfacePattern::Var(name) = &rows[0].pats[0] {
-            return Some(SurfaceExpr::Match(
-                span,
-                None,
-                Box::new(SurfaceExpr::Ident(span, scruts[0].clone())),
-                vec![clean_parser::SurfaceMatchArm {
-                    span,
-                    pattern: SurfacePattern::Var(name.clone()),
-                    body: inner,
-                }],
-            ));
-        }
-        return Some(inner);
+        return compile_pattern_matrix(
+            idents,
+            rest_scruts,
+            &rest_rows,
+            span,
+            extended,
+            reserved,
+            reach,
+        );
     }
 
     // Constructor rule: build a `match scruts[0] with` whose arms are the
@@ -987,7 +2171,7 @@ fn compile_pattern_matrix(
         // (keyed on the arm's pattern-variable name) matches the self-call's
         // decreasing argument. Otherwise we bind the field to a fresh name and
         // re-match the differing sub-patterns as a fresh inner column.
-        let mut field_names: Vec<String> = Vec::with_capacity(field_count);
+        let mut field_names: Vec<SurfaceName> = Vec::with_capacity(field_count);
         let mut field_is_inner: Vec<bool> = Vec::with_capacity(field_count);
         for fi in 0..field_count {
             // `chosen` is the single surface variable name every matching row
@@ -995,12 +2179,11 @@ fn compile_pattern_matrix(
             // constraint and stay compatible with any chosen name). `decomposable`
             // stays true only while all matching rows are a `Var`/wildcard that
             // agree on at most one name.
-            let mut chosen: Option<String> = None;
+            let mut chosen: Option<SurfaceName> = None;
             let mut decomposable = true;
             for r in rows {
                 if let SurfacePattern::Ctor(name, sub) = &r.pats[0] {
-                    if head_ctor_name.as_deref() == Some(name.as_str()) && sub.len() == field_count
-                    {
+                    if head_ctor_name.as_ref() == Some(name) && sub.len() == field_count {
                         match &sub[fi] {
                             SurfacePattern::Wildcard | SurfacePattern::Ellipsis => {
                                 // No constraint.
@@ -1025,26 +2208,62 @@ fn compile_pattern_matrix(
                     }
                 }
             }
+            if decomposable && chosen.as_ref().is_some_and(|n| reserved.contains(n)) {
+                decomposable = false;
+            }
+            // A field bound under a user name is in scope for EVERY row this
+            // arm keeps: the rows with this head AND the pass-through rows.
+            // A row that does not bind that name itself (a `_` there, or a
+            // pass-through row) would see the field instead of whatever the
+            // name meant in its body — a parameter outside the match, a
+            // global, another column's binder: `match a, b with | c+1, 0 =>
+            // g c 0 7 + 1 | _, _ => c` returned the field for `g 3 1 5`
+            // (measured 2026-09-25: `2`; Lean 4.8.0: `5`). So a user name is
+            // bound directly only when every kept row binds exactly it;
+            // otherwise the field gets a fresh name and each row that names
+            // it binds it at its leaf.
+            if decomposable {
+                if let Some(n) = &chosen {
+                    let every_row_binds = rows.iter().all(|r| match &r.pats[0] {
+                        SurfacePattern::Ctor(name, sub)
+                            if head_ctor_name.as_ref() == Some(name)
+                                && sub.len() == field_count =>
+                        {
+                            matches!(&sub[fi], SurfacePattern::Var(v) if v == n)
+                        }
+                        p => !is_passthrough_pattern(p),
+                    });
+                    if !every_row_binds {
+                        decomposable = false;
+                    }
+                }
+            }
             if decomposable {
                 // All matching rows agree on a single variable (or only wildcards)
                 // for this field: bind it directly, no inner column.
-                let name = chosen.unwrap_or_else(|| format!("{}_f{fi}", scruts[0]));
+                // Fresh field names end in a numeric component, so no source
+                // identifier (`a._f0` is field notation on `a`) can reach them.
+                let name = chosen.unwrap_or_else(|| {
+                    SurfaceName::from_name(scruts[0].name().clone().str("_f").num(fi as u64))
+                });
                 field_names.push(name);
                 field_is_inner.push(false);
             } else {
                 // Differing sub-patterns: bind a fresh name, re-match inner.
-                field_names.push(format!("{}_f{fi}", scruts[0]));
+                field_names.push(SurfaceName::from_name(
+                    scruts[0].name().clone().str("_f").num(fi as u64),
+                ));
                 field_is_inner.push(true);
             }
         }
 
         // Inner scrutinee columns are exactly the fields we did NOT bind by a
         // shared name, in order, followed by the remaining structural columns.
-        let inner_field_scruts: Vec<String> = (0..field_count)
+        let inner_field_scruts: Vec<SurfaceName> = (0..field_count)
             .filter(|&fi| field_is_inner[fi])
             .map(|fi| field_names[fi].clone())
             .collect();
-        let mut sub_scruts: Vec<String> = inner_field_scruts;
+        let mut sub_scruts: Vec<SurfaceName> = inner_field_scruts;
         sub_scruts.extend_from_slice(&scruts[1..]);
 
         // Specialize: rows whose first pattern is this head contribute their
@@ -1056,8 +2275,7 @@ fn compile_pattern_matrix(
         for r in rows {
             match &r.pats[0] {
                 SurfacePattern::Ctor(name, sub)
-                    if head_ctor_name.as_deref() == Some(name.as_str())
-                        && sub.len() == field_count =>
+                    if head_ctor_name.as_ref() == Some(name) && sub.len() == field_count =>
                 {
                     let mut new_pats: Vec<SurfacePattern> = inner_field_indices
                         .iter()
@@ -1068,6 +2286,8 @@ fn compile_pattern_matrix(
                         pats: new_pats,
                         body: r.body.clone(),
                         span: r.span,
+                        binds: r.binds.clone(),
+                        origin: r.origin,
                     });
                 }
                 p @ SurfacePattern::Lit(_) if col_head(p).ok().flatten().as_ref() == Some(head) => {
@@ -1075,6 +2295,8 @@ fn compile_pattern_matrix(
                         pats: r.pats[1..].to_vec(),
                         body: r.body.clone(),
                         span: r.span,
+                        binds: r.binds.clone(),
+                        origin: r.origin,
                     });
                 }
                 p if is_passthrough_pattern(p) => {
@@ -1085,13 +2307,23 @@ fn compile_pattern_matrix(
                         pats: new_pats,
                         body: r.body.clone(),
                         span: r.span,
+                        binds: r.binds.clone(),
+                        origin: r.origin,
                     });
                 }
                 _ => { /* row's head differs from this arm: skip */ }
             }
         }
 
-        let body = compile_pattern_matrix(&sub_scruts, &sub_rows, span, extended)?;
+        let body = compile_pattern_matrix(
+            idents,
+            &sub_scruts,
+            &sub_rows,
+            span,
+            extended,
+            reserved,
+            reach,
+        )?;
         // Arm pattern: reconstruct the head, binding fields either to their
         // shared surface name (so the body / IH refers to them unchanged) or to
         // the fresh re-match name. A literal head re-emits the literal verbatim.
@@ -1118,9 +2350,20 @@ fn compile_pattern_matrix(
     }
 
     // Default arm: pass-through rows also apply when the scrutinee matches none
-    // of the explicit heads. Emit a trailing arm dropping this column. If the
-    // first such pass-through row binds a variable, the wildcard arm rebinds it.
-    if heads.iter().any(Option::is_none) {
+    // of the explicit heads. Emit a trailing arm dropping this column; a
+    // pass-through row's variable is among its recorded bindings.
+    //
+    // Not when the heads already name EVERY constructor of the column's
+    // inductive (Maranget's complete signature): no value reaches the default,
+    // and every pass-through row is already inside each constructor arm above.
+    // Lean's `processConstructor` (`Lean/Meta/Match/Match.lean`) likewise
+    // splits on every constructor and emits no default. Emitting it anyway
+    // compiled the rows that would reach it as a match of their own, which can
+    // be partial: `| [], [], [] | a :: as, b :: bs, c :: cs | _ :: _, _, _ |
+    // [], _ :: _, _ | [], _, _ :: _` left `match x₃ with | _ :: _ => …` (no
+    // `[]`) under the unreachable default of the `[]`-column, and the whole
+    // definition failed (trust-ir `semVectorSelectLanes`, gap G18).
+    if heads.iter().any(Option::is_none) && !column_signature_is_complete(idents.env, &head_order) {
         let default_rows: Vec<MatrixRow> = rows
             .iter()
             .zip(heads.iter())
@@ -1129,21 +2372,31 @@ fn compile_pattern_matrix(
                 pats: r.pats[1..].to_vec(),
                 body: r.body.clone(),
                 span: r.span,
+                binds: r.binds.clone(),
+                origin: r.origin,
             })
             .collect();
-        if let Some(default_body) =
-            compile_pattern_matrix(&scruts[1..], &default_rows, span, extended)
-        {
-            // Top-level `Var` rows were rewritten to wildcard rows whose
-            // bodies rebind the variable via `let` (variable-row rewrite
-            // above), so the only pass-through heads here are wildcard /
-            // ellipsis — a wildcard arm is faithful.
-            match_arms.push(clean_parser::SurfaceMatchArm {
-                span,
-                pattern: SurfacePattern::Wildcard,
-                body: default_body,
-            });
-        }
+        // A default that cannot be compiled bails the whole lowering. Dropping
+        // the arm instead left the emitted match without its catch-all, and
+        // the constructors no explicit head names then had no minor at all.
+        let default_body = compile_pattern_matrix(
+            idents,
+            &scruts[1..],
+            &default_rows,
+            span,
+            extended,
+            reserved,
+            reach,
+        )?;
+        // Top-level `Var` rows were rewritten to wildcard rows that record the
+        // variable as a row binding (variable-row rewrite above), so the only
+        // pass-through heads here are wildcard / ellipsis — a wildcard arm is
+        // faithful.
+        match_arms.push(clean_parser::SurfaceMatchArm {
+            span,
+            pattern: SurfacePattern::Wildcard,
+            body: default_body,
+        });
     }
 
     Some(SurfaceExpr::Match(
@@ -1185,7 +2438,7 @@ impl ExprVisitor for DefLevelParamCollector<'_> {
     }
 }
 
-fn collect_def_level_params(expr: &Expr, params: &mut Vec<Name>) {
+pub(super) fn collect_def_level_params(expr: &Expr, params: &mut Vec<Name>) {
     if !expr.has_level_param_quick() {
         return;
     }
@@ -1194,19 +2447,6 @@ fn collect_def_level_params(expr: &Expr, params: &mut Vec<Name>) {
 }
 
 impl ElabCtx<'_> {
-    /// Lean parity for `def f := e` (no ascribed type): residual UNASSIGNED
-    /// metavariables are generalized into fresh leading implicit binders —
-    /// exactly how Lean gives `def comp := Function.comp` (and every
-    /// `alias`-desugared def, e.g. `alias ⟨And.rotate, _⟩ := and_rotate`) its
-    /// signature via abstractMVars. Ascribed defs and theorems keep the
-    /// strict fail-closed guard; user-written `_` holes (span-carrying metas)
-    /// are excluded — those belong to the hole-feedback contract.
-    ///
-    /// Binding order: dependency-first (a meta mentioned in another meta's
-    /// TYPE binds further out), then first occurrence in (ty, val). The
-    /// innermost binder is abstracted first, so outer metas still present as
-    /// tagged FVars inside inner binder types are de Bruijn-adjusted by
-    /// `abstract_fvar` when their own turn comes.
     /// Whether `meta`'s type is a TYPE-CLASS application, i.e. the metavariable
     /// is an unsolved instance goal rather than an ordinary type hole.
     ///
@@ -1217,122 +2457,6 @@ impl ElabCtx<'_> {
         let ty = self.metas.instantiate(&meta.ty);
         crate::instances::extract_class_app(&ty)
             .is_some_and(|(name, _)| self.instances.is_class(&name))
-    }
-
-    fn generalize_residual_metas(&self, ty: Expr, val: Expr) -> (Expr, Expr) {
-        use crate::unify::MetaState;
-
-        fn collect_meta_fvars(e: &Expr, out: &mut Vec<FVarId>) {
-            use clean_kernel::expr::visitor::ExprVisitor;
-            struct C<'v>(&'v mut Vec<FVarId>);
-            impl ExprVisitor for C<'_> {
-                type Result = ();
-                fn combine(&self, _a: (), _b: ()) {}
-                fn visit_fvar(&mut self, id: FVarId) {
-                    if MetaState::from_fvar(id).is_some() && !self.0.contains(&id) {
-                        self.0.push(id);
-                    }
-                }
-            }
-            if e.has_fvar_quick() {
-                C(out).visit_expr(e);
-            }
-        }
-
-        // Occurrence-ordered residual metas over (ty, val), holes excluded.
-        let mut occurrence: Vec<FVarId> = Vec::new();
-        collect_meta_fvars(&ty, &mut occurrence);
-        collect_meta_fvars(&val, &mut occurrence);
-        occurrence.retain(|fv| {
-            MetaState::from_fvar(*fv)
-                .and_then(|mid| self.metas.get(mid))
-                .is_some_and(|meta| {
-                    // User-written `_` holes belong to the hole-feedback
-                    // contract, not to generalization.
-                    meta.span.is_none()
-                        // An unsolved INSTANCE goal is a synthesis FAILURE, not
-                        // a generalizable parameter. Generalizing it turns
-                        //     def bad := (b : Min) + (a : Sec)     -- no such HAdd
-                        // into `∀ {γ} [HAdd Min Sec γ], γ` — a definition that
-                        // silently typechecks while awaiting an instance that
-                        // does not exist, so a mix with NO instance in either
-                        // direction stops being reported
-                        // (`test_b104_hetero_type_incorrect_mix_stays_loud`).
-                        //
-                        // Lean does not generalize these either: synthesis runs
-                        // BEFORE `abstractMVars` and reports "failed to
-                        // synthesize", which is the behaviour this restores.
-                        // Excluding them here leaves the metas unassigned, so
-                        // the fail-closed residual guard below reports them.
-                        && !self.meta_is_instance_goal(meta)
-                })
-        });
-        if occurrence.is_empty() {
-            return (ty, val);
-        }
-
-        // Dependency expansion + ordering: a meta appearing in another meta's
-        // type must bind further out. Bounded passes (the sets are tiny).
-        let meta_ty = |fv: FVarId| -> Option<Expr> {
-            let mid = MetaState::from_fvar(fv)?;
-            let m = self.metas.get(mid)?;
-            Some(
-                self.metas
-                    .instantiate_levels(&self.metas.instantiate(&m.ty)),
-            )
-        };
-        let mut ordered = occurrence;
-        for _ in 0..16 {
-            let mut changed = false;
-            let mut i = 0;
-            while i < ordered.len() {
-                let Some(mty) = meta_ty(ordered[i]) else {
-                    i += 1;
-                    continue;
-                };
-                let mut deps = Vec::new();
-                collect_meta_fvars(&mty, &mut deps);
-                for dep in deps {
-                    let dep_pos = ordered.iter().position(|x| *x == dep);
-                    match dep_pos {
-                        Some(p) if p > i => {
-                            ordered.remove(p);
-                            ordered.insert(i, dep);
-                            changed = true;
-                        }
-                        Some(_) => {}
-                        None => {
-                            // A dep only reachable through a type: include it
-                            // (holes stay excluded — a hole dep leaves this
-                            // meta for the guard, which is the honest outcome).
-                            let is_hole = MetaState::from_fvar(dep)
-                                .and_then(|mid| self.metas.get(mid))
-                                .is_none_or(|meta| meta.span.is_some());
-                            if !is_hole {
-                                ordered.insert(i, dep);
-                                changed = true;
-                            }
-                        }
-                    }
-                }
-                i += 1;
-            }
-            if !changed {
-                break;
-            }
-        }
-
-        // Abstract innermost-first (reverse of the outermost-first `ordered`).
-        let mut ty_acc = ty;
-        let mut val_acc = val;
-        for fv in ordered.iter().rev() {
-            let Some(mty) = meta_ty(*fv) else { continue };
-            let ty_body = ty_acc.abstract_fvar(*fv);
-            let val_body = val_acc.abstract_fvar(*fv);
-            ty_acc = Expr::pi(clean_kernel::BinderInfo::Implicit, mty.clone(), ty_body);
-            val_acc = Expr::lam(clean_kernel::BinderInfo::Implicit, mty, val_body);
-        }
-        (ty_acc, val_acc)
     }
 
     /// Fail-closed residual guard for finalized declarations.
@@ -1349,7 +2473,7 @@ impl ElabCtx<'_> {
     pub(super) fn ensure_no_residual_fvars(
         &self,
         decl_kind: &str,
-        name: &str,
+        name: &SurfaceName,
         ty: &Expr,
         val: Option<&Expr>,
     ) -> Result<(), ElabError> {
@@ -1366,7 +2490,7 @@ impl ElabCtx<'_> {
         // EXPECTED to survive finalization — the hole machinery reports their
         // goal as agent feedback and registration handles them downstream.
         // The guard is for metas nothing will ever report or resolve.
-        let hole_ids: std::collections::HashSet<u64> = self
+        let hole_ids: HashSet<u64> = self
             .metas
             .iter()
             .filter_map(|(id, meta)| meta.span.map(|_| id.as_u64()))
@@ -1428,7 +2552,7 @@ impl ElabCtx<'_> {
             }
             return Err(ElabError::UnsynthesizedInstanceGoal {
                 decl_kind: decl_kind.to_owned(),
-                name: name.to_owned(),
+                name: name.to_string(),
                 goal: self.render_instance_goal(goal),
                 detail,
             });
@@ -1436,14 +2560,17 @@ impl ElabCtx<'_> {
 
         let mut parts = Vec::new();
         if !plain_metas.is_empty() {
-            parts.push(format!("unsolved metavariables ?{plain_metas:?}"));
+            parts.push(format!(
+                "unsolved metavariables ?{}",
+                crate::error_render::opaque(&plain_metas)
+            ));
         }
         if !locals.is_empty() {
             parts.push(format!("escaped local fvars {locals:?}"));
         }
         Err(ElabError::ResidualFreeVariables {
             decl_kind: decl_kind.to_owned(),
-            name: name.to_owned(),
+            name: name.to_string(),
             detail: parts.join("; "),
         })
     }
@@ -1451,7 +2578,7 @@ impl ElabCtx<'_> {
     /// Render a class application as `Class Arg Arg …`, showing unassigned
     /// metavariables as `?N` rather than the `Display` impl's raw
     /// `fvar#FVarId(9223372036854775815)`.
-    fn render_instance_goal(&self, goal: &Expr) -> String {
+    pub(super) fn render_instance_goal(&self, goal: &Expr) -> String {
         let Some((class, args)) = crate::instances::extract_class_app(goal) else {
             return format!("{goal}");
         };
@@ -1492,7 +2619,23 @@ impl ElabCtx<'_> {
     /// outcome is indistinguishable here from a genuine absence, and a
     /// non-existence claim would be false in those cases. Widening that return
     /// type is the follow-on that would let this message distinguish them.
-    fn instance_failure_help(&self, goal: &Expr) -> String {
+    /// [`Self::instance_failure_help`] as an error field: prefixed with its own
+    /// newline, or empty.
+    ///
+    /// The variant's format string appends this directly after the goal, so a
+    /// site that has nothing to add contributes nothing — no stray blank line,
+    /// and the bare message stays byte-identical for the goals that are not
+    /// class applications.
+    pub(super) fn instance_failure_detail(&self, goal: &Expr) -> String {
+        let help = self.instance_failure_help(goal);
+        if help.is_empty() {
+            help
+        } else {
+            format!("\n{help}")
+        }
+    }
+
+    pub(super) fn instance_failure_help(&self, goal: &Expr) -> String {
         const MAX_LISTED: usize = 10;
         let mut out = String::new();
         let Some((class, args)) = crate::instances::extract_class_app(goal) else {
@@ -1602,7 +2745,18 @@ impl ElabCtx<'_> {
     fn registered_carriers(registered: &[crate::instances::InstanceInfo]) -> Vec<String> {
         let mut carriers: Vec<String> = Vec::new();
         for inst in registered {
-            if let Some((_, args)) = crate::instances::extract_class_app(&inst.type_) {
+            // The CONCLUSION of the instance's telescope, not its head. A derived
+            // instance is Π-headed — `∀ {α} [Sho α], Sho (Option α)` — and
+            // `extract_class_app` on the Π returns `None`, so such a candidate
+            // contributed no carrier. When every candidate was Π-headed the
+            // carrier list came back empty and the Options block took its
+            // no-instance branch: the message LISTED a candidate and then said
+            // "there is currently none", two screens apart, in one diagnostic.
+            let mut concl = &inst.type_;
+            while let clean_kernel::ExprKind::Pi(_, _, body) = concl.kind() {
+                concl = body.as_ref();
+            }
+            if let Some((_, args)) = crate::instances::extract_class_app(concl) {
                 if let Some(first) = args.first() {
                     let rendered = Self::render_goal_arg(first);
                     if !rendered.starts_with('?') && !carriers.contains(&rendered) {
@@ -1615,20 +2769,74 @@ impl ElabCtx<'_> {
         carriers
     }
 
+    /// Lean's `solveSelfMax`: a postponed `?x =?= max ?x l` (satisfiable,
+    /// `l ≤ ?x`) is closed by `?x := max ?x' l` with a FRESH universe `?x'`
+    /// — the most general solution, and the only one that neither narrows
+    /// the declaration's universes (`l := 0`) nor identifies two of them
+    /// (`l := ?x`). Run before the drain, which would otherwise refuse the
+    /// equation as circular. It is what the `Compl (α → Prop)` instance
+    /// search leaves behind: `?ι := α` with `α : Type ?u` and `?u` already
+    /// `max ?a ?b` from the class-level pre-check makes `?a =?= max ?a ?b`
+    /// (measured 2026-09-11: `Std.Refl.compl`, `Ne.instIsEquiv_compl`, and
+    /// every `example` over a `Type*` carrier that reached the kernel with
+    /// `Sort (?u+1)` against `Sort (max ?u ?v + 1)`).
+    pub(in crate::infer) fn resolve_self_max_level_equations(&mut self) {
+        for _round in 0..8 {
+            let mut progressed = false;
+            for (l1, l2) in self.metas.postponed_level_equations() {
+                let a = self.metas.instantiate_level(&l1);
+                let b = self.metas.instantiate_level(&l2);
+                for (x, rhs) in [(&a, &b), (&b, &a)] {
+                    let Level::Param(name) = x else {
+                        continue;
+                    };
+                    if self.metas.is_rigid_level_param(name)
+                        || !matches!(rhs, Level::Max(..) | Level::IMax(..))
+                        || !crate::unify::level_solve::level_param_occurs(name, rhs)
+                    {
+                        continue;
+                    }
+                    let fresh = self.fresh_universe_param();
+                    let rest = rhs.substitute(&[(name.clone(), fresh.clone())]);
+                    let solution = Level::max(fresh, rest);
+                    if matches!(
+                        crate::unify::level_solve::solve_level_eq_no_postpone(
+                            &mut self.metas,
+                            x,
+                            &solution
+                        ),
+                        crate::unify::UnifyResult::Success
+                    ) {
+                        progressed = true;
+                    }
+                    break;
+                }
+            }
+            if !progressed {
+                return;
+            }
+        }
+    }
+
     /// U2 rung 4 — the `levelMVarToParam` analog, run once at declaration
     /// close. Splits the surviving universe params into the DECLARED (rigid)
     /// head and the FRESH (auto-generalized) tail, orders the tail by first
     /// use (traversal order: type before value — Lean's ordering), renames it
     /// contiguously `u_1..u_k` (no gaps; mint-index gaps like `t5.{u_0,u_2}`
-    /// were the measured naming divergence), substitutes the renames into the
-    /// declaration, and — when the declaration carried an explicit `.{...}`
-    /// list — REFUSES leftover fresh levels loudly instead of appending them
-    /// (an explicit list is closed in Lean).
+    /// were the measured naming divergence) and substitutes the renames into
+    /// the declaration. Under a written `.{...}` list a fresh level the TYPE
+    /// mentions is appended after the written names, as Lean's
+    /// `sortDeclLevelParams` appends it, and one only the value mentions is
+    /// refused (`docs/DECISIONS.md` R93, ledger class (164)); the list is not
+    /// exhaustive in Lean. A written name the declaration never uses is
+    /// dropped by the `used` filter below, where Lean refuses it ("unused
+    /// universe parameter"): ledger class (165), OPEN.
     pub(super) fn finalize_level_params(
         &mut self,
         ty: Expr,
         val: Expr,
     ) -> Result<(Vec<Name>, Expr, Expr), ElabError> {
+        self.retry_postponed_open_carrier_instances();
         // Canonicalize FIRST: the decl-close canonicalize pass
         // (`canonicalize_levels_in_elab_result`) resolves every level through
         // the union-find, so a rename applied to un-canonicalized exprs would
@@ -1645,18 +2853,24 @@ impl ElabCtx<'_> {
         //
         // Drained BEFORE canonicalization on purpose: draining can assign
         // parameters, and canonicalize must see those assignments.
+        self.resolve_self_max_level_equations();
         if let Err(msg) = self.metas.drain_postponed_levels() {
             return Err(ElabError::Unsupported { feature: msg });
         }
-        let ty = self.metas.canonicalize_levels_in_expr(&ty);
-        let val = self.metas.canonicalize_levels_in_expr(&val);
+        self.retry_postponed_open_carrier_instances();
+        let ty = self
+            .metas
+            .canonicalize_levels_in_expr(&self.metas.instantiate(&ty));
+        let val = self
+            .metas
+            .canonicalize_levels_in_expr(&self.metas.instantiate(&val));
         let mut used = Vec::new();
         collect_def_level_params(&ty, &mut used);
         collect_def_level_params(&val, &mut used);
         let mut declared: Vec<Name> = Vec::new();
         let mut fresh: Vec<Name> = Vec::new();
         for s in &self.universe_params {
-            let n = Name::from_string(s);
+            let n = s.name().clone();
             if !used.contains(&n) {
                 continue;
             }
@@ -1670,63 +2884,63 @@ impl ElabCtx<'_> {
             return Ok((declared, ty, val));
         }
         fresh.sort_by_key(|n| used.iter().position(|u| u == n));
-        // U2 rung-4 explicitness channel (2026-08-25) — the scope cut that
-        // stood here is CLOSED. Lean treats an explicit `.{...}` list as
-        // exhaustive (`Lean.sortDeclLevelParams`: a used level outside a
-        // non-empty `allUserLevelNames` is an error, never an extra
-        // parameter). The blocker was never the rule; it was that
-        // `preprocess_decl_with_context` merges file-scope `universe` names
-        // into the SAME `universe_params` vector as the written list, so this
-        // layer could not tell `universe u` from `def f.{u}`
-        // (`test_issue168_param_to_param_canonical` is exactly the merged
-        // case). `ElabCtx::file_universe_params` now carries the file half,
-        // `set_decl_universe_params` subtracts it, and `Some(..)` here means
-        // the declaration genuinely wrote a list.
+        // A WRITTEN `.{...}` list (U2 rung-4 explicitness channel,
+        // 2026-08-25; corrected 2026-10-19). Lean does not treat the list as
+        // exhaustive. `levelMVarToParamTypesPreDecls`
+        // (`Lean/Elab/MutualDef.lean:1406`, `PreDefinition/Basic.lean:56`)
+        // turns a universe metavariable left in the declaration's TYPE into a
+        // fresh parameter, and `sortDeclLevelParams`
+        // (`Lean/Elab/DeclUtil.lean:79-88`) APPENDS every used parameter the
+        // list does not name after the written ones; its only error is a
+        // written name the declaration never uses. Measured on the pinned
+        // v4.30.0-rc2: `def leak.{u} (A : Type u) (a : A) := fun (B : Type _)
+        // (b : B) => b` registers as `leak.{u, u_1}`, and `def noAns.{u} :
+        // noEv → Type u := fun _ => PEmpty.{u+1}` as `noAns.{u, u_1}`. From
+        // 2026-08-25 to 2026-10-19 Clean refused both, on a misreading of
+        // that function (`docs/FRONTEND_CLASS_LEDGER.md` class (164)). A
+        // metavariable left ONLY in the value is never generalized: Lean
+        // refuses the declaration ("contains universe level metavariables
+        // ... in the declaration body"), and so does this branch.
         //
-        // REFUSAL SCOPE, stated so it can be checked: only a declaration that
-        // WROTE a list, only levels that are USED in the finished type/value
-        // (the `used` filter above), and only levels still UNDETERMINED after
-        // `drain_postponed_levels` + canonicalization. A written list that
-        // names every surviving level, a level hole the solver determined, and
-        // any declaration with no written list all keep auto-generalizing.
+        // `preprocess_decl_with_context` merges file-scope `universe` names
+        // into the SAME `universe_params` vector as the written list;
+        // `ElabCtx::file_universe_params` carries the file half,
+        // `set_decl_universe_params` subtracts it, and `Some(..)` here means
+        // the declaration genuinely wrote a list. A declaration with no
+        // written list keeps generalizing every leftover, the value-only ones
+        // included, where Lean refuses those too (the OPEN half of class
+        // (164)).
         if let Some(explicit) = &self.decl_explicit_universes {
-            let list = explicit.join(", ");
-            let leaked = fresh
+            let mut in_ty = Vec::new();
+            collect_def_level_params(&ty, &mut in_ty);
+            let value_only: Vec<String> = fresh
                 .iter()
-                .map(|n| n.to_string())
-                .collect::<Vec<_>>()
-                .join(", ");
-            let n = fresh.len();
-            let plural = if n == 1 { "level" } else { "levels" };
-            // The advice clause was corrected 2026-08-26b, and the mint-name
-            // reservation is what made the old one visibly wrong. It read
-            // "Either name the missing {plural} in the list, or constrain
-            // {it/them} to a level the list already names." The leaked levels
-            // are always METAVARIABLES — `fresh` is `universe_params` minus the
-            // rigid set — so "name it in the list" never worked: adding `v` to
-            // `.{u}` makes `v` rigid and leaves the `Type _` hole minting its
-            // own level, which leaks exactly as before. Now that mints are
-            // spelled `?u_N` the message was also quoting a name the user
-            // cannot write, which is what surfaced the defect. The actionable
-            // fix is to write the level AT ITS USE SITE and put that name in
-            // the list, or to drop the list and let the declaration
-            // auto-generalize.
-            return Err(ElabError::ExplicitUniverseListClosed {
-                detail: format!(
-                    "the explicit universe list `.{{{list}}}` is closed: elaboration left \
-                     {n} undetermined universe {plural} ({leaked}) that the list does not \
-                     name. Lean treats an explicit `.{{...}}` list as exhaustive, so this \
-                     declaration would register with more universe parameters than it \
-                     declares. The leaked {plural} {} a universe METAVARIABLE, so adding a \
-                     name to the list will not absorb {}: write the level explicitly where \
-                     it is used (`Type v` rather than `Type _`) and name `v` in the list, \
-                     constrain {} to a level the list already names, or drop the `.{{...}}` \
-                     list and let the declaration auto-generalize.",
-                    if n == 1 { "is" } else { "are each" },
-                    if n == 1 { "it" } else { "them" },
-                    if n == 1 { "it" } else { "them" },
-                ),
-            });
+                .filter(|n| !in_ty.contains(n))
+                .map(ToString::to_string)
+                .collect();
+            if !value_only.is_empty() {
+                let list = explicit
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                let n = value_only.len();
+                let plural = if n == 1 { "level" } else { "levels" };
+                return Err(ElabError::ExplicitUniverseListClosed {
+                    detail: format!(
+                        "the declaration's value leaves {n} undetermined universe {plural} \
+                         ({}) that its type does not mention and the explicit universe list \
+                         `.{{{list}}}` does not name. Lean generalizes a universe metavariable \
+                         into an extra parameter only when the declaration's type mentions it, \
+                         and refuses one left in the body (\"contains universe level \
+                         metavariables\"). Write the level where it is used (`Sort v` rather \
+                         than `Sort _`) and name `v` in the list, or constrain {} to a level the \
+                         list already names.",
+                        value_only.join(", "),
+                        if n == 1 { "it" } else { "them" },
+                    ),
+                });
+            }
         }
         // Rename targets come from `fresh_generalized_universe_param`: fresh
         // ids off the SAME monotone counter the metavariable mint draws from,
@@ -1820,8 +3034,8 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn try_elab_course_of_values(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: Option<&SurfaceExpr>,
         val: &SurfaceExpr,
@@ -1861,7 +3075,10 @@ impl<'a> ElabCtx<'a> {
         // ---- Elaborate the wrapper with `f.cov` pushed as a forward local ----
         self.set_decl_universe_params(universe_params);
         let aux_fvar: FVarId = self.push_local(plan.aux_name.clone(), aux_ty_expr);
-        let aux_qualified = Name::from_string(&self.qualify_name(&plan.aux_name));
+        // The auxiliary registered above under its kernel name (`_private.M.0.
+        // f.cov` for a private `f` — G21), so the wrapper names that constant.
+        let aux_qualified =
+            self.kernel_decl_name(&plan.aux_name, modifiers, PrivateNameKind::Definition);
 
         // The wrapper value is `fun (n : Nat) => Prod.fst (f.cov n)`; it already
         // carries its own binder, so elaborate it with an empty binder list and
@@ -1870,7 +3087,7 @@ impl<'a> ElabCtx<'a> {
             clean_parser::Span::dummy(),
             Box::new(SurfaceExpr::Ident(
                 clean_parser::Span::dummy(),
-                "Nat".to_string(),
+                SurfaceName::global_path("Nat"),
             )),
             Box::new(plan.wrapper_ret_ty.clone()),
         );
@@ -1888,10 +3105,15 @@ impl<'a> ElabCtx<'a> {
         let wrapper_ty_expr = replace_fvar_with_const(wrapper_ty_expr, aux_fvar, &aux_qualified);
 
         let auto_implicits = self.take_auto_implicits();
-        let (wrapper_ty_expr, wrapper_val_expr) =
-            Self::wrap_with_auto_implicits(wrapper_ty_expr, wrapper_val_expr, &auto_implicits);
+        let (wrapper_ty_expr, wrapper_val_expr, _) = self.wrap_decl_auto_implicits(
+            Self::section_binder_count(binders),
+            wrapper_ty_expr,
+            wrapper_val_expr,
+            &auto_implicits,
+            None,
+        )?;
 
-        let decl_name = Name::from_string(&self.qualify_name(name));
+        let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
 
@@ -1907,6 +3129,72 @@ impl<'a> ElabCtx<'a> {
         };
 
         Ok(Some(ElabResult::Multiple(vec![aux_result, wrapper_result])))
+    }
+
+    /// Select indexed-child routing only from actual recursive-field metadata.
+    fn applied_field_recursion_position(
+        &self,
+        name: &SurfaceName,
+        binders: &[SurfaceBinder],
+        body: &SurfaceExpr,
+        parameters: &[SurfaceName],
+        explicit_positions: &[usize],
+        calls: &[super::structural::RecursiveCall],
+    ) -> Option<usize> {
+        let mut body = body;
+        while let SurfaceExpr::Paren(_, inner)
+        | SurfaceExpr::Lambda(_, _, inner)
+        | SurfaceExpr::PatternMatchLambda(_, _, inner) = body
+        {
+            body = inner;
+        }
+        let SurfaceExpr::Match(_, _, scrutinee, arms) = body else {
+            return None;
+        };
+        let SurfaceExpr::Ident(_, parameter) = scrutinee.as_ref() else {
+            return None;
+        };
+        let position = parameters.iter().position(|name| name == parameter)?;
+        if !calls.iter().any(|call| {
+            matches!(
+                call.args.get(position),
+                Some(super::structural::RecursiveArg::AppliedField)
+            )
+        }) {
+            return None;
+        }
+        let binder = binders.get(*explicit_positions.get(position)?)?;
+        let mut domain = binder.ty.as_deref()?;
+        while let SurfaceExpr::App(_, head, _)
+        | SurfaceExpr::Paren(_, head)
+        | SurfaceExpr::UniverseInst(_, head, _) = domain
+        {
+            domain = head;
+        }
+        let SurfaceExpr::Ident(_, head) = domain else {
+            return None;
+        };
+        let super::elab_core::IdentTarget::Global(family) = self.resolve_global_ident_target(head)
+        else {
+            return None;
+        };
+        let family = self.env.get_inductive(&family)?;
+        let rows: Vec<_> = arms
+            .iter()
+            .map(|arm| super::structural::DescentRow {
+                pats: std::slice::from_ref(&arm.pattern),
+                body: &arm.body,
+            })
+            .collect();
+        (super::structural::classify_descent(
+            self.env,
+            name,
+            &rows,
+            0,
+            Some(&family.name),
+            position,
+        ) == super::structural::Descent::Valid)
+            .then_some(position)
     }
 
     /// Set up recursion handling shared by `def` and `theorem` elaboration (#1132).
@@ -1927,14 +3215,18 @@ impl<'a> ElabCtx<'a> {
     /// `recursive_def_ctx`, so the common (non-recursive) path is unchanged.
     pub(super) fn setup_recursion(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         binders: &[SurfaceBinder],
         ty: Option<&SurfaceExpr>,
         val: &SurfaceExpr,
         termination: &TerminationHints,
     ) -> Result<Option<(Expr, Expr)>, ElabError> {
+        // A reason recorded for an earlier declaration's self-call must not
+        // name this one's refusal.
+        self.recursive_call_miss = None;
         // Decreasing-argument positions live in CALL-ARGUMENT space: a surface
-        // self-call passes only the EXPLICIT binders, positionally (implicit /
+        // self-call passes only its OWN EXPLICIT binders, positionally. Section
+        // parameters are captured by that recursive binding. (Implicit /
         // strict-implicit / instance binders are omitted at call sites), and
         // the one positional consumer of `decreasing_arg_pos` — `elab_app`'s
         // IH fast path — indexes surface call args too. Resolving detection
@@ -1948,15 +3240,37 @@ impl<'a> ElabCtx<'a> {
         let explicit_positions: Vec<usize> = binders
             .iter()
             .enumerate()
-            .filter(|(_, b)| matches!(b.info, clean_parser::SurfaceBinderInfo::Explicit))
+            .filter(|(_, b)| {
+                !b.name.is_section_variable()
+                    && matches!(b.info, clean_parser::SurfaceBinderInfo::Explicit)
+            })
             .map(|(i, _)| i)
             .collect();
-        let param_names: Vec<String> = explicit_positions
+        let param_names: Vec<SurfaceName> = explicit_positions
             .iter()
             .map(|&i| binders[i].name.clone())
             .collect();
-        let mut recursion_info =
-            super::structural::detect_recursion_with_params(name, val, &param_names);
+        let receiver_pos = self.method_dot_receiver_pos(name, binders);
+        let mut recursion_info = super::structural::detect_recursion_with_receiver(
+            name,
+            val,
+            &param_names,
+            receiver_pos,
+        );
+
+        // Applied fields are NOT variables for the old spelling heuristic:
+        // in particular `HSub.hSub n 1` must retain its well-founded route.
+        // Only actual constructor metadata may select the indexed-child case.
+        if let Some(position) = self.applied_field_recursion_position(
+            name,
+            binders,
+            val,
+            &param_names,
+            &explicit_positions,
+            &recursion_info.calls,
+        ) {
+            recursion_info.decreasing_arg = Some(position);
+        }
 
         // Track AA: a fused nested-mutual fold's primary def (`Tree.size`) often
         // contains NO literal self-call — its only recursion is the SIBLING call
@@ -1971,9 +3285,9 @@ impl<'a> ElabCtx<'a> {
             let forced = self.nested_mutual_aux_arms.as_ref().is_some_and(|aux| {
                 !param_names.is_empty()
                     && aux
-                        .sibling_func_names
+                        .sibling_signatures
                         .iter()
-                        .any(|sib| super::structural::body_mentions_call(val, sib))
+                        .any(|(sib, _)| super::structural::body_mentions_call(val, sib))
             });
             if forced {
                 recursion_info.is_recursive = true;
@@ -1993,8 +3307,10 @@ impl<'a> ElabCtx<'a> {
             .as_ref()
             .map(|tb| match &tb.kind {
                 clean_parser::TerminationKind::Structural(param_name) => {
-                    if param_name.is_empty() {
-                        Ok(None)
+                    if param_name.is_anonymous() {
+                        Err(ElabError::Unsupported {
+                            feature: "termination_by structural must select a parameter".into(),
+                        })
                     } else if let Some(pos) = param_names.iter().position(|p| p == param_name) {
                         Ok(Some((pos, param_name.clone())))
                     } else {
@@ -2117,19 +3433,6 @@ impl<'a> ElabCtx<'a> {
         };
 
         if let Some((dec_pos, dec_name)) = dec_arg {
-            // Collect names of parameters after the decreasing argument (#1386).
-            // These are folded into the motive so IHs can handle varying
-            // parameter values in recursive calls. `dec_pos` is a call-space
-            // position; slicing `binders` needs the full-space index.
-            let dec_binder_pos = explicit_positions.get(dec_pos).copied().unwrap_or(dec_pos);
-            let extra_params: Vec<RecursiveExtraParam> = binders[(dec_binder_pos + 1)..]
-                .iter()
-                .map(|binder| RecursiveExtraParam {
-                    name: binder.name.clone(),
-                    binder_info: convert_binder_info(binder.info),
-                })
-                .collect();
-
             // Extract well-founded measure if present (#1132).
             let wf_measure = termination
                 .termination_by
@@ -2139,6 +3442,16 @@ impl<'a> ElabCtx<'a> {
                     _ => None,
                 });
 
+            // Capture actual sibling annotations in declaration scope, before
+            // pattern names could shadow constants used by those annotations.
+            let mut sibling_types = Vec::new();
+            if let Some(aux) = self.nested_mutual_aux_arms.clone() {
+                for (member, source_type) in aux.sibling_signatures {
+                    let member_type = self.elaborate(&source_type)?;
+                    let _member_universe = self.infer_sort(&member_type)?;
+                    sibling_types.push((self.qualify_name(&member), member_type));
+                }
+            }
             // Set up recursive definition context. Store the *qualified* name
             // (e.g. `TrustIr.Ty.bitWidth` inside `namespace TrustIr`) so the
             // call-site IH substitution can recognise namespace-qualified and
@@ -2156,26 +3469,24 @@ impl<'a> ElabCtx<'a> {
                 // function names on `nested_mutual_aux_arms`; copy them here so a
                 // sibling self-call inside a minor body is recognized. Empty for
                 // ordinary recursion (no aux-arm source installed).
-                sibling_names: self
-                    .nested_mutual_aux_arms
-                    .as_ref()
-                    .map(|a| a.sibling_func_names.clone())
-                    .unwrap_or_default(),
-                extra_params,
+                sibling_names: sibling_types.iter().map(|(name, _)| name.clone()).collect(),
+                sibling_types,
+                parameters: Vec::new(),
+                generalized_params: Vec::new(),
+                index_params: Vec::new(),
                 wf_measure,
+                outer_locals_floor: None,
             });
             Ok(None)
         } else if let Some(tb) = termination.termination_by.as_ref() {
-            if matches!(tb.kind, clean_parser::TerminationKind::WellFounded) && tb.measure.is_some()
-            {
+            // The same predicate routes a `where` helper here
+            // (`try_elab_let_rec_lifted`).
+            if let Some(measure_expr) = tb.well_founded_measure() {
                 // Well-founded recursion with explicit measure.
                 // Use the WF elaboration path instead of structural recursion.
                 let measure = super::wf_recursion::pre_definition::TerminationMeasure {
                     params: tb.params.clone(),
-                    measure_expr: tb
-                        .measure
-                        .clone()
-                        .expect("invariant: measure presence checked above"),
+                    measure_expr: Box::new(measure_expr.clone()),
                     decreasing_by: termination
                         .decreasing_by
                         .as_ref()
@@ -2205,8 +3516,8 @@ impl<'a> ElabCtx<'a> {
     /// auto-implicits, and metavariable instantiation.
     pub(super) fn elab_definition_inner(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: Option<&SurfaceExpr>,
         val: &SurfaceExpr,
@@ -2215,6 +3526,9 @@ impl<'a> ElabCtx<'a> {
         modifiers: &DeclModifiers,
         where_decls: &[WhereLocalDef],
     ) -> Result<ElabResult, ElabError> {
+        let attr_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
+        self.collect_syntactic_defeq(&attr_name, val);
+
         // A SELF-RECURSIVE `partial def name : T := … name …`: Lean treats a
         // partial def as an opaque/unsafe constant — its body is NOT
         // termination-checked and the constant does not reduce in the kernel.
@@ -2252,6 +3566,7 @@ impl<'a> ElabCtx<'a> {
         // references must still resolve). Duplicate names and genuinely
         // mutual (cyclic) groups FAIL LOUD; they are never lowered to a
         // shape that would register with a placeholder.
+        self.register_where_termination(where_decls);
         let val = if where_decls.is_empty() {
             val.clone()
         } else {
@@ -2289,7 +3604,12 @@ impl<'a> ElabCtx<'a> {
         // named-binder + `match` shape so structural recursion lowers via the
         // inductive's `.rec` (Task 3, slice 1). Returns `None` for non-equation
         // declarations, leaving the common path unchanged.
-        let normalized = normalize_equation_def(self.env, name, binders, ty, val);
+        for arm in whole_body_match_arms(val) {
+            self.check_pattern_linear(&arm.pattern)?;
+        }
+        let idents = self.pattern_idents(val);
+        let normalized = normalize_equation_def(self.env, &idents, name, binders, ty, val)?;
+        let written_binders = binders;
         let (binders, ty, val): (&[SurfaceBinder], Option<&SurfaceExpr>, &SurfaceExpr) =
             match &normalized {
                 Some((lifted_binders, new_ty, match_body)) => {
@@ -2297,6 +3617,28 @@ impl<'a> ElabCtx<'a> {
                 }
                 None => (binders, ty, val),
             };
+
+        let mut resolved_termination = termination.clone();
+        if let Some(tb) = resolved_termination.termination_by.as_mut() {
+            if let Some(index) = Self::structural_hint_index(tb, written_binders, binders.len())
+                .map_err(|feature| ElabError::Unsupported { feature })?
+            {
+                tb.kind = clean_parser::TerminationKind::Structural(binders[index].name.clone());
+                tb.params.clear();
+                tb.measure = None;
+            }
+        }
+        let termination = &resolved_termination;
+
+        // A recursive def whose `match` on the decreasing parameter sits
+        // inside a context (`1 + match n with …`, `if a = 0 then … else match
+        // b with …`, an equation's case split on another column) has the
+        // context moved into the match's arms, so the recursor computes the
+        // whole definition, as Lean's `brecOn` does
+        // (`structural::hoist_recursive_match`). What this declines is judged
+        // by the recursion-site check after elaboration.
+        let hoisted = super::structural::hoist_recursive_match(self.env, name, binders, val);
+        let val: &SurfaceExpr = hoisted.as_ref().unwrap_or(val);
 
         // Brick 84: a RECURSIVE def whose body is a multi-scrutinee
         // `match a, b with` over its own binders. The parser packed the
@@ -2306,7 +3648,18 @@ impl<'a> ElabCtx<'a> {
         // form BEFORE `setup_recursion` so the existing IH machinery works
         // unchanged. Engagement-gated on recursion: non-recursive
         // multi-scrutinee matches keep the tuple-`casesOn` path untouched.
-        let multi_scrut = normalize_multi_scrutinee_match_body(self.env, name, binders, val);
+        let explicit_structural =
+            termination
+                .termination_by
+                .as_ref()
+                .and_then(|tb| match &tb.kind {
+                    clean_parser::TerminationKind::Structural(param) if !param.is_anonymous() => {
+                        Some(param)
+                    }
+                    _ => None,
+                });
+        let multi_scrut =
+            normalize_multi_scrutinee_match_body(&idents, name, binders, val, explicit_structural)?;
         let val: &SurfaceExpr = multi_scrut.as_ref().unwrap_or(val);
 
         // The recursion-aware refusal quotes this declaration's parameter
@@ -2318,7 +3671,7 @@ impl<'a> ElabCtx<'a> {
         // for a two-parameter function. Diagnostic-only; nothing reads it
         // unless resolution has already failed.
         if let Some(subject) = self.self_reference.as_mut() {
-            if subject.written == name {
+            if &subject.written == name {
                 subject.params = binders.len();
             }
         }
@@ -2335,10 +3688,15 @@ impl<'a> ElabCtx<'a> {
         {
             // Wrap with auto-implicit binders.
             let auto_implicits = self.take_auto_implicits();
-            let (ty_expr, val_expr) =
-                Self::wrap_with_auto_implicits(ty_expr, val_expr, &auto_implicits);
+            let (ty_expr, val_expr, _) = self.wrap_decl_auto_implicits(
+                Self::section_binder_count(binders),
+                ty_expr,
+                val_expr,
+                &auto_implicits,
+                None,
+            )?;
 
-            let decl_name = Name::from_string(&self.qualify_name(name));
+            let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
             self.ensure_known_attributes(attrs)?;
             self.collect_attributes(&decl_name, attrs);
 
@@ -2356,13 +3714,22 @@ impl<'a> ElabCtx<'a> {
         }
 
         // Elaborate binders as pi types around the type, lambdas around the value
-        // Use a closure to ensure recursive context is cleared even on error
-        let result = self.elab_def_body(binders, ty, val);
+        // Use a closure to ensure recursive context is cleared even on error.
+        // `where` / `let rec` helpers met on the way lift to `<decl>.<name>`
+        // auxiliary declarations (`let_rec_lift`), finished below.
+        // A private parent's helpers inherit its kernel name, so `where go`
+        // of a private `f` is `_private.M.0.f.go`, as Lean names it (G21).
+        let saved_lift = self.begin_let_rec_lift(
+            self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition),
+            modifiers.is_partial,
+        );
+        let result = self.elab_decl_body(binders, ty, val);
+        let lift_scope = self.end_let_rec_lift(saved_lift);
 
         // Clear recursive context after elaboration (must happen even on error)
         self.recursive_def_ctx = None;
 
-        let (ty_expr, val_expr) = result?;
+        let (ty_expr, val_expr, section_fvars) = result?;
 
         // Substitute metavariables (#163: unsolved metavariables from typeclass
         // resolution would otherwise leak as FVars to the kernel type checker)
@@ -2376,11 +3743,28 @@ impl<'a> ElabCtx<'a> {
         // Wrap with auto-implicit binders (#164)
         // Auto-implicits are added in order of first occurrence (reversed for Pi/Lambda)
         let auto_implicits = self.take_auto_implicits();
-        let (ty_expr, val_expr) =
-            Self::wrap_with_auto_implicits(ty_expr, val_expr, &auto_implicits);
+        let (ty_expr, val_expr, section_auto_count) = self.wrap_decl_auto_implicits(
+            Self::section_binder_count(binders),
+            ty_expr,
+            val_expr,
+            &auto_implicits,
+            Some(&section_fvars),
+        )?;
 
         // Collect all attributes for later registration
-        let decl_name = Name::from_string(&self.qualify_name(name));
+        let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
+
+        // When `preprocess` could not scan this body (a `by` block, …) it
+        // prepended EVERY section variable; keep the ones the elaborated
+        // header and value use — Lean's `removeUnusedVars`
+        // (`Lean/Elab/MutualDef.lean:593-609`). No-op unless armed.
+        let (ty_expr, val_expr) = self.prune_armed_section_binders(
+            &decl_name,
+            binders.iter().map(|b| &b.name),
+            section_auto_count,
+            ty_expr,
+            val_expr,
+        );
         // B21: reject unknown attributes loudly before honoring the rest.
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
@@ -2399,27 +3783,24 @@ impl<'a> ElabCtx<'a> {
         // but they remain in `universe_params`. This causes level count
         // mismatches when the definition is later unfolded.
         // Same pattern as #3390 fix for structures (see elab_structure.rs).
-        // Lean parity: a def with NO ascribed type generalizes residual
-        // unassigned metas into implicit binders (abstractMVars) — the alias
-        // desugar and `def f := Function.comp`-style definitions depend on it.
-        let (ty_expr, val_expr) = if ty.is_none() {
-            self.generalize_residual_metas(ty_expr, val_expr)
-        } else {
-            (ty_expr, val_expr)
-        };
-
+        // Ordinary definitions must solve expression metavariables. Aliases
+        // preserve the target telescope directly in their own elaborator.
         let (surviving_universe_params, ty_expr, val_expr) =
             self.finalize_level_params(ty_expr, val_expr)?;
 
+        let (auxiliaries, val_expr) =
+            self.finish_let_rec_lifts(lift_scope, &surviving_universe_params, modifiers, val_expr)?;
+
         self.ensure_no_residual_fvars("def", name, &ty_expr, Some(&val_expr))?;
 
-        Ok(ElabResult::Definition {
+        let definition = ElabResult::Definition {
             name: decl_name,
             universe_params: surviving_universe_params,
             ty: ty_expr,
             val: val_expr,
             modifiers: *modifiers,
-        })
+        };
+        Ok(Self::with_let_rec_auxiliaries(auxiliaries, definition))
     }
 
     /// Elaborate a `theorem` declaration.
@@ -2427,8 +3808,8 @@ impl<'a> ElabCtx<'a> {
     /// Similar to `elab_definition_inner` but produces `ElabResult::Theorem`.
     pub(super) fn elab_theorem_inner(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
         proof: &SurfaceExpr,
@@ -2437,9 +3818,20 @@ impl<'a> ElabCtx<'a> {
         modifiers: &DeclModifiers,
         where_decls: &[WhereLocalDef],
     ) -> Result<ElabResult, ElabError> {
+        let attr_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Theorem);
+        self.collect_syntactic_defeq(&attr_name, proof);
+
+        // Lean refuses the modifier before it reads the theorem: pinned 4.8.0
+        // and 4.30.0-rc2, "'unsafe' theorems are not allowed" (review r6, X10).
+        if modifiers.is_unsafe {
+            return Err(ElabError::CommandFailed {
+                message: "'unsafe' theorems are not allowed".to_string(),
+            });
+        }
         // Desugar where-clause local defs for theorems. Same contract as the
         // `def` path above: dependency-ordered, duplicate/cyclic groups fail
         // loud, no placeholder registration.
+        self.register_where_termination(where_decls);
         let proof = if where_decls.is_empty() {
             proof.clone()
         } else {
@@ -2454,7 +3846,12 @@ impl<'a> ElabCtx<'a> {
         // Normalize equation-form theorems (`theorem t : A → B | pat => ...`)
         // into named-binder + `match` shape, mirroring the definition path so
         // structural recursion lowers via `.rec` (Task 3, slice 1).
-        let normalized = normalize_equation_def(self.env, name, binders, Some(ty), proof);
+        for arm in whole_body_match_arms(proof) {
+            self.check_pattern_linear(&arm.pattern)?;
+        }
+        let idents = self.pattern_idents(proof);
+        let normalized = normalize_equation_def(self.env, &idents, name, binders, Some(ty), proof)?;
+        let written_binders = binders;
         let (binders, ty, proof): (&[SurfaceBinder], &SurfaceExpr, &SurfaceExpr) = match &normalized
         {
             // A normalized equation theorem must have a peeled return type;
@@ -2465,6 +3862,18 @@ impl<'a> ElabCtx<'a> {
             }
             _ => (binders, ty, proof),
         };
+
+        let mut resolved_termination = termination.clone();
+        if let Some(tb) = resolved_termination.termination_by.as_mut() {
+            if let Some(index) = Self::structural_hint_index(tb, written_binders, binders.len())
+                .map_err(|feature| ElabError::Unsupported { feature })?
+            {
+                tb.kind = clean_parser::TerminationKind::Structural(binders[index].name.clone());
+                tb.params.clear();
+                tb.measure = None;
+            }
+        }
+        let termination = &resolved_termination;
 
         self.set_decl_universe_params(universe_params);
 
@@ -2480,10 +3889,15 @@ impl<'a> ElabCtx<'a> {
         {
             // Well-founded lowering early-return path.
             let auto_implicits = self.take_auto_implicits();
-            let (ty_expr, proof_expr) =
-                Self::wrap_with_auto_implicits(ty_expr, proof_expr, &auto_implicits);
+            let (ty_expr, proof_expr, _) = self.wrap_decl_auto_implicits(
+                Self::section_binder_count(binders),
+                ty_expr,
+                proof_expr,
+                &auto_implicits,
+                None,
+            )?;
 
-            let decl_name = Name::from_string(&self.qualify_name(name));
+            let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Theorem);
             self.ensure_known_attributes(attrs)?;
             self.collect_attributes(&decl_name, attrs);
 
@@ -2504,9 +3918,37 @@ impl<'a> ElabCtx<'a> {
         // Elaborate binders/body. The structural recursion context (if installed
         // by `setup_recursion`) is consumed here and must be cleared afterward,
         // even on error.
-        let result = self.elab_def_body(binders, Some(ty), proof);
+        let saved_lift = self.begin_let_rec_lift(
+            self.kernel_decl_name(name, modifiers, PrivateNameKind::Theorem),
+            modifiers.is_partial,
+        );
+        // A recursive self-call inside `by` becomes visible only after tactic
+        // elaboration. When the surface structural path did not install an IH
+        // context, let the pre-definition's real call graph choose its SCC.
+        // Keep explicit termination hints on their existing validating path.
+        let mut predef_auto_count = None;
+        let result = if (normalized.is_some()
+            || matches!(
+                proof,
+                SurfaceExpr::PatternMatchLambda(..)
+                    | SurfaceExpr::ByTactic(..)
+                    | SurfaceExpr::CalcBlock(..)
+            ))
+            && self.recursive_def_ctx.is_none()
+            && termination.termination_by.is_none()
+            && termination.decreasing_by.is_none()
+        {
+            self.elab_single_equation_theorem(name, binders, ty, proof, modifiers)
+                .map(|(ty_expr, proof_expr, auto_count)| {
+                    predef_auto_count = Some(auto_count);
+                    (ty_expr, proof_expr, Vec::new())
+                })
+        } else {
+            self.elab_decl_body(binders, Some(ty), proof)
+        };
+        let lift_scope = self.end_let_rec_lift(saved_lift);
         self.recursive_def_ctx = None;
-        let (ty_expr, proof_expr) = result?;
+        let (ty_expr, proof_expr, section_fvars) = result?;
 
         // Substitute metavariables (#163)
         let ty_expr = self.metas.instantiate(&ty_expr);
@@ -2518,11 +3960,28 @@ impl<'a> ElabCtx<'a> {
 
         // Wrap with auto-implicit binders (#164)
         let auto_implicits = self.take_auto_implicits();
-        let (ty_expr, proof_expr) =
-            Self::wrap_with_auto_implicits(ty_expr, proof_expr, &auto_implicits);
+        let (ty_expr, proof_expr, section_auto_count) = self.wrap_decl_auto_implicits(
+            Self::section_binder_count(binders),
+            ty_expr,
+            proof_expr,
+            &auto_implicits,
+            Some(&section_fvars),
+        )?;
 
         // Collect all attributes for later registration
-        let decl_name = Name::from_string(&self.qualify_name(name));
+        let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Theorem);
+
+        // When `preprocess` could not scan this theorem's HEADER it prepended
+        // EVERY section variable; keep what Lean's `withHeaderSecVars`
+        // (`Lean/Elab/MutualDef.lean:454-490`) keeps over the elaborated
+        // statement. No-op unless armed.
+        let (ty_expr, proof_expr) = self.prune_armed_section_binders(
+            &decl_name,
+            binders.iter().map(|b| &b.name),
+            predef_auto_count.unwrap_or(section_auto_count),
+            ty_expr,
+            proof_expr,
+        );
         // B21: reject unknown attributes loudly before honoring the rest.
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
@@ -2533,15 +3992,23 @@ impl<'a> ElabCtx<'a> {
         let (surviving_universe_params, ty_expr, proof_expr) =
             self.finalize_level_params(ty_expr, proof_expr)?;
 
+        let (auxiliaries, proof_expr) = self.finish_let_rec_lifts(
+            lift_scope,
+            &surviving_universe_params,
+            modifiers,
+            proof_expr,
+        )?;
+
         self.ensure_no_residual_fvars("theorem", name, &ty_expr, Some(&proof_expr))?;
 
-        Ok(ElabResult::Theorem {
+        let theorem = ElabResult::Theorem {
             name: decl_name,
             universe_params: surviving_universe_params,
             ty: ty_expr,
             proof: proof_expr,
             modifiers: *modifiers,
-        })
+        };
+        Ok(Self::with_let_rec_auxiliaries(auxiliaries, theorem))
     }
 
     /// Elaborate an `axiom` declaration.
@@ -2549,15 +4016,15 @@ impl<'a> ElabCtx<'a> {
     /// Axioms have a type but no value expression.
     pub(super) fn elab_axiom_inner(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
         attrs: &[Attribute],
         modifiers: &DeclModifiers,
     ) -> Result<ElabResult, ElabError> {
         self.set_decl_universe_params(universe_params);
-        let ty_expr = self.elab_axiom_type(binders, ty)?;
+        let (ty_expr, section_fvars) = self.elab_decl_type(binders, ty)?;
 
         // Substitute metavariables (#163)
         let ty_expr = self.metas.instantiate(&ty_expr);
@@ -2567,10 +4034,21 @@ impl<'a> ElabCtx<'a> {
 
         // Wrap with auto-implicit binders (#164)
         let auto_implicits = self.take_auto_implicits();
-        let ty_expr = Self::wrap_type_with_auto_implicits(ty_expr, &auto_implicits);
+        let (ty_expr, section_auto_count) = self.wrap_decl_type_auto_implicits(
+            Self::section_binder_count(binders),
+            ty_expr,
+            &auto_implicits,
+            Some(&section_fvars),
+        )?;
 
         // Collect all attributes for later registration
-        let decl_name = Name::from_string(&self.qualify_name(name));
+        let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Axiom);
+        let ty_expr = self.prune_armed_section_type(
+            &decl_name,
+            binders.iter().map(|binder| &binder.name),
+            section_auto_count,
+            ty_expr,
+        );
         // B21: reject unknown attributes loudly before honoring the rest.
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
@@ -2617,13 +4095,14 @@ impl<'a> ElabCtx<'a> {
     /// missed edge can only cause a spurious rejection.
     pub(crate) fn elab_decl_header_inner(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        private_kind: Option<PrivateNameKind>,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
     ) -> Result<(Name, Vec<Name>, Expr), ElabError> {
         self.set_decl_universe_params(universe_params);
-        let ty_expr = self.elab_axiom_type(binders, ty)?;
+        let (ty_expr, section_fvars) = self.elab_decl_type(binders, ty)?;
 
         // Same normalization the axiom path applies: metavariables and level
         // constraints solved during signature unification must be substituted
@@ -2633,9 +4112,16 @@ impl<'a> ElabCtx<'a> {
         let ty_expr = self.metas.instantiate_levels(&ty_expr);
 
         let auto_implicits = self.take_auto_implicits();
-        let ty_expr = Self::wrap_type_with_auto_implicits(ty_expr, &auto_implicits);
+        let (ty_expr, _) = self.wrap_decl_type_auto_implicits(
+            Self::section_binder_count(binders),
+            ty_expr,
+            &auto_implicits,
+            Some(&section_fvars),
+        )?;
 
-        let decl_name = Name::from_string(&self.qualify_name(name));
+        // The name the authoritative pass registers (a private theorem's
+        // mangled name included — G21), so a header matches its declaration.
+        let decl_name = self.kernel_decl_name_for(name, private_kind);
 
         // Filter to surviving params only (#3396, as Definition/Axiom do).
         let mut used_level_params = Vec::new();
@@ -2643,7 +4129,7 @@ impl<'a> ElabCtx<'a> {
         let surviving_universe_params: Vec<Name> = self
             .universe_params
             .iter()
-            .map(|s| Name::from_string(s))
+            .map(|s| s.name().clone())
             .filter(|name| used_level_params.contains(name))
             .collect();
 
@@ -2659,19 +4145,29 @@ impl<'a> ElabCtx<'a> {
     /// Fixes #2552: previously collapsed all opaque to ElabResult::Axiom.
     pub(super) fn elab_opaque_inner(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
         val: Option<&SurfaceExpr>,
         attrs: &[Attribute],
         modifiers: &DeclModifiers,
     ) -> Result<ElabResult, ElabError> {
+        if let Some(value) = val {
+            let attr_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
+            self.collect_syntactic_defeq(&attr_name, value);
+        }
+
         self.set_decl_universe_params(universe_params);
 
-        let decl_name = Name::from_string(&self.qualify_name(name));
+        let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
+        // `implemented_by` names its target as written; a private opaque's
+        // own name is its user-facing one, not the kernel's (G21).
+        let user_name = self.qualify_name(name).into_name();
         if attrs.iter().any(|attr| {
-            matches!(attr, Attribute::ImplementedBy(impl_name) if impl_name == name || impl_name == &decl_name.to_string())
+            matches!(attr, Attribute::ImplementedBy(impl_name) if impl_name == name
+                || impl_name.name() == &decl_name
+                || impl_name.name() == &user_name)
         }) {
             return Err(ElabError::Unsupported {
                 feature: format!(
@@ -2684,7 +4180,8 @@ impl<'a> ElabCtx<'a> {
 
         if let Some(val_expr) = val {
             // Body-bearing opaque: elaborate like a definition
-            let (ty_expr, val_expr) = self.elab_def_body(binders, Some(ty), val_expr)?;
+            let (ty_expr, val_expr, section_fvars) =
+                self.elab_decl_body(binders, Some(ty), val_expr)?;
 
             let ty_expr = self.metas.instantiate(&ty_expr);
             let val_expr = self.metas.instantiate(&val_expr);
@@ -2693,8 +4190,13 @@ impl<'a> ElabCtx<'a> {
             let val_expr = self.metas.instantiate_levels(&val_expr);
 
             let auto_implicits = self.take_auto_implicits();
-            let (ty_expr, val_expr) =
-                Self::wrap_with_auto_implicits(ty_expr, val_expr, &auto_implicits);
+            let (ty_expr, val_expr, _) = self.wrap_decl_auto_implicits(
+                Self::section_binder_count(binders),
+                ty_expr,
+                val_expr,
+                &auto_implicits,
+                Some(&section_fvars),
+            )?;
 
             // Filter to surviving params only (#3396, same as Definition).
             let (surviving_universe_params, ty_expr, val_expr) =
@@ -2709,13 +4211,65 @@ impl<'a> ElabCtx<'a> {
             })
         } else {
             // Body-less opaque: type-only elaboration (like axiom)
-            let ty_expr = self.elab_axiom_type(binders, ty)?;
+            let (ty_expr, section_fvars) = self.elab_decl_type(binders, ty)?;
 
             let ty_expr = self.metas.instantiate(&ty_expr);
             let ty_expr = self.metas.instantiate_levels(&ty_expr);
 
             let auto_implicits = self.take_auto_implicits();
-            let ty_expr = Self::wrap_type_with_auto_implicits(ty_expr, &auto_implicits);
+            let header_binders = auto_implicits.len() + binders.len();
+            let (ty_expr, _) = self.wrap_decl_type_auto_implicits(
+                Self::section_binder_count(binders),
+                ty_expr,
+                &auto_implicits,
+                Some(&section_fvars),
+            )?;
+
+            // SOUNDNESS: the kernel registers a body-less opaque as an axiom, so
+            // its type must be inhabited, as Lean's `opaque` requires
+            // (`mkInhabitantFor`): `opaque o : False` would otherwise be a proof
+            // of `False` (review r6, X9; docs/DECISIONS.md R134). An `unsafe`
+            // opaque is Lean's `sorry` when nothing inhabits it; at the front
+            // door, which refuses every safe use of an unsafe constant (R135),
+            // so is Clean's. `clean check` admits such uses, so it still asks.
+            let unsafe_at_front_door =
+                modifiers.is_unsafe && crate::lean_compile_checks::front_door_active();
+            if !unsafe_at_front_door {
+                match self.require_opaque_inhabitant(
+                    &format!("opaque {name}"),
+                    &ty_expr,
+                    header_binders,
+                    true,
+                )? {
+                    OpaqueInhabitant::Inhabited => {}
+                    // Lean's inhabitant is then `Classical.ofNonempty`, which has
+                    // no code: a computable `opaque` is "failed to compile
+                    // definition" unless nothing compiles its value (an
+                    // `@[extern]` or `@[implemented_by]` opaque, a proposition)
+                    // or a `noncomputable section` marks it instead.
+                    OpaqueInhabitant::Nonempty => {
+                        let compiled_elsewhere = attrs.iter().any(|attr| {
+                            matches!(attr, Attribute::ImplementedBy(_) | Attribute::Extern(_))
+                        });
+                        let erased =
+                            crate::lean_compile_checks::declaration_is_erased(self.env, &ty_expr);
+                        if !modifiers.is_noncomputable && !compiled_elsewhere && !erased {
+                            if crate::lean_compile_checks::in_noncomputable_section() {
+                                crate::lean_compile_checks::defer_noncomputable_mark(
+                                    decl_name.clone(),
+                                );
+                            } else {
+                                return Err(ElabError::CommandFailed {
+                                    message: crate::lean_compile_checks::noncomputable_message(
+                                        self.env,
+                                        &Name::from_string("Classical.ofNonempty"),
+                                    ),
+                                });
+                            }
+                        }
+                    }
+                }
+            }
 
             // Filter to surviving params only (#3396, same as Definition).
             let (surviving_universe_params, ty_expr) = self.finalize_level_params_ty(ty_expr)?;
@@ -2745,67 +4299,46 @@ impl<'a> ElabCtx<'a> {
     /// used: the opaque type itself is kernel-checked.
     pub(super) fn elab_partial_def_opaque(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
         attrs: &[Attribute],
         modifiers: &DeclModifiers,
     ) -> Result<ElabResult, ElabError> {
         self.set_decl_universe_params(universe_params);
-        let decl_name = Name::from_string(&self.qualify_name(name));
+        let decl_name = self.kernel_decl_name(name, modifiers, PrivateNameKind::Definition);
         self.ensure_known_attributes(attrs)?;
         self.collect_attributes(&decl_name, attrs);
 
         // The full signature type `T = (binders) → ty` (like an axiom / body-less
         // opaque).
-        let ty_expr = self.elab_axiom_type(binders, ty)?;
+        let (ty_expr, section_fvars) = self.elab_decl_type(binders, ty)?;
         let ty_expr = self.metas.instantiate(&ty_expr);
         let ty_expr = self.metas.instantiate_levels(&ty_expr);
 
-        // SOUNDNESS GUARD: require `Inhabited` of the RESULT type — the type
-        // after stripping the parameter binders (Lean's partial fixpoint needs a
+        self.check_declaration_header(&[], Some(&ty_expr))?;
+
+        // SOUNDNESS GUARD: require `Inhabited` of the RESULT type, read under
+        // the type's binders opened as locals (Lean's partial fixpoint needs a
         // default of the result type). This is sufficient: if `retTy` is
-        // inhabited then so is `(binders) → retTy`, so the opaque `name : T` is a
-        // genuine witness. Checking the result type (a base type like `Nat`)
-        // also resolves against the concrete `Inhabited Nat` instance, whereas
-        // `Inhabited (Nat → Nat)` would need an `Inhabited`-forall instance.
-        let mut ret_ty = &ty_expr;
-        for _ in 0..binders.len() {
-            match ret_ty.kind() {
-                clean_kernel::ExprKind::Pi(_, _, body) => ret_ty = body,
-                _ => break,
-            }
-        }
-        let ret_ty = ret_ty.clone();
-        // A dependent result type (`partial def f (n : Nat) : Fin n`) leaves
-        // loose bvars we cannot instantiate to check inhabitedness — and such a
-        // type may genuinely be uninhabited (`Fin 0`). Reject conservatively.
-        if ret_ty.has_loose_bvars() {
-            return Err(ElabError::Unsupported {
-                feature: format!(
-                    "`partial def {name}` with a dependent result type is not yet supported"
-                ),
-            });
-        }
-        let u = self
-            .infer_sort(&ret_ty)
-            .unwrap_or_else(|_| Level::succ(Level::zero()));
-        let inhabited_goal = Expr::app(
-            Expr::const_(Name::from_string("Inhabited"), vec![u]),
-            ret_ty.clone(),
-        );
-        if self.resolve_instance(&inhabited_goal).is_none() {
-            return Err(ElabError::FailedToSynthesizeInstance {
-                goal: format!(
-                    "Inhabited <result type of `partial def {name}`> \
-                     (required to register the partial def's opaque signature soundly)"
-                ),
-            });
-        }
+        // inhabited under the binders then so is `(binders) → retTy`, so the
+        // opaque `name : T` is a genuine witness. Shared with `opaque`
+        // ([`Self::require_opaque_inhabitant`]), which also accepts `Nonempty`.
+        self.require_opaque_inhabitant(
+            &format!("partial def {name}"),
+            &ty_expr,
+            binders.len(),
+            false,
+        )?;
 
         let auto_implicits = self.take_auto_implicits();
-        let ty_expr = Self::wrap_type_with_auto_implicits(ty_expr, &auto_implicits);
+        let (ty_expr, _) = self.wrap_decl_type_auto_implicits(
+            Self::section_binder_count(binders),
+            ty_expr,
+            &auto_implicits,
+            Some(&section_fvars),
+        )?;
 
         let (surviving_universe_params, ty_expr) = self.finalize_level_params_ty(ty_expr)?;
 

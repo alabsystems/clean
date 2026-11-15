@@ -32,12 +32,30 @@ THREE PROPERTIES, EACH A LESSON THIS TREE ALREADY PAID FOR
    computed only over empty bodies is refused outright.
 3. REPORTED, NOT ASSERTED. The fractions are printed so anyone can re-derive
    them, and `--selftest` mutates real input to prove each verdict can fire.
+
+SYMBOLS (M2, 2026-09-27). A `rustcc fn` header's name is read by the shared
+reader `scripts/crystal_trust_ir_symbols.py`: trust-ir WS4.3 prints a non-bare
+name QUOTED, the reader decodes it, refuses what the printer cannot write, and
+holds each artifact to one grammar -- so two artifacts are joined by the NAME of
+a function, whichever printer wrote each. `--pinned-inputs` prints the
+first-party modules this script runs besides itself.
 """
 from __future__ import annotations
 import argparse, hashlib, re, sys
 from pathlib import Path
 
-FN_RE = re.compile(r"^rustcc fn @(?P<name>.+?)\((?P<sig>[^)]*)\)\s*\{\s*$")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import crystal_trust_ir_symbols as tir_symbols  # noqa: E402
+
+# Read by check_gate_registry.py (PINNED_INPUTS_MARKER): `--pinned-inputs` prints the first-party
+# modules this script executes besides itself (derived from its imports).
+ANSWERS_PINNED_INPUTS = True
+# The header this channel splits on: a crate-module (`rustcc`) function, as it always was.
+FN_PREFIX = re.compile(r"rustcc ")
+
+
+class Refused(Exception):
+    """An artifact whose symbols no trust-ir printer wrote. Never a verdict of agreement."""
 
 
 def split_functions(text: str) -> dict[str, list[str]]:
@@ -45,12 +63,16 @@ def split_functions(text: str) -> dict[str, list[str]]:
     out: dict[str, list[str]] = {}
     cur: str | None = None
     buf: list[str] = []
-    for line in text.splitlines():
-        m = FN_RE.match(line)
-        if m:
+    syms = tir_symbols.ModuleSymbols(FN_PREFIX)
+    for n, line in enumerate(text.splitlines(), 1):
+        try:
+            fh = syms.fn_header(line, f"line {n}")
+        except tir_symbols.SymbolRefusal as exc:
+            raise Refused(f"line {n}: {exc}") from exc
+        if fh:
             if cur is not None:
                 out[cur] = buf
-            cur, buf = m.group("name"), []
+            cur, buf = fh[0], []
             continue
         if cur is not None:
             if line == "}":
@@ -107,6 +129,16 @@ def compare(a_text: str, b_text: str, *, keep_loc: bool) -> dict:
         "agree": len(agree), "differ": len(differ), "empty_both": len(empty_both),
         "differ_names": differ[:25],
     }
+
+
+def run_pair(a_text: str, b_text: str, *, keep_loc: bool) -> int:
+    """compare + report, with a symbol refusal as its own exit (2), never an agreement."""
+    try:
+        r = compare(a_text, b_text, keep_loc=keep_loc)
+    except Refused as exc:
+        print(f"LOWERING_ADEQUACY=red  refused: {exc}")
+        return 2
+    return report(r)
 
 
 def report(r: dict) -> int:
@@ -217,7 +249,7 @@ def selftest() -> int:
 
     def arm(name, a, b, want, keep_loc=False):
         nonlocal ok
-        got = report(compare(a, b, keep_loc=keep_loc))
+        got = run_pair(a, b, keep_loc=keep_loc)
         good = got == want
         ok = ok and good
         arms.append((name, want, got, good))
@@ -244,6 +276,25 @@ def selftest() -> int:
     arm("target-change-caught", base, tgt, 1)
     print("  arm: an all-empty shared set must be REFUSED as vacuous")
     arm("vacuous", empties[0], empties[0], 3)
+    # M2 (2026-09-27): trust-ir WS4.3 prints a non-bare name QUOTED. The same REAL text so printed
+    # joins its legacy twin by NAME and agrees; under the regex this replaced the quotes stayed in
+    # every name, no body was shared, and the channel read the pair as vacuous (3).
+    quoted = tir_symbols.respell_ws43(base, FN_PREFIX)
+    first = next(tir_symbols.parse_fn_header(ln, FN_PREFIX) for ln in base.splitlines()
+                 if ln.startswith("rustcc fn @"))[0]
+    print("  arm: the same real text printed by WS4.3 (quoted symbols) must AGREE with its legacy twin")
+    arm("ws43-quoted-agrees", base, quoted if f'@{tir_symbols.spell_symbol(first)}(' in quoted
+        and not tir_symbols.is_bare_ident(first) else base + "\nnot respelled\n", 0)
+    print("  arm: ...and a mutated instruction on the quoted side must still DISAGREE")
+    arm("ws43-mutated-instr", base, quoted.replace("const u64 5", "const u64 999999", 1), 1)
+    print("  arm: an artifact mixing quoted and raw symbols must be REFUSED")
+    raw_first = f"rustcc fn @{first}("
+    mixed = quoted.replace(f"rustcc fn @{tir_symbols.spell_symbol(first)}(", raw_first, 1)
+    arm("ws43-mixed-refused", base, mixed if mixed != quoted else "not mixed", 2)
+    print("  arm: an escape no trust-ir printer writes must be REFUSED")
+    esc = quoted.replace(f"@{tir_symbols.spell_symbol(first)}(",
+                         f"@{tir_symbols.spell_symbol(first)[:-1]}\\q\"(", 1)
+    arm("ws43-escape-refused", base, esc, 2)
     print(f"  lowering-adequacy selftest: {sum(1 for *_, g in arms if g)}/{len(arms)} arms behave")
     return 0 if ok else 1
 
@@ -254,7 +305,12 @@ def main() -> int:
     p.add_argument("b", nargs="?", help="candidate trust-ir .txt artifact")
     p.add_argument("--with-loc", action="store_true", help="treat #loc differences as disagreement")
     p.add_argument("--selftest", action="store_true")
+    p.add_argument("--pinned-inputs", action="store_true",
+                   help="print the first-party modules this script runs besides itself; run nothing")
     args = p.parse_args()
+    if args.pinned_inputs:
+        print("\n".join(tir_symbols.first_party_imports(Path(__file__))))
+        return 0
     if args.selftest or not (args.a and args.b):
         print("lowering-adequacy selftest:")
         rc = selftest()
@@ -269,7 +325,7 @@ def main() -> int:
     at, bt = Path(args.a).read_text(), Path(args.b).read_text()
     print(f"lowering adequacy:\n  A {args.a} sha256:{hashlib.sha256(at.encode()).hexdigest()[:16]}"
           f"\n  B {args.b} sha256:{hashlib.sha256(bt.encode()).hexdigest()[:16]}")
-    return report(compare(at, bt, keep_loc=args.with_loc))
+    return run_pair(at, bt, keep_loc=args.with_loc)
 
 
 if __name__ == "__main__":

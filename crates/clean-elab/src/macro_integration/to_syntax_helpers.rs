@@ -22,6 +22,10 @@ pub(super) fn do_elem_to_syntax(elem: &DoElem) -> Syntax {
             SyntaxKind::do_let(),
             vec![Syntax::ident(&binder.name), surface_to_syntax(val)],
         ),
+        DoElem::Have(_, binder, val) => Syntax::node(
+            SyntaxKind::app("doHave"),
+            vec![surface_binder_to_syntax(binder), surface_to_syntax(val)],
+        ),
         DoElem::LetMut(_, binder, val) => Syntax::node(
             SyntaxKind::app("doLetMut"),
             vec![Syntax::ident(&binder.name), surface_to_syntax(val)],
@@ -179,10 +183,10 @@ pub(super) fn do_elem_to_syntax(elem: &DoElem) -> Syntax {
 /// Convert a surface pattern to syntax.
 pub(super) fn surface_pattern_to_syntax(pattern: &SurfacePattern) -> Syntax {
     match pattern {
-        SurfacePattern::Wildcard => Syntax::ident("_"),
+        SurfacePattern::Wildcard => Syntax::generated_ident("_"),
         // `..` constructor-field ellipsis: render back to the surface token so a
         // syntax round-trip preserves it.
-        SurfacePattern::Ellipsis => Syntax::ident(".."),
+        SurfacePattern::Ellipsis => Syntax::generated_ident(".."),
         SurfacePattern::Inaccessible(inner) => Syntax::node(
             SyntaxKind::app("inaccessiblePattern"),
             vec![surface_to_syntax(inner)],
@@ -218,6 +222,38 @@ pub(super) fn surface_pattern_to_syntax(pattern: &SurfacePattern) -> Syntax {
         SurfacePattern::QPattern(inner) => {
             let inner_syn = surface_to_syntax(inner);
             Syntax::node(SyntaxKind::app("qPattern"), vec![inner_syn])
+        }
+        // Structure-instance pattern `{ f := p, .. }`. The round trip has to be
+        // FAITHFUL: a form the macro pass cannot reproduce comes back as a bare
+        // identifier named after its node kind, which is how `open X in e`
+        // became the identifier `openIn` (closed class 42). The `..` flag is
+        // carried by the NODE KIND rather than by a marker child, so reading it
+        // back never depends on how an identifier spells itself; each field and
+        // the optional ascription are their own nodes.
+        SurfacePattern::StructInst {
+            fields,
+            ellipsis,
+            ty,
+        } => {
+            let mut children = Vec::with_capacity(fields.len() + 1);
+            for (name, pat) in fields {
+                children.push(Syntax::node(
+                    SyntaxKind::app("structInstPatternField"),
+                    vec![Syntax::ident(name), surface_pattern_to_syntax(pat)],
+                ));
+            }
+            if let Some(ty) = ty {
+                children.push(Syntax::node(
+                    SyntaxKind::app("structInstPatternType"),
+                    vec![surface_to_syntax(ty)],
+                ));
+            }
+            let kind = if *ellipsis {
+                "structInstPatternDots"
+            } else {
+                "structInstPattern"
+            };
+            Syntax::node(SyntaxKind::app(kind), children)
         }
     }
 }

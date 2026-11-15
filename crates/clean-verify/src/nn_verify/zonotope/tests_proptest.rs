@@ -481,11 +481,11 @@ fn test_t06_relu_negative_center_and_generators_zeroed() {
         let z = random_negative_zonotope(&mut rng, dim, n_gen);
         let rz = zonotope_relu(&z);
 
-        for j in 0..dim {
+        for (j, &center) in rz.center[..dim].iter().enumerate() {
             assert!(
-                rz.center[j].abs() < TOL,
+                center.abs() < TOL,
                 "negative relu center[{j}] = {}, expected 0",
-                rz.center[j]
+                center
             );
         }
         for (gi, gvec) in rz.generators.iter().enumerate() {

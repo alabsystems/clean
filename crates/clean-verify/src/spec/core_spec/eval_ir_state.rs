@@ -81,6 +81,7 @@
 //!
 //! | construct | verdict | fault tag |
 //! |---|---|---|
+//! | `atomic_fetch_add_relaxed_u64_seq` in legacy `ir_exec` | unmodelled — the cell-addressed executor lacks the sequential byte-memory operation; universal refusal `ir_exec_atomic_fetch_add_relaxed_u64_seq_unmodelled` | `width_bounded` |
 //! | **`Overflow` (all 3 ops)** | **MODELLED since 2026-08-25 (plan W3)** — two-result value+flag semantics, `ir_overflow_exec` | `not_int` on non-integer types/operands |
 //! | `Cast` inttoptr / transmute | unmodelled | `width_bounded` |
 //! | **`Cast` bitcast** | **PARTLY MODELLED — see below** | `width_bounded` outside it |
@@ -126,9 +127,13 @@
 //! classified binary64 fragment ([`super::eval_ir_fcmp`]) — and unlike the
 //! arithmetic rows, comparison is TOTAL on classified operands: a NaN
 //! produces an ANSWER (ordered false / unordered true), because a Bool has no
-//! implementation-defined payload to invent. With both retired, ZERO `ir_exec`
-//! dispatch arms are the unmodelled outcome; every remaining `unmodelled` row
-//! in this table is operator- or fragment-level inside an arm that computes.
+//! implementation-defined payload to invent. With both retired, the original
+//! thirty-constructor scope had no wholly unmodelled `ir_exec` arm; its remaining
+//! refusals were operator- or fragment-level inside arms that compute.
+//! **Dated extension, 2026-09-24:** the appended sequential byte fetch-add
+//! constructor has one explicit legacy `unmodelled width_bounded` arm. That
+//! cell-model refusal does not erase the byte profile's separate semantics or
+//! claim concurrent-atomic execution, and is not successful execution coverage.
 //!
 //! **The float RESIDUE, 2026-08-25 (the wave `evalir_w4.PENDING.md` delta 5
 //! named).** Seven of the nine remaining refused float OPERATORS became real:
@@ -375,6 +380,72 @@
 //! DEFINITION the machine runs that costs, and that choice is the measurement
 //! above.
 
+//!
+//! ## The comparisons inspect their operands before they subtract (2026-09-08)
+//!
+//! `ir_nat_ltb` and `ir_nat_eqb` now peel one `Nat.rec` layer off EACH operand
+//! — `a` first, then `b` — and only then run the subtraction tests, which are
+//! kept verbatim under `ir_nat_sub_ltb` / `ir_nat_sub_eqb`. Same predicates
+//! (`ir_nat_ltb_walk_eq` / `ir_nat_eqb_walk_eq` are re-proved over the peeled
+//! forms, each case an `Eq.refl` or the 2026-08-15 lemma), same folding on
+//! closed literals (two iota steps more), no new accelerated constant.
+//!
+//! **Why — a kernel-parity defect the foreign kernel found, measured.** Lean's
+//! `Nat.sub` recurses structurally on its SECOND operand. With a closed literal
+//! there and a symbolic term in front, Lean decides `Nat.sub m k` by walking `k`
+//! one `Nat.pred` at a time (`tests/nat-operand-shape-probe`, `sub_lit_second`:
+//! GRIND at 512, at 4294967295 and at 2^63). Clean's kernel does NOT — its
+//! `native_nat_binop_grind_stuck` leaves a mixed-operand `Nat.sub` with a
+//! closed count >= 512 stuck. So a spec proof whose `Bool.rec` major premise
+//! reaches such a subtraction kernel-checks here and is unfalsifiable by the
+//! cross-check: `gate::leancross` carried SEVEN such declarations from
+//! 2026-08-28 to 2026-09-08, and every earlier diagnosis of them (unary `pow`,
+//! the u32 sentinel's `ir_div_go` fuel, the nested-motive size) was wrong.
+//! Two orientations were reachable:
+//!
+//! * `ir_nat_eqb a b`'s major premise was `ir_nat_iszero (Nat.sub a b)`. At
+//!   `ir_br_c1 e = ir_nat_eqb (ir_wrap ir_d32 e) (… 4294967295)` that is a
+//!   4.29e9-step walk — `bvar_true_implies_lower`, `ir_br_exact`,
+//!   `ir_br_machine_sound` (elaborator `maximum recursion depth`, cascading to
+//!   `ir_br_correct` and both `_lower` / `_witness`).
+//! * `ir_f64_class n` tests NaN as `ir_nat_ltb ir_f64_inf_mag (ir_f64_mag n)`,
+//!   i.e. `ir_nat_pos (Nat.sub (ir_f64_mag n) 9218868437227405312)` — the four
+//!   float `one_step` theorems (`ir_fa`/`ir_fd`/`ir_fm`/`ir_fs2`), which the
+//!   pin reports as `maximum recursion depth` and v4.33.1 as `(kernel) deep
+//!   recursion`.
+//!
+//! **What was tried and refused, all on the 24.5 MB HEAD export at the pinned
+//! `leanprover/lean4:v4.30.0-rc2`, failing DECLARATIONS counted by name:**
+//!
+//! ```text
+//! HEAD, as shipped                                  7 roots + 7 cascades = 14
+//! exporter: guard the carrier's Nat.sub on a
+//!   symbolic minuend (Nat.casesOn)                  0 of the 7, but 16 NEW —
+//!   nat_sub_succ_succ, Nat.sub_le, list_drop_append_ge, … every proof that
+//!   needs `Nat.sub x (succ k) ≡ pred (Nat.sub x k)` at a symbolic x; no
+//!   definitional guard can tell a large literal from a successor tower
+//! spec: swap ir_nat_eqb's two subtractions              br family cleared, float
+//!   family unchanged, AND ir_fc_machine_sound past
+//!   4,000,000 heartbeats — the other orientation is
+//!   the one flat_flags_contains at symbolic bytes needs
+//!   -- and breaks ir_nat_eqb_walk_eq's OWN proof (3 errors): its zero
+//!   case was an Eq.refl about the orientation being swapped away
+//! spec: swap + peel ir_nat_ltb (v6); swap + rewrite       floats clear either way;
+//!   ir_f64_class's NaN test as `not (mag <= inf_mag)` (v7)  both keep the swap's two
+//!                                                        breakages above
+//! spec: peel one layer off each operand (THIS)        0 of the 14, and
+//!   ir_fc_machine_sound still past 4,000,000 heartbeats
+//!   until its A5 was bracketed by ir_outcome_bool_ret
+//!   (eval_ir_correct.rs) so no defeq the elaborator
+//!   decides needs the predicate unfolded            0 errors, exit 0
+//! ```
+//!
+//! Final: 7,201 declarations, 6,376 direct + 1,644 via-block = 8,020 (100%),
+//! exactly the 3 foundational axioms, zero skips, Lean exit 0 in ~66 s on the
+//! whole file (the previous export's Lean run took 1m33s to reach its seven
+//! depth failures). Full
+//! record: `docs/issues/2026-08-31-leancross-residual-is-beq-ble-not-pow.md`.
+
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
@@ -569,11 +640,14 @@ impl Specification {
         // `ir_` names — the same precedent as `ir_nat_eqb` duplicating
         // `nat_eqb`.
         // ---------------------------------------------------------------
+        // The spec foundation uses explicit equality binders; the production
+        // prelude marks them implicit. Spell every supplied argument explicitly,
+        // independently of binder visibility in either vocabulary.
         self.add_recursive_def(
             concat!(
                 "def ir_eq_cong (A : Type) (B : Type) (f : A -> B) (x : A) (y : A) ",
-                "(h : Eq A x y) : Eq B (f x) (f y) := ",
-                "Eq.subst A (fun (z : A) => Eq B (f x) (f z)) x y h (Eq.refl B (f x))",
+                "(h : @Eq A x y) : @Eq B (f x) (f y) := ",
+                "@Eq.subst A (fun (z : A) => @Eq B (f x) (f z)) x y h (@Eq.refl B (f x))",
             ),
             "Congruence: x = y implies f x = f y. The foundation proves this as `Eq.cong` from \
              based `Eq.rec`; this is the same fact proved from `Eq.subst`, which is the ONE \
@@ -589,7 +663,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_pos (n : Nat) : Bool := ",
-                "Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
+                "@Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
                 "(fun (_ : Nat) (_ : Bool) => Bool.true) n",
             ),
             "Is this Nat a successor? One Nat.rec, no walk: the kernel peels a literal to \
@@ -601,7 +675,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_iszero (n : Nat) : Bool := ",
-                "Nat.rec (fun (_ : Nat) => Bool) Bool.true ",
+                "@Nat.rec (fun (_ : Nat) => Bool) Bool.true ",
                 "(fun (_ : Nat) (_ : Bool) => Bool.false) n",
             ),
             "Is this Nat zero? `ir_nat_pos`'s complement, written directly rather than as \
@@ -611,10 +685,10 @@ impl Specification {
 
         self.add_recursive_def(
             concat!(
-                "def ir_nat_sub_zero_left (k : Nat) : Eq Nat (Nat.sub Nat.zero k) Nat.zero := ",
-                "Nat.rec (fun (m : Nat) => Eq Nat (Nat.sub Nat.zero m) Nat.zero) ",
-                "(Eq.refl Nat Nat.zero) ",
-                "(fun (m : Nat) (ih : Eq Nat (Nat.sub Nat.zero m) Nat.zero) => ",
+                "def ir_nat_sub_zero_left (k : Nat) : @Eq Nat (Nat.sub Nat.zero k) Nat.zero := ",
+                "@Nat.rec (fun (m : Nat) => @Eq Nat (Nat.sub Nat.zero m) Nat.zero) ",
+                "(@Eq.refl Nat Nat.zero) ",
+                "(fun (m : Nat) (ih : @Eq Nat (Nat.sub Nat.zero m) Nat.zero) => ",
                 "ir_eq_cong Nat Nat Nat.pred (Nat.sub Nat.zero m) Nat.zero ih) k",
             ),
             "0 - k = 0, by Nat.rec on k and ir_eq_cong Nat.pred (Nat.sub recurses on its SECOND \
@@ -629,12 +703,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_sub_succ_succ (a : Nat) (b : Nat) : ",
-                "Eq Nat (Nat.sub (Nat.succ a) (Nat.succ b)) (Nat.sub a b) := ",
-                "Nat.rec ",
-                "(fun (k : Nat) => Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) ",
-                "(Eq.refl Nat a) ",
+                "@Eq Nat (Nat.sub (Nat.succ a) (Nat.succ b)) (Nat.sub a b) := ",
+                "@Nat.rec ",
+                "(fun (k : Nat) => @Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) ",
+                "(@Eq.refl Nat a) ",
                 "(fun (k : Nat) ",
-                "(ih : Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) => ",
+                "(ih : @Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) => ",
                 "ir_eq_cong Nat Nat Nat.pred ",
                 "(Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k) ih) b",
             ),
@@ -664,11 +738,11 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_eqb_walk (a : Nat) (b : Nat) : Bool := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> Bool) ",
-                "(fun (y : Nat) => Nat.rec (fun (_ : Nat) => Bool) Bool.true ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Bool) ",
+                "(fun (y : Nat) => @Nat.rec (fun (_ : Nat) => Bool) Bool.true ",
                 "(fun (_ : Nat) (_ : Bool) => Bool.false) y) ",
                 "(fun (ap : Nat) (ih : Nat -> Bool) => fun (y : Nat) => ",
-                "Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
+                "@Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
                 "(fun (yp : Nat) (_ : Bool) => ih yp) y) ",
                 "a b",
             ),
@@ -682,11 +756,11 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_ltb_walk (a : Nat) (b : Nat) : Bool := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> Bool) ",
-                "(fun (y : Nat) => Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Bool) ",
+                "(fun (y : Nat) => @Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
                 "(fun (_ : Nat) (_ : Bool) => Bool.true) y) ",
                 "(fun (ap : Nat) (ih : Nat -> Bool) => fun (y : Nat) => ",
-                "Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
+                "@Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
                 "(fun (yp : Nat) (_ : Bool) => ih yp) y) ",
                 "a b",
             ),
@@ -701,53 +775,125 @@ impl Specification {
         // See the module doc for the measurement.
         // ---------------------------------------------------------------
         self.add_recursive_def(
-            "def ir_nat_ltb (a : Nat) (b : Nat) : Bool := ir_nat_pos (Nat.sub b a)",
-            "`a < b`, decided through truncated subtraction instead of a paired unary walk, \
-             and PROVED equal to that walk by ir_nat_ltb_walk_eq. On two closed literals the \
-             kernel reduces `Nat.sub` NATIVELY on BigNat (the same acceleration `ir_nat_rem`'s \
-             outer `Nat.sub` and `ir_nat_pow2`'s `Nat.add` have always relied on), so this \
-             costs one native subtraction and one iota step where the walk costs min(a,b) of \
-             them. It adds no accelerated constant to the substrate: `Nat.sub` was already \
-             here. On a symbolic operand it is stuck exactly where the walk is stuck.",
+            "def ir_nat_sub_ltb (a : Nat) (b : Nat) : Bool := ir_nat_pos (Nat.sub b a)",
+            "THE SUBTRACTION TEST: `a < b` iff `b - a` is a successor. On two closed literals \
+             the kernel reduces `Nat.sub` NATIVELY on BigNat (the same acceleration \
+             `ir_nat_rem`'s outer `Nat.sub` and `ir_nat_pow2`'s `Nat.add` have always relied \
+             on), so this costs one native subtraction and one iota step where the walk costs \
+             min(a,b) of them. It adds no accelerated constant to the substrate: `Nat.sub` was \
+             already here. This WAS `ir_nat_ltb` from 2026-08-15 to 2026-09-08; it is now the \
+             O(1) core that `ir_nat_ltb` lands on once it has peeled one successor off each \
+             operand, and the subject of `ir_nat_sub_ltb_walk_eq`. It is not what the machine \
+             runs directly, and the reason is measured (module doc, 2026-09-08): with a \
+             SYMBOLIC `a` and a closed `b`, `Nat.sub b a` is stuck in both kernels, but with a \
+             symbolic `b` and a closed `a` Lean's kernel walks `Nat.sub b a` one `Nat.pred` per \
+             unit of `a` — Clean leaves it stuck (`native_nat_binop_grind_stuck`).",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_nat_ltb (a : Nat) (b : Nat) : Bool := ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Bool) ",
+                "(fun (y : Nat) => ir_nat_pos y) ",
+                "(fun (ap : Nat) (_ : Nat -> Bool) => fun (y : Nat) => ",
+                "@Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
+                "(fun (yp : Nat) (_ : Bool) => ir_nat_sub_ltb ap yp) y) ",
+                "a b",
+            ),
+            "`a < b`, PROVED equal to the paired unary walk by ir_nat_ltb_walk_eq. One \
+             `Nat.rec` layer is peeled off EACH operand — first `a`, then `b` — and only then \
+             does the subtraction test `ir_nat_sub_ltb` run on the two predecessors. On two \
+             closed literals that is two iota steps and one native BigNat subtraction, so the \
+             u32 sentinel and the 0x110000 bound still fold in milliseconds (the clock in \
+             tests/eval_ir.rs holds it). On a symbolic operand whose head is NEUTRAL — a \
+             variable, or a stuck `ir_wrap` residue, which is all the reflected predicates \
+             ever pass — it is stuck at the recursor on that operand, in EITHER position, \
+             before any subtraction is formed — which is the point. A SUCCESSOR-headed \
+             symbolic operand passes the peel and reaches the subtraction core on the \
+             predecessor (pinned as `cmp_peel_eqb_succsym_u32`, GRIND, in \
+             tests/nat-operand-shape-probe): the peel is a head test, not a universal guard. The bare subtraction test is stuck only when the symbolic operand is \
+             the subtrahend: `ir_nat_pos (Nat.sub b a)` with a closed `a` and a symbolic `b` \
+             asks for `Nat.sub b a`, and Lean's kernel decides that by walking `a` one \
+             `Nat.pred` at a time (`tests/nat-operand-shape-probe`, `sub_lit_second`: GRIND at \
+             512, u32 and f64 scale). Clean's kernel does not, because \
+             `native_nat_binop_grind_stuck` leaves a mixed-operand `Nat.sub` with a closed \
+             count >= 512 stuck, so a proof over a `Bool.rec` whose major premise reaches such \
+             a comparison kernel-checked HERE and could not be re-checked by the foreign \
+             kernel (`gate::leancross`, seven declarations, 2026-08-28 to 2026-09-08). Peeling \
+             the operands first makes the comparison's reducibility a property of the \
+             operands' heads rather than of which side the literal is on. Adds no accelerated \
+             constant.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_nat_sub_eqb (a : Nat) (b : Nat) : Bool := ",
+                "@Bool.rec (fun (_ : Bool) => Bool) Bool.false ",
+                "(ir_nat_iszero (Nat.sub b a)) (ir_nat_iszero (Nat.sub a b))",
+            ),
+            "THE TWO-SIDED SUBTRACTION TEST: `a = b` as `a - b = 0 AND b - a = 0`. Bool.rec's \
+             minor order is (false, true), so the FIRST minor is the `a - b` non-zero case \
+             (answer false) and the SECOND is the case where it vanished (answer: did `b - a` \
+             vanish too). Both subtractions are native on closed literals and each \
+             `ir_nat_iszero` decides on the first iota step, so the u32 sentinel pair — 4.29e9 \
+             walk steps — costs two BigNat subtractions. Adds no accelerated constant: \
+             `Nat.sub` was already here. This WAS `ir_nat_eqb` from 2026-08-15 to 2026-09-08 \
+             and is now the core `ir_nat_eqb` lands on after peeling one successor off each \
+             operand; the subject of `ir_nat_sub_eqb_walk_eq`. Its major premise is \
+             `ir_nat_iszero (Nat.sub a b)`, so with a symbolic `a` and a closed `b` — the \
+             `expr_bvar_in_range` sentinel test, `ir_br_c1` — Lean's kernel walks `b` unary \
+             (module doc, 2026-09-08); swapping the two subtractions only moves the walk to \
+             the other orientation, and that orientation is the one `ir_fc_machine_sound` \
+             needs (measured: the swap alone put it past 4,000,000 heartbeats).",
         )?;
 
         self.add_recursive_def(
             concat!(
                 "def ir_nat_eqb (a : Nat) (b : Nat) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) Bool.false ",
-                "(ir_nat_iszero (Nat.sub b a)) (ir_nat_iszero (Nat.sub a b))",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Bool) ",
+                "(fun (y : Nat) => ir_nat_iszero y) ",
+                "(fun (ap : Nat) (_ : Nat -> Bool) => fun (y : Nat) => ",
+                "@Nat.rec (fun (_ : Nat) => Bool) Bool.false ",
+                "(fun (yp : Nat) (_ : Bool) => ir_nat_sub_eqb ap yp) y) ",
+                "a b",
             ),
-            "`a = b`, decided as `a - b = 0 AND b - a = 0` instead of a paired unary walk, and \
-             PROVED equal to that walk by ir_nat_eqb_walk_eq. Bool.rec's minor order is \
-             (false, true), so the FIRST minor is the `a - b` non-zero case (answer false) and \
-             the SECOND is the case where it vanished (answer: did `b - a` vanish too). Both \
-             subtractions are native on closed literals and each `ir_nat_iszero` decides on \
-             the first iota step, so the u32 sentinel pair — 4.29e9 walk steps — costs two \
-             BigNat subtractions. Adds no accelerated constant: `Nat.sub` was already here.",
+            "`a = b`, PROVED equal to the paired unary walk by ir_nat_eqb_walk_eq. The same \
+             shape as ir_nat_ltb: one `Nat.rec` layer peeled off each operand, `a` first and \
+             then `b`, and the two-sided subtraction test `ir_nat_sub_eqb` on the two \
+             predecessors. Two iota steps plus two native subtractions on closed literals; \
+             stuck at the recursor on a NEUTRAL-headed symbolic operand in EITHER position, \
+             before either subtraction is formed (same successor-headed limit as ir_nat_ltb). That is what lets the foreign kernel re-check \
+             `bvar_true_implies_lower`, `ir_br_exact` and `ir_br_machine_sound`, whose \
+             `Bool.rec` majors reach `ir_br_c1 e = ir_nat_eqb (ir_wrap ir_d32 e) (…4294967295)`: \
+             the old major premise `ir_nat_iszero (Nat.sub (ir_wrap ir_d32 e) 4294967295)` \
+             was a 4.29e9-step `Nat.pred` walk in Lean and a guard-stuck term in Clean. Adds \
+             no accelerated constant.",
         )?;
 
         self.add_recursive_def(
             concat!(
-                "def ir_nat_ltb_walk_eq (a : Nat) (b : Nat) : ",
-                "Eq Bool (ir_nat_ltb a b) (ir_nat_ltb_walk a b) := ",
-                "Nat.rec (fun (x : Nat) => forall (y : Nat), ",
-                "Eq Bool (ir_nat_ltb x y) (ir_nat_ltb_walk x y)) ",
-                "(fun (y : Nat) => Eq.refl Bool (ir_nat_ltb_walk Nat.zero y)) ",
+                "def ir_nat_sub_ltb_walk_eq (a : Nat) (b : Nat) : ",
+                "@Eq Bool (ir_nat_sub_ltb a b) (ir_nat_ltb_walk a b) := ",
+                "@Nat.rec (fun (x : Nat) => forall (y : Nat), ",
+                "@Eq Bool (ir_nat_sub_ltb x y) (ir_nat_ltb_walk x y)) ",
+                "(fun (y : Nat) => @Eq.refl Bool (ir_nat_ltb_walk Nat.zero y)) ",
                 "(fun (x : Nat) (ih : forall (y : Nat), ",
-                "Eq Bool (ir_nat_ltb x y) (ir_nat_ltb_walk x y)) => fun (y : Nat) => ",
-                "Nat.rec (fun (z : Nat) => ",
-                "Eq Bool (ir_nat_ltb (Nat.succ x) z) (ir_nat_ltb_walk (Nat.succ x) z)) ",
+                "@Eq Bool (ir_nat_sub_ltb x y) (ir_nat_ltb_walk x y)) => fun (y : Nat) => ",
+                "@Nat.rec (fun (z : Nat) => ",
+                "@Eq Bool (ir_nat_sub_ltb (Nat.succ x) z) (ir_nat_ltb_walk (Nat.succ x) z)) ",
                 "(ir_eq_cong Nat Bool ir_nat_pos (Nat.sub Nat.zero (Nat.succ x)) Nat.zero ",
                 "(ir_nat_sub_zero_left (Nat.succ x))) ",
-                "(fun (z : Nat) (_ : Eq Bool (ir_nat_ltb (Nat.succ x) z) ",
+                "(fun (z : Nat) (_ : @Eq Bool (ir_nat_sub_ltb (Nat.succ x) z) ",
                 "(ir_nat_ltb_walk (Nat.succ x) z)) => ",
-                "Eq.trans Bool (ir_nat_ltb (Nat.succ x) (Nat.succ z)) ",
-                "(ir_nat_ltb x z) (ir_nat_ltb_walk (Nat.succ x) (Nat.succ z)) ",
+                "@Eq.trans Bool (ir_nat_sub_ltb (Nat.succ x) (Nat.succ z)) ",
+                "(ir_nat_sub_ltb x z) (ir_nat_ltb_walk (Nat.succ x) (Nat.succ z)) ",
                 "(ir_eq_cong Nat Bool ir_nat_pos (Nat.sub (Nat.succ z) (Nat.succ x)) ",
                 "(Nat.sub z x) (ir_nat_sub_succ_succ z x)) ",
                 "(ih z)) y) a b",
             ),
-            "THE LESS-THAN LEMMA: the subtraction test the machine runs and the paired unary \
+            "THE LESS-THAN LEMMA FOR THE SUBTRACTION TEST: `ir_nat_sub_ltb` (the core \
+             `ir_nat_ltb` lands on after its two peels; from 2026-08-15 to 2026-09-08 it WAS \
+             what the machine ran directly) and the paired unary \
              walk are the SAME PREDICATE, at every pair of arguments. Nat.rec on a with the \
              motive generalized over b; the zero case is Eq.refl (`ir_nat_ltb_walk 0 y` and \
              `ir_nat_pos (Nat.sub y 0)` are the same recursor application after delta), the \
@@ -759,37 +905,65 @@ impl Specification {
 
         self.add_recursive_def(
             concat!(
-                "def ir_nat_eqb_walk_eq (a : Nat) (b : Nat) : ",
-                "Eq Bool (ir_nat_eqb a b) (ir_nat_eqb_walk a b) := ",
-                "Nat.rec (fun (x : Nat) => forall (y : Nat), ",
-                "Eq Bool (ir_nat_eqb x y) (ir_nat_eqb_walk x y)) ",
+                "def ir_nat_ltb_walk_eq (a : Nat) (b : Nat) : ",
+                "@Eq Bool (ir_nat_ltb a b) (ir_nat_ltb_walk a b) := ",
+                "@Nat.rec (fun (x : Nat) => forall (y : Nat), ",
+                "@Eq Bool (ir_nat_ltb x y) (ir_nat_ltb_walk x y)) ",
+                "(fun (y : Nat) => @Eq.refl Bool (ir_nat_ltb_walk Nat.zero y)) ",
+                "(fun (x : Nat) (_ : forall (y : Nat), ",
+                "@Eq Bool (ir_nat_ltb x y) (ir_nat_ltb_walk x y)) => fun (y : Nat) => ",
+                "@Nat.rec (fun (z : Nat) => ",
+                "@Eq Bool (ir_nat_ltb (Nat.succ x) z) (ir_nat_ltb_walk (Nat.succ x) z)) ",
+                "(@Eq.refl Bool Bool.false) ",
+                "(fun (z : Nat) (_ : @Eq Bool (ir_nat_ltb (Nat.succ x) z) ",
+                "(ir_nat_ltb_walk (Nat.succ x) z)) => ir_nat_sub_ltb_walk_eq x z) y) a b",
+            ),
+            "THE LESS-THAN LEMMA, restated over the peeled comparison: what the machine runs \
+             and the paired unary walk are the SAME PREDICATE at every pair of arguments. \
+             Nat.rec on a with the motive generalized over b, then Nat.rec on b. Every case \
+             but one is Eq.refl, because after the two peels both sides are literally the \
+             same recursor application: at a = 0 both are `ir_nat_pos y`; at (succ x, 0) both \
+             are Bool.false. At (succ x, succ z) the peeled comparison IS `ir_nat_sub_ltb x z` \
+             and the walk IS `ir_nat_ltb_walk x z`, both by iota, so ir_nat_sub_ltb_walk_eq x z \
+             — the 2026-08-15 lemma, unchanged — closes it; the induction hypothesis is not \
+             even needed. DerivedProved, zero axiom_deps.",
+        )?;
+
+        self.add_recursive_def(
+            concat!(
+                "def ir_nat_sub_eqb_walk_eq (a : Nat) (b : Nat) : ",
+                "@Eq Bool (ir_nat_sub_eqb a b) (ir_nat_eqb_walk a b) := ",
+                "@Nat.rec (fun (x : Nat) => forall (y : Nat), ",
+                "@Eq Bool (ir_nat_sub_eqb x y) (ir_nat_eqb_walk x y)) ",
                 "(fun (y : Nat) => ir_eq_cong Nat Bool ",
-                "(fun (k : Nat) => Bool.rec (fun (_ : Bool) => Bool) Bool.false ",
+                "(fun (k : Nat) => @Bool.rec (fun (_ : Bool) => Bool) Bool.false ",
                 "(ir_nat_iszero (Nat.sub y Nat.zero)) (ir_nat_iszero k)) ",
                 "(Nat.sub Nat.zero y) Nat.zero (ir_nat_sub_zero_left y)) ",
                 "(fun (x : Nat) (ih : forall (y : Nat), ",
-                "Eq Bool (ir_nat_eqb x y) (ir_nat_eqb_walk x y)) => fun (y : Nat) => ",
-                "Nat.rec (fun (z : Nat) => ",
-                "Eq Bool (ir_nat_eqb (Nat.succ x) z) (ir_nat_eqb_walk (Nat.succ x) z)) ",
-                "(Eq.refl Bool Bool.false) ",
-                "(fun (z : Nat) (_ : Eq Bool (ir_nat_eqb (Nat.succ x) z) ",
+                "@Eq Bool (ir_nat_sub_eqb x y) (ir_nat_eqb_walk x y)) => fun (y : Nat) => ",
+                "@Nat.rec (fun (z : Nat) => ",
+                "@Eq Bool (ir_nat_sub_eqb (Nat.succ x) z) (ir_nat_eqb_walk (Nat.succ x) z)) ",
+                "(@Eq.refl Bool Bool.false) ",
+                "(fun (z : Nat) (_ : @Eq Bool (ir_nat_sub_eqb (Nat.succ x) z) ",
                 "(ir_nat_eqb_walk (Nat.succ x) z)) => ",
-                "Eq.trans Bool (ir_nat_eqb (Nat.succ x) (Nat.succ z)) (ir_nat_eqb x z) ",
+                "@Eq.trans Bool (ir_nat_sub_eqb (Nat.succ x) (Nat.succ z)) (ir_nat_sub_eqb x z) ",
                 "(ir_nat_eqb_walk (Nat.succ x) (Nat.succ z)) ",
-                "(Eq.trans Bool (ir_nat_eqb (Nat.succ x) (Nat.succ z)) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) Bool.false (ir_nat_iszero (Nat.sub z x)) ",
-                "(ir_nat_iszero (Nat.sub (Nat.succ x) (Nat.succ z)))) (ir_nat_eqb x z) ",
-                "(ir_eq_cong Nat Bool (fun (k : Nat) => Bool.rec (fun (_ : Bool) => Bool) ",
+                "(@Eq.trans Bool (ir_nat_sub_eqb (Nat.succ x) (Nat.succ z)) ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) Bool.false (ir_nat_iszero (Nat.sub z x)) ",
+                "(ir_nat_iszero (Nat.sub (Nat.succ x) (Nat.succ z)))) (ir_nat_sub_eqb x z) ",
+                "(ir_eq_cong Nat Bool (fun (k : Nat) => @Bool.rec (fun (_ : Bool) => Bool) ",
                 "Bool.false (ir_nat_iszero k) ",
                 "(ir_nat_iszero (Nat.sub (Nat.succ x) (Nat.succ z)))) ",
                 "(Nat.sub (Nat.succ z) (Nat.succ x)) (Nat.sub z x) (ir_nat_sub_succ_succ z x)) ",
-                "(ir_eq_cong Nat Bool (fun (k : Nat) => Bool.rec (fun (_ : Bool) => Bool) ",
+                "(ir_eq_cong Nat Bool (fun (k : Nat) => @Bool.rec (fun (_ : Bool) => Bool) ",
                 "Bool.false (ir_nat_iszero (Nat.sub z x)) (ir_nat_iszero k)) ",
                 "(Nat.sub (Nat.succ x) (Nat.succ z)) (Nat.sub x z) (ir_nat_sub_succ_succ x z))) ",
                 "(ih z)) y) a b",
             ),
-            "THE EQUALITY LEMMA, the same shape and the same three ingredients as \
-             ir_nat_ltb_walk_eq: the two-sided subtraction test the machine runs and the \
+            "THE EQUALITY LEMMA FOR THE TWO-SIDED SUBTRACTION TEST, the same shape and the \
+             same three ingredients as ir_nat_sub_ltb_walk_eq: `ir_nat_sub_eqb` (the core \
+             `ir_nat_eqb` lands on after its two peels; the machine's direct comparison from \
+             2026-08-15 to 2026-09-08) and the \
              paired unary walk are the SAME PREDICATE at every pair of arguments. Nat.rec on a \
              with the motive generalized over b. The zero case is NOT Eq.refl — unlike the \
              less-than lemma it needs ir_nat_sub_zero_left, because `0 - y` sits under the \
@@ -802,9 +976,33 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
+            concat!(
+                "def ir_nat_eqb_walk_eq (a : Nat) (b : Nat) : ",
+                "@Eq Bool (ir_nat_eqb a b) (ir_nat_eqb_walk a b) := ",
+                "@Nat.rec (fun (x : Nat) => forall (y : Nat), ",
+                "@Eq Bool (ir_nat_eqb x y) (ir_nat_eqb_walk x y)) ",
+                "(fun (y : Nat) => @Eq.refl Bool (ir_nat_eqb_walk Nat.zero y)) ",
+                "(fun (x : Nat) (_ : forall (y : Nat), ",
+                "@Eq Bool (ir_nat_eqb x y) (ir_nat_eqb_walk x y)) => fun (y : Nat) => ",
+                "@Nat.rec (fun (z : Nat) => ",
+                "@Eq Bool (ir_nat_eqb (Nat.succ x) z) (ir_nat_eqb_walk (Nat.succ x) z)) ",
+                "(@Eq.refl Bool Bool.false) ",
+                "(fun (z : Nat) (_ : @Eq Bool (ir_nat_eqb (Nat.succ x) z) ",
+                "(ir_nat_eqb_walk (Nat.succ x) z)) => ir_nat_sub_eqb_walk_eq x z) y) a b",
+            ),
+            "THE EQUALITY LEMMA, restated over the peeled comparison, the same shape as \
+             ir_nat_ltb_walk_eq: at a = 0 both sides are `ir_nat_iszero y`, at (succ x, 0) \
+             both are Bool.false, and at (succ x, succ z) the peeled comparison is \
+             `ir_nat_sub_eqb x z` and the walk is `ir_nat_eqb_walk x z` by iota, so the \
+             2026-08-15 lemma ir_nat_sub_eqb_walk_eq closes it. DerivedProved, zero \
+             axiom_deps.",
+        )?;
+
+        self.add_recursive_def(
             "def ir_nat_leb (a : Nat) (b : Nat) : Bool := Bool.or (ir_nat_ltb a b) (ir_nat_eqb a b)",
             "Less-or-equal on Nat. EvalIR substrate. Unchanged text, and folded for free: both \
-             disjuncts are now the subtraction tests.",
+             disjuncts are the peeled comparisons, so `Bool.or`'s major premise `ir_nat_ltb a b` \
+             is stuck at a symbolic operand in either position.",
         )?;
 
         self.add_recursive_def(
@@ -817,8 +1015,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_leb_walk_eq (a : Nat) (b : Nat) : ",
-                "Eq Bool (ir_nat_leb a b) (ir_nat_leb_walk a b) := ",
-                "Eq.trans Bool (ir_nat_leb a b) ",
+                "@Eq Bool (ir_nat_leb a b) (ir_nat_leb_walk a b) := ",
+                "@Eq.trans Bool (ir_nat_leb a b) ",
                 "(Bool.or (ir_nat_ltb_walk a b) (ir_nat_eqb a b)) (ir_nat_leb_walk a b) ",
                 "(ir_eq_cong Bool Bool (fun (g : Bool) => Bool.or g (ir_nat_eqb a b)) ",
                 "(ir_nat_ltb a b) (ir_nat_ltb_walk a b) (ir_nat_ltb_walk_eq a b)) ",
@@ -834,7 +1032,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_mul (a : Nat) (b : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat) Nat.zero ",
+                "@Nat.rec (fun (_ : Nat) => Nat) Nat.zero ",
                 "(fun (_ : Nat) (ih : Nat) => Nat.add a ih) b",
             ),
             "Multiplication on Nat by repeated addition on the second argument. EvalIR substrate \
@@ -844,7 +1042,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_pow2 (k : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat) (Nat.succ Nat.zero) ",
+                "@Nat.rec (fun (_ : Nat) => Nat) (Nat.succ Nat.zero) ",
                 "(fun (_ : Nat) (ih : Nat) => Nat.add ih ih) k",
             ),
             "Two to the k. EvalIR substrate: the modulus for exact width-k integer residues.",
@@ -863,10 +1061,10 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_div_go (fuel : Nat) (a : Nat) (b : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> Nat) ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Nat) ",
                 "(fun (_ : Nat) => Nat.zero) ",
                 "(fun (_ : Nat) (ih : Nat -> Nat) => fun (x : Nat) => ",
-                "Bool.rec (fun (_ : Bool) => Nat) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) ",
                 "(Nat.succ (ih (Nat.sub x b))) ",
                 "Nat.zero ",
                 "(ir_nat_ltb x b)) ",
@@ -884,10 +1082,10 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_div_go_guard (fuel : Nat) (a : Nat) (b : Nat) : ",
-                "Eq Nat (ir_div_go (Nat.succ fuel) a b) ",
-                "(Bool.rec (fun (_ : Bool) => Nat) ",
+                "@Eq Nat (ir_div_go (Nat.succ fuel) a b) ",
+                "(@Bool.rec (fun (_ : Bool) => Nat) ",
                 "(Nat.succ (ir_div_go fuel (Nat.sub a b) b)) Nat.zero (ir_nat_ltb_walk a b)) := ",
-                "ir_eq_cong Bool Nat (fun (g : Bool) => Bool.rec (fun (_ : Bool) => Nat) ",
+                "ir_eq_cong Bool Nat (fun (g : Bool) => @Bool.rec (fun (_ : Bool) => Nat) ",
                 "(Nat.succ (ir_div_go fuel (Nat.sub a b) b)) Nat.zero g) ",
                 "(ir_nat_ltb a b) (ir_nat_ltb_walk a b) (ir_nat_ltb_walk_eq a b)",
             ),
@@ -930,14 +1128,14 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_bool_xor (a : Bool) (b : Bool) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) b (Bool.not b) a",
+                "@Bool.rec (fun (_ : Bool) => Bool) b (Bool.not b) a",
             ),
             "Exclusive or on Bool (Bool.rec minor order is false, true). EvalIR substrate for the \
              i1 case of BinOp::Xor.",
         )?;
 
         self.add_recursive_def(
-            "def ir_bool_nat (value : Bool) : Nat := Bool.rec (fun (_ : Bool) => Nat) Nat.zero (Nat.succ Nat.zero) value",
+            "def ir_bool_nat (value : Bool) : Nat := @Bool.rec (fun (_ : Bool) => Nat) Nat.zero (Nat.succ Nat.zero) value",
             "Embed one Boolean bit as the Nat digit zero or one.",
         )?;
 
@@ -955,7 +1153,7 @@ impl Specification {
             concat!(
                 "def ir_nat_bitop_go (op : Bool -> Bool -> Bool) (fuel : Nat) ",
                 "(left : Nat) (right : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> Nat -> Nat) ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Nat -> Nat) ",
                 "(fun (_ : Nat) (_ : Nat) => Nat.zero) ",
                 "(fun (_ : Nat) (previous : Nat -> Nat -> Nat) => ",
                 "fun (x : Nat) (y : Nat) => Nat.add ",
@@ -981,7 +1179,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_ctpop_go (fuel : Nat) (value : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> Nat) (fun (_ : Nat) => Nat.zero) ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Nat) (fun (_ : Nat) => Nat.zero) ",
                 "(fun (_ : Nat) (previous : Nat -> Nat) => fun (x : Nat) => ",
                 "Nat.add (ir_bool_nat (ir_nat_bit x)) ",
                 "(previous (ir_nat_div x (Nat.succ (Nat.succ Nat.zero))))) ",
@@ -1003,7 +1201,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_signed_magnitude (width : Nat) (value : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) (ir_wrap width value) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) (ir_wrap width value) ",
                 "(Nat.sub (ir_nat_pow2 width) (ir_wrap width value)) ",
                 "(ir_sign_bit width value)",
             ),
@@ -1013,7 +1211,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_signed_encode (width : Nat) (negative : Bool) (magnitude : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) (ir_wrap width magnitude) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) (ir_wrap width magnitude) ",
                 "(ir_sub_wrap width Nat.zero magnitude) negative",
             ),
             "Encode a sign and non-negative magnitude as a canonical two's-complement pattern.",
@@ -1022,11 +1220,11 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_signed_ltb (width : Nat) (left : Nat) (right : Nat) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) ",
+                "@Bool.rec (fun (_ : Bool) => Bool) ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) ",
                 "(ir_nat_ltb (ir_wrap width left) (ir_wrap width right)) Bool.false ",
                 "(ir_sign_bit width right)) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) Bool.true ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) Bool.true ",
                 "(ir_nat_ltb (ir_wrap width left) (ir_wrap width right)) ",
                 "(ir_sign_bit width right)) ",
                 "(ir_sign_bit width left)",
@@ -1052,10 +1250,10 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nats_get (l : IRList Nat) (k : Nat) : IROption Nat := ",
-                "IRList.rec Nat (fun (_ : IRList Nat) => Nat -> IROption Nat) ",
-                "(fun (_ : Nat) => IROption.none Nat) ",
+                "@IRList.rec Nat (fun (_ : IRList Nat) => Nat -> IROption Nat) ",
+                "(fun (_ : Nat) => @IROption.none Nat) ",
                 "(fun (x : Nat) (_ : IRList Nat) (ih : Nat -> IROption Nat) => fun (j : Nat) => ",
-                "Nat.rec (fun (_ : Nat) => IROption Nat) (IROption.some Nat x) ",
+                "@Nat.rec (fun (_ : Nat) => IROption Nat) (@IROption.some Nat x) ",
                 "(fun (jp : Nat) (_ : IROption Nat) => ih jp) j) ",
                 "l k",
             ),
@@ -1070,22 +1268,22 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_vals_get (l : IRScalar) (k : Nat) : IROption IRScalar := ",
-                "IRScalar.rec (fun (_ : IRScalar) => Nat -> IROption IRScalar) ",
-                "(fun (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Bool) (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Nat) (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Nat) (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Nat) (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Nat) (_ : Nat) (_ : Nat) => IROption.none IRScalar) ",
-                "(fun (_ : Nat) (_ : Nat) => IROption.none IRScalar) ",
+                "@IRScalar.rec (fun (_ : IRScalar) => Nat -> IROption IRScalar) ",
+                "(fun (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Bool) (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Nat) (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Nat) (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Nat) (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Nat) (_ : Nat) (_ : Nat) => @IROption.none IRScalar) ",
+                "(fun (_ : Nat) (_ : Nat) => @IROption.none IRScalar) ",
                 "(fun (_ : IRScalar) (_ : Nat -> IROption IRScalar) (_ : Nat) => ",
-                "IROption.none IRScalar) ",
-                "(fun (_ : Nat) => IROption.none IRScalar) ",
+                "@IROption.none IRScalar) ",
+                "(fun (_ : Nat) => @IROption.none IRScalar) ",
                 "(fun (x : IRScalar) (_ : IRScalar) (_ : Nat -> IROption IRScalar) ",
                 "(ih : Nat -> IROption IRScalar) => fun (j : Nat) => ",
-                "Nat.rec (fun (_ : Nat) => IROption IRScalar) (IROption.some IRScalar x) ",
+                "@Nat.rec (fun (_ : Nat) => IROption IRScalar) (@IROption.some IRScalar x) ",
                 "(fun (jp : Nat) (_ : IROption IRScalar) => ih jp) j) ",
                 "l k",
             ),
@@ -1099,7 +1297,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_vals_set (l : IRScalar) (k : Nat) (v : IRScalar) : IRScalar := ",
-                "IRScalar.rec (fun (_ : IRScalar) => Nat -> IRScalar) ",
+                "@IRScalar.rec (fun (_ : IRScalar) => Nat -> IRScalar) ",
                 "(fun (_ : Nat) => IRScalar.vnil) ",
                 "(fun (_ : Bool) (_ : Nat) => IRScalar.vnil) ",
                 "(fun (_ : Nat) (_ : Nat) => IRScalar.vnil) ",
@@ -1113,7 +1311,7 @@ impl Specification {
                 "(fun (_ : Nat) => IRScalar.vnil) ",
                 "(fun (x : IRScalar) (rest : IRScalar) (_ : Nat -> IRScalar) ",
                 "(ih : Nat -> IRScalar) => fun (j : Nat) => ",
-                "Nat.rec (fun (_ : Nat) => IRScalar) (IRScalar.vcons v rest) ",
+                "@Nat.rec (fun (_ : Nat) => IRScalar) (IRScalar.vcons v rest) ",
                 "(fun (jp : Nat) (_ : IRScalar) => IRScalar.vcons x (ih jp)) j) ",
                 "l k",
             ),
@@ -1128,7 +1326,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_vals_len (l : IRScalar) : Nat := ",
-                "IRScalar.rec (fun (_ : IRScalar) => Nat) ",
+                "@IRScalar.rec (fun (_ : IRScalar) => Nat) ",
                 "Nat.zero ",
                 "(fun (_ : Bool) => Nat.zero) ",
                 "(fun (_ : Nat) => Nat.zero) ",
@@ -1152,11 +1350,11 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nodes_get (l : IRList IRNode) (k : Nat) : IROption IRNode := ",
-                "IRList.rec IRNode (fun (_ : IRList IRNode) => Nat -> IROption IRNode) ",
-                "(fun (_ : Nat) => IROption.none IRNode) ",
+                "@IRList.rec IRNode (fun (_ : IRList IRNode) => Nat -> IROption IRNode) ",
+                "(fun (_ : Nat) => @IROption.none IRNode) ",
                 "(fun (x : IRNode) (_ : IRList IRNode) (ih : Nat -> IROption IRNode) => ",
-                "fun (j : Nat) => Nat.rec (fun (_ : Nat) => IROption IRNode) ",
-                "(IROption.some IRNode x) ",
+                "fun (j : Nat) => @Nat.rec (fun (_ : Nat) => IROption IRNode) ",
+                "(@IROption.some IRNode x) ",
                 "(fun (jp : Nat) (_ : IROption IRNode) => ih jp) j) ",
                 "l k",
             ),
@@ -1168,12 +1366,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_block_find (l : IRList IRBlock) (k : Nat) : IROption IRBlock := ",
-                "IRList.rec IRBlock (fun (_ : IRList IRBlock) => IROption IRBlock) ",
-                "(IROption.none IRBlock) ",
+                "@IRList.rec IRBlock (fun (_ : IRList IRBlock) => IROption IRBlock) ",
+                "(@IROption.none IRBlock) ",
                 "(fun (b : IRBlock) (_ : IRList IRBlock) (ih : IROption IRBlock) => ",
-                "IRBlock.rec (fun (_ : IRBlock) => IROption IRBlock) ",
+                "@IRBlock.rec (fun (_ : IRBlock) => IROption IRBlock) ",
                 "(fun (i : Nat) (_ : IRList Nat) (_ : IRList IRNode) => ",
-                "Bool.rec (fun (_ : Bool) => IROption IRBlock) ih (IROption.some IRBlock b) ",
+                "@Bool.rec (fun (_ : Bool) => IROption IRBlock) ih (@IROption.some IRBlock b) ",
                 "(ir_nat_eqb i k)) b) l",
             ),
             "Find a block by id. EvalIR container helper.",
@@ -1182,12 +1380,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_func_find (l : IRList IRFunc) (k : Nat) : IROption IRFunc := ",
-                "IRList.rec IRFunc (fun (_ : IRList IRFunc) => IROption IRFunc) ",
-                "(IROption.none IRFunc) ",
+                "@IRList.rec IRFunc (fun (_ : IRList IRFunc) => IROption IRFunc) ",
+                "(@IROption.none IRFunc) ",
                 "(fun (f : IRFunc) (_ : IRList IRFunc) (ih : IROption IRFunc) => ",
-                "IRFunc.rec (fun (_ : IRFunc) => IROption IRFunc) ",
+                "@IRFunc.rec (fun (_ : IRFunc) => IROption IRFunc) ",
                 "(fun (i : Nat) (_ : IRList Nat) (_ : Nat) (_ : IRList IRBlock) => ",
-                "Bool.rec (fun (_ : Bool) => IROption IRFunc) ih (IROption.some IRFunc f) ",
+                "@Bool.rec (fun (_ : Bool) => IROption IRFunc) ih (@IROption.some IRFunc f) ",
                 "(ir_nat_eqb i k)) f) l",
             ),
             "Find a function by id. EvalIR container helper.",
@@ -1196,12 +1394,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_global_find (l : IRList IRGlobal) (k : Nat) : IROption IRGlobal := ",
-                "IRList.rec IRGlobal (fun (_ : IRList IRGlobal) => IROption IRGlobal) ",
-                "(IROption.none IRGlobal) ",
+                "@IRList.rec IRGlobal (fun (_ : IRList IRGlobal) => IROption IRGlobal) ",
+                "(@IROption.none IRGlobal) ",
                 "(fun (g : IRGlobal) (_ : IRList IRGlobal) (ih : IROption IRGlobal) => ",
-                "IRGlobal.rec (fun (_ : IRGlobal) => IROption IRGlobal) ",
+                "@IRGlobal.rec (fun (_ : IRGlobal) => IROption IRGlobal) ",
                 "(fun (i : Nat) (_ : IRConst) => ",
-                "Bool.rec (fun (_ : Bool) => IROption IRGlobal) ih (IROption.some IRGlobal g) ",
+                "@Bool.rec (fun (_ : Bool) => IROption IRGlobal) ih (@IROption.some IRGlobal g) ",
                 "(ir_nat_eqb i k)) g) l",
             ),
             "Find a global by id. EvalIR container helper.",
@@ -1210,13 +1408,13 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_case_find (l : IRList IRSwitchCase) (k : Nat) : IROption IRSwitchCase := ",
-                "IRList.rec IRSwitchCase (fun (_ : IRList IRSwitchCase) => IROption IRSwitchCase) ",
-                "(IROption.none IRSwitchCase) ",
+                "@IRList.rec IRSwitchCase (fun (_ : IRList IRSwitchCase) => IROption IRSwitchCase) ",
+                "(@IROption.none IRSwitchCase) ",
                 "(fun (c : IRSwitchCase) (_ : IRList IRSwitchCase) (ih : IROption IRSwitchCase) => ",
-                "IRSwitchCase.rec (fun (_ : IRSwitchCase) => IROption IRSwitchCase) ",
+                "@IRSwitchCase.rec (fun (_ : IRSwitchCase) => IROption IRSwitchCase) ",
                 "(fun (v : Nat) (_ : Nat) (_ : IRList Nat) => ",
-                "Bool.rec (fun (_ : Bool) => IROption IRSwitchCase) ih ",
-                "(IROption.some IRSwitchCase c) (ir_nat_eqb v k)) c) l",
+                "@Bool.rec (fun (_ : Bool) => IROption IRSwitchCase) ih ",
+                "(@IROption.some IRSwitchCase c) (ir_nat_eqb v k)) c) l",
             ),
             "Find the Switch arm matching a selector value; none means take the default. EvalIR \
              container helper.",
@@ -1225,12 +1423,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_binding_lookup (l : IRList IRBinding) (k : Nat) : IROption IRScalar := ",
-                "IRList.rec IRBinding (fun (_ : IRList IRBinding) => IROption IRScalar) ",
-                "(IROption.none IRScalar) ",
+                "@IRList.rec IRBinding (fun (_ : IRList IRBinding) => IROption IRScalar) ",
+                "(@IROption.none IRScalar) ",
                 "(fun (b : IRBinding) (_ : IRList IRBinding) (ih : IROption IRScalar) => ",
-                "IRBinding.rec (fun (_ : IRBinding) => IROption IRScalar) ",
+                "@IRBinding.rec (fun (_ : IRBinding) => IROption IRScalar) ",
                 "(fun (i : Nat) (v : IRScalar) => ",
-                "Bool.rec (fun (_ : Bool) => IROption IRScalar) ih (IROption.some IRScalar v) ",
+                "@Bool.rec (fun (_ : Bool) => IROption IRScalar) ih (@IROption.some IRScalar v) ",
                 "(ir_nat_eqb i k)) b) l",
             ),
             "Look up an SSA value id in a locals list, head-first. EvalIR container helper.",
@@ -1239,12 +1437,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_mem_lookup (l : IRList IRMemSlot) (a : Nat) : IROption IRMemSlot := ",
-                "IRList.rec IRMemSlot (fun (_ : IRList IRMemSlot) => IROption IRMemSlot) ",
-                "(IROption.none IRMemSlot) ",
+                "@IRList.rec IRMemSlot (fun (_ : IRList IRMemSlot) => IROption IRMemSlot) ",
+                "(@IROption.none IRMemSlot) ",
                 "(fun (s : IRMemSlot) (_ : IRList IRMemSlot) (ih : IROption IRMemSlot) => ",
-                "IRMemSlot.rec (fun (_ : IRMemSlot) => IROption IRMemSlot) ",
+                "@IRMemSlot.rec (fun (_ : IRMemSlot) => IROption IRMemSlot) ",
                 "(fun (i : Nat) (_ : IRScalar) (_ : Bool) => ",
-                "Bool.rec (fun (_ : Bool) => IROption IRMemSlot) ih (IROption.some IRMemSlot s) ",
+                "@Bool.rec (fun (_ : Bool) => IROption IRMemSlot) ih (@IROption.some IRMemSlot s) ",
                 "(ir_nat_eqb i a)) s) l",
             ),
             "Find the memory cell at an address. EvalIR container helper.",
@@ -1253,14 +1451,14 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_mem_update (l : IRList IRMemSlot) (a : Nat) (v : IRScalar) : IRList IRMemSlot := ",
-                "IRList.rec IRMemSlot (fun (_ : IRList IRMemSlot) => IRList IRMemSlot) ",
-                "(IRList.nil IRMemSlot) ",
+                "@IRList.rec IRMemSlot (fun (_ : IRList IRMemSlot) => IRList IRMemSlot) ",
+                "(@IRList.nil IRMemSlot) ",
                 "(fun (s : IRMemSlot) (rest : IRList IRMemSlot) (ih : IRList IRMemSlot) => ",
-                "IRMemSlot.rec (fun (_ : IRMemSlot) => IRList IRMemSlot) ",
+                "@IRMemSlot.rec (fun (_ : IRMemSlot) => IRList IRMemSlot) ",
                 "(fun (i : Nat) (old : IRScalar) (live : Bool) => ",
-                "Bool.rec (fun (_ : Bool) => IRList IRMemSlot) ",
-                "(IRList.cons IRMemSlot s ih) ",
-                "(IRList.cons IRMemSlot (IRMemSlot.mk i v live) rest) ",
+                "@Bool.rec (fun (_ : Bool) => IRList IRMemSlot) ",
+                "(@IRList.cons IRMemSlot s ih) ",
+                "(@IRList.cons IRMemSlot (IRMemSlot.mk i v live) rest) ",
                 "(ir_nat_eqb i a)) s) l",
             ),
             "Write a value into the cell at an address, preserving liveness and every other \

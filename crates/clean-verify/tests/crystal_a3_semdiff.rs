@@ -28,7 +28,7 @@
 //! `clean_verify::ir_semdiff::cost`.
 //!
 //! **Does not:** that the two `IRInst` encodings denote the same function. The
-//! three original chains exercise 6 of Clean's 28 `IRInst` constructors; the
+//! three original chains exercise 6 of Clean's 30 `IRInst` constructors; the
 //! W1 wide lane (`wide_chains.rs`, plan
 //! `docs/analysis/evalir-completion-plan-2026-08-24.md` §5 W1) adds measured
 //! rows over nine more (`icmp`, `binop`, `cast`, `condbr`, `call`, `store`,
@@ -98,18 +98,28 @@ mod w3_chains;
 
 /// The W4 lane: the float-comparison domain (`synth_fcmp`) — the wave that
 /// replaced the LAST tagged dispatch arm with real semantics, completing the
-/// battery's constructor coverage at 28/28 exercised. Reuses the W2a table
+/// battery's constructor coverage at 28 of the 30 census members exercised.
+/// Reuses the W2a table
 /// structs.
 #[path = "crystal_a3_semdiff/w4_chains.rs"]
 mod w4_chains;
 
 /// The float-RESIDUE lane (`synth_fsign` / `synth_fround` / `synth_fminmax`)
 /// — the wave that gave the seven answering residue OPERATORS real semantics
-/// (constructors were already 28/28 at W4; this lane adds operator coverage
-/// inside `unop`/`binop`, so the coverage ladder's ==28 is untouched by
+/// (the THIR lowerer's 28 were all exercised at W4; this lane adds operator
+/// coverage inside `unop`/`binop`, so the coverage ladder is untouched by
 /// design). Reuses the W2a table structs.
 #[path = "crystal_a3_semdiff/wfr_chains.rs"]
 mod wfr_chains;
+
+/// The WAT lane: the two sequential atomic fetch-add constructors, measured
+/// on the ONE Clean machine that executes them (ByteV1, `ir_byte_run_v1`) —
+/// the legacy `ir_eval` the other lanes run refuses both.
+#[path = "crystal_a3_semdiff/wat_chains.rs"]
+mod wat_chains;
+
+#[path = "crystal_a3_semdiff/trunc_transport.rs"]
+mod trunc_transport;
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
@@ -368,11 +378,12 @@ fn crystal_a3_semdiff_measures_encoding_agreement() {
         );
     }
     eprintln!(
-        "\nThis is a MEASUREMENT, not a proof. Clean's IRInst has 28 constructors; \n\
+        "\nThis is a MEASUREMENT, not a proof. Clean's IRInst has {} constructors; \n\
          the bodies above exercise {}. Agreement on a body's instruction mix says \n\
          nothing about the {} forms it never uses.",
+        irinst_census().len(),
         exercised_forms().len(),
-        28 - exercised_forms().len()
+        irinst_census().len() - exercised_forms().len()
     );
 
     // `is_green` consults BOTH halves. Stated separately here so a red says
@@ -445,14 +456,69 @@ fn exercised_forms() -> BTreeSet<&'static str> {
     forms
 }
 
-/// Coverage is stated over a REAL denominator and never rounded up — and as
-/// of W4 (2026-08-25) the EXERCISED fraction is pinned COMPLETE: every one of
-/// the 28 `IRInst` forms has battery rows, so this gate now fails if a
-/// fixture edit ever silently drops a form. (Until W4 it asserted `< 28` and
-/// instructed that reaching 28 must rewrite the honesty note rather than
-/// leave it claiming partial coverage — this is that rewrite.) EXERCISED is
-/// still not MEASURED: the measured fraction is whatever the last minted
-/// artifact records.
+/// The `IRInst` census, DERIVED from the registered syntax rather than typed.
+///
+/// This ladder used to end in `== 28`, which is a stale pin the moment the
+/// inductive gains a constructor — and in Phase B it gained two. Parsing the
+/// `inductive IRInst : Type` telescope block is the same derivation
+/// `scripts/evalir_coverage.py` and `scripts/evalir_adequacy_grid.py` perform,
+/// so all three move together or the gates disagree out loud.
+fn irinst_census() -> BTreeSet<String> {
+    let src = include_str!("../src/spec/core_spec/eval_ir_syntax.rs");
+    let lines: Vec<&str> = src.lines().collect();
+    let at = lines
+        .iter()
+        .position(|l| l.contains("inductive IRInst : Type"))
+        .expect("eval_ir_syntax.rs must declare `inductive IRInst : Type`");
+    let mut out = BTreeSet::new();
+    for line in &lines[at + 1..] {
+        let t = line.trim();
+        let Some(rest) = t.strip_prefix("| ") else {
+            break;
+        };
+        let (name, _) = rest
+            .split_once(" : ")
+            .expect("every IRInst constructor line is `| name : telescope`");
+        out.insert(name.to_string());
+    }
+    assert!(
+        out.len() > 20,
+        "the IRInst telescope parse collapsed ({} names) — schema drift",
+        out.len()
+    );
+    out
+}
+
+/// The forms the Phase-B derived-bundle (lzd) chain exercises.
+///
+/// EMPTY today, and that is the claim: the two constructors Phase B added come
+/// from the trust-ir bridge's callee sidecar, whose fixture is minted by the
+/// chain step (B7), not by B2. Attributing them here before the fixture exists
+/// would be exactly the rounding-up this file refuses everywhere else. When the
+/// fixture lands, its needles go here and `OWED_BY_THE_LZD_CHAIN` below shrinks
+/// in the same commit.
+fn lzd_exercised_forms() -> BTreeSet<&'static str> {
+    BTreeSet::new()
+}
+
+/// The census members NO committed fixture exercises yet, and who owes them.
+const OWED_BY_THE_LZD_CHAIN: &[&str] = &["borrow", "copy"];
+
+/// Coverage is stated over a REAL denominator and never rounded up.
+///
+/// From W4 (2026-08-25) until Phase B the exercised fraction was pinned
+/// COMPLETE at 28/28. Phase B added `borrow` and `copy` — modelled arms with
+/// no committed battery fixture — so the honest statement is again a
+/// FRACTION, and the two owed names are pinned by name rather than absorbed
+/// into a smaller denominator. Both directions fail here: a fixture that stops
+/// exercising a form (erosion) and a form that quietly leaves the owed list
+/// without its fixture. EXERCISED is still not MEASURED: the measured fraction
+/// is whatever the last minted artifact records.
+///
+/// The two sequential atomic fetch-add constructors appended on 2026-09-24
+/// reached the census with neither a fixture nor an owed row, which turned
+/// this test red; they are exercised by the WAT lane (`wat_chains.rs`), whose
+/// E1 is the ByteV1 machine because the legacy one refuses them.
 #[test]
 fn crystal_a3_coverage_is_reported_over_the_full_irinst_surface() {
     let narrow = exercised_forms();
@@ -461,31 +527,61 @@ fn crystal_a3_coverage_is_reported_over_the_full_irinst_surface() {
     let w2b: BTreeSet<&'static str> = w2a.union(&w2b_exercised_forms()).copied().collect();
     let w2c: BTreeSet<&'static str> = w2b.union(&w2c_exercised_forms()).copied().collect();
     let w3: BTreeSet<&'static str> = w2c.union(&w3_exercised_forms()).copied().collect();
-    let combined: BTreeSet<&'static str> = w3.union(&w4_exercised_forms()).copied().collect();
+    let w4: BTreeSet<&'static str> = w3.union(&w4_exercised_forms()).copied().collect();
+    let wat: BTreeSet<&'static str> = w4
+        .union(&wat_chains::wat_exercised_forms())
+        .copied()
+        .collect();
+    let combined: BTreeSet<&'static str> = wat.union(&lzd_exercised_forms()).copied().collect();
+
+    let census = irinst_census();
+    let n = census.len();
+    let alien: Vec<&&str> = combined.iter().filter(|f| !census.contains(**f)).collect();
+    assert!(
+        alien.is_empty(),
+        "a battery lane claims a form the IRInst census does not declare: {alien:?}"
+    );
+    let owed: BTreeSet<String> = census
+        .iter()
+        .filter(|c| !combined.contains(c.as_str()))
+        .cloned()
+        .collect();
+    let expected_owed: BTreeSet<String> = OWED_BY_THE_LZD_CHAIN
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
     assert_eq!(
+        owed,
+        expected_owed,
+        "the un-exercised IRInst forms must be EXACTLY the ones a named future chain owes \
+         ({expected_owed:?}). A form that fell out is erosion — a committed fixture stopped \
+         exercising it, and the ladder may only be rebuilt deliberately. A form that left \
+         the owed list is progress and must move in the same commit as the fixture that \
+         earns it. Exercised {}/{n}: {combined:?}",
         combined.len(),
-        28,
-        "every IRInst form has had battery rows since W4 (2026-08-25); a committed \
-         fixture stopped exercising one — the coverage ladder may only be rebuilt \
-         deliberately, never eroded. Exercised: {combined:?}"
     );
     eprintln!(
-        "GAP-2 encoding coverage: {}/28 IRInst forms in the original chains {narrow:?}; \
-         {}/28 across original + W1 wide chains; {}/28 adding the W2a synthetic chains; \
-         {}/28 adding the W2b synthetic chains; {}/28 adding the W2c synthetic chains; \
-         {}/28 adding the W3 overflow chains; {}/28 adding the W4 fcmp chain — the full \
-         constructed-Inst surface is EXERCISED. The MEASURED fraction is whatever the \
-         last minted data/crystal_gap2_semdiff_*.json records — this test derives what \
-         the committed fixtures EXERCISE, which becomes measured only when a gate run \
-         mints it, and a synthetic chain's rows measure E1/E2 agreement on authored \
-         text, never a producer's body.",
+        "GAP-2 encoding coverage: {}/{n} IRInst forms in the original chains {narrow:?}; \
+         {}/{n} across original + W1 wide chains; {}/{n} adding the W2a synthetic chains; \
+         {}/{n} adding the W2b synthetic chains; {}/{n} adding the W2c synthetic chains; \
+         {}/{n} adding the W3 overflow chains; {}/{n} adding the W4 fcmp chain; {}/{n} \
+         adding the WAT byte-profile atomic chains; {}/{n} adding the Phase-B \
+         derived-bundle chain — the outstanding {} are owed by the lzd \
+         chain (B7) and are pinned by name, never rounded away. The MEASURED fraction is \
+         whatever the last minted data/crystal_gap2_semdiff_*.json records — this test \
+         derives what the committed fixtures EXERCISE, which becomes measured only when a \
+         gate run mints it, and a synthetic chain's rows measure E1/E2 agreement on \
+         authored text, never a producer's body.",
         narrow.len(),
         wide.len(),
         w2a.len(),
         w2b.len(),
         w2c.len(),
         w3.len(),
+        w4.len(),
+        wat.len(),
         combined.len(),
+        OWED_BY_THE_LZD_CHAIN.len(),
     );
 }
 
@@ -526,9 +622,11 @@ fn is_unsupported_code(code: &str) -> bool {
     code.starts_with("unsupported_")
 }
 
-/// E1 for a wide input: probe the value against kernel-checked `Eq.refl`
-/// obligations, fuel from below, candidates led by the other executors'
-/// answers so a disagreement reports what Clean actually said.
+/// E1 for a wide input: probe the original evaluator equality, fuel from
+/// below, candidates led by the other executors' answers so a disagreement
+/// reports what Clean actually said. Most witnesses are `Eq.refl`; the
+/// full-width truncation witness transports through checked arithmetic laws
+/// to avoid expanding the default repeated-subtraction model.
 fn wide_clean_probe(
     spec: &mut Specification,
     chain: &WideChain,
@@ -553,8 +651,14 @@ fn wide_clean_probe(
 
     for fuel in 0..=MAX_IR_NUMERAL {
         for (c, cand) in candidates.iter().enumerate() {
-            let Ok(src) = wide_value_obligation(
-                &format!("w1_{}_i{idx}_f{fuel}_c{c}", chain.name),
+            let name = format!("w1_{}_i{idx}_f{fuel}_c{c}", chain.name);
+            let obligation = if chain.name == "get_char_val_trunc" && fuel == 2 {
+                trunc_transport::value_obligation
+            } else {
+                wide_value_obligation
+            };
+            let Ok(src) = obligation(
+                &name,
                 chain.clean_module,
                 chain.clean_fid,
                 fuel,
@@ -568,6 +672,9 @@ fn wide_clean_probe(
                 .add_recursive_def(&src, "crystal A3 W1: kernel-checked value probe")
                 .is_ok()
             {
+                if chain.name == "get_char_val_trunc" && fuel == 2 {
+                    trunc_transport::verify_closed(spec, &name);
+                }
                 return (cand.clone(), Some(fuel));
             }
         }
@@ -664,6 +771,9 @@ fn measure_wide(
         .collect();
 
     register_wide_module(spec, chain, registered);
+    if chain.name == "get_char_val_trunc" {
+        trunc_transport::register(spec, chain);
+    }
 
     let mut rows = Vec::new();
     for (idx, input) in chain.inputs.iter().enumerate() {
@@ -710,55 +820,15 @@ fn measure_wide(
     )
 }
 
-/// **The W1 gate.** Every wide chain, every input, every executor that can
-/// reach it — with recorded refusals for the two declared bounded-interpreter
-/// lanes and a hard verdict everywhere else.
-#[test]
-fn crystal_a3_semdiff_wide_measures_encoding_agreement() {
-    let mut spec = build_eval_ir_spec_with_stack();
-    let mut registered: HashSet<&'static str> = HashSet::new();
-    let mut reports = Vec::new();
-
-    for chain in wide_chains() {
-        let report = measure_wide(&mut spec, &chain, &mut registered);
-        eprintln!("\n=== W1 {} ===", report.chain);
-        for row in &report.rows {
-            eprintln!("{}", row.render());
-            for note in &row.notes {
-                eprintln!("      note: {note}");
-            }
-        }
-        eprintln!("  {}", report.summary());
-        reports.push((chain, report));
-    }
-
-    eprintln!("\n--- GAP 2 W1, measured ---");
-    for (_, r) in &reports {
-        eprintln!(
-            "{:<22} {}  cost={:?} (pinned {:+})",
-            r.chain,
-            if r.is_green() {
-                "AGREE"
-            } else {
-                "**SEE VERDICT**"
-            },
-            r.cost_verdict(),
-            r.expected_cost_offset,
-        );
-    }
-    let combined: BTreeSet<&'static str> = exercised_forms()
-        .union(&wide_exercised_forms())
-        .copied()
-        .collect();
-    eprintln!(
-        "\nThis is a MEASUREMENT, not a proof. Original + W1 chains exercise {}/28 \n\
-         IRInst forms; the other {} are untouched by this battery. The committed \n\
-         MEASURED fraction stays whatever the last minted \n\
-         data/crystal_gap2_semdiff_*.json records.",
-        combined.len(),
-        28 - combined.len()
-    );
-
+/// **The W1 gate, per chain.** Every assertion below is the block that used to
+/// live at the end of `crystal_a3_semdiff_wide_measures_encoding_agreement`,
+/// moved here BYTE FOR BYTE and handed a one-element `reports` so its two loops
+/// are unchanged. Nothing is relaxed: the same four obligations bind — E1
+/// answers on every row, zero value disagreements, and then either the full
+/// narrow-gate standard (pinned cost + green) or, for a chain that DECLARED
+/// `e2_may_refuse`, an exact accounting of every Insufficient row.
+fn assert_wide_chain(chain: WideChain, r: ChainReport) {
+    let reports = vec![(chain, r)];
     // E1 is our own kernel: it must ANSWER on every row, whatever the other
     // legs did. A no-candidate here is an instrument failure, never a shrug.
     for (_, r) in &reports {
@@ -835,6 +905,110 @@ fn crystal_a3_semdiff_wide_measures_encoding_agreement() {
             );
         }
     }
+}
+
+/// One `#[test]` per wide chain.
+///
+/// WHY: as ONE test over all ten chains this never finished — the suite rows
+/// record `timed out after 28800s` and `after 7200s`, exit -1, and CLAUDE.md
+/// names sharding it as open work. A target that times out reports NOTHING, so
+/// the repo's only two-machine semantic-agreement evidence was being thrown
+/// away wholesale. Ten rows can each pass, fail, or time out on their own.
+///
+/// The spec build is shared: `build_eval_ir_spec_with_stack` is OnceLock-cached
+/// per process, so ten tests in one binary pay for it once.
+macro_rules! wide_chain_tests {
+    ($($name:ident => $chain:literal,)*) => {
+        $(
+            #[test]
+            fn $name() {
+                let mut spec = if $chain == "get_char_val_trunc" {
+                    trunc_transport::new_spec()
+                } else {
+                    build_eval_ir_spec_with_stack()
+                };
+                let mut registered: HashSet<&'static str> = HashSet::new();
+                let chain = wide_chains()
+                    .into_iter()
+                    .find(|c| c.name == $chain)
+                    .unwrap_or_else(|| panic!("wide chain `{}` is no longer in wide_chains()", $chain));
+                let report = measure_wide(&mut spec, &chain, &mut registered);
+                eprintln!("\n=== W1 {} ===", report.chain);
+                for row in &report.rows {
+                    eprintln!("{}", row.render());
+                    for note in &row.notes {
+                        eprintln!("      note: {note}");
+                    }
+                }
+                eprintln!("  {}", report.summary());
+                assert_wide_chain(chain, report);
+            }
+        )*
+    };
+}
+
+wide_chain_tests! {
+    crystal_a3_semdiff_w1chain_bvar_in_range => "bvar_in_range",
+    crystal_a3_semdiff_w1chain_is_valid_char => "is_valid_char",
+    crystal_a3_semdiff_w1chain_flat_flags_contains => "flat_flags_contains",
+    crystal_a3_semdiff_w1chain_flat_flags_with => "flat_flags_with",
+    crystal_a3_semdiff_w1chain_node_id_index => "node_id_index",
+    crystal_a3_semdiff_w1chain_get_char_val_trunc => "get_char_val_trunc",
+    crystal_a3_semdiff_w1chain_has_loose_bvars => "has_loose_bvars",
+    crystal_a3_semdiff_w1chain_loose_bvar_range => "loose_bvar_range",
+    crystal_a3_semdiff_w1chain_strict_monads => "strict_monads",
+    crystal_a3_semdiff_w1chain_simp_priority_value => "simp_priority_value",
+}
+
+/// Every chain named in the shard table above must still exist, and every chain
+/// in `wide_chains()` must have a shard. Without this a chain could be added to
+/// the table and silently never measured -- the coverage hole sharding is most
+/// likely to introduce.
+#[test]
+fn crystal_a3_semdiff_w1_shards_cover_every_wide_chain() {
+    let declared: BTreeSet<&'static str> = [
+        "bvar_in_range",
+        "is_valid_char",
+        "flat_flags_contains",
+        "flat_flags_with",
+        "node_id_index",
+        "get_char_val_trunc",
+        "has_loose_bvars",
+        "loose_bvar_range",
+        "strict_monads",
+        "simp_priority_value",
+    ]
+    .into_iter()
+    .collect();
+    let actual: BTreeSet<&'static str> = wide_chains().into_iter().map(|c| c.name).collect();
+    assert_eq!(
+        declared, actual,
+        "the per-chain shard table and wide_chains() have diverged — a chain \
+         present in one and absent from the other is never measured"
+    );
+}
+
+/// The GAP 2 coverage MEASUREMENT, split out of the old monolithic test. It
+/// reads fixture text only, so it costs nothing and does not need the shards.
+#[test]
+fn crystal_a3_semdiff_w1_reports_irinst_coverage() {
+    let combined: BTreeSet<&'static str> = exercised_forms()
+        .union(&wide_exercised_forms())
+        .copied()
+        .collect();
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. Original + W1 chains exercise {}/{} \n\
+         IRInst forms; the other {} are untouched by this battery. The committed \n\
+         MEASURED fraction stays whatever the last minted \n\
+         data/crystal_gap2_semdiff_*.json records.",
+        combined.len(),
+        irinst_census().len(),
+        irinst_census().len() - combined.len()
+    );
+    assert!(
+        !combined.is_empty(),
+        "the battery must exercise at least one IRInst form"
+    );
 }
 
 /// The `IRInst` forms the WIDE chains' committed fixtures exercise, derived
@@ -1388,12 +1562,13 @@ fn crystal_a3_semdiff_synth_measures_encoding_agreement() {
         .collect();
     eprintln!(
         "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a chains exercise \
-         {}/28 IRInst forms; the other {} are untouched by this battery. A synthetic \
+         {}/{} IRInst forms; the other {} are untouched by this battery. A synthetic \
          row measures E1/E2 agreement on authored text — never a producer's body — \
          and the committed MEASURED fraction stays whatever the last minted \
          data/crystal_gap2_semdiff_*.json records.",
         combined.len(),
-        28 - combined.len()
+        irinst_census().len(),
+        irinst_census().len() - combined.len()
     );
 }
 
@@ -1418,12 +1593,13 @@ fn crystal_a3_semdiff_w2b_measures_encoding_agreement() {
         .collect();
     eprintln!(
         "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b chains \
-         exercise {}/28 IRInst forms; the other {} are untouched by this battery. A \
+         exercise {}/{} IRInst forms; the other {} are untouched by this battery. A \
          synthetic row measures E1/E2 agreement on authored text — never a producer's \
          body — and the committed MEASURED fraction stays whatever the last minted \
          data/crystal_gap2_semdiff_*.json records.",
         combined.len(),
-        28 - combined.len()
+        irinst_census().len(),
+        irinst_census().len() - combined.len()
     );
 }
 
@@ -1595,13 +1771,14 @@ fn crystal_a3_semdiff_w2c_measures_encoding_agreement() {
         .collect();
     eprintln!(
         "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b + W2c chains \
-         exercise {}/28 IRInst forms; the other {} are untouched by the lanes ABOVE \
+         exercise {}/{} IRInst forms; the other {} are untouched by the lanes ABOVE \
          (overflow has its own W3 lane below since 2026-08-25; fcmp is the plan's W4 \
          float lane). A synthetic row measures E1/E2 agreement on authored text — never \
          a producer's body — and the committed MEASURED fraction stays whatever the last \
          minted data/crystal_gap2_semdiff_*.json records.",
         combined.len(),
-        28 - combined.len(),
+        irinst_census().len(),
+        irinst_census().len() - combined.len(),
     );
 }
 
@@ -1682,11 +1859,12 @@ fn crystal_a3_semdiff_w3_measures_encoding_agreement() {
         .collect();
     eprintln!(
         "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b + W2c + W3 \
-         chains exercise {}/28 IRInst forms (fcmp gained its own W4 lane below on \
+         chains exercise {}/{} IRInst forms (fcmp gained its own W4 lane below on \
          2026-08-25). A synthetic row measures E1/E2 agreement on authored text — never \
          a producer's body — and the committed MEASURED fraction stays whatever the last \
          minted data/crystal_gap2_semdiff_*.json records.",
         combined.len(),
+        irinst_census().len(),
     );
 }
 
@@ -1754,7 +1932,8 @@ fn crystal_a3_w3_lane_exercises_the_overflow_constructor() {
 /// executors — ordered false, unordered true), so every row is exact
 /// twelve-value `Ret` agreement ([`RunResult::Many`]) at the pinned zero
 /// cost offset. The lane completing means every `IRInst` constructor now has
-/// battery rows — the coverage test above pins 28/28 exercised.
+/// battery rows — the coverage test above pins the exercised set against the
+/// DERIVED census, with the two Phase-B forms owed by name.
 #[test]
 fn crystal_a3_semdiff_w4_measures_encoding_agreement() {
     measure_synth_lane("W4", w4_chains::w4_chains());
@@ -1780,11 +1959,14 @@ fn crystal_a3_semdiff_w4_measures_encoding_agreement() {
         .collect();
     eprintln!(
         "\nThis is a MEASUREMENT, not a proof. Original + W1 + W2a + W2b + W2c + W3 + W4 \
-         chains exercise {}/28 IRInst forms — the full constructed-Inst surface. A \
+         chains exercise {}/{} IRInst forms — every constructor the THIR lowerer \
+         produces. The two the trust-ir bridge produces (`borrow`, `copy`) are owed by \
+         the Phase-B derived-bundle chain and are named in OWED_BY_THE_LZD_CHAIN. A \
          synthetic row measures E1/E2 agreement on authored text — never a producer's \
          body — and the committed MEASURED fraction stays whatever the last minted \
          data/crystal_gap2_semdiff_*.json records.",
         combined.len(),
+        irinst_census().len(),
     );
 }
 
@@ -1859,7 +2041,7 @@ fn crystal_a3_semdiff_wfr_measures_encoding_agreement() {
     eprintln!(
         "\nThis is a MEASUREMENT, not a proof. The float-residue chains measure the seven \
          answering residue OPERATORS (fneg/fabs, ffloor/fceil/ftrunc, fmin/fmax) inside \
-         the already-exercised `unop`/`binop` constructors — the 28/28 constructor ladder \
+         the already-exercised `unop`/`binop` constructors — the constructor ladder \
          is untouched by design, and the committed MEASURED fraction stays whatever the \
          last minted data/crystal_gap2_semdiff_*.json records."
     );
@@ -1896,4 +2078,57 @@ fn crystal_a3_wfr_lane_exercises_the_seven_residue_operators() {
         "the float-residue fixtures must exercise all seven answering operators; \
          found only {found:?}"
     );
+}
+
+// ═══════════════════ the WAT byte-profile atomic lane ═══════════════════
+
+/// **The WAT gate.** Both sequential atomic fetch-add constructors, E1 on the
+/// ByteV1 machine (`ir_byte_run_v1` over an authored `IRByteContextV1`) and E2
+/// on trust-ir's interpreter: exact two-value `Ret` agreement (the returned
+/// old word and the reloaded new word, wrapping rows included) at the pinned
+/// zero cost offset, plus the uninitialized-read row at outcome class. No
+/// declared delta. `wat_chains.rs`'s module doc says what this does not
+/// measure (concurrency, a producer's body).
+#[test]
+fn crystal_a3_semdiff_wat_measures_encoding_agreement() {
+    clean_verify::test_utils::run_with_stack(|| {
+        wat_chains::measure_wat_lane(wat_chains::wat_chains());
+    });
+    eprintln!(
+        "\nThis is a MEASUREMENT, not a proof. The WAT chains exercise the two sequential \
+         atomic fetch-add constructors on authored text, through the ByteV1 machine; the \
+         committed MEASURED fraction stays whatever the last minted \
+         data/crystal_gap2_semdiff_*.json records."
+    );
+}
+
+/// The WAT falsifier: a twin that fetch-adds the wrong SSA value must lose
+/// the honest answer and keep its own (`wat_chains.rs`).
+#[test]
+fn crystal_a3_wat_lane_refuses_a_wrong_operand_twin() {
+    clean_verify::test_utils::run_with_stack(wat_chains::wat_wrong_operand_twin_is_refused);
+}
+
+/// The WAT smoke: E2 alone against the authored expectations, no kernel.
+#[test]
+fn crystal_a3_wat_e2_instrument_smoke() {
+    wat_chains::wat_e2_smoke(&wat_chains::wat_chains());
+}
+
+/// The WAT lane covers exactly the two constructors it was added for — each
+/// credited only when its fixture carries the trust-ir operation AND its
+/// Clean twin carries the matching `IRInst` constructor.
+#[test]
+fn crystal_a3_wat_lane_exercises_the_two_atomic_constructors() {
+    let wat = wat_chains::wat_exercised_forms();
+    for expected in [
+        "atomic_fetch_add_relaxed_u64_seq",
+        "atomic_fetch_add_relaxed_usize_seq",
+    ] {
+        assert!(
+            wat.contains(expected),
+            "the WAT fixtures no longer exercise `{expected}`; the lane's +2 claim would be \
+             false. Exercised: {wat:?}"
+        );
+    }
 }

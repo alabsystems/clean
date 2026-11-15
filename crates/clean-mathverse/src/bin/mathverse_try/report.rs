@@ -23,7 +23,7 @@ pub(super) enum Status {
 
 impl Report {
     #[must_use]
-    pub fn classification(&self) -> &'static str {
+    pub(crate) fn classification(&self) -> &'static str {
         if self.status != Status::Pass {
             return "FAIL";
         }
@@ -36,7 +36,7 @@ impl Report {
         }
     }
 
-    pub fn to_text(&self) -> String {
+    pub(crate) fn to_text(&self) -> String {
         let mut out = String::new();
         match self.status {
             Status::Pass => out.push_str("PASS\n"),
@@ -67,7 +67,7 @@ impl Report {
         out
     }
 
-    pub fn to_json(&self) -> String {
+    pub(crate) fn to_json(&self) -> String {
         // Hand-rolled to avoid pulling the full serde ceremony for a
         // three-field report. The keys are stable; downstream tooling
         // can match on them.

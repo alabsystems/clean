@@ -265,6 +265,10 @@ impl<'env> TypeChecker<'env> {
     /// face `(r = 1)`, so `i1 ↦ ⊤`, `i0 ↦ ⊥`). Interval variables are interned
     /// (shared across one parse) so `and`/`or` see consistent atom ids.
     fn parse_cofib(&self, e: &Expr, interner: &mut Vec<Expr>, mode: WhnfMode) -> Option<Cofib> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let w = self.whnf_recurse(e, mode);
         match w.kind() {
             ExprKind::CubicalI0 => return Some(Cofib::bot()),
@@ -348,6 +352,10 @@ impl<'env> TypeChecker<'env> {
         mode: WhnfMode,
         interner: &mut Vec<Expr>,
     ) -> Option<Vec<(Cofib, Expr)>> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let mut branches: Vec<(Cofib, Expr)> = Vec::new();
         let mut cur = u.clone();
         loop {
@@ -507,6 +515,10 @@ impl<'env> TypeChecker<'env> {
         level: &Level,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let i1 = || Expr::from_kind(ExprKind::CubicalI1);
         // Glue.Sys.cons.{ℓ} B φᵢ (Tᵢ i1) (coeEquiv Tᵢ) (isEquivCoe Tᵢ) tail.
         //
@@ -822,6 +834,10 @@ impl<'env> TypeChecker<'env> {
     /// `lift`ed by one when placed under the freshly-introduced tube binder, which
     /// is a no-op for closed terms and defensively correct otherwise.
     fn project_system_tubes(&self, u: &Expr, proj: &Expr, mode: WhnfMode) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let w = self.whnf_recurse(u, mode);
         if let ExprKind::Const(name, _) = w.get_app_fn().kind() {
             let args = w.get_app_args();
@@ -926,6 +942,10 @@ impl<'env> TypeChecker<'env> {
         new_level: &Level,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let w = self.whnf_recurse(u, mode);
         if let ExprKind::Const(name, _) = w.get_app_fn().kind() {
             let args = w.get_app_args();
@@ -1129,6 +1149,7 @@ impl<'env> TypeChecker<'env> {
         base: &Expr,
         ty: &Expr,
     ) -> Result<(), TypeError> {
+        let _metered = self.begin_operation();
         let save = self.ctx_len();
         // Push one fresh FVar per verifier binder (outermost first); each binder's
         // type is opened against the FVars already in scope (locally-nameless).
@@ -1515,6 +1536,10 @@ impl<'env> TypeChecker<'env> {
         base: &Expr,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         // Expose the per-point type `Glue (A i) φ sys` and extract the base line `A i`,
         // the overall extent `φ`, the system `sys`, and the universe level.
         //
@@ -1760,6 +1785,10 @@ impl<'env> TypeChecker<'env> {
     /// owned arguments `(A, B, fst, snd)`. `None` for any other head/arity (so a
     /// *neutral* Σ point leaves the residual rule soundly stuck).
     fn match_sigma_mk(&self, e: &Expr) -> Option<(Expr, Expr, Expr, Expr)> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let ExprKind::Const(name, _) = e.get_app_fn().kind() else {
             return None;
         };
@@ -1784,6 +1813,10 @@ impl<'env> TypeChecker<'env> {
     /// residual `coe`-over-`Glue` rule reads to obtain the fibre centre at `s`.
     #[allow(clippy::type_complexity)]
     fn match_glue_cons(&self, e: &Expr) -> Option<(Expr, Expr, Expr, Expr, Expr, Expr)> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let ExprKind::Const(name, _) = e.get_app_fn().kind() else {
             return None;
         };
@@ -1947,6 +1980,10 @@ impl<'env> TypeChecker<'env> {
         base: &Expr,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         // Cubical-only (mirrors the gating of `try_coe_glue_compute`).
         if !self.mode.has_cubical_layer() {
             return None;
@@ -1998,6 +2035,10 @@ impl<'env> TypeChecker<'env> {
         a_field: &Expr,
         b_field: &Expr,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let ExprKind::Const(sig_name, levels) = p_open.get_app_fn().kind() else {
             return None;
         };
@@ -2360,6 +2401,10 @@ impl<'env> TypeChecker<'env> {
         sys: &Expr,
         mode: WhnfMode,
     ) -> Option<Vec<(Cofib, Expr, Expr)>> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let mut interner: Vec<Expr> = Vec::new();
         let mut cells: Vec<(Cofib, Expr, Expr)> = Vec::new();
         let mut cur = sys.clone();
@@ -2424,6 +2469,10 @@ impl<'env> TypeChecker<'env> {
         head: &Name,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         if *head == *glue_names::EQUIV_FWD || *head == *glue_names::EQUIV_BWD {
             // `Equiv.fwd {A B} (e : Equiv A B) [x…]` — the computing first
             // projection (`f`); `Equiv.bwd` is the dual backward projection (`g`).
@@ -2562,6 +2611,10 @@ impl<'env> TypeChecker<'env> {
         head: &Name,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         if *head != *sigma_names::SIGMA_ELIM {
             return None;
         }
@@ -2623,6 +2676,10 @@ impl<'env> TypeChecker<'env> {
         head: &Name,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let i0 = || Expr::from_kind(ExprKind::CubicalI0);
         let i1 = || Expr::from_kind(ExprKind::CubicalI1);
 

@@ -98,7 +98,7 @@ impl LinearExpr {
     }
 
     /// Get the coefficient for a variable, or 0 if not present.
-    pub fn get_coeff(&self, var: usize) -> i64 {
+    pub(crate) fn get_coeff(&self, var: usize) -> i64 {
         match self.coeff_pos(var) {
             Ok(idx) => self.coeffs[idx].1,
             Err(_) => 0,
@@ -106,7 +106,7 @@ impl LinearExpr {
     }
 
     /// Remove a variable from the coefficient list.
-    pub fn remove_var(&mut self, var: usize) {
+    pub(crate) fn remove_var(&mut self, var: usize) {
         if let Ok(idx) = self.coeff_pos(var) {
             self.coeffs.remove(idx);
         }
@@ -217,14 +217,14 @@ impl LinearExpr {
     /// Get a shared reference to a variable coefficient.
     ///
     /// ENSURES: Returns `Some(&c)` iff `self` contains variable `var` with coefficient `c`
-    pub fn coeff_ref(&self, var: usize) -> Option<&i64> {
+    pub(crate) fn coeff_ref(&self, var: usize) -> Option<&i64> {
         self.coeff_pos(var).ok().map(|idx| &self.coeffs[idx].1)
     }
 
     /// Insert, update, or remove a coefficient while maintaining sorted order.
     ///
     /// ENSURES: `self.coeffs` remains sorted, unique, and zero-free
-    pub fn set_coeff(&mut self, var: usize, coeff: i64) {
+    pub(crate) fn set_coeff(&mut self, var: usize, coeff: i64) {
         match self.coeff_pos(var) {
             Ok(idx) if coeff == 0 => {
                 self.coeffs.remove(idx);
@@ -239,34 +239,14 @@ impl LinearExpr {
         }
     }
 
-    /// Remove a coefficient by variable index.
-    ///
-    /// ENSURES: Returns the removed coefficient when present
-    /// ENSURES: `self.coeffs` remains sorted and unique
-    pub fn remove_coeff(&mut self, var: usize) -> Option<i64> {
-        self.coeff_pos(var)
-            .ok()
-            .map(|idx| self.coeffs.remove(idx).1)
-    }
-
     /// Add to a single coefficient, returning `None` on overflow.
     ///
     /// ENSURES: On `Some(())`, `self[var]` increases by `delta`
     /// ENSURES: Zero coefficients are removed
-    pub fn try_add_to_coeff(&mut self, var: usize, delta: i64) -> Option<()> {
+    pub(crate) fn try_add_to_coeff(&mut self, var: usize, delta: i64) -> Option<()> {
         let next = self.coeff(var).checked_add(delta)?;
         self.set_coeff(var, next);
         Some(())
-    }
-
-    /// Return the only variable term, when the expression is one-hot.
-    ///
-    /// ENSURES: Returns `Some((var, coeff))` iff `self.coeffs.len() == 1`
-    pub fn single_term(&self) -> Option<(usize, i64)> {
-        match self.coeffs.as_slice() {
-            &[(var, coeff)] => Some((var, coeff)),
-            _ => None,
-        }
     }
 
     /// Add two linear expressions.
@@ -336,7 +316,7 @@ impl LinearExpr {
     ///
     /// ENSURES: Returns `None` if any coefficient or constant overflows `i64` on multiplication
     /// ENSURES: On `Some`, result is exact (no saturation or wrapping)
-    pub fn try_scale(&self, k: i64) -> Option<Self> {
+    pub(crate) fn try_scale(&self, k: i64) -> Option<Self> {
         if k == 0 {
             return Some(Self::constant(0));
         }
@@ -355,29 +335,11 @@ impl LinearExpr {
     ///
     /// ENSURES: Returns `None` if any coefficient or constant overflows `i64` on subtraction
     /// ENSURES: On `Some`, result is exact (no saturation or wrapping)
-    pub fn try_sub(&self, other: &Self) -> Option<Self> {
+    pub(crate) fn try_sub(&self, other: &Self) -> Option<Self> {
         Some(Self {
             constant: self.constant.checked_sub(other.constant)?,
             coeffs: Self::combine_coeffs(&self.coeffs, &other.coeffs, i64::checked_sub)?,
         })
-    }
-
-    /// Substitute a variable with another linear expression.
-    ///
-    /// Uses saturating arithmetic to match the rest of the non-certified arithmetic path.
-    ///
-    /// ENSURES: Replaces every occurrence of `var` with `replacement`
-    /// ENSURES: The result remains sparse, sorted, and zero-free
-    #[must_use]
-    pub fn substitute(&self, var: usize, replacement: &Self) -> Self {
-        let coeff = self.coeff(var);
-        if coeff == 0 {
-            return self.clone();
-        }
-
-        let mut result = self.clone();
-        result.remove_coeff(var);
-        result.add(&replacement.scale(coeff))
     }
 
     /// Evaluate a linear expression with a sparse sorted assignment vector.

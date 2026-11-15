@@ -505,7 +505,7 @@ def IMchild.{u, v} {I : Type v} {A : I → Type u} {B : (i : I) → A i → Type
     {t : (i : I) → (a : A i) → B i a → I} {i : I}
     (m : IMIntl.{u, v} A B t i) (b : B i (IMhead.{u, v} m)) :
     IMIntl.{u, v} A B t (ichildIdx0.{u, v} m b) :=
-  Subtype.mk (IMPred.{u, v} A B t (ichildIdx0.{u, v} m b))
+  Subtype.mk (p := IMPred.{u, v} A B t (ichildIdx0.{u, v} m b))
     (fun n => ichildVal.{u, v} m b n)
     (fun n => ichild_coherent.{u, v} m b n)
 
@@ -555,7 +555,7 @@ theorem imk_coherent.{u, v} {I : Type v} {A : I → Type u} {B : (i : I) → A i
 def IMmk.{u, v} {I : Type v} {A : I → Type u} {B : (i : I) → A i → Type u}
     {t : (i : I) → (a : A i) → B i a → I} {i : I}
     (x : isigmaStep.{u, v} A B t (IMIntl.{u, v} A B t) i) : IMIntl.{u, v} A B t i :=
-  Subtype.mk (IMPred.{u, v} A B t i) (imkApprox.{u, v} x) (fun n => imk_coherent.{u, v} x n)
+  Subtype.mk (p := IMPred.{u, v} A B t i) (imkApprox.{u, v} x) (fun n => imk_coherent.{u, v} x n)
 
 -- ── R2 brick 5: the indexed corecursor ──
 
@@ -593,7 +593,7 @@ def IMcorec.{u, v} {I : Type v} {A : I → Type u} {B : (i : I) → A i → Type
     {t : (i : I) → (a : A i) → B i a → I} {S : I → Type (max u v)}
     (g : (j : I) → S j → isigmaStep.{u, v} A B t S j) (j : I) (s : S j) :
     IMIntl.{u, v} A B t j :=
-  Subtype.mk (IMPred.{u, v} A B t j)
+  Subtype.mk (p := IMPred.{u, v} A B t j)
     (fun n => icorecApprox.{u, v} g n j s)
     (fun n => icorec_coherent.{u, v} g n j s)
 
@@ -997,7 +997,7 @@ theorem ibind_vis_child.{u, v} {E : Type u} {R : Type u} {S : Type u} {Ans : E �
 -- walks THROUGH a Tau into the continuation, and the continuation's
 -- answer is observable two observation-steps deep — all by rfl.
 def noEv.{u} : Type u := PUnit.{u+1}
-def noAns.{u} : noEv → Type u := fun _ => NoPos
+def noAns.{u} : noEv.{u} → Type u := fun _ => NoPos  -- `noEv.{u}` named: since dded5a375 `fun _` no longer pins its level
 
 -- concrete computation instances: MONOMORPHIC on purpose (R := Nat is
 -- Type 0, so these pin u := 0 through fresh level metas)
@@ -1026,7 +1026,7 @@ theorem bind_step2 :
 
 theorem isubtype_ext.{u} {X : Type u} {p : X → Prop} (x y : Subtype p)
     (h : x.val = y.val) : x = y :=
-  @Eq.rec X x.val (fun v _ => ∀ hv : p v, x = Subtype.mk p v hv)
+  @Eq.rec X x.val (fun v _ => ∀ hv : p v, x = Subtype.mk (p := p) v hv)
     (fun _ => rfl) y.val h y.property
 
 -- tower agreement → equality (M-extensionality)

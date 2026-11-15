@@ -44,7 +44,29 @@ use anyhow::{bail, Context, Result};
 use dump::DumpConfig;
 use report::{Outcome, Toolchain};
 
+/// What `-h`/`--help` prints: exactly the grammar `run` parses.
+const USAGE: &str = "\
+usage: mathverse_coq_dump --out=DIR (--module=M ... | --modules-file=F | --stdlib)
+                          [--sertop=PATH] [--jobs=N] [--timeout=SECS] [--validate]
+                          [--force] [--coq-theories=DIR]
+  --out=DIR          where <module>.sexp, <module>.meta.json and manifest.json are written
+  --module=M         a module to dump (repeatable); --modules-file=F reads one per line
+                     ('#' lines skipped); --stdlib adds every compiled module under
+                     --coq-theories (default ~/.opam/mathverse-serapi/lib/coq/theories)
+  --sertop=PATH      the sertop binary (default ~/.opam/mathverse-serapi/bin/sertop)
+  --jobs=N           worker sertop processes (default 1; 0 counts as 1)
+  --timeout=SECS     how long to wait on one sertop response (default 60)
+  --validate         replay each written dump through the real importer into its sidecar
+  --force            redump a module whose .sexp and .meta.json already exist
+  Exit 0 when every module was dumped or fresh, 1 when any failed or on an error (the
+  manifest is still written), 2 on a usage error.
+";
+
 fn main() {
+    if std::env::args().skip(1).any(|a| a == "-h" || a == "--help") {
+        print!("{USAGE}");
+        return;
+    }
     if let Err(e) = run() {
         eprintln!("error: {e:#}");
         std::process::exit(1);
@@ -98,10 +120,14 @@ fn run() -> Result<()> {
         } else if arg == "--force" {
             force = true;
         } else {
-            bail!("unknown argument: {arg}");
+            eprint!("mathverse_coq_dump: unknown argument {arg:?}\n{USAGE}");
+            std::process::exit(2);
         }
     }
-    let out = out.context("--out=<dir> is required")?;
+    let Some(out) = out else {
+        eprint!("mathverse_coq_dump: --out=DIR is required\n{USAGE}");
+        std::process::exit(2);
+    };
     if stdlib {
         modules.extend(discover_stdlib(&theories)?);
     }
@@ -109,7 +135,8 @@ fn run() -> Result<()> {
     let mut seen = HashSet::new();
     modules.retain(|m| seen.insert(m.clone()));
     if modules.is_empty() {
-        bail!("no modules selected: pass --module=, --modules-file=, or --stdlib");
+        eprint!("mathverse_coq_dump: no modules selected\n{USAGE}");
+        std::process::exit(2);
     }
     if jobs == 0 {
         jobs = 1;

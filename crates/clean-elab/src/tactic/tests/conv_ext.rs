@@ -23,7 +23,8 @@ fn test_conv_ext_opens_lambda_binder() {
     let mut state = ProofState::new(env, lam);
     let original_meta = state.current_goal().unwrap().meta_id;
 
-    conv_ext(&mut state, "a").expect("conv_ext should succeed on a lambda");
+    conv_ext(&mut state, &clean_parser::SurfaceName::generated_path("a"))
+        .expect("conv_ext should succeed on a lambda");
 
     let goal = state.current_goal().expect("should have a goal");
     assert_ne!(
@@ -35,7 +36,7 @@ fn test_conv_ext_opens_lambda_binder() {
     let a_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "a")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("a"))
         .expect("local context should contain 'a'");
     assert_eq!(
         a_decl.ty, n_ty,
@@ -78,13 +79,14 @@ fn test_conv_ext_opens_pi_binder() {
     let pi = Expr::pi(BinderInfo::Default, n_ty.clone(), body);
     let mut state = ProofState::new(env, pi);
 
-    conv_ext(&mut state, "b").expect("conv_ext should succeed on a forall");
+    conv_ext(&mut state, &clean_parser::SurfaceName::generated_path("b"))
+        .expect("conv_ext should succeed on a forall");
 
     let goal = state.current_goal().expect("should have a goal");
     let b_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "b")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("b"))
         .expect("local context should contain 'b'");
     assert_eq!(
         b_decl.ty, n_ty,
@@ -98,7 +100,7 @@ fn test_conv_ext_fails_on_non_binder() {
     let x = Expr::const_(Name::from_string("x"), vec![]);
     let mut state = ProofState::new(env, x);
 
-    let err = conv_ext(&mut state, "a").unwrap_err();
+    let err = conv_ext(&mut state, &clean_parser::SurfaceName::generated_path("a")).unwrap_err();
     assert!(
         matches!(err, TacticError::InvalidTarget { .. }),
         "conv_ext on a non-binder should produce InvalidTarget, got: {err}"

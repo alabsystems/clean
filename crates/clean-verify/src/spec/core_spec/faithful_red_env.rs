@@ -15,7 +15,7 @@
 //!
 //! ## Brick R0 — the faithful env model
 //!
-//! `faithful_red_env = RedEnv.mk faithful_rec_env faithful_def_env`, a value-ful
+//! `faithful_red_env = RedEnv.mk faithful_rec_env faithful_def_env IndCtorEnv.empty`, a value-ful
 //! `def` (lowers to `Declaration::Definition`, ratchet-clean) modelling a real
 //! single-constructor inductive's recursor PLUS a real definition:
 //!  - `faithful_rec_env`: one recursor `REC` with NON-degenerate metadata
@@ -421,11 +421,14 @@ impl Specification {
     fn add_faithful_red_env_model(&mut self) -> Result<(), SpecError> {
         // faithful_rec_env: one recursor REC, non-degenerate RecMeta (0 params,
         // 1 motive, 1 minor, 0 indices, major-after-minors), one rule for CTOR
-        // (0 fields) with a CLOSED-LAMBDA rhs.
+        // (0 fields) with a CLOSED-LAMBDA rhs. This synthetic reduction-only
+        // fixture has no declaration typing environment: its nil-parameter
+        // signature is explicit test data, not an admitted recursor telescope.
         self.add_recursive_def(
             &format!(
                 "def faithful_rec_env : RecEnv := RecEnv.addRec RecEnv.empty ({REC}) \
-                 (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true) \
+                 (RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ Nat.zero) Nat.zero Bool.true \
+                   (KConstSig.mk (ListType.nil Name) (KExpr.sort Level.zero)) Nat.zero) \
                  ({RULES})"
             ),
             "Faithful recursor environment (real-env discharge R0): one recursor REC modelling a \
@@ -437,14 +440,16 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def faithful_def_env : DefEnv := DefEnv.addDef DefEnv.empty ({DEFN}) \
-                 (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero))"
+                 (KDefSig.mk (KConstSig.mk (ListType.nil Name) \
+                   (KExpr.pi (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero)))) \
+                   (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)))"
             ),
             "Faithful definition environment (real-env discharge R0): one definition DEF unfolding to a \
              closed-lambda value. Value-ful Definition (ratchet-clean).",
         )?;
 
         self.add_recursive_def(
-            "def faithful_red_env : RedEnv := RedEnv.mk faithful_rec_env faithful_def_env",
+            "def faithful_red_env : RedEnv := RedEnv.mk faithful_rec_env faithful_def_env IndCtorEnv.empty",
             "Faithful combined reduction environment (real-env discharge R0): RedEnv.mk of the faithful \
              recursor + definition envs, modelling a real kernel-environment shape (NOT the toy \
              the_red_env). Non-vacuous (iota + delta fire — see the two witnesses). The env over which \
@@ -820,143 +825,67 @@ impl Specification {
     /// R2: the four closure interfaces over `faithful_red_env`
     /// (i3 RecEnvClosed, i4 RecEnvLiftClosed, i5 DefEnvClosed, i6 DefEnvLiftClosed).
     fn add_faithful_red_env_closure_obligations(&mut self) -> Result<(), SpecError> {
-        // i3 RecEnvClosed: every looked-up rule's rhs is instantiate_at-invariant.
-        // Recover rule = RULE (fre_rule_eq_rule), recrule_rhs RULE = LAM is closed,
-        // so instantiate_at (recrule_rhs RULE) val depth computes back to it (Eq.refl).
+        // Both witnesses now carry the same schematic structural closure.
         self.add_definition(Self::fre_eq_lemma(
             "faithful_rec_env_closed",
             "RecEnvClosed (red_rec faithful_red_env)",
-            &format!(
-                "RecEnvClosed.mk (red_rec faithful_red_env) \
-                 (fun (rname : Name) (cname : Name) (rule : RecRule) (val : KExpr) (depth : Nat) \
-                 (hlk : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) rname cname) (OptionType.some RecRule rule)) => \
-                 Eq.substType RecRule \
-                 (fun (rr : RecRule) => Eq KExpr (instantiate_at (recrule_rhs rr) val depth) (recrule_rhs rr)) \
-                 ({RULE}) rule (fre_rule_eq_rule rname cname rule hlk) \
-                 (Eq.refl KExpr (recrule_rhs ({RULE}))))"
-            ),
-            "Real-env discharge i3 (RecEnvClosed over faithful_red_env): every looked-up rule's rhs is \
-             instantiate_at-invariant. The single rule's rhs is the CLOSED lambda LAM, so substitution \
-             leaves it fixed by computation; recover rule = RULE (fre_rule_eq_rule) and transport Eq.refl. \
-             DerivedProved, zero axiom_deps — honestly discharged, NOT carried.",
-            &[
-                "RecEnvClosed",
-                "RecEnvClosed.mk",
-                "fre_rule_eq_rule",
-                "recrule_for",
-                "recrule_rhs",
-                "instantiate_at",
-                "Eq.substType",
-                "Eq.refl",
-                "red_rec",
-                "faithful_red_env",
-            ],
+            r"RecEnvClosed.mk (red_rec faithful_red_env)
+  (fun (rname : Name) (cname : Name) (rule : RecRule)
+    (hlk : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) rname cname)
+      (OptionType.some RecRule rule)) =>
+    Eq.substType RecRule (fun (rr : RecRule) => is_closed_at (recrule_rhs rr) Nat.zero)
+     (RecRule.mk (Name.str Name.anonymous (Nat.succ Nat.zero)) Nat.zero
+       (KExpr.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero)))
+     rule (fre_rule_eq_rule rname cname rule hlk)
+     (is_closed_at.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero) Nat.zero
+       (is_closed_at.sort Level.zero Nat.zero)
+       (is_closed_at.sort Level.zero (Nat.succ Nat.zero))))",
+            "The actual fixture lookup equation identifies its closed lambda rule. Transport structural closure, rather than assuming substitution invariance.",
+            &["RecEnvClosed", "fre_rule_eq_rule", "is_closed_at", "faithful_red_env"],
         ))?;
 
-        // i4 RecEnvLiftClosed: the lift analogue — recrule_rhs RULE = LAM is fixed
-        // by lift_at as well (closed term, no free bvars).
         self.add_definition(Self::fre_eq_lemma(
             "faithful_rec_env_lift_closed",
             "RecEnvLiftClosed (red_rec faithful_red_env)",
-            &format!(
-                "RecEnvLiftClosed.mk (red_rec faithful_red_env) \
-                 (fun (rname : Name) (cname : Name) (rule : RecRule) (cutoff : Nat) (amount : Nat) \
-                 (hlk : Eq (OptionType RecRule) (recrule_for (red_rec faithful_red_env) rname cname) (OptionType.some RecRule rule)) => \
-                 Eq.substType RecRule \
-                 (fun (rr : RecRule) => Eq KExpr (lift_at (recrule_rhs rr) cutoff amount) (recrule_rhs rr)) \
-                 ({RULE}) rule (fre_rule_eq_rule rname cname rule hlk) \
-                 (Eq.refl KExpr (recrule_rhs ({RULE}))))"
-            ),
-            "Real-env discharge i4 (RecEnvLiftClosed over faithful_red_env): every looked-up rule's rhs is \
-             lift_at-invariant. The single rule's rhs is the CLOSED lambda LAM, so lifting leaves it fixed \
-             by computation; recover rule = RULE (fre_rule_eq_rule) and transport Eq.refl. DerivedProved, \
-             zero axiom_deps — honestly discharged, NOT carried.",
-            &[
-                "RecEnvLiftClosed",
-                "RecEnvLiftClosed.mk",
-                "fre_rule_eq_rule",
-                "recrule_for",
-                "recrule_rhs",
-                "lift_at",
-                "Eq.substType",
-                "Eq.refl",
-                "red_rec",
-                "faithful_red_env",
-            ],
+            "recenv_closed_to_lift_closed (red_rec faithful_red_env) faithful_rec_env_closed",
+            "Construct the second nominal interface from the proved shared structural closure field.",
+            &["recenv_closed_to_lift_closed", "faithful_rec_env_closed"],
         ))?;
 
-        // i5 DefEnvClosed: every looked-up def value is instantiate_at-invariant.
-        // Invert the single defval_for slot (opt_pick_some_inv, the i7 pattern) to
-        // pin defval = LAM (closed), then transport Eq.refl.
-        self.add_definition(Self::fre_eq_lemma(
-            "faithful_def_env_closed",
-            "DefEnvClosed (red_def faithful_red_env)",
-            &format!(
-                "DefEnvClosed.mk (red_def faithful_red_env) \
-                 (fun (dname : Name) (defval : KExpr) (subval : KExpr) (depth : Nat) \
-                 (h : Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) dname) (OptionType.some KExpr defval)) => \
-                 opt_pick_some_inv KExpr (name_eqb ({DEFN}) dname) {LAM} (OptionType.none KExpr) defval \
-                 (Eq KExpr (instantiate_at defval subval depth) defval) h \
-                 (fun (_htrue : Eq Bool (name_eqb ({DEFN}) dname) Bool.true) (hv : Eq KExpr {LAM} defval) => \
-                 Eq.substType KExpr (fun (dv : KExpr) => Eq KExpr (instantiate_at dv subval depth) dv) \
-                 {LAM} defval hv (Eq.refl KExpr {LAM})) \
-                 (fun (_hfalse : Eq Bool (name_eqb ({DEFN}) dname) Bool.false) (hn : Eq (OptionType KExpr) (OptionType.none KExpr) (OptionType.some KExpr defval)) => \
-                 option_none_ne_some KExpr defval (Eq KExpr (instantiate_at defval subval depth) defval) hn))"
-            ),
-            "Real-env discharge i5 (DefEnvClosed over faithful_red_env): every looked-up def value is \
-             instantiate_at-invariant. The single definition unfolds to the CLOSED lambda LAM, so \
-             substitution leaves it fixed by computation; invert the def-value lookup (opt_pick_some_inv), \
-             pin defval = LAM, transport Eq.refl. DerivedProved, zero axiom_deps — honestly discharged, \
-             NOT carried.",
-            &[
-                "DefEnvClosed",
-                "DefEnvClosed.mk",
-                "opt_pick_some_inv",
-                "name_eqb",
-                "option_none_ne_some",
-                "defval_for",
-                "instantiate_at",
-                "Eq.substType",
-                "Eq.refl",
-                "red_def",
-                "faithful_red_env",
-            ],
-        ))?;
-
-        // i6 DefEnvLiftClosed: the lift analogue of i5.
-        self.add_definition(Self::fre_eq_lemma(
-            "faithful_def_env_lift_closed",
-            "DefEnvLiftClosed (red_def faithful_red_env)",
-            &format!(
-                "DefEnvLiftClosed.mk (red_def faithful_red_env) \
-                 (fun (dname : Name) (defval : KExpr) (cutoff : Nat) (amount : Nat) \
-                 (h : Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) dname) (OptionType.some KExpr defval)) => \
-                 opt_pick_some_inv KExpr (name_eqb ({DEFN}) dname) {LAM} (OptionType.none KExpr) defval \
-                 (Eq KExpr (lift_at defval cutoff amount) defval) h \
-                 (fun (_htrue : Eq Bool (name_eqb ({DEFN}) dname) Bool.true) (hv : Eq KExpr {LAM} defval) => \
-                 Eq.substType KExpr (fun (dv : KExpr) => Eq KExpr (lift_at dv cutoff amount) dv) \
-                 {LAM} defval hv (Eq.refl KExpr {LAM})) \
-                 (fun (_hfalse : Eq Bool (name_eqb ({DEFN}) dname) Bool.false) (hn : Eq (OptionType KExpr) (OptionType.none KExpr) (OptionType.some KExpr defval)) => \
-                 option_none_ne_some KExpr defval (Eq KExpr (lift_at defval cutoff amount) defval) hn))"
-            ),
-            "Real-env discharge i6 (DefEnvLiftClosed over faithful_red_env): every looked-up def value is \
-             lift_at-invariant. The single definition unfolds to the CLOSED lambda LAM, so lifting leaves \
-             it fixed by computation; invert the def-value lookup (opt_pick_some_inv), pin defval = LAM, \
-             transport Eq.refl. DerivedProved, zero axiom_deps — honestly discharged, NOT carried.",
-            &[
-                "DefEnvLiftClosed",
-                "DefEnvLiftClosed.mk",
-                "opt_pick_some_inv",
-                "name_eqb",
-                "option_none_ne_some",
-                "defval_for",
-                "lift_at",
-                "Eq.substType",
-                "Eq.refl",
-                "red_def",
-                "faithful_red_env",
-            ],
-        ))?;
+        // Both interfaces now store actual structural closure of raw bodies.
+        // Transfer a witness through the optional raw lookup; no result typing
+        // or universally-instantiated closure assumption is inserted.
+        self.add_recursive_def(
+            &format!(r"def faithful_defval_closed (dname : Name) (defval : KExpr)
+(h : Eq (OptionType KExpr) (defval_for (red_def faithful_red_env) dname) (OptionType.some KExpr defval)) :
+is_closed_at defval Nat.zero :=
+Eq.substType (OptionType KExpr)
+  (fun (found : OptionType KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Type)
+    Nat (fun (body : KExpr) => is_closed_at body Nat.zero) found)
+  (defval_for (red_def faithful_red_env) dname) (OptionType.some KExpr defval) h
+  (Bool.rec
+    (fun (guard : Bool) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Type)
+      Nat (fun (body : KExpr) => is_closed_at body Nat.zero)
+      (opt_pick KExpr guard {LAM} (OptionType.none KExpr)))
+    Nat.zero
+    (is_closed_at.lam (KExpr.sort Level.zero) (KExpr.sort Level.zero) Nat.zero
+      (is_closed_at.sort Level.zero Nat.zero)
+      (is_closed_at.sort Level.zero (Nat.succ Nat.zero)))
+    (name_eqb ({DEFN}) dname))"),
+            "The concrete raw definition body is structurally closed; optional lookup transport proves this for every successful lookup without assumed instantiated-output facts.",
+        )?;
+        for (name, iface) in [
+            ("faithful_def_env_closed", "DefEnvClosed"),
+            ("faithful_def_env_lift_closed", "DefEnvLiftClosed"),
+        ] {
+            self.add_definition(Self::fre_eq_lemma(
+                name,
+                &format!("{iface} (red_def faithful_red_env)"),
+                &format!("{iface}.mk (red_def faithful_red_env) faithful_defval_closed"),
+                "Discharge the operational closure interface using structural closedness of the stored schematic body. Instantiated substitution/lift invariance is derived by the delta bridge.",
+                &["faithful_defval_closed", "faithful_red_env"],
+            ))?;
+        }
 
         Ok(())
     }
@@ -999,17 +928,13 @@ impl Specification {
         // to none. CONT is iota_reduct's continuation verbatim (e := x).
         let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
         let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
-        let reduct_x = format!(
-            "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args x)) \
-             (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) \
-             (apply_spine (list_take {prefix_n} (kapp_args x)) (recrule_rhs rule))))"
-        );
         let cont_x = format!(
             "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) \
              (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args x))) \
              (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) \
              (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) \
-             (fun (rule : RecRule) => OptionType.some KExpr {reduct_x})))))"
+             (fun (rule : RecRule) => iota_contractum_at meta rule \
+             (kexpr_const_levels (kapp_fn x)) (kapp_args x) (kapp_args major))))))"
         );
         self.add_definition(Self::fre_eq_lemma(
             "iota_reduct_head_none",
@@ -1038,37 +963,40 @@ impl Specification {
 
         // i1 RecEnvReductNotRedex: an iota reduct of faithful_red_env is never itself
         // a top iota redex. Invert the fired redex (iota_reduct_some_inv) to expose
-        // REDUCT = apply_spine .. (recrule_rhs rule); rule = RULE (fre_rule_eq_rule)
-        // gives recrule_rhs rule = LAM (binder-headed, kexpr_const_name = none); the
+        // REDUCT = apply_spine .. (recursor_rhs_instance ...); rule = RULE
+        // (fre_rule_eq_rule) makes the actual instance binder-headed: universe
+        // instantiation preserves the fixed lambda constructor and its zero sorts. The
         // apply_spine layers don't change the head (kapp_fn_apply_spine x3), so the
         // reduct's head carries no const name and iota_reduct REDUCT = none
         // (iota_reduct_head_none); transport REDUCT = r (option_some_inj).
         let extras_e = format!("(list_drop (Nat.succ {major_idx}) (kapp_args e))");
         let fields_e = "(list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major))";
         let prefix_e = format!("(list_take {prefix_n} (kapp_args e))");
-        let inner3 = format!("(apply_spine {prefix_e} (recrule_rhs rule))");
+        let rhs_e = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))";
+        let inner3 = format!("(apply_spine {prefix_e} {rhs_e})");
         let inner2 = format!("(apply_spine {fields_e} {inner3})");
         let reduct_e = format!("(apply_spine {extras_e} {inner2})");
-        // kapp_fn REDUCT = kapp_fn (recrule_rhs rule) (strip the three apply_spine layers).
+        // Strip the three apply_spine layers down to the actual instantiated RHS.
         let kfreduct_eq = format!(
-            "(Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn (recrule_rhs rule)) \
+            "(Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn {rhs_e}) \
              (kapp_fn_apply_spine {extras_e} {inner2}) \
-             (Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn (recrule_rhs rule)) \
+             (Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn {rhs_e}) \
              (kapp_fn_apply_spine {fields_e} {inner3}) \
-             (kapp_fn_apply_spine {prefix_e} (recrule_rhs rule))))"
+             (kapp_fn_apply_spine {prefix_e} {rhs_e})))"
         );
-        // kexpr_const_name (kapp_fn (recrule_rhs rule)) = none, via rule = RULE.
+        // The instance has no constant head, via rule = RULE; no output-step premise.
         let head_for_rhs = format!(
             "(Eq.substType RecRule \
-             (fun (rr : RecRule) => Eq (OptionType Name) (kexpr_const_name (kapp_fn (recrule_rhs rr))) (OptionType.none Name)) \
+             (fun (rr : RecRule) => Eq (OptionType Name) (kexpr_const_name (kapp_fn \
+             (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rr) (kexpr_const_levels (kapp_fn e))))) (OptionType.none Name)) \
              ({RULE}) rule (fre_rule_eq_rule recname cname rule h5) \
              (Eq.refl (OptionType Name) (OptionType.none Name)))"
         );
         // kexpr_const_name (kapp_fn REDUCT) = none.
         let head_none = format!(
             "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {reduct_e})) \
-             (kexpr_const_name (kapp_fn (recrule_rhs rule))) (OptionType.none Name) \
-             (Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn (recrule_rhs rule)) {kfreduct_eq}) \
+             (kexpr_const_name (kapp_fn {rhs_e})) (OptionType.none Name) \
+             (Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn {rhs_e}) {kfreduct_eq}) \
              {head_for_rhs})"
         );
         let proof_for_reduct =
@@ -1096,8 +1024,8 @@ impl Specification {
             &i1_value,
             "Real-env discharge i1 (RecEnvReductNotRedex over faithful_red_env): an iota reduct is never \
              itself a top iota redex. Invert the fired redex (iota_reduct_some_inv) to expose REDUCT = \
-             apply_spine .. (recrule_rhs rule); rule = RULE (fre_rule_eq_rule) forces recrule_rhs rule = \
-             LAM (binder-headed, kexpr_const_name = none); the apply_spine layers leave the head fixed \
+             apply_spine over the actual once-instantiated RHS. Rule = RULE (fre_rule_eq_rule) forces \
+             its instance to remain binder-headed (kexpr_const_name = none); the apply_spine layers leave the head fixed \
              (kapp_fn_apply_spine), so iota_reduct REDUCT short-circuits to none (iota_reduct_head_none); \
              transport REDUCT = r (option_some_inj). DerivedProved, zero axiom_deps — honestly discharged, \
              NOT carried.",

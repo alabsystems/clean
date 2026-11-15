@@ -91,7 +91,8 @@ def run_verify_gamma_crown(
 ) -> dict[str, Any]:
     """Invoke the live kernel pipeline and return the parsed JSON."""
     cmd = [
-        "cargo",
+        "targo",
+        "--unverified",
         "run",
         "--locked",
         "--quiet",
@@ -306,7 +307,7 @@ def _build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Path to a pre-captured verify_gamma_crown --json file. "
-            "When omitted, a locked short-diagnostic single-job `cargo run` "
+            "When omitted, a locked short-diagnostic single-job `targo --unverified run` "
             "is invoked to produce one live."
         ),
     )

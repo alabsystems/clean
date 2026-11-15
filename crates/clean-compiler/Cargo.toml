@@ -13,6 +13,8 @@ workspace = true
 
 [dependencies]
 clean-kernel = { workspace = true }
+clean-olean = { workspace = true, optional = true }
+blake3 = { workspace = true, optional = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
@@ -22,7 +24,22 @@ tracing = { workspace = true, optional = true }
 # callers opt in.
 clean-features = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+# bincode 1.x (NOT the workspace bincode 2): the TV certificate payload wire
+# format is bincode-1-of-`clean_kernel::Expr`, pinned to match the CONSUMER
+# side (trust-ir core's `clean-expr` pin and trust-ir-build's
+# `clean-tv-anchor` re-checker are both bincode 1.3). A different major from
+# clean-kernel's bincode 2, so both coexist in the graph.
+#
+# Sits ABOVE the trust-ir block on purpose: `runtime-lcnf` needs it and
+# survives the public export, while publish/transform.py bootstrap_projection
+# excises everything from the trust-ir marker to [features]. With the dep
+# inside that block the exported manifest failed to parse (feature
+# `runtime-lcnf` includes `dep:bincode`, but `bincode` is not listed) and no
+# public gate could even start — measured 2026-09-17 while projecting the gate.
+bincode = { version = "1.3", optional = true }
+
 [features]
+runtime-lcnf = ["dep:clean-olean", "dep:blake3", "dep:bincode"]
 round-trip-compile = []
 # CLI surface for Epic #3436 Phase 4 (#3453): exposes `clean_compiler::cli`
 # with clap-derived argument structs and a `FeatureDescriptor` array for the
@@ -30,13 +47,23 @@ round-trip-compile = []
 # downstream crates) do not pay for clap + clean-features unless they opt in.
 cli = ["dep:clap", "dep:clean-features", "dep:tracing"]
 [dev-dependencies]
+clean-parser = { workspace = true }
+clean-elab = { workspace = true }
 # test-fixtures: tests/wf_recursion_e2e.rs mints a deliberately unchecked
 # constant via Environment::add_constant_unchecked_for_test (R1-TESTDOOR —
 # the door only compiles for dev targets).
 clean-kernel = { workspace = true, features = ["test-fixtures"] }
+# test-support: `runtime_lcnf/tests` compiles the checked-in `runtime_probe`
+# Lean fixture family with the repository-pinned toolchain through
+# `clean_olean::test_support::compiled_fixture_dir` (fail-closed when the pin
+# is not installed) instead of reading a fixture path out of the environment.
+# Under resolver 2 this feature unifies with the optional `runtime-lcnf` edge
+# only while dev-dependencies are being built, so no library build pays for it.
+clean-olean = { workspace = true, features = ["test-support"] }
 clean-runtime = { workspace = true }
 proptest = { workspace = true }
 tempfile = { workspace = true }
+syn = { workspace = true, features = ["full", "visit"] }
 
 [[example]]
 name = "linkrun_census"

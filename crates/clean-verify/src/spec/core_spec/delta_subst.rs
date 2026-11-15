@@ -6,8 +6,8 @@
 //! lift commutation substrate — the delta analogue of the Increment E iota
 //! E-core (`iota_subst_commutes` / `iota_lift_commutes`).
 //!
-//! `delta_reduct env e = some (apply_spine (kapp_args e) val)`, where `val =
-//! defval_for env dname` is looked up by the (const) head name `dname` of `e`.
+//! `delta_reduct env e = some (apply_spine (kapp_args e) val)`, where the guarded
+//! `kdef_value_at env dname (kexpr_const_levels (kapp_fn e))` returns `some val`.
 //! The reduct re-applies the ORIGINAL spine `kapp_args e` over the env's
 //! definition value `val`. So commuting a substitution `s` past the directed
 //! delta step needs only that `s` distributes over `apply_spine`/`kapp_args`
@@ -16,8 +16,9 @@
 //! definition values are closed terms). This is STRUCTURALLY SIMPLER than the
 //! iota E-core: there is no rule rhs rebuilt from the env, no major-premise
 //! window, no 5-level inversion — delta's reduct keeps the bare spine and the
-//! whole-value `val` rides through under one closure projection (mirror of
-//! `recenv_closed_rhs`, but on the WHOLE value, not just the rhs slot).
+//! whole-value `val` rides through by guarded-lookup inversion and preservation
+//! of closedness under universe instantiation. The closure premise concerns the
+//! stored schematic body, not a separately assumed fact about each instance.
 //!
 //! The closure condition is captured by `DefEnvClosed env` /
 //! `DefEnvLiftClosed env` — real inductives (proper recursor, NOT axioms),
@@ -25,8 +26,9 @@
 //! defined HYPOTHESES (faithful interfaces); their witness for the kernel env is
 //! discharged at the end of the track by modeling the definition-value store.
 //!
-//! Runs AFTER `add_delta_step` (consumes `DefEnv`/`defval_for`/`delta_reduct`/
-//! `delta_reduct_some_inv`) and AFTER `add_iota_core` (consumes the inst/lift
+//! Runs AFTER `add_delta_step` (consumes raw/guarded lookup and
+//! `delta_reduct_some_inv`) and the early instL-closedness and term-invariance
+//! stages, plus AFTER `add_iota_core` (consumes the inst/lift
 //! commutation substrate: `instantiate_at_apply_spine`,
 //! `instantiate_at_kapp_args_const`, `kexpr_const_name_instantiate_const`,
 //! `lift_at_apply_spine`, `lift_at_kapp_args`, `kexpr_const_name_lift`,
@@ -39,146 +41,198 @@ use crate::spec::error::SpecError;
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
 
-/// The closure fact carried by `DefEnvClosed env`: every value reachable via
-/// `defval_for` is invariant under `instantiate_at` (the kernel's definition
-/// values are closed terms, so substitution leaves them fixed). The delta
-/// analogue of `RecEnvClosed`'s `CLOSED_FACT`, but on the WHOLE looked-up value
-/// (not just a rule rhs slot).
-const DEF_CLOSED_FACT: &str = concat!(
-    "forall (dname : Name) (defval : KExpr) (subval : KExpr) (depth : Nat), ",
+/// Both operational closure interfaces store ONLY closedness of raw schematic
+/// bodies. Universe-instantiated invariance is derived below, never assumed.
+const DEF_SCHEMATIC_CLOSED_FACT: &str = concat!(
+    "forall (dname : Name) (defval : KExpr), ",
     "Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> ",
-    "Eq KExpr (instantiate_at defval subval depth) defval"
-);
-
-/// The lift-closure fact carried by `DefEnvLiftClosed env`: every value reachable
-/// via `defval_for` is invariant under `lift_at`. The lift analogue of
-/// `DEF_CLOSED_FACT`; a closed definition value is fixed by lift as well as inst.
-const DEF_LIFT_CLOSED_FACT: &str = concat!(
-    "forall (dname : Name) (defval : KExpr) (cutoff : Nat) (amount : Nat), ",
-    "Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> ",
-    "Eq KExpr (lift_at defval cutoff amount) defval"
+    "is_closed_at defval Nat.zero"
 );
 
 impl Specification {
     pub(super) fn add_delta_subst(&mut self) -> Result<(), SpecError> {
-        // DefEnvClosed env: every looked-up definition value is closed
-        // (instantiate_at-invariant). Real inductive, mirror of RecEnvClosed.
-        self.add_inductive(
-            &format!(
-                "inductive DefEnvClosed (env : DefEnv) : Type\n| mk : ({DEF_CLOSED_FACT}) → DefEnvClosed env"
-            ),
-            "Closure interface for a definition environment: every value reachable via defval_for is \
-             instantiate_at-invariant (definition values are closed, so substitution leaves them fixed). \
-             A defined hypothesis (NOT an axiom); its witness for the kernel env is discharged at the end \
-             of the track. The delta substitution-commutation uses it so delta_reduct(inst e) and \
-             inst(delta_reduct e) agree on the def value. The delta analogue of RecEnvClosed (on the whole \
-             value, not just a rule rhs slot). Part of #2859 (Increment G).",
+        self.add_recursive_def(
+            r"def kdef_inst_value_closed (defn : KDefSig) (us : ListType Level) (d : Nat)
+(h : is_closed_at (kdef_value defn) d) : is_closed_at (kdef_inst_value defn us) d :=
+instL_preserves_closed_at (paramSubstN (kconst_params (kdef_signature defn)) us) (kdef_value defn) d h",
+            "Instantiate a shared definition's schematic body without changing de Bruijn closedness. Derived from the actual instL structural theorem, with no per-instantiation assumption.",
         )?;
-
-        // defenv_closed_val: the projector the delta E-core consumes. Given the env
-        // is closed and a value was looked up, that value is fixed by instantiate_at.
-        // Mirror of recenv_closed_rhs.
-        self.add_definition(SpecDefinition {
-            name: "defenv_closed_val".to_string(),
-            type_src: "forall (env : DefEnv) (dname : Name) (defval : KExpr) (subval : KExpr) \
-                 (depth : Nat), \
-                 DefEnvClosed env -> \
-                 Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> \
-                 Eq KExpr (instantiate_at defval subval depth) defval"
-                .to_string(),
-            value_src: Some(format!(
-                "fun (env : DefEnv) (dname : Name) (defval : KExpr) (subval : KExpr) \
-                 (depth : Nat) \
-                 (w : DefEnvClosed env) \
-                 (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
-                 DefEnvClosed.rec env \
-                 (fun (_ : DefEnvClosed env) => \
-                 Eq KExpr (instantiate_at defval subval depth) defval) \
-                 (fun (hc : {DEF_CLOSED_FACT}) => hc dname defval subval depth hlk) \
-                 w"
-            )),
-            is_axiom: false,
-            description: concat!(
-                "Projector for DefEnvClosed: in a closed definition environment, a looked-up value is ",
-                "invariant under instantiate_at at any (subval, depth). Projects the single closure fact ",
-                "via DefEnvClosed.rec and applies it to the lookup witness. The interface the delta ",
-                "substitution-commutation consumes to fix the def value across instantiate_at. Mirror of ",
-                "recenv_closed_rhs. DerivedProved; zero axiom_deps. Part of #2859 (Increment G)."
-            )
-            .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "DefEnvClosed".to_string(),
-                "DefEnvClosed.rec".to_string(),
-                "defval_for".to_string(),
-                "instantiate_at".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
-
-        // DefEnvLiftClosed env: the lift analogue — every looked-up value is closed
-        // under lift_at (lift-invariant). Real inductive (NOT an axiom), the lift
-        // mirror of DefEnvClosed. The LIFT delta-commutation consumes its projector.
-        self.add_inductive(
-            &format!(
-                "inductive DefEnvLiftClosed (env : DefEnv) : Type\n| mk : ({DEF_LIFT_CLOSED_FACT}) → DefEnvLiftClosed env"
+        for (iface, prefix, operation, invariance) in [
+            (
+                "DefEnvClosed",
+                "defenv_closed",
+                "instantiate_at",
+                "inst_closed_at_id",
             ),
-            "Lift-closure interface for a definition environment: every value reachable via defval_for is \
-             lift_at-invariant (definition values are closed, so lifting leaves them fixed). A defined \
-             hypothesis (NOT an axiom); the lift analogue of DefEnvClosed. The LIFT delta-commutation uses \
-             it so delta_reduct(lift e) and lift(delta_reduct e) agree on the def value. Part of #2859 (Increment G).",
-        )?;
-
-        // defenv_lift_closed_val: the projector the LIFT delta-commutation consumes.
-        // Given the env is lift-closed and a value was looked up, that value is fixed
-        // by lift_at. The lift mirror of defenv_closed_val.
-        self.add_definition(SpecDefinition {
-            name: "defenv_lift_closed_val".to_string(),
-            type_src: "forall (env : DefEnv) (dname : Name) (defval : KExpr) (cutoff : Nat) \
-                 (amount : Nat), \
-                 DefEnvLiftClosed env -> \
-                 Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval) -> \
-                 Eq KExpr (lift_at defval cutoff amount) defval"
-                .to_string(),
-            value_src: Some(format!(
-                "fun (env : DefEnv) (dname : Name) (defval : KExpr) (cutoff : Nat) \
-                 (amount : Nat) \
-                 (w : DefEnvLiftClosed env) \
-                 (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
-                 DefEnvLiftClosed.rec env \
-                 (fun (_ : DefEnvLiftClosed env) => \
-                 Eq KExpr (lift_at defval cutoff amount) defval) \
-                 (fun (hc : {DEF_LIFT_CLOSED_FACT}) => hc dname defval cutoff amount hlk) \
-                 w"
-            )),
-            is_axiom: false,
-            description: concat!(
-                "Projector for DefEnvLiftClosed: in a lift-closed definition environment, a looked-up value ",
-                "is invariant under lift_at at any (cutoff, amount). Projects the single lift-closure fact ",
-                "via DefEnvLiftClosed.rec and applies it to the lookup witness. The interface the LIFT delta-",
-                "commutation consumes to fix the def value across lift_at. The lift mirror of ",
-                "defenv_closed_val. DerivedProved; zero axiom_deps. Part of #2859 (Increment G)."
-            )
-            .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "DefEnvLiftClosed".to_string(),
-                "DefEnvLiftClosed.rec".to_string(),
-                "defval_for".to_string(),
-                "lift_at".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
+            (
+                "DefEnvLiftClosed",
+                "defenv_lift_closed",
+                "lift_at",
+                "lift_closed_at_id",
+            ),
+        ] {
+            self.add_inductive(
+                &format!("inductive {iface} (env : DefEnv) : Type\n| mk : ({DEF_SCHEMATIC_CLOSED_FACT}) -> {iface} env"),
+                "Schematic closure interface: every raw stored definition body is structurally closed at depth zero. This is not a premise about independently instantiated outputs.",
+            )?;
+            self.add_recursive_def(
+                &format!("def {prefix}_raw (env : DefEnv) (n : Name) (body : KExpr) (w : {iface} env) (found : Eq (OptionType KExpr) (defval_for env n) (OptionType.some KExpr body)) : is_closed_at body Nat.zero := {iface}.rec env (fun (_ : {iface} env) => is_closed_at body Nat.zero) (fun (hc : {DEF_SCHEMATIC_CLOSED_FACT}) => hc n body found) w"),
+                "Project structural closedness of the raw schematic body.",
+            )?;
+            let (extra, args, instantiate) = if operation == "instantiate_at" {
+                ("(x : KExpr) (d : Nat)", "x d", format!("{invariance} body Nat.zero ({prefix}_raw env n body w found) x d (le_zero_n d)"))
+            } else {
+                ("(d : Nat) (x : Nat)", "d x", format!("{invariance} body Nat.zero ({prefix}_raw env n body w found) d x (le_zero_n d)"))
+            };
+            // `{prefix}_val` is the projector the keystone test pins as
+            // DerivedProved with zero axiom_deps (tests/delta_subst_keystone.rs).
+            // It goes through `add_definition`, which kernel-checks the value at
+            // `add_decl` and records the derived-lemma status that registration
+            // actually earned. `add_recursive_def` leaves every definition
+            // DerivedPending by construction (declaration_registration.rs, "not
+            // verified through the kernel promote pipeline"), and nothing later
+            // promotes it — which is exactly what turned the keystone red when
+            // 31fa57c00 moved this projector onto that path.
+            self.add_definition(SpecDefinition {
+                name: format!("{prefix}_val"),
+                type_src: format!(
+                    "forall (env : DefEnv) (n : Name) (body : KExpr) {extra}, \
+                     {iface} env -> \
+                     Eq (OptionType KExpr) (defval_for env n) (OptionType.some KExpr body) -> \
+                     Eq KExpr ({operation} body {args}) body"
+                ),
+                value_src: Some(format!(
+                    "fun (env : DefEnv) (n : Name) (body : KExpr) {extra} \
+                     (w : {iface} env) \
+                     (found : Eq (OptionType KExpr) (defval_for env n) (OptionType.some KExpr body)) => \
+                     {instantiate}"
+                )),
+                is_axiom: false,
+                description: "Preserve the old raw-body invariance interface, now derived from \
+                              schematic structural closedness. DerivedProved; zero axiom_deps."
+                    .to_string(),
+                category: AxiomCategory::DerivedLemma,
+                proof_status: ProofStatus::DerivedProved,
+                elaborated_type: None,
+                elaborated_value: None,
+                dependencies: Some(HashSet::from([
+                    iface.to_string(),
+                    format!("{prefix}_raw"),
+                    invariance.to_string(),
+                    "le_zero_n".to_string(),
+                    "defval_for".to_string(),
+                    operation.to_string(),
+                ])),
+                axiom_deps: HashSet::new(),
+            })?;
+            let derived_closed = format!("kdef_inst_value_closed defn us Nat.zero ({prefix}_raw env n (kdef_value defn) w (kdef_raw_value_of_lookup env n defn lookup))");
+            let derived = if operation == "instantiate_at" {
+                format!("{invariance} (kdef_inst_value defn us) Nat.zero ({derived_closed}) x d (le_zero_n d)")
+            } else {
+                format!("{invariance} (kdef_inst_value defn us) Nat.zero ({derived_closed}) d x (le_zero_n d)")
+            };
+            self.add_recursive_def(
+                &format!(r"def {prefix}_value_at (env : DefEnv) (n : Name) (us : ListType Level) (body : KExpr) {extra}
+(w : {iface} env)
+(found : Eq (OptionType KExpr) (kdef_value_at env n us) (OptionType.some KExpr body)) :
+Eq KExpr ({operation} body {args}) body :=
+kdef_value_at_guard_inv env n us body (Eq KExpr ({operation} body {args}) body) found
+  (fun (defn : KDefSig)
+    (lookup : Eq (OptionType KDefSig) (kdef_for env n) (OptionType.some KDefSig defn))
+    (_guard : Eq Bool (nat_eqb (name_list_len (kconst_params (kdef_signature defn))) (level_list_len us)) Bool.true)
+    (result : Eq KExpr body (kdef_inst_value defn us)) =>
+    Eq.substType KExpr (fun (v : KExpr) => Eq KExpr ({operation} v {args}) v)
+      (kdef_inst_value defn us) body (Eq.symm KExpr body (kdef_inst_value defn us) result)
+      ({derived}))"),
+                "Actual unfolding bodies are invariant under term substitution/lift, derived by guarded-lookup inversion, raw schematic closedness, instL preservation and structural invariance. No per-instantiated-result assumption.",
+            )?;
+        }
 
         self.add_delta_subst_commutes()?;
         self.add_delta_lift_commutes()?;
 
+        Ok(())
+    }
+
+    /// A known constant application head is fixed as a WHOLE expression by
+    /// term substitution and lifting, so its universe argument list survives.
+    pub(super) fn add_delta_head_invariance(&mut self) -> Result<(), SpecError> {
+        for (suffix, params, operation, args, app_law, const_law) in [
+            (
+                "inst",
+                "(v : KExpr) (d : Nat)",
+                "instantiate_at",
+                "v d",
+                "instantiate_at_app",
+                "instantiate_at_const",
+            ),
+            (
+                "lift",
+                "(c : Nat) (a0 : Nat)",
+                "lift_at",
+                "c a0",
+                "lift_at_app",
+                "lift_at_const",
+            ),
+        ] {
+            let guard = |e: &str| {
+                format!("Eq (OptionType Name) (kexpr_const_name (kapp_fn {e})) (OptionType.some Name n)")
+            };
+            let goal =
+                |e: &str| format!("Eq KExpr (kapp_fn ({operation} {e} {args})) (kapp_fn {e})");
+            let ih = |e: &str| format!("{} -> {}", guard(e), goal(e));
+            let bad = |e: &str| {
+                format!(
+                    "(h : {}) => option_none_ne_some Name n ({}) h",
+                    guard(e),
+                    goal(e)
+                )
+            };
+            let body = format!(
+                r"fun {params} (n : Name) (e : KExpr) =>
+KExpr.rec (fun (e0 : KExpr) => {motive})
+  (fun (u : Level) {sort})
+  (fun (i : Nat) {bvar})
+  (fun (f : KExpr) (a : KExpr) (ihf : {ihf}) (_iha : {iha}) (h : {app_guard}) =>
+    Eq.trans KExpr (kapp_fn ({operation} (KExpr.app f a) {args}))
+      (kapp_fn ({operation} f {args})) (kapp_fn (KExpr.app f a))
+      (Eq.cong KExpr KExpr kapp_fn ({operation} (KExpr.app f a) {args})
+        (KExpr.app ({operation} f {args}) ({operation} a {args})) ({app_law} f a {args}))
+      (ihf h))
+  (fun (A : KExpr) (b : KExpr) (_ihA : {ihA}) (_ihb : {ihb}) {lam})
+  (fun (A : KExpr) (b : KExpr) (_ihA : {ihA}) (_ihb : {ihb}) {pi})
+  (fun (nm : Name) (us : ListType Level) (_h : {const_guard}) =>
+    Eq.cong KExpr KExpr kapp_fn ({operation} (KExpr.const nm us) {args})
+      (KExpr.const nm us) ({const_law} nm us {args}))
+  (fun (A : KExpr) (v0 : KExpr) (b : KExpr) (_ihA : {ihA}) (_ihv : {ihv}) (_ihb : {ihb}) {let_})
+  (fun (sn : Name) (i : Nat) (sub : KExpr) (_ihsub : {ihsub}) {proj})
+  (fun (i : Nat) {lit}) e",
+                motive = ih("e0"),
+                sort = bad("(KExpr.sort u)"),
+                bvar = bad("(KExpr.bvar i)"),
+                ihf = ih("f"),
+                iha = ih("a"),
+                app_guard = guard("(KExpr.app f a)"),
+                ihA = ih("A"),
+                ihb = ih("b"),
+                lam = bad("(KExpr.lam A b)"),
+                pi = bad("(KExpr.pi A b)"),
+                const_guard = guard("(KExpr.const nm us)"),
+                ihv = ih("v0"),
+                let_ = bad("(KExpr.let_ A v0 b)"),
+                ihsub = ih("sub"),
+                proj = bad("(KExpr.proj sn i sub)"),
+                lit = bad("(KExpr.lit i)"),
+            );
+            self.add_definition(SpecDefinition {
+                name: format!("delta_head_const_invariant_{suffix}"),
+                type_src: format!("forall {params} (n : Name) (e : KExpr), {} -> {}", guard("e"), goal("e")),
+                value_src: Some(body), is_axiom: false,
+                description: "Term operations preserve a known constant application head including all supplied universe arguments, by actual KExpr induction. Only app and const arms survive the name guard.".to_string(),
+                category: AxiomCategory::DerivedLemma, proof_status: ProofStatus::DerivedProved,
+                elaborated_type: None, elaborated_value: None, dependencies: None, axiom_deps: HashSet::new(),
+            })?;
+        }
         Ok(())
     }
 
@@ -225,7 +279,7 @@ impl Specification {
                 "(Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {fmap} (kapp_args e)) Y) \
                  val (instantiate_at val v d) \
                  (Eq.symm KExpr (instantiate_at val v d) val \
-                 (defenv_closed_val env dname val v d closed h2)))"
+                 (defenv_closed_value_at env dname (kexpr_const_levels (kapp_fn e)) val v d closed h2)))"
             );
             // s3 : C = MID  (symm of instantiate_at_apply_spine).
             let s3 = format!(
@@ -245,7 +299,7 @@ impl Specification {
                  (dname : Name) (val : KExpr) \
                  (closed : DefEnvClosed env) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
                  Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} {mid_to_rhs}"
             );
@@ -255,7 +309,7 @@ impl Specification {
                      (dname : Name) (val : KExpr), \
                      DefEnvClosed env -> \
                      Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname) -> \
-                     Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val) -> \
+                     Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
                      Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e') -> \
                      Eq KExpr (apply_spine (kapp_args (instantiate_at e v d)) val) (instantiate_at e' v d)"
                     .to_string(),
@@ -303,7 +357,7 @@ impl Specification {
                 "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args {ei}) val))"
             );
             let f1 =
-                format!("(fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) {f2})");
+                format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn {ei}))) {f2})");
 
             // Level-1 inst-side lookup: the head const-name survives inst.
             let h1i = format!(
@@ -319,16 +373,20 @@ impl Specification {
             );
 
             // The nested opt_bind_some_intro chain (outside-in, 2 levels).
+            let h2i = format!(
+                "(Eq.trans (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn {ei}))) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) (Eq.cong KExpr (OptionType KExpr) (fun (head : KExpr) => kdef_value_at env dname (kexpr_const_levels head)) (kapp_fn {ei}) (kapp_fn e) (delta_head_const_invariant_inst v d dname e h1)) h2)"
+            );
+
             let recon = format!(
                 "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {ei})) {f1} dname {iep} {h1i} \
-                 (opt_bind_some_intro KExpr KExpr (defval_for env dname) {f2} val {iep} h2 {hf2})"
+                 (opt_bind_some_intro KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn {ei}))) {f2} val {iep} {h2i} {hf2})"
             );
 
             // The continuation k passed to delta_reduct_some_inv (binders match kont).
             let kont_lambda = format!(
                 "(fun (dname : Name) (val : KExpr) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
                  {recon})"
             );
@@ -413,7 +471,7 @@ impl Specification {
                 "(Eq.cong KExpr KExpr (fun (Y : KExpr) => apply_spine (list_map {gmap} (kapp_args e)) Y) \
                  val (lift_at val c a) \
                  (Eq.symm KExpr (lift_at val c a) val \
-                 (defenv_lift_closed_val env dname val c a liftclosed h2)))"
+                 (defenv_lift_closed_value_at env dname (kexpr_const_levels (kapp_fn e)) val c a liftclosed h2)))"
             );
             // s3 : C = MID  (symm of lift_at_apply_spine).
             let s3 =
@@ -429,7 +487,7 @@ impl Specification {
                 "fun (env : DefEnv) (c : Nat) (a : Nat) (e : KExpr) (e' : KExpr) \
                  (dname : Name) (val : KExpr) \
                  (liftclosed : DefEnvLiftClosed env) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
                  Eq.trans KExpr {lhs} {mid} {rhs} {lhs_to_mid} {mid_to_rhs}"
             );
@@ -438,7 +496,7 @@ impl Specification {
                 type_src: "forall (env : DefEnv) (c : Nat) (a : Nat) (e : KExpr) (e' : KExpr) \
                      (dname : Name) (val : KExpr), \
                      DefEnvLiftClosed env -> \
-                     Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val) -> \
+                     Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) -> \
                      Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e') -> \
                      Eq KExpr (apply_spine (kapp_args (lift_at e c a)) val) (lift_at e' c a)"
                     .to_string(),
@@ -483,7 +541,7 @@ impl Specification {
                 "(fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args {el}) val))"
             );
             let f1 =
-                format!("(fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) {f2})");
+                format!("(fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn {el}))) {f2})");
 
             // Level-1 lift-side lookup: the head const-name survives lift (no guard).
             let h1l = format!(
@@ -498,15 +556,19 @@ impl Specification {
                  (delta_reduct_lift_eq env c a e e' dname val liftclosed h2 h2r))"
             );
 
+            let h2l = format!(
+                "(Eq.trans (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn {el}))) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val) (Eq.cong KExpr (OptionType KExpr) (fun (head : KExpr) => kdef_value_at env dname (kexpr_const_levels head)) (kapp_fn {el}) (kapp_fn e) (delta_head_const_invariant_lift c a dname e h1)) h2)"
+            );
+
             let recon = format!(
                 "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {el})) {f1} dname {epl} {h1l} \
-                 (opt_bind_some_intro KExpr KExpr (defval_for env dname) {f2} val {epl} h2 {hf2})"
+                 (opt_bind_some_intro KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn {el}))) {f2} val {epl} {h2l} {hf2})"
             );
 
             let kont_lambda = format!(
                 "(fun (dname : Name) (val : KExpr) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name dname)) \
-                 (h2 : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr val)) \
+                 (h2 : Eq (OptionType KExpr) (kdef_value_at env dname (kexpr_const_levels (kapp_fn e))) (OptionType.some KExpr val)) \
                  (h2r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (kapp_args e) val)) (OptionType.some KExpr e')) => \
                  {recon})"
             );

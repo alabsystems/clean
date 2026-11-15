@@ -384,13 +384,13 @@ pub(super) const VAL_CONV_VERDICT: &str = "AndType.intro (PropBox (forall (D : N
 /// `synTyC_konst_dead_witness` and R11's `r11_interp_const_pi_witness` are the
 /// precedent; this is the same constant, now shape-typed.
 pub(super) fn src_konst_witness() -> String {
-    format!("def r17_konst_witness : WKC r12_piEnv {DEADCONST} Sk.ty := WKC.konst r12_piEnv kcre_name_12 (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))")
+    format!("def r17_konst_witness : WKC r12_piEnv {DEADCONST} Sk.ty := WKC.konst r12_piEnv fixture_def_env_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))")
 }
 
 /// That constant is `whnf_acc` — through `r17_const_no_step`, so the `konst`
 /// clause's TOP-candidate interpretation actually CONTAINS its own subject.
 pub(super) fn src_dead_const_acc() -> String {
-    format!("def r17_deadConst_acc : whnf_acc {DEADCONST} := whnf_acc.intro {DEADCONST} (fun (qe2 : KExpr) (qhs : whnf_step {DEADCONST} qe2) => r17_const_no_step kcre_name_12 (ListType.nil Level) qe2 (whnf_acc qe2) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) qhs)")
+    format!("def r17_deadConst_acc : whnf_acc {DEADCONST} := whnf_acc.intro {DEADCONST} (fun (qe2 : KExpr) (qhs : whnf_step {DEADCONST} qe2) => r17_const_no_step fixture_def_env_name (ListType.nil Level) qe2 (whnf_acc qe2) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) qhs)")
 }
 
 /// NON-DEGENERACY of the `konst` interpretation clause: the constant is a MEMBER
@@ -541,7 +541,7 @@ pub(super) fn probe_zeta_junk() -> String {
 /// `Sk.ty` and at no other shape; the kernel must refuse.
 #[cfg(test)]
 pub(super) fn probe_konst_wrong_shape() -> String {
-    format!("def r17_konst_wrong_shape_probe : WKC r12_piEnv {DEADCONST} {KDTY} := WKC.konst r12_piEnv kcre_name_12 (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))")
+    format!("def r17_konst_wrong_shape_probe : WKC r12_piEnv {DEADCONST} {KDTY} := WKC.konst r12_piEnv fixture_def_env_name (ListType.nil Level) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (Eq.refl (OptionType RecMeta) (OptionType.none RecMeta))")
 }
 
 /// The `konst` rule at a constant that is NOT inert. `kcre_witness_delta_head`

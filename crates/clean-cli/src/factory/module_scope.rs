@@ -9,6 +9,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use clean_kernel::Name;
 use walkdir::{DirEntry, WalkDir};
 
 use super::FactoryOpsError;
@@ -25,10 +26,25 @@ pub(crate) struct ScopeReport {
 pub(crate) fn active_lean_files(root: &Path) -> Result<Vec<PathBuf>, FactoryOpsError> {
     let root = normalize_root(root);
     if let Ok(workspace) = clean_lake::Workspace::load(&root) {
+        workspace
+            .validate_module_index()
+            .map_err(|error| FactoryOpsError::LeanAnalysis {
+                path: root.clone(),
+                message: error.to_string(),
+            })?;
         let mut files = workspace
-            .all_modules()
+            .all_module_names()
             .into_iter()
-            .filter_map(|module| workspace.find_module(&module))
+            .map(|module| {
+                workspace
+                    .find_module_name(&module)
+                    .ok_or_else(|| FactoryOpsError::LeanAnalysis {
+                        path: root.clone(),
+                        message: format!("indexed module {module:?} has no exact source path"),
+                    })
+            })
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .filter(|path| is_lean_source_file(&root, path))
             .collect::<Vec<_>>();
         files.sort();
@@ -47,7 +63,7 @@ pub(crate) fn impacted_lean_files(
 ) -> Result<Vec<PathBuf>, FactoryOpsError> {
     let root = normalize_root(root);
     let active = active_lean_files(&root)?;
-    let graph = ModuleGraph::build(&root, &active);
+    let graph = ModuleGraph::build(&root, &active)?;
     let mut impacted = BTreeSet::new();
 
     let changed_abs = changed_paths
@@ -63,13 +79,8 @@ pub(crate) fn impacted_lean_files(
 
     let mut queue = VecDeque::new();
     for path in changed_abs {
-        let report_path = relative_path(&root, &path);
-        impacted.insert(report_path.clone());
-        let module = graph
-            .module_by_report_path
-            .get(&report_path)
-            .cloned()
-            .unwrap_or_else(|| module_name_from_report_path(&report_path));
+        impacted.insert(path.strip_prefix(&root).unwrap_or(&path).to_path_buf());
+        let module = module_name_from_path(&root, &path)?;
         queue.push_back(module);
     }
 
@@ -79,7 +90,7 @@ pub(crate) fn impacted_lean_files(
             continue;
         }
         if let Some(path) = graph.file_by_module.get(&module) {
-            impacted.insert(path.clone());
+            impacted.insert(path.strip_prefix(&root).unwrap_or(path).to_path_buf());
         }
         if let Some(dependents) = graph.reverse_imports.get(&module) {
             for dependent in dependents {
@@ -88,7 +99,7 @@ pub(crate) fn impacted_lean_files(
         }
     }
 
-    Ok(impacted.into_iter().map(PathBuf::from).collect::<Vec<_>>())
+    Ok(impacted.into_iter().collect())
 }
 
 pub(crate) fn scope_report(
@@ -117,29 +128,25 @@ pub(crate) fn scope_report(
 }
 
 struct ModuleGraph {
-    module_by_report_path: BTreeMap<String, String>,
-    file_by_module: BTreeMap<String, String>,
-    reverse_imports: BTreeMap<String, BTreeSet<String>>,
+    file_by_module: BTreeMap<Name, PathBuf>,
+    reverse_imports: BTreeMap<Name, BTreeSet<Name>>,
 }
 
 impl ModuleGraph {
-    fn build(root: &Path, active_files: &[PathBuf]) -> Self {
-        let mut module_by_report_path = BTreeMap::new();
+    fn build(root: &Path, active_files: &[PathBuf]) -> Result<Self, FactoryOpsError> {
         let mut file_by_module = BTreeMap::new();
         for file in active_files {
-            let report_path = relative_path(root, file);
-            let module = module_name_from_report_path(&report_path);
-            module_by_report_path.insert(report_path.clone(), module.clone());
-            file_by_module.insert(module, report_path);
+            let module = module_name_from_path(root, file)?;
+            file_by_module.insert(module, file.clone());
         }
 
-        let mut reverse_imports: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        let mut reverse_imports: BTreeMap<Name, BTreeSet<Name>> = BTreeMap::new();
         for file in active_files {
-            let report_path = relative_path(root, file);
-            let module = module_name_from_report_path(&report_path);
-            let Ok(text) = fs::read_to_string(file) else {
-                continue;
-            };
+            let module = module_name_from_path(root, file)?;
+            let text = fs::read_to_string(file).map_err(|source| FactoryOpsError::Io {
+                path: file.clone(),
+                source,
+            })?;
             for imported in import_modules(&text) {
                 reverse_imports
                     .entry(imported)
@@ -148,44 +155,40 @@ impl ModuleGraph {
             }
         }
 
-        Self {
-            module_by_report_path,
+        Ok(Self {
             file_by_module,
             reverse_imports,
-        }
+        })
     }
 }
 
-fn import_modules(text: &str) -> Vec<String> {
-    let mut imports = Vec::new();
-    for line in text.lines() {
-        let line = line.split("--").next().unwrap_or("").trim();
-        let Some(rest) = line.strip_prefix("import ") else {
-            if !line.is_empty() && !line.starts_with("@[") {
-                break;
-            }
-            continue;
-        };
-        imports.extend(
-            rest.split_whitespace()
-                .map(|part| {
-                    part.trim_matches(|ch: char| {
-                        !(ch.is_ascii_alphanumeric() || ch == '_' || ch == '.')
-                    })
-                })
-                .filter(|part| !part.is_empty())
-                .map(ToOwned::to_owned),
-        );
-    }
+fn import_modules(text: &str) -> Vec<Name> {
+    let mut imports = clean_parser::notation_seed::scan_imports(text)
+        .into_iter()
+        .map(clean_parser::SurfaceName::into_name)
+        .collect::<Vec<_>>();
     imports.sort();
     imports.dedup();
     imports
 }
 
-fn module_name_from_report_path(path: &str) -> String {
-    path.strip_suffix(".lean")
-        .unwrap_or(path)
-        .replace(['/', '\\'], ".")
+fn module_name_from_path(root: &Path, path: &Path) -> Result<Name, FactoryOpsError> {
+    let relative = path.strip_prefix(root).unwrap_or(path).with_extension("");
+    relative
+        .components()
+        .try_fold(Name::anon(), |name, component| {
+            let std::path::Component::Normal(part) = component else {
+                return Err(FactoryOpsError::LeanAnalysis {
+                    path: path.to_path_buf(),
+                    message: "module path is not relative to the source root".to_owned(),
+                });
+            };
+            let part = part.to_str().ok_or_else(|| FactoryOpsError::LeanAnalysis {
+                path: path.to_path_buf(),
+                message: "module component is not UTF-8".to_owned(),
+            })?;
+            Ok(name.str(part))
+        })
 }
 
 fn discover_lean_files(root: &Path) -> Result<Vec<PathBuf>, FactoryOpsError> {
@@ -251,6 +254,32 @@ fn relative_path(root: &Path, path: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn import_closure_distinguishes_quoted_dotted_files_and_hierarchical_paths() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        fs::create_dir(dir.path().join("A")).expect("nested directory");
+        fs::write(dir.path().join("A.B.lean"), "def quoted : Nat := 1\n").expect("quoted file");
+        fs::write(dir.path().join("A/B.lean"), "def nested : Nat := 2\n").expect("nested file");
+        fs::write(
+            dir.path().join("Quoted.lean"),
+            "import «A.B»\ndef q : Nat := 1\n",
+        )
+        .expect("quoted consumer");
+        fs::write(
+            dir.path().join("Nested.lean"),
+            "import A.B\ndef n : Nat := 2\n",
+        )
+        .expect("nested consumer");
+        assert_eq!(
+            impacted_lean_files(dir.path(), &[PathBuf::from("A.B.lean")]).expect("quoted closure"),
+            vec![PathBuf::from("A.B.lean"), PathBuf::from("Quoted.lean")]
+        );
+        assert_eq!(
+            impacted_lean_files(dir.path(), &[PathBuf::from("A/B.lean")]).expect("nested closure"),
+            vec![PathBuf::from("A/B.lean"), PathBuf::from("Nested.lean")]
+        );
+    }
 
     #[test]
     fn import_closure_finds_transitive_dependents() {

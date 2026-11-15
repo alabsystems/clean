@@ -145,9 +145,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_fneg (n : Nat) : IROption Nat := ",
-                "Bool.rec (fun (_ : Bool) => IROption Nat) ",
-                "(IROption.none Nat) ",
-                "(IROption.some Nat (ir_f64_negate n)) ",
+                "@Bool.rec (fun (_ : Bool) => IROption Nat) ",
+                "(@IROption.none Nat) ",
+                "(@IROption.some Nat (ir_f64_negate n)) ",
                 "(ir_f64_is_pattern n)",
             ),
             "IEEE 754 negate (5.5.1) on every genuine pattern: flip the sign bit, preserve \
@@ -161,9 +161,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_fabs (n : Nat) : IROption Nat := ",
-                "Bool.rec (fun (_ : Bool) => IROption Nat) ",
-                "(IROption.none Nat) ",
-                "(IROption.some Nat (ir_f64_mag n)) ",
+                "@Bool.rec (fun (_ : Bool) => IROption Nat) ",
+                "(@IROption.none Nat) ",
+                "(@IROption.some Nat (ir_f64_mag n)) ",
                 "(ir_f64_is_pattern n)",
             ),
             "IEEE 754 abs (5.5.1) on every genuine pattern: clear the sign bit — which is \
@@ -181,12 +181,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_ltb_pre (a : Nat) (b : Nat) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) ",
+                "@Bool.rec (fun (_ : Bool) => Bool) ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) ",
                 "(ir_nat_ltb (ir_f64_mag a) (ir_f64_mag b)) ",
                 "Bool.false ",
                 "(ir_f64_is_neg b)) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) ",
                 "(Bool.not (Bool.and (ir_nat_iszero (ir_f64_mag a)) (ir_nat_iszero (ir_f64_mag b)))) ",
                 "(ir_nat_ltb (ir_f64_mag b) (ir_f64_mag a)) ",
                 "(ir_f64_is_neg b)) ",
@@ -205,7 +205,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_mm_pick_min (a : Nat) (b : Nat) : IROption Nat := ",
-                "IROption.some Nat (Bool.rec (fun (_ : Bool) => Nat) b a (ir_f64_ltb_pre a b))",
+                "@IROption.some Nat (@Bool.rec (fun (_ : Bool) => Nat) b a (ir_f64_ltb_pre a b))",
             ),
             "The ordered minimum: a when a < b, else b — always ONE OF THE OPERANDS, exactly \
              as minNum returns an operand. On equal non-NaN values outside the zero pair the \
@@ -216,7 +216,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_mm_pick_max (a : Nat) (b : Nat) : IROption Nat := ",
-                "IROption.some Nat (Bool.rec (fun (_ : Bool) => Nat) a b (ir_f64_ltb_pre a b))",
+                "@IROption.some Nat (@Bool.rec (fun (_ : Bool) => Nat) a b (ir_f64_ltb_pre a b))",
             ),
             "The ordered maximum: b when a < b, else a. The mirror of ir_f64_mm_pick_min. \
              DerivedProved, zero axiom_deps.",
@@ -225,9 +225,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_mm_zero (a : Nat) (b : Nat) : IROption Nat := ",
-                "Bool.rec (fun (_ : Bool) => IROption Nat) ",
-                "(IROption.some Nat a) ",
-                "(IROption.none Nat) ",
+                "@Bool.rec (fun (_ : Bool) => IROption Nat) ",
+                "(@IROption.some Nat a) ",
+                "(@IROption.none Nat) ",
                 "(ir_f64_xsign a b)",
             ),
             "The zero/zero cell of BOTH min and max tables: two zeros of the SAME sign are the \
@@ -242,24 +242,24 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_fmin_at (a : Nat) (b : Nat) (ca : IRF64Class) (cb : IRF64Class) : IROption Nat := ",
-                "IRF64Class.rec (fun (_ : IRF64Class) => IRF64Class -> IROption Nat) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.none Nat) ",
-                "(IROption.some Nat b) ",
-                "(IROption.some Nat b) ",
-                "(IROption.some Nat b)) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.some Nat a) ",
+                "@IRF64Class.rec (fun (_ : IRF64Class) => IRF64Class -> IROption Nat) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.none Nat) ",
+                "(@IROption.some Nat b) ",
+                "(@IROption.some Nat b) ",
+                "(@IROption.some Nat b)) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.some Nat a) ",
                 "(ir_f64_mm_pick_min a b) ",
                 "(ir_f64_mm_pick_min a b) ",
                 "(ir_f64_mm_pick_min a b)) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.some Nat a) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.some Nat a) ",
                 "(ir_f64_mm_pick_min a b) ",
                 "(ir_f64_mm_zero a b) ",
                 "(ir_f64_mm_pick_min a b)) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.some Nat a) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.some Nat a) ",
                 "(ir_f64_mm_pick_min a b) ",
                 "(ir_f64_mm_pick_min a b) ",
                 "(ir_f64_mm_pick_min a b)) ",
@@ -290,24 +290,24 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_fmax_at (a : Nat) (b : Nat) (ca : IRF64Class) (cb : IRF64Class) : IROption Nat := ",
-                "IRF64Class.rec (fun (_ : IRF64Class) => IRF64Class -> IROption Nat) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.none Nat) ",
-                "(IROption.some Nat b) ",
-                "(IROption.some Nat b) ",
-                "(IROption.some Nat b)) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.some Nat a) ",
+                "@IRF64Class.rec (fun (_ : IRF64Class) => IRF64Class -> IROption Nat) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.none Nat) ",
+                "(@IROption.some Nat b) ",
+                "(@IROption.some Nat b) ",
+                "(@IROption.some Nat b)) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.some Nat a) ",
                 "(ir_f64_mm_pick_max a b) ",
                 "(ir_f64_mm_pick_max a b) ",
                 "(ir_f64_mm_pick_max a b)) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.some Nat a) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.some Nat a) ",
                 "(ir_f64_mm_pick_max a b) ",
                 "(ir_f64_mm_zero a b) ",
                 "(ir_f64_mm_pick_max a b)) ",
-                "(IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.some Nat a) ",
+                "(@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.some Nat a) ",
                 "(ir_f64_mm_pick_max a b) ",
                 "(ir_f64_mm_pick_max a b) ",
                 "(ir_f64_mm_pick_max a b)) ",
@@ -343,7 +343,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_rnd_frac (away : Bool) (s : Bool) (q : Nat) (r : Nat) (k : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) ",
                 "(ir_f64_pack s (ir_nat_shl q k)) ",
                 "(ir_f64_pack s (ir_nat_shl (Nat.succ q) k)) ",
                 "(Bool.and away (ir_nat_pos r))",
@@ -362,7 +362,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_rnd_small (away : Bool) (s : Bool) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) ",
                 "(ir_f64_pack s Nat.zero) ",
                 "(ir_f64_pack s ir_f64_one_mag) ",
                 "away",
@@ -377,8 +377,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_rnd_fin (away : Bool) (n : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) ",
-                "(Bool.rec (fun (_ : Bool) => Nat) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) ",
+                "(@Bool.rec (fun (_ : Bool) => Nat) ",
                 "(ir_f64_rnd_frac away (ir_f64_is_neg n) ",
                 "(ir_dm_quot (ir_nat_divpow2 (ir_f64_mag n) (Nat.sub 1075 (ir_f64_ebits n)))) ",
                 "(ir_dm_rem (ir_nat_divpow2 (ir_f64_mag n) (Nat.sub 1075 (ir_f64_ebits n)))) ",
@@ -401,12 +401,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_rnd (awayneg : Bool) (awaypos : Bool) (n : Nat) : IROption Nat := ",
-                "IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
-                "(IROption.none Nat) ",
-                "(IROption.some Nat n) ",
-                "(IROption.some Nat n) ",
-                "(IROption.some Nat (ir_f64_rnd_fin ",
-                "(Bool.rec (fun (_ : Bool) => Bool) awaypos awayneg (ir_f64_is_neg n)) n)) ",
+                "@IRF64Class.rec (fun (_ : IRF64Class) => IROption Nat) ",
+                "(@IROption.none Nat) ",
+                "(@IROption.some Nat n) ",
+                "(@IROption.some Nat n) ",
+                "(@IROption.some Nat (ir_f64_rnd_fin ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) awaypos awayneg (ir_f64_is_neg n)) n)) ",
                 "(ir_f64_class n)",
             ),
             "The shared roundToIntegral table over the classification, parameterized by which \
@@ -447,7 +447,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_float1 (f : Nat -> IRStepResult) (a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_float_type_fault ",
                 "(fun (x : Nat) => f x) (ir_as_float a)",
             ),
@@ -460,9 +460,9 @@ impl Specification {
             concat!(
                 "def ir_float_unop (f : Nat -> IROption Nat) (t : IRTy) ",
                 "(a : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_float_type_fault ",
-                "(fun (w : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "(fun (w : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "ir_float_fault ",
                 "(ir_float1 (fun (x : Nat) => ir_f64_result (f x)) a) ",
                 "(ir_nat_eqb w 64)) ",

@@ -105,7 +105,7 @@ pub(crate) fn is_surface_nat_sum(measure: &SurfaceExpr) -> bool {
     match strip_parens(measure) {
         SurfaceExpr::App(_, f, args) => {
             args.len() == 2
-                && matches!(strip_parens(f), SurfaceExpr::Ident(_, name) if name == "HAdd.hAdd")
+                && matches!(strip_parens(f), SurfaceExpr::Ident(_, name) if name.name() == &Name::from_string("HAdd.hAdd"))
         }
         _ => false,
     }

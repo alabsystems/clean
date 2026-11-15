@@ -52,7 +52,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_msum (a : Nat) (b : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) ",
                 "(Nat.add (Nat.sub (ir_f64_ma a b) (ir_f64_mb a b)) ",
                 "(Nat.sub (ir_f64_mb a b) (ir_f64_ma a b))) ",
                 "(Nat.add (ir_f64_ma a b) (ir_f64_mb a b)) ",
@@ -70,8 +70,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_osign (a : Nat) (b : Nat) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) (ir_f64_is_neg b) (ir_f64_is_neg a) ",
+                "@Bool.rec (fun (_ : Bool) => Bool) ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) (ir_f64_is_neg b) (ir_f64_is_neg a) ",
                 "(ir_nat_ltb (ir_f64_mb a b) (ir_f64_ma a b))) ",
                 "Bool.false ",
                 "(ir_nat_iszero (ir_f64_msum a b))",
@@ -85,7 +85,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_rsign (a : Nat) (b : Nat) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) (ir_f64_osign a b) (ir_f64_is_neg a) ",
+                "@Bool.rec (fun (_ : Bool) => Bool) (ir_f64_osign a b) (ir_f64_is_neg a) ",
                 "(ir_f64_ssign a b)",
             ),
             "The sum's sign: the shared sign when the operands agree, otherwise the larger \

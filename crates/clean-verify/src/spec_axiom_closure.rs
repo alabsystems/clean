@@ -117,9 +117,11 @@ pub fn foundational_rule_names(spec: &Specification) -> BTreeSet<String> {
 #[must_use]
 pub fn computed_axiom_closure(spec: &Specification, name: &str) -> BTreeSet<String> {
     let kname = Name::from_string(name);
+    // Rendered UNAMBIGUOUSLY: the closure is compared against name lists
+    // below, and a one-component `«Eq.refl»` must never read as `Eq.refl`.
     spec.env()
         .axiom_deps(&kname)
-        .map(|deps| deps.into_iter().map(|n| n.to_string()).collect())
+        .map(|deps| deps.iter().map(Name::to_unambiguous_string).collect())
         .unwrap_or_default()
 }
 
@@ -133,7 +135,7 @@ pub fn computed_trust_markers(spec: &Specification, name: &str) -> BTreeSet<Stri
     let kname = Name::from_string(name);
     spec.env()
         .trust_marker_deps(&kname)
-        .map(|deps| deps.into_iter().map(|n| n.to_string()).collect())
+        .map(|deps| deps.iter().map(Name::to_unambiguous_string).collect())
         .unwrap_or_default()
 }
 
@@ -147,16 +149,13 @@ pub fn computed_trust_markers(spec: &Specification, name: &str) -> BTreeSet<Stri
 /// base reads self-contained and matches CLAUDE.md's stated foundational base
 /// verbatim, and so a future kernel demotion of any of these to a value-less
 /// `Axiom` cannot silently turn into counted DEBT.
+///
+/// The kernel's own foundation (`propext`, `Quot.sound`, `Classical.choice`
+/// and the `Quot` primitives) is deliberately NOT listed: `axiom_deps` already
+/// drops exactly the kernel's CANONICAL declarations of those names, so a
+/// string entry here could only ever re-admit an axiom that merely SHARES one
+/// of them — a counterfeit statement, which is debt (2026-09-28).
 pub const EXPLICIT_FOUNDATIONAL_BASE: &[&str] = &[
-    // Kernel logical foundation (already excluded by axiom_deps; listed for clarity).
-    "propext",
-    "Quot.sound",
-    "Classical.choice",
-    // Quotient primitives.
-    "Quot",
-    "Quot.mk",
-    "Quot.lift",
-    "Quot.ind",
     // Eq built-ins (CLAUDE.md: foundational).
     "Eq",
     "Eq.refl",

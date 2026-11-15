@@ -143,7 +143,7 @@ fn test_split_ite_both_branches_equal_kernel_accepts() {
         state.goals()[0]
             .local_ctx
             .iter()
-            .any(|d| d.name == "h" && d.ty == c_const()),
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("h") && d.ty == c_const()),
         "true branch must have `h : C`"
     );
 
@@ -275,5 +275,135 @@ fn test_split_no_and_iff_ite_errors_not_panics() {
     assert!(
         matches!(err, TacticError::GoalMismatch(_)),
         "split on a non-And/Iff/ite goal should be a GoalMismatch, got: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Loose-bound-variable guard (Lean `isCandidate?` parity, 2026-09-13)
+// ---------------------------------------------------------------------------
+
+/// An `ite` whose CONDITION mentions a variable bound inside the goal — here
+/// `∀ (p : Prop) (dp : Decidable p), (@ite T p dp a a) = a` — is not a split
+/// candidate (Lean: `!(e.getArg! 1 5).hasLooseBVars`). Before the guard,
+/// `split` lifted `p`/`dp` out of the `∀` into the `Decidable.casesOn` spine
+/// and the kernel refused the term with "Unbound variable index: 1" — an
+/// internal error in place of a refusal. Now it is REFUSED with the fix named,
+/// and the state is untouched.
+#[test]
+fn test_split_refuses_ite_whose_condition_is_bound_inside_goal() {
+    let env = setup_env();
+    // @ite.{1} T (BVar 1 = p) (BVar 0 = dp) a a
+    let ite_loose = Expr::apps(
+        Expr::const_(Name::from_string("ite"), vec![Level::succ(Level::zero())]),
+        [t_const(), Expr::bvar(1), Expr::bvar(0), val("a"), val("a")],
+    );
+    let decidable_p = Expr::app(
+        Expr::const_(Name::from_string("Decidable"), vec![]),
+        Expr::bvar(0),
+    );
+    let target = Expr::pi(
+        clean_kernel::BinderInfo::Default,
+        Expr::prop(),
+        Expr::pi(
+            clean_kernel::BinderInfo::Default,
+            decidable_p,
+            eq_t(ite_loose, val("a")),
+        ),
+    );
+    let mut state = ProofState::new(env, target.clone());
+
+    let err = split_(&mut state).expect_err("split must refuse a binder-scoped ite");
+    match &err {
+        TacticError::GoalMismatch(msg) => {
+            assert!(
+                msg.contains("under a binder") && msg.contains("intro"),
+                "the refusal must name the cause and a fix, got: {msg}"
+            );
+        }
+        other => panic!("expected an honest GoalMismatch, got internal error: {other:?}"),
+    }
+    assert_eq!(state.goals().len(), 1, "state must be unchanged on refusal");
+    assert_eq!(state.goals()[0].target, target);
+}
+
+/// An `ite` whose condition is CLOSED but whose `Decidable` INSTANCE is bound
+/// inside the goal — `∀ (d : Decidable C), (@ite T C d a a) = a` — is refused
+/// too: the instance is lifted into the `casesOn` spine as well.
+#[test]
+fn test_split_refuses_ite_whose_instance_is_bound_inside_goal() {
+    let env = setup_env();
+    let ite_loose_inst = Expr::apps(
+        Expr::const_(Name::from_string("ite"), vec![Level::succ(Level::zero())]),
+        [t_const(), c_const(), Expr::bvar(0), val("a"), val("a")],
+    );
+    let decidable_c = Expr::app(
+        Expr::const_(Name::from_string("Decidable"), vec![]),
+        c_const(),
+    );
+    let target = Expr::pi(
+        clean_kernel::BinderInfo::Default,
+        decidable_c,
+        eq_t(ite_loose_inst, val("a")),
+    );
+    let mut state = ProofState::new(env, target);
+
+    let err = split_(&mut state).expect_err("split must refuse a binder-scoped instance");
+    assert!(
+        matches!(&err, TacticError::GoalMismatch(msg) if msg.contains("under a binder")),
+        "expected an honest GoalMismatch naming the binder, got {err:?}"
+    );
+}
+
+/// The guard is exactly Lean's: an `ite` under a lambda whose condition and
+/// instance are CLOSED still splits, and the kernel accepts the assembled
+/// `Decidable.casesOn` term. Goal: `((fun x : T => @ite T C instC x a) b) = b`.
+/// True branch: `(fun x => x) b = b`; false branch: `(fun x => a) b = b`.
+#[test]
+fn test_split_ite_under_lambda_with_closed_condition_kernel_accepts() {
+    let env = setup_env();
+    let ite_in_lam = Expr::lam(
+        clean_kernel::BinderInfo::Default,
+        t_const(),
+        ite_t(Expr::bvar(0), val("a")),
+    );
+    let target = eq_t(Expr::app(ite_in_lam, val("b")), val("b"));
+    let mut state = ProofState::new(env.clone(), target.clone());
+
+    split_(&mut state).expect("a closed-condition ite under a lambda must split");
+    assert_eq!(state.goals().len(), 2);
+    assert_eq!(
+        state.goals()[0].target,
+        eq_t(
+            Expr::app(
+                Expr::lam(clean_kernel::BinderInfo::Default, t_const(), Expr::bvar(0)),
+                val("b")
+            ),
+            val("b")
+        ),
+        "true branch keeps the lambda, with the ite replaced by its `then` value"
+    );
+
+    // The true branch is def-eq to `b = b`: `Eq.refl b` closes it, and
+    // `close_goal` kernel-checks that against the lambda-carrying target. The
+    // false branch `(fun x => a) b = b` is not provable (a ≠ b is not decided
+    // here), so only its shape is asserted.
+    exact(&mut state, eq_refl_t(val("b"))).expect("Eq.refl b closes the true branch");
+    assert_eq!(
+        state.goals()[0].target,
+        eq_t(
+            Expr::app(
+                Expr::lam(clean_kernel::BinderInfo::Default, t_const(), val("a")),
+                val("b")
+            ),
+            val("b")
+        ),
+        "false branch keeps the lambda, with the ite replaced by its `else` value"
+    );
+    assert!(
+        state.goals()[0]
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("h")),
+        "false branch must carry the `¬C` hypothesis"
     );
 }

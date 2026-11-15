@@ -8,49 +8,81 @@
 //! of expressions using rewrite lemmas, beta/eta reduction, and other normalizations.
 
 mod all;
+pub(crate) mod args;
 mod binder;
+mod binder_domain;
 mod cache;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
 mod budget;
+mod conditional_congr;
 #[cfg(test)]
 pub(crate) mod congr;
+mod ctor_eq;
+mod ctor_inj;
+mod declared_equations;
 mod discharge;
 #[cfg(test)]
 mod discharge_tests;
 mod expr;
+mod fixpoint;
+mod hyp_false;
+mod imp_false;
+mod index_path_memo;
+mod instance_slot;
+mod iota;
+pub(crate) mod lean_builtin_simprocs;
+mod lean_names;
+mod lemma_levels;
 mod lemmas;
 mod lemmas_builtin;
+mod lemmas_builtin_list;
+mod lemmas_local;
 mod match_target;
+mod matcher;
 mod pattern;
 mod perm;
+mod proj_reduce;
 mod proof;
+mod prop_lemmas;
 mod rec_equations;
+mod rec_equations_lifted;
 mod reduce;
 mod rw;
 pub(crate) mod simproc;
 mod simproc_builtins;
 mod simproc_builtins_bool;
+mod simproc_builtins_cmp;
 mod squeeze;
-mod types;
+pub(crate) mod types;
+mod zeta_size;
 
 // Re-export public API
-pub(crate) use all::simp_all_with_config;
 pub use all::{simp_all, simp_at_all};
+pub(crate) use all::{simp_all_with_config, simp_at_all_with_config};
 pub use expr::extract_equality_from_type;
+pub(crate) use rw::simp_rw_with_rules;
 pub use rw::{simp_rw, simp_rw_hyps};
 pub use squeeze::{squeeze_simp, squeeze_simp_and_apply, squeeze_simp_with_config};
 pub use squeeze::{SqueezeSimpConfig, SqueezeSimpResult};
-pub use types::{SimpConfig, SimpIndexMode, SimpLemma};
+pub use types::{AssumptionCloser, SimpConfig, SimpIndexMode, SimpLemma};
 
 // Re-export pub(crate) items used by other tactic modules
+pub(crate) use binder::is_binder_temporary;
+// For tests outside this module that need a REAL simp binder temporary.
+#[cfg(test)]
+pub(crate) use binder::open_binder;
 pub(crate) use budget::SimpBudget;
 #[cfg(test)]
 pub(crate) use cache::cacheable_rebuild_count;
 pub(crate) use cache::collect_simp_lemmas_cached;
 pub(crate) use expr::{make_eq_expr, simp_expr};
+pub(crate) use hyp_false::{close_goal_by_proof_of_false, simp_at_closed_goal};
+#[cfg(test)]
+pub(crate) use index_path_memo::path_computation_count;
 // The uncached builder stays available to tests as the goal-independent
 // reference implementation; production entrypoints go through the cache.
+pub(super) use lemmas::collect_local_extra_lemma_for_decl;
 #[cfg(test)]
 pub(crate) use lemmas::collect_simp_lemmas;
 pub(crate) use lemmas::{collect_named_eq_lemmas, resolve_unfold_defs};
@@ -345,13 +377,17 @@ fn simp_impl(
             state.replace_target_def_eq(current_target.clone())?;
         }
 
-        if !config.only_simplify && try_simp_closers(state) {
+        if !config.only_simplify
+            && try_simp_closers(state, config.assumption_closer, config.legacy_ctor_closer)
+        {
             return Ok(());
         }
         Ok(())
     } else {
         // No progress made - try closing with trivial tactics anyway
-        if !config.only_simplify && try_simp_closers(state) {
+        if !config.only_simplify
+            && try_simp_closers(state, config.assumption_closer, config.legacy_ctor_closer)
+        {
             return Ok(());
         }
         Err(no_progress_with_goal(state, "simp"))
@@ -373,11 +409,20 @@ fn simp_impl(
 /// it does NOT unfold a semireducible `def f := e` to prove `f = e`. The old
 /// full-transparency `rfl` closer silently accepted `f = e := by simp` for any
 /// semireducible `f`, a proof Lean rejects with "simp made no progress".
-fn try_simp_closers(state: &mut ProofState) -> bool {
+///
+/// G49: the `assumption` closer runs only under [`AssumptionCloser::On`].
+/// Lean's `simp` has no such step, so the surface front ends turn it off.
+fn try_simp_closers(
+    state: &mut ProofState,
+    assumption_closer: AssumptionCloser,
+    legacy_ctor_closer: bool,
+) -> bool {
     try_tactic_preserving_state(state, close_refl_reducible)
         || try_tactic_preserving_state(state, close_true_goal)
-        || try_tactic_preserving_state(state, assumption)
-        || try_tactic_preserving_state(state, close_constructor_diseq_implication)
+        || (assumption_closer == AssumptionCloser::On
+            && try_tactic_preserving_state(state, assumption))
+        || (legacy_ctor_closer
+            && try_tactic_preserving_state(state, close_constructor_diseq_implication))
 }
 
 /// The subset of [`try_simp_closers`] that `dsimp` shares: reflexivity at
@@ -400,6 +445,12 @@ fn try_simp_closers(state: &mut ProofState) -> bool {
 pub(crate) fn try_definitional_closers(state: &mut ProofState) -> bool {
     try_tactic_preserving_state(state, close_refl_reducible)
         || try_tactic_preserving_state(state, close_true_goal)
+}
+
+/// Lean's `with_reducible rfl` on the main goal, as `try`: whether it closed
+/// it. A failed attempt leaves the state untouched.
+pub(crate) fn try_reducible_rfl(state: &mut ProofState) -> bool {
+    state.current_goal().is_some() && try_tactic_preserving_state(state, close_refl_reducible)
 }
 
 /// Close an equality goal `a = b` by reflexivity, but only when `a` and `b` are
@@ -519,7 +570,7 @@ pub fn simp_default(state: &mut ProofState) -> TacticResult {
 /// REQUIRES: `lemmas` are valid lemma names in the environment or local context
 /// ENSURES: Only the specified lemmas are used for rewriting (no @[simp] set)
 /// ENSURES: Beta/eta reduction still applies
-pub fn simp_only(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
+pub fn simp_only(state: &mut ProofState, lemmas: Vec<clean_parser::SurfaceName>) -> TacticResult {
     let mut config = SimpConfig::new();
     config.only = true;
     config.extra_lemmas = lemmas;
@@ -531,7 +582,7 @@ pub fn simp_only(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
 /// REQUIRES: `state.goals` is non-empty
 /// REQUIRES: `hyp_name` exists in the current goal's local context
 /// ENSURES: On Ok, the named hypothesis is simplified in the goal context
-pub fn simp_at(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn simp_at(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     simp_at_with_config(state, hyp_name, SimpConfig::new())
 }
 
@@ -540,7 +591,11 @@ pub fn simp_at(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 /// REQUIRES: `state.goals` is non-empty
 /// REQUIRES: `hyp_name` exists in the current goal's local context
 /// ENSURES: On Ok, the named hypothesis is simplified using only the specified lemmas
-pub fn simp_only_at(state: &mut ProofState, hyp_name: &str, lemmas: Vec<String>) -> TacticResult {
+pub fn simp_only_at(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+    lemmas: Vec<clean_parser::SurfaceName>,
+) -> TacticResult {
     let mut config = SimpConfig::new();
     config.extra_lemmas = lemmas;
     simp_at_with_config(state, hyp_name, config)
@@ -566,13 +621,46 @@ pub fn simp_only_at(state: &mut ProofState, hyp_name: &str, lemmas: Vec<String>)
 ///   simplification lacked a proof term (soundness guard).
 pub(crate) fn simp_at_with_config(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &clean_parser::SurfaceName,
     mut config: SimpConfig,
 ) -> TacticResult {
     seed_unfold_defs_from_extras(state, &mut config);
     lemmas::seed_unfold_defs_from_simp_defs(state, &mut config);
     let simp_lemmas = collect_simp_lemmas_cached(state, &config);
     simp_at_with_lemmas(state, hyp_name, &config, &simp_lemmas)
+}
+
+/// Wildcard locations select locals by identity. Remove precisely that
+/// local's own rules; duplicate spellings may denote distinct usable proofs.
+pub(super) fn simp_at_fvar_with_config(
+    state: &mut ProofState,
+    hyp_fvar: clean_kernel::FVarId,
+    mut config: SimpConfig,
+) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
+    config.extra_lemmas.retain(|name| {
+        !goal
+            .local_ctx
+            .iter()
+            .rev()
+            .find(|decl| crate::tactic::pattern::names::hypothesis_named(&decl.name, name))
+            .is_some_and(|decl| decl.fvar == hyp_fvar)
+    });
+    config.exclude_hypothesis = None;
+    if config.use_hypotheses {
+        config
+            .aesop_simp_lemmas
+            .extend(lemmas::collect_hypothesis_lemmas_excluding(
+                state,
+                &config,
+                Some(hyp_fvar),
+            ));
+        config.use_hypotheses = false;
+    }
+    seed_unfold_defs_from_extras(state, &mut config);
+    lemmas::seed_unfold_defs_from_simp_defs(state, &mut config);
+    let simp_lemmas = collect_simp_lemmas_cached(state, &config);
+    simp_at_fvar_with_lemmas(state, hyp_fvar, &config, &simp_lemmas)
 }
 
 /// Simplify the TYPE of `proof` and transport `proof` along the resulting
@@ -614,7 +702,13 @@ pub(crate) fn simp_proof_type(state: &ProofState, mut config: SimpConfig, proof:
     let simp_lemmas = collect_simp_lemmas_cached(state, &config);
 
     let budget = SimpBudget::for_target(&old_ty);
-    let result = simp_expr_budgeted(state, &goal, &old_ty, &simp_lemmas, &config, &budget);
+    // A runaway (no fixpoint) is treated as a tripped budget: the raw term
+    // goes to `exact`, which kernel-checks it like any other.
+    let Ok(result) =
+        fixpoint::simp_type_to_fixpoint(state, &goal, &old_ty, &simp_lemmas, &config, &budget)
+    else {
+        return proof;
+    };
     if budget.detail().is_some() || result.expr == old_ty {
         return proof;
     }
@@ -663,12 +757,17 @@ pub(crate) fn simp_proof_type(state: &ProofState, mut config: SimpConfig, proof:
 /// seed the map directly for advanced use cases; this function only fills
 /// gaps from `extra_lemmas`).
 pub(crate) fn seed_unfold_defs_from_extras(state: &ProofState, config: &mut SimpConfig) {
+    config.prepared_rec_equations.clear();
     if config.extra_lemmas.is_empty() {
         return;
     }
-    let resolved = resolve_unfold_defs(state, &config.extra_lemmas);
-    for (name, body) in resolved {
-        config.unfold_defs.entry(name).or_insert(body);
+    let resolved = resolve_unfold_defs(
+        state,
+        &config.extra_lemmas,
+        &mut config.prepared_rec_equations,
+    );
+    for (name, def) in resolved {
+        config.unfold_defs.entry(name).or_insert(def);
     }
 }
 
@@ -678,7 +777,7 @@ pub(crate) fn seed_unfold_defs_from_extras(state: &ProofState, config: &mut Simp
 /// same environment-dependent lemma set on every iteration.
 pub(super) fn simp_at_with_lemmas(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &clean_parser::SurfaceName,
     config: &SimpConfig,
     simp_lemmas: &SimpLemmaSet,
 ) -> TacticResult {
@@ -691,16 +790,38 @@ pub(super) fn simp_at_with_lemmas(
     let hyp_idx = goal
         .local_ctx
         .iter()
-        .position(|d| d.name == hyp_name)
+        .rposition(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
-    let hyp_fvar = goal.local_ctx[hyp_idx].fvar;
+    simp_at_fvar_with_lemmas(state, goal.local_ctx[hyp_idx].fvar, config, simp_lemmas)
+}
+
+pub(super) fn simp_at_fvar_with_lemmas(
+    state: &mut ProofState,
+    hyp_fvar: clean_kernel::FVarId,
+    config: &SimpConfig,
+    simp_lemmas: &SimpLemmaSet,
+) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let hyp_idx = goal
+        .local_ctx
+        .iter()
+        .position(|decl| decl.fvar == hyp_fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(format!("{hyp_fvar:?}")))?;
+    let hyp_name = &goal.local_ctx[hyp_idx].name;
 
     let old_ty = goal.local_ctx[hyp_idx].ty.clone();
     // Own the budget so a trip is reported as a refusal rather than silently
     // read as "the hypothesis did not simplify".
     let budget = SimpBudget::for_target(&old_ty);
-    let simp_result = simp_expr_budgeted(state, &goal, &old_ty, simp_lemmas, config, &budget);
+    // To a fixpoint, as Lean's `Simp.main` and the goal entry point do: one
+    // traversal leaves the right-hand side it produced unvisited (G25).
+    let simp_result =
+        fixpoint::simp_type_to_fixpoint(state, &goal, &old_ty, simp_lemmas, config, &budget)
+            .map_err(|runaway| TacticError::BudgetExceeded {
+                tactic: format!("simp at {hyp_name}"),
+                detail: runaway.detail(),
+            })?;
     if let Some(detail) = budget.detail() {
         return Err(TacticError::BudgetExceeded {
             tactic: format!("simp at {hyp_name}"),
@@ -710,17 +831,42 @@ pub(super) fn simp_at_with_lemmas(
     let new_ty = simp_result.expr;
 
     if new_ty == old_ty {
+        // Lean's `applySimpResult` tests the RESULT, changed or not: a
+        // hypothesis that already IS `False` closes the goal (pinned
+        // v4.30.0-rc2: `example (h : False) : 1 = 2 := by simp at h`), it is
+        // not "no progress".
+        if !config.only_simplify
+            && hyp_false::close_goal_by_false_hypothesis(
+                state,
+                &goal,
+                &old_ty,
+                &Expr::fvar(hyp_fvar),
+            )
+        {
+            return Ok(());
+        }
         return Err(no_progress_with_goal(state, format!("simp at {hyp_name}")));
     }
 
-    // Create a fresh fvar for the simplified hypothesis
-    let h_new_fvar = state.fresh_fvar();
+    // The simplified hypothesis is the `let` binder wrapped around this
+    // goal's continuation, so it sits at the goal's own binder depth: its id
+    // is the goal's binder base, as `intro` and `have` number theirs. The
+    // global counter is not that base when several goals are simplified in
+    // turn (`cases a <;> simp … at h`, `all_goals simp … at h`): the id then
+    // named no binder at its depth and the proof was refused as capturing an
+    // out-of-scope local.
+    let h_new_fvar = {
+        let base = state.goal_binder_base(&goal);
+        state.next_fvar = state.next_fvar.max(base + 1);
+        clean_kernel::FVarId::new(base)
+    };
 
     // Build new local context with the simplified hypothesis
     let mut new_ctx = goal.local_ctx.clone();
     new_ctx[hyp_idx] = LocalDecl {
+        binder_info: Default::default(),
         fvar: h_new_fvar,
-        name: hyp_name.to_string(),
+        name: hyp_name.clone(),
         ty: new_ty.clone(),
         value: None,
     };
@@ -780,8 +926,16 @@ pub(super) fn simp_at_with_lemmas(
         }
     };
 
+    // Lean's `applySimpResult`: a hypothesis simplified to `False` closes the
+    // goal (`hyp_false`). `only_simplify` callers asked for the rewrite alone.
+    if !config.only_simplify
+        && hyp_false::close_goal_by_false_hypothesis(state, &goal, &new_ty, &h_cast)
+    {
+        return Ok(());
+    }
+
     let proof = Expr::let_named(
-        Name::from_string(hyp_name),
+        hyp_name.name().clone(),
         new_ty.clone(),
         h_cast,
         new_meta_expr.abstract_fvar(h_new_fvar),
@@ -795,6 +949,7 @@ pub(super) fn simp_at_with_lemmas(
         meta_id: new_meta_id,
         target: new_target,
         local_ctx: new_ctx,
+        case_binders: goal.case_binders.clone(),
         tag: goal.tag.clone(),
     };
     state.goals.push_front(new_goal);

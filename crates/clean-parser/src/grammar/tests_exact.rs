@@ -145,19 +145,21 @@ fn test_exact_postfix_bang_keeps_termination_by_as_prefix_not_argument() {
 
     match expr {
         SurfaceExpr::App(_, func, args) => {
-            assert!(matches!(&*func, SurfaceExpr::Ident(_, s) if s == "f"));
+            assert!(
+                matches!(&*func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("f").name())
+            );
             assert_eq!(args.len(), 1, "expected one argument after f");
             match &args[0].expr {
                 SurfaceExpr::App(_, not_func, not_args) => {
                     assert!(
-                        matches!(&**not_func, SurfaceExpr::Ident(_, s) if s == "Not"),
-                        "expected prefix Not argument"
+                        matches!(&**not_func, SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("not").name()),
+                        "expected prefix `not` (Lean: `notation:max \"!\" b:40 => not b`)"
                     );
                     assert_eq!(not_args.len(), 1, "Not should wrap exactly one expression");
                     assert!(
                         matches!(
                             &not_args[0].expr,
-                            SurfaceExpr::Ident(_, s) if s == "termination_by"
+                            SurfaceExpr::Ident(_, s) if (s).name() == crate::SurfaceName::generated_path("termination_by").name()
                         ),
                         "expected `termination_by` identifier inside Not"
                     );
@@ -212,4 +214,21 @@ fn test_exact_decl_valid_def_consumed() {
         result.is_ok(),
         "Valid def declaration should parse exactly: {result:?}"
     );
+}
+
+/// `¬` and `!` are one token kind but two Lean notations
+/// (`Init/Notation.lean`): `¬ p` is `Not p`, `!b` is `not b` (`Bool.not`).
+#[test]
+fn test_prefix_not_and_bang_desugar_to_distinct_heads() {
+    let head = |src: &str| match Parser::parse_expr(src).expect("parses") {
+        SurfaceExpr::App(_, f, _) => match *f {
+            SurfaceExpr::Ident(_, s) => s.to_string(),
+            other => panic!("unexpected head {other:?}"),
+        },
+        other => panic!("expected an application, got {other:?}"),
+    };
+    assert_eq!(head("¬ p"), "Not");
+    assert_eq!(head("¬(a == b)"), "Not");
+    assert_eq!(head("!b"), "not");
+    assert_eq!(head("!(xs.contains y)"), "not");
 }

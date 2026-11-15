@@ -12,9 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use clean_kernel::{
-    is_foundational_axiom, ConstantInfo, ConstantKind, Declaration, Environment, Name, ProofQuality,
-};
+use clean_kernel::{ConstantInfo, ConstantKind, Declaration, Environment, Name, ProofQuality};
 
 use crate::error::{MathverseError, MathverseResult};
 use crate::export::kernel_export::{name_content_profile, KernelShardBuilder};
@@ -38,7 +36,8 @@ pub enum ExcludeReason {
     Unchecked,
     /// Declaration has `kind = ConstantKind::Axiom` and is non-foundational.
     NonFoundationalAxiom,
-    /// Declaration is an `Axiom` on `clean_kernel::is_foundational_axiom` —
+    /// Declaration is the kernel's canonical foundational `Axiom`
+    /// (`Environment::is_canonical_foundational_axiom`) —
     /// skipped (not exported, not counted as a trust gap). See #3536.
     FoundationalAxiom,
     /// Declaration is a definition / opaque (not a theorem).
@@ -174,8 +173,9 @@ pub(crate) fn classify_for_native(
             Some(ProofQuality::NotATheorem) | None => Some(ExcludeReason::Unknown),
             _ => Some(ExcludeReason::Unknown),
         },
-        // Delegate to the kernel whitelist — single source of truth (#3536).
-        ConstantKind::Axiom if is_foundational_axiom(name) => {
+        // Delegate to the kernel — single source of truth (#3536): the
+        // canonical declaration of a foundational name, never the name alone.
+        ConstantKind::Axiom if env.is_canonical_foundational_axiom(name) => {
             Some(ExcludeReason::FoundationalAxiom)
         }
         ConstantKind::Axiom => Some(ExcludeReason::NonFoundationalAxiom),

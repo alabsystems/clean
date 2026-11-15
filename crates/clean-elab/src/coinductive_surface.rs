@@ -213,9 +213,10 @@
 //! hand-written source.
 
 use crate::ElabError;
-use clean_kernel::{Environment, Name};
+use clean_kernel::Environment;
 use clean_parser::{
-    DeclModifiers, Span, SurfaceBinder, SurfaceCtor, SurfaceDecl, SurfaceExpr, UniverseExpr,
+    DeclModifiers, Span, SurfaceBinder, SurfaceCtor, SurfaceDecl, SurfaceExpr, SurfaceName,
+    UniverseExpr,
 };
 
 /// Generation half (validated [`Shape`] → surface declarations). Split along
@@ -247,6 +248,10 @@ mod params;
 
 use guard::{classify_premise, Premise};
 use target::TargetPos;
+
+#[cfg(test)]
+#[path = "coinductive_surface_typed_tests.rs"]
+mod typed_name_tests;
 
 /// Companion suffixes this lowering mints under the declaration's name.
 /// A constructor may not claim one of them. The second row is the
@@ -300,6 +305,37 @@ fn unsupported(msg: impl Into<String>) -> ElabError {
     }
 }
 
+/// Diagnostic labels only. Name comparisons and generation retain the typed row.
+fn join_names(names: &[SurfaceName]) -> String {
+    names
+        .iter()
+        .map(|name| {
+            name.source_spelling()
+                .unwrap_or_else(|| format!("{:?}", name.name()))
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// Preserve the existing generated-binder reservation over actual string
+/// components, without interpreting a rendered dot path as identity.
+fn has_generated_marker(name: &SurfaceName) -> bool {
+    use clean_kernel::name::NameInner;
+    let mut current = name.name();
+    loop {
+        match current.inner() {
+            NameInner::Anon => return false,
+            NameInner::Str(parent, text) => {
+                if text.contains("_coind") {
+                    return true;
+                }
+                current = parent;
+            }
+            NameInner::Num(parent, _) => current = parent,
+        }
+    }
+}
+
 fn strip_parens(expr: &SurfaceExpr) -> &SurfaceExpr {
     match expr {
         SurfaceExpr::Paren(_, e) => strip_parens(e),
@@ -316,7 +352,10 @@ fn variant_label(expr: &SurfaceExpr) -> &'static str {
         SurfaceExpr::ByTactic(..) => "by",
         SurfaceExpr::CalcBlock(..) => "calc",
         SurfaceExpr::If(..) | SurfaceExpr::IfLet(..) | SurfaceExpr::IfDecidable(..) => "if",
-        SurfaceExpr::Let(..) | SurfaceExpr::LetRec(..) | SurfaceExpr::LetPattern(..) => "let",
+        SurfaceExpr::Let(..)
+        | SurfaceExpr::Have(..)
+        | SurfaceExpr::LetRec(..)
+        | SurfaceExpr::LetPattern(..) => "let",
         SurfaceExpr::PatternMatchLambda(..) => "fun | …",
         SurfaceExpr::SyntaxQuote(..) => "syntax quotation",
         SurfaceExpr::SyntheticSorry(..) => "sorry",
@@ -338,7 +377,7 @@ fn variant_label(expr: &SurfaceExpr) -> &'static str {
 /// here.
 struct IndexEquation {
     written: SurfaceExpr,
-    row: String,
+    row: SurfaceName,
 }
 
 /// The lowering plan for ONE constructor — one disjunct of the full rank-1
@@ -354,7 +393,7 @@ struct IndexEquation {
 /// every position substitutes and all three layers vanish).
 struct DisjunctPlan {
     /// Constructor short name (the `step` of `Bisim.step`).
-    ctor: String,
+    ctor: SurfaceName,
     /// `∃ b⃗` binders for constructor-local variables (Brick 2): the
     /// constructor's LEADING explicitly-typed binders, in declaration order,
     /// validated against the binder envelope (explicit, typed, P-free type)
@@ -386,7 +425,7 @@ struct DisjunctPlan {
 
 struct Shape {
     /// Fully-qualified declaration name.
-    qname: String,
+    qname: SurfaceName,
     /// The FIXED declaration-parameter row, validated ([`params`]): every
     /// companion takes these as leading binders, and every occurrence of
     /// the predicate inside the declaration applies exactly this row first.
@@ -398,7 +437,7 @@ struct Shape {
     /// names. Every other constructor's premises are α-renamed onto this row
     /// by `validate`, so generation reads one binder row for the whole
     /// functor. At K = 1 this is the identity of the v1 behavior.
-    idx_names: Vec<String>,
+    idx_names: Vec<SurfaceName>,
     /// One plan per constructor, in declaration order (K ≥ 1; the envelope
     /// refuses K = 0). The functor body is their right-nested `Or`; no `Or`
     /// layer is minted at K = 1, keeping the v1 output byte-stable.
@@ -423,91 +462,21 @@ fn flatten_arrows(expr: &SurfaceExpr) -> Option<(Vec<&SurfaceExpr>, &SurfaceExpr
     }
 }
 
-/// Does `expr` mention `name` as an identifier (exactly, or as the prefix of
-/// a dotted name)? Binder scoping is deliberately IGNORED — a shadowed
-/// occurrence still trips the check, which errs toward rejection.
-fn mentions(expr: &SurfaceExpr, name: &str) -> bool {
-    let mut bound: Vec<&str> = Vec::new();
-    let mut fvs: Vec<&str> = Vec::new();
-    if all_idents(expr, &mut bound, &mut fvs).is_err() {
-        // A form this module cannot analyse is treated as possibly mentioning
-        // the name; the caller rejects either way.
-        return true;
-    }
-    let dotted = format!("{name}.");
-    fvs.iter().any(|id| *id == name || id.starts_with(&dotted))
-}
+#[path = "coinductive_surface_names.rs"]
+mod names;
 
-/// Collect the FREE identifiers of `expr`, honouring lambda/Pi binder scope.
-///
-/// Returns `Err(label)` for a surface form this module refuses to analyse.
-fn all_idents<'a>(
-    expr: &'a SurfaceExpr,
-    bound: &mut Vec<&'a str>,
-    out: &mut Vec<&'a str>,
-) -> Result<(), &'static str> {
-    match expr {
-        SurfaceExpr::Ident(_, id) => {
-            let id = id.as_str();
-            if !bound.contains(&id) && !out.contains(&id) {
-                out.push(id);
-            }
-        }
-        SurfaceExpr::Lit(..) | SurfaceExpr::Universe(..) | SurfaceExpr::Hole(..) => {}
-        SurfaceExpr::App(_, h, args) => {
-            all_idents(h, bound, out)?;
-            for a in args {
-                all_idents(&a.expr, bound, out)?;
-            }
-        }
-        SurfaceExpr::Arrow(_, a, b) => {
-            all_idents(a, bound, out)?;
-            all_idents(b, bound, out)?;
-        }
-        SurfaceExpr::Lambda(_, bs, body) | SurfaceExpr::Pi(_, bs, body) => {
-            let depth = bound.len();
-            for b in bs {
-                if let Some(t) = &b.ty {
-                    all_idents(t, bound, out)?;
-                }
-                bound.push(b.name.as_str());
-            }
-            all_idents(body, bound, out)?;
-            bound.truncate(depth);
-        }
-        SurfaceExpr::Paren(_, e)
-        | SurfaceExpr::Explicit(_, e)
-        | SurfaceExpr::OutParam(_, e)
-        | SurfaceExpr::SemiOutParam(_, e)
-        | SurfaceExpr::Proj(_, e, _)
-        | SurfaceExpr::NamedArg(_, _, e)
-        | SurfaceExpr::UniverseInst(_, e, _) => all_idents(e, bound, out)?,
-        SurfaceExpr::Ascription(_, e, t) => {
-            all_idents(e, bound, out)?;
-            all_idents(t, bound, out)?;
-        }
-        other => return Err(variant_label(other)),
-    }
-    Ok(())
-}
-
-/// Is `id` already a constant of `env`? Used only to tell "constant" from
-/// "stray free variable"; an unknown name rejects rather than being
-/// auto-bound into the generated functor's signature.
-fn known_constant(env: &Environment, id: &str) -> bool {
-    env.get_const(&Name::from_string(id)).is_some()
-}
+use names::{all_idents, all_predicate_idents, is_predicate_head, known_constant, mentions};
 
 #[allow(clippy::too_many_arguments)]
 fn validate(
-    qname: &str,
-    short: &str,
+    qname: &SurfaceName,
+    short: &SurfaceName,
     env: &Environment,
-    universe_params: &[String],
+    universe_params: &[SurfaceName],
     binders: &[SurfaceBinder],
     ty: &SurfaceExpr,
     ctors: &[SurfaceCtor],
-    deriving: &[String],
+    deriving: &[SurfaceName],
     modifiers: &DeclModifiers,
 ) -> Result<Shape, ElabError> {
     let what = format!("coinductive declaration `{qname}`");
@@ -523,12 +492,16 @@ fn validate(
     // (explicit, typed, `P`-free — see `params::validate_params`) and FIXED
     // through the coinduction.
     let decl_params = params::validate_params(&what, short, env, binders)?;
-    let param_names: Vec<String> = decl_params.iter().map(|b| b.name.clone()).collect();
+    let param_names: Vec<SurfaceName> = decl_params.iter().map(|b| b.name.clone()).collect();
     if !deriving.is_empty() {
         return Err(unsupported(format!(
             "{what}: `deriving {}` has no meaning for a Prop-valued greatest \
              fixpoint; this is a deliberate loud reject",
-            deriving.join(", ")
+            deriving
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", ")
         )));
     }
     if !modifiers.is_default() {
@@ -571,10 +544,14 @@ fn validate(
 
     // The shared index-binder row: the FIRST constructor's target-variable
     // names. Every later constructor is α-renamed onto it.
-    let mut shared: Vec<String> = Vec::new();
+    let mut shared: Vec<SurfaceName> = Vec::new();
     let mut disjuncts: Vec<DisjunctPlan> = Vec::with_capacity(ctors.len());
     for (ci, ctor) in ctors.iter().enumerate() {
-        if RESERVED_SUFFIXES.contains(&ctor.name.as_str()) {
+        if ctor
+            .name
+            .component_text()
+            .is_some_and(|name| RESERVED_SUFFIXES.contains(&name))
+        {
             return Err(unsupported(format!(
                 "{what}: constructor name `{}` collides with the generated \
                  companion `{qname}.{}`",
@@ -624,7 +601,7 @@ fn validate(
             &param_names,
             env,
         )?;
-        let subst_vars: Vec<String> = positions
+        let subst_vars: Vec<SurfaceName> = positions
             .iter()
             .filter_map(|p| match p {
                 TargetPos::Subst { var } => Some(var.clone()),
@@ -684,9 +661,9 @@ fn validate(
         // A premise-only variable WITHOUT a declared binder still refuses —
         // the explicit binder is the tax for an ∃-bound variable.
         for p in &prem_exprs {
-            let mut bound: Vec<&str> = Vec::new();
-            let mut fvs: Vec<&str> = Vec::new();
-            all_idents(p, &mut bound, &mut fvs).map_err(|label| {
+            let mut bound: Vec<&SurfaceName> = Vec::new();
+            let mut fvs: Vec<&SurfaceName> = Vec::new();
+            all_predicate_idents(p, short, &mut bound, &mut fvs).map_err(|label| {
                 unsupported(format!(
                     "{what}: a premise of `{}` uses the non-applicative surface \
                      form `{label}`; v1 premises must be built from identifiers, \
@@ -697,7 +674,7 @@ fn validate(
             for fv in fvs {
                 if fv == short
                     || subst_vars.iter().any(|v| v == fv)
-                    || ctor_binders.iter().any(|b| b.name == fv)
+                    || ctor_binders.iter().any(|b| &b.name == fv)
                     || param_names.iter().any(|p| p == fv)
                     || known_constant(env, fv)
                 {
@@ -726,7 +703,7 @@ fn validate(
                 .map(|(i, pos)| match pos {
                     TargetPos::Subst { var } => Ok(var.clone()),
                     TargetPos::Equate { .. } => {
-                        let generated = format!("v_coind{i}");
+                        let generated = SurfaceName::component(format!("v_coind{i}"), false);
                         if known_constant(env, &generated) {
                             return Err(unsupported(format!(
                                 "{what}: the generated index-row name \
@@ -746,19 +723,19 @@ fn validate(
             // the shared binder row would capture it. The α-rename below
             // only maps this constructor's substituted variables, so this
             // guard — not the rename — owns the constant-collision case.
-            let mut bound: Vec<&str> = Vec::new();
-            let mut fvs: Vec<&str> = Vec::new();
+            let mut bound: Vec<&SurfaceName> = Vec::new();
+            let mut fvs: Vec<&SurfaceName> = Vec::new();
             for p in &prem_exprs {
-                let _ = all_idents(p, &mut bound, &mut fvs);
+                let _ = all_predicate_idents(p, short, &mut bound, &mut fvs);
             }
             for pos in &positions {
                 if let TargetPos::Equate { written } = pos {
-                    let _ = all_idents(written, &mut bound, &mut fvs);
+                    let _ = all_predicate_idents(written, short, &mut bound, &mut fvs);
                 }
             }
             for b in &ctor_binders {
                 if let Some(t) = b.ty.as_deref() {
-                    let _ = all_idents(t, &mut bound, &mut fvs);
+                    let _ = all_predicate_idents(t, short, &mut bound, &mut fvs);
                 }
             }
             for fv in fvs {
@@ -769,7 +746,7 @@ fn validate(
                          shared index-row name (`{}`) — under the shared binder \
                          row that occurrence would be captured",
                         ctor.name,
-                        shared.join(" ")
+                        join_names(&shared)
                     )));
                 }
             }
@@ -779,7 +756,7 @@ fn validate(
             // identity and runs rename-free (v1 behavior — including its
             // scope-honoring tolerance of shadowed target variables — is
             // preserved exactly).
-            let map: Vec<(String, String)> = positions
+            let map: Vec<(SurfaceName, SurfaceName)> = positions
                 .iter()
                 .enumerate()
                 .filter_map(|(i, pos)| match pos {
@@ -798,7 +775,7 @@ fn validate(
                          onto that row: {reason}; renaming refuses rather than \
                          risk changing what the premise means",
                         ctor.name,
-                        shared.join(" ")
+                        join_names(&shared)
                     ))
                 };
                 let renamed = |e: &SurfaceExpr| {
@@ -860,7 +837,7 @@ fn validate(
         // its shared-row name at its declared type (structurally the index
         // type, by the substitution rule), keeping the declared constructor
         // type usable exactly as written.
-        let row_of = |name: &str| {
+        let row_of = |name: &SurfaceName| {
             positions
                 .iter()
                 .position(|p| matches!(p, TargetPos::Subst { var } if var == name))
@@ -896,7 +873,7 @@ fn validate(
     }
 
     Ok(Shape {
-        qname: qname.to_string(),
+        qname: qname.clone(),
         params: decl_params,
         idx_tys: idx_tys.into_iter().cloned().collect(),
         idx_names: shared,
@@ -916,14 +893,14 @@ fn validate(
 /// this module. Nothing is generated in that case.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn lower(
-    qname: &str,
-    short: &str,
+    qname: &SurfaceName,
+    short: &SurfaceName,
     env: &Environment,
-    universe_params: &[String],
+    universe_params: &[SurfaceName],
     binders: &[SurfaceBinder],
     ty: &SurfaceExpr,
     ctors: &[SurfaceCtor],
-    deriving: &[String],
+    deriving: &[SurfaceName],
     modifiers: &DeclModifiers,
 ) -> Result<Vec<SurfaceDecl>, ElabError> {
     let shape = validate(

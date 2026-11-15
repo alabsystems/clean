@@ -43,7 +43,6 @@ ring.workspace = true
 # public key and the base64 signature payload returned by `gcloud kms
 # asymmetric-sign --format=json`. Already a workspace dep; no lock drift.
 base64.workspace = true
-fd-lock = "4.0.4"
 rayon.workspace = true
 tracing.workspace = true
 clap = { workspace = true }
@@ -53,7 +52,6 @@ regex = "1"
 # already a workspace dependency (clean-server uses it); httparse + the
 # percent decoder keep the request path dependency-light, and anyhow is the
 # binary-side error type (the library keeps using thiserror::MathverseError).
-tokio = { workspace = true }
 httparse.workspace = true
 percent-encoding.workspace = true
 anyhow.workspace = true
@@ -63,6 +61,13 @@ anyhow.workspace = true
 # symbol (in `parallel_verify.rs`) exported by the linked mimalloc static lib,
 # so no `libmimalloc-sys`/`extended` dependency is needed.
 mimalloc = { workspace = true, optional = true }
+
+# Native-only: fd-lock has no wasip1 backend (the attempt-log and doctor-probe
+# call sites are target-gated), and tokio's full feature set does not build on
+# wasm (only the serve bins use it).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+fd-lock = "4.0.4"
+tokio = { workspace = true, features = ["full"] }
 
 [features]
 # Gate slow tests (25+ min) that require .olean toolchain files behind this feature.
@@ -89,6 +94,11 @@ criterion.workspace = true
 # duplicate facade (rearch stage 9). Dev-dependency cycles are allowed by
 # cargo; the `clean` lib is built without its own dev-deps here.
 clean.workspace = true
+# `clean_olean::test_support::compiled_fixture_dir` mints the `replay_forged`
+# `.olean` fixtures with the pinned Lean for the re-check lane tests
+# (`src/cli/replay_forged_lane_tests.rs`). Test-only: the normal edge above
+# never enables the feature.
+clean-olean = { workspace = true, features = ["test-support"] }
 proptest.workspace = true
 tempfile.workspace = true
 # Enable the `math-overlays` feature on clean-kernel for tests that exercise

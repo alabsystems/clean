@@ -4700,10 +4700,7 @@ mod tests {
     /// `@Eq Nat a b`.
     fn nat_eq(a: Expr, b: Expr) -> Expr {
         let head = Expr::const_str_levels("Eq", vec![Level::succ(Level::zero())]);
-        Expr::app(
-            Expr::app(Expr::app(head, Expr::const_str("Nat")), a),
-            b,
-        )
+        Expr::app(Expr::app(Expr::app(head, Expr::const_str("Nat")), a), b)
     }
 
     #[test]
@@ -4777,10 +4774,7 @@ mod tests {
             ),
             numeral(1),
         );
-        assert_eq!(
-            format!("{partial}"),
-            "HAdd.hAdd Nat Nat Nat instHAddNat 1"
-        );
+        assert_eq!(format!("{partial}"), "HAdd.hAdd Nat Nat Nat instHAddNat 1");
     }
 
     #[test]
@@ -4789,7 +4783,13 @@ mod tests {
         // itself: no derived-Debug fragment may survive into a rendering.
         let goal = nat_eq(nat_add(numeral(1), numeral(1)), numeral(2));
         let rendered = format!("{goal}");
-        for banned in ["lean4_hash", "Const(Name", "App(", "Nat(Small(", "Succ(Zero)"] {
+        for banned in [
+            "lean4_hash",
+            "Const(Name",
+            "App(",
+            "Nat(Small(",
+            "Succ(Zero)",
+        ] {
             assert!(
                 !rendered.contains(banned),
                 "Display leaked the Rust Debug fragment {banned:?}: {rendered}"

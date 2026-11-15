@@ -1,0 +1,10 @@
+{
+ "prefix": "ir_itc",
+ "core_digest": "4244685a37d28821bb045c5d3433993ab5c71e898dc53f03ca824952ebc882b4",
+ "defs_digest": "190e0f3a7bb2a4f567009379b6f62ce445525d8e5198ce672d2313d9c8ef8b9b",
+ "def_count": 45,
+ "text_unwitnessed": [
+  { "slot": "bb1#1 switch arg4", "why": "trust-ir Display never prints Switch.exhaustive_enum_unreachable" },
+  { "slot": "bb9#13 switch arg4", "why": "trust-ir Display never prints Switch.exhaustive_enum_unreachable" }
+ ]
+}

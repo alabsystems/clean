@@ -1,12 +1,12 @@
+; synthetic: SYNTHETIC MODULE -- authored for the W2b semdiff lane
+; synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2b).
+; synthetic: No compiler emitted this body; its registered Clean twin is
+; synthetic: ir_w2b_al_module (eval_ir_w2b_synth.rs). The bool selector routes
+; synthetic: between the initialized round-trip and the uninitialized read,
+; synthetic: so one body pins the allocation, the write-then-read identity,
+; synthetic: and the fresh-cell UB edge. Do not add it to any emitted-fixture
+; synthetic: census.
 fn @synth::alloca_probe(functy.915) {
-    ; #synthetic: SYNTHETIC MODULE -- authored for the W2b semdiff lane
-    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2b).
-    ; #synthetic: No compiler emitted this body; its registered Clean twin is
-    ; #synthetic: ir_w2b_al_module (eval_ir_w2b_synth.rs). The bool selector routes
-    ; #synthetic: between the initialized round-trip and the uninitialized read,
-    ; #synthetic: so one body pins the allocation, the write-then-read identity,
-    ; #synthetic: and the fresh-cell UB edge. Do not add it to any emitted-fixture
-    ; #synthetic: census.
 bb0(%0: u32, %1: bool):
     %2 = alloca u32
     condbr %1, bb1, bb2

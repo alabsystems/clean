@@ -110,7 +110,13 @@ fn test_conv_rw_fails_without_hypothesis() {
     let goal = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, goal);
 
-    let err = conv_rw(&mut state, vec![], "nonexistent", false).unwrap_err();
+    let err = conv_rw(
+        &mut state,
+        vec![],
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        false,
+    )
+    .unwrap_err();
     assert!(
         matches!(
             err,
@@ -131,9 +137,18 @@ fn test_conv_lhs_rewrite_preserves_proof_chain() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local rewrite hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local rewrite hypothesis");
 
-    conv_lhs(&mut state, "hxy", false).expect("conv_lhs should rewrite the lhs");
+    conv_lhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+        false,
+    )
+    .expect("conv_lhs should rewrite the lhs");
     assert_eq!(
         state.current_goal().unwrap().target,
         make_eq(Expr::prop(), make_p(y.clone()), make_p(y)),
@@ -214,7 +229,11 @@ fn test_conv_arg_rejects_non_defeq_argument_change_without_trust() {
         make_p(x.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
     let err = conv_arg(&mut state, |ps| {
@@ -541,10 +560,19 @@ fn test_conv_rhs_rewrite_preserves_proof_chain() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hyx").expect("intro should create the local rewrite hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+    )
+    .expect("intro should create the local rewrite hypothesis");
 
     // conv_rhs rewrites RHS = P(y) using hyx : y = x → P(x)
-    conv_rhs(&mut state, "hyx", false).expect("conv_rhs should rewrite the rhs");
+    conv_rhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+        false,
+    )
+    .expect("conv_rhs should rewrite the rhs");
     assert_eq!(
         state.current_goal().unwrap().target,
         make_eq(Expr::prop(), make_p(x.clone()), make_p(x.clone())),
@@ -596,13 +624,17 @@ fn test_conv_rw_deep_path_preserves_proof_chain() {
         make_eq_n(qx, qy.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality hypothesis");
 
     // Deep-path rewrite: navigate into LHS → AppArg of Q(x) → rewrites x to y
     conv_rw(
         &mut state,
         vec![ConvPosition::EqLhs, ConvPosition::AppArg],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("conv_rw with deep path should succeed");
@@ -646,10 +678,19 @@ fn test_conv_rhs_navigation_reconstruction_proof_chain() {
         make_eq(Expr::prop(), px.clone(), py),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hyx").expect("intro should create the local equality hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+    )
+    .expect("intro should create the local equality hypothesis");
 
     // conv_rhs rewrites RHS = P(y) using hyx : y = x → P(x)
-    conv_rhs(&mut state, "hyx", false).expect("conv_rhs should succeed");
+    conv_rhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+        false,
+    )
+    .expect("conv_rhs should succeed");
 
     // After rewrite: P(x) = P(x)
     let expected_target = make_eq(Expr::prop(), px.clone(), px);
@@ -689,10 +730,19 @@ fn test_conv_lhs_navigation_reconstruction_proof_chain() {
         make_eq(Expr::prop(), px.clone(), py.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality hypothesis");
 
     // conv_lhs rewrites LHS = P(x) using hxy : x = y → P(y)
-    conv_lhs(&mut state, "hxy", false).expect("conv_lhs should succeed");
+    conv_lhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+        false,
+    )
+    .expect("conv_lhs should succeed");
 
     // After rewrite: P(y) = P(y)
     let expected_target = make_eq(Expr::prop(), py.clone(), py);
@@ -741,10 +791,19 @@ fn test_conv_lhs_rewrite_zero_trusted_axioms() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro");
 
     // conv_lhs rewrites P(x) → P(y)
-    conv_lhs(&mut state, "hxy", false).expect("conv_lhs should succeed");
+    conv_lhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+        false,
+    )
+    .expect("conv_lhs should succeed");
     rfl(&mut state).expect("rfl after conv_lhs");
 
     assert!(
@@ -776,10 +835,19 @@ fn test_conv_rhs_rewrite_zero_trusted_axioms() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hyx").expect("intro");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+    )
+    .expect("intro");
 
     // conv_rhs rewrites P(y) → P(x) using hyx : y = x (forward: y→x)
-    conv_rhs(&mut state, "hyx", false).expect("conv_rhs should succeed");
+    conv_rhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+        false,
+    )
+    .expect("conv_rhs should succeed");
     rfl(&mut state).expect("rfl after conv_rhs");
 
     assert!(

@@ -1,0 +1,15 @@
+{
+  "schema": "clean.trust-verified-lane.v1",
+  "what_this_is": "The crates scripts/local_gate.sh's trust-verified-lane leg runs through `targo trust check --allow-l0-gaps --locked -j 4 -p <crate> --lib`, and the per-crate floor scripts/check_trust_verified_lane.py holds each to. A crate here must report ZERO failed obligations; `proved_floor` is 80% of the proved count measured below, rounded down, so verifier nondeterminism (serde-derived rows flip proved<->unknown<->timeout between runs on a loaded box) does not turn the leg red while a real loss does. Unknown rows never count toward a floor. Adding a crate or raising a floor is a reviewed edit; lowering one must say why in `history`.",
+  "lane": "advisory",
+  "measured_with": "targo 1.99.0-dev (321aaeda7 2026-09-17), trustc from the aterm package store (trust/9192), host aarch64-apple-darwin, load 15-25",
+  "crates": {
+    "clean":          {"target": "lib", "proved_floor": 21, "measured": {"proved": 27, "failed": 0, "unknown": 149, "mandated": 3, "total": 179}},
+    "clean-autoform": {"target": "lib", "proved_floor": 32, "measured": {"proved": 40, "failed": 0, "unknown": 180, "mandated": 4, "total": 224}},
+    "clean-cake":     {"target": "lib", "proved_floor": 30, "measured": {"proved": 38, "failed": 0, "unknown": 206, "mandated": 9, "total": 253}},
+    "clean-features": {"target": "lib", "proved_floor": 7,  "measured": {"proved": 9,  "failed": 0, "unknown": 29,  "mandated": 0, "total": 38}}
+  },
+  "history": [
+    "2026-10-02: first pin. clean-features was already at 0 failed. clean (4 failed: check_leaf and topological_batches add overflow, each also a panic_boundary row), clean-autoform (2: InferenceMeter::record_inferred add overflow + panic_boundary) and clean-cake (9: term_size_depth add, local_score unreachable!, canon sub + slice index, soundly_equivalent vec![false; n] bulk allocation, union rank add) were fixed at the source the same day; before/after reports were measured on the same toolchain."
+  ]
+}

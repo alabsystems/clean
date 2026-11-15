@@ -69,7 +69,7 @@ pub(crate) fn snapshot_sorry_goals(
         .map(|(api_goal, raw_goal)| SorryGoal {
             goal_id: api_goal.goal_id,
             target: api_goal.target_pp,
-            tag: raw_goal.tag.clone(),
+            tag: raw_goal.tag.as_ref().and_then(|tag| tag.source_spelling()),
             hypotheses: api_goal
                 .hypotheses
                 .into_iter()

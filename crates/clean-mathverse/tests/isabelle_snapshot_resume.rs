@@ -127,6 +127,11 @@ fn snapshot_resume_matches_full_replay_and_refuses_tampered_prefix() {
     ] {
         clean_mathverse::process_env::remove_persistent(var);
     }
+    // The isabelle-import verb below holds the machine-wide verify lock
+    // (`$HOME/isabelle-work` by default); a test takes its own, in its own
+    // directory.
+    let verify_lock = dir.join(".clean_verify.lock");
+    clean_mathverse::process_env::set_persistent("ISA_VERIFY_LOCK_PATH", &verify_lock);
 
     // 1) Reference: one full replay.
     let mut w = ShardWriter::new();
@@ -265,6 +270,8 @@ fn snapshot_resume_matches_full_replay_and_refuses_tampered_prefix() {
     .expect("isabelle-import verb");
     clean_mathverse::process_env::remove_persistent("ISA_SNAPSHOT_OUT");
     clean_mathverse::process_env::remove_persistent("ISA_SNAPSHOT_IN");
+    clean_mathverse::process_env::remove_persistent("ISA_VERIFY_LOCK_PATH");
+    assert!(!verify_lock.exists(), "the verb released its verify lock");
     assert!(verb_snap.exists(), "verb must save the snapshot");
     // The published shard must read back with one KernelVerified header per
     // verified theorem, every header provenance-linked.

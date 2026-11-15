@@ -1086,11 +1086,79 @@ fn test_nat_linear_order_type_checks() {
     let mut env = Environment::new();
     env.init_nat_linear_order().unwrap();
 
-    // Check Nat.le_total axiom exists
-    assert_axiom(&env, "Nat.le_total");
+    // `Nat.le_total` is a constructive theorem (#3599).
+    assert_const(&env, "Nat.le_total");
+    assert_const(&env, "instLinearOrderNat");
+}
 
-    // Check instLinearOrderNat exists
-    assert_axiom(&env, "instLinearOrderNat");
+/// `instPartialOrderNat` / `instLinearOrderNat` were value-less AXIOMS until
+/// 2026-09-29: the prelude axiom census could not witness their types
+/// inhabited (an order WITH its laws), so they were the whole of
+/// `debt_inhabitation` (docs/issues/2026-09-28-prelude-pure-proves-false.md).
+/// Both are now kernel-checked definitions whose axiom closure is empty, and
+/// their projections compute to `Nat`'s own `≤` and lemmas.
+#[test]
+fn test_nat_order_instances_are_definitions_with_empty_axiom_closure() {
+    use crate::env::ConstantKind;
+    use crate::tc::TypeChecker;
+    let mut env = Environment::new();
+    env.init_nat_linear_order()
+        .expect("the Nat order hierarchy must register");
+    for name in [
+        "instPreorderNat",
+        "instPartialOrderNat",
+        "instLinearOrderNat",
+    ] {
+        let ci = env
+            .get_const(&Name::from_string(name))
+            .unwrap_or_else(|| panic!("{name} must be registered"));
+        assert_eq!(
+            ci.kind,
+            ConstantKind::Definition,
+            "{name} must be a Definition"
+        );
+        assert!(ci.value.is_some(), "{name} must carry a value");
+        let deps = env
+            .axiom_deps(&Name::from_string(name))
+            .unwrap_or_else(|| panic!("{name} registered => axiom_deps Some"));
+        assert!(
+            deps.is_empty(),
+            "{name} must rest on no non-foundational axiom, found {deps:?}"
+        );
+    }
+
+    // `PartialOrder.le_antisymm Nat instPartialOrderNat` is `Nat.le_antisymm`:
+    // the projection of the built instance computes to the lemma it was
+    // built from, so the value is not a stand-in.
+    let tc = TypeChecker::new(&env);
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let po = Expr::const_(Name::from_string("instPartialOrderNat"), vec![]);
+    let field = Expr::proj(Name::from_string("PartialOrder"), 1, po);
+    assert!(
+        tc.is_def_eq(
+            &field,
+            &Expr::const_(Name::from_string("Nat.le_antisymm"), vec![])
+        ),
+        "PartialOrder.le_antisymm of instPartialOrderNat must be Nat.le_antisymm"
+    );
+    let lo = Expr::const_(Name::from_string("instLinearOrderNat"), vec![]);
+    let total = Expr::proj(Name::from_string("LinearOrder"), 1, lo);
+    assert!(
+        tc.is_def_eq(
+            &total,
+            &Expr::const_(Name::from_string("Nat.le_total"), vec![])
+        ),
+        "LinearOrder.le_total of instLinearOrderNat must be Nat.le_total"
+    );
+    // Control: a different lemma is not accepted as the field.
+    assert!(
+        !tc.is_def_eq(
+            &field,
+            &Expr::const_(Name::from_string("Nat.le_trans"), vec![])
+        ),
+        "the antisymmetry field must not be def-eq to Nat.le_trans"
+    );
+    let _ = nat;
 }
 
 #[test]

@@ -23,8 +23,9 @@ fn single_hyp_false_state(env: Environment, h_ty: Expr) -> (ProofState, FVarId) 
         env,
         false_goal(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -40,14 +41,16 @@ fn two_hyp_false_state(env: Environment, h1_ty: Expr, h2_ty: Expr) -> (ProofStat
         false_goal(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },

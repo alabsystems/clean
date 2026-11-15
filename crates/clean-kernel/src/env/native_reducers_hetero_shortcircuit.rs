@@ -269,28 +269,49 @@ fn reduce_hpow_hpow(args: &[&Expr]) -> Option<Expr> {
 /// Signature: `HAppend.hAppend : {α β γ : Type u} → [inst : HAppend α β γ] → α → β → γ`
 /// Args: [α, β, γ, inst, a, b]
 ///
-/// Recognizes known append instances and delegates to the underlying operation:
-/// - `instHAppendStringStringString` -> String.append
+/// Recognizes the canonical `String` append instances and concatenates two
+/// string literals:
+/// - `instHAppendString` (Clean's prelude, `hAppend := String.append`);
+/// - `instHAppendStringStringString`;
+/// - `@instHAppendOfAppend String instAppendString` (Lean 4.30's elaboration
+///   of `"a" ++ "b"`, measured with `pp.all`).
+///
+/// SOUNDNESS (2026-09-26, `docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+/// this reducer used to concatenate for ANY instance argument, so a second,
+/// user-declared `HAppend String String String` instance whose `hAppend`
+/// returns its first argument reduced `"a" ++ "b"` to `"ab"` here and to `"a"`
+/// by δ — in every environment, canonical or not. The instance is now read,
+/// and each name it is recognized by is a fold key
+/// (`native_fold_canon::RECOGNIZED_BY_HEAD`), so a user's definition under one
+/// of those names disables the reducer instead of being trusted.
 fn reduce_happend_happend(args: &[&Expr]) -> Option<Expr> {
     if args.len() < 6 {
         return None;
     }
-    let inst_name = get_instance_name(args[3])?;
-
-    // instHAppendStringStringString (or instHAppendOfAppend applied to String)
-    // Check if both operands are string literals
-    if let (Some(a), Some(b)) = (get_string_val(args[4]), get_string_val(args[5])) {
-        let mut result = String::with_capacity(a.len() + b.len());
-        result.push_str(a);
-        result.push_str(b);
-        return Some(Expr::str_lit(&result));
+    let is_string =
+        |e: &Expr| matches!(e.kind(), ExprKind::Const(n, _) if n.to_string() == "String");
+    if !(is_string(args[0]) && is_string(args[1]) && is_string(args[2])) {
+        return None;
     }
-
-    // Check for Nat addition through instHAppendOfAppend
-    // (less common, but possible for List/Array append with known instances)
-    let _ = inst_name; // Instance name checked but no other Nat patterns here
-
-    None
+    let inst_name = get_instance_name(args[3])?.to_string();
+    let canonical = match inst_name.as_str() {
+        "instHAppendString" | "instHAppendStringStringString" => true,
+        "instHAppendOfAppend" => {
+            let inst_args = args[3].get_app_args();
+            matches!(inst_args.as_slice(), [ty, append]
+                if is_string(ty)
+                    && matches!(append.kind(), ExprKind::Const(n, _) if n.to_string() == "instAppendString"))
+        }
+        _ => false,
+    };
+    if !canonical {
+        return None;
+    }
+    let (a, b) = (get_string_val(args[4])?, get_string_val(args[5])?);
+    let mut result = String::with_capacity(a.len() + b.len());
+    result.push_str(a);
+    result.push_str(b);
+    Some(Expr::str_lit(&result))
 }
 
 /// Register the heterogeneous typeclass short-circuit native reducers.

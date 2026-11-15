@@ -5,7 +5,7 @@
 //! Type inference for the clean kernel type checker.
 //!
 //! Contains:
-//! - `infer_type` — public entry point (debug cross-validates with micro-checker)
+//! - `infer_type` — public entry point (debug builds generate certificates)
 //! - `infer_type_fast` / `_impl` / `_inner` — release-mode fast path
 //! - `check_type` — verify an expression has a given type
 //! - `infer_sort` — infer type and extract universe level
@@ -17,26 +17,37 @@
 //! - `infer_zfc.rs` — ZFC + impredicative mode helpers (#2594)
 //! - `infer_proj.rs` — projection typing, batch cache, `is_prop` (#2594)
 
-#[cfg(not(debug_assertions))]
-use crate::cert::ProofCert;
+#[cfg(all(feature = "inference-stats", not(debug_assertions)))]
+use super::reduction_stats::inference::{self as work_stats, ArcEvent, Operation};
 use crate::expr::stack_safe;
-use crate::expr::{Expr, ExprKind};
+use crate::expr::{Expr, ExprKind, FVarId};
 use crate::level::Level;
 use crate::name::Name;
 #[cfg(not(debug_assertions))]
 use crate::tc::expr_location::ExprPathStep;
 use crate::tc::{TypeChecker, TypeError};
-#[cfg(not(debug_assertions))]
 use std::sync::Arc;
 use std::sync::LazyLock;
 
 /// Pre-interned names for literal type inference (avoids repeated allocation).
-#[cfg(not(debug_assertions))]
 static NAME_NAT: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat"));
-#[cfg(not(debug_assertions))]
 static NAME_STRING: LazyLock<Name> = LazyLock::new(|| Name::from_string("String"));
 
 static NAME_EAGER_REDUCE: LazyLock<Name> = LazyLock::new(|| Name::from_string("eagerReduce"));
+
+/// The literal-inference computation shared by the release and certificate paths.
+///
+/// Keeping the real constructors in this function gives source extraction one
+/// production body to attach to the literal typing specification. The input
+/// payload is preserved by the caller; this computation selects its type without
+/// consulting the environment. This factoring is not a refinement proof.
+#[inline]
+pub(super) fn infer_literal_type(lit: &crate::expr::Literal) -> Expr {
+    match lit {
+        crate::expr::Literal::Nat(_) => Expr::const_(NAME_NAT.clone(), vec![]),
+        crate::expr::Literal::String(_) => Expr::const_(NAME_STRING.clone(), vec![]),
+    }
+}
 
 /// Check if an expression is `eagerReduce _ _` (the constant applied to exactly 2 args).
 ///
@@ -55,6 +66,52 @@ pub(crate) fn is_eager_reduce(e: &Expr) -> bool {
 }
 
 impl<'env> TypeChecker<'env> {
+    /// Close a let result identically in fast and certificate inference.
+    /// Call only after the caller has checked the annotation/value premises
+    /// required by its current inference mode and popped the temporary binder.
+    pub(super) fn close_inferred_let_type(
+        &self,
+        let_name: &Name,
+        ty: &Arc<Expr>,
+        val: &Arc<Expr>,
+        body_type: Expr,
+        fvar_id: FVarId,
+    ) -> Expr {
+        // Retain a checked, well-scoped let in a dependent result type.
+        // Eager substitution duplicates the value throughout that type
+        // before enclosing binders abstract it again. The retained let
+        // has exactly the same zeta normal form. Only full checking has
+        // established the annotation/value premises required to reuse it.
+        // Loose replacement terms retain the original substitution rule.
+        if !self.infer_only.get()
+            && !ty.has_loose_bvars_quick()
+            && !val.has_loose_bvars_quick()
+            && !body_type.has_loose_bvars_quick()
+        {
+            if !body_type.may_contain_fvar(fvar_id) {
+                return body_type;
+            }
+            let abstracted = body_type.abstract_fvar(fvar_id);
+            // The upper bound is conservative: do not retain an unused
+            // declaration merely because a larger FVar was present.
+            if !abstracted.has_loose_bvars_quick() {
+                return body_type;
+            }
+            return Expr::from_kind(ExprKind::Let(
+                let_name.clone(),
+                ty.clone(),
+                val.clone(),
+                Arc::new(abstracted),
+                false,
+            ));
+        }
+
+        // Infer-only or loose inputs keep the existing zeta rule.
+        #[cfg(all(feature = "inference-stats", not(debug_assertions)))]
+        work_stats::record_operation(Operation::SubstLet);
+        body_type.subst_fvar(fvar_id, val)
+    }
+
     /// Return the domain/body of a Pi type while avoiding redundant WHNF calls.
     ///
     /// Projection inference often walks constructor telescopes that are already
@@ -75,8 +132,7 @@ impl<'env> TypeChecker<'env> {
 
     /// Infer the type of an expression
     ///
-    /// In debug builds, this method performs cross-validation with the micro-checker
-    /// to verify kernel correctness. Any disagreement causes a panic.
+    /// In debug builds, this method also generates a typing certificate.
     ///
     /// In release builds, uses a fast path without certificate generation for performance.
     ///
@@ -104,18 +160,9 @@ impl<'env> TypeChecker<'env> {
     /// ENSURES: Deterministic - same input yields same output
     #[cfg(debug_assertions)]
     pub fn infer_type(&self, e: &Expr) -> Result<Expr, TypeError> {
+        let _metered = self.begin_operation();
         self.tick_heartbeat()?;
-        let (ty, cert) = self.infer_type_with_cert(e)?;
-
-        // Cross-validate with micro-checker only when NOT in infer_only mode.
-        // In infer_only mode (the default for infer_type), App/Let type checks
-        // are skipped to match Lean 4's infer_type(). The micro-checker always
-        // performs full checking, so it would reject certs that skipped these
-        // checks. Cross-validation runs during check_type() which sets
-        // infer_only=false. Part of #3134.
-        if !self.infer_only.get() {
-            crate::micro::cross_validate_with_micro(e, &ty, &cert)?;
-        }
+        let (ty, _cert) = self.infer_type_with_cert(e)?;
 
         // Invariant (CIC): type of a type is always a Sort/SProp.
         // Check WHNF since result may not be syntactically a Sort.
@@ -197,6 +244,7 @@ impl<'env> TypeChecker<'env> {
     /// ENSURES: Deterministic - same input yields same output
     #[cfg(not(debug_assertions))]
     pub fn infer_type(&self, e: &Expr) -> Result<Expr, TypeError> {
+        let _metered = self.begin_operation();
         self.tick_heartbeat()?;
         self.infer_type_fast(e)
     }
@@ -301,6 +349,10 @@ impl<'env> TypeChecker<'env> {
         // persists across it and is cleared once at the outermost frame. See the
         // `infer_arc_memo` soundness note in `tc/mod.rs`.
         let depth = self.infer_memo_depth.get();
+        // Certificate inference can re-enter this shared inference frame.
+        // Retire its structural summaries even when the outer owner is fast.
+        let _clear_rebind =
+            (depth == 0).then(|| super::cert::ClearRebindMemo(&self.rebind_closed_memo));
         self.infer_memo_depth.set(depth + 1);
         let result = stack_safe(|| self.infer_type_fast_inner(e));
         self.infer_memo_depth.set(depth);
@@ -314,38 +366,87 @@ impl<'env> TypeChecker<'env> {
     ///
     /// Release-mode analogue of `infer_type_with_cert_arc`: keys on the `Arc<Expr>`
     /// node's stable address so the shared-`Arc` DAG produced by match lowering is
-    /// inferred once per distinct node. The memo value reuses the shared
-    /// `(Arc, type, cert)` slot; in the fast path the certificate component is an
-    /// inexpensive placeholder (`ProofCert::Sort { level: zero }`) that is NEVER
-    /// read — fast inference returns only the type. Pins the `Arc` so its address
-    /// cannot be reused while the entry lives.
+    /// inferred once per admitted distinct node while its entry lives. Fast
+    /// inference needs only the type, so it can use either a type-only or certificate-bearing entry and
+    /// stores no certificate of its own. Pins the `Arc` so its address cannot be
+    /// reused while the entry lives. Two admission windows share the existing
+    /// total cache limit; zero capacity disables admission, not inference.
     #[cfg(not(debug_assertions))]
     pub(super) fn infer_type_fast_arc(&self, arc: &Arc<Expr>) -> Result<Expr, TypeError> {
-        let key = (
-            Arc::as_ptr(arc) as usize,
-            self.infer_only.get(),
-            self.ctx_len(),
-        );
-        if let Some((_pin, ty, _cert)) = self.infer_arc_memo.borrow().get(&key) {
-            return Ok(ty.clone());
+        if self.sharing_replay.is_some() {
+            return self.infer_type_fast_impl(arc.as_ref());
         }
-        let ty = self.infer_type_fast_impl(arc.as_ref())?;
-        self.infer_arc_memo.borrow_mut().insert(
-            key,
-            (
-                arc.clone(),
-                ty.clone(),
-                ProofCert::Sort {
-                    level: Level::zero(),
+        // Child call sites already have an active inference frame. A direct
+        // call must not insert an entry after its outer impl frame clears it.
+        if self.infer_memo_depth.get() == 0 {
+            #[cfg(feature = "inference-stats")]
+            work_stats::record_arc(ArcEvent::NoFrame, self.infer_arc_memo.borrow().len());
+            return self.infer_type_fast_impl(arc.as_ref());
+        }
+        let scoped_key = self.infer_arc_memo_key(arc);
+        let independent_key = self.independent_infer_key(arc);
+        let cached = {
+            let memo = self.infer_arc_memo.borrow();
+            independent_key
+                .as_ref()
+                .and_then(|key| memo.get(key))
+                .or_else(|| memo.get(&scoped_key))
+                .map(|(_, ty, _)| ty.clone())
+        };
+        if let Some(ty) = cached {
+            #[cfg(feature = "inference-stats")]
+            work_stats::record_arc(ArcEvent::Hit, self.infer_arc_memo.borrow().len());
+            return Ok(ty);
+        }
+        #[cfg(feature = "inference-stats")]
+        work_stats::record_arc(ArcEvent::Miss, self.infer_arc_memo.borrow().len());
+        #[cfg(feature = "inference-stats")]
+        work_stats::record_closed_input_miss(!arc.has_fvar_quick() && !arc.has_loose_bvars());
+        let ty = self.infer_type_fast_impl(arc.as_ref());
+        #[cfg(feature = "inference-stats")]
+        if ty.is_err() {
+            work_stats::record_arc(ArcEvent::InferenceError, self.infer_arc_memo.borrow().len());
+        }
+        let ty = ty?;
+        let key = independent_key
+            .filter(|_| self.independent_infer_admissible(arc, &ty))
+            .unwrap_or(scoped_key);
+        let mut memo = self.infer_arc_memo.borrow_mut();
+        #[cfg(feature = "inference-stats")]
+        let mut admitted = false;
+        // A recursive inference may have supplied a real certificate in either
+        // window; check for it before rotating or creating a type-only result.
+        memo.insert_if_absent_with(key, self.max_cache_entries, || {
+            let value = (arc.clone(), ty.clone(), None);
+            #[cfg(feature = "inference-stats")]
+            {
+                admitted = true;
+                // Only this vacant-entry closure creates a fast entry.
+                // The shared memo insertion hook records its actual peak.
+                work_stats::record_arc(ArcEvent::Admission, 0);
+            }
+            value
+        });
+        #[cfg(feature = "inference-stats")]
+        if !admitted {
+            work_stats::record_arc(
+                if memo.get(&key).is_some() {
+                    // A recursive certificate path may already have inserted it.
+                    ArcEvent::RecursiveFill
+                } else {
+                    ArcEvent::CapacityRefusal
                 },
-            ),
-        );
+                memo.len(),
+            );
+        }
         Ok(ty)
     }
 
     /// Inner implementation of fast type inference.
     #[cfg(not(debug_assertions))]
     fn infer_type_fast_inner(&self, e: &Expr) -> Result<Expr, TypeError> {
+        #[cfg(feature = "inference-stats")]
+        work_stats::record_visit(&e.kind, self.infer_memo_depth.get(), self.infer_only.get());
         match &e.kind {
             ExprKind::BVar(idx) => Err(TypeError::UnboundVariable(*idx)),
             ExprKind::FVar(id) => {
@@ -406,16 +507,15 @@ impl<'env> TypeChecker<'env> {
                     }
                 }
 
-                // `instantiate_type` would repeat the `get_const` lookup and the
-                // level-count check already performed above. `info` is in hand and
-                // guaranteed `Some` with a matching arity here, so instantiate the
-                // type directly for the identical result — `instantiate_type` is
-                // exactly `apply_level_subst(&info.type_, &info.level_params, levels)`,
-                // which is `info.type_.instantiate_level_params_direct(..)`. Saves one
-                // HashMap lookup on the hot per-`Const` inference path.
-                let result: Result<Expr, TypeError> = Ok(info
-                    .type_
-                    .instantiate_level_params_direct(&info.level_params, levels));
+                // `info` is in hand with a matching arity (checked above), so the
+                // type is instantiated directly: no second `get_const` lookup on the
+                // hot per-`Const` path. The theory picks the substitution: Clean's
+                // collapsing `instantiate_level_params_direct` under `Extended`,
+                // Lean's `instantiate_type_lparams` under the Lean theories, which
+                // refuses an instantiation whose Lean answer depends on `.olean`
+                // object sharing (`tc/level_profile.rs`, DECISIONS R150).
+                let result: Result<Expr, TypeError> =
+                    self.instantiate_levels_checked(name, &info.type_, &info.level_params, levels);
 
                 #[cfg(feature = "debug-infer")]
                 eprintln!("[infer_type] Const: instantiate_type result = {:?}", result);
@@ -483,10 +583,13 @@ impl<'env> TypeChecker<'env> {
                                 return Err(TypeError::TypeMismatch {
                                     expected: Box::new(expected_arg_type.as_ref().clone()),
                                     inferred: Box::new(arg_type),
-                                    location: self.expr_loc_snapshot(),
+                                    // At the argument, as the cert path. #3425.
+                                    location: self.expr_loc_snapshot_at(ExprPathStep::AppArg),
                                 });
                             }
                         }
+                        #[cfg(feature = "inference-stats")]
+                        work_stats::record_operation(Operation::InstantiateApp);
                         Ok(result_type.instantiate(a))
                     }
                     _ => {
@@ -501,7 +604,7 @@ impl<'env> TypeChecker<'env> {
                         );
                         Err(TypeError::NotAFunction {
                             ty: Box::new(f_type),
-                            location: self.expr_loc_snapshot(),
+                            location: self.expr_loc_snapshot_at(ExprPathStep::AppFn),
                         })
                     }
                 }
@@ -515,7 +618,7 @@ impl<'env> TypeChecker<'env> {
                 // Part of #3223.
                 if !self.infer_only.get() {
                     self.expr_loc_push(ExprPathStep::LamType);
-                    let arg_sort = self.infer_type_fast_impl(arg_type);
+                    let arg_sort = self.infer_type_fast_arc(arg_type);
                     self.expr_loc_pop();
                     let arg_sort = arg_sort?;
                     let arg_sort_whnf = self.whnf_impl(&arg_sort);
@@ -524,13 +627,15 @@ impl<'env> TypeChecker<'env> {
                         _ => {
                             return Err(TypeError::ExpectedSort {
                                 ty: Box::new(arg_sort),
-                                location: self.expr_loc_snapshot(),
-                            })
+                                location: self.expr_loc_snapshot_at(ExprPathStep::LamType),
+                            });
                         }
                     };
                 }
 
                 let fvar_id = self.ctx_push(Name::anon(), arg_type.as_ref().clone(), *bi);
+                #[cfg(feature = "inference-stats")]
+                work_stats::record_operation(Operation::OpenLam);
                 let body_with_fvar = self.open_bvar(body, fvar_id);
                 self.expr_loc_push(ExprPathStep::LamBody);
                 let body_type = self.infer_type_fast_impl(&body_with_fvar);
@@ -540,6 +645,8 @@ impl<'env> TypeChecker<'env> {
                 self.ctx_pop();
                 let body_type = body_type?;
 
+                #[cfg(feature = "inference-stats")]
+                work_stats::record_operation(Operation::AbstractLam);
                 let body_type_abstract = body_type.abstract_fvar(fvar_id);
                 Ok(Expr::from_kind(ExprKind::Pi(
                     *bi,
@@ -549,19 +656,21 @@ impl<'env> TypeChecker<'env> {
             }
             ExprKind::Pi(bi, arg_type, body) => {
                 self.expr_loc_push(ExprPathStep::PiDom);
-                let arg_sort = self.infer_type_fast_impl(arg_type);
+                let arg_sort = self.infer_type_fast_arc(arg_type);
                 self.expr_loc_pop();
                 let arg_sort = arg_sort?;
                 let arg_sort_whnf = self.whnf_impl(&arg_sort);
                 let ExprKind::Sort(l1) = &arg_sort_whnf.kind else {
                     return Err(TypeError::ExpectedSort {
                         ty: Box::new(arg_sort),
-                        location: self.expr_loc_snapshot(),
+                        location: self.expr_loc_snapshot_at(ExprPathStep::PiDom),
                     });
                 };
                 let l1 = l1.clone();
 
                 let fvar_id = self.ctx_push(Name::anon(), arg_type.as_ref().clone(), *bi);
+                #[cfg(feature = "inference-stats")]
+                work_stats::record_operation(Operation::OpenPi);
                 let body_with_fvar = self.open_bvar(body, fvar_id);
                 self.expr_loc_push(ExprPathStep::PiBody);
                 let body_sort = self.infer_type_fast_impl(&body_with_fvar);
@@ -574,12 +683,12 @@ impl<'env> TypeChecker<'env> {
                 let ExprKind::Sort(l2) = &body_sort_whnf.kind else {
                     return Err(TypeError::ExpectedSort {
                         ty: Box::new(body_sort),
-                        location: self.expr_loc_snapshot(),
+                        location: self.expr_loc_snapshot_at(ExprPathStep::PiBody),
                     });
                 };
                 let l2 = l2.clone();
 
-                Ok(Expr::from_kind(ExprKind::Sort(Level::imax(l1, l2))))
+                Ok(Expr::from_kind(ExprKind::Sort(self.level_imax(l1, l2))))
             }
             ExprKind::Let(let_name, ty, val, body, _) => {
                 // Lean 4 parity: when infer_only=false, check that the type is
@@ -588,7 +697,7 @@ impl<'env> TypeChecker<'env> {
                 // Ref: type_checker.cpp:198-221
                 if !self.infer_only.get() {
                     self.expr_loc_push(ExprPathStep::LetType);
-                    let ty_sort = self.infer_type_fast_impl(ty);
+                    let ty_sort = self.infer_type_fast_arc(ty);
                     self.expr_loc_pop();
                     let ty_sort = ty_sort?;
                     let ty_sort_whnf = self.whnf_impl(&ty_sort);
@@ -597,8 +706,8 @@ impl<'env> TypeChecker<'env> {
                         _ => {
                             return Err(TypeError::ExpectedSort {
                                 ty: Box::new(ty_sort),
-                                location: self.expr_loc_snapshot(),
-                            })
+                                location: self.expr_loc_snapshot_at(ExprPathStep::LetType),
+                            });
                         }
                     }
 
@@ -609,7 +718,7 @@ impl<'env> TypeChecker<'env> {
                     // The is_def_eq below then confirms the value's type matches the
                     // annotation.
                     self.expr_loc_push(ExprPathStep::LetVal);
-                    let val_type = self.infer_type_fast_impl(val);
+                    let val_type = self.infer_type_fast_arc(val);
                     self.expr_loc_pop();
                     let val_type = val_type?;
                     // Cumulative subtyping: the let value's type must be a subtype
@@ -623,13 +732,15 @@ impl<'env> TypeChecker<'env> {
                         return Err(TypeError::TypeMismatch {
                             expected: Box::new(ty.as_ref().clone()),
                             inferred: Box::new(val_type),
-                            location: self.expr_loc_snapshot(),
+                            location: self.expr_loc_snapshot_at(ExprPathStep::LetVal),
                         });
                     }
                 }
 
                 let fvar_id =
                     self.ctx_push_let(let_name.clone(), ty.as_ref().clone(), val.as_ref().clone());
+                #[cfg(feature = "inference-stats")]
+                work_stats::record_operation(Operation::OpenLet);
                 let body_with_fvar = self.open_bvar(body, fvar_id);
                 self.expr_loc_push(ExprPathStep::LetBody);
                 let body_type = self.infer_type_fast_impl(&body_with_fvar);
@@ -638,16 +749,9 @@ impl<'env> TypeChecker<'env> {
                 self.ctx_pop();
                 let body_type = body_type?;
 
-                // Substitute FVar(fvar_id) → val directly (zeta-reduction).
-                // Lean 4 abstracts then reconstructs Let binders (local_ctx.cpp:95-108),
-                // but single-variable subst_fvar is equivalent and avoids the
-                // abstract+instantiate round trip.
-                Ok(body_type.subst_fvar(fvar_id, val))
+                Ok(self.close_inferred_let_type(let_name, ty, val, body_type, fvar_id))
             }
-            ExprKind::Lit(lit) => Ok(match lit {
-                crate::expr::Literal::Nat(_) => Expr::const_(NAME_NAT.clone(), vec![]),
-                crate::expr::Literal::String(_) => Expr::const_(NAME_STRING.clone(), vec![]),
-            }),
+            ExprKind::Lit(lit) => Ok(infer_literal_type(lit)),
             ExprKind::Proj(struct_name, idx, e) => {
                 self.expr_loc_push(ExprPathStep::ProjExpr);
                 let result = self.infer_proj_type(struct_name, *idx, e);
@@ -657,7 +761,7 @@ impl<'env> TypeChecker<'env> {
             // MData is transparent - just infer the type of the inner expression
             ExprKind::MData(_, inner) => {
                 self.expr_loc_push(ExprPathStep::MDataExpr);
-                let result = self.infer_type_fast_impl(inner);
+                let result = self.infer_type_fast_arc(inner);
                 self.expr_loc_pop();
                 result
             }
@@ -704,6 +808,7 @@ impl<'env> TypeChecker<'env> {
     /// }
     /// ```
     pub fn check_type(&self, e: &Expr, expected: &Expr) -> Result<(), TypeError> {
+        let _metered = self.metered_scope();
         // Set infer_only=false for full checking (Lean 4's check() semantics).
         let prev = self.infer_only.get();
         self.infer_only.set(false);
@@ -717,13 +822,12 @@ impl<'env> TypeChecker<'env> {
         if self.is_le(&inferred, expected) {
             Ok(())
         } else {
-            // If heartbeat was exhausted during is_def_eq, whnf may have returned
-            // unreduced terms, so the false result is a resource abort, not a real
-            // type mismatch — surface HeartbeatExceeded instead of a misleading
-            // TypeMismatch. Part of #3134 (same guard as the App-arg path). A
-            // genuine type error with budget remaining still returns TypeMismatch
-            // (tick_heartbeat is a no-op while budget remains), so this never
-            // turns an ill-typed constant into a pass.
+            // If heartbeat was exhausted during is_def_eq, whnf may have returned unreduced
+            // terms, so the false result is a resource abort, not a real type mismatch —
+            // surface HeartbeatExceeded instead of a misleading TypeMismatch. Part of #3134
+            // (same guard as the App-arg path). A genuine type error with budget remaining
+            // still returns TypeMismatch (tick_heartbeat is a no-op while budget remains),
+            // so this never turns an ill-typed constant into a pass.
             self.tick_heartbeat()?;
             Err(TypeError::TypeMismatch {
                 expected: Box::new(expected.clone()),
@@ -772,6 +876,7 @@ impl<'env> TypeChecker<'env> {
     /// `Environment::add_decl`, which need to validate proposition-like
     /// declaration types such as `Squash(Prop)`.
     pub fn infer_sort(&self, e: &Expr) -> Result<Level, TypeError> {
+        let _metered = self.metered_scope();
         // Set infer_only=false for full checking (validation entry point).
         let prev = self.infer_only.get();
         self.infer_only.set(false);
@@ -782,10 +887,9 @@ impl<'env> TypeChecker<'env> {
 
     /// Maximum recursion depth for `infer_sort_inner`'s Pi fallback.
     ///
-    /// When `infer_type(e)` returns a Pi type (meaning `e` is a term with a
-    /// function type), `infer_sort_inner` recursively processes the Pi domain
-    /// and body to compute the sort level. This depth limit prevents runaway
-    /// recursion on pathological or cyclic types.
+    /// When `infer_type(e)` returns a Pi type (meaning `e` is a term with a function type),
+    /// `infer_sort_inner` recursively processes the Pi domain and body to compute the sort
+    /// level. This depth limit prevents runaway recursion on pathological or cyclic types.
     ///
     /// 64 is sufficient for all known nn_verify types (deepest observed: ~8
     /// levels for `compose_lipschitz` with higher-order function parameters).
@@ -802,10 +906,10 @@ impl<'env> TypeChecker<'env> {
     /// call reduces structural complexity), but the depth limit provides a
     /// clean error instead of heartbeat exhaustion. Part of #3304.
     fn infer_sort_inner(&self, e: &Expr, depth: u32) -> Result<Level, TypeError> {
-        // Note: no tick_heartbeat() here — infer_type already decrements the
-        // heartbeat counter. Adding a tick here would double-count and could
-        // exhaust the heartbeat budget prematurely for complex types with many
-        // Pi domains (e.g., nn_verify theorems). Part of #3304.
+        // Note: no tick_heartbeat() here — infer_type already decrements the heartbeat
+        // counter. Adding a tick here would double-count and could exhaust the heartbeat
+        // budget prematurely for complex types with many Pi domains (e.g., nn_verify
+        // theorems). Part of #3304.
         let ty = self.infer_type(e)?;
         let ty_whnf = self.whnf(&ty);
         match &ty_whnf.kind {
@@ -829,7 +933,7 @@ impl<'env> TypeChecker<'env> {
                     stack_safe(|| self.infer_sort_inner(&body_with_fvar, depth + 1));
                 self.ctx_pop();
                 let body_level = body_level_result?;
-                Ok(Level::imax(arg_level, body_level))
+                Ok(self.level_imax(arg_level, body_level))
             }
             _ => Err(TypeError::ExpectedSort {
                 ty: Box::new(ty),
@@ -849,6 +953,33 @@ impl<'env> TypeChecker<'env> {
         ctor_type: &Expr,
         num_params: u32,
     ) -> Result<Vec<Level>, TypeError> {
+        self.ctor_field_sorts_with(ctor_type, num_params, Self::infer_sort)
+    }
+
+    /// Infer-only [`Self::ctor_field_sort_levels`], as Lean's large-elimination
+    /// analysis sorts fields (`ensure_type` = `infer_type_core(e, true)`). Native
+    /// admission fully checks the constructor type first, so the modes agree
+    /// there; an imported field's proof argument must not decide elimination.
+    pub(crate) fn ctor_field_sort_levels_infer_only(
+        &self,
+        ctor_type: &Expr,
+        num_params: u32,
+    ) -> Result<Vec<Level>, TypeError> {
+        self.ctor_field_sorts_with(ctor_type, num_params, |tc, e| {
+            let prev = tc.infer_only.get();
+            tc.infer_only.set(true);
+            let result = stack_safe(|| tc.infer_sort_inner(e, 0));
+            tc.infer_only.set(prev);
+            result
+        })
+    }
+
+    fn ctor_field_sorts_with(
+        &self,
+        ctor_type: &Expr,
+        num_params: u32,
+        sort_of: impl Fn(&Self, &Expr) -> Result<Level, TypeError>,
+    ) -> Result<Vec<Level>, TypeError> {
         let mut current = ctor_type.clone();
         let mut depth = 0u32;
         let mut field_sorts = Vec::new();
@@ -858,7 +989,7 @@ impl<'env> TypeChecker<'env> {
             match current.kind() {
                 ExprKind::Pi(bd, domain, body) => {
                     if depth >= num_params {
-                        match self.infer_sort(domain) {
+                        match sort_of(self, domain) {
                             Ok(sort) => field_sorts.push(sort),
                             Err(e) => break Err(e),
                         }

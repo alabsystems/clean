@@ -69,17 +69,17 @@ CAVEAT, stated because it bounds the lemma: a BARE lam IS wh3-stuck (reduce_once
             SRC_WH3_STUCK_KAPP_FN_STUCK,
             "wh3_stuck_kapp_fn_stuck: a stuck term's SPINE HEAD is stuck. The spine induction. \\
 \\
-Composed with the existing wh3_stuck_const_delta_dead it derives the delta-deadness hypothesis that hnf3_app_residual_of_dead_const_head currently demands from its caller. DerivedProved, zero axiom_deps.",
+Composed with wh3_stuck_const_delta_dead it derives guarded operational delta-deadness. It does NOT derive the stronger raw-name absence currently required by hnf3_app_residual_of_dead_const_head; wrong universe arity is another cause of stuckness. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
-            SRC_WH3_STUCK_CONST_NAME_NO_DELTA,
-            "wh3_stuck_const_name_no_delta: a stuck const-headed term's head has no delta value. Nine-arm KExpr.rec; the const arm transports along some-injectivity and computes opt_step_bind at a live value to wstep. DerivedProved, zero axiom_deps.",
+            &wh3_stuck_const_name_no_delta_src(),
+            "wh3_stuck_const_name_no_delta: a stuck constant has no guarded instantiated value at its actual universe arguments. Nine-arm KExpr.rec; the const arm transports the name while retaining those arguments. Wrong arity can explain stuckness even when a raw definition exists. DerivedProved, zero axiom_deps.",
         )?;
         self.add_recursive_def(
             SRC_WH3_STUCK_APP_HEAD_NO_DELTA,
             "wh3_stuck_app_head_no_delta: a stuck application's spine head is delta-DEAD. \\
 \\
-The second hole in the argument, and it closes by a DIFFERENT mechanism than expected. For an APPLIED const, delta does not fire through iota_reduct_whc3 at all — that chain never consults defval_for. It fires through the CONGRUENCE path: reduce_once_red_wh3's const arm makes cf a wstep, reduce_app_head_red_wh3 ilifts it, and opt_app_ilift3's wstep arm rebuilds the application. So delta does fire under application, at every spine depth, and stuckness genuinely excludes a live value. \\
+The second hole in the argument, and it closes by a DIFFERENT mechanism than expected. For an APPLIED const, delta does not fire through iota_reduct_whc3 at all — that chain never consults definition-value lookup. It fires through the CONGRUENCE path: reduce_once_red_wh3's const arm makes cf a wstep, reduce_app_head_red_wh3 ilifts it, and opt_app_ilift3's wstep arm rebuilds the application. So delta does fire under application, at every spine depth, and stuckness excludes a successful guarded lookup at the actual head universe arguments. \\
 \\
 Stated in the kexpr_const_name form the other suppliers use, which is strictly more usable than the literal KExpr.const form. DerivedProved, zero axiom_deps.",
         )?;
@@ -105,10 +105,115 @@ const SRC_WH3_STUCK_APP_FN_STUCK: &str = "def wh3_stuck_app_fn_stuck (k : Nat) (
 
 const SRC_WH3_STUCK_KAPP_FN_STUCK: &str = "def wh3_stuck_kapp_fn_stuck (k : Nat) (e : KExpr) : wh3_stuck_at k e -> wh3_stuck_at k (kapp_fn e) := KExpr.rec (fun (x : KExpr) => wh3_stuck_at k x -> wh3_stuck_at k (kapp_fn x)) (fun (sl : Level) (h : wh3_stuck_at k (KExpr.sort sl)) => h) (fun (bi : Nat) (h : wh3_stuck_at k (KExpr.bvar bi)) => h) (fun (af : KExpr) (aa : KExpr) (ihaf : wh3_stuck_at k af -> wh3_stuck_at k (kapp_fn af)) (_ihaa : wh3_stuck_at k aa -> wh3_stuck_at k (kapp_fn aa)) (h : wh3_stuck_at k (KExpr.app af aa)) => ihaf (wh3_stuck_app_fn_stuck k af aa h)) (fun (lty : KExpr) (lb : KExpr) (_ihlty : wh3_stuck_at k lty -> wh3_stuck_at k (kapp_fn lty)) (_ihlb : wh3_stuck_at k lb -> wh3_stuck_at k (kapp_fn lb)) (h : wh3_stuck_at k (KExpr.lam lty lb)) => h) (fun (pty : KExpr) (pb : KExpr) (_ihpty : wh3_stuck_at k pty -> wh3_stuck_at k (kapp_fn pty)) (_ihpb : wh3_stuck_at k pb -> wh3_stuck_at k (kapp_fn pb)) (h : wh3_stuck_at k (KExpr.pi pty pb)) => h) (fun (cn : Name) (cus : ListType Level) (h : wh3_stuck_at k (KExpr.const cn cus)) => h) (fun (zty : KExpr) (zv : KExpr) (zb : KExpr) (_ihzty : wh3_stuck_at k zty -> wh3_stuck_at k (kapp_fn zty)) (_ihzv : wh3_stuck_at k zv -> wh3_stuck_at k (kapp_fn zv)) (_ihzb : wh3_stuck_at k zb -> wh3_stuck_at k (kapp_fn zb)) (h : wh3_stuck_at k (KExpr.let_ zty zv zb)) => h) (fun (psn : Name) (pix : Nat) (psub : KExpr) (_ihpsub : wh3_stuck_at k psub -> wh3_stuck_at k (kapp_fn psub)) (h : wh3_stuck_at k (KExpr.proj psn pix psub)) => h) (fun (lv : Nat) (h : wh3_stuck_at k (KExpr.lit lv)) => h) e";
 
-const SRC_WH3_STUCK_CONST_NAME_NO_DELTA: &str = "def wh3_stuck_const_name_no_delta (k : Nat) (nm : Name) (dv : KExpr) (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) (OptionType.some KExpr dv)) (x : KExpr) : Eq (OptionType Name) (kexpr_const_name x) (OptionType.some Name nm) -> wh3_stuck_at k x -> Empty := KExpr.rec (fun (z : KExpr) => Eq (OptionType Name) (kexpr_const_name z) (OptionType.some Name nm) -> wh3_stuck_at k z -> Empty) (fun (sl : Level) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.sort sl)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.sort sl)) => option_none_ne_some_type Name nm Empty hn) (fun (bi : Nat) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.bvar bi)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.bvar bi)) => option_none_ne_some_type Name nm Empty hn) (fun (af : KExpr) (aa : KExpr) (_ihaf : Eq (OptionType Name) (kexpr_const_name af) (OptionType.some Name nm) -> wh3_stuck_at k af -> Empty) (_ihaa : Eq (OptionType Name) (kexpr_const_name aa) (OptionType.some Name nm) -> wh3_stuck_at k aa -> Empty) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.app af aa)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.app af aa)) => option_none_ne_some_type Name nm Empty hn) (fun (lty : KExpr) (lb : KExpr) (_ihlty : Eq (OptionType Name) (kexpr_const_name lty) (OptionType.some Name nm) -> wh3_stuck_at k lty -> Empty) (_ihlb : Eq (OptionType Name) (kexpr_const_name lb) (OptionType.some Name nm) -> wh3_stuck_at k lb -> Empty) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.lam lty lb)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.lam lty lb)) => option_none_ne_some_type Name nm Empty hn) (fun (pty : KExpr) (pb : KExpr) (_ihpty : Eq (OptionType Name) (kexpr_const_name pty) (OptionType.some Name nm) -> wh3_stuck_at k pty -> Empty) (_ihpb : Eq (OptionType Name) (kexpr_const_name pb) (OptionType.some Name nm) -> wh3_stuck_at k pb -> Empty) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.pi pty pb)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.pi pty pb)) => option_none_ne_some_type Name nm Empty hn) (fun (cn : Name) (cus : ListType Level) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.const cn cus)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.const cn cus)) => wh_stuck_ne_step_type dv Empty (Eq.symm WhStepR (WhStepR.wstep dv) WhStepR.wstuck (Eq.subst (OptionType KExpr) (fun (o : OptionType KExpr) => Eq WhStepR (opt_step_bind KExpr o WhStepR.wstuck (fun (zv : KExpr) => WhStepR.wstep zv)) WhStepR.wstuck) (defval_for (red_def the_red_env) nm) (OptionType.some KExpr dv) hdef (Eq.subst Name (fun (zn : Name) => Eq WhStepR (opt_step_bind KExpr (defval_for (red_def the_red_env) zn) WhStepR.wstuck (fun (zv : KExpr) => WhStepR.wstep zv)) WhStepR.wstuck) cn nm (option_some_inj Name cn nm hn) hst)))) (fun (zty : KExpr) (zv : KExpr) (zb : KExpr) (_ihzty : Eq (OptionType Name) (kexpr_const_name zty) (OptionType.some Name nm) -> wh3_stuck_at k zty -> Empty) (_ihzv : Eq (OptionType Name) (kexpr_const_name zv) (OptionType.some Name nm) -> wh3_stuck_at k zv -> Empty) (_ihzb : Eq (OptionType Name) (kexpr_const_name zb) (OptionType.some Name nm) -> wh3_stuck_at k zb -> Empty) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.let_ zty zv zb)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.let_ zty zv zb)) => option_none_ne_some_type Name nm Empty hn) (fun (psn : Name) (pix : Nat) (psub : KExpr) (_ihpsub : Eq (OptionType Name) (kexpr_const_name psub) (OptionType.some Name nm) -> wh3_stuck_at k psub -> Empty) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.proj psn pix psub)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.proj psn pix psub)) => option_none_ne_some_type Name nm Empty hn) (fun (lv : Nat) (hn : Eq (OptionType Name) (kexpr_const_name (KExpr.lit lv)) (OptionType.some Name nm)) (hst : wh3_stuck_at k (KExpr.lit lv)) => option_none_ne_some_type Name nm Empty hn) x";
+fn wh3_stuck_const_name_no_delta_src() -> String {
+    let query = |subject: &str| {
+        format!("(kdef_value_at (red_def the_red_env) nm (kexpr_const_levels {subject}))")
+    };
+    let goal = |subject: &str| {
+        format!(
+            "Eq (OptionType KExpr) {} (OptionType.some KExpr dv) -> \
+             Eq (OptionType Name) (kexpr_const_name {subject}) (OptionType.some Name nm) -> \
+             wh3_stuck_at k {subject} -> Empty",
+            query(subject)
+        )
+    };
+    let const_arm = "wh_stuck_ne_step_type dv Empty \
+         (Eq.symm WhStepR (WhStepR.wstep dv) WhStepR.wstuck \
+           (Eq.subst (OptionType KExpr) \
+             (fun (o : OptionType KExpr) => Eq WhStepR \
+               (opt_step_bind KExpr o WhStepR.wstuck (fun (zv : KExpr) => WhStepR.wstep zv)) \
+               WhStepR.wstuck) \
+             (kdef_value_at (red_def the_red_env) nm cus) (OptionType.some KExpr dv) hdef \
+             (Eq.subst Name \
+               (fun (zn : Name) => Eq WhStepR \
+                 (opt_step_bind KExpr (kdef_value_at (red_def the_red_env) zn cus) \
+                   WhStepR.wstuck (fun (zv : KExpr) => WhStepR.wstep zv)) WhStepR.wstuck) \
+               cn nm (option_some_inj Name cn nm hn) hst)))";
+    let arms: [(&str, &[&str], &str); 9] = [
+        ("(sl : Level)", &[], "(KExpr.sort sl)"),
+        ("(bi : Nat)", &[], "(KExpr.bvar bi)"),
+        (
+            "(af : KExpr) (aa : KExpr)",
+            &["af", "aa"],
+            "(KExpr.app af aa)",
+        ),
+        (
+            "(lty : KExpr) (lb : KExpr)",
+            &["lty", "lb"],
+            "(KExpr.lam lty lb)",
+        ),
+        (
+            "(pty : KExpr) (pb : KExpr)",
+            &["pty", "pb"],
+            "(KExpr.pi pty pb)",
+        ),
+        (
+            "(cn : Name) (cus : ListType Level)",
+            &[],
+            "(KExpr.const cn cus)",
+        ),
+        (
+            "(zty : KExpr) (zv : KExpr) (zb : KExpr)",
+            &["zty", "zv", "zb"],
+            "(KExpr.let_ zty zv zb)",
+        ),
+        (
+            "(psn : Name) (pix : Nat) (psub : KExpr)",
+            &["psub"],
+            "(KExpr.proj psn pix psub)",
+        ),
+        ("(lv : Nat)", &[], "(KExpr.lit lv)"),
+    ];
+    let mut minors = String::new();
+    for (index, (payload, children, form)) in arms.iter().enumerate() {
+        let ihs = children
+            .iter()
+            .enumerate()
+            .map(|(i, child)| format!("(_ih{i} : {})", goal(child)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let arm = if index == 5 {
+            const_arm
+        } else {
+            "option_none_ne_some_type Name nm Empty hn"
+        };
+        minors.push_str(&format!(
+            "(fun {payload} {ihs} \
+              (hdef : Eq (OptionType KExpr) {} (OptionType.some KExpr dv)) \
+              (hn : Eq (OptionType Name) (kexpr_const_name {form}) (OptionType.some Name nm)) \
+              (hst : wh3_stuck_at k {form}) => {arm}) ",
+            query(form)
+        ));
+    }
+    format!(
+        "def wh3_stuck_const_name_no_delta (k : Nat) (nm : Name) (dv : KExpr) (x : KExpr) : {} := \
+         KExpr.rec (fun (z : KExpr) => {}) {minors} x",
+        goal("x"),
+        goal("z")
+    )
+}
 
-const SRC_WH3_STUCK_APP_HEAD_NO_DELTA: &str = "def wh3_stuck_app_head_no_delta (k : Nat) (f : KExpr) (a : KExpr) (nm : Name) (dv : KExpr) (hdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) nm) (OptionType.some KExpr dv)) (hh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name nm)) (hs : wh3_stuck_at k (KExpr.app f a)) : Empty := wh3_stuck_const_name_no_delta k nm dv hdef (kapp_fn (KExpr.app f a)) hh (wh3_stuck_kapp_fn_stuck k (KExpr.app f a) hs)";
+const SRC_WH3_STUCK_APP_HEAD_NO_DELTA: &str = "def wh3_stuck_app_head_no_delta (k : Nat) (f : KExpr) (a : KExpr) (nm : Name) (dv : KExpr) (hdef : Eq (OptionType KExpr) (kdef_value_at (red_def the_red_env) nm (kexpr_const_levels (kapp_fn (KExpr.app f a)))) (OptionType.some KExpr dv)) (hh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name nm)) (hs : wh3_stuck_at k (KExpr.app f a)) : Empty := wh3_stuck_const_name_no_delta k nm dv (kapp_fn (KExpr.app f a)) hdef hh (wh3_stuck_kapp_fn_stuck k (KExpr.app f a) hs)";
 
 const SRC_WH3_STUCK_NOT_LET: &str = "def wh3_stuck_not_let (k : Nat) (zty : KExpr) (zv : KExpr) (zb : KExpr) (hs : wh3_stuck_at k (KExpr.let_ zty zv zb)) : Empty := wh_stuck_ne_step_type (instantiate zb zv) Empty (Eq.symm WhStepR (WhStepR.wstep (instantiate zb zv)) WhStepR.wstuck hs)";
 
 const SRC_WH3_STUCK_KAPP_FN_NOT_LET: &str = "def wh3_stuck_kapp_fn_not_let (k : Nat) (e : KExpr) (zty : KExpr) (zv : KExpr) (zb : KExpr) (hf : Eq KExpr (kapp_fn e) (KExpr.let_ zty zv zb)) (hs : wh3_stuck_at k e) : Empty := wh3_stuck_not_let k zty zv zb (Eq.subst KExpr (fun (x : KExpr) => wh3_stuck_at k x) (kapp_fn e) (KExpr.let_ zty zv zb) hf (wh3_stuck_kapp_fn_stuck k e hs))";
+
+#[cfg(test)]
+mod tests {
+    use super::{wh3_stuck_const_name_no_delta_src, SRC_WH3_STUCK_APP_HEAD_NO_DELTA};
+    use crate::test_utils::parse_check;
+
+    #[test]
+    fn guarded_stuck_head_sources_parse_and_retain_actual_levels() {
+        for source in [
+            wh3_stuck_const_name_no_delta_src(),
+            SRC_WH3_STUCK_APP_HEAD_NO_DELTA.to_string(),
+        ] {
+            parse_check(&source).expect("guarded stuck-head definition parses");
+            assert!(source.contains("kdef_value_at"));
+            assert!(source.contains("kexpr_const_levels"));
+            assert!(!source.contains("defval_for"));
+        }
+    }
+}

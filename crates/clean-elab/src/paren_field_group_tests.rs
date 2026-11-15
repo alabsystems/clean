@@ -66,7 +66,7 @@ fn test_class_paren_field_group_elaborates() {
         &mut env,
         "class Pointed (a : Type) where (pt : a)\n\
          instance : Pointed Nat where pt := 0\n\
-         def origin : Nat := Pointed.pt Nat",
+         def origin : Nat := @Pointed.pt Nat _",
         "class paren group",
     );
     assert!(

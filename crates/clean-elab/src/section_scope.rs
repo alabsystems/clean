@@ -353,3 +353,15 @@ pub(crate) fn abstract_section_variables_lam(expr: &Expr, vars: &[&SectionVariab
 #[cfg(test)]
 #[path = "section_scope_tests.rs"]
 mod tests;
+
+/// A section `variable` binder as it enters the section's telescope: its
+/// name is marked [`SurfaceName::as_section_variable`], the one kind of
+/// local a user template's free reference may still denote (see
+/// [`clean_parser::mark_template_free_references`]).
+pub(crate) fn section_variable_binder(
+    binder: &clean_parser::SurfaceBinder,
+) -> clean_parser::SurfaceBinder {
+    let mut binder = binder.clone();
+    binder.name = binder.name.clone().as_section_variable();
+    binder
+}

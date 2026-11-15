@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use clean_parser::SurfaceName;
 
 /// Reset shared trust observability counters before each certificate test.
 ///
@@ -19,7 +20,13 @@ pub(super) fn reset_all_trust_counters() {
 }
 
 pub(super) fn setup_certificate_env() -> Environment {
+    // The default prelude carries no admission markers (bcacce6e0); these
+    // fixtures build and select `trustedAy` sub-terms, so they opt in the way
+    // a frontend does. Without it every candidate fails as `Unknown constant`
+    // before the selection or strict policy under test is reached.
     let mut env = Environment::with_prelude();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for these trustedAy fixtures");
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("P"),
         level_params: vec![],
@@ -48,14 +55,16 @@ pub(super) fn contradiction_state() -> ProofState {
         false_prop(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "hp".to_string(),
+                name: SurfaceName::component("hp", false),
                 ty: p.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "hnp".to_string(),
+                name: SurfaceName::component("hnp", false),
                 ty: not(p),
                 value: None,
             },

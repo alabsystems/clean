@@ -168,6 +168,12 @@ pub mod error_codes {
     pub const TIMEOUT: i32 = -32004;
     /// Per-connection request limit exceeded
     pub const REQUEST_LIMIT_EXCEEDED: i32 = -32005;
+    /// The connection, or a request that needs it in its own params, has not
+    /// presented the server's launch token (`trust_boundary.rs`)
+    pub const UNAUTHORIZED: i32 = -32006;
+    /// A file method's path does not resolve under the workspace root
+    /// (`trust_boundary.rs`)
+    pub const OUTSIDE_WORKSPACE: i32 = -32007;
 }
 
 impl RpcError {
@@ -253,6 +259,18 @@ impl RpcError {
             error_codes::TIMEOUT,
             format!("Operation timed out after {timeout_ms}ms"),
         )
+    }
+
+    /// The launch token was not presented, or was not this server's
+    #[must_use]
+    pub(crate) fn unauthorized(details: impl Into<String>) -> Self {
+        Self::new(error_codes::UNAUTHORIZED, details)
+    }
+
+    /// A file method's path does not resolve under the workspace root
+    #[must_use]
+    pub(crate) fn outside_workspace(details: impl Into<String>) -> Self {
+        Self::new(error_codes::OUTSIDE_WORKSPACE, details)
     }
 
     /// Per-connection request limit exceeded

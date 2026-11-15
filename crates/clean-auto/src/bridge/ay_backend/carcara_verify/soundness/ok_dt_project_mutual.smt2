@@ -1,0 +1,6 @@
+(set-logic QF_UFDTLIA)
+(declare-datatypes ((Tree 0) (Forest 0)) (((leaf (val Int)) (node (children Forest))) ((fnil) (fcons (head Tree) (tail Forest)))))
+(declare-fun t () Tree)
+(declare-fun f () Forest)
+(assert (not (= (head (fcons t f)) t)))
+(check-sat)

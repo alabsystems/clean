@@ -30,22 +30,24 @@ fn make_goal(
     metas: &mut MetaState,
     target: Expr,
     local_ctx: Vec<LocalDecl>,
-    tag: Option<&str>,
+    tag: Option<&'static str>,
 ) -> Goal {
     let meta_id = metas.fresh(target.clone());
     Goal {
         meta_id,
         target,
         local_ctx,
-        tag: tag.map(String::from),
+        tag: tag.map(clean_parser::SurfaceName::generated_path),
+        case_binders: Vec::new(),
     }
 }
 
 /// Helper: build a LocalDecl for a hypothesis.
 fn make_hyp(id: u64, name: &str, ty: Expr) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty,
         value: None,
     }
@@ -256,8 +258,9 @@ fn test_format_local_context_let_binding() {
     let nat = Expr::const_str("Nat");
     let val = Expr::nat_lit(5);
     let decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "n".to_string(),
+        name: clean_parser::SurfaceName::generated_path("n"),
         ty: nat,
         value: Some(val),
     };
@@ -381,5 +384,74 @@ fn test_format_proof_state_multiple() {
     assert!(
         result.contains("\u{22a2} Q"),
         "should contain second goal target: got {result}"
+    );
+}
+
+#[test]
+fn test_format_fully_applied_typed_eq_uses_notation() {
+    let env = setup_env();
+    let eq = Expr::apps(
+        Expr::const_(
+            clean_kernel::Name::from_string("Eq"),
+            vec![Level::succ(Level::zero())],
+        ),
+        [Expr::const_str("Nat"), Expr::nat_lit(1), Expr::nat_lit(2)],
+    );
+    assert!(clean_kernel::TypeChecker::new(&env)
+        .infer_sort(&eq)
+        .expect("real typed equality")
+        .is_zero());
+    assert_eq!(format_expr(&eq, &env, &ExprFormatter::default()), "1 = 2");
+    for (config, expected) in [
+        (
+            ExprFormatter {
+                pp_all: true,
+                ..Default::default()
+            },
+            "((Eq Nat) 1) 2",
+        ),
+        (
+            ExprFormatter {
+                pp_notation: false,
+                ..Default::default()
+            },
+            "Eq Nat 1 2",
+        ),
+        (
+            ExprFormatter {
+                pp_universes: true,
+                ..Default::default()
+            },
+            "Eq.{1} Nat 1 2",
+        ),
+    ] {
+        assert_eq!(format_expr(&eq, &env, &config), expected);
+    }
+}
+
+#[test]
+fn test_format_partial_and_overapplied_eq_keep_application_spines() {
+    let env = setup_env();
+    let head = Expr::const_(
+        clean_kernel::Name::from_string("Eq"),
+        vec![Level::succ(Level::zero())],
+    );
+    let partial = Expr::apps(head.clone(), [Expr::const_str("Nat"), Expr::nat_lit(1)]);
+    let over = Expr::apps(
+        head,
+        [
+            Expr::const_str("Nat"),
+            Expr::nat_lit(1),
+            Expr::nat_lit(2),
+            Expr::nat_lit(3),
+        ],
+    );
+    assert_eq!(
+        format_expr(&partial, &env, &ExprFormatter::default()),
+        "Eq Nat 1"
+    );
+    assert_eq!(
+        format_expr(&over, &env, &ExprFormatter::default()),
+        "Eq Nat 1 2 3"
     );
 }

@@ -29,7 +29,7 @@ use super::AyTerm;
 /// ENSURES: `is_empty()` iff `terms.is_empty()`
 #[derive(Debug, Clone, Default)]
 #[cfg(test)]
-pub struct AyTriggerPattern {
+pub(crate) struct AyTriggerPattern {
     /// Terms forming the trigger pattern
     ///
     /// For a single-pattern trigger, this contains one term.
@@ -47,7 +47,7 @@ impl AyTriggerPattern {
     /// REQUIRES: `term` is a valid ay term from an active solver context
     /// ENSURES: `result.terms.len() == 1`
     /// ENSURES: `!result.is_empty()`
-    pub fn single(term: AyTerm) -> Self {
+    pub(crate) fn single(term: AyTerm) -> Self {
         Self { terms: vec![term] }
     }
 
@@ -61,7 +61,7 @@ impl AyTriggerPattern {
     /// REQUIRES: `terms.len() >= 2` for meaningful multi-pattern
     /// REQUIRES: All terms are from the same solver context
     /// ENSURES: `result.terms.len() == terms.len()`
-    pub fn multi(terms: Vec<AyTerm>) -> Self {
+    pub(crate) fn multi(terms: Vec<AyTerm>) -> Self {
         Self { terms }
     }
 
@@ -71,7 +71,7 @@ impl AyTriggerPattern {
     ///
     /// ENSURES: Returns `true` iff `self.terms.is_empty()`
     /// ENSURES: Pure function, no side effects
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.terms.is_empty()
     }
 
@@ -81,7 +81,7 @@ impl AyTriggerPattern {
     ///
     /// ENSURES: Returns `self.terms.len()`
     /// ENSURES: `self.len() == 0` iff `self.is_empty()`
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.terms.len()
     }
 }
@@ -144,7 +144,7 @@ pub enum TriggerPolicy {
 /// This mirrors [`AyTriggerPattern`] but stores SMT-LIB term strings instead of solver terms.
 #[cfg(test)]
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub struct SmtlibTriggerPattern {
+pub(crate) struct SmtlibTriggerPattern {
     /// SMT-LIB terms forming the trigger pattern.
     ///
     /// Each term should be a valid SMT-LIB term string, e.g. "(f x)".
@@ -154,19 +154,19 @@ pub struct SmtlibTriggerPattern {
 #[cfg(test)]
 impl SmtlibTriggerPattern {
     /// Create a single-term SMT-LIB trigger pattern.
-    pub fn single(term: impl Into<String>) -> Self {
+    pub(crate) fn single(term: impl Into<String>) -> Self {
         Self {
             terms: vec![term.into()],
         }
     }
 
     /// Create a multi-term SMT-LIB trigger pattern.
-    pub fn multi(terms: Vec<String>) -> Self {
+    pub(crate) fn multi(terms: Vec<String>) -> Self {
         Self { terms }
     }
 
     /// Check if this pattern is empty (no terms).
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.terms.is_empty()
     }
 

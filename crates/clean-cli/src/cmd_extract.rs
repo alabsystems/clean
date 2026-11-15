@@ -19,23 +19,37 @@
 //!   shim-coverage check over the emitted TEXT, and a `cc` link against the
 //!   embedded `clean-runtime`.
 //! * `--backend rust`: readable, `unsafe`-free Rust emitted straight from the
-//!   kernel value with plain scalar signatures, compiled by `rustc`. See
-//!   [`crate::extract_rust`].
+//!   kernel value with plain scalar signatures, compiled by the admitted Trust
+//!   oracle compiler (`clean_elab::oracle_compiler`: the `trustc` beside the
+//!   running `clean`, or `CLEAN_NATIVE_DECIDE_TRUSTC`); without one the lane
+//!   refuses with `E_RUST_TOOLCHAIN`. See [`crate::extract_rust`].
 //!
 //! Honesty contract: the differential record is a CHECK over the battery,
 //! not a proof; the manifest says so. Rocq's own Extraction ships neither.
 //! Any refusal or mismatch exits nonzero and writes NOTHING.
+//!
+//! Every lane means the KERNEL value. The C, wasm and TV lanes lower through
+//! `to_lcnf` at `clean_compiler::CodeMeaning::KernelValue`
+//! (`clean_native::select_lcnf_decl_kernel_meaning`, then the pipeline at the
+//! same meaning): no reference to an `@[implemented_by f]` declaration is
+//! compiled as one to `f`, as compiled Lean's would be, and every constant
+//! lowers its own value, so a closure that reaches one extracts its kernel
+//! value, and so does a file with a late `attribute [implemented_by]` command
+//! (`docs/DECISIONS.md` R149; before it, both were refused by name).
 
 use std::path::Path;
 use std::process::Command;
 
 use anyhow::{bail, Context};
+use clean_elab::oracle_compiler::{self, OracleCompiler};
 use clean_kernel::{Environment, Expr, ExprKind, Name};
 
 use crate::cli::{ExtractArgs, ExtractBackend};
-use crate::cmd_compile::{emit_decls, select_lcnf_decl};
 use crate::extract_rust;
-use crate::native_build;
+use clean_compiler::CodeMeaning;
+use clean_native::compile::emit_decls;
+use clean_native::native_build;
+use clean_native::select_lcnf_decl_kernel_meaning;
 
 /// Stable refusal codes (`designs/2026-08-06-clean-extract-width1.md`
 /// §Scope). A refusal writes no artifacts.
@@ -243,9 +257,32 @@ fn visit_consts(e: &Expr, f: &mut impl FnMut(&Name)) {
 /// Both backends share the extraction GATE, the BATTERY and the DIFFERENTIAL;
 /// they differ only in what gets emitted and how it is built.
 pub(crate) fn handle_extract_command(args: &ExtractArgs) -> anyhow::Result<()> {
+    handle_extract_command_with(args, || {
+        oracle_compiler::oracle_compiler().map_err(|why| {
+            anyhow::anyhow!(
+                "{}",
+                extract_rust::RustEmitError::Toolchain(format!(
+                    "the differential battery compiles only with an admitted Trust compiler: \
+                     {why}. Run the `clean` that sits beside a Trust toolchain's `trustc`, or \
+                     set {} to the compiler binary itself, `$(trustc --print sysroot)/bin/trustc` \
+                     (a shim on PATH is a script and is refused; a `clean` built inside a Trust \
+                     toolchain admits only that toolchain's own commit)",
+                    oracle_compiler::TRUSTC_ENV
+                ))
+            )
+        })
+    })
+}
+
+/// [`handle_extract_command`] with the Rust backend's oracle compiler supplied
+/// by `oracle`, which only the Rust backend calls.
+fn handle_extract_command_with<'c>(
+    args: &ExtractArgs,
+    oracle: impl FnOnce() -> anyhow::Result<&'c OracleCompiler>,
+) -> anyhow::Result<()> {
     match args.backend {
         ExtractBackend::C => handle_extract_c(args),
-        ExtractBackend::Rust => handle_extract_rust(args),
+        ExtractBackend::Rust => handle_extract_rust(args, oracle()?),
         ExtractBackend::Wasm => handle_extract_wasm(args),
     }
 }
@@ -334,13 +371,14 @@ fn handle_extract_c(args: &ExtractArgs) -> anyhow::Result<()> {
 }
 
 /// The Rust backend: emit a readable, `unsafe`-free module straight from the
-/// KERNEL value, compile it with `rustc`, and hold it to the same differential.
+/// KERNEL value, compile it with the admitted Trust oracle `compiler`, and hold
+/// it to the same differential.
 ///
 /// It deliberately does NOT go through the C emitter. That pipeline's output is
 /// boxed `clean_obj*` against the Perceus runtime — correct for a runtime, and
 /// not what "extract to a host language" means to a reader. See
 /// [`crate::extract_rust`].
-fn handle_extract_rust(args: &ExtractArgs) -> anyhow::Result<()> {
+fn handle_extract_rust(args: &ExtractArgs, compiler: &OracleCompiler) -> anyhow::Result<()> {
     let decl_name = Name::from_string(&args.decl);
 
     // 1. Elaborate through the SAME front half the C lane uses.
@@ -354,7 +392,7 @@ fn handle_extract_rust(args: &ExtractArgs) -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     let fn_name = extract_rust::rust_fn_name(&args.decl).map_err(|e| anyhow::anyhow!("{e}"))?;
 
-    // 4-6. Synthesize the battery driver, compile with `rustc`, run.
+    // 4-6. Synthesize the battery driver, compile with the admitted `trustc`, run.
     let tmp = tempfile::Builder::new()
         .prefix("clean-extract-rust-")
         .tempdir()
@@ -364,7 +402,7 @@ fn handle_extract_rust(args: &ExtractArgs) -> anyhow::Result<()> {
 
     let battery = build_battery(&sig);
     let driver = extract_rust::render_rust_battery_driver(&fn_name, &sig, &battery);
-    let native_results = extract_rust::run_rust_battery(&module, &driver, &build_dir)
+    let native_results = extract_rust::run_rust_battery(compiler, &module, &driver, &build_dir)
         .map_err(|e| anyhow::anyhow!("{e}"))?;
     if native_results.len() != battery.len() {
         bail!(
@@ -426,7 +464,7 @@ fn handle_extract_wasm(args: &ExtractArgs) -> anyhow::Result<()> {
 
     // 1-2. Same front half and same gate as the other two lanes.
     let compile_args = compile_args_for(args);
-    let (lcnf, env, pipeline) = select_lcnf_decl(&compile_args)?;
+    let (lcnf, env, pipeline) = select_lcnf_decl_kernel_meaning(&compile_args)?;
     let sig = extraction_gate(&env, &decl_name).map_err(|r| anyhow::anyhow!("{r}"))?;
 
     // 3. Fixed-width-only refusal, BEFORE any emission.
@@ -443,8 +481,13 @@ fn handle_extract_wasm(args: &ExtractArgs) -> anyhow::Result<()> {
     }
 
     // 4. Lower to the SAME `boxed_ir_decls` the C emitter consumes, then emit.
-    let artifacts = clean_compiler::pass_manager::compile_lcnf_decls(&lcnf, &env, &pipeline)
-        .context("lower LCNF to IR for wasm emission")?;
+    let artifacts = clean_compiler::pass_manager::compile_lcnf_decls_for(
+        &lcnf,
+        &env,
+        &pipeline,
+        CodeMeaning::KernelValue,
+    )
+    .context("lower LCNF to IR for wasm emission")?;
     let wat = clean_compiler::emit_wasm::emit_wat(&artifacts.boxed_ir_decls)
         .map_err(|e| anyhow::anyhow!("wasm emission refused: {e}"))?;
     let module = clean_compiler::emit_wasm::emit_wasm_binary(&artifacts.boxed_ir_decls)
@@ -679,7 +722,7 @@ fn tv_certificate_entry(args: &ExtractArgs) -> anyhow::Result<serde_json::Value>
     use clean_compiler::pass_manager::PipelineError;
 
     let compile_args = compile_args_for(args);
-    let (lcnf, env, pipeline) = select_lcnf_decl(&compile_args)?;
+    let (lcnf, env, pipeline) = select_lcnf_decl_kernel_meaning(&compile_args)?;
     // The census/object-path config: `ExternCalls` carries the runtime ABI
     // import table, which is what lets `declare_extern_fallbacks` declare the
     // shim-dropped closure boundary (UInt32.toNat & co.) as typed extern
@@ -689,29 +732,34 @@ fn tv_certificate_entry(args: &ExtractArgs) -> anyhow::Result<serde_json::Value>
         runtime_lowering: clean_compiler::emit_trust_ir::RuntimeLowering::ExternCalls,
         ..clean_compiler::emit_trust_ir::TrustIrConfig::default()
     };
-    let (_module, report) = match clean_compiler::pass_manager::compile_lcnf_to_trust_ir_with_report(
-        &lcnf, &env, &pipeline, &emit_cfg,
-    ) {
-        Ok(ok) => ok,
-        // A kernel REFUSAL is a DETECTED MISCOMPILE of an in-fragment decl:
-        // the same L5CNF lowering feeds the shipped C, so nothing ships.
-        Err(PipelineError::TrustIr(TrustIrError::TranslationRefused(refused))) => {
-            anyhow::bail!(
+    let (_module, report) =
+        match clean_compiler::pass_manager::compile_lcnf_to_trust_ir_with_report_for(
+            &lcnf,
+            &env,
+            &pipeline,
+            &emit_cfg,
+            CodeMeaning::KernelValue,
+        ) {
+            Ok(ok) => ok,
+            // A kernel REFUSAL is a DETECTED MISCOMPILE of an in-fragment decl:
+            // the same L5CNF lowering feeds the shipped C, so nothing ships.
+            Err(PipelineError::TrustIr(TrustIrError::TranslationRefused(refused))) => {
+                anyhow::bail!(
                 "TV leg: kernel REFUSED the translation certificate (detected                  miscompile) for {refused:?} — refusing to ship"
             );
-        }
-        // Any other error means the trust-ir backend cannot even EMIT this
-        // closure (e.g. an extern the C lane covers with a shim is simply
-        // undefined there). There is nothing to certify — an honest
-        // "unattempted" with the reason, never a fake status either way.
-        Err(other) => {
-            return Ok(serde_json::json!({
-                "status": "unattempted",
-                "decl": args.decl,
-                "reason": format!("trust-ir lowering unavailable for this closure: {other}"),
-            }));
-        }
-    };
+            }
+            // Any other error means the trust-ir backend cannot even EMIT this
+            // closure (e.g. an extern the C lane covers with a shim is simply
+            // undefined there). There is nothing to certify — an honest
+            // "unattempted" with the reason, never a fake status either way.
+            Err(other) => {
+                return Ok(serde_json::json!({
+                    "status": "unattempted",
+                    "decl": args.decl,
+                    "reason": format!("trust-ir lowering unavailable for this closure: {other}"),
+                }));
+            }
+        };
     let scope = "kernel-decided certificate that the emitted TRUST-IR function \
                  denotes the original kernel definition (Nat mod 2^w, \
                  Fragment-2/4); says NOTHING about the shipped .c text, which \
@@ -762,12 +810,13 @@ fn compile_args_for(args: &ExtractArgs) -> clean_compiler::cli::CompileArgs {
         emit: clean_compiler::cli::EmitFormat::C,
         opt_level: 0,
         output: None,
+        link_artifact: Vec::new(),
     }
 }
 
 /// Elaborate the source file, keeping only the ENVIRONMENT.
 ///
-/// Both backends go through [`crate::cmd_compile::elaborate_file_to_env`] so
+/// Both backends go through [`clean_native::compile::elaborate_file_to_env`] so
 /// they see the same environment: intra-project `import` resolution,
 /// elaboration trust-warning refusals, and kernel-checked registration. A decl
 /// cannot mean one thing to one backend and something else to the other.
@@ -780,19 +829,20 @@ fn compile_args_for(args: &ExtractArgs) -> clean_compiler::cli::CompileArgs {
 /// (`(fun _ => 0) k`), which `to_lcnf` refuses (`Application head: Lam`) —
 /// so both lanes refused a term the Rust table translates soundly.
 fn elaborate_for_extraction(args: &ExtractArgs) -> anyhow::Result<Environment> {
-    crate::cmd_compile::elaborate_file_to_env(&args.file)
+    clean_native::compile::elaborate_file_to_env(&args.file)
 }
 
 /// Reuse the `clean compile` closure/emitter for the C text.
 fn select_and_emit(args: &ExtractArgs) -> anyhow::Result<(String, Environment)> {
     let compile_args = compile_args_for(args);
-    let (lcnf, env, pipeline) = select_lcnf_decl(&compile_args)?;
+    let (lcnf, env, pipeline) = select_lcnf_decl_kernel_meaning(&compile_args)?;
     let c = emit_decls(
         &lcnf,
         &env,
         clean_compiler::cli::EmitFormat::C,
         &pipeline,
         Some(args.file.as_path()),
+        CodeMeaning::KernelValue,
     )?;
     Ok((c, env))
 }
@@ -923,1305 +973,5 @@ fn read_back_nat(e: &Expr) -> Option<String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn env_with(src: &str) -> Environment {
-        let mut env = Environment::with_prelude();
-        let decls = clean_parser::parse_file(src).expect("parse");
-        for d in &decls {
-            clean_elab::elaborate_decl_and_register(&mut env, d).expect("elaborate");
-        }
-        env
-    }
-
-    /// FALSIFIABILITY: the differential must be able to FAIL.
-    ///
-    /// `designs/2026-08-06-clean-extract-width1.md` item 10 calls this the
-    /// "never-green-by-construction" guard, and states the reason plainly —
-    /// without it "the whole layer-2 claim is unfalsifiable". A differential
-    /// check that always passes is not evidence of anything, and the shipped
-    /// manifest asserts `differential: PASSED` on the strength of it.
-    ///
-    /// So: take the SAME declaration and battery the passing e2e test uses, and
-    /// hand the comparator one native result that is off by one. It must reject.
-    ///
-    /// What this proves and what it does not: it proves the comparison step
-    /// genuinely discriminates, so a `PASSED` verdict carries information. It is
-    /// not a tampered-BINARY probe — that is the design's stronger form, and it
-    /// needs a build-injection seam the C lane does not have. The Rust lane DOES
-    /// have one (its emitter and its build are both ours), so the stronger probe
-    /// lives at `test_rust_backend_differential_rejects_a_tampered_emission`.
-    #[test]
-    fn test_differential_check_detects_a_wrong_native_result() {
-        let env = env_with("def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b");
-        let sig = extraction_gate(&env, &Name::from_string("affineU")).expect("v1 class");
-        let battery = build_battery(&sig);
-        assert!(!battery.is_empty(), "battery must be non-empty");
-
-        // The honest baseline: kernel evaluation agrees with itself.
-        let truthful: Vec<String> = battery
-            .iter()
-            .map(|inputs| kernel_eval(&env, "affineU", &sig, inputs).expect("kernel eval"))
-            .collect();
-        differential_check(&env, "affineU", &sig, &battery, &truthful)
-            .expect("kernel-side results must agree with themselves");
-
-        // Now corrupt exactly one point.
-        let mut tampered = truthful.clone();
-        let victim = tampered.len() - 1;
-        let bogus = truthful[victim]
-            .parse::<u64>()
-            .map_or_else(|_| "0".to_string(), |v| (v.wrapping_add(1)).to_string());
-        tampered[victim] = bogus;
-
-        let err = differential_check(&env, "affineU", &sig, &battery, &tampered)
-            .expect_err("a wrong native result MUST be caught");
-        assert!(
-            err.to_string().contains("DIFFERENTIAL MISMATCH"),
-            "expected a differential mismatch, got: {err}"
-        );
-    }
-
-    /// The WASM backend is REACHABLE — `clean extract --backend wasm` runs the
-    /// whole chain, differential included.
-    ///
-    /// `emit_wat`/`emit_wasm_binary` were public library entry points with no verb
-    /// driving them. A backend nobody can invoke is not a feature, and its tests
-    /// were built from hand-written `IRDecl`s, so nothing checked that the real
-    /// pipeline ever produces IR inside the emitter's fragment.
-    ///
-    /// Uses the identity declaration deliberately: see
-    /// `test_extract_wasm_refuses_uintw_arithmetic_through_the_boxed_nat_path`
-    /// for why arithmetic does not reach the emitter yet.
-    ///
-    /// Running the battery needs a Wasm host. Rather than skip silently when
-    /// there is none — the failure mode that lets a lane rot unnoticed — this
-    /// asserts the OTHER branch explicitly: no host must produce the specific
-    /// `E_WASM_NO_HOST` refusal, never a written artifact.
-    #[test]
-    fn test_extract_wasm_backend_runs_the_whole_chain() {
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-wasm-e2e-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("idu.lean");
-        std::fs::write(&src_path, "def idU (a : UInt32) : UInt32 := a\n").expect("write source");
-        let out_dir = tmp.path().join("out");
-
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "idU".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::Wasm,
-            keep_temp: false,
-        };
-        match handle_extract_command(&args) {
-            Ok(()) => {
-                let wat = std::fs::read_to_string(out_dir.join("idU.wat")).expect("emitted wat");
-                assert!(
-                    wat.contains(r#"(export "idU")"#),
-                    "the module must export the declaration; got:\n{wat}"
-                );
-                assert!(
-                    wat.contains("param $v0 i32") && wat.contains("result i32"),
-                    "UInt32 must lower to i32 in and out; got:\n{wat}"
-                );
-                assert!(
-                    out_dir.join("idU.wasm").exists(),
-                    "the binary module must be written alongside the text"
-                );
-                let manifest: serde_json::Value = serde_json::from_str(
-                    &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-                )
-                .expect("manifest is JSON");
-                assert_eq!(manifest["backend"], "wasm");
-                assert!(
-                    manifest["differential"]
-                        .as_str()
-                        .is_some_and(|d| d.starts_with("PASSED")),
-                    "the differential must have RUN on a host, not been assumed: {manifest}"
-                );
-            }
-            Err(e) => {
-                let msg = e.to_string();
-                assert!(
-                    msg.contains("E_WASM_NO_HOST"),
-                    "without a Wasm host the ONLY acceptable outcome is the explicit \
-                     no-host refusal (never a written artifact); got: {msg}"
-                );
-                assert!(!out_dir.exists(), "a refused extraction must write nothing");
-            }
-        }
-    }
-
-    /// `Nat` is refused BEFORE emission, with its own diagnostic.
-    ///
-    /// Wasm i32/i64 arithmetic is modular, which is exactly Lean `UIntW`. Lean
-    /// `Nat` is unbounded and has no faithful Wasm scalar — the Rust backend
-    /// makes its u64 model explicit in the manifest, and a wasm module has
-    /// nowhere to say that. So this refuses rather than adopting a silent model.
-    #[test]
-    fn test_extract_wasm_refuses_nat_signatures() {
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-wasm-nat-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("dbl.lean");
-        std::fs::write(&src_path, "def double (n : Nat) : Nat := Nat.add n n\n")
-            .expect("write source");
-        let out_dir = tmp.path().join("out");
-
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "double".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::Wasm,
-            keep_temp: false,
-        };
-        let err = handle_extract_command(&args).expect_err("a Nat signature must refuse");
-        assert!(
-            err.to_string().contains("E_WASM_SCALAR"),
-            "expected the fixed-width refusal, got: {err}"
-        );
-        assert!(!out_dir.exists(), "a refused extraction must write nothing");
-    }
-
-    /// UIntW ARITHMETIC reaches the Wasm emitter — the design's V1 pick, natively.
-    ///
-    /// This test previously pinned the OPPOSITE, and said so: wiring the verb
-    /// revealed that `def duo (a b : UInt32) := UInt32.add a b` refused with
-    /// "type Object is outside the Wasm fragment", because the prelude's
-    /// `UInt32.add` is compiled FROM SOURCE through boxed `Nat`
-    /// (`clean_box_uint32` → `UInt32.toNat` → `Nat.add` → `UInt32.ofNat`), so its
-    /// `IRDecl` carried `Object` bindings that sank the whole module.
-    ///
-    /// The callee's body was never needed: `lower_expr` already lowered a
-    /// saturated call to `UIntW.{add,sub,mul}` into the native instruction.
-    /// `lower_module` now SKIPS the primitives themselves — the same shape as
-    /// `native_build::is_primitive_denylisted` on the C side — keyed on the very
-    /// table that lowers the call sites, so the skip set and the realized set
-    /// cannot drift.
-    ///
-    /// The result is the design's canonical V1 pick as straight-line native Wasm:
-    ///
-    /// ```wat
-    /// (func $l_affineU (export "affineU") (param $v0 i32) (param $v1 i32) (result i32)
-    ///   local.get $v0  local.get $v1  i32.mul  local.set $v2
-    ///   local.get $v2  local.get $v1  i32.add  local.set $v3
-    ///   local.get $v3)
-    /// ```
-    ///
-    /// No boxing, no calls, and the differential agrees with kernel evaluation on
-    /// every battery point INCLUDING the 2^32 wraparound pair — which is what
-    /// actually establishes that Wasm's modular i32 matches Lean's `UInt32`.
-    #[test]
-    fn test_extract_wasm_lowers_uintw_arithmetic_to_native_instructions() {
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-wasm-arith-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("affine.lean");
-        std::fs::write(
-            &src_path,
-            "def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b\n",
-        )
-        .expect("write source");
-        let out_dir = tmp.path().join("out");
-
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "affineU".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::Wasm,
-            keep_temp: false,
-        };
-        match handle_extract_command(&args) {
-            Ok(()) => {
-                let wat =
-                    std::fs::read_to_string(out_dir.join("affineU.wat")).expect("emitted wat");
-                assert!(
-                    wat.contains("i32.mul") && wat.contains("i32.add"),
-                    "UIntW arithmetic must lower to NATIVE instructions, not calls \
-                     through boxed Nat; got:\n{wat}"
-                );
-                assert!(
-                    !wat.contains("call"),
-                    "the emitted module must be call-free — a `call` means the boxed \
-                     prelude body leaked back in; got:\n{wat}"
-                );
-                let manifest: serde_json::Value = serde_json::from_str(
-                    &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-                )
-                .expect("manifest is JSON");
-                assert!(
-                    manifest["differential"]
-                        .as_str()
-                        .is_some_and(|d| d.starts_with("PASSED")),
-                    "the differential must have RUN: {manifest}"
-                );
-                assert!(
-                    manifest["battery_points"].as_u64().expect("points") >= 8,
-                    "the battery must include the wraparound pair that proves Wasm's \
-                     modular i32 matches Lean UInt32: {manifest}"
-                );
-            }
-            Err(e) => {
-                let msg = e.to_string();
-                assert!(
-                    msg.contains("E_WASM_NO_HOST"),
-                    "without a Wasm host the ONLY acceptable outcome is the explicit \
-                     no-host refusal; got: {msg}"
-                );
-            }
-        }
-    }
-
-    /// The battery must STRADDLE a Bool branch, or control-flow extraction is
-    /// validating nothing.
-    ///
-    /// This is the anti-vacuity property for `if`. The differential compares
-    /// native execution against kernel evaluation per battery point — but if
-    /// every point supplied the same Bool, only ONE arm of the conditional
-    /// would ever run, and a backend that emitted the branches backwards would
-    /// still pass. `build_battery` zips per-type batteries with modular
-    /// wraparound, so a Bool (battery `[0, 1]`) alternates against the longer
-    /// integer battery. Pinned here because a later battery change could
-    /// silently make a Bool constant and quietly hollow out every branch test.
-    #[test]
-    fn test_battery_straddles_a_bool_branch() {
-        let sig = GateSig {
-            params: vec![ScalarTy::Bool, ScalarTy::UInt32, ScalarTy::UInt32],
-            ret: ScalarTy::UInt32,
-        };
-        let battery = build_battery(&sig);
-        let bools: std::collections::HashSet<u64> =
-            battery.iter().filter_map(|t| t.first().copied()).collect();
-        assert!(
-            bools.contains(&0) && bools.contains(&1),
-            "the battery must exercise BOTH arms of a Bool conditional; got {bools:?} \
-             over {} points",
-            battery.len()
-        );
-    }
-
-    /// CONTROL FLOW end to end: `if` extracts on the C and Rust lanes.
-    ///
-    /// This is the increment that takes extraction from "straight-line
-    /// arithmetic" to something you could point at real code. Both lanes run
-    /// the full chain — emit, build, run the battery, differential against
-    /// kernel evaluation — and the battery straddles the branch (see above), so
-    /// a backwards conditional would be caught rather than merely unexercised.
-    ///
-    /// The C lane could always EMIT the branch; what blocked it was the battery
-    /// driver boxing a `Bool` argument while `emit_type` maps `IRType::Bool` to
-    /// an unboxed `uint8_t`, so the program failed to link. The Rust lane needed
-    /// `ite` in its emission table.
-    #[test]
-    fn test_extract_control_flow_if_on_c_and_rust() {
-        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
-            let tmp = tempfile::Builder::new()
-                .prefix("clean-extract-if-")
-                .tempdir()
-                .expect("scratch dir");
-            let src_path = tmp.path().join("ifs.lean");
-            std::fs::write(
-                &src_path,
-                "def pick (b : Bool) (x y : UInt32) : UInt32 := if b then x else y\n",
-            )
-            .expect("write source");
-            let out_dir = tmp.path().join("out");
-
-            let args = ExtractArgs {
-                file: src_path,
-                decl: "pick".to_string(),
-                out: out_dir.clone(),
-                backend,
-                keep_temp: false,
-            };
-            handle_extract_command(&args)
-                .unwrap_or_else(|e| panic!("`if` must extract on the {backend:?} lane: {e}"));
-
-            let manifest: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-            )
-            .expect("manifest is JSON");
-            assert!(
-                manifest["differential"]
-                    .as_str()
-                    .is_some_and(|d| d.starts_with("PASSED")),
-                "{backend:?}: the differential must PASS: {manifest}"
-            );
-
-            if backend == ExtractBackend::Rust {
-                let rs = std::fs::read_to_string(out_dir.join("pick.rs")).expect("emitted rust");
-                assert!(
-                    rs.contains("if a { b } else { c }"),
-                    "the Rust lane must emit a real conditional with the arms in \
-                     SOURCE order — swapping them would still typecheck; got:\n{rs}"
-                );
-                // Check for an `unsafe` BLOCK/fn, not the word — the module's
-                // own header comment advertises "no `unsafe`", so a bare
-                // substring test matches the promise instead of a violation.
-                assert!(
-                    !rs.contains("unsafe {") && !rs.contains("unsafe fn"),
-                    "the readable-Rust guarantee must hold through control flow \
-                     too; got:\n{rs}"
-                );
-            }
-        }
-    }
-
-    /// `match` on a Nat extracts on both lanes — the second control-flow form,
-    /// and the first that BINDS a variable.
-    ///
-    /// `Nat.casesOn` is what a `| 0 => … | k + 1 => …` match elaborates to. The
-    /// successor arm binds the predecessor, so unlike `if` the emitter has to
-    /// extend its scope rather than just pick between two closed expressions.
-    ///
-    /// The battery for a `Nat` parameter is `[0, 1, 2, 3, 7, 12, 63]`, so it
-    /// contains `0` AND non-zero values — both arms run, which is what makes the
-    /// differential meaningful here (see `test_battery_straddles_a_bool_branch`
-    /// for the same property stated for `if`).
-    #[test]
-    fn test_extract_match_on_nat_on_c_and_rust() {
-        const SRC: &str = "\
-def predOr (n : Nat) : Nat :=
-  match n with
-  | 0 => 0
-  | k + 1 => k
-";
-        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
-            let tmp = tempfile::Builder::new()
-                .prefix("clean-extract-match-")
-                .tempdir()
-                .expect("scratch dir");
-            let src_path = tmp.path().join("mt.lean");
-            std::fs::write(&src_path, SRC).expect("write source");
-            let out_dir = tmp.path().join("out");
-
-            let args = ExtractArgs {
-                file: src_path,
-                decl: "predOr".to_string(),
-                out: out_dir.clone(),
-                backend,
-                keep_temp: false,
-            };
-            handle_extract_command(&args)
-                .unwrap_or_else(|e| panic!("`match` must extract on the {backend:?} lane: {e}"));
-
-            let manifest: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-            )
-            .expect("manifest is JSON");
-            assert!(
-                manifest["differential"]
-                    .as_str()
-                    .is_some_and(|d| d.starts_with("PASSED")),
-                "{backend:?}: the differential must PASS: {manifest}"
-            );
-
-            if backend == ExtractBackend::Rust {
-                let rs = std::fs::read_to_string(out_dir.join("predOr.rs")).expect("emitted rust");
-                assert!(
-                    rs.contains("== 0") && rs.contains("- 1"),
-                    "the successor arm must bind the PREDECESSOR, not the scrutinee; \
-                     got:\n{rs}"
-                );
-                assert!(
-                    !rs.contains("unsafe {") && !rs.contains("unsafe fn"),
-                    "the readable-Rust guarantee must survive a binding match; got:\n{rs}"
-                );
-            }
-        }
-    }
-
-    /// The THREE-ARM match — `| 0 => 1 | 1 => 2 | _ => 0` — extracts on the
-    /// Rust lane.
-    ///
-    /// This is the traffic-light protocol stepper's SPEC step
-    /// (`data/graduation/clean-streams`), and the first match whose
-    /// elaboration carries a BETA-REDEX: the shared `_` arm arrives inside the
-    /// successor branch as an application whose head is a LAMBDA, not a
-    /// constant. `translate_beta_redex` binds each redex argument once with a
-    /// `let` and translates the body in the extended scope.
-    ///
-    /// Rust lane only, deliberately: the C lane goes through the L5CNF
-    /// lowering, which refuses this exact term (`Application head: Lam`).
-    /// Pinning that refusal here would turn a lowering gap into a contract —
-    /// the gap is a compiler-side build item, and `scripts/streams_green.sh`
-    /// records whatever C-lane verdict it measures instead.
-    ///
-    /// The Nat battery is `[0, 1, 2, 3, 7, 12, 63]`, so the differential
-    /// exercises all three arms AND the out-of-invariant points (7, 12, 63 all
-    /// take the `_` arm) against kernel evaluation.
-    #[test]
-    fn test_extract_three_arm_match_on_rust() {
-        const SRC: &str = "\
-def stepCase (i : Nat) : Nat :=
-  match i with
-  | 0 => 1
-  | 1 => 2
-  | _ => 0
-";
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-3arm-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("steps.lean");
-        std::fs::write(&src_path, SRC).expect("write source");
-        let out_dir = tmp.path().join("out");
-
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "stepCase".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::Rust,
-            keep_temp: false,
-        };
-        handle_extract_command(&args)
-            .unwrap_or_else(|e| panic!("the three-arm match must extract on the Rust lane: {e}"));
-
-        let manifest: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-        )
-        .expect("manifest is JSON");
-        assert!(
-            manifest["differential"]
-                .as_str()
-                .is_some_and(|d| d.starts_with("PASSED")),
-            "the differential must PASS: {manifest}"
-        );
-
-        let rs = std::fs::read_to_string(out_dir.join("stepCase.rs")).expect("emitted rust");
-        for arm in ["1u64", "2u64", "0u64"] {
-            assert!(
-                rs.contains(arm),
-                "all three arm values must appear in the emitted code; missing {arm}:\n{rs}"
-            );
-        }
-        assert!(
-            !rs.contains("unsafe {") && !rs.contains("unsafe fn"),
-            "the readable-Rust guarantee must survive the redex; got:\n{rs}"
-        );
-    }
-
-    /// The Nat battery exercises BOTH arms of a zero/succ match.
-    ///
-    /// Same anti-vacuity property as the Bool one: if every battery point were
-    /// non-zero, the zero arm would never run and an emitter that dropped it
-    /// entirely would still pass.
-    #[test]
-    fn test_battery_straddles_a_nat_zero_succ_match() {
-        let sig = GateSig {
-            params: vec![ScalarTy::Nat],
-            ret: ScalarTy::Nat,
-        };
-        let battery = build_battery(&sig);
-        let has_zero = battery.iter().any(|t| t.first() == Some(&0));
-        let has_succ = battery.iter().any(|t| t.first().is_some_and(|v| *v > 0));
-        assert!(
-            has_zero && has_succ,
-            "the battery must exercise both the zero and successor arms; got {battery:?}"
-        );
-    }
-
-    /// The battery DIVIDES BY ZERO, which is what makes total division
-    /// checkable at all.
-    ///
-    /// Lean's `Nat.div`/`Nat.mod` are total (`n / 0 = 0`, `n % 0 = n`) while
-    /// Rust and C both fault. If no battery point had a zero divisor, an
-    /// emitter using a bare `/` would pass the differential and then fault in
-    /// production — the worst possible outcome for a tool whose entire claim is
-    /// that the artifact agrees with the kernel.
-    ///
-    /// The zipped battery pairs equal indices, so it only supplies `(0, 0)`;
-    /// the CROSSED point (first param's last value against the others' first)
-    /// is what supplies a nonzero numerator over a zero divisor. That crossed
-    /// point is therefore load-bearing, not a nicety.
-    #[test]
-    fn test_battery_divides_by_zero() {
-        let sig = GateSig {
-            params: vec![ScalarTy::Nat, ScalarTy::Nat],
-            ret: ScalarTy::Nat,
-        };
-        let battery = build_battery(&sig);
-        assert!(
-            battery.iter().any(|t| t.get(1) == Some(&0)),
-            "some battery point must have a ZERO divisor: {battery:?}"
-        );
-        assert!(
-            battery
-                .iter()
-                .any(|t| t.get(1) == Some(&0) && t.first().is_some_and(|n| *n != 0)),
-            "and one must divide a NONZERO numerator by zero — `0 / 0` alone does \
-             not distinguish `n / 0 = 0` from a fault: {battery:?}"
-        );
-    }
-
-    /// `Nat.div`/`Nat.mod` extract with LEAN's total semantics on both lanes.
-    ///
-    /// Verified live, not just asserted: with the guard removed and a bare `/`
-    /// emitted, the battery binary dies with `attempt to divide by zero` and the
-    /// extraction FAILS. The wrong emission does not silently disagree — it
-    /// faults, and the harness refuses to ship it.
-    #[test]
-    fn test_extract_total_div_mod_on_c_and_rust() {
-        const SRC: &str = "\
-def divn (a b : Nat) : Nat := Nat.div a b
-def modn (a b : Nat) : Nat := Nat.mod a b
-";
-        for (decl, zero_case) in [("divn", "0u64"), ("modn", "__d2n")] {
-            for backend in [ExtractBackend::C, ExtractBackend::Rust] {
-                let tmp = tempfile::Builder::new()
-                    .prefix("clean-extract-div-")
-                    .tempdir()
-                    .expect("scratch dir");
-                let src_path = tmp.path().join("dv.lean");
-                std::fs::write(&src_path, SRC).expect("write source");
-                let out_dir = tmp.path().join("out");
-
-                let args = ExtractArgs {
-                    file: src_path,
-                    decl: decl.to_string(),
-                    out: out_dir.clone(),
-                    backend,
-                    keep_temp: false,
-                };
-                handle_extract_command(&args).unwrap_or_else(|e| {
-                    panic!("`{decl}` must extract on the {backend:?} lane: {e}")
-                });
-
-                let manifest: serde_json::Value = serde_json::from_str(
-                    &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-                )
-                .expect("manifest is JSON");
-                assert!(
-                    manifest["differential"]
-                        .as_str()
-                        .is_some_and(|d| d.starts_with("PASSED")),
-                    "{decl}/{backend:?}: the differential must PASS: {manifest}"
-                );
-
-                if backend == ExtractBackend::Rust {
-                    let rs = std::fs::read_to_string(out_dir.join(format!("{decl}.rs")))
-                        .expect("emitted rust");
-                    assert!(
-                        rs.contains("== 0"),
-                        "{decl}: the zero-divisor guard IS the semantics, not \
-                         defensive coding; got:\n{rs}"
-                    );
-                    assert!(
-                        rs.contains(zero_case),
-                        "{decl}: the zero case must yield `{zero_case}` — `n / 0 = 0` \
-                         but `n % 0 = n`, and swapping them typechecks; got:\n{rs}"
-                    );
-                }
-            }
-        }
-    }
-
-    /// The recursion boundary: `Nat.rec` in, well-founded recursion OUT.
-    ///
-    /// This is the safety property behind admitting recursion at all.
-    /// `Nat.rec` lowers to a counted loop whose bound is the scrutinee, so
-    /// termination is inherited from the kernel — which accepted the source
-    /// definition only because the recursor is well-founded — and is manifest in
-    /// the artifact.
-    ///
-    /// `WellFounded.fix` / `Acc.rec` are different in kind: their termination
-    /// rests on an accessibility proof that extraction ERASES. Emitting a loop
-    /// for those would assert a bound the artifact does not carry. And the
-    /// failure mode is the one this harness CANNOT report — a non-terminating
-    /// extraction hangs the differential battery rather than failing it. So they
-    /// must stay refused, and that is asserted here rather than assumed.
-    #[test]
-    fn test_recursion_boundary_admits_nat_rec_and_refuses_well_founded() {
-        let nat_rec = Expr::const_(Name::from_string("Nat.rec"), vec![]);
-        assert!(
-            find_recursion(&nat_rec).is_none(),
-            "`Nat.rec` must be admitted — it lowers to a counted loop"
-        );
-        for refused in [
-            "WellFounded.fix",
-            "Acc.rec",
-            "List.rec",
-            "Nat.brecOn",
-            "Nat.recOn",
-        ] {
-            let e = Expr::const_(Name::from_string(refused), vec![]);
-            assert!(
-                find_recursion(&e).is_some(),
-                "`{refused}` must STILL refuse: its termination is not a counted \
-                 bound the extracted artifact carries"
-            );
-        }
-    }
-
-    /// RECURSION end to end: a structurally recursive definition extracts on
-    /// both lanes, and the Rust artifact is a BOUNDED LOOP.
-    ///
-    /// `sumTo` is genuinely recursive in source — `sumTo k` in its own body —
-    /// and elaborates through `Nat.rec`.
-    #[test]
-    fn test_extract_structural_recursion_on_c_and_rust() {
-        const SRC: &str = "\
-def sumTo (n : Nat) : Nat :=
-  match n with
-  | 0 => 0
-  | k + 1 => Nat.add (sumTo k) (Nat.succ k)
-";
-        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
-            let tmp = tempfile::Builder::new()
-                .prefix("clean-extract-rec-")
-                .tempdir()
-                .expect("scratch dir");
-            let src_path = tmp.path().join("rec.lean");
-            std::fs::write(&src_path, SRC).expect("write source");
-            let out_dir = tmp.path().join("out");
-
-            let args = ExtractArgs {
-                file: src_path,
-                decl: "sumTo".to_string(),
-                out: out_dir.clone(),
-                backend,
-                keep_temp: false,
-            };
-            handle_extract_command(&args).unwrap_or_else(|e| {
-                panic!("structural recursion must extract on the {backend:?} lane: {e}")
-            });
-
-            let manifest: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-            )
-            .expect("manifest is JSON");
-            assert!(
-                manifest["differential"]
-                    .as_str()
-                    .is_some_and(|d| d.starts_with("PASSED")),
-                "{backend:?}: the differential must PASS: {manifest}"
-            );
-
-            if backend == ExtractBackend::Rust {
-                let rs = std::fs::read_to_string(out_dir.join("sumTo.rs")).expect("emitted rust");
-                assert!(
-                    rs.contains("while") && rs.contains("+= 1"),
-                    "the artifact must be a COUNTED loop — the bound is what makes \
-                     termination manifest; got:\n{rs}"
-                );
-                // Count `sumTo(` — a CALL — not the bare name, which also
-                // appears in the generated header comment. Exactly one
-                // occurrence is the definition itself.
-                assert_eq!(
-                    rs.matches("sumTo(").count(),
-                    1,
-                    "the emitted function must not call ITSELF: unbounded recursion \
-                     would HANG the battery rather than fail it, and a hang is the \
-                     one outcome this harness cannot report; got:\n{rs}"
-                );
-            }
-        }
-    }
-
-    /// `==` extracts on both lanes, composing `ite` with `BEq.beq`.
-    ///
-    /// `if i == 0 then …` elaborates the condition through
-    /// `instBEqOfDecidableEq Nat instDecidableEqNat` — the decide-wrapper whose
-    /// `beq a b` is literally `decide (a = b)`. That IS structural equality, so
-    /// it is emitted as Rust `==`; the emitted body is the readable
-    /// `if (a == 0u64) { … }` chain.
-    #[test]
-    fn test_extract_beq_chain_on_c_and_rust() {
-        const SRC: &str = "\
-def stepC (i : Nat) : Nat :=
-  if i == 0 then 1 else if i == 1 then 2 else 0
-";
-        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
-            let tmp = tempfile::Builder::new()
-                .prefix("clean-extract-beq-")
-                .tempdir()
-                .expect("scratch dir");
-            let src_path = tmp.path().join("beq.lean");
-            std::fs::write(&src_path, SRC).expect("write source");
-            let out_dir = tmp.path().join("out");
-            let args = ExtractArgs {
-                file: src_path,
-                decl: "stepC".to_string(),
-                out: out_dir.clone(),
-                backend,
-                keep_temp: false,
-            };
-            handle_extract_command(&args)
-                .unwrap_or_else(|e| panic!("`==` must extract on the {backend:?} lane: {e}"));
-            let manifest: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-            )
-            .expect("manifest is JSON");
-            assert!(
-                manifest["differential"]
-                    .as_str()
-                    .is_some_and(|d| d.starts_with("PASSED")),
-                "{backend:?}: the differential must PASS: {manifest}"
-            );
-            if backend == ExtractBackend::Rust {
-                let rs = std::fs::read_to_string(out_dir.join("stepC.rs")).expect("emitted");
-                assert!(
-                    rs.contains("== 0u64") && rs.contains("== 1u64"),
-                    "the canonical instance must emit as Rust `==`; got:\n{rs}"
-                );
-            }
-        }
-    }
-
-    /// THE FAIL-CLOSED DIRECTION, which is the load-bearing part: a CUSTOM
-    /// `BEq` instance must REFUSE, never be emitted as `==`.
-    ///
-    /// `weird` below says every pair of Nats is equal. Emitting Rust `==` for
-    /// it would be a silently wrong program — and the differential battery
-    /// would only catch it if a battery point happened to land on a
-    /// disagreement, which is exactly the kind of luck a fail-closed emitter
-    /// must not rely on.
-    #[test]
-    fn test_extract_beq_custom_instance_refuses() {
-        const SRC: &str = "\
-def weird : BEq Nat := BEq.mk (fun _ _ => true)
-def bad (a b : Nat) : Bool := @BEq.beq Nat weird a b
-";
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-beq-bad-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("bad.lean");
-        std::fs::write(&src_path, SRC).expect("write source");
-        let out_dir = tmp.path().join("out");
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "bad".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::Rust,
-            keep_temp: false,
-        };
-        let err = handle_extract_command(&args)
-            .expect_err("a custom BEq instance must refuse on the Rust lane");
-        assert!(
-            err.to_string().contains("weird") || err.to_string().contains("instance"),
-            "the refusal must name the non-canonical instance; got: {err}"
-        );
-        assert!(!out_dir.exists(), "a refused extraction must write nothing");
-    }
-
-    /// END-TO-END: the design's canonical V1 pick actually extracts.
-    ///
-    /// `designs/2026-08-06-clean-extract-width1.md` names
-    /// `def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b`
-    /// as the V1 target — the unique shape that both emits self-contained C and
-    /// lands in trust-ir TV Fragment-2.
-    ///
-    /// It did not extract. Every UIntW declaration — including the minimal
-    /// `duo` — bailed with "uncovered extern in emitted C: `l_UInt32_ofNat`",
-    /// because the prelude's `UInt32.add`/`mul` compile from source and route
-    /// through `UInt32.ofNat`, which had no shim. One missing symbol blocked the
-    /// whole lane.
-    ///
-    /// It went unnoticed because THE CHAIN HAD NO TEST: the three tests beside
-    /// this one exercise `extraction_gate` only, and the gate happily accepts
-    /// `affineU` — the refusal happens two steps later, at the extern boundary.
-    /// So this test runs the real command and asserts the real artifacts.
-    #[test]
-    fn test_extract_uintw_v1_pick_runs_the_whole_chain() {
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-e2e-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("affine.lean");
-        std::fs::write(
-            &src_path,
-            "def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b\n",
-        )
-        .expect("write source");
-        let out_dir = tmp.path().join("out");
-
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "affineU".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::C,
-            keep_temp: false,
-        };
-        handle_extract_command(&args).expect("the V1 pick must extract end to end");
-
-        let c = std::fs::read_to_string(out_dir.join("affineU.c")).expect("emitted C");
-        assert!(
-            c.contains("uint32_t l_affineU(uint32_t"),
-            "the extracted entry must keep the unboxed uint32_t ABI; got:\n{c}"
-        );
-
-        let manifest: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-        )
-        .expect("manifest is JSON");
-        assert_eq!(manifest["decl"], "affineU");
-        assert!(
-            manifest["differential"]
-                .as_str()
-                .is_some_and(|d| d.starts_with("PASSED")),
-            "the differential must PASS: {manifest}"
-        );
-        let points = manifest["battery_points"].as_u64().expect("battery_points");
-        assert!(
-            points >= 8,
-            "the battery must actually have run points (incl. the 2^32 wraparound \
-             pair that exercises `ofNat`'s truncation); got {points}"
-        );
-    }
-
-    /// The `--backend` flag is actually WIRED to the clap surface, and `c`
-    /// remains the default so the existing C lane is untouched.
-    ///
-    /// The e2e tests below call [`handle_extract_command`] directly — the same
-    /// function `Commands::Extract` dispatches to — which proves the pipeline
-    /// but not the argument plumbing. This closes that last gap without needing
-    /// a binary build.
-    #[test]
-    fn test_backend_flag_is_wired_and_defaults_to_c() {
-        use clap::Parser as _;
-
-        let parse = |extra: &[&str]| {
-            let mut argv = vec!["clean", "extract", "f.lean", "--decl", "d", "--out", "o"];
-            argv.extend_from_slice(extra);
-            match crate::cli_args::Cli::try_parse_from(argv)
-                .expect("the extract surface must parse")
-                .command
-            {
-                crate::cli_args::Commands::Extract(a) => a.backend,
-                _ => panic!("`clean extract ...` must parse as Commands::Extract"),
-            }
-        };
-
-        assert_eq!(
-            parse(&[]),
-            ExtractBackend::C,
-            "the default must stay `c` — the Rust backend is additive"
-        );
-        assert_eq!(parse(&["--backend", "rust"]), ExtractBackend::Rust);
-        assert_eq!(parse(&["--backend", "c"]), ExtractBackend::C);
-        assert!(
-            crate::cli_args::Cli::try_parse_from([
-                "clean",
-                "extract",
-                "f.lean",
-                "--decl",
-                "d",
-                "--out",
-                "o",
-                "--backend",
-                "haskell",
-            ])
-            .is_err(),
-            "an unknown backend must be rejected by the value enum"
-        );
-    }
-
-    /// END-TO-END (Rust backend): the same V1 pick extracts to READABLE, SAFE
-    /// Rust, and the shipped artifact is the thing a human would want.
-    ///
-    /// The C half of this rung ships a `clean_obj*`/Perceus translation unit —
-    /// correct, and not what a Rocq user means by "extract to a host language".
-    /// This asserts the properties that make the Rust artifact different in
-    /// kind, not just in file extension: no `unsafe`, a plain `u32` signature,
-    /// and the modular arithmetic spelled `wrapping_*` EXPLICITLY (Lean's
-    /// `UInt32.add` wraps; bare `+` would panic in debug and wrap in release,
-    /// so an implicit spelling would be a build-profile-dependent semantics).
-    #[test]
-    fn test_extract_rust_backend_runs_the_whole_chain() {
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-rust-e2e-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("affine.lean");
-        std::fs::write(
-            &src_path,
-            "def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b\n",
-        )
-        .expect("write source");
-        let out_dir = tmp.path().join("out");
-
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "affineU".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::Rust,
-            keep_temp: false,
-        };
-        handle_extract_command(&args).expect("the V1 pick must extract to Rust end to end");
-
-        let rs = std::fs::read_to_string(out_dir.join("affineU.rs")).expect("emitted Rust");
-        assert!(
-            rs.contains("pub fn affineU(a: u32, b: u32) -> u32"),
-            "the emitted signature must be plain scalars, not boxed objects; got:\n{rs}"
-        );
-        assert!(
-            rs.contains("a.wrapping_mul(b).wrapping_add(b)"),
-            "Lean's UInt32 arithmetic is modular and must be spelled wrapping_* \
-             explicitly; got:\n{rs}"
-        );
-        let code_only: String = rs
-            .lines()
-            .filter(|l| !l.trim_start().starts_with("//"))
-            .collect::<Vec<_>>()
-            .join("\n");
-        assert!(
-            !code_only.contains("unsafe"),
-            "the emitted Rust must be safe; got:\n{rs}"
-        );
-
-        let manifest: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-        )
-        .expect("manifest is JSON");
-        assert_eq!(manifest["decl"], "affineU");
-        assert_eq!(manifest["backend"], "rust");
-        assert!(
-            manifest["differential"]
-                .as_str()
-                .is_some_and(|d| d.starts_with("PASSED")),
-            "the differential must PASS: {manifest}"
-        );
-        let points = manifest["battery_points"].as_u64().expect("battery_points");
-        assert!(
-            points >= 7,
-            "the battery must actually have run points (incl. the 2^32 wraparound \
-             pair); got {points}"
-        );
-    }
-
-    /// END-TO-END (Rust backend, `Nat`): the second v1 pick from the rung brief.
-    ///
-    /// `Nat` is the interesting case because Lean's `Nat` is UNBOUNDED and the
-    /// emitted `u64` is only a MODEL of it. The honest spelling therefore is not
-    /// `wrapping_add` (which would silently give a wrong answer past 2^64) but
-    /// `checked_add(..).expect(..)`, which aborts at the model's edge. This pins
-    /// that choice so a later "simplification" to `+` or `wrapping_add` fails.
-    #[test]
-    fn test_extract_rust_backend_nat_models_are_checked_not_wrapping() {
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-rust-nat-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("double.lean");
-        std::fs::write(&src_path, "def double (n : Nat) : Nat := Nat.add n n\n")
-            .expect("write source");
-        let out_dir = tmp.path().join("out");
-
-        handle_extract_command(&ExtractArgs {
-            file: src_path,
-            decl: "double".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::Rust,
-            keep_temp: false,
-        })
-        .expect("the Nat pick must extract to Rust end to end");
-
-        let rs = std::fs::read_to_string(out_dir.join("double.rs")).expect("emitted Rust");
-        assert!(
-            rs.contains("pub fn double(a: u64) -> u64"),
-            "Nat is modelled as u64 in a plain signature; got:\n{rs}"
-        );
-        assert!(
-            rs.contains("a.checked_add(a)") && rs.contains(".expect("),
-            "Lean Nat does not wrap, so the u64 model must abort at its edge \
-             rather than wrap; got:\n{rs}"
-        );
-        assert!(
-            !rs.contains("wrapping_add"),
-            "wrapping arithmetic would be WRONG for Nat; got:\n{rs}"
-        );
-    }
-
-    /// FALSIFIABILITY, strong form: TAMPER WITH THE EMITTED PROGRAM.
-    ///
-    /// `test_differential_check_detects_a_wrong_native_result` probes the
-    /// comparator with a hand-corrupted result string. This probes the whole
-    /// Rust chain: take the module the emitter really produced, flip one
-    /// operator in the emitted TEXT, then compile-and-run it for real and feed
-    /// the genuine binary's output to the genuine differential. It must reject.
-    ///
-    /// This is the tampered-BINARY probe the design
-    /// (`designs/2026-08-06-clean-extract-width1.md`, item 10) asks for and the
-    /// C lane could not reach: the Rust backend owns its emitter and its build,
-    /// so `run_rust_battery` takes the module as a PARAMETER, which is exactly
-    /// the injection seam.
-    #[test]
-    fn test_rust_backend_differential_rejects_a_tampered_emission() {
-        let env = env_with("def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b");
-        let name = Name::from_string("affineU");
-        let sig = extraction_gate(&env, &name).expect("v1 class");
-        let battery = build_battery(&sig);
-        let module = extract_rust::emit_rust_module(&env, &name, &sig).expect("emit");
-        let driver = extract_rust::render_rust_battery_driver("affineU", &sig, &battery);
-
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-tamper-")
-            .tempdir()
-            .expect("scratch dir");
-        let honest_dir = tmp.path().join("honest");
-        std::fs::create_dir_all(&honest_dir).expect("mkdir");
-        let honest = extract_rust::run_rust_battery(&module, &driver, &honest_dir)
-            .expect("the honest emission must build and run");
-        assert_eq!(honest.len(), battery.len(), "one result per battery point");
-        differential_check(&env, "affineU", &sig, &battery, &honest)
-            .expect("the honest emission must pass the differential");
-
-        // One operator, flipped. Still valid Rust; still compiles; wrong.
-        let tampered = module.replace("wrapping_add", "wrapping_sub");
-        assert_ne!(tampered, module, "the tamper must actually change the text");
-        let tampered_dir = tmp.path().join("tampered");
-        std::fs::create_dir_all(&tampered_dir).expect("mkdir");
-        let bad = extract_rust::run_rust_battery(&tampered, &driver, &tampered_dir)
-            .expect("the tampered emission still compiles — that is the point");
-        let err = differential_check(&env, "affineU", &sig, &battery, &bad)
-            .expect_err("a tampered emission MUST be caught by the differential");
-        assert!(
-            err.to_string().contains("DIFFERENTIAL MISMATCH"),
-            "expected a differential mismatch, got: {err}"
-        );
-    }
-
-    /// The Rust emitter is FAIL-CLOSED: an unrecognised constant refuses with a
-    /// stable `E_RUST_*` code rather than guessing.
-    ///
-    /// `Nat.succ` passes the extraction gate (first-order `Nat → Nat`, no
-    /// recursor mentioned) but has no entry in the v1 emission table. The wrong
-    /// behaviour here would be to emit something plausible; the right behaviour
-    /// is to refuse with a code the caller can act on.
-    #[test]
-    fn test_rust_emitter_refuses_constants_outside_the_v1_table() {
-        // `Nat.succ` used to be the unlisted example; it is now emitted (the
-        // recursion work needed it). `Nat.beq` is a real prelude constant that
-        // the v1 Rust table genuinely does not carry.
-        let env = env_with("def g (n : Nat) : Bool := Nat.beq n n");
-        let name = Name::from_string("g");
-        let sig = extraction_gate(&env, &name).expect("gate accepts a first-order Nat def");
-        let err = extract_rust::emit_rust_module(&env, &name, &sig)
-            .expect_err("an unlisted constant must REFUSE, not be guessed at");
-        assert!(
-            err.to_string().starts_with("E_RUST_UNSUPPORTED"),
-            "expected a stable E_RUST_UNSUPPORTED refusal, got: {err}"
-        );
-    }
-
-    #[test]
-    fn test_gate_accepts_first_order_nat_def() {
-        let env = env_with("def double (n : Nat) : Nat := Nat.add n n");
-        let sig = extraction_gate(&env, &Name::from_string("double"))
-            .expect("first-order Nat def is in the v1 class");
-        assert_eq!(sig.params.len(), 1);
-        assert!(matches!(sig.ret, ScalarTy::Nat));
-    }
-
-    #[test]
-    fn test_gate_refuses_prop_and_recursion() {
-        let env = env_with(
-            "theorem trivial_imp (P : Prop) (h : P) : P := h\n\
-             def looped (l : List Nat) : Nat := List.rec 0 (fun _ _ ih => ih) l",
-        );
-        assert!(
-            matches!(
-                extraction_gate(&env, &Name::from_string("trivial_imp")),
-                Err(ExtractRefusal::Prop(_))
-            ),
-            "Prop telescope must refuse E_PROP"
-        );
-        // `Nat.rec` is now ADMITTED (it lowers to a counted loop), so the
-        // recursion refusal is pinned with a recursor that is still out of
-        // scope. Changed deliberately, not because the old case regressed.
-        assert!(
-            matches!(
-                extraction_gate(&env, &Name::from_string("looped")),
-                Err(ExtractRefusal::Recursion(_, _) | ExtractRefusal::TypeParam(_))
-            ),
-            "a non-Nat recursor must still refuse"
-        );
-    }
-
-    #[test]
-    fn test_gate_refuses_unknown_and_nonscalar() {
-        let env = env_with("def idlist (l : List Nat) : List Nat := l");
-        assert!(
-            matches!(
-                extraction_gate(&env, &Name::from_string("idlist")),
-                Err(ExtractRefusal::TypeParam(_))
-            ),
-            "List telescope must refuse E_TYPE_PARAM"
-        );
-        assert!(
-            matches!(
-                extraction_gate(&env, &Name::from_string("missing")),
-                Err(ExtractRefusal::Noncomputable(_))
-            ),
-            "unknown decl must refuse E_NONCOMPUTABLE"
-        );
-    }
-
-    /// REGRESSION (measured hang): the kernel leg at `UInt32 ==` over big
-    /// literals.
-    ///
-    /// `equ (4294967295 : UInt32) 4294967295` elaborates its numerals as
-    /// `UInt32.ofNat (@OfNat.ofNat Nat 4294967295 (instOfNatNat _))`. The
-    /// `instDecidableEqUInt32` native reducer used to DECLINE that wrapper
-    /// shape (it only read raw `Nat` literals), so whnf fell back to
-    /// δι-grinding the structural `decEq` — Θ(2^32) unary work, a
-    /// multi-minute hang sampled as a nested `try_iota_reduction` tower.
-    /// Fixed by peeling the CANONICAL `OfNat` wrapper in
-    /// `get_uint_ctor_val` (clean-kernel `native_reducers_uint.rs`), which
-    /// this exercises through the production `kernel_eval` path.
-    ///
-    /// The worker thread + timeout converts a regression back into a LOUD
-    /// failure instead of a silent test-suite hang.
-    #[test]
-    fn test_kernel_eval_uint32_eq_big_literals_terminates() {
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let env = env_with("def equ (a b : UInt32) : Bool := a == b");
-            let sig = GateSig {
-                params: vec![ScalarTy::UInt32, ScalarTy::UInt32],
-                ret: ScalarTy::Bool,
-            };
-            let big = 4_294_967_295u64;
-            let results: Vec<(Vec<u64>, String)> = [
-                (vec![big, big], "1"),
-                (vec![big, 0], "0"),
-                (vec![0, big], "0"),
-                (vec![4_294_967_290, big], "0"),
-            ]
-            .into_iter()
-            .map(|(inputs, want)| {
-                let got = kernel_eval(&env, "equ", &sig, &inputs)
-                    .expect("kernel leg must reduce UInt32 == to a literal");
-                (inputs, format!("{got} (want {want})"))
-            })
-            .collect();
-            let _ = tx.send(results);
-        });
-        let results = rx.recv_timeout(std::time::Duration::from_secs(120)).expect(
-            "kernel leg must terminate — a timeout here is the Θ(2^32) decEq grind regressing",
-        );
-        for (inputs, got_want) in results {
-            let (got, want) = got_want.split_once(" (want ").expect("format");
-            let want = want.trim_end_matches(')');
-            assert_eq!(got, want, "kernel leg wrong at inputs {inputs:?}");
-        }
-    }
-
-    /// The v1.2 TV leg: the C-lane manifest carries an explicit `tv` entry in
-    /// EVERY build. Feature off: an honest `"unavailable"` note (an absent
-    /// field would read as "nobody thought about it"). Feature on: the
-    /// kernel-decided certificate status for the target decl —
-    /// `"certified"`/`"skipped"`, never a silent omission — plus the scope
-    /// wording that keeps the trust-ir claim separate from the shipped .c
-    /// text (which only the differential covers).
-    #[test]
-    fn test_extract_c_manifest_carries_tv_entry() {
-        let tmp = tempfile::Builder::new()
-            .prefix("clean-extract-tv-")
-            .tempdir()
-            .expect("scratch dir");
-        let src_path = tmp.path().join("affine.lean");
-        std::fs::write(
-            &src_path,
-            "def affineU (a b : UInt32) : UInt32 := UInt32.add (UInt32.mul a b) b\n",
-        )
-        .expect("write source");
-        let out_dir = tmp.path().join("out");
-        let args = ExtractArgs {
-            file: src_path,
-            decl: "affineU".to_string(),
-            out: out_dir.clone(),
-            backend: ExtractBackend::C,
-            keep_temp: false,
-        };
-        handle_extract_command(&args).expect("affineU extracts on the C lane");
-        let manifest: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-        )
-        .expect("manifest is JSON");
-        let tv = &manifest["tv"];
-        if cfg!(feature = "trust-ir-backend") {
-            // THE PIN AT ITS FINAL FORM (measured 2026-08-25): `affineU`
-            // CERTIFIES. The ladder it climbed, each rung measured: Dialect
-            // lowering died `undefined function` (no runtime table) →
-            // ExternCalls emitted but the compositional certificate could not
-            // ground (`UInt32.add`/`mul` were compiled from source, shadowing
-            // the emitter's native-BinOp arm) → the emitter now skips the
-            // primitives (emit_wasm's discipline) so the root's arithmetic IS
-            // native wrapping BinOps, squarely inside the Fragment-2/3
-            // vocabulary, and the kernel-decided mint closes. Regressing any
-            // rung turns this back into skipped/unattempted and fails here.
-            assert_eq!(
-                tv["status"], "certified",
-                "feature-on affineU must carry the kernel-decided certificate: {tv}"
-            );
-            assert!(
-                tv["closure_certified"]
-                    .as_array()
-                    .is_some_and(|c| c.iter().any(|n| n == "affineU")),
-                "the certified list must name the root: {tv}"
-            );
-            assert!(
-                tv["scope"]
-                    .as_str()
-                    .is_some_and(|s| s.contains("NOTHING about the shipped .c")),
-                "the honest scope wording must survive: {tv}"
-            );
-        } else {
-            assert_eq!(
-                tv["status"], "unavailable",
-                "feature-off builds must say so explicitly: {tv}"
-            );
-        }
-    }
-
-    /// The user-visible closure of the same gap: `UInt32 ==` extracts on BOTH
-    /// lanes with the full battery — whose diagonal includes the exact
-    /// measured-hang pair `(4294967295, 4294967295)` and whose crossed point
-    /// supplies a mixed big/zero comparison.
-    #[test]
-    fn test_extract_uint32_eq_on_c_and_rust() {
-        const SRC: &str = "def equ (a b : UInt32) : Bool := a == b\n";
-        for backend in [ExtractBackend::C, ExtractBackend::Rust] {
-            let tmp = tempfile::Builder::new()
-                .prefix("clean-extract-equ-")
-                .tempdir()
-                .expect("scratch dir");
-            let src_path = tmp.path().join("equ.lean");
-            std::fs::write(&src_path, SRC).expect("write source");
-            let out_dir = tmp.path().join("out");
-            let args = ExtractArgs {
-                file: src_path,
-                decl: "equ".to_string(),
-                out: out_dir.clone(),
-                backend,
-                keep_temp: false,
-            };
-            handle_extract_command(&args)
-                .unwrap_or_else(|e| panic!("UInt32 == must extract on the {backend:?} lane: {e}"));
-            let manifest: serde_json::Value = serde_json::from_str(
-                &std::fs::read_to_string(out_dir.join("manifest.json")).expect("manifest"),
-            )
-            .expect("manifest is JSON");
-            assert!(
-                manifest["differential"]
-                    .as_str()
-                    .is_some_and(|d| d.starts_with("PASSED")),
-                "{backend:?}: the differential must PASS: {manifest}"
-            );
-            if backend == ExtractBackend::Rust {
-                let rs = std::fs::read_to_string(out_dir.join("equ.rs")).expect("emitted");
-                assert!(
-                    rs.contains("(a == b)"),
-                    "UInt32 == must emit as Rust `==`; got:\n{rs}"
-                );
-            }
-        }
-    }
-}
+#[path = "cmd_extract_tests.rs"]
+mod tests;

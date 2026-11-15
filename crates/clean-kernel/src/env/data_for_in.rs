@@ -6,15 +6,17 @@
 //! `ForIn.forIn` method, and the `List` instance the do-notation desugarer
 //! emits for `for x in xs do ...`.
 //!
-//! The do-notation elaborator (`clean-elab` `elab_do_for_core`) lowers a
-//! `for`-loop into the fully-applied
+//! The do-notation elaborator (`clean-elab` `elab_do_for_core`) does NOT emit
+//! an application of `ForIn.forIn`: it emits the INLINED `List.forIn` body —
+//! `List.rec` + `ForInStep.rec` + `Bind.bind`/`Pure.pure` with the synthesized
+//! `Pure m` / `Bind m` instances — specialised to the do-block's monad. (The
+//! `[Monad m]` binder in the field telescope had no inhabitant until
+//! 2026-09-28, when `Monad` stopped being an instance-less axiom carrier and
+//! became Lean's class, `data_monad_classes.rs`.) It still RESOLVES the `ForIn m ρ α` instance first,
+//! both to pin the element type `α` from the collection type `ρ` and to refuse
+//! a collection nothing can iterate.
 //!
-//! ```text
-//! @ForIn.forIn.{u1,u2,uρ,uα} m ρ α inst β collection init
-//!   (fun (x : α) (acc : β) => body >>= fun _ => pure (ForInStep.yield acc'))
-//! ```
-//!
-//! For that term to type-check, the environment must contain:
+//! So the environment must still contain:
 //!  * `ForInStep` — a real (axiom-free) inductive with `done`/`yield`,
 //!  * `ForIn` — the type class (single-constructor structure),
 //!  * `ForIn.forIn` — the projection/method,
@@ -23,8 +25,8 @@
 //!
 //! Everything registered here is a genuine kernel-checked term: the `List`
 //! instance is `List.forIn`, built from `List.rec` + `ForInStep.rec` +
-//! the already-registered `Bind.bind`/`Pure.pure` constants. No axioms, no
-//! `sorry`.
+//! its `[Monad m]` binder's `Bind.bind`/`Pure.pure` projections. No axioms,
+//! no `sorry`.
 
 use crate::env::decl_builder::EnvDeclBuilder;
 use crate::env::{
@@ -58,8 +60,11 @@ impl Environment {
         // Type u = Sort (u+1)
         let type_u = Expr::sort(Level::succ(u_lvl.clone()));
 
-        // ForInStep : Type u → Type u
-        let for_in_step_type = Expr::pi(BinderInfo::Implicit, type_u.clone(), type_u.clone());
+        // ForInStep : (α : Type u) → Type u. The parameter is EXPLICIT, as in
+        // Lean (`inductive ForInStep (α : Type u)`): an implicit one made
+        // `ForInStep Nat` an over-application once application stopped
+        // letting surplus arguments fill implicit binders (G44).
+        let for_in_step_type = Expr::pi(BinderInfo::Default, type_u.clone(), type_u.clone());
 
         let for_in_step_const = Expr::const_(Name::from_string("ForInStep"), vec![u_lvl.clone()]);
 
@@ -352,9 +357,8 @@ impl Environment {
     ///
     /// `α` and `β` share the monad-domain level `u1` (so `List α` and the
     /// `ForInStep β` flowing through the monad live in `Type u1`). Built purely
-    /// from `List.rec`, `ForInStep.rec`, `Bind.bind`, `Pure.pure` — no axioms,
-    /// no `[Monad m]` premise (clean's `Bind`/`Pure` are metavariable-resolved,
-    /// not synthesised).
+    /// from `List.rec`, `ForInStep.rec`, and the `[Monad m]` binder's
+    /// `Bind.bind` / `Pure.pure` projections — no axioms.
     pub fn init_list_for_in_inst(&mut self) -> Result<(), EnvError> {
         if self.list_for_in_inst_init {
             return Ok(());
@@ -374,15 +378,6 @@ impl Environment {
             Expr::sort(Level::succ(u2l.clone())),
         );
         let list_const = Expr::const_(Name::from_string("List"), vec![u1l.clone()]);
-
-        let bind_const = Expr::const_(
-            Name::from_string("Bind.bind"),
-            vec![u1l.clone(), u2l.clone()],
-        );
-        let pure_const = Expr::const_(
-            Name::from_string("Pure.pure"),
-            vec![u1l.clone(), u2l.clone()],
-        );
 
         // ── List.forIn type ──────────────────────────────────────────────
         // {m} → {α} → {β} → List α → β → (α → β → m (ForInStep β)) → m β
@@ -452,10 +447,13 @@ impl Environment {
             let (f_id, f) = b.fresh_local(step_ty.clone());
             let (init_id, init) = b.fresh_local(beta.clone());
             let (as_id, as_e) = b.fresh_local(list_alpha.clone());
-            // [Monad m] — bound but ignored by the body (clean's Bind/Pure are
-            // metavariable-resolved, not synthesised from the Monad instance).
+            // [Monad m] — the body's `pure` / `bind` are its projections, as in
+            // Lean's `List.forIn` (until 2026-09-28 this binder was ignored and
+            // the body used instance-less `Pure.pure` / `Bind.bind` AXIOMS,
+            // which proved `False`; `data_monad_classes.rs`).
             let monad_m = monad_m_ty(&m);
-            let (monad_id, _monad) = b.fresh_local(monad_m.clone());
+            let (monad_id, monad) = b.fresh_local(monad_m.clone());
+            let mi = crate::env::data_monad_classes::monad_inst(&u1l, &u2l, &m, &monad);
 
             // motive : List α → Sort _ := fun _ => β → m β
             let motive = {
@@ -470,8 +468,7 @@ impl Environment {
             let nil_case = {
                 let mut c = EnvDeclBuilder::child_of(&b);
                 let (acc_id, acc) = c.fresh_local(beta.clone());
-                let pure_acc =
-                    Expr::apps(pure_const.clone(), [m.clone(), beta.clone(), acc.clone()]);
+                let pure_acc = mi.pure(beta.clone(), acc.clone());
                 let lam = c.mk_lam(acc_id, BinderInfo::Default, beta.clone(), pure_acc);
                 c.finish_child(lam)
             };
@@ -515,8 +512,7 @@ impl Environment {
                 let done_minor = {
                     let mut d = EnvDeclBuilder::child_of(&c);
                     let (b_id, bv) = d.fresh_local(beta.clone());
-                    let pure_b =
-                        Expr::apps(pure_const.clone(), [m.clone(), beta.clone(), bv.clone()]);
+                    let pure_b = mi.pure(beta.clone(), bv.clone());
                     d.finish_child(d.mk_lam(b_id, BinderInfo::Default, beta.clone(), pure_b))
                 };
                 // yield minor: fun (b : β) => ih b
@@ -555,16 +551,7 @@ impl Environment {
                 };
 
                 // @Bind.bind m (ForInStep β) β (f hd acc) cont
-                let bind_app = Expr::apps(
-                    bind_const.clone(),
-                    [
-                        m.clone(),
-                        for_in_step_beta.clone(),
-                        beta.clone(),
-                        f_hd_acc,
-                        cont,
-                    ],
-                );
+                let bind_app = mi.bind(for_in_step_beta.clone(), beta.clone(), f_hd_acc, cont);
                 let _ = m_for_in_step_beta; // (documentary)
 
                 let lam = c.mk_lam(acc_id, BinderInfo::Default, beta.clone(), bind_app);
@@ -699,6 +686,21 @@ mod tests {
     use super::*;
     use crate::env::types::ConstantKind;
     use crate::tc::TypeChecker;
+
+    /// Lean's `inductive ForInStep (α : Type u)`: the parameter is explicit,
+    /// so `ForInStep Nat` is an ordinary application (G44).
+    #[test]
+    fn test_for_in_step_parameter_is_explicit() {
+        let env = Environment::with_prelude();
+        let ty = &env
+            .get_const(&Name::from_string("ForInStep"))
+            .expect("ForInStep is in the prelude")
+            .type_;
+        let crate::expr::ExprKind::Pi(binder, _, _) = ty.kind() else {
+            panic!("ForInStep's type is a Pi, got {ty:?}");
+        };
+        assert_eq!(binder.info, BinderInfo::Default);
+    }
 
     /// `ForInStep` and `ForIn` are registered by the prelude: `ForInStep` as a
     /// real inductive (with auto-generated `done`/`yield` constructors), `ForIn`

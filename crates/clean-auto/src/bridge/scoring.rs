@@ -60,7 +60,7 @@ impl QuantifierPriorityScorer {
     /// - Prefer simpler quantifiers (fewer variables)
     /// - Prefer quantifiers with good triggers
     /// - Ensure fairness by penalizing repeated instantiation
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             trigger_quality_weight: 2,
             bound_var_count_weight: -5,
@@ -175,18 +175,18 @@ pub(crate) struct GroundTermPattern {
 
 impl GoalPatterns {
     /// Create empty goal patterns
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Check if any goal patterns exist
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.ground_terms.is_empty() && self.function_symbols.is_empty()
     }
 
     /// Check if a symbol appears in the goal
     #[cfg(test)]
-    pub fn contains_symbol(&self, sym: &crate::egraph::Symbol) -> bool {
+    pub(crate) fn contains_symbol(&self, sym: &crate::egraph::Symbol) -> bool {
         self.function_symbols.contains(sym)
     }
 
@@ -194,7 +194,7 @@ impl GoalPatterns {
     ///
     /// This computes a relevance score for a trigger pattern:
     /// - Higher score = trigger is more likely to produce goal-relevant instantiations
-    pub fn relevance_score(&self, trigger: &crate::egraph::Trigger) -> i32 {
+    pub(crate) fn relevance_score(&self, trigger: &crate::egraph::Trigger) -> i32 {
         let mut score = 0;
 
         for pattern in &trigger.patterns {
@@ -429,7 +429,7 @@ pub(crate) struct GoalDirectedScorer {
 
 impl GoalDirectedScorer {
     /// Create a new goal-directed scorer
-    pub fn new(goal_patterns: GoalPatterns) -> Self {
+    pub(crate) fn new(goal_patterns: GoalPatterns) -> Self {
         Self {
             base_scorer: QuantifierPriorityScorer::new(),
             goal_patterns,
@@ -439,7 +439,7 @@ impl GoalDirectedScorer {
 
     /// Create a scorer with custom weights
     #[cfg(test)]
-    pub fn with_weights(
+    pub(crate) fn with_weights(
         goal_patterns: GoalPatterns,
         base_scorer: QuantifierPriorityScorer,
         goal_relevance_weight: i32,
@@ -467,7 +467,7 @@ impl GoalDirectedScorer {
 
     /// Check if goal patterns are available
     #[cfg(test)]
-    pub fn has_goal_patterns(&self) -> bool {
+    pub(crate) fn has_goal_patterns(&self) -> bool {
         !self.goal_patterns.is_empty()
     }
 }

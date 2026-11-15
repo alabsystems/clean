@@ -1,0 +1,15 @@
+{
+  "clean_source": "3fa056eb1b97bdd62de3200d5a0f4232e9c570f8",
+  "closed_cone_seconds": 3.340604291,
+  "raw_bytes": 4540257,
+  "raw_sha256": "dbf8b3e669d2ca33602ae54c6402126ddb99b464ff8b178a66fce734d1584e65",
+  "roots": [
+    "Trust.Cert.CheckedMulI128Raw.original_unsigned",
+    "Trust.Cert.CheckedMulI128Raw.original_signed",
+    "Trust.Cert.CheckedMulI128Raw.original_constant"
+  ],
+  "schema": 1,
+  "scope": "untrusted retained mathematical context; must freshly recheck before use",
+  "zstd_bytes": 1736558,
+  "zstd_sha256": "0eb639b891320cd64730eb7ce233620481647a3dd3c4889d1eec8f748a5647b3"
+}

@@ -39,7 +39,7 @@ if [[ "$(uname -m)" != "arm64" ]]; then
 fi
 
 echo "[1/4] building on-chip FP-arith harness..."
-( cd "$HARNESS_DIR" && cargo build --release --bin fp_arith_harness )
+( cd "$HARNESS_DIR" && targo --unverified build --release --bin fp_arith_harness )
 
 echo "[2/4] running real AArch64 fadd/fmul on this chip..."
 "$HARNESS_DIR/target/release/fp_arith_harness" "$GEN"

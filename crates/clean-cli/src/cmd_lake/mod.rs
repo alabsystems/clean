@@ -8,6 +8,7 @@
 //!
 //! - `build`: Project creation, initialization, building, and cleaning
 //! - `deps`: Dependency fetching, updating, resolution, and environment info
+//! - `env_guard`: the Lean toolchain programs `lake env <cmd>` refuses by name
 //! - `run`: Executable running, testing, and Lean interpreter integration
 //! - `scripts`: Script listing, execution, and documentation
 //! - `cache`: Cache management and .olean pack/unpack/upload
@@ -19,6 +20,7 @@ mod build;
 mod cache;
 mod check;
 mod deps;
+mod env_guard;
 mod goodness;
 mod lint;
 mod run;

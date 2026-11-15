@@ -19,7 +19,17 @@ use clean_kernel::name::Name;
 use clean_kernel::{Constructor, Expr, ExprFolder, FVarId, InductiveDecl, InductiveType, Level};
 use clean_parser::SurfaceDecl;
 
+use super::mutual_lift::PreDef;
 use super::{ElabCtx, ElabResult};
+
+/// Pass 2's output: each member's pre-definition, whether it is a theorem
+/// with its modifiers, and how many auto-bound implicits its signature took
+/// (`check_mutual_measure_types`).
+type MutualPredefs = (
+    Vec<PreDef>,
+    Vec<(bool, clean_parser::DeclModifiers)>,
+    Vec<usize>,
+);
 
 /// Per-declaration metadata collected during the type pass.
 struct MutualEntry {
@@ -146,12 +156,13 @@ impl<'a> ElabCtx<'a> {
                     universe_params,
                     binders,
                     ty,
+                    modifiers,
                     ..
                 } => {
                     self.set_decl_universe_params(universe_params);
 
                     let ty_expr = if let Some(ty_surface) = ty {
-                        self.elab_axiom_type(binders, ty_surface)?
+                        self.elab_def_header(binders, ty_surface)?.0
                     } else {
                         // No explicit type annotation — elaborate binders as a
                         // Pi over a fresh metavariable (the body will constrain
@@ -164,11 +175,15 @@ impl<'a> ElabCtx<'a> {
                     let ty_expr = self.metas.instantiate(&ty_expr);
                     let ty_expr = self.metas.instantiate_levels(&ty_expr);
 
-                    let decl_name = Name::from_string(&self.qualify_name(name));
+                    let decl_name = self.kernel_decl_name(
+                        name,
+                        modifiers,
+                        super::elaborate_decl::PrivateNameKind::Definition,
+                    );
                     let univ_names: Vec<Name> = self
                         .universe_params
                         .iter()
-                        .map(|s| Name::from_string(s))
+                        .map(|s| s.name().clone())
                         .collect();
 
                     let fvar = self.push_local(name.clone(), ty_expr);
@@ -185,19 +200,24 @@ impl<'a> ElabCtx<'a> {
                     universe_params,
                     binders,
                     ty,
+                    modifiers,
                     ..
                 } => {
                     self.set_decl_universe_params(universe_params);
 
-                    let ty_expr = self.elab_axiom_type(binders, ty)?;
+                    let ty_expr = self.elab_def_header(binders, ty)?.0;
                     let ty_expr = self.metas.instantiate(&ty_expr);
                     let ty_expr = self.metas.instantiate_levels(&ty_expr);
 
-                    let decl_name = Name::from_string(&self.qualify_name(name));
+                    let decl_name = self.kernel_decl_name(
+                        name,
+                        modifiers,
+                        super::elaborate_decl::PrivateNameKind::Theorem,
+                    );
                     let univ_names: Vec<Name> = self
                         .universe_params
                         .iter()
-                        .map(|s| Name::from_string(s))
+                        .map(|s| s.name().clone())
                         .collect();
 
                     let fvar = self.push_local(name.clone(), ty_expr);
@@ -215,95 +235,84 @@ impl<'a> ElabCtx<'a> {
         }
 
         // ── Pass 2: elaborate bodies with forward declarations in scope ──
+        //
+        // Each member's PRE-DEFINITION: its type and value with every member
+        // (itself included) still a forward local.
 
-        let mut results: Vec<ElabResult> = Vec::with_capacity(entries.len());
-        let mut entry_idx = 0;
+        // The members are Lean's auxiliary declarations while their bodies
+        // elaborate (`LocalDecl.isAuxDecl`): names resolve to them, but no
+        // tactic that enumerates hypotheses sees them (brick B6 of
+        // designs/2026-10-08-mutual-nested-recursion.md; `elab_tactic`'s
+        // bridge leaves them out of a goal's visible context).
+        for entry in &entries {
+            self.aux_decl_locals.insert(entry.fvar);
+        }
+        let pass2 = self.elab_mutual_predefs(decls, &entries);
+        for entry in &entries {
+            self.aux_decl_locals.remove(&entry.fvar);
+        }
+        let (predefs, kinds, auto_implicit_counts) = pass2?;
 
-        for decl in decls {
-            match decl {
-                SurfaceDecl::Def {
-                    universe_params,
-                    binders,
-                    ty,
-                    val,
-                    attrs,
-                    modifiers,
-                    ..
-                } => {
-                    let entry = &entries[entry_idx];
-                    self.set_decl_universe_params(universe_params);
-
-                    let (ty_expr, val_expr) = self.elab_def_body(binders, ty.as_deref(), val)?;
-
-                    let ty_expr = self.metas.instantiate(&ty_expr);
-                    let val_expr = self.metas.instantiate(&val_expr);
-                    let ty_expr = self.metas.instantiate_levels(&ty_expr);
-                    let val_expr = self.metas.instantiate_levels(&val_expr);
-
-                    let auto_implicits = self.take_auto_implicits();
-                    let (ty_expr, val_expr) =
-                        Self::wrap_with_auto_implicits(ty_expr, val_expr, &auto_implicits);
-
-                    // Replace forward-declaration fvars with Const references.
-                    let ty_expr = self.replace_mutual_fvars(&entries, ty_expr);
-                    let val_expr = self.replace_mutual_fvars(&entries, val_expr);
-
-                    self.ensure_known_attributes(attrs)?;
-                    self.collect_attributes(&entry.name, attrs);
-
-                    results.push(ElabResult::Definition {
-                        name: entry.name.clone(),
-                        universe_params: entry.universe_params.clone(),
-                        ty: ty_expr,
-                        val: val_expr,
-                        modifiers: *modifiers,
-                    });
-
-                    entry_idx += 1;
-                }
-
-                SurfaceDecl::Theorem {
-                    universe_params,
-                    binders,
-                    ty,
-                    proof,
-                    attrs,
-                    modifiers,
-                    ..
-                } => {
-                    let entry = &entries[entry_idx];
-                    self.set_decl_universe_params(universe_params);
-
-                    let (ty_expr, proof_expr) = self.elab_def_body(binders, Some(ty), proof)?;
-
-                    let ty_expr = self.metas.instantiate(&ty_expr);
-                    let proof_expr = self.metas.instantiate(&proof_expr);
-                    let ty_expr = self.metas.instantiate_levels(&ty_expr);
-                    let proof_expr = self.metas.instantiate_levels(&proof_expr);
-
-                    let auto_implicits = self.take_auto_implicits();
-                    let (ty_expr, proof_expr) =
-                        Self::wrap_with_auto_implicits(ty_expr, proof_expr, &auto_implicits);
-
-                    let ty_expr = self.replace_mutual_fvars(&entries, ty_expr);
-                    let proof_expr = self.replace_mutual_fvars(&entries, proof_expr);
-
-                    self.ensure_known_attributes(attrs)?;
-                    self.collect_attributes(&entry.name, attrs);
-
-                    results.push(ElabResult::Theorem {
-                        name: entry.name.clone(),
-                        universe_params: entry.universe_params.clone(),
-                        ty: ty_expr,
-                        proof: proof_expr,
-                        modifiers: *modifiers,
-                    });
-
-                    entry_idx += 1;
-                }
-
-                _ => {}
+        // Lean refuses well-founded measures of different types before any
+        // lowering (`elab_mutual_measures`); the structural lift below never
+        // reads a measure.
+        if let Err(err) = self.check_mutual_measure_types(decls, &predefs, &auto_implicit_counts) {
+            for _ in &entries {
+                self.pop_local();
             }
+            return Err(err);
+        }
+
+        // Strongly connected components in dependency order; a recursive one
+        // is lifted onto its family's shared recursor (gap G23), the others
+        // only have their forward locals replaced by the member constants.
+        let lowered = self.lower_mutual_predefs(&predefs);
+        let lowered = match lowered {
+            Ok(lowered) => lowered,
+            Err(err) => {
+                for _ in &entries {
+                    self.pop_local();
+                }
+                return Err(err);
+            }
+        };
+        // Named equation lemmas of the lifted definition members, with the
+        // forward locals still in scope (registered after the members).
+        {
+            let lifted: Vec<Name> = self
+                .mutual_lift_entries
+                .iter()
+                .map(|entry| entry.member.clone())
+                .collect();
+            if !lifted.is_empty() {
+                let mut final_defs = predefs.clone();
+                for member in &lowered {
+                    final_defs[member.index].universe_params = member.universe_params.clone();
+                }
+                self.queue_arm_equations(decls, &final_defs, &lifted);
+            }
+        }
+        let mut results: Vec<ElabResult> = Vec::with_capacity(lowered.len());
+        for member in lowered {
+            let entry = &entries[member.index];
+            let (is_theorem, modifiers) = kinds[member.index];
+            results.push(if is_theorem {
+                ElabResult::Theorem {
+                    name: entry.name.clone(),
+                    universe_params: member.universe_params,
+                    ty: member.ty,
+                    proof: member.val,
+                    modifiers,
+                }
+            } else {
+                ElabResult::Definition {
+                    name: entry.name.clone(),
+                    universe_params: member.universe_params,
+                    ty: member.ty,
+                    val: member.val,
+                    modifiers,
+                }
+            });
         }
 
         // ── cleanup: pop all forward-declaration locals (LIFO order) ──
@@ -341,6 +350,23 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         decls: &[SurfaceDecl],
     ) -> Result<ElabResult, ElabError> {
+        // Auto-implicits are captured PER CONSTRUCTOR inside, but a `?`-return
+        // from anywhere in the block would leave a partial packet behind. An
+        // auto-implicit that survives the declaration that created it is also
+        // pushed onto `self.locals`, so it would silently resolve a bare
+        // identifier in the NEXT declaration. Drain unconditionally.
+        let block_auto_start = self.auto_implicit_count();
+        let result = self.elab_mutual_inductive_inner(decls);
+        if self.auto_implicit_count() > block_auto_start {
+            let _ = self.take_auto_implicits_since(block_auto_start);
+        }
+        result
+    }
+
+    fn elab_mutual_inductive_inner(
+        &mut self,
+        decls: &[SurfaceDecl],
+    ) -> Result<ElabResult, ElabError> {
         // A mutual inductive block must be homogeneous in `inductive` members.
         // Anything else — a `def`/`theorem` mixed in, or a `coinductive` (whose
         // greatest-fixpoint semantics are not handled on this path) — is outside
@@ -356,12 +382,14 @@ impl<'a> ElabCtx<'a> {
 
         // ── Pass 1: elaborate type heads and push forward locals ──
         let mut entries: Vec<MutualIndEntry> = Vec::with_capacity(decls.len());
+        let mut inferred_results = Vec::new();
         for decl in decls {
             let SurfaceDecl::Inductive {
                 name,
                 universe_params,
                 binders,
                 ty,
+                modifiers,
                 ..
             } = decl
             else {
@@ -386,14 +414,48 @@ impl<'a> ElabCtx<'a> {
                 });
             }
 
-            let ind_ty = self.elaborate(ty)?;
+            // Auto-implicits raised while elaborating the TYPE HEAD are a
+            // different animal from constructor-level ones: Lean binds them as
+            // implicit INDICES on the head itself (`inductive HA : α → Type 1`
+            // registers `HA : {α : Type} → α → Type 1`, `number of parameters:
+            // 0`) and every self-reference in every constructor must then
+            // supply one. Threading that needs the single-inductive path's
+            // header-meta machinery (`assign_header_metas` + ctor-local meta
+            // promotion), which is not ported here. Refuse in the open, rather
+            // than registering a head with a free variable in it and letting
+            // the kernel report an fvar id.
+            let head_auto_start = self.auto_implicit_count();
+            let ind_ty = if matches!(ty.as_ref(), clean_parser::SurfaceExpr::Hole(_)) {
+                let level = Level::succ(self.fresh_universe_param());
+                inferred_results.push(level.clone());
+                Expr::sort(level)
+            } else {
+                self.elaborate(ty)?
+            };
+            let head_auto_implicits = self.take_auto_implicits_since(head_auto_start);
+            if !head_auto_implicits.is_empty() {
+                let names: Vec<String> = head_auto_implicits
+                    .iter()
+                    .map(|(n, _, _)| n.source_spelling().unwrap_or_else(|| n.to_string()))
+                    .collect();
+                return Err(ElabError::Unsupported {
+                    feature: format!(
+                        "auto-bound implicit(s) `{}` in the TYPE HEAD of mutual inductive \
+                         '{name}' (Lean binds these as implicit indices on the head; the \
+                         mutual path does not thread them yet — constructor-level \
+                         auto-implicits ARE supported)",
+                        names.join("`, `")
+                    ),
+                });
+            }
             let ind_ty = self.metas.instantiate(&ind_ty);
             let ind_ty = self.metas.instantiate_levels(&ind_ty);
 
-            let qname = Name::from_string(&self.qualify_name(name));
+            // A `private` member is `_private.<module>.0.<name>` (G21 B3).
+            let qname = self.family_decl_name(name, modifiers).into_name();
             // Push under the SHORT name so sibling constructor types can refer to
             // the type by its unqualified spelling (as written in surface syntax).
-            let short = name.rsplit('.').next().unwrap_or(name).to_string();
+            let short = name.last_component();
             let fvar = self.push_local(short, ind_ty.clone());
             entries.push(MutualIndEntry {
                 name: qname,
@@ -404,6 +466,7 @@ impl<'a> ElabCtx<'a> {
 
         // ── Pass 2: elaborate constructors with all heads in scope ──
         let mut types: Vec<InductiveType> = Vec::with_capacity(entries.len());
+        let mut raw_ctor_types = Vec::new();
         let mut entry_idx = 0;
         for decl in decls {
             let SurfaceDecl::Inductive { name: _, ctors, .. } = decl else {
@@ -414,13 +477,42 @@ impl<'a> ElabCtx<'a> {
 
             let mut constructors: Vec<Constructor> = Vec::with_capacity(ctors.len());
             for ctor in ctors {
-                let ctor_name = Name::from_string(&format!("{entry_name}.{}", ctor.name));
+                let ctor_name = crate::namespace::append_names(&entry_name, ctor.name.name());
+
+                // Bracket this constructor's elaboration and bind whatever it
+                // auto-bound as its OWN implicit arguments — the single-inductive
+                // path's `ctor_auto_implicit_start` / `take_auto_implicits_since`
+                // pairing. Without it `| cons : Lift t y -> Env [t]` registers a
+                // type still mentioning the `t`/`y` fvars and the kernel refuses
+                // the family for containing free variables.
+                //
+                // The bracket is per CONSTRUCTOR, not per block: draining at
+                // `take_auto_implicits_since` also removes the fvars from
+                // `self.locals`, so a sibling's `| two : L2 s` cannot capture the
+                // earlier `| one : L1 t`'s `t`, and vice versa.
+                let ctor_auto_start = self.auto_implicit_count();
                 let ctor_ty = self.elaborate(&ctor.ty)?;
+                let ctor_auto_implicits = self.take_auto_implicits_since(ctor_auto_start);
+
                 let mut ctor_ty = self.metas.instantiate(&ctor_ty);
                 ctor_ty = self.metas.instantiate_levels(&ctor_ty);
-                // Replace every forward type-head fvar with a `Const` reference so
-                // the registered constructor types are closed (no locals).
-                ctor_ty = self.replace_mutual_ind_fvars(&entries, ctor_ty);
+
+                // Bind in creation order, as implicit Pi binders — matching
+                // Lean's `Env.cons : {t : Bool} → {y : Type} → Lift t y → Env [t]`.
+                ctor_ty = Self::wrap_type_with_auto_implicits(ctor_ty, &ctor_auto_implicits);
+
+                // Keep the fvar-bearing form until every constructor has been
+                // elaborated. Container applications can union their fresh
+                // universe with a result hole; the final equivalence classes,
+                // not the names minted before pass 2, decide whether a field is
+                // recursive and therefore excluded from the lower bound.
+                raw_ctor_types.push(ctor_ty.clone());
+
+                // Replacement with recursive `Const`s waits until declaration
+                // close, when the shared universe argument list is known. Keep
+                // the wrapped form so a sibling reference inside an
+                // auto-implicit's own TYPE is replaced along with one in the
+                // constructor body.
                 constructors.push(Constructor {
                     name: ctor_name,
                     type_: ctor_ty,
@@ -436,13 +528,127 @@ impl<'a> ElabCtx<'a> {
             entry_idx += 1;
         }
 
+        // Recursive field sorts contain the result holes themselves; they
+        // impose no additional lower bound. Constructor elaboration may have
+        // unioned those holes with fresh levels from `List`, `Prod`, or another
+        // container, so canonicalize the ignored classes only after pass 2.
+        let mut ignored = Vec::new();
+        for level in &inferred_results {
+            self.metas
+                .instantiate_level(level)
+                .collect_params(&mut ignored);
+        }
+        let mut inferred_bound = Level::succ(Level::zero());
+        for ctor_ty in &raw_ctor_types {
+            inferred_bound = Level::max(
+                inferred_bound,
+                self.constructor_universe_bound(ctor_ty, &ignored),
+            );
+        }
+        let inferred_bound = inferred_bound.normalize();
+        for level in &inferred_results {
+            match crate::unify::level_solve::solve_level_eq(&mut self.metas, level, &inferred_bound)
+            {
+                crate::unify::UnifyResult::Success => {}
+                crate::unify::UnifyResult::Failure(message) => {
+                    return Err(ElabError::Unsupported {
+                        feature: format!(
+                            "mutual inductive result-universe inference failed: {message}"
+                        ),
+                    });
+                }
+                crate::unify::UnifyResult::Stuck => return Err(ElabError::CannotInfer),
+            }
+        }
+        self.resolve_self_max_level_equations();
+        if let Err(message) = self.metas.drain_postponed_levels() {
+            return Err(ElabError::Unsupported { feature: message });
+        }
+
+        // A metavariable created while elaborating an EARLIER constructor can be
+        // solved by a LATER sibling's constructor (the family shares one meta
+        // store), so re-instantiate the whole family once at the end. Without
+        // this the first constructor keeps the pre-solution form and the second
+        // the post-solution one, and the kernel sees two spellings of the same
+        // type. Idempotent when nothing moved.
+        let mut types: Vec<InductiveType> = types
+            .into_iter()
+            .map(|ind| InductiveType {
+                name: ind.name,
+                type_: self
+                    .metas
+                    .canonicalize_levels_in_expr(&self.metas.instantiate(&ind.type_)),
+                constructors: ind
+                    .constructors
+                    .into_iter()
+                    .map(|ctor| {
+                        let ty = self.metas.instantiate(&ctor.type_);
+                        let ty = self.metas.canonicalize_levels_in_expr(&ty);
+                        Constructor {
+                            name: ctor.name,
+                            type_: ty,
+                        }
+                    })
+                    .collect(),
+            })
+            .collect();
+
+        // Every rigid level that survives declaration close is part of the
+        // shared mutual-inductive interface, and the same ordered list must be
+        // supplied to every recursive Const. A minted metavariable left here
+        // is not a parameter: Lean refuses a constructor-only hole rather than
+        // exporting it (for example `| mk : Baz -> Foo`, where relaxed auto
+        // implicit elaboration gives `Baz : Sort ?u`).
+        let mut raw_level_params = Vec::new();
+        for ind in &types {
+            crate::level_params::collect_level_params_from_expr(&ind.type_, &mut raw_level_params);
+            for ctor in &ind.constructors {
+                crate::level_params::collect_level_params_from_expr(
+                    &ctor.type_,
+                    &mut raw_level_params,
+                );
+            }
+        }
+        if let Some(param) = raw_level_params
+            .iter()
+            .find(|param| !self.metas.is_rigid_level_param(param))
+        {
+            return Err(ElabError::Unsupported {
+                feature: format!(
+                    "mutual inductive contains unresolved universe level metavariable `{param}`"
+                ),
+            });
+        }
+        let level_params = raw_level_params;
+
+        let recursive_levels: Vec<Level> = level_params.iter().cloned().map(Level::param).collect();
+        types = types
+            .into_iter()
+            .map(|ind| InductiveType {
+                name: ind.name,
+                type_: ind.type_,
+                constructors: ind
+                    .constructors
+                    .into_iter()
+                    .map(|ctor| Constructor {
+                        name: ctor.name,
+                        type_: self.replace_mutual_ind_fvars(
+                            &entries,
+                            ctor.type_,
+                            &recursive_levels,
+                        ),
+                    })
+                    .collect(),
+            })
+            .collect();
+
         // ── cleanup: pop all forward type-head locals (LIFO order) ──
         for _ in &entries {
             self.pop_local();
         }
 
         let decl = InductiveDecl {
-            level_params: Vec::new(),
+            level_params,
             num_params: 0,
             types,
         };
@@ -456,21 +662,27 @@ impl<'a> ElabCtx<'a> {
 
     /// Replace every forward inductive type-head fvar in `expr` with a `Const`
     /// reference to the corresponding family type.
-    fn replace_mutual_ind_fvars(&self, entries: &[MutualIndEntry], expr: Expr) -> Expr {
+    fn replace_mutual_ind_fvars(
+        &self,
+        entries: &[MutualIndEntry],
+        expr: Expr,
+        levels: &[Level],
+    ) -> Expr {
         struct IndFvarFolder<'b> {
             entries: &'b [MutualIndEntry],
+            levels: &'b [Level],
         }
         impl ExprFolder for IndFvarFolder<'_> {
             fn fold_fvar(&mut self, id: FVarId) -> Expr {
                 for entry in self.entries {
                     if id == entry.fvar {
-                        return Expr::const_(entry.name.clone(), Vec::new());
+                        return Expr::const_(entry.name.clone(), self.levels.to_vec());
                     }
                 }
                 Expr::fvar(id)
             }
         }
-        let mut folder = IndFvarFolder { entries };
+        let mut folder = IndFvarFolder { entries, levels };
         folder.fold_expr(&expr)
     }
 
@@ -485,7 +697,6 @@ impl<'a> ElabCtx<'a> {
         body_ty: Expr,
     ) -> Result<Expr, ElabError> {
         use super::convert_binder_info;
-        use clean_kernel::BinderInfo;
 
         if binders.is_empty() {
             return Ok(body_ty);
@@ -504,7 +715,9 @@ impl<'a> ElabCtx<'a> {
         let bi = convert_binder_info(binder.info);
         let fvar = self.push_local(binder.name.clone(), binder_ty.clone());
 
-        let is_inst_implicit = bi == BinderInfo::InstImplicit;
+        // Any local whose type is a class is a local instance (Lean's rule;
+        // see `binder_is_local_instance`), not only the `[…]` spelling.
+        let is_inst_implicit = self.binder_is_local_instance(bi, &binder_ty);
         if is_inst_implicit {
             self.push_local_instance(fvar, binder_ty.clone());
         }
@@ -519,31 +732,131 @@ impl<'a> ElabCtx<'a> {
         let inner_abs = inner_ty.abstract_fvar(fvar);
         Ok(Expr::pi(bi, binder_ty, inner_abs))
     }
+}
 
-    /// Replace all forward-declaration fvars in `expr` with `Const` references
-    /// to the corresponding mutual declarations.
-    fn replace_mutual_fvars(&self, entries: &[MutualEntry], expr: Expr) -> Expr {
-        struct MutualFvarFolder<'b> {
-            entries: &'b [MutualEntry],
-        }
+impl ElabCtx<'_> {
+    /// Pass 2 of [`Self::elab_mutual`]: each member's PRE-DEFINITION, its
+    /// type and value with every member (itself included) still a forward
+    /// local, and its kind.
+    fn elab_mutual_predefs(
+        &mut self,
+        decls: &[SurfaceDecl],
+        entries: &[MutualEntry],
+    ) -> Result<MutualPredefs, ElabError> {
+        let mut predefs: Vec<PreDef> = Vec::with_capacity(entries.len());
+        let mut auto_implicit_counts: Vec<usize> = Vec::with_capacity(entries.len());
+        let mut kinds: Vec<(bool, clean_parser::DeclModifiers)> = Vec::with_capacity(entries.len());
+        let mut entry_idx = 0;
 
-        impl ExprFolder for MutualFvarFolder<'_> {
-            fn fold_fvar(&mut self, id: FVarId) -> Expr {
-                for entry in self.entries {
-                    if id == entry.fvar {
-                        let levels: Vec<Level> = entry
-                            .universe_params
-                            .iter()
-                            .map(|n| Level::param(n.clone()))
-                            .collect();
-                        return Expr::const_(entry.name.clone(), levels);
-                    }
-                }
-                Expr::fvar(id)
+        for decl in decls {
+            let (universe_params, binders, ty, val, attrs, modifiers, is_theorem) = match decl {
+                SurfaceDecl::Def {
+                    universe_params,
+                    binders,
+                    ty,
+                    val,
+                    attrs,
+                    modifiers,
+                    ..
+                } => (
+                    universe_params,
+                    binders,
+                    ty.as_deref(),
+                    val,
+                    attrs,
+                    modifiers,
+                    false,
+                ),
+                SurfaceDecl::Theorem {
+                    universe_params,
+                    binders,
+                    ty,
+                    proof,
+                    attrs,
+                    modifiers,
+                    ..
+                } => (
+                    universe_params,
+                    binders,
+                    Some(&**ty),
+                    proof,
+                    attrs,
+                    modifiers,
+                    true,
+                ),
+                _ => continue,
+            };
+            let entry = &entries[entry_idx];
+            self.set_decl_universe_params(universe_params);
+
+            let (ty_expr, val_expr, _) = self.elab_decl_body(binders, ty, val)?;
+
+            let ty_expr = self.metas.instantiate(&ty_expr);
+            let val_expr = self.metas.instantiate(&val_expr);
+            let ty_expr = self.metas.instantiate_levels(&ty_expr);
+            let val_expr = self.metas.instantiate_levels(&val_expr);
+
+            let auto_implicits = self.take_auto_implicits();
+            auto_implicit_counts.push(auto_implicits.len());
+            let (ty_expr, val_expr) =
+                Self::wrap_with_auto_implicits(ty_expr, val_expr, &auto_implicits);
+
+            if std::env::var_os("CLEAN_MUTUAL_LIFT_TRACE").is_some() {
+                eprintln!("mutual-predef: {} : {ty_expr}\n  := {val_expr}", entry.name);
             }
-        }
 
-        let mut folder = MutualFvarFolder { entries };
-        folder.fold_expr(&expr)
+            self.ensure_known_attributes(attrs)?;
+            // Lean applies a member's attributes before it adds the members
+            // after it: an `@[implemented_by]` naming one is "Unknown
+            // constant".
+            let later: Vec<Name> = entries[entry_idx + 1..]
+                .iter()
+                .map(|later| later.name.clone())
+                .collect();
+            self.collect_attributes_at(
+                &entry.name,
+                attrs,
+                crate::declared_here::AttributeSite::Declaration,
+                &later,
+            );
+
+            let termination = match decl {
+                SurfaceDecl::Def { termination, .. } | SurfaceDecl::Theorem { termination, .. } => {
+                    termination
+                }
+                _ => {
+                    return Err(ElabError::InternalInvariant(
+                        "non-definition reached mutual predefinitions".into(),
+                    ))
+                }
+            };
+            let mut total = 0usize;
+            let mut cursor = &ty_expr;
+            while let clean_kernel::ExprKind::Pi(_, _, body) = cursor.kind() {
+                total += 1;
+                cursor = body;
+            }
+            let autos = auto_implicits.len();
+            let structural_major = termination
+                .termination_by
+                .as_ref()
+                .map(|tb| Self::structural_hint_index(tb, binders, total.saturating_sub(autos)))
+                .transpose()
+                .map_err(|feature| ElabError::Unsupported { feature })?
+                .flatten()
+                .map(|i| autos + i);
+            predefs.push(PreDef {
+                name: entry.name.clone(),
+                fvar: entry.fvar,
+                is_theorem,
+                universe_params: entry.universe_params.clone(),
+                ty: ty_expr,
+                val: val_expr,
+                structural_major,
+            });
+            kinds.push((is_theorem, *modifiers));
+            entry_idx += 1;
+        }
+        Ok((predefs, kinds, auto_implicit_counts))
     }
 }

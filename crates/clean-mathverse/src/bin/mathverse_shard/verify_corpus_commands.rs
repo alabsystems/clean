@@ -44,6 +44,7 @@ pub(super) fn cmd_verify_corpus(
     // Merge every shard into one globally-indexed library.
     let mut library = MathverseLibrary::new(TrustPolicy::permissive());
     let mut loaded = 0usize;
+    let mut all_lean4 = true;
     for path in &mathverse_files {
         let name = path.file_name().unwrap_or_default().to_string_lossy();
         let reader = match ShardReader::from_file(path) {
@@ -56,6 +57,7 @@ pub(super) fn cmd_verify_corpus(
         match library.load_shard(&reader) {
             Ok(added) => {
                 loaded += 1;
+                all_lean4 &= reader.is_lean4_only();
                 println!("  Loaded {name}: {added} constants");
             }
             Err(e) => eprintln!("  SKIP {name}: {e}"),
@@ -66,8 +68,18 @@ pub(super) fn cmd_verify_corpus(
         library.constant_count()
     );
 
-    let prelude = clean_kernel::Environment::try_with_prelude_for_import()
-        .expect("kernel prelude environment");
+    // An all-`.olean` corpus is re-checked as Lean's replay does: in Lean's
+    // kernel theory (reducers Lean's kernel has, Lean's safe context) and from
+    // Lean's replay environment, NOT Clean's prelude (`sorry`/`trustedArith`/
+    // `trustedAy`, and hand-written stand-ins for Lean constants).
+    let prelude = if loaded > 0 && all_lean4 {
+        let mut env = clean_kernel::Environment::for_lean_replay();
+        env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
+        env
+    } else {
+        clean_kernel::Environment::try_with_prelude_for_import()
+            .expect("kernel prelude environment")
+    };
     if elide_proofs != clean_kernel::env::ProofValueElision::None {
         println!(
             "  Bounded-memory elision: {elide_proofs:?} (proof VALUES dropped periodically; \

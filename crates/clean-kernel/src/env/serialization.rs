@@ -21,6 +21,9 @@ use super::Environment;
 /// Uses Vec instead of HashMap for JSON compatibility
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JsonEnvironment {
+    /// Semantic checker input, retained across JSON round trips.
+    #[serde(default)]
+    pub lean_level_profile: crate::level::LeanLevelProfile,
     /// All constant declarations (definitions, axioms, theorems, opaques)
     pub constants: Vec<ConstantInfo>,
     /// Per-constant origin metadata, keyed by name.
@@ -62,6 +65,7 @@ impl JsonEnvironment {
     /// Create from an Environment
     pub(super) fn from_env(env: &Environment) -> Self {
         Self {
+            lean_level_profile: env.lean_level_profile(),
             constants: env.constants.values().cloned().collect(),
             constant_origins: env
                 .constant_origins
@@ -93,6 +97,7 @@ impl JsonEnvironment {
     pub(super) fn into_env(self) -> Environment {
         let quot_init = !self.quotients.is_empty();
         Environment {
+            lean_level_profile: self.lean_level_profile,
             constants: self
                 .constants
                 .into_iter()

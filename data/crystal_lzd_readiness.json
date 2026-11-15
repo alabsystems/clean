@@ -1,0 +1,217 @@
+{
+  "schema": "crystal-lzd-readiness-v1",
+  "verdict": "READY",
+  "what": "The five bodies of `level::Level::is_zero`'s derived reachable closure use only MODELLED IRInst constructors, and every call in them reaches a body in the merged pair. This is a readiness measurement for the Phase-B mint, NOT a mint and NOT a proof.",
+  "functions": [
+    {
+      "source": "crate_root",
+      "name": "level::Level::is_zero"
+    },
+    {
+      "source": "crate_deref",
+      "name": "<level::LevelArc as std::ops::Deref>::deref"
+    },
+    {
+      "source": "sidecar_text",
+      "name": "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>"
+    },
+    {
+      "source": "sidecar_text",
+      "name": "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>"
+    },
+    {
+      "source": "sidecar_text",
+      "name": "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>"
+    }
+  ],
+  "function_count": 5,
+  "distinct_opcodes": 19,
+  "opcode_to_constructor": {
+    "alloca": "alloca",
+    "assert": "assert",
+    "borrow": "borrow",
+    "br": "br",
+    "call": "call",
+    "condbr": "condbr",
+    "const": "const_",
+    "copy": "copy",
+    "extractfield": "extractfield",
+    "gep": "gep",
+    "global_addr": "globaladdr",
+    "insertfield": "insertfield",
+    "load": "load",
+    "ptr_from_parts": "ptrfromparts",
+    "ret": "ret",
+    "store": "store",
+    "switch": "switch",
+    "unreachable": "unreachable",
+    "zext": "cast"
+  },
+  "opcode_counts": {
+    "alloca": 1,
+    "assert": 1,
+    "borrow": 2,
+    "br": 10,
+    "call": 9,
+    "condbr": 1,
+    "const": 14,
+    "copy": 3,
+    "extractfield": 7,
+    "gep": 5,
+    "global_addr": 1,
+    "insertfield": 2,
+    "load": 4,
+    "ptr_from_parts": 1,
+    "ret": 5,
+    "store": 2,
+    "switch": 3,
+    "unreachable": 3,
+    "zext": 2
+  },
+  "opcodes_per_source": {
+    "crate_root": {
+      "br": 7,
+      "call": 6,
+      "condbr": 1,
+      "const": 7,
+      "extractfield": 1,
+      "gep": 3,
+      "load": 1,
+      "ret": 1,
+      "switch": 1
+    },
+    "crate_deref": {
+      "call": 2,
+      "const": 1,
+      "global_addr": 1,
+      "ptr_from_parts": 1,
+      "ret": 1
+    },
+    "sidecar_text": {
+      "alloca": 1,
+      "assert": 1,
+      "borrow": 2,
+      "br": 3,
+      "call": 1,
+      "const": 6,
+      "copy": 3,
+      "extractfield": 6,
+      "gep": 2,
+      "insertfield": 2,
+      "load": 3,
+      "ret": 3,
+      "store": 2,
+      "switch": 2,
+      "unreachable": 3,
+      "zext": 2
+    }
+  },
+  "constructor_census": 33,
+  "unmodelled": [],
+  "layout_cross_check": {
+    "what": "The authored `ir_lzb_deref` geps by SIXTEEN. That constant is now checked against the compiler rather than against two runtime addresses, which is the second discharge route ledger row A-CLZ-DEREF-ARC-DATA-OFFSET names for itself.",
+    "arcinner": {
+      "fields": [
+        "struct.7",
+        "struct.7",
+        "struct.4"
+      ],
+      "size": 56,
+      "align": 8,
+      "repr": "c"
+    },
+    "data_offset_recomputed_from_field_sizes": 16,
+    "emitted_gep_constant_in_the_derived_body": 16,
+    "authored_model_constant": 16,
+    "payload_size": 40,
+    "all_three_agree": true,
+    "what_this_narrows": "The ledger row states `ArcInner` is private `alloc` internals 'with no stated repr'. rustc's own layout descriptor reports repr=c for it, and the sysroot source declares `#[repr(C, align(2))] struct ArcInner<T: ?Sized> { strong: Atomic<usize>, weak: Atomic<usize>, data: T }`. Under repr(C) the field ORDER is guaranteed, so the offset is not a layout accident: it is two pointer-sized atomic counts. The obligation that survives is the pointer width, not the layout algorithm. Closing the row is an owner act; this measurement is the evidence for it."
+  },
+  "the_ids_renumber_between_dumps": {
+    "why_it_matters": "`@func.N` is a WHOLE-CRATE index. A Phase-B mint that joins the crate module to the sidecar bundle by id will address the wrong function whenever the two came from different dumps. Join by NAME.",
+    "committed_deref_fixture_calls": [
+      4924,
+      4925
+    ],
+    "closure_record_declaration_ids": [
+      4938,
+      4939
+    ],
+    "bodies_agree": "the 2026-09-09 revalidation measured all 21 committed fixtures NUMBERING-ONLY at HEAD with zero structural drift, so the ids are the only thing that moved"
+  },
+  "call_closure": {
+    "crate_declarations_derived": {
+      "4938": "!trust_bodyless_instance::std::option::Option::<T>::as_deref::764fc172dc31447ef84e850e93a07a00-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a61735f64657265667c636f6e63726574652d76313a303137363466633137326463333134343765663834653835306539336130376130303030303030303030303030303030303030313031303634393234356434343238383230386434313730393630356132616666326532303030303030303030303030303030303230363131333433323164383934366363373731313830616163316262363965353537303030303030303030303030303030303036343932343564343432383832303864343738386562646530323838333661653530303030303030303030303030303030",
+      "4939": "!trust_bodyless_instance::std::option::Option::<T>::expect::764fc172dc31447ecec17de50d92397c-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a6578706563747c636f6e63726574652d76313a303137363466633137326463333134343765636563313764653530643932333937633030303030303030303030303030303030313031306130303036313133343332316438393436636337373131383061616331626236396535353730303030303030303030303030303030"
+    },
+    "sidecar_internal_calls": [
+      {
+        "from": "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>",
+        "to": "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>"
+      }
+    ],
+    "calls_to_the_ruled_panic_terminal": [
+      {
+        "from": "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>",
+        "to": "core::option::expect_failed"
+      }
+    ],
+    "panic_terminals": [
+      "core::option::expect_failed"
+    ],
+    "escaping": []
+  },
+  "not_claimed": [
+    "that any body is CORRECT \u2014 that is links 3-5, per chain, elsewhere",
+    "that a modelled constructor AGREES with the reference interpreter; data/evalir_adequacy_grid.json carries the measured disagreements, four of which are on borrow/copy/load, which this closure uses",
+    "that the module has been minted, registered or executed",
+    "A0's fifth criterion AS WRITTEN, which reads ONE spliced instruction-bearing prefix; this is two artifacts joined by a manifest"
+  ],
+  "provenance": {
+    "derived_by": "scripts/crystal_lzd_readiness.py",
+    "inputs": [
+      {
+        "path": "crates/clean-verify/tests/fixtures/level_is_zero.trust-ir.txt",
+        "sha256": "b4e6fdbfc52051e9be67f1e9e2abcbba363a13e0df07ffe74257078d6d46bce0"
+      },
+      {
+        "path": "crates/clean-verify/tests/fixtures/level_is_zero_deref_callee.trust-ir.txt",
+        "sha256": "13ec20bc46c0e40b5a5b3f570ff1645830363d172948dac4e99b5b14a561850b"
+      },
+      {
+        "path": "data/crystal_callee_sidecar_step1_2026-09-09/clean_kernel.callees.trust-ir.txt",
+        "sha256": "c303b404cfefa8f871a304cfd97de9f26b0debfceb4493285d0a4a10ebfe3fa0"
+      },
+      {
+        "path": "data/crystal_callee_sidecar_step1_2026-09-09/clean_kernel.callees.manifest.json",
+        "sha256": "9cb56322a240616ef0542bf2d41aaab68892e1a36446ae8caf0abfc3d3131b8a"
+      },
+      {
+        "path": "data/crystal_sidecar_closure_2026-09-10.json",
+        "sha256": "3b149f44bf1d60659f6ed37e3574dfe1c4b1330c2d0dc832505766fe661a8d65"
+      },
+      {
+        "path": "scripts/gen_lzb_activation.py",
+        "sha256": "b931c4f37656ee35870a2e6dd3dc63d5585f388beb0d6d90cc6512a9a0a62464"
+      },
+      {
+        "path": "crates/clean-verify/tests/eval_ir/census.rs",
+        "sha256": "2d785520100aacd746da40082cd733947ebe4890ef1f4feabbf21e5b647da602"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+        "sha256": "1b3aecdf6306b9592bbfd861ae062d690ff39ef57e9dd5de0510389be82a7c42"
+      }
+    ],
+    "denominator_sources": {
+      "census": {
+        "path": "crates/clean-verify/tests/eval_ir/census.rs",
+        "anchor": "EMITTED_INSTS"
+      },
+      "syntax": {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
+        "anchor": "inductive IRInst : Type"
+      }
+    }
+  }
+}

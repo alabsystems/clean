@@ -32,6 +32,11 @@
 
 #![cfg(all(feature = "fmt", feature = "parser"))]
 
+// WS8.7: the 2026-09-17 proof program's claim repro c08 (F-120), ported from
+// `reports/2026-09-17-two-language-proof-program/verify/`.
+#[path = "format_canonical/c08_text_launders_refusals.rs"]
+mod c08_text_launders_refusals;
+
 use trust_ir::inst::{BinOp, ICmpOp, Inst, Ordering};
 use trust_ir::node::InstrNode;
 use trust_ir::proof::ProofAnnotation;
@@ -50,11 +55,14 @@ fn b(n: u32) -> BlockId {
 /// a conditional branch, proof annotations, and block parameters.
 fn module_arith_and_control() -> Module {
     let mut module = Module::new("arith_ctrl");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![Ty::I32, Ty::I32],
-        returns: vec![Ty::I32],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![Ty::I32, Ty::I32],
+            returns: vec![Ty::I32],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "clamp_add", ft, b(0));
 
     // bb0(%0: i32, %1: i32):
@@ -115,7 +123,9 @@ fn module_arith_and_control() -> Module {
     }));
     func.blocks.push(bb2);
 
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -125,11 +135,14 @@ fn module_arith_and_control() -> Module {
 /// the clean version.
 fn module_arith_and_control_sparse() -> Module {
     let mut module = Module::new("arith_ctrl");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![Ty::I32, Ty::I32],
-        returns: vec![Ty::I32],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![Ty::I32, Ty::I32],
+            returns: vec![Ty::I32],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "clamp_add", ft, b(0));
 
     // Block ids deliberately out of order in the Vec: bb2, bb0, bb1.
@@ -195,18 +208,23 @@ fn module_arith_and_control_sparse() -> Module {
     func.blocks.push(bb2);
     func.blocks.push(bb0);
     func.blocks.push(bb1);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
 /// Module with atomic ops (AtomicLoad/Store/RMW/CmpXchg/Fence).
 fn module_atomics() -> Module {
     let mut module = Module::new("atomics");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![Ty::Ptr],
-        returns: vec![Ty::I32],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![Ty::Ptr],
+            returns: vec![Ty::I32],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "atomic_smoke", ft, b(0));
     let mut bb = Block::new(b(0));
     bb.params.push((v(0), Ty::Ptr));
@@ -222,7 +240,9 @@ fn module_atomics() -> Module {
     bb.body
         .push(InstrNode::new(Inst::Return { values: vec![v(1)] }));
     func.blocks.push(bb);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -248,14 +268,18 @@ fn module_aggregate_memory() -> Module {
         align: Some(4),
 
         repr: Default::default(),
+        origin: None,
     });
     let struct_ty = Ty::Struct(sid);
 
-    let ft = module.add_func_type(FuncTy {
-        params: vec![struct_ty.clone()],
-        returns: vec![Ty::I32],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![struct_ty.clone()],
+            returns: vec![Ty::I32],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "get_x", ft, b(0));
     let mut bb = Block::new(b(0));
     bb.params.push((v(0), struct_ty.clone()));
@@ -270,7 +294,9 @@ fn module_aggregate_memory() -> Module {
     bb.body
         .push(InstrNode::new(Inst::Return { values: vec![v(1)] }));
     func.blocks.push(bb);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -301,6 +327,14 @@ fn canonical_is_idempotent_atomics() {
 #[test]
 fn canonical_is_idempotent_aggregate_memory() {
     let m = module_aggregate_memory();
+    // WS4.5 FLIPPED THIS. Named, offset-bearing struct fields ARE carried now
+    // (`name: ty @off`), so the canonical dump is not `#lossy`, it parses, and
+    // idempotence is a property of the module ITSELF rather than of a
+    // loss-free projection of it. Before WS4.5 this asserted the dump was
+    // REFUSED and then erased every field name and offset to get something
+    // that could round-trip at all.
+    assert!(trust_ir::parser::parse_module(&trust_ir::format::canonical(&m)).is_ok());
+    assert!(trust_ir::format::text_losses(&m).is_empty());
     let once = trust_ir::format::canonical(&m);
     let parsed = trust_ir::parser::parse_module(&once).expect("parse must succeed");
     let twice = trust_ir::format::canonical(&parsed);

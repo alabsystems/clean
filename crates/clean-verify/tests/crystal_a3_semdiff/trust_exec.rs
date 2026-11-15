@@ -99,6 +99,7 @@ pub fn build_module(
         params: Vec::new(),
         returns: Vec::new(),
         is_vararg: false,
+        abi: None,
     };
     module.func_types = vec![placeholder; harness_slot + 1];
     let enum_ty = Ty::Enum(arg_enum_id(&module, arg_enum)?);
@@ -109,6 +110,7 @@ pub fn build_module(
         }],
         returns: vec![ret_ty],
         is_vararg: false,
+        abi: None,
     };
     // The harness takes a `u8` tag. It returns whatever the SUBJECT returns,
     // except that an enum return is projected to its `u8` tag first — so every
@@ -124,6 +126,7 @@ pub fn build_module(
         params: vec![Ty::U8],
         returns: vec![harness_ret],
         is_vararg: false,
+        abi: None,
     };
     Ok((module, renamed))
 }

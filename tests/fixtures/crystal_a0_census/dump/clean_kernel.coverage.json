@@ -1,0 +1,108 @@
+{
+ "totals": {
+  "spliced": 6,
+  "bodies": 6,
+  "declarations": 2,
+  "functions": 8
+ },
+ "bodies": [
+  {
+   "func_id": 0,
+   "def_path": "clean::good",
+   "def_index": 100,
+   "lowered": true,
+   "spliced": true,
+   "unsupported": [],
+   "differentials": {
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_detail": "8 marker line(s) identical",
+     "markers_exact": true
+    }
+   },
+   "lineage": "sha256:aaaa11"
+  },
+  {
+   "func_id": 1,
+   "def_path": "clean::helper",
+   "def_index": 101,
+   "lowered": true,
+   "spliced": true,
+   "unsupported": [],
+   "differentials": {
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_detail": "0 marker line(s) identical",
+     "markers_exact": false
+    }
+   },
+   "lineage": "sha256:zzzz99"
+  },
+  {
+   "func_id": 2,
+   "def_path": "clean::escapes",
+   "def_index": 102,
+   "lowered": true,
+   "spliced": true,
+   "unsupported": [],
+   "differentials": {
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_detail": "8 marker line(s) identical",
+     "markers_exact": true
+    }
+   },
+   "lineage": "aaaa"
+  },
+  {
+   "func_id": 3,
+   "def_path": "clean::indirectly",
+   "def_index": 103,
+   "lowered": true,
+   "spliced": true,
+   "unsupported": [],
+   "differentials": {
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_detail": "",
+     "markers_exact": false
+    }
+   },
+   "lineage": "aaaa"
+  },
+  {
+   "func_id": 4,
+   "def_path": "clean::not_lowered",
+   "def_index": 104,
+   "lowered": false,
+   "spliced": false,
+   "unsupported": [
+    "probe"
+   ],
+   "differentials": {
+    "derived_mir": {
+     "verdict": "disagreed",
+     "markers_detail": "8 marker line(s) identical",
+     "markers_exact": true
+    }
+   },
+   "lineage": "aaaa"
+  },
+  {
+   "func_id": 5,
+   "def_path": "clean::partial",
+   "def_index": 105,
+   "lowered": true,
+   "spliced": true,
+   "unsupported": [],
+   "differentials": {
+    "derived_mir": {
+     "verdict": "agreed",
+     "markers_detail": "",
+     "markers_exact": false
+    }
+   },
+   "lineage": "aaaa"
+  }
+ ]
+}

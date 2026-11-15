@@ -147,7 +147,8 @@ pub(crate) const KERNEL_GATE_PREFLIGHT_GUARDS: &[&str] = &[
 ];
 /// Lane argv mirroring `scripts/kernel_soundness_gate.sh` lane 1.
 pub(crate) const KERNEL_LEAN4_PARITY_LANE_COMMAND: &[&str] = &[
-    "cargo",
+    "targo",
+    "--unverified",
     "test",
     "--locked",
     "--message-format=short",
@@ -162,7 +163,8 @@ pub(crate) const KERNEL_LEAN4_PARITY_LANE_COMMAND: &[&str] = &[
 ];
 /// Lane argv mirroring `scripts/kernel_soundness_gate.sh` lane 2.
 pub(crate) const ELAB_SOUNDNESS_GATE_LANE_COMMAND: &[&str] = &[
-    "cargo",
+    "targo",
+    "--unverified",
     "run",
     "--locked",
     "--message-format=short",
@@ -197,7 +199,8 @@ pub(crate) const KERNEL_SOUNDNESS_EXPECTED_LANES: &[KernelSoundnessLaneExpectati
 pub(crate) const DENY_SORRY_KERNEL_GATE_LANE_COMMAND: &[&str] = &[
     "env",
     "DENY_SORRY=1",
-    "cargo",
+    "targo",
+    "--unverified",
     "test",
     "--locked",
     "--message-format=short",
@@ -210,7 +213,8 @@ pub(crate) const DENY_SORRY_KERNEL_GATE_LANE_COMMAND: &[&str] = &[
 pub(crate) const DENY_SORRY_LEAN4_PARITY_LANE_COMMAND: &[&str] = &[
     "env",
     "DENY_SORRY=1",
-    "cargo",
+    "targo",
+    "--unverified",
     "test",
     "--locked",
     "--message-format=short",
@@ -227,7 +231,8 @@ pub(crate) const DENY_SORRY_LEAN4_PARITY_LANE_COMMAND: &[&str] = &[
 pub(crate) const DENY_SORRY_ELAB_ACCEPT_LANE_COMMAND: &[&str] = &[
     "env",
     "DENY_SORRY=1",
-    "cargo",
+    "targo",
+    "--unverified",
     "test",
     "--locked",
     "--message-format=short",
@@ -243,7 +248,8 @@ pub(crate) const DENY_SORRY_ELAB_ACCEPT_LANE_COMMAND: &[&str] = &[
 pub(crate) const DENY_SORRY_ELAB_REJECT_LANE_COMMAND: &[&str] = &[
     "env",
     "DENY_SORRY=1",
-    "cargo",
+    "targo",
+    "--unverified",
     "test",
     "--locked",
     "--message-format=short",

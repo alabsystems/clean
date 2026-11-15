@@ -17,6 +17,8 @@
 //! - `HygieneState`: Tracks the current scope stack during expansion
 //! - `ScopedName`: An identifier with its associated scopes
 
+use clean_kernel::Name;
+use clean_parser::SurfaceName;
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -57,34 +59,34 @@ impl std::fmt::Display for MacroScope {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ScopedName {
     /// The base identifier name
-    pub name: String,
+    pub name: SurfaceName,
     /// The set of scopes this name was defined in
     pub scopes: BTreeSet<MacroScope>,
 }
 
 impl ScopedName {
     /// Create a new scoped name with no scopes (for user code)
-    pub fn new(name: impl Into<String>) -> Self {
+    pub fn new(name: &SurfaceName) -> Self {
         Self {
-            name: name.into(),
+            name: name.clone(),
             scopes: BTreeSet::new(),
         }
     }
 
     /// Create a scoped name with a single scope
-    pub fn with_scope(name: impl Into<String>, scope: MacroScope) -> Self {
+    pub fn with_scope(name: &SurfaceName, scope: MacroScope) -> Self {
         let mut scopes = BTreeSet::new();
         scopes.insert(scope);
         Self {
-            name: name.into(),
+            name: name.clone(),
             scopes,
         }
     }
 
     /// Create from a name and set of scopes
-    pub fn with_scopes(name: impl Into<String>, scopes: BTreeSet<MacroScope>) -> Self {
+    pub fn with_scopes(name: &SurfaceName, scopes: BTreeSet<MacroScope>) -> Self {
         Self {
-            name: name.into(),
+            name: name.clone(),
             scopes,
         }
     }
@@ -106,15 +108,14 @@ impl ScopedName {
 
     /// Get the "mangled" name that includes scope information
     ///
-    /// This produces a unique string representation suitable for
-    /// use in contexts that don't support scoped names natively.
-    pub fn mangled(&self) -> String {
-        if self.scopes.is_empty() {
-            self.name.clone()
-        } else {
-            let scope_suffix: String = self.scopes.iter().map(|s| format!("_{}", s.0)).collect();
-            format!("{}{}", self.name, scope_suffix)
-        }
+    /// Numeric scope components cannot collide with escaped source strings.
+    /// The original typed prefix and lexical metadata remain intact.
+    pub fn mangled(&self) -> SurfaceName {
+        self.scopes.iter().fold(self.name.clone(), |name, scope| {
+            name.append(&SurfaceName::from_name(
+                Name::anon().str("_macro_scope").num(scope.0),
+            ))
+        })
     }
 
     /// Check if two scoped names would bind to the same identifier
@@ -175,7 +176,7 @@ impl HygieneState {
     }
 
     /// Create a fresh identifier with current scopes
-    pub fn fresh_ident(&mut self, base: &str) -> ScopedName {
+    pub fn fresh_ident(&mut self, base: &SurfaceName) -> ScopedName {
         let scopes = self.current_scopes();
         let name = ScopedName::with_scopes(base, scopes);
         self.introduced_names.push(name.clone());
@@ -183,19 +184,18 @@ impl HygieneState {
     }
 
     /// Create a fresh identifier with a generated unique suffix
-    pub fn gensym(&mut self, prefix: &str) -> ScopedName {
+    pub fn gensym(&mut self, prefix: &SurfaceName) -> ScopedName {
         let scope = self.current_scope().unwrap_or_else(MacroScope::root);
-        let unique_name = format!(
-            "{}_{}_{}",
-            prefix,
-            scope.0,
-            NEXT_SCOPE_ID.fetch_add(1, Ordering::SeqCst)
-        );
-        ScopedName::with_scope(unique_name, scope)
+        let unique_name = prefix.append(&SurfaceName::from_name(
+            Name::anon()
+                .str("_macro_fresh")
+                .num(NEXT_SCOPE_ID.fetch_add(1, Ordering::SeqCst)),
+        ));
+        ScopedName::with_scope(&unique_name, scope)
     }
 
     /// Apply current scopes to an existing name
-    pub(crate) fn apply_scopes(&self, name: &str) -> ScopedName {
+    pub(crate) fn apply_scopes(&self, name: &SurfaceName) -> ScopedName {
         ScopedName::with_scopes(name, self.current_scopes())
     }
 
@@ -247,13 +247,15 @@ impl HygieneContext {
     }
 
     /// Generate a fresh identifier unique to this context
-    pub fn fresh(&mut self, prefix: &str) -> String {
+    pub fn fresh(&mut self, prefix: &SurfaceName) -> SurfaceName {
         self.fresh_counter += 1;
-        format!("{}_{}", prefix, self.fresh_counter)
+        prefix.append(&SurfaceName::from_name(
+            Name::anon().str("_macro_fresh").num(self.fresh_counter),
+        ))
     }
 
     /// Create a scoped name with current context
-    pub(crate) fn scoped_name(&self, name: &str) -> ScopedName {
+    pub(crate) fn scoped_name(&self, name: &SurfaceName) -> ScopedName {
         self.state.apply_scopes(name)
     }
 }
@@ -271,7 +273,7 @@ impl<'a> ScopeGuard<'a> {
     }
 
     /// Create a fresh name in this scope
-    pub fn fresh_name(&mut self, base: &str) -> ScopedName {
+    pub fn fresh_name(&mut self, base: &SurfaceName) -> ScopedName {
         self.ctx.state.fresh_ident(base)
     }
 }
@@ -306,10 +308,10 @@ mod tests {
         let s1 = MacroScope::fresh();
         let s2 = MacroScope::fresh();
 
-        let n1 = ScopedName::with_scope("x", s1);
-        let n2 = ScopedName::with_scope("x", s1);
-        let n3 = ScopedName::with_scope("x", s2);
-        let n4 = ScopedName::with_scope("y", s1);
+        let n1 = ScopedName::with_scope(&SurfaceName::generated_path("x"), s1);
+        let n2 = ScopedName::with_scope(&SurfaceName::generated_path("x"), s1);
+        let n3 = ScopedName::with_scope(&SurfaceName::generated_path("x"), s2);
+        let n4 = ScopedName::with_scope(&SurfaceName::generated_path("y"), s1);
 
         assert!(n1.binds_same_as(&n2)); // Same name, same scope
         assert!(!n1.binds_same_as(&n3)); // Same name, different scope
@@ -319,11 +321,11 @@ mod tests {
     #[test]
     fn test_scoped_name_mangled() {
         let s = MacroScope::fresh();
-        let n1 = ScopedName::new("x");
-        let n2 = ScopedName::with_scope("x", s);
+        let n1 = ScopedName::new(&SurfaceName::generated_path("x"));
+        let n2 = ScopedName::with_scope(&SurfaceName::generated_path("x"), s);
 
-        assert_eq!(n1.mangled(), "x");
-        assert!(n2.mangled().starts_with("x_"));
+        assert_eq!(n1.mangled(), SurfaceName::generated_path("x"));
+        assert!(n2.mangled().to_string().starts_with("x._macro_scope."));
     }
 
     #[test]
@@ -358,12 +360,12 @@ mod tests {
         let mut state = HygieneState::new();
         let s1 = state.push_scope();
 
-        let n1 = state.fresh_ident("x");
+        let n1 = state.fresh_ident(&SurfaceName::generated_path("x"));
         assert!(n1.has_scope(s1));
-        assert_eq!(n1.name, "x");
+        assert_eq!(n1.name, SurfaceName::generated_path("x"));
 
         let s2 = state.push_scope();
-        let n2 = state.fresh_ident("x");
+        let n2 = state.fresh_ident(&SurfaceName::generated_path("x"));
         assert!(n2.has_scope(s1));
         assert!(n2.has_scope(s2));
 
@@ -389,12 +391,12 @@ mod tests {
     #[test]
     fn test_hygiene_context_fresh() {
         let mut ctx = HygieneContext::new();
-        let f1 = ctx.fresh("temp");
-        let f2 = ctx.fresh("temp");
+        let f1 = ctx.fresh(&SurfaceName::generated_path("temp"));
+        let f2 = ctx.fresh(&SurfaceName::generated_path("temp"));
 
         assert_ne!(f1, f2);
-        assert!(f1.starts_with("temp_"));
-        assert!(f2.starts_with("temp_"));
+        assert!(f1.to_string().starts_with("temp."));
+        assert!(f2.to_string().starts_with("temp."));
     }
 
     #[test]
@@ -402,8 +404,8 @@ mod tests {
         let mut state = HygieneState::new();
         let _ = state.push_scope();
 
-        let g1 = state.gensym("_x");
-        let g2 = state.gensym("_x");
+        let g1 = state.gensym(&SurfaceName::generated_path("_x"));
+        let g2 = state.gensym(&SurfaceName::generated_path("_x"));
 
         assert_ne!(g1.name, g2.name);
         assert_ne!(g1.mangled(), g2.mangled());
@@ -412,7 +414,7 @@ mod tests {
     #[test]
     fn test_scoped_name_display() {
         let s1 = MacroScope::fresh();
-        let n = ScopedName::with_scope("foo", s1);
+        let n = ScopedName::with_scope(&SurfaceName::generated_path("foo"), s1);
         let displayed = format!("{n}");
         assert!(displayed.contains("foo"));
         assert!(displayed.contains('@'));

@@ -1,0 +1,22 @@
+{
+  "archive": "crates/clean-olean/tests/fixtures/kernel_arena/round-2026-09/lean-arena-round-2026-09-tests.tar.gz",
+  "archive_sha256": "98a69742b538296c5f413d0527dfeef8c4d1815fe64b12c8623cd33de63bee0d",
+  "member": "good/init-prelude.ndjson",
+  "sha256": "fc440bd35aa4ecb244836eef0c2e31c578ac4460f42665f4e8305cbc2cd2104d",
+  "meta": {
+    "meta": {
+      "exporter": {
+        "name": "lean4export",
+        "version": "3.1.0"
+      },
+      "format": {
+        "version": "3.1.0"
+      },
+      "lean": {
+        "githash": "f72c35b3f637c8c6571d353742168ab66cc22c00",
+        "version": "4.29.1"
+      }
+    }
+  },
+  "purpose": "Pinned good standard-library declarations; full signatures, bodies and dependency closure checked before native fold licensing. No trust in incoming version metadata."
+}

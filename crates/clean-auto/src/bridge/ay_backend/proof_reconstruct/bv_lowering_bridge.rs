@@ -1013,7 +1013,7 @@ pub fn certify_lowering_by_reflection(
 /// # Errors
 /// [`BvComputeBlastError`] if a clause proof is malformed or the kernel rejects the
 /// assembled `allSat` term (open in the negated-goal fvar for the disequality clause).
-pub fn build_and_check_all_sat(
+pub(crate) fn build_and_check_all_sat(
     env: &mut Environment,
     proof: &BvBlastProof,
     lhs: &Expr,

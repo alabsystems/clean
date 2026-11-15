@@ -131,11 +131,11 @@ fn test_split_goal_mismatch() {
 /// Locate a goal by exact tag and swap it to the front, mirroring the exact-tag
 /// lookup in `compound_case` (`builtins_compound.rs`). Returns whether a goal
 /// with that tag was found and focused.
-fn focus_by_tag(state: &mut ProofState, tag: &str) -> bool {
+fn focus_by_tag(state: &mut ProofState, tag: &'static str) -> bool {
     match state
         .goals
         .iter()
-        .position(|g| g.tag.as_deref() == Some(tag))
+        .position(|g| g.tag.as_ref().map(|name| name.name()) == Some(&Name::from_string(tag)))
     {
         Some(i) => {
             state.goals.swap(0, i);
@@ -160,13 +160,13 @@ fn test_constructor_on_and_tags_subgoals_left_right() {
 
     assert_eq!(state.goals().len(), 2, "expected two subgoals");
     assert_eq!(
-        state.goals()[0].tag.as_deref(),
-        Some("left"),
+        state.goals()[0].tag.as_ref().map(|name| name.name()),
+        Some(&Name::from_string("left")),
         "first And subgoal must be tagged `left` (And.intro's first field)"
     );
     assert_eq!(
-        state.goals()[1].tag.as_deref(),
-        Some("right"),
+        state.goals()[1].tag.as_ref().map(|name| name.name()),
+        Some(&Name::from_string("right")),
         "second And subgoal must be tagged `right` (And.intro's second field)"
     );
 
@@ -265,13 +265,13 @@ fn test_constructor_on_iff_tags_subgoals_mp_mpr() {
 
     assert_eq!(state.goals().len(), 2, "expected two Iff subgoals");
     assert_eq!(
-        state.goals()[0].tag.as_deref(),
-        Some("mp"),
+        state.goals()[0].tag.as_ref().map(|name| name.name()),
+        Some(&Name::from_string("mp")),
         "first Iff subgoal must be tagged `mp` (Iff.intro's first field)"
     );
     assert_eq!(
-        state.goals()[1].tag.as_deref(),
-        Some("mpr"),
+        state.goals()[1].tag.as_ref().map(|name| name.name()),
+        Some(&Name::from_string("mpr")),
         "second Iff subgoal must be tagged `mpr` (Iff.intro's second field)"
     );
 
@@ -468,8 +468,9 @@ fn test_exfalso_then_exact_proves_goal() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: false_type.clone(),
             value: None,
         }],
@@ -516,8 +517,9 @@ fn test_contradiction_with_false_hyp() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: false_type,
             value: None,
         }],
@@ -546,14 +548,16 @@ fn test_contradiction_with_p_and_not_p() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: p_type,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: not_p_type,
                 value: None,
             },
@@ -579,8 +583,9 @@ fn test_contradiction_no_contradiction_fails() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: p_type,
             value: None,
         }],
@@ -602,18 +607,22 @@ fn test_by_contra_introduces_negation() {
     let mut state = ProofState::new(env, target.clone());
 
     // by_contra h
-    by_contra(&mut state, "h").unwrap();
+    by_contra(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Goal should be False
     let false_type = Expr::const_(Name::from_string("False"), vec![]);
     assert_eq!(state.goals().len(), 1);
     assert_eq!(state.goals()[0].target, false_type);
 
-    // Local context should have h : P → False
+    // Local context should have h : ¬P, with the `Not` head Mathlib's
+    // `by_contra h` states (simp reads a negation off that head only).
     let goal = &state.goals()[0];
     assert_eq!(goal.local_ctx.len(), 1);
-    assert_eq!(goal.local_ctx[0].name, "h");
-    let expected_neg = Expr::pi(BinderInfo::Default, target, false_type);
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("h")
+    );
+    let expected_neg = Expr::app(Expr::const_(Name::from_string("Not"), vec![]), target);
     assert_eq!(goal.local_ctx[0].ty, expected_neg);
 }
 
@@ -628,15 +637,16 @@ fn test_by_contra_then_contradiction() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p_type,
             value: None,
         }],
     );
 
     // by_contra h introduces h : P → False
-    by_contra(&mut state, "h").unwrap();
+    by_contra(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Now we have hp : P and h : P → False, so contradiction should work
     contradiction(&mut state).unwrap();
@@ -664,7 +674,7 @@ fn test_by_contra_no_classical_fails() {
     let target = Expr::const_(Name::from_string("P"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = by_contra(&mut state, "h");
+    let result = by_contra(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(result.is_err(), "by_contra without Classical should fail");
 }
 
@@ -870,7 +880,12 @@ fn test_by_cases_creates_two_goals() {
 
     // by_cases h : Q
     let prop = Expr::const_(Name::from_string("Q"), vec![]);
-    by_cases(&mut state, "h", prop.clone()).unwrap();
+    by_cases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        prop.clone(),
+    )
+    .unwrap();
 
     // Should have two goals
     assert_eq!(state.goals().len(), 2);
@@ -881,14 +896,21 @@ fn test_by_cases_creates_two_goals() {
 
     // First goal should have h : Q
     assert_eq!(state.goals()[0].local_ctx.len(), 1);
-    assert_eq!(state.goals()[0].local_ctx[0].name, "h");
+    assert_eq!(
+        state.goals()[0].local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("h")
+    );
     assert_eq!(state.goals()[0].local_ctx[0].ty, prop);
 
-    // Second goal should have h : ¬Q (Q → False)
+    // Second goal should have h : ¬Q, with the `Not` head as Lean states it
+    // (pinned Lean 4.8.0 and v4.30.0-rc2, 2026-11-13: in that branch
+    // `simp only [h]` closes `Q = False`, which a local `Q → False` cannot).
     assert_eq!(state.goals()[1].local_ctx.len(), 1);
-    assert_eq!(state.goals()[1].local_ctx[0].name, "h");
-    let false_type = Expr::const_(Name::from_string("False"), vec![]);
-    let neg_q = Expr::pi(BinderInfo::Default, prop, false_type);
+    assert_eq!(
+        state.goals()[1].local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("h")
+    );
+    let neg_q = Expr::app(Expr::const_(Name::from_string("Not"), vec![]), prop);
     assert_eq!(state.goals()[1].local_ctx[0].ty, neg_q);
 }
 
@@ -902,8 +924,9 @@ fn test_by_cases_then_assumption() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hq".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hq"),
             ty: Expr::const_(Name::from_string("Q"), vec![]),
             value: None,
         }],
@@ -912,7 +935,7 @@ fn test_by_cases_then_assumption() {
     // by_cases h : Q
     by_cases(
         &mut state,
-        "h",
+        &clean_parser::SurfaceName::generated_path("h"),
         Expr::const_(Name::from_string("Q"), vec![]),
     )
     .unwrap();
@@ -920,7 +943,11 @@ fn test_by_cases_then_assumption() {
     // In positive case (h : Q), we can use h directly
     // Note: The positive hypothesis is added with a new fvar
     let pos_ctx = &state.goals()[0].local_ctx;
-    let h_fvar = pos_ctx.iter().find(|d| d.name == "h").unwrap().fvar;
+    let h_fvar = pos_ctx
+        .iter()
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
+        .unwrap()
+        .fvar;
     exact(&mut state, Expr::fvar(h_fvar)).unwrap();
 
     // In negative case, we still have hq : Q from original context
@@ -958,7 +985,7 @@ fn test_by_cases_no_classical_fails() {
 
     let result = by_cases(
         &mut state,
-        "h",
+        &clean_parser::SurfaceName::generated_path("h"),
         Expr::const_(Name::from_string("Q"), vec![]),
     );
     assert!(result.is_err(), "by_cases without Classical should fail");

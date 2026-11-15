@@ -25,8 +25,9 @@ fn contradictory_nat_le_false_state() -> ProofState {
         Environment::with_prelude(),
         false_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -45,20 +46,23 @@ fn synthetic_row_source_state() -> ProofState {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_id,
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hc_id,
-                name: "hc".into(),
+                name: clean_parser::SurfaceName::generated_path("hc"),
                 ty: make_nat_le_tc(Expr::nat_lit(0), Expr::nat_lit(2)),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hx_id,
-                name: "hx".into(),
+                name: clean_parser::SurfaceName::generated_path("hx"),
                 ty: make_nat_le_tc(Expr::fvar(x_id), Expr::nat_lit(0)),
                 value: None,
             },
@@ -91,20 +95,23 @@ fn goal_derived_synthetic_row_state() -> ProofState {
         nat_lt_tc(Expr::nat_lit(0), Expr::fvar(x_id)),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_id,
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hc_id,
-                name: "hc".into(),
+                name: clean_parser::SurfaceName::generated_path("hc"),
                 ty: make_nat_le_tc(Expr::nat_lit(0), Expr::nat_lit(2)),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hx_id,
-                name: "hx".into(),
+                name: clean_parser::SurfaceName::generated_path("hx"),
                 ty: make_nat_le_tc(
                     Expr::nat_lit(1),
                     nat_mul(Expr::nat_lit(2), Expr::fvar(x_id)),
@@ -127,20 +134,23 @@ fn affine_synthetic_row_source_state() -> ProofState {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_id,
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hc_id,
-                name: "hc".into(),
+                name: clean_parser::SurfaceName::generated_path("hc"),
                 ty: make_nat_le_tc(Expr::nat_lit(0), Expr::nat_lit(3)),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hx_id,
-                name: "hx".into(),
+                name: clean_parser::SurfaceName::generated_path("hx"),
                 ty: make_nat_le_tc(
                     Expr::nat_lit(1),
                     nat_add(Expr::fvar(x_id), Expr::nat_lit(2)),
@@ -495,14 +505,16 @@ fn test_nlinarith_with_config_without_witness_fails_closed_without_trusted_arith
         nat_lt_tc(Expr::nat_lit(0), Expr::fvar(x_id)),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_id,
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: hc_id,
-                name: "hc".into(),
+                name: clean_parser::SurfaceName::generated_path("hc"),
                 ty: make_nat_le_tc(Expr::nat_lit(0), Expr::nat_lit(2)),
                 value: None,
             },

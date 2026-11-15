@@ -1,0 +1,11 @@
+fn @<clean_kernel::expr::types::AppArgsIter<'_> as core::iter::traits::iterator::Iterator>::size_hint::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>(functy.494) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: ptr):
+    %1 = const usize 0
+    %2 = undef enum.33  ; #proof: fresh_symbolic_havoc
+    %3 = undef (usize, enum.33)  ; #proof: fresh_symbolic_havoc
+    %4 = insertfield (usize, enum.33) %3, 0, %1
+    %5 = insertfield (usize, enum.33) %4, 1, %2
+    ret %5
+}

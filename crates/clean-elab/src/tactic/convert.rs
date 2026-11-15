@@ -7,10 +7,12 @@
 //! Provides tactics for converting between equivalent forms.
 //! Calc chain tactics are in calc.rs (split for file size, #2154).
 
+use super::pattern::names::local_name_matches;
 use crate::unify::MetaState;
 use clean_kernel::expr::ExprKind;
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, Level};
+use clean_parser::SurfaceName;
 
 use super::equality::match_equality;
 use super::ring::make_eq;
@@ -130,7 +132,8 @@ fn convert_with_subgoals(
                     meta_id,
                     target: subgoal_target,
                     local_ctx: goal.local_ctx.clone(),
-                    tag: None,
+                    case_binders: goal.case_binders.clone(),
+                    tag: goal.tag.clone(),
                 });
             }
             (true, false) => {
@@ -162,7 +165,8 @@ fn convert_with_subgoals(
                     meta_id,
                     target: subgoal_target,
                     local_ctx: goal.local_ctx.clone(),
-                    tag: None,
+                    case_binders: goal.case_binders.clone(),
+                    tag: goal.tag.clone(),
                 });
             }
             (false, false) => {
@@ -210,13 +214,15 @@ fn convert_with_subgoals(
                     meta_id: meta_rhs,
                     target: rhs_subgoal,
                     local_ctx: goal.local_ctx.clone(),
-                    tag: None,
+                    case_binders: goal.case_binders.clone(),
+                    tag: goal.tag.clone(),
                 });
                 state.goals.push_front(Goal {
                     meta_id: meta_lhs,
                     target: lhs_subgoal,
                     local_ctx: goal.local_ctx.clone(),
-                    tag: None,
+                    case_binders: goal.case_binders.clone(),
+                    tag: goal.tag.clone(),
                 });
             }
         }
@@ -278,21 +284,23 @@ fn convert_with_subgoals(
         meta_id: eq_meta_id,
         target: eq_goal,
         local_ctx: goal.local_ctx.clone(),
-        tag: None,
+        case_binders: goal.case_binders.clone(),
+        tag: goal.tag.clone(),
     });
 
     Ok(())
 }
 
 /// `convert` using a named hypothesis from context
-pub fn convert_hyp(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn convert_hyp(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
 
     // Find hypothesis
     let decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
     let proof_term = Expr::fvar(decl.fvar);

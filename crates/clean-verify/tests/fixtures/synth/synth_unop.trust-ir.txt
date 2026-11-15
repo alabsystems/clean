@@ -1,11 +1,11 @@
+; synthetic: SYNTHETIC MODULE -- authored for the W2a semdiff lane
+; synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2a).
+; synthetic: No compiler emitted this body; its registered Clean twin is
+; synthetic: ir_w2a_uo_module (eval_ir_w2a_synth.rs). Width 8 is a measured
+; synthetic: kernel-cost bound: ir_nat_ctpop walks its operand's unary
+; synthetic: magnitude, and a width-32 complement is the bvar_in_range
+; synthetic: five-day class. Do not add it to any emitted-fixture census.
 fn @synth::unop_probe(functy.914) {
-    ; #synthetic: SYNTHETIC MODULE -- authored for the W2a semdiff lane
-    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2a).
-    ; #synthetic: No compiler emitted this body; its registered Clean twin is
-    ; #synthetic: ir_w2a_uo_module (eval_ir_w2a_synth.rs). Width 8 is a measured
-    ; #synthetic: kernel-cost bound: ir_nat_ctpop walks its operand's unary
-    ; #synthetic: magnitude, and a width-32 complement is the bvar_in_range
-    ; #synthetic: five-day class. Do not add it to any emitted-fixture census.
 bb0(%0: u8):
     %1 = not u8 %0
     %2 = ctpop u8 %1

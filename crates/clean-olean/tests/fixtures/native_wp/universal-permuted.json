@@ -1,0 +1,1035 @@
+{
+  "origin": "explicit shared-IR calculus fixture, not compiler output",
+  "fixture": "permuted",
+  "original_module_bytes": [
+    84,
+    82,
+    85,
+    83,
+    84,
+    95,
+    73,
+    82,
+    38,
+    0,
+    0,
+    0,
+    2,
+    24,
+    115,
+    101,
+    109,
+    114,
+    95,
+    98,
+    111,
+    111,
+    108,
+    101,
+    97,
+    110,
+    95,
+    119,
+    112,
+    95,
+    98,
+    114,
+    97,
+    110,
+    99,
+    104,
+    101,
+    115,
+    6,
+    99,
+    104,
+    111,
+    111,
+    115,
+    101,
+    0,
+    1,
+    3,
+    12,
+    12,
+    12,
+    1,
+    12,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    1,
+    0,
+    0,
+    4,
+    0,
+    3,
+    0,
+    12,
+    1,
+    12,
+    2,
+    12,
+    1,
+    16,
+    0,
+    1,
+    2,
+    2,
+    1,
+    2,
+    2,
+    2,
+    1,
+    0,
+    0,
+    0,
+    0,
+    0,
+    1,
+    2,
+    3,
+    12,
+    4,
+    12,
+    1,
+    15,
+    3,
+    1,
+    4,
+    0,
+    0,
+    0,
+    0,
+    0,
+    2,
+    2,
+    5,
+    12,
+    6,
+    12,
+    1,
+    15,
+    3,
+    1,
+    5,
+    0,
+    0,
+    0,
+    0,
+    0,
+    3,
+    1,
+    7,
+    12,
+    1,
+    20,
+    1,
+    7,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "bundle": {
+    "schema_version": 8,
+    "producer": "TrustIr",
+    "input": "TrustIrModule",
+    "provenance": {
+      "producer_version": "unknown",
+      "source_language": "TrustIr",
+      "source_languages": [
+        "Unknown",
+        "TrustIr"
+      ],
+      "source_artifact": "explicit-calculus/permuted.tirb",
+      "source_digest": {
+        "algorithm": "Sha256",
+        "bytes": [
+          138,
+          93,
+          59,
+          56,
+          222,
+          57,
+          39,
+          129,
+          117,
+          184,
+          156,
+          71,
+          117,
+          8,
+          100,
+          107,
+          6,
+          232,
+          69,
+          193,
+          64,
+          213,
+          158,
+          35,
+          149,
+          139,
+          179,
+          2,
+          156,
+          161,
+          246,
+          243
+        ]
+      }
+    },
+    "serialization": {
+      "schema_version": 8,
+      "canonical_order": true,
+      "sort_unordered_sets": true,
+      "messagepack_named_fields": true,
+      "unknown_fields": "Reject"
+    },
+    "diagnostics": {
+      "level": "Info",
+      "include_source_spans": true,
+      "include_lineage": true,
+      "emit_counterexamples": true,
+      "emit_unsat_cores": true,
+      "emit_proof_traces": false,
+      "max_counterexamples": 1
+    },
+    "trust_ir_module_digest": {
+      "algorithm": "Sha256",
+      "bytes": [
+        236,
+        47,
+        144,
+        216,
+        76,
+        209,
+        127,
+        69,
+        122,
+        123,
+        172,
+        213,
+        196,
+        161,
+        85,
+        82,
+        12,
+        244,
+        215,
+        22,
+        43,
+        122,
+        0,
+        98,
+        254,
+        29,
+        19,
+        111,
+        86,
+        5,
+        60,
+        228
+      ]
+    },
+    "compiler_facts": {
+      "obligation_sources": [
+        {
+          "obligation": 0,
+          "public_obligation_id": "vc:trust-wp:postcondition:0",
+          "function": 0,
+          "span": {
+            "file": 0,
+            "line": 1,
+            "col": 1
+          },
+          "assertion_id": 0,
+          "cause": "Postcondition"
+        }
+      ]
+    },
+    "module": {
+      "name": "semr_boolean_wp_branches",
+      "functions": [
+        {
+          "id": 0,
+          "name": "choose",
+          "ty": 0,
+          "entry": 0,
+          "blocks": [
+            {
+              "id": 0,
+              "params": [
+                [
+                  0,
+                  "Bool"
+                ],
+                [
+                  1,
+                  "Bool"
+                ],
+                [
+                  2,
+                  "Bool"
+                ]
+              ],
+              "body": [
+                {
+                  "inst": {
+                    "CondBr": {
+                      "cond": 0,
+                      "then_target": 1,
+                      "then_args": [
+                        2,
+                        1
+                      ],
+                      "else_target": 2,
+                      "else_args": [
+                        2,
+                        1
+                      ]
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            },
+            {
+              "id": 1,
+              "params": [
+                [
+                  3,
+                  "Bool"
+                ],
+                [
+                  4,
+                  "Bool"
+                ]
+              ],
+              "body": [
+                {
+                  "inst": {
+                    "Br": {
+                      "target": 3,
+                      "args": [
+                        4
+                      ]
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            },
+            {
+              "id": 2,
+              "params": [
+                [
+                  5,
+                  "Bool"
+                ],
+                [
+                  6,
+                  "Bool"
+                ]
+              ],
+              "body": [
+                {
+                  "inst": {
+                    "Br": {
+                      "target": 3,
+                      "args": [
+                        5
+                      ]
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            },
+            {
+              "id": 3,
+              "params": [
+                [
+                  7,
+                  "Bool"
+                ]
+              ],
+              "body": [
+                {
+                  "inst": {
+                    "Return": {
+                      "values": [
+                        7
+                      ]
+                    }
+                  },
+                  "results": [],
+                  "proofs": [],
+                  "span": null,
+                  "proof_context": null
+                }
+              ]
+            }
+          ],
+          "proofs": [],
+          "calling_conv": "C",
+          "linkage": "External",
+          "attrs": {
+            "readonly": false,
+            "readnone": false,
+            "inlinehint": false,
+            "cold": false,
+            "params": [],
+            "naked": false,
+            "target_features": []
+          },
+          "summary": null,
+          "producer": null,
+          "value_names": null,
+          "scopes": null,
+          "source_provenance": null,
+          "body_gate": null,
+          "display_path": null,
+          "section": null,
+          "visibility": "Default"
+        }
+      ],
+      "structs": [],
+      "enums": [],
+      "records": [],
+      "closure_types": [],
+      "globals": [],
+      "func_types": [
+        {
+          "params": [
+            "Bool",
+            "Bool",
+            "Bool"
+          ],
+          "returns": [
+            "Bool"
+          ],
+          "is_vararg": false
+        }
+      ],
+      "types": [],
+      "proof_obligations": [
+        {
+          "id": 0,
+          "kind": "Postcondition",
+          "status": "Pending",
+          "description": "explicit shared-IR calculus postcondition",
+          "formula": {
+            "schema": "trust-wp.pure-expr.v1",
+            "payload": "((c : bool) && ((r : bool) == (l : bool))) || (!(c : bool) && ((r : bool) == (q : bool)))",
+            "smtlib": null,
+            "sort": null,
+            "bindings": [
+              [
+                "c",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "Param": {
+                      "index": 0
+                    }
+                  }
+                }
+              ],
+              [
+                "l",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "Param": {
+                      "index": 1
+                    }
+                  }
+                }
+              ],
+              [
+                "q",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "Param": {
+                      "index": 2
+                    }
+                  }
+                }
+              ],
+              [
+                "r",
+                {
+                  "sort": "Bool",
+                  "place": {
+                    "ResultSlot": {
+                      "index": 0
+                    }
+                  }
+                }
+              ]
+            ]
+          },
+          "function": 0,
+          "source": {
+            "source_id": "explicit-calculus:permuted:choose",
+            "assertion_id": "assertion:0",
+            "range": null,
+            "public": {
+              "obligation_id": "vc:trust-wp:postcondition:0",
+              "semantic_digest": {
+                "algorithm": "Sha256",
+                "bytes": [
+                  107,
+                  22,
+                  142,
+                  17,
+                  27,
+                  81,
+                  138,
+                  175,
+                  202,
+                  82,
+                  2,
+                  89,
+                  93,
+                  64,
+                  13,
+                  153,
+                  17,
+                  100,
+                  17,
+                  91,
+                  159,
+                  67,
+                  165,
+                  154,
+                  167,
+                  196,
+                  119,
+                  45,
+                  73,
+                  59,
+                  38,
+                  144
+                ]
+              }
+            }
+          },
+          "site": null
+        }
+      ],
+      "proof_certificates": [],
+      "target_info": null,
+      "files": [],
+      "obligation_diagnostics": [],
+      "spec_modules": [],
+      "universes": [],
+      "predicates": [],
+      "global_asm": [],
+      "imports": [],
+      "tuple_layouts": [],
+      "completeness": null,
+      "drop_glue": []
+    },
+    "lineage": {
+      "schema_version": 2,
+      "nodes": [
+        {
+          "id": 0,
+          "transform": {
+            "stage": "SolverAdapter",
+            "name": "attach-source-postcondition",
+            "producer": "explicit-calculus-fixture",
+            "version": "1"
+          },
+          "source_module": {
+            "algorithm": "Sha256",
+            "bytes": [
+              35,
+              80,
+              252,
+              114,
+              41,
+              163,
+              168,
+              234,
+              95,
+              135,
+              205,
+              224,
+              105,
+              53,
+              71,
+              252,
+              53,
+              38,
+              32,
+              63,
+              125,
+              90,
+              182,
+              202,
+              227,
+              158,
+              152,
+              188,
+              80,
+              1,
+              184,
+              9
+            ]
+          },
+          "target_module": {
+            "algorithm": "Sha256",
+            "bytes": [
+              236,
+              47,
+              144,
+              216,
+              76,
+              209,
+              127,
+              69,
+              122,
+              123,
+              172,
+              213,
+              196,
+              161,
+              85,
+              82,
+              12,
+              244,
+              215,
+              22,
+              43,
+              122,
+              0,
+              98,
+              254,
+              29,
+              19,
+              111,
+              86,
+              5,
+              60,
+              228
+            ]
+          },
+          "obligations": [
+            0
+          ],
+          "certificates": [],
+          "replay": null
+        }
+      ],
+      "roots": [
+        0
+      ]
+    },
+    "requests": [
+      {
+        "TrustWp": {
+          "id": 7,
+          "mode": "WeakestPrecondition",
+          "function": 0,
+          "obligations": [
+            0
+          ],
+          "lineage_roots": [
+            0
+          ],
+          "options": {
+            "heap_model": "RustBorrowGraph",
+            "loop_strategy": "RequireInvariants",
+            "frame_policy": "BorrowRegions",
+            "panic_semantics": "PanicFreeRequired",
+            "max_abduced_preconditions": 8,
+            "emit_verification_conditions": true
+          },
+          "diagnostics": {
+            "level": "Info",
+            "include_source_spans": true,
+            "include_lineage": true,
+            "emit_counterexamples": true,
+            "emit_unsat_cores": true,
+            "emit_proof_traces": false,
+            "max_counterexamples": 1
+          },
+          "provenance": {
+            "verifier_suite": "TrustWp",
+            "expected_verifier": {
+              "name": "trust-wp",
+              "version": "native-schema-v2",
+              "revision": "0cbaad5b"
+            },
+            "solvers": [
+              {
+                "name": "ay",
+                "version": "0.9.0",
+                "revision": "solver-rev",
+                "digest": {
+                  "algorithm": "Sha256",
+                  "bytes": [
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102,
+                    102
+                  ]
+                }
+              }
+            ],
+            "replay": {
+              "engine": "trust-wp",
+              "invocation": "explicit shared-IR Boolean branch fixture",
+              "transcript_digest": {
+                "algorithm": "Sha256",
+                "bytes": [
+                  35,
+                  80,
+                  252,
+                  114,
+                  41,
+                  163,
+                  168,
+                  234,
+                  95,
+                  135,
+                  205,
+                  224,
+                  105,
+                  53,
+                  71,
+                  252,
+                  53,
+                  38,
+                  32,
+                  63,
+                  125,
+                  90,
+                  182,
+                  202,
+                  227,
+                  158,
+                  152,
+                  188,
+                  80,
+                  1,
+                  184,
+                  9
+                ]
+              }
+            }
+          }
+        }
+      }
+    ]
+  },
+  "requests": [
+    {
+      "api_version": "trust-wp.verify-bundle.v1",
+      "bundle_id": "trust-wp.trust-ir-body-wp.v1:trust-ir-native:semr_boolean_wp_branches:trust-wp:7",
+      "producer": {
+        "name": "TrustIr",
+        "version": "trust-ir-native-schema-8",
+        "revision": "sha256:ec2f90d84cd17f457a7bacd5c4a155520cf4d7162b7a0062fe1d136f56053ce4"
+      },
+      "target": {
+        "crate_name": "semr_boolean_wp_branches",
+        "package_name": null,
+        "target_triple": null
+      },
+      "obligations": [
+        {
+          "id": "trust-ir-r7-proof-0",
+          "kind": "postcondition",
+          "function": "choose",
+          "location": {
+            "file": "trust-ir://file/0",
+            "line": 1,
+            "column": 1
+          },
+          "metadata": {
+            "native_origin": {
+              "schema": "tmir.native-verification-bundle.v8",
+              "mode": "weakest_precondition",
+              "request_id": 7,
+              "function_id": 0,
+              "obligation_id": 0,
+              "lineage_roots": [
+                0
+              ],
+              "tmir_module_digest": {
+                "algorithm": "sha256",
+                "value": "ec2f90d84cd17f457a7bacd5c4a155520cf4d7162b7a0062fe1d136f56053ce4"
+              }
+            },
+            "tmir_source_span": {
+              "file_id": 0,
+              "line": 1,
+              "column": 1
+            },
+            "native_verifier": {
+              "name": "trust-wp",
+              "version": "native-schema-v2",
+              "revision": "0cbaad5b"
+            },
+            "native_replay": {
+              "engine": "trust-wp",
+              "invocation": "explicit shared-IR Boolean branch fixture",
+              "transcript_digest": {
+                "algorithm": "sha256",
+                "value": "2350fc7229a3a8ea5f87cde0693547fc3526203f7d5ab6cae39e98bc5001b809"
+              }
+            },
+            "native_solvers": [
+              {
+                "name": "ay",
+                "version": "0.9.0",
+                "revision": "solver-rev",
+                "digest": {
+                  "algorithm": "sha256",
+                  "value": "6666666666666666666666666666666666666666666666666666666666666666"
+                }
+              }
+            ],
+            "tmir_obligation_source": {
+              "cause": "postcondition",
+              "function_id": 0,
+              "assertion_id": 0,
+              "compiler_fact_refs": []
+            },
+            "proof_context": {
+              "assumptions": [],
+              "assertions": []
+            }
+          },
+          "claim": {
+            "format": "trust_formula_v1",
+            "payload": "{\"schema\":\"trust-wp.trust-formula.v1\",\"variables\":[{\"name\":\"__trust_wp_body_v0\",\"sort\":\"bool\"},{\"name\":\"__trust_wp_body_v1\",\"sort\":\"bool\"},{\"name\":\"__trust_wp_body_v2\",\"sort\":\"bool\"}],\"body\":{\"op\":\"and\",\"lhs\":{\"op\":\"implies\",\"lhs\":{\"var\":\"__trust_wp_body_v0\"},\"rhs\":{\"op\":\"or\",\"lhs\":{\"op\":\"and\",\"lhs\":{\"var\":\"__trust_wp_body_v0\"},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v1\"},\"rhs\":{\"var\":\"__trust_wp_body_v1\"}}},\"rhs\":{\"op\":\"and\",\"lhs\":{\"op\":\"not\",\"expr\":{\"var\":\"__trust_wp_body_v0\"}},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v1\"},\"rhs\":{\"var\":\"__trust_wp_body_v2\"}}}}},\"rhs\":{\"op\":\"implies\",\"lhs\":{\"op\":\"not\",\"expr\":{\"var\":\"__trust_wp_body_v0\"}},\"rhs\":{\"op\":\"or\",\"lhs\":{\"op\":\"and\",\"lhs\":{\"var\":\"__trust_wp_body_v0\"},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v2\"},\"rhs\":{\"var\":\"__trust_wp_body_v1\"}}},\"rhs\":{\"op\":\"and\",\"lhs\":{\"op\":\"not\",\"expr\":{\"var\":\"__trust_wp_body_v0\"}},\"rhs\":{\"op\":\"eq\",\"lhs\":{\"var\":\"__trust_wp_body_v2\"},\"rhs\":{\"var\":\"__trust_wp_body_v2\"}}}}}}}",
+            "digest": null
+          },
+          "summary_facts": []
+        }
+      ],
+      "options": {
+        "require_proof_evidence": true,
+        "timeout_ms": null
+      }
+    }
+  ],
+  "results": [
+    {
+      "api_version": "trust-wp.verify-bundle.v1",
+      "bundle_id": "trust-wp.trust-ir-body-wp.v1:trust-ir-native:semr_boolean_wp_branches:trust-wp:7",
+      "status": "verified",
+      "aggregate_evidence": {
+        "schema_version": "trust-wp.proof-evidence.v1",
+        "producer": "trust-wp-core.verify_bundle",
+        "format": "trust_wp_verify_bundle_aggregate_v1",
+        "strength": "sound",
+        "digest": {
+          "algorithm": "sha256",
+          "value": "61a53afe8ddbc9eb2e0a866d11ddf0b0f53fdce9f0cf78f69c3f49eb85edeb40"
+        },
+        "artifacts": [
+          {
+            "schema_version": "trust-wp.proof-evidence.v1",
+            "id": "trust-wp.proof-evidence.v1/artifact/request-digest/sha256/e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e",
+            "kind": "request_digest",
+            "digest": {
+              "algorithm": "sha256",
+              "value": "e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e"
+            },
+            "description": "canonical verify-bundle request digest",
+            "inline_bytes": {
+              "encoding": "utf8",
+              "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nrequest.api=hex:74727573742d77702e7665726966792d62756e646c652e7631\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f626f6f6c65616e5f77705f6272616e636865733a74727573742d77703a37\nproducer.name=hex:54727573744972\nproducer.version=hex:74727573742d69722d6e61746976652d736368656d612d38\nproducer.revision=hex:7368613235363a65633266393064383463643137663435376137626163643563346131353535323063663464373136326237613030363266653164313336663536303533636534\ntarget.crate=hex:73656d725f626f6f6c65616e5f77705f6272616e63686573\ntarget.package=none\ntarget.triple=none\noptions.require-proof-evidence=true\noptions.timeout-ms=none\nobligation-count=1\nobligation.0.id=hex:74727573742d69722d72372d70726f6f662d30\nobligation.0.kind=hex:706f7374636f6e646974696f6e\nobligation.0.function=hex:63686f6f7365\nobligation.0.location.file=hex:74727573742d69723a2f2f66696c652f30\nobligation.0.location.line=1\nobligation.0.location.column=1\nobligation.0.native-origin=schema=hex:746d69722e6e61746976652d766572696669636174696f6e2d62756e646c652e7638;mode=weakest_precondition;request=7;function=0;obligation=0;lineage-roots=0;tmir-digest=sha256:ec2f90d84cd17f457a7bacd5c4a155520cf4d7162b7a0062fe1d136f56053ce4\nobligation.0.tmir-source-span=file-id=0;line=1;column=1\nobligation.0.native-verifier=name=hex:74727573742d7770;version=hex:6e61746976652d736368656d612d7632;revision=hex:3063626161643562;digest=none\nobligation.0.native-replay=engine=hex:74727573742d7770;invocation=hex:6578706c69636974207368617265642d495220426f6f6c65616e206272616e63682066697874757265;transcript=sha256:2350fc7229a3a8ea5f87cde0693547fc3526203f7d5ab6cae39e98bc5001b809\nobligation.0.native-solvers=0:name=hex:6179;version=hex:302e392e30;revision=hex:736f6c7665722d726576;digest=sha256:6666666666666666666666666666666666666666666666666666666666666666\nobligation.0.tmir-obligation-source=cause=hex:706f7374636f6e646974696f6e;function=0;assertion=0;monomorphization=none;facts=hex:6e6f6e65\nobligation.0.proof-context.assumptions=0\nobligation.0.proof-context.assertions=0\nobligation.0.proof-context-digest=none\nobligation.0.claim-format=hex:5472757374466f726d756c615631\nobligation.0.claim-digest=none\nobligation.0.claim-payload-digest=sha256:bc3c7235dad9d79ff55d1e5d31ce47678582148fc64bd80dbf21f83af48b731f\nobligation.0.summary-count=0\nobligation.0.summary-digest=none\n"
+            }
+          },
+          {
+            "schema_version": "trust-wp.proof-evidence.v1",
+            "id": "trust-wp.proof-evidence.v1/artifact/aggregate-proof-manifest/sha256/e3892696b4729e0a746d811066470ae56637e77b88db9dd2b40960bda2670cc7",
+            "kind": "aggregate_proof_manifest",
+            "digest": {
+              "algorithm": "sha256",
+              "value": "e3892696b4729e0a746d811066470ae56637e77b88db9dd2b40960bda2670cc7"
+            },
+            "description": "aggregate verify-bundle proof manifest",
+            "inline_bytes": {
+              "encoding": "utf8",
+              "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\naggregate-schema=trust-wp.verify-bundle-aggregate.v1\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f626f6f6c65616e5f77705f6272616e636865733a74727573742d77703a37\nrequest-digest=sha256:e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e\nobligation-count=1\nobligation.0.id=hex:74727573742d69722d72372d70726f6f662d30\nobligation.0.status=verified\nobligation.0.evidence-format=hex:74727573745f77702e6e61746976652d707572652d7265706c61792e7631\nobligation.0.evidence-strength=sound\nobligation.0.evidence-digest=sha256:e100294bcb12b592f8a59d8789c2e6f8c36a477fe18abe22d1c45b1753e5cc2c\nobligation.0.evidence-wire-digest=sha256:be5edfd6ef1de0c6919d65622e3a2d9667fb5e685de7b0a3fadc2a9e4f9e5439\nobligation.0.checked-by=hex:74727573745f77702e6e61746976652d707572652d7265706c61792e7631\nobligation.0.artifact-count=4\nobligation.0.artifact.0.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f726571756573742d6469676573742f7368613235362f65393037613332373961313132336236313034623534646632363437353834623462633332633435616339633165373936383766656366333734646133363265\nobligation.0.artifact.0.kind=request-digest\nobligation.0.artifact.0.digest=sha256:e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e\nobligation.0.artifact.1.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f6e6f726d616c697a65642d6f626c69676174696f6e2f7368613235362f31653735666238373130336136663039633764346631336336323830623637323136636438646161633162316561383032613132343832336465383266323165\nobligation.0.artifact.1.kind=normalized-obligation\nobligation.0.artifact.1.digest=sha256:1e75fb87103a6f09c7d4f13c6280b67216cd8daac1b1ea802a124823de82f21e\nobligation.0.artifact.2.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f7265706c61792d6c6f672f7368613235362f35616666666334366538333935356439333866393164646338353537303464316239626630383164376339323465663335376437326536363566396230663839\nobligation.0.artifact.2.kind=replay-log\nobligation.0.artifact.2.digest=sha256:5afffc46e83955d938f91ddc855704d1b9bf081d7c924ef357d72e665f9b0f89\nobligation.0.artifact.3.id=hex:74727573742d77702e70726f6f662d65766964656e63652e76312f61727469666163742f736f6c7665722d7472616e7363726970742f7368613235362f37333362373661376139616534643730663565613364306563646332306437626234353536373732306466356463613063366632353264396633643336623266\nobligation.0.artifact.3.kind=solver-transcript\nobligation.0.artifact.3.digest=sha256:733b76a7a9ae4d70f5ea3d0ecdc20d7bb45567720df5dca0c6f252d9f3d36b2f\n"
+            }
+          }
+        ],
+        "checked_by": "trust-wp.verify-bundle-aggregate.v1"
+      },
+      "obligation_results": [
+        {
+          "obligation_id": "trust-ir-r7-proof-0",
+          "status": {
+            "verified": {
+              "evidence": {
+                "schema_version": "trust-wp.proof-evidence.v1",
+                "producer": "trust-wp-core.verify_bundle",
+                "format": "trust_wp_native_pure_replay_v1",
+                "strength": "sound",
+                "digest": {
+                  "algorithm": "sha256",
+                  "value": "e100294bcb12b592f8a59d8789c2e6f8c36a477fe18abe22d1c45b1753e5cc2c"
+                },
+                "artifacts": [
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/request-digest/sha256/e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e",
+                    "kind": "request_digest",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e"
+                    },
+                    "description": "canonical verify-bundle request digest",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nrequest.api=hex:74727573742d77702e7665726966792d62756e646c652e7631\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f626f6f6c65616e5f77705f6272616e636865733a74727573742d77703a37\nproducer.name=hex:54727573744972\nproducer.version=hex:74727573742d69722d6e61746976652d736368656d612d38\nproducer.revision=hex:7368613235363a65633266393064383463643137663435376137626163643563346131353535323063663464373136326237613030363266653164313336663536303533636534\ntarget.crate=hex:73656d725f626f6f6c65616e5f77705f6272616e63686573\ntarget.package=none\ntarget.triple=none\noptions.require-proof-evidence=true\noptions.timeout-ms=none\nobligation-count=1\nobligation.0.id=hex:74727573742d69722d72372d70726f6f662d30\nobligation.0.kind=hex:706f7374636f6e646974696f6e\nobligation.0.function=hex:63686f6f7365\nobligation.0.location.file=hex:74727573742d69723a2f2f66696c652f30\nobligation.0.location.line=1\nobligation.0.location.column=1\nobligation.0.native-origin=schema=hex:746d69722e6e61746976652d766572696669636174696f6e2d62756e646c652e7638;mode=weakest_precondition;request=7;function=0;obligation=0;lineage-roots=0;tmir-digest=sha256:ec2f90d84cd17f457a7bacd5c4a155520cf4d7162b7a0062fe1d136f56053ce4\nobligation.0.tmir-source-span=file-id=0;line=1;column=1\nobligation.0.native-verifier=name=hex:74727573742d7770;version=hex:6e61746976652d736368656d612d7632;revision=hex:3063626161643562;digest=none\nobligation.0.native-replay=engine=hex:74727573742d7770;invocation=hex:6578706c69636974207368617265642d495220426f6f6c65616e206272616e63682066697874757265;transcript=sha256:2350fc7229a3a8ea5f87cde0693547fc3526203f7d5ab6cae39e98bc5001b809\nobligation.0.native-solvers=0:name=hex:6179;version=hex:302e392e30;revision=hex:736f6c7665722d726576;digest=sha256:6666666666666666666666666666666666666666666666666666666666666666\nobligation.0.tmir-obligation-source=cause=hex:706f7374636f6e646974696f6e;function=0;assertion=0;monomorphization=none;facts=hex:6e6f6e65\nobligation.0.proof-context.assumptions=0\nobligation.0.proof-context.assertions=0\nobligation.0.proof-context-digest=none\nobligation.0.claim-format=hex:5472757374466f726d756c615631\nobligation.0.claim-digest=none\nobligation.0.claim-payload-digest=sha256:bc3c7235dad9d79ff55d1e5d31ce47678582148fc64bd80dbf21f83af48b731f\nobligation.0.summary-count=0\nobligation.0.summary-digest=none\n"
+                    }
+                  },
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/normalized-obligation/sha256/1e75fb87103a6f09c7d4f13c6280b67216cd8daac1b1ea802a124823de82f21e",
+                    "kind": "normalized_obligation",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "1e75fb87103a6f09c7d4f13c6280b67216cd8daac1b1ea802a124823de82f21e"
+                    },
+                    "description": "normalized typed trust-wp PureExpr obligation",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nreplay-schema=trust_wp.native-pure-replay.v1\nbundle=trust-wp.trust-ir-body-wp.v1:trust-ir-native:semr_boolean_wp_branches:trust-wp:7\nproducer.name=hex:54727573744972\nproducer.version=hex:74727573742d69722d6e61746976652d736368656d612d38\nproducer.revision=hex:7368613235363a65633266393064383463643137663435376137626163643563346131353535323063663464373136326237613030363266653164313336663536303533636534\ntarget.crate=hex:73656d725f626f6f6c65616e5f77705f6272616e63686573\ntarget.package=none\ntarget.triple=none\nobligation=trust-ir-r7-proof-0\nkind=postcondition\nfunction=choose\nlocation.file=hex:74727573742d69723a2f2f66696c652f30\nlocation.line=1\nlocation.column=1\nnative-origin=schema=hex:746d69722e6e61746976652d766572696669636174696f6e2d62756e646c652e7638;mode=weakest_precondition;request=7;function=0;obligation=0;lineage-roots=0;tmir-digest=sha256:ec2f90d84cd17f457a7bacd5c4a155520cf4d7162b7a0062fe1d136f56053ce4\ntmir-source-span=file-id=0;line=1;column=1\nnative-verifier=name=hex:74727573742d7770;version=hex:6e61746976652d736368656d612d7632;revision=hex:3063626161643562;digest=none\nnative-replay=engine=hex:74727573742d7770;invocation=hex:6578706c69636974207368617265642d495220426f6f6c65616e206272616e63682066697874757265;transcript=sha256:2350fc7229a3a8ea5f87cde0693547fc3526203f7d5ab6cae39e98bc5001b809\nnative-solvers=0:name=hex:6179;version=hex:302e392e30;revision=hex:736f6c7665722d726576;digest=sha256:6666666666666666666666666666666666666666666666666666666666666666\ntmir-obligation-source=cause=hex:706f7374636f6e646974696f6e;function=0;assertion=0;monomorphization=none;facts=hex:6e6f6e65\nproof-context.assumptions=0\nproof-context.assertions=0\nproof-context-digest=none\nclaim-format=TrustFormulaV1\nclaim-digest=none\npredicate=((__trust_wp_body_v0 ==> ((__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v2)))) && (!__trust_wp_body_v0 ==> ((__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v2)))))\nsummary-count=0\nsummary-digest=none\n"
+                    }
+                  },
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/replay-log/sha256/5afffc46e83955d938f91ddc855704d1b9bf081d7c924ef357d72e665f9b0f89",
+                    "kind": "replay_log",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "5afffc46e83955d938f91ddc855704d1b9bf081d7c924ef357d72e665f9b0f89"
+                    },
+                    "description": "native pure predicate replay trace",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "api=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nreplay-schema=trust_wp.native-pure-replay.v1\nnormalized-digest=sha256:1e75fb87103a6f09c7d4f13c6280b67216cd8daac1b1ea802a124823de82f21e\nsummary-digest=none\nsteps=\ndecode:TrustFormulaV1\nnormalize:((__trust_wp_body_v0 ==> ((__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v1 == __trust_wp_body_v2)))) && (!__trust_wp_body_v0 ==> ((__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v1)) || (!__trust_wp_body_v0 && (__trust_wp_body_v2 == __trust_wp_body_v2)))))\nreplay-rule:boolean-case-split\nresult:verified\n"
+                    }
+                  },
+                  {
+                    "schema_version": "trust-wp.proof-evidence.v1",
+                    "id": "trust-wp.proof-evidence.v1/artifact/solver-transcript/sha256/733b76a7a9ae4d70f5ea3d0ecdc20d7bb45567720df5dca0c6f252d9f3d36b2f",
+                    "kind": "solver_transcript",
+                    "digest": {
+                      "algorithm": "sha256",
+                      "value": "733b76a7a9ae4d70f5ea3d0ecdc20d7bb45567720df5dca0c6f252d9f3d36b2f"
+                    },
+                    "description": "native pure replay proof-check transcript over evidence artifact bytes",
+                    "inline_bytes": {
+                      "encoding": "utf8",
+                      "data": "schema=trust-wp.native-pure-proof-check-transcript.v1\napi=trust-wp.verify-bundle.v1\nevidence-schema=trust-wp.proof-evidence.v1\nreplay-schema=trust_wp.native-pure-replay.v1\nbundle=hex:74727573742d77702e74727573742d69722d626f64792d77702e76313a74727573742d69722d6e61746976653a73656d725f626f6f6c65616e5f77705f6272616e636865733a74727573742d77703a37\nobligation=hex:74727573742d69722d72372d70726f6f662d30\nchecker=trust_wp.native-pure-replay.v1\nresult=verified\nreplay-steps=4\nchecked-artifacts=3\nartifact.0.id=trust-wp.proof-evidence.v1/artifact/request-digest/sha256/e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e\nartifact.0.kind=request-digest\nartifact.0.declared-digest=sha256:e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e\nartifact.0.transport=inline:utf8\nartifact.0.actual-digest=sha256:e907a3279a1123b6104b54df2647584b4bc32c45ac9c1e79687fecf374da362e\nartifact.0.byte-len=2433\nartifact.1.id=trust-wp.proof-evidence.v1/artifact/normalized-obligation/sha256/1e75fb87103a6f09c7d4f13c6280b67216cd8daac1b1ea802a124823de82f21e\nartifact.1.kind=normalized-obligation\nartifact.1.declared-digest=sha256:1e75fb87103a6f09c7d4f13c6280b67216cd8daac1b1ea802a124823de82f21e\nartifact.1.transport=inline:utf8\nartifact.1.actual-digest=sha256:1e75fb87103a6f09c7d4f13c6280b67216cd8daac1b1ea802a124823de82f21e\nartifact.1.byte-len=2181\nartifact.2.id=trust-wp.proof-evidence.v1/artifact/replay-log/sha256/5afffc46e83955d938f91ddc855704d1b9bf081d7c924ef357d72e665f9b0f89\nartifact.2.kind=replay-log\nartifact.2.declared-digest=sha256:5afffc46e83955d938f91ddc855704d1b9bf081d7c924ef357d72e665f9b0f89\nartifact.2.transport=inline:utf8\nartifact.2.actual-digest=sha256:5afffc46e83955d938f91ddc855704d1b9bf081d7c924ef357d72e665f9b0f89\nartifact.2.byte-len=650\n"
+                    }
+                  }
+                ],
+                "checked_by": "trust_wp.native-pure-replay.v1"
+              }
+            }
+          },
+          "diagnostics": [],
+          "metadata": {
+            "solver": {
+              "engine": "trust-wp-core.native-pure-replay",
+              "checker": "trust_wp.native-pure-replay.v1",
+              "claim_format": "TrustFormulaV1",
+              "replay_steps": 4,
+              "assumptions": 0,
+              "assertions": 0
+            },
+            "evidence": {
+              "format": "trust_wp_native_pure_replay_v1",
+              "strength": "sound",
+              "digest": {
+                "algorithm": "sha256",
+                "value": "e100294bcb12b592f8a59d8789c2e6f8c36a477fe18abe22d1c45b1753e5cc2c"
+              },
+              "artifact_count": 4,
+              "checked_by": "trust_wp.native-pure-replay.v1"
+            }
+          }
+        }
+      ],
+      "diagnostics": []
+    }
+  ]
+}

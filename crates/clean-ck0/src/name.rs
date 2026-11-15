@@ -101,6 +101,28 @@ impl Name {
         }
     }
 
+    #[cfg(feature = "export")]
+    pub(crate) fn last_num(&self) -> Option<u64> {
+        match &self.0 {
+            NameRepr::Node(node) => match &node.component {
+                Component::Num(n) => Some(*n),
+                Component::Str(_) => None,
+            },
+            NameRepr::Anonymous => None,
+        }
+    }
+
+    /// Preserve the final component's kind when cloning it below another parent.
+    pub(crate) fn with_parent(&self, parent: &Name) -> Option<Name> {
+        match &self.0 {
+            NameRepr::Node(node) => Some(match &node.component {
+                Component::Str(s) => parent.str(s),
+                Component::Num(n) => parent.num(*n),
+            }),
+            NameRepr::Anonymous => None,
+        }
+    }
+
     /// The final string component, if this name ends in one.
     #[must_use]
     pub(crate) fn last_str(&self) -> Option<&str> {

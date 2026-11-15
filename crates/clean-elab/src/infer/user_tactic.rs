@@ -88,7 +88,8 @@ use crate::tactic::{
 };
 use clean_kernel::{ExprKind, Name};
 use clean_parser::{
-    DoElem, InterpolationPart, SurfaceArg, SurfaceExpr, SurfaceLit, SurfaceRwRule, SurfaceTactic,
+    DoElem, InterpolationPart, SurfaceArg, SurfaceExpr, SurfaceLit, SurfaceName, SurfaceRwRule,
+    SurfaceTactic,
 };
 use std::sync::Arc;
 
@@ -96,7 +97,7 @@ use std::sync::Arc;
 /// surface expression that should replace it. Owned so that sequential
 /// `do`-block bindings (`let x := ...`) can extend the map as the block is
 /// lowered.
-type Binding = (String, SurfaceExpr);
+type Binding = (SurfaceName, SurfaceExpr);
 
 /// Decide whether a parsed tactic-block body is one the bridge can execute via
 /// substitute-and-delegate.
@@ -170,7 +171,7 @@ fn do_block_to_tactics(
             }
             // Pure value let: `let x := <expr>`. No tactic effect — extend the
             // substitution map so later actions can reference `x`.
-            DoElem::Let(_, binder, val) => {
+            DoElem::Let(_, binder, val) | DoElem::Have(_, binder, val) => {
                 let replacement = substitute_in_expr(val, bindings);
                 upsert_binding(bindings, &binder.name, replacement);
             }
@@ -287,7 +288,7 @@ fn runtime_elab_close_plan(elems: &[DoElem], bindings: &mut Vec<Binding>) -> Opt
     let (last, prefix) = elems.split_last()?;
     for elem in prefix {
         match elem {
-            DoElem::Let(_, binder, val) => {
+            DoElem::Let(_, binder, val) | DoElem::Have(_, binder, val) => {
                 let replacement = substitute_in_expr(val, bindings);
                 upsert_binding(bindings, &binder.name, replacement);
                 saw_value_let = true;
@@ -304,7 +305,11 @@ fn runtime_elab_close_plan(elems: &[DoElem], bindings: &mut Vec<Binding>) -> Opt
         return None;
     };
     let (name, args) = close_action_head(expr)?;
-    if !is_runtime_close_keyword(&name) || args.len() != 1 {
+    if !name
+        .component_text()
+        .is_some_and(|text| name.is_unescaped_component(text) && is_runtime_close_keyword(text))
+        || args.len() != 1
+    {
         return None;
     }
     Some(substitute_in_expr(&args[0], bindings))
@@ -313,7 +318,7 @@ fn runtime_elab_close_plan(elems: &[DoElem], bindings: &mut Vec<Binding>) -> Opt
 /// Extract `(keyword, args)` from a terminal action expression (`exact e`,
 /// `refine e`), descending through parentheses. Returns `None` for any other
 /// shape or for actions headed by a metaprogramming-monad op.
-fn close_action_head(expr: &SurfaceExpr) -> Option<(String, Vec<SurfaceExpr>)> {
+fn close_action_head(expr: &SurfaceExpr) -> Option<(SurfaceName, Vec<SurfaceExpr>)> {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             let SurfaceExpr::Ident(_, name) = func.as_ref() else {
@@ -436,7 +441,7 @@ fn do_block_is_exec_interpretable(elems: &[DoElem]) -> bool {
                 }
                 needs_executor = true;
             }
-            DoElem::Let(_, _, val) => {
+            DoElem::Let(_, _, val) | DoElem::Have(_, _, val) => {
                 // A goal-query let routes the block to the executor (its value
                 // is a kernel Expr with no surface form). A plain pure let is
                 // fine in either path.
@@ -477,7 +482,7 @@ fn do_branch_is_exec_runnable(elems: &[DoElem]) -> bool {
                         .as_ref()
                         .is_none_or(|elems| do_branch_is_exec_runnable(elems))
             }
-            DoElem::Let(..) => true,
+            DoElem::Let(..) | DoElem::Have(..) => true,
             DoElem::Bind(_, _, val) => is_value_yielding_bind_tac(val),
             _ => false,
         })
@@ -496,10 +501,12 @@ const GET_MAIN_TARGET_HEADS: &[&str] = &["getMainTarget", "getMainGoalTarget", "
 /// ordinary surface-substitution path.
 fn is_get_main_target_query(expr: &SurfaceExpr) -> bool {
     match expr {
-        SurfaceExpr::Ident(_, name) => GET_MAIN_TARGET_HEADS.contains(&name.as_str()),
+        SurfaceExpr::Ident(_, name) => GET_MAIN_TARGET_HEADS
+            .iter()
+            .any(|head| name == &SurfaceName::generated_path(head)),
         SurfaceExpr::Proj(_, base, clean_parser::Projection::Named(field)) => {
             matches!(base.as_ref(), SurfaceExpr::Ident(_, b)
-                if GET_MAIN_TARGET_HEADS.contains(&format!("{b}.{field}").as_str()))
+                if GET_MAIN_TARGET_HEADS.iter().any(|head| b.append(field) == SurfaceName::generated_path(head)))
         }
         SurfaceExpr::Paren(_, inner) => is_get_main_target_query(inner),
         _ => false,
@@ -545,7 +552,7 @@ fn run_do_exec(
     elems: &[DoElem],
     bindings: Vec<Binding>,
 ) -> Result<(), TacticError> {
-    let mut value_channel_names: Vec<String> = Vec::new();
+    let mut value_channel_names: Vec<SurfaceName> = Vec::new();
     let result = run_do_exec_inner(eval, ps, elems, bindings, &mut value_channel_names);
     // Always unbind every value-channel name this block introduced, on success
     // or failure, so a goal-query value never leaks into a later elaboration.
@@ -562,7 +569,7 @@ fn run_do_exec_inner(
     ps: &mut ProofState,
     elems: &[DoElem],
     mut bindings: Vec<Binding>,
-    value_channel_names: &mut Vec<String>,
+    value_channel_names: &mut Vec<SurfaceName>,
 ) -> Result<(), TacticError> {
     for elem in elems {
         match elem {
@@ -609,7 +616,9 @@ fn run_do_exec_inner(
                 };
                 run_do_exec_inner(eval, ps, branch, bindings.clone(), value_channel_names)?;
             }
-            DoElem::Let(_, binder, val) if is_get_main_target_query(val) => {
+            DoElem::Let(_, binder, val) | DoElem::Have(_, binder, val)
+                if is_get_main_target_query(val) =>
+            {
                 // Goal query: read the current goal's target (a kernel Expr) and
                 // bind it into the value channel so a later `exact g` splices it.
                 // This only names a term the goal already carries — no fabrication.
@@ -621,7 +630,7 @@ fn run_do_exec_inner(
                 eval.set_value_binding(&binder.name, target);
                 value_channel_names.push(binder.name.clone());
             }
-            DoElem::Let(_, binder, val) => {
+            DoElem::Let(_, binder, val) | DoElem::Have(_, binder, val) => {
                 let replacement = substitute_in_expr(val, &bindings);
                 upsert_binding(&mut bindings, &binder.name, replacement);
             }
@@ -720,9 +729,15 @@ fn decide_meta_bool(
 /// a real typed [`TacticError::UserThrowError`]. A `throwError` whose message is
 /// not a literal string (f-string / `MessageData`) still falls through to the
 /// honest-error handler, which surfaces its static message.
-fn is_metaprogramming_monad_op(name: &str) -> bool {
+fn is_metaprogramming_monad_op(name: &SurfaceName) -> bool {
+    let Some(text) = name.component_text() else {
+        return false;
+    };
+    if !name.is_unescaped_component(text) {
+        return false;
+    }
     matches!(
-        name,
+        text,
         "throwError"
             | "throwErrorAt"
             | "throw"
@@ -767,7 +782,7 @@ fn is_throw_error_op(name: &str) -> bool {
 pub(crate) fn is_throw_error_call(expr: &SurfaceExpr) -> bool {
     match expr {
         SurfaceExpr::App(_, func, _) => {
-            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if is_throw_error_op(name))
+            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name.component_text().is_some_and(|text| name.is_unescaped_component(text) && is_throw_error_op(text)))
         }
         SurfaceExpr::Paren(_, inner) => is_throw_error_call(inner),
         _ => false,
@@ -861,7 +876,10 @@ fn is_throw_error_interpolation_shape(expr: &SurfaceExpr) -> bool {
             let SurfaceExpr::Ident(_, name) = func.as_ref() else {
                 return false;
             };
-            if !is_throw_error_op(name) {
+            if !name
+                .component_text()
+                .is_some_and(|text| name.is_unescaped_component(text) && is_throw_error_op(text))
+            {
                 return false;
             }
             match args.last() {
@@ -917,7 +935,10 @@ pub(crate) fn as_throw_error_message_in(
             let SurfaceExpr::Ident(_, name) = func.as_ref() else {
                 return None;
             };
-            if !is_throw_error_op(name) {
+            if !name
+                .component_text()
+                .is_some_and(|text| name.is_unescaped_component(text) && is_throw_error_op(text))
+            {
                 return None;
             }
             // The message is the final positional argument (so `throwError "m"`
@@ -981,7 +1002,10 @@ fn action_expr_to_tactic(expr: &SurfaceExpr, bindings: &[Binding]) -> Option<Sur
             // term `(f x)`, not as separate tactic arguments. Fold them back
             // into one applied term, mirroring how `by exact f x` parses (the
             // tactic dispatcher gives `exact` the full `f x` application).
-            let folded_args = if is_term_arg_close_keyword(name) && lowered_args.len() > 1 {
+            let folded_args = if name.component_text().is_some_and(|text| {
+                name.is_unescaped_component(text) && is_term_arg_close_keyword(text)
+            }) && lowered_args.len() > 1
+            {
                 let mut it = lowered_args.into_iter();
                 let head = it.next().expect("len > 1 guarantees a head");
                 let rest: Vec<SurfaceArg> = it.map(SurfaceArg::positional).collect();
@@ -992,7 +1016,13 @@ fn action_expr_to_tactic(expr: &SurfaceExpr, bindings: &[Binding]) -> Option<Sur
             };
             Some(SurfaceTactic::Named {
                 span: *span,
-                name: name.clone(),
+                name: {
+                    let text = name.component_text()?;
+                    if !name.is_unescaped_component(text) {
+                        return None;
+                    }
+                    text.to_owned()
+                },
                 args: folded_args,
             })
         }
@@ -1002,7 +1032,13 @@ fn action_expr_to_tactic(expr: &SurfaceExpr, bindings: &[Binding]) -> Option<Sur
             }
             Some(SurfaceTactic::Named {
                 span: *span,
-                name: name.clone(),
+                name: {
+                    let text = name.component_text()?;
+                    if !name.is_unescaped_component(text) {
+                        return None;
+                    }
+                    text.to_owned()
+                },
                 args: Vec::new(),
             })
         }
@@ -1016,7 +1052,7 @@ fn action_expr_to_tactic(expr: &SurfaceExpr, bindings: &[Binding]) -> Option<Sur
 ///
 /// A later `do` binding shadows an earlier same-named one (matching block
 /// scoping), so replace in place when present.
-fn upsert_binding(bindings: &mut Vec<Binding>, name: &str, replacement: SurfaceExpr) {
+fn upsert_binding(bindings: &mut Vec<Binding>, name: &SurfaceName, replacement: SurfaceExpr) {
     if let Some(slot) = bindings.iter_mut().find(|(n, _)| n == name) {
         slot.1 = replacement;
     } else {
@@ -1125,7 +1161,7 @@ pub(super) fn run_tactic_do_block(
 /// flat Phase 1 sequence or a single `do`-notation body.
 pub(super) fn build_user_tactic_handler(
     name: String,
-    bound_names: Vec<String>,
+    bound_names: Vec<SurfaceName>,
     body: Vec<SurfaceTactic>,
 ) -> CompoundTacticEntry {
     let entry_name = name.clone();
@@ -1139,7 +1175,11 @@ pub(super) fn build_user_tactic_handler(
                 expected: format!(
                     "{} argument(s) ({}), received {}",
                     bound_names.len(),
-                    bound_names.join(", "),
+                    bound_names
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     args.len()
                 ),
             });
@@ -1156,6 +1196,140 @@ pub(super) fn build_user_tactic_handler(
                 detail: format!("unsupported body for user tactic `{name}`"),
             })?;
         run_lowered_body(eval, ps, lowered)
+    });
+    CompoundTacticEntry {
+        name: entry_name,
+        handler,
+    }
+}
+
+/// The template of a tactic MACRO (`macro "kw" x:term : tactic => `(tactic|
+/// …)`): a quotation over operand variables, not an `elab` body.
+pub(super) struct TacticTemplate {
+    /// The operand variables the template writes, one per pattern variable
+    /// in pattern order.
+    pub(super) vars: Vec<SurfaceName>,
+    /// `false` under `set_option hygiene false`.
+    pub(super) hygienic: bool,
+}
+
+/// Instantiate a tactic macro's template (see [`TacticTemplate`]) with the
+/// call's arguments: every operand variable is replaced by its argument, and
+/// every binder of the template is renamed apart
+/// ([`clean_parser::instantiate_tactic_template`]).
+fn instantiate_tactic_macro(
+    name: &str,
+    body: &[SurfaceTactic],
+    vars: &[SurfaceName],
+    args: &[SurfaceExpr],
+    hygienic: bool,
+) -> Result<Vec<SurfaceTactic>, TacticError> {
+    clean_parser::instantiate_tactic_template(body, vars, args, hygienic).map_err(|refusal| {
+        TacticError::ElaborationFailed {
+            detail: format!("tactic macro `{name}`: {}", refusal.reason()),
+        }
+    })
+}
+
+/// Build the compound handler of a tactic MACRO: a use INSTANTIATES the
+/// template `body` (marked by `clean_parser::mark_template_free_references`
+/// when `hygienic`) with the call's arguments, as Lean expands the macro's
+/// quotation — the arguments stand wherever the template writes their
+/// variables, a template binder never captures an argument's identifier, and
+/// the template's free names resolve where the macro was declared — and runs
+/// the result through the same lowering as a user tactic.
+pub(super) fn build_tactic_macro_handler(
+    name: String,
+    vars: Vec<SurfaceName>,
+    body: Vec<SurfaceTactic>,
+    hygienic: bool,
+) -> CompoundTacticEntry {
+    let entry_name = name.clone();
+    let handler: CompoundTacticHandler = Arc::new(move |eval, ps, tac| {
+        let args = call_site_args(tac).ok_or_else(|| TacticError::ElaborationFailed {
+            detail: format!("user tactic `{name}` invoked with unexpected syntax"),
+        })?;
+        if args.len() != vars.len() {
+            return Err(TacticError::MissingArgument {
+                tactic: name.clone(),
+                expected: format!("{} argument(s), received {}", vars.len(), args.len()),
+            });
+        }
+        let instantiated = instantiate_tactic_macro(&name, &body, &vars, args, hygienic)?;
+        let lowered = lower_body(&instantiated, &mut Vec::new()).ok_or_else(|| {
+            TacticError::ElaborationFailed {
+                detail: format!("unsupported body for user tactic `{name}`"),
+            }
+        })?;
+        run_lowered_body(eval, ps, lowered)
+    });
+    CompoundTacticEntry {
+        name: entry_name,
+        handler,
+    }
+}
+
+/// [`build_tactic_macro_handler`] for a macro with a trailing repetition
+/// variable `rep_var`: each body tactic that mentions it is replicated once
+/// per repetition argument (the expansion [`build_variadic_tactic_handler`]
+/// gives an `elab` body), each copy writing its own operand variable, and the
+/// whole replicated sequence is then instantiated as ONE template.
+pub(super) fn build_variadic_tactic_macro_handler(
+    name: String,
+    fixed_vars: Vec<SurfaceName>,
+    rep_var: SurfaceName,
+    body: Vec<SurfaceTactic>,
+    hygienic: bool,
+) -> CompoundTacticEntry {
+    let entry_name = name.clone();
+    let handler: CompoundTacticHandler = Arc::new(move |eval, ps, tac| {
+        let args = call_site_args(tac).ok_or_else(|| TacticError::ElaborationFailed {
+            detail: format!("user tactic `{name}` invoked with unexpected syntax"),
+        })?;
+        if args.len() < fixed_vars.len() {
+            return Err(TacticError::MissingArgument {
+                tactic: name.clone(),
+                expected: format!(
+                    "at least {} argument(s), received {}",
+                    fixed_vars.len(),
+                    args.len()
+                ),
+            });
+        }
+        if as_do_block(&body).is_some() {
+            return Err(TacticError::ElaborationFailed {
+                detail: format!(
+                    "user tactic `{name}` uses a do-notation body with a repetition \
+                     argument, which is not yet supported"
+                ),
+            });
+        }
+        let (fixed_args, rep_args) = args.split_at(fixed_vars.len());
+        let mut vars = fixed_vars.clone();
+        let mut operands = fixed_args.to_vec();
+        let mut expanded = Vec::with_capacity(body.len());
+        for tactic in &body {
+            if !tactic_mentions(tactic, &rep_var) {
+                expanded.push(tactic.clone());
+                continue;
+            }
+            for element in rep_args {
+                // A variable no source spells, for this copy's element.
+                let copy_var = SurfaceName::unspellable("_tactic_macro_element", vars.len() as u64);
+                let copy = instantiate_tactic_macro(
+                    &name,
+                    std::slice::from_ref(tactic),
+                    std::slice::from_ref(&rep_var),
+                    &[SurfaceExpr::Ident(tactic.span(), copy_var.clone())],
+                    false,
+                )?;
+                expanded.extend(copy);
+                vars.push(copy_var);
+                operands.push(element.clone());
+            }
+        }
+        let instantiated = instantiate_tactic_macro(&name, &expanded, &vars, &operands, hygienic)?;
+        eval.eval_seq(ps, &instantiated)
     });
     CompoundTacticEntry {
         name: entry_name,
@@ -1181,8 +1355,8 @@ pub(super) fn build_user_tactic_handler(
 /// replication of `do` statements is out of Phase 6 scope.
 pub(super) fn build_variadic_tactic_handler(
     name: String,
-    fixed_names: Vec<String>,
-    rep_name: String,
+    fixed_names: Vec<SurfaceName>,
+    rep_name: SurfaceName,
     body: Vec<SurfaceTactic>,
 ) -> CompoundTacticEntry {
     let entry_name = name.clone();
@@ -1196,7 +1370,11 @@ pub(super) fn build_variadic_tactic_handler(
                 expected: format!(
                     "at least {} argument(s) ({}{}), received {}",
                     fixed_names.len(),
-                    fixed_names.join(", "),
+                    fixed_names
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     if fixed_names.is_empty() {
                         format!("{rep_name}*")
                     } else {
@@ -1246,7 +1424,7 @@ pub(super) fn build_variadic_tactic_handler(
 fn expand_variadic_body(
     body: &[SurfaceTactic],
     fixed_bindings: &[Binding],
-    rep_name: &str,
+    rep_name: &SurfaceName,
     rep_args: &[SurfaceExpr],
 ) -> Vec<SurfaceTactic> {
     let mut out = Vec::with_capacity(body.len().saturating_mul(rep_args.len().max(1)));
@@ -1269,7 +1447,7 @@ fn expand_variadic_body(
 /// Whether a tactic node textually references the identifier `name` anywhere in
 /// its `SurfaceExpr` payloads. Used to decide whether a body tactic participates
 /// in per-element repetition expansion.
-fn tactic_mentions(tac: &SurfaceTactic, name: &str) -> bool {
+fn tactic_mentions(tac: &SurfaceTactic, name: &SurfaceName) -> bool {
     match tac {
         SurfaceTactic::Named { args, .. } => args.iter().any(|a| expr_mentions(a, name)),
         SurfaceTactic::Term(_, expr) => expr_mentions(expr, name),
@@ -1277,7 +1455,9 @@ fn tactic_mentions(tac: &SurfaceTactic, name: &str) -> bool {
         // substitutable payloads (conv-macro bridge), so they count as
         // mentions. Unreachable from the variadic tactic path (`Rw` bodies
         // never pass `is_executable_tactic_body`).
-        SurfaceTactic::Rw(_, rules, _) => rules.iter().any(|r| expr_mentions(&r.term, name)),
+        SurfaceTactic::Rw(_, rules, _)
+        | SurfaceTactic::Rewrite(_, rules, _)
+        | SurfaceTactic::Rwa(_, rules, _) => rules.iter().any(|r| expr_mentions(&r.term, name)),
         // Other tactic shapes are passed through unchanged by substitution, so
         // they cannot meaningfully reference the repetition var for expansion.
         _ => false,
@@ -1287,7 +1467,7 @@ fn tactic_mentions(tac: &SurfaceTactic, name: &str) -> bool {
 /// Whether a surface expression references the identifier `name`, descending
 /// through the same shapes [`substitute_in_expr`] rewrites (so "mentions" and
 /// "substitutes" stay consistent).
-fn expr_mentions(expr: &SurfaceExpr, name: &str) -> bool {
+fn expr_mentions(expr: &SurfaceExpr, name: &SurfaceName) -> bool {
     match expr {
         SurfaceExpr::Ident(_, n) => n == name,
         SurfaceExpr::App(_, func, args) => {
@@ -1409,14 +1589,17 @@ pub(super) fn substitute_in_tactic(tac: &SurfaceTactic, bindings: &[Binding]) ->
         // hide there (`user_conv::substitution_reaches`).
         SurfaceTactic::Rw(span, rules, location) => SurfaceTactic::Rw(
             *span,
-            rules
-                .iter()
-                .map(|r| SurfaceRwRule {
-                    span: r.span,
-                    reverse: r.reverse,
-                    term: substitute_in_expr(&r.term, bindings),
-                })
-                .collect(),
+            substitute_in_rw_rules(rules, bindings),
+            location.clone(),
+        ),
+        SurfaceTactic::Rewrite(span, rules, location) => SurfaceTactic::Rewrite(
+            *span,
+            substitute_in_rw_rules(rules, bindings),
+            location.clone(),
+        ),
+        SurfaceTactic::Rwa(span, rules, location) => SurfaceTactic::Rwa(
+            *span,
+            substitute_in_rw_rules(rules, bindings),
             location.clone(),
         ),
         // Other tactic shapes are passed through unchanged. They are still
@@ -1425,6 +1608,18 @@ pub(super) fn substitute_in_tactic(tac: &SurfaceTactic, bindings: &[Binding]) ->
         // performed here.
         other => other.clone(),
     }
+}
+
+/// The rule terms of a `rw` / `rewrite` with the bindings substituted.
+fn substitute_in_rw_rules(rules: &[SurfaceRwRule], bindings: &[Binding]) -> Vec<SurfaceRwRule> {
+    rules
+        .iter()
+        .map(|r| SurfaceRwRule {
+            span: r.span,
+            reverse: r.reverse,
+            term: substitute_in_expr(&r.term, bindings),
+        })
+        .collect()
 }
 
 /// Recursively substitute pattern bindings inside a surface expression.
@@ -1472,8 +1667,8 @@ mod tests {
     use super::*;
     use clean_parser::{InterpolatedStringKind, Span, SurfaceBinder};
 
-    fn ident(name: &str) -> SurfaceExpr {
-        SurfaceExpr::Ident(Span::dummy(), name.to_owned())
+    fn ident(name: SurfaceName) -> SurfaceExpr {
+        SurfaceExpr::Ident(Span::dummy(), name)
     }
 
     fn named(name: &str, args: Vec<SurfaceExpr>) -> SurfaceTactic {
@@ -1484,7 +1679,7 @@ mod tests {
         }
     }
 
-    fn app(head: &str, args: Vec<SurfaceExpr>) -> SurfaceExpr {
+    fn app(head: SurfaceName, args: Vec<SurfaceExpr>) -> SurfaceExpr {
         SurfaceExpr::App(
             Span::dummy(),
             Box::new(ident(head)),
@@ -1499,41 +1694,50 @@ mod tests {
         )]
     }
 
-    fn binder(name: &str) -> SurfaceBinder {
-        SurfaceBinder::new(name, None, clean_parser::SurfaceBinderInfo::Explicit)
+    fn binder(name: SurfaceName) -> SurfaceBinder {
+        SurfaceBinder::new_typed(name, None, clean_parser::SurfaceBinderInfo::Explicit)
     }
 
     #[test]
     fn test_substitute_in_expr_replaces_bound_ident() {
-        let bindings = vec![("e".to_owned(), ident("h"))];
-        let out = substitute_in_expr(&ident("e"), &bindings);
+        let bindings = vec![(
+            SurfaceName::generated_path("e"),
+            ident(SurfaceName::generated_path("h")),
+        )];
+        let out = substitute_in_expr(&ident(SurfaceName::generated_path("e")), &bindings);
         assert!(
-            matches!(&out, SurfaceExpr::Ident(_, n) if n == "h"),
+            matches!(&out, SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("h")),
             "bound `e` should become call-site `h`, got {out:?}"
         );
     }
 
     #[test]
     fn test_substitute_in_expr_leaves_unbound_ident() {
-        let bindings = vec![("e".to_owned(), ident("h"))];
-        let out = substitute_in_expr(&ident("other"), &bindings);
+        let bindings = vec![(
+            SurfaceName::generated_path("e"),
+            ident(SurfaceName::generated_path("h")),
+        )];
+        let out = substitute_in_expr(&ident(SurfaceName::generated_path("other")), &bindings);
         assert!(
-            matches!(&out, SurfaceExpr::Ident(_, n) if n == "other"),
+            matches!(&out, SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("other")),
             "unbound `other` should be unchanged, got {out:?}"
         );
     }
 
     #[test]
     fn test_substitute_in_tactic_rewrites_named_args() {
-        let bindings = vec![("e".to_owned(), ident("h"))];
-        let tac = named("exact", vec![ident("e")]);
+        let bindings = vec![(
+            SurfaceName::generated_path("e"),
+            ident(SurfaceName::generated_path("h")),
+        )];
+        let tac = named("exact", vec![ident(SurfaceName::generated_path("e"))]);
         let out = substitute_in_tactic(&tac, &bindings);
         match out {
             SurfaceTactic::Named { name, args, .. } => {
                 assert_eq!(name, "exact");
                 assert_eq!(args.len(), 1);
                 assert!(
-                    matches!(&args[0], SurfaceExpr::Ident(_, n) if n == "h"),
+                    matches!(&args[0], SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("h")),
                     "exact arg should be substituted to `h`, got {:?}",
                     args[0]
                 );
@@ -1545,8 +1749,8 @@ mod tests {
     #[test]
     fn test_is_executable_tactic_body_accepts_named_sequence() {
         let body = vec![
-            named("intro", vec![ident("h")]),
-            named("exact", vec![ident("h")]),
+            named("intro", vec![ident(SurfaceName::generated_path("h"))]),
+            named("exact", vec![ident(SurfaceName::generated_path("h"))]),
         ];
         assert!(
             is_executable_tactic_body(&body),
@@ -1564,13 +1768,22 @@ mod tests {
 
     #[test]
     fn test_substitute_in_expr_descends_into_application() {
-        let bindings = vec![("e".to_owned(), ident("h"))];
+        let bindings = vec![(
+            SurfaceName::generated_path("e"),
+            ident(SurfaceName::generated_path("h")),
+        )];
         // f e  -> f h
-        let out = substitute_in_expr(&app("f", vec![ident("e")]), &bindings);
+        let out = substitute_in_expr(
+            &app(
+                SurfaceName::generated_path("f"),
+                vec![ident(SurfaceName::generated_path("e"))],
+            ),
+            &bindings,
+        );
         match out {
             SurfaceExpr::App(_, _, args) => {
                 assert!(
-                    matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n == "h"),
+                    matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("h")),
                     "nested arg should be substituted, got {:?}",
                     args[0].expr
                 );
@@ -1586,7 +1799,10 @@ mod tests {
         // do exact e
         let body = do_body(vec![DoElem::Expr(
             Span::dummy(),
-            Box::new(app("exact", vec![ident("e")])),
+            Box::new(app(
+                SurfaceName::generated_path("exact"),
+                vec![ident(SurfaceName::generated_path("e"))],
+            )),
         )]);
         assert!(
             is_executable_tactic_body(&body),
@@ -1597,7 +1813,10 @@ mod tests {
     #[test]
     fn test_do_block_accepts_nullary_action() {
         // do rfl
-        let body = do_body(vec![DoElem::Expr(Span::dummy(), Box::new(ident("rfl")))]);
+        let body = do_body(vec![DoElem::Expr(
+            Span::dummy(),
+            Box::new(ident(SurfaceName::generated_path("rfl"))),
+        )]);
         assert!(
             is_executable_tactic_body(&body),
             "`do rfl` nullary action body should be executable"
@@ -1608,7 +1827,10 @@ mod tests {
     fn test_do_block_lowers_action_to_named() {
         let elems = vec![DoElem::Expr(
             Span::dummy(),
-            Box::new(app("intro", vec![ident("h")])),
+            Box::new(app(
+                SurfaceName::generated_path("intro"),
+                vec![ident(SurfaceName::generated_path("h"))],
+            )),
         )];
         let tacs =
             do_block_to_tactics(&elems, &mut Vec::new()).expect("action lowers to a tactic seq");
@@ -1616,7 +1838,9 @@ mod tests {
         match &tacs[0] {
             SurfaceTactic::Named { name, args, .. } => {
                 assert_eq!(name, "intro");
-                assert!(matches!(&args[0], SurfaceExpr::Ident(_, n) if n == "h"));
+                assert!(
+                    matches!(&args[0], SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("h"))
+                );
             }
             other => panic!("expected Named intro, got {other:?}"),
         }
@@ -1626,8 +1850,18 @@ mod tests {
     fn test_do_block_pure_let_extends_substitution_and_emits_no_effect() {
         // do let x := hP; exact x   ==>   [exact hP]
         let elems = vec![
-            DoElem::Let(Span::dummy(), binder("x"), Box::new(ident("hP"))),
-            DoElem::Expr(Span::dummy(), Box::new(app("exact", vec![ident("x")]))),
+            DoElem::Let(
+                Span::dummy(),
+                binder(SurfaceName::generated_path("x")),
+                Box::new(ident(SurfaceName::generated_path("hP"))),
+            ),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("x"))],
+                )),
+            ),
         ];
         let tacs = do_block_to_tactics(&elems, &mut Vec::new())
             .expect("pure-let + action lowers to a tactic seq");
@@ -1637,7 +1871,7 @@ mod tests {
             SurfaceTactic::Named { name, args, .. } => {
                 assert_eq!(name, "exact");
                 assert!(
-                    matches!(&args[0], SurfaceExpr::Ident(_, n) if n == "hP"),
+                    matches!(&args[0], SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("hP")),
                     "`x` should be substituted to `hP`, got {:?}",
                     args[0]
                 );
@@ -1652,8 +1886,18 @@ mod tests {
         // sequence by `do_block_to_tactics` (which now defers all binds); it is
         // classified as executor-interpretable and lowers to `DoExec`.
         let elems = vec![
-            DoElem::Bind(Span::dummy(), binder("h"), Box::new(ident("intro"))),
-            DoElem::Expr(Span::dummy(), Box::new(app("exact", vec![ident("h")]))),
+            DoElem::Bind(
+                Span::dummy(),
+                binder(SurfaceName::generated_path("h")),
+                Box::new(ident(SurfaceName::generated_path("intro"))),
+            ),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("h"))],
+                )),
+            ),
         ];
         assert!(
             do_block_to_tactics(&elems, &mut Vec::new()).is_none(),
@@ -1685,19 +1929,22 @@ mod tests {
     #[test]
     fn test_is_value_yielding_bind_tac_accepts_nullary_intro() {
         assert!(
-            is_value_yielding_bind_tac(&ident("intro")),
+            is_value_yielding_bind_tac(&ident(SurfaceName::generated_path("intro"))),
             "`intro` (no name arg) is value-yielding"
         );
         assert!(
-            is_value_yielding_bind_tac(&ident("intros")),
+            is_value_yielding_bind_tac(&ident(SurfaceName::generated_path("intros"))),
             "`intros` (no name arg) is value-yielding"
         );
         assert!(
-            !is_value_yielding_bind_tac(&app("intro", vec![ident("x")])),
+            !is_value_yielding_bind_tac(&app(
+                SurfaceName::generated_path("intro"),
+                vec![ident(SurfaceName::generated_path("x"))]
+            )),
             "`intro x` names the hypothesis explicitly and is not the value path"
         );
         assert!(
-            !is_value_yielding_bind_tac(&ident("foo")),
+            !is_value_yielding_bind_tac(&ident(SurfaceName::generated_path("foo"))),
             "a non-intro tactic yields no surface value"
         );
     }
@@ -1706,8 +1953,18 @@ mod tests {
     fn test_do_block_defers_non_intro_value_bind() {
         // do let h <- foo; exact h  — `foo` is not threadable, defer.
         let body = do_body(vec![
-            DoElem::Bind(Span::dummy(), binder("h"), Box::new(ident("foo"))),
-            DoElem::Expr(Span::dummy(), Box::new(app("exact", vec![ident("h")]))),
+            DoElem::Bind(
+                Span::dummy(),
+                binder(SurfaceName::generated_path("h")),
+                Box::new(ident(SurfaceName::generated_path("foo"))),
+            ),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("h"))],
+                )),
+            ),
         ]);
         assert!(
             !is_executable_tactic_body(&body),
@@ -1722,10 +1979,19 @@ mod tests {
         // handler then surfaces the static `throwError` message). Note the
         // message arg here is a bare identifier, not a string literal.
         let body = do_body(vec![
-            DoElem::Expr(Span::dummy(), Box::new(app("logInfo", vec![ident("foo")]))),
             DoElem::Expr(
                 Span::dummy(),
-                Box::new(app("throwError", vec![ident("error")])),
+                Box::new(app(
+                    SurfaceName::generated_path("logInfo"),
+                    vec![ident(SurfaceName::generated_path("foo"))],
+                )),
+            ),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("throwError"),
+                    vec![ident(SurfaceName::generated_path("error"))],
+                )),
             ),
         ]);
         assert!(
@@ -1742,7 +2008,10 @@ mod tests {
 
     #[test]
     fn test_as_throw_error_message_extracts_string() {
-        let call = app("throwError", vec![str_lit("custom message")]);
+        let call = app(
+            SurfaceName::generated_path("throwError"),
+            vec![str_lit("custom message")],
+        );
         assert_eq!(
             as_throw_error_message(&call).as_deref(),
             Some("custom message"),
@@ -1754,12 +2023,19 @@ mod tests {
     fn test_as_throw_error_message_accepts_aliases_and_trailing_message() {
         // `throw "m"` (bare) and `throwErrorAt stx "m"` (position then message).
         assert_eq!(
-            as_throw_error_message(&app("throw", vec![str_lit("m")])).as_deref(),
+            as_throw_error_message(&app(
+                SurfaceName::generated_path("throw"),
+                vec![str_lit("m")]
+            ))
+            .as_deref(),
             Some("m")
         );
         assert_eq!(
-            as_throw_error_message(&app("throwErrorAt", vec![ident("stx"), str_lit("m")]))
-                .as_deref(),
+            as_throw_error_message(&app(
+                SurfaceName::generated_path("throwErrorAt"),
+                vec![ident(SurfaceName::generated_path("stx")), str_lit("m")]
+            ))
+            .as_deref(),
             Some("m"),
             "throwErrorAt's trailing literal-string argument is the message"
         );
@@ -1769,12 +2045,20 @@ mod tests {
     fn test_as_throw_error_message_rejects_non_literal_and_non_throw() {
         // A non-literal message (an identifier / interpolation) is deferred.
         assert!(
-            as_throw_error_message(&app("throwError", vec![ident("msg")])).is_none(),
+            as_throw_error_message(&app(
+                SurfaceName::generated_path("throwError"),
+                vec![ident(SurfaceName::generated_path("msg"))]
+            ))
+            .is_none(),
             "a non-string-literal message must not be recognized (deferred to static path)"
         );
         // A non-throw head is not a throwError.
         assert!(
-            as_throw_error_message(&app("exact", vec![str_lit("m")])).is_none(),
+            as_throw_error_message(&app(
+                SurfaceName::generated_path("exact"),
+                vec![str_lit("m")]
+            ))
+            .is_none(),
             "`exact` is not a throwError op"
         );
     }
@@ -1785,7 +2069,10 @@ mod tests {
         // executable (it raises the real typed error).
         let elems = vec![DoElem::Expr(
             Span::dummy(),
-            Box::new(app("throwError", vec![str_lit("custom message")])),
+            Box::new(app(
+                SurfaceName::generated_path("throwError"),
+                vec![str_lit("custom message")],
+            )),
         )];
         assert!(
             do_block_is_exec_interpretable(&elems),
@@ -1803,14 +2090,20 @@ mod tests {
         // do if true then throwError "bad" else exact hP
         let elems = vec![DoElem::If(
             Span::dummy(),
-            Box::new(ident("true")),
+            Box::new(ident(SurfaceName::generated_path("true"))),
             vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(app("throwError", vec![str_lit("bad")])),
+                Box::new(app(
+                    SurfaceName::generated_path("throwError"),
+                    vec![str_lit("bad")],
+                )),
             )],
             Some(vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(app("exact", vec![ident("hP")])),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("hP"))],
+                )),
             )]),
         )];
         assert!(
@@ -1831,7 +2124,10 @@ mod tests {
         // Term-position spelling wraps the App.
         let term_throw = SurfaceTactic::Term(
             Span::dummy(),
-            Box::new(app("throwError", vec![str_lit("m")])),
+            Box::new(app(
+                SurfaceName::generated_path("throwError"),
+                vec![str_lit("m")],
+            )),
         );
         assert_eq!(
             tactic_throw_error_message_in(&term_throw, &[]).as_deref(),
@@ -1839,12 +2135,23 @@ mod tests {
         );
         // A non-throw tactic is not a throwError.
         assert!(
-            tactic_throw_error_message_in(&named("exact", vec![ident("hP")]), &[]).is_none(),
+            tactic_throw_error_message_in(
+                &named("exact", vec![ident(SurfaceName::generated_path("hP"))]),
+                &[]
+            )
+            .is_none(),
             "`exact hP` is not a throwError tactic"
         );
         // A non-literal message defers.
         assert!(
-            tactic_throw_error_message_in(&named("throwError", vec![ident("msg")]), &[]).is_none(),
+            tactic_throw_error_message_in(
+                &named(
+                    "throwError",
+                    vec![ident(SurfaceName::generated_path("msg"))]
+                ),
+                &[]
+            )
+            .is_none(),
             "a non-string-literal message must not be recognized"
         );
     }
@@ -1867,10 +2174,10 @@ mod tests {
         // `s!"got {x}!"` with `x := 7` renders `got 7!`.
         let parts = vec![
             InterpolationPart::Literal("got ".to_owned()),
-            InterpolationPart::Expr(ident("x")),
+            InterpolationPart::Expr(ident(SurfaceName::generated_path("x"))),
             InterpolationPart::Literal("!".to_owned()),
         ];
-        let bindings: Vec<Binding> = vec![("x".to_owned(), nat_lit(7))];
+        let bindings: Vec<Binding> = vec![(SurfaceName::generated_path("x"), nat_lit(7))];
         assert_eq!(
             render_interpolation(&parts, &bindings).as_deref(),
             Some("got 7!"),
@@ -1883,7 +2190,7 @@ mod tests {
         // `s!"got {x}"` with no binding for `x` declines (defers honestly).
         let parts = vec![
             InterpolationPart::Literal("got ".to_owned()),
-            InterpolationPart::Expr(ident("x")),
+            InterpolationPart::Expr(ident(SurfaceName::generated_path("x"))),
         ];
         assert!(
             render_interpolation(&parts, &[]).is_none(),
@@ -1894,8 +2201,11 @@ mod tests {
     #[test]
     fn test_render_interpolation_application_hole_declines() {
         // A `{f x}` hole (an application) has no faithful textual rendering here.
-        let parts = vec![InterpolationPart::Expr(app("f", vec![ident("x")]))];
-        let bindings: Vec<Binding> = vec![("x".to_owned(), nat_lit(1))];
+        let parts = vec![InterpolationPart::Expr(app(
+            SurfaceName::generated_path("f"),
+            vec![ident(SurfaceName::generated_path("x"))],
+        ))];
+        let bindings: Vec<Binding> = vec![(SurfaceName::generated_path("x"), nat_lit(1))];
         assert!(
             render_interpolation(&parts, &bindings).is_none(),
             "an application hole must decline rather than guess a rendering"
@@ -1909,11 +2219,11 @@ mod tests {
             InterpolatedStringKind::String,
             vec![
                 InterpolationPart::Literal("got ".to_owned()),
-                InterpolationPart::Expr(ident("x")),
+                InterpolationPart::Expr(ident(SurfaceName::generated_path("x"))),
             ],
         );
-        let call = app("throwError", vec![msg]);
-        let bindings: Vec<Binding> = vec![("x".to_owned(), nat_lit(3))];
+        let call = app(SurfaceName::generated_path("throwError"), vec![msg]);
+        let bindings: Vec<Binding> = vec![(SurfaceName::generated_path("x"), nat_lit(3))];
         assert_eq!(
             as_throw_error_message_in(&call, &bindings).as_deref(),
             Some("got 3"),
@@ -1941,7 +2251,7 @@ mod tests {
                     InterpolationPart::Expr(str_lit("ok")),
                 ],
             );
-            let call = app("throwError", vec![msg]);
+            let call = app(SurfaceName::generated_path("throwError"), vec![msg]);
             assert_eq!(
                 as_throw_error_message_in(&call, &[]).as_deref(),
                 Some("v=ok"),
@@ -1953,10 +2263,12 @@ mod tests {
     #[test]
     fn test_is_throw_error_interpolation_shape_recognizes_and_rejects() {
         let interp_call = app(
-            "throwError",
+            SurfaceName::generated_path("throwError"),
             vec![interp(
                 InterpolatedStringKind::String,
-                vec![InterpolationPart::Expr(ident("x"))],
+                vec![InterpolationPart::Expr(ident(SurfaceName::generated_path(
+                    "x",
+                )))],
             )],
         );
         assert!(
@@ -1966,13 +2278,16 @@ mod tests {
         // A literal-message throwError is NOT an interpolation shape (the literal
         // path handles it).
         assert!(
-            !is_throw_error_interpolation_shape(&app("throwError", vec![str_lit("m")])),
+            !is_throw_error_interpolation_shape(&app(
+                SurfaceName::generated_path("throwError"),
+                vec![str_lit("m")]
+            )),
             "a literal-message throwError is not an interpolation shape"
         );
         // A non-throw head is not recognized.
         assert!(
             !is_throw_error_interpolation_shape(&app(
-                "exact",
+                SurfaceName::generated_path("exact"),
                 vec![interp(InterpolatedStringKind::String, vec![])]
             )),
             "an interpolation passed to a non-throw op is not a throwError shape"
@@ -1983,14 +2298,18 @@ mod tests {
     fn test_b87_literal_path_unchanged_through_env_aware_variant() {
         // The plain-literal B87 path is unchanged: a literal message renders to
         // itself regardless of bindings.
-        let call = app("throwError", vec![str_lit("custom message")]);
+        let call = app(
+            SurfaceName::generated_path("throwError"),
+            vec![str_lit("custom message")],
+        );
         assert_eq!(
             as_throw_error_message(&call).as_deref(),
             Some("custom message"),
             "the B87 literal path must be unchanged"
         );
         assert_eq!(
-            as_throw_error_message_in(&call, &[("x".to_owned(), nat_lit(9))]).as_deref(),
+            as_throw_error_message_in(&call, &[(SurfaceName::generated_path("x"), nat_lit(9))])
+                .as_deref(),
             Some("custom message"),
             "bindings must not affect a plain-literal message"
         );
@@ -2022,14 +2341,20 @@ mod tests {
         // genuinely unsupported, so the whole block must defer.
         let elems = vec![DoElem::If(
             Span::dummy(),
-            Box::new(ident("true")),
+            Box::new(ident(SurfaceName::generated_path("true"))),
             vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(app("logInfo", vec![str_lit("x")])),
+                Box::new(app(
+                    SurfaceName::generated_path("logInfo"),
+                    vec![str_lit("x")],
+                )),
             )],
             Some(vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(app("exact", vec![ident("hP")])),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("hP"))],
+                )),
             )]),
         )];
         assert!(
@@ -2043,9 +2368,12 @@ mod tests {
         // do for x in xs do skip  — control flow, deferred.
         let body = do_body(vec![DoElem::For(
             Span::dummy(),
-            binder("x"),
-            Box::new(ident("xs")),
-            vec![DoElem::Expr(Span::dummy(), Box::new(ident("skip")))],
+            binder(SurfaceName::generated_path("x")),
+            Box::new(ident(SurfaceName::generated_path("xs"))),
+            vec![DoElem::Expr(
+                Span::dummy(),
+                Box::new(ident(SurfaceName::generated_path("skip"))),
+            )],
         )]);
         assert!(
             !is_executable_tactic_body(&body),
@@ -2070,21 +2398,35 @@ mod tests {
         let elems = vec![
             DoElem::Let(
                 Span::dummy(),
-                binder("x"),
-                Box::new(app("f", vec![ident("e")])),
+                binder(SurfaceName::generated_path("x")),
+                Box::new(app(
+                    SurfaceName::generated_path("f"),
+                    vec![ident(SurfaceName::generated_path("e"))],
+                )),
             ),
-            DoElem::Expr(Span::dummy(), Box::new(app("exact", vec![ident("x")]))),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("x"))],
+                )),
+            ),
         ];
         // Seed `e -> hP` (call-site arg binding).
-        let mut bindings = vec![("e".to_owned(), ident("hP"))];
+        let mut bindings = vec![(
+            SurfaceName::generated_path("e"),
+            ident(SurfaceName::generated_path("hP")),
+        )];
         let close = runtime_elab_close_plan(&elems, &mut bindings)
             .expect("let-then-exact should yield a runtime close expression");
         // `x` resolves to `f hP` (the let RHS with `e` substituted to `hP`).
         match close {
             SurfaceExpr::App(_, func, args) => {
-                assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "f"));
                 assert!(
-                    matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n == "hP"),
+                    matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("f"))
+                );
+                assert!(
+                    matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("hP")),
                     "argument should be substituted to `hP`, got {:?}",
                     args[0].expr
                 );
@@ -2097,8 +2439,17 @@ mod tests {
     fn test_runtime_elab_close_plan_rejects_bare_exact() {
         // do exact e  — no value let, so the delegate path handles it (no runtime).
         let elems = vec![
-            DoElem::Expr(Span::dummy(), Box::new(app("exact", vec![ident("e")]))),
-            DoElem::Expr(Span::dummy(), Box::new(ident("rfl"))),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("e"))],
+                )),
+            ),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(ident(SurfaceName::generated_path("rfl"))),
+            ),
         ];
         let mut bindings = Vec::new();
         assert!(
@@ -2111,8 +2462,18 @@ mod tests {
     fn test_runtime_elab_close_plan_rejects_non_close_terminal() {
         // do let x := e; intro x  — terminal is not exact/refine, defer.
         let elems = vec![
-            DoElem::Let(Span::dummy(), binder("x"), Box::new(ident("e"))),
-            DoElem::Expr(Span::dummy(), Box::new(app("intro", vec![ident("x")]))),
+            DoElem::Let(
+                Span::dummy(),
+                binder(SurfaceName::generated_path("x")),
+                Box::new(ident(SurfaceName::generated_path("e"))),
+            ),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("intro"),
+                    vec![ident(SurfaceName::generated_path("x"))],
+                )),
+            ),
         ];
         let mut bindings = Vec::new();
         assert!(
@@ -2126,12 +2487,24 @@ mod tests {
         let body = do_body(vec![
             DoElem::Let(
                 Span::dummy(),
-                binder("x"),
-                Box::new(app("f", vec![ident("e")])),
+                binder(SurfaceName::generated_path("x")),
+                Box::new(app(
+                    SurfaceName::generated_path("f"),
+                    vec![ident(SurfaceName::generated_path("e"))],
+                )),
             ),
-            DoElem::Expr(Span::dummy(), Box::new(app("exact", vec![ident("x")]))),
+            DoElem::Expr(
+                Span::dummy(),
+                Box::new(app(
+                    SurfaceName::generated_path("exact"),
+                    vec![ident(SurfaceName::generated_path("x"))],
+                )),
+            ),
         ]);
-        let mut bindings = vec![("e".to_owned(), ident("hP"))];
+        let mut bindings = vec![(
+            SurfaceName::generated_path("e"),
+            ident(SurfaceName::generated_path("hP")),
+        )];
         match lower_body(&body, &mut bindings) {
             Some(LoweredBody::RuntimeElabClose { prefix, close }) => {
                 assert!(prefix.is_empty(), "value-let plan has no tactic prefix");
@@ -2152,8 +2525,8 @@ mod tests {
     fn test_lower_body_keeps_delegate_for_plain_sequence() {
         // A flat sequence stays on the delegate path.
         let body = vec![
-            named("intro", vec![ident("h")]),
-            named("exact", vec![ident("h")]),
+            named("intro", vec![ident(SurfaceName::generated_path("h"))]),
+            named("exact", vec![ident(SurfaceName::generated_path("h"))]),
         ];
         let mut bindings = Vec::new();
         assert!(
@@ -2170,8 +2543,8 @@ mod tests {
         // do let x := hP   — no tactic effect, not executable.
         let body = do_body(vec![DoElem::Let(
             Span::dummy(),
-            binder("x"),
-            Box::new(ident("hP")),
+            binder(SurfaceName::generated_path("x")),
+            Box::new(ident(SurfaceName::generated_path("hP"))),
         )]);
         assert!(
             !is_executable_tactic_body(&body),
@@ -2188,59 +2561,105 @@ mod tests {
         }
     }
 
-    fn tactic_single_arg_ident(tac: &SurfaceTactic) -> &str {
+    fn tactic_single_arg_ident(tac: &SurfaceTactic) -> Option<&SurfaceName> {
         match tac {
             SurfaceTactic::Named { args, .. } => match args.first() {
-                Some(SurfaceExpr::Ident(_, n)) => n,
-                _ => "<not-ident-arg>",
+                Some(SurfaceExpr::Ident(_, n)) => Some(n),
+                _ => None,
             },
-            _ => "<not-named>",
+            _ => None,
         }
     }
 
     #[test]
     fn test_expr_mentions_detects_bound_var() {
-        assert!(expr_mentions(&ident("xs"), "xs"));
-        assert!(!expr_mentions(&ident("ys"), "xs"));
-        // Nested under an application.
         assert!(expr_mentions(
-            &app("f", vec![ident("a"), ident("xs")]),
-            "xs"
+            &ident(SurfaceName::generated_path("xs")),
+            &SurfaceName::generated_path("xs")
         ));
         assert!(!expr_mentions(
-            &app("f", vec![ident("a"), ident("b")]),
-            "xs"
+            &ident(SurfaceName::generated_path("ys")),
+            &SurfaceName::generated_path("xs")
+        ));
+        // Nested under an application.
+        assert!(expr_mentions(
+            &app(
+                SurfaceName::generated_path("f"),
+                vec![
+                    ident(SurfaceName::generated_path("a")),
+                    ident(SurfaceName::generated_path("xs"))
+                ]
+            ),
+            &SurfaceName::generated_path("xs")
+        ));
+        assert!(!expr_mentions(
+            &app(
+                SurfaceName::generated_path("f"),
+                vec![
+                    ident(SurfaceName::generated_path("a")),
+                    ident(SurfaceName::generated_path("b"))
+                ]
+            ),
+            &SurfaceName::generated_path("xs")
         ));
     }
 
     #[test]
     fn test_expand_variadic_body_replicates_rep_tactic_per_element() {
         // Body: `intro xs` — one repetition-mentioning tactic.
-        let body = vec![named("intro", vec![ident("xs")])];
-        let rep_args = vec![ident("a"), ident("b"), ident("c")];
-        let out = expand_variadic_body(&body, &[], "xs", &rep_args);
+        let body = vec![named(
+            "intro",
+            vec![ident(SurfaceName::generated_path("xs"))],
+        )];
+        let rep_args = vec![
+            ident(SurfaceName::generated_path("a")),
+            ident(SurfaceName::generated_path("b")),
+            ident(SurfaceName::generated_path("c")),
+        ];
+        let out = expand_variadic_body(&body, &[], &SurfaceName::generated_path("xs"), &rep_args);
         assert_eq!(out.len(), 3, "should expand to one `intro` per element");
-        assert_eq!(tactic_single_arg_ident(&out[0]), "a");
-        assert_eq!(tactic_single_arg_ident(&out[1]), "b");
-        assert_eq!(tactic_single_arg_ident(&out[2]), "c");
+        assert_eq!(
+            tactic_single_arg_ident(&out[0]),
+            Some(&SurfaceName::generated_path("a"))
+        );
+        assert_eq!(
+            tactic_single_arg_ident(&out[1]),
+            Some(&SurfaceName::generated_path("b"))
+        );
+        assert_eq!(
+            tactic_single_arg_ident(&out[2]),
+            Some(&SurfaceName::generated_path("c"))
+        );
     }
 
     #[test]
     fn test_expand_variadic_body_emits_non_rep_tactic_once() {
         // Body: `intro xs; exact hP` — `exact hP` does not mention `xs`.
         let body = vec![
-            named("intro", vec![ident("xs")]),
-            named("exact", vec![ident("hP")]),
+            named("intro", vec![ident(SurfaceName::generated_path("xs"))]),
+            named("exact", vec![ident(SurfaceName::generated_path("hP"))]),
         ];
-        let rep_args = vec![ident("a"), ident("b")];
-        let out = expand_variadic_body(&body, &[], "xs", &rep_args);
+        let rep_args = vec![
+            ident(SurfaceName::generated_path("a")),
+            ident(SurfaceName::generated_path("b")),
+        ];
+        let out = expand_variadic_body(&body, &[], &SurfaceName::generated_path("xs"), &rep_args);
         // 2 expanded `intro` + 1 `exact` = 3 tactics.
         assert_eq!(out.len(), 3);
         assert_eq!(tactic_name(&out[0]), "intro");
-        assert_eq!(tactic_single_arg_ident(&out[0]), "a");
-        assert_eq!(tactic_single_arg_ident(&out[1]), "b");
+        assert_eq!(
+            tactic_single_arg_ident(&out[0]),
+            Some(&SurfaceName::generated_path("a"))
+        );
+        assert_eq!(
+            tactic_single_arg_ident(&out[1]),
+            Some(&SurfaceName::generated_path("b"))
+        );
         assert_eq!(tactic_name(&out[2]), "exact");
-        assert_eq!(tactic_single_arg_ident(&out[2]), "hP");
+        assert_eq!(
+            tactic_single_arg_ident(&out[2]),
+            Some(&SurfaceName::generated_path("hP"))
+        );
     }
 
     #[test]
@@ -2248,13 +2667,16 @@ mod tests {
         // Zero repetition elements: `intro xs` expands to nothing; `exact hP`
         // still runs once.
         let body = vec![
-            named("intro", vec![ident("xs")]),
-            named("exact", vec![ident("hP")]),
+            named("intro", vec![ident(SurfaceName::generated_path("xs"))]),
+            named("exact", vec![ident(SurfaceName::generated_path("hP"))]),
         ];
-        let out = expand_variadic_body(&body, &[], "xs", &[]);
+        let out = expand_variadic_body(&body, &[], &SurfaceName::generated_path("xs"), &[]);
         assert_eq!(out.len(), 1, "only the non-repetition tactic survives");
         assert_eq!(tactic_name(&out[0]), "exact");
-        assert_eq!(tactic_single_arg_ident(&out[0]), "hP");
+        assert_eq!(
+            tactic_single_arg_ident(&out[0]),
+            Some(&SurfaceName::generated_path("hP"))
+        );
     }
 
     #[test]
@@ -2262,20 +2684,27 @@ mod tests {
         // Fixed prefix `x -> hP`; body `exact x; intro xs`. The non-rep `exact x`
         // gets the fixed binding; the rep `intro xs` is replicated.
         let body = vec![
-            named("exact", vec![ident("x")]),
-            named("intro", vec![ident("xs")]),
+            named("exact", vec![ident(SurfaceName::generated_path("x"))]),
+            named("intro", vec![ident(SurfaceName::generated_path("xs"))]),
         ];
-        let fixed = vec![("x".to_owned(), ident("hP"))];
-        let rep_args = vec![ident("a")];
-        let out = expand_variadic_body(&body, &fixed, "xs", &rep_args);
+        let fixed = vec![(
+            SurfaceName::generated_path("x"),
+            ident(SurfaceName::generated_path("hP")),
+        )];
+        let rep_args = vec![ident(SurfaceName::generated_path("a"))];
+        let out =
+            expand_variadic_body(&body, &fixed, &SurfaceName::generated_path("xs"), &rep_args);
         assert_eq!(out.len(), 2);
         assert_eq!(tactic_name(&out[0]), "exact");
         assert_eq!(
             tactic_single_arg_ident(&out[0]),
-            "hP",
+            Some(&SurfaceName::generated_path("hP")),
             "fixed-prefix binding `x -> hP` should apply to non-rep tactic"
         );
         assert_eq!(tactic_name(&out[1]), "intro");
-        assert_eq!(tactic_single_arg_ident(&out[1]), "a");
+        assert_eq!(
+            tactic_single_arg_ident(&out[1]),
+            Some(&SurfaceName::generated_path("a"))
+        );
     }
 }

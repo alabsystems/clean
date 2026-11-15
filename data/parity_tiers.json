@@ -3,10 +3,11 @@
   "ring": "R3",
   "design": "designs/2026-08-22-spine-and-lattice-program.md \u00a75 Ring R3, incorporated by reference as the kernel workstream of designs/2026-08-22-one-trust-backward-design.md (which cites R3's ratchet machinery at its Layer-B D1(b) obligation)",
   "derived_by": "scripts/parity_tiers.py",
-  "rule": "Every tier is derived from a COMMITTED machine-minted artifact. Authored/prose numbers never count (the house rule proven by scripts/evalir_coverage.py). Where no such artifact exists the tier is UNKNOWN with its reason and the exact command that would mint it; UNKNOWN never satisfies and never violates the ratchet. `value` is monotone UP and each `guards` entry is monotone in its stated direction; `--check` fails a regression as `regression` and any other drift as `stale`.",
+  "rule": "Every tier is derived from a COMMITTED machine-minted artifact. Authored/prose numbers never count (the house rule proven by scripts/evalir_coverage.py). Where no such artifact exists the tier is UNKNOWN with its reason and the exact command that would mint it; UNKNOWN never satisfies and never violates the ratchet. `value` is monotone UP and each `guards` entry is monotone in its stated direction; `--check` fails a regression as `regression` and any other drift as `stale`. The MINT enforces the same directions: since 2026-09-14 a bare run REFUSES to write a fallen number and names it, because `--check` compares this file against a fresh derivation and re-minting first therefore compared the file with itself. A fall lands only through `--rebase \"<why>\"`, which records the exact (tier, guard, direction, from, to) it forgives in `rebases` and is matched on all five, so a landed rebase can never forgive the next fall as well.",
   "outside_the_tcb": "R3 tiers are FIDELITY, not soundness. Clean's parser and elaborator sit outside the trusted computing base: everything they produce is re-checked by the kernel, so a frontend defect surfaces as a REJECTION, never as an unsound acceptance. A tier moving up means more real input gets through; it never means more is trusted.",
   "sources_committed": true,
-  "generated_at_head": "d549a50bfd4f680ed887f6c91761f80f5726c4f5",
+  "generated_at_head": "cb730f04f1d653c270ff2c1106e83bfb3a020b33",
+  "rebases": [],
   "summary": {
     "tiers": 5,
     "measured": 4,
@@ -50,8 +51,8 @@
         "measured_at_commit": "410e193c1cd04d38fc44fecc3d3a4c8004980120",
         "matches_head": false,
         "relation": "ancestor",
-        "commits_behind_head": 104,
-        "label": "STALE: measured at 410e193c1, an ANCESTOR of HEAD (104 commits behind) \u2014 the value is true of that commit, not of HEAD"
+        "commits_behind_head": 4460,
+        "label": "STALE: measured at 410e193c1, an ANCESTOR of HEAD (4460 commits behind) \u2014 the value is true of that commit, not of HEAD"
       },
       "detail": {
         "verdicts": {
@@ -71,9 +72,9 @@
     {
       "name": "universe-u2",
       "status": "measured",
-      "statement": "37/45 U2 universe-level fixtures land on their pinned verdict as POSITIVE passes; the remaining 8 are MUST_FAIL fixtures pinned to refuse.",
-      "value": 37,
-      "denominator": 45,
+      "statement": "43/54 U2 universe-level fixtures land on their pinned verdict as POSITIVE passes; the remaining 11 are MUST_FAIL fixtures pinned to refuse.",
+      "value": 43,
+      "denominator": 54,
       "unit": "fixtures",
       "ratchet": "up",
       "guards": [
@@ -88,27 +89,27 @@
         {
           "path": "reports/u2-battery.json",
           "schema": "u2-battery-v1",
-          "sha256": "91d9b106b4bb3413517e6ab12469af1e47f3758f0b8c20c8d88062ee11fdc2d3",
+          "sha256": "d012dac3fe4e1d64d42fedf9c8cf7438c4a646e35fb366a2a5e1a43ef9c08d12",
           "tracked_and_clean": true
         }
       ],
       "measured_at": {
-        "commit": "1b28d2d742a122f08d2a10d5af466194c1188c2f",
-        "commit_short": "1b28d2d74",
+        "commit": "1bbc6e6a89a219a56927930f0836e629e4873445",
+        "commit_short": "1bbc6e6a8",
         "commit_resolved": true,
-        "date": "2026-08-25",
-        "landed_in_commit": "d549a50bfd4f680ed887f6c91761f80f5726c4f5",
-        "landed_on_date": "2026-08-25"
+        "date": "2026-10-19",
+        "landed_in_commit": "081ff15d3f86ce836c2b20de753df2259acb623e",
+        "landed_on_date": "2026-10-19"
       },
       "staleness": {
-        "measured_at_commit": "1b28d2d742a122f08d2a10d5af466194c1188c2f",
+        "measured_at_commit": "1bbc6e6a89a219a56927930f0836e629e4873445",
         "matches_head": false,
         "relation": "ancestor",
-        "commits_behind_head": 1,
-        "label": "STALE: measured at 1b28d2d74, an ANCESTOR of HEAD (1 commits behind) \u2014 the value is true of that commit, not of HEAD"
+        "commits_behind_head": 3,
+        "label": "STALE: measured at 1bbc6e6a8, an ANCESTOR of HEAD (3 commits behind) \u2014 the value is true of that commit, not of HEAD"
       },
       "detail": {
-        "fail_pinned": 8,
+        "fail_pinned": 11,
         "fail_pinned_ids": [
           "p06",
           "p12",
@@ -117,10 +118,13 @@
           "p39",
           "p40",
           "p42",
-          "p44"
+          "p44",
+          "p47",
+          "p51",
+          "p54"
         ],
         "fail_pinned_are_all_must_fail": true,
-        "clean_binary_sha256": "38981725bad1c9b885bb1885b004def4b8e5fd3b0d302cb064876a22ed28f614",
+        "clean_binary_sha256": "46af213f036056e5f6c6bdcdd23c8ea8a88728cd34a129c145c591e6cc222836",
         "negative_pin_semantics": "MUST_FAIL fixtures are pinned REFUSALS (rigid-refusal / ill-typed-in-Lean-too shapes). They are counted in the denominator and excluded from the numerator: a MUST_FAIL fixture that starts PASSING is a soundness event, not an improvement."
       },
       "does_not_claim": "Not soundness, and not universe-solver completeness. This is a 45-fixture ladder over level-inference shapes, not a corpus; passing it says those shapes elaborate and kernel-check, not that the U2 level solver is complete. The 8 fail-pinned fixtures are not counted as passes in either direction \u2014 some of them (p06, p12) are pinned to refuse FOREVER because the input is genuinely ill-typed.",
@@ -129,98 +133,98 @@
     {
       "name": "mathlib-source-elab",
       "status": "measured",
-      "statement": "326/784 declarations across 5 pinned real Mathlib SOURCE files elaborate through Clean's own frontend under `allow_sorry_success`.",
-      "value": 326,
-      "denominator": 784,
+      "statement": "616/764 declarations across 5 pinned real Mathlib SOURCE files elaborate through Clean's own frontend under `allow_sorry_success`.",
+      "value": 616,
+      "denominator": 764,
       "unit": "declarations",
       "ratchet": "up",
       "guards": [
         {
           "key": "kernel_check_failures",
-          "value": 5,
+          "value": 0,
           "direction": "down",
           "note": "declarations the frontend produced that Clean's KERNEL then rejected"
         },
         {
           "key": "sorry_axioms",
-          "value": 9,
+          "value": 0,
           "direction": "down",
           "note": "run-wide sorry counter; the basis folds sorry-tainted decls into successes"
         },
         {
           "key": "success:Mathlib/Data/Subtype.lean",
-          "value": 13,
+          "value": 35,
           "direction": "up",
-          "note": "per-file floor, 13/45"
+          "note": "per-file floor, 35/43"
         },
         {
           "key": "success:Mathlib/Logic/Basic.lean",
-          "value": 164,
+          "value": 224,
           "direction": "up",
-          "note": "per-file floor, 164/256"
+          "note": "per-file floor, 224/253"
         },
         {
           "key": "success:Mathlib/Logic/Function/Basic.lean",
-          "value": 83,
+          "value": 171,
           "direction": "up",
-          "note": "per-file floor, 83/230"
+          "note": "per-file floor, 171/224"
         },
         {
           "key": "success:Mathlib/Logic/Unique.lean",
-          "value": 8,
+          "value": 30,
           "direction": "up",
-          "note": "per-file floor, 8/41"
+          "note": "per-file floor, 30/40"
         },
         {
           "key": "success:Mathlib/Order/Basic.lean",
-          "value": 58,
+          "value": 156,
           "direction": "up",
-          "note": "per-file floor, 58/212"
+          "note": "per-file floor, 156/204"
         }
       ],
       "sources": [
         {
-          "path": "reports/source-elab/srcelab-2026-08-25-g08b7b05d9.json",
+          "path": "reports/source-elab/srcelab-2026-10-17-g0b70d3e3d.json",
           "schema": "Clean-srcelab-report-v1",
-          "sha256": "9bc25c464513b49295e939d99aafdf077d9ca9b19c6a87e3504aeb9b5cd29740",
+          "sha256": "137c82f8b9607bbb60e1135f8b62ebfa4c08bed3d8b8c44f7e9776d5e4d1367e",
           "tracked_and_clean": true
         },
         {
           "path": "data/source_elab_ratchet.json",
           "schema": "Clean-srcelab-ratchet-v1",
-          "sha256": "9b656b195f8cf2d16845ca5abf8d52b86986d7539e29f22d5b04cf531812107b",
+          "sha256": "a2ca8be470ad3a96a484e9364a70cb1c723f7b7ad9b178dea40760caf269b682",
           "tracked_and_clean": true
         }
       ],
       "measured_at": {
-        "commit": "08b7b05d9c52e783f666018108c218724a8e0b7b",
-        "commit_short": "08b7b05d9",
+        "commit": "0b70d3e3d85966fa997b911accb602d741f9af06",
+        "commit_short": "0b70d3e3d",
         "commit_resolved": true,
-        "date": "2026-08-25",
-        "landed_in_commit": "74b96f9f8cc741532ac7324daf8a6644a8873cf7",
-        "landed_on_date": "2026-08-25"
+        "date": "2026-10-17",
+        "landed_in_commit": "1696d0ce4f6a3996cc2233219eb16d9066ebd2e7",
+        "landed_on_date": "2026-10-17"
       },
       "staleness": {
-        "measured_at_commit": "08b7b05d9c52e783f666018108c218724a8e0b7b",
+        "measured_at_commit": "0b70d3e3d85966fa997b911accb602d741f9af06",
         "matches_head": false,
         "relation": "ancestor",
-        "commits_behind_head": 58,
-        "label": "STALE: measured at 08b7b05d9, an ANCESTOR of HEAD (58 commits behind) \u2014 the value is true of that commit, not of HEAD"
+        "commits_behind_head": 123,
+        "label": "STALE: measured at 0b70d3e3d, an ANCESTOR of HEAD (123 commits behind) \u2014 the value is true of that commit, not of HEAD"
       },
       "detail": {
         "per_file": {
-          "Mathlib/Data/Subtype.lean": "13/45",
-          "Mathlib/Logic/Basic.lean": "164/256",
-          "Mathlib/Logic/Function/Basic.lean": "83/230",
-          "Mathlib/Logic/Unique.lean": "8/41",
-          "Mathlib/Order/Basic.lean": "58/212"
+          "Mathlib/Data/Subtype.lean": "35/43",
+          "Mathlib/Logic/Basic.lean": "224/253",
+          "Mathlib/Logic/Function/Basic.lean": "171/224",
+          "Mathlib/Logic/Unique.lean": "30/40",
+          "Mathlib/Order/Basic.lean": "156/204"
         },
         "counting_basis": "allow_sorry_success",
         "counting_basis_note": "success_count counts --allow-sorry passes: Clean-check-report-v1 has no per-decl sorry-taint field, so sorry-tainted decls are folded into success_count and taint is only visible as the run-wide trust_summary.sorry_axioms counter recorded per file below.",
         "invocation": "clean check --imports-prefer-olean --allow-sorry --json",
         "corpus": "mathlib4 v4.30.0-rc2 (CLEAN_MATHLIB_DIR), per the ratchet's arming record"
       },
-      "does_not_claim": "NOT sorry-free. counting_basis=allow_sorry_success: Clean-check-report-v1 carries no per-decl sorry-taint field, so sorry-tainted declarations are folded into the 326 and taint is visible only as the run-wide sorry_axioms counter (9). Not soundness either: 5 declarations were elaborated and then REJECTED by Clean's kernel \u2014 which is the frontend being outside the TCB working as designed, not a hole. And not Mathlib coverage: five files, chosen to span failure classes, are not the library.",
+      "does_not_claim": "NOT sorry-free. counting_basis=allow_sorry_success: Clean-check-report-v1 carries no per-decl sorry-taint field, so sorry-tainted declarations are folded into the 616 and taint is visible only as the run-wide sorry_axioms counter (0). Not soundness either: 0 declarations were elaborated and then REJECTED by Clean's kernel \u2014 which is the frontend being outside the TCB working as designed, not a hole. And not Mathlib coverage: five files, chosen to span failure classes, are not the library.",
       "mint_command": "scripts/source_elab_gate.sh --jobs 2 --update"
     },
     {
@@ -309,8 +313,8 @@
         "measured_at_commit": "0a3c59c414003d1530cea2a93ebee873d8e1d48d",
         "matches_head": false,
         "relation": "ancestor",
-        "commits_behind_head": 1224,
-        "label": "STALE: measured at 0a3c59c41, an ANCESTOR of HEAD (1224 commits behind) \u2014 the value is true of that commit, not of HEAD"
+        "commits_behind_head": 5580,
+        "label": "STALE: measured at 0a3c59c41, an ANCESTOR of HEAD (5580 commits behind) \u2014 the value is true of that commit, not of HEAD"
       },
       "detail": {
         "merge_rule": "union by module across rerun-results and tail-results; on disagreement the CONSERVATIVE record (fewest constants claimed) wins",

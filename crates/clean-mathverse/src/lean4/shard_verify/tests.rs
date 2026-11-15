@@ -64,18 +64,25 @@ fn reconstruct_shard_levels_handles_composite_levels() {
         levels[succ as usize],
         Level::succ(Level::param(Name::from_string("u")))
     );
+    // Composite nodes are rebuilt verbatim, as Lean's kernel reads the stored
+    // level (DECISIONS R150): Clean's smart constructors would collapse
+    // `max 0 (u+1)` to `u+1` and `imax u (u+1)` to `max u (u+1)`.
     assert_eq!(
         levels[max as usize],
-        Level::max(
-            Level::zero(),
-            Level::succ(Level::param(Name::from_string("u")))
+        Level::Max(
+            Level::zero().into(),
+            Level::succ(Level::param(Name::from_string("u"))).into()
         )
+    );
+    assert_ne!(
+        levels[max as usize],
+        Level::succ(Level::param(Name::from_string("u")))
     );
     assert_eq!(
         levels[imax as usize],
-        Level::imax(
-            Level::param(Name::from_string("u")),
-            Level::succ(Level::param(Name::from_string("u")))
+        Level::IMax(
+            Level::param(Name::from_string("u")).into(),
+            Level::succ(Level::param(Name::from_string("u"))).into()
         )
     );
 }

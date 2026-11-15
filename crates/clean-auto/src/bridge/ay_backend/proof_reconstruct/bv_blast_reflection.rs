@@ -44,7 +44,7 @@ pub enum ReflectionError {
 }
 
 /// The reflection-certificate outcome.
-pub struct ReflectionCertificate {
+pub(crate) struct ReflectionCertificate {
     /// The kernel `Bool` term `checkRefutes <clauses> <refutation>`.
     pub check_app: Expr,
     /// The `Eq.refl Bool.true` proof term (constant size).
@@ -154,7 +154,7 @@ fn clause_pairs(lits: &[Lit]) -> Vec<(u32, bool)> {
 /// and is part of the `checkRefutes3` soundness-proved surface (unchanged here).
 /// `checkRefutes3_sound` is `∀ cs`, so this representation change is soundness-invariant —
 /// only the literal node shape in `cs` differs.
-pub fn encode_proof_clauses(proof: &BvBlastProof) -> Expr {
+pub(crate) fn encode_proof_clauses(proof: &BvBlastProof) -> Expr {
     let clauses: Vec<Vec<(u32, bool)>> = proof
         .clauses
         .iter()
@@ -189,7 +189,7 @@ pub(crate) fn proof_step_tuples(proof: &BvBlastProof) -> Vec<(Vec<(u32, bool)>, 
 /// through unchanged: the kernel `checkRefutes` threads a DB of
 /// `original clauses ++ recorded resolvents` and indexes it by the same id space
 /// (clause ids `< clauses.len()`, step ids after) the producer uses.
-pub fn encode_proof_refutation(proof: &BvBlastProof) -> Expr {
+pub(crate) fn encode_proof_refutation(proof: &BvBlastProof) -> Expr {
     encode_refutation(&proof_step_tuples(proof))
 }
 
@@ -204,7 +204,7 @@ pub fn encode_proof_refutation(proof: &BvBlastProof) -> Expr {
 /// [`ReflectionError::InvalidProof`] if the producer's validation fails;
 /// [`ReflectionError::CertificateRejected`] if the kernel does not accept the
 /// `Eq.refl` (i.e. `checkRefutes` did not reduce to `Bool.true`).
-pub fn certify_by_reflection(
+pub(crate) fn certify_by_reflection(
     env: &Environment,
     proof: &BvBlastProof,
 ) -> Result<ReflectionCertificate, ReflectionError> {
@@ -315,7 +315,7 @@ pub fn check_refutes3_sound_name() -> &'static str {
 /// # Errors
 /// [`ReflectionError::InvalidProof`] if the producer's validation fails;
 /// [`ReflectionError::CertificateRejected`] if the kernel does not accept the `Eq.refl`.
-pub fn certify3_by_reflection(
+pub(crate) fn certify3_by_reflection(
     env: &Environment,
     proof: &BvBlastProof,
 ) -> Result<ReflectionCertificate, ReflectionError> {

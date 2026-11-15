@@ -13,9 +13,22 @@ use trust_ir::Module;
 #[test]
 fn intern_file_is_idempotent_and_indexed() {
     let mut m = Module::new("dbg");
-    assert_eq!(m.intern_file("src/main.rs"), 0);
-    assert_eq!(m.intern_file("src/lib.rs"), 1);
-    assert_eq!(m.intern_file("src/main.rs"), 0, "idempotent");
+    assert_eq!(
+        m.intern_file("src/main.rs")
+            .expect("Module::intern_file: test fixture"),
+        0
+    );
+    assert_eq!(
+        m.intern_file("src/lib.rs")
+            .expect("Module::intern_file: test fixture"),
+        1
+    );
+    assert_eq!(
+        m.intern_file("src/main.rs")
+            .expect("Module::intern_file: test fixture"),
+        0,
+        "idempotent"
+    );
     assert_eq!(m.files.len(), 2);
     assert_eq!(m.file_name(0), Some("src/main.rs"));
     assert_eq!(m.file_name(2), None);
@@ -25,9 +38,11 @@ fn intern_file_is_idempotent_and_indexed() {
 #[test]
 fn file_table_binary_round_trip() {
     let mut m = Module::new("dbg");
-    m.intern_file("a/b/c.rs");
-    m.intern_file("d/e.rs");
-    let bytes = trust_ir::binary::serialize_module(&m);
+    m.intern_file("a/b/c.rs")
+        .expect("Module::intern_file: test fixture");
+    m.intern_file("d/e.rs")
+        .expect("Module::intern_file: test fixture");
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("binary round trip");
     assert_eq!(back.files, m.files);
 }
@@ -36,7 +51,7 @@ fn file_table_binary_round_trip() {
 #[test]
 fn empty_file_table_binary_round_trip() {
     let m = Module::new("dbg");
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("round trip");
     assert!(back.files.is_empty());
 }
@@ -45,8 +60,10 @@ fn empty_file_table_binary_round_trip() {
 #[test]
 fn file_table_text_round_trip() {
     let mut m = Module::new("dbg");
-    m.intern_file("a/b/c.rs");
-    m.intern_file("d/e.rs");
+    m.intern_file("a/b/c.rs")
+        .expect("Module::intern_file: test fixture");
+    m.intern_file("d/e.rs")
+        .expect("Module::intern_file: test fixture");
     let text = format!("{m}");
     assert!(text.contains("file 0 \"a/b/c.rs\""), "text: {text}");
     assert!(text.contains("file 1 \"d/e.rs\""), "text: {text}");

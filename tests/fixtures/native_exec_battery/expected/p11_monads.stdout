@@ -1,0 +1,5 @@
+50
+Except.ok 5
+Except.error "div by zero"
+Except.ok 14
+12

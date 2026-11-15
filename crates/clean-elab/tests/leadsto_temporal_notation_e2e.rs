@@ -87,17 +87,17 @@ fn leadsto_notation_parses_elaborates_and_kernel_checks() {
             panic!("`~>` regressed: declaration fell into error recovery: {content:?}");
         }
     }
-    let theorems: Vec<&str> = flat
+    let theorems: Vec<&clean_kernel::Name> = flat
         .iter()
         .filter_map(|decl| match decl {
-            SurfaceDecl::Theorem { name, .. } => Some(name.as_str()),
+            SurfaceDecl::Theorem { name, .. } => Some(name.name()),
             _ => None,
         })
         .collect();
     assert!(
-        theorems.contains(&"box_unfolds")
-            && theorems.contains(&"diamond_unfolds")
-            && theorems.contains(&"leadsto_unfolds"),
+        theorems.contains(&&clean_kernel::Name::from_string("box_unfolds"))
+            && theorems.contains(&&clean_kernel::Name::from_string("diamond_unfolds"))
+            && theorems.contains(&&clean_kernel::Name::from_string("leadsto_unfolds")),
         "expected box/diamond/leadsto unfolding theorems, got {theorems:?}"
     );
 

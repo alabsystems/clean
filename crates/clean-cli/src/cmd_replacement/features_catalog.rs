@@ -68,7 +68,7 @@ for #3711 and #3712 automation gates.",
             },
             Example {
                 cmd: "clean replacement tactic-parity discover-full-corpus-inputs --json",
-                what: "inspect the tactic parity registry and fail closed on missing real full-corpus inputs",
+                what: "survey the tactic parity registry for missing full-corpus inputs (a report, not a gate: always exits 0)",
             },
             Example {
                 cmd: "clean replacement tactic-parity generate-full-corpus-fixture --output /tmp/tactic-parity-full-corpus.json --json",
@@ -120,14 +120,16 @@ pub(crate) const FEATURE_REPLACEMENT_TACTIC_PARITY_DISCOVER_FULL_CORPUS_INPUTS: 
         summary: "Inspect tactic parity full-corpus inputs (Experimental)",
         description: "\
 Reads the tactic parity eval registry and reports whether real full-corpus \
-source manifests and count artifacts are present. The command is intentionally \
-fail-closed when the full-corpus inputs are placeholders, so launch reports do \
-not confuse a schema fixture with representative tactic coverage.",
+source manifests and count artifacts are present. It is a SURVEY and always \
+exits 0 — by design, like `trust-boundary-audit`: it reports what is missing \
+rather than refusing. Do not gate anything on its exit code; the fail-closed \
+command is `validate-full-corpus`, and even that validates schema and \
+consistency, not corpus representativeness.",
         category: Category::Dev,
         stability: Stability::Experimental,
         examples: &[Example {
             cmd: "clean replacement tactic-parity discover-full-corpus-inputs --json",
-            what: "inspect the tactic parity registry and fail closed on missing real full-corpus inputs",
+            what: "survey the tactic parity registry for missing full-corpus inputs (a report, not a gate: always exits 0)",
         }],
         see_also: &[
             "replacement tactic-parity",
@@ -196,8 +198,11 @@ pub(crate) const FEATURE_REPLACEMENT_TACTIC_PARITY_VALIDATE_FULL_CORPUS: Feature
         summary: "Validate tactic parity full-corpus evidence (Experimental)",
         description: "\
 Validates the full Lean4 tactic corpus acceptance artifact against the Rust \
-schema gate. It remains fail-closed unless the artifact is real full-corpus \
-evidence with matching counts, blocker accounting, and reproduction metadata.",
+schema gate: schema version, internal count consistency, blocker accounting \
+and reproduction metadata. SCHEMA-ONLY: the zero-row fixture that \
+`generate-full-corpus-fixture` writes passes it, so a green exit means the \
+artifact is WELL-FORMED, not that it is real full-corpus evidence — \
+representativeness has no mechanical check here yet.",
         category: Category::Dev,
         stability: Stability::Experimental,
         examples: &[Example {

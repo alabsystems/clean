@@ -67,20 +67,31 @@ impl ProofState {
 
     /// Build a kernel LocalContext from a goal's local context.
     ///
+    /// An owned copy of [`Self::shared_local_ctx`], which memoises the build
+    /// (`local_ctx_memo.rs`); callers that only read should take the shared
+    /// `Arc` instead and skip the copy.
+    ///
     /// REQUIRES: `goal.local_ctx` contains valid local declarations.
     ///   `self.elab_locals` and `self.metas` are consistent with the current state.
     /// ENSURES: Returns a LocalContext containing all elaborator-scope locals,
     ///   goal-scope locals, and metavariable-as-FVar entries. Types are
     ///   instantiated through `self.metas` (expression metas AND solved
-    ///   universe levels — U2 stage 1b).
+    ///   universe levels — U2 stage 1b). Marked have proofs remain opaque;
+    ///   genuine local definitions retain their reduction values.
     pub(crate) fn build_local_ctx(&self, goal: &Goal) -> LocalContext {
+        LocalContext::clone(&self.shared_local_ctx(goal))
+    }
+
+    /// The from-scratch build behind [`Self::build_local_ctx`]; only the memo
+    /// (and its debug audit) calls this.
+    pub(super) fn rebuild_local_ctx(&self, goal: &Goal) -> LocalContext {
         let push_decl = |ctx: &mut LocalContext, decl: &super::LocalDecl| {
-            let name = Name::from_string(&decl.name);
+            let name = decl.name.name().clone();
             let ty = self.instantiate_for_kernel(&decl.ty);
-            if let Some(value) = &decl.value {
+            if let Some(value) = decl.reduction_value() {
                 ctx.push_let_with_id(decl.fvar, name, ty, self.instantiate_for_kernel(value));
             } else {
-                ctx.push_with_id(decl.fvar, name, ty, BinderInfo::Default);
+                ctx.push_with_id(decl.fvar, name, ty, decl.binder_info);
             }
         };
 
@@ -185,12 +196,12 @@ impl ProofState {
                     continue;
                 }
                 if let Some(decl) = decl_index.get(&fv) {
-                    let name = Name::from_string(&decl.name);
+                    let name = decl.name.name().clone();
                     let ty = self.metas.instantiate(&decl.ty);
-                    if let Some(value) = &decl.value {
+                    if let Some(value) = decl.reduction_value() {
                         ctx.push_let_with_id(decl.fvar, name, ty, self.metas.instantiate(value));
                     } else {
-                        ctx.push_with_id(decl.fvar, name, ty, BinderInfo::Default);
+                        ctx.push_with_id(decl.fvar, name, ty, decl.binder_info);
                     }
                     progressed = true;
                 }
@@ -222,14 +233,7 @@ impl ProofState {
     ///
     /// Part of #1671.
     fn with_tc<R>(&self, goal: &Goal, f: impl FnOnce(&TypeChecker<'_>) -> R) -> R {
-        let ctx = self.build_local_ctx(goal);
-        let cached = self.tc_cache.lock().expect("tc_cache poisoned").take();
-        let mut tc = match cached {
-            Some((mid, caches)) if mid == goal.meta_id => {
-                TypeChecker::with_context_and_caches(&self.env, ctx, caches)
-            }
-            _ => TypeChecker::with_context(&self.env, ctx),
-        };
+        let mut tc = self.goal_type_checker(goal);
         let budget = speculative_tc_budget();
         if budget != 0 {
             tc.set_heartbeat_limit(budget);
@@ -245,6 +249,24 @@ impl ProofState {
                 Some((goal.meta_id, tc.take_caches()));
         }
         result
+    }
+
+    /// A `TypeChecker` over `goal`'s memoised context, reusing the cached
+    /// checker state when the goal has not changed since the last call (the
+    /// `with_tc` contract, shared by the budgeted reducers below).
+    ///
+    /// The shared context is handed over as the `Arc` itself when the checker
+    /// inherits cached state — `with_context_and_caches` never writes to it —
+    /// and copied only on a fresh checker, whose constructor takes it owned.
+    fn goal_type_checker(&self, goal: &Goal) -> TypeChecker<'_> {
+        let ctx = self.shared_local_ctx(goal);
+        let cached = self.tc_cache.lock().expect("tc_cache poisoned").take();
+        match cached {
+            Some((mid, caches)) if mid == goal.meta_id => {
+                TypeChecker::with_context_and_caches(&self.env, ctx, caches)
+            }
+            _ => TypeChecker::with_context(&self.env, LocalContext::clone(&ctx)),
+        }
     }
 
     /// Invalidate the TypeChecker cache (call after context-mutating tactics).
@@ -274,7 +296,7 @@ impl ProofState {
     /// REQUIRES: `expr` and `expected` are well-formed in `goal.local_ctx`.
     /// ENSURES: On Ok, the kernel accepts `expr : expected`.
     /// ENSURES: On Err(TypeCheckFailed), the kernel rejected the term.
-    pub fn check_type_strict(
+    pub(crate) fn check_type_strict(
         &self,
         goal: &Goal,
         expr: &Expr,
@@ -284,7 +306,7 @@ impl ProofState {
         let inst_expected = self.instantiate_for_kernel(expected);
         self.with_tc(goal, |tc| {
             tc.check_type(&inst_expr, &inst_expected)
-                .map_err(|e| TacticError::TypeCheckFailed(format!("{e:?}")))
+                .map_err(|e| TacticError::TypeCheckFailed(format!("{e}")))
         })
     }
 
@@ -304,13 +326,13 @@ impl ProofState {
     ///   and the kernel accepted `expr` in full-check mode.
     /// ENSURES: On Err(TypeCheckFailed), the kernel rejected the term under
     ///   full checking (App-arg mismatch, bad domain sort, …).
-    pub fn infer_type_strict(&self, goal: &Goal, expr: &Expr) -> Result<Expr, TacticError> {
+    pub(crate) fn infer_type_strict(&self, goal: &Goal, expr: &Expr) -> Result<Expr, TacticError> {
         let instantiated = self.instantiate_for_kernel(expr);
         let is_lambda = matches!(instantiated.kind(), ExprKind::Lam(..));
         self.with_tc(goal, |tc| {
             let ty = tc
                 .infer_type_full(&instantiated)
-                .map_err(|e| TacticError::TypeCheckFailed(format!("{e:?}")))?;
+                .map_err(|e| TacticError::TypeCheckFailed(format!("{e}")))?;
             let ty = self.instantiate_for_kernel(&ty);
             if is_lambda {
                 self.fix_pi_leaked_fvars(goal, &ty)
@@ -332,7 +354,7 @@ impl ProofState {
         self.with_tc(goal, |tc| {
             let ty = tc
                 .infer_type(&instantiated)
-                .map_err(|e| TacticError::TypeCheckFailed(format!("{e:?}")))?;
+                .map_err(|e| TacticError::TypeCheckFailed(format!("{e}")))?;
             let ty = self.instantiate_for_kernel(&ty);
             if is_lambda {
                 self.fix_pi_leaked_fvars(goal, &ty)
@@ -464,7 +486,7 @@ impl ProofState {
     /// ENSURES: `true` implies the standard (full-transparency) `is_def_eq`
     /// would also hold — a reducible-def-eq is a strict subset, so any proof it
     /// green-lights is still kernel-accepted at `close_goal`.
-    pub fn is_def_eq_reducible(&self, goal: &Goal, a: &Expr, b: &Expr) -> bool {
+    pub(crate) fn is_def_eq_reducible(&self, goal: &Goal, a: &Expr, b: &Expr) -> bool {
         let a_inst = self.metas.instantiate(a);
         let b_inst = self.metas.instantiate(b);
         let ctx = self.build_local_ctx(goal);
@@ -514,14 +536,7 @@ impl ProofState {
         const INDEXING_WHNF_BUDGET: u32 = 10_000;
 
         let instantiated = self.metas.instantiate(expr);
-        let ctx = self.build_local_ctx(goal);
-        let cached = self.tc_cache.lock().expect("tc_cache poisoned").take();
-        let mut tc = match cached {
-            Some((mid, caches)) if mid == goal.meta_id => {
-                TypeChecker::with_context_and_caches(&self.env, ctx, caches)
-            }
-            _ => TypeChecker::with_context(&self.env, ctx),
-        };
+        let mut tc = self.goal_type_checker(goal);
         tc.set_heartbeat_limit(INDEXING_WHNF_BUDGET);
         // Reducible transparency is the class killer (and the Lean-parity
         // choice — Lean's DiscrTree keys via reducibility-restricted whnfDT):
@@ -544,6 +559,57 @@ impl ProofState {
             *self.tc_cache.lock().expect("tc_cache poisoned") =
                 Some((goal.meta_id, tc.take_caches()));
         }
+        result
+    }
+
+    /// WHNF at **reducible + instances** transparency, under a hard
+    /// per-call heartbeat budget — Lean's `withReducibleAndInstances`.
+    ///
+    /// The ceiling is the point. `simp`'s projection reduction
+    /// (`tactic/simp/proj_reduce.rs`) must be able to turn a registered
+    /// instance constant into its `Class.mk …` constructor — `Pi.instCompl`
+    /// is the measured case — and must NOT δ-unfold ordinary semireducible
+    /// definitions, which is what erases the heads lemma matching is keyed on
+    /// (the hazard recorded at `Unifier::with_env_reducible`). `Instances`
+    /// unfolds `@[reducible]` definitions plus registered instances and
+    /// nothing else.
+    ///
+    /// The budget is the [`Self::whnf_indexing`] precedent, for the same
+    /// reason and against the same class: transparency bounds DELTA, and ι is
+    /// not gated by transparency at all, so an instance whose argument spine
+    /// exposes a recursor can still grow a term geometrically within a
+    /// handful of unfolds (measured 2026-08-13 at `Int16.and_eq_neg_one_iff`:
+    /// 21 GB before SIGKILL). On exhaustion the kernel soundly returns its
+    /// input unreduced, so the bomb degrades to "this projection did not
+    /// reduce" — exactly the state before this reduction existed — instead of
+    /// to an OOM.
+    ///
+    /// Use a fresh checker with reducibility honored in all nested reductions.
+    /// The explicit WHNF mode alone does not govern recursor subreductions,
+    /// and cached full-transparency results are unsuitable for this narrower
+    /// policy. No result or cache from this call is installed in `with_tc`.
+    ///
+    /// REQUIRES: `expr` is well-formed in `goal`'s local context.
+    /// ENSURES: the result is definitionally equal to `expr`.
+    pub(crate) fn whnf_instances(&self, goal: &Goal, expr: &Expr) -> Expr {
+        /// Real-reduction ticks per instance-transparency WHNF call. The
+        /// legitimate work here is a handful of delta steps from an instance
+        /// constant to its constructor application, so this is orders of
+        /// magnitude above any honest call and still bails sub-second on the
+        /// geometric-growth class.
+        const INSTANCES_WHNF_BUDGET: u32 = 10_000;
+
+        let instantiated = self.metas.instantiate(expr);
+        let mut tc = TypeChecker::with_context(&self.env, self.build_local_ctx(goal));
+        tc.set_transparency(clean_kernel::TransparencyMode::Instances);
+        tc.set_honor_reducibility(true);
+        tc.set_heartbeat_limit(INSTANCES_WHNF_BUDGET);
+        let result =
+            tc.whnf_with_transparency(&instantiated, clean_kernel::TransparencyMode::Instances);
+        if tc.heartbeat_spent() && std::env::var_os("CLEAN_SIMP_REWRITE_TRACE").is_some() {
+            eprintln!("simp-proj: instances whnf budget exhausted (returning unreduced)");
+        }
+
         result
     }
 
@@ -627,7 +693,7 @@ impl ProofState {
     ///   on which sides needed reduction.
     ///
     /// Part of #685.
-    pub fn prove_eq_by_reduction(
+    pub(crate) fn prove_eq_by_reduction(
         &self,
         goal: &Goal,
         alpha: &Expr,
@@ -692,7 +758,7 @@ impl ProofState {
     /// REQUIRES: `goal`'s local context is valid for the current environment.
     /// ENSURES: On Ok, the verifier has all goal locals and meta-as-fvar entries registered.
     /// ENSURES: On Err, no partially initialized verifier escapes this function.
-    pub fn create_cert_verifier(&self, goal: &Goal) -> Result<CertVerifier<'_>, CertError> {
+    pub(crate) fn create_cert_verifier(&self, goal: &Goal) -> Result<CertVerifier<'_>, CertError> {
         let ctx = self.build_local_ctx(goal);
         let mut verifier = CertVerifier::with_mode(&self.env, self.env.mode());
         verifier.register_local_context(&ctx)?;
@@ -719,7 +785,7 @@ impl ProofState {
         let is_lambda = matches!(instantiated.kind(), ExprKind::Lam(..));
         let (ty, cert) = tc
             .infer_type_with_cert(&instantiated)
-            .map_err(|e| TacticError::TypeCheckFailed(format!("{e:?}")))?;
+            .map_err(|e| TacticError::TypeCheckFailed(format!("{e}")))?;
         let ty = self.metas.instantiate(&ty);
         // Apply same FVar leak fix as infer_type (#2197)
         let ty = if is_lambda {
@@ -762,10 +828,10 @@ impl ProofState {
         // Verify the certificate
         let mut verifier = self
             .create_cert_verifier(goal)
-            .map_err(|e| TacticError::TypeCheckFailed(format!("CertVerifier error: {e:?}")))?;
+            .map_err(|e| TacticError::TypeCheckFailed(format!("CertVerifier error: {e}")))?;
 
         let _ = verifier.verify(&cert, proof).map_err(|e| {
-            TacticError::TypeCheckFailed(format!("Certificate verification failed: {e:?}"))
+            TacticError::TypeCheckFailed(format!("Certificate verification failed: {e}"))
         })?;
 
         Ok(cert)

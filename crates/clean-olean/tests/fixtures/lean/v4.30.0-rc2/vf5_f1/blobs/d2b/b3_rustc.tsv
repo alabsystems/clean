@@ -1,0 +1,6 @@
+ContainmentMode	u8	[0, 1, 2]
+Ordering3	i8	[-1, 0, 1]
+Implicit	isize	[0, 1, 2]
+Sparse	isize	[5, 9]
+FpCategory	isize	[0, 1, 2, 3, 4]
+AtomicOrdering	isize	[0, 1, 2, 3, 4]

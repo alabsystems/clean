@@ -40,7 +40,7 @@ pub enum WhnfProofStep {
     Delta(Name),
     /// Zeta reduction: `let x := val in body` ~> `body[val/x]`
     Zeta,
-    /// Iota reduction: recursor computation rule
+    /// Iota reduction: recursor computation rule and its exposed beta reduction
     Iota,
     /// Projection reduction: `struct.field` ~> `value`
     Proj { struct_name: Name, idx: u32 },
@@ -223,6 +223,7 @@ impl<'env> TypeChecker<'env> {
     /// ENSURES: `result` equals `self.whnf(e)`
     /// ENSURES: If `proof = Some(p)`, then `p : @Eq type_ e result`
     pub fn whnf_with_proof(&self, e: &Expr, type_: &Expr, u: Level) -> WhnfWithProof {
+        let _metered = self.begin_operation();
         stack_safe(|| self.whnf_with_proof_inner(e, type_, u))
     }
 
@@ -281,7 +282,7 @@ impl<'env> TypeChecker<'env> {
                         e.clone()
                     };
                     if let Some(reduced) = self.try_iota_reduction(&app, true) {
-                        // Iota: record one step covering head reduction + iota
+                        // Iota: record head reduction, iota and the exposed RHS beta step.
                         let proof =
                             EqProofBuilder::mk_eq_refl(u.clone(), type_.clone(), reduced.clone());
                         steps.push((reduced.clone(), proof, WhnfProofStep::Iota));

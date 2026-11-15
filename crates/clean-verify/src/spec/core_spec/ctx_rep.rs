@@ -58,62 +58,26 @@
 //! (`tc/local_context.rs:45-58`), so one renaming discipline suffices instead of
 //! finite-support machinery recurring at every binder.
 //!
-//! # COVERAGE — stated as a fraction, never rounded up
+//! # Coverage and theorem boundary
 //!
-//! `ImplInfer` has nine rules. **Eight are bridged here**: `sort`, `fvar`,
-//! `const`, `mdata`, `app`, `lam`, `pi`, `let_`. **The ninth, `lit`, is
-//! REFUTED** — not left open, not rounded up into the numerator.
+//! Every one of `ImplInfer`'s nine rules now has a bridge arm: sort, fvar,
+//! const, mdata, app, lam, pi, let_, and BOTH literal kinds. The literal arm
+//! uses the injective tagged representation in `literal_model.rs`; the old
+//! impossibility theorems applied to the earlier literal-free target judgment
+//! and have been retired with that judgment.
 //!
-//! **RE-MEASURED 2026-08-08 and DISCHARGED 2026-08-11.** The 2026-08-08 pass
-//! found the blocker table stale in three of its five rows; the 2026-08-11 pass
-//! proved the remaining four rules and refuted the fifth. What each row cost:
+//! App and binder arms still carry the explicit operational and representation
+//! premises that later `impl_infer_sound` lemmas discharge. The global theorem
+//! must compose all arms and establish its environment and scoping premises.
+//! These are bridges between two formal relations. Connecting actual Rust
+//! executions is a separate source-refinement obligation.
 //!
-//! | rule | status |
-//! |---|---|
-//! | `app` | **BRIDGED** (`impl_bridge_app`). Matches `KernelInfers.app` premise for premise — nothing is dropped. Its three `forall`-premises are `impl_whnf_to_whnf_to` / `impl_is_le_defeq` / `to_kexpr_at_instantiate` carried as hypotheses, for the stage reason below; the unconditional form is `impl_kinfers_app` (`impl_infer_sound.rs`). |
-//! | `lam` | **BRIDGED** (`impl_bridge_lam`). Unblocked by the 2026-08-08 repair: `KernelInfers.lam` now carries `KernelInfers G A SA -> whnf_to SA (KExpr.sort u)`, the idiom its own `let_` arm always used, matching the deployed `ensure_sort` (`tc/infer.rs:521`). What was left was the open/abstract commutation, carried here as `hopen`/`habs` and discharged at M4 by `impl_kinfers_lam_scoped`. |
-//! | `pi` | **BRIDGED** (`impl_bridge_pi`). Same repair, twice — `KernelInfers.pi` now carries a `whnf_to` premise for the domain (`tc/infer.rs:555`) AND the body (`:573`), which had not been modelled at all. No `habs`: a Pi result is a sort, so there is nothing to abstract back. |
-//! | `let_` | **BRIDGED** (`impl_bridge_let_core` / `impl_bridge_let`). The old row was false in both halves: `KernelInfers.let_` carries `whnf_to Ty (KExpr.sort u)` and `DefEq Tv ty` as witnessed premises, so `hsort` and `hdef` land as themselves and this arm needed **no layer-2 change at all**. |
-//! | `lit` | **REFUTED** (`kernelinfers_lit_rejects`, `impl_bridge_lit_refuted`, `impl_bridge_lit_unprovable`). `KernelInfers` has no literal rule (7 constructors: sort/bvar/pi/lam/const/app/let_), so there is nothing to bridge INTO — and that is now *proved*, not asserted: assuming the rule's would-be type yields `Empty`. |
+//! The literal rule mirrors production's unconditional fixed-name return.
+//! Relating those names to a well-formed real prelude is an environment
+//! invariant, not an extra check performed by that Rust branch.
 //!
-//! **STAGE ORDER is why several arms carry hypotheses.** `add_ctx_rep` runs
-//! BEFORE `add_impl_infer_sound` (`bundles.rs`), and M4 consumes C4's
-//! `to_kexpr_at` / `rho_index` / `CtxRep`, so the order cannot be swapped.
-//! Nothing M4 registers — `impl_whnf_to_whnf_to`, `impl_is_le_defeq`,
-//! `to_kexpr_at_instantiate`, `to_kexpr_open`, `to_kexpr_abstract`, `ImplLC`,
-//! `ctx_rep_snoc_fresh` — is in scope here. Each such fact is therefore stated
-//! as an explicit premise, byte-for-byte the M4 lemma that discharges it, and
-//! `add_kinfers_bridge_arms` (`impl_infer_sound.rs`) supplies them:
-//! `impl_kinfers_lam`, `impl_kinfers_lam_scoped`, `impl_bridge_pi_scoped`, and
-//! `impl_bridge_app_witness` — the one witness that cannot fire in-stage.
-//!
-//! Note also that M4 bridged all nine rules into `TypingCtxConv` instead. That
-//! is a different codomain, not a replacement for this table:
-//! `TypingCtxConv.conv` is unrestricted and its `app`/`let_` arms carry neither
-//! the `whnf_to` nor the `DefEq` premise, so it does not pin the returned type
-//! or the operational steps. This table is about the `KernelInfers` lane, which
-//! is the one that does.
-//!
-//! # The payoff corollary is STILL NOT reachable, and now for a proved reason
-//!
-//! "At the closed top level (`G = nil`, `rho` empty, opening is the identity)
-//! the bridge collapses to a statement about closed declarations" requires the
-//! GLOBAL theorem, i.e. `ImplInfer.rec` applied to all nine minors. A partial
-//! set of minors cannot be assembled — the recursor demands every one.
-//!
-//! At 8/9 that is no longer a matter of effort: `impl_bridge_lit_unprovable`
-//! proves the ninth minor **cannot exist** into this codomain, so the assembled
-//! `ImplInfer.rec`-over-`KernelInfers` theorem is unreachable until
-//! `KernelInfers` itself grows a literal rule. That is a decision about the
-//! metatheory's expression calculus — the same class of change as the
-//! 2026-08-08 `whnf_to` repair — and it is not made unilaterally here. What IS
-//! landed is the closed-level fact the corollary would rest on:
-//! `ctx_rep_nil_lookup_empty` proves that at `LCtx.nil` no `fvar` lookup can
-//! succeed, which is the formal content of "opening is the identity when the
-//! context is empty", and `ctx_rep_nil_witness` supplies `CtxRep nil nil nil`.
-//!
-//! ZERO new axioms: every declaration is an `add_inductive` (census-neutral) or
-//! a valued definition with an empty axiom closure.
+//! ZERO new axioms: every declaration is an inductive or a checked valued
+//! definition. The global acceptance claim must still name its actual scope.
 
 use std::collections::HashSet;
 
@@ -136,6 +100,7 @@ impl Specification {
         self.add_ctx_rep_relation()?;
         self.add_ctx_rep_lookup()?;
         self.add_ctx_rep_bridge()?;
+        self.add_ctx_rep_literal_correctness()?;
         self.add_ctx_rep_witnesses()?;
         Ok(())
     }
@@ -162,21 +127,15 @@ impl Specification {
              which ctx_lookup is none.",
         )?;
 
-        // Literals: KExpr.lit is Nat-ONLY while ImplLit is Nat | String.
-        //
-        // NAMED REPRESENTATION GAP: a String literal has no layer-2 image, so
-        // this map is NOT injective on literals. Nothing downstream can exploit
-        // that, because `KernelInfers` has no literal rule at all — the `lit`
-        // rule is unbridgeable for that independent reason (see the module
-        // header's coverage table). Recorded rather than papered over.
+        // Keep the literal KIND and value: KExpr.lit's Nat is an encoded
+        // tagged payload, not the original natural or string identity.
         self.add_recursive_def(
             r"def impl_lit_to_kexpr (l : ImplLit) : KExpr := match l with
-| ImplLit.natVal k => KExpr.lit k
-| ImplLit.strVal k => KExpr.lit k",
-            "Layer-1 literal to layer-2 literal. NOT INJECTIVE and said so: KExpr.lit \
-             is Nat-only (expr_model.rs), ImplLit is Nat|String (expr::Literal), so \
-             the String case has no distinct image. Inert, because KernelInfers has \
-             no literal rule to bridge into.",
+| ImplLit.natVal k => literal_nat k
+| ImplLit.strVal k => literal_string k",
+            "Translate both literal kinds through the proved injective tagged codec. \
+             Nat and String with the same payload remain distinct expressions. The string \
+             payload is an interned identity whose Rust representation must be injective.",
         )?;
 
         // to_kexpr_at: the back-translation, with a binder DEPTH.
@@ -625,14 +584,14 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "kernelinfers_var_of_var_type".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (i : Nat) (Tk : KExpr), ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) (Tk : KExpr), ",
                 "Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk) -> ",
                 "KernelInfers tenv G (KExpr.bvar i) Tk"
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (i : Nat) ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) ",
                     "(Tk : KExpr) ",
                     "(h : Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk)) => ",
                     "OptionType.rec KExpr ",
@@ -703,7 +662,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_fvar".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) ",
                 "(rho : ListType Nat) (D : LCtx) (x : Nat) (Ai : ImplExpr), ",
                 "CtxRep G rho D -> ",
                 "Eq (OptionType ImplExpr) (lctx_lookup D x) (OptionType.some ImplExpr Ai) -> ",
@@ -712,7 +671,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
                     "(rho : ListType Nat) (D : LCtx) (x : Nat) (Ai : ImplExpr) ",
                     "(hctx : CtxRep G rho D) ",
                     "(hlk : Eq (OptionType ImplExpr) (lctx_lookup D x) ",
@@ -757,7 +716,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_sort".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) ",
                 "(rho : ListType Nat) (l : Level), ",
                 "KernelInfers tenv G (to_kexpr (ImplExpr.sort l) rho) ",
                 "(to_kexpr (ImplExpr.sort (Level.succ l)) rho)"
@@ -765,7 +724,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
                     "(rho : ListType Nat) (l : Level) => KernelInfers.sort tenv G l"
                 )
                 .to_string(),
@@ -798,7 +757,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_mdata".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) ",
                 "(rho : ListType Nat) (e : ImplExpr) (T : ImplExpr), ",
                 "KernelInfers tenv G (to_kexpr e rho) (to_kexpr T rho) -> ",
                 "KernelInfers tenv G (to_kexpr (ImplExpr.mdata e) rho) (to_kexpr T rho)"
@@ -806,7 +765,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
                     "(rho : ListType Nat) (e : ImplExpr) (T : ImplExpr) ",
                     "(h : KernelInfers tenv G (to_kexpr e rho) (to_kexpr T rho)) => h"
                 )
@@ -836,45 +795,45 @@ impl Specification {
         // The two layers hold DIFFERENT environments: layer 1's tenv maps a name
         // to an ImplConstInfo record (level_params, type, is_unsafe, is_partial)
         // and instantiates the universe parameters at the use site; layer 2's
-        // tenv maps a name straight to a KExpr and ignores `us` entirely. So the
-        // bridge needs an explicit environment-correspondence hypothesis, and it
-        // is spelled inline (not as a named alias) because it quantifies over
-        // the universe-instantiation list, which varies per const NODE.
+        // KDeclEnv stores the corresponding schematic KConstSig. The graph
+        // interface below is conditional, but the assembled theorem DERIVES it
+        // from one schematic representation via schematic_tenv_lookup.
         //
-        // The other four operations of the release Const arm — the level-arity
-        // check, the per-level check_level, and the unsafe/partial gates
-        // (tc/infer.rs:383,397-399,401,404) — have NO layer-2 counterpart:
-        // KernelInfers.const's single premise is the environment lookup. That is
-        // another measured asymmetry, not a gap in this proof.
+        // Exact arity is now enforced by the computed lookup itself. Per-level
+        // validity and unsafe/partial admission remain separate obligations.
         self.add_definition(SpecDefinition {
             name: "impl_bridge_const".to_string(),
             type_src: concat!(
-                "forall (tenv2 : Name -> OptionType KExpr) ",
+                "forall (tenv2 : KDeclEnv) ",
                 "(tenv1 : Name -> OptionType ImplConstInfo) (G : ListType KExpr) ",
                 "(rho : ListType Nat) (nm : Name) (us : ListType Level) (ci : ImplConstInfo), ",
                 "(forall (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo), ",
                 "Eq (OptionType ImplConstInfo) (tenv1 nm2) (OptionType.some ImplConstInfo ci2) -> ",
-                "Eq (OptionType KExpr) (tenv2 nm2) (OptionType.some KExpr ",
+                "Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2) -> ",
+                "Eq (OptionType KExpr) (kdecl_type_at tenv2 nm2 us2) (OptionType.some KExpr ",
                 "(to_kexpr (impl_inst_levels (impl_const_lps ci2) us2 (impl_const_type ci2)) rho))) -> ",
                 "Eq (OptionType ImplConstInfo) (tenv1 nm) (OptionType.some ImplConstInfo ci) -> ",
+                "Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us) -> ",
                 "KernelInfers tenv2 G (to_kexpr (ImplExpr.const nm us) rho) ",
                 "(to_kexpr (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) rho)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv2 : Name -> OptionType KExpr) ",
+                    "fun (tenv2 : KDeclEnv) ",
                     "(tenv1 : Name -> OptionType ImplConstInfo) (G : ListType KExpr) ",
                     "(rho : ListType Nat) (nm : Name) (us : ListType Level) (ci : ImplConstInfo) ",
                     "(henv : forall (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo), ",
                     "Eq (OptionType ImplConstInfo) (tenv1 nm2) (OptionType.some ImplConstInfo ci2) -> ",
-                    "Eq (OptionType KExpr) (tenv2 nm2) (OptionType.some KExpr ",
+                    "Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2) -> ",
+                    "Eq (OptionType KExpr) (kdecl_type_at tenv2 nm2 us2) (OptionType.some KExpr ",
                     "(to_kexpr (impl_inst_levels (impl_const_lps ci2) us2 (impl_const_type ci2)) rho))) ",
                     "(hget : Eq (OptionType ImplConstInfo) (tenv1 nm) ",
-                    "(OptionType.some ImplConstInfo ci)) => ",
+                    "(OptionType.some ImplConstInfo ci)) ",
+                    "(arity : Eq Nat (name_list_len (impl_const_lps ci)) (level_list_len us)) => ",
                     "KernelInfers.const tenv2 G nm us ",
                     "(to_kexpr (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) rho) ",
-                    "(henv nm us ci hget)"
+                    "(henv nm us ci hget arity)"
                 )
                 .to_string(),
             ),
@@ -882,13 +841,10 @@ impl Specification {
             description: concat!(
                 "BRIDGE, const rule (ImplInfer.const, tc/infer.rs:371-424). The two layers hold ",
                 "DIFFERENT environments — layer 1 maps a name to an ImplConstInfo record and ",
-                "instantiates universe parameters at the use site, layer 2 maps a name straight ",
-                "to a KExpr and ignores the level list — so the bridge carries an explicit ",
-                "environment-correspondence hypothesis, spelled inline because it must ",
-                "quantify over the per-node universe-instantiation list. Measured asymmetry ",
-                "recorded rather than assumed away: the release arm's level-arity check, ",
-                "per-level check_level and unsafe/partial gates (tc/infer.rs:383,397-404) have ",
-                "NO counterpart in KernelInfers.const, whose only premise is the lookup. ",
+                "instantiates universe parameters at the use site; layer 2 stores a schematic ",
+                "signature and computes exact-arity lookup. This local bridge takes the ",
+                "graph correspondence conditionally; M4 derives it from SchematicTEnvRep. ",
+                "Per-level validity and unsafe/partial admission are not established here. ",
                 "Zero axiom_deps."
             )
             .to_string(),
@@ -920,7 +876,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_app".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) (rho : ",
                 "ListType Nat) (f : ImplExpr) (a : ImplExpr) (F : ImplExpr) (bd : ",
                 "BinderData) (A : ImplExpr) (B : ImplExpr) (A2 : ImplExpr), (forall (rho2 : ",
                 "ListType Nat) (e2 : ImplExpr) (r2 : ImplExpr), ImplWhnfTo e2 r2 -> is_whnf ",
@@ -938,7 +894,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ListType ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) (rho : ListType ",
                     "Nat) (f : ImplExpr) (a : ImplExpr) (F : ImplExpr) (bd : BinderData) (A : ",
                     "ImplExpr) (B : ImplExpr) (A2 : ImplExpr) (hwt : forall (rho2 : ListType ",
                     "Nat) (e2 : ImplExpr) (r2 : ImplExpr), ImplWhnfTo e2 r2 -> is_whnf (to_kexpr ",
@@ -1010,7 +966,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_lam".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) (rho : ",
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
                 ": ImplExpr) (l : Level) (bt : ImplExpr), KernelInfers tenv G (to_kexpr A ",
                 "rho) (to_kexpr S rho) -> whnf_to (to_kexpr S rho) (KExpr.sort l) -> ",
@@ -1025,7 +981,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ListType ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) (rho : ListType ",
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ",
                     "ImplExpr) (l : Level) (bt : ImplExpr) (ihA : KernelInfers tenv G (to_kexpr ",
                     "A rho) (to_kexpr S rho)) (hsort : whnf_to (to_kexpr S rho) (KExpr.sort l)) ",
@@ -1097,7 +1053,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_pi".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ",
+                "forall (tenv : KDeclEnv) (Gk : ListType KExpr) (rho : ",
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 ",
                 ": ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), KernelInfers tenv Gk ",
                 "(to_kexpr A rho) (to_kexpr S1 rho) -> whnf_to (to_kexpr S1 rho) (KExpr.sort ",
@@ -1112,7 +1068,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ListType ",
+                    "fun (tenv : KDeclEnv) (Gk : ListType KExpr) (rho : ListType ",
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 : ",
                     "ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level) (ihA : KernelInfers ",
                     "tenv Gk (to_kexpr A rho) (to_kexpr S1 rho)) (hw1 : whnf_to (to_kexpr S1 ",
@@ -1177,7 +1133,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_let_core".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) (rho : ",
                 "ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) (b : ",
                 "ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr), ",
                 "KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) -> whnf_to ",
@@ -1196,7 +1152,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) (rho : ",
                     "ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) (b : ",
                     "ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr) (ihty ",
                     ": KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho)) (hsort : ",
@@ -1273,7 +1229,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_let".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) (rho : ",
                 "ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) (b : ",
                 "ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr), ",
                 "(forall (rho2 : ListType Nat) (e2 : ImplExpr) (r2 : ImplExpr), ImplWhnfTo ",
@@ -1296,7 +1252,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) (rho : ",
                     "ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) (b : ",
                     "ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr) (hwhnf ",
                     ": (forall (rho2 : ListType Nat) (e2 : ImplExpr) (r2 : ImplExpr), ImplWhnfTo ",
@@ -1348,214 +1304,44 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
 
-        // ── lit — REFUTED, not bridged ──────────────────────────────────────
-        // KernelInfers has seven constructors (sort/bvar/pi/lam/const/app/let_)
-        // and NONE concludes at a KExpr.lit, while the translation sends
-        // ImplExpr.lit through impl_lit_to_kexpr to exactly that head. So there
-        // is no bridge to write, and the honest deliverable is the proof of it —
-        // the exact dual of impl_infer_bvar_rejects on the layer-1 side.
-        //
-        // Per the crystal program standing rule 4, a precise "cannot be done
-        // because X" with a kernel-checked proof of X is a COMPLETED job, not a
-        // gap. The four declarations below are that proof.
-        self.add_definition_reducible(SpecDefinition {
-            name: "KNotLit".to_string(),
-            type_src: "KExpr -> Type".to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (x : KExpr) => KExpr.rec (fun (_ : KExpr) => Type) (fun (l : Level) => ",
-                    "ImplUnit) (fun (i : Nat) => ImplUnit) (fun (f : KExpr) (a : KExpr) (rf : ",
-                    "Type) (ra : Type) => ImplUnit) (fun (ty : KExpr) (b : KExpr) (rt : Type) ",
-                    "(rb : Type) => ImplUnit) (fun (ty : KExpr) (b : KExpr) (rt : Type) (rb : ",
-                    "Type) => ImplUnit) (fun (nm : Name) (us : ListType Level) => ImplUnit) (fun ",
-                    "(ty : KExpr) (v : KExpr) (b : KExpr) (rt : Type) (rv : Type) (rb : Type) => ",
-                    "ImplUnit) (fun (s : Name) (i : Nat) (sub : KExpr) (rs : Type) => ImplUnit) ",
-                    "(fun (k : Nat) => Empty) x",
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: concat!(
-                "Semireducible per-shape family for the LITERAL refutation, the layer-2 dual ",
-                "of ImplNotBVar: KNotLit e reduces (KExpr.rec on e, nine minors in ",
-                "constructor order sort/bvar/app/lam/pi/const/let_/proj/lit) to Empty at a ",
-                "lit and to ImplUnit at every other head. Used as the KernelInfers.rec ",
-                "motive so index unification happens by REDUCTION rather than injectivity ",
-                "plumbing. ImplUnit is the universe adapter and it is forced: Empty is a ",
-                "Type, and the spec Eq is Prop-valued, so it cannot be the other ",
-                "alternative. ZERO axiom_deps.",
-            )
-            .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "KExpr.rec".to_string(),
-                "ImplUnit".to_string(),
-                "Empty".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
-
+        // Both production literal cases now have a genuine target rule.
         self.add_definition(SpecDefinition {
-            name: "kernelinfers_lit_rejects".to_string(),
+            name: "impl_bridge_lit".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (k : Nat) (T ",
-                ": KExpr), KernelInfers tenv G (KExpr.lit k) T -> Empty",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) ",
+                "(rho : ListType Nat) (lt : ImplLit), KernelInfers tenv G ",
+                "(to_kexpr (ImplExpr.lit lt) rho) ",
+                "(to_kexpr (impl_lit_type lt) rho)"
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (k : Nat) (T : ",
-                    "KExpr) (h : KernelInfers tenv G (KExpr.lit k) T) => KernelInfers.rec tenv ",
-                    "(fun (G2 : ListType KExpr) (e2 : KExpr) (T2 : KExpr) (_h : KernelInfers ",
-                    "tenv G2 e2 T2) => KNotLit e2) (fun (sG : ListType KExpr) (sn : Level) => ",
-                    "ImplUnit.mk) (fun (vG : ListType KExpr) (vi : Nat) (vA : KExpr) (vlk : Eq ",
-                    "(OptionType KExpr) (ctx_lookup vG vi) (OptionType.some KExpr vA)) => ",
-                    "ImplUnit.mk) (fun (pG : ListType KExpr) (pA : KExpr) (pB : KExpr) (pSA : ",
-                    "KExpr) (pn : Level) (pSB : KExpr) (pm : Level) (ph1 : KernelInfers tenv pG ",
-                    "pA pSA) (ph2 : whnf_to pSA (KExpr.sort pn)) (ph3 : KernelInfers tenv ",
-                    "(ListType.cons KExpr pA pG) pB pSB) (ph4 : whnf_to pSB (KExpr.sort pm)) ",
-                    "(pih1 : KNotLit pA) (pih2 : KNotLit pB) => ImplUnit.mk) (fun (lG : ListType ",
-                    "KExpr) (lA : KExpr) (lb : KExpr) (lB : KExpr) (lSA : KExpr) (lu : Level) ",
-                    "(lh1 : KernelInfers tenv lG lA lSA) (lh2 : whnf_to lSA (KExpr.sort lu)) ",
-                    "(lh3 : KernelInfers tenv (ListType.cons KExpr lA lG) lb lB) (lih1 : KNotLit ",
-                    "lA) (lih2 : KNotLit lb) => ImplUnit.mk) (fun (cG : ListType KExpr) (cn : ",
-                    "Name) (cus : ListType Level) (cA : KExpr) (cget : Eq (OptionType KExpr) ",
-                    "(tenv cn) (OptionType.some KExpr cA)) => ImplUnit.mk) (fun (aG : ListType ",
-                    "KExpr) (af : KExpr) (aa : KExpr) (aF : KExpr) (aA : KExpr) (aB : KExpr) ",
-                    "(aA2 : KExpr) (ah1 : KernelInfers tenv aG af aF) (ah2 : whnf_to aF ",
-                    "(KExpr.pi aA aB)) (ah3 : KernelInfers tenv aG aa aA2) (ah4 : DefEq aA2 aA) ",
-                    "(aih1 : KNotLit af) (aih2 : KNotLit aa) => ImplUnit.mk) (fun (zG : ListType ",
-                    "KExpr) (zty : KExpr) (zv : KExpr) (zb : KExpr) (zTy : KExpr) (zu : Level) ",
-                    "(zTv : KExpr) (zB : KExpr) (zh1 : KernelInfers tenv zG zty zTy) (zh2 : ",
-                    "whnf_to zTy (KExpr.sort zu)) (zh3 : KernelInfers tenv zG zv zTv) (zh4 : ",
-                    "DefEq zTv zty) (zh5 : KernelInfers tenv (ListType.cons KExpr zty zG) zb zB) ",
-                    "(zih1 : KNotLit zty) (zih2 : KNotLit zv) (zih3 : KNotLit zb) => ",
-                    "ImplUnit.mk) G (KExpr.lit k) T h",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
+                    "(rho : ListType Nat) (lt : ImplLit) => ImplLit.rec ",
+                    "(fun (v : ImplLit) => KernelInfers tenv G ",
+                    "(to_kexpr (ImplExpr.lit v) rho) (to_kexpr (impl_lit_type v) rho)) ",
+                    "(fun (n : Nat) => KernelInfers.lit_nat tenv G n) ",
+                    "(fun (n : Nat) => KernelInfers.lit_string tenv G n) lt"
                 )
                 .to_string(),
             ),
             is_axiom: false,
-            description: concat!(
-                "REFUTATION, layer 2: no KernelInfers derivation concludes at a literal. ",
-                "Proved from the constructor set by KernelInfers.rec over the KNotLit motive ",
-                "— seven minors in declaration order sort/bvar/pi/lam/const/app/let_, tenv ",
-                "first because it is a family parameter. Every minor goal iota-reduces to ",
-                "ImplUnit because no constructor concludes at a lit head, and the eliminated ",
-                "derivation own index reduces the result to Empty. No injectivity and no ",
-                "discriminator plumbing, the same shape as impl_infer_bvar_rejects. Zero ",
-                "axiom_deps.",
-            )
-            .to_string(),
+            description: "The complete literal bridge. Both Nat and String are accepted by \
+                          their actual target typing rule, with their exact distinct translated \
+                          result types. No impossible guard or assumed bridge premise. Like \
+                          production, the operational rule does not validate the prelude; \
+                          environment soundness is a separate invariant."
+                .to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
             elaborated_value: None,
             dependencies: Some(HashSet::from([
-                "KernelInfers.rec".to_string(),
-                "KNotLit".to_string(),
-                "ImplUnit".to_string(),
-                "Empty".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
-
-        self.add_definition(SpecDefinition {
-            name: "impl_bridge_lit_refuted".to_string(),
-            type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ",
-                "ListType Nat) (lt : ImplLit) (T : KExpr), KernelInfers tenv G (to_kexpr ",
-                "(ImplExpr.lit lt) rho) T -> Empty",
-            )
-            .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ListType ",
-                    "Nat) (lt : ImplLit) (T : KExpr) (h : KernelInfers tenv G (to_kexpr ",
-                    "(ImplExpr.lit lt) rho) T) => ImplLit.rec (fun (l : ImplLit) => KernelInfers ",
-                    "tenv G (to_kexpr (ImplExpr.lit l) rho) T -> Empty) (fun (k : Nat) (hk : ",
-                    "KernelInfers tenv G (to_kexpr (ImplExpr.lit (ImplLit.natVal k)) rho) T) => ",
-                    "kernelinfers_lit_rejects tenv G k T hk) (fun (k : Nat) (hk : KernelInfers ",
-                    "tenv G (to_kexpr (ImplExpr.lit (ImplLit.strVal k)) rho) T) => ",
-                    "kernelinfers_lit_rejects tenv G k T hk) lt h",
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: concat!(
-                "REFUTATION at the BRIDGE conclusion shape: no KernelInfers derivation ",
-                "exists for the translation of a layer-1 literal, for ANY type and ANY ",
-                "renaming. ImplLit.rec splits the two literal kinds only so ",
-                "impl_lit_to_kexpr iota-reduces; both arms are the same call. This is where ",
-                "the named representation gap recorded on impl_lit_to_kexpr (KExpr.lit is ",
-                "Nat-only, ImplLit is Nat or String) becomes provably inert: the refutation ",
-                "does not depend on which literal it is. Zero axiom_deps.",
-            )
-            .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "kernelinfers_lit_rejects".to_string(),
+                "KernelInfers.lit_nat".to_string(),
+                "KernelInfers.lit_string".to_string(),
                 "ImplLit.rec".to_string(),
                 "to_kexpr".to_string(),
-                "Empty".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
-
-        self.add_definition(SpecDefinition {
-            name: "impl_bridge_lit_unprovable".to_string(),
-            type_src: concat!(
-                "forall (hyp : forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
-                "(rho : ListType Nat) (lt : ImplLit), KernelInfers tenv G (to_kexpr ",
-                "(ImplExpr.lit lt) rho) (to_kexpr (impl_lit_type lt) rho)), Empty",
-            )
-            .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (hyp : forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
-                    "(rho : ListType Nat) (lt : ImplLit), KernelInfers tenv G (to_kexpr ",
-                    "(ImplExpr.lit lt) rho) (to_kexpr (impl_lit_type lt) rho)) => ",
-                    "impl_bridge_lit_refuted (fun (nm : Name) => OptionType.none KExpr) ",
-                    "(ListType.nil KExpr) (ListType.nil Nat) (ImplLit.natVal Nat.zero) (to_kexpr ",
-                    "(impl_lit_type (ImplLit.natVal Nat.zero)) (ListType.nil Nat)) (hyp (fun (nm ",
-                    ": Name) => OptionType.none KExpr) (ListType.nil KExpr) (ListType.nil Nat) ",
-                    "(ImplLit.natVal Nat.zero))",
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: concat!(
-                "THE DECISIVE STATEMENT: the hyp binder is verbatim the type impl_bridge_lit ",
-                "WOULD have had under the sort/const template — ImplInfer.lit has zero ",
-                "premises and concludes at impl_lit_type lt, so the rule statement is ",
-                "exactly this forall-closure — and from it this term produces Empty. ",
-                "Registering impl_bridge_lit would therefore make the specification ",
-                "inconsistent. That is why the C4 tally is eight bridged plus one REFUTED ",
-                "rather than nine, and why ctx_rep_tests asserts the name impl_bridge_lit is ",
-                "never minted. THE HONEST RESIDUAL, named not hidden: this says the bridge ",
-                "AS STATED INTO KernelInfers is impossible; it does not say the deployed Lit ",
-                "arm is unmodelled. tc/infer.rs:647 returns const Nat [] / const String [] ",
-                "with zero environment validation and layer 1 models that faithfully. ",
-                "Closing the gap for real means ADDING a lit arm to KernelInfers — a ",
-                "decision about the metatheory expression calculus, the same class of change ",
-                "as the 2026-08-08 whnf_to repair, and not one this lane makes unilaterally. ",
-                "Zero axiom_deps.",
-            )
-            .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "impl_bridge_lit_refuted".to_string(),
                 "impl_lit_type".to_string(),
-                "to_kexpr".to_string(),
-                "Empty".to_string(),
             ])),
             axiom_deps: HashSet::new(),
         })?;
@@ -1563,10 +1349,148 @@ impl Specification {
         Ok(())
     }
 
+    /// Inversion of the actual inference relation fixes a literal's exact
+    /// returned type. Unlike a declarative conversion claim, this remains true
+    /// under arbitrary environments: no other inference rule concludes at lit.
+    fn add_ctx_rep_literal_correctness(&mut self) -> Result<(), SpecError> {
+        use super::literal_model::theorem;
+
+        theorem(
+            self,
+            "kernelinfers_literal_result",
+            "forall (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) (T : KExpr), KernelInfers tenv G e T -> literal_infer_result e T",
+            concat!(
+                "fun (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) ",
+                "(T : KExpr) (h : KernelInfers tenv G e T) => KernelInfers.rec tenv ",
+                "(fun (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) ",
+                "(_h : KernelInfers tenv G0 e0 T0) => literal_infer_result e0 T0) ",
+                "(fun (G0 : ListType KExpr) (u : Level) => Nat.zero) ",
+                "(fun (G0 : ListType KExpr) (i : Nat) (A : KExpr) ",
+                "(_hl : Eq (OptionType KExpr) (ctx_lookup G0 i) (OptionType.some KExpr A)) => Nat.zero) ",
+                "(fun (G0 : ListType KExpr) (A : KExpr) (B : KExpr) (SA : KExpr) ",
+                "(u : Level) (SB : KExpr) (v : Level) ",
+                "(_ha : KernelInfers tenv G0 A SA) (_hwa : whnf_to SA (KExpr.sort u)) ",
+                "(_hb : KernelInfers tenv (ListType.cons KExpr A G0) B SB) ",
+                "(_hwb : whnf_to SB (KExpr.sort v)) ",
+                "(_iha : literal_infer_result A SA) (_ihb : literal_infer_result B SB) => Nat.zero) ",
+                "(fun (G0 : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) ",
+                "(SA : KExpr) (u : Level) (_ha : KernelInfers tenv G0 A SA) ",
+                "(_hw : whnf_to SA (KExpr.sort u)) ",
+                "(_hb : KernelInfers tenv (ListType.cons KExpr A G0) b B) ",
+                "(_iha : literal_infer_result A SA) (_ihb : literal_infer_result b B) => Nat.zero) ",
+                "(fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) ",
+                "(_hl : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) => Nat.zero) ",
+                "(fun (G0 : ListType KExpr) (f : KExpr) (a : KExpr) (F : KExpr) ",
+                "(A : KExpr) (B : KExpr) (A2 : KExpr) (_hf : KernelInfers tenv G0 f F) ",
+                "(_hw : whnf_to F (KExpr.pi A B)) (_ha : KernelInfers tenv G0 a A2) ",
+                "(_heq : DefEq A2 A) (_ihf : literal_infer_result f F) ",
+                "(_iha : literal_infer_result a A2) => Nat.zero) ",
+                "(fun (G0 : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) ",
+                "(Ty : KExpr) (u : Level) (Tv : KExpr) (B : KExpr) ",
+                "(_ht : KernelInfers tenv G0 ty Ty) (_hw : whnf_to Ty (KExpr.sort u)) ",
+                "(_hv : KernelInfers tenv G0 v Tv) (_heq : DefEq Tv ty) ",
+                "(_hb : KernelInfers tenv (ListType.cons KExpr ty G0) b B) ",
+                "(_iht : literal_infer_result ty Ty) (_ihv : literal_infer_result v Tv) ",
+                "(_ihb : literal_infer_result b B) => Nat.zero) ",
+                "(fun (G0 : ListType KExpr) (n : Nat) => LiteralReturn.intro ",
+                "(literal_nat_code n) literal_nat_type ",
+                "(Eq.symm KExpr (literal_type_of_code (literal_nat_code n)) ",
+                "literal_nat_type (literal_nat_code_type n))) ",
+                "(fun (G0 : ListType KExpr) (n : Nat) => LiteralReturn.intro ",
+                "(literal_string_code n) literal_string_type ",
+                "(Eq.symm KExpr (literal_type_of_code (literal_string_code n)) ",
+                "literal_string_type (literal_string_code_type n))) G e T h"
+            ),
+            "Inversion over every KernelInfers constructor proves the exact literal return type. Non-literal cases make no claim; both literal minors supply real equations.",
+            &[
+                "KernelInfers.rec",
+                "LiteralReturn.intro",
+                "literal_infer_result",
+                "literal_nat_code_type",
+                "literal_string_code_type",
+            ],
+        )?;
+        for (kind, subject, code, result_type) in [
+            ("nat", "literal_nat", "literal_nat_code", "literal_nat_type"),
+            (
+                "string",
+                "literal_string",
+                "literal_string_code",
+                "literal_string_type",
+            ),
+        ] {
+            theorem(
+                self,
+                &format!("kernelinfers_literal_{kind}_type"),
+                &format!("forall (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat) (T : KExpr), KernelInfers tenv G ({subject} n) T -> Eq KExpr T {result_type}"),
+                &format!("fun (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat) (T : KExpr) (h : KernelInfers tenv G ({subject} n) T) => Eq.trans KExpr T (literal_type_of_code ({code} n)) {result_type} (literal_return_eq ({code} n) T (kernelinfers_literal_result tenv G ({subject} n) T h)) (literal_{kind}_code_type n)"),
+                "For any environment, context and payload, inference can return only this literal kind's exact built-in type expression.",
+                &["kernelinfers_literal_result", "literal_return_eq", "Eq.trans"],
+            )?;
+        }
+        theorem(
+            self,
+            "kernelinfers_nat_not_string",
+            "forall (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat), KernelInfers tenv G (literal_nat n) literal_string_type -> Empty",
+            "fun (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat) (h : KernelInfers tenv G (literal_nat n) literal_string_type) => literal_types_distinct (Eq.symm KExpr literal_string_type literal_nat_type (kernelinfers_literal_nat_type tenv G n literal_string_type h))",
+            "A natural literal cannot infer the String type. This is exact-result soundness, not an unrestricted declarative-conversion assertion.",
+            &["kernelinfers_literal_nat_type", "literal_types_distinct", "Eq.symm"],
+        )?;
+        theorem(
+            self,
+            "kernelinfers_string_not_nat",
+            "forall (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat), KernelInfers tenv G (literal_string n) literal_nat_type -> Empty",
+            "fun (tenv : KDeclEnv) (G : ListType KExpr) (n : Nat) (h : KernelInfers tenv G (literal_string n) literal_nat_type) => literal_types_distinct (kernelinfers_literal_string_type tenv G n literal_nat_type h)",
+            "A string literal cannot infer the Nat type, for every string identity and context.",
+            &["kernelinfers_literal_string_type", "literal_types_distinct"],
+        )?;
+        Ok(())
+    }
+
     /// Non-vacuity witnesses — every relation and every bridge lemma exercised
     /// on a concrete instance, each discharged by computation.
     fn add_ctx_rep_witnesses(&mut self) -> Result<(), SpecError> {
-        let empty_tenv = "(fun (nm : Name) => OptionType.none KExpr)";
+        let empty_tenv = "(fun (nm : Name) => OptionType.none KConstSig)";
+        for (name, ctor, subject, result_type) in [
+            (
+                "impl_bridge_lit_nat_witness",
+                "natVal",
+                "literal_nat",
+                "literal_nat_type",
+            ),
+            (
+                "impl_bridge_lit_string_witness",
+                "strVal",
+                "literal_string",
+                "literal_string_type",
+            ),
+        ] {
+            self.add_definition(SpecDefinition {
+                name: name.to_string(),
+                type_src: format!(
+                    "KernelInfers {empty_tenv} (ListType.nil KExpr) \
+                     ({subject} Nat.zero) {result_type}"
+                ),
+                value_src: Some(format!(
+                    "impl_bridge_lit {empty_tenv} (ListType.nil KExpr) \
+                     (ListType.nil Nat) (ImplLit.{ctor} Nat.zero)"
+                )),
+                is_axiom: false,
+                description: "Literal bridge executed at the closed top level. This witness \
+                              consumes impl_bridge_lit, retains the literal kind, and \
+                              concludes its exact built-in return type."
+                    .to_string(),
+                category: AxiomCategory::DerivedLemma,
+                proof_status: ProofStatus::DerivedProved,
+                elaborated_type: None,
+                elaborated_value: None,
+                dependencies: Some(HashSet::from([
+                    "impl_bridge_lit".to_string(),
+                    "KernelInfers".to_string(),
+                ])),
+                axiom_deps: HashSet::new(),
+            })?;
+        }
         // The layer-1 context the flagship C1 witness builds under its binder:
         // [FVarId 0 : Prop], value-less, Default/Many.
         let d1 = format!(
@@ -1772,19 +1696,23 @@ impl Specification {
         // the translation both genuinely reduce.
         let ci0 = "(ImplConstInfo.mk (ListType.nil Name) (ImplExpr.sort Level.zero) Bool.false Bool.false)";
         let tenv1 = format!("(fun (nm : Name) => OptionType.some ImplConstInfo {ci0})");
-        let tenv2 = "(fun (nm : Name) => OptionType.some KExpr (KExpr.sort Level.zero))";
+        let sig0 = "(KConstSig.mk (ListType.nil Name) (KExpr.sort Level.zero))";
+        let tenv2 = format!("(fun (nm : Name) => OptionType.some KConstSig {sig0})");
         let nil_rho = "(ListType.nil Nat)";
         let henv = format!(
             "(fun (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo) \
              (hc : Eq (OptionType ImplConstInfo) (OptionType.some ImplConstInfo {ci0}) \
              (OptionType.some ImplConstInfo ci2)) => \
              Eq.substType ImplConstInfo \
-             (fun (z : ImplConstInfo) => Eq (OptionType KExpr) \
-             (OptionType.some KExpr (KExpr.sort Level.zero)) \
+             (fun (z : ImplConstInfo) => \
+             Eq Nat (name_list_len (impl_const_lps z)) (level_list_len us2) -> \
+             Eq (OptionType KExpr) (kdecl_type_at {tenv2} nm2 us2) \
              (OptionType.some KExpr (to_kexpr (impl_inst_levels (impl_const_lps z) us2 \
              (impl_const_type z)) {nil_rho}))) \
              {ci0} ci2 (option_some_inj ImplConstInfo {ci0} ci2 hc) \
-             (Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.sort Level.zero))))"
+             (fun (arity : Eq Nat Nat.zero (level_list_len us2)) => \
+             kdecl_type_at_intro {tenv2} nm2 {sig0} us2 \
+             (Eq.refl (OptionType KConstSig) (OptionType.some KConstSig {sig0})) arity))"
         );
         self.add_definition(SpecDefinition {
             name: "impl_bridge_const_witness".to_string(),
@@ -1797,7 +1725,8 @@ impl Specification {
             value_src: Some(format!(
                 "impl_bridge_const {tenv2} {tenv1} (ListType.nil KExpr) {nil_rho} \
                  Name.anonymous (ListType.nil Level) {ci0} {henv} \
-                 (Eq.refl (OptionType ImplConstInfo) (OptionType.some ImplConstInfo {ci0}))"
+                 (Eq.refl (OptionType ImplConstInfo) (OptionType.some ImplConstInfo {ci0})) \
+                 (Eq.refl Nat Nat.zero)"
             )),
             is_axiom: false,
             description: "The const bridge fired with a REAL environment correspondence: the \
@@ -1827,7 +1756,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_lam_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                "KernelInfers (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                 "KExpr) (to_kexpr (ImplExpr.lam (BinderData.mk BinderInfo.default ",
                 "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.bvar Nat.zero)) ",
                 "(ListType.nil Nat)) (to_kexpr (ImplExpr.pi (BinderData.mk ",
@@ -1837,12 +1766,12 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_lam (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "impl_bridge_lam (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                     "KExpr) (ListType.nil Nat) Nat.zero (BinderData.mk BinderInfo.default ",
                     "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.bvar Nat.zero) ",
                     "(ImplExpr.sort (Level.succ Level.zero)) (Level.succ Level.zero) ",
                     "(ImplExpr.sort Level.zero) (impl_bridge_sort (fun (nm : Name) => ",
-                    "OptionType.none KExpr) (ListType.nil KExpr) (ListType.nil Nat) Level.zero) ",
+                    "OptionType.none KConstSig) (ListType.nil KExpr) (ListType.nil Nat) Level.zero) ",
                     "(whnf_to.refl (KExpr.sort (Level.succ Level.zero)) (is_whnf.sort ",
                     "(Level.succ Level.zero))) impl_bridge_fvar_witness (Eq.refl KExpr ",
                     "(KExpr.bvar Nat.zero)) (Eq.refl KExpr (KExpr.sort Level.zero))",
@@ -1880,7 +1809,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_pi_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                "KernelInfers (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                 "KExpr) (to_kexpr (ImplExpr.pi (BinderData.mk BinderInfo.default ",
                 "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.sort Level.zero)) ",
                 "(ListType.nil Nat)) (to_kexpr (ImplExpr.sort (Level.imax (Level.succ ",
@@ -1889,15 +1818,15 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_pi (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "impl_bridge_pi (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                     "KExpr) (ListType.nil Nat) Nat.zero (BinderData.mk BinderInfo.default ",
                     "Multiplicity.many) (ImplExpr.sort Level.zero) (ImplExpr.sort Level.zero) ",
                     "(ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort (Level.succ ",
                     "Level.zero)) (Level.succ Level.zero) (Level.succ Level.zero) ",
-                    "(impl_bridge_sort (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "(impl_bridge_sort (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                     "KExpr) (ListType.nil Nat) Level.zero) (whnf_to.refl (KExpr.sort (Level.succ ",
                     "Level.zero)) (is_whnf.sort (Level.succ Level.zero))) (impl_bridge_sort (fun ",
-                    "(nm : Name) => OptionType.none KExpr) (ListType.cons KExpr (KExpr.sort ",
+                    "(nm : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort ",
                     "Level.zero) (ListType.nil KExpr)) (ListType.cons Nat Nat.zero (ListType.nil ",
                     "Nat)) Level.zero) (whnf_to.refl (KExpr.sort (Level.succ Level.zero)) ",
                     "(is_whnf.sort (Level.succ Level.zero))) (Eq.refl KExpr (KExpr.sort ",
@@ -1935,7 +1864,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_let_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (n0 : Name) => OptionType.none KExpr) (ListType.nil ",
+                "KernelInfers (fun (n0 : Name) => OptionType.none KConstSig) (ListType.nil ",
                 "KExpr) (to_kexpr (ImplExpr.let_ Name.anonymous (ImplExpr.sort (Level.succ ",
                 "Level.zero)) (ImplExpr.sort Level.zero) (ImplExpr.bvar Nat.zero)) ",
                 "(ListType.nil Nat)) (to_kexpr (impl_subst_fvar (ImplExpr.sort (Level.succ ",
@@ -1944,19 +1873,19 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_let_core (fun (n0 : Name) => OptionType.none KExpr) ",
+                    "impl_bridge_let_core (fun (n0 : Name) => OptionType.none KConstSig) ",
                     "(ListType.nil KExpr) (ListType.nil Nat) Nat.zero Name.anonymous ",
                     "(ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort Level.zero) ",
                     "(ImplExpr.bvar Nat.zero) (ImplExpr.sort (Level.succ (Level.succ ",
                     "Level.zero))) (Level.succ (Level.succ Level.zero)) (ImplExpr.sort ",
                     "(Level.succ Level.zero)) (ImplExpr.sort (Level.succ Level.zero)) ",
-                    "(impl_bridge_sort (fun (n0 : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "(impl_bridge_sort (fun (n0 : Name) => OptionType.none KConstSig) (ListType.nil ",
                     "KExpr) (ListType.nil Nat) (Level.succ Level.zero)) (whnf_to.refl ",
                     "(KExpr.sort (Level.succ (Level.succ Level.zero))) (is_whnf.sort (Level.succ ",
                     "(Level.succ Level.zero)))) (impl_bridge_sort (fun (n0 : Name) => ",
-                    "OptionType.none KExpr) (ListType.nil KExpr) (ListType.nil Nat) Level.zero) ",
+                    "OptionType.none KConstSig) (ListType.nil KExpr) (ListType.nil Nat) Level.zero) ",
                     "(DefEq.refl (KExpr.sort (Level.succ Level.zero))) (KernelInfers.bvar (fun ",
-                    "(n0 : Name) => OptionType.none KExpr) (ListType.cons KExpr (KExpr.sort ",
+                    "(n0 : Name) => OptionType.none KConstSig) (ListType.cons KExpr (KExpr.sort ",
                     "(Level.succ Level.zero)) (ListType.nil KExpr)) Nat.zero (KExpr.sort ",
                     "(Level.succ Level.zero)) (Eq.refl (OptionType KExpr) (ctx_lookup ",
                     "(ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (ListType.nil ",

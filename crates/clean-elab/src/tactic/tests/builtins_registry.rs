@@ -52,7 +52,6 @@ fn test_core_nullary_tactics_registered() {
         "congr",
         "aesop",
         "tauto",
-        "simp_all",
         "cert_simp",
         "norm_num",
         "ring",
@@ -160,7 +159,9 @@ fn test_compound_tactics_registered() {
         "conv_enter",
         // Wave 3: rewrite/simp
         "rw",
+        "rewrite",
         "simp",
+        "simp_all",
         "simp_rw",
         "simpa",
         // Wave 4: cases/induction
@@ -253,5 +254,89 @@ fn test_mathlib_critical_tactics_registered() {
             registry.get(name).is_some(),
             "Mathlib-critical P1 tactic '{name}' should be registered"
         );
+    }
+}
+
+/// Exercise the real encoded-name/intro path, rather than installing a
+/// hand-written local context. The codec carries a template reference's
+/// section-origin mark, which differs from the binder's section-variable mark.
+fn template_origin_shadow_state(
+    older: clean_parser::SurfaceName,
+    newer: clean_parser::SurfaceName,
+) -> (super::super::ProofState, clean_kernel::Expr, TacticRegistry) {
+    use clean_kernel::{Environment, Expr, Name};
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let target = Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat));
+    let mut state = super::super::ProofState::new(Environment::with_prelude(), target.clone());
+    let mut registry = TacticRegistry::new();
+    register_builtin_tactics(&mut registry);
+    let intro = registry.get("intro").expect("intro").handler.clone();
+    for name in [older, newer] {
+        intro(
+            &mut state,
+            &[super::super::registry::encode_name_argument(&name)],
+        )
+        .expect("encoded intro");
+    }
+    (state, target, registry)
+}
+
+fn section_origin_h() -> clean_parser::SurfaceName {
+    clean_parser::SurfaceName::component("h", false).with_template_origin(std::sync::Arc::new(
+        clean_parser::TemplateOrigin {
+            namespace: clean_kernel::Name::anon(),
+            section_variable: true,
+            site: None,
+        },
+    ))
+}
+
+#[test]
+fn test_rename_i_template_origin_on_older_local_keeps_shadow_direction() {
+    use clean_kernel::{Expr, TypeChecker};
+    use clean_parser::SurfaceName;
+    let (mut state, target, registry) =
+        template_origin_shadow_state(section_origin_h(), SurfaceName::component("h", false));
+    let older = state.current_goal().expect("goal").local_ctx[0].fvar;
+    let rename = registry.get("rename_i").expect("rename_i").handler.clone();
+    let hp = SurfaceName::component("hp", false);
+    rename(
+        &mut state,
+        &[super::super::registry::encode_name_argument(&hp)],
+    )
+    .expect("the newer ordinary name shadows the older local");
+    let goal = state.current_goal().expect("goal");
+    assert_eq!(goal.local_ctx[0].fvar, older);
+    assert_eq!(goal.local_ctx[0].name, hp);
+    super::super::exact(&mut state, Expr::fvar(older)).expect("exact renamed older local");
+    let proof = state.closed_proof().expect("closed proof");
+    TypeChecker::new(state.env())
+        .check_type(&proof, &target)
+        .expect("kernel-checked projection");
+}
+
+#[test]
+fn test_rename_i_template_origin_on_newer_reference_keeps_its_restriction() {
+    use clean_parser::SurfaceName;
+    let (mut state, _, registry) =
+        template_origin_shadow_state(SurfaceName::component("h", false), section_origin_h());
+    let before = state.current_goal().expect("goal").local_ctx.clone();
+    let rename = registry.get("rename_i").expect("rename_i").handler.clone();
+    let result = rename(
+        &mut state,
+        &[super::super::registry::encode_name_argument(
+            &SurfaceName::component("hp", false),
+        )],
+    );
+    assert!(
+        matches!(result, Err(super::super::TacticError::GoalMismatch(ref detail))
+        if detail.contains("too many variable names")),
+        "{result:?}"
+    );
+    let after = &state.current_goal().expect("goal").local_ctx;
+    assert_eq!(after.len(), before.len());
+    for (old, new) in before.iter().zip(after) {
+        assert_eq!(old.fvar, new.fvar);
+        assert!(old.name.same_syntax(&new.name));
     }
 }

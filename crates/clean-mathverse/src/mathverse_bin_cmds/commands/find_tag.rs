@@ -40,7 +40,8 @@ pub(super) fn run_tag_search(
     }
 }
 
-/// Handle `mathverse find --tags` — enumerate all known tags with counts.
+/// Handle `mathverse find --tags` — list the first `limit` known tags with counts
+/// (the footer carries the total).
 pub(super) fn run_list_tags(limit: usize, format: OutputFormat) {
     let lib = load_library();
     let tag_index = auto_tag_library(&lib);

@@ -71,7 +71,7 @@ pub fn refine(state: &mut ProofState, term: Expr) -> TacticResult {
 pub(crate) fn count_placeholders(expr: &Expr) -> usize {
     stack_safe(|| match expr.kind() {
         // We use a convention where a const named "_" or "?" is a placeholder
-        ExprKind::Const(name, _) => usize::from(is_placeholder_name(&name.to_string())),
+        ExprKind::Const(name, _) => usize::from(is_placeholder_name(name)),
         ExprKind::App(f, arg) => count_placeholders(f) + count_placeholders(arg),
         ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
             count_placeholders(ty) + count_placeholders(body)
@@ -147,7 +147,8 @@ pub fn refine_placeholder(state: &mut ProofState) -> TacticResult {
         meta_id: new_meta_id,
         target: placeholder,
         local_ctx: goal.local_ctx.clone(),
-        tag: None,
+        tag: goal.tag.clone(),
+        case_binders: goal.case_binders.clone(),
     };
 
     state.goals.push_back(new_goal);

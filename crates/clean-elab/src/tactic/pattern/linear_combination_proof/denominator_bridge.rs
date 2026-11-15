@@ -44,7 +44,7 @@ impl DenominatorPlan {
                 let factor = scale.checked_div(den)?;
                 let scaled_num =
                     i64::try_from(i128::from(num).checked_mul(i128::from(factor))?).ok()?;
-                Some(LinearCoeff::new(coeff.hyp_name.as_str(), scaled_num, 1))
+                Some(LinearCoeff::new(&coeff.hyp_name, scaled_num, 1))
             })
             .collect::<Option<Vec<_>>>()?;
 

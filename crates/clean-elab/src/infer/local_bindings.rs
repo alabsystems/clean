@@ -16,28 +16,29 @@
 //! generation before it writes. Adding a new way to mutate the stack means
 //! adding a method here, where the bump cannot be forgotten.
 //!
-//! The let-value side table (`let x : T := v` locals whose value is
-//! body-visible / zeta-reducible) lives here too, so it is maintained in
+//! The stored-value side table (genuine lets and marked have proofs) lives
+//! here too, so it is maintained in
 //! lock-step with the entries it annotates: popping or truncating an entry
 //! drops its value, and the generation covers both.
 
 use crate::state_generation::next_generation;
-use clean_kernel::{Expr, FVarId};
+use clean_kernel::{BinderData, Expr, FVarId};
+use clean_parser::SurfaceName;
 use std::collections::HashMap;
 use std::ops::Deref;
 
 /// One binding: surface name, the free variable standing for it, its type.
-pub(crate) type LocalEntry = (String, FVarId, Expr);
+pub(crate) type LocalEntry = (SurfaceName, FVarId, Expr);
 
-/// Local-binding stack plus let-value side table, generation-stamped.
+/// Local-binding stack and scoped value/binder annotations, generation-stamped.
 #[derive(Debug)]
 pub(crate) struct LocalBindings {
     entries: Vec<LocalEntry>,
-    /// `fvar -> value` for let-bound locals. A local in `entries` that also
-    /// appears here is a local DEFINITION (`let x : T := v`), emitted to the
-    /// kernel as `push_let_with_id` so WHNF can zeta-reduce `x` to `v`;
-    /// opaque hypotheses (`have` / binders) have no entry and stay rigid.
+    /// `fvar -> value` for local definitions and retained marked have proofs.
+    /// Reduction consumers must use `reduction_value`: a stored proof is not
+    /// a defining equation for an opaque have.
     let_values: HashMap<FVarId, Expr>,
+    binder_infos: HashMap<FVarId, BinderData>,
     /// See the module doc and `crate::state_generation`.
     generation: u64,
 }
@@ -47,6 +48,7 @@ impl LocalBindings {
         Self {
             entries: Vec::new(),
             let_values: HashMap::new(),
+            binder_infos: HashMap::new(),
             generation: next_generation(),
         }
     }
@@ -68,7 +70,7 @@ impl LocalBindings {
         self.entries.push(entry);
     }
 
-    /// Push a let-bound binding whose `value` is body-visible.
+    /// Push a value-bearing binding, preserving a marked have proof if present.
     pub(crate) fn push_let(&mut self, entry: LocalEntry, value: Expr) {
         self.touch();
         self.let_values.insert(entry.1, value);
@@ -82,6 +84,7 @@ impl LocalBindings {
         let entry = self.entries.pop()?;
         self.touch();
         self.let_values.remove(&entry.1);
+        self.binder_infos.remove(&entry.1);
         Some(entry)
     }
 
@@ -94,6 +97,7 @@ impl LocalBindings {
         self.touch();
         for (_, fvar, _) in self.entries.drain(len..) {
             self.let_values.remove(&fvar);
+            self.binder_infos.remove(&fvar);
         }
     }
 
@@ -115,13 +119,30 @@ impl LocalBindings {
         self.touch();
         for fvar in removed {
             self.let_values.remove(&fvar);
+            self.binder_infos.remove(&fvar);
         }
     }
 
-    /// The body-visible value of a let-bound local, if `fvar` is one.
+    /// Give the binding at `index` the surface name `name`; the old name, or
+    /// `None` when there is no binding there. The local itself (its free
+    /// variable and type) is untouched.
+    pub(crate) fn rename(&mut self, index: usize, name: SurfaceName) -> Option<SurfaceName> {
+        let entry = self.entries.get_mut(index)?;
+        let old = std::mem::replace(&mut entry.0, name);
+        self.touch();
+        Some(old)
+    }
+
+    /// The raw stored value, including opaque have proofs, for scope/proof reads.
     #[must_use]
     pub(crate) fn let_value(&self, fvar: FVarId) -> Option<&Expr> {
         self.let_values.get(&fvar)
+    }
+
+    /// The computation-visible value. Retaining proof data does not make an
+    /// opaque have reducible in either full or demand-driven kernel contexts.
+    pub(crate) fn reduction_value(&self, fvar: FVarId) -> Option<&Expr> {
+        crate::tactic::local_value_for_reduction(self.let_value(fvar))
     }
 
     /// The whole let-value side table (for exact scope snapshots).
@@ -130,12 +151,31 @@ impl LocalBindings {
         &self.let_values
     }
 
+    pub(crate) fn binder_info(&self, fvar: FVarId) -> BinderData {
+        self.binder_infos.get(&fvar).copied().unwrap_or_default()
+    }
+
+    pub(crate) fn set_binder_info(&mut self, fvar: FVarId, info: BinderData) {
+        self.touch();
+        self.binder_infos.insert(fvar, info);
+    }
+
+    pub(crate) fn binder_infos(&self) -> &HashMap<FVarId, BinderData> {
+        &self.binder_infos
+    }
+
     /// Replace the entire content from a snapshot taken with
-    /// `(self.clone(), self.let_values().clone())`.
-    pub(crate) fn restore(&mut self, entries: Vec<LocalEntry>, let_values: HashMap<FVarId, Expr>) {
+    /// `(self.clone(), self.let_values().clone(), self.binder_infos().clone())`.
+    pub(crate) fn restore(
+        &mut self,
+        entries: Vec<LocalEntry>,
+        let_values: HashMap<FVarId, Expr>,
+        binder_infos: HashMap<FVarId, BinderData>,
+    ) {
         self.touch();
         self.entries = entries;
         self.let_values = let_values;
+        self.binder_infos = binder_infos;
     }
 }
 
@@ -169,8 +209,32 @@ mod tests {
     use super::LocalBindings;
     use clean_kernel::{Expr, FVarId};
 
-    fn entry(i: u64) -> (String, FVarId, Expr) {
-        (format!("x{i}"), FVarId::new(i), Expr::prop())
+    fn entry(i: u64) -> (clean_parser::SurfaceName, FVarId, Expr) {
+        (
+            clean_parser::SurfaceName::from_name(clean_kernel::Name::anon().str(format!("x{i}"))),
+            FVarId::new(i),
+            Expr::prop(),
+        )
+    }
+
+    #[test]
+    fn binder_annotations_follow_removal_and_exact_scope_restoration() {
+        use clean_kernel::BinderInfo;
+        let mut b = LocalBindings::new();
+        b.push(entry(0));
+        b.set_binder_info(FVarId::new(0), BinderInfo::Implicit.into());
+        let snapshot = (b.clone(), b.let_values().clone(), b.binder_infos().clone());
+        b.pop();
+        b.push(entry(0));
+        assert_eq!(b.binder_info(FVarId::new(0)).info, BinderInfo::Default);
+        b.restore(snapshot.0, snapshot.1, snapshot.2);
+        assert_eq!(b.binder_info(FVarId::new(0)).info, BinderInfo::Implicit);
+        b.push(entry(1));
+        b.set_binder_info(FVarId::new(1), BinderInfo::InstImplicit.into());
+        b.truncate(1);
+        assert_eq!(b.binder_info(FVarId::new(1)).info, BinderInfo::Default);
+        b.retain(|_| false);
+        assert_eq!(b.binder_info(FVarId::new(0)).info, BinderInfo::Default);
     }
 
     #[test]
@@ -221,9 +285,9 @@ mod tests {
             "retain drops let values"
         );
 
-        let snapshot = (b.clone(), b.let_values().clone());
+        let snapshot = (b.clone(), b.let_values().clone(), b.binder_infos().clone());
         let g4 = b.generation();
-        b.restore(snapshot.0, snapshot.1);
+        b.restore(snapshot.0, snapshot.1, snapshot.2);
         assert_ne!(
             b.generation(),
             g4,

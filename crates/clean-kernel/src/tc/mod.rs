@@ -7,37 +7,53 @@
 //! The core type checking algorithm.
 
 pub mod batch;
+mod beta;
 mod branch_sharing;
 mod branch_sharing_recursor_app;
 mod cert;
 mod config;
+mod deadline;
 mod decl_budget;
 mod def_eq;
 pub mod equiv_manager;
 mod eta;
 pub mod expr_location;
+mod fold_admission;
 mod heartbeat;
 pub(crate) mod heartbeat_profiler;
 mod infer;
+mod infer_arc_memo;
+#[cfg(not(debug_assertions))]
+mod infer_closed_data;
 mod infer_cubical;
 mod infer_proj;
 mod infer_zfc;
+mod level_profile;
 mod local_context;
-mod monad_reduce;
+#[cfg(test)]
+mod monad_delta_tests;
 mod reduction;
 pub mod reduction_stats;
+mod sharing_invariance;
 mod sliding_cache;
 mod sliding_equiv_manager;
 mod type_error;
+mod type_former_sort;
 mod whnf;
+mod whnf_constructor;
 mod whnf_proj;
 pub mod whnf_proof;
+mod whnf_type_prefix;
+mod work_account;
 
+pub(crate) use deadline::{deadline_fired, deadline_is_armed, with_deadline_suspended};
+pub use deadline::{poll_deadline, run_until};
 pub use decl_budget::{
     clear_declaration_budget, declaration_budget_exhausted, declaration_budget_limit,
     declaration_budget_remaining, declaration_budget_used, reset_declaration_budget,
     set_declaration_budget, with_declaration_budget_suspended,
 };
+pub(crate) use decl_budget::{declaration_budget_state, restore_declaration_budget_state};
 pub use expr_location::{ExprLocation, ExprPathStep};
 pub use local_context::{LocalContext, LocalDecl};
 #[cfg(test)]
@@ -46,7 +62,9 @@ pub(crate) use reduction::string_lit_to_constructor;
 // HIT recursor (`Environment::build_truncation_recursor`) spells its `isProp P`
 // premise with the *same* definition the h-level library uses.
 pub(crate) use reduction::kan::is_prop_type;
+pub use sharing_invariance::{SharingInvariantFailure, SharingInvariantSummary};
 pub use type_error::TypeError;
+pub(crate) use type_former_sort::TypeFormerSort;
 
 /// Opaque container for TypeChecker caches that can be saved and restored
 /// across TypeChecker instances. Enables cross-call caching within the same
@@ -57,6 +75,10 @@ pub use type_error::TypeError;
 /// Part of #1671: ProofState creates fresh TypeChecker per operation.
 #[derive(Default)]
 pub struct TcCaches {
+    /// Effective theory of every retained answer; `None` only for empty default
+    /// caches. This is not an environment or local-context authentication token.
+    kernel_theory: Option<crate::env::KernelTheory>,
+    level_profile: Option<crate::level::LeanLevelProfile>,
     whnf: SlidingCache<Expr, Expr>,
     whnf_core: SlidingCache<Expr, Expr>,
     def_eq: SlidingCache<DefEqCacheKey, bool>,
@@ -107,6 +129,7 @@ use crate::tc::branch_sharing::BranchSharingCache;
 pub(crate) use crate::tc::cert::{abstract_fvar_in_expr, convert_fvar_cert_to_bvar};
 use crate::tc::def_eq::DefEqCacheKey;
 use crate::tc::heartbeat_profiler::HeartbeatProfiler;
+use crate::tc::infer_arc_memo::InferArcMemo;
 use crate::tc::sliding_cache::SlidingCache;
 use crate::tc::sliding_equiv_manager::SlidingEquivManager;
 use std::cell::{Cell, RefCell};
@@ -343,6 +366,18 @@ pub struct TypeChecker<'env> {
     /// turn into a reject, never the reverse). The default (`false`) keeps the
     /// trusted kernel path bit-identical to the pre-B14 behavior.
     honor_reducibility: Cell<bool>,
+    /// Kernel theory override (`None` = the environment's; see `env/kernel_theory.rs`).
+    kernel_theory: Option<crate::env::KernelTheory>,
+    /// Theory that owns the cached answers, which may differ from the current
+    /// configuration while a caller sets up an imported cache before first use.
+    /// Semantic entry points reconcile it before reading any cached answer.
+    cached_kernel_theory: Cell<crate::env::KernelTheory>,
+    /// Memo of the native-fold admission questions per head
+    /// (`tc/fold_admission.rs`): the environment's authority verdict and the
+    /// native-reducer admission (kernel theory + authority). Sound to keep for
+    /// the checker's lifetime: the checker borrows the environment immutably,
+    /// so no constant a verdict read can change.
+    lean_reducer_admission: RefCell<std::collections::HashMap<Name, fold_admission::FoldAdmission>>,
     /// Cache for full WHNF reduction results (the "reduce cache").
     ///
     /// Matches Lean 4's `m_whnf` cache (`type_checker.h:33`): maps an expression
@@ -446,29 +481,46 @@ pub struct TypeChecker<'env> {
     /// EXPONENTIAL when walked as a tree. `infer_type` walks it as a tree, so a
     /// chain of N such patterns made inference (and, in debug builds, the
     /// certificate it drives) take `O(branching^N)`; `semIntBinOp` timed out at
-    /// >110s. This memo collapses the walk to linear in DISTINCT `Arc<Expr>` nodes.
+    /// >110s. This memo reuses inference for admitted distinct `Arc<Expr>` keys;
+    /// two admission windows share its cap so later nodes can enter as old
+    /// entries are evicted. An evicted node is inferred normally on its next use.
     ///
-    /// Keyed on `(Arc<Expr> node address, infer_only, ctx_len)`. It is consulted
-    /// ONLY from `infer_type_with_cert_arc`, which is given a `&Arc<Expr>` whose
-    /// pointee address is STABLE (an interned child of the term, not a transient
-    /// stack `Expr`) and whose `Arc` clone is pinned into the memo value — so the
-    /// address can never be freed and reused while an entry referencing it lives.
+    /// Keyed on the Arc node address, inference mode and active binder-prefix
+    /// identity (see `InferArcMemoKey`). It is consulted
+    /// ONLY from `infer_type_with_cert_arc` and `infer_type_fast_arc`, which are
+    /// given a `&Arc<Expr>` whose pointee address is STABLE (an existing child of
+    /// the term, not a transient stack `Expr`) and whose `Arc` clone is pinned
+    /// into the memo value — so the address can never be freed and reused while
+    /// an entry referencing it lives.
     ///
     /// SOUNDNESS: a node's `(type, cert)` is a pure function of (the node, the
     /// immutable env, the types of the FVars it mentions). FVarIds are never
     /// reused (#1773 — the same invariant that lets `whnf_cache` survive
     /// `ctx_push`/`ctx_pop`). `infer_only` is in the key because it changes which
     /// App/Let def-eq checks run (so an inference-mode result is never served to
-    /// the stricter `check_type` traversal); `ctx_len` keys the binder-context
-    /// snapshot. The memo is cleared whenever it empties back to the outermost
+    /// the stricter `check_type` traversal). The last active FVarId distinguishes
+    /// equal-depth sibling scopes while recovering the same key on return to an
+    /// earlier prefix. Each popped prefix's buckets in both windows are retired
+    /// without scanning other entries; active prefixes survive until eviction.
+    /// The memo is cleared whenever it empties back to the outermost
     /// inference frame (`infer_memo_depth == 0`) and by `local_context_mut`.
-    #[allow(clippy::type_complexity)]
-    infer_arc_memo: RefCell<
-        std::collections::HashMap<
-            (usize, bool, usize),
-            (std::sync::Arc<Expr>, Expr, crate::cert::ProofCert),
-        >,
-    >,
+    ///
+    /// The optional certificate is present ONLY for a real derivation. Fast
+    /// inference stores a type-only entry; full checking or retained certificate
+    /// inference must recompute and upgrade it before returning a certificate.
+    /// New entries are admitted only within an active inference frame, with
+    /// aggregate size at most `max_cache_entries`; zero capacity disables
+    /// admission. An existing entry can be upgraded without growing or rotating
+    /// the memo. Window rotation changes reuse only, never checking obligations.
+    infer_arc_memo: RefCell<InferArcMemo>,
+    /// Lazy structural screen of the immutable owned environment, never a verdict.
+    #[cfg(not(debug_assertions))]
+    independent_infer_environment: Cell<Option<bool>>,
+    /// Pure structural support for FVar-free certificate DAGs, shared between
+    /// binder exits within one certificate inference only. Weak owners cannot
+    /// retain old certificate versions; admission uses max_cache_entries.
+    /// This is not a typing memo and is independent of context/environment.
+    rebind_closed_memo: RefCell<cert::RebindClosedMemo>,
     /// Track WW: re-entrancy depth for `infer_arc_memo` (see its doc). When this
     /// returns to 0 the memo is cleared so stale Arc addresses cannot leak into a
     /// later top-level inference call.
@@ -609,6 +661,10 @@ pub struct TypeChecker<'env> {
     ///
     /// Default: `DEFAULT_HEARTBEAT_LIMIT` (0 = unlimited, matching Lean 4 kernel).
     heartbeat_limit: u32,
+    /// This checker's account with the kernel work meter: the structural walks
+    /// its own operations run are converted into heartbeats
+    /// (`work_account.rs`, `crate::work_meter`).
+    work: work_account::WorkAccount,
     /// Optional heartbeat profiler for diagnosing timeout causes.
     ///
     /// When enabled, tracks heartbeat consumption by operation category (whnf,
@@ -679,7 +735,9 @@ pub struct TypeChecker<'env> {
     /// Lean 4 reference: `type_checker.cpp:100-104` — the kernel validates
     /// that unsafe constants are only referenced within unsafe contexts.
     ///
-    /// Default: `true` (permissive — backward compatible).
+    /// Default: `true` (permissive — backward compatible) in Clean's extended
+    /// kernel theory, `false` under `KernelTheory::Lean` (Lean's
+    /// `definition_safety::safe` default; see `set_kernel_theory`).
     /// Set to `false` via `set_allow_unsafe(false)` for strict checking.
     ///
     /// Part of #3226.
@@ -720,18 +778,27 @@ pub struct TypeChecker<'env> {
     /// by the caller (the public `infer_type_with_cert` entry point) and will be
     /// replayed / serialized, so it MUST be structurally complete.
     ///
-    /// SOUNDNESS: `infer_type_with_cert_arc` caches a cheap placeholder cert for
-    /// later shared-`Arc` (DAG) memo HITS when `infer_only` is set, to avoid an
-    /// exponential blow-up in the discarded-cert fast path used by `infer_type`.
-    /// That placeholder is only safe when the cert is thrown away. When the cert
-    /// is retained (this flag set), the memo must cache the REAL cert so every
-    /// occurrence of a shared sub-term replays to its actual expression — without
-    /// this, a shared `Not P` argument under two projections would replay as the
-    /// placeholder `Sort 0`, corrupting the proof term.
+    /// SOUNDNESS: a type-only Arc memo entry has no certificate. Only an
+    /// infer-only, discard-only internal hit may return a placeholder; it is
+    /// never stored as evidence. When this flag is set (or full checking is
+    /// active), `infer_type_with_cert_arc` must obtain a REAL certificate and
+    /// upgrade any type-only entry. This also covers fast-inference re-entry
+    /// from projection validation during a retained certificate traversal.
     ///
     /// Default: `false`. Set to `true` for the duration of a public
     /// `infer_type_with_cert` call.
     cert_retained: Cell<bool>,
+    /// The constant whose universe instantiation, on a path that cannot
+    /// return an error (δ-unfolding, ι-reduction), depended on `.olean` object
+    /// sharing under the Lean kernel theory (`tc/level_profile.rs`). Once set
+    /// it stays set for this checker's lifetime: every later heartbeat site
+    /// refuses with `TypeError::LevelSharingDependent`, every public
+    /// `is_def_eq` answers false, and `take_caches` hands on nothing, so no
+    /// answer derived from the ambiguous instantiation is served (DECISIONS
+    /// R150).
+    level_sharing_hazard: RefCell<Option<Name>>,
+    // Present only inside a private fresh universal-sharing branch.
+    sharing_replay: Option<RefCell<sharing_invariance::SharingReplay>>,
     /// Expression location tracker for error diagnostics.
     ///
     /// Maintains a breadcrumb trail of `ExprPathStep`s as the type checker
@@ -769,12 +836,18 @@ impl<'env> TypeChecker<'env> {
             mode: env.mode(),
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
+            kernel_theory: None,
+            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
             def_eq_cache: RefCell::new(Default::default()),
             branch_sharing_cache: Some(RefCell::new(Default::default())),
             type_cache: RefCell::new(None),
             infer_arc_memo: RefCell::new(Default::default()),
+            #[cfg(not(debug_assertions))]
+            independent_infer_environment: Cell::new(None),
+            rebind_closed_memo: RefCell::new(Default::default()),
             infer_memo_depth: Cell::new(0),
             proj_type_cache: RefCell::new(Default::default()),
             unfold_cache: RefCell::new(Default::default()),
@@ -785,18 +858,21 @@ impl<'env> TypeChecker<'env> {
             level_eq_override: None,
             args_failure_cache: RefCell::new(Default::default()),
             heartbeat_counter: Cell::new(DEFAULT_HEARTBEAT_LIMIT),
+            work: work_account::WorkAccount::new(),
             heartbeat_limit: DEFAULT_HEARTBEAT_LIMIT,
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
             infer_only: Cell::new(true),
             level_params: None,
-            allow_unsafe: true,
-            allow_partial: true,
+            allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
+            allow_partial: env.kernel_theory() == crate::env::KernelTheory::Extended,
             cumulative: false,
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            level_sharing_hazard: RefCell::new(None),
+            sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
     }
@@ -820,12 +896,18 @@ impl<'env> TypeChecker<'env> {
             mode,
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
+            kernel_theory: None,
+            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
             def_eq_cache: RefCell::new(Default::default()),
             branch_sharing_cache: Some(RefCell::new(Default::default())),
             type_cache: RefCell::new(None),
             infer_arc_memo: RefCell::new(Default::default()),
+            #[cfg(not(debug_assertions))]
+            independent_infer_environment: Cell::new(None),
+            rebind_closed_memo: RefCell::new(Default::default()),
             infer_memo_depth: Cell::new(0),
             proj_type_cache: RefCell::new(Default::default()),
             unfold_cache: RefCell::new(Default::default()),
@@ -836,18 +918,21 @@ impl<'env> TypeChecker<'env> {
             level_eq_override: None,
             args_failure_cache: RefCell::new(Default::default()),
             heartbeat_counter: Cell::new(DEFAULT_HEARTBEAT_LIMIT),
+            work: work_account::WorkAccount::new(),
             heartbeat_limit: DEFAULT_HEARTBEAT_LIMIT,
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
             infer_only: Cell::new(true),
             level_params: None,
-            allow_unsafe: true,
-            allow_partial: true,
+            allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
+            allow_partial: env.kernel_theory() == crate::env::KernelTheory::Extended,
             cumulative: false,
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            level_sharing_hazard: RefCell::new(None),
+            sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
     }
@@ -871,12 +956,18 @@ impl<'env> TypeChecker<'env> {
             mode: env.mode(),
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
+            kernel_theory: None,
+            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
             def_eq_cache: RefCell::new(Default::default()),
             branch_sharing_cache: Some(RefCell::new(Default::default())),
             type_cache: RefCell::new(None),
             infer_arc_memo: RefCell::new(Default::default()),
+            #[cfg(not(debug_assertions))]
+            independent_infer_environment: Cell::new(None),
+            rebind_closed_memo: RefCell::new(Default::default()),
             infer_memo_depth: Cell::new(0),
             proj_type_cache: RefCell::new(Default::default()),
             unfold_cache: RefCell::new(Default::default()),
@@ -887,18 +978,21 @@ impl<'env> TypeChecker<'env> {
             level_eq_override: None,
             args_failure_cache: RefCell::new(Default::default()),
             heartbeat_counter: Cell::new(DEFAULT_HEARTBEAT_LIMIT),
+            work: work_account::WorkAccount::new(),
             heartbeat_limit: DEFAULT_HEARTBEAT_LIMIT,
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
             infer_only: Cell::new(true),
             level_params: None,
-            allow_unsafe: true,
-            allow_partial: true,
+            allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
+            allow_partial: env.kernel_theory() == crate::env::KernelTheory::Extended,
             cumulative: false,
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            level_sharing_hazard: RefCell::new(None),
+            sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
     }
@@ -927,12 +1021,18 @@ impl<'env> TypeChecker<'env> {
             mode,
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
+            kernel_theory: None,
+            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
             def_eq_cache: RefCell::new(Default::default()),
             branch_sharing_cache: Some(RefCell::new(Default::default())),
             type_cache: RefCell::new(None),
             infer_arc_memo: RefCell::new(Default::default()),
+            #[cfg(not(debug_assertions))]
+            independent_infer_environment: Cell::new(None),
+            rebind_closed_memo: RefCell::new(Default::default()),
             infer_memo_depth: Cell::new(0),
             proj_type_cache: RefCell::new(Default::default()),
             unfold_cache: RefCell::new(Default::default()),
@@ -943,18 +1043,21 @@ impl<'env> TypeChecker<'env> {
             level_eq_override: None,
             args_failure_cache: RefCell::new(Default::default()),
             heartbeat_counter: Cell::new(DEFAULT_HEARTBEAT_LIMIT),
+            work: work_account::WorkAccount::new(),
             heartbeat_limit: DEFAULT_HEARTBEAT_LIMIT,
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
             infer_only: Cell::new(true),
             level_params: None,
-            allow_unsafe: true,
-            allow_partial: true,
+            allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
+            allow_partial: env.kernel_theory() == crate::env::KernelTheory::Extended,
             cumulative: false,
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            level_sharing_hazard: RefCell::new(None),
+            sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
     }
@@ -964,6 +1067,7 @@ impl<'env> TypeChecker<'env> {
     /// This exposes the kernel's `@[implemented_by]` / built-in native reducer
     /// hook to elaborator-layer evaluation code without requiring a defeq query.
     pub fn try_reduce_native(&self, e: &Expr) -> Option<Expr> {
+        let _metered = self.begin_operation();
         self.reduce_native(e)
     }
 
@@ -977,7 +1081,10 @@ impl<'env> TypeChecker<'env> {
     ///
     /// Part of #3225.
     pub fn set_level_params(&mut self, params: Vec<Name>) {
-        self.level_params = Some(params);
+        if self.level_params.as_deref() != Some(params.as_slice()) {
+            self.clear_theory_answers();
+            self.level_params = Some(params);
+        }
     }
 
     /// Set whether unsafe declarations are allowed.
@@ -987,7 +1094,10 @@ impl<'env> TypeChecker<'env> {
     ///
     /// Part of #3226.
     pub fn set_allow_unsafe(&mut self, allow: bool) {
-        self.allow_unsafe = allow;
+        if self.allow_unsafe != allow {
+            self.clear_theory_answers();
+            self.allow_unsafe = allow;
+        }
     }
 
     /// Set whether partial declarations are allowed.
@@ -997,7 +1107,10 @@ impl<'env> TypeChecker<'env> {
     ///
     /// Part of #3226.
     pub fn set_allow_partial(&mut self, allow: bool) {
-        self.allow_partial = allow;
+        if self.allow_partial != allow {
+            self.clear_theory_answers();
+            self.allow_partial = allow;
+        }
     }
 
     /// Enable/disable CUMULATIVE subtyping (Coq/pCIC semantics) at
@@ -1005,7 +1118,10 @@ impl<'env> TypeChecker<'env> {
     /// (Lean-faithful non-cumulative). Enable only when re-verifying Coq-sourced
     /// declarations, whose type theory is cumulative (`Prop ≤ Set ≤ Type`).
     pub fn set_cumulative(&mut self, cumulative: bool) {
-        self.cumulative = cumulative;
+        if self.cumulative != cumulative {
+            self.clear_theory_answers();
+            self.cumulative = cumulative;
+        }
     }
 
     /// Whether cumulative subtyping is currently enabled.

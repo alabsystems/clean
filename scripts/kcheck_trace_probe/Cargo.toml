@@ -1,0 +1,23 @@
+[package]
+name = "kcheck-trace-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# An isolated diagnostic harness avoids compiling clean-kernel's unrelated
+# clean-elab/math overlay dev dependency graph just to test the C4 carrier.
+[workspace]
+
+[dev-dependencies]
+clean-kernel = { path = "../../crates/clean-kernel", features = ["kcheck-trace", "reduction-stats"] }
+
+[dependencies]
+clean-olean = { path = "../../crates/clean-olean", optional = true, features = ["kcheck-trace"] }
+
+[features]
+pinned-import = ["dep:clean-olean"]
+
+[[test]]
+name = "pinned_literal"
+path = "tests/pinned_literal.rs"
+required-features = ["pinned-import"]

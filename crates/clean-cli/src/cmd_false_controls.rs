@@ -59,7 +59,9 @@ command exits non-zero unless every required control rejected exactly once; \
 pending-backend and probe-error rows block as well, because an unrun control \
 is not evidence of rejection. `--record-attempt --root <project>` appends the \
 run as a `false_controls` authority-gate proof attempt under \
-`.mathverse/attempts` and refuses to record from a dirty git worktree. \
+`.cake/attempts/` (dated jsonl — the shared authority-attempt ledger; the \
+directory is `.cake`, not `.mathverse`) and refuses to record from a dirty git \
+worktree. \
 `--json` emits the structured report plus the authority receipt.",
         category: Category::Verification,
         stability: Stability::Building,
@@ -121,15 +123,22 @@ pub(crate) enum FalseControlCommands {
         /// Append this run as a false-controls authority-gate attempt.
         #[arg(long)]
         record_attempt: bool,
-        /// Repository or project root containing the `.mathverse` attempt log.
+        /// Repository or project root holding the `.cake/attempts` ledger
+        /// (the shared authority-attempt log; nothing writes
+        /// `.mathverse/attempts`) — and, when recording, the WRITE root the
+        /// attempt lands under.
         #[arg(long, default_value = ".")]
         root: PathBuf,
     },
     /// Validate that one logged Mathverse attempt is replayable as gate evidence.
     ReplayAttempt {
-        /// Attempt id from `.mathverse/attempts/*.jsonl`.
+        /// Attempt id from `.cake/attempts/*.jsonl` (the shared
+        /// authority-attempt ledger; nothing writes `.mathverse/attempts`).
         attempt_id: String,
-        /// Repository or project root containing the `.mathverse` attempt log.
+        /// Repository or project root holding the `.cake/attempts` ledger
+        /// (the shared authority-attempt log; nothing writes
+        /// `.mathverse/attempts`) — and, when recording, the WRITE root the
+        /// attempt lands under.
         #[arg(long, default_value = ".")]
         root: PathBuf,
         /// Permit replay validation when the live environment differs.

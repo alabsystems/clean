@@ -177,6 +177,24 @@ pub(crate) fn phase1_elab_env() -> Environment {
     // `1079.lean` and other compat files rely on if-expressions lowering
     // through `ite`, which is not implied by `Decidable` alone.
     env.init_ite().ok();
+    // `init_ite` supplies the CONSTANT only. simp additionally needs the lemmas
+    // that step through an `ite`: `eq_self` (so a rewritten `n = n` condition
+    // becomes `True`), `ite_true`/`ite_false`, and `if_pos`/`if_neg`. Without
+    // them simp cannot take the branch and descends into the `Decidable`
+    // instance instead — and `Decidable.isTrue` is DEPENDENT in its proposition,
+    // which is where the congruence descent gets stuck on `1079.lean`'s
+    // `cases (Nat.decEq m n)` goals. `init_prelude_extended` registers exactly
+    // this pair beside `init_ite`; this env is assembled piecewise and had only
+    // half of it.
+    env.init_simp_ite_lemmas().ok();
+    // ...and the logic lemmas the builtin prelude registers beside that pair
+    // (`imp_false`, `not_false_eq_true`, …, decision R50). Since a bare `simp`
+    // runs Lean's `simpCtorEq` on every call (G40), `1079.lean`'s
+    // `(if m = n then .eq else .gt) = .lt → False` is rewritten to `False →
+    // False`; Lean closes that by `imp_self`, the builtin prelude by
+    // `imp_false` + `not_false_eq_true`, and this env had neither (the
+    // constructor-disequality closer it used to reach no longer sees `C₁ = C₂`).
+    env.init_simp_logic_lemmas().ok();
     init_prelude_id(&mut env);
     env
 }
@@ -442,8 +460,8 @@ pub(crate) fn evaluate_against_profile(
         }
     }
 
-    for i in outcomes.len()..profile.decls.len() {
-        match &profile.decls[i] {
+    for (i, expected) in profile.decls.iter().enumerate().skip(outcomes.len()) {
+        match expected {
             ExpectedDeclOutcome::Pass => {
                 must_succeed_total += 1;
             }

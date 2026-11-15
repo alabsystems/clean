@@ -16,8 +16,9 @@ fn test_aesop_no_sorry_on_assumption() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p,
             value: None,
         }],
@@ -78,14 +79,16 @@ fn test_aesop_no_sorry_on_and_intro() {
         goal,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "hp".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hp"),
                 ty: p,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "hq".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hq"),
                 ty: q,
                 value: None,
             },

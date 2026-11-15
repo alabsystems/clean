@@ -19,7 +19,7 @@ fn test_abs_cases_no_goals() {
     let mut state = ProofState::new(env, target);
     state.goals.clear();
 
-    let result = abs_cases(&mut state, "x");
+    let result = abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -29,7 +29,11 @@ fn test_abs_cases_var_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let err = abs_cases(&mut state, "nonexistent").unwrap_err();
+    let err = abs_cases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    )
+    .unwrap_err();
     assert!(
         matches!(err, TacticError::HypothesisNotFound(ref s) if s == "nonexistent"),
         "abs_cases with missing var should produce HypothesisNotFound('nonexistent'), got: {err}"
@@ -41,14 +45,15 @@ fn test_abs_cases_non_numeric_type() {
     let env = setup_env();
     let target = Expr::const_(Name::from_string("B"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: Expr::const_(Name::from_string("A"), vec![]), // Non-numeric
         value: None,
     }];
     let mut state = ProofState::with_context(env, target, ctx);
 
-    let result = abs_cases(&mut state, "x");
+    let result = abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(matches!(result, Err(TacticError::InvalidTarget { .. })));
 }
 
@@ -60,14 +65,16 @@ fn test_abs_cases_with_int() {
     let env = setup_env_with_int_ord();
     let target = Expr::const_(Name::from_string("B"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: Expr::const_(Name::from_string("Int"), vec![]),
         value: None,
     }];
     let mut state = ProofState::with_context(env, target, ctx);
 
-    abs_cases(&mut state, "x").expect("abs_cases should succeed on Int variable");
+    abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("abs_cases should succeed on Int variable");
     // Should create two goals
     assert_eq!(state.goals.len(), 2);
 }
@@ -91,15 +98,17 @@ fn test_abs_cases_closed_branches_proof_infers_target() {
 
     let target = Expr::const_(Name::from_string("B"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: Expr::const_(Name::from_string("Int"), vec![]),
         value: None,
     }];
     let mut state = ProofState::with_context(env, target.clone(), ctx.clone());
     let original_meta = state.current_goal().expect("goal present").meta_id;
 
-    abs_cases(&mut state, "x").expect("abs_cases should succeed on Int variable");
+    abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("abs_cases should succeed on Int variable");
     assert_eq!(state.goals.len(), 2);
 
     // Close both branch goals with the B witness.
@@ -121,6 +130,7 @@ fn test_abs_cases_closed_branches_proof_infers_target() {
         target: target.clone(),
         local_ctx: ctx,
         tag: None,
+        case_binders: Vec::new(),
     };
     let inferred = state
         .infer_type(&goal_view, &proof)
@@ -138,14 +148,16 @@ fn test_abs_cases_branch_rejects_wrong_witness() {
     let env = setup_env_with_int_ord();
     let target = Expr::const_(Name::from_string("B"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: Expr::const_(Name::from_string("Int"), vec![]),
         value: None,
     }];
     let mut state = ProofState::with_context(env, target, ctx);
 
-    abs_cases(&mut state, "x").expect("abs_cases should succeed on Int variable");
+    abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("abs_cases should succeed on Int variable");
     let goal = state.current_goal().expect("branch goal present").clone();
 
     // x : Int is not a proof of B.
@@ -160,16 +172,31 @@ fn test_abs_cases_branch_rejects_wrong_witness() {
 
 #[test]
 fn test_abs_cases_config() {
-    let config = AbsCasesConfig::with_names("pos", "neg");
-    assert_eq!(config.nonneg_name, "pos");
-    assert_eq!(config.neg_name, "neg");
+    let config = AbsCasesConfig::with_names(
+        &clean_parser::SurfaceName::generated_path("pos"),
+        &clean_parser::SurfaceName::generated_path("neg"),
+    );
+    assert_eq!(
+        config.nonneg_name,
+        clean_parser::SurfaceName::generated_path("pos")
+    );
+    assert_eq!(
+        config.neg_name,
+        clean_parser::SurfaceName::generated_path("neg")
+    );
 }
 
 #[test]
 fn test_abs_cases_config_default() {
     let config = AbsCasesConfig::new();
-    assert_eq!(config.nonneg_name, "h_nonneg");
-    assert_eq!(config.neg_name, "h_neg");
+    assert_eq!(
+        config.nonneg_name,
+        clean_parser::SurfaceName::generated_path("h_nonneg")
+    );
+    assert_eq!(
+        config.neg_name,
+        clean_parser::SurfaceName::generated_path("h_neg")
+    );
 }
 
 // ========================================================================
@@ -494,7 +521,7 @@ fn test_positivity_at_no_goals() {
     let mut state = ProofState::new(env, target);
     state.goals.clear();
 
-    let result = positivity_at(&mut state, "h");
+    let result = positivity_at(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -504,14 +531,21 @@ fn test_positivity_at_hyp_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = positivity_at(&mut state, "nonexistent");
+    let result = positivity_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s == "nonexistent"));
 }
 
 #[test]
 fn test_positivity_at_config() {
-    let config = PositivityAtConfig::new().with_name("h_positive");
-    assert_eq!(config.result_name, Some("h_positive".to_string()));
+    let config = PositivityAtConfig::new()
+        .with_name(&clean_parser::SurfaceName::generated_path("h_positive"));
+    assert_eq!(
+        config.result_name,
+        Some(clean_parser::SurfaceName::generated_path("h_positive"))
+    );
     assert!(config.try_stronger);
 }
 
@@ -544,14 +578,16 @@ fn test_clear_all_unused_keeps_used() {
     let target = Expr::fvar(FVarId::new(0));
     let ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "x".to_string(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "y".to_string(),
+            name: clean_parser::SurfaceName::generated_path("y"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         },
@@ -562,8 +598,14 @@ fn test_clear_all_unused_keeps_used() {
 
     let goal = state.current_goal().unwrap();
     // x should remain (used in target), y should be removed
-    assert!(goal.local_ctx.iter().any(|d| d.name == "x"));
-    assert!(!goal.local_ctx.iter().any(|d| d.name == "y"));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("x")));
+    assert!(!goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("y")));
 }
 
 #[test]
@@ -573,14 +615,16 @@ fn test_clear_all_unused_keeps_dependencies() {
     let target = Expr::fvar(FVarId::new(0));
     let ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "y".to_string(),
+            name: clean_parser::SurfaceName::generated_path("y"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "x".to_string(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: Expr::fvar(FVarId::new(1)), // x's type depends on y
             value: None,
         },
@@ -591,8 +635,14 @@ fn test_clear_all_unused_keeps_dependencies() {
 
     let goal = state.current_goal().unwrap();
     // Both x and y should remain
-    assert!(goal.local_ctx.iter().any(|d| d.name == "x"));
-    assert!(goal.local_ctx.iter().any(|d| d.name == "y"));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("x")));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("y")));
 }
 
 // ========================================================================
@@ -605,27 +655,54 @@ fn test_rename_all_basic() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h1".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h1"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "h2".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h2"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         },
     ];
     let mut state = ProofState::with_context(env, target, ctx);
 
-    rename_all(&mut state, vec![("h1", "hA"), ("h2", "hB")]).unwrap();
+    rename_all(
+        &mut state,
+        vec![
+            (
+                &clean_parser::SurfaceName::generated_path("h1"),
+                &clean_parser::SurfaceName::generated_path("hA"),
+            ),
+            (
+                &clean_parser::SurfaceName::generated_path("h2"),
+                &clean_parser::SurfaceName::generated_path("hB"),
+            ),
+        ],
+    )
+    .unwrap();
 
     let goal = state.current_goal().unwrap();
-    assert!(goal.local_ctx.iter().any(|d| d.name == "hA"));
-    assert!(goal.local_ctx.iter().any(|d| d.name == "hB"));
-    assert!(!goal.local_ctx.iter().any(|d| d.name == "h1"));
-    assert!(!goal.local_ctx.iter().any(|d| d.name == "h2"));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("hA")));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("hB")));
+    assert!(!goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("h1")));
+    assert!(!goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("h2")));
 }
 
 #[test]
@@ -634,7 +711,13 @@ fn test_rename_all_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = rename_all(&mut state, vec![("nonexistent", "new_name")]);
+    let result = rename_all(
+        &mut state,
+        vec![(
+            &clean_parser::SurfaceName::generated_path("nonexistent"),
+            &clean_parser::SurfaceName::generated_path("new_name"),
+        )],
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s == "nonexistent"));
 }
 

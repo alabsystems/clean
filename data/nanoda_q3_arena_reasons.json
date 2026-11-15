@@ -1,0 +1,572 @@
+{
+  "schema": "clean.nanoda-arena-reasons.v1",
+  "checker_commit": "0da9f98feadd3a0a2ef4b3dbcf52a298a6fef929",
+  "observed_in": "reports/self-proof-q3-2026-11-12/merged/verdict.json",
+  "arena_verdict_checker_commit": "4c544ed",
+  "fixtures": {
+    "bad/bugs/constlevels.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/ctor-num-fields.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:1310:25",
+        "reason": "assertion failed: old.aux_data_ck(new)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/k-rec-conv.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/large-elim-param.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/expr.rs:455:9",
+        "reason": "assertion `left == right` failed\n  left: 2\n right: 1"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/bugs/large-elim-prop-bool.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/expr.rs:455:9",
+        "reason": "assertion `left == right` failed\n  left: 1\n right: 0"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/bugs/level-imax-leq.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:1348:21",
+        "reason": "assertion failed: old_r.aux_data_ck(new_r)"
+      },
+      "target_evidence": "different-reason: recursor auxiliary-data mismatch (False.rec k=true); imax comparison not reached"
+    },
+    "bad/bugs/level-imax-normalization.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/nat-rec-k-lie.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:1348:21",
+        "reason": "assertion failed: old_r.aux_data_ck(new_r)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/nat-rec-rules.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:1348:21",
+        "reason": "assertion failed: old_r.aux_data_ck(new_r)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/nested-unused-param.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:504:13",
+        "reason": "Invalid projection: W != C"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/orphan-rec.ndjson": {
+      "failure": {
+        "kind": "error",
+        "reason": "invalid inductive block at line 18: recursor 2 must list exactly the block's types without duplicates"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/proj-non-structure.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:502:59",
+        "reason": "called `Option::unwrap()` on a `None` value"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/bugs/proj-of-imax-prop.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:538:21",
+        "reason": "infer_proj prop"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/proj-of-stuck-prop.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:296:18",
+        "reason": "ensur_sort could not produce a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/proj-of-subst-prop.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:1365:18",
+        "reason": "expected a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/rec-k-lie.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:1348:21",
+        "reason": "assertion failed: old_r.aux_data_ck(new_r)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/rec-missing-ih.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:784:21",
+        "reason": "assertion failed: self.which_valid_ind_app(st, ctor_type_cursor).is_some()"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/bugs/rec-of-subst-prop.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:1365:18",
+        "reason": "expected a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/other/extra-rec.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:173:13",
+        "reason": "for inductive type False,\nexpected recursors [False.rec],\nwhile export file contained recursors [rogue, False.rec]"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/other/nat-lit-add-bad.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/other/orphan-ctor.ndjson": {
+      "failure": {
+        "kind": "error",
+        "reason": "invalid inductive block at line 19: constructor 2 must belong to an inductive in the same block"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/other/proj-of-prop.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/perf/refute-cheap-first.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/perf/refute-cheap-last.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/002_badDef.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/009_forallSortBad.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:315:18",
+        "reason": "infer_sort_of could not infer a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/010_nonTypeType.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:296:18",
+        "reason": "ensur_sort could not produce a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/011_nonTypeAxiom.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:296:18",
+        "reason": "ensur_sort could not produce a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/012_nonPropThm.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:90:45",
+        "reason": "called `Result::unwrap()` on an `Err` value: \"Theorem type for nonPropThm must be `Prop` (sort 0); found type 1\""
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/014_selfProof.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:238:17",
+        "reason": "infer_const: declaration selfProof depends on selfProof which was not found in the environment"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/019_tut06_bad01.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:203:9",
+        "reason": "assertion failed: self.ctx.no_dupes_all_params(info.uparams)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/046_inductBadNonSort.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:296:18",
+        "reason": "ensur_sort could not produce a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/047_inductBadNonSort2.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:296:18",
+        "reason": "ensur_sort could not produce a sort"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/048_inductLevelParam.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:203:9",
+        "reason": "assertion failed: self.ctx.no_dupes_all_params(info.uparams)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/049_inductTooFewParams.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:448:22",
+        "reason": "exhausted telescope early"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/050_inductWrongCtorParams.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/051_inductWrongCtorResParams.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:926:9",
+        "reason": "assertion failed: self.is_valid_ind_app(st, parent_ind_name, ctor_type_cursor)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/052_inductWrongCtorResLevel.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:926:9",
+        "reason": "assertion failed: self.is_valid_ind_app(st, parent_ind_name, ctor_type_cursor)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/053_inductInIndex.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:926:9",
+        "reason": "assertion failed: self.is_valid_ind_app(st, parent_ind_name, ctor_type_cursor)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/054_indNeg.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:40:17",
+        "reason": "assertion `left == right` failed\n  left: false\n right: true"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/tutorial/056_reduceCtorType.mk.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:926:9",
+        "reason": "assertion failed: self.is_valid_ind_app(st, parent_ind_name, ctor_type_cursor)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/057_indNegReducible.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:40:17",
+        "reason": "assertion `left == right` failed\n  left: false\n right: true"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/tutorial/061_typeWithTooHighTypeField.mk.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:916:17",
+        "reason": "Constructor argument was too large for the corresponding inductive type"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/073_BogusRecursor.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:1348:21",
+        "reason": "assertion failed: old_r.aux_data_ck(new_r)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/087_projOutOfRange.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:542:18",
+        "reason": "Ran out of constructor telescope getting field"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/088_projNotStruct.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:502:59",
+        "reason": "called `Option::unwrap()` on a `None` value"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/tutorial/090_projProp2.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:538:21",
+        "reason": "infer_proj prop"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/092_projProp4.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:538:21",
+        "reason": "infer_proj prop"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/093_projProp5.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:538:21",
+        "reason": "infer_proj prop"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/094_projProp6.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:523:27",
+        "reason": "infer_proj prop"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/096_projIndexData.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:504:13",
+        "reason": "Invalid projection: ProjDataIndex != PropStructure"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/097_projIndexData2.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:504:13",
+        "reason": "Invalid projection: ProjDataIndex != PropStructure"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/100_ruleKbad.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/101_ruleKAcc.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/105_proofIrrelevanceBad.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/111_indexedUnitEta.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/113_indexedStructEta.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/116_funEtaBad.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/117_reflOccLeft.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:40:17",
+        "reason": "assertion `left == right` failed\n  left: false\n right: true"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/tutorial/118_reflOccInIndex.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:40:17",
+        "reason": "assertion `left == right` failed\n  left: false\n right: true"
+      },
+      "target_evidence": "incidental-panic: no target-specific diagnostic; target exercise unestablished"
+    },
+    "bad/tutorial/125_accRecNoEta.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/tc.rs:988:71",
+        "reason": "assertion failed: self.def_eq(u, v)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/132_dup_defs.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/parser.rs:851:17",
+        "reason": "assertion failed: self.declars.insert(name, definition).is_none()"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/133_dup_ind_def.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/parser.rs:901:21",
+        "reason": "assertion failed: self.declars.insert(name, inductive).is_none()"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/134_dup_ctor_def.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/parser.rs:918:21",
+        "reason": "assertion failed: self.declars.insert(name, ctor).is_none()"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/135_dup_rec_def.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/parser.rs:944:21",
+        "reason": "assertion failed: self.declars.insert(name, recursor).is_none()"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/136_misnamed_rec_user.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:173:13",
+        "reason": "for inductive type misnamed_rec,\nexpected recursors [misnamed_rec.rec],\nwhile export file contained recursors [misnamed_rec.not_rec]"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/137_dup_rec_def2.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/inductive.rs:173:13",
+        "reason": "for inductive type dup_rec_def2,\nexpected recursors [dup_rec_def2.rec],\nwhile export file contained recursors [dup_rec_def2.not_rec]"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/138_dup_ctor_rec.ndjson": {
+      "failure": {
+        "kind": "error",
+        "reason": "invalid inductive block at line 24: duplicate declaration name index 2"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/139_DupConCon.ndjson": {
+      "failure": {
+        "kind": "error",
+        "reason": "invalid inductive block at line 34: duplicate declaration name index 3"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/140_falseFromUnsafe.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/parser.rs:844:17",
+        "reason": "assertion failed: !matches!(safety, DefinitionSafety::Unsafe | DefinitionSafety::Partial)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    },
+    "bad/tutorial/141_falseFromPartial.ndjson": {
+      "failure": {
+        "kind": "panic",
+        "location": "src/parser.rs:844:17",
+        "reason": "assertion failed: !matches!(safety, DefinitionSafety::Unsafe | DefinitionSafety::Partial)"
+      },
+      "target_evidence": "unestablished: pinned observation only; not a proof that the target was exercised"
+    }
+  }
+}

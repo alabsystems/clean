@@ -47,7 +47,7 @@ impl LinarithCertificate {
     /// ENSURES: `result.coefficients[hyp_index] == 1`
     /// ENSURES: All other coefficients are 0
     /// ENSURES: `result.coefficients.len() == num_hypotheses`
-    pub fn from_hypothesis(hyp_index: usize, num_hypotheses: usize) -> Self {
+    pub(crate) fn from_hypothesis(hyp_index: usize, num_hypotheses: usize) -> Self {
         let mut cert = Self::new(num_hypotheses);
         cert.coefficients[hyp_index] = 1;
         cert
@@ -82,7 +82,7 @@ impl LinarithCertificate {
     /// REQUIRES: `factor >= 0` for sound certificates
     /// ENSURES: On `Some(result)`, `result.coefficients[i] == self.coefficients[i] * factor` exactly (no overflow)
     /// ENSURES: On `None`, at least one multiplication overflowed `i128`
-    pub fn try_scale(&self, factor: i128) -> Option<Self> {
+    pub(crate) fn try_scale(&self, factor: i128) -> Option<Self> {
         let coefficients: Option<Vec<i128>> = self
             .coefficients
             .iter()
@@ -126,7 +126,7 @@ impl LinarithCertificate {
     /// REQUIRES: `self.coefficients.len() == other.coefficients.len()`
     /// ENSURES: On `Some(result)`, all additions are exact (no overflow)
     /// ENSURES: On `None`, at least one addition overflowed or lengths differ
-    pub fn try_add(&self, other: &Self) -> Option<Self> {
+    pub(crate) fn try_add(&self, other: &Self) -> Option<Self> {
         if self.coefficients.len() != other.coefficients.len() {
             return None;
         }
@@ -166,7 +166,7 @@ impl CertifiedConstraint {
     /// REQUIRES: `hyp_index < num_hypotheses`
     /// ENSURES: `result.certificate.coefficients[hyp_index] == 1`
     /// ENSURES: `result.constraint` is `constraint` unchanged
-    pub fn from_hypothesis(
+    pub(crate) fn from_hypothesis(
         constraint: LinearConstraint,
         hyp_index: usize,
         num_hypotheses: usize,
@@ -182,7 +182,7 @@ impl CertifiedConstraint {
     /// REQUIRES: `constraint` is the negation of the goal constraint
     /// ENSURES: `result.certificate.coefficients.len() == num_hypotheses + 1`
     /// ENSURES: `result.certificate.coefficients[num_hypotheses] == 1` (goal slot)
-    pub fn from_negated_goal(constraint: LinearConstraint, num_hypotheses: usize) -> Self {
+    pub(crate) fn from_negated_goal(constraint: LinearConstraint, num_hypotheses: usize) -> Self {
         // The negated goal is treated as hypothesis index = num_hypotheses
         Self {
             constraint,

@@ -26,24 +26,24 @@ use super::{ProofState, TacticResult};
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ExtConfig {
     /// Variable names for `ext`. `None` entries auto-generate names.
-    pub names: Vec<Option<String>>,
+    pub names: Vec<Option<clean_parser::SurfaceName>>,
     /// Recursion depth for `congr` (default: 1).
     pub depth: Option<usize>,
 }
 
 impl ExtConfig {
     /// Create a config with a single explicit name.
-    pub(crate) fn with_name(name: &str) -> Self {
+    pub(crate) fn with_name(name: &clean_parser::SurfaceName) -> Self {
         Self {
-            names: vec![Some(name.to_string())],
+            names: vec![Some(name.clone())],
             depth: None,
         }
     }
 
     /// Create a config with multiple explicit names.
-    pub(crate) fn with_names(names: &[&str]) -> Self {
+    pub(crate) fn with_names(names: &[&clean_parser::SurfaceName]) -> Self {
         Self {
-            names: names.iter().map(|n| Some(n.to_string())).collect(),
+            names: names.iter().map(|n| Some((*n).clone())).collect(),
             depth: None,
         }
     }
@@ -72,22 +72,23 @@ impl ExtConfig {
 /// Generate a fresh variable name that does not collide with existing context.
 ///
 /// Produces "x", "x_1", "x_2", etc.
-fn auto_var_name(state: &ProofState, base: &str) -> String {
-    let goal = match state.current_goal() {
-        Some(g) => g,
-        None => return base.to_string(),
+fn auto_var_name(state: &ProofState, base: &str) -> clean_parser::SurfaceName {
+    let name = clean_parser::SurfaceName::from_name(clean_kernel::Name::anon().str(base));
+    let Some(goal) = state.current_goal() else {
+        return name;
     };
-    let existing: Vec<&str> = goal.local_ctx.iter().map(|d| d.name.as_str()).collect();
-    if !existing.contains(&base) {
-        return base.to_string();
+    if !goal.local_ctx.iter().any(|decl| decl.name == name) {
+        return name;
     }
-    for i in 1..1000 {
-        let candidate = format!("{base}_{i}");
-        if !existing.contains(&candidate.as_str()) {
+    for index in 1..=goal.local_ctx.len() + 1 {
+        let candidate = clean_parser::SurfaceName::from_name(
+            clean_kernel::Name::anon().str(format!("{base}_{index}")),
+        );
+        if !goal.local_ctx.iter().any(|decl| decl.name == candidate) {
             return candidate;
         }
     }
-    format!("{base}_auto")
+    unreachable!("more distinct fresh candidates than existing local names")
 }
 
 /// Apply function extensionality multiple times according to `config`.
@@ -136,32 +137,8 @@ pub(crate) fn ext_multi(state: &mut ProofState, config: &ExtConfig) -> TacticRes
 ///   untouched.
 /// ENSURES: On `Err`, the proof state is unchanged.
 pub(crate) fn congr_depth(state: &mut ProofState, depth: usize) -> TacticResult {
-    if depth == 0 {
-        return Ok(());
-    }
-
-    // Apply one level of congr
-    super::congr_obtain::congr(state)?;
-
-    // If depth > 1, try to recurse on any new goals that are equalities
-    if depth > 1 {
-        let remaining = depth - 1;
-        let goal_count = state.goals().len();
-        // Try congr on each goal that was just created, but don't fail
-        // if a sub-goal isn't a congruence target.
-        for _ in 0..goal_count {
-            // Try to apply congr recursively; if it fails (not an equality of
-            // applications), just skip this goal.
-            if congr_depth(state, remaining).is_err() {
-                // Rotate to the next goal and try that one
-                if state.goals().len() > 1 {
-                    super::goal::rotate(state)?;
-                }
-            }
-        }
-    }
-
-    Ok(())
+    // Lean's `congr n` (`MVarId.congrN`): see `congr_n`.
+    super::congr_n::congr_n(state, depth)
 }
 
 /// Apply congruence using `ExtConfig`.

@@ -211,7 +211,7 @@ fn explicit_type_dec_eq_without_evidence_fails_without_sorry() {
     assert!(
         matches!(
             error,
-            ElabError::FailedToSynthesizeInstance { ref goal }
+            ElabError::FailedToSynthesizeInstance { ref goal, .. }
                 if goal.contains("Decidable") && goal.contains("UndecidableCarrier")
         ),
         "expected typed Decidable instance-synthesis failure, got {error:?}"
@@ -221,4 +221,62 @@ fn explicit_type_dec_eq_without_evidence_fails_without_sorry() {
         baseline,
         "failed explicit decEq synthesis must not mint synthetic evidence"
     );
+}
+
+/// Elaborate one declaration through `clean check`'s own path and return the
+/// error it is refused with.
+fn check_decl_error(src: &str) -> String {
+    let mut env = Environment::with_prelude();
+    let decl = parse_decl_for_elab(src).expect("parse declaration");
+    match crate::elaborate_decl_and_register(&mut env, &decl) {
+        Ok(_) => panic!("`{src}` must be refused"),
+        Err(e) => e.to_string(),
+    }
+}
+
+/// An explicit `_` at an instance-implicit binder whose goal has no instance
+/// is Lean's "failed to synthesize" (pinned v4.30.0-rc2:
+/// `failed to synthesize Inhabited Empty`). Until 2026-09-29 Clean made the
+/// `_` a user hole, which the residual guard exempts, so the theorem reached
+/// the kernel and was refused only as "contains free variables".
+#[test]
+fn explicit_hole_at_instance_binder_without_instance_fails_to_synthesize() {
+    for (src, goal) in [
+        (
+            "theorem inst_hole_empty : False := Empty.elim (@Inhabited.default Empty _)",
+            "Inhabited Empty",
+        ),
+        (
+            "theorem inst_hole_pure : False := \
+             Empty.elim (@Pure.pure (fun _ : Type => Empty) _ Nat Nat.zero)",
+            "Pure",
+        ),
+    ] {
+        let err = check_decl_error(src);
+        assert!(
+            err.contains("failed to synthesize") && err.contains(goal),
+            "`{src}` must fail to synthesize `{goal}`, got: {err}"
+        );
+        assert!(
+            !err.contains("free variables"),
+            "`{src}` must not reach the kernel: {err}"
+        );
+    }
+}
+
+/// Controls: the same explicit `_` where an instance exists is synthesized,
+/// and its value computes (`default : Nat` is `0`, as in Lean).
+#[test]
+fn explicit_hole_at_instance_binder_with_instance_is_synthesized() {
+    let mut env = Environment::with_prelude();
+    for src in [
+        "def inst_hole_nat : Nat := @Inhabited.default Nat _",
+        "theorem inst_hole_nat_zero : inst_hole_nat = 0 := rfl",
+        "def inst_hole_opt : Option Nat := @Pure.pure Option _ Nat 3",
+        "theorem inst_hole_opt_some : inst_hole_opt = some 3 := rfl",
+    ] {
+        let decl = parse_decl_for_elab(src).expect("parse declaration");
+        crate::elaborate_decl_and_register(&mut env, &decl)
+            .unwrap_or_else(|e| panic!("`{src}` must elaborate: {e}"));
+    }
 }

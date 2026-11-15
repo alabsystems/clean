@@ -395,6 +395,18 @@ pub enum PublishAuditIssue {
     },
 }
 
+/// A successful proof judgment that was checked without registering a constant.
+///
+/// Retained for consumers that impose a stricter kernel theory than elaboration.
+/// This is term data, not an acceptance token or an independent proof grade.
+#[derive(Debug, Clone)]
+pub struct CheckedJudgment {
+    /// The proposition the elaborated value was checked against.
+    pub type_: Expr,
+    /// The actual elaborated proof term, before it would otherwise be discarded.
+    pub value: Expr,
+}
+
 /// What happened to one top-level declaration, in authored order.
 #[derive(Debug)]
 pub struct DeclOutcome {
@@ -416,6 +428,9 @@ pub struct DeclOutcome {
     pub warning: Option<RegistrationWarning>,
     /// Hole contexts captured during elaboration, for IDE surfaces.
     pub hole_contexts: Vec<HoleContext>,
+    /// Successful anonymous proof judgments, in elaboration order.
+    /// Empty for refused declarations and commands that check no proof.
+    pub checked_judgments: Vec<CheckedJudgment>,
 }
 
 impl DeclOutcome {
@@ -575,7 +590,8 @@ pub fn elaborate_module(
 
     // PHASE 2 — type-level declarations, elaborated COMPLETELY (never staged as
     // a partial family) into `base`, so both environments below inherit them.
-    stage::elaborate_type_declarations(&mut base, &mut plan);
+    let type_rejections = stage::elaborate_type_declarations(&mut base, &mut plan);
+    outcome.rejections.extend(type_rejections);
 
     // PHASE 3 — headers, to a CONFIRMED fixed point in a staging environment
     // that is a local of this function and never escapes it: it has no
@@ -627,6 +643,7 @@ pub fn elaborate_module(
             .any(|n| matches!(n.status, plan::NodeStatus::Refused(_)));
 
     let trailing = std::mem::take(&mut plan.trailing_directives);
+    let templates = std::mem::take(&mut plan.templates);
     outcome.decls = plan.into_outcomes();
 
     match options.atomicity {
@@ -641,9 +658,12 @@ pub fn elaborate_module(
             // The caller resumes with the `open` / `export` aliases the source
             // established, expanded against the environment that now holds the
             // batch's declarations — not against the one that existed while the
-            // directives were being read.
+            // directives were being read. So does what each template the batch
+            // declared names.
             let resumed =
                 exec::replay_trailing(&publish_env, file_ctx.namespace_state(), &trailing);
+            let resumed =
+                exec::replay_trailing_templates(&publish_env, file_ctx, resumed, &templates);
             *file_ctx.namespace_state_mut() = resumed;
             *env = publish_env;
             outcome.committed = true;

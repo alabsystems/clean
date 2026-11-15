@@ -45,12 +45,16 @@ fn mk_reverse_local_eq_proof(
 fn collect_local_rw_simp_lemmas(
     state: &ProofState,
     goal: &Goal,
-    lemmas: &[String],
+    lemmas: &[clean_parser::SurfaceName],
 ) -> Result<Vec<SimpLemma>, TacticError> {
     let mut out = Vec::new();
 
     for lemma_name in lemmas {
-        let Some(hyp_decl) = goal.local_ctx.iter().find(|decl| &decl.name == lemma_name) else {
+        let Some(hyp_decl) =
+            goal.local_ctx.iter().rev().find(|decl| {
+                crate::tactic::pattern::names::hypothesis_named(&decl.name, lemma_name)
+            })
+        else {
             continue;
         };
 
@@ -72,7 +76,7 @@ fn collect_local_rw_simp_lemmas(
             mk_reverse_local_eq_proof(state, &eq_type, &lhs, &rhs, levels, forward_proof.clone())?;
 
         out.push(SimpLemma {
-            name: Name::from_string(lemma_name),
+            name: lemma_name.name().clone(),
             lhs: lhs.clone(),
             rhs: rhs.clone(),
             eq_type: Some(eq_type.clone()),
@@ -84,7 +88,7 @@ fn collect_local_rw_simp_lemmas(
         let reverse_query_path = mk_path(state, goal, &rhs, IndexMode::NoIndexAtArgs);
         if !query_path_is_too_generic(&reverse_query_path) {
             out.push(SimpLemma {
-                name: Name::from_string(lemma_name),
+                name: lemma_name.name().clone(),
                 lhs: rhs,
                 rhs: lhs,
                 eq_type: Some(eq_type),
@@ -110,11 +114,34 @@ fn collect_local_rw_simp_lemmas(
 /// # Contract
 ///
 /// REQUIRES: `state.goals` is non-empty
-/// REQUIRES: `lemmas` contains names of hypotheses in the goal's local context
 /// ENSURES: On Ok, goal target was simplified; may or may not be closed (rfl attempted)
 /// ENSURES: On Err(NoProgress), no rewrite or simp step changed the target
 /// ENSURES: On Err(NoGoals), no goals exist; state unchanged
-pub fn simp_rw(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
+pub fn simp_rw(state: &mut ProofState, lemmas: Vec<clean_parser::SurfaceName>) -> TacticResult {
+    simp_rw_with_rules(state, lemmas, Vec::new())
+}
+
+/// `simp_rw` over rules that are already resolved.
+///
+/// `prebuilt` carries what the by-name channel cannot express — a `←`-reversed
+/// rule and a rule whose surface form is a TERM — built by
+/// `simp::args::resolve_simp_args`. `lemmas` is the by-name remainder, and it
+/// now reaches `extra_lemmas` as well as `collect_local_rw_simp_lemmas`: that
+/// function skips every name that is not a local hypothesis (`else { continue
+/// }`), so `simp_rw [and_comm]` used to run with the default simp set and NONE
+/// of the named rules, silently.
+///
+/// NOT Lean-faithful yet, and the gap is stated rather than hidden: Mathlib's
+/// `simp_rw` (`Mathlib/Tactic/SimpRw.lean`) desugars to `simp only` with no
+/// rules followed by ONE `simp only [lᵢ]` per rule IN ORDER
+/// (`withSimpRWRulesSeq`), where this applies the whole set at once. That
+/// ordering difference has its own counterexample in Mathlib's docstring;
+/// porting the desugaring is separate work.
+pub(crate) fn simp_rw_with_rules(
+    state: &mut ProofState,
+    lemmas: Vec<clean_parser::SurfaceName>,
+    prebuilt: Vec<SimpLemma>,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let mut current_target = goal.target.clone();
     let mut made_progress = false;
@@ -123,6 +150,8 @@ pub fn simp_rw(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
 
     let mut simp_config = SimpConfig::new();
     simp_config.aesop_simp_lemmas = collect_local_rw_simp_lemmas(state, &goal, &lemmas)?;
+    simp_config.aesop_simp_lemmas.extend(prebuilt);
+    simp_config.extra_lemmas = lemmas.clone();
     let simp_lemmas = collect_simp_lemmas_cached(state, &simp_config);
 
     // Same per-traversal budget `simp` carries (see `simp/budget.rs`); a trip
@@ -187,9 +216,9 @@ pub fn simp_rw(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
 }
 
 /// Simplified version of simp_rw that uses hypotheses by name.
-pub fn simp_rw_hyps(state: &mut ProofState, hyp_names: Vec<&str>) -> TacticResult {
-    simp_rw(
-        state,
-        hyp_names.into_iter().map(ToString::to_string).collect(),
-    )
+pub fn simp_rw_hyps(
+    state: &mut ProofState,
+    hyp_names: Vec<&clean_parser::SurfaceName>,
+) -> TacticResult {
+    simp_rw(state, hyp_names.into_iter().cloned().collect())
 }

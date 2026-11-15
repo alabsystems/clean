@@ -30,7 +30,9 @@ pub use rewrite::{
     resolve_env_rewrite_parts, rewrite, rewrite_at, rewrite_at_with_proof, rewrite_ltr,
     rewrite_rtl, rewrite_with_proof,
 };
+pub(crate) use rewrite::{rewrite_at_fvar, rewrite_at_fvar_with_proof};
 #[cfg(test)]
 pub(crate) use rewrite::{rewrite_chain, RewriteDirection, RewriteRule};
 pub use structural::{calc_trans, symm, trans};
+pub(crate) use subst::subst_eliminating;
 pub use subst::{subst, subst_vars};

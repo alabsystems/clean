@@ -1,0 +1,6 @@
+# This family has no module source: both artifacts are minted by the generator
+# (see README.md). `run <script> <args...>` is the test-support helper's
+# `lean --run` step; cwd is the copied family directory, so the outputs land
+# beside this file's copy.
+run GenNumericProbe.lean NumericProbeSupported.olean
+run GenNumericProbe.lean NumericProbeSeven.olean --over-u64

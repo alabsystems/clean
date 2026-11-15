@@ -22,52 +22,53 @@ use std::sync::LazyLock;
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Increment reference count.
-pub const INC: &str = "_inc";
+pub(crate) const INC: &str = "_inc";
 /// Decrement reference count.
-pub const DEC: &str = "_dec";
+pub(crate) const DEC: &str = "_dec";
 /// Delete (free) an object known to have refcount 1.
-pub const DEL: &str = "_del";
+pub(crate) const DEL: &str = "_del";
 /// Reset an object for potential reuse.
-pub const RESET: &str = "_reset";
+pub(crate) const RESET: &str = "_reset";
 /// Reuse a reset slot for a new constructor.
-pub const REUSE: &str = "_reuse";
+pub(crate) const REUSE: &str = "_reuse";
 /// Check if an object's reference count > 1.
-pub const IS_SHARED: &str = "_isShared";
+pub(crate) const IS_SHARED: &str = "_isShared";
 /// Generic constructor placeholder (slow-path fallback).
-pub const CTOR: &str = "_ctor";
+pub(crate) const CTOR: &str = "_ctor";
 /// Set an object pointer field.
-pub const SET: &str = "_set";
+pub(crate) const SET: &str = "_set";
 /// Set the constructor tag on a reused object.
-pub const SET_TAG: &str = "_setTag";
+pub(crate) const SET_TAG: &str = "_setTag";
 /// Bind a reuse slot on the fast path.
 #[cfg(test)]
 pub const REUSE_SLOT: &str = "_reuse_slot";
 /// Placeholder name for projected-but-unread fields.
-pub const UNUSED_FIELD: &str = "_unused_field";
+pub(crate) const UNUSED_FIELD: &str = "_unused_field";
 /// Set a USize scalar field.
-pub const USET: &str = "_uset";
+pub(crate) const USET: &str = "_uset";
 /// Set a non-USize scalar field.
-pub const SSET: &str = "_sset";
+pub(crate) const SSET: &str = "_sset";
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Cached Name constants (for construction — avoids per-call allocation)
 // ═══════════════════════════════════════════════════════════════════════════
 
 /// Cached `Name` for `_inc`.
-pub static NAME_INC: LazyLock<Name> = LazyLock::new(|| Name::from_string(INC));
+pub(crate) static NAME_INC: LazyLock<Name> = LazyLock::new(|| Name::from_string(INC));
 /// Cached `Name` for `_dec`.
-pub static NAME_DEC: LazyLock<Name> = LazyLock::new(|| Name::from_string(DEC));
+pub(crate) static NAME_DEC: LazyLock<Name> = LazyLock::new(|| Name::from_string(DEC));
 /// Cached `Name` for `_del`.
-pub static NAME_DEL: LazyLock<Name> = LazyLock::new(|| Name::from_string(DEL));
+pub(crate) static NAME_DEL: LazyLock<Name> = LazyLock::new(|| Name::from_string(DEL));
 /// Cached `Name` for `_reset`.
-pub static NAME_RESET: LazyLock<Name> = LazyLock::new(|| Name::from_string(RESET));
+pub(crate) static NAME_RESET: LazyLock<Name> = LazyLock::new(|| Name::from_string(RESET));
 /// Cached `Name` for `_isShared`.
-pub static NAME_IS_SHARED: LazyLock<Name> = LazyLock::new(|| Name::from_string(IS_SHARED));
+pub(crate) static NAME_IS_SHARED: LazyLock<Name> = LazyLock::new(|| Name::from_string(IS_SHARED));
 /// Cached `Name` for `_ctor`.
-pub static NAME_CTOR: LazyLock<Name> = LazyLock::new(|| Name::from_string(CTOR));
+pub(crate) static NAME_CTOR: LazyLock<Name> = LazyLock::new(|| Name::from_string(CTOR));
 /// Cached `Name` for `_set`.
-pub static NAME_SET: LazyLock<Name> = LazyLock::new(|| Name::from_string(SET));
+pub(crate) static NAME_SET: LazyLock<Name> = LazyLock::new(|| Name::from_string(SET));
 /// Cached `Name` for `_setTag`.
-pub static NAME_SET_TAG: LazyLock<Name> = LazyLock::new(|| Name::from_string(SET_TAG));
+pub(crate) static NAME_SET_TAG: LazyLock<Name> = LazyLock::new(|| Name::from_string(SET_TAG));
 /// Cached `Name` for `_unused_field`.
-pub static NAME_UNUSED_FIELD: LazyLock<Name> = LazyLock::new(|| Name::from_string(UNUSED_FIELD));
+pub(crate) static NAME_UNUSED_FIELD: LazyLock<Name> =
+    LazyLock::new(|| Name::from_string(UNUSED_FIELD));

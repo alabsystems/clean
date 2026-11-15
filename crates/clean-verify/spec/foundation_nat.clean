@@ -1,0 +1,31 @@
+/-! Natural numbers and their first-layer arithmetic (PART 3 of the foundation).
+
+Model unit `foundation_nat` — moved out of `crates/clean-verify/src/spec/core_spec/foundation_types.rs`
+(embed memo W1). Registered by `Specification::register_model_unit(ModelUnit::FoundationNat)`
+through the same `add_inductive` / `add_recursive_def` path the literals used; the
+fidelity oracle in `spec/model_units/tests.rs` pins this file against the retained
+literal. EVERY declaration must carry a `/-- ... -/` doc comment: its text is the
+registered description, byte for byte. -/
+
+/-- Natural numbers. Used for universe levels, de Bruijn indices, and arithmetic. -/
+inductive Nat : Type
+| zero : Nat
+| succ : Nat → Nat
+
+-- Nat.add (recursive definition)
+/-- Addition on natural numbers. -/
+def Nat.add (n : Nat) (m : Nat) : Nat := match m with
+| Nat.zero => n
+| Nat.succ m' => Nat.succ (Nat.add n m')
+
+-- Nat.pred. Use explicit Nat.rec rather than match/casesOn so checked
+-- arithmetic proofs normalize through the same recursor constant.
+/-- Predecessor on natural numbers. -/
+def Nat.pred (n : Nat) : Nat := @Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (m : Nat) (_ : Nat) => m) n
+
+-- Nat.sub (recursive definition)
+-- a - b: recurse on the right argument and peel the left with Nat.pred.
+/-- Subtraction on natural numbers (truncated to zero). -/
+def Nat.sub (a : Nat) (b : Nat) : Nat := match b with
+| Nat.zero => a
+| Nat.succ b' => Nat.pred (Nat.sub a b')

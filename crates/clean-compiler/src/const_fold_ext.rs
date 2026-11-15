@@ -203,8 +203,16 @@ pub(crate) fn fold_bitwise_op(op: &str, lhs: &IRLiteral, rhs: &IRLiteral) -> Opt
         "UInt64.land" => l & r,
         "UInt64.lor" => l | r,
         "UInt64.lxor" | "UInt64.xor" => l ^ r,
-        "UInt64.shiftLeft" => l.checked_shl(r as u32).unwrap_or(0),
-        "UInt64.shiftRight" => l.checked_shr(r as u32).unwrap_or(0),
+        // Lean 4 reduces a machine shift AMOUNT modulo the width
+        // (`UInt64.shiftLeft a b = ⟨a.toBitVec <<< (UInt64.mod b 64).toBitVec⟩`,
+        // `src/Init/Data/UInt/Basic.lean`), so `1 <<< 65 = 2` and `1 <<< 64 = 1`.
+        // This used to be `checked_shl(..).unwrap_or(0)` — shift-past-width is
+        // zero — which is not Lean and not what the kernel proves
+        // (`clean-kernel` `data_types_uint.rs`, `reduce_u64_shift_left`): a
+        // folded constant would have disagreed with a checked `rfl` about the
+        // same term. `r % 64 < 64`, so neither shift below can overflow.
+        "UInt64.shiftLeft" => l.wrapping_shl((r % 64) as u32),
+        "UInt64.shiftRight" => l >> (r % 64),
         _ => return None,
     };
     Some(IRLiteral::UInt64(result))

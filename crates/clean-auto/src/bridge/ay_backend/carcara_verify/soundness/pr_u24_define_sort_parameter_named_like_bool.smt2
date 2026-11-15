@@ -1,0 +1,7 @@
+(set-logic ALL)
+(define-sort S (Bool) Bool)
+(declare-const a (S Int))
+(declare-const b (S Int))
+(declare-const c (S Int))
+(assert (distinct a b c))
+(check-sat)

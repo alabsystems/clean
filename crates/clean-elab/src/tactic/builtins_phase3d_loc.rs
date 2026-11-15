@@ -12,6 +12,8 @@
 //! args, and the `IdentList` pattern converts them to `Expr::Const(name)`
 //! without elaboration. Handlers decode location from the arg names.
 
+use clean_parser::SurfaceName;
+
 use std::collections::VecDeque;
 use std::sync::Arc;
 
@@ -66,13 +68,17 @@ pub(crate) fn with_location(
     ps: &mut super::ProofState,
     args: &[clean_kernel::Expr],
     on_goal: impl FnOnce(&mut super::ProofState) -> Result<(), TacticError>,
-    on_hyp: impl Fn(&mut super::ProofState, &str) -> Result<(), TacticError>,
+    on_hyp: impl Fn(&mut super::ProofState, &SurfaceName) -> Result<(), TacticError>,
     on_all: impl FnOnce(&mut super::ProofState) -> Result<(), TacticError>,
 ) -> Result<(), TacticError> {
     if args.is_empty() {
         return on_goal(ps);
     }
-    if is_wildcard_arg(ps, &args[0]) {
+    // Validate every encoded name slot even if a wildcard dispatches the list.
+    for arg in args {
+        expr_to_hyp_name(ps, arg)?;
+    }
+    if is_wildcard_arg(ps, &args[0])? {
         return on_all(ps);
     }
     let (hyps, apply_goal) = decode_named_location_args(ps, args)?;
@@ -146,22 +152,23 @@ pub(crate) fn register_phase3d_location(registry: &mut TacticRegistry) {
 }
 
 /// Check if an arg represents the wildcard `*` location.
-fn is_wildcard_arg(ps: &super::ProofState, arg: &clean_kernel::Expr) -> bool {
-    expr_to_hyp_name(ps, arg).is_ok_and(|n| n == "*")
+fn is_wildcard_arg(ps: &super::ProofState, arg: &clean_kernel::Expr) -> Result<bool, TacticError> {
+    Ok(expr_to_hyp_name(ps, arg)?.is_unescaped_component("*"))
 }
 
-fn is_goal_arg(ps: &super::ProofState, arg: &clean_kernel::Expr) -> bool {
-    expr_to_hyp_name(ps, arg).is_ok_and(|n| n == "⊢" || n == "|-")
+fn is_goal_arg(ps: &super::ProofState, arg: &clean_kernel::Expr) -> Result<bool, TacticError> {
+    let name = expr_to_hyp_name(ps, arg)?;
+    Ok(name.is_unescaped_component("⊢") || name.is_unescaped_component("|-"))
 }
 
 fn decode_named_location_args(
     ps: &super::ProofState,
     args: &[clean_kernel::Expr],
-) -> Result<(Vec<String>, bool), TacticError> {
+) -> Result<(Vec<SurfaceName>, bool), TacticError> {
     let mut hyps = Vec::new();
     let mut apply_goal = false;
     for arg in args {
-        if is_goal_arg(ps, arg) {
+        if is_goal_arg(ps, arg)? {
             apply_goal = true;
         } else {
             hyps.push(expr_to_hyp_name(ps, arg)?);

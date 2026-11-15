@@ -4,8 +4,8 @@
 
 //! Bridge between arXiv formalization results and Mathverse Library shards.
 //!
-//! Converts successfully type-checked formalizations into `.mathverse` shard
-//! entries with full provenance, axiom profile, and trust metadata.
+//! Tracks formalization provenance. Source text and a claimed admission tier
+//! are not typed shard declarations and cannot authorize a shard export.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -13,11 +13,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use super::formalize::{AdmissionTier, FormalizationResult, PaperFormalization};
-use crate::error::MathverseResult;
-use crate::shard::ShardWriter;
-use crate::types::{
-    AxiomProfile, ContentDomain, ImportConfidence, MathverseConstantHeader, SourceSystem, NO_VALUE,
-};
+use crate::error::{MathverseError, MathverseResult};
 
 // ════════════════════════════════════════════════════════════════════════════
 // Export Statistics
@@ -80,99 +76,39 @@ impl ArxivMathverseBridge {
         }
     }
 
-    /// Convert successfully type-checked formalizations to an mathverse shard file.
+    /// Reject source-only formalizations that lack typed shard declarations.
     ///
-    /// Only formalizations at `TypeChecked` tier or above are exported.
-    /// The shard is written to `output_path`.
+    /// A claimed admission tier does not supply an elaborated type or proof.
+    /// Eligible nonempty source text returns an error without creating or
+    /// modifying the destination. Empty or ineligible inputs return their
+    /// no-output statistics.
     pub fn export_formalized(
         formalizations: &[PaperFormalization],
-        output_path: &Path,
+        _output_path: &Path,
     ) -> MathverseResult<ExportStats> {
-        let mut writer = ShardWriter::new();
         let mut stats = ExportStats::default();
         let mut papers_seen = std::collections::HashSet::new();
-
         for paper in formalizations {
-            let eligible_results: Vec<&FormalizationResult> = paper
-                .definitions
-                .iter()
-                .chain(paper.theorems.iter())
-                .filter(|r| is_exportable(r))
-                .collect();
-
-            stats.total_input += paper.definitions.len() + paper.theorems.len();
-
-            if eligible_results.is_empty() {
-                continue;
-            }
-
-            papers_seen.insert(&paper.paper_id);
-
-            for result in eligible_results {
-                stats.eligible += 1;
-
-                if result.best_lean.is_empty() {
-                    stats.skipped += 1;
-                    continue;
+            for result in paper.definitions.iter().chain(paper.theorems.iter()) {
+                stats.total_input += 1;
+                if claims_admitted_tier(result) {
+                    stats.eligible += 1;
+                    papers_seen.insert(&paper.paper_id);
+                    if !result.best_lean.is_empty() {
+                        return Err(MathverseError::ImportFailed {
+                            system: "arXiv".to_string(),
+                            reason: format!(
+                                "formalization '{}' from '{}' contains source text; \
+                                 elaborate it into typed declarations before shard export",
+                                result.label, paper.paper_id
+                            ),
+                        });
+                    }
                 }
-
-                let name = format!(
-                    "Arxiv.{}.{}",
-                    sanitize_paper_id(&paper.paper_id),
-                    sanitize_label(&result.label),
-                );
-                let name_idx = writer.add_string(&name);
-
-                // Store the Lean code as a string (no expression arena encoding
-                // for NL-imported formalizations — that requires kernel elaboration).
-                let lean_idx = writer.add_string(&result.best_lean);
-
-                let confidence = match result.tier {
-                    AdmissionTier::KernelProved => ImportConfidence::KernelVerified,
-                    AdmissionTier::AuditedAlignment => ImportConfidence::Translated,
-                    AdmissionTier::TypeChecked => ImportConfidence::Axiomatized,
-                    AdmissionTier::Candidate => ImportConfidence::Unverified,
-                };
-
-                // The `kind` field is a free-form string from the LLM
-                // extraction pass ("theorem"/"lemma"/"definition"/…). Treat
-                // definitional tokens as Definition, everything else as
-                // Theorem; both preserve the Arxiv axiom profile.
-                let kind_lc = result.kind.to_ascii_lowercase();
-                let decl_kind = if kind_lc.contains("def") {
-                    crate::types::DeclKind::Definition
-                } else {
-                    crate::types::DeclKind::Theorem
-                };
-                let header = MathverseConstantHeader {
-                    name_idx,
-                    type_idx: lean_idx,  // Store lean code ref in type slot
-                    value_idx: NO_VALUE, // No proof term yet
-                    source_system: SourceSystem::Arxiv as u8,
-                    import_confidence: confidence as u8,
-                    content_domain: ContentDomain::PureMath as u8,
-                    decl_kind: decl_kind as u8,
-                    axiom_profile: AxiomProfile::AXIOMATIZED.union(AxiomProfile::ARXIV_NL_IMPORT),
-                    sidecar_digest: 0,
-                    provenance_idx: 0,
-                    level_params_start: 0,
-                    level_params_count: 0,
-                    _pad2: [0u8; 26],
-                };
-                writer.add_constant(header);
-                stats.exported += 1;
+                stats.skipped += 1;
             }
         }
-
-        stats.skipped += stats.total_input - stats.eligible;
         stats.papers = papers_seen.len();
-
-        if stats.exported > 0 {
-            writer
-                .write_to_file(output_path)
-                .map_err(|e| e.with_context("writing arxiv mathverse shard"))?;
-        }
-
         Ok(stats)
     }
 
@@ -234,22 +170,12 @@ impl Default for ArxivMathverseBridge {
 // Helpers
 // ════════════════════════════════════════════════════════════════════════════
 
-/// A formalization is exportable if it has reached at least `TypeChecked` tier.
-fn is_exportable(result: &FormalizationResult) -> bool {
+/// Whether the caller claims a tier considered for an export attempt.
+fn claims_admitted_tier(result: &FormalizationResult) -> bool {
     matches!(
         result.tier,
         AdmissionTier::TypeChecked | AdmissionTier::AuditedAlignment | AdmissionTier::KernelProved
     )
-}
-
-fn sanitize_paper_id(id: &str) -> String {
-    id.replace(['.', '/', '-'], "_")
-}
-
-fn sanitize_label(label: &str) -> String {
-    label
-        .replace([' ', '.', '-', ':'], "_")
-        .replace(['\'', '"'], "")
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -287,6 +213,65 @@ mod tests {
             thm_formalized,
             thm_total: 0,
         }
+    }
+
+    fn assert_source_only_export_refused(tier: AdmissionTier, lean: &str) {
+        let dir = tempfile::tempdir().expect("temporary output directory");
+        let path = dir.path().join("source-only.mathverse");
+        for existing in [false, true] {
+            if existing {
+                std::fs::write(&path, b"existing shard must remain unchanged")
+                    .expect("write existing destination");
+            }
+            let paper = make_paper(vec![make_result("Claimed proof", tier.clone(), lean)]);
+            let error = ArxivMathverseBridge::export_formalized(&[paper], &path)
+                .expect_err("source text and a claimed tier do not establish a typed declaration");
+            assert!(matches!(
+                error,
+                MathverseError::ImportFailed { system, reason }
+                    if system == "arXiv" && reason.contains("typed declarations")
+            ));
+            if existing {
+                assert_eq!(
+                    std::fs::read(&path).expect("existing destination"),
+                    b"existing shard must remain unchanged"
+                );
+            } else {
+                assert!(!path.exists(), "refusal must not publish a shard");
+            }
+        }
+    }
+
+    #[test]
+    fn source_only_claimed_kernel_proof_is_refused() {
+        assert_source_only_export_refused(
+            AdmissionTier::KernelProved,
+            "theorem fabricated : False := by trivial",
+        );
+    }
+
+    #[test]
+    fn source_only_claimed_type_check_is_refused() {
+        assert_source_only_export_refused(
+            AdmissionTier::TypeChecked,
+            "theorem fabricated : False := by trivial",
+        );
+    }
+
+    #[test]
+    fn source_only_claimed_alignment_is_refused() {
+        assert_source_only_export_refused(
+            AdmissionTier::AuditedAlignment,
+            "theorem fabricated : False := by trivial",
+        );
+    }
+
+    #[test]
+    fn source_only_valid_text_still_requires_typed_declarations() {
+        assert_source_only_export_refused(
+            AdmissionTier::KernelProved,
+            "theorem valid : True := True.intro",
+        );
     }
 
     #[test]
@@ -327,41 +312,31 @@ mod tests {
     }
 
     #[test]
-    fn test_arxiv_to_mathverse_export() {
-        let r_good = make_result(
-            "Theorem 1",
-            AdmissionTier::TypeChecked,
-            "theorem foo (n : Nat) : n + 0 = n := Nat.add_zero n",
-        );
+    fn test_ineligible_and_empty_sources_write_nothing() {
+        let r_good = make_result("Theorem 1", AdmissionTier::TypeChecked, "");
         let r_bad = make_result("Theorem 2", AdmissionTier::Candidate, "bad code");
         let paper = make_paper(vec![r_good, r_bad]);
 
-        let dir = std::env::temp_dir().join("arxiv_mathverse_test");
-        std::fs::create_dir_all(&dir).expect("create temp dir");
-        let shard_path = dir.join("arxiv_test.mathverse");
+        let dir = tempfile::tempdir().expect("temporary output directory");
+        let shard_path = dir.path().join("arxiv_test.mathverse");
 
         let stats = ArxivMathverseBridge::export_formalized(&[paper], &shard_path)
             .expect("export should succeed");
 
         assert_eq!(stats.total_input, 2);
         assert_eq!(stats.eligible, 1);
-        assert_eq!(stats.exported, 1);
-        assert_eq!(stats.skipped, 1);
+        assert_eq!(stats.exported, 0);
+        assert_eq!(stats.skipped, 2);
         assert_eq!(stats.papers, 1);
 
-        // Shard file should exist
-        assert!(shard_path.exists(), "shard file should be created");
-
-        // clean up
-        let _ = std::fs::remove_dir_all(&dir);
+        assert!(!shard_path.exists(), "no typed declarations to export");
     }
 
     #[test]
     fn test_export_empty_formalizations() {
         let paper = make_paper(vec![]);
-        let dir = std::env::temp_dir().join("arxiv_mathverse_empty_test");
-        std::fs::create_dir_all(&dir).expect("create temp dir");
-        let shard_path = dir.join("empty.mathverse");
+        let dir = tempfile::tempdir().expect("temporary output directory");
+        let shard_path = dir.path().join("empty.mathverse");
 
         let stats = ArxivMathverseBridge::export_formalized(&[paper], &shard_path)
             .expect("export should succeed even with no data");
@@ -369,20 +344,18 @@ mod tests {
         assert_eq!(stats.exported, 0);
         // No shard should be written when nothing was exported
         assert!(!shard_path.exists());
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn test_is_exportable_tiers() {
+    fn test_claimed_admission_tiers() {
         let candidate = make_result("T", AdmissionTier::Candidate, "x");
         let tc = make_result("T", AdmissionTier::TypeChecked, "x");
         let aa = make_result("T", AdmissionTier::AuditedAlignment, "x");
         let kp = make_result("T", AdmissionTier::KernelProved, "x");
 
-        assert!(!is_exportable(&candidate));
-        assert!(is_exportable(&tc));
-        assert!(is_exportable(&aa));
-        assert!(is_exportable(&kp));
+        assert!(!claims_admitted_tier(&candidate));
+        assert!(claims_admitted_tier(&tc));
+        assert!(claims_admitted_tier(&aa));
+        assert!(claims_admitted_tier(&kp));
     }
 }

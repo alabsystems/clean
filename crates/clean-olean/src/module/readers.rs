@@ -11,8 +11,25 @@
 use super::{ParsedImport, ParsedModule};
 use crate::error::{OleanError, OleanResult};
 use crate::header::{HEADER_SIZE, HEADER_SIZE_V2, VERSION, VERSION_V2};
-use crate::payload::decode_clean_payload;
+use crate::payload::{decode_clean_payload, CleanPayload};
 use crate::region::{is_ptr, is_scalar, tags, CompactedRegion};
+
+/// Refuse a `CLEANENV` payload trailer on a part Lean's own compiler wrote
+/// (R113, finding B3): only Clean's exporter appends that trailer, and only to
+/// its own layout, so a trailer on a `LeanV1`/`LeanV2` part is foreign and
+/// `lean` never reads it.
+fn reject_foreign_payload_trailer_opt(
+    region: &CompactedRegion<'_>,
+    root: u64,
+    payload: &Option<CleanPayload>,
+) -> OleanResult<()> {
+    if payload.is_some() && region.root_is_lean_layout(root)? {
+        return Err(OleanError::PayloadOnLeanPart(
+            "a Lean-written `.olean` part carries a `CLEANENV` trailer".into(),
+        ));
+    }
+    Ok(())
+}
 
 impl<'a> CompactedRegion<'a> {
     /// Get the root pointer (first pointer after the header).
@@ -79,7 +96,10 @@ impl<'a> CompactedRegion<'a> {
     /// to the full path. This is the lever the per-constant streaming verifier
     /// uses to load a trusted-import closure without reconstructing hundreds of
     /// analysis-module proof bodies (the peak-RSS cost that OOMs otherwise).
-    pub fn read_module_data_opts(&self, skip_proof_values: bool) -> OleanResult<ParsedModule> {
+    pub(crate) fn read_module_data_opts(
+        &self,
+        skip_proof_values: bool,
+    ) -> OleanResult<ParsedModule> {
         let root_ptr = self.root_ptr()?;
 
         if !is_ptr(root_ptr) {
@@ -128,13 +148,19 @@ impl<'a> CompactedRegion<'a> {
             entries = self.read_extension_entries_array(entries_ptr)?;
         }
 
+        let clean_payload = decode_clean_payload(self.data)?;
+        // R113 (finding B3): a `CLEANENV` trailer on a part Lean's own compiler
+        // wrote is foreign — `lean` never reads it — so it is refused here too,
+        // not only in the `LoadModule` loader.
+        reject_foreign_payload_trailer_opt(self, root_ptr, &clean_payload)?;
+
         Ok(ParsedModule {
             const_names,
             constants,
             extra_const_names,
             imports,
             entries,
-            clean_payload: decode_clean_payload(self.data)?,
+            clean_payload,
         })
     }
 
@@ -157,7 +183,7 @@ impl<'a> CompactedRegion<'a> {
     /// (incremental/companion) region are not reconstructed. Used to load an
     /// `.olean.private` proof companion type-only, so a trusted dependency's
     /// proof bodies never become resident.
-    pub fn read_module_data_from_ptr_opts(
+    pub(crate) fn read_module_data_from_ptr_opts(
         &self,
         root_ptr: u64,
         payload_bytes: &[u8],
@@ -200,13 +226,16 @@ impl<'a> CompactedRegion<'a> {
 
         // Skip extension entries for incremental regions (different format)
 
+        let clean_payload = decode_clean_payload(payload_bytes)?;
+        reject_foreign_payload_trailer_opt(self, root_ptr, &clean_payload)?;
+
         Ok(ParsedModule {
             const_names,
             constants,
             extra_const_names,
             imports,
             entries: Vec::new(),
-            clean_payload: decode_clean_payload(payload_bytes)?,
+            clean_payload,
         })
     }
 
@@ -221,7 +250,7 @@ impl<'a> CompactedRegion<'a> {
     /// - Returns the import list in file order.
     /// - Avoids parsing constants and expressions
     ///   (e.g., for dependency graph discovery).
-    pub fn read_imports_only(&self) -> OleanResult<Vec<ParsedImport>> {
+    pub(crate) fn read_imports_only(&self) -> OleanResult<Vec<ParsedImport>> {
         let root_ptr = self.root_ptr()?;
 
         if !is_ptr(root_ptr) {
@@ -259,7 +288,7 @@ impl<'a> CompactedRegion<'a> {
     /// - Returns `(imports, const_names)` equivalent to
     ///   `(parse_module(bytes)?.imports, [const_names ++ extra_const_names])`.
     /// - Does NOT parse constants, types, or expressions (much faster / lighter).
-    pub fn read_imports_and_const_names_only(
+    pub(crate) fn read_imports_and_const_names_only(
         &self,
     ) -> OleanResult<(Vec<ParsedImport>, Vec<String>)> {
         let root_ptr = self.root_ptr()?;

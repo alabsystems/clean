@@ -9,10 +9,67 @@
 //! - Dot notation for non-structure types (`expr.method` → `T.method expr`)
 //! - Qualified name disambiguation (`Foo.bar.baz` → constant lookup)
 
+use super::elab_core::DottedIdent;
 use super::*;
 use crate::stack_safe;
 
 impl<'a> ElabCtx<'a> {
+    /// Interpret a simple named projection as a namespace path only when its
+    /// base is not an actual receiver. Inaccessible patterns use the same rule
+    /// before converting projection syntax into a constructor-name candidate.
+    pub(in crate::infer) fn namespace_projection_name(
+        &self,
+        base: &SurfaceName,
+        field: &SurfaceName,
+    ) -> Option<SurfaceName> {
+        let explicit_root = base.is_unescaped_component("_root_")
+            && base.component_syntax().first() == Some(&clean_parser::NameComponentSyntax::Plain);
+        (explicit_root
+            || !self.ident_resolves_to_value(base)
+            || self.ident_resolves_to_type_former(base))
+        .then(|| base.append(field))
+    }
+
+    /// Resolve only an authored local reference, without elaborating a term or
+    /// allocating metavariables. Script consumers borrow this same name and
+    /// receiver disambiguation with the actual goal's local FVar identities.
+    pub(crate) fn resolve_local_surface_reference(&self, surface: &SurfaceExpr) -> Option<Expr> {
+        match Self::unwrap_surface_parens(surface) {
+            SurfaceExpr::Ident(_, name) => {
+                if name.qualify_under(&SurfaceName::default()).name() != name.name() {
+                    return None;
+                }
+                self.lookup_local(name).map(|(fvar, _)| Expr::fvar(fvar))
+            }
+            SurfaceExpr::Proj(_, base, projection) => self
+                .resolve_qualified_local_reference(Self::unwrap_surface_parens(base), projection),
+            _ => None,
+        }
+    }
+
+    fn resolve_qualified_local_reference(
+        &self,
+        base: &SurfaceExpr,
+        proj: &Projection,
+    ) -> Option<Expr> {
+        let qualified = Self::try_collect_qualified_name(base, proj)?;
+        let mut leading = qualified.clone();
+        while !leading.parent().is_anonymous() {
+            leading = leading.parent();
+        }
+        let explicit_root =
+            qualified.qualify_under(&SurfaceName::default()).name() != qualified.name();
+        if qualified.is_relative_constructor()
+            || explicit_root
+            || (self.ident_resolves_to_value(&leading)
+                && !self.ident_resolves_to_type_former(&leading))
+        {
+            return None;
+        }
+        self.lookup_local(&qualified)
+            .map(|(fvar, _)| Expr::fvar(fvar))
+    }
+
     /// Elaborate a projection expression (`base.field` or `base.0`).
     ///
     /// Handles three cases:
@@ -20,6 +77,19 @@ impl<'a> ElabCtx<'a> {
     /// 2. Dot notation: `expr.method` → `T.method expr` where `T = typeof(expr)`
     /// 3. Qualified name: `Foo.bar` where `Foo` is a namespace, not a value
     pub(crate) fn elab_proj(
+        &mut self,
+        expr: &SurfaceExpr,
+        proj: &Projection,
+    ) -> Result<Expr, ElabError> {
+        // How this term was reached decides an explicit-motive eliminator
+        // head (`elab_dot_elim.rs`); the frame is restored on every exit.
+        let saved = self.open_dot_elim_frame(expr, proj);
+        let result = self.elab_proj_framed(expr, proj);
+        self.dot_elim.restore_frame(saved);
+        result
+    }
+
+    fn elab_proj_framed(
         &mut self,
         expr: &SurfaceExpr,
         proj: &Projection,
@@ -32,6 +102,15 @@ impl<'a> ElabCtx<'a> {
 
         // Unwrap parentheses to handle cases like (Foo).bar
         let unwrapped = Self::unwrap_surface_parens(expr);
+
+        // A dotted source spelling can also name an exact qualified local
+        // (including a temporarily bound inductive self). Reassemble its typed
+        // components before elaborating an otherwise unknown namespace prefix.
+        // A real receiver still wins: local `x` keeps `x.field` projection
+        // semantics even if an unrelated qualified local `x.field` exists.
+        if let Some(local) = self.resolve_qualified_local_reference(unwrapped, proj) {
+            return Ok(local);
+        }
 
         // Namespace-qualified constant has priority over auto-implicit binding.
         //
@@ -52,24 +131,68 @@ impl<'a> ElabCtx<'a> {
                 // name with the marker stripped (Track R: `Ty.isSigned : Ty →
                 // _root_.Bool`). Defer to `elab_ident` which knows how to resolve
                 // a top-level constant / inductive / constructor.
-                if base_name == "_root_" {
-                    return self.elab_ident(&format!("_root_.{field}"));
+                if base_name.is_unescaped_component("_root_")
+                    && base_name.component_syntax().first()
+                        == Some(&clean_parser::NameComponentSyntax::Plain)
+                {
+                    return self.elab_ident(&base_name.append(field));
                 }
-                // Only short-circuit when `base` is a *pure namespace* — not a
-                // value in scope. If `base` itself denotes a value (a local, a
-                // struct instance, an inductive/constructor), keep the existing
-                // structure-projection / method dot-notation path so e.g.
-                // `pairVal.snd` projects the field even when a `pairVal.snd`
-                // constant also happens to exist. A TYPE-FORMER base (`Eq.symm`,
+                // A WRITTEN dotted identifier (not `(base).field`, which
+                // projects a term) is one name, resolved by Lean's rules
+                // (`resolve_dotted_ident`): a global `base.field` wins over a
+                // field of a global value `base` (a namespace member included)
+                // and over a field of a `where`/`let rec` auxiliary
+                // declaration `base`; only an ordinary local `base` is a
+                // receiver regardless. Projecting instead read `Foo.x` with a
+                // `where`-bound `Foo : S` and a global `Foo.x := 9` as the
+                // field (measured 2026-09-26; Lean 4.8.0: `9`).
+                if matches!(expr, SurfaceExpr::Ident(..)) {
+                    match self.resolve_dotted_ident(base_name, field) {
+                        DottedIdent::Global(name) => {
+                            if self.is_known_accessible_global(&name) {
+                                return Ok(self.mk_const(&name));
+                            }
+                            return Err(ElabError::Unsupported {
+                                feature: format!(
+                                    "`{name}` other than applied (Clean supplies this Lean \
+                                     core constant only in its applied form)"
+                                ),
+                            });
+                        }
+                        DottedIdent::FieldOfShadowedLocal(_) => {
+                            return Err(Self::shadowed_receiver_error(base_name, field));
+                        }
+                        DottedIdent::FieldOfGlobal { receiver, fields } => {
+                            return self.elab_global_receiver_chain(expr.span(), receiver, &fields);
+                        }
+                        DottedIdent::UnsupportedGlobalReceiver => {
+                            return Err(Self::unsupported_global_receiver_error(base_name, field));
+                        }
+                        DottedIdent::CoreUnavailable(name) => {
+                            return Err(Self::core_unavailable_error(&name));
+                        }
+                        DottedIdent::Field => {}
+                    }
+                }
+                // Reached only when no global of the full dotted name exists
+                // (or the base is parenthesized): the namespace reading then
+                // applies to a *pure namespace* base — not a value in scope. If
+                // `base` itself denotes a value (a local, a struct instance, an
+                // inductive/constructor), keep the structure-projection /
+                // method dot-notation path. A TYPE-FORMER base (`Eq.symm`,
                 // `Nat.myLemma`) is namespace-like even though the type constant
                 // is in scope: Lean resolves `T.member` as one identifier
                 // (`resolveGlobalName`), never as a projection OF the type
                 // former, and elaborating `T` as a receiver mints a stray
                 // universe param for it that nothing later pins.
-                if !self.ident_resolves_to_value(base_name)
-                    || self.ident_resolves_to_type_former(base_name)
+                // A parenthesized `(base).field` projects the TERM `(base)`
+                // (Lean elaborates the parenthesized term first), never a
+                // namespace member.
+                let written = matches!(expr, SurfaceExpr::Ident(..));
+                if let Some(qualified) = written
+                    .then(|| self.namespace_projection_name(base_name, field))
+                    .flatten()
                 {
-                    let qualified = format!("{base_name}.{field}");
                     // Resolve the dotted name namespace-relatively too (B03):
                     // `B.c` written inside `namespace A` must find `A.B.c`
                     // (Lean `Lean/ResolveName.lean` `resolveUsingNamespace`
@@ -99,17 +222,55 @@ impl<'a> ElabCtx<'a> {
                 if let Some(base_qualified) =
                     Self::try_collect_qualified_name(inner_base, inner_proj)
                 {
-                    let leading = base_qualified
-                        .split('.')
-                        .next()
-                        .unwrap_or(base_qualified.as_str());
-                    if !self.ident_resolves_to_value(leading) {
-                        let qualified = format!("{base_qualified}.{field}");
+                    let mut leading = base_qualified.clone();
+                    while !leading.parent().is_anonymous() {
+                        leading = leading.parent();
+                    }
+                    // Lean resolves the written chain as ONE identifier
+                    // (`resolve_dotted_ident`): a global of the whole
+                    // spelling wins unless the leading component is an
+                    // ORDINARY local; a `where`/`let rec` auxiliary
+                    // declaration or a global value as the leading component
+                    // does not stop it.
+                    let qualified = base_qualified.append(field);
+                    // `(A.B).c` projects the term `(A.B)`: not one identifier.
+                    let written = !matches!(expr, SurfaceExpr::Paren(..));
+                    if written {
+                        match self.resolve_dotted_ident(&base_qualified, field) {
+                            DottedIdent::Global(name) => {
+                                if self.is_known_accessible_global(&name) {
+                                    return Ok(self.mk_const(&name));
+                                }
+                            }
+                            DottedIdent::FieldOfShadowedLocal(_) => {
+                                return Err(Self::shadowed_receiver_error(&base_qualified, field));
+                            }
+                            DottedIdent::FieldOfGlobal { receiver, fields } => {
+                                return self.elab_global_receiver_chain(
+                                    expr.span(),
+                                    receiver,
+                                    &fields,
+                                );
+                            }
+                            DottedIdent::UnsupportedGlobalReceiver => {
+                                return Err(Self::unsupported_global_receiver_error(
+                                    &base_qualified,
+                                    field,
+                                ));
+                            }
+                            DottedIdent::CoreUnavailable(name) => {
+                                return Err(Self::core_unavailable_error(&name));
+                            }
+                            DottedIdent::Field => {}
+                        }
+                    }
+                    if written && !self.ident_resolves_to_value(&leading) {
                         // `_root_.A.B.c`: the marker forces ROOT-only
                         // resolution of the remainder (Lean `rootNamespace`
                         // handling in `Lean/ResolveName.lean`).
-                        if let Some(rest) = qualified.strip_prefix("_root_.") {
-                            let root = Name::from_string(rest);
+                        let root_name = qualified.qualify_under(&SurfaceName::default());
+                        if root_name.name() != qualified.name() {
+                            let root = root_name.into_name();
                             if self.is_known_accessible_global(&root) {
                                 return Ok(self.mk_const(&root));
                             }
@@ -159,13 +320,22 @@ impl<'a> ElabCtx<'a> {
                     match self.elaborate(expr) {
                         Ok(val) => Ok(ReceiverAttempt::Receiver(val)),
                         Err(
+                            // The recursion- and batch-aware variants are
+                            // minted only after identifier resolution has
+                            // already failed. Keep them in the same fallback
+                            // class as `UnknownIdent`: the failed base may be
+                            // only the namespace prefix of the dotted name the
+                            // author actually wrote (`foo` in `foo.missing`).
                             err @ (ElabError::UnknownIdent(_)
-                            | ElabError::UnknownIdentWithSuggestions { .. }),
+                            | ElabError::UnknownIdentWithSuggestions { .. }
+                            | ElabError::UnknownIdentDeferred { .. }
+                            | ElabError::RecursionOutsideFragment { .. }
+                            | ElabError::SameBatchHeaderUnavailable { .. }),
                         ) => {
                             // Base identifier not found - try qualified name fallback
                             if let Projection::Named(field) = proj {
-                                let qualified = format!("{base_name}.{field}");
-                                let name = Name::from_string(&qualified);
+                                let qualified = base_name.append(field);
+                                let name = self.with_private_step(qualified.name().clone());
                                 if let Some(info) = self.env.get_const(&name) {
                                     // Enforce private visibility on qualified name fallback
                                     // (#3410): without this, `Foo.helper` resolves even
@@ -187,15 +357,46 @@ impl<'a> ElabCtx<'a> {
                                 // same-batch sibling, or the self-reference
                                 // recursion report all name the identifier AS
                                 // WRITTEN (`foo.a`), which the base error has
-                                // already truncated to its root (`foo`). Only a
-                                // signal-free bare `UnknownIdent` falls back.
+                                // already truncated to its root (`foo`). A
+                                // signal-free bare `UnknownIdent` falls back
+                                // only when the base error is itself an ordinary
+                                // unknown-ident diagnostic. A recursion- or
+                                // same-batch-aware error describes the PREFIX,
+                                // not the complete authored name, so even a bare
+                                // full-name `UnknownIdent` is more accurate.
                                 // (The old filter forwarded ONLY the suggestion
                                 // variant, so the richer self-reference report
                                 // introduced for recursive defs was silently
                                 // DISCARDED here in favor of the truncated one.)
                                 let qualified_err = self.unknown_ident_error(&qualified);
-                                if !matches!(qualified_err, ElabError::UnknownIdent(_)) {
-                                    return Err(qualified_err);
+                                let qualified_is_bare =
+                                    matches!(&qualified_err, ElabError::UnknownIdent(_));
+                                let base_error_is_rich_prefix = matches!(
+                                    &err,
+                                    ElabError::RecursionOutsideFragment { .. }
+                                        | ElabError::SameBatchHeaderUnavailable { .. }
+                                );
+                                if !qualified_is_bare || base_error_is_rich_prefix {
+                                    // A DEFERRED qualified-name error decides
+                                    // "has suggestions" only when reported:
+                                    // with them it names the qualified
+                                    // identifier, without them it is the base
+                                    // error — exactly the choice made here
+                                    // before the scan was deferred.
+                                    return Err(match qualified_err {
+                                        ElabError::UnknownIdentDeferred {
+                                            name,
+                                            namespace_prefix,
+                                            fallback: None,
+                                        } if !base_error_is_rich_prefix => {
+                                            ElabError::UnknownIdentDeferred {
+                                                name,
+                                                namespace_prefix,
+                                                fallback: Some(Box::new(err)),
+                                            }
+                                        }
+                                        other => other,
+                                    });
                                 }
                             }
                             // Fallback failed - re-raise original error
@@ -211,16 +412,22 @@ impl<'a> ElabCtx<'a> {
                     match self.elaborate(expr) {
                         Ok(val) => Ok(ReceiverAttempt::Receiver(val)),
                         Err(
+                            // Same fallback class as the Ident-base arm: a
+                            // rich diagnostic for an inner prefix must not
+                            // prevent trying the complete qualified chain.
                             err @ (ElabError::UnknownIdent(_)
-                            | ElabError::UnknownIdentWithSuggestions { .. }),
+                            | ElabError::UnknownIdentWithSuggestions { .. }
+                            | ElabError::UnknownIdentDeferred { .. }
+                            | ElabError::RecursionOutsideFragment { .. }
+                            | ElabError::SameBatchHeaderUnavailable { .. }),
                         ) => {
                             // Try to collect full qualified name from nested projections
                             if let Projection::Named(field) = proj {
                                 if let Some(base_qualified) =
                                     Self::try_collect_qualified_name(inner_base, inner_proj)
                                 {
-                                    let qualified = format!("{base_qualified}.{field}");
-                                    let name = Name::from_string(&qualified);
+                                    let qualified = base_qualified.append(field);
+                                    let name = self.with_private_step(qualified.name().clone());
                                     if let Some(info) = self.env.get_const(&name) {
                                         // Enforce private visibility (#3410)
                                         if self.is_const_accessible(&name) {
@@ -239,11 +446,15 @@ impl<'a> ElabCtx<'a> {
                                     // `UnknownIdent` wins over the truncated
                                     // base-name error.
                                     let qualified_err = self.unknown_ident_error(&qualified);
+                                    // A deferred error materializes to exactly
+                                    // these two outcomes: suggestions for the
+                                    // qualified name, or a plain unknown
+                                    // identifier naming it.
                                     if !matches!(qualified_err, ElabError::UnknownIdent(_)) {
                                         return Err(qualified_err);
                                     }
                                     // Return error with full qualified name for better message
-                                    return Err(ElabError::UnknownIdent(qualified));
+                                    return Err(ElabError::UnknownIdent(qualified.to_string()));
                                 }
                             }
                             // Can't collect qualified name - re-raise
@@ -264,6 +475,11 @@ impl<'a> ElabCtx<'a> {
             ReceiverAttempt::Receiver(value) => value,
             ReceiverAttempt::QualifiedConstant(value) => return Ok(value),
         };
+        self.dot_elim.set_frame_receiver(&expr_val);
+        // G28: Lean postpones field notation on a receiver whose type is a
+        // metavariable (`tryPostponeIfMVar`); record it for a watched lambda
+        // or arrow-domain attempt (`elab_app_postpone_lambda.rs`). Changes no verdict here.
+        self.note_field_notation_receiver(&expr_val);
 
         // Try single-constructor-inductive projection first.
         match self.resolve_projection_target(&expr_val) {
@@ -281,12 +497,17 @@ impl<'a> ElabCtx<'a> {
                         if !is_structure {
                             return self.elab_dot_notation(&expr_val, proj);
                         }
-                        let field_name = Name::from_string(name);
+                        let field_name = name.name().clone();
                         match self
                             .env
                             .get_structure_field_index(&struct_name, &field_name)
                         {
-                            Some(idx) => Ok(Expr::proj(struct_name, idx, expr_val)),
+                            Some(idx) => {
+                                // Another module's private structure: Lean
+                                // refuses the field from an importer (G21 B3).
+                                self.check_imported_private_field(&struct_name, &field_name)?;
+                                Ok(Expr::proj(struct_name, idx, expr_val))
+                            }
                             None => {
                                 // Not a real field — but it may be a *method* in the
                                 // structure's namespace (Track UU: `ms.lookupValue id`
@@ -353,13 +574,13 @@ impl<'a> ElabCtx<'a> {
                                     .unwrap_or_default();
                                 let suggestions =
                                     crate::agent_diagnostics::nearest_string_candidates(
-                                        name,
+                                        &name.to_string(),
                                         field_names.iter().map(String::as_str),
                                         5,
                                     );
                                 Err(ElabError::UnknownProjectionField {
                                     struct_name: struct_name.clone(),
-                                    field: name.clone(),
+                                    field: name.to_string(),
                                     suggestions,
                                 })
                             }
@@ -378,6 +599,16 @@ impl<'a> ElabCtx<'a> {
                             });
                         }
 
+                        // Another module's private structure: Lean's
+                        // `resolveLValAux` turns `.i` on a `structure` into
+                        // the i-th field's projection function, which the
+                        // named-field refusal then covers ("field 'x' from
+                        // structure '…' is private", G21 B3). A plain
+                        // one-constructor `inductive` has no projection
+                        // function and Lean projects it with no check.
+                        if is_structure {
+                            self.check_imported_private_field_index(&struct_name, *idx)?;
+                        }
                         // `*idx >= 1` is guaranteed by the `== 0` guard above, so the
                         // subtraction cannot underflow.
                         Ok(Expr::proj(struct_name, *idx - 1, expr_val))
@@ -415,7 +646,7 @@ impl<'a> ElabCtx<'a> {
 
     /// Is `name` a known global (constant, inductive, constructor, or
     /// recursor) that is accessible from the current namespace?
-    fn is_known_accessible_global(&self, name: &Name) -> bool {
+    pub(super) fn is_known_accessible_global(&self, name: &Name) -> bool {
         (self.env.get_const(name).is_some()
             || self.env.get_inductive(name).is_some()
             || self.env.get_constructor(name).is_some()
@@ -430,30 +661,200 @@ impl<'a> ElabCtx<'a> {
     /// aliases, then the root-level exact name. Returns the fully-qualified
     /// global name, or `None` when no accessible global matches. Read-only:
     /// never auto-binds.
-    fn resolve_qualified_chain(&self, dotted: &str) -> Option<Name> {
-        if !self.namespace_prefix.is_empty() {
-            let mut prefix = self.namespace_prefix.as_str();
+    pub(super) fn resolve_qualified_chain(&self, dotted: &SurfaceName) -> Option<Name> {
+        self.resolve_qualified_chain_with_pending(dotted, &[])
+    }
+
+    /// The refusal for a dotted identifier whose receiver Lean takes to be
+    /// an ordinary local that a same-named `where`/`let rec` auxiliary
+    /// declaration shadows (`DottedIdent::FieldOfShadowedLocal`): Clean's
+    /// projection path would read the auxiliary declaration instead.
+    fn shadowed_receiver_error(base: &SurfaceName, field: &SurfaceName) -> ElabError {
+        ElabError::Unsupported {
+            feature: format!(
+                "`{base}.{field}`: Lean reads this as a field of the ordinary local `{base}` \
+                 that a `where`/`let rec` declaration of the same name shadows; rename one of them"
+            ),
+        }
+    }
+
+    /// The refusal for a dotted identifier whose receiver Lean takes to be
+    /// a global that Clean supplies only as a builtin
+    /// (`DottedIdent::UnsupportedGlobalReceiver`).
+    fn unsupported_global_receiver_error(base: &SurfaceName, field: &SurfaceName) -> ElabError {
+        ElabError::Unsupported {
+            feature: format!(
+                "`{base}.{field}`: Lean reads this as a field of the global `{base}`, which a \
+                 `where`/`let rec` declaration of the same name shadows; rename the declaration"
+            ),
+        }
+    }
+
+    /// The refusal for a dotted identifier naming a Lean core constant that
+    /// Clean's prelude lacks (`DottedIdent::CoreUnavailable`).
+    fn core_unavailable_error(name: &Name) -> ElabError {
+        ElabError::Unsupported {
+            feature: format!("`{name}`: a Lean core constant Clean's prelude does not provide"),
+        }
+    }
+
+    /// `receiver.f₁.….fₙ` with `receiver` the resolved GLOBAL constant
+    /// (`DottedIdent::FieldOfGlobal`): each field is projected from the
+    /// term, exactly as for `(receiver).f₁.….fₙ`, so no local of the
+    /// receiver's spelling can be read instead.
+    fn elab_global_receiver_chain(
+        &mut self,
+        span: clean_parser::Span,
+        receiver: Name,
+        fields: &[SurfaceName],
+    ) -> Result<Expr, ElabError> {
+        let head = SurfaceExpr::Paren(
+            span,
+            Box::new(SurfaceExpr::Ident(
+                span,
+                SurfaceName::global_constant(receiver),
+            )),
+        );
+        let chain = fields.iter().fold(head, |acc, field| {
+            SurfaceExpr::Paren(
+                span,
+                Box::new(SurfaceExpr::Proj(
+                    span,
+                    Box::new(acc),
+                    Projection::Named(field.clone()),
+                )),
+            )
+        });
+        self.elaborate(&chain)
+    }
+
+    /// Ordinary typed namespace lookup, including exact pending recursive members.
+    /// A distinct existing global keeps its normal lookup priority.
+    pub(super) fn resolve_qualified_chain_with_pending(
+        &self,
+        dotted: &SurfaceName,
+        pending: &[Name],
+    ) -> Option<Name> {
+        if dotted.is_anonymous() || dotted.is_relative_constructor() {
+            return None;
+        }
+        let known = |name: &Name| pending.contains(name) || self.is_known_accessible_global(name);
+        let root_selected = dotted.qualify_under(&SurfaceName::default());
+        if root_selected.name() != dotted.name() {
+            let root = self.with_private_step(root_selected.into_name());
+            return known(&root).then_some(root);
+        }
+        // A notation template's free spelling: what it resolved to where
+        // the template was declared (`TemplateResolution`).
+        if let Some(resolution) = self.template_resolution(dotted) {
+            return resolution.chain.clone();
+        }
+        // A user template's free reference walks from its declaring namespace.
+        let namespace_prefix = match dotted.template_origin() {
+            Some(origin) => SurfaceName::from_name(origin.namespace.clone()),
+            None => self.namespace_prefix.clone(),
+        };
+        if !namespace_prefix.is_anonymous() {
+            let mut prefix = namespace_prefix;
             loop {
-                let qualified = Name::from_string(&format!("{prefix}.{dotted}"));
-                if self.is_known_accessible_global(&qualified) {
-                    return Some(qualified);
+                let qualified = prefix.append(dotted).into_name();
+                let declared = self.with_private_step(qualified.clone());
+                // Lean's `resolveQualifiedName` at this prefix: the
+                // declaration and the aliases named `prefix.dotted` (an
+                // `export` inside the namespace) are one candidate set;
+                // several distinct ones are ambiguous (measured on Lean
+                // 4.8.0: inside `namespace K.K` with `export A (y)` there,
+                // `K.y` is the alias's `A.y`, not a root `K.y`).
+                let mut found: Vec<Name> = Vec::new();
+                if known(&declared) && self.namespace_candidate_visible(&declared, dotted) {
+                    found.push(declared);
                 }
-                match prefix.rsplit_once('.') {
-                    Some((parent, _)) => prefix = parent,
-                    None => break,
+                for target in self
+                    .namespace_state
+                    .resolve_all(&qualified)
+                    .into_iter()
+                    .chain(self.env.export_alias_targets(&qualified))
+                {
+                    if known(target) && !found.contains(target) {
+                        found.push(target.clone());
+                    }
+                }
+                match found.len() {
+                    0 => {}
+                    1 => return found.pop(),
+                    _ => return None,
+                }
+                prefix = prefix.parent();
+                if prefix.is_anonymous() {
+                    break;
                 }
             }
         }
-        if let Some(qualified) = self.namespace_state.resolve(dotted) {
-            if self.is_known_accessible_global(qualified) {
-                return Some(qualified.clone());
-            }
-        }
-        let root = Name::from_string(dotted);
-        if self.is_known_accessible_global(&root) {
+        // Lean's `resolveExact`: a DOTTED name that exists as written wins
+        // before any alias or `open` (measured on Lean 4.8.0: `def K.x := 3`
+        // with `namespace K; export N.M (x); end K` gives `K.x = 3`; Clean
+        // read the alias and credited `K.x = 1`).
+        let root = self.with_private_step(dotted.name().clone());
+        if !dotted.parent().is_anonymous() && known(&root) {
             return Some(root);
         }
-        None
+        let file_aliased: Vec<&Name> = self
+            .namespace_state
+            .resolve_all(dotted.name())
+            .into_iter()
+            .filter(|target| known(target))
+            .collect();
+        match file_aliased.as_slice() {
+            [only] => return Some((*only).clone()),
+            [] => {}
+            _ => return None,
+        }
+        // The environment's alias table: an `export` another module made
+        // (`namespace K; export N (x)` gives `K.x ↦ N.x`), when it names one
+        // declaration (Lean's `getAliases`; several are ambiguous).
+        let aliased: Vec<&Name> = self
+            .env
+            .export_alias_targets(dotted.name())
+            .into_iter()
+            .filter(|target| known(target))
+            .collect();
+        match aliased.as_slice() {
+            [only] => return Some((*only).clone()),
+            [] => {}
+            _ => return None,
+        }
+        if known(&root) {
+            return Some(root);
+        }
+        // Lean's `resolveOpenDecls`: `ns ++ dotted` for every simple `open
+        // ns` in force (measured on Lean 4.8.0: after `open A`, `N.y` is
+        // `A.N.y`); several are ambiguous.
+        let mut opened: Vec<Name> = Vec::new();
+        for (open_ns, hidden) in self.namespace_state.open_namespaces_with_hidden() {
+            if hidden.iter().any(|h| h == dotted.name()) {
+                continue;
+            }
+            let candidate =
+                self.with_private_step(crate::namespace::append_names(open_ns, dotted.name()));
+            if known(&candidate) && !opened.contains(&candidate) {
+                opened.push(candidate);
+            }
+        }
+        // …and `OpenDecl.explicit` whose short name is a proper prefix of
+        // `dotted` (after `open Foo (Bar)`, `Bar.a` is `Foo.Bar.a`).
+        for candidate in self
+            .namespace_state
+            .explicit_open_prefix_targets(dotted.name())
+        {
+            let candidate = self.with_private_step(candidate);
+            if known(&candidate) && !opened.contains(&candidate) {
+                opened.push(candidate);
+            }
+        }
+        match opened.len() {
+            1 => opened.pop(),
+            _ => None,
+        }
     }
 
     /// Does the bare identifier `name` denote a *value* in the current scope?
@@ -465,35 +866,39 @@ impl<'a> ElabCtx<'a> {
     /// or an unknown identifier that would only auto-bind. Used to decide
     /// whether `base.field` should prefer namespace-qualified constant
     /// resolution over value-based dot notation. Read-only: never auto-binds.
-    fn ident_resolves_to_value(&self, name: &str) -> bool {
+    pub(super) fn ident_resolves_to_value(&self, name: &SurfaceName) -> bool {
         if self.lookup_local(name).is_some() {
             return true;
         }
-        let direct = Name::from_string(name);
+        if let Some(resolution) = self.template_resolution(name) {
+            return resolution.is_value;
+        }
+        let direct = name.name().clone();
         let is_known = |n: &Name| {
             (self.env.get_const(n).is_some() && self.is_const_accessible(n))
                 || self.env.get_inductive(n).is_some()
                 || self.env.get_constructor(n).is_some()
                 || self.env.get_recursor(n).is_some()
+                || (self.env.get_const(n).is_none() && self.private_candidate(n).is_some())
         };
         if is_known(&direct) {
             return true;
         }
-        if let Some(qualified) = self.namespace_state.resolve(name) {
+        if let Some(qualified) = self.namespace_state.resolve(name.name()) {
             if is_known(qualified) {
                 return true;
             }
         }
-        if !self.namespace_prefix.is_empty() {
-            let mut prefix = self.namespace_prefix.as_str();
+        if !self.namespace_prefix.is_anonymous() {
+            let mut prefix = self.namespace_prefix.clone();
             loop {
-                let qualified = Name::from_string(&format!("{prefix}.{name}"));
+                let qualified = prefix.append(name).into_name();
                 if is_known(&qualified) {
                     return true;
                 }
-                match prefix.rsplit_once('.') {
-                    Some((parent, _)) => prefix = parent,
-                    None => break,
+                prefix = prefix.parent();
+                if prefix.is_anonymous() {
+                    break;
                 }
             }
         }
@@ -510,9 +915,12 @@ impl<'a> ElabCtx<'a> {
     /// no whnf — so a defined alias that only REDUCES to a Sort is not
     /// classified; such a base keeps the receiver path, which still resolves
     /// it via `elab_dot_notation`'s namespace walk.
-    fn ident_resolves_to_type_former(&self, name: &str) -> bool {
+    pub(super) fn ident_resolves_to_type_former(&self, name: &SurfaceName) -> bool {
         if self.lookup_local(name).is_some() {
             return false;
+        }
+        if let Some(resolution) = self.template_resolution(name) {
+            return resolution.is_type_former;
         }
         let is_type_former = |n: &Name| {
             if self.env.get_inductive(n).is_some() {
@@ -530,25 +938,25 @@ impl<'a> ElabCtx<'a> {
             }
             matches!(ty.kind(), ExprKind::Sort(_))
         };
-        let direct = Name::from_string(name);
+        let direct = name.name().clone();
         if is_type_former(&direct) {
             return true;
         }
-        if let Some(qualified) = self.namespace_state.resolve(name) {
+        if let Some(qualified) = self.namespace_state.resolve(name.name()) {
             if is_type_former(qualified) {
                 return true;
             }
         }
-        if !self.namespace_prefix.is_empty() {
-            let mut prefix = self.namespace_prefix.as_str();
+        if !self.namespace_prefix.is_anonymous() {
+            let mut prefix = self.namespace_prefix.clone();
             loop {
-                let qualified = Name::from_string(&format!("{prefix}.{name}"));
+                let qualified = prefix.append(name).into_name();
                 if is_type_former(&qualified) {
                     return true;
                 }
-                match prefix.rsplit_once('.') {
-                    Some((parent, _)) => prefix = parent,
-                    None => break,
+                prefix = prefix.parent();
+                if prefix.is_anonymous() {
+                    break;
                 }
             }
         }
@@ -572,13 +980,13 @@ impl<'a> ElabCtx<'a> {
 
         // Namespace lookup: resolve dotted constants like `Id.mk` or `whnf_to.refl`
         if let ExprKind::Const(const_name, _) = expr_val.kind() {
-            let namespaced = Name::append(const_name, &field_name);
+            let namespaced = crate::namespace::append_names(const_name, field_name.name());
             // Check if this matches a recursive function being defined (#522)
             // During recursive definition elaboration, the function isn't in env yet
             // but should be recognized as a valid recursive call target.
             if let Some(ref ctx) = self.recursive_def_ctx {
-                let namespaced_str = namespaced.to_string();
-                if ctx.matches_call_name(&namespaced_str) {
+                let namespaced_source = SurfaceName::from_name(namespaced.clone());
+                if ctx.matches_call_name(&namespaced_source) {
                     // This is a recursive call to the function being defined.
                     // Return a placeholder constant that will be handled by the
                     // recursor elaboration when arguments are applied.
@@ -607,8 +1015,8 @@ impl<'a> ElabCtx<'a> {
             // genuine in-namespace constant is found first. Only accessible
             // constants are returned; the kernel re-checks the result, so a wrong
             // resolution fails closed.
-            let dotted = namespaced.to_string();
-            if let Some(q) = self.namespace_state.resolve(&dotted) {
+            let dotted = SurfaceName::from_name(namespaced.clone());
+            if let Some(q) = self.namespace_state.resolve(dotted.name()) {
                 if self.is_const_accessible(q) {
                     if let Some(info) = self.env.get_const(q) {
                         let q = q.clone();
@@ -621,10 +1029,10 @@ impl<'a> ElabCtx<'a> {
                     }
                 }
             }
-            if !self.namespace_prefix.is_empty() {
-                let mut prefix = self.namespace_prefix.as_str();
+            if !self.namespace_prefix.is_anonymous() {
+                let mut prefix = self.namespace_prefix.clone();
                 loop {
-                    let qualified = Name::from_string(&format!("{prefix}.{dotted}"));
+                    let qualified = self.with_private_step(prefix.append(&dotted).into_name());
                     if self.is_const_accessible(&qualified) {
                         if let Some(info) = self.env.get_const(&qualified) {
                             let levels: Vec<Level> = info
@@ -635,9 +1043,9 @@ impl<'a> ElabCtx<'a> {
                             return Ok(Expr::const_(qualified, levels));
                         }
                     }
-                    match prefix.rsplit_once('.') {
-                        Some((parent, _)) => prefix = parent,
-                        None => break,
+                    prefix = prefix.parent();
+                    if prefix.is_anonymous() {
+                        break;
                     }
                 }
             }
@@ -663,35 +1071,43 @@ impl<'a> ElabCtx<'a> {
         // The kernel re-checks the produced constant, so a wrong resolution fails
         // closed. (The distinct Pi-head case — a type constant like prelude `Set`
         // used as a namespace — is intentionally left to the existing logic.)
+        //
+        // ONLY an AUTO-BOUND receiver qualifies. A user-written binder `foo`
+        // makes `foo.x` a projection of that local in Lean
+        // (`resolveLocalName`), whatever globals exist; its type being still
+        // an unassigned metavariable (which is also an `FVar` here — the
+        // `META_FVAR_TAG` encoding) does not change that. Taking the local's
+        // NAME as a namespace made `def k1 : S → Nat := fun foo => foo.x`,
+        // with a global `foo.x := 9`, compute `∀ s, k1 s = 9` (measured
+        // 2026-09-26; Lean 4.8.0: `k1 ⟨5⟩ = 5`). An auto-bound implicit is
+        // Clean's own placeholder for an identifier that resolved to nothing,
+        // so reading its spelling as the namespace it failed to name is the
+        // only case this fallback exists for.
         if matches!(self.whnf(&expr_ty).kind(), ExprKind::FVar(_)) {
-            if let ExprKind::FVar(id) = expr_val.kind() {
-                let recv_name = self
-                    .locals
-                    .iter()
-                    .rev()
-                    .find(|(_, fv, _)| fv == id)
-                    .map(|(n, _, _)| n.clone());
+            if let ExprKind::FVar(_) = expr_val.kind() {
+                let recv_name = self.auto_bound_head_name(expr_val);
                 if let Some(recv_name) = recv_name {
-                    let dotted = format!("{recv_name}.{field_name}");
+                    let dotted = recv_name.append(&field_name);
                     // Resolve `recv_name.field` through the same namespace chain
                     // `ident_resolves_to_value` consults: the bare name, the active
                     // `open`/`namespace` resolution, then each enclosing namespace
                     // prefix (so `Sequence.denote` finds `TrustIr.Sequence.denote`).
-                    let mut candidates: Vec<Name> = vec![Name::from_string(&dotted)];
-                    if let Some(q) = self.namespace_state.resolve(&dotted) {
+                    let mut candidates: Vec<Name> = vec![dotted.name().clone()];
+                    if let Some(q) = self.namespace_state.resolve(dotted.name()) {
                         candidates.push(q.clone());
                     }
-                    if !self.namespace_prefix.is_empty() {
-                        let mut prefix = self.namespace_prefix.as_str();
+                    if !self.namespace_prefix.is_anonymous() {
+                        let mut prefix = self.namespace_prefix.clone();
                         loop {
-                            candidates.push(Name::from_string(&format!("{prefix}.{dotted}")));
-                            match prefix.rsplit_once('.') {
-                                Some((parent, _)) => prefix = parent,
-                                None => break,
+                            candidates.push(prefix.append(&dotted).into_name());
+                            prefix = prefix.parent();
+                            if prefix.is_anonymous() {
+                                break;
                             }
                         }
                     }
                     for name in candidates {
+                        let name = self.with_private_step(name);
                         if let Some(info) = self.env.get_const(&name) {
                             if self.is_const_accessible(&name) {
                                 let levels: Vec<Level> = info
@@ -725,8 +1141,8 @@ impl<'a> ElabCtx<'a> {
         // `T.field` does not resolve we fall through to the existing logic
         // unchanged (so a `def Foo := Bar` alias still finds `Bar.field`).
         if let ExprKind::Const(head_name, _) = expr_ty.get_app_fn().kind() {
-            let const_name = format!("{head_name}.{field_name}");
-            let name = Name::from_string(&const_name);
+            let name = self
+                .with_private_step(crate::namespace::append_names(head_name, field_name.name()));
             if let Some(info) = self.env.get_const(&name) {
                 if self.is_const_accessible(&name) {
                     let const_level_params = info.level_params.clone();
@@ -741,7 +1157,7 @@ impl<'a> ElabCtx<'a> {
                         const_type.instantiate_level_params_direct(&const_level_params, &levels)
                     };
                     let fn_expr = Expr::const_(name, levels);
-                    let type_name = head_name.to_string();
+                    let type_name = head_name.clone();
                     return self
                         .apply_dot_receiver(fn_expr, &fn_type, expr_val, &expr_ty, &type_name);
                 }
@@ -756,7 +1172,7 @@ impl<'a> ElabCtx<'a> {
         if matches!(expr_ty_whnf.kind(), ExprKind::Sort(_)) {
             let val_whnf = self.whnf(expr_val);
             if let ExprKind::Const(const_name, _) = val_whnf.get_app_fn().kind() {
-                let namespaced = Name::append(const_name, &field_name);
+                let namespaced = crate::namespace::append_names(const_name, field_name.name());
                 // Mutual forward-declaration: inside a `mutual ... end` block the
                 // sibling functions are pushed as *locals* (under their dotted
                 // names) so cross-references resolve before they are registered
@@ -767,7 +1183,9 @@ impl<'a> ElabCtx<'a> {
                 // `elab_mutual` body pass later rewrites the fvar to the proper
                 // `Const`). Without this the dotted sibling call hard-fails as an
                 // unknown type-valued projection.
-                if let Some((fvar, _)) = self.lookup_local(&namespaced.to_string()) {
+                if let Some((fvar, _)) =
+                    self.lookup_local(&SurfaceName::from_name(namespaced.clone()))
+                {
                     return Ok(Expr::fvar(fvar));
                 }
                 // The forward-declaration local is pushed under the *surface*
@@ -785,17 +1203,19 @@ impl<'a> ElabCtx<'a> {
                 // (constants are handled by the qualified lookups below), so this
                 // cannot shadow a genuine global.
                 {
-                    let head_str = const_name.to_string();
-                    let mut suffix = head_str.as_str();
+                    let mut suffix = SurfaceName::from_name(const_name.clone());
                     loop {
-                        let key = format!("{suffix}.{field_name}");
+                        let key = suffix.append(&field_name);
                         if let Some((fvar, _)) = self.lookup_local(&key) {
                             return Ok(Expr::fvar(fvar));
                         }
-                        match suffix.split_once('.') {
-                            Some((_, rest)) => suffix = rest,
-                            None => break,
+                        let Some((_, rest)) = suffix.split_first() else {
+                            break;
+                        };
+                        if rest.is_anonymous() {
+                            break;
                         }
+                        suffix = rest;
                     }
                 }
                 if let Some(info) = self.env.get_const(&namespaced) {
@@ -817,7 +1237,7 @@ impl<'a> ElabCtx<'a> {
                 {
                     return Ok(self.mk_const(&namespaced));
                 }
-                if field_name == "decEq" {
+                if field_name == SurfaceName::generated_path("decEq") {
                     let dec_eq = Name::from_string("decEq");
                     if let Some(info) = self.env.get_const(&dec_eq) {
                         let levels: Vec<Level> = info
@@ -855,14 +1275,38 @@ impl<'a> ElabCtx<'a> {
         // implicit/inst run.
         if let ExprKind::Pi(bi, _, _) = expr_ty_whnf.kind() {
             let leading_implicit = Self::is_implicit_binder(*bi);
+            // Lean's order first: consume the receiver's leading implicits
+            // WITHOUT unfolding, then resolve against the consumed type's own
+            // head, unfolding one definition at a time only on a miss. The
+            // Clean-specific attempts below run only when that finds nothing.
+            if leading_implicit {
+                self.metas.push_scope();
+                match self.resolve_field_through_consumed_implicits(expr_val, &expr_ty, &field_name)
+                {
+                    Ok(Some(resolved)) => {
+                        self.metas.commit();
+                        return Ok(resolved);
+                    }
+                    Ok(None) => {
+                        self.metas.pop_scope();
+                    }
+                    Err(err) => {
+                        self.metas.pop_scope();
+                        return Err(err);
+                    }
+                }
+            }
+            // Lean's `consumeImplicits` fills a receiver's `⦃x⦄` binder only
+            // when the field access has arguments; this path does not see them,
+            // so it keeps the arg-less reading (`ArgsFollow::No`).
             let (applied_expr, resolved_ty) =
-                self.insert_implicit_args(expr_val.clone(), &expr_ty_whnf);
+                self.insert_implicit_args(expr_val.clone(), &expr_ty_whnf, ArgsFollow::No);
             let resolved_ty_whnf = self.whnf(&resolved_ty);
 
             // `.field` as a leading-dot constructor applied to the receiver.
             if let ExprKind::Pi(_, domain, _) = resolved_ty_whnf.kind() {
                 let ctor_expr = self.elab_leading_dot_ctor_with_expected_type(
-                    &format!(".{field_name}"),
+                    &field_name.clone().with_relative_constructor(),
                     domain.as_ref(),
                 );
                 if let Ok(ctor_expr) = ctor_expr {
@@ -890,8 +1334,11 @@ impl<'a> ElabCtx<'a> {
             // receiver into the self-slot; the kernel re-checks the produced
             // term). No kernel/TCB touched.
             if leading_implicit && !matches!(resolved_ty_whnf.kind(), ExprKind::Pi(_, _, _)) {
-                if let Ok(type_name) = self.get_type_name(&resolved_ty) {
-                    let name = Name::from_string(&format!("{type_name}.{field_name}"));
+                if let Ok(type_name) = self.get_type_identity(&resolved_ty) {
+                    let name = self.with_private_step(crate::namespace::append_names(
+                        &type_name,
+                        field_name.name(),
+                    ));
                     if let Some(info) = self.env.get_const(&name) {
                         if self.is_const_accessible(&name) {
                             let const_level_params = info.level_params.clone();
@@ -933,36 +1380,10 @@ impl<'a> ElabCtx<'a> {
             // produced `Function.<field> … receiver` application is kernel-
             // re-checked. No kernel/TCB touched.
             if !leading_implicit {
-                let fn_ns_name = Name::from_string(&format!("Function.{field_name}"));
-                if let Some(info) = self.env.get_const(&fn_ns_name) {
-                    if self.is_const_accessible(&fn_ns_name) {
-                        let const_level_params = info.level_params.clone();
-                        let const_type = info.type_.clone();
-                        let levels: Vec<Level> = const_level_params
-                            .iter()
-                            .map(|_| self.fresh_universe_param())
-                            .collect();
-                        let fn_type = if levels.is_empty() {
-                            const_type
-                        } else {
-                            const_type.instantiate_level_params_direct(&const_level_params, &levels)
-                        };
-                        let fn_expr = Expr::const_(fn_ns_name, levels);
-                        let (fn_with_implicits, fn_rest_ty) =
-                            self.insert_implicit_args(fn_expr, &fn_type);
-                        // Pin `Function.<field>`'s domain metavars (the function's
-                        // source/target types) from the receiver's actual type
-                        // before applying it, so no metavariable is left unsolved.
-                        let fn_rest_ty = self.whnf(&fn_rest_ty);
-                        if let ExprKind::Pi(_, arg_ty, _) = fn_rest_ty.kind() {
-                            let arg_ty = self.metas.instantiate(arg_ty);
-                            self.try_unify(&arg_ty, &expr_ty);
-                        }
-                        let applied = Expr::app(fn_with_implicits, expr_val.clone());
-                        let applied = self.metas.instantiate(&applied);
-                        let applied = self.metas.instantiate_levels(&applied);
-                        return Ok(applied);
-                    }
+                if let Some(applied) =
+                    self.apply_function_namespace_field(&field_name, expr_val, &expr_ty)
+                {
+                    return Ok(applied);
                 }
             }
         }
@@ -995,12 +1416,39 @@ impl<'a> ElabCtx<'a> {
         // `cannot extract type name from …` still left in a future corpus report
         // is definitively one of the OTHER callers (the match-lowering family),
         // which is the per-site attribution the artifact could not give.
-        let type_name = match self.get_type_name(&expr_ty) {
-            Ok(type_name) => type_name,
-            Err(_) => return Err(self.unresolved_dot_target(&expr_ty, &field_name)),
+        // Generalized field notation reads the receiver type's head constant
+        // BEFORE reducing it — `hf.injective.comp_left` with
+        // `hf.injective : Function.Injective f` looks up
+        // `Function.Injective.comp_left` — and reduces only when no such
+        // constant exists (Lean's `resolveLValLoop` unfolds one step at a
+        // time). `get_type_identity` reduces first, so a receiver whose type is
+        // a `∀`-bodied definition lost its head ("whose head does not name a
+        // type after reduction (Pi)": `Function.Bijective.comp_left` in
+        // `Mathlib/Logic/Function/Basic.lean`, measured 2026-09-11).
+        let head_first = match self.metas.instantiate(&expr_ty).get_app_fn().kind() {
+            ExprKind::Const(head, _)
+                if {
+                    let candidate = self.with_private_step(
+                        SurfaceName::from_name(head.clone())
+                            .append(&field_name)
+                            .into_name(),
+                    );
+                    self.env.get_const(&candidate).is_some() && self.is_const_accessible(&candidate)
+                } =>
+            {
+                Some(head.clone())
+            }
+            _ => None,
         };
-        let const_name = format!("{type_name}.{field_name}");
-        let name = Name::from_string(&const_name);
+        let type_name = match head_first {
+            Some(type_name) => type_name,
+            None => match self.get_type_identity(&expr_ty) {
+                Ok(type_name) => type_name,
+                Err(_) => return Err(self.unresolved_dot_target(&expr_ty, &field_name)),
+            },
+        };
+        let const_name = SurfaceName::from_name(type_name.clone()).append(&field_name);
+        let name = self.with_private_step(const_name.name().clone());
 
         // Recursive self-call via method dot-notation (#522, Track R).
         //
@@ -1014,23 +1462,29 @@ impl<'a> ElabCtx<'a> {
         if let Some(ctx) = self.recursive_def_ctx.clone() {
             if ctx.matches_call_name(&const_name) {
                 if let ExprKind::FVar(recv_fvar) = expr_val.kind() {
-                    if let Some(ih_fvar) = ctx
-                        .ih_map
-                        .iter()
-                        .find(|(var_name, _)| {
-                            self.lookup_local(var_name)
-                                .is_some_and(|(fv, _)| fv == *recv_fvar)
-                        })
-                        .map(|(_, ih)| *ih)
-                    {
+                    if let Some(&ih_fvar) = ctx.ih_map.get(recv_fvar) {
+                        // The generalized parameters are whatever this IH is
+                        // later applied to, which this path does not see:
+                        // count every one as changed by a recursive call
+                        // (`recursion_site`).
+                        for &index in &ctx.generalized_params {
+                            if let Some(param) = ctx.parameters.get(index) {
+                                self.recursive_changed_params.insert(param.fvar);
+                            }
+                        }
                         return Ok(Expr::fvar(ih_fvar));
                     }
                 }
             }
         }
 
-        // Check if the constant exists and get its type
-        let const_info = match self.env.get_const(&name) {
+        // Check if the constant exists and get its type. Another module's
+        // `private` declaration does not exist here: Lean's `resolveLValLoop`
+        // looks up `T.f` and the CURRENT module's private `T.f` only, so an
+        // imported `private def Nat.three` is no target for `(0 : Nat).three`
+        // (Clean used to find it and credit `(0 : Nat).three = 3`).
+        let accessible = self.is_const_accessible(&name);
+        let const_info = match self.env.get_const(&name).filter(|_| accessible) {
             Some(info) => info,
             None => {
                 // Nested-aux container coercion (#3239 follow-up).
@@ -1092,7 +1546,7 @@ impl<'a> ElabCtx<'a> {
     /// `Lean/Elab/App.lean`) and the one the pre-whnf lookup above already
     /// consulted. When that head is not a constant there is no namespace to
     /// name, so the field is reported alone rather than guessed at.
-    fn unresolved_dot_target(&self, expr_ty: &Expr, field_name: &str) -> ElabError {
+    fn unresolved_dot_target(&self, expr_ty: &Expr, field_name: &SurfaceName) -> ElabError {
         let name = match expr_ty.get_app_fn().kind() {
             ExprKind::Const(head, _) => format!("{head}.{field_name}"),
             _ => field_name.to_string(),
@@ -1151,11 +1605,11 @@ impl<'a> ElabCtx<'a> {
     /// not found — callers then fall through to the usual unknown-ident error.
     fn try_aux_container_dot(
         &mut self,
-        type_name: &str,
-        field_name: &str,
+        type_name: &Name,
+        field_name: &SurfaceName,
         receiver: &Expr,
     ) -> Result<Option<Expr>, ElabError> {
-        let to_container_name = Name::from_string(&format!("{type_name}.toContainer"));
+        let to_container_name = type_name.clone().str("toContainer");
         let tc_info = match self.env.get_const(&to_container_name) {
             Some(info) => info,
             None => return Ok(None),
@@ -1176,7 +1630,7 @@ impl<'a> ElabCtx<'a> {
         };
 
         // The container method must exist (e.g. `List.length`).
-        let method_name = Name::append(&container_name, field_name);
+        let method_name = crate::namespace::append_names(&container_name, field_name.name());
         let method_info = match self.env.get_const(&method_name) {
             Some(info) => info,
             None => return Ok(None),
@@ -1216,7 +1670,7 @@ impl<'a> ElabCtx<'a> {
             &method_fn_type,
             &converted,
             &converted_ty,
-            &container_name.to_string(),
+            &container_name,
         )?;
         Ok(Some(result))
     }
@@ -1244,14 +1698,22 @@ impl<'a> ElabCtx<'a> {
     /// binder's head matches `T` (e.g. a plain namespaced function), we fall back
     /// to the historical behavior of applying the receiver after implicit-arg
     /// insertion, preserving existing dot-notation semantics.
-    fn apply_dot_receiver(
+    pub(super) fn apply_dot_receiver(
         &mut self,
         fn_expr: Expr,
         fn_type: &Expr,
         receiver: &Expr,
         receiver_ty: &Expr,
-        type_name: &str,
+        type_name: &Name,
     ) -> Result<Expr, ElabError> {
+        // A recursor-family head with an EXPLICIT motive (`x.casesOn`,
+        // `x : Empty`) is Lean's eliminator elaboration, not a lambda over
+        // the motive (`elab_dot_elim.rs`).
+        if let Some(decided) =
+            self.dot_explicit_motive_eliminator(&fn_expr, fn_type, receiver, receiver_ty, type_name)
+        {
+            return decided;
+        }
         let mut result = fn_expr;
         let mut ty = self.whnf(fn_type);
 
@@ -1295,13 +1757,13 @@ impl<'a> ElabCtx<'a> {
             // `def MyNat := Nat` used as the self type).
             let syntactic_head_matches = matches!(
                 arg_ty_inst.get_app_fn().kind(),
-                ExprKind::Const(n, _) if n.to_string() == type_name
+                ExprKind::Const(n, _) if n == type_name
             );
             let arg_head = self.whnf(&arg_ty_inst);
             let head_matches = syntactic_head_matches
                 || matches!(
                     arg_head.get_app_fn().kind(),
-                    ExprKind::Const(n, _) if n.to_string() == type_name
+                    ExprKind::Const(n, _) if n == type_name
                 );
 
             // A CLASS projection carries its receiver as an INSTANCE-IMPLICIT
@@ -1334,8 +1796,11 @@ impl<'a> ElabCtx<'a> {
                 self.try_unify(&arg_ty_inst, receiver_ty);
                 // Receiver unification has now pinned the carrier metavars (e.g.
                 // `?α := Int`); resolve the instance-implicit args deferred above
-                // against the pinned carrier (`BEq Int -> instBEqInt`).
-                self.resolve_deferred_instances(&pending_insts);
+                // against the pinned carrier (`BEq Int -> instBEqInt`). A goal
+                // the receiver did NOT pin (`[Monad ?m]` of `ids.mapM look`,
+                // pinned only by `look` or the expected type) is QUEUED for the
+                // application's drain, never dropped (G37).
+                self.resolve_or_queue_dot_receiver_instances(&pending_insts);
                 let applied = Expr::app(result, receiver.clone());
                 // Substitute all solved type/universe params before the term
                 // leaves the dot path (mirrors elab_app's "all solved level
@@ -1371,7 +1836,8 @@ impl<'a> ElabCtx<'a> {
         // applying the receiver after implicit-argument insertion. Any explicit
         // binders we tentatively re-bound above are still abstracted so the term
         // stays well-formed.
-        let (fn_with_implicits, _) = self.insert_implicit_args(result, &ty);
+        // The receiver is applied next, so `⦃x⦄` binders before it are filled.
+        let (fn_with_implicits, _) = self.insert_implicit_args(result, &ty, ArgsFollow::Yes);
         let applied = Expr::app(fn_with_implicits, receiver.clone());
         // Substitute solved type/universe params before the term leaves the dot
         // path (see the receiver-slot return above for rationale).
@@ -1381,6 +1847,43 @@ impl<'a> ElabCtx<'a> {
             applied,
             &pre_receiver_binders,
         ))
+    }
+
+    /// Resolve each instance-implicit goal of a dot-notation head that the
+    /// receiver unification has made resolvable; QUEUE every other goal that
+    /// still mentions a metavariable for the postponed-instance drain
+    /// (`retry_postponed_open_carrier_instances`, run at the end of the
+    /// enclosing application and of the declaration body), as Lean's
+    /// synthetic instance metavariables are resumed by
+    /// `synthesizeSyntheticMVars` (G37, ledger class (107)).
+    ///
+    /// The result of `resolve_deferred_instances` was discarded here, so such
+    /// a goal's metavariable stayed unassigned with nothing left to solve it:
+    /// `ids.mapM look` failed "failed to synthesize instance `Monad Option`"
+    /// on a goal that WAS resolvable once `look` had pinned `?m := Option`.
+    /// A GROUND goal with no instance is not queued: its metavariable stays
+    /// unassigned and the declaration-close residual guard reports it, as
+    /// before.
+    fn resolve_or_queue_dot_receiver_instances(&mut self, pending: &[(Expr, Expr)]) {
+        for (meta_arg, goal_ty) in pending {
+            let goal = self.whnf(&self.metas.instantiate(goal_ty));
+            let meta_id = match meta_arg.kind() {
+                ExprKind::FVar(fvar) => MetaState::from_fvar(*fvar),
+                _ => None,
+            };
+            let Some(meta_id) = meta_id else {
+                continue;
+            };
+            if self.metas.is_assigned(meta_id) {
+                continue;
+            }
+            let assigned = self
+                .resolve_instance(&goal)
+                .is_some_and(|inst| self.metas.assign(meta_id, inst));
+            if !assigned {
+                self.record_postponed_stuck_instance(meta_arg, &goal);
+            }
+        }
     }
 
     /// Wrap `body` in lambdas for each recorded pre-receiver explicit binder,
@@ -1406,18 +1909,19 @@ impl<'a> ElabCtx<'a> {
     pub(crate) fn try_collect_qualified_name(
         base: &SurfaceExpr,
         proj: &Projection,
-    ) -> Option<String> {
+    ) -> Option<SurfaceName> {
         stack_safe(|| {
             let field = match proj {
-                Projection::Named(n) => n,
+                Projection::Named(n) if !n.is_relative_constructor() && !n.is_anonymous() => n,
+                Projection::Named(_) => return None,
                 Projection::Index(_) => return None,
             };
 
             match base {
-                SurfaceExpr::Ident(_, name) => Some(format!("{name}.{field}")),
+                SurfaceExpr::Ident(_, name) => Some(name.append(field)),
                 SurfaceExpr::Proj(_, inner_base, inner_proj) => {
                     let base_qualified = Self::try_collect_qualified_name(inner_base, inner_proj)?;
-                    Some(format!("{base_qualified}.{field}"))
+                    Some(base_qualified.append(field))
                 }
                 _ => None,
             }
@@ -1451,18 +1955,23 @@ impl<'a> ElabCtx<'a> {
 
         let struct_name = match expr_ty_whnf.get_app_fn().kind() {
             ExprKind::Const(name, _) => name.clone(),
-            other => return Err(ElabError::InvalidProjectionTarget(format!("{other:?}"))),
+            // The receiver's whole type, not the bare head kind — same reason
+            // as the sibling site in `elab_app`.
+            _ => {
+                return Err(ElabError::InvalidProjectionTarget(
+                    crate::error_render::term(&expr_ty_whnf),
+                ))
+            }
         };
 
-        let ind = self
-            .env
-            .get_inductive(&struct_name)
-            .ok_or_else(|| ElabError::InvalidProjectionTarget(format!("{expr_ty_whnf:?}")))?;
+        let ind = self.env.get_inductive(&struct_name).ok_or_else(|| {
+            ElabError::InvalidProjectionTarget(crate::error_render::term(&expr_ty_whnf))
+        })?;
 
         if ind.constructor_names.len() != 1 {
-            return Err(ElabError::InvalidProjectionTarget(format!(
-                "{expr_ty_whnf:?}"
-            )));
+            return Err(ElabError::InvalidProjectionTarget(
+                crate::error_render::term(&expr_ty_whnf),
+            ));
         }
 
         // A single-constructor inductive is projectable. Whether it carries
@@ -1474,7 +1983,7 @@ impl<'a> ElabCtx<'a> {
 
         let ctor_name = &ind.constructor_names[0];
         let ctor = self.env.get_constructor(ctor_name).ok_or_else(|| {
-            ElabError::InvalidProjectionTarget(format!("missing constructor {ctor_name:?}"))
+            ElabError::InvalidProjectionTarget(format!("missing constructor {ctor_name}"))
         })?;
 
         Ok((struct_name, ctor.num_fields, is_registered_structure))
@@ -1512,15 +2021,20 @@ impl<'a> ElabCtx<'a> {
         ) {
             return Ok(None);
         }
-        let (applied_expr, _) = self.insert_implicit_args(expr_val.clone(), &expr_ty_whnf);
+        let (applied_expr, _) =
+            self.insert_implicit_args(expr_val.clone(), &expr_ty_whnf, ArgsFollow::No);
         match self.resolve_projection_target(&applied_expr) {
-            Ok((struct_name, num_fields, _is_structure)) => {
+            Ok((struct_name, num_fields, is_structure)) => {
                 if idx == 0 || idx > num_fields {
                     return Err(ElabError::ProjectionIndexOutOfBounds {
                         struct_name,
                         idx,
                         field_count: num_fields,
                     });
+                }
+                // The direct path's private-field refusal (G21 B3).
+                if is_structure {
+                    self.check_imported_private_field_index(&struct_name, idx)?;
                 }
                 // Substitute the metavariables/levels the implicit peel introduced
                 // before the projected term leaves the dot path (mirrors
@@ -1533,3 +2047,81 @@ impl<'a> ElabCtx<'a> {
         }
     }
 }
+
+#[cfg(test)]
+mod typed_local_projection_tests {
+    use super::*;
+
+    #[test]
+    fn scoped_self_alias_uses_one_existing_binder_and_restores_after_refusal() {
+        let env = Environment::new();
+        let mut ctx = ElabCtx::new(&env);
+        let owner = ctx.push_local(SurfaceName::generated_path("B"), Expr::prop());
+        let alias = SurfaceName::generated_path("A.B");
+        let result: Result<(), ElabError> =
+            ctx.with_local_name_alias(alias.clone(), owner, |ctx| {
+                assert_eq!(ctx.locals.len(), 1);
+                assert_eq!(
+                    ctx.elaborate(&clean_parser::parse_expr("A.B").unwrap())?,
+                    Expr::fvar(owner)
+                );
+                assert!(ctx
+                    .lookup_local(&SurfaceName::component("A.B", true))
+                    .is_none());
+                let shadow = ctx.push_local(alias.clone(), Expr::prop());
+                assert_eq!(ctx.lookup_local(&alias).map(|(id, _)| id), Some(shadow));
+                ctx.pop_local();
+                assert_eq!(ctx.lookup_local(&alias).map(|(id, _)| id), Some(owner));
+                Err(ElabError::Unsupported {
+                    feature: "intentional alias-scope refusal".into(),
+                })
+            });
+        assert!(result.is_err());
+        assert!(ctx.local_name_aliases.is_empty());
+        assert_eq!(ctx.locals.len(), 1);
+        assert!(ctx.lookup_local(&alias).is_none());
+        assert_eq!(
+            ctx.lookup_local(&SurfaceName::generated_path("B"))
+                .map(|(id, _)| id),
+            Some(owner)
+        );
+    }
+
+    #[test]
+    fn qualified_local_lookup_preserves_typed_identity_and_receiver_priority() {
+        let env = Environment::with_prelude();
+        let mut ctx = ElabCtx::new(&env);
+        let nested = ctx.push_local(SurfaceName::generated_path("A.B"), Expr::prop());
+        let quoted = ctx.push_local(SurfaceName::component("A.B", true), Expr::prop());
+        assert_eq!(
+            ctx.elaborate(&clean_parser::parse_expr("A.B").unwrap())
+                .unwrap(),
+            Expr::fvar(nested)
+        );
+        assert_eq!(
+            ctx.elaborate(&clean_parser::parse_expr("«A.B»").unwrap())
+                .unwrap(),
+            Expr::fvar(quoted)
+        );
+
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let product = Expr::apps(
+            Expr::const_(
+                Name::from_string("Prod"),
+                vec![Level::zero(), Level::zero()],
+            ),
+            [nat.clone(), nat.clone()],
+        );
+        let receiver = ctx.push_local(SurfaceName::generated_path("x"), product);
+        let other = ctx.push_local(SurfaceName::generated_path("x.fst"), nat);
+        let result = ctx
+            .elaborate(&clean_parser::parse_expr("x.fst").unwrap())
+            .unwrap();
+        assert_ne!(result.abstract_fvar(receiver), result);
+        assert_eq!(result.abstract_fvar(other), result);
+    }
+}
+
+#[cfg(test)]
+#[path = "elab_proj_instance_tests.rs"]
+mod instance_tests;

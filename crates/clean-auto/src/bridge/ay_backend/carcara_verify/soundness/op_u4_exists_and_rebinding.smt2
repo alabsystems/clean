@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-const y Bool)
+(declare-const t Bool)
+(declare-const p Bool)
+(declare-const y_renamed Bool)
+(assert (not (= (exists ((x Bool)) (and (exists ((x Bool)) (= x t)) (= x p))) (and (exists ((x Bool)) (= x t)) (= t p)))))
+(check-sat)

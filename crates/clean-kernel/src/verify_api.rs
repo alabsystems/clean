@@ -4,24 +4,20 @@
 
 //! Self-verification API — Wave 1 (#1891)
 //!
-//! Chains cert generation → replay → micro-check into a single reusable
+//! Chains cert generation → replay into a single reusable
 //! primitive. Provides both single-expression and batch verification.
 //!
-//! # Three-Stage Pipeline
+//! # Certificate-Replay Pipeline
 //!
 //! 1. `TypeChecker::infer_type_with_cert(expr)` → `(type, ProofCert)`
 //! 2. `CertVerifier::replay_and_verify(cert)` → `(reconstructed_expr, verified_type)`
-//! 3. `cross_validate_with_micro(expr, type, cert)` → `Ok(true)` / `Ok(false)` / `Err`
 //!
-//! Stage 2 confirms that the certificate can independently reconstruct and
-//! re-derive the typing judgment. Stage 3 runs a minimal independent checker
-//! on the subset of expressions it supports (returns `Ok(false)` for
-//! unsupported constructs like Const, FVar, mode-specific forms).
+//! Replay re-derives the typing judgment within Clean. It does not provide
+//! an independent micro-check or a ReferenceKernel fence.
 
 use crate::cert::{CertError, CertVerifier, ProofCert};
 use crate::env::Environment;
 use crate::expr::Expr;
-use crate::micro::{cross_validate_with_micro, CrossValidationError};
 use crate::tc::TypeChecker;
 use crate::TypeError;
 
@@ -46,7 +42,6 @@ use crate::TypeError;
 ///     inferred_type: bogus_expr(),
 ///     cert: bogus_cert(),
 ///     replay_match: true,
-///     micro_match: true,
 /// };
 /// ```
 #[derive(Debug, Clone)]
@@ -60,10 +55,6 @@ pub struct VerificationEvidence {
     pub cert: ProofCert,
     /// Whether certificate replay matched (stage 2 passed).
     pub replay_match: bool,
-    /// Whether the micro-checker confirmed the typing (stage 3).
-    /// `true` = micro-checker agreed, `false` = expression uses
-    /// unsupported constructs (graceful skip, not a failure).
-    pub micro_match: bool,
 }
 
 impl VerificationEvidence {
@@ -81,10 +72,6 @@ impl VerificationEvidence {
 
     pub fn replay_match(&self) -> bool {
         self.replay_match
-    }
-
-    pub fn micro_match(&self) -> bool {
-        self.micro_match
     }
 }
 
@@ -104,16 +91,12 @@ pub enum VerifyError {
         inferred: Box<Expr>,
         replayed: Box<Expr>,
     },
-    /// Micro-checker disagreed with the main kernel (stage 3).
-    #[error("micro-checker disagreement: {0}")]
-    MicroDisagreement(#[source] CrossValidationError),
 }
 
-/// Verify a single expression through the three-stage pipeline.
+/// Verify a single expression through the certificate-replay pipeline.
 ///
 /// 1. Infer type with certificate generation
 /// 2. Replay certificate and verify independently
-/// 3. Cross-validate with micro-checker (best-effort)
 ///
 /// Returns `VerificationEvidence` on success, `VerifyError` on failure.
 ///
@@ -122,7 +105,6 @@ pub enum VerifyError {
 /// REQUIRES: `expr` contains no unbound `BVar`
 /// REQUIRES: All `Const` in `expr` are declared in `env`
 /// ENSURES: On success, `evidence.replay_match() == true`
-/// ENSURES: On success, `evidence.micro_match()` reflects micro-checker coverage
 /// ENSURES: On error, identifies which stage failed
 pub fn verify_expr(env: &Environment, expr: &Expr) -> Result<VerificationEvidence, VerifyError> {
     // Stage 1: Infer type with certificate
@@ -142,18 +124,11 @@ pub fn verify_expr(env: &Environment, expr: &Expr) -> Result<VerificationEvidenc
         });
     }
 
-    // Stage 3: Cross-validate with micro-checker (best-effort)
-    let micro_match = match cross_validate_with_micro(expr, &inferred_type, &cert) {
-        Ok(confirmed) => confirmed,
-        Err(e) => return Err(VerifyError::MicroDisagreement(e)),
-    };
-
     Ok(VerificationEvidence {
         expr: expr.clone(),
         inferred_type,
         cert,
         replay_match: true,
-        micro_match,
     })
 }
 
@@ -169,8 +144,6 @@ pub fn verify_expr(env: &Environment, expr: &Expr) -> Result<VerificationEvidenc
 ///     total: 1,
 ///     passed: 1,
 ///     failed: 0,
-///     micro_confirmed: 1,
-///     micro_skipped: 0,
 ///     errors: vec![],
 /// };
 /// ```
@@ -189,10 +162,6 @@ pub struct BatchVerificationStats {
     pub passed: usize,
     /// Expressions where verification returned an error.
     pub failed: usize,
-    /// Expressions where micro-checker confirmed (subset of passed).
-    pub micro_confirmed: usize,
-    /// Expressions where micro-checker skipped (unsupported constructs).
-    pub micro_skipped: usize,
     /// Per-expression errors (index, error message).
     pub errors: Vec<(usize, String)>,
 }
@@ -203,8 +172,6 @@ impl BatchVerificationStats {
             total,
             passed: 0,
             failed: 0,
-            micro_confirmed: 0,
-            micro_skipped: 0,
             errors: Vec::new(),
         }
     }
@@ -221,14 +188,6 @@ impl BatchVerificationStats {
         self.failed
     }
 
-    pub fn micro_confirmed(&self) -> usize {
-        self.micro_confirmed
-    }
-
-    pub fn micro_skipped(&self) -> usize {
-        self.micro_skipped
-    }
-
     pub fn errors(&self) -> &[(usize, String)] {
         &self.errors
     }
@@ -239,14 +198,6 @@ impl BatchVerificationStats {
             return 0.0;
         }
         self.passed as f64 / self.total as f64
-    }
-
-    /// Fraction of passed expressions that micro-checker confirmed.
-    pub fn micro_coverage(&self) -> f64 {
-        if self.passed == 0 {
-            return 0.0;
-        }
-        self.micro_confirmed as f64 / self.passed as f64
     }
 }
 
@@ -259,13 +210,8 @@ pub fn verify_batch(env: &Environment, exprs: &[Expr]) -> BatchVerificationStats
 
     for (i, expr) in exprs.iter().enumerate() {
         match verify_expr(env, expr) {
-            Ok(evidence) => {
+            Ok(_) => {
                 stats.passed += 1;
-                if evidence.micro_match() {
-                    stats.micro_confirmed += 1;
-                } else {
-                    stats.micro_skipped += 1;
-                }
             }
             Err(e) => {
                 stats.failed += 1;
@@ -401,6 +347,24 @@ mod tests {
         );
     }
 
+    // Mutate the argument of a valid identity application from Prop to Type.
+    // Both direct checking and certificate replay must still refuse the mutant
+    // after removing the optional micro-check.
+    #[test]
+    fn test_identity_argument_mutant_is_refused() {
+        let env = test_env();
+        let tc = TypeChecker::new(&env);
+        let type0 = Expr::type_();
+        let id = Expr::lam(BinderInfo::Default, type0.clone(), Expr::bvar(0));
+        let good = Expr::app(id.clone(), Expr::prop());
+        tc.check_type(&good, &type0).expect("identity accepts Prop");
+        verify_expr(&env, &good).expect("valid application replays");
+
+        let mutant = Expr::app(id, type0.clone());
+        assert!(tc.check_type(&mutant, &type0).is_err());
+        assert!(verify_expr(&env, &mutant).is_err());
+    }
+
     // --- verify_batch tests ---
 
     #[test]
@@ -439,20 +403,6 @@ mod tests {
         assert_eq!(stats.total(), 0);
         assert_eq!(stats.passed(), 0);
         assert!((stats.pass_rate() - 0.0).abs() < f64::EPSILON);
-        assert!((stats.micro_coverage() - 0.0).abs() < f64::EPSILON);
-    }
-
-    #[test]
-    fn test_batch_stats_micro_coverage() {
-        let env = test_env();
-        let exprs = vec![
-            Expr::sort(Level::zero()),
-            Expr::sort(Level::succ(Level::zero())),
-            Expr::sort(Level::succ(Level::succ(Level::zero()))),
-        ];
-        let stats = verify_batch(&env, &exprs);
-        assert_eq!(stats.passed(), 3);
-        assert!(stats.micro_confirmed() + stats.micro_skipped() == stats.passed());
     }
 
     #[test]
@@ -461,11 +411,8 @@ mod tests {
             total: 10,
             passed: 7,
             failed: 3,
-            micro_confirmed: 5,
-            micro_skipped: 2,
             errors: vec![],
         };
         assert!((stats.pass_rate() - 0.7).abs() < f64::EPSILON);
-        assert!((stats.micro_coverage() - 5.0 / 7.0).abs() < f64::EPSILON);
     }
 }

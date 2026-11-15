@@ -155,6 +155,24 @@ sub "$WIT" '"of_those_comparing_ZERO_marker_lines": 1054' '"of_those_comparing_Z
 expect PASS "M7 reverted"
 
 echo
+echo "== M7b: INDEPENDENCE -- the cross-population composition catches what the pin cannot =="
+# AUDIT r14 M14-7. `derived_mir_agreed` is OUTSIDE the pinned triple, so this mutation can only
+# be caught by `markers_exact_true + markers_exact_false == derived_mir_agreed`. If the coherence
+# test were still folded into the pinned one, this would pass silently.
+sub "$WIT" '"derived_mir_agreed": 1541' '"derived_mir_agreed": 1600'
+expect FAIL "M7b mutated: 1082 + 459 != 1600, and no pin covers derived_mir_agreed"; reason
+sub "$WIT" '"derived_mir_agreed": 1600' '"derived_mir_agreed": 1541'
+expect PASS "M7b reverted"
+
+echo
+echo "== M7c: markers_exact_false is a COUNT, not merely a non-zero flag =="
+# It was only ever asserted `> 0`, so 459 -> 1 was invisible. It is a composition term now.
+sub "$WIT" '"markers_exact_false": 459' '"markers_exact_false": 1'
+expect FAIL "M7c mutated: the false class shrank to 1 and the population no longer adds up"; reason
+sub "$WIT" '"markers_exact_false": 1' '"markers_exact_false": 459'
+expect PASS "M7c reverted"
+
+echo
 echo "== M8: FIXTURE DELETED — the gate must fail CLOSED, not vacuously pass =="
 mv "$WIT" "$WIT.bak"
 expect FAIL "M8 mutated: witness fixture absent"; reason

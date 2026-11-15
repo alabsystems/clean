@@ -31,16 +31,31 @@
 //!
 //! # Bounded scope (deliberate)
 //!
-//! Serves **single-target, non-indexed eliminators with explicit
-//! alternatives**. Everything outside that fails closed with a diagnostic that
-//! names the construct — never a silent sorry:
+//! Serves eliminators with **exactly one explicit target** (the one the user
+//! names) and any number of implicit targets, which are solved the way Lean's
+//! `addImplicitTargets` solves them: by unifying the explicit target's
+//! declared type with the major premise's type. As in Lean, a target binder
+//! that is not explicit is implicit whatever else it is, so an eliminator
+//! whose only target is `{t : T}` has "too many targets" for `induction t`.
+//! Everything outside that fails closed with a diagnostic that names the
+//! construct — never a silent sorry:
 //!
-//! - more than one target, or a motive applied to a computed argument
-//!   (`num_complex_motive_args > 0`) — needs index unification (RC-S);
-//! - implicit targets that must be *discovered* rather than named — Lean's
-//!   `addImplicitTargets`;
+//! - no explicit target, or more than one (Lean: `Too many targets` /
+//!   `Insufficient number of targets`);
+//! - a motive applied to a computed argument (`num_complex_motive_args > 0`)
+//!   — needs index unification (RC-S) — or to its targets out of telescope
+//!   order;
+//! - an implicit target that matching cannot solve, that is not a local, that
+//!   repeats another target (Lean's `checkInductionTargets`), that is
+//!   let-bound, or that some other hypothesis depends on (Lean reverts those
+//!   in `generalizeVars`);
 //! - any non-motive, non-target, non-alternative binder that first-order
 //!   matching cannot solve, in particular instance-implicit parameters.
+//!
+//! After the split every target is cleared from each case, in target order,
+//! when nothing left in that case mentions it (Lean's `toClear` with
+//! `tryClear`), so a case whose goal still mentions an implicit target keeps
+//! it.
 //!
 //! # Alternative tags and the missing binder name
 //!
@@ -62,9 +77,12 @@
 
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
+use clean_parser::SurfaceName;
 
+use super::builtins_replace::mentions_fvar;
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 use super::elim_info::{get_elim_info, match_pattern, telescope, ElimInfo, ElimSolution};
+use super::elim_targets::{explicit_target, resolve_targets};
 use super::simp::beta_reduce;
 
 /// A case goal produced by a custom eliminator's alternative.
@@ -76,9 +94,24 @@ struct ElimCase {
     /// Target of the case goal.
     new_target: Expr,
     /// Goal tag (see the module docs on positional tagging).
-    tag: String,
+    tag: SurfaceName,
     /// `fun fields… => ?case_meta`, the argument passed to the eliminator.
     case_proof: Expr,
+    case_binders: Vec<FVarId>,
+}
+
+/// How the alternatives' case goals are tagged.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum AltTags<'a> {
+    /// `induction … using e with | a … => …`: the *i*-th `with` alternative
+    /// names the *i*-th alternative (see the module docs).
+    WithBlock(&'a [SurfaceName]),
+    /// An `@[induction_eliminator]` chosen by the registry. Lean tags these
+    /// with the alternatives' binder names, which Clean's kernel `Pi` does not
+    /// store, so each case gets a tag no `case` or `with` alternative can
+    /// spell: a later reference by Lean's name fails instead of matching a
+    /// guessed one.
+    Inaccessible,
 }
 
 fn unsupported(detail: String) -> TacticError {
@@ -90,9 +123,9 @@ fn unsupported(detail: String) -> TacticError {
 
 /// `induction <hyp> using <elim>` for a non-recursor eliminator.
 ///
-/// `alt_names` are the `with`-block alternative names in source order; entry
-/// *i* tags case *i* (see the module docs). An absent or `_` entry falls back
-/// to `alt<binder position>`.
+/// With [`AltTags::WithBlock`], entry *i* of the `with`-block names tags case
+/// *i* (see the module docs); an absent or `_` entry falls back to
+/// `alt<binder position>`.
 ///
 /// # Contract
 ///
@@ -107,9 +140,9 @@ fn unsupported(detail: String) -> TacticError {
 /// ENSURES: On Err, `state` is unchanged and no goal has been closed
 pub(crate) fn induction_using_eliminator(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     elim_name: &Name,
-    alt_names: &[String],
+    tags: AltTags<'_>,
 ) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
@@ -125,13 +158,6 @@ pub(crate) fn induction_using_eliminator(
         .map_err(|e| unsupported(format!("`{elim_name}` is not an eliminator: {e}")))?;
 
     // ---- bounded-shape gate -------------------------------------------------
-    if info.targets_pos.len() != 1 {
-        return Err(unsupported(format!(
-            "`{elim_name}` has {} targets; this implementation serves single-target eliminators \
-             (multi-target needs index unification)",
-            info.targets_pos.len()
-        )));
-    }
     if info.num_complex_motive_args != 0 {
         return Err(unsupported(format!(
             "`{elim_name}` applies its motive to {} computed argument(s); indexed eliminators are \
@@ -146,21 +172,49 @@ pub(crate) fn induction_using_eliminator(
             info.alts_info.len()
         )));
     }
-    let target_pos = info.targets_pos[0];
+    if info.targets_pos.windows(2).any(|pair| pair[0] >= pair[1]) {
+        return Err(unsupported(format!(
+            "`{elim_name}` applies its motive to its targets out of their parameter order; \
+             that motive layout is not supported"
+        )));
+    }
+    let explicit_pos = explicit_target(&elim_const.type_, &info, elim_name)?;
+    let explicit_motive_param = info
+        .targets_pos
+        .iter()
+        .position(|&pos| pos == explicit_pos)
+        .ok_or_else(|| unsupported(format!("`{elim_name}`: explicit target is not a target")))?;
 
     // ---- the major premise --------------------------------------------------
-    let (hyp_idx, hyp_decl) = goal
+    let hyp_decl = goal
         .local_ctx
         .iter()
-        .enumerate()
-        .find(|(_, d)| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::UnknownIdent(hyp_name.to_string()))?;
     let hyp_fvar = hyp_decl.fvar;
     let hyp_ty = state.metas.instantiate(&hyp_decl.ty);
 
     // ---- solve universe levels and the remaining parameters -----------------
-    let solution = solve_elim(state, &goal, &info, &elim_const, target_pos, &hyp_ty)?;
+    let solution = solve_elim(
+        state,
+        &goal,
+        &info,
+        &elim_const,
+        explicit_pos,
+        explicit_motive_param,
+        &hyp_ty,
+    )?;
     let levels = collect_levels(&solution, &elim_const.level_params, elim_name)?;
+    let target_fvars = resolve_targets(
+        state,
+        &goal,
+        &info,
+        &solution,
+        explicit_pos,
+        hyp_fvar,
+        elim_name,
+    )?;
 
     // ---- walk the telescope, building one argument per binder ---------------
     let elim_type = elim_const
@@ -198,14 +252,14 @@ pub(crate) fn induction_using_eliminator(
         let codomain = codomain.as_ref().clone();
 
         let arg = if pos == info.motive_pos {
-            build_motive(&domain, &goal_target, hyp_fvar, elim_name)?
-        } else if pos == target_pos {
-            Expr::fvar(hyp_fvar)
+            build_motive(&domain, &goal_target, &target_fvars, elim_name)?
+        } else if let Some(k) = info.targets_pos.iter().position(|&t| t == pos) {
+            Expr::fvar(target_fvars[k])
         } else if let Some(alt) = info.alts_info.iter().find(|a| a.binder_pos == pos) {
-            let tag = alt_tag(alt_names, alt_index, alt.binder_pos);
+            let tag = alt_tag(tags, alt_index, alt.binder_pos);
             alt_index += 1;
             state.next_fvar = branch_fvar_base;
-            let case = build_case(state, &goal, hyp_idx, &domain, alt.num_fields, tag)?;
+            let case = build_case(state, &goal, &target_fvars, &domain, alt.num_fields, tag)?;
             branch_fvar_max = branch_fvar_max.max(state.next_fvar);
             let proof = case.case_proof.clone();
             cases.push(case);
@@ -244,6 +298,7 @@ pub(crate) fn induction_using_eliminator(
             meta_id: case.case_meta,
             target: case.new_target,
             local_ctx: case.new_ctx,
+            case_binders: case.case_binders,
             tag: Some(case.tag),
         });
     }
@@ -262,10 +317,18 @@ fn describe_binder(info: BinderInfo) -> &'static str {
 
 /// Tag for the `i`-th alternative: the user's `with`-block name when there is
 /// one, else a positional fallback.
-fn alt_tag(alt_names: &[String], index: usize, binder_pos: usize) -> String {
-    match alt_names.get(index) {
-        Some(name) if name != "_" && !name.is_empty() => name.clone(),
-        _ => format!("alt{binder_pos}"),
+fn alt_tag(tags: AltTags<'_>, index: usize, binder_pos: usize) -> SurfaceName {
+    match tags {
+        AltTags::WithBlock(alt_names) => match alt_names.get(index) {
+            Some(name) if !name.is_unescaped_component("_") && !name.is_anonymous() => name.clone(),
+            _ => SurfaceName::from_name(Name::anon().str(format!("alt{binder_pos}"))),
+        },
+        AltTags::Inaccessible => SurfaceName::from_name(
+            Name::anon()
+                .num(0x5441_4354)
+                .str("custom_eliminator_alt")
+                .num(binder_pos as u64),
+        ),
     }
 }
 
@@ -292,6 +355,7 @@ fn solve_elim(
     info: &ElimInfo,
     elim_const: &clean_kernel::ConstantInfo,
     target_pos: usize,
+    motive_param: usize,
     hyp_ty: &Expr,
 ) -> Result<ElimSolution, TacticError> {
     let params = &elim_const.level_params;
@@ -303,11 +367,17 @@ fn solve_elim(
         match_pattern(target_ty, hyp_ty, target_pos, params, &mut sol);
     }
 
-    // (2) motive telescope: parameter type ≟ hypothesis type, result sort ≟ goal sort
+    // (2) motive telescope: parameter type ≟ hypothesis type, result sort ≟ goal sort.
+    // The parameter is matched only when the explicit target is the motive's
+    // FIRST parameter: a later one's type is in the scope of the earlier
+    // motive parameters, which `match_pattern` would misread as eliminator
+    // binders.
     if let Some((_, motive_ty)) = binders.get(info.motive_pos) {
         let (motive_params, motive_result) = telescope(motive_ty);
-        if let Some((_, motive_dom)) = motive_params.first() {
-            match_pattern(motive_dom, hyp_ty, info.motive_pos, params, &mut sol);
+        if motive_param == 0 {
+            if let Some((_, motive_dom)) = motive_params.first() {
+                match_pattern(motive_dom, hyp_ty, info.motive_pos, params, &mut sol);
+            }
         }
         if let ExprKind::Sort(level_pattern) = motive_result.strip_mdata().kind() {
             let goal_sort = goal_sort_level(state, goal)?;
@@ -377,24 +447,37 @@ fn collect_levels(
         .collect()
 }
 
-/// `fun (x : D) => target[hyp := x]`, with `D` the eliminator's own motive
-/// domain so the application type-checks against the declared motive type.
+/// `fun (x₁ : D₁) … (xₙ : Dₙ) => target[t₁ := x₁, …, tₙ := xₙ]` over the
+/// targets in order (Lean's `setMotiveArg`, `mkLambdaFVars targets goal`),
+/// with each `Dᵢ` the eliminator's own motive domain so the application
+/// type-checks against the declared motive type.
 fn build_motive(
     motive_ty: &Expr,
     goal_target: &Expr,
-    hyp_fvar: FVarId,
+    target_fvars: &[FVarId],
     elim_name: &Name,
 ) -> Result<Expr, TacticError> {
-    let ExprKind::Pi(binder, domain, _) = motive_ty.strip_mdata().kind() else {
-        return Err(unsupported(format!(
-            "`{elim_name}`: motive is not a function type"
-        )));
-    };
-    Ok(Expr::lam(
-        binder.info,
-        domain.as_ref().clone(),
-        goal_target.abstract_fvar(hyp_fvar),
-    ))
+    let mut domains = Vec::with_capacity(target_fvars.len());
+    let mut current = motive_ty.clone();
+    for _ in target_fvars {
+        let ExprKind::Pi(binder, domain, codomain) = current.strip_mdata().kind() else {
+            return Err(unsupported(format!(
+                "`{elim_name}`: motive does not take one parameter per target"
+            )));
+        };
+        domains.push((binder.info, domain.as_ref().clone()));
+        current = codomain.as_ref().clone();
+    }
+    // Abstracting `t₁` first and `tₙ` last leaves `tₙ` at `BVar 0` and `t₁`
+    // at `BVar (n-1)`: `abstract_fvar` shifts the loose variables it meets.
+    let mut body = goal_target.clone();
+    for &fvar in target_fvars {
+        body = body.abstract_fvar(fvar);
+    }
+    for (info, domain) in domains.into_iter().rev() {
+        body = Expr::lam(info, domain, body);
+    }
+    Ok(body)
 }
 
 /// Turn one alternative's declared type into a case goal plus the
@@ -411,19 +494,12 @@ fn build_motive(
 fn build_case(
     state: &mut ProofState,
     goal: &Goal,
-    hyp_idx: usize,
+    targets: &[FVarId],
     alt_ty: &Expr,
     num_fields: usize,
-    tag: String,
+    tag: SurfaceName,
 ) -> Result<ElimCase, TacticError> {
     let mut new_ctx = goal.local_ctx.clone();
-    // The major premise is consumed by the eliminator, exactly as in the
-    // recursor path (`build_induction_cases`). Hypotheses that *depend* on it
-    // are not auto-reverted here either — that is the shared `cases`/`induction`
-    // gap (RC-G / brick T12), not specific to this path.
-    if hyp_idx < new_ctx.len() {
-        new_ctx.remove(hyp_idx);
-    }
 
     let mut current = alt_ty.clone();
     let mut fields: Vec<(FVarId, BinderInfo, Expr)> = Vec::with_capacity(num_fields);
@@ -435,8 +511,16 @@ fn build_case(
                 let codomain = codomain.as_ref().clone();
                 let fvar = state.fresh_fvar();
                 new_ctx.push(LocalDecl {
+                    binder_info: *binder,
                     fvar,
-                    name: format!("{tag}_{}", fields.len()),
+                    name: super::pattern::util::generate_fresh_hyp_name(
+                        &new_ctx,
+                        &super::case_field_names::generated_case_field_name(
+                            &tag,
+                            fields.len() as u64,
+                            super::case_field_names::CaseFieldKind::Field,
+                        ),
+                    ),
                     ty: field_ty.clone(),
                     value: None,
                 });
@@ -456,7 +540,29 @@ fn build_case(
     }
 
     let new_target = beta_reduce(&current);
-    let case_meta = state.fresh_meta_in_context(new_target.clone(), &new_ctx);
+    // Lean's `toClear`: each target, in target order, is cleared when nothing
+    // left in the case mentions it (`tryClear`). The major premise's
+    // dependents were reverted before the split, so it is normally cleared;
+    // an implicit target the case still mentions (`motive a a refl` keeps
+    // `a`) stays, as does one a later target still depends on when it is
+    // tried.
+    for &target in targets {
+        let Some(idx) = new_ctx.iter().position(|d| d.fvar == target) else {
+            continue;
+        };
+        let mentioned = mentions_fvar(&new_target, target)
+            || new_ctx.iter().skip(idx + 1).any(|d| {
+                mentions_fvar(&state.metas.instantiate(&d.ty), target)
+                    || d.value
+                        .as_ref()
+                        .is_some_and(|v| mentions_fvar(&state.metas.instantiate(v), target))
+            });
+        if !mentioned {
+            new_ctx.remove(idx);
+        }
+    }
+    // Scope keeps the eliminated major, as for `cases` (`fresh_case_meta`).
+    let case_meta = state.fresh_case_meta(new_target.clone(), goal, &new_ctx);
 
     let mut case_proof =
         Expr::from_kind(ExprKind::FVar(crate::unify::MetaState::to_fvar(case_meta)));
@@ -474,5 +580,6 @@ fn build_case(
         new_target,
         tag,
         case_proof,
+        case_binders: fields.iter().map(|(id, _, _)| *id).collect(),
     })
 }

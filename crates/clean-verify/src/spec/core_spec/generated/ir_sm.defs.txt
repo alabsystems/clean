@@ -1,4 +1,4 @@
-def ir_sm_tenv : IRTy := IRTy.struct_ 441
-def ir_sm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.load ir_sm_tenv ir_d0 Bool.false) ir_d2) (IRList.cons IRNode (ir_nd1 (IRInst.insertfield ir_sm_tenv ir_d2 81 ir_d1) ir_d3) (IRList.cons IRNode (ir_nd (IRInst.store ir_sm_tenv ir_d0 ir_d3 Bool.false)) (IRList.cons IRNode (ir_nd (IRInst.ret ir_nl0)) (IRList.nil IRNode)))))
+def ir_sm_tenv : IRTy := IRTy.struct_ 586
+def ir_sm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (IRList.cons IRNode (ir_nd1 (IRInst.load ir_sm_tenv ir_d0 Bool.false) ir_d2) (IRList.cons IRNode (ir_nd1 (IRInst.insertfield ir_sm_tenv ir_d2 83 ir_d1) ir_d3) (IRList.cons IRNode (ir_nd (IRInst.store ir_sm_tenv ir_d0 ir_d3 Bool.false)) (IRList.cons IRNode (ir_nd (IRInst.ret ir_nl0)) (IRList.nil IRNode)))))
 def ir_sm_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) ir_d0 (ir_blk ir_sm_b0 ir_blk0)
 def ir_sm_module : IRModule := IRModule.mk (IRList.cons IRFunc ir_sm_func (IRList.nil IRFunc)) (IRList.nil IRGlobal)

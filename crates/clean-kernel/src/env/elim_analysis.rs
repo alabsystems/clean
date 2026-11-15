@@ -11,10 +11,18 @@
 //! Uses TypeChecker for accurate field sort inference (matching Lean 4's
 //! `tc().ensure_type(binding_domain(type))`), fixing incorrect `None` returns
 //! for App expressions that caused Acc.rec to get wrong universe level count.
+//!
+//! Every entry point takes the family's RESULT LEVEL, never its type: Lean
+//! reads `m_result_level`/`m_is_not_zero`, which `check_inductive_types` finds
+//! up to whnf, and so must Clean. The level comes from
+//! `Environment::member_result_level` / `type_former_result_level`
+//! (`env/inductive_result_sort.rs`). Reading the syntactic codomain here was
+//! the hole `def MyProp : Type := Prop; inductive B : MyProp | t | f` went
+//! through: a non-`Sort` head answered "large elimination allowed".
 
 use crate::expr::{Expr, ExprKind};
-use crate::inductive::{get_return_type, Constructor};
-use crate::level::Level;
+use crate::inductive::Constructor;
+use crate::level::{Level, ZeroReading};
 use crate::tc::TypeChecker;
 use crate::Environment;
 
@@ -23,6 +31,11 @@ use crate::Environment;
 /// Mirrors Lean 4 kernel `elim_only_at_universe_zero()` from `inductive.cpp:479`.
 /// When true, the recursor does NOT get an extra motive universe parameter;
 /// the motive sort is fixed at `Sort 0` (Prop).
+///
+/// `result_level` is the family's result level up to whnf (Lean's
+/// `m_result_level`), never a syntactic read of its type. `zero` is the
+/// `is_zero` a field's sort is read with (`inductive.cpp:517`; the caller's
+/// [`Environment::zero_reading`] unless it regenerates Lean's record).
 ///
 /// Rules (for a Prop-valued inductive):
 /// - Mutual inductive predicates (num_types > 1) → always Prop-only (#3238)
@@ -38,11 +51,39 @@ use crate::Environment;
 /// Requires the inductive type and its constructors to be registered in `env`.
 pub(crate) fn elim_only_at_universe_zero(
     env: &Environment,
-    ind_type_expr: &Expr,
+    zero: ZeroReading,
+    result_level: &Level,
     constructors: &[Constructor],
     num_params: u32,
     num_types: usize,
 ) -> bool {
+    match (
+        elim_only_at_universe_zero_without_env(result_level, constructors.len(), num_types),
+        constructors,
+    ) {
+        (Some(answer), _) => answer,
+        (None, [ctor]) => {
+            elim_only_at_universe_zero_single_ctor(env, zero, result_level, ctor, num_params)
+        }
+        // `None` is exactly one constructor, so this arm is never reached; it
+        // answers the conservative way (Prop-only) rather than panic.
+        (None, _) => true,
+    }
+}
+
+/// [`elim_only_at_universe_zero`]'s answer in every case that reads NO
+/// environment, or `None` in the one case that does -- exactly one
+/// constructor, one type in the block, and a result level not provably
+/// nonzero, where the constructor's fields are type-checked against `env`.
+///
+/// This IS the early-return ladder of [`elim_only_at_universe_zero`], which
+/// calls it first, so a caller that answers from it and consults an
+/// environment only on `None` answers exactly as that function would.
+pub(crate) fn elim_only_at_universe_zero_without_env(
+    result_level: &Level,
+    num_constructors: usize,
+    num_types: usize,
+) -> Option<bool> {
     // Lean gates the restriction on `is_not_zero` (inductive.cpp:246-248,
     // :481-484): large elimination is unconditional ONLY when the result
     // level is PROVABLY nonzero. A possibly-zero level (`Sort 0`, `Sort u`,
@@ -51,28 +92,35 @@ pub(crate) fn elim_only_at_universe_zero(
     // large-eliminate, a proof-irrelevance violation at `u := 0`
     // (design 2026-07-02-parameterized-nested-inductives.md [R1]).
     // Clean's `Level::is_nonzero` implements Lean's `is_not_zero` semantics.
-    let result_sort = get_return_type(ind_type_expr);
-    let ExprKind::Sort(result_level) = &result_sort.kind else {
-        return false; // not a sort head — malformed; rejected elsewhere
-    };
     if result_level.is_nonzero() {
-        return false; // provably ≥ 1 → large elimination allowed
+        return Some(false); // provably ≥ 1 → large elimination allowed
     }
 
     // Lean 4 `inductive.cpp:486-489`: mutual inductive predicates (Prop-valued,
     // num_types > 1) can only eliminate into Prop. This prevents extracting
     // computational content from mutual proofs, preserving proof irrelevance.
     if num_types > 1 {
-        return true; // Mutual Prop predicates → Prop-only (#3238)
+        return Some(true); // Mutual Prop predicates → Prop-only (#3238)
     }
 
-    if constructors.len() > 1 {
-        return true; // Multiple constructors → Prop-only
+    if num_constructors > 1 {
+        return Some(true); // Multiple constructors → Prop-only
     }
-    if constructors.is_empty() {
-        return false; // Empty type (e.g., False) → large elimination
+    if num_constructors == 0 {
+        return Some(false); // Empty type (e.g., False) → large elimination
     }
+    None // exactly one constructor: its fields decide, against the environment
+}
 
+/// The one environment-reading case of [`elim_only_at_universe_zero`]: a
+/// single-constructor, non-mutual family whose result level may be zero.
+fn elim_only_at_universe_zero_single_ctor(
+    env: &Environment,
+    zero: ZeroReading,
+    result_level: &Level,
+    ctor: &Constructor,
+    num_params: u32,
+) -> bool {
     // Exactly one constructor. Check non-param fields using TypeChecker.
     // Lean 4 uses tc().ensure_type(binding_domain(type)) for each non-param field,
     // checking if the sort-level is zero (field type lives in Prop).
@@ -91,9 +139,9 @@ pub(crate) fn elim_only_at_universe_zero(
     // elimination. The result was a recursor with 0 level params against
     // references carrying 1 (`Level count mismatch retract.0.rec`).
     // No-op on the Lean/olean lane (`is_cumulative() == false`).
-    tc.set_cumulative(env.is_cumulative());
-    let ctor = &constructors[0];
-    let field_sorts = match tc.ctor_field_sort_levels(&ctor.type_, num_params) {
+    tc.set_cumulative(env.checker_settings().cumulative);
+    // Infer-only, as Lean's `ensure_type` (see `ctor_field_sort_levels_infer_only`).
+    let field_sorts = match tc.ctor_field_sort_levels_infer_only(&ctor.type_, num_params) {
         Ok(sorts) => sorts,
         Err(_) => {
             // Type checking failed — conservatively restrict to Prop elimination.
@@ -109,7 +157,8 @@ pub(crate) fn elim_only_at_universe_zero(
     // form; gated to the cumulative Coq re-verification lane.)
     //
     // For a SINGLE-constructor inductive whose result level `R` is NOT provably
-    // nonzero (so the unconditional large-elim gate at :57 declined and the
+    // nonzero (so the unconditional large-elim gate in
+    // `elim_only_at_universe_zero_without_env` declined and the
     // subsingleton analysis is running), grant LARGE elimination when EVERY
     // constructor field's sort level is `≤ R` as a LEVEL EXPRESSION
     // (`Level::is_geq(R, field)` — e.g. `u ≤ max(u,v)` and `v ≤ max(u,v)` for
@@ -137,12 +186,12 @@ pub(crate) fn elim_only_at_universe_zero(
     // Coq-lane gated (`is_cumulative()`): a no-op on the Lean/olean lane, where
     // flipping a universe-polymorphic inductive's generated recursor level count
     // would diverge from `.olean` recursor expectations (the same gating pattern
-    // as the elim-mirror cumulativity companion at :93). The [R1]
+    // as the elim-mirror cumulativity companion (`tc.set_cumulative` above). The [R1]
     // proof-irrelevance guard below is PRESERVED unchanged for every shape this
     // rule does not accept — multiple constructors (already returned above), a
     // field whose level is not `≤ R`, and indexed non-`Prop` fields — so
     // `Nonempty`/witness-extraction singletons keep eliminating only into `Prop`.
-    if env.is_cumulative()
+    if env.checker_settings().cumulative
         && field_sorts
             .iter()
             .all(|field_level| Level::is_geq(result_level, field_level))
@@ -154,7 +203,9 @@ pub(crate) fn elim_only_at_universe_zero(
     let non_prop_fields: Vec<u32> = field_sorts
         .iter()
         .enumerate()
-        .filter(|(_, level)| !level.is_zero())
+        // Lean's structural `is_zero(sort_level(s))` (inductive.cpp:517) under
+        // the Lean theories (DECISIONS R150).
+        .filter(|(_, level)| !zero.is_zero(level))
         .map(|(i, _)| i as u32)
         .collect();
 

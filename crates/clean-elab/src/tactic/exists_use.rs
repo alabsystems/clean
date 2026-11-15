@@ -187,12 +187,14 @@ fn refine_constructor_exists(state: &mut ProofState, goal: &Goal, target: &Expr)
         meta_id: witness_meta_id,
         target: alpha,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     let proof_goal = Goal {
         meta_id: proof_meta_id,
         target: proof_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
 

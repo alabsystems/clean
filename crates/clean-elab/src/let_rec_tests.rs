@@ -36,20 +36,29 @@ fn mk_match_arm(pattern: SurfacePattern, body: SurfaceExpr) -> SurfaceMatchArm {
 #[test]
 fn test_self_ref_ident_matches() {
     let expr = SurfaceExpr::ident("f");
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
 fn test_self_ref_ident_no_match() {
     let expr = SurfaceExpr::ident("g");
-    assert!(!contains_self_reference(&expr, "f"));
+    assert!(!contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
 fn test_self_ref_in_app_func() {
     // f x
     let expr = SurfaceExpr::app(SurfaceExpr::ident("f"), vec![SurfaceExpr::ident("x")]);
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -57,7 +66,10 @@ fn test_self_ref_in_app_arg() {
     // g (f x)
     let inner = SurfaceExpr::app(SurfaceExpr::ident("f"), vec![SurfaceExpr::ident("x")]);
     let expr = SurfaceExpr::app(SurfaceExpr::ident("g"), vec![inner]);
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -67,7 +79,10 @@ fn test_self_ref_shadowed_by_lambda() {
         vec![SurfaceBinder::explicit("f", SurfaceExpr::ident("Nat"))],
         SurfaceExpr::ident("f"),
     );
-    assert!(!contains_self_reference(&expr, "f"));
+    assert!(!contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -77,7 +92,10 @@ fn test_self_ref_not_shadowed_in_lambda_type() {
         vec![SurfaceBinder::explicit("x", SurfaceExpr::ident("f"))],
         SurfaceExpr::ident("x"),
     );
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -89,7 +107,10 @@ fn test_self_ref_in_let_val() {
         Box::new(SurfaceExpr::ident("f")),
         Box::new(SurfaceExpr::ident("x")),
     );
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -102,7 +123,10 @@ fn test_self_ref_shadowed_by_let() {
         Box::new(SurfaceExpr::ident("f")),
     );
     // val does not reference f, body is shadowed
-    assert!(!contains_self_reference(&expr, "f"));
+    assert!(!contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -114,8 +138,14 @@ fn test_self_ref_in_if_branches() {
         Box::new(SurfaceExpr::ident("f")),
         Box::new(SurfaceExpr::ident("g")),
     );
-    assert!(contains_self_reference(&expr, "f"));
-    assert!(!contains_self_reference(&expr, "h"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
+    assert!(!contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("h")
+    ));
 }
 
 #[test]
@@ -130,14 +160,20 @@ fn test_self_ref_in_match_arm() {
             SurfaceExpr::app(SurfaceExpr::ident("f"), vec![SurfaceExpr::ident("x")]),
         )],
     );
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
 fn test_self_ref_in_arrow() {
     // f -> Nat
     let expr = SurfaceExpr::arrow(SurfaceExpr::ident("f"), SurfaceExpr::ident("Nat"));
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -148,14 +184,20 @@ fn test_self_ref_in_ascription() {
         Box::new(SurfaceExpr::ident("x")),
         Box::new(SurfaceExpr::ident("f")),
     );
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
 fn test_self_ref_in_paren() {
     // (f)
     let expr = SurfaceExpr::Paren(Span::dummy(), Box::new(SurfaceExpr::ident("f")));
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -180,7 +222,10 @@ fn test_self_ref_deep_nesting() {
         vec![SurfaceBinder::explicit("x", SurfaceExpr::ident("Nat"))],
         match_expr,
     );
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 // =========================================================================
@@ -192,7 +237,11 @@ fn test_classify_non_recursive() {
     // let rec f : Nat := 42 in f
     let binder = mk_binder("f", Some(SurfaceExpr::ident("Nat")));
     let val = SurfaceExpr::nat(42);
-    let strategy = classify_recursion("f", &binder, &val);
+    let strategy = classify_recursion(
+        &clean_parser::SurfaceName::generated_path("f"),
+        &binder,
+        &val,
+    );
     assert_eq!(strategy, RecursionStrategy::NonRecursive);
 }
 
@@ -226,7 +275,11 @@ fn test_classify_structural_match_on_param() {
         )),
     );
 
-    let strategy = classify_recursion("f", &binder, &val);
+    let strategy = classify_recursion(
+        &clean_parser::SurfaceName::generated_path("f"),
+        &binder,
+        &val,
+    );
     assert_eq!(
         strategy,
         RecursionStrategy::Structural { decreasing_arg: 0 }
@@ -249,7 +302,11 @@ fn test_classify_structural_from_type() {
         )),
     );
 
-    let strategy = classify_recursion("f", &binder, &val);
+    let strategy = classify_recursion(
+        &clean_parser::SurfaceName::generated_path("f"),
+        &binder,
+        &val,
+    );
     // Should detect structural from type even without match
     assert_eq!(
         strategy,
@@ -273,7 +330,11 @@ fn test_classify_wf_recursion() {
         )),
     );
 
-    let strategy = classify_recursion("f", &binder, &val);
+    let strategy = classify_recursion(
+        &clean_parser::SurfaceName::generated_path("f"),
+        &binder,
+        &val,
+    );
     assert_eq!(strategy, RecursionStrategy::WellFounded);
 }
 
@@ -295,7 +356,11 @@ fn test_classify_structural_list() {
         )),
     );
 
-    let strategy = classify_recursion("f", &binder, &val);
+    let strategy = classify_recursion(
+        &clean_parser::SurfaceName::generated_path("f"),
+        &binder,
+        &val,
+    );
     assert_eq!(
         strategy,
         RecursionStrategy::Structural { decreasing_arg: 0 }
@@ -311,7 +376,11 @@ fn test_classify_no_type_annotation() {
     );
     let binder = mk_binder("f", None);
 
-    let strategy = classify_recursion("f", &binder, &val);
+    let strategy = classify_recursion(
+        &clean_parser::SurfaceName::generated_path("f"),
+        &binder,
+        &val,
+    );
     // Without a type annotation or match, falls back to WF
     assert_eq!(strategy, RecursionStrategy::WellFounded);
 }
@@ -424,7 +493,10 @@ fn test_extract_param_name_first() {
         vec![SurfaceBinder::explicit("n", SurfaceExpr::ident("Nat"))],
         SurfaceExpr::ident("body"),
     );
-    assert_eq!(extract_param_name(&val, 0), Some("n".to_string()));
+    assert_eq!(
+        extract_param_name(&val, 0),
+        Some(clean_parser::SurfaceName::generated_path("n"))
+    );
 }
 
 #[test]
@@ -437,7 +509,10 @@ fn test_extract_param_name_second() {
         ],
         SurfaceExpr::ident("body"),
     );
-    assert_eq!(extract_param_name(&val, 1), Some("b".to_string()));
+    assert_eq!(
+        extract_param_name(&val, 1),
+        Some(clean_parser::SurfaceName::generated_path("b"))
+    );
 }
 
 #[test]
@@ -500,8 +575,10 @@ fn test_mutual_refs_none() {
     // f := 1, g := 2 — no references to each other
     let f_val = SurfaceExpr::nat(1);
     let g_val = SurfaceExpr::nat(2);
-    let bindings: Vec<(String, &SurfaceExpr)> =
-        vec![("f".to_string(), &f_val), ("g".to_string(), &g_val)];
+    let bindings: Vec<(clean_parser::SurfaceName, &SurfaceExpr)> = vec![
+        (clean_parser::SurfaceName::generated_path("f"), &f_val),
+        (clean_parser::SurfaceName::generated_path("g"), &g_val),
+    ];
     let deps = find_mutual_references(&bindings);
     assert!(deps[0].is_empty());
     assert!(deps[1].is_empty());
@@ -512,8 +589,10 @@ fn test_mutual_refs_self_only() {
     // f := f x, g := 2
     let f_val = SurfaceExpr::app(SurfaceExpr::ident("f"), vec![SurfaceExpr::ident("x")]);
     let g_val = SurfaceExpr::nat(2);
-    let bindings: Vec<(String, &SurfaceExpr)> =
-        vec![("f".to_string(), &f_val), ("g".to_string(), &g_val)];
+    let bindings: Vec<(clean_parser::SurfaceName, &SurfaceExpr)> = vec![
+        (clean_parser::SurfaceName::generated_path("f"), &f_val),
+        (clean_parser::SurfaceName::generated_path("g"), &g_val),
+    ];
     let deps = find_mutual_references(&bindings);
     assert_eq!(deps[0], vec![0]); // f depends on f
     assert!(deps[1].is_empty());
@@ -524,8 +603,10 @@ fn test_mutual_refs_cross() {
     // f := g x, g := f x
     let f_val = SurfaceExpr::app(SurfaceExpr::ident("g"), vec![SurfaceExpr::ident("x")]);
     let g_val = SurfaceExpr::app(SurfaceExpr::ident("f"), vec![SurfaceExpr::ident("x")]);
-    let bindings: Vec<(String, &SurfaceExpr)> =
-        vec![("f".to_string(), &f_val), ("g".to_string(), &g_val)];
+    let bindings: Vec<(clean_parser::SurfaceName, &SurfaceExpr)> = vec![
+        (clean_parser::SurfaceName::generated_path("f"), &f_val),
+        (clean_parser::SurfaceName::generated_path("g"), &g_val),
+    ];
     let deps = find_mutual_references(&bindings);
     assert_eq!(deps[0], vec![1]); // f depends on g
     assert_eq!(deps[1], vec![0]); // g depends on f
@@ -537,10 +618,10 @@ fn test_mutual_refs_three_way() {
     let f_val = SurfaceExpr::app(SurfaceExpr::ident("g"), vec![SurfaceExpr::ident("x")]);
     let g_val = SurfaceExpr::app(SurfaceExpr::ident("h"), vec![SurfaceExpr::ident("x")]);
     let h_val = SurfaceExpr::app(SurfaceExpr::ident("f"), vec![SurfaceExpr::ident("x")]);
-    let bindings: Vec<(String, &SurfaceExpr)> = vec![
-        ("f".to_string(), &f_val),
-        ("g".to_string(), &g_val),
-        ("h".to_string(), &h_val),
+    let bindings: Vec<(clean_parser::SurfaceName, &SurfaceExpr)> = vec![
+        (clean_parser::SurfaceName::generated_path("f"), &f_val),
+        (clean_parser::SurfaceName::generated_path("g"), &g_val),
+        (clean_parser::SurfaceName::generated_path("h"), &h_val),
     ];
     let deps = find_mutual_references(&bindings);
     assert_eq!(deps[0], vec![1]); // f → g
@@ -581,18 +662,27 @@ fn test_elab_let_rec_with_lambda() {
 fn test_elab_let_rec_body_uses_binding() {
     // let rec f : Nat := 0 in f
     // The body should resolve f to the let binding.
-    let env = Environment::new();
+    // `Nat` MUST be in the environment, and it was not. Measured 2026-09-15:
+    // with a bare `Environment::new()` this elaboration returns
+    // `UnknownIdent("Nat")`, so the assertion below could never once have run
+    // — the test passed its whole life by skipping its own subject inside an
+    // `if let Ok(...)`. Seeding the environment is what makes the test a test.
+    let mut env = Environment::new();
+    env.init_nat().expect("init_nat");
     let surface = clean_parser::parse_expr("let rec f : Nat := 0 in f").unwrap();
     let mut ctx = crate::ElabCtx::new(&env);
     let result = ctx.elaborate(&surface);
-    // Should produce a let expression
-    if let Ok(expr) = result {
-        assert!(
-            matches!(expr.kind(), clean_kernel::ExprKind::Let(..)),
-            "expected Let expression, got {:?}",
-            expr.kind()
-        );
-    }
+    // Should produce a let expression.
+    //
+    // FAIL-CLOSED since 2026-09-15: this assertion sat inside
+    // `if let Ok(expr) = result`, so an elaboration error skipped the only
+    // check of the binding resolution this test is named for.
+    let expr = result.expect("`let rec f : Nat := 0 in f` should elaborate");
+    assert!(
+        matches!(expr.kind(), clean_kernel::ExprKind::Let(..)),
+        "expected Let expression, got {:?}",
+        expr.kind()
+    );
 }
 
 #[test]
@@ -618,7 +708,11 @@ fn test_classify_structural_second_param() {
         match_body,
     );
     let binder = mk_binder("f", None);
-    let strategy = classify_recursion("f", &binder, &val);
+    let strategy = classify_recursion(
+        &clean_parser::SurfaceName::generated_path("f"),
+        &binder,
+        &val,
+    );
     assert_eq!(
         strategy,
         RecursionStrategy::Structural { decreasing_arg: 1 }
@@ -632,7 +726,10 @@ fn test_self_ref_pi_shadowed() {
         vec![SurfaceBinder::explicit("f", SurfaceExpr::ident("Nat"))],
         SurfaceExpr::ident("f"),
     );
-    assert!(!contains_self_reference(&expr, "f"));
+    assert!(!contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
@@ -644,12 +741,18 @@ fn test_self_ref_let_rec_val() {
         Box::new(SurfaceExpr::ident("f")),
         Box::new(SurfaceExpr::ident("x")),
     );
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }
 
 #[test]
 fn test_self_ref_explicit_wrapper() {
     // @f
     let expr = SurfaceExpr::Explicit(Span::dummy(), Box::new(SurfaceExpr::ident("f")));
-    assert!(contains_self_reference(&expr, "f"));
+    assert!(contains_self_reference(
+        &expr,
+        &clean_parser::SurfaceName::generated_path("f")
+    ));
 }

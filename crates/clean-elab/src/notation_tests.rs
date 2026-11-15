@@ -8,7 +8,7 @@ use super::*;
 use clean_parser::Span;
 
 /// Helper: create a simple infix notation entry (e.g., `_ + _`).
-fn make_infix_entry(token: &str, name: &str, priority: u32) -> NotationEntry {
+fn make_infix_entry(token: &str, name: &'static str, priority: u32) -> NotationEntry {
     NotationEntry {
         name: name.to_owned(),
         pattern: NotationPattern {
@@ -18,14 +18,17 @@ fn make_infix_entry(token: &str, name: &str, priority: u32) -> NotationEntry {
                 NotationPatternItem::Placeholder,
             ],
         },
-        expansion: SurfaceExpr::Ident(Span::new(0, 0), name.to_owned()),
+        expansion: SurfaceExpr::Ident(
+            Span::new(0, 0),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
         priority,
         kind: NotationKind::Infixl,
     }
 }
 
 /// Helper: create a prefix notation entry (e.g., `! _`).
-fn make_prefix_entry(token: &str, name: &str, priority: u32) -> NotationEntry {
+fn make_prefix_entry(token: &str, name: &'static str, priority: u32) -> NotationEntry {
     NotationEntry {
         name: name.to_owned(),
         pattern: NotationPattern {
@@ -34,14 +37,22 @@ fn make_prefix_entry(token: &str, name: &str, priority: u32) -> NotationEntry {
                 NotationPatternItem::Placeholder,
             ],
         },
-        expansion: SurfaceExpr::Ident(Span::new(0, 0), name.to_owned()),
+        expansion: SurfaceExpr::Ident(
+            Span::new(0, 0),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
         priority,
         kind: NotationKind::Prefix,
     }
 }
 
 /// Helper: create a mixfix notation entry (e.g., `⟨ _ , _ ⟩`).
-fn make_mixfix_entry(tokens: &[&str], name: &str, priority: u32, arity: usize) -> NotationEntry {
+fn make_mixfix_entry(
+    tokens: &[&str],
+    name: &'static str,
+    priority: u32,
+    arity: usize,
+) -> NotationEntry {
     let mut items = Vec::new();
     // Interleave tokens and placeholders
     for (i, &tok) in tokens.iter().enumerate() {
@@ -53,7 +64,10 @@ fn make_mixfix_entry(tokens: &[&str], name: &str, priority: u32, arity: usize) -
     NotationEntry {
         name: name.to_owned(),
         pattern: NotationPattern { items },
-        expansion: SurfaceExpr::Ident(Span::new(0, 0), name.to_owned()),
+        expansion: SurfaceExpr::Ident(
+            Span::new(0, 0),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
         priority,
         kind: NotationKind::Notation,
     }
@@ -121,7 +135,10 @@ fn test_postfix_notation() {
                 NotationPatternItem::Token("?".to_owned()),
             ],
         },
-        expansion: SurfaceExpr::Ident(Span::new(0, 0), "Decidable.decide".to_owned()),
+        expansion: SurfaceExpr::Ident(
+            Span::new(0, 0),
+            clean_parser::SurfaceName::generated_path("Decidable.decide"),
+        ),
         priority: 100,
         kind: NotationKind::Postfix,
     });

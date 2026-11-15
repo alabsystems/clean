@@ -9,10 +9,42 @@
     "switch"
   ],
   "count": 6,
-  "total": 28,
+  "total": 33,
+  "unmeasured": [
+    "alloca",
+    "assert",
+    "atomic_fetch_add_relaxed_u64_seq",
+    "atomic_fetch_add_relaxed_usize_seq",
+    "binop",
+    "borrow",
+    "call",
+    "callindirect",
+    "cast",
+    "condbr",
+    "copy",
+    "extractelement",
+    "fcmp",
+    "gep",
+    "globaladdr",
+    "icmp",
+    "insertfield",
+    "overflow",
+    "ptrdata",
+    "ptrfromparts",
+    "ptrmetadata",
+    "release",
+    "select",
+    "store",
+    "undef",
+    "unop",
+    "unreachable"
+  ],
+  "artifacts_behind_the_current_census": [
+    "data/crystal_gap2_semdiff_2026-08-20.json"
+  ],
   "provenance": {
     "derived_by": "scripts/evalir_coverage.py",
-    "rule": "covered = union of coverage.exercised over the artifacts below; measured rows only \u2014 authored-but-unminted battery rows never count. total = pinned constructed-Inst census, derived independently from both denominator sources, which must agree.",
+    "rule": "covered = union of coverage.exercised over the artifacts below; measured rows only \u2014 authored-but-unminted battery rows never count. total = pinned constructed-Inst census, derived independently from both denominator sources, which must agree. An artifact minted against a SMALLER census is honoured at its own date and named in `artifacts_behind_the_current_census`: the constructors added since cannot appear in its `exercised` list, so they land in `unmeasured` and the fraction falls. An artifact claiming a LARGER census than exists is a hard error.",
     "artifacts": [
       {
         "path": "data/crystal_gap2_semdiff_2026-08-20.json",
@@ -24,7 +56,9 @@
           "load",
           "ret",
           "switch"
-        ]
+        ],
+        "census_at_mint": 28,
+        "behind_current_census_by": 5
       }
     ],
     "denominator_sources": {

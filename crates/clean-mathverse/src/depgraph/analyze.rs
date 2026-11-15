@@ -27,7 +27,9 @@ use serde::Serialize;
 
 use clean_kernel::env::is_trust_marker;
 use clean_kernel::expr::{Expr, ExprKind};
-use clean_kernel::{is_foundational_axiom, ConstantInfo, ConstantKind, Environment, Name};
+use clean_kernel::{
+    is_canonical_foundational_constant, ConstantInfo, ConstantKind, Environment, Name,
+};
 
 /// Classification of a closure node. Drives unblock ranking — only
 /// `DomainAxiom` / `AxiomDependentTheorem` / `TrustMarker` nodes are
@@ -166,7 +168,8 @@ fn classify(env: &Environment, info: &ConstantInfo) -> NodeClass {
         ConstantKind::Axiom => {
             if is_trust_marker(&info.name) {
                 NodeClass::TrustMarker
-            } else if is_foundational_axiom(&info.name) {
+            } else if is_canonical_foundational_constant(info) {
+                // The kernel's canonical declaration — never the name alone.
                 NodeClass::FoundationalAxiom
             } else {
                 NodeClass::DomainAxiom

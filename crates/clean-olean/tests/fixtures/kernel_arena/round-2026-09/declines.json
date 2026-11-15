@@ -1,0 +1,208 @@
+{
+ "schema": "clean.kernel-arena-declines.v1",
+ "what_this_is": "The reviewed declines table of the arena battery (crates/clean-olean/tests/kernel_arena_battery.rs): the only route by which a test may end other than as the round expects. Each row names an archived test, the endings it allows besides the expected exit ('decline' = exit 2, 'timeout', 'memory-cap', and 'reject' only as a PINNED fidelity gap of a good test, with the plan item that owns it), optionally the checker build 'profiles' the allowance holds for (an unpinned row only; absent = every profile), and the review that justifies it. A wrong accept is never allowed. Adding a row is a reviewed change, recorded in docs/DECISIONS.md.",
+ "rows": [
+  {
+   "path": "bad/bugs/proj-of-subst-prop.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "profiles": [
+    "debug"
+   ],
+   "pinned": false,
+   "owner": "kernel-defensive-invariants-v4331",
+   "review": "A release build rejects it (measured 2026-10-22 at c67d50331: `PR14806Subst.observe` refused, `check_type: ExpectedSort`, R85's is_prop guard). A debug build stops first on the kernel's debug-only CIC invariant in `infer_type` (crates/clean-kernel/src/tc/infer.rs, \"type of type must be a Sort\"), a panic the checker turns into exit 2. Never an accept: before R85 a release build accepted it (2026-10-17, this battery's first run; R121)."
+  },
+  {
+   "path": "good/init-prelude.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "The Lean 4.29.1 Init the export carries has native-fold digests no reviewed world pins (crates/clean-kernel/src/env/native_fold_canon.tsv pins lean-v4.30.0-rc2's), so `Nat.add`/`Nat.pow` on literals δ-unfold instead of folding and the literal equation is refused. Measured 2026-10-17: `native_fold_verdict` is NotCanonical on the NDJSON-loaded Nat.add and Canonical on the .olean-loaded one. First refusal: `Char.ofNatAux`."
+  },
+  {
+   "path": "good/other/nat-lit-add.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "The Lean 4.29.1 Init the export carries has native-fold digests no reviewed world pins (crates/clean-kernel/src/env/native_fold_canon.tsv pins lean-v4.30.0-rc2's), so `Nat.add`/`Nat.pow` on literals δ-unfold instead of folding and the literal equation is refused. Measured 2026-10-17: `native_fold_verdict` is NotCanonical on the NDJSON-loaded Nat.add and Canonical on the .olean-loaded one. First refusal: `natAddLit`."
+  },
+  {
+   "path": "good/other/nat-lit-sub.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "The Lean 4.29.1 Init the export carries has native-fold digests no reviewed world pins (crates/clean-kernel/src/env/native_fold_canon.tsv pins lean-v4.30.0-rc2's), so `Nat.add`/`Nat.pow` on literals δ-unfold instead of folding and the literal equation is refused. Measured 2026-10-17: `native_fold_verdict` is NotCanonical on the NDJSON-loaded Nat.add and Canonical on the .olean-loaded one. First refusal: `natSubLit`."
+  },
+  {
+   "path": "good/perf/magma-list-deep-n21.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "The Lean 4.29.1 Init the export carries has native-fold digests no reviewed world pins (crates/clean-kernel/src/env/native_fold_canon.tsv pins lean-v4.30.0-rc2's), so `Nat.add`/`Nat.pow` on literals δ-unfold instead of folding and the literal equation is refused. Measured 2026-10-17: `native_fold_verdict` is NotCanonical on the NDJSON-loaded Nat.add and Canonical on the .olean-loaded one. First refusal: `Char.ofNatAux`."
+  },
+  {
+   "path": "good/perf/magma-list-deep-n36.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "The Lean 4.29.1 Init the export carries has native-fold digests no reviewed world pins (crates/clean-kernel/src/env/native_fold_canon.tsv pins lean-v4.30.0-rc2's), so `Nat.add`/`Nat.pow` on literals δ-unfold instead of folding and the literal equation is refused. Measured 2026-10-17: `native_fold_verdict` is NotCanonical on the NDJSON-loaded Nat.add and Canonical on the .olean-loaded one. First refusal: `Char.ofNatAux`."
+  },
+  {
+   "path": "good/tutorial/006_betaReduction.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "kernel-world-profile",
+   "review": "`constType` is a definition with `opaque` reducibility hints. Lean's kernel unfolds every definition (`is_delta` reads `has_value` only, v4.30.0-rc2 type_checker.cpp); Clean's lazy delta skips a definition whose hints are opaque (crates/clean-kernel/src/tc/def_eq/delta_helpers.rs `get_delta_const`), so `constType Prop (Prop → Prop) ≡ Prop → Prop` fails. The plan item owns correcting that comment and the rule."
+  },
+  {
+   "path": "good/tutorial/007_betaReduction2.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "kernel-world-profile",
+   "review": "`constType` is a definition with `opaque` reducibility hints. Lean's kernel unfolds every definition (`is_delta` reads `has_value` only, v4.30.0-rc2 type_checker.cpp); Clean's lazy delta skips a definition whose hints are opaque (crates/clean-kernel/src/tc/def_eq/delta_helpers.rs `get_delta_const`), so `constType Prop (Prop → Prop) ≡ Prop → Prop` fails. The plan item owns correcting that comment and the rule."
+  },
+  {
+   "path": "good/tutorial/055_reduceCtorParam.mk.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "unowned: R122",
+   "review": "Clean's inductive admission requires each constructor's parameters to be the block's parameter telescope syntactically (\"parameter 0 disagrees with the block's shared parameter telescope\"); Lean's kernel compares them up to definitional equality (inductive.cpp `check_constructors`), as these tests require. No plan item owns it yet (decision R122)."
+  },
+  {
+   "path": "good/tutorial/119_reduceCtorParamRefl.mk.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "unowned: R122",
+   "review": "Clean's inductive admission requires each constructor's parameters to be the block's parameter telescope syntactically (\"parameter 0 disagrees with the block's shared parameter telescope\"); Lean's kernel compares them up to definitional equality (inductive.cpp `check_constructors`), as these tests require. No plan item owns it yet (decision R122)."
+  },
+  {
+   "path": "good/tutorial/120_reduceCtorParamRefl2.mk.ndjson",
+   "allows": [
+    "reject"
+   ],
+   "pinned": true,
+   "owner": "unowned: R122",
+   "review": "Clean's inductive admission requires each constructor's parameters to be the block's parameter telescope syntactically (\"parameter 0 disagrees with the block's shared parameter telescope\"); Lean's kernel compares them up to definitional equality (inductive.cpp `check_constructors`), as these tests require. No plan item owns it yet (decision R122)."
+  },
+  {
+   "path": "good/perf/grind-ring-5.ndjson",
+   "allows": [
+    "timeout"
+   ],
+   "pinned": false,
+   "owner": "checkers-kernel-speed",
+   "review": "Over the round's 60 s timeout in a release build (measured 2026-10-17: killed at 60.0 s, 854 MB; the official kernel takes 1.8 s). A speed gap, not a finding."
+  },
+  {
+   "path": "good/perf/app-lam.ndjson",
+   "allows": [
+    "memory-cap"
+   ],
+   "pinned": false,
+   "owner": "checkers-kernel-speed",
+   "review": "Accepted by a release build, but at a 6.2 GB peak resident set (measured 2026-10-17; the official kernel peaks at 1.5 GB), above the battery's 4 GiB per-test cap. A memory gap, not a finding."
+  },
+  {
+   "path": "good/perf/fueled-chain.ndjson",
+   "allows": [
+    "decline",
+    "memory-cap"
+   ],
+   "pinned": false,
+   "owner": "checkers-kernel-speed",
+   "review": "A release build declines it (R128): the export declares `Nat.add` and `Nat.beq`, which Lean's kernel folds on literals by name, and its 4.29.1 definitions have no reviewed native-fold world (R120), so Clean would unfold what Lean folds. A debug build reaches the 4 GiB memory cap first (the replay's unfolding, unoptimized), as it did before R128. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/tutorial/015_levelComp1.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": true,
+   "owner": "R125 (lane N)",
+   "review": "Declined (`level-rewritten-to-zero`): `{\"il\":2,\"imax\":[1,0]}` (`imax 1 0`) is built as `zero` by the kernel's level constructors, while Lean reads the record as written, a level that is not `zero` (not a proposition's sort). Lean accepts the test; Clean's replay admits every declaration, over the level as built; the export is declined because Lean reads the level as written (R125). Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/tutorial/016_levelComp2.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": true,
+   "owner": "R125 (lane N)",
+   "review": "Declined (`level-rewrite-lean-visible`): `imax 0 1` is built as `1`, a rewrite through `imax`, which Lean's normalization does not identify in every context (R125). Lean accepts the test; Clean's replay admits every declaration over the level as built, and the export is declined. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/tutorial/017_levelComp3.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": true,
+   "owner": "R125 (lane N)",
+   "review": "Declined (`level-rewrite-lean-visible`): `imax 2 1` is built as `2`, a rewrite through `imax`, which Lean's normalization does not identify in every context (R125). Lean accepts the test; Clean's replay admits every declaration over the level as built, and the export is declined. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/other/nat-lit-ble.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": false,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "Declined (R128): the export declares `Nat.ble`, which Lean's kernel folds on literals by name, and its 4.29.1 definition has no reviewed native-fold world (R120), so Clean would unfold what Lean folds. Clean's replay admits every declaration; the decline is the export verdict. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/perf/beta-ladder.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": false,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "Declined (R128): the export declares `Nat.add`, which Lean's kernel folds on literals by name, and its 4.29.1 definition has no reviewed native-fold world (R120). Clean's replay admits every declaration; the decline is the export verdict. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/perf/let-ladder.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": false,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "Declined (R128): the export declares `Nat.add`, which Lean's kernel folds on literals by name, and its 4.29.1 definition has no reviewed native-fold world (R120). Clean's replay admits every declaration; the decline is the export verdict. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/perf/magma-list-pair-n7.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": false,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "Declined (R128): the export declares `Nat.add`, `Nat.beq`, `Nat.ble`, `Nat.mod`, `Nat.mul` and `Nat.sub`, which Lean's kernel folds on literals by name, and their 4.29.1 definitions have no reviewed native-fold world (R120). Clean's replay admits every declaration; the decline is the export verdict. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  },
+  {
+   "path": "good/perf/magma-list-pair-n21.ndjson",
+   "allows": [
+    "decline"
+   ],
+   "pinned": false,
+   "owner": "kernel-extension-authority-worlds",
+   "review": "Declined (R128): the export declares `Nat.add`, `Nat.beq`, `Nat.ble`, `Nat.mod`, `Nat.mul` and `Nat.sub`, which Lean's kernel folds on literals by name, and their 4.29.1 definitions have no reviewed native-fold world (R120). Clean's replay admits every declaration; the decline is the export verdict. Measured 2026-10-23 at 4573ed108 (debug and release)."
+  }
+ ]
+}

@@ -87,9 +87,9 @@ pub(super) fn emit_c_float64(f: f64) -> String {
 
 /// Emit a C string literal that preserves the input's UTF-8 bytes.
 ///
-/// The C runtime takes `const char*` and copies bytes with `strlen`/`memcpy`,
-/// so non-ASCII characters must be emitted as byte escapes rather than Rust's
-/// `\u{...}` debug syntax.
+/// The sized C constructor copies these bytes with their explicit UTF-8 length.
+/// Non-ASCII characters use byte escapes rather than Rust's `\u{...}` syntax;
+/// fixed-width octal escapes also keep a NUL before a digit unambiguous.
 pub(super) fn emit_c_string_literal(s: &str) -> String {
     let mut result = String::from("\"");
     for &byte in s.as_bytes() {

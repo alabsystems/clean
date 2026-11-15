@@ -1,0 +1,6 @@
+# Independent syntactic helpers over the existing labelled-term specification.
+# Compile each prerequisite in its own dependency order, followed by this lane.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec
+theory kcheck_sort_bounds

@@ -95,29 +95,53 @@ fn test_translate_nat_mod_total_semantics() {
 }
 
 #[test]
-fn test_translate_int_div_plain() {
+fn test_translate_int_ediv_is_total() {
     let mut t = SmtLibTranslator::new();
-    // Int.div has standard SMT-LIB semantics (undefined for div by 0)
+    // Lean's Euclidean quotient is total, unlike unconstrained SMT div-by-zero.
     let div_expr = Expr::app(
         Expr::app(
-            Expr::const_(Name::from_string("Int.div"), vec![]),
+            Expr::const_(Name::from_string("Int.ediv"), vec![]),
             Expr::nat_lit(10),
         ),
         Expr::nat_lit(3),
     );
-    assert_eq!(t.translate_expr(&div_expr).unwrap(), "(div 10 3)");
+    assert_eq!(
+        t.translate_expr(&div_expr).unwrap(),
+        "(ite (= 3 0) 0 (div 10 3))"
+    );
 }
 
 #[test]
-fn test_translate_int_mod_plain() {
+fn test_translate_int_emod_preserves_the_dividend_at_zero() {
     let mut t = SmtLibTranslator::new();
-    // Int.mod has standard SMT-LIB semantics
+    // Lean's Euclidean remainder preserves the dividend for divisor zero.
     let mod_expr = Expr::app(
         Expr::app(
-            Expr::const_(Name::from_string("Int.mod"), vec![]),
+            Expr::const_(Name::from_string("Int.emod"), vec![]),
             Expr::nat_lit(10),
         ),
         Expr::nat_lit(3),
     );
-    assert_eq!(t.translate_expr(&mod_expr).unwrap(), "(mod 10 3)");
+    assert_eq!(
+        t.translate_expr(&mod_expr).unwrap(),
+        "(ite (= 3 0) 10 (mod 10 3))"
+    );
+}
+
+#[test]
+fn test_explicit_t_rounding_uses_sign_magnitudes() {
+    let mut t = SmtLibTranslator::new();
+    let expr = Expr::apps(
+        Expr::const_(Name::from_string("Int.div"), vec![]),
+        [Expr::nat_lit(7), Expr::nat_lit(2)],
+    );
+    let text = t
+        .translate_expr(&expr)
+        .expect("translate explicit T-division");
+    assert!(text.starts_with("(ite (= 2 0) 0 "), "{text}");
+    assert!(
+        text.contains("(div (ite (< 7 0) (- 7) 7) (ite (< 2 0) (- 2) 2))"),
+        "{text}"
+    );
+    assert_ne!(text, "(ite (= 2 0) 0 (div 7 2))");
 }

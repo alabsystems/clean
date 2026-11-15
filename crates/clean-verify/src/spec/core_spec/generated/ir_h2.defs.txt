@@ -1,4 +1,4 @@
-def ir_h2_tmode : IRTy := IRTy.enum_ ir_d13
+def ir_h2_tmode : IRTy := IRTy.enum_ 17
 def ir_h2_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd3 (ir_nd1 (IRInst.load ir_h2_tmode ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.extractfield (IRTy.uint_ ir_d8) ir_d2 ir_d0) ir_d3) (ir_nd (IRInst.switch ir_d3 ir_d3 ir_nl0 (ir_sc ir_d2 ir_d1 (ir_sc ir_d3 ir_d2 ir_sc0)) Bool.false)))
 def ir_h2_b1 : IRBlock := IRBlock.mk ir_d1 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.true)) ir_d4) (ir_nd (IRInst.br ir_d4 (ir_nl1 ir_d4))))
 def ir_h2_b2 : IRBlock := IRBlock.mk ir_d2 ir_nl0 (ir_bd2 (ir_nd1 (IRInst.const_ IRTy.bool_ (IRConst.bool_ Bool.true)) ir_d5) (ir_nd (IRInst.br ir_d4 (ir_nl1 ir_d5))))

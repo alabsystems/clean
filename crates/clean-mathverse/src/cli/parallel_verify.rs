@@ -35,6 +35,13 @@
 //!   each target proof is checked against those declared dep types, exactly as
 //!   the sequential path checks each proof against the env built from earlier
 //!   (independently-checked) decls. This is the established closure-trust model.
+//! * The base holds each target module's OWN declarations too, so ORDER is
+//!   enforced here, not by the base: a module's constants are verified in
+//!   Lean's replay order (`parallel_verify_replay.rs`, porting
+//!   `Lean/Replay.lean`), and a constant that mentions itself, sits on a
+//!   dependency cycle, is unsafe or partial, or uses a module-local constant
+//!   that was not admitted first is refused before the kernel runs. The base
+//!   carries `KernelTheory::Lean` (Lean's reducer theory and safe context).
 //! * A constant is stamped `KernelVerified` ONLY when `check_decl_readonly`
 //!   returned `Ok` — i.e. the kernel's `check_type` accepted the value. The
 //!   heuristic converter never mints `KernelVerified` (the soundness floor is
@@ -44,34 +51,40 @@
 //!   never shared. Only the immutable `&Environment` is shared, and
 //!   `Environment` is `Sync`.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Mutex;
 
 use std::sync::Arc;
 
-use clean_kernel::env::{Declaration, ProofValueElision};
-use clean_kernel::{EnvError, Environment, KernelTypeError, Name};
+use clean_kernel::env::{KernelTheory, ProofValueElision};
+use clean_kernel::{Environment, Name};
 use clean_olean::verify_batch::{build_dependency_order, module_name_from_path};
 use clean_olean::{
-    default_search_paths, load_module_with_deps_shared_with_policy, ImportKinds, OleanImportPolicy,
+    default_search_paths, load_module_with_deps_shared_with_policy, ImportKinds, LeanWorldScope,
+    OleanImportPolicy,
 };
 use hashbrown::HashSet;
 use rayon::prelude::*;
 
 use crate::cli::closure_load::{
-    build_closure_shards_for_targets, lazy_closure_missing_names,
+    build_closure_shards_for_targets, closure_load_error, lazy_closure_missing_names,
     verify_closure_shards_against_oleans,
 };
 use crate::cli::import_cache::{compute_closure_hashes, ImportCache};
 use crate::cli::MathverseCliError;
 use crate::closure_source::ShardConstantSource;
-use crate::inductive_replay::reconstruct_constant;
 use crate::lean4::olean::olean_bridge::convert_olean_to_mathverse;
 use crate::shard::ShardReader;
-use crate::types::DeclKind;
 use crate::verify::incremental::IncrementalVerifyReport;
+
+#[path = "parallel_verify_replay.rs"]
+mod replay;
+use replay::{record_declared, record_shadowed, ModuleDeclaredNames, ShadowedByModule};
+
+#[path = "parallel_verify_cross.rs"]
+pub(super) mod cross;
 
 /// Per-module verdict accumulator produced by one rayon worker. Merged into a
 /// single [`IncrementalVerifyReport`] after the parallel pass joins.
@@ -101,6 +114,12 @@ pub(crate) struct ModuleVerdicts {
     /// 0 when escalation is disabled. Summed across modules by the caller.
     #[serde(default)]
     heartbeat_escalated_recovered: usize,
+    /// Value-bearing `unsafe`/`partial` constants: `Lean.Environment.replay`
+    /// never admits them, so they are neither KernelVerified nor failures —
+    /// the sequential lane's `UnsafeAccepted` bucket. A constant that uses one
+    /// is refused.
+    #[serde(default)]
+    unsafe_accepted: usize,
 }
 
 /// Output of the parallel convert+verify step.
@@ -215,18 +234,34 @@ fn build_base_env(
     oleans: &[PathBuf],
     root: &Path,
     elision: ProofValueElision,
-) -> Result<(Environment, usize, usize, usize), MathverseCliError> {
+) -> Result<
+    (
+        Environment,
+        usize,
+        usize,
+        usize,
+        ShadowedByModule,
+        ModuleDeclaredNames,
+    ),
+    MathverseCliError,
+> {
     // Search paths: closure root first (so the target modules and their Mathlib
     // siblings resolve), then sibling lake packages, then stdlib/toolchain.
     let search_paths = build_paragon_search_paths(root);
 
-    // Import-verification prelude: suppress the kernel's lossy hand-rolled
-    // `extends`-structure stubs so the real Mathlib structures resolve (same as
-    // the closure loader). The OpaqueAndTheorem elision is applied AT
-    // REGISTRATION so peak RSS is bounded, not just steady-state.
-    let mut env = Environment::try_with_prelude_for_import()
-        .map_err(|e| MathverseCliError::StampPrelude(e.to_string()))?;
-    let import_policy = OleanImportPolicy::default().with_proof_elision(elision);
+    // Lean's replay environment: the targets and their `.olean` closure, and
+    // nothing else (`Environment::for_lean_replay`; Clean's import prelude used
+    // to be seeded here, and the loader keeps the first declaration of a name).
+    // The OpaqueAndTheorem elision is applied AT REGISTRATION so peak RSS is
+    // bounded, not just steady-state.
+    let mut env = Environment::for_lean_replay();
+    let mut shadowed = ShadowedByModule::new();
+    let mut declared = ModuleDeclaredNames::new();
+    // A re-check lane over Lean's world: a refused completion of an artifact's
+    // own stub refuses the import (R131), never a trusted axiom.
+    let import_policy = OleanImportPolicy::default()
+        .with_proof_elision(elision)
+        .refusing_refused_completions();
 
     // One shared visited set across every target: the union closure (targets +
     // deps) is loaded once. Modules an earlier target already pulled in are
@@ -244,11 +279,10 @@ fn build_base_env(
             &mut visited,
             import_policy,
         )
-        .map_err(|e| MathverseCliError::StampClosure {
-            module: module.clone(),
-            reason: format!("base load: {e}"),
-        })?;
+        .map_err(|e| closure_load_error(&module, &e, format!("base load: {e}")))?;
         for summary in summaries {
+            record_shadowed(&mut shadowed, &summary);
+            record_declared(&mut declared, &summary);
             let name = summary
                 .module_name
                 .clone()
@@ -269,7 +303,14 @@ fn build_base_env(
     env.elide_proof_values(elision);
     let elided = env.count_elided_proof_values(elision).total_elided();
 
-    Ok((env, loaded_modules.len(), base_constants, elided))
+    Ok((
+        env,
+        loaded_modules.len(),
+        base_constants,
+        elided,
+        shadowed,
+        declared,
+    ))
 }
 
 /// The demand-paged PARAGON base: a minimal eager `Environment` (the
@@ -287,9 +328,20 @@ fn build_base_env(
 /// freshness it would re-accumulate the whole closure — see
 /// [`ShardConstantSource::fresh_view`]).
 struct LazyBase {
-    /// Minimal eager env: prelude + inductive families ONLY. NO source installed
-    /// — the caller installs a fresh `source` view per wave.
+    /// Minimal eager env: Lean's replay base + inductive families ONLY. NO
+    /// source installed — the caller installs a fresh `source` view per wave.
     base_env: Environment,
+    /// Declarations the eager legs dropped as shadowed (see
+    /// [`ShadowedByModule`]). The definitional kinds are served by name from the
+    /// shards and never pass the loader's dedup, so a closure in which two
+    /// modules declare one name never gets this base at all (step 3c of
+    /// [`build_lazy_base`]); the eager base refuses the redeclaration instead.
+    shadowed: ShadowedByModule,
+    /// Every kernel name each loaded module's parts declared (see
+    /// [`ModuleDeclaredNames`]): the per-module replay marks a declared name
+    /// that is not a shard row unreplayed, so a server-only family cannot be a
+    /// trusted import (finding B1).
+    declared: ModuleDeclaredNames,
     /// The shared template source. The caller calls `fresh_view()` on it per
     /// wave; all views share its (immutable, mmap-backed) readers + index.
     source: Arc<ShardConstantSource>,
@@ -414,14 +466,17 @@ fn build_lazy_base(
     //      from the SAME eager `.olean` path the fully-eager base uses, so the
     //      served `ConstantInfo` is byte-identical — sound, and it lets the
     //      demand-paged base engage for the other ~99.7% of the closure.
-    let mut base_env = Environment::try_with_prelude_for_import()
-        .map_err(|e| MathverseCliError::StampPrelude(e.to_string()))?;
+    let mut base_env = Environment::for_lean_replay();
+    let mut shadowed = ShadowedByModule::new();
+    let mut declared = ModuleDeclaredNames::new();
     let inductive_policy = OleanImportPolicy::default()
         .with_proof_elision(elision)
         .with_import_kinds(ImportKinds::InductiveFamiliesOnly);
     // The skipped-module fallback uses elision too (keep proof VALUES bounded),
     // but loads ALL kinds (default import-kinds) so their definitions are present.
-    let full_policy = OleanImportPolicy::default().with_proof_elision(elision);
+    let full_policy = OleanImportPolicy::default()
+        .with_proof_elision(elision)
+        .refusing_refused_completions();
 
     let mut loaded_modules: BTreeSet<String> = BTreeSet::new();
     let mut base_constants = 0usize;
@@ -447,7 +502,9 @@ fn build_lazy_base(
                            base_env: &mut Environment,
                            visited_b: &mut HashSet<String>,
                            loaded_modules: &mut BTreeSet<String>,
-                           base_constants: &mut usize| {
+                           base_constants: &mut usize,
+                           shadowed: &mut ShadowedByModule,
+                           declared: &mut ModuleDeclaredNames| {
         match load_module_with_deps_shared_with_policy(
             base_env,
             module,
@@ -457,6 +514,8 @@ fn build_lazy_base(
         ) {
             Ok(summaries) => {
                 for summary in summaries {
+                    record_shadowed(shadowed, &summary);
+                    record_declared(declared, &summary);
                     let name = summary
                         .module_name
                         .clone()
@@ -485,6 +544,8 @@ fn build_lazy_base(
             &mut visited_b,
             &mut loaded_modules,
             &mut base_constants,
+            &mut shadowed,
+            &mut declared,
         );
     }
 
@@ -503,11 +564,10 @@ fn build_lazy_base(
             &mut visited_a,
             inductive_policy,
         )
-        .map_err(|e| MathverseCliError::StampClosure {
-            module: module.clone(),
-            reason: format!("lazy base inductive load: {e}"),
-        })?;
+        .map_err(|e| closure_load_error(&module, &e, format!("lazy base inductive load: {e}")))?;
         for summary in summaries {
+            record_shadowed(&mut shadowed, &summary);
+            record_declared(&mut declared, &summary);
             let name = summary
                 .module_name
                 .clone()
@@ -545,7 +605,15 @@ fn build_lazy_base(
     // blake3 + per-const recon_digest + declared-name subset), so serving it is
     // byte-identical to the eager path — the loader stays a search accelerator,
     // NOT TCB (the kernel still re-checks every candidate).
-    let (any_v3_bound, verified_shards) = verify_closure_shards_against_oleans(&mut source, root);
+    //
+    // A shard is servable only when its source `.olean` is of the base's Lean
+    // world (docs/DECISIONS.md R81).
+    let mut world = LeanWorldScope::of_environment(&base_env);
+    let (any_v3_bound, verified_shards) =
+        verify_closure_shards_against_oleans(&mut source, root, &mut world);
+    world
+        .bind_environment(&mut base_env)
+        .map_err(|e| closure_load_error(&shards_dir.display().to_string(), &e, e.to_string()))?;
     if !any_v3_bound {
         // No fail-closed-bound v3 shard at all (a v2 / unbound closure dir). The
         // demand-paged base cannot serve — do NOT silently eager-repair every
@@ -573,6 +641,19 @@ fn build_lazy_base(
         source.shard_count()
     );
 
+    // (3c) A name two closure modules declare. The eager base's loader records
+    // and refuses a redeclaration (`LoadSummary::shadowed_declarations`); this
+    // base never loads a lazily served constant, so it cannot, and it would
+    // serve whichever copy its index met first. Measured 2026-09-25:
+    // `CLEAN_PARAGON_LAZY_BASE=1 stamp-verified --parallel` stamped
+    // `ReplayRedeclare`'s `Nat.pred`. Such a closure falls back to the eager
+    // base (or, under `CLEAN_REQUIRE_BOUNDED=1`, is refused).
+    if let Some((name, served, other)) = replay::first_refused_collision(&source) {
+        eprintln!(
+            "stamp-verified --parallel: PARAGON closure modules `{served}` and `{other}` both declare `{name}` (a redeclaration Lean's import refuses); the demand-paged base serves one declaration per name, so it is unavailable for this run. Falling back to the fully-eager base, whose loader refuses the redeclaration (OOM bound NOT in effect)."
+        );
+        return Ok(None);
+    }
     let servable_constants = source.servable_len();
 
     // (4) Prelude-stub override (verdict parity with the eager overwrite): drop
@@ -658,6 +739,8 @@ fn build_lazy_base(
                 &mut visited_b,
                 &mut loaded_modules,
                 &mut base_constants,
+                &mut shadowed,
+                &mut declared,
             );
         }
         base_env.regenerate_missing_no_confusion();
@@ -665,6 +748,8 @@ fn build_lazy_base(
 
     Ok(Some(LazyBase {
         base_env,
+        shadowed,
+        declared,
         source: Arc::new(source),
         base_modules_loaded: loaded_modules.len(),
         base_constants,
@@ -888,15 +973,22 @@ pub(crate) fn parallel_convert_and_verify(
 
     // The eager base is built ONLY when the demand-paged base is unavailable (so
     // we never pay the ~3.65 GB resident floor on the happy path).
-    let (base, base_modules_loaded, base_constants, base_proof_values_elided): (
+    let (base, base_modules_loaded, base_constants, base_proof_values_elided, shadowed, declared): (
         BaseEnv,
         usize,
         usize,
         usize,
+        ShadowedByModule,
+        ModuleDeclaredNames,
     ) = match lazy_base {
         Some(lb) => {
             let mut base_env = lb.base_env;
             set_heartbeat(&mut base_env);
+            // Lean's kernel theory for every check, and Lean's safe context: a
+            // lazily served constant carries no safety mark, so mark every
+            // unsafe/partial name the shards record before serving.
+            base_env.set_kernel_theory(KernelTheory::Lean);
+            lb.source.mark_non_safe_in(&mut base_env);
             (
                 BaseEnv::Lazy {
                     base_env: Arc::new(base_env),
@@ -908,6 +1000,8 @@ pub(crate) fn parallel_convert_and_verify(
                 // is never resident at all (it lives in the mmap), which subsumes
                 // elision. Report 0 dropped (nothing to drop — nothing eager).
                 0,
+                lb.shadowed,
+                lb.declared,
             )
         }
         None => {
@@ -916,9 +1010,20 @@ pub(crate) fn parallel_convert_and_verify(
             // `CLEAN_REQUIRE_BOUNDED=1` the operator asserted this machine cannot
             // afford it — refuse rather than silently (or even loudly) OOM.
             require_bounded_gate(require_bounded)?;
-            let (mut base_env, m, c, elided) = build_base_env(oleans, root, elision)?;
+            let (mut base_env, m, c, elided, shadowed, declared) =
+                build_base_env(oleans, root, elision)?;
             set_heartbeat(&mut base_env);
-            (BaseEnv::Eager(Arc::new(base_env)), m, c, elided)
+            // Lean's kernel theory for every check (reducers AND Lean's safe
+            // context); the eager loader already marked unsafe/partial names.
+            base_env.set_kernel_theory(KernelTheory::Lean);
+            (
+                BaseEnv::Eager(Arc::new(base_env)),
+                m,
+                c,
+                elided,
+                shadowed,
+                declared,
+            )
         }
     };
     let phase_a_secs = phase_a_start.elapsed().as_secs_f64();
@@ -1043,6 +1148,8 @@ pub(crate) fn parallel_convert_and_verify(
                         olean,
                         shard_path,
                         &wave_base,
+                        shadowed.get(&module_name_from_path(olean, root)),
+                        declared.get(&module_name_from_path(olean, root)),
                         &closure_hashes,
                         &old_cache,
                         live_cache.as_ref(),
@@ -1085,6 +1192,7 @@ pub(crate) fn parallel_convert_and_verify(
         report.kernel_verified += v.kernel_verified;
         report.axiom_accepted += v.axiom_accepted;
         report.axiom_fallback += v.axiom_fallback;
+        report.unsafe_accepted += v.unsafe_accepted;
         report.failed += v.failed;
         report.reconstruct_failed += v.reconstruct_failed;
         report.axiom_fallback_names.extend(v.axiom_fallback_names);
@@ -1095,6 +1203,24 @@ pub(crate) fn parallel_convert_and_verify(
         // `AxiomDischarged`; `report.discharged_axiom_names` stays empty here.
         report.heartbeat_escalated_recovered += v.heartbeat_escalated_recovered;
         heuristic_kernel_verified += v.heuristic_kernel_verified;
+    }
+    // Cross-module half of the replay order (`parallel_verify_cross.rs`): a
+    // constant must not stay KernelVerified on top of another module's
+    // constant that was not admitted. Runs on every run, cache hits included,
+    // because the cached per-module verdicts are module-local by design.
+    let run_modules: Vec<cross::RunModule> = jobs_planned
+        .iter()
+        .map(|(olean, shard)| cross::RunModule {
+            olean: olean.clone(),
+            shard: shard.clone(),
+        })
+        .collect();
+    let demoted = cross::demote_across_modules(&mut report, &run_modules, &pool);
+    if demoted > 0 {
+        eprintln!(
+            "stamp-verified --parallel: replay order demoted {demoted} constant(s) that use a \
+             non-admitted constant of another module of this run"
+        );
     }
     report.elapsed_secs = start.elapsed().as_secs_f64();
 
@@ -1169,6 +1295,18 @@ fn paragon_closure_shards_dir(out_dir: &Path) -> PathBuf {
     out_dir.with_file_name(format!("{stem}.paragon_closure_shards"))
 }
 
+/// Whether PARAGON's demand-paged base can serve a run over `oleans` (the
+/// battery's handle on [`build_lazy_base`], whose result type is private).
+#[cfg(test)]
+pub(super) fn lazy_base_available(
+    oleans: &[PathBuf],
+    root: &Path,
+    out_dir: &Path,
+) -> Result<bool, MathverseCliError> {
+    build_lazy_base(oleans, root, out_dir, ProofValueElision::OpaqueAndTheorem)
+        .map(|base| base.is_some())
+}
+
 /// Default number of modules per Phase-B wave for the demand-paged base, derived
 /// from `jobs` so every worker stays busy while the lazy materialization cache is
 /// reclaimed often enough to bound RSS. Overridable via `CLEAN_PARAGON_WAVE_SIZE`
@@ -1200,6 +1338,8 @@ fn verify_one_job(
     olean: &Path,
     shard_path: &Path,
     wave_base: &Environment,
+    already_declared: Option<&BTreeMap<Name, String>>,
+    module_declared: Option<&BTreeSet<Name>>,
     closure_hashes: &HashMap<PathBuf, String>,
     old_cache: &ImportCache,
     live_cache: Option<&Mutex<LiveCache>>,
@@ -1232,7 +1372,14 @@ fn verify_one_job(
     // `verify_one_module` has already dropped this module's entire reconstructed
     // term forest by the time it returns, so purge the freed arena NOW (Track B1)
     // — before the worker picks up the next module — to keep peak RSS bounded.
-    match verify_one_module(olean, shard_path, wave_base, heartbeat_escalate) {
+    match verify_one_module(
+        olean,
+        shard_path,
+        wave_base,
+        already_declared,
+        module_declared,
+        heartbeat_escalate,
+    ) {
         Ok(verdicts) => {
             purge_freed_arena();
             converted.fetch_add(1, Ordering::Relaxed);
@@ -1263,6 +1410,8 @@ fn verify_one_module(
     olean: &Path,
     shard_path: &Path,
     base: &Environment,
+    already_declared: Option<&BTreeMap<Name, String>>,
+    module_declared: Option<&BTreeSet<Name>>,
     heartbeat_escalate: Option<u32>,
 ) -> Result<ModuleVerdicts, (String, String)> {
     let (buf, convert) = convert_olean_to_mathverse(olean)
@@ -1281,195 +1430,19 @@ fn verify_one_module(
         heuristic_kernel_verified: convert.kernel_verified_from_tc,
         ..Default::default()
     };
-
-    for constant in &reader.constants {
-        v.total += 1;
-        let Some(name) = reader.strings.get(constant.name_idx as usize) else {
-            v.reconstruct_failed += 1;
-            v.failures.push((
-                "<unnamed>".to_string(),
-                "constant name index out of bounds".to_string(),
-            ));
-            continue;
-        };
-        let decl_kind = DeclKind::try_from(constant.decl_kind).unwrap_or(DeclKind::Theorem);
-
-        match decl_kind {
-            // Inductive families (Inductive/Constructor/Recursor) and quotients
-            // are trusted members of the base env — they were registered through
-            // the kernel's checked `.olean` import path in Phase A and CANNOT be
-            // re-minted soundly from shard bytes (the shard format cannot carry
-            // recursor reduction rules losslessly). Count them as accepted
-            // trusted context, NEVER KernelVerified.
-            DeclKind::Inductive | DeclKind::Constructor | DeclKind::Recursor | DeclKind::Quot => {
-                v.axiom_accepted += 1;
-                continue;
-            }
-            // Plain axioms carry no proof term: the kernel only checks the type
-            // is well-formed, which Phase A already did on import. Accepted, not
-            // proof-checked, never KernelVerified.
-            DeclKind::Axiom => {
-                v.axiom_accepted += 1;
-                continue;
-            }
-            // Value-bearing kinds get genuinely re-checked below.
-            DeclKind::Theorem | DeclKind::Definition | DeclKind::Opaque => {}
-        }
-
-        // Reconstruct (level_params, type, value) from the shard's flat arena.
-        let rc = match reconstruct_constant(name, &reader, constant) {
-            Ok(rc) => rc,
-            Err(msg) => {
-                v.reconstruct_failed += 1;
-                v.failures
-                    .push((name.clone(), format!("reconstruct: {msg}")));
-                continue;
-            }
-        };
-
-        // A value-bearing kind with NO reconstructed value cannot be
-        // proof-checked: it is the same axiom-fallback the sequential path
-        // records (no value present), NOT a KernelVerified. Record it NAMED
-        // (2026-07-04): these are opacity artifacts — `opaque` gadgets
-        // (irreducible_def's `wrapped`), meta `register_option`/`partial def`
-        // rows — whose values the olean→shard converter deliberately elides
-        // (olean_bridge `has_value_for: Opaque => false`). A silent bare
-        // increment made `axiom_fallback` disagree with the faildump/class
-        // histogram (25 vs 13 on Mathlib/Data), which reads as a masked
-        // verification gap when it is bookkeeping.
-        let Some(value_expr) = rc.value_expr else {
-            v.axiom_fallback += 1;
-            v.axiom_fallback_names.push((
-                name.clone(),
-                format!(
-                    "no value in shard for {decl_kind:?} row (opaque/meta value                      elided at olean->shard conversion; stamped Axiomatized)"
-                ),
-            ));
-            continue;
-        };
-
-        // Match the sequential path: projection bodies are reducible so
-        // is_def_eq can unfold them. Soundness-neutral (unfold_definition gates
-        // only on Opaque, never on Reducibility — see `try_add_decl`), so this
-        // changes only the def-eq tie-break ordering, never the verdict.
-        let def_reducible = decl_kind == DeclKind::Definition
-            && clean_olean::import::is_projection_fn_body(&value_expr);
-
-        let decl = match decl_kind {
-            DeclKind::Theorem => Declaration::Theorem {
-                name: Name::from_string(name),
-                level_params: rc.level_params,
-                type_: rc.type_expr,
-                value: value_expr,
-            },
-            DeclKind::Definition => Declaration::Definition {
-                name: Name::from_string(name),
-                level_params: rc.level_params,
-                type_: rc.type_expr,
-                value: value_expr,
-                is_reducible: def_reducible,
-            },
-            DeclKind::Opaque => Declaration::Opaque {
-                name: Name::from_string(name),
-                level_params: rc.level_params,
-                type_: rc.type_expr,
-                value: value_expr,
-            },
-            _ => unreachable!("only value-bearing kinds reach here"),
-        };
-
-        // The single soundness primitive: read-only kernel check against the
-        // shared immutable base. Ok IFF the kernel accepted the value's type —
-        // the identical verdict `add_decl` mints, minus the env mutation.
-        //
-        // Tier 1: the normal (`CLEAN_KERNEL_HEARTBEAT`) cap read from the base
-        // env's options. `None` override ⇒ identical to the pre-escalation call.
-        match base.check_decl_readonly_with_heartbeat(&decl, None) {
-            Ok(()) => {
-                v.kernel_verified += 1;
-                v.kernel_verified_names.push(name.clone());
-            }
-            // TIER-2 ESCALATION — fire ONLY on a Tier-1 `HeartbeatExceeded`, and
-            // ONLY when escalation is enabled. We match the TYPED variant
-            // (`EnvError::TypeCheckFailed { source: HeartbeatExceeded, .. }`) so a
-            // `type_mismatch` / `level_mismatch` / `unknown_const` / any other
-            // rejection is NEVER escalated — those are genuine non-verifications,
-            // not resource exhaustion. Re-run the SAME `check_decl_readonly`
-            // gauntlet at the higher deterministic cap H1 against the SAME shared
-            // base (untouched: the override lives only in the per-call
-            // TypeChecker). A pass here is a genuine KernelVerified — the kernel
-            // fully checked the value, it just needed more ticks than Tier 1
-            // allowed. Still exhausting at H1 ⇒ honest `axiom_fallback` (needs
-            // > H1 ticks: a hardware/time bound on this box, NOT a soundness
-            // compromise; never accepted on timeout).
-            Err(EnvError::TypeCheckFailed {
-                source: KernelTypeError::HeartbeatExceeded { .. },
-                ..
-            }) if heartbeat_escalate.is_some() => {
-                match base.check_decl_readonly_with_heartbeat(&decl, heartbeat_escalate) {
-                    Ok(()) => {
-                        v.kernel_verified += 1;
-                        v.kernel_verified_names.push(name.clone());
-                        v.heartbeat_escalated_recovered += 1;
-                    }
-                    Err(e) => {
-                        // Genuinely exceeds the escalated cap (or, vanishingly,
-                        // a different error surfaced under the higher cap):
-                        // honest fallback, NEVER KernelVerified on timeout.
-                        v.axiom_fallback += 1;
-                        v.axiom_fallback_names.push((name.clone(), e.to_string()));
-                    }
-                }
-            }
-            Err(e) => {
-                // A value the kernel REJECTED: the sequential path records this
-                // as an axiom_fallback masking a failed proof. PARAGON never
-                // mutates the base, so there is nothing to fall back to — record
-                // it identically (masked failure), NOT as KernelVerified.
-                v.axiom_fallback += 1;
-                // DIAGNOSTIC: surface the heartbeat profiler breakdown (present
-                // when CLEAN_PROFILE_HEARTBEATS enabled it upstream). Cold path.
-                if let EnvError::TypeCheckFailed {
-                    source:
-                        KernelTypeError::HeartbeatExceeded {
-                            profile: Some(p), ..
-                        },
-                    ..
-                } = &e
-                {
-                    eprintln!("=== HEARTBEAT PROFILE: {name} ===\n{p}");
-                }
-                v.axiom_fallback_names.push((name.clone(), e.to_string()));
-            }
-        }
-
-        // Track B1, WITHIN-module cadence (extends the per-module purge below to a
-        // bounded intra-module batch). Each `check_decl_readonly` allocates a
-        // forest of transient def-eq / WHNF scratch terms that are freed when the
-        // borrow ends, but with the default allocator those pages stay in the
-        // malloc arena, so a DENSE module's RSS ratchets toward the SUM of every
-        // constant's transient peak rather than the max of one. Decommitting the
-        // now-free segments every `PURGE_EVERY` constants lets a worker reuse one
-        // batch's pages for the next instead of ratcheting — bounding the
-        // intra-module high-water-mark on the long dense tail.
-        //
-        // SCOPE / honesty: this is the only verdict-neutral lever available in the
-        // import path. It is a NO-OP without the `mimalloc` feature, and even with
-        // it the dominant dense-module peak is the kernel's TYPE-CHECK working set
-        // (e.g. ~14 GB on `CategoryTheory/Limits/Cones`, whose heaviest single
-        // constant is only a ~21k-node sub-DAG ≈ a few MB reconstructed), NOT the
-        // reconstructed-`Expr` table (~122k nodes, tens of MB). So this trims the
-        // allocator high-water-mark but cannot move the kernel-bound peak; the
-        // dense tail is a kernel-check bound, not a reconstruction bound. Purely an
-        // allocator hint — it never frees a live allocation, never touches the
-        // kernel / `is_def_eq` / any verdict, so the KernelVerified set is
-        // unchanged.
-        const PURGE_EVERY: usize = 64;
-        if v.total.is_multiple_of(PURGE_EVERY) {
-            purge_freed_arena();
-        }
-    }
-
+    // Every constant, in Lean's replay order (`parallel_verify_replay.rs`): a
+    // value-bearing constant earns `KernelVerified` only when its own
+    // `check_decl_readonly` passed AND every module-local constant it uses was
+    // admitted before it. `check_decl_readonly` stays the single soundness
+    // primitive; Track B1's intra-module arena purge runs inside the loop.
+    replay::verify_module_constants(
+        &reader,
+        base,
+        already_declared,
+        module_declared,
+        heartbeat_escalate,
+        &mut v,
+    );
     Ok(v)
 }
 
@@ -1558,6 +1531,9 @@ fn unique_shard_path(out_dir: &Path, olean: &Path, used: &mut BTreeSet<String>) 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::inductive_replay::reconstruct_constant;
+    use crate::types::DeclKind;
+    use clean_kernel::env::Declaration;
     use clean_kernel::expr::Expr;
 
     /// TEMP DIAGNOSTIC (residual-to-zero campaign): faithful single-decl replay
@@ -1584,7 +1560,7 @@ mod tests {
         let root = PathBuf::from(root);
         let want: Vec<String> = consts.split(',').map(|s| s.trim().to_string()).collect();
 
-        let (base, modules, constants, _elided) = build_base_env(
+        let (base, modules, constants, _elided, _shadowed, _declared) = build_base_env(
             std::slice::from_ref(&olean),
             &root,
             ProofValueElision::OpaqueAndTheorem,

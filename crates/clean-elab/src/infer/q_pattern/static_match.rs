@@ -12,7 +12,7 @@ use super::{extract::QPatternMatchResult, q_match_pattern_expr};
 use crate::stack_safe;
 use crate::unify::{MetaState, Unifier, UnifyResult};
 use clean_kernel::{Expr, ExprKind, FVarId, Name};
-use clean_parser::{QAntiquotContent, SurfaceExpr, SurfacePattern};
+use clean_parser::{QAntiquotContent, SurfaceExpr, SurfaceName, SurfacePattern};
 use std::collections::HashMap;
 
 impl<'a> ElabCtx<'a> {
@@ -23,7 +23,7 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn elaborate_q_pattern_with_mvars(
         &mut self,
         pattern: &SurfaceExpr,
-    ) -> Result<(Expr, HashMap<String, FVarId>), ElabError> {
+    ) -> Result<(Expr, HashMap<SurfaceName, FVarId>), ElabError> {
         let mut mvar_map = HashMap::new();
         let expr = self.elaborate_q_pattern_inner(pattern, &mut mvar_map)?;
         Ok((expr, mvar_map))
@@ -33,7 +33,7 @@ impl<'a> ElabCtx<'a> {
     fn elaborate_q_pattern_inner(
         &mut self,
         pattern: &SurfaceExpr,
-        mvar_map: &mut HashMap<String, FVarId>,
+        mvar_map: &mut HashMap<SurfaceName, FVarId>,
     ) -> Result<Expr, ElabError> {
         stack_safe(|| match pattern {
             SurfaceExpr::QAntiquot { content, .. } => {
@@ -282,8 +282,7 @@ impl<'a> ElabCtx<'a> {
                 if let Some(result) = match_result {
                     let mut alias_fvars = Vec::new();
                     for alias in &aliases {
-                        alias_fvars
-                            .push(self.push_local((*alias).to_string(), scrutinee_ty.clone()));
+                        alias_fvars.push(self.push_local((*alias).clone(), scrutinee_ty.clone()));
                     }
 
                     for (name, _val, ty) in &result.bindings {
@@ -305,7 +304,7 @@ impl<'a> ElabCtx<'a> {
                     let mut result_expr = body;
                     for (binding_name, val, ty) in result.bindings.into_iter().rev() {
                         result_expr = Expr::let_named(
-                            Name::from_string(&binding_name),
+                            binding_name.name().clone(),
                             ty,
                             val,
                             result_expr,
@@ -342,7 +341,7 @@ impl<'a> ElabCtx<'a> {
                     self.pop_local();
                     let body_abs = body.abstract_fvar(fvar);
                     return Ok(Expr::let_named(
-                        Name::from_string(name),
+                        name.name().clone(),
                         scrutinee_ty.clone(),
                         scrutinee.clone(),
                         body_abs,
@@ -352,8 +351,8 @@ impl<'a> ElabCtx<'a> {
 
                 _ => {
                     return Err(ElabError::NotImplemented(format!(
-                        "q-match with non-q pattern: {:?}",
-                        arm.pattern
+                        "q-match with non-q pattern: {}",
+                        crate::error_render::pattern(&arm.pattern)
                     )));
                 }
             }
@@ -368,9 +367,10 @@ impl<'a> ElabCtx<'a> {
             Err(ElabError::TypeMismatch {
                 expected: format!("scrutinee to match one of: {}", tried_patterns.join(", ")),
                 actual: format!(
-                    "scrutinee {:?} of type {:?} did not match any q-pattern. \
+                    "scrutinee {} of type {} did not match any q-pattern. \
                     Consider adding a wildcard pattern `| _ => ...`",
-                    scrutinee, scrutinee_ty
+                    crate::error_render::term(scrutinee),
+                    crate::error_render::term(scrutinee_ty)
                 ),
             })
         }

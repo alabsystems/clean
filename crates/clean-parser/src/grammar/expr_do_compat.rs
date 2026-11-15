@@ -34,7 +34,7 @@ impl Parser {
             TokenKind::Ident(_) => self.ident()?,
             TokenKind::Underscore => {
                 self.advance();
-                "_".to_string()
+                SurfaceName::generated_path("_")
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -54,12 +54,16 @@ impl Parser {
             None
         };
 
-        Ok(SurfaceBinder::new(name, ty, SurfaceBinderInfo::Explicit))
+        Ok(SurfaceBinder::new_typed(
+            name,
+            ty,
+            SurfaceBinderInfo::Explicit,
+        ))
     }
 
     /// Parse `have h : P := proof` inside a do-block.
     ///
-    /// This is a pure local declaration, so it lowers onto `DoElem::Let`.
+    /// Keep its opaque origin distinct from a genuine `DoElem::Let`.
     pub(super) fn parse_do_have(&mut self, start_span: Span) -> Result<DoElem, ParseError> {
         let (name, params) = if matches!(
             self.current_kind(),
@@ -69,13 +73,16 @@ impl Parser {
                 TokenKind::Ident(_) => self.ident()?,
                 TokenKind::Underscore => {
                     self.advance();
-                    "_".to_string()
+                    SurfaceName::generated_path("_")
                 }
                 _ => unreachable!("guarded by matches!"),
             };
             (name, self.optional_binders()?)
         } else {
-            ("_h".to_string(), Vec::new())
+            // Anonymous `have : P := …` binds `this`, as the term `have` does
+            // (Lean 4). It used to bind `_h`, an ordinary identifier, so a
+            // later reference to a global `_h` read the binder instead.
+            (SurfaceName::generated_path("this"), Vec::new())
         };
         let mut ty = if self.eat(&TokenKind::Colon) {
             Some(self.expr()?)
@@ -92,8 +99,8 @@ impl Parser {
             val = SurfaceExpr::Lambda(val_span, params, Box::new(val));
         }
         let span = start_span.merge(val.span());
-        let binder = SurfaceBinder::new(name, ty, SurfaceBinderInfo::Explicit);
-        Ok(DoElem::Let(span, binder, Box::new(val)))
+        let binder = SurfaceBinder::new_typed(name, ty, SurfaceBinderInfo::Explicit);
+        Ok(DoElem::Have(span, binder, Box::new(val)))
     }
 
     /// Parse `let rec f args := body [and g args := body]*` inside a do-block.
@@ -150,7 +157,7 @@ impl Parser {
             val = SurfaceExpr::Lambda(val_span, params, Box::new(val));
         }
 
-        let binder = SurfaceBinder::new(name, ty, SurfaceBinderInfo::Explicit);
+        let binder = SurfaceBinder::new_typed(name, ty, SurfaceBinderInfo::Explicit);
         Ok((binder, Box::new(val)))
     }
 
@@ -167,7 +174,10 @@ impl Parser {
         let span = start_span.merge(cond.span());
         let expr = SurfaceExpr::App(
             span,
-            Box::new(SurfaceExpr::Ident(start_span, name.to_string())),
+            Box::new(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path(name),
+            )),
             vec![SurfaceArg::positional(cond)],
         );
         Ok(DoElem::Expr(span, Box::new(expr)))
@@ -255,7 +265,7 @@ impl Parser {
 
         self.expect(&TokenKind::LParen)?;
         let meta_name = self.ident()?;
-        if meta_name != "meta" {
+        if !meta_name.is_unescaped_component("meta") {
             return Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
                 col: self.current_span().start,
@@ -264,7 +274,7 @@ impl Parser {
         }
         self.expect(&TokenKind::ColonEq)?;
         let false_name = self.ident()?;
-        if false_name != "false" {
+        if !false_name.is_unescaped_component("false") {
             return Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
                 col: self.current_span().start,

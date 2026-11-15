@@ -12,6 +12,66 @@ use crate::value::{ProofId, ProofTag};
 use crate::value::FuncId;
 
 #[test]
+fn streamed_domain_sha256_is_byte_exact_for_every_chunking() {
+    let domain = "trust_ir.test.streamed-domain.v1";
+    let payload = b"one canonical payload split many ways";
+    let expected = ProofDigest::sha256_domain(domain, payload);
+
+    for split in 0..=payload.len() {
+        let mut stream = ProofDigest::sha256_domain_stream(domain, payload.len() as u64);
+        stream.update(&payload[..split]).expect("first chunk");
+        stream.update(&[]).expect("empty chunk");
+        stream.update(&payload[split..]).expect("second chunk");
+        assert_eq!(stream.written(), payload.len() as u64);
+        assert_eq!(stream.finish().expect("exact-length finish"), expected);
+    }
+
+    let stream = ProofDigest::sha256_domain_stream(domain, 0);
+    assert_eq!(
+        stream.finish().expect("empty payload"),
+        ProofDigest::sha256_domain(domain, b"")
+    );
+}
+
+#[test]
+fn streamed_domain_sha256_fails_closed_and_recovers_after_overrun() {
+    let mut stream = ProofDigest::sha256_domain_stream("trust_ir.test.stream-overrun.v1", 3);
+    stream.update(b"ab").expect("accepted prefix");
+    assert_eq!(stream.declared_payload_len(), 3);
+    assert_eq!(stream.written(), 2);
+    assert_eq!(
+        stream.update(b"cd"),
+        Err(ProofDigestStreamError::PayloadTooLong {
+            declared: 3,
+            attempted_at_least: 4,
+        })
+    );
+    assert_eq!(
+        stream.written(),
+        2,
+        "rejected bytes must not mutate the stream"
+    );
+    stream.update(b"c").expect("corrected final byte");
+    assert_eq!(
+        stream.finish().expect("exact corrected payload"),
+        ProofDigest::sha256_domain("trust_ir.test.stream-overrun.v1", b"abc")
+    );
+}
+
+#[test]
+fn streamed_domain_sha256_rejects_incomplete_finalization() {
+    let mut stream = ProofDigest::sha256_domain_stream("trust_ir.test.stream-short.v1", 4);
+    stream.update(b"abc").expect("accepted prefix");
+    assert_eq!(
+        stream.finish(),
+        Err(ProofDigestStreamError::PayloadIncomplete {
+            declared: 4,
+            written: 3,
+        })
+    );
+}
+
+#[test]
 fn proof_annotation_memory_safety_variants() {
     let variants = [
         ProofAnnotation::InBounds,
@@ -139,6 +199,7 @@ fn proof_obligation_construction() {
         function: None,
         source: None,
         site: None,
+        spec: None,
     };
     assert_eq!(po.id.index(), 0);
     assert_eq!(po.kind, ObligationKind::MemorySafety);
@@ -157,6 +218,7 @@ fn proof_obligation_different_statuses() {
         function: None,
         source: None,
         site: None,
+        spec: None,
     };
     let discharged = ProofObligation {
         id: ProofId::new(0),
@@ -167,6 +229,7 @@ fn proof_obligation_different_statuses() {
         function: None,
         source: None,
         site: None,
+        spec: None,
     };
     assert_ne!(pending, discharged);
 }
@@ -264,6 +327,8 @@ fn proof_certificate_construction() {
         obligation: ProofId::new(0),
         prover: "ay".to_string(),
         evidence: ProofEvidence::SmtProof(vec![]),
+
+        assurance: None,
     };
     assert_eq!(cert.obligation.index(), 0);
     assert_eq!(cert.prover, "ay");
@@ -288,6 +353,7 @@ fn certificate(id: u32, prover: &str, payload: &[u8]) -> ProofCertificate {
         obligation: ProofId::new(id),
         prover: prover.to_string(),
         evidence: ProofEvidence::SmtProof(payload.to_vec()),
+        assurance: None,
     }
 }
 
@@ -580,6 +646,8 @@ fn trusted_certificate_evidence_is_explicit_not_summary_magic() {
         obligation: ProofId::new(0),
         prover: "human-review".to_string(),
         evidence: ProofEvidence::Trusted("security signoff ticket TSEC-123".to_string()),
+
+        assurance: None,
     };
     let solver = certificate(0, "ay", &[1, 2, 3]);
 
@@ -1187,6 +1255,7 @@ fn proof_obligation_clone() {
         function: None,
         source: None,
         site: None,
+        spec: None,
     };
     let cloned = po.clone();
     assert_eq!(po, cloned);
@@ -1198,6 +1267,8 @@ fn proof_certificate_clone() {
         obligation: ProofId::new(3),
         prover: "lean".to_string(),
         evidence: ProofEvidence::LeanProof("proof term".to_string()),
+
+        assurance: None,
     };
     let cloned = cert.clone();
     assert_eq!(cert, cloned);
@@ -1649,6 +1720,7 @@ fn proof_evidence_clean_cic_with_kernel_recheck() {
             "Classical.choice".to_string(),
             "Quot.sound".to_string(),
         ],
+        binding: None,
     };
     let e = ProofEvidence::CleanCic {
         term: vec![0x01],
@@ -1669,11 +1741,15 @@ fn proof_evidence_clean_cic_with_kernel_recheck() {
         obligation: ProofId::new(0),
         prover: "p".to_string(),
         evidence: e,
+
+        assurance: None,
     };
     let cert_without = ProofCertificate {
         obligation: ProofId::new(0),
         prover: "p".to_string(),
         evidence: bare,
+
+        assurance: None,
     };
     assert_ne!(
         cert_with.evidence_digest(),
@@ -1694,6 +1770,7 @@ fn proof_evidence_clean_cic_serde_roundtrip() {
             theorems: vec!["NNVerify.farkas_combine_2_le_bound".to_string()],
             anchor: KERNEL_ANCHOR_FARKAS_CONSTRUCTIVE.to_string(),
             allowed_axioms: vec!["propext".to_string()],
+            binding: None,
         }),
     };
     let bytes = rmp_serde::to_vec(&e).expect("serialize CleanCic");
@@ -1733,6 +1810,8 @@ fn legacy_bundle_without_new_variants_still_deserializes() {
         obligation: ProofId::new(3),
         prover: "legacy".to_string(),
         evidence: ProofEvidence::LeanProof("theorem foo : True := trivial".to_string()),
+
+        assurance: None,
     };
     let pre_existing_evidence = vec![
         ProofEvidence::SmtProof(vec![0xAB, 0xCD]),
@@ -1750,6 +1829,7 @@ fn legacy_bundle_without_new_variants_still_deserializes() {
         ProofEvidence::InheritedFromCallee {
             callee: FuncId::new(2),
             obligation: ProofId::new(5),
+            external: None,
         },
     ];
     let pre_existing_statuses = vec![
@@ -1797,6 +1877,8 @@ fn clean_cic_match_requires_nonempty_term_and_bound_lineage() {
             lineage,
             kernel_recheck: None,
         },
+
+        assurance: None,
     };
 
     // Non-empty term + bound lineage: admitted.
@@ -1843,6 +1925,129 @@ fn clean_cic_lineage_binds_full_claim_with_sha256_but_not_status() {
         digest,
         "verification progress is not claim identity"
     );
+}
+
+#[test]
+fn clean_cic_lineage_binds_clause_bindings_and_rejects_sort_replay() {
+    use crate::proof::{ClauseBinding, ClausePlace, ClauseSort, ProofFormula};
+
+    let mut obligation = ProofObligation::new(
+        ProofId::new(11),
+        ObligationKind::Postcondition,
+        ProofStatus::Certified,
+        "result does not exceed the bound",
+    );
+    obligation.formula = Some(ProofFormula {
+        schema: "smtlib2".to_string(),
+        payload: "(<= x 18446744073709551615)".to_string(),
+        smtlib: None,
+        sort: None,
+        bindings: Vec::new(),
+    });
+    let unbound = clean_cic_lineage_digest(&obligation);
+
+    let bind = |obligation: &mut ProofObligation, sort: ClauseSort| {
+        obligation.formula.as_mut().unwrap().bindings = vec![(
+            "x".to_string(),
+            ClauseBinding {
+                sort,
+                place: ClausePlace::Param { index: 0 },
+            },
+        )];
+    };
+    bind(&mut obligation, ClauseSort::Int);
+    let over_int = clean_cic_lineage_digest(&obligation);
+    assert_ne!(over_int, unbound, "adding bindings must change the lineage");
+
+    // Same formula text, different arithmetic domain: the Int certificate
+    // must not be replayable against the BitVec(64) claim.
+    let int_certificate = ProofCertificate {
+        obligation: obligation.id,
+        prover: "clean".to_string(),
+        evidence: ProofEvidence::CleanCic {
+            term: vec![0xCA, 0xFE],
+            context: vec![],
+            lineage: over_int,
+            kernel_recheck: None,
+        },
+        assurance: None,
+    };
+    assert!(obligation_has_matching_clean_cic(
+        &obligation,
+        core::slice::from_ref(&int_certificate)
+    ));
+    bind(&mut obligation, ClauseSort::BitVec(64));
+    assert_ne!(clean_cic_lineage_digest(&obligation), over_int);
+    assert!(
+        !obligation_has_matching_clean_cic(&obligation, core::slice::from_ref(&int_certificate)),
+        "a certificate minted over Int must not certify the BitVec(64) claim"
+    );
+
+    // Changing the bound place is also a different claim.
+    let over_bv = clean_cic_lineage_digest(&obligation);
+    obligation.formula.as_mut().unwrap().bindings[0].1.place = ClausePlace::ResultSlot { index: 0 };
+    assert_ne!(clean_cic_lineage_digest(&obligation), over_bv);
+}
+
+#[test]
+fn clean_cic_lineage_binds_exact_site_and_rejects_cross_site_replay() {
+    use crate::value::{BlockId, FuncId};
+
+    let obligation = ProofObligation::new(
+        ProofId::new(7),
+        ObligationKind::BoundsCheck,
+        ProofStatus::Certified,
+        "index is in bounds",
+    )
+    .with_function(FuncId::new(3))
+    .with_site(ObligationSite::new(FuncId::new(3), BlockId::new(5), 7));
+    let lineage = clean_cic_lineage_digest(&obligation);
+    let certificate = ProofCertificate {
+        obligation: obligation.id,
+        prover: "clean".to_string(),
+        evidence: ProofEvidence::CleanCic {
+            term: vec![0xCA, 0xFE],
+            context: vec![],
+            lineage,
+            kernel_recheck: None,
+        },
+        assurance: None,
+    };
+    assert!(obligation_has_matching_clean_cic(
+        &obligation,
+        core::slice::from_ref(&certificate)
+    ));
+
+    let mutations: &[fn(&mut ObligationSite)] = &[
+        |site| site.function = FuncId::new(site.function.index() + 1),
+        |site| site.block = BlockId::new(site.block.index() + 1),
+        |site| site.inst_index += 1,
+    ];
+    for mutate in mutations {
+        let mut changed = obligation.clone();
+        mutate(changed.site.as_mut().unwrap());
+        assert_ne!(
+            clean_cic_lineage_digest(&changed),
+            lineage,
+            "every site coordinate must participate in lineage identity"
+        );
+        assert!(
+            !obligation_has_matching_clean_cic(&changed, core::slice::from_ref(&certificate)),
+            "a CleanCic certificate must not replay at a different IR site"
+        );
+    }
+
+    let mut without_site = obligation;
+    without_site.site = None;
+    assert_ne!(
+        clean_cic_lineage_digest(&without_site),
+        lineage,
+        "site presence is part of lineage identity"
+    );
+    assert!(!obligation_has_matching_clean_cic(
+        &without_site,
+        core::slice::from_ref(&certificate)
+    ));
 }
 
 #[test]
@@ -1914,6 +2119,8 @@ fn census_module(n: u32, cert_for: impl Fn(u32) -> ProofEvidence) -> crate::Modu
             obligation: ProofId::new(i),
             prover: "test".to_string(),
             evidence: cert_for(i),
+
+            assurance: None,
         });
     }
     module

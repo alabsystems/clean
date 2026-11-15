@@ -429,6 +429,7 @@ fn gcongr_monotonic(
                 meta_id: meta2,
                 target: goal2,
                 local_ctx: goal.local_ctx.clone(),
+                case_binders: goal.case_binders.clone(),
                 tag: None,
             },
         );
@@ -438,6 +439,7 @@ fn gcongr_monotonic(
                 meta_id: meta1,
                 target: goal1,
                 local_ctx: goal.local_ctx.clone(),
+                case_binders: goal.case_binders.clone(),
                 tag: None,
             },
         );
@@ -554,6 +556,7 @@ fn gcongr_mul_nat(
                 meta_id: meta,
                 target: sub,
                 local_ctx: goal.local_ctx.clone(),
+                case_binders: goal.case_binders.clone(),
                 tag: None,
             },
         );
@@ -576,6 +579,7 @@ fn gcongr_mul_nat(
                 meta_id: meta,
                 target: sub,
                 local_ctx: goal.local_ctx.clone(),
+                case_binders: goal.case_binders.clone(),
                 tag: None,
             },
         );
@@ -615,6 +619,7 @@ fn gcongr_mul_nat(
             meta_id: meta2,
             target: goal2,
             local_ctx: goal.local_ctx.clone(),
+            case_binders: goal.case_binders.clone(),
             tag: None,
         },
     );
@@ -624,6 +629,7 @@ fn gcongr_mul_nat(
             meta_id: meta1,
             target: goal1,
             local_ctx: goal.local_ctx.clone(),
+            case_binders: goal.case_binders.clone(),
             tag: None,
         },
     );
@@ -683,6 +689,7 @@ fn gcongr_mul_int(
             meta_id: nonneg_meta,
             target: nonneg_goal,
             local_ctx: goal.local_ctx.clone(),
+            case_binders: goal.case_binders.clone(),
             tag: None,
         },
     );
@@ -692,6 +699,7 @@ fn gcongr_mul_int(
             meta_id: mono_meta,
             target: mono_goal,
             local_ctx: goal.local_ctx.clone(),
+            case_binders: goal.case_binders.clone(),
             tag: None,
         },
     );

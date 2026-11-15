@@ -353,13 +353,13 @@ fn test_export_macro() {
 fn test_implemented_by_macro() {
     let registry = AttrMacroRegistry::with_builtins();
     let name = Name::from_string("slow_fn");
-    let attr = Attribute::ImplementedBy("fast_fn_impl".to_owned());
+    let attr = Attribute::ImplementedBy(clean_parser::SurfaceName::generated_path("fast_fn_impl"));
     let entry = registry.get("implementedBy").unwrap();
     let result = entry.handler.expand(&name, &attr).unwrap();
     assert_eq!(
         result,
         AttrMacroResult::RegisterImplementedBy {
-            impl_name: "fast_fn_impl".to_owned()
+            impl_name: clean_kernel::Name::from_string("fast_fn_impl")
         }
     );
 }

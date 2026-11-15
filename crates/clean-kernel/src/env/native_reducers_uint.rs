@@ -13,7 +13,6 @@
 
 use crate::env::Environment;
 use crate::expr::{Expr, ExprKind, Literal};
-use crate::level::Level;
 use crate::name::Name;
 
 /// Matches the native reducer signature used by `env::native_reducers`.
@@ -30,10 +29,10 @@ pub(crate) mod names {
         };
     }
 
+    #[cfg(test)]
     name!(pub(crate) DECIDABLE_IS_TRUE = "Decidable.isTrue");
     #[cfg(test)]
     name!(pub(crate) DECIDABLE_IS_FALSE = "Decidable.isFalse");
-    name!(pub(crate) EQ_REFL = "Eq.refl");
 
     // Canonical elaborated-numeral wrapper (`get_nat_val_peeling_canonical_ofnat`).
     name!(pub(crate) NAT = "Nat");
@@ -184,18 +183,15 @@ pub(crate) fn mk_bool(value: bool) -> Expr {
     Expr::const_(Name::from_string(name), vec![])
 }
 
+/// `@Decidable.isTrue (@Eq T val val) (@Eq.refl T val)`.
+///
+/// The well-typed builder in `native_reducers.rs`. This one used to pass the
+/// proof alone, into the proposition slot, so every `UInt*.decEq` that fired
+/// on equal operands returned an ill-typed `isTrue` (its type a `Pi`), which
+/// the native-fold review refused (`native_fold_review.rs`, leg T; measured
+/// 2026-09-28 over the prelude: 29-50 failing inputs per width).
 pub(crate) fn mk_dec_is_true(type_name: &Name, val: &Expr) -> Expr {
-    let eq_refl = Expr::app(
-        Expr::app(
-            Expr::const_(names::EQ_REFL.clone(), vec![Level::succ(Level::zero())]),
-            Expr::const_(type_name.clone(), vec![]),
-        ),
-        val.clone(),
-    );
-    Expr::app(
-        Expr::const_(names::DECIDABLE_IS_TRUE.clone(), vec![]),
-        eq_refl,
-    )
+    super::native_reducers::mk_dec_is_true(type_name, val)
 }
 
 // --- Shared arithmetic helpers ---

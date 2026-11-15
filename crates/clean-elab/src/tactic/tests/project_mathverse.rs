@@ -88,8 +88,9 @@ fn test_cert_mathverse_closes_contradictory_nat_linear_hypothesis() {
         Environment::with_prelude(),
         false_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -119,8 +120,9 @@ fn test_project_mathverse_zify_rewrites_local_hypotheses_without_trust() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -136,7 +138,7 @@ fn test_project_mathverse_zify_rewrites_local_hypotheses_without_trust() {
         .expect("goal should remain open")
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("rewritten hypothesis should keep its user-facing name");
     assert!(expr_contains_const(&h.ty, "Int.le"));
     assert!(expr_contains_const(&h.ty, "Int.ofNat"));
@@ -152,8 +154,9 @@ fn test_cert_mathverse_records_nat_coercion_before_calling_mathverse() {
         env,
         false_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -194,14 +197,16 @@ fn test_cert_mathverse_reports_nat_sub_without_mutating_state() {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n,
-                name: "n".into(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: m,
-                name: "m".into(),
+                name: clean_parser::SurfaceName::generated_path("m"),
                 ty: nat,
                 value: None,
             },
@@ -253,14 +258,16 @@ fn test_cert_mathverse_with_side_conditions_reports_missing_nat_sub_support() {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n,
-                name: "n".into(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: m,
-                name: "m".into(),
+                name: clean_parser::SurfaceName::generated_path("m"),
                 ty: nat,
                 value: None,
             },
@@ -334,7 +341,8 @@ fn cert_simp_equality_state() -> ProofState {
         make_eq(a_ty, Expr::app(f.clone(), a), Expr::app(f, b)),
     );
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "h").expect("intro should expose local equality");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should expose local equality");
     state
 }
 
@@ -353,8 +361,9 @@ fn cert_pb_bound_contradiction_state() -> ProofState {
         env,
         Expr::const_(Name::from_string("False"), vec![]),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: Expr::const_(Name::from_string("Cert.PB.checkBound"), vec![]),
             value: None,
         }],

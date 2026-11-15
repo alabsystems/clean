@@ -121,7 +121,7 @@ const MUTATIONS: &[Mutation] = &[
         kind: "emitted text: PARAMETER TYPE — &CleanMode becomes Rc<CleanMode>",
         target: "fixture",
         from: "bb0(%0: ptr):",
-        to: "bb0(%0: Rc<enum.13>):",
+        to: "bb0(%0: Rc<enum.17>):",
     },
     Mutation {
         kind: "emitted text: FUNCTION NAME — a different shipped function",
@@ -132,13 +132,13 @@ const MUTATIONS: &[Mutation] = &[
     Mutation {
         kind: "emitted text: ALIGN — the load starts specifying one",
         target: "fixture",
-        from: "load enum.13, ptr %0  ; #loc",
-        to: "load enum.13, ptr %0, align 8  ; #loc",
+        from: "load enum.17, ptr %0  ; #loc",
+        to: "load enum.17, ptr %0, align 8  ; #loc",
     },
     Mutation {
         kind: "emitted text: ANNOTATION KIND — an undeclared trailing clause",
         target: "fixture",
-        from: "  ; #loc: 401 338 5",
+        from: "  ; #loc: 214 338 5",
         to: "  ; #trustme: 1",
     },
     // The four slots the third pass closed, all four in the ONE header line
@@ -228,10 +228,10 @@ fn verdicts_with(core_text: &str, fixture_text: &str, tags_text: &str) -> Verdic
     let m7 = match ir_mint::read_emitted_with_tags(fixture_text) {
         Ok((_, observed)) => {
             observed.enums.len() != t.enums.len()
-                || observed.enums.iter().enumerate().any(|(c, id)| {
-                    u32::try_from(c)
-                        .map_or(true, |c| t.enum_alias(c).map_or(true, |(rec, _)| rec != id))
-                })
+                || observed
+                    .enums
+                    .iter()
+                    .any(|(c, id)| t.enum_alias(*c).map_or(true, |(rec, _)| rec != id))
         }
         Err(_) => true,
     };
@@ -297,21 +297,21 @@ fn mutation_matrix() {
     //
     // (a) The artifact re-interns the enum: the module is the same program and
     //     the tag table is stale. M1..M5 must stay silent; M7 must fire.
-    let reinterned = FIXTURE.replace("enum.13", "enum.176");
+    let reinterned = FIXTURE.replace("enum.17", "enum.199");
     assert_ne!(reinterned, FIXTURE, "the substitution must bite");
     let reint = verdicts(ir_mint::IR_H2_CORE, &reinterned);
     report.push_str(&row(
-        "[fixture] enum RE-INTERNING 13 -> 176",
+        "[fixture] enum RE-INTERNING 17 -> 199",
         &reint,
         "  <- M7 ONLY",
     ));
 
     // (b) The tag table itself is edited: the REGISTERED term would name a
     //     different crate id, which is a real change to the proved module.
-    let bad_tags = ir_mint::IR_H2_TAGS.replace("\"crate_id\": 13", "\"crate_id\": 176");
+    let bad_tags = ir_mint::IR_H2_TAGS.replace("\"crate_id\": 17", "\"crate_id\": 199");
     assert_ne!(bad_tags, ir_mint::IR_H2_TAGS, "the substitution must bite");
     let tagmut = verdicts_with(ir_mint::IR_H2_CORE, FIXTURE, &bad_tags);
-    report.push_str(&row("[tags] crate id 13 -> 176", &tagmut, ""));
+    report.push_str(&row("[tags] crate id 17 -> 199", &tagmut, ""));
 
     // The negative control: renumbering that carries NO recorded fact must not
     // fire anything at all. `#loc`'s file index was measured to move under a
@@ -327,7 +327,7 @@ fn mutation_matrix() {
     // re-interning must be RE-PINNED under review, exactly as an `enum.N` or a
     // callee `@func.N` re-interning already is. The price of that is paid here,
     // in this control, deliberately.
-    let renumbered = FIXTURE.replace("#loc: 401", "#loc: 12");
+    let renumbered = FIXTURE.replace("#loc: 214", "#loc: 12");
     assert_ne!(renumbered, FIXTURE, "the substitution must bite");
     let v = verdicts(ir_mint::IR_H2_CORE, &renumbered);
     report.push_str(&row(

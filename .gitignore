@@ -195,6 +195,10 @@ reports/integration/
 lakefile.olean
 
 # Live agent worktrees (local-only) and agent CLI scratch
+/.worktrees/
+# Registered peer worktree and its generated compiler cache; not parent source.
+/.scratch/p7-worker8/
+/.scratch/p7-target/
 .claude/worktrees/
 .antigravitycli/
 reports/trust-check-ledger-clean-kernel-2026-06-10.json
@@ -217,3 +221,22 @@ queries-*.smt2
 
 # Isabelle/HOL KernelVerified shards (released as archives, not git-tracked)
 data/mathverse-shards/isabelle-hol-kv/
+
+# nat-operand-shape probe runner output. The pinned expectations are the
+# `--@ probe-expect:` headers in probes/*.lean, which ARE tracked; this file is
+# a convenience table whose `ms` fields change on every run. Tracking it would
+# make a routine gate run dirty the tree -- the trap CLAUDE.md documents for
+# data/suite_state/, where one `git checkout` over runner output destroyed a
+# 14-hour sweep with exit 0.
+tests/nat-operand-shape-probe/matrix.json
+.metadata_never_index
+
+# Compiler crash dumps. rustc and the Trust tools write `<tool>-ice-<time>.txt`
+# into the directory they were invoked from, which for this repo is almost
+# always the root; nine of them were once committed under reports/ice/ and
+# outlived the defects they recorded. Anchored to the ROOT only, so a dump that
+# is deliberately filed elsewhere (e.g. under reports/) can still be committed.
+/rustc-ice-*.txt
+/trustc-ice-*.txt
+/trustfmt-ice-*.txt
+/trustdoc-ice-*.txt

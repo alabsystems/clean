@@ -109,3 +109,25 @@ fn test_proof_backend_unsat_without_proof() {
         other => panic!("Expected UNSAT, got {:?}", other),
     }
 }
+
+/// `check_sat`'s `Unknown` carries ay's own account of the stop: a resource
+/// count spent mid-search reads as `resourceout`, with ay's sentence beside it.
+/// The count here is a raw script option, since `check_sat` sends none.
+#[test]
+fn test_proof_backend_unknown_carries_ays_reason() {
+    let mut backend =
+        support::pigeonhole_proof_backend(AyBackendConfig::with_proofs(AyLogic::QfUf), 8);
+    backend.add_raw_declaration("(set-option :rlimit 1)");
+
+    match backend.check_sat().expect("solve") {
+        AyProofResult::Unknown { reason, detail } => {
+            assert_eq!(reason, AyUnknownReason::ResourceLimit);
+            assert_eq!(reason.to_string(), "resourceout");
+            assert!(
+                detail.is_some(),
+                "ay records a sentence beside a spent count"
+            );
+        }
+        other => panic!("Expected Unknown(resourceout), got {other:?}"),
+    }
+}

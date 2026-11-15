@@ -134,6 +134,34 @@ fn parse_module_incremental_opts(
     private_bytes: &[u8],
     skip_proof_values: bool,
 ) -> OleanResult<ParsedModule> {
+    let part = assemble_incremental_part(base_bytes, server_bytes, private_bytes)?;
+    let region = CompactedRegion::new(&part.bytes, part.base_addr);
+    region.read_module_data_from_ptr_opts(part.root_ptr, private_bytes, skip_proof_values)
+}
+
+/// A module-system part (`.olean.private`, or `.olean.server` over its base)
+/// laid out in ONE pointer space with the parts it may reference, the way
+/// Lean's `readModuleDataParts` maps them (`Lean/Environment.lean`): base at its
+/// own address, the server part (when given and when it fits) in the gap, the
+/// part itself at its header's address.
+pub(crate) struct AssembledPart {
+    /// The combined bytes, starting with the base file (so its header).
+    pub(crate) bytes: Vec<u8>,
+    /// The base file's address (file offset 0 of `bytes`).
+    pub(crate) base_addr: u64,
+    /// The part's own root `ModuleData` pointer.
+    pub(crate) root_ptr: u64,
+}
+
+/// Assemble `part_bytes` (an incremental region) over `base_bytes` and,
+/// optionally, `server_bytes`. Shared by [`parse_module_incremental`] and the
+/// compiled-IR reader (`crate::lean_ir`), which must resolve an
+/// `.olean.private` part's pointers exactly as the constant parser does.
+pub(crate) fn assemble_incremental_part(
+    base_bytes: &[u8],
+    server_bytes: Option<&[u8]>,
+    private_bytes: &[u8],
+) -> OleanResult<AssembledPart> {
     let base_header = OleanHeader::parse(base_bytes)?;
     let private_header = OleanHeader::parse(private_bytes)?;
 
@@ -186,8 +214,6 @@ fn parse_module_incremental_opts(
 
     combined.extend_from_slice(private_bytes);
 
-    let region = CompactedRegion::new(&combined, base_base_addr);
-
     let private_start = base_bytes.len() + gap;
     let private_header_size = match private_bytes.get(5) {
         Some(&1) => crate::header::HEADER_SIZE,
@@ -195,9 +221,13 @@ fn parse_module_incremental_opts(
         _ => return Err(OleanError::Region("unknown .olean.private version".into())),
     };
     let root_ptr_offset = private_start + private_header_size;
-    let root_ptr = region.read_u64_at(root_ptr_offset)?;
+    let root_ptr = CompactedRegion::new(&combined, base_base_addr).read_u64_at(root_ptr_offset)?;
 
-    region.read_module_data_from_ptr_opts(root_ptr, private_bytes, skip_proof_values)
+    Ok(AssembledPart {
+        bytes: combined,
+        base_addr: base_base_addr,
+        root_ptr,
+    })
 }
 
 /// Parse all .olean parts (.olean, .olean.server, .olean.private) for a module.

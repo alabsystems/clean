@@ -213,8 +213,9 @@ mod tests {
             env,
             Expr::const_(Name::from_string("False"), vec![]),
             vec![crate::tactic::LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h".into(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: Expr::const_(Name::from_string("Cert.PB.checkBound"), vec![]),
                 value: None,
             }],

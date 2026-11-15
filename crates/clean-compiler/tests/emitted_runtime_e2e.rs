@@ -10,6 +10,7 @@
 
 #![cfg(feature = "round-trip-compile")]
 
+mod runtime_fixture;
 mod test_helpers;
 
 use std::path::{Path, PathBuf};
@@ -19,17 +20,15 @@ use clean_compiler::emit_c::emit_c;
 use clean_compiler::emit_rust::emit_rust;
 use clean_compiler::ir::{IRBody, IRDecl, IRExpr, IRType};
 use clean_compiler::mangle::mangle_name;
+use runtime_fixture::MaterializedRuntime;
 use tempfile::tempdir;
 use test_helpers::{arg, mixed_ctor, name, obj_ctor, var};
 
-fn runtime_include_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/include")
-}
-
-fn runtime_c_source() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/src/clean_runtime.c")
-}
-
+/// The clean-runtime CRATE, for the generated Cargo manifest's path
+/// dependency. This one is a compile-time path by necessity: a Cargo
+/// `path = ...` dependency needs a real crate on disk, and nothing embedded
+/// can stand in for one. The C side no longer needs it — see
+/// `runtime_fixture.rs`.
 fn runtime_crate_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime")
 }
@@ -76,12 +75,14 @@ fn compile_and_run_emitted_c(decls: &[IRDecl], main_body: &str) -> Option<Vec<St
     );
     std::fs::write(&source_path, full_source).expect("failed to write emitted C source");
 
+    // Embedded runtime, not a compile-time path (see runtime_fixture.rs).
+    let runtime = MaterializedRuntime::materialize();
     let compile = Command::new(&cc)
         .arg("-o")
         .arg(&binary_path)
         .arg(&source_path)
-        .arg(runtime_c_source())
-        .arg(format!("-I{}", runtime_include_dir().display()))
+        .arg(runtime.c_source())
+        .arg(format!("-I{}", runtime.include_dir().display()))
         .arg("-lm")
         .arg("-std=c11")
         .output()
@@ -124,16 +125,28 @@ fn compile_and_run_emitted_rust(decls: &[IRDecl], main_body: &str) -> Vec<String
     std::fs::write(dir.path().join("src/main.rs"), full_source)
         .expect("failed to write emitted Rust source");
 
-    let run = Command::new("cargo")
+    // No `current_dir(dir)`: cargo discovers `.cargo/config.toml` upward from
+    // its working directory, and the test process runs in this crate, so the
+    // nested build inherits the repository's toolchain posture
+    // (`-Ztrust-verify=off` for the third-party build-script graph
+    // `clean-runtime` pulls in through `thiserror`). Run from the temp dir it
+    // finds no config, verifies `quote`/`thiserror`/`proc-macro2`'s build
+    // scripts at the toolchain's strict default and fails before a line of
+    // emitted Rust compiles — measured 2026-09-15 (`Trust strict verification
+    // failed for build_script_build::main`). `pipeline_rust_e2e.rs` has always
+    // run its nested cargo from here, which is why it stayed green.
+    // targo (`$CARGO` under targo) refuses a lane-less nested `run`.
+    let driver = std::env::var_os("CARGO").unwrap_or_else(|| "targo".into());
+    let run = Command::new(driver)
+        .arg("--unverified")
         .arg("run")
         .arg("--quiet")
         .arg("--offline")
         .arg("--manifest-path")
         .arg(dir.path().join("Cargo.toml"))
         .env("CARGO_TARGET_DIR", dir.path().join("target"))
-        .current_dir(dir.path())
         .output()
-        .expect("failed to invoke cargo run");
+        .expect("failed to invoke targo --unverified run");
 
     assert!(
         run.status.success(),

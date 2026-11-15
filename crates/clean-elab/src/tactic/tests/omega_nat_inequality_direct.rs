@@ -43,8 +43,9 @@ fn nat_fvar(id: u64) -> Expr {
 /// `name : Nat` local declaration for fvar `id`.
 fn nat_local(id: u64, name: &str) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: nat_type(),
         value: None,
     }
@@ -194,8 +195,9 @@ fn test_omega_proves_with_hypothesis_a_le_b_plus_1() {
             nat_local(0, "a"),
             nat_local(1, "b"),
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: nat_le_tc(a, b),
                 value: None,
             },
@@ -228,8 +230,9 @@ fn test_omega_proves_false_from_n_plus_2_le_n_hyp() {
         vec![
             nat_local(0, "n"),
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: nat_le_tc(nat_add(n.clone(), Expr::nat_lit(2)), n),
                 value: None,
             },
@@ -368,8 +371,9 @@ fn repro_omega_proves_n_lt_5_implies_n_plus_1_lt_7() {
     let n = nat_fvar(0);
     let goal = nat_lt_tc(nat_add(n.clone(), Expr::nat_lit(1)), Expr::nat_lit(7));
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_lt_tc(n, Expr::nat_lit(5)),
         value: None,
     };
@@ -432,8 +436,9 @@ fn shift_omega_proves_a_le_b_implies_a_plus_1_le_b_plus_1() {
         nat_add(b.clone(), Expr::nat_lit(1)),
     );
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };
@@ -452,8 +457,9 @@ fn shift_omega_proves_a_lt_b_implies_a_plus_1_le_b() {
     let b = nat_fvar(1);
     let goal = nat_le_tc(nat_add(a.clone(), Expr::nat_lit(1)), b.clone());
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_lt_tc(a, b),
         value: None,
     };
@@ -474,8 +480,9 @@ fn shift_omega_proves_a_le_b_implies_a_plus_3_le_b_plus_3() {
         nat_add(b.clone(), Expr::nat_lit(3)),
     );
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };
@@ -496,8 +503,9 @@ fn shift_omega_rejects_a_le_b_implies_b_plus_1_le_a() {
     let b = nat_fvar(1);
     let goal = nat_le_tc(nat_add(b.clone(), Expr::nat_lit(1)), a.clone());
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };
@@ -516,8 +524,9 @@ fn shift_omega_rejects_a_le_b_implies_a_plus_2_le_b() {
     let b = nat_fvar(1);
     let goal = nat_le_tc(nat_add(a.clone(), Expr::nat_lit(2)), b.clone());
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };
@@ -718,8 +727,9 @@ fn rev_shift_omega_rejects_a_le_b_implies_a_plus_1_le_b() {
     let b = nat_fvar(1);
     let goal = nat_le_tc(nat_add(a.clone(), Expr::nat_lit(1)), b.clone());
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };
@@ -737,8 +747,9 @@ fn rev_shift_omega_rejects_a_lt_b_implies_b_le_a() {
     let b = nat_fvar(1);
     let goal = nat_le_tc(b.clone(), a.clone());
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_lt_tc(a, b),
         value: None,
     };
@@ -760,8 +771,9 @@ fn rev_shift_omega_rejects_a_le_b_implies_a_plus_2_le_b_plus_1() {
         nat_add(b.clone(), Expr::nat_lit(1)),
     );
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };
@@ -783,8 +795,9 @@ fn rev_shift_omega_proves_a_le_b_implies_a_plus_1_le_b_plus_2() {
         nat_add(b.clone(), Expr::nat_lit(2)),
     );
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };
@@ -806,8 +819,9 @@ fn rev_shift_omega_proves_a_le_b_implies_a_plus_2_le_b_plus_3() {
         nat_add(b.clone(), Expr::nat_lit(3)),
     );
     let h = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(2),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: nat_le_tc(a, b),
         value: None,
     };

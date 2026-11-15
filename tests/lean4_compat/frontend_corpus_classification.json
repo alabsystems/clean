@@ -935,9 +935,8 @@
     "lean4_diagnostic_artifact_stale_or_invalid_files": 0,
     "clean_diagnostic_artifact_stale_or_invalid_files": 0,
     "profiled_expected_diagnostic_categories": {
-      "internal_fvar_reconstruction_blocker": 1,
       "missing_cases_alternative": 1,
-      "other_profiled_expected_diagnostic": 2,
+      "other_profiled_expected_diagnostic": 3,
       "unknown_identifier_or_scope": 2,
       "user_thrown_tactic_error": 1
     },
@@ -946,9 +945,9 @@
       "cannot_infer_type": 1,
       "definition_cannot_be_implemented_by_itself": 1,
       "error": 1,
+      "foo_a_is_the_name_being_defined": 1,
       "unknown": 1,
-      "unknown_identifier": 1,
-      "unknownfvar_fvarid_n": 1
+      "unknown_identifier": 1
     },
     "dimensions": [
       "parse",
@@ -1207,21 +1206,21 @@
         "parse_only_trust_marker_no_clean_trust_artifact_target": 13
       },
       "diagnostic": {
-        "diagnostic_surface_marker": 43,
+        "diagnostic_surface_marker": 44,
         "excluded_parse_or_fuzz_diagnostic": 20,
-        "not_profiled": 30,
+        "not_profiled": 29,
         "profiled_expected_diagnostic": 7
       },
       "diagnostic_category": {
-        "diagnostic_surface_unprofiled": 43,
+        "diagnostic_surface_unprofiled": 44,
         "excluded_parse_or_fuzz_unbucketed": 20,
-        "no_profiled_expected_diagnostic": 30,
+        "no_profiled_expected_diagnostic": 29,
         "profiled_expected_diagnostic_category": 7
       },
       "first_error_signature": {
-        "diagnostic_surface_unprofiled_first_error": 43,
+        "diagnostic_surface_unprofiled_first_error": 44,
         "excluded_parse_or_fuzz_unprofiled": 20,
-        "no_profiled_first_error": 29,
+        "no_profiled_first_error": 28,
         "profiled_first_error_signature": 7,
         "profiled_no_expected_failure": 1
       },
@@ -12688,7 +12687,7 @@
     },
     {
       "filename": "1363.lean",
-      "sha256": "sha256:624d0548a740107ca98902216d92e395f1f7bf7eb04514f5a9df7588543c2acd",
+      "sha256": "sha256:2a3e5a989d7add17f5a219e3bb086111bce054f51a09b26e88f77613e753a4df",
       "phase1_level": "parse_only",
       "profiled": false,
       "dimensions": {
@@ -17743,7 +17742,7 @@
           "replacement_ready": false,
           "reason": "coarse bucket derived from phase1 expected-failure diagnostic substrings; not a Lean4 diagnostic parity check",
           "markers": [
-            "internal_fvar_reconstruction_blocker"
+            "other_profiled_expected_diagnostic"
           ]
         },
         "first_error_signature": {
@@ -17751,7 +17750,7 @@
           "replacement_ready": false,
           "reason": "deterministic first expected-failure substring signature from phase1_expected_outcomes.json; not a Lean4 first-diagnostic parity check",
           "markers": [
-            "unknownfvar_fvarid_n"
+            "foo_a_is_the_name_being_defined"
           ]
         },
         "phase1_transition": {
@@ -22417,7 +22416,7 @@
     },
     {
       "filename": "1845.lean",
-      "sha256": "sha256:a9592519fdb8861e3cc5fe8e8694983e5a3507e9fd181954ec467611e6d2eec9",
+      "sha256": "sha256:f8bb1eeeb4383b8d00da7467a42029b446a5b4144de7168ab3492c9384007a33",
       "phase1_level": "parse_only",
       "profiled": false,
       "dimensions": {
@@ -22748,6 +22747,7 @@
           "reason": "expected diagnostics are profiled or conservatively marked as unclaimed",
           "markers": [
             "#eval",
+            "set_option",
             "throwError"
           ]
         },
@@ -31366,7 +31366,7 @@
     },
     {
       "filename": "247.lean",
-      "sha256": "sha256:ba36e09a7d0c456340c8c593fa4aa1a1363fc49afaf6453a6cc1574da8f27e2b",
+      "sha256": "sha256:f66f2d3f415a6d5d90a5c3e13dd978896b2c45aa68c960a248cbef2f85c04d1a",
       "phase1_level": "parse_only",
       "profiled": false,
       "dimensions": {
@@ -31668,17 +31668,20 @@
           "reason": "deterministic trust-artifact guard: no generated per-file clean trust, sorry, or fallback artifact is recorded for rows where the trust dimension found elab-relevant trusted surface"
         },
         "diagnostic": {
-          "status": "not_profiled",
+          "status": "diagnostic_surface_marker",
           "replacement_ready": false,
-          "reason": "expected diagnostics are profiled or conservatively marked as unclaimed"
+          "reason": "expected diagnostics are profiled or conservatively marked as unclaimed",
+          "markers": [
+            "set_option"
+          ]
         },
         "diagnostic_category": {
-          "status": "no_profiled_expected_diagnostic",
+          "status": "diagnostic_surface_unprofiled",
           "replacement_ready": false,
           "reason": "coarse bucket derived from phase1 expected-failure diagnostic substrings; not a Lean4 diagnostic parity check"
         },
         "first_error_signature": {
-          "status": "no_profiled_first_error",
+          "status": "diagnostic_surface_unprofiled_first_error",
           "replacement_ready": false,
           "reason": "deterministic first expected-failure substring signature from phase1_expected_outcomes.json; not a Lean4 first-diagnostic parity check"
         },

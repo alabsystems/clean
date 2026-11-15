@@ -30,7 +30,7 @@ macro_rules! proof_state_server_feature {
         FeatureDescriptor {
             path: $path,
             summary: $summary,
-            description: "Experimental typed proof-state v2 command surface for math projects. Pass `--server HOST:PORT`, or set `CLEAN_PROOF_STATE_SERVER`/`CLEAN_SERVER`, to route the command to a persistent `clean server` JSON-RPC session; without a server address, the CLI emits the existing fail-closed adapter report.",
+            description: "Experimental typed proof-state v2 command surface for math projects. Pass `--server HOST:PORT`, or set `CLEAN_PROOF_STATE_SERVER`/`CLEAN_SERVER`, to route the command to a persistent `clean server` JSON-RPC session; without a server address, the CLI emits the existing fail-closed adapter report. The CLI's first message to the server presents its launch token, read from `CLEAN_SERVER_TOKEN`, else the file `CLEAN_SERVER_TOKEN_FILE` names, else, for a server on `127.0.0.1` (the one address `clean server` binds; `localhost` is connected as `127.0.0.1`), the token file `clean server` writes for that port; any other address, `[::1]` included, needs one of the two variables.",
             category: Category::Dev,
             stability: Stability::Experimental,
             examples: &[Example {
@@ -354,7 +354,7 @@ pub(crate) const FEATURES: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["math", "proof-state", "open-obligation"],
         summary: "Open a generic obligation as a proof-state v2 handle",
-        description: "Experimental bridge that opens obligations whose `goal.expr` is serialized `clean_kernel::Expr` JSON by calling `proofState.openObligation`. The request persists structured proof-state metadata including project path/root, obligation fingerprint/source, producer, and artifact references; child proof states and snapshots preserve that metadata. Pass `--server HOST:PORT`, or set `CLEAN_PROOF_STATE_SERVER`/`CLEAN_SERVER`, to persist returned `ps_...` ids in a live `clean server` session for later snapshot/apply/extract commands; without a server address, the embedded process-local cache still expires when the CLI exits. Pretty-only goals and hypotheses fail closed with structured diagnostics.",
+        description: "Experimental bridge that opens obligations whose `goal.expr` is serialized `clean_kernel::Expr` JSON by calling `proofState.openObligation`. The request persists structured proof-state metadata including project path/root, obligation fingerprint/source, producer, and artifact references; child proof states and snapshots preserve that metadata. Pass `--server HOST:PORT`, or set `CLEAN_PROOF_STATE_SERVER`/`CLEAN_SERVER`, to persist returned `ps_...` ids in a live `clean server` session for later snapshot/apply/extract commands; without a server address, the embedded process-local cache still expires when the CLI exits. Pretty-only goals and hypotheses fail closed with structured diagnostics. The CLI's first message to the server presents its launch token, read from `CLEAN_SERVER_TOKEN`, else the file `CLEAN_SERVER_TOKEN_FILE` names, else, for a server on `127.0.0.1` (the one address `clean server` binds; `localhost` is connected as `127.0.0.1`), the token file `clean server` writes for that port; any other address, `[::1]` included, needs one of the two variables.",
         category: Category::Dev,
         stability: Stability::Experimental,
         examples: &[Example {
@@ -405,7 +405,7 @@ pub(crate) const FEATURES: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["math", "proof-state", "extract"],
         summary: "Extract proof material from a proof state",
-        description: "Experimental typed proof-state v2 extraction command for math projects. Pass `--server HOST:PORT`, or set `CLEAN_PROOF_STATE_SERVER`/`CLEAN_SERVER`, to route the command to a persistent `clean server` JSON-RPC session; without a server address, the CLI emits the existing fail-closed adapter report. Use `--format kernel_evidence` to emit checked `clean-math-kernel-evidence-v1` from a solved proof state only after certificate generation, strict `check_type` success against the target, clean trust accounting, and structured metadata linkage when available.",
+        description: "Experimental typed proof-state v2 extraction command for math projects. Pass `--server HOST:PORT`, or set `CLEAN_PROOF_STATE_SERVER`/`CLEAN_SERVER`, to route the command to a persistent `clean server` JSON-RPC session; without a server address, the CLI emits the existing fail-closed adapter report. Use `--format kernel_evidence` to emit checked `clean-math-kernel-evidence-v1` from a solved proof state only after certificate generation, strict `check_type` success against the target, clean trust accounting, and structured metadata linkage when available. The CLI's first message to the server presents its launch token, read from `CLEAN_SERVER_TOKEN`, else the file `CLEAN_SERVER_TOKEN_FILE` names, else, for a server on `127.0.0.1` (the one address `clean server` binds; `localhost` is connected as `127.0.0.1`), the token file `clean server` writes for that port; any other address, `[::1]` included, needs one of the two variables.",
         category: Category::Dev,
         stability: Stability::Experimental,
         examples: &[Example {

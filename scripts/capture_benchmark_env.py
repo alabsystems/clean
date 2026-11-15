@@ -101,13 +101,13 @@ def get_cpu_info() -> str:
 
 
 def get_rustc_version() -> str:
-    """Get rustc version."""
-    return run_cmd(["rustc", "--version"])
+    """Get trustc version."""
+    return run_cmd(["trustc", "--version"])
 
 
 def get_cargo_version() -> str:
-    """Get cargo version."""
-    return run_cmd(["cargo", "--version"])
+    """Get targo version (`--unverified --version` is the targo discriminator)."""
+    return run_cmd(["targo", "--unverified", "--version"])
 
 
 def get_memory_info() -> str:

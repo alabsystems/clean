@@ -59,11 +59,11 @@
 //! fallout.
 
 use super::{
-    app, arrow, binder, forall_group, ident, lam, lam_names_of, mk_def, mk_theorem, napp, or, prop,
-    Shape, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr, HYP_H, HYP_HR, HYP_LE, HYP_POST, REL_R,
-    REL_S,
+    app, arrow, binder, forall_group, global, global_napp, ident, lam, lam_names_of, lam_typed,
+    mk_def, mk_theorem, napp, or, prop, Shape, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr, HYP_H,
+    HYP_HR, HYP_LE, HYP_POST, REL_R, REL_S,
 };
-use clean_parser::Span;
+use clean_parser::{Span, SurfaceName};
 
 /// `P.acc` / `P.coind_upto` binder names (paco/accumulation rung): the step
 /// hypothesis, the `Or.elim` case hypotheses, the `coind_upto` closure and
@@ -113,7 +113,7 @@ const HYP_HB: &str = "hb_coind";
 pub(super) fn acc_thm(s: &Shape) -> SurfaceDecl {
     let rel_ty = s.rel_ty();
     let gfp = || s.papp(&s.qname, Vec::new());
-    let lam_names: Vec<&str> = lam_names_of(s, HYP_H);
+    let lam_names: Vec<SurfaceName> = lam_names_of(s, HYP_H);
     let union_pred = || {
         SurfaceExpr::Lambda(
             Span::dummy(),
@@ -126,16 +126,16 @@ pub(super) fn acc_thm(s: &Shape) -> SurfaceDecl {
     let mut acc_mono_args = vec![
         gfp(),
         union_pred(),
-        lam(
+        lam_typed(
             &lam_names_of(s, HYP_HQ),
-            napp("Or.inr", vec![ident(HYP_HQ)]),
+            global_napp("Or.inr", vec![ident(HYP_HQ)]),
         ),
     ];
     acc_mono_args.extend(s.var_args());
     acc_mono_args.push(s.papp(&s.unfold_name(), acc_unfold_args));
     let mut acc_step_args = s.var_args();
     acc_step_args.push(ident(HYP_HR));
-    let acc_post = lam(
+    let acc_post = lam_typed(
         &lam_names_of(s, HYP_HU),
         napp(
             "Or.elim",
@@ -148,7 +148,7 @@ pub(super) fn acc_thm(s: &Shape) -> SurfaceDecl {
     );
     let mut acc_coind_args = vec![union_pred(), acc_post];
     acc_coind_args.extend(s.var_args());
-    acc_coind_args.push(napp("Or.inl", vec![ident(HYP_H)]));
+    acc_coind_args.push(global_napp("Or.inl", vec![ident(HYP_H)]));
     mk_theorem(
         s.acc_name(),
         s.with_params(vec![
@@ -163,7 +163,7 @@ pub(super) fn acc_thm(s: &Shape) -> SurfaceDecl {
             ),
         ]),
         s.forall_vars(arrow(s.applied(ident(REL_R)), s.applied(gfp()))),
-        lam(&lam_names, s.papp(&s.coind_name(), acc_coind_args)),
+        lam_typed(&lam_names, s.papp(&s.coind_name(), acc_coind_args)),
     )
 }
 
@@ -189,7 +189,7 @@ pub(super) fn acc_thm(s: &Shape) -> SurfaceDecl {
 pub(super) fn upto_thm(s: &Shape) -> SurfaceDecl {
     let rel_ty = s.rel_ty();
     let gfp = || s.papp(&s.qname, Vec::new());
-    let lam_names: Vec<&str> = lam_names_of(s, HYP_H);
+    let lam_names: Vec<SurfaceName> = lam_names_of(s, HYP_H);
     let clo_of = |r: SurfaceExpr| app(ident(CLO), vec![r]);
     let rel_binder = |name: &str| binder(name, rel_ty.clone(), SurfaceBinderInfo::Explicit);
     let upto_inner = {
@@ -217,7 +217,7 @@ pub(super) fn upto_thm(s: &Shape) -> SurfaceDecl {
     upto_incl_args.push(ident(HYP_H));
     let mut upto_coind_args = vec![
         clo_of(ident(REL_R)),
-        lam(&lam_names_of(s, HYP_HU), upto_inner),
+        lam_typed(&lam_names_of(s, HYP_HU), upto_inner),
     ];
     upto_coind_args.extend(s.var_args());
     upto_coind_args.push(napp(HYP_INCL, upto_incl_args));
@@ -287,36 +287,42 @@ pub(super) fn upto_thm(s: &Shape) -> SurfaceDecl {
             ),
         ]),
         s.forall_vars(arrow(s.applied(ident(REL_R)), s.applied(gfp()))),
-        lam(&lam_names, s.papp(&s.coind_name(), upto_coind_args)),
+        lam_typed(&lam_names, s.papp(&s.coind_name(), upto_coind_args)),
     )
 }
 
 // ── the parameterized paco tower (`P.paco` rung) ─────────────────────────
 
 impl Shape {
-    fn paco_name(&self) -> String {
-        format!("{}.paco", self.qname)
+    fn paco_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("paco", false))
     }
-    fn paco_coind_name(&self) -> String {
-        format!("{}.paco_coind", self.qname)
+    fn paco_coind_name(&self) -> SurfaceName {
+        self.qname
+            .append(&SurfaceName::component("paco_coind", false))
     }
-    fn paco_unfold_name(&self) -> String {
-        format!("{}.paco_unfold", self.qname)
+    fn paco_unfold_name(&self) -> SurfaceName {
+        self.qname
+            .append(&SurfaceName::component("paco_unfold", false))
     }
-    fn paco_fold_name(&self) -> String {
-        format!("{}.paco_fold", self.qname)
+    fn paco_fold_name(&self) -> SurfaceName {
+        self.qname
+            .append(&SurfaceName::component("paco_fold", false))
     }
-    fn paco_mon_name(&self) -> String {
-        format!("{}.paco_mon", self.qname)
+    fn paco_mon_name(&self) -> SurfaceName {
+        self.qname
+            .append(&SurfaceName::component("paco_mon", false))
     }
-    fn paco_bot_name(&self) -> String {
-        format!("{}.paco_bot", self.qname)
+    fn paco_bot_name(&self) -> SurfaceName {
+        self.qname
+            .append(&SurfaceName::component("paco_bot", false))
     }
-    fn le_paco_name(&self) -> String {
-        format!("{}.le_paco", self.qname)
+    fn le_paco_name(&self) -> SurfaceName {
+        self.qname.append(&SurfaceName::component("le_paco", false))
     }
-    fn paco_acc_name(&self) -> String {
-        format!("{}.paco_acc", self.qname)
+    fn paco_acc_name(&self) -> SurfaceName {
+        self.qname
+            .append(&SurfaceName::component("paco_acc", false))
     }
 
     /// `P.paco p⃗ r` — the parameterized gfp at accumulated `r`, as a
@@ -342,7 +348,7 @@ fn bot_rel(s: &Shape) -> SurfaceExpr {
     SurfaceExpr::Lambda(
         Span::dummy(),
         s.idx_binders(SurfaceBinderInfo::Explicit),
-        Box::new(ident("False")),
+        Box::new(global("False")),
     )
 }
 
@@ -366,12 +372,12 @@ fn paco_def(s: &Shape) -> SurfaceDecl {
         s.paco_name(),
         s.with_params(binders),
         prop(),
-        napp(
+        global_napp(
             "Exists",
             vec![SurfaceExpr::Lambda(
                 Span::dummy(),
                 vec![binder(REL_R, rel_ty, SurfaceBinderInfo::Explicit)],
-                Box::new(napp("And", vec![post, s.applied(ident(REL_R))])),
+                Box::new(global_napp("And", vec![post, s.applied(ident(REL_R))])),
             )],
         ),
     )
@@ -388,7 +394,7 @@ fn paco_def(s: &Shape) -> SurfaceDecl {
 /// ```
 fn paco_coind_thm(s: &Shape) -> SurfaceDecl {
     let rel_ty = s.rel_ty();
-    let lam_names: Vec<&str> = lam_names_of(s, HYP_H);
+    let lam_names: Vec<SurfaceName> = lam_names_of(s, HYP_H);
     mk_theorem(
         s.paco_coind_name(),
         s.with_params(vec![
@@ -407,13 +413,13 @@ fn paco_coind_thm(s: &Shape) -> SurfaceDecl {
             s.applied(ident(REL_R)),
             s.applied(s.paco_at(ident(REL_ACC))),
         )),
-        lam(
+        lam_typed(
             &lam_names,
-            napp(
+            global_napp(
                 "Exists.intro",
                 vec![
                     ident(REL_R),
-                    napp("And.intro", vec![ident(HYP_POST), ident(HYP_H)]),
+                    global_napp("And.intro", vec![ident(HYP_POST), ident(HYP_H)]),
                 ],
             ),
         ),
@@ -434,14 +440,14 @@ fn paco_coind_thm(s: &Shape) -> SurfaceDecl {
 /// ```
 fn paco_unfold_thm(s: &Shape) -> SurfaceDecl {
     let rel_ty = s.rel_ty();
-    let lam_names: Vec<&str> = lam_names_of(s, HYP_H);
+    let lam_names: Vec<SurfaceName> = lam_names_of(s, HYP_H);
     let paco_r = || s.paco_at(ident(REL_ACC));
-    let post_hyp = napp("And.left", vec![ident(HYP_HR)]);
-    let carrier_hyp = napp("And.right", vec![ident(HYP_HR)]);
+    let post_hyp = global_napp("And.left", vec![ident(HYP_HR)]);
+    let carrier_hyp = global_napp("And.right", vec![ident(HYP_HR)]);
     let mut inl_coind_args = vec![ident(REL_ACC), ident(REL_R), post_hyp.clone()];
     inl_coind_args.extend(s.var_args());
     inl_coind_args.push(ident(HYP_HP));
-    let hle = lam(
+    let hle = lam_typed(
         &lam_names_of(s, HYP_HU),
         napp(
             "Or.elim",
@@ -449,9 +455,9 @@ fn paco_unfold_thm(s: &Shape) -> SurfaceDecl {
                 ident(HYP_HU),
                 lam(
                     &[HYP_HP],
-                    napp("Or.inl", vec![s.papp(&s.paco_coind_name(), inl_coind_args)]),
+                    global_napp("Or.inl", vec![s.papp(&s.paco_coind_name(), inl_coind_args)]),
                 ),
-                lam(&[HYP_HQ], napp("Or.inr", vec![ident(HYP_HQ)])),
+                lam(&[HYP_HQ], global_napp("Or.inr", vec![ident(HYP_HQ)])),
             ],
         ),
     );
@@ -472,7 +478,7 @@ fn paco_unfold_thm(s: &Shape) -> SurfaceDecl {
             s.applied(paco_r()),
             s.applied(s.f_applied(union_rel(s, paco_r(), ident(REL_ACC)))),
         )),
-        lam(
+        lam_typed(
             &lam_names,
             napp(
                 "Exists.elim",
@@ -507,7 +513,7 @@ fn paco_fold_thm(s: &Shape) -> SurfaceDecl {
     let mut unfold_args = vec![ident(REL_ACC)];
     unfold_args.extend(s.var_args());
     unfold_args.push(ident(HYP_HP));
-    let hle = lam(
+    let hle = lam_typed(
         &lam_names_of(s, HYP_HU),
         napp(
             "Or.elim",
@@ -515,16 +521,16 @@ fn paco_fold_thm(s: &Shape) -> SurfaceDecl {
                 ident(HYP_HU),
                 lam(
                     &[HYP_HP],
-                    napp("Or.inl", vec![s.papp(&s.paco_unfold_name(), unfold_args)]),
+                    global_napp("Or.inl", vec![s.papp(&s.paco_unfold_name(), unfold_args)]),
                 ),
-                lam(&[HYP_HQ], napp("Or.inr", vec![ident(HYP_HQ)])),
+                lam(&[HYP_HQ], global_napp("Or.inr", vec![ident(HYP_HQ)])),
             ],
         ),
     );
     let mut mono_args = vec![upaco(), union_rel(s, f_upaco(), ident(REL_ACC)), hle];
     mono_args.extend(s.var_args());
     mono_args.push(ident(HYP_H));
-    let post = lam(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
+    let post = lam_typed(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
     mk_theorem(
         s.paco_fold_name(),
         s.with_params(vec![binder(REL_ACC, rel_ty, SurfaceBinderInfo::Explicit)]),
@@ -550,14 +556,17 @@ fn paco_mon_thm(s: &Shape) -> SurfaceDecl {
     let paco_r = || s.paco_at(ident(REL_ACC));
     let mut le_args = s.var_args();
     le_args.push(ident(HYP_HQ));
-    let hle = lam(
+    let hle = lam_typed(
         &lam_names_of(s, HYP_HU),
         napp(
             "Or.elim",
             vec![
                 ident(HYP_HU),
-                lam(&[HYP_HP], napp("Or.inl", vec![ident(HYP_HP)])),
-                lam(&[HYP_HQ], napp("Or.inr", vec![app(ident(HYP_LE), le_args)])),
+                lam(&[HYP_HP], global_napp("Or.inl", vec![ident(HYP_HP)])),
+                lam(
+                    &[HYP_HQ],
+                    global_napp("Or.inr", vec![app(ident(HYP_LE), le_args)]),
+                ),
             ],
         ),
     );
@@ -571,7 +580,7 @@ fn paco_mon_thm(s: &Shape) -> SurfaceDecl {
     ];
     mono_args.extend(s.var_args());
     mono_args.push(s.papp(&s.paco_unfold_name(), unfold_args));
-    let post = lam(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
+    let post = lam_typed(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
     mk_theorem(
         s.paco_mon_name(),
         s.with_params(vec![
@@ -605,14 +614,14 @@ fn paco_mon_thm(s: &Shape) -> SurfaceDecl {
 fn paco_bot_thm(s: &Shape) -> SurfaceDecl {
     let gfp = || s.papp(&s.qname, Vec::new());
     let paco_bot = || s.paco_at(bot_rel(s));
-    let hle = lam(
+    let hle = lam_typed(
         &lam_names_of(s, HYP_HU),
         napp(
             "Or.elim",
             vec![
                 ident(HYP_HU),
                 lam(&[HYP_HP], ident(HYP_HP)),
-                lam(&[HYP_HQ], napp("False.elim", vec![ident(HYP_HQ)])),
+                lam(&[HYP_HQ], global_napp("False.elim", vec![ident(HYP_HQ)])),
             ],
         ),
     );
@@ -622,7 +631,7 @@ fn paco_bot_thm(s: &Shape) -> SurfaceDecl {
     let mut mono_args = vec![union_rel(s, paco_bot(), bot_rel(s)), paco_bot(), hle];
     mono_args.extend(s.var_args());
     mono_args.push(s.papp(&s.paco_unfold_name(), unfold_args));
-    let post = lam(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
+    let post = lam_typed(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
     mk_theorem(
         s.paco_bot_name(),
         s.with_params(Vec::new()),
@@ -645,16 +654,16 @@ fn paco_bot_thm(s: &Shape) -> SurfaceDecl {
 fn le_paco_thm(s: &Shape) -> SurfaceDecl {
     let rel_ty = s.rel_ty();
     let gfp = || s.papp(&s.qname, Vec::new());
-    let hle = lam(
+    let hle = lam_typed(
         &lam_names_of(s, HYP_HP),
-        napp("Or.inl", vec![ident(HYP_HP)]),
+        global_napp("Or.inl", vec![ident(HYP_HP)]),
     );
     let mut unfold_args = s.var_args();
     unfold_args.push(ident(HYP_H));
     let mut mono_args = vec![gfp(), union_rel(s, gfp(), ident(REL_ACC)), hle];
     mono_args.extend(s.var_args());
     mono_args.push(s.papp(&s.unfold_name(), unfold_args));
-    let post = lam(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
+    let post = lam_typed(&lam_names_of(s, HYP_H), s.papp(&s.mono_name(), mono_args));
     mk_theorem(
         s.le_paco_name(),
         s.with_params(vec![binder(REL_ACC, rel_ty, SurfaceBinderInfo::Explicit)]),
@@ -689,26 +698,26 @@ fn paco_acc_thm(s: &Shape) -> SurfaceDecl {
     let rel_ty = s.rel_ty();
     let union_acc = || union_rel(s, ident(REL_ACC), ident(REL_ACC2));
     let paco_u = || s.paco_at(union_acc());
-    let lam_names: Vec<&str> = lam_names_of(s, HYP_HR);
+    let lam_names: Vec<SurfaceName> = lam_names_of(s, HYP_HR);
     let mut step_b_args = s.var_args();
     step_b_args.push(ident(HYP_HB));
-    let map = lam(
+    let map = lam_typed(
         &lam_names_of(s, HYP_HU),
         napp(
             "Or.elim",
             vec![
                 ident(HYP_HU),
-                lam(&[HYP_HP], napp("Or.inl", vec![ident(HYP_HP)])),
+                lam(&[HYP_HP], global_napp("Or.inl", vec![ident(HYP_HP)])),
                 lam(
                     &[HYP_HRR],
                     napp(
                         "Or.elim",
                         vec![
                             ident(HYP_HRR),
-                            lam(&[HYP_HA], napp("Or.inr", vec![ident(HYP_HA)])),
+                            lam(&[HYP_HA], global_napp("Or.inr", vec![ident(HYP_HA)])),
                             lam(
                                 &[HYP_HB],
-                                napp("Or.inl", vec![app(ident(HYP_STEP), step_b_args)]),
+                                global_napp("Or.inl", vec![app(ident(HYP_STEP), step_b_args)]),
                             ),
                         ],
                     ),
@@ -726,7 +735,7 @@ fn paco_acc_thm(s: &Shape) -> SurfaceDecl {
     ];
     mono_args.extend(s.var_args());
     mono_args.push(s.papp(&s.paco_unfold_name(), unfold_args));
-    let post = lam(&lam_names_of(s, HYP_HQ), s.papp(&s.mono_name(), mono_args));
+    let post = lam_typed(&lam_names_of(s, HYP_HQ), s.papp(&s.mono_name(), mono_args));
     let mut step_r_args = s.var_args();
     step_r_args.push(ident(HYP_HR));
     let mut coind_args = vec![ident(REL_ACC), paco_u(), post];
@@ -747,7 +756,7 @@ fn paco_acc_thm(s: &Shape) -> SurfaceDecl {
             s.applied(ident(REL_ACC2)),
             s.applied(s.paco_at(ident(REL_ACC))),
         )),
-        lam(&lam_names, s.papp(&s.paco_coind_name(), coind_args)),
+        lam_typed(&lam_names, s.papp(&s.paco_coind_name(), coind_args)),
     )
 }
 

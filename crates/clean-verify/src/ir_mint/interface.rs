@@ -222,7 +222,16 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
     // The chain's bodies, in MODULE ORDER. One for every chain before
     // `has_loose_bvars`, in which case this is exactly the previous read.
     let declared = tags.body_canonicals();
-    let chunks = super::emitted::split_bodies(text, declared.len())?;
+    // The MODULE-TABLE PREAMBLE first: the `type ty.N = …` and `global …`
+    // rows the printer emits before the first function, read by
+    // `emitted_globals` into the declarations `interface_globals::check_globals`
+    // compares against the tag table's `globals` lane. Every committed fixture before `ir_lzc`
+    // carries none, so the split hands them to `split_bodies` whole.
+    let (preamble_lines, bodies_text) = super::emitted_globals::split_preamble(text);
+    let preamble = super::emitted_globals::parse(&preamble_lines)?;
+    // The bodies' line numbers are offset by the preamble, so a refusal the
+    // split raises names the FILE line and not a body-relative one.
+    let chunks = super::emitted::split_bodies(bodies_text, declared.len(), preamble_lines.len())?;
     // The namespace the tag table already accounts for: every body of this
     // module at its canonical index, so a call to a SIBLING reads as that
     // sibling and not as a fresh foreign callee.
@@ -249,10 +258,25 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
         }
         selves.push(sf);
     }
+    // The GLOBAL namespace the tag table accounts for, built from its
+    // `globals` lane exactly as `namespace` is built from `funcs`: crate-level
+    // `@global.N` id -> canonical index. Its presence is what lets reader B
+    // read a `global_addr` at all (a bare read refuses one); every other
+    // committed table omits the lane, so this is empty for them and a body of
+    // theirs that addressed a global would intern above nothing and then be
+    // refused by `check_globals`.
+    let global_namespace: std::collections::BTreeMap<u32, u32> = tags
+        .globals
+        .iter()
+        .map(|(canonical, pin)| (pin.crate_id, *canonical))
+        .collect();
     let mut cores = Vec::new();
     let mut interfaces = Vec::new();
     let mut bodies = Vec::new();
+    let enum_namespace = tags.enum_namespace();
+    let struct_namespace = tags.struct_namespace();
     let mut usize_seen = 0u32;
+    let mut isize_seen = 0u32;
     for ((chunk, canonical), sf) in chunks.iter().zip(&declared).zip(&selves) {
         let (core, observed) = super::emitted::read_body(
             chunk,
@@ -260,6 +284,8 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
             *canonical,
             &namespace,
             tags.usize_pin.map(|u| u.bits),
+            &global_namespace,
+            (&enum_namespace, &struct_namespace),
         )?;
         let pinned = tags
             .body_interface(*canonical)
@@ -267,6 +293,7 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
         let interface = observed.interface.canonicalize(tags);
         check_body(&interface, pinned, &observed, tags)?;
         usize_seen = usize_seen.saturating_add(observed.usize_seen);
+        isize_seen = isize_seen.saturating_add(observed.isize_seen);
         // The one function reader B just read, lifted out of its one-function
         // wrapper so the chain's functions can be spliced into ONE module.
         let one = core
@@ -282,9 +309,21 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
         interfaces.push(interface);
         bodies.push(observed);
     }
+    // The module's GLOBAL LIST, spliced from the preamble in canonical order
+    // once every body's `global_addr` and every pin and every declaration
+    // account for one another. Empty — the literal `(globals)` — for every
+    // chain whose table has no lane, which is every chain before `ir_lzc`.
+    // The AGGREGATE lanes first: which crate `enum`/`struct` each body's
+    // `enum.N` / `struct.N` denotes. Before the globals check because a module
+    // whose two bodies disagree about what `(enum 0)` means is not a module,
+    // and the reason it runs at all is the `aggregate-id` blind slot — until
+    // 2026-09-10 nothing compared an observed aggregate id to anything.
+    super::interface_aggregates::check_aggregates(&bodies, tags)?;
+    let globals =
+        super::interface_globals::check_globals(&bodies, &preamble, &global_namespace, tags)?;
     let core = Sx::tag(
         "module",
-        vec![Sx::tag("funcs", cores), Sx::tag("globals", vec![])],
+        vec![Sx::tag("funcs", cores), Sx::tag("globals", globals)],
     );
     let observed = bodies
         .first()
@@ -306,6 +345,19 @@ pub fn project(text: &str, tags: &Tags) -> Result<Projection, InterfaceError> {
             slot: "usize sites".into(),
             pinned: format!("{pinned_usize} `usize` site(s)"),
             found: format!("{usize_seen} `usize` site(s)"),
+        });
+    }
+    // `isize` the same way, and counted SEPARATELY on purpose. The two tokens
+    // share a width by Rust's own definition, so they share the lane's `bits`;
+    // they do not share a count, because a chain that swapped one for the
+    // other would resolve to a different core (`(int n)` against `(uint n)`)
+    // and a single summed pin would accept the swap.
+    let pinned_isize = tags.usize_pin.map_or(0, |u| u.isize_sites);
+    if isize_seen != pinned_isize {
+        return Err(InterfaceError::Mismatch {
+            slot: "isize sites".into(),
+            pinned: format!("{pinned_isize} `isize` site(s)"),
+            found: format!("{isize_seen} `isize` site(s)"),
         });
     }
     Ok(Projection {

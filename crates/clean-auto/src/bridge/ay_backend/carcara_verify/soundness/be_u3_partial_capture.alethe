@@ -1,0 +1,3 @@
+(assume nc (not (= ((lambda ((z Int) (y Int)) (+ z y)) y) (lambda ((y Int)) (+ y y)))))
+(step s (cl (= ((lambda ((z Int) (y Int)) (+ z y)) y) (lambda ((y Int)) (+ y y)))) :rule beta_equiv)
+(step done (cl) :rule resolution :premises (nc s))

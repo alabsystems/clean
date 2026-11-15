@@ -21,8 +21,8 @@
 //!
 //! ```text
 //! (func 0 …)                            ← level::Level::is_zero, artifact 3905
-//! (node (results 12) (call 0 (args 9)))  ← @func.3894 = LevelArc::deref
-//! (node (results 13) (call 1 (args 12))) ← @func.3905 = is_zero ITSELF
+//! (node (results 12) (call 0 (args 9)))  ← @func.1947 = LevelArc::deref
+//! (node (results 13) (call 1 (args 12))) ← @func.1961 = is_zero ITSELF
 //! ```
 //!
 //! [`the_swap_counterexample_is_closed`] is the constructed witness: swap the
@@ -65,7 +65,7 @@ fn lz_tags() -> ir_mint::Tags {
 /// exchanged. Q is a DIFFERENT program — it composes the deref and the
 /// recursive call the other way round.
 fn swapped(text: &str) -> String {
-    let (a, b) = ("@func.3894", "@func.3905");
+    let (a, b) = ("@func.1947", "@func.1961");
     assert!(
         text.contains(a) && text.contains(b),
         "the swap anchors are gone, so the counterexample would be vacuous"
@@ -88,7 +88,7 @@ fn the_swap_counterexample_is_closed() {
     let pin = lz_tags().self_func();
     assert_eq!(
         pin,
-        SelfFunc::Pinned(3905),
+        SelfFunc::Pinned(1961),
         "the counterexample is about the body's OWN id; if the table stopped pinning it this test \
          would silently stop testing anything"
     );
@@ -291,7 +291,7 @@ fn m8_the_funcs_tag_table_still_describes_the_artifact() {
         );
     }
 
-    let current: serde_json::Value = serde_json::from_str(ir_mint::IR_LZ_B039_PROVENANCE)
+    let current: serde_json::Value = serde_json::from_str(ir_mint::IR_LZ_047E_PROVENANCE)
         .expect("the current reader-A provenance must parse");
     let current_ids: Vec<u32> = current["crate_func_ids_seen"]
         .as_array()

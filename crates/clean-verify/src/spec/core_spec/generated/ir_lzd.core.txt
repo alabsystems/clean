@@ -1,0 +1,194 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 3) (load (enum 0) 0 false))
+            (node (results 4) (extractfield (uint 8) 3 0))
+            (node (results) (switch 4 5 (args) (cases (case 0 1 (args)) (case 1 2 (args)) (case 4 3 (args)) (case 2 4 (args))) false))
+          ))
+        (block 1
+          (params)
+          (nodes
+            (node (results 5) (const (bool) (bool true)))
+            (node (results) (br 6 (args 5)))
+          ))
+        (block 2
+          (params)
+          (nodes
+            (node (results 6) (const (bool) (bool false)))
+            (node (results) (br 6 (args 6)))
+          ))
+        (block 3
+          (params)
+          (nodes
+            (node (results 7) (const (bool) (bool false)))
+            (node (results) (br 6 (args 7)))
+          ))
+        (block 4
+          (params)
+          (nodes
+            (node (results 8) (const (int 64) (int 8)))
+            (node (results 9) (gep (int 8) 0 (idx 8) true))
+            (node (results 10) (const (int 64) (int 16)))
+            (node (results 11) (gep (int 8) 0 (idx 10) true))
+            (node (results 12) (call 1 (args 9)))
+            (node (results 13) (call 0 (args 12)))
+            (node (results) (condbr 13 7 (args) 8 (args)))
+          ))
+        (block 5
+          (params)
+          (nodes
+            (node (results 14) (const (int 64) (int 16)))
+            (node (results 15) (gep (int 8) 0 (idx 14) true))
+            (node (results 16) (call 1 (args 15)))
+            (node (results 17) (call 0 (args 16)))
+            (node (results) (br 6 (args 17)))
+          ))
+        (block 6
+          (params 1)
+          (nodes
+            (node (results) (ret (vals 1)))
+          ))
+        (block 7
+          (params)
+          (nodes
+            (node (results 18) (call 1 (args 11)))
+            (node (results 19) (call 0 (args 18)))
+            (node (results) (br 9 (args 19)))
+          ))
+        (block 8
+          (params)
+          (nodes
+            (node (results 20) (const (bool) (bool false)))
+            (node (results) (br 9 (args 20)))
+          ))
+        (block 9
+          (params 2)
+          (nodes
+            (node (results) (br 6 (args 2)))
+          ))
+      ))
+    (func 1
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (call 2 (args 0)))
+            (node (results 2) (globaladdr 0))
+            (node (results 3) (const (uint 64) (int 34)))
+            (node (results 4) (ptrfromparts (fatptr (uint 8)) (uint 64) 2 3))
+            (node (results 5) (call 3 (args 1 4)))
+            (node (results) (ret (vals 5)))
+          ))
+      ))
+    (func 2
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (alloca (enum 1) (none)))
+            (node (results 2) (load (enum 2) 0 false))
+            (node (results 3) (extractfield (uint 8) 2 0))
+            (node (results 4) (cast zext (uint 8) (int 64) 3))
+            (node (results) (switch 4 1 (args) (cases (case 0 2 (args)) (case 1 3 (args))) false))
+          ))
+        (block 1
+          (params)
+          (nodes
+            (node (results) (unreachable))
+          ))
+        (block 2
+          (params)
+          (nodes
+            (node (results 5) (const (enum 1) (agg (int 0))))
+            (node (results) (store (enum 1) 1 5 false))
+            (node (results) (br 4 (args)))
+          ))
+        (block 3
+          (params)
+          (nodes
+            (node (results 6) (const (int 64) (int 0)))
+            (node (results 7) (gep (int 8) 0 (idx 6) true))
+            (node (results 8) (borrow 7))
+            (node (results 9) (const (enum 1) (agg (int 1) (int 0))))
+            (node (results 10) (insertfield (enum 1) 9 1 8))
+            (node (results 11) (extractfield (ptr) 10 1))
+            (node (results 12) (copy (ptr) 11))
+            (node (results 13) (call 4 (args 12)))
+            (node (results) (br 5 (args)))
+          ))
+        (block 4
+          (params)
+          (nodes
+            (node (results 14) (load (enum 1) 1 false))
+            (node (results) (ret (vals 14)))
+          ))
+        (block 5
+          (params)
+          (nodes
+            (node (results 15) (const (enum 1) (agg (int 1) (int 0))))
+            (node (results 16) (insertfield (enum 1) 15 1 13))
+            (node (results) (store (enum 1) 1 16 false))
+            (node (results) (br 4 (args)))
+          ))
+      ))
+    (func 3
+      (params 0 1)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 2) (extractfield (uint 8) 0 0))
+            (node (results 3) (cast zext (uint 8) (int 64) 2))
+            (node (results) (switch 3 1 (args) (cases (case 0 2 (args)) (case 1 3 (args))) false))
+          ))
+        (block 1
+          (params)
+          (nodes
+            (node (results) (unreachable))
+          ))
+        (block 2
+          (params)
+          (nodes
+            (node (results 4) (const (bool) (bool false)))
+            (node (results) (assert 4))
+            (node (results) (unreachable))
+          ))
+        (block 3
+          (params)
+          (nodes
+            (node (results 5) (extractfield (ptr) 0 1))
+            (node (results 6) (copy (ptr) 5))
+            (node (results) (ret (vals 6)))
+          ))
+      ))
+    (func 4
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (load (struct 0) 0 false))
+            (node (results 2) (extractfield (struct 1) 1 0))
+            (node (results 3) (copy (struct 1) 2))
+            (node (results 4) (extractfield (ptr) 3 0))
+            (node (results 5) (const (int 64) (int 16)))
+            (node (results 6) (gep (int 8) 4 (idx 5) true))
+            (node (results 7) (borrow 6))
+            (node (results) (ret (vals 7)))
+          ))
+      ))
+  )
+  (globals (global 0 (agg (int 108) (int 105) (int 118) (int 101) (int 32) (int 76) (int 101) (int 118) (int 101) (int 108) (int 65) (int 114) (int 99) (int 32) (int 109) (int 117) (int 115) (int 116) (int 32) (int 99) (int 111) (int 110) (int 116) (int 97) (int 105) (int 110) (int 32) (int 97) (int 32) (int 108) (int 101) (int 118) (int 101) (int 108))))
+)

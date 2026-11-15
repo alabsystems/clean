@@ -10,7 +10,12 @@
 
 use crate::error::ElabError;
 use clean_kernel::Name;
-use clean_parser::{SurfaceBinder, SurfaceBinderInfo, SurfaceExpr};
+use clean_parser::{SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName};
+
+/// A fixed compiler-authored path, never user display text.
+fn generated_ident(path: &'static str) -> SurfaceExpr {
+    SurfaceExpr::Ident(clean_parser::Span::dummy(), SurfaceName::global_path(path))
+}
 
 // ---------------------------------------------------------------------------
 // Extended IO operation names
@@ -128,25 +133,25 @@ impl From<IoMonadExtError> for ElabError {
 // ---------------------------------------------------------------------------
 
 /// Build `<op> arg`.
-fn mk_io_app1(op: &str, arg: SurfaceExpr) -> SurfaceExpr {
-    SurfaceExpr::app(SurfaceExpr::ident(op), vec![arg])
+fn mk_io_app1(op: &'static str, arg: SurfaceExpr) -> SurfaceExpr {
+    SurfaceExpr::app(generated_ident(op), vec![arg])
 }
 
 /// Build `<op> arg1 arg2`.
-fn mk_io_app2(op: &str, a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
-    SurfaceExpr::app(SurfaceExpr::ident(op), vec![a, b])
+fn mk_io_app2(op: &'static str, a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
+    SurfaceExpr::app(generated_ident(op), vec![a, b])
 }
 
 /// Build `<op> action (fun err_name => handler)`.
 fn mk_io_with_handler(
-    op: &str,
+    op: &'static str,
     action: SurfaceExpr,
-    err_name: &str,
+    err_name: &SurfaceName,
     handler: SurfaceExpr,
 ) -> SurfaceExpr {
-    let binder = SurfaceBinder::new(err_name, None, SurfaceBinderInfo::Explicit);
+    let binder = SurfaceBinder::new_typed(err_name.clone(), None, SurfaceBinderInfo::Explicit);
     let handler_fn = SurfaceExpr::lambda(vec![binder], handler);
-    SurfaceExpr::app(SurfaceExpr::ident(op), vec![action, handler_fn])
+    SurfaceExpr::app(generated_ident(op), vec![action, handler_fn])
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +166,7 @@ pub(crate) fn mk_io_throw(err_val: SurfaceExpr) -> SurfaceExpr {
 /// Build `IO.catch action (fun err_name => handler)`.
 pub(crate) fn mk_io_catch(
     action: SurfaceExpr,
-    err_name: &str,
+    err_name: &SurfaceName,
     handler: SurfaceExpr,
 ) -> SurfaceExpr {
     mk_io_with_handler(IO_CATCH, action, err_name, handler)
@@ -170,7 +175,7 @@ pub(crate) fn mk_io_catch(
 /// Build `IO.tryCatch action (fun err_name => handler)`.
 pub(crate) fn mk_io_try_catch(
     action: SurfaceExpr,
-    err_name: &str,
+    err_name: &SurfaceName,
     handler: SurfaceExpr,
 ) -> SurfaceExpr {
     mk_io_with_handler(IO_TRY_CATCH, action, err_name, handler)
@@ -254,7 +259,7 @@ pub(crate) fn mk_io_get_env(var: SurfaceExpr) -> SurfaceExpr {
 }
 /// Build `IO.getCwd`.
 pub(crate) fn mk_io_get_cwd() -> SurfaceExpr {
-    SurfaceExpr::ident(IO_GET_CWD)
+    generated_ident(IO_GET_CWD)
 }
 
 // ---------------------------------------------------------------------------
@@ -265,18 +270,18 @@ pub(crate) fn mk_io_get_cwd() -> SurfaceExpr {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub(crate) enum TransformerLayer {
-    StateT { state_type: String },
-    ExceptT { error_type: String },
-    ReaderT { env_type: String },
+    StateT { state_type: SurfaceName },
+    ExceptT { error_type: SurfaceName },
+    ReaderT { env_type: SurfaceName },
 }
 
 /// Project a transformer layer into its `(head_name, param)` pair.
 /// Internal helper for `TransformerStack::build_type`.
-fn layer_head(layer: &TransformerLayer) -> (&'static str, &str) {
+fn layer_head(layer: &TransformerLayer) -> (&'static str, &SurfaceName) {
     match layer {
-        TransformerLayer::StateT { state_type } => (STATE_T, state_type.as_str()),
-        TransformerLayer::ExceptT { error_type } => (EXCEPT_T, error_type.as_str()),
-        TransformerLayer::ReaderT { env_type } => (READER_T, env_type.as_str()),
+        TransformerLayer::StateT { state_type } => (STATE_T, state_type),
+        TransformerLayer::ExceptT { error_type } => (EXCEPT_T, error_type),
+        TransformerLayer::ReaderT { env_type } => (READER_T, env_type),
     }
 }
 
@@ -330,19 +335,22 @@ impl TransformerStack {
     pub(crate) fn build_type(&self, result_type: SurfaceExpr) -> SurfaceExpr {
         // Zero layers: `IO α` directly.
         let Some((outermost, intermediates)) = self.layers.split_first() else {
-            return SurfaceExpr::app(SurfaceExpr::ident("IO"), vec![result_type]);
+            return SurfaceExpr::app(generated_ident("IO"), vec![result_type]);
         };
 
         // Walk from the innermost layer outward, wrapping `IO` with
         // each transformer head applied to (param, inner). After the
         // loop `inner` is the un-applied transformer stack rooted at
         // `IO`, i.e. `Layer_2 P_2 (... (Layer_{n-1} P_{n-1} IO))`.
-        let mut inner = SurfaceExpr::ident("IO");
+        let mut inner = generated_ident("IO");
         for layer in intermediates.iter().rev() {
             let (name, param) = layer_head(layer);
             inner = SurfaceExpr::app(
-                SurfaceExpr::ident(name),
-                vec![SurfaceExpr::ident(param), inner],
+                generated_ident(name),
+                vec![
+                    SurfaceExpr::Ident(clean_parser::Span::dummy(), param.clone()),
+                    inner,
+                ],
             );
         }
 
@@ -351,8 +359,12 @@ impl TransformerStack {
         // another App. The shape is `head param inner result_type`.
         let (name, param) = layer_head(outermost);
         SurfaceExpr::app(
-            SurfaceExpr::ident(name),
-            vec![SurfaceExpr::ident(param), inner, result_type],
+            generated_ident(name),
+            vec![
+                SurfaceExpr::Ident(clean_parser::Span::dummy(), param.clone()),
+                inner,
+                result_type,
+            ],
         )
     }
 }
@@ -362,19 +374,23 @@ impl TransformerStack {
 // ---------------------------------------------------------------------------
 
 #[must_use]
-pub(crate) fn is_extended_io_op(name: &str) -> bool {
-    EXTENDED_IO_OPS.contains(&name)
+pub(crate) fn is_extended_io_op(name: &SurfaceName) -> bool {
+    name_to_ext_io_op(name.name()).is_some()
 }
 
 #[must_use]
-pub(crate) fn is_monad_transformer(name: &str) -> bool {
-    MONAD_TRANSFORMERS.contains(&name)
+pub(crate) fn is_monad_transformer(name: &SurfaceName) -> bool {
+    MONAD_TRANSFORMERS
+        .iter()
+        .any(|path| name.name() == &Name::from_string(path))
 }
 
 #[must_use]
 pub(crate) fn name_to_ext_io_op(name: &Name) -> Option<&'static str> {
-    let s = name.to_string();
-    EXTENDED_IO_OPS.iter().find(|&&op| op == s).copied()
+    EXTENDED_IO_OPS
+        .iter()
+        .find(|&&op| name == &Name::from_string(op))
+        .copied()
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +403,7 @@ pub(crate) fn check_io_type(expr: &SurfaceExpr) -> Option<&SurfaceExpr> {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                if name == "IO" && args.len() == 1 {
+                if name.name() == &Name::anon().str("IO") && args.len() == 1 {
                     return Some(&args[0].expr);
                 }
             }
@@ -415,10 +431,10 @@ pub(crate) fn is_transformer_io_type(expr: &SurfaceExpr) -> bool {
 
 fn contains_io_base(expr: &SurfaceExpr) -> bool {
     match expr {
-        SurfaceExpr::Ident(_, name) => name == "IO",
+        SurfaceExpr::Ident(_, name) => name.name() == &Name::anon().str("IO"),
         SurfaceExpr::App(_, func, args) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                if name == "IO" {
+                if name.name() == &Name::anon().str("IO") {
                     return true;
                 }
                 if is_monad_transformer(name) && args.len() >= 2 {
@@ -467,7 +483,7 @@ impl std::fmt::Display for PurityContext {
 
 /// Check that an IO operation is not used in a pure context.
 pub(crate) fn check_io_purity(
-    operation: &str,
+    operation: &SurfaceName,
     ctx: &PurityContext,
     config: &IoMonadExtConfig,
 ) -> Result<(), IoMonadExtError> {
@@ -476,7 +492,7 @@ pub(crate) fn check_io_purity(
     }
     if !ctx.allows_io() {
         return Err(IoMonadExtError::PurityViolation {
-            operation: operation.to_owned(),
+            operation: operation.to_string(),
             context: ctx.to_string(),
         });
     }
@@ -501,7 +517,7 @@ fn check_expr_purity_inner(expr: &SurfaceExpr, ctx: &PurityContext) -> Result<()
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
                 if is_extended_io_op(name) || crate::io_monad::is_io_operation(name) {
                     return Err(IoMonadExtError::PurityViolation {
-                        operation: name.clone(),
+                        operation: name.to_string(),
                         context: ctx.to_string(),
                     });
                 }
@@ -513,7 +529,7 @@ fn check_expr_purity_inner(expr: &SurfaceExpr, ctx: &PurityContext) -> Result<()
             Ok(())
         }
         SurfaceExpr::Lambda(_, _, body) => check_expr_purity_inner(body, ctx),
-        SurfaceExpr::Let(_, _, val, body) => {
+        SurfaceExpr::Let(_, _, val, body) | SurfaceExpr::Have(_, _, val, body) => {
             check_expr_purity_inner(val, ctx)?;
             check_expr_purity_inner(body, ctx)
         }

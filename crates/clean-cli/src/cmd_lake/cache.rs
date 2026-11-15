@@ -114,8 +114,13 @@ pub(super) fn lake_cache_put(verbose: bool, dir: Option<PathBuf>) -> anyhow::Res
 
     println!("Cached {} .olean files to {}", cached, cache_dir.display());
     println!();
-    println!("Note: Cloud cache upload requires authentication configuration.");
-    println!("For Mathlib, use 'lake exe cache put' with proper setup.");
+    // Not "requires authentication configuration" — that framing sent the
+    // reader off to configure credentials for a cloud upload that does not
+    // exist in this command at any setting. Same defect the `upload` handler
+    // was deliberately fixed away from; see the comment above its bail!.
+    println!("This is a LOCAL cache only: nothing is uploaded anywhere, and no");
+    println!("setting enables that here. To publish to Mathlib's shared cache,");
+    println!("use Lean's own 'lake exe cache put'.");
 
     Ok(())
 }
@@ -385,8 +390,15 @@ pub(super) fn lake_upload(
     // TODO(#421): Implement actual Reservoir upload
     // Blockers: Reservoir API is not publicly documented. See issue for details.
     // Need: API endpoint, authentication format for ~/.lake/credentials.json
+    // The old second line told the user to "configure reservoir credentials in
+    // ~/.lake/credentials.json". No credentials make this work — the blocker
+    // recorded directly above is that the Reservoir API is undocumented, so
+    // there is nothing to authenticate against. An error whose remedy cannot
+    // succeed sends the reader to debug their own machine.
     anyhow::bail!(
-        "Reservoir upload not yet implemented.\n\
-         Configure reservoir credentials in ~/.lake/credentials.json"
+        "Reservoir upload is not implemented (TODO #421).\n\
+         This is not a configuration problem: the Reservoir API is not \
+         publicly documented, so there is no endpoint or credential format to \
+         set up. `--dry-run` lists the artifacts that would be uploaded."
     )
 }

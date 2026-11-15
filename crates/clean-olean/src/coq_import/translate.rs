@@ -125,7 +125,9 @@ impl Translator {
         if index == 0 {
             return Err(CoqImportError::InvalidRelIndex { index });
         }
-        let slot = usize::try_from(index - 1).expect("u32 fits in usize");
+        // An index no `usize` can hold is unbound at every depth: saturate so
+        // the depth check below refuses it.
+        let slot = usize::try_from(index - 1).unwrap_or(usize::MAX);
         if slot >= self.locals.len() {
             return Err(CoqImportError::UnboundRel {
                 index,

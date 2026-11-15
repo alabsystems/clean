@@ -313,7 +313,8 @@ def type_check(lean_code: str) -> tuple:
 
         result = subprocess.run(
             [
-                "cargo",
+                "targo",
+                "--unverified",
                 "run",
                 "--locked",
                 "--quiet",

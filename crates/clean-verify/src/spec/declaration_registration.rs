@@ -6,7 +6,7 @@
 
 use clean_elab::{elaborate_decl_and_register, ElabResult};
 use clean_kernel::{Declaration, Expr, Level, Name, TypeChecker};
-use clean_parser::parse_decl;
+use clean_parser::parse_decl_exact;
 use std::collections::HashSet;
 
 use super::{decl_budget, AxiomCategory, ProofStatus, SpecDefinition, SpecError, Specification};
@@ -43,7 +43,7 @@ impl Specification {
     }
 
     fn add_inductive_inner(&mut self, source: &str, description: &str) -> Result<(), SpecError> {
-        let decl = parse_decl(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
+        let decl = parse_decl_exact(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
         let ind_name = source
             .split_whitespace()
             .skip_while(|w| *w != "inductive")
@@ -360,7 +360,7 @@ impl Specification {
         source: &str,
         description: &str,
     ) -> Result<(), SpecError> {
-        let decl = parse_decl(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
+        let decl = parse_decl_exact(source).map_err(|e| SpecError::ParseError(e.to_string()))?;
 
         let result = elaborate_decl_and_register(&mut self.env, &decl).map_err(|e| {
             SpecError::ElabError(format!("Failed to elaborate def ({description}): {e}"))

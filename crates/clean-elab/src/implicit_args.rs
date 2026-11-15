@@ -392,7 +392,7 @@ pub(crate) fn insert_implicits(
     // the function type ran out of binders. Report over-application.
     if explicit_idx < explicit_args.len() && !stopped_before_type_exhausted {
         return Err(ElabError::TooManyArguments {
-            func_type: format!("{:?}", fn_type),
+            func_type: crate::error_render::term(fn_type),
             remaining_args: explicit_args.len() - explicit_idx,
         });
     }

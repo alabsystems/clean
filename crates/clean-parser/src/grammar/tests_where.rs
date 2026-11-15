@@ -19,9 +19,15 @@ fn test_parse_where_local_def_multiple_binders() {
         SurfaceDecl::Def {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert_eq!(where_decls.len(), 1);
-            assert_eq!(where_decls[0].name, "helper");
+            assert_eq!(
+                (where_decls[0].name).name(),
+                crate::SurfaceName::generated_path("helper").name()
+            );
             assert_eq!(
                 where_decls[0].binders.len(),
                 2,
@@ -43,9 +49,15 @@ fn test_parse_where_local_def_no_type_annotation() {
         SurfaceDecl::Def {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert_eq!(where_decls.len(), 1);
-            assert_eq!(where_decls[0].name, "helper");
+            assert_eq!(
+                (where_decls[0].name).name(),
+                crate::SurfaceName::generated_path("helper").name()
+            );
             assert!(where_decls[0].binders.is_empty(), "no binders");
             assert!(
                 where_decls[0].ret_ty.is_none(),
@@ -70,9 +82,15 @@ fn test_parse_where_local_def_equation_form() {
         SurfaceDecl::Def {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "top");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("top").name()
+            );
             assert_eq!(where_decls.len(), 1, "the `go` helper must be captured");
-            assert_eq!(where_decls[0].name, "go");
+            assert_eq!(
+                (where_decls[0].name).name(),
+                crate::SurfaceName::generated_path("go").name()
+            );
             assert!(where_decls[0].ret_ty.is_some(), "go has a return type");
             // The equation body desugars to a pattern-matching lambda, exactly as
             // a top-level equation `def` does.
@@ -99,14 +117,23 @@ fn test_parse_where_multiple_defs_with_dependencies() {
         SurfaceDecl::Def {
             name, where_decls, ..
         } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert_eq!(
                 where_decls.len(),
                 2,
                 "should parse two where local definitions"
             );
-            assert_eq!(where_decls[0].name, "bar");
-            assert_eq!(where_decls[1].name, "baz");
+            assert_eq!(
+                (where_decls[0].name).name(),
+                crate::SurfaceName::generated_path("bar").name()
+            );
+            assert_eq!(
+                (where_decls[1].name).name(),
+                crate::SurfaceName::generated_path("baz").name()
+            );
         }
         other => panic!("Expected Def, got {other:?}"),
     }

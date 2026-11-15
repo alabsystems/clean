@@ -1,0 +1,26 @@
+# The source scan of scripts/check_lint_coverage.py: syn parses every file
+# rustc compiled for a STANDALONE_GATED crate (the check reads the set off
+# rustc's dep-info) and this binary refuses the source that keeps code out of
+# the crate's forbidden-lint run. See src/main.rs for the rules.
+#
+# Not a workspace member, for the same reason as scripts/crystal_a2_project: it
+# is a tool of one gate, built by that gate with a committed standalone lock.
+# It is itself STANDALONE_GATED -- the check runs its tests and its lint, and
+# scans its source with itself -- and every tracked file here is a pinned input
+# of the check's registry row (`--pinned-inputs`).
+
+[workspace]
+
+[package]
+name = "clean-lint-scan"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+syn = { version = "2.0.118", default-features = false, features = ["full", "parsing", "printing", "visit"] }
+proc-macro2 = { version = "1.0.106", default-features = false, features = ["span-locations"] }
+
+[[bin]]
+name = "lint-scan"
+path = "src/main.rs"

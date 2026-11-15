@@ -52,7 +52,15 @@
     "ledger data/crystal_fixture_rebaseline_2026-08-20_a152ab39e.json records). This gate then",
     "fired on the stale tokens, exactly as designed; the two ir_type values above were re-read",
     "mechanically from the committed fixtures. Discriminants, switch arms, default coverage and",
-    "aggregate-constant tags are unchanged."
+    "aggregate-constant tags are unchanged.",
+    "RE-PINNED 2026-10-07: the 047ebd051 source-bound fixture rebaseline (trustc 321aaeda7,",
+    "data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json) re-recorded every chain fixture",
+    "and the whole-crate type table renumbered -- CleanMode enum.13 -> enum.17, SourceSystem",
+    "enum.178 -> enum.211, ExprPathStep enum.184 -> enum.225, Level enum.2 -> enum.3. This gate",
+    "fired on the stale tokens as designed; the ir_type values above were re-read mechanically",
+    "from the committed fixtures. Discriminants, switch arms, default coverage and",
+    "aggregate-constant tags are unchanged. The registered CleanMode alias is now the literal",
+    "`ir_h2_tmode : IRTy := IRTy.enum_ 17` (17 is above the ir_d0..ir_d16 data pool)."
   ],
   "enums": [
     {
@@ -99,7 +107,7 @@
         {
           "file": "crates/clean-verify/tests/fixtures/has_cubical_layer.trust-ir.txt",
           "body": "mode::CleanMode::has_cubical_layer",
-          "ir_type": "enum.13",
+          "ir_type": "enum.17",
           "role": "switched_on",
           "switch_arms": [
             2,
@@ -117,7 +125,7 @@
         {
           "file": "crates/clean-verify/tests/fixtures/from_source_system.trust-ir.txt",
           "body": "mode::CleanMode::from_source_system",
-          "ir_type": "enum.13",
+          "ir_type": "enum.17",
           "role": "constructed",
           "switch_arms": null,
           "switch_default_covers": null,
@@ -128,7 +136,7 @@
             4,
             5
           ],
-          "note": "CleanMode is the RESULT here, materialised as `const enum.13 { k }` in every arm. 3 (Directed) is absent because no source system maps to it -- a fact about from_source_system, re-derived by the gate rather than trusted."
+          "note": "CleanMode is the RESULT here, materialised as `const enum.17 { k }` in every arm. 3 (Directed) is absent because no source system maps to it -- a fact about from_source_system, re-derived by the gate rather than trusted."
         }
       ]
     },
@@ -200,7 +208,7 @@
         {
           "file": "crates/clean-verify/tests/fixtures/from_source_system.trust-ir.txt",
           "body": "mode::CleanMode::from_source_system",
-          "ir_type": "enum.178",
+          "ir_type": "enum.211",
           "role": "switched_on",
           "switch_arms": [
             0,
@@ -287,7 +295,7 @@
         {
           "file": "crates/clean-verify/tests/fixtures/expr_path_step_clone.trust-ir.txt",
           "body": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
-          "ir_type": "enum.184",
+          "ir_type": "enum.225",
           "role": "switched_on_and_constructed",
           "switch_arms": [
             0,
@@ -383,7 +391,7 @@
         {
           "file": "crates/clean-verify/tests/fixtures/level_is_zero.trust-ir.txt",
           "body": "level::Level::is_zero",
-          "ir_type": "enum.2",
+          "ir_type": "enum.3",
           "role": "switched_on",
           "switch_arms": [
             0,
@@ -400,7 +408,7 @@
         {
           "file": "crates/clean-verify/tests/fixtures/level_kind_ord.trust-ir.txt",
           "body": "level::Level::kind_ord",
-          "ir_type": "enum.2",
+          "ir_type": "enum.3",
           "role": "switched_on",
           "switch_arms": [
             0,

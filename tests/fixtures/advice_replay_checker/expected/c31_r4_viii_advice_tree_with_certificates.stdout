@@ -1,0 +1,8 @@
+one-step: ACCEPT
+two-certs: ACCEPT
+bad-cert: REFUSE core does not apply
+not-a-redex: REFUSE core does not apply
+wrong-claim: REFUSE reduce: sides differ
+truncated: REFUSE undecodable advice
+trailing: REFUSE trailing bytes
+refl: ACCEPT

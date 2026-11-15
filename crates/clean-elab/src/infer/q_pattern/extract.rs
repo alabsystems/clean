@@ -7,13 +7,13 @@
 use super::super::ElabCtx;
 use crate::stack_safe;
 use clean_kernel::Expr;
-use clean_parser::{QAntiquotContent, SurfaceExpr};
+use clean_parser::{QAntiquotContent, SurfaceExpr, SurfaceName};
 use std::collections::HashSet;
 
 /// Result of matching a q-pattern against a scrutinee
-pub struct QPatternMatchResult {
+pub(crate) struct QPatternMatchResult {
     /// Pattern variable bindings: name -> (value, type)
-    pub bindings: Vec<(String, Expr, Expr)>,
+    pub bindings: Vec<(SurfaceName, Expr, Expr)>,
 }
 
 impl<'a> ElabCtx<'a> {
@@ -24,7 +24,7 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn extract_q_pattern_vars(
         &self,
         expr: &SurfaceExpr,
-    ) -> Vec<(String, Option<SurfaceExpr>)> {
+    ) -> Vec<(SurfaceName, Option<SurfaceExpr>)> {
         let mut vars = Vec::new();
         let mut seen = HashSet::new();
         self.collect_q_pattern_vars(expr, &mut vars, &mut seen);
@@ -35,8 +35,8 @@ impl<'a> ElabCtx<'a> {
     fn collect_q_pattern_vars(
         &self,
         expr: &SurfaceExpr,
-        vars: &mut Vec<(String, Option<SurfaceExpr>)>,
-        seen: &mut HashSet<String>,
+        vars: &mut Vec<(SurfaceName, Option<SurfaceExpr>)>,
+        seen: &mut HashSet<SurfaceName>,
     ) {
         stack_safe(|| match expr {
             SurfaceExpr::QAntiquot { content, .. } => {
@@ -89,7 +89,7 @@ impl<'a> ElabCtx<'a> {
                 self.collect_q_pattern_vars(to, vars, seen);
             }
 
-            SurfaceExpr::Let(_, _, val, body) => {
+            SurfaceExpr::Let(_, _, val, body) | SurfaceExpr::Have(_, _, val, body) => {
                 self.collect_q_pattern_vars(val, vars, seen);
                 self.collect_q_pattern_vars(body, vars, seen);
             }

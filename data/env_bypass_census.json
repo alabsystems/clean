@@ -2,7 +2,7 @@
   "_comment": "Environment-bypass census (program G-SCAN). One row per watched method/site-class through which a declaration, inductive family, recursor, axiom, metadata record, or whole deserialized Environment becomes visible to the kernel without full checking. Seeded from docs/analysis/spine-lattice-recon-2026-08-22.md section 3 (the 18-item census measured at 4d12619e8); site lists RE-MEASURED 2026-08-23 by scripts/check_env_bypass_census.py, which re-derives every row from crates/**/*.rs on every scripts/local_gate.sh run and fails closed on an unaccounted call, a stale site, an over-baseline count, or a new TrustedEnvExt method nobody watches. The watched-method list is pinned IN THAT SCRIPT, so this file cannot widen the watch by itself. Recon item 15 (governance summary: 'items 5-12 unwatched') is CLOSED by this artifact + scanner pair. The add_decl_* / extend_constants_* surfaces are cross-referenced below, never duplicated: one accounting point per site.",
   "version": 1,
   "seeded_from": "docs/analysis/spine-lattice-recon-2026-08-22.md section 3; disposition jobs from designs/2026-08-22-spine-and-lattice-program.md section 5 (Ring R1)",
-  "last_updated": "2026-08-25",
+  "last_updated": "2026-11-07",
   "scanner": "scripts/check_env_bypass_census.py",
   "classification_legend": {
     "E": "eliminable (route through the checked path or delete)",
@@ -14,7 +14,9 @@
   "rows": [
     {
       "id": "ind-meta-bulk",
-      "census_items": [5],
+      "census_items": [
+        5
+      ],
       "methods": [
         "extend_inductives_unchecked",
         "extend_constructors_unchecked",
@@ -22,13 +24,15 @@
       ],
       "classification": "S",
       "disposition_job": "R1-IND",
-      "guard_notes": "CLOSED 2026-08-24 (R1-IND): all six production legs migrated to the new structural tier (row ind-meta-structural below), and the unchecked variants are demoted to #[cfg(any(test, feature = \"test-fixtures\"))] (inherent methods in registration.rs AND the TrustedEnvExt hooks) — like R1-TESTDOOR, a production (non-dev-target) call no longer compiles. The two remaining calls in load_register.rs live inside a #[cfg(test)] mod and are scanner-excluded. Row retained as expect-zero backstop: a production dependency edge enabling test-fixtures would re-open the door and must show up here first.",
+      "guard_notes": "CLOSED 2026-08-24 (R1-IND): all six production legs migrated to the new structural tier (row ind-meta-structural below), and the unchecked variants are demoted to #[cfg(any(test, feature = \"test-fixtures\"))] (inherent methods in registration.rs AND the TrustedEnvExt hooks) \u2014 like R1-TESTDOOR, a production (non-dev-target) call no longer compiles. The two remaining calls in load_register.rs live inside a #[cfg(test)] mod and are scanner-excluded. Row retained as expect-zero backstop: a production dependency edge enabling test-fixtures would re-open the door and must show up here first.",
       "sites": [],
       "max_occurrences": 0
     },
     {
       "id": "ind-meta-structural",
-      "census_items": [5],
+      "census_items": [
+        5
+      ],
       "methods": [
         "extend_inductives_structural",
         "extend_constructors_structural",
@@ -36,19 +40,22 @@
       ],
       "classification": "S",
       "disposition_job": "R1-IND (structural tier landed 2026-08-24; per-lane E via a future full inductive-family replay is the residual)",
-      "guard_notes": "The R1-IND structural tier replacing ind-meta-bulk: per record, the same O(1) checks as extend_constants_structural (no dup level params, no expr/level metavariables, no free vars, Level::Param scope) run over EVERY carried expression — the type, plus each recursor rule's rhs (the ι-reduction payload, exactly where a leaked fvar/mvar would smuggle). A failing record REFUSES structurally (diverted to the loader's skipped/rejected accounting, never inserted); inserted records stamp StructuralOnly. Definitions registration.rs (extend_*_structural + shared validate_family_record_structural). Residual trust: structural is NOT a kernel type/positivity check — the same admission-only .olean posture as the ratcheted constants leg (extend_constants block #4).",
+      "guard_notes": "The R1-IND structural tier replacing ind-meta-bulk: per record, the same O(1) checks as extend_constants_structural (no dup level params, no expr/level metavariables, no free vars, Level::Param scope) run over EVERY carried expression \u2014 the type, plus each recursor rule's rhs (the \u03b9-reduction payload, exactly where a leaked fvar/mvar would smuggle). A failing record REFUSES structurally (diverted to the loader's skipped/rejected accounting, never inserted); inserted records stamp StructuralOnly. Definitions registration.rs (extend_*_structural + shared validate_family_record_structural). Residual trust: structural is NOT a kernel type/positivity check \u2014 the same admission-only .olean posture as the ratcheted constants leg (extend_constants block #4). 2026-09-26 (env/imported_family.rs): the records the REDUCTION ENGINE reads are no longer the file's word. A recursor must EQUAL (up to alpha, binder annotations and a bounded \u03b2) the recursor-table entry the kernel generates from the resident family (type, universe arity, counts, is_k, argument order, every iota rule) \u2014 Lean.Replay's checkPostponedRecursors; a nested family is regenerated by re-admitting it through the checked add_inductive_core on a pruned scratch copy (so it is fully kernel-checked, not only its recursors); a constructor's owner/position/num_params/num_fields/universes and an inductive's num_indices must be the derived ones (num_indices at least the syntactic remainder when the type former is hidden behind a definition, as Lean counts after whnf); recursors register after the module's definitional constants so the regeneration's field-sort inference sees them. Measured RED before the change: a forged k=true recursor let the kernel accept `B.f = B.t`, a forged iota rule `B.rec \u2026 B.t = B.f` (env/imported_family_tests.rs). What stays trusted is a NON-nested family's DECLARATION itself (positivity, universe constraints, constructor typing) and InductiveVal.is_recursive (read only by structure eta). 2026-09-29, 8 -> 6: the Phase 1 import lane decides large elimination IN PLACE after pass 2 (Environment::recompute_imported_large_elim), so the per-module staging clone -- and that clone's two extend_*_structural calls -- are gone; the integration kept that over upstream's per-batch staging.",
       "sites": [
         {
           "file": "crates/clean-olean/src/import/load_register.rs",
-          "lines_hint": "296,309,325 (eager leg); 2163,2183,2231 (per-constant leg)",
+          "lines_hint": "590,603,703 (eager leg); 3953,3974,4102 (per-constant leg)",
           "note": ".olean loader, both registration legs; refusals feed structural_rejections / summary.skipped_constants"
         }
       ],
-      "max_occurrences": 6
+      "max_occurrences": 6,
+      "_audit_r17_baseline_restored": "8 -> 6 -> 8. Lowered by 8b6f2db84 in the same commit that deleted `trusted_ext_delegation_sites`: with the delegation account gone the three structural forwards in env/trusted_ext.rs were counted here instead of excused, and the baseline was reconciled against that. It was 8 at 8d02412db and 411073eae, it measures 8 with the account restored, and it is 8 again. This is a RESTORATION, not a raise -- no new call through a watched door was added by anyone (audit r17)."
     },
     {
       "id": "unchecked-register-singletons",
-      "census_items": [5],
+      "census_items": [
+        5
+      ],
       "methods": [
         "register_inductive_unchecked",
         "register_constructor_unchecked",
@@ -62,8 +69,14 @@
     },
     {
       "id": "srv-register-meta",
-      "census_items": [6],
-      "methods": ["register_inductive", "register_constructor", "register_recursor"],
+      "census_items": [
+        6
+      ],
+      "methods": [
+        "register_inductive",
+        "register_constructor",
+        "register_recursor"
+      ],
       "classification": "E",
       "disposition_job": "R1-SRV",
       "guard_notes": "CLOSED 2026-08-23 (R1-SRV): loadEnvironment merge mode no longer calls the unchecked entry-API hooks. Inductive families are reassembled from the loaded side tables (Environment::inductive_decl_of, the graduation-lane reconstruction) and replayed through the full checked Environment::add_inductive transaction; loaded family metadata the replay cannot regenerate REFUSES the whole merge with a named error (orphan audit in crates/clean-server/src/handlers/env_merge.rs), and a refused merge commits nothing (clone-and-commit). The constants leg stays on checked add_decl as before. Row retained as expect-zero backstop: any new production call to these three methods is a gate RED.",
@@ -72,11 +85,16 @@
     },
     {
       "id": "env-serde-load",
-      "census_items": [7],
-      "methods": ["from_json", "load_from_file"],
+      "census_items": [
+        7
+      ],
+      "methods": [
+        "from_json",
+        "load_from_file"
+      ],
       "classification": "S",
       "disposition_job": "R1-SRV (done for the handler; residual door is the flag-guarded replace install, ledgered here)",
-      "guard_notes": "Whole-Environment deserialization (associated fns, crates/clean-kernel/src/env/serialization.rs; matched in Environment:: form only). declaration_verification is #[serde(skip)] (env/mod.rs), so restored constants carry NO provenance stamp. 2026-08-23 (R1-SRV): loadEnvironment MERGE mode now re-earns every loaded declaration through the checked kernel paths (handlers/env_merge.rs); REPLACE mode's wholesale *env = new_env install is gated behind the explicit request flag replace_unchecked: true (refused with a named error without it) — a ledgered structural door with the flag as its guard, kept because a checked rebuild would silently drop the serialized metadata tables (structure fields, persistent extensions, quotient init) that wholesale install faithfully carries; the honest fast-restore story is R1-SNAP's lineage digest.",
+      "guard_notes": "Whole-Environment deserialization (associated fns, crates/clean-kernel/src/env/serialization.rs; matched in Environment:: form only). declaration_verification is #[serde(skip)] (env/mod.rs), so restored constants carry NO provenance stamp. 2026-08-23 (R1-SRV): loadEnvironment MERGE mode now re-earns every loaded declaration through the checked kernel paths (handlers/env_merge.rs); REPLACE mode's wholesale *env = new_env install is gated behind the explicit request flag replace_unchecked: true (refused with a named error without it) \u2014 a ledgered structural door with the flag as its guard, kept because a checked rebuild would silently drop the serialized metadata tables (structure fields, persistent extensions, quotient init) that wholesale install faithfully carries; the honest fast-restore story is R1-SNAP's lineage digest.",
       "sites": [
         {
           "file": "crates/clean-server/src/handlers/admin.rs",
@@ -92,12 +110,29 @@
       "max_occurrences": 6
     },
     {
+      "id": "env-dag-data-restore",
+      "census_items": [],
+      "methods": [
+        "from_dag_bincode",
+        "from_legacy_dag_bincode"
+      ],
+      "classification": "S",
+      "disposition_job": "Untrusted bounded data carrier; checked consumers must perform fresh dependency-closed replay",
+      "guard_notes": "Both associated DAG data doors use fixed recursive DTOs and owned bounded primitive decoding. Default from_dag_bincode accepts only self-described V2. The explicit legacy door selects fixed Clean3fa or C4 schemas for ambiguous G1 data; the caller must establish source epoch, and that choice grants no proof authority. All persisted fields are explicit and declaration_verification/native caches remain transient. There are zero production callers inside Clean. The downstream fixed CG artifact caller authenticates original bytes/source then still performs unchanged fresh dependency-closed replay, extension, exact axiom and root checks. Framing, allocation, byte/node/reference/depth and recursive atom budgets precede untrusted reconstruction. Hashes, epochs, provenance labels and snapshots cannot replace admission. Scanner alias/function-pointer limits are unchanged.",
+      "sites": [],
+      "max_occurrences": 0
+    },
+    {
       "id": "env-snapshot-restore",
-      "census_items": [8],
-      "methods": ["load_snapshot"],
+      "census_items": [
+        8
+      ],
+      "methods": [
+        "load_snapshot"
+      ],
       "classification": "P",
       "disposition_job": "R1-SNAP (receipt gate landed 2026-08-25; the attestation's honesty is the ledgered residual)",
-      "guard_notes": "Init snapshot restore (associated fn, crates/clean-kernel/src/env/snapshot.rs; matched in Environment:: form only). 2026-08-25 (R1-SNAP): the 'caller is responsible for only snapshotting a re-verified env' gap is closed with the crystal's lineage pattern — save_snapshot seals the caller's SnapshotAttestation (what was re-verified, how much, when) into a SnapshotReceipt whose env_content_sha256 the KERNEL computes over the exact serialized env bytes written (content-derived; no timestamp enters the binding), and load_snapshot under SnapshotReceiptPolicy::RequireReceipt (the only production policy; sole prod caller preload_init_with_snapshot attests only after its fail==0 typecheck_constants_full re-verify) REFUSES a snapshot whose receipt is absent or does not bind (SNAPSHOT_VERSION bumped 1->2; v1 snapshots are a decode/version cache miss, fail safe). THE GUARD (ledgered here): SnapshotReceiptPolicy::AcceptUnreceipted is the explicit opt-out — it still restores, but returns the loud LoadedUnreceipted outcome carrying the violation, has ZERO production callers, and any first production use must show up in this row. Adversarial pins: kernel snapshot.rs tests (receipt-less refuses; caller-forged receipt stripped at save; spliced receipt/env-bytes refuses with ContentMismatch; opt-out loads AND reports) + clean-olean test_receiptless_snapshot_is_refused_not_reused (warm path refuses, receipted control twin restores). Residual trust (why still P, not closed): the receipt binds the attestation to content — it cannot make the attestation TRUE; the verifying run's honesty is the remaining assumption, now named and content-pinned instead of ambient.",
+      "guard_notes": "Init snapshot restore (associated fn, crates/clean-kernel/src/env/snapshot.rs; matched in Environment:: form only). 2026-08-25 (R1-SNAP): the 'caller is responsible for only snapshotting a re-verified env' gap is closed with the crystal's lineage pattern \u2014 save_snapshot seals the caller's SnapshotAttestation (what was re-verified, how much, when) into a SnapshotReceipt whose env_content_sha256 the KERNEL computes over the exact serialized env bytes written (content-derived; no timestamp enters the binding), and load_snapshot under SnapshotReceiptPolicy::RequireReceipt (the only production policy; sole prod caller preload_init_with_snapshot attests only after its fail==0 typecheck_constants_full re-verify) REFUSES a snapshot whose receipt is absent or does not bind (SNAPSHOT_VERSION bumped 1->2; v1 snapshots are a decode/version cache miss, fail safe). THE GUARD (ledgered here): SnapshotReceiptPolicy::AcceptUnreceipted is the explicit opt-out \u2014 it still restores, but returns the loud LoadedUnreceipted outcome carrying the violation, has ZERO production callers, and any first production use must show up in this row. Adversarial pins: kernel snapshot.rs tests (receipt-less refuses; caller-forged receipt stripped at save; spliced receipt/env-bytes refuses with ContentMismatch; opt-out loads AND reports) + clean-olean test_receiptless_snapshot_is_refused_not_reused (warm path refuses, receipted control twin restores). Residual trust (why still P, not closed): the receipt binds the attestation to content \u2014 it cannot make the attestation TRUE; the verifying run's honesty is the remaining assumption, now named and content-pinned instead of ambient.",
       "sites": [
         {
           "file": "crates/clean-olean/src/verify_batch.rs",
@@ -114,39 +149,51 @@
     },
     {
       "id": "axiom-stub-upgrade",
-      "census_items": [9],
-      "methods": ["upgrade_axiom_stubs"],
+      "census_items": [
+        9
+      ],
+      "methods": [
+        "upgrade_axiom_stubs"
+      ],
       "classification": "E",
       "disposition_job": "R1-STUB",
-      "guard_notes": "CLOSED 2026-08-24 (R1-STUB, per the G4 checked-tier precedent): all three production callers migrated to upgrade_axiom_stubs_checked (row below), and this unchecked variant — which injected a delta-unfoldable VALUE with no type check — is demoted to #[cfg(any(test, feature = \"test-fixtures\"))] (inherent method in registration.rs AND the TrustedEnvExt hook), so a production (non-dev-target) call no longer compiles. Row retained as expect-zero backstop.",
+      "guard_notes": "CLOSED 2026-08-24 (R1-STUB, per the G4 checked-tier precedent): all three production callers migrated to upgrade_axiom_stubs_checked (row below), and this unchecked variant \u2014 which injected a delta-unfoldable VALUE with no type check \u2014 is demoted to #[cfg(any(test, feature = \"test-fixtures\"))] (inherent method in registration.rs AND the TrustedEnvExt hook), so a production (non-dev-target) call no longer compiles. Row retained as expect-zero backstop.",
       "sites": [],
       "max_occurrences": 0
     },
     {
       "id": "axiom-stub-upgrade-checked",
-      "census_items": [9],
-      "methods": ["upgrade_axiom_stubs_checked"],
+      "census_items": [
+        9
+      ],
+      "methods": [
+        "upgrade_axiom_stubs_checked"
+      ],
       "classification": "S",
       "disposition_job": "R1-STUB (checked tier landed 2026-08-24; the UnknownConst tolerance is the ledgered residual)",
-      "guard_notes": "The R1-STUB checked tier replacing axiom-stub-upgrade (registration.rs): per record, the stub must EXIST, the record passes validate_constant_info_structural, the incoming type must kernel-match the stub's type (arity + positional alpha-insensitive equality, is_def_eq fallback — the upgrade can never change a constant's stated type), and the incoming VALUE must check_type against it via the exact add_decl machinery. A failing record REFUSES fail-closed: the stub stays, the (name, EnvError) is returned for loud accounting (olean lanes record it in summary.skipped_constants), and nothing ever registers unchecked. Residual trust (why watched, classification S not closed): the G4 UnknownConst tolerance — a value with an unresolved forward/external reference is admitted after the structural+type-anchor tiers only, because the demand-load lane assembles closures incrementally; stamp stays conservative (Unchecked, the same stamp the G4 lane mints) so no verdict over-claims. Perf: at fixture scale (clean-olean --lib, 485 tests) the per-value check_type cost is not measurable (7.5 s suite, unchanged order); no opt-out exists — the checked path is unconditionally on.",
+      "guard_notes": "The R1-STUB checked tier replacing axiom-stub-upgrade (registration.rs): per record, the stub must EXIST, the record passes validate_constant_info_structural, the incoming type must kernel-match the stub's type (arity + positional alpha-insensitive equality, is_def_eq fallback \u2014 the upgrade can never change a constant's stated type), and the incoming VALUE must check_type against it via the exact add_decl machinery. A failing record REFUSES fail-closed: the stub stays, the (name, EnvError) is returned for loud accounting (olean lanes record it in summary.skipped_constants), and nothing ever registers unchecked. Residual trust (why watched, classification S not closed): the G4 UnknownConst tolerance \u2014 a value with an unresolved forward/external reference is admitted after the structural+type-anchor tiers only, because the demand-load lane assembles closures incrementally; stamp stays conservative (Unchecked, the same stamp the G4 lane mints) so no verdict over-claims. Perf: at fixture scale (clean-olean --lib, 485 tests) the per-value check_type cost is not measurable (7.5 s suite, unchanged order); no opt-out exists \u2014 the checked path is unconditionally on. 2026-09-29, 3 -> 2: the Phase 1 replay lane's upgrade_stubs_to_fixpoint makes the ONE checked upgrade call both loaders share (re-offered while another succeeds), replacing a call per loader.",
       "sites": [
         {
           "file": "crates/clean-olean/src/import/load_register.rs",
-          "lines_hint": "1705,2002",
+          "lines_hint": "134",
           "note": ".olean import stub-upgrade legs (ParsedModule + LoadModule direct); refusals feed summary.skipped_constants"
         },
         {
           "file": "crates/clean-mathverse/src/cli/per_constant_load.rs",
-          "lines_hint": "1747",
+          "lines_hint": "1910",
           "note": "per-constant demand-load stub upgrade; a refusal leaves the stub, and only the named TARGET's own kernel gauntlet can mint a verdict"
         }
       ],
-      "max_occurrences": 3
+      "max_occurrences": 2
     },
     {
       "id": "skolem-axiom",
-      "census_items": [10],
-      "methods": ["add_skolem_axiom"],
+      "census_items": [
+        10
+      ],
+      "methods": [
+        "add_skolem_axiom"
+      ],
       "classification": "P",
       "disposition_job": "R1-SKOLEM",
       "guard_notes": "Mechanical half done 2026-08-23, isolation theorem owed. Inherent method demoted to pub(crate) (env/mod.rs:4889) with a SOUNDNESS comment; cross-crate exposure moved onto the TrustedEnvExt choke trait as a delegating method (trusted_ext.rs:78/:224), so the trait re-parse structurally watches it. Sole production caller (clean-auto declare_skolems, invoked from AutomationEngine::prepare_superposition_reconstruction_env) operates on recon_env, a dropped clone: reconstructed proofs re-enter persistent envs only through checked add_decl where unresolved Skolem references are UnknownConst; the SOUNDNESS comment at the call site carries the same argument. Remaining work: the R1-SKOLEM isolation theorem.",
@@ -161,21 +208,29 @@
     },
     {
       "id": "test-door",
-      "census_items": [11],
-      "methods": ["add_constant_unchecked_for_test"],
+      "census_items": [
+        11
+      ],
+      "methods": [
+        "add_constant_unchecked_for_test"
+      ],
       "classification": "E",
       "disposition_job": "R1-TESTDOOR",
-      "guard_notes": "CLOSED structurally 2026-08-23: gated #[cfg(any(test, feature = \"test-fixtures\"))] (env/mod.rs:5528). The test-fixtures feature is empty (clean-kernel/Cargo.toml) and enabled only via [dev-dependencies] in the consuming crates (clean-olean, clean-elab, clean-compiler), so a production (non-dev-target) call no longer compiles — structurally impossible outside test builds, not merely expect-zero. Row retained as backstop: a production dependency edge enabling the feature would re-open the door and must show up here first.",
+      "guard_notes": "CLOSED structurally 2026-08-23: gated #[cfg(any(test, feature = \"test-fixtures\"))] (env/mod.rs:5528). The test-fixtures feature is empty (clean-kernel/Cargo.toml) and enabled only via [dev-dependencies] in the consuming crates (clean-olean, clean-elab, clean-compiler), so a production (non-dev-target) call no longer compiles \u2014 structurally impossible outside test builds, not merely expect-zero. Row retained as backstop: a production dependency edge enabling the feature would re-open the door and must show up here first.",
       "sites": [],
       "max_occurrences": 0
     },
     {
       "id": "lazy-constant-source",
-      "census_items": [12],
-      "methods": ["set_constant_source"],
+      "census_items": [
+        12
+      ],
+      "methods": [
+        "set_constant_source"
+      ],
       "classification": "S/P",
       "disposition_job": "R1-LAZY",
-      "guard_notes": "Installs a lazy ConstantSource: constants become resolvable via the get_const fallback (env/mod.rs:4675-4708) with no registration. Per-entry serve gate on load-time shard digest (closure_source.rs:510-523). 2026-08-24 (R1-LAZY, progress): eager-parity invariant MECHANIZED as a fail-closed hermetic test battery (crates/clean-mathverse/src/closure_source_parity_tests.rs, always-on in cargo test -p clean-mathverse --lib) — name-set equality + per-name ConstantInfo field parity + kernel verdict replay, TOTAL over the served set and fail-closed on any incomparable name; adversarial arms prove detection of tampered type, tampered value, extra name, dropped name, and unverified-shard refusal; the fresh()-cannot-change-resolution contract has its own two arms (full-set before/after identity incl. the Environment::refresh_constant_source_cache seam; no widening past the serve gate). The opt-in real-shard probe (closure_source.rs lazy_closure_verdict_matches_eager) is now TOTAL by default and fail-closed on unresolvable names. REMAINING (still owed under R1-LAZY): the P-half — a spec-side theorem that get_const's lazy fallback preserves kernel verdicts, stated over the deployed kernel.",
+      "guard_notes": "Installs a lazy ConstantSource: constants become resolvable via the get_const fallback (env/mod.rs:4675-4708) with no registration. Per-entry serve gate on load-time shard digest (closure_source.rs:510-523). 2026-08-24 (R1-LAZY, progress): eager-parity invariant MECHANIZED as a fail-closed hermetic test battery (crates/clean-mathverse/src/closure_source_parity_tests.rs, always-on in cargo test -p clean-mathverse --lib) \u2014 name-set equality + per-name ConstantInfo field parity + kernel verdict replay, TOTAL over the served set and fail-closed on any incomparable name; adversarial arms prove detection of tampered type, tampered value, extra name, dropped name, and unverified-shard refusal; the fresh()-cannot-change-resolution contract has its own two arms (full-set before/after identity incl. the Environment::refresh_constant_source_cache seam; no widening past the serve gate). The opt-in real-shard probe (closure_source.rs lazy_closure_verdict_matches_eager) is now TOTAL by default and fail-closed on unresolvable names. REMAINING (still owed under R1-LAZY): the P-half \u2014 a spec-side theorem that get_const's lazy fallback preserves kernel verdicts, stated over the deployed kernel. 2026-11-13, 3 -> 4 (hook-legs lane, reviewed; docs/DECISIONS.md): +1 crates/clean-kernel/src/env/exposure.rs exporting_view (493d4c3aa, `validate source defeq tags through module exposure`). It installs no new served set: HiddenBodies delegates names()/contains() to the source the environment already holds, and every hidden name came from that source's own get(); for such a name it serves the original ConstantInfo with value None and Reducibility::Opaque, and the view's verification stamp for it is removed. The view is a clone that clean-elab's definition_attrs.rs validate() type-checks a public `@[defeq]` tag's equation in, so hiding bodies can only refuse a tag the full environment would accept, never admit a declaration; kernel checking and the runtime keep the original values (pinned by exposure.rs exporting_view_hides_eager_and_lazy_bodies_without_mutating_original). R1-LAZY's eager-parity battery is about what a source SERVES; this site serves a subset of the values of an already-served source, so it adds no parity obligation. The call carries its // SOUNDNESS: comment.",
       "sites": [
         {
           "file": "crates/clean-mathverse/src/cli/closure_load.rs",
@@ -197,16 +252,20 @@
     },
     {
       "id": "axiom-stub-discharge",
-      "census_items": [16],
-      "methods": ["discharge_axiom_stub_for_inductive_import"],
+      "census_items": [
+        16
+      ],
+      "methods": [
+        "discharge_axiom_stub_for_inductive_import"
+      ],
       "classification": "P",
       "disposition_job": "R1-DISCH",
-      "guard_notes": "Removal-only with a re-add contract (trusted_ext.rs:65-72, env/mod.rs): drops a value-free Axiom carrier so the genuine imported inductive of the same name can register. Disposition: prove the contract.",
+      "guard_notes": "Removal-only with a re-add contract (trusted_ext.rs:65-72, env/mod.rs): drops a value-free Axiom carrier so the genuine imported inductive of the same name can register. Disposition: prove the contract. 2026-11-14 source-authority correction: remove the three unrestricted ordinary-source calls in register.rs. The single closed bootstrap loop authenticates only slots created by its own successful init_fact invocation (exact kind, no value, universe parameters and definitionally equal type), performs all checks before the first removal and completes the genuine checked class in a private cloned environment before publishing. Existing initializer no-ops grant no authority; foreign or partial slots refuse without mutation. The separate .olean import call is unchanged. This is a reviewed caller relocation and restriction, not proof of R1-DISCH; classification/disposition and the existing cap of four are unchanged.",
       "sites": [
         {
-          "file": "crates/clean-elab/src/register.rs",
-          "lines_hint": "734,735,737",
-          "note": "inductive-import stub discharge for the type, its constructors, and its projections"
+          "file": "crates/clean-elab/src/source_family_authority.rs",
+          "lines_hint": "195",
+          "note": "Closed immediate Fact bootstrap only: remove the exact newly created, authenticated owner/constructor/projection slots before the checked source registrar completes the family; ordinary source never gains discharge authority."
         },
         {
           "file": "crates/clean-olean/src/import/load_register.rs",
@@ -218,11 +277,15 @@
     },
     {
       "id": "reducibility-hints",
-      "census_items": [17],
-      "methods": ["set_reducibility"],
+      "census_items": [
+        17
+      ],
+      "methods": [
+        "set_reducibility"
+      ],
       "classification": "unclassified",
       "disposition_job": "R1-REDUC",
-      "guard_notes": "Mutates whnf unfolding hints. Disposition: classify strategy-only vs acceptance-affecting (budget interaction), then prove or ledger.",
+      "guard_notes": "Mutates whnf unfolding hints. Disposition: classify strategy-only vs acceptance-affecting (budget interaction), then prove or ledger. 2026-11-07: retain max_occurrences six and the existing R1-REDUC disposition. Nat proof parking moves to the shared restrictive-only checked metadata boundary; source admission uses that same write after its strict checked closure. Its exact-name/signature/value guards reject missing or value-free declarations, and only restrict unfolding. No new raw setter, cap, delegation, direct table mutation or acceptance relaxation is introduced.",
       "sites": [
         {
           "file": "crates/clean-elab/src/command_elab_registry.rs",
@@ -238,96 +301,126 @@
           "file": "crates/clean-olean/src/import/load_register.rs",
           "lines_hint": "1162",
           "note": "imported reducibility hints"
+        },
+        {
+          "file": "crates/clean-kernel/src/env/checked_metadata.rs",
+          "lines_hint": "restrict_checked_unfolding (hint only)",
+          "note": "Shared restrictive-only boundary for existing Nat.le_of_ble_eq_true parking and checked source irreducibility. Requires an exact existing key, closed well-formed signature and definition/proof value. Changes only to Irreducible, preserving kind/type/value/provenance and deferred obligations; cannot relax a hint or admit a declaration."
         }
       ],
-      "max_occurrences": 5
+      "max_occurrences": 6
     },
     {
       "id": "shadowing-overlay",
-      "census_items": [18],
-      "methods": ["clone_pruned_shadowing_overlay"],
+      "census_items": [
+        18
+      ],
+      "methods": [
+        "clone_pruned_shadowing_overlay"
+      ],
       "classification": "unclassified",
       "disposition_job": "R1-OVER",
       "guard_notes": "Clones the env with named declarations pruned (shadowing overlay for check-decl validation). Disposition: classify.",
       "sites": [
         {
-          "file": "crates/clean-server/src/handlers/check_decl_validation.rs",
-          "lines_hint": "400",
-          "note": "checkDecl shadowing-overlay construction"
+          "file": "crates/clean-elab/src/module_driver/validation.rs",
+          "lines_hint": "407",
+          "note": "checkDecl shadowing-overlay construction (moved from the server into clean_elab::module_driver by the Phase 1 driver lane)"
         }
       ],
       "max_occurrences": 1
     },
     {
       "id": "kernel-canonical-builders",
-      "census_items": [13],
-      "methods": ["init_quot", "init_native_reducers", "init_arith_native_reducers"],
+      "census_items": [
+        13
+      ],
+      "methods": [
+        "init_quot",
+        "init_native_reducers",
+        "init_arith_native_reducers"
+      ],
       "classification": "P",
       "disposition_job": "R1-EQREC (13b core_eq stamp removal is the named sub-item; the builder class itself is audit/prove-in-place)",
-      "guard_notes": "Kernel-internal canonical builders: init_quot registers the quotient primitives FullKernelCheck by fiat (mod.rs); the native/arith reducer installers register no declarations but alter reduction behaviour. The site-class is the kernel's own env-construction tree (prefix below); the one external caller is mathverse graduation intake building a fresh prelude env.",
+      "guard_notes": "Kernel-internal canonical builders: init_quot registers the quotient primitives FullKernelCheck by fiat (mod.rs); the native/arith reducer installers register no declarations but alter reduction behaviour. The site-class is the kernel's own env-construction tree (prefix below); the one external caller is mathverse graduation intake building a fresh prelude env. 2026-09-25, 19 -> 20: `Environment::for_lean_replay` (env/mod.rs, the Lean-theory replay environment of the .olean re-check soundness fix) calls `init_quot()`. That is Lean's own rule, not a convenience: Lean's kernel adds the canonical quotient for any non-empty import list (`finalizeImport`: `quotInit := !imports.isEmpty`) and replays a stored `quotInfo` as `addDecl quotDecl`, so a replay environment WITHOUT it would refuse honest modules that use `Quot`, and one that took a module's own restatement instead would let an .olean define the quotient primitives. The loader keeps this resident quotient and drops any module's restatement of it. 2026-09-26, 20 -> 21: +1 external site, the .olean importer's install_kernel_quotients (one call serving both load paths, in every lane, not only the replay) \u2014 a module declaring Quot-kind records gets the kernel's bundle before the duplicate filter, so the file's records are dropped as restatements rather than registered as axioms whose types the file chose; the kernel's quotient reduction fires only on kernel-built primitives (env.quotients). 2026-09-28, 21 -> 22: restores an increment the 403ed338c integration merge dropped. e481d276e (recheck-closure round 24) raised 19 -> 20 on its branch for env/quot_admission.rs `Environment::add_quot`, the CHECKED door (Lean's add_quot `check_eq_type`: inductive Eq, one universe, `{\u03b1 : Sort u} \u2192 \u03b1 \u2192 \u03b1 \u2192 Prop`, one constructor `\u2200 {\u03b1} (a : \u03b1), Eq a a`, then init_quot) that replaced the dependency-closed replay's unchecked `replay.init_quot()` (live caller crates/clean-olean/src/recheck_closed/drive.rs, `provide_quotient`); main raised 19 -> 20 independently for for_lean_replay, and the merge kept main's census text, so the add_quot call came through without its count. Live: 16 init_quot + 3 init_native_reducers + 3 init_arith_native_reducers = 22, no new door. 2026-11-07: 22 -> 20: the duplicate native/arith registration roster in prelude initialization now delegates to the existing ensure_native_reducers owner, preserving the exact ordered 21-family roster and actual callbacks. The one private canonical factory retains installation custody with each function; public callback registration confers none. No quotient/declaration admission changes.",
       "sites": [
         {
           "file": "crates/clean-mathverse/src/graduate/intake.rs",
           "lines_hint": "638,639,640",
           "note": "graduation intake prelude-env construction (init_quot + both reducer installers)"
+        },
+        {
+          "file": "crates/clean-olean/src/import/load_register.rs",
+          "lines_hint": "425",
+          "note": "fn install_kernel_quotients: a module whose records are Quot-kind gets the KERNEL's quotient bundle before the duplicate filter, so the file's Quot records (and a same-module Quot.sound) are dropped as duplicates rather than registered as axioms with file-chosen types. Lean handles a quotInfo record with addDecl .quotDecl (the kernel builds the types). Paired with the kernel guard that fires quotient reduction only on kernel-built primitives (env.quotients), 2026-09-26."
         }
       ],
-      "site_prefixes": ["crates/clean-kernel/src/env/"],
-      "max_occurrences": 19
+      "site_prefixes": [
+        "crates/clean-kernel/src/env/"
+      ],
+      "max_occurrences": 20
     },
     {
       "id": "structure-field-metadata",
       "census_items": [],
-      "methods": ["register_structure_fields"],
+      "methods": [
+        "register_structure_fields"
+      ],
       "classification": "M",
       "disposition_job": "watch-only (G-SCAN); no R1 job - admits no declaration, but a projection-metadata lie could misdirect elaboration, so the class is watched",
-      "guard_notes": "Registers structure field-name metadata (registration.rs:1435; Err on unknown struct). Heavily used by the kernel's own prelude builders (prefix below) plus five named external callers.",
+      "guard_notes": "Registers structure field-name metadata (registration.rs:1435; Err on unknown struct). Heavily used by the kernel's own prelude builders (prefix below) plus the named external callers below. BASELINE RAISED 83 -> 84 on 2026-08-27: bd60299ac ('Iff registers the two fields Lean 4 says it has') added one call at crates/clean-kernel/src/env/logic_iff.rs:123, which the site_prefixes entry already accounts for, but the cap was never raised with it -- so this soundness gate has been RED at the tip ever since, in the pre-push hook and in local_gate.sh, and its own demonstration could not be replayed (a red arm on a red tree proves nothing). The call is in class: a kernel prelude builder registering the field table for a structure it is declaring, exactly like the other 83. Verified against a pristine `git archive HEAD` export, so the red was the tip's and not a working tree's. BASELINE RAISED 84 -> 85 on 2026-09-20, in review with the change that adds the call: the Lean.structureExt decoder (226573332, landed on main with the 690e74157 merge) registers an olean-IMPORTED structure's field table from Lean's own persisted `StructureInfo.fieldNames` at crates/clean-olean/src/import/load_register.rs `try_register_structure_meta`. In class for this row: it admits no declaration, runs only when no table is present for that structure, and goes through the kernel's own validation (`register_structure_fields` rejects a count that disagrees with the constructor, and duplicates) with a rejected table logged at warn and left absent -- strictly better-sourced than the projection-derived recovery leg beside it, which infers the same table from projection bodies. The caller is production (`clean check --imports-prefer-olean`, measured on the armed source-elaboration ratchet). 2026-09-28, cap UNCHANGED at 85, two moves that cancel (both arrived with the 403ed338c integration merge): -1, crates/clean-lake/src/build.rs lost its call when 29de4ae8b replaced the lake builder's own ElabResult commit arm with the canonical `elaborate_decl_and_register_with_context_and_warning` pipeline, so lake structure tables now reach the kernel through the clean-elab/src/register.rs site above and the lake site row is removed (the census only shrinks); +1, fd20888d5 added crates/clean-kernel/src/env/lean_core_supply.rs `Subsingleton` -> [allEq], accounted by the site_prefixes entry and in class: a kernel prelude builder registering the field table of a structure it has just declared through the checked add_inductive. External named callers are now four FILES carrying six calls (elab register, elab structure_cmd, olean load_register x3, server checkDecl). BASELINE RAISED 85 -> 87 on 2026-09-29, in review with the change that adds the calls (docs/issues/2026-09-28-prelude-pure-proves-false.md): the default prelude's `Pure.pure` / `Bind.bind` were value-less axioms that proved `False`, and the fix declares Lean's `Applicative` and `Monad` classes (crates/clean-kernel/src/env/data_monad_classes.rs `add_parent_class`, one call serving both) and `MonadExcept` (crates/clean-kernel/src/env/data_monad_except.rs) through the checked `add_inductive`, then registers each one's field table -- in class for this row and accounted by the site_prefixes entry: a kernel prelude builder registering the fields of a structure it has just declared, with `register_structure_fields` rejecting a count that disagrees with the constructor.",
       "sites": [
         {
           "file": "crates/clean-elab/src/register.rs",
-          "lines_hint": "757",
+          "lines_hint": "823",
           "note": "structure registration during elaboration"
         },
         {
           "file": "crates/clean-elab/src/structure_cmd.rs",
-          "lines_hint": "291",
+          "lines_hint": "294",
           "note": "structure command elaboration"
         },
         {
-          "file": "crates/clean-lake/src/build.rs",
-          "lines_hint": "987",
-          "note": "lake build-time structure metadata"
-        },
-        {
           "file": "crates/clean-olean/src/import/load_register.rs",
-          "lines_hint": "338,1390",
-          "note": ".olean import: extension-entry leg + projection-derived leg"
+          "lines_hint": "736,2233,2500",
+          "note": ".olean import: typed-extension-entry leg + Lean.structureExt decoded-table leg (try_register_structure_meta) + projection-derived leg"
         },
         {
-          "file": "crates/clean-server/src/handlers/check_decl_validation.rs",
-          "lines_hint": "360",
-          "note": "checkDecl structure metadata"
+          "file": "crates/clean-elab/src/module_driver/validation.rs",
+          "lines_hint": "367",
+          "note": "checkDecl structure metadata (moved from the server into clean_elab::module_driver by the Phase 1 driver lane)"
         }
       ],
-      "site_prefixes": ["crates/clean-kernel/src/env/"],
-      "max_occurrences_note_2026_08_27": "83 -> 84: bd60299ac registers the field table for `Iff` in the kernel's own prelude (crates/clean-kernel/src/env/logic_iff.rs) -- the fix for `h.mp` dying with UnknownStructureField because Iff.mp is Iff.rec-built and the Proj fallback had nothing to read. In-prefix, kernel-internal, reviewed here (audit r1); the baseline is raised for exactly this one call.",
-      "max_occurrences": 84
+      "site_prefixes": [
+        "crates/clean-kernel/src/env/"
+      ],
+      "max_occurrences": 87
     },
     {
       "id": "param-binder-metadata",
       "census_items": [],
-      "methods": ["set_param_names", "set_param_infos"],
+      "methods": [
+        "set_param_names",
+        "set_param_infos",
+        "set_typed_param_names",
+        "set_typed_param_infos"
+      ],
       "classification": "M",
       "disposition_job": "watch-only (G-SCAN); binder-kind metadata steers named/positional application in elaboration, never kernel acceptance",
-      "guard_notes": "set_param_infos records binder kinds (B01); set_param_names is the legacy form with ZERO production callers measured 2026-08-23 (expect-zero within this row).",
+      "guard_notes": "The three existing constructor/projection/declaration registration sites now call set_typed_param_infos with exact Name identities and binder kinds. This REPLACES their legacy set_param_infos calls; it does not add sites or raise the aggregate cap of three. Both legacy setters remain watched: they invalidate the typed sidecar rather than reconstruct identity from diagnostic strings. set_typed_param_names is also watched; neither names-only setter nor the legacy infos setter has a production caller in this increment. Metadata steers elaboration and remains distinct from kernel declaration acceptance. 2026-10-07, 3 -> 4 (names-structs review): +1 crates/clean-elab/src/decl_attributes.rs `CtxAttributes::apply` records the parameter names of a lifted `where`/`let rec` auxiliary (`parent.go`: its captured locals, then the own parameters its type names), so `parent.go (k := 2)` binds by name as pinned Lean 4.8.0 does. It runs after the auxiliary registered, only for a name the environment already holds (`env.get_const(&name).is_some()`), and like the other three it steers named-argument slot assignment, never kernel acceptance: every application it shapes is elaborated and kernel-checked as usual. 2026-11-07: retain the aggregate cap of four. The lifted-helper raw call moves to the shared kernel add_checked_param_infos boundary, also used by the checked source reader. The boundary checks the exact registered key with infer_sort over its closed signature and validates every supplied Pi slot; source packets require complete coverage, lifted helpers a validated declared prefix. Invalid names/kinds/arity refuse before mutation. No declaration is admitted or promoted by metadata. The three registration sites remain unchanged; no new cap, delegation, scanner exception or direct table write is introduced. 2026-11-13 (hook-legs lane; docs/DECISIONS.md): 8c866b7fe added two raw set_typed_param_infos writes, an alias's metadata copied from its target in clean-elab register.rs register_param_names and Subtype.mk's in clean-kernel env/core.rs init_subtype, which took the row to 5 over its cap of 4 and left core.rs unaccounted. Neither is a fifth registration site: both now go through add_checked_param_infos (the alias as a declared prefix of its own telescope, an alias whose binders disagree getting no metadata; Subtype.mk complete, against the constructor init_subtype just admitted). The cap stays 4.",
       "sites": [
         {
           "file": "crates/clean-elab/src/register.rs",
-          "lines_hint": "777,812,1077 (all set_param_infos)",
-          "note": "constructor/projection/declaration binder-kind registration"
+          "lines_hint": "780,815,1088 (all set_typed_param_infos; hints only)",
+          "note": "same three constructor/projection/declaration binder-kind registration sites, now preserving exact typed parameter names"
+        },
+        {
+          "file": "crates/clean-kernel/src/env/checked_metadata.rs",
+          "lines_hint": "add_checked_param_infos (hint only)",
+          "note": "Shared checked metadata boundary for the existing lifted-helper producer, checked source packet headers, alias metadata (clean-elab register.rs) and init_subtype's Subtype.mk. Validates the exact resident Name, closed well-formed signature, supplied Pi binder kinds and prefix/complete coverage before this one write; retains typed binder identities and declaration provenance."
         }
       ],
-      "max_occurrences": 3
+      "max_occurrences": 4
     },
     {
       "id": "persistent-extension-state",
@@ -342,22 +435,65 @@
       ],
       "classification": "M",
       "disposition_job": "watch-only (G-SCAN); env-extension entry storage for .olean import/export, admits no declaration",
-      "guard_notes": "Persistent env-extension entry plumbing. Production callers measured 2026-08-23: only the .olean loader (three calls); get_persistent_extension_state / materialize_extension_states / export_extension_states have zero production callers (expect-zero within this row).",
+      "guard_notes": "Persistent env-extension entry plumbing. Production callers measured 2026-08-23: only the .olean loader (three calls); get_persistent_extension_state / materialize_extension_states / export_extension_states had zero production callers (expect-zero within this row). 2026-09-28, 3 -> 4: +1 READ, crates/clean-kernel/src/env/effect.rs `extension_entry_map` (0d26054a2, arrived on main with the 403ed338c integration merge unaccounted) calls `export_extension_states()` -- `&self`, delegating to `ExtensionStates::export_all(&self)` (persistent_ext.rs), which returns a copy and writes nothing. It feeds `EnvEffect::effect_since` / `disagreement`, the sibling-import divergence detector of `clean check` / `project check`, which REFUSES on a mismatch; it admits no declaration and registers no entry. get_persistent_extension_state / materialize_extension_states remain expect-zero. 2026-09-29, 4 -> 5: +1 READ, crates/clean-kernel/src/env/content_digest.rs, the environment content digest the Phase 1 import lane landed (it showed the digest byte-identical before and after its change); a read-only export that admits and mutates nothing. 2026-11-05, 5 -> 7: +2 READS on one line, crates/clean-kernel/src/env/fact_delta.rs `unreplayable_change` (Trust TG6), which compares `before.export_extension_states()` with `after.export_extension_states()` and REFUSES to build a local fact delta when an exported extension entry changed (a delta does not carry them); read-only copies that admit and register nothing. 2026-11-10, 7 -> 10: three exact matcher.rs calls. register_matcher_info first finds the actual definition, validates its bounded arity/telescope and metadata detail graph, refuses conflicting/malformed cached entries, serializes canonical JSON and enforces the 1MiB payload bound before register_persistent_extension/add_persistent_extension_entries. This stores reduction metadata under Clean.matcherInfo.v1 and admits no declaration or proof. Generic extension writes invalidate the matcher index. decode_matcher_storage reads get_persistent_extension_state; decode_entry refuses non-Object, oversized, noncanonical or malformed detail data, conflicting duplicates remain None; get_matcher_info additionally validates against the current declaration. This ledger accounts the observed metadata-storage surface; it does not certify frontend reduction or the metadata as proof authority. The row remains capped at the actual ten occurrences; a fourth call in matcher.rs must fail the extra-call replay.",
       "sites": [
         {
           "file": "crates/clean-olean/src/import/load_register.rs",
-          "lines_hint": "358 (register), 365 (get_module_entries), 394 (add_entries)",
+          "lines_hint": "800 (register), 807 (get_module_entries), 836 (add_entries)",
           "note": ".olean env-extension import"
+        },
+        {
+          "file": "crates/clean-kernel/src/env/effect.rs",
+          "lines_hint": "457",
+          "note": "EnvEffect extension-entry snapshot (read-only export_extension_states) for the sibling-import effect comparison"
+        },
+        {
+          "file": "crates/clean-kernel/src/env/content_digest.rs",
+          "lines_hint": "650",
+          "note": "read-only export_extension_states: the typed-extension section of the environment content digest `clean check` writes on request"
+        },
+        {
+          "file": "crates/clean-kernel/src/env/fact_delta.rs",
+          "lines_hint": "unreplayable_change",
+          "note": "read-only export_extension_states (x2): a local fact delta refuses an exported-extension change"
+        },
+        {
+          "file": "crates/clean-kernel/src/env/matcher.rs",
+          "lines_hint": "register_matcher_info (register/add), decode_matcher_storage (read)",
+          "note": "Three measured calls: validated matcher metadata registers its fixed extension key and appends its bounded canonical payload; decoding reads that key without changing declarations. No site prefix or delegation exemption."
         }
       ],
-      "max_occurrences": 3
+      "max_occurrences": 10
+    },
+    {
+      "id": "local-fact-delta",
+      "classification": "S",
+      "methods": [
+        "apply_local_fact_delta"
+      ],
+      "max_occurrences": 1,
+      "disposition_job": "load-bearing (Trust TG6, decision COMPILE-TIME-FACTS-1); the one door that imports a local kernel fact",
+      "guard_notes": "2026-11-05, 0 -> 1. `Environment::apply_local_fact_delta` replays an `EnvFactDelta` (fact_delta.rs): every environment component one elaboration changed, with the producing check's `declaration_verification` stamps, applied with NO kernel check. Its only production call in this repo is the replay self-check inside `local_fact_delta_since` (fact_delta.rs), which applies a delta it has just built to a CLONE of the environment it was built from and refuses the delta unless the result equals the checked environment over every component (`local_fact_difference`); that clone is discarded and admits nothing. The cross-crate caller is Trust's keyed Clean session (`trust-certify` `clean_island/keyed_env.rs`), through `TrustedEnvExt::apply_local_fact_delta`: it applies a fact only when its key (island bytes, the dependencies' kernel-record digests, the upstream chain, the prelude, the kernel theory, the pointer width and the compiler identity including the SHA-256 of the checker's image) matches and the stored bytes match their SHA-256, checks every changed entry's BEFORE value first (a mismatch changes nothing), and audits one hit in 32 by re-elaboration. What it trusts is the same-user store (Trust KNOWN_HAZARDS P-CORESIDENT) and the producing process of the same compiler; Trust docs/TCB.md's TG6 row states it.",
+      "census_items": [],
+      "sites": [
+        {
+          "file": "crates/clean-kernel/src/env/fact_delta.rs",
+          "lines_hint": "local_fact_delta_since",
+          "note": "replay self-check on a discarded clone of `before`"
+        }
+      ]
     }
   ],
   "cross_references": [
     {
       "id": "add-decl-bypass",
-      "census_items": [1],
-      "methods": ["add_decl_unchecked", "add_decl_structural"],
+      "census_items": [
+        1
+      ],
+      "methods": [
+        "add_decl_unchecked",
+        "add_decl_structural"
+      ],
       "scanner": "scripts/check_add_decl_ratchet.py",
       "ledger": "data/unchecked_decl_ratchet.json",
       "ledger_key": "add_decl_unchecked_production_sites",
@@ -366,8 +502,15 @@
     },
     {
       "id": "extend-constants-bypass",
-      "census_items": [2, 3, 4],
-      "methods": ["extend_constants_unchecked", "extend_constants_structural"],
+      "census_items": [
+        2,
+        3,
+        4
+      ],
+      "methods": [
+        "extend_constants_unchecked",
+        "extend_constants_structural"
+      ],
       "scanner": "scripts/check_extend_constants_ratchet.py",
       "ledger": "data/unchecked_decl_ratchet.json",
       "ledger_key": "extend_constants",
@@ -378,17 +521,210 @@
   "informational": [
     {
       "id": "import-reverification-fraction",
-      "census_items": [14],
+      "census_items": [
+        14
+      ],
       "kind": "metric",
       "disposition_job": "R1-INIT",
       "note": "data/import_reverification_metric.json reads 0/0 UNMEASURED BASELINE (no Lean toolchain on the recording host): the re-verified fraction of any import lane is UNKNOWN, not 0%. verify_bootstrap_lane (bootstrap_verify.rs:173) is the closeable Init/Std lane. Not a method class; nothing for the scanner to match."
     },
     {
       "id": "eqrec-stamp-removal",
-      "census_items": [13],
+      "census_items": [
+        13
+      ],
       "kind": "audit-note",
       "disposition_job": "R1-EQREC (audited + pinned 2026-08-25)",
-      "note": "AUDITED 2026-08-25 (R1-EQREC): the recon's 'absent provenance, unexamined downstream' was measured at the removal lines only — the removal (core_eq/recursors.rs, three declaration_verification.remove sites in the fix_* helpers) is TRANSIENT: register() re-earns FullKernelCheck for Eq.rec/Eq.casesOn/Eq.recOn via validate_and_stamp_recursor (landed 43bab616e, 2026-07-12: recursor-metadata invariants + per-rule subject reduction over the repaired iota payloads + check_decl_readonly_strict of the exact constant payload — value-checked for casesOn/recOn, type-only for the primitive value-less Eq.rec, identical to what add_inductive mints for every generated recursor; never above what the construction earns). If the re-check fails, register() errors and the absent stamp is the correct conservative state. Downstream consumers traced: axiom_audit certification (None -> strict recheck, never promoted; non-Full on value-less kernel objects -> UnverifiedKernelObject), canonical-ambient-axiom + clean-verify live-axiom integrity (kind-Axiom only; these three are kind Definition), noConfusion regeneration predicate (.noConfusion* names only). Pinned by core_eq/recursors.rs tests: test_eq_repair_reearns_full_kernel_check_stamp (all three stamped after init_eq) and test_eq_rec_stamp_is_earned_not_asserted (corrupted rule payload refuses validation). SOUNDNESS notes now sit at all three removal sites. REMAINING under item 13: the nested-restore StructuralOnly 'provisional' eliminator stamps (inductive_nested_restore.rs:449-455) — not this audit's subject. Neither path calls a watched method, so this stays an audit pointer, not a scanned row."
+      "note": "AUDITED 2026-08-25 (R1-EQREC): the recon's 'absent provenance, unexamined downstream' was measured at the removal lines only \u2014 the removal (core_eq/recursors.rs, three declaration_verification.remove sites in the fix_* helpers) is TRANSIENT: register() re-earns FullKernelCheck for Eq.rec/Eq.casesOn/Eq.recOn via validate_and_stamp_recursor (landed 43bab616e, 2026-07-12: recursor-metadata invariants + per-rule subject reduction over the repaired iota payloads + check_decl_readonly_strict of the exact constant payload \u2014 value-checked for casesOn/recOn, type-only for the primitive value-less Eq.rec, identical to what add_inductive mints for every generated recursor; never above what the construction earns). If the re-check fails, register() errors and the absent stamp is the correct conservative state. Downstream consumers traced: axiom_audit certification (None -> strict recheck, never promoted; non-Full on value-less kernel objects -> UnverifiedKernelObject), canonical-ambient-axiom + clean-verify live-axiom integrity (kind-Axiom only; these three are kind Definition), noConfusion regeneration predicate (.noConfusion* names only). Pinned by core_eq/recursors.rs tests: test_eq_repair_reearns_full_kernel_check_stamp (all three stamped after init_eq) and test_eq_rec_stamp_is_earned_not_asserted (corrupted rule payload refuses validation). SOUNDNESS notes now sit at all three removal sites. REMAINING under item 13: the nested-restore StructuralOnly 'provisional' eliminator stamps (inductive_nested_restore.rs:449-455) \u2014 not this audit's subject. Neither path calls a watched method, so this stays an audit pointer, not a scanned row."
     }
-  ]
+  ],
+  "trusted_ext_delegation_sites": [
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "add_persistent_extension_entries",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "add_skolem_axiom",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "clone_pruned_shadowing_overlay",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "discharge_axiom_stub_for_inductive_import",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "export_extension_states",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "extend_constructors_structural",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "extend_constructors_unchecked",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "extend_inductives_structural",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "extend_inductives_unchecked",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "extend_recursors_structural",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "extend_recursors_unchecked",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "get_persistent_extension_module_entries",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "get_persistent_extension_state",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "init_arith_native_reducers",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "init_native_reducers",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "init_quot",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "materialize_extension_states",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "register_constructor",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "register_inductive",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "register_persistent_extension",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "register_recursor",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "register_recursor_unchecked",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "register_structure_fields",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "set_param_infos",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "set_param_names",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "set_typed_param_names",
+      "occurrences": 1,
+      "trust": "Typed metadata successor forward only: exactly one call inside its own method of impl TrustedEnvExt for Environment, with the site's own SOUNDNESS comment. The existing structural delegation predicate and cap remain mandatory; this row grants no foreign caller, alternate enclosing method, missing-comment exemption, or extra production-site allowance. Exact Name metadata is not proof or declaration-admission authority."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "set_typed_param_infos",
+      "occurrences": 1,
+      "trust": "Typed binder-info successor forward only: exactly one call inside its own method of impl TrustedEnvExt for Environment, with the site's own SOUNDNESS comment. The existing structural delegation predicate and cap remain mandatory; this row grants no foreign caller, alternate enclosing method, missing-comment exemption, or extra production-site allowance. The three existing registration calls are accounted separately under the unchanged param-binder-metadata cap."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "set_reducibility",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "upgrade_axiom_stubs",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "upgrade_axiom_stubs_checked",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    },
+    {
+      "file": "crates/clean-kernel/src/env/trusted_ext.rs",
+      "method": "apply_local_fact_delta",
+      "occurrences": 1,
+      "trust": "SANCTIONED TRAIT DELEGATION, PROVED AT THE SITE (audit r15 M15-2, 2026-09-02). This row is a CAP on a forward the scanner proves for itself: the hit must be in this file, inside `fn <method>` of `impl TrustedEnvExt for Environment`, calling the door its own enclosing fn is named after, with a `// SOUNDNESS:` comment that BELONGS to it (the window floors at the previous watched call and at the top of the enclosing fn's attribute run). It is not a grant. Measured before this change: one appended row excused a genuinely NEW production bypass at any of the 35 watched doors in ANY production file -- exit 0, output byte-identical to pristine -- and absorbed a max_occurrences overflow at an already-baselined site, because an excused hit returned before the per-row accounting. Measured on the comment half: of the 32 `// SOUNDNESS:` blocks in this file, 31 could be deleted with every gate still green, because the blocks sit 6-11 lines apart and each was covered by its NEIGHBOUR's comment; the per-block sweep now reads 32 of 32 load-bearing. Rounds 12-15 each closed the previous SPELLING of this excuse (a shape, then a hardcoded (line, method) table in the scanner source, then a capped artifact row) while leaving the predicate un-derived from the code it excused. This row is the first version that is a statement ABOUT that code."
+    }
+  ],
+  "_audit_r17_restoration_note": "AUDIT r17 (2026-09-02): `trusted_ext_delegation_sites` -- 28 capped rows, built in r14 M14-3 and made a PROVED site predicate in r15 M15-2 / r16 M16-1 -- was deleted wholesale by 8b6f2db84 (-302 lines) while that lane was chasing a red tip. With the account gone every genuine `impl TrustedEnvExt for Environment` forward became an unaccounted production bypass, and the baselines were then reconciled against their absence (structure-field-metadata 83 -> 84, ind-meta-structural 8 -> 6). The rows are RESTORED here rather than the baselines re-absorbed: the census's own rule is that a call through a watched door is justified and the baseline raised IN REVIEW, never absorbed, and a deleted account is the strongest form of absorption there is."
 }

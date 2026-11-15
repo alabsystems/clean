@@ -320,7 +320,7 @@ impl<'a> UnifyExt<'a> {
             (ExprKind::Sort(l1), ExprKind::Sort(l2)) => self.unify_levels(l1, l2),
             (ExprKind::Const(n1, ls1), ExprKind::Const(n2, ls2)) => {
                 if n1 != n2 || ls1.len() != ls2.len() {
-                    return UnifyResult::Failure(format!("const mismatch: {n1:?} vs {n2:?}"));
+                    return UnifyResult::Failure(format!("const mismatch: {n1} vs {n2}"));
                 }
                 for (l1, l2) in ls1.iter().zip(ls2.iter()) {
                     if let r @ UnifyResult::Failure(_) = self.unify_levels(l1, l2) {
@@ -334,9 +334,11 @@ impl<'a> UnifyExt<'a> {
                 UnifyResult::Failure(format!("bvar mismatch: {i1} vs {i2}"))
             }
             (ExprKind::FVar(a), ExprKind::FVar(b)) if a == b => UnifyResult::Success,
-            (ExprKind::FVar(a), ExprKind::FVar(b)) => {
-                UnifyResult::Failure(format!("fvar mismatch: {a:?} vs {b:?}"))
-            }
+            (ExprKind::FVar(a), ExprKind::FVar(b)) => UnifyResult::Failure(format!(
+                "fvar mismatch: {} vs {}",
+                crate::error_render::fvar(*a, None),
+                crate::error_render::fvar(*b, None)
+            )),
             (ExprKind::App(f1, a1), ExprKind::App(f2, a2)) => {
                 if let r @ UnifyResult::Failure(_) = self.unify(f1, f2) {
                     return r;
@@ -379,9 +381,9 @@ impl<'a> UnifyExt<'a> {
                 } else {
                     self.record(TraceKind::Failure, left, right);
                     UnifyResult::Failure(format!(
-                        "shape mismatch: {:?} vs {:?}",
-                        std::mem::discriminant(left.kind()),
-                        std::mem::discriminant(right.kind())
+                        "shape mismatch: {} vs {}",
+                        crate::error_render::kind_name(left),
+                        crate::error_render::kind_name(right)
                     ))
                 }
             }

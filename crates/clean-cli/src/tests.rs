@@ -82,8 +82,25 @@ fn verify_c_file_nonexistent_path_fails() {
 fn verify_c_file_verbose_mode() {
     let code = r"
         //@ requires x >= 0;
+        //@ requires x != -2147483648;
         int abs(int x) { return x >= 0 ? x : -x; }
     ";
+    // The original x >= 0 already excludes INT_MIN mathematically. State the
+    // redundant bound explicitly for this verbosity test: deriving it is a
+    // prover-completeness limitation, not reachable overflow under x >= 0.
+    assert_abs_signed_min_obligation(
+        code,
+        &[
+            clean_c_sem::spec::Spec::ge(
+                clean_c_sem::spec::Spec::var("x"),
+                clean_c_sem::spec::Spec::int(0),
+            ),
+            clean_c_sem::spec::Spec::ne(
+                clean_c_sem::spec::Spec::var("x"),
+                clean_c_sem::spec::Spec::int(i64::from(i32::MIN)),
+            ),
+        ],
+    );
 
     let dir = tempfile::tempdir().expect("tempdir should be created");
     let path = dir.path().join("abs.c");
@@ -91,6 +108,53 @@ fn verify_c_file_verbose_mode() {
 
     // Verbose mode should still work (just prints more output)
     verify_c_file(&path, true, false).expect("verbose mode should work");
+}
+
+#[test]
+fn verify_c_file_verbose_mode_rejects_unconstrained_signed_abs() {
+    let code = "int abs(int x) { return x >= 0 ? x : -x; }";
+    assert_abs_signed_min_obligation(code, &[]);
+    let dir = tempfile::tempdir().expect("tempdir should be created");
+    let path = dir.path().join("abs.c");
+    fs::write(&path, code).expect("write should succeed");
+    assert!(
+        verify_c_file(&path, true, false).is_err(),
+        "verbose output must not waive the reachable signed-min overflow"
+    );
+}
+
+fn assert_abs_signed_min_obligation(code: &str, requires: &[clean_c_sem::spec::Spec]) {
+    use clean_c_sem::{parser::CParser, spec::Spec, types::CType, vcgen::VCKind};
+    let functions = CParser::new()
+        .parse_translation_unit_with_specs(code)
+        .expect("parse abs");
+    assert_eq!(functions.len(), 1);
+    let function = &functions[0];
+    assert_eq!(function.func.return_type, CType::int());
+    assert_eq!(
+        function.func.params,
+        vec![clean_c_sem::stmt::FuncParam::new("x", CType::int())]
+    );
+    assert_eq!(function.spec.requires, requires);
+    assert_eq!(
+        clean_c_sem::types::IntKind::Int.signed_min(),
+        i128::from(i32::MIN)
+    );
+    let vcs = function.generate_vcs();
+    let min_checks = vcs
+        .iter()
+        .filter(|vc| vc.description == "Signed unary negation excludes the minimum value")
+        .collect::<Vec<_>>();
+    assert_eq!(min_checks.len(), 1);
+    assert_eq!(min_checks[0].kind, VCKind::NoUB);
+    let mut conclusion = &min_checks[0].obligation;
+    while let Spec::Implies(_, body) = conclusion {
+        conclusion = body;
+    }
+    assert_eq!(
+        *conclusion,
+        Spec::ne(Spec::var("x"), Spec::int(i64::from(i32::MIN)))
+    );
 }
 
 // ========== eval_expr tests ==========
@@ -182,8 +246,15 @@ fn check_file_empty_file() {
     let path = dir.path().join("empty.clean");
     fs::write(&path, code).expect("write should succeed");
 
-    // Empty file should succeed (0 declarations)
-    check_file(&path, false, false, PreludeMode::Builtin).expect("Empty file should be valid");
+    // An empty file checks 0 declarations, and a check that checked nothing
+    // is refused rather than passed (round-22 verification: vacuous pass).
+    let err = check_file(&path, false, false, PreludeMode::Builtin)
+        .expect_err("an empty file must not pass");
+    assert!(
+        err.to_string()
+            .contains("check failed: no declaration was checked"),
+        "unexpected error: {err}"
+    );
 }
 
 #[test]
@@ -596,6 +667,7 @@ fn cli_parse_server_default() {
                 init,
                 stdlib,
                 theorem_index,
+                ..
             }) => (port, no_gpu, websocket, init, stdlib, theorem_index),
             _ => panic!("Expected Server command"),
         }
@@ -634,6 +706,44 @@ fn cli_parse_server_default() {
             false,
             false,
             Some(PathBuf::from("index.json"))
+        )
+    );
+}
+
+#[test]
+fn test_cli_parse_server_trust_boundary_flags() {
+    use clap::Parser;
+    let parse = |args: &[&str]| match Cli::try_parse_from(args).unwrap().command {
+        Commands::Server(ServerArgs {
+            workspace_root,
+            token_file,
+            allow_origin,
+            ..
+        }) => (workspace_root, token_file, allow_origin),
+        _ => panic!("Expected Server command"),
+    };
+    assert_eq!(parse(&["clean", "server"]), (None, None, Vec::new()));
+    assert_eq!(
+        parse(&[
+            "clean",
+            "server",
+            "--websocket",
+            "--workspace-root",
+            "proj",
+            "--token-file",
+            "t.token",
+            "--allow-origin",
+            "https://a.example",
+            "--allow-origin",
+            "vscode-webview://b",
+        ]),
+        (
+            Some(PathBuf::from("proj")),
+            Some(PathBuf::from("t.token")),
+            vec![
+                "https://a.example".to_string(),
+                "vscode-webview://b".to_string()
+            ]
         )
     );
 }

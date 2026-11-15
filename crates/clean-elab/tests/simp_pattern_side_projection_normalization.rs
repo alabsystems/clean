@@ -61,20 +61,20 @@ use clean_parser::parse_file;
 /// built from `Inhabited`, whose projection has the same shape.
 const PREAMBLE: &str = r"
 def myInh : Inhabited (List Nat -> List Nat -> List Nat) :=
-  Inhabited.mk (List Nat -> List Nat -> List Nat) (fun a b => List.append Nat a b)
+  @Inhabited.mk (List Nat -> List Nat -> List Nat) (fun a b => @List.append Nat a b)
 
 def hAppendTwoLayer : HAppend (List Nat) (List Nat) (List Nat) :=
-  HAppend.mk (List Nat) (List Nat) (List Nat)
-    (fun a b => Inhabited.default (List Nat -> List Nat -> List Nat) myInh a b)
+  @HAppend.mk (List Nat) (List Nat) (List Nat)
+    (fun a b => @Inhabited.default (List Nat -> List Nat -> List Nat) myInh a b)
 
 theorem notation_lemma (l : List Nat) :
-    @HAppend.hAppend (List Nat) (List Nat) (List Nat) (instHAppendListList Nat) l
-      (List.nil Nat) = l := by
+    @HAppend.hAppend (List Nat) (List Nat) (List Nat) (@instHAppendListList Nat) l
+      (@List.nil Nat) = l := by
   rw [List.append_nil]
 
 theorem two_layer_lemma (l : List Nat) :
     @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l
-      (List.nil Nat) = l := by
+      (@List.nil Nat) = l := by
   rw [List.append_nil]
 ";
 
@@ -155,7 +155,7 @@ fn simp_only_notation_lemma_matches_identical_notation_goal() {
     assert_tactic_theorem(
         "same_surface",
         "theorem same_surface (l : List Nat) : \
-         @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l (List.nil Nat) = l := by \
+         @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l (@List.nil Nat) = l := by \
          simp only [two_layer_lemma]",
     );
 }
@@ -168,7 +168,7 @@ fn simp_only_notation_lemma_matches_across_instance_encodings() {
     assert_tactic_theorem(
         "cross_encoding",
         "theorem cross_encoding (l : List Nat) : \
-         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (instHAppendListList Nat) l (List.nil Nat) = l := by \
+         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (@instHAppendListList Nat) l (@List.nil Nat) = l := by \
          simp only [two_layer_lemma]",
     );
 }
@@ -180,7 +180,7 @@ fn simp_only_notation_lemma_matches_bare_op_goal() {
     assert_tactic_theorem(
         "bare_goal",
         "theorem bare_goal (l : List Nat) : \
-         List.append Nat l (List.nil Nat) = l := by \
+         @List.append Nat l (@List.nil Nat) = l := by \
          simp only [two_layer_lemma]",
     );
 }
@@ -193,7 +193,7 @@ fn simp_only_bare_lemma_still_matches_notation_goal() {
     assert_tactic_theorem(
         "bare_lemma_control",
         "theorem bare_lemma_control (l : List Nat) : \
-         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (instHAppendListList Nat) l (List.nil Nat) = l := by \
+         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (@instHAppendListList Nat) l (@List.nil Nat) = l := by \
          simp only [List.append_nil]",
     );
 }
@@ -207,7 +207,7 @@ fn simp_only_notation_lemma_rejects_false_goal_same_surface() {
     assert_false_theorem_rejected(
         "same_surface_false",
         "theorem same_surface_false (l m : List Nat) : \
-         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (instHAppendListList Nat) l m = l := by \
+         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (@instHAppendListList Nat) l m = l := by \
          simp only [two_layer_lemma]",
     );
 }
@@ -227,7 +227,7 @@ fn simp_only_notation_lemma_rejects_false_bare_op_goal() {
     assert_false_theorem_rejected(
         "bare_goal_false",
         "theorem bare_goal_false (l m : List Nat) : \
-         List.append Nat l m = l := by \
+         @List.append Nat l m = l := by \
          simp only [two_layer_lemma]",
     );
 }

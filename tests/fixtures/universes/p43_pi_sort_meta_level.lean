@@ -22,8 +22,13 @@
 --   * arrowId/sortArrowId/depPiId — Max, IMax, and dependent-Pi faces.
 --   * propImpId — the Prop-codomain face (`got Sort(Zero)`).
 --   * monoSolve — the new equation SOLVES through arms 7/9 when the
---     operands are assignable `Type*` mints (`max(u,v) := 0` — Lean accepts
---     this spelling as monomorphic too). Its rigid twin is p44.
+--     operands are assignable level HOLES (`Type _`: `max(u,v) := 0`; the
+--     pinned Lean registers it as `{φ ψ : Type} → …`). Its rigid twin is p44.
+--     Spelled `Type*` until 2026-09-13, when `Type*` became what Mathlib's
+--     `TypeStar.lean` makes it — a fresh RIGID parameter — and the pinned
+--     Lean, given that elaborator, refuses the `Type*` spelling:
+--     `tid ?m.1 ?m.2 has type ?m.1 of sort Type but is expected to have type
+--     φ → ψ of sort Type (max u_4 u_5)`.
 --   * exfControl — in-family control: binder-ascribed Pi under `∃` passed
 --     BEFORE the fix (app-path constraint generation) and must keep passing.
 
@@ -47,4 +52,4 @@ def exfControl {φ ψ : Type*} (A : (φ → ψ) → Prop) : Prop := ∃ f, A f
 
 def tid (μ : Type) (c : μ) : μ := c
 
-def monoSolve {φ ψ : Type*} (f : φ → ψ) : φ → ψ := tid _ f
+def monoSolve {φ ψ : Type _} (f : φ → ψ) : φ → ψ := tid _ f

@@ -81,17 +81,74 @@ EVIDENCE: dict[str, str] = {
 # before fixture replacement.  Other moved tokens are debug/file coordinates
 # or indices the corresponding lane deliberately treats as a moving artifact
 # pin; the append-only ledger still records every one of them.
+#
+# RESTATED 2026-10-07 for the clean 047ebd051 / trustc 321aaeda7 rebaseline
+# (docs/DECISIONS.md, "Crystal fixture rebaseline at 047ebd051"): this table is
+# the per-rebaseline review data, and it now names EVERY moved functy, type,
+# callee and global token -- the tag tables pin each of them verbatim (the
+# interface `functy` pins postdate the 2026-08-20 table). `strict_monads` is
+# absent because its STRUCTURAL drift was re-derived in 047ebd051, so its
+# fixture reads IDENTICAL here. The 2026-08-20 rows are kept in
+# data/crystal_fixture_rebaseline_bindings_2026-08-20_a152ab39e.json.
 REQUIRED_BINDINGS: dict[str, set[tuple[str, str, str]]] = {
-    "from_source_system": {("type-table-index", "enum.175", "enum.178")},
-    "flat_flags_contains": {("type-table-index", "struct.1012", "struct.1017")},
-    "expr_path_step_clone": {("type-table-index", "enum.181", "enum.184")},
-    "level_is_zero": {
-        ("callee-index", "@func.4914", "@func.3894"),
-        ("callee-index", "@func.4925", "@func.3905"),
+    "bvar_in_range": {("functy-index", "functy.467", "functy.435")},
+    "expr_path_step_clone": {
+        ("functy-index", "functy.859", "functy.903"),
+        ("type-table-index", "enum.184", "enum.225"),
     },
-    "strict_monads": {("type-table-index", "struct.433", "struct.441")},
-    "flat_flags_with": {("type-table-index", "struct.1012", "struct.1017")},
-    "node_id_index": {("type-table-index", "struct.317", "struct.323")},
+    "flat_flags_contains": {
+        ("functy-index", "functy.488", "functy.459"),
+        ("type-table-index", "struct.1017", "struct.815"),
+    },
+    "flat_flags_with": {
+        ("functy-index", "functy.489", "functy.460"),
+        ("type-table-index", "struct.1017", "struct.815"),
+    },
+    "float_add": {("functy-index", "functy.381", "functy.363")},
+    "float_div": {("functy-index", "functy.381", "functy.363")},
+    "float_mul": {("functy-index", "functy.381", "functy.363")},
+    "float_sub": {("functy-index", "functy.381", "functy.363")},
+    "from_source_system": {
+        ("functy-index", "functy.554", "functy.518"),
+        ("type-table-index", "enum.13", "enum.17"),
+        ("type-table-index", "enum.178", "enum.211"),
+    },
+    "get_char_val_trunc": {("functy-index", "functy.370", "functy.352")},
+    "has_cubical_layer": {("type-table-index", "enum.13", "enum.17")},
+    "has_loose_bvars": {
+        ("callee-index", "@func.3657", "@func.1729"),
+        ("functy-index", "functy.435", "functy.410"),
+        ("type-table-index", "struct.29", "struct.765"),
+    },
+    "is_valid_char": {("functy-index", "functy.377", "functy.359")},
+    "level_is_zero": {
+        ("callee-index", "@func.3894", "@func.1947"),
+        ("callee-index", "@func.3905", "@func.1961"),
+        ("type-table-index", "enum.2", "enum.3"),
+    },
+    "level_is_zero_deref_callee": {
+        ("callee-index", "@func.6516", "@func.4925"),
+        ("callee-index", "@func.7211", "@func.4924"),
+        ("functy-index", "functy.45", "functy.22"),
+        ("global-index", "@global.4557", "@global.1135"),
+    },
+    "level_kind_ord": {
+        ("functy-index", "functy.306", "functy.278"),
+        ("type-table-index", "enum.2", "enum.3"),
+    },
+    "loose_bvar_range_callee": {
+        ("functy-index", "functy.433", "functy.408"),
+        ("type-table-index", "struct.29", "struct.765"),
+    },
+    "meta_tag_shl": {("functy-index", "functy.118", "functy.116")},
+    "node_id_index": {
+        ("functy-index", "functy.97", "functy.85"),
+        ("type-table-index", "struct.323", "struct.210"),
+    },
+    "simp_priority_value": {
+        ("functy-index", "functy.147", "functy.149"),
+        ("type-table-index", "enum.127", "enum.135"),
+    },
 }
 
 
@@ -450,11 +507,20 @@ def validate_body_set(bodies: object) -> dict[str, Any]:
 
 
 def changed_token_pairs(old: str, new: str, classes: tuple[str, ...]) -> list[dict[str, str]]:
+    # These token patterns MUST match the spellings the imported `classify`
+    # normalises (crystal_fixture_freshness.py `_norm_*`), or a line the
+    # classifier files under a class would plan ZERO token pairs here and the
+    # ledger would record a renumbering it cannot name.  Widened 2026-09-09
+    # with the classifier (`ty.N` under type-table-index, `@__trust_promoted_N`
+    # under global-index); unreachable today -- no `*.trust-ir.txt` body
+    # carries either spelling, the deref body spells its global `@global.N` --
+    # but the two tables are kept in step, and the zero-pairs case below now
+    # REFUSES rather than silently planning an empty ledger row.
     patterns = {
         "functy-index": r"functy\.\d+",
-        "type-table-index": r"\b(?:enum|struct|tuple|array)\.\d+",
+        "type-table-index": r"\b(?:enum|struct|tuple|array|ty)\.\d+",
         "callee-index": r"@func\.\d+",
-        "global-index": r"@global\.\d+",
+        "global-index": r"@global\.\d+|@__trust_promoted_\d+",
         "loc-file-index": r"#loc:\s+\d+(?:\s+\d+\s+\d+)?",
     }
     pairs: list[dict[str, str]] = []
@@ -466,9 +532,17 @@ def changed_token_pairs(old: str, new: str, classes: tuple[str, ...]) -> list[di
         right = re.findall(pattern, new)
         if len(left) != len(right):
             refuse(f"{cls}: token arity changed on {old!r} -> {new!r}")
+        found = 0
         for before, after in zip(left, right):
             if before != after:
                 pairs.append({"class": cls, "old": before, "new": after})
+                found += 1
+        if found == 0:
+            refuse(
+                f"{cls}: the classifier filed this line under {cls!r} but no token of that "
+                f"class differs by this script's pattern -- the two tables are out of step: "
+                f"{old!r} -> {new!r}"
+            )
     return pairs
 
 
@@ -694,6 +768,21 @@ def verify_required_bindings(
             refuse(f"binding {stem} {old}->{new} is not present in the exact live delta")
 
 
+# The build-provenance prose each current-source pin carries. These defaults
+# describe the sealed stage-1 snapshot every rebaseline before 2026-10-07 was
+# measured with; a run on another toolchain states its own (`--recipe`,
+# `--driver-seal`) rather than inheriting a sentence that is not about it.
+DEFAULT_RECIPE = (
+    "TRUSTC=<sealed stage1>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> "
+    "TRUST_IR_BUILD_TARGET_DIR=<exact-driver prewarm> "
+    "scripts/trust_ir_build.sh --print-only"
+)
+DEFAULT_DRIVER_SEAL = (
+    "Trust seal_driver guard passed with the sole resolved driver inside the "
+    "read-only snapshot; sysrootcheck reported metadata v12/v12 and compiled std."
+)
+
+
 def current_evidence_pin(
     *,
     stem: str,
@@ -711,6 +800,8 @@ def current_evidence_pin(
     driver_sha: str,
     dump: Path,
     emitted_sha: str,
+    recipe: str = DEFAULT_RECIPE,
+    driver_seal: str = DEFAULT_DRIVER_SEAL,
 ) -> dict[str, Any]:
     head = report_row.get("at_head")
     if not isinstance(head, dict):
@@ -793,15 +884,8 @@ def current_evidence_pin(
             "trustc_sha256": trustc_sha,
             "librustc_driver_sha256": driver_sha,
             "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off",
-            "recipe": (
-                "TRUSTC=<sealed stage1>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> "
-                "TRUST_IR_BUILD_TARGET_DIR=<exact-driver prewarm> "
-                "scripts/trust_ir_build.sh --print-only"
-            ),
-            "driver_seal": (
-                "Trust seal_driver guard passed with the sole resolved driver inside the "
-                "read-only snapshot; sysrootcheck reported metadata v12/v12 and compiled std."
-            ),
+            "recipe": recipe,
+            "driver_seal": driver_seal,
             "artifacts": artifacts,
             "whole_crate_measurement": measured,
             "fatal_invariants": invariants,
@@ -952,6 +1036,16 @@ def main() -> int:
         help="reviewed explanation recorded verbatim in the append-only ledger",
     )
     ap.add_argument("--apply", action="store_true")
+    ap.add_argument(
+        "--recipe",
+        default=DEFAULT_RECIPE,
+        help="the measured dump recipe recorded in every current-source pin",
+    )
+    ap.add_argument(
+        "--driver-seal",
+        default=DEFAULT_DRIVER_SEAL,
+        help="how the trustc/driver pair was identified, recorded in every current-source pin",
+    )
     args = ap.parse_args()
     if not args.apply:
         refuse("fixture replacement requires the explicit --apply authorization")
@@ -1156,6 +1250,8 @@ def main() -> int:
             driver_sha=sha256(args.driver),
             dump=args.dump,
             emitted_sha=plans[stem]["new_sha256"],
+            recipe=args.recipe,
+            driver_seal=args.driver_seal,
         )
         old_value["current_source_bound_pin"] = pin
         new_text = json.dumps(old_value, indent=1) + "\n"

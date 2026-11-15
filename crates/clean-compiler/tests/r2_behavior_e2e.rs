@@ -33,7 +33,7 @@
 #![cfg(feature = "round-trip-compile")]
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 
 use clean_compiler::emit_c::{emit_c_with_config, CEmitConfig};
@@ -42,13 +42,8 @@ use clean_compiler::to_lcnf::constant_to_decl;
 use clean_compiler::Decl;
 use clean_kernel::{Environment, Expr, ExprVisitor, LevelVec, Name};
 
-fn runtime_include_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/include")
-}
-
-fn runtime_c_source() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/src/clean_runtime.c")
-}
+mod runtime_fixture;
+use runtime_fixture::MaterializedRuntime;
 
 fn find_c_compiler() -> Option<String> {
     for compiler in ["cc", "gcc", "clang"] {
@@ -186,13 +181,16 @@ clean_obj* l_Nat_decEq(clean_obj* a, clean_obj* b) { return clean_box(clean_unbo
 static clean_obj* nil(void) { return clean_box(0); }
 /* Extern-boundary stubs for PROOF-machinery residue some closures carry
  * (Nat.divmodAux lemma lambdas, Eq.subst, the Prop head Nat.le): verified
- * UNREACHABLE from every driven entry point — the stubs abort so any future
- * change that routes execution through them fails the driver loudly instead
- * of silently computing with dummies. */
-#include <stdlib.h>
+ * UNREACHABLE from every driven entry point — the stubs stop the driver with
+ * status 86 so any future change that routes execution through them fails the
+ * driver loudly instead of silently computing with dummies. `_exit`, never
+ * `abort()`: a crash signal makes macOS write a crash report. The flush
+ * first keeps the driver's partial stdout for the failing test's message. */
+#include <unistd.h>
 static clean_obj* unreachable_proof_stub(const char* who) {
     fprintf(stderr, "driver reached proof-machinery extern %s\n", who);
-    abort();
+    fflush(NULL);
+    _exit(86);
 }
 clean_obj* l_Eq_ndrec(clean_obj* a, clean_obj* b, clean_obj* c, clean_obj* d, clean_obj* e, clean_obj* f) { (void)a;(void)b;(void)c;(void)d;(void)e;(void)f; return unreachable_proof_stub("Eq.ndrec"); }
 clean_obj* l_Nat_le__of__succ__le__succ(clean_obj* a, clean_obj* b, clean_obj* c) { (void)a;(void)b;(void)c; return unreachable_proof_stub("Nat.le_of_succ_le_succ"); }
@@ -217,6 +215,8 @@ fn build_and_run(
     want_asan: bool,
 ) -> Vec<String> {
     let dir = tempfile::tempdir().expect("tempdir");
+    // Embedded runtime, not a compile-time path (see runtime_fixture.rs).
+    let runtime = MaterializedRuntime::materialize();
     let source = dir.path().join(format!("{name}.c"));
     let binary = dir.path().join(name);
     std::fs::write(
@@ -234,9 +234,9 @@ fn build_and_run(
         .arg("-o")
         .arg(&binary)
         .arg(&source)
-        .arg(runtime_c_source())
+        .arg(runtime.c_source())
         .arg("-I")
-        .arg(runtime_include_dir())
+        .arg(runtime.include_dir())
         .output()
         .expect("spawn cc");
     assert!(

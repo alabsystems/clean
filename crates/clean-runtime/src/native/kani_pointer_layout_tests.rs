@@ -8,6 +8,7 @@
 //! layout computation for Ctor, Closure, and String objects.
 //!
 //! Run with: `cargo kani --features kani -p clean-runtime`
+//! STOCK EXCEPTION (Trust lacks kani; measured `targo kani` -> `error: no such command`; kani drives its own pinned nightly).
 //!
 //! Part of #1144
 

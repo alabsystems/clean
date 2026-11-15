@@ -51,6 +51,8 @@ mod tests_consumer_acceptance;
 #[cfg(test)]
 mod tests_goals;
 #[cfg(test)]
+mod tests_integer_division;
+#[cfg(test)]
 mod tests_proof_backend;
 #[cfg(test)]
 mod tests_proof_format;
@@ -64,7 +66,7 @@ mod tests_translate;
 mod tests_translate_traits;
 
 // --- Public re-exports (stable ay_backend / ay_contract surface) ---
-pub use carcara_verify::verify_alethe_proof;
+pub use carcara_verify::{verify_alethe_proof, verify_alethe_proof_until};
 pub use config::AyBackendConfig;
 pub use proof_backend::{AyProofBackend, AyProofQuality, AyProofResult, VerifyError};
 pub use proof_format::ProofProfile;

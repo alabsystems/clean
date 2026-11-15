@@ -55,7 +55,7 @@
 //!   four verified unchanged by the guarded-premise battery.
 
 use super::{flatten_arrows, generate, mentions, strip_parens, target, HYP_G_PREFIX, HYP_LE};
-use clean_parser::{Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr};
+use clean_parser::{Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName};
 
 // ── the premise taxonomy ─────────────────────────────────────────────────
 
@@ -106,8 +106,8 @@ enum ExConjunct {
 /// context — for every shape whose positivity is not established here.
 pub(super) fn classify_premise(
     p: &SurfaceExpr,
-    short: &str,
-    params: &[String],
+    short: &SurfaceName,
+    params: &[SurfaceName],
     arity: usize,
 ) -> Result<Premise, String> {
     let stripped = strip_parens(p);
@@ -130,14 +130,14 @@ pub(super) fn classify_premise(
 /// occurrences never mention the row.
 fn rec_atom(
     e: &SurfaceExpr,
-    short: &str,
-    params: &[String],
+    short: &SurfaceName,
+    params: &[SurfaceName],
     arity: usize,
 ) -> Result<Option<Vec<SurfaceExpr>>, String> {
     let SurfaceExpr::App(_, head, args) = e else {
         return Ok(None);
     };
-    if !matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id == short) {
+    if !super::is_predicate_head(head, short) {
         return Ok(None);
     }
     if args.len() != params.len() + arity || args.iter().any(|a| a.name.is_some()) {
@@ -147,7 +147,7 @@ fn rec_atom(
             format!(
                 "`{short} {} e₁ … e{arity}` with the declared parameter row \
                  then exactly {arity} positional index argument(s)",
-                params.join(" ")
+                super::join_names(params)
             )
         };
         return Err(format!(
@@ -193,8 +193,8 @@ impl BinderSite {
 fn check_clause_binder(
     b: &SurfaceBinder,
     earlier: &[SurfaceBinder],
-    short: &str,
-    params: &[String],
+    short: &SurfaceName,
+    params: &[SurfaceName],
     site: BinderSite,
 ) -> Result<(), String> {
     let where_ = site.label();
@@ -205,10 +205,10 @@ fn check_clause_binder(
              occurrence `{short} {} …` would no longer apply the FIXED \
              parameter row",
             b.name,
-            params.join(" ")
+            super::join_names(params)
         ));
     }
-    if b.name == "_" {
+    if b.name.is_unescaped_component("_") {
         return Err(format!(
             "a {where_} declares an anonymous binder `_`; the generated \
              `F_mono` proof must re-supply every bound variable by NAME \
@@ -229,15 +229,15 @@ fn check_clause_binder(
             b.name
         ));
     }
-    if b.name == short {
+    if short.has_prefix(&b.name) {
         return Err(format!(
             "a {where_} declares binder `{}` named after the predicate \
-             itself; every occurrence of `{short}` in a premise must be the \
+             or its qualified root; every occurrence of `{short}` in a premise must be the \
              recursive predicate, not a local",
             b.name
         ));
     }
-    if b.name.contains("_coind") {
+    if super::has_generated_marker(&b.name) {
         return Err(format!(
             "a {where_} declares binder `{}`, which carries the `_coind` \
              marker reserved for generated binder names — it could be \
@@ -273,8 +273,8 @@ fn check_clause_binder(
 /// name.
 fn classify_guarded(
     p: &SurfaceExpr,
-    short: &str,
-    params: &[String],
+    short: &SurfaceName,
+    params: &[SurfaceName],
     arity: usize,
 ) -> Result<Premise, String> {
     // Leading `∀` groups only — mirroring the constructor-binder peel.
@@ -327,8 +327,8 @@ fn classify_guarded(
 /// [`Premise::Plain`] long before this point).
 fn classify_concl(
     c: &SurfaceExpr,
-    short: &str,
-    params: &[String],
+    short: &SurfaceName,
+    params: &[SurfaceName],
     arity: usize,
     premise_is_bare: bool,
 ) -> Result<GuardedConcl, String> {
@@ -376,7 +376,13 @@ fn collect_exists(e: &SurfaceExpr) -> Result<Option<(Vec<SurfaceBinder>, &Surfac
     let mut binders: Vec<SurfaceBinder> = Vec::new();
     let mut cur = e;
     while let SurfaceExpr::App(_, head, args) = cur {
-        if !matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id == "Exists") {
+        // Only the `∃` sugar's own head (a `SurfaceName::global_path`
+        // reference): a spelled `Exists` may be a binder the user wrote, and
+        // analysing its application as an `∃` would rebuild it with the
+        // global `Exists`. An unrecognized head falls through to the
+        // fail-closed refusal below.
+        if !matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id.is_global_reference() && id.name() == SurfaceName::generated_path("Exists").name() && !id.is_relative_constructor())
+        {
             break;
         }
         if args.len() != 1 || args[0].name.is_some() {
@@ -409,15 +415,16 @@ fn collect_exists(e: &SurfaceExpr) -> Result<Option<(Vec<SurfaceBinder>, &Surfac
 /// refuses by name.
 fn classify_ex_conjuncts(
     body: &SurfaceExpr,
-    short: &str,
-    params: &[String],
+    short: &SurfaceName,
+    params: &[SurfaceName],
     arity: usize,
 ) -> Result<Vec<ExConjunct>, String> {
     let mut out = Vec::new();
     let mut cur = body;
     loop {
         if let SurfaceExpr::App(_, head, args) = cur {
-            if matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id == "And")
+            // Only the `∧` sugar's own head (see `collect_exists`).
+            if matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id.is_global_reference() && id.name() == SurfaceName::generated_path("And").name() && !id.is_relative_constructor())
                 && args.len() == 2
                 && args.iter().all(|a| a.name.is_none())
             {
@@ -433,8 +440,8 @@ fn classify_ex_conjuncts(
 
 fn classify_ex_conjunct(
     e: &SurfaceExpr,
-    short: &str,
-    params: &[String],
+    short: &SurfaceName,
+    params: &[SurfaceName],
     arity: usize,
 ) -> Result<ExConjunct, String> {
     let stripped = strip_parens(e);
@@ -461,7 +468,10 @@ impl GuardedPremise {
     /// [`target::rename_free`]: a guard or `∃` binder named after either
     /// side of the map would shadow/capture — refused with the same
     /// message shape.
-    pub(super) fn renamed(&self, map: &[(String, String)]) -> Result<GuardedPremise, String> {
+    pub(super) fn renamed(
+        &self,
+        map: &[(SurfaceName, SurfaceName)],
+    ) -> Result<GuardedPremise, String> {
         let sub = |e: &SurfaceExpr| target::rename_free(e, map);
         let check = |bs: &[SurfaceBinder]| -> Result<(), String> {
             for b in bs {
@@ -531,7 +541,7 @@ impl ExConjunct {
 /// `∃ y⃗, body` — the parser's desugaring, rebuilt outermost-last.
 fn exists_nest(binders: &[SurfaceBinder], body: SurfaceExpr) -> SurfaceExpr {
     binders.iter().rev().fold(body, |acc, b| {
-        generate::napp(
+        generate::global_napp(
             "Exists",
             vec![SurfaceExpr::Lambda(
                 Span::dummy(),
@@ -601,16 +611,16 @@ impl GuardedPremise {
     ///   `Exists` — while the ∃-free guarded tests stay green. Both nets
     ///   fire BEFORE anything registers.
     pub(super) fn mono_map(&self, h: SurfaceExpr) -> SurfaceExpr {
-        let hyp_names: Vec<String> = (0..self.hyps.len())
-            .map(|i| format!("{HYP_G_PREFIX}{i}"))
+        let hyp_names: Vec<SurfaceName> = (0..self.hyps.len())
+            .map(|i| SurfaceName::component(format!("{HYP_G_PREFIX}{i}"), false))
             .collect();
-        let lam_refs: Vec<&str> = self
+        let lam_refs: Vec<SurfaceName> = self
             .binders
             .iter()
-            .map(|b| b.name.as_str())
-            .chain(hyp_names.iter().map(String::as_str))
+            .map(|b| b.name.clone())
+            .chain(hyp_names.iter().cloned())
             .collect();
-        let applied = generate::app(h, lam_refs.iter().map(|n| generate::ident(n)).collect());
+        let applied = generate::app(h, lam_refs.iter().map(generate::typed_ident).collect());
         let mapped = match &self.concl {
             GuardedConcl::Rec(args) => le_map(args, applied),
             GuardedConcl::Exists { binders, conjuncts } => {
@@ -628,14 +638,17 @@ impl GuardedPremise {
                                 }
                             })
                             .collect(),
-                        |a, b| generate::napp("And.intro", vec![a, b]),
+                        |a, b| generate::global_napp("And.intro", vec![a, b]),
                     );
                     binders.iter().rev().fold(packed, |acc, b| {
-                        generate::napp("Exists.intro", vec![generate::ident(&b.name), acc])
+                        generate::global_napp(
+                            "Exists.intro",
+                            vec![generate::typed_ident(&b.name), acc],
+                        )
                     })
                 })
             }
         };
-        generate::lam(&lam_refs, mapped)
+        generate::lam_typed(&lam_refs, mapped)
     }
 }

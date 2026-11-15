@@ -13,6 +13,7 @@ use crate::error::ElabError;
 use crate::mutual_decl::MutualBlock;
 use clean_kernel::expr::ExprKind;
 use clean_kernel::Expr;
+use clean_parser::SurfaceName;
 use std::collections::{HashMap, HashSet};
 use std::fmt::Write as FmtWrite;
 
@@ -49,7 +50,7 @@ pub(crate) enum CycleKind {
 pub(crate) struct CycleInfo {
     pub(crate) indices: Vec<usize>,
     pub(crate) kind: CycleKind,
-    pub(crate) names: Vec<String>,
+    pub(crate) names: Vec<SurfaceName>,
 }
 
 /// Find and classify all cycles via SCC decomposition.
@@ -164,9 +165,9 @@ pub(crate) fn count_forward_refs(block: &MutualBlock, order: &[usize]) -> usize 
 #[derive(Debug, Clone)]
 pub(crate) struct TypeDependency {
     pub(crate) decl_index: usize,
-    pub(crate) decl_name: String,
-    pub(crate) type_refs: Vec<String>,
-    pub(crate) body_refs: Vec<String>,
+    pub(crate) decl_name: SurfaceName,
+    pub(crate) type_refs: Vec<clean_kernel::Name>,
+    pub(crate) body_refs: Vec<clean_kernel::Name>,
 }
 
 /// Collect type and body constant references for each declaration.
@@ -193,10 +194,10 @@ pub(crate) fn collect_type_dependencies(block: &MutualBlock) -> Vec<TypeDependen
         .collect()
 }
 
-fn collect_const_names(expr: &Expr, out: &mut Vec<String>) {
+fn collect_const_names(expr: &Expr, out: &mut Vec<clean_kernel::Name>) {
     match expr.kind() {
         ExprKind::Const(name, _) => {
-            let s = name.to_string();
+            let s = name.clone();
             if !out.contains(&s) {
                 out.push(s);
             }
@@ -226,7 +227,7 @@ fn collect_const_names(expr: &Expr, out: &mut Vec<String>) {
 pub(crate) struct StratificationLayer {
     pub(crate) layer_index: usize,
     pub(crate) decl_indices: Vec<usize>,
-    pub(crate) decl_names: Vec<String>,
+    pub(crate) decl_names: Vec<SurfaceName>,
 }
 
 /// Result of stratification analysis.
@@ -316,7 +317,7 @@ pub(crate) fn analyze_stratification(block: &MutualBlock) -> StratificationResul
 #[allow(dead_code)]
 pub(crate) struct DeclSizeEstimate {
     pub(crate) index: usize,
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) type_nodes: usize,
     pub(crate) body_nodes: usize,
     pub(crate) total: usize,
@@ -383,7 +384,7 @@ pub(crate) fn estimate_block_size(
 #[allow(dead_code)]
 pub(crate) struct SignatureInfo {
     pub(crate) index: usize,
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) num_params: usize,
     pub(crate) has_explicit_type: bool,
     pub(crate) return_sort_level: Option<u32>,

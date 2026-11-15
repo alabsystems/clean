@@ -32,8 +32,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -130,14 +129,14 @@ fn m3_mint_reproduces_the_registered_script() {
         "the mint record's core digest does not match the committed core module"
     );
     // The interface-only alias: BYTE-IDENTICAL to the pin the hand
-    // transcription already registered, and a literal (1017 > 16).
+    // transcription already registered, and a literal (815 > 16; 1017 before the 2026-10-07 rebaseline).
     assert_eq!(
         ir_mint::mint(&core_a(), PREFIX, &tags())
             .expect("mint")
             .lines
             .first()
             .map(String::as_str),
-        Some("def ir_fc_tflags : IRTy := IRTy.struct_ 1017"),
+        Some("def ir_fc_tflags : IRTy := IRTy.struct_ 815"),
     );
 }
 
@@ -167,12 +166,12 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("bb0(%0: struct.1017, %1: struct.1017):"),
-        "both parameters must still be struct.1017; if not, the artifact was re-interned and \
+        FIXTURE.contains("bb0(%0: struct.815, %1: struct.815):"),
+        "both parameters must still be struct.815; if not, the artifact was re-interned and \
          this table needs a one-line REVIEWED re-pin"
     );
     assert!(
-        ir_mint::IR_FC_TAGS.contains("\"crate_id\": 1017"),
+        ir_mint::IR_FC_TAGS.contains("\"crate_id\": 815"),
         "and the committed table must record it"
     );
 }
@@ -212,17 +211,17 @@ fn m10_the_interface_pins_bite() {
     let t = tags();
     for (from, to, slot) in [
         (
-            "bb0(%0: struct.1017, %1: struct.1017):",
-            "bb0(%0: struct.1017, %1: struct.999):",
+            "bb0(%0: struct.815, %1: struct.815):",
+            "bb0(%0: struct.815, %1: struct.999):",
             "parameter",
         ),
         (
-            "bb0(%0: struct.1017, %1: struct.1017):",
-            "bb0(%0: u32, %1: struct.1017):",
+            "bb0(%0: struct.815, %1: struct.815):",
+            "bb0(%0: u32, %1: struct.815):",
             "parameter",
         ),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.488)", "(functy.489)", "signature index"),
+        ("(functy.459)", "(functy.460)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");

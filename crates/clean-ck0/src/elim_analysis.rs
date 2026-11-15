@@ -40,40 +40,51 @@ pub(crate) fn large_eliminates(env: &dyn Env, decl: &InductiveDecl, ind_sort: &L
 }
 
 /// Block-aware large-elimination determination (design §5.2: "the subsingleton
-/// gate must account for the whole block"). The block large-eliminates iff
-/// **every** type in it would large-eliminate on its own AND the block has a
-/// single type. A mutual block of more than one type is conservatively
-/// Prop-only-eliminating: Lean restricts large elimination for genuinely mutual
-/// Prop families, and over-permissiveness here is a false-*accept* with no
-/// differential oracle — so we take the sound, conservative direction (at worst
-/// we forbid a legal large recursor). A non-`Prop` block always large-eliminates
-/// (the `Prop` gate does not apply).
+/// gate must account for the whole block"), Lean's `elim_only_at_universe_zero`
+/// over a block (`inductive.cpp@v4.30.0-rc2`): large elimination is
+/// unconditional only when the result level is PROVABLY nonzero
+/// (`m_is_not_zero`); otherwise a mutual block (N > 1) eliminates only into
+/// `Prop`, and a single type runs the subsingleton analysis.
+///
+/// "Provably nonzero", never "not provably zero": a block in `Sort u` may be a
+/// `Prop` block (`u := 0`), so it is not exempt. The old test here,
+/// `!any(is_zero)`, exempted it, and a mutual `Sort u` block got large
+/// recursors (pinned Lean: `motive_1 : EvU → Prop`). Every type of a block is
+/// asked (Lean asks the first; ck0 does not check the block's levels agree, so
+/// asking all of them is the conservative reading of the same rule).
 pub(crate) fn block_large_eliminates(
     env: &dyn Env,
     block: &crate::mutual::MutualBlock,
     ind_sorts: &[Level],
 ) -> bool {
-    // If no type is in Prop, large elimination is unconditionally allowed.
-    let any_prop = ind_sorts.iter().any(Level::is_zero);
-    if !any_prop {
+    // Provably nonzero everywhere → large elimination is unconditional.
+    if !ind_sorts.is_empty() && ind_sorts.iter().all(Level::is_nonzero) {
         return true;
     }
-    // Some type is in Prop. A genuinely mutual (N > 1) Prop block is Prop-only
-    // (conservative + sound). A single-element block defers to the standard
-    // single-type subsingleton predicate.
+    // A level that may be zero: a genuinely mutual (N > 1) block is Prop-only
+    // (Lean: `if (m_ind_types.size() > 1) return true;`). A single-element
+    // block defers to the single-type subsingleton predicate.
     if block.decls.len() != 1 {
         return false;
     }
-    let decl = &block.decls[0];
-    let sort = &ind_sorts[0];
+    // A missing entry is answered conservatively (Prop-only) rather than by a
+    // panicking index.
+    let (Some(decl), Some(sort)) = (block.decls.first(), ind_sorts.first()) else {
+        return false;
+    };
     !elim_only_at_universe_zero(env, decl, sort)
 }
 
 /// Mirror of Lean's `elim_only_at_universe_zero`. `true` ⇒ Prop-only
 /// elimination (no extra motive universe param); `false` ⇒ large elimination.
 fn elim_only_at_universe_zero(env: &dyn Env, decl: &InductiveDecl, ind_sort: &Level) -> bool {
-    // Not in Prop → large elimination always allowed.
-    if !ind_sort.is_zero() {
+    // Lean: `if (m_is_not_zero) return false;`. Only a PROVABLY nonzero level
+    // is exempt. A level that may be zero (`Sort u`, `Sort (imax u v)`) runs
+    // the analysis below: `SU : Sort u | a | b` is a two-constructor `Prop`
+    // family at `u := 0`, and a large `SU.rec` proves `False` there (pinned
+    // Lean gives `SU.rec` the motive `SU → Prop`). The levels are canonical, so
+    // `is_nonzero` is Lean's `is_not_zero` on the normalized level.
+    if ind_sort.is_nonzero() {
         return false;
     }
 

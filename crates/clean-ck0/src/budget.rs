@@ -26,6 +26,14 @@ pub enum BudgetError {
     OutOfBudget,
 }
 
+/// A level past the depth bound is refused as the frame cap and the reduct
+/// bound are, as out of budget (R166).
+impl From<crate::level::LevelTooDeep> for BudgetError {
+    fn from(_: crate::level::LevelTooDeep) -> Self {
+        BudgetError::OutOfBudget
+    }
+}
+
 /// A deterministic step meter. Threaded by `&mut` through reduction and
 /// conversion so the *total* work of one decision is bounded.
 #[derive(Clone, Copy, Debug)]
@@ -64,6 +72,23 @@ impl Budget {
                 Ok(())
             }
             None => Err(BudgetError::OutOfBudget),
+        }
+    }
+
+    /// Consume `steps` at once: the native `Nat` work meter charges one step per
+    /// 64-bit word a result may occupy, before computing it (R166). When fewer
+    /// remain the budget is exhausted, as `step` leaves it, and the work does not
+    /// proceed.
+    pub(crate) fn charge(&mut self, steps: u64) -> Result<(), BudgetError> {
+        match self.fuel.checked_sub(steps) {
+            Some(next) => {
+                self.fuel = next;
+                Ok(())
+            }
+            None => {
+                self.fuel = 0;
+                Err(BudgetError::OutOfBudget)
+            }
         }
     }
 }

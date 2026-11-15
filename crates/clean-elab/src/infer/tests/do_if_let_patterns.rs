@@ -28,13 +28,19 @@ fn test_do_if_let_ctor_pattern_binds_field_in_then_branch() {
         vec![DoElem::IfLet(
             Span::dummy(),
             SurfacePattern::Ctor(
-                "Nat.succ".to_string(),
-                vec![SurfacePattern::Var("k".to_string())],
+                SurfaceName::generated_path("Nat.succ"),
+                vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("k"),
+                )),
             )],
             Some(vec![DoElem::Expr(
                 Span::dummy(),
@@ -61,13 +67,19 @@ fn test_do_if_let_ctor_pattern_without_else_uses_unit_fallback() {
         vec![DoElem::IfLet(
             Span::dummy(),
             SurfacePattern::Ctor(
-                "Nat.succ".to_string(),
-                vec![SurfacePattern::Var("k".to_string())],
+                SurfaceName::generated_path("Nat.succ"),
+                vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Return(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "Unit.unit".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("Unit.unit"),
+                )),
             )],
             None,
         )],
@@ -92,10 +104,16 @@ fn test_do_if_let_literal_pattern_without_else_uses_unit_fallback() {
         vec![DoElem::IfLet(
             Span::dummy(),
             SurfacePattern::Lit(SurfaceLit::Nat(0)),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Return(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "Unit.unit".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("Unit.unit"),
+                )),
             )],
             None,
         )],
@@ -119,10 +137,13 @@ fn test_do_if_let_ctor_nested_literal_pattern_elaborates() {
         vec![DoElem::IfLet(
             Span::dummy(),
             SurfacePattern::Ctor(
-                "Nat.succ".to_string(),
+                SurfaceName::generated_path("Nat.succ"),
                 vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Expr(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
@@ -135,6 +156,10 @@ fn test_do_if_let_ctor_nested_literal_pattern_elaborates() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -152,13 +177,16 @@ fn test_do_if_let_as_ctor_nested_literal_pattern_elaborates() {
         vec![DoElem::IfLet(
             Span::dummy(),
             SurfacePattern::As(
-                "whole".to_string(),
+                SurfaceName::generated_path("whole"),
                 Box::new(SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                     vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
                 )),
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Expr(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
@@ -171,6 +199,10 @@ fn test_do_if_let_as_ctor_nested_literal_pattern_elaborates() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -189,12 +221,15 @@ fn test_do_if_let_or_ctor_nested_literal_pattern_elaborates() {
             Span::dummy(),
             SurfacePattern::Or(
                 Box::new(SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                     vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
                 )),
                 Box::new(SurfacePattern::Wildcard),
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Expr(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
@@ -207,6 +242,10 @@ fn test_do_if_let_or_ctor_nested_literal_pattern_elaborates() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -231,10 +270,13 @@ fn test_do_if_let_as_pattern_uses_fresh_shared_scrutinee_when_base_name_taken() 
         vec![DoElem::IfLet(
             Span::dummy(),
             SurfacePattern::As(
-                "whole".to_string(),
+                SurfaceName::generated_path("whole"),
                 Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Expr(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
@@ -277,7 +319,10 @@ fn test_do_if_let_or_pattern_uses_fresh_shared_scrutinee_when_base_name_taken() 
                     1,
                 )),
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Expr(
                 Span::dummy(),
                 Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
@@ -290,6 +335,10 @@ fn test_do_if_let_or_pattern_uses_fresh_shared_scrutinee_when_base_name_taken() 
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
     let result = ctx.elaborate(&surface);
     assert!(
         result.is_ok(),
@@ -313,10 +362,16 @@ fn test_do_if_let_or_pattern_without_else_uses_unit_fallback() {
                     1,
                 )),
             ),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )),
             vec![DoElem::Return(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "Unit.unit".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("Unit.unit"),
+                )),
             )],
             None,
         )],

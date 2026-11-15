@@ -483,6 +483,7 @@ pub fn satres_formula(rule_name: &str, clauses: &[Vec<SatLit>]) -> Option<ProofF
         payload: format!("rule={rule_name}\ncnf={}", clauses_digest(clauses)),
         smtlib: None,
         sort: None,
+        bindings: Vec::new(),
     })
 }
 

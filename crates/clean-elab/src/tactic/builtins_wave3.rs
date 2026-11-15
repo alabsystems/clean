@@ -12,6 +12,8 @@
 //!
 //! Split from `builtins.rs` per the 500-line file limit.
 
+use clean_parser::SurfaceName;
+
 use std::sync::Arc;
 
 use clean_kernel::Expr;
@@ -39,11 +41,15 @@ fn register_ident_list_tactics(registry: &mut TacticRegistry) {
         pattern: TacticArgPattern::IdentList,
         handler: Arc::new(|ps, args| {
             if args.is_empty() {
-                super::intro(ps, "h")
+                super::intro(ps, &SurfaceName::generated_path("h"))
             } else {
                 let names = args_to_names(ps, args)?;
                 for name in &names {
-                    super::intro(ps, name)?;
+                    if name.is_unescaped_component("_") {
+                        super::intro(ps, name)?;
+                    } else {
+                        super::target_equation::intro_shadowing(ps, name)?;
+                    }
                 }
                 Ok(())
             }
@@ -55,7 +61,7 @@ fn register_ident_list_tactics(registry: &mut TacticRegistry) {
         handler: Arc::new(|ps, args| {
             let names = args_to_names(ps, args)?;
             if names.is_empty() {
-                super::ext(ps, "x")?;
+                super::ext(ps, &SurfaceName::generated_path("x"))?;
             } else {
                 for name in &names {
                     super::ext(ps, name)?;
@@ -70,7 +76,7 @@ fn register_ident_list_tactics(registry: &mut TacticRegistry) {
         handler: Arc::new(|ps, args| {
             let names = args_to_names(ps, args)?;
             if names.is_empty() {
-                super::funext(ps, "x")?;
+                super::funext(ps, &SurfaceName::generated_path("x"))?;
             } else {
                 for name in &names {
                     super::funext(ps, name)?;
@@ -86,7 +92,7 @@ fn register_ident_list_tactics(registry: &mut TacticRegistry) {
             let name = if let Some(arg) = args.first() {
                 expr_to_hyp_name(ps, arg)?
             } else {
-                "h".to_string()
+                SurfaceName::generated_path("h")
             };
             super::by_contra(ps, &name)
         }),
@@ -115,10 +121,28 @@ fn register_nonempty_ident_tactics(registry: &mut TacticRegistry) {
         pattern: TacticArgPattern::NonemptyIdentList,
         handler: Arc::new(|ps, args| {
             let names = args_to_names(ps, args)?;
+            // Lean's evalRevert resolves all names first; MVarId.revert then
+            // includes forward dependencies and sorts in declaration order.
+            // Reuse the batch proof construction used by cases/induction.
+            let mut roots = Vec::with_capacity(names.len());
             for name in &names {
-                super::revert(ps, name)?;
+                super::pattern::names::require_binding_name(name, "revert")?;
+                roots.push(super::hypothesis::hypothesis_fvar(ps, name)?);
             }
-            Ok(())
+            let goal = ps.current_goal().ok_or(TacticError::NoGoals)?;
+            let mut reverted: std::collections::HashSet<_> = roots.into_iter().collect();
+            // Query instantiated dependencies without rewriting any locals.
+            // A well-formed context lists each dependency before its users.
+            for decl in &goal.local_ctx {
+                if reverted.contains(&decl.fvar) {
+                    continue;
+                }
+                if super::major_dependents::generalizing_depends_on(ps, decl, &reverted) {
+                    reverted.insert(decl.fvar);
+                }
+            }
+            let reverted: Vec<_> = reverted.into_iter().collect();
+            super::major_dependents::revert_fvars(ps, &reverted).map(|_| ())
         }),
     });
     registry.register(TacticEntry {
@@ -126,8 +150,23 @@ fn register_nonempty_ident_tactics(registry: &mut TacticRegistry) {
         pattern: TacticArgPattern::NonemptyIdentList,
         handler: Arc::new(|ps, args| {
             let names = args_to_names(ps, args)?;
+            // Lean's `evalClear`: resolve every name, sort the locals by
+            // declaration order, and clear the LAST first, so `clear h hp`
+            // succeeds when `hp` depends on `h` (each clear still refuses a
+            // remaining dependent, `hypothesis::clear_fvar`).
+            let mut fvars = Vec::with_capacity(names.len());
             for name in &names {
-                super::clear(ps, name)?;
+                super::pattern::names::require_binding_name(name, "clear")?;
+                fvars.push(super::hypothesis::hypothesis_fvar(ps, name)?);
+            }
+            let goal = ps.current_goal().ok_or(TacticError::NoGoals)?;
+            let position = |fvar: &clean_kernel::FVarId| {
+                goal.local_ctx.iter().position(|decl| decl.fvar == *fvar)
+            };
+            fvars.sort_by_key(|fvar| std::cmp::Reverse(position(fvar)));
+            fvars.dedup();
+            for fvar in fvars {
+                super::hypothesis::clear_fvar(ps, fvar)?;
             }
             Ok(())
         }),
@@ -141,24 +180,83 @@ fn register_nonempty_ident_tactics(registry: &mut TacticRegistry) {
 
 fn rename_i_handler(ps: &mut ProofState, args: &[Expr]) -> TacticResult {
     let new_names = args_to_names(ps, args)?;
+    rename_inaccessible_binders(ps, &new_names)
+}
+
+/// Name the last inaccessible locals in context order, as both `rename_i`
+/// and `case` do. This includes inaccessible locals from earlier eliminations.
+pub(super) fn rename_inaccessible_binders(
+    ps: &mut ProofState,
+    new_names: &[SurfaceName],
+) -> TacticResult {
     if let Some(goal) = ps.current_goal_mut() {
-        let inacc_indices: Vec<usize> = goal
-            .local_ctx
-            .iter()
-            .enumerate()
-            .rev()
-            .filter(|(_, d)| {
-                d.name.starts_with('_') || d.name.chars().next().is_some_and(|c| c.is_ascii_digit())
-            })
-            .map(|(i, _)| i)
-            .collect();
-        for (new_name, &idx) in new_names.iter().zip(inacc_indices.iter()) {
-            if new_name != "_" {
+        // Lean 4.8's `rename_i x₁ … xₙ` (`evalRenameInaccessibles`) names the
+        // LAST n inaccessible locals, in context order (`x₁` the earliest of
+        // them), and refuses more names than there are (gap G67). Every
+        // local whose name Clean generated is inaccessible — an unnamed
+        // constructor field from an earlier `cases` as much as the latest
+        // case's — except `this`, which Lean's `have` makes accessible.
+        // An older duplicate is inaccessible only while a newer matching local
+        // is present. Keep the introduction predicate's direction: an older
+        // ACTUAL local matches the newer REQUESTED name. Template-origin
+        // restrictions apply to that requested name and are asymmetric.
+        let inaccessible: Vec<usize> =
+            goal.local_ctx
+                .iter()
+                .enumerate()
+                .filter(|(index, d)| {
+                    is_generated_inaccessible_name(&d.name)
+                        || (is_generated_name(&d.name) && !d.name.is_unescaped_component("this"))
+                        || goal.local_ctx.iter().skip(*index + 1).any(|newer| {
+                            super::pattern::names::hypothesis_named(&d.name, &newer.name)
+                        })
+                })
+                .map(|(i, _)| i)
+                .collect();
+        if new_names.len() > inaccessible.len() {
+            return Err(TacticError::GoalMismatch(
+                "too many variable names provided".to_string(),
+            ));
+        }
+        let renamed = &inaccessible[inaccessible.len() - new_names.len()..];
+        for (new_name, &idx) in new_names.iter().zip(renamed) {
+            if !new_name.is_unescaped_component("_") {
                 goal.local_ctx[idx].name = new_name.clone();
             }
         }
     }
     Ok(())
+}
+
+/// Every component of `name` was generated, none written in source.
+fn is_generated_name(name: &SurfaceName) -> bool {
+    !name.is_anonymous()
+        && name
+            .component_syntax()
+            .iter()
+            .all(|origin| *origin == clean_parser::NameComponentSyntax::Generated)
+}
+
+pub(super) fn is_generated_inaccessible_name(name: &SurfaceName) -> bool {
+    if name.is_relative_constructor()
+        || name.is_anonymous()
+        || !name
+            .component_syntax()
+            .iter()
+            .all(|origin| *origin == clean_parser::NameComponentSyntax::Generated)
+    {
+        return false;
+    }
+    let Some((first, _)) = name.split_first() else {
+        return false;
+    };
+    match first.name().inner() {
+        clean_kernel::name::NameInner::Num(_, _) => true,
+        clean_kernel::name::NameInner::Str(_, text) => {
+            text.starts_with('_') || text.chars().next().is_some_and(|c| c.is_ascii_digit())
+        }
+        clean_kernel::name::NameInner::Anon => false,
+    }
 }
 
 /// 3C.7: compound-arg tactics (ident + expr combinations).
@@ -193,7 +291,7 @@ fn register_compound_arg_tactics(registry: &mut TacticRegistry) {
                     expected: "at least 2 arguments: <hyp> <arg> …".into(),
                 });
             }
-            let hyp_name = expr_to_hyp_name(ps, &args[0])?;
+            let hyp_name = super::builtins::term_hyp_name(ps, &args[0])?;
             super::specialize_generalize::specialize_multi(ps, &hyp_name, &args[1..])
         }),
     });
@@ -208,6 +306,35 @@ fn register_compound_arg_tactics(registry: &mut TacticRegistry) {
         name: "generalize".to_string(),
         pattern: TacticArgPattern::ExprList,
         handler: Arc::new(|ps, args| match args {
+            // `generalize (h :)? e = x at loc` — the parser puts a location
+            // naming hypotheses after a fixed equation slot (`_` without `h`).
+            [term, var, hyp, locations @ ..] if !locations.is_empty() => {
+                let var_name = expr_to_hyp_name(ps, var)?;
+                let hyp_name = expr_to_hyp_name(ps, hyp)?;
+                let hyp_name = (!hyp_name.is_unescaped_component("_")).then_some(hyp_name);
+                let mut listed = Vec::with_capacity(locations.len());
+                let mut wildcard = false;
+                for location in locations {
+                    let name = expr_to_hyp_name(ps, location)?;
+                    if name.is_unescaped_component("*") {
+                        wildcard = true;
+                    } else if !name.is_unescaped_component("⊢") {
+                        listed.push(name);
+                    }
+                }
+                let hyps = if wildcard {
+                    super::generalize::GeneralizeHyps::All
+                } else {
+                    super::generalize::GeneralizeHyps::Listed(listed)
+                };
+                super::generalize::generalize_at(
+                    ps,
+                    term.clone(),
+                    &var_name,
+                    hyp_name.as_ref(),
+                    &hyps,
+                )
+            }
             [term, var, hyp] => {
                 let var_name = expr_to_hyp_name(ps, var)?;
                 let hyp_name = expr_to_hyp_name(ps, hyp)?;
@@ -248,6 +375,9 @@ fn register_search_tactics(registry: &mut TacticRegistry) {
 }
 
 /// Convert elaborated args to string names (for ident-list tactics).
-fn args_to_names(ps: &ProofState, args: &[Expr]) -> Result<Vec<String>, TacticError> {
+pub(super) fn args_to_names(
+    ps: &ProofState,
+    args: &[Expr],
+) -> Result<Vec<SurfaceName>, TacticError> {
     args.iter().map(|e| expr_to_hyp_name(ps, e)).collect()
 }

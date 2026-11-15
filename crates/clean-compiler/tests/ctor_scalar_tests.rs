@@ -15,7 +15,7 @@
 
 use std::collections::HashMap;
 
-use clean_compiler::ir::{IRBody, IRExpr, IRType, VarId};
+use clean_compiler::ir::{IRArg, IRBody, IRExpr, IRType, VarId};
 use clean_compiler::lcnf::{Arg, Code, Decl, LetDecl, LetValue, Param};
 use clean_compiler::to_ir::lower_decl_with_env;
 use clean_compiler::to_ir::CtorMeta;
@@ -193,10 +193,16 @@ fn test_ctor_all_scalar_no_objects() {
     }
 }
 
-/// Ctor with erased (proof) arg preceding scalar field (documents #1994 bug).
+/// Ctor with an erased (proof) arg preceding a scalar field.
 ///
-/// When #1994 is fixed, this test will fail — update it to verify correct
-/// SSet generation.
+/// The erased argument KEEPS its declared object slot (a boxed unit), and the
+/// `UInt64` is stored after that ONE object -- the layout every reader
+/// computes (`compute_proj_expr` over the declared `[Object, UInt64]`). This
+/// copy of the test pinned the dropped-slot layout (`field_types [UInt64]`,
+/// zero objects) and was left behind when `3b61b56f4` (2026-09-25) restored
+/// the declared slot and updated the lib copy (`to_ir/tests.rs`); it read red
+/// from then on, found 2026-10-07 by an unfiltered `-p clean-compiler --tests`
+/// run. It now pins the same contract, and the SSet's position too.
 #[test]
 fn test_ctor_erased_before_scalar_misalignment() {
     let mut ctor_env = HashMap::new();
@@ -235,20 +241,28 @@ fn test_ctor_erased_before_scalar_misalignment() {
 
     let body = lower_with_ctors(&decl, &ctor_env);
     match &body {
-        IRBody::VDecl { value, rest, .. } => {
+        IRBody::VDecl {
+            var: ctor_var,
+            value,
+            rest,
+            ..
+        } => {
             match value {
                 IRExpr::Ctor { info, args } => {
-                    // After alignment fix (#2123): field_types excludes erased proof field.
-                    assert_eq!(info.field_types, vec![IRType::UInt64]);
+                    // The erased proof keeps its declared object slot.
+                    assert_eq!(info.field_types, vec![IRType::Object, IRType::UInt64]);
                     assert_eq!(info.num_scalars, 1);
-                    assert_eq!(info.num_objects, 0);
-                    assert_eq!(args.len(), 0, "UInt64 data extracted as scalar, not object");
+                    assert_eq!(info.num_objects, 1);
+                    assert_eq!(
+                        args,
+                        &vec![IRArg::Erased],
+                        "the erased proof fills its object slot; the UInt64 is an SSet"
+                    );
                 }
                 other => panic!("Expected Ctor, got {:?}", other),
             }
-            // SSet generated for the UInt64 scalar field.
-            let has_sset = matches!(rest.as_ref(), IRBody::SSet { .. });
-            assert!(has_sset, "SSet should be generated for UInt64 scalar field");
+            // The UInt64 lands in the scalar area after the ONE object slot.
+            assert_sset(rest, *ctor_var, 1, 0, IRType::UInt64);
         }
         _ => panic!("Expected VDecl"),
     }

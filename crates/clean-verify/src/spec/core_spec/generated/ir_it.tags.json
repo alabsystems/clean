@@ -1,0 +1,117 @@
+{
+ "chain": "ir_it",
+ "body": "tc::infer::<impl tc::TypeChecker<'_>>::infer_type",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types and FUNCTIONS carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "*** THIS IS THE CRYSTAL'S DESIGNATED TARGET. *** Every other chain is cut from the crate module; this body is function index 0 of the callee sidecar's partial bundle for infer_type itself. Its `funcs` lane is non-empty and load-bearing in the way ir_lz's is: the emitted text names this body by NAME and its callees by whole-crate INDEX (`call @func.19`, `call @func.2`), so nothing in the text says which index is the body itself. Reader A can see it; reader B cannot. This table is how reader B is told, and it is what stands between `infer_type(tick_heartbeat(self))` and any other reading.",
+ "how_it_is_used": "`ir_mint::emitted::read_with_self` interns `self_crate_id` FIRST, so the body's own id takes canonical 0 and `call @func.19` interns above it. `ir_mint::project` reads the `interface` block in the other direction and REFUSES a fixture whose header or parameter types are not the pinned ones.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. Reader A's own record on this dump: `param_tys_erased: [Ptr, Ptr]`, `block_param_tys_erased: []`, `aligns_erased: [alloca:None, load:None, store:None, store:None]`.",
+ "isize_what": "This body contains FOUR `isize` tokens and ZERO `usize` ones -- the switch discriminant read, the constant it is compared against, and the two extractfields of a flat enum tag. `isize` is target-dependent exactly as `usize` is, and by Rust's own definition the same width, so the lane below carries `bits` once and counts the two token kinds SEPARATELY: one token's pin cannot be satisfied by the other's occurrences.",
+ "usize": {
+  "bits": 64,
+  "sites": 0,
+  "isize_sites": 4,
+  "target_fact": "A TARGET fact, not an assumption: the recorded producer is trustc on aarch64-apple-darwin, a 64-bit target. Reader A resolved this chain with --usize-bits 64 and recorded {\"usize_bits\": 64, \"usize_sites_resolved\": 0, \"isize_sites_resolved\": 4} in ir_it.core.prov.json; reader B resolves through THIS row and refuses the body without it. On a 32-bit target the flat enum tag would be 32 bits wide and this table would be WRONG, which is why the width is a reviewed pin rather than a constant inside a reader.",
+  "erasure_note": "What the resolution ERASES: the resolved core spells every site as the plain (int 64), so a body differing from this one only by writing `i64` where this one writes `isize` projects to the SAME core module. The `isize_sites` count above is what catches that swap -- the i64 spelling drops the observed count to 0 -- not the core text. Note the body ALSO contains genuine `i64` constants (`const i64 1`, twice), so this chain is exactly the shape where the count matters: a swap in either direction changes it."
+ },
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "ccc",
+  "header_note": "Absence of a linkage keyword IS `external`. This body's header prints `fn @...` with NO calling-convention keyword, unlike every crate-module chain, which prints `rustcc`. Reader A records `artifact_calling_conv: ccc`. The sidecar lane showing through: derived from monomorphized upstream MIR, not lowered from this crate's THIR.",
+  "functy": 0,
+  "functy_note": "Pinned VERBATIM from the emitted header `(functy.0)`; reader A independently records `artifact_functy_id: 0`. Index ZERO because this body is function 0 of its own bundle -- the sidecar's manifest puts the requested root first.",
+  "producer": "trust-ir",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. `trust-ir` here, where the crate-module chains carry `trust`.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&mut TypeChecker<'_>",
+    "note": "The receiver. Passed straight through to BOTH callees and never dereferenced in this body."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&Expr",
+    "note": "The expression to infer. Passed to infer_type_fast on the ok path and UNUSED on the heartbeat-error path."
+   }
+  ],
+  "params_note": "TWO, both thin pointers, both on the ENTRY block. The pin is that neither is dereferenced here: this body is a dispatcher.",
+  "block_params": [],
+  "block_params_note": "EMPTY, and that is a measurement: every join in this body is by `br` with no arguments, through the `%2` alloca slot instead. `block_param_tys_erased` is [].",
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement: the alloca, the load and the two stores all print without an align, so reader A erased four `None`s and there is nothing to pin.",
+  "clauses": [
+   "producer",
+   "proof"
+  ],
+  "clauses_note": "Two kinds, and the absence of `loc` and `names` is part of the pin. The `proof` clauses' CONTENT is a producer claim -- `pure` on the header and `fresh_symbolic_havoc` on each `undef` -- and is deliberately not compared, exactly like `loc` content. Recording that the HAVOC MARKERS are producer claims and not facts this chain establishes is the point of this row."
+ },
+ "enums": [],
+ "enums_note": "EMPTY, and that is a measurement: reader A's `crate_enum_ids_seen` is []. Every sum type this body touches -- Result, ControlFlow, TypeError -- reaches it as a FLAT `__tag`/`__v` STRUCT, not as an IR enum. That is the producer decision the 2026-09-16 link-5 census traced, and it is visible here as an empty lane beside a five-row structs lane.",
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 2,
+   "alias": "ir_it_tresult",
+   "rust_type": "core::result::Result",
+   "note": "THE RETURN TYPE -- `Result<Expr, TypeError>` as a flat [__tag, __v0_0, __v1_0] struct with NO recorded size. The alloca, the load and both stores name it. This is the type the proven-output gate refuses `infer_type` on."
+  },
+  {
+   "canonical": 1,
+   "crate_id": 1,
+   "rust_type": "datatype::clean_kernel::tc::type_error::TypeError",
+   "note": "The OPAQUE datatype rendering -- zero fields, no size. `extractfield struct.1 %3, 2` reads the heartbeat error out of it and the result is DEAD. Opaque because ty_convert.rs routes the recursive kernel cluster to Ty::Datatype by def path.",
+   "alias": "ir_it_ttyerr_opaque"
+  },
+  {
+   "canonical": 2,
+   "crate_id": 16,
+   "rust_type": "clean_kernel::tc::type_error::TypeError",
+   "note": "The FLAT rendering of the same Rust type as canonical 1 -- 34 fields, one per variant payload. Both spellings appear in one body: the `undef`s are typed with this one, the extractfields with the opaque one.",
+   "alias": "ir_it_ttyerr_flat"
+  },
+  {
+   "canonical": 3,
+   "crate_id": 18,
+   "rust_type": "core::result::Result",
+   "note": "A SECOND `Result` instantiation, distinct from canonical 0 by crate id. Built by insertfield out of undefs on the error path and immediately taken apart again.",
+   "alias": "ir_it_tresult2"
+  },
+  {
+   "canonical": 4,
+   "crate_id": 19,
+   "rust_type": "core::ops::control_flow::ControlFlow",
+   "note": "The `?` desugaring's carrier, flat [__tag, __v0_0, __v1_0]. Built and destructured entirely within the error path.",
+   "alias": "ir_it_tcflow"
+  }
+ ],
+ "structs_note": "FIVE rows, the largest structs lane of any chain, and every one of them is a flat `__tag`/`__v` rendering or an opaque datatype. Not one carries a recorded size.",
+ "funcs": [
+  {
+   "canonical": 0,
+   "crate_id": 0,
+   "name": "tc::infer::<impl tc::TypeChecker<'_>>::infer_type",
+   "role": "SELF -- the root body, `(func 0 ...)`. NOT called recursively in this body; the row exists so a text reader can tell the body's own index from its callees', which is the ir_lz discipline."
+  },
+  {
+   "canonical": 1,
+   "crate_id": 19,
+   "name": "tc::heartbeat::<impl tc::TypeChecker<'_>>::tick_heartbeat",
+   "role": "The FIRST callee, and where this module goes STUCK: it is called and not defined here. It is also the cut whose removal makes infer_type's transitive closure acyclic (396 functions / 12 back edges -> 113 / 0)."
+  },
+  {
+   "canonical": 2,
+   "crate_id": 2,
+   "name": "tc::infer::<impl tc::TypeChecker<'_>>::infer_type_fast",
+   "role": "The ok-path callee -- the body that does the actual inference. Unreached in this module, because the machine halts at canonical 1 first."
+  }
+ ],
+ "funcs_note": "THREE rows. `check_func_namespace` requires a non-empty lane for a module with calls, and the SELF row at canonical 0 is what keeps `call 1` from resolving to this body itself -- the 2026-08-20 namespace defect."
+}

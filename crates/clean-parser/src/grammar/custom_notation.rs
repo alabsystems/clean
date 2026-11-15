@@ -59,10 +59,9 @@
 use super::Parser;
 use crate::lexer::{Lexer, TokenKind};
 use crate::surface::{
-    DeclScope, NotationItem, NotationKind, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo,
-    SurfaceExpr,
+    DeclScope, NotationItem, NotationKind, Span, SurfaceArg, SurfaceExpr, SurfaceName,
 };
-use crate::ParseError;
+use crate::{ParseError, TemplateRefusal};
 
 /// The ambient custom-operator operand level at full-expression positions
 /// ([`Parser::expr`] entry). Lean's `term` parser is `term:0`, so every
@@ -143,23 +142,26 @@ fn split_looser_builtin(
                 // WHOLE notation span. An explicitly authored `Sum A B` or
                 // `Prod A B` keeps the identifier's narrower token span and is
                 // an application atom, not a looser infix tail.
-                SurfaceExpr::Ident(head_span, name) if *head_span == span && name == "Sum" => {
+                SurfaceExpr::Ident(head_span, name)
+                    if *head_span == span && name.is_unescaped_component("Sum") =>
+                {
                     Some(LooserBuiltin::Sum)
                 }
-                SurfaceExpr::Ident(head_span, name) if *head_span == span && name == "Prod" => {
+                SurfaceExpr::Ident(head_span, name)
+                    if *head_span == span && name.is_unescaped_component("Prod") =>
+                {
                     Some(LooserBuiltin::Prod)
                 }
                 _ => None,
             };
             if let Some(kind) = kind.filter(|kind| kind.level() < slot_level) {
-                if args.len() == 2 && args.iter().all(|arg| arg.name.is_none()) {
-                    let mut args = args.into_iter();
-                    let left = args.next().expect("binary builtin has a left operand").expr;
-                    let right = args
-                        .next()
-                        .expect("binary builtin has a right operand")
-                        .expr;
-                    return Ok((kind, left, right));
+                if args.iter().all(|arg| arg.name.is_none()) {
+                    // Exactly two positional operands; any other count is an
+                    // application atom, returned unchanged.
+                    return match <[SurfaceArg; 2]>::try_from(args) {
+                        Ok([left, right]) => Ok((kind, left.expr, right.expr)),
+                        Err(args) => Err(SurfaceExpr::App(span, head, args)),
+                    };
                 }
             }
             Err(SurfaceExpr::App(span, head, args))
@@ -184,7 +186,7 @@ fn rebuild_looser_builtin(
             };
             SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, head.to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             )
         }
@@ -203,7 +205,7 @@ fn is_generated_dependent_product(expr: &SurfaceExpr) -> bool {
     let SurfaceExpr::Ident(_, name) = head.as_ref() else {
         return false;
     };
-    if name != "Sigma" && name != "PSigma" {
+    if !name.is_unescaped_component("Sigma") && !name.is_unescaped_component("PSigma") {
         return false;
     }
     matches!(
@@ -230,10 +232,13 @@ fn looser_builtin_children(
             let SurfaceExpr::Ident(head_span, name) = head.as_ref() else {
                 return None;
             };
-            let level = match name.as_str() {
+            let level = match name
+                .component_text()
+                .filter(|text| name.is_unescaped_component(text))
+            {
                 _ if head_span != span => return None,
-                "Sum" => SUM_LEVEL,
-                "Prod" => PROD_LEVEL,
+                Some("Sum") => SUM_LEVEL,
+                Some("Prod") => PROD_LEVEL,
                 _ => return None,
             };
             if level >= slot_level {
@@ -278,30 +283,54 @@ fn leftmost_relation_operand(mut expr: &SurfaceExpr, slot_level: u32) -> &Surfac
 /// exactly where the descent put it while an `infixl:25` — whose right slot is
 /// `term:26` — rotates through it.
 fn apply_operator_across_looser_tails(
-    expansion: &SurfaceExpr,
+    expansion: &NotationExpansion,
     left: SurfaceExpr,
     right: SurfaceExpr,
     lhs_level: u32,
     rhs_level: u32,
-) -> SurfaceExpr {
+) -> Result<SurfaceExpr, TemplateRefusal> {
     let left = match split_looser_builtin(left, lhs_level) {
         Ok((kind, outer, inner)) => {
-            return rebuild_looser_builtin(
+            return Ok(rebuild_looser_builtin(
                 kind,
                 outer,
-                apply_operator_across_looser_tails(expansion, inner, right, lhs_level, rhs_level),
-            );
+                apply_operator_across_looser_tails(expansion, inner, right, lhs_level, rhs_level)?,
+            ));
         }
         Err(left) => left,
     };
     match split_looser_builtin(right, rhs_level) {
-        Ok((kind, inner, outer)) => rebuild_looser_builtin(
+        Ok((kind, inner, outer)) => Ok(rebuild_looser_builtin(
             kind,
-            apply_operator_across_looser_tails(expansion, left, inner, lhs_level, rhs_level),
+            apply_operator_across_looser_tails(expansion, left, inner, lhs_level, rhs_level)?,
             outer,
-        ),
+        )),
         Err(right) => apply_operator(expansion, left.span(), &[left, right]),
     }
+}
+
+/// What a use of a registered notation expands to.
+#[derive(Debug, Clone)]
+pub(super) enum NotationExpansion {
+    /// `infixl`/`infixr`/`infix`/`prefix`/`postfix`: the head term to the
+    /// right of `=>`, APPLIED to the operands — Lean expands `infixl " ** "
+    /// => f` to the template `f lhs rhs`.
+    Head(SurfaceExpr),
+    /// A `notation` template over its operand variables. A use SUBSTITUTES
+    /// the operands into it ([`crate::instantiate_notation_template`]), as
+    /// Lean expands the notation's quotation; it is never applied to them.
+    Template {
+        vars: Vec<SurfaceName>,
+        body: SurfaceExpr,
+        /// `false` for a template declared under `set_option hygiene
+        /// false`: `body` is then the template as written, and a use is the
+        /// bare substitution ([`crate::instantiate_unhygienic_notation_template`]).
+        hygienic: bool,
+    },
+    /// A template the hygiene walk refused
+    /// ([`crate::mark_template_free_references`]): the declaration is
+    /// refused, and so is every use — it is never read as other syntax.
+    Refused(TemplateRefusal),
 }
 
 /// A user-declared fixed-arity operator registered while parsing a file.
@@ -320,15 +349,14 @@ pub(super) struct CustomOperator {
     /// `None` defaults to 65. Compared against `Parser::custom_min_prec` — the
     /// Lean level of the operand slot being parsed — to decide consumption.
     pub(super) precedence: u32,
-    /// The expansion head: the term to the right of `=>`. Applied positionally
-    /// to the operands.
-    pub(super) expansion: SurfaceExpr,
+    /// What a use expands to (see [`NotationExpansion`]).
+    pub(super) expansion: NotationExpansion,
     /// For `scoped` notation: the FULL declaring namespace path. The operator
     /// is consulted only while that namespace is active — the current
     /// namespace (or an ancestor of it) or one activated by `open` /
     /// `open scoped`. `None` for plain and `local` notation (always active,
     /// preserving the pre-existing `local` behavior).
-    pub(super) scope_ns: Option<String>,
+    pub(super) scope_ns: Option<SurfaceName>,
 }
 
 /// One element of a registered closed mixfix `notation` pattern.
@@ -355,13 +383,12 @@ pub(super) struct CustomMixfix {
     /// Declared precedence of the whole notation (`:N` / `:max`); `None`
     /// defaults to max — closed delimiter pairs act atom-like.
     pub(super) precedence: u32,
-    /// `fun <holes> => <template>`: the expansion abstracted over the hole
-    /// variables in pattern order, beta-reduced against the parsed operands by
-    /// the shared application machinery.
-    pub(super) expansion: SurfaceExpr,
+    /// The template over the hole variables in pattern order, instantiated
+    /// with the parsed operands (see [`NotationExpansion`]).
+    pub(super) expansion: NotationExpansion,
     /// For `scoped` notation: the FULL declaring namespace path (see
     /// [`CustomOperator::scope_ns`]). `None` = always active.
-    pub(super) scope_ns: Option<String>,
+    pub(super) scope_ns: Option<SurfaceName>,
 }
 
 impl Parser {
@@ -377,6 +404,7 @@ impl Parser {
         pattern: &[NotationItem],
         expansion: &SurfaceExpr,
         scope: DeclScope,
+        site: crate::TemplateSiteId,
     ) {
         // `scoped` notation registers against its declaring namespace and is
         // consulted only while that namespace is active. At root there is no
@@ -390,7 +418,25 @@ impl Parser {
             },
             DeclScope::Default | DeclScope::Local => None,
         };
-        self.register_custom_operator_ns(kind, precedence, pattern, expansion, scope_ns);
+        let namespace = self
+            .notation_ns_stack
+            .last()
+            .map_or_else(clean_kernel::Name::anon, |ns| ns.name().clone());
+        // Under `set_option hygiene false` the template is kept as written:
+        // Lean's quotation then adds no macro scope and pre-resolves nothing.
+        let hygienic = !self.hygiene_off;
+        let expansion = if hygienic {
+            hygienic_expansion(
+                pattern,
+                expansion,
+                &namespace,
+                &self.section_variable_names,
+                Some(site),
+            )
+        } else {
+            Ok(expansion.clone())
+        };
+        self.register_custom_operator_ns(kind, precedence, pattern, expansion, scope_ns, hygienic);
     }
 
     /// Register a notation whose declaring namespace is already resolved.
@@ -403,44 +449,56 @@ impl Parser {
     /// it supplies its own — and everything downstream of this point is
     /// identical for the two. Keeping one body means a seeded notation can
     /// never be more capable, or differently modelled, than a declared one.
+    ///
+    /// `expansion` is the template as [`hygienic_expansion`] marked it, or
+    /// the reason it refused it; a refused notation is registered all the
+    /// same, so that every use is refused instead of being read as other
+    /// syntax.
     pub(super) fn register_custom_operator_ns(
         &mut self,
         kind: NotationKind,
         precedence: Option<u32>,
         pattern: &[NotationItem],
-        expansion: &SurfaceExpr,
-        scope_ns: Option<String>,
+        expansion: Result<SurfaceExpr, TemplateRefusal>,
+        scope_ns: Option<SurfaceName>,
+        hygienic: bool,
     ) {
         // `infixl`/`infixr`/`prefix`/`postfix` name no operands in their pattern
         // (the operands are implicit) and their expansion is a bare head applied
         // positionally. The general `notation` command instead NAMES its operands
         // in the pattern and references them in the expansion as a template. When
         // a `notation` pattern is a simple infix `a "sym" b`, prefix `"sym" a`, or
-        // postfix `a "sym"` shape, register it by mapping to the corresponding
-        // fixed-arity kind and abstracting the named operands into a lambda
-        // `fun <vars> => <expansion>`, so the shared application machinery
-        // (`apply_operator`) beta-reduces the template against the operands. Any
-        // other `notation` interleaving (multi-literal mixfix, binder notations,
-        // a bare symbol) is left parse-only — registers no parseable operator,
-        // exactly as before. Associativity beyond left-assoc and precedence
-        // disambiguation between two custom `notation`s are not modelled (the
-        // matcher is left-to-right); those remain parse-only failures.
+        // postfix `a "sym"` shape, register it under the corresponding
+        // fixed-arity kind with its TEMPLATE, which a use instantiates with the
+        // operands (`apply_operator`). Any other `notation` interleaving
+        // (multi-literal mixfix, binder notations, a bare symbol) is left
+        // parse-only — registers no parseable operator, exactly as before.
+        // Associativity beyond left-assoc and precedence disambiguation between
+        // two custom `notation`s are not modelled (the matcher is
+        // left-to-right); those remain parse-only failures.
         let (effective_kind, effective_expansion) = if matches!(kind, NotationKind::Notation) {
             let Some((mapped, vars)) = classify_notation_shape(pattern) else {
                 // Not a simple fixed-arity shape — try the closed multi-hole
                 // mixfix form (`"⟪" a ", " b "⟫"`); anything else stays
                 // parse-only.
-                self.register_custom_mixfix(precedence, pattern, expansion, scope_ns);
+                self.register_custom_mixfix(precedence, pattern, expansion, scope_ns, hygienic);
                 return;
             };
-            let binders: Vec<SurfaceBinder> = vars
-                .into_iter()
-                .map(|v| SurfaceBinder::new(v, None, SurfaceBinderInfo::Explicit))
-                .collect();
-            let lam = SurfaceExpr::Lambda(expansion.span(), binders, Box::new(expansion.clone()));
-            (mapped, lam)
+            let expansion = match expansion {
+                Ok(body) => NotationExpansion::Template {
+                    vars,
+                    body,
+                    hygienic,
+                },
+                Err(refusal) => NotationExpansion::Refused(refusal),
+            };
+            (mapped, expansion)
         } else {
-            (kind, expansion.clone())
+            let expansion = match expansion {
+                Ok(head) => NotationExpansion::Head(head),
+                Err(refusal) => NotationExpansion::Refused(refusal),
+            };
+            (kind, expansion)
         };
 
         // The symbol is the single literal in the pattern. `infixl`/`infixr`
@@ -504,8 +562,9 @@ impl Parser {
         &mut self,
         precedence: Option<u32>,
         pattern: &[NotationItem],
-        expansion: &SurfaceExpr,
-        scope_ns: Option<String>,
+        expansion: Result<SurfaceExpr, TemplateRefusal>,
+        scope_ns: Option<SurfaceName>,
+        hygienic: bool,
     ) {
         if !matches!(pattern.first(), Some(NotationItem::Literal(_)))
             || !matches!(pattern.last(), Some(NotationItem::Literal(_)))
@@ -513,7 +572,7 @@ impl Parser {
             return;
         }
         let mut items = Vec::with_capacity(pattern.len());
-        let mut vars: Vec<String> = Vec::new();
+        let mut vars: Vec<SurfaceName> = Vec::new();
         let mut prev_was_hole = false;
         for item in pattern {
             match item {
@@ -553,16 +612,15 @@ impl Parser {
         if !leads_with_free_symbol {
             return;
         }
-        // A zero-hole notation abstracts nothing, and a zero-binder `Lambda`
-        // is not a term — store the template itself.
-        let template = if vars.is_empty() {
-            expansion.clone()
-        } else {
-            let binders: Vec<SurfaceBinder> = vars
-                .into_iter()
-                .map(|v| SurfaceBinder::new(v, None, SurfaceBinderInfo::Explicit))
-                .collect();
-            SurfaceExpr::Lambda(expansion.span(), binders, Box::new(expansion.clone()))
+        // A zero-hole notation is instantiated with no operands: its binders
+        // are still renamed for this use.
+        let template = match expansion {
+            Ok(body) => NotationExpansion::Template {
+                vars,
+                body,
+                hygienic,
+            },
+            Err(refusal) => NotationExpansion::Refused(refusal),
         };
         self.custom_mixfixes.push(CustomMixfix {
             items,
@@ -601,7 +659,23 @@ impl Parser {
     /// as `m`. Used for custom-operator right operands (`infixl:n` ⇒ `n + 1`,
     /// `infixr:n`/`prefix:n` ⇒ `n`), so e.g. a `prefix:60` operand includes
     /// builtin `*` (70) and `+` (65) exactly as in Lean.
+    ///
+    /// This re-enters the operator chain below `expr_in_slot`, so it grows
+    /// the stack on demand exactly as that guarded entry does: a custom
+    /// operator's operand is parsed through here, and a chain of them
+    /// recursed band into band with no checkpoint until a 1 MB thread
+    /// overflowed on the codata seed library (a cycle is ~330 KB in a debug
+    /// build; regression pin
+    /// `codata_cmd_tests::test_codata_stream_encoding_survives_small_thread_stack`).
     fn expr_at_custom_level(&mut self, m: u32) -> Result<SurfaceExpr, ParseError> {
+        stacker::maybe_grow(
+            Self::EXPR_STACK_RED_ZONE,
+            Self::EXPR_STACK_GROW_SIZE,
+            || self.expr_at_custom_level_unguarded(m),
+        )
+    }
+
+    fn expr_at_custom_level_unguarded(&mut self, m: u32) -> Result<SurfaceExpr, ParseError> {
         let saved = self.custom_min_prec;
         self.custom_min_prec = m;
         let result = match m {
@@ -621,7 +695,7 @@ impl Parser {
             70 => self.mul_expr(),
             71..=73 => self.smul_expr(),
             74..=75 => self.subst_expr(),
-            76..=80 => self.comp_expr(),
+            76..=80 => self.caret_expr(),
             81..=82 => self.setprod_expr(),
             83..=90 => self.compose_expr(),
             91..=100 => self.map_expr(),
@@ -654,7 +728,7 @@ impl Parser {
                     break;
                 }
                 self.consume_custom_operator(&op);
-                left = apply_operator(&op.expansion, left.span(), &[left]);
+                left = self.expand_notation(&op.expansion, left.span(), &[left])?;
                 continue;
             }
             if let Some(op) = self
@@ -672,7 +746,7 @@ impl Parser {
                     op.precedence + 1
                 };
                 let right = self.expr_at_custom_level(rhs_level)?;
-                left = apply_operator(&op.expansion, left.span(), &[left, right]);
+                left = self.expand_notation(&op.expansion, left.span(), &[left, right])?;
                 self.reject_nonassoc_chain(&op)?;
                 continue;
             }
@@ -825,13 +899,17 @@ impl Parser {
                         .to_string(),
                 });
             }
+            let mut sides = [left, right];
+            self.hoist_operand_cdots(&op.expansion, &mut sides);
+            let [left_side, right_side] = sides;
             left = apply_operator_across_looser_tails(
                 &op.expansion,
-                left,
-                right,
+                left_side,
+                right_side,
                 lhs_level,
                 rhs_level,
-            );
+            )
+            .map_err(|refusal| self.notation_refused(&refusal))?;
             self.reject_nonassoc_chain(&op)?;
             saw_level_50_custom |= op.precedence == CUSTOM_LOW_INFIX_CEILING;
         }
@@ -905,8 +983,27 @@ impl Parser {
                 });
             }
             self.consume_custom_operator(&op);
+            // A `prefix:max` operator takes an ATOM and the result is itself a
+            // max-precedence term, so it can HEAD an application. Lean expands
+            // `prefix:$prec $op => $f` to `notation:$prec $op arg:$prec => $f
+            // arg` (`Lean/Elab/Mixfix.lean:28-29`), and at `max` the operand is
+            // a `term:max` — an application sits at leadPrec 1023, one below.
+            // `expr_at_custom_level` at 1024 lands in its `_ => unary_expr()`
+            // arm, a FULL application, so `↿(f p.1) p.2` parsed as
+            // `↿((f p.1) p.2)` and `f p.1 : β` was applied to `p.2`:
+            // "function type fvar#1 is not a function type, but 1 argument(s)
+            // remain" (`Function.hasUncurryInduction`,
+            // Mathlib/Logic/Function/Basic.lean). The head arm of `app_expr`
+            // does exactly this for `postfix:max` (closed class 19); this is
+            // its prefix twin, and the operand is parsed as an atom only at
+            // max, so every lower-precedence prefix keeps its declared level.
+            if op.precedence >= 1024 {
+                let operand = self.atom_expr()?;
+                let applied = self.expand_notation(&op.expansion, start, &[operand])?;
+                return self.app_expr_with_head(applied);
+            }
             let operand = self.expr_at_custom_level(op.precedence)?;
-            return Ok(apply_operator(&op.expansion, start, &[operand]));
+            return self.expand_notation(&op.expansion, start, &[operand]);
         }
 
         // Closed mixfix notation announced by its leading literal: `⟪a, b, c⟫`.
@@ -926,7 +1023,7 @@ impl Parser {
                     break;
                 }
                 self.consume_custom_operator(&op);
-                left = apply_operator(&op.expansion, left.span(), &[left]);
+                left = self.expand_notation(&op.expansion, left.span(), &[left])?;
                 continue;
             }
 
@@ -950,7 +1047,7 @@ impl Parser {
                     op.precedence + 1
                 };
                 let right = self.expr_at_custom_level(rhs_level)?;
-                left = apply_operator(&op.expansion, left.span(), &[left, right]);
+                left = self.expand_notation(&op.expansion, left.span(), &[left, right])?;
                 self.reject_nonassoc_chain(&op)?;
                 continue;
             }
@@ -986,16 +1083,12 @@ impl Parser {
     /// unscoped notation always is; `scoped` notation only while its
     /// declaring namespace is the current namespace, a dot-prefix ancestor of
     /// it, or activated by a parse-time `open` / `open scoped`.
-    pub(super) fn custom_scope_active(&self, scope_ns: Option<&str>) -> bool {
+    pub(super) fn custom_scope_active(&self, scope_ns: Option<&SurfaceName>) -> bool {
         let Some(ns) = scope_ns else {
             return true;
         };
         if let Some(current) = self.notation_ns_stack.last() {
-            if current == ns
-                || (current.len() > ns.len()
-                    && current.starts_with(ns)
-                    && current.as_bytes()[ns.len()] == b'.')
-            {
+            if current.has_prefix(ns) {
                 return true;
             }
         }
@@ -1005,9 +1098,9 @@ impl Parser {
     /// Enter a `namespace` block for scoped-notation tracking: push the full
     /// dotted path and remember the activation mark that
     /// [`Parser::exit_notation_namespace`] truncates back to.
-    pub(super) fn enter_notation_namespace(&mut self, name: &str) -> usize {
+    pub(super) fn enter_notation_namespace(&mut self, name: &SurfaceName) -> usize {
         let full = match self.notation_ns_stack.last() {
-            Some(parent) => format!("{parent}.{name}"),
+            Some(parent) => parent.append(name),
             None => name.to_owned(),
         };
         self.notation_ns_stack.push(full);
@@ -1026,17 +1119,17 @@ impl Parser {
     /// each enclosing-namespace qualification, mirroring Lean's
     /// `resolveNamespace` candidate set; activating a namespace with no
     /// scoped notation is a no-op.
-    pub(super) fn activate_open_scoped_notation_path(&mut self, path: &[String]) {
-        if path.is_empty() {
+    pub(super) fn activate_open_scoped_notation_path(&mut self, path: &SurfaceName) {
+        if path.is_anonymous() {
             return;
         }
-        let joined = path.join(".");
+        let joined = path.clone();
         // Each stack entry is already a full cumulative path, so the stack IS
         // the prefix set to qualify against.
-        let qualified: Vec<String> = self
+        let qualified: Vec<SurfaceName> = self
             .notation_ns_stack
             .iter()
-            .map(|prefix| format!("{prefix}.{joined}"))
+            .map(|prefix| prefix.append(&joined))
             .collect();
         self.open_scoped_notation_ns.push(joined);
         self.open_scoped_notation_ns.extend(qualified);
@@ -1083,7 +1176,7 @@ impl Parser {
             .custom_mixfixes
             .iter()
             .filter(|mf| {
-                self.custom_scope_active(mf.scope_ns.as_deref())
+                self.custom_scope_active(mf.scope_ns.as_ref())
                     && match mf.items.first() {
                         Some(MixfixItem::Literal(toks)) => self.tokens_match_at_cursor(toks),
                         _ => false,
@@ -1195,18 +1288,18 @@ impl Parser {
                 MixfixItem::Hole => operands.push(self.expr()?),
             }
         }
-        Ok(apply_operator(&mf.expansion, start, &operands))
+        self.expand_notation(&mf.expansion, start, &operands)
     }
 
     /// Return a registered operator of the given `kind` whose symbol matches the
     /// tokens at the current position, if any. Longest match wins so a
     /// multi-token symbol is preferred over any shorter overlap.
-    fn match_custom_operator(&self, kind: NotationKind) -> Option<CustomOperator> {
+    pub(super) fn match_custom_operator(&self, kind: NotationKind) -> Option<CustomOperator> {
         self.custom_operators
             .iter()
             .filter(|op| {
                 op.kind == kind
-                    && self.custom_scope_active(op.scope_ns.as_deref())
+                    && self.custom_scope_active(op.scope_ns.as_ref())
                     && self.tokens_match_at_cursor(&op.symbol_tokens)
             })
             .max_by_key(|op| op.symbol_tokens.len())
@@ -1244,10 +1337,10 @@ impl Parser {
                     | NotationKind::Infixr
                     | NotationKind::Infix
                     | NotationKind::Postfix
-            ) && self.custom_scope_active(op.scope_ns.as_deref())
+            ) && self.custom_scope_active(op.scope_ns.as_ref())
                 && self.tokens_match_at_offset(&op.symbol_tokens, offset)
         }) || self.custom_mixfixes.iter().any(|mf| {
-            self.custom_scope_active(mf.scope_ns.as_deref())
+            self.custom_scope_active(mf.scope_ns.as_ref())
                 && mf.items.iter().skip(1).any(|item| {
                     matches!(item, MixfixItem::Literal(toks)
                         if self.tokens_match_at_offset(toks, offset))
@@ -1256,9 +1349,49 @@ impl Parser {
     }
 
     /// Advance past a matched operator's symbol tokens.
-    fn consume_custom_operator(&mut self, op: &CustomOperator) {
+    pub(super) fn consume_custom_operator(&mut self, op: &CustomOperator) {
         for _ in 0..op.symbol_tokens.len() {
             self.advance();
+        }
+    }
+
+    /// Expand one use of a registered notation ([`apply_operator`]); a
+    /// refused template or operand is a parse error at the use.
+    pub(super) fn expand_notation(
+        &mut self,
+        expansion: &NotationExpansion,
+        start: Span,
+        operands: &[SurfaceExpr],
+    ) -> Result<SurfaceExpr, ParseError> {
+        let mut operands = operands.to_vec();
+        self.hoist_operand_cdots(expansion, &mut operands);
+        apply_operator(expansion, start, &operands)
+            .map_err(|refusal| self.notation_refused(&refusal))
+    }
+
+    /// A `·` operand of a notation TEMPLATE belongs to the parentheses
+    /// around the use, which bind it after the template has put it wherever
+    /// it goes (`expr_app::cdot::hoist_operand`). A head applied to its
+    /// operands keeps them on the section spine and needs nothing.
+    pub(super) fn hoist_operand_cdots(
+        &mut self,
+        expansion: &NotationExpansion,
+        operands: &mut [SurfaceExpr],
+    ) {
+        if matches!(expansion, NotationExpansion::Template { .. }) {
+            for operand in operands {
+                let hoisted = super::expr_app::cdot::hoist_operand(operand);
+                self.hoisted_operand_cdots.extend(hoisted);
+            }
+        }
+    }
+
+    /// The parse error refusing a notation use at the cursor.
+    pub(super) fn notation_refused(&self, refusal: &TemplateRefusal) -> ParseError {
+        ParseError::NotationRefused {
+            line: self.current_line(),
+            col: self.current().col as usize,
+            message: refusal.reason().to_owned(),
         }
     }
 }
@@ -1270,7 +1403,7 @@ impl Parser {
 /// `a "sym"` → postfix. Any other interleaving (mixfix with two or more
 /// literals, binder notations, a bare symbol with no operand) returns `None`
 /// and is left parse-only.
-fn classify_notation_shape(pattern: &[NotationItem]) -> Option<(NotationKind, Vec<String>)> {
+fn classify_notation_shape(pattern: &[NotationItem]) -> Option<(NotationKind, Vec<SurfaceName>)> {
     match pattern {
         [NotationItem::Variable(a), NotationItem::Literal(_), NotationItem::Variable(b)] => {
             Some((NotationKind::Infixl, vec![a.clone(), b.clone()]))
@@ -1307,29 +1440,76 @@ fn lex_symbol(symbol: &str) -> Vec<TokenKind> {
         .collect()
 }
 
-/// Build `<expansion> arg0 arg1 ...`.
+/// The notation's expansion with its FREE references marked hygienic
+/// ([`crate::mark_template_free_references`]): the pattern variables are the
+/// operands, everything else the template names resolves where the notation
+/// was declared — never to a binder at the use site. A template whose
+/// binding structure the walk does not model is refused
+/// ([`TemplateRefusal`]), never kept as written.
+pub(crate) fn hygienic_expansion(
+    pattern: &[NotationItem],
+    expansion: &SurfaceExpr,
+    namespace: &clean_kernel::Name,
+    section_variables: &[SurfaceName],
+    site: Option<crate::TemplateSiteId>,
+) -> Result<SurfaceExpr, TemplateRefusal> {
+    let operands: Vec<SurfaceName> = pattern
+        .iter()
+        .filter_map(|item| match item {
+            NotationItem::Variable(v) => Some(v.clone()),
+            NotationItem::Literal(_) => None,
+        })
+        .collect();
+    crate::mark_template_free_references(expansion, &operands, namespace, section_variables, site)
+}
+
+/// Expand one use of a registered notation with the parsed `operands`.
 ///
-/// A NULLARY notation (`notation "∞" => Nat`) has no operands and no
-/// abstracting lambda, so its expansion IS the term: applying it to an empty
-/// argument list would mint `App(Nat, [])`, a spine the elaborator has no
-/// reason to expect. Return the template unchanged instead.
-fn apply_operator(expansion: &SurfaceExpr, start: Span, operands: &[SurfaceExpr]) -> SurfaceExpr {
-    if operands.is_empty() {
-        return expansion.clone();
-    }
-    let end = operands
-        .last()
-        .map_or_else(|| expansion.span(), SurfaceExpr::span);
+/// A `notation` template is INSTANTIATED — the operands substituted into it
+/// ([`crate::instantiate_notation_template`]) — as Lean expands the
+/// notation's quotation; it is never applied to its operands as a function,
+/// which would elaborate each operand outside the template. An
+/// `infixl`/`prefix`/… head is applied to them, which is what Lean's
+/// expansion of those commands is. A refused declaration refuses the use.
+pub(super) fn apply_operator(
+    expansion: &NotationExpansion,
+    start: Span,
+    operands: &[SurfaceExpr],
+) -> Result<SurfaceExpr, TemplateRefusal> {
+    let end = operands.last().map_or(start, SurfaceExpr::span);
     let span = start.merge(end);
-    SurfaceExpr::App(
-        span,
-        Box::new(expansion.clone()),
-        operands
-            .iter()
-            .cloned()
-            .map(SurfaceArg::positional)
-            .collect(),
-    )
+    match expansion {
+        NotationExpansion::Template {
+            vars,
+            body,
+            hygienic,
+        } => {
+            let expanded = if *hygienic {
+                crate::instantiate_notation_template(body, vars, operands)?
+            } else {
+                crate::instantiate_unhygienic_notation_template(body, vars, operands)?
+            };
+            // A nullary notation's expansion IS the term; an applied one is
+            // kept as one parenthesized unit.
+            Ok(if operands.is_empty() {
+                expanded
+            } else {
+                SurfaceExpr::Paren(span, Box::new(expanded))
+            })
+        }
+        // A nullary head has no operands: the expansion IS the term.
+        NotationExpansion::Head(head) if operands.is_empty() => Ok(head.clone()),
+        NotationExpansion::Head(head) => Ok(SurfaceExpr::App(
+            span,
+            Box::new(head.clone()),
+            operands
+                .iter()
+                .cloned()
+                .map(SurfaceArg::positional)
+                .collect(),
+        )),
+        NotationExpansion::Refused(refusal) => Err(refusal.clone()),
+    }
 }
 
 /// Whether a single token is a built-in operator already handled by the

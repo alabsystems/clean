@@ -130,8 +130,17 @@ impl<'env> CertVerifier<'env> {
     /// ENSURES: On success, `result` is the type of `expr`
     /// ENSURES: On success, `TypeChecker::infer_type(expr) == result`
     /// ENSURES: Deterministic - same inputs yield same output
+    ///
+    /// A caller's deadline (`tc::run_until`) is polled at every certificate
+    /// edge and every reduction step. Once it has fired, the check is refused
+    /// with [`CertError::Interrupted`], whatever the degraded steps after it
+    /// produced.
     pub fn verify(&mut self, cert: &ProofCert, expr: &Expr) -> Result<Expr, CertError> {
-        self.verify_recurse(cert, expr)
+        let result = self.verify_recurse(cert, expr);
+        if crate::tc::deadline_fired() {
+            return Err(CertError::Interrupted);
+        }
+        result
     }
 
     /// Guard one recursive certificate edge.
@@ -144,6 +153,9 @@ impl<'env> CertVerifier<'env> {
         cert: &ProofCert,
         expr: &Expr,
     ) -> Result<Expr, CertError> {
+        if crate::tc::poll_deadline() {
+            return Err(CertError::Interrupted);
+        }
         stack_safe(|| self.verify_impl(cert, expr))
     }
 

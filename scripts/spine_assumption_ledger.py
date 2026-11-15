@@ -48,8 +48,12 @@ seeded row is a human act, and R8 makes omitting one a gate failure rather than
 a tidy ledger.
 
   class `core-callee-model`     1 — C-LZ's deref residual.
-  class `layout-obligation`     2 — the two undischarged `Level` layout
-                                obligations the designated target stands on.
+  class `layout-obligation`     3 — the undischarged layout obligations the
+                                designated target stands on: the two `Level`
+                                ones, plus the `Arc` data offset the deref
+                                model geps by (which replaced a
+                                `core-callee-model` row when that clause was
+                                discharged rather than restated).
   class `operational-contract`  3 — PROSPECTIVE. The psm/`stack_safe` FFI
                                 bracket (§3.3, T-CTRL) and the two per-cache
                                 contracts (§3.2, T-HASH (a) memos / (b)
@@ -129,7 +133,7 @@ _ISO_DATE = re.compile(r"(20\d\d-\d\d-\d\d)")
 _UNDERSCORE_DATE = re.compile(r"(20\d\d)_(\d\d)_(\d\d)")
 
 # The blind-slot lane's own test module, used to spell each slot's probe.
-BLIND_SLOT_TEST = "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::%s"
+BLIND_SLOT_TEST = "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::%s"
 BLIND_SLOT_ANCHOR_TEST = "m9_every_blind_slot_is_anchored_in_live_source"
 GRID_PROBE = "python3 scripts/evalir_adequacy_grid.py --check"
 
@@ -170,7 +174,7 @@ SEEDED_ENTRIES = [
             "dereferencing is what `is_zero` is there to do. Every chain that "
             "reads through an `Arc` inherits this floor."
         ),
-        "probe": "cargo test --locked -p clean-verify --test crystal_a1_lineage level_is_zero",
+        "probe": "targo --unverified test --locked -p clean-verify --test crystal_a1_lineage level_is_zero",
         "probe_kind": "measurement",
         "discharge": (
             "replace the authored model with a DERIVED one via cross-crate "
@@ -214,6 +218,84 @@ SEEDED_ENTRIES = [
         "sources": [
             {"path": STATUS_DOC, "anchor": "fields reachable at cells `a+8` and `a+16`"},
             {"path": LZ_MEMO, "anchor": "`LevelArc` fields at cells `a+8` and `a+16`"},
+        ],
+    },
+    {
+        "id": "A-CLZ-DEREF-ARC-DATA-OFFSET",
+        "class": "layout-obligation",
+        "origin": "seeded",
+        "status": "measured",
+        "date": "2026-09-09",
+        "owning_job": "C-LZ",
+        "statement": (
+            "`ir_lzb_deref` geps the pointer it loads out of a `LevelArc` field "
+            "by SIXTEEN, and `EncodesLevelArcF` places every child `Level` at "
+            "`Nat.add b ir_d16` to match, because `<Arc<T> as Deref>::deref` "
+            "yields the address of the Arc's DATA — past `ArcInner`'s strong "
+            "and weak counts. The 16 is MEASURED on this target (stable rustc "
+            "1.97.1 aarch64-apple-darwin, `Level` size 40 / align 8: "
+            "`stored=0x105459bf0`, `deref_result=0x105459c00`).\n"
+            "NARROWED 2026-09-10, and one clause of it REFUTED. This row used to "
+            "end 'not guaranteed: `ArcInner` is private `alloc` internals with "
+            "NO STATED REPR, and another target or another smart pointer would "
+            "move it.' The no-stated-repr half is FALSE, measured two ways. "
+            "rustc's own layout descriptor for this instance reports `repr=c` "
+            "for `ArcInner` (the same extraction reports `repr=transparent` for "
+            "`NonNull` and no repr at all for `Arc`, so it is not defaulting), "
+            "and the sysroot source declares `#[repr(C, align(2))] struct "
+            "ArcInner<T: ?Sized> { strong: Atomic<usize>, weak: Atomic<usize>, "
+            "data: T }`. Under `repr(C)` the field ORDER is guaranteed, so 16 is "
+            "not a layout-algorithm accident: it is two pointer-sized atomic "
+            "counts, and what survives is the POINTER WIDTH, not the layout "
+            "algorithm. The second half stands unchanged: another target moves "
+            "it, and another smart pointer has a different header entirely.\n"
+            "The row's own second discharge route — 'make the deref's own "
+            "callees bodyful, at which point the offset comes from the emitted "
+            "code' — is now AVAILABLE and taken as far as evidence goes. The "
+            "callee sidecar derives `<Arc<Level> as Deref>::deref` from its own "
+            "monomorphized MIR, and that body geps by a `const i64 16`. So the "
+            "16 is no longer a difference between two runtime addresses: it is "
+            "the compiler's own constant for this instance. "
+            "`scripts/crystal_lzd_readiness.py` RECOMPUTES the offset from "
+            "rustc's field sizes (`ArcInner` size 56, fields Atomic(8), "
+            "Atomic(8), Level, so data at 16 and a 40-byte payload — the same 40 "
+            "this row already recorded) and REFUSES unless the recomputed "
+            "offset, the emitted gep constant and the authored model's constant "
+            "all agree. Demonstrated: planting 24 as the authored constant "
+            "fails closed with 'ledger row A-CLZ-DEREF-ARC-DATA-OFFSET is now "
+            "false of the machine it models'. CLOSING the row is still an owner "
+            "act, and it should not close alone: its route says it closes "
+            "together with `A-CLZ-DEREF-MODEL`, which needs the derived module "
+            "MINTED and A4/A5 re-proved over it, not merely measured mintable. \n"
+            "WHAT THIS ROW IS NOT. Audit r16 M16-6 (2026-09-02) opened it as a "
+            "`core-callee-model` row recording something strictly worse — the "
+            "model returned the loaded word UNCHANGED, computing `x` where the "
+            "machine computes `&*x`, which did not weaken the relation but made "
+            "it UNSATISFIABLE by any real `Level` heap at exactly the "
+            "`Succ`/`Max`/`IMax` nodes link 4 is about. That clause is "
+            "DISCHARGED: the model carries the gep, the relation moved with it, "
+            "and the two `Eq.refl` cost equations it re-derived are "
+            "kernel-checked at their new values (`ir_lzb_cost_halts_max` 41, "
+            "`ir_lzb_cost_halts_imax` 22). What survives is the layout "
+            "obligation above, in the same family as the field offsets and the "
+            "niche tag — a smaller and honest debt in place of a false clause."
+        ),
+        "probe": (
+            "targo --unverified test --locked -p clean-verify --test crystal_a1_lineage "
+            "deref_model_arc_data_offset"
+        ),
+        "probe_kind": "measurement",
+        "discharge": (
+            "derive the Arc data offset from a committed layout descriptor the "
+            "way `data/crystal_enum_layout_census_2026-08-21.json` derives the "
+            "tag encoding, rather than from a constant stated in two places and "
+            "held in step by a test; or make the deref's own callees bodyful, "
+            "at which point the offset comes from the emitted code and this row "
+            "and `A-CLZ-DEREF-MODEL` close together."
+        ),
+        "sources": [
+            {"path": STATUS_DOC, "anchor": "the Arc's DATA address, sixteen bytes past the stored word"},
+            {"path": LZ_MEMO, "anchor": "the deref model geps by the Arc header"},
         ],
     },
     {

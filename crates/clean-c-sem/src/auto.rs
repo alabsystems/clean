@@ -59,9 +59,9 @@ use clean_auto::bridge::proof_trust::count_embedded_trusted_ay_terms;
 use clean_kernel::{AppArgs, Environment, Expr, ExprKind};
 use std::borrow::Cow;
 
-/// Kernel-backed evidence returned by the SMT bridge.
+/// SMT bridge reconstruction evidence returned by the SMT bridge.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct KernelProofEvidence {
+pub struct SmtBridgeEvidence {
     /// Kernel proof term returned by clean-auto reconstruction.
     pub proof: Expr,
     /// Count of embedded `trustedAy` constants inside `proof`.
@@ -71,10 +71,12 @@ pub struct KernelProofEvidence {
 /// Result of attempting to prove a verification condition
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProofStatus {
-    /// VC was proved with a kernel term returned by clean-auto.
-    KernelVerified(KernelProofEvidence),
-    /// VC was discharged by a local structural shortcut without a kernel proof term.
-    StructuralProved,
+    /// The SMT bridge returned a reconstructed term. This is not a fenced
+    /// Clean-kernel acceptance; embedded trustedAy subterms are counted,
+    /// and remain accepted by the convenience APIs.
+    SmtBridgeChecked(SmtBridgeEvidence),
+    /// The local structural matcher accepted the VC; no kernel check ran.
+    StructuralMatched,
     /// SMT proved UNSAT but no kernel proof term is available.
     Unverified(String),
     /// VC could not be proved
@@ -87,19 +89,19 @@ pub enum ProofStatus {
 impl ProofStatus {
     /// Returns true for any success class accepted by the loose convenience APIs.
     pub fn is_established(&self) -> bool {
-        matches!(self, Self::KernelVerified(_) | Self::StructuralProved)
+        matches!(self, Self::SmtBridgeChecked(_) | Self::StructuralMatched)
     }
 
-    /// Returns true when the VC has a kernel-backed proof term.
-    pub fn is_kernel_verified(&self) -> bool {
-        matches!(self, Self::KernelVerified(_))
+    /// Returns true when the VC has an SMT bridge reconstructed proof term.
+    pub fn is_smt_bridge_checked(&self) -> bool {
+        matches!(self, Self::SmtBridgeChecked(_))
     }
 
     /// Returns true when the VC has a kernel proof term with no embedded trust debt.
     pub fn is_fully_verified(&self) -> bool {
         matches!(
             self,
-            Self::KernelVerified(KernelProofEvidence {
+            Self::SmtBridgeChecked(SmtBridgeEvidence {
                 trusted_ay_subterms: 0,
                 ..
             })
@@ -109,9 +111,9 @@ impl ProofStatus {
     /// Compact marker for human-readable reports.
     pub fn display_marker(&self) -> &'static str {
         match self {
-            Self::KernelVerified(evidence) if evidence.trusted_ay_subterms == 0 => "K",
-            Self::KernelVerified(_) => "K!",
-            Self::StructuralProved => "S",
+            Self::SmtBridgeChecked(evidence) if evidence.trusted_ay_subterms == 0 => "B",
+            Self::SmtBridgeChecked(_) => "B!",
+            Self::StructuralMatched => "S",
             Self::Unverified(_) => "U",
             Self::Failed(_) => "X",
             Self::Unknown => "?",
@@ -121,14 +123,14 @@ impl ProofStatus {
     /// Human-readable status text for report output.
     pub fn display_text(&self) -> Cow<'static, str> {
         match self {
-            Self::KernelVerified(evidence) if evidence.trusted_ay_subterms == 0 => {
-                Cow::Borrowed("kernel verified")
+            Self::SmtBridgeChecked(evidence) if evidence.trusted_ay_subterms == 0 => {
+                Cow::Borrowed("SMT bridge checked")
             }
-            Self::KernelVerified(evidence) => Cow::Owned(format!(
-                "kernel verified with {} embedded trustedAy subterms",
+            Self::SmtBridgeChecked(evidence) => Cow::Owned(format!(
+                "SMT bridge checked with {} embedded trustedAy subterms",
                 evidence.trusted_ay_subterms
             )),
-            Self::StructuralProved => Cow::Borrowed("structural proof without kernel term"),
+            Self::StructuralMatched => Cow::Borrowed("structural match; no kernel check"),
             Self::Unverified(reason) => Cow::Owned(format!("unverified UNSAT: {reason}")),
             Self::Failed(reason) => Cow::Owned(format!("failed: {reason}")),
             Self::Unknown => Cow::Borrowed("unknown"),
@@ -143,10 +145,10 @@ pub struct VerificationSummary {
     pub total: usize,
     /// Number of proved VCs
     pub proved: usize,
-    /// Number of kernel-backed VCs
-    pub kernel_verified: usize,
-    /// Number of structurally discharged VCs
-    pub structural_proved: usize,
+    /// Number of SMT bridge reconstructed VCs
+    pub smt_bridge_checked: usize,
+    /// Number of VCs accepted by the local structural matcher
+    pub structural_matched: usize,
     /// Number of VCs with UNSAT but no kernel proof term
     pub unverified: usize,
     /// Number of failed VCs
@@ -165,13 +167,13 @@ impl VerificationSummary {
     pub fn add(&mut self, description: String, status: ProofStatus) {
         self.total += 1;
         match &status {
-            ProofStatus::KernelVerified(_) => {
+            ProofStatus::SmtBridgeChecked(_) => {
                 self.proved += 1;
-                self.kernel_verified += 1;
+                self.smt_bridge_checked += 1;
             }
-            ProofStatus::StructuralProved => {
+            ProofStatus::StructuralMatched => {
                 self.proved += 1;
-                self.structural_proved += 1;
+                self.structural_matched += 1;
             }
             ProofStatus::Unverified(_) => self.unverified += 1,
             ProofStatus::Failed(_) => self.failed += 1,
@@ -185,7 +187,7 @@ impl VerificationSummary {
         self.proved == self.total
     }
 
-    /// Check if all VCs were kernel-verified without embedded trust debt.
+    /// Check if all VCs were SMT bridge checked without embedded trust debt.
     pub fn all_fully_verified(&self) -> bool {
         self.total
             == self
@@ -208,11 +210,11 @@ impl VerificationSummary {
     /// Human-readable summary line for report output.
     pub fn overview(&self) -> String {
         format!(
-            "{} total, {} established ({} kernel, {} structural), {} unverified, {} failed, {} unknown",
+            "{} total, {} established ({} SMT bridge, {} structural), {} unverified, {} failed, {} unknown",
             self.total,
             self.proved,
-            self.kernel_verified,
-            self.structural_proved,
+            self.smt_bridge_checked,
+            self.structural_matched,
             self.unverified,
             self.failed,
             self.unknown
@@ -443,14 +445,17 @@ impl VCProver {
 
     /// Core proving logic using clean-auto.
     ///
-    /// SOUNDNESS (hole 9): a `Refuted` verdict is a GENUINE counterexample
-    /// (¬goal is SAT, so the goal is FALSE) and is DISPOSITIVE. It is reported
-    /// as `Failed` and is NOT overridden by the loose structural fallback that
-    /// previously ran on `Refuted` (that fallback could certify a false
-    /// obligation via a collapsed-head "equality").
+    /// SOUNDNESS (hole 9): a `Refuted` verdict is DISPOSITIVE for this lane —
+    /// reported as `Failed` and NOT overridden by the loose structural
+    /// fallback that previously ran on `Refuted` (that fallback could certify
+    /// a false obligation via a collapsed-head "equality"). It is NOT a
+    /// validated counterexample: the model satisfies the TRANSLATED `¬goal`,
+    /// where operations outside the solver's theories are uninterpreted, so a
+    /// valid goal can get one too (decide review, 2026-09-28). The failure is
+    /// fail-closed and its message says exactly that.
     ///
     /// The sole exception is when the SOUND structural check *independently
-    /// proves the goal true* (`StructuralProved`) — that can only happen for a
+    /// proves the goal true* (`StructuralMatched`) — that can only happen for a
     /// genuinely-valid goal (`True`, a reflexive/constant comparison, or a
     /// composition of proved sub-goals; the translation is now injective, so
     /// distinct operands never collapse into a false equality). A
@@ -467,19 +472,22 @@ impl VCProver {
             Ok(SVR::Verified(result)) => {
                 let proof = result.proof_term().clone();
                 let trusted_ay_subterms = count_embedded_trusted_ay_terms(&proof);
-                ProofStatus::KernelVerified(KernelProofEvidence {
+                ProofStatus::SmtBridgeChecked(SmtBridgeEvidence {
                     proof,
                     trusted_ay_subterms,
                 })
             }
-            Ok(SVR::Refuted(_)) => {
+            Ok(refuted @ SVR::Refuted(_)) => {
                 // Only a sound, independent structural PROOF of validity may
-                // override a refutation (translation artifact). Anything else —
+                // override the SMT model (translation artifact). Anything else —
                 // including a structural `Failed` or inconclusive result —
-                // leaves the genuine counterexample dispositive.
+                // leaves the obligation failed, with the model labelled as the
+                // unvalidated model of the solver's abstraction it is.
                 match self.try_structural_proof(expr) {
-                    Some(status @ ProofStatus::StructuralProved) => status,
-                    _ => ProofStatus::Failed("SMT found counterexample".into()),
+                    Some(status @ ProofStatus::StructuralMatched) => status,
+                    _ => {
+                        ProofStatus::Failed(refuted.unvalidated_model_reason().unwrap_or_default())
+                    }
                 }
             }
             // Non-committal SMT verdicts (could-not-decide / no reconstructed
@@ -543,14 +551,14 @@ impl VCProver {
         // themselves structurally identical, and reflexive equality holds.
         // See docs/SOUNDNESS_FINDINGS_CLEAN_C_SEM_2026-07.md holes 5,6,8.
         match name_str {
-            "True" => Some(ProofStatus::StructuralProved),
+            "True" => Some(ProofStatus::StructuralMatched),
             "False" => Some(ProofStatus::Failed("Cannot prove False".to_string())),
             "Eq" if args.len() >= 2 => {
                 let len = args.len();
                 let lhs = args[len - 2];
                 let rhs = args[len - 1];
                 if self.exprs_structurally_equal(lhs, rhs) {
-                    Some(ProofStatus::StructuralProved)
+                    Some(ProofStatus::StructuralMatched)
                 } else {
                     None
                 }
@@ -560,11 +568,11 @@ impl VCProver {
                 let lhs = args[len - 2];
                 let rhs = args[len - 1];
                 if self.exprs_structurally_equal(lhs, rhs) {
-                    return Some(ProofStatus::StructuralProved);
+                    return Some(ProofStatus::StructuralMatched);
                 }
                 if let (Some(a), Some(b)) = (self.try_extract_int(lhs), self.try_extract_int(rhs)) {
                     if a <= b {
-                        return Some(ProofStatus::StructuralProved);
+                        return Some(ProofStatus::StructuralMatched);
                     }
                     return Some(ProofStatus::Failed(format!("{a} > {b}")));
                 }
@@ -575,11 +583,11 @@ impl VCProver {
                 let lhs = args[len - 2];
                 let rhs = args[len - 1];
                 if self.exprs_structurally_equal(lhs, rhs) {
-                    return Some(ProofStatus::StructuralProved);
+                    return Some(ProofStatus::StructuralMatched);
                 }
                 if let (Some(a), Some(b)) = (self.try_extract_int(lhs), self.try_extract_int(rhs)) {
                     if a >= b {
-                        return Some(ProofStatus::StructuralProved);
+                        return Some(ProofStatus::StructuralMatched);
                     }
                     return Some(ProofStatus::Failed(format!("{a} < {b}")));
                 }
@@ -594,7 +602,7 @@ impl VCProver {
                 }
                 if let (Some(a), Some(b)) = (self.try_extract_int(lhs), self.try_extract_int(rhs)) {
                     if a < b {
-                        return Some(ProofStatus::StructuralProved);
+                        return Some(ProofStatus::StructuralMatched);
                     }
                     return Some(ProofStatus::Failed(format!("{a} >= {b}")));
                 }
@@ -609,7 +617,7 @@ impl VCProver {
                 }
                 if let (Some(a), Some(b)) = (self.try_extract_int(lhs), self.try_extract_int(rhs)) {
                     if a > b {
-                        return Some(ProofStatus::StructuralProved);
+                        return Some(ProofStatus::StructuralMatched);
                     }
                     return Some(ProofStatus::Failed(format!("{a} <= {b}")));
                 }
@@ -622,7 +630,7 @@ impl VCProver {
                     (Some(left), Some(right))
                         if left.is_established() && right.is_established() =>
                     {
-                        Some(ProofStatus::StructuralProved)
+                        Some(ProofStatus::StructuralMatched)
                     }
                     (Some(ProofStatus::Failed(reason)), _) => {
                         Some(ProofStatus::Failed(format!("Left conjunct: {reason}")))
@@ -643,13 +651,13 @@ impl VCProver {
                         .as_ref()
                         .is_some_and(ProofStatus::is_established)
                 {
-                    Some(ProofStatus::StructuralProved)
+                    Some(ProofStatus::StructuralMatched)
                 } else {
                     None
                 }
             }
             "Not" if args.len() == 1 => match self.try_structural_proof(args[0]) {
-                Some(ProofStatus::Failed(_)) => Some(ProofStatus::StructuralProved),
+                Some(ProofStatus::Failed(_)) => Some(ProofStatus::StructuralMatched),
                 Some(status) if status.is_established() => {
                     Some(ProofStatus::Failed("Cannot prove Not(True)".to_string()))
                 }
@@ -666,10 +674,10 @@ impl VCProver {
                 .as_ref()
                 .is_some_and(ProofStatus::is_established)
             {
-                return Some(ProofStatus::StructuralProved);
+                return Some(ProofStatus::StructuralMatched);
             }
             if let Some(ProofStatus::Failed(_)) = self.try_structural_proof(domain) {
-                return Some(ProofStatus::StructuralProved);
+                return Some(ProofStatus::StructuralMatched);
             }
         }
 
@@ -678,7 +686,7 @@ impl VCProver {
             .as_ref()
             .is_some_and(ProofStatus::is_established)
         {
-            return Some(ProofStatus::StructuralProved);
+            return Some(ProofStatus::StructuralMatched);
         }
 
         None
@@ -780,7 +788,7 @@ pub fn quick_check(spec: &Spec) -> bool {
 }
 
 /// Strict verification of a specification.
-/// Returns true only for kernel-backed proofs with zero embedded trust debt.
+/// Returns true only for SMT bridge reconstructed proofs with zero embedded trust debt.
 pub fn quick_check_fully_verified(spec: &Spec) -> bool {
     let mut prover = VCProver::new().with_timeout(1000);
     prover.prove_spec(spec).is_fully_verified()

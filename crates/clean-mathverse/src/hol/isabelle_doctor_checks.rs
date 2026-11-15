@@ -9,6 +9,7 @@
 //! `isabelle_doctor_tests.rs`). Split out of `isabelle_doctor.rs` to keep each
 //! file under the size cap.
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
@@ -104,6 +105,9 @@ fn git_newest_crates_ct() -> Option<u64> {
 // ---------------------------------------------------------------------------
 
 /// The observable state of the verify flock.
+// wasm32: the fd-lock probe is native-only, so `Free`/`Held` are never minted
+// there — only `Absent`/`Unknown`.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum LockState {
     /// No lock file on disk — the flock infra has not landed (degrade softly).
@@ -231,6 +235,7 @@ pub(super) fn parse_lock_holder(content: &str) -> LockHolder {
 /// Non-destructively probe the flock at `path`: existence, then a non-blocking
 /// exclusive acquire (immediately released). Never takes a hard dependency on
 /// the lock's producer — a missing file is [`LockState::Absent`], not an error.
+#[cfg(not(target_arch = "wasm32"))]
 pub(super) fn probe_verify_lock(path: &Path) -> LockState {
     if !path.exists() {
         return LockState::Absent;
@@ -253,6 +258,16 @@ pub(super) fn probe_verify_lock(path: &Path) -> LockState {
     };
     drop(attempt);
     state
+}
+
+/// wasm32: `fd-lock` has no wasip1 backend, so a present lock file's state
+/// cannot be probed — report it as unknown rather than free or held.
+#[cfg(target_arch = "wasm32")]
+pub(super) fn probe_verify_lock(path: &Path) -> LockState {
+    if !path.exists() {
+        return LockState::Absent;
+    }
+    LockState::Unknown
 }
 
 /// The verify/import command lines currently running (best-effort via `pgrep`).

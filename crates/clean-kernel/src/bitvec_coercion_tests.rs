@@ -115,6 +115,7 @@ fn test_coercion_identities_are_proved_theorems_with_empty_axiom_closure() {
         names::BV_TAKE_LEN_APPEND,
         names::OR_ZERO_ID,
         names::ADD_ZERO_ID,
+        names::ADD_RIGHT_ZERO_ID,
         names::BVF_EXTRACT_ZEXT_ID,
         names::BVF_OR_ZERO_ID,
         names::BVF_ADD_ZERO_ID,
@@ -128,6 +129,8 @@ fn test_coercion_identities_are_proved_theorems_with_empty_axiom_closure() {
         names::BVF_OR_CONG2,
         names::BVF_ZEXT_CONG,
         names::BVF_EXTRACT_CONG1,
+        names::BVF_CONCAT_CONG,
+        names::BVF_CONCAT_LOW,
         names::ITE_VAL_NOT,
         names::BVF_DIV_CONG,
         names::BVF_SDIV_CONG,
@@ -178,6 +181,7 @@ fn test_coercion_ops_are_real_definitions() {
     let env = env();
     for op in [
         names::APPEND,
+        names::BV_CONCAT,
         names::REPL_F,
         names::ZEXT,
         names::TAKE_LEN,
@@ -1247,7 +1251,10 @@ fn test_slt_bridge_wrong_drops_overflow_xor_is_rejected() {
         type_: wrong_ty,
         value: refl(bf.clone()), // try the bvSLtReal side (false)
     });
-    assert!(res.is_err(), "WRONG slt bridge (= N, no overflow XOR) must be kernel-REJECTED at the 0 vs -2 witness (false != true)");
+    assert!(
+        res.is_err(),
+        "WRONG slt bridge (= N, no overflow XOR) must be kernel-REJECTED at the 0 vs -2 witness (false != true)"
+    );
     // sanity: the TRUE value bvSLtReal a b = false reduces by refl (faithfulness).
     let tc = TypeChecker::with_mode(&env, env.mode());
     assert!(
@@ -1351,8 +1358,10 @@ fn test_div_guard_bridge_dropping_precondition_is_rejected() {
         dv_f.clone(),
     );
     let tc = TypeChecker::with_mode(&env, env.mode());
-    assert!(tc.check_type(&refll(dv_f.clone()), &wrong_ty).is_err(),
-        "guard at b=[false] picks z=[true]≠dv=[false]; the unconditional claim must be kernel-REJECTED");
+    assert!(
+        tc.check_type(&refll(dv_f.clone()), &wrong_ty).is_err(),
+        "guard at b=[false] picks z=[true]≠dv=[false]; the unconditional claim must be kernel-REJECTED"
+    );
 }
 
 /// NON-VACUITY for selectStoreDiff: the `bvBeq a a' = false` hypothesis is LOAD-BEARING. The
@@ -1834,8 +1843,10 @@ fn test_select_store_same_wrong_address_is_rejected() {
         sel(sto(const_f.clone(), a_t.clone(), v_t.clone()), a_f.clone()),
         v_t.clone(),
     );
-    assert!(tc.check_type(&refll(v_t.clone()), &wrong_ty).is_err(),
-        "wrong-address read (a'=[false]≠a=[true]) returns m a'=[false]≠v=[true]; must be kernel-REJECTED");
+    assert!(
+        tc.check_type(&refll(v_t.clone()), &wrong_ty).is_err(),
+        "wrong-address read (a'=[false]≠a=[true]) returns m a'=[false]≠v=[true]; must be kernel-REJECTED"
+    );
     // POSITIVE arm: the SAME-address read DOES return v (the keystone holds concretely).
     let right_ty = eql(
         sel(sto(const_f.clone(), a_t.clone(), v_t.clone()), a_t.clone()),
@@ -1942,4 +1953,317 @@ fn test_bvmul_computes_real_multiply() {
         cases.len(),
         "all bvMul differential samples must match integer multiply (mod 2^w)"
     );
+}
+
+fn f_concat(high: Expr, low: Expr) -> Expr {
+    Expr::apps(Expr::const_str("Clean.BVC.BvF.Concat"), [high, low])
+}
+
+#[test]
+fn test_bvf_concat_preserves_little_endian_byte_order_at_native_widths() {
+    let env = env();
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    for bytes in [2, 3, 4, 8] {
+        let mut joined = f_leaf(bv_lit(0x21, 8));
+        let mut value = 0x21_u64;
+        for byte in 1..bytes {
+            let next = 0x21 + byte * 0x17;
+            joined = f_concat(f_leaf(bv_lit(u64::from(next), 8)), joined);
+            value |= u64::from(next) << (8 * byte);
+        }
+        let proof = eq_refl_list(evalf(joined.clone()));
+        tc.check_type(
+            &proof,
+            &eq_list(evalf(joined.clone()), bv_lit(value, bytes * 8)),
+        )
+        .expect("Concat(high,low) assembles the exact little-endian bytes");
+        let reversed = value.swap_bytes() >> ((8 - bytes) * 8);
+        assert!(
+            tc.check_type(&proof, &eq_list(evalf(joined), bv_lit(reversed, bytes * 8)))
+                .is_err(),
+            "the same proof must not authorize reversed byte order"
+        );
+    }
+}
+
+#[test]
+fn test_bvf_concat_congruence_checks_both_operands_and_conclusion() {
+    let env = env();
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    let high_bits = bv_lit(0xa3, 8);
+    let low_bits = bv_lit(0x59, 8);
+    let high = f_leaf(high_bits.clone());
+    let high_next = f_const(high_bits);
+    let low = f_leaf(low_bits.clone());
+    let low_next = f_const(low_bits);
+    assert_ne!(high, high_next);
+    assert_ne!(low, low_next);
+    let high_proof = eq_refl_list(evalf(high.clone()));
+    let low_proof = eq_refl_list(evalf(low.clone()));
+    let proof = Expr::apps(
+        Expr::const_str(names::BVF_CONCAT_CONG),
+        [
+            high.clone(),
+            high_next.clone(),
+            low.clone(),
+            low_next.clone(),
+            high_proof.clone(),
+            low_proof.clone(),
+        ],
+    );
+    let expected = eq_list(
+        evalf(f_concat(high.clone(), low.clone())),
+        evalf(f_concat(high_next.clone(), low_next.clone())),
+    );
+    tc.check_type(&proof, &expected)
+        .expect("two-sided Concat congruence");
+    let wrong = eq_list(
+        evalf(f_concat(high.clone(), low.clone())),
+        evalf(f_concat(low_next.clone(), high_next.clone())),
+    );
+    assert!(
+        tc.check_type(&proof, &wrong).is_err(),
+        "retargeted conclusion"
+    );
+    for (hp, lp) in [
+        (low_proof.clone(), low_proof),
+        (high_proof.clone(), high_proof),
+    ] {
+        let bad = Expr::apps(
+            Expr::const_str(names::BVF_CONCAT_CONG),
+            [
+                high.clone(),
+                high_next.clone(),
+                low.clone(),
+                low_next.clone(),
+                hp,
+                lp,
+            ],
+        );
+        assert!(
+            tc.check_type(&bad, &expected).is_err(),
+            "wrong operand equality"
+        );
+    }
+}
+
+#[test]
+fn test_bvf_concat_low_read_keeps_symbolic_memory_and_address_identity() {
+    let mut env = env();
+    // Opaque DATA parameters, not theorem axioms: two independent entry arrays.
+    for name in ["ConcatMemory0", "ConcatMemory1"] {
+        env.add_decl(crate::Declaration::Axiom {
+            name: Name::from_string(name),
+            level_params: vec![],
+            type_: Expr::arrow(list_bool(), list_bool()),
+        })
+        .expect("opaque memory parameter");
+    }
+    let read = |memory: &str, address: u64| {
+        f_leaf(Expr::apps(
+            Expr::const_str(names::BV_SELECT),
+            [Expr::const_str(memory), bv_lit(address, 64)],
+        ))
+    };
+    let high = read("ConcatMemory0", 0x1001);
+    let low = read("ConcatMemory0", 0x1000);
+    let joined = f_concat(high.clone(), low.clone());
+    let sliced = Expr::apps(
+        Expr::const_str("Clean.BVC.BvF.ExtractLow"),
+        [joined.clone(), low.clone()],
+    );
+    let proof = Expr::apps(Expr::const_str(names::BVF_CONCAT_LOW), [high, low.clone()]);
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    tc.check_type(&proof, &eq_list(evalf(sliced.clone()), evalf(low.clone())))
+        .expect("symbolic byte read recovered without reducing or replacing memory");
+    for wrong in [read("ConcatMemory1", 0x1000), read("ConcatMemory0", 0x1001)] {
+        assert!(
+            tc.check_type(&proof, &eq_list(evalf(sliced.clone()), evalf(wrong)))
+                .is_err(),
+            "a proof must not authorize another memory or address"
+        );
+    }
+    let wrong_width = Expr::apps(
+        Expr::const_str("Clean.BVC.BvF.ExtractLow"),
+        [joined, f_const(bv_lit(0, 7))],
+    );
+    assert!(
+        tc.check_type(&proof, &eq_list(evalf(wrong_width), evalf(low)))
+            .is_err(),
+        "the low slice's tag cannot be replaced by an unrelated width"
+    );
+}
+
+#[test]
+fn test_bvf_concat_low_handles_empty_and_unequal_widths_without_truncation() {
+    let env = env();
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    for (high_width, low_width) in [(0, 0), (8, 0), (0, 8), (5, 11), (8, 56)] {
+        let high = f_leaf(bv_lit(0x15, high_width));
+        let low = f_leaf(bv_lit(0x6b, low_width));
+        let sliced = Expr::apps(
+            Expr::const_str("Clean.BVC.BvF.ExtractLow"),
+            [f_concat(high.clone(), low.clone()), low.clone()],
+        );
+        let proof = Expr::apps(Expr::const_str(names::BVF_CONCAT_LOW), [high, low.clone()]);
+        tc.check_type(&proof, &eq_list(evalf(sliced), evalf(low)))
+            .expect("low projection holds independently of both operand lengths");
+    }
+}
+
+#[test]
+fn test_bvf_concat_replays_real_nested_byte_stores_without_erasing_memory() {
+    let mut env = env();
+    env.add_decl(crate::Declaration::Axiom {
+        name: Name::from_string("ConcatEntryMemory"),
+        level_params: vec![],
+        type_: Expr::arrow(list_bool(), list_bool()),
+    })
+    .expect("opaque entry-array data parameter");
+    let select = |m: Expr, a: Expr| Expr::apps(Expr::const_str(names::BV_SELECT), [m, a]);
+    let store = |m: Expr, a: Expr, v: Expr| Expr::apps(Expr::const_str(names::BV_STORE), [m, a, v]);
+    let memory = Expr::const_str("ConcatEntryMemory");
+    let low_address = bv_lit(0x1000, 64);
+    let high_address = bv_lit(0x1001, 64);
+    let low = bv_lit(0x59, 8);
+    let high = bv_lit(0xa3, 8);
+    let first = store(memory.clone(), low_address.clone(), low.clone());
+    let exit = store(first.clone(), high_address.clone(), high.clone());
+    let low_read = select(exit.clone(), low_address.clone());
+    let high_read = select(exit.clone(), high_address.clone());
+    // This proof's exact checked guard is bvBeq(0x1001,0x1000)=false.
+    let distinct = Expr::apps(
+        Expr::const_(
+            Name::from_string("Eq.refl"),
+            vec![Level::succ(Level::zero())],
+        ),
+        [bool_ty(), bfalse()],
+    );
+    let through_high = Expr::apps(
+        Expr::const_str(names::SELECT_STORE_DIFF),
+        [
+            first.clone(),
+            high_address.clone(),
+            low_address.clone(),
+            high.clone(),
+            distinct,
+        ],
+    );
+    let hit_low = Expr::apps(
+        Expr::const_str(names::SELECT_STORE_SAME),
+        [memory, low_address.clone(), low.clone()],
+    );
+    let low_proof = Expr::apps(
+        Expr::const_(
+            Name::from_string("Eq.trans"),
+            vec![Level::succ(Level::zero())],
+        ),
+        [
+            list_bool(),
+            low_read.clone(),
+            select(first.clone(), low_address.clone()),
+            low.clone(),
+            through_high,
+            hit_low,
+        ],
+    );
+    let high_proof = Expr::apps(
+        Expr::const_str(names::SELECT_STORE_SAME),
+        [first.clone(), high_address.clone(), high.clone()],
+    );
+    let proof = Expr::apps(
+        Expr::const_str(names::BVF_CONCAT_CONG),
+        [
+            f_leaf(high_read.clone()),
+            f_const(high.clone()),
+            f_leaf(low_read.clone()),
+            f_const(low.clone()),
+            high_proof,
+            low_proof,
+        ],
+    );
+    let joined = |m: Expr| {
+        evalf(f_concat(
+            f_leaf(select(m.clone(), high_address.clone())),
+            f_leaf(select(m, low_address.clone())),
+        ))
+    };
+    let expected = eq_list(joined(exit.clone()), bv_lit(0xa359, 16));
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    tc.check_type(&proof, &expected)
+        .expect("two byte stores and the actual two-byte LE read compose in the kernel");
+    // A return-only value check would miss deletion of the high-byte write.
+    assert!(
+        tc.check_type(&proof, &eq_list(joined(first), bv_lit(0xa359, 16)))
+            .is_err(),
+        "the proof cannot be substituted onto the deleted-store memory"
+    );
+    let wrong_value = store(exit, high_address.clone(), bv_lit(0xa4, 8));
+    assert!(
+        tc.check_type(&proof, &eq_list(joined(wrong_value), bv_lit(0xa359, 16)))
+            .is_err(),
+        "the proof cannot authorize a changed exit byte"
+    );
+}
+
+#[test]
+fn test_add_right_zero_id_is_constructive_for_arbitrary_bit_lists() {
+    let mut env = env();
+    let name = Name::from_string(names::ADD_RIGHT_ZERO_ID);
+    assert_eq!(env.get_const(&name).unwrap().kind, ConstantKind::Theorem);
+    assert!(domain_axioms(&env, names::ADD_RIGHT_ZERO_ID).is_empty());
+    env.add_decl(crate::Declaration::Axiom {
+        name: Name::from_string("RightZero.symbolic"),
+        level_params: vec![],
+        type_: list_bool(),
+    })
+    .unwrap();
+    let input = Expr::const_str("RightZero.symbolic");
+    let actual = Expr::apps(
+        Expr::const_str("Clean.BVI.addRecM"),
+        [input.clone(), all_false(input.clone()), bfalse()],
+    );
+    let proof = Expr::app(Expr::const_str(names::ADD_RIGHT_ZERO_ID), input.clone());
+    TypeChecker::new(&env)
+        .check_type(&proof, &eq_list(actual, input))
+        .unwrap();
+    for width in [0, 1, 8, 64] {
+        let input = bv_lit(0x55, width);
+        let goal = eq_list(
+            Expr::apps(
+                Expr::const_str("Clean.BVI.addRecM"),
+                [input.clone(), all_false(input.clone()), bfalse()],
+            ),
+            input.clone(),
+        );
+        TypeChecker::new(&env)
+            .check_type(
+                &Expr::app(Expr::const_str(names::ADD_RIGHT_ZERO_ID), input),
+                &goal,
+            )
+            .unwrap();
+    }
+}
+
+#[test]
+fn test_add_right_zero_id_hostile_substitution_refuses() {
+    let env = env();
+    let input = bv_lit(0x55, 8);
+    let proof = Expr::app(Expr::const_str(names::ADD_RIGHT_ZERO_ID), input.clone());
+    for (right, carry, result) in [
+        (bv_lit(1, 8), bfalse(), input.clone()),
+        (all_false(input.clone()), btrue(), input.clone()),
+        (all_false(input.clone()), bfalse(), bv_lit(0x54, 8)),
+    ] {
+        let actual = Expr::apps(
+            Expr::const_str("Clean.BVI.addRecM"),
+            [input.clone(), right, carry],
+        );
+        assert!(
+            TypeChecker::new(&env)
+                .check_type(&proof, &eq_list(actual, result))
+                .is_err(),
+            "a changed operand/carry/result cannot borrow right-zero proof"
+        );
+    }
 }

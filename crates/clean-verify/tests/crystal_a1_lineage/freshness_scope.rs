@@ -149,12 +149,40 @@ fn the_scope_file_names_a_committed_record_and_a_pinned_rev() {
         "{SCOPE} names {record}, which is not in the tree. A scope bound to a record nobody \
          can read is a pin to nothing."
     );
-    assert_eq!(
-        record,
-        super::freshness::CURRENT_RECORD,
-        "{SCOPE} must bind the record the current-source lineage gate reads"
-    );
     let record_json = super::freshness::read_json(record);
+    // The scope binds either the current-source lineage record itself, or an
+    // AT-HEAD successor of it: a `chain_revalidation_at_head/v1` record whose
+    // fixtures are the current rebaseline's and which names that lineage record
+    // as the one it supersedes for scope purposes. That successor is how a
+    // CONTENT-SCOPE red is cleared without a rebaseline (2026-09-20): a fresh
+    // dump at HEAD, every chained body NUMBERING-ONLY, minted by
+    // `scripts/crystal_chain_revalidation.py --at-head`. Anything else bound
+    // here is a pin to a record no lineage gate reads.
+    if record != super::freshness::CURRENT_RECORD {
+        assert_eq!(
+            record_json["schema"].as_str(),
+            Some("clean.crystal.chain_revalidation_at_head/v1"),
+            "{SCOPE} binds {record}, which is neither the current-source lineage record \
+             ({}) nor an at-head successor of it",
+            super::freshness::CURRENT_RECORD
+        );
+        assert_eq!(
+            record_json["supersedes_for_current_source_scope"].as_str(),
+            Some(super::freshness::CURRENT_RECORD),
+            "{SCOPE} binds an at-head record that does not supersede the current-source \
+             lineage record for scope purposes"
+        );
+        assert_eq!(
+            record_json["generator"]["fixture_rebaseline_record"].as_str(),
+            Some(super::freshness::CURRENT_REBASELINE),
+            "{SCOPE} binds an at-head record whose fixtures are not the current rebaseline's"
+        );
+        assert_eq!(
+            record_json["provenance"]["at_head"]["fixtures_rebaseline_record"].as_str(),
+            Some(super::freshness::CURRENT_REBASELINE),
+            "{SCOPE}: the at-head record's provenance and generator disagree on the rebaseline"
+        );
+    }
     let rev = scope["covered_clean_rev"]
         .as_str()
         .expect("the scope file must pin the clean rev it was emitted at");

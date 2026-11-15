@@ -30,7 +30,7 @@ impl SmtLibBuilder {
     }
 
     /// Append a command to the SMT-LIB script.
-    pub fn add_command(&mut self, command: SmtLibCommand) -> &mut Self {
+    pub(crate) fn add_command(&mut self, command: SmtLibCommand) -> &mut Self {
         self.commands.push(command);
         self
     }

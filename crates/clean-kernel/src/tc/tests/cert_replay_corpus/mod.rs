@@ -5,8 +5,7 @@
 //! Self-verification Wave 0: Fixed corpus + baseline metrics.
 //!
 //! Runs the full certificate-replay pipeline on a fixed corpus of 50+
-//! expressions: `infer_type_with_cert` → `replay_and_verify` →
-//! `cross_validate_with_micro`.
+//! expressions: `infer_type_with_cert` → `replay_and_verify`.
 //!
 //! Part of #1890 / #371. Design: designs/2026-02-15-371-certificate-replay-alternative.md
 
@@ -14,7 +13,6 @@ mod data;
 
 use super::*;
 use crate::cert::{CertVerifier, ProofCert};
-use crate::micro::cross_validate_with_micro;
 use data::{build_corpus, CorpusEntry};
 
 // =========================================================================
@@ -26,8 +24,6 @@ struct EntryResult {
     name: &'static str,
     cert_ok: bool,
     replay_ok: bool,
-    micro_supported: bool,
-    micro_ok: bool,
     error: Option<String>,
 }
 
@@ -38,10 +34,6 @@ struct CorpusMetrics {
     cert_fail: usize,
     replay_pass: usize,
     replay_fail: usize,
-    micro_supported: usize,
-    micro_unsupported: usize,
-    micro_pass: usize,
-    micro_fail: usize,
 }
 
 impl std::fmt::Display for CorpusMetrics {
@@ -68,20 +60,6 @@ impl std::fmt::Display for CorpusMetrics {
             self.replay_pass,
             self.cert_pass,
             pct(self.replay_pass, self.cert_pass)
-        )?;
-        writeln!(
-            f,
-            "Micro-checker supported: {}/{} ({:.1}%)",
-            self.micro_supported,
-            self.cert_pass,
-            pct(self.micro_supported, self.cert_pass)
-        )?;
-        writeln!(
-            f,
-            "Micro-checker pass:     {}/{} ({:.1}%)",
-            self.micro_pass,
-            self.micro_supported,
-            pct(self.micro_pass, self.micro_supported)
         )
     }
 }
@@ -100,10 +78,8 @@ fn run_pipeline(entry: &CorpusEntry) -> EntryResult {
                 name: entry.name,
                 cert_ok: false,
                 replay_ok: false,
-                micro_supported: false,
-                micro_ok: false,
                 error: Some(format!("cert generation failed: {e}")),
-            }
+            };
         }
     };
 
@@ -112,26 +88,15 @@ fn run_pipeline(entry: &CorpusEntry) -> EntryResult {
             name: entry.name,
             cert_ok: true,
             replay_ok: false,
-            micro_supported: false,
-            micro_ok: false,
             error: Some(format!("replay failed: {e}")),
         };
     }
-
-    let (micro_supported, micro_ok, error) =
-        match cross_validate_with_micro(&entry.expr, &ty, &cert) {
-            Ok(true) => (true, true, None),
-            Ok(false) => (false, false, None),
-            Err(e) => (true, false, Some(format!("micro failed: {e}"))),
-        };
 
     EntryResult {
         name: entry.name,
         cert_ok: true,
         replay_ok: true,
-        micro_supported,
-        micro_ok,
-        error,
+        error: None,
     }
 }
 
@@ -173,16 +138,6 @@ fn collect_metrics(results: &[EntryResult]) -> CorpusMetrics {
             m.replay_pass += 1;
         } else if r.cert_ok {
             m.replay_fail += 1;
-        }
-        if r.micro_supported {
-            m.micro_supported += 1;
-            if r.micro_ok {
-                m.micro_pass += 1;
-            } else {
-                m.micro_fail += 1;
-            }
-        } else if r.cert_ok {
-            m.micro_unsupported += 1;
         }
     }
     m
@@ -246,26 +201,6 @@ fn test_cert_replay_corpus_replay_agreement() {
     assert!(
         failures.is_empty(),
         "Replay failures:\n{}",
-        failures.join("\n")
-    );
-}
-
-/// Micro-checker must not disagree with kernel on supported expressions.
-#[test]
-fn test_cert_replay_corpus_micro_agreement() {
-    let corpus = build_corpus();
-    let mut failures = Vec::new();
-    for entry in &corpus {
-        let tc = TypeChecker::new(&entry.env);
-        if let Ok((ty, cert)) = tc.infer_type_with_cert(&entry.expr) {
-            if let Err(e) = cross_validate_with_micro(&entry.expr, &ty, &cert) {
-                failures.push(format!("{}: micro disagrees: {e}", entry.name));
-            }
-        }
-    }
-    assert!(
-        failures.is_empty(),
-        "Micro disagreements:\n{}",
         failures.join("\n")
     );
 }

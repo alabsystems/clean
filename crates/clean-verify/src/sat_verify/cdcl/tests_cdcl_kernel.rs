@@ -33,9 +33,9 @@
 //!
 //! Part of #3364.
 
-use crate::proofs::promote::promote_with_proof_term;
+use crate::proofs::promote::{promote_with_proof_term, PromotionError};
 use crate::proofs::ProofLibrary;
-use crate::spec::{AxiomCategory, ProofStatus, Specification};
+use crate::spec::{AxiomCategory, ProofStatus, SpecError, Specification};
 use crate::test_utils::run_with_stack;
 
 /// Construct the minimum spec needed for CDCL S01-S06 promotion tests.
@@ -47,7 +47,7 @@ fn build_cdcl_spec() -> Specification {
 /// S01 `TrailOp.rec` proof-term source.
 fn s01_proof_src() -> &'static str {
     "fun (n : Nat) (trail : TrailOp n) => \
-     TrailOp.rec n \
+     @TrailOp.rec n \
        (fun (t : TrailOp n) => TrailConsistent n t) \
        (TrailConsistent.empty n) \
        (fun (var : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
@@ -62,7 +62,7 @@ fn s01_proof_src() -> &'static str {
 /// S02 `WatchOp.rec` proof-term source.
 fn s02_proof_src() -> &'static str {
     "fun (nc : Nat) (ops : WatchOp nc) => \
-     WatchOp.rec nc \
+     @WatchOp.rec nc \
        (fun (w : WatchOp nc) => WatchInvariant nc w) \
        (WatchInvariant.init nc) \
        (fun (clause_idx : Nat) (old_watch : Nat) (new_watch : Nat) \
@@ -77,7 +77,7 @@ fn s02_proof_src() -> &'static str {
 /// S03 `ResolutionStep.rec` proof-term source.
 fn s03_proof_src() -> &'static str {
     "fun (db_size : Nat) (deriv : ResolutionStep db_size) => \
-     ResolutionStep.rec db_size \
+     @ResolutionStep.rec db_size \
        (fun (d : ResolutionStep db_size) => ResolutionSound db_size d) \
        (fun (idx : Nat) => ResolutionSound.axiom_clause db_size idx) \
        (fun (pivot : Nat) (left : ResolutionStep db_size) (right : ResolutionStep db_size) \
@@ -89,7 +89,7 @@ fn s03_proof_src() -> &'static str {
 /// S04 `BacktrackOp.rec` proof-term source.
 fn s04_proof_src() -> &'static str {
     "fun (n : Nat) (ops : BacktrackOp n) => \
-     BacktrackOp.rec n \
+     @BacktrackOp.rec n \
        (fun (b : BacktrackOp n) => BacktrackValid n b) \
        (fun (level : Nat) => BacktrackValid.current n level) \
        (fun (var : Nat) (var_level : Nat) \
@@ -104,7 +104,7 @@ fn s04_proof_src() -> &'static str {
 /// S05 `BCPStep.rec` proof-term source.
 fn s05_proof_src() -> &'static str {
     "fun (n : Nat) (steps : BCPStep n) => \
-     BCPStep.rec n \
+     @BCPStep.rec n \
        (fun (s : BCPStep n) => BCPComplete n s) \
        (BCPComplete.fixpoint n) \
        (fun (clause_idx : Nat) (lit : Nat) \
@@ -119,7 +119,7 @@ fn s05_proof_src() -> &'static str {
 /// S06 `CDCLStep.rec` proof-term source.
 fn s06_proof_src() -> &'static str {
     "fun (bound : Nat) (steps : CDCLStep bound) => \
-     CDCLStep.rec bound \
+     @CDCLStep.rec bound \
        (fun (s : CDCLStep bound) => CDCLTerminates bound s) \
        (CDCLTerminates.sat bound) \
        (CDCLTerminates.unsat bound) \
@@ -353,5 +353,76 @@ fn test_cdcl_theorems_verify_through_library() {
         }
 
         assert_eq!(proved, 6, "All 6 CDCL theorems should verify");
+    });
+}
+
+#[test]
+fn test_cdcl_wrong_base_cannot_promote_or_change_debt() {
+    run_with_stack(|| {
+        let mut spec = build_cdcl_spec();
+        let (name, proof_src) = cdcl_theorems()[0];
+        let before = spec.get_definition(name).expect("registered S01").clone();
+        let wrong_base = proof_src.replacen("(TrailConsistent.empty n)", "Nat.zero", 1);
+        assert_ne!(wrong_base, proof_src, "mutation must change the base case");
+
+        let error = promote_with_proof_term(&mut spec, name, &wrong_base)
+            .expect_err("a Nat is not a TrailConsistent base witness");
+        assert!(matches!(error, PromotionError::VerificationFailed { .. }));
+        let after = spec.get_definition(name).expect("S01 remains registered");
+        assert_eq!(after.proof_status, before.proof_status);
+        assert_eq!(after.value_src, before.value_src);
+        assert_eq!(after.axiom_deps, before.axiom_deps);
+        assert_eq!(after.dependencies, before.dependencies);
+
+        for (name, proof_src) in cdcl_theorems() {
+            let attempt = promote_with_proof_term(&mut spec, name, proof_src)
+                .unwrap_or_else(|error| panic!("canonical {name}: {error}"));
+            assert!(attempt.promoted);
+            assert!(attempt.axiom_deps.is_empty());
+            assert_post_promotion_state(&spec, name, proof_src);
+        }
+    });
+}
+
+#[test]
+fn test_cdcl_unjustified_self_reference_cannot_register() {
+    run_with_stack(|| {
+        let mut spec = build_cdcl_spec();
+        // The canonical S01 already has a kernel-checked value. Referencing
+        // that existing definition would be justified, so use a fresh name
+        // whose only proposed witness is itself.
+        let name = "cdcl_s01_unjustified_self_reference";
+        let kernel_name = clean_kernel::Name::from_string(name);
+        assert!(spec.get_definition(name).is_none());
+        assert!(spec.env().get_const(&kernel_name).is_none());
+        let mut circular = spec
+            .get_definition("cdcl_s01_trail_consistency")
+            .expect("registered S01")
+            .clone();
+        circular.name = name.to_string();
+        circular.value_src = Some(format!(
+            "fun (n : Nat) (trail : TrailOp n) => {name} n trail"
+        ));
+        circular.elaborated_type = None;
+        circular.elaborated_value = None;
+        circular.dependencies = None;
+
+        let error = spec
+            .add_definition(circular)
+            .expect_err("a new declaration cannot justify its own value");
+        assert!(matches!(&error, SpecError::ElabError(_)));
+        assert!(error.to_string().contains(name));
+        assert!(spec.get_definition(name).is_none());
+        assert!(spec.env().get_const(&kernel_name).is_none());
+
+        let library = ProofLibrary::new();
+        for (name, _) in cdcl_theorems() {
+            let proof = library.get(name).expect("canonical library proof");
+            let attempt = promote_with_proof_term(&mut spec, name, &proof.proof_src)
+                .unwrap_or_else(|error| panic!("canonical {name}: {error}"));
+            assert!(attempt.promoted);
+            assert!(attempt.axiom_deps.is_empty());
+            assert_post_promotion_state(&spec, name, &proof.proof_src);
+        }
     });
 }

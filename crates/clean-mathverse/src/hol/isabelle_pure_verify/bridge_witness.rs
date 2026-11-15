@@ -40,7 +40,6 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use clean_kernel::env::is_foundational_axiom;
 use clean_kernel::{Declaration, Environment};
 
 use crate::closure_source::shard_dir_facts;
@@ -173,11 +172,12 @@ pub(crate) fn load_bridge_witnesses(
 }
 
 /// Whether `name`'s transitive axiom closure in `env` is `⊆ FOUNDATIONAL_AXIOMS`.
+///
+/// `axiom_deps` already drops exactly the kernel's CANONICAL foundations, so
+/// the closure is foundational iff nothing is left. (Re-testing what is left by
+/// name would re-admit an axiom that merely shares a foundational name.)
 fn witness_closure_foundational(env: &Environment, name: &clean_kernel::Name) -> bool {
-    match env.axiom_deps(name) {
-        Some(deps) => deps.iter().all(is_foundational_axiom),
-        None => false,
-    }
+    env.axiom_deps(name).is_some_and(|deps| deps.is_empty())
 }
 
 #[cfg(test)]

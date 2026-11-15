@@ -24,6 +24,7 @@ thiserror.workspace = true
 rayon = { workspace = true }
 walkdir = { workspace = true }
 semver = "1.0"
+blake3.workspace = true
 
 [dev-dependencies]
 tempfile = { workspace = true }

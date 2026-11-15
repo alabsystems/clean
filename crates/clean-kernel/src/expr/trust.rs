@@ -4,7 +4,7 @@
 
 //! Trust recognizers on expressions.
 
-use super::sorry::push_expr_children;
+use super::sorry::push_sorry_scan_children;
 use super::{Expr, ExprKind};
 use crate::name::Name;
 
@@ -23,8 +23,17 @@ impl Expr {
         let mut stack = vec![self];
 
         while let Some(curr) = stack.pop() {
-            has_explicit_sorry |= curr.is_non_synthetic_sorry();
-            has_synthetic_sorry |= curr.is_synthetic_sorry();
+            // A sorry-headed spine is ONE occurrence whatever its arguments
+            // (see `expr/sorry.rs`); only its literal-`true` flag makes it
+            // synthetic, and every other occurrence is counted as explicit.
+            if let Some(occurrence) = push_sorry_scan_children(&mut stack, curr) {
+                if occurrence.is_synthetic_sorry() {
+                    has_synthetic_sorry = true;
+                } else {
+                    has_explicit_sorry = true;
+                }
+                continue;
+            }
 
             if let ExprKind::Const(name, _) = curr.kind() {
                 if *name == trusted_arith_name {
@@ -33,8 +42,6 @@ impl Expr {
                     trusted_ay_count += 1;
                 }
             }
-
-            push_expr_children(&mut stack, curr);
         }
 
         (

@@ -38,8 +38,15 @@ pub struct RegistrationWarning {
     pub decl_name: Name,
     /// Primary classification of the declaration's trust debt.
     pub kind: RegistrationWarningKind,
-    /// Full declaration-level trust summary for richer consumers.
+    /// Full declaration-level trust summary for richer consumers: the
+    /// declaration's own terms, with the trust markers its CONSTANT CLOSURE
+    /// reaches folded in ([`DeclarationTrustSummary::absorb_closure_markers`]).
     pub summary: DeclarationTrustSummary,
+    /// When the debt is reached only through the declaration's closure and
+    /// not written in its own terms: the constants it cites whose closure
+    /// carries the debt (`theorem t := lemma1` with `lemma1` a sorry). Empty
+    /// when the declaration's own terms carry it.
+    pub via: Vec<Name>,
 }
 
 /// The result of `elaborate_decl_and_register_with_warning`, bundling the
@@ -83,7 +90,24 @@ impl RegistrationWarning {
             decl_name: name,
             kind,
             summary,
+            via: Vec::new(),
         })
+    }
+
+    /// `" (through a, b)"` when the debt is inherited through cited constants
+    /// ([`Self::via`]); empty when the declaration's own terms carry it.
+    #[must_use]
+    pub fn via_suffix(&self) -> String {
+        if self.via.is_empty() {
+            return String::new();
+        }
+        let shown: Vec<String> = self.via.iter().take(3).map(ToString::to_string).collect();
+        let more = self.via.len().saturating_sub(shown.len());
+        if more > 0 {
+            format!(" (through {}, +{more} more)", shown.join(", "))
+        } else {
+            format!(" (through {})", shown.join(", "))
+        }
     }
 }
 

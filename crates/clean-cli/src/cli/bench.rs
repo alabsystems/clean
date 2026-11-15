@@ -4,10 +4,12 @@
 
 //! CLI surface for `clean bench` (geometry benchmark runner).
 //!
-//! Part of Epic #3436 Phase 2. The `bench` subcommand currently wraps the
-//! geometry benchmark suite under `crates/clean-cli/src/benchmarks/`. Kernel
-//! microbench descriptors may be added later from `clean_kernel::cli`; for
-//! now the whole group is owned here.
+//! Part of Epic #3436 Phase 2. The `bench` subcommand wraps the geometry
+//! benchmark runner that lives in `clean_kernel::cert::benchmark`
+//! (`BenchmarkConfig`/`BenchmarkRunner`); problem INPUTS live under the repo's
+//! `benchmarks/geometry/` data directory. Kernel microbench descriptors may be
+//! added later from `clean_kernel::cli`; for now the whole group is owned
+//! here.
 //!
 //! Design: `designs/2026-04-18-unified-cli-feature-index.md`.
 
@@ -132,7 +134,9 @@ status, and (optionally) writes results to `--output`. Default suite is \
         path: &["bench", "list"],
         summary: "List problems in a benchmark suite",
         description: "Lists every problem in the selected suite directory. \
-Pass `--verbose` to include hypotheses, goals, and metadata for each problem.",
+Pass `--verbose` to add each problem's goal, difficulty, tags, derivation \
+flag, and (when the metadata carries one) statement — constraints/hypotheses \
+are not listed; `bench info <id>` prints those.",
         category: Category::Meta,
         stability: Stability::V1,
         examples: &[Example {
@@ -148,8 +152,9 @@ Pass `--verbose` to include hypotheses, goals, and metadata for each problem.",
     FeatureDescriptor {
         path: &["bench", "info"],
         summary: "Show info about a benchmark problem",
-        description: "Prints the statement, hypotheses, and suite membership \
-for a single problem. Accepts either a problem ID resolved under \
+        description: "Prints a single problem's id, objects, constraints, \
+goal, metadata (statement when the metadata carries one), and whether a \
+derivation is available. Accepts either a problem ID resolved under \
 `--suite` or a direct path to the problem directory.",
         category: Category::Meta,
         stability: Stability::V1,
@@ -186,8 +191,9 @@ formats; prefer `bench run` for suite-level regression runs.",
         summary: "Validate public benchmark publication metadata (Experimental)",
         description: "Experimental gate that checks `reports/benchmarks/publication/current.json` \
 against the Rust-owned public benchmark publication contract. `--launch` \
-requires published, fresh, committed benchmark evidence and fails closed with \
-structured JSON when evidence is missing or stale.",
+requires published, fresh, committed benchmark evidence and fails closed when \
+evidence is missing or stale — with structured JSON when `--json` is ALSO \
+passed, else plain ERROR lines on stderr.",
         category: Category::Meta,
         stability: Stability::Experimental,
         examples: &[Example {

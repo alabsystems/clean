@@ -2,7 +2,11 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Regression tests for ElabCtx TypeChecker cache reuse (#1852).
+//! Regression tests for ElabCtx TypeChecker cache authority (#1852).
+//!
+//! Installing the elaborator's level callback and reducibility policy clears
+//! answer-bearing caches. Seeds from a default checker therefore cannot be
+//! assumed compatible with an elaboration call.
 
 use super::*;
 
@@ -19,7 +23,7 @@ fn cache_debug(ctx: &ElabCtx<'_>) -> String {
 }
 
 #[test]
-fn test_issue1852_whnf_preserves_seeded_def_eq_cache() {
+fn test_issue1852_whnf_discards_def_eq_seed_from_default_policy() {
     let mut env = Environment::new();
     env.init_nat().expect("Nat environment should initialize");
     let seed_tc = TypeChecker::new(&env);
@@ -38,17 +42,18 @@ fn test_issue1852_whnf_preserves_seeded_def_eq_cache() {
 
     let ctx = ElabCtx::new(&env);
     ctx.tc_caches.replace(seeded);
-    let _ = ctx.whnf(&prop);
+    assert_eq!(ctx.whnf(&prop), prop);
 
     let after_debug = cache_debug(&ctx);
-    assert!(
-        cache_count(&after_debug, "def_eq_entries") >= seeded_def_eq,
-        "ElabCtx::whnf should preserve seeded def_eq cache entries: {after_debug}"
+    assert_eq!(
+        cache_count(&after_debug, "def_eq_entries"),
+        0,
+        "ElabCtx::whnf must discard answers from the default checker policy: {after_debug}"
     );
 }
 
 #[test]
-fn test_issue1852_is_def_eq_preserves_seeded_whnf_cache() {
+fn test_issue1852_is_def_eq_discards_whnf_seed_from_default_policy() {
     // Need an expression that actually populates the WHNF cache.
     // `whnf` short-circuits and skips the cache for Sort/Pi/Lam/Lit/MVar
     // kinds (Lean 4 parity, #3210). Use a Const reference that requires
@@ -64,26 +69,29 @@ fn test_issue1852_is_def_eq_preserves_seeded_whnf_cache() {
     let seeded = seed_tc.take_caches();
     let seeded_debug = format!("{:?}", seeded);
     let seeded_whnf = cache_count(&seeded_debug, "whnf_entries");
-    if seeded_whnf == 0 {
-        eprintln!("SKIP: seed whnf did not populate cache (perhaps further inlined)");
-        return;
-    }
+    assert!(
+        seeded_whnf > 0,
+        "seed TypeChecker must populate the whnf cache: {seeded_debug}"
+    );
 
     let ctx = ElabCtx::new(&env);
     ctx.tc_caches.replace(seeded);
     assert!(ctx.is_def_eq(&lit_zero, &const_zero));
 
     let after_debug = cache_debug(&ctx);
-    assert!(
-        cache_count(&after_debug, "whnf_entries") >= seeded_whnf,
-        "ElabCtx::is_def_eq should preserve seeded whnf cache entries: {after_debug}"
+    assert_eq!(
+        cache_count(&after_debug, "whnf_entries"),
+        0,
+        "ElabCtx::is_def_eq must discard answers from the default checker policy: {after_debug}"
     );
 }
 
 #[test]
-fn test_issue1852_infer_type_preserves_seeded_projection_cache() {
+fn test_issue1852_infer_type_repopulates_projection_cache_after_policy_change() {
     let env = pair_env_with_namespaced_const();
-    let expr = elab_with_env(&env, "pairVal.snd").expect("pairVal.snd should elaborate");
+    // `(pairVal).snd` is a projection (a bare `pairVal.snd` names the
+    // constant of that full name).
+    let expr = elab_with_env(&env, "(pairVal).snd").expect("(pairVal).snd should elaborate");
 
     let seed_tc = TypeChecker::new(&env);
     let seed_ty = seed_tc
@@ -101,15 +109,24 @@ fn test_issue1852_infer_type_preserves_seeded_projection_cache() {
 
     let ctx = ElabCtx::new(&env);
     ctx.tc_caches.replace(seeded);
+    // A call that cannot infer the projection still has to retire its answer
+    // from the incompatible default policy. The next call recomputes it.
+    assert_eq!(ctx.whnf(&Expr::prop()), Expr::prop());
+    let cleared_debug = cache_debug(&ctx);
+    assert_eq!(
+        cache_count(&cleared_debug, "proj_type_entries"),
+        0,
+        "elaborator policy setup must retire the seeded projection answer: {cleared_debug}"
+    );
     let inferred = ctx
         .infer_type(&expr)
-        .expect("ElabCtx should infer projection type with seeded caches");
+        .expect("ElabCtx should recompute the projection type after invalidation");
     assert_eq!(inferred, seed_ty, "projection type should remain stable");
 
     let after_debug = cache_debug(&ctx);
     assert!(
-        cache_count(&after_debug, "proj_type_entries") >= seeded_proj,
-        "ElabCtx::infer_type should preserve seeded projection cache entries: {after_debug}"
+        cache_count(&after_debug, "proj_type_entries") > 0,
+        "ElabCtx::infer_type should repopulate the projection cache: {after_debug}"
     );
 }
 
@@ -189,7 +206,7 @@ fn test_optional_probe_none_rolls_back_full_state_then_context_reuses() {
     let env = Environment::with_prelude();
     let mut ctx = ElabCtx::new(&env);
     ctx.current_expected_type = Some(Expr::type_());
-    ctx.push_local("outerProbeLocal".to_string(), Expr::prop());
+    ctx.push_local(SurfaceName::generated_path("outerProbeLocal"), Expr::prop());
     ctx.instance_cache
         .insert("entry-instance".to_string(), Expr::prop());
     let locals_before = ctx.locals.clone();
@@ -200,7 +217,10 @@ fn test_optional_probe_none_rolls_back_full_state_then_context_reuses() {
 
     let declined: Option<()> = ctx
         .with_optional_temporary_local_scope(|this| {
-            this.push_local("speculativeLocal".to_string(), Expr::prop());
+            this.push_local(
+                SurfaceName::generated_path("speculativeLocal"),
+                Expr::prop(),
+            );
             this.current_expected_type = None;
             assert!(this.metas.assign(stable_meta, Expr::prop()));
             let created = this.metas.fresh(Expr::type_());
@@ -239,4 +259,41 @@ fn test_optional_probe_none_rolls_back_full_state_then_context_reuses() {
     assert_eq!(ctx.locals, locals_before);
     assert_eq!(ctx.current_expected_type, expected_before);
     assert!(ctx.instance_cache.is_empty());
+}
+
+#[test]
+fn test_issue1852_kernel_answers_do_not_cross_elaboration_reducibility() {
+    let mut env = Environment::new();
+    env.init_nat().expect("checked Nat");
+    let name = Name::from_string("cacheIrreducibleZero");
+    env.add_decl(Declaration::Definition {
+        name: name.clone(),
+        level_params: vec![],
+        type_: Expr::const_str("Nat"),
+        value: Expr::nat_lit(0),
+        is_reducible: true,
+    })
+    .expect("checked alias");
+    env.restrict_checked_unfolding(&name)
+        .expect("checked irreducible policy");
+    let value = Expr::const_(name, vec![]);
+    for equality_first in [false, true] {
+        let seed_tc = TypeChecker::new(&env);
+        // The standalone kernel deliberately ignores the reducibility hint.
+        assert_eq!(seed_tc.whnf(&value), Expr::nat_lit(0));
+        assert!(seed_tc.is_def_eq(&value, &Expr::nat_lit(0)));
+        let seeded = seed_tc.take_caches();
+        let debug = format!("{seeded:?}");
+        assert!(cache_count(&debug, "whnf_entries") > 0);
+        assert!(cache_count(&debug, "def_eq_entries") > 0);
+        let ctx = ElabCtx::new(&env);
+        ctx.tc_caches.replace(seeded);
+        if equality_first {
+            assert!(!ctx.is_def_eq(&value, &Expr::nat_lit(0)));
+            assert_eq!(ctx.whnf(&value), value);
+        } else {
+            assert_eq!(ctx.whnf(&value), value);
+            assert!(!ctx.is_def_eq(&value, &Expr::nat_lit(0)));
+        }
+    }
 }

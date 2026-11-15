@@ -75,7 +75,7 @@ pub(in super::super) fn mk_raw_le(
     rhs: ay_core::TermId,
 ) -> ay_core::TermId {
     terms.mk_app(
-        ay_core::Symbol::Named("<=".to_string()),
+        ay_core::Symbol::Named("<=".into()),
         vec![lhs, rhs],
         Sort::Bool,
     )
@@ -88,7 +88,7 @@ pub(in super::super) fn mk_raw_lt(
     rhs: ay_core::TermId,
 ) -> ay_core::TermId {
     terms.mk_app(
-        ay_core::Symbol::Named("<".to_string()),
+        ay_core::Symbol::Named("<".into()),
         vec![lhs, rhs],
         Sort::Bool,
     )
@@ -101,7 +101,7 @@ pub(in super::super) fn mk_raw_ge(
     rhs: ay_core::TermId,
 ) -> ay_core::TermId {
     terms.mk_app(
-        ay_core::Symbol::Named(">=".to_string()),
+        ay_core::Symbol::Named(">=".into()),
         vec![lhs, rhs],
         Sort::Bool,
     )
@@ -114,7 +114,7 @@ pub(in super::super) fn mk_raw_gt(
     rhs: ay_core::TermId,
 ) -> ay_core::TermId {
     terms.mk_app(
-        ay_core::Symbol::Named(">".to_string()),
+        ay_core::Symbol::Named(">".into()),
         vec![lhs, rhs],
         Sort::Bool,
     )

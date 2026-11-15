@@ -58,7 +58,7 @@ fn test_is_def_eq_offset_zero_vs_succ() {
 /// Test is_def_eq_offset: Nat.succ(Nat.zero) =?= Nat.succ(Nat.zero) peels to zero =?= zero.
 #[test]
 fn test_is_def_eq_offset_succ_succ_equal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let succ = |e: Expr| Expr::app(Expr::const_(Name::from_string("Nat.succ"), vec![]), e);
@@ -96,7 +96,7 @@ fn test_is_def_eq_offset_literal_zero() {
 /// Test is_def_eq_offset: Nat literals use successor peeling via is_nat_succ_expr.
 #[test]
 fn test_is_def_eq_offset_literal_succ_peeling() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let lit_3 = Expr::nat_lit(3);

@@ -23,7 +23,7 @@
 
 set -euo pipefail
 
-REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || cd "$(dirname "$0")/.." && pwd)"
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || { cd "$(dirname "$0")/.." && pwd; })"
 cd "$REPO_ROOT"
 
 exec python3 -m scripts.axiom_audit.aggregates "$@"

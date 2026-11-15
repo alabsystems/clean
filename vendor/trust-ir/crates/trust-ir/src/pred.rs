@@ -66,6 +66,8 @@
 use crate::constant::Constant;
 use crate::value::{PredId, UnivId};
 
+mod observed_smt_match;
+
 /// How many members a `FiniteSet` / `Universe::Members` extension may carry
 /// before the validator calls it a cardinality blowup.
 ///
@@ -895,73 +897,123 @@ impl<'a> PredTable<'a> {
             // know — a `Refine` names it. Left `None` deliberately rather
             // than guessed.
             sort: None,
+            bindings: Vec::new(),
         })
     }
 
     /// SMT-LIB2 rendering of a predicate over the free variable `self`.
+    ///
+    /// Unbounded: the rendering is not shared across the predicate DAG, so its
+    /// length can be exponential in the table's (see
+    /// [`Self::smtlib_of_within`]). Render an untrusted table with a budget.
     pub fn smtlib_of(&self, id: PredId) -> Option<String> {
-        self.smtlib_at(id, 0)
+        self.smtlib_of_within(id, usize::MAX)
     }
 
-    fn smtlib_at(&self, id: PredId, depth: u32) -> Option<String> {
+    /// [`Self::smtlib_of`], or `None` as soon as the text would exceed
+    /// `max_len` bytes. The rendering is NOT shared across the predicate DAG:
+    /// a validator-legal table `pred.k = Conj([k-2, k-1])` renders to fib(k)
+    /// leaves within the depth cap, so a caller holding an untrusted text to
+    /// compare against renders only up to that text's own length (a longer
+    /// rendering is not it), which bounds the cost by the text it was given.
+    pub fn smtlib_of_within(&self, id: PredId, max_len: usize) -> Option<String> {
+        let mut out = String::new();
+        self.write_smtlib(id, 0, max_len, &mut out)?;
+        Some(out)
+    }
+
+    fn write_smtlib(&self, id: PredId, depth: u32, max_len: usize, out: &mut String) -> Option<()> {
+        fn push(out: &mut String, max_len: usize, text: &str) -> Option<()> {
+            out.push_str(text);
+            (out.len() <= max_len).then_some(())
+        }
         if depth > MAX_PRED_DEPTH {
             return None;
         }
-        let text = match self.pred(id)? {
-            Pred::Interval { lo, hi } => {
-                format!("(and (<= {lo} self) (<= self {hi}))")
+        // `format!("{head} {}", arms.join(" "))` + `)`, byte for byte.
+        let arms = |out: &mut String, head: &str, arms: &mut dyn Iterator<Item = String>| {
+            push(out, max_len, head)?;
+            push(out, max_len, " ")?;
+            for (index, arm) in arms.enumerate() {
+                if index > 0 {
+                    push(out, max_len, " ")?;
+                }
+                push(out, max_len, &arm)?;
             }
-            Pred::FiniteSet(items) => {
-                let arms: Vec<String> = items
-                    .iter()
-                    .map(|c| match constant_key(c) {
-                        Some((1, v)) => format!("(= self {})", v != 0),
-                        _ => format!("(= self {c})"),
-                    })
-                    .collect();
-                format!("(or {})", arms.join(" "))
-            }
+            push(out, max_len, ")")
+        };
+        match self.pred(id)? {
+            Pred::Interval { lo, hi } => push(
+                out,
+                max_len,
+                &format!("(and (<= {lo} self) (<= self {hi}))"),
+            ),
+            Pred::FiniteSet(items) => arms(
+                out,
+                "(or",
+                &mut items.iter().map(|c| match constant_key(c) {
+                    Some((1, v)) => format!("(= self {})", v != 0),
+                    _ => format!("(= self {c})"),
+                }),
+            ),
             Pred::InUniverse(u, space) => {
                 let universe = self.universe(*u)?;
                 match space {
                     Space::Member => match universe {
-                        Universe::IntRange { lo, hi } => {
-                            format!("(and (<= {lo} self) (<= self {hi}))")
-                        }
-                        Universe::Members(items) => {
-                            let arms: Vec<String> =
-                                items.iter().map(|c| format!("(= self {c})")).collect();
-                            format!("(or {})", arms.join(" "))
-                        }
+                        Universe::IntRange { lo, hi } => push(
+                            out,
+                            max_len,
+                            &format!("(and (<= {lo} self) (<= self {hi}))"),
+                        ),
+                        Universe::Members(items) => arms(
+                            out,
+                            "(or",
+                            &mut items.iter().map(|c| format!("(= self {c})")),
+                        ),
                     },
                     // The convention distinction survives into SMT: an index
                     // constrains the ORDINAL, not the member value.
                     Space::Index => {
                         let card = universe.cardinality()?;
-                        format!("(and (<= 0 self) (< self {card}))")
+                        push(out, max_len, &format!("(and (<= 0 self) (< self {card}))"))
                     }
                 }
             }
-            Pred::NonZero => "(not (= self 0))".to_string(),
-            Pred::NonNull => "(not (= self null))".to_string(),
+            Pred::NonZero => push(out, max_len, "(not (= self 0))"),
+            Pred::NonNull => push(out, max_len, "(not (= self null))"),
             Pred::Conj(children) => {
-                let arms: Vec<String> = children
-                    .iter()
-                    .map(|c| self.smtlib_at(*c, depth + 1))
-                    .collect::<Option<_>>()?;
-                format!("(and {})", arms.join(" "))
+                self.write_smtlib_children("(and", children, depth, max_len, out)
             }
             Pred::Disj(children) => {
-                let arms: Vec<String> = children
-                    .iter()
-                    .map(|c| self.smtlib_at(*c, depth + 1))
-                    .collect::<Option<_>>()?;
-                format!("(or {})", arms.join(" "))
+                self.write_smtlib_children("(or", children, depth, max_len, out)
             }
-            Pred::Top => "true".to_string(),
-            Pred::Bottom => "false".to_string(),
-        };
-        Some(text)
+            Pred::Top => push(out, max_len, "true"),
+            Pred::Bottom => push(out, max_len, "false"),
+        }
+    }
+
+    fn write_smtlib_children(
+        &self,
+        head: &str,
+        children: &[PredId],
+        depth: u32,
+        max_len: usize,
+        out: &mut String,
+    ) -> Option<()> {
+        // `format!("{head} {}", arms.join(" "))` + `)`, byte for byte.
+        out.push_str(head);
+        out.push(' ');
+        for (index, child) in children.iter().enumerate() {
+            if index > 0 {
+                out.push(' ');
+            }
+            if out.len() > max_len {
+                return None;
+            }
+            self.write_smtlib(*child, depth + 1, max_len, out)?;
+        }
+        out.push(')');
+        (out.len() <= max_len).then_some(())
     }
 
     /// **The join**: the least upper bound this lattice can compute for two
@@ -1366,6 +1418,65 @@ mod tests {
         assert!(!t.implies(PredId::new(4), PredId::new(1)));
         assert!(t.implies(PredId::new(0), PredId::new(4)));
         assert!(t.implies(PredId::new(1), PredId::new(4)));
+    }
+
+    /// The budgeted renderer is the renderer. A rendering is either the whole
+    /// text or `None`; the budget never truncates, and a DAG whose rendering
+    /// is not shared (`pred.k = Conj([k-2, k-1])`, fib(k) leaves) is refused
+    /// at the budget without being rendered.
+    #[test]
+    fn a_bounded_rendering_is_the_whole_rendering_or_none() {
+        let mut predicates = vec![
+            Pred::NonZero,
+            Pred::Interval { lo: 0, hi: 5 },
+            Pred::FiniteSet(vec![Constant::Int(1), Constant::Int(3)]),
+        ];
+        for k in 3..=12u32 {
+            predicates.push(Pred::Disj(vec![PredId::new(k - 3), PredId::new(k - 1)]));
+        }
+        for k in 13..=40u32 {
+            predicates.push(Pred::Conj(vec![PredId::new(k - 2), PredId::new(k - 1)]));
+        }
+        let t = PredTable::new(&predicates, &[]);
+        // The renderer before the budget (one `format!` per node), for the
+        // shapes above: the budgeted one must agree byte for byte.
+        fn reference(t: &PredTable<'_>, id: PredId) -> String {
+            match t.pred(id).expect("in range") {
+                Pred::Interval { lo, hi } => format!("(and (<= {lo} self) (<= self {hi}))"),
+                Pred::FiniteSet(items) => {
+                    let arms: Vec<String> = items
+                        .iter()
+                        .map(|c| match constant_key(c) {
+                            Some((1, v)) => format!("(= self {})", v != 0),
+                            _ => format!("(= self {c})"),
+                        })
+                        .collect();
+                    format!("(or {})", arms.join(" "))
+                }
+                Pred::NonZero => "(not (= self 0))".to_string(),
+                Pred::Conj(children) => {
+                    let arms: Vec<String> = children.iter().map(|c| reference(t, *c)).collect();
+                    format!("(and {})", arms.join(" "))
+                }
+                Pred::Disj(children) => {
+                    let arms: Vec<String> = children.iter().map(|c| reference(t, *c)).collect();
+                    format!("(or {})", arms.join(" "))
+                }
+                other => panic!("not used here: {other:?}"),
+            }
+        }
+        for k in 0..=14u32 {
+            let whole = t.smtlib_of(PredId::new(k)).expect("renders");
+            assert_eq!(whole, reference(&t, PredId::new(k)), "pred.{k}");
+            assert_eq!(
+                t.smtlib_of_within(PredId::new(k), whole.len()),
+                Some(whole.clone())
+            );
+            assert_eq!(t.smtlib_of_within(PredId::new(k), whole.len() - 1), None);
+            assert_eq!(t.smtlib_of_within(PredId::new(k), 0), None);
+        }
+        // pred.40 would be ~10^8 leaves; at a 4 KiB budget it is refused.
+        assert_eq!(t.smtlib_of_within(PredId::new(40), 4096), None);
     }
 
     #[test]

@@ -8,12 +8,12 @@
 //!
 //! - **JSON** — machine-readable closure dump for `--headline` and
 //!   `--impact`. Uses `serde_json` and preserves `NodeClass` tags.
-//! - **Graphviz DOT** — `--graphviz` and the committed
-//!   `reports/depgraph/*.dot` artifacts. Node color encodes class so the
-//!   rendered graph lets humans eyeball "where does the trust gap live?".
-//! - **Ranked text** — `--unblock` stdout + committed
-//!   `reports/depgraph/*.txt`. Columns: `impact`, `direct-dependents`,
-//!   `class`, `name`. Plain ASCII so the artifact is greppable.
+//! - **Graphviz DOT** — `--graphviz`, printed to stdout (redirect it to a
+//!   `.dot` file; nothing under `reports/` is committed for it). Node color
+//!   encodes class so the rendered graph lets humans eyeball "where does the
+//!   trust gap live?".
+//! - **Ranked text** — `--unblock` stdout. Columns: `impact`,
+//!   `direct-dependents`, `class`, `name`. Plain ASCII so it is greppable.
 //!
 //! The formatters do not touch filesystem — the caller wires them to
 //! `std::fs::write` or stdout as appropriate. This keeps the depgraph

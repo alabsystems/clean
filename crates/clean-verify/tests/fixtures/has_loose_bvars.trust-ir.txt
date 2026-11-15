@@ -1,9 +1,9 @@
-rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.435) {
+rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.410) {
     ; #producer: trust
     ; #names: %0="self"
-bb0(%0: struct.29):
-    %1 = call @func.3657(%0)  ; #loc: 374 137 13
-    %2 = const u32 0  ; #loc: 374 137 34
-    %3 = icmp ugt u32 %1, %2  ; #loc: 374 137 8
-    ret %3  ; #loc: 374 138 5
+bb0(%0: struct.765):
+    %1 = call @func.1729(%0)  ; #loc: 187 137 13
+    %2 = const u32 0  ; #loc: 187 137 34
+    %3 = icmp ugt u32 %1, %2  ; #loc: 187 137 8
+    ret %3  ; #loc: 187 138 5
 }

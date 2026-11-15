@@ -21,7 +21,7 @@
 //!   NATIVE Wasm instructions rather than calls.
 //!
 //! The accepted TYPE set is exactly the set of widths the accepted OPERATION
-//! set covers ([`wasm_arith`], the same table as
+//! set covers ([`wasm_arith`], the `add`/`sub`/`mul` part of
 //! `emit_trust_ir::uint_arith_binop`). That is the whole design rule: this
 //! backend admits a type only when it can also compute with it, so no value
 //! can enter a module that the module has no faithful way to manipulate.
@@ -241,10 +241,12 @@ const fn narrow_mask(ty: &IRType) -> Option<u32> {
 
 /// The fixed-width UInt primitives that lower to NATIVE Wasm instructions.
 ///
-/// The same table as `emit_trust_ir::uint_arith_binop`, and excluded for the
-/// same reasons: `Nat.*` is arbitrary-precision, `USize.*` is host-width, and
-/// `.div`/`.mod` carry division-by-zero semantics a plain `i32.div_u` does not
-/// model.
+/// The `add`/`sub`/`mul` part of `emit_trust_ir::uint_arith_binop`, excluded
+/// for the same reasons: `Nat.*` is arbitrary-precision, `USize.*` is
+/// host-width, and `.div`/`.mod` carry division-by-zero semantics a plain
+/// `i32.div_u` does not model. That table's `land`/`lor` (native in trust-ir
+/// since WS6.3) are not taken here: a call to one is refused loudly like any
+/// other non-arithmetic callee.
 fn wasm_arith(name: &str) -> Option<(ArithOp, IRType)> {
     let (prefix, suffix) = name.rsplit_once('.')?;
     let ty = match prefix {

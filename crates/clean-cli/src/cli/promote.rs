@@ -33,9 +33,12 @@ pub(crate) const FEATURES: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["promote", "list"],
         summary: "List DerivedPending definitions and proof availability",
-        description: "Enumerates every `DerivedPending` definition in the \
-specification and reports whether a matching proof is available in the \
-proof library. Pass `--verbose` for type signatures and axiom deps.",
+        description: "Enumerates the promotion candidates — the `DerivedLemma` \
+definitions whose proof status is `DerivedPending` — and reports whether a \
+matching proof is available in the proof library. A `DerivedPending` \
+definition in another category is not a candidate and is not listed; the \
+inductive-type and recursor registrations are `FoundationalRule` and sit \
+outside this pipeline. Pass `--verbose` for type signatures and axiom deps.",
         category: Category::Meta,
         stability: Stability::V1,
         examples: &[Example {
@@ -51,8 +54,9 @@ proof library. Pass `--verbose` for type signatures and axiom deps.",
     FeatureDescriptor {
         path: &["promote", "run"],
         summary: "Run the full promotion pipeline",
-        description: "Attempts to promote every `DerivedPending` definition \
-to `DerivedProved` by checking proof library entries against the \
+        description: "Attempts to promote every candidate `clean promote list` \
+prints — a `DerivedLemma` whose proof status is `DerivedPending` — to \
+`DerivedProved` by checking proof library entries against the \
 specification. Reports per-attempt status when `--verbose` is set.",
         category: Category::Meta,
         stability: Stability::V1,

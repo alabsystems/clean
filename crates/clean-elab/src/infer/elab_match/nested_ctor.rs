@@ -11,17 +11,17 @@
 
 use super::super::*;
 use super::{
-    desugar_nonzero_nat_lit, ensure_supported_literal_pattern, numeral_add_pattern_binder_name,
-    NestedPatternFieldPlan, NestedPatternPlan,
+    desugar_nat_numeral_add_pattern, desugar_nonzero_nat_lit, ensure_supported_literal_pattern,
+    numeral_add_pattern_binder_name, NestedPatternFieldPlan, NestedPatternPlan,
 };
 
 impl<'a> ElabCtx<'a> {
-    fn inaccessible_expr_ctor_name(&self, expr: &SurfaceExpr) -> Option<String> {
+    fn inaccessible_expr_ctor_name(&self, expr: &SurfaceExpr) -> Option<SurfaceName> {
         match expr {
             SurfaceExpr::Ident(_, name) => Some(name.clone()),
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                 if let SurfaceExpr::Ident(_, namespace) = base.as_ref() {
-                    Some(format!("{namespace}.{field}"))
+                    self.namespace_projection_name(namespace, field)
                 } else {
                     None
                 }
@@ -40,7 +40,8 @@ impl<'a> ElabCtx<'a> {
             SurfaceExpr::Ident(_, name) => Some(SurfacePattern::Var(name.clone())),
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                 if let SurfaceExpr::Ident(_, namespace) = base.as_ref() {
-                    Some(SurfacePattern::Var(format!("{namespace}.{field}")))
+                    self.namespace_projection_name(namespace, field)
+                        .map(SurfacePattern::Var)
                 } else {
                     None
                 }
@@ -59,16 +60,14 @@ impl<'a> ElabCtx<'a> {
                     return Ok(None);
                 };
                 let full_ctor = self.ctor_pattern_full_name(&ctor_name, &type_name);
-                let expected_inductive = Name::from_string(&type_name);
-                let Some(ctor_info) = self.env.get_constructor(&Name::from_string(&full_ctor))
-                else {
+                let expected_inductive = type_name.name().clone();
+                let Some(ctor_info) = self.env.get_constructor(full_ctor.name()) else {
                     return Ok(None);
                 };
                 if ctor_info.inductive_name != expected_inductive {
                     return Ok(None);
                 }
-                let ctor_field_types =
-                    self.compute_ctor_field_types(&Name::from_string(&full_ctor), field_ty)?;
+                let ctor_field_types = self.compute_ctor_field_types(full_ctor.name(), field_ty)?;
                 if args.len() != ctor_field_types.len() {
                     return Ok(None);
                 }
@@ -92,20 +91,22 @@ impl<'a> ElabCtx<'a> {
         &self,
         context: &str,
         field_ty: &Expr,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
-    ) -> Result<(String, Vec<Expr>, Vec<SurfacePattern>), ElabError> {
+    ) -> Result<(SurfaceName, Vec<Expr>, Vec<SurfacePattern>), ElabError> {
         let type_name = self.get_type_name(field_ty)?;
-        let expected_inductive = Name::from_string(&type_name);
+        let expected_inductive = type_name.name().clone();
+        // Another module's private structure in a nested position (G21 B3).
+        self.check_imported_private_anon_pattern(&expected_inductive, ctor_name)?;
         // Resolve through opened namespaces too, falling back to the literal
         // qualification so the UnknownIdent diagnostic names what the user wrote.
         let mut full_ctor = self.ctor_pattern_full_name(ctor_name, &type_name);
-        let mut ctor_name = Name::from_string(&full_ctor);
+        let mut ctor_name = full_ctor.name().clone();
         let ctor_info = self
             .env
             .get_constructor(&ctor_name)
             .cloned()
-            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.clone()))?;
+            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
         if ctor_info.inductive_name != expected_inductive {
             // Nested-aux mirror (#3396 FIX-FV Part 2): the field has the
             // synthesised aux type (`Value._List`) but the user wrote a
@@ -125,7 +126,7 @@ impl<'a> ElabCtx<'a> {
                 }) {
                 Some(remapped) => {
                     full_ctor = remapped;
-                    ctor_name = Name::from_string(&full_ctor);
+                    ctor_name = full_ctor.name().clone();
                 }
                 None => {
                     return Err(ElabError::NotImplemented(format!(
@@ -172,21 +173,44 @@ impl<'a> ElabCtx<'a> {
                 if let Some(pat) =
                     self.inaccessible_expr_to_nested_pattern(field_ty, inaccessible_expr)?
                 {
+                    // Resolve converted constructor identifiers before this
+                    // tree's child binders are introduced. Otherwise a freshly
+                    // pushed field named `Nat.zero` shadows its own pattern.
+                    // Actual outer locals still participate in resolution.
+                    let pat = match self.normalize_match_pattern_names(&pat, field_ty) {
+                        Ok(pat) => pat,
+                        // A non-constructor inaccessible expression still needs
+                        // field-level defeq support. Preserve that refusal when
+                        // its projection-shaped spelling is not a global name;
+                        // do not turn failed resolution into a binder or plan.
+                        Err(
+                            error @ (ElabError::UnknownIdent(_)
+                            | ElabError::UnknownIdentWithSuggestions { .. }
+                            | ElabError::UnknownIdentDeferred { .. }),
+                        ) => {
+                            return Err(ElabError::NotImplemented(format!(
+                                "{context}: nested inaccessible pattern requires field-level definitional equality checking: {error}"
+                            )));
+                        }
+                        Err(error) => return Err(error),
+                    };
                     let plan =
                         self.bind_nested_pattern_plan_inner(context, &pat, field_expr, field_ty)?;
                     if matches!(plan, NestedPatternPlan::None)
                         && self.get_type_name(field_ty).is_ok()
                     {
                         Err(ElabError::NotImplemented(format!(
-                            "{context}: nested inaccessible pattern requires field-level definitional equality checking: {inaccessible_expr:?}"
-                        )))
+                            "{context}: nested inaccessible pattern requires field-level definitional equality checking: {}"
+                        ,
+                crate::error_render::shape(inaccessible_expr))))
                     } else {
                         Ok(plan)
                     }
                 } else if self.get_type_name(field_ty).is_ok() {
                     Err(ElabError::NotImplemented(format!(
-                        "{context}: nested inaccessible pattern requires field-level definitional equality checking: {inaccessible_expr:?}"
-                    )))
+                        "{context}: nested inaccessible pattern requires field-level definitional equality checking: {}"
+                    ,
+                crate::error_render::shape(inaccessible_expr))))
                 } else {
                     Ok(NestedPatternPlan::None)
                 }
@@ -205,7 +229,7 @@ impl<'a> ElabCtx<'a> {
                     .resolve_ctor_name(name, &type_name)
                     .filter(|full_ctor| {
                         self.env
-                            .get_constructor(&Name::from_string(full_ctor))
+                            .get_constructor(full_ctor.name())
                             .is_some_and(|info| info.num_fields == 0)
                     });
                 if let Some(full_ctor) = nullary_ctor {
@@ -237,22 +261,83 @@ impl<'a> ElabCtx<'a> {
             SurfacePattern::Lit(lit) => {
                 let type_name = self.get_type_name(field_ty)?;
                 ensure_supported_literal_pattern(context, &type_name, lit)?;
-                Ok(NestedPatternPlan::CasesOn {
-                    field_expr,
-                    field_ty: field_ty.clone(),
-                    target_ctor_name: "Nat.zero".to_string(),
-                    target_fields: vec![],
-                })
+                // MERGE NOTE (2026-09-18): `main` landed the same meaning fix
+                // independently in 569076d4f as an early-return `if let`; this
+                // is that fix as an exhaustive `match`, which is the same
+                // function on every reachable input and additionally fail-closes
+                // on a non-`Nat` literal instead of falling through to the
+                // `Nat.zero` plan.  Today `ensure_supported_literal_pattern`
+                // (above) already refuses those with this very message, so the
+                // last arm is unreachable — it is here so that relaxing that
+                // guard cannot silently make some other literal MEAN zero,
+                // which is exactly the defect this arm is fixing.
+                match lit {
+                    SurfaceLit::Nat(0) => Ok(NestedPatternPlan::CasesOn {
+                        field_expr,
+                        field_ty: field_ty.clone(),
+                        target_ctor_name: SurfaceName::generated_path("Nat.zero"),
+                        target_fields: vec![],
+                    }),
+                    // A nested literal `k > 0` is the constructor pattern
+                    // `Nat.succ^k Nat.zero`, exactly as at top level (#796) and
+                    // in the inaccessible-expression path above. This arm used
+                    // to plan EVERY nested literal as `Nat.zero`, so
+                    // `| some 7 => a | _ => b` compiled to `| some 0 => a | _ =>
+                    // b` and `rfl` proved `f (some 0) = a` — a meaning change
+                    // no kernel check can see, because the kernel checks the
+                    // term it is given (2026-09-17).
+                    SurfaceLit::Nat(k) => self.bind_nested_pattern_plan_inner(
+                        context,
+                        &desugar_nonzero_nat_lit(*k),
+                        field_expr,
+                        field_ty,
+                    ),
+                    _ => Err(ElabError::NotImplemented(format!(
+                        "{context}: only Nat literal patterns are currently supported, got {}",
+                        crate::error_render::lit(lit)
+                    ))),
+                }
             }
             SurfacePattern::NumeralAdd(inner_pat, k) => {
                 let type_name = self.get_type_name(field_ty)?;
                 let var_name =
                     numeral_add_pattern_binder_name(context, &type_name, inner_pat.as_ref(), *k)?;
+                // `n + k` is `Nat.succ^k n`, exactly as a nested literal `k` is
+                // `Nat.succ^k Nat.zero` (the arm above). The single-`Nat.succ`
+                // plan below is that desugaring ONLY for `k = 1`: it used to
+                // serve every `k`, so a nested `(z+2) :: y` matched `1 :: y`
+                // as `(z+1) :: y` and `def h1 | (z+2) :: y => 1 + h1 y | _ =>
+                // 0` proved `h1 [1] = 1` by `rfl` and `decide` (measured
+                // 2026-09-25; Lean 4.8.0: `0`).
+                //
+                // `n + 0` is `n` itself. The enclosing constructor bound this
+                // field under a placeholder (its sub-pattern is not a `Var`),
+                // so `n` is bound as an alias of the field, `n@_`: the same
+                // single-`Nat.succ` plan read `(z+0) :: y` as `(z+1) :: y`
+                // (`p8 [3, 4] = 105` was provable; Lean 4.8.0: `107`).
+                if *k == 0 {
+                    let whole = match inner_pat.as_ref() {
+                        SurfacePattern::Var(_) => {
+                            SurfacePattern::As(var_name, Box::new(SurfacePattern::Wildcard))
+                        }
+                        _ => SurfacePattern::Wildcard,
+                    };
+                    return self
+                        .bind_nested_pattern_plan_inner(context, &whole, field_expr, field_ty);
+                }
+                if *k > 1 {
+                    return self.bind_nested_pattern_plan_inner(
+                        context,
+                        &desugar_nat_numeral_add_pattern(inner_pat.as_ref(), *k),
+                        field_expr,
+                        field_ty,
+                    );
+                }
                 let inner_fvar = self.push_local(var_name, field_ty.clone());
                 Ok(NestedPatternPlan::CasesOn {
                     field_expr,
                     field_ty: field_ty.clone(),
-                    target_ctor_name: "Nat.succ".to_string(),
+                    target_ctor_name: SurfaceName::generated_path("Nat.succ"),
                     target_fields: vec![NestedPatternFieldPlan {
                         fvar: inner_fvar,
                         ty: field_ty.clone(),
@@ -299,7 +384,7 @@ impl<'a> ElabCtx<'a> {
                         self.beta_reduce_predicate_field_ty(&opened_field_ty, &prior_field_fvars);
                     let var_name = match sub_pat {
                         SurfacePattern::Var(name) => name.clone(),
-                        _ => "_".to_string(),
+                        _ => SurfaceName::generated_path("_"),
                     };
                     let field_fvar = self.push_local(var_name, target_field_ty.clone());
                     prior_field_fvars.push(field_fvar);
@@ -323,7 +408,8 @@ impl<'a> ElabCtx<'a> {
                 })
             }
             _ => Err(ElabError::NotImplemented(format!(
-                "{context}: nested constructor field pattern is not currently supported: {pat:?}"
+                "{context}: nested constructor field pattern is not currently supported: {}",
+                crate::error_render::pattern(pat)
             ))),
         }
     }
@@ -498,6 +584,233 @@ impl<'a> ElabCtx<'a> {
         })
     }
 
+    /// How many nested `casesOn` sites of `plans` consume the caller's fallback.
+    ///
+    /// A site consumes it once per NON-matching minor, so every `CasesOn` node
+    /// counts unless its type is known to have a single constructor in a
+    /// single-member family (a structure-like pattern: its one minor is the
+    /// matching one). An unknown type counts — over-counting only costs a
+    /// `let` that is used once; under-counting is what re-creates the
+    /// product-of-depths term (see [`Self::apply_nested_plans_with_fallback`]).
+    fn nested_plans_fallback_sites(&self, plans: &[NestedPatternPlan]) -> usize {
+        fn sites(this: &ElabCtx<'_>, plan: &NestedPatternPlan) -> usize {
+            match plan {
+                NestedPatternPlan::None => 0,
+                NestedPatternPlan::Alias { inner, .. } => sites(this, inner),
+                NestedPatternPlan::CasesOn {
+                    field_ty,
+                    target_fields,
+                    ..
+                } => {
+                    let single_minor = this
+                        .get_type_name(field_ty)
+                        .ok()
+                        .and_then(|type_name| this.env.get_inductive(type_name.name()))
+                        .is_some_and(|ind| {
+                            ind.constructor_names.len() == 1 && ind.all_names.len() <= 1
+                        });
+                    usize::from(!single_minor)
+                        + target_fields
+                            .iter()
+                            .map(|field| sites(this, &field.plan))
+                            .sum::<usize>()
+                }
+            }
+        }
+        plans.iter().map(|plan| sites(self, plan)).sum()
+    }
+
+    /// The locals `plans` own on the local stack: exactly the ones
+    /// `bind_nested_pattern_plan_inner` pushed for them and
+    /// `apply_nested_pattern_plan_inner` pops again (one per alias, one per
+    /// destructured field) — the same walk as `cleanup_nested_pattern_plan`.
+    ///
+    /// Collected as ids rather than a count so the splice in
+    /// [`Self::apply_nested_plans_with_fallback`] can CHECK that the segment it
+    /// lifts off is these locals, instead of trusting an arithmetic length. The
+    /// push ORDER is deliberately not asserted: a caller may bind all of a
+    /// constructor's fields first and collect their nested plans afterwards
+    /// (`elab_if_let`), which interleaves differently from this walk.
+    fn nested_plans_local_fvars(plans: &[NestedPatternPlan]) -> Vec<FVarId> {
+        fn locals(plan: &NestedPatternPlan, out: &mut Vec<FVarId>) {
+            match plan {
+                NestedPatternPlan::None => {}
+                NestedPatternPlan::Alias {
+                    alias_fvar, inner, ..
+                } => {
+                    out.push(*alias_fvar);
+                    locals(inner, out);
+                }
+                NestedPatternPlan::CasesOn { target_fields, .. } => {
+                    for field in target_fields {
+                        out.push(field.fvar);
+                        locals(&field.plan, out);
+                    }
+                }
+            }
+        }
+        let mut out = Vec::new();
+        for plan in plans {
+            locals(plan, &mut out);
+        }
+        out
+    }
+
+    /// Apply all of an arm's nested-pattern `plans` (innermost last, like
+    /// [`Self::apply_nested_field_plans`]) with `fallback_body` as the value of
+    /// every non-matching nested minor — binding that fallback ONCE for the
+    /// whole arm whenever more than one nested `casesOn` site would consume it:
+    ///
+    /// ```text
+    /// let fb : branch_ty := <fallback> in <nested casesOn chain mentioning fb>
+    /// ```
+    ///
+    /// ROOT CAUSE this closes (2026-09-17, `Nat`-literal table matches). A
+    /// literal pattern `k` is the constructor pattern `Nat.succ^k Nat.zero`, so
+    /// its arm is a chain of `k + 1` nested `Nat.casesOn`, and EVERY level's
+    /// non-matching minor is the fallback — for a multi-arm match, the next
+    /// arm's complete alternative. Inlined, arm `i` holds `kᵢ + 1` copies of
+    /// arm `i+1`, which holds `kᵢ₊₁ + 1` copies of arm `i+2`, …: the term is
+    /// linear as an `Arc` DAG but its TREE size is the product of the arm
+    /// depths. Each copy sits under a different minor binder, and the kernel's
+    /// `infer_arc_memo` is keyed on the node address, the inference mode AND the
+    /// last active `FVarId` (`clean_kernel::tc::infer_arc_memo`) — it has to be,
+    /// a node's type depends on its context — so each copy misses the memo and
+    /// `add_decl`'s `check_type` re-infers the whole next alternative once per
+    /// level, recursively. The kernel documents this producer by name
+    /// (`clean_kernel::tc`, `infer_arc_memo` field doc).
+    ///
+    /// Measured on `def T : Nat → Nat | 49 => … | c => c` (release builds, peak
+    /// RSS under a 3 GB watchdog): at `origin/main` 2 arms 71 MB, 3 arms 546 MB,
+    /// 4 arms killed at 3 GB in 1.1 s, the owner's 22-arm `keyboard_shift.lean`
+    /// killed at 3 GB; with this sharing, 22 arms is 68 MB in 0.32 s. (The
+    /// 27.9 GB figure in the lane brief is the same shape measured without a cap
+    /// on the installed pack binary.) The per-`casesOn` sharing in
+    /// `wrap_with_nested_ctor_caseson_impl` (trk-yy) cannot see this: it counts
+    /// uses within ONE `casesOn`, and `Nat.casesOn` uses the fallback exactly
+    /// once per level.
+    ///
+    /// The `let` form is definitionally the inlined form (zeta), so the kernel
+    /// re-checks an equivalent term and accept/reject is unchanged; what
+    /// changes is that the term is now linear as a TREE, for every consumer.
+    ///
+    /// With fewer than two consuming sites, or an atomic fallback (nothing to
+    /// share), the inlined form is emitted unchanged.
+    ///
+    /// Local-stack discipline: the plans pop their own locals LIFO as they are
+    /// applied, so the placeholder must sit BELOW them, yet it must not be in
+    /// scope while the arm body is elaborated (a tactic body would see it as a
+    /// hypothesis, and `assumption` could pick the NEXT arm's value). It is
+    /// therefore spliced in here, after the body exists: the plan-owned locals
+    /// are lifted off, the placeholder is pushed, and the same locals (same
+    /// `FVarId`s, same order, let values kept) go back on top. Their types
+    /// cannot mention the placeholder, so the context stays well-formed. When
+    /// the top of the stack is NOT exactly those locals the splice would move a
+    /// stranger's binding, so this emits the inlined form instead — the shape
+    /// every caller had before the sharing existed, never an error: sharing is
+    /// an optimisation and must not be able to refuse a program.
+    pub(in crate::infer) fn apply_nested_plans_with_fallback(
+        &mut self,
+        plans: &[NestedPatternPlan],
+        body: Expr,
+        branch_ty: &Expr,
+        fallback_body: &Expr,
+    ) -> Result<Expr, ElabError> {
+        let atomic_fallback = matches!(
+            fallback_body.kind(),
+            ExprKind::FVar(_)
+                | ExprKind::BVar(_)
+                | ExprKind::Const(..)
+                | ExprKind::Sort(_)
+                | ExprKind::Lit(_)
+        );
+        // Lifting the plans' own locals off the stack is only sound when they
+        // ARE the top of the stack; read that before starting the transaction.
+        let plan_fvars = Self::nested_plans_local_fvars(plans);
+        let splice_base = self.locals.len().checked_sub(plan_fvars.len());
+        let stack_is_plan_owned = splice_base.is_some_and(|base| {
+            let mut lifted: Vec<FVarId> = self.locals[base..].iter().map(|(_, f, _)| *f).collect();
+            let mut owned = plan_fvars.clone();
+            lifted.sort_unstable();
+            owned.sort_unstable();
+            lifted == owned
+        });
+        if atomic_fallback || !stack_is_plan_owned || self.nested_plans_fallback_sites(plans) < 2 {
+            return self.with_local_scope_rollback(|this| {
+                let mut result = body;
+                for plan in plans.iter().rev() {
+                    result = this.apply_nested_pattern_plan_inner(
+                        result,
+                        plan,
+                        branch_ty,
+                        Some(fallback_body),
+                    )?;
+                }
+                Ok(result)
+            });
+        }
+        let plan_locals_base = splice_base.expect("checked by `stack_is_plan_owned`");
+
+        self.with_local_scope_rollback(|this| {
+            let plan_locals: Vec<(SurfaceName, FVarId, Expr, Option<Expr>)> = this.locals
+                [plan_locals_base..]
+                .iter()
+                .map(|(name, fvar, ty)| {
+                    (
+                        name.clone(),
+                        *fvar,
+                        ty.clone(),
+                        this.locals.let_value(*fvar).cloned(),
+                    )
+                })
+                .collect();
+            this.locals.truncate(plan_locals_base);
+            let fb_fvar = this.push_local(
+                SurfaceName::unspellable("_nested_fallback", 0),
+                branch_ty.clone(),
+            );
+            for (name, fvar, ty, let_value) in plan_locals {
+                match let_value {
+                    Some(value) => this.push_local_let_with_fvar(name, fvar, ty, value),
+                    None => this.push_local_with_fvar(name, fvar, ty),
+                }
+            }
+
+            let fallback_ref = Expr::fvar(fb_fvar);
+            let mut result = body;
+            for plan in plans.iter().rev() {
+                result = this.apply_nested_pattern_plan_inner(
+                    result,
+                    plan,
+                    branch_ty,
+                    Some(&fallback_ref),
+                )?;
+            }
+
+            // The plans popped exactly their own locals; the placeholder must
+            // now be the top of the stack.
+            let actual_fvar = this.locals.last().map(|(_, fvar, _)| *fvar);
+            if actual_fvar != Some(fb_fvar) {
+                return Err(ElabError::InternalInvariant(format!(
+                    "arm-scope nested fallback placeholder local-stack mismatch: expected top {}, got {}",
+                    crate::error_render::fvar(fb_fvar, None),
+                    match actual_fvar {
+                        Some(f) => crate::error_render::fvar(f, None),
+                        None => "an empty local stack".to_string(),
+                    }
+                )));
+            }
+            this.pop_local();
+            Ok(Expr::let_named(
+                Name::anon(),
+                branch_ty.clone(),
+                fallback_body.clone(),
+                result.abstract_fvar(fb_fvar),
+                false,
+            ))
+        })
+    }
+
     /// Wrap an expression in a nested `casesOn` that selects one constructor.
     ///
     /// For pattern `Nat.succ Nat.zero => body`, the `Nat.zero` sub-pattern needs
@@ -514,7 +827,7 @@ impl<'a> ElabCtx<'a> {
         body: Expr,
         field_expr: Expr,
         field_ty: &Expr,
-        target_ctor_name: &str,
+        target_ctor_name: &SurfaceName,
         branch_ty: &Expr,
     ) -> Result<Expr, ElabError> {
         // This builder has no intentional local-state output. Keep its internal
@@ -539,7 +852,7 @@ impl<'a> ElabCtx<'a> {
         body: Expr,
         field_expr: Expr,
         field_ty: &Expr,
-        target_ctor_name: &str,
+        target_ctor_name: &SurfaceName,
         branch_ty: &Expr,
         fallback_body: Expr,
     ) -> Result<Expr, ElabError> {
@@ -560,13 +873,13 @@ impl<'a> ElabCtx<'a> {
         body: Expr,
         field_expr: Expr,
         field_ty: &Expr,
-        target_ctor_name: &str,
+        target_ctor_name: &SurfaceName,
         branch_ty: &Expr,
         fallback_body: Option<Expr>,
     ) -> Result<Expr, ElabError> {
         let type_name = self.get_type_name(field_ty)?;
 
-        let ind_name = Name::from_string(&type_name);
+        let ind_name = type_name.name().clone();
         let ind_info =
             self.env
                 .get_inductive(&ind_name)
@@ -576,7 +889,7 @@ impl<'a> ElabCtx<'a> {
                     actual: format!("{field_ty}"),
                 })?;
 
-        let cases_on_name = Name::from_string(&format!("{type_name}.casesOn"));
+        let cases_on_name = type_name.name().clone().str("casesOn");
 
         let elim_levels = self.eliminator_levels(&cases_on_name, field_ty, branch_ty)?;
         let eliminator = self.apply_eliminator_params(
@@ -602,7 +915,7 @@ impl<'a> ElabCtx<'a> {
         // #3396 FIX-FV Part 2 pattern direction.
         let eliminator_metadata =
             self.match_eliminator_metadata(&type_name, &cases_on_name, true)?;
-        let num_motives = eliminator_metadata.recursor.num_motives as usize;
+        let num_motives = eliminator_metadata.eliminator_num_motives();
         if num_motives == 0 {
             return Err(ElabError::InternalInvariant(format!(
                 "nested-pattern eliminator `{cases_on_name}` declares no motives"
@@ -675,12 +988,16 @@ impl<'a> ElabCtx<'a> {
         // which member owns the major. We materialise that exact order here,
         // pairing each constructor with the member it belongs to (so its field
         // types are computed against the right member-applied type).
-        let minor_plan: Vec<clean_kernel::RecursorRule> =
+        let mut minor_plan: Vec<clean_kernel::RecursorRule> =
             self.recursor_minor_rules(&ind_info, &eliminator_metadata.recursor)?;
+        if eliminator_metadata.member_cases_on {
+            // Lean's member `casesOn` takes this member's minors only (G33).
+            minor_plan.retain(|rule| ind_info.constructor_names.contains(&rule.constructor_name));
+        }
 
         let fallback_uses = minor_plan
             .iter()
-            .filter(|rule| rule.constructor_name.to_string() != full_target)
+            .filter(|rule| &rule.constructor_name != full_target.name())
             .count();
         let matching_uses = minor_plan.len().saturating_sub(fallback_uses);
         if matching_uses != 1 {
@@ -696,7 +1013,14 @@ impl<'a> ElabCtx<'a> {
             )));
         }
 
-        let share_fallback = fallback_body.is_some() && fallback_uses >= 2;
+        // A fallback that is already a bare free variable was bound by the
+        // arm-scope sharing (`apply_nested_plans_with_fallback`), or is a plain
+        // local: re-binding an atom shares nothing and only stacks
+        // `let fb' := fb`.
+        let share_fallback = fallback_uses >= 2
+            && fallback_body
+                .as_ref()
+                .is_some_and(|fallback| !matches!(fallback.kind(), ExprKind::FVar(_)));
         // Placeholder for the shared fallback. When sharing, every minor references
         // `FVar(fb_fvar)`; we abstract it into the lifted `let` binder afterwards.
         // `abstract_fvar` rewrites each occurrence to the correct `BVar(depth)` for
@@ -705,7 +1029,10 @@ impl<'a> ElabCtx<'a> {
         let fb_fvar = if share_fallback {
             // Keep the placeholder in the local context while telescope-driven
             // construction infers the type of partially-applied eliminators.
-            Some(self.push_local("_nested_fallback".to_string(), branch_ty.clone()))
+            Some(self.push_local(
+                SurfaceName::unspellable("_nested_fallback", 0),
+                branch_ty.clone(),
+            ))
         } else {
             None
         };
@@ -728,7 +1055,7 @@ impl<'a> ElabCtx<'a> {
             // field. Field types are computed against the OWNING member's applied
             // type, so a restored companion minor binds the declared field types.
             for rule in &minor_plan {
-                if rule.constructor_name.to_string() == full_target {
+                if &rule.constructor_name == full_target.name() {
                     // Matching constructor: use the arm body.
                     cases_result = Expr::app(cases_result, body.clone());
                 } else {
@@ -800,7 +1127,12 @@ impl<'a> ElabCtx<'a> {
             let actual_fvar = self.locals.last().map(|(_, fvar, _)| *fvar);
             if actual_fvar != Some(expected_fvar) {
                 return Err(ElabError::InternalInvariant(format!(
-                    "nested fallback placeholder local-stack mismatch: expected top {expected_fvar:?}, got {actual_fvar:?}"
+                    "nested fallback placeholder local-stack mismatch: expected top {}, got {}",
+                    crate::error_render::fvar(expected_fvar, None),
+                    match actual_fvar {
+                        Some(f) => crate::error_render::fvar(f, None),
+                        None => "an empty local stack".to_string(),
+                    }
                 )));
             }
             self.pop_local();
@@ -812,7 +1144,7 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Looks up the constructor by name and instantiates its type parameters
     /// from the scrutinee type to recover the field types.
-    pub(in crate::infer) fn compute_ctor_field_types(
+    pub(crate) fn compute_ctor_field_types(
         &self,
         ctor_name: &Name,
         scrutinee_ty: &Expr,
@@ -871,7 +1203,15 @@ impl<'a> ElabCtx<'a> {
         let mut types = Vec::new();
         for field_index in 0..info.num_fields {
             if let ExprKind::Pi(_, domain, codomain) = ctor_ty.kind() {
-                types.push((**domain).clone());
+                // A field typed by a PARAMETER applied to earlier fields —
+                // `Exists.intro`'s `(h : p w)` with `p := fun h => p h` from
+                // `∃ h, p h` — is a beta-redex once the parameters are in;
+                // Lean's `introN` head-betas every binder it introduces, so
+                // the pattern variable reads `p h₁`, not `(fun h => p h) h₁`
+                // (which `simpa … using h₂` cannot rewrite under —
+                // `Prop.exists_iff`, `Prop.forall_iff` in
+                // `Mathlib/Logic/Basic.lean`, measured 2026-09-11).
+                types.push(crate::tactic::op_projection::head_beta(domain));
                 ctor_ty = (**codomain).clone();
             } else {
                 return Err(ElabError::InternalInvariant(format!(
@@ -883,14 +1223,17 @@ impl<'a> ElabCtx<'a> {
             ExprKind::Const(name, levels) => (name, levels),
             _ => {
                 return Err(ElabError::InternalInvariant(format!(
-                    "constructor metadata `{ctor_name}` does not have a constant-headed return type after instantiation: {ctor_ty:?}"
-                )));
+                    "constructor metadata `{ctor_name}` does not have a constant-headed return type after instantiation: {}"
+                ,
+                crate::error_render::term(&ctor_ty))));
             }
         };
         if return_name != &info.inductive_name || return_levels != scrutinee_levels {
             return Err(ElabError::InternalInvariant(format!(
-                "constructor metadata `{ctor_name}` returns `{return_name}` at levels {return_levels:?}, expected `{}` at {scrutinee_levels:?}",
+                "constructor metadata `{ctor_name}` returns `{return_name}` at levels {}, expected `{}` at {}",
+                crate::error_render::levels(return_levels),
                 info.inductive_name,
+                crate::error_render::levels(scrutinee_levels),
             )));
         }
         let return_args = ctor_ty.get_app_args();

@@ -84,11 +84,9 @@ pub fn rotate_back(state: &mut ProofState) -> TacticResult {
     }
     if state.goals.len() > 1 {
         state.invalidate_tc_cache();
-        let last = state
-            .goals
-            .pop_back()
-            .expect("goals has more than 1 element");
-        state.goals.push_front(last);
+        if let Some(last) = state.goals.pop_back() {
+            state.goals.push_front(last);
+        }
     }
     Ok(())
 }
@@ -124,8 +122,9 @@ pub fn pick_goal(state: &mut ProofState, index: usize) -> TacticResult {
         return Ok(()); // Already at front
     }
     state.invalidate_tc_cache();
-    let goal = state.goals.remove(index).expect("index checked above");
-    state.goals.push_front(goal);
+    if let Some(goal) = state.goals.remove(index) {
+        state.goals.push_front(goal);
+    }
     Ok(())
 }
 

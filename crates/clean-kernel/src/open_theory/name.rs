@@ -33,7 +33,7 @@ impl OtName {
     }
 
     #[must_use]
-    pub fn with_component(&self, component: impl Into<String>) -> Self {
+    pub(crate) fn with_component(&self, component: impl Into<String>) -> Self {
         Self {
             namespace: self.namespace.clone(),
             component: component.into(),

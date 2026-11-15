@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import tempfile
 import unittest
@@ -15,6 +16,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / "scripts" / "axiom_audit_release_check.sh"
 RELEASE_READINESS = REPO_ROOT / "docs" / "RELEASE_READINESS.md"
+REPLACEMENT_CONSTS = REPO_ROOT / "crates" / "clean-cli" / "src" / "cmd_replacement" / "consts.rs"
 
 
 class AxiomAuditReleaseCheckScriptTests(unittest.TestCase):
@@ -56,9 +58,19 @@ class AxiomAuditReleaseCheckScriptTests(unittest.TestCase):
             )
 
     def test_release_readiness_docs_reference_axiom_audit_release_check(self) -> None:
+        # The release lane of record is the Rust command the replacement gate
+        # runs (`AXIOM_AUDIT_GATE_COMMAND`); the Rust tests refuse this script
+        # as a source of its evidence, so the doc must name the command and
+        # not the script.
+        consts = REPLACEMENT_CONSTS.read_text(encoding="utf-8")
+        match = re.search(
+            r'pub\(crate\) const AXIOM_AUDIT_GATE_COMMAND: &str = "([^"]+)";', consts
+        )
+        self.assertIsNotNone(match, REPLACEMENT_CONSTS)
         text = RELEASE_READINESS.read_text(encoding="utf-8")
-        self.assertIn("./scripts/axiom_audit_release_check.sh", text)
-        self.assertIn("non-mutating axiom-audit lane", text)
+        self.assertIn(match.group(1), text)
+        self.assertIn("is the Rust-owned axiom-audit lane", " ".join(text.split()))
+        self.assertNotIn("axiom_audit_release_check.sh", text)
 
     def test_release_check_defaults_to_single_cargo_job(self) -> None:
         source = SCRIPT.read_text(encoding="utf-8")
@@ -90,7 +102,7 @@ class AxiomAuditReleaseCheckScriptTests(unittest.TestCase):
         cargo_lines = [
             line.strip()
             for line in source.splitlines()
-            if "cargo " in line
+            if ("cargo " in line or "targo " in line)
             and not line.lstrip().startswith("#")
             and not line.lstrip().startswith("export ")
         ]

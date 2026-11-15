@@ -3,8 +3,16 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Native-Rust execution for `native_decide`, with kernel reduction fallback.
+//!
+//! The native path lowers a ground goal to a Rust program and runs it. The
+//! program is compiled only by the admitted Trust oracle compiler
+//! ([`crate::oracle_compiler`]); without one, the Clean kernel decides. The
+//! kernel is the authority for ACCEPTANCE either way: a native `true` is
+//! re-derived by kernel reduction of the `Decidable` instance before any proof
+//! is returned, and a native `false` only fails the tactic.
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::Command;
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -13,8 +21,44 @@ use clean_kernel::{BinderInfo, Expr, ExprKind, Level};
 use tempfile::tempdir;
 use thiserror::Error;
 
+use crate::oracle_compiler::{oracle_compiler, OracleCompiler};
 use crate::tactic::core::{Goal, ProofState};
 use crate::tactic::equality::match_equality;
+
+/// Fixed protocol labels, never a rendered source Name. A single quoted
+/// `Nat.add` component is distinct from the canonical qualified builtin.
+fn builtin_label(name: &Name) -> Option<&'static str> {
+    [
+        "Bool.true",
+        "Bool.false",
+        "Int.ofNat",
+        "Int.negSucc",
+        "Int.neg",
+        "Neg.neg",
+        "Int.add",
+        "Int.sub",
+        "Int.mul",
+        "Nat.zero",
+        "Nat.one",
+        "Nat.succ",
+        "Nat.add",
+        "Nat.mul",
+        "Nat.sub",
+        "Nat.pow",
+        "HAdd.hAdd",
+        "Add.add",
+        "HMul.hMul",
+        "Mul.mul",
+        "HSub.hSub",
+        "Sub.sub",
+        "HPow.hPow",
+        "Pow.pow",
+        "Decidable.isTrue",
+        "Decidable.isFalse",
+    ]
+    .into_iter()
+    .find(|label| name == &Name::from_string(label))
+}
 
 #[derive(Debug, Clone)]
 pub(crate) enum NativeDecideExecOutcome {
@@ -40,13 +84,16 @@ pub(crate) struct NativeCompileResult {
     pub(crate) bytecode: Arc<[u8]>,
 }
 
+/// A compiled oracle is keyed by the goal AND the compiler that built it.
+type NativeDecideCacheKey = (PathBuf, Expr);
+
 #[derive(Debug, Default)]
 pub(crate) struct NativeDecideCache {
-    entries: Mutex<HashMap<Expr, NativeCompileResult>>,
+    entries: Mutex<HashMap<NativeDecideCacheKey, NativeCompileResult>>,
 }
 
 impl NativeDecideCache {
-    fn get(&self, key: &Expr) -> Option<NativeCompileResult> {
+    fn get(&self, key: &NativeDecideCacheKey) -> Option<NativeCompileResult> {
         self.entries
             .lock()
             .expect("native_decide cache poisoned")
@@ -56,7 +103,7 @@ impl NativeDecideCache {
 
     fn get_or_insert_with(
         &self,
-        key: Expr,
+        key: NativeDecideCacheKey,
         build: impl FnOnce() -> Result<NativeCompileResult, NativeDecideExecError>,
     ) -> Result<NativeCompileResult, NativeDecideExecError> {
         if let Some(cached) = self.get(&key) {
@@ -103,21 +150,31 @@ pub(crate) fn native_decide_cache_len_for_tests() -> usize {
     native_decide_cache().len()
 }
 
-#[derive(Debug, Clone, Copy, Default)]
-pub(crate) struct NativeRunner;
+/// Lowers a goal to an oracle program and compiles it with an admitted Trust
+/// compiler -- the only way a native program is built.
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct NativeRunner<'a> {
+    compiler: &'a OracleCompiler,
+}
 
-impl NativeRunner {
+impl<'a> NativeRunner<'a> {
+    pub(crate) fn new(compiler: &'a OracleCompiler) -> Self {
+        Self { compiler }
+    }
+
     pub(crate) fn compile(
         &self,
         target: &Expr,
     ) -> Result<NativeCompileResult, NativeDecideExecError> {
         let target = strip_metadata(target).clone();
-        native_decide_cache().get_or_insert_with(target.clone(), || {
+        let key = (self.compiler.path().to_path_buf(), target.clone());
+        native_decide_cache().get_or_insert_with(key, || {
             let rust_bool = lower_decidable_to_rust(&target)?;
             let rust_source = render_native_program(&rust_bool);
+            let bytecode = compile_rust_program(self.compiler, &rust_source)?;
             Ok(NativeCompileResult {
-                rust_source: Arc::<str>::from(rust_source.clone()),
-                bytecode: Arc::<[u8]>::from(compile_rust_program(&rust_source)?.into_boxed_slice()),
+                rust_source: Arc::<str>::from(rust_source),
+                bytecode: Arc::<[u8]>::from(bytecode.into_boxed_slice()),
             })
         })
     }
@@ -160,20 +217,52 @@ pub(crate) fn native_eval_bool(
     }
 }
 
+/// Decide `goal` natively through this process's admitted oracle compiler
+/// ([`oracle_compiler`]), or by the kernel when there is none.
 pub(crate) fn execute_native_decide(
     state: &ProofState,
     goal: &Goal,
 ) -> Result<NativeDecideExecOutcome, NativeDecideExecError> {
+    execute_native_decide_with(state, goal, oracle_compiler().ok())
+}
+
+/// [`execute_native_decide`] with the oracle compiler given: `None` is the
+/// kernel-only path, which is also where every native failure lands.
+pub(crate) fn execute_native_decide_with(
+    state: &ProofState,
+    goal: &Goal,
+    compiler: Option<&OracleCompiler>,
+) -> Result<NativeDecideExecOutcome, NativeDecideExecError> {
     let target = state.metas().instantiate(&goal.target);
     let decidable_expr = synthesize_decidable_expr(state, goal, &target)?;
-    match NativeRunner.compile(&target) {
-        Ok(compiled) => match native_eval_bool(&compiled) {
-            Ok(true) => return classify_decidable_result(&state.whnf(goal, &decidable_expr)),
-            Ok(false) => return Ok(NativeDecideExecOutcome::Refuted),
-            Err(err) => tracing::debug!(error = %err, "native_decide native execution failed"),
-        },
-        Err(err) => tracing::debug!(error = %err, "native_decide native compilation unavailable"),
+    if let Some(compiler) = compiler {
+        let decided = |verdict: &str| {
+            tracing::debug!(
+                compiler = %compiler.path().display(),
+                commit = compiler.commit(),
+                verdict,
+                "native_decide: the Trust oracle decided"
+            );
+        };
+        match NativeRunner::new(compiler).compile(&target) {
+            Ok(compiled) => match native_eval_bool(&compiled) {
+                // The kernel re-derives the proof from the Decidable instance.
+                Ok(true) => {
+                    decided("true");
+                    return classify_decidable_result(&state.whnf(goal, &decidable_expr));
+                }
+                Ok(false) => {
+                    decided("false");
+                    return Ok(NativeDecideExecOutcome::Refuted);
+                }
+                Err(err) => tracing::debug!(error = %err, "native_decide native execution failed"),
+            },
+            Err(err) => {
+                tracing::debug!(error = %err, "native_decide native compilation unavailable")
+            }
+        }
     }
+    tracing::debug!("native_decide: the Clean kernel decides");
     execute_kernel_native_decide(state, goal, &target, &decidable_expr)
 }
 
@@ -221,7 +310,7 @@ fn synthesize_decidable_expr(
             detail: format!("equality type is not a supported constant: {ty:?}"),
         });
     };
-    let dec_eq_name = Name::from_string(&format!("{type_name}.decEq"));
+    let dec_eq_name = type_name.clone().str("decEq");
     // Wave 95: Gap 19. The original guard required a full `Declaration`
     // for `<Ty>.decEq`. In the prelude env, `Nat.decEq` / `Bool.decEq`
     // are wired as *native reducers* (no declaration body needed —
@@ -297,7 +386,7 @@ fn lower_decidable_to_rust(target: &Expr) -> Result<String, NativeDecideExecErro
 fn lower_bool_expr(expr: &Expr) -> Result<String, NativeDecideExecError> {
     let expr = strip_metadata(expr);
     match expr.kind() {
-        ExprKind::Const(name, _) => match name.to_string().as_str() {
+        ExprKind::Const(name, _) => match builtin_label(name).unwrap_or("") {
             "Bool.true" => Ok("Ok(true)".to_owned()),
             "Bool.false" => Ok("Ok(false)".to_owned()),
             _ => Err(NativeDecideExecError::Unsupported {
@@ -354,7 +443,7 @@ fn lower_int_expr(expr: &Expr) -> Result<String, NativeDecideExecError> {
             detail: format!("unsupported Int application head in native_decide: {expr:?}"),
         });
     };
-    match head.to_string().as_str() {
+    match builtin_label(head).unwrap_or("") {
         "Int.ofNat" => {
             let n = int_nat_arg(args.last(), expr)?;
             lower_int_from_nat(n).map(|v| format!("Ok({v}i64)"))
@@ -460,9 +549,9 @@ fn lower_nat_expr(expr: &Expr) -> Result<String, NativeDecideExecError> {
             .ok_or_else(|| NativeDecideExecError::Unsupported {
                 detail: format!("Nat literal exceeds u64 native_decide subset: {expr:?}"),
             }),
-        ExprKind::Const(name, _) => match name.to_string().as_str() {
+        ExprKind::Const(name, _) => match builtin_label(name).unwrap_or("") {
             "Nat.zero" => Ok("Ok(0u64)".to_owned()),
-            "Nat.one" | "1" => Ok("Ok(1u64)".to_owned()),
+            "Nat.one" => Ok("Ok(1u64)".to_owned()),
             _ => Err(NativeDecideExecError::Unsupported {
                 detail: format!("unsupported Nat constant in native_decide: {expr:?}"),
             }),
@@ -481,7 +570,7 @@ fn lower_nat_app(expr: &Expr) -> Result<String, NativeDecideExecError> {
             detail: format!("unsupported Nat application head in native_decide: {expr:?}"),
         });
     };
-    let op = op_name.to_string();
+    let op = builtin_label(op_name).unwrap_or("");
     if op == "Nat.succ" {
         let arg = args
             .last()
@@ -495,7 +584,7 @@ fn lower_nat_app(expr: &Expr) -> Result<String, NativeDecideExecError> {
             detail: format!("unsupported Nat arity in native_decide: {expr:?}"),
         });
     }
-    let helper = match op.as_str() {
+    let helper = match op {
         "Nat.add" | "HAdd.hAdd" | "Add.add" => "nat_add",
         "Nat.mul" | "HMul.hMul" | "Mul.mul" => "nat_mul",
         "Nat.sub" | "HSub.hSub" | "Sub.sub" => "nat_sub",
@@ -535,101 +624,28 @@ fn render_native_program(bool_expr: &str) -> String {
     .replace("__BOOL_EXPR__", bool_expr)
 }
 
-fn compile_rust_program(source: &str) -> Result<Vec<u8>, NativeDecideExecError> {
-    let dir = tempdir().map_err(|err| NativeDecideExecError::NativeCompileFailed {
-        detail: format!("failed to create temp dir for native_decide compile: {err}"),
+/// Compile a generated oracle program with the admitted Trust compiler.
+fn compile_rust_program(
+    compiler: &OracleCompiler,
+    source: &str,
+) -> Result<Vec<u8>, NativeDecideExecError> {
+    let compile_failed = |detail: String| NativeDecideExecError::NativeCompileFailed { detail };
+    let dir = tempdir().map_err(|err| {
+        compile_failed(format!(
+            "failed to create temp dir for native_decide compile: {err}"
+        ))
     })?;
     let source_path = dir.path().join("native_decide.rs");
     let binary_path = dir.path().join(native_binary_name());
-    std::fs::write(&source_path, source).map_err(|err| {
-        NativeDecideExecError::NativeCompileFailed {
-            detail: format!("failed to write native_decide source: {err}"),
-        }
-    })?;
-    // TRUST OPT-OUT. `rustc` here resolves through rustup from this repo's
-    // `rust-toolchain.toml`, which pins `channel = "trust"` — a VERIFYING
-    // compiler. It therefore ran Trust's obligation checker over this generated
-    // program and, under the strict policy, FAILED the build:
-    //
-    //   error: Trust strict verification failed for `native_decide::nat_succ`:
-    //          2 obligation(s) were not fully verified
-    //
-    // That is a category error. This program is an evaluation ORACLE for a
-    // ground decidable proposition, not a verification target — and it is
-    // already safe by construction: the emitted arithmetic is `checked_add(..)
-    // .ok_or("native_decide Nat overflow")`, so overflow returns an `Err`
-    // rather than wrapping. Trust's own note says as much — "runtime-checked:
-    // compiler retained the existing assertion because the proof is not yet
-    // static". Opting out removes the static obligation REPORT; the runtime
-    // guard is still compiled in, so the emitted semantics are unchanged.
-    //
-    // `.cargo/config.toml` already establishes this opt-out for everything in
-    // the build that is not itself the verification target.
-    //
-    // PROBE, don't assume: the flag is trust-only (stock rustc rejects any
-    // `-Z` off nightly), and its spelling has already moved once — wave-2
-    // DELETED `-Zno-trust-verify=yes`. So try it, and fall back to a plain
-    // invocation when the compiler does not understand it. The decision is
-    // cached, so the double compile happens at most once per process.
-    fn run_rustc(
-        source_path: &std::path::Path,
-        binary_path: &std::path::Path,
-        trust_opt_out: bool,
-    ) -> std::io::Result<std::process::Output> {
-        let mut cmd = Command::new("rustc");
-        cmd.arg("--edition=2021").arg("-O");
-        if trust_opt_out {
-            cmd.arg("-Ztrust-verify=off");
-        }
-        cmd.arg(source_path).arg("-o").arg(binary_path).output()
-    }
-
-    /// Does this `rustc` understand `-Ztrust-verify=off`?
-    static TRUST_OPT_OUT: OnceLock<bool> = OnceLock::new();
-
-    fn flag_was_rejected(stderr: &str) -> bool {
-        stderr.contains("only accepted on the nightly compiler")
-            || stderr.contains("unknown unstable option")
-            || stderr.contains("unknown debugging option")
-            || stderr.contains("incorrect value")
-    }
-
-    let launch_failed = |err: std::io::Error| NativeDecideExecError::NativeCompileFailed {
-        detail: format!("failed to launch rustc for native_decide: {err}"),
-    };
-
-    let mut output = match TRUST_OPT_OUT.get() {
-        Some(&opt_out) => run_rustc(&source_path, &binary_path, opt_out).map_err(launch_failed)?,
-        None => {
-            let attempt = run_rustc(&source_path, &binary_path, true).map_err(launch_failed)?;
-            let stderr = String::from_utf8_lossy(&attempt.stderr);
-            if !attempt.status.success() && flag_was_rejected(&stderr) {
-                let _ = TRUST_OPT_OUT.set(false);
-                run_rustc(&source_path, &binary_path, false).map_err(launch_failed)?
-            } else {
-                let _ = TRUST_OPT_OUT.set(true);
-                attempt
-            }
-        }
-    };
-
-    // A cached `true` can still go stale if the toolchain changes mid-process;
-    // retry plain rather than reporting a flag-parse failure as a compile error.
-    if !output.status.success() && flag_was_rejected(&String::from_utf8_lossy(&output.stderr)) {
-        output = run_rustc(&source_path, &binary_path, false).map_err(launch_failed)?;
-    }
-
-    if !output.status.success() {
-        return Err(NativeDecideExecError::NativeCompileFailed {
-            detail: format!(
-                "rustc exited with {}: stderr={}",
-                output.status,
-                String::from_utf8_lossy(&output.stderr).trim(),
-            ),
-        });
-    }
-    std::fs::read(&binary_path).map_err(|err| NativeDecideExecError::NativeCompileFailed {
-        detail: format!("failed to read compiled native_decide binary: {err}"),
+    std::fs::write(&source_path, source)
+        .map_err(|err| compile_failed(format!("failed to write native_decide source: {err}")))?;
+    compiler
+        .compile(&source_path, &binary_path)
+        .map_err(|err| compile_failed(err.to_string()))?;
+    std::fs::read(&binary_path).map_err(|err| {
+        compile_failed(format!(
+            "failed to read compiled native_decide binary: {err}"
+        ))
     })
 }
 
@@ -731,7 +747,7 @@ fn reduce_bool_result(
             ),
         });
     };
-    match name.to_string().as_str() {
+    match builtin_label(name).unwrap_or("") {
         "Bool.true" => Ok(true),
         "Bool.false" => Ok(false),
         _ => Err(NativeDecideExecError::ExecutionFailed {
@@ -748,7 +764,7 @@ fn classify_decidable_result(
             detail: format!("native_decide result is not a Decidable constructor: {result:?}"),
         });
     };
-    match name.to_string().as_str() {
+    match builtin_label(name).unwrap_or("") {
         "Decidable.isTrue" => {
             let args = result.get_app_args();
             let proof = args
@@ -764,5 +780,80 @@ fn classify_decidable_result(
         _ => Err(NativeDecideExecError::ExecutionFailed {
             detail: format!("native_decide result did not reduce to isTrue/isFalse: {result:?}"),
         }),
+    }
+}
+
+#[cfg(test)]
+mod typed_builtin_tests {
+    use super::*;
+
+    #[test]
+    fn native_values_and_operators_refuse_quoted_display_twins() {
+        assert!(lower_bool_expr(&Expr::const_(Name::from_string("Bool.true"), vec![])).is_ok());
+        assert!(lower_bool_expr(&Expr::const_(Name::anon().str("Bool.true"), vec![])).is_err());
+        assert!(lower_nat_expr(&Expr::const_(Name::from_string("Nat.zero"), vec![])).is_ok());
+        assert!(lower_nat_expr(&Expr::const_(Name::anon().str("Nat.zero"), vec![])).is_err());
+        for label in ["Nat.add", "Nat.mul", "Nat.sub", "Nat.pow"] {
+            let apply = |name| {
+                Expr::apps(
+                    Expr::const_(name, vec![]),
+                    [Expr::nat_lit(2), Expr::nat_lit(1)],
+                )
+            };
+            assert!(lower_nat_expr(&apply(Name::from_string(label))).is_ok());
+            assert!(lower_nat_expr(&apply(Name::anon().str(label))).is_err());
+        }
+        for label in ["Int.ofNat", "Int.negSucc"] {
+            let apply = |name| Expr::app(Expr::const_(name, vec![]), Expr::nat_lit(1));
+            assert!(lower_int_expr(&apply(Name::from_string(label))).is_ok());
+            assert!(lower_int_expr(&apply(Name::anon().str(label))).is_err());
+        }
+        for name in [Name::anon().str("1"), Name::anon().num(1)] {
+            assert_eq!(builtin_label(&name), None);
+            assert!(lower_nat_expr(&Expr::const_(name, vec![])).is_err());
+        }
+        assert!(lower_nat_expr(&Expr::nat_lit(1)).is_ok());
+        assert!(lower_nat_expr(&Expr::app(
+            Expr::const_(Name::from_string("Nat.succ"), vec![]),
+            Expr::const_(Name::from_string("Nat.zero"), vec![]),
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn decidable_classification_requires_exact_constructor_identity() {
+        let proof = Expr::const_(Name::from_string("True.intro"), vec![]);
+        let positive = |name| {
+            Expr::apps(
+                Expr::const_(name, vec![]),
+                [
+                    Expr::const_(Name::from_string("True"), vec![]),
+                    proof.clone(),
+                ],
+            )
+        };
+        assert!(
+            matches!(classify_decidable_result(&positive(Name::from_string("Decidable.isTrue"))), Ok(NativeDecideExecOutcome::Proved(p)) if p == proof)
+        );
+        assert!(
+            classify_decidable_result(&positive(Name::anon().str("Decidable.isTrue"))).is_err()
+        );
+        let false_prop = Expr::const_(Name::from_string("False"), vec![]);
+        let negative = |name| {
+            Expr::apps(
+                Expr::const_(name, vec![]),
+                [
+                    false_prop.clone(),
+                    Expr::lam(BinderInfo::Default, false_prop.clone(), Expr::bvar(0)),
+                ],
+            )
+        };
+        assert!(matches!(
+            classify_decidable_result(&negative(Name::from_string("Decidable.isFalse"))),
+            Ok(NativeDecideExecOutcome::Refuted)
+        ));
+        assert!(
+            classify_decidable_result(&negative(Name::anon().str("Decidable.isFalse"))).is_err()
+        );
     }
 }

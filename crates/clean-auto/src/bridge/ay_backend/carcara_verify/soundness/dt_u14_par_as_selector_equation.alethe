@@ -1,0 +1,7 @@
+(define-fun ap ((f (-> P Int)) (x P)) Int (f x))
+(assume h0 (= g (as snd (-> P Int))))
+(assume h (not (= (g (mk a b)) b)))
+(step s (cl (= (ap (as snd (-> P Int)) (mk a b)) b)) :rule dt_project)
+(step t1 (cl (= (g (mk a b)) (ap (as snd (-> P Int)) (mk a b)))) :rule ho_cong :premises (h0))
+(step t2 (cl (= (g (mk a b)) b)) :rule trans :premises (t1 s))
+(step t (cl) :rule resolution :premises (h t2))

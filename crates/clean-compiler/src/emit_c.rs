@@ -547,6 +547,14 @@ impl CEmitter {
             IRExpr::Tag(arg) => format!("clean_obj_tag({})", self.emit_arg(arg)),
             IRExpr::Box { ty, arg } => match ty {
                 IRType::UInt64 => format!("clean_box_uint64({})", self.emit_arg(arg)),
+                // WS6.1 producer canonicalization, C mirror of
+                // `emit_trust_ir::emit_box_extern`: a `USize` is boxed with
+                // the runtime's one `Nat` spelling (tagged below 2^63, a heap
+                // Nat above), exactly as `emit_box_scalar_carrier` already
+                // re-boxes a `USize` carrier. The tagged `clean_box` it used
+                // to fall through to drops bit 63: measured (WS6.1 review),
+                // `USize.ofNat`'s boxed wrapper returned 5 for `2^63 + 5`.
+                IRType::USize => format!("clean_nat_of_u64((uint64_t){})", self.emit_arg(arg)),
                 IRType::UInt32 => format!("clean_box_uint32({})", self.emit_arg(arg)),
                 IRType::Float64 => format!("clean_box_float({})", self.emit_arg(arg)),
                 IRType::Float32 => format!("clean_box_float((double){})", self.emit_arg(arg)),
@@ -562,6 +570,17 @@ impl CEmitter {
                     format!("clean_unbox_uint64({})", self.emit_arg(arg))
                 }
                 IRType::UInt32 => format!("clean_unbox_uint32({})", self.emit_arg(arg)),
+                // WS6.1 (F-101) mirror of `emit_trust_ir::emit_unbox_extern`:
+                // a narrow integer or `Bool` may arrive tagged OR heap-boxed
+                // (a `clean_box_uint64` literal cell, or a two-limb heap
+                // `Nat`), so it reads the dispatching low limb, which is exact
+                // mod 2^w for w <= 64. The tagged-only `clean_unbox` read
+                // pointer bits off a heap cell.
+                IRType::UInt16 => {
+                    format!("(uint16_t)clean_unbox_uint64({})", self.emit_arg(arg))
+                }
+                IRType::UInt8 => format!("(uint8_t)clean_unbox_uint64({})", self.emit_arg(arg)),
+                IRType::Bool => format!("(clean_unbox_uint64({}) != 0)", self.emit_arg(arg)),
                 _ => format!("clean_unbox({})", self.emit_arg(arg)),
             },
             IRExpr::Lit(lit) => self.emit_literal(lit),
@@ -611,7 +630,11 @@ impl CEmitter {
             IRExpr::IsShared(var) => {
                 format!("!clean_is_exclusive({})", self.emit_var(*var))
             }
-            IRExpr::String(s) => format!("clean_mk_string({})", emit_c_string_literal(s)),
+            IRExpr::String(s) => format!(
+                "clean_mk_string_from_bytes({}, {})",
+                emit_c_string_literal(s),
+                s.len()
+            ),
             IRExpr::Reset(var) => format!("clean_reset({})", self.emit_var(*var)),
             IRExpr::Reuse { var, ctor, args } => {
                 let args_str: Vec<String> = args.iter().map(|a| self.emit_arg(a)).collect();

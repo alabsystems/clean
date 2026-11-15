@@ -187,7 +187,7 @@ impl AgentDiagnostic {
 
     /// Add related context.
     #[must_use]
-    pub fn with_related(
+    pub(crate) fn with_related(
         mut self,
         message: impl Into<String>,
         span: Option<AgentSourceSpan>,
@@ -221,11 +221,30 @@ where
     scored.sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
     scored
         .into_iter()
-        .take(limit)
+        // ADMIT, THEN TRUNCATE. This used to `.take(limit)` first, which made
+        // the window swallow good answers: the sort ranks by distance, the
+        // cutoff below is scaled to each candidate's OWN length, so the five
+        // nearest names could all fail their cutoffs while an admissible name
+        // sat at rank six and was never asked. The cutoff value is unchanged,
+        // so everything the tightening bought is kept — this only stops the
+        // truncation from deciding admission.
         .filter_map(|(score, _, name)| {
-            let cutoff = (query.len().max(name.len()) / 2).max(2);
+            // Half the word length was too permissive to be help. Measured:
+            // `inhabit` was answered with `linarith` (8 chars, distance well
+            // past 4) and, per the cascade audit, `coe_injective` was answered
+            // with `Bool.not_inj, Int8.not_inj, ISize.not_inj` — suggestions
+            // that share a suffix and nothing else. A "did you mean" a reader
+            // must evaluate and reject is worse than none: it costs attention
+            // and implies the real name was checked for.
+            //
+            // A third keeps every genuine near miss measured here —
+            // `exct`->`exact`, `Nat.add_com`->`Nat.add_comm` are distance 1 —
+            // and drops the noise. The substring escapes below still catch
+            // prefix and abbreviation cases that distance alone would miss.
+            let cutoff = (query.len().max(name.len()) / 3).max(1);
             (score <= cutoff || name.contains(query) || query.contains(&name)).then_some(name)
         })
+        .take(limit)
         .collect()
 }
 

@@ -93,12 +93,7 @@ impl<'a> ElabCtx<'a> {
         ind_type: &Expr,
         ctors: &[SurfaceCtor],
     ) -> Option<Expr> {
-        let short = ind_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let short = clean_parser::SurfaceName::from_name(ind_name.clone()).last_component();
         // Nested restore removes the temporary `Ind._List` declaration and
         // exposes the declared container type again.  The primary recursor
         // keeps its companion motive/minors, but those rules are re-keyed to
@@ -143,7 +138,7 @@ impl<'a> ElabCtx<'a> {
         all_targets.push(aux_cons.clone());
 
         let level_one = Level::succ(Level::zero());
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
 
         // Real recursor motives.
         // motive_Ind  : fun a'  : Ind       => (b  : Ind)       -> Decidable (a'  = b)
@@ -206,7 +201,7 @@ impl<'a> ElabCtx<'a> {
     fn analyze_ctor_listrec(
         &mut self,
         ind_name: &Name,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         aux_type: &Expr,
         ctor: &SurfaceCtor,
@@ -216,7 +211,9 @@ impl<'a> ElabCtx<'a> {
         // The kernel registers ctors under the fully-qualified inductive name
         // (`{ind_name}.{ctor}`); `short` is only for surface-recursion detection.
         Some(CtorAnalysis {
-            name: Name::from_string(&format!("{ind_name}.{}", ctor.name)),
+            name: clean_parser::SurfaceName::from_name(ind_name.clone())
+                .append(&ctor.name)
+                .into_name(),
             fields,
         })
     }
@@ -224,7 +221,7 @@ impl<'a> ElabCtx<'a> {
     /// Peel a ctor's surface telescope, classifying each field.
     fn collect_fields_listrec(
         &mut self,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         aux_type: &Expr,
         surf: &SurfaceExpr,
@@ -256,7 +253,7 @@ impl<'a> ElabCtx<'a> {
     /// Classify a single field surface type.
     fn classify_field_listrec(
         &mut self,
-        short: &str,
+        short: &clean_parser::SurfaceName,
         ind_type: &Expr,
         aux_type: &Expr,
         ty: &SurfaceExpr,
@@ -264,16 +261,22 @@ impl<'a> ElabCtx<'a> {
         let ty = peel_paren(ty);
         // Direct self reference: `Ind`.
         if let SurfaceExpr::Ident(_, n) = ty {
-            if n == short {
+            if !n.is_relative_constructor() && n == short {
                 return Some(FieldKind::SelfRec);
             }
         }
         // Restored nested-recursive container: `List Ind`.
         if let SurfaceExpr::App(_, head, args) = ty {
             if let SurfaceExpr::Ident(_, container) = peel_paren(head) {
-                if container == "List" && args.len() == 1 {
+                // The container must RESOLVE to the global `List` (not a
+                // parameter or other binder spelled `List`).
+                if !container.is_relative_constructor()
+                    && container.name() == &Name::anon().str("List")
+                    && self.head_denotes_global(container, "List")
+                    && args.len() == 1
+                {
                     if let SurfaceExpr::Ident(_, n) = peel_paren(&args[0].expr) {
-                        if n == short {
+                        if !n.is_relative_constructor() && n == short {
                             return Some(FieldKind::ListSelf);
                         }
                     }
@@ -405,7 +408,7 @@ impl<'a> ElabCtx<'a> {
         let cases_on = if major_is_aux {
             Name::from_string("List.casesOn")
         } else {
-            Name::from_string(&format!("{ind_name}.casesOn"))
+            ind_name.clone().str("casesOn")
         };
         let major_ty = if major_is_aux { aux_type } else { ind_type };
 
@@ -503,7 +506,7 @@ impl<'a> ElabCtx<'a> {
                 Expr::fvar(e_fvar),
             )
         } else {
-            let no_conf = Name::from_string(&format!("{ind_name}.noConfusion"));
+            let no_conf = ind_name.clone().str("noConfusion");
             Expr::app(
                 Expr::app(
                     Expr::app(
@@ -754,7 +757,7 @@ impl<'a> ElabCtx<'a> {
         let nc = if major_is_aux {
             list_noconfusion_app(ind_type, aux_type, a_applied, b_applied, Expr::fvar(e_fvar))
         } else {
-            let no_conf = Name::from_string(&format!("{ind_name}.noConfusion"));
+            let no_conf = ind_name.clone().str("noConfusion");
             Expr::app(
                 Expr::app(
                     Expr::app(
@@ -1069,7 +1072,7 @@ fn eq_trans(level: &Level, ty: &Expr, x: &Expr, y: &Expr, z: &Expr, p: Expr, q: 
 }
 
 /// Whether a surface type mentions identifier `name`.
-fn surface_mentions(expr: &SurfaceExpr, name: &str) -> bool {
+fn surface_mentions(expr: &SurfaceExpr, name: &clean_parser::SurfaceName) -> bool {
     match expr {
         SurfaceExpr::Ident(_, n) => n == name,
         SurfaceExpr::App(_, h, args) => {

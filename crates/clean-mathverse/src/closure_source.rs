@@ -54,6 +54,11 @@ struct SharedReaders {
     /// (tests). Used by [`ShardConstantSource::owning_module`] so the PARAGON
     /// coverage repair can eager-load the module that defines a missing name.
     shard_modules: Vec<Option<String>>,
+    /// Every later occurrence of a name `by_name` already indexed:
+    /// `(name, served (shard, idx), other (shard, idx))`. The index serves one
+    /// declaration per name, and Lean's import refuses a name two modules
+    /// declare unless one restates the other's theorem (`subsumesInfo`).
+    collisions: Vec<(Name, (u32, u32), (u32, u32))>,
 }
 
 /// A demand-paged source of trusted-closure constants backed by one OR MORE
@@ -142,6 +147,7 @@ impl ShardConstantSource {
         shard_modules: Vec<Option<String>>,
     ) -> Self {
         let mut by_name: HashMap<Name, (u32, u32)> = HashMap::new();
+        let mut collisions = Vec::new();
         for (s, reader) in readers.iter().enumerate() {
             for (i, c) in reader.constants.iter().enumerate() {
                 if !servable_kind(c.decl_kind) {
@@ -158,9 +164,16 @@ impl ShardConstantSource {
                     if is_kernel_regenerated_aux_name(name) {
                         continue;
                     }
-                    by_name
-                        .entry(Name::from_string(name))
-                        .or_insert((s as u32, i as u32));
+                    match by_name.entry(Name::from_string(name)) {
+                        std::collections::hash_map::Entry::Occupied(served) => collisions.push((
+                            served.key().clone(),
+                            *served.get(),
+                            (s as u32, i as u32),
+                        )),
+                        std::collections::hash_map::Entry::Vacant(slot) => {
+                            slot.insert((s as u32, i as u32));
+                        }
+                    }
                 }
             }
         }
@@ -170,6 +183,7 @@ impl ShardConstantSource {
                 readers,
                 by_name,
                 shard_modules,
+                collisions,
             }),
             shard_verified,
             cache: FrozenMap::new(),
@@ -186,6 +200,12 @@ impl ShardConstantSource {
             .shard_modules
             .get(*shard as usize)
             .and_then(|m| m.as_deref())
+    }
+
+    /// Names more than one shard declares, each with the `(shard, index)` the
+    /// source serves and the one it does not (see `SharedReaders::collisions`).
+    pub(crate) fn collisions(&self) -> &[(Name, (u32, u32), (u32, u32))] {
+        &self.shared.collisions
     }
 
     /// A FRESH view over the SAME (immutable, zero-copy-shared) mmap readers and
@@ -298,6 +318,45 @@ impl ShardConstantSource {
             readers.push(ShardMmapReader::open_lazy(&f)?);
         }
         Ok(Self::from_readers_with_modules(readers, shard_modules))
+    }
+
+    /// Every servable name whose shard header records Lean `unsafe` or
+    /// `partial` safety, with that safety. A lazily served constant carries no
+    /// safety mark in the environment by itself, so a caller that checks in
+    /// Lean's safe context (`KernelTheory::Lean`) marks these before serving:
+    /// otherwise a safe target could use an unsafe dependency unseen.
+    pub(crate) fn non_safe_names(&self) -> Vec<(Name, clean_olean::DefinitionSafety, DeclKind)> {
+        self.shared
+            .by_name
+            .iter()
+            .filter_map(|(name, &(shard, idx))| {
+                let header = self
+                    .shared
+                    .readers
+                    .get(shard as usize)?
+                    .constants
+                    .get(idx as usize)?;
+                let safety = header.definition_safety()?;
+                (safety != clean_olean::DefinitionSafety::Safe).then(|| {
+                    let kind = header.decl_kind().unwrap_or(DeclKind::Axiom);
+                    (name.clone(), safety, kind)
+                })
+            })
+            .collect()
+    }
+
+    /// Mark every [`Self::non_safe_names`] entry on `env` (unsafe, or partial
+    /// for a definition; a partial mark on any other kind fails closed to
+    /// unsafe, as the eager loader does).
+    pub(crate) fn mark_non_safe_in(&self, env: &mut clean_kernel::env::Environment) {
+        for (name, safety, kind) in self.non_safe_names() {
+            match safety {
+                clean_olean::DefinitionSafety::Partial if kind == DeclKind::Definition => {
+                    env.mark_partial(name);
+                }
+                _ => env.mark_unsafe(name),
+            }
+        }
     }
 
     /// Number of constants this source can serve (post-hybrid-filter).
@@ -478,6 +537,22 @@ pub(crate) fn walk_refs_from_reader(
 
 /// Demand-paged reconstruct of one sub-DAG against a reader's mmap arena.
 /// Free-function twin of [`ShardConstantSource::reconstruct_subdag`].
+/// Constant `idx`'s type and (when stored) value, rebuilt from the mmap arena;
+/// `None` when the type cannot be rebuilt.
+pub(crate) fn constant_type_and_value(
+    reader: &ShardMmapReader,
+    idx: usize,
+) -> Option<(Expr, Option<Expr>)> {
+    let c = reader.constants.get(idx)?;
+    let type_ = reconstruct_subdag_for(reader, c.type_idx)?;
+    let value = if c.value_idx == NO_VALUE {
+        None
+    } else {
+        Some(reconstruct_subdag_for(reader, c.value_idx)?)
+    };
+    Some((type_, value))
+}
+
 fn reconstruct_subdag_for(reader: &ShardMmapReader, root_idx: u32) -> Option<Expr> {
     let read_flat = |i: u32| reader.read_expr(i).map_err(|e| e.to_string());
     reconstruct_single_subdag_with_reader(

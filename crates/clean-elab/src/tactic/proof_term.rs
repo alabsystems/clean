@@ -15,7 +15,7 @@ use clean_kernel::{Expr, ExprKind, ExprVisitor, FVarId};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 use super::equality;
-use super::tauto::fresh_hyp_name;
+use super::tauto::fresh_hyp_name_typed;
 
 /// Whether `expr` mentions the free variable `fvar` (including meta-encoded
 /// FVars). Used by `apply`'s dependent-goal partition (B102).
@@ -87,100 +87,152 @@ pub fn exact(state: &mut ProofState, proof: Expr) -> TacticResult {
     }
 }
 
-/// Introduce a hypothesis (for goals of the form ∀ x, P)
+/// Introduce a hypothesis or a local definition.
 ///
 /// # Contract
 ///
 /// REQUIRES: `state.goals` is non-empty
-/// REQUIRES: Current goal target is a Pi/forall type (after WHNF)
+/// REQUIRES: Current goal target is a Pi/forall type or an explicit let.
 /// ENSURES: On Ok, the current goal is replaced by a new goal with the domain added to local context
 /// ENSURES: On Ok, the new goal target is the codomain instantiated with a fresh FVar
-/// ENSURES: On Err(GoalMismatch), goal target is not a Pi type; state is unchanged
-pub fn intro(state: &mut ProofState, name: &str) -> TacticResult {
-    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-
-    // WHNF to expose the Pi
-    let target = state.whnf(&goal, &goal.target);
-
-    match target.kind() {
-        ExprKind::Pi(bi, domain, codomain) => {
-            let name = fresh_hyp_name(&goal.local_ctx, name);
-
-            // Create a free variable for the introduced hypothesis from THIS
-            // goal's own tactic-binder base rather than the monotonic global
-            // `next_fvar` counter (#2533). `close_fvars` maps a tactic FVar `n`
-            // to a BVar only when `n` lands in `[fvar_base, fvar_base + depth)`,
-            // so a goal's first `intro` must get id `fvar_base` and each further
-            // intro the next slot up. `goal_fvar_base` computes exactly that from
-            // the goal's context, so it is depth-correct for BOTH sibling goals
-            // (a fresh `;`-sequenced sibling has no tactic FVars → base ==
-            // `fvar_base`, identical to the first sibling) AND single-goal
-            // multi-intro (`intro a; intro b`: after `a` the max is `base`, so
-            // `b` gets `base + 1`). Using the global counter instead let an
-            // earlier sibling's advanced `next_fvar` leak into the next sibling's
-            // first `intro`, producing a too-high id that `close_fvars` could not
-            // convert → fail-closed `ProofNotProduced`.
-            // `goal_binder_base`, not `goal_fvar_base`: a goal whose context was
-            // narrowed by `clear` keeps the removed local in its meta scope and
-            // under a live `lambda`, so the context alone would hand back an id
-            // that is still bound (capture). Identical to `goal_fvar_base`
-            // wherever nothing has narrowed, so the sibling invariant below holds
-            // unchanged.
-            let base = state.goal_binder_base(&goal);
-            let fvar = FVarId::new(base);
-
-            // Keep the global counter monotonic past this allocation so unrelated
-            // global `fresh_fvar` calls never collide with `fvar`, and so
-            // `closed_proof`'s `close_fvars_validated(.., base, limit=next_fvar)`
-            // scan range still covers this FVar's id.
-            state.next_fvar = state.next_fvar.max(base + 1);
-
-            // Create the new local declaration
-            let local_decl = LocalDecl {
-                fvar,
-                name: name.clone(),
-                ty: domain.as_ref().clone(),
-                value: None,
-            };
-
-            // Create new context with the hypothesis
-            let mut new_ctx = goal.local_ctx.clone();
-            new_ctx.push(local_decl);
-
-            // Instantiate the codomain with the free variable
-            let new_target = codomain.instantiate(&Expr::fvar(fvar));
-
-            // Create new metavariable for the new goal
-            let new_meta_id = state.fresh_meta_in_context(new_target.clone(), &new_ctx);
-
-            // The proof of the original goal is λ x : A, <new_proof>
-            let new_meta_expr = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(new_meta_id)));
-            let proof = Expr::lam(
-                *bi,
-                domain.as_ref().clone(),
-                new_meta_expr.abstract_fvar(fvar),
-            );
-
-            // Part of #2154: type-check intro proof. The tactic-level
-            // infer_type now fixes leaked FVars in Pi types via
-            // fix_pi_leaked_fvars (#2197), so close_goal works here.
-            state.close_goal(&goal, proof)?;
-
-            // Add the new goal
-            let new_goal = Goal {
-                meta_id: new_meta_id,
-                target: new_target,
-                local_ctx: new_ctx,
-                tag: None,
-            };
-
-            state.goals.push_front(new_goal);
-            Ok(())
-        }
-        _ => Err(TacticError::GoalMismatch(
-            "intro requires a forall/arrow goal".to_string(),
-        )),
+/// ENSURES: On Err(GoalMismatch), target has neither binder; state is unchanged
+pub fn intro(state: &mut ProofState, name: &clean_parser::SurfaceName) -> TacticResult {
+    enum IntroBinder {
+        Forall(clean_kernel::BinderData),
+        Let {
+            name: Name,
+            value: Expr,
+            non_dep: bool,
+        },
     }
+
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    // An explicit let must be introduced before WHNF zeta-reduces its value,
+    // including when outer metadata hides the binder. In particular, a reverted
+    // definition is not an arbitrary hypothesis. Inspect through metadata without
+    // changing the stored goal or its checked continuation.
+    let original = state.metas.instantiate(&goal.target);
+    let exposed = original.strip_mdata();
+    let target = if matches!(exposed.kind(), ExprKind::Let(..)) {
+        exposed.clone()
+    } else {
+        state.whnf(&goal, &original)
+    };
+    let (binder, domain, codomain) = match target.kind() {
+        ExprKind::Pi(info, domain, body) => {
+            (IntroBinder::Forall(*info), domain.clone(), body.clone())
+        }
+        ExprKind::Let(name, ty, value, body, non_dep) => (
+            IntroBinder::Let {
+                name: name.clone(),
+                value: value.as_ref().clone(),
+                non_dep: *non_dep,
+            },
+            ty.clone(),
+            body.clone(),
+        ),
+        _ => {
+            return Err(TacticError::GoalMismatch(
+                "intro requires a forall/arrow or let goal".to_string(),
+            ))
+        }
+    };
+
+    let name = fresh_hyp_name_typed(&goal.local_ctx, name);
+
+    // Create a free variable for the introduced hypothesis from THIS
+    // goal's own tactic-binder base rather than the monotonic global
+    // `next_fvar` counter (#2533). `close_fvars` maps a tactic FVar `n`
+    // to a BVar only when `n` lands in `[fvar_base, fvar_base + depth)`,
+    // so a goal's first `intro` must get id `fvar_base` and each further
+    // intro the next slot up. `goal_fvar_base` computes exactly that from
+    // the goal's context, so it is depth-correct for BOTH sibling goals
+    // (a fresh `;`-sequenced sibling has no tactic FVars → base ==
+    // `fvar_base`, identical to the first sibling) AND single-goal
+    // multi-intro (`intro a; intro b`: after `a` the max is `base`, so
+    // `b` gets `base + 1`). Using the global counter instead let an
+    // earlier sibling's advanced `next_fvar` leak into the next sibling's
+    // first `intro`, producing a too-high id that `close_fvars` could not
+    // convert → fail-closed `ProofNotProduced`.
+    // `goal_binder_base`, not `goal_fvar_base`: a goal whose context was
+    // narrowed by `clear` keeps the removed local in its meta scope and
+    // under a live `lambda`, so the context alone would hand back an id
+    // that is still bound (capture). Identical to `goal_fvar_base`
+    // wherever nothing has narrowed, so the sibling invariant below holds
+    // unchanged.
+    let base = state.goal_binder_base(&goal);
+    let fvar = FVarId::new(base);
+
+    // Keep the global counter monotonic past this allocation so unrelated
+    // global `fresh_fvar` calls never collide with `fvar`, and so
+    // `closed_proof`'s `close_fvars_validated(.., base, limit=next_fvar)`
+    // scan range still covers this FVar's id.
+    state.next_fvar = state.next_fvar.max(base + 1);
+
+    // Create the new local declaration
+    // Lean's `introN` head-betas the binder's type: a `∀`-bodied
+    // predicate instantiated at its argument (`(fun h => p h) w`)
+    // is introduced as `p w`. The lambda below keeps the domain as
+    // written; the two are definitionally equal.
+    let local_decl = LocalDecl {
+        binder_info: match &binder {
+            IntroBinder::Forall(info) => *info,
+            IntroBinder::Let { .. } => Default::default(),
+        },
+        fvar,
+        name: name.clone(),
+        ty: super::op_projection::head_beta(&domain),
+        value: match &binder {
+            IntroBinder::Forall(_) => None,
+            IntroBinder::Let { value, .. } => Some(value.clone()),
+        },
+    };
+
+    // Create new context with the hypothesis
+    let mut new_ctx = goal.local_ctx.clone();
+    new_ctx.push(local_decl);
+
+    // Instantiate the codomain with the free variable
+    let new_target = codomain.instantiate(&Expr::fvar(fvar));
+
+    // The visible target retains the defined local. The continuation meta's
+    // declared type substitutes its genuine value, so it can also be checked
+    // under the original goal's scope while the let proof is assembled.
+    // These targets are definitionally equal in new_ctx; no context is widened.
+    let meta_target = match &binder {
+        IntroBinder::Forall(_) => new_target.clone(),
+        IntroBinder::Let { value, .. } => codomain.instantiate(value),
+    };
+    let new_meta_id = state.fresh_meta_in_context(meta_target, &new_ctx);
+
+    // Keep the same binder in the proof: a lambda for a hypothesis, a let for a definition.
+    let new_meta_expr = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(new_meta_id)));
+    let proof_body = new_meta_expr.abstract_fvar(fvar);
+    let proof = match binder {
+        IntroBinder::Forall(info) => Expr::lam(info, domain.as_ref().clone(), proof_body),
+        IntroBinder::Let {
+            name,
+            value,
+            non_dep,
+        } => Expr::let_named(name, domain.as_ref().clone(), value, proof_body, non_dep),
+    };
+
+    // Part of #2154: type-check intro proof. The tactic-level
+    // infer_type now fixes leaked FVars in Pi types via
+    // fix_pi_leaked_fvars (#2197), so close_goal works here.
+    state.close_goal(&goal, proof)?;
+
+    // Add the new goal
+    let new_goal = Goal {
+        meta_id: new_meta_id,
+        target: new_target,
+        local_ctx: new_ctx,
+        case_binders: goal.case_binders.clone(),
+        tag: goal.tag.clone(),
+    };
+
+    state.goals.push_front(new_goal);
+    Ok(())
 }
 
 /// Introduce multiple hypotheses
@@ -191,7 +243,7 @@ pub fn intro(state: &mut ProofState, name: &str) -> TacticResult {
 /// REQUIRES: Current goal target has at least `names.len()` nested Pi/forall binders
 /// ENSURES: On Ok, `names.len()` hypotheses are introduced sequentially via `intro`
 /// ENSURES: On Err, partial introductions may have been applied (not transactional)
-pub fn intros(state: &mut ProofState, names: Vec<String>) -> TacticResult {
+pub fn intros(state: &mut ProofState, names: Vec<clean_parser::SurfaceName>) -> TacticResult {
     for name in &names {
         intro(state, name)?;
     }
@@ -316,7 +368,8 @@ fn apply_aux_acc(
                                 meta_id,
                                 target,
                                 local_ctx: goal.local_ctx.clone(),
-                                tag: None,
+                                case_binders: goal.case_binders.clone(),
+                                tag: goal.tag.clone(),
                             };
                             state.goals.push_front(new_goal);
                         }
@@ -362,22 +415,58 @@ fn apply_aux_acc(
 /// # Contract
 ///
 /// REQUIRES: `state.goals` is non-empty
-/// ENSURES: On Ok, a local hypothesis with type definitionally equal to the goal target is used
-/// ENSURES: On Err(HypothesisNotFound), no hypothesis matches; state is unchanged
+/// ENSURES: On Ok, the newest local matching exact's unification policy closes the checked goal
+/// ENSURES: On Err(NoMatchingHypothesis), speculative assignments and goals are unchanged
 pub fn assumption(state: &mut ProofState) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = state.metas.instantiate(&goal.target);
+    let target_has_metas = crate::tactic::pattern::contains_unassigned_meta(&target);
 
-    // Search through hypotheses for one that matches
-    for decl in &goal.local_ctx {
+    // Search newest first, but a kernel-transparent match is only an
+    // eligibility check. The selected local must also match exact's
+    // elaborator transparency and protected-head policy. Otherwise a newer
+    // irreducible local can hide an older usable hypothesis.
+    for decl in goal.local_ctx.iter().rev() {
         let hyp_ty = state.metas.instantiate(&decl.ty);
-        if state.is_def_eq(&goal, &hyp_ty, &target) {
-            return exact(state, Expr::fvar(decl.fvar));
+        if !state.is_def_eq(&goal, &hyp_ty, &target)
+            && !target_has_metas
+            && !crate::tactic::pattern::contains_unassigned_meta(&hyp_ty)
+        {
+            continue;
         }
+        let ctx = state.build_local_ctx(&goal);
+        state.metas.push_scope();
+        let unified = {
+            let (metas, env) = state.metas_and_env();
+            matches!(
+                Unifier::with_env(metas, env, ctx)
+                    .with_protected_heads()
+                    .unify(&hyp_ty, &target),
+                UnifyResult::Success
+            )
+        };
+        if unified {
+            // Keep the existing checked assignment boundary; no candidate
+            // assignments survive if that final check rejects the proof.
+            match state.close_goal(&goal, Expr::fvar(decl.fvar)) {
+                Ok(()) => {
+                    state.metas.commit();
+                    return Ok(());
+                }
+                Err(error) => {
+                    state.metas.pop_scope();
+                    state.invalidate_tc_cache();
+                    return Err(error);
+                }
+            }
+        }
+        state.metas.pop_scope();
+        state.invalidate_tc_cache();
     }
 
-    Err(TacticError::HypothesisNotFound(
-        "no matching hypothesis found".into(),
+    Err(crate::tactic::display::no_matching_hypothesis(
+        state,
+        "assumption",
     ))
 }
 
@@ -435,6 +524,38 @@ pub fn rfl(state: &mut ProofState) -> TacticResult {
     // universe metavars resolved during apply/unification.
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let target = state.metas.instantiate(&goal.target);
+
+    // Lean's `rfl` closes ANY reflexive relation registered `@[refl]`, not
+    // only `Eq`: `Iff.refl` and `HEq.refl` are the two the core library
+    // registers, and Lean core itself relies on the first — every structure
+    // field declared `f : ∀ a b, a < b ↔ … := by intros; rfl`
+    // (`Preorder.lt_iff_le_not_ge`, `LinearOrder.min_def`, …) is discharged
+    // by `rfl` on an `Iff`. Until 2026-09-10 Clean's `rfl` applied `Eq.refl`
+    // to that goal and reported `rigid head/arity mismatch: Eq vs Iff`, so
+    // `Pi.preorder`'s autoParam script failed one step after it started
+    // running (measured on `Mathlib/Order/Basic.lean`). The goal head decides
+    // the constant; `apply` still unifies both sides, so a non-reflexive
+    // `p ↔ q` fails here exactly as `Eq.refl` fails on `a = b`.
+    if let ExprKind::Const(head, _) = target.get_app_fn().kind() {
+        // Both spellings: the builtin prelude carries `Iff.rfl` but not
+        // `Iff.refl`; a real `Init` import carries both.
+        let refl_for: &[&str] = match head.to_string().as_str() {
+            "Iff" => &["Iff.refl", "Iff.rfl"],
+            "HEq" => &["HEq.refl", "HEq.rfl"],
+            _ => &[],
+        };
+        if !refl_for.is_empty() {
+            for candidate in refl_for {
+                if state.env.get_const(&Name::from_string(candidate)).is_some() {
+                    let refl = state.mk_const_str(candidate);
+                    return apply(state, refl);
+                }
+            }
+            return Err(TacticError::EnvironmentMissing {
+                constant: refl_for[0].to_string(),
+            });
+        }
+    }
     let extracted_levels = equality::match_equality(&target)
         .map(|(_ty, _lhs, _rhs, lvls)| lvls)
         .ok();

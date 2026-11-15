@@ -42,6 +42,15 @@
 //! retire both and break that discharge, so they stay pinned here rather than
 //! being quietly proved.
 //!
+//! **KR1 slice 1 (2026-10-22, `docs/DECISIONS.md` R132).** The `Fact` triple
+//! and the 163 `SetTheory.*` symbols left the default prelude for the opt-in
+//! stub theory (`env/stub_theory.rs`, `Environment::init_stub_theory`): the
+//! non-foundational count fell from 267 to 101 and the default prelude has
+//! no asserted proposition left. A source or `.olean` `class Fact` now
+//! registers directly, with no stub to discharge. The wrap control below opts
+//! its probe environment into the stub theory to keep a value-less
+//! proposition to wrap.
+//!
 //! # Not a second taxonomy
 //!
 //! The buckets come from [`super::soundness_certificate::partition_axioms`] —
@@ -54,15 +63,23 @@
 //!   mathematical statement the kernel never checked. It is genuine
 //!   domain-specific debt in CLAUDE.md's sense: a proof reaching one is not a
 //!   proof.
-//! * **`debt_signature`** — an axiom whose type is data (`Sort u`, `u ≠ 0`) or
-//!   a type former. This is an uninterpreted symbol — a declared name with no
-//!   definition, the shape `Set.union` / `Subgroup.carrier` / `IO` have. It
-//!   asserts no proposition, so it cannot make a false statement provable on
-//!   its own; it is API-completeness debt, and it is counted separately rather
-//!   than being laundered into the same number as the propositions.
+//! * **`debt_signature`** — an axiom whose type is data (`Sort u`, `u ≠ 0`) and
+//!   WITNESSED inhabited by [`super::axiom_inhabitation`]: an uninterpreted
+//!   symbol — a declared name with no definition, the shape `Set.union` /
+//!   `Subgroup.carrier` / `IO.println` have. Every witnessed axiom holds in ONE
+//!   fixed model of the whole environment, so together they cannot make a false
+//!   statement provable; it is API-completeness debt, counted separately rather
+//!   than laundered into the same number as the propositions.
+//! * **`debt_inhabitation`** — an axiom whose type is data but NOT witnessed
+//!   inhabited. The sort alone decides nothing: until 2026-09-28 this census
+//!   filed `Pure.pure : {m} → {α} → α → m α` as a signature because its sort is
+//!   `Type (max (u+1) v)`, and it proved `False`
+//!   (`docs/issues/2026-09-28-prelude-pure-proves-false.md`). An unwitnessed
+//!   inhabitation claim is treated exactly like an asserted proposition.
 //!
 //! The split is computed by the kernel (`infer_type` of the declared type,
-//! `is_def_eq` against `Sort 0`), never by reading a name.
+//! `is_def_eq` against `Sort 0`, then the inhabitation witness), never by
+//! reading a name.
 //!
 //! # What the gate refuses
 //!
@@ -128,6 +145,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
 use super::axiom_audit::is_foundational_axiom;
+use super::axiom_inhabitation::inhabitation_witness;
 use super::soundness_certificate::partition_axioms;
 use super::types::{ConstantKind, Declaration};
 use super::Environment;
@@ -142,24 +160,14 @@ fn ratchet_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../data/prelude_axiom_ratchet.json")
 }
 
-/// Build the environment a bare `clean check <file>` loads.
-///
-/// This is `Environment::with_prelude()` plus the three registrars the CLI
-/// applies before it elaborates a single line, mirrored from
-/// `crates/clean-cli/src/cmd_core.rs:66-104` (`PreludeMode::Builtin`, the
-/// default). Censusing `with_prelude()` alone would UNDER-count: `init_io_ops`
-/// registers a family of `IO.*` axioms that every default `clean check` run
-/// carries (11 constants, measured).
-///
-/// The kernel cannot depend on `clean-cli`, so the mirror is by construction,
-/// and `prelude_axiom_census_mirrors_the_cli_check_environment` pins the fact
-/// that each mirrored registrar is reachable and contributes.
+/// Mirror the default production check constructor's checked List and ULift
+/// registrars. IO/control/admission signatures are explicit optional fragments;
+/// they must not be counted as default declarations (F3). The elaborator's
+/// production-constructor test independently checks this mirror at runtime.
 fn check_default_env() -> Environment {
     let mut env = Environment::with_prelude();
     env.init_monad_list_insts()
         .expect("invariant: init_monad_list_insts is idempotent on with_prelude()");
-    env.init_io_ops()
-        .expect("invariant: init_io_ops is idempotent on with_prelude()");
     env.init_ulift()
         .expect("invariant: init_ulift is idempotent on with_prelude()");
     env
@@ -190,8 +198,15 @@ struct PreludeAxiomCensus {
     admitted_domain: BTreeSet<String>,
     /// Non-foundational, `Prop`-typed: an asserted mathematical statement.
     debt_proposition: BTreeSet<String>,
-    /// Non-foundational, data-typed: an uninterpreted symbol.
+    /// Non-foundational, data-typed, and WITNESSED inhabited in the census
+    /// model (`axiom_inhabitation.rs`): an uninterpreted symbol.
     debt_signature: BTreeSet<String>,
+    /// Non-foundational, data-typed, and NOT witnessed inhabited: the type
+    /// claims an inhabitant the census cannot exhibit in any model it knows.
+    /// `Pure.pure`'s old type (`{m} → {α} → α → m α`) is the reason this
+    /// bucket exists — it proved `False`, and the old split called it a
+    /// signature because its SORT is not `Prop`.
+    debt_inhabitation: BTreeSet<String>,
     /// Non-foundational axioms whose type the kernel could not classify.
     /// Counted separately and NEVER folded into either debt bucket — an
     /// unclassifiable type is the absence of information, not a signature.
@@ -211,6 +226,7 @@ impl PreludeAxiomCensus {
             &self.admitted_domain,
             &self.debt_proposition,
             &self.debt_signature,
+            &self.debt_inhabitation,
             &self.unknown_sort,
         ] {
             out.extend(set.iter().cloned());
@@ -233,10 +249,17 @@ impl PreludeAxiomCensus {
 /// telescope over `Set α`, whose sort is `Sort (u+1)`, so the axiom declares an
 /// uninterpreted symbol. The comparison goes through `is_def_eq` rather than a
 /// syntactic `is_prop`, so an unnormalized `imax` sort is still recognized.
+///
+/// A data-typed axiom is a SIGNATURE only when
+/// [`super::axiom_inhabitation::inhabitation_witness`] exhibits why its type is
+/// inhabited in the census model; otherwise it is an INHABITATION claim. The
+/// sort alone cannot decide it: `Pure.pure`'s old type lives in
+/// `Type (max (u+1) v)` and proved `False`.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum AxiomTypeClass {
     Proposition,
     Signature,
+    Inhabitation,
     Unknown,
 }
 
@@ -246,8 +269,10 @@ fn classify_axiom_type(env: &Environment, ty: &Expr) -> AxiomTypeClass {
         Ok(sort) => {
             if tc.is_def_eq(&sort, &Expr::prop()) {
                 AxiomTypeClass::Proposition
-            } else {
+            } else if inhabitation_witness(env, ty).is_ok() {
                 AxiomTypeClass::Signature
+            } else {
+                AxiomTypeClass::Inhabitation
             }
         }
         Err(_) => AxiomTypeClass::Unknown,
@@ -288,6 +313,9 @@ fn census(env: &Environment) -> PreludeAxiomCensus {
                         }
                         AxiomTypeClass::Signature => {
                             out.debt_signature.insert(s);
+                        }
+                        AxiomTypeClass::Inhabitation => {
+                            out.debt_inhabitation.insert(s);
                         }
                         AxiomTypeClass::Unknown => {
                             out.unknown_sort.insert(s);
@@ -368,6 +396,7 @@ fn new_axiom_problems(c: &PreludeAxiomCensus, r: &serde_json::Value) -> Vec<Stri
     pinned.extend(pinned_set(r, "admitted_domain"));
     pinned.extend(pinned_set(r, "debt_proposition"));
     pinned.extend(pinned_set(r, "debt_signature"));
+    pinned.extend(pinned_set(r, "debt_inhabitation"));
     pinned.extend(pinned_set(r, "unknown_sort"));
 
     let live = c.pinned_names();
@@ -383,6 +412,7 @@ fn new_axiom_problems(c: &PreludeAxiomCensus, r: &serde_json::Value) -> Vec<Stri
         ("baseline_non_foundational", c.non_foundational_total()),
         ("baseline_debt_proposition", c.debt_proposition.len()),
         ("baseline_debt_signature", c.debt_signature.len()),
+        ("baseline_debt_inhabitation", c.debt_inhabitation.len()),
         ("baseline_unknown_sort", c.unknown_sort.len()),
         ("baseline_trust_markers", c.trust_markers.len()),
         ("baseline_admitted_domain", c.admitted_domain.len()),
@@ -393,6 +423,21 @@ fn new_axiom_problems(c: &PreludeAxiomCensus, r: &serde_json::Value) -> Vec<Stri
                 "RATCHET `{key}` rose: live {live_count} > baseline {baseline}"
             ));
         }
+    }
+
+    // A name pinned as a SIGNATURE that the witness criterion now refuses is
+    // a MISCLASSIFICATION, whatever the counts say: it is the exact error the
+    // old sort-only split made on `Pure.pure`.
+    let pinned_signature = pinned_set(r, "debt_signature");
+    let misclassified: Vec<&String> = c
+        .debt_inhabitation
+        .intersection(&pinned_signature)
+        .collect();
+    if !misclassified.is_empty() {
+        problems.push(format!(
+            "PINNED AS debt_signature BUT NOT WITNESSED INHABITED: {misclassified:?} — the type \
+             claims an inhabitant the census cannot exhibit, so it is not an uninterpreted symbol"
+        ));
     }
 
     let pinned_foundational = pinned_set(r, "foundational");
@@ -464,6 +509,7 @@ fn census_as_ratchet(
         "baseline_non_foundational": c.non_foundational_total(),
         "baseline_debt_proposition": c.debt_proposition.len(),
         "baseline_debt_signature": c.debt_signature.len(),
+        "baseline_debt_inhabitation": c.debt_inhabitation.len(),
         "baseline_unknown_sort": c.unknown_sort.len(),
         "baseline_trust_markers": c.trust_markers.len(),
         "baseline_admitted_domain": c.admitted_domain.len(),
@@ -479,6 +525,7 @@ fn census_as_ratchet(
         "admitted_domain": c.admitted_domain.iter().collect::<Vec<_>>(),
         "debt_proposition": c.debt_proposition.iter().collect::<Vec<_>>(),
         "debt_signature": c.debt_signature.iter().collect::<Vec<_>>(),
+        "debt_inhabitation": c.debt_inhabitation.iter().collect::<Vec<_>>(),
         "unknown_sort": c.unknown_sort.iter().collect::<Vec<_>>(),
         "theorems_reaching_debt": serde_json::Value::Object(debt_map),
         "definitions_reaching_debt": serde_json::Value::Object(
@@ -607,7 +654,10 @@ fn reaches_no_asserted_proposition(
     reached: &BTreeMap<String, Vec<String>>,
     r: &serde_json::Value,
 ) -> Vec<String> {
-    let props = pinned_set(r, "debt_proposition");
+    let mut props = pinned_set(r, "debt_proposition");
+    // An unwitnessed inhabitation claim is treated exactly like an asserted
+    // proposition: it may be what makes a statement provable.
+    props.extend(pinned_set(r, "debt_inhabitation"));
     reached
         .iter()
         .filter(|(_, deps)| deps.iter().any(|d| props.contains(d)))
@@ -629,19 +679,32 @@ fn prelude_axiom_ratchet_refuses_a_theorem_that_wraps_a_prelude_axiom() {
 
     // #49 RETARGET: this control used to wrap `Nat.lt_succ_iff`, which is now a
     // kernel-checked Theorem (`nat_lt_succ_iff_proof.rs`), so it can no longer
-    // serve as the axiom to wrap. `Fact.out` is the remaining
-    // `debt_proposition` entry with the plainest type. When the `Fact` triple is
-    // retired too, retarget again — do NOT weaken the precondition.
+    // serve as the axiom to wrap. It then wrapped `Fact.out`, the last
+    // `debt_proposition` entry with the plainest type.
+    //
+    // KR1 slice 1 (R132): `Fact` moved, with `SetTheory.*`, out of the default
+    // prelude into the opt-in stub theory, so the default prelude has NO
+    // asserted proposition left to wrap. The control now opts the probe
+    // environment into that theory and wraps `Fact.out` there: the gate's
+    // predicate is the same function over the same census, so it must still
+    // name the wrapped axiom. The precondition is not weakened: `Fact.out`
+    // must be ABSENT from the default prelude and an AXIOM once opted in.
     let target = Name::from_string("Fact.out");
+    assert!(
+        env.get_const(&target).is_none(),
+        "control precondition: Fact.out is no longer in the default prelude (R132)"
+    );
+    env.init_stub_theory()
+        .expect("the opt-in stub theory initializes on the default prelude");
     let info = env
         .get_const(&target)
         .cloned()
-        .expect("Fact.out is registered by the default prelude");
+        .expect("Fact.out is registered by the opt-in stub theory");
     assert_eq!(
         info.kind,
         ConstantKind::Axiom,
-        "control precondition: Fact.out must still be an AXIOM in the default prelude. \
-         If it has been PROVED, retarget this control at another debt_proposition entry."
+        "control precondition: Fact.out must still be an AXIOM in the stub theory. \
+         If it has been PROVED, retarget this control at another asserted proposition."
     );
 
     let probe = Name::from_string("PreludeAxiomProbe.wrapsFactOut");
@@ -755,8 +818,10 @@ fn prelude_axiom_ratchet_refuses_a_newly_planted_axiom() {
 /// Refusal 4 answers "does anything the prelude calls PROVED rest on debt?"
 /// and the measured answer is no. That is a narrower fact than it reads as,
 /// because a user's theorem inherits the closure of every constant it
-/// mentions: `Set.union` is itself an axiom here, so `theorem foo : ... (A ∪ B)
-/// ...` reaches debt on its first line without the user writing an axiom name.
+/// mentions: `IO.bind` is itself an axiom here, so a theorem about an `IO`
+/// action reaches debt on its first line without the user writing an axiom
+/// name (until KR1 increment 3, R143, `Set.union` was one too, and `A ∪ B`
+/// did the same).
 /// This measures that exposure surface directly and ratchets it, so the honest
 /// statement stays honest as definitions are added.
 ///
@@ -823,12 +888,8 @@ fn prelude_axiom_census_definition_exposure_does_not_grow() {
 
 /// The census must keep measuring the CLI's environment, not a subset of it.
 ///
-/// `check_default_env` mirrors three registrars the kernel cannot call through
-/// `clean-cli`. If one of them stops contributing — renamed, folded into
-/// `with_prelude`, or dropped from the check path — the mirror silently starts
-/// censusing a smaller environment than the one users get. This pins that each
-/// mirrored registrar is still reachable and that the CLI-side environment is
-/// strictly larger than the bare prelude.
+/// The mirror's checked registrars remain live, while IO is absent by default.
+/// An explicitly opted-in IO context is the non-vacuous classifier control.
 #[test]
 fn prelude_axiom_census_mirrors_the_cli_check_environment() {
     let bare = Environment::with_prelude();
@@ -836,12 +897,16 @@ fn prelude_axiom_census_mirrors_the_cli_check_environment() {
     assert!(
         full.constants().count() > bare.constants().count(),
         "check_default_env() added nothing over Environment::with_prelude(): the CLI mirror \
-         (init_monad_list_insts / init_io_ops / init_ulift) has gone inert, so this census \
+         (init_monad_list_insts / init_ulift) has gone inert, so this census \
          measures a SMALLER environment than a bare `clean check` loads."
     );
-    // `init_io_ops` is the registrar that adds axioms rather than definitions;
-    // its absence would silently shrink the axiom census.
-    let io_axioms = full
+    // Default construction must omit IO, and explicit opt-in must retain it.
+    assert!(full.get_const(&Name::from_string("IO")).is_none());
+    let mut opted = full.clone();
+    opted
+        .init_io_stub_theory()
+        .expect("explicit IO stub theory");
+    let io_axioms = opted
         .constants()
         .filter(|c| c.kind == ConstantKind::Axiom && c.name.to_string().starts_with("IO."))
         .count();
@@ -851,15 +916,19 @@ fn prelude_axiom_census_mirrors_the_cli_check_environment() {
     );
 }
 
-/// Every trust marker in the default environment must be classified as debt,
-/// never as foundational. This is the #3554 regression in census form.
+/// Explicitly opted-in trust markers must be classified as debt, never as
+/// foundational; the default environment must have none. This is the #3554 regression in census form.
 #[test]
 fn prelude_axiom_census_trust_markers_are_not_foundational() {
-    let env = check_default_env();
+    let mut env = check_default_env();
+    assert!(census(&env).trust_markers.is_empty());
+    env.init_admission_stub_theory()
+        .expect("explicit admission stub theory");
     let c = census(&env);
+    assert_eq!(c.trust_markers.len(), 4);
     assert!(
         !c.trust_markers.is_empty(),
-        "VACUITY: no trust markers found in the default environment, so this test proves \
+        "VACUITY: no trust markers found in the opted-in environment, so this test proves \
          nothing. `sorry` / `sorryAx` are registered by init_sorry / init_sorry_ax."
     );
     for m in &c.trust_markers {
@@ -873,4 +942,202 @@ fn prelude_axiom_census_trust_markers_are_not_foundational() {
             "is_foundational_axiom({m}) is true — the #3554 classifier bug is back"
         );
     }
+}
+
+/// THE ARM THAT IS RED ON THE OLD, SORT-ONLY SPLIT.
+///
+/// Until 2026-09-28 the default prelude carried
+/// `axiom Pure.pure : {m : Type u → Type v} → {α : Type u} → α → m α`, and this
+/// census filed it under `debt_signature` — "an uninterpreted symbol that
+/// asserts no proposition" — because the SORT of that type is
+/// `Type (max (u+1) v)`, not `Prop`. It proved `False`
+/// (`Empty.elim (Pure.pure (fun _ => Empty) Nat 0)`;
+/// `docs/issues/2026-09-28-prelude-pure-proves-false.md`). This arm plants the
+/// OLD `Pure.pure` and `Bind.bind` types under fresh names and requires the
+/// census to refuse them the signature bucket, and the gate to refuse them;
+/// with the sort-only classifier restored it fails on its first assertion
+/// (demonstrated in the issue file).
+///
+/// Controls pin the other direction, so the criterion cannot pass by refusing
+/// everything: an uninterpreted type former and an axiom of type `Nat` stay
+/// signatures, and an axiom of type `Empty` — a closed data type with no
+/// inhabitant, which the sort-only split ALSO called a signature — is refused.
+#[test]
+fn prelude_axiom_ratchet_refuses_signature_for_an_uninhabitable_type() {
+    use crate::expr::BinderInfo;
+    let mut env = check_default_env();
+    let u = Level::param(Name::from_string("u"));
+    let v = Level::param(Name::from_string("v"));
+    let ty_u = Expr::sort(Level::succ(u.clone()));
+    let ty_v = Expr::sort(Level::succ(v.clone()));
+    let kind = Expr::pi(BinderInfo::Default, ty_u.clone(), ty_v);
+    let lps = vec![Name::from_string("u"), Name::from_string("v")];
+
+    // {m : Type u → Type v} → {α : Type u} → α → m α           (old Pure.pure)
+    let old_pure = Expr::pi(
+        BinderInfo::Implicit,
+        kind.clone(),
+        Expr::pi(
+            BinderInfo::Implicit,
+            ty_u.clone(),
+            Expr::pi(
+                BinderInfo::Default,
+                Expr::bvar(0),
+                Expr::app(Expr::bvar(2), Expr::bvar(1)),
+            ),
+        ),
+    );
+    // {m} → {α β : Type u} → m α → (α → m β) → m β           (old Bind.bind)
+    let old_bind = Expr::pi(
+        BinderInfo::Implicit,
+        kind.clone(),
+        Expr::pi(
+            BinderInfo::Implicit,
+            ty_u.clone(),
+            Expr::pi(
+                BinderInfo::Implicit,
+                ty_u.clone(),
+                Expr::pi(
+                    BinderInfo::Default,
+                    Expr::app(Expr::bvar(2), Expr::bvar(1)),
+                    Expr::pi(
+                        BinderInfo::Default,
+                        Expr::pi(
+                            BinderInfo::Default,
+                            Expr::bvar(2),
+                            Expr::app(Expr::bvar(4), Expr::bvar(2)),
+                        ),
+                        Expr::app(Expr::bvar(4), Expr::bvar(2)),
+                    ),
+                ),
+            ),
+        ),
+    );
+    let planted: [(&str, Vec<Name>, Expr); 5] = [
+        ("PreludeAxiomProbe.oldPurePure", lps.clone(), old_pure),
+        ("PreludeAxiomProbe.oldBindBind", lps, old_bind),
+        (
+            "PreludeAxiomProbe.carrier",
+            vec![],
+            Expr::pi(
+                BinderInfo::Default,
+                Expr::sort(Level::succ(Level::zero())),
+                Expr::sort(Level::succ(Level::zero())),
+            ),
+        ),
+        (
+            "PreludeAxiomProbe.someNat",
+            vec![],
+            Expr::const_(Name::from_string("Nat"), Vec::<Level>::new()),
+        ),
+        (
+            "PreludeAxiomProbe.someEmpty",
+            vec![],
+            Expr::const_(Name::from_string("Empty"), Vec::<Level>::new()),
+        ),
+    ];
+    for (name, level_params, type_) in planted {
+        env.add_decl(Declaration::Axiom {
+            name: Name::from_string(name),
+            level_params,
+            type_,
+        })
+        .unwrap_or_else(|e| panic!("planting {name} must be well-formed: {e:?}"));
+    }
+
+    let c = census(&env);
+    for refused in [
+        "PreludeAxiomProbe.oldPurePure",
+        "PreludeAxiomProbe.oldBindBind",
+        "PreludeAxiomProbe.someEmpty",
+    ] {
+        assert!(
+            !c.debt_signature.contains(refused),
+            "{refused} was classed debt_signature (\"asserts no proposition\"); its type is \
+             inhabited in no model, so that is the Pure.pure misclassification again"
+        );
+        assert!(
+            c.debt_inhabitation.contains(refused),
+            "{refused} did not land in debt_inhabitation (prop={} unknown={})",
+            c.debt_proposition.contains(refused),
+            c.unknown_sort.contains(refused)
+        );
+    }
+    for kept in ["PreludeAxiomProbe.carrier", "PreludeAxiomProbe.someNat"] {
+        assert!(
+            c.debt_signature.contains(kept),
+            "control {kept} is witnessed inhabited and must stay a signature; the criterion \
+             is refusing too much"
+        );
+    }
+
+    let r = load_ratchet();
+    let problems = new_axiom_problems(&c, &r);
+    assert!(
+        problems
+            .iter()
+            .any(|p| p.contains("baseline_debt_inhabitation")),
+        "refusal 2 did not fire on a risen debt_inhabitation count; problems were {problems:?}"
+    );
+
+    // And a ratchet that PINS the old type as a signature — the checked-in
+    // file before this fix, in miniature — is refused by name.
+    let mut stale = r.clone();
+    if let Some(sig) = stale
+        .get_mut("debt_signature")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        sig.push(serde_json::json!("PreludeAxiomProbe.oldPurePure"));
+    }
+    let stale_problems = new_axiom_problems(&c, &stale);
+    assert!(
+        stale_problems.iter().any(|p| p
+            .contains("PINNED AS debt_signature BUT NOT WITNESSED INHABITED")
+            && p.contains("PreludeAxiomProbe.oldPurePure")),
+        "a ratchet pinning the old Pure.pure type as a signature was not refused; problems \
+         were {stale_problems:?}"
+    );
+}
+
+/// The default prelude registers no axiom the census cannot witness except
+/// the ones the ratchet names, and NONE of the monad family: the class-based
+/// hierarchy leaves no `Pure.pure` / `Bind.bind` / `StateT.*` /
+/// `MonadExcept.throw` / `OptionT.*` axiom behind.
+#[test]
+fn prelude_axiom_census_has_no_monad_inhabitation_axiom() {
+    let env = check_default_env();
+    let c = census(&env);
+    for name in [
+        "Pure.pure",
+        "Bind.bind",
+        "Monad",
+        "StateT.pure",
+        "StateT.get",
+        "StateT.set",
+        "StateT.modify",
+        "StateT.modifyGet",
+        "MonadExcept.throw",
+        "MonadExcept.tryCatch",
+        "OptionT",
+        "OptionT.run",
+        "OptionT.fail",
+        "ExceptT",
+        "ExceptT.run",
+        "StateM",
+        "StateM.pure",
+    ] {
+        let kind = env.get_const(&Name::from_string(name)).map(|ci| ci.kind);
+        assert_ne!(
+            kind,
+            Some(ConstantKind::Axiom),
+            "{name} is still a value-less AXIOM in the default prelude"
+        );
+    }
+    assert!(
+        c.debt_inhabitation
+            .iter()
+            .all(|n| !n.starts_with("Pure.") && !n.starts_with("Bind.")),
+        "debt_inhabitation still names a monad operation: {:?}",
+        c.debt_inhabitation
+    );
 }

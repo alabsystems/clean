@@ -234,6 +234,11 @@ pub(crate) struct AxiomAuditLaneExpectation {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub(crate) enum ReplacementStatus {
+    /// Nothing the row cites measures its claim: its evidence artifact is
+    /// VACUOUS (see `EvidenceContract::Vacuous`). Never hand-declared -- it is
+    /// derived by `effective_status_for`, and it is not a soft `Green`, a soft
+    /// `Blocked` or a soft `PendingEvidence`: it is the absence of information.
+    Unknown,
     Blocked,
     PendingEvidence,
     InProgress,
@@ -310,6 +315,7 @@ pub(crate) enum StrictSolverFragmentBehavior {
 impl ReplacementStatus {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
+            Self::Unknown => "unknown",
             Self::Blocked => "blocked",
             Self::PendingEvidence => "pending_evidence",
             Self::InProgress => "in_progress",

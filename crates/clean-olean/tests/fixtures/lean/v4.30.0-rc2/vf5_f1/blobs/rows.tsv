@@ -1,0 +1,6 @@
+# key	blob	row	fid	census row
+collision	collision.bin	collision_41_helper	0	trust/r1/caller_closure_key_space_collision.rs (-) line 41 `t::t::helper`
+collision	collision.bin	collision_48_helper	2	trust/r1/caller_closure_key_space_collision.rs (-) line 48 `t::helper`
+no_collision	no_collision.bin	no_collision_20_helper	0	trust/r1/caller_closure_key_space_no_collision.rs (-) line 20 `t::u::helper`
+no_collision	no_collision.bin	no_collision_27_helper	2	trust/r1/caller_closure_key_space_no_collision.rs (-) line 27 `t::helper`
+r1_budget	r1_budget_control.bin	r1_budget_control_51_helper	0	trust/r1_budget_trip_mints_no_flip.rs (control) line 51 `t::helper`

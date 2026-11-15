@@ -678,27 +678,18 @@ mod tests {
     }
     fn list_bool_e() -> Expr {
         Expr::app(
-            Expr::const_(
-                clean_kernel::name::Name::from_string("List"),
-                vec![Level::zero()],
-            ),
+            Expr::const_(Name::from_string("List"), vec![Level::zero()]),
             Expr::const_str("Bool"),
         )
     }
     fn bvi_lit(value: u64, width: u32) -> Expr {
         let nil = Expr::app(
-            Expr::const_(
-                clean_kernel::name::Name::from_string("List.nil"),
-                vec![Level::zero()],
-            ),
+            Expr::const_(Name::from_string("List.nil"), vec![Level::zero()]),
             Expr::const_str("Bool"),
         );
         let cons = |h: Expr, t: Expr| {
             Expr::apps(
-                Expr::const_(
-                    clean_kernel::name::Name::from_string("List.cons"),
-                    vec![Level::zero()],
-                ),
+                Expr::const_(Name::from_string("List.cons"), vec![Level::zero()]),
                 [Expr::const_str("Bool"), h, t],
             )
         };
@@ -715,10 +706,7 @@ mod tests {
     }
     fn eq_list_e(a: Expr, b: Expr) -> Expr {
         Expr::apps(
-            Expr::const_(
-                clean_kernel::name::Name::from_string("Eq"),
-                vec![Level::succ(Level::zero())],
-            ),
+            Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
             [list_bool_e(), a, b],
         )
     }
@@ -760,7 +748,7 @@ mod tests {
         use clean_kernel::TypeChecker;
         let mut env = bvi_env();
         env.add_decl(clean_kernel::Declaration::Axiom {
-            name: clean_kernel::name::Name::from_string("sb_bvi"),
+            name: Name::from_string("sb_bvi"),
             level_params: vec![],
             type_: Expr::const_str("Bool"),
         })
@@ -770,18 +758,12 @@ mod tests {
         // xs = ys = [sb] : List Bool
         let one_list = |b: Expr| {
             Expr::apps(
-                Expr::const_(
-                    clean_kernel::name::Name::from_string("List.cons"),
-                    vec![Level::zero()],
-                ),
+                Expr::const_(Name::from_string("List.cons"), vec![Level::zero()]),
                 [
                     Expr::const_str("Bool"),
                     b,
                     Expr::app(
-                        Expr::const_(
-                            clean_kernel::name::Name::from_string("List.nil"),
-                            vec![Level::zero()],
-                        ),
+                        Expr::const_(Name::from_string("List.nil"), vec![Level::zero()]),
                         Expr::const_str("Bool"),
                     ),
                 ],
@@ -811,7 +793,7 @@ mod tests {
         let tc = TypeChecker::with_mode(&env, env.mode());
         let refl = Expr::apps(
             Expr::const_(
-                clean_kernel::name::Name::from_string("Eq.refl"),
+                Name::from_string("Eq.refl"),
                 vec![Level::succ(Level::zero())],
             ),
             [list_bool_e(), add_m.clone()],

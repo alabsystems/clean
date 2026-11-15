@@ -19,14 +19,14 @@ impl ProofState {
     pub(crate) fn meta_scope_for_context(
         &self,
         local_ctx: &[super::LocalDecl],
-    ) -> Vec<(String, FVarId, Expr)> {
+    ) -> Vec<(clean_parser::SurfaceName, FVarId, Expr)> {
         Self::scope_snapshot(&self.elab_locals, local_ctx)
     }
 
     pub(super) fn scope_snapshot(
         elab_locals: &[super::LocalDecl],
         local_ctx: &[super::LocalDecl],
-    ) -> Vec<(String, FVarId, Expr)> {
+    ) -> Vec<(clean_parser::SurfaceName, FVarId, Expr)> {
         let mut seen = HashSet::new();
         let mut locals = Vec::new();
         for decl in elab_locals.iter().chain(local_ctx) {
@@ -47,6 +47,48 @@ impl ProofState {
         local_ctx: &[super::LocalDecl],
     ) -> MetaId {
         let locals = self.meta_scope_for_context(local_ctx);
+        self.metas.fresh_with_locals(ty, locals)
+    }
+
+    /// Create the metavariable of a case goal an eliminator derives from
+    /// `parent` — `cases x`, `induction x`, `induction x using r`.
+    ///
+    /// Each case's VISIBLE context is `case_ctx`: the parent's, minus the
+    /// eliminated major premise `x`, plus the constructor's fields. Its proof,
+    /// though, is a minor premise sitting UNDER the `fun x =>` binder that
+    /// introduced `x` (and under every binder the parent's own scope still
+    /// counts — a local `clear` hid, for one). Minting the case's scope from
+    /// `case_ctx` alone dropped those binders from it, so the next `intro` in
+    /// a field-less case (`goal_binder_base`) handed out `x`'s id again, and
+    /// `close_fvars`' id-to-depth arithmetic resolved the new local to `x`:
+    /// `intro x; cases x; · intro h; exact absurd h hn` built a term whose `h`
+    /// was `x` (kernel: "expected f n = none, got Option Nat"). Keeping the
+    /// parent's scope as an immutable superset — the same invariant `clear`
+    /// relies on — makes the base clear every live binder. The scope never
+    /// widens what the case may NAME: name resolution reads the goal's
+    /// context, from which `x` is gone, exactly as Lean's `cases` clears it.
+    pub(crate) fn fresh_case_meta(
+        &mut self,
+        ty: Expr,
+        parent: &Goal,
+        case_ctx: &[super::LocalDecl],
+    ) -> MetaId {
+        let mut locals = self
+            .metas
+            .get(parent.meta_id)
+            .map(|meta| meta.locals.clone())
+            .unwrap_or_default();
+        let mut seen: HashSet<FVarId> = locals.iter().map(|(_, fvar, _)| *fvar).collect();
+        let extra = self
+            .elab_locals
+            .iter()
+            .chain(&parent.local_ctx)
+            .chain(case_ctx);
+        for decl in extra {
+            if seen.insert(decl.fvar) {
+                locals.push((decl.name.clone(), decl.fvar, decl.ty.clone()));
+            }
+        }
         self.metas.fresh_with_locals(ty, locals)
     }
 
@@ -166,14 +208,15 @@ impl ProofState {
     /// ENSURES: The name is not writable in surface syntax
     pub(crate) fn fresh_universe_param(&mut self) -> Level {
         let name = loop {
-            let candidate = self.level_mint.next_name();
+            let candidate =
+                clean_parser::SurfaceName::from_name(Name::anon().str(self.level_mint.next_name()));
             if !self.universe_params.contains(&candidate) {
                 break candidate;
             }
         };
         self.universe_params.push(name.clone());
-        crate::u2_histogram::u2_mint_trace("proofstate", &name);
-        Level::param(Name::from_string(&name))
+        crate::u2_histogram::u2_mint_trace("proofstate", &name.to_string());
+        Level::param(name.into_name())
     }
 
     /// Build `Expr::const_(name, levels)` with fresh universe params for each

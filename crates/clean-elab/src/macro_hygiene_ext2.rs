@@ -191,7 +191,9 @@ impl HygieneExt2Ctx {
         if self.scope_stack.len() <= 1 {
             return Err(HygieneExt2Error::ScopeUnderflow);
         }
-        Ok(self.scope_stack.pop().expect("invariant: checked above"))
+        self.scope_stack
+            .pop()
+            .ok_or(HygieneExt2Error::ScopeUnderflow)
     }
 
     #[must_use]

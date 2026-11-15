@@ -41,7 +41,7 @@ echo "$out" | tail -3
 if echo "$out" | grep -q "All verification conditions discharged successfully"; then
   echo "OK: F* confirms every ay-admitted lemma holds (each discharged by Z3/SMT)."
   echo "    The Clean side re-proves the SAME statements to the 3 axioms via ay"
-  echo "    reconstruction — gate: cargo test -p clean-mathverse fstar_ay::tests"
+  echo "    reconstruction — gate: targo --unverified test -p clean-mathverse fstar_ay::tests"
 else
   echo "FAIL: F* did not discharge all lemmas." >&2
   exit 1

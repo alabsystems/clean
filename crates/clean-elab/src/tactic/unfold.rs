@@ -7,7 +7,7 @@
 //! Provides tactics for unfolding definitions in goals and hypotheses.
 
 use clean_kernel::name::Name;
-use clean_kernel::{Expr, ExprFolder, ExprVisitor, LevelVec};
+use clean_kernel::{Expr, ExprFolder, ExprKind, ExprVisitor, LevelVec};
 
 use super::{ProofState, TacticError, TacticResult};
 
@@ -24,7 +24,7 @@ pub(crate) enum UnfoldTarget {
     /// Unfold in the current goal target.
     Goal,
     /// Unfold in a named hypothesis.
-    Hypothesis(String),
+    Hypothesis(clean_parser::SurfaceName),
 }
 
 /// Unfold a definition in the goal.
@@ -38,12 +38,12 @@ pub(crate) enum UnfoldTarget {
 ///   named constant with its definition.
 /// ENSURES: On `Ok(())`, the goal stack shape and local context are unchanged;
 ///   only the current target is updated.
-pub fn unfold(state: &mut ProofState, name: &str) -> TacticResult {
+pub fn unfold(state: &mut ProofState, name: &clean_parser::SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let target = goal.target.clone();
 
     // Try to find the definition in the environment
-    let def_name = Name::from_string(name);
+    let def_name = crate::tactic::core::resolve_global_name(state, name)?;
     let const_info = state
         .env
         .get_const(&def_name)
@@ -63,8 +63,10 @@ pub fn unfold(state: &mut ProofState, name: &str) -> TacticResult {
         .clone();
 
     // Substitute the definition for the constant in the target, instantiating
-    // the definition's universe params from each occurrence's level args.
-    let unfolded = substitute_const_levels(&target, &def_name, &def_level_params, &def_val);
+    // the definition's universe params from each occurrence's level args and
+    // head-beta-contracting the value against the occurrence's arguments
+    // (Lean's `deltaExpand`; see `unfold_const_beta`).
+    let unfolded = unfold_const_beta(&target, &def_name, &def_level_params, &def_val);
 
     if unfolded == target {
         return Err(TacticError::UnfoldFailed {
@@ -150,6 +152,98 @@ pub(crate) fn substitute_const_levels(
     folder.fold_expr(expr)
 }
 
+/// Unfold every occurrence of `name` in `expr` the way Lean's `unfold` does:
+/// substitute the (level-instantiated) definition value and **head-beta
+/// contract it against the occurrence's own arguments**.
+///
+/// This is `Lean.Meta.delta?` (`Lean/Meta/Tactic/Delta.lean`):
+/// `f.betaRev e.getAppRevArgs` — the value `fun x₁ … xₙ => body` applied to
+/// `a₁ … aₖ` becomes `body[x₁ := a₁, …]` (with any surplus arguments left
+/// applied, and any missing binders left as a lambda). So `unfold min2` on
+/// `min2 a b ≤ a` yields `(if a < b then a else b) ≤ a`, exactly the goal Lean
+/// prints, rather than the raw redex `(fun a b => if a < b then a else b) a b ≤ a`
+/// that [`substitute_const_levels`] leaves behind.
+///
+/// Why the redex is not merely ugly (measured 2026-09-13, Trust two-language
+/// battery row r11): a tactic that searches the goal structurally — `split`'s
+/// `if-then-else` finder — walked into the un-contracted lambda and returned an
+/// `ite` whose condition was `BVar(1) < BVar(0)`, then rebuilt a
+/// `Decidable.casesOn` spine outside the binder, and the kernel refused it
+/// with "Unbound variable index: 1". Contracting the redex at the source is
+/// the Lean-faithful fix; `split` additionally refuses loose candidates on its
+/// own (see `connective::find_first_ite`), so neither layer relies on the other.
+///
+/// Only the redex *created by the unfolding* is contracted: a beta-redex the
+/// user wrote elsewhere in the goal is left alone, as in Lean. The result is
+/// definitionally equal to `expr` by construction (delta + beta).
+///
+/// REQUIRES: `value` is the stored value of the declaration named `name`,
+///   whose universe parameters are `def_level_params`.
+/// ENSURES: Every application spine `@name.{ls} a₁ … aₖ` in `expr` is replaced
+///   by `head_beta(value[def_level_params := ls] a₁ … aₖ)`; a bare
+///   `@name.{ls}` (no arguments) is replaced by the instantiated value.
+/// ENSURES: Nodes not headed by `name` keep their constructor; children are
+///   rewritten recursively (stack-safe).
+pub(crate) fn unfold_const_beta(
+    expr: &Expr,
+    name: &Name,
+    def_level_params: &[Name],
+    value: &Expr,
+) -> Expr {
+    struct UnfoldBetaFolder<'a> {
+        target_name: &'a Name,
+        def_level_params: &'a [Name],
+        replacement: &'a Expr,
+    }
+
+    impl UnfoldBetaFolder<'_> {
+        fn instantiated_value(&self, levels: &LevelVec) -> Expr {
+            self.replacement
+                .instantiate_level_params_direct(self.def_level_params, levels)
+        }
+    }
+
+    impl ExprFolder for UnfoldBetaFolder<'_> {
+        /// A bare (unapplied) occurrence: substitute the value as-is.
+        fn fold_const(&mut self, name: &Name, levels: &LevelVec) -> Expr {
+            if name == self.target_name {
+                self.instantiated_value(levels)
+            } else {
+                Expr::const_(name.clone(), levels.clone())
+            }
+        }
+
+        /// An applied occurrence: handle the WHOLE spine at its outermost
+        /// `App` node, so the value meets all of the occurrence's arguments at
+        /// once and is head-beta-contracted against them.
+        fn fold_app(&mut self, f: &Expr, a: &Expr) -> Expr {
+            let head = f.get_app_fn();
+            if let ExprKind::Const(name, levels) = head.kind() {
+                if name == self.target_name {
+                    // Arguments may themselves mention `name`; rewrite them
+                    // first so the contraction sees fully-unfolded operands.
+                    let mut args: Vec<Expr> = f
+                        .get_app_args()
+                        .into_iter()
+                        .map(|arg| self.fold_expr(arg))
+                        .collect();
+                    args.push(self.fold_expr(a));
+                    let value = self.instantiated_value(levels);
+                    return super::op_projection::head_beta(&Expr::apps(value, args));
+                }
+            }
+            Expr::app(self.fold_expr(f), self.fold_expr(a))
+        }
+    }
+
+    let mut folder = UnfoldBetaFolder {
+        target_name: name,
+        def_level_params,
+        replacement: value,
+    };
+    folder.fold_expr(expr)
+}
+
 /// Unfold a definition in a hypothesis.
 ///
 /// REQUIRES: `state.goals` is non-empty.
@@ -160,9 +254,13 @@ pub(crate) fn substitute_const_levels(
 /// ENSURES: Returns `Err(HypothesisNotFound)` when `hyp_name` is absent and
 ///   `Err(UnfoldFailed)` when the definition is missing, opaque, or absent from
 ///   the hypothesis type.
-pub fn unfold_at(state: &mut ProofState, def_name: &str, hyp_name: &str) -> TacticResult {
+pub fn unfold_at(
+    state: &mut ProofState,
+    def_name: &clean_parser::SurfaceName,
+    hyp_name: &clean_parser::SurfaceName,
+) -> TacticResult {
     // First get the definition value from the environment
-    let def_name_obj = Name::from_string(def_name);
+    let def_name_obj = crate::tactic::core::resolve_global_name(state, def_name)?;
     let const_info =
         state
             .env
@@ -189,11 +287,12 @@ pub fn unfold_at(state: &mut ProofState, def_name: &str, hyp_name: &str) -> Tact
     let hyp_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .cloned()
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
-    let new_ty = substitute_const_levels(&hyp_decl.ty, &def_name_obj, &def_level_params, &def_val);
+    let new_ty = unfold_const_beta(&hyp_decl.ty, &def_name_obj, &def_level_params, &def_val);
 
     if new_ty == hyp_decl.ty {
         return Err(TacticError::UnfoldFailed {
@@ -538,7 +637,10 @@ mod tests {
                 vec![SurfaceTactic::Named {
                     span: Span::dummy(),
                     name: "change".to_string(),
-                    args: vec![SurfaceExpr::Ident(Span::dummy(), "True".to_string())],
+                    args: vec![SurfaceExpr::Ident(
+                        Span::dummy(),
+                        clean_parser::SurfaceName::generated_path("True"),
+                    )],
                 }],
             ),
         )

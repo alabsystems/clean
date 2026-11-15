@@ -49,7 +49,7 @@
 //!
 //! - **The iota engine is ONE recursor family at ONE canonical major.**
 //!   `candExp_iota_natrec_zero` covers `Nat.rec mot m0 m1 Nat.zero` — the
-//!   reflected `kcre_name_27` recursor at the reflected `kcre_name_18`
+//!   reflected `fixture_nat_rec_name` recursor at the reflected `fixture_nat_zero_name`
 //!   constructor. Generic/indexed/mutual recursors, and the `Nat.succ` major's
 //!   ENGINE, are NOT here: the succ major adds a fourth accessibility layer
 //!   (the numeral argument steps under `app_right`) and is R4. What R3 DOES
@@ -72,7 +72,7 @@
 //!   `betaRed_inst_transport` is NOT consumed here. (It becomes load-bearing
 //!   for the W/generic rungs, where the contractum substitutes into a minor.)
 //! - **Nat.rec is not delta-defined, and that is checked, not assumed.**
-//!   `natRecSpine4_delta_none` is a refl over the real env: `kcre_name_27` has
+//!   `natRecSpine4_delta_none` is a refl over the real env: `fixture_nat_rec_name` has
 //!   no `defval_for` entry, so the whnf delta leg of a Nat.rec spine is dead.
 //!   Without it the spine's reduct classification would be incomplete.
 //! - **The necessity guard is a DISTINCT route, not the same theorem.**
@@ -123,38 +123,39 @@ use crate::spec::Specification;
 // Group 0 — the reflected atoms and the spine builders.
 //
 // Every literal is a GENERATED `kcre_*` atom, never a hand-written Name or
-// KExpr: `kcre_name_27` is Nat.rec, `kcre_name_18` is Nat.zero,
-// `kcre_name_10` is Nat.succ, and the zero-rule RHS is projected out of the
+// KExpr: `fixture_nat_rec_name` is Nat.rec, `fixture_nat_zero_name` is Nat.zero,
+// `fixture_nat_succ_name` is Nat.succ, and the zero-rule RHS is projected out of the
 // generated Guard-4 iota reduct with `kapp_fn`.
 // ================================================================
 
 /// `Nat.rec` as a reflected const with an empty level list.
-pub const NREC: &str = "(KExpr.const kcre_name_27 (ListType.nil Level))";
+// Universe arguments are generated from the actual Nat.rec witness signature.
+pub(super) const NREC: &str = "(KExpr.const fixture_nat_rec_name kcre_witness_rec_levels)";
 /// `Nat.zero` — the canonical major of the zero rule.
-pub const NZERO: &str = "(KExpr.const kcre_name_18 (ListType.nil Level))";
+pub(super) const NZERO: &str = "(KExpr.const fixture_nat_zero_name (ListType.nil Level))";
 /// `Nat.succ` — the head of the successor major.
-pub const NSUCC: &str = "(KExpr.const kcre_name_10 (ListType.nil Level))";
+pub(super) const NSUCC: &str = "(KExpr.const fixture_nat_succ_name (ListType.nil Level))";
 /// The REAL `Nat.rec` zero-rule RHS, projected from the generated Guard-4
 /// reduct `kcre_witness_nat_zero_reduct = rhs (sort 0) (sort 0) (sort 0)`.
-pub const RHSZ: &str = "(kapp_fn kcre_witness_nat_zero_reduct)";
+pub(super) const RHSZ: &str = "(kapp_fn kcre_witness_nat_zero_reduct)";
 /// A closed probe whose iota reduct exposes the REAL successor-rule RHS.
-pub const SUCC_PROBE: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const kcre_name_27 (ListType.nil Level)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.app (KExpr.const kcre_name_10 (ListType.nil Level)) (KExpr.sort Level.zero)))";
+pub(super) const SUCC_PROBE: &str = "(KExpr.app (KExpr.app (KExpr.app (KExpr.app (KExpr.const fixture_nat_rec_name kcre_witness_rec_levels) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.app (KExpr.const fixture_nat_succ_name (ListType.nil Level)) (KExpr.sort Level.zero)))";
 /// The REAL `Nat.rec` successor-rule RHS: the head of the probe's own iota
 /// reduct, extracted with a bare `OptionType.rec` (no `opt_default`
 /// dependency, so this stays inside the substitution bundle).
-pub fn rhss() -> String {
+pub(super) fn rhss() -> String {
     format!(
         "(kapp_fn (OptionType.rec KExpr (fun (_ : OptionType KExpr) => KExpr) (KExpr.sort Level.zero) (fun (qr : KExpr) => qr) (iota_reduct (red_rec the_red_env) {SUCC_PROBE})))"
     )
 }
 
 /// `KExpr.app f a`.
-pub fn ap(f: &str, a: &str) -> String {
+pub(super) fn ap(f: &str, a: &str) -> String {
     format!("(KExpr.app {f} {a})")
 }
 
 /// The `Nat.rec` application spine over the given argument terms.
-pub fn sp(args: &[&str]) -> String {
+pub(super) fn sp(args: &[&str]) -> String {
     let mut t = NREC.to_string();
     for a in args {
         t = ap(&t, a);
@@ -163,12 +164,12 @@ pub fn sp(args: &[&str]) -> String {
 }
 
 /// The zero-rule contractum `rhsZero mot m0 m1`.
-pub fn zcontract(x1: &str, x2: &str, x3: &str) -> String {
+pub(super) fn zcontract(x1: &str, x2: &str, x3: &str) -> String {
     ap(&ap(&ap(RHSZ, x1), x2), x3)
 }
 
 /// The successor-rule contractum `rhsSucc mot m0 m1 n`.
-pub fn scontract(x1: &str, x2: &str, x3: &str, n: &str) -> String {
+pub(super) fn scontract(x1: &str, x2: &str, x3: &str, n: &str) -> String {
     ap(&ap(&ap(&ap(&rhss(), x1), x2), x3), n)
 }
 
@@ -193,13 +194,13 @@ pub fn scontract(x1: &str, x2: &str, x3: &str, n: &str) -> String {
 
 /// A continuation of the inversion: its binder name and its type as a
 /// function of the reduct term (the `@R@` placeholder).
-pub struct Cont {
-    pub name: &'static str,
-    pub ty: String,
+pub(super) struct Cont {
+    pub(super) name: &'static str,
+    pub(super) ty: String,
 }
 
 /// Continuation BINDERS at a given reduct target (R4 reuses this scaffold).
-pub fn conts_at(conts: &[Cont], target: &str, binder_prefix: &str) -> String {
+pub(super) fn conts_at(conts: &[Cont], target: &str, binder_prefix: &str) -> String {
     conts
         .iter()
         .map(|c| {
@@ -214,7 +215,7 @@ pub fn conts_at(conts: &[Cont], target: &str, binder_prefix: &str) -> String {
 }
 
 /// Continuation TYPES at a given reduct target (R4 reuses this scaffold).
-pub fn conts_ty_at(conts: &[Cont], target: &str) -> String {
+pub(super) fn conts_ty_at(conts: &[Cont], target: &str) -> String {
     conts
         .iter()
         .map(|c| format!("({}) -> ", c.ty.replace("@R@", target)))
@@ -234,7 +235,7 @@ fn ih_ty(conts: &[Cont], redex: &str, src: &str, dst: &str) -> String {
 /// BODIES (the text after `=>`); every other arm is a structural
 /// discrimination fixed by the redex being an application.
 #[allow(clippy::too_many_arguments)]
-pub fn beta_inv_body(
+pub(super) fn beta_inv_body(
     redex: &str,
     head: &str,
     arg: &str,
@@ -414,15 +415,15 @@ fn iota_kill_refl(redex: &str) -> String {
 /// `Empty.rec` detour). Rather than take that detour, R3 removes the case
 /// analysis from the transport entirely: this identity is the ONLY case split,
 /// and `delta_app_lift` is then a single `Eq.cong` over the option.
-pub const TY_R3_OPT_BIND_ID: &str = "forall (o : OptionType KExpr), Eq (OptionType KExpr) (opt_bind KExpr KExpr o (fun (qx : KExpr) => OptionType.some KExpr qx)) o";
-pub const VAL_R3_OPT_BIND_ID: &str = "fun (o : OptionType KExpr) => OptionType.rec KExpr (fun (qo : OptionType KExpr) => Eq (OptionType KExpr) (opt_bind KExpr KExpr qo (fun (qx : KExpr) => OptionType.some KExpr qx)) qo) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (fun (qw : KExpr) => Eq.refl (OptionType KExpr) (OptionType.some KExpr qw)) o";
+pub(super) const TY_R3_OPT_BIND_ID: &str = "forall (o : OptionType KExpr), Eq (OptionType KExpr) (opt_bind KExpr KExpr o (fun (qx : KExpr) => OptionType.some KExpr qx)) o";
+pub(super) const VAL_R3_OPT_BIND_ID: &str = "fun (o : OptionType KExpr) => OptionType.rec KExpr (fun (qo : OptionType KExpr) => Eq (OptionType KExpr) (opt_bind KExpr KExpr qo (fun (qx : KExpr) => OptionType.some KExpr qx)) qo) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (fun (qw : KExpr) => Eq.refl (OptionType KExpr) (OptionType.some KExpr qw)) o";
 
-pub const TY_DELTA_APP_LIFT: &str = "forall (env : DefEnv) (c : Name) (us : ListType Level) (v : KExpr) (a : KExpr), delta_step env (KExpr.const c us) v -> delta_step env (KExpr.app (KExpr.const c us) a) (KExpr.app v a)";
+pub(super) const TY_DELTA_APP_LIFT: &str = "forall (env : DefEnv) (c : Name) (us : ListType Level) (v : KExpr) (a : KExpr), delta_step env (KExpr.const c us) v -> delta_step env (KExpr.app (KExpr.const c us) a) (KExpr.app v a)";
 
-pub fn val_delta_app_lift() -> String {
+pub(super) fn val_delta_app_lift() -> String {
     let f_id = "(fun (qx : KExpr) => OptionType.some KExpr qx)";
     let f_ap = "(fun (qx : KExpr) => OptionType.some KExpr (KExpr.app qx a))";
-    let dv = "(defval_for env c)";
+    let dv = "(kdef_value_at env c us)";
     let bound_id = format!("(opt_bind KExpr KExpr {dv} {f_id})");
     // hdv : defval_for env c = some v — the bare lookup equation, recovered
     // from the bare-const delta step through the right-identity.
@@ -437,11 +438,11 @@ pub fn val_delta_app_lift() -> String {
     )
 }
 
-pub const TY_R3_APPLIED_DELTA_WITNESS: &str = "delta_step (red_def the_red_env) (KExpr.app (KExpr.const kcre_witness_delta_head (ListType.nil Level)) (KExpr.bvar Nat.zero)) (KExpr.app kcre_witness_delta_value (KExpr.bvar Nat.zero))";
-pub const VAL_R3_APPLIED_DELTA_WITNESS: &str = "delta_app_lift (red_def the_red_env) kcre_witness_delta_head (ListType.nil Level) kcre_witness_delta_value (KExpr.bvar Nat.zero) the_red_env_delta_nonvacuous";
+pub(super) const TY_R3_APPLIED_DELTA_WITNESS: &str = "delta_step (red_def the_red_env) (KExpr.app (KExpr.const kcre_witness_delta_head (ListType.nil Level)) (KExpr.bvar Nat.zero)) (KExpr.app kcre_witness_delta_value (KExpr.bvar Nat.zero))";
+pub(super) const VAL_R3_APPLIED_DELTA_WITNESS: &str = "delta_app_lift (red_def the_red_env) kcre_witness_delta_head (ListType.nil Level) kcre_witness_delta_value (KExpr.bvar Nat.zero) the_red_env_delta_nonvacuous";
 
-pub const TY_APPCONST_ACC_REDUCT_ACC: &str = "forall (c : Name) (us : ListType Level) (v : KExpr) (a : KExpr), delta_step (red_def the_red_env) (KExpr.const c us) v -> whnf_acc (KExpr.app (KExpr.const c us) a) -> whnf_acc (KExpr.app v a)";
-pub const VAL_APPCONST_ACC_REDUCT_ACC: &str = "fun (c : Name) (us : ListType Level) (v : KExpr) (a : KExpr) (hd : delta_step (red_def the_red_env) (KExpr.const c us) v) (hacc : whnf_acc (KExpr.app (KExpr.const c us) a)) => whnfAcc_inv_step (KExpr.app (KExpr.const c us) a) hacc (KExpr.app v a) (whnf_step.delta (KExpr.app (KExpr.const c us) a) (KExpr.app v a) (delta_step_to_reduces (KExpr.app (KExpr.const c us) a) (KExpr.app v a) (delta_app_lift (red_def the_red_env) c us v a hd)))";
+pub(super) const TY_APPCONST_ACC_REDUCT_ACC: &str = "forall (c : Name) (us : ListType Level) (v : KExpr) (a : KExpr), delta_step (red_def the_red_env) (KExpr.const c us) v -> whnf_acc (KExpr.app (KExpr.const c us) a) -> whnf_acc (KExpr.app v a)";
+pub(super) const VAL_APPCONST_ACC_REDUCT_ACC: &str = "fun (c : Name) (us : ListType Level) (v : KExpr) (a : KExpr) (hd : delta_step (red_def the_red_env) (KExpr.const c us) v) (hacc : whnf_acc (KExpr.app (KExpr.const c us) a)) => whnfAcc_inv_step (KExpr.app (KExpr.const c us) a) hacc (KExpr.app v a) (whnf_step.delta (KExpr.app (KExpr.const c us) a) (KExpr.app v a) (delta_step_to_reduces (KExpr.app (KExpr.const c us) a) (KExpr.app v a) (delta_app_lift (red_def the_red_env) c us v a hd)))";
 
 // ---- the const-headed one-argument spine inversion ----
 
@@ -467,7 +468,7 @@ fn capp_conts() -> Vec<Cont> {
     ]
 }
 
-pub fn ty_constapp1_beta_inv() -> String {
+pub(super) fn ty_constapp1_beta_inv() -> String {
     let r = capp_redex();
     let cs = capp_conts();
     format!(
@@ -476,7 +477,7 @@ pub fn ty_constapp1_beta_inv() -> String {
     )
 }
 
-pub fn val_constapp1_beta_inv() -> String {
+pub(super) fn val_constapp1_beta_inv() -> String {
     let r = capp_redex();
     let cs = capp_conts();
     let live_beta = format!(
@@ -509,7 +510,7 @@ fn capp_whnf_conts() -> Vec<Cont> {
     cs
 }
 
-pub fn ty_constapp1_whnf_inv() -> String {
+pub(super) fn ty_constapp1_whnf_inv() -> String {
     let r = capp_redex();
     let cs = capp_whnf_conts();
     format!(
@@ -518,7 +519,7 @@ pub fn ty_constapp1_whnf_inv() -> String {
     )
 }
 
-pub fn val_constapp1_whnf_inv() -> String {
+pub(super) fn val_constapp1_whnf_inv() -> String {
     let r = capp_redex();
     let cs = capp_whnf_conts();
     format!(
@@ -529,7 +530,7 @@ pub fn val_constapp1_whnf_inv() -> String {
 
 // ---- the applied-delta engine ----
 
-pub fn ty_candexp_delta_app() -> String {
+pub(super) fn ty_candexp_delta_app() -> String {
     let r = capp_redex();
     format!(
         "forall (S : KExpr -> Type), IsCandSet S -> forall (c : Name) (us : ListType Level) (v : KExpr), delta_step (red_def the_red_env) (KExpr.const c us) v -> forall (arg0 : KExpr), (forall (a2 : KExpr), betaStar arg0 a2 -> Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (OptionType.none KExpr)) -> whnf_acc arg0 -> (forall (a2 : KExpr), betaStar arg0 a2 -> S (KExpr.app v a2)) -> S {r}",
@@ -537,7 +538,7 @@ pub fn ty_candexp_delta_app() -> String {
     )
 }
 
-pub fn val_candexp_delta_app() -> String {
+pub(super) fn val_candexp_delta_app() -> String {
     let motive_body = |a: &str| {
         format!(
             "(forall (a2 : KExpr), betaStar {a} a2 -> Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (OptionType.none KExpr)) -> (forall (a2 : KExpr), betaStar {a} a2 -> S (KExpr.app v a2)) -> S {}",
@@ -562,12 +563,12 @@ pub fn val_candexp_delta_app() -> String {
     )
 }
 
-pub const TY_R3_DELTAAPP_IOTA_DEAD: &str = "forall (a : KExpr), Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) (KExpr.app (KExpr.const kcre_witness_delta_head (ListType.nil Level)) a)) (OptionType.none KExpr)";
-pub const VAL_R3_DELTAAPP_IOTA_DEAD: &str =
+pub(super) const TY_R3_DELTAAPP_IOTA_DEAD: &str = "forall (a : KExpr), Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) (KExpr.app (KExpr.const kcre_witness_delta_head (ListType.nil Level)) a)) (OptionType.none KExpr)";
+pub(super) const VAL_R3_DELTAAPP_IOTA_DEAD: &str =
     "fun (a : KExpr) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)";
 
-pub const TY_R3_DELTAAPP_CONCRETE: &str = "whnf_acc (KExpr.app kcre_witness_delta_value (KExpr.bvar Nat.zero)) -> whnf_acc (KExpr.app (KExpr.const kcre_witness_delta_head (ListType.nil Level)) (KExpr.bvar Nat.zero))";
-pub const VAL_R3_DELTAAPP_CONCRETE: &str = "fun (hc : whnf_acc (KExpr.app kcre_witness_delta_value (KExpr.bvar Nat.zero))) => candExp_delta_app (fun (e : KExpr) => whnf_acc e) isCand_whnfAcc kcre_witness_delta_head (ListType.nil Level) kcre_witness_delta_value the_red_env_delta_nonvacuous (KExpr.bvar Nat.zero) (fun (a2 : KExpr) (_ : betaStar (KExpr.bvar Nat.zero) a2) => r3_deltaApp_iota_dead a2) cand_var_witness (fun (a2 : KExpr) (hst : betaStar (KExpr.bvar Nat.zero) a2) => Eq.substType KExpr (fun (qw : KExpr) => whnf_acc (KExpr.app kcre_witness_delta_value qw)) (KExpr.bvar Nat.zero) a2 (Eq.symm KExpr a2 (KExpr.bvar Nat.zero) (betaStar_bvar_collapse Nat.zero a2 hst)) hc)";
+pub(super) const TY_R3_DELTAAPP_CONCRETE: &str = "whnf_acc (KExpr.app kcre_witness_delta_value (KExpr.bvar Nat.zero)) -> whnf_acc (KExpr.app (KExpr.const kcre_witness_delta_head (ListType.nil Level)) (KExpr.bvar Nat.zero))";
+pub(super) const VAL_R3_DELTAAPP_CONCRETE: &str = "fun (hc : whnf_acc (KExpr.app kcre_witness_delta_value (KExpr.bvar Nat.zero))) => candExp_delta_app (fun (e : KExpr) => whnf_acc e) isCand_whnfAcc kcre_witness_delta_head (ListType.nil Level) kcre_witness_delta_value the_red_env_delta_nonvacuous (KExpr.bvar Nat.zero) (fun (a2 : KExpr) (_ : betaStar (KExpr.bvar Nat.zero) a2) => r3_deltaApp_iota_dead a2) cand_var_witness (fun (a2 : KExpr) (hst : betaStar (KExpr.bvar Nat.zero) a2) => Eq.substType KExpr (fun (qw : KExpr) => whnf_acc (KExpr.app kcre_witness_delta_value qw)) (KExpr.bvar Nat.zero) a2 (Eq.symm KExpr a2 (KExpr.bvar Nat.zero) (betaStar_bvar_collapse Nat.zero a2 hst)) hc)";
 
 // ================================================================
 // Group C — the Nat.rec spine inversions (arity 1..4).
@@ -606,7 +607,7 @@ fn spine_live_arms(n: usize, iota_live: bool) -> (String, String, String, String
     let arg = args[n - 1];
     let live_beta = if n == 1 {
         format!(
-            "const_ne_lam kcre_name_27 (ListType.nil Level) qA qb C (Eq.symm KExpr (KExpr.lam qA qb) {head} (app_inj_fst (KExpr.lam qA qb) qarg {head} {arg} heq))"
+            "const_ne_lam fixture_nat_rec_name kcre_witness_rec_levels qA qb C (Eq.symm KExpr (KExpr.lam qA qb) {head} (app_inj_fst (KExpr.lam qA qb) qarg {head} {arg} heq))"
         )
     } else {
         let inner_head = sp(&args[..n - 2]);
@@ -617,7 +618,7 @@ fn spine_live_arms(n: usize, iota_live: bool) -> (String, String, String, String
     };
     let live_appl = if n == 1 {
         format!(
-            "r2_const_no_beta_reduces kcre_name_27 (ListType.nil Level) qf2 C (Eq.rec KExpr qf (fun (qx : KExpr) (_ : Eq KExpr qf qx) => beta_reduces qx qf2) qstep {head} (app_inj_fst qf qa {head} {arg} heq))"
+            "r2_const_no_beta_reduces fixture_nat_rec_name kcre_witness_rec_levels qf2 C (Eq.rec KExpr qf (fun (qx : KExpr) (_ : Eq KExpr qf qx) => beta_reduces qx qf2) qstep {head} (app_inj_fst qf qa {head} {arg} heq))"
         )
     } else {
         let sub = &args[..n - 1];
@@ -662,7 +663,7 @@ fn spine_live_arms(n: usize, iota_live: bool) -> (String, String, String, String
     (live_beta, live_appl, live_appr, live_iota)
 }
 
-pub fn ty_natrec_spine_beta_inv(n: usize) -> String {
+pub(super) fn ty_natrec_spine_beta_inv(n: usize) -> String {
     let args = &SP_ARGS[..n];
     let redex = sp(args);
     let mut cs = spine_conts(args);
@@ -683,7 +684,7 @@ pub fn ty_natrec_spine_beta_inv(n: usize) -> String {
     )
 }
 
-pub fn val_natrec_spine_beta_inv(n: usize) -> String {
+pub(super) fn val_natrec_spine_beta_inv(n: usize) -> String {
     let args = &SP_ARGS[..n];
     let redex = sp(args);
     let head = sp(&args[..n - 1]);
@@ -708,13 +709,13 @@ pub fn val_natrec_spine_beta_inv(n: usize) -> String {
     )
 }
 
-pub fn ty_natrec_spine4_delta_none() -> String {
+pub(super) fn ty_natrec_spine4_delta_none() -> String {
     format!(
         "forall (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (x4 : KExpr), Eq (OptionType KExpr) (delta_reduct (red_def the_red_env) {}) (OptionType.none KExpr)",
         sp(&SP_ARGS)
     )
 }
-pub const VAL_NATREC_SPINE4_DELTA_NONE: &str = "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (x4 : KExpr) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)";
+pub(super) const VAL_NATREC_SPINE4_DELTA_NONE: &str = "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (x4 : KExpr) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)";
 
 fn spine4_whnf_conts() -> Vec<Cont> {
     let redex = sp(&SP_ARGS);
@@ -726,7 +727,7 @@ fn spine4_whnf_conts() -> Vec<Cont> {
     cs
 }
 
-pub fn ty_natrec_spine4_whnf_inv() -> String {
+pub(super) fn ty_natrec_spine4_whnf_inv() -> String {
     let redex = sp(&SP_ARGS);
     let cs = spine4_whnf_conts();
     format!(
@@ -735,7 +736,7 @@ pub fn ty_natrec_spine4_whnf_inv() -> String {
     )
 }
 
-pub fn val_natrec_spine4_whnf_inv() -> String {
+pub(super) fn val_natrec_spine4_whnf_inv() -> String {
     let redex = sp(&SP_ARGS);
     let cs = spine4_whnf_conts();
     format!(
@@ -748,35 +749,35 @@ pub fn val_natrec_spine4_whnf_inv() -> String {
 // Group D — the iota fires over the REAL reflected env (all refl).
 // ================================================================
 
-pub fn ty_natrecz_iota_fires() -> String {
+pub(super) fn ty_natrecz_iota_fires() -> String {
     format!(
         "forall (x1 : KExpr) (x2 : KExpr) (x3 : KExpr), iota_step (red_rec the_red_env) {} {}",
         sp(&["x1", "x2", "x3", NZERO]),
         zcontract("x1", "x2", "x3")
     )
 }
-pub fn val_natrecz_iota_fires() -> String {
+pub(super) fn val_natrecz_iota_fires() -> String {
     format!(
         "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) => Eq.refl (OptionType KExpr) (OptionType.some KExpr {})",
         zcontract("x1", "x2", "x3")
     )
 }
 
-pub fn ty_natrecs_iota_fires() -> String {
+pub(super) fn ty_natrecs_iota_fires() -> String {
     format!(
         "forall (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (n : KExpr), iota_step (red_rec the_red_env) {} {}",
         sp(&["x1", "x2", "x3", &ap(NSUCC, "n")]),
         scontract("x1", "x2", "x3", "n")
     )
 }
-pub fn val_natrecs_iota_fires() -> String {
+pub(super) fn val_natrecs_iota_fires() -> String {
     format!(
         "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (n : KExpr) => Eq.refl (OptionType KExpr) (OptionType.some KExpr {})",
         scontract("x1", "x2", "x3", "n")
     )
 }
 
-pub fn ty_natrec_succzero_iota_fires() -> String {
+pub(super) fn ty_natrec_succzero_iota_fires() -> String {
     let b0 = "(KExpr.bvar Nat.zero)";
     format!(
         "iota_step (red_rec the_red_env) {} {}",
@@ -784,15 +785,15 @@ pub fn ty_natrec_succzero_iota_fires() -> String {
         scontract(b0, b0, b0, NZERO)
     )
 }
-pub const VAL_NATREC_SUCCZERO_IOTA_FIRES: &str = "natRecS_iota_fires (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.const kcre_name_18 (ListType.nil Level))";
+pub(super) const VAL_NATREC_SUCCZERO_IOTA_FIRES: &str = "natRecS_iota_fires (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.const fixture_nat_zero_name (ListType.nil Level))";
 
-pub fn ty_natrecv_iota_none() -> String {
+pub(super) fn ty_natrecv_iota_none() -> String {
     format!(
         "forall (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (i : Nat), Eq (OptionType KExpr) (iota_reduct (red_rec the_red_env) {}) (OptionType.none KExpr)",
         sp(&["x1", "x2", "x3", "(KExpr.bvar i)"])
     )
 }
-pub const VAL_NATRECV_IOTA_NONE: &str = "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (i : Nat) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)";
+pub(super) const VAL_NATRECV_IOTA_NONE: &str = "fun (x1 : KExpr) (x2 : KExpr) (x3 : KExpr) (i : Nat) => Eq.refl (OptionType KExpr) (OptionType.none KExpr)";
 
 // ================================================================
 // Group E — the iota ENGINE at the canonical Nat.zero major.
@@ -809,7 +810,7 @@ fn zredex(a1: &str, a2: &str, a3: &str) -> String {
     sp(&[a1, a2, a3, NZERO])
 }
 
-pub fn ty_candexp_iota_natrec_zero() -> String {
+pub(super) fn ty_candexp_iota_natrec_zero() -> String {
     format!(
         "forall (S : KExpr -> Type), IsCandSet S -> forall (mot : KExpr), whnf_acc mot -> forall (m0 : KExpr), whnf_acc m0 -> forall (m1 : KExpr), whnf_acc m1 -> ({}) -> S {}",
         zfam("mot", "m0", "m1"),
@@ -817,7 +818,7 @@ pub fn ty_candexp_iota_natrec_zero() -> String {
     )
 }
 
-pub fn val_candexp_iota_natrec_zero() -> String {
+pub(super) fn val_candexp_iota_natrec_zero() -> String {
     // Motive at each nesting level.
     let p_mot = |t: &str| {
         format!(
@@ -849,7 +850,7 @@ pub fn val_candexp_iota_natrec_zero() -> String {
                 .to_string(),
             2 => "ihm1 qy (whnf_step.beta v0 qy hy) (fun (b1 : KExpr) (h1 : betaStar t0 b1) (b2 : KExpr) (h2 : betaStar u0 b2) (b3 : KExpr) (h3 : betaStar qy b3) => hfam b1 h1 b2 h2 b3 (betaStar.step v0 qy b3 hy h3))"
                 .to_string(),
-            _ => "r2_const_no_beta_reduces kcre_name_18 (ListType.nil Level) qy (S e2) hy"
+            _ => "r2_const_no_beta_reduces fixture_nat_zero_name (ListType.nil Level) qy (S e2) hy"
                 .to_string(),
         };
         if slot == 3 {
@@ -899,14 +900,14 @@ pub fn val_candexp_iota_natrec_zero() -> String {
 // Group F — the §6 discriminating witnesses.
 // ================================================================
 
-pub fn ty_natrecz_contract_acc_necessary() -> String {
+pub(super) fn ty_natrecz_contract_acc_necessary() -> String {
     format!(
         "forall (x1 : KExpr) (x2 : KExpr) (x3 : KExpr), whnf_acc {} -> whnf_acc {}",
         zredex("x1", "x2", "x3"),
         zcontract("x1", "x2", "x3")
     )
 }
-pub fn val_natrecz_contract_acc_necessary() -> String {
+pub(super) fn val_natrecz_contract_acc_necessary() -> String {
     let r = zredex("x1", "x2", "x3");
     let c = zcontract("x1", "x2", "x3");
     format!(
@@ -914,7 +915,7 @@ pub fn val_natrecz_contract_acc_necessary() -> String {
     )
 }
 
-pub fn ty_natrecz_engine_concrete() -> String {
+pub(super) fn ty_natrecz_engine_concrete() -> String {
     let b0 = "(KExpr.bvar Nat.zero)";
     format!(
         "whnf_acc {} -> whnf_acc {}",
@@ -922,7 +923,7 @@ pub fn ty_natrecz_engine_concrete() -> String {
         zredex(b0, b0, b0)
     )
 }
-pub fn val_natrecz_engine_concrete() -> String {
+pub(super) fn val_natrecz_engine_concrete() -> String {
     let b0 = "(KExpr.bvar Nat.zero)";
     let collapse =
         |v: &str| format!("(Eq.symm KExpr {v} {b0} (betaStar_bvar_collapse Nat.zero {v} h{v}))");
@@ -947,7 +948,7 @@ pub fn val_natrecz_engine_concrete() -> String {
     )
 }
 
-pub fn ty_natrec_stuck_cand_mem() -> String {
+pub(super) fn ty_natrec_stuck_cand_mem() -> String {
     format!(
         "forall (S : KExpr -> Type), IsCandSet S -> forall (i : Nat) (j : Nat) (k : Nat) (l : Nat), S {}",
         sp(&[
@@ -959,7 +960,7 @@ pub fn ty_natrec_stuck_cand_mem() -> String {
     )
 }
 
-pub fn val_natrec_stuck_cand_mem() -> String {
+pub(super) fn val_natrec_stuck_cand_mem() -> String {
     let args = [
         "(KExpr.bvar i)",
         "(KExpr.bvar j)",
@@ -996,11 +997,11 @@ pub fn val_natrec_stuck_cand_mem() -> String {
     )
 }
 
-pub fn ty_natrec_stuck_witness() -> String {
+pub(super) fn ty_natrec_stuck_witness() -> String {
     let b0 = "(KExpr.bvar Nat.zero)";
     format!("whnf_acc {}", sp(&[b0, b0, b0, b0]))
 }
-pub const VAL_NATREC_STUCK_WITNESS: &str = "natRecStuck_cand_mem (fun (e : KExpr) => whnf_acc e) isCand_whnfAcc Nat.zero Nat.zero Nat.zero Nat.zero";
+pub(super) const VAL_NATREC_STUCK_WITNESS: &str = "natRecStuck_cand_mem (fun (e : KExpr) => whnf_acc e) isCand_whnfAcc Nat.zero Nat.zero Nat.zero Nat.zero";
 
 // ==== R3 SOURCES END ====
 
@@ -1294,7 +1295,7 @@ impl Specification {
             value_src: Some(VAL_NATREC_SPINE4_DELTA_NONE.to_string()),
             is_axiom: false,
             description: "Refl over the real env: the reflected Nat.rec is NOT delta-defined \
-                          (defval_for has no kcre_name_27 entry), so a Nat.rec spine's whnf \
+                          (defval_for has no fixture_nat_rec_name entry), so a Nat.rec spine's whnf \
                           delta leg is dead — for any arguments, since delta_reduct only reads \
                           the spine head. Without this the four-argument reduct classification \
                           would be incomplete. Zero axiom_deps."
@@ -1808,10 +1809,7 @@ mod tests {
         assert!(rhss().contains("iota_reduct (red_rec the_red_env)"));
         assert!(rhss().contains(SUCC_PROBE));
         for atom in [NREC, NZERO, NSUCC] {
-            assert!(
-                atom.contains("kcre_name_"),
-                "{atom} must be a generated atom"
-            );
+            assert!(atom.contains("fixture_"), "{atom} must be a generated atom");
         }
         // (2)
         for n in 1usize..=3 {
@@ -1858,7 +1856,7 @@ mod tests {
             "the iota engine must consume the fire exactly once"
         );
         assert!(
-            eng.contains("r2_const_no_beta_reduces kcre_name_18"),
+            eng.contains("r2_const_no_beta_reduces fixture_nat_zero_name"),
             "the major continuation must be refuted: Nat.zero is a bare const"
         );
         // (5)

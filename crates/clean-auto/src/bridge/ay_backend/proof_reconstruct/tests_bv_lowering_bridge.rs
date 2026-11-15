@@ -109,7 +109,7 @@ fn headline_width4_lowering_cert_is_fully_zero_trust() {
     let domain = env.axiom_deps(&cert_name).expect("axiom_deps");
     let non_foundational: Vec<String> = domain
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .filter(|n| n != "a" && n != "b" && !is_foundational(n))
         .collect();
     assert!(

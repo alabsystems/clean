@@ -11,7 +11,12 @@ impl<'a> ElabCtx<'a> {
     fn top_level_prod_pattern_arity(pattern: &SurfacePattern) -> usize {
         match pattern {
             SurfacePattern::Ctor(name, fields)
-                if matches!(name.as_str(), "Prod.mk" | "PProd.mk") && fields.len() == 2 =>
+                if [
+                    SurfaceName::generated_path("Prod.mk"),
+                    SurfaceName::generated_path("PProd.mk"),
+                ]
+                .contains(name)
+                    && fields.len() == 2 =>
             {
                 1 + Self::top_level_prod_pattern_arity(&fields[1])
             }
@@ -28,7 +33,12 @@ impl<'a> ElabCtx<'a> {
         for _ in 0..arity.saturating_sub(1) {
             match current {
                 SurfacePattern::Ctor(name, fields)
-                    if matches!(name.as_str(), "Prod.mk" | "PProd.mk") && fields.len() == 2 =>
+                    if [
+                        SurfaceName::generated_path("Prod.mk"),
+                        SurfaceName::generated_path("PProd.mk"),
+                    ]
+                    .contains(name)
+                        && fields.len() == 2 =>
                 {
                     result.push(fields[0].clone());
                     current = &fields[1];
@@ -64,9 +74,11 @@ impl<'a> ElabCtx<'a> {
         tuple_ctor_name: &str,
     ) -> SurfacePattern {
         match pattern {
-            SurfacePattern::Ctor(name, fields) if name == "Prod.mk" && fields.len() == 2 => {
+            SurfacePattern::Ctor(name, fields)
+                if name == &SurfaceName::generated_path("Prod.mk") && fields.len() == 2 =>
+            {
                 SurfacePattern::Ctor(
-                    tuple_ctor_name.to_string(),
+                    SurfaceName::generated_path(tuple_ctor_name),
                     vec![
                         fields[0].clone(),
                         Self::rewrite_pattern_lambda_tuple_pattern(&fields[1], tuple_ctor_name),
@@ -165,6 +177,18 @@ impl<'a> ElabCtx<'a> {
         if scrutinee_name != &binder.name || arms.is_empty() {
             return Ok(None);
         }
+        // Only the parser's MULTI-arm `fun | p, q => … | …` desugaring (and
+        // the course-of-values lowering that mirrors it) tuples its
+        // positions into one `Prod.mk` spine over the scrutinee `_x`. A
+        // destructuring lambda (`fun ⟨a, b⟩ …`) and a single-arm `fun | p, q
+        // => …` are an interleaved fun/match nest over `_dxN` binders and
+        // must not be read as curried: their first pattern is a genuine
+        // constructor pattern on the first argument, and counting its
+        // `Prod.mk` spine as positions bound `fun ⟨a, b⟩ => …` as `fun a b`
+        // whenever the expected type had two arrows.
+        if binder.name != SurfaceName::pattern_lambda_binder() {
+            return Ok(None);
+        }
 
         let tuple_arity = Self::top_level_prod_pattern_arity(&arms[0].pattern);
         if tuple_arity <= 1 {
@@ -200,9 +224,12 @@ impl<'a> ElabCtx<'a> {
                 return Ok(None);
             };
 
-            let local_name = format!("{}_{}", binder.name, idx);
+            let local_name =
+                SurfaceName::from_name(binder.name.name().clone().str("_eta").num(idx as u64));
             let fvar = self.push_local(local_name.clone(), domain.clone());
-            let is_inst_implicit = bi.info == BinderInfo::InstImplicit;
+            self.note_let_rec_binder(fvar, bi.info);
+            self.locals.set_binder_info(fvar, bi);
+            let is_inst_implicit = self.binder_is_local_instance(bi.info, &domain);
             if is_inst_implicit {
                 self.push_local_instance(fvar, domain.clone());
             }
@@ -281,6 +308,14 @@ impl<'a> ElabCtx<'a> {
             .iter()
             .map(|arm| Self::peel_prod_pattern(&arm.pattern, arity))
             .collect();
+
+        // Class (88): one matched column followed by hypothesis columns that
+        // name it — generalize them into the match (`elab_pattern_lambda_dep`).
+        if let Some(result) =
+            self.try_elab_curried_generalized_match(arms, &peeled_arms, eta_locals)?
+        {
+            return Ok(result);
+        }
 
         // Find the rightmost position with a constructor pattern in any arm.
         // Positions before it that are all wildcard/var get bound as plain lambdas.

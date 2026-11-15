@@ -66,6 +66,21 @@ fn test_zero_timeout_preserves_unknown_reason() {
     assert_eq!(result.panic_reason(), None);
 }
 
+/// The clean mirror reads every reason ay publishes as ay prints it. Nothing
+/// is folded into a neighbour: a withheld UNSAT (`proof-trusted`) or a caught
+/// wrong answer (`self-check-rejected`) must never read as a bland `unknown`,
+/// and a consumer that classifies the token sees ay's own account.
+#[test]
+fn test_unknown_reason_mirror_prints_ays_own_token_for_every_reason() {
+    for reason in ay::UnknownReason::ALL {
+        assert_eq!(
+            AyUnknownReason::from(reason).to_string(),
+            reason.to_string(),
+            "{reason:?} must read as ay prints it"
+        );
+    }
+}
+
 #[test]
 fn test_fp_to_real_sat_preserves_validation_provenance() {
     let mut backend = AyBackend::new(AyLogic::QfFp);

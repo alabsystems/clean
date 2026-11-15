@@ -56,19 +56,27 @@
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Environment, Expr, ExprKind, LocalContext, TypeChecker};
 use clean_parser::{
-    SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceLit, SurfaceMatchArm, SurfacePattern,
+    SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceLit, SurfaceMatchArm, SurfaceName,
+    SurfacePattern,
 };
 
 use super::elab_decl_value::{is_structural_pattern, peel_n_domains};
 
 /// The detected `(d : I) → F d → R` shape of a two-argument equation def.
+#[derive(Clone, PartialEq, Eq)]
+enum DispatchKey {
+    Literal(u64),
+    Tower,
+    Constructor(Name),
+}
+
 struct DepFamily {
     /// The type-family constant (`T9`).
     family: Name,
     /// The column-0 domain inductive's surface name (`Nat`).
-    col0_ind: String,
+    col0_ind: SurfaceName,
     /// The DECLARED Pi binder name for column 0 (`n`).
-    binder: String,
+    binder: SurfaceName,
 }
 
 /// Strip surface parens.
@@ -86,16 +94,16 @@ fn unwrap_paren(e: &SurfaceExpr) -> &SurfaceExpr {
 /// definition WITH a value (so the kernel probe can delta-unfold it).
 fn detect_dependent_domain(
     env: &Environment,
-    domains: &[(SurfaceExpr, Option<String>)],
+    domains: &[(SurfaceExpr, Option<SurfaceName>, SurfaceBinderInfo)],
 ) -> Option<DepFamily> {
-    let [(d0, d0_name), (d1, _)] = domains else {
+    let [(d0, d0_name, _), (d1, _, _)] = domains else {
         return None;
     };
     let binder = d0_name.clone()?;
     let SurfaceExpr::Ident(_, col0_ind) = unwrap_paren(d0) else {
         return None;
     };
-    env.get_inductive(&Name::from_string(col0_ind))?;
+    env.get_inductive(&col0_ind.name().clone())?;
     let SurfaceExpr::App(_, f, args) = unwrap_paren(d1) else {
         return None;
     };
@@ -114,7 +122,7 @@ fn detect_dependent_domain(
     if *dep_arg != binder {
         return None;
     }
-    let family = Name::from_string(family_name);
+    let family = family_name.name().clone();
     let ci = env.get_const(&family)?;
     if ci.value.is_none() || !ci.level_params.is_empty() {
         return None;
@@ -129,12 +137,16 @@ fn detect_dependent_domain(
 /// Resolve `cname` (bare `true` or qualified `Bool.true`) as a NULLARY,
 /// parameter-free, level-free constructor of `ind_name`. Parameter/level
 /// freedom keeps the `Expr::const_str` probe term well-formed.
-fn resolve_nullary_ctor(env: &Environment, ind_name: &str, cname: &str) -> Option<Name> {
-    let candidates = [cname.to_string(), format!("{ind_name}.{cname}")];
+fn resolve_nullary_ctor(
+    env: &Environment,
+    ind_name: &SurfaceName,
+    cname: &SurfaceName,
+) -> Option<Name> {
+    let candidates = [cname.clone(), ind_name.append(cname)];
     candidates.into_iter().find_map(|cand| {
-        let name = Name::from_string(&cand);
+        let name = cand.into_name();
         let cv = env.get_constructor(&name)?;
-        (cv.inductive_name.to_string() == ind_name
+        (&cv.inductive_name == ind_name.name()
             && cv.num_fields == 0
             && cv.num_params == 0
             && cv.level_params.is_empty())
@@ -153,9 +165,13 @@ fn probe_row_refined_domain(
 ) -> Option<Name> {
     let mut lctx = LocalContext::new();
     let probe = match col0_leaf {
-        SurfacePattern::Lit(SurfaceLit::Nat(v)) if dep.col0_ind == "Nat" => Expr::nat_lit(*v),
+        SurfacePattern::Lit(SurfaceLit::Nat(v))
+            if dep.col0_ind == SurfaceName::generated_path("Nat") =>
+        {
+            Expr::nat_lit(*v)
+        }
         SurfacePattern::NumeralAdd(inner, k)
-            if dep.col0_ind == "Nat"
+            if dep.col0_ind == SurfaceName::generated_path("Nat")
                 && *k >= 1
                 && matches!(**inner, SurfacePattern::Var(_) | SurfacePattern::Wildcard) =>
         {
@@ -172,12 +188,12 @@ fn probe_row_refined_domain(
         }
         SurfacePattern::Ctor(cname, sub) if sub.is_empty() => {
             let resolved = resolve_nullary_ctor(env, &dep.col0_ind, cname)?;
-            Expr::const_str(&resolved.to_string())
+            Expr::const_(resolved, vec![])
         }
         _ => return None,
     };
     let tc = TypeChecker::with_context(env, lctx);
-    let reduced = tc.whnf(&Expr::app(Expr::const_str(&dep.family.to_string()), probe));
+    let reduced = tc.whnf(&Expr::app(Expr::const_(dep.family.clone(), vec![]), probe));
     match reduced.kind() {
         ExprKind::Const(ind, levels) if levels.is_empty() && env.get_inductive(ind).is_some() => {
             Some(ind.clone())
@@ -186,25 +202,24 @@ fn probe_row_refined_domain(
     }
 }
 
-/// Per-ROW form of the B83 nullary-ctor ident rewrite: `Var(name)` becomes
-/// `Ctor(name, [])` iff `name` (or its `Refined.name` qualification) is a
-/// nullary constructor of that row's REFINED inductive.
-fn rewrite_leaf_nullary_for(
-    env: &Environment,
-    refined: &Name,
-    leaf: &SurfacePattern,
-) -> SurfacePattern {
+/// Per-ROW check of the second column against the row's REFINED inductive.
+/// Constructors that ordinary name resolution gives were already rewritten by
+/// the caller (`PatternIdents`); a `Var` leaf left that names a nullary
+/// constructor of the refined inductive only through its namespace
+/// (`Refined.name`) is ambiguous — Lean 4 binds it — so the lane declines
+/// (`None`) and the def goes to the typed path, which refuses it.
+fn check_leaf_for(env: &Environment, refined: &Name, leaf: &SurfacePattern) -> Option<()> {
     if let SurfacePattern::Var(name) = leaf {
-        let refined_str = refined.to_string();
-        let is_nullary = |cand: &str| {
-            env.get_constructor(&Name::from_string(cand))
+        let shorthand = crate::namespace::append_names(refined, name.name());
+        if name.parent().is_anonymous()
+            && env
+                .get_constructor(&shorthand)
                 .is_some_and(|cv| cv.inductive_name == *refined && cv.num_fields == 0)
-        };
-        if is_nullary(name) || is_nullary(&format!("{refined_str}.{name}")) {
-            return SurfacePattern::Ctor(name.clone(), Vec::new());
+        {
+            return None;
         }
     }
-    leaf.clone()
+    Some(())
 }
 
 /// The Brick-88 lowering. All-or-nothing: `None` leaves the caller's state
@@ -212,7 +227,7 @@ fn rewrite_leaf_nullary_for(
 pub(super) fn try_emit_dependent_family(
     env: &Environment,
     ty: &SurfaceExpr,
-    domains: &[(SurfaceExpr, Option<String>)],
+    domains: &[(SurfaceExpr, Option<SurfaceName>, SurfaceBinderInfo)],
     arm_leaves: &[Vec<SurfacePattern>],
     arms: &[SurfaceMatchArm],
     is_recursive: bool,
@@ -235,34 +250,39 @@ pub(super) fn try_emit_dependent_family(
     // different towers overlap), textually identical across its rows; every
     // lit value below the tower depth. Distinct keys are then pairwise
     // DISJOINT, so regrouping rows by key preserves first-match-wins.
-    let mut tower: Option<(String, u64)> = None;
+    let mut tower: Option<(Option<SurfaceName>, u64)> = None;
     let mut lit_vals: Vec<u64> = Vec::new();
     let mut saw_ctor = false;
-    let mut keys: Vec<String> = Vec::with_capacity(arm_leaves.len());
+    let mut keys: Vec<DispatchKey> = Vec::with_capacity(arm_leaves.len());
     for leaves in arm_leaves {
         match &leaves[0] {
             SurfacePattern::Lit(SurfaceLit::Nat(v)) => {
                 lit_vals.push(*v);
-                keys.push(format!("L:{v}"));
+                keys.push(DispatchKey::Literal(*v));
             }
-            SurfacePattern::NumeralAdd(_, k) => {
-                let key = format!("{:?}", leaves[0]);
+            SurfacePattern::NumeralAdd(inner, k) => {
+                let key = match inner.as_ref() {
+                    SurfacePattern::Var(name) => Some(name.clone()),
+                    SurfacePattern::Wildcard => None,
+                    _ => return None,
+                };
                 match &tower {
                     None => tower = Some((key, *k)),
-                    Some((prev, _)) if *prev == key => {}
+                    Some((prev, depth)) if *prev == key && *depth == *k => {}
                     Some(_) => return None,
                 }
-                keys.push("T".to_string());
+                keys.push(DispatchKey::Tower);
             }
             // Key nullary ctors by their RESOLVED name, so `true` and
             // `Bool.true` rows group together instead of forming two
             // overlapping arms.
             SurfacePattern::Ctor(cname, _) => {
                 saw_ctor = true;
-                keys.push(format!(
-                    "C:{}",
-                    resolve_nullary_ctor(env, &dep.col0_ind, cname)?
-                ));
+                keys.push(DispatchKey::Constructor(resolve_nullary_ctor(
+                    env,
+                    &dep.col0_ind,
+                    cname,
+                )?));
             }
             _ => return None,
         }
@@ -276,13 +296,13 @@ pub(super) fn try_emit_dependent_family(
         }
     }
 
-    // Per-row nullary-ctor rewrite of the SECOND column against the row's
-    // refined inductive — on a scratch copy.
-    let rewritten: Vec<SurfacePattern> = arm_leaves
-        .iter()
-        .zip(&refined)
-        .map(|(leaves, r)| rewrite_leaf_nullary_for(env, r, &leaves[1]))
-        .collect();
+    // Per-row check of the SECOND column against the row's refined inductive
+    // (its constructors were resolved by the caller).
+    for (leaves, r) in arm_leaves.iter().zip(&refined) {
+        check_leaf_for(env, r, &leaves[1])?;
+    }
+    let rewritten: Vec<SurfacePattern> =
+        arm_leaves.iter().map(|leaves| leaves[1].clone()).collect();
 
     // ENGAGEMENT GATE: at least one row's second column must be structural
     // after the rewrite. All-pass-through dependent columns already route
@@ -293,7 +313,7 @@ pub(super) fn try_emit_dependent_family(
 
     // Group rows by dispatch key, preserving first-appearance order (groups
     // are pairwise disjoint; within a group row order is kept).
-    let mut group_keys: Vec<String> = Vec::new();
+    let mut group_keys: Vec<DispatchKey> = Vec::new();
     let mut groups: Vec<Vec<usize>> = Vec::new();
     for (i, key) in keys.iter().enumerate() {
         match group_keys.iter().position(|k| k == key) {
@@ -310,7 +330,7 @@ pub(super) fn try_emit_dependent_family(
     // hypothesis-dependence (unsupported) into expected-type dependence
     // (supported: the dependent motive instantiates it per arm).
     let (_, tail) = peel_n_domains(ty, 1)?;
-    let lifted = SurfaceBinder::new(
+    let lifted = SurfaceBinder::new_typed(
         dep.binder.clone(),
         Some(domains[0].0.clone()),
         SurfaceBinderInfo::Explicit,
@@ -320,7 +340,8 @@ pub(super) fn try_emit_dependent_family(
     let mut match_arms: Vec<SurfaceMatchArm> = Vec::with_capacity(groups.len());
     for (gi, rows) in groups.iter().enumerate() {
         let first = rows[0];
-        let refined_ident = SurfaceExpr::Ident(span, refined[first].to_string());
+        let refined_ident =
+            SurfaceExpr::Ident(span, SurfaceName::from_name(refined[first].clone()));
         // The λ binder is deliberately ANNOTATED with the refined inductive:
         // the arm's expected type is `T9 ctor_i → Nat` and the annotation is
         // kernel-defeq to its domain (delta + iota) — checked, loud on
@@ -334,11 +355,11 @@ pub(super) fn try_emit_dependent_family(
             ) => {
                 let name = match &rewritten[first] {
                     SurfacePattern::Var(v) => v.clone(),
-                    _ => "_".to_string(),
+                    _ => SurfaceName::generated_path("_"),
                 };
                 SurfaceExpr::Lambda(
                     span,
-                    vec![SurfaceBinder::new(
+                    vec![SurfaceBinder::new_typed(
                         name,
                         Some(refined_ident),
                         SurfaceBinderInfo::Explicit,
@@ -347,7 +368,10 @@ pub(super) fn try_emit_dependent_family(
                 )
             }
             _ => {
-                let scrut_name = format!("_x_dep{gi}");
+                // Unspellable: this binder encloses the arm bodies, so a
+                // spellable `_x_dep<n>` captured a body's reference to a global
+                // of that spelling.
+                let scrut_name = SurfaceName::unspellable("_x_dep", gi as u64);
                 let inner_arms: Vec<SurfaceMatchArm> = rows
                     .iter()
                     .map(|&ri| SurfaceMatchArm {
@@ -358,7 +382,7 @@ pub(super) fn try_emit_dependent_family(
                     .collect();
                 SurfaceExpr::Lambda(
                     span,
-                    vec![SurfaceBinder::new(
+                    vec![SurfaceBinder::new_typed(
                         scrut_name.clone(),
                         Some(refined_ident),
                         SurfaceBinderInfo::Explicit,

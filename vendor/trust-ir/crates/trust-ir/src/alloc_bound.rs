@@ -1,66 +1,169 @@
-//! Static byte-budget check for stack/heap allocations — the
-//! architecturally-correct home for byte-aware allocation bounds.
+//! Allocation-size bounds: which `Alloca` / `HeapAlloc` sizes the program does
+//! NOT provably bound.
 //!
-//! UNLIKE the Rust/MIR layer (trust-vcgen), where `RawVec<T>` erases the element
-//! type to `u8` and the trust-types `Ty` model drops `Vec<T>`'s `T` — so
-//! `elem_size × count` cannot be recovered and the obligation can only bound the
-//! element COUNT — the trust-ir `Alloca`/`HeapAlloc` carries the REAL element
-//! `ty`. So here `elem_bytes × count` is EXACT: the same element COUNT yields a
-//! different verdict for a 1-byte vs an 8-byte element, which is precisely the
-//! byte-awareness the MIR layer cannot do.
+//! # The question, and the one line it is judged against
 //!
-//! Two finding classes, both NON-FATAL by design (advisory; never a hard
-//! `validate_module` error, so they can never reject valid IR — drop-in parity):
+//! An allocation of `count` elements of `ty` asks for `count × size_of(ty)`
+//! bytes. This lint proves an upper bound on that size and reports the
+//! allocation when the proof does not keep it within the largest object the
+//! target can hold: `isize::MAX` bytes at the module's pointer width
+//! ([`max_object_bytes`]). That line is the target's definition of an object —
+//! Rust's `Layout`, LLVM's object model and every GEP offset are bounded by it
+//! — and not a budget: it has no knob, it is the same for every program on a
+//! target, and a bound above it proves nothing, because the count's own
+//! integer type is always such a bound. There is NO availability threshold:
+//! the 256 MiB `ALLOC_BYTE_BUDGET` this module used to judge against was
+//! deleted, approved by the owner 2026-09-29 ("delete the 256 MiB number; the
+//! lint reports only allocations whose size is not provably bounded"). The
+//! superproject's `trust-vcgen` carries its own copy of that number
+//! (`UNBOUNDED_ALLOC_BYTE_CEILING`, `generate/mod.rs`); it is not a trust-ir
+//! artifact and follows in a later superproject change.
 //!
-//! * [`AllocBoundReason::ConstantOverBudget`] — a *provably-constant* byte size
-//!   reaches [`ALLOC_BYTE_BUDGET`]. Byte-exact and high-confidence. The constant
-//!   is recovered by folding integer arithmetic (`1 << 28`, `K * M`, masks,
-//!   casts), so a size that is *computed* from constants is caught, not only a
-//!   bare literal.
+//! The element type is not erased here (unlike MIR's `RawVec<T>`, which is
+//! `u8`-typed), so the byte size is exact: the same count is bounded for a
+//! 1-byte element and not for an 8-byte one.
 //!
-//! * [`AllocBoundReason::UnboundedRuntimeCount`] — a *runtime* count with no
-//!   provable upper bound: no dominating guard (`if n <= K`), no local mask/mod
-//!   (`n & MASK`, `n % M`), and no narrowing cast bound it below the budget.
-//!   This is the shape of the 2026-06-16 host OOM, where `vec![None; byte_len]`
-//!   lowered to an allocation sized by a runtime `byte_len`. It is enforced at
-//!   *runtime* by the interpreter memory budget
-//!   (`crate::interpret::InterpretOptions::mem_budget`); statically we can only
-//!   warn. The discharge analysis is SOUND in the conservative direction: we
-//!   silence a count only when a real dominating guard or local definition
-//!   proves it under budget, so a guard against a huge sentinel (e.g. the
-//!   `usize::MAX` overflow check `usize::try_from` emits) does NOT silence it.
-//!   When in doubt we flag — the safe direction for a hazard detector. The
-//!   note fails OPEN on an unsized element type (cannot size it).
+//! Three finding classes, all NON-FATAL (advisory, never a `validate_module`
+//! error, so they can never reject valid IR):
+//!
+//! * [`AllocBoundReason::ExceedsObjectLimit`] — every execution that reaches
+//!   the allocation asks for more than the largest object: it can never
+//!   succeed. Byte-exact for a constant count.
+//! * [`AllocBoundReason::UnboundedRuntimeCount`] — no bound the analysis proves
+//!   keeps the size within the largest object: the size is decided by a
+//!   runtime value the program never checked. This is the shape of the
+//!   2026-06-16 host OOM, where `vec![None; byte_len]` lowered to an allocation
+//!   sized by an unchecked runtime `byte_len`. (The reference interpreter's
+//!   allocations are sparse since v50, so a huge `Alloca` costs the host
+//!   O(1); this lint is about the compiled program.)
+//! * [`AllocBoundReason::UnknownElementSize`] — the element type has no byte
+//!   size (a sequence, set, record, closure, dialect or error type; a missing
+//!   or cyclic type entry; a struct with no declared size; an enum with no
+//!   layout the target answers for): nothing bounds the size, so it is
+//!   reported, never skipped.
+//!
+//! # Element sizes
+//!
+//! A SIZE needs no alignment, so elements are sized on every target, inside or
+//! outside the canonical scalar-ALIGNMENT table [`Module::ty_layout_shape`]
+//! keys on: a scalar by its width (`bool` one byte, `isize`/`usize`, pointers
+//! and handles one pointer word, a fat pointer two), a struct by its declared
+//! `size`, a tuple by its layout descriptor's, an array or vector by its
+//! element's size times its length, a refinement by its base, an enum by its
+//! layout descriptor's size or else the canonical layout
+//! ([`Module::enum_layout_shape`], whose tag and payload placement needs the
+//! target's alignments, so outside that table such an enum is unsized). Where
+//! the layout authority answers, these are its sizes (a test holds them
+//! equal). Sizes are `u128` products, so an element of `2^61` bytes or more is
+//! judged exactly, and a product beyond `u128` exceeds every object.
+//!
+//! # What "provably bounded" covers
+//!
+//! The analysis judges the executions the IR DEFINES. A zero count, and a
+//! signed count at or below zero, is undefined behaviour at the allocation in
+//! the reference interpreter, so it has no size to bound: an unchecked `i64`
+//! count of bytes is not reported — its defined values are at most
+//! `i64::MAX`, within a 64-bit target's line — although compiled code that
+//! sign-extends a negative count would ask for about `2^64` bytes. Undefined
+//! counts are a UB question, not a size question. And because the line is the
+//! largest object, not an availability figure, a count narrower than the
+//! pointer width is bounded by its type: `u32` elements of `u64` (at most 32
+//! GiB) are within a 64-bit target's line and are not reported. Silence on
+//! either is therefore not a statement that the allocation is small.
+//!
+//! # The analysis
+//!
+//! Every integer SSA value gets an unsigned interval — and, where a signed
+//! comparison supplies one, an upper bound on its signed reading — computed
+//! ONCE, where the value is defined:
+//!
+//! * constants, and exact interval arithmetic (`Add`/`Sub`/`Mul` only while
+//!   the result provably does not wrap, or exactly when both operands are
+//!   constants; masks, shifts, division, remainder, `zext`/`sext`/`trunc`), so
+//!   `1 << 28`, `n & 0xFFFF`, `n % 1024` and `n as u16 as usize` are bounded;
+//! * `Select` joins its arms, each refined by its condition, so
+//!   `n.min(K)` — `select(n < K, n, K)` — is bounded by `K`;
+//! * a block parameter joins the arguments of its incoming edges, each refined
+//!   by that edge's branch condition; an edge not walked yet (a loop's back
+//!   edge) contributes an unbounded argument, so a loop-carried count is
+//!   reported, which is the sound direction;
+//! * a branch condition (`ICmp`, through `Copy` and boolean negation — its
+//!   one spelling `bxor %c, true` (SPEC_RATIFICATIONS §3.2), the overloaded
+//!   `xor` with a constant, and the refused `not bool` alike — including
+//!   the flag of an unsigned `Overflow`: its false edge makes the result the
+//!   exact, unwrapped value), a `Switch` case, an `Assume` and an `Assert`
+//!   refine the compared values throughout the region they dominate. A
+//!   signed comparison bounds a signed reading only: `(n as i64) < K` does not
+//!   bound an unsigned `n`, whose values above `i64::MAX` pass it.
+//!
+//! Each transfer function (`binop`, `unop`, `cast`, `cmp_facts`,
+//! `switch_default`, `unwrapped`, `Range::meet` / `Range::join`) is
+//! checked against the reference interpreter's own integer arithmetic,
+//! exhaustively at small widths (`alloc_bound_property_tests.rs`), and the
+//! whole analysis against interpreter runs of random programs
+//! (`alloc_bound_differential_tests.rs`).
+//!
+//! # Cost
+//!
+//! One walk of the dominator tree visits each block once, children in reverse
+//! postorder, which finishes every forward-edge predecessor of a block before
+//! the block; facts are scoped to the walk (pushed on entry, undone on exit).
+//! Time and memory are O(blocks + edges + instructions + branch arguments) per
+//! function — a census counts that work and the tests hold it to the
+//! program's own counts — plus element sizing, which is memoized per type-table
+//! entry, struct and enum, so it is O(types + structs + enums + tuple
+//! descriptors) per module however the types nest. Two costs come from shared
+//! analyses this lint calls and are theirs, not this walk's: the shared
+//! [`DominatorTree`] (a Cooper–Harvey–Kennedy fixpoint over ordered maps,
+//! super-linear in the worst case: measured about 26× time per 10× blocks at
+//! 10^6 blocks, 2026-09-30), and, once per descriptor-less enum element type,
+//! [`Module::enum_layout_shape`], which lays out the enum's fields without
+//! memoization. There is no fixpoint, no iteration limit and no size refusal
+//! here. A fact refines the values defined in the region it dominates, and
+//! the count itself where it is used; a value computed BEFORE a guard on its
+//! operand keeps its unguarded range, so such an allocation is reported (a
+//! false positive, never a false discharge). Unreachable blocks never
+//! allocate and are not judged. A function whose CFG the dominator analysis
+//! rejects is judged block by block with no branch facts, which only reports
+//! more.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
-use crate::value::{BlockId, ValueId};
-use crate::{BinOp, Block, CastOp, Constant, Function, ICmpOp, Inst, Module};
+use crate::analysis::DominatorTree;
+use crate::shape::PointerLayoutShape;
+use crate::ty::{EnumDef, Ty};
+use crate::value::{BlockId, EnumId, StructId, TyId, ValueId};
+use crate::{BinOp, CastOp, Constant, Function, ICmpOp, Inst, InstrNode, Module, OverflowOp, UnOp};
 
-/// CFG analysis maps for a function: per-block predecessors and the dominator
-/// set of each block. Computed lazily and only when a symbolic count appears.
-type CfgMaps = (
-    HashMap<BlockId, Vec<BlockId>>,
-    HashMap<BlockId, HashSet<BlockId>>,
-);
-
-/// Per-allocation byte budget, mirroring the interpreter's default `mem_budget`
-/// (256 MiB). A single allocation whose byte size reaches this is flagged.
-pub const ALLOC_BYTE_BUDGET: u128 = 256 * 1024 * 1024;
-
-/// Why an allocation was flagged.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AllocBoundReason {
-    /// Provably-constant byte size reaches the budget (byte-exact, high
-    /// confidence). `count`/`bytes` carry the exact figures.
-    ConstantOverBudget,
-    /// Runtime count with no provable upper bound and no discharging guard,
-    /// mask, or narrowing cast — advisory. The interpreter memory budget
-    /// enforces this at runtime. `count`/`bytes` are `0` (unknown).
-    UnboundedRuntimeCount,
+/// The largest object, in bytes, a target with `pointer_bits`-bit pointers can
+/// hold: `isize::MAX` at that width (`2^(pointer_bits - 1) - 1`). Every
+/// allocation must fit it to exist; it is the target's definition, not a
+/// tunable figure. Above 128 bits the line is beyond `u128` and this
+/// saturates (the validator admits pointer sizes of 1, 2, 4 and 8 bytes).
+pub fn max_object_bytes(pointer_bits: u32) -> u128 {
+    match pointer_bits {
+        0 => 0,
+        1..=128 => u128::MAX.checked_shr(129 - pointer_bits).unwrap_or(0),
+        _ => u128::MAX,
+    }
 }
 
-/// One flagged allocation.
+/// Why an allocation was reported.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AllocBoundReason {
+    /// Every execution reaching the allocation asks for more bytes than the
+    /// target's largest object: it can never succeed. `count` / `bytes` are
+    /// the LEAST such request (exact for a constant count).
+    ExceedsObjectLimit,
+    /// No bound the analysis proves keeps the size within the target's largest
+    /// object. `count` / `bytes` are `0` (not known).
+    UnboundedRuntimeCount,
+    /// The element type has no byte size (see the module docs), so no bound
+    /// on the allocation's size exists. `count` / `bytes` are `0`.
+    UnknownElementSize,
+}
+
+/// One reported allocation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AllocBoundFinding {
     pub function: String,
@@ -69,791 +172,1417 @@ pub struct AllocBoundFinding {
     pub kind: &'static str,
     pub elem_ty: String,
     pub reason: AllocBoundReason,
-    /// Exact element count for [`AllocBoundReason::ConstantOverBudget`], else `0`.
+    /// The least element count, for [`AllocBoundReason::ExceedsObjectLimit`];
+    /// else `0`.
     pub count: u128,
-    /// Exact byte size for [`AllocBoundReason::ConstantOverBudget`], else `0`.
+    /// The least byte size (saturating), for
+    /// [`AllocBoundReason::ExceedsObjectLimit`]; else `0`.
     pub bytes: u128,
+    /// The target's largest object in bytes ([`max_object_bytes`] at the
+    /// module's pointer width): the line the size was judged against.
+    pub object_limit: u128,
 }
 
 impl core::fmt::Display for AllocBoundFinding {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self.reason {
-            AllocBoundReason::ConstantOverBudget => write!(
+            AllocBoundReason::ExceedsObjectLimit => write!(
                 f,
-                "{} of {} x {} (~{} bytes) in `{}` bb{} reaches the {}-byte allocation budget: \
-                 bound the count or route it through a budget-checked allocator that fails closed",
+                "{} of {} x {} ({} bytes) in `{}` bb{} exceeds the largest object the target \
+                 can hold ({} bytes): it can never succeed",
                 self.kind,
                 self.count,
                 self.elem_ty,
                 self.bytes,
                 self.function,
                 self.block,
-                ALLOC_BYTE_BUDGET
+                self.object_limit
             ),
             AllocBoundReason::UnboundedRuntimeCount => write!(
                 f,
-                "{} of `{}` in `{}` bb{} is sized by a runtime count with no provable upper bound: \
-                 bound it (e.g. `if n <= MAX`), mask it (`n & MASK`), or route it through a \
-                 budget-checked allocator; enforced at runtime by the interpreter memory budget",
-                self.kind, self.elem_ty, self.function, self.block
+                "{} of `{}` in `{}` bb{}: no bound proves its size within the target's \
+                 {}-byte object limit; bound the count (`if n <= MAX`), mask it (`n & MASK`) \
+                 or narrow it (advisory)",
+                self.kind, self.elem_ty, self.function, self.block, self.object_limit
+            ),
+            AllocBoundReason::UnknownElementSize => write!(
+                f,
+                "{} of `{}` in `{}` bb{}: the element type has no byte size, so nothing \
+                 proves the allocation within the target's {}-byte object limit (advisory)",
+                self.kind, self.elem_ty, self.function, self.block, self.object_limit
             ),
         }
     }
 }
 
-/// Scan `module` for allocations whose size reaches [`ALLOC_BYTE_BUDGET`]
-/// (constant, byte-exact) or whose runtime count has no provable bound
-/// (advisory). `pointer_bits` sizes pointer-width element types. The element
-/// `ty` is not erased here, so the constant case is byte-exact.
-pub fn check_allocation_bounds(module: &Module, pointer_bits: u32) -> Vec<AllocBoundFinding> {
+/// Report every `Alloca` / `HeapAlloc` of `module` whose byte size is not
+/// provably within the largest object of the module's target
+/// ([`Module::pointer_bits`]), in function, block and instruction order.
+pub fn check_allocation_bounds(module: &Module) -> Vec<AllocBoundFinding> {
+    check(module).0
+}
+
+/// The work one [`check_allocation_bounds`] run did, counted where it is done:
+/// the tests hold each count to the program's own size, so a fixpoint, a
+/// repeated walk or an unmemoized type recursion fails a test instead of only
+/// running long.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct Census {
+    /// Blocks evaluated (a block of a well-formed CFG once, when reachable).
+    blocks: usize,
+    /// Instructions evaluated.
+    nodes: usize,
+    /// Successor edges whose argument ranges were recorded.
+    edges_recorded: usize,
+    /// Incoming-edge arguments read while joining block parameters.
+    arguments_joined: usize,
+    /// Element-size computations that missed the memo: each distinct element
+    /// type, type-table entry, struct and enum at most once.
+    sizes_computed: usize,
+}
+
+/// [`check_allocation_bounds`] and the work it did.
+fn check(module: &Module) -> (Vec<AllocBoundFinding>, Census) {
+    let pointer_bits = module.pointer_bits();
+    let object_limit = max_object_bytes(pointer_bits);
+    let mut sizer = Sizer::new(module);
+    let mut census = Census::default();
     let mut findings = Vec::new();
     for func in &module.functions {
-        let consts = const_eval(func);
-        let defs = def_sites(func);
-        // Dominator/predecessor maps are only needed if a symbolic count
-        // appears; compute lazily on first use to keep constant-only functions
-        // cheap.
-        let mut cfg: Option<CfgMaps> = None;
-
-        for block in &func.blocks {
-            for node in &block.body {
-                let (kind, ty, count) = match &node.inst {
-                    Inst::Alloca { ty, count, .. } => ("alloca", ty, count),
-                    Inst::HeapAlloc { ty, count, .. } => ("heap_alloc", ty, count),
-                    _ => continue,
-                };
-                // `None` count is a single element ⇒ always bounded.
-                let Some(cv) = count else { continue };
-                // Unsized element type (struct/array/…) ⇒ cannot size; fail open.
-                let Some(bits) = ty.bit_width_with(pointer_bits) else {
-                    continue;
-                };
-                let elem_bytes = u128::from(bits) / 8;
-                // Zero-sized element ⇒ allocation is empty regardless of count.
-                if elem_bytes == 0 {
-                    continue;
-                }
-
-                if let Some(&n) = consts.get(cv) {
-                    // Constant count: byte-exact verdict. Non-positive count is a
-                    // separate UB the interpreter already rejects; only flag a
-                    // provably-large positive bound.
-                    if n <= 0 {
-                        continue;
-                    }
-                    let bytes = (n as u128).saturating_mul(elem_bytes);
-                    if bytes >= ALLOC_BYTE_BUDGET {
-                        findings.push(AllocBoundFinding {
-                            function: func.name.clone(),
-                            block: block.id.index(),
-                            kind,
-                            elem_ty: format!("{ty}"),
-                            reason: AllocBoundReason::ConstantOverBudget,
-                            count: n as u128,
-                            bytes,
-                        });
-                    }
-                    continue;
-                }
-
-                // Symbolic count: try to discharge it via a local definition
-                // bound (mask/mod/narrowing cast) or a dominating guard. Only a
-                // bound that proves it UNDER budget silences the note.
-                let (preds, dom) = cfg.get_or_insert_with(|| {
-                    let preds = predecessors(func);
-                    let dom = dominators(func, &preds);
-                    (preds, dom)
-                });
-                let local = local_count_bound(*cv, &defs, &consts, pointer_bits);
-                let guard = guard_count_bound(func, block.id, *cv, &defs, &consts, dom, preds);
-                let bound = match (local, guard) {
-                    (Some(a), Some(b)) => Some(a.min(b)),
-                    (Some(a), None) | (None, Some(a)) => Some(a),
-                    (None, None) => None,
-                };
-                if let Some(b) = bound
-                    && b.saturating_mul(elem_bytes) < ALLOC_BYTE_BUDGET
-                {
-                    continue; // discharged
-                }
-                findings.push(AllocBoundFinding {
-                    function: func.name.clone(),
-                    block: block.id.index(),
-                    kind,
-                    elem_ty: format!("{ty}"),
-                    reason: AllocBoundReason::UnboundedRuntimeCount,
-                    count: 0,
-                    bytes: 0,
-                });
-            }
-        }
+        let mut walk = Walk {
+            module,
+            func,
+            pointer_bits,
+            object_limit,
+            sizer: &mut sizer,
+            census: &mut census,
+            def: HashMap::new(),
+            active: HashMap::new(),
+            undo: Vec::new(),
+            conds: HashMap::new(),
+            bool_consts: HashMap::new(),
+            edge_args: HashMap::new(),
+            found: Vec::new(),
+        };
+        walk.run();
+        let mut found = walk.found;
+        found.sort_by_key(|(position, _)| *position);
+        findings.extend(found.into_iter().map(|(_, finding)| finding));
     }
-    findings
+    census.sizes_computed = sizer.computed;
+    (findings, census)
 }
 
-/// SSA constant evaluator: folds integer literals AND arithmetic over already-
-/// known constants (`Add`/`Sub`/`Mul`/`Shl`/`And`/`Or`/`Xor`, `Copy`, integer
-/// casts) to a fixpoint. Every fold is *checked* — an operation that would
-/// overflow `i128` is not folded — so a recovered constant is EXACT and the
-/// `ConstantOverBudget` verdict never false-positives. This recovers e.g.
-/// `1 << 28` or `K * M` as the byte size, not just a bare literal.
-fn const_eval(func: &Function) -> HashMap<ValueId, i128> {
-    let mut m: HashMap<ValueId, i128> = HashMap::new();
-    let mut changed = true;
-    // Each pass can resolve at least one more value; bound the fixpoint by a
-    // generous multiple of the instruction count as a non-termination backstop.
-    let mut guard = 0usize;
-    let limit = func.blocks.iter().map(|b| b.body.len()).sum::<usize>() + 4;
-    while changed && guard < limit + 4 {
-        changed = false;
-        guard += 1;
-        for block in &func.blocks {
-            for node in &block.body {
-                let Some(&res) = node.results.first() else {
-                    continue;
-                };
-                if m.contains_key(&res) {
-                    continue;
-                }
-                let folded = match &node.inst {
-                    Inst::Const {
-                        value: Constant::Int(n),
-                        ..
-                    } => Some(*n),
-                    Inst::Copy { operand, .. } => m.get(operand).copied(),
-                    Inst::Cast {
-                        op,
-                        src_ty,
-                        dst_ty,
-                        operand,
-                    } => fold_cast(*op, src_ty, dst_ty, m.get(operand).copied()),
-                    Inst::BinOp { op, lhs, rhs, .. } => {
-                        fold_binop(*op, m.get(lhs).copied(), m.get(rhs).copied())
-                    }
-                    _ => None,
-                };
-                if let Some(v) = folded {
-                    m.insert(res, v);
-                    changed = true;
-                }
-            }
-        }
-    }
-    m
+// ---------------------------------------------------------------------------
+// Element sizes.
+
+/// A byte size: exact, beyond `u128`, or not determinable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Bytes {
+    Exact(u128),
+    /// More than `u128::MAX` bytes: beyond every object up to a 128-bit target.
+    Beyond,
+    Unknown,
 }
 
-/// Checked integer fold. Returns `None` (do not fold) on overflow or a
-/// non-constant operand, keeping every recovered constant exact.
-fn fold_binop(op: BinOp, lhs: Option<i128>, rhs: Option<i128>) -> Option<i128> {
-    let (a, b) = (lhs?, rhs?);
-    match op {
-        BinOp::Add => a.checked_add(b),
-        BinOp::Sub => a.checked_sub(b),
-        BinOp::Mul => a.checked_mul(b),
-        BinOp::And => Some(a & b),
-        BinOp::Or => Some(a | b),
-        BinOp::Xor => Some(a ^ b),
-        BinOp::Shl => {
-            // Fold via `a * 2^b` so value overflow is caught by `checked_mul`.
-            if !(0..128).contains(&b) {
-                return None;
-            }
-            1i128.checked_shl(b as u32).and_then(|m| a.checked_mul(m))
+impl Bytes {
+    /// `n` of these. An unknown size stays unknown (the layout authority
+    /// refuses `[T; 0]` of an unlayoutable `T` too).
+    fn times(self, n: u128) -> Self {
+        match self {
+            Bytes::Exact(bytes) => bytes.checked_mul(n).map_or(Bytes::Beyond, Bytes::Exact),
+            Bytes::Beyond if n == 0 => Bytes::Exact(0),
+            Bytes::Beyond => Bytes::Beyond,
+            Bytes::Unknown => Bytes::Unknown,
         }
-        _ => None,
     }
 }
 
-/// Fold integer-preserving casts of a known constant. `ZExt`/`SExt`/`Bitcast`
-/// preserve the integer value (zero-extension of a non-negative value, sign-
-/// extension, and equal-width bitcast); `Trunc` masks to the destination width.
-fn fold_cast(
-    op: CastOp,
-    _src_ty: &crate::ty::Ty,
-    dst_ty: &crate::ty::Ty,
-    val: Option<i128>,
-) -> Option<i128> {
-    let v = val?;
-    match op {
-        CastOp::SExt | CastOp::Bitcast => Some(v),
-        CastOp::ZExt => (v >= 0).then_some(v),
-        CastOp::Trunc => {
-            let bits = dst_ty.bit_width_with(64)?;
-            if bits == 0 || bits > 127 {
-                return None;
-            }
-            let mask = (1i128 << bits) - 1;
-            Some(v & mask)
+/// One type-table entry's size, or the mark of one being sized (a cycle).
+#[derive(Debug, Clone, Copy)]
+enum Slot {
+    Sizing,
+    Sized(Bytes),
+}
+
+/// Element byte sizes for one module, memoized per type, type-table entry and
+/// enum (see the module docs for the rules).
+struct Sizer<'m> {
+    module: &'m Module,
+    pointer_bytes: u128,
+    /// Each struct's declared size, the first definition of an id winning, as
+    /// in the layout authority.
+    structs: HashMap<StructId, Option<u64>>,
+    enums: HashMap<EnumId, &'m EnumDef>,
+    /// Each tuple type's descriptor sizes (more than one is incoherent).
+    tuples: HashMap<&'m Ty, Vec<u64>>,
+    by_ty: HashMap<Ty, Bytes>,
+    by_id: HashMap<TyId, Slot>,
+    by_enum: HashMap<EnumId, Bytes>,
+    /// The layout authority, one table for the module, so each enum's
+    /// canonical layout lays out what it reaches once for every enum asked.
+    layouts: crate::LayoutTable<'m>,
+    /// Memo misses ([`Census::sizes_computed`]).
+    computed: usize,
+}
+
+impl<'m> Sizer<'m> {
+    fn new(module: &'m Module) -> Self {
+        let mut structs = HashMap::new();
+        for def in &module.structs {
+            structs.entry(def.id).or_insert(def.size);
         }
-        _ => None,
+        let mut enums = HashMap::new();
+        for def in &module.enums {
+            enums.entry(def.id).or_insert(def);
+        }
+        let mut tuples: HashMap<&Ty, Vec<u64>> = HashMap::new();
+        for desc in &module.tuple_layouts {
+            if let Some(ty @ Ty::Tuple(_)) = module.types.get(desc.tuple_type.as_usize()) {
+                tuples.entry(ty).or_default().push(desc.size);
+            }
+        }
+        Self {
+            module,
+            pointer_bytes: u128::from(module.pointer_bits()) / 8,
+            structs,
+            enums,
+            tuples,
+            by_ty: HashMap::new(),
+            by_id: HashMap::new(),
+            by_enum: HashMap::new(),
+            layouts: module.layout_table(),
+            computed: 0,
+        }
+    }
+
+    /// The byte size of one `ty`.
+    fn bytes(&mut self, ty: &Ty) -> Bytes {
+        if let Some(bytes) = self.by_ty.get(ty) {
+            return *bytes;
+        }
+        self.computed += 1;
+        let bytes = self.compute(ty);
+        self.by_ty.insert(ty.clone(), bytes);
+        bytes
+    }
+
+    /// The byte size of type-table entry `id`; a cycle has none. A chain of
+    /// entries (`[ty.k-1; n]`, a refinement of `ty.k-1`, …) is followed in a
+    /// loop, not by recursion, so its length costs heap, never stack.
+    fn entry(&mut self, id: TyId) -> Bytes {
+        // The entries entered on the way down, each with its multiplier.
+        let mut chain: Vec<(TyId, u128)> = Vec::new();
+        let mut current = id;
+        let mut bytes = loop {
+            match self.by_id.get(&current) {
+                Some(Slot::Sized(bytes)) => break *bytes,
+                Some(Slot::Sizing) => break Bytes::Unknown, // a cycle
+                None => {}
+            }
+            let Some(ty) = self.module.types.get(current.as_usize()) else {
+                break Bytes::Unknown;
+            };
+            self.computed += 1;
+            self.by_id.insert(current, Slot::Sizing);
+            match ty {
+                Ty::Array(elem, len) => {
+                    chain.push((current, u128::from(*len)));
+                    current = *elem;
+                }
+                Ty::Refine(base, _) => {
+                    chain.push((current, 1));
+                    current = *base;
+                }
+                other => {
+                    let bytes = self.compute(other);
+                    self.by_id.insert(current, Slot::Sized(bytes));
+                    break bytes;
+                }
+            }
+        };
+        for (entry, factor) in chain.into_iter().rev() {
+            bytes = bytes.times(factor);
+            self.by_id.insert(entry, Slot::Sized(bytes));
+        }
+        bytes
+    }
+
+    fn enum_bytes(&mut self, id: EnumId) -> Bytes {
+        if let Some(bytes) = self.by_enum.get(&id) {
+            return *bytes;
+        }
+        self.computed += 1;
+        let bytes = match self.enums.get(&id) {
+            None => Bytes::Unknown,
+            Some(def) => match &def.layout {
+                // A producer descriptor's size is normative.
+                Some(desc) => Bytes::Exact(u128::from(desc.size)),
+                // The canonical layout places the tag and payload by the
+                // target's alignments; only the layout authority knows them.
+                None => self
+                    .layouts
+                    .enum_layout(id)
+                    .ok()
+                    .filter(|layout| layout.size_bits.is_multiple_of(8))
+                    .map_or(Bytes::Unknown, |layout| {
+                        Bytes::Exact(u128::from(layout.size_bits / 8))
+                    }),
+            },
+        };
+        self.by_enum.insert(id, bytes);
+        bytes
+    }
+
+    fn compute(&mut self, ty: &Ty) -> Bytes {
+        let word = Bytes::Exact(self.pointer_bytes);
+        match ty {
+            Ty::Storage(layout) => {
+                if layout.is_well_formed(self.module.pointer_bits()) {
+                    Bytes::Exact(u128::from(layout.size_bytes))
+                } else {
+                    Bytes::Unknown
+                }
+            }
+            Ty::Bool | Ty::I8 | Ty::U8 => Bytes::Exact(1),
+            Ty::I16 | Ty::U16 | Ty::F16 => Bytes::Exact(2),
+            Ty::I32 | Ty::U32 | Ty::F32 | Ty::Char => Bytes::Exact(4),
+            Ty::I64 | Ty::U64 | Ty::F64 => Bytes::Exact(8),
+            Ty::I128 | Ty::U128 => Bytes::Exact(16),
+            Ty::Isize
+            | Ty::Usize
+            | Ty::Handle(_)
+            | Ty::Ptr
+            | Ty::Ref(_)
+            | Ty::RefMut(_)
+            | Ty::PtrConst(_)
+            | Ty::PtrMut(_)
+            | Ty::Rc(_)
+            | Ty::Func(_) => word,
+            Ty::FatPtr(kind) => {
+                let pointer_bits = self.module.pointer_bits();
+                PointerLayoutShape::fat(pointer_bits, kind.metadata_shape())
+                    .total_bits()
+                    .map_or(Bytes::Beyond, |bits| Bytes::Exact(u128::from(bits) / 8))
+            }
+            Ty::Unit | Ty::Never => Bytes::Exact(0),
+            Ty::Struct(id) => self
+                .structs
+                .get(id)
+                .copied()
+                .flatten()
+                .map_or(Bytes::Unknown, |size| Bytes::Exact(u128::from(size))),
+            Ty::Array(elem, len) => self.entry(*elem).times(u128::from(*len)),
+            Ty::Vector(elem, lanes) => self.bytes(elem).times(u128::from(*lanes)),
+            Ty::Refine(base, _) => self.entry(*base),
+            Ty::Enum(id) => self.enum_bytes(*id),
+            Ty::Tuple(elems) if elems.is_empty() => Bytes::Exact(0),
+            Ty::Tuple(_) => match self.tuples.get(ty).map(Vec::as_slice) {
+                // A declared tuple layout needs a target, as the authority says.
+                Some([size]) if self.module.target_info.is_some() => {
+                    Bytes::Exact(u128::from(*size))
+                }
+                _ => Bytes::Unknown,
+            },
+            Ty::Error
+            | Ty::Dialect(_)
+            | Ty::Closure(_)
+            | Ty::Set(..)
+            | Ty::Sequence(_)
+            | Ty::Record(_) => Bytes::Unknown,
+            Ty::Ext(e) => e.unreachable(),
+        }
     }
 }
 
-/// Maps each SSA value to its defining instruction (SSA: at most one).
-fn def_sites(func: &Function) -> HashMap<ValueId, &Inst> {
-    let mut m = HashMap::new();
-    for block in &func.blocks {
-        for node in &block.body {
-            if let Some(&res) = node.results.first() {
-                m.insert(res, &node.inst);
-            }
-        }
-    }
-    m
+// ---------------------------------------------------------------------------
+// The value domain.
+
+/// All-ones at `bits` (1..=128).
+fn umax(bits: u32) -> u128 {
+    u128::MAX >> (128 - bits)
 }
 
-/// Largest unsigned value representable in `bits` bits.
-fn type_max(bits: u32) -> u128 {
-    if bits >= 128 {
-        u128::MAX
+/// The largest non-negative signed value at `bits`, as an unsigned number.
+fn smax(bits: u32) -> u128 {
+    umax(bits) >> 1
+}
+
+/// The signed reading of the low `bits` bits of `v`.
+fn to_signed(v: u128, bits: u32) -> i128 {
+    let shift = 128 - bits;
+    ((v << shift) as i128) >> shift
+}
+
+/// The two's-complement bits of `s` at `bits`.
+fn to_unsigned(s: i128, bits: u32) -> u128 {
+    (s as u128) & umax(bits)
+}
+
+/// The smallest signed value at `bits`.
+fn smin(bits: u32) -> i128 {
+    to_signed(smax(bits) + 1, bits)
+}
+
+/// The smallest all-ones number at or above `v` (`0` for `0`).
+fn ones_covering(v: u128) -> u128 {
+    if v == 0 {
+        0
     } else {
-        (1u128 << bits) - 1
+        u128::MAX >> v.leading_zeros()
     }
 }
 
-/// Upper bound on a count established by HOW the count value is defined:
-/// `n & MASK` ≤ `MASK`, `n % M` ≤ `M-1`, a narrowing/zero-extending cast bounds
-/// it by the narrow type's range. `None` if the definition implies no bound.
-fn local_count_bound(
-    count: ValueId,
-    defs: &HashMap<ValueId, &Inst>,
-    consts: &HashMap<ValueId, i128>,
-    pointer_bits: u32,
-) -> Option<u128> {
-    match defs.get(&count)? {
-        Inst::BinOp {
-            op: BinOp::And,
-            lhs,
-            rhs,
-            ..
-        } => {
-            // `x & c ≤ c` for any non-negative mask `c`.
-            for v in [lhs, rhs] {
-                if let Some(&c) = consts.get(v)
-                    && c >= 0
-                {
-                    return Some(c as u128);
-                }
+/// What is known about one integer value of `bits` bits: its unsigned reading
+/// lies in `lo..=hi` (`lo > hi`: no execution reaches here), and its signed
+/// reading is at most `shi` when that is tighter than the interval says.
+/// `signed` is the declared type's reading, used only where the count is
+/// judged (a signed count must be positive).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Range {
+    bits: u32,
+    signed: bool,
+    lo: u128,
+    hi: u128,
+    shi: Option<i128>,
+}
+
+impl Range {
+    fn top(bits: u32, signed: bool) -> Self {
+        Self {
+            bits,
+            signed,
+            lo: 0,
+            hi: umax(bits),
+            shi: None,
+        }
+    }
+
+    fn exact(bits: u32, signed: bool, v: u128) -> Self {
+        let v = v & umax(bits);
+        Self {
+            bits,
+            signed,
+            lo: v,
+            hi: v,
+            shi: None,
+        }
+    }
+
+    fn empty(bits: u32, signed: bool) -> Self {
+        Self {
+            bits,
+            signed,
+            lo: 1,
+            hi: 0,
+            shi: None,
+        }
+    }
+
+    fn span(bits: u32, signed: bool, lo: u128, hi: u128) -> Self {
+        Self {
+            bits,
+            signed,
+            lo,
+            hi,
+            shi: None,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.lo > self.hi
+    }
+
+    fn exact_value(&self) -> Option<u128> {
+        (self.lo == self.hi).then_some(self.lo)
+    }
+
+    /// Every value is non-negative in its signed reading.
+    fn nonneg(&self) -> bool {
+        self.hi <= smax(self.bits)
+    }
+
+    /// An upper bound on the signed reading.
+    fn signed_hi(&self) -> i128 {
+        let from_bits = if self.lo > smax(self.bits) {
+            to_signed(self.hi, self.bits)
+        } else {
+            self.hi.min(smax(self.bits)) as i128
+        };
+        self.shi.map_or(from_bits, |s| s.min(from_bits))
+    }
+
+    /// Fold `shi` into the interval where it says something about the bits,
+    /// and drop it where the interval already says as much.
+    fn normalize(mut self) -> Self {
+        if self.is_empty() {
+            return Self::empty(self.bits, self.signed);
+        }
+        let Some(s) = self.shi else {
+            return self;
+        };
+        if s < smin(self.bits) {
+            return Self::empty(self.bits, self.signed);
+        }
+        if s < 0 {
+            // A negative signed reading: the bits lie above `smax`.
+            self.lo = self.lo.max(smax(self.bits) + 1);
+            self.hi = self.hi.min(to_unsigned(s, self.bits));
+        } else if self.nonneg() {
+            self.hi = self.hi.min(s as u128);
+        }
+        if self.is_empty() {
+            return Self::empty(self.bits, self.signed);
+        }
+        self.shi = None;
+        if s < self.signed_hi() {
+            self.shi = Some(s);
+        }
+        self
+    }
+
+    /// Both hold (intersection). `self`'s declared reading is kept.
+    fn meet(self, other: Self) -> Self {
+        if self.bits != other.bits {
+            return self;
+        }
+        Self {
+            bits: self.bits,
+            signed: self.signed,
+            lo: self.lo.max(other.lo),
+            hi: self.hi.min(other.hi),
+            shi: match (self.shi, other.shi) {
+                (Some(a), Some(b)) => Some(a.min(b)),
+                (a, None) => a,
+                (None, b) => b,
+            },
+        }
+        .normalize()
+    }
+
+    /// Either holds (hull). `self`'s declared reading is kept.
+    fn join(self, other: Self) -> Self {
+        if self.bits != other.bits {
+            return Self::top(self.bits, self.signed);
+        }
+        if self.is_empty() {
+            return Self {
+                signed: self.signed,
+                ..other
+            };
+        }
+        if other.is_empty() {
+            return self;
+        }
+        Self {
+            bits: self.bits,
+            signed: self.signed,
+            lo: self.lo.min(other.lo),
+            hi: self.hi.max(other.hi),
+            shi: Some(self.signed_hi().max(other.signed_hi())),
+        }
+        .normalize()
+    }
+
+    fn at_most(bits: u32, hi: Option<u128>) -> Self {
+        match hi {
+            Some(hi) => Self::span(bits, false, 0, hi.min(umax(bits))),
+            None => Self::empty(bits, false),
+        }
+    }
+
+    fn at_least(bits: u32, lo: Option<u128>) -> Self {
+        match lo {
+            Some(lo) if lo <= umax(bits) => Self::span(bits, false, lo, umax(bits)),
+            _ => Self::empty(bits, false),
+        }
+    }
+
+    fn signed_at_most(bits: u32, shi: Option<i128>) -> Self {
+        match shi {
+            Some(s) => Self {
+                shi: Some(s),
+                ..Self::top(bits, false)
             }
+            .normalize(),
+            None => Self::empty(bits, false),
+        }
+    }
+}
+
+/// `a op b` at `bits` over the interpreter's integer semantics (wrapping
+/// `Add`/`Sub`/`Mul`; a zero divisor or an out-of-range shift is undefined
+/// behaviour, so no execution continues with one).
+fn binop(op: BinOp, bits: u32, signed: bool, a: Range, b: Range) -> Range {
+    let top = Range::top(bits, signed);
+    if a.bits != bits || b.bits != bits {
+        return top;
+    }
+    if a.is_empty() || b.is_empty() {
+        return Range::empty(bits, signed);
+    }
+    let max = umax(bits);
+    let exact = |v: u128| Range::exact(bits, signed, v);
+    let both = a.exact_value().zip(b.exact_value());
+    let span = |lo: u128, hi: u128| Range::span(bits, signed, lo, hi);
+    match op {
+        BinOp::Add => match (a.lo.checked_add(b.lo), a.hi.checked_add(b.hi)) {
+            (Some(lo), Some(hi)) if hi <= max => span(lo, hi),
+            _ => both.map_or(top, |(x, y)| exact(x.wrapping_add(y))),
+        },
+        BinOp::Sub => {
+            if a.lo >= b.hi {
+                span(a.lo - b.hi, a.hi - b.lo)
+            } else {
+                both.map_or(top, |(x, y)| exact(x.wrapping_sub(y)))
+            }
+        }
+        BinOp::Mul => match a.hi.checked_mul(b.hi) {
+            Some(hi) if hi <= max => span(a.lo * b.lo, hi),
+            _ => both.map_or(top, |(x, y)| exact(x.wrapping_mul(y))),
+        },
+        BinOp::And => both.map_or(span(0, a.hi.min(b.hi)), |(x, y)| exact(x & y)),
+        BinOp::Or => both.map_or(
+            span(a.lo.max(b.lo), ones_covering(a.hi.max(b.hi))),
+            |(x, y)| exact(x | y),
+        ),
+        BinOp::Xor => both.map_or(span(0, ones_covering(a.hi.max(b.hi))), |(x, y)| {
+            exact(x ^ y)
+        }),
+        BinOp::UDiv => {
+            // A zero divisor is UB: every continuing execution has `b >= 1`.
+            if b.hi == 0 {
+                return Range::empty(bits, signed);
+            }
+            span(a.lo / b.hi, a.hi / b.lo.max(1))
+        }
+        BinOp::URem => {
+            if b.hi == 0 {
+                return Range::empty(bits, signed);
+            }
+            match both {
+                Some((x, y)) if y != 0 => exact(x % y),
+                _ => span(0, a.hi.min(b.hi - 1)),
+            }
+        }
+        // On non-negative operands the signed forms are the unsigned ones.
+        BinOp::SDiv if a.nonneg() && b.nonneg() => binop(BinOp::UDiv, bits, signed, a, b),
+        BinOp::SRem if a.nonneg() && b.nonneg() => binop(BinOp::URem, bits, signed, a, b),
+        BinOp::Shl | BinOp::LShr | BinOp::AShr => {
+            // An amount at or above the width is UB.
+            let width = u128::from(bits);
+            if b.lo >= width {
+                return Range::empty(bits, signed);
+            }
+            let (min_shift, max_shift) = (b.lo as u32, b.hi.min(width - 1) as u32);
+            match op {
+                BinOp::Shl if a.hi <= max >> max_shift => {
+                    span(a.lo << min_shift, a.hi << max_shift)
+                }
+                BinOp::Shl => both.map_or(top, |(x, y)| exact(x << y)),
+                BinOp::LShr => span(a.lo >> max_shift, a.hi >> min_shift),
+                _ if a.nonneg() => span(a.lo >> max_shift, a.hi >> min_shift),
+                _ => both.map_or(top, |(x, y)| {
+                    exact(to_unsigned(to_signed(x, bits) >> y, bits))
+                }),
+            }
+        }
+        _ => top,
+    }
+}
+
+/// `op` on an integer operand.
+fn unop(op: UnOp, bits: u32, signed: bool, a: Range) -> Range {
+    if a.bits != bits {
+        return Range::top(bits, signed);
+    }
+    if a.is_empty() {
+        return Range::empty(bits, signed);
+    }
+    let max = umax(bits);
+    match op {
+        UnOp::Not => Range::span(bits, signed, max - a.hi, max - a.lo),
+        UnOp::Neg => a.exact_value().map_or(Range::top(bits, signed), |x| {
+            Range::exact(bits, signed, 0u128.wrapping_sub(x))
+        }),
+        UnOp::CtPop | UnOp::CtLz | UnOp::CtTz => Range::span(bits, signed, 0, u128::from(bits)),
+        _ => Range::top(bits, signed),
+    }
+}
+
+/// An integer-to-integer cast of `a` (`from` bits) to `to` bits.
+fn cast(op: CastOp, to: u32, signed: bool, from: u32, a: Range) -> Range {
+    if a.bits != from {
+        return Range::top(to, signed);
+    }
+    if a.is_empty() {
+        return Range::empty(to, signed);
+    }
+    let keep = || Range::span(to, signed, a.lo, a.hi);
+    match op {
+        CastOp::ZExt if to >= from => keep(),
+        CastOp::SExt if to >= from => {
+            if a.nonneg() {
+                keep()
+            } else if a.lo > smax(from) {
+                // Every value is negative: sign extension adds the same high bits.
+                let high = umax(to) - umax(from);
+                Range::span(to, signed, a.lo + high, a.hi + high)
+            } else {
+                Range::top(to, signed)
+            }
+        }
+        CastOp::Trunc if to <= from => {
+            if a.hi <= umax(to) {
+                keep()
+            } else {
+                a.exact_value()
+                    .map_or(Range::top(to, signed), |x| Range::exact(to, signed, x))
+            }
+        }
+        CastOp::Bitcast if to == from => Range {
+            signed,
+            shi: None,
+            ..a
+        },
+        _ => Range::top(to, signed),
+    }
+}
+
+/// What `x op y` holding implies for each operand, `[for x, for y]`: the
+/// facts to meet into their current ranges `x` and `y` (`None`: nothing).
+fn cmp_facts(op: ICmpOp, bits: u32, x: Range, y: Range) -> [Option<Range>; 2] {
+    // `a < b` (`strict`) or `a <= b`, unsigned: [for a, for b].
+    let unsigned_lt = |strict: bool, a: Range, b: Range| {
+        let (hi, lo) = if strict {
+            (b.hi.checked_sub(1), a.lo.checked_add(1))
+        } else {
+            (Some(b.hi), Some(a.lo))
+        };
+        [
+            Some(Range::at_most(bits, hi)),
+            Some(Range::at_least(bits, lo)),
+        ]
+    };
+    // The same order on the signed readings.
+    let signed_lt = |strict: bool, a: Range, b: Range| {
+        let bound = if strict {
+            b.signed_hi().checked_sub(1)
+        } else {
+            Some(b.signed_hi())
+        };
+        let small = Range::signed_at_most(bits, bound);
+        if a.nonneg() && b.nonneg() {
+            // Both non-negative: the signed order is the unsigned one.
+            let [for_a, for_b] = unsigned_lt(strict, a, b);
+            [for_a.map(|fact| fact.meet(small)), for_b]
+        } else {
+            [Some(small), None]
+        }
+    };
+    let swap = |[a, b]: [Option<Range>; 2]| [b, a];
+    // `r != c` for an exact `c` at an end of `r` trims that end.
+    let ne = |r: Range, other: Range| {
+        let c = other.exact_value()?;
+        if r.lo == c {
+            Some(Range::at_least(bits, c.checked_add(1)))
+        } else if r.hi == c {
+            Some(Range::at_most(bits, c.checked_sub(1)))
+        } else {
             None
         }
-        Inst::BinOp {
-            op: BinOp::URem,
-            rhs,
-            ..
-        } => {
-            let &m = consts.get(rhs)?;
-            (m >= 1).then(|| (m - 1) as u128)
+    };
+    let same = |r: Range| {
+        Range {
+            signed: false,
+            shi: Some(r.signed_hi()),
+            ..r
         }
-        Inst::BinOp {
-            op: BinOp::SRem,
-            rhs,
-            ..
-        } => {
-            let &m = consts.get(rhs)?;
-            (m != 0).then(|| m.unsigned_abs() - 1)
-        }
-        Inst::Cast {
-            op: CastOp::ZExt,
-            src_ty,
-            ..
-        } => src_ty.bit_width_with(pointer_bits).map(type_max),
-        Inst::Cast {
-            op: CastOp::Trunc,
-            dst_ty,
-            ..
-        } => dst_ty.bit_width_with(pointer_bits).map(type_max),
-        _ => None,
-    }
-}
-
-/// Tightest upper bound on `count` proven by a dominating guard. SOUND: a guard
-/// edge bounds the allocation only when that edge's target dominates the alloc
-/// block AND is that guard's sole successor-predecessor, so reaching the alloc
-/// implies the comparison held. `None` if no guard bounds it.
-fn guard_count_bound(
-    func: &Function,
-    alloc_block: BlockId,
-    count: ValueId,
-    defs: &HashMap<ValueId, &Inst>,
-    consts: &HashMap<ValueId, i128>,
-    dom: &HashMap<BlockId, HashSet<BlockId>>,
-    preds: &HashMap<BlockId, Vec<BlockId>>,
-) -> Option<u128> {
-    let mut best: Option<u128> = None;
-    for block in &func.blocks {
-        for node in &block.body {
-            let Inst::CondBr {
-                cond,
-                then_target,
-                else_target,
-                ..
-            } = &node.inst
-            else {
-                continue;
-            };
-            let Some(Inst::ICmp { op, lhs, rhs, .. }) = defs.get(cond).copied() else {
-                continue;
-            };
-            let (then_bound, else_bound) = if *lhs == count {
-                edge_bounds(*op, consts.get(rhs).copied())
-            } else if *rhs == count {
-                // `K op count` is `count (swap op) K`.
-                edge_bounds(swap_cmp(*op), consts.get(lhs).copied())
-            } else {
-                (None, None)
-            };
-            if let Some(b) = then_bound
-                && dominates(*then_target, alloc_block, dom)
-                && sole_pred(*then_target, block.id, preds)
-            {
-                best = Some(best.map_or(b, |x| x.min(b)));
-            }
-            if let Some(b) = else_bound
-                && dominates(*else_target, alloc_block, dom)
-                && sole_pred(*else_target, block.id, preds)
-            {
-                best = Some(best.map_or(b, |x| x.min(b)));
-            }
-        }
-    }
-    best
-}
-
-/// For `count <cmp> K`, the (then-edge, else-edge) upper bounds on `count`.
-/// Signed and unsigned compares are treated alike for a non-negative `K` — a
-/// negative count is a separate allocation UB, so for an upper bound the
-/// distinction is immaterial. `None` means that edge implies no upper bound.
-fn edge_bounds(op: ICmpOp, k: Option<i128>) -> (Option<u128>, Option<u128>) {
-    let Some(k) = k else { return (None, None) };
-    if k < 0 {
-        return (None, None);
-    }
-    let k = k as u128;
-    let km1 = k.saturating_sub(1);
+        .normalize()
+    };
     match op {
-        // count < K : then count ≤ K-1 ; else count ≥ K (unbounded)
-        ICmpOp::Ult | ICmpOp::Slt => (Some(km1), None),
-        // count ≤ K : then K ; else unbounded
-        ICmpOp::Ule | ICmpOp::Sle => (Some(k), None),
-        // count > K : then unbounded ; else count ≤ K
-        ICmpOp::Ugt | ICmpOp::Sgt => (None, Some(k)),
-        // count ≥ K : then unbounded ; else count ≤ K-1
-        ICmpOp::Uge | ICmpOp::Sge => (None, Some(km1)),
-        // count == K : then exactly K ; else unbounded
-        ICmpOp::Eq => (Some(k), None),
-        ICmpOp::Ne => (None, Some(k)),
+        ICmpOp::Ult => unsigned_lt(true, x, y),
+        ICmpOp::Ule => unsigned_lt(false, x, y),
+        ICmpOp::Ugt => swap(unsigned_lt(true, y, x)),
+        ICmpOp::Uge => swap(unsigned_lt(false, y, x)),
+        ICmpOp::Slt => signed_lt(true, x, y),
+        ICmpOp::Sle => signed_lt(false, x, y),
+        ICmpOp::Sgt => swap(signed_lt(true, y, x)),
+        ICmpOp::Sge => swap(signed_lt(false, y, x)),
+        ICmpOp::Eq => [Some(same(y)), Some(same(x))],
+        ICmpOp::Ne => [ne(x, y), ne(y, x)],
     }
 }
 
-/// The comparison `c` such that `K op count` ≡ `count c K` (operand swap).
-fn swap_cmp(op: ICmpOp) -> ICmpOp {
+/// The selector `r` on a `Switch`'s default edge: it is none of `cases` (its
+/// bits at `r`'s width), which trims the ends of its interval.
+fn switch_default(r: Range, mut cases: Vec<u128>) -> Range {
+    if r.is_empty() {
+        return Range::empty(r.bits, false);
+    }
+    cases.sort_unstable();
+    let (mut lo, mut hi) = (r.lo, r.hi);
+    for &c in &cases {
+        if c == lo {
+            let Some(next) = lo.checked_add(1) else {
+                return Range::empty(r.bits, false);
+            };
+            lo = next;
+        }
+    }
+    for &c in cases.iter().rev() {
+        if c == hi {
+            let Some(next) = hi.checked_sub(1) else {
+                return Range::empty(r.bits, false);
+            };
+            hi = next;
+        }
+    }
+    Range::span(r.bits, false, lo, hi)
+}
+
+/// The result of an UNSIGNED `op` on `a` and `b` where its overflow flag is
+/// false: the exact, unwrapped value.
+fn unwrapped(op: OverflowOp, bits: u32, a: Range, b: Range) -> Range {
+    if a.is_empty() || b.is_empty() {
+        return Range::empty(bits, false);
+    }
+    let max = umax(bits);
     match op {
-        ICmpOp::Ult => ICmpOp::Ugt,
-        ICmpOp::Ule => ICmpOp::Uge,
-        ICmpOp::Ugt => ICmpOp::Ult,
-        ICmpOp::Uge => ICmpOp::Ule,
-        ICmpOp::Slt => ICmpOp::Sgt,
-        ICmpOp::Sle => ICmpOp::Sge,
-        ICmpOp::Sgt => ICmpOp::Slt,
-        ICmpOp::Sge => ICmpOp::Sle,
-        ICmpOp::Eq => ICmpOp::Eq,
-        ICmpOp::Ne => ICmpOp::Ne,
+        OverflowOp::AddOverflow => Range::span(
+            bits,
+            false,
+            a.lo.saturating_add(b.lo),
+            a.hi.saturating_add(b.hi).min(max),
+        ),
+        // No overflow means `a >= b`.
+        OverflowOp::SubOverflow => match a.hi.checked_sub(b.lo) {
+            Some(hi) => Range::span(bits, false, a.lo.saturating_sub(b.hi), hi),
+            None => Range::empty(bits, false),
+        },
+        OverflowOp::MulOverflow => Range::span(
+            bits,
+            false,
+            a.lo.saturating_mul(b.lo),
+            a.hi.saturating_mul(b.hi).min(max),
+        ),
     }
 }
 
-/// `x` dominates `y` (every path from entry to `y` passes through `x`).
-fn dominates(x: BlockId, y: BlockId, dom: &HashMap<BlockId, HashSet<BlockId>>) -> bool {
-    dom.get(&y).is_some_and(|s| s.contains(&x))
+/// The negation of a comparison.
+fn negate(op: ICmpOp) -> ICmpOp {
+    match op {
+        ICmpOp::Eq => ICmpOp::Ne,
+        ICmpOp::Ne => ICmpOp::Eq,
+        ICmpOp::Ult => ICmpOp::Uge,
+        ICmpOp::Uge => ICmpOp::Ult,
+        ICmpOp::Ule => ICmpOp::Ugt,
+        ICmpOp::Ugt => ICmpOp::Ule,
+        ICmpOp::Slt => ICmpOp::Sge,
+        ICmpOp::Sge => ICmpOp::Slt,
+        ICmpOp::Sle => ICmpOp::Sgt,
+        ICmpOp::Sgt => ICmpOp::Sle,
+    }
 }
 
-/// `target`'s only predecessor is `guard` — so entering `target` is equivalent
-/// to taking `guard`'s edge to it (the guard's comparison held).
-fn sole_pred(target: BlockId, guard: BlockId, preds: &HashMap<BlockId, Vec<BlockId>>) -> bool {
-    matches!(preds.get(&target), Some(ps) if ps.len() == 1 && ps[0] == guard)
+/// A boolean value's meaning, when it is one the analysis reads.
+#[derive(Debug, Clone, Copy)]
+enum Atom {
+    /// `lhs op rhs` over `bits`-bit integers.
+    Cmp {
+        op: ICmpOp,
+        bits: u32,
+        lhs: ValueId,
+        rhs: ValueId,
+    },
+    /// The overflow flag of an UNSIGNED `Overflow`: when it is false the
+    /// result is the exact, unwrapped value, which lies in `exact`.
+    Overflowed { result: ValueId, exact: Range },
 }
 
-/// Successor blocks reachable from `block`'s terminator(s).
-fn successors(block: &Block) -> Vec<BlockId> {
-    let mut out = Vec::new();
-    for node in &block.body {
+/// `atom`, or its negation when `negated`.
+#[derive(Debug, Clone, Copy)]
+struct Cond {
+    atom: Atom,
+    negated: bool,
+}
+
+/// A position in source order: (block index in the function, instruction).
+type Position = (usize, usize);
+
+/// One function's walk.
+struct Walk<'m, 's> {
+    module: &'m Module,
+    func: &'m Function,
+    pointer_bits: u32,
+    object_limit: u128,
+    /// Element byte sizes, shared across functions.
+    sizer: &'s mut Sizer<'m>,
+    census: &'s mut Census,
+    /// Each integer value's range where it is defined.
+    def: HashMap<ValueId, Range>,
+    /// Refinements by the facts in scope; `undo` restores them on scope exit.
+    active: HashMap<ValueId, Range>,
+    undo: Vec<(ValueId, Option<Range>)>,
+    /// Boolean values the analysis reads as a condition.
+    conds: HashMap<ValueId, Cond>,
+    /// The `Bool` constants, so `bxor %c, true` reads as the negation of `%c`.
+    bool_consts: HashMap<ValueId, bool>,
+    /// Argument ranges each walked edge passes, by (source block, successor).
+    edge_args: HashMap<(BlockId, usize), Vec<Option<Range>>>,
+    found: Vec<(Position, AllocBoundFinding)>,
+}
+
+/// The successor edges of a terminator in the canonical order
+/// [`DominatorTree::edge_dominates`] numbers them: `Br` 0; `CondBr` then/else
+/// 0/1; `Switch` cases, then default; an invoke-family terminator
+/// normal/unwind 0/1.
+fn successors(inst: &Inst) -> Vec<(BlockId, &[ValueId])> {
+    // The exhaustive accessor (amendment D §1.3), whose order is this one.
+    inst.successor_edges()
+        .into_iter()
+        .map(|edge| (edge.target, edge.args))
+        .collect()
+}
+
+impl Walk<'_, '_> {
+    fn int_bits(&self, ty: &Ty) -> Option<u32> {
+        if !ty.is_integer() {
+            return None;
+        }
+        ty.bit_width_with(self.pointer_bits)
+            .filter(|bits| (1..=128).contains(bits))
+    }
+
+    fn cur(&self, v: ValueId) -> Option<Range> {
+        self.active.get(&v).or_else(|| self.def.get(&v)).copied()
+    }
+
+    fn cur_or_top(&self, v: ValueId, bits: u32) -> Range {
+        self.cur(v)
+            .filter(|r| r.bits == bits)
+            .unwrap_or(Range::top(bits, false))
+    }
+
+    /// Record that `v` lies in `fact` for the rest of the current scope.
+    fn refine(&mut self, v: ValueId, fact: Range) {
+        let old = self.active.get(&v).copied();
+        let base = self.cur(v).unwrap_or(Range::top(fact.bits, false));
+        let new = base.meet(fact);
+        if new != base {
+            self.undo.push((v, old));
+            self.active.insert(v, new);
+        }
+    }
+
+    fn undo_to(&mut self, mark: usize) {
+        while self.undo.len() > mark {
+            let (v, old) = self.undo.pop().expect("above the mark");
+            match old {
+                Some(range) => self.active.insert(v, range),
+                None => self.active.remove(&v),
+            };
+        }
+    }
+
+    /// The ranges `lhs op rhs` holding implies, one per operand.
+    fn cmp_facts(
+        &self,
+        op: ICmpOp,
+        bits: u32,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Vec<(ValueId, Range)> {
+        let x = self.cur_or_top(lhs, bits);
+        let y = self.cur_or_top(rhs, bits);
+        let [for_lhs, for_rhs] = cmp_facts(op, bits, x, y);
+        [(lhs, for_lhs), (rhs, for_rhs)]
+            .into_iter()
+            .filter_map(|(v, fact)| Some((v, fact?)))
+            .collect()
+    }
+
+    /// What `cond` being `truth` implies.
+    fn facts(&self, cond: ValueId, truth: bool) -> Vec<(ValueId, Range)> {
+        let Some(Cond { atom, negated }) = self.conds.get(&cond).copied() else {
+            return Vec::new();
+        };
+        let holds = truth != negated;
+        match atom {
+            Atom::Cmp { op, bits, lhs, rhs } => {
+                self.cmp_facts(if holds { op } else { negate(op) }, bits, lhs, rhs)
+            }
+            Atom::Overflowed { result, exact } if !holds => vec![(result, exact)],
+            Atom::Overflowed { .. } => Vec::new(),
+        }
+    }
+
+    fn assume(&mut self, cond: ValueId, truth: bool) {
+        for (v, fact) in self.facts(cond, truth) {
+            self.refine(v, fact);
+        }
+    }
+
+    /// `v`'s range where `cond` is `truth`.
+    fn under(&self, v: ValueId, bits: u32, cond: ValueId, truth: bool) -> Range {
+        let base = self.cur_or_top(v, bits);
+        self.facts(cond, truth)
+            .into_iter()
+            .filter(|(subject, _)| *subject == v)
+            .fold(base, |r, (_, fact)| r.meet(fact))
+    }
+
+    /// The facts taking successor `index` of `terminator` implies.
+    fn edge_facts(&self, terminator: &Inst, index: usize) -> Vec<(ValueId, Range)> {
+        match terminator {
+            Inst::CondBr { cond, .. } => self.facts(*cond, index == 0),
+            Inst::Switch { value, cases, .. } => {
+                let Some(r) = self.cur(*value) else {
+                    return Vec::new();
+                };
+                let case_bits = |c: &Constant| match c {
+                    Constant::Int(i) => Some(*i as u128 & umax(r.bits)),
+                    Constant::U128(u) => Some(*u & umax(r.bits)),
+                    _ => None,
+                };
+                if let Some(case) = cases.get(index) {
+                    return case_bits(&case.value)
+                        .map(|c| vec![(*value, Range::exact(r.bits, false, c))])
+                        .unwrap_or_default();
+                }
+                // The default edge: the selector is none of the cases.
+                let excluded = cases
+                    .iter()
+                    .filter_map(|case| case_bits(&case.value))
+                    .collect();
+                vec![(*value, switch_default(r, excluded))]
+            }
+            _ => Vec::new(),
+        }
+    }
+
+    /// Whether `bytes` is more than the largest object. Beyond `u128` it is,
+    /// unless the line itself is (a pointer wider than 128 bits).
+    fn over_limit(&self, bytes: Bytes) -> bool {
+        match bytes {
+            Bytes::Exact(bytes) => bytes > self.object_limit,
+            Bytes::Beyond => self.pointer_bits <= 128,
+            Bytes::Unknown => false,
+        }
+    }
+
+    /// Whether `bytes` is provably within the largest object.
+    fn within_limit(&self, bytes: Bytes) -> bool {
+        match bytes {
+            Bytes::Exact(bytes) => bytes <= self.object_limit,
+            Bytes::Beyond | Bytes::Unknown => false,
+        }
+    }
+
+    /// Judge one allocation against the object limit.
+    fn judge(&mut self, at: Position, kind: &'static str, ty: &Ty, count: Option<ValueId>) {
+        // (least count of an execution that allocates, proven upper bound)
+        let (least, most) = match count {
+            None => (1, Some(1)),
+            Some(count) => match self.cur(count) {
+                None => (1, None),
+                Some(r) if r.is_empty() => return, // unreachable
+                Some(r) if r.signed => {
+                    // A signed count must be positive; zero or negative is UB.
+                    let top = r.signed_hi();
+                    if top < 1 || r.lo > smax(r.bits) {
+                        return;
+                    }
+                    (r.lo.max(1), Some(r.hi.min(top as u128)))
+                }
+                Some(r) => {
+                    if r.hi == 0 {
+                        return; // a zero count is UB
+                    }
+                    (r.lo.max(1), Some(r.hi))
+                }
+            },
+        };
+        let elem = self.sizer.bytes(ty);
+        let least_bytes = elem.times(least);
+        let reason = if elem == Bytes::Exact(0) {
+            return; // nothing is allocated, whatever the count
+        } else if elem == Bytes::Unknown {
+            AllocBoundReason::UnknownElementSize
+        } else if self.over_limit(least_bytes) {
+            AllocBoundReason::ExceedsObjectLimit
+        } else if !most.is_some_and(|most| self.within_limit(elem.times(most))) {
+            AllocBoundReason::UnboundedRuntimeCount
+        } else {
+            return;
+        };
+        let exceeds = reason == AllocBoundReason::ExceedsObjectLimit;
+        self.found.push((
+            at,
+            AllocBoundFinding {
+                function: self.func.name.clone(),
+                block: self.func.blocks[at.0].id.index(),
+                kind,
+                elem_ty: format!("{ty}"),
+                reason,
+                count: if exceeds { least } else { 0 },
+                bytes: match least_bytes {
+                    Bytes::Exact(bytes) if exceeds => bytes,
+                    _ if exceeds => u128::MAX,
+                    _ => 0,
+                },
+                object_limit: self.object_limit,
+            },
+        ));
+    }
+
+    /// Give `node`'s integer results their ranges (and read its conditions),
+    /// with the facts now in scope.
+    fn eval(&mut self, at: Position, node: &InstrNode) {
+        self.census.nodes += 1;
+        let first = node.results.first().copied();
         match &node.inst {
-            Inst::Br { target, .. } => out.push(*target),
-            Inst::CondBr {
-                then_target,
-                else_target,
-                ..
+            Inst::Const {
+                ty: Ty::Bool,
+                value: Constant::Bool(b),
             } => {
-                out.push(*then_target);
-                out.push(*else_target);
+                if let Some(r) = first {
+                    self.bool_consts.insert(r, *b);
+                }
             }
-            Inst::Switch { default, cases, .. } => {
-                out.push(*default);
-                out.extend(cases.iter().map(|c| c.target));
+            Inst::Const { ty, value } => {
+                if let (Some(bits), Some(r)) = (self.int_bits(ty), first) {
+                    let range = match value {
+                        Constant::Int(i) => Range::exact(bits, ty.is_signed(), *i as u128),
+                        Constant::U128(u) => Range::exact(bits, ty.is_signed(), *u),
+                        _ => Range::top(bits, ty.is_signed()),
+                    };
+                    self.def.insert(r, range);
+                }
             }
-            Inst::Invoke {
-                normal_dest,
-                unwind_dest,
-                ..
+            Inst::Copy { ty, operand } => {
+                if let Some(r) = first {
+                    if let Some(bits) = self.int_bits(ty) {
+                        let range = Range {
+                            signed: ty.is_signed(),
+                            ..self.cur_or_top(*operand, bits)
+                        };
+                        self.def.insert(r, range);
+                    }
+                    if let Some(cond) = self.conds.get(operand).copied() {
+                        self.conds.insert(r, cond);
+                    }
+                }
+            }
+            Inst::Cast {
+                op,
+                src_ty,
+                dst_ty,
+                operand,
             } => {
-                out.push(*normal_dest);
-                out.push(*unwind_dest);
+                if let (Some(to), Some(r)) = (self.int_bits(dst_ty), first) {
+                    let range = match self.int_bits(src_ty) {
+                        Some(from) => cast(
+                            *op,
+                            to,
+                            dst_ty.is_signed(),
+                            from,
+                            self.cur_or_top(*operand, from),
+                        ),
+                        None => Range::top(to, dst_ty.is_signed()),
+                    };
+                    self.def.insert(r, range);
+                }
             }
+            // Boolean negation's one spelling, `bxor %c, true`
+            // (SPEC_RATIFICATIONS §3.2): an exclusive-or of a condition with a
+            // `Bool` constant is that condition, negated when the constant is
+            // `true`. The overloaded `xor bool` computes the same value.
+            Inst::BinOp {
+                op: BinOp::BXor | BinOp::Xor,
+                ty: Ty::Bool,
+                lhs,
+                rhs,
+            } => {
+                let operands = [(*lhs, *rhs), (*rhs, *lhs)];
+                let read = operands.iter().find_map(|(c, k)| {
+                    let cond = self.conds.get(c).copied()?;
+                    let flip = self.bool_consts.get(k).copied()?;
+                    Some(Cond {
+                        negated: cond.negated != flip,
+                        ..cond
+                    })
+                });
+                if let (Some(cond), Some(r)) = (read, first) {
+                    self.conds.insert(r, cond);
+                }
+            }
+            Inst::BinOp { op, ty, lhs, rhs } => {
+                if let (Some(bits), Some(r)) = (self.int_bits(ty), first) {
+                    let (a, b) = (self.cur_or_top(*lhs, bits), self.cur_or_top(*rhs, bits));
+                    self.def.insert(r, binop(*op, bits, ty.is_signed(), a, b));
+                }
+            }
+            Inst::UnOp { op, ty, operand } => {
+                if let Some(r) = first {
+                    if matches!(ty, Ty::Bool) && *op == UnOp::Not {
+                        if let Some(cond) = self.conds.get(operand).copied() {
+                            self.conds.insert(
+                                r,
+                                Cond {
+                                    negated: !cond.negated,
+                                    ..cond
+                                },
+                            );
+                        }
+                    } else if let Some(bits) = self.int_bits(ty) {
+                        let a = self.cur_or_top(*operand, bits);
+                        self.def.insert(r, unop(*op, bits, ty.is_signed(), a));
+                    }
+                }
+            }
+            Inst::Select {
+                ty,
+                cond,
+                then_val,
+                else_val,
+            } => {
+                if let (Some(bits), Some(r)) = (self.int_bits(ty), first) {
+                    let then_range = self.under(*then_val, bits, *cond, true);
+                    let else_range = self.under(*else_val, bits, *cond, false);
+                    let range = Range {
+                        signed: ty.is_signed(),
+                        ..then_range.join(else_range)
+                    };
+                    self.def.insert(r, range);
+                }
+            }
+            Inst::ICmp { op, ty, lhs, rhs } => {
+                if let (Some(bits), Some(r)) = (self.int_bits(ty), first) {
+                    let atom = Atom::Cmp {
+                        op: *op,
+                        bits,
+                        lhs: *lhs,
+                        rhs: *rhs,
+                    };
+                    self.conds.insert(
+                        r,
+                        Cond {
+                            atom,
+                            negated: false,
+                        },
+                    );
+                }
+            }
+            Inst::Overflow { op, ty, lhs, rhs } => {
+                if let (Some(bits), Some(r)) = (self.int_bits(ty), first) {
+                    let (a, b) = (self.cur_or_top(*lhs, bits), self.cur_or_top(*rhs, bits));
+                    let wrapping = match op {
+                        OverflowOp::AddOverflow => BinOp::Add,
+                        OverflowOp::SubOverflow => BinOp::Sub,
+                        OverflowOp::MulOverflow => BinOp::Mul,
+                    };
+                    let signed = ty.is_signed();
+                    self.def.insert(r, binop(wrapping, bits, signed, a, b));
+                    if let (false, Some(&flag)) = (signed, node.results.get(1)) {
+                        let exact = unwrapped(*op, bits, a, b);
+                        self.conds.insert(
+                            flag,
+                            Cond {
+                                atom: Atom::Overflowed { result: r, exact },
+                                negated: false,
+                            },
+                        );
+                    }
+                }
+            }
+            Inst::Assume { cond } | Inst::Assert { cond, .. } => self.assume(*cond, true),
+            Inst::Alloca { ty, count, .. } => self.judge(at, "alloca", ty, *count),
+            Inst::HeapAlloc { ty, count, .. } => self.judge(at, "heap_alloc", ty, *count),
             _ => {}
         }
-    }
-    out
-}
-
-fn predecessors(func: &Function) -> HashMap<BlockId, Vec<BlockId>> {
-    let mut preds: HashMap<BlockId, Vec<BlockId>> = HashMap::new();
-    for block in &func.blocks {
-        preds.entry(block.id).or_default();
-    }
-    for block in &func.blocks {
-        for succ in successors(block) {
-            preds.entry(succ).or_default().push(block.id);
+        // Every other integer result is unconstrained.
+        if node.results.iter().any(|r| !self.def.contains_key(r)) {
+            for (r, ty) in node.results.iter().zip(node.result_tys(self.module)) {
+                if !self.def.contains_key(r)
+                    && let Some(bits) = self.int_bits(&ty)
+                {
+                    self.def.insert(*r, Range::top(bits, ty.is_signed()));
+                }
+            }
         }
     }
-    preds
-}
 
-/// Iterative dominator-set computation: `dom(b) = {b} ∪ ⋂ dom(p)` over `b`'s
-/// predecessors, to a fixpoint. Unreachable blocks reduce to `{b}`.
-fn dominators(
-    func: &Function,
-    preds: &HashMap<BlockId, Vec<BlockId>>,
-) -> HashMap<BlockId, HashSet<BlockId>> {
-    let all: HashSet<BlockId> = func.blocks.iter().map(|b| b.id).collect();
-    let mut dom: HashMap<BlockId, HashSet<BlockId>> = HashMap::new();
-    for block in &func.blocks {
-        if block.id == func.entry {
-            dom.insert(block.id, HashSet::from([block.id]));
-        } else {
-            dom.insert(block.id, all.clone());
-        }
-    }
-    let mut changed = true;
-    let mut guard = 0usize;
-    let limit = func.blocks.len() * 2 + 4;
-    while changed && guard < limit {
-        changed = false;
-        guard += 1;
-        for block in &func.blocks {
-            if block.id == func.entry {
+    /// Evaluate block `position`'s parameters and instructions; with
+    /// `incoming` (a dominator walk), record the ranges its edges pass.
+    fn block(&mut self, position: usize, incoming: Option<&[(BlockId, usize)]>) {
+        self.census.blocks += 1;
+        let func = self.func;
+        let block = &func.blocks[position];
+        for (k, (v, ty)) in block.params.iter().enumerate() {
+            let Some(bits) = self.int_bits(ty) else {
                 continue;
+            };
+            let top = Range::top(bits, ty.is_signed());
+            let joined = match incoming {
+                Some(edges) if block.id != func.entry && !edges.is_empty() => {
+                    edges.iter().try_fold(None::<Range>, |acc, edge| {
+                        self.census.arguments_joined += 1;
+                        let arg = self
+                            .edge_args
+                            .get(edge)
+                            .and_then(|args| args.get(k).copied().flatten())
+                            .filter(|r| r.bits == bits)?;
+                        Some(Some(acc.map_or(arg, |acc| acc.join(arg))))
+                    })
+                }
+                _ => None,
+            };
+            let range = joined.flatten().map_or(top, |r| Range {
+                signed: ty.is_signed(),
+                ..r
+            });
+            self.def.insert(*v, range);
+        }
+        for (index, node) in block.body.iter().enumerate() {
+            self.eval((position, index), node);
+        }
+        if incoming.is_none() {
+            return;
+        }
+        let Some(terminator) = block.body.last() else {
+            return;
+        };
+        for (index, (_, args)) in successors(&terminator.inst).into_iter().enumerate() {
+            let facts = self.edge_facts(&terminator.inst, index);
+            let ranges = args
+                .iter()
+                .map(|arg| {
+                    facts
+                        .iter()
+                        .filter(|(subject, _)| subject == arg)
+                        .fold(self.cur(*arg), |r, (_, fact)| r.map(|r| r.meet(*fact)))
+                })
+                .collect();
+            self.census.edges_recorded += 1;
+            self.edge_args.insert((block.id, index), ranges);
+        }
+    }
+
+    fn run(&mut self) {
+        let dom = DominatorTree::new(self.func);
+        if !dom.is_well_formed() {
+            // No trustworthy CFG: judge each block alone, with the facts its
+            // own `Assume`s / `Assert`s state and nothing from any branch.
+            for position in 0..self.func.blocks.len() {
+                let mark = self.undo.len();
+                self.block(position, None);
+                self.undo_to(mark);
             }
-            let mut new_set: Option<HashSet<BlockId>> = None;
-            for p in preds.get(&block.id).into_iter().flatten() {
-                let dp = &dom[p];
-                new_set = Some(match new_set {
-                    None => dp.clone(),
-                    Some(acc) => acc.intersection(dp).copied().collect(),
-                });
+            return;
+        }
+        let func = self.func;
+        let positions: HashMap<BlockId, usize> = func
+            .blocks
+            .iter()
+            .enumerate()
+            .map(|(position, block)| (block.id, position))
+            .collect();
+        let terminator = |block: BlockId| {
+            positions
+                .get(&block)
+                .and_then(|position| func.blocks[*position].body.last())
+        };
+        let targets = |block: BlockId| -> Vec<BlockId> {
+            terminator(block).map_or_else(Vec::new, |node| {
+                successors(&node.inst)
+                    .into_iter()
+                    .map(|(target, _)| target)
+                    .collect()
+            })
+        };
+        // Reverse postorder of the reachable CFG, and each block's incoming
+        // edges from reachable blocks (source, successor index).
+        let mut rpo_number: HashMap<BlockId, usize> = HashMap::new();
+        let mut incoming: HashMap<BlockId, Vec<(BlockId, usize)>> = HashMap::new();
+        let mut postorder = Vec::new();
+        let mut seen = std::collections::HashSet::from([func.entry]);
+        let mut dfs = vec![(func.entry, targets(func.entry), 0usize)];
+        while let Some((source, block_targets, next)) = dfs.last_mut() {
+            let Some(&target) = block_targets.get(*next) else {
+                postorder.push(*source);
+                dfs.pop();
+                continue;
+            };
+            incoming.entry(target).or_default().push((*source, *next));
+            *next += 1;
+            if seen.insert(target) {
+                dfs.push((target, targets(target), 0));
             }
-            let mut new_set = new_set.unwrap_or_default();
-            new_set.insert(block.id);
-            if new_set != dom[&block.id] {
-                dom.insert(block.id, new_set);
-                changed = true;
+        }
+        let reachable = postorder.len();
+        for (index, block) in postorder.into_iter().enumerate() {
+            rpo_number.insert(block, reachable - 1 - index);
+        }
+        // Dominator-tree children, in reverse postorder: every forward-edge
+        // predecessor of a block is then walked before the block.
+        let mut children: HashMap<BlockId, Vec<BlockId>> = HashMap::new();
+        for block in &func.blocks {
+            if let Some(parent) = dom.immediate_dominator(block.id) {
+                children.entry(parent).or_default().push(block.id);
+            }
+        }
+        for list in children.values_mut() {
+            list.sort_by_key(|block| rpo_number.get(block).copied().unwrap_or(usize::MAX));
+        }
+        enum Step {
+            Enter(BlockId),
+            Leave(usize),
+        }
+        let mut stack = vec![Step::Enter(func.entry)];
+        while let Some(step) = stack.pop() {
+            let block = match step {
+                Step::Leave(mark) => {
+                    self.undo_to(mark);
+                    continue;
+                }
+                Step::Enter(block) => block,
+            };
+            let Some(&position) = positions.get(&block) else {
+                continue;
+            };
+            let mark = self.undo.len();
+            let edges = incoming.remove(&block).unwrap_or_default();
+            // The edge every path into this block takes holds throughout the
+            // region it dominates. Its source is the immediate dominator,
+            // whose end state is the state now.
+            if let Some(parent) = dom.immediate_dominator(block)
+                && let Some(&(_, index)) = edges.iter().find(|(source, index)| {
+                    *source == parent && dom.edge_dominates(parent, *index, block)
+                })
+                && let Some(node) = terminator(parent)
+            {
+                for (v, fact) in self.edge_facts(&node.inst, index) {
+                    self.refine(v, fact);
+                }
+            }
+            self.block(position, Some(&edges));
+            stack.push(Step::Leave(mark));
+            for child in children.get(&block).into_iter().flatten().rev() {
+                stack.push(Step::Enter(*child));
             }
         }
     }
-    dom
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::node::InstrNode;
-    use crate::ty::Ty;
-    use crate::value::{BlockId, FuncId, FuncTyId};
-    use crate::{Block, Function};
+#[path = "alloc_bound_tests.rs"]
+mod tests;
 
-    /// One function: `count_const`-element `Alloca` of `elem` (None ⇒ 1 element).
-    fn module_with(count_const: Option<i128>, elem: Ty) -> Module {
-        let mut module = Module::new("alloc-bound-test");
-        let mut func = Function::new(FuncId::new(0), "f", FuncTyId::new(0), BlockId::new(0));
-        let mut block = Block::new(BlockId::new(0));
-        let count_val = count_const.map(|n| {
-            let v = ValueId::new(0);
-            block.body.push(
-                InstrNode::new(Inst::Const {
-                    ty: Ty::U64,
-                    value: Constant::Int(n),
-                })
-                .with_result(v),
-            );
-            v
-        });
-        block.body.push(
-            InstrNode::new(Inst::Alloca {
-                ty: elem,
-                count: count_val,
-                align: None,
-            })
-            .with_result(ValueId::new(1)),
-        );
-        func.blocks.push(block);
-        module.add_function(func);
-        module
-    }
+#[cfg(test)]
+#[path = "alloc_bound_property_tests.rs"]
+mod property_tests;
 
-    #[test]
-    fn flags_constant_alloc_over_byte_budget() {
-        // 2^26 × i64 = 512 MiB ≥ 256 MiB ⇒ flagged, byte-exact.
-        let m = module_with(Some(1 << 26), Ty::I64);
-        let f = check_allocation_bounds(&m, 64);
-        assert_eq!(f.len(), 1, "a 512 MiB constant alloca must be flagged");
-        assert_eq!(f[0].kind, "alloca");
-        assert_eq!(f[0].reason, AllocBoundReason::ConstantOverBudget);
-        assert_eq!(f[0].bytes, (1u128 << 26) * 8);
-    }
-
-    #[test]
-    fn byte_aware_same_count_small_element_not_flagged() {
-        // SAME element COUNT as above, but i8 elements: 2^26 × 1 = 64 MiB < 256 MiB
-        // ⇒ NOT flagged. This element-SIZE sensitivity is exactly what the MIR
-        // layer cannot do (RawVec<T> erases T to u8).
-        let m = module_with(Some(1 << 26), Ty::I8);
-        assert!(check_allocation_bounds(&m, 64).is_empty());
-    }
-
-    #[test]
-    fn single_element_alloca_is_bounded() {
-        assert!(check_allocation_bounds(&module_with(None, Ty::I64), 64).is_empty());
-    }
-
-    /// Build a single-block function whose alloca count is `count_inst`'s result,
-    /// preceded by `setup` instructions. Returns the module.
-    fn module_one_block(setup: Vec<InstrNode>, count: ValueId, elem: Ty) -> Module {
-        let mut module = Module::new("m");
-        let mut func = Function::new(FuncId::new(0), "f", FuncTyId::new(0), BlockId::new(0));
-        let mut block = Block::new(BlockId::new(0));
-        block.body.extend(setup);
-        block.body.push(
-            InstrNode::new(Inst::Alloca {
-                ty: elem,
-                count: Some(count),
-                align: None,
-            })
-            .with_result(ValueId::new(100)),
-        );
-        func.blocks.push(block);
-        module.add_function(func);
-        module
-    }
-
-    #[test]
-    fn computed_constant_over_budget_is_folded_and_flagged() {
-        // count = 1 << 28 (folded through Shl), i8 elements ⇒ 256 MiB ≥ budget.
-        let one = ValueId::new(0);
-        let sh = ValueId::new(1);
-        let twenty_eight = ValueId::new(2);
-        let setup = vec![
-            InstrNode::new(Inst::Const {
-                ty: Ty::U64,
-                value: Constant::Int(1),
-            })
-            .with_result(one),
-            InstrNode::new(Inst::Const {
-                ty: Ty::U64,
-                value: Constant::Int(28),
-            })
-            .with_result(twenty_eight),
-            InstrNode::new(Inst::BinOp {
-                op: BinOp::Shl,
-                ty: Ty::U64,
-                lhs: one,
-                rhs: twenty_eight,
-            })
-            .with_result(sh),
-        ];
-        let m = module_one_block(setup, sh, Ty::I8);
-        let f = check_allocation_bounds(&m, 64);
-        assert_eq!(
-            f.len(),
-            1,
-            "a computed-constant 256 MiB alloca must be flagged"
-        );
-        assert_eq!(f[0].reason, AllocBoundReason::ConstantOverBudget);
-        assert_eq!(f[0].bytes, 1u128 << 28);
-    }
-
-    #[test]
-    fn bare_symbolic_count_flagged_as_unbounded_note() {
-        // A runtime count with no definition, guard, or mask in scope is the
-        // crash shape ⇒ advisory note (was previously silent).
-        let mut m = Module::new("sym");
-        let mut func = Function::new(FuncId::new(0), "g", FuncTyId::new(0), BlockId::new(0));
-        let mut block = Block::new(BlockId::new(0));
-        block = block.with_param(ValueId::new(7), Ty::U64);
-        block.body.push(
-            InstrNode::new(Inst::Alloca {
-                ty: Ty::I64,
-                count: Some(ValueId::new(7)),
-                align: None,
-            })
-            .with_result(ValueId::new(1)),
-        );
-        func.blocks.push(block);
-        m.add_function(func);
-        let f = check_allocation_bounds(&m, 64);
-        assert_eq!(
-            f.len(),
-            1,
-            "an unbounded runtime count must be flagged as a note"
-        );
-        assert_eq!(f[0].reason, AllocBoundReason::UnboundedRuntimeCount);
-    }
-
-    #[test]
-    fn masked_symbolic_count_not_flagged() {
-        // count = n & 0xFFFF ⇒ ≤ 65535; × i64 = 512 KiB < budget ⇒ discharged.
-        let n = ValueId::new(7); // block param (runtime)
-        let mask = ValueId::new(0);
-        let masked = ValueId::new(1);
-        let setup = vec![
-            InstrNode::new(Inst::Const {
-                ty: Ty::U64,
-                value: Constant::Int(0xFFFF),
-            })
-            .with_result(mask),
-            InstrNode::new(Inst::BinOp {
-                op: BinOp::And,
-                ty: Ty::U64,
-                lhs: n,
-                rhs: mask,
-            })
-            .with_result(masked),
-        ];
-        let m = module_one_block(setup, masked, Ty::I64);
-        assert!(
-            check_allocation_bounds(&m, 64).is_empty(),
-            "a masked count must be discharged, not flagged"
-        );
-    }
-
-    #[test]
-    fn mod_symbolic_count_not_flagged() {
-        // count = n % 1024 ⇒ ≤ 1023 ⇒ discharged.
-        let n = ValueId::new(7);
-        let m_const = ValueId::new(0);
-        let rem = ValueId::new(1);
-        let setup = vec![
-            InstrNode::new(Inst::Const {
-                ty: Ty::U64,
-                value: Constant::Int(1024),
-            })
-            .with_result(m_const),
-            InstrNode::new(Inst::BinOp {
-                op: BinOp::URem,
-                ty: Ty::U64,
-                lhs: n,
-                rhs: m_const,
-            })
-            .with_result(rem),
-        ];
-        let m = module_one_block(setup, rem, Ty::I64);
-        assert!(check_allocation_bounds(&m, 64).is_empty());
-    }
-
-    #[test]
-    fn narrowing_cast_count_not_flagged() {
-        // count = zext(u16) ⇒ ≤ 65535 ⇒ discharged even for i64 elements.
-        let n16 = ValueId::new(7);
-        let widened = ValueId::new(1);
-        let setup = vec![
-            InstrNode::new(Inst::Cast {
-                op: CastOp::ZExt,
-                src_ty: Ty::U16,
-                dst_ty: Ty::U64,
-                operand: n16,
-            })
-            .with_result(widened),
-        ];
-        let m = module_one_block(setup, widened, Ty::I64);
-        assert!(check_allocation_bounds(&m, 64).is_empty());
-    }
-
-    /// Two-block function: bb0 does `if count <cmp> K` and branches to bb1 (the
-    /// alloca, sole-pred bb0) on the true edge, else returns. Models a guard.
-    fn module_guarded(op: ICmpOp, k: i128, elem: Ty) -> Module {
-        let mut module = Module::new("guarded");
-        let mut func = Function::new(FuncId::new(0), "f", FuncTyId::new(0), BlockId::new(0));
-
-        let count = ValueId::new(7); // entry block param (runtime)
-        let kv = ValueId::new(0);
-        let cond = ValueId::new(1);
-        let mut bb0 = Block::new(BlockId::new(0)).with_param(count, Ty::U64);
-        bb0.body.push(
-            InstrNode::new(Inst::Const {
-                ty: Ty::U64,
-                value: Constant::Int(k),
-            })
-            .with_result(kv),
-        );
-        bb0.body.push(
-            InstrNode::new(Inst::ICmp {
-                op,
-                ty: Ty::U64,
-                lhs: count,
-                rhs: kv,
-            })
-            .with_result(cond),
-        );
-        bb0.body.push(InstrNode::new(Inst::CondBr {
-            cond,
-            then_target: BlockId::new(1),
-            then_args: vec![],
-            else_target: BlockId::new(2),
-            else_args: vec![],
-        }));
-
-        let mut bb1 = Block::new(BlockId::new(1));
-        bb1.body.push(
-            InstrNode::new(Inst::Alloca {
-                ty: elem,
-                count: Some(count),
-                align: None,
-            })
-            .with_result(ValueId::new(2)),
-        );
-        bb1.body
-            .push(InstrNode::new(Inst::Return { values: vec![] }));
-
-        let mut bb2 = Block::new(BlockId::new(2));
-        bb2.body
-            .push(InstrNode::new(Inst::Return { values: vec![] }));
-
-        func.blocks.extend([bb0, bb1, bb2]);
-        module.add_function(func);
-        module
-    }
-
-    #[test]
-    fn dominating_guard_below_budget_not_flagged() {
-        // if count < 1000 { alloca i64[count] } ⇒ ≤ 999 × 8 < budget ⇒ silent.
-        let m = module_guarded(ICmpOp::Ult, 1000, Ty::I64);
-        assert!(
-            check_allocation_bounds(&m, 64).is_empty(),
-            "a count guarded below budget must not be flagged"
-        );
-    }
-
-    #[test]
-    fn dominating_guard_against_huge_sentinel_still_flagged() {
-        // if count < usize::MAX { alloca i64[count] }: the guard is the overflow
-        // check `usize::try_from` emits — K × 8 ≫ budget ⇒ NOT discharged. This
-        // is the exact false-discharge the crude "compared ⇒ bounded" heuristic
-        // would have gotten wrong, letting the crash through.
-        let m = module_guarded(ICmpOp::Ult, i128::from(u64::MAX), Ty::I64);
-        let f = check_allocation_bounds(&m, 64);
-        assert_eq!(
-            f.len(),
-            1,
-            "a guard against a huge sentinel must not discharge"
-        );
-        assert_eq!(f[0].reason, AllocBoundReason::UnboundedRuntimeCount);
-    }
-}
+#[cfg(test)]
+#[path = "alloc_bound_differential_tests.rs"]
+mod differential_tests;

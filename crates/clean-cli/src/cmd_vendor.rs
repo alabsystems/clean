@@ -20,11 +20,16 @@
 //!   `Cargo.lock` fingerprint it should correspond to.
 //! - `clean vendor clean`   — remove `vendor/` and `.cargo/vendor.toml`.
 //!
-//! First-party repositories are never vendored into Clean. AY is an exact private
-//! Git dependency in the committed manifest/lock authority and remains a
-//! separate repository during co-development; only external crates.io/git
-//! sources belong in the vendor artifact. Replaces the former
-//! `scripts/fetch_vendor.sh`.
+//! First-party packages are stripped from the vendor tree by `[package].name`
+//! (the `ay`, `clean`, `ny` and `trust` families) or by an
+//! `alabsystems`/`alabsystems` `[package].repository` URL. A first-party fork
+//! that keeps its upstream name and declares no `repository` matches neither
+//! test and survives into the tree: `num-bigint`, `num-integer`, `num-traits`
+//! and `rustc-hash` all resolve from `alabsystems/ty` in `Cargo.lock` today.
+//! AY is an exact private Git dependency in the committed manifest/lock
+//! authority and remains a separate repository during co-development; external
+//! crates.io/git sources are what the vendor artifact is for. Replaces the
+//! former `scripts/fetch_vendor.sh`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -97,7 +102,11 @@ build external dependencies offline with \
 AY Git source must already be cached or selected by an explicit local patch. \
 Vendored sources are not committed to git (they are large and mostly cfg-gated \
 windows/wasm bindings). First-party packages are removed from fetched and \
-newly produced vendor trees before use or packaging.",
+newly produced vendor trees before use or packaging, matched by \
+`[package].name` or by an internal `[package].repository` URL. A first-party \
+fork that keeps its upstream name and declares no `repository` matches \
+neither test and stays in the tree: `num-bigint`, `num-integer`, \
+`num-traits` and `rustc-hash` resolve from `alabsystems/ty` today.",
         category: Category::Build,
         stability: Stability::Building,
         examples: &[Example {
@@ -117,7 +126,11 @@ newly produced vendor trees before use or packaging.",
 Runs `cargo vendor` and compresses the result into a `vendor.tar.zst` artifact \
 (default `target/vendor.tar.zst`) for upload to the `vendor-latest` release. The \
 maintainer side of the workflow: produces exactly what `clean vendor fetch` \
-consumes. First-party packages are removed in staging before compression. \
+consumes. First-party packages are removed in staging before compression, \
+matched by `[package].name` or by an internal `[package].repository` URL. A \
+first-party fork that keeps its upstream name and declares no `repository` \
+matches neither test, which today leaves `num-bigint`, `num-integer`, \
+`num-traits` and `rustc-hash` from `alabsystems/ty` in the artifact. \
 Warns if `cargo vendor`'s emitted source-replacement config drifts from the \
 built-in canonical config.",
         category: Category::Build,
@@ -334,19 +347,21 @@ fn vendor_package(out: Option<&Path>) -> anyhow::Result<()> {
     let staged_vendor = staging.path().join(VENDOR_DIR);
 
     println!(
-        "[vendor package] staging `cargo vendor` output outside the source tree at {} ...",
+        "[vendor package] staging `targo vendor` output outside the source tree at {} ...",
         staged_vendor.display()
     );
-    let vendored = Command::new("cargo")
+    // The driver is targo (`$CARGO` when this runs under targo); owner
+    // directive 2026-09-28. `vendor` compiles nothing, so it takes no lane.
+    let vendored = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "targo".into()))
         .arg("vendor")
         .arg("--versioned-dirs")
         .arg(&staged_vendor)
         .current_dir(&root)
         .output()
-        .context("running `cargo vendor` (is cargo on PATH?)")?;
+        .context("running `targo vendor` (is targo on PATH?)")?;
     if !vendored.status.success() {
         bail!(
-            "`cargo vendor` failed (exit {:?}): {}",
+            "`targo vendor` failed (exit {:?}): {}",
             vendored.status.code(),
             String::from_utf8_lossy(&vendored.stderr)
         );

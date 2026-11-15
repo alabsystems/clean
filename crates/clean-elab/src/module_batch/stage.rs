@@ -36,11 +36,12 @@
 //! real declaration. That removes the problem instead of working around it.
 
 use clean_kernel::{Declaration, Environment, Expr, Name};
-use clean_parser::{SurfaceBinder, SurfaceDecl, SurfaceExpr};
+use clean_parser::{SurfaceBinder, SurfaceDecl, SurfaceExpr, SurfaceName};
 
 use super::exec::{elaborate_node, introduced_names, referenced_names, OptionScope};
 use super::plan::{Node, NodeClass, NodeStatus, Plan};
 use super::{BatchRejection, DeclHeader, HeaderKind, InstanceHeader, NoHeaderReason};
+use crate::infer::elaborate_decl::{private_kind_of, PrivateNameKind};
 use crate::ElabError;
 
 /// How many times the header index may be recomputed before the batch is
@@ -50,6 +51,10 @@ use crate::ElabError;
 /// forward name.
 const MAX_HEADER_ITERATIONS: usize = 8;
 
+#[cfg(test)]
+#[path = "stage_meta_tests.rs"]
+mod meta_tests;
+
 /// Phase 2 — elaborate every type-level declaration completely and register it.
 ///
 /// Best effort: a type declaration whose elaboration fails here (because it
@@ -57,7 +62,11 @@ const MAX_HEADER_ITERATIONS: usize = 8;
 /// re-attempted by the body worklist. Degrading to today's source-order
 /// semantics for such a declaration can only lose a forward reference; it cannot
 /// manufacture one.
-pub(super) fn elaborate_type_declarations(base: &mut Environment, plan: &mut Plan) {
+pub(super) fn elaborate_type_declarations(
+    base: &mut Environment,
+    plan: &mut Plan,
+) -> Vec<BatchRejection> {
+    let mut rejections = Vec::new();
     let mut options = OptionScope::default();
     for index in 0..plan.nodes.len() {
         if plan.nodes[index].class != NodeClass::TypeLevel
@@ -72,9 +81,14 @@ pub(super) fn elaborate_type_declarations(base: &mut Environment, plan: &mut Pla
         let Ok(result) = elaboration.result else {
             continue;
         };
+        // A failed `deriving` class is reported beside the type, which
+        // registers without it.
+        let (result, logged_deriving) =
+            super::exec::split_logged_source_rejections(&plan.nodes[index], result);
         let node = &mut plan.nodes[index];
         node.hole_contexts = elaboration.hole_contexts;
         if super::exec::register_node(base, node, &result, elaboration.attributes).is_ok() {
+            rejections.extend(logged_deriving);
             introduced_names(&result, &mut node.introduces);
             let mut referenced = std::collections::HashSet::new();
             referenced_names(&result, &mut referenced);
@@ -86,6 +100,7 @@ pub(super) fn elaborate_type_declarations(base: &mut Environment, plan: &mut Pla
         }
     }
     options.leave(base);
+    rejections
 }
 
 /// Phase 3 — stage every remaining signature into a NON-AUTHORITATIVE
@@ -256,14 +271,23 @@ fn elaborate_header(env: &Environment, node: &Node) -> Result<DeclHeader, NoHead
     // by the sibling's own refusal, so no list is threaded here either.
     let mut ctx = super::exec::elab_ctx_for(env, node, &[]);
     let (name, universe_params, ty) = ctx
-        .elab_decl_header_inner(shape.name, shape.universe_params, shape.binders, shape.ty)
+        .elab_decl_header_inner(
+            shape.name,
+            shape.private_kind,
+            shape.universe_params,
+            shape.binders,
+            shape.ty,
+        )
         .map_err(classify_header_error)?;
 
     // A staged header carrying `?m` or an unsolved level is provisional in the
     // one way a header may never be: those are solved FROM THE BODY, so the
     // signature other declarations would resolve against is not yet the
     // signature the kernel will hold. Hard reject rather than stage it.
-    if ty.has_expr_mvar_quick() || ty.has_level_mvar_quick() {
+    // A REAL meta scan (G46, ledger (116)): elaborator metas are bit-63
+    // FVars and `has_expr_mvar_quick` is constant false, so until 2026-10-08
+    // a provisional header with an open `?m` was staged.
+    if crate::unify::MetaState::expr_has_meta(&ty) || ty.has_level_mvar_quick() {
         return Err(NoHeaderReason::ResidualMetavariable);
     }
 
@@ -292,16 +316,20 @@ fn elaborate_header(env: &Environment, node: &Node) -> Result<DeclHeader, NoHead
 fn header_from_inferred_type(env: &Environment, node: &Node) -> Result<DeclHeader, NoHeaderReason> {
     let elaboration = elaborate_node(env, node, &[]);
     let result = elaboration.result.map_err(classify_header_error)?;
-    let crate::infer::ElabResult::Definition {
+    // The declaration itself, also when it lifted `where` / `let rec` helpers
+    // (`ElabResult::primary_leaf`); only its header is staged.
+    let Some(crate::infer::ElabResult::Definition {
         name,
         universe_params,
         ty,
         ..
-    } = result
+    }) = result.primary_leaf()
     else {
         return Err(NoHeaderReason::UnsupportedShape);
     };
-    if ty.has_expr_mvar_quick() || ty.has_level_mvar_quick() {
+    let (name, universe_params, ty) = (name.clone(), universe_params.clone(), ty.clone());
+    // A real meta scan (G46); see the written-signature staging above.
+    if crate::unify::MetaState::expr_has_meta(&ty) || ty.has_level_mvar_quick() {
         return Err(NoHeaderReason::ResidualMetavariable);
     }
     Ok(DeclHeader {
@@ -316,7 +344,9 @@ fn header_from_inferred_type(env: &Environment, node: &Node) -> Result<DeclHeade
 
 /// Map an elaboration failure to the reason a header is absent.
 fn classify_header_error(error: ElabError) -> NoHeaderReason {
-    match error {
+    // An `Unsupported` raised inside an autoParam `by` block arrives wrapped
+    // in the tactic attribution; classify the error it wraps.
+    match error.innermost() {
         ElabError::Unsupported { .. } => NoHeaderReason::UnsupportedShape,
         _ => NoHeaderReason::SignatureDidNotElaborate,
     }
@@ -334,12 +364,15 @@ fn class_of(ty: &Expr) -> Option<Name> {
 
 /// The pieces of a surface declaration a header needs.
 struct HeaderShape<'a> {
-    name: &'a str,
-    universe_params: &'a [String],
+    name: &'a SurfaceName,
+    universe_params: &'a [SurfaceName],
     binders: &'a [SurfaceBinder],
     ty: &'a SurfaceExpr,
     kind: HeaderKind,
     instance_priority: Option<u32>,
+    /// `Some(kind)` for a `private` declaration: its header carries the name
+    /// registration gives it (G21).
+    private_kind: Option<PrivateNameKind>,
 }
 
 /// Decide whether a declaration has an elaborable signature, and pull it out.
@@ -353,6 +386,7 @@ fn header_shape(decl: &SurfaceDecl) -> Result<HeaderShape<'_>, NoHeaderReason> {
             universe_params,
             binders,
             ty: Some(ty),
+            modifiers,
             ..
         } => Ok(HeaderShape {
             name,
@@ -361,12 +395,14 @@ fn header_shape(decl: &SurfaceDecl) -> Result<HeaderShape<'_>, NoHeaderReason> {
             ty,
             kind: HeaderKind::Definition,
             instance_priority: None,
+            private_kind: private_kind_of(modifiers, PrivateNameKind::Definition),
         }),
         SurfaceDecl::Theorem {
             name,
             universe_params,
             binders,
             ty,
+            modifiers,
             ..
         } => Ok(HeaderShape {
             name,
@@ -375,12 +411,14 @@ fn header_shape(decl: &SurfaceDecl) -> Result<HeaderShape<'_>, NoHeaderReason> {
             ty,
             kind: HeaderKind::Theorem,
             instance_priority: None,
+            private_kind: private_kind_of(modifiers, PrivateNameKind::Theorem),
         }),
         SurfaceDecl::Axiom {
             name,
             universe_params,
             binders,
             ty,
+            modifiers,
             ..
         } => Ok(HeaderShape {
             name,
@@ -389,12 +427,14 @@ fn header_shape(decl: &SurfaceDecl) -> Result<HeaderShape<'_>, NoHeaderReason> {
             ty,
             kind: HeaderKind::Axiom,
             instance_priority: None,
+            private_kind: private_kind_of(modifiers, PrivateNameKind::Axiom),
         }),
         SurfaceDecl::Opaque {
             name,
             universe_params,
             binders,
             ty,
+            modifiers,
             ..
         } => Ok(HeaderShape {
             name,
@@ -403,6 +443,7 @@ fn header_shape(decl: &SurfaceDecl) -> Result<HeaderShape<'_>, NoHeaderReason> {
             ty,
             kind: HeaderKind::Opaque,
             instance_priority: None,
+            private_kind: private_kind_of(modifiers, PrivateNameKind::Definition),
         }),
         // An ANONYMOUS instance's canonical name is minted by probing the
         // environment for a free `instFooBar_N`, so it depends on what is
@@ -416,6 +457,7 @@ fn header_shape(decl: &SurfaceDecl) -> Result<HeaderShape<'_>, NoHeaderReason> {
             binders,
             class_type,
             priority,
+            modifiers,
             ..
         } => Ok(HeaderShape {
             name,
@@ -424,6 +466,7 @@ fn header_shape(decl: &SurfaceDecl) -> Result<HeaderShape<'_>, NoHeaderReason> {
             ty: class_type,
             kind: HeaderKind::Instance,
             instance_priority: Some(priority.unwrap_or(crate::instances::DEFAULT_PRIORITY)),
+            private_kind: private_kind_of(modifiers, PrivateNameKind::Definition),
         }),
         SurfaceDecl::Inductive { .. }
         | SurfaceDecl::Structure { .. }

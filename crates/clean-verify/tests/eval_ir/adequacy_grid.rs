@@ -12,7 +12,19 @@
 //! naming its `Eq.refl` theorem), or never receives it at all (`audit-pin`,
 //! the erased `align` slots) — plus the measured executor divergences
 //! (`declared-delta`: six from W1-W4, five from the 2026-08-25 float-residue
-//! wave), whose permanent home the grid is.
+//! wave, four from Phase B), whose permanent home the grid is. A delta row
+//! states which WAY it runs: `accept-more` (the model continues where the
+//! reference faults) is the only direction that could turn a false theorem
+//! into a proof, so it is never left implicit, and the fail-closed
+//! `reject-more` residues are named in their rows rather than glossed.
+//!
+//! There is no constructor count typed in this gate's producer any more: the
+//! denominator is derived by `evalir_coverage.derive_denominator` from
+//! `EMITTED_INSTS` and the `IRInst` inductive, and the grid's own telescope
+//! parse is a third source held to it. The two counts this file DOES assert
+//! (33 constructors, 33 dispatch arms) are the independent re-derivation the
+//! module doc above describes — they are meant to be edited in the same commit
+//! as the syntax, and to fail loudly if they are not.
 //!
 //! The grid is GENERATED, fail-closed, by `scripts/evalir_adequacy_grid.py`.
 //! This gate re-derives the field surface INDEPENDENTLY — its own parse of
@@ -72,7 +84,11 @@ fn irinst_fields() -> Vec<(String, Vec<String>)> {
         );
         out.push((name.to_string(), parts));
     }
-    assert_eq!(out.len(), 28, "IRInst must declare exactly 28 constructors");
+    assert_eq!(
+        out.len(),
+        33,
+        "IRInst includes the appended Release syntax without ARC execution"
+    );
     out
 }
 
@@ -100,8 +116,8 @@ fn dispatch_arms() -> BTreeMap<String, (Vec<String>, String)> {
     }
     assert_eq!(
         out.len(),
-        28,
-        "the ir_exec dispatch must have exactly 28 arms"
+        33,
+        "the ir_exec dispatch includes both explicit byte-only atomic refusals"
     );
     out
 }
@@ -268,15 +284,44 @@ fn eval_ir_adequacy_grid_erasure_and_delta_rows_are_exactly_the_named_ones() {
         "round-nan-payload",
         "minmax-ambiguous-cells",
         "fp-casts-answer-in-e2",
+        // Phase B's four (2026-09-10), and NOT all in one direction — the
+        // rows say which way each one runs, because "the model continues where
+        // the reference faults" is the only direction that can turn a false
+        // theorem into a proof and so is the one that must be declared rather
+        // than discovered. ACCEPT-MORE: `copy-type-check-coarse` within a
+        // shape class (a width, signedness or aggregate-id disagreement passes
+        // the shape check and would fail expect_ty), and
+        // `zero-address-is-not-null` (address 0 is an ordinary address here,
+        // NullPtr there). NEITHER SIDE FAULTS: `enum-load-shape-directed` is a
+        // VALUE divergence — the shape-directed view against the reference's
+        // always-decode-the-byte-image. REJECT-MORE, fail-closed:
+        // `borrow-one-past-the-end` (the reference's second
+        // try_pointer_from_address loop admits base+size; the model has no
+        // cell there), and the reject-more half of `copy-type-check-coarse`
+        // (the reference's Copy arm never calls reject_partial and transports
+        // poison verbatim), each named inside its own row.
+        "copy-type-check-coarse",
+        "enum-load-shape-directed",
+        "zero-address-is-not-null",
+        "borrow-one-past-the-end",
+        // Crystal E5's three (2026-09-27, decision memo §23). REJECT-MORE, fail-closed:
+        // `fat-null-lanes` (a wide value has no null lane). ACCEPT-MORE on ill-typed input only:
+        // `ptrmeta-kind-pair` (the metadata type is not checked against the pointer's kind).
+        // ACCEPT-MORE and PRE-EXISTING: `icmp-pointer-answers` (the model answers a thin-pointer
+        // `icmp` the reference refuses; the wide half agrees).
+        "fat-null-lanes",
+        "ptrmeta-kind-pair",
+        "icmp-pointer-answers",
     ]
     .iter()
     .map(|s| (*s).to_string())
     .collect();
     assert_eq!(
         deltas, want_deltas,
-        "the declared-delta rows must be exactly the eleven measured findings (six from \
-         W1-W4, five from the float-residue wave) — a new measured divergence gets a new \
-         row, and none is retired without a dated re-measurement"
+        "the declared-delta rows must be exactly the eighteen measured findings (six from \
+         W1-W4, five from the float-residue wave, four from Phase B, three from crystal E5) — a \
+         new measured divergence gets a new row, and none is retired without a dated \
+         re-measurement"
     );
 }
 

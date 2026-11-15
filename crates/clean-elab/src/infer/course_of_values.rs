@@ -43,16 +43,15 @@
 
 use clean_parser::{
     Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceLit, SurfaceMatchArm,
-    SurfacePattern,
+    SurfaceName, SurfacePattern,
 };
 
 /// The two declarations the pair-threading transform produces from one
 /// course-of-values `def`: the single-step pair-threading auxiliary and the
 /// projecting wrapper that keeps the original surface name.
 pub(super) struct PairThreaded {
-    /// Auxiliary name (`<f>.cov` — a dotted name a user cannot collide with via
-    /// a plain identifier, and which is namespaced under the function).
-    pub aux_name: String,
+    /// Auxiliary identity (`f` followed by a separate `cov` component).
+    pub aux_name: SurfaceName,
     /// Auxiliary type: `Nat → R × R`.
     pub aux_ty: SurfaceExpr,
     /// Auxiliary value: the single-step pair-threading `PatternMatchLambda`.
@@ -71,7 +70,7 @@ pub(super) struct PairThreaded {
 /// equation-def parser emits the single argument as the synthetic `_x` lambda
 /// binder inside `val`, not as a declaration binder); `ty` must be `Nat → R`.
 pub(super) fn try_pair_thread(
-    name: &str,
+    name: &SurfaceName,
     binders: &[SurfaceBinder],
     ty: Option<&SurfaceExpr>,
     val: &SurfaceExpr,
@@ -97,13 +96,17 @@ pub(super) fn try_pair_thread(
     let [lam_binder] = lam_binders.as_slice() else {
         return None;
     };
-    if lam_binder.name != "_x" {
+    if !lam_binder
+        .name
+        .same_syntax(&SurfaceName::pattern_lambda_binder())
+    {
         return None;
     }
     let SurfaceExpr::Match(_, None, scrut, arms) = &**lam_body else {
         return None;
     };
-    if !matches!(&**scrut, SurfaceExpr::Ident(_, s) if s == "_x") {
+    if !matches!(&**scrut, SurfaceExpr::Ident(_, s) if s.same_syntax(&SurfaceName::pattern_lambda_binder()))
+    {
         return None;
     }
 
@@ -139,10 +142,10 @@ pub(super) fn try_pair_thread(
     // Any *other* self-call shape (e.g. `f (n + 2)`, `f 0`) is outside the
     // two-prior envelope; `rewrite_rec_body` returns `None` so we bail rather
     // than emit a term that drops a recursive call.
-    let a_name = "_cov_a";
-    let b_name = "_cov_b";
-    let k_name = "_cov_k";
-    let rbody2 = rewrite_rec_body(&rbody, name, &pvar, a_name, b_name, k_name)?;
+    let a_name = SurfaceName::unspellable("_cov_a", 0);
+    let b_name = SurfaceName::unspellable("_cov_b", 0);
+    let k_name = SurfaceName::unspellable("_cov_k", 0);
+    let rbody2 = rewrite_rec_body(&rbody, name, &pvar, &a_name, &b_name, &k_name)?;
 
     // ---- Build `aux_ty = Nat → R × R` ----
     let prod_ret = prod_ty(ret_ty.clone(), ret_ty.clone());
@@ -162,19 +165,16 @@ pub(super) fn try_pair_thread(
     // Arm `k + 1 => match <aux> k with | (a, b) => (b, rbody')`.
     let aux_self_call = app(
         SurfaceExpr::Ident(Span::dummy(), aux_name_of(name)),
-        vec![SurfaceExpr::Ident(Span::dummy(), k_name.to_string())],
+        vec![SurfaceExpr::Ident(Span::dummy(), k_name.clone())],
     );
     let pair_pattern = SurfacePattern::Ctor(
-        "Prod.mk".to_string(),
+        SurfaceName::generated_path("Prod.mk"),
         vec![
-            SurfacePattern::Var(a_name.to_string()),
-            SurfacePattern::Var(b_name.to_string()),
+            SurfacePattern::Var(a_name.clone()),
+            SurfacePattern::Var(b_name.clone()),
         ],
     );
-    let next_pair = prod_mk(
-        SurfaceExpr::Ident(Span::dummy(), b_name.to_string()),
-        rbody2,
-    );
+    let next_pair = prod_mk(SurfaceExpr::Ident(Span::dummy(), b_name.clone()), rbody2);
     let inner_match = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -187,19 +187,22 @@ pub(super) fn try_pair_thread(
     );
     let aux_arm_succ = SurfaceMatchArm {
         span: Span::dummy(),
-        pattern: SurfacePattern::NumeralAdd(Box::new(SurfacePattern::Var(k_name.to_string())), 1),
+        pattern: SurfacePattern::NumeralAdd(Box::new(SurfacePattern::Var(k_name.clone())), 1),
         body: inner_match,
     };
     let aux_match = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "_x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::pattern_lambda_binder(),
+        )),
         vec![aux_arm0, aux_arm_succ],
     );
     let aux_val = SurfaceExpr::PatternMatchLambda(
         Span::dummy(),
-        vec![SurfaceBinder::new(
-            "_x".to_string(),
+        vec![SurfaceBinder::new_typed(
+            SurfaceName::pattern_lambda_binder(),
             None,
             SurfaceBinderInfo::Explicit,
         )],
@@ -207,18 +210,18 @@ pub(super) fn try_pair_thread(
     );
 
     // ---- Build wrapper `fun (n : Nat) => Prod.fst (<aux> n)` ----
-    let wrapper_param = "_cov_n";
+    let wrapper_param = SurfaceName::unspellable("_cov_n", 0);
     let wrapper_body = app(
-        SurfaceExpr::Ident(Span::dummy(), "Prod.fst".to_string()),
+        SurfaceExpr::Ident(Span::dummy(), SurfaceName::global_path("Prod.fst")),
         vec![app(
             SurfaceExpr::Ident(Span::dummy(), aux_name_of(name)),
-            vec![SurfaceExpr::Ident(Span::dummy(), wrapper_param.to_string())],
+            vec![SurfaceExpr::Ident(Span::dummy(), wrapper_param.clone())],
         )],
     );
     let wrapper_val = SurfaceExpr::Lambda(
         Span::dummy(),
-        vec![SurfaceBinder::new(
-            wrapper_param.to_string(),
+        vec![SurfaceBinder::new_typed(
+            wrapper_param.clone(),
             Some(nat_ident()),
             SurfaceBinderInfo::Explicit,
         )],
@@ -234,27 +237,27 @@ pub(super) fn try_pair_thread(
     })
 }
 
-/// The auxiliary name for `f`: `f.cov`. Dotted so it never collides with a
-/// user-written identifier and reads as "course-of-values helper of `f`".
-fn aux_name_of(name: &str) -> String {
-    format!("{name}.cov")
+/// The auxiliary is a structural child of `f`. Existing declaration checks
+/// still reject an occupied identity; display spelling is not a freshness proof.
+fn aux_name_of(name: &SurfaceName) -> SurfaceName {
+    name.append(&SurfaceName::generated_path("cov"))
 }
 
 /// `Nat` as a surface identifier.
 fn nat_ident() -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), "Nat".to_string())
+    SurfaceExpr::Ident(Span::dummy(), SurfaceName::global_path("Nat"))
 }
 
 /// Whether `e` is the bare `Nat` identifier (the only domain the transform
 /// accepts).
 fn is_nat_ident(e: &SurfaceExpr) -> bool {
-    matches!(e, SurfaceExpr::Ident(_, s) if s == "Nat")
+    matches!(e, SurfaceExpr::Ident(_, s) if s == &SurfaceName::generated_path("Nat"))
 }
 
 /// `A × B` as the parser renders it: `App(Ident "Prod", [A, B])`.
 fn prod_ty(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
     app(
-        SurfaceExpr::Ident(Span::dummy(), "Prod".to_string()),
+        SurfaceExpr::Ident(Span::dummy(), SurfaceName::global_path("Prod")),
         vec![a, b],
     )
 }
@@ -262,7 +265,7 @@ fn prod_ty(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
 /// `(a, b)` as the parser renders it: `App(Ident "Prod.mk", [a, b])`.
 fn prod_mk(a: SurfaceExpr, b: SurfaceExpr) -> SurfaceExpr {
     app(
-        SurfaceExpr::Ident(Span::dummy(), "Prod.mk".to_string()),
+        SurfaceExpr::Ident(Span::dummy(), SurfaceName::global_path("Prod.mk")),
         vec![a, b],
     )
 }
@@ -282,7 +285,8 @@ fn nat_lit_arm_body(arm: &SurfaceMatchArm, lit: u64) -> Option<SurfaceExpr> {
     let matches_pat = match &arm.pattern {
         SurfacePattern::Lit(SurfaceLit::Nat(n)) => *n == lit,
         SurfacePattern::Ctor(name, sub) if lit == 0 && sub.is_empty() => {
-            name == "Nat.zero" || name == "Nat.Zero"
+            name == &SurfaceName::generated_path("Nat.zero")
+                || name == &SurfaceName::generated_path("Nat.Zero")
         }
         _ => false,
     };
@@ -292,7 +296,7 @@ fn nat_lit_arm_body(arm: &SurfaceMatchArm, lit: u64) -> Option<SurfaceExpr> {
 /// Whether `expr` contains an application whose head is the identifier `name`
 /// (a self-call). Conservative structural walk over the surface forms the
 /// recursive arm body can take.
-pub(super) fn body_calls(expr: &SurfaceExpr, name: &str) -> bool {
+pub(super) fn body_calls(expr: &SurfaceExpr, name: &SurfaceName) -> bool {
     match expr {
         SurfaceExpr::App(_, head, args) => {
             let head_is_self = matches!(&**head, SurfaceExpr::Ident(_, s) if s == name);
@@ -303,7 +307,9 @@ pub(super) fn body_calls(expr: &SurfaceExpr, name: &str) -> bool {
         SurfaceExpr::Lambda(_, _, b) | SurfaceExpr::PatternMatchLambda(_, _, b) => {
             body_calls(b, name)
         }
-        SurfaceExpr::Let(_, _, v, b) => body_calls(v, name) || body_calls(b, name),
+        SurfaceExpr::Let(_, _, v, b) | SurfaceExpr::Have(_, _, v, b) => {
+            body_calls(v, name) || body_calls(b, name)
+        }
         SurfaceExpr::If(_, c, t, e) => {
             body_calls(c, name) || body_calls(t, name) || body_calls(e, name)
         }
@@ -326,11 +332,11 @@ pub(super) fn body_calls(expr: &SurfaceExpr, name: &str) -> bool {
 /// recursive call.
 fn rewrite_rec_body(
     expr: &SurfaceExpr,
-    f: &str,
-    pvar: &str,
-    a: &str,
-    b: &str,
-    k: &str,
+    f: &SurfaceName,
+    pvar: &SurfaceName,
+    a: &SurfaceName,
+    b: &SurfaceName,
+    k: &SurfaceName,
 ) -> Option<SurfaceExpr> {
     match expr {
         // A self-call `f <arg>`: only the two recognized offsets are allowed.
@@ -339,8 +345,8 @@ fn rewrite_rec_body(
                 return None;
             };
             match classify_self_arg(&arg.expr, pvar)? {
-                SelfArg::Pred => Some(SurfaceExpr::Ident(Span::dummy(), a.to_string())),
-                SelfArg::PredPlusOne => Some(SurfaceExpr::Ident(Span::dummy(), b.to_string())),
+                SelfArg::Pred => Some(SurfaceExpr::Ident(Span::dummy(), a.clone())),
+                SelfArg::PredPlusOne => Some(SurfaceExpr::Ident(Span::dummy(), b.clone())),
             }
         }
         // A non-self application: recurse into head and args. Any nested self-call
@@ -367,7 +373,7 @@ fn rewrite_rec_body(
             Box::new(rewrite_rec_body(t, f, pvar, a, b, k)?),
         )),
         // Bare reference to the surface recursion variable becomes `k`.
-        SurfaceExpr::Ident(span, s) if s == pvar => Some(SurfaceExpr::Ident(*span, k.to_string())),
+        SurfaceExpr::Ident(span, s) if s == pvar => Some(SurfaceExpr::Ident(*span, k.clone())),
         // Leaves and other identifiers pass through unchanged. Conservatively, if
         // a self-call to `f` is buried inside a form we do not descend into,
         // `body_calls`-style detection would not catch it — but the recursive arm
@@ -378,6 +384,7 @@ fn rewrite_rec_body(
         SurfaceExpr::Lambda(..)
         | SurfaceExpr::PatternMatchLambda(..)
         | SurfaceExpr::Let(..)
+        | SurfaceExpr::Have(..)
         | SurfaceExpr::LetRec(..)
         | SurfaceExpr::Match(..)
         | SurfaceExpr::If(..)
@@ -401,14 +408,14 @@ enum SelfArg {
 
 /// Classify a self-call's single argument as one of the two recognized prior
 /// offsets, or `None` for any other shape.
-fn classify_self_arg(arg: &SurfaceExpr, pvar: &str) -> Option<SelfArg> {
+fn classify_self_arg(arg: &SurfaceExpr, pvar: &SurfaceName) -> Option<SelfArg> {
     match arg {
         SurfaceExpr::Paren(_, inner) => classify_self_arg(inner, pvar),
         SurfaceExpr::Ident(_, s) if s == pvar => Some(SelfArg::Pred),
         // `pvar + 1` parses as `App(Ident "HAdd.hAdd", [pvar, 1])`.
         SurfaceExpr::App(_, head, args)
             if matches!(&**head, SurfaceExpr::Ident(_, s)
-                if s == "HAdd.hAdd" || s == "Add.add" || s == "Nat.add") =>
+                if s == &SurfaceName::generated_path("HAdd.hAdd") || s == &SurfaceName::generated_path("Add.add") || s == &SurfaceName::generated_path("Nat.add")) =>
         {
             let [lhs, rhs] = args.as_slice() else {
                 return None;

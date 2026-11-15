@@ -26,9 +26,32 @@
 //!   ArrayAxiom / Generic clauses. Hole remains an error fallback.
 
 // BV bit-blast proof-reconstruction lane — gated behind `ay-bv-blast` (off by
-// default). These modules import `ay_proof::bv_blast_export`, which upstream
-// `ay` has removed. Preserved (not deleted) so they are recoverable once `ay`
-// re-adds the export API. See crates/clean-auto/Cargo.toml.
+// default). These modules import `ay_proof::bv_blast_export`.
+//
+// CORRECTION, measured 2026-09-15. This comment said that API was one "which
+// upstream `ay` has removed", and that the modules were "preserved (not
+// deleted) so they are recoverable once `ay` re-adds the export API". THAT IS
+// FALSE AT THE CURRENT PIN, and it contradicted crates/clean-auto/Cargo.toml,
+// which says the opposite ("it does at the current pin") — two committed
+// statements disagreeing with nothing in the tree able to adjudicate.
+// Measured: `cargo check -p clean-auto --features ay-bv-blast` exits 0 with
+// ZERO errors in 57 s, and `cargo test --features ay-bv-blast --lib` is
+// 2361 passed / 0 failed.
+//
+// So this is not shelved code awaiting an upstream fix. It is LIVE, COMPILING
+// code whose tests nothing ran: the feature is enabled by no dependent
+// manifest, no .cargo alias, no justfile recipe and — until today — no gate
+// leg, so `cargo test --workspace` and the workspace clippy compiled zero of
+// it. 89 tests lived only in this configuration (75 here, 14 in
+// `crate::proved_gate`; 98 and 84 since 2026-09-29), including the proved-gate
+// refusal controls whose own doc comment reads `ANTI-VACUITY (LOAD-BEARING)`.
+// All 89 passed; they had simply never been compiled in this repo's history.
+//
+// Now covered by the `ay-bv-blast-gated` leg of scripts/local_gate.sh
+// (full mode; 11m57s, 12.07 GB peak measured 2026-09-15). If you gate more
+// modules here, they join that leg automatically only if their module name is
+// in its filter — check it.
+// See crates/clean-auto/Cargo.toml.
 #[cfg(feature = "ay-bv-blast")]
 pub mod bv_blast_reflection;
 #[cfg(feature = "ay-bv-blast")]

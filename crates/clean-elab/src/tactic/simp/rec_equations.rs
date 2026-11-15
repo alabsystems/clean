@@ -22,9 +22,12 @@
 //! for each constructor `c` of the major's inductive
 //!
 //! ```text
-//!   f prefix… (c params fields…) extras… = <iota-reduced arm with recursive
-//!                                           `T.rec …` calls folded back to f>
+//!   f x₁ … (c params fields…) … xₙ = <iota-reduced arm with recursive
+//!                                      `T.rec …` calls folded back to f>
 //! ```
+//!
+//! (the constructor at the major's binder position, every other binder as
+//! itself).
 //!
 //! Each equation is definitionally true (delta + beta + iota), so its proof
 //! witness is a plain `Eq.refl` over the LHS. Soundness never rests on the
@@ -37,11 +40,15 @@
 //!
 //! Synthesis returns `None` (and the caller falls back to the historical
 //! delta-unfold) unless the whole shape is the plain structural class:
-//! a level-monomorphic `Definition`, a non-mutual / non-nested / non-reflexive
+//! a `Definition` whose levels belong to its declared universe telescope,
+//! a non-mutual / non-nested / non-reflexive
 //! inductive with no indices, `MajorAfterMinors` argument order, the major
-//! premise and every extra argument being exactly the def's trailing binders,
-//! and every recursive `T.rec` call in each reduced arm folding back to an
-//! `f`-application over the same instantiated prefix. All-or-nothing per
+//! premise and every extra argument being distinct binders of the def with
+//! every binder inside the major an extra (an extra may also sit OUTSIDE it: a
+//! leading parameter the match lowering generalized into the motive), the
+//! prefix spine mentioning neither, and every recursive `T.rec` call in each
+//! reduced arm folding back to an `f`-application over the same instantiated
+//! prefix. All-or-nothing per
 //! definition: if any constructor's equation fails to synthesize, no equation
 //! is emitted (a half-covered constructor set would leave some goals stuck in
 //! a shape neither path can rewrite).
@@ -53,6 +60,9 @@ use clean_kernel::{Environment, Expr, ExprKind, Level, RecursorArgOrder};
 use super::reduce::beta_reduce;
 use super::types::{SimpIndexMode, SimpLemma};
 use crate::tactic::bvar_ops::lift_bvars;
+
+#[path = "rec_equations_brec.rs"]
+mod brec;
 
 /// Priority for synthesized equations: same tier as other `simp [name]`
 /// extras (`collect_extra_lemmas` uses 50 for environment lemmas and local
@@ -80,18 +90,53 @@ pub(super) fn synthesize_rec_def_equations(
     env: &Environment,
     name: &Name,
 ) -> Option<Vec<SimpLemma>> {
-    let decl = env.get_const(name)?;
+    synthesize_rec_def_equations_or_decline(env, name).ok()
+}
+
+/// [`synthesize_rec_def_equations`], naming the shape requirement that
+/// declined when there are no equations (a diagnostic only: every decline
+/// leaves the historical delta-unfold in place).
+pub(super) fn synthesize_rec_def_equations_or_decline(
+    env: &Environment,
+    name: &Name,
+) -> Result<Vec<SimpLemma>, &'static str> {
+    synthesize_native_equations(env, name).or_else(|reason| {
+        super::declared_equations::collect(env, name, EQUATION_PRIORITY)
+            .or_else(|| brec::synthesize(env, name))
+            .ok_or(reason)
+    })
+}
+
+fn synthesize_native_equations(
+    env: &Environment,
+    name: &Name,
+) -> Result<Vec<SimpLemma>, &'static str> {
+    // A member of a lifted `mutual` block (gap G23) has its equations
+    // recorded by the lift: its value applies a shared nested recursor that
+    // the plain structural shape below declines.
+    if let Some(lifted) = super::rec_equations_lifted::lifted_member_equations(env, name) {
+        return lifted;
+    }
+    let decl = env.get_const(name).ok_or("no such constant")?;
     if !matches!(decl.kind, ConstantKind::Definition) {
-        return None;
+        return Err("not a definition");
     }
-    // Level-polymorphic defs are out of scope: the `Eq.refl` proof template is
-    // assembled at synthesis time, where nothing can solve a level param, and
-    // an unsolved level in a template is exactly the declaration-killing class
-    // `template_has_unsolved_level` refuses.
-    if !decl.level_params.is_empty() {
-        return None;
+    let value = decl.value.as_ref().ok_or("no value")?;
+    // Keep declared parameters in the schema. LemmaLevels freshens them for
+    // each match together with the LHS, RHS and Eq.refl template. Foreign
+    // parameters remain a refusal, not implicit new schema variables.
+    if crate::infer::collect_level_params(&[value, &decl.type_])
+        .iter()
+        .any(|parameter| !decl.level_params.contains(parameter))
+    {
+        return Err("undeclared universe parameter");
     }
-    let value = decl.value.as_ref()?;
+    let definition_levels: Vec<Level> = decl
+        .level_params
+        .iter()
+        .cloned()
+        .map(Level::param)
+        .collect();
 
     // 1. The value's lambda telescope: `fun x₁ … xₙ => body`.
     let mut n: usize = 0;
@@ -101,30 +146,34 @@ pub(super) fn synthesize_rec_def_equations(
         body = b.as_ref();
     }
     if n == 0 {
-        return None;
+        return Err("no lambda telescope");
     }
 
     // 2. `body` must be a recursor application spine.
     let head = body.get_app_fn();
     let ExprKind::Const(rec_name, rec_levels) = head.kind() else {
-        return None;
+        return Err("body head is not a constant");
     };
-    let rv = env.get_recursor(rec_name)?;
+    let rv = env.get_recursor(rec_name).ok_or("head is not a recursor")?;
     if rv.num_motives != 1 || rv.num_indices != 0 {
-        return None;
+        return Err("not a single-motive index-free recursor");
     }
     if !matches!(rv.arg_order, RecursorArgOrder::MajorAfterMinors) {
-        return None;
+        return Err("recursor is not MajorAfterMinors");
     }
-    if rec_levels.len() != rv.level_params.len() || rec_levels.iter().any(Level::has_params) {
-        return None;
+    if rec_levels.len() != rv.level_params.len()
+        || !levels_are_declared(rec_levels, &decl.level_params)
+    {
+        return Err("recursor levels are not declared");
     }
-    let iv = env.get_inductive(&rv.inductive_name)?;
+    let iv = env
+        .get_inductive(&rv.inductive_name)
+        .ok_or("recursor's inductive unknown")?;
     if iv.all_names.len() > 1 || iv.is_nested || iv.is_reflexive {
-        return None;
+        return Err("mutual, nested or reflexive inductive");
     }
     if rv.rules.is_empty() || rv.rules.len() != iv.constructor_names.len() {
-        return None;
+        return Err("recursor rules do not match the constructors");
     }
 
     let args: Vec<Expr> = body.get_app_args().iter().map(|a| (*a).clone()).collect();
@@ -133,39 +182,71 @@ pub(super) fn synthesize_rec_def_equations(
     // major, then `m` extra arguments consumed by a function-typed motive.
     let p1 = num_params + 1 + rv.num_minors as usize;
     if args.len() < p1 + 1 {
-        return None;
+        return Err("recursor spine has no major");
     }
-    let m = args.len() - p1 - 1;
-    if m + 1 > n {
-        return None;
+    let num_extras = args.len() - p1 - 1;
+    if num_extras + 1 > n {
+        return Err("more extras than binders");
     }
-    // 3. Major and extras must be exactly the def's trailing binders, in
-    // order: `body = Rec prefix… x_{n-m} x_{n-m+1} … xₙ`.
-    if args[p1] != Expr::bvar(m as u32) {
-        return None;
-    }
-    for (i, extra) in args[p1 + 1..].iter().enumerate() {
-        if *extra != Expr::bvar((m - 1 - i) as u32) {
-            return None;
+    // 3. The major and the extras are distinct binders of the def, and every
+    // other binder lies OUTSIDE the major (`f`'s fixed prefix). The extras
+    // need not follow the major: the match lowering generalizes a parameter
+    // written BEFORE the major into the motive too (`def f (k : Nat) : List α
+    // → …` is `fun k x => T.rec … x k`), where Lean keeps it fixed — the same
+    // function, so its equations are `f k (c fields…) = …` either way.
+    let binder_bvar = |e: &Expr| match e.kind() {
+        ExprKind::BVar(j) if (*j as usize) < n => Some(*j as usize),
+        _ => None,
+    };
+    let major = binder_bvar(&args[p1]).ok_or("the major is not a binder of the def")?;
+    let mut extras: Vec<usize> = Vec::with_capacity(num_extras);
+    for extra in &args[p1 + 1..] {
+        let j = binder_bvar(extra).ok_or("an extra is not a binder of the def")?;
+        if j == major || extras.contains(&j) {
+            return Err("an extra repeats the major or another extra");
         }
+        extras.push(j);
+    }
+    // `m`: the binders inside the major. Each must be an extra — a binder
+    // there that the recursor does not thread could have a type mentioning
+    // the major, which no fold-back over the fields could re-type.
+    let m = major;
+    if (0..m).any(|j| !extras.contains(&j)) {
+        return Err("a binder inside the major is not an extra");
     }
     // 4. The prefix spine (params/motive/minors) must not capture the major
     // or the extras — otherwise substituting the constructor for the major
     // would have to rewrite the prefix too and the fold-back spine below
     // would not be constant across recursive calls.
     for a in &args[..p1] {
-        for v in 0..=(m as u32) {
-            if a.has_loose_bvar(v) {
-                return None;
-            }
+        if std::iter::once(&major)
+            .chain(&extras)
+            .any(|&v| a.has_loose_bvar(v as u32))
+        {
+            return Err("the prefix spine mentions the major or an extra");
         }
     }
+    // Where each of `f`'s arguments comes from in a recursive `T.rec` call:
+    // a fixed binder is itself, the major and each extra are the call's
+    // matching recursor argument (0 = major, 1 + i = extra i).
+    let f_arg_sources: Vec<FArgSource> = (0..n)
+        .map(|p| {
+            let j = n - 1 - p;
+            if j == major {
+                FArgSource::RecArg(0)
+            } else if let Some(i) = extras.iter().position(|&e| e == j) {
+                FArgSource::RecArg(1 + i)
+            } else {
+                FArgSource::Fixed(j)
+            }
+        })
+        .collect();
 
     // Constructor levels: a recursor prepends its motive-universe params, so
     // the inductive's own levels are the trailing entries of the rec levels.
     let ind_lp = iv.level_params.len();
     if rec_levels.len() < ind_lp {
-        return None;
+        return Err("recursor levels shorter than the inductive's");
     }
     let ctor_levels: Vec<Level> = rec_levels[rec_levels.len() - ind_lp..].to_vec();
 
@@ -175,14 +256,15 @@ pub(super) fn synthesize_rec_def_equations(
     let mut result_ty: &Expr = &decl.type_;
     for _ in 0..n {
         let ExprKind::Pi(_, _, b) = result_ty.kind() else {
-            return None;
+            return Err("result type has fewer binders than the value");
         };
         result_ty = b.as_ref();
     }
-    let u = sort_level_of_result_type(env, result_ty)?;
+    let u = sort_level_of_result_type(env, result_ty, &decl.level_params)
+        .ok_or("result sort not resolvable")?;
 
     // `f x₁ … xₙ` over the original telescope; each equation σ-maps it.
-    let mut f_app_old = Expr::const_(name.clone(), Vec::<Level>::new());
+    let mut f_app_old = Expr::const_(name.clone(), definition_levels.clone());
     for i in (0..n).rev() {
         f_app_old = Expr::app(f_app_old, Expr::bvar(i as u32));
     }
@@ -190,12 +272,14 @@ pub(super) fn synthesize_rec_def_equations(
     let rec_levels_slice: Vec<Level> = rec_levels.iter().cloned().collect();
     let mut out = Vec::with_capacity(rv.rules.len());
     for rule in &rv.rules {
-        let cv = env.get_constructor(&rule.constructor_name)?;
+        let cv = env
+            .get_constructor(&rule.constructor_name)
+            .ok_or("rule constructor unknown")?;
         if cv.inductive_name != rv.inductive_name || cv.num_fields != rule.num_fields {
-            return None;
+            return Err("rule and constructor disagree");
         }
         if !rule.rhs.is_lam() {
-            return None;
+            return Err("rule RHS is not a lambda");
         }
         let k = rule.num_fields as usize;
 
@@ -208,7 +292,12 @@ pub(super) fn synthesize_rec_def_equations(
         };
         let mut ctor_app = Expr::const_(rule.constructor_name.clone(), ctor_levels.clone());
         for pa in &args[..num_params] {
-            ctor_app = Expr::app(ctor_app, shift.apply(pa, 0)?);
+            ctor_app = Expr::app(
+                ctor_app,
+                shift
+                    .apply(pa, 0)
+                    .ok_or("a parameter mentions the major or an extra")?,
+            );
         }
         for t in 0..k {
             ctor_app = Expr::app(ctor_app, Expr::bvar((m + k - 1 - t) as u32));
@@ -218,18 +307,21 @@ pub(super) fn synthesize_rec_def_equations(
             shift,
             ctor_app: &ctor_app,
         };
-        let lhs = sigma.apply(&f_app_old, 0)?;
-        let eq_ty = sigma.apply(result_ty, 0)?;
+        let lhs = sigma.apply(&f_app_old, 0).ok_or("sigma on the LHS")?;
+        let eq_ty = sigma
+            .apply(result_ty, 0)
+            .ok_or("sigma on the result type")?;
 
         // One manual iota step: the recursor rule's RHS lambda applied to the
         // σ-mapped prefix (params+motive+minors), then the constructor fields,
         // then the extras — exactly the kernel's `try_iota_reduction` recipe —
-        // and beta-reduced. Bounded by construction: no whnf, no further
-        // unfolding, so the arm keeps its surface operators.
+        // and brought to βζ-normal form (`beta_normal`). No whnf, no delta,
+        // so the arm keeps its surface operators.
         let sprefix: Vec<Expr> = args[..p1]
             .iter()
             .map(|a| sigma.apply(a, 0))
-            .collect::<Option<Vec<_>>>()?;
+            .collect::<Option<Vec<_>>>()
+            .ok_or("sigma on the recursor prefix")?;
         let mut red = rule
             .rhs
             .instantiate_level_params_direct(&rv.level_params, &rec_levels_slice);
@@ -239,25 +331,46 @@ pub(super) fn synthesize_rec_def_equations(
         for t in 0..k {
             red = Expr::app(red, Expr::bvar((m + k - 1 - t) as u32));
         }
-        for i in 0..m {
-            red = Expr::app(red, Expr::bvar((m - 1 - i) as u32));
+        for extra in &args[p1 + 1..] {
+            red = Expr::app(red, sigma.apply(extra, 0).ok_or("sigma on an extra")?);
         }
-        let red = beta_reduce(&red);
+        let red = beta_normal(&red).ok_or("the iota reduct has no beta normal form in bounds")?;
 
         // Fold recursive `T.rec prefix… field extras…` calls back into
         // `f prefix-binders… field extras…` so the RHS (and thus the goal
         // after rewriting) stays in surface form the IHs can match.
-        let f_prefix_args: Vec<Expr> = (0..(n - m - 1))
-            .map(|i| Expr::bvar((n + k - 2 - i) as u32))
+        //
+        // The recursive call's prefix is the copy of the σ-mapped prefix that
+        // the rule substituted into its `T.rec α motive minors… field`, now
+        // in βζ-normal form with the rest of the reduct. Compare against the
+        // normal form of the prefix, not the raw one: a minor carrying its
+        // own redex or `let` (the nested-head fallback `(fun s x ih => …) s x
+        // ih`, a pattern variable's `let` alias) is reduced in the copy. The
+        // normal form is unique, so the two agree whatever order reduced them.
+        let fold_prefix: Vec<Expr> = sprefix
+            .iter()
+            .map(beta_normal)
+            .collect::<Option<Vec<_>>>()
+            .ok_or("the recursor prefix has no beta normal form in bounds")?;
+        // A fixed binder is outside the major (step 3), so σ only shifts it.
+        let f_args: Vec<FArg> = f_arg_sources
+            .iter()
+            .map(|source| match *source {
+                FArgSource::Fixed(j) => FArg::Fixed(Expr::bvar((j + k - 1) as u32)),
+                FArgSource::RecArg(i) => FArg::RecArg(i),
+            })
             .collect();
         let fold = RecFoldBack {
             rec_name,
             rec_levels: &rec_levels_slice,
-            prefix: &sprefix,
+            prefix: &fold_prefix,
             f_name: name,
-            f_prefix_args: &f_prefix_args,
+            f_levels: &definition_levels,
+            f_args: &f_args,
         };
-        let rhs = fold.apply(&red, 0)?;
+        let rhs = fold
+            .apply(&red, 0)
+            .ok_or("a recursive call does not fold back to the definition")?;
 
         // Proof witness: `@Eq.refl.{u} eq_ty lhs`. Definitional (delta+iota):
         // `proof_matches_rewrite` kernel-checks `rhs ≡ lhs` at match time.
@@ -278,19 +391,55 @@ pub(super) fn synthesize_rec_def_equations(
             priority: EQUATION_PRIORITY,
         });
     }
-    Some(out)
+    Ok(out)
+}
+
+/// Passes of [`beta_reduce`] that [`beta_normal`] makes before it gives up.
+const BETA_NORMAL_ROUNDS: usize = 64;
+
+/// The βζ-normal size (tree nodes) from which [`beta_normal`] declines
+/// instead of building the normal form: a `match` that binds a large
+/// right-hand side once by a `let` (G76) is linear as written and exponential
+/// once normalized, and the iota reduct copies the whole minor into each
+/// recursive call it contains (`zeta_size.rs`).
+const BETA_NORMAL_MAX_NODES: u64 = 1 << 18;
+
+/// The βζ-normal form of `e`. One [`beta_reduce`] pass contracts every redex
+/// present in `e` but not the redexes its own substitutions create: the
+/// iota reduct `rule_rhs prefix… fields… extras…` became `minor fields… ih
+/// extras…`, a NEW redex, which a single pass left standing. With an extra
+/// after the major (a parameter the lowering generalized into the motive) the
+/// recursive call sat inside that redex as the bare induction hypothesis
+/// `T.rec … tail`, not yet applied to its extra, and could not fold back to
+/// `f k tail`: `def addKList (k : Nat) : List Nat → …` got no equations.
+/// Repeats the pass to a fixpoint; `None` past [`BETA_NORMAL_ROUNDS`], or when
+/// the normal form would reach [`BETA_NORMAL_MAX_NODES`] (fail-closed: the
+/// caller declines and the delta-unfold stays, under simp's size budget).
+fn beta_normal(e: &Expr) -> Option<Expr> {
+    if super::zeta_size::beta_zeta_size_reaches(e, BETA_NORMAL_MAX_NODES) {
+        return None;
+    }
+    let mut current = beta_reduce(e);
+    for _ in 0..BETA_NORMAL_ROUNDS {
+        let next = beta_reduce(&current);
+        if next == current {
+            return Some(current);
+        }
+        current = next;
+    }
+    None
 }
 
 /// Sort level of a definition's result type, resolved through its head
 /// inductive: for `ty = T a…` with `T : Π …, Sort ℓ`, returns ℓ instantiated
 /// at `T`'s level arguments. `None` for any other head (fail-closed).
-fn sort_level_of_result_type(env: &Environment, ty: &Expr) -> Option<Level> {
+fn sort_level_of_result_type(env: &Environment, ty: &Expr, declared: &[Name]) -> Option<Level> {
     let head = ty.get_app_fn();
     let ExprKind::Const(tname, tlevels) = head.kind() else {
         return None;
     };
     let iv = env.get_inductive(tname)?;
-    if iv.level_params.len() != tlevels.len() || tlevels.iter().any(Level::has_params) {
+    if iv.level_params.len() != tlevels.len() || !levels_are_declared(tlevels, declared) {
         return None;
     }
     let mut t: &Expr = &iv.type_;
@@ -306,7 +455,18 @@ fn sort_level_of_result_type(env: &Environment, ty: &Expr) -> Option<Level> {
         .cloned()
         .zip(tlevels.iter().cloned())
         .collect();
-    Some(l.substitute(&subst))
+    let result = l.substitute(&subst);
+    levels_are_declared(std::slice::from_ref(&result), declared).then_some(result)
+}
+
+fn levels_are_declared(levels: &[Level], declared: &[Name]) -> bool {
+    levels.iter().all(|level| {
+        let mut parameters = Vec::new();
+        level.collect_params(&mut parameters);
+        parameters
+            .iter()
+            .all(|parameter| declared.contains(parameter))
+    })
 }
 
 /// Index-only part of σ: maps an original-telescope BVar to the new telescope
@@ -394,6 +554,25 @@ fn map_bvars(e: &Expr, depth: u32, f: &dyn Fn(u32, u32) -> Option<Expr>) -> Opti
     })
 }
 
+/// Where one of `f`'s arguments comes from in a recursive recursor call, by
+/// the def's binder position (outermost first).
+#[derive(Clone, Copy)]
+enum FArgSource {
+    /// A fixed binder (outside the major, threaded by no recursor argument):
+    /// its original-telescope BVar index.
+    Fixed(usize),
+    /// The recursor argument after the prefix: 0 = major, `1 + i` = extra `i`.
+    RecArg(usize),
+}
+
+/// One of `f`'s arguments in a fold-back, at new-telescope depth 0.
+enum FArg {
+    /// A fixed binder: the same variable at every recursive call.
+    Fixed(Expr),
+    /// The recursive call's own argument after the prefix (0 = major).
+    RecArg(usize),
+}
+
 /// Folds recursive recursor calls back into `f`-applications.
 struct RecFoldBack<'a> {
     rec_name: &'a Name,
@@ -401,16 +580,50 @@ struct RecFoldBack<'a> {
     /// σ-mapped params+motive+minors at new-telescope depth 0.
     prefix: &'a [Expr],
     f_name: &'a Name,
-    /// `f`'s leading (pre-major) arguments — the new-telescope prefix-binder
-    /// BVars — at depth 0.
-    f_prefix_args: &'a [Expr],
+    f_levels: &'a [Level],
+    /// `f`'s arguments in binder order.
+    f_args: &'a [FArg],
 }
 
 impl RecFoldBack<'_> {
-    /// Replace every `Rec prefix… major extras…` spine with
-    /// `f prefix-binders… major extras…`. `None` when a `Rec` occurrence
-    /// survives in any unfoldable position — the equation would leak a raw
-    /// recursor into goals, so the whole synthesis is abandoned.
+    /// `f`'s argument list for a recursive call whose arguments after the
+    /// prefix are `rec_args` (major, then extras, then any over-application).
+    /// A call that leaves an argument `f` needs unsupplied folds only when
+    /// the missing ones are `f`'s trailing arguments (a partial application
+    /// of `f`); otherwise it is `None`.
+    fn f_application(&self, rec_args: &[Expr], depth: u32) -> Option<Expr> {
+        let mut folded = Expr::const_(self.f_name.clone(), self.f_levels.to_vec());
+        let mut used = 0usize;
+        for (pos, fa) in self.f_args.iter().enumerate() {
+            match fa {
+                FArg::Fixed(v) => folded = Expr::app(folded, lift_bvars(v, depth)),
+                FArg::RecArg(i) => match rec_args.get(*i) {
+                    Some(ea) => {
+                        folded = Expr::app(folded, self.apply(ea, depth)?);
+                        used = used.max(i + 1);
+                    }
+                    // Partial: every remaining `f` argument must be a recursor
+                    // argument the call also leaves out, in recursor order.
+                    None => {
+                        let rest = &self.f_args[pos..];
+                        let in_order = rest.iter().enumerate().all(
+                            |(o, r)| matches!(r, FArg::RecArg(ri) if *ri == rec_args.len() + o),
+                        );
+                        return in_order.then_some(folded);
+                    }
+                },
+            }
+        }
+        for ea in rec_args.get(used..).unwrap_or_default() {
+            folded = Expr::app(folded, self.apply(ea, depth)?);
+        }
+        Some(folded)
+    }
+
+    /// Replace every `Rec prefix… major extras…` spine with `f`'s
+    /// application in binder order. `None` when a `Rec` occurrence survives
+    /// in any unfoldable position — the equation would leak a raw recursor
+    /// into goals, so the whole synthesis is abandoned.
     fn apply(&self, e: &Expr, depth: u32) -> Option<Expr> {
         match e.kind() {
             ExprKind::App(func, a) => {
@@ -429,14 +642,7 @@ impl RecFoldBack<'_> {
                                 return None;
                             }
                         }
-                        let mut folded = Expr::const_(self.f_name.clone(), Vec::<Level>::new());
-                        for fa in self.f_prefix_args {
-                            folded = Expr::app(folded, lift_bvars(fa, depth));
-                        }
-                        for ea in &eargs[self.prefix.len()..] {
-                            folded = Expr::app(folded, self.apply(ea, depth)?);
-                        }
-                        return Some(folded);
+                        return self.f_application(&eargs[self.prefix.len()..], depth);
                     }
                 }
                 Some(Expr::app(self.apply(func, depth)?, self.apply(a, depth)?))
@@ -467,3 +673,7 @@ impl RecFoldBack<'_> {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "rec_equations_tests.rs"]
+mod tests;

@@ -33,12 +33,15 @@
 //! tower of `ITreeEco.lean:3075+`. That is past the range the design cites for
 //! this brick, and stating it would cost a probe cycle per shape.
 
-use crate::codata_cmd::{arrow, at_app, ident, lam, mk_def, mk_theorem, plain_app};
+use crate::codata_cmd::GlobalPath;
+use crate::codata_cmd::{
+    affix_name, arrow, at_app, child_name, ident, lam, mk_def, mk_theorem, pair_name, plain_app,
+};
 use crate::codata_variant_generate::{
     binder, ctor_binders, ctor_call, eq, lam_one, lam_typed, tag_tower,
 };
 use crate::codata_variant_plan::{projection_path, ArgPlan, VariantCtorPlan, VariantShape};
-use clean_parser::{Span, SurfaceBinder, SurfaceDecl, SurfaceExpr, UniverseExpr};
+use clean_parser::{Span, SurfaceBinder, SurfaceDecl, SurfaceExpr, SurfaceName, UniverseExpr};
 
 /// `Prop`, as a sort rather than an identifier lookup.
 fn prop_universe() -> SurfaceExpr {
@@ -97,7 +100,7 @@ fn ctor_side(
     call_args.extend(ctor.args.iter().map(|a| ident(a.alt_name())));
     CtorSide {
         binders,
-        call: plain_app(&format!("{}.{}", shape.name, ctor.name), call_args),
+        call: plain_app(shape.name.append(ctor.name), call_args),
         tag: shape.tag(k, ctor.alt_payload_value()),
         payload_value: ctor.alt_payload_value(),
     }
@@ -106,7 +109,7 @@ fn ctor_side(
 /// `T.head_Cₖ ps args…` under the primary or alternate naming — the `rfl`
 /// head law the definitional tier emitted, applied to one side's binders.
 fn head_law_call(
-    name: &str,
+    name: &SurfaceName,
     ctor: &VariantCtorPlan<'_>,
     params: &[SurfaceExpr],
     alt: bool,
@@ -117,7 +120,7 @@ fn head_law_call(
             .iter()
             .map(|a| ident(if alt { a.alt_name() } else { a.arg_name() })),
     );
-    plain_app(&format!("{name}.head_{}", ctor.name), args)
+    plain_app(name.append(&affix_name(ctor.name, "head_", "")), args)
 }
 
 /// VC-5's whole output, in dependency order: the classifiers, the
@@ -140,24 +143,24 @@ pub(crate) fn generate(shape: &VariantShape<'_>) -> Vec<SurfaceDecl> {
     // live at.
     let head_ty = {
         let mut args = params.clone();
-        args.push(ident("PUnit.unit"));
-        plain_app(&format!("{name}.shapeF"), args)
+        args.push(ident(GlobalPath("PUnit.unit")));
+        plain_app(child_name(name, "shapeF"), args)
     };
     let head_call = |x: SurfaceExpr| {
         let mut args = params.clone();
         args.push(x);
-        plain_app(&format!("{name}.head"), args)
+        plain_app(child_name(name, "head"), args)
     };
     // A tag tower scrutinises `scruts[0]`, so a declaration whose BODY is a
     // tag tower binds its argument under that name.
-    let scrut = g.scruts[0].as_str();
+    let scrut = &g.scruts[0];
 
     let mut out: Vec<SurfaceDecl> = Vec::new();
     if n >= 2 {
         // def T.isCₖ (ps) (s0 : T.shapeF ps PUnit.unit) : Prop
         for (k, ctor) in shape.ctors.iter().enumerate() {
             out.push(mk_def(
-                format!("{name}.is{}", ctor.name),
+                name.append(&affix_name(ctor.name, "is", "")),
                 {
                     let mut bs = binders.clone();
                     bs.push(binder(scrut, head_ty.clone()));
@@ -198,7 +201,7 @@ fn disjointness(
     self_ty: &SurfaceExpr,
     head_ty: &SurfaceExpr,
     head_call: &dyn Fn(SurfaceExpr) -> SurfaceExpr,
-    scrut: &str,
+    scrut: &SurfaceName,
 ) -> SurfaceDecl {
     let name = shape.name;
     let g = &shape.gen_names;
@@ -211,7 +214,10 @@ fn disjointness(
     let heads_eq = plain_app(
         "Eq.trans",
         vec![
-            plain_app("Eq.symm", vec![head_law_call(name, cj, params, false)]),
+            plain_app(
+                GlobalPath("Eq.symm"),
+                vec![head_law_call(name, cj, params, false)],
+            ),
             plain_app(
                 "Eq.trans",
                 vec![
@@ -231,13 +237,13 @@ fn disjointness(
             ),
         ],
     );
-    let motive = lam(&[scrut, "_"], {
+    let motive = lam(&[scrut.clone(), SurfaceName::generated_path("_")], {
         let mut args = params.to_vec();
         args.push(ident(scrut));
-        plain_app(&format!("{name}.is{}", cj.name), args)
+        plain_app(name.append(&affix_name(cj.name, "is", "")), args)
     });
     mk_theorem(
-        format!("{name}.{}_ne_{}", cj.name, ck.name),
+        name.append(&pair_name(cj.name, "_ne_", ck.name)),
         {
             let mut bs = shape.binders.to_vec();
             bs.extend(left.binders);
@@ -245,7 +251,7 @@ fn disjointness(
             bs.push(binder(&g.eq_arg, eq(left.call, right.call)));
             bs
         },
-        ident("False"),
+        ident(GlobalPath("False")),
         // `T.isCⱼ ps tagⱼ` IS `True` and `T.isCⱼ ps tagₖ` IS `False`,
         // definitionally, so transporting `True.intro` along the head equation
         // lands exactly on the goal.
@@ -255,7 +261,7 @@ fn disjointness(
                 head_ty.clone(),
                 left.tag,
                 motive,
-                ident("True.intro"),
+                ident(GlobalPath("True.intro")),
                 right.tag,
                 heads_eq,
             ],
@@ -277,7 +283,7 @@ fn injectivity_tier(
     self_ty: &SurfaceExpr,
     head_ty: &SurfaceExpr,
     head_call: &dyn Fn(SurfaceExpr) -> SurfaceExpr,
-    scrut: &str,
+    scrut: &SurfaceName,
 ) -> Vec<SurfaceDecl> {
     let name = shape.name;
     let g = &shape.gen_names;
@@ -289,8 +295,8 @@ fn injectivity_tier(
         if m == 0 {
             continue;
         }
-        let out_name = format!("{name}.out_{}", ctor.name);
-        let inj_name = format!("{name}.{}_inj", ctor.name);
+        let out_name = name.append(&affix_name(ctor.name, "out_", ""));
+        let inj_name = name.append(&affix_name(ctor.name, "", "_inj"));
         let left = ctor_side(shape, k, ctor, params, self_ty, false);
         let right = ctor_side(shape, k, ctor, params, self_ty, true);
 
@@ -369,7 +375,7 @@ fn injectivity_tier(
         };
         for (i, p) in ctor.payloads().enumerate() {
             out.push(mk_theorem(
-                format!("{inj_name}_{i}"),
+                affix_name(&inj_name, "", &format!("_{i}")),
                 inj_binders.clone(),
                 eq(ident(&p.arg_name), ident(&p.alt_name)),
                 plain_app(

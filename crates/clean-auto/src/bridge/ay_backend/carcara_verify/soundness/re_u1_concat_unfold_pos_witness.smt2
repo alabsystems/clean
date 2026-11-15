@@ -1,0 +1,8 @@
+(set-logic ALL)
+(declare-const s String)
+(declare-const y String)
+(declare-const L Int)
+(declare-const b RegLan)
+(assert (str.in_re s (re.++ (str.to_re "a") (re.* (str.to_re "b")) (str.to_re "c"))))
+(assert (not (and (= s (str.++ "a" (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= s (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))) "c")) (and (str.in_re (choice ((x String)) (exists ((k_0 String) (R_0 RegLan) (R_1 RegLan)) (and (= s (str.++ k_0 x)) (str.in_re k_0 R_0) (str.in_re x R_1)))) (re.++ (re.* (str.to_re "b")) (str.to_re "c"))) true))))
+(check-sat)

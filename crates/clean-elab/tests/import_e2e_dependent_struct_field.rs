@@ -403,9 +403,30 @@ fn test_imported_dpair_struct_literal_constructs_dependent_field() {
         "p.data must be Box.mk 1 (index matching tag), got {:?}",
         TypeChecker::new(&env).whnf(&data).kind()
     );
+    // The index is asserted through the field's TYPE, not by asking `is_def_eq`
+    // to separate `Box.mk 1` from `Box.mk 0`.
+    //
+    // That negative form was out of contract and has been retired. `is_def_eq`
+    // is only meaningful on terms already known to share a type — Lean's own
+    // `isDefEq` is called nowhere else, and `try_structure_eta_core`
+    // (clean-kernel tc/def_eq/structural.rs:181, citing Lean
+    // type_checker.cpp:801) leans on that invariant: it checks only that the
+    // two sides' types share a HEAD CONSTANT. `Box` promotes its index to a
+    // parameter via `fixedIndicesToParams`, leaving `num_fields = 0`, so the
+    // fieldwise comparison is vacuous and `Box.mk 0` and `Box.mk 1` — terms of
+    // the DIFFERENT types `Box 0` and `Box 1` — come back equal. That is the
+    // documented contract being used outside itself, not a defect.
+    //
+    // Asserting the inferred type is strictly stronger anyway: it says the
+    // dependency survived, rather than that one wrong witness was rejected.
+    let data_ty = TypeChecker::new(&env)
+        .infer_type(&data)
+        .expect("p.data must have an inferred type");
     assert!(
-        !def_eq(&env, &data, &box_mk(const_("Nat.zero"))),
-        "p.data must not collapse to Box.mk 0 (lost the tag dependency)"
+        def_eq(&env, &data_ty, &box_at(one.clone())),
+        "p.data's TYPE must be `Box 1` — the index carried by the dependent \
+         field, matching tag. Got {:?}",
+        data_ty.kind()
     );
 }
 
@@ -494,10 +515,15 @@ fn test_imported_dpair_dependent_projection_reduces_correctly() {
         "getData p2 must be Box.mk 2 (right slot, right index), got {:?}",
         TypeChecker::new(&env).whnf(&get_data_app).kind()
     );
-    // And NOT Box.mk 0 (a mis-instantiated dependency that lost the index).
+    // The index is asserted through the TYPE, not by asking `is_def_eq` to
+    // separate two terms of different types — see the note at the first site.
+    let get_data_ty = TypeChecker::new(&env)
+        .infer_type(&get_data_app)
+        .expect("getData p2 must have an inferred type");
     assert!(
-        !def_eq(&env, &get_data_app, &box_mk(const_("Nat.zero"))),
-        "getData p2 must not collapse to Box.mk 0 (lost dependency)"
+        def_eq(&env, &get_data_ty, &box_at(two.clone())),
+        "getData p2's TYPE must be `Box 2` (right slot, right index), got {:?}",
+        get_data_ty.kind()
     );
 }
 

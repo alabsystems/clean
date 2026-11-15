@@ -249,7 +249,20 @@ impl SmtSolver {
                     }
                 }
                 SolveResult::Unsat(_) => return self.take_unsat_core_result(),
-                SolveResult::Unknown => return SmtResult::Unknown,
+                // The CDCL core answers `Unknown` only at its conflict limit,
+                // `SMT_CONFLICT_LIMIT`, which `SmtSolver::new` sets. It stops
+                // mid-search, above the root with its last conflict unanalysed,
+                // so return it to the root as the restart arm does: the stopped
+                // search's decisions are guesses, and a later `add_clause`
+                // (E-matching's instance clauses) or `solve()` that read them as
+                // level-0 assignments would answer a level-0 UNSAT, and a core,
+                // that depend on them.
+                SolveResult::Unknown => {
+                    self.conflict_limit_reached = true;
+                    self.sat.backtrack_to_root();
+                    self.sat.reset_propagation_queue();
+                    return SmtResult::Unknown;
+                }
             }
         }
         SmtResult::Unknown

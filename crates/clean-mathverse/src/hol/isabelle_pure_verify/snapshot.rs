@@ -98,7 +98,12 @@ const LAYOUT_FP_MIN_VERSION: u32 = 6;
 /// The last snapshot format this loader can still decode (by migration).
 const OLDEST_READABLE_VERSION: u32 = 2;
 /// Decode budget: a snapshot beyond this is corrupt or hostile, not real.
+#[cfg(not(target_arch = "wasm32"))]
 const DECODE_BUDGET_BYTES: usize = 64 * 1024 * 1024 * 1024;
+/// wasm32: usize is 32-bit, so the native budget does not fit; the whole
+/// address space is the effective cap.
+#[cfg(target_arch = "wasm32")]
+const DECODE_BUDGET_BYTES: usize = usize::MAX;
 
 /// The translator fingerprint recorded in snapshots this build writes and
 /// demanded of snapshots it loads. Defaults to the crate version; callers

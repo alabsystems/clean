@@ -51,8 +51,9 @@ fixed by commit `bf3a92a10`, plan §4 RC-A).
 **Must observe.** ≥3 `g_auto` rows flip pass→fail, with the norm_num rows on
 true ground goals — designated rows `p_auto_norm_num_01` ((2:Nat) ≤ 3),
 `p_auto_norm_num_05` (¬(3 = 4)), `p_auto_norm_num_06` ((0:Nat) < 1) — failing
-via `SmtFailed { tactic: "decide", detail: "found counterexample — goal is not
-valid" }`, while the `p_auto_decide_*` controls on the identical goals keep
+via `SmtFailed { tactic: "decide", detail: "found no proof: the negated goal is
+satisfiable in the solver's abstraction …" }` (the pre-2026-09-28 text of the same
+failure was "found counterexample — goal is not valid", an unvalidated claim), while the `p_auto_decide_*` controls on the identical goals keep
 passing (the in-file control pattern from the plan's live reproduction,
 `scratchpad/rc2_control.lean`, which measured 3 pass/3 fail before the fix and
 6/0 after). With the baseline recorded, the gate exits 1 on the regression;
@@ -144,3 +145,107 @@ the fail-closed integrity properties:
   supposed to be distinguishing FROM the other one, so the loss is invisible
   unless the other environment is measured too — which is now what the gate
   does.
+
+## Two-way — pinned Lean's verdict on every row (item 17, phase 1, 2026-10-27)
+
+Every declared row (probes, required, helpers, canaries; negatives and controls
+once phase 2 adds them) carries pinned Lean's verdict in the sealed
+`LEAN_VERDICTS.json` beside its fixture, minted only by
+`scripts/tactic_parity/mint_lean_verdicts.py --family <F>` (the pinned
+v4.30.0-rc2 `lean` by absolute path, 120 s / 2 GiB caps, whole-file `lean
+--json` plus one `#print axioms` per row, cross-checked by a per-row split
+run). Three modules hold the rules and run nothing: `lean_verdicts.py` (the
+sidecar: seal, world, digests, the row grammar and the re-derivation),
+`family_two_way.py` (the cross, the ratchet, `--strict`, `--check-artifact`)
+and `clean_report.py` (parsing `clean check --json`). Minted 2026-10-27 and
+re-minted after the review round with no verdict, class, axiom or message
+changed: g_auto 139 rows, 53 accept / 86 reject (78 unknown-tactic,
+8 elab-error); g_simp 137 rows, 112 accept / 25 reject (15 unknown-tactic,
+10 elab-error). The elab-error rejects are the 13 canaries (`Function expected`,
+frontend ledger class 73: report-only until phase 2 respells them),
+`p_auto_grind_10`, `p_simp_local_09` and `p_simp_push_cast_01/03/05`.
+
+**In world.** A probe is outside the `import Init` world only when every
+tactic pinned Lean calls unknown is in `family_two_way.MATHLIB_TACTICS`
+(`aesop`, `cc`, `field_simp`, `gcongr`, `linarith`, `nlinarith`, `norm_num`,
+`positivity`, `ring`, `tauto`). The tokens are recorded per row at mint
+(`unknown_tactics`) and `--static` re-derives them from each stored message's
+position in the fixture's bytes, so a respelled token is refused. 92 of the 111
+rejected rows are out of world; `p_auto_search_10` (`library_search`, renamed
+`exact?` in Lean v4.3.0) is a verdict on Clean like any other row. Keyed on the
+class alone, as first landed, a typo or a Clean-only tactic name was exempt.
+
+**Recording.** The NEW-FALSE-ACCEPT ratchet sees only rows a baseline records,
+so `--update-baseline` refuses any in-world row Clean accepts and pinned Lean
+rejects that the baseline does not already record as a pass (a renamed row, a
+new negative, a deleted baseline), unless `MANIFEST.json`'s
+`two_way_record_exemptions` names it with a written reason.
+
+**`--check-artifact`** re-crosses every row of every minted file: a minted file
+the artifact never measured, or one whose bytes moved since, is UNKNOWN and
+exits 3 (never `artifact-ok`; a hard failure under `--strict`), and a dropped,
+duplicated or unlisted row is refused. At most one of `--static`,
+`--canary-check`, `--check-artifact`; `--strict` and `--update-baseline` are
+refused where they would be ignored. A measured run crosses the one sidecar
+`main` validated; it is never re-read.
+
+**What the seal is.** A plain sha256 over canonical JSON: it catches an edit
+that forgot to reseal (A4), and the re-derivation catches a verdict that no
+longer follows from its own stored messages (A3, A8). A forger who rewrites a
+row's messages, axioms and verdict consistently and recomputes the seal passes
+`--static`; only `mint_lean_verdicts.py --check` (the FULL-mode
+`tactic-lean-verdicts` leg, which asks pinned Lean again) refuses that. No
+in-repo stamp would help: whoever can reseal can restamp. That leg skips only
+on exit 2 with the minter's own `MINT_LEAN_VERDICTS=skipped:no-usable-lean`
+line; argparse's and Python's own exit 2 are hard fails.
+
+Recorded as `arms.family_gate` in `data/gate_demonstrations.json`, for
+`scripts/check_gate_registry.py --demonstrate family_gate` to replay. Every arm
+is binary-free and Lean-free. Replayed by hand on 2026-10-27 in a scratch copy,
+through the runner's own `_apply`: 13/13 green unmutated and red mutated. The
+registry's `--demonstrate` / `--repin` did not run: every demonstration command
+goes through `heavy_gate`, and the gate was held by an exclusive job with a
+14-deep queue all session, so `family_gate` still records `demonstrated: null`
+until the landing runs them.
+
+| Arm | Perturbation | Red with |
+|---|---|---|
+| A1 | `p_auto_decide_08 : (2 : Nat) < 5` → `< 6` in `g_auto/decide.lean`, no re-mint | `--static`: `decide.lean: edited without a re-mint` |
+| A2 | a comment-only edit in `g_auto/decide.lean` (the digest pins no normalisation) | the same |
+| A3 | `p_auto_grind_10`'s Lean verdict hand-flipped to `accept` | `--static`: `… is recorded accept/elab-error but does not re-derive …` |
+| A4 | one stored Lean message of `p_auto_grind_10` edited (the verdict still re-derives) | `--static`: `content seal broken` |
+| A5 | the sidecar's `lean_world.id` set to `v4.33.1` | `--static`: `not the oracle world` |
+| A8 | `p_auto_search_10`'s recorded unknown tactic respelled `aesop` | `--static`: `records unknown_tactics ['aesop']` |
+| S1 | `--strict`'s rule neutered in `family_two_way.py` | `test_strict_fails_on_a_false_acceptance` |
+| S2 | the NEW-FALSE-ACCEPT comparison neutered | `test_run_family_seeded_acceptance_names_new_false_accept` |
+| S3 | the `sorryAx` condition in `lean_verdicts.classify` dropped | `test_classify_sorry_axiom_alone_rejects` |
+| S4 | the in-world rule keyed on the class again, not the allowlist | `test_only_a_mathlib_tactic_probe_is_out_of_world` |
+| S5 | `--update-baseline`'s unrecorded-false-acceptance refusal dropped | `test_an_unrecorded_in_world_false_acceptance_is_not_recorded` |
+| S6 | `--check-artifact` exits 0 on a stale file | `test_a_stale_file_is_unknown_not_red_and_not_green` |
+| S7 | `--check-artifact` stops requiring every minted file | `test_a_minted_file_the_artifact_never_measured_is_unknown` |
+
+The S-arms' test files (`scripts/test_family_two_way.py`,
+`scripts/test_family_gate_two_way.py`) are among `--pinned-inputs`, so editing
+one re-stales the demonstration (R7).
+
+S2 is item 17's phase-1 seeded acceptance through the measured code path:
+`run_family` with `clean` stubbed passes a negative the v2 baseline recorded
+`fail`, pinned Lean rejects it, and the run exits 1 naming
+`NEW-FALSE-ACCEPT neg_t`; `--update-baseline` refuses it even with
+`CLEAN_FAMILY_BASELINE_ALLOW_REGRESSION=1`. An out-of-world probe is exempt from
+the ratchet (pinned by `test_ratchet_unknown_tactic_probe_is_exempt`); a
+negative never is.
+
+There is no unmutated `--strict` arm: off by default, it is red on the real
+families while the false-acceptance count is nonzero. The committed
+`reports/tactic-families/*-latest.json` are v1 (2026-09-15) and carry no
+two-way totals; `--check-artifact` refuses them as `artifact-not-v2` until
+phase 2 re-measures with `target/release/clean`. Phase 2 adds the arms that
+need the binary or the phase-2 MANIFEST rows: A6 (a negative rejected for a
+different reason), A7 (a control pointed at a negative), and B1 (the seeded
+acceptance on a real dated v2 artifact).
+
+`scripts/test_lean_oracle_diff.sh` pins the oracle column of
+`scripts/lean_oracle_diff.sh`: `LEAN=/nonexistent` used to read `0`
+(ACCEPTED), because `lean_verdict` grepped for an error line and a missing
+binary prints none. It now reads `2` and the script exits 2.

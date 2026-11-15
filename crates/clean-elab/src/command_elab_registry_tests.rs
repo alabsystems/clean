@@ -460,36 +460,120 @@ fn test_builtin_inline_handler() {
     );
 }
 
+/// An environment with a class `TestC : Type → Type` and `instTestCNat :
+/// TestC Nat`, i.e. the shape `@[instance]` is legal on.
+fn env_with_class_and_instance_def(inst: &str) -> Environment {
+    use clean_kernel::env::KernelClassInfo;
+    use clean_kernel::BinderInfo;
+
+    let mut env = Environment::with_prelude();
+    let type0 = clean_kernel::Expr::type_();
+    let class_name = Name::from_string("TestC");
+    env.add_decl(clean_kernel::Declaration::Axiom {
+        name: class_name.clone(),
+        level_params: vec![],
+        type_: clean_kernel::Expr::pi(BinderInfo::Default, type0.clone(), type0),
+    })
+    .expect("TestC should register");
+    env.register_class(KernelClassInfo {
+        name: class_name.clone(),
+        num_params: 1,
+        out_params: vec![],
+        semi_out_params: vec![],
+    });
+    env.add_decl(clean_kernel::Declaration::Axiom {
+        name: Name::from_string(inst),
+        level_params: vec![],
+        type_: clean_kernel::Expr::app(
+            clean_kernel::Expr::const_(class_name, vec![]),
+            clean_kernel::Expr::const_(Name::from_string("Nat"), vec![]),
+        ),
+    })
+    .expect("instance def should register");
+    env
+}
+
+/// An unannotated `@[instance]` records Lean's `default` priority (1000) and
+/// keys the instance under its REAL class, read off the type's conclusion.
+///
+/// Both used to be wrong: the fallback was the kernel's seeding constant (100
+/// = Lean's `low`) and `class_name` was the declaration name.
 #[test]
 fn test_builtin_instance_handler() {
     let registry = CommandElabRegistry::new();
-    let mut env = env_with_test_def("instHAddNat");
+    let mut env = env_with_class_and_instance_def("instTestCNat");
     let mut ctx = CommandElabCtx {
-        decl_name: Name::from_string("instHAddNat"),
+        decl_name: Name::from_string("instTestCNat"),
         env: &mut env,
     };
 
     let result = registry.elaborate("instance", &mut ctx, &[]);
+    result
+        .expect("should have handler")
+        .expect("@[instance] handler should succeed on a class-typed declaration");
+
+    let entries = env.get_class_instances(&Name::from_string("TestC"));
+    let entry = entries
+        .iter()
+        .find(|i| i.name == Name::from_string("instTestCNat"))
+        .expect("instance must be keyed under its real class `TestC`");
+    assert_eq!(
+        entry.priority,
+        crate::instances::DEFAULT_PRIORITY,
+        "an unannotated @[instance] takes Lean's `default` = 1000, not the \
+         kernel's seeding constant (100)"
+    );
     assert!(
-        result.expect("should have handler").is_ok(),
-        "@[instance] handler should succeed"
+        env.get_class_instances(&Name::from_string("instTestCNat"))
+            .is_empty(),
+        "no bucket may be keyed by the DECLARATION name"
     );
 }
 
 #[test]
 fn test_builtin_instance_handler_with_priority() {
     let registry = CommandElabRegistry::new();
-    let mut env = env_with_test_def("instHAddNat");
+    let mut env = env_with_class_and_instance_def("instTestCNat");
     let mut ctx = CommandElabCtx {
-        decl_name: Name::from_string("instHAddNat"),
+        decl_name: Name::from_string("instTestCNat"),
         env: &mut env,
     };
 
     let args = vec!["500".to_owned()];
     let result = registry.elaborate("instance", &mut ctx, &args);
+    result
+        .expect("should have handler")
+        .expect("@[instance 500] handler should succeed");
+
+    let entries = env.get_class_instances(&Name::from_string("TestC"));
+    let entry = entries
+        .iter()
+        .find(|i| i.name == Name::from_string("instTestCNat"))
+        .expect("instance must be keyed under `TestC`");
+    assert_eq!(
+        entry.priority, 500,
+        "an explicit priority is honored verbatim"
+    );
+}
+
+/// `@[instance]` on a declaration whose type does not conclude in a registered
+/// class is a LOUD error — Lean's "invalid 'instance' attribute". The handler
+/// used to accept anything, inventing `class_name = declName`.
+#[test]
+fn test_builtin_instance_handler_rejects_non_class_target() {
+    let registry = CommandElabRegistry::new();
+    let mut env = env_with_test_def("notAClassInstance");
+    let mut ctx = CommandElabCtx {
+        decl_name: Name::from_string("notAClassInstance"),
+        env: &mut env,
+    };
+
+    let result = registry
+        .elaborate("instance", &mut ctx, &[])
+        .expect("should have handler");
     assert!(
-        result.expect("should have handler").is_ok(),
-        "@[instance 500] handler should succeed"
+        result.is_err(),
+        "@[instance] on a non-class-typed declaration must be a loud error"
     );
 }
 

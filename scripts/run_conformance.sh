@@ -10,7 +10,7 @@
 #
 # Modes:
 #   Default:    Runs SAT + SMT internal conformance tests via
-#               cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS"
+#               targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS"
 #   --sat:      Runs only SAT conformance tests
 #   --smt:      Runs only SMT/Alethe conformance tests
 #   Selectors:  --sat and --smt are mutually exclusive; omit both to run both
@@ -19,7 +19,7 @@
 #               comparison path via `clean kernel lrat-conform`. SMT external
 #               comparison remains unimplemented and is reported as skipped.
 #   --verbose:  Shows resolved command/status details without streaming test bodies
-#   --nocapture: Also forwards --nocapture to cargo test for focused debugging
+#   --nocapture: Also forwards --nocapture to targo --unverified test for focused debugging
 #
 # External SAT oracles currently wired by --external:
 #   - ay-lrat-check: https://github.com/Z3Prover/z3
@@ -52,7 +52,7 @@ Usage:
 
 Modes:
   Default:    Runs SAT + SMT internal conformance tests via
-              cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS"
+              targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS"
   --sat:      Runs only SAT conformance tests
   --smt:      Runs only SMT/Alethe conformance tests
   Selectors:  --sat and --smt are mutually exclusive; omit both to run both
@@ -61,7 +61,7 @@ Modes:
               comparison path via `clean kernel lrat-conform`. SMT external
               comparison remains unimplemented and is reported as skipped.
   --verbose:  Shows resolved command/status details without streaming test bodies
-  --nocapture: Also forwards --nocapture to cargo test for focused debugging
+  --nocapture: Also forwards --nocapture to targo --unverified test for focused debugging
 
 External SAT oracles currently wired by --external:
   - ay-lrat-check: https://github.com/Z3Prover/z3
@@ -125,7 +125,7 @@ run_sat_external_comparison() {
         echo "  using $tool"
     done
 
-    local external_cmd=(cargo run --locked -q --message-format=short -j "$CARGO_BUILD_JOBS" -p clean --bin clean -- kernel lrat-conform)
+    local external_cmd=(targo --unverified run --locked -q --message-format=short -j "$CARGO_BUILD_JOBS" -p clean --bin clean -- kernel lrat-conform)
     external_cmd+=("${SAT_EXTERNAL_ARGS[@]}")
     "${external_cmd[@]}"
     echo "[2/2] SAT external checker comparison: PASSED"
@@ -170,7 +170,7 @@ fi
 
 echo "[1/2] Running internal conformance tests ($INTERNAL_SCOPE)..."
 cd "$REPO_ROOT"
-cargo_cmd=(cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-verify --lib -- "$FILTER")
+cargo_cmd=(targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-verify --lib -- "$FILTER")
 if [ "$VERBOSE" = true ]; then
     printf 'cargo:'
     printf ' %q' "${cargo_cmd[@]}"

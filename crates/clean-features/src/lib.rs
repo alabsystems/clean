@@ -8,7 +8,8 @@
 //!
 //! Descriptors in this crate are compile-time-static data consumed by the
 //! top-level `clean` binary to render `clean features`, `clean help <path>`,
-//! `clean explore`, and generated docs such as `docs/CLI.md`.
+//! and generated docs such as `docs/CLI.md`. (No `clean explore` exists —
+//! an earlier plan for one never landed.)
 //!
 //! The reference data model lives in
 //! `designs/2026-04-18-unified-cli-feature-index.md`, in the

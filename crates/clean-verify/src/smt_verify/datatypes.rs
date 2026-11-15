@@ -441,7 +441,7 @@ fn as_negation(dag: &SmtProofDag, id: SmtTermId) -> Option<SmtTermId> {
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -553,7 +553,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "injectivity should be valid: {:?}",
             verdict.detail
         );
@@ -581,7 +581,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "injectivity (both args) should be valid: {:?}",
             verdict.detail
         );
@@ -622,8 +622,8 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
-            "single constructor equality should not be kernel-verified by injectivity"
+            StepTrustLevel::StepChecked,
+            "single constructor equality should not be step-checked by injectivity"
         );
     }
 
@@ -648,7 +648,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "distinctness should be valid: {:?}",
             verdict.detail
         );
@@ -671,7 +671,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "distinctness (swapped) should be valid: {:?}",
             verdict.detail
         );
@@ -696,10 +696,10 @@ mod tests {
         // It might be checked by injectivity if argument equalities are present.
         let clause = vec![neq];
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
-        // Should not be kernel-verified by distinctness alone.
+        // Should not be step-checked by distinctness alone.
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "same constructor should not pass distinctness"
         );
     }
@@ -722,7 +722,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "selector head reduction should be valid: {:?}",
             verdict.detail
         );
@@ -743,7 +743,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "selector tail reduction should be valid: {:?}",
             verdict.detail
         );
@@ -764,7 +764,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "selector (swapped) should be valid: {:?}",
             verdict.detail
         );
@@ -786,8 +786,8 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
-            "wrong selector value should not be kernel-verified"
+            StepTrustLevel::StepChecked,
+            "wrong selector value should not be step-checked"
         );
     }
 
@@ -807,7 +807,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "tester positive match should be valid: {:?}",
             verdict.detail
         );
@@ -829,7 +829,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "tester negative mismatch should be valid: {:?}",
             verdict.detail
         );
@@ -851,7 +851,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "tester = true should be valid: {:?}",
             verdict.detail
         );
@@ -873,7 +873,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "tester = false (mismatch) should be valid: {:?}",
             verdict.detail
         );
@@ -895,8 +895,8 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
-            "wrong tester=true should not be kernel-verified"
+            StepTrustLevel::StepChecked,
+            "wrong tester=true should not be step-checked"
         );
     }
 
@@ -917,7 +917,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "acyclicity should be valid: {:?}",
             verdict.detail
         );
@@ -938,7 +938,7 @@ mod tests {
         let verdict = check_datatypes_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "acyclicity (swapped) should be valid: {:?}",
             verdict.detail
         );

@@ -1,0 +1,1696 @@
+{
+  "schema_version": "tactic-family-lean-verdicts-v1",
+  "family": "g_simp",
+  "generated_by": "scripts/tactic_parity/mint_lean_verdicts.py --family g_simp",
+  "minted_at_utc": "2026-10-28T06:24:04+00:00",
+  "lean_world": {
+    "id": "v4.30.0-rc2",
+    "toolchain": "leanprover/lean4:v4.30.0-rc2",
+    "githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "version_line": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)"
+  },
+  "rule": "tactic-family-lean-verdict-v1",
+  "method": {
+    "lean_args": [
+      "--json"
+    ],
+    "suffix": "#print axioms <row> per declared row",
+    "cross_check": "per-row split: import Init + preceding helpers + row"
+  },
+  "files": {
+    "simp_core.lean": {
+      "fixture_sha256": "881c60a7fab7238207883cfa915f62c41930dde330dfddf57210e34408ad6921",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_simp_core": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_core_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_11": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_12": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_13": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_14": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_15": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_16": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_17": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_18": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_19": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_20": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_21": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_22": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_23": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_24": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_25": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_26": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_27": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_28": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_29": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_core_30": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        }
+      }
+    },
+    "simp_only.lean": {
+      "fixture_sha256": "c315c706de2b703704410fba61dbd3bdc45c821573106885b315f5f5d3e7f876",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_simp_only": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_only_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_11": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_12": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_13": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_14": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_15": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_16": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_17": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_18": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_19": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_20": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_21": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_22": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_23": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_24": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_only_25": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        }
+      }
+    },
+    "simp_at.lean": {
+      "fixture_sha256": "d9547ac786173d183239b402c833e6adbd700a9d2aea087ebc469c56a73575af",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_simp_at": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_at_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_11": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_at_12": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "warning",
+              "line_rel": 1,
+              "col": 33,
+              "data": "unused variable `h1`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`"
+            },
+            {
+              "severity": "warning",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unused variable `h2`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_all_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        }
+      }
+    },
+    "simpa_dsimp.lean": {
+      "fixture_sha256": "9d01a4661e663ec70c3946c3dea59402e8b83274fb5cab65c4302cf40ca65fcd",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_simp_simpa_dsimp": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simpa_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simpa_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "warning",
+              "line_rel": 1,
+              "col": 47,
+              "data": "try 'simp' instead of 'simpa'\n\nNote: This linter can be disabled with `set_option linter.unnecessarySimpa false`"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_dsimp_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "warning",
+              "line_rel": 1,
+              "col": 20,
+              "data": "unused variable `n`\n\nNote: This linter can be disabled with `set_option linter.unusedVariables false`"
+            }
+          ],
+          "split_verdict": "accept"
+        }
+      }
+    },
+    "norm_casts.lean": {
+      "fixture_sha256": "f933e185288d8f1935647eff0bac10b03753ab4fac81239c09880a3222530669",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_simp_norm_casts": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 2 + 2 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 58,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unsolved goals\n⊢ 10 * 10 = 100"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\n⊢ 2 ≤ 3"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 53,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 49,
+              "data": "unsolved goals\n⊢ ¬3 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_05": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 68,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unsolved goals\na : Nat\nh : a = 3\n⊢ a + 1 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_06": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 7 - 3 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_07": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 2 + 2 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_08": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\n⊢ 1 < 2"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_09": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 6 / 2 = 3"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_norm_num_10": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 55,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 51,
+              "data": "unsolved goals\n⊢ 2 ^ 4 = 16"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_push_cast_01": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 91,
+              "data": "unsolved goals\na b : Nat\n⊢ ↑a + ↑b = ↑a + ↑b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_push_cast_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_push_cast_03": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 81,
+              "data": "unsolved goals\na : Nat\n⊢ ↑a * 2 = ↑a * 2"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_push_cast_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_push_cast_05": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 77,
+              "data": "unsolved goals\na : Nat\n⊢ ↑a + 0 = ↑a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_field_simp_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "field_simp"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 76,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 72,
+              "data": "unsolved goals\na b : Nat\nh : b ≠ 0\n⊢ a * b / b = a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_field_simp_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "field_simp"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 66,
+              "data": "unsolved goals\na : Nat\nh : a ≠ 0\n⊢ a / a = 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_field_simp_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "field_simp"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 58,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unsolved goals\na : Nat\n⊢ a / 1 = a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_field_simp_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "field_simp"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 83,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 79,
+              "data": "unsolved goals\na b : Nat\nhb : b ≠ 0\n⊢ a * b / b + 0 = a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_field_simp_05": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "field_simp"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 2,
+              "col": 3,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 87,
+              "data": "unsolved goals\na b c : Nat\nhc : c ≠ 0\nh : a * c / c = b\n⊢ a = b"
+            }
+          ],
+          "split_verdict": "reject"
+        }
+      }
+    },
+    "local_simp_attrs.lean": {
+      "fixture_sha256": "9147283624e46d6ee50e97dab97e8ebcef6c21e28089ea6154c62b147673380b",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_simp_local_attrs": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "lsf": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "lsf_eq": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "ls_cond": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "ls_plain": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_simp_local_09": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "propext",
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 2,
+              "data": "Type mismatch\n  h\nhas type\n  n = 4\nbut is expected to have type\n  n + 1 = 5"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_simp_local_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        }
+      }
+    }
+  },
+  "seal": "33d4f7e5a27bcca026653c89ad375010f1eed6feed53aa413e46deda074aa812"
+}

@@ -14,11 +14,10 @@ use crate::expr::{Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
 use crate::tc::expr_location::ExprPathStep;
-use crate::tc::infer::is_eager_reduce;
+use crate::tc::infer::{infer_literal_type, is_eager_reduce};
 use crate::tc::TypeChecker;
 use crate::TypeError;
 
-use super::convert_fvar_cert_to_bvar;
 use std::sync::Arc;
 
 impl<'env> TypeChecker<'env> {
@@ -46,8 +45,17 @@ impl<'env> TypeChecker<'env> {
         // that can itself induce a hang is worse than no budget.
         //
         // Deliberately NOT `tick_heartbeat`: this neither reads nor decrements
-        // the per-checker counter, so cert-mode heartbeat accounting is
-        // byte-identical to before.
+        // the per-checker counter. It does settle the walks billed so far
+        // (`work_account.rs`), so a budget they spent stops this recursion
+        // here rather than at the next whnf or def-eq tick.
+        let _metered = self.metered_scope();
+        self.settle_kernel_work();
+        // The ambient deadline is polled here for the same reason as the
+        // budget below: this recursion is where the tactic engine's retained-
+        // certificate inference spends its time.
+        if super::super::deadline::poll_deadline() {
+            return Err(TypeError::Interrupted);
+        }
         if !super::super::decl_budget::consume_declaration_budget() {
             return Err(TypeError::DeclarationBudgetExhausted {
                 limit: super::super::decl_budget::declaration_budget_limit(),
@@ -109,10 +117,13 @@ impl<'env> TypeChecker<'env> {
                     }
                 }
 
-                let ty = self
+                let info = self
                     .env
-                    .instantiate_type(name, levels)
+                    .get_const(name)
+                    .filter(|info| info.level_params.len() == levels.len())
                     .ok_or_else(|| TypeError::UnknownConst(name.clone()))?;
+                let ty =
+                    self.instantiate_levels_checked(name, &info.type_, &info.level_params, levels)?;
                 let cert = ProofCert::Const {
                     name: name.clone(),
                     levels: levels.to_vec(),
@@ -169,6 +180,11 @@ impl<'env> TypeChecker<'env> {
                             self.eager_reduce.set(prev_eager);
 
                             if !eq {
+                                // A def-eq stopped by a spent budget is not a type
+                                // mismatch: report HeartbeatExceeded, as the release
+                                // path's App-arg check does (#3134). A genuine
+                                // mismatch with budget left is unchanged.
+                                self.tick_heartbeat()?;
                                 // Point at the argument position. Part of #3425.
                                 self.expr_loc_push(ExprPathStep::AppArg);
                                 let loc = self.expr_loc_snapshot();
@@ -185,9 +201,9 @@ impl<'env> TypeChecker<'env> {
                         let result_ty = result_type.instantiate(a);
 
                         let cert = ProofCert::App {
-                            fn_cert: Arc::new(f_cert),
+                            fn_cert: f_cert,
                             fn_type: Box::new(f_type_whnf.clone()),
-                            arg_cert: Arc::new(arg_cert),
+                            arg_cert,
                             result_type: Box::new(result_ty.clone()),
                         };
 
@@ -261,7 +277,7 @@ impl<'env> TypeChecker<'env> {
                 let (body_type, body_cert_raw) = body_result?;
 
                 // Convert FVar certificates back to BVar certificates for the body
-                let body_cert = convert_fvar_cert_to_bvar(body_cert_raw, fvar_id, 0);
+                let body_cert = self.rebind_certificate_body(body_cert_raw, fvar_id);
 
                 // Abstract back to get Pi type
                 let body_type_abstract = body_type.abstract_fvar(fvar_id);
@@ -311,7 +327,7 @@ impl<'env> TypeChecker<'env> {
                 let (body_sort, body_type_cert_raw) = body_result?;
 
                 // Convert FVar certificates back to BVar certificates for the body
-                let body_type_cert = convert_fvar_cert_to_bvar(body_type_cert_raw, fvar_id, 0);
+                let body_type_cert = self.rebind_certificate_body(body_type_cert_raw, fvar_id);
 
                 let body_sort_whnf = self.whnf_impl(&body_sort);
                 let ExprKind::Sort(l2) = &body_sort_whnf.kind else {
@@ -325,7 +341,7 @@ impl<'env> TypeChecker<'env> {
                 };
                 let l2 = l2.clone();
 
-                let result_level = Level::imax(l1.clone(), l2.clone());
+                let result_level = self.level_imax(l1.clone(), l2.clone());
                 let result_type = Expr::from_kind(ExprKind::Sort(result_level));
 
                 let cert = ProofCert::Pi {
@@ -338,7 +354,7 @@ impl<'env> TypeChecker<'env> {
 
                 Ok((result_type, cert))
             }
-            ExprKind::Let(_, ty, val, body, _) => {
+            ExprKind::Let(let_name, ty, val, body, _) => {
                 // Always infer type and value certs for the certificate.
                 // #3425: breadcrumb into the let-type annotation.
                 self.expr_loc_push(ExprPathStep::LetType);
@@ -378,6 +394,8 @@ impl<'env> TypeChecker<'env> {
                     // PARITY with the release fast path (`infer.rs` Let-val
                     // check). `is_le` == `is_def_eq` off the Coq lane.
                     if !self.is_le(&_val_type, ty) {
+                        // Same budget guard as the App-arg check above.
+                        self.tick_heartbeat()?;
                         self.expr_loc_push(ExprPathStep::LetVal);
                         let loc = self.expr_loc_snapshot();
                         self.expr_loc_pop();
@@ -392,7 +410,7 @@ impl<'env> TypeChecker<'env> {
                 // Add let binding to context and infer body type.
                 // #3425: breadcrumb into the let body.
                 let fvar_id =
-                    self.ctx_push_let(Name::anon(), ty.as_ref().clone(), val.as_ref().clone());
+                    self.ctx_push_let(let_name.clone(), ty.as_ref().clone(), val.as_ref().clone());
                 let body_with_fvar = self.open_bvar(body, fvar_id);
                 self.expr_loc_push(ExprPathStep::LetBody);
                 let body_result = self.infer_type_with_cert_impl(&body_with_fvar);
@@ -402,13 +420,12 @@ impl<'env> TypeChecker<'env> {
                 let (body_type, body_cert_raw) = body_result?;
 
                 // Convert FVar certificates back to BVar certificates for the body
-                let body_cert = convert_fvar_cert_to_bvar(body_cert_raw, fvar_id, 0);
+                let body_cert = self.rebind_certificate_body(body_cert_raw, fvar_id);
 
-                // Substitute FVar(fvar_id) → val directly (zeta-reduction).
-                // Must use subst_fvar, not instantiate: after open_bvar, body_type
-                // contains FVar(fvar_id), not BVar(0). instantiate would search for
-                // BVar(0) and find nothing, leaking FVars into the result type.
-                let result_type = body_type.subst_fvar(fvar_id, val);
+                // Preserve the same checked dependent-let result as fast
+                // inference, while retaining the real body certificate below.
+                let result_type =
+                    self.close_inferred_let_type(let_name, ty, val, body_type, fvar_id);
 
                 let cert = ProofCert::Let {
                     type_cert: Arc::new(type_cert),
@@ -420,12 +437,7 @@ impl<'env> TypeChecker<'env> {
                 Ok((result_type, cert))
             }
             ExprKind::Lit(lit) => {
-                let type_ = match lit {
-                    crate::expr::Literal::Nat(_) => Expr::const_(super::NAME_NAT.clone(), vec![]),
-                    crate::expr::Literal::String(_) => {
-                        Expr::const_(super::NAME_STRING.clone(), vec![])
-                    }
-                };
+                let type_ = infer_literal_type(lit);
                 let cert = ProofCert::Lit {
                     lit: lit.clone(),
                     type_: Box::new(type_.clone()),

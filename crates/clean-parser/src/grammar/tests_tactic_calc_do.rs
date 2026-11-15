@@ -55,7 +55,10 @@ fn test_parse_calc_implicit_rfl() {
             assert_eq!(steps.len(), 1);
             match &steps[0].proof {
                 SurfaceCalcJustification::Term(SurfaceExpr::Ident(_, name)) => {
-                    assert_eq!(name, "rfl");
+                    assert_eq!(
+                        (name).name(),
+                        crate::SurfaceName::generated_path("rfl").name()
+                    );
                 }
                 other => panic!("Expected implicit rfl, got {other:?}"),
             }
@@ -202,7 +205,10 @@ fn test_parse_by_case() {
             assert_eq!(tactics.len(), 1);
             match &tactics[0] {
                 SurfaceTactic::Case(_, name, _binders, body) => {
-                    assert_eq!(name, "succ");
+                    assert_eq!(
+                        (name).name(),
+                        crate::SurfaceName::generated_path("succ").name()
+                    );
                     assert!(!body.is_empty());
                 }
                 other => panic!("Expected Case, got {other:?}"),
@@ -223,7 +229,10 @@ fn test_parse_by_unfold() {
                     assert_eq!(name, "unfold");
                     assert_eq!(args.len(), 1);
                     match &args[0] {
-                        SurfaceExpr::Ident(_, ident) => assert_eq!(ident, "Nat.add"),
+                        SurfaceExpr::Ident(_, ident) => assert_eq!(
+                            (ident).name(),
+                            crate::SurfaceName::generated_path("Nat.add").name()
+                        ),
                         other => panic!("Expected Ident arg, got {other:?}"),
                     }
                 }
@@ -232,6 +241,86 @@ fn test_parse_by_unfold() {
         }
         other => panic!("Expected ByTactic, got {other:?}"),
     }
+}
+
+/// The names an `unfold` tactic carries, in source order, each with its
+/// location arguments.
+fn unfold_names_and_locations(tactic: &SurfaceTactic) -> Vec<(String, Vec<String>)> {
+    let one = |t: &SurfaceTactic| match t {
+        SurfaceTactic::Named { name, args, .. } if name == "unfold" => {
+            let spelled: Vec<String> = args
+                .iter()
+                .map(|arg| match arg {
+                    SurfaceExpr::Ident(_, ident) => ident.to_string(),
+                    other => panic!("Expected Ident arg, got {other:?}"),
+                })
+                .collect();
+            (spelled[0].clone(), spelled[1..].to_vec())
+        }
+        other => panic!("Expected Named(unfold), got {other:?}"),
+    };
+    match tactic {
+        SurfaceTactic::Paren(_, inner) => inner.iter().map(one).collect(),
+        single => vec![one(single)],
+    }
+}
+
+/// Lean's `unfold id+`: `unfold a b` unfolds `a`, then `b` (Mathbot's Llvm2 task
+/// spells it `unfold loweredAddKernel sourceAddKernel`).
+#[test]
+fn test_parse_by_unfold_several_names() {
+    let expr = Parser::parse_expr("by unfold loweredAddKernel sourceAddKernel").unwrap();
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("Expected ByTactic, got {expr:?}");
+    };
+    assert_eq!(tactics.len(), 1);
+    assert_eq!(
+        unfold_names_and_locations(&tactics[0]),
+        vec![
+            ("loweredAddKernel".to_string(), vec![]),
+            ("sourceAddKernel".to_string(), vec![]),
+        ]
+    );
+}
+
+/// Every name is unfolded at the one location the tactic names.
+#[test]
+fn test_parse_by_unfold_several_names_share_the_location() {
+    let expr = Parser::parse_expr("by unfold f Nat.g at h ⊢").unwrap();
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("Expected ByTactic, got {expr:?}");
+    };
+    assert_eq!(tactics.len(), 1);
+    let at = vec!["h".to_string(), "⊢".to_string()];
+    assert_eq!(
+        unfold_names_and_locations(&tactics[0]),
+        vec![("f".to_string(), at.clone()), ("Nat.g".to_string(), at)]
+    );
+}
+
+/// The name list ends at the next tactic: a same-column line is a new tactic,
+/// and so is a tactic name on the same line after `;`.
+#[test]
+fn test_parse_by_unfold_names_stop_at_the_next_tactic() {
+    let expr =
+        Parser::parse_expr("by\n  unfold loweredAddKernel sourceAddKernel\n  rw [Nat.add_assoc]")
+            .unwrap();
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("Expected ByTactic, got {expr:?}");
+    };
+    assert_eq!(tactics.len(), 2, "{tactics:?}");
+    assert_eq!(unfold_names_and_locations(&tactics[0]).len(), 2);
+    assert!(matches!(&tactics[1], SurfaceTactic::Rw(..)), "{tactics:?}");
+
+    let expr = Parser::parse_expr("by\n  unfold f\n  g").unwrap();
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("Expected ByTactic, got {expr:?}");
+    };
+    assert_eq!(
+        unfold_names_and_locations(&tactics[0]),
+        vec![("f".to_string(), vec![])],
+        "a name on the next line at the tactic's column is not unfolded: {tactics:?}"
+    );
 }
 
 #[test]
@@ -349,7 +438,7 @@ fn test_parse_by_simp_at_hyp() {
             match &tactics[0] {
                 SurfaceTactic::Simp { location, .. } => match location {
                     SurfaceTacticLocation::Hyps(names) => {
-                        assert_eq!(names, &["h"]);
+                        assert_eq!(names, &[crate::SurfaceName::generated_path("h")]);
                     }
                     other => panic!("Expected Hyps location, got {other:?}"),
                 },
@@ -369,7 +458,7 @@ fn test_parse_by_simp_at_hyp_and_goal_unicode_turnstile() {
             match &tactics[0] {
                 SurfaceTactic::Simp { location, .. } => match location {
                     SurfaceTacticLocation::HypsAndGoal(names) => {
-                        assert_eq!(names, &["h"]);
+                        assert_eq!(names, &[crate::SurfaceName::generated_path("h")]);
                     }
                     other => panic!("Expected HypsAndGoal location, got {other:?}"),
                 },
@@ -389,7 +478,7 @@ fn test_parse_by_simp_at_hyp_and_goal_ascii_turnstile() {
             match &tactics[0] {
                 SurfaceTactic::Simp { location, .. } => match location {
                     SurfaceTacticLocation::HypsAndGoal(names) => {
-                        assert_eq!(names, &["h"]);
+                        assert_eq!(names, &[crate::SurfaceName::generated_path("h")]);
                     }
                     other => panic!("Expected HypsAndGoal location, got {other:?}"),
                 },
@@ -410,8 +499,12 @@ fn test_parse_by_dsimp_at_hyp_and_goal_turnstile_named_args() {
                 SurfaceTactic::Named { name, args, .. } => {
                     assert_eq!(name, "dsimp");
                     assert_eq!(args.len(), 2);
-                    assert!(matches!(&args[0], SurfaceExpr::Ident(_, ident) if ident == "h"));
-                    assert!(matches!(&args[1], SurfaceExpr::Ident(_, ident) if ident == "⊢"));
+                    assert!(
+                        matches!(&args[0], SurfaceExpr::Ident(_, ident) if (ident).name() == crate::SurfaceName::generated_path("h").name())
+                    );
+                    assert!(
+                        matches!(&args[1], SurfaceExpr::Ident(_, ident) if (ident).name() == crate::SurfaceName::generated_path("⊢").name())
+                    );
                 }
                 other => panic!("Expected Named dsimp tactic, got {other:?}"),
             }
@@ -487,30 +580,35 @@ fn test_parse_by_cdot_single() {
 
 #[test]
 fn test_parse_by_constructor_then_cdots() {
-    // `constructor; · exact rfl; · simp` — common Lean 4 pattern
+    // `constructor; · exact rfl; · simp`. A bullet's body is a full
+    // `tacticSeq` (`cdotTk tacticSeqIndentGt`, `Init/NotationExtra.lean:
+    // 320-322`) and `;` separates ITS tactics, so the second bullet is NESTED
+    // in the first. The pinned Lean v4.30.0-rc2 on
+    // `example : 1 = 1 ∧ True := by constructor; · exact rfl; · simp`
+    // reports "1:55: error: No goals to be solved" at the SECOND `·` and
+    // leaves `case right` unsolved: the second bullet ran inside the first.
     let expr = Parser::parse_expr("by constructor; \u{00b7} exact rfl; \u{00b7} simp").unwrap();
     match expr {
         SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(tactics.len(), 3, "constructor + 2 cdot-focused blocks");
+            assert_eq!(tactics.len(), 2, "constructor + one cdot-focused block");
             assert!(
                 matches!(&tactics[0], SurfaceTactic::Named { ref name, .. } if name == "constructor")
             );
-            // Each · block wraps its tactic(s) in FocusBlock
             match &tactics[1] {
                 SurfaceTactic::FocusBlock(_, inner) => {
-                    assert_eq!(inner.len(), 1);
+                    assert_eq!(inner.len(), 2, "exact + the nested bullet");
                     assert!(
                         matches!(&inner[0], SurfaceTactic::Named { ref name, .. } if name == "exact")
                     );
+                    match &inner[1] {
+                        SurfaceTactic::FocusBlock(_, nested) => {
+                            assert_eq!(nested.len(), 1);
+                            assert!(matches!(&nested[0], SurfaceTactic::Simp { .. }));
+                        }
+                        other => panic!("Expected the nested cdot FocusBlock, got {other:?}"),
+                    }
                 }
-                other => panic!("Expected FocusBlock for first cdot, got {other:?}"),
-            }
-            match &tactics[2] {
-                SurfaceTactic::FocusBlock(_, inner) => {
-                    assert_eq!(inner.len(), 1);
-                    assert!(matches!(&inner[0], SurfaceTactic::Simp { .. }));
-                }
-                other => panic!("Expected FocusBlock for second cdot, got {other:?}"),
+                other => panic!("Expected FocusBlock for the first cdot, got {other:?}"),
             }
         }
         other => panic!("Expected ByTactic, got {other:?}"),

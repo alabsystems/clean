@@ -4,6 +4,9 @@
 
 //! Solve-result types for the Ay backend.
 
+// The clean-local mirror types below are pure data; only the `From` bridges
+// to ay's own types need the solver crates, which have no wasm32 port.
+#[cfg(not(target_arch = "wasm32"))]
 use ay::{SolveResult, UnknownReason, VerifiedSolveResult};
 use std::fmt;
 
@@ -25,6 +28,7 @@ pub struct AyVerificationSummary {
     pub sat_incomplete_checks: u64,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<ay_dpll::api::VerificationSummary> for AyVerificationSummary {
     fn from(summary: ay_dpll::api::VerificationSummary) -> Self {
         Self {
@@ -53,6 +57,7 @@ pub enum AyVerificationLevel {
     FullyVerified,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<ay_dpll::api::VerificationLevel> for AyVerificationLevel {
     fn from(level: ay_dpll::api::VerificationLevel) -> Self {
         if level.is_trusted_only() {
@@ -80,15 +85,29 @@ pub struct AySolveVerification {
 }
 
 /// clean-owned mirror of ay's structured Unknown reasons.
+///
+/// One variant per reason ay publishes, and [`Display`](fmt::Display) prints
+/// ay's own token for it (`resourceout`, `timeout`, `memout`, …), so a
+/// consumer reads the reason exactly as ay reported it. A reason newer than
+/// this mirror reads as [`Self::Unknown`], ay's own "no specific reason".
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[must_use]
 #[non_exhaustive]
 pub enum AyUnknownReason {
+    /// ay's wall-clock deadline (`:timeout`) expired.
     Timeout,
+    /// ay's deterministic resource count (`:rlimit`, or its default ground
+    /// allowance) was spent.
     ResourceLimit,
     MemoryLimit,
     Interrupted,
     Incomplete,
+    /// ay computed a verdict and its own fail-closed checker refuted it: a
+    /// caught wrong answer, never an undecided problem.
+    SelfCheckRejected,
+    /// ay computed an UNSAT and withheld it because its proof is not
+    /// trust-free: a soundness gate fired, never an undecided problem.
+    ProofTrusted,
     QuantifierRoundLimit,
     QuantifierDeferred,
     QuantifierUnhandled,
@@ -97,10 +116,13 @@ pub enum AyUnknownReason {
     SplitLimit,
     ExpressionSplit,
     Unsupported,
+    UnsupportedArithmetic,
+    UnsupportedMixedCollection,
     InternalError,
     Unknown,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<UnknownReason> for AyUnknownReason {
     fn from(reason: UnknownReason) -> Self {
         match reason {
@@ -109,6 +131,8 @@ impl From<UnknownReason> for AyUnknownReason {
             UnknownReason::MemoryLimit => Self::MemoryLimit,
             UnknownReason::Interrupted => Self::Interrupted,
             UnknownReason::Incomplete => Self::Incomplete,
+            UnknownReason::SelfCheckRejected => Self::SelfCheckRejected,
+            UnknownReason::ProofTrusted => Self::ProofTrusted,
             UnknownReason::QuantifierRoundLimit => Self::QuantifierRoundLimit,
             UnknownReason::QuantifierDeferred => Self::QuantifierDeferred,
             UnknownReason::QuantifierUnhandled => Self::QuantifierUnhandled,
@@ -119,8 +143,12 @@ impl From<UnknownReason> for AyUnknownReason {
             UnknownReason::SplitLimit => Self::SplitLimit,
             UnknownReason::ExpressionSplit => Self::ExpressionSplit,
             UnknownReason::Unsupported => Self::Unsupported,
+            UnknownReason::UnsupportedArithmetic => Self::UnsupportedArithmetic,
+            UnknownReason::UnsupportedMixedCollection => Self::UnsupportedMixedCollection,
             UnknownReason::InternalError => Self::InternalError,
             UnknownReason::Unknown => Self::Unknown,
+            // ay's enum is `#[non_exhaustive]`: a reason newer than this
+            // mirror is ay's "no specific reason", never a guessed neighbour.
             _ => Self::Unknown,
         }
     }
@@ -128,7 +156,7 @@ impl From<UnknownReason> for AyUnknownReason {
 
 impl AyUnknownReason {
     /// Returns `true` when the reason comes from quantifier-side incompleteness.
-    pub fn is_quantifier(&self) -> bool {
+    pub(crate) fn is_quantifier(&self) -> bool {
         matches!(
             self,
             Self::QuantifierRoundLimit
@@ -148,6 +176,8 @@ impl fmt::Display for AyUnknownReason {
             Self::MemoryLimit => write!(f, "memout"),
             Self::Interrupted => write!(f, "interrupted"),
             Self::Incomplete => write!(f, "incomplete"),
+            Self::SelfCheckRejected => write!(f, "(incomplete self-check-rejected)"),
+            Self::ProofTrusted => write!(f, "(incomplete proof-trusted)"),
             Self::QuantifierRoundLimit => write!(f, "(incomplete quantifier-round-limit)"),
             Self::QuantifierDeferred => write!(f, "(incomplete quantifier-deferred)"),
             Self::QuantifierUnhandled => write!(f, "(incomplete quantifier-unhandled)"),
@@ -158,6 +188,8 @@ impl fmt::Display for AyUnknownReason {
             Self::SplitLimit => write!(f, "incomplete"),
             Self::ExpressionSplit => write!(f, "incomplete"),
             Self::Unsupported => write!(f, "unsupported"),
+            Self::UnsupportedArithmetic => write!(f, "(unsupported arithmetic)"),
+            Self::UnsupportedMixedCollection => write!(f, "(unsupported mixed-collection)"),
             Self::InternalError => write!(f, "internal-error"),
             Self::Unknown => write!(f, "unknown"),
         }
@@ -227,7 +259,7 @@ impl AySolveEnvelope {
     }
 
     /// Whether ay validated the SAT model on this solve path.
-    pub fn was_model_validated(&self) -> bool {
+    pub(crate) fn was_model_validated(&self) -> bool {
         match self {
             Self::Solved { verification, .. } => verification.summary.sat_model_validated,
             Self::PanicUnknown { .. } => false,
@@ -243,7 +275,7 @@ impl AySolveEnvelope {
     }
 
     /// Panic payload captured from the solver, when clean downgraded a panic.
-    pub fn panic_reason(&self) -> Option<&str> {
+    pub(crate) fn panic_reason(&self) -> Option<&str> {
         match self {
             Self::PanicUnknown { panic_reason } => Some(panic_reason.as_str()),
             Self::Solved { .. } => None,
@@ -259,12 +291,12 @@ impl AySolveEnvelope {
     }
 
     /// Solver verification counters preserved from the solve call.
-    pub fn verification_summary(&self) -> Option<AyVerificationSummary> {
+    pub(crate) fn verification_summary(&self) -> Option<AyVerificationSummary> {
         self.verification().map(|verification| verification.summary)
     }
 
     /// Runtime verification level preserved from the solve call.
-    pub fn verification_level(&self) -> Option<AyVerificationLevel> {
+    pub(crate) fn verification_level(&self) -> Option<AyVerificationLevel> {
         self.verification().map(|verification| verification.level)
     }
 
@@ -327,6 +359,7 @@ impl AySolveResult {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<SolveResult> for AySolveResult {
     fn from(r: SolveResult) -> Self {
         match r {
@@ -338,6 +371,7 @@ impl From<SolveResult> for AySolveResult {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<&SolveResult> for AySolveResult {
     fn from(r: &SolveResult) -> Self {
         match r {
@@ -349,6 +383,7 @@ impl From<&SolveResult> for AySolveResult {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl From<VerifiedSolveResult> for AySolveResult {
     fn from(r: VerifiedSolveResult) -> Self {
         r.result().into()

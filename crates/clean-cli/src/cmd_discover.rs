@@ -28,10 +28,11 @@ pub(crate) fn handle_discover_command(args: DiscoverArgs) -> Result<()> {
     }
 
     if !args.quiet {
-        let threads = args.threads.map_or("auto".to_string(), |n| n.to_string());
+        // `--threads` is accepted and ignored (the search is sequential), so it
+        // is not echoed here: a `threads=N` banner reads as a setting in force.
         let _ = writeln!(
             std::io::stderr(),
-            "Searching {family} family (max_depth={}, max_width={}, max_c={}, threads={threads})...",
+            "Searching {family} family (max_depth={}, max_width={}, max_c={}, sequential)...",
             args.max_depth,
             args.max_width,
             args.max_c,

@@ -7,12 +7,14 @@
 //! Reads real math library files and converts them into Mathverse format,
 //! producing JSON statistics and converted theorem records.
 //!
-//! Usage:
+//! Usage (the bare binary prints the full command roster):
 //!   mathverse_convert metamath <path-to-set.mm>
-//!   mathverse_convert opentheory <path-to-article>
-//!   mathverse_convert lean4-dir <olean-dir>  Verify+convert Lean 4 .olean directory
-//!   mathverse_convert all <data-dir>         Convert all supported libraries in data dir
-//!   mathverse_convert verify <shard-dir>     Kernel-verify constants in .mathverse shards
+//!   mathverse_convert opentheory <article-dir>   Convert every .art file under the dir
+//!   mathverse_convert lean4-dir <olean-dir>      Verify a Lean 4 .olean directory; writes
+//!                                                <olean-dir>.mathverse.json (conversion
+//!                                                happens under `all`)
+//!   mathverse_convert all <data-dir>             Convert all supported libraries in data dir
+//!   mathverse_convert verify <shard-dir>         Kernel-verify constants in .mathverse shards
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -31,19 +33,50 @@ fn main() {
     if args.len() < 2 {
         eprintln!("Usage: mathverse_convert <command> [args...]");
         eprintln!(
-            "Commands: build, status, metamath, metamath-dir, lean4-dir, mathlib, all, stats, verify, refresh"
+            "Commands: build, status, update, fetch, metamath, metamath-dir, lean4-dir, \
+             opentheory, isabelle-binary, isabelle-mathlib-bridge, mathlib, all, stats, \
+             verify, verify-shard, refresh"
         );
         eprintln!("\nIncremental reconstruct (Phase 0):");
         eprintln!("  build [SYSTEMS...] [--out DIR] [--manifest PATH] [--force]   cached/incremental import (lane: metamath)");
         eprintln!("  status [--out DIR]                                          show the mathverse.lock.json build ledger");
         eprintln!("  update [--fetch] [--out DIR] [--manifest PATH]              rebuild only upstream-changed lanes (continuous update)");
         eprintln!("  fetch [--manifest PATH]                                     git-fetch sources and persist new SHAs");
+        eprintln!("\nConverters:");
+        eprintln!(
+            "  metamath <path.mm> | metamath-dir <dir>        summary JSON written beside each input"
+        );
+        eprintln!(
+            "  lean4-dir <olean-dir>                          verify only; writes <olean-dir>.mathverse.json"
+        );
+        eprintln!(
+            "  opentheory <article-dir>                       every .art under the dir -> shard"
+        );
+        eprintln!("  isabelle-binary <dir>                          -> shard");
+        eprintln!("  isabelle-mathlib-bridge <isabelle.mathverse> [mathlib-shard-dir]");
+        eprintln!(
+            "  mathlib [--output DIR] ... | all <data-dir>    (all: every supported library)"
+        );
+        eprintln!("  verify <shard-dir> | verify-shard <path> | stats <data-dir>");
         eprintln!("\nOptions:");
-        eprintln!("  --output-dir <PATH>  Write persistent output to directory");
+        eprintln!(
+            "  --output-dir <PATH>  Output directory for build, status, update, mathlib, all,"
+        );
+        eprintln!(
+            "                       opentheory, isabelle-binary and isabelle-mathlib-bridge;"
+        );
+        eprintln!(
+            "                       metamath/lean4-dir write beside their input, verify into"
+        );
+        eprintln!(
+            "                       the shard dir, and the remaining commands do not read it"
+        );
         eprintln!("\nRefresh subcommands:");
         eprintln!("  refresh --check                 Show stale sources");
         eprintln!("  refresh --update                Fetch updates for stale sources");
-        eprintln!("  refresh --rebuild               Fetch + re-compile changed sources");
+        eprintln!(
+            "  refresh --rebuild               As --update, then print the `all` command that rebuilds"
+        );
         eprintln!("  refresh --manifest <PATH>       Use custom manifest (default: data/mathverse_sources.toml)");
         std::process::exit(1);
     }

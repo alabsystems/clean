@@ -66,6 +66,23 @@
 
 use crate::error::{OleanError, OleanResult};
 use crate::expr::BigNat;
+use crate::header::OleanHeader;
+
+/// Which on-disk `lean::mpz` layout a compacted `LeanMPZ` object uses.
+///
+/// See [`CompactedRegion::read_mpz_at`] for the two byte layouts and why a
+/// decoder that assumes one of them mis-reads the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MpzLayout {
+    /// `__mpz_struct`: `_mp_alloc` i32 @ +8, `_mp_size` i32 @ +12, `_mp_d` @ +16,
+    /// 64-bit limbs @ +24.
+    Gmp,
+    /// GMP-free `lean::mpz`: `m_sign` bool @ +8, `m_size` u64 @ +16,
+    /// `m_digits` @ +24, 32-bit digits @ +32.
+    LeanNative,
+}
+
+pub(crate) use typed::TypedModuleLayout;
 
 /// Object tags from Lean 4 runtime
 pub mod tags {
@@ -111,22 +128,19 @@ impl ObjectHeader {
     /// - On success, returns the parsed header fields.
     /// - Returns `OleanError::OutOfBounds` if `bytes` is too short.
     pub fn parse(bytes: &[u8]) -> OleanResult<Self> {
-        if bytes.len() < OBJECT_HEADER_SIZE {
+        // `OBJECT_HEADER_SIZE` is 8: the pattern matches exactly when
+        // `bytes.len() >= OBJECT_HEADER_SIZE`.
+        const _: () = assert!(OBJECT_HEADER_SIZE == 8);
+        let [r0, r1, r2, r3, c0, c1, other, tag, ..] = *bytes else {
             return Err(OleanError::OutOfBounds {
                 offset: 0,
                 size: bytes.len(),
             });
-        }
-
-        let rc = i32::from_le_bytes(bytes[0..4].try_into().expect("slice length verified above"));
-        let cs_sz =
-            u16::from_le_bytes(bytes[4..6].try_into().expect("slice length verified above"));
-        let other = bytes[6];
-        let tag = bytes[7];
+        };
 
         Ok(Self {
-            rc,
-            cs_sz,
+            rc: i32::from_le_bytes([r0, r1, r2, r3]),
+            cs_sz: u16::from_le_bytes([c0, c1]),
             other,
             tag,
         })
@@ -204,6 +218,12 @@ pub fn is_ptr(ptr: u64) -> bool {
     ptr != 0 && (ptr & 1) == 0
 }
 
+mod mdata;
+mod typed;
+
+#[cfg(test)]
+mod parsed_name_tests;
+
 /// Parser for compacted regions (entire .olean file)
 ///
 /// This parser operates on the entire .olean file, not just the region portion.
@@ -232,6 +252,9 @@ pub struct CompactedRegion<'a> {
     /// single-threaded during conversion (one region per module, converted
     /// sequentially), so no synchronization is required.
     name_cache: std::cell::RefCell<hashbrown::HashMap<usize, std::rc::Rc<str>>>,
+    // Typed identities are scoped to these immutable bytes, never to a dotted
+    // projection or a cache shared between different compacted regions.
+    typed_names: std::cell::RefCell<hashbrown::HashMap<u64, clean_kernel::name::Name>>,
 }
 
 impl<'a> CompactedRegion<'a> {
@@ -252,6 +275,7 @@ impl<'a> CompactedRegion<'a> {
             data,
             base_addr,
             name_cache: std::cell::RefCell::new(hashbrown::HashMap::new()),
+            typed_names: std::cell::RefCell::new(hashbrown::HashMap::new()),
         }
     }
 
@@ -306,11 +330,9 @@ impl<'a> CompactedRegion<'a> {
             });
         }
 
-        Ok(u64::from_le_bytes(
-            self.data[offset..offset + 8]
-                .try_into()
-                .expect("slice length verified above"),
-        ))
+        let mut bytes = [0u8; 8];
+        bytes.copy_from_slice(&self.data[offset..offset + 8]);
+        Ok(u64::from_le_bytes(bytes))
     }
 
     /// Read an i32 at a file offset
@@ -321,7 +343,7 @@ impl<'a> CompactedRegion<'a> {
     /// # ENSURES
     /// - Returns the little-endian i32 at `offset`.
     /// - Returns `OleanError::OutOfBounds` on invalid range.
-    pub fn read_i32_at(&self, offset: usize) -> OleanResult<i32> {
+    pub(crate) fn read_i32_at(&self, offset: usize) -> OleanResult<i32> {
         if offset + 4 > self.data.len() {
             return Err(OleanError::OutOfBounds {
                 offset,
@@ -329,11 +351,9 @@ impl<'a> CompactedRegion<'a> {
             });
         }
 
-        Ok(i32::from_le_bytes(
-            self.data[offset..offset + 4]
-                .try_into()
-                .expect("slice length verified above"),
-        ))
+        let mut bytes = [0u8; 4];
+        bytes.copy_from_slice(&self.data[offset..offset + 4]);
+        Ok(i32::from_le_bytes(bytes))
     }
 
     /// Read a pointer (u64) at a file offset (alias for read_u64_at)
@@ -434,35 +454,166 @@ impl<'a> CompactedRegion<'a> {
 
         // MPZ tag = 250
         if header.tag == tags::MPZ {
-            // MPZ layout (lean_mpz_object):
-            //   header(8) + __mpz_struct { _mp_alloc(i32 at +8) + _mp_size(i32 at +12)
-            //                              + _mp_d(pointer, 8 bytes at +16) }
-            //   + digits[...] (at +24)
-            //
-            // In compacted .olean regions, _mp_d is patched to point to the inline
-            // digit array. The pointer field is still physically present (8 bytes).
-            // Reference: Lean 4 runtime/mpz.h lean_mpz_object
-            let size_raw = self.read_i32_at(offset + 12)?;
-            let size = size_raw.unsigned_abs() as usize;
-
-            if size == 0 {
-                return Ok(BigNat::from_u64(0));
-            }
-
-            // Read all limbs (little-endian order in memory)
-            // Digits start at +24 (after header + alloc + size + _mp_d pointer)
-            let mut limbs = Vec::with_capacity(size);
-            for i in 0..size {
-                let limb = self.read_u64_at(offset + 24 + i * 8)?;
-                limbs.push(limb);
-            }
-
-            Ok(BigNat::from_limbs(limbs))
+            self.read_mpz_at(ptr, offset, &header)
         } else {
             Err(OleanError::Region(format!(
                 "unexpected object tag {} for Nat at offset {}",
                 header.tag, offset
             )))
+        }
+    }
+
+    /// Decode a compacted `LeanMPZ` object into a [`BigNat`].
+    ///
+    /// # Two on-disk bignum encodings
+    ///
+    /// Lean ships `lean::mpz` in two shapes and BOTH occur in released
+    /// `.olean` files, so a decoder that hard-codes one of them silently
+    /// mis-reads the other:
+    ///
+    /// * **GMP** (`LEAN_USE_GMP`): `lean_mpz_object` is
+    ///   `header(8) + __mpz_struct { _mp_alloc: i32 @ +8, _mp_size: i32 @ +12,
+    ///   _mp_d: ptr @ +16 }`, with the **64-bit** limbs inline at `+24` and
+    ///   `_mp_d` patched to point at them (or left null by Clean's own test
+    ///   writers). Object size is `24 + 8 * |_mp_size|`.
+    /// * **Lean-native** (GMP-free builds, which includes the released Lean
+    ///   4.8.0 toolchain): `lean::mpz` is
+    ///   `{ bool m_sign; size_t m_size; mpn_digit *m_digits; }`, so the object
+    ///   is `header(8) + sign(1, padded to 8) @ +8 + m_size: u64 @ +16 +
+    ///   m_digits: ptr @ +24`, with the **32-bit** digits inline at `+32` and
+    ///   `m_digits` left as a stale host pointer. Object size is
+    ///   `32 + 4 * m_size`.
+    ///
+    /// The v2 `.olean` header carries the answer in its flags byte (bit 0 =
+    /// "persisted bignums use GMP"); a v1 header does not, so the layout is
+    /// then decided STRUCTURALLY and both candidates must be checked.
+    ///
+    /// # Fail-closed
+    ///
+    /// A candidate layout is accepted only if every one of its own invariants
+    /// holds (`cs_sz` agreement, digit array inside the region, GMP's
+    /// `_mp_alloc >= |_mp_size|` and inline/null `_mp_d`, the native sign byte
+    /// being a real `bool`). If NEITHER candidate validates, or if BOTH do, the
+    /// read is refused with a diagnostic naming both interpretations — never
+    /// resolved by guessing.
+    fn read_mpz_at(&self, ptr: u64, offset: usize, header: &ObjectHeader) -> OleanResult<BigNat> {
+        let gmp = self.mpz_gmp_candidate(ptr, offset, header);
+        let native = self.mpz_native_candidate(offset, header);
+
+        match (gmp, native) {
+            (Some(limbs), None) | (None, Some(limbs)) => Ok(BigNat::from_limbs(limbs)),
+            (Some(_), Some(_)) => Err(OleanError::Region(format!(
+                "ambiguous MPZ object at offset {offset}: it validates as BOTH the GMP \
+                 (_mp_size @ +12, 64-bit limbs @ +24) and the Lean-native \
+                 (m_size @ +16, 32-bit digits @ +32) layout; refusing to guess"
+            ))),
+            (None, None) => Err(OleanError::Region(format!(
+                "unrecognized MPZ object at offset {offset} (cs_sz={}): it matches neither the \
+                 GMP layout (_mp_alloc @ +8, _mp_size @ +12, 64-bit limbs @ +24) nor the \
+                 Lean-native layout (sign @ +8, m_size @ +16, 32-bit digits @ +32)",
+                header.cs_sz
+            ))),
+        }
+    }
+
+    /// The GMP (`__mpz_struct`) reading of an MPZ object, or `None` if this
+    /// object does not satisfy that layout's invariants.
+    fn mpz_gmp_candidate(
+        &self,
+        ptr: u64,
+        offset: usize,
+        header: &ObjectHeader,
+    ) -> Option<Vec<u64>> {
+        if !self.mpz_layout_permitted(MpzLayout::Gmp) {
+            return None;
+        }
+        let alloc = self.read_i32_at(offset + 8).ok()?;
+        let size_raw = self.read_i32_at(offset + 12).ok()?;
+        // Lean boxes every value that fits a tagged scalar, so a heap mpz is
+        // never zero and never negative.
+        if size_raw <= 0 {
+            return None;
+        }
+        let size = size_raw as usize;
+        if alloc < size_raw {
+            return None;
+        }
+        if header.cs_sz != 0 && usize::from(header.cs_sz) != 24 + 8 * size {
+            return None;
+        }
+        // `_mp_d` is either patched to the inline digit array or left null by
+        // Clean's own writers; anything else is not this layout.
+        let mp_d = self.read_u64_at(offset + 16).ok()?;
+        if mp_d != 0 && mp_d != ptr.checked_add(24)? {
+            return None;
+        }
+        let mut limbs = Vec::with_capacity(size);
+        for i in 0..size {
+            limbs.push(self.read_u64_at(offset + 24 + i * 8).ok()?);
+        }
+        Some(limbs)
+    }
+
+    /// The Lean-native (`{bool, size_t, mpn_digit*}`) reading of an MPZ object,
+    /// or `None` if this object does not satisfy that layout's invariants.
+    ///
+    /// `m_digits` at `+24` is deliberately NOT checked: the compactor leaves a
+    /// stale host pointer there, which is exactly what made this layout look
+    /// like a corrupt GMP object.
+    fn mpz_native_candidate(&self, offset: usize, header: &ObjectHeader) -> Option<Vec<u64>> {
+        if !self.mpz_layout_permitted(MpzLayout::LeanNative) {
+            return None;
+        }
+        // `m_sign` is a real `bool`; the seven bytes after it are padding and
+        // carry uninitialized garbage, so only the first byte may be read.
+        let sign = *self.data.get(offset + 8)?;
+        if sign > 1 {
+            return None;
+        }
+        let digit_count = usize::try_from(self.read_u64_at(offset + 16).ok()?).ok()?;
+        // A heap mpz holds a value Lean could not box as a 63-bit scalar, so it
+        // needs at least two 32-bit digits. Requiring that is what keeps this
+        // layout from also matching a one-limb GMP object.
+        if digit_count < 2 {
+            return None;
+        }
+        if header.cs_sz != 0 && usize::from(header.cs_sz) != 32 + 4 * digit_count {
+            return None;
+        }
+        if sign == 1 {
+            // A negative bignum is not a `Nat`. Refuse rather than silently
+            // dropping the sign.
+            return None;
+        }
+        let digits_start = offset.checked_add(32)?;
+        let digits_end = digits_start.checked_add(4 * digit_count)?;
+        if digits_end > self.data.len() {
+            return None;
+        }
+        let mut limbs = vec![0u64; digit_count.div_ceil(2)];
+        for i in 0..digit_count {
+            let at = digits_start + i * 4;
+            let mut bytes = [0u8; 4];
+            bytes.copy_from_slice(&self.data[at..at + 4]);
+            let digit = u32::from_le_bytes(bytes);
+            limbs[i / 2] |= u64::from(digit) << (32 * (i % 2));
+        }
+        Some(limbs)
+    }
+
+    /// Whether `layout` is permitted for this region by the `.olean` header.
+    ///
+    /// A v2 header states the answer in its flags byte, and that statement is
+    /// authority: the other layout is then not even considered. A v1 header (or
+    /// a synthetic non-`.olean` buffer, as the unit tests use) carries no such
+    /// field, so both layouts stay on the table and the structural checks
+    /// decide.
+    fn mpz_layout_permitted(&self, layout: MpzLayout) -> bool {
+        match OleanHeader::parse(self.data) {
+            Ok(header) if header.version == crate::header::VERSION_V2 => {
+                header.uses_gmp_bignums() == (layout == MpzLayout::Gmp)
+            }
+            _ => true,
         }
     }
 
@@ -525,7 +676,9 @@ impl<'a> CompactedRegion<'a> {
 
     /// Read a Lean Name object at a file offset
     ///
-    /// Returns the fully qualified name as a string (e.g., "Nat.add").
+    /// Returns the fully qualified name as a string (e.g., "Nat.add"). This
+    /// legacy projection is lossy: dotted or numeric String components cannot
+    /// be distinguished from hierarchy or Name.num. It is not typed identity.
     ///
     /// # REQUIRES
     /// - `offset` points to a valid Name object.
@@ -605,17 +758,49 @@ impl<'a> CompactedRegion<'a> {
 
             // Name.num (constructor 2, 2 fields: parent, number)
             (2, 2) => {
+                // Finalized files select an encoding by their measured module
+                // envelope, never by retrying a failed modern Nat as raw u64.
+                // OleanExporter's existing low-level round-trip helpers also
+                // read unfinished buffers with exactly 64 zero reserved bytes.
+                // That explicit scratch form is Clean-only, including cs_sz=0.
+                let encoding = if self
+                    .data
+                    .get(..64)
+                    .is_some_and(|prefix| prefix.iter().all(|byte| *byte == 0))
+                {
+                    TypedModuleLayout::CleanLegacy
+                } else {
+                    self.typed_module_layout()?
+                };
+                let size = match encoding {
+                    TypedModuleLayout::LeanV1 | TypedModuleLayout::LeanV2 => 32,
+                    TypedModuleLayout::CleanLegacy => 0,
+                };
+                if header.rc != 0 || header.cs_sz != size {
+                    return Err(OleanError::Region(
+                        "unsupported projected numeric Name layout".into(),
+                    ));
+                }
+                self.bytes_at(offset, if size == 0 { 24 } else { usize::from(size) })?;
                 let parent_ptr = self.read_u64_at(offset + 8)?;
-                let num = self.read_u64_at(offset + 16)?;
+                let field = self.read_u64_at(offset + 16)?;
+                let num = match encoding {
+                    TypedModuleLayout::LeanV1 | TypedModuleLayout::LeanV2 => {
+                        self.read_kernel_nat_u64(field)?
+                    }
+                    TypedModuleLayout::CleanLegacy => field,
+                };
 
                 // Read parent name (cached rc).
-                let parent: std::rc::Rc<str> = if is_scalar(parent_ptr) {
+                let parent: std::rc::Rc<str> = if parent_ptr == 1 {
                     std::rc::Rc::from("")
                 } else if is_ptr(parent_ptr) {
                     let parent_off = self.ptr_to_offset(parent_ptr)?;
                     self.read_name_rc_at_depth(parent_off, depth + 1)?
                 } else {
-                    std::rc::Rc::from("")
+                    return Err(OleanError::Region(
+                        "invalid projected numeric Name parent".into(),
+                    ));
                 };
 
                 if parent.is_empty() {
@@ -642,7 +827,8 @@ impl<'a> CompactedRegion<'a> {
     /// # ENSURES
     /// - Returns (offset, name) pairs for discovered Name.str objects.
     /// - Best-effort: malformed entries are skipped.
-    pub fn find_all_names(&self) -> Vec<(usize, String)> {
+    #[cfg(test)]
+    pub(crate) fn find_all_names(&self) -> Vec<(usize, String)> {
         let mut names = Vec::new();
 
         // Start at offset 64 (after header + root pointer)
@@ -666,367 +852,8 @@ impl<'a> CompactedRegion<'a> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
+mod tests;
 
-    /// Regression: `read_name_at` memoizes each `Name` object by file offset, so
-    /// a `Name` shared as the PARENT of several children is decoded exactly once.
-    /// This is the fix for the `Init` pre-load hot path, where every `Expr::const`
-    /// re-resolved the same deep names from raw bytes. The test asserts both
-    /// correctness (identical dotted strings) and that the shared parent lands in
-    /// the cache after the first child is read.
-    #[test]
-    fn test_read_name_at_memoizes_shared_parent() {
-        // base_addr = 0 ⇒ pointer value == file offset. Objects are 8-byte
-        // aligned so every offset is even and non-zero (a valid `is_ptr`).
-        fn push_string(buf: &mut Vec<u8>, s: &str) -> u64 {
-            while !buf.len().is_multiple_of(8) {
-                buf.push(0);
-            }
-            let off = buf.len() as u64;
-            // header: rc(4)=0, cs_sz(2)=0, other(1)=0, tag(1)=STRING
-            buf.extend_from_slice(&0u32.to_le_bytes());
-            buf.extend_from_slice(&0u16.to_le_bytes());
-            buf.push(0);
-            buf.push(tags::STRING);
-            let m_size = (s.len() + 1) as u64; // includes null terminator
-            buf.extend_from_slice(&m_size.to_le_bytes()); // m_size
-            buf.extend_from_slice(&m_size.to_le_bytes()); // m_capacity
-            buf.extend_from_slice(&(s.len() as u64).to_le_bytes()); // m_length
-            buf.extend_from_slice(s.as_bytes());
-            buf.push(0); // null terminator
-            off
-        }
-        fn push_name_str(buf: &mut Vec<u8>, parent_ptr: u64, string_ptr: u64) -> u64 {
-            while !buf.len().is_multiple_of(8) {
-                buf.push(0);
-            }
-            let off = buf.len() as u64;
-            // header: rc=0, cs_sz=0, other=2 (2 fields), tag=1 (Name.str)
-            buf.extend_from_slice(&0u32.to_le_bytes());
-            buf.extend_from_slice(&0u16.to_le_bytes());
-            buf.push(2);
-            buf.push(1);
-            buf.extend_from_slice(&parent_ptr.to_le_bytes());
-            buf.extend_from_slice(&string_ptr.to_le_bytes());
-            off
-        }
-
-        let mut buf: Vec<u8> = Vec::new();
-        buf.extend_from_slice(&[0u8; 8]); // reserve offset 0 as the null slot
-
-        let s_nat = push_string(&mut buf, "Nat");
-        let s_succ = push_string(&mut buf, "succ");
-        let s_add = push_string(&mut buf, "add");
-        const ANON: u64 = 1; // scalar-boxed Name.anonymous
-        let n_nat = push_name_str(&mut buf, ANON, s_nat);
-        let n_succ = push_name_str(&mut buf, n_nat, s_succ);
-        let n_add = push_name_str(&mut buf, n_nat, s_add);
-
-        let region = CompactedRegion::new(&buf, 0);
-        assert!(region.name_cache.borrow().is_empty(), "cache starts empty");
-
-        // Reading a child decodes and caches BOTH the child and its parent.
-        assert_eq!(region.read_name_at(n_succ as usize).unwrap(), "Nat.succ");
-        assert!(
-            region.name_cache.borrow().contains_key(&(n_nat as usize)),
-            "shared parent `Nat` cached after first child read"
-        );
-        assert!(region.name_cache.borrow().contains_key(&(n_succ as usize)));
-
-        // A sibling reuses the cached parent yet yields its own distinct name.
-        assert_eq!(region.read_name_at(n_add as usize).unwrap(), "Nat.add");
-        assert_eq!(region.read_name_at(n_nat as usize).unwrap(), "Nat");
-
-        // Idempotent: a repeat read hits the cache and is byte-identical.
-        assert_eq!(region.read_name_at(n_succ as usize).unwrap(), "Nat.succ");
-        assert_eq!(region.read_name_at(n_add as usize).unwrap(), "Nat.add");
-    }
-
-    #[test]
-    fn test_object_header_parse() {
-        // Construct a constructor object header
-        // rc=0, cs_sz=0x20, other=2 (2 fields), tag=0 (first constructor)
-        let bytes = [
-            0, 0, 0, 0, // rc = 0
-            0x20, 0, // cs_sz = 0x20
-            2, // other = 2
-            0, // tag = 0
-        ];
-
-        let header = ObjectHeader::parse(&bytes).unwrap();
-        assert_eq!(header.rc, 0);
-        assert_eq!(header.cs_sz, 0x20);
-        assert_eq!(header.other, 2);
-        assert_eq!(header.tag, 0);
-        assert!(header.is_constructor());
-        assert_eq!(header.num_fields(), 2);
-    }
-
-    #[test]
-    fn test_object_header_string() {
-        // String object header
-        let bytes = [
-            0,
-            0,
-            0,
-            0, // rc = 0
-            0,
-            0,            // cs_sz = 0
-            5,            // other = 5 (length?)
-            tags::STRING, // tag = STRING
-        ];
-
-        let header = ObjectHeader::parse(&bytes).unwrap();
-        assert_eq!(header.tag, tags::STRING);
-        assert!(!header.is_constructor());
-        assert!(header.is_scalar());
-    }
-
-    /// Verify ObjectHeader::parse returns OutOfBounds error when slice is too short
-    #[test]
-    fn test_object_header_parse_short_slice() {
-        let bytes = [0u8; OBJECT_HEADER_SIZE - 1];
-        let err = ObjectHeader::parse(&bytes).unwrap_err();
-        assert!(matches!(
-            err,
-            OleanError::OutOfBounds {
-                offset: 0,
-                size
-            } if size == bytes.len()
-        ));
-    }
-
-    /// Verify num_fields() returns 0 for non-constructor objects regardless of `other` field
-    #[test]
-    fn test_object_header_num_fields_non_constructor() {
-        // Non-constructor with other=9 should still return num_fields=0
-        let bytes = [
-            0,
-            0,
-            0,
-            0, // rc = 0
-            0,
-            0,            // cs_sz = 0
-            9,            // other = 9 (ignored for non-constructors)
-            tags::STRING, // tag = STRING (non-constructor tag)
-        ];
-
-        let header = ObjectHeader::parse(&bytes).unwrap();
-        assert!(!header.is_constructor());
-        assert_eq!(header.num_fields(), 0);
-    }
-
-    /// Verify is_scalar and is_ptr correctly categorize pointer values by LSB
-    #[test]
-    fn test_scalar_detection() {
-        // Scalar values have LSB = 1
-        assert!(is_scalar(1)); // boxed 0 (Name.anonymous)
-        assert!(is_scalar(3)); // boxed 1
-        assert!(is_scalar(0xFF)); // odd number
-
-        // Pointers have LSB = 0 (and non-zero)
-        assert!(is_ptr(0x0010_0000));
-        assert!(is_ptr(2));
-
-        // Zero is neither scalar nor valid pointer
-        assert!(!is_scalar(0));
-        assert!(!is_ptr(0));
-    }
-
-    /// Verify is_scalar and is_ptr are mutually exclusive for all pointer values
-    #[test]
-    fn test_scalar_ptr_exclusivity() {
-        // No value can be both scalar AND pointer (mutually exclusive)
-        let samples = [0u64, 1, 2, 3, 4, 5, 0x10, 0x11];
-        for &ptr in &samples {
-            assert!(
-                !(is_scalar(ptr) && is_ptr(ptr)),
-                "ptr={} should not be both scalar and pointer",
-                ptr
-            );
-        }
-
-        // Verify specific categorizations
-        assert!(is_scalar(1)); // odd number = scalar
-        assert!(is_ptr(2)); // even non-zero = pointer
-    }
-
-    #[test]
-    fn test_unbox_scalar() {
-        assert_eq!(unbox_scalar(1), 0);
-        assert_eq!(unbox_scalar(3), 1);
-        assert_eq!(unbox_scalar(5), 2);
-        assert_eq!(unbox_scalar(201), 100);
-    }
-
-    #[test]
-    fn test_compacted_region_string() {
-        // Create a mock .olean file structure with a string
-        let base_addr = 0x1000u64;
-
-        // We need at least 64 bytes header + object
-        let mut data = vec![0u8; 128];
-
-        // String object at offset 64 (first object after header)
-        let str_offset = 64;
-        // Header
-        data[str_offset..str_offset + 4].copy_from_slice(&0i32.to_le_bytes()); // rc
-        data[str_offset + 4..str_offset + 6].copy_from_slice(&0u16.to_le_bytes()); // cs_sz
-        data[str_offset + 6] = 0; // other
-        data[str_offset + 7] = tags::STRING;
-        // m_size = 6 (5 chars + null)
-        data[str_offset + 8..str_offset + 16].copy_from_slice(&6u64.to_le_bytes());
-        // m_capacity = 6
-        data[str_offset + 16..str_offset + 24].copy_from_slice(&6u64.to_le_bytes());
-        // m_length = 5
-        data[str_offset + 24..str_offset + 32].copy_from_slice(&5u64.to_le_bytes());
-        // String data "hello\0"
-        data[str_offset + 32..str_offset + 38].copy_from_slice(b"hello\0");
-
-        let region = CompactedRegion::new(&data, base_addr);
-        let s = region.read_lean_string_at(str_offset).unwrap();
-        assert_eq!(s, "hello");
-    }
-
-    /// Verify ptr_to_offset validates pointers against region bounds and scalar tagging
-    #[test]
-    fn test_ptr_to_offset() {
-        let base_addr = 0x0010_0000_u64;
-        let data = vec![0u8; 100];
-        let region = CompactedRegion::new(&data, base_addr);
-
-        // Null pointer
-        assert_eq!(region.ptr_to_offset(0).unwrap(), 0);
-
-        // Valid pointer
-        assert_eq!(region.ptr_to_offset(base_addr + 50).unwrap(), 50);
-
-        // Base address points at offset 0
-        assert_eq!(region.ptr_to_offset(base_addr).unwrap(), 0);
-
-        // Tagged pointer inside the region should still be rejected
-        assert!(
-            matches!(
-                region.ptr_to_offset(base_addr + 1),
-                Err(OleanError::InvalidPointer { .. })
-            ),
-            "tagged pointer should produce InvalidPointer"
-        );
-
-        // Pointer before base is invalid
-        assert!(
-            matches!(
-                region.ptr_to_offset(base_addr - 1),
-                Err(OleanError::InvalidPointer { .. })
-            ),
-            "pointer before base should produce InvalidPointer"
-        );
-
-        // Pointer beyond region is invalid
-        assert!(
-            matches!(
-                region.ptr_to_offset(base_addr + 200),
-                Err(OleanError::InvalidPointer { .. })
-            ),
-            "pointer beyond region should produce InvalidPointer"
-        );
-
-        // Scalar values are not valid pointers
-        assert!(
-            matches!(
-                region.ptr_to_offset(1),
-                Err(OleanError::InvalidPointer { .. })
-            ),
-            "scalar 1 (boxed 0) should produce InvalidPointer"
-        );
-        assert!(
-            matches!(
-                region.ptr_to_offset(3),
-                Err(OleanError::InvalidPointer { .. })
-            ),
-            "scalar 3 (boxed 1) should produce InvalidPointer"
-        );
-    }
-
-    /// Verify ptr_to_offset rejects pointer exactly at end of region (off-by-one boundary)
-    #[test]
-    fn test_ptr_to_offset_end_boundary() {
-        let base_addr = 0x0100_0000_u64;
-        let data = vec![0u8; 64];
-        let region = CompactedRegion::new(&data, base_addr);
-        // Pointer at exactly base_addr + data.len() is invalid (one past end)
-        let ptr = base_addr + data.len() as u64;
-        let err = region.ptr_to_offset(ptr).unwrap_err();
-        assert!(matches!(
-            err,
-            OleanError::InvalidPointer { ptr: err_ptr, offset }
-                if err_ptr == ptr && offset == data.len()
-        ));
-    }
-
-    /// Verify offset_to_ptr and ptr_to_offset are inverses for valid offsets
-    #[test]
-    fn test_offset_to_ptr_roundtrip() {
-        let base_addr = 0x2000_u64;
-        let data = vec![0u8; 32];
-        let region = CompactedRegion::new(&data, base_addr);
-        // Test roundtrip at start, middle, and end of valid range.
-        // Use only even offsets since odd addresses are scalar-tagged in Lean's compacted region.
-        // Calculate max_even dynamically in case data size changes.
-        let max_even = (data.len() - 1) & !1; // Largest even offset within bounds
-        for offset in [0usize, 12usize, max_even] {
-            let ptr = region.offset_to_ptr(offset);
-            assert_eq!(ptr, base_addr + offset as u64);
-            assert_eq!(region.ptr_to_offset(ptr).unwrap(), offset);
-        }
-    }
-
-    /// Verify odd pointers are rejected as scalars.
-    ///
-    /// In Lean's runtime, odd addresses (ptr & 1 == 1) represent unboxed scalars,
-    /// not heap pointers. The actual value is (ptr >> 1). This test ensures
-    /// ptr_to_offset correctly rejects these as InvalidPointer.
-    #[test]
-    fn test_odd_ptr_rejected_as_scalar() {
-        let base_addr = 0x2000_u64;
-        let data = vec![0u8; 32];
-        let region = CompactedRegion::new(&data, base_addr);
-        // Test multiple odd offsets: near start, middle, and near end of range
-        for odd_offset in [1usize, 15usize, 31usize] {
-            let odd_ptr = base_addr + odd_offset as u64;
-            let result = region.ptr_to_offset(odd_ptr);
-            assert!(
-                result.is_err(),
-                "Odd pointer 0x{:x} (offset {}) should be rejected as scalar-tagged",
-                odd_ptr,
-                odd_offset
-            );
-        }
-    }
-
-    /// Verify read_lean_string_at returns OutOfBounds when m_size exceeds available data
-    #[test]
-    fn test_read_lean_string_at_length_mismatch() {
-        let base_addr = 0x1000u64;
-        let mut data = vec![0u8; 96]; // Only 96 bytes total
-        let str_offset = 64;
-
-        // Build string header at offset 64
-        data[str_offset..str_offset + 4].copy_from_slice(&0i32.to_le_bytes()); // rc
-        data[str_offset + 4..str_offset + 6].copy_from_slice(&0u16.to_le_bytes()); // cs_sz
-        data[str_offset + 6] = 0; // other
-        data[str_offset + 7] = tags::STRING; // tag
-                                             // m_size = 20 (string data would need 20 bytes at offset 64+32=96, but only 0 bytes available)
-        data[str_offset + 8..str_offset + 16].copy_from_slice(&20u64.to_le_bytes());
-
-        let region = CompactedRegion::new(&data, base_addr);
-        let err = region.read_lean_string_at(str_offset).unwrap_err();
-        let data_start = str_offset + 32; // String data starts at header + 32
-        assert!(matches!(
-            err,
-            OleanError::OutOfBounds { offset, size }
-                if offset == data_start && size == data.len()
-        ));
-    }
-}
+#[cfg(test)]
+#[path = "region_mpz_tests.rs"]
+mod mpz_tests;

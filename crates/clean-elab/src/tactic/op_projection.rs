@@ -50,20 +50,90 @@ pub(crate) const HETERO_OP_PROJECTIONS: &[&str] = &[
 
 /// Whether `name` is one of the heterogeneous binary-op projection functions
 /// (see [`HETERO_OP_PROJECTIONS`]).
+///
+/// Compared WITHOUT rendering the name: this runs once or twice per simp
+/// lemma attempt (`reduce_op_projection_head`, the head guards in
+/// `simp/expr.rs`), and the `name.to_string()` it used to build was 8-9% of
+/// the samples of a 189.5 s `simp_rw` in `Mathlib/Order/Basic.lean`
+/// (`Name::fmt` under this function; performance audit 2026-09-24).
+/// [`name_display_eq`] answers exactly what the string comparison did.
 pub(crate) fn is_hetero_op_projection(name: &Name) -> bool {
-    let s = name.to_string();
-    HETERO_OP_PROJECTIONS.iter().any(|p| *p == s)
+    HETERO_OP_PROJECTIONS
+        .iter()
+        .any(|p| name_display_eq(name, p))
 }
 
 /// Given a hetero-op projection name (`HAdd.hAdd`), return the owning class name
 /// (`HAdd`) so the constructor `HAdd.mk` can be checked. Returns `None` for a
 /// non-projection name.
 pub(crate) fn hetero_class_of_projection(name: &Name) -> Option<String> {
-    let s = name.to_string();
     HETERO_OP_PROJECTIONS
         .iter()
-        .find(|p| **p == s)
+        .find(|p| name_display_eq(name, p))
         .and_then(|p| p.split_once('.').map(|(class, _)| class.to_string()))
+}
+
+/// `name.to_string() == text`, decided without allocating.
+///
+/// Walks the components from the last one, stripping each (and the `.` that
+/// `Display` puts between two of them) off the END of `text`. That is exactly
+/// the rendering `impl Display for Name` performs — components joined by `.`
+/// with no escaping, numeric ones in decimal, the anonymous name as
+/// `[anonymous]` — so a name whose one component itself contains a dot
+/// (`Name::anon().str("HAdd.hAdd")`) still equals `"HAdd.hAdd"`, as it did
+/// under the string comparison this replaces.
+pub(crate) fn name_display_eq(name: &Name, text: &str) -> bool {
+    use clean_kernel::name::NameInner;
+
+    if name.is_anon() {
+        return text == "[anonymous]";
+    }
+    let mut rest = text;
+    let mut current = name;
+    loop {
+        let parent: &Name = match current.inner() {
+            NameInner::Anon => return rest.is_empty(),
+            NameInner::Str(parent, component) => {
+                let Some(prefix) = rest.strip_suffix(component.as_ref()) else {
+                    return false;
+                };
+                rest = prefix;
+                parent
+            }
+            NameInner::Num(parent, value) => {
+                let mut digits = [0u8; 20];
+                let Some(prefix) = rest.strip_suffix(decimal(*value, &mut digits)) else {
+                    return false;
+                };
+                rest = prefix;
+                parent
+            }
+        };
+        if parent.is_anon() {
+            return rest.is_empty();
+        }
+        let Some(prefix) = rest.strip_suffix('.') else {
+            return false;
+        };
+        rest = prefix;
+        current = parent;
+    }
+}
+
+/// `value` in decimal, written into the tail of `buf` (20 bytes hold any
+/// `u64`).
+fn decimal(mut value: u64, buf: &mut [u8; 20]) -> &str {
+    let mut start = buf.len();
+    loop {
+        start -= 1;
+        buf[start] = b'0' + (value % 10) as u8;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    // Every byte written is an ASCII digit, so this cannot fail.
+    std::str::from_utf8(&buf[start..]).unwrap_or("")
 }
 
 /// Reduce exactly the typeclass-projection layer of an op-headed subterm,
@@ -98,6 +168,38 @@ pub(crate) fn reduce_op_projection_head(
     goal: &Goal,
     haystack: &Expr,
 ) -> Option<Expr> {
+    reduce_op_projection_head_with(state, haystack, &|expr| state.whnf(goal, expr))
+}
+
+/// The same field selection, with the existing bounded instance reduction.
+/// Unlike WHNF of an entire application, this preserves the stored operation
+/// head even when its operands are concrete or its projection is semireducible.
+#[cfg(any(feature = "ay-smt", test))]
+pub(crate) fn reduce_op_projection_head_instances(
+    state: &ProofState,
+    goal: &Goal,
+    haystack: &Expr,
+) -> Option<Expr> {
+    reduce_op_projection_head_with(state, haystack, &|expr| state.whnf_instances(goal, expr))
+}
+
+/// Bounded field selection for a homogeneous structure accessor such as Div.div.
+#[cfg(any(feature = "ay-smt", test))]
+pub(crate) fn reduce_structure_projection_head_instances(
+    state: &ProofState,
+    goal: &Goal,
+    expr: &Expr,
+) -> Expr {
+    reduce_projection_layers(state, expr.clone(), &|expr| {
+        state.whnf_instances(goal, expr)
+    })
+}
+
+fn reduce_op_projection_head_with(
+    state: &ProofState,
+    haystack: &Expr,
+    whnf_instance: &impl Fn(&Expr) -> Expr,
+) -> Option<Expr> {
     let hay_fn = haystack.get_app_fn();
     let ExprKind::Const(hay_name, _) = hay_fn.kind() else {
         return None;
@@ -120,7 +222,7 @@ pub(crate) fn reduce_op_projection_head(
     // Reduce the instance ONLY enough to expose its `H⊕.mk …` constructor.
     // WHNF-ing the *instance term itself* (not the projection application) is
     // safe: the op is a stored field, not applied, so no operator ι-redex fires.
-    let inst_whnf = state.whnf(goal, inst);
+    let inst_whnf = whnf_instance(inst);
     let inst_fn = inst_whnf.get_app_fn();
     let ExprKind::Const(inst_ctor, _) = inst_fn.kind() else {
         return None;
@@ -154,14 +256,18 @@ pub(crate) fn reduce_op_projection_head(
     // Normalize the two structural differences — head-beta, then any remaining
     // structure-projection layers — so BOTH encodings land on the same bare op
     // head. See `docs/plans/CLASS_PROJECTION_SURFACE_2026-07-29.md`.
-    Some(reduce_projection_layers(state, goal, head_beta(&result)))
+    Some(reduce_projection_layers(
+        state,
+        head_beta(&result),
+        whnf_instance,
+    ))
 }
 
 /// Head-beta-reduce `expr`: apply the spine arguments to a `Lam` head for as long
 /// as both are available. Only the *head* redex is contracted — arguments are
 /// never entered, so no operand is reduced (the invariant
 /// [`reduce_op_projection_head`] depends on).
-fn head_beta(expr: &Expr) -> Expr {
+pub(crate) fn head_beta(expr: &Expr) -> Expr {
     let args: Vec<Expr> = expr.get_app_args().into_iter().cloned().collect();
     let mut fun = expr.get_app_fn().clone();
     let mut consumed = 0usize;
@@ -195,10 +301,14 @@ const MAX_PROJECTION_LAYERS: usize = 8;
 /// soon as the head is an ordinary definition (`List.append`, `Nat.mod`), so the
 /// op const the rewrite lemma is keyed on is preserved and never δ-unfolded into
 /// its `.rec` body.
-fn reduce_projection_layers(state: &ProofState, goal: &Goal, expr: Expr) -> Expr {
+fn reduce_projection_layers(
+    state: &ProofState,
+    expr: Expr,
+    whnf_instance: &impl Fn(&Expr) -> Expr,
+) -> Expr {
     let mut current = expr;
     for _ in 0..MAX_PROJECTION_LAYERS {
-        match peel_structure_projection(state, goal, &current) {
+        match peel_structure_projection(state, &current, whnf_instance) {
             Some(next) => current = head_beta(&next),
             None => break,
         }
@@ -225,7 +335,11 @@ fn reduce_projection_layers(state: &ProofState, goal: &Goal, expr: Expr) -> Expr
 /// constructor, or when a `.rec`-encoded accessor meets a multi-field structure
 /// (no field index to disambiguate) — in every such case the caller keeps the
 /// un-peeled form.
-fn peel_structure_projection(state: &ProofState, goal: &Goal, expr: &Expr) -> Option<Expr> {
+fn peel_structure_projection(
+    state: &ProofState,
+    expr: &Expr,
+    whnf_instance: &impl Fn(&Expr) -> Expr,
+) -> Option<Expr> {
     let ExprKind::Const(head_name, _) = expr.get_app_fn().kind() else {
         return None;
     };
@@ -241,7 +355,7 @@ fn peel_structure_projection(state: &ProofState, goal: &Goal, expr: &Expr) -> Op
     // constructor, then read the field out. The field itself is never reduced
     // and the operands are never entered — so `List.append`/`Nat.mod` survives
     // as a head for the rewrite lemma to key on.
-    let structure = state.whnf(goal, args.get(accessor.structure_arg)?);
+    let structure = whnf_instance(args.get(accessor.structure_arg)?);
     let ExprKind::Const(ctor_name, _) = structure.get_app_fn().kind() else {
         return None;
     };
@@ -333,3 +447,7 @@ fn accessor_shape(state: &ProofState, name: &Name) -> Option<AccessorShape> {
         field,
     })
 }
+
+#[cfg(test)]
+#[path = "op_projection_name_tests.rs"]
+mod name_display_eq_tests;

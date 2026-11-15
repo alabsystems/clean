@@ -1,0 +1,14 @@
+{
+  "command": "targo --unverified test --locked -p clean-kernel --lib",
+  "declared_tests": 11158,
+  "kind": "lib-rollup",
+  "notes": "This target is SHARDED. Its bucket is derived by the runner from the shard records under data/suite_state/shards/, never from this file; this file exists so a reader of the parent id finds the plan and the superseded run instead of a stale status. GREEN requires every shard GREEN at the current digest and the shards' measured test counts to re-sum to the declared total.",
+  "package": "clean-kernel",
+  "schema": "clean.suite_state/v1",
+  "shard_count": 12,
+  "shard_plan": "$HOME/clean/.claude/worktrees/e3-fixup/data/suite_plans/clean-kernel__lib.json",
+  "source": "derived",
+  "status": "SUPERSEDED",
+  "superseded_run": null,
+  "target": "clean-kernel::lib"
+}

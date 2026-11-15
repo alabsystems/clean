@@ -318,9 +318,9 @@ fn test_not_binds_tighter_than_and() {
     // `(¬ (a = b)) ∧ c`. This regression guard proves the precedence widening
     // did not swallow the connectives.
     let env = elaborate_module(
-        r"theorem not_and (a b : Nat) (h1 : ¬ a = b) (h2 : a = a) : (¬ a = b) ∧ a = a :=
+        r"theorem not_and_prec (a b : Nat) (h1 : ¬ a = b) (h2 : a = a) : (¬ a = b) ∧ a = a :=
   And.intro h1 h2",
     )
     .expect("`¬ a = b ∧ c` must parse as `(¬ (a = b)) ∧ c`");
-    assert_axiom_free(&env, &["not_and"]);
+    assert_axiom_free(&env, &["not_and_prec"]);
 }

@@ -1,0 +1,79 @@
+{
+  "command": [
+    "lean4export",
+    "Q2Nested",
+    "--",
+    "Q2Rose.rec",
+    "Q2ArrayRose.rec",
+    "Q2FunctionRose.rec",
+    "q2ListNestedIota",
+    "q2ArrayNestedIota",
+    "q2FunctionNestedIota"
+  ],
+  "decls": [
+    "Q2Rose.rec",
+    "Q2ArrayRose.rec",
+    "Q2FunctionRose.rec",
+    "q2ListNestedIota",
+    "q2ArrayNestedIota",
+    "q2FunctionNestedIota"
+  ],
+  "environment": {
+    "HOME": "<home>",
+    "LEAN_ABORT_ON_PANIC": "1",
+    "LEAN_PATH": "/private/tmp/q2-part2-nested",
+    "LEAN_SYSROOT": "<toolchain dir>",
+    "PATH": "<toolchain dir>/bin:/usr/bin:/bin",
+    "TMPDIR": "<tmpdir>"
+  },
+  "environment_cleared": true,
+  "export": {
+    "bytes": 60274,
+    "file": "nested.ndjson",
+    "lines": 1047,
+    "sha256": "a362bc38894f743830452ae496d59b0bfef02676e0efcf933cd08259454cf0d0"
+  },
+  "exporter": {
+    "binary_sha256": "157f4e82e28fbd84ae5e12d3855591b8e14eaba3357851d5991d33c61de37fee",
+    "commit": "12581a6b680d8478175596338eb2d53383a323e3",
+    "kind": "lean4export-repo",
+    "repo": "https://github.com/leanprover/lean4export",
+    "tag": "v4.30.0-rc2"
+  },
+  "gate": {
+    "held": "",
+    "label": "lean-export-mint-Q2Nested",
+    "reserved_gb": 1,
+    "script": "scripts/heavy_gate.sh",
+    "script_sha256": "6cf91332c255dcebee8905eeac68bf613b60159ffa6bb139f804b8117856a6f1",
+    "weight": "auto:lean-export-mint-Q2Nested:5"
+  },
+  "generated": "2026-11-13T07:37:03Z",
+  "host": "Darwin arm64",
+  "lean_banner": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)",
+  "lean_githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+  "meta": {
+    "meta": {
+      "exporter": {
+        "name": "lean4export",
+        "version": "3.1.0"
+      },
+      "format": {
+        "version": "3.1.0"
+      },
+      "lean": {
+        "githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+        "version": "4.30.0-rc2"
+      }
+    }
+  },
+  "meta_line": "{\"meta\":{\"exporter\":{\"name\":\"lean4export\",\"version\":\"3.1.0\"},\"format\":{\"version\":\"3.1.0\"},\"lean\":{\"githash\":\"3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc\",\"version\":\"4.30.0-rc2\"}}}",
+  "minted_by": "scripts/lean_export_mint.sh",
+  "modules": [
+    "Q2Nested"
+  ],
+  "options": [],
+  "schema": "clean.lean_export_mint/1",
+  "script_sha256": "5e76ea608272c4d5eb804d33a996ddae5a8dfa8c456c8d7f575df74d6331717d",
+  "toolchain": "v4.30.0-rc2"
+}

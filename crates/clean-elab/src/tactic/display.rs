@@ -30,12 +30,15 @@
 //! ⊢ P
 //! ```
 
+// Every `write!` in this file targets a `String`, whose `fmt::Write` impl never
+// fails, so the `fmt::Result` is discarded (`let _ =`) rather than unwrapped.
+use std::collections::{HashMap, HashSet};
 use std::fmt::Write;
 
 use crate::stack_safe;
 use crate::tactic::core::{Goal, LocalDecl, ProofState};
 use clean_kernel::expr::ExprKind;
-use clean_kernel::{BinderInfo, Environment, Expr, Level, Literal};
+use clean_kernel::{BinderInfo, Environment, Expr, FVarId, Level, Literal};
 
 // =============================================================================
 // ExprFormatter — configurable expression pretty-printing
@@ -47,6 +50,8 @@ use clean_kernel::{BinderInfo, Environment, Expr, Level, Literal};
 /// whether universe levels are printed, and layout parameters.
 #[derive(Debug, Clone)]
 pub(crate) struct ExprFormatter {
+    /// Display names keyed by actual local identity, never identifier spelling.
+    pub(crate) local_names: HashMap<FVarId, String>,
     /// Show implicit arguments (like Lean 4's `set_option pp.all true`)
     pub pp_all: bool,
     /// Use mathematical notation where possible (e.g., `→` for Pi)
@@ -65,12 +70,39 @@ pub(crate) struct ExprFormatter {
 impl Default for ExprFormatter {
     fn default() -> Self {
         Self {
+            local_names: HashMap::new(),
             pp_all: false,
             pp_notation: true,
             pp_universes: false,
             max_depth: 64,
             line_width: 100,
         }
+    }
+}
+
+impl ExprFormatter {
+    /// Keep actual local identities, disambiguating shadowed display names.
+    pub(crate) fn with_local_names(
+        mut self,
+        names: impl DoubleEndedIterator<Item = (FVarId, String)>,
+    ) -> Self {
+        let mut used = HashSet::new();
+        for (fvar, mut name) in names.rev() {
+            while !used.insert(name.clone()) {
+                name.push('✝');
+            }
+            self.local_names.insert(fvar, name);
+        }
+        self
+    }
+
+    /// Render captured expressions without requiring an unrelated environment.
+    pub(crate) fn format(&self, expr: &Expr) -> String {
+        let mut buf = String::new();
+        // Private constants retain their user-facing names.
+        let shown = crate::private_names::user_facing_expr(expr);
+        format_expr_inner(&shown, self, 0, false, &mut buf);
+        buf
     }
 }
 
@@ -90,9 +122,7 @@ impl Default for ExprFormatter {
 /// ENSURES: recursion is bounded by `config.max_depth`
 #[must_use]
 pub(crate) fn format_expr(expr: &Expr, _env: &Environment, config: &ExprFormatter) -> String {
-    let mut buf = String::new();
-    format_expr_inner(expr, config, 0, false, &mut buf);
-    buf
+    config.format(expr)
 }
 
 /// Core recursive formatter. `depth` tracks current nesting for the depth
@@ -113,33 +143,37 @@ fn format_expr_inner(
     stack_safe(|| match expr.kind() {
         // --- atoms ---
         ExprKind::BVar(idx) => {
-            write!(buf, "#B{idx}").expect("infallible: write to String");
+            let _ = write!(buf, "#B{idx}");
         }
         ExprKind::FVar(id) => {
-            write!(buf, "#F{}", id.as_u64()).expect("infallible: write to String");
+            if let Some(name) = config.local_names.get(id) {
+                buf.push_str(name);
+            } else {
+                let _ = write!(buf, "#F{}", id.as_u64());
+            }
         }
         ExprKind::Sort(level) => {
             format_sort(level, config, buf);
         }
         ExprKind::Const(name, levels) => {
-            write!(buf, "{name}").expect("infallible: write to String");
+            let _ = write!(buf, "{name}");
             if config.pp_universes && !levels.is_empty() {
                 buf.push_str(".{");
                 for (i, l) in levels.iter().enumerate() {
                     if i > 0 {
                         buf.push_str(", ");
                     }
-                    write!(buf, "{l}").expect("infallible: write to String");
+                    let _ = write!(buf, "{l}");
                 }
                 buf.push('}');
             }
         }
         ExprKind::Lit(lit) => match lit {
             Literal::Nat(n) => {
-                write!(buf, "{n}").expect("infallible: write to String");
+                let _ = write!(buf, "{n}");
             }
             Literal::String(s) => {
-                write!(buf, "\"{s}\"").expect("infallible: write to String");
+                let _ = write!(buf, "\"{s}\"");
             }
         },
 
@@ -198,7 +232,7 @@ fn format_expr_inner(
                 buf.push('(');
             }
             buf.push_str("let ");
-            write!(buf, "{name}").expect("infallible: write to String");
+            let _ = write!(buf, "{name}");
             buf.push_str(" : ");
             format_expr_inner(ty, config, depth + 1, false, buf);
             buf.push_str(" := ");
@@ -215,6 +249,26 @@ fn format_expr_inner(
             if !config.pp_all {
                 // Collect application spine for compact display
                 let (head, args) = collect_app_spine(expr);
+                // A genuine fully applied equality carries its implicit type
+                // argument before its two sides. Partial/overapplied spines
+                // keep the ordinary application view.
+                if let (true, [_, left, right]) = (
+                    config.pp_notation
+                        && !config.pp_universes
+                        && matches!(head.kind(), ExprKind::Const(name, _) if name == &clean_kernel::Name::from_string("Eq")),
+                    args.as_slice(),
+                ) {
+                    if parens {
+                        buf.push('(');
+                    }
+                    format_expr_inner(left, config, depth + 1, true, buf);
+                    buf.push_str(" = ");
+                    format_expr_inner(right, config, depth + 1, true, buf);
+                    if parens {
+                        buf.push(')');
+                    }
+                    return;
+                }
                 if args.len() > 1 {
                     let needs_parens = parens;
                     if needs_parens {
@@ -246,7 +300,7 @@ fn format_expr_inner(
         // --- projections / metadata ---
         ExprKind::Proj(name, idx, inner) => {
             format_expr_inner(inner, config, depth + 1, true, buf);
-            write!(buf, ".{name}.{idx}").expect("infallible: write to String");
+            let _ = write!(buf, ".{name}.{idx}");
         }
         ExprKind::MData(_, inner) => {
             // Metadata is transparent — just format the inner expression
@@ -262,7 +316,7 @@ fn format_expr_inner(
 
         // --- cubical / set-theoretic extensions: generic fallback ---
         _ => {
-            write!(buf, "{expr:?}").expect("infallible: write to String");
+            let _ = write!(buf, "{expr:?}");
         }
     });
 }
@@ -282,7 +336,7 @@ fn collect_app_spine(expr: &Expr) -> (Expr, Vec<Expr>) {
 /// Format a Sort expression. `Sort 0` = Prop, `Sort 1` = Type, `Sort (n+1)` = Type n.
 fn format_sort(level: &Level, config: &ExprFormatter, buf: &mut String) {
     if config.pp_universes {
-        write!(buf, "Sort {level}").expect("infallible: write to String");
+        let _ = write!(buf, "Sort {level}");
         return;
     }
     match level {
@@ -299,15 +353,15 @@ fn format_sort(level: &Level, config: &ExprFormatter, buf: &mut String) {
                 if n == 1 {
                     buf.push_str("Type");
                 } else {
-                    write!(buf, "Type {}", n - 1).expect("infallible: write to String");
+                    let _ = write!(buf, "Type {}", n - 1);
                 }
             } else {
-                write!(buf, "Sort {level}").expect("infallible: write to String");
+                let _ = write!(buf, "Sort {level}");
             }
         }
         _ => {
             if config.pp_universes {
-                write!(buf, "Sort {level}").expect("infallible: write to String");
+                let _ = write!(buf, "Sort {level}");
             } else {
                 buf.push_str("Sort _");
             }
@@ -357,17 +411,52 @@ pub(crate) fn format_local_context(
     env: &Environment,
     config: &ExprFormatter,
 ) -> String {
-    let mut lines = Vec::with_capacity(decls.len());
+    let config = local_name_config(config, decls);
+    let mut groups: Vec<(Vec<String>, String, Option<String>)> = Vec::with_capacity(decls.len());
+    let mut previous_type = None;
     for decl in decls {
-        let ty_str = format_expr(&decl.ty, env, config);
+        let name = config
+            .local_names
+            .get(&decl.fvar)
+            .cloned()
+            .unwrap_or_else(|| decl.name.to_string());
+        // Lean groups consecutive assumptions with the same actual type;
+        // retain let values on their own lines and compare expressions.
+        if decl.value.is_none() && previous_type == Some(&decl.ty) {
+            if let Some((names, _, _)) = groups.last_mut() {
+                names.push(name);
+                continue;
+            }
+        }
+        let ty_str = format_expr(&decl.ty, env, &config);
         if let Some(val) = &decl.value {
-            let val_str = format_expr(val, env, config);
-            lines.push(format!("{} : {} := {}", decl.name, ty_str, val_str));
+            let val_str = format_expr(val, env, &config);
+            groups.push((vec![name], ty_str, Some(val_str)));
+            previous_type = None;
         } else {
-            lines.push(format!("{} : {}", decl.name, ty_str));
+            groups.push((vec![name], ty_str, None));
+            previous_type = Some(&decl.ty);
         }
     }
-    lines.join("\n")
+    groups
+        .into_iter()
+        .map(|(names, ty, value)| {
+            let names = names.join(" ");
+            value.map_or_else(
+                || format!("{names} : {ty}"),
+                |value| format!("{names} : {ty} := {value}"),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn local_name_config(config: &ExprFormatter, decls: &[LocalDecl]) -> ExprFormatter {
+    // Keep the newest local's spelling; shadowed locals remain distinct in
+    // both hypothesis types and target expressions by their original FVars.
+    config
+        .clone()
+        .with_local_names(decls.iter().map(|decl| (decl.fvar, decl.name.to_string())))
 }
 
 // =============================================================================
@@ -401,22 +490,23 @@ pub(crate) fn format_goal_with_config(
     env: &Environment,
     config: &ExprFormatter,
 ) -> String {
+    let config = local_name_config(config, &goal.local_ctx);
     let mut buf = String::new();
 
     // Case tag (if present)
     if let Some(tag) = &goal.tag {
-        writeln!(buf, "case {tag}").expect("infallible: write to String");
+        let _ = writeln!(buf, "case {tag}");
     }
 
     // Local context
-    let ctx = format_local_context(&goal.local_ctx, env, config);
+    let ctx = format_local_context(&goal.local_ctx, env, &config);
     if !ctx.is_empty() {
-        writeln!(buf, "{ctx}").expect("infallible: write to String");
+        let _ = writeln!(buf, "{ctx}");
     }
 
     // Turnstile + target
-    let target_str = format_expr(&goal.target, env, config);
-    write!(buf, "\u{22a2} {target_str}").expect("infallible: write to String");
+    let target_str = format_expr(&goal.target, env, &config);
+    let _ = write!(buf, "\u{22a2} {target_str}");
 
     buf
 }
@@ -446,12 +536,14 @@ pub(crate) fn format_current_goal(state: &ProofState) -> Option<String> {
             .local_ctx
             .iter()
             .map(|decl| LocalDecl {
+                binder_info: decl.binder_info,
                 fvar: decl.fvar,
                 name: decl.name.clone(),
                 ty: state.metas.instantiate(&decl.ty),
                 value: decl.value.as_ref().map(|v| state.metas.instantiate(v)),
             })
             .collect(),
+        case_binders: goal.case_binders.clone(),
         tag: goal.tag.clone(),
     };
     Some(format_goal(&instantiated, state.env()))
@@ -475,6 +567,22 @@ pub(crate) fn no_progress_with_goal(
     match format_current_goal(state) {
         Some(goal) => crate::tactic::TacticError::no_progress_on(tactic, goal),
         None => crate::tactic::TacticError::no_progress(tactic),
+    }
+}
+
+/// Build a `NoMatchingHypothesis` error carrying the goal that was searched.
+///
+/// The goal block is the whole payload this error needs: it is the target the
+/// search was matching against AND every hypothesis it considered, in one
+/// render. Degrades to the bare message when there is no current goal.
+#[must_use]
+pub(crate) fn no_matching_hypothesis(
+    state: &ProofState,
+    tactic: impl Into<String>,
+) -> crate::tactic::TacticError {
+    crate::tactic::TacticError::NoMatchingHypothesis {
+        tactic: tactic.into(),
+        goal: format_current_goal(state),
     }
 }
 
@@ -530,7 +638,7 @@ pub(crate) fn format_proof_state_with_config(
 
     // Goal count header (only for 2+ goals)
     if goals.len() > 1 {
-        writeln!(buf, "{} goals", goals.len()).expect("infallible: write to String");
+        let _ = writeln!(buf, "{} goals", goals.len());
     }
 
     for (i, goal) in goals.iter().enumerate() {

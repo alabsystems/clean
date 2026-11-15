@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 // ============================================================================
@@ -41,8 +42,9 @@ fn test_smt_solver_prove_exposes_direct_proof_status_on_contradiction() {
 
     // Register proposition variable as Prop-typed local
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: p_fvar,
-        name: "p".to_string(),
+        name: SurfaceName::component("p", false),
         ty: Expr::prop(),
         value: None,
     }];

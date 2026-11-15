@@ -3,11 +3,17 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use crate::oracle_compiler::tests::toolchain_trustc;
 use crate::tactic::native_decide_eval::{
-    clear_native_decide_cache_for_tests, execute_native_decide, native_decide_cache_len_for_tests,
-    native_eval_bool, NativeDecideExecOutcome, NativeRunner,
+    clear_native_decide_cache_for_tests, execute_native_decide, execute_native_decide_with,
+    native_decide_cache_len_for_tests, native_eval_bool, NativeDecideExecOutcome, NativeRunner,
 };
 use serial_test::serial;
+
+/// The native runner over this toolchain's admitted `trustc`.
+fn runner() -> NativeRunner<'static> {
+    NativeRunner::new(toolchain_trustc())
+}
 
 #[test]
 fn test_native_decide_true_goal_with_prelude_closes_without_trust() {
@@ -61,7 +67,7 @@ fn test_native_runner_compiles_nat_equality_and_hits_cache() {
         Expr::nat_lit(4),
     );
 
-    let compiled = NativeRunner
+    let compiled = runner()
         .compile(&target)
         .expect("native runner should compile ground Nat equality");
     assert!(
@@ -82,7 +88,7 @@ fn test_native_runner_compiles_nat_equality_and_hits_cache() {
         "first compile should populate the cache (got {first_len})"
     );
 
-    let cached = NativeRunner
+    let cached = runner()
         .compile(&target)
         .expect("second compile should hit the cache");
     assert_eq!(
@@ -114,7 +120,7 @@ fn test_native_decide_nat_equality_goal_uses_computational_path() {
     // Wave 95 — Gap 19 CLOSED. `Nat.decEq` is registered as a native
     // reducer in the prelude; `synthesize_decidable_expr` now accepts
     // native-reducer-only hooks (not just full declarations).
-    match execute_native_decide(&state, &goal) {
+    match execute_native_decide_with(&state, &goal, Some(toolchain_trustc())) {
         Ok(NativeDecideExecOutcome::Proved(proof)) => {
             let proof_head = proof.get_app_fn();
             assert!(
@@ -165,7 +171,7 @@ fn test_native_decide_false_nat_equality_is_refuted_by_kernel_path() {
     // Wave 95 — Gap 19 CLOSED. Refutation path now reaches the kernel
     // reducer for `Nat.decEq` (a native reducer suffices to enter the
     // path), and `2+2 = 5` reduces to `Decidable.isFalse`.
-    let outcome = execute_native_decide(&state, &goal);
+    let outcome = execute_native_decide_with(&state, &goal, Some(toolchain_trustc()));
     match outcome {
         Ok(NativeDecideExecOutcome::Refuted) => {}
         Ok(NativeDecideExecOutcome::Proved(_)) => {
@@ -201,7 +207,7 @@ fn test_native_decide_bool_equality_lowers_natively_and_stays_kernel_checked() {
     // native-decide-beyond-nat: Bool equality now lowers natively. The
     // lowering is only a fast oracle; on `Ok(true)` the trusted proof is
     // still re-derived by reducing `Bool.decEq` in the kernel.
-    let compiled = NativeRunner
+    let compiled = runner()
         .compile(&target)
         .expect("Bool equality should lower to a native program");
     assert!(
@@ -214,7 +220,7 @@ fn test_native_decide_bool_equality_lowers_natively_and_stays_kernel_checked() {
         "Bool.true = Bool.true should evaluate to true natively"
     );
 
-    match execute_native_decide(&state, &goal) {
+    match execute_native_decide_with(&state, &goal, Some(toolchain_trustc())) {
         Ok(NativeDecideExecOutcome::Proved(proof)) => {
             let proof_head = proof.get_app_fn();
             assert!(
@@ -341,7 +347,7 @@ fn test_native_decide_int_equality_lowers_natively_and_closes() {
     );
     let mut state = ProofState::new(env, target.clone());
 
-    let compiled = NativeRunner
+    let compiled = runner()
         .compile(&target)
         .expect("Int equality should lower to a native program");
     assert!(
@@ -382,7 +388,7 @@ fn test_native_decide_int_negative_equality_lowers_faithfully() {
         neg_one.clone(),
         neg_one,
     );
-    let compiled = NativeRunner
+    let compiled = runner()
         .compile(&target)
         .expect("negative Int equality should lower to a native program");
     assert!(
@@ -408,7 +414,7 @@ fn test_native_decide_string_equality_true_closes() {
     );
     let mut state = ProofState::new(env, target.clone());
 
-    let compiled = NativeRunner
+    let compiled = runner()
         .compile(&target)
         .expect("String equality should lower to a native program");
     assert!(
@@ -440,7 +446,7 @@ fn test_native_decide_string_equality_false_is_refuted() {
         Expr::str_lit("clean"),
         Expr::str_lit("lean"),
     );
-    let compiled = NativeRunner
+    let compiled = runner()
         .compile(&target)
         .expect("unequal String equality should still lower to a native program");
     assert!(
@@ -450,7 +456,7 @@ fn test_native_decide_string_equality_false_is_refuted() {
 
     let mut state = ProofState::new(env, target);
     let goal = state.current_goal().expect("goal should exist").clone();
-    match execute_native_decide(&state, &goal) {
+    match execute_native_decide_with(&state, &goal, Some(toolchain_trustc())) {
         Ok(NativeDecideExecOutcome::Refuted) => {}
         other => panic!("unequal String literals should be refuted, got {other:?}"),
     }
@@ -476,7 +482,7 @@ fn test_native_decide_unsupported_type_lowering_errors_honestly() {
         Expr::const_(Name::from_string("Float.zero"), vec![]),
         Expr::const_(Name::from_string("Float.zero"), vec![]),
     );
-    let err = NativeRunner
+    let err = runner()
         .compile(&target)
         .expect_err("Float equality must not lower natively");
     let msg = format!("{err:?}");
@@ -484,4 +490,71 @@ fn test_native_decide_unsupported_type_lowering_errors_honestly() {
         msg.contains("only supports Nat/Bool/Int/String equality"),
         "expected honest unsupported-type error, got: {msg}"
     );
+}
+
+/// DIFFERENTIAL: the native path (this toolchain's admitted `trustc`) and the
+/// kernel-only path (no oracle compiler) return the same verdict and the same
+/// proof for every goal the native path lowers -- so a process without an
+/// admitted compiler loses speed, never an answer.
+#[test]
+#[serial]
+fn test_native_and_kernel_only_paths_agree() {
+    clear_native_decide_cache_for_tests();
+    let nat = || Expr::const_(Name::from_string("Nat"), vec![]);
+    let int = || Expr::const_(Name::from_string("Int"), vec![]);
+    let string = || Expr::const_(Name::from_string("String"), vec![]);
+    let boolean = || Expr::const_(Name::from_string("Bool"), vec![]);
+    let bool_lit = |b: &str| Expr::const_(Name::from_string(b), vec![]);
+    let nat_op = |op: &str, l: u64, r: u64| {
+        Expr::apps(
+            Expr::const_(Name::from_string(op), vec![]),
+            [Expr::nat_lit(l), Expr::nat_lit(r)],
+        )
+    };
+    let goals = [
+        Expr::const_(Name::from_string("True"), vec![]),
+        Expr::const_(Name::from_string("False"), vec![]),
+        make_eq(nat(), nat_op("Nat.add", 2, 2), Expr::nat_lit(4)),
+        make_eq(nat(), nat_op("Nat.add", 2, 2), Expr::nat_lit(5)),
+        make_eq(nat(), nat_op("Nat.mul", 6, 7), Expr::nat_lit(42)),
+        make_eq(nat(), nat_op("Nat.sub", 3, 5), Expr::nat_lit(0)),
+        make_eq(nat(), nat_op("Nat.pow", 2, 10), Expr::nat_lit(1024)),
+        make_eq(
+            int(),
+            Expr::apps(
+                Expr::const_(Name::from_string("Int.add"), vec![]),
+                [int_of_nat(2), int_of_nat(2)],
+            ),
+            int_of_nat(4),
+        ),
+        make_eq(string(), Expr::str_lit("clean"), Expr::str_lit("clean")),
+        make_eq(string(), Expr::str_lit("clean"), Expr::str_lit("lean")),
+        make_eq(boolean(), bool_lit("Bool.true"), bool_lit("Bool.true")),
+        make_eq(boolean(), bool_lit("Bool.true"), bool_lit("Bool.false")),
+    ];
+    let trustc = toolchain_trustc();
+    for target in goals {
+        // The native leg is real: the goal lowers, compiles and runs.
+        let compiled = runner()
+            .compile(&target)
+            .unwrap_or_else(|err| panic!("{target:?} must compile natively: {err:?}"));
+        let native_bool = native_eval_bool(&compiled).expect("the oracle runs");
+        let state = ProofState::new(Environment::with_prelude(), target.clone());
+        let goal = state.current_goal().expect("goal should exist").clone();
+        let native = execute_native_decide_with(&state, &goal, Some(trustc));
+        let kernel = execute_native_decide_with(&state, &goal, None);
+        match (&native, &kernel) {
+            (
+                Ok(NativeDecideExecOutcome::Proved(native_proof)),
+                Ok(NativeDecideExecOutcome::Proved(kernel_proof)),
+            ) => {
+                assert!(native_bool, "the oracle said false for proved {target:?}");
+                assert_eq!(native_proof, kernel_proof, "proofs differ for {target:?}");
+            }
+            (Ok(NativeDecideExecOutcome::Refuted), Ok(NativeDecideExecOutcome::Refuted)) => {
+                assert!(!native_bool, "the oracle said true for refuted {target:?}");
+            }
+            _ => panic!("paths disagree for {target:?}: native {native:?}, kernel {kernel:?}"),
+        }
+    }
 }

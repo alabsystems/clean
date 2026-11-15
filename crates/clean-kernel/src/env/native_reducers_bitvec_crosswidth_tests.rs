@@ -28,10 +28,11 @@
 //! through a `check_type` path lacking the stated-type sort gate — cannot
 //! silently re-open the hole:
 //!
-//!   1. RAW ARTIFACT (documented, expected `true`): the value-level
-//!      `is_def_eq(ofNat 8 5, ofNat 16 5) = true`, while the same-width
-//!      controls behave correctly (`ofNat 8 5 == ofNat 8 5` true,
-//!      `ofNat 8 5 == ofNat 8 6` false).
+//!   1. RAW ARTIFACT, CLOSED 2026-09-28: since the payload reducer is refused
+//!      (`native_fold_canon.tsv`, role `refused`), the value-level
+//!      `is_def_eq(ofNat 8 5, ofNat 16 5)` is `false`; the same-width controls
+//!      behave correctly (`ofNat 8 5 == ofNat 8 5` true, `ofNat 8 5 == ofNat 8
+//!      6` false).
 //!   2. TYPE-LEVEL GUARD: `is_def_eq(BitVec 8, BitVec 16) = false`.
 //!   3. THE SAFETY PROPERTY: `add_decl` of the doctored cross-width false
 //!      theorem `@Eq (BitVec 8) (ofNat 8 5) (ofNat 16 5) := rfl` is REJECTED,
@@ -101,20 +102,23 @@ fn eq_refl_bitvec(w: u64, v: Expr) -> Expr {
 // (1) RAW is_def_eq ARTIFACT — documented, expected `true`.
 // ===========================================================================
 
-/// The known raw artifact: the value-level reducer drops the width, so
-/// `is_def_eq(BitVec.ofNat 8 5, BitVec.ofNat 16 5)` is `true`. This is the
-/// payload-conflation the type-level gate (test 3/4) renders unreachable as a
-/// false-proposition certification. Pinned so a regression here is noticed.
+/// The former raw artifact, CLOSED 2026-09-28: the value-level reducer drops
+/// the width, so while it fired `is_def_eq(BitVec.ofNat 8 5, BitVec.ofNat 16
+/// 5)` was `true`. The native-fold review refuses that reducer over the
+/// prelude's definition (its result is a `Nat`, not a `BitVec`; `refused` in
+/// `native_fold_canon.tsv`), so the terms δ-unfold to constructors that carry
+/// their widths and the raw comparison is `false`. Pinned so a re-admission
+/// of the payload reducer is noticed.
 #[test]
 fn test_raw_is_def_eq_crosswidth_payload_conflates_true_known_artifact() {
     let env = make_bitvec_env();
     let tc = TypeChecker::new(&env);
     assert!(
-        tc.is_def_eq(&of_nat(8, 5), &of_nat(16, 5)),
-        "KNOWN ARTIFACT: BitVec.ofNat erases width to a bare Nat, so cross-width \
-         same-payload VALUES conflate at raw is_def_eq. If this changed (now \
-         false), the width-tagging hardening (fix_plan option 1) may have landed \
-         — update this pin and the SOUNDNESS_CERTIFICATE note accordingly."
+        !tc.is_def_eq(&of_nat(8, 5), &of_nat(16, 5)),
+        "the E3 artifact is back: BitVec.ofNat's width-erasing payload reducer \
+         fires again over the prelude (docs/issues/2026-09-26-kernel-native-fold-\
+         by-name.md, \"every world pins only reviewed folds\"), so cross-width \
+         same-payload VALUES conflate at raw is_def_eq"
     );
 }
 

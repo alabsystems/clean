@@ -79,7 +79,7 @@ use clean_kernel::env::{Declaration, DeclarationTrustSummary, Environment};
 use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
 use clean_kernel::{BinderInfo, Expr, ExprKind, Level, Name, RecursorArgOrder, TypeChecker};
 
-use clean_elab::tactic::{rewrite, simp, Goal, ProofState, SimpConfig};
+use clean_elab::tactic::{rewrite, rfl, simp, Goal, ProofState, SimpConfig};
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_parser::parse_file;
 
@@ -309,7 +309,13 @@ fn register_stuck_wf_def(env: &mut Environment) -> bool {
 
     // value: fun (x : Nat) => @Acc.intro Nat emptyRel x (fun z hz => False.elim hz)
     let intro = Expr::const_(Name::from_string("Acc.intro"), vec![lvl1()]);
-    let false_elim = Expr::const_(Name::from_string("False.elim"), vec![lvl1()]);
+    // `False.elim.{0}`, NOT `.{1}`. Its motive here is `Acc emptyRel z`, and
+    // `Acc` lands in `Prop` (see `acc_decl`, ":185"), i.e. `Sort 0`. Spelled at
+    // level 1 the term is genuinely ill-typed — the kernel rejects it with
+    // `expected Sort 1, inferred Sort 0` at exactly this `AppFn` — and
+    // `register_stuck_wf_def` then returns `false`, surfacing as the bland
+    // "fStuck should register" with the real error discarded.
+    let false_elim = Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]);
     // under [x, z]: emptyRel z x ; the `hz` binder body discharges via False.elim.
     let acc_field = {
         // motive of False.elim is `Acc emptyRel z` (z = BVar1 under [x,z,hz]).
@@ -398,6 +404,47 @@ fn register_inline_eq_def(env: &mut Environment) {
     .expect("imported WF equation lemma fInline.eq_def should kernel-check and register");
 }
 
+/// Register `g.eq_def : ∀ x, g x = Nat.add x x`, the equation lemma for the
+/// equation lemma's own right-hand side.
+///
+/// `fInline.eq_def` rewrites `fInline 6` to `g 6` and stops there. `g` is a
+/// plain (`Regular`) `def`, and since B15 (`8aaf2bdc7`) simp's reflexivity
+/// closer `close_refl_reducible` is deliberately reducible-transparency only —
+/// it refuses delta on a `Regular` head — so the residue `g 6 = Nat.add 6 6`
+/// stays open. That refusal is correct and is itself pinned
+/// (`simp_discipline_e2e.rs` requires `def mval7 : Nat := 5` NOT to be closed
+/// by `simp`), so widening the closer is not available.
+///
+/// A real `.olean` ships an equation lemma per definition, not only for the
+/// outermost one. Registering `g`'s makes the fixture faithful: the chain then
+/// reaches `Nat.add 6 6 = Nat.add 6 6`, which closes reducibly, and the test's
+/// claim — that `simp only` with the IMPORTED equation lemmas closes the
+/// use-goal, kernel-checked, sorry-free and axiom-free — is measured at full
+/// strength rather than relaxed.
+fn register_g_eq_def(env: &mut Environment) {
+    // ∀ (x : Nat), g x = Nat.add x x
+    let lhs = Expr::app(const_("g"), Expr::bvar(0));
+    let rhs = Expr::app(Expr::app(const_("Nat.add"), Expr::bvar(0)), Expr::bvar(0));
+    let ty = Expr::pi(BinderInfo::Default, nat(), nat_eq(lhs, rhs));
+
+    // proof: fun (x : Nat) => @Eq.refl Nat (Nat.add x x) — `g` is a plain def,
+    // so this is rfl-provable at full transparency, which `add_decl` uses.
+    let refl = Expr::const_(Name::from_string("Eq.refl"), vec![lvl1()]);
+    let refl_body = Expr::app(
+        Expr::app(refl, nat()),
+        Expr::app(Expr::app(const_("Nat.add"), Expr::bvar(0)), Expr::bvar(0)),
+    );
+    let value = Expr::lam(BinderInfo::Default, nat(), refl_body);
+
+    env.add_decl(Declaration::Theorem {
+        name: Name::from_string("g.eq_def"),
+        level_params: vec![],
+        type_: ty,
+        value,
+    })
+    .expect("equation lemma g.eq_def should kernel-check and register (rfl-provable)");
+}
+
 /// Register the equation lemma `fStuck.eq_def : ∀ x, fStuck x = g x` for the
 /// genuinely non-reducing `fStuck`.
 ///
@@ -463,6 +510,10 @@ fn env_with_imported_wf_and_eq_def() -> Environment {
     let mut env = imported_acc_env();
     elaborate_decls_into(&mut env, WF_DEFS);
     register_inline_eq_def(&mut env);
+    // A real `.olean` ships an equation lemma per definition, and
+    // `fInline.eq_def`'s right-hand side `g` needs its own — see
+    // `register_g_eq_def`.
+    register_g_eq_def(&mut env);
 
     // Sanity: the equation lemma is itself sorry-free and axiom-free, so any
     // proof a tactic builds out of it is clean iff the tactic wires it soundly.
@@ -599,12 +650,23 @@ fn test_rw_imported_wf_eq_def_unfolds_use() {
         .expect("fresh proof state has exactly one goal");
 
     // rw [fInline.eq_def] : rewrites fInline 4 -> g 4 (forward).
-    rewrite(&mut state, "fInline.eq_def", false)
-        .expect("rw [fInline.eq_def] should resolve the imported ∀-equation and fire");
+    rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("fInline.eq_def"),
+        false,
+    )
+    .expect("rw [fInline.eq_def] should resolve the imported ∀-equation and fire");
 
     // After rewriting, the remaining goal `g 4 = Nat.add 4 4` is closed by rfl.
-    // Drive it with the existing `rfl`-style closure via `simp` (def-eq close).
-    let close = simp(&mut state, SimpConfig::new());
+    //
+    // Driven by `rfl`, NOT `simp`. `simp`'s reflexivity closer runs at
+    // REDUCIBLE transparency by design (B15, `tactic/simp/mod.rs:369-375`):
+    // Lean's `simp` does not unfold a semireducible `def f := e` to prove
+    // `f = e`, and the full-transparency closer that used to do so accepted
+    // proofs Lean rejects. `g` is an ordinary semireducible `def`, so `simp`
+    // must leave this goal open; `rfl` is the closer allowed to use full
+    // def-eq, and it is what the surrounding comment always meant.
+    let close = rfl(&mut state);
     assert!(
         close.is_ok() && state.goals().is_empty(),
         "after rw [fInline.eq_def], `g 4 = Nat.add 4 4` must close by def-eq; \
@@ -672,7 +734,10 @@ fn test_simp_only_imported_wf_eq_def_closes_use_soundly() {
 
     let mut config = SimpConfig::new();
     config.only = true;
-    config.extra_lemmas = vec!["fInline.eq_def".to_string()];
+    config.extra_lemmas = vec![
+        clean_parser::SurfaceName::generated_path("fInline.eq_def"),
+        clean_parser::SurfaceName::generated_path("g.eq_def"),
+    ];
 
     let result = simp(&mut state, config);
     assert!(
@@ -819,8 +884,12 @@ fn test_rw_keyed_match_reaches_stuck_wf_use() {
         .cloned()
         .expect("fresh proof state has exactly one goal");
 
-    rewrite(&mut state, "fStuck.eq_def", false)
-        .expect("rw [fStuck.eq_def] should fire via the keyed match on the stuck WF use");
+    rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("fStuck.eq_def"),
+        false,
+    )
+    .expect("rw [fStuck.eq_def] should fire via the keyed match on the stuck WF use");
     let close = simp(&mut state, SimpConfig::new());
     assert!(
         close.is_ok() && state.goals().is_empty(),
@@ -879,8 +948,15 @@ fn test_native_wf_eq_def_rewrite_matches_import() {
         .front()
         .cloned()
         .expect("fresh proof state has exactly one goal");
-    rewrite(&mut state, "fInline.eq_def", false).expect("native rw [fInline.eq_def] should fire");
-    let close = simp(&mut state, SimpConfig::new());
+    rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("fInline.eq_def"),
+        false,
+    )
+    .expect("native rw [fInline.eq_def] should fire");
+    // `rfl`, not `simp` — same reason as the imported twin above: `g` is
+    // semireducible and `simp`'s closer is reducible-transparency by design.
+    let close = rfl(&mut state);
     assert!(
         close.is_ok() && state.goals().is_empty(),
         "native rw[eq_def] should close `g 7 = Nat.add 7 7`; remaining: {}",

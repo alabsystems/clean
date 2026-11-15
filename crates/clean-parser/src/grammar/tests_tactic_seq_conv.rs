@@ -118,7 +118,7 @@ fn test_parse_conv_at_hyp() {
                 SurfaceTactic::Conv(_, loc, body) => {
                     match loc {
                         SurfaceTacticLocation::Hyps(names) => {
-                            assert_eq!(names, &["h"]);
+                            assert_eq!(names, &[crate::SurfaceName::generated_path("h")]);
                         }
                         other => panic!("Expected Hyps location, got {other:?}"),
                     }
@@ -142,7 +142,7 @@ fn test_parse_conv_at_hyp_and_goal_ascii_turnstile() {
                 SurfaceTactic::Conv(_, loc, body) => {
                     match loc {
                         SurfaceTacticLocation::HypsAndGoal(names) => {
-                            assert_eq!(names, &["h"]);
+                            assert_eq!(names, &[crate::SurfaceName::generated_path("h")]);
                         }
                         other => panic!("Expected HypsAndGoal location, got {other:?}"),
                     }
@@ -230,7 +230,9 @@ fn test_parse_conv_enter() {
                         SurfaceTactic::ConvEnter(_, args) => {
                             assert_eq!(args.len(), 3);
                             assert!(matches!(&args[0], ConvEnterArg::Index(1)));
-                            assert!(matches!(&args[1], ConvEnterArg::Name(n) if n == "x"));
+                            assert!(
+                                matches!(&args[1], ConvEnterArg::Name(n) if (n).name() == crate::SurfaceName::generated_path("x").name())
+                            );
                             assert!(matches!(&args[2], ConvEnterArg::Index(-2)));
                         }
                         other => panic!("Expected ConvEnter, got {other:?}"),
@@ -250,7 +252,10 @@ fn test_parse_def_match_single_arm() {
     let decl = Parser::parse_decl("def f | 0 => 1").unwrap();
     match decl {
         SurfaceDecl::Def { name, val, .. } => {
-            assert_eq!(name, "f");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("f").name()
+            );
             assert!(matches!(*val, SurfaceExpr::PatternMatchLambda(_, _, _)));
         }
         other => panic!("Expected Def, got {other:?}"),
@@ -262,7 +267,10 @@ fn test_parse_def_match_multi_arm() {
     let decl = Parser::parse_decl("def f | 0 => 1 | n => n").unwrap();
     match decl {
         SurfaceDecl::Def { name, val, .. } => {
-            assert_eq!(name, "f");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("f").name()
+            );
             match *val {
                 SurfaceExpr::PatternMatchLambda(_, _, ref body) => {
                     if let SurfaceExpr::Match(_, _, _, ref arms) = **body {
@@ -283,7 +291,10 @@ fn test_parse_def_match_where_syntax() {
     let decl = Parser::parse_decl("def f : Nat -> Nat where | 0 => 1 | n => n").unwrap();
     match decl {
         SurfaceDecl::Def { name, val, .. } => {
-            assert_eq!(name, "f");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("f").name()
+            );
             assert!(matches!(*val, SurfaceExpr::PatternMatchLambda(_, _, _)));
         }
         other => panic!("Expected Def, got {other:?}"),
@@ -307,7 +318,10 @@ fn test_parse_theorem_match() {
     let decl = Parser::parse_decl("theorem foo : Nat -> Bool | 0 => true | _ => false").unwrap();
     match decl {
         SurfaceDecl::Theorem { name, proof, .. } => {
-            assert_eq!(name, "foo");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("foo").name()
+            );
             assert!(matches!(*proof, SurfaceExpr::PatternMatchLambda(_, _, _)));
         }
         other => panic!("Expected Theorem, got {other:?}"),
@@ -399,13 +413,19 @@ fn test_parse_cases_with_alts_tactic_bodies() {
         SurfaceExpr::ByTactic(_, tactics) => {
             assert_eq!(tactics.len(), 1);
             match &tactics[0] {
-                SurfaceTactic::Cases(_, _target, alts) => {
+                SurfaceTactic::Cases(_, _, _target, alts) => {
                     assert_eq!(alts.len(), 2, "should have 2 alternatives");
-                    assert_eq!(alts[0].name, "zero");
+                    assert_eq!(
+                        (alts[0].name).name(),
+                        crate::SurfaceName::generated_path("zero").name()
+                    );
                     assert_eq!(alts[0].tactics.len(), 1);
                     assert!(matches!(&alts[0].tactics[0], SurfaceTactic::Simp { .. }));
-                    assert_eq!(alts[1].name, "succ");
-                    assert_eq!(alts[1].args, vec!["m"]);
+                    assert_eq!(
+                        (alts[1].name).name(),
+                        crate::SurfaceName::generated_path("succ").name()
+                    );
+                    assert_eq!(alts[1].args, vec![crate::SurfaceName::generated_path("m")]);
                     assert_eq!(alts[1].tactics.len(), 1);
                     assert!(
                         matches!(&alts[1].tactics[0], SurfaceTactic::Named { ref name, .. } if name == "omega")
@@ -430,14 +450,26 @@ fn test_parse_induction_with_multi_tactic_alts() {
             match &tactics[0] {
                 SurfaceTactic::Induction { alts, .. } => {
                     assert_eq!(alts.len(), 2, "should have 2 alternatives");
-                    assert_eq!(alts[0].name, "zero");
+                    assert_eq!(
+                        (alts[0].name).name(),
+                        crate::SurfaceName::generated_path("zero").name()
+                    );
                     assert_eq!(
                         alts[0].tactics.len(),
                         2,
                         "zero alt should have 2 tactics (simp; ring)"
                     );
-                    assert_eq!(alts[1].name, "succ");
-                    assert_eq!(alts[1].args, vec!["n", "ih"]);
+                    assert_eq!(
+                        (alts[1].name).name(),
+                        crate::SurfaceName::generated_path("succ").name()
+                    );
+                    assert_eq!(
+                        alts[1].args,
+                        vec![
+                            crate::SurfaceName::generated_path("n"),
+                            crate::SurfaceName::generated_path("ih")
+                        ]
+                    );
                     assert_eq!(
                         alts[1].tactics.len(),
                         2,
@@ -463,7 +495,7 @@ fn test_parse_tactic_match_basic() {
         SurfaceExpr::ByTactic(_, tactics) => {
             assert_eq!(tactics.len(), 1, "expected 1 tactic (match)");
             match &tactics[0] {
-                SurfaceTactic::Match(_, discrs, arms) => {
+                SurfaceTactic::Match(_, _, discrs, arms) => {
                     assert_eq!(discrs.len(), 1, "1 discriminant");
                     assert_eq!(arms.len(), 2, "2 match arms");
                     // First arm: true => exact rfl
@@ -496,7 +528,7 @@ fn test_parse_tactic_match_multi_tactic_arms() {
         SurfaceExpr::ByTactic(_, tactics) => {
             assert_eq!(tactics.len(), 1);
             match &tactics[0] {
-                SurfaceTactic::Match(_, discrs, arms) => {
+                SurfaceTactic::Match(_, _, discrs, arms) => {
                     assert_eq!(discrs.len(), 1);
                     assert_eq!(arms.len(), 2);
                     // First arm has 2 tactics: simp; ring

@@ -67,6 +67,158 @@ impl Specification {
         Ok(())
     }
 
+    /// Unchanged foundational proof prerequisites, registered before iota closure.
+    pub(super) fn add_closed_bvar_primitives(&mut self) -> Result<(), SpecError> {
+        self.add_definition(SpecDefinition {
+            name: "nat_sub_succ_self".to_string(),
+            type_src: "forall (i : Nat), Eq Nat (Nat.sub (Nat.succ i) i) (Nat.succ Nat.zero)"
+                .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (i : Nat) => Nat.rec ",
+                    "(fun (j : Nat) => Eq Nat (Nat.sub (Nat.succ j) j) (Nat.succ Nat.zero)) ",
+                    "(Eq.refl Nat (Nat.succ Nat.zero)) ",
+                    "(fun (k : Nat) (ih : Eq Nat (Nat.sub (Nat.succ k) k) (Nat.succ Nat.zero)) => ",
+                    "Eq.trans Nat ",
+                    "(Nat.sub (Nat.succ (Nat.succ k)) (Nat.succ k)) ",
+                    "(Nat.sub (Nat.succ k) k) ",
+                    "(Nat.succ Nat.zero) ",
+                    "(nat_sub_succ_succ (Nat.succ k) k) ",
+                    "ih) ",
+                    "i",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: "Nat.sub (succ i) i = succ 0. DerivedProved via Nat.rec on i + \
+                          nat_sub_succ_succ. Stage-0 Brick 1."
+                .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "Nat.rec".to_string(),
+                "Eq.refl".to_string(),
+                "Eq.trans".to_string(),
+                "nat_sub_succ_succ".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "nat_sub_succ_pos".to_string(),
+            type_src: concat!(
+                "forall (i : Nat) (d : Nat), ",
+                "Le (Nat.succ i) d -> ",
+                "Eq Nat (Nat.sub d i) ",
+                "(Nat.succ (Nat.sub (Nat.sub d i) (Nat.succ Nat.zero)))",
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (i : Nat) (d : Nat) (h : Le (Nat.succ i) d) => ",
+                    "Le.rec (Nat.succ i) ",
+                    "(fun (j : Nat) (_ : Le (Nat.succ i) j) => ",
+                    "Eq Nat (Nat.sub j i) ",
+                    "(Nat.succ (Nat.sub (Nat.sub j i) (Nat.succ Nat.zero)))) ",
+                    // refl arm: j = succ i
+                    "(nat_pos_witness_from_succ_eq (Nat.sub (Nat.succ i) i) Nat.zero ",
+                    "(nat_sub_succ_self i)) ",
+                    // step arm: j = succ m
+                    "(fun (m : Nat) (_hm : Le (Nat.succ i) m) ",
+                    "(ihm : Eq Nat (Nat.sub m i) ",
+                    "(Nat.succ (Nat.sub (Nat.sub m i) (Nat.succ Nat.zero)))) => ",
+                    "nat_sub_pos_succ m i ihm) ",
+                    "d h",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: "Le (succ i) d -> Nat.sub d i positive (witness shape). DerivedProved \
+                          via Le.rec on the proof; refl arm uses nat_sub_succ_self + \
+                          nat_pos_witness_from_succ_eq, step arm uses nat_sub_pos_succ. \
+                          Stage-0 Brick 1."
+                .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "Le".to_string(),
+                "Le.rec".to_string(),
+                "nat_sub_succ_self".to_string(),
+                "nat_pos_witness_from_succ_eq".to_string(),
+                "nat_sub_pos_succ".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "inst_bvar_lt".to_string(),
+            type_src: concat!(
+                "forall (i : Nat) (d : Nat) (v : KExpr), ",
+                "Le (Nat.succ i) d -> ",
+                "Eq KExpr (instantiate_bvar_at i d v) (KExpr.bvar i)",
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (i : Nat) (d : Nat) (v : KExpr) (h : Le (Nat.succ i) d) => ",
+                    "instantiate_bvar_at_below i d v (nat_sub_succ_pos i d h)",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: "If succ i <= d then instantiate_bvar_at i d v = bvar i. DerivedProved \
+                          via instantiate_bvar_at_below + nat_sub_succ_pos. Stage-0 Brick 1."
+                .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "Le".to_string(),
+                "instantiate_bvar_at_below".to_string(),
+                "nat_sub_succ_pos".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "lift_bvar_lt".to_string(),
+            type_src: concat!(
+                "forall (i : Nat) (c : Nat) (amount : Nat), ",
+                "Le (Nat.succ i) c -> ",
+                "Eq KExpr (lift_at (KExpr.bvar i) c amount) (KExpr.bvar i)",
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (i : Nat) (c : Nat) (amount : Nat) (h : Le (Nat.succ i) c) => ",
+                    "lift_at_bvar_below i c amount (nat_sub_succ_pos i c h)",
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: "If succ i <= c then lift_at (bvar i) c amount = bvar i. DerivedProved \
+                          via lift_at_bvar_below + nat_sub_succ_pos — the lift mirror of \
+                          inst_bvar_lt. Front #1 keystone support."
+                .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "Le".to_string(),
+                "lift_at_bvar_below".to_string(),
+                "nat_sub_succ_pos".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+        Ok(())
+    }
+
     pub(super) fn add_expr_model_inst_ceiling(&mut self) -> Result<(), SpecError> {
         self.add_bvar_ceiling_definition()?;
 
@@ -209,42 +361,6 @@ impl Specification {
         //   base i=0: Nat.sub (succ 0) 0 = succ 0 by iota on concrete zero (Eq.refl).
         //   step i=succ k: nat_sub_succ_succ (succ k) k reduces the minuend/subtrahend,
         //     then the IH closes.
-        self.add_definition(SpecDefinition {
-            name: "nat_sub_succ_self".to_string(),
-            type_src: "forall (i : Nat), Eq Nat (Nat.sub (Nat.succ i) i) (Nat.succ Nat.zero)"
-                .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (i : Nat) => Nat.rec ",
-                    "(fun (j : Nat) => Eq Nat (Nat.sub (Nat.succ j) j) (Nat.succ Nat.zero)) ",
-                    "(Eq.refl Nat (Nat.succ Nat.zero)) ",
-                    "(fun (k : Nat) (ih : Eq Nat (Nat.sub (Nat.succ k) k) (Nat.succ Nat.zero)) => ",
-                    "Eq.trans Nat ",
-                    "(Nat.sub (Nat.succ (Nat.succ k)) (Nat.succ k)) ",
-                    "(Nat.sub (Nat.succ k) k) ",
-                    "(Nat.succ Nat.zero) ",
-                    "(nat_sub_succ_succ (Nat.succ k) k) ",
-                    "ih) ",
-                    "i",
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "Nat.sub (succ i) i = succ 0. DerivedProved via Nat.rec on i + \
-                          nat_sub_succ_succ. Stage-0 Brick 1."
-                .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Nat.rec".to_string(),
-                "Eq.refl".to_string(),
-                "Eq.trans".to_string(),
-                "nat_sub_succ_succ".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
 
         // nat_sub_succ_pos: Le (succ i) d -> Nat.sub d i is positive (witness shape).
         //
@@ -253,88 +369,11 @@ impl Specification {
         //   refl arm (j = succ i): nat_sub_succ_self i gives Nat.sub (succ i) i = succ 0;
         //     nat_pos_witness_from_succ_eq reshapes it to the witness form.
         //   step arm (j = succ m): nat_sub_pos_succ m i lifts the IH from m to succ m.
-        self.add_definition(SpecDefinition {
-            name: "nat_sub_succ_pos".to_string(),
-            type_src: concat!(
-                "forall (i : Nat) (d : Nat), ",
-                "Le (Nat.succ i) d -> ",
-                "Eq Nat (Nat.sub d i) ",
-                "(Nat.succ (Nat.sub (Nat.sub d i) (Nat.succ Nat.zero)))",
-            )
-            .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (i : Nat) (d : Nat) (h : Le (Nat.succ i) d) => ",
-                    "Le.rec (Nat.succ i) ",
-                    "(fun (j : Nat) (_ : Le (Nat.succ i) j) => ",
-                    "Eq Nat (Nat.sub j i) ",
-                    "(Nat.succ (Nat.sub (Nat.sub j i) (Nat.succ Nat.zero)))) ",
-                    // refl arm: j = succ i
-                    "(nat_pos_witness_from_succ_eq (Nat.sub (Nat.succ i) i) Nat.zero ",
-                    "(nat_sub_succ_self i)) ",
-                    // step arm: j = succ m
-                    "(fun (m : Nat) (_hm : Le (Nat.succ i) m) ",
-                    "(ihm : Eq Nat (Nat.sub m i) ",
-                    "(Nat.succ (Nat.sub (Nat.sub m i) (Nat.succ Nat.zero)))) => ",
-                    "nat_sub_pos_succ m i ihm) ",
-                    "d h",
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "Le (succ i) d -> Nat.sub d i positive (witness shape). DerivedProved \
-                          via Le.rec on the proof; refl arm uses nat_sub_succ_self + \
-                          nat_pos_witness_from_succ_eq, step arm uses nat_sub_pos_succ. \
-                          Stage-0 Brick 1."
-                .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Le".to_string(),
-                "Le.rec".to_string(),
-                "nat_sub_succ_self".to_string(),
-                "nat_pos_witness_from_succ_eq".to_string(),
-                "nat_sub_pos_succ".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
 
         // inst_bvar_lt: if succ i <= d then instantiate_bvar_at i d v = bvar i.
         //
         // instantiate_bvar_at_below consumes the positivity witness; nat_sub_succ_pos
         // supplies it from the Le proof.
-        self.add_definition(SpecDefinition {
-            name: "inst_bvar_lt".to_string(),
-            type_src: concat!(
-                "forall (i : Nat) (d : Nat) (v : KExpr), ",
-                "Le (Nat.succ i) d -> ",
-                "Eq KExpr (instantiate_bvar_at i d v) (KExpr.bvar i)",
-            )
-            .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (i : Nat) (d : Nat) (v : KExpr) (h : Le (Nat.succ i) d) => ",
-                    "instantiate_bvar_at_below i d v (nat_sub_succ_pos i d h)",
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "If succ i <= d then instantiate_bvar_at i d v = bvar i. DerivedProved \
-                          via instantiate_bvar_at_below + nat_sub_succ_pos. Stage-0 Brick 1."
-                .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Le".to_string(),
-                "instantiate_bvar_at_below".to_string(),
-                "nat_sub_succ_pos".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
 
         // le_add_self_right: Le b (add a b). Transport le_add_self_left b a along
         // nat_add_comm b a (add b a = add a b).
@@ -653,37 +692,6 @@ impl Specification {
         //
         // The lift mirror of inst_bvar_lt: lift_at_bvar_below consumes the
         // positivity witness; nat_sub_succ_pos supplies it from the Le proof.
-        self.add_definition(SpecDefinition {
-            name: "lift_bvar_lt".to_string(),
-            type_src: concat!(
-                "forall (i : Nat) (c : Nat) (amount : Nat), ",
-                "Le (Nat.succ i) c -> ",
-                "Eq KExpr (lift_at (KExpr.bvar i) c amount) (KExpr.bvar i)",
-            )
-            .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (i : Nat) (c : Nat) (amount : Nat) (h : Le (Nat.succ i) c) => ",
-                    "lift_at_bvar_below i c amount (nat_sub_succ_pos i c h)",
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "If succ i <= c then lift_at (bvar i) c amount = bvar i. DerivedProved \
-                          via lift_at_bvar_below + nat_sub_succ_pos — the lift mirror of \
-                          inst_bvar_lt. Front #1 keystone support."
-                .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Le".to_string(),
-                "lift_at_bvar_below".to_string(),
-                "nat_sub_succ_pos".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
 
         // lift_ceiling_id (KEYSTONE): if cutoff is at-or-above the ceiling of e
         // then lift_at e cutoff amount = e.

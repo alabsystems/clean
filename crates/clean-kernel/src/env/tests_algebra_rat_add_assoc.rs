@@ -2,19 +2,12 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Guard tests for `Rat.add_assoc` — pins the Phase-3 (#3572) outcome:
-//! `Declaration::Theorem` with a real `Eq.trans`-chained proof term
-//! rooted at an `Eq.trans` (with `congrArg` steps lifting
-//! `Int.right_distrib`, `Int.mul_assoc`, `Int.mul_comm`,
-//! `Int.add_assoc`, `Int.ofNat_mul`, and `Nat.mul_assoc`). Also guards
-//! transitive closure bound and the `FOUNDATIONAL_AXIOMS` whitelist
-//! removal.
-//!
-//! Lives alongside `algebra_rat_add_assoc_proof.rs` (per-phase companion
-//! test file, mirrors the Phase-2 `tests_algebra_rat_add_comm.rs`).
+//! Guards for the live quotient proof of `Rat.add_assoc`: full kernel
+//! validation, a genuine `Quot.ind` body, no domain-specific axioms, and
+//! positive evidence that the proof reaches foundational `Quot.sound`.
 
 use super::axiom_audit::{is_foundational_axiom, ProofQuality};
-use super::{ConstantKind, Environment};
+use super::{ConstantKind, DeclarationVerification, Environment};
 use crate::expr::ExprKind;
 use crate::name::Name;
 
@@ -25,16 +18,6 @@ fn env_with_rat_add_assoc() -> Environment {
     env.init_rat_field_inst()
         .expect("init_rat_field_inst should succeed");
     env
-}
-
-/// Wrapper that returns `None` (rather than panic) when
-/// `init_rat_field_inst` regresses upstream, so individual tests can
-/// skip-and-pass instead of failing the whole suite on transient kernel
-/// proof-construction regressions.
-fn try_env_with_rat_add_assoc() -> Option<Environment> {
-    let mut env = Environment::new();
-    env.init_rat_field_inst().ok()?;
-    Some(env)
 }
 
 #[test]
@@ -48,6 +31,11 @@ fn test_rat_add_assoc_is_theorem_not_axiom() {
         ConstantKind::Theorem,
         "Rat.add_assoc should be Declaration::Theorem (post-#3572 Phase 3), got {:?}",
         info.kind
+    );
+    assert_eq!(
+        env.declaration_verification(&info.name),
+        Some(DeclarationVerification::FullKernelCheck),
+        "Rat.add_assoc must pass the full kernel gate, not only a structural check",
     );
 }
 
@@ -102,109 +90,45 @@ fn test_rat_add_assoc_proof_body_is_not_axiom_ref() {
     }
 }
 
-/// Phase-3 allow-list of axioms: the Int/Nat ring-normalization names
-/// the constructive proof composes with `congrArg` + `Eq.trans`.
-///
-/// `Int.ofNat_mul` was demoted from Axiom to Theorem (#3551) — it is
-/// still cited in the proof term but no longer appears in the
-/// transitive axiom closure because its own closure is empty.
-///
-/// `Nat.mul_assoc` was demoted from Axiom to a constructive Theorem
-/// (#3604, see `algebra_nat_mul_assoc_proof.rs`); like `Int.ofNat_mul`
-/// it is still cited in the proof term but no longer surfaces in the
-/// transitive axiom closure (empty own-closure), so it has been removed
-/// from this allow-list.
-const PHASE_3_ALLOWED: &[&str] = &[
-    "Int.right_distrib",
-    "Int.mul_assoc",
-    "Int.mul_comm",
-    "Int.add_assoc",
-];
-
 #[test]
 fn test_rat_add_assoc_closure_allowlist_and_self_reference() {
-    // Every axiom reached by the transitive closure of `Rat.add_assoc`
-    // must be either in the Phase-3 allow-list or in `FOUNDATIONAL_AXIOMS`,
-    // and `Rat.add_assoc` must not self-reference.
+    // axiom_deps excludes canonical foundational axioms. The live quotient
+    // proof must not depend on any of the former Phase-3 domain axioms or
+    // self-reference through an axiom wrapper.
     let env = env_with_rat_add_assoc();
     let deps = env
         .axiom_deps(&Name::from_string("Rat.add_assoc"))
         .expect("Rat.add_assoc should have an axiom-deps closure");
-    let allowed: std::collections::HashSet<&str> = PHASE_3_ALLOWED.iter().copied().collect();
-    for dep in &deps {
-        let name = dep.to_string();
-        assert!(
-            allowed.contains(name.as_str()) || is_foundational_axiom(dep),
-            "Rat.add_assoc transitive closure contains unexpected axiom {name}; \
-             expected only the Phase-3 allow-list ∪ FOUNDATIONAL_AXIOMS \
-             (#3572 Phase 3)"
-        );
-        assert_ne!(
-            name, "Rat.add_assoc",
-            "Rat.add_assoc must not self-reference in its own transitive \
-             axiom closure (axiom_wrapper masquerade — #3572)"
-        );
-    }
+    assert!(
+        deps.is_empty(),
+        "Rat.add_assoc must have no domain-specific or self-referential axiom dependencies: {deps:?}",
+    );
 }
 
 #[test]
 fn test_rat_add_assoc_closure_positive_containment() {
-    // Positive containment: every axiom in the Phase-3 allow-list must
-    // appear in the closure. Otherwise the proof would be vacuous or
-    // would skip a step from the 8-stage Int-ring normalization.
-    let Some(env) = try_env_with_rat_add_assoc() else {
-        eprintln!("SKIP: init_rat_field_inst failed upstream");
-        return;
-    };
-    let Some(deps) = env.axiom_deps(&Name::from_string("Rat.add_assoc")) else {
-        eprintln!("SKIP: Rat.add_assoc not present in env");
-        return;
-    };
-    let dep_names: std::collections::HashSet<String> = deps.iter().map(|d| d.to_string()).collect();
-    let missing: Vec<&&str> = PHASE_3_ALLOWED
-        .iter()
-        .filter(|n| !dep_names.contains(**n))
-        .collect();
-    if !missing.is_empty() {
-        eprintln!(
-            "SKIP: Rat.add_assoc closure is missing Phase-3 axioms {missing:?}; got {dep_names:?}"
-        );
-    }
+    // The current proof closes representative equality with Quot.sound.
+    // Check that positive dependency instead of expecting obsolete Int axioms.
+    let env = env_with_rat_add_assoc();
+    let deps = env
+        .foundational_axiom_deps(&Name::from_string("Rat.add_assoc"))
+        .expect("Rat.add_assoc should have a foundational axiom-deps closure");
+    assert!(
+        deps.contains(&Name::from_string("Quot.sound")),
+        "Rat.add_assoc quotient proof must reach Quot.sound; got {deps:?}",
+    );
+    assert!(deps.iter().all(is_foundational_axiom));
 }
 
 #[test]
 fn test_rat_add_assoc_closure_proof_quality_classification() {
-    // Pin `ProofQuality` to `Constructive` or `AxiomDependent` carrying
-    // each allow-list axiom. `Opaque`/`Unknown` would indicate a
-    // regression in how the kernel classifies this Theorem.
-    let Some(env) = try_env_with_rat_add_assoc() else {
-        eprintln!("SKIP: init_rat_field_inst failed upstream");
-        return;
-    };
-    let Some(quality) = env.proof_quality(&Name::from_string("Rat.add_assoc")) else {
-        eprintln!("SKIP: Rat.add_assoc not present in env");
-        return;
-    };
-    match quality {
-        ProofQuality::Constructive => {
-            // Acceptable when all Int/Nat deps happen to be promoted.
-        }
-        ProofQuality::AxiomDependent { axioms, .. } => {
-            let missing: Vec<&&str> = PHASE_3_ALLOWED
-                .iter()
-                .filter(|expected| !axioms.iter().any(|a| a.to_string() == **expected))
-                .collect();
-            if !missing.is_empty() {
-                eprintln!("SKIP: Rat.add_assoc AxiomDependent closure is missing {missing:?}");
-            }
-        }
-        other => {
-            eprintln!(
-                "SKIP: unexpected proof quality for Rat.add_assoc: {:?}",
-                other
-            );
-        }
-    }
+    // This variant means foundational-axiom-only, not constructive logic.
+    let env = env_with_rat_add_assoc();
+    assert_eq!(
+        env.proof_quality(&Name::from_string("Rat.add_assoc")),
+        Some(ProofQuality::Constructive),
+        "Rat.add_assoc must be fully proved without domain-specific axioms",
+    );
 }
 
 #[test]

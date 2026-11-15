@@ -132,14 +132,21 @@ pub struct SmtModel {
 }
 
 impl SmtModel {
-    /// Format a human-readable summary of the counterexample model.
+    /// Format a human-readable summary of the model.
+    ///
+    /// The model satisfies the TRANSLATED query only. The bridge lowers every
+    /// operation outside its theories to an uninterpreted function, so this is
+    /// NOT a counterexample to the source goal (for the VALID
+    /// `∀ a : Bool, (a && true) = a` it is `and(sk, true) ≠ sk`), and the
+    /// summary says so rather than calling it one.
     ///
     /// Returns term-id based equality/disequality counts since the model
     /// does not carry expression-level names. Callers that need detailed
     /// inspection should use crate-internal field access.
     pub(crate) fn display_summary(&self) -> String {
         format!(
-            "counterexample: {} equalities, {} disequalities, {} SAT assignments",
+            "unvalidated model of the solver's abstraction: {} equalities, \
+             {} disequalities, {} SAT assignments",
             self.equalities.len(),
             self.disequalities.len(),
             self.sat_model.len(),

@@ -6,7 +6,7 @@
 //!
 //! Part of #1978
 
-use clean_compiler::ir::{CtorInfo, IRArg, IRBody, IRDecl, IRExpr, IRType, VarId};
+use clean_compiler::ir::{CtorInfo, IRArg, IRType, VarId};
 use clean_kernel::Name;
 
 pub fn var(n: u32) -> VarId {
@@ -19,30 +19,6 @@ pub fn name(s: &str) -> Name {
 
 pub fn arg(n: u32) -> IRArg {
     IRArg::Var(VarId(n))
-}
-
-/// Build a function that computes one expression and returns it.
-///
-/// `params` are `(var_id, type)` pairs.
-/// `result_var` is the VarId for the VDecl that holds the expression result.
-pub fn simple_fn(
-    fname: &str,
-    params: &[(u32, IRType)],
-    ret_ty: IRType,
-    result_var: u32,
-    expr: IRExpr,
-) -> IRDecl {
-    IRDecl {
-        name: name(fname),
-        params: params.iter().map(|(v, t)| (VarId(*v), t.clone())).collect(),
-        return_type: ret_ty.clone(),
-        body: IRBody::VDecl {
-            var: VarId(result_var),
-            ty: ret_ty,
-            value: expr,
-            rest: Box::new(IRBody::Ret(IRArg::Var(VarId(result_var)))),
-        },
-    }
 }
 
 /// Build a CtorInfo with only object fields.
@@ -67,20 +43,4 @@ pub fn mixed_ctor(tag: u32, num_objects: u32, scalar_types: &[IRType]) -> CtorIn
         num_objects,
         field_types,
     }
-}
-
-/// Parity check: verify a pattern appears in both C and Rust output.
-pub fn assert_both_contain(c_code: &str, rust_code: &str, pattern: &str) {
-    assert!(
-        c_code.contains(pattern),
-        "C emitter missing pattern: {}\n---C output---\n{}",
-        pattern,
-        c_code
-    );
-    assert!(
-        rust_code.contains(pattern),
-        "Rust emitter missing pattern: {}\n---Rust output---\n{}",
-        pattern,
-        rust_code
-    );
 }

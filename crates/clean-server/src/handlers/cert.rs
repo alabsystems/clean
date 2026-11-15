@@ -10,21 +10,22 @@
 //! - Archive/unarchive (LZ4 and Zstd)
 //! - Dictionary-based compression
 
+use super::core::run_with_env;
 use super::helpers::format_expr;
 use super::state::ServerState;
 use super::types::ns_from_us;
+use super::work::{answer_on_pool, past, run_item_until, WorkError};
 use crate::progress::ProgressSender;
 use crate::rpc::{RequestId, Response, RpcError};
 use clean_kernel::cert::{
-    archive_cert_with_algorithm_stats, batch_verify_with_stats_progress, compress_cert,
-    compress_cert_with_stats, decompress_cert, unarchive_cert_envelope,
-    zstd_archive_cert_with_dict, zstd_archive_cert_with_dict_level,
+    archive_cert_with_algorithm_stats, compress_cert, compress_cert_with_stats, decompress_cert,
+    unarchive_cert_envelope, zstd_archive_cert_with_dict, zstd_archive_cert_with_dict_level,
     zstd_archive_cert_with_dict_stats_level, zstd_unarchive_cert_with_dict, BatchVerifyInput,
     BatchVerifyResult, BatchVerifyStats, CertArchiveEnvelope, CertDictionary, CertError,
     CertVerifier, CompressedCert, CompressionAlgorithm, CompressionStats, DictCertArchive,
     ProofCert,
 };
-use clean_kernel::Expr;
+use clean_kernel::{Environment, Expr};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::time::{Duration, Instant};
@@ -222,6 +223,10 @@ pub struct CompressCertParams {
     /// Whether to include compression statistics
     #[serde(default)]
     pub include_stats: bool,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Compress certificate response
@@ -274,6 +279,10 @@ impl From<CompressionStats> for CompressCertStats {
 pub struct DecompressCertParams {
     /// The compressed certificate to decompress
     pub compressed: CompressedCert,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Decompress certificate response
@@ -302,6 +311,10 @@ pub struct ArchiveCertParams {
     /// Whether to include compression statistics
     #[serde(default)]
     pub include_stats: bool,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Archive certificate response
@@ -329,6 +342,10 @@ pub struct ArchiveCertResult {
 pub struct UnarchiveCertParams {
     /// The archived certificate as base64-encoded bytes
     pub archive: String,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Unarchive certificate response
@@ -360,6 +377,10 @@ pub struct TrainDictParams {
     /// Target compression level (default 3)
     #[serde(default)]
     pub level: Option<i32>,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Train dictionary response
@@ -395,6 +416,10 @@ pub struct ArchiveCertWithDictParams {
     /// Whether to include compression statistics
     #[serde(default)]
     pub include_stats: bool,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Archive certificate with dictionary response
@@ -429,6 +454,10 @@ pub struct UnarchiveCertWithDictParams {
     pub archive: String,
     /// The dictionary as base64-encoded bytes (must match the one used for compression)
     pub dictionary: String,
+    /// Timeout in milliseconds (the server's default without one): the
+    /// request answers the timeout error at it (since 2026-10-16).
+    #[serde(default)]
+    pub timeout_ms: Option<u64>,
 }
 
 /// Unarchive certificate with dictionary response
@@ -453,7 +482,7 @@ pub struct UnarchiveCertWithDictResult {
 ///
 /// Verifies multiple proof certificates in parallel using rayon.
 /// This is the high-throughput API for validating pre-computed proof certificates.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_batch_verify_cert(
     state: &ServerState,
     id: RequestId,
@@ -463,48 +492,29 @@ pub async fn handle_batch_verify_cert(
     let start = Instant::now();
     let cert_count = params.items.len() as u64;
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms * 10));
+    let deadline = start.checked_add(timeout);
 
     let result = tokio::time::timeout(timeout, async {
-        batch_verify_cert_impl(state, &params, progress.clone()).await
+        batch_verify_cert_impl(state, params, progress.clone(), deadline).await
     })
-    .await;
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
 
-    let elapsed_us = start.elapsed().as_micros() as u64;
-    let elapsed_ms = elapsed_us / 1000;
-
-    match result {
-        Ok(Ok(mut verify_result)) => {
-            verify_result.time_ms = elapsed_ms;
-            verify_result.time_ns = Some(ns_from_us(elapsed_us));
-            let all_success = verify_result.results.iter().all(|r| r.success);
-            state
-                .metrics
-                .record_request("batchVerifyCert", all_success, elapsed_us);
-            state.metrics.record_batch_items(cert_count);
-            state.metrics.record_certs_verified(cert_count);
-            state.metrics.record_cert_verify_time(elapsed_us);
-            Response::success_typed(id.clone(), &verify_result)
-                .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
-        }
-        Ok(Err(e)) => {
-            state
-                .metrics
-                .record_request("batchVerifyCert", false, elapsed_us);
-            Response::error(id, e)
-        }
-        Err(_) => {
-            state
-                .metrics
-                .record_request("batchVerifyCert", false, elapsed_us);
-            Response::error(id, RpcError::timeout(timeout.as_millis() as u64))
-        }
-    }
+    batch_verify_response(
+        state,
+        id,
+        "batchVerifyCert",
+        Some(cert_count),
+        start,
+        timeout,
+        result,
+    )
 }
 
 /// Handle the "batchVerifyCertArchive" method
 ///
 /// Verifies a batch of archived proof certificates against expressions.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_batch_verify_cert_archive(
     state: &ServerState,
     id: RequestId,
@@ -513,50 +523,229 @@ pub async fn handle_batch_verify_cert_archive(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms * 10));
+    let deadline = start.checked_add(timeout);
 
     let result = tokio::time::timeout(timeout, async {
-        batch_verify_cert_archive_impl(state, &params, progress.clone()).await
+        batch_verify_cert_archive_impl(state, params, progress.clone(), deadline).await
     })
-    .await;
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
 
+    batch_verify_response(
+        state,
+        id,
+        "batchVerifyCertArchive",
+        None,
+        start,
+        timeout,
+        result,
+    )
+}
+
+/// The response of a batch certificate verification, and its metrics.
+/// `cert_count` is the request's item count, when it is known before the
+/// results are (an archived batch counts the results).
+fn batch_verify_response(
+    state: &ServerState,
+    id: RequestId,
+    method: &'static str,
+    cert_count: Option<u64>,
+    start: Instant,
+    timeout: Duration,
+    result: Result<BatchVerifyCertResult, WorkError>,
+) -> Response {
     let elapsed_us = start.elapsed().as_micros() as u64;
     let elapsed_ms = elapsed_us / 1000;
 
     match result {
-        Ok(Ok(mut verify_result)) => {
+        Ok(mut verify_result) => {
             verify_result.time_ms = elapsed_ms;
             verify_result.time_ns = Some(ns_from_us(elapsed_us));
             let all_success = verify_result.results.iter().all(|r| r.success);
-            let cert_count = verify_result.results.len() as u64;
+            let cert_count = cert_count.unwrap_or(verify_result.results.len() as u64);
             state
                 .metrics
-                .record_request("batchVerifyCertArchive", all_success, elapsed_us);
+                .record_request(method, all_success, elapsed_us);
             state.metrics.record_batch_items(cert_count);
             state.metrics.record_certs_verified(cert_count);
             state.metrics.record_cert_verify_time(elapsed_us);
             Response::success_typed(id.clone(), &verify_result)
                 .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
         }
-        Ok(Err(e)) => {
-            state
-                .metrics
-                .record_request("batchVerifyCertArchive", false, elapsed_us);
-            Response::error(id, e)
+        Err(WorkError::Unavailable(detail)) => {
+            state.metrics.record_request(method, false, elapsed_us);
+            Response::error(id, RpcError::internal_error(detail))
         }
-        Err(_) => {
-            state
-                .metrics
-                .record_request("batchVerifyCertArchive", false, elapsed_us);
+        Err(WorkError::Interrupted) => {
+            state.metrics.record_request(method, false, elapsed_us);
             Response::error(id, RpcError::timeout(timeout.as_millis() as u64))
         }
     }
 }
 
+/// Threads a batch verifies on: the request's count, else the server's, else
+/// rayon's pool (0); capped at the cores, as a pool of the client's asking
+/// costs a thread each.
+fn batch_threads(state: &ServerState, requested: usize) -> usize {
+    let threads = if requested > 0 {
+        requested
+    } else {
+        state.worker_threads
+    };
+    let cores = std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get);
+    threads.min(cores)
+}
+
+/// Adaptive progress frequency: for large batches, only send progress every N items
+fn progress_interval(total: usize) -> usize {
+    if total <= 100 {
+        1 // Every item
+    } else if total <= 500 {
+        total / 50 // ~50 updates
+    } else if total <= 2000 {
+        total / 100 // ~100 updates
+    } else {
+        total / 200 // ~200 updates max
+    }
+}
+
+/// Forward the batch's per-item results to `progress` as they arrive, until
+/// the work drops its sender. Runs inside the request, so a request that
+/// stops waiting stops reporting.
+async fn report_batch_progress(
+    progress: Option<ProgressSender>,
+    total: usize,
+    mut each_verified: tokio::sync::mpsc::UnboundedReceiver<BatchVerifyResult>,
+) {
+    let progress_interval = progress_interval(total);
+    let mut completed = 0usize;
+    while let Some(result) = each_verified.recv().await {
+        completed += 1;
+        let Some(progress) = progress.as_ref() else {
+            continue;
+        };
+        // Only send progress on interval boundaries, first item, or last item
+        let should_report =
+            completed % progress_interval == 0 || completed == total || completed == 1;
+        if should_report {
+            let percentage = (completed * 100)
+                .checked_div(total)
+                .map_or(100, |p| p.min(100) as u8);
+
+            let details = json!({
+                "id": result.id,
+                "success": result.success,
+                "verified_type": result.verified_type.as_ref().map(format_expr),
+                "error": result.error,
+                "time_us": result.time_us,
+            });
+
+            progress
+                .notify(
+                    format!("Verified {}/{} ({})", completed, total, result.id),
+                    Some(percentage),
+                    Some(details),
+                )
+                .await;
+        }
+    }
+}
+
+/// Verify `inputs` in parallel, each certificate under `deadline` on the
+/// thread that verifies it (the deadline is thread-local), and none started
+/// after it: the kernel's batch verification, item for item, with the request's
+/// deadline. `None` when the deadline interrupted an item or left one
+/// unstarted: no partial result is a verdict on the items the batch did not
+/// finish. `on_result` sees the items that finished, as they finish. `threads`
+/// as the kernel's batch functions take it: 0 for rayon's pool, N for a pool of
+/// N (the certificate verifier keeps no thread-local state, so rayon's pool
+/// serves).
+fn verify_batch_until(
+    env: &Environment,
+    inputs: Vec<BatchVerifyInput>,
+    threads: usize,
+    deadline: Option<Instant>,
+    on_result: impl Fn(&BatchVerifyResult) + Send + Sync,
+) -> Option<Vec<BatchVerifyResult>> {
+    use rayon::prelude::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let interrupted = AtomicBool::new(false);
+    let verify_one = |input: BatchVerifyInput| -> Option<BatchVerifyResult> {
+        let started_at = Instant::now();
+        if interrupted.load(Ordering::Relaxed)
+            || deadline.is_some_and(|deadline| started_at >= deadline)
+        {
+            interrupted.store(true, Ordering::Relaxed);
+            return None;
+        }
+        let BatchVerifyInput { id, cert, expr } = input;
+        let verdict = run_item_until(deadline, || {
+            CertVerifier::with_mode(env, env.mode()).verify(&cert, &expr)
+        });
+        let Some(verdict) = verdict else {
+            interrupted.store(true, Ordering::Relaxed);
+            return None;
+        };
+        let time_us = u64::try_from(started_at.elapsed().as_micros()).unwrap_or(u64::MAX);
+        let result = match verdict {
+            Ok(verified_type) => BatchVerifyResult {
+                id,
+                success: true,
+                verified_type: Some(verified_type),
+                error: None,
+                time_us,
+            },
+            Err(error) => BatchVerifyResult {
+                id,
+                success: false,
+                verified_type: None,
+                error: Some(error.to_string()),
+                time_us,
+            },
+        };
+        on_result(&result);
+        Some(result)
+    };
+    let verify_all = || inputs.into_par_iter().map(verify_one).collect::<Vec<_>>();
+    let pool = (threads > 0)
+        .then(|| {
+            rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .ok()
+        })
+        .flatten();
+    let verified = match pool {
+        Some(pool) => pool.install(verify_all),
+        None => verify_all(),
+    };
+    verified.into_iter().collect()
+}
+
+fn api_results(results: Vec<BatchVerifyResult>) -> Vec<BatchVerifyCertItemResult> {
+    results
+        .into_iter()
+        .map(|r| {
+            let time_ns = Some(ns_from_us(r.time_us));
+            BatchVerifyCertItemResult {
+                id: r.id,
+                success: r.success,
+                verified_type: r.verified_type.map(|t| format_expr(&t)),
+                error: r.error,
+                time_us: r.time_us,
+                time_ns,
+            }
+        })
+        .collect()
+}
+
 async fn batch_verify_cert_impl(
     state: &ServerState,
-    params: &BatchVerifyCertParams,
+    params: BatchVerifyCertParams,
     progress: Option<ProgressSender>,
-) -> Result<BatchVerifyCertResult, RpcError> {
+    deadline: Option<Instant>,
+) -> Result<BatchVerifyCertResult, WorkError> {
     let total = params.items.len();
 
     if let Some(ref progress) = progress {
@@ -572,109 +761,30 @@ async fn batch_verify_cert_impl(
     // Convert to kernel BatchVerifyInput
     let inputs: Vec<BatchVerifyInput> = params
         .items
-        .iter()
-        .map(|item| BatchVerifyInput::new(item.id.clone(), item.cert.clone(), item.expr.clone()))
-        .collect();
-
-    let env = state.env.read().await;
-
-    // Determine thread count: request param > server config > auto (0)
-    let num_threads = if params.threads > 0 {
-        params.threads
-    } else {
-        state.worker_threads
-    };
-
-    // Forward per-item completions over an unbounded channel when progress is requested
-    let (progress_tx, progress_rx) = if progress.is_some() {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<BatchVerifyResult>();
-        (Some(tx), Some(rx))
-    } else {
-        (None, None)
-    };
-
-    // Stream progress notifications as results arrive
-    // Adaptive frequency: for large batches, only send progress every N items
-    let progress_interval = if total <= 100 {
-        1 // Every item
-    } else if total <= 500 {
-        total / 50 // ~50 updates
-    } else if total <= 2000 {
-        total / 100 // ~100 updates
-    } else {
-        total / 200 // ~200 updates max
-    };
-
-    let progress_forwarder = if let (Some(progress), Some(mut rx)) = (progress.clone(), progress_rx)
-    {
-        Some(tokio::spawn(async move {
-            let mut completed = 0usize;
-            while let Some(result) = rx.recv().await {
-                completed += 1;
-                // Only send progress on interval boundaries, first item, or last item
-                let should_report =
-                    completed % progress_interval == 0 || completed == total || completed == 1;
-                if should_report {
-                    let percentage = (completed * 100)
-                        .checked_div(total)
-                        .map_or(100, |p| p.min(100) as u8);
-
-                    let details = json!({
-                        "id": result.id,
-                        "success": result.success,
-                        "verified_type": result.verified_type.as_ref().map(format_expr),
-                        "error": result.error,
-                        "time_us": result.time_us,
-                    });
-
-                    progress
-                        .notify(
-                            format!("Verified {}/{} ({})", completed, total, result.id),
-                            Some(percentage),
-                            Some(details),
-                        )
-                        .await;
-                }
-            }
-        }))
-    } else {
-        None
-    };
-
-    // Use tokio spawn_blocking to run the CPU-bound parallel verification
-    let env_clone = env.clone();
-    let progress_callback = progress_tx.map(|tx| {
-        move |result: &BatchVerifyResult| {
-            let _ = tx.send(result.clone());
-        }
-    });
-    let threads = num_threads;
-    let (results, stats) = tokio::task::spawn_blocking(move || match progress_callback {
-        Some(cb) => batch_verify_with_stats_progress(&env_clone, inputs, threads, cb),
-        None => batch_verify_with_stats_progress(&env_clone, inputs, threads, |_| {}),
-    })
-    .await
-    .map_err(|e| RpcError::internal_error(format!("Task join error: {e}")))?;
-
-    if let Some(task) = progress_forwarder {
-        let _ = task.await;
-    }
-
-    // Convert results to API types
-    let api_results: Vec<BatchVerifyCertItemResult> = results
         .into_iter()
-        .map(|r| {
-            let time_ns = Some(ns_from_us(r.time_us));
-            BatchVerifyCertItemResult {
-                id: r.id,
-                success: r.success,
-                verified_type: r.verified_type.map(|t| format_expr(&t)),
-                error: r.error,
-                time_us: r.time_us,
-                time_ns,
-            }
-        })
+        .map(|item| BatchVerifyInput::new(item.id, item.cert, item.expr))
         .collect();
+    let threads = batch_threads(state, params.threads);
+
+    // Per-item completions come back over this channel while the batch runs.
+    let (verified, each_verified) = tokio::sync::mpsc::unbounded_channel::<BatchVerifyResult>();
+    let reporting = progress.is_some();
+    let work = run_with_env(state, deadline, move |held| {
+        let wall_start = Instant::now();
+        let results = verify_batch_until(&held.env, inputs, threads, deadline, |result| {
+            if reporting {
+                let _ = verified.send(result.clone());
+            }
+        })?;
+        let wall_time_us = wall_start.elapsed().as_micros() as u64;
+        let stats = compute_batch_verify_stats(&results, wall_time_us);
+        Some((results, stats))
+    });
+    let (finished, ()) = tokio::join!(
+        work,
+        report_batch_progress(progress.clone(), total, each_verified)
+    );
+    let (results, stats) = finished?.ok_or(WorkError::Interrupted)?;
 
     if let Some(ref progress) = progress {
         progress
@@ -695,7 +805,7 @@ async fn batch_verify_cert_impl(
     }
 
     Ok(BatchVerifyCertResult {
-        results: api_results,
+        results: api_results(results),
         stats: stats.into(),
         time_ms: 0,
         time_ns: None,
@@ -749,9 +859,10 @@ fn compute_batch_verify_stats(
 
 async fn batch_verify_cert_archive_impl(
     state: &ServerState,
-    params: &BatchVerifyCertArchiveParams,
+    params: BatchVerifyCertArchiveParams,
     progress: Option<ProgressSender>,
-) -> Result<BatchVerifyCertResult, RpcError> {
+    deadline: Option<Instant>,
+) -> Result<BatchVerifyCertResult, WorkError> {
     let total = params.items.len();
     let wall_start = Instant::now();
 
@@ -765,153 +876,77 @@ async fn batch_verify_cert_archive_impl(
             .await;
     }
 
-    let (progress_tx, progress_rx) = if progress.is_some() {
-        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<BatchVerifyResult>();
-        (Some(tx), Some(rx))
-    } else {
-        (None, None)
-    };
-
-    let progress_interval = if total <= 100 {
-        1
-    } else if total <= 500 {
-        total / 50
-    } else if total <= 2000 {
-        total / 100
-    } else {
-        total / 200
-    };
-
-    let progress_forwarder = if let (Some(progress), Some(mut rx)) = (progress.clone(), progress_rx)
-    {
-        Some(tokio::spawn(async move {
-            let mut completed = 0usize;
-            while let Some(result) = rx.recv().await {
-                completed += 1;
-                let should_report =
-                    completed % progress_interval == 0 || completed == total || completed == 1;
-                if should_report {
-                    let percentage = (completed * 100)
-                        .checked_div(total)
-                        .map_or(100, |p| p.min(100) as u8);
-
-                    let details = json!({
-                        "id": result.id,
-                        "success": result.success,
-                        "verified_type": result.verified_type.as_ref().map(format_expr),
-                        "error": result.error,
-                        "time_us": result.time_us,
-                    });
-
-                    progress
-                        .notify(
-                            format!("Verified {}/{} ({})", completed, total, result.id),
-                            Some(percentage),
-                            Some(details),
-                        )
-                        .await;
+    let threads = batch_threads(state, params.threads);
+    let items = params.items;
+    let (verified, each_verified) = tokio::sync::mpsc::unbounded_channel::<BatchVerifyResult>();
+    let reporting = progress.is_some();
+    let work = run_with_env(state, deadline, move |held| {
+        let report = |result: &BatchVerifyResult| {
+            if reporting {
+                let _ = verified.send(result.clone());
+            }
+        };
+        // Unarchiving is decompression, CPU work like the checks: it runs
+        // here too.
+        let mut inputs = Vec::new();
+        let mut input_indices = Vec::new();
+        let mut results: Vec<Option<BatchVerifyResult>> = vec![None; items.len()];
+        let ids: Vec<String> = items.iter().map(|item| item.id.clone()).collect();
+        for (idx, item) in items.into_iter().enumerate() {
+            // Decompression reads no deadline: read the clock between items.
+            if past(deadline) {
+                return None;
+            }
+            match unarchive_cert_envelope(&item.archive) {
+                Ok(cert) => {
+                    inputs.push(BatchVerifyInput::new(item.id, cert, item.expr));
+                    input_indices.push(idx);
                 }
-            }
-        }))
-    } else {
-        None
-    };
-
-    let mut inputs = Vec::new();
-    let mut input_indices = Vec::new();
-    let mut results: Vec<Option<BatchVerifyResult>> = vec![None; total];
-
-    for (idx, item) in params.items.iter().enumerate() {
-        match unarchive_cert_envelope(&item.archive) {
-            Ok(cert) => {
-                inputs.push(BatchVerifyInput::new(
-                    item.id.clone(),
-                    cert,
-                    item.expr.clone(),
-                ));
-                input_indices.push(idx);
-            }
-            Err(e) => {
-                let failure = BatchVerifyResult {
-                    id: item.id.clone(),
-                    success: false,
-                    verified_type: None,
-                    error: Some(format!("Archive error: {e}")),
-                    time_us: 0,
-                };
-                results[idx] = Some(failure.clone());
-                if let Some(ref tx) = progress_tx {
-                    let _ = tx.send(failure);
+                Err(e) => {
+                    let failure = BatchVerifyResult {
+                        id: item.id,
+                        success: false,
+                        verified_type: None,
+                        error: Some(format!("Archive error: {e}")),
+                        time_us: 0,
+                    };
+                    report(&failure);
+                    results[idx] = Some(failure);
                 }
             }
         }
-    }
-
-    let env = state.env.read().await;
-
-    let num_threads = if params.threads > 0 {
-        params.threads
-    } else {
-        state.worker_threads
-    };
-
-    let env_clone = env.clone();
-    let progress_callback = progress_tx.map(|tx| {
-        move |result: &BatchVerifyResult| {
-            let _ = tx.send(result.clone());
-        }
-    });
-    let threads = num_threads;
-    let verified_results = tokio::task::spawn_blocking(move || {
-        if inputs.is_empty() {
+        let verified_results = if inputs.is_empty() {
             Vec::new()
         } else {
-            match progress_callback {
-                Some(cb) => batch_verify_with_stats_progress(&env_clone, inputs, threads, cb).0,
-                None => batch_verify_with_stats_progress(&env_clone, inputs, threads, |_| {}).0,
-            }
+            verify_batch_until(&held.env, inputs, threads, deadline, report)?
+        };
+        for (result, idx) in verified_results.into_iter().zip(input_indices) {
+            results[idx] = Some(result);
         }
-    })
-    .await
-    .map_err(|e| RpcError::internal_error(format!("Task join error: {e}")))?;
-
-    for (result, idx) in verified_results.into_iter().zip(input_indices) {
-        results[idx] = Some(result);
-    }
-
-    if let Some(task) = progress_forwarder {
-        let _ = task.await;
-    }
-
-    let mut combined = Vec::with_capacity(total);
-    for (idx, item) in params.items.iter().enumerate() {
-        let result = results[idx].clone().unwrap_or_else(|| BatchVerifyResult {
-            id: item.id.clone(),
-            success: false,
-            verified_type: None,
-            error: Some("Missing verification result".to_string()),
-            time_us: 0,
-        });
-        combined.push(result);
-    }
+        Some(
+            results
+                .into_iter()
+                .zip(ids)
+                .map(|(result, id)| {
+                    result.unwrap_or_else(|| BatchVerifyResult {
+                        id,
+                        success: false,
+                        verified_type: None,
+                        error: Some("Missing verification result".to_string()),
+                        time_us: 0,
+                    })
+                })
+                .collect::<Vec<_>>(),
+        )
+    });
+    let (finished, ()) = tokio::join!(
+        work,
+        report_batch_progress(progress.clone(), total, each_verified)
+    );
+    let combined = finished?.ok_or(WorkError::Interrupted)?;
 
     let wall_time_us = wall_start.elapsed().as_micros() as u64;
     let stats = compute_batch_verify_stats(&combined, wall_time_us);
-
-    let api_results: Vec<BatchVerifyCertItemResult> = combined
-        .into_iter()
-        .map(|r| {
-            let time_ns = Some(ns_from_us(r.time_us));
-            BatchVerifyCertItemResult {
-                id: r.id,
-                success: r.success,
-                verified_type: r.verified_type.map(|t| format_expr(&t)),
-                error: r.error,
-                time_us: r.time_us,
-                time_ns,
-            }
-        })
-        .collect();
 
     if let Some(ref progress) = progress {
         progress
@@ -932,7 +967,7 @@ async fn batch_verify_cert_archive_impl(
     }
 
     Ok(BatchVerifyCertResult {
-        results: api_results,
+        results: api_results(combined),
         stats: stats.into(),
         time_ms: 0,
         time_ns: None,
@@ -944,7 +979,7 @@ async fn batch_verify_cert_archive_impl(
 /// Verifies a single proof certificate against an expression.
 /// This is the lightweight API for verifying individual certificates,
 /// as opposed to batchVerifyCert which is optimized for high-throughput parallel verification.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_verify_cert(
     state: &ServerState,
     id: RequestId,
@@ -952,13 +987,18 @@ pub async fn handle_verify_cert(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
+    let (cert, expr) = (params.cert, params.expr);
 
-    let result = tokio::time::timeout(timeout, async {
-        let env = state.env.read().await;
-        let mut verifier = CertVerifier::with_mode(&env, env.mode());
-        verifier.verify(&params.cert, &params.expr)
-    })
-    .await;
+    let result = tokio::time::timeout(
+        timeout,
+        run_with_env(state, deadline, move |held| {
+            let env: &Environment = &held.env;
+            CertVerifier::with_mode(env, env.mode()).verify(&cert, &expr)
+        }),
+    )
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
 
     let time_us = start.elapsed().as_micros() as u64;
 
@@ -989,7 +1029,11 @@ pub async fn handle_verify_cert(
             Response::success_typed(id.clone(), &result)
                 .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
         }
-        Err(_) => {
+        Err(WorkError::Unavailable(detail)) => {
+            state.metrics.record_request("verifyCert", false, time_us);
+            Response::error(id, RpcError::internal_error(detail))
+        }
+        Err(WorkError::Interrupted) => {
             state.metrics.record_request("verifyCert", false, time_us);
             Response::error(id, RpcError::timeout(timeout.as_millis() as u64))
         }
@@ -999,7 +1043,7 @@ pub async fn handle_verify_cert(
 /// Handle the "verifyCertArchive" method
 ///
 /// Verifies a single archived proof certificate against an expression.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_verify_cert_archive(
     state: &ServerState,
     id: RequestId,
@@ -1007,17 +1051,22 @@ pub async fn handle_verify_cert_archive(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    let deadline = start.checked_add(timeout);
+    let (archive, expr) = (params.archive, params.expr);
 
-    let result = tokio::time::timeout(timeout, async {
-        let env = state.env.read().await;
-        let cert = match unarchive_cert_envelope(&params.archive) {
-            Ok(cert) => cert,
-            Err(e) => return Err(CertError::InvalidCert(format!("Archive error: {e}"))),
-        };
-        let mut verifier = CertVerifier::with_mode(&env, env.mode());
-        verifier.verify(&cert, &params.expr)
-    })
-    .await;
+    let result = tokio::time::timeout(
+        timeout,
+        run_with_env(state, deadline, move |held| {
+            let cert = match unarchive_cert_envelope(&archive) {
+                Ok(cert) => cert,
+                Err(e) => return Err(CertError::InvalidCert(format!("Archive error: {e}"))),
+            };
+            let env: &Environment = &held.env;
+            CertVerifier::with_mode(env, env.mode()).verify(&cert, &expr)
+        }),
+    )
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
 
     let time_us = start.elapsed().as_micros() as u64;
 
@@ -1052,7 +1101,13 @@ pub async fn handle_verify_cert_archive(
             Response::success_typed(id.clone(), &result)
                 .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
         }
-        Err(_) => {
+        Err(WorkError::Unavailable(detail)) => {
+            state
+                .metrics
+                .record_request("verifyCertArchive", false, time_us);
+            Response::error(id, RpcError::internal_error(detail))
+        }
+        Err(WorkError::Interrupted) => {
             state
                 .metrics
                 .record_request("verifyCertArchive", false, time_us);
@@ -1065,14 +1120,23 @@ pub async fn handle_verify_cert_archive(
 ///
 /// Compresses a proof certificate using structure-sharing compression.
 /// This is an in-memory compression that exploits shared subexpressions.
-#[instrument(skip(_state))]
+#[instrument(skip(state, params))]
 pub async fn handle_compress_cert(
-    _state: &ServerState,
+    state: &ServerState,
     id: RequestId,
     params: CompressCertParams,
 ) -> Response {
     let start = Instant::now();
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_on_pool(&state.work, id, start, timeout, move |id| {
+        compress_cert_answer(id, params, start)
+    })
+    .await
+}
 
+/// `compressCert`'s work: decoding and encoding bounded only by the codec's limits,
+/// so it runs on the work pool (`work::answer_on_pool`).
+fn compress_cert_answer(id: RequestId, params: CompressCertParams, start: Instant) -> Response {
     let result = if params.include_stats {
         match compress_cert_with_stats(&params.cert) {
             Ok((compressed, stats)) => {
@@ -1118,14 +1182,23 @@ pub async fn handle_compress_cert(
 /// Handle the "decompressCert" method
 ///
 /// Decompresses a structure-sharing compressed certificate back to ProofCert.
-#[instrument(skip(_state))]
+#[instrument(skip(state, params))]
 pub async fn handle_decompress_cert(
-    _state: &ServerState,
+    state: &ServerState,
     id: RequestId,
     params: DecompressCertParams,
 ) -> Response {
     let start = Instant::now();
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_on_pool(&state.work, id, start, timeout, move |id| {
+        decompress_cert_answer(id, params, start)
+    })
+    .await
+}
 
+/// `decompressCert`'s work: decoding and encoding bounded only by the codec's limits,
+/// so it runs on the work pool (`work::answer_on_pool`).
+fn decompress_cert_answer(id: RequestId, params: DecompressCertParams, start: Instant) -> Response {
     match decompress_cert(&params.compressed) {
         Ok(cert) => {
             let elapsed_us = start.elapsed().as_micros() as u64;
@@ -1148,16 +1221,25 @@ pub async fn handle_decompress_cert(
 ///
 /// Archives a proof certificate to a portable byte format using LZ4 or Zstd compression.
 /// The result is a base64-encoded string suitable for storage or transmission.
-#[instrument(skip(_state))]
+#[instrument(skip(state, params))]
 pub async fn handle_archive_cert(
-    _state: &ServerState,
+    state: &ServerState,
     id: RequestId,
     params: ArchiveCertParams,
 ) -> Response {
+    let start = Instant::now();
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_on_pool(&state.work, id, start, timeout, move |id| {
+        archive_cert_answer(id, params, start)
+    })
+    .await
+}
+
+/// `archiveCert`'s work: decoding and encoding bounded only by the codec's limits,
+/// so it runs on the work pool (`work::answer_on_pool`).
+fn archive_cert_answer(id: RequestId, params: ArchiveCertParams, start: Instant) -> Response {
     use base64::{engine::general_purpose::STANDARD, Engine};
     use clean_kernel::cert::ArchiveVariantStats;
-
-    let start = Instant::now();
 
     // Parse algorithm
     let algorithm = match params.algorithm.as_deref().unwrap_or("lz4") {
@@ -1234,15 +1316,24 @@ pub async fn handle_archive_cert(
 /// Handle the "unarchiveCert" method
 ///
 /// Restores a proof certificate from a base64-encoded archive.
-#[instrument(skip(_state))]
+#[instrument(skip(state, params))]
 pub async fn handle_unarchive_cert(
-    _state: &ServerState,
+    state: &ServerState,
     id: RequestId,
     params: UnarchiveCertParams,
 ) -> Response {
-    use base64::{engine::general_purpose::STANDARD, Engine};
-
     let start = Instant::now();
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_on_pool(&state.work, id, start, timeout, move |id| {
+        unarchive_cert_answer(id, params, start)
+    })
+    .await
+}
+
+/// `unarchiveCert`'s work: decoding and encoding bounded only by the codec's limits,
+/// so it runs on the work pool (`work::answer_on_pool`).
+fn unarchive_cert_answer(id: RequestId, params: UnarchiveCertParams, start: Instant) -> Response {
+    use base64::{engine::general_purpose::STANDARD, Engine};
 
     // Decode base64
     let envelope_bytes = match STANDARD.decode(&params.archive) {
@@ -1300,15 +1391,24 @@ pub async fn handle_unarchive_cert(
 ///
 /// Trains a compression dictionary from sample certificates.
 /// The dictionary can then be used with archiveCertWithDict for improved compression.
-#[instrument(skip(_state))]
+#[instrument(skip(state, params))]
 pub async fn handle_train_dict(
-    _state: &ServerState,
+    state: &ServerState,
     id: RequestId,
     params: TrainDictParams,
 ) -> Response {
-    use base64::{engine::general_purpose::STANDARD, Engine};
-
     let start = Instant::now();
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_on_pool(&state.work, id, start, timeout, move |id| {
+        train_dict_answer(id, params, start)
+    })
+    .await
+}
+
+/// `trainDict`'s work: decoding and encoding bounded only by the codec's limits,
+/// so it runs on the work pool (`work::answer_on_pool`).
+fn train_dict_answer(id: RequestId, params: TrainDictParams, start: Instant) -> Response {
+    use base64::{engine::general_purpose::STANDARD, Engine};
 
     let max_size = params.max_size.unwrap_or(CertDictionary::DEFAULT_SIZE);
     let level = params.level.unwrap_or(3);
@@ -1352,15 +1452,28 @@ pub async fn handle_train_dict(
 ///
 /// Archives a certificate using dictionary-based Zstd compression.
 /// The dictionary must have been created with trainDict.
-#[instrument(skip(_state))]
+#[instrument(skip(state, params))]
 pub async fn handle_archive_cert_with_dict(
-    _state: &ServerState,
+    state: &ServerState,
     id: RequestId,
     params: ArchiveCertWithDictParams,
 ) -> Response {
-    use base64::{engine::general_purpose::STANDARD, Engine};
-
     let start = Instant::now();
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_on_pool(&state.work, id, start, timeout, move |id| {
+        archive_cert_with_dict_answer(id, params, start)
+    })
+    .await
+}
+
+/// `archiveCertWithDict`'s work: decoding and encoding bounded only by the codec's limits,
+/// so it runs on the work pool (`work::answer_on_pool`).
+fn archive_cert_with_dict_answer(
+    id: RequestId,
+    params: ArchiveCertWithDictParams,
+    start: Instant,
+) -> Response {
+    use base64::{engine::general_purpose::STANDARD, Engine};
 
     // Decode and deserialize dictionary
     let dict_bytes = match STANDARD.decode(&params.dictionary) {
@@ -1497,15 +1610,28 @@ pub async fn handle_archive_cert_with_dict(
 ///
 /// Restores a certificate from a dictionary-compressed archive.
 /// The same dictionary used for compression must be provided.
-#[instrument(skip(_state))]
+#[instrument(skip(state, params))]
 pub async fn handle_unarchive_cert_with_dict(
-    _state: &ServerState,
+    state: &ServerState,
     id: RequestId,
     params: UnarchiveCertWithDictParams,
 ) -> Response {
-    use base64::{engine::general_purpose::STANDARD, Engine};
-
     let start = Instant::now();
+    let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    answer_on_pool(&state.work, id, start, timeout, move |id| {
+        unarchive_cert_with_dict_answer(id, params, start)
+    })
+    .await
+}
+
+/// `unarchiveCertWithDict`'s work: decoding and encoding bounded only by the codec's limits,
+/// so it runs on the work pool (`work::answer_on_pool`).
+fn unarchive_cert_with_dict_answer(
+    id: RequestId,
+    params: UnarchiveCertWithDictParams,
+    start: Instant,
+) -> Response {
+    use base64::{engine::general_purpose::STANDARD, Engine};
 
     // Decode and deserialize dictionary
     let dict_bytes = match STANDARD.decode(&params.dictionary) {

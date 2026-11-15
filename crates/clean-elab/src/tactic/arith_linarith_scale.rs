@@ -51,14 +51,21 @@ impl SortLeAcc {
 
     /// From `fvar : a ≤ b` to `(sort, a, b, fvar)`, optionally downcasting
     /// concrete-all-Real slices to Int.
+    ///
+    /// A strict `fvar : a < b` enters as the `≤` it proves by definition
+    /// ([`arith_linarith_chain::definitional_le_endpoints`]: `(Nat.succ a, b)`
+    /// over Nat, `(a + 1, b)` over Int), never as `a ≤ b`, which it does not
+    /// prove. A strict Real / Rat hypothesis has no such reading and yields
+    /// `None`.
     pub(crate) fn from_hypothesis(
         fvar: FVarId,
         goal: &Goal,
         real_mode: RealAccumulationMode,
     ) -> Option<Self> {
         let h_ty = find_hyp_type(goal, fvar)?;
-        let (alpha, lhs, rhs) = extract_le_args(&h_ty)?;
+        let (alpha, op, lhs, rhs) = arith_linarith_chain::extract_le_args_full(&h_ty)?;
         let sort = arith_linarith_chain::detect_sort(&alpha)?;
+        let (lhs, rhs) = arith_linarith_chain::definitional_le_endpoints(sort, op, &lhs, &rhs)?;
         if sort == ArithSort::Real && real_mode == RealAccumulationMode::DowncastToInt {
             if let Some(acc) = Self::from_real_downcast(fvar, &lhs, &rhs) {
                 return Some(acc);
@@ -97,10 +104,17 @@ impl SortLeAcc {
         real_mode: RealAccumulationMode,
     ) -> Option<Self> {
         let h_ty = find_hyp_type(goal, fvar)?;
-        let (alpha, a, b) = extract_le_args(&h_ty)?;
+        let (alpha, _, _) = extract_le_args(&h_ty)?;
         let sort = arith_linarith_chain::detect_sort(&alpha)?;
 
         if sort == ArithSort::Nat {
+            // The oriented `≤` the hypothesis proves (strict read by definition).
+            let SortLeAcc {
+                lhs: a,
+                rhs: b,
+                proof: h,
+                ..
+            } = Self::from_hypothesis(fvar, goal, real_mode)?;
             let coeff_u64 = u64::try_from(coeff).ok()?;
             let coeff_expr = Expr::nat_lit(coeff_u64);
             let mul_le = Expr::const_(Name::from_string("Nat.mul_le_mul_left"), vec![]);
@@ -109,7 +123,7 @@ impl SortLeAcc {
                     Expr::app(Expr::app(mul_le, a.clone()), b.clone()),
                     coeff_expr.clone(),
                 ),
-                Expr::fvar(fvar),
+                h,
             );
             let nat_mul = Expr::const_(Name::from_string("Nat.mul"), vec![]);
             let lhs = Expr::app(Expr::app(nat_mul.clone(), coeff_expr.clone()), a);

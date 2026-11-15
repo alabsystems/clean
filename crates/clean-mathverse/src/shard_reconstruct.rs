@@ -525,20 +525,22 @@ fn build_levels(
                 let inner_idx = read_level_u32(flat, 0)?;
                 Level::succ(get_built_level(&built, inner_idx)?)
             }
+            // `max`/`imax` verbatim, as Lean's kernel reads the stored level
+            // (DECISIONS R150): Clean's smart constructors would collapse it.
             FlatLevel::TAG_MAX => {
                 let left_idx = read_level_u32(flat, 0)?;
                 let right_idx = read_level_u32(flat, 4)?;
-                Level::max(
-                    get_built_level(&built, left_idx)?,
-                    get_built_level(&built, right_idx)?,
+                Level::Max(
+                    get_built_level(&built, left_idx)?.into(),
+                    get_built_level(&built, right_idx)?.into(),
                 )
             }
             FlatLevel::TAG_IMAX => {
                 let left_idx = read_level_u32(flat, 0)?;
                 let right_idx = read_level_u32(flat, 4)?;
-                Level::imax(
-                    get_built_level(&built, left_idx)?,
-                    get_built_level(&built, right_idx)?,
+                Level::IMax(
+                    get_built_level(&built, left_idx)?.into(),
+                    get_built_level(&built, right_idx)?.into(),
                 )
             }
             FlatLevel::TAG_PARAM => {

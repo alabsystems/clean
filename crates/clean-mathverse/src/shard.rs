@@ -60,10 +60,17 @@ use crate::provenance::ProvenanceSidecar;
 use crate::types::{AxiomProfile, MathverseConstantHeader};
 
 pub const SHARD_MAGIC: u32 = 0x4F4D_4547; // "OMEG"
-/// Current shard version (v3 adds the closure-binding header fields at bytes
-/// 48..96: source_olean_blake3, source_olean_len, fail_closed_verified,
-/// module_name_idx — see the layout doc above and `ShardHeader`).
-pub const SHARD_VERSION: u32 = 3;
+/// Current shard version. v4 has v3's layout; it marks a shard whose levels
+/// were decoded from the `.olean` verbatim (no `max`/`imax` collapse, DECISIONS
+/// R150), so a v3 closure shard, whose levels an older decoder collapsed, is
+/// never served lazily and is never rebound by a restamp (`from_reader`): the
+/// lazy path refuses it and the loader falls back to the eager `.olean` closure.
+pub const SHARD_VERSION: u32 = 4;
+/// v3 adds the closure-binding header fields at bytes 48..96:
+/// source_olean_blake3, source_olean_len, fail_closed_verified,
+/// module_name_idx — see the layout doc above and `ShardHeader`. Layout only:
+/// a v3 shard is read eagerly, never served lazily.
+pub const SHARD_VERSION_V3: u32 = 3;
 /// Prior shard version (64-byte constant headers with level_params, no closure
 /// binding). Retained so the SHIPPED mathverse-v1.3.0 library (v2, 1,052,886
 /// decls) keeps loading via the eager readers, and as the keying threshold for
@@ -85,7 +92,12 @@ pub const BLOOM_SIZE: usize = 256 * 1024; // 256KB
 /// constraint — raising it loads more real data without changing any decl or
 /// trust label. 4 GiB comfortably fits every shipped Core shard while staying
 /// well under `usize::MAX`. Override with `MATHVERSE_MAX_DECOMPRESS_BYTES`.
+#[cfg(not(target_arch = "wasm32"))]
 pub const DEFAULT_MAX_DECOMPRESS_BYTES: usize = 4 * 1024 * 1024 * 1024;
+/// wasm32: usize is 32-bit, so the native budget does not fit; the whole
+/// address space is the effective cap.
+#[cfg(target_arch = "wasm32")]
+pub const DEFAULT_MAX_DECOMPRESS_BYTES: usize = usize::MAX;
 
 /// Environment variable to override [`DEFAULT_MAX_DECOMPRESS_BYTES`] (decimal
 /// byte count). Invalid or absent values fall back to the default.
@@ -234,10 +246,12 @@ impl ShardHeader {
             });
         }
         let version = u32::from_le_bytes([buf[4], buf[5], buf[6], buf[7]]);
-        // Accept v1, v2, v3, but never below the caller's floor (the lazy path
-        // sets it to SHARD_VERSION so v1/v2 closure shards are refused -> eager).
+        // Accept v1, v2, v3, v4, but never below the caller's floor (the lazy
+        // path sets it to SHARD_VERSION so v1/v2/v3 closure shards are refused
+        // -> eager).
         if version < min_version
             || (version != SHARD_VERSION
+                && version != SHARD_VERSION_V3
                 && version != SHARD_VERSION_V2
                 && version != SHARD_VERSION_LEGACY)
         {
@@ -254,7 +268,7 @@ impl ShardHeader {
         // v3 closure-binding fields decode only at v3; pre-v3 headers leave
         // bytes 48..96 as zero, decoded here as "unbound" (loader refuses lazy).
         let (source_olean_blake3, source_olean_len, fail_closed_verified, module_name_idx) =
-            if version >= SHARD_VERSION {
+            if version >= SHARD_VERSION_V3 {
                 let mut hash = [0u8; 32];
                 hash.copy_from_slice(&buf[48..80]);
                 (
@@ -906,7 +920,10 @@ impl ShardWriter {
         // fail_closed_verified/source hash/module and silently disable lazy
         // serving (a 101.7x -> 1x regression). Carry them across so a restamp
         // preserves the binding. The module name is recovered from the source
-        // header's `module_name_idx` via the reader's OWN string table.
+        // header's `module_name_idx` via the reader's OWN string table. Only a
+        // CURRENT-version shard's binding is carried: a v3 shard's levels were
+        // collapsed by an older decoder, and rewriting it at v4 must not bind
+        // it for lazy serving (DECISIONS R150).
         let source_olean_blake3 = if reader.header.version >= SHARD_VERSION
             && reader.header.source_olean_blake3 != [0u8; 32]
         {
@@ -1172,6 +1189,19 @@ pub struct ShardReader {
 }
 
 impl ShardReader {
+    /// Whether every constant of this shard came from Lean 4 (a non-empty
+    /// `.olean`-derived shard). A re-check of such a shard runs in
+    /// `KernelTheory::Lean`, the theory the `.olean`'s own kernel admitted it
+    /// under; a mixed or non-Lean shard keeps Clean's extended theory.
+    #[must_use]
+    pub fn is_lean4_only(&self) -> bool {
+        !self.constants.is_empty()
+            && self
+                .constants
+                .iter()
+                .all(|c| c.source() == Ok(crate::types::SourceSystem::Lean4))
+    }
+
     /// Read a shard from a file.
     ///
     /// Errors carry the shard path: an unreadable file is
@@ -1352,6 +1382,27 @@ impl ShardReader {
             provenance,
             sorted_index,
         })
+    }
+
+    /// Read a shard from a byte slice, refusing one whose provenance sidecar
+    /// does not decode or does not match its constant headers' digests.
+    ///
+    /// [`Self::from_bytes`] keeps such a shard and reports its provenance as
+    /// unavailable, so a legacy library shard still loads (7278e9164). A gate
+    /// that admits a shard reads through this instead: drift between the hot
+    /// headers and the cold sidecar is a corrupt or tampered artifact there.
+    ///
+    /// # Errors
+    /// Every error of [`Self::from_bytes`], and
+    /// [`MathverseError::ShardCorrupt`] when the sidecar fails to decode, a
+    /// header's provenance index is out of bounds, or its digest differs.
+    pub(crate) fn from_bytes_strict_provenance(data: &[u8]) -> MathverseResult<Self> {
+        let reader = Self::from_bytes(data)?;
+        // `from_bytes` proved the provenance section ends where the footer starts.
+        let provenance_start = data.len() - FOOTER_SIZE - reader.header.provenance_len as usize;
+        let raw_provenance = decode_provenance(data, provenance_start, &reader.header)?;
+        validate_provenance_headers(&reader.constants, &raw_provenance)?;
+        Ok(reader)
     }
 
     /// Check if a name might exist in this shard (bloom filter check).
@@ -3302,7 +3353,7 @@ fn bloom_check(filter: &[u8], name: &str) -> bool {
 
 /// Hex encoding (inline, avoids adding `hex` crate dependency).
 mod hex {
-    pub fn encode(data: &[u8]) -> String {
+    pub(crate) fn encode(data: &[u8]) -> String {
         data.iter().map(|b| format!("{b:02x}")).collect()
     }
 }
@@ -3429,9 +3480,11 @@ mod tests {
             .to_bytes()
         };
 
-        // Strict v3 rejects v1 and v2.
+        // Strict (lazy) v4 rejects v1, v2 and v3: a v3 shard's levels were
+        // collapsed by the pre-R150 decoder.
         let v1 = mk(SHARD_VERSION_LEGACY, 0);
         let v2 = mk(SHARD_VERSION_V2, 7);
+        let v3_old = mk(SHARD_VERSION_V3, 4);
         let v3 = mk(SHARD_VERSION, 4);
         assert!(matches!(
             ShardHeader::from_bytes_strict(&v1, SHARD_VERSION),
@@ -3441,11 +3494,16 @@ mod tests {
             ShardHeader::from_bytes_strict(&v2, SHARD_VERSION),
             Err(MathverseError::UnsupportedVersion(2))
         ));
+        assert!(matches!(
+            ShardHeader::from_bytes_strict(&v3_old, SHARD_VERSION),
+            Err(MathverseError::UnsupportedVersion(3))
+        ));
         assert!(ShardHeader::from_bytes_strict(&v3, SHARD_VERSION).is_ok());
 
-        // Shared `from_bytes` accepts all three (eager library unaffected).
+        // Shared `from_bytes` accepts all four (eager library unaffected).
         assert!(ShardHeader::from_bytes(&v1).is_ok());
         assert!(ShardHeader::from_bytes(&v2).is_ok());
+        assert!(ShardHeader::from_bytes(&v3_old).is_ok());
         assert!(ShardHeader::from_bytes(&v3).is_ok());
 
         // level_lists_count decodes for a v2 header after the bump.

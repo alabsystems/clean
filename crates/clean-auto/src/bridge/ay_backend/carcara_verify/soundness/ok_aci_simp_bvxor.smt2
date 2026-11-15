@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const x (_ BitVec 8))
+(declare-const y (_ BitVec 8))
+(assert (not (= (bvxor x (bvxor y x)) (bvxor x x y))))
+(check-sat)

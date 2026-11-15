@@ -20,7 +20,7 @@ use std::io::Write;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use clean_kernel::env::{is_foundational_axiom, Environment};
+use clean_kernel::env::Environment;
 use clean_kernel::expr::{Expr, ExprKind};
 use clean_kernel::name::Name;
 use clean_kernel::tc::TypeChecker;
@@ -77,7 +77,7 @@ fn reachable_sorry_axioms(env: &Environment, root: &Name) -> Vec<String> {
             let nm = name.to_string();
             if nm.contains("sorry") || nm.contains("Sorry") {
                 sorry_found.insert(nm);
-            } else if !is_foundational_axiom(&name) {
+            } else if !env.is_canonical_foundational_axiom(&name) {
                 // Non-foundational axiom = unproved domain obligation.
                 sorry_found.insert(format!("{nm} (non-foundational axiom)"));
             }

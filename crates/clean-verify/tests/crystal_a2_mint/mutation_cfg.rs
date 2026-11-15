@@ -30,8 +30,8 @@ fn cfg_lanes_pin_the_one_unprinted_core_field() {
 
     // (1) `volatile` — CLOSED. Both readers see it, and they see the same thing.
     let volatile = FIXTURE.replace(
-        "%2 = load enum.13, ptr %0",
-        "%2 = volatile load enum.13, ptr %0",
+        "%2 = load enum.17, ptr %0",
+        "%2 = volatile load enum.17, ptr %0",
     );
     assert_ne!(volatile, FIXTURE, "the substitution must bite");
     let v = parse_emitted(&volatile);

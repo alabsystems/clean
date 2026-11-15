@@ -1,0 +1,6 @@
+trust-ir-flip: did=DefId(0:100 ~ clean::x) compiled from trust lineage=sha256:aaaa11
+trust-ir-flip: did=DefId(0:101 ~ clean::x) compiled from trust lineage=sha256:aaaa11
+trust-ir-flip: did=DefId(0:102 ~ clean::x) compiled from trust lineage=sha256:aaaa11
+trust-ir-flip: did=DefId(0:103 ~ clean::x) compiled from trust lineage=sha256:aaaa11
+trust-ir-flip: did=DefId(0:105 ~ clean::x) compiled from trust lineage=sha256:aaaa11
+trust-ir-flip: did=DefId(0:101 ~ clean::helper) CTFE compiled from trust lineage=bbbb

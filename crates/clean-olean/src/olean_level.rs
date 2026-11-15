@@ -171,7 +171,7 @@ pub fn filter_exports(entries: &[ParsedExtension], filter: &ExportFilter) -> Vec
 /// standard behavior where all persistent extensions are included in the
 /// `.olean` output.
 #[must_use]
-pub fn default_export_config() -> ExportEntriesConfig {
+pub(crate) fn default_export_config() -> ExportEntriesConfig {
     ExportEntriesConfig {
         default_level: ExportLevel::Exported,
         overrides: HashMap::new(),

@@ -346,11 +346,13 @@ fn require_first_ctor<'a>(
 
 /// If `ty` is a bare monomorphic `Const(name, [])` head, return its name.
 ///
-/// Field-instance resolution is restricted to this shape: a non-parametric,
-/// non-applied constant such as `Nat`, `Bool`, or another in-tree enum. Applied
-/// types (`List Nat`), bound variables, sorts, etc. are intentionally rejected
-/// so the resolved instance term is unambiguously the monomorphic instance for
-/// exactly that type.
+/// This is the MONOMORPHIC leaf shape: a non-parametric, non-applied constant
+/// such as `Nat`, `Bool`, or another in-tree enum. Bound variables, sorts and
+/// multi-argument applications are rejected so the resolved instance term is
+/// unambiguously the monomorphic instance for exactly that type. Applied type
+/// constructors (`List Nat`) are handled separately by
+/// [`resolve_applied_field_instance`], which composes a parametric instance with
+/// the recursively-resolved instance for the argument.
 fn bare_const_name(ty: &Expr) -> Option<&Name> {
     match ty.kind() {
         ExprKind::Const(name, levels) if levels.is_empty() => Some(name),
@@ -358,27 +360,178 @@ fn bare_const_name(ty: &Expr) -> Option<&Name> {
     }
 }
 
-/// Resolve the instance constant for `class_name` applied to the bare
-/// monomorphic field type `field_ty` from `env`.
+/// Decompose `@C.{lvls} T` — an application of a bare CONSTANT head to exactly
+/// one argument — into `(C, lvls, T)`.
 ///
-/// Walks the registered instances for the class and accepts one whose type is
-/// exactly `@<class_name> <field_ty>` (i.e. `App(Const(class_name, _),
-/// Const(field_name, []))`). The instance type is read from
-/// [`KernelInstanceInfo::type_`] when present, otherwise from the registered
-/// constant's declared type (prelude instances such as `instBEqNat` register
-/// with `type_: None` but their `add_decl` type is `BEq Nat`).
+/// Returns `None` for anything else, including a multi-argument application
+/// (`Prod A B`): a two-parameter type constructor needs a two-premise instance
+/// shape that [`matches_unary_ctor_instance`] deliberately does not match, so
+/// admitting it here would only produce a mis-applied term.
+fn applied_const_head(ty: &Expr) -> Option<(&Name, &[Level], &Expr)> {
+    let ExprKind::App(fun, arg) = ty.kind() else {
+        return None;
+    };
+    let ExprKind::Const(head, levels) = fun.kind() else {
+        return None;
+    };
+    Some((head, levels.as_slice(), &**arg))
+}
+
+/// Is `ty` the application `@<class> (BVar idx)`?
+fn is_class_app_of_bvar(ty: &Expr, class: &Name, idx: u32) -> bool {
+    let ExprKind::App(fun, arg) = ty.kind() else {
+        return false;
+    };
+    matches!(fun.kind(), ExprKind::Const(n, _) if n == class)
+        && matches!(arg.kind(), ExprKind::BVar(i) if *i == idx)
+}
+
+/// Does the registered instance type `inst_ty` have exactly the parametric
+/// shape this resolver can apply?
 ///
-/// Returns the closed instance term `Const(inst_name, [])` on a match (instances
-/// resolvable here are monomorphic, so they carry no level params), or `None`
-/// when no monomorphic in-tree instance for the field type exists. Callers then
-/// try another genuine builder or fail closed with `Unsupported`.
+/// ```text
+/// {α : Sort _} → [_ : <class> α] → <class> (@<head>.{p} α)
+/// ```
+///
+/// with `level_params == [p]`. Every part is checked structurally: two binders
+/// and no more, the premise is the SAME class at the SAME parameter, the
+/// conclusion is the class at `head` applied to that parameter (`BVar 1` under
+/// the two binders), and `head`'s sole level argument is the instance's sole
+/// level parameter. That last condition is what lets the caller instantiate
+/// `p := <the field type's own head level>` and get a term whose type is
+/// syntactically the field type's class.
+///
+/// Anything else — a second type parameter, a premise at a different class, an
+/// extra non-instance binder, a `head` at a fixed level — returns `false`, and
+/// the caller fails closed rather than applying an instance it has not
+/// understood.
+fn matches_unary_ctor_instance(
+    inst_ty: &Expr,
+    class: &Name,
+    head: &Name,
+    level_params: &[Name],
+) -> bool {
+    let [p] = level_params else {
+        return false;
+    };
+    // Binder 1: the type parameter α (its sort is left to the kernel re-check).
+    let ExprKind::Pi(_, _alpha_ty, rest) = inst_ty.kind() else {
+        return false;
+    };
+    // Binder 2: the class premise `<class> α`, where α is `BVar 0` at this depth.
+    let ExprKind::Pi(_, premise_ty, body) = rest.kind() else {
+        return false;
+    };
+    if !is_class_app_of_bvar(premise_ty, class, 0) {
+        return false;
+    }
+    // Conclusion: `<class> (@<head>.{p} α)`, where α is `BVar 1` at this depth.
+    let ExprKind::App(fun, arg) = body.kind() else {
+        return false;
+    };
+    if !matches!(fun.kind(), ExprKind::Const(n, _) if n == class) {
+        return false;
+    }
+    let Some((h_name, h_levels, h_arg)) = applied_const_head(arg) else {
+        return false;
+    };
+    h_name == head
+        && h_levels.len() == 1
+        && Level::is_def_eq(&h_levels[0], &Level::param(p.clone()))
+        && matches!(h_arg.kind(), ExprKind::BVar(1))
+}
+
+/// Resolve the instance for an APPLIED field type `@<head>.{lvl} T` by finding a
+/// parametric instance for `<head>` and applying it to `T` together with the
+/// recursively-resolved instance for `T`.
+///
+/// The produced term is `@<inst>.{lvl} T <T's instance>`, where `lvl` is read
+/// off the field type's OWN head constant — so `xs : List Nat` (i.e.
+/// `@List.{0} Nat`) resolves to `@instDecidableEqList.{0} Nat instDecidableEqNat`.
+/// Nesting works by construction: `List (List Nat)` recurses on the argument.
+///
+/// **Fail-closed.** If the argument's instance does not resolve, this returns
+/// `None` exactly as the monomorphic path does; it never manufactures a
+/// `sorryAx` or an unapplied instance. The only shape admitted is the
+/// single-parameter, single-premise one that [`matches_unary_ctor_instance`]
+/// checks. A two-parameter constructor (`Prod A B`) does not have that shape and
+/// is left to fail closed rather than guessed at — the generalization this
+/// carries is "one type parameter, one class premise", which is what was built
+/// and measured; wider arities are unimplemented, not merely untested.
+fn resolve_applied_field_instance(
+    env: &Environment,
+    class_name: &str,
+    class: &Name,
+    field_ty: &Expr,
+) -> Option<Expr> {
+    let (head, head_levels, arg) = applied_const_head(field_ty)?;
+    // The head must carry exactly the one level the instance is polymorphic in.
+    if head_levels.len() != 1 {
+        return None;
+    }
+    let arg_level = head_levels[0].clone();
+    // The level is written into a term that becomes a declaration with NO level
+    // parameters, so it must be CLOSED. An elaborator level metavariable is
+    // spelled as a `Level::Param` (`ElabCtx::fresh_universe_param`), and one that
+    // reached here unsolved would produce `UndefinedLevelParam` at registration
+    // (#3393's failure mode) rather than a wrong answer — but refusing is still
+    // the honest result, so fail closed instead of emitting it.
+    if arg_level.has_params() {
+        return None;
+    }
+    for inst in env.get_class_instances(class) {
+        let Some(info) = env.get_const(&inst.name) else {
+            continue;
+        };
+        let inst_ty = inst.type_.clone().unwrap_or_else(|| info.type_.clone());
+        if !matches_unary_ctor_instance(&inst_ty, class, head, &info.level_params) {
+            continue;
+        }
+        // The argument's own instance is REQUIRED. `None` here means the whole
+        // resolution fails closed — no other head instance can supply it.
+        let arg_inst = resolve_field_instance(env, class_name, arg)?;
+        return Some(Expr::apps(
+            Expr::const_(inst.name.clone(), vec![arg_level]),
+            [arg.clone(), arg_inst],
+        ));
+    }
+    None
+}
+
+/// Resolve the instance term for `class_name` at the field type `field_ty`.
+///
+/// Two shapes resolve, and nothing else:
+///
+/// 1. **A bare monomorphic constant** (`Nat`, `Bool`, another in-tree enum).
+///    Walks the registered instances for the class and accepts one whose type is
+///    exactly `@<class_name> <field_ty>` (i.e. `App(Const(class_name, _),
+///    Const(field_name, []))`), returning the closed term `Const(inst_name, [])`
+///    — instances resolvable here are monomorphic, so they carry no level
+///    params. The instance type is read from [`KernelInstanceInfo::type_`] when
+///    present, otherwise from the registered constant's declared type (prelude
+///    instances such as `instBEqNat` register with `type_: None` but their
+///    `add_decl` type is `BEq Nat`).
+///
+/// 2. **A unary applied type constructor** (`List Nat`, `List Inner`,
+///    `List (List Nat)`), resolved by [`resolve_applied_field_instance`]: find a
+///    parametric instance for the head constant and apply it to the argument
+///    together with the argument's own recursively-resolved instance. The
+///    recursion is structural — the argument is a strict subterm — so it
+///    terminates on any finite type.
+///
+/// Returns `None` when neither shape resolves. Callers then try another genuine
+/// builder or fail closed with `Unsupported`; nothing here manufactures a
+/// `sorryAx`.
 pub(crate) fn resolve_field_instance(
     env: &Environment,
     class_name: &str,
     field_ty: &Expr,
 ) -> Option<Expr> {
-    let field_name = bare_const_name(field_ty)?;
     let class = Name::from_string(class_name);
+    let Some(field_name) = bare_const_name(field_ty) else {
+        // Not a bare constant — try the applied type-constructor shape.
+        return resolve_applied_field_instance(env, class_name, &class, field_ty);
+    };
     for inst in env.get_class_instances(&class) {
         let inst_ty = inst
             .type_

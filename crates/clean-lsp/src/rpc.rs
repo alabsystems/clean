@@ -15,6 +15,9 @@
 //! Sources: Lean team, "Lean.Data.Lsp.Extra"
 //! <https://lean-lang.org/doc/api/Lean/Data/Lsp/Extra.html>
 
+#[path = "rpc/lean_uint64_wire.rs"]
+mod lean_uint64_wire;
+
 use clean_elab::interactive_goals::{InteractiveGoals, InteractiveTermGoal};
 use dashmap::DashMap;
 use serde::{Deserialize, Serialize};
@@ -23,6 +26,10 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 use tower_lsp::lsp_types::{Position, Url};
+
+#[cfg(test)]
+#[path = "rpc/service_wire_tests.rs"]
+mod service_wire_tests;
 
 /// RPC connect request params
 /// Source: Lean.Data.Lsp.Extra, RpcConnectParams
@@ -38,6 +45,7 @@ pub struct RpcConnectParams {
 #[serde(rename_all = "camelCase")]
 pub struct RpcConnected {
     /// Session identifier (UInt64 in Lean4)
+    #[serde(with = "lean_uint64_wire")]
     pub session_id: u64,
 }
 
@@ -51,6 +59,7 @@ pub struct RpcCallParams {
     /// Position in document
     pub position: Position,
     /// Session ID from connect
+    #[serde(with = "lean_uint64_wire")]
     pub session_id: u64,
     /// Fully-qualified method name (e.g., "Lean.Widget.getWidgets")
     pub method: String,
@@ -74,6 +83,7 @@ pub struct RpcReleaseParams {
     /// Document URI
     pub uri: Url,
     /// Session ID
+    #[serde(with = "lean_uint64_wire")]
     pub session_id: u64,
     /// References to release
     pub refs: Vec<RpcRef>,
@@ -84,6 +94,7 @@ pub struct RpcReleaseParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcRef {
     /// Reference pointer (opaque to client)
+    #[serde(with = "lean_uint64_wire::usize_ref")]
     pub p: u64,
 }
 
@@ -95,11 +106,12 @@ pub struct RpcKeepAliveParams {
     /// Document URI
     pub uri: Url,
     /// Session ID
+    #[serde(with = "lean_uint64_wire")]
     pub session_id: u64,
 }
 
 // Note: RpcNeedsReconnect is not a separate struct in Lean4.
-// The error is signaled via RpcError with code -32000 and message "RpcNeedsReconnect".
+// Lean uses RPC error -32900 with the message "Outdated RPC session".
 // See RpcError::needs_reconnect() for the implementation.
 
 /// Widget source request params
@@ -107,6 +119,7 @@ pub struct RpcKeepAliveParams {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GetWidgetSourceParams {
     /// Hash of JS module
+    #[serde(with = "lean_uint64_wire")]
     pub hash: u64,
     /// Position in document
     pub pos: Position,
@@ -136,6 +149,7 @@ pub struct PanelWidgetInstance {
     /// Widget module name
     pub id: String,
     /// Hash of JS source
+    #[serde(with = "lean_uint64_wire")]
     pub javascript_hash: u64,
     /// Widget props (may contain RPC refs)
     pub props: Value,
@@ -174,10 +188,10 @@ pub struct PlainGoalParams {
 /// Source: Lean.Data.Lsp.Extra, PlainGoal
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlainGoalResponse {
+    /// Goals rendered as Markdown code blocks, or `no goals` when solved.
+    pub rendered: String,
     /// List of tactic goals rendered as plain text
-    /// None if there are no goals at this position
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub goals: Option<Vec<String>>,
+    pub goals: Vec<String>,
 }
 
 /// Request params for $/lean/plainTermGoal
@@ -191,14 +205,15 @@ pub struct PlainTermGoalParams {
     pub position: Position,
 }
 
-/// Response for $/lean/plainTermGoal
-/// Source: Lean.Data.Lsp.Extra, PlainTermGoal
+/// Present response for $/lean/plainTermGoal.
+/// Source: Lean.Data.Lsp.Extra, PlainTermGoal.
+/// The endpoint returns `None` (JSON null) when no term goal was captured.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PlainTermGoalResponse {
-    /// Expected type rendered as plain text
-    /// None if there is no expected type at this position
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub goal: Option<String>,
+    /// Recorded expected-type and local-context text.
+    pub goal: String,
+    /// Source range associated with the captured goal, in LSP UTF-16 positions.
+    pub range: Range,
 }
 
 /// RPC session state
@@ -462,15 +477,15 @@ pub struct RpcError {
 impl RpcError {
     pub fn needs_reconnect() -> Self {
         Self {
-            code: -32000,
-            message: "RpcNeedsReconnect".to_string(),
+            code: -32900,
+            message: "Outdated RPC session".to_string(),
         }
     }
 
     pub fn method_not_found(method: &str) -> Self {
         Self {
             code: -32601,
-            message: format!("Method not found: {method}"),
+            message: format!("No RPC method '{method}' found"),
         }
     }
 
@@ -484,8 +499,8 @@ impl RpcError {
     /// Widget source not found (widget JS not registered)
     pub fn widget_source_not_found(hash: u64) -> Self {
         Self {
-            code: -32001,
-            message: format!("Widget source not found for hash {hash}"),
+            code: -32602,
+            message: format!("No widget module with hash {hash} registered"),
         }
     }
 }
@@ -640,7 +655,7 @@ impl RpcSessionManager {
         // Check session hasn't timed out
         if session.last_activity.elapsed() > SESSION_TIMEOUT {
             drop(session);
-            self.sessions.remove(&params.session_id);
+            self.remove_expired_session(params.session_id);
             return Err(RpcError::needs_reconnect());
         }
 
@@ -667,8 +682,9 @@ impl RpcSessionManager {
 
     /// Handle $/lean/rpc/release (notification - no response)
     pub fn release(&self, params: RpcReleaseParams) {
-        if let Some(session) = self.sessions.get(&params.session_id) {
+        if let Some(mut session) = self.sessions.get_mut(&params.session_id) {
             if session.uri == params.uri {
+                session.last_activity = Instant::now();
                 session.object_store.release(&params.refs);
             }
         }
@@ -693,8 +709,16 @@ impl RpcSessionManager {
             .collect();
 
         for session_id in expired {
-            self.sessions.remove(&session_id);
+            self.remove_expired_session(session_id);
         }
+    }
+
+    fn remove_expired_session(&self, session_id: u64) -> bool {
+        self.sessions
+            .remove_if(&session_id, |_, session| {
+                session.last_activity.elapsed() > SESSION_TIMEOUT
+            })
+            .is_some()
     }
 }
 
@@ -771,11 +795,8 @@ mod tests {
 
         let result = manager.call(params);
         let err = result.unwrap_err();
-        assert!(
-            err.message.contains("Reconnect"),
-            "expected Reconnect error, got: {}",
-            err.message
-        );
+        assert_eq!(err.code, -32900);
+        assert_eq!(err.message, "Outdated RPC session");
         assert!(
             manager.sessions.is_empty(),
             "invalid-session calls should not allocate or recover RPC session state"
@@ -836,11 +857,8 @@ mod tests {
 
         let result = manager.call(call_params);
         let err = result.unwrap_err();
-        assert!(
-            err.message.contains("Method not found"),
-            "expected 'Method not found' error, got: {}",
-            err.message
-        );
+        assert_eq!(err.code, -32601);
+        assert_eq!(err.message, "No RPC method 'Unknown.Method' found");
 
         let follow_up = manager.call(RpcCallParams {
             text_document: TextDocumentIdentifier {
@@ -927,6 +945,74 @@ mod tests {
             call.is_ok(),
             "repeated release notifications should leave the RPC session callable"
         );
+    }
+
+    #[test]
+    fn test_rpc_release_refreshes_session_and_survives_expiry_cleanup() {
+        let manager = RpcSessionManager::new();
+        let uri = Url::parse("file:///test.lean").unwrap();
+        let connected = manager
+            .connect(RpcConnectParams { uri: uri.clone() })
+            .unwrap();
+        manager
+            .sessions
+            .get_mut(&connected.session_id)
+            .unwrap()
+            .last_activity = Instant::now() - SESSION_TIMEOUT - Duration::from_secs(1);
+        let before_release = Instant::now();
+        let params: RpcReleaseParams = serde_json::from_value(serde_json::json!({
+            "uri": uri,
+            "sessionId": connected.session_id.to_string(),
+            "refs": []
+        }))
+        .unwrap();
+
+        manager.release(params);
+        assert!(
+            manager
+                .sessions
+                .get(&connected.session_id)
+                .unwrap()
+                .last_activity
+                >= before_release,
+            "a valid release must renew the actual session, even with no references"
+        );
+        manager.cleanup_expired();
+        assert!(manager.sessions.contains_key(&connected.session_id));
+    }
+
+    #[test]
+    fn test_rpc_release_wrong_uri_preserves_the_expired_timestamp() {
+        let manager = RpcSessionManager::new();
+        let connected = manager
+            .connect(RpcConnectParams {
+                uri: Url::parse("file:///test.lean").unwrap(),
+            })
+            .unwrap();
+        let expired = Instant::now() - SESSION_TIMEOUT - Duration::from_secs(1);
+        manager
+            .sessions
+            .get_mut(&connected.session_id)
+            .unwrap()
+            .last_activity = expired;
+        let params: RpcReleaseParams = serde_json::from_value(serde_json::json!({
+            "uri": "file:///other.lean",
+            "sessionId": connected.session_id.to_string(),
+            "refs": []
+        }))
+        .unwrap();
+
+        manager.release(params);
+        assert_eq!(
+            manager
+                .sessions
+                .get(&connected.session_id)
+                .unwrap()
+                .last_activity,
+            expired
+        );
+        manager.cleanup_expired();
+        assert!(!manager.sessions.contains_key(&connected.session_id));
     }
 
     #[test]
@@ -1396,6 +1482,10 @@ mod tests {
         let json = serde_json::to_string(&connected).unwrap();
         assert!(json.contains("sessionId"));
         assert!(json.contains("42"));
+        assert_eq!(
+            serde_json::from_str::<Value>(&json).unwrap()["sessionId"],
+            "42"
+        );
     }
 
     #[test]
@@ -1403,7 +1493,7 @@ mod tests {
         let json = r#"{
             "textDocument": {"uri": "file:///test.lean"},
             "position": {"line": 10, "character": 5},
-            "sessionId": 42,
+            "sessionId": "42",
             "method": "Lean.Widget.getWidgets",
             "params": {}
         }"#;
@@ -1417,8 +1507,8 @@ mod tests {
     fn test_rpc_release_params_serde() {
         let json = r#"{
             "uri": "file:///test.lean",
-            "sessionId": 42,
-            "refs": [{"p": 1}, {"p": 2}]
+            "sessionId": "42",
+            "refs": [{"p": "1"}, {"p": "2"}]
         }"#;
         let params: RpcReleaseParams = serde_json::from_str(json).unwrap();
         assert_eq!(params.session_id, 42);
@@ -1452,11 +1542,8 @@ mod tests {
 
         let result = manager.call(call_params);
         let err = result.unwrap_err();
-        assert!(
-            err.message.contains("Reconnect"),
-            "expected Reconnect error, got: {}",
-            err.message
-        );
+        assert_eq!(err.code, -32900);
+        assert_eq!(err.message, "Outdated RPC session");
 
         let follow_up = manager.call(RpcCallParams {
             text_document: TextDocumentIdentifier {
@@ -1498,15 +1585,14 @@ mod tests {
             },
             session_id: connected.session_id,
             method: "Lean.Widget.getWidgetSource".to_string(),
-            params: serde_json::json!({"hash": 12345, "pos": {"line": 5, "character": 10}}),
+            params: serde_json::json!({"hash": "12345", "pos": {"line": 5, "character": 10}}),
         };
 
         let result = manager.call(call_params);
-        // Should return widget_source_not_found error (code -32001)
+        // Unknown module hashes use Lean's invalid-params error.
         let err = result.unwrap_err();
-        assert_eq!(err.code, -32001);
-        assert!(err.message.contains("12345"));
-        assert!(err.message.contains("not found"));
+        assert_eq!(err.code, -32602);
+        assert_eq!(err.message, "No widget module with hash 12345 registered");
 
         let follow_up = manager.call(RpcCallParams {
             text_document: TextDocumentIdentifier {
@@ -1594,7 +1680,7 @@ mod tests {
                 session_id: connected.session_id,
                 method: "Lean.Widget.getWidgetSource".to_string(),
                 params: serde_json::json!({
-                    "hash": javascript_hash,
+                    "hash": javascript_hash.to_string(),
                     "pos": {"line": 1, "character": 5}
                 }),
             })
@@ -1653,7 +1739,7 @@ mod tests {
 
     #[test]
     fn test_get_widget_source_params_serde() {
-        let json = r#"{"hash": 123456789, "pos": {"line": 10, "character": 5}}"#;
+        let json = r#"{"hash": "123456789", "pos": {"line": 10, "character": 5}}"#;
         let params: GetWidgetSourceParams = serde_json::from_str(json).unwrap();
         assert_eq!(params.hash, 123_456_789);
         assert_eq!(params.pos.line, 10);
@@ -1682,6 +1768,10 @@ mod tests {
         let json = serde_json::to_string(&widget).unwrap();
         assert!(json.contains("javascriptHash"));
         assert!(json.contains("12345"));
+        assert_eq!(
+            serde_json::from_str::<Value>(&json).unwrap()["javascriptHash"],
+            "12345"
+        );
         assert!(!json.contains("name")); // None should be skipped
     }
 
@@ -1701,9 +1791,108 @@ mod tests {
         // cleanup shouldn't remove active session (not expired yet)
         manager.cleanup_expired();
         assert!(manager.sessions.contains_key(&connected.session_id));
+    }
 
-        // Note: We can't easily test actual timeout expiry without sleeping 30s,
-        // but we verify the cleanup mechanism works on active sessions.
+    #[test]
+    fn test_rpc_expiry_candidate_release_renewal_survives() {
+        let manager = RpcSessionManager::new();
+        let uri: Url = "file:///expiry-release.lean".parse().unwrap();
+        let connected = manager
+            .connect(RpcConnectParams { uri: uri.clone() })
+            .unwrap();
+        manager
+            .sessions
+            .get_mut(&connected.session_id)
+            .unwrap()
+            .last_activity = Instant::now() - SESSION_TIMEOUT - Duration::from_secs(1);
+
+        // Select the cleanup candidate before another request renews it. Replay
+        // the deletion stage directly to make this interleaving deterministic.
+        let candidate = manager
+            .sessions
+            .iter()
+            .find(|session| session.last_activity.elapsed() > SESSION_TIMEOUT)
+            .map(|session| *session.key())
+            .unwrap();
+        manager.release(RpcReleaseParams {
+            uri: uri.clone(),
+            session_id: connected.session_id,
+            refs: vec![],
+        });
+        assert!(!manager.remove_expired_session(candidate));
+        assert!(manager
+            .call(RpcCallParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: Position::default(),
+                session_id: connected.session_id,
+                method: "Lean.Widget.getWidgets".to_owned(),
+                params: Value::Null,
+            })
+            .is_ok());
+    }
+
+    #[test]
+    fn test_rpc_expiry_candidate_keep_alive_renewal_survives() {
+        let manager = RpcSessionManager::new();
+        let uri: Url = "file:///expiry-keep-alive.lean".parse().unwrap();
+        let connected = manager
+            .connect(RpcConnectParams { uri: uri.clone() })
+            .unwrap();
+        manager
+            .sessions
+            .get_mut(&connected.session_id)
+            .unwrap()
+            .last_activity = Instant::now() - SESSION_TIMEOUT - Duration::from_secs(1);
+        let candidate = manager
+            .sessions
+            .iter()
+            .find(|session| session.last_activity.elapsed() > SESSION_TIMEOUT)
+            .map(|session| *session.key())
+            .unwrap();
+        manager.keep_alive(RpcKeepAliveParams {
+            uri: uri.clone(),
+            session_id: connected.session_id,
+        });
+        assert!(!manager.remove_expired_session(candidate));
+        assert!(manager
+            .call(RpcCallParams {
+                text_document: TextDocumentIdentifier { uri },
+                position: Position::default(),
+                session_id: connected.session_id,
+                method: "Lean.Widget.getWidgets".to_owned(),
+                params: Value::Null,
+            })
+            .is_ok());
+    }
+
+    #[test]
+    fn test_rpc_expiry_candidate_wrong_uri_does_not_revive() {
+        for release in [false, true] {
+            let manager = RpcSessionManager::new();
+            let uri: Url = "file:///expiry-original.lean".parse().unwrap();
+            let connected = manager.connect(RpcConnectParams { uri }).unwrap();
+            manager
+                .sessions
+                .get_mut(&connected.session_id)
+                .unwrap()
+                .last_activity = Instant::now() - SESSION_TIMEOUT - Duration::from_secs(1);
+            let wrong_uri: Url = "file:///expiry-other.lean".parse().unwrap();
+            if release {
+                manager.release(RpcReleaseParams {
+                    uri: wrong_uri,
+                    session_id: connected.session_id,
+                    refs: vec![],
+                });
+            } else {
+                manager.keep_alive(RpcKeepAliveParams {
+                    uri: wrong_uri,
+                    session_id: connected.session_id,
+                });
+            }
+            assert!(manager.remove_expired_session(connected.session_id));
+            assert!(!manager.sessions.contains_key(&connected.session_id));
+            assert!(!manager.remove_expired_session(connected.session_id));
+        }
     }
 
     #[test]
@@ -1775,10 +1964,100 @@ mod tests {
             params: Value::Null,
         });
         let err = cross_call.unwrap_err();
-        assert!(
-            err.message.contains("Reconnect"),
-            "expected Reconnect error for cross-doc call, got: {}",
-            err.message
+        assert_eq!(err.code, -32900);
+        assert_eq!(err.message, "Outdated RPC session");
+    }
+}
+
+// Native wire contracts through the public RPC data types.
+#[cfg(test)]
+mod native_integer_wire_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn connect_reply_uses_exact_decimal_string_for_native_uint64() {
+        for session_id in [0, 1, (1_u64 << 53) - 1, 1_u64 << 53, u64::MAX] {
+            let wire = serde_json::to_value(RpcConnected { session_id }).expect("connect encoding");
+            assert_eq!(wire, json!({"sessionId": session_id.to_string()}));
+            let decoded: RpcConnected = serde_json::from_value(wire).expect("connect decoding");
+            assert_eq!(decoded.session_id, session_id);
+        }
+    }
+
+    #[test]
+    fn call_accepts_native_string_id_and_rejects_numeric_or_overflow_id() {
+        let mut wire = json!({
+            "textDocument": {"uri": "file:///NativeWire.lean"},
+            "position": {"line": 0, "character": 0},
+            "sessionId": u64::MAX.to_string(),
+            "method": "Lean.Widget.getInteractiveGoals",
+            "params": {"textDocument": {"uri": "file:///NativeWire.lean"}, "position": {"line": 0, "character": 0}}
+        });
+        let call: RpcCallParams = serde_json::from_value(wire.clone()).expect("native call");
+        assert_eq!(call.session_id, u64::MAX);
+        assert_eq!(serde_json::to_value(call).expect("call encoding"), wire);
+        for invalid in [
+            json!(1),
+            json!("18446744073709551616"),
+            json!(-1),
+            json!(null),
+        ] {
+            wire["sessionId"] = invalid;
+            assert!(serde_json::from_value::<RpcCallParams>(wire.clone()).is_err());
+        }
+    }
+
+    #[test]
+    fn release_and_keepalive_follow_native_session_and_reference_encoding() {
+        let uri: Url = "file:///NativeWire.lean".parse().expect("URI");
+        let reference = u64::try_from(usize::MAX).expect("native pointer bound");
+        let release = RpcReleaseParams {
+            uri: uri.clone(),
+            session_id: u64::MAX,
+            refs: vec![RpcRef { p: reference }],
+        };
+        let wire = serde_json::to_value(release).expect("release encoding");
+        assert_eq!(
+            wire,
+            json!({"uri": uri, "sessionId": u64::MAX.to_string(), "refs": [{"p": reference.to_string()}]})
+        );
+        let decoded: RpcReleaseParams = serde_json::from_value(wire).expect("release decoding");
+        assert_eq!(decoded.session_id, u64::MAX);
+        assert_eq!(decoded.refs[0].p, reference);
+        let keep = RpcKeepAliveParams {
+            uri: uri.clone(),
+            session_id: u64::MAX,
+        };
+        let wire = serde_json::to_value(keep).expect("keepalive encoding");
+        assert_eq!(wire, json!({"uri": uri, "sessionId": u64::MAX.to_string()}));
+        assert_eq!(
+            serde_json::from_value::<RpcKeepAliveParams>(wire)
+                .expect("keepalive decoding")
+                .session_id,
+            u64::MAX
+        );
+    }
+
+    #[test]
+    fn widget_hashes_preserve_native_uint64_wire_values() {
+        let request: GetWidgetSourceParams = serde_json::from_value(
+            json!({"hash": u64::MAX.to_string(), "pos": {"line": 0, "character": 0}}),
+        )
+        .expect("native widget source request");
+        assert_eq!(request.hash, u64::MAX);
+        assert_eq!(
+            serde_json::to_value(request).expect("source request encoding")["hash"],
+            json!(u64::MAX.to_string())
+        );
+        let panel: PanelWidgetInstance = serde_json::from_value(
+            json!({"id": "NativeWidget", "javascriptHash": u64::MAX.to_string(), "props": {}}),
+        )
+        .expect("native panel hash");
+        assert_eq!(panel.javascript_hash, u64::MAX);
+        assert_eq!(
+            serde_json::to_value(panel).expect("panel encoding")["javascriptHash"],
+            json!(u64::MAX.to_string())
         );
     }
 }

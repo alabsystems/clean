@@ -287,7 +287,10 @@ fn decide_eq_equality(
     if !decidable_type_check(ty) {
         return Err(TacticError::ArithmeticFailed {
             tactic: "decide_eq".to_string(),
-            reason: format!("type {ty:?} does not have decidable equality"),
+            reason: format!(
+                "type {} does not have decidable equality",
+                crate::error_render::term(ty)
+            ),
         });
     }
 

@@ -19,16 +19,16 @@ mod extract;
 mod runtime;
 mod static_match;
 
-use clean_parser::{SurfaceExpr, SurfacePattern};
+use clean_parser::{SurfaceExpr, SurfaceName, SurfacePattern};
 
 pub(in crate::infer) fn q_match_pattern_expr<'a>(
     pattern: &'a SurfacePattern,
-    aliases: &mut Vec<&'a str>,
+    aliases: &mut Vec<&'a SurfaceName>,
 ) -> Option<&'a SurfaceExpr> {
     match pattern {
         SurfacePattern::QPattern(expr) => Some(expr.as_ref()),
         SurfacePattern::As(name, inner) => {
-            aliases.push(name.as_str());
+            aliases.push(name);
             q_match_pattern_expr(inner, aliases)
         }
         _ => None,

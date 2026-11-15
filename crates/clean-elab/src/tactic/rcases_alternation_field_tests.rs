@@ -43,10 +43,14 @@ fn test_rcases_alternation_nullary_branch_binds_nothing() {
     let mut env = Environment::new();
     env.init_nat().expect("init_nat");
     let mut state = ProofState::new(env, Expr::arrow(nat_ty(), nat_ty()));
-    intro(&mut state, "n").expect("intro n");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).expect("intro n");
 
-    destruct_named_hypothesis(&mut state, "n", "_ | m")
-        .expect("`rcases n with _ | m` must split Nat even though Nat.zero binds no field");
+    destruct_named_hypothesis(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("n"),
+        "_ | m",
+    )
+    .expect("`rcases n with _ | m` must split Nat even though Nat.zero binds no field");
 
     assert_eq!(
         state.goals().len(),
@@ -66,7 +70,8 @@ fn test_rcases_alternation_nullary_branch_binds_nothing() {
         "the Nat.succ branch must carry exactly its one field, got {succ_ctx:?}"
     );
     assert_eq!(
-        succ_ctx[0].name, "m",
+        succ_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("m"),
         "the Nat.succ field must take the second alternative's name"
     );
 }
@@ -83,11 +88,15 @@ fn test_rcases_alternation_nullary_branch_does_not_rename_outer_hypothesis() {
     env.init_true_false().expect("init_true_false");
     let true_ty = Expr::const_(Name::from_string("True"), vec![]);
     let mut state = ProofState::new(env, Expr::arrow(true_ty, Expr::arrow(nat_ty(), nat_ty())));
-    intro(&mut state, "hp").expect("intro hp");
-    intro(&mut state, "n").expect("intro n");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hp")).expect("intro hp");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n")).expect("intro n");
 
-    destruct_named_hypothesis(&mut state, "n", "hz | m")
-        .expect("`rcases n with hz | m` must split Nat");
+    destruct_named_hypothesis(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("n"),
+        "hz | m",
+    )
+    .expect("`rcases n with hz | m` must split Nat");
 
     assert_eq!(state.goals().len(), 2, "Nat split should leave two goals");
     let zero_ctx = &state.goals()[0].local_ctx;
@@ -97,7 +106,8 @@ fn test_rcases_alternation_nullary_branch_does_not_rename_outer_hypothesis() {
         "the Nat.zero branch keeps only the outer hypothesis, got {zero_ctx:?}"
     );
     assert_eq!(
-        zero_ctx[0].name, "hp",
+        zero_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("hp"),
         "the outer hypothesis must keep its name — a nullary branch's pattern has \
          no field to bind and must never rename an unrelated hypothesis"
     );
@@ -107,9 +117,14 @@ fn test_rcases_alternation_nullary_branch_does_not_rename_outer_hypothesis() {
         2,
         "the Nat.succ branch keeps the outer hypothesis plus its field, got {succ_ctx:?}"
     );
-    assert_eq!(succ_ctx[0].name, "hp", "outer hypothesis stays first");
     assert_eq!(
-        succ_ctx[1].name, "m",
+        succ_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("hp"),
+        "outer hypothesis stays first"
+    );
+    assert_eq!(
+        succ_ctx[1].name,
+        clean_parser::SurfaceName::generated_path("m"),
         "the Nat.succ field takes the second alternative's name"
     );
 }
@@ -129,10 +144,14 @@ fn test_rcases_alternation_multi_field_branch_maps_tuple_over_fields() {
         nat_ty(),
     );
     let mut state = ProofState::new(env, Expr::arrow(list_nat, nat_ty()));
-    intro(&mut state, "l").expect("intro l");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("l")).expect("intro l");
 
-    destruct_named_hypothesis(&mut state, "l", "_ | ⟨x, xs⟩")
-        .expect("`rcases l with _ | ⟨x, xs⟩` must map the tuple over List.cons's two fields");
+    destruct_named_hypothesis(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("l"),
+        "_ | ⟨x, xs⟩",
+    )
+    .expect("`rcases l with _ | ⟨x, xs⟩` must map the tuple over List.cons's two fields");
 
     assert_eq!(state.goals().len(), 2, "List split should leave two goals");
     assert!(
@@ -147,11 +166,13 @@ fn test_rcases_alternation_multi_field_branch_maps_tuple_over_fields() {
         "the List.cons branch must carry both fields, got {cons_ctx:?}"
     );
     assert_eq!(
-        cons_ctx[0].name, "x",
+        cons_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x"),
         "the tuple's first component names the HEAD field"
     );
     assert_eq!(
-        cons_ctx[1].name, "xs",
+        cons_ctx[1].name,
+        clean_parser::SurfaceName::generated_path("xs"),
         "the tuple's second component names the TAIL field"
     );
 }

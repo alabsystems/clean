@@ -395,8 +395,9 @@ impl<'env> CertVerifier<'env> {
     /// (tc/def_eq/proof_irrel.rs): returns `None` on ANY doubt, and callers
     /// treat `None` as "type-directed rule does not apply" — the old,
     /// conservative answer. For well-typed input this computes the same
-    /// type (up to def-eq) as kernel inference; it is never consulted to
-    /// certify a type, only to enable kernel-supported def-eq equations.
+    /// type (up to def-eq) as kernel inference. Projection verification also
+    /// uses it to classify already-typed constructor domains by their sort;
+    /// this is not a replacement for checking arbitrary application arguments.
     fn infer_for_eq(&self, ctx: &mut Vec<Expr>, e: &Expr) -> Option<Expr> {
         stack_safe(|| self.infer_for_eq_inner(ctx, e))
     }
@@ -437,6 +438,14 @@ impl<'env> CertVerifier<'env> {
                 ctx.pop();
                 Some(Expr::pi(*bi, ty.as_ref().clone(), body_ty?))
             }
+            ExprKind::Pi(_, domain, body) => {
+                let domain_sort = self.infer_sort_for_projection(ctx, domain)?;
+                ctx.push(domain.as_ref().clone());
+                let body_sort = self.infer_sort_for_projection(ctx, body);
+                ctx.pop();
+                Some(Expr::sort(Level::imax(domain_sort, body_sort?)))
+            }
+            ExprKind::Let(_, _, value, body, _) => self.infer_for_eq(ctx, &body.instantiate(value)),
             ExprKind::Lit(Literal::Nat(_)) => Some(Expr::const_(NAME_NAT.clone(), vec![])),
             ExprKind::Lit(Literal::String(_)) => Some(Expr::const_(NAME_STRING.clone(), vec![])),
             ExprKind::MData(_, inner) => self.infer_for_eq(ctx, inner),
@@ -444,11 +453,27 @@ impl<'env> CertVerifier<'env> {
                 let inner_ty = self.infer_for_eq(ctx, inner)?;
                 // Independent environment-derived field type (soundness-
                 // critical helper shared with `verify_proj`, #2064).
-                self.derive_proj_field_type(struct_name, *idx, inner, &inner_ty)
+                self.derive_proj_field_type(ctx, struct_name, *idx, inner, &inner_ty)
                     .ok()
             }
-            // Pi, Let, cubical, ZFC, Squash, …: not needed by the current
+            // Cubical, ZFC, Squash, …: not supported by the current
             // type-directed rules — fail closed.
+            _ => None,
+        }
+    }
+
+    /// Infer the sort of an already-typed type in the *current* binder context.
+    /// In particular, a Pi ending in Prop has sort `imax u 0 = 0`, whereas
+    /// Prop itself has sort 1. Unknown is distinct from a non-Prop sort.
+    pub(in crate::cert) fn infer_sort_for_projection(
+        &self,
+        ctx: &mut Vec<Expr>,
+        ty: &Expr,
+    ) -> Option<Level> {
+        let ty_whnf = self.whnf_impl(ty);
+        let sort = self.infer_for_eq(ctx, &ty_whnf)?;
+        match &self.whnf_impl(&sort).kind {
+            ExprKind::Sort(level) => Some(level.clone()),
             _ => None,
         }
     }

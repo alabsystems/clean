@@ -115,9 +115,11 @@ impl<'a> Unifier<'a> {
             );
         }
         UnifyResult::Failure(format!(
-            "cannot unify expressions of different shape: {:?} vs {:?}",
-            std::mem::discriminant(left.kind()),
-            std::mem::discriminant(right.kind())
+            "cannot unify {} with {}: {} vs {}",
+            crate::error_render::kind_name(left),
+            crate::error_render::kind_name(right),
+            crate::error_render::term(left),
+            crate::error_render::term(right)
         ))
     }
 
@@ -168,12 +170,81 @@ impl<'a> Unifier<'a> {
                 }
                 self.unify_with_whnf(func1, func2)
             }
-            _ => UnifyResult::Failure(format!(
-                "cannot unify ZFC set expressions of different shape: {:?} vs {:?}",
-                std::mem::discriminant(left),
-                std::mem::discriminant(right)
-            )),
+            // The ZFC operands are a private sub-enum with no `Display`, so
+            // this one keeps its discriminant — but says so, instead of
+            // presenting an opaque index as the explanation.
+            _ => UnifyResult::Failure(
+                "cannot unify ZFC set expressions of different shape".to_string(),
+            ),
         }
+    }
+
+    /// The historical App/App rule: the function parts first (so every earlier
+    /// argument, implicit ones included, before the last), then the last
+    /// argument pair. `try_unify_spine_postponing_stuck_implicits` runs it
+    /// first and keeps whatever it solves.
+    pub(super) fn unify_app_app_in_order(
+        &mut self,
+        (left, right): (&Expr, &Expr),
+        (f1, a1): (&Expr, &Expr),
+        (f2, a2): (&Expr, &Expr),
+    ) -> UnifyResult {
+        let generation = self.metas.generation();
+        // Apply WHNF to subterms for consistency with Pi/Lam handling (#379)
+        // — but NEVER reduce a subterm pair that is already
+        // syntactically identical: identical subterms are def-eq
+        // as-is, and for ground interpreter-style subterms (huge
+        // normal forms) the reduce-before-compare ordering is the
+        // measured >12GB wall the `unify` entry fast path guards
+        // against (see the comment there). The partial-application
+        // `f` side matters as much as the argument side: in
+        // `Sem.run (stepNWithContext …) st`, the whole interpreter
+        // call sits inside `f1`/`f2`.
+        if f1 != f2 {
+            if self.unify_app_unreduced_function_parts((left, right), (f1, a1), (f2, a2)) {
+                return UnifyResult::Success;
+            }
+            let f1_whnf = self.try_whnf(f1);
+            let f2_whnf = self.try_whnf(f2);
+            // Lean compares the function parts AS WRITTEN first
+            // (`isDefEqApp` / `tryHeuristic` / first-order
+            // `processAssignment`); reducing them can erase an
+            // argument a metavariable needs (`LT.lt ?α X ?a` WHNFs to
+            // `X.1 ?a`, losing `?α`). Tried in a rollback scope, with
+            // this reduced comparison as the fallback — see
+            // `app_heads.rs`.
+            match self.unify_core(&f1_whnf, &f2_whnf) {
+                UnifyResult::Success => {}
+                other => return other,
+            }
+        }
+        if self.metas.generation() == generation {
+            return self.unify_app_args(a1, a2);
+        }
+        // An earlier argument may have assigned a meta buried inside a later
+        // computation. Head-only instantiation cannot expose that reduction.
+        let fresh_a1 = self.metas.instantiate(a1);
+        let fresh_a2 = self.metas.instantiate(a2);
+        if fresh_a1 == *a1 && fresh_a2 == *a2 {
+            return self.unify_app_args(a1, a2);
+        }
+        // Preserve the historical solution whenever it works. Failed attempts
+        // must not leak assignments into the refreshed comparison.
+        self.metas.push_scope();
+        let original = self.unify_app_args(a1, a2);
+        if matches!(original, UnifyResult::Success) {
+            self.metas.commit();
+            return original;
+        }
+        self.metas.pop_scope();
+        self.metas.push_scope();
+        let refreshed = self.unify_app_args(&fresh_a1, &fresh_a2);
+        if matches!(refreshed, UnifyResult::Success) {
+            self.metas.commit();
+            return refreshed;
+        }
+        self.metas.pop_scope();
+        original
     }
 
     pub(super) fn unify_core(&mut self, left: &Expr, right: &Expr) -> UnifyResult {
@@ -290,7 +361,7 @@ impl<'a> Unifier<'a> {
                     }
                     UnifyResult::Success
                 } else {
-                    UnifyResult::Failure(format!("const mismatch: {n1:?} vs {n2:?}"))
+                    UnifyResult::Failure(format!("const mismatch: {n1} vs {n2}"))
                 }
             }
 
@@ -308,7 +379,11 @@ impl<'a> Unifier<'a> {
                 if id1 == id2 {
                     UnifyResult::Success
                 } else {
-                    UnifyResult::Failure(format!("fvar mismatch: {id1:?} vs {id2:?}"))
+                    UnifyResult::Failure(format!(
+                        "fvar mismatch: {} vs {}",
+                        crate::error_render::fvar(*id1, None),
+                        crate::error_render::fvar(*id2, None)
+                    ))
                 }
             }
 
@@ -368,97 +443,18 @@ impl<'a> Unifier<'a> {
                         }
                     }
                     return UnifyResult::Failure(format!(
-                        "rigid head/arity mismatch: {:?} vs {:?}",
-                        left.get_app_fn().kind(),
-                        right.get_app_fn().kind()
+                        "rigid head/arity mismatch: {} vs {}",
+                        crate::error_render::term(left.get_app_fn()),
+                        crate::error_render::term(right.get_app_fn())
                     ));
                 }
-                // Apply WHNF to subterms for consistency with Pi/Lam handling (#379)
-                // — but NEVER reduce a subterm pair that is already
-                // syntactically identical: identical subterms are def-eq
-                // as-is, and for ground interpreter-style subterms (huge
-                // normal forms) the reduce-before-compare ordering is the
-                // measured >12GB wall the `unify` entry fast path guards
-                // against (see the comment there). The partial-application
-                // `f` side matters as much as the argument side: in
-                // `Sem.run (stepNWithContext …) st`, the whole interpreter
-                // call sits inside `f1`/`f2`.
-                if f1 != f2 {
-                    let f1_whnf = self.try_whnf(f1);
-                    let f2_whnf = self.try_whnf(f2);
-                    match self.unify_core(&f1_whnf, &f2_whnf) {
-                        UnifyResult::Success => {}
-                        other => return other,
-                    }
+                // Lean's `isDefEqArgs` postponement of implicit arguments,
+                // narrowed to the shape this unifier otherwise refuses (see
+                // `postponed_args.rs`). `None` means "not that shape".
+                if let Some(result) = self.try_unify_spine_postponing_stuck_implicits(left, right) {
+                    return result;
                 }
-                if a1 == a2 {
-                    return UnifyResult::Success;
-                }
-                // Targeted exception: do NOT Î´-unfold an argument whose head is
-                // an `Irreducible` constant (the Track II `Nat.land`/`lor`/`xor`)
-                // WHEN the OPPOSITE argument is a bare metavariable, so the
-                // metavar is assigned the SURFACE head a later `rw`/`unfold`
-                // relies on. Gating on "opposite is a bare meta" confines it to
-                // metavar assignment; general structural unification keeps #379
-                // WHNF. Soundness unchanged (kernel re-checks the proof term).
-                // Second targeted exception: a beta-redex argument (Lam-headed
-                // application) paired against a FLEX application (spine head is
-                // an unsolved metavariable) has TWO legitimate higher-order
-                // solutions, and eager reduction commits to the wrong one when
-                // it is type-incorrect. For the postponed-lambda `congrArg`
-                // shape the pair is
-                //   `(fun o => Ev s n (Value.nat o)) x  =?=  ?f x`
-                // Beta-first yields the PROJECTION `?f := Ev s n` — here
-                // type-incorrect (`Nat → Prop` slot, `Value → Prop` head), and
-                // the failed attempt used to leave `?f` poisoned for every
-                // later consumer (the trust-spec-temporal FiniteModel
-                // regression). Keeping the redex pairs the spines and yields
-                // the IMITATION `?f := (fun o => …)` — but arg-driven flows
-                // (the LRAT `List.rec`/`congrArg` corpus shape) genuinely rely
-                // on the projection. So: try the historical reduced path in a
-                // SPECULATIVE scope first — committing when it succeeds keeps
-                // every previously-working solution byte-identical — and only
-                // on failure roll back (un-poisoning the flex head) and pair
-                // the spines unreduced. Soundness unchanged either way: the
-                // assignment is kernel-re-checked, and beta ⊆ def-eq means the
-                // kept redex can only refine WHICH solution is found, never
-                // equate unequal terms.
-                let flex_head = |u: &Self, e: &Expr| {
-                    matches!(e.kind(), ExprKind::App(_, _)) && u.as_meta(e.get_app_fn()).is_some()
-                };
-                let lam_headed_app = |e: &Expr| {
-                    matches!(e.kind(), ExprKind::App(_, _))
-                        && matches!(e.get_app_fn().kind(), ExprKind::Lam(_, _, _))
-                };
-                if (lam_headed_app(a1) && flex_head(self, a2))
-                    || (lam_headed_app(a2) && flex_head(self, a1))
-                {
-                    self.metas.push_scope();
-                    let reduced = {
-                        let a1_whnf = self.try_whnf(a1);
-                        let a2_whnf = self.try_whnf(a2);
-                        self.unify_core(&a1_whnf, &a2_whnf)
-                    };
-                    if matches!(reduced, UnifyResult::Success) {
-                        self.metas.commit();
-                        return UnifyResult::Success;
-                    }
-                    self.metas.pop_scope();
-                    return self.unify_core(a1, a2);
-                }
-                let a1_keep = self.head_is_protected_def(a1) && self.as_meta(a2).is_some();
-                let a2_keep = self.head_is_protected_def(a2) && self.as_meta(a1).is_some();
-                let a1_whnf = if a1_keep {
-                    (**a1).clone()
-                } else {
-                    self.try_whnf(a1)
-                };
-                let a2_whnf = if a2_keep {
-                    (**a2).clone()
-                } else {
-                    self.try_whnf(a2)
-                };
-                self.unify_core(&a1_whnf, &a2_whnf)
+                self.unify_app_app_in_order((left, right), (f1, a1), (f2, a2))
             }
 
             // Lambda and Pi
@@ -743,8 +739,97 @@ impl<'a> Unifier<'a> {
                 self.unify_with_whnf(pred1, pred2)
             }
 
+            // Eta: exactly one side is a lambda (both-lambda is handled above).
+            //
+            // `λ x. body =?= t` holds iff `λ x. body =?= λ x. t x`, so expand
+            // the non-lambda side and re-enter the Lam/Lam arm — which opens the
+            // binder with a real fvar and therefore lets the Miller solver
+            // assign metavariables inside `body`. Mirrors the kernel's
+            // `try_eta_expansion_impl` (crates/clean-kernel/src/tc/eta.rs) and
+            // Lean 4's `Lean.Meta.isDefEqEta`.
+            //
+            // Without this the ONLY eta available here is the kernel's, via
+            // `try_kernel_def_eq` below — and the kernel cannot solve a
+            // metavariable, so the whole `fun x => ?m x =?= t` family failed as
+            // a bare shape mismatch (`Discriminant(1) vs Discriminant(5)`,
+            // Lam vs FVar). That family is exactly how Lean spells a predicate
+            // binder: `{ x // p x }` elaborates to `Subtype fun x => p x`, so
+            // an implicit `{p}` of a lemma stated over `{ x // p x }` reaches
+            // an argument of type `Subtype q` as `fun x => ?p x =?= q`.
+            //
+            // SPECULATIVE, and that is not optional. The attempt compares the
+            // lambda's domain against the domain of the other side's inferred
+            // type and then walks both bodies, so a FAILING attempt can still
+            // have assigned metavariables — and, worse, level parameters — on
+            // the way down. Keeping those on a path that then rejects poisons
+            // every later constraint. Measured, on the codata seed library
+            // (`crates/clean-elab/data/MTypeIndexedPoly2.lean`): an unscoped
+            // version turned `Codata.ilabel_stable` into `cannot assign rigid
+            // universe parameter u := 0` and took 21 of the 71 seed
+            // declarations down with it, reddening 41 `codata_cmd_tests`.
+            // `push_scope`/`pop_scope` undo level assignments as well as meta
+            // assignments (`UndoRecord::LevelConcrete` / `LevelParent` /
+            // `LevelBound`), so a rejected attempt restores the pre-attempt
+            // state exactly and the shape failure is reported from it.
+            (ExprKind::Lam(_, _, _), _) => match self.eta_expand_other(right) {
+                Some(expanded) => self.unify_eta_speculatively(left, &expanded, left, right),
+                None => self.try_kernel_def_eq(left, right),
+            },
+            (_, ExprKind::Lam(_, _, _)) => match self.eta_expand_other(left) {
+                Some(expanded) => self.unify_eta_speculatively(&expanded, right, left, right),
+                None => self.try_kernel_def_eq(left, right),
+            },
+
             // Fall back to kernel def-eq for Nat/String literal ↔ constructor, etc.
             _ => self.try_kernel_def_eq(left, right),
         }
+    }
+
+    /// Try `eta_l =?= eta_r` inside a rollback scope, reporting the ORIGINAL
+    /// pair's shape failure when the attempt does not succeed.
+    ///
+    /// See the eta arms in [`Unifier::unify_core_inner`] for why the scope is
+    /// load-bearing rather than defensive.
+    fn unify_eta_speculatively(
+        &mut self,
+        eta_l: &Expr,
+        eta_r: &Expr,
+        orig_l: &Expr,
+        orig_r: &Expr,
+    ) -> UnifyResult {
+        self.metas.push_scope();
+        if let UnifyResult::Success = self.unify_core(eta_l, eta_r) {
+            self.metas.commit();
+            return UnifyResult::Success;
+        }
+        self.metas.pop_scope();
+        self.try_kernel_def_eq(orig_l, orig_r)
+    }
+
+    /// Eta-expand a non-lambda `other` into `fun (x : d) => other x`, where `d`
+    /// is the domain of `other`'s own (WHNF'd) Pi type.
+    ///
+    /// Returns `None` — leaving the caller to report the ordinary shape
+    /// mismatch — when there is no typechecker (legacy no-WHNF mode), when
+    /// `other`'s type cannot be inferred, or when that type is not a Pi. Taking
+    /// the domain from `other`'s inferred type rather than from the lambda's
+    /// binder is what makes this an equality-preserving rewrite instead of a
+    /// guess: an `other` that is not a function is not eta-expandable at all,
+    /// and must keep failing.
+    fn eta_expand_other(&self, other: &Expr) -> Option<Expr> {
+        let domain = {
+            let tc_cache = self.tc_cache.borrow();
+            let tc = tc_cache.as_ref()?;
+            let other_ty = tc.infer_type(other).ok()?;
+            match tc.whnf(&other_ty).kind() {
+                ExprKind::Pi(_, pi_domain, _) => (**pi_domain).clone(),
+                _ => return None,
+            }
+        };
+        Some(Expr::lam(
+            clean_kernel::BinderData::default(),
+            domain,
+            Expr::app(other.lift(1), Expr::bvar(0)),
+        ))
     }
 }

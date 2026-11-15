@@ -53,7 +53,7 @@ impl<'a> ElabCtx<'a> {
         // Ind p₀ … p_{k-1}
         let ind_applied = Expr::apps(Expr::const_(ind_name.clone(), vec![]), param_args.clone());
         let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
-        let cases_on = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on = ind_name.clone().str("casesOn");
 
         // Per-field `@BEq.beq.{0} p_{fp} inst_{fp} xⱼ yⱼ`, folded right with Bool.and.
         let beqs: Vec<Expr> = (0..n)
@@ -189,7 +189,7 @@ impl<'a> ElabCtx<'a> {
         let ind_applied = Expr::apps(Expr::const_(ind_name.clone(), vec![]), param_args.clone());
         let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
         let bool_false = Expr::const_(Name::from_string("Bool.false"), vec![]);
-        let cases_on = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on = ind_name.clone().str("casesOn");
         let motive = Expr::lam(BinderInfo::Default, ind_applied.clone(), bool_ty);
 
         // Bind ctor `c`'s fields (innermost-first) around `body`, typing each

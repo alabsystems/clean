@@ -21,7 +21,11 @@ use clean_parser::{parse_file, Projection, SurfaceDecl, SurfaceExpr};
 fn def_value<'a>(decls: &'a [SurfaceDecl], name: &str) -> &'a SurfaceExpr {
     for d in decls {
         match d {
-            SurfaceDecl::Def { name: n, val, .. } if n == name => return val,
+            SurfaceDecl::Def { name: n, val, .. }
+                if n.name() == clean_parser::SurfaceName::generated_path(name).name() =>
+            {
+                return val
+            }
             SurfaceDecl::RawDecl { content, .. } if content.contains(name) => {
                 panic!("`def {name}` fell into error recovery as RawDecl: {content:?}");
             }
@@ -37,7 +41,8 @@ fn as_app_of<'a>(expr: &'a SurfaceExpr, head: &str) -> &'a [clean_parser::Surfac
         SurfaceExpr::App(_, f, args) => {
             match f.as_ref() {
                 SurfaceExpr::Ident(_, name) => assert_eq!(
-                    name, head,
+                    name.name(),
+                    clean_parser::SurfaceName::generated_path(head).name(),
                     "application head mismatch: expected {head:?}, got {name:?}"
                 ),
                 other => panic!("expected Ident head {head:?}, got {other:?}"),
@@ -50,7 +55,9 @@ fn as_app_of<'a>(expr: &'a SurfaceExpr, head: &str) -> &'a [clean_parser::Surfac
 
 fn as_ident(expr: &SurfaceExpr) -> &str {
     match expr {
-        SurfaceExpr::Ident(_, name) => name,
+        SurfaceExpr::Ident(_, name) => name
+            .component_text()
+            .expect("fixture expects exactly one string component"),
         other => panic!("expected Ident, got {other:?}"),
     }
 }
@@ -182,11 +189,11 @@ fn test_undeclared_operator_unaffected() {
         matches!(
             d,
             SurfaceDecl::Def { name, val, .. }
-                if name == "foo" && matches!(val.as_ref(), SurfaceExpr::App(..))
+                if name.name() == clean_parser::SurfaceName::generated_path("foo").name() && matches!(val.as_ref(), SurfaceExpr::App(..))
                     && matches!(
                         val.as_ref(),
                         SurfaceExpr::App(_, f, _)
-                            if matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n == "mul")
+                            if matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == clean_parser::SurfaceName::generated_path("mul").name())
                     )
         )
     });
@@ -206,7 +213,11 @@ fn test_custom_operator_in_theorem_body() {
     let proof = decls
         .iter()
         .find_map(|d| match d {
-            SurfaceDecl::Theorem { name, proof, .. } if name == "t" => Some(proof),
+            SurfaceDecl::Theorem { name, proof, .. }
+                if name.name() == clean_parser::SurfaceName::generated_path("t").name() =>
+            {
+                Some(proof)
+            }
             _ => None,
         })
         .expect("theorem `t` should parse as a real Theorem");
@@ -223,13 +234,13 @@ fn test_custom_operator_does_not_leak_across_parse_calls() {
     let _ = parse_file("infixl:65 \" ** \" => mul").expect("parse");
     let decls = parse_file("def foo := a ** b").expect("parse");
     let has_real_def = decls.iter().any(|d| {
-        matches!(d, SurfaceDecl::Def { name, .. } if name == "foo")
+        matches!(d, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("foo").name())
             && matches!(def_value(&decls, "foo"), SurfaceExpr::App(..))
     });
     assert!(
         !has_real_def
             || !matches!(def_value(&decls, "foo"), SurfaceExpr::App(_, f, _)
-            if matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n == "mul")),
+            if matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == clean_parser::SurfaceName::generated_path("mul").name())),
         "custom operator from a prior parse_file must not leak into a new one"
     );
 }
@@ -244,7 +255,10 @@ fn test_projection_still_parses_with_custom_operator_registered() {
     match val {
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
             assert_eq!(as_ident(base), "p");
-            assert_eq!(field, "x");
+            assert_eq!(
+                field.name(),
+                clean_parser::SurfaceName::generated_path("x").name()
+            );
         }
         other => panic!("expected projection p.x, got {other:?}"),
     }
@@ -378,7 +392,7 @@ theorem unfolds : (f ~> g) = LeadsTo f g := proof
     assert!(
         decls
             .iter()
-            .any(|decl| matches!(decl, SurfaceDecl::Theorem { name, .. } if name == "unfolds")),
+            .any(|decl| matches!(decl, SurfaceDecl::Theorem { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("unfolds").name())),
         "parenthesized level-50 relation theorem was lost: {decls:#?}",
     );
 }
@@ -393,7 +407,7 @@ fn test_level_50_custom_relation_cannot_feed_comparison_without_parentheses() {
     assert!(
         !decls
             .iter()
-            .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name == "rejected")),
+            .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
         "`a ~> b = c` must not become an accepted definition: {decls:#?}",
     );
 }
@@ -405,7 +419,7 @@ fn test_low_custom_relation_rejects_unparenthesized_binder_arrow_rhs() {
     assert!(
         !decls
             .iter()
-            .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name == "rejected")),
+            .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
         "unparenthesized binder-arrow RHS must fail closed: {decls:#?}",
     );
 }
@@ -423,7 +437,7 @@ fn test_low_custom_relation_rejects_dependent_product_tail() {
         assert!(
             !decls
                 .iter()
-                .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name == "rejected")),
+                .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
             "dependent-product tail must fail closed for `{expression}`: {decls:#?}",
         );
     }
@@ -436,7 +450,7 @@ fn test_low_precedence_postfix_fails_closed() {
     assert!(
         !decls
             .iter()
-            .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name == "rejected")),
+            .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
         "unsupported low-precedence postfix must not leave a partial definition: {decls:#?}",
     );
 }
@@ -454,7 +468,11 @@ fn def_lowered_to(decls: &[SurfaceDecl], name: &str, head: &str) -> bool {
     fn walk<'a>(decls: &'a [SurfaceDecl], name: &str, out: &mut Option<&'a SurfaceExpr>) {
         for d in decls {
             match d {
-                SurfaceDecl::Def { name: n, val, .. } if n == name => *out = Some(val),
+                SurfaceDecl::Def { name: n, val, .. }
+                    if n.name() == clean_parser::SurfaceName::generated_path(name).name() =>
+                {
+                    *out = Some(val)
+                }
                 SurfaceDecl::Namespace { decls, .. } | SurfaceDecl::Section { decls, .. } => {
                     walk(decls, name, out);
                 }
@@ -466,7 +484,8 @@ fn def_lowered_to(decls: &[SurfaceDecl], name: &str, head: &str) -> bool {
     walk(decls, name, &mut val);
     match val {
         Some(SurfaceExpr::App(_, f, args)) => {
-            matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n == head) && args.len() == 2
+            matches!(f.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == clean_parser::SurfaceName::generated_path(head).name())
+                && args.len() == 2
         }
         _ => false,
     }
@@ -569,7 +588,7 @@ fn head_of(e: &SurfaceExpr) -> String {
         SurfaceExpr::Paren(_, inner) => head_of(inner),
         SurfaceExpr::App(_, f, _) => head_of(f),
         SurfaceExpr::Lambda(_, _, body) => head_of(body),
-        SurfaceExpr::Ident(_, n) => n.clone(),
+        SurfaceExpr::Ident(_, n) => n.to_string(),
         other => format!("{other:?}"),
     }
 }
@@ -704,7 +723,7 @@ fn test_unmatched_overlapping_mixfix_stays_loud() {
     assert!(
         !decls
             .iter()
-            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name == "bad")),
+            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("bad").name())),
         "`bad` must not parse as a real `def`: {decls:#?}"
     );
 }

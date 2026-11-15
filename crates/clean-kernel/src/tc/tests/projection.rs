@@ -875,13 +875,23 @@ fn test_proj_type_inference_over_applied() {
     let proj = Expr::proj(pair, 0, fvar);
     let result = tc.infer_type(&proj);
 
-    // Since #2208 changed is_prop to return Result (propagating errors via ?),
-    // the is_prop call in infer_proj_type_from_impl fires before the arg-count
-    // validation. Pair : Type -> Type -> Type, so App(App(App(Pair, Nat), Nat), Nat)
-    // tries to apply Nat to Type (= Sort 1), which is not a Pi -> NotAFunction.
+    // `Pair A B` has 2 params + 0 indices, so `App(App(App(Pair, Nat), Nat), Nat)`
+    // over-applies it (3 type args). Lean's `infer_proj` counts the arguments
+    // (`args.size() != nparams + nindices`) and throws the invalid-projection
+    // error BEFORE it computes `is_prop(type)`. Clean now matches that order (the
+    // `is_prop` call was moved after the arg-count check when #14807 made
+    // `is_prop` require a sort), so the arg-count mismatch is reported here rather
+    // than a `NotAFunction` from inferring the over-applied type inside `is_prop`.
     assert!(
-        matches!(result, Err(TypeError::NotAFunction { .. })),
-        "Expected NotAFunction (is_prop propagates before arg-count check), got {:?}",
+        matches!(
+            result,
+            Err(TypeError::InvalidProjWrongArgCount {
+                got: 3,
+                expected: 2,
+                ..
+            })
+        ),
+        "Expected InvalidProjWrongArgCount (arg-count checked before is_prop, per Lean), got {:?}",
         result
     );
 }
@@ -1216,9 +1226,9 @@ fn test_valid_proj_prop_to_prop() {
 
 /// Build a minimal environment with String, List, Char, Nat for projection tests.
 fn build_string_env() -> Environment {
-    let mut env = Environment::new();
-    env.init_string().unwrap();
-    env
+    // See `tc/reduction/tests.rs::make_string_env`: literal expansion needs the
+    // canonical `String.ofList`/`Char.ofNat`, which the prelude holds.
+    Environment::with_prelude()
 }
 
 /// Regression test for #1409: projection reduction must lower string literals
@@ -1392,75 +1402,119 @@ fn test_proj_string_literal_lowering_uses_caller_transparency_mode() {
     );
 }
 
-/// Regression test for #3209: projection reduction must NOT check that the
-/// constructor's inductive name matches the Proj's struct_name.
-///
-/// In Lean 4, type aliases create situations where Proj("Alias", 0, e) has
-/// e that WHNFs to a constructor for the underlying type, not the alias.
-/// For example, `Substring` might be an alias for `Substring.Raw`, so
-/// `Proj("Substring", 0, x)` where x reduces to `Substring.Raw.mk(...)`.
-///
-/// Lean 4 type_checker.cpp:358-373 (`reduce_proj_core`) does NOT check
-/// the struct name — it only checks that the head is a constructor and
-/// that the field index is in bounds.
-///
-/// Before this fix, clean had an extra `ctor_val.inductive_name == struct_name`
-/// check that prevented these projections from reducing, causing TypeMismatch
-/// errors on 5 Init module constants.
-#[test]
-fn test_proj_reduces_across_type_alias_boundary() {
+/// Two one-field structures, `ProjA` and `ProjB`, each with a `Prop`-typed
+/// field, so the projections reduce to a closed `Prop` that is easy to compare.
+fn two_unrelated_structures_env() -> Environment {
     use crate::inductive::{Constructor, InductiveDecl, InductiveType};
 
     let mut env = Environment::new();
-
-    // Define the "real" type: RealPair : Type
-    // RealPair.mk : Prop → Prop → RealPair
-    let real_pair = Name::from_string("RealPair");
-    let real_pair_mk_type = Expr::arrow(
-        Expr::prop(),
-        Expr::arrow(Expr::prop(), Expr::const_(real_pair.clone(), vec![])),
-    );
-
-    let decl = InductiveDecl {
-        level_params: vec![],
-        num_params: 0,
-        types: vec![InductiveType {
-            name: real_pair.clone(),
-            type_: Expr::type_(),
-            constructors: vec![Constructor {
-                name: Name::from_string("RealPair.mk"),
-                type_: real_pair_mk_type,
+    for s in ["ProjA", "ProjB"] {
+        let name = Name::from_string(s);
+        env.add_inductive(InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: name.clone(),
+                type_: Expr::type_(),
+                constructors: vec![Constructor {
+                    name: Name::from_string(&format!("{s}.mk")),
+                    type_: Expr::arrow(Expr::prop(), Expr::const_(name, vec![])),
+                }],
             }],
-        }],
-    };
-    env.add_inductive(decl).unwrap();
+        })
+        .unwrap_or_else(|e| panic!("env setup: structure {s}: {e:?}"));
+    }
+    env
+}
 
+/// Lean v4.33.1 `reduce_proj_core` (leanprover/lean4#14632): the projection's
+/// structure name selects whose field layout the index refers to, so a
+/// constructor of any OTHER inductive must not be projected. `infer_proj`
+/// refuses such a projection, so only an unchecked term reaches reduction —
+/// this builds one directly, as upstream's `kernelProjSname.lean` does with
+/// `debug.skipKernelTC`.
+///
+/// Before the guard, Clean (like Lean v4.30.0-rc2) reduced
+/// `Proj(ProjA, 0, ProjB.mk True)` to `True`. The same-name control
+/// `Proj(ProjB, 0, ProjB.mk True)` must still reduce, in every whnf mode, so
+/// the test fails on a guard that blocks all projection reduction.
+#[test]
+fn projection_of_a_foreign_structure_constructor_stays_stuck() {
+    use crate::env::TransparencyMode;
+
+    let env = two_unrelated_structures_env();
     let tc = TypeChecker::new(&env);
+    let field = Expr::const_(Name::from_string("True"), vec![]);
+    let b_mk = Expr::app(
+        Expr::const_(Name::from_string("ProjB.mk"), vec![]),
+        field.clone(),
+    );
+    let own = Expr::proj(Name::from_string("ProjB"), 0, b_mk.clone());
+    let foreign = Expr::proj(Name::from_string("ProjA"), 0, b_mk);
 
-    // Build RealPair.mk val0 val1
-    let mk = Expr::const_(Name::from_string("RealPair.mk"), vec![]);
-    let val0 = Expr::prop();
-    let val1 = Expr::type_();
-    let pair_val = Expr::app(Expr::app(mk, val0.clone()), val1.clone());
-
-    // Key scenario: Proj uses an ALIAS name, not the real inductive name.
-    // This simulates the type alias pattern where Proj("AliasPair", 0, ...)
-    // has a constructor from "RealPair" as the head.
-    let alias_name = Name::from_string("AliasPair");
-
-    // Proj("AliasPair", 0, RealPair.mk val0 val1) should STILL reduce
-    // because Lean 4 does NOT check struct_name == constructor's inductive.
-    let proj0 = Expr::proj(alias_name.clone(), 0, pair_val.clone());
-    let result0 = tc.whnf(&proj0);
+    // Control: the matching structure name reduces in every mode.
     assert_eq!(
-        result0, val0,
-        "Proj with alias name should reduce to field 0 (Part of #3209)"
+        tc.whnf(&own),
+        field,
+        "control: full whnf must reduce ProjB.0"
+    );
+    assert_eq!(
+        tc.whnf_core_no_delta(&own, true),
+        field,
+        "control: cheap-projection whnf_core must reduce ProjB.0"
+    );
+    assert_eq!(
+        tc.whnf_core_no_delta(&own, false),
+        field,
+        "control: full-projection whnf_core must reduce ProjB.0"
+    );
+    assert_eq!(
+        tc.whnf_with_transparency(&own, TransparencyMode::Default),
+        field,
+        "control: whnf_with_transparency must reduce ProjB.0"
     );
 
-    let proj1 = Expr::proj(alias_name, 1, pair_val);
-    let result1 = tc.whnf(&proj1);
+    // Subject: a ProjA projection of a ProjB constructor stays stuck.
     assert_eq!(
-        result1, val1,
-        "Proj with alias name should reduce to field 1 (Part of #3209)"
+        tc.whnf(&foreign),
+        foreign,
+        "full whnf reduced a ProjA projection of a ProjB constructor"
+    );
+    assert_eq!(
+        tc.whnf_core_no_delta(&foreign, true),
+        foreign,
+        "cheap-projection whnf_core reduced a foreign-constructor projection"
+    );
+    assert_eq!(
+        tc.whnf_core_no_delta(&foreign, false),
+        foreign,
+        "full-projection whnf_core reduced a foreign-constructor projection"
+    );
+    assert_eq!(
+        tc.whnf_with_transparency(&foreign, TransparencyMode::Default),
+        foreign,
+        "whnf_with_transparency reduced a foreign-constructor projection"
+    );
+}
+
+/// The string-literal path of the same guard: Lean's `reduce_proj_core`
+/// expands a literal to its constructor form, which belongs to `String`, so
+/// `Proj(String, 0, "ab")` reduces while a projection naming another structure
+/// stays stuck (upstream `kernelProjSname.lean`'s `stuck` pair).
+#[test]
+fn projection_of_a_string_literal_under_a_foreign_structure_name_stays_stuck() {
+    let env = build_string_env();
+    let tc = TypeChecker::new(&env);
+    let own = Expr::proj(Name::from_string("String"), 0, Expr::str_lit("ab"));
+    assert!(
+        !matches!(tc.whnf(&own).kind(), ExprKind::Proj(..)),
+        "control: Proj(String, 0, \"ab\") must reduce"
+    );
+    // `Prod` is a structure in the prelude and is not `String`.
+    let foreign = Expr::proj(Name::from_string("Prod"), 0, Expr::str_lit("ab"));
+    assert!(
+        matches!(tc.whnf(&foreign).kind(), ExprKind::Proj(name, 0, _) if *name == Name::from_string("Prod")),
+        "Proj(Prod, 0, \"ab\") reduced through String.mk: {:?}",
+        tc.whnf(&foreign)
     );
 }

@@ -95,7 +95,8 @@ pub(crate) struct AxiomAuditArgs {
     /// Axiom audit JSON to verify.
     #[arg(long, value_name = "AUDIT")]
     pub verify: PathBuf,
-    /// Optional launch evidence JSON to write after verification passes.
+    /// Optional launch evidence JSON, written whenever this flag is given — before
+    /// the pass/fail verdict — carrying `validation_passed` and `status`.
     #[arg(long, value_name = "EVIDENCE")]
     pub evidence: Option<PathBuf>,
     /// Emit JSON instead of a compact human-readable verification summary.

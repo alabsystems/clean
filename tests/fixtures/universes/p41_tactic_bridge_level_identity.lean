@@ -52,9 +52,10 @@ theorem probe_two_worlds {α : Sort u} {β : Sort v} (a : α) (b : β)
 
 -- In-family control: the simp spelling passed BEFORE the bridge fix (simp's
 -- own-name lemma convention plus its own level realization) and must keep
--- passing after it.
+-- passing after it. `h` is in the list because Lean's simp has no
+-- `assumption` step (G49): `simp [pid_eq]` alone leaves `a = b` (pinned 4.8.0).
 theorem probe_simp_control {α : Sort v} (a b : α) (h : a = b) : pid a = b := by
-  simp [pid_eq]
+  simp [pid_eq, h]
 
 -- Same-universe spelling of the rw probe: the lemma's ProofState-minted
 -- fresh param must solve against the SAME declared u the enclosing theorem

@@ -16,8 +16,11 @@
 //! ```
 //!
 //! Accepts the same flags as before (`--competition`, `--smtcomp`, `--satcomp`,
-//! `--format`, `--strict`, `--timing`, `--certificate`, `--trim`). Exit codes
-//! remain contractual: `0` verified, `10` invalid, `1` error.
+//! `--format`, `--strict`, `--timing`, `--certificate`, `--trim`) — but
+//! `--strict`, `--certificate` and `--trim` are read by the default mode alone,
+//! and `--format` selects no format in any mode. Exit codes remain contractual:
+//! `0` verified, `10` invalid, `1` error, with the two mode-specific departures
+//! `--help` spells out.
 
 use std::path::PathBuf;
 use std::process;
@@ -56,19 +59,32 @@ Verify SAT/SMT proofs against formulas.
 Formats: LRAT (text/binary), DRAT (text/binary), Alethe, SMT-LIB2, VeriPB
 
 Options:
-  --format <fmt>    Override auto-detection (lrat|drat|alethe|smtlib2|veripb|auto)
-  --strict          Reject proofs with any trusted (unverified) steps
+  --format <fmt>    The format you EXPECT (lrat|drat|alethe|smtlib2|veripb|
+                    auto). Selects nothing — detection decides in every mode.
+                    Its only effect is a stderr warning on a mismatch, and
+                    only in the default mode
+  --strict          Reject any proof that is not fully kernel-verified: one
+                    with trusted steps, and equally a holey one with none.
+                    Default mode only
   --timing          Print parse and verification timing
   --competition     Competition mode: LRAT-only, maximum performance
   --smtcomp         SMT-COMP output: valid|holey|invalid|unknown + hole count
   --satcomp         SAT-COMP output: s VERIFIED | s NOT VERIFIED
-  --certificate <f> Emit verification certificate to file (JSON)
-  --trim <output>   Trim LRAT proof and write minimized proof to file
+  --certificate <f> Emit verification certificate to file (JSON). Default mode
+                    only; --competition, --smtcomp and --satcomp write no file
+  --trim <output>   Trim LRAT proof and write minimized proof to file; a
+                    non-LRAT proof is skipped with a message. Default mode
+                    only; the other three modes write no file
   --help            Show this message
 
 Exit codes:
-  0   Proof verified (valid refutation)
-  10  Proof invalid
+  0   Proof verified (valid refutation). Under --smtcomp, `holey` also exits 0:
+      the empty clause is derived with no trusted steps, but the result is not
+      kernel-verified (the default and --satcomp modes exit 10 for that shape)
+  10  Proof invalid. Under --competition a CNF or LRAT parse error is reported
+      as `s INVALID` with this code, and under --satcomp a proof that cannot be
+      verified at all is `s NOT VERIFIED` with this code — in both modes only a
+      file that cannot be read exits 1
   1   Error (I/O, parse, unknown format)
 
 Note: this binary is a compat shim for `clean verify proof` (Epic #3436 #3511).

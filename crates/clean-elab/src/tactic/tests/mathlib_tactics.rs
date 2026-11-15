@@ -40,8 +40,9 @@ fn test_simpa_with_hypothesis() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         }],
@@ -60,8 +61,9 @@ fn test_simpa_only_empty() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: Expr::const_(Name::from_string("A"), vec![]),
             value: None,
         }],

@@ -23,17 +23,22 @@
 //!    conv-mode `congr` interception), so an expanded conv macro and its
 //!    inline spelling are the same program.
 //!
+//! # Expansion
+//!
+//! The script is the macro's TEMPLATE: a use instantiates it with the call's
+//! arguments (`clean_parser::instantiate_tactic_template`), as Lean expands
+//! the quotation — an argument stands wherever the script writes its
+//! variable, the script's binders are renamed apart, and its free names
+//! resolve where the macro was declared (the registration marks them).
+//!
 //! # Substitution reach (fail closed)
 //!
-//! `substitute_in_tactic` rewrites bound argument references only inside the
-//! payloads it understands: `Named`/`Term` argument expressions and `rw` rule
-//! terms. A conv script tactic outside that reach could carry a bound name
-//! that would silently NOT be substituted — the literal binder name would then
-//! resolve (or capture) at the call site, a silent mis-expansion. The
-//! registration path therefore consults [`substitution_reaches`] for every
+//! The registration path still consults [`substitution_reaches`] for every
 //! script tactic of an argument-taking macro and rejects the declaration
-//! loudly when substitution cannot be shown to reach. Nullary macros have
-//! nothing to substitute, so ANY parseable conv script is delegated verbatim.
+//! loudly when a variable could stand where the bridge cannot show it is
+//! meant to (a hypothesis location, an `enter` binder step, a tactic shape it
+//! does not list). Nullary macros have nothing to substitute, so ANY
+//! parseable conv script is instantiated.
 //!
 //! # Soundness
 //!
@@ -45,9 +50,9 @@
 
 use std::sync::Arc;
 
-use super::user_tactic::{call_site_args, substitute_in_tactic};
+use super::user_tactic::call_site_args;
 use crate::tactic::{CompoundTacticEntry, CompoundTacticHandler, TacticError};
-use clean_parser::{ConvEnterArg, SurfaceExpr, SurfaceTactic, SurfaceTacticLocation};
+use clean_parser::{ConvEnterArg, SurfaceTactic, SurfaceTacticLocation};
 
 /// Whether argument substitution provably reaches every bound-name occurrence
 /// a conv-script tactic could carry. Used at REGISTRATION time for
@@ -64,10 +69,15 @@ use clean_parser::{ConvEnterArg, SurfaceExpr, SurfaceTactic, SurfaceTacticLocati
 ///   name is a hidden occurrence — not reachable.
 /// - Everything else (`Simp`, nested `Conv`, `Cases`, …): payload coverage is
 ///   unverified — not reachable (fail closed).
-pub(super) fn substitution_reaches(tac: &SurfaceTactic, bound: &[String]) -> bool {
+pub(super) fn substitution_reaches(
+    tac: &SurfaceTactic,
+    bound: &[clean_parser::SurfaceName],
+) -> bool {
     match tac {
         SurfaceTactic::Named { .. } | SurfaceTactic::Term(..) => true,
-        SurfaceTactic::Rw(_, _, location) => !location_mentions(location, bound),
+        SurfaceTactic::Rw(_, _, location) | SurfaceTactic::Rewrite(_, _, location) => {
+            !location_mentions(location, bound)
+        }
         SurfaceTactic::ConvArg(..) => true,
         SurfaceTactic::ConvEnter(_, args) => args.iter().all(|arg| match arg {
             ConvEnterArg::Index(_) => true,
@@ -81,8 +91,11 @@ pub(super) fn substitution_reaches(tac: &SurfaceTactic, bound: &[String]) -> boo
 pub(super) fn conv_tactic_shape(tac: &SurfaceTactic) -> &'static str {
     match tac {
         SurfaceTactic::Rw(..) => "`rw … at h` (bound name in the location)",
+        SurfaceTactic::Rewrite(..) => "`rewrite … at h` (bound name in the location)",
+        SurfaceTactic::Rwa(..) => "`rwa`",
         SurfaceTactic::ConvEnter(..) => "`enter [binder-name]` (bound name as a binder step)",
-        SurfaceTactic::Simp { .. } => "`simp`",
+        SurfaceTactic::Simp { all: true, .. } => "`simp_all`",
+        SurfaceTactic::Simp { all: false, .. } => "`simp`",
         SurfaceTactic::SimpRw(..) => "`simp_rw`",
         SurfaceTactic::Conv(..) => "nested `conv`",
         _ => "a non-substitutable tactic shape",
@@ -92,7 +105,10 @@ pub(super) fn conv_tactic_shape(tac: &SurfaceTactic) -> &'static str {
 /// True iff a tactic location names any of the bound pattern variables — a
 /// hidden occurrence substitution cannot rewrite (locations carry hypothesis
 /// names as plain strings).
-fn location_mentions(location: &SurfaceTacticLocation, bound: &[String]) -> bool {
+fn location_mentions(
+    location: &SurfaceTacticLocation,
+    bound: &[clean_parser::SurfaceName],
+) -> bool {
     match location {
         SurfaceTacticLocation::Goal | SurfaceTacticLocation::Wildcard => false,
         SurfaceTacticLocation::Hyps(names) | SurfaceTacticLocation::HypsAndGoal(names) => {
@@ -115,8 +131,9 @@ fn location_mentions(location: &SurfaceTacticLocation, bound: &[String]) -> bool
 /// delegation only; no new way to change a focus or close a goal.
 pub(super) fn build_user_conv_handler(
     name: String,
-    bound_names: Vec<String>,
+    bound_names: Vec<clean_parser::SurfaceName>,
     script: Vec<SurfaceTactic>,
+    hygienic: bool,
 ) -> CompoundTacticEntry {
     let entry_name = name.clone();
     let handler: CompoundTacticHandler = Arc::new(move |eval, ps, tac| {
@@ -138,24 +155,23 @@ pub(super) fn build_user_conv_handler(
                 expected: format!(
                     "{} argument(s) ({}), received {}",
                     bound_names.len(),
-                    bound_names.join(", "),
+                    bound_names
+                        .iter()
+                        .map(ToString::to_string)
+                        .collect::<Vec<_>>()
+                        .join(", "),
                     args.len()
                 ),
             });
         }
-        let expanded: Vec<SurfaceTactic> = if bound_names.is_empty() {
-            script.clone()
-        } else {
-            let bindings: Vec<(String, SurfaceExpr)> = bound_names
-                .iter()
-                .cloned()
-                .zip(args.iter().cloned())
-                .collect();
-            script
-                .iter()
-                .map(|t| substitute_in_tactic(t, &bindings))
-                .collect()
-        };
+        // The script is the macro's template: the arguments stand wherever it
+        // writes their variables, and its binders are renamed apart
+        // (`clean_parser::instantiate_tactic_template`).
+        let expanded =
+            clean_parser::instantiate_tactic_template(&script, &bound_names, args, hygienic)
+                .map_err(|refusal| TacticError::ElaborationFailed {
+                    detail: format!("conv macro `{name}`: {}", refusal.reason()),
+                })?;
         crate::tactic::builtins_phase3d_conv::run_conv_body(eval, ps, &expanded)
     });
     CompoundTacticEntry {

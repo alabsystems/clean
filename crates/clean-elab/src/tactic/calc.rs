@@ -50,11 +50,11 @@ pub enum CalcJustification {
     /// A proof term
     Term(Expr),
     /// Name of a hypothesis
-    Hyp(String),
+    Hyp(clean_parser::SurfaceName),
     /// Use rfl/refl
     Refl,
     /// Apply a named lemma
-    Lemma(String),
+    Lemma(clean_parser::SurfaceName),
 }
 
 /// Resolve a calc step justification to a proof term.
@@ -71,8 +71,9 @@ fn resolve_justification(
             let decl = goal
                 .local_ctx
                 .iter()
-                .find(|d| &d.name == name)
-                .ok_or_else(|| TacticError::HypothesisNotFound(name.clone()))?;
+                .rev()
+                .find(|d| super::pattern::names::local_name_matches(&d.name, name))
+                .ok_or_else(|| TacticError::HypothesisNotFound(name.to_string()))?;
             Ok(Expr::fvar(decl.fvar))
         }
         CalcJustification::Refl => {
@@ -87,7 +88,10 @@ fn resolve_justification(
                 })
             }
         }
-        CalcJustification::Lemma(name) => Ok(state.mk_const_str(name)),
+        CalcJustification::Lemma(name) => {
+            super::pattern::names::require_binding_name(name, "calc")?;
+            Ok(state.mk_const(name.name()))
+        }
     }
 }
 
@@ -293,12 +297,14 @@ pub fn calc_eq(state: &mut ProofState, middle: Expr) -> TacticResult {
         meta_id: meta2,
         target: goal2_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     });
     state.goals.push_front(Goal {
         meta_id: meta1,
         target: goal1_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     });
 
@@ -409,8 +415,9 @@ impl CalcState {
                 TacticError::InvalidTarget {
                     tactic: "calc".into(),
                     detail: format!(
-                        "unsupported calc transitivity: {:?} followed by {:?}",
-                        prev_rel, step.rel
+                        "unsupported calc transitivity: {} followed by {}",
+                        crate::error_render::opaque(&prev_rel),
+                        crate::error_render::opaque(&step.rel)
                     ),
                 }
             })?;

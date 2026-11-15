@@ -61,7 +61,7 @@ impl<'a> ElabCtx<'a> {
         let param_args: Vec<Expr> = params.iter().map(|p| fv(*p)).collect();
         let ind_applied = Expr::apps(Expr::const_(ind_name.clone(), vec![]), param_args.clone());
         let ordering_ty = Expr::const_(Name::from_string("Ordering"), vec![]);
-        let cases_on = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on = ind_name.clone().str("casesOn");
         let motive = Expr::lam(
             BinderInfo::Default,
             ind_applied.clone(),

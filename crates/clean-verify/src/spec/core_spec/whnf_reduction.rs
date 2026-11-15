@@ -138,7 +138,13 @@ impl Specification {
             r"inductive whnf_step : KExpr → KExpr → Type
 | beta : forall (e : KExpr) (e' : KExpr), beta_reduces e e' → whnf_step e e'
 | delta : forall (e : KExpr) (e' : KExpr), delta_reduces e e' → whnf_step e e'",
-            "Single WHNF step for the current fragment: beta/compatibility/iota surface steps or delta unfolding.",
+            "Single reduction step for the current fragment: beta/compatibility/iota surface \
+             steps or delta unfolding. \
+             \
+             NOT weak-head, despite the name: the beta leg beta_reduces carries congruence \
+             arms under binders (lam_ty, lam_body, pi_dom, pi_cod, let_ty, let_val, \
+             let_body), so this relation reduces inside a lambda and a pi. Everything \
+             phrased over it -- whnf_acc above all -- is therefore about FULL reduction.",
         )?;
 
         // =========================================================
@@ -160,8 +166,17 @@ impl Specification {
         self.add_inductive(
             r"inductive whnf_acc : KExpr → Type
 | intro : forall (e : KExpr), (forall (e' : KExpr), whnf_step e e' → whnf_acc e') → whnf_acc e",
-            "Accessibility of e under whnf_step: inhabited iff every WHNF \
-             reduction sequence from e is finite (Acc over the flipped step relation).",
+            "Accessibility of e under whnf_step: inhabited iff every reduction \
+             sequence from e is finite (Acc over the flipped step relation). \
+             \
+             READ THE NAME WITH CARE: despite `whnf`, this is accessibility under FULL \
+             one-step reduction, because whnf_step's beta leg carries congruence arms UNDER \
+             BINDERS (lam_body, pi_cod, let_body among them). So whnf_acc e is STRONG \
+             NORMALIZATION of e, not weak-head normalization, and it is correspondingly \
+             harder to establish and stronger to consume. SELF_VERIFICATION_CERTIFICATE.md \
+             states the same at its reduction-relation entry; this description used to say \
+             'every WHNF reduction sequence', which invited the weaker reading at the very \
+             place a reader meets the definition.",
         )?;
 
         // terminates_whnf e := whnf_acc e. WHNF reduction terminates on e iff e

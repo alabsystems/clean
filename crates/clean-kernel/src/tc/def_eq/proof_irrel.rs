@@ -145,7 +145,7 @@ impl<'env> TypeChecker<'env> {
     fn try_infer_type_quick_inner(&self, e: &Expr) -> Option<Expr> {
         match e.kind() {
             ExprKind::FVar(id) => self.ctx.borrow().get(*id).map(|d| d.type_.clone()),
-            ExprKind::Const(name, levels) => self.env.instantiate_type(name, levels),
+            ExprKind::Const(name, levels) => self.instantiate_type_in_theory(name, levels),
             ExprKind::Sort(l) => Some(Expr::from_kind(ExprKind::Sort(Level::succ(l.clone())))),
             ExprKind::App(f, a) => {
                 let f_type = self.try_infer_type_quick(f)?;
@@ -159,10 +159,7 @@ impl<'env> TypeChecker<'env> {
                 let body_type = self.try_infer_type_quick(body)?;
                 Some(Expr::pi(*bi, ty.as_ref().clone(), body_type))
             }
-            ExprKind::Lit(lit) => Some(match lit {
-                crate::expr::Literal::Nat(_) => Expr::const_(NAME_NAT.clone(), vec![]),
-                crate::expr::Literal::String(_) => Expr::const_(NAME_STRING.clone(), vec![]),
-            }),
+            ExprKind::Lit(lit) => Some(crate::tc::infer::infer_literal_type(lit)),
             ExprKind::MData(_, inner) => self.try_infer_type_quick(inner),
             ExprKind::Squash(inner) => {
                 if self.mode != CleanMode::Impredicative
@@ -195,3 +192,11 @@ impl<'env> TypeChecker<'env> {
         })
     }
 }
+
+#[cfg(all(test, not(kani)))]
+#[path = "proof_irrel_literal_tests.rs"]
+mod literal_tests;
+
+#[cfg(all(test, not(kani)))]
+#[path = "proof_irrel_three_valued_tests.rs"]
+mod three_valued_tests;

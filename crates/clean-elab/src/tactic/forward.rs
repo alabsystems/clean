@@ -8,7 +8,7 @@
 //! - `suffices` reduces a goal by providing a sufficient condition
 
 use crate::unify::{MetaState, Unifier, UnifyResult};
-use clean_kernel::{Expr, ExprKind, FVarId, Name};
+use clean_kernel::{Expr, ExprKind, FVarId};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 
@@ -43,7 +43,12 @@ use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 /// ENSURES: On Ok with `None`, original goal closed; 2 new goals pushed (lemma + continuation)
 /// ENSURES: On Ok, new goal(s) have `h : ty` available in local context
 /// ENSURES: On Err(TypeMismatch), proof type does not unify with `ty`; state unchanged
-pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) -> TacticResult {
+pub fn have_(
+    state: &mut ProofState,
+    name: &clean_parser::SurfaceName,
+    ty: Expr,
+    proof: Option<Expr>,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     if let Some(pf) = proof {
@@ -71,11 +76,15 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
                     FVarId::new(base)
                 };
 
+                // Lean's `have` local has no value; Clean keeps one, marked as
+                // a `have`'s (`local_ops::have_value`), so reduction and term
+                // elaboration keep it opaque wherever the declaration is copied.
                 let local_decl = LocalDecl {
+                    binder_info: Default::default(),
                     fvar,
-                    name: name.to_string(),
+                    name: name.clone(),
                     ty: ty.clone(),
-                    value: Some(pf.clone()),
+                    value: Some(super::core::have_value(pf.clone())),
                 };
 
                 // Create new goal with extended context
@@ -90,7 +99,7 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
                 // The proof of the original goal is:
                 // let h : T := proof in <continuation>
                 let proof_term = Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     ty,
                     pf,
                     new_meta_expr.abstract_fvar(fvar),
@@ -105,7 +114,8 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
                     meta_id: new_meta_id,
                     target: goal.target.clone(),
                     local_ctx: new_ctx,
-                    tag: None,
+                    case_binders: goal.case_binders.clone(),
+                    tag: goal.tag.clone(),
                 };
 
                 state.goals.push_front(new_goal);
@@ -134,8 +144,9 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
         };
 
         let local_decl = LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: name.to_string(),
+            name: name.clone(),
             ty: ty.clone(),
             value: None,
         };
@@ -157,7 +168,7 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
         // The proof of the original goal is:
         // let h : T := <lemma_proof> in <continuation>
         let proof_term = Expr::let_named(
-            Name::from_string(name),
+            name.name().clone(),
             ty.clone(),
             lemma_meta_expr,
             cont_meta_expr.abstract_fvar(fvar),
@@ -172,6 +183,7 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
             meta_id: lemma_meta_id,
             target: ty,
             local_ctx: goal.local_ctx.clone(),
+            case_binders: Vec::new(),
             tag: None,
         };
 
@@ -180,7 +192,8 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
             meta_id: cont_meta_id,
             target: goal.target.clone(),
             local_ctx: new_ctx,
-            tag: None,
+            case_binders: goal.case_binders.clone(),
+            tag: goal.tag.clone(),
         };
 
         // Insert goals (lemma first, then continuation)
@@ -230,7 +243,7 @@ pub fn have_(state: &mut ProofState, name: &str, ty: Expr, proof: Option<Expr>) 
 /// ENSURES: On Err(TypeMismatch), proof_fn type does not match `ty → goal.target`
 pub fn suffices_(
     state: &mut ProofState,
-    _name: &str,
+    _name: &clean_parser::SurfaceName,
     ty: Expr,
     proof_fn: Option<Expr>,
 ) -> TacticResult {
@@ -264,7 +277,8 @@ pub fn suffices_(
                     meta_id: sufficient_meta_id,
                     target: ty,
                     local_ctx: goal.local_ctx.clone(),
-                    tag: None,
+                    case_binders: goal.case_binders.clone(),
+                    tag: goal.tag.clone(),
                 };
 
                 state.goals.push_front(sufficient_goal);
@@ -305,7 +319,8 @@ pub fn suffices_(
             meta_id: sufficient_meta_id,
             target: ty.clone(),
             local_ctx: goal.local_ctx.clone(),
-            tag: None,
+            case_binders: goal.case_binders.clone(),
+            tag: goal.tag.clone(),
         };
 
         // Goal 2: prove that sufficient condition implies original goal
@@ -313,7 +328,8 @@ pub fn suffices_(
             meta_id: impl_meta_id,
             target: Expr::arrow(ty, goal.target),
             local_ctx: goal.local_ctx.clone(),
-            tag: None,
+            case_binders: goal.case_binders.clone(),
+            tag: goal.tag.clone(),
         };
 
         // Insert goals (sufficient first, then implication)

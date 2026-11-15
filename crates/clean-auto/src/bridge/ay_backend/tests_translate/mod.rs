@@ -14,6 +14,7 @@ pub(super) use clean_kernel::FVarId;
 
 mod domain_sorts;
 mod fvar_apps;
+mod int_constructors;
 mod mdata;
 mod nat_semantics;
 mod quantifier_like;

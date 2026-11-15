@@ -519,13 +519,13 @@ fn looks_like_opb(text: &str) -> bool {
 
 /// Trust level for a unified verification result.
 ///
-/// Classifies how deeply the proof was checked, from full kernel verification
+/// Classifies how deeply the proof was checked, from full certificate checking
 /// down to format recognition without checking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[non_exhaustive]
 pub enum TrustLevel {
-    /// Every proof step was independently verified by clean's kernel.
-    KernelVerified,
+    /// Every proof step was independently checked by clean's proof-format checkers.
+    CertificateChecked,
     /// Proof was verified but some steps were structurally accepted
     /// (correct arity/shape but not semantically rechecked).
     StructurallyVerified,
@@ -540,7 +540,7 @@ pub enum TrustLevel {
 impl std::fmt::Display for TrustLevel {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            TrustLevel::KernelVerified => write!(f, "kernel-verified"),
+            TrustLevel::CertificateChecked => write!(f, "certificate-checked"),
             TrustLevel::StructurallyVerified => write!(f, "structurally-verified"),
             TrustLevel::PartiallyVerified => write!(f, "partially-verified"),
             TrustLevel::FormatRecognized => write!(f, "format-recognized"),
@@ -672,7 +672,7 @@ fn verify_any_sat_proof(
     let elapsed = start.elapsed().as_micros() as u64;
 
     let trust_level = if pipeline_result.valid && pipeline_result.stats.steps_trusted == 0 {
-        TrustLevel::KernelVerified
+        TrustLevel::CertificateChecked
     } else if pipeline_result.valid {
         TrustLevel::StructurallyVerified
     } else {
@@ -700,7 +700,7 @@ fn verify_any_alethe(proof: &[u8], start: Instant) -> Result<UnifiedResult, Pipe
         Ok(result) => {
             let elapsed = start.elapsed().as_micros() as u64;
             let trust_level = if result.stats.is_fully_verified() {
-                TrustLevel::KernelVerified
+                TrustLevel::CertificateChecked
             } else if result.stats.trusted == 0 {
                 TrustLevel::StructurallyVerified
             } else {
@@ -712,7 +712,7 @@ fn verify_any_alethe(proof: &[u8], start: Instant) -> Result<UnifiedResult, Pipe
                 valid: result.valid,
                 verification_time_us: elapsed,
                 trust_level,
-                steps_verified: (result.stats.kernel_verified + result.stats.structurally_accepted)
+                steps_verified: (result.stats.step_checked + result.stats.structurally_accepted)
                     as usize,
                 steps_trusted: result.stats.trusted as usize,
                 certificate: None,
@@ -745,7 +745,7 @@ fn verify_any_smtlib2(proof: &[u8], start: Instant) -> Result<UnifiedResult, Pip
             let result = smt_verify::verify_smt_proof(&dag, VerifyMode::Permissive);
             let elapsed = start.elapsed().as_micros() as u64;
             let trust_level = if result.valid && result.stats.is_fully_verified() {
-                TrustLevel::KernelVerified
+                TrustLevel::CertificateChecked
             } else if result.valid && result.stats.trusted == 0 {
                 TrustLevel::StructurallyVerified
             } else if result.valid {
@@ -759,7 +759,7 @@ fn verify_any_smtlib2(proof: &[u8], start: Instant) -> Result<UnifiedResult, Pip
                 valid: result.valid,
                 verification_time_us: elapsed,
                 trust_level,
-                steps_verified: (result.stats.kernel_verified + result.stats.structurally_accepted)
+                steps_verified: (result.stats.step_checked + result.stats.structurally_accepted)
                     as usize,
                 steps_trusted: result.stats.trusted as usize,
                 certificate: None,
@@ -1118,7 +1118,7 @@ fn verify_alethe_pipeline(
         Ok(result) => {
             let elapsed = start.elapsed().as_micros() as u64;
             let steps_verified =
-                (result.stats.kernel_verified + result.stats.structurally_accepted) as usize;
+                (result.stats.step_checked + result.stats.structurally_accepted) as usize;
             let steps_trusted = result.stats.trusted as usize;
 
             Ok(PipelineResult {
@@ -1185,7 +1185,7 @@ fn verify_smtlib2_pipeline(
             let result = smt_verify::verify_smt_proof(&dag, mode);
             let elapsed = start.elapsed().as_micros() as u64;
             let steps_verified =
-                (result.stats.kernel_verified + result.stats.structurally_accepted) as usize;
+                (result.stats.step_checked + result.stats.structurally_accepted) as usize;
             let steps_trusted = result.stats.trusted as usize;
 
             Ok(PipelineResult {
@@ -1814,7 +1814,7 @@ mod tests {
 
         assert!(result.valid);
         assert_eq!(result.format, ProofFormat::Lrat);
-        assert_eq!(result.trust_level, TrustLevel::KernelVerified);
+        assert_eq!(result.trust_level, TrustLevel::CertificateChecked);
         assert!(result.steps_verified > 0);
         assert_eq!(result.steps_trusted, 0);
         assert!(result.certificate.is_some());
@@ -1849,7 +1849,7 @@ mod tests {
         assert!(result.valid);
         assert_eq!(result.format, ProofFormat::Alethe);
         assert!(
-            result.trust_level == TrustLevel::KernelVerified
+            result.trust_level == TrustLevel::CertificateChecked
                 || result.trust_level == TrustLevel::StructurallyVerified,
             "Alethe proof should be verified, got {:?}",
             result.trust_level,
@@ -1883,7 +1883,10 @@ mod tests {
 
     #[test]
     fn test_trust_level_display() {
-        assert_eq!(TrustLevel::KernelVerified.to_string(), "kernel-verified");
+        assert_eq!(
+            TrustLevel::CertificateChecked.to_string(),
+            "certificate-checked"
+        );
         assert_eq!(
             TrustLevel::StructurallyVerified.to_string(),
             "structurally-verified"

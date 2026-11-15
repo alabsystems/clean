@@ -679,7 +679,7 @@ fn builtin_int_div(args: &[Value]) -> Result<Value, FfiError> {
         .ok_or_else(|| arithmetic_overflow(NAME))
 }
 
-/// `Int.mod : Int → Int → Int`. Modulus by zero yields `0` (Lean convention);
+/// `Int.mod : Int → Int → Int`. Modulus by zero yields the dividend (Lean convention);
 /// otherwise truncating remainder, declining the `i64::MIN % -1` overflow
 /// (`fold_arith`: `Int.mod if rhs != 0 => (lhs as i64).checked_rem(rhs as i64)?`).
 fn builtin_int_mod(args: &[Value]) -> Result<Value, FfiError> {
@@ -688,7 +688,7 @@ fn builtin_int_mod(args: &[Value]) -> Result<Value, FfiError> {
     let lhs = expect_int(NAME, args, 0)?;
     let rhs = expect_int(NAME, args, 1)?;
     if rhs == 0 {
-        return Ok(Value::Int(0));
+        return Ok(Value::Int(lhs));
     }
     lhs.checked_rem(rhs)
         .map(Value::Int)

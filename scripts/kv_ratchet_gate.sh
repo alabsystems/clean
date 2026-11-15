@@ -11,6 +11,27 @@
 #                       production-default `opaque-and-theorem` run (eliding theorem
 #                       values may only ADD KernelVerified, never drop one).
 #                       [`clean mathverse elision-gate`]
+#   0. Completeness  — in BOTH stamps, no slice constant failed or fell back to an
+#                       axiom (`failed == 0`, `axiom_fallback == 0`, no olean
+#                       failed to convert). Checked before 1 and 2, and on ANY
+#                       corpus: it needs no baseline, so it holds the slice to
+#                       "every constant re-checks" even where the count cannot be
+#                       compared.
+#
+# ## The corpus pin (2026-10-07)
+#
+# The count in 1 is a property of the CORPUS as much as of Clean: it is how many
+# constants the slice's two modules declare, all of them KernelVerified. The 702
+# this gate was armed with on 2026-06-24 recorded no Mathlib revision, so it could
+# not be reproduced anywhere -- the first measured run since (Mathlib 43ad0e9d,
+# Lean v4.30.0-rc2) stamped 686 of 686 constants KernelVerified, 0 failed, 0
+# fallback, and the ratchet called that a regression. A count is now compared only
+# against the corpus it was minted on: data/kv_ratchet_corpus.json pins the
+# sha256 of every slice .olean (plus the Mathlib rev and toolchain, for humans),
+# and a corpus whose slice bytes differ runs the completeness floor and the
+# elision subset but SKIPS the count comparison (`skipped:corpus-mismatch`,
+# a FAILURE under KV_GATE_REQUIRE_MEASURED). Re-minting the count on a new corpus
+# moves the pin and the baseline together, in one reviewed commit.
 #
 # This is what makes the gate NON-VACUOUS: it re-measures a real (small, fixed,
 # OOM-safe, deterministic) slice rather than reading a static committed summary.
@@ -22,12 +43,13 @@
 #
 # ## The verdict line (why a green exit code is not evidence)
 #
-# There are SIX skip-green paths below, and at least two of them fire routinely on
+# There are SEVEN skip-green paths below, and at least two of them fire routinely on
 # an ordinary dev machine: the corpus lives under data/raw/mathlib4 and is commonly
 # a symlink into /tmp (deleted by tmp cleanup), and the RAM admission check defers
 # whenever the box is under 8GiB free — which concurrent builds cause constantly.
 # So `exit 0` alone means ANY of: verified; no binary; no corpus; partial corpus;
-# empty slice; or simply that something else was using memory.
+# empty slice; a corpus other than the pinned one (the count was not compared);
+# or simply that something else was using memory.
 #
 # Exit status therefore cannot distinguish a measurement from a deferral, and no
 # automation (or release checklist, or blog post) should treat it as if it could.
@@ -48,6 +70,7 @@ cd "$(cd "$(dirname "$0")/.." && pwd)" || exit 1
 
 SLICE=data/kv_ratchet_slice.txt
 RATCHET=data/mathlib_kv_ratchet.json
+CORPUS_PIN=data/kv_ratchet_corpus.json
 ML=data/raw/mathlib4
 MLLIB="$ML/.lake/build/lib/lean"
 MLROOT="$MLLIB/Mathlib"
@@ -79,17 +102,51 @@ skip() {
 
 fail() { echo "KV ratchet gate: FAIL — $2" >&2; verdict "failed:$1"; exit 1; }
 
-# Resolve a built `clean` binary. Prefer the LOCAL build (the binary under test)
-# over any globally-installed `clean` on PATH: a stale PATH binary would re-stamp
-# with the wrong kernel and yield a wrong count (false pass/fail). $CLEAN_BIN
-# overrides for out-of-tree runs (e.g. a worktree whose target/ is redirected).
-CLEAN_BIN="${CLEAN_BIN:-}"
-[ -z "$CLEAN_BIN" ] && [ -x target/release/clean ] && CLEAN_BIN=target/release/clean
-[ -z "$CLEAN_BIN" ] && [ -x target/debug/clean ] && CLEAN_BIN=target/debug/clean
-[ -z "$CLEAN_BIN" ] && CLEAN_BIN="$(command -v clean 2>/dev/null || true)"
-[ -z "$CLEAN_BIN" ] && skip no-binary "no clean binary (cargo build --release --bin clean to enable)"
 [ -f "$SLICE" ]    || skip no-slice-manifest "no slice manifest at $SLICE"
 [ -d "$MLLIB" ]    || skip no-corpus "no Mathlib checkout at $MLLIB"
+
+# Resolve the `clean` binary this gate is about to re-stamp KernelVerified with,
+# and REFUSE one that cannot be shown to be built from this checkout.
+#
+# The three-line fallback that used to sit here (release, then debug, then
+# `command -v clean`) had no freshness check at all, and the comment above it
+# named the exact hazard -- "a stale PATH binary would re-stamp with the wrong
+# kernel and yield a wrong count (false pass/fail)" -- without guarding it. The
+# moment a corpus landed, this gate would have ratcheted a committed soundness
+# baseline against whatever binary was lying in target/. Measured 2026-09-15:
+# target/release/clean here was built 2026-08-27 and carries a build sha that
+# resolves to no commit in this clone.
+#
+# The resolution and the check now live in one place with both callers, because
+# scripts/kv_invariance_gate.sh carried the identical three lines and ITS
+# registry row claims soundness and is already demonstrated.
+#
+# ORDER MATTERS, IN BOTH DIRECTIONS, and this sits between the two kinds of
+# check above and below it.
+#
+# It is placed AFTER the slice and corpus checks, because those answer "is there
+# anything to measure at all?" and their answer here is no. Refusing a stale
+# binary on a tree that has no corpus would redden every lane for a binary the
+# gate was never going to run, which is a false alarm and teaches people to
+# ignore it.
+#
+# It is placed BEFORE the low-memory check, because that one is a DEFERRAL of
+# work the gate does intend to do. A correctness refusal must outrank a
+# deferral, or a stale binary on a loaded box arrives as a green
+# `skipped:low-memory` -- the gate declining for a reason that has nothing to do
+# with the thing that is actually wrong.
+#
+# Sourced by the relative path, like the sibling stamp_mem_governor.sh below:
+# this script cd's to the repo root at the top and there is no $REPO_ROOT here.
+# shellcheck source=scripts/lib/clean_binary_under_test.sh
+. scripts/lib/clean_binary_under_test.sh
+resolve_clean_binary_under_test
+case "$?" in
+  0) CLEAN_BIN="$CLEAN_BIN_UNDER_TEST" ;;
+  2) skip no-binary "$CLEAN_BIN_REASON" ;;
+  3) fail stale-binary "$CLEAN_BIN_REASON" ;;
+  *) fail stale-binary "the binary-under-test resolver returned an unexpected status" ;;
+esac
 
 # LEAN_PATH: Mathlib lib + the pinned toolchain core + every Lake package lib.
 TC="$(tr -d ' \t\r\n' < "$ML/lean-toolchain" | sed 's#/#--#; s#:#---#')"
@@ -110,6 +167,38 @@ while IFS= read -r line; do
   TARGETS="$TARGETS $f"
 done < "$SLICE"
 [ -n "$TARGETS" ] || skip empty-slice "slice manifest is empty"
+
+# Is this the corpus the count baseline was minted on? Compared by CONTENT: the
+# set of slice paths must equal the pin's, and every slice .olean's sha256 must
+# equal its pinned digest. Decided here, acted on only after the stamps: a
+# mismatched corpus still runs the completeness floor and the elision subset,
+# which need no baseline, and skips only the count comparison. An unreadable or
+# malformed pin is a FAILURE, never a reason to compare blind.
+[ -f "$CORPUS_PIN" ] || fail corpus-pin "no corpus pin at $CORPUS_PIN -- the count baseline in $RATCHET cannot be tied to a corpus"
+CORPUS_STATE="$(python3 - "$CORPUS_PIN" "$SLICE" "$MLROOT" <<'PY'
+import hashlib, json, sys
+pin_path, slice_path, mlroot = sys.argv[1:4]
+try:
+    pin = json.load(open(pin_path, encoding="utf-8"))
+    pinned = pin["slice_sha256"]
+    assert isinstance(pinned, dict) and pinned
+except Exception as exc:  # noqa: BLE001 -- the shell turns this into a FAILURE
+    print(f"malformed {pin_path}: {exc}")
+    sys.exit(2)
+rows = [l.strip() for l in open(slice_path, encoding="utf-8")]
+rows = [l for l in rows if l and not l.startswith("#")]
+if sorted(rows) != sorted(pinned):
+    print(f"mismatch: the slice lists {sorted(rows)}, the pin covers {sorted(pinned)}")
+    sys.exit(0)
+for rel in rows:
+    h = hashlib.sha256(open(f"{mlroot}/{rel}", "rb").read()).hexdigest()
+    if h != pinned[rel]:
+        print(f"mismatch: {rel} is sha256:{h[:12]}, pinned sha256:{pinned[rel][:12]} "
+              f"(Mathlib {pin.get('mathlib_rev', '?')[:12]})")
+        sys.exit(0)
+print("match")
+PY
+)" || fail corpus-pin "$CORPUS_STATE"
 
 # Lightweight OOM admission. Deliberately NOT the heavy-stamp global lock
 # (scripts/lib/stamp_mem_governor.sh): that lock is held ~continuously by the
@@ -147,13 +236,39 @@ echo "  re-stamping pinned slice (opaque-and-theorem + opaque)..."
 stamp opaque-and-theorem "$OUT/summary_oat.json" "$OUT/kv_oat.json" || fail stamp-oat "production-default stamp of the pinned slice"
 stamp opaque             "$OUT/summary_op.json"  "$OUT/kv_op.json"  || fail stamp-opaque "statically-sound (opaque) stamp of the pinned slice"
 
-# 1. KV ratchet (monotonic-UP + heuristic==0 soundness floor) on the oat summary.
-"$CLEAN_BIN" mathverse ratchet check --summary "$OUT/summary_oat.json" --ratchet "$RATCHET" \
-  || fail ratchet-regression "re-stamping the pinned slice dropped KernelVerified below the baseline (or heuristic_kernel_verified != 0); see $RATCHET + $SLICE"
+# 0. Completeness, on any corpus: no slice constant failed or fell back to an
+#    axiom in EITHER stamp, and every olean converted.
+for _mode in oat op; do
+  _gap="$(python3 - "$OUT/summary_$_mode.json" <<'PY'
+import json, sys
+try:
+    s = json.load(open(sys.argv[1], encoding="utf-8"))
+    bad = {k: s[k] for k in ("failed", "axiom_fallback") if s[k] != 0}
+    if s["oleans_failed"]:
+        bad["oleans_failed"] = s["oleans_failed"]
+except Exception as exc:  # noqa: BLE001 -- an unreadable summary is a gap
+    print(f"unreadable stamp summary {sys.argv[1]}: {exc}")
+    sys.exit(0)
+if bad:
+    print(f"{bad} of {s.get('total')} slice constants")
+PY
+)"
+  [ -z "$_gap" ] || fail slice-incomplete "the $_mode stamp did not kernel-verify every slice constant: $_gap"
+done
+
+# 1. KV ratchet (monotonic-UP + heuristic==0 soundness floor) on the oat summary,
+#    only against the corpus the baseline was minted on (see "The corpus pin").
+if [ "$CORPUS_STATE" = match ]; then
+  "$CLEAN_BIN" mathverse ratchet check --summary "$OUT/summary_oat.json" --ratchet "$RATCHET" \
+    || fail ratchet-regression "re-stamping the pinned slice dropped KernelVerified below the baseline (or heuristic_kernel_verified != 0); see $RATCHET + $SLICE"
+fi
 
 # 2. Elision subset gate: KV(opaque) must be subset-of KV(opaque-and-theorem).
 "$CLEAN_BIN" mathverse elision-gate "$OUT/kv_op.json" "$OUT/kv_oat.json" \
   || fail elision-subset "opaque-and-theorem dropped a KernelVerified constant that the statically-sound opaque run kept"
+
+[ "$CORPUS_STATE" = match ] \
+  || skip corpus-mismatch "every slice constant re-checked and the elision subset held, but the corpus is not the one $RATCHET was minted on ($CORPUS_STATE), so the KernelVerified COUNT was not compared; re-mint the pin and the baseline together on a new corpus, never one without the other"
 
 echo "  KV ratchet gate: PASS (slice re-stamped; ratchet + elision subset hold)."
 verdict measured

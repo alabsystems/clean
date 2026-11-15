@@ -92,8 +92,8 @@ fn test_graduate_pilot_full_contract() {
     assert!(reader.lookup_name(BAD_DEPENDENT).is_none());
     assert!(reader.lookup_name(BAD_AXIOM).is_none());
 
-    let sidecar = ProvenanceSidecar::from_bytes(&reader.provenance)
-        .expect("decode provenance sidecar");
+    let sidecar =
+        ProvenanceSidecar::from_bytes(&reader.provenance).expect("decode provenance sidecar");
     let prov = sidecar.get(header.provenance_idx).expect("prov record");
     let expected_note = record.provenance_note().expect("binding note");
     assert!(expected_note.starts_with(GRADUATION_NOTE_PREFIX));
@@ -141,11 +141,8 @@ fn test_cake_gate_v1_committed_graduation_artifact_still_verifies() {
     //      proof value does not typecheck must FAIL the gate's kernel replay
     //      — fail-closed, never silently accepted.
     let tmp = tempfile::tempdir().expect("tempdir");
-    let shard_path = write_legacy_nonreplaying_graduation(
-        tmp.path(),
-        GRADUATION_SCHEMA_VERSION_V1,
-        false,
-    );
+    let shard_path =
+        write_legacy_nonreplaying_graduation(tmp.path(), GRADUATION_SCHEMA_VERSION_V1, false);
 
     let record = GraduationRecord::from_file(&graduation_record_path(&shard_path))
         .expect("regenerated v1 record must parse under the current schema types");

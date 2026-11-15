@@ -76,8 +76,9 @@ fn setup_three_hyp_nat_denominator_bridge_state(goal_lhs: Expr, goal_rhs: Expr) 
         make_eq(nat.clone(), goal_lhs, goal_rhs),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(
                     nat.clone(),
                     nat_mul(2, nat_var("a")),
@@ -86,14 +87,16 @@ fn setup_three_hyp_nat_denominator_bridge_state(goal_lhs: Expr, goal_rhs: Expr) 
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(nat.clone(), nat_var("c"), nat_var("d")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h3".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: make_eq(nat, nat_var("e"), nat_var("f")),
                 value: None,
             },
@@ -121,8 +124,9 @@ fn setup_three_hyp_int_denominator_bridge_state(goal_lhs: Expr, goal_rhs: Expr) 
         make_eq(int.clone(), goal_lhs, goal_rhs),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(
                     int.clone(),
                     int_mul(2, int_var("a")),
@@ -131,14 +135,16 @@ fn setup_three_hyp_int_denominator_bridge_state(goal_lhs: Expr, goal_rhs: Expr) 
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(int.clone(), int_var("c"), int_var("d")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h3".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: make_eq(int, int_var("e"), int_var("f")),
                 value: None,
             },
@@ -182,9 +188,18 @@ fn test_polyrith_three_hyp_rational_coeff_nat_cert_pipeline_clears_denominators_
 
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(1, 2)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
-            ("h3".to_string(), Polynomial::constant(-1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(1, 2),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h3"),
+                Polynomial::constant(-1, 1),
+            ),
         ],
         verified: true,
         explanation: "three-hyp Nat denominator bridge".to_string(),
@@ -222,9 +237,9 @@ fn test_linear_combination_tactic_three_hyp_rational_nat_goal_closes_without_tru
     linear_combination(
         &mut state,
         vec![
-            LinearCoeff::new("h1", 1, 2),
-            LinearCoeff::one("h2"),
-            LinearCoeff::int("h3", -1),
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h1"), 1, 2),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+            LinearCoeff::int(&clean_parser::SurfaceName::generated_path("h3"), -1),
         ],
     )
     .expect("linear_combination should close the Nat rational three-hypothesis goal");
@@ -241,9 +256,18 @@ fn test_polyrith_three_hyp_rational_coeff_int_cert_pipeline_clears_denominators_
 
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(1, 2)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
-            ("h3".to_string(), Polynomial::constant(-1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(1, 2),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h3"),
+                Polynomial::constant(-1, 1),
+            ),
         ],
         verified: true,
         explanation: "three-hyp Int denominator bridge".to_string(),
@@ -281,9 +305,9 @@ fn test_linear_combination_tactic_three_hyp_rational_int_goal_closes_without_tru
     linear_combination(
         &mut state,
         vec![
-            LinearCoeff::new("h1", 1, 2),
-            LinearCoeff::one("h2"),
-            LinearCoeff::int("h3", -1),
+            LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h1"), 1, 2),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+            LinearCoeff::int(&clean_parser::SurfaceName::generated_path("h3"), -1),
         ],
     )
     .expect("linear_combination should close the Int rational three-hypothesis goal");

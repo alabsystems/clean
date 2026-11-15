@@ -42,8 +42,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -206,13 +205,13 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("fn @expr::bvar_in_range(functy.467)"),
-        "the emitted body must still carry signature index 467; if it does not, the artifact \
+        FIXTURE.contains("fn @expr::bvar_in_range(functy.435)"),
+        "the emitted body must still carry signature index 435; if it does not, the artifact \
          was re-interned and this table needs a one-line REVIEWED re-pin — which is a \
          different thing from the proved module having stopped matching"
     );
     assert!(
-        ir_mint::IR_BR_TAGS.contains("\"functy\": 467"),
+        ir_mint::IR_BR_TAGS.contains("\"functy\": 435"),
         "and the committed table must record it"
     );
     assert!(
@@ -269,7 +268,7 @@ fn m10_the_interface_pins_bite() {
         ("%1: u32, %2: u32):", "%1: u32, %2: u64):", "parameter"),
         ("bb3(%3: bool):", "bb3(%3: u32):", "block parameter"),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.467)", "(functy.468)", "signature index"),
+        ("(functy.435)", "(functy.436)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");

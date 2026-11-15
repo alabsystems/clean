@@ -59,16 +59,27 @@ impl StampEnvFingerprint {
     /// here re-keys every module, forcing an honest full re-verify.
     pub fn cache_key(&self) -> String {
         format!(
-            "kv={};tc={};hb={};el={};mcm={};pv={}",
+            "kv={};tc={};hb={};el={};mcm={};pv={};rd={}",
             self.kernel_version,
             self.toolchain,
             self.heartbeat,
             self.elision_policy,
             self.max_closure_modules,
             self.prelude_variant,
+            REPLAY_DISCIPLINE,
         )
     }
 }
+
+/// The verdict discipline every stamp this binary mints was produced under,
+/// folded into [`StampEnvFingerprint::cache_key`]. The crate version does not
+/// move when the discipline does, so without this a verdict cached by a binary
+/// that checked each target with its own declaration resident (and with Clean's
+/// extended reducer theory) would be REPLAYED as a cache hit: the
+/// 2026-09-23 forgeries `forged3_self : False := forged3_self` and
+/// `System.Platform.isOSX = true := rfl` were stamped exactly that way. Bump
+/// it whenever what earns `KernelVerified` changes.
+pub(crate) const REPLAY_DISCIPLINE: &str = "lean-replay-order+lean-kernel-theory/1";
 
 /// Sidecar manifest of the constants Clean's kernel re-verified.
 #[derive(Debug, Clone, Serialize, Deserialize)]

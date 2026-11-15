@@ -40,6 +40,7 @@ mod report_validators;
 mod reviewer_deck;
 mod rows;
 mod rust_first_evidence;
+mod rust_source_scope;
 mod sorry_bypass_lint;
 mod sorry_bypass_syntax;
 mod tactic_count_artifact;

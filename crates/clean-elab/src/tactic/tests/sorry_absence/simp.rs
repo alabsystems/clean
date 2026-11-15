@@ -85,8 +85,9 @@ fn test_simp_no_sorry_on_hypothesis_rewrite() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: p,
             value: None,
         }],

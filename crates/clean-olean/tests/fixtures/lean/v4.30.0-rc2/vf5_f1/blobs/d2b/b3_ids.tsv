@@ -1,0 +1,9 @@
+# The enum ids the D-2(b) artifact gives each fieldless enum (`enum @<Name> ... id=<N>` in the
+# compiler's text dump of the same module, `-Ztrust-dump=ir:`); a wrong id makes B3 refuse.
+# name	enum id
+ContainmentMode	0
+Ordering3	1
+Implicit	2
+Sparse	3
+FpCategory	4
+AtomicOrdering	5

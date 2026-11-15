@@ -90,7 +90,7 @@ def build_native_shard() -> tuple[list[str], list[str]]:
         build_log = Path(tmp) / "cargo-build-native.log"
         closure_path = Path(tmp) / "accepted-closure.json"
         cmd = [
-            "cargo", "run", "--locked", "--release", "--quiet",
+            "targo", "--unverified", "run", "--locked", "--release", "--quiet",
             "--message-format=short", "-j", CARGO_BUILD_JOBS,
             "-p", "clean-mathverse", "--bin", "mathverse_shard", "--",
             "build-native", tmp,

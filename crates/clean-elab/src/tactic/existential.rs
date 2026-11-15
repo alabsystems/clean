@@ -53,7 +53,8 @@ pub fn existsi(state: &mut ProofState, witness: Expr) -> TacticResult {
     // Exists : {α : Sort u} → (α → Prop) → Prop
     let (alpha, pred) = match_exists(&target).ok_or_else(|| {
         TacticError::GoalMismatch(format!(
-            "existsi: goal '{target:?}' is not of the form '∃ x, P x'"
+            "existsi: goal '{}' is not of the form '∃ x, P x'",
+            crate::error_render::term(&target)
         ))
     })?;
 
@@ -141,6 +142,7 @@ pub fn existsi(state: &mut ProofState, witness: Expr) -> TacticResult {
         meta_id: goal.meta_id,
         target: solved_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: goal.tag.clone(),
     };
 
@@ -152,6 +154,7 @@ pub fn existsi(state: &mut ProofState, witness: Expr) -> TacticResult {
         meta_id: new_meta_id,
         target: solved_new_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     state.goals.push_front(new_goal);
@@ -205,7 +208,11 @@ pub(crate) fn match_exists(expr: &Expr) -> Option<(Expr, Expr)> {
 /// ENSURES: On Ok, original goal closed with `Or.rec` on `Classical.em prop`
 /// ENSURES: On Ok, two new goals pushed: positive (`h : P`) first, negative (`h : ¬P`) second
 /// ENSURES: On Err(TypeMismatch), `prop` is not Prop-valued; state unchanged
-pub fn by_cases(state: &mut ProofState, hyp_name: &str, prop: Expr) -> TacticResult {
+pub fn by_cases(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+    prop: Expr,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Check that Classical.em exists
@@ -234,10 +241,18 @@ pub fn by_cases(state: &mut ProofState, hyp_name: &str, prop: Expr) -> TacticRes
         });
     }
 
-    let false_type = Expr::const_(Name::from_string("False"), vec![]);
-
-    // ¬P = P → False
-    let neg_prop = Expr::pi(BinderInfo::Default, prop.clone(), false_type);
+    // `¬P`, spelled with the `Not` head as Lean's `by_cases` states it — not
+    // the unfolded `P → False`. simp reads a negation off the `Not` head
+    // only (`P = False`); a local `P → False` is the CONDITIONAL rule
+    // `P → (False = True)`, so the arrow spelling left `by_cases h : P <;>
+    // simp [h]` unable to decide `P` in the negative branch.
+    let not_name = Name::from_string("Not");
+    if state.env.get_const(&not_name).is_none() {
+        return Err(TacticError::EnvironmentMissing {
+            constant: "Not".to_string(),
+        });
+    }
+    let neg_prop = Expr::app(Expr::const_(not_name, vec![]), prop.clone());
 
     // Fresh fvar for the hypothesis `h`. The positive and negative branches are
     // PARALLEL binders — each is its own `λ h => …` lambda directly under
@@ -266,8 +281,9 @@ pub fn by_cases(state: &mut ProofState, hyp_name: &str, prop: Expr) -> TacticRes
     // Context for positive case: h : P
     let mut ctx_pos = goal.local_ctx.clone();
     ctx_pos.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: fvar_pos,
-        name: hyp_name.to_string(),
+        name: hyp_name.clone(),
         ty: prop.clone(),
         value: None,
     });
@@ -275,8 +291,9 @@ pub fn by_cases(state: &mut ProofState, hyp_name: &str, prop: Expr) -> TacticRes
     // Context for negative case: h : ¬P
     let mut ctx_neg = goal.local_ctx.clone();
     ctx_neg.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: fvar_neg,
-        name: hyp_name.to_string(),
+        name: hyp_name.clone(),
         ty: neg_prop.clone(),
         value: None,
     });
@@ -332,12 +349,14 @@ pub fn by_cases(state: &mut ProofState, hyp_name: &str, prop: Expr) -> TacticRes
         meta_id: meta_pos,
         target: goal.target.clone(),
         local_ctx: ctx_pos,
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     let goal_neg = Goal {
         meta_id: meta_neg,
         target: goal.target,
         local_ctx: ctx_neg,
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
 

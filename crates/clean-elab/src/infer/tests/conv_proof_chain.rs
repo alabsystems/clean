@@ -56,15 +56,15 @@ fn test_elab_by_tactic_conv_lhs_rewrite_preserves_proof_chain() {
     let mut ctx = ElabCtx::new(&env);
 
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-    let x_fvar = ctx.push_local("x".to_string(), nat.clone());
-    let y_fvar = ctx.push_local("y".to_string(), nat);
+    let x_fvar = ctx.push_local(SurfaceName::generated_path("x"), nat.clone());
+    let y_fvar = ctx.push_local(SurfaceName::generated_path("y"), nat);
     let x_expr = Expr::fvar(x_fvar);
     let y_expr = Expr::fvar(y_fvar);
 
     let eq_const = Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]);
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let target = Expr::app(Expr::app(Expr::app(eq_const, nat_ty), x_expr), y_expr);
-    ctx.push_local("h".to_string(), target.clone());
+    ctx.push_local(SurfaceName::generated_path("h"), target.clone());
 
     ctx.current_expected_type = Some(target.clone());
     let proof = ctx
@@ -96,8 +96,8 @@ fn test_elab_by_tactic_conv_lhs_reverse_rewrite_preserves_proof_chain() {
     let mut ctx = ElabCtx::new(&env);
 
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-    let x_fvar = ctx.push_local("x".to_string(), nat.clone());
-    let y_fvar = ctx.push_local("y".to_string(), nat);
+    let x_fvar = ctx.push_local(SurfaceName::generated_path("x"), nat.clone());
+    let y_fvar = ctx.push_local(SurfaceName::generated_path("y"), nat);
     let x_expr = Expr::fvar(x_fvar);
     let y_expr = Expr::fvar(y_fvar);
 
@@ -108,7 +108,7 @@ fn test_elab_by_tactic_conv_lhs_reverse_rewrite_preserves_proof_chain() {
         y_expr.clone(),
     );
     let target = Expr::app(Expr::app(Expr::app(eq_const, nat_ty), y_expr), x_expr);
-    ctx.push_local("h".to_string(), hyp);
+    ctx.push_local(SurfaceName::generated_path("h"), hyp);
 
     ctx.current_expected_type = Some(target.clone());
     let proof = ctx

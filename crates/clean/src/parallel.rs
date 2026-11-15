@@ -150,7 +150,10 @@ impl DeclDepGraph {
 
         while !queue.is_empty() {
             let batch: Vec<Name> = queue.drain(..).collect();
-            processed += batch.len();
+            // Saturating: `processed` never exceeds `self.nodes.len()` (each node
+            // enters the queue once), and a saturated count still differs from
+            // it, so the cycle verdict below cannot be forged by a wrap.
+            processed = processed.saturating_add(batch.len());
 
             for name in &batch {
                 if let Some(dependents) = self.rdeps.get(name) {
@@ -373,13 +376,30 @@ pub struct ParallelCheckResult {
     pub parallel_elapsed: Duration,
     /// Sum of individual declaration check times (estimate of sequential time).
     pub sequential_estimate: Duration,
+    /// Declarations admitted to the check that carry trust debt in their
+    /// constant closure: a `trustedArith` / `trustedAy` marker, or a `sorry`
+    /// waived by `allow_sorry`. Such a declaration may pass; the result is
+    /// then not fully verified — as [`crate::CheckResult::is_fully_verified`]
+    /// already refuses a result with warnings. Before 2026-09-28 this API
+    /// dropped the warning and `theorem bad : False := trustedAy False`
+    /// checked as fully verified.
+    pub trust_debt: Vec<(String, DeclWarning)>,
+    /// Admitted declarations whose verdict rests on a DOMAIN axiom, with those
+    /// axioms (as [`crate::CheckResult::assumptions`]). Not counted as sorry;
+    /// a result with any is not fully verified.
+    pub assumptions: Vec<(String, Vec<String>)>,
 }
 
 impl ParallelCheckResult {
     /// Returns `true` if all declarations passed with no errors.
     #[must_use]
     pub fn is_fully_verified(&self) -> bool {
-        self.errors.is_empty() && self.total_failed == 0
+        // A result that checked nothing verified nothing.
+        self.total_passed > 0
+            && self.errors.is_empty()
+            && self.total_failed == 0
+            && self.trust_debt.is_empty()
+            && self.assumptions.is_empty()
     }
 
     /// Speedup ratio: sequential estimate / actual parallel time.
@@ -434,9 +454,21 @@ pub fn check_declarations_parallel(
         .topological_batches()
         .unwrap_or_else(|| vec![items.iter().map(|it| Name::from_string(&it.name)).collect()]);
 
-    let mut all_decl_results = Vec::with_capacity(items.len());
+    // Grown per checked item, not pre-sized from `items.len()`: the Trust
+    // verified lane refutes a capacity read off a collection's length as an
+    // unbounded bulk allocation (`unbounded_allocation`, measured 2026-10-19
+    // with trust/9192), and an early stop leaves items unchecked.
+    let mut all_decl_results = Vec::new();
     let mut all_errors = Vec::new();
-    let mut batch_results = Vec::with_capacity(batches.len());
+    // Grown one entry per batch actually checked, not pre-sized from
+    // `batches.len()`: that count is a property of the dependency graph (not
+    // the length of anything this vector mirrors), an empty batch is skipped
+    // and an early stop leaves the rest unchecked, so it over-asks — and a
+    // `BatchResult` (48 B) is wider than the `Vec<Name>` (24 B) it would be
+    // sized against, so the one up-front allocation was not bounded by the
+    // memory `batches` already holds. Each push here follows checking at
+    // least one item.
+    let mut batch_results = Vec::new();
     let total_passed = AtomicUsize::new(0);
     let total_failed = AtomicUsize::new(0);
     let seq_estimate_ns = AtomicUsize::new(0);
@@ -521,7 +553,7 @@ pub fn check_declarations_parallel(
         let batch_elapsed = batch_start.elapsed();
 
         let batch_passed = results.iter().filter(|r| r.passed).count();
-        let batch_failed = results.len() - batch_passed;
+        let batch_failed = results.iter().filter(|r| !r.passed).count();
 
         if let Some(ref cb) = config.progress_callback {
             cb(ProgressEvent::BatchCompleted {
@@ -563,7 +595,9 @@ pub fn check_declarations_parallel(
 
     if let Some(ref cb) = config.progress_callback {
         cb(ProgressEvent::AllCompleted {
-            total: tp + tf,
+            // Every checked item bumped exactly one of the two counters and
+            // left exactly one result, so the result count IS `tp + tf`.
+            total: all_decl_results.len(),
             passed: tp,
             failed: tf,
             elapsed: parallel_elapsed,
@@ -580,6 +614,8 @@ pub fn check_declarations_parallel(
         total_elapsed: parallel_elapsed,
         parallel_elapsed,
         sequential_estimate: Duration::from_nanos(seq_estimate_ns.load(Ordering::Relaxed) as u64),
+        trust_debt: Vec::new(),
+        assumptions: Vec::new(),
     }
 }
 
@@ -672,39 +708,106 @@ pub fn check_source_parallel(
 
     // Elaborate sequentially, collecting items for parallel check.
     let mut file_ctx = FileContext::new();
-    let mut check_items = Vec::with_capacity(decls.len());
+    // Grown, not pre-sized from `decls.len()`: the same unbounded-allocation
+    // obligation as `all_decl_results` (left UNKNOWN here on 2026-10-19), and
+    // refused or registered-only declarations never enter this list.
+    let mut check_items = Vec::new();
+
+    // Declarations refused BEFORE the parallel phase: elaboration errors,
+    // failed block members, and sorry-backed leaves. This loop used to drop
+    // every one of them (`Err(_) => {}` under a comment claiming the errors
+    // were "already recorded"; blocks named "(skipped)"; the sorry warning
+    // bound to `_warning` and discarded), so `theorem bad : 1 = 2 := rfl`
+    // reported `total_failed == 0` and `is_fully_verified() == true`
+    // (round-22 repair).
+    let mut refused: Vec<DeclResult> = Vec::new();
+    let mut registered_only: Vec<DeclResult> = Vec::new();
+    let mut trust_debt: Vec<(String, DeclWarning)> = Vec::new();
+    let mut assumptions: Vec<(String, Vec<String>)> = Vec::new();
+    // Every leaf's trust verdict is read off its constant closure, one memo
+    // for the run.
+    let mut closure = clean_kernel::env::DomainAxiomClosure::new();
+    let refuse = |refused: &mut Vec<DeclResult>, name: String, error: String| {
+        refused.push(DeclResult {
+            name,
+            passed: false,
+            error: Some(error),
+            warning: None,
+        });
+    };
 
     for decl in &decls {
         let processed = preprocess_decl_with_context(decl, &mut file_ctx);
         match elaborate_decl_and_register_with_warning(&mut env, &processed) {
             Ok(registered) => {
-                let name = crate::check::elab_result_name(&registered.result);
-                if name == "(skipped)" {
-                    continue;
-                }
-
-                // Extract type+value for parallel checking.
-                let (ty, value, is_theorem) = extract_check_info(&registered.result);
-                if let Some(ty) = ty {
-                    // Classify warning.
-                    let _warning = registered.warning.as_ref().map(|w| match w.kind {
+                let mut leaves: Vec<&clean_elab::ElabResult> = Vec::new();
+                registered.result.leaf_decls(&mut leaves);
+                for leaf in leaves {
+                    if let Some(message) = leaf.source_error_message() {
+                        refuse(&mut refused, crate::check::elab_result_name(leaf), message);
+                        continue;
+                    }
+                    if let clean_elab::ElabResult::Failed { name, error, .. } = leaf {
+                        refuse(&mut refused, name.clone(), error.to_string());
+                        continue;
+                    }
+                    let name = crate::check::elab_result_name(leaf);
+                    if name == "(skipped)" {
+                        continue;
+                    }
+                    let warning = clean_elab::register::registration_warning_for_leaf_in(
+                        &mut closure,
+                        &env,
+                        leaf,
+                    )
+                    .map(|w| match w.kind {
                         RegistrationWarningKind::ExplicitSorry => DeclWarning::ExplicitSorry,
                         RegistrationWarningKind::SyntheticSorry => DeclWarning::SyntheticSorry,
                         RegistrationWarningKind::TrustedArith => DeclWarning::TrustedArith,
                         RegistrationWarningKind::TrustedAy => DeclWarning::TrustedAy,
                     });
+                    if warning.as_ref().is_some_and(DeclWarning::is_sorry) && !config.allow_sorry {
+                        refuse(&mut refused, name, "uses sorry".to_string());
+                        continue;
+                    }
+                    if let Some(debt) = &warning {
+                        trust_debt.push((name.clone(), debt.clone()));
+                    }
+                    let assumed =
+                        clean_elab::register::leaf_domain_axioms(&mut closure, &env, leaf);
+                    if !assumed.is_empty() {
+                        assumptions.push((
+                            name.clone(),
+                            // Unambiguous rendering: `«Eq.refl»` never reads
+                            // as the kernel's `Eq.refl`.
+                            assumed.iter().map(Name::to_unambiguous_string).collect(),
+                        ));
+                    }
 
-                    check_items.push(ElabCheckItem {
-                        name,
-                        ty,
-                        value,
-                        is_theorem,
-                    });
+                    // Extract type+value for parallel checking.
+                    let (ty, value, is_theorem) = extract_check_info(leaf);
+                    if let Some(ty) = ty {
+                        check_items.push(ElabCheckItem {
+                            name,
+                            ty,
+                            value,
+                            is_theorem,
+                        });
+                    } else {
+                        // An inductive family carries no single type/value
+                        // pair to re-check here; it passed the kernel's own
+                        // `add_inductive` check at registration. Count it,
+                        // so a family-only source is not "nothing checked".
+                        registered_only.push(DeclResult {
+                            name,
+                            passed: true,
+                            error: None,
+                            warning,
+                        });
+                    }
                 }
             }
-            Err(_) => {
-                // Elaboration errors are already recorded; skip this decl.
-            }
+            Err(e) => refuse(&mut refused, "(elaboration)".to_string(), format!("{e:?}")),
         }
     }
 
@@ -712,6 +815,20 @@ pub fn check_source_parallel(
 
     // Phase 2: Parallel type check.
     let mut result = check_declarations_parallel(&env, &check_items, config);
+    result.errors.extend(
+        refused
+            .iter()
+            .map(|d| (d.name.clone(), d.error.clone().unwrap_or_default())),
+    );
+    result.declarations.extend(refused);
+    result.declarations.extend(registered_only);
+    // The totals are counts OF `declarations`: the parallel phase counted its
+    // own results, every refused entry failed and every registered-only one
+    // passed, so recounting the merged list is exact and needs no addition.
+    result.total_passed = result.declarations.iter().filter(|d| d.passed).count();
+    result.total_failed = result.declarations.iter().filter(|d| !d.passed).count();
+    result.trust_debt = trust_debt;
+    result.assumptions = assumptions;
     result.total_elapsed = overall_start.elapsed();
 
     Ok(result)
@@ -721,6 +838,7 @@ pub fn check_source_parallel(
 fn extract_check_info(result: &clean_elab::ElabResult) -> (Option<Expr>, Option<Expr>, bool) {
     use clean_elab::ElabResult;
     match result {
+        ElabResult::Diagnosed { result, .. } => extract_check_info(result),
         ElabResult::Definition { ty, val, .. } | ElabResult::Instance { ty, val, .. } => {
             (Some(ty.clone()), Some(val.clone()), false)
         }
@@ -1018,16 +1136,144 @@ mod tests {
         }
     }
 
+    /// `batches` holds exactly one entry per checked batch, in order (the
+    /// vector is grown per batch, not pre-sized from the graph's batch count).
+    #[test]
+    fn test_batch_results_one_per_checked_batch() {
+        let config = ParallelCheckConfig::default();
+        let source = "def ch1 : Nat := 0\ndef ch2 : Nat := ch1\ndef ch3 : Nat := ch2";
+        let result = check_source_parallel(source, &config).expect("chain check should succeed");
+        assert_eq!(
+            result.batch_count, 3,
+            "a 3-long dependency chain is 3 batches"
+        );
+        assert_eq!(result.batches.len(), result.batch_count);
+        for (i, batch) in result.batches.iter().enumerate() {
+            assert_eq!(batch.batch_index, i);
+            assert_eq!(batch.declarations.len(), 1);
+        }
+        assert_eq!(result.declarations.len(), 3);
+    }
+
     #[test]
     fn test_parallel_check_theorem() {
         let config = ParallelCheckConfig::default();
-        let result = check_source_parallel("theorem trivial : True := True.intro", &config)
+        // Not `trivial`: that is a Lean 4.8.0 core constant, and a source
+        // declaration of a core name is refused as already declared (db37ea99b,
+        // `check_not_declared_in_lean_core`) — which is what Lean does too.
+        let result = check_source_parallel("theorem trivial_true : True := True.intro", &config)
             .expect("parallel check should succeed");
         assert!(
             result.total_passed >= 1,
             "trivial theorem should pass: errors={:?}",
             result.errors
         );
+    }
+
+    /// The refusal the old fixture tripped over stays: `trivial` is a Lean
+    /// 4.8.0 core constant, and redeclaring it is refused, never credited.
+    #[test]
+    fn test_parallel_check_refuses_a_lean_core_name() {
+        let config = ParallelCheckConfig::default();
+        let result = check_source_parallel("theorem trivial : True := True.intro", &config)
+            .expect("pipeline runs");
+        assert_eq!(result.total_passed, 0, "{result:?}");
+        assert!(
+            result
+                .errors
+                .iter()
+                .any(|(_, error)| error.contains("DeclaredInLeanCore")
+                    && error.contains("trivial")),
+            "the core-name refusal must be reported: {result:?}"
+        );
+    }
+
+    /// Round-22 repair: elaboration errors, failed block members and sorry
+    /// leaves were all dropped before the parallel phase, so each of these
+    /// reported `total_failed == 0` and `is_fully_verified() == true`.
+    #[test]
+    fn test_parallel_check_refuses_what_it_used_to_drop() {
+        let config = ParallelCheckConfig::default();
+        for source in [
+            "theorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := rfl\n",
+            "namespace A\ntheorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := rfl\nend A\n",
+            "section S\ntheorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := rfl\nend S\n",
+            "theorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := sorry\n",
+            "namespace A\ntheorem good : 1 = 1 := rfl\nexample : 1 = 2 := sorry\nend A\n",
+        ] {
+            let result = check_source_parallel(source, &config).expect("pipeline runs");
+            assert_eq!(result.total_failed, 1, "{source}: {result:?}");
+            assert_eq!(result.total_passed, 1, "{source}: the good sibling passes");
+            assert!(!result.is_fully_verified(), "{source}");
+        }
+        // Nothing checked is not verified; a family-only source is checked.
+        let empty = check_source_parallel("-- comment\n", &config).expect("pipeline runs");
+        assert!(!empty.is_fully_verified());
+        let family = check_source_parallel("inductive T where\n  | a\n  | b\n", &config)
+            .expect("pipeline runs");
+        assert!(family.is_fully_verified(), "{family:?}");
+    }
+
+    /// Regression (Trust verified lane, 2026-10-03): the batch failure count
+    /// was `len - passed`, the `AllCompleted` total `passed + failed`, and the
+    /// final totals `+=` the refused / registered-only counts. Each is now a
+    /// count of the list it describes; the progress events and the totals
+    /// still agree with the per-declaration results.
+    #[test]
+    fn test_parallel_check_counts_are_counts_of_results() {
+        use std::sync::Mutex;
+        let events: Arc<Mutex<Vec<ProgressEvent>>> = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        let config = ParallelCheckConfig {
+            progress_callback: Some(Arc::new(move |e| sink.lock().unwrap().push(e))),
+            ..ParallelCheckConfig::default()
+        };
+        let source = "def base : Nat := 42\ndef derived : Nat := base\n\
+                      theorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := rfl\n\
+                      inductive T where\n  | a\n  | b\n";
+        let result = check_source_parallel(source, &config).expect("pipeline runs");
+        let passed = result.declarations.iter().filter(|d| d.passed).count();
+        assert_eq!(result.total_passed, passed, "{result:?}");
+        assert_eq!(result.total_failed, result.declarations.len() - passed);
+        assert_eq!(result.total_failed, 1, "only `bad` fails: {result:?}");
+        assert!(result.total_passed >= 4, "{result:?}");
+
+        let events = events.lock().unwrap();
+        let checked = events
+            .iter()
+            .filter(|e| matches!(e, ProgressEvent::DeclChecked { .. }))
+            .count();
+        let mut started = HashMap::new();
+        let mut completed = 0usize;
+        for e in events.iter() {
+            match e {
+                ProgressEvent::BatchStarted {
+                    batch_index,
+                    batch_size,
+                } => {
+                    started.insert(*batch_index, *batch_size);
+                }
+                ProgressEvent::BatchCompleted {
+                    batch_index,
+                    passed,
+                    failed,
+                } => {
+                    assert_eq!(Some(&(passed + failed)), started.get(batch_index));
+                }
+                ProgressEvent::AllCompleted {
+                    total,
+                    passed,
+                    failed,
+                    ..
+                } => {
+                    completed += 1;
+                    assert_eq!(*total, passed + failed);
+                    assert_eq!(*total, checked);
+                }
+                ProgressEvent::DeclChecked { .. } => {}
+            }
+        }
+        assert_eq!(completed, 1);
     }
 
     #[test]

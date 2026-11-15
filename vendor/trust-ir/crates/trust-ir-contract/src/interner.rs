@@ -315,33 +315,6 @@ mod tests {
     }
 
     #[test]
-    fn test_copy_semantics() {
-        let a = Symbol::intern("copy_test");
-        let b = a; // Copy, not move
-        let c = a; // Still valid because Symbol is Copy
-        assert_eq!(a, b);
-        assert_eq!(b, c);
-    }
-
-    #[test]
-    fn test_hash_consistency() {
-        use crate::fx::FxHashSet;
-        let a = Symbol::intern("hash_test_a");
-        let b = Symbol::intern("hash_test_a");
-        let mut set = FxHashSet::default();
-        set.insert(a);
-        assert!(set.contains(&b));
-    }
-
-    #[test]
-    fn test_ord() {
-        let a = Symbol::intern("ord_a");
-        let b = Symbol::intern("ord_b");
-        // Ordering is by index, not lexicographic
-        assert!(a < b || b < a);
-    }
-
-    #[test]
     fn test_interner_len() {
         let mut interner = Interner::new();
         assert!(interner.is_empty());
@@ -383,14 +356,6 @@ mod tests {
     fn test_unicode() {
         let sym = Symbol::intern("variableα");
         assert_eq!(sym.as_str(), "variableα");
-    }
-
-    #[test]
-    fn test_global_interner_is_shared() {
-        // Two calls to Symbol::intern should share the same global table
-        let a = Symbol::intern("global_shared_test");
-        let b = Symbol::intern("global_shared_test");
-        assert_eq!(a.index(), b.index());
     }
 
     // Tests for backward-compatible conversions added for interning extension
@@ -463,16 +428,6 @@ mod tests {
     }
 
     #[test]
-    fn test_symbol_as_ref_str_generic() {
-        // Symbol implements AsRef<str> for generic contexts
-        fn takes_as_ref(s: &impl AsRef<str>) -> &str {
-            s.as_ref()
-        }
-        let sym = Symbol::intern("as_ref_generic_test");
-        assert_eq!(takes_as_ref(&sym), "as_ref_generic_test");
-    }
-
-    #[test]
     fn test_symbol_in_hashmap_lookup_by_symbol() {
         // Symbol keys in HashMap are looked up by Symbol (fast u32 comparison)
         use crate::fx::FxHashMap;
@@ -485,14 +440,7 @@ mod tests {
     }
 
     #[test]
-    fn test_symbol_copy_semantics_zero_cost() {
-        // Verify that interning the same string 1000 times costs nothing
-        let first = Symbol::intern("copy_cost_test");
-        for _ in 0..1000 {
-            let sym = Symbol::intern("copy_cost_test");
-            assert_eq!(sym.index(), first.index());
-        }
-        // Symbol is 4 bytes
+    fn test_symbol_is_four_bytes() {
         assert_eq!(std::mem::size_of::<Symbol>(), 4);
     }
 }

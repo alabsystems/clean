@@ -33,6 +33,19 @@ use clean_verify::Specification;
 
 const GENERATED_DIR: &str = "crates/clean-verify/src/spec/core_spec/generated";
 
+/// What `-h`/`--help` prints: the three forms `run` dispatches, nothing more.
+const USAGE: &str = "\
+usage: red_env_reflect [--check | --probe]
+  (no flag)  reflect the foundation core from an artifact-independent seed, validate the
+             rendered script against a fresh seed and a full Specification, then publish
+             the three generated files under crates/clean-verify/src/spec/core_spec/generated
+  --check    build the live Specification and report drift against the committed files
+  --probe    build the live Specification and whnf-probe the Stage-1 closure checkers
+             (given both flags, --probe runs and --check does not)
+  Exit 0 on success (no drift for --check, no stuck fold for --probe), 1 on a failure,
+  2 on an unknown argument.
+";
+
 fn main() {
     // Spec construction + reflection recurse deeply; use a big-stack thread
     // (same pattern as the lean_export bin).
@@ -54,8 +67,12 @@ fn run() -> i32 {
         match a.as_str() {
             "--check" => check_only = true,
             "--probe" => probe = true,
+            "-h" | "--help" => {
+                print!("{USAGE}");
+                return 0;
+            }
             other => {
-                eprintln!("unknown argument: {other}");
+                eprint!("red_env_reflect: unknown argument {other:?}\n{USAGE}");
                 return 2;
             }
         }
@@ -88,7 +105,13 @@ fn run() -> i32 {
     );
 
     let t1 = Instant::now();
-    let reflection = reflect_foundation_core(spec.env());
+    let reflection = match reflect_foundation_core(spec.env()) {
+        Ok(reflection) => reflection,
+        Err(error) => {
+            eprintln!("[red_env_reflect] FATAL: {error}");
+            return 1;
+        }
+    };
     eprintln!(
         "[red_env_reflect] reflection computed in {:.3}s: {} recursors ({} rules), {} defs, {} interned names, {} skips",
         t1.elapsed().as_secs_f64(),
@@ -174,7 +197,8 @@ fn run() -> i32 {
         "[red_env_reflect] validating the generated artifact set through a full \
          Specification built from the fresh in-memory script ..."
     );
-    let full_spec = match Specification::new_with_red_env_reflection_script(&script) {
+    let full_spec = match Specification::new_with_red_env_reflection_artifacts(&script, &interning)
+    {
         Ok(specification) => specification,
         Err(error) => {
             eprintln!(
@@ -387,9 +411,15 @@ fn run_probe(spec: &Specification) -> i32 {
     // Aggregate per-element cost (the TRUE-case fold cost the Bool.and
     // short-circuit hides): force the full per-element checker test
     // `nat_eqb (bvar_ceiling <term>) 0` for every reflected rule rhs and
-    // def value, and total the whnf time. This is the measured one-rfl
+    // definition type/value, and total the whnf time. This is the measured one-rfl
     // budget for a Stage-4 depth-aware checker at real-env scale.
-    let reflection = reflect_foundation_core(spec.env());
+    let reflection = match reflect_foundation_core(spec.env()) {
+        Ok(reflection) => reflection,
+        Err(error) => {
+            eprintln!("[red_env_reflect] probe reflection failed: {error}");
+            return 1;
+        }
+    };
     let mut elements: Vec<(String, &clean_verify::red_env_reflect::SpecExpr)> = Vec::new();
     for rec in &reflection.recs {
         for rule in &rec.rules {
@@ -397,6 +427,7 @@ fn run_probe(spec: &Specification) -> i32 {
         }
     }
     for def in &reflection.defs {
+        elements.push((format!("{} (type)", def.name), &def.type_));
         elements.push((def.name.clone(), &def.value));
     }
     let mut total = std::time::Duration::ZERO;

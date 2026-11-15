@@ -10,12 +10,13 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
 use clean_elab::{
-    elaborate_decl_and_register_with_context, preprocess_decl_with_context, FileContext,
+    elaborate_decl_and_register_with_context, prepare_declaration_environment,
+    preprocess_decl_with_context, FileContext,
 };
 use clean_kernel::env::{ConstantInfo, ConstantKind, DeclarationTrustSummary, Reducibility};
 use clean_kernel::{Environment, Expr, ExprKind, Name};
 use clean_parser::DeclModifiers;
-use clean_parser::{parse_file_with_tactics, Span, SurfaceDecl};
+use clean_parser::{parse_file_with_tactics, Span, SurfaceDecl, SurfaceName};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
@@ -167,6 +168,10 @@ impl TrustRecord {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) struct DeclarationRecord {
     pub(crate) name: String,
+    /// Exact in-memory identity. Like kernel expressions below, it cannot be
+    /// recovered from an index report's display label.
+    #[serde(skip)]
+    pub(crate) identity: Option<Name>,
     pub(crate) kind: DeclarationKind,
     pub(crate) source_path: String,
     pub(crate) span: Option<SourceSpan>,
@@ -191,6 +196,24 @@ pub(crate) struct DeclarationRecord {
     pub(crate) constant_kind: ConstantKind,
 }
 
+fn name_label(name: &Name) -> String {
+    SurfaceName::from_name(name.clone())
+        .source_spelling()
+        .unwrap_or_else(|| format!("{name:?}"))
+}
+
+/// A constant's trust debt as the merge gate must read it: its own terms
+/// (any occurrence of a marker) AND the trust markers its constant closure
+/// reaches — a changed declaration that starts citing a sorry'd lemma, or
+/// rests on `sorryAx` behind an alias, carries that debt.
+fn closure_trust_summary(env: &Environment, info: &ConstantInfo) -> DeclarationTrustSummary {
+    let mut summary = info.trust_summary();
+    let markers =
+        clean_kernel::env::DomainAxiomClosure::new().trust_markers_of_name(env, &info.name);
+    summary.absorb_closure_markers(markers.iter());
+    summary
+}
+
 impl DeclarationRecord {
     fn from_constant(
         env: &Environment,
@@ -205,12 +228,13 @@ impl DeclarationRecord {
             .type_
             .collect_constants()
             .into_iter()
-            .map(|name| name.to_string())
+            .map(|name| name_label(&name))
             .collect::<Vec<_>>();
         symbol_refs.sort();
         symbol_refs.dedup();
         Self {
-            name: info.name.to_string(),
+            name: name_label(&info.name),
+            identity: Some(info.name.clone()),
             kind,
             source_path,
             span,
@@ -221,7 +245,7 @@ impl DeclarationRecord {
             conclusion_head: conclusion_head(&info.type_),
             symbol_refs,
             trust: TrustRecord::from_summary(
-                info.trust_summary(),
+                closure_trust_summary(env, info),
                 env.is_unsafe(&info.name),
                 kind == DeclarationKind::Axiom,
             ),
@@ -236,6 +260,7 @@ impl DeclarationRecord {
 
     fn source_only(
         name: String,
+        identity: Option<Name>,
         kind: DeclarationKind,
         source_path: String,
         span: Option<SourceSpan>,
@@ -246,6 +271,7 @@ impl DeclarationRecord {
         let fingerprint = text_fingerprint(&normalize_statement(statement));
         Self {
             name,
+            identity,
             kind,
             source_path,
             span,
@@ -268,7 +294,7 @@ impl DeclarationRecord {
     pub(crate) fn to_constant_info(&self) -> Option<ConstantInfo> {
         let type_ = self.type_expr.clone()?;
         Some(ConstantInfo {
-            name: Name::from_string(&self.name),
+            name: self.identity.clone()?,
             level_params: self.level_params.clone(),
             type_,
             value: self.value_expr.clone(),
@@ -531,11 +557,15 @@ fn kernel_records_for_file(
             let _ = elaborate_decl_and_register_with_context(&mut env, &processed, &mut file_ctx);
             continue;
         }
+        let processed = preprocess_decl_with_context(decl, &mut file_ctx);
+        // Fixed session support is not a declaration of this source file.
+        // Run the elaborator's own preparation before attributing its delta;
+        // do not filter names from the declarations it actually registers.
+        prepare_declaration_environment(&mut env, &processed);
         let before = env
             .constants()
-            .map(|info| info.name.to_string())
+            .map(|info| info.name.clone())
             .collect::<HashSet<_>>();
-        let processed = preprocess_decl_with_context(decl, &mut file_ctx);
         if let Err(error) =
             elaborate_decl_and_register_with_context(&mut env, &processed, &mut file_ctx)
         {
@@ -548,7 +578,7 @@ fn kernel_records_for_file(
         }
         let mut added = env
             .constants()
-            .filter(|info| !before.contains(&info.name.to_string()))
+            .filter(|info| !before.contains(&info.name))
             .map(|info| {
                 DeclarationRecord::from_constant(
                     &env,
@@ -570,14 +600,14 @@ fn kernel_records_for_file(
 
 fn records_added_since(
     env: &Environment,
-    before: &HashSet<String>,
+    before: &HashSet<Name>,
     source_path: &str,
     text: &str,
     decl: &SurfaceDecl,
 ) -> Vec<DeclarationRecord> {
     let mut records = env
         .constants()
-        .filter(|info| !before.contains(&info.name.to_string()))
+        .filter(|info| !before.contains(&info.name))
         .map(|info| {
             DeclarationRecord::from_constant(
                 env,
@@ -598,13 +628,14 @@ fn extend_missing_surface_records(
 ) {
     let kernel_names = kernel_records
         .iter()
-        .map(|record| record.name.as_str())
+        .filter_map(|record| record.identity.as_ref())
         .collect::<HashSet<_>>();
-    records.extend(
-        surface_records
-            .into_iter()
-            .filter(|record| !kernel_names.contains(record.name.as_str())),
-    );
+    records.extend(surface_records.into_iter().filter(|record| {
+        record
+            .identity
+            .as_ref()
+            .is_none_or(|name| !kernel_names.contains(name))
+    }));
 }
 
 fn surface_records_for_file(
@@ -626,10 +657,31 @@ fn push_surface_records(
     decl: &SurfaceDecl,
     text: &str,
     source_path: &str,
-    namespace: &mut Vec<String>,
+    namespace: &mut Vec<SurfaceName>,
     records: &mut Vec<DeclarationRecord>,
 ) {
     match decl {
+        SurfaceDecl::Alias {
+            span,
+            names,
+            modifiers,
+            ..
+        } => {
+            // A source alias alone does not establish its target's declaration
+            // kind or proof closure. Admitted kernel records supply that evidence.
+            for (name, _) in names {
+                push_surface_record(
+                    name,
+                    DeclarationKind::Unknown,
+                    *modifiers,
+                    *span,
+                    text,
+                    source_path,
+                    namespace,
+                    records,
+                );
+            }
+        }
         SurfaceDecl::Def {
             name,
             span,
@@ -773,26 +825,39 @@ fn push_surface_records(
         }
         | SurfaceDecl::SetOption {
             body: Some(body), ..
-        } => push_surface_records(body, text, source_path, namespace, records),
+        }
+        | SurfaceDecl::GuardMsgs { cmd: body, .. } => {
+            push_surface_records(body, text, source_path, namespace, records)
+        }
         _ => {}
     }
 }
 
 fn push_surface_record(
-    name: &str,
+    name: &SurfaceName,
     kind: DeclarationKind,
     modifiers: DeclModifiers,
     span: Span,
     text: &str,
     source_path: &str,
-    namespace: &[String],
+    namespace: &[SurfaceName],
     records: &mut Vec<DeclarationRecord>,
 ) {
-    let full_name = qualify_name(namespace, name);
+    let namespace = namespace
+        .iter()
+        .fold(SurfaceName::default(), |prefix, part| {
+            part.qualify_under(&prefix)
+        });
+    let full_name = name.qualify_under(&namespace);
+    let identity = full_name.into_name();
+    let local_label = name
+        .source_spelling()
+        .unwrap_or_else(|| format!("{:?}", name.name()));
     let snippet = text.get(span.start..span.end).unwrap_or_default();
-    let statement = normalize_decl_statement(snippet, kind, name);
+    let statement = normalize_decl_statement(snippet, kind, &local_label);
     records.push(DeclarationRecord::source_only(
-        full_name,
+        name_label(&identity),
+        Some(identity),
         kind,
         source_path.to_owned(),
         Some(source_span(text, span)),
@@ -833,6 +898,7 @@ fn scan_source_file(root: &Path, file: &Path, text: &str, records: &mut Vec<Decl
             };
             records.push(DeclarationRecord::source_only(
                 qualify_name(&namespace, header.name),
+                None,
                 header.kind,
                 source_path.clone(),
                 Some(span),
@@ -1073,6 +1139,7 @@ fn span_for_surface_decl(text: &str, decl: &SurfaceDecl) -> Option<SourceSpan> {
 fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
     match decl {
         SurfaceDecl::Def { span, .. }
+        | SurfaceDecl::Alias { span, .. }
         | SurfaceDecl::Theorem { span, .. }
         | SurfaceDecl::Axiom { span, .. }
         | SurfaceDecl::Opaque { span, .. }
@@ -1096,7 +1163,11 @@ fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::DerivingInstance { span, .. }
         | SurfaceDecl::Check { span, .. }
         | SurfaceDecl::Eval { span, .. }
+        | SurfaceDecl::Reduce { span, .. }
         | SurfaceDecl::Print { span, .. }
+        | SurfaceDecl::PrintAxioms { span, .. }
+        | SurfaceDecl::Guard { span, .. }
+        | SurfaceDecl::GuardMsgs { span, .. }
         | SurfaceDecl::Mutual { span, .. }
         | SurfaceDecl::Syntax { span, .. }
         | SurfaceDecl::DeclareSyntaxCat { span, .. }
@@ -1104,6 +1175,7 @@ fn surface_decl_span(decl: &SurfaceDecl) -> Option<Span> {
         | SurfaceDecl::MacroRules { span, .. }
         | SurfaceDecl::Notation { span, .. }
         | SurfaceDecl::Elab { span, .. }
+        | SurfaceDecl::Prelude { span }
         | SurfaceDecl::RawDecl { span, .. }
         | SurfaceDecl::Attribute { span, .. }
         | SurfaceDecl::SetOption { span, .. }
@@ -1261,6 +1333,61 @@ mod tests {
     use super::*;
 
     #[test]
+    fn kernel_record_restores_exact_name_without_reparsing_its_label() {
+        let env = Environment::new();
+        for identity in [
+            Name::anon().str("A.B"),
+            Name::anon().str("A").str("B"),
+            Name::anon().num(7),
+            Name::anon().str("7"),
+        ] {
+            let info = ConstantInfo {
+                name: identity.clone(),
+                level_params: vec![],
+                type_: Expr::sort(clean_kernel::Level::zero()),
+                value: None,
+                is_reducible: false,
+                reducibility: Reducibility::Regular(0),
+                kind: ConstantKind::Axiom,
+            };
+            let mut record =
+                DeclarationRecord::from_constant(&env, &info, "fixture.lean".to_owned(), None);
+            record.name = "same misleading display label".to_owned();
+            assert_eq!(
+                record.to_constant_info().expect("typed record").name,
+                identity
+            );
+            record.identity = None;
+            assert!(
+                record.to_constant_info().is_none(),
+                "a label cannot restore missing kernel identity"
+            );
+        }
+    }
+
+    #[test]
+    fn parsed_index_and_kernel_merge_distinguish_quoted_namespace_components() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let text = "namespace «A.B»\ndef chosen : Nat := 1\nend «A.B»\nnamespace A.B\ndef chosen : Nat := 2\nend A.B\n";
+        let decls =
+            parse_file_with_tactics(text, &Default::default()).expect("parsed index fixture");
+        let records =
+            surface_records_for_file(dir.path(), &dir.path().join("Fixture.lean"), text, &decls);
+        assert_eq!(records.len(), 2);
+        let quoted = Name::anon().str("A.B").str("chosen");
+        let nested = Name::anon().str("A").str("B").str("chosen");
+        assert_eq!(records[0].identity.as_ref(), Some(&quoted));
+        assert_eq!(records[1].identity.as_ref(), Some(&nested));
+        assert_ne!(records[0].name, records[1].name);
+        let mut kernel_row = records[0].clone();
+        kernel_row.name = records[1].name.clone();
+        let mut remaining = Vec::new();
+        extend_missing_surface_records(&mut remaining, records, &[kernel_row]);
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].identity.as_ref(), Some(&nested));
+    }
+
+    #[test]
     fn duplicate_theorem_source_fingerprint_ignores_theorem_name() {
         let left = normalize_decl_statement(
             "theorem first : True := True.intro",
@@ -1337,6 +1464,110 @@ mod tests {
     }
 
     #[test]
+    fn declaration_preparation_is_idempotent_and_does_not_register_source() {
+        let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
+        let decls =
+            parse_file_with_tactics("import Init\ndef own : Nat := 1\n", &patterns).expect("parse");
+        assert_eq!(decls.len(), 2);
+        let mut env = Environment::with_prelude();
+        env.init_pprod().expect("product support");
+        env.init_exists().expect("existential support");
+        let constant_names = |env: &Environment| {
+            env.constants()
+                .map(|info| info.name.clone())
+                .collect::<HashSet<_>>()
+        };
+        let instance_rows = |env: &Environment| {
+            let mut rows = env
+                .instances()
+                .map(|info| {
+                    (
+                        info.name.clone(),
+                        info.class_name.clone(),
+                        info.priority,
+                        info.type_.clone(),
+                        info.value.clone(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            rows.sort_by(|left, right| left.0.cmp(&right.0));
+            rows
+        };
+        let initial_names = constant_names(&env);
+        let initial_instances = instance_rows(&env);
+        let bridges = ["instHAdd", "instHMul", "instHSub"].map(Name::from_string);
+        // Since 2026-09-30 the prelude DEFINES the homogeneous bridges (Lean's
+        // floor lemmas are stated through them, `env/lean_arith_bridges.rs`) but
+        // does not register them as instances; preparation registers them.
+        assert!(bridges
+            .iter()
+            .all(|name| env.get_const(name).is_some() && !env.is_instance(name)));
+
+        prepare_declaration_environment(&mut env, &decls[0]);
+        assert_eq!(constant_names(&env), initial_names);
+        assert_eq!(instance_rows(&env), initial_instances);
+
+        prepare_declaration_environment(&mut env, &decls[1]);
+        let prepared_names = constant_names(&env);
+        let prepared_instances = instance_rows(&env);
+        // Preparation declares nothing: the bridges were already constants.
+        assert_eq!(prepared_names, initial_names);
+        assert_eq!(prepared_instances.len(), initial_instances.len() + 3);
+        assert!(bridges.iter().all(|name| env.is_instance(name)));
+        assert!(env.get_const(&Name::from_string("own")).is_none());
+        for name in &bridges {
+            let rows = prepared_instances
+                .iter()
+                .filter(|row| &row.0 == name)
+                .collect::<Vec<_>>();
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0].2, 50);
+        }
+        for decl in [&decls[1], &decls[0], &decls[1]] {
+            prepare_declaration_environment(&mut env, decl);
+            assert_eq!(constant_names(&env), prepared_names);
+            assert_eq!(instance_rows(&env), prepared_instances);
+        }
+
+        let mut file_ctx = FileContext::new();
+        let processed = preprocess_decl_with_context(&decls[1], &mut file_ctx);
+        elaborate_decl_and_register_with_context(&mut env, &processed, &mut file_ctx)
+            .expect("actual own declaration");
+        assert_eq!(
+            constant_names(&env)
+                .difference(&prepared_names)
+                .cloned()
+                .collect::<HashSet<_>>(),
+            HashSet::from([Name::from_string("own")])
+        );
+        assert_eq!(instance_rows(&env), prepared_instances);
+    }
+
+    #[test]
+    fn kernel_index_excludes_session_support_without_an_import() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("A.lean");
+        let text = "def own : Nat := 1\ndef next : Nat := own\n";
+        fs::write(&file, text).expect("write");
+        let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
+        let decls = parse_file_with_tactics(text, &patterns).expect("parse");
+        let outcome = kernel_records_for_file(dir.path(), &file, text, &decls).expect("kernel");
+        assert_eq!(outcome.diagnostic, None);
+        assert_eq!(
+            outcome
+                .records
+                .iter()
+                .map(|record| record.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["own", "next"]
+        );
+        assert!(outcome
+            .records
+            .iter()
+            .all(|record| record.source_path == "A.lean"));
+    }
+
+    #[test]
     fn conclusion_head_reads_pi_result_head() {
         let ty = Expr::pi(
             clean_kernel::BinderInfo::Default,
@@ -1345,5 +1576,38 @@ mod tests {
         );
 
         assert_eq!(conclusion_head(&ty), Some("True".to_owned()));
+    }
+    #[test]
+    fn alias_surface_records_keep_names_and_spans_without_proof_credit() {
+        let text = "alias ⟨forward, backward⟩ := equivalence";
+        let patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
+        let declarations = parse_file_with_tactics(text, &patterns).expect("alias syntax");
+        assert_eq!(
+            crate::cmd_core::surface_decl_name(&declarations[0]).as_deref(),
+            Some("forward")
+        );
+        assert_eq!(
+            crate::cmd_core::surface_decl_span(&declarations[0]),
+            Some(Span::new(0, text.len()))
+        );
+        let records = surface_records_for_file(
+            Path::new("."),
+            Path::new("Aliases.lean"),
+            text,
+            &declarations,
+        );
+        assert_eq!(
+            records
+                .iter()
+                .map(|row| row.name.as_str())
+                .collect::<Vec<_>>(),
+            ["forward", "backward"]
+        );
+        for record in records {
+            assert_eq!(record.kind, DeclarationKind::Unknown);
+            assert_eq!(record.source, RecordSource::ParsedSurface);
+            assert!(record.type_expr.is_none() && record.value_expr.is_none());
+            assert_eq!(record.span.expect("source span").end, text.len());
+        }
     }
 }

@@ -210,7 +210,11 @@ fn test_simp_only_universe_polymorphic_lemma_rewrites() {
     let target = eq_at(Level::succ(Level::zero()), n_ty(), wrap_n, n);
     let mut state = ProofState::new(env, target);
 
-    simp_only(&mut state, vec!["Wrap_id".to_string()]).expect(
+    simp_only(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("Wrap_id")],
+    )
+    .expect(
         "simp only must use a UNIVERSE-POLYMORPHIC registry lemma \
          (RC-E.1: the reconstructed proof carried an unsolved `u_simp`)",
     );
@@ -241,8 +245,11 @@ fn test_simp_only_monomorphic_lemma_still_rewrites() {
     let target = eq_at(Level::succ(Level::zero()), n_ty(), wrap_n, n);
     let mut state = ProofState::new(env, target);
 
-    simp_only(&mut state, vec!["WrapN_id".to_string()])
-        .expect("simp only must keep using a MONOMORPHIC registry lemma");
+    simp_only(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("WrapN_id")],
+    )
+    .expect("simp only must keep using a MONOMORPHIC registry lemma");
     assert!(
         state.is_complete(),
         "monomorphic rewrite leaves `n = n`, which simp closes"
@@ -299,7 +306,8 @@ fn test_simp_builtin_u_simp_pattern_still_fires() {
         ),
     );
     let mut state = ProofState::new(env, goal_ty);
-    intro(&mut state, "xs").expect("intro the list variable");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("xs"))
+        .expect("intro the list variable");
 
     simp(&mut state, SimpConfig::new())
         .expect("the builtin `List.append_nil` u_simp pattern must still fire");

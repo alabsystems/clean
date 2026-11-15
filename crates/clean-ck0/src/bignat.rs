@@ -230,6 +230,72 @@ impl BigNat {
     pub fn as_biguint(&self) -> &BigUint {
         &self.0
     }
+
+    /// The 64-bit words this value occupies, at least 1: the unit of the native
+    /// `Nat` work meter (R166).
+    #[must_use]
+    pub(crate) fn words(&self) -> u64 {
+        // AUDIT: `bits()` is a `u64` count; a ceiling division by 64 cannot
+        // overflow, and `max(1)` only raises it.
+        self.0.bits().div_ceil(64).max(1)
+    }
+}
+
+/// Upper bounds, in 64-bit words, on the size of a native `Nat` result, known
+/// before the result is computed (R166): whnf charges one budget step per word,
+/// so a decision's native arithmetic allocates at most as many words as its fuel.
+/// Every bound saturates: one past `u64` is past every budget.
+pub(crate) mod result_words {
+    use super::BigNat;
+
+    /// `a + b` and every operation whose result is no larger than its larger
+    /// operand plus one word (`-`, `/`, `%`, `gcd`, the bitwise and right-shift
+    /// operations, `succ`).
+    #[must_use]
+    pub(crate) fn sum(a: &BigNat, b: &BigNat) -> u64 {
+        // AUDIT: saturating; a bound, never a value.
+        a.words().max(b.words()).saturating_add(1)
+    }
+
+    /// `a * b`.
+    #[must_use]
+    pub(crate) fn product(a: &BigNat, b: &BigNat) -> u64 {
+        // AUDIT: saturating; a bound, never a value.
+        a.words().saturating_add(b.words())
+    }
+
+    /// `a ^ exponent`: a result of at most `bits(a) * exponent` bits, and one
+    /// word when `a` is 0 or 1.
+    #[must_use]
+    pub(crate) fn power(a: &BigNat, exponent: u64) -> u64 {
+        if a.0 <= super::BigUint::from(1u32) {
+            return 1;
+        }
+        // AUDIT: saturating; a bound, never a value.
+        a.0.bits().saturating_mul(exponent).div_ceil(64).max(1)
+    }
+
+    /// `a <<< shift`: one word when `a` is 0.
+    #[must_use]
+    pub(crate) fn shifted_left(a: &BigNat, shift: u64) -> u64 {
+        if a.is_zero() {
+            return 1;
+        }
+        // AUDIT: saturating; a bound, never a value.
+        a.words().saturating_add(shift.div_ceil(64))
+    }
+
+    /// Not a result size: the work of `a / b`, `a % b` and `gcd a b`, whose
+    /// result is small. Schoolbook division costs about one word operation per
+    /// pair of operand words; Euclid's loop takes at most about 1.44 remainder
+    /// steps per bit of the smaller operand, each linear in the operands' size.
+    /// So the product of the sizes bounds the work of each up to a constant
+    /// factor.
+    #[must_use]
+    pub(crate) fn division_work(a: &BigNat, b: &BigNat) -> u64 {
+        // AUDIT: saturating; a bound, never a value.
+        a.words().saturating_mul(b.words())
+    }
 }
 
 impl std::fmt::Display for BigNat {

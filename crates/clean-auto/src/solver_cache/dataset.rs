@@ -60,7 +60,7 @@ pub enum DatasetError {
 /// so they are the Phase-1 feature core; the richer static features are a later
 /// schema extension flagged in the design.
 #[derive(Clone, Debug, Default, PartialEq, Serialize)]
-pub struct FeatureVector {
+pub(crate) struct FeatureVector {
     /// SAT conflicts from the SMT probe (`None` if the SMT engine did not run).
     pub(crate) sat_conflicts: Option<u64>,
     /// SAT decisions from the SMT probe.
@@ -102,7 +102,7 @@ impl FeatureVector {
 
 /// The label block (Y) for one attempt (design §6.2).
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct LabelBlock {
+pub(crate) struct LabelBlock {
     /// The attempt outcome (`proved`/`timeout`/...).
     pub(crate) result: String,
     /// End-to-end wall time (ms).
@@ -118,7 +118,7 @@ pub struct LabelBlock {
 
 /// Provenance attached to every dataset row.
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct DatasetProvenance {
+pub(crate) struct DatasetProvenance {
     /// The obligation identity — siblings (multiple engines on one instance)
     /// share this so the consumer can reconstruct full attempt sets for VBS/SBS.
     pub(crate) obligation_digest: String,
@@ -136,7 +136,7 @@ pub struct DatasetProvenance {
 
 /// One exported dataset row: `(features, strategy, labels, provenance)`.
 #[derive(Clone, Debug, PartialEq, Serialize)]
-pub struct DatasetRow {
+pub(crate) struct DatasetRow {
     /// Static + probe features (X).
     pub(crate) features: FeatureVector,
     /// The strategy id that produced this attempt.

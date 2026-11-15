@@ -47,7 +47,7 @@ use std::collections::HashSet;
 /// - max a b     = max(eval(a), eval(b))
 /// - imax a b    = if eval(b) == 0 { 0 } else { max(eval(a), eval(b)) }
 /// - param p     = assignment[p]
-fn eval(level: &Level, assignment: &[(Name, u64)]) -> u64 {
+pub(super) fn eval(level: &Level, assignment: &[(Name, u64)]) -> u64 {
     match level {
         Level::Zero => 0,
         Level::Succ(l) => eval(l, assignment) + 1,
@@ -74,7 +74,7 @@ fn eval(level: &Level, assignment: &[(Name, u64)]) -> u64 {
 /// 0-vs-positive pivot AND positive magnitudes large enough to distinguish
 /// offset differences within the depth bound (a depth-D level adds at most
 /// D successors).
-fn all_assignments(params: &[Name], max_val: u64) -> Vec<Vec<(Name, u64)>> {
+pub(super) fn all_assignments(params: &[Name], max_val: u64) -> Vec<Vec<(Name, u64)>> {
     let n = params.len();
     let span = (max_val + 1) as usize;
     let total = span.pow(n as u32);
@@ -93,7 +93,7 @@ fn all_assignments(params: &[Name], max_val: u64) -> Vec<Vec<(Name, u64)>> {
 }
 
 /// GROUND-TRUTH semantic equality: `eval` agrees for ALL assignments.
-fn genuine_equal(a: &Level, b: &Level, assignments: &[Vec<(Name, u64)>]) -> bool {
+pub(super) fn genuine_equal(a: &Level, b: &Level, assignments: &[Vec<(Name, u64)>]) -> bool {
     assignments.iter().all(|asn| eval(a, asn) == eval(b, asn))
 }
 
@@ -115,7 +115,7 @@ fn key(l: &Level) -> String {
 /// Depth convention: leaves (Zero, Param) = depth 1; a node of depth `d` has at
 /// least one child of depth `d-1`. Max/IMax are built from the full set of
 /// strictly-smaller levels; results are structurally deduped (by Display).
-fn enumerate(max_depth: u32, params: &[Name], max_levels: Option<usize>) -> Vec<Level> {
+pub(super) fn enumerate(max_depth: u32, params: &[Name], max_levels: Option<usize>) -> Vec<Level> {
     let cap = max_levels.unwrap_or(usize::MAX);
     let mut by_depth: Vec<Vec<Level>> = Vec::new();
     let mut all: Vec<Level> = Vec::new();
@@ -350,7 +350,7 @@ fn assert_green(r: &HarnessResult) {
 ///   `max 1 (imax u u_1)` vs `max (max 1 u_1) (imax u u_1)`
 /// (equal for all assignments: if u_1 == 0 both are 1; if u_1 > 0 then
 /// `imax u u_1 = max(u, u_1) >= u_1` absorbs the `max 1 u_1`.)
-fn completeness_target_pair() -> (Level, Level) {
+pub(super) fn completeness_target_pair() -> (Level, Level) {
     let u = Level::param(Name::from_string("u"));
     let u1 = Level::param(Name::from_string("u_1"));
     let one = Level::succ(Level::zero());
@@ -377,7 +377,7 @@ fn completeness_target_pair() -> (Level, Level) {
 /// The extra term `imax (succ u) (imax (succ u) u_2)` on the RHS is dominated by
 /// the JOIN `max(succ u, u_2)` of the OTHER retained args, but by NO single one —
 /// this is exactly the join-subsumption case.
-fn reverse_rec_on_target_pair() -> (Level, Level) {
+pub(super) fn reverse_rec_on_target_pair() -> (Level, Level) {
     let u = Level::param(Name::from_string("u"));
     let u2 = Level::param(Name::from_string("u_2"));
     let succ_u = Level::succ(u);
@@ -482,11 +482,18 @@ fn harness_completeness_target_accepted() {
         lhs.normalize(),
         rhs.normalize()
     );
+    assert!(
+        !Level::lean_is_equivalent(&lhs, &rhs),
+        "pinned Lean v4.30.0-rc2 refuses this pair (t1, measured 2026-10-17): it must stay refused under KernelTheory::Lean"
+    );
 }
 
 /// COMPLETENESS TARGET (JOIN-SUBSUMPTION): the `List.reverseRecOn._unary` vs
-/// `.eq_1` WF-recursion shape must be accepted. This is the exact pair whose
-/// `check_type` `TypeMismatch` motivated the join-subsumption fix.
+/// `.eq_1` WF-recursion shape is accepted by Clean's `Extended` normaliser.
+/// This is the pair whose `check_type` `TypeMismatch` motivated the
+/// join-subsumption fix (`71446b04f`). Pinned Lean's kernel REFUSES it (t2):
+/// the honest WF declarations pass Lean because it reads their stored levels
+/// verbatim, and the mismatch was Clean's collapsing decoder (DECISIONS R150).
 #[test]
 fn harness_reverse_rec_on_target_accepted() {
     let (lhs, rhs) = reverse_rec_on_target_pair();
@@ -505,6 +512,10 @@ fn harness_reverse_rec_on_target_accepted() {
         "JOIN-SUBSUMPTION COMPLETENESS TARGET not met: is_def_eq rejected genuinely-equal pair\n  lhs = {lhs}\n  rhs = {rhs}\n  norm(lhs) = {}\n  norm(rhs) = {}",
         lhs.normalize(),
         rhs.normalize()
+    );
+    assert!(
+        !Level::lean_is_equivalent(&lhs, &rhs),
+        "pinned Lean v4.30.0-rc2 refuses this pair (t2, measured 2026-10-17): it must stay refused under KernelTheory::Lean"
     );
 }
 

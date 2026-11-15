@@ -9,10 +9,11 @@ mod build;
 mod kind;
 mod locations;
 
+pub(crate) use accounting::deny_sorry_already_enabled;
 pub use accounting::{
     assert_no_sorry, ay_lifetime_count, ay_proof_count, ay_reconstruction_failure_count,
     ay_reconstruction_success_count, deny_sorry_enabled, explicit_sorry_count,
-    local_ay_reconstruction_success_count, record_ay_reconstruction_failure,
+    local_ay_reconstruction_success_count, local_sorry_count, record_ay_reconstruction_failure,
     record_ay_reconstruction_success, reset_ay_counter, reset_ay_reconstruction_failure_counter,
     reset_ay_reconstruction_success_counter, reset_local_ay_reconstruction_success_counter,
     reset_sorry_counter, sorry_count, sorry_lifetime_count, synthetic_sorry_count,
@@ -27,6 +28,8 @@ pub use locations::{
     reset_sorry_locations, sorry_locations, with_sorry_location_key,
 };
 
+#[cfg(test)]
+mod test_gate;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]

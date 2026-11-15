@@ -25,13 +25,16 @@ pub(super) fn run() -> anyhow::Result<()> {
     } else if which_in_path("soundness_gate").is_some() {
         run_and_forward(Path::new("soundness_gate"), &[])
     } else {
-        // Fallback: build via cargo. Emits a clear hint if that's unavailable.
+        // Fallback: build via targo's unverified lane (`$CARGO` when this runs
+        // under targo). Emits a clear hint if that's unavailable.
         eprintln!(
             "soundness_gate binary not found alongside the `clean` executable or on \
-             $PATH; falling back to `cargo run --locked -p clean-elab --bin soundness_gate`."
+             $PATH; falling back to `targo --unverified run --locked -p clean-elab --bin soundness_gate`."
         );
-        let status = Command::new("cargo")
+        let driver = std::env::var_os("CARGO").unwrap_or_else(|| "targo".into());
+        let status = Command::new(driver)
             .args([
+                "--unverified",
                 "run",
                 "--locked",
                 "--quiet",
@@ -43,7 +46,7 @@ pub(super) fn run() -> anyhow::Result<()> {
             .stdout(Stdio::inherit())
             .stderr(Stdio::inherit())
             .status()
-            .context("failed to invoke cargo to run soundness_gate")?;
+            .context("failed to invoke targo to run soundness_gate")?;
         if !status.success() {
             bail!("soundness-gate: FAIL");
         }

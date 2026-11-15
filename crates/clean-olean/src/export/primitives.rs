@@ -9,7 +9,7 @@ use crate::header::HEADER_SIZE;
 use crate::level::level_tags;
 use crate::region::tags;
 use clean_kernel::level::Level;
-use clean_kernel::name::Name;
+use clean_kernel::name::{Name, NameInner};
 
 impl OleanExporter {
     /// Create a new exporter with default settings
@@ -29,12 +29,13 @@ impl OleanExporter {
     /// # ENSURES
     /// - Output buffer is initialized with header + root pointer space.
     /// - Returned exporter uses the provided `base_addr`.
-    pub fn with_base_addr(base_addr: u64) -> Self {
+    pub(crate) fn with_base_addr(base_addr: u64) -> Self {
         let mut exporter = Self {
             data: Vec::new(),
             base_addr,
             strings: std::collections::HashMap::new(),
             names: std::collections::HashMap::new(),
+            kernel_names: std::collections::HashMap::new(),
         };
 
         // Reserve space for header (56 bytes) + root pointer (8 bytes)
@@ -212,7 +213,37 @@ impl OleanExporter {
 
     /// Write a Name from kernel Name type
     pub(super) fn write_kernel_name(&mut self, name: &Name) -> usize {
-        self.write_name(&name.to_string())
+        let mut current = name;
+        let mut pending = Vec::new();
+        let mut offset = loop {
+            if let Some(offset) = self.kernel_names.get(current) {
+                break *offset;
+            }
+            match current.inner() {
+                NameInner::Anon => {
+                    let offset = self.write_name_anonymous();
+                    self.kernel_names.insert(current.clone(), offset);
+                    break offset;
+                }
+                NameInner::Str(parent, _) | NameInner::Num(parent, _) => {
+                    pending.push(current);
+                    current = parent;
+                }
+            }
+        };
+        for name in pending.into_iter().rev() {
+            let parent = self.offset_to_ptr(offset);
+            offset = match name.inner() {
+                NameInner::Str(_, value) => {
+                    let string = self.write_string(value);
+                    self.write_name_str(parent, self.offset_to_ptr(string))
+                }
+                NameInner::Num(_, value) => self.write_name_num(parent, *value),
+                NameInner::Anon => unreachable!("pending names are non-anonymous"),
+            };
+            self.kernel_names.insert(name.clone(), offset);
+        }
+        offset
     }
 
     // =========================================================================

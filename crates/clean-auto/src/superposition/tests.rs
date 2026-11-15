@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use super::*;
+use crate::search_stop::SearchStop;
 use std::collections::HashSet;
 use std::ops::ControlFlow;
 use std::time::{Duration, Instant};
@@ -218,18 +219,21 @@ fn test_prover_transitivity() {
 #[test]
 fn test_prove_until_elapsed_deadline_preempts_search() {
     // The set { a = b }, { a ≠ b } is UNSAT and `prove` derives the empty
-    // clause. With an already-elapsed wall-clock deadline, the saturation loop's
-    // per-iteration deadline poll fires before it can do that work and returns
-    // ResourceLimit — the BUG-1 guarantee that the hot loop honours the deadline.
+    // clause. With an already-elapsed backstop, the saturation loop's
+    // per-step backstop poll fires before it can do that work and returns
+    // ResourceLimit — the BUG-1 guarantee that the hot loop honours the
+    // backstop — and the poll latches, so the caller can tell the clock from
+    // the counts.
     let mut prover = SuperpositionProver::new();
     prover.add_clause(vec![Literal::eq(const_(0), const_(1))]);
     prover.add_clause(vec![Literal::neq(const_(0), const_(1))]);
 
-    let elapsed = Instant::now() - Duration::from_secs(1);
-    match prover.prove_until(10_000, Some(elapsed)) {
+    let stop = SearchStop::new(Some(Instant::now() - Duration::from_secs(1)));
+    match prover.prove_until(10_000, Some(&stop)) {
         ProverResult::ResourceLimit => {}
-        other => panic!("expected ResourceLimit from an elapsed deadline, got {other:?}"),
+        other => panic!("expected ResourceLimit from an elapsed backstop, got {other:?}"),
     }
+    assert!(stop.has_fired(), "the backstop that cut the run must latch");
 }
 
 #[test]
@@ -244,6 +248,129 @@ fn test_prove_until_no_deadline_matches_prove() {
         ProverResult::Unsatisfiable(_) => {}
         other => panic!("expected Unsatisfiable with no deadline, got {other:?}"),
     }
+}
+
+#[test]
+fn test_prove_until_a_first_step_decision_stands_under_a_passed_backstop() {
+    // The loop polls the backstop only after the step's counts and its cheap
+    // decisions (saturation, an empty given clause). A run that those decide on
+    // its first step therefore answers them even under a backstop that passed
+    // before it started, and makes no poll. A poll back at the top of the loop
+    // would answer ResourceLimit for both.
+    let passed = || SearchStop::new(Some(Instant::now()));
+
+    let stop = passed();
+    match SuperpositionProver::new().prove_until(10_000, Some(&stop)) {
+        ProverResult::Saturated => {}
+        other => panic!("an empty clause set saturates on its first step, got {other:?}"),
+    }
+    assert_eq!((stop.polls(), stop.has_fired()), (0, false));
+
+    let mut prover = SuperpositionProver::new();
+    prover.add_clause(vec![]);
+    let stop = passed();
+    match prover.prove_until(10_000, Some(&stop)) {
+        ProverResult::Unsatisfiable(_) => {}
+        other => panic!("an empty given clause is a refutation, got {other:?}"),
+    }
+    assert_eq!((stop.polls(), stop.has_fired()), (0, false));
+}
+
+#[test]
+fn test_prove_until_a_refutation_stands_when_the_backstop_passes_after_the_last_poll() {
+    // The transitivity refutation takes several polled steps. Let the backstop
+    // pass right after the last of them has read the clock: no poll sees it,
+    // so the refutation the counts reach stands, and nothing reads the clock
+    // again to throw it away.
+    let transitivity = || {
+        let mut prover = SuperpositionProver::new();
+        prover.add_clause(vec![Literal::eq(const_(0), const_(1))]);
+        prover.add_clause(vec![Literal::eq(const_(1), const_(2))]);
+        prover.add_clause(vec![Literal::neq(const_(0), const_(2))]);
+        prover
+    };
+    let counted = SearchStop::new(None);
+    assert!(matches!(
+        transitivity().prove_until(10_000, Some(&counted)),
+        ProverResult::Unsatisfiable(_)
+    ));
+    let polls = counted.polls();
+    assert!(
+        polls > 1,
+        "the refutation takes several polled steps: {polls}"
+    );
+
+    let _seam = crate::search_stop::slowdown::PassAfterPoll::new(polls);
+    let stop = SearchStop::new(Instant::now().checked_add(Duration::from_secs(600)));
+    match transitivity().prove_until(10_000, Some(&stop)) {
+        ProverResult::Unsatisfiable(_) => {}
+        other => panic!("the counts' refutation must stand, got {other:?}"),
+    }
+    assert_eq!((stop.polls(), stop.has_fired()), (polls, false));
+}
+
+/// The transitivity problem `{a = b}, {b = c}, {a ≠ c}` under a declaration
+/// work budget of `limit` units, on a fresh thread so the thread-local budget
+/// cannot leak into another test. Returns the result, the units spent and the
+/// site that exhausted the budget, if any.
+fn prove_transitivity_under_work_budget(limit: u64) -> (ProverResult, u64, Option<&'static str>) {
+    std::thread::spawn(move || {
+        crate::work_budget::set_limit(limit);
+        let mut prover = SuperpositionProver::new();
+        prover.add_clause(vec![Literal::eq(const_(0), const_(1))]);
+        prover.add_clause(vec![Literal::eq(const_(1), const_(2))]);
+        prover.add_clause(vec![Literal::neq(const_(0), const_(2))]);
+        let result = prover.prove_until(10_000, None);
+        let outcome = (
+            result,
+            crate::work_budget::used(),
+            crate::work_budget::exhausted_at(),
+        );
+        crate::work_budget::set_limit(0);
+        outcome
+    })
+    .join()
+    .expect("work-budget prover thread must not panic")
+}
+
+#[test]
+fn test_prove_until_work_budget_under_limit_proves_over_limit_refuses() {
+    // Measure what the search needs, then pin both sides of that line: the
+    // same search with exactly that budget still proves, and one unit less is
+    // a ResourceLimit charged to the superposition site. The bound is
+    // deterministic, so the two runs cannot straddle it by accident.
+    let (generous, needed, site) = prove_transitivity_under_work_budget(1_000_000);
+    assert!(
+        matches!(generous, ProverResult::Unsatisfiable(_)),
+        "a generous budget must not change the result, got {generous:?}"
+    );
+    assert_eq!(site, None, "a generous budget is never exhausted");
+    assert!(needed > 0, "the search must be charged for its steps");
+
+    let (exact, spent, site) = prove_transitivity_under_work_budget(needed);
+    assert!(
+        matches!(exact, ProverResult::Unsatisfiable(_)),
+        "exactly the measured budget must still prove, got {exact:?}"
+    );
+    assert_eq!(spent, needed, "the charge is deterministic");
+    assert_eq!(site, None);
+
+    let (starved, _, site) = prove_transitivity_under_work_budget(needed - 1);
+    assert!(
+        matches!(starved, ProverResult::ResourceLimit),
+        "one unit under the measured need must stop the search, got {starved:?}"
+    );
+    assert_eq!(site, Some("superposition"));
+}
+
+#[test]
+fn test_prove_until_work_budget_disabled_changes_nothing() {
+    // Limit 0 is the default on every thread: nothing is counted and the
+    // search is exactly the unbudgeted one.
+    let (result, spent, site) = prove_transitivity_under_work_budget(0);
+    assert!(matches!(result, ProverResult::Unsatisfiable(_)));
+    assert_eq!(spent, 0);
+    assert_eq!(site, None);
 }
 
 #[test]

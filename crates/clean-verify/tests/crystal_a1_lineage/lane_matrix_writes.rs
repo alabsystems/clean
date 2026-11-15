@@ -43,8 +43,8 @@ use super::*;
 const CAND_FW_B0: &str = "def ir_fw_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd6 (ir_nd1 \
      (IRInst.extractfield (IRTy.uint_ 8) ir_d0 ir_d0) ir_d2) (ir_nd1 (IRInst.extractfield \
      (IRTy.uint_ 8) ir_d1 ir_d0) ir_d3) (ir_nd1 (IRInst.binop IRBinOp.or_ (IRTy.uint_ 8) ir_d2 \
-     ir_d3) ir_d4) (ir_nd1 (IRInst.const_ (IRTy.struct_ 1017) (ir_cvar ir_d0)) ir_d5) (ir_nd1 \
-     (IRInst.insertfield (IRTy.struct_ 1017) ir_d5 ir_d0 ir_d4) ir_d6) (ir_nd (IRInst.ret \
+     ir_d3) ir_d4) (ir_nd1 (IRInst.const_ (IRTy.struct_ 815) (ir_cvar ir_d0)) ir_d5) (ir_nd1 \
+     (IRInst.insertfield (IRTy.struct_ 815) ir_d5 ir_d0 ir_d4) ir_d6) (ir_nd (IRInst.ret \
      (ir_nl1 ir_d6))))";
 const CAND_FW_FUNC: &str = "def ir_fw_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) \
      ir_d0 (ir_blk ir_fw_b0 ir_blk0)";
@@ -53,8 +53,8 @@ const CAND_FW_FUNC: &str = "def ir_fw_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 i
 /// `fixtures/strict_monads.trust-ir.txt`
 /// (`env::Environment::set_lean4_core_strict_monads`) — TEST-LOCAL.
 const CAND_SM_B0: &str = "def ir_sm_b0 : IRBlock := IRBlock.mk ir_d0 ir_nl0 (ir_bd4 (ir_nd1 \
-     (IRInst.load (IRTy.struct_ 441) ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.insertfield \
-     (IRTy.struct_ 441) ir_d2 ir_d81 ir_d1) ir_d3) (ir_nd (IRInst.store (IRTy.struct_ 441) \
+     (IRInst.load (IRTy.struct_ 586) ir_d0 Bool.false) ir_d2) (ir_nd1 (IRInst.insertfield \
+     (IRTy.struct_ 586) ir_d2 ir_d83 ir_d1) ir_d3) (ir_nd (IRInst.store (IRTy.struct_ 586) \
      ir_d0 ir_d3 Bool.false)) (ir_nd (IRInst.ret ir_nl0)))";
 const CAND_SM_FUNC: &str = "def ir_sm_func : IRFunc := IRFunc.mk ir_d0 (ir_nl2 ir_d0 ir_d1) \
      ir_d0 (ir_blk ir_sm_b0 ir_blk0)";
@@ -116,7 +116,7 @@ fn writes_lanes_agree_on_the_candidate_transcriptions() {
     );
     assert_eq!(
         fw.insertfields.get(&0),
-        Some(&vec![(6, "struct1017".to_string(), 5, 0, 4)]),
+        Some(&vec![(6, "struct815".to_string(), 5, 0, 4)]),
         "the lane must actually be POPULATED on this body — an empty lane agreeing with an \
          empty lane is the vacuity mode this file exists to refuse"
     );
@@ -131,13 +131,13 @@ fn writes_lanes_agree_on_the_candidate_transcriptions() {
     );
     assert_eq!(
         sm.insertfields.get(&0),
-        Some(&vec![(3, "struct441".to_string(), 2, 81, 1)]),
-        "insertfield at FIELD 81 of Environment is the exact case the lane was cut for"
+        Some(&vec![(3, "struct586".to_string(), 2, 83, 1)]),
+        "insertfield at FIELD 83 of Environment is the exact case the lane was cut for"
     );
     assert_eq!(
         sm.stores.get(&0),
-        Some(&vec![(0, "struct441".to_string(), 3)]),
-        "the store lane must be populated: (POINTER %0, struct441, value %3)"
+        Some(&vec![(0, "struct586".to_string(), 3)]),
+        "the store lane must be populated: (POINTER %0, struct586, value %3)"
     );
 }
 
@@ -156,23 +156,23 @@ fn insertfield_lane_catches_what_every_old_lane_misses() {
     // same class binding the same result.
     for (from, to, what) in [
         (
-            "insertfield struct.1017 %5, 0, %4",
-            "insertfield struct.1017 %5, 1, %4",
+            "insertfield struct.815 %5, 0, %4",
+            "insertfield struct.815 %5, 1, %4",
             "FIELD INDEX 0 -> 1",
         ),
         (
-            "insertfield struct.1017 %5, 0, %4",
-            "insertfield struct.1018 %5, 0, %4",
-            "TYPE struct.1017 -> struct.1018",
+            "insertfield struct.815 %5, 0, %4",
+            "insertfield struct.816 %5, 0, %4",
+            "TYPE struct.815 -> struct.816",
         ),
         (
-            "insertfield struct.1017 %5, 0, %4",
-            "insertfield struct.1017 %5, 0, %3",
+            "insertfield struct.815 %5, 0, %4",
+            "insertfield struct.815 %5, 0, %3",
             "inserted VALUE %4 -> %3",
         ),
         (
-            "insertfield struct.1017 %5, 0, %4",
-            "insertfield struct.1017 %1, 0, %4",
+            "insertfield struct.815 %5, 0, %4",
+            "insertfield struct.815 %1, 0, %4",
             "source AGGREGATE %5 -> %1",
         ),
     ] {
@@ -226,18 +226,18 @@ fn store_lane_catches_what_every_old_lane_misses() {
     // Environment: storing it makes the whole body a no-op).
     for (from, to, what) in [
         (
-            "store struct.441 %3, ptr %0",
-            "store struct.441 %0, ptr %3",
+            "store struct.586 %3, ptr %0",
+            "store struct.586 %0, ptr %3",
             "ptr/value SWAP",
         ),
         (
-            "store struct.441 %3, ptr %0",
+            "store struct.586 %3, ptr %0",
             "store struct.442 %3, ptr %0",
-            "TYPE struct.441 -> struct.442",
+            "TYPE struct.586 -> struct.442",
         ),
         (
-            "store struct.441 %3, ptr %0",
-            "store struct.441 %2, ptr %0",
+            "store struct.586 %3, ptr %0",
+            "store struct.586 %2, ptr %0",
             "stored VALUE %3 -> %2",
         ),
     ] {
@@ -259,8 +259,8 @@ fn store_lane_catches_what_every_old_lane_misses() {
     // fault, and which no other lane distinguishes from the artifact.
     let drifted = parse_clean(
         &CAND_SM_B0.replace(
-            "(IRTy.struct_ 441) ir_d0 ir_d3 Bool.false",
-            "(IRTy.struct_ 441) ir_d1 ir_d3 Bool.false",
+            "(IRTy.struct_ 586) ir_d0 ir_d3 Bool.false",
+            "(IRTy.struct_ 586) ir_d1 ir_d3 Bool.false",
         ),
         "def ir_sm_b",
     );
@@ -280,7 +280,7 @@ fn store_lane_catches_what_every_old_lane_misses() {
     // `order` (its class list loses the entry) — the lane's contribution is
     // the operands and the type, which order structurally cannot carry.
     let deleted =
-        parse_emitted(&text.replace("    store struct.441 %3, ptr %0  ; #loc: 368 3479 8\n", ""));
+        parse_emitted(&text.replace("    store struct.586 %3, ptr %0  ; #loc: 180 3784 8\n", ""));
     assert_ne!(
         emitted.order, deleted.order,
         "deleting the store must already fail the ORDER lane — if this ever passes, the \
@@ -298,14 +298,14 @@ fn store_lane_catches_what_every_old_lane_misses() {
 #[test]
 fn volatile_and_align_stores_are_refused_not_dropped() {
     let text = fixture("strict_monads.trust-ir.txt");
-    let volatile_emitted = text.replace("store struct.441 %3", "volatile store struct.441 %3");
+    let volatile_emitted = text.replace("store struct.586 %3", "volatile store struct.586 %3");
     assert!(
         std::panic::catch_unwind(|| parse_emitted(&volatile_emitted)).is_err(),
         "an emitted VOLATILE store must be refused — the lane has no slot for the flag"
     );
     let aligned = text.replace(
-        "store struct.441 %3, ptr %0",
-        "store struct.441 %3, ptr %0, align 8",
+        "store struct.586 %3, ptr %0",
+        "store struct.586 %3, ptr %0, align 8",
     );
     assert!(
         std::panic::catch_unwind(|| parse_emitted(&aligned)).is_err(),

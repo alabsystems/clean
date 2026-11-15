@@ -74,8 +74,12 @@ toml.workspace = true
 tempfile.workspace = true
 
 [features]
+# Untrusted, opt-in C4 experiment; no ordinary or reference entry calls it.
+kcheck-trace = []
+
 # Feature flag for Kani bounded model checking harnesses
 # Usage: cargo kani --features kani
+# STOCK EXCEPTION (Trust lacks kani; measured `targo kani` -> `error: no such command`; kani drives its own pinned nightly).
 kani = []
 
 # CLI surface for Epic #3436 Phase 2+: exposes `clean_kernel::cli` with
@@ -105,6 +109,12 @@ debug-whnf = []
 # every hook call site is cfg-gated. See tc/reduction_stats.rs.
 # Usage: cargo test --features reduction-stats
 reduction-stats = []
+
+# Fixed-size fast-inference work counters; deliberately does NOT enable the
+# older per-name/term-formatting reduction-stats instrumentation. See
+# tc::reduction_stats::inference_stats_snapshot and CLEAN_INFERENCE_STATS_EARLY.
+# All production call sites are removed when this diagnostic feature is off.
+inference-stats = []
 
 # Feature flag for verbose type inference debugging (for #821 investigation)
 # Usage: cargo test --features debug-infer
@@ -211,3 +221,13 @@ harness = false
 [[bench]]
 name = "cert_macro_bench"
 harness = false
+
+[[test]]
+name = "kcheck_trace"
+required-features = ["kcheck-trace", "reduction-stats"]
+
+# The suite runner forwards required-features; without this, the file-level
+# cfg produces a successful libtest invocation that runs zero tests.
+[[test]]
+name = "to_micro_cert_coverage"
+required-features = ["geometry-tools"]

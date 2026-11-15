@@ -219,7 +219,7 @@ else
 
     if [ -z "$HASHER" ]; then
         echo "Error: no BLAKE3 hasher found; refusing to use unverified Mathverse shards" >&2
-        echo "  Install: brew install b3sum or cargo install --locked b3sum" >&2
+        echo "  Install: brew install b3sum or targo --unverified install --locked b3sum" >&2
         echo "  Use --skip-verify to bypass manifest verification explicitly." >&2
         exit 1
     else

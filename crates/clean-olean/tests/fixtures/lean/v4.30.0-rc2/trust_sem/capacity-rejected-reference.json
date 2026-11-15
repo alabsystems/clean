@@ -1,0 +1,58 @@
+{
+  "sources": [
+    {
+      "module": "SemR",
+      "path": "../semr/SemR.lean"
+    },
+    {
+      "module": "MiniRust",
+      "path": "../semr/MiniRust.lean"
+    },
+    {
+      "module": "SemRMiniRust",
+      "path": "../semr/SemRMiniRust.lean"
+    },
+    {
+      "module": "TrustSem",
+      "path": "TrustSem.lean"
+    },
+    {
+      "module": "TrustSemAllocationCapacity",
+      "path": "TrustSemAllocationCapacity.lean"
+    },
+    {
+      "module": "TrustSemAllocationCapacityRejected",
+      "path": "TrustSemAllocationCapacityRejected.lean"
+    }
+  ],
+  "module": "TrustSemAllocationCapacityRejected",
+  "roots": [
+    "TrustSem.AllocationCapacity.full_memory_all_rejected",
+    "TrustSem.AllocationCapacity.full_memory_rejects_every_oracle",
+    "TrustSem.AllocationCapacity.abort_is_not_original_rejection",
+    "TrustSem.AllocationCapacity.fuel_is_not_original_rejection",
+    "TrustSem.AllocationCapacity.zero_fuel_still_fuel",
+    "TrustSem.AllocationCapacity.all_rejected_runOracle",
+    "TrustSem.AllocationCapacity.all_rejected_dead",
+    "TrustSem.AllocationCapacity.exhausted_allocation_continuation_dead",
+    "TrustSem.AllocationCapacity.miniRust_live_step_excludes_exhausted_call",
+    "MRf.BasicMemory.allocate",
+    "TrustSem.miniRust_core_wf"
+  ],
+  "positive": [
+    {
+      "proof": "TrustSem.AllocationCapacity.full_memory_rejects_every_oracle",
+      "goal": "TrustSem.AllocationCapacity.RejectEveryOracleGoal"
+    }
+  ],
+  "negative": [
+    {
+      "proof": "TrustSem.AllocationCapacity.full_memory_rejects_every_oracle",
+      "goal": "TrustSem.AllocationCapacity.AbortEveryOracleGoal"
+    },
+    {
+      "proof": "TrustSem.AllocationCapacity.full_memory_rejects_every_oracle",
+      "goal": "TrustSem.AllocationCapacity.FuelEveryOracleGoal"
+    }
+  ]
+}

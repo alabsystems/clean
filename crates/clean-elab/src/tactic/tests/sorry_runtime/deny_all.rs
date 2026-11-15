@@ -34,20 +34,23 @@ fn deny_all_sorry_non_trivial_theorem() {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_fvar,
-                name: "a".to_string(),
+                name: clean_parser::SurfaceName::generated_path("a"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },

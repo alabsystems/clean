@@ -84,13 +84,14 @@
 //!   outermost reflected DefEnv entry) THROUGH the engine, consuming the
 //!   existing Guard-4 step witness `the_red_env_delta_nonvacuous` (no new
 //!   step computation) plus refl-computed iota/delta deadness of the body's
-//!   components (`kcre_name_12`, `kcre_name_90` — neither is a recursor;
-//!   `kcre_name_12` is not delta-defined; the body's inner redex positions
+//!   components (`fixture_def_env_name`, `fixture_def_env_closed_b_name` — neither is a recursor;
+//!   `fixture_def_env_name` is not delta-defined; the body's inner redex positions
 //!   are a bare const and a bvar, so it is whnf-stuck). Per the_red_env.rs
 //!   Guard 3 this module is thereby one of the designated witness-discharge
 //!   sites; the witness references generated `kcre_*` atoms, so a
-//!   regeneration of the reflection that changes them fails these proofs
-//!   CLOSED rather than silently drifting.
+//!   semantic aliases follow the current interning table. A regeneration
+//!   that changes the selected body or reduction facts still fails these
+//!   proofs CLOSED rather than silently drifting.
 //!
 //! ## Census
 //!
@@ -218,21 +219,21 @@ pub(super) const VAL_CONSTACC_BODY_ACC: &str = "fun (c : Name) (us : ListType Le
 
 // ================================================================
 // Group D — the delta discriminating witnesses at the REAL reflected env
-// constant def_env_lift_closed_b (kcre_witness_delta_head = kcre_name_118,
+// constant def_env_lift_closed_b (kcre_witness_delta_head,
 // the outermost DefEnv entry; its value kcre_witness_delta_value =
-// lam (const kcre_name_12 nil) (app (const kcre_name_90 nil) (bvar 0))).
-// kcre_name_90 (def_env_closed_b) is NOT a recursor, so the body's app is
-// iota-dead by refl; kcre_name_12 is not delta-defined and a bare const is
+// lam (const fixture_def_env_name nil) (app (const fixture_def_env_closed_b_name nil) (bvar 0))).
+// fixture_def_env_closed_b_name (def_env_closed_b) is NOT a recursor, so the body's app is
+// iota-dead by refl; fixture_def_env_name is not delta-defined and a bare const is
 // beta-dead generically; delta never fires under a binder (whnf_step's
 // delta leg is root-only) — so the body is whnf-STUCK and its whnf_acc is
 // the vacuous intro.
 // ================================================================
 
-const W_HEAD: &str = "(KExpr.const kcre_name_90 (ListType.nil Level))";
+const W_HEAD: &str = "(KExpr.const fixture_def_env_closed_b_name (ListType.nil Level))";
 const W_ARG: &str = "(KExpr.bvar kcre_nat_0)";
 const W_APP: &str =
-    "(KExpr.app (KExpr.const kcre_name_90 (ListType.nil Level)) (KExpr.bvar kcre_nat_0))";
-const W_DOM: &str = "(KExpr.const kcre_name_12 (ListType.nil Level))";
+    "(KExpr.app (KExpr.const fixture_def_env_closed_b_name (ListType.nil Level)) (KExpr.bvar kcre_nat_0))";
+const W_DOM: &str = "(KExpr.const fixture_def_env_name (ListType.nil Level))";
 
 pub(super) fn ty_witness_body_no_beta() -> String {
     format!("forall (e2 : KExpr) (C : Type), beta_reduces {W_APP} e2 -> C")
@@ -241,8 +242,8 @@ pub(super) fn ty_witness_body_no_beta() -> String {
 pub(super) fn val_witness_body_no_beta() -> String {
     let mot =
         format!("(fun (s : KExpr) (t : KExpr) (_ : beta_reduces s t) => Eq KExpr s {W_APP} -> C)");
-    let w_beta = format!("(fun (A0 : KExpr) (body : KExpr) (arg : KExpr) (heq : Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {W_APP}) => const_ne_lam kcre_name_90 (ListType.nil Level) A0 body C (Eq.symm KExpr (KExpr.lam A0 body) {W_HEAD} (app_inj_fst (KExpr.lam A0 body) arg {W_HEAD} {W_ARG} heq)))");
-    let w_appl = format!("(fun (f : KExpr) (f2 : KExpr) (a : KExpr) (hstep : beta_reduces f f2) (_ih : Eq KExpr f {W_APP} -> C) (heq : Eq KExpr (KExpr.app f a) {W_APP}) => r2_const_no_beta_reduces kcre_name_90 (ListType.nil Level) f2 C (Eq.rec KExpr f (fun (x : KExpr) (_ : Eq KExpr f x) => beta_reduces x f2) hstep {W_HEAD} (app_inj_fst f a {W_HEAD} {W_ARG} heq)))");
+    let w_beta = format!("(fun (A0 : KExpr) (body : KExpr) (arg : KExpr) (heq : Eq KExpr (KExpr.app (KExpr.lam A0 body) arg) {W_APP}) => const_ne_lam fixture_def_env_closed_b_name (ListType.nil Level) A0 body C (Eq.symm KExpr (KExpr.lam A0 body) {W_HEAD} (app_inj_fst (KExpr.lam A0 body) arg {W_HEAD} {W_ARG} heq)))");
+    let w_appl = format!("(fun (f : KExpr) (f2 : KExpr) (a : KExpr) (hstep : beta_reduces f f2) (_ih : Eq KExpr f {W_APP} -> C) (heq : Eq KExpr (KExpr.app f a) {W_APP}) => r2_const_no_beta_reduces fixture_def_env_closed_b_name (ListType.nil Level) f2 C (Eq.rec KExpr f (fun (x : KExpr) (_ : Eq KExpr f x) => beta_reduces x f2) hstep {W_HEAD} (app_inj_fst f a {W_HEAD} {W_ARG} heq)))");
     let w_appr = format!("(fun (f : KExpr) (a : KExpr) (a2 : KExpr) (hstep : beta_reduces a a2) (_ih : Eq KExpr a {W_APP} -> C) (heq : Eq KExpr (KExpr.app f a) {W_APP}) => no_whnf_step_bvar kcre_nat_0 a2 C (whnf_step.beta {W_ARG} a2 (Eq.rec KExpr a (fun (x : KExpr) (_ : Eq KExpr a x) => beta_reduces x a2) hstep {W_ARG} (app_inj_snd f a {W_HEAD} {W_ARG} heq))))");
     let w_lamty = format!("(fun (ty : KExpr) (ty2 : KExpr) (body : KExpr) (_hstep : beta_reduces ty ty2) (_ih : Eq KExpr ty {W_APP} -> C) (heq : Eq KExpr (KExpr.lam ty body) {W_APP}) => lam_ne_app ty body {W_HEAD} {W_ARG} C heq)");
     let w_lambd = format!("(fun (ty : KExpr) (body : KExpr) (body2 : KExpr) (_hstep : beta_reduces body body2) (_ih : Eq KExpr body {W_APP} -> C) (heq : Eq KExpr (KExpr.lam ty body) {W_APP}) => lam_ne_app ty body {W_HEAD} {W_ARG} C heq)");
@@ -265,7 +266,7 @@ pub(super) const TY_WITNESS_BODY_ACC: &str = "whnf_acc kcre_witness_delta_value"
 
 pub(super) fn val_witness_body_acc() -> String {
     format!(
-        "whnf_acc.intro kcre_witness_delta_value (fun (e2 : KExpr) (hs : whnf_step kcre_witness_delta_value e2) => whnf_step.rec kcre_witness_delta_value e2 (fun (_ : whnf_step kcre_witness_delta_value e2) => whnf_acc e2) (fun (hbr : beta_reduces kcre_witness_delta_value e2) => lamHead_beta_inv {W_DOM} {W_APP} e2 (whnf_acc e2) hbr (fun (ty2 : KExpr) (hstepty : beta_reduces {W_DOM} ty2) (_heq : Eq KExpr e2 (KExpr.lam ty2 {W_APP})) => r2_const_no_beta_reduces kcre_name_12 (ListType.nil Level) ty2 (whnf_acc e2) hstepty) (fun (b2 : KExpr) (hstepb : beta_reduces {W_APP} b2) (_heq : Eq KExpr e2 (KExpr.lam {W_DOM} b2)) => r2_deltaWitness_body_no_beta b2 (whnf_acc e2) hstepb)) (fun (hdr : delta_reduces kcre_witness_delta_value e2) => delta_step_head_none_absurd_type (red_def the_red_env) kcre_witness_delta_value e2 (whnf_acc e2) (Eq.refl (OptionType Name) (OptionType.none Name)) (delta_reduces_to_step kcre_witness_delta_value e2 hdr)) hs)"
+        "whnf_acc.intro kcre_witness_delta_value (fun (e2 : KExpr) (hs : whnf_step kcre_witness_delta_value e2) => whnf_step.rec kcre_witness_delta_value e2 (fun (_ : whnf_step kcre_witness_delta_value e2) => whnf_acc e2) (fun (hbr : beta_reduces kcre_witness_delta_value e2) => lamHead_beta_inv {W_DOM} {W_APP} e2 (whnf_acc e2) hbr (fun (ty2 : KExpr) (hstepty : beta_reduces {W_DOM} ty2) (_heq : Eq KExpr e2 (KExpr.lam ty2 {W_APP})) => r2_const_no_beta_reduces fixture_def_env_name (ListType.nil Level) ty2 (whnf_acc e2) hstepty) (fun (b2 : KExpr) (hstepb : beta_reduces {W_APP} b2) (_heq : Eq KExpr e2 (KExpr.lam {W_DOM} b2)) => r2_deltaWitness_body_no_beta b2 (whnf_acc e2) hstepb)) (fun (hdr : delta_reduces kcre_witness_delta_value e2) => delta_step_head_none_absurd_type (red_def the_red_env) kcre_witness_delta_value e2 (whnf_acc e2) (Eq.refl (OptionType Name) (OptionType.none Name)) (delta_reduces_to_step kcre_witness_delta_value e2 hdr)) hs)"
     )
 }
 
@@ -867,20 +868,39 @@ impl Specification {
         })?;
 
         // --- Group D: the real-env delta witnesses ---
+        // Frequency-ranked interning tags may change when reflection grows.
+        // Resolve semantic names through the same validated table used by the
+        // current artifact (including the generator's fresh in-memory table).
+        // The body-shape and non-reduction proofs below still check against
+        // the actual selected reflected definition and fail on semantic drift.
+        for (alias, semantic_name) in [
+            ("fixture_nat_rec_name", "Nat.rec"),
+            ("fixture_nat_zero_name", "Nat.zero"),
+            ("fixture_nat_succ_name", "Nat.succ"),
+            ("fixture_def_env_name", "DefEnv"),
+            ("fixture_def_env_closed_b_name", "def_env_closed_b"),
+        ] {
+            let tag = self.reflected_name_tag(semantic_name)?;
+            self.add_recursive_def(
+                &format!("def {alias} : Name := kcre_name_{tag}"),
+                "Resolve the witness's semantic constant name through the validated current reflection table. This is a naming adapter, not an assumed body-shape or reduction theorem.",
+            )?;
+        }
         self.add_definition(SpecDefinition {
             name: "r2_deltaWitness_body_no_beta".to_string(),
             type_src: ty_witness_body_no_beta(),
             value_src: Some(val_witness_body_no_beta()),
             is_axiom: false,
-            description: "Witness support: app (const kcre_name_90 nil) (bvar 0) — the body \
+            description: "Witness support: app (const fixture_def_env_closed_b_name nil) (bvar 0) — the body \
                           of the reflected kernel definition def_env_lift_closed_b — admits \
                           no beta_reduces step: head is a bare const (r2_const_no_beta_\
                           reduces), argument is a bvar (no_whnf_step_bvar), top-beta dies by \
                           lam/const no-confusion, and the iota arm dies by REFL — \
-                          kcre_name_90 (def_env_closed_b) carries no RecMeta in the real \
+                          fixture_def_env_closed_b_name (def_env_closed_b) carries no RecMeta in the real \
                           reflected env, so iota_reduct computes to none. Guard-3 posture: \
                           this is a designated-witness value computation over the_red_env; \
-                          a regeneration changing the atoms fails this proof closed. \
+                          semantic-name aliases tolerate table renumbering, but changed \
+                          body shape or reduction behavior still fails this proof closed. \
                           Zero axiom_deps."
                 .to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -909,8 +929,8 @@ impl Specification {
             value_src: Some(val_witness_body_acc()),
             is_axiom: false,
             description: "kcre_witness_delta_value — the REAL unfolding body of \
-                          def_env_lift_closed_b, lam (const kcre_name_12 nil) (app (const \
-                          kcre_name_90 nil) (bvar 0)) — is whnf_acc, VACUOUSLY: it admits no \
+                          def_env_lift_closed_b, lam (const fixture_def_env_name nil) (app (const \
+                          fixture_def_env_closed_b_name nil) (bvar 0)) — is whnf_acc, VACUOUSLY: it admits no \
                           whnf_step at all. Delta never fires at a lam head (root-only, \
                           kexpr_const_name = none by refl) and never under a binder \
                           (whnf_step's delta leg has no congruence); the beta leg's two live \

@@ -1,14 +1,14 @@
+; synthetic: SYNTHETIC MODULE -- authored for the W2c semdiff lane
+; synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2c).
+; synthetic: No compiler emitted this body; its registered Clean twin is
+; synthetic: ir_w2c_ga_module (eval_ir_w2c_synth.rs). The module's ONE global
+; synthetic: (u32 = 7) lives in the composed module header -- the chain
+; synthetic: table's type_decls -- because a global is a module-level
+; synthetic: declaration, not a function body line. The bool selector routes
+; synthetic: between the initializer read and the store-through-one-address /
+; synthetic: load-through-the-other aliasing observation. Do not add it to
+; synthetic: any emitted-fixture census.
 fn @synth::globaladdr_probe(functy.921) {
-    ; #synthetic: SYNTHETIC MODULE -- authored for the W2c semdiff lane
-    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2c).
-    ; #synthetic: No compiler emitted this body; its registered Clean twin is
-    ; #synthetic: ir_w2c_ga_module (eval_ir_w2c_synth.rs). The module's ONE global
-    ; #synthetic: (u32 = 7) lives in the composed module header -- the chain
-    ; #synthetic: table's type_decls -- because a global is a module-level
-    ; #synthetic: declaration, not a function body line. The bool selector routes
-    ; #synthetic: between the initializer read and the store-through-one-address /
-    ; #synthetic: load-through-the-other aliasing observation. Do not add it to
-    ; #synthetic: any emitted-fixture census.
 bb0(%0: u32, %1: bool):
     %2 = global_addr @global.0
     condbr %1, bb1, bb2

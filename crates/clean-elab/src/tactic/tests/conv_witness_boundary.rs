@@ -21,21 +21,24 @@ fn assert_no_trusted_fallback(state: &ProofState, tactic_name: &str, before: (u6
     assert_no_trusted_axiom_usage(tactic_name, "focused conv rewrite", before);
 }
 
-fn rw_rule(name: &str) -> SurfaceRwRule {
+fn rw_rule(name: &'static str) -> SurfaceRwRule {
     SurfaceRwRule {
         span: Span::dummy(),
         reverse: false,
-        term: SurfaceExpr::Ident(Span::dummy(), name.to_string()),
+        term: SurfaceExpr::Ident(
+            Span::dummy(),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
     }
 }
 
-fn local_fvar_by_name(state: &ProofState, name: &str) -> FVarId {
+fn local_fvar_by_name(state: &ProofState, name: &'static str) -> FVarId {
     state
         .current_goal()
         .expect("test state should have a current goal")
         .local_ctx
         .iter()
-        .find(|decl| decl.name == name)
+        .find(|decl| decl.name.name() == &Name::from_string(name))
         .map(|decl| decl.fvar)
         .expect("named local should exist")
 }
@@ -76,8 +79,16 @@ fn test_conv_goal_compound_prop_multi_rule_rewrite_zero_trusted_axioms() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hxy").expect("intro hxy");
-    intro(&mut state, "hyz").expect("intro hyz");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro hxy");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyz"),
+    )
+    .expect("intro hyz");
     let axiom_before = axiom_snapshot();
 
     eval_conv_lhs_rw(
@@ -116,8 +127,16 @@ fn test_conv_goal_compound_nonprop_multi_rule_rewrite_zero_trusted_axioms() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hxy").expect("intro hxy");
-    intro(&mut state, "hyz").expect("intro hyz");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro hxy");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyz"),
+    )
+    .expect("intro hyz");
     let axiom_before = axiom_snapshot();
 
     eval_conv_lhs_rw(
@@ -161,10 +180,22 @@ fn test_conv_at_hypothesis_multi_rule_rewrite_zero_trusted_axioms() {
         ),
     );
     let mut state = ProofState::new(env.clone(), goal);
-    intro(&mut state, "hxy").expect("intro hxy");
-    intro(&mut state, "hyz").expect("intro hyz");
-    intro(&mut state, "h_target").expect("intro h_target");
-    intro(&mut state, "hz").expect("intro hz");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro hxy");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyz"),
+    )
+    .expect("intro hyz");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h_target"),
+    )
+    .expect("intro h_target");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hz")).expect("intro hz");
     let h_target_fvar = local_fvar_by_name(&state, "h_target");
     let hz_fvar = local_fvar_by_name(&state, "hz");
     let axiom_before = axiom_snapshot();
@@ -174,7 +205,9 @@ fn test_conv_at_hypothesis_multi_rule_rewrite_zero_trusted_axioms() {
         &mut state,
         &SurfaceTactic::Conv(
             Span::dummy(),
-            SurfaceTacticLocation::Hyps(vec!["h_target".into()]),
+            SurfaceTacticLocation::Hyps(vec![clean_parser::SurfaceName::generated_path(
+                "h_target",
+            )]),
             vec![
                 SurfaceTactic::ConvArg(Span::dummy(), -2),
                 SurfaceTactic::Rw(
@@ -192,7 +225,7 @@ fn test_conv_at_hypothesis_multi_rule_rewrite_zero_trusted_axioms() {
         .unwrap()
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h_target")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h_target"))
         .expect("rewritten hypothesis should remain");
     assert_ne!(h_target.fvar, h_target_fvar);
     assert_eq!(

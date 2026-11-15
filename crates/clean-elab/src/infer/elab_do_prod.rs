@@ -18,6 +18,7 @@
 use super::{ElabCtx, ElabError};
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, Level};
+use clean_parser::SurfaceName;
 
 #[derive(Clone)]
 struct ProductTail {
@@ -154,7 +155,7 @@ pub(crate) fn project_prod(
 /// `Prod T1 (Prod T2 (Prod T3 ...))` (right-nested).
 pub(crate) fn build_sigma_type(
     ctx: &ElabCtx<'_>,
-    mut_var_types: &[(String, Expr)],
+    mut_var_types: &[(SurfaceName, Expr)],
 ) -> Result<Expr, ElabError> {
     match mut_var_types.len() {
         0 => Ok(Expr::const_(Name::from_string("Unit"), vec![])),
@@ -187,7 +188,7 @@ pub(crate) fn build_sigma_type(
 /// tuples.
 pub(crate) fn build_sigma_value(
     ctx: &ElabCtx<'_>,
-    vars: &[(String, Expr, Expr)],
+    vars: &[(SurfaceName, Expr, Expr)],
 ) -> Result<Expr, ElabError> {
     match vars.len() {
         0 => Err(ElabError::InternalInvariant(
@@ -235,9 +236,9 @@ pub(crate) fn build_sigma_value(
 /// bind as local variables.
 pub(crate) fn destructure_sigma(
     ctx: &ElabCtx<'_>,
-    vars: &[(String, Expr)],
+    vars: &[(SurfaceName, Expr)],
     tuple_expr: Expr,
-) -> Result<Vec<(String, Expr)>, ElabError> {
+) -> Result<Vec<(SurfaceName, Expr)>, ElabError> {
     match vars.len() {
         0 => Ok(vec![]),
         1 => {

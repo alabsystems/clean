@@ -195,7 +195,7 @@ impl IRType {
 /// `Void` and `Erased` are NOT equivalent to object types — `Void` means
 /// "no value" and `Erased` is a proof/type erasure marker, neither of which
 /// can be passed where `clean_obj*` is expected.
-pub fn eqv_types(t1: &IRType, t2: &IRType) -> bool {
+pub(crate) fn eqv_types(t1: &IRType, t2: &IRType) -> bool {
     if t1.is_scalar() && t2.is_scalar() {
         t1 == t2
     } else if t1.is_object() && t2.is_object() {
@@ -312,8 +312,12 @@ pub enum IRExpr {
     /// Unbox heap object to scalar.
     ///
     /// `ty` is the expected scalar type of the unboxed value, needed by
-    /// emitters to dispatch between `clean_unbox()` (integers/usize),
-    /// `clean_unbox_float()` (Float64), etc.
+    /// emitters to pick the reader: the representation-DISPATCHING
+    /// `clean_unbox_uint64()` / `clean_unbox_uint32()` for integers and
+    /// `Bool` (a `Nat` arrives tagged OR heap-boxed, so the tagged-only
+    /// `clean_unbox()` is never a faithful integer reader — WS6.1),
+    /// `clean_unbox_float()` for floats. A non-scalar `ty` has no reader; the
+    /// trust-ir backend refuses it.
     Unbox { ty: IRType, arg: IRArg },
 
     /// Literal value.

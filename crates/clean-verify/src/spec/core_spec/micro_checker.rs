@@ -1711,10 +1711,13 @@ mod micro_structural_eq_tests {
 
     /// Build the implementation-soundness bundle, which includes
     /// `add_micro_checker` (and therefore the faithful `micro_structural_eq`
-    /// stack registered by `add_micro_structural_eq`).
+    /// stack registered by `add_micro_structural_eq`), on the large stack the
+    /// crate's other impl-soundness tests build it on. Built on libtest's own
+    /// 2 MiB thread it overflowed wherever `.cargo/config.toml`'s
+    /// `RUST_MIN_STACK` did not reach the test binary, which aborted the whole
+    /// binary (16 aborts on 2026-09-22/23, runs of the binary by hand).
     fn build_micro_spec() -> Specification {
-        Specification::new_implementation_soundness_test_spec()
-            .expect("implementation-soundness spec (incl. micro_checker) should build")
+        crate::test_utils::build_implementation_soundness_spec_with_stack()
     }
 
     /// `micro_structural_eq` is NO LONGER an axiom: it is a reducible

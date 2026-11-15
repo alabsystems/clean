@@ -9,7 +9,7 @@
 //! Extracted from `inductive_recursor.rs` for maintainability.
 
 use crate::expr::{BinderData, BinderInfo, Expr, ExprKind};
-use crate::inductive::{get_return_type, InductiveType};
+use crate::inductive::{get_return_type, head_beta_spine, InductiveType};
 use crate::level::Level;
 use crate::name::Name;
 use smallvec::SmallVec;
@@ -181,6 +181,7 @@ impl Environment {
     pub(crate) fn build_recursor_rule_rhs(
         &self,
         rec_name: &Name,
+        ctor_name: &Name,
         rec_level_params: &[Name],
         num_params: u32,
         num_motives: u32,
@@ -196,7 +197,9 @@ impl Environment {
         let np = num_params as usize;
         let nm = num_motives as usize;
         let n_minors = num_ctors; // num_minors == num_ctors for standard rec
-                                  // Total lambda binders: params + motives + minors + fields
+        let field_binders =
+            Self::constructor_field_binder_data(ctor_name, num_params, num_fields, all_types);
+        // Total lambda binders: params + motives + minors + fields
         let total_binders = np + nm + n_minors + nf;
 
         // Inside the body, de Bruijn indices (innermost = BVar(0)):
@@ -226,8 +229,14 @@ impl Environment {
 
         for (i, &is_recursive) in recursive_flags.iter().enumerate() {
             if is_recursive {
+                // The induction hypothesis reads the field through `whnf` of
+                // the field and of each body of its Pi spine, as Lean's
+                // `mk_rec_infos` does (inductive.cpp:650-656), here β only;
+                // the field's own binder keeps the type as written.
+                let ih_view = field_types.get(i).map(head_beta_spine);
+
                 // Count Pi binders in the field type (#1784).
-                let n_pis = field_types.get(i).map(Self::count_pi_binders).unwrap_or(0);
+                let n_pis = ih_view.as_ref().map(Self::count_pi_binders).unwrap_or(0);
 
                 // When n_pis > 0, the IH body is under n_pis additional lambda
                 // binders. All BVar references to params/motives/minors/fields
@@ -238,11 +247,11 @@ impl Environment {
                 // of the type that field returns to (Lean 4 inductive.cpp:738).
                 // Determine the target recursor name from the field type's return type.
                 let ih_rec_name = if all_types.len() > 1 {
-                    if let Some(field_ty) = field_types.get(i) {
+                    if let Some(field_ty) = ih_view.as_ref() {
                         let ret_ty = get_return_type(field_ty);
                         let head = ret_ty.get_app_fn();
                         if let ExprKind::Const(name, _) = &head.kind {
-                            Name::from_string(&format!("{name}.rec"))
+                            name.clone().str("rec")
                         } else {
                             rec_name.clone()
                         }
@@ -284,7 +293,7 @@ impl Environment {
                 // gate dropped them, minting an IH the subject-reduction
                 // validator rejects (found via the nested-local lift's
                 // indexed-container fixture, 2026-08-04).
-                if let Some(field_ty) = field_types.get(i) {
+                if let Some(field_ty) = ih_view.as_ref() {
                     let indices = self.get_constructor_return_indices(field_ty, num_params);
                     for idx_expr in indices {
                         let remapped = Self::remap_residual_index_bvars(
@@ -302,8 +311,8 @@ impl Environment {
                 ih = Expr::app(ih, major);
 
                 // Wrap IH in lambda binders for Pi-bound variables (#1784).
-                let pi_domains = field_types
-                    .get(i)
+                let pi_domains = ih_view
+                    .as_ref()
                     .map(Self::collect_pi_domains)
                     .unwrap_or_default();
                 for (k, (bi, domain)) in pi_domains.iter().enumerate().rev() {
@@ -370,7 +379,11 @@ impl Environment {
             } else {
                 dummy_ty.clone()
             };
-            result = Expr::lam(BinderInfo::Default, field_ty, result);
+            let binder = field_binders
+                .get(i)
+                .copied()
+                .unwrap_or_else(|| BinderInfo::Default.into());
+            result = Expr::lam(binder, field_ty, result);
         }
         // Minors (innermost minor first wrapping outward)
         for minor_ty in minor_domain_types.iter().rev() {

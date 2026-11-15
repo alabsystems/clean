@@ -102,7 +102,9 @@
 //! The constructed term is kernel-checked by the same path as any other term.
 //! There is no kernel bypass and no new axiom.
 
-use clean_parser::{Projection, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr};
+use clean_parser::{
+    Projection, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName,
+};
 
 /// The fixed `Expr`-builder builtins recognized as `mkXxx` head identifiers,
 /// paired with the number of *argument* positions they consume after the
@@ -214,7 +216,7 @@ enum Builtin<'e> {
     /// `Name`. The span carried is the call's span for diagnostics.
     Const {
         span: clean_parser::Span,
-        name: String,
+        name: SurfaceName,
     },
     /// `mkApp f a` / `mkApp2 f a b` / `Expr.app f a` — yields the application of
     /// the head to the argument sub-terms (each recursively rewritten by the
@@ -230,7 +232,7 @@ enum Builtin<'e> {
     Binder {
         span: clean_parser::Span,
         form: BinderForm,
-        name: String,
+        name: SurfaceName,
         ty: &'e SurfaceExpr,
         body: &'e SurfaceExpr,
     },
@@ -250,9 +252,14 @@ fn match_builtin_call(expr: &SurfaceExpr) -> Option<Builtin<'_>> {
     if args.iter().any(|a| a.name.is_some()) {
         return None;
     }
-    let head = builtin_head_name(func)?;
+    let identity = builtin_head_name(func)?;
+    let head = ["mkConst", "Expr.const", "Expr.app"]
+        .into_iter()
+        .chain(MK_APP_BUILTINS.iter().map(|(name, _)| *name))
+        .chain(BINDER_BUILTINS.iter().map(|(name, _, _)| *name))
+        .find(|name| identity == SurfaceName::generated_path(name))?;
 
-    match head.as_str() {
+    match head {
         // `mkConst `Name` (arity 1) or `mkConst `Name us` (arity 2, level list
         // dropped). The first argument must be a name literal (SyntaxQuote).
         "mkConst" if args.len() == 1 || args.len() == 2 => {
@@ -349,7 +356,7 @@ fn lower_builtin(builtin: Builtin<'_>, changed: &mut bool) -> SurfaceExpr {
         } => {
             // The binder type and body are ordinary sub-terms: rewrite them so a
             // nested constructor builtin (e.g. `` mkConst `Nat ``) collapses.
-            let binder = SurfaceBinder::new(
+            let binder = SurfaceBinder::new_typed(
                 name,
                 Some(rewrite(ty, changed)),
                 SurfaceBinderInfo::Explicit,
@@ -366,14 +373,15 @@ fn lower_builtin(builtin: Builtin<'_>, changed: &mut bool) -> SurfaceExpr {
 /// Extract the head identifier of a builtin call: either a bare `Ident` (e.g.
 /// `mkApp`) or a qualified `Expr.const`/`Expr.app` projection rendered as the
 /// dotted string `"Expr.const"`.
-fn builtin_head_name(func: &SurfaceExpr) -> Option<String> {
+fn builtin_head_name(func: &SurfaceExpr) -> Option<SurfaceName> {
     match func {
-        SurfaceExpr::Ident(_, name) => Some(name.clone()),
+        SurfaceExpr::Ident(_, name) if !name.is_relative_constructor() => Some(name.clone()),
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
             let SurfaceExpr::Ident(_, base_name) = base.as_ref() else {
                 return None;
             };
-            Some(format!("{base_name}.{field}"))
+            (!base_name.is_relative_constructor() && !field.is_relative_constructor())
+                .then(|| base_name.append(field))
         }
         _ => None,
     }
@@ -382,9 +390,11 @@ fn builtin_head_name(func: &SurfaceExpr) -> Option<String> {
 /// Extract the name carried by a name-literal argument. `mkConst`/`Expr.const`
 /// take a `` `Name `` syntax-quote literal; we accept that shape only, so a
 /// non-literal first argument defers (returns `None`) rather than guessing.
-fn name_literal(expr: &SurfaceExpr) -> Option<String> {
+fn name_literal(expr: &SurfaceExpr) -> Option<SurfaceName> {
     match expr {
-        SurfaceExpr::SyntaxQuote(_, name) => Some(name.clone()),
+        SurfaceExpr::SyntaxQuote(_, name) => clean_parser::parse_name(name)
+            .ok()
+            .filter(|name| !name.is_relative_constructor()),
         SurfaceExpr::Paren(_, inner) => name_literal(inner),
         _ => None,
     }

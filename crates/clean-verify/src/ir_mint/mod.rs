@@ -128,9 +128,13 @@
 //!   table pins. So `bb0(%0: ptr)` and `bb0(%0: Rc<enum.13>)` are still one
 //!   core module and are no longer one accepted artifact.
 //!
-//!   Of the rest: a `global_addr` is now REFUSED outright rather than interned
-//!   into a module whose global list is hard-coded empty; a callee index the
-//!   table does not pin, or pins as a different crate id, is refused; and the
+//!   Of the rest: a `global_addr` is REFUSED on every bare read (`read`,
+//!   `read_with_tags`, `read_with_self`, `read_with_pins`) and read on exactly
+//!   one path — [`project`] under a tag table with a `globals` lane — where
+//!   `interface_globals::check_globals` compares every observed id against the
+//!   pins and the module-table preamble before the list is spliced; a callee
+//!   index the table does not pin, or pins as a different crate id, is
+//!   refused; and the
 //!   three operands `ir_exec` genuinely drops —
 //!   `Switch.exhaustive_enum_unreachable` and `CallIndirect`'s signature and
 //!   convention — are now KERNEL-CHECKED inert
@@ -166,15 +170,29 @@
 pub mod core;
 mod decode;
 mod emitted;
+mod emitted_globals;
 mod emitted_inst;
 mod error;
 mod interface;
+mod interface_aggregates;
+mod interface_globals;
 mod mint;
+mod mint_globals;
 mod shape;
 pub mod tags;
+mod tags_encodings;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod tests_globals;
+
+#[cfg(test)]
+mod tests_corpus;
+
+#[cfg(test)]
+mod tests_encodings;
 
 pub use core::{digest, parse, print, Sx};
 pub use decode::decode;

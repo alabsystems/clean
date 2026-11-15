@@ -44,12 +44,12 @@ impl Default for SimpAllConfig {
 
 impl SimpAllConfig {
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     #[must_use]
-    pub fn only(lemmas: Vec<Name>) -> Self {
+    pub(crate) fn only(lemmas: Vec<Name>) -> Self {
         Self::new().with_only_mode(true).with_lemmas(lemmas)
     }
 
@@ -59,7 +59,7 @@ impl SimpAllConfig {
     }
 
     #[must_use]
-    pub fn with_max_iterations(mut self, max_iterations: usize) -> Self {
+    pub(crate) fn with_max_iterations(mut self, max_iterations: usize) -> Self {
         self.max_iterations = max_iterations;
         self
     }
@@ -89,7 +89,7 @@ impl SimpAllConfig {
     }
 
     #[must_use]
-    pub fn with_trace(mut self, trace: bool) -> Self {
+    pub(crate) fn with_trace(mut self, trace: bool) -> Self {
         self.trace = trace;
         self
     }
@@ -98,7 +98,12 @@ impl SimpAllConfig {
     pub(crate) fn to_simp_config(&self) -> SimpConfig {
         let mut config = SimpConfig::new();
         config.max_steps = self.max_iterations;
-        config.extra_lemmas = self.lemmas.iter().map(ToString::to_string).collect();
+        config.extra_lemmas = self
+            .lemmas
+            .iter()
+            .cloned()
+            .map(clean_parser::SurfaceName::from_name)
+            .collect();
         config.only = self.only_mode;
         config.only_simplify = self.only_mode;
         config.use_hypotheses = true;
@@ -125,7 +130,7 @@ pub(crate) struct SimpHypothesis {
 
 impl SimpHypothesis {
     #[must_use]
-    pub fn new(name: Name, expr: Expr) -> Self {
+    pub(crate) fn new(name: Name, expr: Expr) -> Self {
         Self {
             name,
             expr,
@@ -134,7 +139,7 @@ impl SimpHypothesis {
         }
     }
 
-    pub fn simplify(&mut self, config: &SimpAllConfig) -> SimpStepResult {
+    pub(crate) fn simplify(&mut self, config: &SimpAllConfig) -> SimpStepResult {
         if self.removed {
             return SimpStepResult::Unchanged;
         }
@@ -160,7 +165,7 @@ pub(crate) struct SimpAllState {
 
 impl SimpAllState {
     #[must_use]
-    pub fn new(hypotheses: Vec<SimpHypothesis>, goal: Expr) -> Self {
+    pub(crate) fn new(hypotheses: Vec<SimpHypothesis>, goal: Expr) -> Self {
         Self {
             hypotheses,
             goal,

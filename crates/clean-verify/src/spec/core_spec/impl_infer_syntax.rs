@@ -413,18 +413,6 @@ impl Specification {
              release arm consults it at tc/infer.rs:404 under !allow_partial.",
         )?;
 
-        // List lengths, monomorphic (the level-arity check at tc/infer.rs:383).
-        self.add_recursive_def(
-            r"def name_list_len (xs : ListType Name) : Nat := ListType.rec Name (fun (_ : ListType Name) => Nat) Nat.zero (fun (y : Name) (rest : ListType Name) (ih : Nat) => Nat.succ ih) xs",
-            "Length of a Name list — the `info.level_params.len()` side of the \
-             release Const arm's arity check (tc/infer.rs:383).",
-        )?;
-        self.add_recursive_def(
-            r"def level_list_len (xs : ListType Level) : Nat := ListType.rec Level (fun (_ : ListType Level) => Nat) Nat.zero (fun (u : Level) (rest : ListType Level) (ih : Nat) => Nat.succ ih) xs",
-            "Length of a Level list — the `levels.len()` side of the release Const \
-             arm's arity check (tc/infer.rs:383).",
-        )?;
-
         // The declared-level-param discipline: every `Level::Param` mentioned by
         // an admitted declaration must appear in its declared `level_params`.
         //
@@ -437,13 +425,16 @@ impl Specification {
         // Sort and Const arms make (`:366-368`, `:396-399`) are no-ops in the
         // modelled configuration.
         //
-        // The OBLIGATION nevertheless does hold for every admitted declaration —
-        // it is just discharged one level up, by `find_undef_level_param` over
-        // both the type and the value in `add_decl` step (4)
-        // (`env/decl_add.rs:520-534`), before any type checking runs. So
-        // `level_params_ok` is a faithful model of a real admission-path check;
-        // it simply models `decl_add`'s check, not `infer`'s. The `sort` and
-        // `const` rules carry it as a premise for that reason.
+        // For a FRESH ordinary add_decl success OUTSIDE Metamath pass 1,
+        // `find_undef_level_param` checks both type and value before typing
+        // (env/decl_add.rs:827-843 at the 2026-09-08 audit). This is not an
+        // invariant of every successful-looking registration path: guarded MM
+        // pass 1 inserts unchecked, existing-name success can skip the incoming
+        // declaration, and structural/import paths have distinct provenance.
+        // See SELF_VERIFICATION_UNIVERSES_2026-09-08.md's admission audit.
+        // `level_params_ok` models the fresh-admission scan, not a check that
+        // every direct call to infer performs. A production correspondence
+        // theorem must justify the sort/const rule's premise at its caller.
         self.add_recursive_def(
             r"def name_list_mem (xs : ListType Name) (n : Name) : Bool := ListType.rec Name (fun (_ : ListType Name) => Bool) Bool.false (fun (y : Name) (rest : ListType Name) (ih : Bool) => Bool.or (name_eqb y n) ih) xs",
             "Membership of a Name in a Name list (Bool-valued, decidable).",
@@ -457,15 +448,18 @@ impl Specification {
 | Level.param n => name_list_mem lps n",
             "The declared-level-param discipline: every Level::Param occurring in \
              the level must appear in the declaration's declared level_params \
-             (Lean 4 parity with type_checker.cpp:63-73). ATTRIBUTION, measured: \
-             this models add_decl step (4)'s find_undef_level_param over the type \
-             and the value (env/decl_add.rs:520-534), which runs on every \
-             admission before any type checking. It does NOT model \
+             ATTRIBUTION, measured: this models the find_undef_level_param scan \
+             over type and value for a fresh ordinary add_decl outside Metamath \
+             pass 1 (env/decl_add.rs:827-843, 2026-09-08). Existing-name returns, \
+             unchecked insertion and structural imports require their own \
+             provenance argument; no universal admission invariant is claimed. \
+             It does NOT model \
              TypeChecker::check_level, whose calls in the release Sort and Const \
              arms (tc/infer.rs:366-368, :396-399) are NO-OPS in the modelled \
              configuration: check_level returns Ok(()) unless \
              TypeChecker::level_params is Some (tc/infer.rs:892-894), and nothing \
-             on the admission path sets it.",
+             on the ordinary fresh admission path sets it. A source correspondence \
+             theorem must establish this model premise from the relevant caller.",
         )?;
         self.add_recursive_def(
             r"def impl_levels_ok (lps : ListType Name) (us : ListType Level) : Bool := ListType.rec Level (fun (_ : ListType Level) => Bool) Bool.true (fun (u : Level) (rest : ListType Level) (ih : Bool) => Bool.and (level_params_ok lps u) ih) us",

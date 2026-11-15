@@ -46,7 +46,7 @@ fn test_set_option_stores_value() {
     let mut env = Environment::new();
     let decl = clean_parser::SurfaceDecl::SetOption {
         span: clean_parser::Span::dummy(),
-        name: "maxHeartbeats".to_string(),
+        name: clean_parser::SurfaceName::generated_path("maxHeartbeats"),
         value: Some("400000".to_string()),
         body: None,
     };
@@ -63,7 +63,7 @@ fn test_set_option_no_value() {
     let mut env = Environment::new();
     let decl = clean_parser::SurfaceDecl::SetOption {
         span: clean_parser::Span::dummy(),
-        name: "pp.all".to_string(),
+        name: clean_parser::SurfaceName::generated_path("pp.all"),
         value: None,
         body: None,
     };
@@ -850,17 +850,20 @@ fn test_open_renaming_unit_level() {
 
     let mut ns = crate::namespace::NamespaceState::new();
     let path = clean_parser::OpenPath {
-        path: vec!["Foo".into()],
+        path: clean_parser::SurfaceName::from_name(Name::anon().str("Foo")),
         names: vec![],
         hiding: vec![],
         renaming: vec![clean_parser::surface::OpenRename {
-            from: "bar".into(),
-            to: "myBar".into(),
+            from: clean_parser::SurfaceName::generated_path("bar"),
+            to: clean_parser::SurfaceName::generated_path("myBar"),
         }],
     };
     crate::namespace::process_open(&env, &[path], &mut ns).unwrap();
-    assert_eq!(ns.resolve("myBar").unwrap().to_string(), "Foo.bar");
-    assert!(ns.resolve("bar").is_none());
+    assert_eq!(
+        ns.resolve(&Name::from_string("myBar")).unwrap().to_string(),
+        "Foo.bar"
+    );
+    assert!(ns.resolve(&Name::from_string("bar")).is_none());
 }
 
 #[test]
@@ -885,15 +888,15 @@ fn test_open_hiding_unit_level() {
 
     let mut ns = crate::namespace::NamespaceState::new();
     let path = clean_parser::OpenPath {
-        path: vec!["Ns".into()],
+        path: clean_parser::SurfaceName::from_name(Name::anon().str("Ns")),
         names: vec![],
-        hiding: vec!["alpha".into()],
+        hiding: vec![clean_parser::SurfaceName::generated_path("alpha")],
         renaming: vec![],
     };
     crate::namespace::process_open(&env, &[path], &mut ns).unwrap();
-    assert!(ns.resolve("beta").is_some());
+    assert!(ns.resolve(&Name::from_string("beta")).is_some());
     assert!(
-        ns.resolve("alpha").is_none(),
+        ns.resolve(&Name::from_string("alpha")).is_none(),
         "hidden name should not be available"
     );
 }

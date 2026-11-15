@@ -27,7 +27,7 @@ use std::collections::{HashMap, HashSet};
 /// Controls when the attribute's effect is active during elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
 #[non_exhaustive]
-pub enum AttributeScope {
+pub(crate) enum AttributeScope {
     /// Visible everywhere the declaration is imported (default).
     #[default]
     Global,
@@ -42,7 +42,7 @@ pub enum AttributeScope {
 /// Associates a declaration with an attribute name under a specific scope
 /// and namespace context.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ScopedAttrEntry {
+pub(crate) struct ScopedAttrEntry {
     /// Name of the declaration carrying the attribute.
     pub decl_name: Name,
     /// Name of the attribute (e.g. `"simp"`, `"instance"`).
@@ -60,7 +60,7 @@ pub struct ScopedAttrEntry {
 /// [`get_active`](ScopedAttrRegistry::get_active) filter entries based on
 /// scope visibility rules.
 #[derive(Debug, Clone, Default)]
-pub struct ScopedAttrRegistry {
+pub(crate) struct ScopedAttrRegistry {
     /// Entries indexed by attribute name for efficient lookup.
     entries: HashMap<String, Vec<ScopedAttrEntry>>,
     /// The set of namespaces currently opened via `open`.

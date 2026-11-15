@@ -61,14 +61,16 @@ fn expect_fin_case_scope(goal: &Goal, has_proved_equality: bool) {
     let hyp = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("dependent Fin sub-goal should keep hypothesis h in context");
     assert!(
         hyp.value.is_none(),
         "fallback cases must not fake a let value"
     );
     assert_eq!(
-        goal.local_ctx.iter().any(|decl| decl.name == "h_eq"),
+        goal.local_ctx
+            .iter()
+            .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("h_eq")),
         has_proved_equality,
         "only a branch introduced by an equality lambda may expose h_eq"
     );
@@ -91,14 +93,15 @@ fn test_fin_cases_fin3_dependent_target_succeeds() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: fin3_ty,
             value: None,
         }],
     );
 
-    let result = fin_cases(&mut state, "h");
+    let result = fin_cases(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         result.is_ok(),
         "fin_cases Fin 3 with dependent target should succeed, got: {result:?}"
@@ -130,14 +133,16 @@ fn test_fin_cases_fin3_branch_requires_equality_transport() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: fin3_ty,
             value: None,
         }],
     );
 
-    fin_cases(&mut state, "h").expect("fin_cases should split a dependent Fin goal");
+    fin_cases(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("fin_cases should split a dependent Fin goal");
     let first_goal = state
         .current_goal()
         .expect("fin_cases should leave the first branch as the current goal")
@@ -148,5 +153,8 @@ fn test_fin_cases_fin3_branch_requires_equality_transport() {
         result.is_err(),
         "a specialized proof of R 0 must not inhabit R h without using h_eq transport"
     );
-    assert!(first_goal.local_ctx.iter().any(|decl| decl.name == "h_eq"));
+    assert!(first_goal
+        .local_ctx
+        .iter()
+        .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("h_eq")));
 }

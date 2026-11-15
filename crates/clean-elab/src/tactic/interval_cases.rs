@@ -27,7 +27,10 @@ use super::{match_le, match_lt, Goal, LocalDecl, ProofState, TacticError, Tactic
 /// ENSURES: the range is capped at 100 values; larger ranges return
 /// `Err(InvalidTarget)`
 /// ENSURES: on `Err(NoGoals)` or `Err(HypothesisNotFound)`, `state` is unchanged
-pub fn interval_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn interval_cases(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -38,7 +41,8 @@ pub fn interval_cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     let hyp = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?
         .clone();
 
@@ -97,7 +101,7 @@ fn build_interval_goals(
     state: &mut ProofState,
     goal: &Goal,
     hyp: &LocalDecl,
-    hyp_name: &str,
+    hyp_name: &clean_parser::SurfaceName,
     lower: i64,
     upper: i64,
 ) -> Result<(Vec<Goal>, Vec<Expr>), TacticError> {
@@ -131,8 +135,9 @@ fn build_interval_goals(
             eq_fvar_id += 1;
             state.next_fvar = state.next_fvar.max(eq_fvar_id);
             new_ctx.push(LocalDecl {
+                binder_info: Default::default(),
                 fvar: eq_fvar,
-                name: format!("{hyp_name}_eq"),
+                name: super::pattern::names::generated_suffix(hyp_name, "_eq"),
                 ty: make_equality_type(
                     &Expr::const_(Name::from_string("Nat"), vec![]),
                     &Expr::fvar(hyp.fvar),
@@ -157,6 +162,7 @@ fn build_interval_goals(
             meta_id: new_meta_id,
             target: new_target,
             local_ctx: new_ctx,
+            case_binders: goal.case_binders.clone(),
             tag: None,
         });
         value_exprs.push(value_expr);

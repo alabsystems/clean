@@ -9,7 +9,10 @@
 //! for an agent trying to *learn* Clean's Lean-4-replacement status. This view
 //! never fails closed — it renders every replacement row with its real evidence
 //! state, downgrading any hand-declared `Green` whose evidence file is absent or
-//! a `{"stub": true}` placeholder. It is explicitly NOT a launch gate.
+//! a `{"stub": true}` placeholder, and reading `unknown` for any row whose
+//! evidence is VACUOUS -- an artifact whose producer does not measure the claim
+//! (`EvidenceContract::Vacuous`), or a placeholder no command produces
+//! (`EvidenceContract::Unproduced`). It is explicitly NOT a launch gate.
 
 use super::*;
 
@@ -29,6 +32,12 @@ pub(crate) enum EvidenceState {
     Invalid,
     /// The "evidence" is a schema/version name, not a repo path.
     SchemaName,
+    /// The path's declared contract is `EvidenceContract::Vacuous` -- its
+    /// producer does not measure the row's claim (hard-coded, stub-only or
+    /// emit-only), so the row is `Unknown` whatever the file contains -- or it
+    /// is `EvidenceContract::Unproduced` and holds the `{"stub": true}`
+    /// placeholder no command in the tree will ever replace.
+    Vacuous,
 }
 
 impl EvidenceState {
@@ -39,6 +48,7 @@ impl EvidenceState {
             Self::Missing => "MISSING",
             Self::Invalid => "INVALID",
             Self::SchemaName => "schema-name",
+            Self::Vacuous => "VACUOUS",
         }
     }
 }
@@ -120,7 +130,11 @@ impl InformationalScorecard {
                    row's own evidence file resolves under evidence_root, satisfies \
                    the contract declared for it (parses, carries the expected \
                    schema_version, does not report its own failure) AND, where the \
-                   row is backed by a zero-trust gate, that gate reports passed.",
+                   row is backed by a zero-trust gate, that gate reports passed. \
+                   `unknown` means the row's evidence is VACUOUS: its producer does \
+                   not measure the claim (hard-coded, stub-only or emit-only), or it \
+                   is a placeholder no command produces, and the row's detail line \
+                   names what would mint real evidence.",
             evidence_root: evidence_root.to_string_lossy().replace('\\', "/"),
             evidence_root_source: evidence_root_source.label(),
             rows,
@@ -171,8 +185,12 @@ pub(crate) fn reconcile_with_gate_verdict(
         None | Some(ZeroTrustGateStatus::Passed) => effective,
         Some(ZeroTrustGateStatus::Blocked) => ReplacementStatus::Blocked,
         Some(ZeroTrustGateStatus::PendingEvidence) => match effective {
-            // Only ever move toward less confidence.
+            // Only ever move toward less confidence. `Unknown` stays: it is
+            // the absence of information about the row's own evidence, and
+            // rewriting it to `PendingEvidence` would drop the VACUOUS reason
+            // for a softer word that promises evidence nothing can mint.
             ReplacementStatus::Blocked => ReplacementStatus::Blocked,
+            ReplacementStatus::Unknown => ReplacementStatus::Unknown,
             _ => ReplacementStatus::PendingEvidence,
         },
     }
@@ -192,6 +210,13 @@ pub(crate) fn effective_status_for(
     evidence_state: EvidenceState,
 ) -> ReplacementStatus {
     match evidence_state {
+        // VACUOUS evidence says nothing about the claim, in either direction,
+        // so the row is UNKNOWN whatever was declared -- except `Blocked`,
+        // which records a known blocker and is already the least confident
+        // claim a row can make. Never an upgrade: `Unknown` is not launch-ready.
+        EvidenceState::Vacuous if declared != ReplacementStatus::Blocked => {
+            ReplacementStatus::Unknown
+        }
         EvidenceState::Missing | EvidenceState::Stub | EvidenceState::Invalid
             if declared == ReplacementStatus::Green =>
         {
@@ -229,12 +254,7 @@ pub(crate) fn is_stub_evidence(contents: &str) -> bool {
 }
 
 fn status_label(status: ReplacementStatus) -> &'static str {
-    match status {
-        ReplacementStatus::Green => "green",
-        ReplacementStatus::InProgress => "in_progress",
-        ReplacementStatus::PendingEvidence => "pending_evidence",
-        ReplacementStatus::Blocked => "blocked",
-    }
+    status.as_str()
 }
 
 pub(crate) fn render_informational_human(
@@ -287,16 +307,22 @@ mod tests {
         let scorecard = InformationalScorecard::current();
         // Every row whose declared status is Green but whose evidence is not
         // Present must be downgraded — never reported green on stub/missing.
+        // VACUOUS evidence reads `Unknown` rather than `PendingEvidence`
+        // (2026-09-24): it is not evidence that is late, it is evidence whose
+        // producer does not measure the claim.
         for row in &scorecard.rows {
             if row.declared_status == ReplacementStatus::Green
                 && row.evidence_state != EvidenceState::Present
             {
+                let want = if row.evidence_state == EvidenceState::Vacuous {
+                    ReplacementStatus::Unknown
+                } else {
+                    ReplacementStatus::PendingEvidence
+                };
                 assert_eq!(
-                    row.effective_status,
-                    ReplacementStatus::PendingEvidence,
+                    row.effective_status, want,
                     "row {} claims green on {:?} evidence",
-                    row.id,
-                    row.evidence_state
+                    row.id, row.evidence_state
                 );
             }
         }

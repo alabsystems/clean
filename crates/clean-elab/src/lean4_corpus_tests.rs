@@ -3373,13 +3373,38 @@ fn test_implicit_lambda_two_implicits_one_explicit() {
 }
 
 #[test]
-fn test_implicit_lambda_explicit_then_implicit() {
-    // Implicit appears AFTER an explicit binder: `n` binds Nat normally, then
-    // `x` (explicit) triggers implicit insertion for `α`.
+fn test_implicit_lambda_explicit_then_implicit_is_refused() {
+    // CONTRACT RE-DECISION, 2026-09-20. This test used to assert the opposite
+    // — that `x` (explicit) triggers implicit insertion for `α` — and that
+    // rule is not Lean's. Lean decides implicit-lambda insertion ONCE for the
+    // whole term, from the OUTER expected type's leading binder
+    // (`useImplicitLambda`, `Lean/Elab/Term/TermElabM.lean`:1711, dispatched
+    // at :1806); here that binder is the explicit `Nat →`, so no wrap is
+    // taken. `elabFunBinders` → `propagateExpectedType`
+    // (`Lean/Elab/Binders.lean`:410, arm `| .forallE _ d b _ =>` at :416)
+    // then peels one `forallE` per user binder IGNORING its binder info, so
+    // `x` binds the implicit `{α}` and the body `x : α` cannot inhabit
+    // `α → α`. The pinned v4.30.0-rc2 binary says exactly that:
+    //
+    //   Type mismatch
+    //     x
+    //   has type
+    //     Type
+    //   of sort `Type 1` but is expected to have type
+    //     x → x
+    //
+    // Clean ACCEPTED it, which is a silent-acceptance hole: a term Lean
+    // rejects was given a kernel-checked declaration. Pinned as a refusal.
     let code = "def f7 : Nat -> {α : Type} -> α -> α := fun n x => x\n";
     let (env, results) = elab_file_prelude(code);
-    assert_all_ok(&results, "implicit-lambda explicit-then-implicit");
-    assert!(env.get_const(&Name::from_string("f7")).is_some());
+    assert!(
+        results.iter().any(|r| r.is_err()),
+        "`fun n x => x : Nat → {{α}} → α → α` must be REFUSED as Lean refuses it, got {results:?}"
+    );
+    assert!(
+        env.get_const(&Name::from_string("f7")).is_none(),
+        "a refused declaration must not be registered"
+    );
 }
 
 #[test]
@@ -3553,13 +3578,13 @@ fn test_cond_elaborates_and_reduces() {
     // Both branches reduce (kernel-checked by rfl): cond true x y ⟶ x,
     // cond false x y ⟶ y.
     let code = "def uc : Nat := cond true 1 0\n\
-                theorem cond_true : cond true 1 0 = 1 := rfl\n\
-                theorem cond_false : cond false 1 0 = 0 := rfl\n";
+                theorem uc_cond_true : cond true 1 0 = 1 := rfl\n\
+                theorem uc_cond_false : cond false 1 0 = 0 := rfl\n";
     let (env, results) = elab_file_prelude(code);
     assert_all_ok(&results, "cond elaborates + reduces");
     assert!(env.get_const(&Name::from_string("uc")).is_some());
-    assert!(env.get_const(&Name::from_string("cond_true")).is_some());
-    assert!(env.get_const(&Name::from_string("cond_false")).is_some());
+    assert!(env.get_const(&Name::from_string("uc_cond_true")).is_some());
+    assert!(env.get_const(&Name::from_string("uc_cond_false")).is_some());
 }
 
 #[test]
@@ -4509,7 +4534,7 @@ fn test_bare_default_resolves() {
                 deriving Inhabited\n\
                 def d : S1 := default\n\
                 theorem d_field : d.x = 0 := rfl\n\
-                theorem inline : (default : S1).x = 0 := rfl\n\
+                theorem inline_default : (default : S1).x = 0 := rfl\n\
                 theorem nat_default : (default : Nat) = 0 := rfl\n\
                 theorem bool_default : (default : Bool) = false := rfl\n";
     let (env, results) = elab_file_prelude(code);
@@ -4525,12 +4550,19 @@ fn test_bare_default_soundness_and_user_shadow() {
         elab_file_prelude(bad).1.iter().any(|x| x.is_err()),
         "default Nat is 0, not 1"
     );
-    // A user-defined `default` constant still wins (alias only fires when unresolved).
+    // A root `def default` beside Lean's `export Inhabited (default)` alias
+    // makes `default` AMBIGUOUS, and pinned Lean 4.8.0 refuses the theorem
+    // ("ambiguous, possible interpretations _root_.default : Nat,
+    // Inhabited.default", measured 2026-10-16). This lock used to assert the
+    // user constant won — a false acceptance — until the builtin prelude
+    // carried Lean's alias table (G44, `env/lean_core_exports.rs`).
     let shadow = "def default : Nat := 5\ntheorem t : default = 5 := rfl\n";
-    assert!(
-        elab_file_prelude(shadow).1.iter().all(|x| x.is_ok()),
-        "user-defined `default` must shadow the Inhabited.default alias"
-    );
+    let results = elab_file_prelude(shadow).1;
+    assert!(results[0].is_ok(), "the root `default` itself is declared");
+    let err = results[1]
+        .as_ref()
+        .expect_err("Lean 4.8.0 reports `default` ambiguous");
+    assert!(err.to_string().contains("ambiguous"), "{err}");
 }
 
 // ---------------------------------------------------------------------------
@@ -5502,11 +5534,20 @@ fn test_bare_not_alias_soundness() {
         "not true = false, so `not true = true` must be rejected"
     );
 
-    // A user-defined `not` still wins over the alias.
+    // A user `def not` is REFUSED, as in Lean 4.8.0 (`'not' has already been
+    // declared`): `not` is a Lean core constant that Clean models as
+    // `Bool.not`. Accepting it let the user's function replace that meaning,
+    // so `not 5 = 6` (and `xor false false = true` below) was proved about a
+    // statement Lean reads with its core constant (measured 2026-09-26).
     let shadow = "def not (n : Nat) : Nat := n + 1\ntheorem t : not 5 = 6 := rfl\n";
-    assert_all_ok(
-        &elab_file_prelude(shadow).1,
-        "user `def not` shadows the Bool.not alias",
+    let results = elab_file_prelude(shadow).1;
+    assert!(
+        results.first().is_some_and(Result::is_err),
+        "user `def not` must be refused (Lean: already declared): {results:?}"
+    );
+    assert!(
+        results.get(1).is_some_and(Result::is_err),
+        "`not 5 = 6` must not be proved: {results:?}"
     );
 }
 
@@ -5583,11 +5624,17 @@ fn test_bare_xor_alias_soundness() {
         "xor true true = false, so `= true` must be rejected"
     );
 
-    // A user-defined `xor` still wins over the alias.
+    // A user `def xor` is REFUSED, as in Lean 4.8.0 (see
+    // `test_bare_not_alias_soundness`).
     let shadow = "def xor (n : Nat) : Nat := n * 2\ntheorem t : xor 5 = 10 := rfl\n";
-    assert_all_ok(
-        &elab_file_prelude(shadow).1,
-        "user `def xor` shadows the Bool.xor alias",
+    let results = elab_file_prelude(shadow).1;
+    assert!(
+        results.first().is_some_and(Result::is_err),
+        "user `def xor` must be refused (Lean: already declared): {results:?}"
+    );
+    assert!(
+        results.get(1).is_some_and(Result::is_err),
+        "`xor 5 = 10` must not be proved: {results:?}"
     );
 }
 
@@ -5835,13 +5882,20 @@ fn test_bare_compare_wrong_value_rejected() {
 
 #[test]
 fn test_user_compare_shadows_alias() {
-    // A user `def compare` must win over the on-demand Ord.compare alias.
+    // A root `def compare` beside Lean's `export Ord (compare)` alias makes
+    // `compare` AMBIGUOUS: pinned Lean 4.8.0 refuses `uc` ("ambiguous,
+    // possible interpretations _root_.compare 2 3 : Nat, Ord.compare 2 3 :
+    // Ordering", measured 2026-10-16). This lock used to assert the user
+    // constant won — a false acceptance — until the builtin prelude carried
+    // Lean's alias table (G44, `env/lean_core_exports.rs`).
     let code = "def compare (a b : Nat) : Nat := a + b\n\
         theorem uc : compare 2 3 = 5 := rfl\n";
-    assert_all_ok(
-        &elab_file_prelude(code).1,
-        "user `def compare` shadows the Ord.compare alias",
-    );
+    let results = elab_file_prelude(code).1;
+    assert!(results[0].is_ok(), "the root `compare` itself is declared");
+    let err = results[1]
+        .as_ref()
+        .expect_err("Lean 4.8.0 reports `compare` ambiguous");
+    assert!(err.to_string().contains("ambiguous"), "{err}");
 }
 
 // ---------------------------------------------------------------------------
@@ -6637,8 +6691,8 @@ fn test_b90_typed_default_control() {
     // Engagement gate: the pre-existing typed-field-with-default shape
     // (`q : Nat := p + 1`) must keep working unchanged alongside B90.
     let code = "structure TB where\n  p : Nat := 4\n\
-        structure TC extends TB where\n  q : Nat := p + 1\n\
-        theorem tc1 : ({} : TC).q = 5 := rfl\n";
+        structure TC2 extends TB where\n  q : Nat := p + 1\n\
+        theorem tc1 : ({} : TC2).q = 5 := rfl\n";
     assert_all_ok(&elab_file_prelude(code).1, "b90 typed default control");
 }
 
@@ -7462,10 +7516,26 @@ fn test_b98_hash_instance_resolves() {
 fn test_b98_unsupported_shape_still_loud() {
     // Descoped shapes must keep LOUD typed errors (never a silent stub):
     // (a) recursive inductive, (b) parametric structure.
+    // The type itself is declared (Lean adds it before running any deriving
+    // handler); the refusal is the failed leaf beside it, and its category is
+    // the handler's own, read through `innermost`.
+    fn deriving_refusal(
+        result: &Result<ElabResult, crate::ElabError>,
+    ) -> Option<&crate::ElabError> {
+        let mut leaves = Vec::new();
+        result.as_ref().ok()?.leaf_decls(&mut leaves);
+        leaves.into_iter().find_map(|leaf| match leaf {
+            ElabResult::Failed { error, .. } => match error.as_ref() {
+                crate::ElabError::DerivingHandlerFailed { error, .. } => Some(error.innermost()),
+                _ => None,
+            },
+            _ => None,
+        })
+    }
     let recursive = "inductive DerordTreeH\n  | leaf\n  | node (l : DerordTreeH) (r : DerordTreeH)\nderiving Hashable\n";
     let (_env, results) = elab_file_prelude(recursive);
-    match results.first().expect("inductive decl present") {
-        Err(crate::ElabError::Unsupported { feature }) => {
+    match deriving_refusal(results.first().expect("inductive decl present")) {
+        Some(crate::ElabError::Unsupported { feature }) => {
             assert!(
                 feature.contains("Hashable") && feature.contains("DerordTreeH"),
                 "recursive descope must name Hashable and the type, got: {feature}"
@@ -7477,8 +7547,8 @@ fn test_b98_unsupported_shape_still_loud() {
     let parametric =
         "structure DerordBoxH (\u{3b1} : Type) where\n  val : \u{3b1}\nderiving Hashable\n";
     let (_env, results) = elab_file_prelude(parametric);
-    match results.first().expect("structure decl present") {
-        Err(crate::ElabError::Unsupported { feature }) => {
+    match deriving_refusal(results.first().expect("structure decl present")) {
+        Some(crate::ElabError::Unsupported { feature }) => {
             assert!(
                 feature.contains("Hashable") && feature.contains("DerordBoxH"),
                 "parametric descope must name Hashable and the type, got: {feature}"
@@ -9898,11 +9968,31 @@ fn test_b107_deriving_repr_nonrepr_field_fails_loud() {
   f : Nat → Nat
   deriving Repr
 "####;
-    let (_env, results) = elab_file_prelude(code);
+    let (env, results) = elab_file_prelude(code);
+    // The failure is a failed leaf beside `HasFn`, which Lean declares before
+    // running the handler (`infer::deriving_log`).
+    let mut leaves = Vec::new();
+    for result in &results {
+        result
+            .as_ref()
+            .expect("HasFn itself is declared")
+            .leaf_decls(&mut leaves);
+    }
     assert!(
-        results.iter().any(Result::is_err),
+        leaves.iter().any(|leaf| matches!(
+            leaf,
+            ElabResult::Failed { error, .. }
+                if error.to_string().contains("cannot synthesize Repr for field `f`")
+        )),
         "deriving Repr on a struct with a non-representable field must fail loud, got: {results:?}"
     );
+    assert!(env.get_const(&Name::from_string("HasFn")).is_some());
+    assert!(env
+        .get_const(&crate::derive::builtin_instance_name(
+            &Name::from_string("HasFn"),
+            "Repr"
+        ))
+        .is_none());
 }
 
 #[test]
@@ -13686,4 +13776,174 @@ fn test_r9_theorem_where_match_body_control() {
     // routes every `where` to a struct literal".
     let code = "theorem twMatch : \u{2200} (n : Nat), n = n where\n  | 0 => rfl\n  | _ => rfl\n";
     assert_all_ok(&elab_file_prelude(code).1, "theorem-where match body");
+}
+
+// ===========================================================================
+// W2 / two-language battery row r11: PURE-ORDER reconstruction over the
+// fixed-width unsigned-integer carriers.
+//
+// `UInt64.le`/`.lt` unfold definitionally to `Nat.le`/`.lt` on the
+// order-preserving `.toNat` embedding, so a PURE-ORDER `UInt` goal reduces to
+// the matching `Nat` problem over opaque `toNat` atoms and kernel-checks. The
+// soundness boundary is arithmetic: `UInt` `+`/`-`/`*` wrap at `2^w`, so any
+// atom carrying arithmetic must FAIL CLOSED (the negatives below pin that).
+// See `crate::tactic::arith_uint_order`.
+// ===========================================================================
+
+/// Walk a proof term for a forbidden constant (e.g. `sorry`/`sorryAx`).
+#[cfg(test)]
+fn uint_order_proof_mentions(expr: &clean_kernel::Expr, name_str: &str) -> bool {
+    use clean_kernel::expr::ExprKind;
+    match expr.kind() {
+        ExprKind::Const(name, _) => name == &Name::from_string(name_str),
+        ExprKind::App(f, a) => {
+            uint_order_proof_mentions(f, name_str) || uint_order_proof_mentions(a, name_str)
+        }
+        ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
+            uint_order_proof_mentions(ty, name_str) || uint_order_proof_mentions(body, name_str)
+        }
+        ExprKind::Let(_, ty, val, body, _) => {
+            uint_order_proof_mentions(ty, name_str)
+                || uint_order_proof_mentions(val, name_str)
+                || uint_order_proof_mentions(body, name_str)
+        }
+        ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
+            uint_order_proof_mentions(inner, name_str)
+        }
+        _ => false,
+    }
+}
+
+/// The last elaboration result is a registered `Theorem`; assert its proof
+/// closure mentions no `sorry`/`sorryAx`/`trustedArith` axiom.
+#[cfg(test)]
+fn assert_last_theorem_axiom_free(results: &[Result<ElabResult, crate::ElabError>], ctx: &str) {
+    let last = results
+        .last()
+        .unwrap_or_else(|| panic!("{ctx}: no results"));
+    let elab = last
+        .as_ref()
+        .unwrap_or_else(|e| panic!("{ctx}: last decl failed: {e:?}"));
+    let proof = match elab {
+        ElabResult::Theorem { proof, .. } => proof,
+        other => panic!("{ctx}: expected a Theorem, got {other:?}"),
+    };
+    for forbidden in ["sorry", "sorryAx", "trustedArith", "trustedAy"] {
+        assert!(
+            !uint_order_proof_mentions(proof, forbidden),
+            "{ctx}: proof closure must not mention `{forbidden}`"
+        );
+    }
+}
+
+/// Assert that a `by omega` theorem was REFUSED (failed to elaborate) — the
+/// fail-closed direction that keeps the wrapping fragment out of scope.
+#[cfg(test)]
+fn assert_omega_refused(code: &str, ctx: &str) {
+    let (_env, results) = elab_file_prelude(code);
+    let last = results
+        .last()
+        .unwrap_or_else(|| panic!("{ctx}: no results"));
+    let refused = match last {
+        Err(_) => true,
+        Ok(elab) => {
+            let mut leaves = Vec::new();
+            elab.leaf_decls(&mut leaves);
+            leaves
+                .iter()
+                .any(|l| matches!(l, ElabResult::Failed { .. }))
+        }
+    };
+    assert!(
+        refused,
+        "{ctx}: omega MUST fail closed but it succeeded: {last:?}"
+    );
+}
+
+/// The battery row r11 headline: the full `min2_le_left` theorem verifies
+/// end-to-end (`unfold min2; split <;> omega`), axiom-free.
+#[test]
+fn test_w2_r11_uint64_min2_le_left_verifies() {
+    let code = "def min2 (a : UInt64) (b : UInt64) : UInt64 := if a < b then a else b\n\
+                theorem min2_le_left (a b : UInt64) : min2 a b <= a := by\n\
+                \x20 unfold min2\n\
+                \x20 split <;> omega\n";
+    let (_env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "r11 min2_le_left");
+    assert_last_theorem_axiom_free(&results, "r11 min2_le_left");
+}
+
+/// isTrue branch in isolation: `(h : a < b) ⊢ a ≤ a` (reflexivity).
+#[test]
+fn test_w2_r11_uint64_order_istrue_branch() {
+    let code = "theorem t (a b : UInt64) (h : a < b) : a <= a := by omega\n";
+    let (_env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "r11 isTrue a<=a");
+    assert_last_theorem_axiom_free(&results, "r11 isTrue a<=a");
+}
+
+/// isFalse branch in isolation: `(h : ¬ a < b) ⊢ b ≤ a` (via `Nat.not_lt`).
+#[test]
+fn test_w2_r11_uint64_order_isfalse_branch() {
+    let code = "theorem t (a b : UInt64) (h : ¬ a < b) : b <= a := by omega\n";
+    let (_env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "r11 isFalse b<=a");
+    assert_last_theorem_axiom_free(&results, "r11 isFalse b<=a");
+}
+
+/// Carrier generality: the same reconstruction fires for `UInt32`/`USize`.
+#[test]
+fn test_w2_r11_uint32_usize_order_branches() {
+    for code in [
+        "theorem t (a b : UInt32) (h : a < b) : a <= a := by omega\n",
+        "theorem t (a b : USize)  (h : ¬ a < b) : b <= a := by omega\n",
+    ] {
+        let (_env, results) = elab_file_prelude(code);
+        assert_all_ok(&results, "r11 uint32/usize order");
+    }
+}
+
+/// The Nat twin (battery r20) still proves with the same tactics — the UInt
+/// lane must not disturb the Nat path.
+#[test]
+fn test_w2_r11_nat_twin_min2n_still_proves() {
+    let code = "def min2n (a : Nat) (b : Nat) : Nat := if a < b then a else b\n\
+                theorem min2n_le_left (a b : Nat) : min2n a b <= a := by\n\
+                \x20 unfold min2n\n\
+                \x20 split <;> omega\n";
+    let (_env, results) = elab_file_prelude(code);
+    assert_all_ok(&results, "r20 nat twin min2n");
+    assert_last_theorem_axiom_free(&results, "r20 nat twin min2n");
+}
+
+/// SOUNDNESS negatives — every one MUST stay refused. `UInt` arithmetic wraps,
+/// so the linear model is unsound: any atom with `+`/`-`/`*` fails closed, and
+/// genuinely-false pure-order goals are not provable either.
+#[test]
+fn test_w2_r11_uint64_soundness_negatives_stay_refused() {
+    // `a ≤ a + 1` is FALSE at `u64::MAX` (wraps to 0). Arithmetic atom → closed.
+    assert_omega_refused(
+        "theorem wrap (a : UInt64) : a <= a + 1 := by omega\n",
+        "wrap a<=a+1",
+    );
+    // `a ≤ b + 1` from `a ≤ b` is FALSE at `b = u64::MAX`. Arithmetic atom → closed.
+    assert_omega_refused(
+        "theorem g (a b : UInt64) (h : a <= b) : a <= b + 1 := by omega\n",
+        "arith-hyp a<=b |- a<=b+1",
+    );
+    // Reflexive but ARITHMETIC atoms: even though `a+1 ≤ a+1` is true, the atom
+    // carries `+`, so the lane fails closed (boundary is atom SHAPE, not truth).
+    assert_omega_refused(
+        "theorem g2 (a : UInt64) : a + 1 <= a + 1 := by omega\n",
+        "arith-atom a+1<=a+1",
+    );
+    // Genuinely-false pure-order goals: unprovable, must stay refused.
+    assert_omega_refused(
+        "theorem f (a b : UInt64) : a <= b := by omega\n",
+        "unconditional a<=b",
+    );
+    assert_omega_refused(
+        "theorem f2 (a b : UInt64) (h : a < b) : b <= a := by omega\n",
+        "false b<=a from a<b",
+    );
 }

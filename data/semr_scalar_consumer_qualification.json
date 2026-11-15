@@ -1,0 +1,200 @@
+{
+  "schema": "clean.scoped-source-consumer-qualification.v1",
+  "source_execution_commit": "0f561cb8a47bd25edc3b18c971c9ab111527db5f",
+  "scope": "Ordinary source and current canonical scalar mathematics. No release, compiler/source-body license, physical ABI/ISA, or G1-G8 authority.",
+  "selected": {
+    "trust_ir": "eb5d764e0efea54221c87f6dee49b2f4a78ce8e4",
+    "trust_cg": "c743bdd425407865772d33c2121112404fa2282d",
+    "reverse_clean": "6c8fda90ff5a5fcbe82f3d58a8a7b5a61eeb2b85",
+    "kernel_tree": "69b9334b727f2973c39944c3a721f5035af5cc93",
+    "ay": "add70f658ebe48a4d6a112a68a9d2866dab68970"
+  },
+  "source_model": {
+    "semr_sha256": "e648fb30deab76f6fc70394b0afb68fe9014b2ded3574cd465eea9cc98bf30b9",
+    "exact_copied_IR_sources": 9,
+    "fixture_modules": 11,
+    "original_module_bytes": 262,
+    "original_module_sha256": "9f6b6822cbe02635dab8a34293e2dfdc590071993d3c06e4611acd0897eb5be8"
+  },
+  "canonical_transaction": {
+    "source_only": true,
+    "both_locks_checked": true,
+    "dependency_boundary_checked": true,
+    "full_derived_diagnostic": "NOT_JUDGED_NOT_MINTED",
+    "result_sha256": "fd0b81d805779f674e1e51dab6f532f0cce9d059593b945368f5c009f58d09c4"
+  },
+  "proof": {
+    "cone_constants": 5749,
+    "units": 4824,
+    "constants_admitted": 4570,
+    "families_replayed": 250,
+    "family_members_compared": 2087,
+    "recursor_rules_compared": 682,
+    "axioms_admitted": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "extension_bindings_pinned": true
+  },
+  "actual_selected_tests": {
+    "scalar_and_source_checks": 8,
+    "compiler": 2,
+    "reflection": 2,
+    "automation": 2,
+    "optimizer": 1,
+    "verifier": 1,
+    "total": 16,
+    "failed": 0,
+    "ignored": 0
+  },
+  "execution_receipts": {
+    "current_model_and_source": {
+      "sha256": "6dd1db1ea8a25fa2d23a8998649cf08ea442b559943045304a1e35c54007b280",
+      "source_and_Lean_world_bookends_unchanged": true,
+      "test_commands": [
+        {
+          "argv": [
+            "$HOME/trust-retained-proof-publication-20261105-ql7r/source/scripts/build-slot",
+            "--cpus",
+            "4",
+            "--mem-gb",
+            "24",
+            "--",
+            "$HOME/trust-clean-frame-cohort-20261107-root-2gnnmejj/source/scripts/heavy_gate.sh",
+            "run",
+            "24",
+            "cohort-scalar-reference",
+            "--",
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "--release",
+            "-p",
+            "clean-olean",
+            "--test",
+            "semr_u64_addition",
+            "canonical_scalar_",
+            "--",
+            "--nocapture",
+            "--test-threads=2"
+          ],
+          "passed": 2,
+          "log_sha256": "2db396a9a292bb93ef85a5420a45de4f14d94f0ebe1aaa7d4c269216e274d9d6"
+        },
+        {
+          "argv": [
+            "$HOME/trust-retained-proof-publication-20261105-ql7r/source/scripts/build-slot",
+            "--cpus",
+            "4",
+            "--mem-gb",
+            "6",
+            "--",
+            "$HOME/trust-clean-frame-cohort-20261107-root-2gnnmejj/source/scripts/heavy_gate.sh",
+            "run",
+            "6",
+            "cohort-scalar-source-copies",
+            "--",
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-olean",
+            "--test",
+            "semr_reference",
+            "semr_fixture_",
+            "--",
+            "--nocapture",
+            "--test-threads=2"
+          ],
+          "passed": 4,
+          "log_sha256": "7f3006ff9814a3281c5a6afd589581fbad227373d6a8ddd0ef295b95aa4dee73"
+        },
+        {
+          "argv": [
+            "$HOME/trust-retained-proof-publication-20261105-ql7r/source/scripts/build-slot",
+            "--cpus",
+            "4",
+            "--mem-gb",
+            "6",
+            "--",
+            "$HOME/trust-clean-frame-cohort-20261107-root-2gnnmejj/source/scripts/heavy_gate.sh",
+            "run",
+            "6",
+            "cohort-scalar-copy-judge",
+            "--",
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-olean",
+            "--test",
+            "semr_reference",
+            "semr_copy_judge_controls",
+            "--",
+            "--nocapture",
+            "--test-threads=2"
+          ],
+          "passed": 1,
+          "log_sha256": "85d72373cf5081bd8172bab85194eebd5f059aa5191bbfd6d00f74e5a9ee8646"
+        },
+        {
+          "argv": [
+            "$HOME/trust-retained-proof-publication-20261105-ql7r/source/scripts/build-slot",
+            "--cpus",
+            "4",
+            "--mem-gb",
+            "6",
+            "--",
+            "$HOME/trust-clean-frame-cohort-20261107-root-2gnnmejj/source/scripts/heavy_gate.sh",
+            "run",
+            "6",
+            "cohort-scalar-consumer-edge",
+            "--",
+            "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+            "--unverified",
+            "test",
+            "--locked",
+            "--offline",
+            "-p",
+            "clean-olean",
+            "--test",
+            "semr_reference",
+            "semr_source_pin_follows_its_actual_consumer_edge",
+            "--",
+            "--nocapture",
+            "--test-threads=2"
+          ],
+          "passed": 1,
+          "log_sha256": "b063ae3bb3939e3bbe99dc989360acc9c631c6e06eb018a48e658ee586bef9a3"
+        }
+      ]
+    },
+    "compatibility": {
+      "handoff_sha256": "c8a75346ea711d4856693940c5474b513333498712ba323d43d6010b893688c1",
+      "artifact_manifest_sha256": "2d18a8516e8eaff4603417cdbb9cca59603976bc755b2c9e008980d00938a6e8",
+      "summary_sha256": "81b22166e7f879095127dac7b456bb8368cf74ca1360da5605edee3bf857deff",
+      "actual_test_images_sha256": "03b3083d79fc83bd0106859658ea5b389922d40ca12bdb08bbd9e7db1c284302",
+      "source_bookends_unchanged": true
+    }
+  },
+  "historical_failures_preserved": [
+    "Original replay-owner baseline accepted forged diagnostics; focused new regression failed before fix.",
+    "Prior b7 scalar math recheck remains qualified for its original model; pinned current-source guard correctly refused that stale copy.",
+    "Zero-test reflection selector was refused; exact two actual reflection tests were executed afterward."
+  ],
+  "not_run": [
+    "full workspace/just-ci diagnostic",
+    "old 72/191 root and whole SemR audit train",
+    "SDK or sealed release qualification"
+  ],
+  "publication_note": "After this execution, only this receipt and decision documentation are added; qualified runtime, model, manifest and lock inputs remain exact.",
+  "qualified_coherent_source_cut": "3805c23cf0c9050d239b543daf6ef8e1e7c9cd6c",
+  "publication_relation": "This exact checked cut is retained in main ancestry. Newer kernel optimizations merged on main have separate execution subjects; the Trust daily build selects the coherent cut, not a different unqualified kernel tree."
+}

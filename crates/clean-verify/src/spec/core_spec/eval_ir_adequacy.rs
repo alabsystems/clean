@@ -5,20 +5,41 @@
 //! `EvalIR` — the adequacy grid's theorem band (plan W5, §4(c) of
 //! `docs/analysis/evalir-completion-plan-2026-08-24.md`).
 //!
-//! The 28-arm dispatch (`super::eval_ir_machine`, `ir_exec`) binds every
-//! field of every `IRInst` constructor and DROPS twenty of them — type
+//! The 33-arm dispatch (`super::eval_ir_machine`, `ir_exec`) binds every
+//! field of every `IRInst` constructor and DROPS twenty-four of them — type
 //! annotations, volatility flags, `gep`'s `inbounds`, `switch`'s
 //! exhaustiveness flag, `callindirect`'s signature index and calling
-//! convention. Three of the twenty have had kernel-checked irrelevance
-//! theorems since the operand audit (`ir_exec_switch_exh_irrelevant`,
-//! `ir_exec_callind_conv_irrelevant`, `ir_exec_callind_sig_irrelevant`,
-//! registered beside the dispatch). This module is the other SEVENTEEN, one
+//! convention, and both operands of the refused legacy
+//! `atomic_fetch_add_relaxed_u64_seq` arm, plus the width and two operands of
+//! the distinct refused Usize arm and the retained, refused Release pointer.
+//! Some have kernel-checked model-only irrelevance
+//! theorems beside the dispatch — the operand audit's
+//! (`ir_exec_switch_exh_irrelevant`, `ir_exec_callind_conv_irrelevant`,
+//! `ir_exec_callind_sig_irrelevant`), the two atomic arms' and Release's;
+//! `PRE_EXISTING` in the test band lists them. This module is the rest, one
 //! per remaining dropped field, same mechanism: the kernel iota-reduces the
 //! match on the concrete constructor, the dropped field never appears in the
 //! answer, and `Eq.refl` closes the equation at EVERY module, state, result
 //! list and sibling operand.
 //!
-//! Why this is worth seventeen theorems rather than one comment: the
+//! It had one row more until Phase B, and the row that left is the one to read
+//! before adding another. `load.t` was an irrelevance row; the load arm now
+//! consults the module's DERIVED encodings table to decode the loaded word at
+//! the load's type, so the field is READ and the theorem is false of a general
+//! module. Its replacement is a PAIR beside the dispatch:
+//! `ir_exec_load_ty_irrelevant_mk` (the same statement at an `IRModule.mk`,
+//! which is what makes the extension conservative over every chain minted
+//! before it) and `ir_load_view_mkv_reads_ty` (a module at which the view is
+//! demonstrably not the identity). And `copy.t`, which arrived in the same
+//! wave, is NOT an irrelevance row and must never become one: the reference's
+//! arm calls `expect_ty` on the operand and faults on disagreement, so a
+//! theorem saying the model's step is the same at every type would be an
+//! adequacy claim the reference refutes. The dispatch reads it
+//! (`ir_copy_eval`), the residual coarseness is the declared delta
+//! `copy-type-check-coarse`, and `ir_copy_ty_slot_is_read` pins that the check
+//! fires.
+//!
+//! Why this is worth a theorem per field rather than one comment: the
 //! constructor-NAME parity check in the trust-ir repo "cannot see semantic
 //! depth" (`lean_schema_parity.rs`; `docs/GAP2_ENCODING_CORRESPONDENCE.md`).
 //! The B-SEM exit replaces that sentence with a per-constructor account of
@@ -68,45 +89,42 @@ pub(crate) struct AdequacyRow {
     doc: &'static str,
 }
 
-/// The seventeen W5 irrelevance theorems, in `IRInst` declaration order.
-/// (The other three dropped fields — `switch.exh`, `callindirect.sig`,
-/// `callindirect.cc` — have their theorems beside the dispatch since the
-/// operand audit; the unit tests below hold the union to be exactly the
-/// dispatch's dropped-field surface.)
+/// The W5 irrelevance theorems, in `IRInst` declaration order. The other
+/// dropped fields have theorems beside the dispatch (`PRE_EXISTING` in the
+/// test band); the tests there hold the union to be exactly the dispatch's
+/// dropped-field surface, and every count this file's prose states to it.
 pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "load",
-        varied: "t",
-        src: "def ir_exec_load_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (p : Nat) (vol : Bool) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.load t1 p vol) rs s) (ir_exec m (IRInst.load t2 p vol) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_load_eval s (ir_getd s p)))",
-        doc: "ir_exec_load_ty_irrelevant: the machine's step on a `load` is THE SAME \
-              CONFIGURATION at any two printed types — a cell-addressed load returns the stored \
-              VALUE whatever the annotation says it is. This is the semantic half of the \
-              2026-08-19 operand-audit finding that BOTH parsers ignored `load`'s type slot (the \
-              `load_tys` lineage lane now compares it): the type is a lineage fact about which \
-              module was emitted, provably not a fact about what the load computes. \
-              DerivedProved, zero axiom_deps.",
-    },
-    AdequacyRow {
-        ctor: "load",
         varied: "vol",
-        src: "def ir_exec_load_vol_irrelevant (m : IRModule) (t : IRTy) (p : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.load t p Bool.true) rs s) (ir_exec m (IRInst.load t p Bool.false) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_load_eval s (ir_getd s p)))",
+        src: "def ir_exec_load_vol_irrelevant (m : IRModule) (t : IRTy) (p : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.load t p Bool.true) rs s) (ir_exec m (IRInst.load t p Bool.false) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_load_view (ir_mod_encs m) t (ir_load_eval s (ir_getd s p))))",
         doc: "ir_exec_load_vol_irrelevant: the volatility flag cannot change the step, either \
               way it is set. The machine has no observable the flag could order against — no \
               I/O, no concurrent writer — so volatility is outside the fragment because the \
-              fragment provably does not consult it. DerivedProved, zero axiom_deps.",
+              fragment provably does not consult it. RESPELLED for Phase B: the statement is \
+              unchanged and still true, but its `Eq.refl` names the dispatch arm's reduct and \
+              the arm now consults the module's encodings table — a theorem whose statement \
+              survives a change and whose WITNESS does not. The module stays abstract, so this \
+              holds at an `IRModule.mkv` with a live table as well. DerivedProved, zero \
+              axiom_deps.",
     },
     AdequacyRow {
         ctor: "store",
         varied: "t",
-        src: "def ir_exec_store_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (p : Nat) (v : Nat) (vol : Bool) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.store t1 p v vol) rs s) (ir_exec m (IRInst.store t2 p v vol) rs s) := Eq.refl IRConfig (ir_store_exec s (ir_getd s p) (ir_getd s v))",
+        src: "def ir_exec_store_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (p : Nat) (v : Nat) (vol : Bool) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.store t1 p v vol) rs s) (ir_exec m (IRInst.store t2 p v vol) rs s) := @Eq.refl IRConfig (ir_store_exec s (ir_getd s p) (ir_getd s v))",
         doc: "ir_exec_store_ty_irrelevant: a `store` writes the operand VALUE into the cell at \
-              any two printed types — the write dual of ir_exec_load_ty_irrelevant. \
+              any two printed types, and UNCONDITIONALLY — the store arm consults no encodings \
+              table, so unlike the load side there is no module at which the printed type \
+              re-enters. It is therefore the write dual of the load-side PAIR \
+              (ir_exec_load_ty_irrelevant_mk, which states the same shape only at an \
+              `IRModule.mk`, and ir_load_view_mkv_reads_ty, which exhibits the module where \
+              the load-side reading fails) rather than of a single general theorem. \
               DerivedProved, zero axiom_deps.",
     },
     AdequacyRow {
         ctor: "store",
         varied: "vol",
-        src: "def ir_exec_store_vol_irrelevant (m : IRModule) (t : IRTy) (p : Nat) (v : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.store t p v Bool.true) rs s) (ir_exec m (IRInst.store t p v Bool.false) rs s) := Eq.refl IRConfig (ir_store_exec s (ir_getd s p) (ir_getd s v))",
+        src: "def ir_exec_store_vol_irrelevant (m : IRModule) (t : IRTy) (p : Nat) (v : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.store t p v Bool.true) rs s) (ir_exec m (IRInst.store t p v Bool.false) rs s) := @Eq.refl IRConfig (ir_store_exec s (ir_getd s p) (ir_getd s v))",
         doc: "ir_exec_store_vol_irrelevant: the write's volatility flag is dropped by the \
               dispatch exactly as the read's; same fragment boundary, same proof. \
               DerivedProved, zero axiom_deps.",
@@ -114,7 +132,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "alloca",
         varied: "t",
-        src: "def ir_exec_alloca_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (c : IROption Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.alloca t1 c) rs s) (ir_exec m (IRInst.alloca t2 c) rs s) := Eq.refl IRConfig (ir_alloca_exec s rs c)",
+        src: "def ir_exec_alloca_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (c : IROption Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.alloca t1 c) rs s) (ir_exec m (IRInst.alloca t2 c) rs s) := @Eq.refl IRConfig (ir_alloca_exec s rs c)",
         doc: "ir_exec_alloca_ty_irrelevant: `alloca` allocates its live undef CELLS whatever \
               type they are declared to hold — a cell holds a value, so the element type sizes \
               nothing. The neighbouring `align` operand does not even reach the instruction \
@@ -124,7 +142,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "gep",
         varied: "t",
-        src: "def ir_exec_gep_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (b : Nat) (idxs : IRList Nat) (inb : Bool) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.gep t1 b idxs inb) rs s) (ir_exec m (IRInst.gep t2 b idxs inb) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_gep_eval (ir_getd s b) (ir_resolve s idxs)))",
+        src: "def ir_exec_gep_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (b : Nat) (idxs : IRList Nat) (inb : Bool) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.gep t1 b idxs inb) rs s) (ir_exec m (IRInst.gep t2 b idxs inb) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_gep_eval (ir_getd s b) (ir_resolve s idxs)))",
         doc: "ir_exec_gep_ty_irrelevant: `gep`'s printed element type cannot change the step — \
               the machine's offset arithmetic is single-scale over cells, never byte-scaled by \
               a type's size. DerivedProved, zero axiom_deps.",
@@ -132,7 +150,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "gep",
         varied: "inb",
-        src: "def ir_exec_gep_inbounds_irrelevant (m : IRModule) (t : IRTy) (b : Nat) (idxs : IRList Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.gep t b idxs Bool.true) rs s) (ir_exec m (IRInst.gep t b idxs Bool.false) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_gep_eval (ir_getd s b) (ir_resolve s idxs)))",
+        src: "def ir_exec_gep_inbounds_irrelevant (m : IRModule) (t : IRTy) (b : Nat) (idxs : IRList Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.gep t b idxs Bool.true) rs s) (ir_exec m (IRInst.gep t b idxs Bool.false) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_gep_eval (ir_getd s b) (ir_resolve s idxs)))",
         doc: "ir_exec_gep_inbounds_irrelevant: the machine takes THE SAME step whichever way \
               `inbounds` is set — which is precisely the PRECONDITION of the no-wrap folding \
               the flag licenses (eval_ir_syntax.rs keeps the field as load-bearing for any \
@@ -142,7 +160,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "ptrdata",
         varied: "t",
-        src: "def ir_exec_ptrdata_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (p : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.ptrdata t1 p) rs s) (ir_exec m (IRInst.ptrdata t2 p) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_ptrdata_eval (ir_getd s p)))",
+        src: "def ir_exec_ptrdata_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (p : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.ptrdata t1 p) rs s) (ir_exec m (IRInst.ptrdata t2 p) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_ptrdata_eval (ir_getd s p)))",
         doc: "ir_exec_ptrdata_ty_irrelevant: `ptr_data` projects the pointer VALUE's data lane; \
               the printed pointer type is inert at every operand. DerivedProved, zero \
               axiom_deps.",
@@ -150,25 +168,18 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "ptrmetadata",
         varied: "pt",
-        src: "def ir_exec_ptrmeta_pt_irrelevant (m : IRModule) (pt1 : IRTy) (pt2 : IRTy) (mt : IRTy) (p : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.ptrmetadata pt1 mt p) rs s) (ir_exec m (IRInst.ptrmetadata pt2 mt p) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_ptrmeta_eval (ir_getd s p)))",
+        src: "def ir_exec_ptrmeta_pt_irrelevant (m : IRModule) (pt1 : IRTy) (pt2 : IRTy) (mt : IRTy) (p : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.ptrmetadata pt1 mt p) rs s) (ir_exec m (IRInst.ptrmetadata pt2 mt p) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_ptrmeta_eval mt (ir_getd s p)))",
         doc: "ir_exec_ptrmeta_pt_irrelevant: `ptr_metadata` dispatches on the pointer VALUE's \
               thin-vs-fat shape (ir_ptrmeta_eval), not on the printed POINTER type; the slot is \
-              inert at every operand. DerivedProved, zero axiom_deps.",
-    },
-    AdequacyRow {
-        ctor: "ptrmetadata",
-        varied: "mt",
-        src: "def ir_exec_ptrmeta_mt_irrelevant (m : IRModule) (pt : IRTy) (mt1 : IRTy) (mt2 : IRTy) (p : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.ptrmetadata pt mt1 p) rs s) (ir_exec m (IRInst.ptrmetadata pt mt2 p) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_ptrmeta_eval (ir_getd s p)))",
-        doc: "ir_exec_ptrmeta_mt_irrelevant: the printed METADATA type is as inert as the \
-              pointer type beside it — the W2b lane already recorded that the metadata VALUE \
-              itself is carried as a bare Nat (the vtable/fnptr pointer-ness erasure); this \
-              theorem is the instruction-level statement that the machine consults neither \
-              annotation. DerivedProved, zero axiom_deps.",
+              inert at every operand. Its sibling `mt` LEFT this band in crystal E5 (memo §23): \
+              the fat arm reads its word at the declared metadata type, so `mt` is read and the \
+              former `ir_exec_ptrmeta_mt_irrelevant` would be false; `ir_e5_ptrmeta_mt_is_read` \
+              is its replacement. DerivedProved, zero axiom_deps.",
     },
     AdequacyRow {
         ctor: "ptrfromparts",
         varied: "pt",
-        src: "def ir_exec_ptrparts_pt_irrelevant (m : IRModule) (pt1 : IRTy) (pt2 : IRTy) (mt : IRTy) (d : Nat) (md : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.ptrfromparts pt1 mt d md) rs s) (ir_exec m (IRInst.ptrfromparts pt2 mt d md) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_ptrparts_eval (ir_getd s d) (ir_getd s md)))",
+        src: "def ir_exec_ptrparts_pt_irrelevant (m : IRModule) (pt1 : IRTy) (pt2 : IRTy) (mt : IRTy) (d : Nat) (md : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.ptrfromparts pt1 mt d md) rs s) (ir_exec m (IRInst.ptrfromparts pt2 mt d md) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_ptrparts_eval (ir_getd s d) (ir_getd s md)))",
         doc: "ir_exec_ptrparts_pt_irrelevant: the rebuild consumes the data and metadata \
               VALUES (ir_ptrparts_eval dispatches on their shapes); the printed pointer type \
               is inert at every pair. DerivedProved, zero axiom_deps.",
@@ -176,7 +187,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "ptrfromparts",
         varied: "mt",
-        src: "def ir_exec_ptrparts_mt_irrelevant (m : IRModule) (pt : IRTy) (mt1 : IRTy) (mt2 : IRTy) (d : Nat) (md : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.ptrfromparts pt mt1 d md) rs s) (ir_exec m (IRInst.ptrfromparts pt mt2 d md) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_ptrparts_eval (ir_getd s d) (ir_getd s md)))",
+        src: "def ir_exec_ptrparts_mt_irrelevant (m : IRModule) (pt : IRTy) (mt1 : IRTy) (mt2 : IRTy) (d : Nat) (md : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.ptrfromparts pt mt1 d md) rs s) (ir_exec m (IRInst.ptrfromparts pt mt2 d md) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_ptrparts_eval (ir_getd s d) (ir_getd s md)))",
         doc: "ir_exec_ptrparts_mt_irrelevant: the printed metadata type slot of \
               `ptr_from_parts` is dropped exactly as `ptr_metadata`'s; the machine's thin/fat \
               decision reads the metadata VALUE. DerivedProved, zero axiom_deps.",
@@ -184,7 +195,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "extractfield",
         varied: "t",
-        src: "def ir_exec_extractfield_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (a : Nat) (k : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.extractfield t1 a k) rs s) (ir_exec m (IRInst.extractfield t2 a k) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_ef_at (ir_getd s a) k))",
+        src: "def ir_exec_extractfield_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (a : Nat) (k : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.extractfield t1 a k) rs s) (ir_exec m (IRInst.extractfield t2 a k) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_ef_at (ir_getd s a) k))",
         doc: "ir_exec_extractfield_ty_irrelevant: the field read indexes the aggregate VALUE's \
               inline spine; the aggregate's printed type is inert (the operand audit's \
               `extract_tys` lineage lane compares the slot artifact-side, and this is the \
@@ -193,7 +204,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "insertfield",
         varied: "t",
-        src: "def ir_exec_insertfield_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (a : Nat) (k : Nat) (v : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.insertfield t1 a k v) rs s) (ir_exec m (IRInst.insertfield t2 a k v) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_insert_field (ir_getd s a) k (ir_getd s v)))",
+        src: "def ir_exec_insertfield_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (a : Nat) (k : Nat) (v : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.insertfield t1 a k v) rs s) (ir_exec m (IRInst.insertfield t2 a k v) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_insert_field (ir_getd s a) k (ir_getd s v)))",
         doc: "ir_exec_insertfield_ty_irrelevant: the functional field update rebuilds the \
               aggregate VALUE's spine; the printed aggregate type is inert. DerivedProved, \
               zero axiom_deps.",
@@ -201,7 +212,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "extractelement",
         varied: "t",
-        src: "def ir_exec_extractelement_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (a : Nat) (k : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.extractelement t1 a k) rs s) (ir_exec m (IRInst.extractelement t2 a k) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_extract_elem (ir_getd s a) (ir_getd s k)))",
+        src: "def ir_exec_extractelement_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (a : Nat) (k : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.extractelement t1 a k) rs s) (ir_exec m (IRInst.extractelement t2 a k) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_extract_elem (ir_getd s a) (ir_getd s k)))",
         doc: "ir_exec_extractelement_ty_irrelevant: the dynamically indexed element read walks \
               the aggregate VALUE's spine by the INDEX OPERAND's value; the printed container \
               type is inert. DerivedProved, zero axiom_deps.",
@@ -209,7 +220,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "undef",
         varied: "t",
-        src: "def ir_exec_undef_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.undef t1) rs s) (ir_exec m (IRInst.undef t2) rs s) := Eq.refl IRConfig (ir_bind s rs IRScalar.undef_)",
+        src: "def ir_exec_undef_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.undef t1) rs s) (ir_exec m (IRInst.undef t2) rs s) := @Eq.refl IRConfig (ir_bind s rs IRScalar.undef_)",
         doc: "ir_exec_undef_ty_irrelevant: `undef` binds the one untyped poison value \
               IRScalar.undef_ whatever type the instruction is declared at; the annotation is \
               inert. (What HAPPENS to that value afterwards is the W2a declared delta — the \
@@ -219,7 +230,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
     AdequacyRow {
         ctor: "select",
         varied: "t",
-        src: "def ir_exec_select_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (c : Nat) (a : Nat) (b : Nat) (rs : IRList Nat) (s : IRMachine) : Eq IRConfig (ir_exec m (IRInst.select t1 c a b) rs s) (ir_exec m (IRInst.select t2 c a b) rs s) := Eq.refl IRConfig (ir_bind_result s rs (ir_select_eval (ir_getd s c) (ir_getd s a) (ir_getd s b)))",
+        src: "def ir_exec_select_ty_irrelevant (m : IRModule) (t1 : IRTy) (t2 : IRTy) (c : Nat) (a : Nat) (b : Nat) (rs : IRList Nat) (s : IRMachine) : @Eq IRConfig (ir_exec m (IRInst.select t1 c a b) rs s) (ir_exec m (IRInst.select t2 c a b) rs s) := @Eq.refl IRConfig (ir_bind_result s rs (ir_select_eval (ir_getd s c) (ir_getd s a) (ir_getd s b)))",
         doc: "ir_exec_select_ty_irrelevant: `select` dispatches on the CONDITION VALUE and \
               returns one arm VALUE; the printed result type is inert at every triple. \
               DerivedProved, zero axiom_deps.",
@@ -227,7 +238,7 @@ pub(crate) const ADEQUACY_THEOREMS: &[AdequacyRow] = &[
 ];
 
 impl Specification {
-    /// Register the seventeen W5 irrelevance theorems.
+    /// Register the W5 irrelevance theorems.
     ///
     /// # Errors
     /// Returns `SpecError` if any declaration fails to elaborate or
@@ -256,12 +267,39 @@ mod tests {
     const MACHINE_SRC: &str = include_str!("eval_ir_machine.rs");
     const SYNTAX_SRC: &str = include_str!("eval_ir_syntax.rs");
 
-    /// The three dropped-field theorems that predate W5 and live beside the
-    /// dispatch in `eval_ir_machine.rs`.
+    /// The dropped-field theorems that live beside the dispatch in
+    /// `eval_ir_machine.rs`: the operand audit's, and the dropped fields of the
+    /// two refused legacy atomic arms.
     const PRE_EXISTING: &[(&str, &str, &str)] = &[
         ("switch", "exh", "ir_exec_switch_exh_irrelevant"),
         ("callindirect", "sig", "ir_exec_callind_sig_irrelevant"),
         ("callindirect", "cc", "ir_exec_callind_conv_irrelevant"),
+        (
+            "atomic_fetch_add_relaxed_u64_seq",
+            "pointer",
+            "ir_exec_atomic_fetch_add_relaxed_u64_seq_pointer_irrelevant",
+        ),
+        (
+            "atomic_fetch_add_relaxed_u64_seq",
+            "value",
+            "ir_exec_atomic_fetch_add_relaxed_u64_seq_value_irrelevant",
+        ),
+        (
+            "atomic_fetch_add_relaxed_usize_seq",
+            "bits",
+            "ir_exec_atomic_fetch_add_relaxed_usize_seq_bits_irrelevant",
+        ),
+        (
+            "atomic_fetch_add_relaxed_usize_seq",
+            "pointer",
+            "ir_exec_atomic_fetch_add_relaxed_usize_seq_pointer_irrelevant",
+        ),
+        (
+            "atomic_fetch_add_relaxed_usize_seq",
+            "value",
+            "ir_exec_atomic_fetch_add_relaxed_usize_seq_value_irrelevant",
+        ),
+        ("release", "pointer", "ir_exec_release_pointer_irrelevant"),
     ];
 
     /// Identifier tokens of `s` (split on anything outside `[A-Za-z0-9_]`).
@@ -293,7 +331,12 @@ mod tests {
             let ctor = toks.next().expect("an arm names its constructor");
             arms.push((ctor, toks.collect(), rhs.to_string()));
         }
-        assert_eq!(arms.len(), 28, "the dispatch must have exactly 28 arms");
+        // Both byte atomic operations and retained Release explicitly refuse in legacy.
+        assert_eq!(
+            arms.len(),
+            33,
+            "the dispatch includes explicit atomic and Release refusals"
+        );
         arms
     }
 
@@ -418,10 +461,10 @@ mod tests {
         }
         assert_eq!(
             dropped, claimed,
-            "the dispatch's dropped fields and the irrelevance theorems must be the same set \
-             (20 rows). A new dropped field needs a theorem; a field the dispatch now reads \
-             must have its theorem REMOVED and its grid row flipped to relevant-by-design — \
-             regenerate data/evalir_adequacy_grid.json either way."
+            "the dispatch's dropped fields and the irrelevance theorems must be the same set. A \
+             new dropped field needs a theorem; a field the dispatch now reads must have its \
+             theorem REMOVED and its grid row flipped to relevant-by-design — regenerate \
+             data/evalir_adequacy_grid.json either way."
         );
     }
 
@@ -449,8 +492,8 @@ mod tests {
         }
         assert_eq!(
             fields.len(),
-            28,
-            "IRInst must declare exactly 28 constructors"
+            33,
+            "IRInst includes the appended Release syntax without ARC execution"
         );
         let arms = dispatch_arms();
         for (name, n_fields) in fields {
@@ -466,5 +509,105 @@ mod tests {
                 n_fields
             );
         }
+    }
+
+    /// `n` for a count in digits or an English number word below a hundred.
+    fn count_word(w: &str) -> Option<usize> {
+        const UNITS: [&str; 20] = [
+            "zero",
+            "one",
+            "two",
+            "three",
+            "four",
+            "five",
+            "six",
+            "seven",
+            "eight",
+            "nine",
+            "ten",
+            "eleven",
+            "twelve",
+            "thirteen",
+            "fourteen",
+            "fifteen",
+            "sixteen",
+            "seventeen",
+            "eighteen",
+            "nineteen",
+        ];
+        const TENS: [&str; 8] = [
+            "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+        ];
+        if let Ok(n) = w.parse() {
+            return Some(n);
+        }
+        let unit = |s: &str| UNITS.iter().position(|u| *u == s);
+        let ten = |s: &str| TENS.iter().position(|t| *t == s).map(|i| 20 + 10 * i);
+        match w.split_once('-') {
+            None => unit(w).or_else(|| ten(w)),
+            Some((t, u)) => Some(ten(t)? + unit(u).filter(|u| (1..10).contains(u))?),
+        }
+    }
+
+    /// Every count this file's prose states about its own tables is the
+    /// tables'. Two comments here said "three" of `PRE_EXISTING` for a day
+    /// after it grew to five rows, while every test above stayed green.
+    #[test]
+    fn test_the_prose_counts_are_the_tables() {
+        const THIS_SRC: &str = include_str!("eval_ir_adequacy.rs");
+        let arms = dispatch_arms();
+        let dropped: usize = arms
+            .iter()
+            .map(|(_, vars, rhs)| {
+                let used = word_tokens(rhs);
+                vars.iter().filter(|v| !used.contains(*v)).count()
+            })
+            .sum();
+        let words: Vec<String> = THIS_SRC
+            .split_whitespace()
+            .map(|w| {
+                w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '-')
+                    .to_ascii_lowercase()
+            })
+            .filter(|w| !w.is_empty())
+            .collect();
+        let word = |j: Option<usize>| j.and_then(|j| words.get(j)).map_or("", String::as_str);
+        let (mut read, mut wrong) = (0, Vec::new());
+        for i in 0..words.len() {
+            let (prev, this) = (word(i.checked_sub(1)), word(Some(i)));
+            let (next, next2) = (word(Some(i + 1)), word(Some(i + 2)));
+            let rule = match (prev, next, next2) {
+                (_, "w5", "irrelevance") => {
+                    Some(("W5 irrelevance theorems", ADEQUACY_THEOREMS.len()))
+                }
+                (_, "dropped-field", "theorems") => {
+                    Some(("dropped-field theorems", PRE_EXISTING.len()))
+                }
+                ("other", "dropped", "fields") => {
+                    Some(("other dropped fields", PRE_EXISTING.len()))
+                }
+                ("drops", "of", "them") => Some(("dropped fields of the dispatch", dropped)),
+                _ => this
+                    .strip_suffix("-arm")
+                    .filter(|_| next == "dispatch")
+                    .map(|_| ("dispatch arms", arms.len())),
+            };
+            let stated = count_word(this.strip_suffix("-arm").unwrap_or(this));
+            if let (Some((what, table)), Some(n)) = (rule, stated) {
+                read += 1;
+                if n != table {
+                    wrong.push(format!("`{this}` {what}: the table has {table}"));
+                }
+            }
+        }
+        assert!(
+            wrong.is_empty(),
+            "this file's prose restates a count its tables no longer have:\n  {}",
+            wrong.join("\n  ")
+        );
+        assert!(
+            read > 0,
+            "the prose states no count at all; the reader is not reading it"
+        );
     }
 }

@@ -1,0 +1,12 @@
+{
+  "schema": "clean.kv-ratchet-corpus/v1",
+  "what_this_is": "The corpus the KernelVerified count in data/mathlib_kv_ratchet.json was minted on. scripts/kv_ratchet_gate.sh compares that count only when every .olean the slice (data/kv_ratchet_slice.txt) names has exactly the sha256 recorded here and the slice lists exactly these paths; on any other corpus it still runs the completeness floor and the elision subset and reports KV_GATE=skipped:corpus-mismatch for the count. Move this pin and the baseline together, in one commit, from one measured run.",
+  "mathlib_rev": "43ad0e9d2e144aa282f0c642a5b8427f39d23e4b",
+  "lean_toolchain": "leanprover/lean4:v4.30.0-rc2",
+  "provisioned_by": "git fetch --depth 1 of mathlib4 at mathlib_rev, `lake exe cache get` (1,185 of 8,290 files were still in the cache on 2026-10-07; the slice's closure was complete), `lake build Mathlib.Logic.Basic Mathlib.Logic.Function.Basic` (nothing to build); docs/DECISIONS.md R5 pins this revision as the Mathlib corpus",
+  "slice_sha256": {
+    "Logic/Basic.olean": "293b9b06ecb1c8421e85df0da6576b13b5bdae9aa878efe561c55ad73c48e55e",
+    "Logic/Function/Basic.olean": "a22f2486e11f6054d83894b354d7f32f4467a08e8cf07798006d12d69a2626a1"
+  },
+  "minted": "2026-10-07, clean 290e3ec72, release clean binary carrying that HEAD: 686 constants stamped under opaque-and-theorem, 686 KernelVerified, 0 failed, 0 axiom_fallback, heuristic 0 (opaque: the same); the elision subset held"
+}

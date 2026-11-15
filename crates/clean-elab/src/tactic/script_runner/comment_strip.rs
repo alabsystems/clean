@@ -17,6 +17,8 @@ pub fn strip_block_comments(input: &str) -> String {
     enum State {
         Normal,
         InString { escaped: bool },
+        InQuotedIdent,
+        InLineComment,
         InBlockComment { depth: u32 },
     }
 
@@ -27,7 +29,13 @@ pub fn strip_block_comments(input: &str) -> String {
     while let Some(ch) = chars.next() {
         state = match state {
             State::Normal => {
-                if ch == '/' && chars.peek() == Some(&'-') {
+                if ch == '«' {
+                    result.push(ch);
+                    State::InQuotedIdent
+                } else if ch == '-' && chars.peek() == Some(&'-') {
+                    result.push(ch);
+                    State::InLineComment
+                } else if ch == '/' && chars.peek() == Some(&'-') {
                     chars.next();
                     result.push(' ');
                     result.push(' ');
@@ -50,6 +58,22 @@ pub fn strip_block_comments(input: &str) -> String {
                     State::Normal
                 } else {
                     State::InString { escaped: false }
+                }
+            }
+            State::InQuotedIdent => {
+                result.push(ch);
+                if ch == '»' {
+                    State::Normal
+                } else {
+                    State::InQuotedIdent
+                }
+            }
+            State::InLineComment => {
+                result.push(ch);
+                if ch == '\n' {
+                    State::Normal
+                } else {
+                    State::InLineComment
                 }
             }
             State::InBlockComment { depth } => {

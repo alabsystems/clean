@@ -148,7 +148,7 @@ impl Specification {
         self.add_recursive_def(
             r"def def_env_closed_b (env : DefEnv) : Bool := match env with
 | DefEnv.empty => Bool.true
-| DefEnv.addDef tail dname val => Bool.and (nat_eqb (bvar_ceiling val) Nat.zero) (def_env_closed_b tail)",
+| DefEnv.addDef tail dname defn => Bool.and (nat_eqb (bvar_ceiling (kdef_value defn)) Nat.zero) (def_env_closed_b tail)",
             "Closure checker for a definition environment: every registered definition's value \
              has bvar_ceiling 0 (closed). Kernel-evaluable fold; a concrete env discharges \
              DefEnvClosed by def_env_closed_of_b + a single Eq.refl Bool.true. \
@@ -337,25 +337,25 @@ impl Specification {
              (_hb : Eq Bool (def_env_closed_b DefEnv.empty) Bool.true) => \
              option_none_ne_some KExpr defval \
              (Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) hlk) \
-             (fun (tail : DefEnv) (dn : Name) (dv : KExpr) \
+             (fun (tail : DefEnv) (dn : Name) (defn : KDefSig) \
              (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval) -> \
              Eq Bool (def_env_closed_b tail) Bool.true -> \
              Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) \
-             (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn dv) dname) (OptionType.some KExpr defval)) \
-             (hb : Eq Bool (def_env_closed_b (DefEnv.addDef tail dn dv)) Bool.true) => \
-             opt_pick_some_inv KExpr (name_eqb dn dname) dv \
+             (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr defval)) \
+             (hb : Eq Bool (def_env_closed_b (DefEnv.addDef tail dn defn)) Bool.true) => \
+             opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) \
              (defval_for tail dname) defval \
              (Eq Bool (nat_eqb (bvar_ceiling defval) Nat.zero) Bool.true) hlk \
              (fun (_ht : Eq Bool (name_eqb dn dname) Bool.true) \
-             (hval : Eq KExpr dv defval) => \
+             (hval : Eq KExpr (kdef_value defn) defval) => \
              Eq.subst KExpr \
              (fun (z : KExpr) => Eq Bool (nat_eqb (bvar_ceiling z) Nat.zero) Bool.true) \
-             dv defval hval \
-             (band_eq_true_left (nat_eqb (bvar_ceiling dv) Nat.zero) (def_env_closed_b tail) hb)) \
+             (kdef_value defn) defval hval \
+             (band_eq_true_left (nat_eqb (bvar_ceiling (kdef_value defn)) Nat.zero) (def_env_closed_b tail) hb)) \
              (fun (_hf : Eq Bool (name_eqb dn dname) Bool.false) \
              (htail : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr defval)) => \
              ih htail \
-             (band_eq_true_right (nat_eqb (bvar_ceiling dv) Nat.zero) (def_env_closed_b tail) hb))) \
+             (band_eq_true_right (nat_eqb (bvar_ceiling (kdef_value defn)) Nat.zero) (def_env_closed_b tail) hb))) \
              env",
             "Fold-membership (def-env level): defval_for env dname = some defval and \
              def_env_closed_b env = true imply nat_eqb (bvar_ceiling defval) 0 = true. DefEnv.rec; \
@@ -386,88 +386,154 @@ impl Specification {
     /// Le (ceiling_zero_le), and close with the IN-TREE keystone
     /// (inst_above_ceiling_id / lift_ceiling_id).
     fn add_env_closed_generic_discharge(&mut self) -> Result<(), SpecError> {
+        self.add_recursive_def(
+            r"def ceiling_zero_is_closed_at (e : KExpr)
+(h : Eq Nat (bvar_ceiling e) Nat.zero) (d : Nat) : is_closed_at e d :=
+KExpr.rec (fun (e0 : KExpr) => Eq Nat (bvar_ceiling e0) Nat.zero -> forall (d0 : Nat), is_closed_at e0 d0)
+  (fun (u : Level) (_h : Eq Nat (bvar_ceiling (KExpr.sort u)) Nat.zero) (d0 : Nat) => is_closed_at.sort u d0)
+  (fun (i : Nat) (hi : Eq Nat (bvar_ceiling (KExpr.bvar i)) Nat.zero) (d0 : Nat) =>
+    Empty.rec (fun (_ : Empty) => is_closed_at (KExpr.bvar i) d0)
+      (Eq.substType Nat (fun (z : Nat) => Nat.rec (fun (_ : Nat) => Type) Nat (fun (_ : Nat) (_ : Type) => Empty) z)
+        Nat.zero (Nat.succ i) (Eq.symm Nat (Nat.succ i) Nat.zero hi) Nat.zero))
+  (fun (f : KExpr) (a : KExpr)
+    (ihf : Eq Nat (bvar_ceiling f) Nat.zero -> forall (d0 : Nat), is_closed_at f d0)
+    (iha : Eq Nat (bvar_ceiling a) Nat.zero -> forall (d0 : Nat), is_closed_at a d0)
+    (ha : Eq Nat (bvar_ceiling (KExpr.app f a)) Nat.zero) (d0 : Nat) =>
+    is_closed_at.app f a d0
+      (ihf (nat_add_eq_zero_left (bvar_ceiling f) (bvar_ceiling a) ha) d0)
+      (iha (nat_add_eq_zero_right (bvar_ceiling f) (bvar_ceiling a) ha) d0))
+  (fun (A : KExpr) (b : KExpr)
+    (ihA : Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
+    (ihb : Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
+    (hb : Eq Nat (bvar_ceiling (KExpr.lam A b)) Nat.zero) (d0 : Nat) =>
+    is_closed_at.lam A b d0
+      (ihA (nat_add_eq_zero_left (bvar_ceiling A) (bvar_ceiling b) hb) d0)
+      (ihb (nat_add_eq_zero_right (bvar_ceiling A) (bvar_ceiling b) hb) (Nat.succ d0)))
+  (fun (A : KExpr) (b : KExpr)
+    (ihA : Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
+    (ihb : Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
+    (hb : Eq Nat (bvar_ceiling (KExpr.pi A b)) Nat.zero) (d0 : Nat) =>
+    is_closed_at.pi A b d0
+      (ihA (nat_add_eq_zero_left (bvar_ceiling A) (bvar_ceiling b) hb) d0)
+      (ihb (nat_add_eq_zero_right (bvar_ceiling A) (bvar_ceiling b) hb) (Nat.succ d0)))
+  (fun (n : Name) (us : ListType Level) (_h : Eq Nat (bvar_ceiling (KExpr.const n us)) Nat.zero) (d0 : Nat) => is_closed_at.const n us d0)
+  (fun (A : KExpr) (v : KExpr) (b : KExpr)
+    (ihA : Eq Nat (bvar_ceiling A) Nat.zero -> forall (d0 : Nat), is_closed_at A d0)
+    (ihv : Eq Nat (bvar_ceiling v) Nat.zero -> forall (d0 : Nat), is_closed_at v d0)
+    (ihb : Eq Nat (bvar_ceiling b) Nat.zero -> forall (d0 : Nat), is_closed_at b d0)
+    (hb : Eq Nat (bvar_ceiling (KExpr.let_ A v b)) Nat.zero) (d0 : Nat) =>
+    is_closed_at.let_ A v b d0
+      (ihA (nat_add_eq_zero_left (bvar_ceiling A) (Nat.add (bvar_ceiling v) (bvar_ceiling b)) hb) d0)
+      (ihv (nat_add_eq_zero_left (bvar_ceiling v) (bvar_ceiling b)
+        (nat_add_eq_zero_right (bvar_ceiling A) (Nat.add (bvar_ceiling v) (bvar_ceiling b)) hb)) d0)
+      (ihb (nat_add_eq_zero_right (bvar_ceiling v) (bvar_ceiling b)
+        (nat_add_eq_zero_right (bvar_ceiling A) (Nat.add (bvar_ceiling v) (bvar_ceiling b)) hb)) (Nat.succ d0)))
+  (fun (sn : Name) (i : Nat) (sub : KExpr)
+    (ih : Eq Nat (bvar_ceiling sub) Nat.zero -> forall (d0 : Nat), is_closed_at sub d0)
+    (hs : Eq Nat (bvar_ceiling (KExpr.proj sn i sub)) Nat.zero) (d0 : Nat) => is_closed_at.proj sn i sub d0 (ih hs d0))
+  (fun (i : Nat) (_h : Eq Nat (bvar_ceiling (KExpr.lit i)) Nat.zero) (d0 : Nat) => is_closed_at.lit i d0)
+  e h d",
+            "The existing additive ceiling-zero checker implies actual structural closedness at every depth. Binder arms use the stronger induction hypothesis at successor depth; no instantiated-body condition is assumed.",
+        )?;
         // rec_env_closed_of_b: checker-true -> RecEnvClosed.
+        //
+        // REGISTRATION PATH MATTERS HERE, and it is what the keystone test
+        // (`test_checker_soundness_lemmas_are_derived_proved_zero_axioms`) pins:
+        // this lemma and its lift twin go through `add_definition`, which
+        // kernel-checks the value at `add_decl` and records the DerivedProved
+        // status that registration actually earned. f89426583 moved both onto
+        // `add_recursive_def`, which stamps EVERY definition DerivedPending by
+        // construction (declaration_registration.rs, "not verified through the
+        // kernel promote pipeline") and nothing later promotes it -- so a
+        // kernel-checked, zero-closure lemma read DerivedPending. Same value,
+        // same type; only the path is restored.
         self.add_definition(Self::ecc_lemma(
             "rec_env_closed_of_b",
             "forall (env : RecEnv), \
              Eq Bool (rec_env_closed_b env) Bool.true -> RecEnvClosed env",
             "fun (env : RecEnv) (hb : Eq Bool (rec_env_closed_b env) Bool.true) => \
              RecEnvClosed.mk env \
-             (fun (rname : Name) (cname : Name) (rule : RecRule) (val : KExpr) (depth : Nat) \
+             (fun (rname : Name) (cname : Name) (rule : RecRule) \
              (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
-             opt_bind_some_inv RecRules RecRule (recrules_for env rname) \
+             opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
-             (Eq KExpr (instantiate_at (recrule_rhs rule) val depth) (recrule_rhs rule)) hlk \
+             (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
              (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
              (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
-             inst_above_ceiling_id (recrule_rhs rule) val depth \
-             (ceiling_zero_le (recrule_rhs rule) depth \
+             ceiling_zero_is_closed_at (recrule_rhs rule) \
+             (nat_eqb_eq (bvar_ceiling (recrule_rhs rule)) Nat.zero \
              (rec_rules_closed_b_sound rules cname rule hin \
-             (rec_env_closed_b_sound env rname rules hrules hb)))))",
+             (rec_env_closed_b_sound env rname rules hrules hb))) Nat.zero))",
             "GENERIC checker soundness (inst): rec_env_closed_b env = true -> RecEnvClosed env, \
-             for ANY env. Decompose the recrule_for lookup (opt_bind_some_inv), chain the two \
-             fold-membership lemmas to the rule's ceiling-0 fact, bridge to Le (ceiling_zero_le), \
-             close with the keystone inst_above_ceiling_id. A concrete env now discharges \
-             RecEnvClosed by a single Eq.refl Bool Bool.true (the kernel evaluates the checker). \
-             DerivedProved, zero axiom_deps. Front #1 Stage 1 (generic discharge).",
+             for ANY env. Generic checker soundness constructs schematic structural RHS \
+             closedness from actual fold membership: decompose the recrule_for lookup with the \
+             Type-valued inverter (opt_bind_some_inv_type returns the inductive closure witness), \
+             chain the two fold-membership lemmas to the rule's ceiling-0 fact, and close with \
+             ceiling_zero_is_closed_at at depth 0. No per-instance closure condition is assumed. \
+             A concrete env discharges RecEnvClosed by a single Eq.refl Bool Bool.true (the \
+             kernel evaluates the checker). DerivedProved, zero axiom_deps. Front #1 Stage 1 \
+             (generic discharge).",
             &[
                 "RecEnvClosed",
                 "RecEnvClosed.mk",
                 "rec_env_closed_b",
                 "rec_env_closed_b_sound",
                 "rec_rules_closed_b_sound",
-                "ceiling_zero_le",
-                "inst_above_ceiling_id",
-                "opt_bind_some_inv",
+                "ceiling_zero_is_closed_at",
+                "nat_eqb_eq",
+                "opt_bind_some_inv_type",
+                "is_closed_at",
+                "bvar_ceiling",
                 "recrule_for",
                 "recrules_for",
                 "recrule_in_rules",
                 "recrule_rhs",
-                "instantiate_at",
             ],
         ))?;
 
         // rec_env_lift_closed_of_b: checker-true -> RecEnvLiftClosed. Same
-        // membership chain (the lift checker is the alias); the keystone swaps
-        // to lift_ceiling_id.
+        // membership chain (the lift checker is the alias); the interface
+        // field is the same is_closed_at _ 0 witness. Same registration path
+        // as rec_env_closed_of_b, for the same reason.
         self.add_definition(Self::ecc_lemma(
             "rec_env_lift_closed_of_b",
             "forall (env : RecEnv), \
              Eq Bool (rec_env_lift_closed_b env) Bool.true -> RecEnvLiftClosed env",
             "fun (env : RecEnv) (hb : Eq Bool (rec_env_lift_closed_b env) Bool.true) => \
              RecEnvLiftClosed.mk env \
-             (fun (rname : Name) (cname : Name) (rule : RecRule) (cutoff : Nat) (amount : Nat) \
+             (fun (rname : Name) (cname : Name) (rule : RecRule) \
              (hlk : Eq (OptionType RecRule) (recrule_for env rname cname) (OptionType.some RecRule rule)) => \
-             opt_bind_some_inv RecRules RecRule (recrules_for env rname) \
+             opt_bind_some_inv_type RecRules RecRule (recrules_for env rname) \
              (fun (rules : RecRules) => recrule_in_rules rules cname) rule \
-             (Eq KExpr (lift_at (recrule_rhs rule) cutoff amount) (recrule_rhs rule)) hlk \
+             (is_closed_at (recrule_rhs rule) Nat.zero) hlk \
              (fun (rules : RecRules) \
              (hrules : Eq (OptionType RecRules) (recrules_for env rname) (OptionType.some RecRules rules)) \
              (hin : Eq (OptionType RecRule) (recrule_in_rules rules cname) (OptionType.some RecRule rule)) => \
-             lift_ceiling_id (recrule_rhs rule) cutoff amount \
-             (ceiling_zero_le (recrule_rhs rule) cutoff \
+             ceiling_zero_is_closed_at (recrule_rhs rule) \
+             (nat_eqb_eq (bvar_ceiling (recrule_rhs rule)) Nat.zero \
              (rec_rules_closed_b_sound rules cname rule hin \
-             (rec_env_closed_b_sound env rname rules hrules hb)))))",
+             (rec_env_closed_b_sound env rname rules hrules hb))) Nat.zero))",
             "GENERIC checker soundness (lift): rec_env_lift_closed_b env = true -> \
              RecEnvLiftClosed env, for ANY env. Same fold-membership chain as \
-             rec_env_closed_of_b (the lift checker is the closedness alias); the interface field \
-             closes with the lift keystone lift_ceiling_id instead. DerivedProved, zero \
-             axiom_deps. Front #1 Stage 1 (generic discharge).",
+             rec_env_closed_of_b (the lift checker is the closedness alias) to the same \
+             is_closed_at _ 0 witness; no per-instance closure condition is assumed. \
+             DerivedProved, zero axiom_deps. Front #1 Stage 1 (generic discharge).",
             &[
                 "RecEnvLiftClosed",
                 "RecEnvLiftClosed.mk",
                 "rec_env_lift_closed_b",
                 "rec_env_closed_b_sound",
                 "rec_rules_closed_b_sound",
-                "ceiling_zero_le",
-                "lift_ceiling_id",
-                "opt_bind_some_inv",
+                "ceiling_zero_is_closed_at",
+                "nat_eqb_eq",
+                "opt_bind_some_inv_type",
+                "is_closed_at",
+                "bvar_ceiling",
                 "recrule_for",
                 "recrules_for",
                 "recrule_in_rules",
                 "recrule_rhs",
-                "lift_at",
             ],
         ))?;
 
@@ -479,11 +545,11 @@ impl Specification {
              Eq Bool (def_env_closed_b env) Bool.true -> DefEnvClosed env",
             "fun (env : DefEnv) (hb : Eq Bool (def_env_closed_b env) Bool.true) => \
              DefEnvClosed.mk env \
-             (fun (dname : Name) (defval : KExpr) (subval : KExpr) (depth : Nat) \
+             (fun (dname : Name) (defval : KExpr) \
              (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
-             inst_above_ceiling_id defval subval depth \
-             (ceiling_zero_le defval depth \
-             (def_env_closed_b_sound env dname defval hlk hb)))",
+             ceiling_zero_is_closed_at defval \
+             (nat_eqb_eq (bvar_ceiling defval) Nat.zero \
+             (def_env_closed_b_sound env dname defval hlk hb)) Nat.zero)",
             "GENERIC checker soundness (inst): def_env_closed_b env = true -> DefEnvClosed env, \
              for ANY env. The def-env fold-membership lemma pins the looked-up value's ceiling to \
              0; ceiling_zero_le bridges to Le; inst_above_ceiling_id closes. A concrete env now \
@@ -508,11 +574,11 @@ impl Specification {
              Eq Bool (def_env_lift_closed_b env) Bool.true -> DefEnvLiftClosed env",
             "fun (env : DefEnv) (hb : Eq Bool (def_env_lift_closed_b env) Bool.true) => \
              DefEnvLiftClosed.mk env \
-             (fun (dname : Name) (defval : KExpr) (cutoff : Nat) (amount : Nat) \
+             (fun (dname : Name) (defval : KExpr) \
              (hlk : Eq (OptionType KExpr) (defval_for env dname) (OptionType.some KExpr defval)) => \
-             lift_ceiling_id defval cutoff amount \
-             (ceiling_zero_le defval cutoff \
-             (def_env_closed_b_sound env dname defval hlk hb)))",
+             ceiling_zero_is_closed_at defval \
+             (nat_eqb_eq (bvar_ceiling defval) Nat.zero \
+             (def_env_closed_b_sound env dname defval hlk hb)) Nat.zero)",
             "GENERIC checker soundness (lift): def_env_lift_closed_b env = true -> \
              DefEnvLiftClosed env, for ANY env. Same membership chain as def_env_closed_of_b \
              (the lift checker is the closedness alias); closes with lift_ceiling_id. \

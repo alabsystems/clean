@@ -35,11 +35,12 @@ use crate::inductive::{
 use crate::inductive_params::validate_num_params_block;
 use crate::level::Level;
 use crate::name::Name;
-use crate::positivity::check_positivity_ctor_block;
+use crate::positivity::Positivity;
 use crate::recursor::RecursorData;
 use crate::recursor_mutual::build_block_recursors;
 use crate::staging_env::MutualStagingEnv;
 use crate::term::{Term, TermKind};
+use crate::validate::Env;
 
 /// A mutual inductive block: `N` inductives sharing `num_params` leading
 /// parameters and `num_level_params` universe params, defined together. The
@@ -155,8 +156,13 @@ pub fn add_inductive_mutual(
     if any_known {
         // A partial overlap (some names exist, some don't) is a conflict: the
         // block is not the one already admitted.
+        // Named by the block's first type, as before; the block is non-empty
+        // (refused above), so the anonymous name is never the one reported.
         return Err(AdmitError::Conflict {
-            name: block.decls[0].name.clone(),
+            name: block
+                .decls
+                .first()
+                .map_or_else(Name::anonymous, |d| d.name.clone()),
         });
     }
 
@@ -165,16 +171,40 @@ pub fn add_inductive_mutual(
         validate_num_params_block(d, &block_names)?;
     }
 
-    // (2) strict positivity over the WHOLE block: a field may not mention ANY
-    // block type non-strictly-positively.
-    for d in &block.decls {
-        for ctor in &d.constructors {
-            check_positivity_ctor_block(&*env, &block_names, &ctor.type_).map_err(|()| {
-                AdmitError::NonPositive {
+    let mut shape_block = block.clone();
+    {
+        let staging = MutualStagingEnv::new(env, &block);
+        for d in &mut shape_block.decls {
+            for ctor in &mut d.constructors {
+                ctor.type_ = crate::inductive::fields::constructor_view(
+                    &staging,
+                    &ctor.type_,
+                    np,
+                    &block_names,
+                )
+                .map_err(|e| AdmitError::Derivation {
                     ind: d.name.clone(),
-                    ctor: ctor.name.clone(),
-                }
-            })?;
+                    detail: format!("constructor field reduction: {e}"),
+                })?
+                .type_;
+            }
+        }
+    }
+
+    // (2) strict positivity over the WHOLE block: a field may not mention ANY
+    // block type non-strictly-positively. One check for the block, so each
+    // container slot its constructors need is established once (R176).
+    {
+        let mut positivity = Positivity::new(&*env, &block_names);
+        for d in &shape_block.decls {
+            for ctor in &d.constructors {
+                positivity
+                    .check_ctor(&ctor.type_)
+                    .map_err(|()| AdmitError::NonPositive {
+                        ind: d.name.clone(),
+                        ctor: ctor.name.clone(),
+                    })?;
+            }
         }
     }
 
@@ -255,6 +285,8 @@ pub(crate) struct BlockCtorInfo {
     /// Field domain types (after params), level-shifted into the recursor's
     /// telescope by the caller.
     pub(crate) field_tys: Vec<Term>,
+    /// Reduced analysis shapes, preserving the declared field domains above.
+    pub(crate) recursive_tys: Vec<Term>,
     /// Per-field recursive flag.
     pub(crate) recursive: Vec<bool>,
     /// Per-field motive index a recursive field targets (only meaningful where
@@ -266,11 +298,30 @@ pub(crate) struct BlockCtorInfo {
     pub(crate) num_fields: u32,
 }
 
+impl BlockCtorInfo {
+    /// `(field index, field type, target motive index)` of every recursive
+    /// field, in field order. `recursive` and `field_motive` are both mapped
+    /// from `field_tys` itself, so the three are equally long by construction
+    /// and the triple needs no index into any of them.
+    pub(crate) fn recursive_fields(
+        &self,
+    ) -> impl DoubleEndedIterator<Item = (usize, &Term, usize)> {
+        self.recursive_tys
+            .iter()
+            .zip(&self.recursive)
+            .zip(&self.field_motive)
+            .enumerate()
+            .filter(|&(_, ((_, &is_rec), _))| is_rec)
+            .map(|(i, ((ty, _), &motive))| (i, ty, motive))
+    }
+}
+
 /// Gather the global ordered constructor list for the whole block, tagging each
 /// constructor with its owner-type index and the block-recursive analysis. The
 /// `ind_level_subst` is applied to lift field types / indices into the
 /// recursor's level telescope (identity when small-elim).
 pub(crate) fn gather_block_ctor_infos(
+    env: &dyn Env,
     block: &MutualBlock,
     ind_level_subst: &[Level],
 ) -> Result<Vec<BlockCtorInfo>, AdmitError> {
@@ -280,18 +331,37 @@ pub(crate) fn gather_block_ctor_infos(
     for (type_idx, d) in block.decls.iter().enumerate() {
         for ctor in &d.constructors {
             let (field_tys, ret) = split_ctor_telescope(&ctor.type_, np);
-            let recursive: Vec<bool> = field_tys
+            let views =
+                crate::inductive::fields::constructor_view(env, &ctor.type_, np, &block_names)
+                    .map_err(|e| AdmitError::Derivation {
+                        ind: d.name.clone(),
+                        detail: format!("constructor field reduction: {e}"),
+                    })?
+                    .fields;
+            let recursive: Vec<bool> = views
                 .iter()
                 .map(|f| is_recursive_field_block(&block_names, f))
                 .collect();
-            let field_motive: Vec<usize> = field_tys
+            let field_motive: Vec<usize> = views
                 .iter()
                 .map(|f| field_motive_index_block(&block_names, f))
                 .collect();
+            let recursive_tys = views
+                .into_iter()
+                .map(|t| t.instantiate_levels(ind_level_subst))
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|e| AdmitError::Derivation {
+                    ind: d.name.clone(),
+                    detail: e.to_string(),
+                })?;
             let field_tys: Vec<Term> = field_tys
                 .into_iter()
                 .map(|t| t.instantiate_levels(ind_level_subst))
-                .collect();
+                .collect::<Result<_, _>>()
+                .map_err(|e| AdmitError::Derivation {
+                    ind: d.name.clone(),
+                    detail: e.to_string(),
+                })?;
             let num_fields =
                 u32::try_from(field_tys.len()).map_err(|_| AdmitError::Derivation {
                     ind: d.name.clone(),
@@ -303,11 +373,16 @@ pub(crate) fn gather_block_ctor_infos(
                 .into_iter()
                 .skip(np_us)
                 .map(|t| t.instantiate_levels(ind_level_subst))
-                .collect();
+                .collect::<Result<_, _>>()
+                .map_err(|e| AdmitError::Derivation {
+                    ind: d.name.clone(),
+                    detail: e.to_string(),
+                })?;
             out.push(BlockCtorInfo {
                 name: ctor.name.clone(),
                 owner_type_idx: type_idx,
                 field_tys,
+                recursive_tys,
                 recursive,
                 field_motive,
                 return_indices,

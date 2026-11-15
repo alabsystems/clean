@@ -31,7 +31,7 @@
 //! ## Trust Levels
 //!
 //! Each step receives a trust classification:
-//! - `KernelVerified`: semantically checked by clean
+//! - `StepChecked`: semantically checked by clean
 //! - `StructurallyAccepted`: non-empty clause, correct arity
 //! - `Axiomatic`: input assumptions
 //! - `Trusted`: unverified fallback
@@ -379,7 +379,7 @@ fn verify_theory_lemma(
                 // No explicit coefficients: try unit coefficients (all 1s).
                 let unit_coeffs: Vec<i64> = vec![1; clause.len()];
                 let verdict = lia::check_lia_generic(dag, step_id, clause, &unit_coeffs);
-                if verdict.trust_level == StepTrustLevel::KernelVerified {
+                if verdict.trust_level == StepTrustLevel::StepChecked {
                     verdict
                 } else {
                     // Unit coefficients didn't work; structurally accept.
@@ -563,7 +563,7 @@ mod tests {
         );
         assert_eq!(result.stats.total_steps, 3);
         assert_eq!(result.stats.axiomatic, 2);
-        assert_eq!(result.stats.kernel_verified, 1);
+        assert_eq!(result.stats.step_checked, 1);
         assert_eq!(result.stats.trusted, 0);
         assert!(result.stats.is_fully_verified());
     }
@@ -762,7 +762,7 @@ mod tests {
         assert!(result.valid);
         assert!(result.stats.is_fully_verified());
         assert_eq!(result.stats.axiomatic, 2);
-        assert!(result.stats.kernel_verified >= 1);
+        assert!(result.stats.step_checked >= 1);
         assert_eq!(result.stats.trusted, 0);
     }
 

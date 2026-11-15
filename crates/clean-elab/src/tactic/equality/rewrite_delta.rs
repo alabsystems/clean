@@ -134,8 +134,11 @@ pub(super) struct DeltaRule {
 /// REQUIRES: `name` is not shadowed by a local hypothesis of the current goal.
 /// ENSURES: `Some(rule)` implies unfolding `rule` is a δβ step whose result is
 ///   definitionally equal to the input, with a body of bounded size.
-pub(super) fn delta_rule(state: &ProofState, name: &str) -> Option<DeltaRule> {
-    let const_name = Name::from_string(name);
+pub(super) fn delta_rule(
+    state: &ProofState,
+    name: &clean_parser::SurfaceName,
+) -> Option<DeltaRule> {
+    let const_name = name.name().clone();
     let info = state.env.get_const(&const_name)?;
 
     if !matches!(info.kind, ConstantKind::Definition) {
@@ -201,9 +204,9 @@ pub(super) fn unfold_at_hyp(
     state: &mut ProofState,
     rule: &DeltaRule,
     hyp_fvar: FVarId,
-    hyp_name: &str,
+    hyp_name: &clean_parser::SurfaceName,
     old_ty: &Expr,
-) -> TacticResult {
+) -> Result<FVarId, TacticError> {
     let old_ty = state.metas.instantiate(old_ty);
     let unfolded = delta_beta_unfold(&old_ty, rule);
     if unfolded == old_ty {
@@ -213,7 +216,7 @@ pub(super) fn unfold_at_hyp(
             vec![format!("hyp:{hyp_name}")],
         ));
     }
-    state.replace_local_decl_def_eq(hyp_fvar, unfolded)
+    state.replace_local_decl_def_eq_fvar(hyp_fvar, unfolded)
 }
 
 /// The `RewriteNoMatch` a `rw [<def>]` reports when the definition does not
@@ -426,8 +429,10 @@ fn beta_apply(value: Expr, args: &[Expr]) -> Expr {
 /// `rw` resolution order is Lean 4's: a local hypothesis shadows an
 /// environment constant of the same name, so the delta path must not even look
 /// at the environment when one exists.
-pub(super) fn shadowed_by_local(goal: &Goal, name: &str) -> bool {
-    goal.local_ctx.iter().any(|d| d.name == name)
+pub(super) fn shadowed_by_local(goal: &Goal, name: &clean_parser::SurfaceName) -> bool {
+    goal.local_ctx
+        .iter()
+        .any(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, name))
 }
 
 #[cfg(test)]

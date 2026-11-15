@@ -74,6 +74,13 @@ impl<'env> TypeChecker<'env> {
         if !(is_add || is_sub || is_mul) {
             return None;
         }
+        // AUTHORITY (`env/native_fold_authority.rs`): the fold computes what the
+        // canonical `Int.add`/`Int.sub`/`Int.mul` compute, so it needs them.
+        // THEORY (`tc/fold_admission.rs`): Lean's kernel has no `Int` fold, so
+        // the reference theory declines and δ unfolds the definition.
+        if !self.hardwired_fold_admitted(name) {
+            return None;
+        }
         // SCOPE GUARD (non-regression) — fire ONLY when the expression
         // SYNTACTICALLY contains a `Big` Nat literal (a magnitude exceeding
         // `u64`). That is PRECISELY the case the established env-level i128

@@ -656,6 +656,17 @@ impl Name {
         &self.inner
     }
 
+    /// Exhaustive data projection for the frozen DAG wire schema. Cached hash
+    /// is intentionally recomputed; adding a representation field requires an
+    /// explicit decision here rather than silently changing persisted bytes.
+    pub(crate) fn dag_wire_inner(&self) -> &NameInner {
+        let Self {
+            inner,
+            cached_hash: _,
+        } = self;
+        inner
+    }
+
     /// Create from a dotted string like "Nat.add" (uncached - always allocates)
     /// For high-throughput parsing, prefer `Name::interned()` which uses caching.
     ///
@@ -719,6 +730,17 @@ impl Name {
         prefix.clone().str(suffix)
     }
 
+    /// Transplant the final typed component under a new parent.
+    /// Unlike `last_component`, this preserves Str versus Num and embedded dots.
+    /// Anonymous names have no final component and cannot be transplanted.
+    pub(crate) fn with_parent(&self, parent: Name) -> Option<Self> {
+        match self.inner() {
+            NameInner::Anon => None,
+            NameInner::Str(_, component) => Some(parent.str(component.as_ref())),
+            NameInner::Num(_, component) => Some(parent.num(*component)),
+        }
+    }
+
     /// Get the last component of the name as a string.
     /// Returns None for anonymous names.
     /// For `Nat.add` returns "add", for `Nat.0` returns "0".
@@ -734,6 +756,88 @@ impl Name {
             NameInner::Num(_, n) => Some(n.to_string()),
         }
     }
+
+    /// Render the name so that no two distinct names render alike and no
+    /// rendered name hides a character a reader cannot see or tell apart.
+    ///
+    /// A string component renders PLAIN — exactly as [`std::fmt::Display`]
+    /// renders it — when it is non-empty, not all decimal digits (which would
+    /// read back as a numeric component), does not start with `[` (the
+    /// anonymous name renders `[anonymous]`), and consists of printable ASCII
+    /// other than `.` and `\`. Every other string component is QUOTED in
+    /// `«»`, and inside the quotes each character outside printable ASCII and
+    /// the space is written as the explicit escape `\u{hex}`, and `\` as
+    /// `\\`. A numeric component renders as its digits.
+    ///
+    /// So `«Quot.sound»` (one component) never reads as `Quot.sound` (two);
+    /// a zero-width space, a bidi control or a Cyrillic `е` is never rendered
+    /// as itself — `pro\u{200b}pext` renders `«pro\u{200b}pext»`, never
+    /// `propext`, and `prop\u{435}xt` renders `«prop\u{435}xt»`. Every
+    /// non-ASCII character is escaped, not only the ones known to be
+    /// confusable: telling a confusable from a distinct letter needs the
+    /// Unicode confusables table, and an escape is lossless either way.
+    ///
+    /// Injective: `«` and `»` are non-ASCII, so inside a quoted component they
+    /// are always escaped and the first literal `»` closes it; a `.` outside
+    /// quotes therefore always separates components; a plain component is
+    /// never all digits, so digits are always a numeric component; and `\` is
+    /// escaped, so a literal `\u{200b}` typed into a name never reads as an
+    /// escape. The single component `».«` renders `«\u{bb}.\u{ab}»`, two
+    /// empty components `«».«»`.
+    ///
+    /// Display is ambiguous by design; a report that DISCLOSES names for a
+    /// reader, or for a tool that compares them against a list, uses this.
+    #[must_use]
+    pub fn to_unambiguous_string(&self) -> String {
+        let mut components: Vec<String> = Vec::new();
+        let mut current = self;
+        loop {
+            match &current.inner {
+                NameInner::Anon => break,
+                NameInner::Str(parent, component) => {
+                    components.push(unambiguous_component(component.as_ref()));
+                    current = parent;
+                }
+                NameInner::Num(parent, component) => {
+                    components.push(component.to_string());
+                    current = parent;
+                }
+            }
+        }
+        if components.is_empty() {
+            return "[anonymous]".to_string();
+        }
+        components.reverse();
+        components.join(".")
+    }
+}
+
+/// One string component as [`Name::to_unambiguous_string`] renders it.
+fn unambiguous_component(text: &str) -> String {
+    let plain = !text.is_empty()
+        && !text.bytes().all(|b| b.is_ascii_digit())
+        && !text.starts_with('[')
+        && text
+            .chars()
+            .all(|c| c.is_ascii_graphic() && c != '.' && c != '\\');
+    if plain {
+        return text.to_string();
+    }
+    let mut out = String::with_capacity(text.len() + 4);
+    out.push('«');
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            ' ' => out.push(' '),
+            c if c.is_ascii_graphic() => out.push(c),
+            c => {
+                use std::fmt::Write as _;
+                let _ = write!(out, "\\u{{{:x}}}", u32::from(c));
+            }
+        }
+    }
+    out.push('»');
+    out
 }
 
 impl FromStr for Name {
@@ -800,6 +904,114 @@ impl std::fmt::Display for Name {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `to_unambiguous_string` never renders an invisible or non-ASCII
+    /// character as itself. Measured on ad89a748b: an axiom named
+    /// `pro\u{200b}pext` (a zero-width space inside) was disclosed by
+    /// `clean check` as "bad: rests on axiom(s) propext" — indistinguishable
+    /// from the kernel's foundation — and a Cyrillic `propеxt` likewise.
+    #[test]
+    fn unambiguous_rendering_escapes_invisible_and_non_ascii_characters() {
+        let one = |c: &str| Name::anon().str(c).to_unambiguous_string();
+        assert_eq!(one("pro\u{200b}pext"), "«pro\\u{200b}pext»"); // zero-width space
+        assert_eq!(one("pro\u{200d}pext"), "«pro\\u{200d}pext»"); // zero-width joiner
+        assert_eq!(one("abc\u{202e}fed"), "«abc\\u{202e}fed»"); // right-to-left override
+        assert_eq!(one("abc\u{2066}d"), "«abc\\u{2066}d»"); // left-to-right isolate
+        assert_eq!(one("prop\u{435}xt"), "«prop\\u{435}xt»"); // Cyrillic `е`
+        assert_eq!(one("Qu\u{43e}t"), "«Qu\\u{43e}t»"); // Cyrillic `о`
+        assert_eq!(one("\u{3b1}"), "«\\u{3b1}»"); // every non-ASCII letter
+        assert!(!one("pro\u{200b}pext").contains('\u{200b}'));
+        // A backslash is escaped, so typed escape text never reads as one.
+        assert_eq!(one("a\\b"), "«a\\\\b»");
+        assert_eq!(one("pro\\u{200b}pext"), "«pro\\\\u{200b}pext»");
+        assert_ne!(one("pro\\u{200b}pext"), one("pro\u{200b}pext"));
+        // Space, and the anonymous name's own spelling, are quoted.
+        assert_eq!(one("a b"), "«a b»");
+        assert_eq!(one("[anonymous]"), "«[anonymous]»");
+        assert_eq!(Name::anon().to_unambiguous_string(), "[anonymous]");
+        // Ordinary names are unchanged, and the dotted-component quoting stands.
+        assert_eq!(
+            Name::from_string("Nat.add").to_unambiguous_string(),
+            "Nat.add"
+        );
+        assert_eq!(
+            Name::from_string("Foo.bar_baz'").to_unambiguous_string(),
+            "Foo.bar_baz'"
+        );
+        assert_eq!(one("Quot.sound"), "«Quot.sound»");
+        assert_eq!(one("12"), "«12»");
+        assert_eq!(one(""), "«»");
+        assert_eq!(
+            Name::anon().str("Nat").num(0).to_unambiguous_string(),
+            "Nat.0"
+        );
+        // One component `».«` and two empty components both rendered
+        // `«».«»` before 2026-09-28.
+        assert_eq!(
+            Name::anon().str("».«").to_unambiguous_string(),
+            "«\\u{bb}.\\u{ab}»"
+        );
+        assert_eq!(
+            Name::anon().str("").str("").to_unambiguous_string(),
+            "«».«»"
+        );
+    }
+
+    /// No two distinct names render alike, over components built to collide:
+    /// dots, guillemets, empties, digits, backslash-escape text, invisible and
+    /// confusable characters, in one- and two-component names and beside
+    /// numeric components. Every rendering is printable ASCII plus `«»`.
+    #[test]
+    fn unambiguous_rendering_is_injective_over_adversarial_components() {
+        let components = [
+            "",
+            ".",
+            "«",
+            "»",
+            "».«",
+            "«»",
+            "«».«»",
+            "a",
+            "a.b",
+            "a b",
+            "0",
+            "12",
+            "[anonymous]",
+            "\\",
+            "\\u{200b}",
+            "\u{200b}",
+            "pro\u{200b}pext",
+            "propext",
+            "prop\u{435}xt",
+            "«a»",
+            "a»",
+            "«a",
+        ];
+        let mut names = vec![Name::anon(), Name::anon().num(0), Name::anon().num(12)];
+        for c in components {
+            names.push(Name::anon().str(c));
+            names.push(Name::anon().str(c).num(0));
+            names.push(Name::anon().num(12).str(c));
+            for d in components {
+                names.push(Name::anon().str(c).str(d));
+            }
+        }
+        let mut seen: HashMap<String, Name> = HashMap::new();
+        for name in names {
+            let rendered = name.to_unambiguous_string();
+            assert!(
+                rendered
+                    .chars()
+                    .all(|c| c.is_ascii_graphic() || c == ' ' || c == '«' || c == '»'),
+                "{rendered:?}"
+            );
+            let previous = seen.insert(rendered.clone(), name.clone());
+            assert!(
+                previous.as_ref().is_none_or(|previous| *previous == name),
+                "{rendered:?} renders two distinct names: {previous:?} and {name:?}"
+            );
+        }
+    }
 
     #[test]
     fn test_name_from_str() {
@@ -1026,6 +1238,7 @@ mod tests {
 /// Verify safety properties for all inputs up to a bound.
 ///
 /// Run with: cargo kani --features kani -p clean-kernel
+/// STOCK EXCEPTION (Trust lacks kani; measured `targo kani` -> `error: no such command`; kani drives its own pinned nightly).
 #[cfg(kani)]
 mod kani_proofs {
     use super::*;

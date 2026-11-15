@@ -1,0 +1,256 @@
+{
+ "chain": "ir_itc",
+ "body": "tc::infer::<impl tc::TypeChecker<'_>>::infer_type WITH tc::heartbeat::...::tick_heartbeat",
+ "what": "The CRATE-LEVEL interning ids these two bodies' aggregate types and FUNCTIONS carry, keyed by canonical FIRST-USE index.",
+ "why": "*** THE DESIGNATED TARGET, ONE FRAME DEEPER. *** ir_it defines infer_type alone and halts at `call 1`; this chain defines tick_heartbeat beside it so that call RESOLVES, and the machine halts inside tick_heartbeat at ITS first call instead. That is the ir_lz -> ir_lzc step applied to the crystal's own target, and tick_heartbeat is the cut the 2026-09-16 closure measurement named: removing it takes infer_type's transitive closure from 396 functions with 12 recursion back edges to 113 with none.",
+ "how_it_is_used": "`read_with_self` interns the self id FIRST so `call 1` reads as tick_heartbeat and not as a self-call; `project` compares the emitted header and parameter types against the interface block.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print.",
+ "interface_producer_invariance": "`ty` is CANONICAL, `observed_ty` is verbatim and RECORDED, NEVER COMPARED.",
+ "isize_what": "TWELVE isize tokens across the two bodies and zero usize ones. Same target pin as every sidecar chain.",
+ "tuple_what": "tick_heartbeat spells ONE tuple type, `(u32, bool)` -- the checked-arithmetic pair `sub.overflow` produces and the next three nodes pack. `IRTy.tuple_` takes a Nat and the reflected module has no tuple table to index, so the image is ARITY-ONLY and the element types are ERASED: a body differing only by `(u64, ptr)` would project to the same `(tuple 2)`. The `tuple_sites` count below is what makes that swap visible, exactly as ir_ni's `usize.sites` catches a u64-for-usize swap the resolved core cannot.",
+ "tuple_sites": 1,
+ "usize": {
+  "bits": 64,
+  "sites": 0,
+  "isize_sites": 12,
+  "target_fact": "aarch64-apple-darwin, a 64-bit target. Reader A resolved with --usize-bits 64 and recorded isize_sites_resolved: 12.",
+  "erasure_note": "The resolved core spells every site as the plain (int 64), so an i64-for-isize swap is caught by the count above, not by the core text."
+ },
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "ccc",
+  "header_note": "No calling-convention keyword, like every sidecar-lane body.",
+  "functy": 0,
+  "functy_note": "Pinned from the emitted header `(functy.0)` of function 0; reader A records artifact_functy_id: 0.",
+  "producer": "trust-ir",
+  "producer_note": "The sidecar bundle's own stamp.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&mut TypeChecker<'_>",
+    "note": "The receiver, passed to both callees and not dereferenced in function 0 -- tick_heartbeat IS what dereferences it."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&Expr",
+    "note": "The expression, unused on the heartbeat-error path."
+   }
+  ],
+  "params_note": "TWO thin pointers on the entry block of function 0.",
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY: every memory instruction in both bodies prints without an align.",
+  "clauses": [
+   "producer",
+   "proof"
+  ],
+  "clauses_note": "Two kinds; the proof clauses' CONTENT (`pure`, `fresh_symbolic_havoc`, `no_overflow`, `valid_borrow`) is a producer claim and is deliberately not compared."
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 7,
+   "alias": "ir_itc_topt1",
+   "rust_type": "core::option::Option",
+   "note": "A niche-encoded Option."
+  },
+  {
+   "canonical": 1,
+   "crate_id": 14,
+   "alias": "ir_itc_tcat",
+   "rust_type": "clean_kernel::tc::heartbeat_profiler::types::HeartbeatProfileCategory",
+   "note": "The profiler's 3-variant category enum."
+  },
+  {
+   "canonical": 2,
+   "crate_id": 9,
+   "alias": "ir_itc_topt2",
+   "rust_type": "core::option::Option",
+   "note": "A second Option instantiation."
+  }
+ ],
+ "structs": [
+  {
+   "canonical": 0,
+   "crate_id": 2,
+   "alias": "ir_itc_tresult",
+   "rust_type": "core::result::Result",
+   "note": "infer_type's RETURN TYPE, flat [__tag,__v0_0,__v1_0], no recorded size."
+  },
+  {
+   "canonical": 1,
+   "crate_id": 1,
+   "alias": "ir_itc_ttyerr_op",
+   "rust_type": "datatype::clean_kernel::tc::type_error::TypeError",
+   "note": "The OPAQUE datatype rendering, zero fields."
+  },
+  {
+   "canonical": 2,
+   "crate_id": 16,
+   "alias": "ir_itc_ttyerr_fl",
+   "rust_type": "clean_kernel::tc::type_error::TypeError",
+   "note": "The FLAT rendering of the same Rust type, 34 fields -- both spellings in one module."
+  },
+  {
+   "canonical": 3,
+   "crate_id": 18,
+   "alias": "ir_itc_tresult2",
+   "rust_type": "core::result::Result",
+   "note": "A second Result instantiation, distinct by crate id."
+  },
+  {
+   "canonical": 4,
+   "crate_id": 19,
+   "alias": "ir_itc_tcflow",
+   "rust_type": "core::ops::control_flow::ControlFlow",
+   "note": "The `?` desugaring's carrier."
+  },
+  {
+   "canonical": 5,
+   "crate_id": 91,
+   "alias": "ir_itc_tresult3",
+   "rust_type": "core::result::Result",
+   "note": "tick_heartbeat's own return Result -- the value its alloca slot holds."
+  },
+  {
+   "canonical": 6,
+   "crate_id": 68,
+   "alias": "ir_itc_ttc",
+   "rust_type": "clean_kernel::tc::TypeChecker",
+   "note": "THE RECEIVER, 33 fields. Loaded by tick_heartbeat to read the budget counter."
+  },
+  {
+   "canonical": 7,
+   "crate_id": 49,
+   "alias": "ir_itc_tucell1",
+   "rust_type": "core::cell::UnsafeCell",
+   "note": "Interior mutability under the heartbeat counter."
+  },
+  {
+   "canonical": 8,
+   "crate_id": 23,
+   "alias": "ir_itc_tcell",
+   "rust_type": "core::cell::Cell",
+   "note": "ditto."
+  },
+  {
+   "canonical": 9,
+   "crate_id": 22,
+   "alias": "ir_itc_tucell2",
+   "rust_type": "core::cell::UnsafeCell",
+   "note": "A second UnsafeCell instantiation, distinct by crate id."
+  },
+  {
+   "canonical": 10,
+   "crate_id": 70,
+   "alias": "ir_itc_tborrowref",
+   "rust_type": "core::cell::BorrowRef",
+   "note": "RefCell's borrow flag."
+  },
+  {
+   "canonical": 11,
+   "crate_id": 5,
+   "alias": "ir_itc_tnonnull",
+   "rust_type": "core::ptr::non_null::NonNull",
+   "note": "The one struct in this module with a DOCUMENTED guaranteed layout."
+  },
+  {
+   "canonical": 12,
+   "crate_id": 71,
+   "alias": "ir_itc_tref",
+   "rust_type": "core::cell::Ref",
+   "note": "The RefCell guard."
+  }
+ ],
+ "structs_note": "THIRTEEN rows, the largest structs lane of any chain -- tick_heartbeat reads through a RefCell to reach the budget counter, which is where the Cell/UnsafeCell/BorrowRef/Ref cluster comes from.",
+ "funcs": [
+  {
+   "canonical": 0,
+   "crate_id": 0,
+   "name": "tc::infer::<impl tc::TypeChecker<'_>>::infer_type",
+   "role": "SELF -- the root body, func 0. The row keeps `call 1` from resolving to this body itself (the 2026-08-20 namespace defect)."
+  },
+  {
+   "canonical": 1,
+   "crate_id": 19,
+   "name": "tc::heartbeat::<impl tc::TypeChecker<'_>>::tick_heartbeat",
+   "role": "*** THE SIZE-ONE CUT, NOW DEFINED. *** In ir_it this call went stuck; here it RESOLVES and the machine enters this body. It is the callee whose absence makes infer_type's transitive closure cyclic (396 functions / 12 back edges -> 113 / 0)."
+  },
+  {
+   "canonical": 2,
+   "crate_id": 2,
+   "name": "tc::infer::<impl tc::TypeChecker<'_>>::infer_type_fast",
+   "role": "The ok-path callee -- still undefined, and still unreached, because the machine now halts INSIDE tick_heartbeat before returning."
+  },
+  {
+   "canonical": 3,
+   "crate_id": 67,
+   "name": "std::thread::local::LocalKey::<tc::decl_budget::DeclBudget>::with::<{closure},bool>",
+   "role": "THE NEW FRONTIER: tick_heartbeat's own first call, and where this module halts. A thread-local access."
+  },
+  {
+   "canonical": 4,
+   "crate_id": 68,
+   "name": "tc::decl_budget::declaration_budget_limit",
+   "role": "Undefined; unreached."
+  },
+  {
+   "canonical": 5,
+   "crate_id": 69,
+   "name": "tc::heartbeat::<impl tc::TypeChecker<'_>>::heartbeat_exceeded_error",
+   "role": "Undefined; unreached."
+  },
+  {
+   "canonical": 6,
+   "crate_id": 70,
+   "name": "tc::heartbeat_profiler::profiler::HeartbeatProfiler::tick",
+   "role": "Undefined; unreached."
+  }
+ ],
+ "funcs_note": "SEVEN rows. Two are DEFINED in this module (canonical 0 and 1); the other five are declarations, and canonical 3 is where the machine halts.",
+ "extra_bodies": [
+  {
+   "canonical": 1,
+   "prefix": "ir_th",
+   "body": "tc::heartbeat::<impl tc::TypeChecker<'_>>::tick_heartbeat",
+   "role": "*** THE SIZE-ONE CUT, DEFINED IN THIS MODULE. *** In ir_it this body is a declaration and `call 1` goes stuck; here it is present and the call RESOLVES, so the machine enters it and halts at ITS first call instead. Seventeen blocks: it allocas a Result slot, reads the budget through a RefCell, does a checked `sub.overflow u32` and packs the pair into a `(u32, bool)` tuple, and branches on the heartbeat limit. It is the callee whose absence makes infer_type's transitive closure cyclic -- 396 functions with 12 recursion back edges become 113 with none once it is cut.",
+   "interface": {
+    "linkage": "external",
+    "calling_conv": "ccc",
+    "header_note": "No calling-convention keyword, like function 0 and every sidecar-lane body.",
+    "functy": 23,
+    "functy_note": "Pinned VERBATIM from the emitted header `fn @...::tick_heartbeat::<...>(functy.23)`; re-pinned under review, like every functy.",
+    "producer": "trust-ir",
+    "params": [
+     {
+      "block": 0,
+      "index": 0,
+      "ssa": 0,
+      "ty": "ptr",
+      "observed_ty": "ptr",
+      "rust_type": "&mut TypeChecker<'_>",
+      "note": "The receiver. UNLIKE function 0, this body dereferences it -- `load struct.68, ptr %0` is how it reaches the heartbeat counter."
+     }
+    ],
+    "params_note": "ONE, and it is the same receiver function 0 passes straight through.",
+    "block_params": [],
+    "block_params_note": "EMPTY across all seventeen blocks, and that is a measurement: every join is by `br` with no arguments through the alloca slot.",
+    "aligns": [],
+    "aligns_note": "EMPTY, and a measurement: no memory instruction in this body prints an align.",
+    "clauses": [
+     "producer",
+     "proof"
+    ],
+    "clauses_note": "Two kinds. The proof clauses' CONTENT here is richer than any earlier chain's -- `pure`, `fresh_symbolic_havoc`, `no_overflow`, `valid_borrow` -- and every one is a PRODUCER CLAIM about the body, deliberately not compared and not established by this chain."
+   }
+  }
+ ]
+}

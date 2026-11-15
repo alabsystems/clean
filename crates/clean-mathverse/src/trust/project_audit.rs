@@ -8,8 +8,8 @@ use hashbrown::{HashMap, HashSet};
 
 use clean_kernel::expr::ZFCSetExpr;
 use clean_kernel::{
-    is_foundational_axiom, is_trust_marker, ConstantInfo, ConstantKind, Environment, Expr,
-    ExprKind, Name, ProofQuality,
+    is_canonical_foundational_constant, is_trust_marker, ConstantInfo, ConstantKind, Environment,
+    Expr, ExprKind, Name, ProofQuality,
 };
 use std::path::{Path, PathBuf};
 
@@ -533,7 +533,7 @@ impl<'env> ProjectTrustCache<'env> {
                 }
                 ConstantKind::Axiom => {
                     report.axioms += 1;
-                    if !is_foundational_axiom(&info.name) {
+                    if !is_canonical_foundational_constant(info) {
                         all_domain_axioms.insert(info.name.clone());
                     }
                 }
@@ -614,7 +614,10 @@ impl<'env> ProjectTrustCache<'env> {
             let Some(dep_info) = self.constants_by_name.get(&dep_name).copied() else {
                 continue;
             };
-            if dep_info.kind == ConstantKind::Axiom && !is_foundational_axiom(&dep_name) {
+            // The kernel's canonical declaration of a foundational name is
+            // exempt — by content, never by name.
+            if dep_info.kind == ConstantKind::Axiom && !is_canonical_foundational_constant(dep_info)
+            {
                 deps.insert(dep_name.clone());
             }
             if visiting.contains(&dep_name) {
@@ -649,7 +652,7 @@ impl<'env> ProjectTrustCache<'env> {
             let Some(info) = self.constants_by_name.get(&name).copied() else {
                 continue;
             };
-            if info.kind == ConstantKind::Axiom && !is_foundational_axiom(&name) {
+            if info.kind == ConstantKind::Axiom && !is_canonical_foundational_constant(info) {
                 deps.insert(name.clone());
             }
             stack.extend(self.axiom_refs(info));
@@ -792,13 +795,22 @@ fn trust_level_for(
     summary: clean_kernel::env::DeclarationTrustSummary,
     recursive_deps: &RecursiveTrustDeps,
 ) -> TrustLevel {
+    // The markers the constant closure reaches count exactly as markers in
+    // the declaration's own terms: a theorem proved from a sorry'd lemma is
+    // partially axiomatized, not merely "axiom-dependent".
+    let closure = trust_cache.axiom_deps(info);
+    let closure_trusted = closure
+        .iter()
+        .any(|dep| matches!(dep.to_string().as_str(), "trustedArith" | "trustedAy"));
+    let closure_sorry = closure.iter().any(clean_kernel::is_sorry_marker);
     if trust_cache.is_unsafe(&info.name)
         || summary.trusted_axiom_count() > 0
+        || closure_trusted
         || !recursive_deps.unsafe_deps.is_empty()
     {
         return TrustLevel::TrustedOracle;
     }
-    if summary.has_sorry() || !recursive_deps.opaque_deps.is_empty() {
+    if summary.has_sorry() || closure_sorry || !recursive_deps.opaque_deps.is_empty() {
         return TrustLevel::PartiallyAxiomatized;
     }
     if !trust_cache.axiom_deps(info).is_empty() {
@@ -836,7 +848,7 @@ fn axiom_profile_for(
     if info.kind == ConstantKind::Opaque {
         profile |= AxiomProfile::AXIOMATIZED;
     }
-    if info.kind == ConstantKind::Axiom && !is_foundational_axiom(&info.name) {
+    if info.kind == ConstantKind::Axiom && !is_canonical_foundational_constant(info) {
         profile |= AxiomProfile::AXIOMATIZED;
     }
     if summary.has_sorry() {
@@ -850,9 +862,10 @@ fn axiom_profile_for(
     }
 
     for dep in trust_cache.axiom_deps(info) {
-        if !is_foundational_axiom(&dep) {
-            profile |= AxiomProfile::AXIOMATIZED;
-        }
+        // `axiom_deps` already dropped exactly the kernel's canonical
+        // foundations, so every dep left is an assumption (re-testing it by
+        // name would re-admit an axiom that merely shares a foundational name).
+        profile |= AxiomProfile::AXIOMATIZED;
         match dep.to_string().as_str() {
             "trustedArith" => profile |= AxiomProfile::LRA_TRUSTED,
             "trustedAy" => profile |= AxiomProfile::SMT_ORACLE,
@@ -878,7 +891,7 @@ fn add_declaration_findings(
 
     match info.kind {
         ConstantKind::Axiom => {
-            let foundational = is_foundational_axiom(&info.name);
+            let foundational = is_canonical_foundational_constant(info);
             builder.add_finding(AuditFinding::structured(
                 if foundational {
                     AuditSeverity::Info

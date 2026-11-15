@@ -116,7 +116,7 @@ fn parse_verify_kernel_args(args: &[String]) -> Result<VerifyKernelOpts, String>
     }
 
     let shard_dir = shard_dir.ok_or_else(|| {
-        "Usage: mathverse_shard verify-kernel <shard-dir> [--json=<path>] [--incremental]\n   \
+        "Usage: mathverse_shard verify-kernel <shard-dir> [--json=<path> | --incremental]\n   \
          or: mathverse_shard verify-kernel --corpus <shard-dir> [--emit-verified=<path>]\n   \
          or: mathverse_shard verify-kernel --native <shard-dir>\n   \
          or: mathverse_shard verify-kernel --per-constant <shard-dir>"
@@ -428,8 +428,21 @@ pub(crate) fn cmd_verify_incremental(shard_dir: &Path) {
         // seeding the prelude eliminates those buckets. (Cross-shard references
         // stay unresolved until a multi-shard global-topological loader exists —
         // shards are size-split, not dependency-closed.)
-        let prelude = clean_kernel::Environment::try_with_prelude_for_import()
-            .expect("kernel prelude environment");
+        // An `.olean`-derived shard is re-checked as Lean's replay does: in
+        // Lean's kernel theory (reducers Lean's kernel has, Lean's safe
+        // context) and from Lean's replay environment, NOT Clean's prelude,
+        // whose `sorry`/`trustedArith`/`trustedAy` and hand-written stand-ins
+        // for Lean constants a Lean module must never resolve to. A reference
+        // to another shard's constant is then an unknown constant, as it is for
+        // `leanchecker` without the module's imports.
+        let prelude = if reader.is_lean4_only() {
+            let mut env = clean_kernel::Environment::for_lean_replay();
+            env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
+            env
+        } else {
+            clean_kernel::Environment::try_with_prelude_for_import()
+                .expect("kernel prelude environment")
+        };
         let r = verify_shard_incremental_with_env(&reader, prelude);
         println!(
             "  {name}: {} total, {} verified, {} failed, {} cycle-skipped, {:.2}s",

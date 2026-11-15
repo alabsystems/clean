@@ -20,6 +20,10 @@ mod aesop_proof_chain;
 mod alias_patterns;
 #[path = "tests/anon_ctor_dependent_exists.rs"]
 mod anon_ctor_dependent_exists;
+#[path = "tests/app_ellipsis.rs"]
+mod app_ellipsis;
+#[path = "tests/auto_bound_universe.rs"]
+mod auto_bound_universe;
 #[path = "tests/basic.rs"]
 mod basic;
 #[path = "tests/by_ascription.rs"]
@@ -60,6 +64,22 @@ mod do_match_q_patterns;
 mod do_match_return_bodies;
 #[path = "tests/do_notation.rs"]
 mod do_notation;
+#[path = "tests/join_point_unit.rs"]
+mod join_point_unit;
+#[path = "tests/tactic_bridge_scope.rs"]
+mod tactic_bridge_scope;
+// Declared 2026-09-16. Until that day this file was on disk and in NO module
+// tree: `grep -rn do_notation_control --include='*.rs' crates/` returned zero
+// hits, and a set difference over every `#[path]` here against the directory
+// listing named it as the only orphan. So its 13 `#[test]` functions — 10 of
+// them with no same-name counterpart in `do_control_flow.rs` — had never been
+// compiled, let alone run. That is not a skipping test; it is the appearance of
+// coverage with none behind it, and this repo's rule is that a test PASSES,
+// FAILS, or is DELETED.
+#[path = "tests/deferred_ident_suggestions.rs"]
+mod deferred_ident_suggestions;
+#[path = "tests/do_notation_control.rs"]
+mod do_notation_control;
 #[path = "tests/do_notation_state.rs"]
 mod do_notation_state;
 #[path = "tests/do_try_catch.rs"]
@@ -70,6 +90,10 @@ mod elab_rules;
 mod exact_universe_poly;
 #[path = "tests/explicit_universe_list.rs"]
 mod explicit_universe_list;
+#[path = "tests/fin_arith_lean_faithful.rs"]
+mod fin_arith_lean_faithful;
+#[path = "tests/flex_slot_behind_def.rs"]
+mod flex_slot_behind_def;
 #[path = "tests/if_expr.rs"]
 mod if_expr;
 #[path = "tests/if_let_complex_patterns.rs"]
@@ -78,6 +102,8 @@ mod if_let_complex_patterns;
 mod if_let_patterns;
 #[path = "tests/implicit.rs"]
 mod implicit;
+#[path = "tests/implicit_lambda_context_balance.rs"]
+mod implicit_lambda_context_balance;
 #[path = "tests/inductive.rs"]
 mod inductive;
 #[path = "tests/inductive_deriving_3431.rs"]
@@ -96,16 +122,39 @@ mod instance_elab_regressions;
 mod leading_dot_theorem;
 #[path = "tests/let_binding.rs"]
 mod let_binding;
+mod local_instance_binders;
+#[path = "tests/match_catch_all_sharing.rs"]
+mod match_catch_all_sharing;
+#[path = "tests/match_catch_all_sharing_pred.rs"]
+mod match_catch_all_sharing_pred;
+#[path = "tests/match_compile_joint_cover.rs"]
+mod match_compile_joint_cover;
+#[path = "tests/match_compile_overlap.rs"]
+mod match_compile_overlap;
+#[path = "tests/match_compile_redundant.rs"]
+mod match_compile_redundant;
 #[path = "tests/match_ctor_namespace.rs"]
 mod match_ctor_namespace;
 #[path = "tests/match_expr.rs"]
 mod match_expr;
 #[path = "tests/match_expr_nat_rec.rs"]
 mod match_expr_nat_rec;
+#[path = "tests/minmax_numeral_instance.rs"]
+mod minmax_numeral_instance;
 #[path = "tests/mint_name_collision.rs"]
 mod mint_name_collision;
 #[path = "tests/modifiers.rs"]
 mod modifiers;
+#[path = "tests/mutual_lift_cases.rs"]
+mod mutual_lift_cases_tests;
+#[path = "tests/mutual_lift_dep_columns.rs"]
+mod mutual_lift_dep_columns_tests;
+#[path = "tests/mutual_lift_eqns.rs"]
+mod mutual_lift_eqns_tests;
+#[path = "tests/mutual_lift_shared.rs"]
+mod mutual_lift_shared_tests;
+#[path = "tests/mutual_lift.rs"]
+mod mutual_lift_tests;
 #[path = "tests/nat_literal_pattern_typecheck.rs"]
 mod nat_literal_pattern_typecheck;
 #[path = "tests/nested_ctor_patterns.rs"]
@@ -120,52 +169,73 @@ mod property_tests;
 mod proptest_roundtrip;
 #[path = "tests/quotation.rs"]
 mod quotation;
+#[path = "tests/recursive_dot_call.rs"]
+mod recursive_dot_call;
 #[path = "tests/recursor_universe_params.rs"]
 mod recursor_universe_params;
 #[path = "tests/regression.rs"]
 mod regression;
+#[path = "tests/reserved_kernel_name.rs"]
+mod reserved_kernel_name;
 #[path = "tests/rw_proof_chain.rs"]
 mod rw_proof_chain;
+#[path = "tests/simp_binder_domain.rs"]
+mod simp_binder_domain;
 #[path = "tests/simp_chain_proof.rs"]
 mod simp_chain_proof;
 #[path = "tests/simp_namespace_proof.rs"]
 mod simp_namespace_proof;
 #[path = "tests/sorry.rs"]
 mod sorry;
+#[path = "tests/struct_instance_sources.rs"]
+mod struct_instance_sources;
 #[path = "tests/structural_recursion.rs"]
 mod structural_recursion;
 #[path = "tests/structure.rs"]
 mod structure_tests;
 #[path = "tests/suffices_tactic.rs"]
 mod suffices_tactic;
+#[path = "tests/tactic_attribution.rs"]
+mod tactic_attribution;
 #[path = "tests/tactic_bridge_levels.rs"]
 mod tactic_bridge_levels;
 #[path = "tests/tactic_error_boundary.rs"]
 mod tactic_error_boundary;
+#[path = "tests/tactic_local_meta_bridge.rs"]
+mod tactic_local_meta_bridge;
 #[path = "tests/tactic_macro_exec.rs"]
 mod tactic_macro_exec;
 #[path = "tests/trans_class.rs"]
 mod trans_class;
 #[path = "tests/traversal_regressions.rs"]
 mod traversal_regressions;
+#[path = "tests/trust_ir_semantics_open_gaps.rs"]
+mod trust_ir_semantics_open_gaps;
 #[path = "tests/universe_inst.rs"]
 mod universe_inst;
+#[path = "tests/untyped_binder_type_from_use.rs"]
+mod untyped_binder_type_from_use;
 #[path = "tests/user_tactic_exec.rs"]
 mod user_tactic_exec;
 #[path = "tests/verification/mod.rs"]
 mod verification;
 
+// The helpers below are REPORTING boundaries, like the public entry points:
+// the error a test inspects is the reported one, so its deferred "did you
+// mean" list is materialized here (`ElabError::with_ident_suggestions`).
 fn elab(input: &str) -> Result<Expr, ElabError> {
     let env = Environment::new();
     let mut ctx = ElabCtx::new(&env);
     let surface = parse_expr(input).map_err(|e| ElabError::ParseError(e.to_string()))?;
     ctx.elaborate(&surface)
+        .map_err(|error| error.with_ident_suggestions(&env))
 }
 
 fn elab_with_env(env: &Environment, input: &str) -> Result<Expr, ElabError> {
     let mut ctx = ElabCtx::new(env);
     let surface = parse_expr(input).map_err(|e| ElabError::ParseError(e.to_string()))?;
     ctx.elaborate(&surface)
+        .map_err(|error| error.with_ident_suggestions(env))
 }
 
 #[test]
@@ -352,6 +422,7 @@ fn elab_decl(input: &str) -> Result<ElabResult, ElabError> {
     let mut ctx = ElabCtx::new(&env);
     let surface = parse_decl_for_elab(input)?;
     ctx.elab_decl(&surface)
+        .map_err(|error| error.with_ident_suggestions(&env))
 }
 
 /// Elaborate a declaration with a full prelude environment.
@@ -366,4 +437,40 @@ fn elab_decl_with_prelude(input: &str) -> Result<ElabResult, ElabError> {
     let mut ctx = ElabCtx::new(&env);
     let surface = parse_decl_for_elab(input)?;
     ctx.elab_decl(&surface)
+        .map_err(|error| error.with_ident_suggestions(&env))
 }
+
+/// The declared type and the handler errors of a `deriving` clause whose
+/// classes failed: Lean adds the type before running any handler, so the
+/// declaration elaborates and each failed class is its own failed leaf beside
+/// it (`infer::deriving_log`). Panics on any other shape.
+fn type_with_failed_deriving(
+    result: Result<ElabResult, ElabError>,
+) -> (ElabResult, Vec<ElabError>) {
+    let Ok(ElabResult::Multiple(mut results)) = result else {
+        panic!("expected the type plus its failed deriving classes, got {result:?}");
+    };
+    let failures = results
+        .drain(1..)
+        .map(|leaf| match leaf {
+            ElabResult::Failed { error, .. } => match *error {
+                ElabError::DerivingHandlerFailed { error, .. } => *error,
+                other => panic!("expected a deriving failure, got {other:?}"),
+            },
+            other => panic!("expected a failed deriving leaf, got {other:?}"),
+        })
+        .collect::<Vec<_>>();
+    let declared = results.pop().expect("the declared type leads the result");
+    assert!(
+        matches!(
+            declared,
+            ElabResult::Structure { .. } | ElabResult::Inductive { .. }
+        ),
+        "the type itself is declared: {declared:?}"
+    );
+    assert!(!failures.is_empty(), "a failed class is reported");
+    (declared, failures)
+}
+
+#[path = "tests/tactic_rigidity.rs"]
+mod tactic_rigidity;

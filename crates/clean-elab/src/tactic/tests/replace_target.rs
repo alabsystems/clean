@@ -583,9 +583,15 @@ fn test_clean_replace_target_and_hyp_simplification_still_closes_by_assumption()
     let p = add_type_family_p(&mut env);
     let (a_ty, theorem_type) = make_reducible_clean_goal(&p);
     let mut state = ProofState::new(env, theorem_type);
-    intro(&mut state, "h1").expect("intro should expose the first reducible hypothesis");
-    intro(&mut state, "h2").expect("intro should expose the dependent reducible hypothesis");
-    intro(&mut state, "h_target").expect("intro should expose the reducible closing hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h1"))
+        .expect("intro should expose the first reducible hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h2"))
+        .expect("intro should expose the dependent reducible hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h_target"),
+    )
+    .expect("intro should expose the reducible closing hypothesis");
     clean(&mut state).expect("clean should reduce target and local hypothesis types");
 
     let cleaned_goal = state.current_goal().expect("clean should leave one goal");
@@ -906,13 +912,20 @@ fn test_replace_target_with_trusted_fallback_prop_to_prop_not_sort_rejected() {
 /// target assignment patterns and asserts the count matches the known
 /// baseline of allowed sites.
 ///
-/// Allowed sites (7 total):
+/// Allowed sites — the COUNT is `BASELINE` below and is not restated here.
+/// (Measured 2026-09-15: this list said "7 total" and named a
+/// `core/local_ops.rs` site that does not exist — `grep -c '.target = '` on that
+/// file is 0 — while `BASELINE` said 6 and its own inline list named the right
+/// six. A count typed into prose that nothing re-derives is the defect class
+/// CLAUDE.md's gate rules name; the constant is the authority, so the number is
+/// gone from here rather than corrected in two places. The scanner is honest
+/// about its scope in the other direction too: a raw grep finds 8 occurrences,
+/// and the two extra are COMMENTS in `tauto/search.rs` that
+/// `production_code_lines` correctly drops.)
 ///   - `builtins.rs` conv_nav: temporary sub-state focus (not final target)
 ///   - `builtins_phase3d_rewrite.rs` conv_focus_rewrite ×2: focus-only conv-body
 ///     structural replacement (single-focus witness path + multi-focus congr
 ///     tree path); the outer conv wrapper still owns proof lifting
-///   - `core/local_ops.rs` replace_local_decl_with_value_when_possible:
-///     validated explicit-value insertion commits the rewritten goal in place
 ///   - `conv_ext.rs` ×3 (#2477 Phase 4 multi-focus congr): focus NARROWING in
 ///     the conv sub-ProofState — `conv_congr` defaults the cursor to the last
 ///     argument, `open_nested_congr` descends into a nested focus, and

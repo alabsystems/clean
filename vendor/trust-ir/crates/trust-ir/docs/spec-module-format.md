@@ -41,11 +41,20 @@ SpecModule {
   waivers:    Vec<SpecWaiver>,            // explicit per-action exemptions
   proofs:     Vec<SpecProof>,             // NEW (binary v14); action ↔ proof-harness bindings; omitted/empty for legacy
   origin:     SpecOrigin,                 // Embedded | External(path)
-  enforcement: SpecEnforcementMode,       // TRAILING (v27): DesignOnly | Linked
+  enforcement: SpecEnforcementMode,       // (v27): DesignOnly | Linked
+  temporal:   Vec<SpecTemporal>,          // TRAILING (v46): named temporal properties; empty on older blobs
 }
 
-SpecVar       { name: String, ty: String }            // `ty` is an opaque tag, e.g. "Int", "Bool", "0..7"
-SpecInvariant { name: String, formula: String }       // `formula` is opaque TLA+/DSL text
+SpecVar       { name: String, ty: String,             // `ty`: opaque under DesignOnly; Bool | Int | BitVec(<w>) | <lo>..<hi> under Linked
+                sort: Option<ClauseSort> }            // v46: the wire sort; must agree with `ty` (both modes); None = NOT RECORDED
+SpecInvariant { name: String, formula: String,        // `formula`: opaque under DesignOnly; an SMT-LIB2 Bool term under Linked
+                typed: Option<ProofFormula> }         // v46: the SAME first-order clause carrier contract clauses use;
+                                                      //      bindings name state variables via ClausePlace::SpecVar { index }
+SpecTemporal  { name: String, form: TemporalForm }    // v46: name unique within the machine; an obligation's `spec` backref cites it
+TemporalForm  = Always(ProofFormula) | Eventually(ProofFormula) | LeadsTo(ProofFormula, ProofFormula)
+              | WeakFair { action, relation: Option<ProofFormula> } | StrongFair { action, relation: Option<ProofFormula> }
+                                                      // first-order leaves only (no binder, no Pi/lambda); ONLY a fairness
+                                                      // form's `relation` may bind the primed ClausePlace::SpecVarNext { index }
 
 SpecAnchor {
   machine:     String,                    // must resolve to a SpecModule.name (Ob.4)
@@ -66,11 +75,13 @@ SpecWaiver {
 SpecProof {                               // NEW (binary v14) — the IR analogue of aterm's proof_anchor!
   machine:    String,                     // must resolve (Ob.4)
   action:     String,                     // must exist (Ob.1)
-  proof_name: String,                     // MUST resolve to a HarnessManifest entry (L1)
-  kind:       ProofKind,                  // Kani (the only variant today)
+  proof_name: String,                     // Kani: MUST resolve to a HarnessManifest entry (L1)
+  kind:       ProofKind,                  // Kani | CleanTheorem { name } (v46)
 }
 
-ProofKind = Kani                          // future-proofs the schema for other proof technologies
+ProofKind = Kani                          // resolved against the harness manifest (L1)
+          | CleanTheorem { name: String } // v46: resolved ONLY against the KernelCertifiedTheorems witness
+                                          // trust_ir_build::kernel_certified_theorems mints by validating the module
 
 SpecOrigin = Embedded | External(String)  // External carries the source .tla path
 SpecEnforcementMode = DesignOnly | Linked
@@ -128,12 +139,13 @@ an ambiguous manifest.
 | Field | Meaning |
 |---|---|
 | `SpecModule.name` | The unique, nonblank machine name. Anchors/waivers/proofs reference a `SpecModule` by this string. Matches the TLA+ `MODULE` name / `Model::name`. |
-| `vars` | Abstract state variables. `ty` is an **opaque** textual tag — the standalone IR does not interpret it. |
+| `vars` | Abstract state variables. Under `DesignOnly`, `ty` is an **opaque** textual tag. Under `Linked` it must be `Bool`, `Int`, `BitVec(<w>)` or `<lo>..<hi>` (an `Int` range), and the name an unprimed SMT simple symbol that is not a surface operator (S3). |
 | `actions` | The named transitions of the machine. **Order is preserved.** These are the targets an anchor or waiver may bind to. |
-| `invariants` | Named safety properties. `formula` is **opaque** surface syntax (TLA+/DSL). |
+| `invariants` | Named safety properties. Under `DesignOnly`, `formula` is **opaque** surface syntax (TLA+/DSL). Under `Linked` it must be one quantifier-free SMT-LIB2 `Bool` term over the declared, unprimed variables, well-sorted (S3); TLA+ surface syntax is refused there. |
 | `anchors` | Each binds one `action` of one `machine` to a concrete source symbol. `function: Some(FuncId)` binds the in-module action implementation. `projection_target` binds either an in-module projection function, the versioned temporal field-path intrinsic, or the explicit external-unresolved state. `rust_symbol`/`span` and `project` remain diagnostic provenance and must agree with typed targets. Every present owned anchor carries a **nonblank projection name** (L2). |
 | `waivers` | Each exempts one `action` from requiring an anchor, **with a nonblank reason**. A waiver can cover an absent anchor for Ob.3; it cannot make a malformed present anchor satisfy L2. |
-| `proofs` | Each binds one `action` to a named proof harness (`proof_name`) of a given `kind`. The IR analogue of aterm's `proof_anchor!`. `proof_name` is resolved against the supplied `HarnessManifest` (L1). Like an anchor, the `machine`/`action` must satisfy Ob.4/Ob.1. |
+| `proofs` | Each binds one `action` to a named proof harness (`proof_name`) of a given `kind`. The IR analogue of aterm's `proof_anchor!`. A `Kani` `proof_name` is resolved against the supplied `HarnessManifest` (L1); a `CleanTheorem { name }` (v46) is resolved ONLY against the `KernelCertifiedTheorems` witness — never against the module's own `Certified` rows, which the linker cannot re-check (S4). Like an anchor, the `machine`/`action` must satisfy Ob.4/Ob.1. |
+| `temporal` | (v46) Named temporal properties: `Always`/`Eventually`/`LeadsTo` over single-state first-order leaves, `WeakFair`/`StrongFair` naming a declared action (Ob.1) with an optional two-state action relation. Every leaf's `bindings` must name THIS machine's variables (`SpecVar`/`SpecVarNext { index }`, index in range, sort agreeing with `SpecVar.sort`), and `SpecVarNext` is legal only in an action relation (S4). A `Liveness`/`TemporalSafety` obligation names the property it discharges through `ProofObligation.spec`. |
 | `origin` | `Embedded` for in-source `ty_model!` literals; `External("path/To.tla")` for hand-written TLA parsed via `TlaSpec::parse`. Both bind to source identically. |
 | `enforcement` | `DesignOnly` is explicitly non-certifying and makes no total-coverage claim. `Linked` enforces coverage for every action, including when the machine has zero anchors. Current emitters and writers state the mode explicitly; legacy v23–v26 binary and old serde/text inputs map conservatively to `DesignOnly`. |
 
@@ -165,14 +177,23 @@ after functions/obligations/certificates. **Every free-form string is quoted**
 spec_module "<name>" {
   origin (embedded | external "<path>")     # exactly one origin line, required
   enforcement (design-only | linked)        # current writers emit exactly one mode
-  var "<name>" : "<ty>"                    # zero or more, in order
+  var "<name>" : "<ty>" [sort <sort>]     # zero or more, in order (sort: v46, WS4.4 text)
   action "<name>"                          # zero or more, in order
-  invariant "<name>" : "<formula>"         # zero or more, in order
+  invariant "<name>" : "<formula>" [typed <formula-clause>]   # zero or more (typed: v46, WS4.4 text)
   anchor machine "<m>" action "<a>" [function <id>] rust "<sym>" span "<s>" [project "<p>"] [target (none | function <id> | temporal-field-paths-v1 | external-unresolved)]
   waiver machine "<m>" action "<a>" reason "<why>"
-  proof  machine "<m>" action "<a>" name "<harness>" kind "<kind>"   # zero or more (binary v14+)
+  proof  machine "<m>" action "<a>" name "<harness>" kind "<kind>" [theorem "<name>"]   # zero or more (binary v14+; theorem only with kind "clean-theorem", v46)
+  temporal "<name>" (always <formula-clause> | eventually <formula-clause>
+                     | leads_to <formula-clause> <formula-clause>
+                     | weak_fair "<action>" [<formula-clause>]
+                     | strong_fair "<action>" [<formula-clause>])   # zero or more, v46 (WS4.4 text)
 }
 ```
+
+`<formula-clause>` and `<sort>` are the shared WS4.4 proof-surface spellings
+(`docs/formats.md`): `formula "<schema>" "<payload>" [smtlib ".."] [sort ".."]
+[bind "<name>" <sort> <place>]*`, with a spec variable bound as
+`spec_var(N)` and its successor value as `spec_var_next(N)`.
 
 Rules:
 
@@ -186,7 +207,14 @@ Rules:
   target or action `function`, regardless of origin.
 * `function` is optional only for design-only/legacy unresolved anchors. It is
   an unsigned module-local `FuncId` and precedes `rust` in canonical text.
-* On a `proof` line, `kind` is currently always `"kani"`.
+* On a `proof` line, `kind` is `"kani"` or, since v46, `"clean-theorem"`
+  followed by `theorem "<kernel name>"`.
+* The v46 typed carrier (`SpecVar.sort`, `SpecInvariant.typed`, `temporal`)
+  is carried by text since WS4.4, in the shared sort / formula spelling above,
+  and round-trips exactly. The one residue is a `ClauseSort` nested deeper
+  than 64 levels (the reader's cap): a machine carrying one prints the module
+  `#lossy` with `spec-carrier(spec_module N)` and the parser refuses the
+  marked text. Binary, JSON and MessagePack carry all of it.
 * `fmt → parse → fmt` is a byte-for-byte fixed point (the diff-stability
   guarantee asserted by `tests/spec_module_roundtrip.rs`).
 
@@ -202,7 +230,7 @@ spec_module "ring" {
   var "seq" : "0..7"
   action "Push"
   action "Pop"
-  invariant "BoundedSeq" : "seq <= 7"
+  invariant "BoundedSeq" : "(<= seq 7)"
   anchor machine "ring" action "Push" function 0 rust "aterm_buffer::Ring::push" span "crates/aterm-buffer/src/ring.rs:120:4" project "aterm_buffer::Ring::project" target function 1
   waiver machine "ring" action "Pop" reason "pop has no shipping handler yet"
   proof machine "ring" action "Push" name "ring_push_refines" kind "kani"
@@ -254,7 +282,7 @@ an externally-tagged enum.
       ],
       "actions": ["Push", "Pop"],
       "invariants": [
-        { "name": "BoundedSeq", "formula": "seq <= 7" }
+        { "name": "BoundedSeq", "formula": "(<= seq 7)" }
       ],
       "anchors": [
         {
@@ -293,7 +321,10 @@ An external origin serializes as `{ "External": "path/To.tla" }`; an anchor
 without a projection serializes `"project": null` and
 `"projection_target": null`; unit projection targets serialize as
 `"TemporalFieldPathsV1"` or `"ExternalUnresolved"`; `ProofKind::Kani`
-serializes as the externally-tagged string `"Kani"`.
+serializes as the externally-tagged string `"Kani"` and the v46
+`CleanTheorem` as `{ "CleanTheorem": { "name": "…" } }`. The v46 fields
+serialize as `"sort": null | {…}`, `"typed": null | {…}` and `"temporal": [...]`
+(appended after `enforcement`; every one `#[serde(default)]`).
 
 > **MessagePack and binary compatibility note:** the CLI uses the compact (positional) `rmp_serde`
 > encoding, which decodes structs as fixed-length sequences. For that reason the
@@ -318,9 +349,14 @@ trust-ir spec-link <module> [--harness-manifest <m>]
 ```
 
 `trust-ir-cli spec-link <module>` loads the module and calls the single public
-`trust_ir::link_spec_modules(&module, manifest, options)` boundary. That API
-performs structural closure, module-local executable resolution, enforcement
-policy, coverage, and manifest-backed proof resolution together. It prints a
+`trust_ir::link_spec_modules_with_theorems(&module, manifest, theorems,
+options)` boundary (`link_spec_modules` is the same call with no witness).
+That API performs structural closure, module-local executable resolution,
+enforcement policy, coverage, manifest-backed proof resolution and, since v46,
+witness-backed Clean-theorem resolution together; the CLI mints the witness
+with `trust_ir_build::kernel_certified_theorems` (a full module validation,
+in-process CleanCic re-check included) whenever a `clean-theorem` binding is
+present, and an invalid module mints none. It prints a
 per-machine coverage report and exits 0 only for a certifying report. Any
 violation or explicit non-certification reason exits 1. Running `spec-link` on
 a module with no `SpecModule` objects is also a usage error (exit 1).
@@ -330,6 +366,8 @@ a module with no `SpecModule` objects is also a usage error (exit 1).
 | **S0 — unambiguous identity** | Semantic names and payloads are nonblank; machine/member/binding identities are unique; an action cannot be both anchored and waived. | Last-definition-wins machines, duplicate declarations, ambiguous proof/waiver bindings, and metadata that serializes but has no semantic identity. |
 | **S1 — container owns binding** | Every anchor, waiver, and proof must name the `SpecModule` that contains it. | A binding stored under machine A silently covering the same-named action of machine B. |
 | **S2 — typed resolution** | Every `Linked` anchor has an action `FuncId` and a typed/versioned projection target, regardless of origin. Populated function targets must exist, carry bodies, and agree with their diagnostic names. A function projection must have the exact non-variadic `(&T) -> R` shape. The temporal intrinsic must use its canonical versioned name; `ExternalUnresolved` is forbidden for embedded models. | Stale IDs, declaration-only links, origin-based identity downgrades, label drift, mutable/value projection inputs, and artifacts that claim linkage without a resolvable semantic target. |
+| **S3 — linked surface** | For every `Linked` machine: each variable type is `Bool`, `Int`, `BitVec(<w>)` or `<lo>..<hi>` and each variable name an unprimed SMT simple symbol that is not a surface operator (`LinkedVariableUnparsed`); each invariant is one quantifier-free SMT-LIB2 term of sort `Bool` whose free symbols are declared variables (a primed `x'` is allowed only in actions) and whose applications are well-sorted over the core, integer and bit-vector operators, in printable ASCII with only SMT-LIB2 whitespace and at most 256 levels of nesting (`LinkedFormulaUnparsed`). A variable name may not be any function symbol of the `Core`/`Ints`/`FixedSizeBitVectors` theories. (v46) Each typed carrier — a typed invariant or a temporal leaf — that carries an `smtlib` rendering must read as the same kind of term over its OWN `bindings`, which are its whole variable environment (a free symbol they do not bind is undeclared even when the machine declares a variable of that name; a bound name must be an unprimed simple symbol and bound once) — `LinkedTypedCarrierUnparsed`; a carrier with no `smtlib` is not read here, its bindings still being held to S4. A typed invariant's rendering and its string `formula` are ONE predicate: read with each bound name replaced by the state variable its `SpecVar` place indexes, the carrier must be the same s-expression as `formula` (whitespace aside) — `LinkedTypedCarrierDisagrees`, reported only when both renderings read and every binding resolves, so a garbage twin is named once by its own rule. `DesignOnly` strings stay opaque. The module validator reports the same rule as `SpecLinkedVariableUnparsed` / `SpecLinkedFormulaUnparsed` (the typed-carrier rule through `InvalidSpecStructure`). | A certifying link over an invariant nobody can read: garbage syntax, TLA+ surface syntax, an undeclared variable, an ill-sorted comparison, or a variable whose type is not a type — in the string `formula` or, one layer up, in the typed carrier's rendering beside a well-formed binding list. |
+| **S4 — typed carrier** | (v46) In BOTH modes: a declared `SpecVar.sort` agrees with its parsed `ty` (`SpecVariableSortMismatch`); every typed invariant / temporal leaf binding names one of this machine's variables by `SpecVar`/`SpecVarNext { index }` in range, at the variable's sort — its declared `sort`, else the sort its `ty` tag parses to (`SpecVar::effective_sort`; an unrecorded `sort` is not a wildcard) — primed only inside a fairness action relation (`SpecTypedBindingInvalid`); a fairness form's `action` is declared (Ob.1); temporal names are unique (S0). A `CleanTheorem` proof binding resolves only against the supplied `KernelCertifiedTheorems` witness (`CleanTheoremUnresolved`); with no witness a `Linked` machine is refused unless the exploratory option is set, which makes the report non-certifying (`clean-theorem-unverified`) — the L1 manifest policy's twin. | A typed clause about a variable the machine does not declare, a primed variable in an invariant, a sort strip that turns a false claim into a true one, and a spec binding that asserts a kernel theorem nothing re-checked. |
 | **Ob.1 — action exists** | Every `anchor.action` / `waiver.action` / `proof.action` is in its machine's `actions`. | `#[refines(action="SetOriginMode")]` against a machine with no such action; an external (Next-only) module's anchor naming a non-Next def like `TypeOK` (**L3** — locked by test). |
 | **Ob.3 — coverage** | For every `Linked` machine, every action is covered by ≥1 owned anchor **or** a waiver. This remains a hard gate when the machine has zero anchors. `DesignOnly` explicitly makes no coverage claim. | A model action with no shipping handler and no waiver; deleting the last anchor can no longer silently disable coverage. |
 | **Ob.4 — machine resolves** | Every `anchor.machine` / `waiver.machine` / `proof.machine` names a `SpecModule` present in the input. | The dead-`TerminalModes.tla` situation — an annotation pointing at nothing. |
@@ -360,7 +398,7 @@ spec-link: 1 machine(s) in pass.trust_ir
   machine "ring" [embedded] coverage 2/2 = 100.0% (1 anchored, 1 waived) [linked]
 spec-link: harness manifest m.json (1 harness), resolved 1 proof binding
 spec-link-status: certifying
-ok: pass.trust_ir — all spec↔source obligations hold (S0/S1/S2, Ob.1/Ob.3/Ob.4, L2) plus all proof bindings resolved (L1)
+ok: pass.trust_ir — all spec↔source obligations hold (S0/S1/S2/S3, Ob.1/Ob.3/Ob.4, L2) plus all proof bindings resolved (L1)
 ```
 
 Failing (Ob.4):

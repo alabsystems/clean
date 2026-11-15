@@ -110,6 +110,13 @@ def main(argv: list[str]) -> int:
         {r["token"] for r in rows if r["verdict"] == "silent" and not r.get("intentional_sorry")}
     )
     live_unnamed = sorted({r["token"] for r in rows if r["verdict"] == "unnamed"})
+    # ROW-level, not token-level. The aggregate count alone cannot see a
+    # one-for-one swap: fix one probe, break another, and `unnamed` is flat.
+    # Pinning the exact (token, label) pairs makes ANY attributed row that
+    # loses its name a failure, regardless of the total.
+    live_unnamed_rows = sorted(
+        [r["token"], r["label"]] for r in rows if r["verdict"] == "unnamed"
+    )
 
     if "--update" in argv:
         ratchet.update(
@@ -118,6 +125,7 @@ def main(argv: list[str]) -> int:
                 "baseline_unnamed": totals["unnamed"],
                 "known_silent": live_silent,
                 "known_unnamed": live_unnamed,
+                "known_unnamed_rows": live_unnamed_rows,
             }
         )
         RATCHET.write_text(json.dumps(ratchet, indent=2) + "\n")
@@ -155,6 +163,31 @@ def main(argv: list[str]) -> int:
         )
         ok = False
 
+    # --- attribution integrity: a row that NAMES its tactic today may never
+    # stop naming it. The count check above is blind to a one-for-one swap.
+    known_unnamed_rows = ratchet.get("known_unnamed_rows")
+    if known_unnamed_rows is None:
+        sys.exit(
+            f"FAIL: {RATCHET.name} has no `known_unnamed_rows`. The attribution "
+            f"pin is mandatory: without it a tactic can silently lose its name "
+            f"as long as another one gains it. Run --update."
+        )
+    pinned = {tuple(row) for row in known_unnamed_rows}
+    regressed = sorted(tuple(row) for row in live_unnamed_rows if tuple(row) not in pinned)
+    if regressed:
+        print(
+            f"FAIL: these probes USED to name the tactic that failed and no longer do:\n"
+            f"      {regressed}\n"
+            f"      A tactic that fails without naming itself is effectively hidden —\n"
+            f"      a reader cannot tell whether it ran and gave up or was never\n"
+            f"      reached. Attribution is added at the `by`-block boundary in\n"
+            f"      ElabCtx::attribute_tactic_failure (crates/clean-elab/src/infer/\n"
+            f"      elab_tactic.rs) from the dispatch trace in infer/tactic_trace.rs;\n"
+            f"      a new dispatch path that bypasses `eval_tactic` will show up here.",
+            file=sys.stderr,
+        )
+        ok = False
+
     known_unnamed = set(ratchet.get("known_unnamed", []))
     vanished = sorted(known_unnamed - set(live_unnamed))
     if vanished and totals["unnamed"] >= base_unnamed:
@@ -182,7 +215,9 @@ def main(argv: list[str]) -> int:
             f"unnamed={totals['unnamed']} (of {totals['probes']} probes over "
             f"{len({r['token'] for r in rows})} tactic tokens; "
             f"{totals['pass']} pass, {totals['loud']} fail loudly, "
-            f"{totals['intentional_sorry']} intentional sorry)."
+            f"{totals['intentional_sorry']} intentional sorry). "
+            f"{len(pinned)} unattributed row(s) pinned; every other failing row "
+            f"names the tactic responsible."
         )
     return 0
 

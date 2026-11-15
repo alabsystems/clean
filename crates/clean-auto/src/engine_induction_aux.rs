@@ -39,7 +39,6 @@
 //! (they close on their own IH), keeping the recursion finite.
 
 use std::cell::{Cell, RefCell};
-use std::time::Instant;
 
 use clean_kernel::{
     BinderInfo, Environment, Expr, ExprKind, Level, LocalContext, Name, TypeChecker,
@@ -50,6 +49,7 @@ use crate::engine_induction::{build_eq, kernel_accepts, parse_eq, type_checker, 
 use crate::engine_induction_match::{
     carrier_head_name, is_add_right_comm_shape, is_distribute_conjecture,
 };
+use crate::search_stop::SearchStop;
 
 /// A specialised, kernel-checked rewrite equation: `(witness, equation_type)`.
 type RewriteFact = (Expr, Expr);
@@ -187,14 +187,15 @@ impl AutomationEngine {
         env: &Environment,
         ctx: &LocalContext,
         goal: &Expr,
-        deadline: Instant,
+        stop: &SearchStop,
     ) -> Vec<RewriteFact> {
         // Re-entrancy guard: never synthesise while proving an aux lemma — those
         // proofs close on their own IH and must not recurse into synthesis.
         let Some(_guard) = SynthGuard::enter() else {
             return Vec::new();
         };
-        if Instant::now() >= deadline {
+        // After the synthesis-depth count has admitted this region.
+        if stop.backstop_fired() {
             return Vec::new();
         }
         let Some((_levels, _ty, lhs, rhs)) = parse_eq(goal) else {
@@ -203,7 +204,7 @@ impl AutomationEngine {
 
         let mut facts = Vec::new();
         for side in [&lhs, &rhs] {
-            if let Some(fact) = self.bridge_stuck_side(env, ctx, side, deadline) {
+            if let Some(fact) = self.bridge_stuck_side(env, ctx, side, stop) {
                 facts.push(fact);
             }
         }
@@ -222,7 +223,7 @@ impl AutomationEngine {
         env: &Environment,
         ctx: &LocalContext,
         side: &Expr,
-        deadline: Instant,
+        stop: &SearchStop,
     ) -> Option<RewriteFact> {
         let tc = type_checker(env, ctx);
 
@@ -330,10 +331,10 @@ impl AutomationEngine {
             // pre-seeded here (proved by the lane, kernel-checked) into the
             // chaining store the sub-term rewriter consults.
             if is_distribute_conjecture(conjecture) {
-                self.preseed_add_right_comm(env, &arg1_ty, deadline);
+                self.preseed_add_right_comm(env, &arg1_ty, stop);
             }
             let Some(proof) =
-                self.try_induction_lane(env, conjecture, &empty, deadline, INDUCTION_FUEL)
+                self.try_induction_lane(env, conjecture, &empty, stop, INDUCTION_FUEL)
             else {
                 continue;
             };
@@ -355,7 +356,7 @@ impl AutomationEngine {
     /// Prove `add_right_comm : ∀ a b c, (a+b)+c = (a+c)+b` for the accumulator
     /// (`Nat.add`) and push it to the chaining fact store, at most once per
     /// synthesis tree. Silent no-op off the `Nat` carrier or if it does not prove.
-    fn preseed_add_right_comm(&self, env: &Environment, carrier_ty: &Expr, deadline: Instant) {
+    fn preseed_add_right_comm(&self, env: &Environment, carrier_ty: &Expr, stop: &SearchStop) {
         if carrier_head_name(carrier_ty).as_deref() != Some("Nat") {
             return;
         }
@@ -370,8 +371,7 @@ impl AutomationEngine {
             return;
         };
         let empty = LocalContext::new();
-        let Some(proof) = self.try_induction_lane(env, &conj, &empty, deadline, INDUCTION_FUEL)
-        else {
+        let Some(proof) = self.try_induction_lane(env, &conj, &empty, stop, INDUCTION_FUEL) else {
             return;
         };
         if kernel_accepts(env, &empty, &proof, &conj) {

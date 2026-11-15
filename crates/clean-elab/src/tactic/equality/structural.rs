@@ -73,6 +73,7 @@ pub fn symm(state: &mut ProofState) -> TacticResult {
         meta_id: swapped_meta_id,
         target: swapped_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     state.goals.push_front(new_goal);
@@ -174,12 +175,14 @@ pub fn trans(state: &mut ProofState, middle: Expr) -> TacticResult {
         meta_id: goal1_meta_id,
         target: goal1_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
     let new_goal2 = Goal {
         meta_id: goal2_meta_id,
         target: goal2_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
 
@@ -215,7 +218,11 @@ pub fn trans(state: &mut ProofState, middle: Expr) -> TacticResult {
 /// REQUIRES: LHS of h1 matches goal LHS, RHS of h2 matches goal RHS
 /// ENSURES: On Ok, the current goal is closed with `Eq.trans h1 h2`
 /// ENSURES: On Err(GoalMismatch), chain does not connect; state unchanged
-pub fn calc_trans(state: &mut ProofState, h1_name: &str, h2_name: &str) -> TacticResult {
+pub fn calc_trans(
+    state: &mut ProofState,
+    h1_name: &clean_parser::SurfaceName,
+    h2_name: &clean_parser::SurfaceName,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = state.whnf(&goal, &goal.target);
 
@@ -236,14 +243,16 @@ pub fn calc_trans(state: &mut ProofState, h1_name: &str, h2_name: &str) -> Tacti
     let h1_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == h1_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, h1_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(h1_name.to_string()))?;
 
     // Find h2 in context
     let h2_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == h2_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, h2_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(h2_name.to_string()))?;
 
     // Match h1 as equality a = b

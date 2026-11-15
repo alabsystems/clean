@@ -703,7 +703,7 @@ impl Specification {
                 "major at the interior boundary K = list_head (list_drop K (kapp_args e0)) = some major; the ",
                 "constructor head = some cname; recrule_for env recname cname = some rule), rebuild iota_reduct env ",
                 "e0 = some REDUCT, where REDUCT is the iota_reduct formula over kapp_args e0 / kapp_args major / ",
-                "recrule_rhs rule. Five nested opt_bind_some_intro (e0 generic, major at the interior boundary, NOT ",
+                "the actual once-instantiated RHS. Both field and head-universe arity guards are required; the canonical full reconstruction is used (e0 generic, major at the interior boundary, NOT ",
                 "the last applied arg). The reconstruction the ι×δ commutation fires on the δ-stepped redex v. ",
                 "DerivedProved, zero axiom_deps. Part of #2859 (Increment H++, delta increment Stage 4)."
             )
@@ -714,8 +714,10 @@ impl Specification {
             elaborated_value: None,
             dependencies: Some(HashSet::from([
                 "iota_reduct".to_string(),
-                "opt_bind".to_string(),
-                "opt_bind_some_intro".to_string(),
+                "iota_reduct_full_recon".to_string(),
+                "iota_fields_ok".to_string(),
+                "recursor_rhs_instance".to_string(),
+                "recmeta_signature".to_string(),
                 "kexpr_const_name".to_string(),
                 "kapp_fn".to_string(),
                 "kapp_args".to_string(),
@@ -1098,11 +1100,11 @@ impl Specification {
                 "iota_delta_comm — the ι×δ COMMUTATION (the residual obligation of par_delta_sc's iota arm). From ",
                 "iota_reduct (red_rec env) e = some e' and a single interior δ-step delta_cong env e v, the ",
                 "δ-stepped redex v fires the SAME rule to a reduct d with delta_cong_star env e' d, packaged as ",
-                "par_delta_sc_witness env e' v. Invert e (iota_reduct_some_inv_type); the head δ is impossible (e's ",
+                "par_delta_sc_witness env e' v. Invert e with both actual guards (iota_reduct_full_inv_type); the head δ is impossible (e's ",
                 "head recname is a recursor, no def value via RecEnvDefEnvDisjoint + recmeta_some_defval_none), so ",
-                "the δ-step is a spine congruence (delta_cong_spine_cong) preserving the recursor head; the major ",
+                "the δ-step is a spine congruence (delta_cong_spine_cong) preserving the complete recursor head, including universes (delta_cong_preserves_kapp_fn); the major ",
                 "(constructor cname, no def value via RecEnvCtorNoDefVal) δ*-steps to major_v with preserved head + ",
-                "δ*-related fields, so iota_reduct (red_rec env) v fires the same rule (iota_reduct_recon_general); ",
+                "δ*-related fields. Their equal count transports the actual field guard; complete head equality transports arity and the instantiated RHS. Thus iota_reduct (red_rec env) v fires the same rule (iota_reduct_recon_general); ",
                 "the reduct congruence delta_cong_star e' d is the 3-layer apply_spine_delta_cong_star over the ",
                 "δ*-related extras/fields/prefix (δ mirror of par_reduces_c_reduct_cong). DerivedProved, zero ",
                 "axiom_deps. Part of #2859 (Increment H++, delta increment Stage 4 — Hindley-Rosen assembly)."
@@ -1118,7 +1120,7 @@ impl Specification {
                 "par_reduces_c".to_string(),
                 "par_reduces_c.iota".to_string(),
                 "iota_reduct".to_string(),
-                "iota_reduct_some_inv_type".to_string(),
+                "iota_reduct_full_inv_type".to_string(),
                 "iota_reduct_recon_general".to_string(),
                 "delta_cong".to_string(),
                 "delta_cong_star".to_string(),
@@ -1126,6 +1128,7 @@ impl Specification {
                 "delta_cong_star_list".to_string(),
                 "delta_cong_spine_cong".to_string(),
                 "delta_cong_preserves_head_const".to_string(),
+                "delta_cong_preserves_kapp_fn".to_string(),
                 "delta_cong_star_spine_cong".to_string(),
                 "delta_cong_star_preserves_head_const".to_string(),
                 "delta_cong_list_length_eq".to_string(),
@@ -1430,24 +1433,10 @@ impl Specification {
             )
             .to_string(),
             value_src: Some(
-                concat!(
-                    "fun (denv : DefEnv) (e : KExpr) (nm : Name) ",
-                    "(gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name nm)) ",
-                    "(gd : Eq (OptionType KExpr) (defval_for denv nm) (OptionType.none KExpr)) => ",
-                    "Eq.trans (OptionType KExpr) ",
-                    "(delta_reduct denv e) ",
-                    "(opt_bind KExpr KExpr (defval_for denv nm) (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val))) ",
-                    "(OptionType.none KExpr) ",
-                    // h1: delta_reduct denv e = opt_bind KExpr KExpr (defval_for denv nm) SMALL (rewrite head)
-                    "(Eq.cong (OptionType Name) (OptionType KExpr) ",
-                    "(fun (O : OptionType Name) => opt_bind Name KExpr O (fun (dname : Name) => opt_bind KExpr KExpr (defval_for denv dname) (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val)))) ",
-                    "(kexpr_const_name (kapp_fn e)) (OptionType.some Name nm) gh) ",
-                    // h2: opt_bind KExpr KExpr (defval_for denv nm) SMALL = none (rewrite def-value)
-                    "(Eq.cong (OptionType KExpr) (OptionType KExpr) ",
-                    "(fun (O : OptionType KExpr) => opt_bind KExpr KExpr O (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args e) val))) ",
-                    "(defval_for denv nm) (OptionType.none KExpr) gd)"
-                )
-                .to_string(),
+                "fun (denv : DefEnv) (e : KExpr) (nm : Name) \
+                 (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name nm)) \
+                 (gd : Eq (OptionType KExpr) (defval_for denv nm) (OptionType.none KExpr)) => \
+                 delta_reduct_no_raw_value denv e nm gh gd".to_string(),
             ),
             is_axiom: false,
             description: concat!(
@@ -1588,6 +1577,26 @@ impl Specification {
             ])),
             axiom_deps: HashSet::new(),
         })?;
+
+        // The complete constant spine head survives a non-head delta step. This
+        // retains universe arguments needed by the actual recursor RHS instance.
+        self.add_recursive_def(
+            r"def delta_cong_preserves_kapp_fn (env : RedEnv) (f : KExpr) (f' : KExpr) (nm : Name) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name nm)) (gdef : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) (h : delta_cong env f f') : Eq KExpr (kapp_fn f) (kapp_fn f') :=
+ delta_cong.rec env (fun (s : KExpr) (t : KExpr) (_h : delta_cong env s t) => Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn s) (kapp_fn t))
+ (fun (e0 : KExpr) (e0' : KExpr) (hd : delta_step (red_def env) e0 e0') (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn e0)) (OptionType.some Name nm)) (gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some KExpr e0' (Eq KExpr (kapp_fn e0) (kapp_fn e0')) (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def env) e0) (OptionType.some KExpr e0') (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) e0) (OptionType.none KExpr) (delta_reduct_eq_none_of_defval_none (red_def env) e0 nm gh gd)) hd))
+ (fun (f : KExpr) (f' : KExpr) (a : KExpr) (_h : delta_cong env f f') (ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn f) (kapp_fn f')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name nm)) (gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => Eq.trans KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn (KExpr.app f' a)) (kapp_fn_app f a) (Eq.trans KExpr (kapp_fn f) (kapp_fn f') (kapp_fn (KExpr.app f' a)) (ih (Eq.subst KExpr (fun (head : KExpr) => Eq (OptionType Name) (kexpr_const_name head) (OptionType.some Name nm)) (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a) gh) gd) (Eq.symm KExpr (kapp_fn (KExpr.app f' a)) (kapp_fn f') (kapp_fn_app f' a))))
+ (fun (f : KExpr) (a : KExpr) (a' : KExpr) (_h : delta_cong env a a') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn a)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn a) (kapp_fn a')) (_gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => Eq.trans KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn (KExpr.app f a')) (kapp_fn_app f a) (Eq.symm KExpr (kapp_fn (KExpr.app f a')) (kapp_fn f) (kapp_fn_app f a')))
+ (fun (ty : KExpr) (ty' : KExpr) (b : KExpr) (_h : delta_cong env ty ty') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn ty)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn ty) (kapp_fn ty')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.lam ty b))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.lam ty b)) (kapp_fn (KExpr.lam ty' b))) gh)
+ (fun (ty : KExpr) (b : KExpr) (b' : KExpr) (_h : delta_cong env b b') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn b) (kapp_fn b')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.lam ty b))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.lam ty b)) (kapp_fn (KExpr.lam ty b'))) gh)
+ (fun (ty : KExpr) (ty' : KExpr) (b : KExpr) (_h : delta_cong env ty ty') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn ty)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn ty) (kapp_fn ty')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.pi ty b))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.pi ty b)) (kapp_fn (KExpr.pi ty' b))) gh)
+ (fun (ty : KExpr) (b : KExpr) (b' : KExpr) (_h : delta_cong env b b') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn b) (kapp_fn b')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.pi ty b))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.pi ty b)) (kapp_fn (KExpr.pi ty b'))) gh)
+ (fun (ty : KExpr) (ty' : KExpr) (v : KExpr) (b : KExpr) (_h : delta_cong env ty ty') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn ty)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn ty) (kapp_fn ty')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.let_ ty v b))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.let_ ty v b)) (kapp_fn (KExpr.let_ ty' v b))) gh)
+ (fun (ty : KExpr) (v : KExpr) (v' : KExpr) (b : KExpr) (_h : delta_cong env v v') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn v)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn v) (kapp_fn v')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.let_ ty v b))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.let_ ty v b)) (kapp_fn (KExpr.let_ ty v' b))) gh)
+ (fun (ty : KExpr) (v : KExpr) (b : KExpr) (b' : KExpr) (_h : delta_cong env b b') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn b) (kapp_fn b')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.let_ ty v b))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.let_ ty v b)) (kapp_fn (KExpr.let_ ty v b'))) gh)
+ (fun (s : Name) (i : Nat) (sub : KExpr) (sub' : KExpr) (_h : delta_cong env sub sub') (_ih : Eq (OptionType Name) (kexpr_const_name (kapp_fn sub)) (OptionType.some Name nm) -> Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr) -> Eq KExpr (kapp_fn sub) (kapp_fn sub')) (gh : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.proj s i sub))) (OptionType.some Name nm)) (_gd : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.proj s i sub)) (kapp_fn (KExpr.proj s i sub'))) gh)
+ f f' h ghead gdef",
+            "Complete constant spine-head preservation under the existing raw-definition absence guard, by all eleven actual delta_cong constructors.",
+        )?;
 
         // delta_cong_spine_cong: under the head-const guard + the def-value-none
         // guard, a single δ-step is a spine congruence: kapp_args f δ*-list-reduce to
@@ -2130,7 +2139,7 @@ impl Specification {
                     "(delta_cong_star_list_append env (kapp_args f) (kapp_args f') ",
                     "(ListType.cons KExpr a (ListType.nil KExpr)) (ListType.cons KExpr a' (ListType.nil KExpr)) ",
                     "hf ",
-                    "(delta_cong_star_list.cons env a a' (ListType.nil KExpr) (ListType.nil KExpr) ha (delta_cong_star_list.nil env)))))"
+                    "(delta_cong_star_list.cons env a a' (ListType.nil KExpr) (ListType.nil KExpr) ha (delta_cong_star_list.nil env))))"
                 )
                 .to_string(),
             ),
@@ -2325,7 +2334,7 @@ fn iota_recon_subterms() -> (String, String, String, String, String, String) {
     let fields = "(list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major))".to_string();
     let prefix = format!("(list_take {prefix_n} (kapp_args e0))");
     let reduct = format!(
-        "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} (recrule_rhs rule))))"
+        "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e0))))))"
     );
     (major_idx, prefix_n, extras, fields, prefix, reduct)
 }
@@ -2341,30 +2350,18 @@ fn iota_reduct_recon_general_type() -> String {
          Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e0))) (OptionType.some KExpr major) -> \
          Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
          Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
+         Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true -> \
+         Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn e0)))) Bool.true -> \
          Eq (OptionType KExpr) (iota_reduct env e0) (OptionType.some KExpr {reduct})",
         major_idx = major_idx,
         reduct = reduct,
     )
 }
 
-/// Proof term for `iota_reduct_recon_general`. Five nested `opt_bind_some_intro`
-/// rebuilding `iota_reduct env e0`'s opt_bind chain bottom-up; the innermost reduct
-/// equation is `Eq.refl` (the final bind reduces to `some REDUCT`).
+/// The canonical reconstruction requires five actual lookups plus both guards;
+/// it returns the single universe-instantiated stored RHS contractum.
 fn iota_reduct_recon_general_proof() -> String {
     let (major_idx, _prefix_n, _extras, _fields, _prefix, reduct) = iota_recon_subterms();
-    // The opt_bind continuations (verbatim from iota_reduct, over e0, bottom-up).
-    let l6 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct})");
-    let l5 = format!(
-        "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {l6})"
-    );
-    let l4 = format!(
-        "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {l5})"
-    );
-    let l3 = format!(
-        "(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e0))) {l4})"
-    );
-    let l2 =
-        format!("(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {l3})");
     format!(
         "fun (env : RecEnv) (e0 : KExpr) (recname : Name) (meta : RecMeta) (major : KExpr) \
          (cname : Name) (rule : RecRule) \
@@ -2372,24 +2369,14 @@ fn iota_reduct_recon_general_proof() -> String {
          (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
          (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e0))) (OptionType.some KExpr major)) \
          (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-         (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) => \
-         opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn e0)) {l2} recname {reduct} h1 \
-         (opt_bind_some_intro RecMeta KExpr (recmeta_for env recname) {l3} meta {reduct} h2 \
-         (opt_bind_some_intro KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e0))) {l4} major {reduct} h3 \
-         (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn major)) {l5} cname {reduct} h4 \
-         (opt_bind_some_intro RecRule KExpr (recrule_for env recname cname) {l6} rule {reduct} h5 \
-         (Eq.refl (OptionType KExpr) (OptionType.some KExpr {reduct}))))))",
-        major_idx = major_idx,
-        reduct = reduct,
-        l2 = l2,
-        l3 = l3,
-        l4 = l4,
-        l5 = l5,
-        l6 = l6,
+         (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+         (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (harity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn e0)))) Bool.true) => \
+         iota_reduct_full_recon env e0 {reduct} recname meta major cname rule h1 h2 h3 h4 h5 hfields harity (Eq.refl KExpr {reduct})"
     )
 }
 
-/// Proof term for `iota_delta_comm`. Invert `e` via `iota_reduct_some_inv_type`;
+/// Proof term for `iota_delta_comm`. Invert `e` via the guarded full Type view;
 /// the head δ is discharged (recursor head, no def value via `recmeta_some_defval_none`);
 /// `delta_cong_spine_cong` + `delta_cong_preserves_head_const` give the δ*-related spine
 /// + preserved recursor head; `list_head_some_delta_cong` lifts the major to `major_v`;
@@ -2408,23 +2395,34 @@ fn iota_delta_comm_proof() -> String {
         format!("(list_drop (Nat.sub (list_length (kapp_args {m})) {nf}) (kapp_args {m}))")
     };
     let prefix = |t: &str| format!("(list_take {prefix_n} (kapp_args {t}))");
+    let rhs = |t: &str| {
+        format!("(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn {t})))")
+    };
     let reduct = |t: &str, m: &str| {
         format!(
-            "(apply_spine {ex} (apply_spine {fl} (apply_spine {pf} (recrule_rhs rule))))",
+            "(apply_spine {ex} (apply_spine {fl} (apply_spine {pf} {rhs})))",
             ex = extras(t),
             fl = fields(m),
             pf = prefix(t),
+            rhs = rhs(t),
         )
     };
     let e_reduct = reduct("e", "major");
     let v_reduct = reduct("v", "major_v");
-    let inner_e = format!("(apply_spine {pf} (recrule_rhs rule))", pf = prefix("e"));
-    let inner_v = format!("(apply_spine {pf} (recrule_rhs rule))", pf = prefix("v"));
+    let rhs_e = rhs("e");
+    let rhs_v = rhs("v");
+    let inner_e = format!("(apply_spine {pf} {rhs_e})", pf = prefix("e"));
+    let inner_v = format!("(apply_spine {pf} {rhs_v})", pf = prefix("v"));
 
     // hspine_ev / h1v: spine δ*-congruence + preserved recursor head, under gd_rec.
     let gd_rec = "(recmeta_some_defval_none env recname meta wdisj h2)";
-    let hspine_ev = format!("(delta_cong_spine_cong env e v recname h1 {gd_rec} hdelta)");
-    let h1v = format!("(delta_cong_preserves_head_const env e v recname h1 {gd_rec} hdelta)");
+    let hspine_ev = format!("(delta_cong_spine_cong env e v recname h1 {gd_rec} step_delta)");
+    let h1v = format!("(delta_cong_preserves_head_const env e v recname h1 {gd_rec} step_delta)");
+
+    let head_ev = format!("(delta_cong_preserves_kapp_fn env e v recname h1 {gd_rec} step_delta)");
+    let arity_v = format!("(Eq.subst KExpr (fun (head : KExpr) => Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels head))) Bool.true) (kapp_fn e) (kapp_fn v) {head_ev} harity)");
+    let rhs_ev = format!("(Eq.cong KExpr KExpr (fun (head : KExpr) => recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels head)) (kapp_fn e) (kapp_fn v) {head_ev})");
+    let rhs_star = format!("(Eq.substType KExpr (fun (r : KExpr) => delta_cong_star env {rhs_e} r) {rhs_e} {rhs_v} {rhs_ev} (delta_cong_star.refl env {rhs_e}))");
 
     // Inside the list_head_some_delta_cong continuation (major_v, h3v, hmaj bound):
     let gd_ctor = "(recenv_ctor_no_defval_cname env recname cname rule major wctor h4 h5)";
@@ -2432,14 +2430,15 @@ fn iota_delta_comm_proof() -> String {
         format!("(delta_cong_star_preserves_head_const env major major_v cname h4 {gd_ctor} hmaj)");
     let hspine_major =
         format!("(delta_cong_star_spine_cong env major major_v cname h4 {gd_ctor} hmaj)");
+    let fields_v = format!("(Eq.subst Nat (fun (n : Nat) => Eq Bool (nat_eqb (Nat.sub {nf} n) Nat.zero) Bool.true) (list_length (kapp_args major)) (list_length (kapp_args major_v)) (delta_cong_list_length_eq env (kapp_args major) (kapp_args major_v) {hspine_major}) hfields)");
     let hiota_v =
-        format!("(iota_reduct_recon_general (red_rec env) v recname meta major_v cname rule {h1v} h2 h3v {h4v} h5)");
+        format!("(iota_reduct_recon_general (red_rec env) v recname meta major_v cname rule {h1v} h2 h3v {h4v} h5 {fields_v} {arity_v})");
 
     // The 3-layer reduct congruence: delta_cong_star env e_reduct v_reduct.
     let inner_cong = format!(
-        "(apply_spine_delta_cong_star env {pe} {pv} (recrule_rhs rule) (recrule_rhs rule) \
+        "(apply_spine_delta_cong_star env {pe} {pv} {rhs_e} {rhs_v} \
          (list_take_delta_cong env {prefix_n} (kapp_args e) (kapp_args v) {hspine_ev}) \
-         (delta_cong_star.refl env (recrule_rhs rule)))",
+         {rhs_star})",
         pe = prefix("e"),
         pv = prefix("v"),
     );
@@ -2468,10 +2467,10 @@ fn iota_delta_comm_proof() -> String {
         exe = extras("e"),
         exv = extras("v"),
     );
-    // delta_cong_star env e' v_reduct (transport e_reduct = e' via h5r).
+    // Transport the source through the actual returned contractum equation.
     let leg_delta = format!(
         "(Eq.substType KExpr (fun (Z : KExpr) => delta_cong_star env Z {v_reduct}) {e_reduct} e' \
-         (option_some_inj KExpr {e_reduct} e' h5r) {outer_cong})"
+         (Eq.symm KExpr e' {e_reduct} returned) {outer_cong})"
     );
     let witness = format!(
         "(par_delta_sc_witness.intro env e' v {v_reduct} {leg_delta} \
@@ -2485,7 +2484,7 @@ fn iota_delta_comm_proof() -> String {
          (hmaj : delta_cong_star env major major_v) => {witness})"
     );
 
-    // The iota_reduct_some_inv_type continuation (binds recname..rule, h1..h5, h5r).
+    // The full Type view retains fields, arity and the returned instance equation.
     let inv_cont = format!(
         "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
          (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
@@ -2493,7 +2492,9 @@ fn iota_delta_comm_proof() -> String {
          (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
          (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
          (h5 : Eq (OptionType RecRule) (recrule_for (red_rec env) recname cname) (OptionType.some RecRule rule)) \
-         (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {e_reduct}) (OptionType.some KExpr e')) => \
+         (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (harity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) \
+         (returned : Eq KExpr e' {e_reduct}) => \
          list_head_some_delta_cong env (list_drop {major_idx} (kapp_args e)) (list_drop {major_idx} (kapp_args v)) major \
          (par_delta_sc_witness env e' v) \
          (list_drop_delta_cong env {major_idx} (kapp_args e) (kapp_args v) {hspine_ev}) \
@@ -2503,8 +2504,8 @@ fn iota_delta_comm_proof() -> String {
     format!(
         "fun (env : RedEnv) (e : KExpr) (e' : KExpr) (v : KExpr) \
          (hsome : Eq (OptionType KExpr) (iota_reduct (red_rec env) e) (OptionType.some KExpr e')) \
-         (hdelta : delta_cong env e v) (wdisj : RecEnvDefEnvDisjoint env) (wctor : RecEnvCtorNoDefVal env) => \
-         iota_reduct_some_inv_type (red_rec env) e e' (par_delta_sc_witness env e' v) hsome {inv_cont}"
+         (step_delta : delta_cong env e v) (wdisj : RecEnvDefEnvDisjoint env) (wctor : RecEnvCtorNoDefVal env) => \
+         iota_reduct_full_inv_type (red_rec env) e e' (par_delta_sc_witness env e' v) hsome {inv_cont}"
     )
 }
 

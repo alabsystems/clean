@@ -64,6 +64,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -81,6 +82,9 @@ W2C_SYNTH_PATH = f"{CORE}/eval_ir_w2c_synth.rs"
 FCMP_PATH = f"{CORE}/eval_ir_fcmp.rs"
 FLOAT_RES_PATH = f"{CORE}/eval_ir_float_res.rs"
 FLOAT_RES_W_PATH = f"{CORE}/eval_ir_float_res_witnesses.rs"
+OPS_PATH = f"{CORE}/eval_ir_ops.rs"
+E5_PATH = f"{CORE}/eval_ir_e5.rs"
+CENSUS_PATH = "crates/clean-verify/tests/eval_ir/census.rs"
 MINT_PATH = "crates/clean-verify/src/ir_mint/emitted_inst.rs"
 LEDGER_PATH = "data/crystal_mint_blind_slots.json"
 AUDIT_PATH = "crates/clean-verify/tests/crystal_a1_lineage/operand_audit.rs"
@@ -96,12 +100,15 @@ INPUT_PATHS = [
     SYNTAX_PATH,
     MACHINE_PATH,
     ADEQUACY_PATH,
+    CENSUS_PATH,
     W2A_SYNTH_PATH,
     W2B_SYNTH_PATH,
     W2C_SYNTH_PATH,
     FCMP_PATH,
     FLOAT_RES_PATH,
     FLOAT_RES_W_PATH,
+    OPS_PATH,
+    E5_PATH,
     MINT_PATH,
     LEDGER_PATH,
     AUDIT_PATH,
@@ -124,7 +131,20 @@ SINCE_W5 = "W5 2026-08-25 (authored; first kernel run is the big-box obligation)
 
 # (constructor, dispatch pattern variable) -> (theorem, source file, since).
 THEOREMS: dict[tuple[str, str], tuple[str, str, str]] = {
-    ("load", "t"): ("ir_exec_load_ty_irrelevant", ADEQUACY_PATH, SINCE_W5),
+    # NOT ("load", "t"): the load arm READS the type since Phase B — it decodes
+    # the loaded word through the module's derived encodings table — so the
+    # irrelevance theorem is false of a general module and was deleted rather
+    # than retyped. Its replacements are `ir_exec_load_ty_irrelevant_mk` (the
+    # same statement at an IRModule.mk, i.e. conservativity) and
+    # `ir_load_view_mkv_reads_ty` (a module at which the view is not the
+    # identity), both beside the dispatch, both outside this table because
+    # neither claims a DROPPED field.
+    #
+    # NOT ("copy", "t") either, and that one must never be added: the
+    # reference's Inst::Copy arm calls expect_ty on the operand and faults
+    # type_error on disagreement, so the slot decides accept-versus-fault. The
+    # dispatch models the check (ir_copy_eval) and the residue is the declared
+    # delta `copy-type-check-coarse`.
     ("load", "vol"): ("ir_exec_load_vol_irrelevant", ADEQUACY_PATH, SINCE_W5),
     ("store", "t"): ("ir_exec_store_ty_irrelevant", ADEQUACY_PATH, SINCE_W5),
     ("store", "vol"): ("ir_exec_store_vol_irrelevant", ADEQUACY_PATH, SINCE_W5),
@@ -133,7 +153,14 @@ THEOREMS: dict[tuple[str, str], tuple[str, str, str]] = {
     ("gep", "inb"): ("ir_exec_gep_inbounds_irrelevant", ADEQUACY_PATH, SINCE_W5),
     ("ptrdata", "t"): ("ir_exec_ptrdata_ty_irrelevant", ADEQUACY_PATH, SINCE_W5),
     ("ptrmetadata", "pt"): ("ir_exec_ptrmeta_pt_irrelevant", ADEQUACY_PATH, SINCE_W5),
-    ("ptrmetadata", "mt"): ("ir_exec_ptrmeta_mt_irrelevant", ADEQUACY_PATH, SINCE_W5),
+    # NOT ("ptrmetadata", "mt") since crystal E5 (memo §23): the fat arm reads
+    # its metadata word AT the declared metadata type (`ir_ptrmeta_lane`: a
+    # length at an unsigned type, a vtable address at `ptr_`), exactly as the
+    # reference's eval_ptr_metadata does, so the slot is READ and the former
+    # irrelevance theorem would be false. Its replacement,
+    # `ir_e5_ptrmeta_mt_is_read`, exhibits two types giving two answers at one
+    # fat value, and lives with the E5 stage, outside this table because it
+    # claims no DROPPED field.
     ("ptrfromparts", "pt"): ("ir_exec_ptrparts_pt_irrelevant", ADEQUACY_PATH, SINCE_W5),
     ("ptrfromparts", "mt"): ("ir_exec_ptrparts_mt_irrelevant", ADEQUACY_PATH, SINCE_W5),
     ("switch", "exh"): ("ir_exec_switch_exh_irrelevant", MACHINE_PATH, SINCE_PRE_W5),
@@ -148,6 +175,39 @@ THEOREMS: dict[tuple[str, str], tuple[str, str, str]] = {
     ),
     ("undef", "t"): ("ir_exec_undef_ty_irrelevant", ADEQUACY_PATH, SINCE_W5),
     ("select", "t"): ("ir_exec_select_ty_irrelevant", ADEQUACY_PATH, SINCE_W5),
+    # These laws characterize the legacy machine's unconditional REFUSAL.
+    # ByteV1 reads both operands; neither this table nor the legacy theorem
+    # supplies successful atomic execution or three-executor agreement.
+    ("release", "pointer"): (
+        "ir_exec_release_pointer_irrelevant",
+        MACHINE_PATH,
+        "2026-11-08 syntax retention only; explicit legacy unmodelled result, not Rust Release irrelevance",
+    ),
+    ("atomic_fetch_add_relaxed_u64_seq", "pointer"): (
+        "ir_exec_atomic_fetch_add_relaxed_u64_seq_pointer_irrelevant",
+        MACHINE_PATH,
+        "2026-09-24 legacy refusal only; ByteV1 operand semantics are separate",
+    ),
+    ("atomic_fetch_add_relaxed_u64_seq", "value"): (
+        "ir_exec_atomic_fetch_add_relaxed_u64_seq_value_irrelevant",
+        MACHINE_PATH,
+        "2026-09-24 legacy refusal only; ByteV1 operand semantics are separate",
+    ),
+    ("atomic_fetch_add_relaxed_usize_seq", "bits"): (
+        "ir_exec_atomic_fetch_add_relaxed_usize_seq_bits_irrelevant",
+        MACHINE_PATH,
+        "2026-09-24 legacy refusal only; target-indexed ByteV1 semantics are separate",
+    ),
+    ("atomic_fetch_add_relaxed_usize_seq", "pointer"): (
+        "ir_exec_atomic_fetch_add_relaxed_usize_seq_pointer_irrelevant",
+        MACHINE_PATH,
+        "2026-09-24 legacy refusal only; target-indexed ByteV1 semantics are separate",
+    ),
+    ("atomic_fetch_add_relaxed_usize_seq", "value"): (
+        "ir_exec_atomic_fetch_add_relaxed_usize_seq_value_irrelevant",
+        MACHINE_PATH,
+        "2026-09-24 legacy refusal only; target-indexed ByteV1 semantics are separate",
+    ),
 }
 
 AUDIT_PIN_TEST = "the_alignment_operand_reaches_the_mint_and_its_exec_erasure_is_pinned"
@@ -168,11 +228,24 @@ ERASED_MINT_ANCHORS = {
         'r.r_align(format!("store:{align:?}"));',
         "is not an operand this reader knows on a `store`",
     ],
-    # No emitted chained body allocas, so the mint has NO alloca arm at all:
-    # the whole instruction (align included) falls through to the fail-closed
-    # NoImage refusal. The derivation additionally checks the mnemonic is
-    # absent from the reader.
-    "alloca": ['CoreError::NoImage(format!("printed instruction'],
+    # UPDATED 2026-09-14. This read "no emitted chained body allocas, so the mint
+    # has NO alloca arm at all: the whole instruction (align included) falls
+    # through to the fail-closed NoImage refusal", and the derivation checked the
+    # mnemonic was ABSENT from the reader. That premise expired the moment a
+    # chained body allocated: the lzd chain's `Option::as_deref` opens
+    # `%1 = alloca enum.1`, so `ir_mint/emitted_inst.rs` now carries a real
+    # `alloca` arm and the absence check fails closed -- correctly, which is how
+    # this was found.
+    #
+    # The ERASURE is unchanged and is if anything better evidenced. The arm reads
+    # the type, an optional count and `align N`, hands the alignment to
+    # `r.r_align("alloca:{align:?}")` -- the `aligns` lane this row's `boundary`
+    # already describes -- and REFUSES any other trailing operand rather than
+    # dropping it. So `align` still reaches the mint, is still recorded, and
+    # still has no `IRInst` slot; only the mechanism moved from "the mnemonic is
+    # unknown" to "the mnemonic is known and the slot is explicitly erased",
+    # which is the stronger of the two.
+    "alloca": ["is not an operand this reader knows on an `alloca`"],
 }
 
 DELTAS = [
@@ -432,6 +505,278 @@ DELTAS = [
             (FLOAT_RES_W_PATH, "interpret.rs:4005-4143"),
         ],
     },
+    # ---------------------------------------------------------------- Phase B
+    {
+        "id": "copy-type-check-coarse",
+        "constructor": "copy",
+        "clean": (
+            "ir_copy_eval checks the operand's SHAPE class against the declared type "
+            "(bool / integer / float / thin pointer / fat pointer / unit / aggregate / "
+            "function pointer / never) and faults type_error across classes — kernel "
+            "witness ir_copy_ty_slot_is_read — but ACCEPTS within a class: two integer "
+            "widths, the two signednesses, two aggregate ids, and the WHOLE thin-pointer "
+            "family are indistinguishable to it. The enumeration is exhaustive as written: "
+            "tuple/array/struct/enum share the aggregate class, and ptr_/ref_/refmut_/"
+            "rawconst_/rawmut_/rc_ share the thin-pointer class WITH nullptr_, so "
+            "`ir_copy_eval (IRTy.ref_ p) IRScalar.nullptr_` accepts where expect_ty faults"
+        ),
+        "e2": (
+            "the reference's Inst::Copy arm calls expect_ty(operand, ty), a dynamic type "
+            "EQUALITY on the value's own carried Ty, and faults type_error on any "
+            "disagreement — width and aggregate id included"
+        ),
+        "measured": (
+            "2026-09-10 at trust 0dd9d3e2d7, against `Inst::Copy` (interpret.rs:691-696 — "
+            "`expect_ty(operand, ty)?` then a rebind of the same value) and `fn expect_ty` "
+            "(interpret.rs:5548-5557 — `if &value.ty == ty { Ok(()) } else { type_error "
+            "}`). The residual is TWO-WAY and both directions are declared here. "
+            "ACCEPT-MORE: a width, signedness or aggregate-id disagreement passes the "
+            "shape check and would fail expect_ty. REJECT-MORE, fail-closed: the Copy arm "
+            "never calls reject_partial (interpret.rs:6506-6515; its message at "
+            "interpret.rs:6500-6501 states that poison may only be copied or stored, never "
+            "inspected), so the reference transports poison VERBATIM where ir_copy_eval "
+            "faults type_error at ir_scalar_shape's class 0 — unreachable on the executed "
+            "fragment, because the model's only producer of a bound undef_ is IRInst.undef, "
+            "itself the declared delta `undef-execution`. This row exists rather than an "
+            "irrelevance theorem for copy.t because copy.t is READ: IRScalar carries no "
+            "type tag (an int_ does not say its width, an aggv does not say its id), which "
+            "is the same design choice that lets a cell hold a value instead of a byte "
+            "image, so expect_ty is not statable in this model and the finest decidable "
+            "partition is the shape class. The chain's own three copies (`copy ptr`, `copy "
+            "ptr`, `copy struct.0`) are all cross-class-correct, so neither direction bears "
+            "on them"
+        ),
+        "recorded_in": (
+            "this grid row is the permanent home; the reference arm and the model arm are "
+            "read side by side in eval_ir_machine.rs's COPY comment block"
+        ),
+        "anchors": [
+            (MACHINE_PATH, "def ir_copy_eval "),
+            (MACHINE_PATH, "ir_copy_ty_slot_is_read"),
+        ],
+    },
+    {
+        "id": "enum-load-shape-directed",
+        "constructor": "load",
+        "clean": (
+            "the encoding-aware load view decodes a matched aggregate type only when the "
+            "cell holds a WORD-shaped scalar (ptr_ / nullptr_ / int_); at the same type "
+            "an inline aggregate value passes through unchanged — kernel witness "
+            "ir_view_agg_is_identity"
+        ),
+        "e2": (
+            "the reference always decodes the BYTE IMAGE the store wrote, at the load's "
+            "type, whatever produced it"
+        ),
+        "measured": (
+            "2026-09-10 at trust 0dd9d3e2d7, against decode_value's Niche arm "
+            "(interpret.rs:3766-3796) and the store-side niche check "
+            "(interpret.rs:3538-3567). NEITHER SIDE FAULTS in this row: it is a VALUE "
+            "divergence, not a fault-direction one. The two agree exactly when the model's "
+            "store/load round-trip and "
+            "the reference's encode/decode round-trip are both the identity on a valid "
+            "value, which is the case on this chain: `as_deref` writes an aggregate into "
+            "its own alloca and reads it back (sidecar text: `store enum.0 %5, ptr %1` "
+            "then `%14 = load enum.0, ptr %1`), while `%2 = load enum.1, ptr %0` reads a "
+            "real heap word at the SAME kind of type. The decision is SHAPE-directed "
+            "inside a type-directed dispatch, and the identity arm is not an accident — "
+            "it is what keeps the chain alive on both the None and the Some path, and "
+            "what makes the whole extension conservative on the eighteen chains that "
+            "predate it. The carrier-constructor half of the row is the same class read "
+            "the other way: the reference turns any 8-byte word at a pointer-payload type "
+            "into a pointer VALUE KIND through resolve_pointer_kind, so an integer carrier "
+            "becomes NullPtr / Ptr / DanglingPtr there and stays an int_ here"
+        ),
+        "recorded_in": (
+            "this grid row is the permanent home; the shape-tolerance rule is stated in "
+            "ir_niche_image's doc and pinned by ir_view_agg_is_identity"
+        ),
+        "anchors": [
+            (MACHINE_PATH, "def ir_load_view "),
+            (MACHINE_PATH, "ir_view_agg_is_identity"),
+        ],
+    },
+    {
+        "id": "zero-address-is-not-null",
+        "constructor": "borrow",
+        "clean": (
+            "the machine's null is the scalar IRScalar.nullptr_; `ptr_ Nat.zero` is an "
+            "ORDINARY address in its own address space, so a live cell at address 0 is "
+            "loaded, stored and borrowed like any other — kernel witness "
+            "ir_borrow_no_provenance_is_ub covers the missing-cell case, not this one"
+        ),
+        "e2": (
+            "the reference's resolve_pointer_kind maps address 0 to NullPtr before it "
+            "looks for an allocation, so every dereference of it — Load, Store and Borrow "
+            "alike — is UB 'null pointer dereference'"
+        ),
+        "measured": (
+            "2026-09-10 at trust 0dd9d3e2d7, against `fn resolve_pointer_kind` "
+            "(interpret.rs:5415-5423 — `if address == 0 { NullPtr } else if let Some(ptr) = "
+            "self.try_pointer_from_address(address) { Ptr } else { DanglingPtr }`) and `fn "
+            "expect_pointer` (interpret.rs:5648-5670). The direction is ACCEPT-MORE: the "
+            "model continues where the reference is UB. This is the machine's PRE-EXISTING "
+            "address-space "
+            "convention, shared verbatim by ir_load_at and ir_store_at since the memory "
+            "stage was written; it is recorded under `borrow` because Phase B is where it "
+            "was measured, and it is reachable rather than theoretical — ir_alloca_k "
+            "allocates at the machine's allocation counter, and every return-slot lemma "
+            "is stated at an ABSTRACT counter, which includes zero. A zero test in the "
+            "arms would close it and would also make each of them stuck at that abstract "
+            "counter, so it is declared rather than taken"
+        ),
+        "recorded_in": (
+            "this grid row is the permanent home; the reasoning is in eval_ir_machine.rs's "
+            "BORROW comment block, which is also where the load/store sharing is stated"
+        ),
+        "anchors": [
+            (MACHINE_PATH, "def ir_borrow_eval "),
+            (MACHINE_PATH, "ir_borrow_no_provenance_is_ub"),
+        ],
+    },
+    {
+        "id": "borrow-one-past-the-end",
+        "constructor": "borrow",
+        "clean": (
+            "ir_borrow_slot resolves the address through ir_mem_lookup and faults `ub "
+            "bad_addr` when no LIVE cell answers; ir_alloc_cells materialises cells only "
+            "at base .. base+k-1, so a one-past-the-end address has no cell and the borrow "
+            "faults — kernel witness ir_borrow_no_provenance_is_ub, which is exactly this "
+            "no-cell minor read at an empty memory"
+        ),
+        "e2": (
+            "the reference's try_pointer_from_address has a SECOND loop that accepts "
+            "`address == allocation.base + allocation.size`, so a one-past-the-end address "
+            "resolves to Ptr rather than DanglingPtr and expect_pointer admits the borrow"
+        ),
+        "measured": (
+            "2026-09-10 at trust 0dd9d3e2d7, against the second loop of `fn "
+            "try_pointer_from_address` (interpret.rs:5396-5406) reached through `fn "
+            "resolve_pointer_kind` (interpret.rs:5415-5423) and `fn expect_pointer` "
+            "(interpret.rs:5648-5670). The direction is REJECT-MORE and therefore "
+            "FAIL-CLOSED: the model refuses a borrow the reference performs, which can "
+            "leave a chain stuck but cannot admit a false theorem. It is REACHABLE rather "
+            "than theoretical — ir_gep_eval (the ir_gep_base off the ir_sum_idx sum) adds "
+            "an unbounded offset with no bound check, so `ptr_ (base+k)` is constructible "
+            "in the model exactly as it is in the reference — and it is SHARED verbatim "
+            "with ir_load_at and ir_store_at, which resolve through the same "
+            "ir_mem_lookup; it is recorded under `borrow` because Phase B's borrow arm is "
+            "where it was measured. Closing it would mean giving the model an allocation "
+            "table with bases and sizes rather than a flat cell list, which is a memory-"
+            "model change and not a borrow-arm change, so it is declared rather than taken. "
+            "The executed fragment does not exhibit it: the sidecar chain's geps are "
+            "in-bounds field projections"
+        ),
+        "recorded_in": (
+            "this grid row is the permanent home; the two-way residue is stated in "
+            "eval_ir_machine.rs's BORROW comment block beside the address-zero one"
+        ),
+        "anchors": [
+            (MACHINE_PATH, "def ir_borrow_slot "),
+            (MACHINE_PATH, "def ir_gep_eval "),
+            (MACHINE_PATH, "def ir_alloc_cells "),
+        ],
+    },
+    # Crystal E5's three (2026-09-27, decision memo §23), each measured by RUNNING the pinned
+    # reference interpreter on tests/fixtures/e5/e5_m0off_slices.trust-ir.txt or read off its
+    # arm, and each named in the direction it runs.
+    {
+        "id": "fat-null-lanes",
+        "constructor": "ptrfromparts",
+        "clean": (
+            "a wide value is IRScalar.fat_ d md -- an ADDRESS and a WORD, with no null lane -- so "
+            "ptr_from_parts over a null data pointer is `ub null_deref` (ir_ptrparts_eval) and over "
+            "a null metadata pointer `type_error not_int` (ir_ptrparts_at)"
+        ),
+        "e2": (
+            "eval_ptr_from_parts builds FatPtr { NullPtr, .. } -- validate_fat_pointer_value admits "
+            "a Ptr, NullPtr or DanglingPtr data lane -- and, at a vtable kind, FatPtr { .., "
+            "NullPtr }; the null fat pointer CONSTANT `{ 0, 0 }` is its const_value arm"
+        ),
+        "measured": (
+            "2026-09-27 at trust-ir dcc5b9a3, read off eval_ptr_from_parts, "
+            "validate_fat_pointer_value and const_value's null fat pointer arm. REJECT-MORE, "
+            "FAIL-CLOSED: the model halts where the reference builds a value, which can leave a "
+            "chain stuck but cannot admit a false theorem. The projector refuses a CONSTANT at "
+            "container_len, container_vtable and dyn.N by name (the null pair is the only one the "
+            "reference admits there), and none of the four E5 slices of real m0off bodies carries "
+            "a null lane"
+        ),
+        "recorded_in": (
+            "this grid row is the permanent home; the design is decision memo §23, and the "
+            "projector's refusal is its `Inst::Const` arm"
+        ),
+        "anchors": [
+            (MACHINE_PATH, "def ir_ptrparts_at "),
+            (MACHINE_PATH, "def ir_ptrparts_eval "),
+        ],
+    },
+    {
+        "id": "ptrmeta-kind-pair",
+        "constructor": "ptrmetadata",
+        "clean": (
+            "the fat arm reads its word at the DECLARED metadata type alone (ir_ptrmeta_lane: a "
+            "length at uint_ w, a vtable address at ptr_) and does not check that type against the "
+            "POINTER type's canonical kind -- `pt` stays dropped (ir_exec_ptrmeta_pt_irrelevant) -- "
+            "so a vtable word read at uint_ w binds an integer"
+        ),
+        "e2": (
+            "eval_ptr_metadata refuses a declared metadata type that is not "
+            "FatPtrKind::metadata_ty of the pointer type (type_error), a length for "
+            "Slice/Str/ContainerLen and a thin Ptr for TraitObject/ContainerVtable"
+        ),
+        "measured": (
+            "2026-09-27 at trust-ir dcc5b9a3, read off eval_ptr_metadata. ACCEPT-MORE, on "
+            "ILL-TYPED input only: trust-ir's validator refuses the pair statically "
+            "(PointerMetadataTypeMismatch), and the projector refuses it by name "
+            "(check_metadata_ty), so no validated module and no projected module carries one; "
+            "on a canonical pair the two answer alike, which the E5 slices measure "
+            "(ir_e5_ptrmeta_mt_is_read, ir_e5_ptrmeta_len_word)"
+        ),
+        "recorded_in": (
+            "this grid row is the permanent home; ir_ptrmeta_lane's comment block in "
+            "eval_ir_machine.rs states the arm"
+        ),
+        "anchors": [
+            (MACHINE_PATH, "def ir_ptrmeta_lane "),
+            (ADEQUACY_PATH, "def ir_exec_ptrmeta_pt_irrelevant "),
+            (E5_PATH, "ir_e5_ptrmeta_mt_is_read"),
+        ],
+    },
+    {
+        "id": "icmp-pointer-answers",
+        "constructor": "icmp",
+        "clean": (
+            "ir_icmp_eq / ir_icmp_ne ANSWER on pointer-shaped operands (ir_eqb over the comparable "
+            "ptr_ / nullptr_ / fnptr_ constructors); on a WIDE pointer they halt type_error "
+            "not_int (ir_e5_icmp_eq_containerlen_refused and its five siblings), which is exact"
+        ),
+        "e2": (
+            "eval_icmp refuses EVERY non-integer operand, thin pointer or wide: expect_int_value "
+            "raises type_error ('expected integer value, got ptr'); trust-ir's Lean semantics "
+            "(semICmpInst, 'ICmp: non-integer operands') refuses the same"
+        ),
+        "measured": (
+            "2026-09-27 at trust-ir dcc5b9a3, by RUNNING the reference interpreter on "
+            "tests/fixtures/e5/e5_m0off_slices.trust-ir.txt: e5::drive_control_thin_icmp "
+            "(`icmp eq ptr %0, %0`) and e5::drive_ptr_eq (the `Arc::ptr_eq` fast path of "
+            "<Name as PartialEq>::eq, `icmp eq fatptr<container_len>`) both end TypeError. "
+            "ACCEPT-MORE on the THIN half: the model answers where the reference refuses, and "
+            "the m0off callee sidecar carries 185 `icmp eq ptr` sites, so this is reachable, not "
+            "theoretical. It is PRE-EXISTING (E5 found it, did not make it) and the wide half "
+            "agrees. Closing it is a reference question -- the compiled program does compare "
+            "pointers -- not a model one, so it is declared rather than taken"
+        ),
+        "recorded_in": (
+            "this grid row is the permanent home; the measurement is "
+            "tests/eval_ir/e5_fat_images.rs's E2 leg and decision memo §23"
+        ),
+        "anchors": [
+            (OPS_PATH, "def ir_icmp_eq "),
+            (OPS_PATH, "def ir_scalar_cmpable "),
+            (E5_PATH, "ir_e5_icmp_eq_containerlen_refused"),
+        ],
+    },
 ]
 
 
@@ -504,6 +849,50 @@ def sha256_text(text: str) -> str:
 # -------------------------------------------------------------------- derive
 
 
+_COVERAGE_MODULE: list = []
+
+
+def _evalir_coverage_module():
+    """`scripts/evalir_coverage.py`, loaded BY PATH.
+
+    The denominator has exactly one authority and this script is not it.
+    Re-implementing the `EMITTED_INSTS` / `inductive IRInst` parse here would
+    create a second one, which is the failure the cross-check exists to catch —
+    the same reason `spine_scoreboard.py` loads this module rather than parsing
+    for itself. Loaded by path, never via sys.path, so nothing is shadowed.
+    """
+    if _COVERAGE_MODULE:
+        return _COVERAGE_MODULE[0]
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "evalir_coverage.py")
+    spec = importlib.util.spec_from_file_location(
+        "clean_evalir_adequacy_grid_coverage", src
+    )
+    if spec is None or spec.loader is None:
+        raise GridError(f"cannot load the denominator authority: {src}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    _COVERAGE_MODULE.append(module)
+    return module
+
+
+def derive_census(inputs: dict[str, str]) -> list[str]:
+    """The constructed-and-modelled census, DERIVED — never typed here.
+
+    There is no literal constructor count in this script. The value comes from
+    `evalir_coverage.derive_denominator`, which requires `EMITTED_INSTS`
+    (tests/eval_ir/census.rs) and the `IRInst` inductive (eval_ir_syntax.rs) to
+    agree exactly; the grid's own telescope parse is then held to it, making
+    this file a THIRD source that must agree rather than a place a number is
+    maintained. Adding a constructor moves the value by parse, in all three at
+    once or in none.
+    """
+    mod = _evalir_coverage_module()
+    try:
+        return mod.derive_denominator(inputs[CENSUS_PATH], inputs[SYNTAX_PATH])
+    except Exception as exc:  # CoverageError, or any parse drift
+        raise GridError(f"the pinned census cannot be derived: {exc}") from exc
+
+
 def read_inputs(root: str) -> dict[str, str]:
     inputs: dict[str, str] = {}
     for rel in INPUT_PATHS:
@@ -536,8 +925,13 @@ def derive(
             f"only in syntax {sorted(set(ctor_names) - set(arm_names))}; "
             f"only in dispatch {sorted(set(arm_names) - set(ctor_names))}"
         )
-    if len(ctor_names) != 28:
-        raise GridError(f"IRInst constructor census must be 28, found {len(ctor_names)}")
+    census = derive_census(inputs)
+    if sorted(ctor_names) != census:
+        raise GridError(
+            "the grid's own IRInst parse and the pinned census DISAGREE: "
+            f"only in the grid's parse {sorted(set(ctor_names) - set(census))}; "
+            f"only in the census {sorted(set(census) - set(ctor_names))}"
+        )
     arm_by_name = {c: (vs, rhs) for c, vs, rhs in arms}
 
     rows: list[dict] = []
@@ -618,11 +1012,18 @@ def derive(
             "(the R8 ledger row the audit-pin rows cite)"
         )
     require_anchor(inputs, AUDIT_PATH, f"fn {AUDIT_PIN_TEST}", "audit-pin")
-    if "alloca" in inputs[MINT_PATH]:
+    # The mint HAS an alloca arm since 2026-09-14 (the lzd chain's `as_deref`
+    # opens `%1 = alloca enum.1`), so its ABSENCE is no longer the evidence.
+    # What must hold instead is that the arm erases `align` deliberately: it
+    # records the alignment in the `aligns` lane and REFUSES any operand it does
+    # not recognise, rather than dropping one silently. Both are anchored above;
+    # this asserts the recording side, which the anchor table cannot express.
+    if "r_align(" not in inputs[MINT_PATH]:
         raise GridError(
-            f"{MINT_PATH}: now mentions `alloca` — the audit-pin rows claim the mint has NO "
-            "alloca arm (the mnemonic falls through to the fail-closed NoImage refusal); "
-            "re-derive the alloca.align row against the new reader"
+            f"{MINT_PATH}: the audit-pin rows say `align` reaches the mint and is recorded "
+            "in the `aligns` lane, but no `r_align(` call remains -- either the alloca arm "
+            "stopped recording the alignment (the silently-dropped class this row exists to "
+            "refuse) or the lane was renamed and this check must follow it"
         )
     erased_rows = []
     for ctor in ("load", "store", "alloca"):
@@ -695,10 +1096,12 @@ def derive(
         "schema": SCHEMA,
         "what": (
             "Per-constructor, per-field adequacy account of EvalIR's encoding of the "
-            "28 constructed trust_ir::Inst variants — the B-SEM §4(c) grid. Every syntax "
-            "field of every IRInst constructor is classified; the erased align slots and "
-            "the measured W1-W4 and float-residue executor divergences have their "
-            "permanent rows here."
+            "constructed-and-modelled trust_ir::Inst variants — the B-SEM §4(c) grid. The "
+            "count is DERIVED (evalir_coverage.derive_denominator over EMITTED_INSTS and "
+            "the IRInst inductive), never typed here. Every syntax field of every IRInst "
+            "constructor is classified; the erased align slots and the measured W1-W4, "
+            "float-residue and Phase-B executor divergences have their permanent rows "
+            "here."
         ),
         "constructors": len(ctor_names),
         "rows": all_rows,
@@ -779,17 +1182,17 @@ def self_test(root: str) -> int:
     )
 
     # 3. A dropped field loses its theorem row (unclassified erasure).
-    def no_load_ty():
-        t = {k: v for k, v in THEOREMS.items() if k != ("load", "t")}
+    def no_load_vol():
+        t = {k: v for k, v in THEOREMS.items() if k != ("load", "vol")}
         derive(real, theorems=t)
 
-    arm("theorem row deleted for dropped field load.t", no_load_ty)
+    arm("theorem row deleted for dropped field load.vol", no_load_vol)
 
     # 4. The theorem's definition disappears from its source file.
     arm(
         "theorem definition removed from eval_ir_adequacy.rs",
         lambda: derive(
-            mutated(ADEQUACY_PATH, "def ir_exec_load_ty_irrelevant ", "def ir_exec_gone ")
+            mutated(ADEQUACY_PATH, "def ir_exec_load_vol_irrelevant ", "def ir_exec_gone ")
         ),
     )
 
@@ -803,14 +1206,24 @@ def self_test(root: str) -> int:
 
     # 6. The dispatch starts READING a field a theorem claims is dropped.
     arm(
-        "dispatch arm starts reading load's dropped type",
+        "dispatch arm starts reading load's dropped volatility flag",
         lambda: derive(
             mutated(
                 MACHINE_PATH,
-                "| IRInst.load t p vol => ir_bind_result s rs (ir_load_eval s (ir_getd s p))",
-                "| IRInst.load t p vol => ir_bind_result s rs (ir_load_eval s (ir_getd s t))",
+                "| IRInst.load t p vol => ir_bind_result s rs (ir_load_view "
+                "(ir_mod_encs m) t (ir_load_eval s (ir_getd s p)))",
+                "| IRInst.load t p vol => ir_bind_result s rs (ir_load_view "
+                "(ir_mod_encs m) t (ir_load_eval s (ir_getd s vol)))",
             )
         ),
+    )
+
+    # 6b. The census and the grid's own IRInst parse disagree (a constructor
+    #     added to the syntax without moving EMITTED_INSTS, which is exactly
+    #     what the derived denominator exists to refuse).
+    arm(
+        "census loses a constructor the syntax still declares",
+        lambda: derive(mutated(CENSUS_PATH, '    "select",\n', "")),
     )
 
     # 7. An erased-slot mint anchor disappears (the align lane closed or moved).

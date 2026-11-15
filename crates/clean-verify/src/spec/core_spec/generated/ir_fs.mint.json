@@ -2,7 +2,7 @@
  "prefix": "ir_fs",
  "body": "mode::CleanMode::from_source_system",
  "core_digest": "391084975f38ea81d1f70a8c5e8de2b04aa8ec5509263f64c9ac481a02ed9320",
- "defs_digest": "5530520168257bd479bf087e4c297965f08eda27090622d4f0e2b8d74ba829c6",
+ "defs_digest": "c6c40590c89f9f0cd7baebec779accc415e875c347e316fc4f62a1814a03d139",
  "def_count": 18,
  "def_count_note": "SIXTEEN module definitions (fourteen blocks, the func, the module) plus TWO aliases: ir_fs_tmode (the result enum the arms materialise) and ir_fs_tsrc (the argument enum, INTERFACE-ONLY -- registered so the SourceSystem pin is an elaborated term, named by nothing in the module; see the tag table's canonical-1 row).",
  "artifact_core_digest": "dc7f19f6b3f8d755784cc60d0ed179ece25d4b14afa74934d6061d9f26b89055",

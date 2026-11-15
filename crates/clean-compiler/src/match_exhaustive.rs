@@ -104,20 +104,24 @@ pub(crate) struct ExhaustivenessChecker {
 
 impl ExhaustivenessChecker {
     /// Create a new checker with an empty type registry.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             type_registry: HashMap::new(),
         }
     }
 
     /// Register a type and its constructors.
-    pub fn register_type(&mut self, info: TypeInfo) {
+    pub(crate) fn register_type(&mut self, info: TypeInfo) {
         self.type_registry.insert(info.name.clone(), info);
     }
 
     /// Check a pattern matrix for exhaustiveness and redundancy.
     #[must_use]
-    pub fn check(&self, patterns: &[Vec<CheckPattern>], type_name: &str) -> ExhaustivenessResult {
+    pub(crate) fn check(
+        &self,
+        patterns: &[Vec<CheckPattern>],
+        type_name: &str,
+    ) -> ExhaustivenessResult {
         let redundant = self.find_redundant(patterns);
         if !redundant.is_empty() {
             return ExhaustivenessResult::Redundant {
@@ -138,7 +142,7 @@ impl ExhaustivenessChecker {
 
     /// Maranget's U predicate: is `vector` useful w.r.t. `matrix`?
     #[must_use]
-    pub fn useful(&self, matrix: &[Vec<CheckPattern>], vector: &[CheckPattern]) -> bool {
+    pub(crate) fn useful(&self, matrix: &[Vec<CheckPattern>], vector: &[CheckPattern]) -> bool {
         if vector.is_empty() {
             return matrix.is_empty();
         }
@@ -178,7 +182,7 @@ impl ExhaustivenessChecker {
     }
 
     /// Specialize matrix on a constructor (or literal key).
-    pub fn specialize(
+    pub(crate) fn specialize(
         matrix: &[Vec<CheckPattern>],
         head: &str,
         arity: usize,
@@ -194,7 +198,7 @@ impl ExhaustivenessChecker {
     }
 
     /// Default matrix: keep wildcard-headed rows, drop first column.
-    pub fn default_matrix(matrix: &[Vec<CheckPattern>]) -> Vec<Vec<CheckPattern>> {
+    pub(crate) fn default_matrix(matrix: &[Vec<CheckPattern>]) -> Vec<Vec<CheckPattern>> {
         let mut out = Vec::new();
         for row in matrix {
             if row.is_empty() {
@@ -214,7 +218,7 @@ impl ExhaustivenessChecker {
     }
 
     /// Generate witness patterns for non-exhaustiveness.
-    pub fn missing_patterns(
+    pub(crate) fn missing_patterns(
         &self,
         matrix: &[Vec<CheckPattern>],
         type_name: &str,
@@ -271,7 +275,7 @@ impl ExhaustivenessChecker {
     }
 
     /// Find indices of redundant patterns.
-    pub fn find_redundant(&self, patterns: &[Vec<CheckPattern>]) -> Vec<usize> {
+    pub(crate) fn find_redundant(&self, patterns: &[Vec<CheckPattern>]) -> Vec<usize> {
         let mut redundant = Vec::new();
         for i in 0..patterns.len() {
             if !self.useful(&patterns[..i], &patterns[i]) {

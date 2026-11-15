@@ -165,8 +165,8 @@ pub fn abel_with_config(state: &mut ProofState, config: AbelConfig) -> TacticRes
         return Err(TacticError::ArithmeticFailed {
             tactic: "abel".to_string(),
             reason: format!(
-                "terms do not normalize to equal values. Difference: {:?}",
-                diff.coefficients
+                "terms do not normalize to equal values. Difference: {}",
+                crate::error_render::opaque(&diff.coefficients)
             ),
         });
     }
@@ -403,8 +403,9 @@ pub fn group_with_config(state: &mut ProofState, config: GroupConfig) -> TacticR
         return Err(TacticError::ArithmeticFailed {
             tactic: "group".to_string(),
             reason: format!(
-                "terms do not normalize to equal values. lhs: {:?}, rhs: {:?}",
-                lhs_term.factors, rhs_term.factors
+                "terms do not normalize to equal values. lhs: {}, rhs: {}",
+                crate::error_render::opaque(&lhs_term.factors),
+                crate::error_render::opaque(&rhs_term.factors)
             ),
         });
     }

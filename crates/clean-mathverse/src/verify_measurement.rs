@@ -12,7 +12,7 @@
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use crate::build_library::{build_lean4_library, BuildConfig};
     use crate::shard::ShardReader;
@@ -184,7 +184,7 @@ mod tests {
     /// Collect .mathverse shard files from the output directory.
     /// LibraryLoader writes base shards to `output_dir/base/` and deltas to
     /// `output_dir/delta/`.
-    fn collect_shard_files(output_dir: &PathBuf) -> Vec<PathBuf> {
+    fn collect_shard_files(output_dir: &Path) -> Vec<PathBuf> {
         let mut shard_files: Vec<PathBuf> = Vec::new();
         for subdir in &["base", "delta"] {
             let dir = output_dir.join(subdir);
@@ -285,7 +285,7 @@ mod tests {
                     }
                 }
 
-                if total_constants % 5000 == 0 {
+                if total_constants.is_multiple_of(5000) {
                     eprintln!("  progress: {total_constants} constants verified...");
                 }
             }
@@ -390,6 +390,7 @@ mod tests {
             modules: vec!["Init".to_string()],
             shard_size_limit: 5000,
             max_file_size: 2_500_000,
+            file_limit: 0,
             verbose: true,
             ..BuildConfig::default()
         };
@@ -441,6 +442,7 @@ mod tests {
             modules: vec![], // all modules
             shard_size_limit: 10_000,
             max_file_size: 2_500_000,
+            file_limit: 0,
             verbose: true,
             ..BuildConfig::default()
         };

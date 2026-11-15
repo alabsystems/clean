@@ -1,0 +1,3 @@
+(assume nc (not (= (forall ((u Bool)) (let ((u (not u)) (w u)) (or u w))) (forall ((v Bool)) (let ((z (not v)) (w v)) (or v w))))))
+(step s (cl (= (forall ((u Bool)) (let ((u (not u)) (w u)) (or u w))) (forall ((v Bool)) (let ((z (not v)) (w v)) (or v w))))) :rule refl)
+(step done (cl) :rule resolution :premises (nc s))

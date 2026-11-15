@@ -24,7 +24,7 @@ pub struct OtTranslationContext {
 
 impl OtTranslationContext {
     #[must_use]
-    pub fn with_type_vars(type_vars: impl IntoIterator<Item = OtName>) -> Self {
+    pub(crate) fn with_type_vars(type_vars: impl IntoIterator<Item = OtName>) -> Self {
         Self {
             binders: type_vars.into_iter().map(ScopeBinder::TypeVar).collect(),
         }

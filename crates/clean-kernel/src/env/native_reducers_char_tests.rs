@@ -18,16 +18,64 @@ use crate::name::Name;
 
 // === Char code-point extraction: olean 2-field Char.mk shape ===
 
+/// The genuine kernel spine: `@BitVec.ofFin {w} (@Fin.mk {n} val isLt)`,
+/// implicit arguments included (a kernel term carries every argument). With a
+/// bare-literal width and bound, reading the spine's FIRST argument returned
+/// the width (32) — or, one level down, the bound — instead of the value. The
+/// fixture this test used to build omitted the implicits, which is exactly the
+/// shape that hid the misread (fixed 2026-09-26, fold-authority audit).
+fn olean_char(width: Expr, bound: Expr, value: u64) -> Expr {
+    let fin = Expr::apps(
+        Expr::const_(Name::from_string("Fin.mk"), vec![]),
+        [
+            bound,
+            Expr::nat_lit(value),
+            Expr::const_(Name::from_string("trivial"), vec![]),
+        ],
+    );
+    let bv = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofFin"), vec![]),
+        [width, fin],
+    );
+    let u32v = Expr::app(
+        Expr::const_(Name::from_string("UInt32.ofBitVec"), vec![]),
+        bv,
+    );
+    Expr::apps(
+        Expr::const_(Name::from_string("Char.mk"), vec![]),
+        [u32v, Expr::const_(Name::from_string("trivial"), vec![])],
+    )
+}
+
+#[test]
+fn test_char_code_point_ofin_reads_value_not_width_or_bound() {
+    // Bare-literal width 32 and bound 2^32: the value is 90.
+    let ch = olean_char(Expr::nat_lit(32), Expr::nat_lit(1 << 32), 90);
+    assert_eq!(
+        char_code_point(&ch),
+        Some(90),
+        "value, not width (32) or bound"
+    );
+    assert_eq!(get_char_val(&ch), Some('Z'));
+}
+
 #[test]
 fn test_char_code_point_olean_two_field_shape() {
-    // olean: Char.mk (UInt32.ofBitVec (BitVec.ofFin (Fin.mk <n> _))) valid
-    // char_code_point must dig the literal <n> out of the genuine ctor chain.
+    // olean: Char.mk (UInt32.ofBitVec (@BitVec.ofFin w (@Fin.mk n <v> _))) valid
+    // char_code_point must dig the literal <v> out of the genuine ctor chain.
     let n = Expr::nat_lit(90);
-    let fin = Expr::app(
-        Expr::app(Expr::const_(Name::from_string("Fin.mk"), vec![]), n.clone()),
-        Expr::const_(Name::from_string("trivial"), vec![]),
+    let fin = Expr::apps(
+        Expr::const_(Name::from_string("Fin.mk"), vec![]),
+        [
+            Expr::const_(Name::from_string("bound"), vec![]),
+            n.clone(),
+            Expr::const_(Name::from_string("trivial"), vec![]),
+        ],
     );
-    let bv = Expr::app(Expr::const_(Name::from_string("BitVec.ofFin"), vec![]), fin);
+    let bv = Expr::apps(
+        Expr::const_(Name::from_string("BitVec.ofFin"), vec![]),
+        [Expr::const_(Name::from_string("width"), vec![]), fin],
+    );
     let u32v = Expr::app(
         Expr::const_(Name::from_string("UInt32.ofBitVec"), vec![]),
         bv,
@@ -320,4 +368,152 @@ fn test_reduce_char_dec_eq_not_equal_is_sound() {
     let _ = tc
         .infer_type(&term)
         .expect("char decEq reducer output type-checks");
+}
+
+// === ASCII-only, like Lean ===
+
+/// Lean v4.30.0-rc2 `src/Init/Data/Char/Basic.lean`, written out independently
+/// of the reducers and WITHOUT any `char::is_*` helper, so a helper whose
+/// notion of "ASCII whitespace" or "letter" differs from Lean's cannot make the
+/// model and the reducer wrong together.
+//
+// `clippy::manual_is_ascii_check` wants `c.is_ascii_uppercase()` here. Taking
+// that suggestion would defeat the paragraph above: the whole value of this
+// module is that it does NOT route through a `char::is_*` helper, so a helper
+// that disagrees with Lean cannot agree with the reducer and hide the
+// disagreement. The manual range IS the independence.
+#[allow(clippy::manual_is_ascii_check)]
+mod lean_char_model {
+    pub(super) fn is_whitespace(c: char) -> bool {
+        c == ' ' || c == '\t' || c == '\r' || c == '\n'
+    }
+    pub(super) fn is_upper(c: char) -> bool {
+        ('A'..='Z').contains(&c)
+    }
+    pub(super) fn is_lower(c: char) -> bool {
+        ('a'..='z').contains(&c)
+    }
+    pub(super) fn is_alpha(c: char) -> bool {
+        is_upper(c) || is_lower(c)
+    }
+    pub(super) fn to_lower(c: char) -> char {
+        if is_upper(c) {
+            char::from_u32(c as u32 + 32).expect("ASCII")
+        } else {
+            c
+        }
+    }
+    pub(super) fn to_upper(c: char) -> char {
+        if is_lower(c) {
+            char::from_u32(c as u32 - 32).expect("ASCII")
+        } else {
+            c
+        }
+    }
+}
+
+/// The six classifier / case-map reducers agree with Lean on EVERY ASCII code
+/// point and on the non-ASCII characters where a Unicode-aware answer differs.
+/// Each near-miss below is what the previous (Rust-Unicode) reducers answered,
+/// and each is FALSE in Lean 4.
+#[test]
+fn test_char_reducers_are_ascii_only_like_lean() {
+    use lean_char_model as lean;
+    let bool_of = |e: Option<Expr>| -> bool {
+        let e = e.expect("reducer must fire on a Char literal");
+        if e == mk_bool_expr(true) {
+            true
+        } else {
+            assert_eq!(e, mk_bool_expr(false), "a Bool reducer must answer a Bool");
+            false
+        }
+    };
+    let char_of = |e: Option<Expr>| -> char {
+        get_char_val(&e.expect("reducer must fire on a Char literal"))
+            .expect("a Char reducer must answer a Char")
+    };
+
+    // U+00E9 é / U+00C9 É: a Unicode letter pair. U+00DF ß: uppercases to "SS".
+    // U+0130 İ: lowercases to two code points. U+03A9 Ω / U+03C9 ω: Greek.
+    // U+000B / U+000C: whitespace to Rust, not to Lean. U+00A0 / U+2003 /
+    // U+3000: Unicode spaces. U+0661: a non-ASCII digit (control: `isDigit` was
+    // already ASCII-only and must stay so).
+    let non_ascii = [
+        '\u{e9}',
+        '\u{c9}',
+        '\u{df}',
+        '\u{130}',
+        '\u{3a9}',
+        '\u{3c9}',
+        '\u{a0}',
+        '\u{2003}',
+        '\u{3000}',
+        '\u{661}',
+        '\u{10ffff}',
+    ];
+    for c in (0u8..=127).map(char::from).chain(non_ascii) {
+        let e = mk_char_expr(c);
+        let at = format!("U+{:04X}", c as u32);
+        assert_eq!(
+            bool_of(reduce_char_is_whitespace(&[&e])),
+            lean::is_whitespace(c),
+            "isWhitespace {at}"
+        );
+        assert_eq!(
+            bool_of(reduce_char_is_upper(&[&e])),
+            lean::is_upper(c),
+            "isUpper {at}"
+        );
+        assert_eq!(
+            bool_of(reduce_char_is_lower(&[&e])),
+            lean::is_lower(c),
+            "isLower {at}"
+        );
+        assert_eq!(
+            bool_of(reduce_char_is_alpha(&[&e])),
+            lean::is_alpha(c),
+            "isAlpha {at}"
+        );
+        assert_eq!(
+            char_of(reduce_char_to_lower(&[&e])),
+            lean::to_lower(c),
+            "toLower {at}"
+        );
+        assert_eq!(
+            char_of(reduce_char_to_upper(&[&e])),
+            lean::to_upper(c),
+            "toUpper {at}"
+        );
+    }
+
+    // The near-misses, spelled out so a regression names itself.
+    let e_acute = mk_char_expr('\u{e9}');
+    assert_eq!(char_of(reduce_char_to_upper(&[&e_acute])), '\u{e9}');
+    assert_ne!(
+        char_of(reduce_char_to_upper(&[&e_acute])),
+        '\u{c9}',
+        "'é'.toUpper = 'É' is FALSE in Lean"
+    );
+    assert!(
+        !bool_of(reduce_char_is_alpha(&[&e_acute])),
+        "'é'.isAlpha = true is FALSE in Lean"
+    );
+    assert!(
+        !bool_of(reduce_char_is_lower(&[&e_acute])),
+        "'é'.isLower = true is FALSE in Lean"
+    );
+    let form_feed = mk_char_expr('\u{c}');
+    assert!(
+        !bool_of(reduce_char_is_whitespace(&[&form_feed])),
+        "U+000C is whitespace to Rust (even `is_ascii_whitespace`), not to Lean"
+    );
+    // Positive twins: the ASCII cases still work.
+    assert_eq!(char_of(reduce_char_to_upper(&[&mk_char_expr('a')])), 'A');
+    assert_eq!(char_of(reduce_char_to_upper(&[&mk_char_expr('z')])), 'Z');
+    assert_eq!(char_of(reduce_char_to_lower(&[&mk_char_expr('Z')])), 'z');
+    // The edges of the ranges: '`' (0x60) and '{' (0x7B) flank 'a'..'z'.
+    assert_eq!(char_of(reduce_char_to_upper(&[&mk_char_expr('`')])), '`');
+    assert_eq!(char_of(reduce_char_to_upper(&[&mk_char_expr('{')])), '{');
+    assert_eq!(char_of(reduce_char_to_lower(&[&mk_char_expr('@')])), '@');
+    assert_eq!(char_of(reduce_char_to_lower(&[&mk_char_expr('[')])), '[');
 }

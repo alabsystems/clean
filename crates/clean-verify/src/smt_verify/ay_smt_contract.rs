@@ -146,12 +146,12 @@ pub struct ContractVerificationResult {
     /// a discharge claim. Callers that need a discharge (a verified refutation)
     /// must check [`fully_verified`](Self::fully_verified) instead.
     pub passed: bool,
-    /// Whether the proof is a *fully kernel-verified* refutation: it structurally
+    /// Whether the proof is a *fully step-checked* refutation: it structurally
     /// derives the empty clause and its derivation contains no structurally-
     /// accepted or trusted steps.
     ///
     // SOUNDNESS (root cause B/C): a discharged obligation ("verified refutation")
-    // requires the empty clause to be fully kernel-verified. `passed` alone is
+    // requires the empty clause to be fully step-checked. `passed` alone is
     // insufficient because weak-completeness contracts intentionally accept holes;
     // this field is the fail-closed discharge signal. See
     // docs/SOUNDNESS_FINDINGS_CLEAN_VERIFY_2026-07.md.
@@ -382,7 +382,7 @@ pub fn verify_ay_contract(
     }
 
     // SOUNDNESS (root cause B/C): a discharged obligation ("verified refutation")
-    // requires the empty clause to be fully kernel-verified — it must derive the
+    // requires the empty clause to be fully step-checked — it must derive the
     // empty clause AND contain no structurally-accepted or trusted steps. This is
     // strictly stronger than `passed`, which merely reflects the contract's stated
     // (possibly weak) completeness level. A holey proof whose empty clause was
@@ -503,7 +503,7 @@ fn completeness_accepts(
         ProofCompleteness::Full => {
             matches!(
                 trust,
-                StepTrustLevel::KernelVerified | StepTrustLevel::Axiomatic
+                StepTrustLevel::StepChecked | StepTrustLevel::Axiomatic
             )
         }
         ProofCompleteness::TheoryComplete => trust != StepTrustLevel::Trusted,
@@ -514,7 +514,7 @@ fn completeness_accepts(
 #[must_use]
 fn minimum_trust_for_completeness(completeness: ProofCompleteness) -> StepTrustLevel {
     match completeness {
-        ProofCompleteness::Full => StepTrustLevel::KernelVerified,
+        ProofCompleteness::Full => StepTrustLevel::StepChecked,
         ProofCompleteness::TheoryComplete => StepTrustLevel::StructurallyAccepted,
         ProofCompleteness::StructuralOnly | ProofCompleteness::Partial => StepTrustLevel::Trusted,
     }
@@ -528,7 +528,7 @@ fn trust_satisfies_minimum(actual: StepTrustLevel, minimum: StepTrustLevel) -> b
 #[must_use]
 fn trust_strength(level: StepTrustLevel) -> u8 {
     match level {
-        StepTrustLevel::KernelVerified => 3,
+        StepTrustLevel::StepChecked => 3,
         StepTrustLevel::StructurallyAccepted => 2,
         StepTrustLevel::Axiomatic => 1,
         StepTrustLevel::Trusted => 0,
@@ -683,7 +683,7 @@ fn euf_obligation() -> TheoryProofObligation {
     TheoryProofObligation {
         theory: SmtTheory::Euf,
         required_detail: RequiredDetail::CongruencePaths,
-        minimum_trust: StepTrustLevel::KernelVerified,
+        minimum_trust: StepTrustLevel::StepChecked,
     }
 }
 
@@ -692,7 +692,7 @@ fn lra_obligation() -> TheoryProofObligation {
     TheoryProofObligation {
         theory: SmtTheory::Lra,
         required_detail: RequiredDetail::FarkasCoefficients,
-        minimum_trust: StepTrustLevel::KernelVerified,
+        minimum_trust: StepTrustLevel::StepChecked,
     }
 }
 
@@ -728,7 +728,7 @@ fn datatypes_obligation() -> TheoryProofObligation {
     TheoryProofObligation {
         theory: SmtTheory::Datatypes,
         required_detail: RequiredDetail::DatatypeAxiomInstances,
-        minimum_trust: StepTrustLevel::KernelVerified,
+        minimum_trust: StepTrustLevel::StepChecked,
     }
 }
 

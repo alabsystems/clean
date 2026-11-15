@@ -79,8 +79,9 @@ impl ElabCtx<'_> {
             // unless every goal is closed — exactly the trailing `done`.
             SurfaceTactic::Simp {
                 span,
+                all: false,
                 only: false,
-                lemmas: vec![],
+                lemmas: Vec::new(),
                 location: SurfaceTacticLocation::Goal,
                 use_hypotheses: false,
             },
@@ -111,7 +112,7 @@ impl ElabCtx<'_> {
         // user has to prove.
         let shown = crate::tactic::simp::beta_reduce(goal);
         Err(ElabError::GetElemValidUnproved {
-            goal: format!("{shown:?}"),
+            goal: crate::error_render::term(&shown),
             tried: GETELEM_TACTIC_CHAIN.to_string(),
         })
     }

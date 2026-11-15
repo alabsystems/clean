@@ -1,0 +1,6 @@
+# input (escaped newlines)\tclause binders\tselected parameter
+def f : Nat → Nat → Nat\n  | 0, _ => 0\n  | n + 1, k => f n k\ntermination_by structural fuel _ => fuel\n	fuel,_	fuel
+def f (k : Nat) : Nat → Nat\n  | 0 => k\n  | n + 1 => f k n\ntermination_by structural fuel => fuel\n	fuel	fuel
+def f (n : Nat) : Nat := match n with | 0 => 0 | k + 1 => f k\ntermination_by structural n\n	-	n
+theorem prop : Nat → True\n  | 0 => True.intro\n  | n + 1 => prop n\ntermination_by structural fuel => fuel\n	fuel	fuel
+def outer (n : Nat) : Nat := go n\nwhere\n  go : Nat → Nat\n    | 0 => 0\n    | k + 1 => go k\n  termination_by structural fuel => fuel\n	fuel	fuel

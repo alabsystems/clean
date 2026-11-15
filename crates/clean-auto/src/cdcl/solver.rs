@@ -82,7 +82,8 @@ pub struct CdclSolver {
     pub(super) clause_inc: f64,
     /// Clause activity decay
     pub(super) clause_decay: f64,
-    /// Conflict limit for search
+    /// Conflict limit for search: lifetime conflicts, across every `solve()`
+    /// call on this solver, past which `solve()` answers `Unknown`.
     pub(super) conflict_limit: u64,
     /// Seen marks for conflict analysis
     pub(super) seen: Vec<bool>,
@@ -440,8 +441,12 @@ impl CdclSolver {
         self.backtrack(0);
     }
 
-    /// Set the conflict limit for solving (used by cdcl tests)
-    #[cfg(test)]
+    /// Set the conflict limit: the solver's lifetime conflict count (it is not
+    /// reset between `solve()` calls) past which `solve()` answers `Unknown`.
+    ///
+    /// The SMT solver sets it once, to `smt::SMT_CONFLICT_LIMIT`, so every SMT
+    /// solve is bounded by a count rather than left to a caller's clock. A
+    /// solver built here directly keeps `u64::MAX`.
     pub(crate) fn set_conflict_limit(&mut self, limit: u64) {
         self.conflict_limit = limit;
     }

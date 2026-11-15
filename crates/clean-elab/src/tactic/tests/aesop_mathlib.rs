@@ -170,20 +170,23 @@ fn test_mathlib_impl_chain() {
         c.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: Expr::arrow(a.clone(), b.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: Expr::arrow(b.clone(), c.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h3".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: a.clone(),
                 value: None,
             },
@@ -244,20 +247,23 @@ fn test_mathlib_or_elim() {
         c.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: a_or_b,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "ha".to_string(),
+                name: clean_parser::SurfaceName::generated_path("ha"),
                 ty: Expr::arrow(a, c.clone()),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "hb".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hb"),
                 ty: Expr::arrow(b, c),
                 value: None,
             },
@@ -318,14 +324,16 @@ fn test_mathlib_neg_intro() {
         not_a,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: Expr::arrow(a.clone(), b),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "hnb".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hnb"),
                 ty: not_b,
                 value: None,
             },

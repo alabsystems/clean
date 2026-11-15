@@ -4,6 +4,8 @@
 
 //! linear_combination tactic: Prove goals via linear combinations of hypotheses.
 
+use clean_parser::SurfaceName;
+
 use clean_kernel::Expr;
 
 use super::super::{
@@ -17,7 +19,7 @@ use super::util::try_extract_eq;
 #[derive(Debug, Clone)]
 pub struct LinearCoeff {
     /// Name of the hypothesis
-    pub hyp_name: String,
+    pub hyp_name: SurfaceName,
     /// Coefficient (rational)
     pub coeff: (i64, u64), // (numerator, denominator)
 }
@@ -28,9 +30,9 @@ impl LinearCoeff {
     /// # Contract
     ///
     /// ENSURES: `self.coeff == (1, 1)` and `self.hyp_name == hyp_name`
-    pub fn one(hyp_name: &str) -> Self {
+    pub fn one(hyp_name: &SurfaceName) -> Self {
         Self {
-            hyp_name: hyp_name.to_string(),
+            hyp_name: hyp_name.clone(),
             coeff: (1, 1),
         }
     }
@@ -40,9 +42,9 @@ impl LinearCoeff {
     /// # Contract
     ///
     /// ENSURES: `self.coeff == (num, denom.max(1))` — denominator is clamped to at least 1
-    pub fn new(hyp_name: &str, num: i64, denom: u64) -> Self {
+    pub fn new(hyp_name: &SurfaceName, num: i64, denom: u64) -> Self {
         Self {
-            hyp_name: hyp_name.to_string(),
+            hyp_name: hyp_name.clone(),
             coeff: (num, denom.max(1)),
         }
     }
@@ -52,9 +54,9 @@ impl LinearCoeff {
     /// # Contract
     ///
     /// ENSURES: `self.coeff == (n, 1)`
-    pub fn int(hyp_name: &str, n: i64) -> Self {
+    pub fn int(hyp_name: &SurfaceName, n: i64) -> Self {
         Self {
-            hyp_name: hyp_name.to_string(),
+            hyp_name: hyp_name.clone(),
             coeff: (n, 1),
         }
     }
@@ -144,6 +146,9 @@ pub fn linear_combination_with_config(
     coeffs: Vec<LinearCoeff>,
     config: LinearCombinationConfig,
 ) -> TacticResult {
+    for coeff in &coeffs {
+        super::names::require_binding_name(&coeff.hyp_name, "linear_combination")?;
+    }
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -164,7 +169,8 @@ pub fn linear_combination_with_config(
         let hyp = goal
             .local_ctx
             .iter()
-            .find(|h| h.name == coeff.hyp_name)
+            .rev()
+            .find(|h| super::names::local_name_matches(&h.name, &coeff.hyp_name))
             .ok_or_else(|| {
                 TacticError::HypothesisNotFound(format!(
                     "linear_combination: hypothesis '{}' not found",
@@ -237,7 +243,10 @@ pub fn linear_combination_with_config(
 ///
 /// REQUIRES: same as `linear_combination`
 /// ENSURES: Behaves like `linear_combination(state, coeffs)` where each coefficient is 1
-pub fn linear_combination_simple(state: &mut ProofState, hyp_names: Vec<&str>) -> TacticResult {
+pub fn linear_combination_simple(
+    state: &mut ProofState,
+    hyp_names: Vec<&SurfaceName>,
+) -> TacticResult {
     let coeffs: Vec<LinearCoeff> = hyp_names
         .iter()
         .map(|name| LinearCoeff::one(name))
@@ -307,14 +316,18 @@ mod tests {
             env,
             make_eq_n(y.clone(), x.clone()),
             vec![LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h".to_string(),
+                name: SurfaceName::generated_path("h"),
                 ty: make_eq_n(x, y),
                 value: None,
             }],
         );
 
-        let result = linear_combination(&mut state, vec![LinearCoeff::new("h", 1, 2)]);
+        let result = linear_combination(
+            &mut state,
+            vec![LinearCoeff::new(&SurfaceName::generated_path("h"), 1, 2)],
+        );
         assert!(
             matches!(
                 result,

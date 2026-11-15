@@ -15,6 +15,7 @@ use clean_kernel::expr::{Expr, ExprKind};
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
 use clean_olean::{load_module_with_deps, load_olean_file, pinned_lean_lib_path, OleanExporter};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use tempfile::tempdir;
 
@@ -1004,16 +1005,31 @@ fn test_bridge_init_cross_env_typecheck() {
     );
 }
 
-/// Full prelude bridge: compare ALL constants from `Environment::try_with_prelude()`
-/// against comprehensive Init .olean loading.
-///
-/// Unlike the extended tests (22 init_* functions, 31 named constants), this test
-/// covers the entire prelude surface area (66 init_* functions, including algebra,
-/// logic, classical, decidable, control, etc.) against the broadest possible Init
-/// .olean module set.
-///
-/// Part of #1488 Phase 0: validates that the full prelude's universe-level params
-/// match the canonical Lean 4 .olean declarations.
+/// Require the actual import world to cover a frontier frozen independently of it.
+/// Missing declarations are failures, never removed from the denominator.
+fn require_import_arity_frontier(
+    frontier: &BTreeMap<Name, usize>,
+    actual: &BTreeMap<Name, usize>,
+) -> Result<usize, Vec<String>> {
+    let mut failures = Vec::new();
+    for (name, expected) in frontier {
+        match actual.get(name) {
+            Some(found) if found == expected => {}
+            Some(found) => failures.push(format!("{name}: expected {expected}, got {found}")),
+            None => failures.push(format!("{name}: missing from import world")),
+        }
+    }
+    if failures.is_empty() {
+        Ok(frontier.len())
+    } else {
+        Err(failures)
+    }
+}
+
+/// Universe-arity fidelity of the production import prelude over the complete
+/// native/canonical overlap, frozen before the import world is loaded.
+/// The native execution prelude deliberately specializes some declarations;
+/// its differences stay diagnostic and are not called Lean parity.
 #[test]
 fn test_bridge_full_prelude_overlap_zero_mismatches() {
     let Some(lib_path) = require_olean_lean() else {
@@ -1021,11 +1037,18 @@ fn test_bridge_full_prelude_overlap_zero_mismatches() {
         return;
     };
 
-    let (env_olean, loaded, failed) = load_olean_init_comprehensive(&lib_path);
+    let mut env_olean = Environment::default();
+    for module in INIT_MODULES_COMPREHENSIVE {
+        load_module_with_deps(&mut env_olean, module, std::slice::from_ref(&lib_path))
+            .unwrap_or_else(|error| panic!("Reference import {module} failed: {error}"));
+    }
     let env_hw = load_handwritten_prelude();
 
-    println!("=== Full Prelude Bridge ===");
-    println!("  Comprehensive .olean modules: {loaded} loaded, {failed} failed");
+    println!("=== Full Import Prelude Arity Bridge ===");
+    println!(
+        "  Comprehensive .olean modules: {} loaded, 0 failed",
+        INIT_MODULES_COMPREHENSIVE.len()
+    );
 
     let olean_count = env_olean.num_constants();
     let hw_count = env_hw.num_constants();
@@ -1034,7 +1057,7 @@ fn test_bridge_full_prelude_overlap_zero_mismatches() {
     let (overlap, level_match, level_mismatch, hw_only, mismatched_names) =
         count_full_overlap(&env_olean, &env_hw);
 
-    println!("  Overlap: {overlap} shared, {level_match} match, {level_mismatch} mismatch, {hw_only} hw-only");
+    println!("  Native diagnostic: {overlap} shared, {level_match} match, {level_mismatch} arity differences, {hw_only} native-only");
 
     if !mismatched_names.is_empty() {
         println!("  First mismatches (max 20):");
@@ -1043,15 +1066,94 @@ fn test_bridge_full_prelude_overlap_zero_mismatches() {
         }
     }
 
-    assert_eq!(
-        level_mismatch, 0,
-        "Full prelude: expected 0 universe-level mismatches but found {level_mismatch}: {mismatched_names:?}"
-    );
-    // The full prelude should have significantly more overlap than the extended test (>=50)
+    // Freeze the ORIGINAL native/canonical population, not an intersection
+    // with whatever a later import happened to make resident.
+    let frontier: BTreeMap<Name, usize> = env_hw
+        .constants()
+        .filter_map(|native| {
+            env_olean
+                .get_const(&native.name)
+                .map(|canonical| (native.name.clone(), canonical.level_params.len()))
+        })
+        .collect();
+    assert_eq!(frontier.len(), overlap as usize);
+    assert_eq!(frontier.len() + hw_only as usize, hw_count);
     assert!(
-        overlap >= 100,
-        "Expected >=100 overlapping constants with full prelude, got {overlap}"
+        frontier.len() >= 1447,
+        "Pinned native/canonical frontier shrank below 1447: {}",
+        frontier.len()
     );
+
+    let mut import_world = Environment::try_with_prelude_for_import().expect("import prelude");
+    let withheld: Vec<Name> = frontier
+        .keys()
+        .filter(|name| import_world.get_const(name).is_none())
+        .cloned()
+        .collect();
+    for module in INIT_MODULES_COMPREHENSIVE {
+        load_module_with_deps(&mut import_world, module, std::slice::from_ref(&lib_path))
+            .unwrap_or_else(|error| panic!("Production import {module} failed: {error}"));
+    }
+    for name in &withheld {
+        assert!(
+            matches!(
+                import_world.get_constant_origin(name),
+                Some(clean_kernel::env::ConstantOrigin::Olean {
+                    module: Some(_),
+                    ..
+                })
+            ),
+            "withheld `{name}` must come from an actual .olean import"
+        );
+    }
+    let actual: BTreeMap<Name, usize> = import_world
+        .constants()
+        .map(|info| (info.name.clone(), info.level_params.len()))
+        .collect();
+    let matched = require_import_arity_frontier(&frontier, &actual)
+        .unwrap_or_else(|errors| panic!("Import arity frontier refused: {errors:?}"));
+    println!(
+        "  Frozen frontier: {matched}/{} matched, 0 missing, 0 arity mismatches",
+        frontier.len()
+    );
+
+    // Positive participants, not exceptions: these deliberately specialized
+    // native declarations must become genuine, value-bearing import records.
+    for text in ["List.zip", "List.mapM", "tryCatchThe"] {
+        let name = Name::from_string(text);
+        let expected = *frontier.get(&name).expect("required original participant");
+        assert!(
+            withheld.contains(&name),
+            "native `{name}` must not shadow its import"
+        );
+        let info = import_world
+            .get_const(&name)
+            .expect("genuine imported participant");
+        let value = info
+            .value
+            .as_ref()
+            .expect("genuine imported participant has a value");
+        clean_kernel::tc::TypeChecker::new(&import_world)
+            .check_type(value, &info.type_)
+            .unwrap_or_else(|error| panic!("imported `{name}` value/type mismatch: {error}"));
+
+        let mut missing = actual.clone();
+        assert!(missing.remove(&name).is_some());
+        assert_eq!(
+            require_import_arity_frontier(&frontier, &missing)
+                .unwrap_err()
+                .len(),
+            1
+        );
+        let mut changed = actual.clone();
+        changed.insert(name, expected + 1);
+        assert_eq!(
+            require_import_arity_frontier(&frontier, &changed)
+                .unwrap_err()
+                .len(),
+            1
+        );
+    }
 }
 
 /// Cross-env type-check results for bridge tests.

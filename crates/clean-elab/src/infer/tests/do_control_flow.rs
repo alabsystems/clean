@@ -80,102 +80,82 @@ fn test_terminal_return_no_except_wrapping() {
     }
 }
 
-/// B08: a top-level non-terminal `return` short-circuits — `do { return 42; Type }`
-/// lowers to `Pure.pure 42` in the pure lane (the trailing `Type` is dead code
-/// after the return), with NO ExceptT transformer / unbound-fvar join point.
+/// A top-level non-terminal `return` is refused: pinned Lean 4.8.0 rejects any
+/// element after `return` ("must be last element in a `do` sequence",
+/// measured 2026-10-16). Until round-5 lane D (G54) Clean lowered
+/// `do { return 42; Type }` to `Pure.pure 42` and dropped `Type`; this test
+/// pinned that short-circuit.
 #[test]
-fn test_non_terminal_return_is_pure_short_circuit() {
-    let parse_result = clean_parser::parse_expr("do { return 42; Type }");
-    match parse_result {
-        Ok(surface) => {
-            let env = Environment::new();
-            let mut ctx = super::ElabCtx::new(&env);
-            match ctx.elaborate(&surface) {
-                Ok(expr) => {
-                    assert!(
-                        !expr_contains_const(&expr, "ExceptT.run")
-                            && !expr_contains_const(&expr, "ExceptT.throw"),
-                        "pure short-circuit must not use the ExceptT transformer, got {expr:?}"
-                    );
-                    let head = expr.get_app_fn();
-                    if let ExprKind::Const(name, _) = head.kind() {
-                        assert_eq!(
-                            name.to_string(),
-                            "Pure.pure",
-                            "non-terminal return should short-circuit to Pure.pure"
-                        );
-                    }
-                }
-                Err(_) => {
-                    // May fail in the empty env (no Pure const) — acceptable.
-                }
-            }
-        }
-        Err(_) => {
-            // Parser may not support this syntax yet
-        }
-    }
+fn test_non_terminal_return_is_refused_as_lean() {
+    let surface = clean_parser::parse_expr("do { return 42; Type }")
+        .expect("`do { return 42; Type }` must parse");
+    let env = Environment::new();
+    let mut ctx = super::ElabCtx::new(&env);
+    let err = ctx
+        .elaborate(&surface)
+        .expect_err("Lean refuses an element after `return`");
+    assert!(
+        err.to_string()
+            .contains("must be last element in a `do` sequence"),
+        "the refusal is Lean's: {err:?}"
+    );
 }
 
-/// `do break` should produce OptionT.fail at the break layer.
-/// Break activates the ControlStack with a Break (OptionT) layer.
+/// REFUSAL PIN for `do { break }` outside any loop.
+///
+/// MEASURED 2026-09-16 on a bare `Environment::new()`: this elaboration is
+/// `ElabError::Unsupported` naming the `break`/`continue`-outside-a-`for`
+/// descope (B23). So the assertion this test carried — "break should produce
+/// OptionT.run or OptionT.fail" — sat in an `Ok` arm the elaborator has never
+/// once reached, next to an `Err` arm whose only check
+/// (`msg.contains("break")`) the refusal message satisfies. The test passed its
+/// whole life without measuring its own subject.
+///
+/// PINNED AS A REFUSAL, not skipped: on the day the OptionT break layer lands,
+/// `expect_err` fails loudly and whoever landed it replaces this pin with the
+/// target assertion, which is:
+///
+///     let head = expr.get_app_fn();
+///     assert!(matches!(head.kind(), ExprKind::Const(n, _)
+///                      if n.to_string() == "OptionT.run"
+///                      || n.to_string() == "OptionT.fail"));
 #[test]
-fn test_break_produces_option_t_fail() {
-    let result = elab("do { break }");
-    match result {
-        Ok(expr) => {
-            // Should contain OptionT.fail somewhere in the expression
-            let head = expr.get_app_fn();
-            match head.kind() {
-                ExprKind::Const(name, _) => {
-                    // The outermost should be OptionT.run (unwrap step) or OptionT.fail
-                    assert!(
-                        name.to_string() == "OptionT.run" || name.to_string() == "OptionT.fail",
-                        "break should produce OptionT.run or OptionT.fail, got {}",
-                        name
-                    );
-                }
-                _ => {
-                    // May be wrapped in other expressions
-                }
-            }
-        }
-        Err(e) => {
-            // break requires a loop context — may error
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("break") || msg.contains("OptionT") || msg.contains("NotImplemented"),
-                "unexpected error for break: {e:?}"
-            );
-        }
-    }
+fn test_break_outside_a_loop_is_refused_not_lowered_to_option_t() {
+    let err = elab("do { break }").expect_err(
+        "bare `break` has no OptionT lowering on this tree: if it now elaborates, \
+         delete this pin and assert the OptionT.run / OptionT.fail head instead",
+    );
+    assert!(
+        matches!(err, ElabError::Unsupported { .. }),
+        "the descope must stay a typed Unsupported error, got {err:?}"
+    );
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("break") && msg.contains("for"),
+        "the refusal must name `break` and the missing `for` context; a different \
+         message means the cause moved and this pin no longer describes it: {msg}"
+    );
 }
 
-/// `do continue` should produce OptionT.fail at the continue layer.
+/// REFUSAL PIN for `do { continue }` outside any loop — same wall, same
+/// measurement (2026-09-16, bare `Environment::new()`, `ElabError::Unsupported`),
+/// and the same never-reached `Ok` arm. Target assertion when the gap closes:
+/// the head is `OptionT.run` or `OptionT.fail`.
 #[test]
-fn test_continue_produces_option_t_fail() {
-    let result = elab("do { continue }");
-    match result {
-        Ok(expr) => {
-            let head = expr.get_app_fn();
-            if let ExprKind::Const(name, _) = head.kind() {
-                assert!(
-                    name.to_string() == "OptionT.run" || name.to_string() == "OptionT.fail",
-                    "continue should produce OptionT.run or OptionT.fail, got {}",
-                    name
-                );
-            }
-        }
-        Err(e) => {
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("continue")
-                    || msg.contains("OptionT")
-                    || msg.contains("NotImplemented"),
-                "unexpected error for continue: {e:?}"
-            );
-        }
-    }
+fn test_continue_outside_a_loop_is_refused_not_lowered_to_option_t() {
+    let err = elab("do { continue }").expect_err(
+        "bare `continue` has no OptionT lowering on this tree: if it now \
+         elaborates, delete this pin and assert the OptionT head instead",
+    );
+    assert!(
+        matches!(err, ElabError::Unsupported { .. }),
+        "the descope must stay a typed Unsupported error, got {err:?}"
+    );
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("continue") && msg.contains("for"),
+        "the refusal must name `continue` and the missing `for` context: {msg}"
+    );
 }
 
 /// B08: `do let mut x := 0; x := 1; x` — straight-line reassignment desugars
@@ -199,39 +179,50 @@ fn test_let_mut_reassign_desugars_to_let_shadowing() {
                 "pure reassignment must not use the StateT transformer, got {expr:?}"
             );
         }
-        Err(e) => {
-            let msg = format!("{e:?}");
-            assert!(
-                msg.contains("mut")
-                    || msg.contains("reassign")
-                    || msg.contains("NotImplemented")
-                    || msg.contains("unknown"),
-                "unexpected error for let mut + reassign: {e:?}"
-            );
-        }
+        // FAIL-CLOSED since 2026-09-16: MEASURED, this elaboration SUCCEEDS
+        // (`Environment::with_prelude()`, outermost `Let`, no `StateT` const),
+        // so the disjunctive `Err` arm that used to stand here only guarded
+        // against the two assertions above never running.
+        Err(e) => panic!("`do {{ let mut x := 0; x := 1; x }}` must elaborate: {e:?}"),
     }
 }
 
-/// Terminal return optimization: `do { if Prop then return Prop else return Prop }`
+/// Terminal return optimization: `do { if <guard> then return Prop else return Prop }`
 /// All returns are inside terminal branches — no ExceptT needed.
+///
+/// BROKEN FIXTURE, repaired 2026-09-16. This test used `elab(...)` — a bare
+/// `Environment::new()` — and `Prop` as the conditional guard. MEASURED, that
+/// pair can never elaborate: with no prelude the error is
+/// `TypeMismatch { expected: "valid type", actual: "Unknown constant: Pure.pure" }`,
+/// and even WITH the prelude a `Prop`-valued guard is rejected
+/// (`expected: "conditional guard of type Bool or Prop", actual: "Type"`). The
+/// `Ok` arm's only assertion therefore never ran, beside an `Err(_) => {}` arm
+/// that could not fail. With the prelude and a real `Bool` guard the
+/// elaboration succeeds (MEASURED: head `ite`, `Pure.pure` present, no
+/// `ExceptT` const anywhere), so the assertion now runs.
 #[test]
 fn test_terminal_return_in_branches_no_wrapping() {
-    let result = elab("do { if Prop then return Prop else return Prop }");
-    match result {
-        Ok(expr) => {
-            let head = expr.get_app_fn();
-            if let ExprKind::Const(name, _) = head.kind() {
-                assert_ne!(
-                    name.to_string(),
-                    "ExceptT.run",
-                    "terminal returns in all branches should NOT produce ExceptT.run"
-                );
-            }
-        }
-        Err(_) => {
-            // May fail due to missing ite/Decidable — acceptable
-        }
+    let env = Environment::with_prelude();
+    let expr = elab_with_env(
+        &env,
+        "do { if Bool.true then return Prop else return Prop }",
+    )
+    .expect("terminal returns in both branches of a Bool guard must elaborate");
+    let head = expr.get_app_fn();
+    match head.kind() {
+        ExprKind::Const(name, _) => assert_ne!(
+            name.to_string(),
+            "ExceptT.run",
+            "terminal returns in all branches should NOT produce ExceptT.run"
+        ),
+        other => panic!("expected a Const head for the guarded do-block, got {other:?}"),
     }
+    assert!(
+        !expr_contains_const(&expr, "ExceptT.run")
+            && !expr_contains_const(&expr, "ExceptT.throw")
+            && !expr_contains_const(&expr, "MonadExcept.throw"),
+        "terminal returns in all branches must not reach the ExceptT transformer at all"
+    );
 }
 
 /// `has_top_level_non_terminal_return` utility function test.
@@ -241,7 +232,12 @@ fn test_has_top_level_non_terminal_return() {
     use clean_parser::{DoElem, Span, SurfaceExpr, SurfacePattern};
 
     let span = Span::new(0, 0);
-    let expr = || Box::new(SurfaceExpr::Ident(span, "x".to_string()));
+    let expr = || {
+        Box::new(SurfaceExpr::Ident(
+            span,
+            clean_parser::SurfaceName::generated_path("x"),
+        ))
+    };
 
     // Single terminal return
     let elems = vec![DoElem::Return(span, expr())];
@@ -283,7 +279,7 @@ fn test_has_top_level_non_terminal_return() {
             vec![DoElem::Return(span, expr())],
             vec![clean_parser::DoCatchClause {
                 span,
-                binder: "e".to_string(),
+                binder: clean_parser::SurfaceName::generated_path("e"),
                 exc_type: None,
                 body: vec![DoElem::Expr(span, expr())],
             }],
@@ -376,7 +372,13 @@ fn test_for_break_produces_forin_step_done() {
         }
         _ => panic!("expected Const(Bind.bind, _), got {head:?}"),
     }
-    assert!(expr_contains_const(&expr, "ForIn.forIn"));
+    // The loop is the INLINED `List.forIn` recursion — `List.rec` over the
+    // collection with a `ForInStep.rec` join — not an application of the
+    // `ForIn.forIn` projection (see the lowering comment in
+    // `infer/elab_do_for.rs`; the projection's `[Monad m]` slot CAN be filled
+    // since `Monad` became Lean's class on 2026-09-28, and the inlined fold
+    // carries the synthesized `Pure m` / `Bind m` instances).
+    assert!(expr_contains_const(&expr, "List.rec"));
 
     // The body lambda (last arg) should contain ForInStep.done
     assert!(
@@ -402,7 +404,13 @@ fn test_for_continue_produces_forin_step_yield() {
     let expr = elab_with_env(&env, "do { for x in xs do continue }")
         .expect("for-continue should elaborate with xs in env");
 
-    assert!(expr_contains_const(&expr, "ForIn.forIn"));
+    // The loop is the INLINED `List.forIn` recursion — `List.rec` over the
+    // collection with a `ForInStep.rec` join — not an application of the
+    // `ForIn.forIn` projection (see the lowering comment in
+    // `infer/elab_do_for.rs`; the projection's `[Monad m]` slot CAN be filled
+    // since `Monad` became Lean's class on 2026-09-28, and the inlined fold
+    // carries the synthesized `Pure m` / `Bind m` instances).
+    assert!(expr_contains_const(&expr, "List.rec"));
     assert!(
         matches!(expr.get_app_fn().kind(), ExprKind::Const(name, _) if name.to_string() == "Bind.bind")
     );
@@ -614,19 +622,31 @@ fn test_compound_do_if_return_branches_are_pure_ite() {
         vec![
             DoElem::If(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "true".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    clean_parser::SurfaceName::generated_path("true"),
+                )),
                 vec![DoElem::Return(
                     Span::dummy(),
-                    Box::new(SurfaceExpr::Ident(Span::dummy(), "Type".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        Span::dummy(),
+                        clean_parser::SurfaceName::generated_path("Type"),
+                    )),
                 )],
                 Some(vec![DoElem::Return(
                     Span::dummy(),
-                    Box::new(SurfaceExpr::Ident(Span::dummy(), "Type".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        Span::dummy(),
+                        clean_parser::SurfaceName::generated_path("Type"),
+                    )),
                 )]),
             ),
             DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "Prop".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    clean_parser::SurfaceName::generated_path("Prop"),
+                )),
             ),
         ],
     );
@@ -661,14 +681,20 @@ fn test_compound_do_try_return_body_uses_except_wrapping() {
                 Span::dummy(),
                 vec![DoElem::Return(
                     Span::dummy(),
-                    Box::new(SurfaceExpr::Ident(Span::dummy(), "Type".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        Span::dummy(),
+                        clean_parser::SurfaceName::generated_path("Type"),
+                    )),
                 )],
                 vec![],
                 None,
             ),
             DoElem::Expr(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "Prop".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    clean_parser::SurfaceName::generated_path("Prop"),
+                )),
             ),
         ],
     );
@@ -746,7 +772,7 @@ fn test_singleton_return_body_uses_outer_continuation_helper() {
             clean_parser::Span::dummy(),
             Box::new(SurfaceExpr::Ident(
                 clean_parser::Span::dummy(),
-                "Prop".to_string(),
+                clean_parser::SurfaceName::generated_path("Prop"),
             )),
         )])
         .expect("single return body should elaborate via outer continuation helper");
@@ -763,15 +789,21 @@ fn test_singleton_return_body_uses_outer_continuation_helper() {
 
 #[test]
 fn test_failing_ordinary_and_nested_do_restore_full_outer_context_for_reuse() {
-    use clean_kernel::{name::Name, ExprKind, Level};
+    use clean_kernel::{name::Name, Level};
     use clean_parser::{DoElem, Span, SurfaceExpr};
     use std::collections::HashSet;
 
     let env = Environment::with_prelude();
     let mut ctx = super::ElabCtx::new(&env);
-    let outer_expected = Expr::type_();
+    let outer_expected = Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    );
     ctx.current_expected_type = Some(outer_expected.clone());
-    let outer_fvar = ctx.push_local("outerDoLocal".to_string(), Expr::prop());
+    let outer_fvar = ctx.push_local(
+        clean_parser::SurfaceName::generated_path("outerDoLocal"),
+        Expr::prop(),
+    );
     let locals_before = ctx.locals.clone();
 
     let outer_m = Expr::const_(Name::from_string("Outer.DoMonad"), vec![]);
@@ -784,7 +816,7 @@ fn test_failing_ordinary_and_nested_do_restore_full_outer_context_for_reuse() {
     });
 
     let mut reassigns = HashSet::new();
-    reassigns.insert("outerMutable".to_string());
+    reassigns.insert(clean_parser::SurfaceName::generated_path("outerMutable"));
     let outer_control = super::super::elab_do_control::ControlInfo {
         breaks: true,
         continues: true,
@@ -806,10 +838,17 @@ fn test_failing_ordinary_and_nested_do_restore_full_outer_context_for_reuse() {
         sigma: Expr::prop(),
         acc_fvar: outer_fvar,
         u_level: Level::zero(),
-        mut_vars: vec![("outerMutable".to_string(), outer_fvar, Expr::prop())],
+        mut_vars: vec![(
+            clean_parser::SurfaceName::generated_path("outerMutable"),
+            outer_fvar,
+            Expr::prop(),
+        )],
         return_type: Some(Expr::prop()),
     });
-    ctx.do_mut_vars = vec!["outerMutable".to_string(), "outerSecond".to_string()];
+    ctx.do_mut_vars = vec![
+        clean_parser::SurfaceName::generated_path("outerMutable"),
+        clean_parser::SurfaceName::generated_path("outerSecond"),
+    ];
     ctx.do_pure_state = true;
 
     let assert_outer_state = |ctx: &super::ElabCtx<'_>| {
@@ -840,7 +879,7 @@ fn test_failing_ordinary_and_nested_do_restore_full_outer_context_for_reuse() {
         assert_eq!(control.num_regular_exits, 7);
         assert_eq!(
             control.reassigns,
-            HashSet::from(["outerMutable".to_string()])
+            HashSet::from([clean_parser::SurfaceName::generated_path("outerMutable")])
         );
 
         let stack = ctx
@@ -863,20 +902,29 @@ fn test_failing_ordinary_and_nested_do_restore_full_outer_context_for_reuse() {
         assert_eq!(loop_ctx.u_level, Level::zero());
         assert_eq!(
             loop_ctx.mut_vars,
-            vec![("outerMutable".to_string(), outer_fvar, Expr::prop())]
+            vec![(
+                clean_parser::SurfaceName::generated_path("outerMutable"),
+                outer_fvar,
+                Expr::prop()
+            )]
         );
         assert_eq!(loop_ctx.return_type, Some(Expr::prop()));
         assert_eq!(
             ctx.do_mut_vars,
-            vec!["outerMutable".to_string(), "outerSecond".to_string()]
+            vec![
+                clean_parser::SurfaceName::generated_path("outerMutable"),
+                clean_parser::SurfaceName::generated_path("outerSecond")
+            ]
         );
         assert!(ctx.do_pure_state);
     };
 
-    let missing = |name: &str| SurfaceExpr::Ident(Span::dummy(), name.to_string());
+    let missing = |name: clean_parser::SurfaceName| SurfaceExpr::Ident(Span::dummy(), name);
     let ordinary_failure = [DoElem::Expr(
         Span::dummy(),
-        Box::new(missing("missingOrdinaryDoValue")),
+        Box::new(missing(clean_parser::SurfaceName::generated_path(
+            "missingOrdinaryDoValue",
+        ))),
     )];
     assert!(ctx.elab_do(&ordinary_failure).is_err());
     assert_outer_state(&ctx);
@@ -887,7 +935,9 @@ fn test_failing_ordinary_and_nested_do_restore_full_outer_context_for_reuse() {
             Span::dummy(),
             vec![DoElem::Expr(
                 Span::dummy(),
-                Box::new(missing("missingNestedDoValue")),
+                Box::new(missing(clean_parser::SurfaceName::generated_path(
+                    "missingNestedDoValue",
+                ))),
             )],
         )),
     )];
@@ -896,12 +946,18 @@ fn test_failing_ordinary_and_nested_do_restore_full_outer_context_for_reuse() {
 
     let successful = [DoElem::Expr(
         Span::dummy(),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "Prop".to_string())),
+        Box::new(SurfaceExpr::Lit(
+            Span::dummy(),
+            clean_parser::SurfaceLit::Nat(0),
+        )),
     )];
     let result = ctx
         .elab_do(&successful)
         .expect("outer context should remain reusable after do failures");
-    assert!(matches!(result.kind(), ExprKind::Sort(Level::Zero)));
+    let result = ctx.metas.instantiate(&result);
+    let tc = clean_kernel::TypeChecker::new(&env);
+    let ty = tc.infer_type(&result).expect("successful do checks");
+    assert!(tc.is_def_eq(&ty, &outer_expected));
     assert_outer_state(&ctx);
 }
 
@@ -979,9 +1035,15 @@ fn test_for_early_return_with_post_loop() {
     let expr = elab_with_env(&env, "do { for x in xs do { return x }; return Unit.unit }")
         .expect("for-early-return-post should elaborate with xs in env");
 
+    // The loop is the INLINED `List.forIn` recursion — `List.rec` over the
+    // collection with a `ForInStep.rec` join — not an application of the
+    // `ForIn.forIn` projection (see the lowering comment in
+    // `infer/elab_do_for.rs`; the projection's `[Monad m]` slot CAN be filled
+    // since `Monad` became Lean's class on 2026-09-28, and the inlined fold
+    // carries the synthesized `Pure m` / `Bind m` instances).
     assert!(
-        expr_contains_const(&expr, "ForIn.forIn"),
-        "should contain ForIn.forIn"
+        expr_contains_const(&expr, "List.rec"),
+        "should contain the inlined `List.forIn` recursion"
     );
     // Option.some should appear for the return value tunneling in the post-loop
     assert!(
@@ -998,17 +1060,24 @@ fn test_pattern_reassign_records_all_vars() {
     use clean_parser::{DoElem, Span, SurfaceExpr, SurfacePattern};
 
     let pat = SurfacePattern::Ctor(
-        "Prod.mk".to_string(),
+        clean_parser::SurfaceName::generated_path("Prod.mk"),
         vec![
-            SurfacePattern::Var("a".to_string()),
-            SurfacePattern::Var("b".to_string()),
+            SurfacePattern::Var(clean_parser::SurfaceName::generated_path("a")),
+            SurfacePattern::Var(clean_parser::SurfaceName::generated_path("b")),
         ],
     );
-    let val = Box::new(SurfaceExpr::Ident(Span::dummy(), "state".to_string()));
+    let val = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        clean_parser::SurfaceName::generated_path("state"),
+    ));
     let info = infer_control_info_elem(&DoElem::PatternReassign(Span::dummy(), pat, val));
     assert_eq!(info.num_regular_exits, 1);
-    assert!(info.reassigns.contains("a"));
-    assert!(info.reassigns.contains("b"));
+    assert!(info
+        .reassigns
+        .contains(&clean_parser::SurfaceName::generated_path("a")));
+    assert!(info
+        .reassigns
+        .contains(&clean_parser::SurfaceName::generated_path("b")));
     assert_eq!(info.reassigns.len(), 2);
     assert!(info.needs_control_stack());
 }
@@ -1019,22 +1088,31 @@ fn test_pattern_reassign_nested_triple() {
     use clean_parser::{DoElem, Span, SurfaceExpr, SurfacePattern};
 
     let pat = SurfacePattern::Ctor(
-        "Prod.mk".to_string(),
+        clean_parser::SurfaceName::generated_path("Prod.mk"),
         vec![
-            SurfacePattern::Var("a".to_string()),
+            SurfacePattern::Var(clean_parser::SurfaceName::generated_path("a")),
             SurfacePattern::Ctor(
-                "Prod.mk".to_string(),
+                clean_parser::SurfaceName::generated_path("Prod.mk"),
                 vec![
-                    SurfacePattern::Var("b".to_string()),
-                    SurfacePattern::Var("c".to_string()),
+                    SurfacePattern::Var(clean_parser::SurfaceName::generated_path("b")),
+                    SurfacePattern::Var(clean_parser::SurfaceName::generated_path("c")),
                 ],
             ),
         ],
     );
-    let val = Box::new(SurfaceExpr::Ident(Span::dummy(), "state".to_string()));
+    let val = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        clean_parser::SurfaceName::generated_path("state"),
+    ));
     let info = infer_control_info_elem(&DoElem::PatternReassign(Span::dummy(), pat, val));
-    assert!(info.reassigns.contains("a"));
-    assert!(info.reassigns.contains("b"));
-    assert!(info.reassigns.contains("c"));
+    assert!(info
+        .reassigns
+        .contains(&clean_parser::SurfaceName::generated_path("a")));
+    assert!(info
+        .reassigns
+        .contains(&clean_parser::SurfaceName::generated_path("b")));
+    assert!(info
+        .reassigns
+        .contains(&clean_parser::SurfaceName::generated_path("c")));
     assert_eq!(info.reassigns.len(), 3);
 }

@@ -38,6 +38,16 @@ pub(crate) use recovery::try_superposition_fallback;
 #[cfg(test)]
 pub(crate) use recovery::validate_superposition_candidate_for_test;
 
+/// What `decide` reports when the bridge finds `¬goal` satisfiable.
+///
+/// A satisfying assignment of the bridge's EUF/arithmetic abstraction is not a
+/// counterexample to the goal (see the `Refuted` arm of [`decide`]), so the
+/// message states only that the goal was not proved.
+const REFUTED_ABSTRACTION_DETAIL: &str =
+    "found no proof: the negated goal is satisfiable in the solver's abstraction, \
+     where operations outside its theories are uninterpreted — not a validated \
+     counterexample";
+
 /// Decision procedure tactic using SMT solving.
 ///
 /// The `decide` tactic attempts to prove the goal using an SMT solver.
@@ -88,9 +98,18 @@ pub fn decide(state: &mut ProofState) -> TacticResult {
             Ok(())
         }
         Ok(clean_auto::bridge::SmtVerificationResult::Refuted(_model)) => {
+            // NOT a counterexample. The bridge lowers every constant-headed
+            // application outside its theories (`&&`, `^^^`, `UInt32` `+`, …)
+            // to an uninterpreted function and every constant (`true`,
+            // `false`, …) to an uninterpreted constant, and it does not record
+            // that abstraction as lossy. A model of `¬goal` in that abstraction
+            // is therefore not a model of `¬goal`: for the VALID goal
+            // `∀ a : Bool, (a && true) = a` it satisfies `and(sk, true) ≠ sk`.
+            // Nothing here evaluates the model against the real definitions,
+            // so the only honest report is "not proved".
             Err(TacticError::SmtFailed {
                 tactic: "decide".into(),
-                detail: "found counterexample — goal is not valid".into(),
+                detail: REFUTED_ABSTRACTION_DETAIL.into(),
             })
         }
         Ok(clean_auto::bridge::SmtVerificationResult::Unknown(_reason)) => {

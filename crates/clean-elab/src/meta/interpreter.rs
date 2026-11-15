@@ -10,9 +10,12 @@ use crate::unify::MetaState;
 use clean_kernel::{Environment, Expr, ExprFolder, ExprKind, Name};
 use std::sync::Arc;
 
+#[cfg(test)]
+mod typed_tests;
+
 /// Result of a runtime q-pattern match attempt
 #[derive(Debug, Clone)]
-pub struct RuntimeMatchResult {
+pub(crate) struct RuntimeMatchResult {
     /// Whether the pattern matched
     pub matched: bool,
     /// Bindings from pattern variables to their matched values
@@ -22,7 +25,7 @@ pub struct RuntimeMatchResult {
 
 impl RuntimeMatchResult {
     /// Create a successful match result with bindings
-    pub fn success(bindings: Vec<(String, Expr)>) -> Self {
+    pub(crate) fn success(bindings: Vec<(String, Expr)>) -> Self {
         Self {
             matched: true,
             bindings,
@@ -30,7 +33,7 @@ impl RuntimeMatchResult {
     }
 
     /// Create a failed match result
-    pub fn failure() -> Self {
+    pub(crate) fn failure() -> Self {
         Self {
             matched: false,
             bindings: Vec::new(),
@@ -54,7 +57,7 @@ impl RuntimeMatchResult {
 ///
 /// # Returns
 /// A `RuntimeMatchResult` indicating success/failure and bindings
-pub fn try_runtime_match(
+pub(crate) fn try_runtime_match(
     meta_ctx: &mut MetaCtx<'_>,
     scrutinee: &Expr,
     pattern: &Expr,
@@ -87,7 +90,7 @@ pub fn try_runtime_match(
 
 /// Result of interpreting a runtime expression
 #[derive(Debug, Clone)]
-pub enum RuntimeInterpretResult {
+pub(crate) enum RuntimeInterpretResult {
     /// Expression evaluated to a concrete value
     Value(Expr),
     /// Expression could not be interpreted (needs further evaluation)
@@ -103,11 +106,12 @@ pub enum RuntimeInterpretResult {
 /// - `qq_runtime_binding` tags: Extract pattern variable values
 /// - `qq_match_failure` tags: Signal match failures
 /// - `ite` applications: Conditional branching based on check results
-pub struct RuntimeInterpreter<'a> {
+pub(crate) struct RuntimeInterpreter<'a> {
     /// MetaM context for isDefEq checks
     meta_ctx: MetaCtx<'a>,
-    /// Current pattern variable bindings (populated during matching)
+    /// Legacy v1 string bindings, kept separate from exact v2 identities.
     bindings: std::collections::HashMap<String, Expr>,
+    typed_bindings: std::collections::HashMap<Name, Expr>,
 }
 
 // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
@@ -115,43 +119,50 @@ pub struct RuntimeInterpreter<'a> {
 #[allow(dead_code)]
 impl<'a> RuntimeInterpreter<'a> {
     /// Create a new runtime interpreter
-    pub fn new(env: &'a Environment) -> Self {
+    pub(crate) fn new(env: &'a Environment) -> Self {
         Self {
             meta_ctx: MetaCtx::new(env),
             bindings: std::collections::HashMap::new(),
+            typed_bindings: std::collections::HashMap::new(),
         }
     }
 
     /// Create interpreter with existing MetaM context
-    pub fn with_meta_ctx(meta_ctx: MetaCtx<'a>) -> Self {
+    pub(crate) fn with_meta_ctx(meta_ctx: MetaCtx<'a>) -> Self {
         Self {
             meta_ctx,
             bindings: std::collections::HashMap::new(),
+            typed_bindings: std::collections::HashMap::new(),
         }
     }
 
     /// Get the MetaM context
-    pub fn meta_ctx(&self) -> &MetaCtx<'a> {
+    pub(crate) fn meta_ctx(&self) -> &MetaCtx<'a> {
         &self.meta_ctx
     }
 
     /// Get mutable MetaM context
-    pub fn meta_ctx_mut(&mut self) -> &mut MetaCtx<'a> {
+    pub(crate) fn meta_ctx_mut(&mut self) -> &mut MetaCtx<'a> {
         &mut self.meta_ctx
     }
 
     /// Get current bindings
-    pub fn bindings(&self) -> &std::collections::HashMap<String, Expr> {
+    pub(crate) fn bindings(&self) -> &std::collections::HashMap<String, Expr> {
         &self.bindings
+    }
+
+    /// Exact v2 bindings. No display projection or legacy-map fallback.
+    pub(crate) fn typed_bindings(&self) -> &std::collections::HashMap<Name, Expr> {
+        &self.typed_bindings
     }
 
     /// Interpret an expression, evaluating MData-tagged runtime constructs
     ///
     /// This is the main entry point for runtime q-pattern matching evaluation.
-    pub fn interpret(&mut self, expr: &Expr) -> RuntimeInterpretResult {
+    pub(crate) fn interpret(&mut self, expr: &Expr) -> RuntimeInterpretResult {
         stack_safe(|| match expr.kind() {
             // Handle MData-tagged expressions
-            ExprKind::MData(metadata, inner) => self.interpret_mdata(metadata, inner),
+            ExprKind::MData(metadata, inner) => self.interpret_mdata(metadata, inner, expr),
 
             // Handle ite (if-then-else) for runtime conditionals
             ExprKind::App(func, arg) => {
@@ -183,9 +194,32 @@ impl<'a> RuntimeInterpreter<'a> {
         &mut self,
         metadata: &clean_kernel::MDataMap,
         inner: &Expr,
+        original: &Expr,
     ) -> RuntimeInterpretResult {
         stack_safe(|| {
             use clean_kernel::{MDataValue, Name};
+
+            // Presence selects the typed protocol even if the marker payload is
+            // malformed. Never retry such a record through the legacy decoder.
+            if metadata
+                .iter()
+                .any(|(k, _)| *k == Name::anon().str("qq_runtime_check_v2"))
+            {
+                return self.eval_typed_check(metadata, inner, original);
+            }
+            if metadata
+                .iter()
+                .any(|(k, _)| *k == Name::anon().str("qq_runtime_binding_v2"))
+            {
+                if let [(key, MDataValue::Name(name))] = metadata.as_slice() {
+                    if *key == Name::anon().str("qq_runtime_binding_v2") {
+                        if let Some(value) = self.typed_bindings.get(name) {
+                            return RuntimeInterpretResult::Value(value.clone());
+                        }
+                    }
+                }
+                return RuntimeInterpretResult::NotInterpreted(original.clone());
+            }
 
             // Check for qq_runtime_check tag
             if let Some((_, MDataValue::Bool(true))) = metadata
@@ -222,7 +256,124 @@ impl<'a> RuntimeInterpreter<'a> {
         })
     }
 
-    /// Evaluate a qq_runtime_check tagged expression
+    /// Decode the exact structural prefix, never a formatted-name prefix.
+    fn typed_binding_key(key: &Name) -> Option<Name> {
+        use clean_kernel::name::NameInner;
+        let mut components = Vec::new();
+        let mut current = key;
+        let mut name_bytes = 0usize;
+        while !current.is_anon() {
+            if components.len() >= 256 {
+                return None;
+            }
+            match current.inner() {
+                NameInner::Str(parent, text) => {
+                    name_bytes = name_bytes.checked_add(text.len())?;
+                    if name_bytes > 65536 {
+                        return None;
+                    }
+                    components.push((Some(text.as_ref()), 0));
+                    current = parent;
+                }
+                NameInner::Num(parent, number) => {
+                    components.push((None, *number));
+                    current = parent;
+                }
+                NameInner::Anon => break,
+            }
+        }
+        if components.pop()? != (Some("qq_binding_v2"), 0) || components.is_empty() {
+            return None;
+        }
+        let mut name = Name::anon();
+        for (text, number) in components.into_iter().rev() {
+            name = match text {
+                Some(text) => name.str(text),
+                None => name.num(number),
+            };
+        }
+        Some(name)
+    }
+
+    /// Typed v2 is an additive identity protocol for this existing staged
+    /// interpreter, not a new proof/admission rule. Its complete binding table
+    /// must decode and resolve before any rows become visible.
+    fn eval_typed_check(
+        &mut self,
+        metadata: &clean_kernel::MDataMap,
+        inner: &Expr,
+        original: &Expr,
+    ) -> RuntimeInterpretResult {
+        use clean_kernel::{FVarId, MDataValue};
+        self.typed_bindings.clear();
+        let refused = || RuntimeInterpretResult::NotInterpreted(original.clone());
+        if metadata.len() > 4097 {
+            return refused();
+        }
+        let marker = Name::anon().str("qq_runtime_check_v2");
+        let mut marker_count = 0usize;
+        let mut rows = std::collections::HashMap::new();
+        let mut ids = std::collections::HashSet::new();
+        for (key, value) in metadata {
+            if *key == marker {
+                if !matches!(value, MDataValue::Bool(true)) {
+                    return refused();
+                }
+                marker_count += 1;
+                continue;
+            }
+            let Some(name) = Self::typed_binding_key(key) else {
+                return refused();
+            };
+            let MDataValue::Nat(id) = value else {
+                return refused();
+            };
+            let Some(meta_id) = MetaState::from_fvar(FVarId::new(*id)) else {
+                return refused();
+            };
+            if self.meta_ctx.metas().get(meta_id).is_none()
+                || rows.insert(name, meta_id).is_some()
+                || !ids.insert(*id)
+            {
+                return refused();
+            }
+        }
+        if marker_count != 1 {
+            return refused();
+        }
+        let ExprKind::App(function, pattern) = inner.kind() else {
+            return refused();
+        };
+        let ExprKind::App(head, scrutinee) = function.kind() else {
+            return refused();
+        };
+        let ExprKind::Const(name, _) = head.kind() else {
+            return refused();
+        };
+        if *name != Name::anon().str("Prod").str("mk") {
+            return refused();
+        }
+        let matched = self
+            .meta_ctx
+            .with_reducible(|ctx| ctx.is_def_eq(scrutinee, pattern));
+        if !matched {
+            return RuntimeInterpretResult::Value(Expr::const_(
+                Name::anon().str("Bool").str("false"),
+                vec![],
+            ));
+        }
+        let mut retained = std::collections::HashMap::new();
+        for (name, meta_id) in rows {
+            let Some(value) = self.meta_ctx.metas().get_assignment(meta_id) else {
+                return refused();
+            };
+            retained.insert(name, self.meta_ctx.instantiate_mvars(value));
+        }
+        self.typed_bindings = retained;
+        RuntimeInterpretResult::Value(Expr::const_(Name::anon().str("Bool").str("true"), vec![]))
+    }
+
+    /// Evaluate a legacy v1 qq_runtime_check tagged expression.
     ///
     /// The inner expression should be: App(App(Prod.mk, scrutinee), pattern)
     /// The metadata contains binding entries: `qq_binding_<varname>` = FVarId (as Nat)
@@ -450,7 +601,7 @@ impl<'a> RuntimeInterpreter<'a> {
 /// Convenience function to interpret a runtime q-match expression
 ///
 /// This is the primary entry point for external callers.
-pub fn interpret_runtime_match(env: &Environment, expr: &Expr) -> RuntimeInterpretResult {
+pub(crate) fn interpret_runtime_match(env: &Environment, expr: &Expr) -> RuntimeInterpretResult {
     let mut interpreter = RuntimeInterpreter::new(env);
     interpreter.interpret(expr)
 }

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::expr::{Expr, ExprKind, FVarId};
-use crate::micro::CrossValidationError;
 use crate::name::Name;
 use crate::tc::expr_location::ExprLocation;
 use crate::tc::heartbeat_profiler::HeartbeatProfile;
@@ -35,6 +34,70 @@ fn head_summary(e: &Expr) -> String {
     }
 }
 
+/// Collect the universe levels appearing in `e`, in traversal order.
+///
+/// Used only to disambiguate a mismatch whose two sides print identically.
+fn levels_in(e: &Expr) -> Vec<String> {
+    fn go(e: &Expr, out: &mut Vec<String>) {
+        match &e.kind {
+            ExprKind::Const(_, levels) => out.extend(levels.iter().map(ToString::to_string)),
+            ExprKind::Sort(level) => out.push(level.to_string()),
+            ExprKind::App(f, a) => {
+                go(f, out);
+                go(a, out);
+            }
+            ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
+                go(ty, out);
+                go(body, out);
+            }
+            ExprKind::Let(_, ty, val, body, _) => {
+                go(ty, out);
+                go(val, out);
+                go(body, out);
+            }
+            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) => go(inner, out),
+            _ => {}
+        }
+    }
+    let mut out = Vec::new();
+    go(e, &mut out);
+    out
+}
+
+/// Explain a mismatch whose two sides render to the SAME string.
+///
+/// `Display for Expr` deliberately omits universe levels — `LE2.{u} x` and
+/// `LE2.{v} x` both print `LE2 x` — so a universe mismatch, which is the most
+/// common kind of kernel rejection on Mathlib source, arrives as
+/// `expected LE2 fvar#4, got LE2 fvar#4`. A message asserting that two
+/// identical things differ is worse than no message: it reads as a checker bug
+/// rather than as a fact about the term.
+///
+/// Rather than making every message noisier by always printing levels, this
+/// fires only on the collision, where the extra words are the entire content.
+/// If the levels agree too, it says so — "the difference is somewhere this
+/// printer does not show" is still a true and actionable statement, and it
+/// stops the reader re-reading two identical strings looking for the typo.
+fn disambiguate(expected: &Expr, inferred: &Expr) -> String {
+    if expected.to_string() != inferred.to_string() {
+        return String::new();
+    }
+    let el = levels_in(expected);
+    let il = levels_in(inferred);
+    if el != il {
+        return format!(
+            "\n  both sides print identically; they differ in universe levels: \
+             {{{}}} vs {{{}}}",
+            el.join(", "),
+            il.join(", ")
+        );
+    }
+    "\n  both sides print identically and carry the same universe levels; the \
+     difference is in a part this printer does not show (binder info, \
+     metadata, or free-variable identity)"
+        .to_string()
+}
+
 /// Type checking errors.
 ///
 /// Note: Expr fields are boxed to reduce the size of the Result type on the success path.
@@ -62,7 +125,13 @@ pub enum TypeError {
         location: Option<Box<ExprLocation>>,
     },
     /// Argument type doesn't match parameter type
-    #[error("Type mismatch: expected {expected}, got {inferred} (heads: {} vs {}){}", head_summary(expected), head_summary(inferred), location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default())]
+    #[error(
+        "Type mismatch: expected {expected}, got {inferred} (heads: {} vs {}){}{}",
+        head_summary(expected),
+        head_summary(inferred),
+        disambiguate(expected, inferred),
+        location.as_ref().map(|l| format!("\n  {l}")).unwrap_or_default()
+    )]
     TypeMismatch {
         /// The type expected by the context
         expected: Box<Expr>,
@@ -149,14 +218,6 @@ pub enum TypeError {
         /// Number of supplied levels
         got: usize,
     },
-
-    /// Micro-checker cross-validation disagreed with the main kernel
-    ///
-    /// The independent micro-checker produced a different result than the main
-    /// kernel's type inference. This indicates a potential soundness issue.
-    /// Boxed to keep TypeError small on the success path.
-    #[error("Cross-validation failure: {0}")]
-    CrossValidationFailure(Box<CrossValidationError>),
 
     /// Type checking exceeded the heartbeat limit (deterministic timeout).
     ///
@@ -268,6 +329,20 @@ pub enum TypeError {
         /// Name of the partial declaration
         name: Name,
     },
+
+    /// Under [`crate::env::KernelTheory::Lean`] (and `LeanReference`),
+    /// instantiating `name`'s universe parameters met a stored `max`/`imax`
+    /// node that Lean's `instantiate` keeps when the `.olean` shares its level
+    /// objects and rebuilds to a different level when it does not
+    /// (`level/lean_kernel.rs`). Lean's own verdict on the declaration then
+    /// depends on object sharing, which Clean cannot observe, so the check is
+    /// refused (DECISIONS R150). No stored level in pinned `Init`, `Std` or
+    /// `Lean` has such a node.
+    #[error("universe instantiation of '{name}' depends on .olean object sharing (a stored max/imax that Lean's mk_max/mk_imax would rebuild differently); refused under the Lean kernel theory")]
+    LevelSharingDependent {
+        /// The constant whose type or value was being instantiated.
+        name: Name,
+    },
 }
 
 impl TypeError {
@@ -307,12 +382,6 @@ impl TypeError {
     }
 }
 
-impl From<CrossValidationError> for TypeError {
-    fn from(e: CrossValidationError) -> Self {
-        TypeError::CrossValidationFailure(Box::new(e))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -348,5 +417,75 @@ mod tests {
         };
         let msg = err.to_string();
         assert!(msg.contains("(head: Nat)"), "got: {msg}");
+    }
+
+    /// The defect this exists for: a mismatch whose two sides print the same.
+    ///
+    /// `Display for Expr` omits universe levels, so `LE2.{u} x` and `LE2.{v} x`
+    /// both render `LE2 x`. Measured on real Mathlib source, the message read
+    /// `Kernel check failed: expected LE2 fvar#4, got LE2 fvar#4` — a checker
+    /// telling a user that two identical things differ.
+    #[test]
+    fn test_type_mismatch_that_prints_identically_names_the_universe_difference() {
+        let u = crate::Level::param(Name::from_string("u"));
+        let v = crate::Level::param(Name::from_string("v"));
+        let expected = Expr::const_(Name::from_string("LE2"), vec![u]);
+        let inferred = Expr::const_(Name::from_string("LE2"), vec![v]);
+
+        // Precondition of the whole fix: the two sides ARE indistinguishable
+        // through the ordinary printer. If this ever stops holding, the
+        // disambiguation below is dead code and should be reconsidered.
+        assert_eq!(
+            expected.to_string(),
+            inferred.to_string(),
+            "the printer is expected to collide here; that collision is the defect"
+        );
+
+        let err = TypeError::TypeMismatch {
+            expected: Box::new(expected),
+            inferred: Box::new(inferred),
+            location: None,
+        };
+        let msg = err.to_string();
+        assert!(
+            msg.contains("both sides print identically"),
+            "the message must admit the collision, got: {msg}"
+        );
+        assert!(
+            msg.contains("universe levels"),
+            "and name what actually differs, got: {msg}"
+        );
+        assert!(msg.contains('u') && msg.contains('v'), "got: {msg}");
+    }
+
+    /// An ordinary mismatch gains NOTHING. The disambiguation is for the
+    /// collision only; paying for it on every message would be the wrong trade.
+    #[test]
+    fn test_an_ordinary_type_mismatch_is_unchanged() {
+        let err = TypeError::TypeMismatch {
+            expected: Box::new(Expr::const_(Name::from_string("Nat"), vec![])),
+            inferred: Box::new(Expr::const_(Name::from_string("Int"), vec![])),
+            location: None,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("expected Nat, got Int"), "got: {msg}");
+        assert!(
+            !msg.contains("both sides print identically"),
+            "no disambiguation when the sides already differ, got: {msg}"
+        );
+    }
+
+    /// Colliding sides with EQUAL levels still get an honest sentence rather
+    /// than silence — the reader is told to stop looking for a typo.
+    #[test]
+    fn test_identical_print_with_equal_levels_says_where_the_difference_is_not() {
+        let a = Expr::fvar(FVarId::new(4));
+        let err = TypeError::TypeMismatch {
+            expected: Box::new(a.clone()),
+            inferred: Box::new(a),
+            location: None,
+        };
+        let msg = err.to_string();
+        assert!(msg.contains("same universe levels"), "got: {msg}");
     }
 }

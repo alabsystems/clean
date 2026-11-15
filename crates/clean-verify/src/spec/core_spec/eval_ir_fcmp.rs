@@ -114,22 +114,22 @@ use crate::spec::Specification;
 //   -inf  = 0xFFF0000000000000 = 18442240474082181120
 //   qNaN  = 0x7FF8000000000000 = 9221120237041090560
 //   junk  = 2^64               = 18446744073709551616
-const SRC_WC_OEQ_EQUAL: &str = "def ir_exact_fcmp_oeq_equal : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OEQ_NAN: &str = "def ir_exact_fcmp_oeq_nan : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
-const SRC_WC_UEQ_NAN: &str = "def ir_exact_fcmp_ueq_nan : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ueq (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_UNE_NAN: &str = "def ir_exact_fcmp_une_nan : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.une (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OLT_NAN: &str = "def ir_exact_fcmp_olt_nan : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
-const SRC_WC_ULT_NAN: &str = "def ir_exact_fcmp_ult_nan : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ult (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OEQ_ZEROS: &str = "def ir_exact_fcmp_oeq_zeros : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 0) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OLT_ZEROS: &str = "def ir_exact_fcmp_olt_zeros : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
-const SRC_WC_OLT_NEG: &str = "def ir_exact_fcmp_olt_neg : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 13835058055282163712) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OGT_SWAP: &str = "def ir_exact_fcmp_ogt_swap : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ogt (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OGE_INF: &str = "def ir_exact_fcmp_oge_inf : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oge (IRTy.float_ 64) (IRScalar.float_ 9218868437227405312) (IRScalar.float_ 9218868437227405312)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OLT_NINF: &str = "def ir_exact_fcmp_olt_ninf : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 18442240474082181120) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_OLE_ASYM: &str = "def ir_exact_fcmp_ole_asym : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ole (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
-const SRC_WC_UGE_NAN: &str = "def ir_exact_fcmp_uge_nan : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.uge (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
-const SRC_WC_JUNK_OEQ: &str = "def ir_exact_fcmp_junk_oeq : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 18446744073709551616) (IRScalar.float_ 18446744073709551616)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
-const SRC_WC_JUNK_UEQ: &str = "def ir_exact_fcmp_junk_ueq : Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ueq (IRTy.float_ 64) (IRScalar.float_ 18446744073709551616) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OEQ_EQUAL: &str = "def ir_exact_fcmp_oeq_equal : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OEQ_NAN: &str = "def ir_exact_fcmp_oeq_nan : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
+const SRC_WC_UEQ_NAN: &str = "def ir_exact_fcmp_ueq_nan : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ueq (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_UNE_NAN: &str = "def ir_exact_fcmp_une_nan : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.une (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OLT_NAN: &str = "def ir_exact_fcmp_olt_nan : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
+const SRC_WC_ULT_NAN: &str = "def ir_exact_fcmp_ult_nan : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ult (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OEQ_ZEROS: &str = "def ir_exact_fcmp_oeq_zeros : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 0) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OLT_ZEROS: &str = "def ir_exact_fcmp_olt_zeros : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
+const SRC_WC_OLT_NEG: &str = "def ir_exact_fcmp_olt_neg : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 13835058055282163712) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OGT_SWAP: &str = "def ir_exact_fcmp_ogt_swap : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ogt (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OGE_INF: &str = "def ir_exact_fcmp_oge_inf : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oge (IRTy.float_ 64) (IRScalar.float_ 9218868437227405312) (IRScalar.float_ 9218868437227405312)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OLT_NINF: &str = "def ir_exact_fcmp_olt_ninf : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.olt (IRTy.float_ 64) (IRScalar.float_ 18442240474082181120) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_OLE_ASYM: &str = "def ir_exact_fcmp_ole_asym : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ole (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
+const SRC_WC_UGE_NAN: &str = "def ir_exact_fcmp_uge_nan : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.uge (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
+const SRC_WC_JUNK_OEQ: &str = "def ir_exact_fcmp_junk_oeq : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.oeq (IRTy.float_ 64) (IRScalar.float_ 18446744073709551616) (IRScalar.float_ 18446744073709551616)) (IRStepResult.value (IRScalar.bool_ Bool.false)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.false))";
+const SRC_WC_JUNK_UEQ: &str = "def ir_exact_fcmp_junk_ueq : @Eq IRStepResult (ir_fcmp_eval IRFCmpOp.ueq (IRTy.float_ 64) (IRScalar.float_ 18446744073709551616) (IRScalar.float_ 0)) (IRStepResult.value (IRScalar.bool_ Bool.true)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.bool_ Bool.true))";
 
 impl Specification {
     /// The float-comparison band: the non-NaN bit-order deciders, the
@@ -152,7 +152,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_is_nan (n : Nat) : Bool := ",
-                "IRF64Class.rec (fun (_ : IRF64Class) => Bool) ",
+                "@IRF64Class.rec (fun (_ : IRF64Class) => Bool) ",
                 "Bool.true Bool.false Bool.false Bool.false ",
                 "(ir_f64_class n)",
             ),
@@ -191,12 +191,12 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_ltb (a : Nat) (b : Nat) : Bool := ",
-                "Bool.rec (fun (_ : Bool) => Bool) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) ",
+                "@Bool.rec (fun (_ : Bool) => Bool) ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) ",
                 "(ir_nat_ltb (ir_f64_mag a) (ir_f64_mag b)) ",
                 "Bool.false ",
                 "(ir_f64_is_neg b)) ",
-                "(Bool.rec (fun (_ : Bool) => Bool) ",
+                "(@Bool.rec (fun (_ : Bool) => Bool) ",
                 "(Bool.not (Bool.and (ir_nat_iszero (ir_f64_mag a)) (ir_nat_iszero (ir_f64_mag b)))) ",
                 "(ir_nat_ltb (ir_f64_mag b) (ir_f64_mag a)) ",
                 "(ir_f64_is_neg b)) ",
@@ -251,9 +251,9 @@ impl Specification {
             concat!(
                 "def ir_float_cmp (f : Nat -> Nat -> Bool) (t : IRTy) ",
                 "(a : IRScalar) (b : IRScalar) : IRStepResult := ",
-                "IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
+                "@IROption.rec Nat (fun (_ : IROption Nat) => IRStepResult) ",
                 "ir_float_type_fault ",
-                "(fun (w : Nat) => Bool.rec (fun (_ : Bool) => IRStepResult) ",
+                "(fun (w : Nat) => @Bool.rec (fun (_ : Bool) => IRStepResult) ",
                 "ir_float_fault ",
                 "(ir_float2 (fun (x : Nat) (y : Nat) => ",
                 "IRStepResult.value (IRScalar.bool_ (f x y))) a b) ",
@@ -310,9 +310,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_fcmp_int_ty_faults (op : IRFCmpOp) (w : Nat) ",
-                "(a : IRScalar) (b : IRScalar) : Eq IRStepResult ",
+                "(a : IRScalar) (b : IRScalar) : @Eq IRStepResult ",
                 "(ir_fcmp_eval op (IRTy.int_ w) a b) ir_float_type_fault := ",
-                "Eq.refl IRStepResult ir_float_type_fault",
+                "@Eq.refl IRStepResult ir_float_type_fault",
             ),
             "An fcmp at an INTEGER type is `type_error not_float` at EVERY operator, width \
              and operand pair: the kernel iota-reduces ir_ty_float_width on the int_ \
@@ -322,9 +322,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_fcmp_f32_unmodelled (op : IRFCmpOp) ",
-                "(a : IRScalar) (b : IRScalar) : Eq IRStepResult ",
+                "(a : IRScalar) (b : IRScalar) : @Eq IRStepResult ",
                 "(ir_fcmp_eval op (IRTy.float_ 32) a b) ir_float_fault := ",
-                "Eq.refl IRStepResult ir_float_fault",
+                "@Eq.refl IRStepResult ir_float_fault",
             ),
             "An fcmp at binary32 is the TAGGED `unmodelled float_domain` outcome at every \
              operator and operand pair — the dated fragment refusal (2026-08-25): the pinned \
@@ -336,10 +336,10 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_fcmp_not_float_operand (op : IRFCmpOp) (n : Nat) ",
-                "(b : IRScalar) : Eq IRStepResult ",
+                "(b : IRScalar) : @Eq IRStepResult ",
                 "(ir_fcmp_eval op (IRTy.float_ 64) (IRScalar.int_ n) b) ",
                 "ir_float_type_fault := ",
-                "Eq.refl IRStepResult ir_float_type_fault",
+                "@Eq.refl IRStepResult ir_float_type_fault",
             ),
             "A non-float OPERAND under a well-formed f64 fcmp fails closed with type_error \
              not_float at every operator, payload and second operand: ir_float2's first \

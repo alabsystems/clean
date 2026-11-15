@@ -71,9 +71,8 @@ fn perf_lemma_name(salt: &str, i: usize) -> Name {
 ///   (`∀ α a b, (a = b) = (b = a)`), which `insert_if_specific` REFUSES, so it
 ///   lands in the unindexed head-const bucket under `Eq`.
 ///
-/// The `salt` keeps each test's declarations (and therefore its cache key
-/// fingerprint) distinct, so tests stay isolated even if a single-threaded
-/// test run shares one thread-local cache.
+/// The `salt` keeps each test's declarations distinct. Cache identity also
+/// separates fresh environments whose declarations reuse the same names.
 fn build_env(salt: &str, lemma_count: usize) -> Environment {
     let mut env = Environment::new();
     env.init_nat().expect("init nat");
@@ -178,6 +177,122 @@ fn test_simp_cache_second_call_reuses_built_set() {
 }
 
 #[test]
+fn test_simp_cache_separates_divergent_clones_with_the_same_registry_names() {
+    let mut base = build_env("branch", 0);
+    let heads = ["SimpPerf.branch.left", "SimpPerf.branch.right"];
+    for head in heads {
+        base.add_decl(Declaration::Axiom {
+            name: Name::from_string(head),
+            level_params: vec![],
+            type_: Expr::const_(Name::from_string("Nat"), vec![]),
+        })
+        .expect("register branch head");
+    }
+    let mut states = Vec::new();
+    let lemma = Name::from_string("SimpPerf.branch.same_lemma");
+    for head in heads {
+        let mut env = base.clone();
+        env.add_decl(Declaration::Axiom {
+            name: lemma.clone(),
+            level_params: vec![],
+            type_: mk_eq_nat(Expr::const_(Name::from_string(head), vec![]), nat_zero()),
+        })
+        .expect("register a different statement under the same lemma name");
+        env.register_simp_lemma(lemma.clone(), SimpPriority::Default);
+        states.push(state_for(env));
+    }
+    assert_eq!(states[0].env().generation(), states[1].env().generation());
+    assert_eq!(
+        states[0].env().simp_registry_revision(),
+        states[1].env().simp_registry_revision()
+    );
+    let config = SimpConfig::new();
+    let first = collect_simp_lemmas_cached(&states[0], &config);
+    let second = collect_simp_lemmas_cached(&states[1], &config);
+    assert!(!Arc::ptr_eq(&first, &second));
+    for (set, head) in [(&first, heads[0]), (&second, heads[1])] {
+        let rule = set
+            .iter()
+            .find(|rule| rule.name == lemma)
+            .expect("own lemma");
+        assert_eq!(rule.lhs, Expr::const_(Name::from_string(head), vec![]));
+    }
+    assert!(Arc::ptr_eq(
+        &first,
+        &collect_simp_lemmas_cached(&states[0], &config)
+    ));
+}
+
+#[test]
+fn test_simp_cache_recomputes_paths_for_an_independent_environment() {
+    use crate::tactic::simp::path_computation_count;
+
+    let config = SimpConfig::new();
+    let first = state_for(build_env("independent", 5));
+    let second = state_for(build_env("independent", 5));
+    let before = path_computation_count();
+    let first_set = collect_simp_lemmas_cached(&first, &config);
+    let first_computed = path_computation_count() - before;
+    assert!(first_computed > 0);
+    let before = path_computation_count();
+    let second_set = collect_simp_lemmas_cached(&second, &config);
+    assert_eq!(path_computation_count() - before, first_computed);
+    assert!(!Arc::ptr_eq(&first_set, &second_set));
+}
+
+#[test]
+fn test_simp_cache_rebuilds_after_trusted_registry_delta_replay() {
+    use clean_kernel::env::TrustedEnvExt;
+
+    let lemma = perf_lemma_name("delta", 0);
+    let mut env = build_env("delta", 1);
+    assert!(env.unregister_simp_lemma(&lemma));
+    let mut state = state_for(env);
+    let config = SimpConfig::new();
+    for action in 0..3 {
+        let old = collect_simp_lemmas_cached(&state, &config);
+        let identity = state.env().simp_cache_identity();
+        let mut produced = state.env().clone();
+        match action {
+            0 => produced.register_simp_lemma(lemma.clone(), SimpPriority::Default),
+            1 => assert!(produced.unregister_simp_lemma(&lemma)),
+            _ => {
+                produced.register_simp_lemma(lemma.clone(), SimpPriority::Default);
+                assert!(produced.unregister_simp_lemma(&lemma));
+            }
+        }
+        let delta = produced
+            .local_fact_delta_since(state.env())
+            .expect("actual checked registry delta");
+        if action == 0 {
+            let mut wrong_base = state.env().clone();
+            wrong_base.register_simp_lemma(lemma.clone(), SimpPriority::Default);
+            let unchanged = wrong_base.simp_cache_identity();
+            let bytes = wrong_base.to_bincode().expect("record wrong base");
+            assert!(TrustedEnvExt::apply_local_fact_delta(&mut wrong_base, &delta).is_err());
+            assert_eq!(unchanged, wrong_base.simp_cache_identity());
+            assert_eq!(
+                bytes,
+                wrong_base.to_bincode().expect("unchanged wrong base")
+            );
+        }
+        TrustedEnvExt::apply_local_fact_delta(state.env_mut(), &delta)
+            .expect("replay through the actual trusted endpoint");
+        assert_ne!(identity, state.env().simp_cache_identity());
+        let rebuilds = cacheable_rebuild_count();
+        let new = collect_simp_lemmas_cached(&state, &config);
+        assert_eq!(cacheable_rebuild_count(), rebuilds + 1);
+        assert!(!Arc::ptr_eq(&old, &new));
+        assert_eq!(new.iter().any(|rule| rule.name == lemma), action == 0);
+        assert!(Arc::ptr_eq(
+            &new,
+            &collect_simp_lemmas_cached(&state, &config)
+        ));
+        assert_eq!(cacheable_rebuild_count(), rebuilds + 1);
+    }
+}
+
+#[test]
 fn test_simp_cache_rebuilds_when_registry_gains_a_lemma() {
     let env = build_env("grow", 50);
     let config = SimpConfig::new();
@@ -210,6 +325,83 @@ fn test_simp_cache_rebuilds_when_registry_gains_a_lemma() {
         "the freshly registered lemma must be in the rebuilt set"
     );
     assert_eq!(second.len(), first.len() + 1);
+}
+
+/// A registry that GROWS must be seen (the rebuild above) — and the rebuild
+/// must pay path computation for the new lemma only, while building exactly
+/// the set a from-scratch build does. Every `@[simp]` declaration of a file
+/// is such a growth; re-deriving ~10k imported key paths per growth was 27%
+/// of one `Mathlib/Logic/Basic.lean` sample (performance audit 2026-09-24).
+#[test]
+fn test_simp_cache_rebuild_on_growth_computes_only_the_new_paths() {
+    use crate::tactic::simp::{collect_simp_lemmas, path_computation_count};
+
+    let env = build_env("memo", 50);
+    let config = SimpConfig::new();
+    let state = state_for(env.clone());
+    let first = collect_simp_lemmas_cached(&state, &config);
+
+    let mut grown = env;
+    let late_head = Name::from_string("SimpPerf.memo.lateHead");
+    grown
+        .add_decl(Declaration::Axiom {
+            name: late_head.clone(),
+            level_params: vec![],
+            type_: Expr::const_(Name::from_string("Nat"), vec![]),
+        })
+        .expect("register late head");
+    let late = Name::from_string("SimpPerf.memo.late");
+    grown
+        .add_decl(Declaration::Axiom {
+            name: late.clone(),
+            level_params: vec![],
+            type_: mk_eq_nat(Expr::const_(late_head.clone(), vec![]), nat_zero()),
+        })
+        .expect("register late lemma");
+    grown.register_simp_lemma(late.clone(), SimpPriority::Default);
+    let grown_state = state_for(grown);
+
+    let computed_before = path_computation_count();
+    let rebuilt = collect_simp_lemmas_cached(&grown_state, &config);
+    let computed = path_computation_count() - computed_before;
+    assert_eq!(
+        computed,
+        1,
+        "the rebuild must compute the new lemma's path and reuse the {} it had",
+        first.len()
+    );
+
+    // The same set a from-scratch build makes: same lemmas in the same order,
+    // and the same candidates at the new lemma's head and at old ones.
+    let scratch = collect_simp_lemmas(&grown_state, &config);
+    let rebuilt_names: Vec<Name> = rebuilt.iter().map(|l| l.name.clone()).collect();
+    let scratch_names: Vec<Name> = scratch.iter().map(|l| l.name.clone()).collect();
+    assert_eq!(rebuilt_names, scratch_names);
+    let goal = grown_state.current_goal().expect("a goal").clone();
+    for query in [
+        Expr::const_(late_head.clone(), vec![]),
+        Expr::const_(perf_const_name("memo", 7), vec![]),
+        mk_eq_nat(nat_zero(), nat_zero()),
+    ] {
+        let from_memo: Vec<Name> = rebuilt
+            .candidates(&grown_state, &goal, &query)
+            .iter()
+            .map(|l| l.name.clone())
+            .collect();
+        let from_scratch: Vec<Name> = scratch
+            .candidates(&grown_state, &goal, &query)
+            .iter()
+            .map(|l| l.name.clone())
+            .collect();
+        assert_eq!(from_memo, from_scratch, "candidates differ at {query:?}");
+    }
+    assert!(
+        rebuilt
+            .candidates(&grown_state, &goal, &Expr::const_(late_head, vec![]))
+            .iter()
+            .any(|l| l.name == late),
+        "the new lemma must be offered at its own head"
+    );
 }
 
 #[test]
@@ -251,7 +443,9 @@ fn test_simp_cache_bypasses_goal_dependent_configs() {
     // counted rebuild, no cache pollution).
     let mut only_config = SimpConfig::new();
     only_config.only = true;
-    only_config.extra_lemmas = vec![perf_lemma_name("bypass", 0).to_string()];
+    only_config.extra_lemmas = vec![clean_parser::SurfaceName::from_name(perf_lemma_name(
+        "bypass", 0,
+    ))];
     let only_set = collect_simp_lemmas_cached(&state, &only_config);
     assert!(
         only_set.len() < first.len(),
@@ -317,5 +511,51 @@ fn test_simp_candidates_const_headed_query_consults_fewer_lemmas() {
     assert!(
         !c5_candidates.iter().any(|l| l.name == flip_name),
         "an Eq-bucketed lemma must not be scanned at a non-Eq-headed query"
+    );
+}
+
+/// `simp at h` sets `SimpConfig::exclude_hypothesis` for every hypothesis it
+/// visits. That flag is read only by the two channels a cacheable config
+/// already has empty (`extra_lemmas`, and `collect_hypothesis_lemmas` behind
+/// `use_hypotheses`), so it must not disqualify the cache: while it did, the
+/// commonest simp spelling of all fell to the composable arm, where
+/// `SimpLemmaSet::base_with_overlay` deep-clones the base — ~10k lemmas and
+/// the discrimination tree under real imports — to add an empty overlay.
+#[test]
+fn test_simp_cache_excluded_hypothesis_still_hits_the_cache() {
+    let state = state_for(build_env("excl", 1000));
+    let plain = SimpConfig::new();
+    let mut excluded = SimpConfig::new();
+    excluded.exclude_hypothesis = Some(clean_parser::SurfaceName::generated_path("h"));
+
+    let before = cacheable_rebuild_count();
+    let first = collect_simp_lemmas_cached(&state, &plain);
+    let second = collect_simp_lemmas_cached(&state, &excluded);
+
+    assert_eq!(
+        cacheable_rebuild_count(),
+        before + 1,
+        "a config that only carries `exclude_hypothesis` must reuse the cached set"
+    );
+    assert!(
+        Arc::ptr_eq(&first, &second),
+        "the excluded-hypothesis config must get the identical Arc, not a clone"
+    );
+}
+
+/// The control: a config whose `extra_lemmas` are non-empty is genuinely not
+/// cacheable, so the relaxation above cannot be hiding a real overlay.
+#[test]
+fn test_simp_cache_extra_lemmas_still_bypass_the_cache() {
+    let state = state_for(build_env("excl_ctl", 50));
+    let plain = SimpConfig::new();
+    let mut extras = SimpConfig::new();
+    extras.extra_lemmas = vec![clean_parser::SurfaceName::generated_path("SimpPerf.l0")];
+
+    let first = collect_simp_lemmas_cached(&state, &plain);
+    let second = collect_simp_lemmas_cached(&state, &extras);
+    assert!(
+        !Arc::ptr_eq(&first, &second),
+        "a config carrying extra lemmas must not be served the bare cached set"
     );
 }

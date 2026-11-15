@@ -29,7 +29,8 @@
 //! # What a goal is
 //!
 //! [`BvGoal`] is `lhs == rhs` over [`BvTerm`], a closed bit-vector fragment.
-//! For a sited lowered assert the goal is always
+//! For a sited assert (an `Inst::Assert`, or a lowered `CondBr` assert) the
+//! goal is always
 //! `<condition, 1 bit> == Const { value: 1, width: 1 }` — "the checked
 //! condition is true for every valuation of the block's free parameters".
 //!
@@ -52,7 +53,7 @@
 //! [`GoalDeriveError`]. There is no arm that approximates.
 
 use crate::constant::Constant;
-use crate::inst::{BinOp, CastOp, ICmpOp, Inst, UnOp};
+use crate::inst::{BinOp, CastOp, ICmpOp, Inst, OverflowOp, UnOp};
 use crate::node::InstrNode;
 use crate::ty::Ty;
 use crate::value::{BlockId, ValueId};
@@ -700,16 +701,26 @@ pub fn bvblast_goal_formula_parts(formula: &ProofFormula) -> Option<((u32, u32, 
     if parts.next().is_some() {
         return None;
     }
-    if obligation_kind_tag_is_known(kind)
-        && goal.len() == 64
-        && goal
-            .bytes()
-            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
-    {
+    if obligation_kind_tag_is_known(kind) && is_bvgoal_digest_hex(goal) {
         Some(((function, block, inst_index), kind, goal))
     } else {
         None
     }
+}
+
+/// Whether `digest` is spelled exactly as [`bvgoal_digest_hex`] spells a goal
+/// digest: 64 lowercase hexadecimal digits, nothing else.
+///
+/// The ONE spelling rule for a goal digest. [`bvblast_goal_formula_parts`]
+/// holds a formula's claimed digest to it, and a consumer that decodes a digest
+/// from untrusted bytes (the bit-blast certificate payload in `trust-ir-ay`)
+/// holds that one to it before using it, so no code path ever compares, slices
+/// or prints a digest of any other shape.
+pub fn is_bvgoal_digest_hex(digest: &str) -> bool {
+    digest.len() == 64
+        && digest
+            .bytes()
+            .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
 }
 
 fn obligation_kind_tag_is_known(tag: &str) -> bool {
@@ -725,6 +736,244 @@ pub fn bvgoal_digest_hex(goal: &BvGoal) -> String {
     digest_hex(&bvgoal_digest(goal))
 }
 
+// ───────────────────── producer formulas against the site goal ─────────────────────
+
+fn write_smtlib(term: &BvTerm, out: &mut String) {
+    use core::fmt::Write as _;
+    let binary = |out: &mut String, op: &str, a: &BvTerm, b: &BvTerm| {
+        out.push('(');
+        out.push_str(op);
+        out.push(' ');
+        write_smtlib(a, out);
+        out.push(' ');
+        write_smtlib(b, out);
+        out.push(')');
+    };
+    match term {
+        BvTerm::Leaf { name, .. } => out.push_str(name),
+        BvTerm::Const { value, width } => {
+            let _ = write!(out, "(_ bv{value} {width})");
+        }
+        BvTerm::Add(a, b) => binary(out, "bvadd", a, b),
+        BvTerm::Sub(a, b) => binary(out, "bvsub", a, b),
+        BvTerm::And(a, b) => binary(out, "bvand", a, b),
+        BvTerm::Or(a, b) => binary(out, "bvor", a, b),
+        BvTerm::Xor(a, b) => binary(out, "bvxor", a, b),
+        BvTerm::Shl(a, b) => binary(out, "bvshl", a, b),
+        BvTerm::Lshr(a, b) => binary(out, "bvlshr", a, b),
+        BvTerm::Ashr(a, b) => binary(out, "bvashr", a, b),
+        BvTerm::Not(inner) => {
+            out.push_str("(bvnot ");
+            write_smtlib(inner, out);
+            out.push(')');
+        }
+        BvTerm::ZeroExt(inner, added) => {
+            let _ = write!(out, "((_ zero_extend {added}) ");
+            write_smtlib(inner, out);
+            out.push(')');
+        }
+        BvTerm::SignExt(inner, added) => {
+            let _ = write!(out, "((_ sign_extend {added}) ");
+            write_smtlib(inner, out);
+            out.push(')');
+        }
+        BvTerm::Extract { inner, high, low } => {
+            let _ = write!(out, "((_ extract {high} {low}) ");
+            write_smtlib(inner, out);
+            out.push(')');
+        }
+        // A 1-bit result, as every predicate node of the fragment is.
+        BvTerm::Eq(a, b) => {
+            out.push_str("(ite ");
+            binary(out, "=", a, b);
+            out.push_str(" #b1 #b0)");
+        }
+        // Carry out of `a + b`: the wrapped sum is below `a`.
+        BvTerm::CarryOut {
+            lhs,
+            rhs,
+            is_sub: false,
+        } => {
+            out.push_str("(ite (bvult (bvadd ");
+            write_smtlib(lhs, out);
+            out.push(' ');
+            write_smtlib(rhs, out);
+            out.push_str(") ");
+            write_smtlib(lhs, out);
+            out.push_str(") #b1 #b0)");
+        }
+        // Carry out of `a - b` (no borrow): `a >=u b`.
+        BvTerm::CarryOut {
+            lhs,
+            rhs,
+            is_sub: true,
+        } => {
+            out.push_str("(ite ");
+            binary(out, "bvuge", lhs, rhs);
+            out.push_str(" #b1 #b0)");
+        }
+    }
+}
+
+/// The canonical SMT-LIB2 rendering of a goal: `(= <lhs> <rhs>)`, one fixed
+/// spelling per node, single spaces, no line breaks.
+///
+/// This is the canonical bit-vector rendering a producer formula is compared
+/// against by [`formula_matches_goal`]. It is injective on well-formed goals
+/// TOGETHER WITH the leaf widths: every operator and every constant carries its
+/// width, and a leaf's width is supplied by the formula's `bindings`, which
+/// [`formula_matches_goal`] requires to name exactly the goal's leaves at
+/// exactly their widths.
+pub fn bvgoal_smtlib(goal: &BvGoal) -> String {
+    let mut out = String::new();
+    out.push_str("(= ");
+    write_smtlib(&goal.lhs, &mut out);
+    out.push(' ');
+    write_smtlib(&goal.rhs, &mut out);
+    out.push(')');
+    out
+}
+
+fn collect_leaves(term: &BvTerm, out: &mut Vec<(String, u32)>) {
+    match term {
+        BvTerm::Leaf { name, width } => {
+            if !out.iter().any(|(seen, _)| seen == name) {
+                out.push((name.clone(), *width));
+            }
+        }
+        BvTerm::Const { .. } => {}
+        BvTerm::Not(inner)
+        | BvTerm::ZeroExt(inner, _)
+        | BvTerm::SignExt(inner, _)
+        | BvTerm::Extract { inner, .. } => collect_leaves(inner, out),
+        BvTerm::Add(a, b)
+        | BvTerm::Sub(a, b)
+        | BvTerm::And(a, b)
+        | BvTerm::Or(a, b)
+        | BvTerm::Xor(a, b)
+        | BvTerm::Shl(a, b)
+        | BvTerm::Lshr(a, b)
+        | BvTerm::Ashr(a, b)
+        | BvTerm::Eq(a, b)
+        | BvTerm::CarryOut { lhs: a, rhs: b, .. } => {
+            collect_leaves(a, out);
+            collect_leaves(b, out);
+        }
+    }
+}
+
+/// The refusal every route reports when a row's own formula does not state
+/// the goal re-derived at its site. One spelling, matched by substring.
+pub const PRODUCER_FORMULA_DISAGREES: &str = "producer formula disagrees with the site goal";
+
+/// Does a producer-carried formula state exactly `goal`? (WS5.4 (1b))
+///
+/// A row that already carries a formula is discharged only when this holds; a
+/// discharge route must NEVER replace the producer's formula with "whatever
+/// condition sits at the site", because that erases exactly the disagreement a
+/// verifier must see. True iff ALL of:
+///
+/// 1. the formula's ONE SMT-LIB text ([`ProofFormula::smtlib_text`]: an
+///    `smtlib2` payload whose `smtlib` rendering, if any, is that payload) is
+///    exactly [`bvgoal_smtlib`]`(goal)` — canonical bit-vector rendering
+///    equality, byte for byte (no normalization: a rewriter here would be
+///    trusted code between the claim and the proof). Any other schema's
+///    payload is opaque to trust-ir, so nothing shows it states the goal,
+///    whatever its rendering says; it never matches. (It used to match on
+///    the rendering alone, so an opaque payload stating another claim was
+///    discharged and accepted by the authority.)
+/// 2. `formula.sort`, if recorded, is `Bool`;
+/// 3. `formula.bindings` binds EXACTLY the goal's free leaves, each once, each
+///    to [`ClausePlace::Value`] of the SSA value the leaf names
+///    ([`bvgoal_leaf_name`]) at [`ClauseSort::BitVec`] of the leaf's width.
+///    Empty bindings are UNBINDABLE, never a wildcard, and an extra binding is
+///    refused rather than ignored: the formula must mean one thing.
+///
+/// Anything else — including a formula in a schema this crate cannot read —
+/// is `false`, and the row stays undischarged ([`PRODUCER_FORMULA_DISAGREES`]).
+pub fn formula_matches_goal(formula: &ProofFormula, goal: &BvGoal) -> bool {
+    if formula.smtlib_text() != Some(bvgoal_smtlib(goal).as_str()) {
+        return false;
+    }
+    if formula.sort.as_deref().is_some_and(|sort| sort != "Bool") {
+        return false;
+    }
+    let mut leaves = Vec::new();
+    collect_leaves(&goal.lhs, &mut leaves);
+    collect_leaves(&goal.rhs, &mut leaves);
+    if formula.bindings.len() != leaves.len() {
+        return false;
+    }
+    leaves.iter().all(|(name, width)| {
+        let mut bound = formula.bindings.iter().filter(|(n, _)| n == name);
+        let (Some((_, binding)), None) = (bound.next(), bound.next()) else {
+            return false;
+        };
+        let names_this_value = match binding.place {
+            super::obligations::ClausePlace::Value(value) => bvgoal_leaf_name(value) == *name,
+            _ => false,
+        };
+        names_this_value && binding.sort == super::obligations::ClauseSort::BitVec(*width)
+    })
+}
+
+/// Does the obligation's formula state the goal re-derived at its site?
+///
+/// Two spellings are admitted, and nothing else:
+///
+/// * the bit-blast goal CLAIM ([`BVBLAST_GOAL_SCHEMA`], what a discharge route
+///   stamps on a formula-less row): its site, kind and goal digest must each be
+///   the obligation's own and the re-derived goal's;
+/// * a producer formula for which [`formula_matches_goal`] holds.
+///
+/// `false` for a formula-less obligation: the caller decides what an absent
+/// formula means (a discharge route stamps the claim; nothing is inferred here).
+pub fn formula_binds_site_goal(obligation: &ProofObligation, goal: &BvGoal) -> bool {
+    let Some(formula) = obligation.formula.as_ref() else {
+        return false;
+    };
+    if formula.schema == BVBLAST_GOAL_SCHEMA {
+        let (Some(site), Some(((f, b, i), kind_tag, digest))) = (
+            obligation.site.as_ref(),
+            bvblast_goal_formula_parts(formula),
+        ) else {
+            return false;
+        };
+        return (f, b, i) == (site.function.index(), site.block.index(), site.inst_index)
+            && obligation_kind_tag(&obligation.kind) == Some(kind_tag)
+            && digest == bvgoal_digest_hex(goal);
+    }
+    formula_matches_goal(formula, goal)
+}
+
+/// Build the producer-side formula [`formula_matches_goal`] admits for `goal`:
+/// schema `smtlib2`, payload and `smtlib` the canonical rendering, sort `Bool`,
+/// and one `Value`-place `BitVec` binding per free leaf. For producers and
+/// tests; a discharge route never calls it on a row that already has a formula.
+pub fn bvgoal_formula(goal: &BvGoal) -> Option<ProofFormula> {
+    let mut leaves = Vec::new();
+    collect_leaves(&goal.lhs, &mut leaves);
+    collect_leaves(&goal.rhs, &mut leaves);
+    let mut bindings = Vec::with_capacity(leaves.len());
+    for (name, width) in leaves {
+        let index: u32 = name.strip_prefix('v')?.parse().ok()?;
+        let value = ValueId::new(index);
+        if bvgoal_leaf_name(value) != name {
+            return None;
+        }
+        bindings.push((
+            name,
+            super::obligations::ClauseBinding {
+                sort: super::obligations::ClauseSort::BitVec(width),
+                place: super::obligations::ClausePlace::Value(value),
+            },
+        ));
+    }
+    let mut formula = ProofFormula::smtlib2(bvgoal_smtlib(goal), "Bool");
+    formula.bindings = bindings;
+    Some(formula)
+}
+
 // ───────────────────────────── goal derivation ─────────────────────────────
 
 /// Why a sited obligation yields no goal. Every variant is a refusal, never an
@@ -734,6 +983,9 @@ pub enum GoalDeriveError {
     /// The obligation records no `site`, so there is no instruction to read a
     /// condition from. A missing site is unbindable, never a wildcard.
     NoSite,
+    /// The obligation's kind is outside [`ASSERT_CLASS_OBLIGATION_KINDS`], so a
+    /// sited assert condition is not what it states (WS5.4 (1a)).
+    KindNotAssertClass { kind: ObligationKind },
     /// `ProofObligation::function` and `ObligationSite::function` disagree.
     SiteFunctionMismatch { obligation: u32, site: u32 },
     /// The site names a function, block, or instruction index this module does
@@ -759,9 +1011,10 @@ impl core::fmt::Display for GoalDeriveError {
         match self {
             Self::NoSite => write!(
                 f,
-                "obligation records no site; a bv-blast goal is derived from the sited CondBr \
+                "obligation records no site; a bv-blast goal is derived from the sited assert \
                  only (fail-closed)"
             ),
+            Self::KindNotAssertClass { kind } => f.write_str(&assert_class_kind_refusal(kind)),
             Self::SiteFunctionMismatch { obligation, site } => write!(
                 f,
                 "obligation is scoped to function {obligation} but its site names function {site}"
@@ -802,14 +1055,28 @@ pub fn is_diverging_arm(function: &Function, target: BlockId) -> bool {
         .is_some_and(|node| matches!(node.inst, Inst::Unreachable))
 }
 
-/// Read the lowered-assert condition out of the `CondBr` at an obligation site:
+/// Read the assert condition out of the node at an obligation site:
 /// `(cond, expected)` where `expected` is the boolean the condition must take
-/// for control to AVOID the diverging arm.
+/// for control to continue past the check.
 ///
-/// Fail-closed on ambiguity. If both successors diverge, or neither does, the
-/// node is not a recognisable lowered assert and no condition is derived —
-/// guessing the polarity would prove `cond == false` and record it as
-/// discharging an obligation that says `cond == true`.
+/// Two shapes are recognised, and nothing else:
+///
+/// * **`Inst::Assert { cond }`** (WS5.4) — the ratified proof-carrying
+///   instruction: control continues only if `cond` holds, so the obligation it
+///   states is exactly `cond` at that point. There is no polarity to infer:
+///   the result is always `(cond, true)`. This is the shape the direct lane
+///   emits (`assert %c` after `select %overflowed, false, true`).
+/// * **A lowered `CondBr`** exactly one of whose successors diverges, in the
+///   producer's fixed `condbr assert_cond, <success>, <panic>` convention.
+///
+/// Fail-closed on ambiguity. If both successors of a `CondBr` diverge, or
+/// neither does, the node is not a recognisable lowered assert and no
+/// condition is derived — guessing the polarity would prove `cond == false`
+/// and record it as discharging an obligation that says `cond == true`.
+///
+/// Which obligation KINDS a sited assert may back is a separate question,
+/// answered by [`is_assert_class_kind`]; every caller gates on it before
+/// reading a condition here.
 ///
 /// # Why this lives in `trust-ir`
 ///
@@ -820,6 +1087,12 @@ pub fn lowered_assert_condition(
     function: &Function,
     node: &InstrNode,
 ) -> Result<(ValueId, bool), String> {
+    if let Inst::Assert { cond, .. } = &node.inst {
+        // The condition IS the obligation: `assert c` traps unless `c`, so the
+        // fact a proof must establish is `c == true` at this point, read off the
+        // instruction itself rather than out of the block graph.
+        return Ok((*cond, true));
+    }
     let Inst::CondBr {
         cond,
         then_target,
@@ -828,8 +1101,8 @@ pub fn lowered_assert_condition(
     } = &node.inst
     else {
         return Err(format!(
-            "the instruction at this obligation's site is {}, not a CondBr; the sited VC \
-             only recognises a lowered assert (fail-closed)",
+            "the instruction at this obligation's site is {}, not an Assert or a CondBr; the \
+             sited VC only recognises an Inst::Assert or a lowered assert (fail-closed)",
             inst_label(&node.inst)
         ));
     };
@@ -879,6 +1152,55 @@ pub fn lowered_assert_condition(
     }
 }
 
+/// The obligation kinds a sited assert — an `Inst::Assert` or a lowered
+/// `CondBr` assert — can back: the panic-class checks whose meaning IS "this
+/// check cannot fail".
+///
+/// ONE constant, read by every route (the bit-blast producer and its validator
+/// capability, the SMT sited VC, and [`derive_site_goal`] itself), so the routes
+/// cannot disagree about which rows an assert condition may discharge.
+///
+/// Deliberately narrow. A proof that the sited condition always holds is a
+/// panic-freedom fact about THAT check. It is sound for `BoundsCheck`
+/// (index-in-bounds) and `ArithmeticSafety` (overflow / shift range / divisor
+/// nonzero). It says nothing about a `Postcondition`, a `LoopInvariant` or a
+/// `Termination` row that merely happens to be sited on a node that is an
+/// assert (WS5.5 sites loop rows at `(header, 0)`, and a header can open with a
+/// bounds check): admitting those would let an unrelated condition "prove"
+/// them. `MemorySafety` is excluded because alignment and non-nullness are
+/// provenance facts a bit-vector condition over an unconstrained pointer does
+/// not establish, and `PanicFreedom` because it is a whole-function claim that
+/// one site does not establish.
+pub const ASSERT_CLASS_OBLIGATION_KINDS: [ObligationKind; 2] = [
+    ObligationKind::BoundsCheck,
+    ObligationKind::ArithmeticSafety,
+];
+
+/// True iff `kind` is in [`ASSERT_CLASS_OBLIGATION_KINDS`]: the table
+/// [`super::ObligationKindShape::is_assert_class`], every cell of which is a
+/// proved Trust contract (gate 13). The array stays as the same set spelled as
+/// data; `assert_class_array_is_the_proved_table` holds the two equal.
+pub fn is_assert_class_kind(kind: &ObligationKind) -> bool {
+    kind.shape().is_assert_class()
+}
+
+/// True iff `inst` is an assert-shaped site node — an `Inst::Assert` or a
+/// `CondBr` — i.e. a node whose condition some route could read as the
+/// obligation's statement. A row of a non-assert-class kind sited on one is
+/// refused with [`assert_class_kind_refusal`], never backed by the condition.
+pub fn is_assert_site_inst(inst: &Inst) -> bool {
+    matches!(inst, Inst::Assert { .. } | Inst::CondBr { .. })
+}
+
+/// The refusal every route reports for a non-assert-class row sited on an
+/// assert-shaped node. One spelling, so a consumer can match it by substring.
+pub fn assert_class_kind_refusal(kind: &ObligationKind) -> String {
+    format!(
+        "kind {kind} is not an assert-class obligation: a sited assert condition backs only \
+         bounds_check and arithmetic_safety rows (fail-closed)"
+    )
+}
+
 /// Compact label for an instruction in fail-closed error messages.
 fn inst_label(inst: &Inst) -> String {
     let debug = format!("{inst:?}");
@@ -892,10 +1214,15 @@ fn inst_label(inst: &Inst) -> String {
 /// The instructions whose results are a pure function of the block's parameters
 /// and constants — the only definitions the goal derivation will look through.
 ///
-/// Deliberately narrower than the sited VC's whitelist: `FCmp`, float `BinOp`,
-/// float `UnOp`, and `Overflow` are pure but have no representation in the
-/// bit-blast fragment, so they are excluded here rather than being walked into
-/// and then rejected deeper.
+/// Deliberately narrower than the sited VC's whitelist: `FCmp`, float `BinOp`
+/// and float `UnOp` are pure but have no representation in the bit-blast
+/// fragment, so they are excluded here rather than being walked into and then
+/// rejected deeper. `Overflow` (add/sub only — `MulOverflow` is refused for the
+/// same reason `BinOp::Mul` is) and `Select` ARE admitted since WS5.4: the
+/// direct lane spells every checked add/sub as `add.overflow` + `select
+/// %overflowed, false, true` + `assert`, and both lower to existing nodes of the
+/// fragment with no new gate kind (see [`Lowering::lower_overflow`] and
+/// [`Lowering::lower_select`]).
 fn is_bv_pure_inst(inst: &Inst) -> bool {
     matches!(
         inst,
@@ -903,9 +1230,11 @@ fn is_bv_pure_inst(inst: &Inst) -> bool {
             | Inst::NullPtr
             | Inst::BinOp { .. }
             | Inst::UnOp { .. }
+            | Inst::Overflow { .. }
             | Inst::ICmp { .. }
             | Inst::Cast { .. }
             | Inst::Copy { .. }
+            | Inst::Select { .. }
     )
 }
 
@@ -1012,6 +1341,15 @@ impl<'a> Lowering<'a> {
                 let x = self.lower(*operand)?;
                 lower_cast(*op, src, dst, x)
             }
+            Inst::Overflow { op, ty, lhs, rhs } => {
+                self.lower_overflow(value, node, *op, ty, *lhs, *rhs)
+            }
+            Inst::Select {
+                ty,
+                cond,
+                then_val,
+                else_val,
+            } => self.lower_select(ty, *cond, *then_val, *else_val),
             other => Err(GoalDeriveError::ConditionNotPure {
                 value: value.index(),
                 detail: format!(
@@ -1020,6 +1358,125 @@ impl<'a> Lowering<'a> {
                 ),
             }),
         }
+    }
+
+    /// `%r, %o = add.overflow|sub.overflow T a, b`: result 0 is the wrapped
+    /// value, result 1 the 1-bit overflow flag, at `T`'s signedness (the same
+    /// reading the reference interpreter and the adapter's `encode_overflow_check`
+    /// give it).
+    ///
+    /// The flag uses only existing nodes:
+    ///
+    /// * unsigned add — the ripple carry-out: `CarryOut { a, b, is_sub: false }`;
+    /// * unsigned sub — the borrow, `a <u b`: `Not(CarryOut { a, b, is_sub: true })`;
+    /// * signed add — both operands' signs agree and the result's differs:
+    ///   `msb((a ^ r) & (b ^ r))` with `r = a + b`;
+    /// * signed sub — the operands' signs differ and the result's differs from
+    ///   `a`'s: `msb((a ^ b) & (a ^ r))` with `r = a - b`.
+    ///
+    /// `MulOverflow` is refused for the reason `BinOp::Mul` is.
+    fn lower_overflow(
+        &mut self,
+        value: ValueId,
+        node: &'a InstrNode,
+        op: OverflowOp,
+        ty: &Ty,
+        lhs: ValueId,
+        rhs: ValueId,
+    ) -> Result<BvTerm, GoalDeriveError> {
+        if op == OverflowOp::MulOverflow {
+            return Err(GoalDeriveError::Unsupported {
+                detail: "OverflowOp::MulOverflow is refused structurally, as BinOp::Mul is: \
+                         bit-blasting a multiply is unbounded in practice"
+                    .to_string(),
+            });
+        }
+        if !ty.is_integer() {
+            return Err(GoalDeriveError::Unsupported {
+                detail: format!("overflow arithmetic over the non-integer type {ty}"),
+            });
+        }
+        let position = match node.results.as_slice() {
+            [v0, _] if *v0 == value => 0,
+            [_, v1] if *v1 == value => 1,
+            _ => {
+                return Err(GoalDeriveError::Unsupported {
+                    detail: "an Overflow node must carry exactly (value, overflowed) results"
+                        .to_string(),
+                });
+            }
+        };
+        let width = self.ty_width(ty)?;
+        let a = self.lower(lhs)?;
+        let b = self.lower(rhs)?;
+        let is_add = op == OverflowOp::AddOverflow;
+        let wrapped = if is_add {
+            BvTerm::Add(a.clone().boxed(), b.clone().boxed())
+        } else {
+            BvTerm::Sub(a.clone().boxed(), b.clone().boxed())
+        };
+        if position == 0 {
+            return Ok(wrapped);
+        }
+        if !ty.is_signed() {
+            let carry = BvTerm::CarryOut {
+                lhs: a.boxed(),
+                rhs: b.boxed(),
+                is_sub: !is_add,
+            };
+            return Ok(if is_add {
+                carry
+            } else {
+                BvTerm::Not(carry.boxed())
+            });
+        }
+        let sign_mix = if is_add {
+            BvTerm::And(
+                BvTerm::Xor(a.boxed(), wrapped.clone().boxed()).boxed(),
+                BvTerm::Xor(b.boxed(), wrapped.boxed()).boxed(),
+            )
+        } else {
+            BvTerm::And(
+                BvTerm::Xor(a.clone().boxed(), b.boxed()).boxed(),
+                BvTerm::Xor(a.boxed(), wrapped.boxed()).boxed(),
+            )
+        };
+        Ok(BvTerm::Extract {
+            inner: sign_mix.boxed(),
+            high: width - 1,
+            low: width - 1,
+        })
+    }
+
+    /// `select T c, t, e` over a 1-bit `c`: `(m & t) | (~m & e)` where `m` is
+    /// `c` replicated to `T`'s width (`c` itself at width 1, `SignExt(c, w-1)`
+    /// otherwise — all ones when `c` is set, all zeros when it is clear).
+    fn lower_select(
+        &mut self,
+        ty: &Ty,
+        cond: ValueId,
+        then_val: ValueId,
+        else_val: ValueId,
+    ) -> Result<BvTerm, GoalDeriveError> {
+        let width = self.ty_width(ty)?;
+        let c = self.lower(cond)?;
+        let cond_width = c.width().map_err(GoalDeriveError::Shape)?;
+        if cond_width != 1 {
+            return Err(GoalDeriveError::Unsupported {
+                detail: format!("select condition is {cond_width} bits wide, not a 1-bit bool"),
+            });
+        }
+        let t = self.lower(then_val)?;
+        let e = self.lower(else_val)?;
+        let mask = if width == 1 {
+            c
+        } else {
+            BvTerm::SignExt(c.boxed(), width - 1)
+        };
+        Ok(BvTerm::Or(
+            BvTerm::And(mask.clone().boxed(), t.boxed()).boxed(),
+            BvTerm::And(BvTerm::Not(mask.boxed()).boxed(), e.boxed()).boxed(),
+        ))
     }
 
     fn lower_const(&self, ty: &Ty, konst: &Constant) -> Result<BvTerm, GoalDeriveError> {
@@ -1217,8 +1674,12 @@ fn lower_cast(op: CastOp, src: u32, dst: u32, x: BvTerm) -> Result<BvTerm, GoalD
 
 /// Reconstruct the bit-vector goal a sited panic-class obligation states.
 ///
-/// The result is `condition == #b1` where `condition` is the `CondBr` condition
-/// at `obligation.site`, lowered over the block's parameters as free variables
+/// The obligation's kind must be assert-class ([`is_assert_class_kind`]);
+/// any other kind is refused with [`GoalDeriveError::KindNotAssertClass`]
+/// before the site is read. The result is `condition == #b1` where
+/// `condition` is the assert condition at `obligation.site` — the `cond` of an
+/// `Inst::Assert`, or of a lowered `CondBr` assert ([`lowered_assert_condition`])
+/// — lowered over the block's parameters as free variables
 /// and the block's pure prefix as definitions. Nothing about how control reached
 /// the block is assumed: no path condition, no caller precondition, no memory.
 /// That is a strictly weaker hypothesis set than any real execution has, so a
@@ -1235,6 +1696,14 @@ pub fn derive_site_goal(
     obligation: &ProofObligation,
 ) -> Result<BvGoal, GoalDeriveError> {
     let site = obligation.site.as_ref().ok_or(GoalDeriveError::NoSite)?;
+    // The kind gate comes before anything is read from the site: a
+    // non-assert-class row sited on an assert does not STATE that assert's
+    // condition, so there is no goal to derive for it (WS5.4 (1a)).
+    if !is_assert_class_kind(&obligation.kind) {
+        return Err(GoalDeriveError::KindNotAssertClass {
+            kind: obligation.kind.clone(),
+        });
+    }
     if let Some(scoped) = obligation.function
         && scoped != site.function
     {
@@ -1430,6 +1899,29 @@ mod tests {
     }
 
     #[test]
+    fn goal_digest_spelling_is_exactly_what_the_digest_writer_emits() {
+        let goal = BvGoal::predicate(BvTerm::leaf("v0", 1));
+        let digest = bvgoal_digest_hex(&goal);
+        assert!(is_bvgoal_digest_hex(&digest), "the writer's own spelling");
+        assert!(!is_bvgoal_digest_hex(&digest[..63]), "one digit short");
+        assert!(
+            !is_bvgoal_digest_hex(&format!("{digest}0")),
+            "one digit long"
+        );
+        assert!(
+            !is_bvgoal_digest_hex(&digest.to_uppercase()),
+            "uppercase hex"
+        );
+        // 21 three-byte characters plus one byte: 64 BYTES, no hex digit.
+        let non_ascii = format!("{}0", "\u{20ac}".repeat(21));
+        assert_eq!(non_ascii.len(), 64);
+        assert!(
+            !is_bvgoal_digest_hex(&non_ascii),
+            "non-ASCII of the right byte length"
+        );
+    }
+
+    #[test]
     fn formula_parse_is_strict() {
         let mut formula =
             ProofFormula::new(BVBLAST_GOAL_SCHEMA, "site=1:2:3\nkind=BoundsCheck\ngoal=00");
@@ -1533,5 +2025,92 @@ mod tests {
             "the proved corpus shape costs {cost}, above the cap {BVGOAL_MAX_BLAST_COST}"
         );
         assert_eq!(goal.validate_shape(), Ok(()));
+    }
+
+    /// WS5.4 (1b): the canonical rendering, and the exact-match admission of a
+    /// producer formula against it.
+    #[test]
+    fn a_producer_formula_matches_only_its_own_goal() {
+        let x = BvTerm::leaf("v3", 8);
+        let add = BvGoal::predicate(BvTerm::Not(Box::new(BvTerm::CarryOut {
+            lhs: Box::new(x.clone()),
+            rhs: Box::new(BvTerm::Const { value: 1, width: 8 }),
+            is_sub: false,
+        })));
+        let sub = BvGoal::predicate(BvTerm::CarryOut {
+            lhs: Box::new(x),
+            rhs: Box::new(BvTerm::Const { value: 1, width: 8 }),
+            is_sub: true,
+        });
+        assert_eq!(
+            bvgoal_smtlib(&add),
+            "(= (bvnot (ite (bvult (bvadd v3 (_ bv1 8)) v3) #b1 #b0)) (_ bv1 1))"
+        );
+        assert_eq!(
+            bvgoal_smtlib(&sub),
+            "(= (ite (bvuge v3 (_ bv1 8)) #b1 #b0) (_ bv1 1))"
+        );
+
+        let formula = bvgoal_formula(&add).expect("IR-named leaves");
+        assert!(formula_matches_goal(&formula, &add));
+        assert!(
+            !formula_matches_goal(&formula, &sub),
+            "a formula for a+.. is not a-.."
+        );
+        // Unbound, mis-sorted, or mis-placed leaves never match.
+        let mut unbound = formula.clone();
+        unbound.bindings.clear();
+        assert!(!formula_matches_goal(&unbound, &add));
+        let mut mis_sorted = formula.clone();
+        mis_sorted.bindings[0].1.sort = super::super::obligations::ClauseSort::BitVec(16);
+        assert!(!formula_matches_goal(&mis_sorted, &add));
+        let mut mis_placed = formula.clone();
+        mis_placed.bindings[0].1.place =
+            super::super::obligations::ClausePlace::Value(ValueId::new(4));
+        assert!(!formula_matches_goal(&mis_placed, &add));
+        // Only the ONE SMT-LIB text is matched: an opaque schema never is,
+        // whatever its rendering says; an `smtlib2` payload with no rendering
+        // states the same text.
+        let mut opaque = formula.clone();
+        opaque.schema = "trust-types.Formula@1".to_string();
+        assert!(!formula_matches_goal(&opaque, &add));
+        let mut payload_only = formula.clone();
+        payload_only.smtlib = None;
+        assert!(formula_matches_goal(&payload_only, &add));
+        // A non-IR leaf name has no formula.
+        assert!(bvgoal_formula(&BvGoal::predicate(BvTerm::leaf("x", 1))).is_none());
+    }
+
+    #[test]
+    fn only_assert_class_kinds_are_admitted() {
+        assert!(is_assert_class_kind(&ObligationKind::BoundsCheck));
+        assert!(is_assert_class_kind(&ObligationKind::ArithmeticSafety));
+        for kind in [
+            ObligationKind::Postcondition,
+            ObligationKind::LoopInvariant,
+            ObligationKind::Termination,
+            ObligationKind::MemorySafety,
+            ObligationKind::PanicFreedom,
+        ] {
+            assert!(!is_assert_class_kind(&kind));
+            assert!(assert_class_kind_refusal(&kind).contains("is not an assert-class obligation"));
+        }
+    }
+
+    /// The data spelling of the assert-class set and the PROVED table agree on
+    /// every kind shape — the array is what callers enumerate, the table is
+    /// what the gate proves, and neither may drift from the other.
+    #[test]
+    fn assert_class_array_is_the_proved_table() {
+        use super::super::ObligationKindShape;
+        for &shape in ObligationKindShape::ALL {
+            let in_array = ASSERT_CLASS_OBLIGATION_KINDS
+                .iter()
+                .any(|kind| kind.shape() == shape);
+            assert_eq!(in_array, shape.is_assert_class(), "{}", shape.name());
+        }
+        for kind in &ASSERT_CLASS_OBLIGATION_KINDS {
+            assert!(is_assert_class_kind(kind));
+        }
     }
 }

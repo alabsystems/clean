@@ -17,7 +17,7 @@ Usage: scripts/run_build_regression_gate.sh [options]
 Run the #1412 build-regression command policy for routine gates.
 
 Options:
-  --include-olean-test-write   Run isolated slow lane: cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-olean test_write
+  --include-olean-test-write   Run isolated slow lane: targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-olean test_write
   --max-reruns N               Max reruns for slow lane (default: 1, must be >= 0)
   --only TARGET                all | clean-olean | clean-auto | clean-lake (default: all)
   -h, --help                   Show this help message
@@ -63,11 +63,11 @@ run_doc_metrics_check_in_head_snapshot() {
 run_clean_olean_test_write_lane() {
     local attempt=0
     while true; do
-        log "clean-olean slow lane attempt=${attempt}: cargo test --locked --message-format=short -j $CARGO_BUILD_JOBS -p clean-olean test_write"
+        log "clean-olean slow lane attempt=${attempt}: targo --unverified test --locked --message-format=short -j $CARGO_BUILD_JOBS -p clean-olean test_write"
         if CLEAN_OLEAN_TEST_WRITE_LANE=1 \
             CLEAN_OLEAN_TEST_WRITE_RERUN="${attempt}" \
             scripts/cargo_test_nonvacuous.sh olean-test-write -- \
-            cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-olean test_write; then
+            targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-olean test_write; then
             log "clean-olean slow lane passed on attempt=${attempt}"
             return 0
         fi
@@ -137,16 +137,16 @@ if [[ "$ONLY_CRATE" == "all" ]]; then
 fi
 
 if [[ "$ONLY_CRATE" == "all" || "$ONLY_CRATE" == "clean-olean" ]]; then
-    run_cmd "routine gate" cargo check --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-olean --tests
+    run_cmd "routine gate" targo --unverified check --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-olean --tests
 fi
 
 if [[ "$ONLY_CRATE" == "all" || "$ONLY_CRATE" == "clean-auto" ]]; then
-    run_cmd "routine gate" cargo check --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-auto
+    run_cmd "routine gate" targo --unverified check --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-auto
     # ay-smt gate removed: ay-smt is now a default feature (#2402)
 fi
 
 if [[ "$ONLY_CRATE" == "all" || "$ONLY_CRATE" == "clean-lake" ]]; then
-    run_cmd "routine gate" cargo check --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-lake --tests
+    run_cmd "routine gate" targo --unverified check --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-lake --tests
 fi
 
 if ((INCLUDE_OLEAN_TEST_WRITE == 1)) && [[ "$ONLY_CRATE" != "clean-auto" && "$ONLY_CRATE" != "clean-lake" ]]; then

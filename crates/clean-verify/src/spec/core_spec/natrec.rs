@@ -32,6 +32,10 @@
 //! N4 = `whnf_terminates_well_typed_nat` + `onePlusOne_computes`.
 //! See `designs/2026-07-11-natrec-spec-port-plan.md`.
 
+// Guarded-iota migration: rule tables store each RHS once at the signature's
+// anonymous universe parameter. Retained rule/environment u arguments are API
+// compatibility only; the active operator instantiates the actual head levels.
+
 use crate::spec::SpecError;
 use crate::spec::Specification;
 
@@ -120,13 +124,16 @@ impl Specification {
 
         // ── Argument-order metadata: num_params=0, num_motives=1, num_minors=2,
         // num_indices=0, major_after_minors=true (RecursorArgOrder::MajorAfterMinors).
+        // Metadata-only migration: store the one schematic signature now.
+        // The old iota operation and per-u RHS environment below are unchanged;
+        // their later switch to schematic stored rules must be atomic.
         self.add_recursive_def(
-            "def natRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true",
+            "def natRecMeta : RecMeta := RecMeta.mk Nat.zero (Nat.succ Nat.zero) (Nat.succ (Nat.succ Nat.zero)) Nat.zero Bool.true (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (natRecTy (Level.param Name.anonymous))) Nat.zero",
             "Nat.rec arg-order metadata (0 params, 1 motive, 2 minors, 0 indices, major-after-minors). Nat.rec port N0.",
         )?;
         // The two rules, one per constructor.
         self.add_recursive_def(
-            "def natRecRules (u : Level) : RecRules := RecRules.cons (RecRule.mk zeroName Nat.zero (natRecRhsZero u)) (RecRules.cons (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc u)) RecRules.nil)",
+            "def natRecRules (u : Level) : RecRules := RecRules.cons (RecRule.mk zeroName Nat.zero (natRecRhsZero (Level.param Name.anonymous))) (RecRules.cons (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc (Level.param Name.anonymous))) RecRules.nil)",
             "Nat.rec recursor rules (zero: 0 fields, succ: 1 field). Nat.rec port N0.",
         )?;
         // The Nat recursor environment: the schematic RecEnv INSTANTIATED with Nat.
@@ -183,29 +190,30 @@ impl Specification {
         )?;
         // ── N2 (gate): NatRecEnvOK (renv really carries the Nat.rec recursor data).
         self.add_inductive(
-            "inductive NatRecEnvOK : Level -> RecEnv -> Type\n| mk : forall (u : Level) (renv : RecEnv), Eq (OptionType RecMeta) (recmeta_for renv recName) (OptionType.some RecMeta natRecMeta) -> Eq (OptionType RecRule) (recrule_for renv recName zeroName) (OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero u))) -> Eq (OptionType RecRule) (recrule_for renv recName succName) (OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc u))) -> NatRecEnvOK u renv",
+            "inductive NatRecEnvOK : Level -> RecEnv -> Type\n| mk : forall (u : Level) (renv : RecEnv), Eq (OptionType RecMeta) (recmeta_for renv recName) (OptionType.some RecMeta natRecMeta) -> Eq (OptionType RecRule) (recrule_for renv recName zeroName) (OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero (Level.param Name.anonymous)))) -> Eq (OptionType RecRule) (recrule_for renv recName succName) (OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc (Level.param Name.anonymous)))) -> NatRecEnvOK u renv",
             "NatRecEnvOK u renv: renv carries the Nat.rec metadata + both rules. Gates the model redNatRec field vacuous off non-Nat envs. Nat.rec port N2.",
         )?;
         // natREnv actually satisfies NatRecEnvOK — the three fields hold by rfl
         // (recmeta_for/recrule_for on natREnv compute to the Nat.rec data).
         // Non-vacuity: the Nat recursor env is real. Zero axiom_deps.
         self.add_recursive_def(
-            "def natREnv_recEnvOK (u : Level) : NatRecEnvOK u (natREnv u) := NatRecEnvOK.mk u (natREnv u) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta natRecMeta)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero u)))) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc u))))",
+            "def natREnv_recEnvOK (u : Level) : NatRecEnvOK u (natREnv u) := NatRecEnvOK.mk u (natREnv u) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta natRecMeta)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk zeroName Nat.zero (natRecRhsZero (Level.param Name.anonymous))))) (Eq.refl (OptionType RecRule) (OptionType.some RecRule (RecRule.mk succName (Nat.succ Nat.zero) (natRecRhsSucc (Level.param Name.anonymous)))))",
             "natREnv satisfies NatRecEnvOK, by rfl: recmeta_for/recrule_for on natREnv compute to the Nat.rec metadata + rules. The Nat recursor env is real. Nat.rec port N2.",
         )?;
 
         // ── X15 ι-LIVENESS INSTANCES over the 3-way step: the Nat recursor on a
         // constructor-headed major ALWAYS takes a whnf_red_step, for ANY
-        // definition environment paired with natREnv and ANY motive/minors —
+        // definition environment and metadata table paired with natREnv, and
+        // ANY motive/minors —
         // the in-spec sibling of the Aristotle-proved natrec_fires, lifted
         // from the natREnv_iota_zero/succ rfl-witnesses through the ι arm
-        // (red_rec (RedEnv.mk r d) computes to r).
+        // (red_rec (RedEnv.mk r d ic) computes to r).
         self.add_recursive_def(
-            "def natrec_fires_red_zero (u : Level) (d : DefEnv) (m : KExpr) (z : KExpr) (s : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := whnf_red_step.iota (RedEnv.mk (natREnv u) d) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (natREnv_iota_zero u m z s)",
+            "def natrec_fires_red_zero (u : Level) (d : DefEnv) (ic : IndCtorEnv) (m : KExpr) (z : KExpr) (s : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) := whnf_red_step.iota (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s natZeroC) (KExpr.app (KExpr.app (KExpr.app (natRecRhsZero u) m) z) s) (natREnv_iota_zero u m z s)",
             "ι-LIVENESS (X15, Nat instance, zero major): for ANY definition environment and ANY motive/minors, the Nat recursor applied to the zero constructor takes a whnf_red_step — the natREnv_iota_zero rfl-witness through the ι arm. The in-spec natrec_fires (zero case).",
         )?;
         self.add_recursive_def(
-            "def natrec_fires_red_succ (u : Level) (d : DefEnv) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := whnf_red_step.iota (RedEnv.mk (natREnv u) d) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (natREnv_iota_succ u m z s n)",
+            "def natrec_fires_red_succ (u : Level) (d : DefEnv) (ic : IndCtorEnv) (m : KExpr) (z : KExpr) (s : KExpr) (n : KExpr) : whnf_red_step (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) := whnf_red_step.iota (RedEnv.mk (natREnv u) d ic) (natRecApp u m z s (KExpr.app natSuccC n)) (KExpr.app (KExpr.app (KExpr.app (KExpr.app (natRecRhsSucc u) m) z) s) n) (natREnv_iota_succ u m z s n)",
             "ι-LIVENESS (X15, Nat instance, succ major): for ANY definition environment and ANY motive/minors and ANY major tail n, the Nat recursor applied to succ n takes a whnf_red_step — the natREnv_iota_succ rfl-witness through the ι arm. The in-spec natrec_fires (succ case).",
         )?;
 
@@ -607,7 +615,7 @@ impl Specification {
         // any CandModel M. Numerals are neutral (neutral_numeral) with no reducts
         // (numeral_no_step), so CR3 applies vacuously. Genuine, from the bare interface.
         self.add_recursive_def(
-            "def red_numeral (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (t : KExpr) (h : IsNumeral t) (T : KExpr) : cm_Red tenv M T t := CR3 tenv M T t (neutral_numeral t h) (fun (e2 : KExpr) (hstep : whnf_step t e2) => numeral_no_step t h e2 (cm_Red tenv M T e2) hstep)",
+            "def red_numeral (tenv : KDeclEnv) (M : CandModel tenv) (t : KExpr) (h : IsNumeral t) (T : KExpr) : cm_Red tenv M T t := CR3 tenv M T t (neutral_numeral t h) (fun (e2 : KExpr) (hstep : whnf_step t e2) => numeral_no_step t h e2 (cm_Red tenv M T e2) hstep)",
             "red_numeral: every numeral is reducible (cm_Red) at every type — neutral (neutral_numeral) + no reducts (numeral_no_step) ⇒ CR3 vacuously. Nat.rec port B5(f).",
         )?;
 
@@ -713,7 +721,7 @@ impl Specification {
             );
             let h2t = format!("(Eq.rec KExpr {arm2lhs} (fun (Tv : KExpr) (_ : Eq KExpr {arm2lhs} Tv) => cm_Red tenv M Tv {succcontr}) {h2} {succT} (natSuccArm_inst2 m n {nra}))");
             let succ_case = format!("(fun (n : KExpr) (hn : IsNumeral n) (ihn : forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m n) (natRecApp u m z s n)) (m : KExpr) (z : KExpr) (s : KExpr) (hm : cm_Red tenv M {mtym} m) (hz : cm_Red tenv M (KExpr.app m natZeroC) z) (hs : cm_Red tenv M {scs} s) => redNatRec_holds tenv M u {rr} {re} m z s {succt} {succcontr} {succT} natFresh_red (natREnv_recEnvOK u) (NatRecContract.succ u m z s n) (CR1 tenv M {mtym} m hm) (CR1 tenv M (KExpr.app m natZeroC) z hz) (CR1 tenv M {scs} s hs) (whnfAcc_numeral {succt} (IsNumeral.succ n hn)) {h2t})");
-            let body = format!("def natRec_adequacy_numeral (tenv : Name -> OptionType KExpr) (M : CandModel tenv) (u : Level) (t : KExpr) (h : IsNumeral t) : forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m t) (natRecApp u m z s t) := IsNumeral.rec {motive} {zero_case} {succ_case} t h");
+            let body = format!("def natRec_adequacy_numeral (tenv : KDeclEnv) (M : CandModel tenv) (u : Level) (t : KExpr) (h : IsNumeral t) : forall (m : KExpr) (z : KExpr) (s : KExpr), cm_Red tenv M {mtym} m -> cm_Red tenv M (KExpr.app m natZeroC) z -> cm_Red tenv M {scs} s -> cm_Red tenv M (KExpr.app m t) (natRecApp u m z s t) := IsNumeral.rec {motive} {zero_case} {succ_case} t h");
             self.add_recursive_def(
                 &body,
                 "natRec_adequacy_numeral: for every numeral t, if the motive/zero/succ minors are reducible at their dependent types then Nat.rec m z s t is reducible at (m t). THE recursor-reducibility payoff (redNatRec head-expansion + pi_elim + numeral induction). Nat.rec port B5(g).",
@@ -726,8 +734,25 @@ impl Specification {
         // zero:Nat, succ:Nat->Nat, rec:natRecTy). VARIABLE-motive only (conv-free
         // TypingCtx ceiling — the honest limit). CandModel-conditional, zero axioms.
         self.add_recursive_def(
-            "def natTEnv (u : Level) (n : Name) : OptionType KExpr := opt_pick KExpr (name_eqb n natName) (KExpr.sort (Level.succ Level.zero)) (opt_pick KExpr (name_eqb n zeroName) natTypeC (opt_pick KExpr (name_eqb n succName) (KExpr.pi natTypeC natTypeC) (opt_pick KExpr (name_eqb n recName) (natRecTy u) (OptionType.none KExpr))))",
-            "natTEnv u: the Nat const-typing env (Nat : sort 1, zero : Nat, succ : Nat -> Nat, rec : natRecTy). Nat.rec port B6.",
+            "def natTEnv (u : Level) (n : Name) : OptionType KConstSig := opt_pick KConstSig (name_eqb n natName) (KConstSig.mk (ListType.nil Name) (KExpr.sort (Level.succ Level.zero))) (opt_pick KConstSig (name_eqb n zeroName) (KConstSig.mk (ListType.nil Name) natTypeC) (opt_pick KConstSig (name_eqb n succName) (KConstSig.mk (ListType.nil Name) (KExpr.pi natTypeC natTypeC)) (opt_pick KConstSig (name_eqb n recName) (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (natRecTy (Level.param Name.anonymous))) (OptionType.none KConstSig))))",
+            "Nat schematic signature environment: Nat/zero/succ have no universe parameters; the recursor stores one parameter and natRecTy at that parameter. The legacy u argument is retained for callers but does not fix the stored type. This is a model environment, not a production admission witness.",
+        )?;
+        self.add_recursive_def(
+            "def natRecMeta_signature : Eq (OptionType KConstSig) (natTEnv Level.zero recName) (OptionType.some KConstSig (recmeta_signature (natRecMeta))) := Eq.refl (OptionType KConstSig) (OptionType.some KConstSig (recmeta_signature (natRecMeta)))",
+            "Stored Nat metadata signature equals the existing schematic declaration; this is data agreement, not recursor RHS typing.",
+        )?;
+
+        self.add_recursive_def(
+            "def natTEnv_rec_lookup (u : Level) : Eq (OptionType KExpr) (kdecl_type_at (natTEnv Level.zero) recName (ListType.cons Level u (ListType.nil Level))) (OptionType.some KExpr (natRecTy u)) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (natRecTy u))",
+            "The same stored Nat recursor signature yields natRecTy u at every supplied universe, through the actual arity-checked lookup.",
+        )?;
+        self.add_recursive_def(
+            "def natTEnv_rec_typed (u : Level) : TypingCtx (natTEnv Level.zero) (ListType.nil KExpr) (natRecC u) (natRecTy u) := TypingCtx.const (natTEnv Level.zero) (ListType.nil KExpr) recName (ListType.cons Level u (ListType.nil Level)) (natRecTy u) (natTEnv_rec_lookup u)",
+            "Actual TypingCtx constructor witness for the universe-bearing recursor constant; the signature migration does not exclude it by a zero-arity guard.",
+        )?;
+        self.add_recursive_def(
+            "def natTEnv_rec_missing_argument : Eq (OptionType KExpr) (kdecl_type_at (natTEnv Level.zero) recName (ListType.nil Level)) (OptionType.none KExpr) := Eq.refl (OptionType KExpr) (OptionType.none KExpr)",
+            "The same stored recursor rejects a missing universe argument.",
         )?;
         self.add_recursive_def(
             "def whnf_terminates_well_typed_nat (u : Level) (M : CandModel (natTEnv u)) (e : KExpr) (T : KExpr) (h : TypingCtx (natTEnv u) (ListType.nil KExpr) e T) : whnf_acc e := whnf_terminates_well_typed_dependent (natTEnv u) M e T h",

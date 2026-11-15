@@ -24,15 +24,12 @@ impl Parser {
         // Type annotation is optional in some cases
         let ty = if self.eat(&TokenKind::Colon) {
             self.expr()?
-        } else if universe_params.is_empty() {
-            // Default to Type (monomorphic inductives keep landing on Type 0)
-            SurfaceExpr::Universe(start_span, UniverseExpr::Type)
         } else {
-            // U2 rung 5: a `.{u}`-declared inductive with an omitted result
-            // sort gets a FRESH level (solved from constructor-field sorts in
-            // elab_inductive) instead of collapsing to concrete Type 0 —
-            // `inductive Box.{u} (A : Type u) | mk : A → Box A` infers Type u.
-            SurfaceExpr::Universe(start_span, UniverseExpr::TypeImplicit)
+            // Infer the omitted result from constructor fields, regardless of
+            // whether universe names were declared with a `.{u}` list.
+            // Even a declaration with no named universes can need Type 1
+            // (for example, a constructor taking a field of type `Type`).
+            SurfaceExpr::Hole(start_span)
         };
 
         // Parse constructors - three syntaxes supported:
@@ -47,7 +44,7 @@ impl Parser {
             // Parse constructors after where
             while self.eat(&TokenKind::Pipe) || self.is_ctor_start() {
                 let ctor_span = self.current_span();
-                let ctor_name = self.ident()?;
+                let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
 
                 ctors.push(SurfaceCtor {
@@ -60,7 +57,7 @@ impl Parser {
             // Pipe-style constructors
             while self.eat(&TokenKind::Pipe) {
                 let ctor_span = self.current_span();
-                let ctor_name = self.ident()?;
+                let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
 
                 ctors.push(SurfaceCtor {
@@ -108,7 +105,7 @@ impl Parser {
         if self.eat(&TokenKind::Where) {
             while self.eat(&TokenKind::Pipe) || self.is_ctor_start() {
                 let ctor_span = self.current_span();
-                let ctor_name = self.ident()?;
+                let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
                 ctors.push(SurfaceCtor {
                     span: ctor_span,
@@ -119,7 +116,7 @@ impl Parser {
         } else {
             while self.eat(&TokenKind::Pipe) {
                 let ctor_span = self.current_span();
-                let ctor_name = self.ident()?;
+                let ctor_name = self.raw_ident()?;
                 let ctor_ty = self.parse_ctor_type(ctor_span, &name, &binders)?;
                 ctors.push(SurfaceCtor {
                     span: ctor_span,
@@ -160,7 +157,7 @@ impl Parser {
     pub(in crate::grammar) fn parse_ctor_type(
         &mut self,
         ctor_span: Span,
-        ind_name: &str,
+        ind_name: &SurfaceName,
         params: &[SurfaceBinder],
     ) -> Result<SurfaceExpr, ParseError> {
         // Default return type when a constructor omits it (`| nothing`): the
@@ -173,7 +170,7 @@ impl Parser {
         // shorthand. For a non-parametric inductive `params` is empty and this is
         // exactly the previous bare-name default.
         let default_return = || {
-            let head = SurfaceExpr::Ident(ctor_span, ind_name.to_string());
+            let head = SurfaceExpr::Ident(ctor_span, ind_name.clone());
             if params.is_empty() {
                 head
             } else {

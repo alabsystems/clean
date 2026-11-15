@@ -15,6 +15,7 @@ fn is_unknown_ident<T>(result: &Result<T, ElabError>, expected: &str) -> bool {
     match result {
         Err(ElabError::UnknownIdent(name)) => name == expected,
         Err(ElabError::UnknownIdentWithSuggestions { name, .. }) => name == expected,
+        Err(ElabError::UnknownIdentDeferred { name, .. }) => name == expected,
         _ => false,
     }
 }
@@ -96,11 +97,17 @@ fn test_if_let_as_pattern_binds_whole_scrutinee_in_then_branch() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::As(
-            "whole".to_string(),
+            SurfaceName::generated_path("whole"),
             Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "whole".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("whole"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
     );
 
@@ -120,12 +127,18 @@ fn test_if_let_as_pattern_does_not_bind_whole_scrutinee_in_else_branch() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::As(
-            "whole".to_string(),
+            SurfaceName::generated_path("whole"),
             Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "whole".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("whole"),
+        )),
     );
 
     let mut ctx = ElabCtx::new(&env);
@@ -150,7 +163,10 @@ fn test_if_let_or_pattern_desugars_without_rejecting_complex_pattern() {
                 1,
             )),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
@@ -178,10 +194,13 @@ fn test_if_let_as_pattern_uses_fresh_shared_scrutinee_when_base_name_taken() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::As(
-            "whole".to_string(),
+            SurfaceName::generated_path("whole"),
             Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
@@ -215,7 +234,10 @@ fn test_if_let_or_pattern_uses_fresh_shared_scrutinee_when_base_name_taken() {
                 1,
             )),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
@@ -243,13 +265,16 @@ fn test_if_let_as_pattern_does_not_capture_outer_shared_scrutinee_name() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::As(
-            "whole".to_string(),
+            SurfaceName::generated_path("whole"),
             Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
         Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "__iflet_scrutinee".to_string(),
+            SurfaceName::generated_path("n"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("__iflet_scrutinee"),
         )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
     );
@@ -272,14 +297,20 @@ fn test_if_let_as_pattern_supports_nested_ctor_inner_pattern() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::As(
-            "whole".to_string(),
+            SurfaceName::generated_path("whole"),
             Box::new(SurfacePattern::Ctor(
-                "Nat.succ".to_string(),
+                SurfaceName::generated_path("Nat.succ"),
                 vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
             )),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "whole".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("whole"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
 
@@ -300,12 +331,20 @@ fn test_if_let_or_pattern_supports_nested_ctor_left_branch() {
         Span::dummy(),
         SurfacePattern::Or(
             Box::new(SurfacePattern::Ctor(
-                "Nat.succ".to_string(),
+                SurfaceName::generated_path("Nat.succ"),
                 vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
             )),
-            Box::new(SurfacePattern::Wildcard),
+            // Not `_`: `p | _` is irrefutable, which makes the `else`
+            // alternative redundant (G62).
+            Box::new(SurfacePattern::Ctor(
+                SurfaceName::generated_path("Nat.zero"),
+                vec![],
+            )),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
@@ -326,11 +365,17 @@ fn test_if_let_as_pattern_error_cleans_up_shared_scrutinee_local() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::As(
-            "whole".to_string(),
+            SurfaceName::generated_path("whole"),
             Box::new(SurfacePattern::Lit(SurfaceLit::Nat(0))),
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "missing".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("missing"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
     );
 
@@ -342,7 +387,7 @@ fn test_if_let_as_pattern_error_cleans_up_shared_scrutinee_local() {
     );
     let leaked = ctx.elaborate(&SurfaceExpr::Ident(
         Span::dummy(),
-        "__iflet_scrutinee".to_string(),
+        SurfaceName::generated_path("__iflet_scrutinee"),
     ));
     assert!(
         is_unknown_ident(&leaked, "__iflet_scrutinee"),

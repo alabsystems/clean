@@ -6,7 +6,7 @@
 
 use super::result::{ProofMethod, SmtProofResult, SmtVerificationResult};
 use super::{BridgeError, BridgeResult, LogicalForm, SmtBridge};
-use crate::smt::{SmtResult, TermId};
+use crate::smt::{SmtResult, TermId, SMT_CONFLICT_LIMIT_REASON};
 use clean_kernel::{Expr, ExprKind};
 
 /// Equality goal terms captured during classification for proof reconstruction.
@@ -85,7 +85,8 @@ impl<'env> SmtBridge<'env> {
     ///
     /// Returns a tri-state [`SmtVerificationResult`]:
     /// - `Verified(proof)` — goal proved (¬goal unsatisfiable)
-    /// - `Refuted(model)` — counterexample found (¬goal satisfiable)
+    /// - `Refuted(model)` — the translated ¬goal is satisfiable in the bridge's
+    ///   abstraction (NOT a validated counterexample; see [`SmtVerificationResult::Refuted`])
     /// - `Unknown(reason)` — solver inconclusive
     ///
     /// # Single-shot contract (#2836)
@@ -98,7 +99,8 @@ impl<'env> SmtBridge<'env> {
     /// REQUIRES: `goal` is a Prop-typed expression in the bridge's environment.
     /// REQUIRES: first call on this bridge instance (single-shot).
     /// ENSURES: on `Ok(Verified(proof))`, `proof.proof_term` type-checks against `goal`.
-    /// ENSURES: on `Ok(Refuted(model))`, model witnesses `¬goal`.
+    /// ENSURES: on `Ok(Refuted(model))`, model satisfies the TRANSLATED `¬goal`;
+    /// it witnesses `¬goal` itself only when no uninterpreted abstraction was used.
     pub fn prove(&mut self, goal: &Expr) -> BridgeResult<SmtVerificationResult> {
         // Single-shot guard: the bridge accumulates solver clauses, lossy atoms,
         // and hypothesis state that is not reset between calls. A second prove()
@@ -246,9 +248,13 @@ impl<'env> SmtBridge<'env> {
                 {
                     return Ok(reconstructed);
                 }
-                Ok(SmtVerificationResult::Unknown(
-                    "solver returned unknown".into(),
-                ))
+                // A count, not a clock, stopped this solve: say which one.
+                let reason = if self.smt.conflict_limit_reached() {
+                    SMT_CONFLICT_LIMIT_REASON
+                } else {
+                    "solver returned unknown"
+                };
+                Ok(SmtVerificationResult::Unknown(reason.into()))
             }
         }
     }

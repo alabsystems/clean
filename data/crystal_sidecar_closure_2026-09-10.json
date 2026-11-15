@@ -1,0 +1,104 @@
+{
+  "schema": "crystal-sidecar-closure-v1",
+  "target": "level::Level::is_zero",
+  "crate_module": {
+    "path": "$HOME/clean/target/crystal-lane/dump-sidecar-O3/clean_kernel.trust-ir.txt",
+    "functions": 5617,
+    "instruction_bearing": 3915
+  },
+  "sidecar_manifest": {
+    "path": "$HOME/clean/target/crystal-lane/dump-sidecar-O3/callees/clean_kernel.callees.manifest.json",
+    "closed": true,
+    "lowering": "ok",
+    "members": [
+      "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>",
+      "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>",
+      "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>"
+    ],
+    "panic_terminals": [
+      "core::option::expect_failed"
+    ],
+    "escaping": []
+  },
+  "closure": {
+    "size": 4,
+    "members": [
+      "!trust_bodyless_instance::std::option::Option::<T>::as_deref::764fc172dc31447ef84e850e93a07a00-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a61735f64657265667c636f6e63726574652d76313a303137363466633137326463333134343765663834653835306539336130376130303030303030303030303030303030303030313031303634393234356434343238383230386434313730393630356132616666326532303030303030303030303030303030303230363131333433323164383934366363373731313830616163316262363965353537303030303030303030303030303030303036343932343564343432383832303864343738386562646530323838333661653530303030303030303030303030303030",
+      "!trust_bodyless_instance::std::option::Option::<T>::expect::764fc172dc31447ecec17de50d92397c-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a6578706563747c636f6e63726574652d76313a303137363466633137326463333134343765636563313764653530643932333937633030303030303030303030303030303030313031306130303036313133343332316438393436636337373131383061616331626236396535353730303030303030303030303030303030",
+      "<level::LevelArc as std::ops::Deref>::deref",
+      "level::Level::is_zero"
+    ],
+    "declarations": 2,
+    "indirect_calls": []
+  },
+  "derived_by_sidecar": [
+    {
+      "crate_func_id": 4938,
+      "name": "!trust_bodyless_instance::std::option::Option::<T>::as_deref::764fc172dc31447ef84e850e93a07a00-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a61735f64657265667c636f6e63726574652d76313a303137363466633137326463333134343765663834653835306539336130376130303030303030303030303030303030303030313031303634393234356434343238383230386434313730393630356132616666326532303030303030303030303030303030303230363131333433323164383934366363373731313830616163316262363965353537303030303030303030303030303030303036343932343564343432383832303864343738386562646530323838333661653530303030303030303030303030303030",
+      "callee_def_path": "std::option::Option::<T>::as_deref",
+      "resolved": "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>",
+      "sidecar_func_id": 1,
+      "outcome": "resolved"
+    },
+    {
+      "crate_func_id": 4939,
+      "name": "!trust_bodyless_instance::std::option::Option::<T>::expect::764fc172dc31447ecec17de50d92397c-6861766f633a7374643a3a6f7074696f6e3a3a4f7074696f6e3a3a3c543e3a3a6578706563747c636f6e63726574652d76313a303137363466633137326463333134343765636563313764653530643932333937633030303030303030303030303030303030313031306130303036313133343332316438393436636337373131383061616331626236396535353730303030303030303030303030303030",
+      "callee_def_path": "std::option::Option::<T>::expect",
+      "resolved": "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>",
+      "sidecar_func_id": 0,
+      "outcome": "resolved"
+    }
+  ],
+  "left_over": [],
+  "closed_across_the_pair": true,
+  "closed_meaning": "every callee the target transitively reaches has a body -- in the crate module or, for a declaration the manifest joins by concrete key, in the sidecar -- with no indirect call anywhere in the walk, the sidecar's own bundle closed, and its lowering ok. It does NOT say A0's criterion 5 is met AS WRITTEN (that reads one spliced prefix), and it says nothing about whether a derived body is correct.",
+  "residual_panic_terminals": [
+    "core::option::expect_failed"
+  ],
+  "residual_meaning": "a diverging panic/abort terminal is lowered `assert false; unreachable` with no call and needs no body; its unreachability is a separate proof obligation on the caller (for is_zero: ir_lzb_panic_path_is_unreachable).",
+  "provenance": {
+    "clean_rev": "332dba5e8fb8f76489690b390c428555b6a454d4",
+    "trust_lane_branch": "crystal/callee-sidecar",
+    "trust_lane_commit": "946398bfe5bc7fdec2b6b6b63ed9fff5b60f9373",
+    "trust_base": "0dd9d3e2d7513446da8efc5697852918eed98026",
+    "driver_seal": "$HOME/clean/target/crystal-lane/seal-sidecar",
+    "arm": "release/-O3 lib-only clean-kernel, -Ztrust-ir-callee-sidecar='LevelArc as std::ops::Deref'",
+    "o0_arm_identical": "true"
+  },
+  "controls_2026-09-10": {
+    "positive": {
+      "target": "level::Level::is_zero",
+      "closed_across_the_pair": true,
+      "exit": 0
+    },
+    "same_result_on_the_O0_arm": true,
+    "negative_uncovered_declarations": [
+      {
+        "target": "level::Level::succ",
+        "left_over": [
+          "std::sync::Arc::<T>::new (a declaration the sidecar filter did not cover)"
+        ],
+        "closed_across_the_pair": false,
+        "exit": 1
+      },
+      {
+        "target": "bitvec_compute::BvNames::bv",
+        "left_over": [
+          "core::fmt::rt::Argument::<'_>::new",
+          "std::fmt::Arguments::<'a>::new",
+          "std::fmt::format",
+          "std::hint::must_use"
+        ],
+        "closed_across_the_pair": false,
+        "exit": 1
+      }
+    ],
+    "control_already_bodyful": {
+      "target": "expr::meta::ExprMeta::has_loose_bvars",
+      "closure": 2,
+      "declarations": 0,
+      "closed_across_the_pair": true,
+      "note": "the body the owner ruling already reads A0 6-of-6 THROUGH A CALL: its closure needed no sidecar."
+    }
+  }
+}

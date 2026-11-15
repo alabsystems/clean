@@ -6,13 +6,12 @@
 //!
 //! Provides incremental compilation and parallel builds.
 
+use crate::build_trace;
 use crate::error::{LakeError, LakeResult};
 use crate::workspace::Workspace;
 use clean_elab::ElabResult;
-use clean_kernel::env::{ConstantInfo, Declaration};
-use clean_kernel::inductive::{
-    Constructor, ConstructorVal, InductiveDecl, InductiveType, InductiveVal, RecursorVal,
-};
+use clean_kernel::env::ConstantInfo;
+use clean_kernel::inductive::{ConstructorVal, InductiveVal, RecursorVal};
 use clean_kernel::name::Name;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -20,7 +19,8 @@ use std::time::{Duration, Instant};
 
 /// Result of building modules: (built, skipped, failed)
 /// - built: List of successfully built module names
-/// - skipped: List of modules skipped (already up to date)
+/// - skipped: List of modules whose existing artifact was reused because its
+///   build trace matches every input and output file (`build_trace`)
 /// - failed: List of (module_name, error_message) for failed builds
 type BuildModulesResult = (Vec<String>, Vec<String>, Vec<(String, String)>);
 
@@ -64,6 +64,33 @@ impl Drop for ScratchBuildDir {
     }
 }
 
+/// The three parts of the artifact whose `.olean` is `olean`, in the order
+/// the trace digests them.
+fn artifact_parts_at(olean: &std::path::Path) -> [std::path::PathBuf; 3] {
+    let with = |suffix: &str| {
+        let mut raw = olean.as_os_str().to_os_string();
+        raw.push(suffix);
+        std::path::PathBuf::from(raw)
+    };
+    [olean.to_path_buf(), with(".server"), with(".private")]
+}
+
+/// The fixed git hash `clean lake build` writes into every `.olean` header it
+/// produces (40 hex characters). An artifact carrying any other hash was not
+/// written by this builder, so no fresh build here can reproduce it.
+pub const CLEAN_OLEAN_GIT_HASH: &str = "1ea5000000000000000000000000000000000000";
+
+/// The three artifact files of one module as a FRESH build wrote them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FreshModuleArtifacts {
+    /// `.olean`
+    pub olean: Vec<u8>,
+    /// `.olean.server`
+    pub server: Vec<u8>,
+    /// `.olean.private`
+    pub private: Vec<u8>,
+}
+
 /// Build context for a workspace
 pub struct BuildContext {
     /// The workspace being built
@@ -72,6 +99,34 @@ pub struct BuildContext {
     deps: HashMap<String, Vec<String>>,
     /// Build options
     options: BuildOptions,
+    /// Digests of artifact files already hashed during the current
+    /// [`Self::build_modules`] pass, keyed by the `.olean` path (and of
+    /// toolchain root `.olean`s, keyed by that path). Every module's trace
+    /// names its whole transitive closure, so without this a no-op build of
+    /// a chain of N modules hashed O(N²) files (round-27 measurement: 0.042 s
+    /// at 40 modules, 0.29 s at 120). Cleared at the start of each pass and
+    /// invalidated for a module whenever its artifact is about to be
+    /// rewritten, so a digest is never served for bytes that changed under it.
+    artifact_digests: Mutex<HashMap<std::path::PathBuf, String>>,
+    /// Per module of the current pass: every module its build loads, with the
+    /// file it is loaded from ([`Self::loaded_closure`]). Cleared with
+    /// `artifact_digests`.
+    closures: Mutex<HashMap<String, Arc<Vec<LoadedImport>>>>,
+    /// Per file read for its imports during the current pass.
+    import_headers: Mutex<HashMap<std::path::PathBuf, Arc<Vec<Name>>>>,
+    /// The admission of every module a build loads that this workspace does
+    /// not build itself: the one authority `clean check` uses
+    /// ([`crate::ImportAdmitter`]).
+    admission: Mutex<crate::artifact_binding::ImportAdmitter>,
+    /// The disclosure rows of the current pass: artifacts taken as built.
+    disclosures: Mutex<std::collections::BTreeSet<String>>,
+}
+
+/// One module a build loads, and the file it is loaded from.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct LoadedImport {
+    module: String,
+    olean: std::path::PathBuf,
 }
 
 /// Build options
@@ -167,10 +222,17 @@ impl BuildOptions {
 pub struct BuildResult {
     /// Modules that were built
     pub built: Vec<String>,
-    /// Modules that were skipped (up to date)
+    /// Modules not rebuilt: their existing artifact was reused because this
+    /// builder's trace for it matches the source, every in-workspace
+    /// dependency's artifact, the toolchain import roots and the artifact
+    /// itself (see `build_trace`). A timestamp alone never lands a module here.
     pub skipped: Vec<String>,
     /// Modules that failed
     pub failed: Vec<(String, String)>,
+    /// Imported artifacts the build loaded and took as built — no source
+    /// compared with them — one row each, as `clean check` discloses them:
+    /// what the built modules state holds of those artifacts' definitions.
+    pub disclosures: Vec<String>,
     /// Total build time
     pub duration: Duration,
 }
@@ -206,6 +268,11 @@ impl BuildContext {
             workspace,
             deps: HashMap::new(),
             options: BuildOptions::default(),
+            artifact_digests: Mutex::new(HashMap::new()),
+            closures: Mutex::new(HashMap::new()),
+            import_headers: Mutex::new(HashMap::new()),
+            admission: Mutex::new(crate::artifact_binding::ImportAdmitter::new()),
+            disclosures: Mutex::new(std::collections::BTreeSet::new()),
         }
     }
 
@@ -285,6 +352,7 @@ impl BuildContext {
             built: result.0,
             skipped: result.1,
             failed: result.2,
+            disclosures: self.take_disclosures(),
             duration: start.elapsed(),
         })
     }
@@ -312,7 +380,7 @@ impl BuildContext {
             .iter()
             .find(|l| l.name == target)
         {
-            self.workspace.lib_modules(&lib.name)
+            self.workspace.lib_modules(&lib.name)?
         } else if let Some(exe) = self
             .workspace
             .config()
@@ -346,6 +414,7 @@ impl BuildContext {
             built: result.0,
             skipped: result.1,
             failed: result.2,
+            disclosures: self.take_disclosures(),
             duration: start.elapsed(),
         })
     }
@@ -369,6 +438,51 @@ impl BuildContext {
         let result = self.build_modules_named_inner(modules);
         self.end_check_only(scratch);
         result
+    }
+
+    /// Build `modules` and their in-workspace dependencies FROM SOURCE into a
+    /// scratch directory, and return what that build wrote for each requested
+    /// module AND each in-workspace dependency it built. The project's own
+    /// build directory is neither read nor written, and nothing is skipped as
+    /// up to date.
+    ///
+    /// This is the reference `clean lake verify-fresh` compares an artifact
+    /// against: an artifact is fresh only if it is byte-identical to what the
+    /// current source builds to (the builder is byte-reproducible). A module
+    /// whose fresh build fails is absent from the map and listed in the
+    /// result's `failed`.
+    pub fn build_fresh_artifacts(
+        &mut self,
+        modules: &[String],
+    ) -> LakeResult<(BuildResult, HashMap<String, FreshModuleArtifacts>)> {
+        let scratch = ScratchBuildDir::create()?;
+        self.workspace
+            .set_build_dir_override(Some(scratch.path.clone()));
+        let built = self.build_modules_named_inner(modules).and_then(|result| {
+            let mut artifacts = HashMap::new();
+            for module in modules.iter().chain(&result.built) {
+                if artifacts.contains_key(module) || result.failed.iter().any(|(m, _)| m == module)
+                {
+                    continue;
+                }
+                let olean = self.workspace.olean_path(module)?;
+                if !olean.exists() {
+                    continue;
+                }
+                artifacts.insert(
+                    module.clone(),
+                    FreshModuleArtifacts {
+                        olean: std::fs::read(&olean)?,
+                        server: std::fs::read(self.workspace.olean_server_path(module)?)?,
+                        private: std::fs::read(self.workspace.olean_private_path(module)?)?,
+                    },
+                );
+            }
+            Ok((result, artifacts))
+        });
+        self.workspace.set_build_dir_override(None);
+        drop(scratch);
+        built
     }
 
     fn build_modules_named_inner(&mut self, modules: &[String]) -> LakeResult<BuildResult> {
@@ -397,6 +511,7 @@ impl BuildContext {
             built: result.0,
             skipped: result.1,
             failed: result.2,
+            disclosures: self.take_disclosures(),
             duration: start.elapsed(),
         })
     }
@@ -405,7 +520,7 @@ impl BuildContext {
     fn discover_dependencies(&mut self) -> LakeResult<()> {
         self.deps.clear();
 
-        for module in self.workspace.all_modules() {
+        for module in self.workspace.all_modules()? {
             self.discover_module_deps(&module)?;
         }
 
@@ -425,7 +540,7 @@ impl BuildContext {
         };
 
         let content = std::fs::read_to_string(&src_path)?;
-        let imports = self.extract_imports(&content);
+        let imports = self.extract_imports(&content)?;
 
         // Recursively discover deps for imported modules
         for imp in &imports {
@@ -440,43 +555,24 @@ impl BuildContext {
 
     /// Extract import statements from Lean source (for local dependency tracking)
     /// This filters out stdlib imports since they don't need to be built locally.
-    fn extract_imports(&self, content: &str) -> Vec<String> {
-        Self::extract_all_imports(content)
+    fn extract_imports(&self, content: &str) -> LakeResult<Vec<String>> {
+        Ok(Self::extract_all_imports(content)?
             .into_iter()
             .filter(|m| !self.is_stdlib_import(m))
-            .collect()
+            .collect())
     }
 
-    /// Extract ALL import statements from Lean source (including stdlib)
-    fn extract_all_imports(content: &str) -> Vec<String> {
-        let mut imports = vec![];
-
-        for line in content.lines() {
-            let line = line.trim();
-
-            // Skip comments
-            if line.starts_with("--") {
-                continue;
-            }
-
-            // Handle import statements
-            if let Some(rest) = line.strip_prefix("import ") {
-                let module = rest.trim().to_string();
-                imports.push(module);
-            }
-
-            // Stop at first non-import declaration
-            if !line.is_empty()
-                && !line.starts_with("import ")
-                && !line.starts_with("--")
-                && !line.starts_with("open ")
-                && !line.starts_with("set_option ")
-            {
-                // Continue - imports can be interspersed with other lines in modern Lean
-            }
-        }
-
-        imports
+    /// Read dependency names with the same header grammar as elaboration.
+    /// Line scanning loses public/meta imports, modifiers, multiline names and
+    /// comments, and can mistake text in a comment for a dependency.
+    fn extract_all_imports(content: &str) -> LakeResult<Vec<String>> {
+        let header = clean_parser::Parser::parse_header(content)
+            .map_err(|error| LakeError::Elaboration(format!("invalid module header: {error}")))?;
+        Ok(header
+            .imports
+            .into_iter()
+            .map(|import| import.module.name().to_string())
+            .collect())
     }
 
     /// Does `module` carry one of the toolchain's reserved name prefixes?
@@ -571,6 +667,25 @@ impl BuildContext {
     fn build_modules(&self, modules: &[String]) -> BuildModulesResult {
         use rayon::prelude::*;
 
+        // Digests memoized by an earlier pass may describe files rewritten
+        // since; each pass starts from the files as they are.
+        self.artifact_digests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.closures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.import_headers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.disclosures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+
         let built = Arc::new(Mutex::new(vec![]));
         let skipped = Arc::new(Mutex::new(vec![]));
         let failed = Arc::new(Mutex::new(vec![]));
@@ -611,8 +726,29 @@ impl BuildContext {
                         return;
                     }
 
-                    // Check if module needs rebuild
-                    if !self.options.force && !self.workspace.needs_rebuild(module) {
+                    // Reuse the module's artifact only when its build trace
+                    // matches the files on disk now (see `build_trace`); a
+                    // timestamp alone never credits a module.
+                    let reuse = match self.may_reuse_artifact(module) {
+                        Ok(value) => value,
+                        Err(error) => {
+                            failed
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .push((module.clone(), error.to_string()));
+                            return;
+                        }
+                    };
+                    if reuse {
+                        // A reused module rests on the same imports as a
+                        // built one: admitted the same way, every pass.
+                        if let Err(error) = self.admit_imports(module) {
+                            failed
+                                .lock()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .push((module.clone(), error.to_string()));
+                            return;
+                        }
                         skipped
                             .lock()
                             .unwrap_or_else(|e| e.into_inner())
@@ -667,6 +803,363 @@ impl BuildContext {
         let failed = Self::take_shared_state(failed);
 
         (built, skipped, failed)
+    }
+
+    /// The three artifact files of `module`, in the order the trace digests them.
+    fn artifact_parts(&self, module: &str) -> LakeResult<[std::path::PathBuf; 3]> {
+        Ok([
+            self.workspace.olean_path(module)?,
+            self.workspace.olean_server_path(module)?,
+            self.workspace.olean_private_path(module)?,
+        ])
+    }
+
+    /// `key`'s digest from this pass's memo, computing it with `compute` on
+    /// a miss.
+    fn memo_digest(
+        &self,
+        key: &std::path::Path,
+        compute: impl FnOnce() -> LakeResult<String>,
+    ) -> LakeResult<String> {
+        if let Some(digest) = self
+            .artifact_digests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(key)
+        {
+            return Ok(digest.clone());
+        }
+        let digest = compute()?;
+        self.artifact_digests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(key.to_path_buf(), digest.clone());
+        Ok(digest)
+    }
+
+    /// Forget the memoized digest of `module`'s artifact: it is about to be
+    /// (or has just been) rewritten.
+    fn forget_digest(&self, olean: &std::path::Path) {
+        self.artifact_digests
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(olean);
+    }
+
+    /// What `module`'s build reads, as its build trace records it: the source
+    /// `content`, the artifacts of every in-workspace module in its transitive
+    /// import closure, and the root `.olean` of each toolchain import.
+    fn trace_inputs(&self, module: &str, content: &str) -> LakeResult<build_trace::TraceInputs> {
+        let mut closure: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut stack: Vec<&String> = self.deps.get(module).into_iter().flatten().collect();
+        while let Some(dep) = stack.pop() {
+            if dep != module && closure.insert(dep.clone()) {
+                stack.extend(self.deps.get(dep).into_iter().flatten());
+            }
+        }
+        let mut inputs = std::collections::BTreeMap::new();
+        for dep in closure {
+            let parts = self.artifact_parts(&dep)?;
+            let digest =
+                self.memo_digest(&parts[0], || build_trace::digest_artifact_parts(&parts))?;
+            inputs.insert(dep, digest);
+        }
+        // Every module the build loads that this workspace does not build,
+        // by the file it loads and all three of its parts: a rewritten
+        // module anywhere in the closure, not only a named import's root
+        // `.olean`, is a changed input.
+        let mut external: std::collections::BTreeMap<String, String> =
+            std::collections::BTreeMap::new();
+        for loaded in self.loaded_closure(module, content)?.iter() {
+            if self.built_here(loaded) {
+                continue;
+            }
+            let parts = artifact_parts_at(&loaded.olean);
+            let digest =
+                self.memo_digest(&loaded.olean, || build_trace::digest_artifact_parts(&parts))?;
+            // One module loaded from two files (by the two search-path
+            // lists the build uses) records both.
+            external
+                .entry(loaded.module.clone())
+                .and_modify(|d| {
+                    if !d.split('+').any(|x| x == digest) {
+                        d.push('+');
+                        d.push_str(&digest);
+                    }
+                })
+                .or_insert(digest);
+        }
+        for imp in Self::extract_all_imports(content)? {
+            if self.is_stdlib_import(&imp)
+                && clean_olean::find_module_olean(&imp, &clean_olean::default_search_paths())
+                    .is_none()
+            {
+                external.insert(imp, "unresolved".to_string());
+            }
+        }
+        Ok(build_trace::TraceInputs {
+            source: content.as_bytes().to_vec(),
+            inputs,
+            stdlib: external,
+            permissive_imports: self.options.permissive_imports,
+            // The language the module is compiled in: an artifact built under
+            // other `leanOptions` is not this build's (Lake hashes its
+            // `leanArgs` into the trace the same way).
+            lean_args: self.workspace.module_lean_args(module)?,
+        })
+    }
+
+    /// Whether `loaded` is a module this workspace builds, loaded from where
+    /// this build writes it: built (or its trace verified) earlier in the
+    /// same pass, so it needs no admission.
+    fn built_here(&self, loaded: &LoadedImport) -> bool {
+        self.workspace.find_module(&loaded.module).is_some()
+            && self
+                .workspace
+                .olean_path(&loaded.module)
+                .is_ok_and(|path| path == loaded.olean)
+    }
+
+    /// The imports recorded in the `.olean` at `path`, read once per pass.
+    fn header_imports(&self, path: &std::path::Path) -> LakeResult<Arc<Vec<Name>>> {
+        if let Some(imports) = self
+            .import_headers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(path)
+        {
+            return Ok(Arc::clone(imports));
+        }
+        let bytes = std::fs::read(path)?;
+        let imports: Vec<Name> = clean_olean::parse_typed_imports(&bytes)
+            .map_err(|e| LakeError::BuildFailed {
+                module: path.display().to_string(),
+                reason: format!("unreadable import header: {e}"),
+            })?
+            .into_iter()
+            .map(|import| import.module_name)
+            .collect();
+        let imports = Arc::new(imports);
+        self.import_headers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(path.to_path_buf(), Arc::clone(&imports));
+        Ok(imports)
+    }
+
+    /// Walk the import closure of `root` exactly as the loader does
+    /// (`clean_olean::load_module_with_deps` over `search_paths`: each
+    /// module from the first root holding it, then the imports its `.olean`
+    /// records), adding every module and file to `out`. A module that
+    /// resolves nowhere is left to the load, which fails on it.
+    fn walk_imports(
+        &self,
+        root: &str,
+        search_paths: &[std::path::PathBuf],
+        out: &mut std::collections::BTreeSet<LoadedImport>,
+    ) -> LakeResult<()> {
+        let Some(root_path) = clean_olean::find_module_olean(root, search_paths) else {
+            return Ok(());
+        };
+        let mut seen: HashSet<Name> = HashSet::new();
+        let mut stack: Vec<(String, std::path::PathBuf)> = vec![(root.to_string(), root_path)];
+        while let Some((module, olean)) = stack.pop() {
+            for import in self.header_imports(&olean)?.iter() {
+                if !seen.insert(import.clone()) {
+                    continue;
+                }
+                if let Ok(path) = clean_olean::resolve_typed_module_path(import, search_paths) {
+                    stack.push((import.to_string(), path));
+                }
+            }
+            out.insert(LoadedImport { module, olean });
+        }
+        Ok(())
+    }
+
+    // A stopped loader may already have inserted part of a module. Continuing
+    // would use that partial environment as though the import had finished.
+    fn import_allows_fallback(e: &clean_olean::ImportError) -> bool {
+        !e.is_world_refusal() && !e.is_resource_refusal()
+    }
+
+    /// The opt-out a failed import load names: none for a refused Lean
+    /// world, which `--permissive-imports` does not continue past (R81).
+    fn import_failure_hint(e: &clean_olean::ImportError) -> &'static str {
+        if e.is_world_refusal() {
+            "(no import policy continues past a refused Lean world, docs/DECISIONS.md R81)"
+        } else if e.is_resource_refusal() {
+            "(resource exhaustion or interruption leaves an incomplete import; retry in a fresh environment)"
+        } else {
+            "(pass --permissive-imports to warn and continue)"
+        }
+    }
+
+    /// Every module `module`'s build loads, with the file it is loaded
+    /// from — what [`Self::build_module`] loads: each toolchain-named import
+    /// the workspace does not provide, with its closure over the default
+    /// search paths, and each in-workspace dependency already built, with
+    /// its closure over the build directory then those paths.
+    /// An import of `module` whose artifact cannot be read while its closure
+    /// is walked. Fail-closed by default, exactly as the load below it: the
+    /// module fails, naming the import and the opt-out. Under the explicit
+    /// `--permissive-imports` opt-out it is a warning and the walk goes on
+    /// without it; the load then meets the same artifact and warns again.
+    fn unreadable_import(&self, module: &str, what: &str) -> LakeResult<()> {
+        if !self.options.permissive_imports {
+            return Err(LakeError::BuildFailed {
+                module: module.to_string(),
+                reason: format!("{what} (pass --permissive-imports to warn and continue)"),
+            });
+        }
+        eprintln!("  Warning: {what}");
+        Ok(())
+    }
+
+    fn loaded_closure(&self, module: &str, content: &str) -> LakeResult<Arc<Vec<LoadedImport>>> {
+        if let Some(closure) = self
+            .closures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(module)
+        {
+            return Ok(Arc::clone(closure));
+        }
+        let defaults = clean_olean::default_search_paths();
+        let mut out = std::collections::BTreeSet::new();
+        for imp in Self::extract_all_imports(content)? {
+            if self.is_stdlib_import(&imp) {
+                if let Err(e) = self.walk_imports(&imp, &defaults, &mut out) {
+                    self.unreadable_import(
+                        module,
+                        &format!("failed to load stdlib import '{imp}': {e}"),
+                    )?;
+                }
+            }
+        }
+        let mut dep_search_paths = vec![self.workspace.lib_dir()];
+        dep_search_paths.extend(defaults);
+        for dep in self.deps.get(module).into_iter().flatten() {
+            let olean_path = self.workspace.olean_path(dep)?;
+            if olean_path.exists() {
+                if let Err(e) = self.walk_imports(dep, &dep_search_paths, &mut out) {
+                    self.unreadable_import(
+                        module,
+                        &format!(
+                            "failed to load dependency '{dep}' from {}: {e}",
+                            olean_path.display()
+                        ),
+                    )?;
+                }
+            }
+        }
+        let closure = Arc::new(out.into_iter().collect::<Vec<_>>());
+        self.closures
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(module.to_string(), Arc::clone(&closure));
+        Ok(closure)
+    }
+
+    /// Admit every module `module`'s build loads that this workspace does
+    /// not build itself, through the authority `clean check` uses
+    /// ([`crate::ImportAdmitter`]): the pinned toolchain's own build (by
+    /// digest) is the base; an artifact that is not the build of the source
+    /// beside it refuses the module; one with no source to compare, or
+    /// written by another tool, is taken as built and disclosed. A module's
+    /// name grants nothing: `Mathlib.*`, `Std.*` or `Init.*` outside the
+    /// pinned toolchain is an artifact like any other.
+    fn admit_imports(&self, module: &str) -> LakeResult<()> {
+        let src_path = self
+            .workspace
+            .find_module(module)
+            .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
+        let content = std::fs::read_to_string(&src_path)?;
+        let closure = self.loaded_closure(module, &content)?;
+        let mut admission = self.admission.lock().unwrap_or_else(|e| e.into_inner());
+        let mut refusals = Vec::new();
+        for loaded in closure.iter() {
+            if self.built_here(loaded) {
+                continue;
+            }
+            match admission.admit(&loaded.module, &loaded.olean) {
+                crate::artifact_binding::ImportAdmission::Toolchain
+                | crate::artifact_binding::ImportAdmission::Bound => {}
+                crate::artifact_binding::ImportAdmission::Refused(row) => refusals.push(row),
+                crate::artifact_binding::ImportAdmission::Disclosed(row) => {
+                    self.disclosures
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(row);
+                }
+            }
+        }
+        if refusals.is_empty() {
+            Ok(())
+        } else {
+            Err(LakeError::BuildFailed {
+                module: module.to_string(),
+                reason: refusals.join("; "),
+            })
+        }
+    }
+
+    /// The disclosure rows of the pass that just ran.
+    fn take_disclosures(&self) -> Vec<String> {
+        std::mem::take(&mut *self.disclosures.lock().unwrap_or_else(|e| e.into_inner()))
+            .into_iter()
+            .collect()
+    }
+
+    /// Why `module`'s artifact in this workspace's build directory is not
+    /// what this builder recorded building from its current source; `None`
+    /// when its build trace matches every input and output file now.
+    ///
+    /// The consumer-side twin of the reuse decision below, for a consumer
+    /// (`clean check`, `clean export-cert`) that loads the artifact instead
+    /// of building it (see [`crate::artifact_binding`]). The comparison is
+    /// always the strict one: a trace written under `--permissive-imports`
+    /// does not bind.
+    pub(crate) fn artifact_trace_refusal(
+        &mut self,
+        module: &str,
+    ) -> LakeResult<Option<&'static str>> {
+        let src_path = self
+            .workspace
+            .find_module(module)
+            .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
+        self.discover_module_deps(module)?;
+        let content = std::fs::read_to_string(&src_path)?;
+        let parts = self.artifact_parts(module)?;
+        let mut current = self.trace_inputs(module, &content)?;
+        current.permissive_imports = false;
+        build_trace::reuse_refusal(&parts[0], &parts, current)
+    }
+
+    /// May `module`'s existing artifact be counted as built without building
+    /// it? Only when this builder's trace for it matches every input and
+    /// output file as it is now; `--force` never reuses.
+    fn may_reuse_artifact(&self, module: &str) -> LakeResult<bool> {
+        // `needs_rebuild` first, whatever `--force` says: it validates the
+        // module's output identity, and an invalid one fails the module.
+        if self.workspace.needs_rebuild(module)? || self.options.force {
+            return Ok(false);
+        }
+        let src_path = self
+            .workspace
+            .find_module(module)
+            .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
+        let content = std::fs::read_to_string(&src_path)?;
+        let parts = self.artifact_parts(module)?;
+        let refusal =
+            build_trace::reuse_refusal(&parts[0], &parts, self.trace_inputs(module, &content)?)?;
+        if let Some(reason) = refusal {
+            if self.options.verbose {
+                eprintln!("Rebuilding {module}: existing artifact not reused ({reason})");
+            }
+            return Ok(false);
+        }
+        Ok(true)
     }
 
     /// Compute build levels for parallel execution
@@ -734,11 +1227,28 @@ impl BuildContext {
         // Read source
         let content = std::fs::read_to_string(&src_path)?;
 
+        // What this build reads, recorded BEFORE anything is loaded, and the
+        // old trace removed before anything is written: a failed build must
+        // not leave a trace that still names the old artifact.
+        let trace_inputs = self.trace_inputs(module, &content)?;
+        let artifact_parts = self.artifact_parts(module)?;
+        build_trace::remove_trace(&artifact_parts[0])?;
+        self.forget_digest(&artifact_parts[0]);
+        // Every module this build is about to load that the workspace does
+        // not build itself is admitted first, as `clean check` admits it.
+        self.admit_imports(module)?;
+        let admitted = self.loaded_closure(module, &content)?;
+
         // Parse
-        let surface = clean_parser::parse_file(&content).map_err(|e| LakeError::BuildFailed {
-            module: module.to_string(),
-            reason: format!("parse error: {e}"),
+        let parsed = clean_parser::parse_file_with_diagnostics(&content).map_err(|e| {
+            LakeError::BuildFailed {
+                module: module.to_string(),
+                reason: format!("parse error: {e}"),
+            }
         })?;
+
+        let header = parsed.header;
+        let surface = parsed.decls;
 
         // Create environment with imported modules
         let mut env = clean_kernel::Environment::with_prelude();
@@ -746,9 +1256,15 @@ impl BuildContext {
             module: module.to_string(),
             reason: format!("IO operation initialization failed: {e}"),
         })?;
+        // The environment as this build constructed it, BEFORE any import:
+        // everything loaded below — stdlib and local dependency artifacts
+        // alike — enters structurally (never type-checked), so before this
+        // module is exported its declarations' cited closure is re-admitted
+        // by the kernel over exactly this base (module-trust, 2026-09-24).
+        let mut import_gate = clean_olean::ImportedConeGate::new(&env);
 
         // Extract ALL imports (including stdlib) from this file
-        let all_imports = Self::extract_all_imports(&content);
+        let all_imports = Self::extract_all_imports(&content)?;
 
         // Load stdlib imports from the Lean toolchain
         let stdlib_imports: Vec<_> = all_imports
@@ -765,6 +1281,7 @@ impl BuildContext {
             for imp in &stdlib_imports {
                 match clean_olean::load_module_with_deps(&mut env, imp, &search_paths) {
                     Ok(summaries) => {
+                        Self::loaded_as_admitted(module, &summaries, &admitted)?;
                         if self.options.verbose {
                             let total_consts: usize =
                                 summaries.iter().map(|s| s.added_constants).sum();
@@ -780,13 +1297,15 @@ impl BuildContext {
                         // Fail-closed by default: a module must not "build"
                         // against a silently incomplete environment. The
                         // explicit --permissive-imports opt-out restores the
-                        // legacy warn-and-continue behavior.
-                        if !self.options.permissive_imports {
+                        // legacy warn-and-continue behavior, except past a
+                        // part of a refused or second Lean world (R38, R81), or
+                        // a resource stop leaving a partially loaded environment.
+                        if !self.options.permissive_imports || !Self::import_allows_fallback(&e) {
                             return Err(LakeError::BuildFailed {
                                 module: module.to_string(),
                                 reason: format!(
-                                    "failed to load stdlib import '{imp}': {e} \
-                                     (pass --permissive-imports to warn and continue)"
+                                    "failed to load stdlib import '{imp}': {e} {}",
+                                    Self::import_failure_hint(&e)
                                 ),
                             });
                         }
@@ -814,10 +1333,11 @@ impl BuildContext {
         let mut dep_search_paths = vec![self.workspace.lib_dir()];
         dep_search_paths.extend(clean_olean::default_search_paths());
         for dep in &import_names {
-            let olean_path = self.workspace.olean_path(dep);
+            let olean_path = self.workspace.olean_path(dep)?;
             if olean_path.exists() {
                 match clean_olean::load_module_with_deps(&mut env, dep, &dep_search_paths) {
                     Ok(summaries) => {
+                        Self::loaded_as_admitted(module, &summaries, &admitted)?;
                         if self.options.verbose {
                             let total: usize = summaries.iter().map(|s| s.added_constants).sum();
                             eprintln!(
@@ -830,13 +1350,13 @@ impl BuildContext {
                     }
                     Err(e) => {
                         // Fail-closed by default (see the stdlib branch above).
-                        if !self.options.permissive_imports {
+                        if !self.options.permissive_imports || !Self::import_allows_fallback(&e) {
                             return Err(LakeError::BuildFailed {
                                 module: module.to_string(),
                                 reason: format!(
-                                    "failed to load dependency '{dep}' from {}: {e} \
-                                     (pass --permissive-imports to warn and continue)",
-                                    olean_path.display()
+                                    "failed to load dependency '{dep}' from {}: {e} {}",
+                                    olean_path.display(),
+                                    Self::import_failure_hint(&e)
                                 ),
                             });
                         }
@@ -850,36 +1370,34 @@ impl BuildContext {
             }
         }
 
+        // Session support the elaborator seeds into the environment (PProd, the
+        // `instHAdd`-family bridge instances) is fixed repo-authored setup, not
+        // this module's declarations: seed it BEFORE the census below so it is
+        // neither exported into this module's artifact nor re-exported by every
+        // module of the package. `prepare_declaration_environment` is idempotent
+        // and is what the elaborator entry repeats per declaration.
+        if let Some(first) = surface
+            .iter()
+            .find(|d| !matches!(d, clean_parser::SurfaceDecl::Import { .. }))
+        {
+            clean_elab::prepare_declaration_environment(&mut env, first);
+        }
+
         // Snapshot environment before elaboration so we can capture only new declarations
         let baseline_consts: HashSet<Name> = env.constants().map(|c| c.name.clone()).collect();
         let baseline_inds: HashSet<Name> = env.inductives().map(|i| i.name.clone()).collect();
         let baseline_ctors: HashSet<Name> = env.constructors().map(|c| c.name.clone()).collect();
         let baseline_recs: HashSet<Name> = env.recursors().map(|r| r.name.clone()).collect();
+        let baseline_exports = ModuleExportBaseline::take(&env);
 
-        // Elaborate
-        for decl in &surface {
-            let (result, aesop_attrs) = {
-                let mut elab = clean_elab::ElabCtx::new(&env);
-                let result = elab.elab_decl(decl).map_err(|e| LakeError::BuildFailed {
-                    module: module.to_string(),
-                    reason: format!("elaboration error: {e}"),
-                })?;
-                let aesop_attrs = elab.take_aesop_attrs();
-                (result, aesop_attrs)
-            };
+        // The `leanOptions` / `moreLeanArgs` Lake compiles this module with,
+        // installed as the initial option state of its file (gap G50).
+        let lean_args = self.module_lean_options(module)?;
+        let (example_roots, global_readds) =
+            Self::elaborate_module(module, &surface, &header, &mut env, &lean_args)?;
 
-            Self::commit_elab_result(&mut env, result).map_err(|reason| {
-                LakeError::BuildFailed {
-                    module: module.to_string(),
-                    reason,
-                }
-            })?;
-
-            // Register aesop rules collected during elaboration
-            for (name, attr) in aesop_attrs {
-                clean_elab::register_aesop_rule(&mut env, name, &attr);
-            }
-        }
+        Self::gate_module_examples(module, &env, &mut import_gate, &example_roots)?;
+        Self::gate_module_closure(module, &env, &mut import_gate, &baseline_consts)?;
 
         // Collect newly added declarations for payload/export
         let mut new_inductives: Vec<InductiveVal> = env
@@ -936,7 +1454,7 @@ impl BuildContext {
         export_const_names.dedup();
 
         // Create output directory
-        let olean_path = self.workspace.olean_path(module);
+        let olean_path = self.workspace.olean_path(module)?;
         if let Some(parent) = olean_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
@@ -945,16 +1463,99 @@ impl BuildContext {
         let imports: Vec<(&str, bool)> = import_names.iter().map(|s| (s.as_str(), false)).collect();
         let const_refs: Vec<&str> = export_const_names.iter().map(String::as_str).collect();
 
+        // The module's `protected` / `private` marks travel with its
+        // declarations: without them an importer's `open N; w` reached a
+        // protected `N.w`, and a `private` declaration was nameable from
+        // every importer (round-25 verification: `protterm_3`,
+        // `privshadow2_3` built where Lean 4.8.0 rejects them).
+        let exported: HashSet<Name> = new_inductives
+            .iter()
+            .map(|i| i.name.clone())
+            .chain(new_constructors.iter().map(|c| c.name.clone()))
+            .chain(new_recursors.iter().map(|r| r.name.clone()))
+            .chain(new_constants.iter().map(|c| c.name.clone()))
+            .collect();
+        let mut protected_decls: Vec<Name> = exported
+            .iter()
+            .filter(|name| env.is_protected(name))
+            .cloned()
+            .collect();
+        protected_decls.sort_by_key(ToString::to_string);
+        let mut private_decls: Vec<Name> = exported
+            .iter()
+            .filter(|name| env.is_private(name))
+            .cloned()
+            .collect();
+        private_decls.sort_by_key(ToString::to_string);
+
+        // The module's own `@[implemented_by]` / `@[extern]` bindings travel
+        // with its declarations (payload version 5): without them a program
+        // importing this artifact compiled the logical body where Lean runs
+        // the implementation (`docs/DECISIONS.md` R149). Elaboration binds only
+        // a declaration of this run, so the module's new names are all there is.
+        let own_names = || {
+            new_inductives
+                .iter()
+                .map(|i| &i.name)
+                .chain(new_constructors.iter().map(|c| &c.name))
+                .chain(new_recursors.iter().map(|r| &r.name))
+                .chain(new_constants.iter().map(|c| &c.name))
+        };
+        let mut implemented_by: Vec<(Name, Name)> = own_names()
+            .filter_map(|name| {
+                env.get_implemented_by(name)
+                    .map(|target| (name.clone(), target.clone()))
+            })
+            .collect();
+        implemented_by.sort_by_key(|(name, _)| name.to_string());
+        let mut externs: Vec<(Name, String)> = own_names()
+            .filter_map(|name| {
+                env.get_extern(name)
+                    .map(|symbol| (name.clone(), symbol.clone()))
+            })
+            .collect();
+        externs.sort_by_key(|(name, _)| name.to_string());
+        // The module's own constants a late `attribute [implemented_by]`
+        // command of the module came too late for: an importer must refuse
+        // to compile them as this build's own lanes do (`docs/DECISIONS.md`
+        // R149). A row for an imported constant is its own module's, and an
+        // importer reads it from that module's payload.
+        let own: HashSet<&Name> = own_names().collect();
+        let mut implemented_by_order: Vec<(Name, Name, Name)> = env
+            .compiled_before_record()
+            .into_iter()
+            .flatten()
+            .filter(|(referrer, _)| own.contains(referrer))
+            .map(|(referrer, why)| (referrer.clone(), why.rebound.clone(), why.via.clone()))
+            .collect();
+        implemented_by_order.sort_by_key(|(referrer, _, _)| referrer.to_string());
+
+        let module_exports = baseline_exports.exports(&env, &global_readds);
+        let definition_exposure = clean_kernel::env::exposure::definitions(&env)
+            .into_iter()
+            .filter(|(name, _)| own.contains(name))
+            .collect();
         let payload = clean_olean::CleanPayload {
             constants: new_constants,
             inductives: new_inductives,
             constructors: new_constructors,
             recursors: new_recursors,
             structure_fields,
+            protected_decls,
+            private_decls,
+            classes: module_exports.classes,
+            global_instances: module_exports.global_instances,
+            scoped_instances: module_exports.scoped_instances,
+            export_aliases: module_exports.export_aliases,
+            namespaces: module_exports.namespaces,
+            implemented_by,
+            externs,
+            implemented_by_order,
+            csimp: clean_kernel::env::csimp::export_compilation_snapshot(&env),
+            definition_exposure,
         };
 
-        // Use a fixed git hash for clean-generated .olean files (40 hex chars)
-        const CLEAN_GIT_HASH: &str = "1ea5000000000000000000000000000000000000";
+        const CLEAN_GIT_HASH: &str = CLEAN_OLEAN_GIT_HASH;
 
         // Export all three .olean parts for Lean 4 compatibility:
         // - .olean (exported): constants and public extension entries
@@ -980,15 +1581,21 @@ impl BuildContext {
 
         // Export .olean.server (server level) - empty for now
         // This file will contain LSP-specific extension entries when supported
-        let server_path = self.workspace.olean_server_path(module);
+        let server_path = self.workspace.olean_server_path(module)?;
         let empty_payload = clean_olean::CleanPayload {
             constants: vec![],
             inductives: vec![],
             constructors: vec![],
             recursors: vec![],
             structure_fields: vec![],
+            protected_decls: vec![],
+            private_decls: vec![],
+            ..clean_olean::CleanPayload::default()
         };
-        let server_bytes = clean_olean::OleanExporter::export_with_payload(
+        // Incremental companions must occupy distinct pointer ranges, including
+        // the complete preceding file's payload/footer and alignment padding.
+        let server_bytes = clean_olean::OleanExporter::export_with_payload_after(
+            &olean_bytes,
             &imports,
             &[], // No constants in server part
             &[], // No server extension entries for now
@@ -1003,8 +1610,9 @@ impl BuildContext {
 
         // Export .olean.private (private level) - empty for now
         // This file will contain private implementation extension entries when supported
-        let private_path = self.workspace.olean_private_path(module);
-        let private_bytes = clean_olean::OleanExporter::export_with_payload(
+        let private_path = self.workspace.olean_private_path(module)?;
+        let private_bytes = clean_olean::OleanExporter::export_with_payload_after(
+            &server_bytes,
             &imports,
             &[], // No constants in private part
             &[], // No private extension entries for now
@@ -1017,236 +1625,293 @@ impl BuildContext {
         })?;
         std::fs::write(&private_path, &private_bytes)?;
 
+        // Only now, with the module elaborated, kernel-checked, gated and
+        // all three parts written, may its artifact be reused by a later build.
+        build_trace::write_trace(&olean_path, &artifact_parts, trace_inputs)?;
+        self.forget_digest(&artifact_parts[0]);
+
         Ok(())
     }
 
-    /// Commit an elaboration result into the kernel environment.
-    fn commit_elab_result(
-        env: &mut clean_kernel::Environment,
-        result: ElabResult,
-    ) -> Result<(), String> {
-        match result {
-            ElabResult::Definition {
-                name,
-                universe_params,
-                ty,
-                val,
-                modifiers: _,
-            } => env
-                .add_decl(Declaration::Definition {
-                    name,
-                    level_params: universe_params,
-                    type_: ty,
-                    value: val,
-                    is_reducible: false,
+    /// Every module a load call loaded (its summaries' labels, a
+    /// companion part's `M._server` / `M._private` counted as `M`) must be
+    /// one [`Self::loaded_closure`] walked for `module` — the set admitted
+    /// before the load. The walk follows the loader's own rule; a module it
+    /// did not see was loaded unexamined, and fails the build closed.
+    fn loaded_as_admitted(
+        module: &str,
+        summaries: &[clean_olean::LoadSummary],
+        admitted: &[LoadedImport],
+    ) -> LakeResult<()> {
+        let labels: HashSet<&str> = summaries
+            .iter()
+            .filter_map(|s| s.module_name.as_deref())
+            .collect();
+        for label in &labels {
+            let base = ["._server", "._private"]
+                .iter()
+                .find_map(|suffix| {
+                    label
+                        .strip_suffix(suffix)
+                        .filter(|base| labels.contains(base))
                 })
-                .map_err(|e| e.to_string()),
-            ElabResult::Theorem {
-                name,
-                universe_params,
-                ty,
-                proof,
-                modifiers: _,
-            } => env
-                .add_decl(Declaration::Theorem {
-                    name,
-                    level_params: universe_params,
-                    type_: ty,
-                    value: proof,
-                })
-                .map_err(|e| e.to_string()),
-            ElabResult::Axiom {
-                name,
-                universe_params,
-                ty,
-                modifiers: _,
-            } => env
-                .add_decl(Declaration::Axiom {
-                    name,
-                    level_params: universe_params,
-                    type_: ty,
-                })
-                .map_err(|e| e.to_string()),
-            ElabResult::Opaque {
-                name,
-                universe_params,
-                ty,
-                val,
-                modifiers: _,
-            } => {
-                if let Some(value) = val {
-                    env.add_decl(Declaration::Opaque {
-                        name,
-                        level_params: universe_params,
-                        type_: ty,
-                        value,
-                    })
-                    .map_err(|e| e.to_string())
-                } else {
-                    env.add_decl(Declaration::Axiom {
-                        name,
-                        level_params: universe_params,
-                        type_: ty,
-                    })
-                    .map_err(|e| e.to_string())
-                }
+                .unwrap_or(label);
+            if !admitted.iter().any(|loaded| loaded.module == base) {
+                return Err(LakeError::BuildFailed {
+                    module: module.to_string(),
+                    reason: format!(
+                        "loaded `{base}`, which the import admission did not examine; \
+                         nothing is built against it"
+                    ),
+                });
             }
-            ElabResult::Inductive {
-                name,
-                universe_params,
-                num_params,
-                ty,
-                constructors,
-                derived_instances,
-                ..
-            } => {
-                let decl = InductiveDecl {
-                    level_params: universe_params,
-                    num_params,
-                    types: vec![InductiveType {
-                        name: name.clone(),
-                        type_: ty,
-                        constructors: constructors
-                            .into_iter()
-                            .map(|(ctor_name, ctor_ty)| Constructor {
-                                name: ctor_name,
-                                type_: ctor_ty,
-                            })
-                            .collect(),
-                    }],
-                };
-                env.add_inductive(decl).map_err(|e| e.to_string())?;
-
-                for inst in derived_instances {
-                    env.add_decl(Declaration::Definition {
-                        name: inst.name,
-                        level_params: Vec::new(),
-                        type_: inst.ty,
-                        value: inst.val,
-                        is_reducible: false,
-                    })
-                    .map_err(|e| e.to_string())?;
-                }
-                Ok(())
-            }
-            // A mutual inductive family registers in a single `add_inductive`
-            // call so cross-references resolve and the kernel builds the mutual
-            // recursors.
-            ElabResult::MutualInductive {
-                decl,
-                derived_instances,
-                ..
-            } => {
-                env.add_inductive(decl).map_err(|e| e.to_string())?;
-                for inst in derived_instances {
-                    env.add_decl(Declaration::Definition {
-                        name: inst.name,
-                        level_params: inst.level_params,
-                        type_: inst.ty,
-                        value: inst.val,
-                        is_reducible: false,
-                    })
-                    .map_err(|e| e.to_string())?;
-                }
-                Ok(())
-            }
-            ElabResult::Structure {
-                name,
-                universe_params,
-                num_params,
-                ty,
-                ctor_name,
-                ctor_ty,
-                field_names,
-                projections,
-                derived_instances,
-                class_info,
-                ..
-            } => {
-                let decl = InductiveDecl {
-                    level_params: universe_params,
-                    num_params,
-                    types: vec![InductiveType {
-                        name: name.clone(),
-                        type_: ty,
-                        constructors: vec![Constructor {
-                            name: ctor_name,
-                            type_: ctor_ty,
-                        }],
-                    }],
-                };
-                env.add_inductive(decl).map_err(|e| e.to_string())?;
-                env.register_structure_fields(name.clone(), field_names)
-                    .map_err(|e| e.to_string())?;
-
-                for (proj_name, proj_ty, proj_val) in projections {
-                    env.add_decl(Declaration::Definition {
-                        name: proj_name,
-                        level_params: Vec::new(),
-                        type_: proj_ty,
-                        value: proj_val,
-                        is_reducible: true,
-                    })
-                    .map_err(|e| e.to_string())?;
-                }
-
-                for inst in derived_instances {
-                    env.add_decl(Declaration::Definition {
-                        name: inst.name.clone(),
-                        level_params: Vec::new(),
-                        type_: inst.ty,
-                        value: inst.val,
-                        is_reducible: false,
-                    })
-                    .map_err(|e| e.to_string())?;
-
-                    // Register instance metadata
-                    env.register_instance(clean_kernel::KernelInstanceInfo {
-                        name: inst.name,
-                        class_name: inst.class_name,
-                        priority: inst.priority,
-                        type_: None,
-                        value: None,
-                    });
-                }
-
-                // If this is a class declaration, register the class
-                if let Some(info) = class_info {
-                    env.register_class(clean_kernel::KernelClassInfo {
-                        name: name.clone(),
-                        num_params: info.num_params,
-                        out_params: info.out_params,
-                        semi_out_params: info.semi_out_params,
-                    });
-                }
-                Ok(())
-            }
-            ElabResult::Instance {
-                name,
-                universe_params,
-                ty,
-                val,
-                ..
-            } => env
-                .add_decl(Declaration::Definition {
-                    name,
-                    level_params: universe_params,
-                    type_: ty,
-                    value: val,
-                    is_reducible: false,
-                })
-                .map_err(|e| e.to_string()),
-            // `Failed` is an inner decl that already failed elaboration/kernel
-            // checking; it is never committed to the environment (committing it
-            // would register a rejected declaration).
-            // `Example` is checked-then-discarded (B02; lean4
-            // `src/Lean/Elab/Declaration.lean`, `elabExample`) — never committed.
-            ElabResult::Multiple(_)
-            | ElabResult::Command(_)
-            | ElabResult::Skipped
-            | ElabResult::Example { .. }
-            | ElabResult::Failed { .. } => Ok(()),
         }
+        Ok(())
+    }
+
+    /// Refuse to export a module whose declarations' cited closure does not
+    /// re-admit over the build's own base, reaches a trust marker (`sorry`,
+    /// `sorryAx`, `trustedArith`, `trustedAy`), or rests on an axiom another
+    /// module declared (whatever its name: only the base's own declaration of
+    /// a foundational axiom is taken as given). The module's OWN axioms are reported,
+    /// not refused: they are in the source being built.
+    fn gate_module_closure(
+        module: &str,
+        env: &clean_kernel::Environment,
+        gate: &mut clean_olean::ImportedConeGate,
+        baseline_consts: &HashSet<Name>,
+    ) -> LakeResult<()> {
+        let roots: std::collections::BTreeSet<Name> = env
+            .constants()
+            .filter(|c| !baseline_consts.contains(&c.name))
+            .map(|c| c.name.clone())
+            .collect();
+        if roots.is_empty() {
+            return Ok(());
+        }
+        let verdict = gate.check(env, &roots);
+        if !verdict.passed(false) {
+            return Err(LakeError::BuildFailed {
+                module: module.to_string(),
+                reason: format!(
+                    "cited closure not credited: {}",
+                    verdict.refusal_summary(false)
+                ),
+            });
+        }
+        let own_axioms: Vec<String> = roots
+            .iter()
+            .filter(|n| {
+                // Every own axiom, whatever its name: a citing module accepts
+                // an axiom only when its own base holds that very
+                // declaration, and a module's own axiom is never in a
+                // citer's base.
+                env.get_const(n)
+                    .is_some_and(|c| c.kind == clean_kernel::ConstantKind::Axiom)
+            })
+            .map(ToString::to_string)
+            .collect();
+        if !own_axioms.is_empty() {
+            eprintln!(
+                "warning: module {module} declares {} axiom(s), which every module citing \
+                 them will refuse to credit: {}",
+                own_axioms.len(),
+                own_axioms.join(", ")
+            );
+        }
+        Ok(())
+    }
+
+    /// Elaborate and kernel-check every declaration of `module` into `env`
+    /// through the SAME pipeline `clean check` and `clean project check` use
+    /// (`preprocess_decl_with_context` + `elaborate_decl_and_register_with_context_and_warning`
+    /// over one `FileContext`), and refuse the module on any failure.
+    ///
+    /// Returns the cited roots of the module's `example`s, which are checked
+    /// and then discarded (never registered), so the closure gate can only
+    /// reach them through their terms.
+    ///
+    /// # What this replaced (round-22 verification of `317f48b45`)
+    ///
+    /// The builder ran its own loop: a fresh `ElabCtx` per top-level
+    /// declaration, then a hand-written `commit_elab_result` that registered
+    /// single results and answered `Ok(())` for `Multiple` and `Failed`. A
+    /// `section` that recovered from an inner failure returned that failure
+    /// as a `Failed` leaf inside `Multiple`, so `section S theorem bad : 1 = 2
+    /// := rfl end S` printed `Build OK`, exited 0 and wrote the `.olean`
+    /// (likewise a `codef … := sorry` inside a section). The same arm silently
+    /// dropped every GOOD declaration of a multi-declaration `namespace` or
+    /// `section` from the environment, so a sibling citing an earlier sibling
+    /// failed with `Unknown identifier` and the artifact never held them.
+    fn elaborate_module(
+        module: &str,
+        surface: &[clean_parser::SurfaceDecl],
+        header: &clean_parser::FileHeader,
+        env: &mut clean_kernel::Environment,
+        options: &[clean_elab::command_line_options::CommandLineOption],
+    ) -> LakeResult<(std::collections::BTreeSet<Name>, Vec<Name>)> {
+        let fail = |reason: String| LakeError::BuildFailed {
+            module: module.to_string(),
+            reason,
+        };
+        let kernel_before = clean_elab::register::kernel_check_failures_on_this_thread();
+        let mut file_ctx = clean_elab::FileContext::new();
+        file_ctx.set_file_header(header);
+        // Exactly a leading `set_option` per override, as `lean -D` applies it.
+        clean_elab::command_line_options::apply_command_line_options(env, &mut file_ctx, options);
+        // Dependencies were loaded from the workspace's own artifacts above;
+        // an `import` must not reach past them to an external `.olean`.
+        file_ctx.disable_external_import_search();
+        // Lean's main module is the Lake module name, so a `private`
+        // declaration is written into the artifact as Lean writes it,
+        // `_private.<module>.0.<name>` (G21), the name `clean check` gives it.
+        file_ctx.set_main_module(Name::from_string(module));
+        let imports: Vec<Name> = surface
+            .iter()
+            .filter_map(|decl| match decl {
+                clean_parser::SurfaceDecl::Import { paths, .. } => Some(paths),
+                _ => None,
+            })
+            .flatten()
+            .map(|path| path.name().clone())
+            .collect();
+        for import in &imports {
+            file_ctx.record_compiler_import(import);
+        }
+        clean_kernel::env::csimp::begin_source_module(env, Name::from_string(module), imports);
+
+        let mut example_roots = std::collections::BTreeSet::new();
+        let mut failures: Vec<String> = Vec::new();
+        for decl in surface {
+            if matches!(decl, clean_parser::SurfaceDecl::Import { .. }) {
+                continue;
+            }
+            let processed = clean_elab::preprocess_decl_with_context(decl, &mut file_ctx);
+            match clean_elab::elaborate_decl_and_register_with_context_and_warning(
+                env,
+                &processed,
+                &mut file_ctx,
+            ) {
+                Ok(registered) => {
+                    let mut leaves: Vec<&ElabResult> = Vec::new();
+                    registered.result.leaf_decls(&mut leaves);
+                    for leaf in leaves {
+                        match leaf {
+                            ElabResult::Diagnosed { .. } => {
+                                if let Some(message) = leaf.source_error_message() {
+                                    failures.push(message);
+                                }
+                            }
+                            ElabResult::Failed { name, error, .. } => {
+                                failures.push(format!("{name}: {error}"));
+                            }
+                            ElabResult::Example { .. } => {
+                                example_roots.extend(leaf.cited_roots(env));
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                Err(e) => {
+                    use clean_parser::SurfaceDecl as D;
+                    let name = match decl {
+                        D::Def { name, .. }
+                        | D::Theorem { name, .. }
+                        | D::Axiom { name, .. }
+                        | D::Opaque { name, .. }
+                        | D::Inductive { name, .. }
+                        | D::Structure { name, .. }
+                        | D::Class { name, .. }
+                        | D::Namespace { name, .. } => format!("{name}: "),
+                        _ => String::new(),
+                    };
+                    failures.push(format!("{name}{e}"));
+                }
+            }
+        }
+        if !failures.is_empty() {
+            return Err(fail(format!(
+                "elaboration error: {} declaration(s) failed: {}",
+                failures.len(),
+                failures.join("; ")
+            )));
+        }
+        let kernel_delta = clean_elab::register::kernel_check_failures_on_this_thread()
+            .saturating_sub(kernel_before);
+        if kernel_delta > 0 {
+            // No declaration row accounts for it, and a module whose kernel
+            // recorded a failed check is not a built module.
+            return Err(fail(format!(
+                "the kernel recorded {kernel_delta} failed check(s) that no declaration reported"
+            )));
+        }
+        Ok((example_roots, file_ctx.instance_global_readds()))
+    }
+
+    /// The `-D` overrides in the `lean` arguments Lake compiles `module` with
+    /// ([`Workspace::module_lean_args`]), validated with pinned Lean's `-D`
+    /// rules: an option Lean would refuse fails the module, as `lean` would.
+    /// An argument that is not a `-D` changes nothing Clean elaborates; it is
+    /// named on stderr rather than dropped in silence.
+    fn module_lean_options(
+        &self,
+        module: &str,
+    ) -> LakeResult<Vec<clean_elab::command_line_options::CommandLineOption>> {
+        let fail = |reason: String| LakeError::BuildFailed {
+            module: module.to_string(),
+            reason,
+        };
+        let args = self
+            .workspace
+            .module_lean_args(module)
+            .map_err(|e| fail(e.to_string()))?;
+        let parsed =
+            clean_elab::command_line_options::options_from_lean_args(&args).map_err(|e| {
+                fail(format!(
+                    "lakefile leanOptions/moreLeanArgs/weakLeanArgs: {e}"
+                ))
+            })?;
+        for option in parsed.options.iter().filter(|o| !o.is_applied()) {
+            eprintln!(
+                "warning: {module}: lakefile option `-D{}` is a Lean option Clean does not \
+                 implement; it cannot change which declarations are accepted (or is Lean's \
+                 default), so it was not applied",
+                option.to_arg()
+            );
+        }
+        for arg in &parsed.not_applied {
+            eprintln!(
+                "warning: {module}: `lean` argument `{arg}` from the lakefile has no meaning \
+                 to Clean's elaborator and was not applied"
+            );
+        }
+        Ok(parsed.options)
+    }
+
+    /// Run the closure gate over the module's `example`s. They are checked and
+    /// discarded, so [`Self::gate_module_closure`] (which walks the
+    /// environment's new constants) never sees them: `example : 1 = 2 :=
+    /// sorry` must not build.
+    fn gate_module_examples(
+        module: &str,
+        env: &clean_kernel::Environment,
+        gate: &mut clean_olean::ImportedConeGate,
+        roots: &std::collections::BTreeSet<Name>,
+    ) -> LakeResult<()> {
+        if roots.is_empty() {
+            return Ok(());
+        }
+        let verdict = gate.check(env, roots);
+        if verdict.passed(false) {
+            return Ok(());
+        }
+        Err(LakeError::BuildFailed {
+            module: module.to_string(),
+            reason: format!(
+                "an example's cited closure is not credited: {}",
+                verdict.refusal_summary(false)
+            ),
+        })
     }
 
     /// clean build artifacts
@@ -1271,6 +1936,33 @@ mod tests {
     }
 
     #[test]
+    fn invalid_module_output_identity_cannot_be_counted_as_fresh_or_skipped() {
+        let tmp = TempDir::new().unwrap();
+        for force in [false, true] {
+            for module in ["7", ".ctor", "A..B", "«../Outside»"] {
+                let context = empty_ctx(&tmp).with_options(BuildOptions::new().with_force(force));
+                let (built, skipped, failed) = context.build_modules(&[module.to_owned()]);
+                assert!(built.is_empty(), "{module}");
+                assert!(skipped.is_empty(), "{module}");
+                assert_eq!(failed.len(), 1, "{module}");
+                assert_eq!(failed[0].0, module);
+                assert!(
+                    failed[0].1.contains("invalid configuration"),
+                    "{:?}",
+                    failed
+                );
+            }
+        }
+        std::fs::write(tmp.path().join("A.B.lean"), "").unwrap();
+        let ws = Workspace::new(tmp.path(), "test");
+        assert!(ws.needs_rebuild("«A.B»").unwrap());
+        assert!(
+            ws.needs_rebuild("A.B").is_err(),
+            "different module is missing"
+        );
+    }
+
+    #[test]
     fn test_extract_imports() {
         let tmp = TempDir::new().unwrap();
         let content = r"
@@ -1282,8 +1974,18 @@ open MyLib
 
 def foo := 1
 ";
-        let imports = empty_ctx(&tmp).extract_imports(content);
+        let imports = empty_ctx(&tmp).extract_imports(content).expect("header");
         assert_eq!(imports, vec!["MyLib.Core", "MyLib.Utils"]);
+    }
+
+    #[test]
+    fn test_extract_imports_uses_header_grammar() {
+        let content = "module\n/- import NotAnImport -/\npublic import PublicDep\nmeta import MetaDep\nimport all PrivateDep\nimport\n  MultilineDep\ndef x := 0\n-- import AlsoNotAnImport\n";
+        assert_eq!(
+            BuildContext::extract_all_imports(content).expect("header"),
+            vec!["PublicDep", "MetaDep", "PrivateDep", "MultilineDep"]
+        );
+        assert!(BuildContext::extract_all_imports("public import MissingModuleHeader").is_err());
     }
 
     #[test]
@@ -1295,7 +1997,7 @@ import Std.Data.List
 import Lean.Elab
 import MyProject.Core
 ";
-        let imports = empty_ctx(&tmp).extract_imports(content);
+        let imports = empty_ctx(&tmp).extract_imports(content).expect("header");
         assert_eq!(imports, vec!["MyProject.Core"]);
     }
 
@@ -1324,7 +2026,9 @@ import MyProject.Core
             "an unprovided module still routes to the toolchain"
         );
 
-        let imports = ctx.extract_imports("import Std.Mine\nimport Std.Data.List\n");
+        let imports = ctx
+            .extract_imports("import Std.Mine\nimport Std.Data.List\n")
+            .expect("header");
         assert_eq!(imports, vec!["Std.Mine"]);
     }
 
@@ -1372,6 +2076,7 @@ import MyProject.Core
             built: vec!["A".to_string()],
             skipped: vec!["B".to_string()],
             failed: vec![],
+            disclosures: vec![],
             duration: Duration::from_secs(1),
         };
         assert!(result.is_success());
@@ -1384,6 +2089,7 @@ import MyProject.Core
             built: vec!["A".to_string()],
             skipped: vec![],
             failed: vec![("B".to_string(), "error".to_string())],
+            disclosures: vec![],
             duration: Duration::from_secs(1),
         };
         assert!(!result.is_success());
@@ -1696,8 +2402,10 @@ def mainVal : Type 1 := baseVal"
     /// Measured 2026-08-27 while `check_only` was inert: `clean lake
     /// check-build` printed "Build check passed." for a project whose source
     /// no longer compiled, because every module was skipped against a newer
-    /// `.olean`. The ordinary build below is the CONTROL — it still skips and
-    /// still reports success, which is exactly why the check must not.
+    /// `.olean`. The ordinary build below used to be the CONTROL that still
+    /// skipped and reported success; since build traces (T7a2, 2026-09-26) it
+    /// reuses nothing whose trace does not match, so it reports the break
+    /// too.
     #[test]
     fn test_check_only_build_does_not_inherit_a_pass_from_stale_artifacts() {
         let tmp = write_two_module_project();
@@ -1715,14 +2423,19 @@ def mainVal : Type 1 := baseVal"
         back_date(&core);
         back_date(&tmp.path().join("MyProject/Main.lean"));
 
-        // CONTROL: the ordinary build reports success without reading either
-        // source — this is the state the check has to see through.
+        // The ordinary build no longer credits the back-dated artifacts: the
+        // source of `Core` differs from the one its trace records, so `Core`
+        // is rebuilt, and `Main` then no longer elaborates.
         let ws = Workspace::load(tmp.path()).expect("workspace loads");
         let mut ctx = BuildContext::new(ws);
-        let control = ctx.build_all().expect("control build");
+        let ordinary = ctx.build_all().expect("ordinary build");
         assert!(
-            control.failed.is_empty() && control.built.is_empty(),
-            "control: the ordinary build must skip everything here, got {control:?}"
+            ordinary.skipped.is_empty()
+                && ordinary
+                    .failed
+                    .iter()
+                    .any(|(module, _)| module == "MyProject.Main"),
+            "the ordinary build must rebuild and report the break, got {ordinary:?}"
         );
 
         // The check must fail: `Main` no longer elaborates against `Core`.
@@ -1961,11 +2674,29 @@ lean_lib DepFail where
             first.failed
         );
 
-        // Corrupt the dependency artifact (its fresh mtime keeps Base skipped)
-        // and drop Top's artifact so only Top rebuilds.
+        // Corrupt the dependency artifact and drop Top's artifact so only Top
+        // rebuilds.
         let lib_dir = tmp.path().join(".lake/build/lib");
         fs::write(lib_dir.join("DepFail/Base.olean"), b"not an olean").unwrap();
         fs::remove_file(lib_dir.join("DepFail/Top.olean")).unwrap();
+        // This fixture exercises the LOADER's fail-closed path for a
+        // dependency artifact the build reuses but cannot load. Since build
+        // traces, a rewritten artifact is rebuilt from source instead of
+        // reused, so the only state that still reaches the loader is a trace
+        // naming the corrupt bytes themselves (a trace is a cache key, not a
+        // certificate): re-stamp Base's trace over them.
+        let base_olean = lib_dir.join("DepFail/Base.olean");
+        let trace = build_trace::trace_path(&base_olean);
+        let mut recorded: serde_json::Value =
+            serde_json::from_slice(&fs::read(&trace).unwrap()).unwrap();
+        recorded["outputs"] = build_trace::digest_artifact_parts(&[
+            base_olean.clone(),
+            base_olean.with_extension("olean.server"),
+            base_olean.with_extension("olean.private"),
+        ])
+        .unwrap()
+        .into();
+        fs::write(&trace, serde_json::to_vec(&recorded).unwrap()).unwrap();
 
         tmp
     }
@@ -2017,5 +2748,167 @@ lean_lib DepFail where
             "Top should still build under --permissive-imports: {:?}",
             result.built
         );
+    }
+}
+
+#[cfg(test)]
+#[path = "build_admission_tests.rs"]
+mod admission_tests;
+
+#[cfg(test)]
+#[path = "build_block_tests.rs"]
+mod block_tests;
+
+#[cfg(test)]
+#[path = "build_options_tests.rs"]
+mod options_tests;
+
+/// The environment's class, instance, alias and namespace tables before a
+/// module is elaborated, to read off what the module EXPORTS of them (the
+/// payload's version-3 fields). Lean exports a module's entries of
+/// `classExtension`, `instanceExtension` (global and scoped entries; never a
+/// local one or an erasure), `aliasExtension` and `namespacesExt`.
+struct ModuleExportBaseline {
+    classes: HashSet<Name>,
+    /// Instances with a global entry.
+    global_instances: HashSet<Name>,
+    scoped_entries: usize,
+    export_aliases: HashSet<(Name, Name)>,
+    namespaces: HashSet<Name>,
+}
+
+/// What a module exports of those tables.
+struct ModuleExports {
+    classes: Vec<clean_kernel::env::KernelClassInfo>,
+    global_instances: Vec<clean_kernel::env::KernelInstanceInfo>,
+    scoped_instances: Vec<(Name, clean_kernel::env::KernelInstanceInfo)>,
+    export_aliases: Vec<(Name, Name)>,
+    namespaces: Vec<Name>,
+}
+
+impl ModuleExportBaseline {
+    fn take(env: &clean_kernel::Environment) -> Self {
+        Self {
+            classes: env.classes().map(|c| c.name.clone()).collect(),
+            global_instances: env
+                .instances()
+                .filter(|info| clean_olean::has_global_instance_entry(env, &info.name))
+                .map(|info| info.name.clone())
+                .collect(),
+            scoped_entries: env
+                .get_ext_state::<clean_olean::ScopedInstanceState>(
+                    clean_olean::scoped_instance_idx(),
+                )
+                .map_or(0, |state| state.entries.len()),
+            export_aliases: env
+                .export_alias_pairs()
+                .map(|(alias, target)| (alias.clone(), target.clone()))
+                .collect(),
+            namespaces: env.registered_namespaces().cloned().collect(),
+        }
+    }
+
+    /// The module's exports: `env` after it, `global_readds` the instances it
+    /// gave a global entry that already had one
+    /// (`FileContext::instance_global_readds`).
+    ///
+    /// The global instance entries are exported by their effect on an
+    /// importer's replay, which inserts each entry IN PLACE when it holds the
+    /// instance and PUSHES it otherwise (`DiscrTree.insertVal`): every
+    /// instance that gained its first global entry here, in the order it
+    /// gained it (its position in the environment's index), then every
+    /// instance re-inserted here, each at its final priority.
+    fn exports(&self, env: &clean_kernel::Environment, global_readds: &[Name]) -> ModuleExports {
+        let mut classes: Vec<clean_kernel::env::KernelClassInfo> = env
+            .classes()
+            .filter(|class| !self.classes.contains(&class.name))
+            .cloned()
+            .collect();
+        classes.sort_by_key(|class| class.name.to_string());
+
+        let mut pushed: Vec<(u64, clean_kernel::env::KernelInstanceInfo)> = env
+            .instances()
+            .filter(|info| {
+                !self.global_instances.contains(&info.name)
+                    && clean_olean::has_global_instance_entry(env, &info.name)
+            })
+            .map(|info| (env.instance_seq(&info.name).unwrap_or(0), info.clone()))
+            .collect();
+        pushed.sort_by_key(|(seq, _)| *seq);
+        let mut global_instances: Vec<clean_kernel::env::KernelInstanceInfo> =
+            pushed.into_iter().map(|(_, info)| info).collect();
+        let mut readded: HashSet<&Name> = HashSet::new();
+        for name in global_readds {
+            if !readded.insert(name) || !self.global_instances.contains(name) {
+                continue;
+            }
+            if let Some(info) = env.instances().find(|info| &info.name == name) {
+                global_instances.push(info.clone());
+            }
+        }
+
+        let scoped_instances = env
+            .get_ext_state::<clean_olean::ScopedInstanceState>(clean_olean::scoped_instance_idx())
+            .map(|state| {
+                state
+                    .entries
+                    .iter()
+                    .skip(self.scoped_entries)
+                    .filter_map(|(ns, name, priority)| {
+                        let mut info = env.instances().find(|info| &info.name == name)?.clone();
+                        info.priority = *priority;
+                        Some((ns.clone(), info))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        let mut export_aliases: Vec<(Name, Name)> = env
+            .export_alias_pairs()
+            .map(|(alias, target)| (alias.clone(), target.clone()))
+            .filter(|pair| !self.export_aliases.contains(pair))
+            .collect();
+        export_aliases.sort_by_key(|(alias, target)| (alias.to_string(), target.to_string()));
+
+        let mut namespaces: Vec<Name> = env
+            .registered_namespaces()
+            .filter(|ns| !self.namespaces.contains(*ns))
+            .cloned()
+            .collect();
+        namespaces.sort_by_key(ToString::to_string);
+
+        ModuleExports {
+            classes,
+            global_instances,
+            scoped_instances,
+            export_aliases,
+            namespaces,
+        }
+    }
+}
+
+#[cfg(test)]
+mod import_resource_tests {
+    use super::BuildContext;
+    use clean_olean::ImportError;
+
+    #[test]
+    fn stopped_imports_cannot_continue_in_permissive_mode() {
+        let absent = ImportError::ModuleNotFound {
+            module: "Missing".to_owned(),
+            searched: vec![],
+        };
+        assert!(BuildContext::import_allows_fallback(&absent));
+        assert!(BuildContext::import_failure_hint(&absent).contains("--permissive-imports"));
+        for error in [
+            ImportError::Interrupted,
+            ImportError::ResourceLimit {
+                operation: "structure-field validation".to_owned(),
+                reason: "declaration budget exhausted".to_owned(),
+            },
+        ] {
+            assert!(!BuildContext::import_allows_fallback(&error));
+            assert!(!BuildContext::import_failure_hint(&error).contains("--permissive-imports"));
+        }
     }
 }

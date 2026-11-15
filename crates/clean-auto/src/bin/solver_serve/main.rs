@@ -26,19 +26,57 @@
 //!   - `$CLEAN_SOLVER_INGEST`           set non-empty to enable `POST /ingest`
 //!   - `$CLEAN_SOLVER_BUDGET_MS`        PAR-2 timeout budget (default 5000)
 
+#[cfg(not(target_arch = "wasm32"))]
 mod config;
+#[cfg(not(target_arch = "wasm32"))]
 mod http;
+#[cfg(not(target_arch = "wasm32"))]
 mod routes;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::rc::Rc;
 
+#[cfg(not(target_arch = "wasm32"))]
 use anyhow::{Context, Result};
+#[cfg(not(target_arch = "wasm32"))]
 use clean_auto::solver_cache_service::ServeState;
 
+#[cfg(not(target_arch = "wasm32"))]
 use config::ServeConfig;
+#[cfg(not(target_arch = "wasm32"))]
 use routes::AppState;
 
+/// What `-h`/`--help` prints. The service takes no arguments; every knob is an
+/// environment variable `ServeConfig::from_env` reads.
+#[cfg(not(target_arch = "wasm32"))]
+const USAGE: &str = "\
+usage: solver_serve   (no arguments; configured entirely by environment)
+  PORT                        TCP port to bind (default 8080)
+  CLEAN_SOLVER_TELEMETRY_DIR  telemetry dir (attempts.jsonl) — this and/or the cache dir is
+                              required
+  CLEAN_SOLVER_CACHE_DIR      content-addressed proof-cache dir
+  CLEAN_SOLVER_INDEX          optional pre-built VCIDX01 index for /lookup
+  CLEAN_SOLVER_INGEST         set non-empty to enable POST /ingest (needs the telemetry dir)
+  CLEAN_SOLVER_BUDGET_MS      PAR-2 timeout budget in ms (default 5000; 0 or non-numeric
+                              falls back to the default)
+";
+
+// wasm32 has no sockets and no tokio runtime; the service is native-only.
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    eprintln!("solver_serve is unavailable on wasm");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
+    if let Some(arg) = std::env::args().nth(1) {
+        if arg == "-h" || arg == "--help" {
+            print!("{USAGE}");
+            return Ok(());
+        }
+        eprint!("solver_serve: unexpected argument {arg:?}\n{USAGE}");
+        std::process::exit(2);
+    }
     let config = ServeConfig::from_env()?;
 
     eprintln!(

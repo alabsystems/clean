@@ -106,8 +106,11 @@ fn build_synthetic_row_decl(
 
     let fvar = state.fresh_fvar();
     let decl = LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: format!("nlinarith_synth_{}", fvar.as_u64()),
+        name: clean_parser::SurfaceName::from_name(
+            Name::anon().str("nlinarith_synth").num(fvar.as_u64()),
+        ),
         ty: proof_ty,
         value: Some(proof_value.clone()),
     };

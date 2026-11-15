@@ -1,0 +1,12 @@
+/-! Product type (PART 2 of the foundation).
+
+Model unit `foundation_prod` — moved out of `crates/clean-verify/src/spec/core_spec/foundation_types.rs`
+(embed memo W1). Registered by `Specification::register_model_unit(ModelUnit::FoundationProd)`
+through the same `add_inductive` / `add_recursive_def` path the literals used; the
+fidelity oracle in `spec/model_units/tests.rs` pins this file against the retained
+literal. EVERY declaration must carry a `/-- ... -/` doc comment: its text is the
+registered description, byte for byte. -/
+
+/-- Product type: ProdType α β is a pair of α and β. -/
+inductive ProdType (α : Type) (β : Type) : Type
+| mk : α → β → ProdType α β

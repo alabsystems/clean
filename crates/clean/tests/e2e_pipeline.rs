@@ -91,12 +91,38 @@ fn test_e2e_simple_bool_false() {
 
 #[test]
 fn test_e2e_theorem_true_intro() {
-    let result = check_source("theorem trivial : True := True.intro", &default_config())
-        .expect("pipeline should not fail");
+    // Not `trivial`: that is Init.Core's own theorem, and pinned Lean refuses
+    // to redeclare it (`\`trivial\` has already been declared`, v4.30.0-rc2);
+    // Clean refuses it too (`DeclaredInLeanCore`), which the next test pins.
+    let result = check_source(
+        "theorem true_intro_holds : True := True.intro",
+        &default_config(),
+    )
+    .expect("pipeline should not fail");
     assert_clean(&result, 1, "True.intro theorem");
     assert!(
         result.is_fully_verified(),
         "True.intro should be fully verified"
+    );
+}
+
+#[test]
+fn test_e2e_redeclaring_a_lean_core_theorem_is_refused() {
+    let result = check_source("theorem trivial : True := True.intro", &default_config())
+        .expect("pipeline should not fail");
+    assert_eq!(
+        result.passed_count, 0,
+        "`trivial` is Init.Core's; redeclaring it must not pass: {:?}",
+        result.errors
+    );
+    assert!(
+        result
+            .errors
+            .iter()
+            .any(|e| format!("{e:?}").contains("has already been declared")
+                || format!("{e:?}").contains("DeclaredInLeanCore")),
+        "the refusal must name the core declaration: {:?}",
+        result.errors
     );
 }
 
@@ -188,17 +214,10 @@ fn test_e2e_parse_error() {
     // The pipeline may return a parse error, an elaboration error, or an empty
     // result (if the parser skips unrecognized tokens). All are acceptable
     // as long as the pipeline does not panic.
-    match result {
-        Ok(r) => {
-            // Either errors were reported, or the parser produced no declarations
-            // from the gibberish input. Both are correct behavior.
-            assert!(
-                !r.errors.is_empty() || r.passed_count == 0,
-                "invalid syntax should produce errors or zero declarations"
-            );
-        }
-        Err(_) => { /* Parse error is also acceptable */ }
-    }
+    assert!(
+        !result.is_ok_and(|r| r.errors.is_empty() && r.passed_count != 0),
+        "invalid syntax should produce errors or zero declarations"
+    );
 }
 
 #[test]

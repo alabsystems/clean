@@ -202,7 +202,8 @@ pub(crate) fn parse_format_spec(spec: &str) -> Result<FormatSpec, ElabError> {
         }
         if idx == precision_start {
             return Err(ElabError::ParseError(format!(
-                "invalid format spec {spec:?}: precision requires digits"
+                "invalid format spec {}: precision requires digits",
+                crate::error_render::opaque(&spec)
             )));
         }
         out.precision = Some(parse_usize(&chars[precision_start..idx], "precision")?);
@@ -210,8 +211,9 @@ pub(crate) fn parse_format_spec(spec: &str) -> Result<FormatSpec, ElabError> {
 
     if idx != chars.len() {
         return Err(ElabError::ParseError(format!(
-            "invalid format spec {spec:?}: trailing data {:?}",
-            chars[idx..].iter().collect::<String>()
+            "invalid format spec {}: trailing data {}",
+            chars[idx..].iter().collect::<String>(),
+            crate::error_render::opaque(&spec)
         )));
     }
 
@@ -406,7 +408,8 @@ fn align_from_char(ch: char) -> Result<Align, ElabError> {
         '>' => Ok(Align::Right),
         '^' => Ok(Align::Center),
         other => Err(ElabError::ParseError(format!(
-            "invalid alignment character {other:?}"
+            "invalid alignment character {}",
+            crate::error_render::opaque(&other)
         ))),
     }
 }

@@ -48,6 +48,9 @@ fn chc_x86_v4_i32_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V4_ZERO_MASK".to_string(),
@@ -57,6 +60,9 @@ fn chc_x86_v4_i32_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V4_ALL_ONES_MASK".to_string(),
@@ -66,6 +72,9 @@ fn chc_x86_v4_i32_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V4_BOOL_MASK".to_string(),
@@ -75,23 +84,29 @@ fn chc_x86_v4_i32_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
 
-    let ft = module.add_func_type(FuncTy {
-        params: vec![v4i32.clone(), v4i32.clone()],
-        returns: vec![
-            v4i32.clone(),
-            v4i32.clone(),
-            v4bool.clone(),
-            Ty::I32,
-            v4i32.clone(),
-            v4bool.clone(),
-            v4bool.clone(),
-            v4bool.clone(),
-            v4bool.clone(),
-        ],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![v4i32.clone(), v4i32.clone()],
+            returns: vec![
+                v4i32.clone(),
+                v4i32.clone(),
+                v4bool.clone(),
+                Ty::I32,
+                v4i32.clone(),
+                v4bool.clone(),
+                v4bool.clone(),
+                v4bool.clone(),
+                v4bool.clone(),
+            ],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "lane_packed_v4_i32", ft, b(0));
     let mut block = Block::new(b(0));
     block.params.push((v(0), v4i32.clone()));
@@ -235,7 +250,9 @@ fn chc_x86_v4_i32_module() -> Module {
         values: vec![v(7), v(8), v(9), v(12), v(13), v(14), v(15), v(16), v(17)],
     }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -252,6 +269,9 @@ fn chc_x86_v2_i64_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V2_ZERO_MASK".to_string(),
@@ -261,6 +281,9 @@ fn chc_x86_v2_i64_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V2_ALL_ONES_MASK".to_string(),
@@ -270,6 +293,9 @@ fn chc_x86_v2_i64_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V2_BOOL_MASK".to_string(),
@@ -279,21 +305,27 @@ fn chc_x86_v2_i64_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
 
-    let ft = module.add_func_type(FuncTy {
-        params: vec![v2i64.clone(), v2i64.clone()],
-        returns: vec![
-            v2i64.clone(),
-            v2bool.clone(),
-            v2bool.clone(),
-            v2bool.clone(),
-            v2bool.clone(),
-            v2bool.clone(),
-            v2bool.clone(),
-        ],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![v2i64.clone(), v2i64.clone()],
+            returns: vec![
+                v2i64.clone(),
+                v2bool.clone(),
+                v2bool.clone(),
+                v2bool.clone(),
+                v2bool.clone(),
+                v2bool.clone(),
+                v2bool.clone(),
+            ],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "lane_packed_v2_i64", ft, b(0));
     let mut block = Block::new(b(0));
     block.params.push((v(0), v2i64.clone()));
@@ -397,7 +429,9 @@ fn chc_x86_v2_i64_module() -> Module {
         values: vec![v(7), v(8), v(4), v(9), v(10), v(11), v(12)],
     }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -431,6 +465,9 @@ fn chc_x86_v16_i8_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V16_BOOL_MASK".to_string(),
@@ -443,21 +480,27 @@ fn chc_x86_v16_i8_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
 
-    let ft = module.add_func_type(FuncTy {
-        params: vec![v16i8.clone(), v16i8.clone()],
-        returns: vec![
-            v16bool.clone(),
-            v16bool.clone(),
-            v16bool.clone(),
-            v16bool.clone(),
-            v16bool.clone(),
-            v16bool.clone(),
-            Ty::I32,
-        ],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![v16i8.clone(), v16i8.clone()],
+            returns: vec![
+                v16bool.clone(),
+                v16bool.clone(),
+                v16bool.clone(),
+                v16bool.clone(),
+                v16bool.clone(),
+                v16bool.clone(),
+                Ty::I32,
+            ],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "narrow_compare_mask_v16_i8", ft, b(0));
     let mut block = Block::new(b(0));
     block.params.push((v(0), v16i8.clone()));
@@ -528,7 +571,9 @@ fn chc_x86_v16_i8_module() -> Module {
         values: vec![v(2), v(3), v(4), v(5), v(6), v(7), v(8)],
     }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -554,6 +599,9 @@ fn chc_x86_v8_i16_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     module.globals.push(Global {
         name: "V8_BOOL_MASK".to_string(),
@@ -565,21 +613,27 @@ fn chc_x86_v8_i16_module() -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
 
-    let ft = module.add_func_type(FuncTy {
-        params: vec![v8i16.clone(), v8i16.clone()],
-        returns: vec![
-            v8bool.clone(),
-            v8bool.clone(),
-            v8bool.clone(),
-            v8bool.clone(),
-            v8bool.clone(),
-            v8bool.clone(),
-            Ty::I32,
-        ],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![v8i16.clone(), v8i16.clone()],
+            returns: vec![
+                v8bool.clone(),
+                v8bool.clone(),
+                v8bool.clone(),
+                v8bool.clone(),
+                v8bool.clone(),
+                v8bool.clone(),
+                Ty::I32,
+            ],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "narrow_compare_mask_v8_i16", ft, b(0));
     let mut block = Block::new(b(0));
     block.params.push((v(0), v8i16.clone()));
@@ -650,7 +704,9 @@ fn chc_x86_v8_i16_module() -> Module {
         values: vec![v(2), v(3), v(4), v(5), v(6), v(7), v(8)],
     }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 
@@ -687,7 +743,8 @@ fn chc_x86_v4_i32_contract_roundtrips_text_and_binary() {
         .validate_vector_select_contracts()
         .expect("parsed module preserves bool-mask select contract");
 
-    let bytes = trust_ir::binary::serialize_module(&module);
+    let bytes =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
     let decoded = trust_ir::binary::deserialize_module(&bytes).expect("binary roundtrip");
     assert_eq!(decoded, module);
     decoded
@@ -726,7 +783,8 @@ fn chc_x86_v16_i8_narrow_compare_mask_contract_roundtrips_text_and_binary() {
     let parsed = trust_ir::parser::parse_module(&text).expect("text roundtrip");
     assert_eq!(parsed, module);
 
-    let bytes = trust_ir::binary::serialize_module(&module);
+    let bytes =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
     let decoded = trust_ir::binary::deserialize_module(&bytes).expect("binary roundtrip");
     assert_eq!(decoded, module);
 }
@@ -762,7 +820,8 @@ fn chc_x86_v8_i16_narrow_compare_mask_contract_roundtrips_text_and_binary() {
     let parsed = trust_ir::parser::parse_module(&text).expect("text roundtrip");
     assert_eq!(parsed, module);
 
-    let bytes = trust_ir::binary::serialize_module(&module);
+    let bytes =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
     let decoded = trust_ir::binary::deserialize_module(&bytes).expect("binary roundtrip");
     assert_eq!(decoded, module);
 }
@@ -799,7 +858,8 @@ fn chc_x86_v2_i64_contract_roundtrips_text_and_binary() {
         .validate_vector_select_contracts()
         .expect("parsed module preserves bool-mask select contract");
 
-    let bytes = trust_ir::binary::serialize_module(&module);
+    let bytes =
+        trust_ir::binary::serialize_module(&module).expect("serialize_module: test fixture");
     let decoded = trust_ir::binary::deserialize_module(&bytes).expect("binary roundtrip");
     assert_eq!(decoded, module);
     decoded
@@ -815,11 +875,14 @@ fn chc_x86_v2_i64_contract_roundtrips_text_and_binary() {
 fn chc_pmulld_lanewise_wrapping_multiply_executes() {
     let v4i32 = Ty::v4_i32();
     let mut module = Module::new("chc_pmulld_exec");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![],
-        returns: vec![v4i32.clone()],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![],
+            returns: vec![v4i32.clone()],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "pmulld", ft, b(0));
     let mut block = Block::new(b(0));
     // lanes: [i32::MAX, 1, -1, 100]  *  [2, 2, 2, 2]
@@ -850,7 +913,9 @@ fn chc_pmulld_lanewise_wrapping_multiply_executes() {
         .body
         .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
 
     let out = Interpreter::with_module(&module)
         .execute_func(FuncId::new(0), [])

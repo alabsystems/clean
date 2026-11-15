@@ -58,8 +58,9 @@ fn test_abs_cases_proof_term_is_well_typed() {
     let env = setup_env_with_int_ord();
     let target = Expr::const_(Name::from_string("B"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: Expr::const_(Name::from_string("Int"), vec![]),
         value: None,
     }];
@@ -69,7 +70,7 @@ fn test_abs_cases_proof_term_is_well_typed() {
     let original_meta = state.current_goal().unwrap().meta_id;
 
     // abs_cases should succeed on an Int variable
-    if abs_cases(&mut state, "x").is_ok() {
+    if abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x")).is_ok() {
         // If the original meta was assigned, check the proof term doesn't
         // contain Expr::type_() as a bare argument (that's the placeholder bug)
         if let Some(meta) = state.metas.get(original_meta) {
@@ -113,7 +114,12 @@ fn test_by_cases_proof_passes_type_inference() {
     let mut state = ProofState::new(env, target.clone());
 
     let original_meta = state.current_goal().unwrap().meta_id;
-    by_cases(&mut state, "h", prop).expect("by_cases should succeed");
+    by_cases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        prop,
+    )
+    .expect("by_cases should succeed");
 
     let meta = state.metas.get(original_meta).expect("meta should exist");
     let proof = meta.assignment.as_ref().expect("meta should be assigned");
@@ -123,6 +129,7 @@ fn test_by_cases_proof_passes_type_inference() {
         target,
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     };
 
     // After #2216 fix: Or.rec gets vec![] (0 universe args), matching its 0 params.
@@ -185,8 +192,9 @@ fn test_abs_cases_proof_passes_type_inference() {
 
     let target = Expr::const_(Name::from_string("B"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(100),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: Expr::const_(Name::from_string("Int"), vec![]),
         value: None,
     }];
@@ -195,7 +203,8 @@ fn test_abs_cases_proof_passes_type_inference() {
     let original_meta = state.current_goal().unwrap().meta_id;
 
     // abs_cases now uses checked close_goal (Or.rec proof + type-checking)
-    abs_cases(&mut state, "x").expect("abs_cases should succeed with checked close_goal");
+    abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("abs_cases should succeed with checked close_goal");
 
     // The original meta should be assigned with an Or.rec proof
     let meta = state.metas.get(original_meta).expect("meta should exist");
@@ -205,12 +214,14 @@ fn test_abs_cases_proof_passes_type_inference() {
         meta_id: original_meta,
         target: Expr::const_(Name::from_string("B"), vec![]),
         local_ctx: vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "x".to_string(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: Expr::const_(Name::from_string("Int"), vec![]),
             value: None,
         }],
         tag: None,
+        case_binders: Vec::new(),
     };
 
     // Type inference should PASS now with Or.rec + Pi(P, False) + enriched env
@@ -246,7 +257,12 @@ fn test_wlog_proof_passes_type_inference() {
     let original_meta = state.current_goal().unwrap().meta_id;
 
     // wlog should succeed (now uses checked close_goal with Or.rec)
-    wlog(&mut state, "h", assumption).expect("wlog should succeed");
+    wlog(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        assumption,
+    )
+    .expect("wlog should succeed");
 
     // The original meta should be assigned with an Or.rec proof
     let meta = state.metas.get(original_meta).expect("meta should exist");
@@ -257,6 +273,7 @@ fn test_wlog_proof_passes_type_inference() {
         target,
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     };
 
     // Type inference should PASS now that we use Or.rec (0 universe params, Prop-valued)
@@ -264,21 +281,26 @@ fn test_wlog_proof_passes_type_inference() {
     let _ = result.expect("wlog proof should pass type inference after Or.elim → Or.rec fix");
 }
 
-/// After #2154 Wave 7: abs_cases negation type now uses Pi(P, False) matching
-/// Classical.em's structural output. Previously regression test for #2184.
+/// abs_cases states its negative case `¬(x ≥ 0)` with the `Not` head, as
+/// Lean states a negated case; simp reads a negation off that head only.
+/// #2154 was the arrow and `Not` spellings MIXED in one proof; the one term
+/// is used throughout, and `test_abs_cases_proof_passes_type_inference`
+/// checks the assembled proof still type-checks.
 #[test]
-fn test_abs_cases_negation_type_is_pi() {
+fn test_abs_cases_negation_hypothesis_has_not_head() {
     let env = setup_env_with_int_ord();
 
     let target = Expr::const_(Name::from_string("B"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(100),
-        name: "x".to_string(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: Expr::const_(Name::from_string("Int"), vec![]),
         value: None,
     }];
     let mut state = ProofState::with_context(env, target, ctx);
-    abs_cases(&mut state, "x").expect("abs_cases should succeed");
+    abs_cases(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("abs_cases should succeed");
 
     assert!(
         state.goals.len() >= 2,
@@ -286,19 +308,20 @@ fn test_abs_cases_negation_type_is_pi() {
         state.goals.len()
     );
 
-    // After fix: neg_hyp.ty is Pi(ge_zero, False) matching Classical.em's output
     let neg_goal = &state.goals[1];
     let neg_hyp = neg_goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "h_neg")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h_neg"))
         .expect("negative case should have h_neg hypothesis");
 
-    // Negation should now be Pi(ge_zero, False), not App(Not, ge_zero)
-    let is_pi = matches!(neg_hyp.ty.kind(), ExprKind::Pi(..));
+    let has_not_head = matches!(
+        neg_hyp.ty.get_app_fn().kind(),
+        ExprKind::Const(n, _) if *n == Name::from_string("Not")
+    ) && neg_hyp.ty.get_app_args().len() == 1;
     assert!(
-        is_pi,
-        "abs_cases negation should use Pi(P, False) form after #2154 fix, got: {:?}",
+        has_not_head,
+        "abs_cases negation should be stated as `Not (x ≥ 0)`, got: {:?}",
         neg_hyp.ty
     );
 }

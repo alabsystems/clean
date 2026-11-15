@@ -34,6 +34,7 @@ pub fn cmd_serve(args: &[String]) {
                 port = args
                     .get(i)
                     .and_then(|p| p.parse::<u16>().ok())
+                    .filter(|&p| p != 0)
                     .unwrap_or_else(|| {
                         eprintln!("--port must be a valid TCP port (1-65535)");
                         std::process::exit(1);

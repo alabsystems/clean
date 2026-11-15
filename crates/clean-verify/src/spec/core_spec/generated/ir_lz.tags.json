@@ -35,7 +35,7 @@
  "enums": [
   {
    "canonical": 0,
-   "crate_id": 2,
+   "crate_id": 3,
    "alias": "ir_lz_tlevel",
    "rust_type": "level::Level",
    "observed_crate_id_by_producer": { "P1": 2, "P2": 2, "P3": 2 }
@@ -45,14 +45,14 @@
  "funcs": [
   {
    "canonical": 0,
-   "crate_id": 3905,
+   "crate_id": 1961,
    "name": "level::Level::is_zero",
    "role": "SELF -- the body being read. It is called RECURSIVELY three times (once per payload read), which is why this row is load-bearing rather than ceremonial: without it a text reader cannot tell the recursive call from the call to the deref.",
    "observed_crate_id_by_producer": { "P1": 4925, "P2": 4925, "P3": 3895, "P4": 3905 }
   },
   {
    "canonical": 1,
-   "crate_id": 3894,
+   "crate_id": 1947,
    "name": "<level::LevelArc as std::ops::Deref>::deref",
    "role": "The one non-self callee. Called three times, once per payload read, and its result is immediately consumed by the recursive call -- the dataflow signature `crystal_a1_lineage/level_is_zero.rs` identifies it by.",
    "observed_crate_id_by_producer": { "P1": 4914, "P2": 4914, "P3": 3884, "P4": 3894 }

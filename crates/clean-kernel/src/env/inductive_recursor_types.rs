@@ -288,7 +288,9 @@ impl Environment {
             } else {
                 mtype.clone()
             };
-            result_ty = Expr::pi(BinderInfo::Implicit, lifted_mtype, result_ty);
+            // Lean infers implicit motives from later minor domains. Empty
+            // families have no such occurrence and keep an explicit motive.
+            result_ty = Expr::pi(BinderInfo::Default, lifted_mtype, result_ty);
         }
 
         // Add parameters (outermost)
@@ -493,7 +495,7 @@ impl Environment {
             } else {
                 mtype.clone()
             };
-            result_ty = Expr::pi(BinderInfo::Implicit, lifted_mtype, result_ty);
+            result_ty = Expr::pi(BinderInfo::Default, lifted_mtype, result_ty);
         }
 
         // Add parameters (outermost)

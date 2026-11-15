@@ -95,6 +95,7 @@ fn assert_recursion_refusal(error: &ElabError, decl: &str, params: usize) {
             name,
             decl: found_decl,
             params: found_params,
+            ..
         } => {
             assert_eq!(name, decl, "the refusal must carry the ident as written");
             assert_eq!(found_decl, decl, "the refusal must name the definition");
@@ -309,6 +310,35 @@ fn test_a_genuine_typo_keeps_the_ordinary_unknown_ident_diagnostics() {
     );
 }
 
+/// CONTROL — a missing dotted identifier is not a self-reference merely
+/// because its namespace prefix is the declaration currently being defined.
+/// `elab_proj` must try the complete written name after the base `diagPrefix`
+/// receives the recursion-aware unknown-identifier diagnostic. The deliberately
+/// distant suffix has no nearby theorem, so the complete-name diagnostic is a
+/// bare `UnknownIdent`; correctness must not depend on a suggestion payload.
+#[test]
+fn test_missing_dotted_name_is_not_self_reference_to_its_prefix() {
+    let distant_suffix = "z".repeat(128);
+    let missing_name = format!("diagPrefix.{distant_suffix}");
+    let source = format!("def diagPrefix : Nat := {missing_name}\n");
+    let (env, errors) = check_sequential(&source);
+    assert!(
+        env.get_const(&Name::from_string("diagPrefix")).is_none(),
+        "the invalid definition must remain fail-closed"
+    );
+    assert_eq!(errors.len(), 1, "exactly one refusal, got: {errors:?}");
+    match &errors[0] {
+        ElabError::UnknownIdent(name) => assert_eq!(
+            name, &missing_name,
+            "the diagnostic must preserve the complete identifier as written"
+        ),
+        other => panic!(
+            "the dotted identifier is not a self-reference to its prefix; got: {other:?}\n\
+             display: {other}"
+        ),
+    }
+}
+
 /// CONTROL — the admitting recursion paths still admit. The change is
 /// diagnostic-only: structural equation-form recursion and phase-1
 /// single-parameter WF recursion were in the fragment before and must stay.
@@ -393,6 +423,42 @@ fn test_batch_reference_to_a_failed_header_names_the_sibling_declaration() {
         helper_refusal.contains("NoSuchType"),
         "`helper`'s own refusal must stay about its actual defect, the \
          unknown `NoSuchType`:\n{helper_refusal}"
+    );
+}
+
+/// CONTROL — the same-batch sibling diagnostic also belongs to the failed
+/// BASE identifier, not to every dotted name beginning with that spelling.
+/// Here `batchPrefix` has no header, but the authored use is the distinct name
+/// `batchPrefix.<distant suffix>`; the complete bare-unknown diagnostic must
+/// win without relying on a nearby-theorem suggestion.
+#[test]
+fn test_missing_dotted_name_is_not_failed_same_batch_prefix() {
+    let distant_suffix = "z".repeat(128);
+    let missing_name = format!("batchPrefix.{distant_suffix}");
+    let source = format!(
+        "set_option autoImplicit false\n\
+         def lead : Nat := {missing_name}\n\
+         def batchPrefix : NoSuchType := 0\n"
+    );
+    let (env, committed, rejections) = check_batch(&source);
+    assert!(!committed, "the invalid batch must remain fail-closed");
+    for name in ["lead", "batchPrefix"] {
+        assert!(
+            env.get_const(&Name::from_string(name)).is_none(),
+            "`{name}` reached the environment from a refused atomic batch"
+        );
+    }
+    let lead_refusal = rejections
+        .split("\n\n")
+        .find(|rejection| rejection.contains("`lead`"))
+        .unwrap_or_else(|| panic!("no refusal names `lead`:\n{rejections}"));
+    assert!(
+        lead_refusal.contains(&format!("Unknown identifier: {missing_name}")),
+        "the refusal must preserve the complete identifier as written:\n{lead_refusal}"
+    );
+    assert!(
+        !lead_refusal.contains("matches `batchPrefix`, declared in this same batch"),
+        "a diagnostic for the base prefix swallowed the complete dotted name:\n{lead_refusal}"
     );
 }
 

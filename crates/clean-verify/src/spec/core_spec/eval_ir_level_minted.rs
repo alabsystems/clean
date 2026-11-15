@@ -69,7 +69,7 @@ const MINTED_IR_LZ: &str = include_str!("generated/ir_lz.defs.txt");
 /// against the script so a regenerated script with a different shape fails
 /// rather than silently reusing the wrong doc.
 const MINTED_IR_LZ_DOCS: &[&str] = &[
-    "ir_lz_tlevel: the Level enum type, enum id 2 -- the id the emitted body names in `%3 = load enum.2, ptr %0`, minted out of the committed tag table generated/ir_lz.tags.json. The same Rust type the hand model's ir_tLevel names; the mint spells its own alias. DerivedProved, zero axiom_deps.",
+    "ir_lz_tlevel: the Level enum type, enum id 3 (2 before the 2026-10-07 rebaseline) -- the id the emitted body names in `%3 = load enum.3, ptr %0`, minted out of the committed tag table generated/ir_lz.tags.json. The same Rust type the hand model's ir_tLevel names; the mint spells its own alias. DerivedProved, zero axiom_deps.",
     "ir_lz_b0: entry block, MINTED FROM THE EMITTED ARTIFACT. load the Level, extractfield the u8 discriminant, then a FOUR-case switch {0 -> b1, 1 -> b2, 4 -> b3, 2 -> b4} with IMax (tag 3) on the DEFAULT edge to b5 and exhaustive_enum_unreachable FALSE -- the measured flag, where the hand model carried a five-case table, an unreachable default and TRUE. The flagship's wrong-exhaustive-flag class, on the designated target itself. DerivedProved, zero axiom_deps.",
     "ir_lz_b1: Zero => true, then br to the join b6 with the answer as a block argument. The hand model RETURNS from each arm; the emitted body has no per-arm ret. DerivedProved, zero axiom_deps.",
     "ir_lz_b2: Succ => false, br b6. DerivedProved, zero axiom_deps.",

@@ -309,7 +309,7 @@ fn test_no_where_decl_ever_registers_with_sorry_axiom() {
     for source in sources {
         // Independently collect the declared top-level names so we can audit
         // whatever actually registered.
-        let decl_names: Vec<String> = parse_file(source)
+        let decl_names: Vec<clean_parser::SurfaceName> = parse_file(source)
             .map(|decls| {
                 decls
                     .iter()
@@ -327,7 +327,7 @@ fn test_no_where_decl_ever_registers_with_sorry_axiom() {
             Err(_) => {} // loud failure is always acceptable
             Ok(env) => {
                 for name in &decl_names {
-                    let Some(deps) = env.axiom_deps(&Name::from_string(name)) else {
+                    let Some(deps) = env.axiom_deps(name.name()) else {
                         continue; // not registered — nothing to taint
                     };
                     let tainted: Vec<String> = deps

@@ -468,7 +468,7 @@ fn test_user_tactic_deferred_do_body_errors_honestly() {
         pattern: vec![
             clean_parser::SyntaxPatternItem::Literal("mydo".to_owned()),
             clean_parser::SyntaxPatternItem::Variable {
-                name: "e".to_owned(),
+                name: SurfaceName::generated_path("e"),
                 category: Some("term".to_owned()),
             },
         ],

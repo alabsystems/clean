@@ -330,10 +330,17 @@ fn canon(e: &Expr) -> (Expr, [u8; 32]) {
             if let ExprKind::Const(name, _) = chead.kind() {
                 if let Some(arity) = commutative_full_arity(name) {
                     // Only a full application places both operands in the last two args.
+                    // Every `COMMUTATIVE_OPS` arity is >= 2, so both operands are
+                    // always present; taking them with `split_last_mut`/`last_mut`
+                    // states that without an index computation that could underflow
+                    // or go out of bounds.
                     if cargs.len() == arity {
-                        let n = cargs.len();
-                        if cargs[n - 2].1 > cargs[n - 1].1 {
-                            cargs.swap(n - 2, n - 1);
+                        if let Some((rhs, rest)) = cargs.split_last_mut() {
+                            if let Some(lhs) = rest.last_mut() {
+                                if lhs.1 > rhs.1 {
+                                    std::mem::swap(lhs, rhs);
+                                }
+                            }
                         }
                     }
                 }

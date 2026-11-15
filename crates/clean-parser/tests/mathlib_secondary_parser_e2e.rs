@@ -11,7 +11,8 @@
 //!   [`UniverseExpr::SortStar`] (elaboration parity with `Type*` is pinned in
 //!   `clean-elab/tests/universe_enforcement_e2e.rs`).
 //! - **P3 `open scoped X in <term>`** — term-level namespace opening.
-//! - **P5 `alias`** — Batteries/Mathlib alias command, desugared to `def`s.
+//! - **P5 `alias`** — Batteries/Mathlib alias command, kept as a dedicated
+//!   [`SurfaceDecl::Alias`] that preserves the target's telescope.
 //! - **P6 `library_note «title»`** — Mathlib doc no-op command, and guillemet
 //!   `«…»` identifiers lexing as a single identifier.
 //!
@@ -19,7 +20,9 @@
 //! `Mathlib/Logic/Basic.lean` snippets that must parse without falling back to a
 //! `RawDecl` recovery placeholder.
 
-use clean_parser::{parse_expr, parse_file, SurfaceDecl, SurfaceExpr, UniverseExpr};
+use clean_parser::{
+    parse_expr, parse_file, Span, SurfaceDecl, SurfaceExpr, SurfaceName, UniverseExpr,
+};
 
 /// Parse a source string expected to yield exactly one declaration.
 fn parse_one(src: &str) -> SurfaceDecl {
@@ -107,12 +110,12 @@ fn test_open_scoped_in_term_parses() {
             assert_eq!(paths.len(), 1, "one opened namespace");
             assert_eq!(
                 paths[0].path,
-                vec!["Classical".to_string()],
+                SurfaceName::generated_path("Classical"),
                 "the `Classical` namespace path must be preserved, not discarded"
             );
             // The sub-term is `Decidable.byContradiction`.
             assert!(
-                !matches!(&*body, SurfaceExpr::Ident(_, n) if n == "open"),
+                !matches!(&*body, SurfaceExpr::Ident(_, n) if n.name() == SurfaceName::generated_path("open").name()),
                 "body must be the real sub-term, not an `open` marker"
             );
         }
@@ -132,7 +135,7 @@ fn test_open_plain_in_term_still_parses() {
             ..
         } => {
             assert!(!scoped, "plain `open` is not scoped");
-            assert_eq!(paths[0].path, vec!["Nat".to_string()]);
+            assert_eq!(paths[0].path, SurfaceName::generated_path("Nat"));
             // `succ zero` — an application of the opened `succ`.
             assert!(
                 matches!(&*body, SurfaceExpr::App(_, _, _)),
@@ -151,73 +154,169 @@ fn test_open_scoped_multiple_in_term_parses() {
         SurfaceExpr::OpenIn { paths, scoped, .. } => {
             assert!(scoped);
             assert_eq!(paths.len(), 2, "both namespaces preserved");
-            assert_eq!(paths[0].path, vec!["Classical".to_string()]);
-            assert_eq!(paths[1].path, vec!["Real".to_string()]);
+            assert_eq!(paths[0].path, SurfaceName::generated_path("Classical"));
+            assert_eq!(paths[1].path, SurfaceName::generated_path("Real"));
         }
         other => panic!("expected OpenIn node, got {other:?}"),
     }
 }
 
 // ── P5 · alias ───────────────────────────────────────────────────────────────
+//
+// Since 8c866b7fe (docs/DECISIONS.md, 2026-11-12 "Resolve declaration headers
+// before bodies ...") the parser keeps `alias` as a dedicated
+// `SurfaceDecl::Alias` instead of desugaring it to an inferred `def`: Batteries'
+// `alias` copies the target's type, level parameters and constant reference, and
+// an iff alias builds `Iff.mp`/`Iff.mpr` under the target's full telescope. An
+// inferred source `def` would instantiate implicit binders instead. The
+// end-to-end elaboration of this node against the Batteries 4.35 oracle
+// (`reports/header-inference-2026-11-12/alias-oracle.json`) is pinned by
+// `crates/clean-elab/tests/alias_telescope_preservation.rs`.
+
+fn surface(path: &str) -> SurfaceName {
+    SurfaceName::generated_path(path)
+}
+
+/// The parsed pieces of an alias command: its names with iff directions
+/// (`None` plain, `Some(true)` forward, `Some(false)` reverse), its target and
+/// its span.
+type AliasParts = (Vec<(SurfaceName, Option<bool>)>, SurfaceName, Span);
+
+fn expect_alias(decl: SurfaceDecl) -> AliasParts {
+    match decl {
+        SurfaceDecl::Alias {
+            names,
+            target,
+            span,
+            ..
+        } => (names, target, span),
+        other => panic!("expected SurfaceDecl::Alias, got {other:?}"),
+    }
+}
 
 #[test]
-fn test_alias_plain_desugars_to_def() {
-    match parse_one("alias Iff.imp := imp_congr") {
-        SurfaceDecl::Def { name, val, .. } => {
-            assert_eq!(name, "Iff.imp");
+fn test_alias_plain_parses_to_alias_decl() {
+    let src = "alias Iff.imp := imp_congr";
+    let (names, target, span) = expect_alias(parse_one(src));
+    assert_eq!(names.len(), 1, "plain alias names one constant: {names:?}");
+    assert_eq!(names[0].0.name(), surface("Iff.imp").name());
+    assert_eq!(names[0].1, None, "a plain alias has no iff direction");
+    assert_eq!(target.name(), surface("imp_congr").name());
+    assert_eq!(
+        span.end,
+        src.len(),
+        "the alias span extends through the target token"
+    );
+}
+
+/// Assert `src` yields no `SurfaceDecl::Alias`: the parse either fails or
+/// recovers into a `RawDecl` placeholder (itself a parse failure).
+fn assert_alias_refused(src: &str) {
+    match parse_file(src) {
+        Err(_) => {}
+        Ok(decls) => {
             assert!(
-                matches!(&*val, SurfaceExpr::Ident(_, t) if t == "imp_congr"),
-                "alias value should be the target identifier, got {val:?}"
+                decls
+                    .iter()
+                    .all(|d| !matches!(d, SurfaceDecl::Alias { .. })),
+                "`{src}` must not parse to an alias: {decls:?}"
+            );
+            assert!(
+                decls
+                    .iter()
+                    .any(|d| matches!(d, SurfaceDecl::RawDecl { .. })),
+                "`{src}` must surface a parse failure: {decls:?}"
             );
         }
-        other => panic!("expected Def from plain alias, got {other:?}"),
+    }
+}
+
+// Batteries 66e469188 `alias` spells its operator as the literal `" := "`; the
+// Lean 3 arrow form is not upstream syntax. Pinned Lean 4.36.0-rc2 with
+// `import Batteries.Tactic.Alias` rejects both spellings:
+// `alias foo ← bar`      → `3:9: error: unexpected token '←'; expected ':='`
+// `alias ⟨f, g⟩ ← bar`   → `3:12: error: unexpected token '←'; expected ':='`
+#[test]
+fn test_alias_reverse_arrow_plain_form_refused() {
+    assert_alias_refused("alias foo \u{2190} bar");
+}
+
+#[test]
+fn test_alias_reverse_arrow_iff_form_refused() {
+    assert_alias_refused("alias \u{27e8}f, g\u{27e9} \u{2190} bar");
+}
+
+#[test]
+fn test_alias_iff_destructure_forward_only_parses_to_alias_decl() {
+    // `alias ⟨fwd, _⟩ := iffThm` — only the forward (`Iff.mp`) direction is named.
+    let src = "alias \u{27e8}And.rotate, _\u{27e9} := and_rotate";
+    let (names, target, span) = expect_alias(parse_one(src));
+    assert_eq!(names.len(), 1, "`_` skips the reverse direction: {names:?}");
+    assert_eq!(names[0].0.name(), surface("And.rotate").name());
+    assert_eq!(
+        names[0].1,
+        Some(true),
+        "the first slot is the forward direction"
+    );
+    assert_eq!(target.name(), surface("and_rotate").name());
+    assert_eq!(span.end, src.len());
+}
+
+#[test]
+fn test_alias_iff_destructure_reverse_only_parses_to_alias_decl() {
+    let (names, target, _) = expect_alias(parse_one("alias \u{27e8}_, mprName\u{27e9} := someIff"));
+    assert_eq!(names.len(), 1, "`_` skips the forward direction: {names:?}");
+    assert_eq!(names[0].0.name(), surface("mprName").name());
+    assert_eq!(
+        names[0].1,
+        Some(false),
+        "the second slot is the reverse direction"
+    );
+    assert_eq!(target.name(), surface("someIff").name());
+}
+
+#[test]
+fn test_alias_iff_destructure_both_directions_parses_to_one_alias_decl() {
+    // Both directions named → one alias node carrying both directions
+    // (fwd = Iff.mp, bwd = Iff.mpr), not a `mutual` block of inferred defs.
+    let (names, target, _) = expect_alias(parse_one(
+        "alias \u{27e8}mpName, mprName\u{27e9} := someIff",
+    ));
+    assert_eq!(names.len(), 2, "two named directions: {names:?}");
+    assert_eq!(names[0].0.name(), surface("mpName").name());
+    assert_eq!(names[0].1, Some(true));
+    assert_eq!(names[1].0.name(), surface("mprName").name());
+    assert_eq!(names[1].1, Some(false));
+    assert_eq!(target.name(), surface("someIff").name());
+}
+
+/// Batteries' `aliasLR` grammar is exactly `"⟨" binderIdent ", " binderIdent "⟩"`
+/// (`reports/header-inference-2026-11-12/Batteries-Alias.lean-*.gz`); any other
+/// arity is refused by Lean (the `iff_three` row of `alias-oracle.json` exits
+/// 1). Clean must not produce an alias or a definition from such a command.
+fn assert_iff_alias_refused(src: &str) {
+    match parse_file(src) {
+        // A hard parse error is a refusal.
+        Err(_) => {}
+        // Recovery is a refusal only if nothing alias-shaped came out of it.
+        Ok(decls) => assert!(
+            !decls.iter().any(|d| matches!(
+                d,
+                SurfaceDecl::Alias { .. } | SurfaceDecl::Def { .. } | SurfaceDecl::Mutual { .. }
+            )),
+            "`{src}` must not parse to an alias or definition, got {decls:?}"
+        ),
     }
 }
 
 #[test]
-fn test_alias_reverse_arrow_desugars_to_def() {
-    // The historical `alias newName ← target` reverse form.
-    match parse_one("alias foo \u{2190} bar") {
-        SurfaceDecl::Def { name, val, .. } => {
-            assert_eq!(name, "foo");
-            assert!(matches!(&*val, SurfaceExpr::Ident(_, t) if t == "bar"));
-        }
-        other => panic!("expected Def from reverse alias, got {other:?}"),
-    }
+fn test_alias_iff_destructure_three_entries_refused() {
+    assert_iff_alias_refused("alias \u{27e8}f, g, h\u{27e9} := original");
 }
 
 #[test]
-fn test_alias_iff_destructure_forward_only_desugars_to_def() {
-    // `alias ⟨fwd, _⟩ := iffThm` — only the forward direction is named.
-    match parse_one("alias \u{27e8}And.rotate, _\u{27e9} := and_rotate") {
-        SurfaceDecl::Def { name, val, .. } => {
-            assert_eq!(name, "And.rotate");
-            match &*val {
-                SurfaceExpr::App(_, head, args) => {
-                    assert!(
-                        matches!(&**head, SurfaceExpr::Ident(_, n) if n == "Iff.mp"),
-                        "forward direction should be `Iff.mp target`, got {head:?}"
-                    );
-                    assert_eq!(args.len(), 1);
-                }
-                other => panic!("expected `Iff.mp and_rotate`, got {other:?}"),
-            }
-        }
-        other => panic!("expected Def from forward-only iff alias, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_alias_iff_destructure_both_directions_desugars_to_mutual() {
-    // Both directions named → a mutual block of two `def`s (fwd = Iff.mp,
-    // bwd = Iff.mpr).
-    match parse_one("alias \u{27e8}mpName, mprName\u{27e9} := someIff") {
-        SurfaceDecl::Mutual { decls, .. } => {
-            assert_eq!(decls.len(), 2, "two named directions → two defs");
-            assert!(decls.iter().all(|d| matches!(d, SurfaceDecl::Def { .. })));
-        }
-        other => panic!("expected Mutual from two-direction iff alias, got {other:?}"),
-    }
+fn test_alias_iff_destructure_one_entry_refused() {
+    assert_iff_alias_refused("alias \u{27e8}f\u{27e9} := original");
 }
 
 #[test]
@@ -250,7 +349,7 @@ fn test_library_note_string_title_parses() {
 fn test_guillemet_identifier_lexes_as_single_ident() {
     let expr = parse_expr("\u{ab}foo bar\u{bb}").expect("guillemet identifier should parse");
     assert!(
-        matches!(&expr, SurfaceExpr::Ident(_, n) if n == "foo bar"),
+        matches!(&expr, SurfaceExpr::Ident(_, n) if n.same_syntax(&SurfaceName::component("foo bar", true))),
         "guillemet `«foo bar»` should be a single identifier, got {expr:?}"
     );
 }

@@ -152,6 +152,9 @@ impl EquivManager {
 
     /// Implementation of core equivalence check (called via stack_safe).
     fn is_equiv_core_impl(&mut self, a: &Expr, b: &Expr, use_hash: bool) -> bool {
+        // One unit of kernel work per node pair this walk enters; its node-map
+        // probes pay for their own key comparisons (`crate::work_meter`).
+        crate::work_meter::charge(crate::work_meter::Walk::Equiv, 1);
         // 3. Existing union-find knowledge must win even when hashes differ.
         // add_equiv can merge structurally different expressions, so hash
         // pre-filtering before this check would incorrectly return false.
@@ -224,8 +227,10 @@ impl EquivManager {
                     && self.is_equiv_core(body1, body2, use_hash)
             }
             (ExprKind::Lit(l1), ExprKind::Lit(l2)) => l1 == l2,
-            (ExprKind::Proj(_, i1, e1), ExprKind::Proj(_, i2, e2)) => {
-                i1 == i2 && self.is_equiv_core(e1, e2, use_hash)
+            // The structure name is part of a projection (leanprover/lean4#14631:
+            // v4.33.1's equality caches compare it with the rest of the term).
+            (ExprKind::Proj(s1, i1, e1), ExprKind::Proj(s2, i2, e2)) => {
+                s1 == s2 && i1 == i2 && self.is_equiv_core(e1, e2, use_hash)
             }
             (ExprKind::MData(_, e1), ExprKind::MData(_, e2)) => {
                 self.is_equiv_core(e1, e2, use_hash)

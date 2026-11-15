@@ -196,8 +196,9 @@ fn test_max_iterations_one_allows_single_expansion() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p,
             value: None,
         }],
@@ -298,8 +299,9 @@ fn test_aesop_with_normalization() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p,
             value: None,
         }],

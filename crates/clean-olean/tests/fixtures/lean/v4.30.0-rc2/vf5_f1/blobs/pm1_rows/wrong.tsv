@@ -1,0 +1,53 @@
+# One false-clause control per row: `wrong_<key>.rs`'s harness `<key>_wrong` with the row's clause made
+# false, its counterexample (SemR values), and why it panics there.
+# key	false harness	counterexample	why
+tab_cells	tab_cells_wrong	[.int .usize 0]	`tab_cells_wrong(0)` panics: the clause with 0 cells at a stop is false there (the result is 4)
+slept_through_m_nonneg_w_nonneg	slept_through_m_nonneg_w_nonneg_wrong	[.int .i64 60, .int .i64 0]	`slept_through_m_nonneg_w_nonneg_wrong(60, 0)` panics: the clause with the threshold 59 is false there
+slept_through_m_nonneg_w_neg	slept_through_m_nonneg_w_neg_wrong	[.int .i64 18446744073709551555, .int .i64 0]	`slept_through_m_nonneg_w_neg_wrong(-61, 0)` panics: the clause reading w < m - 60 is false there
+slept_through_m_neg_w_nonneg	slept_through_m_neg_w_nonneg_wrong	[.int .i64 0, .int .i64 18446744073709551556]	`slept_through_m_neg_w_nonneg_wrong(0, -60)` panics: the clause with the threshold 59 is false there
+slept_through_m_neg_w_neg	slept_through_m_neg_w_neg_wrong	[.int .i64 18446744073709551615, .int .i64 18446744073709551555]	`slept_through_m_neg_w_neg_wrong(-1, -61)` panics: the clause with the threshold 59 is false there
+past_ceiling	past_ceiling_wrong	[.int .u64 18446744073709551615, .int .u64 9223372036854775807]	`past_ceiling_wrong(u64::MAX, MAX_TURN_ID)` panics: the clause with no ceiling at the top is false there
+er_pack_high	er_pack_high_wrong	[.int .u64 65536, .int .u64 0]	`er_pack_high_wrong(65536, 0)` panics: the clause keeping 17 session bits is false there (the high half is 0)
+er_pack_low	er_pack_low_wrong	[.int .u64 0, .int .u64 281474976710656]	`er_pack_low_wrong(0, 2^48)` panics: the clause keeping 49 stamp bits is false there (the low half is 0)
+dialog_options	dialog_options_wrong	[.int .u32 32]	`dialog_options_wrong(0x20)` panics: the clause passing FOS_PICKFOLDERS through is false there
+is_cancelled	is_cancelled_wrong	[.int .i32 2147943623]	`is_cancelled_wrong(0x800704C7 as i32)` panics: the clause naming 0x800704C6 is false there
+exports_for_target	exports_for_target_wrong	[.int .u64 1790526324, .int .u64 1790526323]	`exports_for_target_wrong(1_790_526_324, 1_790_526_323)` panics: the clause without the importer's disjunct is false there
+defer_gpu_build	defer_gpu_build_wrong	[.bool true, .bool false]	`defer_gpu_build_wrong(true, false)` panics: the clause as a disjunction is false there
+tainted_at	tainted_at_wrong	[.bool false, .int .u64 5, .int .u64 5, .int .u64 0]	`tainted_at_wrong(false, 5, 5, 0)` panics: the clause with now <= until is false there
+boot_health_dispatch_headless_fresh	boot_health_dispatch_headless_fresh_wrong	[.bool true, .bool true, .bool false, .bool false, .bool true, .bool false, .bool false]	`boot_health_dispatch_headless_fresh_wrong(true, true, false, false, true, false, false)` panics: the clause asking a headless launch for an OS window is false there
+boot_health_dispatch_headless_dispatched	boot_health_dispatch_headless_dispatched_wrong	[.bool true, .bool true, .bool false, .bool true, .bool true, .bool false, .bool false]	`boot_health_dispatch_headless_dispatched_wrong(true, true, false, true, true, false, false)` panics: the clause ignoring the dispatched latch is false there
+boot_health_dispatch_windowed_fresh	boot_health_dispatch_windowed_fresh_wrong	[.bool false, .bool false, .bool true, .bool false, .bool true, .bool false, .bool false]	`boot_health_dispatch_windowed_fresh_wrong(false, false, true, false, true, false, false)` panics: the clause without the OS window is false there
+boot_health_dispatch_windowed_dispatched	boot_health_dispatch_windowed_dispatched_wrong	[.bool false, .bool false, .bool true, .bool true, .bool true, .bool true, .bool false]	`boot_health_dispatch_windowed_dispatched_wrong(false, false, true, true, true, true, false)` panics: the clause ignoring the dispatched latch is false there
+windows_info_flags	windows_info_flags_wrong	[.bool false, .bool true]	`windows_info_flags_wrong(false, true)` panics: the clause with NIIF_INFO beside NIIF_USER is false there
+colorref_swap	colorref_swap_wrong	[.int .u32 16777216]	`colorref_swap_wrong(0x0100_0000)` panics: the clause as an involution on all 32 bits is false there
+is_os_settings_message	is_os_settings_message_wrong	[.int .u32 800]	`is_os_settings_message_wrong(0x320)` panics: the clause without the colorization message is false there
+reduced_transparency_from	reduced_transparency_from_wrong	[.bool true, .bool true]	`reduced_transparency_from_wrong(true, true)` panics: the clause as hc and not effects is false there
+entry_counts_as_child	entry_counts_as_child_wrong	[.int .u32 1, .int .u32 0, .bool true]	`entry_counts_as_child_wrong(1, 0, true)` panics: the clause ignoring conhost is false there
+semantic_prewarm_result_is_current	semantic_prewarm_result_is_current_wrong	[.int .u64 0, .int .u64 1]	`semantic_prewarm_result_is_current_wrong(0, 1)` panics: the clause as c <= r is false there
+semantic_prewarm_replacement_carries_base	semantic_prewarm_replacement_carries_base_wrong	[.bool true, .bool true]	`semantic_prewarm_replacement_carries_base_wrong(true, true)` panics: the clause as exclusive or is false there
+semantic_prewarm_cache_active_before_request	semantic_prewarm_cache_active_before_request_wrong	[.bool true, .bool true, .bool true]	`semantic_prewarm_cache_active_before_request_wrong(true, true, true)` panics: the clause ignoring a matching candidate is false there
+separates	separates_wrong	[.int .usize 1, .int .usize 0]	`separates_wrong(1, 0)` panics: the clause dividing the chip after the active one is false there
+capture_flying_alpha	capture_flying_alpha_wrong	[.bool true, .bool true, .int .u8 1]	`capture_flying_alpha_wrong(true, true, 1)` panics: the clause ignoring pet mode is false there
+capture_ticks_cursor_fx	capture_ticks_cursor_fx_wrong	[.bool true, .bool false]	`capture_ticks_cursor_fx_wrong(true, false)` panics: the clause ignoring the OS window is false there
+present_band_bg	present_band_bg_wrong	[.int .u32 4278190081, .int .u32 0]	`present_band_bg_wrong(0xFF00_0001, 0)` panics: the clause reading it as unset is false there
+sparkle_words_presentable	sparkle_words_presentable_wrong	[.bool true, .bool true]	`sparkle_words_presentable_wrong(true, true)` panics: the clause ignoring suspension is false there
+update_bar_press_applies	update_bar_press_applies_wrong	[.bool true, .bool true, .bool false]	`update_bar_press_applies_wrong(true, true, false)` panics: the clause ignoring the hand-off is false there
+control_lanes_prepared	control_lanes_prepared_wrong	[.int .usize 1, .int .usize 0]	`control_lanes_prepared_wrong(1, 0)` panics: the clause needing one lane is false there
+handoff_server_available	handoff_server_available_wrong	[]	`handoff_server_available_wrong()` panics: the clause claiming a server is false
+dh_quiet	dh_quiet_wrong	[.bool true, .bool false, .bool false, .bool true, .bool false]	`dh_quiet_wrong(true, false, false, true, false)` panics: the clause without presence is false there
+may_reveal	may_reveal_wrong	[.bool true, .bool false, .bool true]	`may_reveal_wrong(true, false, true)` panics: the clause ignoring a drag is false there
+full_follow_due	full_follow_due_wrong	[.bool false, .int .u64 0, .int .u64 0, .int .u64 0, .int .u64 2]	`full_follow_due_wrong(false, 0, 0, 0, 2)` panics: the clause letting the phase step by two is false there
+takes_part	takes_part_wrong	[.bool true, .bool false]	`takes_part_wrong(true, false)` panics: the clause excluding every headless launch is false there
+is_update_candidate	is_update_candidate_wrong	[.bool true, .bool false]	`is_update_candidate_wrong(true, false)` panics: the clause as a conjunction is false there
+video_post_present_should_finalize	video_post_present_should_finalize_wrong	[.bool false, .bool true]	`video_post_present_should_finalize_wrong(false, true)` panics: the clause on the deadline alone is false there
+native_preview_may_tick	native_preview_may_tick_wrong	[.bool true, .bool false, .bool false, .bool false]	`native_preview_may_tick_wrong(true, false, false, false)` panics: the clause without focus is false there
+bar_title_attention	bar_title_attention_wrong	[.bool true, .bool false, .bool false]	`bar_title_attention_wrong(true, false, false)` panics: the clause reading realized is false there
+agent_prime_permitted	agent_prime_permitted_wrong	[.bool true, .bool false]	`agent_prime_permitted_wrong(true, false)` panics: the clause ignoring a test build is false there
+exact_delete_absence_is_converged	exact_delete_absence_is_converged_wrong	[.bool true, .bool false]	`exact_delete_absence_is_converged_wrong(true, false)` panics: the clause on the delete alone is false there
+nests_inside_aterm	nests_inside_aterm_wrong	[.bool true, .bool false, .bool true, .bool false]	`nests_inside_aterm_wrong(true, false, true, false)` panics: the clause without the tty is false there
+b32_val	b32_val_wrong	[.int .u8 118]	`b32_val_wrong(b'v')` panics: the clause not skipping u is false there (the index is 27)
+artifact_cap	artifact_cap_wrong	[.int .u64 0]	`artifact_cap_wrong(0)` panics: the clause as a plain min is false there (the cap is not 0)
+padding_for	padding_for_wrong	[.int .u64 0]	`padding_for_wrong(0)` panics: the clause without the outer mod is false there (it says 512)
+is_vendor_build	is_vendor_build_wrong	[.int .u64 1000000000000000000]	`is_vendor_build_wrong(10^18)` panics: the clause with a strict bound is false there
+should_complete_set	should_complete_set_wrong	[.bool true, .bool false, .bool true]	`should_complete_set_wrong(true, false, true)` panics: the clause without asked is false there
+says_not_installed_yet	says_not_installed_yet_wrong	[.bool true, .bool true]	`says_not_installed_yet_wrong(true, true)` panics: the clause ignoring the window pass is false there

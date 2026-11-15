@@ -3,9 +3,15 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Tests for the content-addressed cached closure loader. Seeded by the committed
-//! `tests/fixtures/olean/v4.13.0/custom/Minimal.olean` (def `identity` + theorem
-//! `id_id`, imports exactly `Init`) so they run with no Mathlib checkout — the same
-//! fixture the v3 closure-binding tests use.
+//! pair in `tests/fixtures/olean/v4.30.0/closure_cache/` — a `prelude` leaf `Init`
+//! (inductive `Leaf`, def `Leaf.same`) that imports nothing, and a `Target` that
+//! imports it (def `targetVal`) — so they run with no Mathlib checkout.
+//!
+//! They used to copy `v4.13.0/custom/Minimal.olean` into BOTH slots. Minimal
+//! imports `Init`, so that `Init.olean` imported ITSELF, and since the typed import
+//! graph (`clean-olean/src/import/load.rs`) refuses a module dependency cycle —
+//! correctly, Lean refuses one too — the cold load failed and five of these tests
+//! were red, unrun by any suite row.
 //!
 //! `#[path]`-included submodule of `graduate_closure_cache`, so `super::*` resolves
 //! to that module's private items (including the private `CachePlan` fields).
@@ -17,22 +23,26 @@ use clean_kernel::Environment;
 /// Serializes the two tests that touch the process-global `$CLEAN_CLOSURE_CACHE_DIR`.
 static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-/// Path to the committed `Minimal.olean` fixture.
-fn minimal_olean() -> PathBuf {
+/// Path to one module of the committed closure-cache fixture pair.
+fn closure_fixture(module: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(|p| p.parent())
-        .map(|root| root.join("tests/fixtures/olean/v4.13.0/custom/Minimal.olean"))
+        .map(|root| {
+            root.join(format!(
+                "tests/fixtures/olean/v4.30.0/closure_cache/{module}.olean"
+            ))
+        })
         .expect("workspace root")
 }
 
-/// Lay out a resolvable closure under `root`: `Init.olean` + `Target.olean` (both
-/// copies of the fixture). `Target` imports `Init`, so the closure is `{Target, Init}`.
+/// Lay out a resolvable, ACYCLIC closure under `root`: the leaf `Init.olean` and a
+/// `Target.olean` that imports it, so the closure is `{Target, Init}`.
 fn layout_minimal_closure(root: &Path) -> PathBuf {
     std::fs::create_dir_all(root).unwrap();
-    std::fs::copy(minimal_olean(), root.join("Init.olean")).expect("copy Init.olean");
+    std::fs::copy(closure_fixture("Init"), root.join("Init.olean")).expect("copy Init.olean");
     let target = root.join("Target.olean");
-    std::fs::copy(minimal_olean(), &target).expect("copy Target.olean");
+    std::fs::copy(closure_fixture("Target"), &target).expect("copy Target.olean");
     target
 }
 
@@ -66,8 +76,7 @@ fn cold_env(root: &Path) -> Environment {
 }
 
 /// `(kind, level_params, has_value)` plus structural type/value equality, the same
-/// MData-peeling oracle the round-trip uses. Minimal has ZERO MData, so this is an
-/// exact structural compare here.
+/// MData-peeling oracle the round-trip uses.
 fn const_equal(a: &ConstantInfo, b: &ConstantInfo) -> bool {
     a.kind == b.kind
         && a.level_params == b.level_params
@@ -115,8 +124,8 @@ fn test_warm_load_is_faithful_to_cold() {
         "warm closure must carry exactly the cold closure's constants"
     );
     assert!(
-        cold_names.contains("identity") && cold_names.contains("id_id"),
-        "the Minimal fixture's own decls must be present (non-vacuous): {cold_names:?}"
+        cold_names.contains("Leaf.same") && cold_names.contains("targetVal"),
+        "both fixture modules' own decls must be present (non-vacuous): {cold_names:?}"
     );
 
     // Every shared constant is structurally identical.

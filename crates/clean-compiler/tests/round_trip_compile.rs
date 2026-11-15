@@ -52,7 +52,7 @@ pub unsafe fn clean_ctor_set_uint64(obj: *mut CleanObj, offset: usize, val: u64)
 pub unsafe fn clean_ctor_set_usize(obj: *mut CleanObj, idx: usize, val: usize) {}
 pub unsafe fn clean_ctor_set_float(obj: *mut CleanObj, offset: usize, val: f64) {}
 pub unsafe fn clean_ctor_set_float32(obj: *mut CleanObj, offset: usize, val: f32) {}
-pub unsafe fn clean_obj_tag(obj: *mut CleanObj) -> u8 { 0 }
+pub unsafe fn clean_obj_tag(obj: *mut CleanObj) -> u32 { 0 }
 pub unsafe fn clean_box_uint32(val: u32) -> *mut CleanObj { core::ptr::null_mut() }
 pub unsafe fn clean_box_uint64(val: u64) -> *mut CleanObj { core::ptr::null_mut() }
 pub unsafe fn clean_box_float(val: f64) -> *mut CleanObj { core::ptr::null_mut() }
@@ -61,7 +61,7 @@ pub unsafe fn clean_unbox_uint32(obj: *mut CleanObj) -> u32 { 0 }
 pub unsafe fn clean_unbox_uint64(obj: *mut CleanObj) -> u64 { 0 }
 pub unsafe fn clean_unbox_float(obj: *mut CleanObj) -> f64 { 0.0 }
 pub unsafe fn clean_inc(obj: *mut CleanObj) {}
-pub unsafe fn clean_inc_n(obj: *mut CleanObj, n: u32) {}
+pub unsafe fn clean_inc_n(obj: *mut CleanObj, n: usize) {}
 pub unsafe fn clean_dec(obj: *mut CleanObj) {}
 pub unsafe fn clean_is_exclusive(obj: *mut CleanObj) -> bool { true }
 pub unsafe fn clean_reset(obj: *mut CleanObj) -> *mut CleanObj { core::ptr::null_mut() }
@@ -84,13 +84,32 @@ fn assert_rust_compiles_with(decl: &IRDecl, extra_stubs: &str) {
     let src_path = dir.path().join("test_emit.rs");
     std::fs::write(&src_path, &code).expect("failed to write temp file");
 
-    let output = std::process::Command::new("rustc")
-        .args(["--edition", "2021", "--crate-type", "lib"])
+    // Trust's `trustc`: `$RUSTC`, else the one beside the running Targo
+    // (`$CARGO`; Targo does not export `$RUSTC` to tests), else PATH (owner
+    // directive 2026-09-28). The emitted code is a compile-check ARTIFACT, not
+    // a verification target.
+    let trustc = format!("trustc{}", std::env::consts::EXE_SUFFIX);
+    let compiler = std::env::var_os("RUSTC")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            std::env::var_os("CARGO")
+                .map(|cargo| std::path::PathBuf::from(cargo).with_file_name(&trustc))
+                .filter(|sibling| sibling.is_file())
+                .unwrap_or_else(|| std::path::PathBuf::from(&trustc))
+        });
+    let output = std::process::Command::new(compiler)
+        .args([
+            "-Ztrust-verify=off",
+            "--edition",
+            "2021",
+            "--crate-type",
+            "lib",
+        ])
         .arg("--out-dir")
         .arg(dir.path())
         .arg(&src_path)
         .output()
-        .expect("rustc not found — is Rust installed?");
+        .expect("trustc not found — is the Trust toolchain on PATH?");
 
     assert!(
         output.status.success(),

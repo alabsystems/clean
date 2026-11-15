@@ -37,11 +37,14 @@ fn test_hdiv_nat_uses_total() {
 }
 
 #[test]
-fn test_hdiv_int_uses_plain() {
+fn test_hdiv_int_with_unresolved_dictionary_is_refused() {
     let mut t = SmtLibTranslator::new();
     let int_ty = Expr::const_(Name::from_string("Int"), vec![]);
     let expr = make_hdiv(int_ty, Expr::nat_lit(10), Expr::nat_lit(3));
-    assert_eq!(t.translate_expr(&expr).unwrap(), "(div 10 3)");
+    assert!(matches!(
+        t.translate_expr(&expr),
+        Err(TranslateError::UnsupportedExpr(_))
+    ));
 }
 
 #[test]
@@ -56,9 +59,12 @@ fn test_hmod_nat_uses_total() {
 }
 
 #[test]
-fn test_hmod_int_uses_plain() {
+fn test_hmod_int_with_unresolved_dictionary_is_refused() {
     let mut t = SmtLibTranslator::new();
     let int_ty = Expr::const_(Name::from_string("Int"), vec![]);
     let expr = make_hmod(int_ty, Expr::nat_lit(10), Expr::nat_lit(3));
-    assert_eq!(t.translate_expr(&expr).unwrap(), "(mod 10 3)");
+    assert!(matches!(
+        t.translate_expr(&expr),
+        Err(TranslateError::UnsupportedExpr(_))
+    ));
 }

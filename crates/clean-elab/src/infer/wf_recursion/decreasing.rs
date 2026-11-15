@@ -41,7 +41,7 @@
 
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprKind, FVarId};
-use clean_parser::SurfaceTactic;
+use clean_parser::{SurfaceName, SurfaceTactic};
 
 use super::{measure_shape, ElabCtx};
 use crate::ElabError;
@@ -95,7 +95,7 @@ impl ElabCtx<'_> {
         budget: Budget,
     ) -> Option<Expr> {
         let depth = budget.sum;
-        let locals: Vec<(String, FVarId, Expr)> = self.locals.clone();
+        let locals: Vec<(SurfaceName, FVarId, Expr)> = self.locals.clone();
 
         // Tier 1: a hypothesis already proves the goal.
         for (_, fvar, ty) in &locals {
@@ -245,7 +245,7 @@ impl ElabCtx<'_> {
     fn try_nat_sub_lt_discharge(
         &mut self,
         goal: &Expr,
-        locals: &[(String, FVarId, Expr)],
+        locals: &[(SurfaceName, FVarId, Expr)],
     ) -> Option<Expr> {
         // The caller constructs the goal as `Nat.lt <m arg> <m param>`;
         // extract the right-hand side `B := m param`.
@@ -327,7 +327,7 @@ impl ElabCtx<'_> {
     fn try_nat_mod_lt_discharge(
         &mut self,
         goal: &Expr,
-        locals: &[(String, FVarId, Expr)],
+        locals: &[(SurfaceName, FVarId, Expr)],
     ) -> Option<Expr> {
         let (lhs, divisor) = split_nat_lt(goal)?;
         let numerator = mod_numerator(&lhs)?;
@@ -351,7 +351,7 @@ impl ElabCtx<'_> {
     /// candidate built from an unrelated hypothesis simply fails inference and
     /// is dropped.
     ///
-    /// Three routes, in the order a reader would try them:
+    /// Four routes, in the order a reader would try them:
     ///
     /// 1. **the hypothesis itself** — `h : 0 < b`, which is what the `dite`
     ///    spelling `if h : 0 < b then …` binds. This is the pre-existing
@@ -363,6 +363,8 @@ impl ElabCtx<'_> {
     ///    `ite` has been normalized to `dite` (see `call_sites::ite_to_dite`).
     ///    This is the route that unblocks the verbatim
     ///    `if b == 0 then a else gcd b (a % b)`.
+    /// 4. **a positive difference** — for `b ≡ B - k` and `h : k < B`, see
+    ///    [`Self::difference_positivity_candidates`].
     ///
     /// Route 3 needs the Prop the Bool test decides and its `Decidable`
     /// instance. Rather than destructure the hypothesis — whose `==` elaborates
@@ -379,12 +381,19 @@ impl ElabCtx<'_> {
     /// because a source `0` elaborates through `OfNat.ofNat`; they are
     /// definitionally equal, and trying both costs two candidates rather than a
     /// dependence on which normal form the elaborator happened to leave behind.
-    fn positivity_candidates(&self, b: &Expr, locals: &[(String, FVarId, Expr)]) -> Vec<Expr> {
+    fn positivity_candidates(&self, b: &Expr, locals: &[(SurfaceName, FVarId, Expr)]) -> Vec<Expr> {
         let mut out: Vec<Expr> = locals.iter().map(|(_, fv, _)| Expr::fvar(*fv)).collect();
+        // Route 4 goes LAST so every obligation an earlier route discharged
+        // keeps the proof term it had.
+        let difference = self.difference_positivity_candidates(b, locals);
+        let out_with_difference = |mut out: Vec<Expr>| {
+            out.extend(difference.iter().cloned());
+            out
+        };
 
         let pos_name = Name::from_string("Nat.pos_of_ne_zero");
         if self.env.get_const(&pos_name).is_none() {
-            return out;
+            return out_with_difference(out);
         }
         let pos_of_ne_zero = Expr::const_(pos_name, vec![]);
         let bridge_name = Name::from_string("of_not_decide_eq_true");
@@ -422,7 +431,98 @@ impl ElabCtx<'_> {
                 out.push(Expr::apps(pos_of_ne_zero.clone(), [b.clone(), ne]));
             }
         }
-        out
+        out_with_difference(out)
+    }
+
+    /// **Route 4 — a positive difference.** Candidate proofs of
+    /// `Nat.lt 0 (B - k)` from a hypothesis `h : k < B`: the count-up loop's
+    /// obligation (`go (i + 1)` under `if h : i < limit`, measure
+    /// `limit - i`, K5 probe b2) is `limit - (i + 1) < limit - i`, which is
+    /// definitionally `(limit - i) - 1 < limit - i`, so tier 2's
+    /// `Nat.sub_lt (limit - i) 1 pos _` closes it once `pos : 0 < limit - i`
+    /// is in hand. Lean's `Nat.sub_pos_of_lt` is not in the prelude, so the
+    /// candidate is assembled from three that are (all constructive,
+    /// axiom-free prelude theorems):
+    ///
+    /// ```text
+    /// h₁ : 1 + k ≤ B           := Eq.subst (Nat.add_comm k 1) h      -- h : k + 1 ≤ B
+    /// h₂ : (1 + k) - k ≤ B - k := Nat.sub_le_sub_right (1 + k) B k h₁
+    /// h₃ : 1 ≤ B - k           := Eq.subst (Nat.add_sub_cancel 1 k) h₂
+    /// ```
+    ///
+    /// and `1 ≤ B - k` is `0 < B - k`. As for every route, a candidate built
+    /// from an unrelated hypothesis fails the caller's strict recheck.
+    fn difference_positivity_candidates(
+        &self,
+        b: &Expr,
+        locals: &[(SurfaceName, FVarId, Expr)],
+    ) -> Vec<Expr> {
+        let Some((minuend, subtrahend)) = sub_parts(b) else {
+            return Vec::new();
+        };
+        let names = [
+            "Eq.subst",
+            "Nat.add_comm",
+            "Nat.add_sub_cancel",
+            "Nat.sub_le_sub_right",
+            "Nat.le",
+            "Nat.add",
+            "Nat.sub",
+        ];
+        if names
+            .iter()
+            .any(|n| self.env.get_const(&Name::from_string(n)).is_none())
+        {
+            return Vec::new();
+        }
+        let c = |n: &str| Expr::const_(Name::from_string(n), vec![]);
+        let l1 = clean_kernel::level::Level::succ(clean_kernel::level::Level::zero());
+        let eq_subst = Expr::const_(Name::from_string("Eq.subst"), vec![l1]);
+        let nat = c("Nat");
+        let one = Expr::nat_lit(1);
+        let add = |x: Expr, y: Expr| Expr::apps(c("Nat.add"), [x, y]);
+        let sub = |x: Expr, y: Expr| Expr::apps(c("Nat.sub"), [x, y]);
+        let le_motive = |rhs: &Expr| {
+            Expr::lam(
+                clean_kernel::BinderInfo::Default,
+                nat.clone(),
+                Expr::apps(c("Nat.le"), [Expr::bvar(0), rhs.clone()]),
+            )
+        };
+        let k_plus_one = add(subtrahend.clone(), one.clone());
+        let one_plus_k = add(one.clone(), subtrahend.clone());
+        let difference = sub(minuend.clone(), subtrahend.clone());
+        locals
+            .iter()
+            .map(|(_, fvar, _)| {
+                let h1 = Expr::apps(
+                    eq_subst.clone(),
+                    [
+                        nat.clone(),
+                        le_motive(&minuend),
+                        k_plus_one.clone(),
+                        one_plus_k.clone(),
+                        Expr::apps(c("Nat.add_comm"), [subtrahend.clone(), one.clone()]),
+                        Expr::fvar(*fvar),
+                    ],
+                );
+                let h2 = Expr::apps(
+                    c("Nat.sub_le_sub_right"),
+                    [one_plus_k.clone(), minuend.clone(), subtrahend.clone(), h1],
+                );
+                Expr::apps(
+                    eq_subst.clone(),
+                    [
+                        nat.clone(),
+                        le_motive(&difference),
+                        sub(one_plus_k.clone(), subtrahend.clone()),
+                        one.clone(),
+                        Expr::apps(c("Nat.add_sub_cancel"), [one.clone(), subtrahend.clone()]),
+                        h2,
+                    ],
+                )
+            })
+            .collect()
     }
 
     /// Strict validation of a decreasing-proof candidate: no sorry, and the
@@ -553,6 +653,24 @@ fn sub_subtrahend(e: &Expr) -> Option<Expr> {
     }
     if *name == Name::from_string("HSub.hSub") && args.len() == 6 {
         return Some(Expr::clone(args[5]));
+    }
+    None
+}
+
+/// The minuend and subtrahend of a difference, in either spelling (see
+/// [`sub_subtrahend`]).
+fn sub_parts(e: &Expr) -> Option<(Expr, Expr)> {
+    let e = strip_mdata(e);
+    let head = e.get_app_fn();
+    let args = e.get_app_args();
+    let ExprKind::Const(name, _) = strip_mdata(head).kind() else {
+        return None;
+    };
+    if *name == Name::from_string("Nat.sub") && args.len() == 2 {
+        return Some((Expr::clone(args[0]), Expr::clone(args[1])));
+    }
+    if *name == Name::from_string("HSub.hSub") && args.len() == 6 {
+        return Some((Expr::clone(args[4]), Expr::clone(args[5])));
     }
     None
 }
@@ -705,6 +823,7 @@ impl ElabCtx<'_> {
             .locals
             .iter()
             .map(|(name, fvar, ty)| crate::tactic::LocalDecl {
+                binder_info: self.locals.binder_info(*fvar),
                 fvar: *fvar,
                 name: name.clone(),
                 ty: ty.clone(),
@@ -725,13 +844,14 @@ impl ElabCtx<'_> {
         // the same.
         let mut tactic_rigid = self.metas.rigid_level_params_snapshot();
         for name in &self.universe_params {
-            tactic_rigid.insert(Name::from_string(name));
+            tactic_rigid.insert(name.name().clone());
         }
         ps.seed_universe_world(
             self.universe_params.clone(),
             self.level_mint.clone(),
             tactic_rigid,
         );
+        ps.set_instance_visibility(self.instance_visibility());
 
         for tac in tactics {
             self.eval_tactic(&mut ps, tac)?;

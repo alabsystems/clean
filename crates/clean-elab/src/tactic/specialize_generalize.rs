@@ -10,13 +10,12 @@
 //! - [`specialize_multi`]: Apply multiple arguments to a universally quantified hypothesis
 //! - [`generalize_at`]: Generalize a term in a specific hypothesis (not the goal)
 //! - [`revert_many`]: Revert multiple hypotheses in order
-//! - [`revert_with_deps`]: Revert a hypothesis along with all its dependents
+//! - `revert_fvar_with_deps`: Revert a selected local and its dependents by identity
 
 use clean_kernel::{BinderInfo, Expr};
 
 use super::core::{ProofState, TacticError, TacticResult};
 use super::equality::contains_expr;
-use super::hypothesis::collect_fvars;
 
 // ============================================================================
 // Specialize Multi
@@ -53,7 +52,7 @@ use super::hypothesis::collect_fvars;
 /// ```
 pub(crate) fn specialize_multi(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &clean_parser::SurfaceName,
     args: &[Expr],
 ) -> TacticResult {
     if args.is_empty() {
@@ -108,8 +107,8 @@ pub(crate) fn specialize_multi(
 pub(crate) fn generalize_at(
     state: &mut ProofState,
     term: Expr,
-    var_name: &str,
-    hyp_name: &str,
+    var_name: &clean_parser::SurfaceName,
+    hyp_name: &clean_parser::SurfaceName,
 ) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
@@ -117,7 +116,7 @@ pub(crate) fn generalize_at(
     let hyp_idx = goal
         .local_ctx
         .iter()
-        .position(|d| d.name == hyp_name)
+        .rposition(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     let decl = goal.local_ctx[hyp_idx].clone();
 
@@ -182,7 +181,10 @@ pub(crate) fn generalize_at(
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn revert_many(state: &mut ProofState, hyp_names: &[&str]) -> TacticResult {
+pub(crate) fn revert_many(
+    state: &mut ProofState,
+    hyp_names: &[&clean_parser::SurfaceName],
+) -> TacticResult {
     for name in hyp_names {
         super::congr_obtain::revert(state, name)?;
     }
@@ -226,19 +228,39 @@ pub(crate) fn revert_many(state: &mut ProofState, hyp_names: &[&str]) -> TacticR
 /// ```
 /// Both `h` (depends on `x`) and `x` are reverted. `h` is reverted first
 /// since it depends on `x`.
+#[cfg(test)]
 pub(crate) fn revert_with_deps(
     state: &mut ProofState,
-    hyp_name: &str,
-) -> Result<Vec<String>, TacticError> {
+    hyp_name: &clean_parser::SurfaceName,
+) -> Result<Vec<clean_parser::SurfaceName>, TacticError> {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Find the target hypothesis
     let target_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     let target_fvar = target_decl.fvar;
+
+    revert_fvar_with_deps(state, target_fvar)
+        .map(|reverted| reverted.into_iter().map(|(_, name)| name).collect())
+}
+
+/// Revert an exact local and its dependents, retaining identities in the
+/// returned revert order. Internal traversals must not re-resolve duplicate names.
+pub(crate) fn revert_fvar_with_deps(
+    state: &mut ProofState,
+    target_fvar: clean_kernel::FVarId,
+) -> Result<Vec<(clean_kernel::FVarId, clean_parser::SurfaceName)>, TacticError> {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    if !goal.local_ctx.iter().any(|decl| decl.fvar == target_fvar) {
+        return Err(TacticError::HypothesisNotFound(crate::error_render::fvar(
+            target_fvar,
+            None,
+        )));
+    }
 
     // Compute the set of FVarIds that need to be reverted.
     // Start with the target, then find all hypotheses whose types
@@ -253,8 +275,7 @@ pub(crate) fn revert_with_deps(
             if to_revert.contains(&decl.fvar) {
                 continue;
             }
-            let fvars_in_ty = collect_fvars(&decl.ty);
-            if fvars_in_ty.iter().any(|fv| to_revert.contains(fv)) {
+            if super::major_dependents::generalizing_depends_on(state, decl, &to_revert) {
                 to_revert.insert(decl.fvar);
                 added = true;
             }
@@ -266,18 +287,17 @@ pub(crate) fn revert_with_deps(
 
     // Collect names in reverse context order (last-added dependents first)
     // so that dependents are reverted before their dependencies.
-    let revert_order: Vec<String> = goal
+    let revert_order: Vec<_> = goal
         .local_ctx
         .iter()
         .rev()
         .filter(|d| to_revert.contains(&d.fvar))
-        .map(|d| d.name.clone())
+        .map(|d| (d.fvar, d.name.clone()))
         .collect();
 
-    // Revert in the computed order
-    for name in &revert_order {
-        super::congr_obtain::revert(state, name)?;
-    }
+    // Construct the complete telescope once, retaining definitions and scope.
+    let fvars: Vec<_> = revert_order.iter().map(|(fvar, _)| *fvar).collect();
+    super::major_dependents::revert_fvars(state, &fvars)?;
 
     Ok(revert_order)
 }
@@ -308,7 +328,7 @@ pub(crate) fn revert_with_deps(
 pub(crate) fn generalize_in_goal(
     state: &mut ProofState,
     term: Expr,
-    var_name: &str,
+    var_name: &clean_parser::SurfaceName,
 ) -> TacticResult {
     super::generalize::generalize(state, term, var_name)
 }
@@ -324,7 +344,11 @@ pub(crate) fn generalize_in_goal(
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn specialize_single(state: &mut ProofState, hyp_name: &str, arg: Expr) -> TacticResult {
+pub(crate) fn specialize_single(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+    arg: Expr,
+) -> TacticResult {
     super::hypothesis::specialize(state, hyp_name, arg)
 }
 
@@ -339,6 +363,9 @@ pub(crate) fn specialize_single(state: &mut ProofState, hyp_name: &str, arg: Exp
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
-pub(crate) fn revert_single(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub(crate) fn revert_single(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+) -> TacticResult {
     super::congr_obtain::revert(state, hyp_name)
 }

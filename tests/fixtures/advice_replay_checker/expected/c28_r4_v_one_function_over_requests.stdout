@@ -1,0 +1,7 @@
+conv-both: ACCEPT cursor=8
+conv-same: ACCEPT cursor=1
+conv-differ: REFUSE terms differ at 7
+conv-truncated: REFUSE no token at 2
+conv-wrong-token: REFUSE step at 0 does not apply
+conv-depth: REFUSE depth
+infer: size=5 cursor=7

@@ -11,8 +11,30 @@
 //!
 //! Every hook call site is gated with `#[cfg(feature = "reduction-stats")]`
 //! so production builds carry zero overhead. The `report`/`reset` API is
-//! always present (returning an empty report when the feature is off) so
+//! always present (returning an empty report when both features are off) so
 //! external diagnostic harnesses need no feature gates of their own.
+//!
+//! The independent `inference-stats` feature adds fixed-size fast-inference
+//! aggregates without enabling the legacy term-formatting hooks above.
+//! Its [`inference_stats_snapshot`] API returns scalar current-thread totals,
+//! and the existing report/reset functions also include those totals. The
+//! actual fast body is compiled only with `not(debug_assertions)`; debug builds
+//! can observe shared memo insertion peaks but not execute that body.
+//!
+//! With `inference-stats`, exactly `CLEAN_INFERENCE_STATS_EARLY=1` enables at
+//! most eight best-effort aggregate stderr records per thread, at fixed
+//! lifetime fast-visit counts 1,000, 10,000, ..., 10,000,000,000. The environment
+//! is read once per thread. Resets do not renew the quota or checkpoints.
+//! Counts can include prelude/earlier checks on the thread: they are not
+//! automatically attributed to one audit. No expression is retained/formatted
+//! or walked by the new hooks. These diagnostics perturb execution and must
+//! stay separate from nominal benchmark/qualification results.
+
+pub(crate) mod inference;
+pub use inference::{
+    inference_stats_report, inference_stats_reset, inference_stats_snapshot, InferenceStats,
+    INFERENCE_NODE_KINDS,
+};
 
 #[cfg(feature = "reduction-stats")]
 use crate::name::Name;
@@ -32,6 +54,7 @@ struct Stats {
     unfold_real: u64,
     unfold_cached: u64,
     proof_irrel_true: u64,
+    proof_irrel_false: u64,
     proof_irrel_none: u64,
     unfold_by_name: HashMap<Name, u64>,
     iota_by_rec: HashMap<Name, u64>,
@@ -95,10 +118,10 @@ pub(crate) fn record_core_pair(a: &Expr, b: &Expr) {
 pub(crate) fn record_proof_irrel(result: Option<bool>) {
     STATS.with(|s| {
         let mut s = s.borrow_mut();
-        if result == Some(true) {
-            s.proof_irrel_true += 1;
-        } else {
-            s.proof_irrel_none += 1;
+        match result {
+            Some(true) => s.proof_irrel_true += 1,
+            Some(false) => s.proof_irrel_false += 1,
+            None => s.proof_irrel_none += 1,
         }
     });
 }
@@ -607,8 +630,10 @@ fn write_shape(e: &Expr, depth: u32, out: &mut String, budget: &mut usize) {
 
 /// Reset all reduction statistics for the current thread.
 ///
-/// No-op unless the `reduction-stats` feature is enabled.
+/// No-op unless `reduction-stats` or `inference-stats` is enabled.
+/// Does not renew the inference diagnostic's lifetime early-output quota.
 pub fn reduction_stats_reset() {
+    inference_stats_reset();
     #[cfg(feature = "reduction-stats")]
     STATS.with(|s| *s.borrow_mut() = Stats::default());
     #[cfg(feature = "reduction-stats")]
@@ -618,7 +643,7 @@ pub fn reduction_stats_reset() {
 /// Render the current thread's reduction statistics as a human-readable
 /// report (top `top` entries per per-name table).
 ///
-/// Returns an empty string unless the `reduction-stats` feature is enabled.
+/// Returns an empty string unless either diagnostic feature is enabled.
 #[must_use]
 pub fn reduction_stats_report(top: usize) -> String {
     #[cfg(feature = "reduction-stats")]
@@ -629,7 +654,7 @@ pub fn reduction_stats_report(top: usize) -> String {
             out.push_str(&format!(
                 "whnf cache: {} hits / {} misses; def_eq cache: {} hits / {} misses\n\
                  unfolds: {} real / {} cached; lazy-delta loop iterations: {}\n\
-                 proof-irrel: {} true / {} none\n",
+                 proof-irrel: {} true / {} false / {} none\n",
                 s.whnf_hits,
                 s.whnf_misses,
                 s.defeq_hits,
@@ -638,6 +663,7 @@ pub fn reduction_stats_report(top: usize) -> String {
                 s.unfold_cached,
                 s.delta_loop_iters,
                 s.proof_irrel_true,
+                s.proof_irrel_false,
                 s.proof_irrel_none,
             ));
             {
@@ -670,12 +696,13 @@ pub fn reduction_stats_report(top: usize) -> String {
                     out.push_str(&format!("  {count:>12}  {name}\n"));
                 }
             }
+            out.push_str(&inference_stats_report());
             out
         })
     }
     #[cfg(not(feature = "reduction-stats"))]
     {
         let _ = top;
-        String::new()
+        inference_stats_report()
     }
 }

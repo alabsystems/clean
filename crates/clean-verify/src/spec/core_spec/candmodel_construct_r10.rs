@@ -117,7 +117,7 @@
 //! - `r10_deadConst_cand_mem` — a δ-dead, non-recursor constant is in EVERY
 //!   `IsCandHI` candidate;
 //! - `r10_interp_const_pi_witness : candInterp (pi (sort 0) (sort 0))
-//!   (const kcre_name_12 nil)` — **the ladder's first constant at a PI type.**
+//!   (const fixture_def_env_name nil)` — **the ladder's first constant at a PI type.**
 //!   R9 named that gap ("no rule reaches a const at a PI type at all") and
 //!   attributed it to the head-free wall; the wall is real but it is narrower
 //!   than head-freeness, and this is the part of it that lifts.
@@ -253,7 +253,7 @@ impl Specification {
     /// `add_par_reduces_iota_delta` (`delta_reduct_eq_none_of_defval_none`),
     /// `add_iota_step` (`recmeta_for`, `iota_reduct`), `add_delta_step`
     /// (`defval_for`, `delta_reduct`) and the generated `kernel_core_red_env`
-    /// atoms (`kcre_name_12`, `kcre_name_18`, `kcre_name_27`,
+    /// atoms (`fixture_def_env_name`, `fixture_nat_zero_name`, `fixture_nat_rec_name`,
     /// `kcre_witness_nat_zero_reduct`).
     pub(super) fn add_candmodel_construct_r10(&mut self) -> Result<(), SpecError> {
         // --- Group A: the two lambda projections and the settlement ---
@@ -307,7 +307,7 @@ impl Specification {
             VAL_R10_STUCKOMEGA_DELTA_NONE.to_string(),
             &["delta_reduct", "the_red_env"],
             "The counterexample's three-argument Nat.rec spine has NO delta reduct over the real \
-             reflected environment — one Eq.refl, because kcre_name_27 carries no definitional \
+             reflected environment — one Eq.refl, because fixture_nat_rec_name carries no definitional \
              value. R5's r5_natRecV3_delta_none at the omega-bearing argument list.",
         )?;
         add_thm(
@@ -336,7 +336,7 @@ impl Specification {
             VAL_R10_NATZERO_WHNFACC.to_string(),
             &["whnfAcc_const_dead"],
             "The real reflected Nat.zero constructor is strongly normalizing — R9's \
-             whnfAcc_const_dead at kcre_name_18, whose defval lookup is one Eq.refl. This is what \
+             whnfAcc_const_dead at fixture_nat_zero_name, whose defval lookup is one Eq.refl. This is what \
              puts the counterexample's argument in the domain candidate whnf_acc.",
         )?;
         add_thm(
@@ -653,7 +653,7 @@ impl Specification {
             ty_r10_deadconst_headinert(),
             VAL_R10_DEADCONST_HEADINERT.to_string(),
             &["HeadInert", "inertConst_headInert"],
-            "A REAL reflected kernel constant is head-inert: kcre_name_12 (the inductive type \
+            "A REAL reflected kernel constant is head-inert: fixture_def_env_name (the inductive type \
              DefEnv), whose defval and recmeta lookups over the real environment are both one \
              Eq.refl. The premise gate's unconditional supply for HeadInert, and the entry point \
              of the unlock.",

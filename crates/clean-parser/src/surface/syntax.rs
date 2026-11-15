@@ -4,6 +4,8 @@
 
 //! Macro and notation syntax types for surface declarations.
 
+use super::name::SurfaceName;
+
 use super::{Span, SurfaceExpr};
 
 // ============================================================================
@@ -24,7 +26,7 @@ pub enum SyntaxPatternItem {
     Literal(String),
     /// Variable binding with optional category: `x`, `cond:term`, `body:tactic`
     Variable {
-        name: String,
+        name: SurfaceName,
         /// The syntax category (e.g., "term", "tactic"), if specified
         category: Option<String>,
     },
@@ -91,5 +93,5 @@ pub enum NotationItem {
     /// Literal token: `"+"`, `"⟨"`, `","`
     Literal(String),
     /// Variable to be filled: `a`, `b`
-    Variable(String),
+    Variable(SurfaceName),
 }

@@ -80,6 +80,11 @@ pub(crate) struct MatchTarget {
     /// The normalised target. Equal to `source` when neither step fired, which
     /// is the overwhelmingly common case.
     target: Expr,
+    /// The goal universe parameters `source` and `target` mention — rigid for
+    /// every universe-polymorphic candidate matched against them — computed
+    /// on first use and shared by every candidate, for the reason this type
+    /// exists at all.
+    level_params: std::cell::OnceCell<Vec<Name>>,
 }
 
 impl MatchTarget {
@@ -94,7 +99,22 @@ impl MatchTarget {
         MatchTarget {
             source: expr.clone(),
             target,
+            level_params: std::cell::OnceCell::new(),
         }
+    }
+
+    /// The goal's universe parameters this subterm mentions, which a match
+    /// may never assign (see `super::lemma_levels::goal_level_params`).
+    pub(crate) fn level_params(&self) -> &[Name] {
+        self.level_params.get_or_init(|| {
+            let mut out = super::lemma_levels::goal_level_params(&self.target);
+            for name in super::lemma_levels::goal_level_params(&self.source) {
+                if !out.contains(&name) {
+                    out.push(name);
+                }
+            }
+            out
+        })
     }
 
     /// The subterm being rewritten — what a rewrite must be stated over.

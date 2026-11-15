@@ -193,7 +193,7 @@ impl ReducedContext {
 
 /// The kernel `False` constant, matched exactly as the e2e helper does:
 /// `Const(Name "False")` with no level arguments.
-pub fn false_expr() -> Expr {
+pub(crate) fn false_expr() -> Expr {
     Expr::const_(Name::from_string("False"), Vec::new())
 }
 

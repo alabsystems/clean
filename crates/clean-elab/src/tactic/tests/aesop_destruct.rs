@@ -63,8 +63,9 @@ fn test_destruct_basic() {
         env,
         r,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -72,7 +73,10 @@ fn test_destruct_basic() {
 
     // Verify initial state: has P, no Q
     let goal = state.current_goal().unwrap();
-    let has_p_before = goal.local_ctx.iter().any(|d| d.name == "hp");
+    let has_p_before = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("hp"));
     let has_q_before = goal
         .local_ctx
         .iter()
@@ -93,7 +97,10 @@ fn test_destruct_basic() {
     let goal = state
         .current_goal()
         .expect("should have a goal after failed search");
-    let has_hp_after = goal.local_ctx.iter().any(|d| d.name == "hp");
+    let has_hp_after = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("hp"));
     assert!(
         has_hp_after,
         "hp : P should be preserved after failed aesop search (tree-based rollback)"
@@ -147,8 +154,9 @@ fn test_destruct_no_infinite_loop() {
         env,
         r,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -228,14 +236,16 @@ fn test_destruct_preserves_other_hyps() {
         s,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(100),
-                name: "hp".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hp"),
                 ty: p.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(101),
-                name: "hq".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hq"),
                 ty: q.clone(),
                 value: None,
             },
@@ -255,8 +265,14 @@ fn test_destruct_preserves_other_hyps() {
     let goal = state
         .current_goal()
         .expect("should have a goal after failed search");
-    let has_hq = goal.local_ctx.iter().any(|d| d.name == "hq");
-    let has_hp = goal.local_ctx.iter().any(|d| d.name == "hp");
+    let has_hq = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("hq"));
+    let has_hp = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("hp"));
     assert!(
         has_hq,
         "hq : Q should be preserved after failed aesop search"
@@ -299,8 +315,9 @@ fn setup_builder_test(builder: AesopRuleBuilder) -> ProofState {
         env,
         r,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p,
             value: None,
         }],
@@ -329,11 +346,19 @@ fn test_destruct_vs_forward() {
     // Both failed searches should preserve state via tree-based backtracking
     let forward_has_hp = state_forward
         .current_goal()
-        .map(|g| g.local_ctx.iter().any(|d| d.name == "hp"))
+        .map(|g| {
+            g.local_ctx
+                .iter()
+                .any(|d| d.name == clean_parser::SurfaceName::generated_path("hp"))
+        })
         .unwrap_or(false);
     let destruct_has_hp = state_destruct
         .current_goal()
-        .map(|g| g.local_ctx.iter().any(|d| d.name == "hp"))
+        .map(|g| {
+            g.local_ctx
+                .iter()
+                .any(|d| d.name == clean_parser::SurfaceName::generated_path("hp"))
+        })
         .unwrap_or(false);
     assert!(
         forward_has_hp && destruct_has_hp,

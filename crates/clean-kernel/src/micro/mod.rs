@@ -47,9 +47,5 @@ mod types;
 
 pub use checker::MicroChecker;
 pub use env::{MicroConst, MicroEnv};
-pub use translate::{
-    cross_validate_with_micro, diversity_check_rfl, DiversityOutcome, TranslateError,
-};
-pub use types::{
-    CrossValidationError, MicroCert, MicroError, MicroExpr, MicroLevel, MicroLiteral, MicroResult,
-};
+pub use translate::{diversity_check_rfl, DiversityOutcome, TranslateError};
+pub use types::{MicroCert, MicroError, MicroExpr, MicroLevel, MicroLiteral, MicroResult};

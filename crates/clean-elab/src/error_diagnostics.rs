@@ -15,6 +15,10 @@ impl ElabError {
     #[must_use]
     pub fn agent_diagnostics(&self) -> Vec<AgentDiagnostic> {
         match self {
+            // Attribution is presentation, not classification: a wrapped
+            // error keeps the machine diagnostics of the error it wraps.
+            Self::InTactic { source, .. } => source.agent_diagnostics(),
+            Self::DerivingHandlerFailed { error, .. } => error.agent_diagnostics(),
             Self::UnknownIdentWithSuggestions { name, suggestions } => {
                 let mut diag = AgentDiagnostic::error(
                     "ident.nearest_theorems",
@@ -33,7 +37,12 @@ impl ElabError {
             // across it. Deliberately no `replacement`: none of the three
             // options is a token swap, and offering one as if it were is the
             // failure mode this diagnostic replaces.
-            Self::RecursionOutsideFragment { name, decl, params } => {
+            Self::RecursionOutsideFragment {
+                name,
+                decl,
+                params,
+                detail,
+            } => {
                 vec![AgentDiagnostic::error(
                     "recursion.outside_fragment",
                     format!("`{name}` is the name being defined: `{decl}` is recursive"),
@@ -42,6 +51,7 @@ impl ElabError {
                     ("identifier", name.clone()),
                     ("declaration", decl.clone()),
                     ("parameters", params.to_string()),
+                    ("form", detail.clone()),
                     (
                         "supported",
                         "structural; well-founded with a termination_by measure \

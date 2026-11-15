@@ -249,7 +249,31 @@ mod tests {
                 break message;
             }
         };
+        write_message(
+            &mut client_write,
+            &json!({
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "$/lean/plainGoal",
+                "params": {
+                    "textDocument": { "uri": uri },
+                    "position": { "line": 0, "character": 0 }
+                }
+            }),
+        )
+        .await;
+        let outside_response = loop {
+            let message = timeout_next(&mut reader).await;
+            if message.get("id").and_then(Value::as_i64) == Some(3) {
+                break message;
+            }
+        };
         server.abort();
+
+        assert!(
+            outside_response.get("result").is_some_and(Value::is_null),
+            "plainGoal outside a tactic snapshot must reply with null: {outside_response}"
+        );
 
         let goals: Vec<String> = goal_response["result"]["goals"]
             .as_array()
@@ -264,6 +288,10 @@ mod tests {
             "$/lean/plainGoal returned no goal for `skip`; the ban-list assertion \
              below would be vacuous. Response: {goal_response}"
         );
+        let rendered = goal_response["result"]["rendered"]
+            .as_str()
+            .expect("plainGoal must provide Lean's Markdown rendered field");
+        assert!(rendered.starts_with("```lean\n") && rendered.ends_with("\n```"));
         assert!(
             !diagnostic_messages.is_empty(),
             "the document's two failing declarations published no diagnostics; \
@@ -272,7 +300,12 @@ mod tests {
 
         for goal in &goals {
             assert_no_debug_render("$/lean/plainGoal", goal);
+            assert!(
+                rendered.contains(goal),
+                "rendered reply dropped the live goal"
+            );
         }
+        assert_no_debug_render("$/lean/plainGoal rendered", rendered);
         for message in &diagnostic_messages {
             assert_no_debug_render("textDocument/publishDiagnostics", message);
         }

@@ -14,7 +14,7 @@
 use super::{
     known_constant, mentions, strip_parens, unsupported, variant_label, ElabError, Environment,
 };
-use clean_parser::{SurfaceArg, SurfaceBinder, SurfaceExpr};
+use clean_parser::{SurfaceArg, SurfaceBinder, SurfaceExpr, SurfaceName};
 
 /// The classification of one target position of a constructor's conclusion.
 pub(super) enum TargetPos {
@@ -23,7 +23,7 @@ pub(super) enum TargetPos {
     /// bare occurrence of a declared binder whose declared type is beyond
     /// doubt the index type (see [`classify_target`]). No equation is
     /// minted — the v1/Brick-1 byte-stability minimization.
-    Subst { var: String },
+    Subst { var: SurfaceName },
     /// Every other position: the disjunct carries the index equation
     /// `written = vᵢ` (written target on the LEFT — the pinned
     /// orientation), and the intro theorem closes it with
@@ -68,7 +68,7 @@ fn contains_hole(expr: &SurfaceExpr) -> bool {
 /// shape, so conservative `false` on anything unrecognized is safe.
 fn surface_eq(a: &SurfaceExpr, b: &SurfaceExpr) -> bool {
     match (strip_parens(a), strip_parens(b)) {
-        (SurfaceExpr::Ident(_, x), SurfaceExpr::Ident(_, y)) => x == y,
+        (SurfaceExpr::Ident(_, x), SurfaceExpr::Ident(_, y)) => x.same_syntax(y),
         (SurfaceExpr::Lit(_, x), SurfaceExpr::Lit(_, y)) => x == y,
         (SurfaceExpr::App(_, hx, xs), SurfaceExpr::App(_, hy, ys)) => {
             surface_eq(hx, hy)
@@ -111,13 +111,13 @@ fn surface_eq(a: &SurfaceExpr, b: &SurfaceExpr) -> bool {
 ///   provided it is hole-free and does not mention the predicate.
 pub(super) fn classify_target(
     target: &SurfaceExpr,
-    short: &str,
+    short: &SurfaceName,
     arity: usize,
-    ctor_name: &str,
+    ctor_name: &SurfaceName,
     what: &str,
     binders: &[SurfaceBinder],
     idx_tys: &[&SurfaceExpr],
-    params: &[String],
+    params: &[SurfaceName],
     env: &Environment,
 ) -> Result<Vec<TargetPos>, ElabError> {
     let shape_err = || {
@@ -128,7 +128,7 @@ pub(super) fn classify_target(
                 "`{short} {} a₁ … a{arity}` — the declaration-parameter row \
                  exactly as declared, then exactly {arity} positional target \
                  argument(s)",
-                params.join(" ")
+                super::join_names(params)
             )
         };
         unsupported(format!(
@@ -141,7 +141,7 @@ pub(super) fn classify_target(
     let SurfaceExpr::App(_, head, all_args) = strip_parens(target) else {
         return Err(shape_err());
     };
-    if !matches!(strip_parens(head), SurfaceExpr::Ident(_, id) if id == short) {
+    if !super::is_predicate_head(head, short) {
         return Err(shape_err());
     }
     if all_args.len() != params.len() + arity
@@ -159,10 +159,10 @@ pub(super) fn classify_target(
 
     // Bare-position occurrence counts drive the substitution/equation split.
     let bare_name = |a: &SurfaceArg| match strip_parens(&a.expr) {
-        SurfaceExpr::Ident(_, id) => Some(id.clone()),
+        SurfaceExpr::Ident(_, id) if !id.is_relative_constructor() => Some(id.clone()),
         _ => None,
     };
-    let bares: Vec<Option<String>> = args.iter().map(bare_name).collect();
+    let bares: Vec<Option<SurfaceName>> = args.iter().map(bare_name).collect();
 
     let mut positions = Vec::with_capacity(arity);
     for (i, arg) in args.iter().enumerate() {
@@ -176,9 +176,9 @@ pub(super) fn classify_target(
             )));
         }
         {
-            let mut bound: Vec<&str> = Vec::new();
-            let mut fvs: Vec<&str> = Vec::new();
-            super::all_idents(arg, &mut bound, &mut fvs).map_err(|label| {
+            let mut bound: Vec<&SurfaceName> = Vec::new();
+            let mut fvs: Vec<&SurfaceName> = Vec::new();
+            super::all_predicate_idents(arg, short, &mut bound, &mut fvs).map_err(|label| {
                 unsupported(format!(
                     "{what}: a target argument of constructor `{ctor_name}` uses \
                      the non-applicative surface form `{label}`; target arguments \
@@ -200,7 +200,13 @@ pub(super) fn classify_target(
             });
             continue;
         };
-        if id.contains("_coind") {
+        if short.has_prefix(id) {
+            return Err(unsupported(format!(
+                "{what}: constructor `{ctor_name}` uses target variable `{id}` \
+                 that shadows the predicate `{short}` or its qualified root"
+            )));
+        }
+        if super::has_generated_marker(id) {
             return Err(unsupported(format!(
                 "{what}: constructor `{ctor_name}` uses the target variable `{id}`, \
                  which carries the `_coind` marker reserved for generated binder \
@@ -257,10 +263,10 @@ pub(super) fn classify_target(
     // index position. This is where a compound target over an UNDECLARED
     // variable (`Bad (stl s) t` with no `(s : Str)` binder) refuses: a
     // fresh variable is only bindable by substituting at a bare position.
-    let subst_names: Vec<&str> = positions
+    let subst_names: Vec<&SurfaceName> = positions
         .iter()
         .filter_map(|p| match p {
-            TargetPos::Subst { var } => Some(var.as_str()),
+            TargetPos::Subst { var } => Some(var),
             TargetPos::Equate { .. } => None,
         })
         .collect();
@@ -268,13 +274,13 @@ pub(super) fn classify_target(
         let TargetPos::Equate { written } = pos else {
             continue;
         };
-        let mut bound: Vec<&str> = Vec::new();
-        let mut fvs: Vec<&str> = Vec::new();
+        let mut bound: Vec<&SurfaceName> = Vec::new();
+        let mut fvs: Vec<&SurfaceName> = Vec::new();
         // Vetted applicative above; an error here is unreachable.
-        let _ = super::all_idents(written, &mut bound, &mut fvs);
+        let _ = super::all_predicate_idents(written, short, &mut bound, &mut fvs);
         for fv in fvs {
             if subst_names.contains(&fv)
-                || binders.iter().any(|b| b.name == fv)
+                || binders.iter().any(|b| &b.name == fv)
                 || params.iter().any(|p| p == fv)
                 || known_constant(env, fv)
             {
@@ -296,8 +302,8 @@ pub(super) fn classify_target(
 /// declared-binder substitution minimization: a binder type mentioning a
 /// constructor-local name could change meaning under the shared index row.
 fn type_fvs_all_constants(ty: &SurfaceExpr, env: &Environment) -> bool {
-    let mut bound: Vec<&str> = Vec::new();
-    let mut fvs: Vec<&str> = Vec::new();
+    let mut bound: Vec<&SurfaceName> = Vec::new();
+    let mut fvs: Vec<&SurfaceName> = Vec::new();
     if super::all_idents(ty, &mut bound, &mut fvs).is_err() {
         return false;
     }
@@ -325,11 +331,14 @@ fn type_fvs_all_constants(ty: &SurfaceExpr, env: &Environment) -> bool {
 ///   applicative fragment `all_idents` accepts.
 pub(super) fn rename_free(
     expr: &SurfaceExpr,
-    map: &[(String, String)],
+    map: &[(SurfaceName, SurfaceName)],
 ) -> Result<SurfaceExpr, String> {
     let sub = |e: &SurfaceExpr| rename_free(e, map);
     match expr {
         SurfaceExpr::Ident(sp, id) => {
+            if id.is_relative_constructor() {
+                return Err("relative constructor selector cannot be alpha-renamed".to_owned());
+            }
             if let Some((_, dst)) = map.iter().find(|(src, _)| src == id) {
                 return Ok(SurfaceExpr::Ident(*sp, dst.clone()));
             }

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -48,3 +49,36 @@ def test_unrecognized_vendor_entries_fail_closed(tmp_path: Path) -> None:
         "internal-copy: missing .cargo-checksum.json",
         "loose-internal.txt: unexpected top-level file",
     ]
+
+
+MANIFEST = ROOT / "data" / "vendor_manifest.json"
+LOCK = ROOT / "Cargo.lock"
+
+
+def test_committed_manifest_is_the_full_set_regenerated_from_the_lock() -> None:
+    """Control: the real manifest passes, and covers every crates.io package."""
+    assert generator.check_committed(str(MANIFEST), str(LOCK)) == 0
+    rows = json.loads(MANIFEST.read_text())["crates"]
+    assert len(rows) == len(generator.lock_derived_rows(str(LOCK)))
+
+
+def test_manifest_missing_one_locked_crate_is_refused(tmp_path: Path, capsys) -> None:
+    """R165's 342-of-389 manifest, reduced to one removed row: refused for MISSING."""
+    manifest = json.loads(MANIFEST.read_text())
+    removed = manifest["crates"].pop(len(manifest["crates"]) // 2)
+    mutant = tmp_path / "vendor_manifest.json"
+    mutant.write_text(json.dumps(manifest))
+
+    assert generator.check_committed(str(mutant), str(LOCK)) == 1
+    said = capsys.readouterr().err
+    assert "MISSING: 1 of" in said
+    assert f"{removed['name']} {removed['version']}" in said
+
+
+def test_lock_changed_without_regenerating_is_refused(tmp_path: Path, capsys) -> None:
+    """86588a484's shape: a lock edit that moves no crates.io package still reds."""
+    lock = tmp_path / "Cargo.lock"
+    lock.write_bytes(LOCK.read_bytes() + b"\n")
+
+    assert generator.check_committed(str(MANIFEST), str(lock)) == 1
+    assert "STALE:" in capsys.readouterr().err

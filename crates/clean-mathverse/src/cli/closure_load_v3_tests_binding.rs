@@ -53,7 +53,8 @@ fn test_independent_eager_vs_lazy_parity_minimal() {
 
     // Build the lazy source and run the EXACT load-time verification.
     let mut source = ShardConstantSource::from_dir(shards.path()).expect("source");
-    let (any_v3, verified) = verify_closure_shards_against_oleans(&mut source, root.path());
+    let (any_v3, verified) =
+        verify_closure_shards_against_oleans(&mut source, root.path(), &mut LeanWorldScope::new());
     assert!(any_v3, "the v3 fail-closed shard must be recognized");
     assert_eq!(
         verified, 1,
@@ -148,7 +149,8 @@ fn test_load_time_hash_mismatch_refuses() {
     std::fs::write(&olean, &data).unwrap();
 
     let mut source = ShardConstantSource::from_dir(shards.path()).expect("source");
-    let (any_v3, verified) = verify_closure_shards_against_oleans(&mut source, root.path());
+    let (any_v3, verified) =
+        verify_closure_shards_against_oleans(&mut source, root.path(), &mut LeanWorldScope::new());
     assert!(any_v3, "still a v3 fail-closed shard");
     assert_eq!(verified, 0, "mismatched olean must NOT verify");
     // No served name resolves (all => eager).
@@ -179,7 +181,11 @@ fn test_load_time_arena_corruption_refuses() {
     // later `verified == 0` is attributable to the arena corruption alone.
     {
         let mut pristine = ShardConstantSource::from_dir(shards.path()).expect("source");
-        let (any_v3, verified) = verify_closure_shards_against_oleans(&mut pristine, root.path());
+        let (any_v3, verified) = verify_closure_shards_against_oleans(
+            &mut pristine,
+            root.path(),
+            &mut LeanWorldScope::new(),
+        );
         assert!(any_v3, "pristine shard is v3 fail-closed-bound");
         assert_eq!(verified, 1, "pristine shard verifies (positive control)");
     }
@@ -224,7 +230,11 @@ fn test_load_time_arena_corruption_refuses() {
             caught_any = true;
             break;
         };
-        let (any_v3, verified) = verify_closure_shards_against_oleans(&mut source, root.path());
+        let (any_v3, verified) = verify_closure_shards_against_oleans(
+            &mut source,
+            root.path(),
+            &mut LeanWorldScope::new(),
+        );
         if !any_v3 {
             // A corrupted header field flipped the fail-closed marker etc.; still a
             // refusal. (Should not happen for an arena-only patch, but it is sound.)
@@ -295,7 +305,8 @@ fn test_foreign_constant_laundering_refused() {
     std::fs::write(shards.path().join("Innocent.mathverse"), &buf).unwrap();
 
     let mut source = ShardConstantSource::from_dir(shards.path()).expect("source");
-    let (any_v3, verified) = verify_closure_shards_against_oleans(&mut source, root.path());
+    let (any_v3, verified) =
+        verify_closure_shards_against_oleans(&mut source, root.path(), &mut LeanWorldScope::new());
     assert!(any_v3, "it IS a v3 fail-closed shard");
     assert_eq!(
         verified, 0,
@@ -348,7 +359,8 @@ fn test_fail_closed_missing_not_served() {
     std::fs::write(shards.path().join("NoGate.mathverse"), &buf).unwrap();
 
     let mut source = ShardConstantSource::from_dir(shards.path()).expect("source");
-    let (any_v3, verified) = verify_closure_shards_against_oleans(&mut source, root.path());
+    let (any_v3, verified) =
+        verify_closure_shards_against_oleans(&mut source, root.path(), &mut LeanWorldScope::new());
     assert!(
         !any_v3,
         "a shard without fail_closed_verified is not a v3-bound shard"
@@ -461,7 +473,8 @@ fn test_bounded_base_serves_after_load_time_verify() {
 
     // The fix: run the load-time content-binding verification (the call
     // `build_lazy_base` now makes right after `from_dir`).
-    let (any_v3, verified) = verify_closure_shards_against_oleans(&mut source, root.path());
+    let (any_v3, verified) =
+        verify_closure_shards_against_oleans(&mut source, root.path(), &mut LeanWorldScope::new());
     assert!(any_v3, "the Minimal shard is v3 fail-closed-bound");
     assert_eq!(verified, 1, "the Minimal shard verifies against its olean");
 

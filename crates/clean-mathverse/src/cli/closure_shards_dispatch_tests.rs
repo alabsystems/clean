@@ -149,18 +149,29 @@ fn test_build_closure_shards_subcommand_produces_v3_shards() {
 /// `cmd_build_closure_shards` is best-effort and never aborts on a per-module
 /// resolve/convert miss: a module that does not resolve under ANY search path is
 /// reported and SKIPPED rather than erroring (a partial/empty cache simply forces
-/// the eager fallback when later served). Here the only import (`Init`) resolves
-/// via the toolchain's default search paths, so the command succeeds with a
-/// non-empty cache; a module unresolvable everywhere would be skipped the same
-/// way without erroring. The empty-cache → eager invariant itself is covered by
-/// `test_cache_populated_false_when_empty` and the closure-serve precedence
-/// tests.
+/// the eager fallback when later served). The target is written by Clean's
+/// exporter (of no Lean world, docs/DECISIONS.md R81), and its one import names
+/// a module no search path holds. The empty-cache → eager invariant itself is
+/// covered by `test_cache_populated_false_when_empty` and the closure-serve
+/// precedence tests.
+///
+/// Until 2026-10-17 the target was `Minimal` (Lean v4.13.0), whose `Init`
+/// resolved to the pinned toolchain's on a box that has it: a closure of two
+/// Lean worlds, which the builder now refuses by name
+/// (`per_constant_world_gate_tests.rs`), and no unresolvable module at all.
 #[test]
 fn test_build_closure_shards_is_best_effort_and_does_not_error() {
     let out = tempfile::tempdir().unwrap();
     let root = tempfile::tempdir().unwrap();
     let target = root.path().join("Target.olean");
-    std::fs::copy(minimal_olean(), &target).expect("copy target");
+    let bytes = clean_olean::OleanExporter::export_minimal(
+        &[("NoSuch.Module.Anywhere", false)],
+        &[],
+        &[],
+        "1ea5000000000000000000000000000000000000",
+    )
+    .expect("export a Clean-written target");
+    std::fs::write(&target, bytes).expect("write target");
 
     let args = BuildClosureShardsArgs {
         target,

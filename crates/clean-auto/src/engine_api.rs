@@ -39,7 +39,13 @@ pub enum AutomationOutcome {
         /// End-to-end time spent before returning.
         time_ms: u64,
     },
-    /// A solver found a counterexample / refutation.
+    /// A VALIDATED counterexample: a model checked against the goal's real
+    /// definitions, which establishes that the goal is false.
+    ///
+    /// No engine produces this today. An SMT satisfying assignment is a model
+    /// of the bridge's ABSTRACTION (operations outside its theories are
+    /// uninterpreted), so it is reported as [`Self::Unknown`] with a reason
+    /// that says so — see `SmtVerificationResult::unvalidated_model_reason`.
     Refuted {
         /// Strategy that produced the outcome.
         source: AutomationSource,
@@ -152,7 +158,7 @@ impl<'a> AutomationQuery<'a> {
     }
 
     /// Supply a premise database for MePo scoring.
-    pub fn with_premise_db(mut self, premise_db: &'a PremiseDatabase) -> Self {
+    pub(crate) fn with_premise_db(mut self, premise_db: &'a PremiseDatabase) -> Self {
         self.premise_db = Some(premise_db);
         self
     }
@@ -246,7 +252,7 @@ impl<'a> AutomationRequest<'a> {
     }
 
     /// Supply a premise database for MePo scoring.
-    pub fn with_premise_db(mut self, premise_db: &'a PremiseDatabase) -> Self {
+    pub(crate) fn with_premise_db(mut self, premise_db: &'a PremiseDatabase) -> Self {
         self.premise_db = Some(premise_db);
         self
     }

@@ -164,11 +164,10 @@ pub fn measurability_with_config(
 pub(crate) fn is_measurability_goal(expr: &Expr) -> bool {
     let head = get_app_head(expr);
     if let ExprKind::Const(name, _) = head.kind() {
-        let s = name.to_string();
-        s == "Measurable"
-            || s == "AEMeasurable"
-            || s == "StronglyMeasurable"
-            || s == "AEStronglyMeasurable"
+        matches!(
+            super::util::builtin_component(name),
+            Some("Measurable" | "AEMeasurable" | "StronglyMeasurable" | "AEStronglyMeasurable")
+        )
     } else {
         false
     }

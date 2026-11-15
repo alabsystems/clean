@@ -2541,8 +2541,14 @@ fn test_par_reduces_p_app_redex_is_zero_axiom_derived_proved() {
         .dependencies
         .as_ref()
         .expect("par_reduces_p_app_redex should record deps");
+    // The recon brick follows the proof term: b2b6a9281 ("Model guarded iota
+    // with schematic RHS and retained universes") replaced the c-side glue
+    // `iota_reduct_par_app_recon` with the canonical `iota_reduct_full_recon`
+    // in BOTH `par_reduces_p_app_redex_proof()` and the recorded deps, and this
+    // pin was left naming the old brick. Not relaxed: the head-preservation
+    // bricks are pinned unchanged.
     assert!(
-        deps.contains("iota_reduct_par_app_recon")
+        deps.contains("iota_reduct_full_recon")
             && deps.contains("par_reduces_p_preserves_head_const_below_boundary")
             && deps.contains("par_reduces_p_preserves_head_const_no_recmeta")
             && deps.contains("recenv_ctor_no_recmeta_cname")
@@ -3995,10 +4001,20 @@ fn test_par_reduces_p_star_confluence_is_zero_axiom_derived_proved() {
 #[test]
 fn test_red_env_and_projections_registered() {
     let spec = build_par_test_spec();
-    for name in ["RedEnv", "RedEnv.mk", "RedEnv.rec", "red_rec", "red_def"] {
+    for name in [
+        "RedEnv",
+        "RedEnv.mk",
+        "RedEnv.rec",
+        "red_rec",
+        "red_def",
+        "red_ind_ctor",
+        "IndCtorEnv",
+        "kind_for",
+        "kctor_for",
+    ] {
         assert!(
             spec.definitions().contains_key(name),
-            "{name} should be registered (RedEnv = RecEnv × DefEnv carrier)"
+            "{name} should be registered in the shared reduction/metadata carrier"
         );
     }
 }

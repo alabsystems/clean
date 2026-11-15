@@ -67,12 +67,14 @@ fn test_build_or_elim_chain_two_values_structure() {
             target: target.clone(),
             local_ctx: vec![],
             tag: None,
+            case_binders: Vec::new(),
         },
         Goal {
             meta_id: meta_1,
             target: target.clone(),
             local_ctx: vec![],
             tag: None,
+            case_binders: Vec::new(),
         },
     ];
 
@@ -116,6 +118,7 @@ fn test_build_or_elim_chain_single_value_returns_meta() {
         target: target.clone(),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     }];
     let values = vec![make_nat_literal(0)];
 
@@ -149,6 +152,7 @@ fn test_build_or_elim_chain_three_values_nested() {
             target: target.clone(),
             local_ctx: vec![],
             tag: None,
+            case_binders: Vec::new(),
         });
         values.push(make_nat_literal(i));
     }
@@ -212,27 +216,30 @@ fn test_interval_cases_dependent_target_succeeds() {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_lower".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_lower"),
                 ty: make_nat_le_tc(make_nat_literal(2), Expr::fvar(n_fvar)),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_upper".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_upper"),
                 ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(4)),
                 value: None,
             },
         ],
     );
 
-    let result = interval_cases(&mut state, "n");
+    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(
         result.is_ok(),
         "interval_cases with dependent target should succeed, got: {result:?}"
@@ -249,7 +256,9 @@ fn test_interval_cases_dependent_target_succeeds() {
             "dependent interval sub-goals should preserve the original target"
         );
         assert_eq!(
-            goal.local_ctx.iter().any(|decl| decl.name == "n_eq"),
+            goal.local_ctx
+                .iter()
+                .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("n_eq")),
             idx + 1 < goal_count,
             "only branches backed by an equality lambda may carry n_eq"
         );
@@ -270,27 +279,30 @@ fn test_interval_cases_lt_dependent_target_succeeds() {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_lower".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_lower"),
                 ty: make_nat_lt_tc(make_nat_literal(1), Expr::fvar(n_fvar)),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_upper".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_upper"),
                 ty: make_nat_lt_tc(Expr::fvar(n_fvar), make_nat_literal(5)),
                 value: None,
             },
         ],
     );
 
-    let result = interval_cases(&mut state, "n");
+    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(
         result.is_ok(),
         "interval_cases LT with dependent target should succeed, got: {result:?}"
@@ -304,7 +316,9 @@ fn test_interval_cases_lt_dependent_target_succeeds() {
     for (idx, goal) in state.goals.iter().enumerate() {
         assert_eq!(goal.target, target);
         assert_eq!(
-            goal.local_ctx.iter().any(|decl| decl.name == "n_eq"),
+            goal.local_ctx
+                .iter()
+                .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("n_eq")),
             idx + 1 < goal_count
         );
     }
@@ -324,27 +338,30 @@ fn test_interval_cases_single_value_dependent_target_succeeds() {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_lower".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_lower"),
                 ty: make_nat_le_tc(make_nat_literal(3), Expr::fvar(n_fvar)),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_upper".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_upper"),
                 ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(3)),
                 value: None,
             },
         ],
     );
 
-    let result = interval_cases(&mut state, "n");
+    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(
         result.is_ok(),
         "single-value interval_cases with dependent target should succeed, got: {result:?}"
@@ -354,7 +371,7 @@ fn test_interval_cases_single_value_dependent_target_succeeds() {
     assert!(!state.goals[0]
         .local_ctx
         .iter()
-        .any(|decl| decl.name == "n_eq"));
+        .any(|decl| decl.name == clean_parser::SurfaceName::generated_path("n_eq")));
 }
 
 // =========================================================================
@@ -370,28 +387,31 @@ fn test_interval_cases_inconsistent_bounds_error() {
     let mut state = ProofState::new(env, Expr::const_(Name::from_string("R"), vec![]));
     let n_fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: n_fvar,
-        name: "n".to_string(),
+        name: clean_parser::SurfaceName::generated_path("n"),
         ty: nat_ty.clone(),
         value: None,
     });
 
     let h1_fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: h1_fvar,
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: make_nat_le_tc(make_nat_literal(5), Expr::fvar(n_fvar)),
         value: None,
     });
     let h2_fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: h2_fvar,
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(2)),
         value: None,
     });
 
-    let result = interval_cases(&mut state, "n");
+    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(result.is_err(), "inconsistent bounds should fail");
     let err_msg = format!("{:?}", result.unwrap_err());
     assert!(
@@ -409,28 +429,31 @@ fn test_interval_cases_rejects_large_range() {
     let mut state = ProofState::new(env, Expr::const_(Name::from_string("R"), vec![]));
     let n_fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: n_fvar,
-        name: "n".to_string(),
+        name: clean_parser::SurfaceName::generated_path("n"),
         ty: nat_ty.clone(),
         value: None,
     });
 
     let h1_fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: h1_fvar,
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: make_nat_le_tc(make_nat_literal(0), Expr::fvar(n_fvar)),
         value: None,
     });
     let h2_fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: h2_fvar,
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: make_nat_le_tc(Expr::fvar(n_fvar), make_nat_literal(200)),
         value: None,
     });
 
-    let result = interval_cases(&mut state, "n");
+    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(result.is_err(), "range > 100 should be rejected");
     let err_msg = format!("{:?}", result.unwrap_err());
     assert!(

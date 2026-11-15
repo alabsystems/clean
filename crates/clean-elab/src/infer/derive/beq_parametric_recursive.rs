@@ -46,9 +46,8 @@ pub(super) fn classify_single_param_recursive(
     if binders.len() != 1 {
         return None;
     }
-    let pname = binders[0].name.as_str();
-    let short = ind_name.to_string();
-    let short = short.rsplit('.').next().unwrap_or(&short);
+    let pname = &binders[0].name;
+    let short = clean_parser::SurfaceName::from_name(ind_name.clone()).last_component();
 
     let mut per_ctor = Vec::with_capacity(ctors.len());
     let mut saw_rec = false;
@@ -57,12 +56,14 @@ pub(super) fn classify_single_param_recursive(
         let mut cur = peel(&ctor.ty);
         while let SurfaceExpr::Arrow(_, dom, cod) = cur {
             match peel(dom) {
-                SurfaceExpr::Ident(_, n) if n == pname => fields.push(RecField::Param),
+                SurfaceExpr::Ident(_, n) if !n.is_relative_constructor() && n == pname => {
+                    fields.push(RecField::Param)
+                }
                 // `Ind p` — head is the inductive, sole arg is the parameter.
                 SurfaceExpr::App(_, head, args) => {
-                    let head_ok = matches!(peel(head), SurfaceExpr::Ident(_, n) if n == short);
+                    let head_ok = matches!(peel(head), SurfaceExpr::Ident(_, n) if !n.is_relative_constructor() && n == &short);
                     let arg_ok = args.len() == 1
-                        && matches!(peel(&args[0].expr), SurfaceExpr::Ident(_, n) if n == pname);
+                        && matches!(peel(&args[0].expr), SurfaceExpr::Ident(_, n) if !n.is_relative_constructor() && n == pname);
                     if head_ok && arg_ok {
                         fields.push(RecField::SelfRec);
                         saw_rec = true;
@@ -111,8 +112,8 @@ impl<'a> ElabCtx<'a> {
         let bool_ty = Expr::const_(Name::from_string("Bool"), vec![]);
         let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
         let bool_false = Expr::const_(Name::from_string("Bool.false"), vec![]);
-        let cases_on = Name::from_string(&format!("{ind_name}.casesOn"));
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let cases_on = ind_name.clone().str("casesOn");
+        let rec_name = ind_name.clone().str("rec");
 
         // rec motive: `fun (_ : Ind p) => Ind p → Bool`
         let rec_motive = Expr::lam(

@@ -45,7 +45,7 @@
 
 use crate::error::ElabError;
 use clean_kernel::expr::{ExprKind, Literal};
-use clean_kernel::{Environment, Expr};
+use clean_kernel::{Environment, Expr, Name};
 use clean_runtime::io_runtime::{IoAction, IoError, IoRuntime, IoValue};
 
 /// Errors specific to the IO bridge translation.
@@ -114,6 +114,16 @@ pub(crate) const IO_OP_NAMES: &[&str] = &[
     "IO.monoNanosNow",
     "IO.panic",
 ];
+
+/// An operation provided by the initialized IO bridge, independently of
+/// whether its logical kernel signature has a reducible body. This does not
+/// install an implementation for a user axiom with a similar printed name.
+pub(crate) fn has_runtime_implementation(env: &Environment, name: &Name) -> bool {
+    env.has_io_ops()
+        && IO_OP_NAMES
+            .iter()
+            .any(|operation| *name == Name::from_string(operation))
+}
 
 /// Check whether an expression has IO type via structural name matching.
 ///

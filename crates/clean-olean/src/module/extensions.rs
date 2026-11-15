@@ -7,6 +7,7 @@
 //! Reads persistent environment extension entries from .olean files.
 //! Each extension is a `(Name × Array (Name × DataValue))` pair.
 
+use super::extensions_structure::is_structure_extension_name;
 use super::{
     ParsedAttrKind, ParsedClassEntry, ParsedExtension, ParsedExtensionEntry,
     ParsedExtensionEntryData, ParsedInstanceEntry, ParsedSimpEntry, ParsedSimpEntryKind,
@@ -146,6 +147,8 @@ impl<'a> CompactedRegion<'a> {
             self.read_simp_entry_array(entries_ptr)?
         } else if extension_name == LEAN_ALIAS_EXTENSION {
             (self.read_alias_entry_array(entries_ptr)?, 0)
+        } else if is_structure_extension_name(&extension_name) {
+            self.read_structure_entry_array(entries_ptr)?
         } else {
             (self.read_extension_entry_array(entries_ptr)?, 0)
         };
@@ -598,6 +601,48 @@ impl<'a> CompactedRegion<'a> {
             out_params,
             out_level_params,
         }))
+    }
+
+    /// Decode an `Array Name` object into resolved names; `Ok(None)` when the
+    /// pointer is not an array or an element is not a `Name` object.
+    pub(super) fn read_name_array(&self, ptr: u64) -> OleanResult<Option<Vec<String>>> {
+        if !is_ptr(ptr) {
+            return Ok(None);
+        }
+        let offset = self.ptr_to_offset(ptr)?;
+        let header = self.read_header_at(offset)?;
+        if header.tag != tags::ARRAY && header.tag != tags::STRUCT_ARRAY {
+            return Ok(None);
+        }
+        let size = self.read_usize_at(offset + 8, "Name array")?;
+        self.validate_array_bounds(offset, size)?;
+        let mut out = Vec::with_capacity(size);
+        for i in 0..size {
+            let elem_offset = self.array_elem_offset(offset, i, "Name array")?;
+            let elem_ptr = self.read_u64_at(elem_offset)?;
+            if !is_ptr(elem_ptr) {
+                return Ok(None);
+            }
+            out.push(self.resolve_name_ptr(elem_ptr)?);
+        }
+        Ok(Some(out))
+    }
+
+    /// Decode an `Option Name`: `box(0)` is `none` (→ `Some(None)`), a tag-1
+    /// constructor with one slot is `some n`; anything else is `None`
+    /// (unexpected layout, count as undecoded).
+    pub(super) fn read_option_name(&self, ptr: u64) -> OleanResult<Option<Option<String>>> {
+        if !is_ptr(ptr) {
+            return Ok(Some(None));
+        }
+        let offset = self.ptr_to_offset(ptr)?;
+        let header = self.read_header_at(offset)?;
+        if !header.is_constructor() || header.tag != 1 || header.other < 1 {
+            return Ok(None);
+        }
+        Ok(Some(Some(
+            self.resolve_name_ptr(self.read_u64_at(offset + 8)?)?,
+        )))
     }
 
     /// Decode an `Array Nat` object into its element values.

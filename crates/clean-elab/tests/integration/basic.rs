@@ -233,7 +233,10 @@ fn test_implicit_argument_resolution() {
 
     check_and_add_decl(&mut env, "axiom Nat : Type").unwrap();
     check_and_add_decl(&mut env, "axiom zero : Nat").unwrap();
-    check_and_add_decl(&mut env, "def id [A : Type] (x : A) := x").unwrap();
+    // `{A : Type}` is the implicit binder; pinned Lean (v4.30.0-rc2, v4.8.0)
+    // refuses the `[A : Type]` spelling this test once used, because `Type` is
+    // not a class (see the refusal test below).
+    check_and_add_decl(&mut env, "def id {A : Type} (x : A) := x").unwrap();
     check_and_add_decl(&mut env, "def useId := id zero").unwrap();
 
     let use_id = Name::from_string("useId");
@@ -242,5 +245,19 @@ fn test_implicit_argument_resolution() {
         matches!(info.type_.kind(), ExprKind::Const(ref n, _) if n.to_string() == "Nat"),
         "Expected type Nat, got {:?}",
         info.type_
+    );
+}
+
+/// Negative control: an instance-implicit binder over a type that is not a
+/// class is refused, as pinned Lean refuses it ("invalid binder annotation,
+/// type is not a class instance").
+#[test]
+fn test_instance_binder_over_non_class_type_refused() {
+    let mut env = Environment::new();
+    let err = check_and_add_decl(&mut env, "def id [A : Type] (x : A) := x")
+        .expect_err("`[A : Type]` must be refused: `Type` is not a class");
+    assert!(
+        err.contains("not a class instance"),
+        "expected the non-class binder refusal, got: {err}"
     );
 }

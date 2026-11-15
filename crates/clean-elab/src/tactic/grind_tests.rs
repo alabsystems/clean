@@ -15,6 +15,10 @@
 //! a `ProofState`. Full integration testing requires a properly bootstrapped
 //! environment loaded from .olean files.
 
+use super::super::grind_split::{
+    collect_eq_hypotheses, collect_ite_conditions, collect_or_hypotheses,
+    condition_already_decided, split_candidate_conditions,
+};
 use super::*;
 use clean_kernel::level::Level;
 use clean_kernel::name::Name;
@@ -59,90 +63,183 @@ fn test_grind_config_builder() {
     assert_eq!(config.automation_timeout_ms, 50);
 }
 
+/// The first condition `collect_ite_conditions` finds — the single answer
+/// `find_ite_condition` used to give, kept here because these four cases pin
+/// WHICH argument of the spine is the condition (argument 1, not the result
+/// type) and that reading is what the collector must preserve.
+fn first_ite_condition(expr: &Expr) -> Option<Expr> {
+    collect_ite_conditions(expr).into_iter().next()
+}
+
 #[test]
-fn test_find_ite_condition_none_for_non_ite() {
+fn test_collect_ite_conditions_non_ite_yields_none() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
-    assert!(find_ite_condition(&a).is_none());
+    assert!(first_ite_condition(&a).is_none());
 }
 
-#[test]
-fn test_find_ite_condition_detects_ite() {
-    // Build @ite P inst t e
+/// `@ite α c inst t e` / `@dite α c inst t e` — the real five-argument spine
+/// (the condition is argument 1; argument 0 is the result type).
+fn ite_like(head: &str, n_args: usize) -> (Expr, Expr) {
+    let alpha = Expr::const_(Name::from_string("Alpha"), vec![]);
     let p = Expr::const_(Name::from_string("P"), vec![]);
     let inst = Expr::const_(Name::from_string("inst"), vec![]);
     let t = Expr::const_(Name::from_string("t"), vec![]);
     let e = Expr::const_(Name::from_string("e"), vec![]);
-
-    let ite_expr = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::app(
-                    Expr::const_(Name::from_string("ite"), vec![Level::succ(Level::zero())]),
-                    p.clone(),
-                ),
-                inst,
-            ),
-            t,
-        ),
-        e,
-    );
-
-    let result = find_ite_condition(&ite_expr);
-    assert!(result.is_some(), "should detect ite condition");
-}
-
-#[test]
-fn test_find_ite_condition_detects_dite() {
-    // Build @dite P inst t e — same structure as ite
-    let p = Expr::const_(Name::from_string("P"), vec![]);
-    let inst = Expr::const_(Name::from_string("inst"), vec![]);
-    let t = Expr::const_(Name::from_string("t"), vec![]);
-    let e = Expr::const_(Name::from_string("e"), vec![]);
-
-    let dite_expr = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::app(
-                    Expr::const_(Name::from_string("dite"), vec![Level::succ(Level::zero())]),
-                    p.clone(),
-                ),
-                inst,
-            ),
-            t,
-        ),
-        e,
-    );
-
-    let result = find_ite_condition(&dite_expr);
-    assert!(result.is_some(), "should detect dite condition");
-    // The extracted condition should be P (first arg to dite)
-    if let Some(cond) = result {
-        assert_eq!(format!("{cond:?}"), format!("{p:?}"));
+    let args = [alpha, p.clone(), inst, t, e];
+    let mut expr = Expr::const_(Name::from_string(head), vec![Level::succ(Level::zero())]);
+    for arg in args.into_iter().take(n_args) {
+        expr = Expr::app(expr, arg);
     }
+    (expr, p)
 }
 
 #[test]
-fn test_find_ite_condition_insufficient_args() {
-    // ite with only 3 args (needs 4) should not match
-    let p = Expr::const_(Name::from_string("P"), vec![]);
-    let inst = Expr::const_(Name::from_string("inst"), vec![]);
-    let t = Expr::const_(Name::from_string("t"), vec![]);
+fn test_collect_ite_conditions_detects_ite_condition() {
+    let (ite_expr, p) = ite_like("ite", 5);
+    let cond = first_ite_condition(&ite_expr).expect("should detect the ite condition");
+    assert_eq!(cond, p, "the condition is argument 1, not the result type");
+}
 
-    let partial_ite = Expr::app(
-        Expr::app(
-            Expr::app(
-                Expr::const_(Name::from_string("ite"), vec![Level::succ(Level::zero())]),
-                p,
-            ),
-            inst,
-        ),
-        t,
-    );
+#[test]
+fn test_collect_ite_conditions_detects_dite_condition() {
+    let (dite_expr, p) = ite_like("dite", 5);
+    let cond = first_ite_condition(&dite_expr).expect("should detect the dite condition");
+    assert_eq!(cond, p, "the condition is argument 1, not the result type");
+}
 
+#[test]
+fn test_collect_ite_conditions_partial_spine_yields_none() {
+    // Four arguments is a partial application (Lean's isIte needs five).
+    let (partial_ite, _) = ite_like("ite", 4);
     assert!(
-        find_ite_condition(&partial_ite).is_none(),
-        "ite with <4 args should not match"
+        first_ite_condition(&partial_ite).is_none(),
+        "ite with fewer than 5 args should not match"
     );
+}
+
+/// The re-split guard's exact contract: a condition this branch has ALREADY
+/// decided is skipped and the NEXT one is chosen.
+///
+/// Compared by condition EXPRESSION, never by the `h_grind` name prefix — a
+/// name test would also block a legitimately nested split on a distinct
+/// condition. Both spellings of a decided condition are recognised:
+/// `by_cases` pushes `h : c` in the positive branch and `h : c → False` in the
+/// negative one (it builds the negation as a `Pi`, not as a `Not`
+/// application), and a hand-written `¬c` is the third.
+#[test]
+fn test_split_candidate_skips_a_decided_condition_and_takes_the_next() {
+    use crate::tactic::LocalDecl;
+    use crate::unify::{MetaId, MetaState};
+    use clean_kernel::FVarId;
+
+    let p = Expr::const_(Name::from_string("P"), vec![]);
+    let q = Expr::const_(Name::from_string("Q"), vec![]);
+    let false_c = Expr::const_(Name::from_string("False"), vec![]);
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let a = Expr::const_(Name::from_string("a"), vec![]);
+    let b = Expr::const_(Name::from_string("b"), vec![]);
+    let inst = Expr::const_(Name::from_string("inst"), vec![]);
+    let ite = |c: &Expr, t: Expr, e: Expr| {
+        Expr::apps(
+            Expr::const_(Name::from_string("ite"), vec![Level::succ(Level::zero())]),
+            [nat.clone(), c.clone(), inst.clone(), t, e],
+        )
+    };
+    // `if P then (if Q then a else b) else b` — two DISTINCT conditions.
+    let target = ite(&p, ite(&q, a.clone(), b.clone()), b);
+    assert_eq!(
+        collect_ite_conditions(&target),
+        vec![p.clone(), q.clone()],
+        "both conditions are found, outermost first"
+    );
+
+    let metas = MetaState::new();
+    // The splitter's own case hypothesis, which is the ONLY scope the guard
+    // reads: an ordinary context hypothesis that happens to decide a condition
+    // must not block the split (pinned e2e by
+    // `tests_grind_preprocess::test_grind_splits_on_a_condition_an_ordinary_hypothesis_decides`).
+    let case_hyps = [clean_parser::SurfaceName::generated_path("h_grind.0")];
+    let goal_with = |hyp_ty: Expr| Goal {
+        meta_id: MetaId(0),
+        target: target.clone(),
+        local_ctx: vec![LocalDecl {
+            binder_info: Default::default(),
+            fvar: FVarId::new(0),
+            name: clean_parser::SurfaceName::generated_path("h_grind.0"),
+            ty: hyp_ty,
+            value: None,
+        }],
+        case_binders: Vec::new(),
+        tag: None,
+    };
+
+    for decided in [
+        p.clone(),
+        Expr::pi(clean_kernel::BinderInfo::Default, p.clone(), false_c),
+        Expr::app(Expr::const_(Name::from_string("Not"), vec![]), p.clone()),
+    ] {
+        let goal = goal_with(decided.clone());
+        assert!(
+            condition_already_decided(&goal, &metas, &case_hyps, &p),
+            "`{decided:?}` decides P"
+        );
+        assert!(
+            !condition_already_decided(&goal, &metas, &case_hyps, &q),
+            "`{decided:?}` says nothing about Q"
+        );
+        let chosen = collect_ite_conditions(&goal.target)
+            .into_iter()
+            .find(|c| !condition_already_decided(&goal, &metas, &case_hyps, c));
+        assert_eq!(
+            chosen,
+            Some(q.clone()),
+            "the split must move on to the undecided condition"
+        );
+    }
+
+    // An ORDINARY hypothesis with the same type decides NOTHING: the guard
+    // reads only the names the splitter itself minted. Reading the whole
+    // context refused `(hP : P) ⊢ (if P then a else b) = a`, which pinned Lean
+    // closes — and nothing would have collapsed the `ite` instead, because
+    // only `case_hyps` are handed to the preprocessing simp.
+    let user_hyp_goal = Goal {
+        meta_id: MetaId(0),
+        target: target.clone(),
+        local_ctx: vec![LocalDecl {
+            binder_info: Default::default(),
+            fvar: FVarId::new(0),
+            name: clean_parser::SurfaceName::component("hP", false),
+            ty: p.clone(),
+            value: None,
+        }],
+        case_binders: Vec::new(),
+        tag: None,
+    };
+    assert!(
+        !condition_already_decided(&user_hyp_goal, &metas, &case_hyps, &p),
+        "an ordinary hypothesis is not one of grind's own case splits"
+    );
+    assert_eq!(
+        collect_ite_conditions(&user_hyp_goal.target)
+            .into_iter()
+            .find(|c| !condition_already_decided(&user_hyp_goal, &metas, &case_hyps, c)),
+        Some(p.clone()),
+        "the split still happens when only a user hypothesis decides it"
+    );
+
+    // With NOTHING decided the outermost condition is still chosen first, so
+    // the guard changes which condition is picked only when it has to.
+    let empty_goal = Goal {
+        meta_id: MetaId(0),
+        target: target.clone(),
+        local_ctx: Vec::new(),
+        case_binders: Vec::new(),
+        tag: None,
+    };
+    let chosen = collect_ite_conditions(&empty_goal.target)
+        .into_iter()
+        .find(|c| !condition_already_decided(&empty_goal, &metas, &case_hyps, c));
+    assert_eq!(chosen, Some(p), "unchanged when nothing is decided");
 }
 
 #[test]
@@ -154,6 +251,7 @@ fn test_collect_eq_hypotheses_empty() {
         target: Expr::const_(Name::from_string("A"), vec![]),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     };
     let metas = MetaState::new();
     let eqs = collect_eq_hypotheses(&goal, &metas);
@@ -186,30 +284,34 @@ fn test_collect_or_hypothesis_names_preserves_context_order() {
         target: prop_a.clone(),
         local_ctx: vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "plain".to_string(),
+                name: clean_parser::SurfaceName::generated_path("plain"),
                 ty: prop_a,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_or_left".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_or_left"),
                 ty: or_ab,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_or_right".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_or_right"),
                 ty: or_bc,
                 value: None,
             },
         ],
         tag: None,
+        case_binders: Vec::new(),
     };
 
     assert_eq!(
-        collect_or_hypothesis_names(&goal, &MetaState::new()),
-        vec!["h_or_left".to_string(), "h_or_right".to_string()]
+        collect_or_hypotheses(&goal, &MetaState::new()),
+        vec![FVarId::new(1), FVarId::new(2)]
     );
 }
 
@@ -272,8 +374,9 @@ fn test_grind_arithmetic_closer_closes_nat_contradiction() {
         Environment::with_prelude(),
         false_ty,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -302,14 +405,16 @@ fn test_grind_triggered_solve_by_elim_instantiates_matching_implication() {
         q.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "hp".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hp"),
                 ty: p.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_trigger".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_trigger"),
                 ty: Expr::arrow(p, q.clone()),
                 value: None,
             },
@@ -319,7 +424,58 @@ fn test_grind_triggered_solve_by_elim_instantiates_matching_implication() {
     let goal = state.current_goal().expect("goal").clone();
     assert_eq!(
         collect_ematch_trigger_candidates(&goal, state.metas()),
-        vec!["h_trigger".to_string()]
+        vec![FVarId::new(1)]
+    );
+    assert!(
+        try_triggered_solve_by_elim(&mut state, 2),
+        "grind trigger-guided instantiation should apply h_trigger and solve hp"
+    );
+    assert!(
+        state.is_complete(),
+        "trigger-guided instantiation should close the goal"
+    );
+}
+
+#[test]
+fn test_grind_trigger_uses_hidden_local_identity() {
+    use crate::tactic::LocalDecl;
+    use clean_kernel::env::Environment;
+    use clean_kernel::FVarId;
+
+    let p = Expr::const_(Name::from_string("P"), vec![]);
+    let q = Expr::const_(Name::from_string("Q"), vec![]);
+    let mut state = ProofState::with_context(
+        Environment::new(),
+        q.clone(),
+        vec![
+            LocalDecl {
+                binder_info: Default::default(),
+                fvar: FVarId::new(0),
+                name: clean_parser::SurfaceName::generated_path("hp"),
+                ty: p.clone(),
+                value: None,
+            },
+            LocalDecl {
+                binder_info: Default::default(),
+                fvar: FVarId::new(1),
+                name: clean_parser::SurfaceName::generated_path("h_trigger"),
+                ty: Expr::arrow(p, q.clone()),
+                value: None,
+            },
+            LocalDecl {
+                binder_info: Default::default(),
+                fvar: FVarId::new(2),
+                name: clean_parser::SurfaceName::generated_path("h_trigger"),
+                ty: Expr::const_(Name::from_string("R"), vec![]),
+                value: None,
+            },
+        ],
+    );
+
+    let goal = state.current_goal().expect("goal").clone();
+    assert_eq!(
+        collect_ematch_trigger_candidates(&goal, state.metas()),
+        vec![FVarId::new(1)]
     );
     assert!(
         try_triggered_solve_by_elim(&mut state, 2),
@@ -341,4 +497,78 @@ fn test_grind_config_non_exhaustive() {
     // Other fields retain defaults
     assert!(config.use_simp);
     assert!(config.use_cc);
+}
+
+/// A hypothesis's `ite` condition read out from UNDER its binder carries a
+/// loose bound variable, and such a term is not a term of the goal's context
+/// at all — handing it to `by_cases` would put it through `infer_type`.
+///
+/// This is why `try_split_ite` filters the candidate list on
+/// `has_loose_bvars` rather than trusting `by_cases` to refuse it. The shape
+/// is `Function.Injective.dite`'s: a `dite` inside a `∀`-quantified
+/// hypothesis. Measured with `CLEAN_GRIND_TRACE` on the e2e version
+/// (`raw candidates depth=0 n=1`, `App(FVar(0), BVar(0))`), so the collector
+/// really does produce it — the filter is not guarding an empty case.
+#[test]
+fn test_split_candidates_include_a_binder_bound_condition_that_is_filtered_out() {
+    use crate::tactic::LocalDecl;
+    use crate::unify::{MetaId, MetaState};
+    use clean_kernel::FVarId;
+
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let inst = Expr::const_(Name::from_string("inst"), vec![]);
+    let r = Expr::const_(Name::from_string("R"), vec![]);
+    let g = Expr::const_(Name::from_string("g"), vec![]);
+    let k = Expr::const_(Name::from_string("k"), vec![]);
+    // `∀ n : Nat, (if R n then g n else k n) = g n`
+    let cond_under_binder = Expr::app(r, Expr::bvar(0));
+    let body = Expr::apps(
+        Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+        [
+            nat.clone(),
+            Expr::apps(
+                Expr::const_(Name::from_string("ite"), vec![Level::succ(Level::zero())]),
+                [
+                    nat.clone(),
+                    cond_under_binder.clone(),
+                    inst,
+                    Expr::app(g.clone(), Expr::bvar(0)),
+                    Expr::app(k, Expr::bvar(0)),
+                ],
+            ),
+            Expr::app(g, Expr::bvar(0)),
+        ],
+    );
+    let hyp_ty = Expr::pi(clean_kernel::BinderInfo::Default, nat, body);
+
+    let goal = Goal {
+        meta_id: MetaId(0),
+        // No `ite` in the target, so every candidate comes from the context.
+        target: Expr::const_(Name::from_string("Qq"), vec![]),
+        local_ctx: vec![LocalDecl {
+            binder_info: Default::default(),
+            fvar: FVarId::new(0),
+            name: clean_parser::SurfaceName::component("hbind", false),
+            ty: hyp_ty,
+            value: None,
+        }],
+        case_binders: Vec::new(),
+        tag: None,
+    };
+    let metas = MetaState::new();
+    let raw = split_candidate_conditions(&goal, &metas, &goal.target);
+    assert_eq!(
+        raw,
+        vec![cond_under_binder.clone()],
+        "the hypothesis scan does yield the binder-bound condition"
+    );
+    assert!(
+        cond_under_binder.has_loose_bvars(),
+        "and it is not a term of this context"
+    );
+    assert!(
+        !raw.iter().any(|c| !c.has_loose_bvars()),
+        "so the split has no candidate it can pose, and must say so rather \
+         than hand a loose bound variable to by_cases"
+    );
 }

@@ -1,0 +1,4 @@
+(assume h0 (not (str.in_re (str.substr y 0 L) (re.++ (str.to_re "a") (str.to_re "")))))
+(assume nc (not (forall ((L Int)) (or (< L 0) (< (str.len (str.substr y 0 L)) L) (not (str.in_re (str.substr (str.substr y 0 L) 0 L) (str.to_re "a"))) (not (str.in_re (str.substr (str.substr y 0 L) L (- (str.len (str.substr y 0 L)) L)) (str.to_re "")))))))
+(step s (cl (forall ((L Int)) (or (< L 0) (< (str.len (str.substr y 0 L)) L) (not (str.in_re (str.substr (str.substr y 0 L) 0 L) (str.to_re "a"))) (not (str.in_re (str.substr (str.substr y 0 L) L (- (str.len (str.substr y 0 L)) L)) (str.to_re "")))))) :rule re_unfold_neg :premises (h0))
+(step done (cl) :rule resolution :premises (nc s))

@@ -113,15 +113,14 @@ impl Document {
         // handler re-parses synchronously before it returns, so a stale parse
         // is never observable.
         //
-        // `elaborated` is deliberately PRESERVED: it is the last *committed*
-        // elaboration snapshot, and elaboration runs as a per-URI background
-        // task (see `backend::background`). A hover / plainGoal / inlay
-        // request racing that task answers from this snapshot — its byte
-        // offsets may lag the edited text slightly, the standard LSP
-        // staleness tradeoff, matching Lean's own server — rather than going
-        // dark for the whole elaboration window. `commit_elaboration`
-        // replaces it only with a result computed at the document's current
-        // version.
+        // Preserve the last committed declaration metadata for existing
+        // hover / plainGoal / inlay consumers. Hole byte spans, however, must
+        // not be reinterpreted against edited text as ranged term goals.
+        // `commit_elaboration` repopulates holes only at the current version.
+        if let Some(elaborated) = &mut self.elaborated {
+            elaborated.holes.clear();
+            elaborated.term_infos.clear();
+        }
         self.parsed = None;
     }
 
@@ -252,11 +251,13 @@ pub struct ElaboratedDocument {
     pub declarations: Vec<ElaboratedDecl>,
     /// Hole-local expected-type contexts recorded during elaboration.
     ///
-    /// Each entry carries the source range of a hole (`_` or `sorry`) together
-    /// with the expected type the elaborator demands at that hole. Consumed by
-    /// `$/lean/plainTermGoal` to answer with the hole-local goal rather than the
-    /// whole declaration's type.
+    /// Each entry carries a user-written underscore's source span and the
+    /// expected type recorded by the elaborator there. Explicit `sorry` is
+    /// recorded in `term_infos`. Consumed by `$/lean/plainTermGoal`; declaration
+    /// types never substitute for these term-local observations.
     pub holes: Vec<HoleContext>,
+    /// Actual source-term contexts, cleared on every document edit.
+    pub(crate) term_infos: Vec<SourceInfo>,
     /// User-defined widget modules discovered during elaboration.
     ///
     /// Each entry records a declaration carrying the `@[widget_module]`
@@ -265,6 +266,19 @@ pub struct ElaboratedDocument {
     /// instance for each recorded module alongside the built-in declaration
     /// panels.
     pub widget_modules: Vec<WidgetModule>,
+}
+
+/// One source-info node; non-term nodes block enclosing term-goal fallback.
+#[derive(Debug, Clone)]
+pub(crate) struct SourceInfo {
+    pub id: u64,
+    pub parent_id: Option<u64>,
+    pub start: usize,
+    pub end: usize,
+    pub application_head: Option<(usize, usize)>,
+    pub is_variable: bool,
+    pub is_partial: bool,
+    pub goal: Option<String>,
 }
 
 /// A user-defined widget module discovered during elaboration.
@@ -283,14 +297,12 @@ pub struct WidgetModule {
     pub end: usize,
 }
 
-/// A hole (`_`/`sorry`) and the type expected at its source position.
+/// A user-written underscore hole and the captured type expected at its position.
 ///
-/// Populated from the elaborator for every user-written `_` hole (body-level
-/// and nested / sub-term, e.g. `(_ : Nat) + 1`), carrying the precise type the
-/// elaborator demanded at that hole. A body-level `sorry` is also recorded,
-/// with the declaration's own elaborated type. The hole `range` is narrower
-/// than the enclosing declaration range, so `plainTermGoal` can prefer the
-/// hole-local goal when the cursor sits on the hole itself.
+/// Populated from the elaborator's span-tagged contexts for body and nested
+/// holes, e.g. `(_ : Nat) + 1`. Other terms use their own term-goal contexts;
+/// declaration types do not substitute for term-local expected types. The
+/// token span supplies the range returned by `plainTermGoal`.
 #[derive(Debug, Clone, Default)]
 pub struct HoleContext {
     /// Byte offset start of the hole token.
@@ -305,8 +317,8 @@ pub struct HoleContext {
     /// Mirrors the Lean infoview's local context shown above the goal
     /// turnstile. Each entry is rendered with the same pretty-printer used for
     /// `expected_type`. Empty when no binders are in scope at the hole (e.g. a
-    /// top-level body hole), in which case `plainTermGoal` reports only the
-    /// expected type.
+    /// top-level body hole), in which case `plainTermGoal` reports the goal
+    /// prefix followed by the expected type.
     pub local_bindings: Vec<(String, String)>,
 }
 
@@ -413,7 +425,12 @@ pub struct TypeError {
 /// An elaborated declaration
 #[derive(Debug, Clone)]
 pub struct ElaboratedDecl {
-    /// Declaration name
+    /// Exact elaborator identity, user-facing: a private declaration's
+    /// kernel name without its `_private.<module>.0` prefix (G21), the name
+    /// this document's source writes for it. Labels must never be reparsed
+    /// to recover it.
+    pub identity: clean_kernel::Name,
+    /// Declaration label for display; not a name-resolution key.
     pub name: String,
     /// Declaration type (pretty-printed)
     pub type_str: String,

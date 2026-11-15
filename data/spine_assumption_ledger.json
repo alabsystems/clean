@@ -3,22 +3,22 @@
   "what": "The \u00a73.6 assumption ledger: every unproved thing a spine chain stands on, one row each, with a statement, a probe command, a discharge condition, a date and an owning job. designs/2026-08-22-spine-and-lattice-program.md \u00a73.6 and standing rule R8.",
   "not_claimed": "This file is an INVENTORY OF STATED ASSUMPTIONS, not evidence that any of them is safe. A row's presence is a debt, not a discharge. A row carrying a witness is a BOUNDED assumption, not a closed one. And the ledger cannot be complete by construction: the derived classes are as complete as their source artifacts, and the seeded classes are as complete as the humans who wrote them down. docs/analysis/spine-assumption-ledger-2026-08-27.md states this at length.",
   "counting_rule": "`count` counts rows with status=measured \u2014 the debt standing today, and the number G-SCORE ratchets DOWN. `prospective_count` counts rows for assumptions of jobs that have NOT RUN; they are listed so \u00a73.6's named contracts are visible, and excluded from `count` so a planned assumption never masquerades as a live one. A prospective row becoming live is a rebase of `count` upward, and it is progress.",
-  "count": 26,
+  "count": 35,
   "prospective_count": 3,
-  "row_count": 29,
+  "row_count": 38,
   "counts_by_class": {
-    "crystal-erasure-slot": 12,
-    "evalir-declared-delta": 11,
+    "crystal-erasure-slot": 13,
+    "evalir-declared-delta": 18,
     "core-callee-model": 1,
-    "layout-obligation": 2,
+    "layout-obligation": 3,
     "operational-contract": 3
   },
   "counts_by_origin": {
-    "derived": 23,
-    "seeded": 6
+    "derived": 31,
+    "seeded": 7
   },
   "counts_by_status": {
-    "measured": 26,
+    "measured": 35,
     "prospective": 3
   },
   "cross_references": [
@@ -26,12 +26,12 @@
       "id": "XREF-VERDICT-IO-LANE-B",
       "path": "data/verdict_io_contracts.json",
       "block": "ledger",
-      "row_count": 44,
+      "row_count": 73,
       "direction": "down",
       "rows_by_class": {
-        "content-bearing": 34,
+        "content-bearing": 59,
         "meta": 2,
-        "success-only": 8
+        "success-only": 12
       },
       "why_not_copied": "Ring R2 lane (b) mints and ratchets its own \u00a73.6 rows in its own artifact. Copying them here would give each assumption two accounting points and two ratchets; the env-bypass census follows the same rule. They are counted in the scoreboard by the separate row `assumption_ledger.verdict_io_lane_b`, which is disjoint from `assumption_ledger.count` by construction \u2014 this generator aborts if any id here collides with one there."
     }
@@ -43,7 +43,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: The TYPE of every function parameter and every block parameter. ARTIFACT CARRIES: `bb0(%0: ptr)`, `bb0(%0: enum.175)`, `bb0(%0: struct.1012, %1: struct.1012)`, `bb12(%1: enum.181)` -- measured across the eleven committed fixtures. CORE CARRIES: The SSA id alone. `(params 0)`. UNCHANGED -- no core digest moved. STATE IN THE OWNING ARTIFACT (compared): CLOSED 2026-08-20, as a COMPARISON rather than a module field. `bb0(%0: ptr)` and `bb0(%0: Rc<enum.13>)` still project to the identical core module -- and always will until Clean's `IRFunc` carries a type, which would move every registered term and every core digest -- but they are no longer both ACCEPTED: `ir_mint::project` refuses a body whose parameter types are not the pinned ones. This is the M7 split applied one slot out: the fact the module cannot express lives in a reviewed table a gate checks against the artifact. RESIDUAL: The core module alone still cannot separate the pair, and `the_core_module_alone_still_cannot_separate_the_type_rows` measures that rather than leaving it implied. So this closes the ACCEPTANCE, not the encoding: `ir_h2_module` is the projection of `has_cubical_layer` only together with the table that says its receiver is a `ptr`.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::param_types_are_compared_and_the_pair_is_now_refused",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::param_types_are_compared_and_the_pair_is_now_refused",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row. The slot's own residual states what that needs.",
       "date": "2026-08-20",
@@ -77,7 +77,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: The function's NAME, and with it the `rustcc fn @\u2026` header line entire. ARTIFACT CARRIES: `rustcc fn @level::Level::is_zero(functy.0) {` CORE CARRIES: Nothing. The core module opens at the first block. UNCHANGED. STATE IN THE OWNING ARTIFACT (compared): CLOSED 2026-08-20. Two different shipped functions with the same body still project to the same core module -- the digest is still name-free, which is what makes it producer-invariant across a rename -- but `ir_mint::project` refuses a body whose header does not name the chain's pinned `body`. The name is the right thing to pin because it is the half that does NOT move: measured over the three producer dumps of `ir_mint.producer_ab.json`, every `@func.N` moved and no `crate_func_names_seen` entry did.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_function_name_is_compared_and_the_pair_is_now_refused",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_function_name_is_compared_and_the_pair_is_now_refused",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row.",
       "date": "2026-08-20",
@@ -111,7 +111,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: WHICH function a `call` reaches, beyond `is it this body or not`. ARTIFACT CARRIES: `call @func.4914(%9)` -- a whole-crate function-table INDEX. The artifact BINARY additionally carries the function table, so reader A can resolve the index to `<level::LevelArc as std::ops::Deref>::deref`. The emitted TEXT cannot: it prints no declaration under that name. CORE CARRIES: A canonical index in the ONE namespace the function's own id shares. Index 0 is the body itself; every other index denotes a distinct foreign callee and nothing more. STATE IN THE OWNING ARTIFACT (compared): CLOSED 2026-08-20 at the acceptance, half-closed before it. Two bodies calling two DIFFERENT foreign functions still project to the same core module, and `ir_func_find` refuses every foreign callee alike so the erasure stays invisible to the semantics for as long as the module is one function wide. What changed is that a body whose callee crate ids are not the pinned ones is REFUSED, and a callee index no row accounts for is refused rather than defaulted -- so the numeral can no longer stand for nothing.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::foreign_callee_identity_is_now_pinned_and_a_swap_is_refused",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::foreign_callee_identity_is_now_pinned_and_a_swap_is_refused",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row.",
       "date": "2026-08-20",
@@ -144,34 +144,42 @@
       "class": "crystal-erasure-slot",
       "origin": "derived",
       "status": "measured",
-      "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: WHICH global a `global_addr` addresses, and the module's global list entire. ARTIFACT CARRIES: `global_addr @global.4527` -- a whole-crate global-table index. Globals print as `@__trust_promoted_N`, so even the artifact text carries no name for one. CORE CARRIES: Nothing: a `global_addr` is no longer readable at all. STATE IN THE OWNING ARTIFACT (refused): CLOSED 2026-08-20 by REFUSAL, which is the honest close for a slot with no inhabitant. `mint` already refused a non-empty global list and `decode` already refused a module with globals in it, so a body with a global could never have been minted -- it could only have been read into an incoherent core module where `(globaladdr 0)` named an entry the module does not declare. Reader B now stops at the read. The moment a chain genuinely carries a global, this refusal is the thing that has to be lifted, deliberately, together with projecting the global list.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_global_slot_is_now_a_refusal_on_every_chained_fixture",
+      "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: WHICH global a `global_addr` addresses; the module's global list entire; and the global's NAME, TYPE and LINKAGE. ARTIFACT CARRIES: `global_addr @global.4557` -- a whole-crate global-table index -- plus a module-table row that DOES carry the other three: `global internal @__trust_promoted_4557 [ty.0 x 34] = array[ 108, 105, ... ]`, beside the `type ty.0 = u8` row that resolves the element type. CORE CARRIES: `(globaladdr 0)` -- a canonical POSITION in this module's own global list, not a crate index -- and `(global 0 (agg (int 108) ...))`, the 34 initializer bytes. `IRGlobal.mk : Nat -> IRConst -> IRGlobal` has no name slot, no type slot and no linkage slot, so those three are carried by neither the instruction nor the list. STATE IN THE OWNING ARTIFACT (compared): REFUSAL LIFTED 2026-09-09, on exactly one path, which is what the 2026-08-20 close said in its own last sentence would have to happen: `The moment a chain genuinely carries a global, this refusal is the thing that has to be lifted, deliberately, together with projecting the global list.` `ir_lzc` is that chain -- its deref body builds the `expect` message out of `@__trust_promoted_4557` -- so the list is now PROJECTED and this slot is COMPARED rather than refused. `check_globals` accounts every observed `global_addr`, every tag-table pin and every module-table declaration against one another in four directions, each refusal naming its slot (`global declaration` / `global linkage` / `global type`), and `mint_globals` splices the list in the order `ir_global_find` walks. What stays ERASED from the core module is exactly what `IRGlobal.mk` has no slot for -- name, type, linkage -- and those are COMPARED against the tag table instead of carried, the `param-type` pattern one namespace over. A bare read is unchanged and still refuses. RESIDUAL: a producer that pinned a wrong type or linkage CONSISTENTLY with its own fixture would not be caught here. That is the general shape of every `compared` row in this file, and it is bounded by the producer rather than by `project`.",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_global_slot_is_refused_bare_and_compared_under_a_tag_table",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row.",
-      "date": "2026-08-20",
+      "date": "2026-09-09",
       "owning_job": "crystal_a2_mint::blind_slots",
       "sources": [
         {
           "path": "crates/clean-verify/src/ir_mint/emitted.rs",
-          "anchor": "pub(super) fn r_global(&mut self, id: u32) -> Result<u32, EmittedError> {"
+          "anchor": "pub(super) fn global_index(&mut self, id: u32) -> Result<u32, EmittedError> {"
         },
         {
           "path": "crates/clean-verify/src/ir_mint/emitted_reader.rs",
           "anchor": "Sx::tag(\"globals\", vec![]),"
         },
         {
+          "path": "crates/clean-verify/src/ir_mint/interface_globals.rs",
+          "anchor": "pub(super) fn check_globals("
+        },
+        {
+          "path": "crates/clean-verify/src/ir_mint/mint_globals.rs",
+          "anchor": "clean: \"IRGlobal.mk\","
+        },
+        {
           "path": "scripts/crystal_a2_project/src/main.rs",
-          "anchor": "out.push_str(\"  (globals)\\n\");"
+          "anchor": "out.push_str(\"  (globals\");"
         }
       ],
       "derived_from": {
         "path": "data/crystal_mint_blind_slots.json",
         "slot_id": "global-index"
       },
-      "slot_kind": "refused",
+      "slot_kind": "compared",
       "defence": "witnessed \u2014 a test constructs the indistinguishable pair",
-      "read_by": "`crystal_a2_mint`'s blind-slot lane, which measures that all eleven chained bodies are still global-free AND that a constructed body carrying one is now refused.",
-      "live_on_chains": "none of the eleven"
+      "read_by": "`crystal_a2_mint`'s blind-slot lane -- the witness below carries all three faces (latent on the eleven, refused bare, compared under a table) -- and its `globals` lane, `crystal_a2_mint/globals.rs`, which is nine constructed refusals each asserting the SLOT it names. Plus `crystal_a2_mint_lzc`'s M7 against the committed tag artifact and its `m10_the_interface_pins_bite`, which mutates the fixture's `type ty.0 = u8`, its `[ty.0 x 34]` and its `global internal @` and requires a refusal for each.",
+      "live_on_chains": "ir_lzc only -- the first chain whose module carries a non-empty `(globals)` list. The eleven older chained bodies are still global-free, measured in the witness."
     },
     {
       "id": "A-ERASE-functy-index",
@@ -179,7 +187,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: The function-TYPE table index in the header, `functy.N` -- trust-ir's FOURTH crate-level namespace, and the last numeral in the pipeline that stood for nothing. ARTIFACT CARRIES: `(functy.53)`. It indexes `Module::func_types`, whose entries are `FuncTy { params, returns, is_vararg }` (`trust-ir/src/ty.rs:751`). The emitted TEXT prints no `functy` table, so the index cannot be resolved from the text at all -- only compared. CORE CARRIES: Nothing, and that is a checked fact: the registered `IRFunc` inductive has four fields and none of them is an `IRTy`. UNCHANGED -- no core digest moved. STATE IN THE OWNING ARTIFACT (compared): CLOSED 2026-08-20, as a comparison rather than a module field. Two bodies with different signatures still project to the identical core module -- and always will until Clean's `IRFunc` carries an `IRTy`, which would move every registered term and every core digest -- but they are no longer both ACCEPTED. Combined with `param-type`, the core module still states NO type information about the function's interface at all; the difference is that the TABLE now does, and the gate checks it. RESIDUAL: The index is COMPARED and still not RESOLVED. Nothing in this repo says what `functy.0` IS -- neither reader can print `(ptr) -> bool` -- so the pin establishes that two dumps name the same table entry, not that the entry means what a reader thinks. Resolving it needs reader A to record the resolved `FuncTy` from the artifact's own type table, which is a build item and is written down here rather than assumed away.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::functy_is_compared_and_the_vararg_pair_is_now_refused",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::functy_is_compared_and_the_vararg_pair_is_now_refused",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row. The slot's own residual states what that needs.",
       "date": "2026-08-20",
@@ -213,7 +221,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: The alignment operand of `load` / `store` / `alloca`. ARTIFACT CARRIES: `align N`, printed by trust-ir's `Display`. CORE CARRIES: Nothing. UNCHANGED -- `IRInst.load` is `IRTy -> Nat -> Bool -> IRInst`. STATE IN THE OWNING ARTIFACT (compared): HALF-CLOSED 2026-08-20. The alignment cannot reach the module and the IR machine has no alignment notion to make a misaligned access observable, so this stays a fragment boundary -- one of the reasons the machine's memory model is not a claim about the real one. What changed is that the value is no longer thrown away unread: until 2026-08-20 reader B's `load` took `tail.split(',').next()` and discarded everything after the pointer WITHOUT LOOKING AT IT, so `, align 8` and `, banana` were equally invisible. It is now read, pinned, compared, and an unrecognised trailing operand is a refusal.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::m9_every_blind_slot_is_anchored_in_live_source",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::m9_every_blind_slot_is_anchored_in_live_source",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row.",
       "date": "2026-08-20",
@@ -266,7 +274,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: `; #loc:`, `; #scope:`, `; #proof:`, `; #names:` and `; #producer:` trailing clauses. ARTIFACT CARRIES: `  ; #loc: 389 525 8`, `; #names: %0=\"self\"` CORE CARRIES: Nothing of any clause CONTENT. The set of clause KINDS is pinned, and since 2026-08-20 the CONTENT of one kind -- `#producer` -- is pinned too. STATE IN THE OWNING ARTIFACT (compared): The CONTENT erasure is deliberate and load-bearing, and stays: the `#loc` file index is a whole-crate table that renumbers with no instruction changed, and `Module::stable_digest` excludes it upstream for the same reason. Erasing it is what makes the core digest producer-invariant. What was WRONG before 2026-08-20 is that the erasure was unbounded -- every `  ; #...` suffix was dropped whatever it said -- so a producer that started annotating an instruction with something trust-bearing would have been erased in silence. That is the exact failure the `exhaustive_enum_unreachable` flag demonstrates one level in. The kind set is now an allowlist of five, each inert for a stated reason, and an unlisted kind is a refusal. RESIDUAL: The file index inside `#loc` is a renumbering that COULD be canonicalised and is not. Nothing depends on it and nothing claims it is inert for any reason other than that debug-info coordinates cannot change what a module computes -- which is why the honest classification of the remaining erasure is LINEAGE, not semantics.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_producer_clause_content_is_compared_and_the_other_four_are_measured_inert",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_producer_clause_content_is_compared_and_the_other_four_are_measured_inert",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row. The slot's own residual states what that needs.",
       "date": "2026-08-20",
@@ -304,7 +312,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: Calling convention and linkage of the FUNCTION (closed) and of each direct call site (open, and open for a different reason than the row used to give). ARTIFACT CARRIES: `rustcc fn @level::Level::is_zero(functy.0) {` -- the `rustcc` IS the calling convention. `trust_ir::display`'s `impl Display for Function` prints the linkage when it is not `External` and the convention when it is not `C`, in that order, before `fn @`. All sixteen committed fixtures are `external` + `rustcc`, the first suppressed and the second printed. CORE CARRIES: Nothing for the function. UNCHANGED. `callindirect` DOES carry a convention operand in the fragment; a direct `call` does not, because `trust_ir::Inst::Call` has no such field. STATE IN THE OWNING ARTIFACT (compared): CLOSED 2026-08-20 for the FUNCTION, as a comparison. A body whose header names a different convention or a different linkage is refused BY NAME (`calling convention: the artifact carries [ccc]; the chain's tag table pins [rustcc]`), and a header with no keyword at all is read as `external`/`ccc` -- a value -- rather than as whatever the pin says. An unrecognised leading token is refused rather than skipped, so a linkage or convention trust-ir grows later cannot be read as `no token`. RESIDUAL: STILL OPEN, and now stated at its real shape: the calling convention of a DIRECT CALL's callee. `trust_ir::Inst::Call` is `{ callee, args }` and carries no convention field at all, so this is not an erasure by the printer -- it is absent from the IR. The convention of a direct callee is a property of the callee's own `Function`, which is not in a one-function fragment, so the slot becomes witnessable when the fragment grows past one function and not before. The one convention the fragment DOES carry, on `callindirect`, is proved inert: `ir_exec_callind_conv_irrelevant` proves `ir_exec` returns the same IRConfig at any two conventions. So the residual is a CROSS-FUNCTION residual, not a text-reader blindness.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_calling_convention_and_linkage_are_read_from_the_header_not_assumed",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_calling_convention_and_linkage_are_read_from_the_header_not_assumed",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row. The slot's own residual states what that needs.",
       "date": "2026-08-20",
@@ -346,7 +354,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: `Inst::Switch.exhaustive_enum_unreachable`. ARTIFACT CARRIES: A real `bool` field of the emitted instruction. trust-ir's `Display` matches `Inst::Switch { .., .. }` and NEVER prints it. CORE CARRIES: The measured flag, from reader A. Reader B writes `?`, and `?` cannot be minted. STATE IN THE OWNING ARTIFACT (unwitnessed): This slot has exactly ONE in-repo witness, the binary projection, and it is the slot the hand transcription got WRONG: `SRC_IR_H2_B0` carried `Bool.true` against a measured `false` on three producers and four sibling chains. `eval_ir_machine` drops the flag -- PROVED, see `the_decision_2026_08_20` -- so no theorem moved, but a theorem was being stated about a module the compiler does not emit.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::m9_every_blind_slot_is_anchored_in_live_source",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::m9_every_blind_slot_is_anchored_in_live_source",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row.",
       "date": "2026-08-20",
@@ -376,7 +384,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: WHICH block a function is entered at. ARTIFACT CARRIES: `trust_ir::Function` has an `entry: BlockId` field SEPARATE from its `blocks: Vec<Block>`. The emitted TEXT prints the blocks in vector order and prints NO entry marker at all. CORE CARRIES: `(entry N)` -- the id of the FIRST block reader B encountered, and reader A's reading of the real `func.entry`. STATE IN THE OWNING ARTIFACT (unwitnessed): OPEN, and open at the PRODUCER rather than at this gate -- which is why it is a row and not a defect. Two functions differing only in their entry block have BYTE-IDENTICAL emitted text, so no text reader can separate them and no amount of work on reader B can change that. What keeps it from being a hole is that reader A does NOT assume: it reads `func.entry` off the binary. So a body whose entry is not its first block makes readers A and B DISAGREE, and M2 is the check that fires. The assumption is therefore CHECKED rather than merely made -- but it was checked by accident, and until 2026-08-20 nothing said so. RESIDUAL: There is no in-repo witness. Constructing one needs a `trust_ir::Module` built by hand with `entry != blocks[0]`, serialised and re-read, which is a producer-side test in the `trust` repo. Until then this is a single-assumption slot whose only defence is that two readers derive it differently and are compared.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::m9_every_blind_slot_is_anchored_in_live_source",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::m9_every_blind_slot_is_anchored_in_live_source",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row. The slot's own residual states what that needs.",
       "date": "2026-08-20",
@@ -406,7 +414,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: EVERYTHING in the emitted text after the body's closing brace -- and, in the other direction, a body that has no closing brace at all. ARTIFACT CARRIES: Whatever the file holds after `}`. A real trust-ir module text carries the rest of the module there: more functions, the `global` declarations, the `file` table, the type tables. CORE CARRIES: Nothing, and until 2026-08-20 nothing SAID nothing. `Reader::run` matched the first line equal to `}` and `break`, so the remainder was neither read nor refused. STATE IN THE OWNING ARTIFACT (refused): CLOSED 2026-08-20 by REFUSAL, which is the right close for a reader whose contract is ONE body per text: there is nothing in a second function for a one-function projection to say, so the honest answer is to stop rather than to ignore. If a chain ever needs to project a whole module, this refusal is the thing that has to be lifted deliberately, together with projecting the function list. RESIDUAL: Reader A is unaffected: it projects one `trust_ir::Function` out of a decoded module and never sees text, so it could not have had this defect and gains nothing from the fix. The two readers were therefore NOT in agreement about what the fixture file means, and nothing had noticed.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::content_after_the_closing_brace_is_now_refused_rather_than_dropped_unread",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::content_after_the_closing_brace_is_now_refused_rather_than_dropped_unread",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row. The slot's own residual states what that needs.",
       "date": "2026-08-20",
@@ -436,7 +444,7 @@
       "origin": "derived",
       "status": "measured",
       "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: The target word size behind a printed `usize` type token. ARTIFACT CARRIES: `trust_ir::Ty::Usize` in the binary; the token `usize` in the emitted text (`zext u32 %1 to usize`, node_id_index). CORE CARRIES: The RESOLVED fixed-width integer, `(uint 64)`. The core module cannot remember the token was `usize`: reader C decodes the registered kernel term, and Clean's `IRTy` has no usize constructor -- so keeping the distinction in the core would make reader C structurally unable to agree. STATE IN THE OWNING ARTIFACT (compared): Without the pin, NOTHING resolves: both text readers refuse the token by name, so a chain whose body contains `usize` cannot join the mint at all until its table states the width as a reviewed target fact. With the pin, the resolved core is one module for `usize` and `u64` twins -- and the pinned SITE COUNT is the acceptance check that separates them, so the erasure is bounded to a count-preserving positional exchange between a usize and a real u64, which no chained body exhibits (the one chained usize body has one cast and no u64).",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a2_mint blind_slots::usize_is_refused_unpinned_and_the_site_count_separates_the_u64_twin",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::usize_is_refused_unpinned_and_the_site_count_separates_the_u64_twin",
       "probe_kind": "measurement",
       "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row.",
       "date": "UNDATED",
@@ -464,6 +472,48 @@
       "read_by": "Reader A: `Projector::ty`, `Ty::Usize` arm (scripts/crystal_a2_project/src/main.rs), resolved under `--usize-bits`, recorded as `usize_bits` + `usize_sites_resolved` in the provenance JSON. Reader B: `Reader::ty`, the `\"usize\"` arm (src/ir_mint/emitted.rs), resolved through `read_with_pins`, counted into `ObservedTags::usize_seen`. The pin: `Tags::usize_pin` (src/ir_mint/tags.rs), compared by `project` (src/ir_mint/interface.rs).",
       "live_on_chains": "UNSTATED",
       "date_reason": "the slot carries no ISO date in any of its text or key names; a date is never invented here"
+    },
+    {
+      "id": "A-ERASE-aggregate-id",
+      "class": "crystal-erasure-slot",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "The crystal-A2 mint erases this slot from the projected core module, and every chain minted through that projection stands, unproved, on the erasure being invisible to the value the module computes. SLOT: WHICH crate aggregate a body's `enum.N` / `struct.N` denotes. ARTIFACT CARRIES: `load enum.6, ptr %0` -- a whole-crate TYPE-table index, the same kind of index `@func.N` and `@global.N` are. CORE CARRIES: `(enum 0)` -- a canonical index assigned by FIRST-SEEN order within ONE body, counting from 0. It carries no crate identity at all. STATE IN THE OWNING ARTIFACT (compared): FOUND 2026-09-10 by an adversarial design review of the Phase-B five-body module, MEASURED with a constructed pair the same day, and CLOSED by comparison the same day. What it was: `project` related an observed aggregate id to the lane NOWHERE -- measured, `interface.rs` mentioned neither lane -- while the lane's crate id is what reaches the committed proof, because `alias_defs` writes `def <alias> : IRTy := IRTy.enum_ ir_d<crate_id>` and `ir_lzc.defs.txt` line 1 is `def ir_lzc_tlevel : IRTy := IRTy.enum_ ir_d2`. Two bodies naming `enum.2` and `enum.7` projected to ONE core under a table pinning 2, both minting `IRTy.enum_ ir_d2`. Why eighteen chains survived it, as a CONSTRUCTION and not a defence: each was assembled from ONE artifact, so first-seen order and the lane's order are the same walk. That argument does not survive a module assembled from TWO artifacts with independent type numbering, which is what the Phase-B module is -- its crate bodies name `enum.2` and its sidecar bodies name `enum.0` and `enum.1`, all three claiming canonical 0. `check_aggregates` now refuses in four directions: two bodies disagreeing about what a canonical index denotes; an observed index no row pins; an observed index whose raw id disagrees with the row's `crate_id`; and a pinned row NOTHING reaches. The last one reads the UNION of instruction and INTERFACE positions, and that is not a detail -- a first cut reading instruction positions alone refused the committed `ir_hlb` chain, whose `structs` pin (`ir_hlb_tself`, `struct.29`) is named only by the root's parameter type. Running a new refusal against the whole corpus is what caught it. All 20 committed tables pass unchanged.",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a2_mint blind_slots::the_aggregate_id_a_body_names_is_compared_and_the_pair_is_now_refused",
+      "probe_kind": "measurement",
+      "discharge": "close the erasure in the ENCODING, not only at acceptance, and delete the slot from data/crystal_mint_blind_slots.json \u2014 a comparison or a refusal BOUNDS the slot, it does not remove it, which is why a slot recorded CLOSED still holds a ledger row.",
+      "date": "2026-09-10",
+      "owning_job": "crystal_a2_mint::blind_slots",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/ir_mint/emitted.rs",
+          "anchor": "fn intern(map: &mut BTreeMap<u32, u32>, id: u32) -> u32 {"
+        },
+        {
+          "path": "crates/clean-verify/src/ir_mint/tags.rs",
+          "anchor": "pub(crate) fn alias_defs(&self) -> Vec<String> {"
+        },
+        {
+          "path": "crates/clean-verify/src/ir_mint/tags.rs",
+          "anchor": "\"def {alias} : IRTy := IRTy.enum_ {}\","
+        },
+        {
+          "path": "crates/clean-verify/src/ir_mint/interface.rs",
+          "anchor": "slot: format!(\"callee {canonical} (`{name}`)\"),"
+        },
+        {
+          "path": "crates/clean-verify/src/ir_mint/interface_aggregates.rs",
+          "anchor": "pub(super) fn check_aggregates(bodies: &[ObservedTags], tags: &Tags) -> Result<(), InterfaceError> {"
+        }
+      ],
+      "derived_from": {
+        "path": "data/crystal_mint_blind_slots.json",
+        "slot_id": "aggregate-id"
+      },
+      "slot_kind": "compared",
+      "defence": "witnessed \u2014 a test constructs the indistinguishable pair",
+      "read_by": "`ir_mint::interface_aggregates::check_aggregates`, called by `project` before the globals check, on every chain. Plus `crystal_a2_mint`'s blind-slot lane: the witness below is the constructed pair that USED to pass, now asserting the refusal, beside the pin-over-nothing direction and the parameter-reached control that the `ir_hlb` chain forced.",
+      "live_on_chains": "all twenty, and now checked on all twenty. It was harmless on each by construction; it would not have been on any module assembled from more than one artifact."
     },
     {
       "id": "A-DELTA-undef-execution",
@@ -763,6 +813,207 @@
       "recorded_in": "data/evalir_float_residue.PENDING.md"
     },
     {
+      "id": "A-DELTA-copy-type-check-coarse",
+      "class": "evalir-declared-delta",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "EvalIR's executable semantics and the pinned trust-ir reference interpreter DIVERGE on `copy`, and the encoding DECLARES the divergence rather than closing it. CLEAN: ir_copy_eval checks the operand's SHAPE class against the declared type (bool / integer / float / thin pointer / fat pointer / unit / aggregate / function pointer / never) and faults type_error across classes \u2014 kernel witness ir_copy_ty_slot_is_read \u2014 but ACCEPTS within a class: two integer widths, the two signednesses, two aggregate ids, and the WHOLE thin-pointer family are indistinguishable to it. The enumeration is exhaustive as written: tuple/array/struct/enum share the aggregate class, and ptr_/ref_/refmut_/rawconst_/rawmut_/rc_ share the thin-pointer class WITH nullptr_, so `ir_copy_eval (IRTy.ref_ p) IRScalar.nullptr_` accepts where expect_ty faults E2: the reference's Inst::Copy arm calls expect_ty(operand, ty), a dynamic type EQUALITY on the value's own carried Ty, and faults type_error on any disagreement \u2014 width and aggregate id included MEASURED: 2026-09-10 at trust 0dd9d3e2d7, against `Inst::Copy` (interpret.rs:691-696 \u2014 `expect_ty(operand, ty)?` then a rebind of the same value) and `fn expect_ty` (interpret.rs:5548-5557 \u2014 `if &value.ty == ty { Ok(()) } else { type_error }`). The residual is TWO-WAY and both directions are declared here. ACCEPT-MORE: a width, signedness or aggregate-id disagreement passes the shape check and would fail expect_ty. REJECT-MORE, fail-closed: the Copy arm never calls reject_partial (interpret.rs:6506-6515; its message at interpret.rs:6500-6501 states that poison may only be copied or stored, never inspected), so the reference transports poison VERBATIM where ir_copy_eval faults type_error at ir_scalar_shape's class 0 \u2014 unreachable on the executed fragment, because the model's only producer of a bound undef_ is IRInst.undef, itself the declared delta `undef-execution`. This row exists rather than an irrelevance theorem for copy.t because copy.t is READ: IRScalar carries no type tag (an int_ does not say its width, an aggv does not say its id), which is the same design choice that lets a cell hold a value instead of a byte image, so expect_ty is not statable in this model and the finest decidable partition is the shape class. The chain's own three copies (`copy ptr`, `copy ptr`, `copy struct.0`) are all cross-class-correct, so neither direction bears on them",
+      "probe": "python3 scripts/evalir_adequacy_grid.py --check",
+      "probe_kind": "measurement",
+      "discharge": "close the divergence \u2014 model the refused fragment, or align the fault class \u2014 and delete the row from data/evalir_adequacy_grid.json. The ratcheted count is `totals.declared-delta` there, published as the scoreboard row `evalir.adequacy.declared_delta` (direction down).",
+      "date": "2026-09-10",
+      "owning_job": "B-SEM (\u00a74(c) adequacy grid)",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_copy_eval "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "ir_copy_ty_slot_is_read"
+        }
+      ],
+      "derived_from": {
+        "path": "data/evalir_adequacy_grid.json",
+        "delta_id": "copy-type-check-coarse"
+      },
+      "recorded_in": "this grid row is the permanent home; the reference arm and the model arm are read side by side in eval_ir_machine.rs's COPY comment block"
+    },
+    {
+      "id": "A-DELTA-enum-load-shape-directed",
+      "class": "evalir-declared-delta",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "EvalIR's executable semantics and the pinned trust-ir reference interpreter DIVERGE on `load`, and the encoding DECLARES the divergence rather than closing it. CLEAN: the encoding-aware load view decodes a matched aggregate type only when the cell holds a WORD-shaped scalar (ptr_ / nullptr_ / int_); at the same type an inline aggregate value passes through unchanged \u2014 kernel witness ir_view_agg_is_identity E2: the reference always decodes the BYTE IMAGE the store wrote, at the load's type, whatever produced it MEASURED: 2026-09-10 at trust 0dd9d3e2d7, against decode_value's Niche arm (interpret.rs:3766-3796) and the store-side niche check (interpret.rs:3538-3567). NEITHER SIDE FAULTS in this row: it is a VALUE divergence, not a fault-direction one. The two agree exactly when the model's store/load round-trip and the reference's encode/decode round-trip are both the identity on a valid value, which is the case on this chain: `as_deref` writes an aggregate into its own alloca and reads it back (sidecar text: `store enum.0 %5, ptr %1` then `%14 = load enum.0, ptr %1`), while `%2 = load enum.1, ptr %0` reads a real heap word at the SAME kind of type. The decision is SHAPE-directed inside a type-directed dispatch, and the identity arm is not an accident \u2014 it is what keeps the chain alive on both the None and the Some path, and what makes the whole extension conservative on the eighteen chains that predate it. The carrier-constructor half of the row is the same class read the other way: the reference turns any 8-byte word at a pointer-payload type into a pointer VALUE KIND through resolve_pointer_kind, so an integer carrier becomes NullPtr / Ptr / DanglingPtr there and stays an int_ here",
+      "probe": "python3 scripts/evalir_adequacy_grid.py --check",
+      "probe_kind": "measurement",
+      "discharge": "close the divergence \u2014 model the refused fragment, or align the fault class \u2014 and delete the row from data/evalir_adequacy_grid.json. The ratcheted count is `totals.declared-delta` there, published as the scoreboard row `evalir.adequacy.declared_delta` (direction down).",
+      "date": "2026-09-10",
+      "owning_job": "B-SEM (\u00a74(c) adequacy grid)",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_load_view "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "ir_view_agg_is_identity"
+        }
+      ],
+      "derived_from": {
+        "path": "data/evalir_adequacy_grid.json",
+        "delta_id": "enum-load-shape-directed"
+      },
+      "recorded_in": "this grid row is the permanent home; the shape-tolerance rule is stated in ir_niche_image's doc and pinned by ir_view_agg_is_identity"
+    },
+    {
+      "id": "A-DELTA-zero-address-is-not-null",
+      "class": "evalir-declared-delta",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "EvalIR's executable semantics and the pinned trust-ir reference interpreter DIVERGE on `borrow`, and the encoding DECLARES the divergence rather than closing it. CLEAN: the machine's null is the scalar IRScalar.nullptr_; `ptr_ Nat.zero` is an ORDINARY address in its own address space, so a live cell at address 0 is loaded, stored and borrowed like any other \u2014 kernel witness ir_borrow_no_provenance_is_ub covers the missing-cell case, not this one E2: the reference's resolve_pointer_kind maps address 0 to NullPtr before it looks for an allocation, so every dereference of it \u2014 Load, Store and Borrow alike \u2014 is UB 'null pointer dereference' MEASURED: 2026-09-10 at trust 0dd9d3e2d7, against `fn resolve_pointer_kind` (interpret.rs:5415-5423 \u2014 `if address == 0 { NullPtr } else if let Some(ptr) = self.try_pointer_from_address(address) { Ptr } else { DanglingPtr }`) and `fn expect_pointer` (interpret.rs:5648-5670). The direction is ACCEPT-MORE: the model continues where the reference is UB. This is the machine's PRE-EXISTING address-space convention, shared verbatim by ir_load_at and ir_store_at since the memory stage was written; it is recorded under `borrow` because Phase B is where it was measured, and it is reachable rather than theoretical \u2014 ir_alloca_k allocates at the machine's allocation counter, and every return-slot lemma is stated at an ABSTRACT counter, which includes zero. A zero test in the arms would close it and would also make each of them stuck at that abstract counter, so it is declared rather than taken",
+      "probe": "python3 scripts/evalir_adequacy_grid.py --check",
+      "probe_kind": "measurement",
+      "discharge": "close the divergence \u2014 model the refused fragment, or align the fault class \u2014 and delete the row from data/evalir_adequacy_grid.json. The ratcheted count is `totals.declared-delta` there, published as the scoreboard row `evalir.adequacy.declared_delta` (direction down).",
+      "date": "2026-09-10",
+      "owning_job": "B-SEM (\u00a74(c) adequacy grid)",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_borrow_eval "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "ir_borrow_no_provenance_is_ub"
+        }
+      ],
+      "derived_from": {
+        "path": "data/evalir_adequacy_grid.json",
+        "delta_id": "zero-address-is-not-null"
+      },
+      "recorded_in": "this grid row is the permanent home; the reasoning is in eval_ir_machine.rs's BORROW comment block, which is also where the load/store sharing is stated"
+    },
+    {
+      "id": "A-DELTA-borrow-one-past-the-end",
+      "class": "evalir-declared-delta",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "EvalIR's executable semantics and the pinned trust-ir reference interpreter DIVERGE on `borrow`, and the encoding DECLARES the divergence rather than closing it. CLEAN: ir_borrow_slot resolves the address through ir_mem_lookup and faults `ub bad_addr` when no LIVE cell answers; ir_alloc_cells materialises cells only at base .. base+k-1, so a one-past-the-end address has no cell and the borrow faults \u2014 kernel witness ir_borrow_no_provenance_is_ub, which is exactly this no-cell minor read at an empty memory E2: the reference's try_pointer_from_address has a SECOND loop that accepts `address == allocation.base + allocation.size`, so a one-past-the-end address resolves to Ptr rather than DanglingPtr and expect_pointer admits the borrow MEASURED: 2026-09-10 at trust 0dd9d3e2d7, against the second loop of `fn try_pointer_from_address` (interpret.rs:5396-5406) reached through `fn resolve_pointer_kind` (interpret.rs:5415-5423) and `fn expect_pointer` (interpret.rs:5648-5670). The direction is REJECT-MORE and therefore FAIL-CLOSED: the model refuses a borrow the reference performs, which can leave a chain stuck but cannot admit a false theorem. It is REACHABLE rather than theoretical \u2014 ir_gep_eval (the ir_gep_base off the ir_sum_idx sum) adds an unbounded offset with no bound check, so `ptr_ (base+k)` is constructible in the model exactly as it is in the reference \u2014 and it is SHARED verbatim with ir_load_at and ir_store_at, which resolve through the same ir_mem_lookup; it is recorded under `borrow` because Phase B's borrow arm is where it was measured. Closing it would mean giving the model an allocation table with bases and sizes rather than a flat cell list, which is a memory-model change and not a borrow-arm change, so it is declared rather than taken. The executed fragment does not exhibit it: the sidecar chain's geps are in-bounds field projections",
+      "probe": "python3 scripts/evalir_adequacy_grid.py --check",
+      "probe_kind": "measurement",
+      "discharge": "close the divergence \u2014 model the refused fragment, or align the fault class \u2014 and delete the row from data/evalir_adequacy_grid.json. The ratcheted count is `totals.declared-delta` there, published as the scoreboard row `evalir.adequacy.declared_delta` (direction down).",
+      "date": "2026-09-10",
+      "owning_job": "B-SEM (\u00a74(c) adequacy grid)",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_borrow_slot "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_gep_eval "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_alloc_cells "
+        }
+      ],
+      "derived_from": {
+        "path": "data/evalir_adequacy_grid.json",
+        "delta_id": "borrow-one-past-the-end"
+      },
+      "recorded_in": "this grid row is the permanent home; the two-way residue is stated in eval_ir_machine.rs's BORROW comment block beside the address-zero one"
+    },
+    {
+      "id": "A-DELTA-fat-null-lanes",
+      "class": "evalir-declared-delta",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "EvalIR's executable semantics and the pinned trust-ir reference interpreter DIVERGE on `ptrfromparts`, and the encoding DECLARES the divergence rather than closing it. CLEAN: a wide value is IRScalar.fat_ d md -- an ADDRESS and a WORD, with no null lane -- so ptr_from_parts over a null data pointer is `ub null_deref` (ir_ptrparts_eval) and over a null metadata pointer `type_error not_int` (ir_ptrparts_at) E2: eval_ptr_from_parts builds FatPtr { NullPtr, .. } -- validate_fat_pointer_value admits a Ptr, NullPtr or DanglingPtr data lane -- and, at a vtable kind, FatPtr { .., NullPtr }; the null fat pointer CONSTANT `{ 0, 0 }` is its const_value arm MEASURED: 2026-09-27 at trust-ir dcc5b9a3, read off eval_ptr_from_parts, validate_fat_pointer_value and const_value's null fat pointer arm. REJECT-MORE, FAIL-CLOSED: the model halts where the reference builds a value, which can leave a chain stuck but cannot admit a false theorem. The projector refuses a CONSTANT at container_len, container_vtable and dyn.N by name (the null pair is the only one the reference admits there), and none of the four E5 slices of real m0off bodies carries a null lane",
+      "probe": "python3 scripts/evalir_adequacy_grid.py --check",
+      "probe_kind": "measurement",
+      "discharge": "close the divergence \u2014 model the refused fragment, or align the fault class \u2014 and delete the row from data/evalir_adequacy_grid.json. The ratcheted count is `totals.declared-delta` there, published as the scoreboard row `evalir.adequacy.declared_delta` (direction down).",
+      "date": "2026-09-27",
+      "owning_job": "B-SEM (\u00a74(c) adequacy grid)",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_ptrparts_at "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_ptrparts_eval "
+        }
+      ],
+      "derived_from": {
+        "path": "data/evalir_adequacy_grid.json",
+        "delta_id": "fat-null-lanes"
+      },
+      "recorded_in": "this grid row is the permanent home; the design is decision memo \u00a723, and the projector's refusal is its `Inst::Const` arm"
+    },
+    {
+      "id": "A-DELTA-ptrmeta-kind-pair",
+      "class": "evalir-declared-delta",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "EvalIR's executable semantics and the pinned trust-ir reference interpreter DIVERGE on `ptrmetadata`, and the encoding DECLARES the divergence rather than closing it. CLEAN: the fat arm reads its word at the DECLARED metadata type alone (ir_ptrmeta_lane: a length at uint_ w, a vtable address at ptr_) and does not check that type against the POINTER type's canonical kind -- `pt` stays dropped (ir_exec_ptrmeta_pt_irrelevant) -- so a vtable word read at uint_ w binds an integer E2: eval_ptr_metadata refuses a declared metadata type that is not FatPtrKind::metadata_ty of the pointer type (type_error), a length for Slice/Str/ContainerLen and a thin Ptr for TraitObject/ContainerVtable MEASURED: 2026-09-27 at trust-ir dcc5b9a3, read off eval_ptr_metadata. ACCEPT-MORE, on ILL-TYPED input only: trust-ir's validator refuses the pair statically (PointerMetadataTypeMismatch), and the projector refuses it by name (check_metadata_ty), so no validated module and no projected module carries one; on a canonical pair the two answer alike, which the E5 slices measure (ir_e5_ptrmeta_mt_is_read, ir_e5_ptrmeta_len_word)",
+      "probe": "python3 scripts/evalir_adequacy_grid.py --check",
+      "probe_kind": "measurement",
+      "discharge": "close the divergence \u2014 model the refused fragment, or align the fault class \u2014 and delete the row from data/evalir_adequacy_grid.json. The ratcheted count is `totals.declared-delta` there, published as the scoreboard row `evalir.adequacy.declared_delta` (direction down).",
+      "date": "2026-09-27",
+      "owning_job": "B-SEM (\u00a74(c) adequacy grid)",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "anchor": "def ir_ptrmeta_lane "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+          "anchor": "def ir_exec_ptrmeta_pt_irrelevant "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_e5.rs",
+          "anchor": "ir_e5_ptrmeta_mt_is_read"
+        }
+      ],
+      "derived_from": {
+        "path": "data/evalir_adequacy_grid.json",
+        "delta_id": "ptrmeta-kind-pair"
+      },
+      "recorded_in": "this grid row is the permanent home; ir_ptrmeta_lane's comment block in eval_ir_machine.rs states the arm"
+    },
+    {
+      "id": "A-DELTA-icmp-pointer-answers",
+      "class": "evalir-declared-delta",
+      "origin": "derived",
+      "status": "measured",
+      "statement": "EvalIR's executable semantics and the pinned trust-ir reference interpreter DIVERGE on `icmp`, and the encoding DECLARES the divergence rather than closing it. CLEAN: ir_icmp_eq / ir_icmp_ne ANSWER on pointer-shaped operands (ir_eqb over the comparable ptr_ / nullptr_ / fnptr_ constructors); on a WIDE pointer they halt type_error not_int (ir_e5_icmp_eq_containerlen_refused and its five siblings), which is exact E2: eval_icmp refuses EVERY non-integer operand, thin pointer or wide: expect_int_value raises type_error ('expected integer value, got ptr'); trust-ir's Lean semantics (semICmpInst, 'ICmp: non-integer operands') refuses the same MEASURED: 2026-09-27 at trust-ir dcc5b9a3, by RUNNING the reference interpreter on tests/fixtures/e5/e5_m0off_slices.trust-ir.txt: e5::drive_control_thin_icmp (`icmp eq ptr %0, %0`) and e5::drive_ptr_eq (the `Arc::ptr_eq` fast path of <Name as PartialEq>::eq, `icmp eq fatptr<container_len>`) both end TypeError. ACCEPT-MORE on the THIN half: the model answers where the reference refuses, and the m0off callee sidecar carries 185 `icmp eq ptr` sites, so this is reachable, not theoretical. It is PRE-EXISTING (E5 found it, did not make it) and the wide half agrees. Closing it is a reference question -- the compiled program does compare pointers -- not a model one, so it is declared rather than taken",
+      "probe": "python3 scripts/evalir_adequacy_grid.py --check",
+      "probe_kind": "measurement",
+      "discharge": "close the divergence \u2014 model the refused fragment, or align the fault class \u2014 and delete the row from data/evalir_adequacy_grid.json. The ratcheted count is `totals.declared-delta` there, published as the scoreboard row `evalir.adequacy.declared_delta` (direction down).",
+      "date": "2026-09-27",
+      "owning_job": "B-SEM (\u00a74(c) adequacy grid)",
+      "sources": [
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_ops.rs",
+          "anchor": "def ir_icmp_eq "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_ops.rs",
+          "anchor": "def ir_scalar_cmpable "
+        },
+        {
+          "path": "crates/clean-verify/src/spec/core_spec/eval_ir_e5.rs",
+          "anchor": "ir_e5_icmp_eq_containerlen_refused"
+        }
+      ],
+      "derived_from": {
+        "path": "data/evalir_adequacy_grid.json",
+        "delta_id": "icmp-pointer-answers"
+      },
+      "recorded_in": "this grid row is the permanent home; the measurement is tests/eval_ir/e5_fat_images.rs's E2 leg and decision memo \u00a723"
+    },
+    {
       "id": "A-CLZ-DEREF-MODEL",
       "class": "core-callee-model",
       "origin": "seeded",
@@ -770,7 +1021,7 @@
       "date": "2026-08-26",
       "owning_job": "C-LZ",
       "statement": "The designated target's link-4 theorems hold over a module whose second function is AUTHORED, not minted. `ir_lzb_correct` (A4) and `ir_lzb_machine_sound` (A5) are stated over `ir_lzb_module` = the minted `ir_lz_func` at function 0 (pinned by name, kernel-checked, `ir_lzb_func0_is_minted`) PLUS a hand-authored model of `<LevelArc as Deref>::deref` at function 1. That model is an ASSUMPTION about `Option::as_deref` + `Option::expect`, whose bodies no artifact here can carry: rustc has no cross-crate THIR (`thir_body` takes a `LocalDefId`; there is no `thir_of_instance`). Measured 2026-08-26, the scope was an undercount in both directions: the reachable closure is six or seven functions, not two, it includes the higher-order `Option::map`, and its DATA path bottoms out at `NonNull::as_ref`'s `&*ptr` \u2014 a language primitive with no body at all, which unreachability cannot excuse because dereferencing is what `is_zero` is there to do. Every chain that reads through an `Arc` inherits this floor.",
-      "probe": "cargo test --locked -p clean-verify --test crystal_a1_lineage level_is_zero",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a1_lineage level_is_zero",
       "probe_kind": "measurement",
       "discharge": "replace the authored model with a DERIVED one via cross-crate lowering (designs/2026-08-26-cross-crate-lowering-for-a0.md). Note what that buys, in the currency the status page states: it does not REMOVE the assumption, it converts a bespoke one (\"`deref` does load + null-check + assert\", this chain only) into shared instruction semantics (\"EvalIR's `load` models `&*ptr`\") that all eighteen chains already rest on. This row closes only when the deref's own callees are bodyful \u2014 A0's bodyful reachable closure, architecturally blocked today.",
       "sources": [
@@ -803,6 +1054,28 @@
         {
           "path": "designs/2026-08-22-is-zero-model-vs-minted-decision.md",
           "anchor": "`LevelArc` fields at cells `a+8` and `a+16`"
+        }
+      ]
+    },
+    {
+      "id": "A-CLZ-DEREF-ARC-DATA-OFFSET",
+      "class": "layout-obligation",
+      "origin": "seeded",
+      "status": "measured",
+      "date": "2026-09-09",
+      "owning_job": "C-LZ",
+      "statement": "`ir_lzb_deref` geps the pointer it loads out of a `LevelArc` field by SIXTEEN, and `EncodesLevelArcF` places every child `Level` at `Nat.add b ir_d16` to match, because `<Arc<T> as Deref>::deref` yields the address of the Arc's DATA \u2014 past `ArcInner`'s strong and weak counts. The 16 is MEASURED on this target (stable rustc 1.97.1 aarch64-apple-darwin, `Level` size 40 / align 8: `stored=0x105459bf0`, `deref_result=0x105459c00`).\nNARROWED 2026-09-10, and one clause of it REFUTED. This row used to end 'not guaranteed: `ArcInner` is private `alloc` internals with NO STATED REPR, and another target or another smart pointer would move it.' The no-stated-repr half is FALSE, measured two ways. rustc's own layout descriptor for this instance reports `repr=c` for `ArcInner` (the same extraction reports `repr=transparent` for `NonNull` and no repr at all for `Arc`, so it is not defaulting), and the sysroot source declares `#[repr(C, align(2))] struct ArcInner<T: ?Sized> { strong: Atomic<usize>, weak: Atomic<usize>, data: T }`. Under `repr(C)` the field ORDER is guaranteed, so 16 is not a layout-algorithm accident: it is two pointer-sized atomic counts, and what survives is the POINTER WIDTH, not the layout algorithm. The second half stands unchanged: another target moves it, and another smart pointer has a different header entirely.\nThe row's own second discharge route \u2014 'make the deref's own callees bodyful, at which point the offset comes from the emitted code' \u2014 is now AVAILABLE and taken as far as evidence goes. The callee sidecar derives `<Arc<Level> as Deref>::deref` from its own monomorphized MIR, and that body geps by a `const i64 16`. So the 16 is no longer a difference between two runtime addresses: it is the compiler's own constant for this instance. `scripts/crystal_lzd_readiness.py` RECOMPUTES the offset from rustc's field sizes (`ArcInner` size 56, fields Atomic(8), Atomic(8), Level, so data at 16 and a 40-byte payload \u2014 the same 40 this row already recorded) and REFUSES unless the recomputed offset, the emitted gep constant and the authored model's constant all agree. Demonstrated: planting 24 as the authored constant fails closed with 'ledger row A-CLZ-DEREF-ARC-DATA-OFFSET is now false of the machine it models'. CLOSING the row is still an owner act, and it should not close alone: its route says it closes together with `A-CLZ-DEREF-MODEL`, which needs the derived module MINTED and A4/A5 re-proved over it, not merely measured mintable. \nWHAT THIS ROW IS NOT. Audit r16 M16-6 (2026-09-02) opened it as a `core-callee-model` row recording something strictly worse \u2014 the model returned the loaded word UNCHANGED, computing `x` where the machine computes `&*x`, which did not weaken the relation but made it UNSATISFIABLE by any real `Level` heap at exactly the `Succ`/`Max`/`IMax` nodes link 4 is about. That clause is DISCHARGED: the model carries the gep, the relation moved with it, and the two `Eq.refl` cost equations it re-derived are kernel-checked at their new values (`ir_lzb_cost_halts_max` 41, `ir_lzb_cost_halts_imax` 22). What survives is the layout obligation above, in the same family as the field offsets and the niche tag \u2014 a smaller and honest debt in place of a false clause.",
+      "probe": "targo --unverified test --locked -p clean-verify --test crystal_a1_lineage deref_model_arc_data_offset",
+      "probe_kind": "measurement",
+      "discharge": "derive the Arc data offset from a committed layout descriptor the way `data/crystal_enum_layout_census_2026-08-21.json` derives the tag encoding, rather than from a constant stated in two places and held in step by a test; or make the deref's own callees bodyful, at which point the offset comes from the emitted code and this row and `A-CLZ-DEREF-MODEL` close together.",
+      "sources": [
+        {
+          "path": "docs/CRYSTAL_STATUS.md",
+          "anchor": "the Arc's DATA address, sixteen bytes past the stored word"
+        },
+        {
+          "path": "designs/2026-08-22-is-zero-model-vs-minted-decision.md",
+          "anchor": "the deref model geps by the Arc header"
         }
       ]
     },
@@ -926,15 +1199,15 @@
     "inputs": [
       {
         "path": "data/crystal_mint_blind_slots.json",
-        "sha256": "c590e140e5c7803f5b3019c84e46d8cd31c62a8166411fb06ff7c2c38184e27d"
+        "sha256": "c2fd4659a8697f10297f99c5b8c602d43d6a07022c69c86586897db4fcc97331"
       },
       {
         "path": "data/evalir_adequacy_grid.json",
-        "sha256": "52a937ca039244e487b123f489d72ff51caf42c20604de3ffed0c5205ab67775"
+        "sha256": "ad6ee7dbf67de3c6e8a4a1e5b677effa4c5ac8f4dda7487c5307f711ad7d6cfd"
       },
       {
         "path": "data/verdict_io_contracts.json",
-        "sha256": "1ad9f8369a8d1fbc1db4e64fee39047db5fdfb86ed536a33d7e932827a1f4ef6"
+        "sha256": "192be09a3cfad15e90570506775063b923a156eb3d389790de53bdbf95f33f9e"
       }
     ],
     "consumers": [

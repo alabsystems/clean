@@ -10,6 +10,26 @@ use crate::tactic::LocalDecl;
 use crate::unify::MetaState;
 
 impl SmtSolver {
+    /// Keep witness placeholders fresh against every source local, including
+    /// proof locals that the environment-owning caller does not register as
+    /// SMT scalar terms.
+    pub(in super::super) fn reserve_context_fvar_ids(&mut self, local_ctx: &[LocalDecl]) {
+        if let SmtSolver::Verifiable {
+            next_exists_placeholder_fvar,
+            ..
+        } = self
+        {
+            let next_placeholder_base = local_ctx
+                .iter()
+                .map(|decl| decl.fvar.as_u64().saturating_add(1))
+                .max()
+                .unwrap_or(0);
+            if *next_exists_placeholder_fvar < next_placeholder_base {
+                *next_exists_placeholder_fvar = next_placeholder_base;
+            }
+        }
+    }
+
     /// Register all FVars from a goal's local context with sort inferred from
     /// their Lean types. Must be called before `translate_and_assert` or `prove`
     /// so that `translate_fvar` can look up the correct sort instead of
@@ -34,6 +54,7 @@ impl SmtSolver {
         local_ctx: &[LocalDecl],
         metas: &MetaState,
     ) -> AyResult<()> {
+        self.reserve_context_fvar_ids(local_ctx);
         match self {
             SmtSolver::Fast(backend) => {
                 for decl in local_ctx {
@@ -46,17 +67,8 @@ impl SmtSolver {
                 backend,
                 translator,
                 var_map,
-                next_exists_placeholder_fvar,
                 ..
             } => {
-                let next_placeholder_base = local_ctx
-                    .iter()
-                    .map(|decl| decl.fvar.as_u64().saturating_add(1))
-                    .max()
-                    .unwrap_or(0);
-                if *next_exists_placeholder_fvar < next_placeholder_base {
-                    *next_exists_placeholder_fvar = next_placeholder_base;
-                }
                 for decl in local_ctx {
                     let ty = metas.instantiate(&decl.ty);
                     let lean_ty = ty.strip_mdata();

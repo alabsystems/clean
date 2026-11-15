@@ -21,9 +21,12 @@ use clean_auto::arith_proof::{mk_int_concrete_false, ArithSort, CmpOp};
 /// Derive `False` from a contradictory `@Nat.le lhs rhs` proof where
 /// `lhs_val > rhs_val` as concrete Nat values.
 ///
-/// 1. Apply `Nat.le_of_succ_le_succ` `rhs_val` times -> `p' : @Nat.le diff 0`
-/// 2. diff = 1: `Nat.lt_irrefl 0 p'` (unfolds to `@Nat.le 1 0 -> False`)
-/// 3. diff >= 2: `Nat.not_succ_lt_zero (diff-2) p'` (unfolds to `@Nat.le diff 0 -> False`)
+/// `Nat.lt_irrefl rhs (Nat.le_trans (rhs+1) lhs rhs (rhs+1 ≤ lhs) proof)`, the
+/// premise `rhs+1 ≤ lhs` a single literal comparison
+/// ([`super::nat_le_bridge::nat_false_of_lits_le`]). The term and its kernel
+/// check are constant-size in both values. It used to peel
+/// `Nat.le_of_succ_le_succ` `rhs_val` times, one nested application per unit
+/// of the smaller literal.
 ///
 /// REQUIRES: `proof` has type `@Nat.le lhs_val rhs_val`
 /// REQUIRES: `lhs_val > rhs_val` (otherwise returns `None`)
@@ -33,43 +36,7 @@ pub(crate) fn derive_false_from_contradictory_le(
     lhs_val: u64,
     rhs_val: u64,
 ) -> Option<Expr> {
-    if lhs_val <= rhs_val {
-        return None;
-    }
-
-    let le_of_succ = Expr::const_(Name::from_string("Nat.le_of_succ_le_succ"), vec![]);
-
-    // Strip successors from both sides rhs_val times.
-    let mut current_proof = proof;
-    let mut current_lhs = lhs_val;
-    let mut current_rhs = rhs_val;
-
-    while current_rhs > 0 {
-        let n = Expr::nat_lit(current_lhs - 1);
-        let m = Expr::nat_lit(current_rhs - 1);
-        current_proof = Expr::app(
-            Expr::app(Expr::app(le_of_succ.clone(), n), m),
-            current_proof,
-        );
-        current_lhs -= 1;
-        current_rhs -= 1;
-    }
-
-    // current_proof : @Nat.le diff 0 where diff = lhs_val - rhs_val >= 1
-    let diff = current_lhs;
-
-    let false_proof = if diff == 1 {
-        let lt_irrefl = Expr::const_(Name::from_string("Nat.lt_irrefl"), vec![]);
-        Expr::app(Expr::app(lt_irrefl, Expr::nat_lit(0)), current_proof)
-    } else {
-        let not_succ_lt = Expr::const_(Name::from_string("Nat.not_succ_lt_zero"), vec![]);
-        Expr::app(
-            Expr::app(not_succ_lt, Expr::nat_lit(diff - 2)),
-            current_proof,
-        )
-    };
-
-    Some(false_proof)
+    super::nat_le_bridge::nat_false_of_lits_le(proof, lhs_val, rhs_val)
 }
 
 /// Wrap a proof of `False` with `@False.elim.{0} goal_type false_proof`.
@@ -115,15 +82,16 @@ fn try_close_contradictory_le(
 /// Derive `False` from `h : Nat.le (core + c1) (core + c2)` with `c1 > c2`.
 ///
 /// Construction (mirrors `order_nat_le_antisymm_proof.rs`):
-/// - `step : Nat.le (Nat.succ rhs) lhs` built from `Nat.le.refl`/`Nat.le.step`
-///   (valid since `c1 >= c2 + 1`, i.e. `succ rhs` has offset `c2 + 1 <= c1`).
+/// - `step : Nat.le (Nat.succ rhs) lhs`, the offsets `c2 + 1 <= c1` compared
+///   once over the common base ([`super::nat_le_bridge::nat_le_between`];
+///   constant-size in `c1 - c2`).
 /// - `Nat.le_trans (Nat.succ rhs) lhs rhs step h : Nat.le (Nat.succ rhs) rhs`
 ///   which is `Nat.lt rhs rhs`.
 /// - `Nat.lt_irrefl rhs (...) : False`.
 ///
-/// All three constants (`Nat.le.refl`/`Nat.le.step`, `Nat.le_trans`,
-/// `Nat.lt_irrefl`) are constructive prelude theorems / inductive constructors,
-/// so the resulting `False` term carries no domain axioms. `close_goal` still
+/// Every constant (`Nat.le_of_ble_eq_true`, `Nat.add_le_add_left`,
+/// `Nat.le_trans`, `Nat.lt_irrefl`) is a constructive prelude theorem, so the
+/// resulting `False` term carries no domain axioms. `close_goal` still
 /// re-checks it.
 fn try_close_contradictory_nat_le_symbolic(
     proof: &Expr,
@@ -131,7 +99,8 @@ fn try_close_contradictory_nat_le_symbolic(
     rhs: &Expr,
     goal_target: &Expr,
 ) -> Option<Expr> {
-    use crate::tactic::arith_linarith_nat_direct::{nat_le_via_steps, nat_split_core_offset};
+    use crate::tactic::arith_linarith_nat_direct::nat_split_core_offset;
+    use crate::tactic::nat_le_bridge::nat_le_between;
 
     let (lhs_core, lhs_off) = nat_split_core_offset(lhs)?;
     let (rhs_core, rhs_off) = nat_split_core_offset(rhs)?;
@@ -142,10 +111,8 @@ fn try_close_contradictory_nat_le_symbolic(
     let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
     let succ_rhs = Expr::app(succ, rhs.clone());
 
-    // step : Nat.le (succ rhs) lhs.  succ rhs has offset rhs_off + 1 <= lhs_off,
-    // so we weaken from `Nat.le.refl (succ rhs)` by `lhs_off - (rhs_off + 1)`.
-    let steps = lhs_off - rhs_off - 1;
-    let step = nat_le_via_steps(&succ_rhs, steps);
+    // step : Nat.le (succ rhs) lhs.  succ rhs has offset rhs_off + 1 <= lhs_off.
+    let step = nat_le_between(&succ_rhs, lhs)?;
 
     // Nat.le_trans (succ rhs) lhs rhs step proof : Nat.le (succ rhs) rhs ≡ Nat.lt rhs rhs
     let le_trans = Expr::const_(Name::from_string("Nat.le_trans"), vec![]);
@@ -163,12 +130,25 @@ fn try_close_contradictory_nat_le_symbolic(
 
 /// Evaluate an Int expression to a concrete i64 value.
 ///
-/// Handles `Int.ofNat(n)`, `Int.negSucc(n)`, `Int.add(a, b)`, `Int.mul(a, b)`.
+/// Handles `Int.ofNat(n)`, `Int.negSucc(n)`, `Int.add(a, b)`, `Int.mul(a, b)`,
+/// `Int.sub(a, b)` and the numeral `@OfNat.ofNat Int n _`.
 ///
 /// REQUIRES: `expr` is a well-formed kernel expression
 /// ENSURES: On `Some(n)`, `expr` evaluates to `n` as i64
 /// ENSURES: On `None`, `expr` contains free variables or unrecognized constructors
 fn eval_int_expr(expr: &Expr) -> Option<i64> {
+    // A source numeral `(5 : Int)` elaborates to `@OfNat.ofNat Int 5 inst`.
+    // Reading its literal only guides the closer: the `False` term is
+    // re-checked by the kernel, which unfolds the instance itself.
+    if let ExprKind::Const(name, _) = expr.get_app_fn().kind() {
+        let args = expr.get_app_args();
+        if args.len() == 3
+            && name.to_string() == "OfNat.ofNat"
+            && matches!(args[0].kind(), ExprKind::Const(n, _) if n.to_string() == "Int")
+        {
+            return i64::try_from(eval_nat_expr(args[1])?).ok();
+        }
+    }
     match expr.kind() {
         ExprKind::Lit(Literal::Nat(n)) => {
             use clean_kernel::expr::BigNat;
@@ -340,6 +320,9 @@ fn try_close_contradictory_real_le(
 
 /// Sort-dispatched contradiction closing: tries Nat, Int, or Real evaluation.
 ///
+/// REQUIRES: `combined_proof` proves the NON-strict `lhs ≤ rhs`; a strict
+///   proof is read as the `≤` it is by definition first
+///   (`arith_linarith_chain::definitional_le_endpoints`).
 /// ENSURES: On `Some(proof)`, `proof` has type `goal_target`
 pub(crate) fn try_close_contradictory_le_generic(
     sort: ArithSort,

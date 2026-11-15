@@ -94,8 +94,10 @@ impl fmt::Display for DiagnosticHint {
 /// Generate hints for common error patterns.
 #[must_use]
 pub(crate) fn hint_for_error(error: &ElabError) -> Vec<DiagnosticHint> {
-    match error {
-        ElabError::UnknownIdent(name) => {
+    // Attribution is presentation: a wrapped error keeps the hints of the
+    // error it wraps.
+    match error.innermost() {
+        ElabError::UnknownIdent(name) | ElabError::UnknownIdentDeferred { name, .. } => {
             let mut hints = vec![DiagnosticHint {
                 message: format!("Did you mean to import a module containing `{name}`?"),
                 replacement: None,

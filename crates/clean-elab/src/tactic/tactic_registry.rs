@@ -155,7 +155,7 @@ impl UserTacticRegistry {
         let entry = self
             .entries
             .get(name)
-            .ok_or_else(|| TacticError::UnknownTactic(name.to_string()))?;
+            .ok_or_else(|| self.unknown_tactic(name))?;
         (entry.handler)(args, state)
     }
 
@@ -165,6 +165,28 @@ impl UserTacticRegistry {
     #[must_use]
     pub fn is_registered(&self, name: &str) -> bool {
         self.entries.contains_key(name)
+    }
+
+    /// Build the error for a tactic name that is not registered, suggesting the
+    /// closest registered names when there are any.
+    ///
+    /// The registry and the edit-distance helper were both already in scope at
+    /// every site that minted this error, and no site called either: a user who
+    /// typed `inhabit` was told `unknown tactic 'inhabit'` and nothing else.
+    #[must_use]
+    pub(crate) fn unknown_tactic(&self, name: &str) -> TacticError {
+        let suggestions =
+            crate::agent_diagnostics::nearest_string_candidates(name, self.names(), 3);
+        if suggestions.is_empty() {
+            // No near miss. Suggesting the three alphabetically-first tactics
+            // would be noise dressed as help.
+            TacticError::UnknownTactic(name.to_string())
+        } else {
+            TacticError::UnknownTacticWithSuggestions {
+                name: name.to_string(),
+                suggestions,
+            }
+        }
     }
 
     /// Iterator over all registered tactic names.
@@ -219,14 +241,21 @@ fn register_nullary_builtins(reg: &mut UserTacticRegistry) {
         ),
         (
             "intro",
-            |ps| super::intro(ps, "h"),
+            |ps| super::intro(ps, &clean_parser::SurfaceName::generated_path("h")),
             "Introduce a binder from the goal into the context",
         ),
         (
             "intros",
             |ps| {
                 let mut count = 0;
-                while super::intro(ps, &format!("h_{count}")).is_ok() {
+                while super::intro(
+                    ps,
+                    &clean_parser::SurfaceName::from_name(
+                        clean_kernel::Name::anon().str(format!("h_{count}")),
+                    ),
+                )
+                .is_ok()
+                {
                     count += 1;
                 }
                 Ok(())
@@ -277,7 +306,8 @@ fn register_nullary_builtins(reg: &mut UserTacticRegistry) {
         ),
         (
             "decide",
-            super::decide,
+            // The registered `decide` (`builtins.rs`), Lean's procedure.
+            super::decide_lean::decide,
             "Solve decidable propositions by computation",
         ),
         (

@@ -89,8 +89,8 @@ pub fn classify_arith_head(name: &str) -> Option<ArithHead> {
         "Int.add" => (Add, Int),
         "Int.sub" => (Sub, Int),
         "Int.mul" => (Mul, Int),
-        "Int.div" => (Div, Int),
-        "Int.mod" => (Mod, Int),
+        "Int.div" | "Int.ediv" => (Div, Int),
+        "Int.mod" | "Int.emod" => (Mod, Int),
         "Int.neg" | "Int.negSucc" => (Neg, Int),
         // Real direct
         "Real.add" => (Add, Real),
@@ -145,9 +145,9 @@ pub(crate) fn classify_arith_head_name(name: &Name) -> Option<ArithHead> {
         (Sub, Int)
     } else if name_eq_str(name, "Int.mul") {
         (Mul, Int)
-    } else if name_eq_str(name, "Int.div") {
+    } else if name_eq_any(name, &["Int.div", "Int.ediv"]) {
         (Div, Int)
-    } else if name_eq_str(name, "Int.mod") {
+    } else if name_eq_any(name, &["Int.mod", "Int.emod"]) {
         (Mod, Int)
     } else if name_eq_any(name, &["Int.neg", "Int.negSucc"]) {
         (Neg, Int)

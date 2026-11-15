@@ -40,6 +40,12 @@ impl<'a> ElabCtx<'a> {
     /// by `elab_nat_literal_with_expected` which tries OfNat instance resolution
     /// first, then falls back to hardcoded constructors.
     pub(in crate::infer) fn elab_nat_literal(&mut self, n: &BigNat) -> Result<Expr, ElabError> {
+        if crate::source_prelude::is_bare_module(self.env) {
+            return Ok(self.elab_nat_literal_with_expected(
+                n,
+                &Expr::const_(Name::from_string("Nat"), vec![]),
+            ));
+        }
         Ok(Expr::bignat_lit(n.clone()))
     }
 
@@ -112,10 +118,13 @@ impl<'a> ElabCtx<'a> {
         // the pre-B12 pin. Regression pin: tests/ofnat_open_carrier_default.rs.
         //
         // B99: the `@[default_instance]` TABLE drives this defaulting in real
-        // Lean — `instOfNatNat` is merely its 1000-priority entry. When the
-        // file registered its own `OfNat` default instance at priority >=
-        // 1000 (e.g. `@[default_instance 2000] instance : OfNat MyType n`),
-        // that entry outranks `instOfNatNat`, so consult the table BEFORE the
+        // Lean — `instOfNatNat` is merely its priority-100 entry
+        // (`@[default_instance 100]`, Lean 4.8.0 `Init/Prelude.lean`; this
+        // arm read 1000 until R163). When the file registered its own `OfNat`
+        // default instance at priority >= 100 (e.g. `@[default_instance]`,
+        // 1000, or `@[default_instance 200] instance : OfNat MyType n`), that
+        // entry is tried before `instOfNatNat` (a tie goes to the newer
+        // entry), so consult the table BEFORE the
         // hard Nat pin: the stuck-goal defaulting in `resolve_instance`
         // assigns the carrier from the winning entry. On failure — or when
         // no user default at the `instOfNatNat` tier exists — the Nat pin
@@ -126,10 +135,14 @@ impl<'a> ElabCtx<'a> {
             ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some()
         ) {
             let ofnat = Name::from_string("OfNat");
-            let has_user_default_at_nat_tier = self
-                .default_instances
-                .get(&ofnat)
-                .is_some_and(|entries| entries.iter().any(|(_, priority)| *priority >= 1000));
+            let has_user_default_at_nat_tier = self.has_user_ofnat_default_at_nat_tier();
+            // Inside a `let` value that postpones its numerals, the literal
+            // waits for its carrier as in Lean (`OfNat ?α n` pending); the
+            // `let` drains it after its body (`drain_postponed_numerals`),
+            // where a user `OfNat` default at this tier decides it.
+            if self.numeral_postpone_depth > 0 {
+                return self.postpone_open_numeral(n, &expected_whnf);
+            }
             let defaulted_carrier = has_user_default_at_nat_tier && {
                 let ofnat_levels = self
                     .env
@@ -140,7 +153,18 @@ impl<'a> ElabCtx<'a> {
                     Expr::app(Expr::const_(ofnat, ofnat_levels), expected_whnf.clone()),
                     Expr::bignat_lit(n.clone()),
                 );
-                self.resolve_instance(&goal).is_some()
+                // This numeral does not wait (it is outside a postponing
+                // scope, or the scope's drain is deciding it), so its default
+                // applies now even inside a Lean-order alternative, which
+                // would otherwise report the goal stuck and leave the hard
+                // `Nat` pin below to answer it (`let k := id 5; Tag.tag k`
+                // with a default `OfNat W n` gave `Nat`, Lean `W`). The
+                // answer is counted (an early one stands that alternative
+                // down; the drain does not count its own).
+                let defer = std::mem::take(&mut self.defer_user_defaults);
+                let resolved = self.resolve_instance(&goal).is_some();
+                self.defer_user_defaults = defer;
+                resolved
             };
             if defaulted_carrier {
                 // The default instance assigned the carrier metavariable;
@@ -265,6 +289,12 @@ impl<'a> ElabCtx<'a> {
                     );
                 }
             }
+        }
+
+        // An explicit prelude has no builtin numeric default. Retain a real
+        // OfNat obligation instead of fabricating a value of a name-only Nat.
+        if crate::source_prelude::is_bare_module(self.env) {
+            return self.postpone_open_numeral(n, &expected_whnf);
         }
 
         // Step 2: Hardcoded fallback for built-in types when OfNat instances are
@@ -607,6 +637,14 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Returning `None` on a literal field therefore keeps `Nat` byte-identical
     /// while letting the width-specific carriers reach their constructor.
+    ///
+    /// A field that is itself a NUMERAL (`OfNat.ofNat …`) is not a carrier
+    /// construction either: `instance weird : OfNat Nat 5 := ⟨7⟩` has the
+    /// field `@OfNat.ofNat Nat 7 (instOfNatNat 7)`, and projecting it turned
+    /// the surface `(5 : Nat)` into the numeral `7`, which Lean never does
+    /// (its term is `@OfNat.ofNat Nat 5 weird`, shown `5`). `simp` then decided
+    /// `7 < 6` and closed `h : (5 : Nat) < 6 ⊢ False`, which pinned Lean 4.8.0
+    /// leaves open (review r4t q1; integ/r5, 2026-10-16). Kept as written.
     fn project_ofnat_carrier_value(&self, inst_expr: &Expr) -> Option<Expr> {
         let reduced = self.whnf(inst_expr);
         let ExprKind::Const(head_name, _) = reduced.get_app_fn().kind() else {
@@ -621,6 +659,13 @@ impl<'a> ElabCtx<'a> {
         let args = reduced.get_app_args();
         let value = args.get(2)?;
         if matches!(value.kind(), ExprKind::Lit(_)) {
+            return None;
+        }
+        let is_numeral = matches!(
+            value.get_app_fn().kind(),
+            ExprKind::Const(head, _) if *head == Name::from_string("OfNat.ofNat")
+        );
+        if is_numeral {
             return None;
         }
         Some((*value).clone())
@@ -769,18 +814,54 @@ impl<'a> ElabCtx<'a> {
         }
     }
 
+    /// One `Coe` hop: resolve `Coe from to` and project through `Coe.coe`.
+    ///
+    /// # The universe arguments are not optional
+    ///
+    /// Ground truth from the pinned toolchain
+    /// (`lean4 v4.30.0-rc2`, `set_option pp.universes true`, `#check @Coe.coe`):
+    ///
+    /// ```text
+    /// Coe.{u_1, u_2} : semiOutParam (Sort u_1) → Sort u_2 → Sort (max (max 1 u_1) u_2)
+    /// @Coe.coe.{u_1, u_2} : {α : semiOutParam (Sort u_1)} → {β : Sort u_2} →
+    ///                       [self : Coe.{u_1, u_2} α β] → α → β
+    /// ```
+    ///
+    /// Both are TWO-universe-parameter constants under a real Lean/Mathlib
+    /// import. This site used to spell both with an EMPTY level list, so every
+    /// coercion it emitted carried `Const("Coe.coe", [])` and died the moment
+    /// the term was kernel-checked:
+    /// `Level count mismatch for Coe.coe: declared 2 level params, got 0`
+    /// (measured on `Mathlib/Data/Subtype.lean:207 Subtype.coe_prop` and
+    /// `Mathlib/Logic/Unique.lean:248 Option.subsingleton_iff_isEmpty`).
+    ///
+    /// The levels come from the sorts of `from` and `to` themselves — the same
+    /// discipline as [`Self::try_coerce_subtype_val`], which takes `u` from the
+    /// receiver's own `Subtype.{u}` head rather than minting a metavariable.
+    ///
+    /// The arity is read from the ENVIRONMENT, not hardcoded: Clean's own
+    /// prelude may register a level-monomorphic `Coe`, and supplying two levels
+    /// to a zero-parameter constant is the same defect in the other direction.
+    /// A constant whose declared arity is neither 0 nor 2, or a `from`/`to`
+    /// whose type is not a `Sort`, makes this hop REFUSE rather than guess —
+    /// the caller then reports an honest `TypeMismatch` instead of emitting a
+    /// term the kernel will reject.
     fn try_coerce_coe_step(&mut self, expr: &Expr, from: &Expr, to: &Expr) -> Option<Expr> {
+        let coe_levels = self.coe_class_levels(from, to)?;
         let coe_goal = Expr::app(
-            Expr::app(Expr::const_(Name::from_string("Coe"), vec![]), from.clone()),
+            Expr::app(
+                Expr::const_(Name::from_string("Coe"), coe_levels.clone()),
+                from.clone(),
+            ),
             to.clone(),
         );
         let inst_expr = self.resolve_instance(&coe_goal)?;
-        // Project: `@Coe.coe <from> <to> <inst> <expr>`.
+        // Project: `@Coe.coe.{u,v} <from> <to> <inst> <expr>`.
         Some(Expr::app(
             Expr::app(
                 Expr::app(
                     Expr::app(
-                        Expr::const_(Name::from_string("Coe.coe"), vec![]),
+                        Expr::const_(Name::from_string("Coe.coe"), coe_levels),
                         from.clone(),
                     ),
                     to.clone(),
@@ -789,6 +870,39 @@ impl<'a> ElabCtx<'a> {
             ),
             expr.clone(),
         ))
+    }
+
+    /// The universe arguments `Coe`/`Coe.coe` must carry for a `from → to` hop.
+    ///
+    /// Returns `Some(vec![])` when the environment's `Coe` is level-monomorphic
+    /// (Clean's own prelude shape), `Some(vec![u, v])` when it declares two
+    /// parameters and both `from : Sort u` and `to : Sort v` can be read, and
+    /// `None` in every other case — including a `Coe` that is absent from the
+    /// environment entirely, where no coercion could be emitted anyway.
+    ///
+    /// ENSURES: the returned length equals `Coe`'s declared level-parameter
+    ///   count, so the emitted `Const` can never be a `LevelCountMismatch`
+    fn coe_class_levels(&mut self, from: &Expr, to: &Expr) -> Option<Vec<Level>> {
+        let declared = self
+            .env
+            .get_const(&Name::from_string("Coe"))?
+            .level_params
+            .len();
+        match declared {
+            0 => Some(Vec::new()),
+            2 => Some(vec![self.sort_level_of(from)?, self.sort_level_of(to)?]),
+            _ => None,
+        }
+    }
+
+    /// The level `u` of a type `t : Sort u`, or `None` when `t`'s inferred type
+    /// does not whnf to a `Sort` (a metavariable-headed type, say).
+    fn sort_level_of(&mut self, ty: &Expr) -> Option<Level> {
+        let sort = self.whnf(&self.infer_type(ty).ok()?);
+        match sort.kind() {
+            ExprKind::Sort(level) => Some(level.clone()),
+            _ => None,
+        }
     }
 
     /// Transitive coercion: compose imported `Coe` instances along a
@@ -1470,15 +1584,21 @@ impl<'a> ElabCtx<'a> {
 /// preserved verbatim (Lean 4 does not normalize them): `3.14` becomes
 /// `(314, true, 2)`, not `(157, true, ...)`.
 ///
-/// Decomposition for `<int>.<frac>e<exp>`:
-/// - the mantissa is the concatenation of the integer and fraction digits,
-/// - the net base-10 exponent is `exp - frac.len()`,
-/// - a non-negative net exponent yields `(mantissa, false, net)`,
-///   a negative one yields `(mantissa, true, -net)`.
+/// The triple is Lean's own, rule for rule — `decodeScientificLitVal?`
+/// (`Init/Meta/Defs.lean` in v4.30.0-rc2, `Init/Meta.lean` in v4.8.0). The
+/// kernel computes no `Float`, so the triple IS the literal's meaning: two
+/// spellings are `rfl`-equal exactly when their triples are. For
+/// `<int>.<frac>e<exp>` the mantissa is the integer and fraction digits
+/// concatenated, and with `f = frac.len()`:
+/// - a WRITTEN `-` yields `(mantissa, true, exp + f)` whatever `exp` is, so
+///   `1e-0` is `(1, true, 0)` and a different term from `1e0`
+///   (`(1, false, 0)`);
+/// - otherwise `exp >= f` yields `(mantissa, false, exp - f)`,
+/// - and `exp < f` yields `(mantissa, true, f - exp)`.
 ///
 /// Examples: `3.14 -> (314, true, 2)`, `1e-5 -> (1, true, 5)`,
 /// `2.5E10 -> (25, false, 9)`, `31.0 -> (310, true, 1)`,
-/// `0.0 -> (0, true, 1)`.
+/// `0.0 -> (0, true, 1)`, `1e-0 -> (1, true, 0)`, `1.25e1 -> (125, true, 1)`.
 ///
 /// The input is assumed to be a lexer-validated float token (digits, at most
 /// one `.`, an optional `e`/`E` exponent with optional sign). Overflow of the
@@ -1488,16 +1608,27 @@ pub(in crate::infer) fn parse_scientific_notation(
     text: &str,
 ) -> Result<(u64, bool, u64), ElabError> {
     let invalid = || ElabError::ParseError(format!("invalid float literal `{text}`"));
-
-    // Split off the exponent part (after `e`/`E`), if any.
-    let (significand, exp_part) = match text.find(['e', 'E']) {
-        Some(idx) => (&text[..idx], Some(&text[idx + 1..])),
-        None => (text, None),
+    let exponent_out_of_range = || ElabError::Unsupported {
+        feature: format!("float literal `{text}`: exponent out of range"),
     };
 
-    let explicit_exp: i64 = match exp_part {
-        Some(s) => s.parse::<i64>().map_err(|_| invalid())?,
-        None => 0,
+    // Split off the exponent part (after `e`/`E`), if any, keeping whether a
+    // `-` was WRITTEN apart from the magnitude: Lean decides `exponentSign` by
+    // the written sign, never by the sign of the net exponent.
+    let (significand, written_minus, exp_magnitude) = match text.find(['e', 'E']) {
+        Some(idx) => {
+            let exp = &text[idx + 1..];
+            let (written_minus, digits) = match exp.strip_prefix('-') {
+                Some(rest) => (true, rest),
+                None => (false, exp.strip_prefix('+').unwrap_or(exp)),
+            };
+            if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+                return Err(invalid());
+            }
+            let magnitude = digits.parse::<u64>().map_err(|_| exponent_out_of_range())?;
+            (&text[..idx], written_minus, magnitude)
+        }
+        None => (text, false, 0),
     };
 
     // Split the significand into integer and fractional digit runs.
@@ -1523,24 +1654,17 @@ pub(in crate::infer) fn parse_scientific_notation(
             feature: format!("float literal `{text}`: mantissa exceeds u64 range"),
         })?;
 
-    // Net base-10 exponent: each fractional digit divides by ten.
-    let frac_len = i64::try_from(frac_digits.len()).map_err(|_| invalid())?;
-    let net_exp = explicit_exp
-        .checked_sub(frac_len)
-        .ok_or_else(|| ElabError::Unsupported {
-            feature: format!("float literal `{text}`: exponent out of range"),
-        })?;
-
-    if net_exp >= 0 {
-        let dec_exp = u64::try_from(net_exp).map_err(|_| ElabError::Unsupported {
-            feature: format!("float literal `{text}`: exponent out of range"),
-        })?;
-        Ok((mantissa, false, dec_exp))
-    } else {
-        // Magnitude of a negative net exponent. Negating `i64::MIN` would
-        // overflow, so route through `unsigned_abs`.
-        let dec_exp = net_exp.unsigned_abs();
+    // Each fractional digit divides by ten; Lean's `decodeAfterExp` rule.
+    let frac_len = u64::try_from(frac_digits.len()).map_err(|_| invalid())?;
+    if written_minus {
+        let dec_exp = exp_magnitude
+            .checked_add(frac_len)
+            .ok_or_else(exponent_out_of_range)?;
         Ok((mantissa, true, dec_exp))
+    } else if exp_magnitude >= frac_len {
+        Ok((mantissa, false, exp_magnitude - frac_len))
+    } else {
+        Ok((mantissa, true, frac_len - exp_magnitude))
     }
 }
 
@@ -1601,6 +1725,30 @@ mod scientific_notation_tests {
             parse_scientific_notation("1.5e+3").expect("valid float"),
             (15, false, 2)
         );
+    }
+
+    #[test]
+    fn test_parse_scientific_notation_written_minus_keeps_sign_at_zero_exponent() {
+        // Lean's `decodeScientificLitVal?` sets `exponentSign` when `-` is
+        // WRITTEN, so `1e-0` is `(1, true, 0)` — a different term from `1e0`
+        // and `1e+0`, `(1, false, 0)`. Pinned v4.30.0-rc2 and v4.8.0 print
+        // `(5e-00 : Float)` under `pp.all` as `OfScientific.ofScientific …
+        // 5 Bool.true 0`.
+        for (text, triple) in [
+            ("1e-0", (1, true, 0)),
+            ("5e-00", (5, true, 0)),
+            ("1e0", (1, false, 0)),
+            ("1e+0", (1, false, 0)),
+            ("1.0e-0", (10, true, 1)),
+            ("1.25e1", (125, true, 1)),
+            ("1.5e-3", (15, true, 4)),
+        ] {
+            assert_eq!(
+                parse_scientific_notation(text).expect("valid float"),
+                triple,
+                "`{text}` must decode to Lean's triple"
+            );
+        }
     }
 
     #[test]

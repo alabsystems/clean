@@ -27,6 +27,61 @@ use clean_kernel::Expr;
 
 use super::{ProofState, TacticError, TacticResult};
 
+#[cfg(test)]
+#[path = "mathverse_context_tests.rs"]
+mod context_tests;
+
+/// Encode only exact names supported by the legacy Mathverse dotted-name
+/// protocol. This is not source spelling: its decoder interprets numeric
+/// components as `Name::Num`, so a numeric-looking `Name::Str` is unsupported.
+/// Unsupported names omit an optional neighborhood hint; they are never
+/// flattened into a different global identity.
+fn mathverse_context_path(name: &clean_kernel::Name) -> Option<String> {
+    use clean_kernel::name::NameInner;
+    let mut parts = Vec::new();
+    let mut current = name;
+    loop {
+        match current.inner() {
+            NameInner::Anon => break,
+            NameInner::Str(parent, part) => {
+                if part.is_empty() || part.contains('.') || part.parse::<u64>().is_ok() {
+                    return None;
+                }
+                parts.push(part.to_string());
+                current = parent.as_ref();
+            }
+            NameInner::Num(parent, index) => {
+                parts.push(index.to_string());
+                current = parent.as_ref();
+            }
+        }
+    }
+    if parts.is_empty() {
+        return None;
+    }
+    parts.reverse();
+    Some(parts.join("."))
+}
+
+/// Neighborhood lookup consumes global constant keys, not local binder labels.
+/// Collect exact constants from instantiated local types and let values, then
+/// cross the checked legacy path boundary solely for that search hint. The
+/// target expression, candidate validation, trust policy and kernel check do
+/// not use this projection.
+pub fn mathverse_context_names(
+    metas: &crate::unify::MetaState,
+    locals: &[super::LocalDecl],
+) -> Vec<String> {
+    let mut names = std::collections::BTreeSet::new();
+    for local in locals {
+        names.extend(metas.instantiate(&local.ty).collect_constants());
+        if let Some(value) = &local.value {
+            names.extend(metas.instantiate(value).collect_constants());
+        }
+    }
+    names.iter().filter_map(mathverse_context_path).collect()
+}
+
 #[cfg(feature = "mathverse-library")]
 use clean_mathverse::library::MathverseLibrary;
 #[cfg(feature = "mathverse-library")]
@@ -296,7 +351,7 @@ pub fn run_strict_mathverse_use(state: &mut ProofState) -> TacticResult {
 // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
 // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[allow(dead_code)]
-pub fn run_relaxed_foundational_mathverse_use(state: &mut ProofState) -> TacticResult {
+pub(crate) fn run_relaxed_foundational_mathverse_use(state: &mut ProofState) -> TacticResult {
     #[cfg(feature = "mathverse-library")]
     {
         eval_mathverse_use_with_trust(state, TrustGate::RelaxedFoundational)
@@ -324,12 +379,7 @@ fn eval_mathverse_use_with_trust(state: &mut ProofState, trust_gate: TrustGate) 
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let target = state.metas.instantiate(&goal.target);
 
-    // Collect constant names from the local context as search context
-    let context_names: Vec<String> = goal
-        .local_ctx
-        .iter()
-        .map(|decl| decl.name.clone())
-        .collect();
+    let context_names = mathverse_context_names(&state.metas, &goal.local_ctx);
     let context_refs: Vec<&str> = context_names.iter().map(|s| s.as_str()).collect();
 
     let config = PremiseConfig {
@@ -374,7 +424,8 @@ fn eval_mathverse_use_with_trust(state: &mut ProofState, trust_gate: TrustGate) 
         return Err(TacticError::SearchExhausted {
             tactic: "mathverse_use".into(),
             detail: format!(
-                "no matching theorem found in Mathverse Library (trust gate: {trust_gate:?})"
+                "no matching theorem found in Mathverse Library (trust gate: {})",
+                crate::error_render::opaque(&trust_gate)
             ),
         });
     }
@@ -570,9 +621,30 @@ pub(crate) fn validate_dependency_loader_trust(
             return Err(TacticError::SearchExhausted {
                 tactic: "mathverse_use".into(),
                 detail: format!(
-                    "dependency loader rejected `{}`: dependency `{dep_name}` has trust {confidence:?} (kind {}), below {trust_gate:?}",
+                    "dependency loader rejected `{}`: dependency `{dep_name}` has trust {} (kind {}), below {}",
                     candidate.name,
                     decl_kind_name(decl_kind)
+                ,
+                crate::error_render::opaque(&confidence),
+                crate::error_render::opaque(&trust_gate)),
+            });
+        }
+
+        // The foundational half of `RelaxedFoundational` admits by NAME and
+        // kind alone. The name must also denote the kernel's canonical
+        // declaration in the live environment (exact statement and universe
+        // arity), never a library axiom that merely shares the name.
+        if !trust_gate.accepts(confidence)
+            && !env
+                .is_canonical_foundational_axiom(&clean_kernel::name::Name::from_string(dep_name))
+        {
+            return Err(TacticError::SearchExhausted {
+                tactic: "mathverse_use".into(),
+                detail: format!(
+                    "dependency loader rejected `{}`: dependency `{dep_name}` is admitted only as a \
+                     foundational axiom, but the environment holds no canonical kernel declaration \
+                     of that name",
+                    candidate.name
                 ),
             });
         }
@@ -745,11 +817,7 @@ fn eval_mathverse_suggest_impl(state: &mut ProofState) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let target = state.metas.instantiate(&goal.target);
 
-    let context_names: Vec<String> = goal
-        .local_ctx
-        .iter()
-        .map(|decl| decl.name.clone())
-        .collect();
+    let context_names = mathverse_context_names(&state.metas, &goal.local_ctx);
     let context_refs: Vec<&str> = context_names.iter().map(|s| s.as_str()).collect();
 
     let config = PremiseConfig {

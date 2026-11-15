@@ -39,7 +39,7 @@ TEST_LOG="$(mktemp)"
 # All four test-name filters go AFTER `--` (libtest OR-matches multiple filters; cargo
 # itself accepts only one positional TESTNAME). ADD = ripple-carry gate-fidelity;
 # XOR/AND/OR = the three bitwise gate-fidelities the real GVN canonicalizer also covers.
-cargo test --locked -p clean-auto --lib --features ay-bv-blast \
+targo --unverified test --locked -p clean-auto --lib --features ay-bv-blast \
   -- --nocapture \
   criterion2_gvn_commute_lowering_is_nonvacuously_certified_trust_count_zero \
   criterion2_gvn_xor_commute_lowering_certified_trust_count_zero \

@@ -29,7 +29,8 @@ fn assert_in_env(spec: &Specification, name: &str) {
     );
 }
 
-fn generated_name_atoms(spec: &Specification, helper: &str) -> BTreeSet<String> {
+/// Every constant the generated helper's elaborated value references.
+fn generated_constants(spec: &Specification, helper: &str) -> BTreeSet<String> {
     spec.definitions()
         .get(helper)
         .unwrap_or_else(|| panic!("generated helper {helper} should be registered"))
@@ -39,6 +40,13 @@ fn generated_name_atoms(spec: &Specification, helper: &str) -> BTreeSet<String> 
         .collect_constants()
         .into_iter()
         .map(|name| name.to_string())
+        .collect()
+}
+
+/// Only the interned `kcre_name_*` semantic-name atoms among those constants.
+fn generated_name_atoms(spec: &Specification, helper: &str) -> BTreeSet<String> {
+    generated_constants(spec, helper)
+        .into_iter()
         .filter(|name| name.starts_with("kcre_name_"))
         .collect()
 }
@@ -123,10 +131,37 @@ fn the_red_env_is_the_kernel_core_reflection_alias() {
         BTreeSet::from([nat_rec, nat_zero.clone()]),
         "generated redex must contain exactly the reflected Nat.rec and Nat.zero name atoms"
     );
+    // Since b2b6a9281 ("Model guarded iota with schematic RHS and retained
+    // universes") the generator emits the reflected Nat.zero rule RHS as its own
+    // helper, `kcre_witness_nat_zero_rhs`, and the reduct is COMPUTED from it by
+    // `recursor_rhs_instance` over the reflected recursor signature and the
+    // witness levels, rather than spelled out atom by atom. So the atoms of the
+    // rule RHS are pinned on the RHS helper — and the retained universe
+    // parameter `u` is now one of them — while the reduct is pinned to consume
+    // exactly that helper through the instantiation, with no re-spelled atoms.
+    let universe_u = generated_name_atom("u");
     assert_eq!(
-        generated_name_atoms(&spec, "kcre_witness_nat_zero_reduct"),
-        BTreeSet::from([nat, nat_zero, nat_succ]),
-        "generated reduct must contain exactly the semantic atoms in the reflected Nat.zero rule RHS"
+        generated_name_atoms(&spec, "kcre_witness_nat_zero_rhs"),
+        BTreeSet::from([nat, nat_zero, nat_succ, universe_u]),
+        "generated rule RHS must contain exactly the semantic atoms in the reflected Nat.zero rule \
+         RHS plus its retained universe parameter"
+    );
+    let reduct = generated_constants(&spec, "kcre_witness_nat_zero_reduct");
+    for consumed in [
+        "kcre_witness_nat_zero_rhs",
+        "kcre_witness_rec_levels",
+        "fixture_nat_rec_meta",
+        "recursor_rhs_instance",
+    ] {
+        assert!(
+            reduct.contains(consumed),
+            "generated reduct must be computed from {consumed}: {reduct:?}"
+        );
+    }
+    assert!(
+        generated_name_atoms(&spec, "kcre_witness_nat_zero_reduct").is_empty(),
+        "generated reduct must consume the rule RHS through its helper, never by re-spelling \
+         name atoms: {reduct:?}"
     );
     let delta = spec
         .definitions()

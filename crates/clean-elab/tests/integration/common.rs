@@ -69,8 +69,15 @@ fn ensure_type_infers(tc: &TypeChecker<'_>, expr: &Expr, context: &str) -> Resul
 pub fn check_and_add_decl(env: &mut Environment, input: &str) -> Result<(), String> {
     let surface = parse_decl(input).map_err(|e| format!("Parse error: {e}"))?;
     let elab_result = elaborate_decl(env, &surface).map_err(|e| format!("Elab error: {e}"))?;
+    add_elab_result(env, elab_result)
+}
 
+/// Type-check and add one elaborated result. A `Diagnosed` result is the
+/// declaration it encloses plus source diagnostics that do not revoke it, so
+/// it is checked and added as that declaration.
+fn add_elab_result(env: &mut Environment, elab_result: ElabResult) -> Result<(), String> {
     match elab_result {
+        ElabResult::Diagnosed { result, .. } => return add_elab_result(env, *result),
         ElabResult::Definition {
             name,
             universe_params,

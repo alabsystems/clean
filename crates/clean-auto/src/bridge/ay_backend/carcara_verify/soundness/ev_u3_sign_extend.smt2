@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const x (_ BitVec 8))
+(assert (= x ((_ sign_extend 4) #b1011)))
+(assert (= x #b11111011))
+(check-sat)

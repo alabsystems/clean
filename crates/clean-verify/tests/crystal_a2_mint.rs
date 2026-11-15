@@ -63,8 +63,7 @@ use clean_verify::ir_mint::{self, Sx};
 // the include is dead-code-allowed rather than trimmed — trimming it would fork
 // the comparator, which is the one thing it must not do.
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -88,6 +87,14 @@ mod callee_identity;
 // erases it.
 #[path = "crystal_a2_mint/blind_slots.rs"]
 mod blind_slots;
+
+// The GLOBALS lane of `project`: the module-table preamble (`type ty.N = …`
+// and `global …` rows), the tag table's `globals` pins and every body's
+// `global_addr` must account for one another, and the list is spliced into the
+// core module. Constructed witnesses only; the committed `ir_lzc` pair has its
+// own gate file.
+#[path = "crystal_a2_mint/globals.rs"]
+mod globals;
 
 // M10 — the interface lane: the function's NAME, every parameter's TYPE, every
 // `align` operand and the KINDS of annotation clause, compared against the
@@ -207,7 +214,7 @@ fn m2_the_blind_slot_is_the_one_the_hand_transcription_got_wrong() {
         .find(|l| l.starts_with("def ir_h2_b0 "))
         .expect("a minted b0");
     assert!(
-        ir_mint::IR_H2_DEFS.contains("def ir_h2_tmode : IRTy := IRTy.enum_ ir_d13"),
+        ir_mint::IR_H2_DEFS.contains("def ir_h2_tmode : IRTy := IRTy.enum_ 17"),
         "the minted script must carry the 2026-08-19 load-type correction, derived from the \
          committed tag table rather than repaired by hand"
     );
@@ -271,11 +278,11 @@ fn m4_decode_discriminates_between_two_registered_modules() {
     // that read the wrong constant, would pass M4 and be useless.
     let spec = clean_verify::test_utils::shared_spec();
     let h2 = ir_mint::decode(spec.env(), MODULE_CONST, &tags()).expect("decode ir_h2_module");
-    // `ir_ko_module` loads `enum.2` (Level). Decoding it under h2's tag table
+    // `ir_ko_module` loads `enum.3` (Level). Decoding it under h2's tag table
     // must REFUSE rather than silently renumber, so the control is run under a
     // table that lists Level's id and nothing else.
     let ko_tags = ir_mint::tags::parse(
-        r#"{"body":"t","interface":{"linkage":"external","calling_conv":"rustcc","functy":0,"producer":null,"params":[],"block_params":[],"aligns":[],"clauses":[]},"enums":[{"canonical":0,"crate_id":2,"alias":"ir_ko_tenum"}],"structs":[],"funcs":[]}"#,
+        r#"{"body":"t","interface":{"linkage":"external","calling_conv":"rustcc","functy":0,"producer":null,"params":[],"block_params":[],"aligns":[],"clauses":[]},"enums":[{"canonical":0,"crate_id":3,"alias":"ir_ko_tenum"}],"structs":[],"funcs":[]}"#,
     )
     .expect("a one-row table");
     assert!(
@@ -344,8 +351,8 @@ fn m7_the_tag_table_still_describes_the_artifact() {
         observed.enums.len(),
         t.enums.len()
     );
-    for (canonical, crate_id) in observed.enums.iter().enumerate() {
-        let idx = u32::try_from(canonical).expect("small");
+    for (idx, crate_id) in observed.enums.iter() {
+        let idx = *idx;
         let (recorded, alias) = t.enum_alias(idx).expect("a listed canonical index");
         assert_eq!(
             recorded, crate_id,
@@ -361,6 +368,20 @@ fn m7_the_tag_table_still_describes_the_artifact() {
     );
 
     // …and reader A's independent record of the same ids.
+    //
+    // `observed.enums` is canonical -> raw and is now a MAP (a body under a
+    // chain's tag table is pre-seeded with the whole lane, so the lane it
+    // REPORTS is what this body actually named). Reader A records the same
+    // fact as a list in canonical order, so the comparison is against the
+    // map's values in key order.
+    let seen: Vec<u32> = observed.enums.values().copied().collect();
+
+    // The three-producer table is HISTORICAL and append-only (field-81 era):
+    // its ids describe the builds it measured, not this fixture's, and they
+    // stopped agreeing with the artifact at the 2026-10-07 rebaseline, when two
+    // new `Environment` fields re-interned `CleanMode` from `enum.13` to
+    // `enum.17`. What it still pins is the SHAPE -- one enum per canonical
+    // index on every producer -- and the core digest (M6).
     let rec: serde_json::Value =
         serde_json::from_str(PRODUCER_AB).expect("the producer A/B record must parse");
     let row = rec["rows"]
@@ -369,18 +390,59 @@ fn m7_the_tag_table_still_describes_the_artifact() {
         .iter()
         .find(|r| r["chain"] == "has_cubical_layer")
         .expect("the width-one chain");
-    for per_producer in row["crate_enum_ids_seen"].as_array().expect("ids") {
-        let ids: Vec<u32> = per_producer
-            .as_array()
-            .expect("one list per producer")
-            .iter()
-            .map(|v| u32::try_from(v.as_u64().expect("id")).expect("small"))
-            .collect();
+    for (i, per_producer) in row["crate_enum_ids_seen"]
+        .as_array()
+        .expect("ids")
+        .iter()
+        .enumerate()
+    {
         assert_eq!(
-            ids, observed.enums,
-            "reader A and reader B disagree about the crate-level enum ids of this body"
+            per_producer
+                .as_array()
+                .expect("one list per producer")
+                .len(),
+            seen.len(),
+            "historical producer {i} saw a different NUMBER of enums than this body names"
         );
     }
+
+    // The CURRENT reader-A record: the same projector over the exact binary the
+    // fixture was cut from. Its ids are compared verbatim, and it is bound to
+    // that binary through the fixture's source-bound pin, not trusted by path.
+    let current: serde_json::Value = serde_json::from_str(ir_mint::IR_H2_PROVENANCE)
+        .expect("the current reader-A provenance must parse");
+    let ids: Vec<u32> = current["crate_enum_ids_seen"]
+        .as_array()
+        .expect("current enum ids")
+        .iter()
+        .map(|v| u32::try_from(v.as_u64().expect("id")).expect("small"))
+        .collect();
+    assert_eq!(
+        ids, seen,
+        "reader A and reader B disagree about the crate-level enum ids of this body"
+    );
+    assert_eq!(
+        current["function_name"].as_str(),
+        Some("mode::CleanMode::has_cubical_layer")
+    );
+    assert_eq!(
+        current["core_digest"].as_str(),
+        row["core_digest"]
+            .as_array()
+            .expect("one digest per producer")[0]
+            .as_str(),
+        "the current reader A projected a different canonical core from the historical producers"
+    );
+    let lineage: serde_json::Value =
+        serde_json::from_str(include_str!("fixtures/has_cubical_layer.lineage.json"))
+            .expect("the has_cubical_layer lineage must parse");
+    assert_eq!(
+        current["dump_sha256"].as_str(),
+        lineage["current_source_bound_pin"]["build"]["artifacts"]["clean_kernel.trust-ir.bin"]
+            ["sha256"]
+            .as_str(),
+        "reader-A provenance is not bound to the binary the fixture was cut from"
+    );
 }
 
 // ────────────────────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@ use super::translate::ExprKey;
 use crate::superposition::{Literal, Symbol, Term};
 
 /// Clausifies kernel `Expr` goals into CNF and records reconstruction metadata.
-pub struct GoalClausifier<'a> {
+pub(crate) struct GoalClausifier<'a> {
     /// Bidirectional mapping for proof reconstruction
     symbol_map: SymbolMap,
     /// Kernel Expr → superposition Symbol. Uses `ExprKey` for structural equality (#2252).
@@ -49,7 +49,7 @@ impl Default for GoalClausifier<'_> {
 impl<'a> GoalClausifier<'a> {
     /// Create a new clausifier without environment-backed type inference.
     /// Type queries fail closed instead of fabricating placeholder metadata.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         GoalClausifier {
             symbol_map: SymbolMap::new(),
             expr_to_symbol: HashMap::new(),
@@ -63,7 +63,7 @@ impl<'a> GoalClausifier<'a> {
 
     /// Create a new clausifier with environment-backed type inference.
     /// Missing metadata still fails closed when `TypeChecker::infer_type` fails.
-    pub fn new_with_env(env: &'a Environment) -> Self {
+    pub(crate) fn new_with_env(env: &'a Environment) -> Self {
         GoalClausifier {
             symbol_map: SymbolMap::new(),
             expr_to_symbol: HashMap::new(),
@@ -77,7 +77,7 @@ impl<'a> GoalClausifier<'a> {
 
     /// Set the FVarId base for goal clause hypotheses.
     /// Avoids collisions with tactic-scope FVarIds. Part of #1164.
-    pub fn set_goal_fvar_base(&mut self, base: u64) {
+    pub(crate) fn set_goal_fvar_base(&mut self, base: u64) {
         self.goal_fvar_base = base;
     }
 
@@ -90,7 +90,7 @@ impl<'a> GoalClausifier<'a> {
     ///
     /// `(clauses, symbol_map)` where each inner `Vec<Literal>` is one clause
     /// (disjunction of literals), and the set of clauses is their conjunction.
-    pub fn clausify_goal(&mut self, goal: &Expr) -> (Vec<Vec<Literal>>, &SymbolMap) {
+    pub(crate) fn clausify_goal(&mut self, goal: &Expr) -> (Vec<Vec<Literal>>, &SymbolMap) {
         // Negate the goal for refutation: to prove P, show ¬P is unsatisfiable
         let nnf = self.expr_to_nnf(goal, true);
         let clauses = Self::nnf_to_cnf(&nnf);
@@ -121,7 +121,7 @@ impl<'a> GoalClausifier<'a> {
 
     /// Clausify a hypothesis (added as-is, not negated).
     #[cfg(test)]
-    pub fn clausify_hypothesis(
+    pub(crate) fn clausify_hypothesis(
         &mut self,
         hyp: &Expr,
         clause_id: u64,
@@ -143,7 +143,7 @@ impl<'a> GoalClausifier<'a> {
     ///
     /// Each clause is registered with the same `fvar` (all clauses originate
     /// from the same hypothesis).
-    pub fn clausify_hypothesis_sequential(
+    pub(crate) fn clausify_hypothesis_sequential(
         &mut self,
         hyp: &Expr,
         starting_clause_id: u64,
@@ -159,7 +159,7 @@ impl<'a> GoalClausifier<'a> {
     }
 
     /// Consume the clausifier and return the symbol map.
-    pub fn into_symbol_map(self) -> SymbolMap {
+    pub(crate) fn into_symbol_map(self) -> SymbolMap {
         self.symbol_map
     }
 

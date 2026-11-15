@@ -474,6 +474,11 @@ mod tests {
         assert!(result.goals.is_empty());
         assert_eq!(result.iterations, 0);
     }
+    /// An SMT model of `¬goal` is a model of the bridge's abstraction, not a
+    /// disproof (decide review, 2026-09-28): the goal stays open — a later
+    /// round, with more proved premises, may still close it — until the
+    /// budget runs out. This test used to expect `Disproved` after one
+    /// attempt.
     #[test]
     fn test_batch_prove_single_query() {
         let env = Environment::new();
@@ -486,8 +491,15 @@ mod tests {
                 Duration::from_secs(1),
             ))]),
         );
-        assert_eq!(result.goals[0].status, BatchGoalStatus::Disproved);
-        assert_eq!(result.goals[0].attempts, 1);
+        assert!(
+            matches!(
+                result.goals[0].status,
+                BatchGoalStatus::Timeout | BatchGoalStatus::Unknown
+            ),
+            "an unvalidated SMT model neither proves nor disproves: {:?}",
+            result.goals[0]
+        );
+        assert!(result.goals[0].attempts >= 1);
     }
 
     #[test]

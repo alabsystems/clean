@@ -236,8 +236,9 @@ fn test_tactic_builder_trivial() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -307,8 +308,9 @@ fn test_tactic_builder_assumption() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],

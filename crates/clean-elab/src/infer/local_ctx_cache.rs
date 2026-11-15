@@ -76,16 +76,20 @@ impl ElabCtx<'_> {
         for (name, fvar, ty) in &self.locals {
             let ty_inst = self.metas.instantiate(ty);
             let ty_inst = self.metas.instantiate_levels(&ty_inst);
-            // Let-bound locals (`let x : T := v`) carry a value: emit them as
-            // local definitions so the kernel WHNF can zeta-reduce `x` to `v`
-            // during def-eq. Opaque hypotheses (`have`/binders) have no value
-            // entry and stay rigid. See `LocalBindings`.
-            if let Some(value) = self.locals.let_value(*fvar) {
+            // Only genuine lets expose defining equations. Marked have
+            // proofs remain stored for scope/proof reads but stay rigid in
+            // the kernel reduction view. See `LocalBindings`.
+            if let Some(value) = self.locals.reduction_value(*fvar) {
                 let val_inst = self.metas.instantiate(value);
                 let val_inst = self.metas.instantiate_levels(&val_inst);
-                ctx.push_let_with_id(*fvar, Name::from_string(name), ty_inst, val_inst);
+                ctx.push_let_with_id(*fvar, name.name().clone(), ty_inst, val_inst);
             } else {
-                ctx.push_with_id(*fvar, Name::from_string(name), ty_inst, BinderInfo::Default);
+                ctx.push_with_id(
+                    *fvar,
+                    name.name().clone(),
+                    ty_inst,
+                    self.locals.binder_info(*fvar),
+                );
             }
         }
 
@@ -184,7 +188,7 @@ mod tests {
             "unchanged state must serve the same Arc"
         );
 
-        let fvar = ctx.push_local("x".to_string(), Expr::prop());
+        let fvar = ctx.push_local(clean_parser::SurfaceName::generated_path("x"), Expr::prop());
         let c = ctx.shared_local_ctx();
         assert!(!Arc::ptr_eq(&a, &c), "a push must invalidate");
         assert!(
@@ -206,7 +210,10 @@ mod tests {
         // must follow the meta's assignment and its undo.
         let m = ctx.metas.fresh(Expr::type_());
         let m_fvar = crate::unify::MetaState::to_fvar(m);
-        let x = ctx.push_local("x".to_string(), Expr::fvar(m_fvar));
+        let x = ctx.push_local(
+            clean_parser::SurfaceName::generated_path("x"),
+            Expr::fvar(m_fvar),
+        );
         let before = ctx.shared_local_ctx();
         assert_eq!(
             before.get(x).map(|d| d.type_.clone()),
@@ -249,7 +256,7 @@ mod tests {
         let mut ctx = ElabCtx::new(&env);
         let m = ctx.metas.fresh(Expr::type_());
         let x = ctx.push_local(
-            "x".to_string(),
+            clean_parser::SurfaceName::generated_path("x"),
             Expr::fvar(crate::unify::MetaState::to_fvar(m)),
         );
         let snapshot = ctx.metas.clone();

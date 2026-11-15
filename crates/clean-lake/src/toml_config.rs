@@ -17,7 +17,10 @@
 //! own "decode what you recognize" behavior so a newer `lakefile.toml` still
 //! loads its recognized fields rather than failing wholesale.
 
-use crate::config::{Dependency, LakeConfig, LakefileParseMode, LeanExe, LeanLib, PackageConfig};
+use crate::config::{
+    Dependency, LakeConfig, LakefileParseMode, LeanExe, LeanLib, LeanOption, LeanOptionValue,
+    PackageConfig,
+};
 use crate::error::{LakeError, LakeResult};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
@@ -43,6 +46,12 @@ struct RawTomlLakefile {
     more_lean_args: Vec<String>,
     #[serde(rename = "moreLinkArgs")]
     more_link_args: Vec<String>,
+    #[serde(rename = "weakLeanArgs")]
+    weak_lean_args: Vec<String>,
+    /// `[leanOptions]` (dotted keys arrive as nested tables) or an array of
+    /// `[name, value]` / `{name, value}` entries; Lake 4.8 decodes both.
+    #[serde(rename = "leanOptions")]
+    lean_options: Option<toml::Value>,
     require: Vec<RawRequire>,
     lean_lib: Vec<RawLeanLib>,
     lean_exe: Vec<RawLeanExe>,
@@ -106,6 +115,10 @@ struct RawLeanLib {
     default_facets: Vec<String>,
     #[serde(rename = "moreLeanArgs")]
     more_lean_args: Vec<String>,
+    #[serde(rename = "weakLeanArgs")]
+    weak_lean_args: Vec<String>,
+    #[serde(rename = "leanOptions")]
+    lean_options: Option<toml::Value>,
 }
 
 /// A `[[lean_exe]]` target entry.
@@ -120,6 +133,75 @@ struct RawLeanExe {
     more_lean_args: Vec<String>,
     #[serde(rename = "moreLinkArgs")]
     more_link_args: Vec<String>,
+    #[serde(rename = "weakLeanArgs")]
+    weak_lean_args: Vec<String>,
+    #[serde(rename = "leanOptions")]
+    lean_options: Option<toml::Value>,
+}
+
+/// Lake 4.8's `decodeLeanOptions`: a table (`pp.unicode.fun = true` decodes
+/// as nested tables, flattened in key order) or an array whose entries are
+/// `[name, value]` pairs or `{ name = …, value = … }` tables. Anything that
+/// is no `LeanOptionValue` (a float, a negative integer, a malformed entry)
+/// leaves the whole field unreadable: its text goes to `unreadable`, which a
+/// build refuses.
+fn toml_lean_options(value: Option<&toml::Value>, unreadable: &mut Vec<String>) -> Vec<LeanOption> {
+    fn option_value(value: &toml::Value) -> Option<LeanOptionValue> {
+        match value {
+            toml::Value::Boolean(b) => Some(LeanOptionValue::Bool(*b)),
+            toml::Value::String(s) => Some(LeanOptionValue::String(s.clone())),
+            toml::Value::Integer(n) => u64::try_from(*n).ok().map(LeanOptionValue::Nat),
+            _ => None,
+        }
+    }
+    fn walk(prefix: &str, table: &toml::Table, out: &mut Vec<LeanOption>) -> bool {
+        table.iter().all(|(key, value)| {
+            let name = if prefix.is_empty() {
+                key.clone()
+            } else {
+                format!("{prefix}.{key}")
+            };
+            if let toml::Value::Table(inner) = value {
+                return walk(&name, inner, out);
+            }
+            let Some(value) = option_value(value) else {
+                return false;
+            };
+            out.push(LeanOption { name, value });
+            true
+        })
+    }
+    fn entry(value: &toml::Value) -> Option<LeanOption> {
+        let (name, value) = match value {
+            toml::Value::Array(pair) => match pair.as_slice() {
+                [name, value] => (name, value),
+                _ => return None,
+            },
+            toml::Value::Table(table) if table.len() == 2 => {
+                (table.get("name")?, table.get("value")?)
+            }
+            _ => return None,
+        };
+        Some(LeanOption {
+            name: name.as_str()?.to_string(),
+            value: option_value(value)?,
+        })
+    }
+    let Some(value) = value else {
+        return Vec::new();
+    };
+    let decoded = match value {
+        toml::Value::Table(table) => {
+            let mut options = Vec::new();
+            walk("", table, &mut options).then_some(options)
+        }
+        toml::Value::Array(entries) => entries.iter().map(entry).collect(),
+        _ => None,
+    };
+    decoded.unwrap_or_else(|| {
+        unreadable.push(format!("leanOptions = {value:?}"));
+        Vec::new()
+    })
 }
 
 impl RawRequire {
@@ -251,6 +333,9 @@ impl RawTomlLakefile {
             .map(RawRequire::into_dependency)
             .collect();
 
+        let mut package_unreadable = Vec::new();
+        let package_options =
+            toml_lean_options(self.lean_options.as_ref(), &mut package_unreadable);
         let package = PackageConfig {
             name: self.name,
             version: self.version,
@@ -262,6 +347,9 @@ impl RawTomlLakefile {
             lean_version: self.lean_version.or(self.toolchain),
             more_lean_args: self.more_lean_args,
             more_link_args: self.more_link_args,
+            lean_options: package_options,
+            weak_lean_args: self.weak_lean_args,
+            unreadable_lean_args: package_unreadable,
             ..Default::default()
         };
 
@@ -276,6 +364,9 @@ impl RawTomlLakefile {
                 } else {
                     lib.roots
                 };
+                let mut unreadable_lean_args = Vec::new();
+                let lean_options =
+                    toml_lean_options(lib.lean_options.as_ref(), &mut unreadable_lean_args);
                 LeanLib {
                     name: lib.name,
                     roots,
@@ -284,6 +375,9 @@ impl RawTomlLakefile {
                     default_facets: lib.default_facets,
                     src_dir: lib.src_dir.map(PathBuf::from),
                     pre_compile_hooks: Vec::new(),
+                    lean_options,
+                    weak_lean_args: lib.weak_lean_args,
+                    unreadable_lean_args,
                 }
             })
             .collect();
@@ -294,6 +388,9 @@ impl RawTomlLakefile {
             .map(|exe| {
                 // Lake defaults an executable's root module to its own name.
                 let root = exe.root.unwrap_or_else(|| exe.name.clone());
+                let mut unreadable_lean_args = Vec::new();
+                let lean_options =
+                    toml_lean_options(exe.lean_options.as_ref(), &mut unreadable_lean_args);
                 LeanExe {
                     name: exe.name,
                     root,
@@ -301,6 +398,9 @@ impl RawTomlLakefile {
                     more_link_args: exe.more_link_args,
                     src_dir: exe.src_dir.map(PathBuf::from),
                     supported_backends: Vec::new(),
+                    lean_options,
+                    weak_lean_args: exe.weak_lean_args,
+                    unreadable_lean_args,
                 }
             })
             .collect();

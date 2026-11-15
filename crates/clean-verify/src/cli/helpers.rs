@@ -156,7 +156,7 @@ pub(crate) fn emit_certificate(
         proof_hash,
         proof_format: format!("{format}"),
         trust_summary: TrustSummary {
-            kernel_verified: 0,
+            step_checked: 0,
             structurally_accepted: 0,
             axiomatic: 0,
             trusted: 0,

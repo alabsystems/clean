@@ -1,0 +1,587 @@
+{
+ "schema": "clean-mutual-nested-verdicts-v2",
+ "fixtures": {
+  "aux_decl_hidden.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'assumption' failed",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `assumption` failed"
+  },
+  "aux_decl_hidden_simp_all.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "simp_all made no progress",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "simp_all made no progress"
+  },
+  "aux_decl_named.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "cases_ctor_eq.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "cases_ctor_eq_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "The rfl tactic failed. Possible reasons:",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `rfl` failed: The left-hand side"
+  },
+  "cases_dependent.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "cases_dependent_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "cases_mutual.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "cases_mutual_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "The rfl tactic failed. Possible reasons:",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `rfl` failed: The left-hand side"
+  },
+  "cases_nested.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "cases_nested_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "The rfl tactic failed. Possible reasons:",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `rfl` failed: The left-hand side"
+  },
+  "cases_rename_block.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "cases_rename_i_this.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "too many variable names provided",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "too many variable names provided"
+  },
+  "cases_rename_i_too_many.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "too many variable names provided",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "too many variable names provided"
+  },
+  "cases_simp_at_all_goals.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "cases_simp_at_all_goals_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "const_value_at.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "const_value_at_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Not a definitional equality: the left-hand side"
+  },
+  "decide_nested.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "decide_nested_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "dep_column_alias_pin.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "dep_column_alias_pin_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "dep_column_mutual.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "dep_column_mutual_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "dep_column_single.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "dep_column_single_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "dep_column_two_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "eqns_catchall_pin.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "eqns_denote.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "eqns_denote_simp_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "eqns_denote_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "eqns_major_choice.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "eqns_major_choice_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "eqns_pair.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "eqns_pair_wrong.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "eqns_prelude.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "eqns_prelude_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "simp made no progress",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "`simp` made no progress"
+  },
+  "eqns_simp.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "eqns_simp_at_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "eqns_simp_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "eqns_theorem_simp.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "eqns_theorem_simp_neg.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unsolved goals",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "unsolved goals"
+  },
+  "induction_dependent.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "induction_dependent_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "application type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Application type mismatch: The argument"
+  },
+  "induction_generalizing_unnecessary.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "unnecessary 'generalizing' argument, variable 'h0' is generalized automatically",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Unnecessary `generalizing` argument: Variable `h0` is generalized automatically"
+  },
+  "induction_nested_refused.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "'induction' tactic does not support nested inductive types, the eliminator 'P.rec' has multiple motives",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "The `induction` tactic does not support the type `P` because it is a nested inductive type"
+  },
+  "inexact_float.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "inexact_float_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "neg_cycle.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "fail to show termination for",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "fail to show termination for"
+  },
+  "neg_nonstruct.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "fail to show termination for",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "fail to show termination for"
+  },
+  "nonrec_order.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "nonrec_order_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Not a definitional equality: the left-hand side"
+  },
+  "of_constant.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "of_constant_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Not a definitional equality: the left-hand side"
+  },
+  "open_cov_through_owned.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "open_option_intermediate.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "open_pair_dependent_theorem.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "pair_decide.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "pair_decide_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "pair_intermediate_size.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "pair_intermediate_size_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "pair_rfl_widening.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "pair_rfl_widening_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Not a definitional equality: the left-hand side"
+  },
+  "pair_wrong_grandchild.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "refine_after_consumed.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "refine_after_consumed_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "The rfl tactic failed. Possible reasons:",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `rfl` failed: The left-hand side"
+  },
+  "repro.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "repro_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "rfl_open_widening.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "rfl_open_widening_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Not a definitional equality: the left-hand side"
+  },
+  "self_call_in_by.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "shared_denote.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "shared_denote_fixed.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "shared_denote_fixed_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "shared_denote_miswire.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "shared_slot_eval.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "shared_slot_eval_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "shared_theorems.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "shared_theorems_nonstruct.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "fail to show termination for",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "fail to show termination for"
+  },
+  "simp_injeq.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "simp_injeq_only_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "simp made no progress",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "`simp` made no progress"
+  },
+  "simp_injeq_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "subst_var.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "subst_var_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'subst' failed, did not find equation for eliminating 'r'",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `subst` failed: did not find equation for eliminating 'r'"
+  },
+  "symbol_addr.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "symbol_addr_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "symbol_addr_widening.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "maximum recursion depth has been reached",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "symbol_addr_widening_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "maximum recursion depth has been reached",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "tac_form.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "tac_form_neg.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "fail to show termination for",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "fail to show termination for"
+  },
+  "template_slice.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "template_slice_subst_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Not a definitional equality: the left-hand side"
+  },
+  "template_slice_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  },
+  "theorem_arms_nonstruct.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Type mismatch"
+  },
+  "theorem_arms_widening.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "type mismatch",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "width_ambiguous.lean": {
+   "lean_4_8_0": "accepted",
+   "lean_4_8_0_first_error": "",
+   "lean_4_30_0_rc2": "accepted",
+   "lean_4_30_0_rc2_first_error": ""
+  },
+  "width_ambiguous_twin.lean": {
+   "lean_4_8_0": "refused",
+   "lean_4_8_0_first_error": "tactic 'decide' proved that the proposition",
+   "lean_4_30_0_rc2": "refused",
+   "lean_4_30_0_rc2_first_error": "Tactic `decide` proved that the proposition"
+  }
+ }
+}

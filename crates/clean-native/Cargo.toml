@@ -1,0 +1,38 @@
+[package]
+name = "clean-native"
+version.workspace = true
+edition = "2021"
+authors = ["Andrew Yates <andrewyates.name@gmail.com>"]
+license = "Apache-2.0"
+description = "Clean's native core: a kernel-checked Lean declaration to a linked executable, shared by `clean` and Trust"
+repository.workspace = true
+readme.workspace = true
+
+[lints]
+workspace = true
+
+[features]
+default = []
+
+[dependencies]
+anyhow.workspace = true
+thiserror.workspace = true
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2.workspace = true
+clean-olean.workspace = true
+tempfile.workspace = true
+clean-kernel.workspace = true
+clean-parser.workspace = true
+clean-elab.workspace = true
+clean-compiler = { workspace = true, features = ["cli", "runtime-lcnf"] }
+clean-runtime.workspace = true
+libc.workspace = true
+
+[dev-dependencies]
+# Admit official source packets in isolated native-bridge execution tests.
+clean-kernel = { workspace = true, features = ["test-fixtures"] }
+# `clean_olean::test_support::compiled_fixture_dir`: the pinned-Lean-compiled
+# `.olean` the imported `@[implemented_by]` tests run against
+# (`src/compile_implemented_by_import_tests.rs`).
+clean-olean = { workspace = true, features = ["test-support"] }

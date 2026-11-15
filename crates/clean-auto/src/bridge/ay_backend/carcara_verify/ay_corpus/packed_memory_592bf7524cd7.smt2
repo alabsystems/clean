@@ -1,0 +1,6 @@
+(set-logic QF_ABV)
+(declare-const mem_base_v9 (_ BitVec 64))
+(declare-const mem_stval_v40_w8 (_ BitVec 64))
+(declare-const mem_default (_ BitVec 8))
+(assert (not (= (select (store (store ((as const (Array (_ BitVec 64) (_ BitVec 8))) mem_default) mem_base_v9 ((_ extract 7 0) mem_stval_v40_w8)) (bvadd mem_base_v9 (_ bv1 64)) ((_ extract 15 8) mem_stval_v40_w8)) mem_base_v9) ((_ extract 7 0) mem_stval_v40_w8))))
+(check-sat)

@@ -524,6 +524,9 @@ impl Environment {
         // `init_beq_list`).
         self.init_beq_optstr()?;
 
+        // Parametric `BEq (α × β)` (`and` of the two component comparisons).
+        self.init_beq_prod()?;
+
         self.beq_init = true;
         Ok(())
     }

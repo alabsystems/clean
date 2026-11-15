@@ -908,9 +908,10 @@ status counts, and highlights key entries such as C004, C006, and T60. \
 registry snapshots for the proof library, SAT frontier registry, and \
 gamma-crown conjecture catalog.\n\n\
 Items gated on `TrustReportAgreement`, including C004, C006, and T60, are \
-guarded against accidental promotion: if the manifest marks one of them \
-`KernelProved`, the command fails until the trust report agrees with that \
-promotion.",
+guarded against accidental promotion: a manifest that marks one of them \
+`KernelProved` fails UNCONDITIONALLY — no code path reads a trust report yet, \
+so today the gate is a hard block on that combination, not an agreement \
+check.",
         category: Category::Dev,
         stability: Stability::Experimental,
         examples: &[

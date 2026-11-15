@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const x (_ BitVec 4))
+(assert (= x (bvsub #b0000 #b1111)))
+(assert (= x #b0001))
+(check-sat)

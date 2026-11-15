@@ -23,20 +23,23 @@ pub(super) fn workload_linarith_basic() -> (String, u64) {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_fvar,
-                name: "a".to_string(),
+                name: clean_parser::SurfaceName::generated_path("a"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -72,32 +75,37 @@ pub(super) fn workload_linarith_le_trans() -> (String, u64) {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_fvar,
-                name: "a".to_string(),
+                name: clean_parser::SurfaceName::generated_path("a"),
                 ty: nat.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: b_fvar,
-                name: "b".to_string(),
+                name: clean_parser::SurfaceName::generated_path("b"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h3_fvar,
-                name: "h3".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: h3_ty,
                 value: None,
             },
@@ -143,20 +151,23 @@ pub(super) fn workload_linarith_scaled() -> (String, u64) {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_fvar,
-                name: "a".to_string(),
+                name: clean_parser::SurfaceName::generated_path("a"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -194,20 +205,23 @@ pub(super) fn workload_mathverse_parity() -> (String, u64) {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(401),
-                name: "h_even".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_even"),
                 ty: even_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(402),
-                name: "h_odd".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_odd"),
                 ty: odd_ty,
                 value: None,
             },
@@ -256,20 +270,23 @@ pub(super) fn workload_mathverse_linear() -> (String, u64) {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_fvar,
-                name: "a".to_string(),
+                name: clean_parser::SurfaceName::generated_path("a"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -302,20 +319,23 @@ pub(super) fn workload_nlinarith() -> (String, u64) {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: a_fvar,
-                name: "a".to_string(),
+                name: clean_parser::SurfaceName::generated_path("a"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -371,7 +391,9 @@ fn test_workload_instance_no_table_stays_sorry_free() {
 
 /// W8: Intentional sorry tactic — always generates exactly 1 sorry.
 pub(super) fn workload_sorry_tactic() -> (String, u64) {
-    let env = Environment::with_prelude();
+    let mut env = Environment::with_prelude();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for this low-level sorry fixture");
     let goal_ty = Expr::prop();
     let mut state = ProofState::new(env, goal_ty);
 
@@ -383,11 +405,13 @@ pub(super) fn workload_sorry_tactic() -> (String, u64) {
 
 /// W9: Direct create_sorry_term — structural sorry (e.g., unsolved subgoal).
 pub(super) fn workload_structural_sorry() -> (String, u64) {
-    let env = Environment::with_prelude();
+    let mut env = Environment::with_prelude();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for this low-level sorry fixture");
 
     let before = sorry_count();
     let sorry_expr = create_sorry_term(&env, &Expr::prop());
-    // with_prelude() registers sorryAx (via init_bool), so create_sorry_term
+    // The explicitly requested admission fragment registers sorryAx, so create_sorry_term
     // returns `sorryAx.{u} goal_ty Bool.true` rather than legacy `sorry.{u} goal_ty`.
     // Accept either head constant.
     use clean_kernel::ExprKind;

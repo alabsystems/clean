@@ -158,14 +158,16 @@ fn test_mono_addition_closes_main_goal_with_checked_nat_proof() {
         target.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty.clone(),
                 value: None,
             },
@@ -247,8 +249,9 @@ fn test_mono_monotone_hypothesis_fails_honestly_without_checked_application() {
         env,
         make_nat_le_tc(const_expr("a"), const_expr("b")),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hmono".into(),
+            name: clean_parser::SurfaceName::generated_path("hmono"),
             ty: Expr::app(const_expr("Monotone"), const_expr("f")),
             value: None,
         }],

@@ -2236,6 +2236,11 @@ pub enum CertError {
         /// The current mode that doesn't support the feature.
         current_mode: CleanMode,
     },
+    /// The check ran past the deadline its caller installed
+    /// (`tc::run_until`) and stopped. Not a verdict on the certificate:
+    /// nothing was accepted and nothing was refuted.
+    #[error("certificate verification interrupted: the check ran past its deadline")]
+    Interrupted,
 }
 
 /// Get a descriptive name for certificate variant

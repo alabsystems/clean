@@ -15,8 +15,14 @@ use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprKind, Level};
 
 use super::expr::{extract_equality_full, extract_iff_with_binders, mk_iff_rewrite_proof_template};
-use super::lemmas_builtin;
-use super::types::{SimpConfig, SimpIndexMode, SimpLemma, SimpLemmaSet};
+use super::lemmas_local::local_prop_hyp_lemma;
+pub(super) use super::lemmas_local::{
+    local_rule_binder_types, prop_false_proof, prop_simp_lemmas_from_proof, prop_true_proof,
+    type_is_prop,
+};
+use super::prop_lemmas::mk_prop_simp_lemmas;
+use super::types::{SimpConfig, SimpIndexMode, SimpLemma, SimpLemmaSet, UnfoldDef};
+use super::{lemmas_builtin, lemmas_builtin_list};
 use crate::name_resolution::resolve_identifier;
 use crate::tactic::core::ProofState;
 use crate::tactic::core::TacticError;
@@ -33,6 +39,17 @@ use crate::tactic::match_equality;
 /// ENSURES: Lemmas are sorted by priority (most specific first, fallback last)
 /// ENSURES: Each lemma has valid `lhs` and `rhs` extracted from its type
 pub(crate) fn collect_simp_lemmas(state: &ProofState, config: &SimpConfig) -> SimpLemmaSet {
+    collect_simp_lemmas_with_memo(state, config, None)
+}
+
+/// [`collect_simp_lemmas`], taking the key paths of closed lemma patterns from
+/// `memo` (`index_path_memo.rs`); the cached-set rebuild is the one caller
+/// that passes one.
+pub(crate) fn collect_simp_lemmas_with_memo(
+    state: &ProofState,
+    config: &SimpConfig,
+    memo: Option<&mut super::index_path_memo::PathMemo>,
+) -> SimpLemmaSet {
     let mut lemmas = Vec::new();
 
     // In `simp only` mode, skip built-in and @[simp] registry lemmas.
@@ -42,10 +59,14 @@ pub(crate) fn collect_simp_lemmas(state: &ProofState, config: &SimpConfig) -> Si
         lemmas.extend(lemmas_builtin::collect_nat_lemmas(state, config));
         lemmas.extend(lemmas_builtin::collect_bool_lemmas(state, config));
         lemmas.extend(lemmas_builtin::collect_prop_lemmas(state, config));
-        lemmas.extend(lemmas_builtin::collect_list_lemmas(state, config));
+        lemmas.extend(lemmas_builtin_list::collect_list_lemmas(state, config));
 
         // Add registered @[simp] lemmas from the environment registry (#1670)
         lemmas.extend(collect_registry_lemmas(state, config));
+    } else if config.simprocs.runs_simp_only_builtins() {
+        // Lean's `simp only` starts from `simpOnlyBuiltins`; see
+        // `SimprocScope::runs_simp_only_builtins` for why only this scope.
+        lemmas.extend(lemmas_builtin::collect_simp_only_builtins(state, config));
     }
 
     // Add user-specified extra lemmas (by name)
@@ -54,7 +75,7 @@ pub(crate) fn collect_simp_lemmas(state: &ProofState, config: &SimpConfig) -> Si
     // `simp [*]` semantics: add all equality hypotheses from the local context
     // as rewrite lemmas. This lets `simp [*]` use h : a = b from the context.
     if config.use_hypotheses {
-        lemmas.extend(collect_hypothesis_lemmas(state));
+        lemmas.extend(collect_hypothesis_lemmas(state, config));
     }
 
     // Add aesop simp lemmas (already constructed, from @[aesop norm simp] rules)
@@ -63,15 +84,25 @@ pub(crate) fn collect_simp_lemmas(state: &ProofState, config: &SimpConfig) -> Si
     // Sort by priority (higher first)
     lemmas.sort_by_key(|b| std::cmp::Reverse(b.priority));
 
-    SimpLemmaSet::from_state(state, lemmas)
+    SimpLemmaSet::from_state_memo(state, lemmas, memo)
 }
 
 /// Collect user-specified extra lemmas (by name).
 pub(super) fn collect_extra_lemmas(state: &ProofState, config: &SimpConfig) -> Vec<SimpLemma> {
     let mut lemmas = Vec::new();
     for lemma_name in &config.extra_lemmas {
-        if let Some(local_lemma) = collect_local_extra_lemma(state, lemma_name) {
-            lemmas.push(local_lemma);
+        // Lean's `simpGoal` removes the hypothesis being simplified from its
+        // own set; a name that IS that hypothesis yields no rule.
+        if config
+            .exclude_hypothesis
+            .as_ref()
+            .is_some_and(|name| name == lemma_name)
+        {
+            continue;
+        }
+        let local_rules = collect_local_extra_lemma(state, lemma_name);
+        if !local_rules.is_empty() {
+            lemmas.extend(local_rules);
             continue;
         }
 
@@ -91,21 +122,68 @@ pub(super) fn collect_extra_lemmas(state: &ProofState, config: &SimpConfig) -> V
                 mk_iff_simp_lemma(&name, &decl.type_, 50, &decl.level_params)
             {
                 lemmas.push(lemma);
-            } else if let Some(eqs) =
-                super::rec_equations::synthesize_rec_def_equations(&state.env, &name)
+            } else if let Some(eqs) = config
+                .prepared_rec_equations
+                .get(&name)
+                .cloned()
+                .or_else(|| super::rec_equations::synthesize_rec_def_equations(&state.env, &name))
             {
                 // A definition compiled to a `T.rec` value gets Lean-style
                 // per-constructor equational lemmas instead of a delta-unfold
                 // (which would rewrite the goal into a stuck recursor form no
                 // IH can match — the rec-iota simp class, B7).
                 // `resolve_unfold_defs` skips exactly these names.
-                lemmas.extend(eqs);
+                lemmas.extend(eqs.into_iter().filter(|equation| {
+                    !config
+                        .exclude
+                        .contains(&clean_parser::SurfaceName::from_name(equation.name.clone()))
+                }));
+            } else {
+                // A constant whose TYPE is any other proposition — a
+                // theorem, an axiom, a constructor of an inductive
+                // proposition, a proposition-valued field — is Lean's
+                // `preprocess` form: `p = True`, `p = False`,
+                // `(a = b) = False`, the halves of a conjunction
+                // (`prop_lemmas`). A definition of any other type yields
+                // nothing here.
+                lemmas.extend(mk_prop_simp_lemmas(state, &name, 50));
             }
             // Otherwise, if the constant is a Definition whose type is not an
             // equality (e.g. `StateT.bind`, `Except.bind`, monadic helper
             // definitions), it is captured by `resolve_unfold_defs` and
             // delta-unfolded by `simp_expr`, not here as an equality rewrite
             // lemma. See #3518.
+        } else {
+            // A named simp lemma that resolves to NOTHING used to vanish here
+            // with no diagnostic (`if let Some(decl) = …` with no `else`), so
+            // `simp [<a name this environment lacks>]` degenerated to plain
+            // `simp` and the row reported "no progress" instead of naming the
+            // missing lemma — the cascade-masking class.
+            //
+            // Lean's `elabSimpArgs` THROWS on such an argument. Clean does not
+            // yet, deliberately: under `--imports-prefer-olean` a derived name
+            // the decoder does not mint (a `to_dual` twin, say) would turn
+            // every row that currently degrades gracefully into a hard
+            // failure, and that blast radius has not been measured. The
+            // diagnostic is the part that costs nothing.
+            //
+            // A name that IS a local yields no rule here whenever the local is
+            // not a proposition (`n : Nat`, `f : α → β`), and `simp_all` pushes
+            // hypothesis names into `extra_lemmas` on every call — so saying
+            // "names nothing in this environment" about one would be both
+            // false and, inside an aesop search, said thousands of times.
+            let names_a_local = state.current_goal().is_some_and(|goal| {
+                goal.local_ctx.iter().any(|decl| {
+                    crate::tactic::pattern::names::hypothesis_named(&decl.name, lemma_name)
+                })
+            });
+            if !names_a_local {
+                tracing::warn!(
+                    "simp: lemma `{}` names nothing in this environment and was \
+                     skipped; the rewrite set is the one you would get without it",
+                    lemma_name
+                );
+            }
         }
     }
     lemmas
@@ -130,10 +208,12 @@ pub(super) fn collect_extra_lemmas(state: &ProofState, config: &SimpConfig) -> V
 /// namespace context was threaded — it falls back to the literal name, so
 /// behavior is unchanged for already-qualified names and the caller's
 /// existing `get_const` lookup still governs whether the lemma is used.
-fn resolve_extra_lemma_name(state: &ProofState, lemma_name: &str) -> Name {
-    let literal = Name::from_string(lemma_name);
+fn resolve_extra_lemma_name(state: &ProofState, lemma_name: &clean_parser::SurfaceName) -> Name {
+    let literal = lemma_name
+        .qualify_under(&clean_parser::SurfaceName::default())
+        .into_name();
     match state.namespace_state() {
-        Some(ns_state) => resolve_identifier(&literal, ns_state, &state.env).unwrap_or(literal),
+        Some(ns_state) => resolve_identifier(lemma_name, ns_state, &state.env).unwrap_or(literal),
         None => literal,
     }
 }
@@ -160,14 +240,18 @@ fn resolve_extra_lemma_name(state: &ProofState, lemma_name: &str) -> Name {
 /// ENSURES: Part of #3518.
 pub(crate) fn resolve_unfold_defs(
     state: &ProofState,
-    extra_lemmas: &[String],
-) -> HashMap<Name, Expr> {
+    extra_lemmas: &[clean_parser::SurfaceName],
+    prepared: &mut HashMap<Name, Vec<SimpLemma>>,
+) -> HashMap<Name, UnfoldDef> {
     let mut out = HashMap::new();
     let goal = state.current_goal();
     for lemma_name in extra_lemmas {
         // Local hypotheses shadow environment constants.
         if let Some(g) = goal {
-            if g.local_ctx.iter().any(|d| d.name == *lemma_name) {
+            if g.local_ctx
+                .iter()
+                .any(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, lemma_name))
+            {
                 continue;
             }
         }
@@ -195,11 +279,20 @@ pub(crate) fn resolve_unfold_defs(
             // a stuck recursor form those equations (and the local IHs) can
             // no longer match. The same synthesis call keeps the two sites
             // agreeing exactly: any def it refuses stays on this unfold path.
-            if super::rec_equations::synthesize_rec_def_equations(&state.env, &name).is_some() {
+            if let Some(equations) =
+                super::rec_equations::synthesize_rec_def_equations(&state.env, &name)
+            {
+                prepared.insert(name, equations);
                 continue;
             }
             if let Some(value) = &decl.value {
-                out.insert(name, value.clone());
+                out.insert(
+                    name,
+                    UnfoldDef {
+                        level_params: decl.level_params.clone(),
+                        value: value.clone(),
+                    },
+                );
             }
         }
     }
@@ -235,7 +328,10 @@ pub(crate) fn seed_unfold_defs_from_simp_defs(state: &ProofState, config: &mut S
     }
     for info in state.env.get_simp_lemmas() {
         let name = &info.name;
-        if config.exclude.contains(&name.to_string()) {
+        if config
+            .exclude
+            .contains(&clean_parser::SurfaceName::from_name(name.clone()))
+        {
             continue;
         }
         let Some(decl) = state.env.get_const(name) else {
@@ -250,6 +346,9 @@ pub(crate) fn seed_unfold_defs_from_simp_defs(state: &ProofState, config: &mut S
         {
             continue;
         }
+        if super::rec_equations::synthesize_rec_def_equations(&state.env, name).is_some() {
+            continue;
+        }
         let Some(value) = &decl.value else {
             continue;
         };
@@ -259,7 +358,10 @@ pub(crate) fn seed_unfold_defs_from_simp_defs(state: &ProofState, config: &mut S
         config
             .unfold_defs
             .entry(name.clone())
-            .or_insert_with(|| value.clone());
+            .or_insert_with(|| UnfoldDef {
+                level_params: decl.level_params.clone(),
+                value: value.clone(),
+            });
     }
 }
 
@@ -288,22 +390,52 @@ fn value_references_const(e: &Expr, name: &Name) -> bool {
 ///
 /// Local hypotheses should shadow environment constants for `simp_all`,
 /// `simp_only`, and similar name-based entrypoints.
-fn collect_local_extra_lemma(state: &ProofState, lemma_name: &str) -> Option<SimpLemma> {
-    let goal = state.current_goal()?;
-    let hyp_decl = goal.local_ctx.iter().find(|decl| decl.name == lemma_name)?;
+///
+/// Empty when no local has that name or the local yields no rule (it is not
+/// a proposition); the caller then resolves the name globally. One local can
+/// yield several rules: a conjunction is split (`local_prop_hyp_lemma`).
+fn collect_local_extra_lemma(
+    state: &ProofState,
+    lemma_name: &clean_parser::SurfaceName,
+) -> Vec<SimpLemma> {
+    let Some(goal) = state.current_goal() else {
+        return Vec::new();
+    };
+    // The MOST RECENT local of that name, as Lean resolves a shadowed name.
+    let Some(hyp_decl) = goal
+        .local_ctx
+        .iter()
+        .rev()
+        .find(|decl| crate::tactic::pattern::names::hypothesis_named(&decl.name, lemma_name))
+    else {
+        return Vec::new();
+    };
+    collect_local_extra_lemma_for_decl(state, goal, hyp_decl)
+}
+
+/// Automatic context walks keep the selected local identity instead of
+/// resolving its spelling again after a newer local shadows it.
+pub(in crate::tactic) fn collect_local_extra_lemma_for_decl(
+    state: &ProofState,
+    goal: &crate::tactic::Goal,
+    hyp_decl: &crate::tactic::LocalDecl,
+) -> Vec<SimpLemma> {
     let hyp_ty = state.whnf(goal, &hyp_decl.ty);
-    let (binder_count, eq_type, lhs, rhs, _levels) = extract_local_equality_template(&hyp_ty)?;
+    let Some((binder_count, eq_type, lhs, rhs, _levels)) = extract_local_equality_template(&hyp_ty)
+    else {
+        return local_prop_hyp_lemma(state, goal, hyp_decl, 50);
+    };
     let proof_template = mk_local_proof_template(Expr::fvar(hyp_decl.fvar), binder_count);
 
-    Some(SimpLemma {
-        name: Name::from_string(lemma_name),
+    vec![SimpLemma {
+        name: hyp_decl.name.name().clone(),
         lhs: state.metas.instantiate(&lhs),
         rhs: state.metas.instantiate(&rhs),
         eq_type: Some(state.metas.instantiate(&eq_type)),
         proof_expr: Some(state.metas.instantiate(&proof_template)),
         index_mode: SimpIndexMode::NoIndexAtArgs,
         priority: 50,
-    })
+    }]
 }
 
 pub(crate) fn extract_local_equality_template(
@@ -335,23 +467,81 @@ pub(crate) fn mk_local_proof_template(mut proof: Expr, binder_count: u32) -> Exp
 /// REQUIRES: `state` has at least one goal with a local context.
 /// ENSURES: Each returned lemma has `proof_expr` set to the hypothesis fvar
 ///   applied to its binder arguments, so the rewrite carries a real proof term.
-/// ENSURES: Only equality-shaped hypotheses are included; non-equality hypotheses
-///   are silently skipped.
-pub(super) fn collect_hypothesis_lemmas(state: &ProofState) -> Vec<SimpLemma> {
+/// ENSURES: EVERY Prop hypothesis yields a rule — an equation as itself, and
+///   anything else through `local_prop_hyp_lemma`, Lean's `preprocess`.
+/// ENSURES: `config.exclude_hypothesis` never yields a rule.
+/// ENSURES: a hypothesis named in `config.exclude` (`simp [*, -h]`) never
+///   yields a rule — Lean's `applyStarArg` skips an erased `.fvar` origin.
+///
+/// Lean's `[*]` is `applyStarArg` (`Lean/Elab/Tactic/Simp.lean`): it loops
+/// over `getPropHyps` — EVERY Prop hypothesis — and calls
+/// `simpTheorems.addTheorem (.fvar h)`, the same `preprocess` a named lemma
+/// takes, so `hab : a ≤ b` becomes `(a ≤ b) = True` and `ha : a ≤ b → p a`
+/// becomes the conditional `∀ (_ : a ≤ b), p a = True`. Clean used to keep
+/// only `h : a = b`-shaped locals here and drop the rest with no diagnostic,
+/// which is why `simp only [ha, hab]` proved goals `simp [*]` could not — the
+/// named path has always had the fall-through (`collect_local_extra_lemma`).
+pub(super) fn collect_hypothesis_lemmas(state: &ProofState, config: &SimpConfig) -> Vec<SimpLemma> {
+    let excluded = state.current_goal().and_then(|goal| {
+        config.exclude_hypothesis.as_ref().and_then(|name| {
+            goal.local_ctx
+                .iter()
+                .rev()
+                .find(|decl| crate::tactic::pattern::names::hypothesis_named(&decl.name, name))
+                .map(|decl| decl.fvar)
+        })
+    });
+    collect_hypothesis_lemmas_excluding(state, config, excluded)
+}
+
+pub(super) fn collect_hypothesis_lemmas_excluding(
+    state: &ProofState,
+    config: &SimpConfig,
+    excluded: Option<clean_kernel::FVarId>,
+) -> Vec<SimpLemma> {
     let Some(goal) = state.current_goal() else {
         return Vec::new();
     };
     let mut out = Vec::new();
     for decl in &goal.local_ctx {
+        // Lean removes the hypothesis being simplified from its own set
+        // (`simpGoal`); without this a `simp [*] at h` would rewrite `h : P`
+        // to `True` by `h` itself.
+        if excluded == Some(decl.fvar) {
+            continue;
+        }
+        // `simp [*, -h]`: Lean's `applyStarArg` guards its `getPropHyps` loop
+        // with `unless simpTheorems.isErased (.fvar h)`, so an erased LOCAL
+        // never joins the star set either. Pinned v4.30.0-rc2 refuses
+        // `example (h : P) : P := by simp [*, -h]` ("`simp` made no
+        // progress") while accepting it without the `-h`. `-` only gained a
+        // writer (`SimpConfig::exclude`) with the `simpArg` port, so before
+        // that the two channels could not disagree.
+        if config.exclude.iter().any(|name| {
+            goal.local_ctx
+                .iter()
+                .rev()
+                .find(|candidate| {
+                    crate::tactic::pattern::names::hypothesis_named(&candidate.name, name)
+                })
+                .is_some_and(|candidate| candidate.fvar == decl.fvar)
+        }) {
+            continue;
+        }
         let hyp_ty = state.whnf(goal, &decl.ty);
         let Some((binder_count, eq_type, lhs, rhs, _levels)) =
             extract_local_equality_template(&hyp_ty)
         else {
+            // Every other PROPOSITION is Lean's `preprocess` form. Priority 75
+            // keeps the `[*]` slot (between the registry's 100 and a named
+            // extra lemma's 50); a non-Prop local yields nothing, which is
+            // `local_prop_hyp_lemma`'s own `Sort 0` check.
+            out.extend(local_prop_hyp_lemma(state, goal, decl, 75));
             continue;
         };
         let proof_template = mk_local_proof_template(Expr::fvar(decl.fvar), binder_count);
         out.push(SimpLemma {
-            name: Name::from_string(&decl.name),
+            name: decl.name.name().clone(),
             lhs: state.metas.instantiate(&lhs),
             rhs: state.metas.instantiate(&rhs),
             eq_type: Some(state.metas.instantiate(&eq_type)),
@@ -378,7 +568,7 @@ pub(super) fn collect_hypothesis_lemmas(state: &ProofState) -> Vec<SimpLemma> {
 /// invented for non-symmetric (`→`) lemmas because only `Iff` conclusions reach
 /// here. The `propext`-wrapped witness introduces no axiom beyond the
 /// foundational `propext`.
-fn mk_iff_simp_lemma(
+pub(super) fn mk_iff_simp_lemma(
     name: &Name,
     ty: &Expr,
     priority: u32,
@@ -421,39 +611,75 @@ fn collect_registry_lemmas(state: &ProofState, config: &SimpConfig) -> Vec<SimpL
         "false_or",
         "not_true",
         "not_false",
+        // G39: collected by `lemmas_builtin::collect_logic_iff_lemmas`.
+        "ite_eq_left_iff",
+        "ite_eq_right_iff",
+        "imp_false",
+        "Decidable.not_not",
+        "not_false_eq_true",
+        "not_true_eq_false",
+        "implies_true",
+        "false_implies",
+        "ne_eq",
     ];
     let mut out = Vec::new();
     for info in state.env.get_simp_lemmas() {
-        let name_str = info.name.to_string();
-        if HARDCODED.contains(&name_str.as_str()) || config.exclude.contains(&name_str) {
+        let name_str = clean_parser::SurfaceName::from_name(info.name.clone());
+        if HARDCODED
+            .iter()
+            .any(|text| info.name == Name::from_string(text))
+            || config.exclude.contains(&name_str)
+        {
             continue;
         }
-        if let Some(decl) = state.env.get_const(&info.name) {
-            if let Some((eq_type, lhs, rhs)) = extract_equality_full(&decl.type_) {
-                out.push(SimpLemma {
-                    name: info.name.clone(),
-                    lhs,
-                    rhs,
-                    eq_type: Some(eq_type),
-                    proof_expr: None,
-                    index_mode: SimpIndexMode::Normal,
-                    priority: info.priority.value(),
-                });
-            } else if let Some(lemma) = mk_iff_simp_lemma(
-                &info.name,
-                &decl.type_,
-                info.priority.value(),
-                &decl.level_params,
-            ) {
-                out.push(lemma);
-            }
-        }
+        out.extend(
+            attr_simp_lemmas(state, &info.name, info.priority.value())
+                .into_iter()
+                .filter(|equation| {
+                    !config
+                        .exclude
+                        .contains(&clean_parser::SurfaceName::from_name(equation.name.clone()))
+                }),
+        );
     }
 
     // `get_simp_lemmas()` iterates a HashMap; stabilize equal-priority registry
     // lemmas so simp rewrite selection is deterministic across runs.
     out.sort_by(|a, b| a.name.cmp(&b.name));
     out
+}
+
+/// The rewrite rules a `@[simp]` attribute on constant `name` contributes, as
+/// Lean's `mkSimpTheoremsFromConst` makes them: an `=` conclusion as it is, an
+/// `↔` through `propext`, any other proposition through `preprocess`
+/// (`Nat.zero_le : 0 ≤ n` becomes `(0 ≤ n) = True`). Empty when `name` names
+/// nothing.
+fn attr_simp_lemmas(state: &ProofState, name: &Name, priority: u32) -> Vec<SimpLemma> {
+    let Some(decl) = state.env.get_const(name) else {
+        return Vec::new();
+    };
+    if let Some((eq_type, lhs, rhs)) = extract_equality_full(&decl.type_) {
+        vec![SimpLemma {
+            name: name.clone(),
+            lhs,
+            rhs,
+            eq_type: Some(eq_type),
+            proof_expr: None,
+            index_mode: SimpIndexMode::Normal,
+            priority,
+        }]
+    } else if let Some(lemma) = mk_iff_simp_lemma(name, &decl.type_, priority, &decl.level_params) {
+        vec![lemma]
+    } else if let Some(mut equations) =
+        super::rec_equations::synthesize_rec_def_equations(&state.env, name)
+    {
+        for equation in &mut equations {
+            equation.priority = priority;
+        }
+        equations
+    } else {
+        mk_prop_simp_lemmas(state, name, priority)
+    }
 }
 
 /// Collect simp lemmas by name from the environment.
@@ -551,12 +777,44 @@ mod namespace_resolution_tests {
     }
 
     /// Build a `simp only` config naming a single extra lemma.
-    fn only_config(lemma: &str) -> SimpConfig {
+    fn only_config(lemma: &'static str) -> SimpConfig {
         SimpConfig {
             only: true,
-            extra_lemmas: vec![lemma.to_string()],
+            extra_lemmas: vec![clean_parser::SurfaceName::generated_path(lemma)],
             ..SimpConfig::new()
         }
+    }
+
+    #[test]
+    fn prepared_equations_are_rebuilt_for_each_invocation() {
+        let mut env = Environment::with_prelude();
+        let declaration = clean_parser::parse_decl(
+            "def cachedRec : Nat → Nat | Nat.zero => Nat.zero | Nat.succ n => Nat.succ (cachedRec n)",
+        ).expect("recursive declaration");
+        crate::elaborate_decl_and_register(&mut env, &declaration).expect("register definition");
+        let state = ProofState::new(env, nat_ty());
+        let mut config = only_config("cachedRec");
+        super::super::seed_unfold_defs_from_extras(&state, &mut config);
+        let name = Name::from_string("cachedRec");
+        let prepared = config
+            .prepared_rec_equations
+            .get(&name)
+            .expect("prepared equations");
+        assert_eq!(prepared.len(), 2);
+        assert!(!config.unfold_defs.contains_key(&name));
+        let collected = collect_extra_lemmas(&state, &config);
+        assert_eq!(collected.len(), prepared.len());
+        assert!(collected
+            .iter()
+            .zip(prepared)
+            .all(|(a, b)| a.lhs == b.lhs && a.rhs == b.rhs));
+
+        // Reusing the config against another environment must not carry the
+        // former invocation's family, even when the requested name is unchanged.
+        let other = ProofState::new(Environment::with_prelude(), nat_ty());
+        super::super::seed_unfold_defs_from_extras(&other, &mut config);
+        assert!(config.prepared_rec_equations.is_empty());
+        assert!(collect_extra_lemmas(&other, &config).is_empty());
     }
 
     fn state_with_open(env: Environment, opened: &[&str]) -> ProofState {
@@ -641,13 +899,16 @@ mod namespace_resolution_tests {
     fn test_resolve_extra_lemma_name_through_open_and_fallback() {
         let state = state_with_open(test_env(), &["Nat"]);
         assert_eq!(
-            resolve_extra_lemma_name(&state, "add_zero"),
+            resolve_extra_lemma_name(
+                &state,
+                &clean_parser::SurfaceName::generated_path("add_zero")
+            ),
             Name::from_string("Nat.add_zero")
         );
         // Unknown name falls back to the literal (so the caller's get_const
         // miss governs behavior, not a panic).
         assert_eq!(
-            resolve_extra_lemma_name(&state, "ghost"),
+            resolve_extra_lemma_name(&state, &clean_parser::SurfaceName::generated_path("ghost")),
             Name::from_string("ghost")
         );
     }

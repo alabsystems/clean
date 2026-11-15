@@ -28,17 +28,17 @@ impl AyBackend {
     }
 
     /// Declare a fresh integer variable
-    pub fn fresh_int(&mut self, name_hint: &str) -> AyTerm {
+    pub(crate) fn fresh_int(&mut self, name_hint: &str) -> AyTerm {
         Self::wrap_term(self.session().fresh_const(name_hint, Sort::Int))
     }
 
     /// Declare a fresh real variable
-    pub fn fresh_real(&mut self, name_hint: &str) -> AyTerm {
+    pub(crate) fn fresh_real(&mut self, name_hint: &str) -> AyTerm {
         Self::wrap_term(self.session().fresh_const(name_hint, Sort::Real))
     }
 
     /// Declare a fresh bitvector variable
-    pub fn fresh_bv(&mut self, name_hint: &str, width: u32) -> AyTerm {
+    pub(crate) fn fresh_bv(&mut self, name_hint: &str, width: u32) -> AyTerm {
         Self::wrap_term(self.session().fresh_const(name_hint, Sort::bitvec(width)))
     }
 
@@ -47,17 +47,17 @@ impl AyBackend {
     // =========================================================================
 
     /// Create a boolean constant
-    pub fn bool_const(&mut self, value: bool) -> AyTerm {
+    pub(crate) fn bool_const(&mut self, value: bool) -> AyTerm {
         Self::wrap_term(self.session().bool_const(value))
     }
 
     /// Create an integer constant
-    pub fn int_const(&mut self, value: i64) -> AyTerm {
+    pub(crate) fn int_const(&mut self, value: i64) -> AyTerm {
         Self::wrap_term(self.session().int_const(value))
     }
 
     /// Create an integer constant from a Nat literal (arbitrary precision).
-    pub fn int_const_nat(&mut self, value: &clean_kernel::expr::BigNat) -> AyTerm {
+    pub(crate) fn int_const_nat(&mut self, value: &clean_kernel::expr::BigNat) -> AyTerm {
         let term = match value.to_u64().and_then(|v| i64::try_from(v).ok()) {
             Some(v) => self.session().int_const(v),
             None => {
@@ -70,12 +70,12 @@ impl AyBackend {
 
     /// Create a real constant
     #[allow(deprecated)] // try_real_const not yet available in ay-dpll
-    pub fn real_const(&mut self, value: f64) -> AyTerm {
+    pub(crate) fn real_const(&mut self, value: f64) -> AyTerm {
         Self::wrap_term(self.solver.real_const(value))
     }
 
     /// Create a bitvector constant
-    pub fn bv_const(&mut self, value: i64, width: u32) -> AyTerm {
+    pub(crate) fn bv_const(&mut self, value: i64, width: u32) -> AyTerm {
         Self::wrap_term(self.session().bv_const(value, width))
     }
 
@@ -84,7 +84,7 @@ impl AyBackend {
     // =========================================================================
 
     /// Create logical AND
-    pub fn and(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn and(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::bool_nary(
             &mut self.session(),
             ops::NaryBoolOp::And,
@@ -93,7 +93,7 @@ impl AyBackend {
     }
 
     /// Create logical AND of multiple terms
-    pub fn and_many(&mut self, terms: &[AyTerm]) -> AyTerm {
+    pub(crate) fn and_many(&mut self, terms: &[AyTerm]) -> AyTerm {
         let terms = Self::raw_terms(terms);
         Self::wrap_term(ops::bool_nary(
             &mut self.session(),
@@ -103,7 +103,7 @@ impl AyBackend {
     }
 
     /// Create logical OR
-    pub fn or(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn or(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::bool_nary(
             &mut self.session(),
             ops::NaryBoolOp::Or,
@@ -112,7 +112,7 @@ impl AyBackend {
     }
 
     /// Create logical OR of multiple terms
-    pub fn or_many(&mut self, terms: &[AyTerm]) -> AyTerm {
+    pub(crate) fn or_many(&mut self, terms: &[AyTerm]) -> AyTerm {
         let terms = Self::raw_terms(terms);
         Self::wrap_term(ops::bool_nary(
             &mut self.session(),
@@ -127,7 +127,7 @@ impl AyBackend {
     }
 
     /// Create logical implication (a => b)
-    pub fn implies(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn implies(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::implies(
             &mut self.session(),
             a.into_inner(),
@@ -136,7 +136,7 @@ impl AyBackend {
     }
 
     /// Create if-then-else
-    pub fn ite(&mut self, cond: AyTerm, then_val: AyTerm, else_val: AyTerm) -> AyTerm {
+    pub(crate) fn ite(&mut self, cond: AyTerm, then_val: AyTerm, else_val: AyTerm) -> AyTerm {
         Self::wrap_term(ops::ite(
             &mut self.session(),
             cond.into_inner(),
@@ -150,7 +150,7 @@ impl AyBackend {
     // =========================================================================
 
     /// Create equality (a = b)
-    pub fn eq(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn eq(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::compare(
             &mut self.session(),
             ops::Comparison::Eq,
@@ -160,7 +160,7 @@ impl AyBackend {
     }
 
     /// Create disequality (a != b)
-    pub fn neq(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn neq(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::compare(
             &mut self.session(),
             ops::Comparison::Ne,
@@ -170,7 +170,7 @@ impl AyBackend {
     }
 
     /// Create less-than (a < b)
-    pub fn lt(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn lt(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::compare(
             &mut self.session(),
             ops::Comparison::Lt,
@@ -180,7 +180,7 @@ impl AyBackend {
     }
 
     /// Create less-than-or-equal (a <= b)
-    pub fn le(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn le(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::compare(
             &mut self.session(),
             ops::Comparison::Le,
@@ -190,7 +190,7 @@ impl AyBackend {
     }
 
     /// Create greater-than (a > b)
-    pub fn gt(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn gt(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::compare(
             &mut self.session(),
             ops::Comparison::Gt,
@@ -200,7 +200,7 @@ impl AyBackend {
     }
 
     /// Create greater-than-or-equal (a >= b)
-    pub fn ge(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn ge(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::compare(
             &mut self.session(),
             ops::Comparison::Ge,
@@ -214,7 +214,7 @@ impl AyBackend {
     // =========================================================================
 
     /// Create addition (a + b)
-    pub fn add(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn add(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::arith::add(
             &mut self.session(),
             a.into_inner(),
@@ -223,7 +223,7 @@ impl AyBackend {
     }
 
     /// Create subtraction (a - b)
-    pub fn sub(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn sub(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::arith::sub(
             &mut self.session(),
             a.into_inner(),
@@ -232,7 +232,7 @@ impl AyBackend {
     }
 
     /// Create multiplication (a * b)
-    pub fn mul(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn mul(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::arith::mul(
             &mut self.session(),
             a.into_inner(),
@@ -241,12 +241,12 @@ impl AyBackend {
     }
 
     /// Create negation (-a)
-    pub fn neg(&mut self, a: AyTerm) -> AyTerm {
+    pub(crate) fn neg(&mut self, a: AyTerm) -> AyTerm {
         Self::wrap_term(ops::arith::neg(&mut self.session(), a.into_inner()))
     }
 
     /// Create integer division (a div b)
-    pub fn int_div(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn int_div(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::arith::int_div(
             &mut self.session(),
             a.into_inner(),
@@ -255,7 +255,7 @@ impl AyBackend {
     }
 
     /// Create modulo (a mod b)
-    pub fn modulo(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn modulo(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::arith::modulo(
             &mut self.session(),
             a.into_inner(),
@@ -268,7 +268,7 @@ impl AyBackend {
     // =========================================================================
 
     /// Create bitvector addition
-    pub fn bvadd(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn bvadd(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::bv::add(
             &mut self.session(),
             a.into_inner(),
@@ -277,7 +277,7 @@ impl AyBackend {
     }
 
     /// Create bitvector subtraction
-    pub fn bvsub(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn bvsub(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::bv::sub(
             &mut self.session(),
             a.into_inner(),
@@ -286,7 +286,7 @@ impl AyBackend {
     }
 
     /// Create bitvector multiplication
-    pub fn bvmul(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn bvmul(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::bv::binop(
             &mut self.session(),
             ops::bv::BinOp::Mul,
@@ -296,7 +296,7 @@ impl AyBackend {
     }
 
     /// Create bitvector unsigned less-than
-    pub fn bvult(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn bvult(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::bv::cmp(
             &mut self.session(),
             ops::bv::Cmp::ULt,
@@ -306,7 +306,7 @@ impl AyBackend {
     }
 
     /// Create bitvector signed less-than
-    pub fn bvslt(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
+    pub(crate) fn bvslt(&mut self, a: AyTerm, b: AyTerm) -> AyTerm {
         Self::wrap_term(ops::bv::cmp(
             &mut self.session(),
             ops::bv::Cmp::SLt,
@@ -334,7 +334,7 @@ impl AyBackend {
     }
 
     /// Array store: `(store array index value)` — returns a new array with `array[index] = value`
-    pub fn store(&mut self, array: AyTerm, index: AyTerm, value: AyTerm) -> AyTerm {
+    pub(crate) fn store(&mut self, array: AyTerm, index: AyTerm, value: AyTerm) -> AyTerm {
         Self::wrap_term(ops::array::store(
             &mut self.session(),
             array.into_inner(),
@@ -344,7 +344,7 @@ impl AyBackend {
     }
 
     /// Array select: `(select array index)` — reads `array[index]`
-    pub fn select(&mut self, array: AyTerm, index: AyTerm) -> AyTerm {
+    pub(crate) fn select(&mut self, array: AyTerm, index: AyTerm) -> AyTerm {
         Self::wrap_term(ops::array::select(
             &mut self.session(),
             array.into_inner(),
@@ -379,7 +379,7 @@ impl AyBackend {
     /// REQUIRES: `body` has Bool sort
     /// ENSURES: Result has Bool sort
     /// ENSURES: Triggers are auto-selected by the solver
-    pub fn forall(&mut self, vars: &[AyTerm], body: AyTerm) -> AyResult<AyTerm> {
+    pub(crate) fn forall(&mut self, vars: &[AyTerm], body: AyTerm) -> AyResult<AyTerm> {
         let vars = Self::raw_terms(vars);
         self.solver
             .try_forall(&vars, body.into_inner())
@@ -434,7 +434,7 @@ impl AyBackend {
     /// REQUIRES: `body` has Bool sort
     /// ENSURES: Result has Bool sort
     /// ENSURES: Triggers are auto-selected by the solver
-    pub fn exists(&mut self, vars: &[AyTerm], body: AyTerm) -> AyResult<AyTerm> {
+    pub(crate) fn exists(&mut self, vars: &[AyTerm], body: AyTerm) -> AyResult<AyTerm> {
         let vars = Self::raw_terms(vars);
         self.solver
             .try_exists(&vars, body.into_inner())
@@ -494,13 +494,13 @@ impl AyBackend {
     }
 
     /// Push a new scope for incremental solving
-    pub fn push(&mut self) {
+    pub(crate) fn push(&mut self) {
         self.clear_last_consumer_sat();
         self.session().push();
     }
 
     /// Pop the most recent scope
-    pub fn pop(&mut self) {
+    pub(crate) fn pop(&mut self) {
         self.clear_last_consumer_sat();
         self.session().pop();
     }

@@ -28,6 +28,7 @@ fn module_with_refinements() -> Module {
 
     let range = m
         .intern_universe(Universe::IntRange { lo: 1, hi: 8 })
+        .expect("Module::intern_universe: test fixture")
         .expect("canonical range");
     let members = m
         .intern_universe(Universe::Members(vec![
@@ -35,41 +36,64 @@ fn module_with_refinements() -> Module {
             Constant::Int(4),
             Constant::Int(8),
         ]))
+        .expect("Module::intern_universe: test fixture")
         .expect("canonical members");
 
     let interval = m
         .intern_pred(Pred::Interval { lo: 0, hi: 7 })
+        .expect("Module::intern_pred: test fixture")
         .expect("canonical interval");
     let finite = m
         .intern_pred(Pred::FiniteSet(vec![Constant::Int(2), Constant::Int(4)]))
+        .expect("Module::intern_pred: test fixture")
         .expect("canonical finite set");
     let member = m
         .intern_pred(Pred::InUniverse(range, Space::Member))
+        .expect("Module::intern_pred: test fixture")
         .expect("in range");
     let index = m
         .intern_pred(Pred::InUniverse(members, Space::Index))
+        .expect("Module::intern_pred: test fixture")
         .expect("in range");
-    let nonzero = m.intern_pred(Pred::NonZero).expect("leaf");
-    let nonnull = m.intern_pred(Pred::NonNull).expect("leaf");
-    let _top = m.intern_pred(Pred::Top).expect("leaf");
-    let _bottom = m.intern_pred(Pred::Bottom).expect("leaf");
+    let nonzero = m
+        .intern_pred(Pred::NonZero)
+        .expect("Module::intern_pred: test fixture")
+        .expect("leaf");
+    let nonnull = m
+        .intern_pred(Pred::NonNull)
+        .expect("Module::intern_pred: test fixture")
+        .expect("leaf");
+    let _top = m
+        .intern_pred(Pred::Top)
+        .expect("Module::intern_pred: test fixture")
+        .expect("leaf");
+    let _bottom = m
+        .intern_pred(Pred::Bottom)
+        .expect("Module::intern_pred: test fixture")
+        .expect("leaf");
     let conj = m
         .intern_pred(Pred::Conj(vec![interval, nonzero]))
+        .expect("Module::intern_pred: test fixture")
         .expect("children exist");
     let _disj = m
         .intern_pred(Pred::Disj(vec![finite, member, index]))
+        .expect("Module::intern_pred: test fixture")
         .expect("children exist");
 
-    let i64_ty = m.add_type(Ty::I64);
-    let ptr_ty = m.add_type(Ty::Ptr);
-    m.add_type(Ty::Refine(i64_ty, conj));
-    m.add_type(Ty::Refine(ptr_ty, nonnull));
+    let i64_ty = m.add_type(Ty::I64).expect("Module::add_type: test fixture");
+    let ptr_ty = m.add_type(Ty::Ptr).expect("Module::add_type: test fixture");
+    m.add_type(Ty::Refine(i64_ty, conj))
+        .expect("Module::add_type: test fixture");
+    m.add_type(Ty::Refine(ptr_ty, nonnull))
+        .expect("Module::add_type: test fixture");
 
     m.add_func_type(FuncTy {
         params: vec![Ty::Refine(i64_ty, member)],
         returns: vec![Ty::Refine(i64_ty, index)],
+        abi: None,
         is_vararg: false,
-    });
+    })
+    .expect("Module::add_func_type: test fixture");
 
     m
 }
@@ -77,7 +101,7 @@ fn module_with_refinements() -> Module {
 #[test]
 fn binary_round_trip_preserves_tables_and_refinements() {
     let m = module_with_refinements();
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("decode");
 
     assert_eq!(back.universes, m.universes, "universe table must survive");
@@ -90,7 +114,7 @@ fn binary_round_trip_preserves_tables_and_refinements() {
 
     // Re-encoding the decoded module must be byte-identical: the codec has no
     // producer-order-dependent choices left in it.
-    let again = trust_ir::binary::serialize_module(&back);
+    let again = trust_ir::binary::serialize_module(&back).expect("serialize_module: test fixture");
     assert_eq!(bytes, again, "encode -> decode -> encode must be stable");
 }
 
@@ -139,18 +163,24 @@ fn json_and_msgpack_round_trip_preserve_tables() {
 fn a_module_without_refinements_is_bit_identical_to_before() {
     // The additive-format contract: a module that carries no refinement is
     // unchanged by this feature in every format. The two new trailing binary
-    // sections encode as two zero-length varints, and the two new serde fields
-    // are skipped entirely when empty.
+    // sections encode as two zero-length varints. (Since v41 `predicates` is
+    // always emitted by serde, and so is `global_asm`: the cross-crate
+    // `imports` table was appended after both. Since v42 imports is also
+    // always emitted; tuple_layouts held the sole trailing-skip slot until
+    // WS5.3b appended `completeness` after it, which flipped tuple_layouts to
+    // always-emitted and made the completeness claim the trailing skip.)
     let mut m = Module::new("legacy");
-    m.add_type(Ty::I64);
+    m.add_type(Ty::I64).expect("Module::add_type: test fixture");
     m.add_func_type(FuncTy {
         params: vec![Ty::I64],
         returns: vec![Ty::I64],
+        abi: None,
         is_vararg: false,
-    });
+    })
+    .expect("Module::add_func_type: test fixture");
     assert!(m.predicates.is_empty() && m.universes.is_empty());
 
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("decode");
     assert_eq!(back, m);
     assert!(back.predicates.is_empty() && back.universes.is_empty());
@@ -161,18 +191,41 @@ fn a_module_without_refinements_is_bit_identical_to_before() {
     assert_eq!(trust_ir::parser::parse_module(&text).expect("parse"), m);
 
     let json = serde_json::to_string(&m).expect("json");
-    // R3 #5 positional-serde discipline: `predicates` is the SOLE trailing
-    // conditionally-skipped field, so it vanishes when empty; `universes` sits
-    // before it and must therefore ALWAYS be emitted, or every later field
-    // would shift a slot in the positional MessagePack encoding.
+    // R3 #5 positional-serde discipline. The trailing slot MOVED TWICE in v41:
+    // `global_asm` was appended after `predicates` (flipping `predicates` to
+    // always-emitted), then the cross-crate `imports` table was appended after
+    // `global_asm` (flipping THAT to always-emitted). A struct may carry at
+    // most one conditionally-skipped field and it must be the LAST one, or
+    // every later field shifts a slot in the positional MessagePack encoding.
+    // v42 moved that final slot to tuple_layouts without reordering any
+    // field; WS5.3b moved it again, to the `completeness` claim (absent =
+    // NO CLAIM), flipping tuple_layouts to always-emitted; amendment D (v55)
+    // moved it once more, to the drop-glue table, flipping `completeness` to
+    // always-emitted (`null` when there is no claim); v58 moved it again, to
+    // closure_layouts (APPENDED after the drop-glue table, flipping
+    // `drop_glue` to always-emitted, so an empty table spells `[]`).
     assert!(
-        !json.contains("\"predicates\""),
-        "the trailing table must be skipped when empty: {json}"
+        !json.contains("\"closure_layouts\""),
+        "the trailing closure-layout table must be skipped when empty: {json}"
     );
     assert!(
-        json.contains("\"universes\":[]"),
-        "a non-trailing field must always be emitted: {json}"
+        json.ends_with(",\"completeness\":null,\"drop_glue\":[]}"),
+        "the claim slot and the drop-glue table before it are always emitted: {json}"
     );
+    for always in [
+        "\"predicates\":[]",
+        "\"universes\":[]",
+        "\"global_asm\":[]",
+        "\"imports\":[]",
+        "\"tuple_layouts\":[]",
+        "\"completeness\":null",
+        "\"drop_glue\":[]",
+    ] {
+        assert!(
+            json.contains(always),
+            "a non-trailing field must always be emitted ({always}): {json}"
+        );
+    }
     assert_eq!(serde_json::from_str::<Module>(&json).expect("decode"), m);
 
     // The positional codec is the one that actually bites: a legacy-shaped
@@ -187,8 +240,11 @@ fn refinement_is_representation_preserving() {
     // The load-bearing claim of the whole change: a `Refine` lays out EXACTLY
     // as its base does, so no downstream artifact can move.
     let mut m = Module::new("repr");
-    let p = m.intern_pred(Pred::NonZero).expect("leaf");
-    let i64_ty = m.add_type(Ty::I64);
+    let p = m
+        .intern_pred(Pred::NonZero)
+        .expect("Module::intern_pred: test fixture")
+        .expect("leaf");
+    let i64_ty = m.add_type(Ty::I64).expect("Module::add_type: test fixture");
     let refined = Ty::Refine(i64_ty, p);
 
     let base_layout = m.ty_layout_shape(&Ty::I64).expect("i64 layout");
@@ -207,9 +263,11 @@ fn interning_is_by_content_not_by_call_site() {
     let mut m = Module::new("intern");
     let a = m
         .intern_in_universe(Universe::IntRange { lo: 1, hi: 8 }, Space::Member)
+        .expect("Module::intern_in_universe: test fixture")
         .expect("interned");
     let b = m
         .intern_in_universe(Universe::IntRange { lo: 1, hi: 8 }, Space::Member)
+        .expect("Module::intern_in_universe: test fixture")
         .expect("interned");
     assert_eq!(a, b, "identical content must be one id");
     assert_eq!(m.universes.len(), 1);
@@ -223,9 +281,11 @@ fn interning_is_by_content_not_by_call_site() {
             Constant::Int(1),
             Constant::Int(3),
         ]))
+        .expect("Module::intern_universe: test fixture")
         .expect("canonicalized");
     let d = m
         .intern_universe(Universe::Members(vec![Constant::Int(1), Constant::Int(3)]))
+        .expect("Module::intern_universe: test fixture")
         .expect("canonical");
     assert_eq!(c, d, "canonicalization must precede identity");
 }

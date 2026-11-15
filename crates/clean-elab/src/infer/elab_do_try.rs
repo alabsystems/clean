@@ -56,8 +56,6 @@ impl<'a> ElabCtx<'a> {
         body: Expr,
         catch_clause: &DoCatchClause,
     ) -> Result<Expr, ElabError> {
-        let handler_body = self.elab_do_body_with_outer_continuation(&catch_clause.body)?;
-
         let exc_ty = if let Some(exc_type_surface) = &catch_clause.exc_type {
             self.elaborate(exc_type_surface)?
         } else {
@@ -71,9 +69,16 @@ impl<'a> ElabCtx<'a> {
                 .unwrap_or_else(|| self.fresh_meta(Expr::type_()))
         };
 
+        // The handler is elaborated with its binder IN SCOPE. It used to be
+        // elaborated before the binder was pushed, so `catch e => pure e`
+        // either failed "Unknown identifier: e" or — with an outer `e` in
+        // scope — silently returned the OUTER value (G61).
         let fvar = self.push_local(catch_clause.binder.clone(), exc_ty.clone());
-        let handler_abs = handler_body.abstract_fvar(fvar);
+        let handler_result = self.elab_do_body_with_outer_continuation(&catch_clause.body);
         self.pop_local();
+        let handler_body = handler_result?;
+        let handler_body = self.metas.instantiate(&handler_body);
+        let handler_abs = handler_body.abstract_fvar(fvar);
         let handler_lambda = Expr::lam(BinderInfo::Default, exc_ty.clone(), handler_abs);
 
         if catch_clause.exc_type.is_some() {
@@ -126,10 +131,30 @@ impl<'a> ElabCtx<'a> {
         // Concrete `(u, m, α)` off the block's expected result type (like
         // `mk_bind_app`) so no monad/universe metavariable is left unsolved.
         let (base_u, base_v, base_m) = self.get_or_create_monad_info();
-        let (do_u, _do_v, m, alpha) = self.expected_do_result_components().unwrap_or_else(|| {
+        let (do_u, do_v, m, alpha) = self.expected_do_result_components().unwrap_or_else(|| {
             let type_u = Expr::sort(Level::succ(base_u.clone()));
             (base_u, base_v, base_m, self.fresh_meta(type_u))
         });
+
+        let name = Name::from_string("tryCatchThe");
+        // Genuine Init has three levels and a MonadExceptOf dictionary. It
+        // must retain its own ABI when imported instead of a native stub.
+        if self
+            .env
+            .get_const(&name)
+            .is_some_and(|c| c.level_params.len() == 3)
+        {
+            let levels = vec![u_exc, do_u, do_v];
+            let inst = self.do_instance_arg(
+                "MonadExceptOf",
+                levels.clone(),
+                &[epsilon.clone(), m.clone()],
+            );
+            return Ok(Expr::apps(
+                Expr::const_(name, levels),
+                [epsilon, m, inst, alpha, body, handler],
+            ));
+        }
 
         // Registered `tryCatchThe.{u,v} : {ε}{m}{α} → m α → (ε → m α) → m α` — a
         // plain (instance-free) axiom with TWO level params. The previous build
@@ -171,16 +196,18 @@ impl<'a> ElabCtx<'a> {
             (base_u, base_v, base_m, self.fresh_meta(type_u))
         });
 
-        // Registered `MonadExcept.tryCatch.{u,v,w} : {ε}{m}{α} → m α →
-        // (ε → m α) → m α` is a plain (instance-free) axiom — mirror that arity.
-        // The previous build inserted a nonexistent `MonadExcept ε m` instance
-        // argument, over-applying the axiom (cryptic `NotAFunction`).
-        // `@MonadExcept.tryCatch.{u_exc,u,v} ε m α body handler`.
-        let try_catch = Expr::const_(
-            Name::from_string("MonadExcept.tryCatch"),
-            vec![u_exc, do_u, do_v],
-        );
-        Ok(Expr::apps(try_catch, [epsilon, m, alpha, body, handler]))
+        // `MonadExcept.tryCatch.{u,v,w} : {ε} → {m} → [self : MonadExcept ε m]
+        // → {α} → m α → (ε → m α) → m α` is Lean's class projection (it was an
+        // instance-less axiom until 2026-09-28; its sibling `throw` proved
+        // `False`). `@MonadExcept.tryCatch.{u_exc,u,v} ε m ?inst α body handler`.
+        let levels = vec![u_exc, do_u, do_v];
+        let inst =
+            self.do_instance_arg("MonadExcept", levels.clone(), &[epsilon.clone(), m.clone()]);
+        let try_catch = Expr::const_(Name::from_string("MonadExcept.tryCatch"), levels);
+        Ok(Expr::apps(
+            try_catch,
+            [epsilon, m, inst, alpha, body, handler],
+        ))
     }
 
     /// Build `tryFinally body fin` for finally clauses.
@@ -242,7 +269,10 @@ impl<'a> ElabCtx<'a> {
 
         let action_expr = self.elaborate(action)?;
         let result_ty = self.fresh_meta(Expr::type_());
-        let fvar = self.push_local("__let_else_x".to_string(), result_ty.clone());
+        let fvar = self.push_local(
+            SurfaceName::unspellable("__let_else_x", 0),
+            result_ty.clone(),
+        );
 
         let fallback_expr = self.elab_do_body_with_outer_continuation(fallback)?;
 
@@ -261,7 +291,7 @@ impl<'a> ElabCtx<'a> {
                 // Fix #3419: Instantiate metas before abstracting FVars.
                 let body_inst = self.metas.instantiate(&body);
                 Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     result_ty.clone(),
                     Expr::bvar(0),
                     body_inst.abstract_fvar(inner_fvar),
@@ -304,13 +334,13 @@ impl<'a> ElabCtx<'a> {
         rest: &[DoElem],
     ) -> Result<Expr, ElabError> {
         let span = action.span();
-        let fresh = "__let_else_x".to_string();
-        let binder = SurfaceBinder::new(&fresh, None, SurfaceBinderInfo::Explicit);
+        let fresh = SurfaceName::unspellable("__let_else_x", 0);
+        let binder = SurfaceBinder::new_typed(fresh.clone(), None, SurfaceBinderInfo::Explicit);
         let bind_elem = DoElem::Bind(span, binder, Box::new(action.clone()));
 
         // Success arm: the continuation after the pattern match
         let success_body = if rest.is_empty() {
-            let unit_expr = SurfaceExpr::Ident(span, "Unit.unit".to_string());
+            let unit_expr = SurfaceExpr::Ident(span, SurfaceName::global_path("Unit.unit"));
             vec![DoElem::Return(span, Box::new(unit_expr))]
         } else {
             rest.to_vec()
@@ -345,7 +375,7 @@ impl<'a> ElabCtx<'a> {
             .first()
             .map_or(clean_parser::Span::new(0, 0), |e| e.span());
         let binder = SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit);
-        let collection = SurfaceExpr::Ident(span, "Lean.Loop.mk".to_string());
+        let collection = SurfaceExpr::Ident(span, SurfaceName::global_path("Lean.Loop.mk"));
         let for_elem = DoElem::For(span, binder, Box::new(collection), body.to_vec());
         self.elab_do_elems(&[for_elem])
     }
@@ -407,8 +437,8 @@ impl<'a> ElabCtx<'a> {
 
         // Build body lambda: fun (_ : Unit) (acc : PUnit) => if cond then ... else ...
         // Push loop variables BEFORE elaborating body so DoLoopContext can reference acc
-        let fvar_elem = self.push_local("_".to_string(), unit_ty.clone());
-        let fvar_acc = self.push_local("__do_acc".to_string(), beta.clone());
+        let fvar_elem = self.push_local(SurfaceName::generated_path("_"), unit_ty.clone());
+        let fvar_acc = self.push_local(SurfaceName::unspellable("__do_acc", 0), beta.clone());
 
         // Set up DoLoopContext so break/continue inside body produce ForInStep directly
         let outer_loop_ctx = self.do_loop_ctx.take();
@@ -437,7 +467,7 @@ impl<'a> ElabCtx<'a> {
         let yield_pure = self.mk_pure_app(yield_val);
 
         let discard_ty = self.fresh_meta(Expr::type_());
-        let fvar_d = self.push_local("_".to_string(), discard_ty.clone());
+        let fvar_d = self.push_local(SurfaceName::generated_path("_"), discard_ty.clone());
         let yield_abs = yield_pure.abstract_fvar(fvar_d);
         self.pop_local();
         let yield_cont = Expr::lam(BinderInfo::Default, discard_ty, yield_abs);
@@ -503,7 +533,7 @@ impl<'a> ElabCtx<'a> {
 
         // Build continuation thunk: fun (_ : Unit) => rest
         let unit_ty = Expr::const_(Name::from_string("Unit"), vec![]);
-        let fvar = self.push_local("_".to_string(), unit_ty.clone());
+        let fvar = self.push_local(SurfaceName::generated_path("_"), unit_ty.clone());
         let rest_abs = rest_expr.abstract_fvar(fvar);
         self.pop_local();
         let thunk = Expr::lam(BinderInfo::Default, unit_ty, rest_abs);

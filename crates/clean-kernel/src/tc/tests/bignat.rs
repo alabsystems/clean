@@ -553,7 +553,7 @@ fn test_def_eq_offset_bignat_big_different() {
 /// through one round of successor peeling.
 #[test]
 fn test_def_eq_offset_bignat_big_vs_succ_small_max() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^64 as BigNat::Big

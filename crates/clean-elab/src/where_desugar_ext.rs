@@ -18,7 +18,9 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use clean_parser::{Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, WhereLocalDef};
+use clean_parser::{
+    Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName, WhereLocalDef,
+};
 
 use crate::where_desugar::WhereClause;
 
@@ -30,11 +32,11 @@ pub(crate) enum WhereDesugarError {
     /// as mutual recursion.
     #[error(
         "cyclic dependency among where-clause definitions: {}",
-        names.join(" -> ")
+        names.iter().map(ToString::to_string).collect::<Vec<_>>().join(" -> ")
     )]
     CyclicDependency {
         /// Names forming the cycle, in dependency order.
-        names: Vec<String>,
+        names: Vec<SurfaceName>,
         /// Span of the first clause in the cycle, for error reporting.
         span: Span,
     },
@@ -43,7 +45,7 @@ pub(crate) enum WhereDesugarError {
     #[error("duplicate where-clause definition: `{name}`")]
     DuplicateName {
         /// The duplicated name.
-        name: String,
+        name: SurfaceName,
         /// Span of the second (duplicate) definition.
         span: Span,
     },
@@ -52,28 +54,20 @@ pub(crate) enum WhereDesugarError {
 /// Collect free identifier names from a `SurfaceExpr` (excluding locally bound names).
 /// Conservative approximation — caller intersects with where-clause name set.
 #[must_use]
-pub(crate) fn collect_free_idents(expr: &SurfaceExpr) -> HashSet<String> {
+pub(crate) fn collect_free_idents(expr: &SurfaceExpr) -> HashSet<SurfaceName> {
     collect_free_idents_checked(expr).0
 }
 
-/// Whether [`collect_free_idents`] could analyze `expr` COMPLETELY.
-///
-/// The traversal's final arm silently ignores constructs it does not model, so
-/// an identifier occurring only inside one is never reported. Undercounting is
-/// sound for dependency analysis; it is NOT sound for `used_section_binders`,
-/// where a missed identifier drops a section `variable` and the declaration
-/// registers with the WRONG ARITY (measured: `p` used only as a `Proj`
-/// receiver, `TooManyArguments` on every later application — r90's
-/// `sectvar_transitive_incl`).
-///
-/// Callers that need completeness consult this and fall back to including
-/// everything.
-#[must_use]
-pub(crate) fn free_idents_are_complete(expr: &SurfaceExpr) -> bool {
-    collect_free_idents_checked(expr).1
-}
-
 /// The single traversal: free identifiers, plus whether it saw everything.
+///
+/// The traversal's final arm does not descend into constructs it does not
+/// model, so an identifier occurring only inside one is never reported; the
+/// flag says so. Undercounting is sound for dependency analysis; it is NOT
+/// sound for `section_var_selection::select_section_binders`, where a missed
+/// identifier would drop a section `variable` and register the declaration
+/// with the WRONG ARITY (measured: `p` used only as a `Proj` receiver,
+/// `TooManyArguments` on every later application — r90's
+/// `sectvar_transitive_incl`), so that caller reads the flag and falls back.
 ///
 /// ONE match, deliberately. Completeness used to be computed by a second,
 /// parallel match that had to be kept in step by hand — and a drift in either
@@ -81,9 +75,64 @@ pub(crate) fn free_idents_are_complete(expr: &SurfaceExpr) -> bool {
 /// (losing the Lean-parity win); teach only the predicate and the arity bug
 /// returns. Adding a variant here now updates both by construction.
 #[must_use]
-pub(crate) fn collect_free_idents_checked(expr: &SurfaceExpr) -> (HashSet<String>, bool) {
-    let mut free = HashSet::new();
-    let mut bound: Vec<HashSet<String>> = vec![HashSet::new()];
+pub(crate) fn collect_free_idents_checked(expr: &SurfaceExpr) -> (HashSet<SurfaceName>, bool) {
+    let (free, complete) = collect_free_idents_detailed(expr);
+    (free.names, complete)
+}
+
+/// The free identifiers of a term, split by how a user template's free
+/// references (`clean_parser::mark_template_free_references`) take part.
+#[derive(Default)]
+pub(crate) struct FreeIdents {
+    /// Every free identifier (a template's free references included).
+    pub(crate) names: HashSet<SurfaceName>,
+    /// The identifiers with at least one free occurrence that is NOT a
+    /// template's free reference: the ones a local may bind.
+    pub(crate) plain: HashSet<SurfaceName>,
+    /// The template free references that denote the section variable of
+    /// their spelling: uses of it that no binder at the use site shadows.
+    pub(crate) template_section: HashSet<SurfaceName>,
+}
+
+impl FreeIdents {
+    fn reference(&mut self, name: &SurfaceName, bound: &[HashSet<SurfaceName>]) {
+        match name.template_origin() {
+            // A template's free reference is never bound by a binder the use
+            // site puts around it.
+            Some(origin) => {
+                self.names.insert(name.clone());
+                if origin.section_variable {
+                    self.template_section.insert(name.clone());
+                }
+            }
+            // A notation's reference to a global constant
+            // (`SurfaceName::global_path`: the `Eq` of `a = b`) is never a
+            // local, so it is no use of a local — in particular of a section
+            // variable of the same spelling. Counting it as one added
+            // `variable (Eq : Nat → Nat → Prop)` to `def sg (a b : Nat) := if
+            // a = b then 1 else 0`, and `sg (fun _ _ => True) 1 1 = 1` was
+            // accepted (measured 2026-09-26; Lean 4.8.0: `sg` takes two
+            // arguments).
+            None if name.is_global_reference() => {
+                if !bound.iter().any(|scope| scope.contains(name)) {
+                    self.names.insert(name.clone());
+                }
+            }
+            None => {
+                if !bound.iter().any(|scope| scope.contains(name)) {
+                    self.names.insert(name.clone());
+                    self.plain.insert(name.clone());
+                }
+            }
+        }
+    }
+}
+
+/// [`collect_free_idents_checked`], keeping the [`FreeIdents`] split.
+#[must_use]
+pub(crate) fn collect_free_idents_detailed(expr: &SurfaceExpr) -> (FreeIdents, bool) {
+    let mut free = FreeIdents::default();
+    let mut bound: Vec<HashSet<SurfaceName>> = vec![HashSet::new()];
     let mut complete = true;
     collect_free_idents_inner(expr, &mut free, &mut bound, &mut complete);
     (free, complete)
@@ -91,17 +140,12 @@ pub(crate) fn collect_free_idents_checked(expr: &SurfaceExpr) -> (HashSet<String
 
 fn collect_free_idents_inner(
     expr: &SurfaceExpr,
-    free: &mut HashSet<String>,
-    bound: &mut Vec<HashSet<String>>,
+    free: &mut FreeIdents,
+    bound: &mut Vec<HashSet<SurfaceName>>,
     complete: &mut bool,
 ) {
     match expr {
-        SurfaceExpr::Ident(_, name) => {
-            let is_bound = bound.iter().any(|scope| scope.contains(name.as_str()));
-            if !is_bound {
-                free.insert(name.clone());
-            }
-        }
+        SurfaceExpr::Ident(_, name) => free.reference(name, bound),
 
         SurfaceExpr::Lambda(_, binders, body)
         | SurfaceExpr::PatternMatchLambda(_, binders, body) => {
@@ -116,7 +160,7 @@ fn collect_free_idents_inner(
             }
             let mut scope = HashSet::new();
             for b in binders {
-                if b.name != "_" {
+                if !b.name.is_unescaped_component("_") {
                     scope.insert(b.name.clone());
                 }
             }
@@ -133,7 +177,7 @@ fn collect_free_idents_inner(
             }
             let mut scope = HashSet::new();
             for b in binders {
-                if b.name != "_" {
+                if !b.name.is_unescaped_component("_") {
                     scope.insert(b.name.clone());
                 }
             }
@@ -142,13 +186,13 @@ fn collect_free_idents_inner(
             bound.pop();
         }
 
-        SurfaceExpr::Let(_, binder, val, body) => {
+        SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::Have(_, binder, val, body) => {
             if let Some(ty) = &binder.ty {
                 collect_free_idents_inner(ty, free, bound, complete);
             }
             collect_free_idents_inner(val, free, bound, complete);
             let mut scope = HashSet::new();
-            if binder.name != "_" {
+            if !binder.name.is_unescaped_component("_") {
                 scope.insert(binder.name.clone());
             }
             bound.push(scope);
@@ -159,7 +203,7 @@ fn collect_free_idents_inner(
         SurfaceExpr::LetRec(_, binder, val, body) => {
             // In let rec, the name is in scope in both val and body.
             let mut scope = HashSet::new();
-            if binder.name != "_" {
+            if !binder.name.is_unescaped_component("_") {
                 scope.insert(binder.name.clone());
             }
             bound.push(scope);
@@ -192,6 +236,27 @@ fn collect_free_idents_inner(
             collect_free_idents_inner(cond, free, bound, complete);
             collect_free_idents_inner(then_br, free, bound, complete);
             collect_free_idents_inner(else_br, free, bound, complete);
+        }
+
+        // `if h : c then t else e` is `dite c (fun h => t) (fun h => e)`
+        // (Lean `Init/Notation.lean:474-480`, the `termDepIfThenElse`
+        // expansion): the condition is free, and `h` is bound in BOTH branches
+        // — `h : c` in `then`, `h : ¬c` in `else`. Left to the catch-all, every
+        // declaration holding one was scanned as incomplete and handed every
+        // section variable: Mathlib's `Function.update` (`if h : a = a'`)
+        // registered with the unused `α'` and the shadowed `f a b` (uses:
+        // `unsolved metavariables ?[4, 6, 7, 8]`), `Function.invFun` and
+        // `Function.extend` likewise.
+        SurfaceExpr::IfDecidable(_, h, cond, then_br, else_br) => {
+            collect_free_idents_inner(cond, free, bound, complete);
+            let mut scope = HashSet::new();
+            if !h.is_unescaped_component("_") {
+                scope.insert(h.clone());
+            }
+            bound.push(scope);
+            collect_free_idents_inner(then_br, free, bound, complete);
+            collect_free_idents_inner(else_br, free, bound, complete);
+            bound.pop();
         }
 
         SurfaceExpr::Match(_, hyp, scrutinee, arms) => {
@@ -269,12 +334,12 @@ fn collect_free_idents_inner(
 /// expressions, not binders. `_` is never recorded.
 fn collect_pattern_bound_names(
     pattern: &clean_parser::SurfacePattern,
-    scope: &mut HashSet<String>,
+    scope: &mut HashSet<SurfaceName>,
 ) {
     use clean_parser::SurfacePattern;
     match pattern {
         SurfacePattern::Var(name) => {
-            if name != "_" {
+            if !name.is_unescaped_component("_") {
                 scope.insert(name.clone());
             }
         }
@@ -285,7 +350,7 @@ fn collect_pattern_bound_names(
         }
         SurfacePattern::NumeralAdd(inner, _) => collect_pattern_bound_names(inner, scope),
         SurfacePattern::As(name, inner) => {
-            if name != "_" {
+            if !name.is_unescaped_component("_") {
                 scope.insert(name.clone());
             }
             collect_pattern_bound_names(inner, scope);
@@ -293,6 +358,11 @@ fn collect_pattern_bound_names(
         SurfacePattern::Or(lhs, rhs) => {
             collect_pattern_bound_names(lhs, scope);
             collect_pattern_bound_names(rhs, scope);
+        }
+        SurfacePattern::StructInst { fields, .. } => {
+            for (_, pat) in fields {
+                collect_pattern_bound_names(pat, scope);
+            }
         }
         SurfacePattern::Wildcard
         | SurfacePattern::Inaccessible(_)
@@ -305,21 +375,21 @@ fn collect_pattern_bound_names(
 /// Collect free identifiers from a where-clause's body and type annotation,
 /// excluding parameters bound by the clause itself.
 #[must_use]
-fn clause_free_idents(clause: &WhereClause) -> HashSet<String> {
-    let mut free = HashSet::new();
-    let mut bound: Vec<HashSet<String>> = vec![HashSet::new()];
+fn clause_free_idents(clause: &WhereClause) -> HashSet<SurfaceName> {
+    let mut free = FreeIdents::default();
+    let mut bound: Vec<HashSet<SurfaceName>> = vec![HashSet::new()];
 
     // This walk feeds WHERE-CLAUSE DEPENDENCY analysis, which the collector's
     // contract explicitly serves: missing an identifier can only drop a
     // dependency edge, never invent one. Completeness is discarded here on
-    // purpose — unlike `used_section_binders`, where an undercount silently
+    // purpose — unlike `select_section_binders`, where an undercount silently
     // changes a declaration's arity.
     let mut dep_analysis_tolerates_undercount = true;
 
     // Parameters are bound in the body and return type
     let mut param_scope = HashSet::new();
     for b in &clause.params {
-        if b.name != "_" {
+        if !b.name.is_unescaped_component("_") {
             param_scope.insert(b.name.clone());
         }
         // But parameter types can reference other clauses
@@ -354,7 +424,7 @@ fn clause_free_idents(clause: &WhereClause) -> HashSet<String> {
     }
 
     bound.pop();
-    free
+    free.names
 }
 
 /// Result of dependency analysis on where-clauses.
@@ -383,9 +453,9 @@ pub(crate) fn analyze_where_deps(
     }
 
     // Check for duplicate names
-    let mut seen_names: HashMap<&str, usize> = HashMap::new();
+    let mut seen_names: HashMap<&SurfaceName, usize> = HashMap::new();
     for (i, clause) in clauses.iter().enumerate() {
-        if let Some(&prev_idx) = seen_names.get(clause.name.as_str()) {
+        if let Some(&prev_idx) = seen_names.get(&clause.name) {
             let _ = prev_idx; // suppress unused warning
             return Err(WhereDesugarError::DuplicateName {
                 name: clause.name.clone(),
@@ -396,10 +466,10 @@ pub(crate) fn analyze_where_deps(
     }
 
     // Build name → index mapping
-    let name_to_idx: HashMap<&str, usize> = clauses
+    let name_to_idx: HashMap<&SurfaceName, usize> = clauses
         .iter()
         .enumerate()
-        .map(|(i, c)| (c.name.as_str(), i))
+        .map(|(i, c)| (&c.name, i))
         .collect();
 
     let num_nodes = clauses.len();
@@ -409,7 +479,7 @@ pub(crate) fn analyze_where_deps(
     for (i, clause) in clauses.iter().enumerate() {
         let free = clause_free_idents(clause);
         for ident in &free {
-            if let Some(&dep_idx) = name_to_idx.get(ident.as_str()) {
+            if let Some(&dep_idx) = name_to_idx.get(ident) {
                 if dep_idx != i {
                     edges[i].push(dep_idx);
                 }
@@ -570,7 +640,7 @@ pub(crate) fn desugar_where_ordered(
     // clause referencing only ITSELF is not in any mutual group; single
     // self-recursion is handled downstream by the `let rec` structural lift.)
     if let Some(group) = analysis.mutual_groups.first() {
-        let mut names: Vec<String> = group.iter().map(|&i| clauses[i].name.clone()).collect();
+        let mut names: Vec<SurfaceName> = group.iter().map(|&i| clauses[i].name.clone()).collect();
         let span = group.first().map_or_else(Span::dummy, |&i| clauses[i].span);
         if let Some(first) = names.first().cloned() {
             names.push(first); // display as `a -> b -> a`

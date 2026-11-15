@@ -38,7 +38,7 @@ impl<'a> ElabCtx<'a> {
     fn wrap_with_auto_implicits_rec(
         ty: Expr,
         val: Expr,
-        auto_implicits: &[(String, FVarId, Expr)],
+        auto_implicits: &[(SurfaceName, FVarId, Expr)],
         outer_fvars: &[FVarId],
     ) -> (Expr, Expr) {
         let Some(((_name, fvar, implicit_ty), rest)) = auto_implicits.split_first() else {
@@ -62,7 +62,7 @@ impl<'a> ElabCtx<'a> {
 
     fn wrap_type_with_auto_implicits_rec(
         ty: Expr,
-        auto_implicits: &[(String, FVarId, Expr)],
+        auto_implicits: &[(SurfaceName, FVarId, Expr)],
         outer_fvars: &[FVarId],
     ) -> Expr {
         let Some(((_name, fvar, implicit_ty), rest)) = auto_implicits.split_first() else {
@@ -88,7 +88,26 @@ impl<'a> ElabCtx<'a> {
     ///
     /// This implements relaxed auto-implicit by default since that matches Lean 4's
     /// default behavior and what most FATE-X files expect.
-    pub(in crate::infer) fn is_valid_auto_implicit_name(name: &str, relaxed: bool) -> bool {
+    pub(in crate::infer) fn is_valid_auto_implicit_name(name: &SurfaceName, relaxed: bool) -> bool {
+        if name.is_relative_constructor() {
+            return false;
+        }
+        // A notation or macro template's identifier is never auto-bound: in
+        // Lean it carries the expansion's macro scope, and a macro-scoped name
+        // is not an atomic name (`isValidAutoBoundImplicitName`). The same
+        // holds for a template binder renamed apart (a spelling holding `»`,
+        // which no identifier token can).
+        if name.template_origin().is_some()
+            || name.template_scope().is_some()
+            || name
+                .component_text()
+                .is_some_and(|text| text.contains('\u{BB}'))
+        {
+            return false;
+        }
+        let Some(name) = name.component_text() else {
+            return false;
+        };
         if name.is_empty() {
             return false;
         }
@@ -102,12 +121,76 @@ impl<'a> ElabCtx<'a> {
         relaxed || chars.next().is_none()
     }
 
+    /// The `autoImplicit` and `relaxedAutoImplicit` options in force, in that
+    /// order (both default to `true`, as in Lean).
+    pub(in crate::infer) fn auto_implicit_options(&self) -> (bool, bool) {
+        let flag = |name: &str| match self.get_option(name) {
+            Some(Some(v)) => v != "false",
+            _ => true,
+        };
+        (flag("autoImplicit"), flag("relaxedAutoImplicit"))
+    }
+
+    /// May an undeclared universe NAME be auto-bound as a level parameter?
+    ///
+    /// Lean's `isValidAutoBoundLevelName` (`Lean/Elab/AutoBound.lean`): an
+    /// atomic name, and unless `relaxedAutoImplicit` is on, an ASCII-lowercase
+    /// first character (`Char.isLower`) followed only by digits, subscript
+    /// letters or digits, `_` or `'` (`isValidAutoBoundSuffix`). So with the
+    /// option off, `u`, `v₁` and `u_1'` auto-bind and `β` or `uv` do not.
+    pub(in crate::infer) fn is_valid_auto_bound_level_name(
+        name: &SurfaceName,
+        relaxed: bool,
+    ) -> bool {
+        // A macro-scoped or renamed-apart template name is not atomic, exactly
+        // as for term-level auto-bound names.
+        if name.template_origin().is_some() || name.template_scope().is_some() {
+            return false;
+        }
+        let Some(text) = name.component_text() else {
+            return false;
+        };
+        let mut chars = text.chars();
+        let Some(first) = chars.next() else {
+            return false;
+        };
+        relaxed
+            || (first.is_ascii_lowercase()
+                && chars
+                    .all(|c| c.is_ascii_digit() || is_subscript_alnum(c) || c == '_' || c == '\''))
+    }
+
     /// Unwrap parentheses from a surface expression.
     /// Returns the innermost non-Paren expression.
     pub(in crate::infer) fn unwrap_surface_parens(expr: &SurfaceExpr) -> &SurfaceExpr {
         match expr {
             SurfaceExpr::Paren(_, inner) => Self::unwrap_surface_parens(inner),
             _ => expr,
+        }
+    }
+
+    /// Is this surface term an `@`-application — `@f`, `@f a b`, `@f.{u} a`?
+    ///
+    /// Lean's `ElabAppArgs.explicit` is decided from the SYNTAX and travels
+    /// with the application to `finalize`, which leaves every unsupplied
+    /// binder intact. Clean's `explicit_mode` is restored when `elab_app`
+    /// returns, so the expected-type reconciliation that runs afterwards needs
+    /// the same fact read off the surface term instead.
+    ///
+    /// The parser builds `@f a` as `App(Explicit(Ident f), args)` (the `@`
+    /// wraps the head ATOM, not the application) and `@f.{u} a` as
+    /// `App(UniverseInst(Explicit(f), levels), args)`.
+    pub(in crate::infer) fn surface_is_explicit_app(expr: &SurfaceExpr) -> bool {
+        fn head_is_explicit(expr: &SurfaceExpr) -> bool {
+            match ElabCtx::unwrap_surface_parens(expr) {
+                SurfaceExpr::Explicit(..) => true,
+                SurfaceExpr::UniverseInst(_, base, _) => head_is_explicit(base),
+                _ => false,
+            }
+        }
+        match Self::unwrap_surface_parens(expr) {
+            SurfaceExpr::App(_, func, _) => head_is_explicit(func),
+            other => head_is_explicit(other),
         }
     }
 
@@ -130,7 +213,7 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Check if an auto-implicit with this name already exists
-    pub(in crate::infer) fn has_auto_implicit(&self, name: &str) -> Option<FVarId> {
+    pub(in crate::infer) fn has_auto_implicit(&self, name: &SurfaceName) -> Option<FVarId> {
         self.auto_implicit_lookup.get(name).copied()
     }
 
@@ -143,7 +226,7 @@ impl<'a> ElabCtx<'a> {
     /// silently generalized into a fresh binder. A user-written binder is a
     /// local but never an auto-implicit, so over-applying one is a genuine
     /// arity error and is deliberately left alone.
-    pub(in crate::infer) fn auto_bound_head_name(&self, head: &Expr) -> Option<String> {
+    pub(in crate::infer) fn auto_bound_head_name(&self, head: &Expr) -> Option<SurfaceName> {
         let ExprKind::FVar(id) = head.get_app_fn().kind() else {
             return None;
         };
@@ -170,20 +253,20 @@ impl<'a> ElabCtx<'a> {
     ) -> ElabError {
         match self.auto_bound_head_name(head) {
             Some(name) => ElabError::AutoBoundHeadOverApplied {
-                name,
+                name: name.to_string(),
                 // Pretty-printed, not dumped: see the variant's `func_type` doc.
                 func_type: func_type.to_string(),
                 remaining_args,
             },
             None => ElabError::TooManyArguments {
-                func_type: format!("{func_type:?}"),
+                func_type: crate::error_render::term(func_type),
                 remaining_args,
             },
         }
     }
 
     /// Add a new auto-implicit binding
-    pub(in crate::infer) fn add_auto_implicit(&mut self, name: String, ty: Expr) -> FVarId {
+    pub(in crate::infer) fn add_auto_implicit(&mut self, name: SurfaceName, ty: Expr) -> FVarId {
         let fvar = self.fresh_fvar();
         self.auto_implicits.push((name.clone(), fvar, ty.clone()));
         self.auto_implicit_lookup
@@ -191,11 +274,13 @@ impl<'a> ElabCtx<'a> {
             .or_insert(fvar);
         // Also add to locals so the identifier can be looked up in subsequent uses
         self.locals.push((name, fvar, ty));
+        self.locals
+            .set_binder_info(fvar, BinderInfo::Implicit.into());
         fvar
     }
 
     /// Take auto-implicits for finalizing a declaration
-    pub(in crate::infer) fn take_auto_implicits(&mut self) -> Vec<(String, FVarId, Expr)> {
+    pub(in crate::infer) fn take_auto_implicits(&mut self) -> Vec<(SurfaceName, FVarId, Expr)> {
         let instantiated: Vec<_> = self
             .auto_implicits
             .iter()
@@ -234,7 +319,7 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn snapshot_auto_implicits_since(
         &self,
         start: usize,
-    ) -> Vec<(String, FVarId, Expr)> {
+    ) -> Vec<(SurfaceName, FVarId, Expr)> {
         assert!(
             start <= self.auto_implicits.len(),
             "auto-implicit scope start must be within bounds"
@@ -253,7 +338,7 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn take_auto_implicits_since(
         &mut self,
         start: usize,
-    ) -> Vec<(String, FVarId, Expr)> {
+    ) -> Vec<(SurfaceName, FVarId, Expr)> {
         assert!(
             start <= self.auto_implicits.len(),
             "auto-implicit scope start must be within bounds"
@@ -290,7 +375,7 @@ impl<'a> ElabCtx<'a> {
     pub(in crate::infer) fn wrap_with_auto_implicits(
         ty: Expr,
         val: Expr,
-        auto_implicits: &[(String, FVarId, Expr)],
+        auto_implicits: &[(SurfaceName, FVarId, Expr)],
     ) -> (Expr, Expr) {
         Self::wrap_with_auto_implicits_rec(ty, val, auto_implicits, &[])
     }
@@ -299,10 +384,20 @@ impl<'a> ElabCtx<'a> {
     /// Used for axioms which have no value expression
     pub(in crate::infer) fn wrap_type_with_auto_implicits(
         ty: Expr,
-        auto_implicits: &[(String, FVarId, Expr)],
+        auto_implicits: &[(SurfaceName, FVarId, Expr)],
     ) -> Expr {
         Self::wrap_type_with_auto_implicits_rec(ty, auto_implicits, &[])
     }
+}
+
+/// `Lean.isSubScriptAlnum` (`Init/Meta/Defs.lean`, v4.30): subscript digits,
+/// subscript Latin letters, `ᵢ`..`ᵪ`, and `ⱼ`.
+fn is_subscript_alnum(c: char) -> bool {
+    let v = u32::from(c);
+    (0x2080..=0x2089).contains(&v)
+        || (0x2090..=0x209c).contains(&v)
+        || (0x1d62..=0x1d6a).contains(&v)
+        || v == 0x2c7c
 }
 
 #[cfg(test)]
@@ -315,25 +410,46 @@ mod tests {
         let mut ctx = ElabCtx::new(&env);
         let sort_ty = Expr::sort(Level::zero());
 
-        let alpha = ctx.add_auto_implicit("alpha".to_string(), sort_ty.clone());
-        let beta = ctx.add_auto_implicit("beta".to_string(), sort_ty.clone());
-        assert_eq!(ctx.has_auto_implicit("alpha"), Some(alpha));
-        assert_eq!(ctx.has_auto_implicit("beta"), Some(beta));
+        let alpha = ctx.add_auto_implicit(SurfaceName::generated_path("alpha"), sort_ty.clone());
+        let beta = ctx.add_auto_implicit(SurfaceName::generated_path("beta"), sort_ty.clone());
+        assert_eq!(
+            ctx.has_auto_implicit(&SurfaceName::generated_path("alpha")),
+            Some(alpha)
+        );
+        assert_eq!(
+            ctx.has_auto_implicit(&SurfaceName::generated_path("beta")),
+            Some(beta)
+        );
 
         let drained = ctx.take_auto_implicits_since(1);
         assert_eq!(drained.len(), 1, "only the tail packet should drain");
-        assert_eq!(drained[0].0, "beta");
+        assert_eq!(drained[0].0, SurfaceName::generated_path("beta"));
         assert_eq!(ctx.auto_implicit_count(), 1);
-        assert_eq!(ctx.has_auto_implicit("alpha"), Some(alpha));
-        assert_eq!(ctx.has_auto_implicit("beta"), None);
+        assert_eq!(
+            ctx.has_auto_implicit(&SurfaceName::generated_path("alpha")),
+            Some(alpha)
+        );
+        assert_eq!(
+            ctx.has_auto_implicit(&SurfaceName::generated_path("beta")),
+            None
+        );
 
-        let beta_rebound = ctx.add_auto_implicit("beta".to_string(), sort_ty);
-        assert_eq!(ctx.has_auto_implicit("beta"), Some(beta_rebound));
+        let beta_rebound = ctx.add_auto_implicit(SurfaceName::generated_path("beta"), sort_ty);
+        assert_eq!(
+            ctx.has_auto_implicit(&SurfaceName::generated_path("beta")),
+            Some(beta_rebound)
+        );
 
         let taken = ctx.take_auto_implicits();
         assert_eq!(taken.len(), 2, "both active auto-implicits should drain");
         assert_eq!(ctx.auto_implicit_count(), 0);
-        assert_eq!(ctx.has_auto_implicit("alpha"), None);
-        assert_eq!(ctx.has_auto_implicit("beta"), None);
+        assert_eq!(
+            ctx.has_auto_implicit(&SurfaceName::generated_path("alpha")),
+            None
+        );
+        assert_eq!(
+            ctx.has_auto_implicit(&SurfaceName::generated_path("beta")),
+            None
+        );
     }
 }

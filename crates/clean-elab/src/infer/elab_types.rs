@@ -12,19 +12,24 @@
 //! - Binder info conversion helpers
 
 use crate::commands::{CheckResult, EvalResult, PrintResult};
+use clean_kernel::expr::UsedConstants;
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, FVarId};
-use clean_parser::{DeclModifiers, SurfaceBinderInfo, SurfaceExpr};
+use clean_parser::{DeclModifiers, SurfaceBinderInfo, SurfaceExpr, SurfaceName};
 use std::collections::HashMap;
 
-/// Metadata for a parameter after the decreasing argument in a recursive
-/// definition.
+/// An original declaration binder, captured before match-arm shadowing.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct RecursiveExtraParam {
+pub(super) struct RecursiveParam {
     /// Binder name as it appears in the local context.
-    pub name: String,
+    pub name: SurfaceName,
     /// Original binder visibility, needed when rebuilding IH/motive binders.
     pub binder_info: BinderInfo,
+    /// Captured by the recursive binding, rather than supplied at its calls.
+    /// Includes autos introduced by captured section-variable domains.
+    pub(super) captured_section: bool,
+    pub(super) fvar: FVarId,
+    pub(super) type_: Expr,
 }
 
 /// Context for recursive definition elaboration (#378)
@@ -34,21 +39,21 @@ pub(super) struct RecursiveExtraParam {
 #[allow(dead_code)]
 pub(super) struct RecursiveDefContext {
     /// Name of the function being defined
-    pub func_name: String,
-    /// Position of the decreasing argument (0-indexed)
+    pub func_name: SurfaceName,
+    /// Position among the recursive binding's own explicit arguments.
+    /// Captured section parameters are omitted at internal call sites.
     pub decreasing_arg_pos: usize,
     /// Name of the decreasing argument
-    pub decreasing_arg_name: String,
+    pub decreasing_arg_name: SurfaceName,
     /// Inductive type name of the decreasing argument
     pub inductive_type_name: Option<Name>,
     /// Free variable for the inductive hypothesis (set when elaborating match arms)
     pub ih_fvar: Option<FVarId>,
     /// Type of the IH (set when elaborating match arms)
     pub ih_type: Option<Expr>,
-    /// Mapping from pattern variable names to their IH fvars (#381)
-    /// Used to replace recursive calls with the appropriate IH.
-    /// Key is the variable name bound in the pattern, value is the IH fvar for that variable.
-    pub ih_map: HashMap<String, FVarId>,
+    /// Recursive constructor-field FVar identity to its IH. Names alone are
+    /// insufficient: a same-named local may shadow a pattern variable.
+    pub ih_map: HashMap<FVarId, FVarId>,
     /// Fully-qualified names of *sibling* mutual functions whose calls also
     /// rewrite to induction hypotheses (Track AA: a nested-mutual fold fuses
     /// `Tree.size`/`Tree.sizeList` into one `Tree.rec` application, so inside a
@@ -56,60 +61,49 @@ pub(super) struct RecursiveDefContext {
     /// as recursive self-calls — each resolving to the IH bound for its argument
     /// variable). Empty for ordinary single-function recursion, leaving the
     /// existing `matches_call_name` behavior byte-for-byte unchanged.
-    pub sibling_names: Vec<String>,
-    /// Parameters AFTER the decreasing argument (#1386).
-    /// These get folded into the recursor motive so IHs can handle varying
-    /// parameter values in recursive calls (e.g., `Nat.succ cutoff` vs `cutoff`).
-    pub extra_params: Vec<RecursiveExtraParam>,
+    pub sibling_names: Vec<SurfaceName>,
+    /// Actual member types elaborated before entering constructor-arm scope.
+    pub(super) sibling_types: Vec<(SurfaceName, Expr)>,
+    /// Original typed declaration telescope, in binder order.
+    pub(super) parameters: Vec<RecursiveParam>,
+    /// Binder indices generalized in the current recursive match's motive.
+    /// This includes movable prefix parameters, not just the suffix. Prefix
+    /// dependencies of the scrutinee type remain fixed recursor parameters.
+    pub(super) generalized_params: Vec<usize>,
+    /// Original binders supplied as variable indices to an indexed recursor.
+    /// Their values vary with the structural child; they are not fixed params
+    /// or additional IH arguments.
+    pub(super) index_params: Vec<usize>,
     /// Well-founded measure expression from `termination_by` (#1132).
     /// Stored for future well-founded recursion compilation via `WellFounded.fix`.
     /// None for structural recursion or when no measure is provided.
     pub wf_measure: Option<Box<SurfaceExpr>>,
+    /// For a `let rec`/`where` helper: the first free-variable id allocated
+    /// inside the helper. A local of the helper's own bare name bound before
+    /// it (an id below this floor, such as a sibling `where` helper `go`
+    /// while a `let rec go` inside another helper elaborates) is shadowed by
+    /// the helper, as Lean's `let rec` binds its name over its own body. A
+    /// local bound inside the helper (one of its parameters, a pattern
+    /// variable) still shadows the helper. `None` for a top-level `def`.
+    pub(super) outer_locals_floor: Option<u64>,
 }
 
 impl RecursiveDefContext {
     /// Short (final-segment) name of the function being defined, e.g.
     /// `bitWidth` for `TrustIr.Ty.bitWidth`.
-    pub fn short_name(&self) -> &str {
-        self.func_name
-            .rsplit_once('.')
-            .map(|(_, tail)| tail)
-            .unwrap_or(self.func_name.as_str())
+    pub(super) fn short_name(&self) -> SurfaceName {
+        self.func_name.last_component()
     }
 
-    /// Does `candidate` name this recursive function?
-    ///
-    /// `func_name` is the fully qualified declaration name (e.g.
-    /// `TrustIr.Ty.bitWidth`). A self-call may be spelled with the full
-    /// qualified path, or with a namespace-relative prefix shorter than the
-    /// enclosing namespace (`Ty.bitWidth` inside `namespace TrustIr`), so a
-    /// candidate matches when it equals the full name or is a dotted *suffix*
-    /// of it. The bare short name alone does not match here — that case is
-    /// handled separately at call sites where the receiver type is known.
-    pub fn matches_call_name(&self, candidate: &str) -> bool {
-        let cand = candidate.strip_prefix("_root_.").unwrap_or(candidate);
-        if Self::name_matches(cand, &self.func_name) {
-            return true;
-        }
-        // Track AA: a fused nested-mutual fold also recognizes its sibling
-        // function names as recursive self-calls (each resolves to the IH bound
-        // for its argument variable, via `ih_map`).
-        self.sibling_names
-            .iter()
-            .any(|sib| Self::name_matches(cand, sib))
-    }
-
-    /// Does the (already `_root_.`-stripped) `cand` denote the function whose
-    /// fully qualified name is `full`? Matches an exact spelling, a dotted
-    /// suffix of `full`, or (for a namespace-relative prefix like `Ty.bitWidth`
-    /// inside `namespace TrustIr`) a dotted prefix of `full`. A bare short name
-    /// alone does not match — that case is handled at call sites where the
-    /// receiver type is known.
-    fn name_matches(cand: &str, full: &str) -> bool {
-        if cand == full || cand.ends_with(&format!(".{full}")) {
-            return true;
-        }
-        cand.contains('.') && full.ends_with(&format!(".{cand}"))
+    /// Does an already RESOLVED canonical name denote a recursive member?
+    /// Surface spellings must first use the ordinary namespace search with the
+    /// pending members included; a dotted suffix is not an identity proof.
+    pub(super) fn matches_call_name(&self, candidate: &SurfaceName) -> bool {
+        candidate.name() == self.func_name.name()
+            || self
+                .sibling_names
+                .iter()
+                .any(|name| candidate.name() == name.name())
     }
 }
 
@@ -143,7 +137,7 @@ pub struct DerivedInstance {
 /// parameter names used. Returns a deduplicated, order-preserving list.
 /// Used to compute `DerivedInstance::level_params` from the instance's
 /// type and value expressions.  Part of #3393.
-pub fn collect_level_params(exprs: &[&Expr]) -> Vec<Name> {
+pub(crate) fn collect_level_params(exprs: &[&Expr]) -> Vec<Name> {
     use clean_kernel::ExprKind;
     use std::collections::HashSet;
 
@@ -243,15 +237,49 @@ pub struct HoleContext {
     /// assignments (an unsolved type is reported as-is).
     pub expected_type: Expr,
     /// Local bindings in scope when the hole was elaborated, as
-    /// `(name, type)` pairs in binder order. Each type is instantiated with the
-    /// final metavariable assignments. May be empty when no locals were in
-    /// scope (e.g. a top-level body hole).
-    pub local_bindings: Vec<(String, Expr)>,
+    /// `(identity, name, type)` triples in binder order. Each type is instantiated
+    /// with the final metavariable assignments. Identities let the renderer
+    /// resolve dependent types and distinguish shadowed binders. May be empty
+    /// when no locals were in scope (e.g. a top-level body hole).
+    pub local_bindings: Vec<(FVarId, String, Expr)>,
+}
+
+impl HoleContext {
+    /// Render the actual expected type and hypotheses in their captured local
+    /// context, using the same identity-aware formatter as tactic goals.
+    #[must_use]
+    pub fn render(&self) -> (String, Vec<(String, String)>) {
+        let config = crate::tactic::display::ExprFormatter::default().with_local_names(
+            self.local_bindings
+                .iter()
+                .map(|(fvar, name, _)| (*fvar, name.clone())),
+        );
+        let bindings = self
+            .local_bindings
+            .iter()
+            .map(|(fvar, name, ty)| {
+                let name = config
+                    .local_names
+                    .get(fvar)
+                    .cloned()
+                    .unwrap_or_else(|| name.clone());
+                (name, config.format(ty))
+            })
+            .collect();
+        (config.format(&self.expected_type), bindings)
+    }
 }
 
 /// Result of elaboration
 #[derive(Debug)]
 pub enum ElabResult {
+    /// The enclosed declaration registered successfully. Source diagnostics
+    /// (for example compilation errors) do not revoke that registration.
+    /// This remains one checked declaration, not an unregistered `Failed` leaf.
+    Diagnosed {
+        result: Box<ElabResult>,
+        diagnostics: Vec<crate::source_diagnostics::SourceDiagnostic>,
+    },
     Definition {
         name: Name,
         universe_params: Vec<Name>,
@@ -379,7 +407,7 @@ pub enum ElabResult {
         /// a structure). Recorded via `set_param_infos` at registration so
         /// `Struct.field (α := T)` named-argument calls resolve instead of
         /// hitting the no-recorded-binder-names descope (B92).
-        projection_param_infos: Vec<(String, BinderInfo)>,
+        projection_param_infos: Vec<(SurfaceName, BinderInfo)>,
         /// Parent subobject fields from an `extends` clause, as
         /// `(toParent_field_name, parent_struct_name)` in constructor order.
         /// Mirrors Lean's subobject layout (`src/Lean/Elab/Structure.lean`):
@@ -472,14 +500,162 @@ pub enum ElabResult {
 pub enum CommandOutput {
     Check(CheckResult),
     Eval(EvalResult),
+    /// `#reduce e` (`crate::reduce_command`): Clean's rendering of the term
+    /// Lean's `Meta.reduce` returns unchanged, which is not Lean's text.
+    Reduce(crate::reduce_command::ReduceResult),
     Print(PrintResult),
+    /// `#print axioms c`: Lean 4.8.0's axiom census of each constant `c`
+    /// resolved to (`crate::print_axioms`).
+    PrintAxioms(crate::print_axioms::PrintAxiomsResult),
+    /// A `#guard_msgs` whose expectation matched and whose command declared
+    /// nothing (`crate::guard_msgs`). It is a checked assertion, not an
+    /// administrative command: the checkers count it as one passing unit
+    /// ([`ElabResult::checked_leaves`]).
+    GuardMsgs(crate::guard_msgs::GuardMsgsResult),
 }
 
 impl ElabResult {
-    /// Return the elaborated declaration name when one exists.
+    /// Source errors attached to this result, including nested blocks.
+    /// These do not imply that the enclosed kernel declarations were rejected.
+    #[must_use]
+    pub fn source_error_message(&self) -> Option<String> {
+        let messages: Vec<String> = match self {
+            Self::Diagnosed {
+                result,
+                diagnostics,
+            } => result
+                .source_error_message()
+                .into_iter()
+                .chain(diagnostics.iter().map(|d| d.error.to_string()))
+                .collect(),
+            Self::Multiple(results) => results
+                .iter()
+                .filter_map(Self::source_error_message)
+                .collect(),
+            _ => Vec::new(),
+        };
+        (!messages.is_empty()).then(|| messages.join("\n"))
+    }
+
+    /// Consume source diagnostics after a successful `#guard_msgs` comparison.
+    /// The actual declarations and their registered values remain intact.
+    pub(crate) fn without_source_diagnostics(self) -> Self {
+        match self {
+            Self::Diagnosed { result, .. } => result.without_source_diagnostics(),
+            Self::Multiple(results) => Self::Multiple(
+                results
+                    .into_iter()
+                    .map(Self::without_source_diagnostics)
+                    .collect(),
+            ),
+            other => other,
+        }
+    }
+
+    /// Every name a checked declaration's verdict rests on: the declaration's own
+    /// registered names, and every constant its elaborated type/value/constructor
+    /// terms mention. An `example` is never registered, so its terms are the only
+    /// way to reach its cone.
+    #[must_use]
+    pub fn cited_roots(&self, env: &clean_kernel::Environment) -> std::collections::BTreeSet<Name> {
+        let mut refs: std::collections::HashSet<Name> = std::collections::HashSet::new();
+        let mut names: Vec<&Name> = Vec::new();
+        // A DAG walk: a term whose subterms are shared (a match's copied
+        // right-hand side, G15/G76) can be a tree far larger than its distinct
+        // nodes.
+        let mut add = |e: &Expr| e.used_constants_dag(UsedConstants::ConstantsOnly, &mut refs);
+        match self {
+            Self::Definition { name, ty, val, .. } | Self::Instance { name, ty, val, .. } => {
+                names.push(name);
+                add(ty);
+                add(val);
+            }
+            Self::Theorem {
+                name, ty, proof, ..
+            } => {
+                names.push(name);
+                add(ty);
+                add(proof);
+            }
+            Self::Axiom { name, ty, .. } => {
+                names.push(name);
+                add(ty);
+            }
+            Self::Opaque { name, ty, val, .. } => {
+                names.push(name);
+                add(ty);
+                if let Some(val) = val {
+                    add(val);
+                }
+            }
+            Self::Inductive {
+                name,
+                ty,
+                constructors,
+                ..
+            } => {
+                names.push(name);
+                add(ty);
+                for (ctor, ctor_ty) in constructors {
+                    names.push(ctor);
+                    add(ctor_ty);
+                }
+            }
+            Self::MutualInductive { decl, .. } => {
+                for ty in &decl.types {
+                    names.push(&ty.name);
+                    add(&ty.type_);
+                    for ctor in &ty.constructors {
+                        names.push(&ctor.name);
+                        add(&ctor.type_);
+                    }
+                }
+            }
+            Self::Structure {
+                name,
+                ty,
+                ctor_name,
+                ctor_ty,
+                projections,
+                field_defaults,
+                ..
+            } => {
+                names.push(name);
+                names.push(ctor_name);
+                add(ty);
+                add(ctor_ty);
+                for (proj, proj_ty, proj_val) in projections {
+                    names.push(proj);
+                    add(proj_ty);
+                    add(proj_val);
+                }
+                for (_, default) in field_defaults {
+                    add(default);
+                }
+            }
+            Self::Example { ty, val, .. } => {
+                add(ty);
+                add(val);
+            }
+            Self::Multiple(_) | Self::Command(_) | Self::Skipped | Self::Failed { .. } => {}
+            Self::Diagnosed { result, .. } => return result.cited_roots(env),
+        }
+        let mut roots: std::collections::BTreeSet<Name> = refs.into_iter().collect();
+        for name in names {
+            if env.get_const(name).is_some() {
+                roots.insert(name.clone());
+            }
+        }
+        roots
+    }
+
+    /// Return the elaborated declaration name when one exists — for a
+    /// declaration that lifted `where` / `let rec` helpers, the declaration's
+    /// own name, never a helper's ([`Self::primary_leaf`]).
     #[must_use]
     pub fn declaration_name(&self) -> Option<&Name> {
         match self {
+            Self::Diagnosed { result, .. } => result.declaration_name(),
             Self::Definition { name, .. }
             | Self::Theorem { name, .. }
             | Self::Axiom { name, .. }
@@ -490,12 +666,71 @@ impl ElabResult {
             // A mutual inductive family has several names; report the first
             // type's name as the representative for the block.
             Self::MutualInductive { decl, .. } => decl.types.first().map(|t| &t.name),
-            Self::Multiple(results) => results.iter().find_map(|r| r.declaration_name()),
+            Self::Multiple(results) => match Self::lifted_helpers_parent(results) {
+                Some(parent) => parent.declaration_name(),
+                None => results.iter().find_map(|r| r.declaration_name()),
+            },
             // `Failed` carries only a best-effort *string* name (the inner decl
             // never produced a kernel `Name`), so there is no `&Name` to return.
             // `Example` is anonymous by construction (Lean discards it).
             Self::Command(_) | Self::Skipped | Self::Failed { .. } | Self::Example { .. } => None,
         }
+    }
+
+    /// The declaration a result for ONE source declaration is about: itself
+    /// for a single declaration; for `parent` with the auxiliaries it lifted
+    /// — `Multiple([parent.go…, parent])`, auxiliaries first so they register
+    /// first (`crate::infer::let_rec_lift`, and the course-of-values
+    /// `parent.cov`) — the parent; for a type with failed `deriving` classes
+    /// beside it — `Multiple([T, Failed…])` — the type. `None` for any other
+    /// block (a `namespace` or `mutual` block is about no one declaration)
+    /// and for a result that declares nothing.
+    ///
+    /// Callers that ask about "the declaration" (its parameter names, its
+    /// editor info, its staged header) read this rather than matching a lone
+    /// `Definition`, which a declaration with a helper is not.
+    #[must_use]
+    pub fn primary_leaf(&self) -> Option<&ElabResult> {
+        match self {
+            Self::Diagnosed { result, .. } => result.primary_leaf(),
+            Self::Multiple(results) => {
+                if let Some(parent) = Self::lifted_helpers_parent(results) {
+                    return Some(parent);
+                }
+                let (first, rest) = results.split_first()?;
+                let only_failed_beside = !rest.is_empty()
+                    && rest.iter().all(|r| matches!(r, Self::Failed { .. }))
+                    && !matches!(first, Self::Multiple(_));
+                if only_failed_beside {
+                    first.primary_leaf()
+                } else {
+                    None
+                }
+            }
+            Self::Command(_) | Self::Skipped | Self::Failed { .. } | Self::Example { .. } => None,
+            _ => Some(self),
+        }
+    }
+
+    /// The parent of `[parent.go…, parent]`: the last result, when it is a
+    /// single named declaration and every result before it is a declaration
+    /// strictly under its name — the shape `let_rec_lift` builds, and only it
+    /// (a `namespace` block's members are siblings, never under one another).
+    fn lifted_helpers_parent(results: &[ElabResult]) -> Option<&ElabResult> {
+        let (last, helpers) = results.split_last()?;
+        if helpers.is_empty() || matches!(last, Self::Multiple(_)) {
+            return None;
+        }
+        let parent = last.declaration_name()?;
+        helpers
+            .iter()
+            .all(|helper| {
+                !matches!(helper, Self::Multiple(_))
+                    && helper.declaration_name().is_some_and(|name| {
+                        name != parent && crate::namespace::name_has_prefix(name, parent)
+                    })
+            })
+            .then_some(last)
     }
 
     /// Collect every leaf declaration result, flattening any nested
@@ -522,10 +757,72 @@ impl ElabResult {
         }
     }
 
+    /// Refuse a [`Self::Multiple`] that still holds declaration leaves.
+    ///
+    /// THE K5 VACUOUS PASS, PINNED WHERE IT HAPPENED (2026-09-17). A `namespace` /
+    /// `section` / `mutual` block elaborates to one `Multiple` holding its members.
+    /// Answering "this is administrative, skip it" for such a block does not skip a
+    /// command — it skips every declaration inside it, silently, and the run then
+    /// reports `0 checked, 0 failed, pass`. `clean project check` did exactly that
+    /// on a 1,580-declaration package and did not refuse a deliberate type error
+    /// inside a namespace (`reports/2026-09-17-clean-authority-project-check-vacuous.md`).
+    ///
+    /// Every caller that validates one declaration at a time must flatten with
+    /// [`Self::leaf_decls`] first. This turns the mistake into a loud failure
+    /// instead of a green run. A block that really holds nothing — an empty
+    /// namespace, or one holding only `#command` / `set_option` — is genuinely
+    /// administrative and returns `None`.
+    #[must_use]
+    pub fn unflattened_block_refusal(&self) -> Option<String> {
+        if !matches!(self, Self::Multiple(_)) {
+            return None;
+        }
+        let mut leaves: Vec<&ElabResult> = Vec::new();
+        self.leaf_decls(&mut leaves);
+        (!leaves.is_empty()).then(|| {
+            format!(
+                "internal: a namespace/section/mutual block holding {} declaration(s) reached the \
+                 single-declaration checker unflattened; it must be flattened with `leaf_decls` so \
+                 every member is checked",
+                leaves.len()
+            )
+        })
+    }
+
+    /// [`Self::leaf_decls`] plus every passing `#guard_msgs` that declared
+    /// nothing ([`CommandOutput::GuardMsgs`]): the units a CHECKER counts.
+    ///
+    /// A `#guard_msgs` is an assertion, so a file of nothing but passing
+    /// `#guard_msgs in #print axioms c` audits checked something; reporting it
+    /// as `nothing_checked` would misstate the run. It is kept out of
+    /// `leaf_decls` because that one's callers hand every leaf to read-only
+    /// kernel validation, and a message comparison has no term to re-check.
+    pub fn checked_leaves<'a>(&'a self, out: &mut Vec<&'a ElabResult>) {
+        match self {
+            Self::Multiple(results) => {
+                for r in results {
+                    r.checked_leaves(out);
+                }
+            }
+            Self::Command(CommandOutput::GuardMsgs(_)) => out.push(self),
+            Self::Command(_) | Self::Skipped => {}
+            _ => out.push(self),
+        }
+    }
+
+    /// Whether this is a checked assertion command — a passing `#guard_msgs`
+    /// that declared nothing — rather than an administrative one. Checkers
+    /// count it as one passing unit (see [`Self::checked_leaves`]).
+    #[must_use]
+    pub fn is_checked_command(&self) -> bool {
+        matches!(self, Self::Command(CommandOutput::GuardMsgs(_)))
+    }
+
     /// Return the declared type for declaration kinds that elaborate one.
     #[must_use]
-    pub fn declaration_type(&self) -> Option<&Expr> {
+    pub(crate) fn declaration_type(&self) -> Option<&Expr> {
         match self {
+            Self::Diagnosed { result, .. } => result.declaration_type(),
             Self::Definition { ty, .. }
             | Self::Theorem { ty, .. }
             | Self::Axiom { ty, .. }
@@ -537,29 +834,6 @@ impl ElabResult {
             Self::MutualInductive { decl, .. } => decl.types.first().map(|t| &t.type_),
             Self::Multiple(results) => results.iter().find_map(|r| r.declaration_type()),
             Self::Command(_) | Self::Skipped | Self::Failed { .. } => None,
-        }
-    }
-
-    /// Returns `(type, value)` for declarations that have both.
-    #[must_use]
-    pub fn type_value_pair(&self) -> Option<(&Expr, &Expr)> {
-        match self {
-            Self::Definition { ty, val, .. } => Some((ty, val)),
-            Self::Theorem { ty, proof, .. } => Some((ty, proof)),
-            Self::Instance { ty, val, .. } => Some((ty, val)),
-            Self::Example { ty, val } => Some((ty, val)),
-            Self::Opaque {
-                ty, val: Some(val), ..
-            } => Some((ty, val)),
-            Self::Multiple(results) => results.iter().find_map(|r| r.type_value_pair()),
-            Self::Axiom { .. }
-            | Self::Opaque { val: None, .. }
-            | Self::Inductive { .. }
-            | Self::MutualInductive { .. }
-            | Self::Structure { .. }
-            | Self::Command(_)
-            | Self::Skipped
-            | Self::Failed { .. } => None,
         }
     }
 

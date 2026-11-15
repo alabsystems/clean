@@ -16,7 +16,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
+import subprocess
 import sys
 from collections import Counter
 from pathlib import Path
@@ -27,7 +29,23 @@ def is_json_number(value: object) -> TypeGuard[int | float]:
     return type(value) in {int, float}
 
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+# ── WHICH TREE IS CLASSIFIED ────────────────────────────────────────────────
+#
+# This checkout, unless CLEAN_LEAN4_COMPAT_ROOT names another. The override
+# exists for --self-test, which has to classify a tree it can plant a broken
+# artifact into: the two Rust tests that were supposed to pin the
+# placeholder-rejection property could not do that, so they SKIPPED whenever the
+# real artifact was present — which is always, since it has been tracked since
+# the commit that added them, so neither ever executed an assertion (audit r17,
+# 2026-09-14; the same class as crates/clean-cli/tests/replacement_status_evidence_cli.rs,
+# fixed at f84bdb4aa).
+#
+# An environment variable that changes what a gate MEASURES is the C-ENV-NEUTRAL
+# hazard data/verdict_io_contracts.json watches, so `--check` REFUSES while it is
+# set: a derivation checked against a synthetic root is not a check of this repo.
+_ROOT_OVERRIDE = os.environ.get("CLEAN_LEAN4_COMPAT_ROOT")
+SCRIPT_REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(_ROOT_OVERRIDE).resolve() if _ROOT_OVERRIDE else SCRIPT_REPO_ROOT
 DATA_DIR = REPO_ROOT / "tests" / "lean4_compat"
 DEFAULT_OUTPUT = DATA_DIR / "frontend_corpus_classification.json"
 EXIT_STATUS_ARTIFACT_SCHEMA_PATH = (
@@ -503,7 +521,19 @@ DIAGNOSTIC_PATTERNS = [
 
 
 def repo_rel(path: Path) -> str:
-    return path.relative_to(REPO_ROOT).as_posix()
+    """Repo-relative spelling, stable under a CLEAN_LEAN4_COMPAT_ROOT override.
+
+    Inputs live under REPO_ROOT (the override when one is set); this SCRIPT does
+    not — it is always read from the real checkout — so a single-root
+    `relative_to` raised on the `generated_by` path the moment the override
+    existed. Both roots are tried, in that order.
+    """
+    for base in (REPO_ROOT, SCRIPT_REPO_ROOT):
+        try:
+            return path.relative_to(base).as_posix()
+        except ValueError:
+            continue
+    return path.as_posix()
 
 
 def read_manifest(path: Path) -> dict[str, str]:
@@ -5579,7 +5609,25 @@ def main() -> int:
         action="store_true",
         help="fail if the output path does not already match generated content",
     )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="two-way arms on a temp copy of tests/lean4_compat: a placeholder run "
+             "artifact must be classified stale_or_invalid, the real one must not",
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        return self_test()
+
+    if args.check and _ROOT_OVERRIDE:
+        print(
+            "REFUSING --check: CLEAN_LEAN4_COMPAT_ROOT is set, so this would check a "
+            "derivation against a synthetic tree and report it as this repository's. "
+            "The override exists for --self-test only.",
+            file=sys.stderr,
+        )
+        return 2
 
     generated = normalized_json(generate())
     if str(args.output) == "-":
@@ -5600,6 +5648,86 @@ def main() -> int:
 
     output_path.write_text(generated)
     print(f"Generated {repo_rel(output_path)}")
+    return 0
+
+
+def _classify_in(root: Path) -> dict:
+    """Run THIS script against `root` and return the classification it derives."""
+    env = dict(os.environ, CLEAN_LEAN4_COMPAT_ROOT=str(root))
+    out = subprocess.run(
+        [sys.executable, str(Path(__file__).resolve()), "--output", "-"],
+        capture_output=True, text=True, env=env, check=False,
+    )
+    if out.returncode != 0:
+        raise RuntimeError(f"generator failed against {root}: {out.stderr.strip()[:400]}")
+    return json.loads(out.stdout)
+
+
+def _row(doc: dict, filename: str) -> dict:
+    for f in doc["files"]:
+        if f.get("filename") == filename:
+            return f
+    raise RuntimeError(f"{filename} is not in the classification")
+
+
+SELFTEST_SUBJECT = "220.lean"
+SELFTEST_ARTIFACT = "frontend_run_artifacts/lean4/exit_status/220.lean.json"
+SELFTEST_DIMENSION = "lean4_exit_status"
+
+
+def self_test() -> int:
+    """The property the two Rust tests never ran, measured both ways.
+
+    `lean4_frontend_exit_status_placeholder_artifact_is_stale_or_invalid` and its
+    diagnostic sibling (crates/clean-elab/tests/integration/lean4_phase1_compat.rs)
+    write a `{}` placeholder at the REAL artifact path and assert the classifier
+    rejects it -- so they guard on `if artifact_path.exists() { return }` to avoid
+    clobbering a tracked file. That artifact has been tracked since the commit
+    that added the tests, so the guard has ALWAYS fired and the eight assertions
+    behind it have never executed once. Here the plant lands in a temp copy, so
+    there is nothing to clobber and nothing to skip.
+    """
+    import shutil
+    import tempfile
+
+    failures: list[str] = []
+
+    def arm(name: str, ok: bool, detail: str = "") -> None:
+        print(f"  self-test ARM {'ok' if ok else 'FAILED'}: {name}"
+              + (f" -> {detail}" if detail else ""))
+        if not ok:
+            failures.append(name)
+
+    src = Path(__file__).resolve().parents[2] / "tests" / "lean4_compat"
+    with tempfile.TemporaryDirectory(prefix="frontend_classification_selftest_") as tmp:
+        root = Path(tmp)
+        shutil.copytree(src, root / "tests" / "lean4_compat")
+
+        # CONTROL: the untouched copy classifies exactly as the real tree does.
+        # Without this the plant arm could pass because the copy is broken.
+        baseline = _classify_in(root)
+        real = json.loads((src / "frontend_corpus_classification.json").read_text())
+        arm("an untouched copy reproduces the committed classification",
+            normalized_json(baseline) == normalized_json(real))
+
+        dim = _row(baseline, SELFTEST_SUBJECT)["dimensions"][SELFTEST_DIMENSION]
+        arm("the subject's exit-status artifact is ACCEPTED before the plant",
+            "stale_or_invalid" not in json.dumps(dim), dim.get("status", "?"))
+
+        (root / "tests" / "lean4_compat" / SELFTEST_ARTIFACT).write_text("{}" + chr(10))
+        pdim = _row(_classify_in(root), SELFTEST_SUBJECT)["dimensions"][SELFTEST_DIMENSION]
+        arm("a `{}` placeholder artifact is classified stale_or_invalid",
+            "stale_or_invalid" in str(pdim.get("status", "")), pdim.get("status", "?"))
+        arm("and the placeholder is reported as a VALIDATION failure, not a shrug",
+            "stale_or_invalid" in json.dumps(pdim.get("expected_artifact", {})),
+            json.dumps(pdim.get("expected_artifact", {}))[:120])
+        arm("the accepted and rejected statuses actually differ",
+            pdim.get("status") != dim.get("status"))
+
+    if failures:
+        print(f"self-test: {len(failures)} arm(s) FAILED: {', '.join(failures)}", file=sys.stderr)
+        return 1
+    print("self-test: all arms green")
     return 0
 
 

@@ -14,7 +14,8 @@
     "toolchain_pairing": "The Stage-1 trustc and its Stage-1 sysroot were snapshotted together. A standalone compile passed. The installed Stage-2 b2b28c445 driver was rejected and not used because its Stage-1 std was stamped 8ea683678 (E0514).",
     "recipe": "TRUSTC=<snapshotted 8ea683678 stage1>/bin/trustc TRUST_IR_BUILD_DUMP=<dump> TRUST_IR_BUILD_TARGET_DIR=<target> scripts/trust_ir_build.sh --print-only",
     "dependency_prewarm": "The exact same 8ea683678 trustc first built the dependency graph without -Ztrust-ir-lower=on. The measurement script then cargo-cleaned clean-kernel and forced the subject crate alone through its release-shaped lowering/flip wrapper. This avoids an unrelated query cycle in third-party cc while preserving a clean non-incremental subject compile.",
-    "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off; release-only inference spine present 6/6"
+    "profile": "release, -Cdebuginfo=0, -Cdebug-assertions=off; release-only inference spine present 6/6",
+    "clean_source_note": "audit r7 M4: clean_source_rev fb45c249acf103e9a6af73d8aa7dc2499d9a55d2 [resolves to no commit] and clean_source_tree 314314a410626e9b95ba26320907afdef9f70ae4 [resolves to no commit] -- pre-rebase lane worktree state; the kernel_src sha256 content pin in this record is the surviving anchor, and trust_worktree_rev resolves."
   },
   "artifacts": {
     "clean_kernel.trust-ir.txt": {
@@ -76,7 +77,9 @@
       "def_path": "mode::CleanMode::has_cubical_layer",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["loc-file-index"],
+        "drift_classes": [
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -84,8 +87,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -101,7 +111,10 @@
       "def_path": "level::Level::kind_ord",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -109,8 +122,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -126,7 +146,11 @@
       "def_path": "mode::CleanMode::from_source_system",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index", "type-table-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index",
+          "type-table-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -134,8 +158,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -151,7 +182,11 @@
       "def_path": "flat::types::FlatFlags::contains",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index", "type-table-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index",
+          "type-table-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -159,8 +194,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -176,7 +218,10 @@
       "def_path": "expr::bvar_in_range",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -184,8 +229,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -201,7 +253,10 @@
       "def_path": "env::native_reducers_char::is_valid_char",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -209,8 +264,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -226,7 +288,11 @@
       "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index", "type-table-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index",
+          "type-table-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -234,8 +300,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -251,7 +324,10 @@
       "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -259,8 +335,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -276,7 +359,10 @@
       "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -284,8 +370,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -301,7 +394,10 @@
       "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -309,8 +405,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -326,7 +429,10 @@
       "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -334,8 +440,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -351,7 +464,10 @@
       "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -359,8 +475,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -376,7 +499,10 @@
       "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["functy-index", "loc-file-index"],
+        "drift_classes": [
+          "functy-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -384,8 +510,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -401,7 +534,10 @@
       "def_path": "level::Level::is_zero",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["callee-index", "loc-file-index"],
+        "drift_classes": [
+          "callee-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -409,8 +545,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 6, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 6,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -426,7 +569,9 @@
       "def_path": "env::types::SimpPriority::value",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["loc-file-index"],
+        "drift_classes": [
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -434,8 +579,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 0, "unresolved": 0},
-        "derived_mir": {"verdict": "agreed", "markers_exact": true},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 0,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "agreed",
+          "markers_exact": true
+        },
         "flip_fired": true
       },
       "lineage": {
@@ -453,7 +605,12 @@
       "def_path": "<level::LevelArc as std::ops::Deref>::deref",
       "emitted_body_vs_committed_fixture": {
         "verdict": "NUMBERING-ONLY",
-        "drift_classes": ["callee-index", "functy-index", "global-index", "loc-file-index"],
+        "drift_classes": [
+          "callee-index",
+          "functy-index",
+          "global-index",
+          "loc-file-index"
+        ],
         "instructions_moved": 0
       },
       "links_at_head": {
@@ -461,8 +618,15 @@
         "lowered": true,
         "spliced": true,
         "unsupported": [],
-        "calls": {"resolved": 0, "extern_decls": 2, "unresolved": 0},
-        "derived_mir": {"verdict": "unsupported", "markers_exact": false},
+        "calls": {
+          "resolved": 0,
+          "extern_decls": 2,
+          "unresolved": 0
+        },
+        "derived_mir": {
+          "verdict": "unsupported",
+          "markers_exact": false
+        },
         "flip_fired": false
       },
       "lineage": {

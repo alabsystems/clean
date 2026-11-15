@@ -8,20 +8,62 @@
 
 use crate::instances::{extract_class_app, DEFAULT_PRIORITY};
 use crate::ElabError;
-use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Expr, ExprFolder, ExprVisitor, Level, LevelVec};
-use clean_parser::{DeclModifiers, Span, SurfaceBinder, SurfaceExpr, SurfaceField};
+use clean_kernel::name::{Name, NameInner};
+use clean_kernel::{BinderInfo, Expr, ExprFolder, ExprKind, ExprVisitor, Level, LevelVec};
+use clean_parser::{DeclModifiers, Span, SurfaceBinder, SurfaceExpr, SurfaceField, SurfaceName};
 
 use super::{
     convert_binder_info, is_out_param_type, is_semi_out_param_type, ClassRegistration,
     DerivedInstance, ElabCtx, ElabResult,
 };
 
+/// Append an exact field identity without parsing its diagnostic spelling.
+fn structure_member_name(owner: &Name, field: &Name) -> Name {
+    SurfaceName::from_name(owner.clone())
+        .append(&SurfaceName::from_name(field.clone()))
+        .into_name()
+}
+
+/// Lean's `mkToParentName` prefixes the final string component, not a dotted
+/// rendering of the complete parent name. Dots inside that component stay text.
+fn parent_subobject_name(parent: &Name) -> Result<Name, ElabError> {
+    match parent.inner() {
+        NameInner::Str(_, leaf) => Ok(Name::anon().str(format!("to{leaf}"))),
+        NameInner::Anon | NameInner::Num(..) => Err(ElabError::Unsupported {
+            feature: format!("structure parent has no final string component: {parent:?}"),
+        }),
+    }
+}
+
+/// Diagnostic label only; callers retain the original typed identity.
+fn source_name_label(name: &SurfaceName) -> String {
+    name.source_spelling()
+        .unwrap_or_else(|| format!("{:?}", name.name()))
+}
+
+#[cfg(test)]
+#[path = "elab_structure_typed_tests.rs"]
+mod typed_declaration_tests;
+
 /// Collect all Level::Param names that appear in an expression's Sort and Const nodes.
 /// Used to determine which universe parameters are actually referenced after level
 /// instantiation resolves concrete assignments (#3390).
+///
+/// A SELF-OCCURRENCE (`Const(Struct, …)` or a member `Struct.field`) is not
+/// evidence of use and is skipped. It is built from EVERY name in
+/// `universe_params` at the time — the declared parameters and every level
+/// metavariable field elaboration minted — and is rewritten to exactly the
+/// surviving list afterwards ([`FilterStructSelfLevels`]). Counting it kept
+/// every minted level that was never ASSIGNED: an instance candidate that is
+/// tried and rolled back leaves its freshened level names behind, so a class
+/// whose field type ran a search past a universe-polymorphic candidate
+/// (`h : ∀ a b : α, (if a ≤ b then a else b) = a` answered by the class's own
+/// `dec` field, after the global candidates failed) was registered as
+/// `D.{u, ?u_1, …}` — a phantom parameter no use site can determine, surfacing
+/// as "cannot assign rigid universe parameter ?u_1 := ?u_3" at `by exact inst`.
 struct StructLevelParamCollector<'a> {
     params: &'a mut Vec<Name>,
+    self_levels: &'a FilterStructSelfLevels<'a>,
 }
 
 impl ExprVisitor for StructLevelParamCollector<'_> {
@@ -33,18 +75,28 @@ impl ExprVisitor for StructLevelParamCollector<'_> {
         level.collect_params(self.params);
     }
 
-    fn visit_const(&mut self, _name: &Name, levels: &LevelVec) -> Self::Result {
+    fn visit_const(&mut self, name: &Name, levels: &LevelVec) -> Self::Result {
+        if self.self_levels.is_self_or_member(name) {
+            return;
+        }
         for level in levels {
             level.collect_params(self.params);
         }
     }
 }
 
-fn collect_struct_level_params(expr: &Expr, params: &mut Vec<Name>) {
+fn collect_struct_level_params(struct_name: &Name, expr: &Expr, params: &mut Vec<Name>) {
     if !expr.has_level_param_quick() {
         return;
     }
-    let mut collector = StructLevelParamCollector { params };
+    let self_levels = FilterStructSelfLevels {
+        struct_name,
+        keep_params: &[],
+    };
+    let mut collector = StructLevelParamCollector {
+        params,
+        self_levels: &self_levels,
+    };
     collector.visit_expr(expr);
 }
 
@@ -54,10 +106,10 @@ fn collect_struct_level_params(expr: &Expr, params: &mut Vec<Name>) {
 /// (`@Parent.f.{levels}`). Returns empty if the head is not a `Const`.
 fn head_const_levels(ty: &Expr) -> Vec<Level> {
     let mut current = ty;
-    while let clean_kernel::ExprKind::App(func, _) = current.kind() {
+    while let ExprKind::App(func, _) = current.kind() {
         current = func.as_ref();
     }
-    if let clean_kernel::ExprKind::Const(_, levels) = current.kind() {
+    if let ExprKind::Const(_, levels) = current.kind() {
         levels.iter().cloned().collect()
     } else {
         Vec::new()
@@ -76,16 +128,35 @@ fn head_const_levels(ty: &Expr) -> Vec<Level> {
 /// `@MyMag.op : {α : Type} → [self : MyMag α] → α → α → α`, and an
 /// instance-implicit class param `[BEq α]` also becomes implicit
 /// (`@WithInst.w : {α : Type} → {inst : BEq α} → [self : WithInst α] → α → Nat`).
+///
+/// A plain `structure` ALSO makes its parameters implicit in projections — only
+/// `self` differs (explicit, not instance-implicit). Re-measured against
+/// v4.30.0-rc2 with `set_option pp.parens true`:
+///
+/// ```text
+/// structure S1 (α : Type) (β : Type)     ⇒  @S1.f : {α β : Type} → S1 α β → α
+/// structure S2 {α : Type}                ⇒  @S2.h : {α : Type} → S2 → α
+/// structure S4 ⦃α : Type⦄                ⇒  @S4.f : {α : Type} → S4 → α
+/// structure S3 (α : Type) [Inhabited α]  ⇒  @S3.k : {α : Type} → [inst : Inhabited α] → S3 α → α
+/// class     C2 (α : Type) [Inhabited α]  ⇒  @C2.n : {α : Type} → {inst : Inhabited α} → [self : C2 α] → α
+/// ```
+///
+/// Parameter inference considers explicit argument domains and the result.
+/// A class's instance-implicit `self` does not by itself determine unused
+/// parameters: `class Tag (α : Type) where tag : Nat` keeps α explicit.
+/// Classes flatten parameter instances to implicit; structures preserve them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::infer) enum StructureKind {
-    /// A plain `structure`: projections keep the declared parameter binder
-    /// infos and an explicit `self` (current Clean behavior; Lean additionally
-    /// makes structure params implicit in projections — tracked as a separate
-    /// fidelity gap. The CONSTRUCTOR's params are implicit, matching Lean —
-    /// see the ctor abstraction pass).
+    /// A plain `structure`: projections take implicit params (an
+    /// instance-implicit param stays instance-implicit) and an explicit `self`.
+    /// The CONSTRUCTOR's params are implicit too — see the ctor abstraction
+    /// pass.
     Structure,
-    /// A `class`: projections take implicit params and inst-implicit `self`.
-    Class,
+    /// A `class`: projection parameter inference considers explicit domains and
+    /// the result; `self` is instance-implicit. Unused params remain explicit.
+    /// `parent_fields` counts the leading fields `elab_class` prepended for
+    /// its `extends` parents (`toParent : Parent args`).
+    Class { parent_fields: usize },
 }
 
 /// A structure field to elaborate: either inherited from an `extends` parent
@@ -97,7 +168,7 @@ enum FieldSpec<'a> {
     /// Field flattened from a parent structure. `ty` is the parent field's
     /// elaborated kernel type; `default` is any registered parent default.
     Inherited {
-        name: String,
+        name: SurfaceName,
         ty: Expr,
         default: Option<Expr>,
     },
@@ -106,7 +177,7 @@ enum FieldSpec<'a> {
 }
 
 impl FieldSpec<'_> {
-    fn name(&self) -> &str {
+    fn name(&self) -> &SurfaceName {
         match self {
             FieldSpec::Inherited { name, .. } => name,
             FieldSpec::Own(field) => &field.name,
@@ -179,10 +250,8 @@ impl FilterStructSelfLevels<'_> {
         if name == self.struct_name {
             return true;
         }
-        // A projection member `Struct.field` renders as `<struct>.<field>`; the
-        // dotted prefix is exactly the struct's rendered name.
-        let member_prefix = format!("{}.", self.struct_name);
-        name.to_string().starts_with(&member_prefix)
+        SurfaceName::from_name(name.clone())
+            .has_prefix(&SurfaceName::from_name(self.struct_name.clone()))
     }
 }
 
@@ -212,8 +281,8 @@ impl<'a> ElabCtx<'a> {
     /// and `toParent` instances are generated for each parent.
     pub(super) fn elab_class(
         &mut self,
-        name: &str,
-        _universe_params: &[String],
+        name: &SurfaceName,
+        _universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         extends: &[Box<SurfaceExpr>],
         ty: Option<&SurfaceExpr>,
@@ -233,14 +302,14 @@ impl<'a> ElabCtx<'a> {
                     if let SurfaceExpr::Ident(_, n) = current {
                         n.clone()
                     } else {
-                        "Parent".to_string()
+                        SurfaceName::generated_path("Parent")
                     }
                 }
                 SurfaceExpr::Ident(_, n) => n.clone(),
-                _ => "Parent".to_string(),
+                _ => SurfaceName::generated_path("Parent"),
             };
 
-            let field_name = format!("to{parent_name}");
+            let field_name = SurfaceName::from_name(parent_subobject_name(parent_name.name())?);
             all_fields.push(SurfaceField {
                 span: Span::dummy(),
                 name: field_name,
@@ -265,7 +334,9 @@ impl<'a> ElabCtx<'a> {
             &all_fields,
             &[],
             modifiers,
-            StructureKind::Class,
+            StructureKind::Class {
+                parent_fields: extends.len(),
+            },
         )?;
 
         let out_params: Vec<usize> = binders
@@ -294,7 +365,7 @@ impl<'a> ElabCtx<'a> {
             })
             .collect();
 
-        let class_name = Name::from_string(name);
+        let class_name = name.name().clone();
 
         self.instances.register_class_full(
             class_name.clone(),
@@ -305,7 +376,7 @@ impl<'a> ElabCtx<'a> {
 
         // Generate toParent instances for extends clause.
         // Re-push binders because elab_structure popped them.
-        let mut param_fvars: Vec<(String, clean_kernel::FVarId, Expr)> = Vec::new();
+        let mut param_fvars: Vec<(SurfaceName, clean_kernel::FVarId, Expr)> = Vec::new();
         for binder in binders.iter() {
             let binder_ty = if let Some(t) = &binder.ty {
                 self.elaborate(t)?
@@ -313,6 +384,8 @@ impl<'a> ElabCtx<'a> {
                 let binder_sort = Expr::sort(self.fresh_universe_param());
                 self.fresh_meta(binder_sort)
             };
+            let binder_ty = self.coerce_type_position(binder_ty);
+            self.check_instance_binder_annotation(binder.info, &binder_ty)?;
             let fvar = self.push_local(binder.name.clone(), binder_ty.clone());
             param_fvars.push((binder.name.clone(), fvar, binder_ty));
         }
@@ -341,10 +414,10 @@ impl<'a> ElabCtx<'a> {
         for parent_expr in extends.iter() {
             if let Ok(parent_ty) = self.elaborate(parent_expr) {
                 if let Some((parent_class_name, _parent_args)) = extract_class_app(&parent_ty) {
-                    let parent_suffix = parent_class_name
-                        .last_component()
-                        .unwrap_or_else(|| "Parent".to_string());
-                    let instance_name = Name::append(&class_name, &format!("to{}", parent_suffix));
+                    let instance_name = structure_member_name(
+                        &class_name,
+                        &parent_subobject_name(&parent_class_name)?,
+                    );
 
                     // Build instance type: {params} → [ChildClass params] → ParentClass params
                     let mut child_class_ty = self.mk_const(&class_name);
@@ -478,6 +551,7 @@ impl<'a> ElabCtx<'a> {
                 &class_name,
                 &class_ups,
                 &param_fvars,
+                binders,
                 extends,
                 &class_field_names,
             )
@@ -547,7 +621,8 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         class_name: &Name,
         class_universe_params: &[Name],
-        param_fvars: &[(String, clean_kernel::FVarId, Expr)],
+        param_fvars: &[(SurfaceName, clean_kernel::FVarId, Expr)],
+        binders: &[SurfaceBinder],
         extends: &[Box<SurfaceExpr>],
         class_field_names: &[Name],
     ) -> (Vec<(Name, Name)>, Vec<(Name, Expr, Expr)>) {
@@ -605,13 +680,13 @@ impl<'a> ElabCtx<'a> {
             if parent_fields.is_empty() {
                 continue;
             }
-            let to_field_const = Name::from_string(&format!("{class_name}.{to_field}"));
+            let to_field_const = structure_member_name(class_name, to_field);
 
             for pf in &parent_fields {
                 if already.contains(pf) {
                     continue;
                 }
-                let parent_field_const = Name::from_string(&format!("{parent_class_name}.{pf}"));
+                let parent_field_const = structure_member_name(&parent_class_name, pf);
                 let Some(pf_info) = self.env.get_const(&parent_field_const) else {
                     continue;
                 };
@@ -627,7 +702,8 @@ impl<'a> ElabCtx<'a> {
                 for (_, fv, _) in param_fvars {
                     self_ty = Expr::app(self_ty, Expr::fvar(*fv));
                 }
-                let self_fvar = self.push_local("self".to_string(), self_ty.clone());
+                let self_fvar =
+                    self.push_local(SurfaceName::generated_path("self"), self_ty.clone());
 
                 // to_parent = @Child.toParent <params> self
                 let mut to_parent = Expr::const_(to_field_const.clone(), struct_levels.clone());
@@ -643,9 +719,7 @@ impl<'a> ElabCtx<'a> {
                 let mut telescope_ok = true;
                 for arg in parent_args.iter().chain(std::iter::once(&to_parent)) {
                     match telescope_ty.kind() {
-                        clean_kernel::ExprKind::Pi(_, _, tbody) => {
-                            telescope_ty = tbody.instantiate(arg)
-                        }
+                        ExprKind::Pi(_, _, tbody) => telescope_ty = tbody.instantiate(arg),
                         _ => {
                             telescope_ok = false;
                             break;
@@ -660,8 +734,7 @@ impl<'a> ElabCtx<'a> {
                 let result_ty = telescope_ty;
 
                 // Abstract over `self` (inst-implicit), then the class params
-                // (implicit — class projection binder infos, matching the direct
-                // projections `elab_structure` emits).
+                // (inferred below, matching the direct class projections).
                 let proj_val_inner = body.abstract_fvar(self_fvar);
                 let proj_ty_inner = result_ty.abstract_fvar(self_fvar);
                 self.pop_local(); // self
@@ -679,16 +752,25 @@ impl<'a> ElabCtx<'a> {
                     for (_, prev_fv, _) in param_fvars.iter().take(k) {
                         binder_ty = binder_ty.abstract_fvar(*prev_fv);
                     }
-                    proj_val = Expr::lam(BinderInfo::Implicit, binder_ty.clone(), proj_val);
-                    proj_ty = Expr::pi(BinderInfo::Implicit, binder_ty, proj_ty);
+                    let info = if convert_binder_info(binders[k].info) == BinderInfo::InstImplicit
+                        || matches!(binder_ty.get_app_fn().kind(), ExprKind::Const(n, _) if *n == Name::from_string("outParam"))
+                    {
+                        BinderInfo::Implicit
+                    } else {
+                        BinderInfo::Default
+                    };
+                    proj_val = Expr::lam(info, binder_ty.clone(), proj_val);
+                    proj_ty = Expr::pi(info, binder_ty, proj_ty);
                 }
+                proj_ty = proj_ty
+                    .infer_implicit_n(u32::try_from(param_fvars.len()).unwrap_or(u32::MAX), false);
 
                 // Fail closed: only emit fully-closed projections.
                 if proj_val.has_fvar_quick() || proj_ty.has_fvar_quick() {
                     continue;
                 }
                 already.insert(pf.clone());
-                let proj_name = Name::from_string(&format!("{class_name}.{pf}"));
+                let proj_name = structure_member_name(class_name, pf);
                 projs.push((proj_name, proj_ty, proj_val));
             }
         }
@@ -776,10 +858,7 @@ impl<'a> ElabCtx<'a> {
                     })?;
             let parent_num_params = inductive.num_params as usize;
 
-            let leaf = parent_name
-                .last_component()
-                .unwrap_or_else(|| parent_name.to_string());
-            let to_field = Name::from_string(&format!("to{leaf}"));
+            let to_field = parent_subobject_name(&parent_name)?;
 
             let (parent_args, parent_levels, flattened) = if parent_num_params == 0 {
                 // Parameter-less parent: transitive flattening (own + subobject
@@ -859,7 +938,7 @@ impl<'a> ElabCtx<'a> {
         // parameterized parent re-expose its inherited fields in turn.
         let field_names = self.all_projectable_field_names(parent);
         for field in &field_names {
-            let proj_const = Name::from_string(&format!("{parent}.{field}"));
+            let proj_const = structure_member_name(parent, field);
             let Some(info) = self.env.get_const(&proj_const) else {
                 continue;
             };
@@ -875,7 +954,7 @@ impl<'a> ElabCtx<'a> {
             let mut telescope_ok = true;
             for arg in parent_args {
                 match ty.kind() {
-                    clean_kernel::ExprKind::Pi(_, _, body) => ty = body.instantiate(arg),
+                    ExprKind::Pi(_, _, body) => ty = body.instantiate(arg),
                     _ => {
                         telescope_ok = false;
                         break;
@@ -886,7 +965,7 @@ impl<'a> ElabCtx<'a> {
                 continue;
             }
             let result_ty = match ty.kind() {
-                clean_kernel::ExprKind::Pi(_, _, body) => body.as_ref().clone(),
+                ExprKind::Pi(_, _, body) => body.as_ref().clone(),
                 _ => continue,
             };
             // A self-dependent field's result type still mentions `self` after
@@ -1006,7 +1085,7 @@ impl<'a> ElabCtx<'a> {
         field: &Name,
         allow_self_dep: bool,
     ) -> Option<Expr> {
-        let proj_name = Name::from_string(&format!("{struct_name}.{field}"));
+        let proj_name = structure_member_name(struct_name, field);
         let info = self.env.get_const(&proj_name)?;
         let num_params = self
             .env
@@ -1018,7 +1097,7 @@ impl<'a> ElabCtx<'a> {
         let mut ty = &info.type_;
         for _ in 0..(num_params + 1) {
             match ty.kind() {
-                clean_kernel::ExprKind::Pi(_, _, body) => ty = body,
+                ExprKind::Pi(_, _, body) => ty = body,
                 _ => return None,
             }
         }
@@ -1065,7 +1144,7 @@ impl<'a> ElabCtx<'a> {
             std::collections::HashMap::new();
 
         for sub in subobjects {
-            let to_field_name = Name::from_string(&format!("{struct_name}.{}", sub.to_field));
+            let to_field_name = structure_member_name(struct_name, &sub.to_field);
             for (field, result_ty) in &sub.flattened {
                 if !already.insert(field.clone()) {
                     // CLASHING PARENT FIELDS are a LOUD error; a genuine DIAMOND
@@ -1107,8 +1186,8 @@ impl<'a> ElabCtx<'a> {
                 }
                 parent_contributed
                     .insert(field.clone(), (sub.parent_name.clone(), result_ty.clone()));
-                let proj_name = Name::from_string(&format!("{struct_name}.{field}"));
-                let parent_field_name = Name::from_string(&format!("{}.{field}", sub.parent_name));
+                let proj_name = structure_member_name(struct_name, field);
+                let parent_field_name = structure_member_name(&sub.parent_name, field);
                 // Level list for the parent-field reference. For a PARAMETERIZED
                 // parent the projection shares the parent's universe params (the
                 // levels the child applied to the parent — `sub.parent_levels`),
@@ -1148,7 +1227,8 @@ impl<'a> ElabCtx<'a> {
                 for pf in &proj_param_fvars {
                     struct_applied = Expr::app(struct_applied, Expr::fvar(*pf));
                 }
-                let self_fvar = self.push_local("self".to_string(), struct_applied.clone());
+                let self_fvar =
+                    self.push_local(SurfaceName::generated_path("self"), struct_applied.clone());
 
                 // `Child.toParent params self`
                 let mut to_parent = Expr::const_(to_field_name.clone(), struct_levels.to_vec());
@@ -1251,23 +1331,79 @@ impl<'a> ElabCtx<'a> {
     /// - Inductive `Point : Type` with constructor `Point.mk : Nat → Nat → Point`
     /// - Field names registered: ["x", "y"]
     #[allow(clippy::too_many_arguments)] // mirrors the surface decl's components
+    /// Register `fvar` as a local instance for the duration of the
+    /// structure/class field-elaboration scope, iff its type is a CLASS TYPE as
+    /// Lean's `isClass?` reads one: under a ∀-telescope, an application of a
+    /// registered class or of a reducible alias of one. Returns whether a push
+    /// happened, so the caller can pop exactly as many as it pushed.
+    ///
+    /// Lean's rule, ground-truthed against v4.30.0-rc2 and deliberately NOT
+    /// inferred from Clean's `def` path: `Lean.Meta.withNewFVar` consults
+    /// `isClass? fvarType` and calls `withNewLocalInstance` when it answers —
+    /// so EVERY local declaration whose type is a class is a local instance,
+    /// **whatever its binder info**. Measured consequences, all three of which
+    /// Clean rejected before this hook and Lean accepts:
+    ///
+    /// ```text
+    /// class C (α : Type u) [LT α] : Prop where      -- the declaration's own [..] binder
+    ///   dense : ∀ a₁ a₂ : α, a₁ < a₂ → True
+    /// structure S (α : Type u) where                -- an EXPLICIT class-typed earlier field
+    ///   inner : MyLT α
+    ///   prop  : ∀ a b : α, MyLT.mylt a b → True
+    /// class D (α : Type u) extends MyPO α where     -- the `extends` subobject field
+    ///   more : ∀ a b : α, MyLT.mylt a b → True
+    /// ```
+    ///
+    /// The binder-info-blind rule is load-bearing, not generosity: restricting
+    /// it to `BinderInfo::InstImplicit` (the convenient approximation, and what
+    /// `elab_def_body` does) passes the first shape and still rejects the other
+    /// two, because a field — including the `toParent` subobject field an
+    /// `extends` clause synthesizes — is `BinderInfo::Default`. That is the
+    /// dominant Mathlib class shape, so the approximation is pinned as a
+    /// must-fail mutation in `tests/structure_field_local_instances.rs`.
+    ///
+    /// Fails closed on anything whose conclusion is not a constant-headed
+    /// application of a class (or of a reducible alias of one): a
+    /// metavariable-headed type, a `Sort`/`Type` binder, or a plain data field
+    /// registers nothing.
+    fn push_field_scope_local_instance(&mut self, fvar: clean_kernel::FVarId, ty: &Expr) -> bool {
+        // The ONE class-type test every push site shares
+        // (`binder_is_local_instance`, Lean's `isClass?`): it reads the
+        // conclusion of a ∀-telescope (`dec : (a b : α) → Decidable (a ≤ b)`)
+        // and sees through a reducible alias of a class (`LinearOrder`'s
+        // `toDecidableLE : DecidableLE α`, which answers the `Decidable (a ≤
+        // b)` of its own later `min`/`max` defaults). This site used to test
+        // the bare head of the field type, so both shapes were passed over.
+        if !self.binder_is_local_instance(BinderInfo::Default, ty) {
+            return false;
+        }
+        self.push_local_instance(fvar, ty.clone());
+        true
+    }
+
     pub(super) fn elab_structure(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         extends: &[Box<SurfaceExpr>],
         ty: Option<&SurfaceExpr>,
-        custom_ctor: Option<&str>,
+        custom_ctor: Option<&SurfaceName>,
         fields: &[SurfaceField],
-        deriving: &[String],
+        deriving: &[SurfaceName],
         modifiers: &DeclModifiers,
         kind: StructureKind,
     ) -> Result<ElabResult, ElabError> {
-        let struct_name = Name::from_string(name);
+        let struct_name = name.name().clone();
+        // Lean resolves every class of the `deriving` clause before it
+        // elaborates the structure: a name that does not resolve fails the
+        // whole declaration (`deriving_log`).
+        self.resolve_deriving_clause(deriving)?;
         // Constructor name: the explicit `structCtor` (`structure P where make ::`)
         // when present, else the default `mk` (Lean `mkConstructorName`).
-        let ctor_name = Name::from_string(&format!("{name}.{}", custom_ctor.unwrap_or("mk")));
+        let ctor_name = custom_ctor
+            .map(|ctor| name.append(ctor).into_name())
+            .unwrap_or_else(|| struct_name.clone().str("mk"));
 
         // SAFETY: Number of params bounded by practical limits (no structure has billions of params)
         let num_params = u32::try_from(binders.len()).unwrap_or(u32::MAX);
@@ -1276,6 +1412,10 @@ impl<'a> ElabCtx<'a> {
         // after field elaboration without re-elaborating under the field scope.
         let mut binder_types = Vec::with_capacity(binders.len());
         let mut param_fvars = Vec::with_capacity(binders.len());
+        // Class-typed parameters registered as local instances for the field
+        // scope (see `push_field_scope_local_instance`). Counted, not derived,
+        // so the pop below removes exactly what was pushed.
+        let mut param_local_instances = 0usize;
 
         for binder in binders {
             let binder_ty = if let Some(t) = &binder.ty {
@@ -1284,7 +1424,12 @@ impl<'a> ElabCtx<'a> {
                 let binder_sort = Expr::sort(self.fresh_universe_param());
                 self.fresh_meta(binder_sort)
             };
+            let binder_ty = self.coerce_type_position(binder_ty);
+            self.check_instance_binder_annotation(binder.info, &binder_ty)?;
             let fvar = self.push_local(binder.name.clone(), binder_ty.clone());
+            if self.push_field_scope_local_instance(fvar, &binder_ty) {
+                param_local_instances += 1;
+            }
             binder_types.push(binder_ty);
             param_fvars.push(fvar);
         }
@@ -1327,19 +1472,19 @@ impl<'a> ElabCtx<'a> {
             let inherited_ty = parent_subobjects
                 .iter()
                 .flat_map(|sub| sub.flattened.iter())
-                .find(|(pf_name, _)| pf_name.to_string() == field.name)
+                .find(|(pf_name, _)| pf_name == field.name.name())
                 .map(|(_, pf_ty)| pf_ty.clone());
             let Some(pf_ty) = inherited_ty else {
                 let inherited_names: Vec<String> = parent_subobjects
                     .iter()
                     .flat_map(|sub| sub.flattened.iter())
-                    .map(|(pf_name, _)| pf_name.to_string())
+                    .map(|(pf_name, _)| source_name_label(&SurfaceName::from_name(pf_name.clone())))
                     .collect();
                 return Err(ElabError::UnknownStructureField {
                     struct_name: struct_name.clone(),
-                    field: field.name.clone(),
+                    field: source_name_label(&field.name),
                     suggestions: crate::agent_diagnostics::nearest_string_candidates(
-                        &field.name,
+                        &source_name_label(&field.name),
                         inherited_names.iter().map(String::as_str),
                         5,
                     ),
@@ -1370,11 +1515,11 @@ impl<'a> ElabCtx<'a> {
                 )));
             }
             override_default_fns.push((
-                Name::from_string(&format!("{}.{}._default", struct_name, field.name)),
+                structure_member_name(&struct_name, field.name.name()).str("_default"),
                 pf_ty,
                 val.clone(),
             ));
-            override_field_defaults.push((Name::from_string(&field.name), val));
+            override_field_defaults.push((field.name.name().clone(), val));
         }
 
         // Unified constructor-field list: one embedded `toParent : Parent`
@@ -1386,7 +1531,7 @@ impl<'a> ElabCtx<'a> {
         let all_fields: Vec<FieldSpec<'_>> = parent_subobjects
             .iter()
             .map(|sub| FieldSpec::Inherited {
-                name: sub.to_field.to_string(),
+                name: SurfaceName::from_name(sub.to_field.clone()),
                 ty: sub.parent_ty.clone(),
                 default: None,
             })
@@ -1416,7 +1561,7 @@ impl<'a> ElabCtx<'a> {
         // emit a `<Struct>.<field>._default` function below (Lean
         // `mkDefaultFnOfStructField`). The index is the field's position among
         // all fields (aligned with `field_fvars`/`field_types`).
-        let mut dependent_field_defaults: Vec<(usize, String, Expr)> = Vec::new();
+        let mut dependent_field_defaults: Vec<(usize, SurfaceName, Expr)> = Vec::new();
         // Names bound in `meta_value_bindings` so that inherited parent fields
         // resolve as BARE identifiers in later field types (`uq : ∀ a, a =
         // deflt` where `deflt` is inherited from `Inh` through `toInh`). Each is
@@ -1424,15 +1569,17 @@ impl<'a> ElabCtx<'a> {
         // splices the projection-through-the-subobject directly (Lean brings
         // parent fields into the field-elaboration scope). Removed after the
         // field loop so they never leak to sibling declarations.
-        let mut inherited_field_bindings: Vec<String> = Vec::new();
+        let mut inherited_field_bindings: Vec<SurfaceName> = Vec::new();
+        // Class-typed FIELDS registered as local instances, counted for the
+        // symmetric pop before the field fvars come off the local stack.
+        let mut field_local_instances = 0usize;
 
         for (field_idx, spec) in all_fields.iter().enumerate() {
             let field_ty = match spec {
                 FieldSpec::Inherited { ty, default, .. } => {
                     if let Some(default_val) = default {
                         if !default_val.has_fvar_quick() {
-                            field_defaults
-                                .push((Name::from_string(spec.name()), default_val.clone()));
+                            field_defaults.push((spec.name().name().clone(), default_val.clone()));
                         }
                     }
                     ty.clone()
@@ -1445,7 +1592,7 @@ impl<'a> ElabCtx<'a> {
                         let default_val = self.metas.instantiate(&default_val);
                         let default_val = self.metas.instantiate_levels(&default_val);
                         if !default_val.has_fvar_quick() {
-                            field_defaults.push((Name::from_string(&field.name), default_val));
+                            field_defaults.push((field.name.name().clone(), default_val));
                         } else {
                             // References earlier fields/params (or, defensively, a
                             // residual metavariable). Defer to `_default`-fn
@@ -1463,10 +1610,18 @@ impl<'a> ElabCtx<'a> {
                     field_ty
                 }
             };
-            let fvar = self.push_local(spec.name().to_string(), field_ty.clone());
+            let fvar = self.push_local(spec.name().clone(), field_ty.clone());
+            // A class-typed field — including the `toParent` subobject field an
+            // `extends` clause synthesizes — is a local instance for every
+            // LATER field's type, exactly as in Lean. Its binder info is
+            // `Default`, which is why the registration cannot key on
+            // `InstImplicit`.
+            if self.push_field_scope_local_instance(fvar, &field_ty) {
+                field_local_instances += 1;
+            }
             field_types.push(field_ty);
             field_fvars.push(fvar);
-            field_names.push(Name::from_string(spec.name()));
+            field_names.push(spec.name().name().clone());
 
             // For each embedded parent subobject (the first `parent_subobjects`
             // entries of `all_fields`, in order), bind the parent's projectable
@@ -1479,14 +1634,13 @@ impl<'a> ElabCtx<'a> {
             if field_idx < parent_subobjects.len() {
                 let sub = &parent_subobjects[field_idx];
                 for (pf_name, _) in &sub.flattened {
-                    let key = pf_name.to_string();
+                    let key = SurfaceName::from_name(pf_name.clone());
                     if self.meta_value_bindings.contains_key(&key) {
                         // First parent to expose a name wins (matches the
                         // derived-projection `already` shadowing rule).
                         continue;
                     }
-                    let parent_field_const =
-                        Name::from_string(&format!("{}.{}", sub.parent_name, pf_name));
+                    let parent_field_const = structure_member_name(&sub.parent_name, pf_name);
                     let mut val = Expr::const_(parent_field_const, sub.parent_levels.clone());
                     for arg in &sub.parent_args {
                         val = Expr::app(val, arg.clone());
@@ -1494,6 +1648,48 @@ impl<'a> ElabCtx<'a> {
                     val = Expr::app(val, Expr::fvar(fvar));
                     self.meta_value_bindings.insert(key.clone(), val);
                     inherited_field_bindings.push(key);
+                }
+            }
+            // A CLASS's parents arrive as ordinary leading fields (`elab_class`
+            // prepends `toParent : Parent args` and passes no `extends`), so the
+            // subobject bindings above never ran for them and `class C (α)
+            // extends P α where h : ∀ a : α, le a a` refused `le` ("Unknown
+            // identifier", measured 2026-09-12; the pinned lean accepts it, as
+            // it does for a `structure`). Bind the parent's projectable fields
+            // through the just-pushed field exactly as the structure path does.
+            if let StructureKind::Class { parent_fields } = kind {
+                if field_idx < parent_fields {
+                    let parent_ty = self.metas.instantiate(&field_types[field_idx]);
+                    if let ExprKind::Const(parent_name, parent_levels) =
+                        parent_ty.get_app_fn().kind()
+                    {
+                        let parent_args: Vec<Expr> =
+                            parent_ty.get_app_args().into_iter().cloned().collect();
+                        let flattened = if parent_args.is_empty() {
+                            self.collect_flattened_projectable(parent_name, true)
+                        } else {
+                            self.collect_flattened_projectable_instantiated(
+                                parent_name,
+                                &parent_args,
+                                parent_levels,
+                            )
+                        };
+                        for (pf_name, _) in &flattened {
+                            let key = SurfaceName::from_name(pf_name.clone());
+                            if self.meta_value_bindings.contains_key(&key) {
+                                continue;
+                            }
+                            let parent_field_const =
+                                crate::namespace::append_names(parent_name, pf_name);
+                            let mut val = Expr::const_(parent_field_const, parent_levels.to_vec());
+                            for arg in &parent_args {
+                                val = Expr::app(val, arg.clone());
+                            }
+                            val = Expr::app(val, Expr::fvar(fvar));
+                            self.meta_value_bindings.insert(key.clone(), val);
+                            inherited_field_bindings.push(key);
+                        }
+                    }
                 }
             }
         }
@@ -1522,7 +1718,7 @@ impl<'a> ElabCtx<'a> {
         let struct_levels: Vec<Level> = self
             .universe_params
             .iter()
-            .map(|s| Level::param(Name::from_string(s)))
+            .map(|s| Level::param(s.name().clone()))
             .collect();
         let mut ctor_result = Expr::const_(struct_name.clone(), struct_levels.clone());
         for fvar in &param_fvars {
@@ -1539,7 +1735,7 @@ impl<'a> ElabCtx<'a> {
         // Emit `<Struct>.<field>._default` functions for the dependent defaults
         // recorded above. Each is abstracted over the structure parameters and
         // the PRECEDING fields (constructor order), so its Pi-arity is
-        // `num_params + field_idx`; `elab_struct_lit::field_default_value`
+        // `num_params + field_idx`; `elab_struct_lit_inherit::field_default_value`
         // applies it to `param_args ++ preceding_field_values` truncated to that
         // arity to reconstruct the omitted field's value. Lean shape:
         // `mkDefaultFnOfStructField` (`src/Lean/Elab/StructInst.lean`). The
@@ -1552,7 +1748,7 @@ impl<'a> ElabCtx<'a> {
         let mut default_fns: Vec<(Name, Expr, Expr)> = Vec::new();
         for (field_idx, field_name, default_val) in &dependent_field_defaults {
             let default_fn_name =
-                Name::from_string(&format!("{}.{}._default", struct_name, field_name));
+                structure_member_name(&struct_name, field_name.name()).str("_default");
             let mut dval = default_val.clone();
             let mut dty = field_types[*field_idx].clone();
             for j in (0..*field_idx).rev() {
@@ -1590,7 +1786,11 @@ impl<'a> ElabCtx<'a> {
         // so no abstraction pass is needed here.
         default_fns.extend(override_default_fns);
 
-        // Pop field fvars
+        // Pop field fvars, and first the class-typed ones among them that were
+        // registered as local instances (LIFO, symmetric with the push).
+        for _ in 0..field_local_instances {
+            self.pop_local_instance();
+        }
         for _ in 0..all_fields.len() {
             self.pop_local();
         }
@@ -1611,13 +1811,13 @@ impl<'a> ElabCtx<'a> {
         // so `C.f x` gets `{α}`/`[self]` inserted by the application
         // elaborator; for a structure `self` stays explicit.
         let self_binder_info = match kind {
-            StructureKind::Class => BinderInfo::InstImplicit,
+            StructureKind::Class { .. } => BinderInfo::InstImplicit,
             StructureKind::Structure => BinderInfo::Default,
         };
         let mut projections = Vec::new();
 
         for (field_idx, spec) in all_fields.iter().enumerate() {
-            let proj_name = Name::from_string(&format!("{}.{}", name, spec.name()));
+            let proj_name = structure_member_name(&struct_name, spec.name().name());
 
             // Recreate the parameter scope using the cached binder types.
             let mut proj_param_fvars = Vec::with_capacity(binders.len());
@@ -1640,7 +1840,8 @@ impl<'a> ElabCtx<'a> {
 
             // Push a local for the structure value FIRST
             // This is needed so that we can refer to it in field types
-            let struct_fvar = self.push_local("self".to_string(), struct_applied.clone());
+            let struct_fvar =
+                self.push_local(SurfaceName::generated_path("self"), struct_applied.clone());
 
             // Start from the already-elaborated field type. Rebind the original
             // parameter fvars to the projection scope's params so the projection
@@ -1680,16 +1881,25 @@ impl<'a> ElabCtx<'a> {
             for i in (0..binders.len()).rev() {
                 proj_ty = proj_ty.abstract_fvar(proj_param_fvars[i]);
                 proj_val = proj_val.abstract_fvar(proj_param_fvars[i]);
-                // Class params are ALWAYS implicit in projections (Lean
-                // `mkProjections`; even `[inst]` params become `{inst}` —
-                // v4.30.0-rc2 ground truth in [`StructureKind`]).
-                let bi = match kind {
-                    StructureKind::Class => BinderInfo::Implicit,
-                    StructureKind::Structure => convert_binder_info(binders[i].info),
+                // Match Lean's mkProjections: reset ordinary parameters to
+                // explicit, preserve structure instances, flatten class instances,
+                // then infer implicit parameters from explicit domains and range.
+                let original = convert_binder_info(binders[i].info);
+                let bi = if original == BinderInfo::InstImplicit {
+                    match kind {
+                        StructureKind::Class { .. } => BinderInfo::Implicit,
+                        StructureKind::Structure => BinderInfo::InstImplicit,
+                    }
+                } else if matches!(proj_param_types[i].get_app_fn().kind(), ExprKind::Const(n, _) if *n == Name::from_string("outParam"))
+                {
+                    BinderInfo::Implicit
+                } else {
+                    BinderInfo::Default
                 };
                 proj_ty = Expr::pi(bi, proj_param_types[i].clone(), proj_ty);
                 proj_val = Expr::lam(bi, proj_param_types[i].clone(), proj_val);
             }
+            proj_ty = proj_ty.infer_implicit_n(num_params, false);
 
             // Pop param fvars
             for _ in 0..binders.len() {
@@ -1710,7 +1920,11 @@ impl<'a> ElabCtx<'a> {
             ctor_ty = Expr::pi(BinderInfo::Implicit, binder_types[i].clone(), ctor_ty);
         }
 
-        // Pop param fvars
+        // Pop param fvars, and first the class-typed ones among them that were
+        // registered as local instances (LIFO, symmetric with the push).
+        for _ in 0..param_local_instances {
+            self.pop_local_instance();
+        }
         for _ in 0..binders.len() {
             self.pop_local();
         }
@@ -1766,15 +1980,33 @@ impl<'a> ElabCtx<'a> {
         let struct_universe_params_len = self.universe_params.len();
 
         // Generate derived instances from deriving clause. Overrides are not
-        // constructor fields, so derive handlers see only `own_fields`.
-        let derived_instances = self.generate_derived_instances(
-            &struct_name,
-            universe_params,
-            binders,
-            own_fields,
-            &struct_ty,
-            deriving,
-        )?;
+        // constructor fields, so derive handlers see only `own_fields`. One
+        // class at a time: a class that fails is recorded beside the
+        // structure, which is declared regardless, as Lean declares it before
+        // running any deriving handler (`deriving_log`).
+        // A structure is nested when a field mentions it (it cannot hold
+        // itself directly); Lean's `DecidableEq` handler throws on one.
+        let nesting = if field_types.iter().any(|ty| {
+            self.metas
+                .instantiate(ty)
+                .collect_constants()
+                .contains(&struct_name)
+        }) {
+            super::deriving_log::TypeNesting::Nested
+        } else {
+            super::deriving_log::TypeNesting::Flat
+        };
+        let derived_instances =
+            self.derive_clause_logged(&struct_name, nesting, deriving, |ctx, class| {
+                ctx.generate_derived_instances(
+                    &struct_name,
+                    universe_params,
+                    binders,
+                    own_fields,
+                    &struct_ty,
+                    std::slice::from_ref(class),
+                )
+            });
 
         // Restore universe_params to pre-derive state — the fresh params
         // allocated by derive handlers are internal to instance bodies and
@@ -1801,17 +2033,17 @@ impl<'a> ElabCtx<'a> {
         // constants that unify to concrete levels; these must not be declared as
         // the structure's universe params.
         let mut used_level_params = Vec::new();
-        collect_struct_level_params(&struct_ty, &mut used_level_params);
-        collect_struct_level_params(&ctor_ty, &mut used_level_params);
+        collect_struct_level_params(&struct_name, &struct_ty, &mut used_level_params);
+        collect_struct_level_params(&struct_name, &ctor_ty, &mut used_level_params);
         for (_, ty, val) in &projections {
-            collect_struct_level_params(ty, &mut used_level_params);
-            collect_struct_level_params(val, &mut used_level_params);
+            collect_struct_level_params(&struct_name, ty, &mut used_level_params);
+            collect_struct_level_params(&struct_name, val, &mut used_level_params);
         }
 
         let surviving_universe_params: Vec<Name> = self
             .universe_params
             .iter()
-            .map(|s| Name::from_string(s))
+            .map(|s| s.name().clone())
             .filter(|name| used_level_params.contains(name))
             .collect();
 
@@ -1843,10 +2075,13 @@ impl<'a> ElabCtx<'a> {
         // Named-argument binder row shared by every projection: the struct's
         // binders then the receiver `self`, matching each projection's Pi
         // telescope built above (B92).
-        let projection_param_infos: Vec<(String, BinderInfo)> = binders
+        let projection_param_infos: Vec<(SurfaceName, BinderInfo)> = binders
             .iter()
             .map(|b| (b.name.clone(), convert_binder_info(b.info)))
-            .chain(std::iter::once(("self".to_string(), self_binder_info)))
+            .chain(std::iter::once((
+                SurfaceName::generated_path("self"),
+                self_binder_info,
+            )))
             .collect();
 
         // Use the surviving universe params, preserving declaration order while

@@ -182,12 +182,20 @@ fn test_candmodel_r14_axiom_closure_is_empty() {
 
 /// CENSUS, by kernel ground truth, over the bundle R14 actually changes.
 ///
-/// `tests/axiom_ratchet.rs::no_new_admitted_axioms_in_spec` is the authoritative
-/// gate, but it builds the FULL spec, which the suite state records at
-/// **28.87 GB peak RSS** (`data/suite_state/clean-verify__test__axiom_ratchet.json`)
-/// — it does not fit on a 16 GB box, exactly as R12 and R13 recorded. This is
-/// the same `newly_admitted_axioms` subset check run against the substitution
-/// bundle, which is the only environment this rung modifies.
+/// `tests/axiom_ratchet.rs::no_new_admitted_axioms_in_spec` is the
+/// authoritative gate. **It fits on this box, and the figure that said
+/// otherwise was false** — measured 2026-09-17: that gate over the FULL spec
+/// runs in 18m30s at **2.75 GB peak RSS** under `heavy_gate.sh run 4`. The
+/// "28.87 GB peak RSS" this comment used to cite was a CARRIED peak, never a
+/// measurement (`_prior_peak_rss_gb` raises a weight and never lowers it), and
+/// `docs/archive/CLAUDE_MD_HISTORY.md` had already retracted it. It cited
+/// `data/suite_state/clean-verify__test__axiom_ratchet.json`, the very file
+/// that refutes it — 2.04 GB over 569 samples. Check the file a sentence
+/// cites, not only its number.
+///
+/// This subset check stays as the FAST per-rung one, against the substitution
+/// bundle that is the only environment this rung modifies. It is NOT a
+/// substitute for the authoritative gate, which should be run before landing.
 #[test]
 fn test_candmodel_r14_admits_no_new_census_axiom() {
     let spec = r14_spec();

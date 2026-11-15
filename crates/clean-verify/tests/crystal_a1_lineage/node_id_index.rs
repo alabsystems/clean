@@ -5,7 +5,7 @@
 //! **Link 2a for the zext chain: `cert::builder::state::NodeId::index`.**
 //!
 //! ```text
-//! bb0(%0: struct.323):
+//! bb0(%0: struct.210):
 //!     %1 = extractfield u32 %0, 0
 //!     %2 = zext u32 %1 to usize
 //!     ret %2
@@ -166,8 +166,8 @@ fn node_id_index_proved_module_matches_the_emitted_artifact() {
     // separating this body from its unchained twin (ExtensionIdx::index,
     // struct.848), so it is pinned in the text.
     assert!(
-        text.contains("bb0(%0: struct.323):"),
-        "one by-value parameter of type struct.323 — NodeId, not ExtensionIdx"
+        text.contains("bb0(%0: struct.210):"),
+        "one by-value parameter of type struct.210 — NodeId, not ExtensionIdx"
     );
     let func = clean_block_sources("generated/ir_ni.defs.txt", "def ir_ni_func");
     assert!(
@@ -176,7 +176,7 @@ fn node_id_index_proved_module_matches_the_emitted_artifact() {
     );
     let tself = clean_block_sources("generated/ir_ni.defs.txt", "def ir_ni_tself");
     assert!(
-        tself.contains("IRTy.struct_ 323"),
+        tself.contains("IRTy.struct_ 210"),
         "the registered receiver type must carry the SAME struct id the artifact prints: {tself}"
     );
 
@@ -204,7 +204,7 @@ fn node_id_index_proved_module_matches_the_emitted_artifact() {
 #[test]
 fn node_id_index_the_lanes_catch_a_drifted_artifact() {
     let raw = parse_emitted(&fixture("node_id_index.trust-ir.txt"));
-    let head = "rustcc fn @x(functy.97) {\nbb0(%0: struct.323):\n";
+    let head = "rustcc fn @x(functy.85) {\nbb0(%0: struct.210):\n";
     let body = |mid: &str| {
         parse_emitted(&format!(
             "{head}    %1 = extractfield u32 %0, 0\n{mid}    ret %2\n}}\n"
@@ -358,7 +358,7 @@ fn node_id_index_the_lanes_catch_a_drifted_spec_module_too() {
 #[test]
 fn node_id_index_the_parser_still_refuses_an_unresolved_usize() {
     let twin = parse_emitted(
-        "rustcc fn @x(functy.97) {\nbb0(%0: struct.848):\n    %1 = extractfield u32 %0, 0\n    \
+        "rustcc fn @x(functy.85) {\nbb0(%0: struct.848):\n    %1 = extractfield u32 %0, 0\n    \
          %2 = zext u32 %1 to usize\n    ret %2\n}\n",
     );
     let tys = twin.cast_tys.get(&0).expect("the cast must be in the lane");

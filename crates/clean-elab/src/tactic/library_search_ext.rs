@@ -12,8 +12,8 @@ use clean_kernel::{name::Name, Expr, ExprKind};
 use thiserror::Error;
 
 use super::library_search::{
-    calculate_type_similarity, count_pis, expr_depth, extract_head_name, LibrarySearchMatchKind,
-    LibrarySearchResult,
+    calculate_type_similarity, count_pis, expr_depth, extract_typed_head_name,
+    LibrarySearchMatchKind, LibrarySearchResult,
 };
 
 #[derive(Debug, Clone, Error, PartialEq)]
@@ -315,16 +315,14 @@ pub(crate) enum TypeFilterMode {
 }
 
 impl TypeFilterMode {
-    pub(crate) fn matches(self, expr: &Expr, head: &str) -> bool {
+    pub(crate) fn matches(self, expr: &Expr, head: &Name) -> bool {
         match self {
-            Self::ExactHead => extract_head_name(expr).as_deref() == Some(head),
+            Self::ExactHead => extract_typed_head_name(expr).as_ref() == Some(head),
             Self::Compatible => {
                 Self::ExactHead.matches(expr, head)
                     || Self::SubExpression.matches(expr, head)
-                    || calculate_type_similarity(
-                        expr,
-                        &Expr::const_(Name::from_string(head), Vec::new()),
-                    ) >= 0.35
+                    || calculate_type_similarity(expr, &Expr::const_(head.clone(), Vec::new()))
+                        >= 0.35
             }
             Self::SubExpression => expr_contains_head(expr, head),
         }
@@ -337,7 +335,7 @@ pub(crate) struct TypeFilter;
 impl TypeFilter {
     pub(crate) fn filter_with_mode(
         results: &[LibrarySearchResult],
-        head: &str,
+        head: &Name,
         mode: TypeFilterMode,
     ) -> Vec<LibrarySearchResult> {
         results
@@ -348,7 +346,7 @@ impl TypeFilter {
     }
     pub(crate) fn filter_by_type_head(
         results: &[LibrarySearchResult],
-        head: &str,
+        head: &Name,
     ) -> Vec<LibrarySearchResult> {
         Self::filter_with_mode(results, head, TypeFilterMode::ExactHead)
     }
@@ -609,8 +607,8 @@ pub(crate) fn subsequence_score(query: &[u8], candidate: &[u8]) -> f64 {
     (0.4 + 0.25 * coverage + 0.25 * compactness + 0.1 * continuity).clamp(0.0, 0.89)
 }
 
-pub(crate) fn expr_contains_head(expr: &Expr, head: &str) -> bool {
-    if extract_head_name(expr).as_deref() == Some(head) {
+pub(crate) fn expr_contains_head(expr: &Expr, head: &Name) -> bool {
+    if extract_typed_head_name(expr).as_ref() == Some(head) {
         return true;
     }
     match expr.kind() {

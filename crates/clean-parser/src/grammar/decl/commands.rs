@@ -3,13 +3,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Parsing for miscellaneous Lean 4 declaration commands:
-//! example, import, namespace, section, universe, variable, open, export,
-//! deriving instance, mutual, hash commands, abbrev, attribute, set_option,
-//! and declare_aesop_rule_sets.
+//! example, import, namespace, section, universe, variable, include/omit,
+//! open and export. The remaining commands are in `commands_misc.rs`.
 
 use super::super::Parser;
 use crate::lexer::TokenKind;
-use crate::surface::modifiers::DeclModifiers;
 use crate::surface::*;
 use crate::ParseError;
 
@@ -38,46 +36,21 @@ impl Parser {
         })
     }
 
-    /// Parse import declaration: `import Lean.Data.List`
+    /// Parse an `import` command that is not a header import: one after the
+    /// header has ended (Lean refuses those, "invalid 'import' command, it
+    /// must be used in the beginning of the file"; Clean still reads them), or
+    /// one `Parser::parse_decl` is handed. The target grammar is the
+    /// past-header one, `Parser::import_target` (`all` is the modifier only
+    /// before a same-line name); the header's own is
+    /// `Parser::header_import_target`.
     pub(in crate::grammar) fn import_decl(
         &mut self,
         start_span: Span,
     ) -> Result<SurfaceDecl, ParseError> {
-        let mut paths = Vec::new();
-
-        // Lean 4 module system: `import all X` requests importing X's private
-        // declarations too. `all` is not a reserved keyword (module names could
-        // in principle collide), so only treat it as the import modifier when it
-        // is immediately followed by another identifier (the module path). It is
-        // transparent to checking — resolve X exactly as a bare `import X`.
-        if matches!(self.current_kind(), TokenKind::Ident(name) if name == "all")
-            && matches!(self.peek_kind(1), Some(TokenKind::Ident(_)))
-        {
-            self.advance();
-        }
-
-        loop {
-            let path = self.module_path()?;
-            paths.push(path);
-
-            // Support comma or whitespace separated modules on same line
-            if self.eat(&TokenKind::Comma) {
-                continue;
-            }
-
-            // Whitespace-separated imports only continue on the same physical
-            // line. An identifier-led command on the next line, such as
-            // `local notation`, belongs to the file body.
-            if self.current().preceded_by_newline
-                || !matches!(self.current_kind(), TokenKind::Ident(_))
-            {
-                break;
-            }
-        }
-
+        let (_all, module) = self.import_target()?;
         Ok(SurfaceDecl::Import {
             span: start_span,
-            paths,
+            paths: vec![module],
         })
     }
 
@@ -99,11 +72,33 @@ impl Parser {
     /// always advances past at least one token (or onto a fresh decl-start /
     /// `End` / EOF), so the `while` loop below cannot spin in place.
     fn scoped_block_decls(&mut self) -> Vec<SurfaceDecl> {
+        // A `variable` declared in the block dies at its `end`, and so does
+        // a `set_option hygiene` set in it.
+        let section_variables = self.section_variable_names.len();
+        let hygiene_off = self.hygiene_off;
+        let decls = self.scoped_block_decls_inner();
+        self.section_variable_names.truncate(section_variables);
+        self.hygiene_off = hygiene_off;
+        decls
+    }
+
+    fn scoped_block_decls_inner(&mut self) -> Vec<SurfaceDecl> {
         let mut decls = Vec::new();
-        while !matches!(self.current_kind(), TokenKind::End | TokenKind::Eof) {
+        while !matches!(self.current_kind(), TokenKind::End | TokenKind::Eof)
+            && self.file_refusal.is_none()
+        {
             let span = self.current_span();
             match self.decl() {
                 Ok(d) => decls.push(d),
+                // A module-system refusal refuses the whole file wherever it
+                // stands (plan item `formats-module-spelling-refusals`): every
+                // enclosing block stops, and `file()` or the `parse_decl`
+                // entry point that parsed the outermost block returns it.
+                // After a recovered header import it is recovered below
+                // instead, as `file()` recovers it (`header_recovered`).
+                Err(err @ ParseError::ModuleSyntaxRefused { .. }) if !self.header_recovered => {
+                    self.file_refusal = Some(err);
+                }
                 Err(err) => {
                     decls.push(self.skip_to_next_decl_with_recovery("error-recovery", span, &err));
                 }
@@ -126,7 +121,49 @@ impl Parser {
         start_span: Span,
     ) -> Result<SurfaceDecl, ParseError> {
         let name = self.qualified_ident()?;
+        Ok(self.namespace_block(start_span, name))
+    }
 
+    /// Parse the body of a `namespace <name>` whose keyword and name are
+    /// already consumed, and close it against whatever `end` follows.
+    ///
+    /// ## Why this is not just "parse decls, eat `end`"
+    ///
+    /// Lean pushes ONE scope per component of the `namespace` name and closes
+    /// exactly as many scopes as the `end` name has components. So the `end`
+    /// name's width — not the `namespace` name's — decides how much is closed,
+    /// and a PARTIAL `end` legally leaves the outer components open.
+    ///
+    /// Ground truth, Lean 4.30.0-rc2 (`set_option pp.fullNames true`):
+    ///
+    /// ```text
+    ///   namespace Bundle.Pretriv / def inner / end Pretriv
+    ///   def after_partial / end Bundle
+    ///     => Bundle.Pretriv.inner : Nat
+    ///        Bundle.after_partial : Nat      -- NOT `after_partial`
+    ///   namespace A.B.C / end B.C            -- a 2-of-3 suffix is legal too
+    ///   namespace A.B.C / end A              -- error: "Expected `C`"
+    /// ```
+    ///
+    /// Clean's surface tree is structural rather than a scope stack, so a
+    /// partial `end` is NORMALISED here into the balanced tree that means the
+    /// same thing: the closed components become an inner `Namespace` node, and
+    /// the components left open become an outer `Namespace` node whose body
+    /// CONTINUES with the rest of the enclosing block. `namespace Bundle.Pretriv
+    /// … end Pretriv … end Bundle` therefore parses as
+    /// `Namespace(Bundle, [Namespace(Pretriv, …), …])`.
+    ///
+    /// That normalisation is what keeps the elaborator honest without a second
+    /// namespace mechanism: every `Namespace` node it sees is now exactly
+    /// balanced by its own `end`, so restoring the whole entered prefix on exit
+    /// (`NamespaceState::exit_namespace`, the 6557c358d fix) is correct for
+    /// every shape rather than only for the exact-match one. Before this, the
+    /// two shapes were in direct conflict and each fix broke the other — the
+    /// A/B is in `crates/clean-elab/tests/namespace_dotted_end_cross_module.rs`.
+    ///
+    /// Recursion terminates because a partial `end` consumes at least one
+    /// component, so `outer` is strictly shorter than `name`.
+    fn namespace_block(&mut self, start_span: Span, name: SurfaceName) -> SurfaceDecl {
         // Track the namespace for parse-time scoped custom notation: a
         // `scoped infixl` inside the block is tagged with (and active in)
         // this path; `open` activations made inside die at `end`.
@@ -138,20 +175,60 @@ impl Parser {
 
         self.exit_notation_namespace(open_mark);
 
-        // `end` is optional - namespace can end at EOF
-        if self.eat(&TokenKind::End) {
-            // Optionally consume the namespace name after `end`.
-            // Accept either a full qualified match (`end Foo.Bar.Baz`)
-            // or a leaf-only match (`end Baz` against `Foo.Bar.Baz`)
-            // to preserve the lenient behavior of earlier versions.
-            self.try_consume_end_name(&name);
+        // `end` is optional - namespace can end at EOF.
+        let closed = if self.eat(&TokenKind::End) {
+            self.try_consume_end_name(&name)
+        } else {
+            0
+        };
+
+        let component_count = name.component_syntax().len();
+        // `closed == 0` is a bare `end` or a name that does not match this
+        // block at all; `closed == component_count` is the exact match. Both
+        // close the whole block, which is what the unsplit node means.
+        if closed == 0 || closed >= component_count {
+            return SurfaceDecl::Namespace {
+                span: start_span,
+                name,
+                decls,
+            };
         }
 
-        Ok(SurfaceDecl::Namespace {
+        // Peel structural components, including their lexical origin. A
+        // quoted `«A.B»` remains one component throughout a partial close.
+        let mut outer = name;
+        let mut inner_name = SurfaceName::from_name(clean_kernel::Name::anon());
+        for _ in 0..closed {
+            inner_name = outer.last_component().append(&inner_name);
+            outer = outer.parent();
+        }
+        let inner = SurfaceDecl::Namespace {
             span: start_span,
-            name,
+            name: inner_name,
             decls,
-        })
+        };
+
+        // The outer components are still open: their body is this inner node
+        // followed by the remainder of the enclosing block.
+        match self.namespace_block(start_span, outer) {
+            SurfaceDecl::Namespace {
+                span,
+                name: outer_name,
+                decls: rest,
+            } => {
+                let mut body = Vec::with_capacity(rest.len() + 1);
+                body.push(inner);
+                body.extend(rest);
+                SurfaceDecl::Namespace {
+                    span,
+                    name: outer_name,
+                    decls: body,
+                }
+            }
+            // `namespace_block` only ever returns a `Namespace`; keep the
+            // inner node rather than dropping it if that ever changes.
+            other => other,
+        }
     }
 
     /// Parse section declaration: `section [Name] ... end [Name]`
@@ -162,12 +239,14 @@ impl Parser {
         // Section name is optional. `local` is NOT a section name: it is the
         // declaration modifier of the section's first inner decl (`section` +
         // `local instance …` / `local notation …`) — Lean reserves `local` as
-        // a keyword, so a section can never be named `local`. Swallowing it
+        // a keyword; escaped `«local»` is still an ordinary section name. Swallowing it
         // as the name silently DROPPED the modifier, so a `local instance`
         // registered as if global and leaked past `end` (B99, r82
         // `instprio_local_section_shadow`).
         let name = match self.current_kind() {
-            TokenKind::Ident(id) if id != "local" => Some(self.ident()?),
+            TokenKind::Ident(id) if id != "local" || self.current().ident_escaped => {
+                Some(self.ident()?)
+            }
             _ => None,
         };
 
@@ -186,7 +265,11 @@ impl Parser {
             // though Lean 4 itself does not idiomatically use that; accept
             // either the full path or just the trailing segment.
             if let Some(n) = name.as_ref() {
-                self.try_consume_end_name(n);
+                // A section name is a single component, so the only suffix a
+                // matching `end` can name is the whole of it: there is no
+                // partial-close case to normalise the way `namespace_block`
+                // does.
+                let _ = self.try_consume_end_name(n);
             }
         }
 
@@ -194,50 +277,46 @@ impl Parser {
             span: start_span,
             name,
             decls,
+            noncomputable: false,
         })
     }
 
     /// Consume an optional `Name` (possibly dotted) following a closing `end`
-    /// keyword. Matches either the full opening name or just its trailing
-    /// segment; leaves the parser position unchanged on mismatch so that the
+    /// keyword, and report HOW MANY components of `opening_name` it closes.
+    ///
+    /// Lean's rule (`elabEnd`) is a component-wise SUFFIX match: `end X` closes
+    /// the innermost `X`, and the name may name any number of trailing
+    /// components of the open block. Measured on Lean 4.30.0-rc2:
+    ///
+    /// ```text
+    ///   namespace A.B.C / end C       -- ok, leaves `A.B` open
+    ///   namespace A.B.C / end B.C     -- ok, leaves `A` open
+    ///   namespace A.B.C / end A.B.C   -- ok, back to the root
+    ///   namespace A.B.C / end A       -- error: Expected `C`, but found `A`
+    /// ```
+    ///
+    /// Returns the number of segments consumed, or `0` when nothing was
+    /// consumed — a bare `end`, or a name that is not a suffix of
+    /// `opening_name`. On `0` the parser position is left unchanged so the
     /// caller can produce a clearer diagnostic upstream.
-    fn try_consume_end_name(&mut self, opening_name: &str) {
-        // Peek ahead to assemble the dotted name without committing tokens.
-        let mut lookahead = 0usize;
-        let mut consumed_segments: Vec<String> = Vec::new();
-
-        match self.peek_kind(lookahead) {
-            Some(TokenKind::Ident(seg)) => {
-                consumed_segments.push(seg.clone());
-                lookahead += 1;
-            }
-            _ => return,
+    fn try_consume_end_name(&mut self, opening_name: &SurfaceName) -> usize {
+        let start = self.pos;
+        let Ok(found) = self.qualified_ident() else {
+            self.pos = start;
+            return 0;
+        };
+        // Lean's rule: the `end` name must be a component-wise SUFFIX of the
+        // open block's name. An `end` naming MORE components than the block has
+        // (`end Bundle.Trivialization` against `namespace Trivialization`)
+        // reaches past this block into its enclosing ones; that is legal Lean
+        // but is not representable in one structural node, so it is left
+        // unconsumed for the caller's diagnostic rather than mis-closed here.
+        let count = found.component_syntax().len();
+        if count == 0 || !opening_name.has_suffix(&found) {
+            self.pos = start;
+            return 0;
         }
-
-        // Look for `.Ident` repetitions.
-        while matches!(self.peek_kind(lookahead), Some(TokenKind::Dot)) {
-            match self.peek_kind(lookahead + 1) {
-                Some(TokenKind::Ident(next_seg)) => {
-                    consumed_segments.push(next_seg.clone());
-                    lookahead += 2;
-                }
-                _ => break,
-            }
-        }
-
-        let full = consumed_segments.join(".");
-        let leaf = opening_name.rsplit('.').next().unwrap_or(opening_name);
-
-        // Accept either: full dotted match, or a single-segment leaf match.
-        let accept = full == opening_name || (consumed_segments.len() == 1 && full == leaf);
-        if !accept {
-            return;
-        }
-
-        // Commit: advance past `lookahead` tokens.
-        for _ in 0..lookahead {
-            self.advance();
-        }
+        count
     }
 
     /// Parse universe declaration: `universe u v`
@@ -285,14 +364,36 @@ impl Parser {
         &mut self,
         start_span: Span,
         keyword_col: u32,
+        visibility: Option<Visibility>,
     ) -> Result<SurfaceDecl, ParseError> {
         self.binder_run_line_barrier = Some(keyword_col);
         let binders = self.binders()?;
-
-        Ok(SurfaceDecl::Variable {
+        let names_mark = self.section_variable_names.len();
+        self.section_variable_names
+            .extend(binders.iter().map(|binder| binder.name.clone()));
+        let variable = SurfaceDecl::Variable {
             span: start_span,
             binders,
-        })
+            visibility,
+        };
+
+        // `variable … in <command>`: Lean's `cmd₁ in cmd₂` is
+        // `section cmd₁ cmd₂ end`, so the variables scope over that one
+        // command and die after it (pinned Lean v4.30.0-rc2: `variable (n :
+        // Nat) in def f : Nat := n + 1` gives `f : Nat → Nat`, and a later
+        // `def g : Nat := n` is `Unknown identifier n`). The anonymous section
+        // is exactly the node a written `section … end` produces.
+        if self.eat(&TokenKind::In) {
+            let body = self.decl();
+            self.section_variable_names.truncate(names_mark);
+            return Ok(SurfaceDecl::Section {
+                span: start_span,
+                name: None,
+                decls: vec![variable, body?],
+                noncomputable: false,
+            });
+        }
+        Ok(variable)
     }
 
     /// Parse the name list of `include x y …` / `omit x y …`.
@@ -316,7 +417,7 @@ impl Parser {
         &mut self,
         keyword: &str,
         keyword_col: u32,
-    ) -> Result<Vec<String>, ParseError> {
+    ) -> Result<Vec<SurfaceName>, ParseError> {
         let mut names = Vec::new();
         while let TokenKind::Ident(_) = self.current_kind() {
             // SAME LINE DISCIPLINE AS `variable`, AND FOR THE SAME MEASURED
@@ -372,7 +473,7 @@ impl Parser {
 
             if self.eat(&TokenKind::LParen) {
                 while self.is_ident_like() {
-                    names.push(self.ident_like()?);
+                    names.push(self.open_list_name()?);
                 }
                 self.expect(&TokenKind::RParen)?;
             } else if self.eat(&TokenKind::Hiding) {
@@ -459,6 +560,20 @@ impl Parser {
         })
     }
 
+    /// One name of an `open Ns (…)` / `export Ns (…)` list. Lean's grammar
+    /// is `ident+`, and an `ident` may be dotted: `export M (Zed.x)` makes
+    /// `Zed.x` name `M.Zed.x`. Reading only the first component stopped the
+    /// list at the `.`, the whole command was dropped by error recovery, and
+    /// the file went on with `Zed.x` read as a field of a root value `Zed`
+    /// (measured 2026-09-26: `Zed.x = 5` accepted; Lean 4.8.0: 4).
+    fn open_list_name(&mut self) -> Result<SurfaceName, ParseError> {
+        if matches!(self.current_kind(), TokenKind::Ident(_)) {
+            self.qualified_ident()
+        } else {
+            self.ident_like()
+        }
+    }
+
     /// Parse export command: `export Namespace (name1 name2 ...)`
     /// Makes names from another namespace visible in the current namespace.
     pub(in crate::grammar) fn export_decl(
@@ -472,7 +587,7 @@ impl Parser {
         self.expect(&TokenKind::LParen)?;
         let mut names = Vec::new();
         while self.is_ident_like() {
-            names.push(self.ident_like()?);
+            names.push(self.open_list_name()?);
         }
         if names.is_empty() {
             return Err(ParseError::UnexpectedToken {
@@ -487,431 +602,6 @@ impl Parser {
             span: start_span,
             namespace,
             names,
-        })
-    }
-
-    /// Parse standalone deriving instance command: `deriving instance Class1, Class2 for Type1, Type2`
-    pub(in crate::grammar) fn deriving_instance_decl(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        // Expect `instance` keyword after `deriving`
-        self.expect(&TokenKind::Instance)?;
-
-        // Parse comma-separated class names
-        let mut classes = Vec::new();
-        classes.push(self.qualified_ident()?);
-        while self.eat(&TokenKind::Comma) {
-            classes.push(self.qualified_ident()?);
-        }
-
-        // Expect `for` (as identifier, not a keyword)
-        match self.current_kind() {
-            TokenKind::Ident(s) if s == "for" => {
-                self.advance();
-            }
-            _ => {
-                return Err(ParseError::UnexpectedToken {
-                    line: self.current_line(),
-                    col: self.current_span().start,
-                    message: "expected 'for' after type class names".to_string(),
-                });
-            }
-        }
-
-        // Parse comma-separated type names
-        let mut types = Vec::new();
-        types.push(self.qualified_ident()?);
-        while self.eat(&TokenKind::Comma) {
-            types.push(self.qualified_ident()?);
-        }
-
-        Ok(SurfaceDecl::DerivingInstance {
-            span: start_span,
-            classes,
-            types,
-        })
-    }
-
-    /// Parse mutual block: `mutual ... end`
-    pub(in crate::grammar) fn mutual_decl(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        let mut decls = Vec::new();
-
-        while !matches!(self.current_kind(), TokenKind::End | TokenKind::Eof) {
-            decls.push(self.decl()?);
-        }
-
-        self.expect(&TokenKind::End)?;
-
-        Ok(SurfaceDecl::Mutual {
-            span: start_span,
-            decls,
-        })
-    }
-
-    /// Parse hash commands: `#check`, `#eval`, `#print`
-    pub(in crate::grammar) fn hash_command(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        match self.current_kind().clone() {
-            TokenKind::Ident(cmd) => {
-                self.advance();
-                match cmd.as_str() {
-                    "check" => {
-                        let expr = self.expr()?;
-                        Ok(SurfaceDecl::Check {
-                            span: start_span,
-                            expr: Box::new(expr),
-                        })
-                    }
-                    "eval" => {
-                        let expr = self.expr()?;
-                        Ok(SurfaceDecl::Eval {
-                            span: start_span,
-                            expr: Box::new(expr),
-                        })
-                    }
-                    "print" => {
-                        let name = self.qualified_ident()?;
-                        Ok(SurfaceDecl::Print {
-                            span: start_span,
-                            name,
-                        })
-                    }
-                    "reduce" | "whnf" | "norm_num" => {
-                        // Treat as eval
-                        let expr = self.expr()?;
-                        Ok(SurfaceDecl::Eval {
-                            span: start_span,
-                            expr: Box::new(expr),
-                        })
-                    }
-                    _ => {
-                        // Unknown hash command - try to skip it gracefully
-                        self.skip_to_next_decl_token();
-                        Ok(SurfaceDecl::Check {
-                            span: start_span,
-                            expr: Box::new(SurfaceExpr::Hole(start_span)),
-                        })
-                    }
-                }
-            }
-            _ => Err(ParseError::UnexpectedToken {
-                line: self.current_line(),
-                col: self.current_span().start,
-                message: format!("expected command after #, got {:?}", self.current_kind()),
-            }),
-        }
-    }
-
-    /// Parse abbrev declaration (like def but unfolds eagerly)
-    /// Also handles `abbrev class` which creates an abbreviation for a class.
-    ///
-    /// In Lean 4, `abbrev` creates a definition with `@[reducible]` semantics:
-    /// the kernel always unfolds it during definitional equality checking.
-    /// We track this via `DeclModifiers.is_abbrev` so the elaborator can set
-    /// `Reducibility::Reducible` on the kernel declaration. Part of #3391.
-    pub(in crate::grammar) fn abbrev_decl(
-        &mut self,
-        start_span: Span,
-        attrs: Vec<Attribute>,
-    ) -> Result<SurfaceDecl, ParseError> {
-        // Check if abbrev is a modifier for class
-        if self.eat(&TokenKind::Class) {
-            return self.class_decl(start_span);
-        }
-        // Parse like def but with is_abbrev = true
-        let modifiers = DeclModifiers {
-            is_abbrev: true,
-            ..DeclModifiers::default()
-        };
-        self.def_decl_with_mods(start_span, attrs, modifiers)
-    }
-
-    /// Parse attribute command: `attribute [simp] foo bar`
-    pub(in crate::grammar) fn attribute_cmd(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        let attrs = if self.check(&TokenKind::LBracket) {
-            self.expect(&TokenKind::LBracket)?;
-            let mut attrs = Vec::new();
-            loop {
-                let attr = if self.eat(&TokenKind::Minus) {
-                    let attr_name = match self.current_kind().clone() {
-                        TokenKind::Ident(name) => {
-                            self.advance();
-                            self.skip_attribute_args();
-                            name
-                        }
-                        TokenKind::Instance => {
-                            self.advance();
-                            self.skip_attribute_args();
-                            "instance".to_string()
-                        }
-                        _ => {
-                            return Err(ParseError::UnexpectedToken {
-                                line: self.current_line(),
-                                col: self.current_span().start,
-                                message: format!(
-                                    "expected attribute name after '-', got {:?}",
-                                    self.current_kind()
-                                ),
-                            });
-                        }
-                    };
-                    AttributeCommandAttr::Remove(attr_name)
-                } else {
-                    AttributeCommandAttr::Add(self.single_attribute()?)
-                };
-                attrs.push(attr);
-                if !self.eat(&TokenKind::Comma) {
-                    break;
-                }
-            }
-            self.expect(&TokenKind::RBracket)?;
-            attrs
-        } else {
-            Vec::new()
-        };
-
-        let mut names = Vec::new();
-        while let TokenKind::Ident(_) = self.current_kind() {
-            names.push(self.qualified_ident()?);
-        }
-
-        Ok(SurfaceDecl::Attribute {
-            span: start_span,
-            attrs,
-            names,
-        })
-    }
-
-    /// Parse `set_option` command
-    ///
-    /// Supports two forms:
-    /// - File-scope: `set_option maxHeartbeats 400000`
-    /// - Per-declaration: `set_option maxHeartbeats 400000 in def foo := ...`
-    pub(in crate::grammar) fn set_option_cmd(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        let name = self.qualified_ident()?;
-
-        let value = match self.current_kind().clone() {
-            TokenKind::Ident(v) if v != "in" => {
-                self.advance();
-                Some(v)
-            }
-            TokenKind::NatLit(n) => {
-                self.advance();
-                Some(n.to_string())
-            }
-            TokenKind::StringLit(s) => {
-                self.advance();
-                Some(s)
-            }
-            _ => None,
-        };
-
-        // Check for `in <declaration>` form (per-declaration scoping).
-        let body = if self.eat(&TokenKind::In) {
-            Some(Box::new(self.decl()?))
-        } else {
-            None
-        };
-
-        Ok(SurfaceDecl::SetOption {
-            span: start_span,
-            name,
-            value,
-            body,
-        })
-    }
-
-    /// Parse `declare_aesop_rule_sets` command
-    ///
-    /// Syntax: `declare_aesop_rule_sets [Measurable, Continuous]`
-    ///
-    /// Declares named rule sets for domain-specific aesop tactics.
-    pub(in crate::grammar) fn declare_aesop_rule_sets_decl(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        // Expect opening bracket
-        if !self.eat(&TokenKind::LBracket) {
-            return Err(ParseError::UnexpectedToken {
-                line: self.current_line(),
-                col: self.current_span().start,
-                message: "expected '[' after declare_aesop_rule_sets".to_string(),
-            });
-        }
-
-        let mut names = Vec::new();
-
-        // Parse comma-separated list of identifiers
-        while let TokenKind::Ident(name) = self.current_kind().clone() {
-            names.push(name);
-            self.advance();
-
-            // Check for comma (more names) or closing bracket
-            if !self.eat(&TokenKind::Comma) {
-                break;
-            }
-        }
-
-        // Expect closing bracket
-        if !self.eat(&TokenKind::RBracket) {
-            return Err(ParseError::UnexpectedToken {
-                line: self.current_line(),
-                col: self.current_span().start,
-                message: "expected ']' after rule set names".to_string(),
-            });
-        }
-
-        Ok(SurfaceDecl::DeclareAesopRuleSets {
-            span: start_span,
-            names,
-        })
-    }
-
-    /// Parse the Batteries/Mathlib `alias` command.
-    ///
-    /// Forms:
-    /// - `alias newName := target` — the plain form; `newName` becomes an alias
-    ///   (a `def`) of the existing declaration `target`.
-    /// - `alias newName ← target` — the historical reverse arrow; parsed the
-    ///   same as the plain form (`newName := target`).
-    /// - `alias ⟨fwdName, bwdName⟩ := iffThm` — the iff-destructuring form;
-    ///   `fwdName := Iff.mp iffThm` and `bwdName := Iff.mpr iffThm`. A `_`
-    ///   entry skips that direction.
-    ///
-    /// All forms desugar to real `def`s so the alias resolves like any other
-    /// definition. Leading attributes/modifiers (`@[simp]`, `protected`, …)
-    /// carry through to the generated `def`s.
-    pub(in crate::grammar) fn alias_decl(
-        &mut self,
-        start_span: Span,
-        attrs: Vec<Attribute>,
-        modifiers: DeclModifiers,
-    ) -> Result<SurfaceDecl, ParseError> {
-        if self.eat(&TokenKind::LAngle) {
-            // Iff-destructuring form: `alias ⟨fwd, bwd⟩ := iffThm`.
-            let mut names: Vec<Option<String>> = Vec::new();
-            loop {
-                if self.eat(&TokenKind::Underscore) {
-                    names.push(None);
-                } else {
-                    names.push(Some(self.qualified_ident()?));
-                }
-                if !self.eat(&TokenKind::Comma) {
-                    break;
-                }
-            }
-            self.expect(&TokenKind::RAngle)?;
-            // Operator: `:=` (or the historical `←`).
-            if !self.eat(&TokenKind::LeftArrow) {
-                self.expect(&TokenKind::ColonEq)?;
-            }
-            let target = self.qualified_ident()?;
-            // Each named direction i becomes `def name := Iff.<proj_i> target`.
-            let mut defs = Vec::new();
-            for (i, entry) in names.iter().enumerate() {
-                let Some(name) = entry else { continue };
-                let proj = if i == 0 { "Iff.mp" } else { "Iff.mpr" };
-                let val = SurfaceExpr::App(
-                    start_span,
-                    Box::new(SurfaceExpr::Ident(start_span, proj.to_string())),
-                    vec![SurfaceArg::positional(SurfaceExpr::Ident(
-                        start_span,
-                        target.clone(),
-                    ))],
-                );
-                defs.push(Self::mk_alias_def(
-                    start_span,
-                    name.clone(),
-                    val,
-                    attrs.clone(),
-                    modifiers,
-                ));
-            }
-            if defs.len() == 1 {
-                // Exactly one direction named — return the lone `def` directly.
-                return Ok(defs.swap_remove(0));
-            }
-            Ok(SurfaceDecl::Mutual {
-                span: start_span,
-                decls: defs,
-            })
-        } else {
-            // Plain form: `alias newName := target` (or `alias newName ← target`).
-            let name = self.qualified_ident()?;
-            if !self.eat(&TokenKind::LeftArrow) {
-                self.expect(&TokenKind::ColonEq)?;
-            }
-            let target = self.qualified_ident()?;
-            let val = SurfaceExpr::Ident(start_span, target);
-            Ok(Self::mk_alias_def(start_span, name, val, attrs, modifiers))
-        }
-    }
-
-    /// Build a `def newName := val` node standing in for an `alias`.
-    fn mk_alias_def(
-        span: Span,
-        name: String,
-        val: SurfaceExpr,
-        attrs: Vec<Attribute>,
-        modifiers: DeclModifiers,
-    ) -> SurfaceDecl {
-        SurfaceDecl::Def {
-            span,
-            name,
-            universe_params: Vec::new(),
-            binders: Vec::new(),
-            ty: None,
-            val: Box::new(val),
-            attrs,
-            termination: TerminationHints::default(),
-            modifiers,
-            where_decls: Vec::new(),
-        }
-    }
-
-    /// Parse the Mathlib/Batteries `library_note «title»` documentation command.
-    ///
-    /// The title is a guillemet-quoted identifier (`«fact non-instances»`,
-    /// lexed as a single identifier) or a string literal. The following
-    /// `/-- … -/` note body is captured by the lexer's doc-comment side table,
-    /// so nothing further is consumed here. The command carries no checkable
-    /// content and elaborates to a no-op.
-    pub(in crate::grammar) fn library_note_decl(
-        &mut self,
-        start_span: Span,
-    ) -> Result<SurfaceDecl, ParseError> {
-        let title = match self.current_kind().clone() {
-            TokenKind::Ident(s) => {
-                self.advance();
-                s
-            }
-            TokenKind::StringLit(s) => {
-                self.advance();
-                s
-            }
-            other => {
-                return Err(ParseError::UnexpectedToken {
-                    line: self.current_line(),
-                    col: self.current_span().start,
-                    message: format!("expected note title after `library_note`, got {other:?}"),
-                });
-            }
-        };
-        Ok(SurfaceDecl::LibraryNote {
-            span: start_span,
-            title,
         })
     }
 }

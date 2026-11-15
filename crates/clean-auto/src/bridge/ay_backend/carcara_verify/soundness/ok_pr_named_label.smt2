@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const x Int)
+(assert (! (< x 3) :named a))
+(assert (not a))
+(check-sat)

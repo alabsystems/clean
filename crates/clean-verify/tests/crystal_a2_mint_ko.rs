@@ -29,9 +29,10 @@
 //!   this chain's committed core was cut by the gate's FIRST landing and had
 //!   never been minted.)
 //! * The aggregate alias exercises `mint::interning_id`'s POOL arm: `Level`
-//!   is `enum.2` on all four recorded dumps, inside `ir_d0..ir_d16`, so the
-//!   alias reads `IRTy.enum_ ir_d2` where `ir_pv_tprio` reads a literal
-//!   `127`. M3 pins the spelling in both directions.
+//!   was `enum.2` on all four recorded dumps and is `enum.3` since the
+//!   2026-10-07 rebaseline — inside `ir_d0..ir_d16` either way — so the
+//!   alias reads `IRTy.enum_ ir_d3` where `ir_pv_tprio` reads a literal
+//!   `135`. M3 pins the spelling in both directions.
 //! * The join block binds a `u8` — the first minted chain whose block
 //!   parameter row carries an integer width, which is the M10 slot an
 //!   `f32`-class twin would hide in.
@@ -39,8 +40,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -168,11 +168,11 @@ fn m3_the_alias_renders_through_the_pool() {
         .lines;
     assert_eq!(
         lines.first().map(String::as_str),
-        Some("def ir_ko_tenum : IRTy := IRTy.enum_ ir_d2"),
-        "crate id 2 is inside ir_d0..ir_d16 and must render as `ir_d2`"
+        Some("def ir_ko_tenum : IRTy := IRTy.enum_ ir_d3"),
+        "crate id 3 is inside ir_d0..ir_d16 and must render as `ir_d3`"
     );
     assert!(
-        !ir_mint::IR_KO_DEFS.contains("IRTy.enum_ 2"),
+        !ir_mint::IR_KO_DEFS.contains("IRTy.enum_ 3"),
         "and NOT as a bare literal, which would be a different (also-elaborable) spelling \
          than the one the M3 byte-equality pins"
     );
@@ -211,13 +211,13 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("load enum.2, ptr %0"),
-        "the emitted body must still name enum.2; if it does not, the artifact was re-interned \
+        FIXTURE.contains("load enum.3, ptr %0"),
+        "the emitted body must still name enum.3; if it does not, the artifact was re-interned \
          and this table needs a one-line REVIEWED re-pin — which is a different thing from the \
          proved module having stopped matching"
     );
     assert!(
-        ir_mint::IR_KO_TAGS.contains("\"crate_id\": 2"),
+        ir_mint::IR_KO_TAGS.contains("\"crate_id\": 3"),
         "and the committed table must record it"
     );
 }
@@ -272,7 +272,7 @@ fn m10_the_interface_pins_bite() {
         ("bb6(%1: u8):", "bb6(%1: u32):", "block parameter"),
         ("bb0(%0: ptr):", "bb0(%0: f64):", "parameter"),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.306)", "(functy.307)", "signature index"),
+        ("(functy.278)", "(functy.279)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");

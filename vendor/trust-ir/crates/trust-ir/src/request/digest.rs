@@ -207,6 +207,10 @@ pub(crate) fn write_fat_ptr_kind_stable(out: &mut Vec<u8>, kind: &crate::FatPtrK
         // string pointer. Sharing a tag would make two different meanings hash
         // equal, which is the one thing a stable digest may never do.
         crate::FatPtrKind::ContainerLen => write_u8_stable(out, 3),
+        // Tag 4, DISTINCT from TraitObject's 2 for the same reason: a
+        // container-tail pointer is not a trait-object pointer, and it has no
+        // trait id to write -- nothing dispatches through it.
+        crate::FatPtrKind::ContainerVtable => write_u8_stable(out, 4),
     }
 }
 
@@ -236,6 +240,11 @@ pub(crate) fn write_closure_ty_id_stable(out: &mut Vec<u8>, id: ClosureTyId) {
 
 pub(crate) fn write_ty_stable(out: &mut Vec<u8>, ty: &Ty) {
     match ty {
+        Ty::Storage(layout) => {
+            write_u8_stable(out, 40);
+            write_u64_stable(out, layout.size_bytes);
+            write_u64_stable(out, layout.align_bytes);
+        }
         Ty::I8 => write_u8_stable(out, 0),
         Ty::I16 => write_u8_stable(out, 1),
         Ty::I32 => write_u8_stable(out, 2),
@@ -327,9 +336,10 @@ pub(crate) fn write_ty_stable(out: &mut Vec<u8>, ty: &Ty) {
             write_u8_stable(out, 30);
             write_closure_ty_id_stable(out, *id);
         }
-        // Stable tag 33 (next free after the v25 vector tag 32).
+        // Compiler-facts v5 repairs the old Refine=33 / Isize=33 collision.
+        // These are request-identity tags, not binary module codec tags.
         Ty::Refine(base, pred) => {
-            write_u8_stable(out, 33);
+            write_u8_stable(out, 37);
             write_ty_id_stable(out, *base);
             write_u32_stable(out, pred.index());
         }
@@ -338,6 +348,21 @@ pub(crate) fn write_ty_stable(out: &mut Vec<u8>, ty: &Ty) {
             write_u32_stable(out, *lanes);
             write_ty_stable(out, elem);
         }
+        Ty::Dialect(ty) => {
+            // Nominal identities have no machine representation.
+            write_u8_stable(out, 36);
+            write_str_stable(out, &ty.namespace);
+            write_str_stable(out, &ty.name);
+            write_u32_stable(out, ty.version);
+        }
+        // v43: the pair IS the identity; deliberately not `Ptr`'s tag 13,
+        // because a handle and a pointer must never hash equal.
+        Ty::Handle(ty) => {
+            write_u8_stable(out, 38);
+            write_str_stable(out, &ty.name);
+            write_str_stable(out, &ty.runtime);
+        }
+        Ty::Ext(e) => e.unreachable(),
     }
 }
 
@@ -410,6 +435,18 @@ pub(crate) fn write_constant_stable(out: &mut Vec<u8>, constant: &Constant) {
             write_u64_stable(out, *addend as u64);
         }
         Constant::PhantomData => write_u8_stable(out, 10),
+        // Crystal lane (E3b, v49): stable tag 15, the next free one, matching the binary codec's tag.
+        Constant::Uninit => write_u8_stable(out, 15),
+        // v50 Splat: stable tag 16 (next free; matches the binary codec's
+        // tag). One element and the length — the digest input does not grow
+        // with the length, and an equal list spells a different digest (the
+        // §3 rule keeps a valid module to one spelling).
+        Constant::Splat { elem, len } => {
+            write_u8_stable(out, 16);
+            write_constant_stable(out, elem);
+            write_u64_stable(out, *len);
+        }
+        Constant::Ext(e) => e.unreachable(),
     }
 }
 
@@ -422,6 +459,7 @@ pub(crate) fn write_constants_stable(out: &mut Vec<u8>, constants: &[Constant]) 
 
 pub(crate) fn write_ty_shape_stable(out: &mut Vec<u8>, shape: TyShape) {
     match shape {
+        TyShape::Storage => write_u8_stable(out, 27),
         TyShape::Int { signed, bits } => {
             write_u8_stable(out, 0);
             write_bool_stable(out, signed);
@@ -460,6 +498,9 @@ pub(crate) fn write_ty_shape_stable(out: &mut Vec<u8>, shape: TyShape) {
         // v30: refinement shape (representation-preserving; the base type's
         // own shape is digested wherever the base is reachable).
         TyShape::Refine => write_u8_stable(out, 24),
+        TyShape::Dialect => write_u8_stable(out, 25),
+        // v43: one pointer word, but a distinct shape from `ThinPointer` (3).
+        TyShape::Handle => write_u8_stable(out, 26),
     }
 }
 
@@ -478,6 +519,7 @@ pub(crate) fn write_pointer_metadata_shape_stable(
             write_u32_stable(out, trait_id);
         }
         PointerMetadataShape::ContainerLen => write_u8_stable(out, 3),
+        PointerMetadataShape::ContainerVtable => write_u8_stable(out, 4),
     }
 }
 
@@ -509,6 +551,7 @@ pub(crate) fn write_field_offset_shape_stable(out: &mut Vec<u8>, field: &FieldOf
 
 pub(crate) fn write_ty_layout_kind_stable(out: &mut Vec<u8>, kind: &TyLayoutKind) {
     match kind {
+        TyLayoutKind::Storage => write_u8_stable(out, 11),
         TyLayoutKind::Scalar(shape) => {
             write_u8_stable(out, 0);
             write_ty_shape_stable(out, *shape);
@@ -543,6 +586,23 @@ pub(crate) fn write_ty_layout_kind_stable(out: &mut Vec<u8>, kind: &TyLayoutKind
         }
         TyLayoutKind::Unit => write_u8_stable(out, 6),
         TyLayoutKind::Never => write_u8_stable(out, 7),
+        TyLayoutKind::Tuple { fields } => {
+            write_u8_stable(out, 9);
+            write_len_stable(out, fields.len());
+            for field in fields {
+                write_field_offset_shape_stable(out, field);
+            }
+        }
+        // v58: additive, exactly as `Tuple` took tag 9 in v42 — every
+        // previous tag is preserved, so no existing request digest moves.
+        TyLayoutKind::Closure { id, captures } => {
+            write_u8_stable(out, 10);
+            write_closure_ty_id_stable(out, *id);
+            write_len_stable(out, captures.len());
+            for capture in captures {
+                write_field_offset_shape_stable(out, capture);
+            }
+        }
         TyLayoutKind::Vector {
             elem_shape,
             lanes,
@@ -604,8 +664,19 @@ pub(crate) fn write_obligation_kind_stable(out: &mut Vec<u8>, kind: &ObligationK
             ObligationKind::ArithmeticSafety => 10,
             ObligationKind::BoundsCheck => 11,
             ObligationKind::GiveBackRefinement => 12,
+            ObligationKind::Termination => 13,
+            ObligationKind::Ownership => 14,
+            ObligationKind::Custom { .. } => 15,
         },
     );
+    // `Custom` is the only payload-carrying kind, and its payload is
+    // IDENTITY: without these two strings every `Custom` obligation hashes
+    // equal, so two different producer namespaces would collide in a digest
+    // that exists to keep proof units apart.
+    if let ObligationKind::Custom { namespace, name } = kind {
+        write_str_stable(out, namespace);
+        write_str_stable(out, name);
+    }
 }
 
 pub(crate) fn write_proof_status_stable(out: &mut Vec<u8>, status: ProofStatus) {
@@ -629,6 +700,7 @@ pub(crate) fn write_bundle_producer_stable(out: &mut Vec<u8>, producer: NativeBu
             NativeBundleProducer::TSwift => 1,
             NativeBundleProducer::TC => 2,
             NativeBundleProducer::TrustIr => 3,
+            NativeBundleProducer::Clean => 4,
         },
     );
 }
@@ -714,8 +786,23 @@ pub(crate) fn write_source_language_stable(out: &mut Vec<u8>, language: NativeSo
             NativeSourceLanguage::C => 3,
             NativeSourceLanguage::TrustIr => 4,
             NativeSourceLanguage::Other => 5,
+            NativeSourceLanguage::Lean => 6,
+            NativeSourceLanguage::Clean => 7,
         },
     );
+}
+
+/// The schema-8 language SET, written after the primary scalar: length, then
+/// each member's stable tag in `BTreeSet` (ascending) order, so the digest
+/// is set-order-independent by construction.
+pub(crate) fn write_source_languages_stable(
+    out: &mut Vec<u8>,
+    languages: &BTreeSet<NativeSourceLanguage>,
+) {
+    write_len_stable(out, languages.len());
+    for language in languages {
+        write_source_language_stable(out, *language);
+    }
 }
 
 pub(crate) fn write_tool_identity_stable(out: &mut Vec<u8>, tool: &NativeToolIdentity) {
@@ -756,6 +843,7 @@ pub(crate) fn write_bundle_provenance_stable(
 ) {
     write_str_stable(out, &provenance.producer_version);
     write_source_language_stable(out, provenance.source_language);
+    write_source_languages_stable(out, &provenance.source_languages);
     write_option_str_stable(out, provenance.source_artifact.as_deref());
     write_option_digest_stable(out, provenance.source_digest);
 
@@ -1879,6 +1967,7 @@ pub(crate) fn validate_replay_context(
     request_obligations: &BTreeSet<ProofId>,
     compiler_facts: &NativeCompilerFacts,
     context: &NativeReplayContext,
+    predicates: &crate::pred::PredTable<'_>,
     errors: &mut Vec<NativeVerificationBundleError>,
 ) {
     for unsupported in &context.unsupported_modes {
@@ -1911,6 +2000,17 @@ pub(crate) fn validate_replay_context(
                 request,
                 atom: atom.id,
                 field: "formula.payload",
+            });
+        }
+        // One formula (`ProofFormula::states_two_texts`, a `pred.N` citation
+        // resolved against the bundle's module): a payload and a rendering
+        // that is not its one text are two premises a verifier could pick
+        // between.
+        if atom.formula.states_two_texts(predicates) {
+            errors.push(NativeVerificationBundleError::InvalidReplayAtom {
+                request,
+                atom: atom.id,
+                field: "formula.smtlib",
             });
         }
         if atom.payload_digest.is_zero() {
@@ -2283,10 +2383,11 @@ pub(crate) fn validate_diagnostics(
 }
 
 pub(crate) fn validate_adt_layout_fact(
-    module: &Module,
+    layouts: &crate::LayoutTable<'_>,
     fact: &NativeAdtLayoutFact,
     errors: &mut Vec<NativeVerificationBundleError>,
 ) {
+    let module = layouts.module();
     match (&fact.ty, &fact.layout.kind) {
         (Ty::Struct(id), TyLayoutKind::Struct { id: layout_id, .. }) if id == layout_id => {
             if module.struct_def(*id).is_none() {
@@ -2295,8 +2396,8 @@ pub(crate) fn validate_adt_layout_fact(
                     field: "ty.struct_id",
                 });
             }
-            match module.ty_layout_shape(&fact.ty) {
-                Ok(expected) if expected != fact.layout => {
+            match layouts.ty_layout(&fact.ty) {
+                Ok(expected) if *expected != fact.layout => {
                     errors.push(NativeVerificationBundleError::InvalidCompilerFact {
                         fact: NativeCompilerFactRef::AdtLayout(fact.id),
                         field: "layout",
@@ -2404,7 +2505,8 @@ pub(crate) fn validate_native_enum_layout_fact(
             let Some(expected_ty) = expected.fields.get(field_index) else {
                 continue;
             };
-            if field.field != field_index as u32 {
+            // Exact: an index past `u32::MAX` names no field id.
+            if u32::try_from(field_index) != Ok(field.field) {
                 invalid("enum_layout.variant.fields");
             }
             if field.ty_shape != expected_ty.shape() {
@@ -2634,12 +2736,13 @@ pub(crate) fn validate_trait_object_upcast_metadata_fact(
 }
 
 pub(crate) fn validate_pointer_offset_fact(
-    module: &Module,
+    layouts: &crate::LayoutTable<'_>,
     fact: &NativePointerOffsetFact,
     known_functions: &BTreeSet<FuncId>,
     known_obligations: &BTreeSet<ProofId>,
     errors: &mut Vec<NativeVerificationBundleError>,
 ) {
+    let module = layouts.module();
     let fact_ref = NativeCompilerFactRef::PointerOffset(fact.id);
     if !known_functions.contains(&fact.function) {
         errors.push(NativeVerificationBundleError::UnknownCompilerFactFunction {
@@ -2659,9 +2762,9 @@ pub(crate) fn validate_pointer_offset_fact(
             field: "offset_ty",
         });
     }
-    match module.ty_layout_shape(&fact.pointee_ty) {
+    match layouts.ty_layout(&fact.pointee_ty) {
         Ok(expected) => {
-            if expected != fact.element_layout {
+            if *expected != fact.element_layout {
                 errors.push(NativeVerificationBundleError::InvalidCompilerFact {
                     fact: fact_ref,
                     field: "element_layout",
@@ -2786,6 +2889,7 @@ pub(crate) fn native_function_value_ty(function: &Function, value: ValueId) -> O
 
 pub(crate) fn native_inst_result_ty(inst: &Inst) -> Option<Ty> {
     match inst {
+        Inst::MakeClosure { ty, .. } => Some(Ty::Closure(*ty)),
         Inst::BinOp { ty, .. } => Some(ty.clone()),
         Inst::UnOp { ty, .. } => Some(ty.clone()),
         Inst::ICmp { ty, .. } | Inst::FCmp { ty, .. } => Some(ty.comparison_result_ty()),
@@ -2799,6 +2903,8 @@ pub(crate) fn native_inst_result_ty(inst: &Inst) -> Option<Ty> {
         Inst::AtomicLoad { ty, .. } | Inst::AtomicRMW { ty, .. } => Some(ty.clone()),
         Inst::ExtractField { ty, .. }
         | Inst::InsertField { ty, .. }
+        | Inst::MakeAggregate { ty, .. }
+        | Inst::ArraySplat { ty, .. }
         | Inst::ExtractElement { ty, .. }
         | Inst::InsertElement { ty, .. }
         | Inst::Const { ty, .. }
@@ -2819,12 +2925,13 @@ pub(crate) fn native_inst_result_ty(inst: &Inst) -> Option<Ty> {
 }
 
 pub(crate) fn validate_cast_fact(
-    module: &Module,
+    layouts: &crate::LayoutTable<'_>,
     fact: &NativeCastFact,
     known_functions: &BTreeSet<FuncId>,
     known_obligations: &BTreeSet<ProofId>,
     errors: &mut Vec<NativeVerificationBundleError>,
 ) {
+    let module = layouts.module();
     let fact_ref = NativeCompilerFactRef::Cast(fact.id);
     if !known_functions.contains(&fact.function) {
         errors.push(NativeVerificationBundleError::UnknownCompilerFactFunction {
@@ -2849,7 +2956,7 @@ pub(crate) fn validate_cast_fact(
             field: "evidence",
         });
     }
-    match module.layout_sensitive_cast_evidence(fact.op, &fact.source_ty, &fact.target_ty) {
+    match layouts.layout_sensitive_cast_evidence(fact.op, &fact.source_ty, &fact.target_ty) {
         Ok(expected) if expected == fact.evidence => {}
         Ok(_) => errors.push(NativeVerificationBundleError::InvalidCompilerFact {
             fact: fact_ref,
@@ -3150,19 +3257,80 @@ pub(crate) fn validate_trust_vc_request(
     _lineage_certificates: &BTreeSet<ProofCertificateRef>,
     errors: &mut Vec<NativeVerificationBundleError>,
 ) {
-    let certificate_obligations: BTreeSet<ProofId> = request
-        .certificates
-        .iter()
-        .map(|cert| cert.obligation)
-        .collect();
-    for obligation in &request.obligations {
-        if !certificate_obligations.contains(obligation) {
-            errors.push(
-                NativeVerificationBundleError::MissingTrustVcEvidenceForObligation {
-                    request: request.id,
-                    obligation: *obligation,
-                },
-            );
+    // MODE-AWARE, and only here. The certificate loop below stays
+    // unconditional: a discharge request that wrongly carries certificates
+    // still gets every certificate refusal it would have got in import mode,
+    // PLUS the discharge-specific one, so a malformed request is refused more
+    // precisely, never less.
+    match request.mode {
+        // IMPORT / MERGE: trust-vc is being asked to CHECK evidence somebody
+        // else produced, so every obligation must come with a certificate.
+        // Moved verbatim — the variant, its fields and its rendered string are
+        // unchanged.
+        TrustVcVerificationMode::ImportProofCertificates
+        | TrustVcVerificationMode::MergeProofCertificates => {
+            let certificate_obligations: BTreeSet<ProofId> = request
+                .certificates
+                .iter()
+                .map(|cert| cert.obligation)
+                .collect();
+            for obligation in &request.obligations {
+                if !certificate_obligations.contains(obligation) {
+                    errors.push(
+                        NativeVerificationBundleError::MissingTrustVcEvidenceForObligation {
+                            request: request.id,
+                            obligation: *obligation,
+                        },
+                    );
+                }
+            }
+        }
+        // DISCHARGE: trust-vc is being asked to PRODUCE a proof, so requiring a
+        // certificate per obligation would refuse every well-formed request.
+        // The requirement is inverted instead: name a function, carry nothing.
+        //
+        // WHAT THE TWO ARMED CHECKS ACTUALLY COVER, stated precisely because
+        // an earlier version of this comment overstated it. `function:
+        // Some(f)` arms `MissingFunction` (bundle.rs) and
+        // `RequestObligationFunctionMismatch` (bundle.rs), which confine the
+        // request to obligations whose COMPILER-FACT SIDECAR ROW is sourced to
+        // `f`. They say nothing about the module obligation the receiver
+        // actually lowers, which can be unsited or sited elsewhere; that is
+        // the separate `TrustVcDischargeObligationNotSitedInFunction` check in
+        // bundle.rs's request loop, added because trust-vc scopes by the site
+        // and the two repos must not disagree about the wire contract.
+        //
+        // CONSUMER-ADVANCEMENT PRECONDITION. `TrustVcNativeRequest::function`
+        // (requests.rs) warns that an OLD consumer silently DROPS the key,
+        // recomputes a 4-bytes-shorter stable digest and reports
+        // `EvidenceRequestDigestMismatch` rather than a version error — "a
+        // producer may only start emitting `Some` after every consumer has
+        // been advanced". Requiring `Some` in discharge mode makes every
+        // future discharge producer land in exactly that state. It is safe
+        // TODAY only because no producer mints a discharge request at all
+        // (trust-ir-bridge/src/native_request.rs mints only
+        // `ImportProofCertificates`), so the compiler-side mint increment must
+        // land after every consumer is at this schema, not before.
+        // Everything else a discharge request needs — non-empty obligations,
+        // known obligations, no duplicates, lineage roots rooted at this
+        // module, lineage-closure membership, per-obligation span and assertion
+        // id, replay identity, provenance suite and solver identities — is
+        // already enforced mode-independently by `validate_requests`.
+        TrustVcVerificationMode::DischargeProofObligations => {
+            if request.function.is_none() {
+                errors.push(
+                    NativeVerificationBundleError::MissingTrustVcDischargeFunction(request.id),
+                );
+            }
+            for cert_ref in &request.certificates {
+                errors.push(
+                    NativeVerificationBundleError::TrustVcDischargeRequestCarriesCertificate {
+                        request: request.id,
+                        obligation: cert_ref.obligation,
+                        prover: cert_ref.prover.clone(),
+                    },
+                );
+            }
         }
     }
 
@@ -3173,12 +3341,8 @@ pub(crate) fn validate_trust_vc_request(
             // this process; opaque SMT/Lean/Kani strings and self-digests do not
             // take the discharged path.
             if let Some(status) = known_obligation_status.get(&cert_ref.obligation) {
-                let admissible_as_discharged = match status {
-                    ProofStatus::Discharged | ProofStatus::Certified => {
-                        replayed_authority.contains(&cert_ref.obligation)
-                    }
-                    ProofStatus::Pending | ProofStatus::Failed | ProofStatus::Trusted => false,
-                };
+                let admissible_as_discharged = status.is_discharged_tier()
+                    && replayed_authority.contains(&cert_ref.obligation);
                 if !admissible_as_discharged {
                     errors.push(
                         NativeVerificationBundleError::TrustVcCertificateNotDischarged {
@@ -3199,6 +3363,44 @@ pub(crate) fn validate_trust_vc_request(
                     prover: cert_ref.prover.clone(),
                 });
             }
+        }
+    }
+}
+
+/// Refuse a bundle in which one obligation is both IMPORTED and DISCHARGED.
+///
+/// Cross-request, so it cannot live in `validate_trust_vc_request`, which sees
+/// one request at a time. See
+/// [`NativeVerificationBundleError::TrustVcObligationBothImportedAndDischarged`]
+/// for why the ambiguity is refused instead of resolved.
+pub(crate) fn validate_trust_vc_request_modes_do_not_collide(
+    requests: &[NativeVerificationRequest],
+    errors: &mut Vec<NativeVerificationBundleError>,
+) {
+    let mut importing: BTreeMap<ProofId, NativeRequestId> = BTreeMap::new();
+    let mut discharging: BTreeMap<ProofId, NativeRequestId> = BTreeMap::new();
+    for request in requests {
+        let NativeVerificationRequest::TrustVc(trust_vc) = request else {
+            continue;
+        };
+        let target = match trust_vc.mode {
+            TrustVcVerificationMode::ImportProofCertificates
+            | TrustVcVerificationMode::MergeProofCertificates => &mut importing,
+            TrustVcVerificationMode::DischargeProofObligations => &mut discharging,
+        };
+        for obligation in &trust_vc.obligations {
+            target.entry(*obligation).or_insert(trust_vc.id);
+        }
+    }
+    for (obligation, discharging_request) in discharging {
+        if let Some(importing_request) = importing.get(&obligation) {
+            errors.push(
+                NativeVerificationBundleError::TrustVcObligationBothImportedAndDischarged {
+                    obligation,
+                    importing: *importing_request,
+                    discharging: discharging_request,
+                },
+            );
         }
     }
 }
@@ -3344,4 +3546,181 @@ pub(crate) fn source_bound_lineage_membership(
     }
 
     (obligations, certificates)
+}
+
+#[cfg(test)]
+mod nominal_type_identity_tests {
+    use super::*;
+
+    #[test]
+    fn request_type_variant_tags_are_disjoint() {
+        // Every transportable Ty variant gets a distinct outer tag. Ty::Error
+        // is producer-internal and deliberately panics at this boundary.
+        let representatives = [
+            Ty::I8,
+            Ty::I16,
+            Ty::I32,
+            Ty::I64,
+            Ty::I128,
+            Ty::U8,
+            Ty::U16,
+            Ty::U32,
+            Ty::U64,
+            Ty::U128,
+            Ty::Isize,
+            Ty::Usize,
+            Ty::Char,
+            Ty::F16,
+            Ty::F32,
+            Ty::F64,
+            Ty::Bool,
+            Ty::Ptr,
+            Ty::FatPtr(crate::FatPtrKind::Str),
+            Ty::Unit,
+            Ty::Never,
+            Ty::Struct(StructId::new(0)),
+            Ty::Array(TyId::new(0), 1),
+            Ty::Tuple(vec![Ty::I8]),
+            Ty::Enum(EnumId::new(0)),
+            Ty::Func(FuncTyId::new(0)),
+            Ty::Ref(Box::new(Ty::I8)),
+            Ty::RefMut(Box::new(Ty::I8)),
+            Ty::PtrConst(Box::new(Ty::I8)),
+            Ty::PtrMut(Box::new(Ty::I8)),
+            Ty::Rc(Box::new(Ty::I8)),
+            Ty::Set(TyId::new(0), SetRepr::Boxed),
+            Ty::Sequence(TyId::new(0)),
+            Ty::Record(RecordId::new(0)),
+            Ty::Closure(ClosureTyId::new(0)),
+            Ty::Refine(TyId::new(0), crate::PredId::new(0)),
+            Ty::Vector(Box::new(Ty::I8), 4),
+            Ty::Dialect(Box::new(crate::DialectTy::new("example", "value", 1))),
+            Ty::handle("Nat", "trust_bignum::Nat"),
+        ];
+        let mut tags = std::collections::BTreeMap::new();
+        for ty in representatives {
+            let mut bytes = Vec::new();
+            write_ty_stable(&mut bytes, &ty);
+            assert!(
+                tags.insert(bytes[0], ty.clone()).is_none(),
+                "duplicate request type tag {} for {ty:?}",
+                bytes[0]
+            );
+        }
+        assert_eq!(tags.len(), 39);
+        assert_eq!(tags[&33], Ty::Isize);
+        assert_eq!(tags[&37], Ty::Refine(TyId::new(0), crate::PredId::new(0)));
+        assert_eq!(tags[&38], Ty::handle("Nat", "trust_bignum::Nat"));
+    }
+
+    /// The stable request-digest `FatPtrKind` sub-tags are frozen, exactly as
+    /// the wire sub-tags are (`binary::tests::subtag_wire_tags_frozen`). Every
+    /// request and evidence digest over a fat pointer funnels through
+    /// `write_fat_ptr_kind_stable`; renumbering it would silently move all of
+    /// them, and the outer-tag test above sees only `bytes[0]` of one
+    /// representative.
+    #[test]
+    fn request_fat_ptr_kind_stable_tags_are_frozen_and_disjoint() {
+        use crate::FatPtrKind;
+        let table = [
+            (FatPtrKind::Slice(TyId::new(0)), 0u8),
+            (FatPtrKind::Str, 1),
+            (FatPtrKind::TraitObject { trait_id: 0 }, 2),
+            (FatPtrKind::ContainerLen, 3),
+            (FatPtrKind::ContainerVtable, 4),
+        ];
+        let mut distinct = std::collections::BTreeSet::new();
+        for (kind, want) in &table {
+            let mut sub = Vec::new();
+            write_fat_ptr_kind_stable(&mut sub, kind);
+            assert_eq!(
+                sub[0], *want,
+                "request FatPtrKind sub-tag drifted: {kind:?}"
+            );
+            // At the `Ty` funnel: outer FatPtr tag, then the same sub-tag.
+            let mut bytes = Vec::new();
+            write_ty_stable(&mut bytes, &Ty::FatPtr(*kind));
+            assert_eq!(
+                bytes[1..],
+                sub[..],
+                "Ty::FatPtr funnel diverged for {kind:?}"
+            );
+            assert!(
+                distinct.insert(bytes),
+                "duplicate request digest bytes for {kind:?}"
+            );
+        }
+        assert_eq!(distinct.len(), table.len());
+        // The two container-tail kinds must not collide with the kinds whose
+        // metadata lane they share (a vtable word is not a trait id; a
+        // container length is not a str length), nor with each other.
+        let digest = |kind: FatPtrKind| {
+            let mut bytes = Vec::new();
+            write_ty_stable(&mut bytes, &Ty::FatPtr(kind));
+            bytes
+        };
+        assert_ne!(
+            digest(FatPtrKind::ContainerVtable),
+            digest(FatPtrKind::TraitObject { trait_id: 0 })
+        );
+        assert_ne!(
+            digest(FatPtrKind::ContainerVtable),
+            digest(FatPtrKind::ContainerLen)
+        );
+        assert_ne!(digest(FatPtrKind::ContainerLen), digest(FatPtrKind::Str));
+    }
+
+    #[test]
+    fn request_type_bytes_bind_exact_nominal_identity_and_scalar_tags() {
+        let mut distinct = std::collections::BTreeSet::new();
+        for (namespace, name, version) in [
+            ("example", "value", 1),
+            ("other", "value", 1),
+            ("example", "other", 1),
+            ("example", "value", 2),
+        ] {
+            let mut bytes = Vec::new();
+            write_ty_stable(
+                &mut bytes,
+                &Ty::Dialect(Box::new(crate::DialectTy::new(namespace, name, version))),
+            );
+            assert_eq!(bytes[0], 36);
+            distinct.insert(bytes);
+        }
+        assert_eq!(distinct.len(), 4);
+        let mut bytes = Vec::new();
+        write_ty_stable(&mut bytes, &Ty::I64);
+        assert_eq!(bytes, vec![3]);
+        bytes.clear();
+        write_ty_shape_stable(&mut bytes, crate::shape::TyShape::Dialect);
+        assert_eq!(bytes, vec![25]);
+    }
+
+    /// v43: the handle digest binds the exact pair and never collides with
+    /// `Ptr`, with a dialect identity of the same spelling, or with another
+    /// runtime's handle of the same name.
+    #[test]
+    fn request_type_bytes_bind_exact_handle_identity_and_never_ptr() {
+        let mut distinct = std::collections::BTreeSet::new();
+        for (name, runtime) in [
+            ("Nat", "trust_bignum::Nat"),
+            ("Int", "trust_bignum::Nat"),
+            ("Nat", "other::Nat"),
+        ] {
+            let mut bytes = Vec::new();
+            write_ty_stable(&mut bytes, &Ty::handle(name, runtime));
+            assert_eq!(bytes[0], 38);
+            distinct.insert(bytes);
+        }
+        assert_eq!(distinct.len(), 3);
+        let mut ptr = Vec::new();
+        write_ty_stable(&mut ptr, &Ty::Ptr);
+        assert!(!distinct.contains(&ptr));
+        let mut shape = Vec::new();
+        write_ty_shape_stable(&mut shape, crate::shape::TyShape::Handle);
+        assert_eq!(shape, vec![26]);
+        let mut thin = Vec::new();
+        write_ty_shape_stable(&mut thin, crate::shape::TyShape::ThinPointer);
+        assert_ne!(shape, thin);
+    }
 }

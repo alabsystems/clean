@@ -180,11 +180,9 @@ impl OleanHeader {
         }
 
         // Parse base address (little-endian)
-        let base_addr = u64::from_le_bytes(
-            bytes[base_addr_offset..base_addr_offset + 8]
-                .try_into()
-                .expect("header size verified above"),
-        );
+        let mut base_addr_bytes = [0u8; 8];
+        base_addr_bytes.copy_from_slice(&bytes[base_addr_offset..base_addr_offset + 8]);
+        let base_addr = u64::from_le_bytes(base_addr_bytes);
 
         Ok(Self {
             magic,
@@ -206,7 +204,7 @@ impl OleanHeader {
     ///
     /// v1 headers have no flags byte; they are treated as not GMP-encoded.
     #[must_use]
-    pub fn uses_gmp_bignums(&self) -> bool {
+    pub(crate) fn uses_gmp_bignums(&self) -> bool {
         self.flags & FLAG_GMP_BIGNUMS != 0
     }
 

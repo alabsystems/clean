@@ -196,6 +196,9 @@ impl Specification {
              (Handbook of Satisfiability, Ch. 4, Theorem 4.1). Part of #3333.",
         )?;
 
+        // These recursors infer their parameter and motive binders. Each
+        // stored proof supplies both explicitly, so use `@` consistently in
+        // this registration, the proof library, and the promotion tests.
         // ── S01: Trail consistency (inductive type) ──────────────────────
 
         self.add_definition(SpecDefinition {
@@ -203,7 +206,7 @@ impl Specification {
             type_src: "forall (n : Nat) (trail : TrailOp n), TrailConsistent n trail".to_string(),
             value_src: Some(
                 "fun (n : Nat) (trail : TrailOp n) => \
-                 TrailOp.rec n \
+                 @TrailOp.rec n \
                    (fun (t : TrailOp n) => TrailConsistent n t) \
                    (TrailConsistent.empty n) \
                    (fun (var : Nat) (prev : TrailOp n) (ih : TrailConsistent n prev) => \
@@ -237,7 +240,7 @@ impl Specification {
             type_src: "forall (nc : Nat) (ops : WatchOp nc), WatchInvariant nc ops".to_string(),
             value_src: Some(
                 "fun (nc : Nat) (ops : WatchOp nc) => \
-                 WatchOp.rec nc \
+                 @WatchOp.rec nc \
                    (fun (w : WatchOp nc) => WatchInvariant nc w) \
                    (WatchInvariant.init nc) \
                    (fun (clause_idx : Nat) (old_watch : Nat) (new_watch : Nat) \
@@ -272,7 +275,7 @@ impl Specification {
             type_src: "forall (db_size : Nat) (deriv : ResolutionStep db_size), ResolutionSound db_size deriv".to_string(),
             value_src: Some(
                 "fun (db_size : Nat) (deriv : ResolutionStep db_size) => \
-                 ResolutionStep.rec db_size \
+                 @ResolutionStep.rec db_size \
                    (fun (d : ResolutionStep db_size) => ResolutionSound db_size d) \
                    (fun (idx : Nat) => ResolutionSound.axiom_clause db_size idx) \
                    (fun (pivot : Nat) (left : ResolutionStep db_size) (right : ResolutionStep db_size) \
@@ -304,7 +307,7 @@ impl Specification {
             type_src: "forall (n : Nat) (ops : BacktrackOp n), BacktrackValid n ops".to_string(),
             value_src: Some(
                 "fun (n : Nat) (ops : BacktrackOp n) => \
-                 BacktrackOp.rec n \
+                 @BacktrackOp.rec n \
                    (fun (b : BacktrackOp n) => BacktrackValid n b) \
                    (fun (level : Nat) => BacktrackValid.current n level) \
                    (fun (var : Nat) (var_level : Nat) \
@@ -338,7 +341,7 @@ impl Specification {
             type_src: "forall (n : Nat) (steps : BCPStep n), BCPComplete n steps".to_string(),
             value_src: Some(
                 "fun (n : Nat) (steps : BCPStep n) => \
-                 BCPStep.rec n \
+                 @BCPStep.rec n \
                    (fun (s : BCPStep n) => BCPComplete n s) \
                    (BCPComplete.fixpoint n) \
                    (fun (clause_idx : Nat) (lit : Nat) \
@@ -374,7 +377,7 @@ impl Specification {
                 .to_string(),
             value_src: Some(
                 "fun (bound : Nat) (steps : CDCLStep bound) => \
-                 CDCLStep.rec bound \
+                 @CDCLStep.rec bound \
                    (fun (s : CDCLStep bound) => CDCLTerminates bound s) \
                    (CDCLTerminates.sat bound) \
                    (CDCLTerminates.unsat bound) \

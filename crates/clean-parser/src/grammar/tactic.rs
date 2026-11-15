@@ -20,6 +20,23 @@ use crate::surface::{Span, SurfaceExpr, SurfaceTactic, SurfaceTacticLocation};
 use crate::tactic_patterns::TacticArgPattern;
 use crate::ParseError;
 
+/// The name a tactic gives a hypothesis Lean introduces HYGIENICALLY (the
+/// macro-scoped `h` of an anonymous `by_cases e`, the `_` binder of
+/// `suffices _ : t`). It is compiler-authored under a numeric frame, which no
+/// identifier token — not even an escaped `«h✝»` — can spell, so user code can
+/// never refer to it, exactly as with Lean's inaccessible names; tactics that
+/// scan the context (`assumption`, `simp [*]`) still see it.
+pub(crate) fn inaccessible_hypothesis() -> crate::SurfaceName {
+    crate::SurfaceName::from_name(
+        clean_kernel::Name::anon()
+            .num(INACCESSIBLE_NAME_FRAME)
+            .str("h✝"),
+    )
+}
+
+/// The numeric frame of [`inaccessible_hypothesis`] ("INAC").
+const INACCESSIBLE_NAME_FRAME: u64 = 0x494E_4143;
+
 /// Convert a parsed tactic location to Named args for registry dispatch.
 ///
 /// `at h1 h2` → `[Ident("h1"), Ident("h2")]`
@@ -36,10 +53,16 @@ fn location_to_args(span: Span, loc: SurfaceTacticLocation) -> Vec<SurfaceExpr> 
         SurfaceTacticLocation::HypsAndGoal(names) => names
             .into_iter()
             .map(|n| SurfaceExpr::Ident(span, n))
-            .chain(std::iter::once(SurfaceExpr::Ident(span, "⊢".to_string())))
+            .chain(std::iter::once(SurfaceExpr::Ident(
+                span,
+                crate::SurfaceName::generated_path("⊢"),
+            )))
             .collect(),
         SurfaceTacticLocation::Wildcard => {
-            vec![SurfaceExpr::Ident(span, "*".to_string())]
+            vec![SurfaceExpr::Ident(
+                span,
+                crate::SurfaceName::generated_path("*"),
+            )]
         }
     }
 }
@@ -250,10 +273,16 @@ impl Parser {
                 self.parse_tactic_match(span)
             }
 
-            // Parenthesized tactic sequence
+            // Parenthesized tactic sequence. Lean 4.8: `"(" withoutPosition(
+            // tacticSeq) ")"` (`Init/Tactics.lean` `paren`): the brackets drop
+            // the outer position, and the inner `tacticSeq` saves its OWN —
+            // its first tactic's column (`sepByIndent`). So a term argument
+            // inside stops at a new line at or left of that column: in
+            // `(refine f ?_ ?_\n · tac)` the bullet is a sibling tactic, not
+            // an argument of `f`. Hence the indentation frame.
             TokenKind::LParen => {
                 self.advance();
-                let inner = self.tactic_seq()?;
+                let inner = self.indented_tactic_seq()?;
                 let end = self.current_span();
                 self.expect(&TokenKind::RParen)?;
                 Ok(SurfaceTactic::Paren(span.merge(end), inner))
@@ -262,9 +291,11 @@ impl Parser {
             // Braced tactic sequence: `{ tac1; tac2 }`
             // In Lean 4, this is `tacticSeqBracketed` — uses focusAndDone wrapped
             // in closeUsingOrAdmit: focus on goal 0, run tactics, check closure.
+            // Its body is `sepByIndentSemicolon`, which saves the first
+            // tactic's column exactly like the paren form above.
             TokenKind::LBrace => {
                 self.advance();
-                let inner = self.tactic_seq()?;
+                let inner = self.indented_tactic_seq()?;
                 let end = self.current_span();
                 self.expect(&TokenKind::RBrace)?;
                 Ok(SurfaceTactic::FocusBlock(span.merge(end), inner))
@@ -273,9 +304,24 @@ impl Parser {
             // Focus dot: `· tac` or `· tac1; tac2`
             // In Lean 4, `·` (cdot) uses closeUsingOrAdmit which wraps
             // focusAndDone: focus on goal 0, run tactics, check closure.
+            //
+            // Grammar: `syntax (name := cdot) cdotTk tacticSeqIndentGt :
+            // tactic` (`Init/NotationExtra.lean:320-322`). The body is a full
+            // `tacticSeq` whose position is its FIRST tactic's column
+            // (`sepBy1Indent`'s `withPosition` + `checkColGe`,
+            // `Lean/Parser/Extra.lean:202-208`), and each element is a whole
+            // tactic, `t <;> t'` included. So the bullet pushes its own column
+            // frame: a term argument inside it stops at a new line at or left
+            // of that column (`checkColGt` on `argument`), a same-column `·`
+            // is a NESTED bullet of this one, and a line left of it ends the
+            // bullet. Measured before this: with no frame, `· obtain ⟨a, b⟩ :=
+            // h` swallowed every following tactic line as arguments of `h`
+            // (`Injective.extend_comp`, Mathlib `Logic/Function/Basic.lean`),
+            // a nested bullet list became siblings of its parent bullet, and
+            // `· t1 <;> t2` parsed as `(· t1) <;> t2`.
             TokenKind::Cdot => {
                 self.advance();
-                let inner = self.tactic_seq_until_focus()?;
+                let inner = self.indented_tactic_seq()?;
                 Ok(SurfaceTactic::FocusBlock(span, inner))
             }
 
@@ -305,16 +351,32 @@ impl Parser {
             }
             // Conv-mode navigation: with arguments
             "arg" | "enter" => self.parse_compound_ident_tactic(span, name),
-            "rw" | "rewrite" | "rwa" | "simp" | "simp_only" | "simp_rw" | "cases" | "induction"
-            | "case" | "next" | "first" | "calc" | "unfold" | "push_neg" | "dsimp" | "conv"
-            | "all_goals" | "any_goals" | "try" | "repeat" | "focus" | "simpa" | "simpa_only" => {
-                self.parse_compound_ident_tactic(span, name)
-            }
+            "rw" | "rewrite" | "rwa" | "simp" | "simp_all" | "simp_only" | "simp_rw" | "cases"
+            | "induction" | "case" | "next" | "first" | "calc" | "unfold" | "push_neg"
+            | "dsimp" | "conv" | "all_goals" | "any_goals" | "try" | "repeat" | "focus"
+            | "simpa" | "simpa_only" | "solve" => self.parse_compound_ident_tactic(span, name),
             // 3C.7: compound-arg tactics — hardcoded parsing, Named output (#2430 Wave 3)
             "by_cases" => {
                 self.advance();
-                let hyp_name = self.expect_ident("by_cases")?;
-                self.expect(&TokenKind::Colon)?;
+                // `syntax "by_cases " (atomic(ident " : "))? term`
+                // (`Init/ByCases.lean:20`): the binder is taken only when an
+                // identifier is directly followed by `:`, the two-token
+                // analogue of `atomic(ident " : ")`. Otherwise the whole
+                // argument is the proposition and the hypothesis is the
+                // macro's hygienic `h` (`by_cases $e` ⇒ `by_cases h : $e`,
+                // `:22-23`), which user code cannot name — `h✝` is not an
+                // identifier token. Measured before: `by_cases P <;> simp […]`
+                // (Mathlib `Logic/Basic.lean:824`) died "expected Colon, got
+                // SeqFocusOp" and left a raw declaration.
+                let hyp_name = if matches!(self.current_kind(), TokenKind::Ident(_))
+                    && matches!(self.peek_kind(1), Some(TokenKind::Colon))
+                {
+                    let name = self.expect_ident("by_cases")?;
+                    self.expect(&TokenKind::Colon)?;
+                    name
+                } else {
+                    inaccessible_hypothesis()
+                };
                 let prop = self.parse_tactic_expr()?;
                 Ok(SurfaceTactic::Named {
                     span,
@@ -410,6 +472,19 @@ impl Parser {
                 self.advance();
                 self.parse_tactic_rintro(span)
             }
+            // `syntax (name := replace) "replace" letDecl : tactic`
+            // (`Init/Tactics.lean:1291`): the declaration grammar is `have`'s.
+            // With no arm it fell to the generic argument parser, which stops
+            // at `:=` ("unexpected token: ColonEq", Mathlib
+            // `Logic/Function/Basic.lean:681`).
+            "replace" => {
+                self.advance();
+                let decl = self.parse_tactic_have(span)?;
+                Ok(SurfaceTactic::Replace(
+                    span.merge(decl.span()),
+                    Box::new(decl),
+                ))
+            }
             // `generalize (h :)? e = x` — abstract the term `e` in the goal as a
             // fresh variable `x`. The optional `h :` prefix names a hypothesis
             // `h : e = x` recording the abstraction (Lean 4 `Lean.Parser.Tactic`
@@ -446,7 +521,25 @@ impl Parser {
                 self.expect(&TokenKind::Eq)?;
                 let var_name = self.expect_ident("generalize")?;
                 let mut args = vec![term, SurfaceExpr::Ident(span, var_name)];
-                if let Some(hyp_name) = hyp_name {
+                // `(location)?` (Lean 4.8 `Init/Tactics.lean`: `"generalize "
+                // generalizeArg,+ (location)?`): `at h₁ … hₙ ⊢?` / `at *` also
+                // generalizes the listed hypotheses. The target is generalized
+                // whatever the location says, so a location naming only `⊢`
+                // adds nothing. A location naming hypotheses is encoded after
+                // a fixed equation-name slot (`_` when there is no `h :`):
+                // `[e, x, h | _, loc…]`, so every arity stays unambiguous.
+                let location = self.parse_tactic_location();
+                let location_args = location_to_args(span, location);
+                let names_hyps = location_args.iter().any(
+                    |arg| !matches!(arg, SurfaceExpr::Ident(_, n) if n.is_unescaped_component("⊢")),
+                );
+                if names_hyps {
+                    args.push(match hyp_name {
+                        Some(hyp_name) => SurfaceExpr::Ident(span, hyp_name),
+                        None => SurfaceExpr::Hole(span),
+                    });
+                    args.extend(location_args);
+                } else if let Some(hyp_name) = hyp_name {
                     args.push(SurfaceExpr::Ident(span, hyp_name));
                 }
                 Ok(SurfaceTactic::Named {
@@ -509,6 +602,29 @@ impl Parser {
         }
     }
 
+    /// Whether the current token is a further name of an `unfold` whose own
+    /// token sits at column `unfold_col`.
+    ///
+    /// Lean's `colGt` keeps a name on a later line only right of that column,
+    /// and its `ident` matches no keyword, so the list also ends at `at`, at a
+    /// tactic keyword or registered tactic name (`try_eat_ident`'s rule), and
+    /// where the tactic block ends.
+    fn unfold_name_follows(&self, unfold_col: u32) -> bool {
+        let token = self.current();
+        let TokenKind::Ident(name) = &token.kind else {
+            return false;
+        };
+        if token.lean_keyword || (token.preceded_by_newline && token.col <= unfold_col) {
+            return false;
+        }
+        if !token.ident_escaped
+            && (self.is_tactic_keyword(name) || self.tactic_pattern(name).is_some())
+        {
+            return false;
+        }
+        !self.at_tactic_end(0)
+    }
+
     /// Parse compound identifier-based tactics that need sub-parsers or arguments.
     fn parse_compound_ident_tactic(
         &mut self,
@@ -519,27 +635,48 @@ impl Parser {
         match name {
             "arg" => self.parse_conv_arg(span),
             "enter" => self.parse_conv_enter(span),
-            "rw" | "rewrite" => self.parse_tactic_rw(span),
+            "rw" => self.parse_tactic_rw(span),
+            "rewrite" => self.parse_tactic_rewrite(span),
             "rwa" => self.parse_tactic_rwa(span),
-            "simp" => self.parse_tactic_simp(span, false),
-            "simp_only" => self.parse_tactic_simp(span, true),
+            "simp" => self.parse_tactic_simp(span, false, false),
+            "simp_all" => self.parse_tactic_simp(span, false, true),
+            "simp_only" => self.parse_tactic_simp(span, true, false),
             "simp_rw" => self.parse_tactic_simp_rw(span),
             "cases" => self.parse_tactic_cases_induction(span, true),
             "induction" => self.parse_tactic_cases_induction(span, false),
             "case" => self.parse_tactic_case(span),
             "next" => self.parse_tactic_next(span),
             "first" => self.parse_tactic_first(span),
+            "solve" => self.parse_tactic_solve(span),
             "calc" => self.parse_tactic_calc(span),
             "unfold" => {
-                let def_name = self.qualified_ident()?;
-                let loc = self.parse_tactic_location();
-                let mut args = vec![SurfaceExpr::Ident(span, def_name)];
-                args.extend(location_to_args(span, loc));
-                Ok(SurfaceTactic::Named {
-                    span,
-                    name: "unfold".to_string(),
-                    args,
-                })
+                // Lean 4.8: `unfold (ppSpace colGt ident)+ (location)?`, and
+                // `unfold a b at h` unfolds `a`, then `b`, at the one location.
+                // Each name is its own `unfold` in a `Paren` sequence, so the
+                // one-name handler and its location dispatch serve every name.
+                let unfold_col = self.tokens[self.pos.saturating_sub(1)].col;
+                let mut def_names = vec![self.qualified_ident()?];
+                while self.unfold_name_follows(unfold_col) {
+                    def_names.push(self.qualified_ident()?);
+                }
+                let loc_args = location_to_args(span, self.parse_tactic_location());
+                let mut unfolds: Vec<SurfaceTactic> = def_names
+                    .into_iter()
+                    .map(|def_name| {
+                        let mut args = vec![SurfaceExpr::Ident(span, def_name)];
+                        args.extend(loc_args.iter().cloned());
+                        SurfaceTactic::Named {
+                            span,
+                            name: "unfold".to_string(),
+                            args,
+                        }
+                    })
+                    .collect();
+                if unfolds.len() == 1 {
+                    Ok(unfolds.remove(0))
+                } else {
+                    Ok(SurfaceTactic::Paren(span, unfolds))
+                }
             }
             "push_neg" => {
                 let loc = self.parse_tactic_location();
@@ -667,6 +804,52 @@ impl Parser {
                 Ok(vec![first, second])
             }
             Some(TacticArgPattern::ExprList) => self.parse_named_tactic_args(),
+            Some(TacticArgPattern::BracketedParamList) => {
+                // `only` is a bare keyword-ish identifier in Lean's grammar,
+                // not a term — reading it as one made `grind only [f]` parse
+                // `only` as an application head. It is RECORDED rather than
+                // dropped: Lean's `grind only` suppresses the ambient
+                // `@[grind]` set (measured on v4.30.0-rc2 — `grind only` fails
+                // on a goal a bare `grind` closes through an `@[grind] def`),
+                // so dropping it made Clean close goals Lean rejects.
+                //
+                // It travels as a leading marker argument whose name is
+                // GENERATED, which no source identifier can be: the ident
+                // protocol carries each component's origin
+                // (`NameComponentSyntax`), so `same_syntax` tells the marker
+                // apart from a user lemma that happens to be spelled the same.
+                let mut args = Vec::new();
+                if matches!(self.current_kind(), TokenKind::Ident(w) if w == "only") {
+                    self.advance();
+                    args.push(SurfaceExpr::Ident(
+                        self.prev_span(),
+                        crate::SurfaceName::generated_path(crate::GRIND_ONLY_MARKER),
+                    ));
+                }
+                if !self.check(&TokenKind::LBracket) {
+                    return Ok(args);
+                }
+                // `parse_simp_lemmas` now yields `SurfaceSimpArg`, which
+                // carries the `←`/`-` modifiers `simp` needs. `grind`'s
+                // parameter list is a plain `[term,*]` (Lean's
+                // `EMatchTheoremParam`), so the modifier is not part of its
+                // grammar and each element travels as its bare term — a
+                // `@[grind ←]`-style modifier on a TACTIC parameter is one of
+                // the divergences this package pinned open rather than closed.
+                let (params, _star) = self.parse_simp_lemmas()?;
+                // `simpPre`/`simpPost` (`↓`/`↑`) belong to `simpLemma`, not
+                // to `grind`'s parameter grammar: refused, never dropped.
+                if params.iter().any(|p| p.phase.is_some()) {
+                    return Err(ParseError::UnexpectedToken {
+                        line: self.current_line(),
+                        col: self.current_span().start,
+                        message: "a `grind` parameter takes no `↓`/`↑` simp phase marker"
+                            .to_string(),
+                    });
+                }
+                args.extend(params.into_iter().map(|p| p.term));
+                Ok(args)
+            }
             None => {
                 // Built-in single-term tactics take exactly ONE term argument and
                 // must STOP at a top-level comma. The default (patternless) parse
@@ -742,7 +925,10 @@ impl Parser {
             if let Some(n) = self.try_eat_ident() {
                 args.push(SurfaceExpr::Ident(self.prev_span(), n));
             } else if self.eat(&TokenKind::Underscore) {
-                args.push(SurfaceExpr::Ident(self.prev_span(), "_".to_string()));
+                args.push(SurfaceExpr::Ident(
+                    self.prev_span(),
+                    crate::SurfaceName::generated_path("_"),
+                ));
             } else {
                 break;
             }
@@ -761,8 +947,22 @@ impl Parser {
         span: Span,
         name: &str,
     ) -> Result<SurfaceTactic, ParseError> {
+        let tactic_col = self.current().col;
         self.advance();
-        let idents = self.parse_ident_list();
+        let idents = if name == "rename_i" {
+            // These are new binder names. A contextual tactic name such as
+            // `first` is an identifier here; layout bounds the next tactic.
+            let mut names = Vec::new();
+            while matches!(self.current_kind(), TokenKind::Ident(_))
+                && !self.current().lean_keyword
+                && !(self.current().preceded_by_newline && self.current().col <= tactic_col)
+            {
+                names.push(self.expect_ident("rename_i")?);
+            }
+            names
+        } else {
+            self.parse_ident_list()
+        };
         if idents.is_empty() {
             return Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
@@ -779,21 +979,5 @@ impl Parser {
             name: name.to_string(),
             args,
         })
-    }
-
-    /// Parse tactic sequence until we hit `·`, `|`, or a normal tactic block terminator.
-    /// Used for focus-dot parsing: `· tac1; tac2` stops at the next `·`.
-    fn tactic_seq_until_focus(&mut self) -> Result<Vec<SurfaceTactic>, ParseError> {
-        let mut tactics = Vec::new();
-
-        while !self.at_tactic_end(0)
-            && !matches!(self.current_kind(), TokenKind::Cdot | TokenKind::Pipe)
-        {
-            let tac = self.tactic()?;
-            tactics.push(tac);
-            while self.eat(&TokenKind::Semicolon) {}
-        }
-
-        Ok(tactics)
     }
 }

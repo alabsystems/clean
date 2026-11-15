@@ -25,6 +25,17 @@ mod simple;
 mod suggest;
 mod types;
 
+#[cfg(test)]
+mod typed_name_tests;
+
+/// Builtin protocols accept one actual string component, never a displayed path.
+fn atomic_name(name: &clean_kernel::Name) -> Option<&str> {
+    match name.inner() {
+        clean_kernel::name::NameInner::Str(parent, text) if parent.is_anon() => Some(text),
+        _ => None,
+    }
+}
+
 pub use aesop::{aesop, aesop_with_config, AesopConfig, AesopRule, AesopRuleKind};
 pub use simple::{apply_search, exact_search, rewrite_search, SearchResult};
 pub(crate) use simple::{can_apply_to_produce, types_unify};

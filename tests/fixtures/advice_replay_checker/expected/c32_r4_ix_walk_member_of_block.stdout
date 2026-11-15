@@ -1,0 +1,4 @@
+walk-three: ACCEPT cursor=7
+walk-empty: ACCEPT cursor=4
+walk-bad-label: REFUSE terms differ at 5
+walk-depth: REFUSE depth

@@ -312,14 +312,37 @@ fn test_fold_bitwise_shift_right() {
     assert_eq!(result, Some(IRLiteral::UInt64(16)));
 }
 
+/// Lean 4: the shift AMOUNT is reduced mod 64, so an amount past the width is
+/// not "overflow" and the result is not `0`. This test used to be
+/// `test_fold_bitwise_shift_overflow_clamps` and asserted `0` for `1 <<< 128`.
 #[test]
-fn test_fold_bitwise_shift_overflow_clamps() {
-    let result = fold_bitwise_op(
-        "UInt64.shiftLeft",
-        &IRLiteral::UInt64(1),
-        &IRLiteral::UInt64(128),
-    );
-    assert_eq!(result, Some(IRLiteral::UInt64(0)));
+fn test_fold_bitwise_shift_amount_is_reduced_mod_64() {
+    let fold = |op: &str, a: u64, b: u64| {
+        fold_bitwise_op(op, &IRLiteral::UInt64(a), &IRLiteral::UInt64(b))
+    };
+    // (op, a, amount, Lean's answer)
+    for (op, a, b, expected) in [
+        ("UInt64.shiftLeft", 1, 128, 1), // 128 % 64 = 0
+        ("UInt64.shiftLeft", 1, 64, 1),
+        ("UInt64.shiftLeft", 1, 65, 2),
+        ("UInt64.shiftLeft", 1, 63, 1 << 63),
+        ("UInt64.shiftLeft", u64::MAX, 63, 1 << 63), // high bits drop
+        ("UInt64.shiftLeft", 1, u64::MAX, 1 << 63),  // u64::MAX % 64 = 63
+        ("UInt64.shiftLeft", 1, 1 << 32, 1),         // an `as u32` cast alone is not the rule
+        ("UInt64.shiftRight", 8, 67, 1),
+        ("UInt64.shiftRight", u64::MAX, 64, u64::MAX),
+        ("UInt64.shiftRight", u64::MAX, 63, 1),
+        ("UInt64.shiftRight", 256, 0, 256),
+    ] {
+        assert_eq!(
+            fold(op, a, b),
+            Some(IRLiteral::UInt64(expected)),
+            "{op} {a:#x} {b}"
+        );
+    }
+    // The near-miss this replaces: shift-past-width-is-zero must NOT come back.
+    assert_ne!(fold("UInt64.shiftLeft", 1, 65), Some(IRLiteral::UInt64(0)));
+    assert_ne!(fold("UInt64.shiftRight", 8, 67), Some(IRLiteral::UInt64(0)));
 }
 
 #[test]

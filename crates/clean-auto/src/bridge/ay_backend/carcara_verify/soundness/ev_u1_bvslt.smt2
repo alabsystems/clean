@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const x Bool)
+(assert (= x (bvslt #b1111 #b0001)))
+(assert (= x true))
+(check-sat)

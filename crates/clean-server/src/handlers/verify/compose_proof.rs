@@ -12,13 +12,16 @@
 use super::fill_sorries_support::collect_explicit_sorry_positions;
 use super::parse_lean::{is_explicit_hole_tactic, parse_lean_file};
 use super::types::*;
+use crate::handlers::core::{run_with_env, WorkEnv};
 use crate::handlers::helpers::{generate_tactic_suggestions, parse_tactic_script};
 use crate::handlers::state::ServerState;
 use crate::handlers::tactic::execute_simple_tactic;
+use crate::handlers::work::WorkError;
 use crate::proof_state::convert_goals;
 use crate::rpc::{RequestId, Response, RpcError};
 use clean_elab::elaborate;
 use clean_elab::tactic::ProofState as InternalProofState;
+use clean_kernel::Environment;
 use clean_parser::parse_expr_with_tactics_exact;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -81,7 +84,7 @@ pub struct ComposeProofResult {
 /// This is the complement of `fillSorries`: where `fillSorries` auto-discovers
 /// tactics for sorry holes, `composeProof` uses caller-provided tactics
 /// (typically discovered via the `applyTactic` interactive loop).
-#[instrument(skip(state))]
+#[instrument(skip(state, params), fields(content_bytes = params.content.len()))]
 pub async fn handle_compose_proof(
     state: &ServerState,
     id: RequestId,
@@ -97,10 +100,28 @@ pub async fn handle_compose_proof(
         .map(|r| (r.sorry_index, r.tactic.as_str()))
         .collect();
 
-    // --- Parse ---
-    let parse_start = Instant::now();
-    let theorem = match parse_lean_file(&params.content) {
-        Ok((theorem, _)) => theorem,
+    // --- Parse --- the file and its proof's script: request work, on the
+    // pool under the request's deadline (`super::parse_on_pool`).
+    let content = params.content;
+    let parsed = super::parse_on_pool(state, start, timeout, move || {
+        let parse_start = Instant::now();
+        let parsed = parse_lean_file(&content).map(|(theorem, _)| theorem);
+        let parse_ns = parse_start.elapsed().as_nanos() as u64;
+        let parsed = parsed.map(|theorem| {
+            theorem.map(|theorem| {
+                let original_tactics = parse_tactic_script(&theorem.original_proof);
+                (theorem, original_tactics)
+            })
+        });
+        (parsed, parse_ns)
+    })
+    .await;
+    let (parsed, parse_ns) = match parsed {
+        Ok(parsed) => parsed,
+        Err(error) => return super::replay_response::<()>(id, timeout, Err(error)),
+    };
+    let theorem = match parsed {
+        Ok(theorem) => theorem,
         Err(error) => {
             return error_response(
                 id,
@@ -110,9 +131,8 @@ pub async fn handle_compose_proof(
             );
         }
     };
-    let parse_ns = parse_start.elapsed().as_nanos() as u64;
 
-    let Some(theorem) = theorem else {
+    let Some((theorem, original_tactics)) = theorem else {
         return error_response(
             id,
             start,
@@ -121,34 +141,106 @@ pub async fn handle_compose_proof(
         );
     };
 
-    let original_tactics = parse_tactic_script(&theorem.original_proof);
-
     // --- Elaborate ---
     let initialize_start = Instant::now();
     if let Err(error) = super::initialize_verify_file_env(state).await {
-        let elapsed_ns = start.elapsed().as_nanos() as u64;
-        return compose_error_response(
-            id,
-            Some(theorem),
-            Some(original_tactics.join("\n")),
-            0,
-            TimingBreakdown {
-                parse_ns,
-                elaborate_ns: 0,
-                verify_ns: 0,
-                total_ns: elapsed_ns,
-            },
-            &format!("failed to initialize verification environment: {error}"),
-            vec!["check the server's kernel environment".into()],
-        );
+        // The answer reports the holes left in the proof as sent, which
+        // parses it: request work, on the pool under the request's deadline
+        // as the parse above (the set-up's wait is not charged to it, as
+        // below). Until R87 it was parsed here, on the runtime.
+        let effective_timeout = timeout.saturating_add(initialize_start.elapsed());
+        let message = format!("failed to initialize verification environment: {error}");
+        let job_id = id.clone();
+        let answered = super::parse_on_pool(state, start, effective_timeout, move || {
+            let elapsed_ns = start.elapsed().as_nanos() as u64;
+            compose_error_response(
+                job_id,
+                Some(theorem),
+                Some(original_tactics.join("\n")),
+                0,
+                TimingBreakdown {
+                    parse_ns,
+                    elaborate_ns: 0,
+                    verify_ns: 0,
+                    total_ns: elapsed_ns,
+                },
+                &message,
+                vec!["check the server's kernel environment".into()],
+            )
+        })
+        .await;
+        return match answered {
+            Ok(response) => response,
+            Err(error) => super::replay_response::<()>(id, timeout, Err(error)),
+        };
     }
     // Environment construction is prerequisite setup, not proof execution.
     // Keep it in reported wall-clock latency without consuming the caller's
     // parsing/elaboration/replay budget.
     let effective_timeout = timeout.saturating_add(initialize_start.elapsed());
 
+    // The replay runs on the work pool, under the deadline the timeout sets
+    // (environment setup above excluded, as before).
+    let deadline = start.checked_add(effective_timeout);
+    let remaining = effective_timeout.saturating_sub(start.elapsed());
+    let job_id = id.clone();
+    let replacements: HashMap<usize, String> = replacement_map
+        .into_iter()
+        .map(|(index, tactic)| (index, tactic.to_string()))
+        .collect();
+    let outcome = tokio::time::timeout(
+        remaining,
+        run_with_env(state, deadline, move |held| {
+            compose_proof_on_pool(
+                held,
+                job_id,
+                ComposeReplay {
+                    theorem,
+                    original_tactics,
+                    replacements,
+                    parse_ns,
+                    start,
+                    effective_timeout,
+                },
+            )
+        }),
+    )
+    .await
+    .unwrap_or(Err(WorkError::Interrupted));
+    match outcome {
+        Ok(response) => response,
+        Err(error) => super::replay_response::<()>(id, timeout, Err(error)),
+    }
+}
+
+/// What the replay of a `composeProof` request needs from the request.
+struct ComposeReplay {
+    theorem: ExtractedTheorem,
+    original_tactics: Vec<String>,
+    replacements: HashMap<usize, String>,
+    parse_ns: u64,
+    start: Instant,
+    effective_timeout: Duration,
+}
+
+/// Elaborate the goal and replay the composed proof against the held
+/// environment. Runs on the work pool.
+fn compose_proof_on_pool(held: &WorkEnv, id: RequestId, replay: ComposeReplay) -> Response {
+    let ComposeReplay {
+        theorem,
+        original_tactics,
+        replacements,
+        parse_ns,
+        start,
+        effective_timeout,
+    } = replay;
+    let replacement_map: HashMap<usize, &str> = replacements
+        .iter()
+        .map(|(index, tactic)| (*index, tactic.as_str()))
+        .collect();
+
     let elaborate_start = Instant::now();
-    let surface_expr = match parse_expr_with_tactics_exact(&theorem.goal, &state.tactic_patterns) {
+    let surface_expr = match parse_expr_with_tactics_exact(&theorem.goal, &held.patterns) {
         Ok(expr) => expr,
         Err(error) => {
             let elaborate_ns = elaborate_start.elapsed().as_nanos() as u64;
@@ -170,8 +262,8 @@ pub async fn handle_compose_proof(
         }
     };
 
-    let env = state.env.read().await;
-    let target = match elaborate(&env, &surface_expr) {
+    let env: &Environment = &held.env;
+    let target = match elaborate(env, &surface_expr) {
         Ok(expr) => expr,
         Err(error) => {
             let elaborate_ns = elaborate_start.elapsed().as_nanos() as u64;
@@ -231,7 +323,7 @@ pub async fn handle_compose_proof(
             if let Some(replacement) = replacement_map.get(&sorry_index) {
                 // Apply the caller-provided replacement tactic
                 let replacement = replacement.trim().to_string();
-                match execute_simple_tactic(&mut proof_state, &replacement, &env) {
+                match execute_simple_tactic(&mut proof_state, &replacement, env) {
                     Ok(()) => {
                         rewritten_tactics.push(replacement);
                         replaced_count += 1;
@@ -247,7 +339,7 @@ pub async fn handle_compose_proof(
                             collect_explicit_sorry_positions(&theorem, &composed_proof);
                         let verify_ns = verify_start.elapsed().as_nanos() as u64;
                         let elapsed_ns = start.elapsed().as_nanos() as u64;
-                        let goals = convert_goals(&proof_state, &env);
+                        let goals = convert_goals(&proof_state, env);
                         let result = ComposeProofResult {
                             verified: false,
                             composed_proof: Some(composed_proof),
@@ -289,7 +381,7 @@ pub async fn handle_compose_proof(
                 }
             } else {
                 // No replacement provided — keep the original sorry
-                if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, &env) {
+                if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, env) {
                     let composed_proof = rewritten_tactics
                         .iter()
                         .cloned()
@@ -320,7 +412,7 @@ pub async fn handle_compose_proof(
         }
 
         // Non-sorry tactic — replay verbatim
-        if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, &env) {
+        if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, env) {
             let composed_proof = rewritten_tactics
                 .iter()
                 .cloned()
@@ -363,11 +455,12 @@ pub async fn handle_compose_proof(
     if proof_state.is_complete() {
         let closed_proof = proof_state.closed_proof();
         let verified = if remaining_sorries.is_empty() {
-            super::verify_closed_proof(&env, &target, closed_proof.as_ref())
+            super::verify_closed_proof(env, &target, closed_proof.as_ref())
         } else {
             false
         };
         let trust_summary = super::trust_summary_from_ledger_with_closed_proof(
+            env,
             proof_state.trust_ledger(),
             closed_proof.as_ref(),
             verified,
@@ -389,7 +482,7 @@ pub async fn handle_compose_proof(
     }
 
     // Proof incomplete — goals remain
-    let goals = convert_goals(&proof_state, &env);
+    let goals = convert_goals(&proof_state, env);
     let result = ComposeProofResult {
         verified: false,
         composed_proof: Some(composed_proof),

@@ -1,0 +1,5 @@
+(set-logic QF_UFDTLIA)
+(declare-datatype __trust_d_1_A ((__trust_c_1_A_A (__trust_s_1_A_fld Int))))
+(declare-fun __trust_u_x () __trust_d_1_A)
+(assert (and (= __trust_u_x (__trust_c_1_A_A 5)) (not (= (__trust_s_1_A_fld __trust_u_x) 5))))
+(check-sat)

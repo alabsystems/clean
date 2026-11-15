@@ -138,7 +138,7 @@ mod tests;
 
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId};
-use clean_parser::SurfaceExpr;
+use clean_parser::{SurfaceExpr, SurfaceName};
 
 use self::pre_definition::TerminationMeasure;
 use super::ElabCtx;
@@ -153,7 +153,7 @@ use crate::ElabError;
 /// SOUNDNESS: every refusal in this module goes through here and returns an
 /// error. Nothing is ever registered via `sorry`, an axiom, or an unchecked
 /// declaration for a definition the WF lowering cannot compile.
-fn wf_unsupported(name: &str, reason: &str) -> ElabError {
+fn wf_unsupported(name: &SurfaceName, reason: &str) -> ElabError {
     ElabError::Unsupported {
         feature: format!(
             "well-founded recursion for '{name}': `termination_by` with a \
@@ -189,7 +189,7 @@ fn sum_spelling(mentioned: &[usize], binders: &[clean_parser::SurfaceBinder]) ->
         .map(|index| {
             binders
                 .get(*index)
-                .map_or_else(|| format!("<parameter #{index}>"), |b| b.name.clone())
+                .map_or_else(|| format!("<parameter #{index}>"), |b| b.name.to_string())
         })
         .collect::<Vec<_>>()
         .join(" + ")
@@ -216,7 +216,7 @@ impl<'a> ElabCtx<'a> {
     /// `(type, value)` pair where value is a `WellFounded.fix` application.
     pub(super) fn elab_wf_recursion(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         binders: &[clean_parser::SurfaceBinder],
         ty: Option<&SurfaceExpr>,
         val: &SurfaceExpr,
@@ -274,7 +274,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn elab_wf_recursion_core(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         func_ty: &Expr,
         ret_ty: &Expr,
         func_body: &Expr,
@@ -449,7 +449,7 @@ impl<'a> ElabCtx<'a> {
     /// - binder_fvars are the FVars for each parameter
     fn elab_wf_pre_definition(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         binders: &[clean_parser::SurfaceBinder],
         ty: Option<&SurfaceExpr>,
         val: &SurfaceExpr,
@@ -498,8 +498,11 @@ impl<'a> ElabCtx<'a> {
             full_ty = Expr::pi(bi, binder_ty.clone(), abstracted);
         }
 
+        if ty.is_some() {
+            self.check_declaration_header(&[], Some(&full_ty))?;
+        }
         // Push the function itself as a local for recursive references
-        let func_fvar = self.push_local(name.to_owned(), full_ty.clone());
+        let func_fvar = self.push_local(name.clone(), full_ty.clone());
 
         // Set expected type for bidirectional type checking
         let prev_expected = self.current_expected_type.clone();
@@ -565,7 +568,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn build_wf_definition(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         func_ty: &Expr,
         ret_ty: &Expr,
         func_body: &Expr,
@@ -762,8 +765,8 @@ impl<'a> ElabCtx<'a> {
                         _ => {
                             return Err(ElabError::Unsupported {
                                 feature: format!(
-                                    "well-founded recursion: expected Pi type, got {:?}",
-                                    whnf
+                                    "well-founded recursion: expected Pi type, got {}",
+                                    crate::error_render::term(&whnf)
                                 ),
                             });
                         }

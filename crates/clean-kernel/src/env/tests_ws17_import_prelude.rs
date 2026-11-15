@@ -223,13 +223,21 @@ fn test_ws18_default_prelude_seeds_lossy_finset_and_fact_stubs() {
         env.get_inductive(&Name::from_string("Finset")).is_none(),
         "the default Finset stub is a Subtype DEFINITION, not a real inductive"
     );
-    // `Fact` is present as an axiom; its `.rec` is therefore absent.
+    // `Fact` is no longer seeded by the default prelude (KR1 slice 1, R132):
+    // the axiom stub moved to the opt-in stub theory, which still seeds it
+    // as an axiom with no `.rec`.
     assert!(
-        env.get_const(&Name::from_string("Fact")).is_some(),
-        "default prelude seeds the Fact axiom stub"
+        env.get_const(&Name::from_string("Fact")).is_none(),
+        "the default prelude no longer seeds the Fact axiom stub"
+    );
+    let mut opted = env.clone();
+    opted.init_stub_theory().expect("opt in to the stub theory");
+    assert!(
+        opted.get_const(&Name::from_string("Fact")).is_some(),
+        "the opt-in stub theory seeds the Fact axiom stub"
     );
     assert!(
-        env.get_const(&Name::from_string("Fact.rec")).is_none(),
+        opted.get_const(&Name::from_string("Fact.rec")).is_none(),
         "the Fact axiom stub has no kernel-generated recursor"
     );
 }
@@ -687,12 +695,14 @@ fn test_nat_dec_eq_cluster_lanes_diverge_only_on_overlays() {
 // SOUNDNESS: suppression makes the import prelude register STRICTLY FEWER trusted
 // constants; it can only make the kernel check the REAL declaration, never let an
 // invalid term pass. Nothing here touches `is_def_eq`/`whnf`. The default
-// (proof-execution) lane keeps the single-universe stubs byte-identical.
+// (proof-execution) lane keeps the `List.zip` / `List.mapM` stubs byte-identical;
+// its `Except` became Lean 4.8.0's two-universe `Except.{u, v}` on 2026-10-16
+// (trust-ir gap G32), which the import prelude still suppresses (it withholds
+// the `Monad` classes the family needs).
 
-/// The DEFAULT prelude seeds the single-universe `Except` / `List.zip` /
-/// `List.mapM` stubs with their reduced (monomorphic) level-param arity — the
-/// shapes the import prelude must avoid so the real multi-universe originals
-/// register.
+/// The DEFAULT prelude seeds the reduced-arity `List.zip` / `List.mapM` stubs
+/// and Lean 4.8.0's two-universe `Except.{u, v}` (G32) — the import prelude
+/// avoids all three so the genuine originals register.
 #[test]
 fn test_ws_level_default_prelude_seeds_reduced_arity_monad_list_stubs() {
     let env = Environment::try_with_prelude().expect("default prelude");
@@ -700,15 +710,16 @@ fn test_ws_level_default_prelude_seeds_reduced_arity_monad_list_stubs() {
         !env.suppresses_lossy_structure_stubs(),
         "default prelude must NOT be in import-suppression mode"
     );
-    // Reduced-arity stubs are present with FEWER level params than Lean core.
-    for (name, want_params) in [("Except", 1usize), ("List.zip", 1), ("List.mapM", 2)] {
+    // `List.zip` / `List.mapM` have FEWER level params than Lean core;
+    // `Except` has Lean's two (G32).
+    for (name, want_params) in [("Except", 2usize), ("List.zip", 1), ("List.mapM", 2)] {
         let ci = env
             .get_const(&Name::from_string(name))
             .unwrap_or_else(|| panic!("default prelude seeds the `{name}` stub"));
         assert_eq!(
             ci.level_params.len(),
             want_params,
-            "default `{name}` stub is the reduced-arity ({want_params}-universe) carrier"
+            "default `{name}` has {want_params} universe parameter(s)"
         );
     }
     // The `Except` constructors + monad family come with the stub.
@@ -811,9 +822,23 @@ fn test_ws_level_import_prelude_suppresses_string_repr_tostring_stubs() {
         // instances from the checked `.olean` path.
         "instToStringInt",
         "instToStringChar",
+        "instToStringUInt8",
+        "instToStringUInt16",
         "instToStringUInt32",
         "instToStringUInt64",
+        "instToStringUSize",
         "instToStringList",
+        // `Option α` and `Prod α β`, added 2026-09-16 under the same
+        // suppression contract: `init_to_string_instances` returns early in
+        // import mode, so the genuine Lean `instToStringOption` /
+        // `instToStringProd` arrive through the checked `.olean` path instead
+        // of being shadowed by these hand-rolled bodies.
+        "instToStringOption",
+        "instToStringProd",
+        // `Float` (G27, 2026-10-08): the opaque extern `Float.toString` and its
+        // instance, under the same suppression — the genuine Lean pair imports.
+        "Float.toString",
+        "instToStringFloat",
     ] {
         assert!(
             default_env.get_const(&Name::from_string(c)).is_some(),
@@ -888,24 +913,33 @@ fn test_ws_level_import_prelude_suppresses_int_arith_cluster() {
 /// v4.31 retarget (2026-07-04): the StateT member axioms are MISSING the
 /// `[Monad m]` instance binder v4.31 requires (arity drift — the incremental
 /// lane's CHECKED axiom upgrade fails closed with UpgradeTypeMismatch), and
-/// `Id.mk`/`IO.pure`/`IO.bind`/`StateM.pure` are phantom constants absent
-/// upstream. `instBEqOption` same-name-collides with the genuine v4.31
+/// `Id.mk`/`IO.pure`/`IO.bind` are phantom constants absent upstream
+/// (`StateM.pure` was one too, until 2026-09-28 retired it — `StateM` is now
+/// Lean's `StateT σ Id`, whose operations take `[Monad m]` as Lean's do). `instBEqOption` same-name-collides with the genuine v4.31
 /// derived instance with a different value (wrapping the upstream-absent
 /// `Option.beq`). In IMPORT mode the five registering inits are suppressed so
 /// the genuine olean declarations import; the DEFAULT lane keeps them.
+/// `IO.pure`/`IO.bind` left the default prelude for the explicit IO fragment
+/// (bcacce6e0): the default lane gets them only on opt-in, and the import lane
+/// not even then.
 #[test]
 fn test_ws_level_import_prelude_suppresses_monadic_and_beq_option_stubs() {
     let default_env = Environment::try_with_prelude().expect("default prelude");
+    let mut default_io_env = default_env.clone();
+    default_io_env
+        .init_io_stub_theory()
+        .expect("explicit IO fragment");
     let import_env = Environment::try_with_prelude_for_import().expect("import prelude");
+    let mut import_io_env = import_env.clone();
+    import_io_env
+        .init_io_stub_theory()
+        .expect("the IO fragment no-ops in import mode");
     for c in [
         "StateT.pure",
         "StateT.get",
         "StateT.set",
         "StateT.modify",
         "Id.mk",
-        "IO.pure",
-        "IO.bind",
-        "StateM.pure",
         "instBEqOption",
         "Option.beq",
     ] {
@@ -917,6 +951,22 @@ fn test_ws_level_import_prelude_suppresses_monadic_and_beq_option_stubs() {
             import_env.get_const(&Name::from_string(c)).is_none(),
             "import lane must NOT pre-seed `{c}` — arity-drifted/phantom/colliding \
              vs the genuine v4.31 declaration"
+        );
+    }
+    for c in ["IO.pure", "IO.bind"] {
+        let name = Name::from_string(c);
+        assert!(
+            default_env.get_const(&name).is_none(),
+            "the default prelude carries no IO fragment (`{c}`)"
+        );
+        assert!(
+            default_io_env.get_const(&name).is_some(),
+            "the explicit IO fragment registers the Clean-native `{c}`"
+        );
+        assert!(
+            import_io_env.get_const(&name).is_none(),
+            "import lane must NOT seed `{c}` even on opt-in — phantom vs the \
+             genuine v4.31 declaration"
         );
     }
 }
@@ -1077,17 +1127,11 @@ fn test_ws_level_import_prelude_suppresses_bool_xor_nat_bitwise_cluster() {
             "import lane must NOT pre-seed the drifted `{c}`"
         );
     }
-    // `Nat.testBit` stays as init_nat's VALUE-LESS axiom in the import lane —
-    // the genuine olean definition upgrades it through the checked path; the
-    // drifted value-bearing re-registration (register_nat_testbit_def) is the
-    // gated one and must not have installed a value.
-    let import_testbit = import_env
+    // The genuine definition must also be absent from the trusted import
+    // base, so replay can admit and reduce it instead of retaining an axiom.
+    assert!(import_env
         .get_const(&Name::from_string("Nat.testBit"))
-        .expect("import lane keeps the upgradeable Nat.testBit axiom");
-    assert!(
-        import_testbit.value.is_none(),
-        "import-lane Nat.testBit must be VALUE-LESS (upgradeable axiom), not          the drifted value-bearing definition"
-    );
+        .is_none());
     // Bool substrate + the and/or comm proofs stay in both lanes.
     for c in [
         "Bool",
@@ -1283,8 +1327,7 @@ fn test_ws_list_recursion_cluster_suppressed_in_import_mode() {
     // The List substrate and the NON-divergent neighbours stay in both lanes:
     // `List.get?` and `List.tail` are Clean seeds with no census collision,
     // and the Option combinators ride `init_list_ops` (kept so import-mode
-    // callers still get them). `Nat.shiftRight` stays as the upgradeable
-    // VALUE-LESS axiom.
+    // callers still get them). Bitwise operations come from real imports.
     for c in [
         "List",
         "List.nil",
@@ -1295,7 +1338,6 @@ fn test_ws_list_recursion_cluster_suppressed_in_import_mode() {
         "Option.map",
         "Option.bind",
         "Option.getD",
-        "Nat.shiftRight",
         "HShiftLeft",
         "Array",
         "Array.mk",
@@ -1388,43 +1430,33 @@ fn test_ws_nat_core_arith_cluster_suppressed_in_import_mode() {
     // The Nat substrate stays in both lanes: the inductive + ctors + rec, the
     // defeq-faithful `Nat.pred`, the `Nat.le`/`Nat.lt` order predicates, and
     // the heterogeneous op CLASSES (only the Nat instances are withheld).
-    // `Nat.land`/`lor`/`xor`/`shiftRight`/`testBit` stay as upgradeable
-    // VALUE-LESS axioms. (`Nat.compare` is not asserted either way: its only
+    // Bitwise operations are absent from the import base. (`Nat.compare` is not asserted either way: its only
     // import-prelude entry rode the gated `instBEqNat` init, so it is simply
     // absent — the genuine olean definition imports on demand.)
     for c in [
-        "Nat",
-        "Nat.zero",
-        "Nat.succ",
-        "Nat.rec",
-        "Nat.pred",
-        "Nat.le",
-        "Nat.lt",
-        "HAdd",
-        "HSub",
-        "HMul",
-        "HDiv",
-        "HMod",
-        "HPow",
-        "BEq",
-        "Nat.land",
-        "Nat.lor",
-        "Nat.xor",
-        "Nat.shiftRight",
-        "Nat.testBit",
+        "Nat", "Nat.zero", "Nat.succ", "Nat.rec", "Nat.pred", "Nat.le", "Nat.lt", "HAdd", "HSub",
+        "HMul", "HDiv", "HMod", "HPow", "BEq",
     ] {
         assert!(
             import_env.get_const(&Name::from_string(c)).is_some(),
             "`{c}` must remain available in the import prelude"
         );
     }
-    for axiom in ["Nat.land", "Nat.lor", "Nat.xor", "Nat.shiftRight"] {
-        let info = import_env
-            .get_const(&Name::from_string(axiom))
-            .expect("checked present above");
+    for operation in [
+        "Nat.land",
+        "Nat.lor",
+        "Nat.xor",
+        "Nat.shiftRight",
+        "Nat.testBit",
+    ] {
+        assert!(default_env
+            .get_const(&Name::from_string(operation))
+            .is_some());
         assert!(
-            info.value.is_none(),
-            "import-lane `{axiom}` must stay the upgradeable VALUE-LESS axiom"
+            import_env
+                .get_const(&Name::from_string(operation))
+                .is_none(),
+            "import-lane `{operation}` must come from the real module"
         );
     }
 }
@@ -1512,6 +1544,43 @@ fn test_ws_ord_instance_cluster_suppressed_in_import_mode() {
         assert!(
             import_env.get_const(&Name::from_string(c)).is_some(),
             "`{c}` must remain available in the import prelude"
+        );
+    }
+}
+
+#[test]
+fn test_ws17_import_bitwise_stubs_have_no_remaining_dependents() {
+    use crate::expr::UsedConstants;
+    use std::collections::HashSet;
+
+    let env = Environment::try_with_prelude_for_import().expect("import prelude");
+    let omitted: HashSet<Name> = [
+        "Nat.land",
+        "Nat.lor",
+        "Nat.xor",
+        "Nat.shiftRight",
+        "Nat.testBit",
+    ]
+    .into_iter()
+    .map(Name::from_string)
+    .collect();
+    for name in &omitted {
+        assert!(
+            env.get_const(name).is_none(),
+            "{name} must come from a genuine import"
+        );
+    }
+    for info in env.constants() {
+        let mut dependencies = HashSet::new();
+        info.type_
+            .used_constants_dag(UsedConstants::ConstantsOnly, &mut dependencies);
+        if let Some(value) = &info.value {
+            value.used_constants_dag(UsedConstants::ConstantsOnly, &mut dependencies);
+        }
+        assert!(
+            dependencies.is_disjoint(&omitted),
+            "{} still depends on an omitted bitwise stub",
+            info.name
         );
     }
 }

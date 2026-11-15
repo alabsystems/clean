@@ -1,0 +1,140 @@
+{
+  "schema": "clean.crystal_infer_type_link5_probe/v1",
+  "what_this_is": "The pipeline from a DERIVED body to a discharged output-preservation obligation works end to end, on a body that reached the module through infer_type's own call closure. That had never been shown.",
+  "measured_utc": "2026-09-16T18:37:28Z",
+  "trust_rev": "3a5ea226bd",
+  "probe": "crates/trust-cg-bridge/tests/crystal_infer_type_gate_probe.rs (features tir-scoreboard,ay-proofs)",
+  "source_artifact": "dump-infertype-O3-part/callees/clean_kernel.callees.trust-ir.bin (2,388 functions)",
+  "target": {
+    "name": "<[clean_kernel::level::Level; 2] as smallvec::Array>::size",
+    "module_index": 102,
+    "instructions": 2,
+    "signature": "() -> usize"
+  },
+  "backend": {
+    "arch": "AArch64",
+    "triple": "aarch64-apple-darwin",
+    "opt": "O0"
+  },
+  "result": {
+    "verdict": "Proven",
+    "object_bytes": 446
+  },
+  "two_fragments_finding": "The first attempt targeted ahash::operations::folded_multiply, chosen from a census of eval_ir_inst's SEVEN modelled instruction kinds. The gate answered Unknown: 'unsupported instruction `Assume` ... outside the converter's mapped fragment'. `lower_module_to_lir` has its OWN mapped fragment and Assume is outside it, while the SPEC side handles it as a side condition. The '20 gate-ready bodies' figure therefore measured HALF the constraint; re-filtered against both (spec fragment + assume-free + scalar params), 15 qualify.",
+  "what_this_is_not": "NOT infer_type. CORRECTED 2026-09-16: it is refused in the CONVERTER (`lower_module_to_lir`: \"unsupported type in `function return`: Struct(StructId(2))\"), NOT at its signature -- it never reaches `trust_ir_gate_obligation`, where `signature_reg_width` lives. 205 of the 206 `impl TypeChecker` bodies stop at the converter; exactly one reaches the obligation. NOT a complete five-link chain even for a proved body: links 3 and 4 are spec-side work this proves nothing about.",
+  "census": {
+    "what": "Every function in the derived module offered to the real gate, verdict tallied. The gate decides, not a hand filter.",
+    "extraction": "WHOLE MODULE, one target function: every TYPE table kept intact so all positional ids resolve with no remapping, `globals` cleared, `functions` replaced by the single target. `lower_module_to_lir` takes a func_id and lowers exactly ONE function, so keeping the neighbours costs nothing; the earlier full-module attempt scored 0 PROVEN in the NEXT step, `emit_object_with_trust_ir_globals`, which emits every global and refused on an unrelated `__trust_bytes_0`.",
+    "module_functions": 2388,
+    "proven": 16,
+    "refuted": 0,
+    "unknown": 2372,
+    "module_holes": 0,
+    "everything_attributable": "2,388 = 16 + 0 + 2,372 + 0. No row is this probe's artifact and none is unexplained.",
+    "zero_refuted_note": "The gate never claims a derived body MISCOMPILES. Every non-proven case is Unknown -- outside a modelled fragment -- not a disagreement between spec and emitted bytes. This now holds across THREE independent extractions of the same module, which is what makes it the robust finding here.",
+    "axis": {
+      "converter: type outside the mapped fragment": 941,
+      "producer: derived module records no size/align for a struct": 551,
+      "converter: aggregate field outside the scalar C-layout slice": 385,
+      "converter: non-scalar memory shape (alloca pointee / slice element)": 215,
+      "producer: body carries a live `Undef`": 124,
+      "other (repr(Transparent), checked-arith tuple seeds, zero-field aggregates)": 73,
+      "converter: opcode outside the mapped fragment": 45,
+      "converter: pointer outside the modeled (move-only) pointer fragment": 23,
+      "converter: signature outside the mapped fragment": 15
+    },
+    "proven_shape": "Fifteen are nullary/scalar-parameter, scalar-return container and sort helpers (2-22 instructions). The SIXTEENTH is `clean_kernel::tc::def_eq::delta::<impl TypeChecker<'_>>::lazy_delta_step_no_consts` -- the first proven body that is actually in the typechecker. It appears only once the module is complete, which retracts the earlier 'the smallvec Array::size family and siblings' shape note.",
+    "is_zero_verdict": "Unknown { reason: \"lower_module_to_lir failed: function `clean_kernel::level::Level::is_zero` has an `Undef` that is not a provably-dead memory-merge seed: Undef value 15 is not consumed by a single Store into a local Alloca\" } -- the crystal's DESIGNATED width-one target, refused by this gate in this O3-derived module, in the producer class. The probe reports this body's verdict verbatim wherever it lands.",
+    "axis_is_asserted": "The probe asserts cls_total == unknown and proven+refuted+unknown+holes == 2,388. The first published axis summed to 2,371 against 2,372 because the `is_zero` arm incremented the verdict tally and not the class rollup; the assertions now stand where that arithmetic was.",
+    "axis_finding_RETRACTED": "674 of 2,372 (28%) are PRODUCER gaps -- rustc knows those layouts and the extractor did not record them, and the `Undef`s are values the producer emitted. Neither needs an IR format change or a spec change, which is the opposite of what the retracted 'types dominate' reading implied. 361 of the 551 are one type: `core::option::Option`. The one claim that survives all three readings is that OPCODES ARE A ROUNDING ERROR: 45 of 2,372.",
+    "axis_finding_retraction": "The sentence above -- '675 of 2,372 (28%) are PRODUCER gaps ... neither needs an IR format change or a spec change' -- is RETRACTED as to its implication, measured the same day at trust `9aa4f5856b`. The CLASSIFICATION holds: those bodies really do refuse first on a datum the producer never recorded. The IMPLICATION does not. Stamping a synthetic layout onto all 175 layout-less structs clears every one of the 551 refusals and moves PROVEN by ZERO (16 -> 16); they refuse one step later, with 'aggregate field outside the scalar C-layout slice' going 385 -> 867 (+482). The layout datum is NECESSARY and nowhere near SUFFICIENT. Behind all 551 is the CONVERTER's aggregate fragment, so the producer fix buys a different refusal message and not one proved body.",
+    "what_the_axis_is_for": "A census reports each body's FIRST refusal, and the first refusal is not the binding one. The axis is an accurate map of where bodies stop; it is NOT a ranking of levers. To size a lever, measure the DELTA in PROVEN when that refusal is removed -- which is what the what-if does, and what turned the largest-looking producer bucket into a zero.",
+    "binding_constraint": "The CONVERTER's type/aggregate fragment, and it is reached before anything else. For `infer_type` itself the refused type is Struct(2) = `core::result::Result` spelled [\"__tag\",\"__v0_0\",\"__v1_0\"] with size None. The three types blocking the whole TypeChecker family: `datatype::clean_kernel::expr::Expr` (opaque, 0 fields, 30 bodies), flat `core::option::Option` (25), flat `core::result::Result` (17). The 'refused at its SIGNATURE' reading carried until 2026-09-16 pointed the work at the gate's obligation; widening the obligation would move nothing, because the converter never produces a LIR to hand it. It does NOT follow that the obligation would accept an aggregate return once the converter is widened -- nothing reaches it, so that is untested.",
+    "enum_layout_inconsistency": "Localized while measuring the above and real regardless of its value as a lever: `lower_enum_adt` (trust-mir-extract ty_convert.rs:3602) sets `layout: None` while filling `enum_layout`, so an enum reaches the bridge TWICE -- as an EnumDef with a full descriptor (109 of 117 enums here; `core::option::Option` at size 8/16/24/88/144/496 across instantiations) and as a flattened StructDef `[\"__tag\",\"__v1_0\"]` with no layout. 361 of the 551 name that flattened Option. The datum is in the module, on the other table.",
+    "three_blockers_are_one": "`lower_enum_adt` (ty_convert.rs:3602) renders an enum as a flat `__tag`/`__v` struct with `layout: None`. That single producer decision is what the converter's TYPE fragment refuses (the 'signature' story), what the memory-layout path refuses (the 551 'no recorded size/align'), and what the aggregate slice refuses behind it. Three separately-documented blockers, one object.",
+    "bottom_of_link5": {
+      "what": "The refusal chain followed to the end. It bottoms out in a def-path-gated producer decision about the kernel's own central type, not in the gate, the converter, or the bridge.",
+      "chain": [
+        "obligation: never reached (2,360 of 2,388 bodies stop before it)",
+        "converter: unsupported type in `function return`: Struct(StructId(2))",
+        "Struct(2) = core::result::Result, flat [__tag,__v0_0,__v1_0], size None",
+        "__v0_0 = datatype::clean_kernel::expr::Expr -> Struct(0), 0 fields, no size",
+        "__v1_0 = datatype::...::TypeError -> Struct(1), 0 fields, no size",
+        "both are Ty::Datatype, which carries NO LAYOUT by construction",
+        "ty_convert.rs:1907-1931 routes Level, ExprKind and Expr to Datatype BY DEF PATH",
+        "because the layout-bearing Ty::Adt rendering OOM-killed extraction at ~464 MB (recorded in source at ty_convert.rs:1919; not re-measured here)"
+      ],
+      "not_fixable_downstream": "Not in the converter (no size -> no ABI class). Not in the bridge (the single-variant Datatype expansion buys field identity, never layout; the expanded def still has size None). Not by re-spelling as Ty::Enum (refused by the same fragment). map_scalar_int_ty accepts exactly {i8..i128, isize/usize, char, bool, Ptr, Func}.",
+      "return_abi_distribution": {
+        "scalar (already in the fragment)": 460,
+        "aggregate <=16 bytes -> x0/x1 register pair": 583,
+        "aggregate >16 bytes -> indirect/sret": 167,
+        "size unknown, ABI unclassifiable (infer_type is here)": 769
+      },
+      "RETRACTED_what_it_would_take": "The explosion is a property of `trust_types::Ty`, the producer's INTERMEDIATE representation, not of the target IR -- trust_ir's module format is an id table, inherently finite for recursive types AND layout-bearing (109 of 117 enums here carry a full EnumLayoutDescriptor). A representation with by-name refs carrying layout would be both. That is a `trust_types::Ty` change = THE WIRE BREAK ALREADY SCOPED FOR PROGRAMMES D AND E (Ty not #[non_exhaustive], 2,893 mentions, binary.rs VERSION 29, four repos). Those were carried as separate optional programmes; they are on the CRITICAL PATH for link 5 of this goal, and nothing smaller reaches it.",
+      "retraction": "The 'what it would take' above -- the trust_types::Ty representation change (D/E wire break), 'nothing smaller reaches it' -- is WITHDRAWN, measured. Stamping a layout onto every layout-less struct leaves the refusal BYTE-IDENTICAL ('unsupported type in `function return`: Struct(StructId(2))') and does not move the stage distribution at all (2360/12/16 both sides). The layout is never consulted there: `map_scalar_int_ty` matches on the Ty CONSTRUCTOR. The D/E wire break is NOT established as on link 5's critical path.",
+      "three_walls": {
+        "1_converter_signature_fragment": "map_scalar_int_ty (module_to_lir.rs:356) admits exactly {i8..i128, isize/usize, char, bool, Ptr, Func} and refuses every aggregate BY CONSTRUCTOR -- layout-independent. Stops infer_type, 205 of 206 impl TypeChecker bodies, 2,360 of 2,388. ONE function, ONE crate. FIRST.",
+        "2_obligation_is_a_scalar_return_equality": "trust_ir_function_semantics requires func_ty.returns.len()==1 (:696) and one out_width from signature_reg_width(returns[0]) (:702); SpecSemantics carries a single value:Formula at a single width. REAL, and SECOND -- which makes the 2026-09-15 design note right about the work and wrong only about which step refuses first.",
+        "3_unknown": "Nothing reaches far enough to say. No claim made."
+      },
+      "not_a_blocker": "The TARGET IR: trust_cg_lower::types::Type already has Struct(Vec<Type>), Array(Box<Type>,u32) and Enum{tag_width,variants}. LIR can represent an aggregate return today.",
+      "module_is_exhausted": "Twelve bodies reach the obligation and are refused THERE -- the only candidates for a proved body needing no aggregate work. ALL TWELVE are deliberate fail-closed walls: 4 the same aggregate wall on the spec side (Enum 54/89/33), 2 the move-only pointer fragment, 2 unit returns ('expected exactly 1 return value, got 0' -- correctly refused, since discharging a vacuous obligation is what the vacuity firewall exists to stop), 2 Alloca, 1 Load. So 16 proved is what this fragment yields on this module and there is no residue of accidental refusals to harvest.",
+      "walls_1_and_2_are_one_job": "module_to_lir.rs constructs ZERO aggregate LIR types (I64 63, I8 14, I128 9, I32 8, I16 6, B1 5; no Struct/Array/Enum), while mapping.rs and lower.rs in the same crate do build LirType::Struct. The gate's converter is scalar-only BY CONSTRUCTION because the obligation is a scalar register equality -- co-designed. So widening wall 1 alone is not merely worth zero proved bodies, it is NOT COHERENT: there is no aggregate value model to put in a signature. Cheapest coherent slice: the 583 returns <=16 bytes, where wall 2 widens from one register to two."
+    },
+    "RETIRED_module_does_not_model_expr": {
+      "finding": "CATEGORICAL. Walking infer_type's return: Struct(2) Result -> .__tag Isize (scalar), .__v0_0 Struct(0) datatype::Expr OPAQUE 0 fields, .__v1_0 Struct(1) datatype::TypeError OPAQUE 0 fields. Every path reaches an opaque leaf in ONE step. The expanded Expr does not help: Struct(220).kind is Struct(101) ExprKind with ZERO fields. The whole Expr/ExprKind/Level/TypeError cluster carries no structure.",
+      "why_it_ends_the_converter_line": "Not 'has no layout' -- has no content. The gate proves the return VALUE equals what the machine leaves, which needs the module to MODEL that value. An opaque zero-field def is a havoc symbol. Widening map_scalar_int_ty, widening the obligation, supplying a layout -- none give the spec side a value, and an obligation with an unconstrained symbol on both sides is VACUOUS, which the vacuity firewall refuses. The three walls are real and all DOWNSTREAM of this for infer_type.",
+      "deliberate": "ty_convert.rs:1907-1931 routes Level/ExprKind/Expr to Ty::Datatype by def path; lower_adt_as_datatype renders recursive children as BY-NAME refs -- the by-name ref IS the opacity, a cut point so the cluster stays finitely declarable (source comment :1919: the Ty::Adt rendering OOM-killed extraction at ~464 MB). A designed refusal, like the atomic quarantine.",
+      "what_completion_requires": "An AUTHORED MODEL of the opaque type -- the shape link 4 already executed for Level::is_zero, where ir_lzb_module is the derived function plus an authored model of the one callee rustc could not give a body for, deref carried as a labelled ASSUMPTION with its residual named. Link 5 for infer_type needs an authored `Expr` model on that pattern: spec-side work in clean-verify, NOT converter work in trust-cg-bridge.",
+      "RETIRED": "True OF THE MODULE and still binds any body that CONSTRUCTS an Expr. NOT the binding constraint for infer_type, whose ok path TRANSPORTS its return (block 5: Call infer_type_fast; Store; block 3: Load; Return -- the Expr is moved, never inspected). Stated as categorical, it was too strong."
+    },
+    "measured_distance_to_a_proved_infer_type": {
+      "target_is_smaller_than_the_precedent": "infer_type blocks=6 instructions=36 calls=2; level::Level::is_zero blocks=17 instructions=52 calls=6. Link 4 closed for is_zero with ~1,790 lines of spec. infer_type's BODY is the small part.",
+      "transport_vs_construct": "infer_type's ok path TRANSPORTS its return (Call infer_type_fast -> Store -> Load -> Return; the Expr is never inspected). A body that CONSTRUCTS an Expr needs its internals modelled; one that TRANSPORTS it does not -- the obligation is that the bytes move, which a miscompile falsifies and which is not vacuous.",
+      "deepest_wall_is_the_call_method": "The converter inlines pure leaf calls to a fixpoint and fail-closes on the residue -- a whole-function call-free method with NO compositional call rule. A recursive cycle cannot be inlined.",
+      "closures": {
+        "infer_type no cut": "396 functions / 61,707 instructions / 12 back edges",
+        "infer_type cut tick_heartbeat": "113 functions / 7,379 instructions / 0 back edges",
+        "is_zero (precedent)": "2 functions / 78 instructions / 1 back edge"
+      },
+      "cut_set_has_size_one": "All 12 back edges are heartbeat_profiler sort code (quicksort, median3_rec, drift::sort) reached through tick_heartbeat -- NONE is infer_type's own typechecking recursion. Cutting that one callee makes the closure acyclic. Cutting a callee with an authored model is exactly ir_lzb_deref for is_zero.",
+      "what_stands_between_here_and_a_proved_infer_type": [
+        "1. an authored `tick_heartbeat` model -- the cut making the closure acyclic; harder than the deref model because it MUTATES a counter (a state obligation, not a read)",
+        "2. wall 1: map_scalar_int_ty refuses every aggregate by constructor; applies to all 113",
+        "3. wall 2: the obligation is a scalar-return equality (returns.len()==1, one out_width)",
+        "4. the error path's live `Undef`s -- the derived body builds Err(undefined) where real Rust constructs a TypeError; same class that refuses is_zero here; a producer-fidelity gap"
+      ],
+      "not_established": "That 7,379 instructions actually inline (only that no CYCLE forbids it; still ~95x the precedent), or that walls 1-2 fall once they do."
+    },
+    "why_no_widening_moves_the_number": {
+      "finding": "The gate's fragment is a CONJUNCTION of seven narrow axes. 17 bodies violate 0 axes (the fragment's entire population), 61 violate exactly 1, and 2,310 -- 97% -- violate two or more.",
+      "per_axis_blocked": {
+        "signature: non-scalar param or return": 2109,
+        "memory: Load/Store/Alloca/GEP": 1964,
+        "aggregate ops: InsertField/ExtractField": 1857,
+        "undef: a live Undef": 1847,
+        "call: Call/CallIndirect": 1557,
+        "borrow: Borrow/BorrowMut": 1108,
+        "assume: Assume": 211
+      },
+      "why_16_never_moved": "16 of the 17 bodies that clear all seven axes already prove. The fragment's population is exhausted; every widening this module admits is a two-axis job at minimum. The 61 single-axis bodies split five ways, so the BEST single widening reaches 27.",
+      "three_widenings_all_zero": "supply the missing struct layout (16->16, measured); admit aggregate returns (incoherent -- no aggregate value model in the converter); admit scalar-newtype returns (21 signatures newly map, but those bodies carry Load 93, Store 106, Alloca 54, Call 50, Undef 89).",
+      "CALIBRATION": "infer_type violates 5 of 7 axes (signature, call, memory, undef, aggregate ops). level::Level::is_zero -- the crystal's COMPLETED width-one chain -- violates 4 of 7 (call, memory, undef, borrow) and is NOT inside this gate's fragment either. So this gate is not the instrument by which that chain closed, and holding infer_type to it sets a bar the precedent never met. Whether 'link 5 for infer_type' means THIS gate or the route is_zero took is an OWNER question; every 'how far is infer_type' number in this repo, including all of 2026-09-16's, implicitly answers the stronger one without saying so."
+    }
+  },
+  "superseded_census": {
+    "note": "The census recorded here on 2026-09-16 was measured twice on an instrument that manufactured its own dominant bucket. Both readings are kept verbatim because the RETRACTIONS are the content.",
+    "reading_1": {
+      "reported": "15 proven / 0 refuted / 2,373 unknown; 'TYPES DOMINATE (905 + 242 = 1,147), not opcodes'",
+      "defect": "The probe built a MINIMAL module (function + its own FuncTy) with empty struct/enum/closure tables, so a large share of the 2,373 were the converter failing to resolve a def the probe had not supplied. They were counted as gate verdicts.",
+      "retracted": "the 1,147 figure, and the whole unknown_reasons_top table below it"
+    },
+    "reading_2": {
+      "reported": "15 proven / 0 refuted / 1,420 genuine unknown / 953 UNMEASURED",
+      "defect": "Correct in shape, wrong in size. The classifier keyed on ONE of the converter's two spellings for a missing def (`struct id N not in module`), missed the other (`aggregate Ty::Struct(N) has no StructDef in the module table`), and could not see the enum/closure lookups at all -- those return a bare `None` and surface as an ordinary `unsupported type`. With the tables empty, ~1,300 rows were artifacts and only 953 were separated.",
+      "retracted": "the 1,420 / 953 split"
+    }
+  },
+  "trust_rev_note": "Pushed as `4f840dc3a6` on trust `crystal/callee-sidecar`. The record committed at clean `d8c5f3012` cited `d57ac781fd`, which is NOT on the trust remote: the branch was replayed to add `Measured-on:` trailers to three commits that quoted a test count without naming a tree (trust's R2 provenance gate), and the replay changed every sha from `e0983293a3` up. The replayed tree is byte-identical to the pre-stamp tree; only the messages differ. The three counts were RE-MEASURED at each commit's own tree before stamping -- 898 passed / 11 failed at all three -- rather than stamped on the assumption that the original runs were of the committed tree, which is the exact failure that gate exists to catch."
+}

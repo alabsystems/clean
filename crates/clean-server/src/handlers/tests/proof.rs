@@ -123,6 +123,7 @@ async fn test_extract_proof_with_certificate() {
     let extract_params = ExtractProofParams {
         state_id: current_state_id.clone(),
         format: "certificate".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -165,6 +166,7 @@ async fn test_extract_proof_certificate_verifies_with_verify_cert() {
     let extract_params = ExtractProofParams {
         state_id: current_state_id.clone(),
         format: "certificate".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -236,6 +238,7 @@ async fn test_extract_proof_all_format() {
     let extract_params = ExtractProofParams {
         state_id: current_state_id.clone(),
         format: "all".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -279,6 +282,7 @@ async fn test_extract_proof_default_format_verifies_via_kernel() {
     let extract_params = ExtractProofParams {
         state_id: current_state_id.clone(),
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -336,6 +340,7 @@ async fn test_extract_proof_kernel_evidence_emits_checked_schema() {
         ExtractProofParams {
             state_id: current_state_id,
             format: "kernel_evidence".to_string(),
+            timeout_ms: None,
         },
     )
     .await;
@@ -389,6 +394,7 @@ async fn test_extract_proof_kernel_evidence_uses_proof_state_metadata() {
         max_states: 4,
         min_schema_version: crate::proof_state::PROOF_STATE_SCHEMA_VERSION.to_string(),
         max_schema_version: crate::proof_state::PROOF_STATE_SCHEMA_VERSION.to_string(),
+        timeout_ms: None,
     };
 
     let open_response = handle_open_obligation(&state, RequestId::Number(1), params).await;
@@ -433,6 +439,7 @@ async fn test_extract_proof_kernel_evidence_uses_proof_state_metadata() {
         ExtractProofParams {
             state_id: applied.new_state_id,
             format: "kernel_evidence".to_string(),
+            timeout_ms: None,
         },
     )
     .await;
@@ -461,6 +468,7 @@ async fn test_extract_proof_kernel_evidence_rejects_trust_debt() {
         ExtractProofParams {
             state_id: current_state_id,
             format: "kernel_evidence".to_string(),
+            timeout_ms: None,
         },
     )
     .await;

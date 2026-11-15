@@ -671,11 +671,11 @@ def myPair : Type u -> Type v -> Type (max u v) := sorry
     } = &processed_def
     {
         assert!(
-            universe_params.contains(&"u".to_string()),
+            universe_params.contains(&clean_parser::SurfaceName::generated_path("u")),
             "Processed def should contain universe param 'u'"
         );
         assert!(
-            universe_params.contains(&"v".to_string()),
+            universe_params.contains(&clean_parser::SurfaceName::generated_path("v")),
             "Processed def should contain universe param 'v'"
         );
     } else {
@@ -699,7 +699,7 @@ theorem myThm : Type u := sorry
     } = &processed_thm
     {
         assert!(
-            universe_params.contains(&"u".to_string()),
+            universe_params.contains(&clean_parser::SurfaceName::generated_path("u")),
             "Processed theorem should contain universe param 'u'"
         );
     } else {
@@ -723,7 +723,7 @@ axiom myAxiom : Type u
     } = &processed_axiom
     {
         assert!(
-            universe_params.contains(&"u".to_string()),
+            universe_params.contains(&clean_parser::SurfaceName::generated_path("u")),
             "Processed axiom should contain universe param 'u'"
         );
     } else {
@@ -751,7 +751,7 @@ def second : Type u := sorry
     } = &processed_first
     {
         assert!(
-            universe_params.contains(&"u".to_string()),
+            universe_params.contains(&clean_parser::SurfaceName::generated_path("u")),
             "First def '{}' should contain universe param 'u'",
             name
         );
@@ -764,7 +764,7 @@ def second : Type u := sorry
     } = &processed_second
     {
         assert!(
-            universe_params.contains(&"u".to_string()),
+            universe_params.contains(&clean_parser::SurfaceName::generated_path("u")),
             "Second def '{}' should contain universe param 'u'",
             name
         );

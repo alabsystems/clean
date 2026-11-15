@@ -26,7 +26,7 @@ impl<'env> TypeChecker<'env> {
     ///
     /// # FVarId-unreachability invariant (#1773)
     ///
-    /// No cache invalidation needed on push/pop. This is safe because of the
+    /// No validity invalidation needed on push/pop. This is safe because of the
     /// **FVarId-unreachability invariant**: FVarIds are allocated from a
     /// monotonically increasing counter (`LocalContext::next_id`) and are
     /// never reused after `ctx_pop`. Consequently:
@@ -39,6 +39,8 @@ impl<'env> TypeChecker<'env> {
     ///
     /// This matches Lean 4's strategy (type_checker.cpp never clears caches
     /// on push/pop). See #1411 F2, #1325.
+    /// The Arc-inference memo additionally retires each popped prefix's bucket
+    /// to release unreachable owners, without invalidating any live prefix.
     pub(super) fn ctx_push(&self, name: Name, ty: Expr, bi: impl Into<BinderData>) -> FVarId {
         let mut ctx = self.ctx_mut();
         ctx.advance_next_id(self.next_fvar_floor);
@@ -66,12 +68,14 @@ impl<'env> TypeChecker<'env> {
 
     /// Pop a local declaration from the context.
     ///
-    /// No cache invalidation needed — see `ctx_push` FVarId-unreachability
-    /// invariant (#1773). Popped FVarIds are never reused, so stale cache
-    /// entries involving the popped FVar are unreachable: no future expression
-    /// will contain the popped FVarId as a subterm.
+    /// Retire only the Arc-inference bucket whose exact prefix has ended.
+    /// Popped IDs are never reused, so this bucket cannot have a future valid
+    /// hit. Other caches and still-active prefix buckets are unchanged.
     pub(super) fn ctx_pop(&self) {
-        self.ctx_mut().pop();
+        let popped = self.ctx_mut().pop();
+        if let Some(decl) = popped {
+            self.infer_arc_memo.borrow_mut().retire_scope(decl.id);
+        }
     }
 
     /// Batch-restore context to a previous length.
@@ -85,7 +89,13 @@ impl<'env> TypeChecker<'env> {
             // context for a no-op (the common `is_def_eq` exit path).
             return;
         }
-        self.ctx_mut().truncate_to(target_len);
+        let mut ctx = self.ctx_mut();
+        let mut memo = self.infer_arc_memo.borrow_mut();
+        while ctx.len() > target_len {
+            if let Some(decl) = ctx.pop() {
+                memo.retire_scope(decl.id);
+            }
+        }
     }
 
     /// Current context length.
@@ -128,7 +138,7 @@ impl<'env> TypeChecker<'env> {
     /// by `add_decl`) to label the location trail with the declaration being
     /// checked. Callers that don't set this get location trails without a
     /// declaration name prefix.
-    pub fn set_expr_loc_decl_name(&self, name: Name) {
+    pub(crate) fn set_expr_loc_decl_name(&self, name: Name) {
         self.expr_loc.borrow_mut().decl_name = Some(name);
     }
 
@@ -154,6 +164,26 @@ impl<'env> TypeChecker<'env> {
     /// Returns `None` if the location is empty (no steps and no decl name).
     pub(super) fn expr_loc_snapshot(&self) -> Option<Box<ExprLocation>> {
         self.expr_loc.borrow().snapshot()
+    }
+
+    /// Snapshot the trail one `step` below the current position: the
+    /// push / snapshot / pop the cert path (`tc/cert/infer_core.rs`) spells out
+    /// at each error that names a child, so the release body records the same
+    /// trail. The release body uses it at all seven: `NotAFunction` (`AppFn`),
+    /// an ill-typed App argument (`AppArg`), a Lam domain, Pi domain or Pi body
+    /// that is not a sort (`LamType`, `PiDom`, `PiBody`), a Let type that is
+    /// not a sort (`LetType`) and an ill-typed Let value (`LetVal`).
+    /// `tests/release_infer_parity.rs` compares the two trails. Part of #3425.
+    /// Release-only, like its caller `infer_type_fast_inner`.
+    #[cfg(not(debug_assertions))]
+    pub(super) fn expr_loc_snapshot_at(
+        &self,
+        step: super::expr_location::ExprPathStep,
+    ) -> Option<Box<ExprLocation>> {
+        self.expr_loc_push(step);
+        let loc = self.expr_loc_snapshot();
+        self.expr_loc_pop();
+        loc
     }
 
     /// Check if type checking cache is enabled.
@@ -225,6 +255,7 @@ impl<'env> TypeChecker<'env> {
         let mut hasher = std::collections::hash_map::DefaultHasher::new();
         self.mode.hash(&mut hasher);
         self.infer_only.get().hash(&mut hasher);
+        self.env.lean_level_profile().hash(&mut hasher);
         hasher.finish()
     }
 
@@ -236,6 +267,7 @@ impl<'env> TypeChecker<'env> {
         let mut hasher = KaniHasher::new();
         self.mode.hash(&mut hasher);
         self.infer_only.get().hash(&mut hasher);
+        self.env.lean_level_profile().hash(&mut hasher);
         hasher.finish()
     }
 
@@ -263,22 +295,10 @@ impl<'env> TypeChecker<'env> {
     /// ENSURES: If mode changed, all caches are invalidated
     pub fn set_mode(&mut self, mode: CleanMode) {
         if self.mode != mode {
+            self.clear_theory_answers();
             self.mode = mode;
-            self.whnf_cache.borrow_mut().clear();
-            self.whnf_core_cache.borrow_mut().clear();
-            self.def_eq_cache.borrow_mut().clear();
-            if let Some(cache) = &self.branch_sharing_cache {
-                cache.borrow_mut().clear();
-            }
-            self.args_failure_cache.borrow_mut().clear();
-            self.proj_type_cache.borrow_mut().clear();
-            self.unfold_cache.borrow_mut().clear();
-            self.quick_infer_cache.borrow_mut().clear();
-            self.equiv_manager.borrow_mut().clear();
-            // Type cache: update mode hash (triggers clear if changed)
             let mode_hash = self.compute_mode_hash();
-            let mut cache_ref = self.type_cache.borrow_mut();
-            if let Some(cache) = cache_ref.as_mut() {
+            if let Some(cache) = self.type_cache.borrow_mut().as_mut() {
                 cache.set_mode_hash(mode_hash);
             }
         }
@@ -303,12 +323,200 @@ impl<'env> TypeChecker<'env> {
     /// Callers set it before running any reduction, so the reduction caches
     /// only ever hold results computed under a single gate setting.
     pub fn set_honor_reducibility(&self, honor: bool) {
-        self.honor_reducibility.set(honor);
+        if self.honor_reducibility.get() != honor {
+            self.clear_theory_answers();
+            self.honor_reducibility.set(honor);
+        }
     }
 
     /// Whether the opt-in elaboration-time reducibility gate is active.
-    pub fn honors_reducibility(&self) -> bool {
+    pub(crate) fn honors_reducibility(&self) -> bool {
         self.honor_reducibility.get()
+    }
+
+    /// Run this checker in `theory` regardless of the environment's own
+    /// [`crate::env::Environment::kernel_theory`]. Set it before any reduction,
+    /// including after restoring caches. The first semantic operation checks
+    /// the retained answers' theory, so restoring an identical override keeps
+    /// warm answers while a different theory discards them before use.
+    ///
+    /// It also resets the declaration-safety context to the theory's default.
+    /// Lean's `type_checker` runs at `definition_safety::safe` unless its caller
+    /// passes another safety (`src/kernel/type_checker.h`), and then refuses a
+    /// reference to an unsafe constant, or a partial one, in `infer_constant`
+    /// (`type_checker.cpp`, "invalid declaration, it uses unsafe declaration").
+    /// So [`crate::env::KernelTheory::Lean`] starts safe; Clean's extended
+    /// theory keeps its historical permissive default. A caller checking an
+    /// unsafe or partial declaration opens that context afterwards with
+    /// [`Self::set_allow_unsafe`] / [`Self::set_allow_partial`].
+    pub fn set_kernel_theory(&mut self, theory: crate::env::KernelTheory) {
+        let permissive = theory == crate::env::KernelTheory::Extended;
+        // Even the same theory can reset a caller's stricter/looser safety
+        // context. Do not retain this checker's inference answers across that
+        // reset. This does not authenticate arbitrary policy changes at other
+        // setters or expand the existing same-environment/context contract.
+        if self.kernel_theory() == theory
+            && (self.allow_unsafe != permissive || self.allow_partial != permissive)
+        {
+            self.clear_theory_answers();
+            self.cached_kernel_theory.set(theory);
+        }
+        self.kernel_theory = Some(theory);
+        self.allow_unsafe = permissive;
+        self.allow_partial = permissive;
+        // Registry admissions depend on the theory; native-fold authority
+        // verdicts do not (`tc/fold_admission.rs`). Dropped eagerly here as
+        // well as by the lazy theory custody check.
+        for admission in self.lean_reducer_admission.get_mut().values_mut() {
+            admission.forget_registry();
+        }
+    }
+
+    /// The kernel theory this checker's native reductions run in.
+    #[must_use]
+    pub fn kernel_theory(&self) -> crate::env::KernelTheory {
+        self.kernel_theory
+            .unwrap_or_else(|| self.env.kernel_theory())
+    }
+
+    /// O(1) warm custody check at semantic entry points, not at recursive nodes.
+    /// A theory change clears retained answers in time proportional to the cache.
+    /// Delay it until use so callers may install their original theory override
+    /// after cache restoration. Only theory is authenticated here: the existing
+    /// same-environment/context and compatible other-policy requirements remain.
+    #[inline]
+    pub(super) fn ensure_cache_theory(&self) {
+        let theory = self.kernel_theory();
+        if self.cached_kernel_theory.get() != theory {
+            self.clear_theory_answers();
+            self.cached_kernel_theory.set(theory);
+        }
+    }
+
+    /// Clear answer-bearing state without altering the context, FVar allocation
+    /// floor, resource allowances, or the caller's chosen checker configuration.
+    pub(super) fn clear_theory_answers(&self) {
+        self.whnf_cache.borrow_mut().clear();
+        self.whnf_core_cache.borrow_mut().clear();
+        self.def_eq_cache.borrow_mut().clear();
+        self.proj_type_cache.borrow_mut().clear();
+        self.unfold_cache.borrow_mut().clear();
+        self.equiv_manager.borrow_mut().clear();
+        if let Some(cache) = &self.branch_sharing_cache {
+            cache.borrow_mut().clear();
+        }
+        if let Some(cache) = self.type_cache.borrow_mut().as_mut() {
+            cache.clear();
+        }
+        self.args_failure_cache.borrow_mut().clear();
+        self.quick_infer_cache.borrow_mut().clear();
+        self.infer_arc_memo.borrow_mut().clear();
+        self.rebind_closed_memo.borrow_mut().clear();
+        self.lean_reducer_admission.borrow_mut().clear();
+    }
+
+    /// The native reducer registered for `name`, if this checker's kernel
+    /// theory lets it fire (`env/kernel_theory.rs`); the Lean-theory verdict is
+    /// computed once per head per checker.
+    ///
+    /// In EVERY theory the head must also be canonical in this environment
+    /// (`env/native_fold_authority.rs`): a reducer computes what the head's
+    /// canonical definition computes, so for a head the environment does not
+    /// hold, holds as an axiom, or holds with another definition, the reducer
+    /// is unjustified and does not fire (`tc/fold_admission.rs`).
+    pub(crate) fn native_reducer_for(
+        &self,
+        name: &Name,
+    ) -> Option<&'env crate::env::NativeReducerFn> {
+        let reducer = self.env.get_native_reducer(name)?;
+        self.registry_reducer_admitted(name).then_some(reducer)
+    }
+
+    /// The arity a native reducer for `name` computes at: the number of
+    /// SYNTACTIC leading `Pi` binders of the constant's declared type (through
+    /// `MData` only — never whnf, never δ).
+    ///
+    /// A native reducer computes the VALUE of its constant applied to exactly
+    /// this many arguments. When a term supplies MORE, the surplus arguments
+    /// are a genuine application of the computed value and
+    /// [`reduce_native`](Self::reduce_native) re-applies them rather than
+    /// dropping them. Deriving the arity from the constant's own type keeps a
+    /// single point of truth that cannot drift from what the reducer reduces (a
+    /// per-reducer declaration across ~200 registration sites could).
+    ///
+    /// Syntactic, deliberately. An arity that UNFOLDS the result type would
+    /// OVER-count: `foo : Nat → Set Nat` with `Set α := α → Prop`, or an
+    /// instance `instDecidableEqBool : DecidableEq Bool` (syntactic arity 0,
+    /// which unfolds to `(a b : Bool) → Decidable (a = b)`), would be handed
+    /// arguments the reducer never consumes, and those would be DROPPED with
+    /// nothing left over to re-apply. Under-counting is safe: the reducer is
+    /// handed fewer arguments than it reads, so it declines, and δ unfolds the
+    /// head instead (`instDecidableEqNat := Nat.decEq`, whose own reducer fires
+    /// at its syntactic arity 2).
+    ///
+    /// `None` when the constant is absent from the environment; the reducer is
+    /// then not consulted at all (fold admission already refuses an absent head
+    /// outside the test-only mint bypass).
+    ///
+    /// OPEN EVIDENCE GAP (2026-09-30): no unit test pins the `Pi`-alias-result
+    /// case (`foo : Nat → SetN`, `bar : SetN`, `SetN := Nat → Prop`, each
+    /// applied to one surplus argument). Adding it was attempted and the file
+    /// write was blocked by a safety classifier, so the property is NOT covered
+    /// by a test. It rests on: (a) this function, which counts syntactic leading
+    /// `Pi`s through `MData` only, with no whnf and no δ (read the loop below);
+    /// (b) the census of all 347 reducers registered in `with_prelude`, where
+    /// the only syntactic-arity-0 heads are `instDecidableEq<T>`, the admitted
+    /// ones `Bool`/`Char`/`Int`/`String`, whose result `Decidable p` is not a
+    /// function type and which now decline; and (c) the RED/GREEN `False`
+    /// derivation for the over-application class
+    /// (`tests_native_reducer_arity`).
+    pub(in crate::tc) fn native_reducer_arity(&self, name: &Name) -> Option<usize> {
+        let info = self.env.get_const(name)?;
+        let mut ty: &Expr = &info.type_;
+        let mut arity = 0usize;
+        loop {
+            match ty.kind() {
+                crate::expr::ExprKind::MData(_, inner) => ty = inner,
+                crate::expr::ExprKind::Pi(_, _, body) => {
+                    arity += 1;
+                    ty = body;
+                }
+                _ => break,
+            }
+        }
+        Some(arity)
+    }
+
+    /// Split an application spine of `name` for its native reducer: the first
+    /// [`native_reducer_arity`](Self::native_reducer_arity) arguments are what
+    /// the reducer receives, the rest is the surplus
+    /// [`reapply_native_surplus`](Self::reapply_native_surplus) re-applies to
+    /// its result. This is the ONLY place `reduce_native` decides what a reducer
+    /// sees, so no reducer is ever handed more than its syntactic arity.
+    ///
+    /// `None` (the reducer is not consulted) when the head is absent from the
+    /// environment or the term is under-applied. An arity of 0 hands the reducer
+    /// no arguments and re-applies the whole spine.
+    pub(in crate::tc) fn native_reducer_spine<'s, 'e>(
+        &self,
+        name: &Name,
+        all_args: &'s [&'e Expr],
+    ) -> Option<(&'s [&'e Expr], &'s [&'e Expr])> {
+        let arity = self.native_reducer_arity(name)?;
+        if all_args.len() < arity {
+            return None;
+        }
+        Some(all_args.split_at(arity))
+    }
+
+    /// `value` applied to the surplus arguments `rest` that
+    /// [`native_reducer_spine`](Self::native_reducer_spine) split off.
+    pub(in crate::tc) fn reapply_native_surplus(value: Expr, rest: &[&Expr]) -> Expr {
+        if rest.is_empty() {
+            value
+        } else {
+            Expr::apps(value, rest.iter().map(|arg| (*arg).clone()))
+        }
     }
 
     /// Create a type checker with a specific transparency mode.
@@ -331,12 +539,18 @@ impl<'env> TypeChecker<'env> {
             mode: env.mode(),
             transparency,
             honor_reducibility: Cell::new(false),
+            kernel_theory: None,
+            cached_kernel_theory: Cell::new(env.kernel_theory()),
+            lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(Default::default()),
             whnf_core_cache: RefCell::new(Default::default()),
             def_eq_cache: RefCell::new(Default::default()),
             branch_sharing_cache: Some(RefCell::new(Default::default())),
             type_cache: RefCell::new(None),
             infer_arc_memo: RefCell::new(Default::default()),
+            #[cfg(not(debug_assertions))]
+            independent_infer_environment: Cell::new(None),
+            rebind_closed_memo: RefCell::new(Default::default()),
             infer_memo_depth: Cell::new(0),
             proj_type_cache: RefCell::new(Default::default()),
             unfold_cache: RefCell::new(Default::default()),
@@ -347,18 +561,21 @@ impl<'env> TypeChecker<'env> {
             level_eq_override: None,
             args_failure_cache: RefCell::new(Default::default()),
             heartbeat_counter: Cell::new(DEFAULT_HEARTBEAT_LIMIT),
+            work: super::work_account::WorkAccount::new(),
             heartbeat_limit: DEFAULT_HEARTBEAT_LIMIT,
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
             infer_only: Cell::new(true),
             level_params: None,
-            allow_unsafe: true,
-            allow_partial: true,
+            allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
+            allow_partial: env.kernel_theory() == crate::env::KernelTheory::Extended,
             cumulative: false,
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            level_sharing_hazard: RefCell::new(None),
+            sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
     }
@@ -371,18 +588,8 @@ impl<'env> TypeChecker<'env> {
     /// Part of #1636.
     pub fn set_transparency(&mut self, transparency: TransparencyMode) {
         if self.transparency != transparency {
+            self.clear_theory_answers();
             self.transparency = transparency;
-            self.whnf_cache.borrow_mut().clear();
-            self.whnf_core_cache.borrow_mut().clear();
-            self.def_eq_cache.borrow_mut().clear();
-            if let Some(cache) = &self.branch_sharing_cache {
-                cache.borrow_mut().clear();
-            }
-            self.args_failure_cache.borrow_mut().clear();
-            self.proj_type_cache.borrow_mut().clear();
-            self.unfold_cache.borrow_mut().clear();
-            self.quick_infer_cache.borrow_mut().clear();
-            self.equiv_manager.borrow_mut().clear();
         }
     }
 
@@ -392,6 +599,7 @@ impl<'env> TypeChecker<'env> {
         &mut self,
         f: impl Fn(&crate::level::Level, &crate::level::Level) -> bool + 'env,
     ) {
+        self.clear_theory_answers();
         self.level_eq_override = Some(Box::new(f));
     }
 
@@ -400,7 +608,7 @@ impl<'env> TypeChecker<'env> {
         if let Some(ref f) = self.level_eq_override {
             f(l1, l2)
         } else {
-            crate::level::Level::is_def_eq(l1, l2)
+            self.levels_equiv_in_theory(l1, l2)
         }
     }
 
@@ -409,7 +617,11 @@ impl<'env> TypeChecker<'env> {
     /// This enables cross-call caching: create a TC, run an operation, extract
     /// caches via `take_caches`, store them, then inject into the next TC via
     /// this constructor. Caches are only valid for the same goal context
-    /// (same local declarations and same environment).
+    /// (same local declarations and same environment) and compatible checker
+    /// policies. Their effective kernel theory is retained and checked lazily
+    /// before use, allowing the caller to reinstall an identical theory
+    /// override first. Other policy/context compatibility remains the caller's
+    /// obligation; this is not a general environment identity check.
     ///
     /// Part of #1671.
     ///
@@ -423,6 +635,7 @@ impl<'env> TypeChecker<'env> {
         ctx: impl Into<Arc<LocalContext>>,
         caches: TcCaches,
     ) -> Self {
+        let caches = Self::caches_for_level_profile(env, caches);
         Self {
             env,
             ctx: RefCell::new(ctx.into()),
@@ -430,12 +643,20 @@ impl<'env> TypeChecker<'env> {
             mode: env.mode(),
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
+            kernel_theory: None,
+            cached_kernel_theory: Cell::new(
+                caches.kernel_theory.unwrap_or_else(|| env.kernel_theory()),
+            ),
+            lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(caches.whnf),
             whnf_core_cache: RefCell::new(caches.whnf_core),
             def_eq_cache: RefCell::new(caches.def_eq),
             branch_sharing_cache: Some(RefCell::new(Default::default())),
             type_cache: RefCell::new(None),
             infer_arc_memo: RefCell::new(Default::default()),
+            #[cfg(not(debug_assertions))]
+            independent_infer_environment: Cell::new(None),
+            rebind_closed_memo: RefCell::new(Default::default()),
             infer_memo_depth: Cell::new(0),
             proj_type_cache: RefCell::new(caches.proj_type),
             unfold_cache: RefCell::new(caches.unfold),
@@ -446,18 +667,21 @@ impl<'env> TypeChecker<'env> {
             level_eq_override: None,
             args_failure_cache: RefCell::new(Default::default()),
             heartbeat_counter: Cell::new(DEFAULT_HEARTBEAT_LIMIT),
+            work: super::work_account::WorkAccount::new(),
             heartbeat_limit: DEFAULT_HEARTBEAT_LIMIT,
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
             infer_only: Cell::new(true),
             level_params: None,
-            allow_unsafe: true,
-            allow_partial: true,
+            allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
+            allow_partial: env.kernel_theory() == crate::env::KernelTheory::Extended,
             cumulative: false,
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            level_sharing_hazard: RefCell::new(None),
+            sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
     }
@@ -477,6 +701,7 @@ impl<'env> TypeChecker<'env> {
         mode: CleanMode,
         caches: TcCaches,
     ) -> Self {
+        let caches = Self::caches_for_level_profile(env, caches);
         let mut ctx = LocalContext::new();
         ctx.advance_next_id(caches.next_fvar_id);
         Self {
@@ -486,12 +711,20 @@ impl<'env> TypeChecker<'env> {
             mode,
             transparency: TransparencyMode::Default,
             honor_reducibility: Cell::new(false),
+            kernel_theory: None,
+            cached_kernel_theory: Cell::new(
+                caches.kernel_theory.unwrap_or_else(|| env.kernel_theory()),
+            ),
+            lean_reducer_admission: RefCell::new(std::collections::HashMap::new()),
             whnf_cache: RefCell::new(caches.whnf),
             whnf_core_cache: RefCell::new(caches.whnf_core),
             def_eq_cache: RefCell::new(caches.def_eq),
             branch_sharing_cache: Some(RefCell::new(Default::default())),
             type_cache: RefCell::new(None),
             infer_arc_memo: RefCell::new(Default::default()),
+            #[cfg(not(debug_assertions))]
+            independent_infer_environment: Cell::new(None),
+            rebind_closed_memo: RefCell::new(Default::default()),
             infer_memo_depth: Cell::new(0),
             proj_type_cache: RefCell::new(caches.proj_type),
             unfold_cache: RefCell::new(caches.unfold),
@@ -502,18 +735,21 @@ impl<'env> TypeChecker<'env> {
             level_eq_override: None,
             args_failure_cache: RefCell::new(Default::default()),
             heartbeat_counter: Cell::new(DEFAULT_HEARTBEAT_LIMIT),
+            work: super::work_account::WorkAccount::new(),
             heartbeat_limit: DEFAULT_HEARTBEAT_LIMIT,
             profiler: None,
             eager_reduce: Cell::new(false),
             nat_probe_depth: Cell::new(0),
             infer_only: Cell::new(true),
             level_params: None,
-            allow_unsafe: true,
-            allow_partial: true,
+            allow_unsafe: env.kernel_theory() == crate::env::KernelTheory::Extended,
+            allow_partial: env.kernel_theory() == crate::env::KernelTheory::Extended,
             cumulative: false,
             #[cfg(debug_assertions)]
             in_infer_type_assert: Cell::new(false),
             cert_retained: Cell::new(false),
+            level_sharing_hazard: RefCell::new(None),
+            sharing_replay: None,
             expr_loc: RefCell::new(ExprLocation::new()),
         }
     }
@@ -525,8 +761,34 @@ impl<'env> TypeChecker<'env> {
     /// `with_context_and_caches` to reuse in the next TC instance.
     ///
     /// Part of #1671.
+    fn caches_for_level_profile(env: &crate::env::Environment, caches: TcCaches) -> TcCaches {
+        if caches
+            .level_profile
+            .is_some_and(|profile| profile != env.lean_level_profile())
+        {
+            // Keep the local-ID floor but never relabel answers produced by
+            // another source world's universe algebra.
+            TcCaches {
+                next_fvar_id: caches.next_fvar_id,
+                ..TcCaches::default()
+            }
+        } else {
+            caches
+        }
+    }
+
     pub fn take_caches(&self) -> TcCaches {
+        // An untouched import must not be relabeled as this checker's default
+        // theory and exported with answers from a different one.
+        self.ensure_cache_theory();
+        // Answers that may rest on a sharing-dependent instantiation are not
+        // handed on (`tc/level_profile.rs`).
+        if self.level_sharing_recorded() {
+            self.clear_theory_answers();
+        }
         TcCaches {
+            kernel_theory: Some(self.kernel_theory()),
+            level_profile: Some(self.env.lean_level_profile()),
             whnf: self.whnf_cache.take(),
             whnf_core: self.whnf_core_cache.take(),
             def_eq: self.def_eq_cache.take(),
@@ -578,21 +840,42 @@ impl<'env> TypeChecker<'env> {
     ///
     /// # Soundness
     ///
-    /// This calls `LocalContext::truncate_to(0)`, which drops all live binders but
+    /// This calls `ctx_truncate_to(0)`, which drops all live binders but
     /// PRESERVES the monotonic `next_id` FVarId counter and the `used_ids` reuse
     /// guard. The FVarId-unreachability invariant (#1773) therefore still holds:
     /// FVarIds are never reused, so any stale FVar-keyed cache entry (whnf, def_eq,
     /// equiv, quick-infer, infer-arc) is simply unreachable from future terms — no
-    /// invalidation is required, exactly as for `ctx_pop`. The `type_cache` is keyed
-    /// on closed terms plus the env/mode hash and is independent of the local
-    /// context, so it stays valid across the reset; that is the whole point —
+    /// validity invalidation is required, exactly as for `ctx_pop`. Unreachable
+    /// Arc-inference prefix buckets are retired to release their owners. The
+    /// `type_cache` is keyed on closed terms plus the env/mode hash and is
+    /// independent of the local context, so it stays valid across the reset —
     /// cross-declaration type reuse must survive a context reset.
     ///
-    /// This deliberately does NOT clear caches (unlike the test-only
-    /// `local_context_mut`), because the env is fixed for the checker's lifetime
-    /// and cache reuse across declarations is the intended optimization.
+    /// This deliberately does NOT clear still-reachable caches (unlike the
+    /// test-only `local_context_mut`), because the env is fixed for the checker's
+    /// lifetime and cache reuse across declarations is the intended optimization.
     pub fn reset_local_context(&self) {
         self.ctx_truncate_to(0);
+    }
+
+    /// Borrow the current local context without cloning or mutating it.
+    ///
+    /// Release this guard before calling checker operations that may push or
+    /// pop locals (including inference and definitional equality). The returned
+    /// `Ref` provides no mutable access to the context or its declarations.
+    ///
+    /// ```compile_fail
+    /// use clean_kernel::{Environment, Expr, LocalContext, TypeChecker};
+    /// use clean_kernel::expr::BinderInfo;
+    /// use clean_kernel::name::Name;
+    /// let env = Environment::new();
+    /// let tc = TypeChecker::with_context(&env, LocalContext::new());
+    /// let mut context = tc.local_context();
+    /// context.push(Name::anon(), Expr::prop(), BinderInfo::Default);
+    /// ```
+    #[must_use]
+    pub fn local_context(&self) -> std::cell::Ref<'_, LocalContext> {
+        std::cell::Ref::map(self.ctx.borrow(), |ctx| &**ctx)
     }
 
     /// Number of entries currently in the local context. READ-ONLY observer.
@@ -609,7 +892,8 @@ impl<'env> TypeChecker<'env> {
         self.ctx.borrow().len()
     }
 
-    /// Set the maximum whnf/def-eq memoization-cache size (entries).
+    /// Set the maximum whnf/def-eq cache size and Arc-inference memo admission
+    /// limit (entries).
     ///
     /// A pure PERFORMANCE knob: it changes only how much reduction is memoized,
     /// never the reduction RESULT, so it has ZERO soundness effect (an
@@ -620,6 +904,12 @@ impl<'env> TypeChecker<'env> {
     /// budget the growing trie thrashes the cache and the cert re-checks
     /// super-linearly. See `bv_blast_reflection::reflection_tc`.
     pub fn set_max_cache_entries(&mut self, max: usize) {
+        // Normal outer inference already clears this memo. Also honor a lower
+        // bound immediately for any retained internal/test inference frame;
+        // this does not alter the other caches' existing admission policies.
+        if max < self.max_cache_entries {
+            self.infer_arc_memo.get_mut().clear();
+        }
         self.max_cache_entries = max;
     }
 }
@@ -649,11 +939,6 @@ impl<'env> TypeChecker<'env> {
         let ctx = Arc::make_mut(self.ctx.get_mut());
         ctx.clear_reuse_history();
         ctx
-    }
-
-    /// Get reference to the local context
-    pub(crate) fn local_context(&self) -> std::cell::Ref<'_, LocalContext> {
-        std::cell::Ref::map(self.ctx.borrow(), |ctx| &**ctx)
     }
 
     /// Enable type checking cache.

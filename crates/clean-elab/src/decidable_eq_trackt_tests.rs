@@ -11,11 +11,11 @@
 //!    are distinct). The fix routes a single FIELDED ctor through the fielded
 //!    builder so every field is decided.
 //!
-//! 2. **Nested-`List Self` recursion** — `tuple : List Ty -> Ty` uses a
-//!    restored companion recursion (`num_motives = 2`). A dedicated mutual-`rec`
-//!    builder (`decidable_eq_list_recursive.rs`) discharges it sorry-free, and a
-//!    companion kernel fix makes `Ty.noConfusionType` reduce for mutual types so
-//!    the `noConfusion`-based `isFalse` branches kernel-check and reduce.
+//! 2. **Nested-`List Self`** — `tuple : List Ty -> Ty` is a NESTED inductive,
+//!    for which Lean (4.8.0 and 4.30.0-rc2 alike) derives no `DecidableEq`: the
+//!    clause refuses the class and the type is still declared. The companion
+//!    kernel fix that makes `Ty.noConfusionType` reduce for the restored mutual
+//!    type stays pinned.
 //!
 //! Every derived instance here is asserted to: register, infer-type against the
 //! kernel, contain NO `sorry`/`sorryAx`, have EMPTY `axiom_deps`, and DECIDE
@@ -157,48 +157,83 @@ fn single_nullary_ctor_still_reflexive() {
 }
 
 // ===================================================================
-// (2) Nested-`List Self` recursive DecidableEq via mutual rec.
+// (2) Nested-`List Self`: Lean derives no `DecidableEq`, and neither does
+//     Clean.
 // ===================================================================
+//
+// Lean 4.8.0's `DecidableEq` handler declines a nested inductive (`mkDecEq`
+// returns `false` on `isNested`, `Lean/Elab/Deriving/DecEq.lean`) and the
+// default handler throws: pinned v4.8.0 on `TY_DECL` is "default handlers
+// have not been implemented yet, class: 'DecidableEq' types: [Ty]", and
+// v4.30.0-rc2 is "None of the deriving handlers for class `DecidableEq`
+// applied to `Ty`". Clean's restored-companion builder
+// (`decidable_eq_list_recursive.rs`) derived a sound instance anyway, which
+// made Clean accept `if Ty.int = Ty.int then …` where Lean fails to
+// synthesize `Decidable`. The clause now refuses the class up front
+// (`infer::deriving_log`), so these pin the refusal; the type itself is still
+// declared.
 
 const TY_DECL: &str =
     "inductive Ty where | int | vector : Nat -> Ty | tuple : List Ty -> Ty deriving DecidableEq";
 
-#[test]
-fn listself_registers_sound() {
-    let env = env_with(&[TY_DECL]);
-    assert_instance_sound(&env, "instTyDecidableEq");
+/// `decl` registered into `env`, with the failed-leaf errors its result
+/// carries beside it.
+fn register_with_failures(env: &mut Environment, decl: &str) -> Vec<String> {
+    let parsed = parse_decl(decl).unwrap_or_else(|e| panic!("parse {decl:?}: {e:?}"));
+    let result = elaborate_decl_and_register(env, &parsed)
+        .unwrap_or_else(|e| panic!("register {decl:?}: {e:?}"));
+    let mut failures = Vec::new();
+    collect_failed(&result, &mut failures);
+    failures
+}
+
+fn collect_failed(result: &crate::ElabResult, out: &mut Vec<String>) {
+    match result {
+        crate::ElabResult::Multiple(results) => {
+            for r in results {
+                collect_failed(r, out);
+            }
+        }
+        crate::ElabResult::Failed { error, .. } => out.push(error.to_string()),
+        _ => {}
+    }
 }
 
 #[test]
-fn listself_decides_non_tuple_ctors() {
-    let env = env_with(&[TY_DECL]);
-    assert!(picks_equal(&env, "Ty.int", "Ty.int"));
-    assert!(!picks_equal(&env, "Ty.int", "Ty.vector 0"));
-    assert!(picks_equal(&env, "Ty.vector 3", "Ty.vector 3"));
-    assert!(!picks_equal(&env, "Ty.vector 1", "Ty.vector 2"));
+fn listself_deriving_decidable_eq_refused_type_still_declared() {
+    let mut env = Environment::with_prelude();
+    let failures = register_with_failures(&mut env, TY_DECL);
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(
+        failures[0].contains("default handlers have not been implemented yet"),
+        "{failures:?}"
+    );
+    assert!(env.get_const(&Name::from_string("Ty")).is_some());
+    assert!(env.get_const(&Name::from_string("Ty.tuple")).is_some());
+    assert!(
+        env.get_const(&Name::from_string("instTyDecidableEq"))
+            .is_none(),
+        "Lean derives no DecidableEq for a nested inductive"
+    );
 }
 
 #[test]
-fn listself_decides_tuple_elementwise() {
-    // Restored nested constructors use the declared standard List surface.
-    let env = env_with(&[TY_DECL]);
-    let empty = "Ty.tuple List.nil";
-    let one_int = "Ty.tuple (List.cons Ty.int List.nil)";
-    let one_vec = "Ty.tuple (List.cons (Ty.vector 0) List.nil)";
-
-    assert!(picks_equal(&env, empty, empty));
-    assert!(picks_equal(&env, one_int, one_int));
-    // element differs (int vs vector) ⇒ NOT equal
-    assert!(!picks_equal(&env, one_int, one_vec));
-    // length differs ⇒ NOT equal
-    assert!(!picks_equal(&env, one_int, empty));
+fn listself_decision_has_no_instance_refused() {
+    let mut env = env_with(&[TY_DECL]);
+    let d =
+        parse_decl("def __pick : Nat := if (Ty.int = Ty.int) then 1 else 0").expect("parse pick");
+    assert!(
+        elaborate_decl_and_register(&mut env, &d).is_err(),
+        "Lean 4.8.0: failed to synthesize `Decidable (Ty.int = Ty.int)`"
+    );
 }
 
 #[test]
 fn listself_noconfusion_type_reduces_for_mutual() {
     // The kernel-side fix: `Ty.noConfusionType False int (vector 0)` must reduce
     // to `False` for the MUTUAL `Ty` (it previously stuck on an under-applied
-    // `Ty.casesOn`, blocking every `noConfusion`-based `isFalse`).
+    // `Ty.casesOn`, blocking every `noConfusion`-based `isFalse`). The type is
+    // declared whether or not its `deriving` clause succeeds.
     let env = env_with(&[TY_DECL]);
     let tc = TypeChecker::new(&env);
     let nct = Expr::const_(
@@ -224,50 +259,42 @@ fn listself_noconfusion_type_reduces_for_mutual() {
 }
 
 #[test]
-fn listself_sound_with_preceding_inductives() {
-    // Track-relevant: even when OTHER inductives precede `Ty`, the derived
-    // instance registers sound and the tuple decision reduces through restored
-    // standard List constructors.
+fn listself_refused_with_preceding_flat_inductives_still_derived() {
+    // Flat inductives before `Ty` still derive (Lean derives them too); the
+    // nested one does not.
     let env = env_with(&[
         "inductive Pr where | mk : Nat -> Nat -> Pr deriving DecidableEq",
         "inductive Tri where | mk : Nat -> Nat -> Nat -> Tri deriving DecidableEq",
         TY_DECL,
     ]);
-    assert_instance_sound(&env, "instTyDecidableEq");
-    let one_int = "Ty.tuple (List.cons Ty.int List.nil)";
-    let one_vec = "Ty.tuple (List.cons (Ty.vector 0) List.nil)";
-    assert!(picks_equal(&env, one_int, one_int));
-    assert!(!picks_equal(&env, one_int, one_vec));
+    assert_instance_sound(&env, "instPrDecidableEq");
+    assert_instance_sound(&env, "instTriDecidableEq");
+    assert!(env
+        .get_const(&Name::from_string("instTyDecidableEq"))
+        .is_none());
+    assert!(!picks_equal(&env, "Pr.mk 1 2", "Pr.mk 1 3"));
 }
 
-/// Exact-name regression for restored `List` companion rules. A user primary
-/// inductive below namespace `List` has constructors such as
-/// `List.NamespaceTy.int`; those must remain primary rules, not be classified
-/// as auxiliary merely by the `List.` prefix.
+/// The nested type under namespace `List` is refused too: the refusal keys
+/// on the kernel's record of nesting, not on any `List.` name prefix.
 #[test]
-fn list_namespace_primary_ctors_are_not_decidable_eq_companion_rules() {
-    let env = env_with(&["namespace List \
+fn list_namespace_nested_decidable_eq_refused() {
+    let mut env = Environment::with_prelude();
+    let failures = register_with_failures(
+        &mut env,
+        "namespace List \
          inductive NamespaceTy where \
          | int : NamespaceTy \
          | vector : Nat -> NamespaceTy \
          | tuple : List NamespaceTy -> NamespaceTy \
          deriving DecidableEq \
-         end List"]);
-
-    assert_instance_sound(&env, "instList.NamespaceTyDecidableEq");
-    assert!(picks_equal(
-        &env,
-        "List.NamespaceTy.int",
-        "List.NamespaceTy.int"
-    ));
-    assert!(!picks_equal(
-        &env,
-        "List.NamespaceTy.int",
-        "List.NamespaceTy.vector 0"
-    ));
-    assert!(!picks_equal(
-        &env,
-        "List.NamespaceTy.tuple (List.cons List.NamespaceTy.int List.nil)",
-        "List.NamespaceTy.tuple List.nil"
-    ));
+         end List",
+    );
+    assert_eq!(failures.len(), 1, "{failures:?}");
+    assert!(env
+        .get_const(&Name::from_string("List.NamespaceTy"))
+        .is_some());
+    assert!(env
+        .get_const(&Name::from_string("instList.NamespaceTyDecidableEq"))
+        .is_none());
 }

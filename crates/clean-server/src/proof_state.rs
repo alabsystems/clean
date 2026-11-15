@@ -23,6 +23,7 @@
 
 use clean_elab::tactic::{Goal, LocalDecl, ProofState as InternalProofState, TacticError};
 use clean_kernel::{BinderInfo, Environment, Expr, ExprKind, Name};
+use clean_parser::SurfaceName;
 use lru::LruCache;
 use serde::{Deserialize, Serialize};
 use std::num::NonZeroUsize;
@@ -30,6 +31,8 @@ use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::{Duration, Instant};
 use uuid::Uuid;
+
+use crate::handlers::{free_off_runtime, Shared};
 
 // ============================================================================
 // State ID
@@ -114,8 +117,22 @@ impl FromStr for AttemptId {
 
 /// Cached proof state with expiration and metadata
 struct CachedState {
-    /// The internal proof state
-    state: InternalProofState,
+    /// The internal proof state. Shared with every reader (`ProofStateCache::get`):
+    /// a proof state holds a whole environment, so a copy is the work of a
+    /// request that changes it, on the pool, never a read's.
+    ///
+    /// Readers share its checker caches too (one `Mutex` in the state). No
+    /// server path calls a checker method on a shared state (`with_tc`:
+    /// `infer_type`, `whnf`, `is_def_eq`, `normalize`), and none may: under a
+    /// deadline that fired, those can store under-reduced results in the
+    /// caches, which every later reader would then see (a loss of
+    /// completeness, never of soundness). A path that needs one copies the
+    /// state first, as a tactic does.
+    ///
+    /// The cache's share, one of the holders a [`Shared`] counts: a state the
+    /// cache lets go while a request still reads it is freed off the runtime
+    /// by whichever lets it go last (`handlers/off_runtime.rs`).
+    state: Shared<InternalProofState>,
     /// When this state was created (reserved for metrics/debugging)
     _created_at: Instant,
     /// When this state expires
@@ -401,7 +418,7 @@ impl ProofStateCache {
         let id = StateId::new();
         let now = Instant::now();
         let cached = CachedState {
-            state,
+            state: Shared::new(state),
             _created_at: now,
             expires_at: saturating_expires_at(now, ttl),
             problem_id,
@@ -417,11 +434,15 @@ impl ProofStateCache {
         };
 
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
-        cache.put(id, cached);
+        free_entry(cache.push(id, cached));
         id
     }
 
     /// Insert a child state, inheriting lifecycle metadata from its parent.
+    ///
+    /// A state refused at the lifecycle limit is freed off the runtime
+    /// (`handlers::free_off_runtime`), after the cache's lock is let go: it
+    /// holds a whole environment.
     pub fn insert_child(
         &self,
         state: InternalProofState,
@@ -438,6 +459,8 @@ impl ProofStateCache {
             .filter(|(_, cached)| cached.lifecycle_root_id == parent.lifecycle_root_id)
             .count();
         if live_in_group >= parent.max_states {
+            drop(cache);
+            free_off_runtime(state);
             return Err(ProofStateLifecycleError::MaxStatesExceeded {
                 max_states: parent.max_states,
                 live_states: live_in_group,
@@ -445,7 +468,7 @@ impl ProofStateCache {
         }
 
         let cached = CachedState {
-            state,
+            state: Shared::new(state),
             _created_at: now,
             expires_at: saturating_expires_at(now, parent.ttl),
             problem_id: parent.problem_id.clone(),
@@ -459,7 +482,7 @@ impl ProofStateCache {
             max_states: parent.max_states,
             ttl: parent.ttl,
         };
-        cache.put(id, cached);
+        free_entry(cache.push(id, cached));
         Ok(id)
     }
 
@@ -478,7 +501,7 @@ impl ProofStateCache {
         let id = StateId::new();
         let now = Instant::now();
         let cached = CachedState {
-            state,
+            state: Shared::new(state),
             _created_at: now,
             expires_at: saturating_expires_at(now, ttl),
             problem_id,
@@ -494,7 +517,7 @@ impl ProofStateCache {
         };
 
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
-        cache.put(id, cached);
+        free_entry(cache.push(id, cached));
         id
     }
 
@@ -520,7 +543,7 @@ impl ProofStateCache {
                     cached.expires_at.saturating_duration_since(Instant::now()),
                 ))
             } else {
-                cache.pop(id);
+                free_states(cache.pop(id));
                 None
             }
         } else {
@@ -571,20 +594,22 @@ impl ProofStateCache {
     /// Remove a state from the cache
     pub fn remove(&self, id: &StateId) {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
-        cache.pop(id);
+        free_states(cache.pop(id));
     }
 
     /// Remove a state and all descendants currently in cache.
     pub fn remove_subtree(&self, id: &StateId) -> bool {
         let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
         let keys: Vec<StateId> = cache.iter().map(|(state_id, _)| *state_id).collect();
-        let mut removed = false;
+        let mut removed = Vec::new();
         for candidate in keys {
             if candidate == *id || cached_state_has_ancestor(&cache, &candidate, id) {
-                removed |= cache.pop(&candidate).is_some();
+                removed.extend(cache.pop(&candidate));
             }
         }
-        removed
+        let any = !removed.is_empty();
+        free_states(removed);
+        any
     }
 
     /// Retain a state by extending its TTL. Returns the effective lifecycle if found.
@@ -598,7 +623,7 @@ impl ProofStateCache {
         let (ttl_sec, ttl_remaining_sec, max_states, lifecycle_root_id) = {
             let cached = cache.get_mut(id)?;
             if now >= cached.expires_at {
-                cache.pop(id);
+                free_states(cache.pop(id));
                 return None;
             }
             if let Some(ttl) = ttl {
@@ -695,8 +720,20 @@ fn evict_expired_from_cache(cache: &mut LruCache<StateId, CachedState>, now: Ins
         .map(|(k, _)| *k)
         .collect();
 
-    for id in expired {
-        cache.pop(&id);
+    free_states(expired.iter().filter_map(|id| cache.pop(id)));
+}
+
+/// Free what a `push` replaced or evicted.
+fn free_entry(entry: Option<(StateId, CachedState)>) {
+    free_states(entry.map(|(_, cached)| cached));
+}
+
+/// Free cached states off the runtime (`handlers::free_off_runtime`): each
+/// holds a whole environment. Nothing to free starts nothing.
+fn free_states(states: impl IntoIterator<Item = CachedState>) {
+    let states: Vec<CachedState> = states.into_iter().collect();
+    if !states.is_empty() {
+        free_off_runtime(states);
     }
 }
 
@@ -754,8 +791,10 @@ fn reconstruct_tactic_script_from_cache(
 /// Reference to a cached proof state with metadata
 #[derive(Debug, Clone)]
 pub struct ProofStateRef {
-    /// The internal proof state
-    pub state: InternalProofState,
+    /// The internal proof state, shared with the cache: a request that changes
+    /// it copies it on the work pool. Freed off the runtime by its last holder,
+    /// a request's included (`handlers/off_runtime.rs`).
+    pub(crate) state: Shared<InternalProofState>,
     /// State identifier
     pub id: StateId,
     /// Problem identifier
@@ -878,7 +917,7 @@ pub struct ApiGoalSummary {
 /// Stable summary of one local declaration.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ApiLocalContextSummary {
-    /// Hypothesis or local variable name.
+    /// Source name when expressible, otherwise an unselectable diagnostic label.
     pub name: String,
     /// Head symbol of the declaration type, when structurally available.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -893,7 +932,7 @@ pub struct ApiLocalContextSummary {
 /// Serializable hypothesis for API responses
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApiHypothesis {
-    /// Hypothesis name
+    /// Source name when expressible, otherwise an unselectable diagnostic label.
     pub name: String,
     /// Type expression (full)
     pub type_expr: Expr,
@@ -1378,6 +1417,11 @@ pub struct OpenObligationRequest {
     pub min_schema_version: String,
     /// Maximum proof-state response schema accepted by the caller.
     pub max_schema_version: String,
+    /// Optional timeout in milliseconds (the server's default when absent).
+    /// Checking that the goal is a type is kernel work on a caller's term, so
+    /// it runs under the request's deadline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub timeout_ms: Option<u64>,
 }
 
 impl OpenObligationRequest {
@@ -1639,7 +1683,8 @@ pub struct ObligationGoalPayload {
 /// Local hypothesis payload for a dynamic obligation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ObligationLocalHypothesis {
-    /// User-facing hypothesis name.
+    /// Source identifier spelling; literal punctuation requires guillemet quoting.
+    /// Relative/root selectors, anonymous names and wildcard binders are refused.
     pub name: String,
     /// Optional serialized type expression.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -1972,6 +2017,18 @@ impl From<TacticError> for TacticApiError {
                 TacticErrorCode::UnknownTactic,
                 format!("unknown identifier: {name}"),
             ),
+            // Carry the REAL near misses. `unknown_tactic` above answers every
+            // caller with the same hardcoded eight names, which is a list of
+            // tactics rather than a suggestion about what was typed.
+            TacticError::UnknownTacticWithSuggestions { name, suggestions } => TacticApiError {
+                code: TacticErrorCode::UnknownTactic,
+                message: format!("unknown tactic: {name}"),
+                details: None,
+                suggestions: suggestions
+                    .iter()
+                    .map(|s| format!("did you mean `{s}`?"))
+                    .collect(),
+            },
             TacticError::TypeCheckFailed(msg) => TacticApiError {
                 code: TacticErrorCode::TypeMismatch,
                 message: format!("type check failed: {msg}"),
@@ -1993,6 +2050,26 @@ impl From<TacticError> for TacticApiError {
                 message: format!("hypothesis not found: {name}"),
                 details: None,
                 suggestions: vec!["Check available hypotheses with getProofState".into()],
+            },
+            // The goal block already lists every hypothesis the search
+            // considered, so it goes in `details` rather than being dropped —
+            // and the suggestion is not "go look at the context", because the
+            // context is right there in the message.
+            TacticError::NoMatchingHypothesis { tactic, goal } => TacticApiError {
+                code: TacticErrorCode::TacticFailed,
+                message: format!("{tactic}: no hypothesis matches the goal"),
+                details: goal.as_ref().map(|g| TacticErrorDetails {
+                    expected_type: None,
+                    actual_type: None,
+                    diff: None,
+                    failed_constraints: vec![],
+                    // The goal block, one entry per line: the target the search
+                    // matched against, and every hypothesis it considered.
+                    trace: g.lines().map(str::to_string).collect(),
+                }),
+                suggestions: vec![
+                    "No hypothesis has the goal's type; introduce or derive one".into()
+                ],
             },
             _ => Self::with_code(TacticErrorCode::TacticFailed, err.to_string()),
         }
@@ -2136,6 +2213,41 @@ fn pp_binder_info(bi: BinderInfo) -> &'static str {
 // Conversion Functions
 // ============================================================================
 
+/// A local selector cannot be a wildcard or a global/relative selector. Keep
+/// lexical information while crossing the explicit source-text wire boundary.
+pub(crate) fn parse_obligation_local_name(text: &str) -> Option<SurfaceName> {
+    let name = clean_parser::parse_name(text).ok()?;
+    local_name_source_spelling(&name)?;
+    Some(name)
+}
+
+fn local_name_source_spelling(name: &SurfaceName) -> Option<String> {
+    if name.is_anonymous() || name.is_relative_constructor() || name.is_unescaped_component("_") {
+        return None;
+    }
+    // A plain _root_ prefix changes reference resolution, unlike an escaped
+    // literal namespace component. Generated names are rendered canonically.
+    if !name.same_syntax(&name.qualify_under(&SurfaceName::default())) {
+        return None;
+    }
+    name.source_spelling()
+}
+
+fn local_name_label(name: &SurfaceName) -> String {
+    // This mandatory legacy label is display only. Never invent a selectable
+    // source name for an internal numeric/anonymous/wildcard identity. The
+    // original typed local remains in the cached proof state; API ingress
+    // explicitly refuses this non-source label.
+    local_name_source_spelling(name).unwrap_or_else(|| "<non-source local>".to_owned())
+}
+
+fn kernel_name_source_spelling(name: &Name) -> Option<String> {
+    if name.is_anon() {
+        return None;
+    }
+    SurfaceName::from_name(name.clone()).source_spelling()
+}
+
 /// Convert internal goals to API goals
 pub(crate) fn convert_goals(state: &InternalProofState, env: &Environment) -> Vec<ApiGoal> {
     state
@@ -2184,7 +2296,7 @@ fn convert_goal(goal: &Goal, index: usize, env: &Environment) -> ApiGoal {
 /// Convert a hypothesis to API format
 fn convert_hypothesis(hyp: &LocalDecl, env: &Environment) -> ApiHypothesis {
     ApiHypothesis {
-        name: hyp.name.clone(),
+        name: local_name_label(&hyp.name),
         type_expr: hyp.ty.clone(),
         type_pp: pp_expr(&hyp.ty, env),
         value: hyp.value.clone(),
@@ -2195,7 +2307,7 @@ fn convert_hypothesis(hyp: &LocalDecl, env: &Environment) -> ApiHypothesis {
 
 fn summarize_local_decl(hyp: &LocalDecl) -> ApiLocalContextSummary {
     ApiLocalContextSummary {
-        name: hyp.name.clone(),
+        name: local_name_label(&hyp.name),
         type_head: expr_head_symbol(&hyp.ty),
         type_symbols: expr_symbols(&hyp.ty),
         is_let: hyp.value.is_some(),
@@ -2238,9 +2350,9 @@ fn context_summary_for_goal(
 
 fn expr_head_symbol(expr: &Expr) -> Option<String> {
     match expr.strip_mdata().kind() {
-        ExprKind::Const(name, _) => Some(name.to_string()),
+        ExprKind::Const(name, _) => kernel_name_source_spelling(name),
         ExprKind::App(_, _) => match expr.strip_mdata().get_app_fn().strip_mdata().kind() {
-            ExprKind::Const(name, _) => Some(name.to_string()),
+            ExprKind::Const(name, _) => kernel_name_source_spelling(name),
             ExprKind::FVar(fvar) => Some(format!("fvar:{}", fvar.as_u64())),
             ExprKind::BVar(idx) => Some(format!("bvar:{idx}")),
             _ => None,
@@ -2248,7 +2360,7 @@ fn expr_head_symbol(expr: &Expr) -> Option<String> {
         ExprKind::Pi(_, _, body) => expr_head_symbol(body),
         ExprKind::Lam(_, _, body) => expr_head_symbol(body),
         ExprKind::Let(_, _, _, body, _) => expr_head_symbol(body),
-        ExprKind::Proj(name, _, _) => Some(name.to_string()),
+        ExprKind::Proj(name, _, _) => kernel_name_source_spelling(name),
         ExprKind::FVar(fvar) => Some(format!("fvar:{}", fvar.as_u64())),
         ExprKind::BVar(idx) => Some(format!("bvar:{idx}")),
         ExprKind::Sort(level) if level.is_zero() => Some("Prop".to_string()),
@@ -2270,7 +2382,7 @@ fn expr_symbols(expr: &Expr) -> Vec<String> {
 
 fn collect_expr_symbols(expr: &Expr, symbols: &mut Vec<String>) {
     match expr.strip_mdata().kind() {
-        ExprKind::Const(name, _) => symbols.push(name.to_string()),
+        ExprKind::Const(name, _) => symbols.extend(kernel_name_source_spelling(name)),
         ExprKind::App(f, arg) => {
             collect_expr_symbols(f, symbols);
             collect_expr_symbols(arg, symbols);
@@ -2285,7 +2397,7 @@ fn collect_expr_symbols(expr: &Expr, symbols: &mut Vec<String>) {
             collect_expr_symbols(body, symbols);
         }
         ExprKind::Proj(name, _, base) => {
-            symbols.push(name.to_string());
+            symbols.extend(kernel_name_source_spelling(name));
             collect_expr_symbols(base, symbols);
         }
         ExprKind::MData(_, inner) | ExprKind::Squash(inner) => collect_expr_symbols(inner, symbols),
@@ -2347,14 +2459,31 @@ pub fn to_api_state(
     format: OutputFormat,
     trust_summary: Option<crate::handlers::TrustSummary>,
 ) -> ApiProofState {
-    let goals = convert_goals(&state_ref.state, env);
-    let is_solved = state_ref.state.is_complete();
+    let search = snapshot_search(&state_ref.state, env, format, state_ref.domain_profile);
+    api_state_with(state_ref, env, trust_summary, search)
+}
 
+/// The parts of a snapshot that search: the `llm` format's relevant lemmas
+/// (premise selection over every theorem of the environment) and hints, and
+/// the Mathverse candidates (a scan of the corpus, when one is installed).
+/// A request computes them where its work runs, on the pool.
+pub(crate) struct SnapshotSearch {
+    relevant_lemmas: Option<Vec<RelevantLemma>>,
+    search_hints: Option<Vec<String>>,
+    mathverse_candidates: Vec<MathverseCandidate>,
+}
+
+/// What a snapshot of `state` in `format` searches for.
+pub(crate) fn snapshot_search(
+    state: &InternalProofState,
+    env: &Environment,
+    format: OutputFormat,
+    domain_profile: ObligationDomainProfile,
+) -> SnapshotSearch {
     // For LLM format, add relevant lemmas and search hints
-    let (relevant_lemmas, search_hints) = if format == OutputFormat::Llm && !is_solved {
-        let lemmas =
-            select_relevant_lemmas_for_profile(&state_ref.state, env, state_ref.domain_profile, 16);
-        let hints = generate_search_hints(&state_ref.state, env);
+    let (relevant_lemmas, search_hints) = if format == OutputFormat::Llm && !state.is_complete() {
+        let lemmas = select_relevant_lemmas_for_profile(state, env, domain_profile, 16);
+        let hints = generate_search_hints(state, env);
         (
             if lemmas.is_empty() {
                 None
@@ -2366,6 +2495,35 @@ pub fn to_api_state(
     } else {
         (None, None)
     };
+    SnapshotSearch {
+        relevant_lemmas,
+        search_hints,
+        mathverse_candidates: mathverse_candidates_for_state(state, env),
+    }
+}
+
+/// Does a snapshot in `format` of a state (`solved` or not) search? An
+/// unsolved state's `llm` snapshot selects premises from the whole
+/// environment, and every snapshot scans the Mathverse corpus when one is
+/// installed; anything else is rendering, bounded by the state.
+pub(crate) fn snapshot_searches(format: OutputFormat, solved: bool) -> bool {
+    (format == OutputFormat::Llm && !solved) || crate::mathverse_provider::global().is_loaded()
+}
+
+/// A snapshot of `state_ref` from the parts that search, computed already.
+pub(crate) fn api_state_with(
+    state_ref: &ProofStateRef,
+    env: &Environment,
+    trust_summary: Option<crate::handlers::TrustSummary>,
+    search: SnapshotSearch,
+) -> ApiProofState {
+    let goals = convert_goals(&state_ref.state, env);
+    let is_solved = state_ref.state.is_complete();
+    let SnapshotSearch {
+        relevant_lemmas,
+        search_hints,
+        mathverse_candidates,
+    } = search;
 
     ApiProofState {
         state_id: state_ref.id.to_string(),
@@ -2379,7 +2537,7 @@ pub fn to_api_state(
         tactic_script_prefix: state_ref.tactic_script_prefix.clone(),
         relevant_lemmas,
         search_hints,
-        mathverse_candidates: mathverse_candidates_for_state(&state_ref.state, env),
+        mathverse_candidates,
         trust_summary,
         lifecycle: ProofStateLifecycleMetadata {
             ttl_sec: state_ref.ttl.as_secs(),
@@ -2402,31 +2560,51 @@ pub fn to_api_state(
 /// is folded into the corpus) and the on-disk corpus become visible here.
 pub(crate) fn mathverse_candidates_for_state(
     state: &InternalProofState,
-    env: &Environment,
+    _env: &Environment,
 ) -> Vec<MathverseCandidate> {
-    mathverse_candidates_for_goal(state.goals().front(), env)
+    mathverse_candidates_of(state)
+}
+
+/// [`mathverse_candidates_for_state`], which reads no environment: the
+/// candidates depend on the state and the corpus only.
+pub(crate) fn mathverse_candidates_of(state: &InternalProofState) -> Vec<MathverseCandidate> {
+    mathverse_candidates_for_goal(state, state.goals().front())
 }
 
 /// Candidate retrieval for a single focused goal (the shared core of
 /// [`mathverse_candidates_for_state`] and the LLM-guidance path).
 fn mathverse_candidates_for_goal(
+    state: &InternalProofState,
     goal: Option<&Goal>,
-    _env: &Environment,
 ) -> Vec<MathverseCandidate> {
     let goal = match goal {
         Some(goal) => goal,
         None => return Vec::new(),
     };
+    let provider = crate::mathverse_provider::global();
+    if !provider.is_loaded() {
+        // A corpus-less provider answers no candidates: nothing to scan.
+        return Vec::new();
+    }
+    // A scan of the installed corpus is work for the pool, under a request's
+    // deadline, never for a runtime worker (R36 and R87: every
+    // proof-state answer that reports candidates finds them in its work).
+    // Tests build with debug assertions, so with a corpus installed
+    // (`tests/corpus_scans.rs`), a request path that brings the scan back to
+    // the runtime fails the test that takes it. wasm has no runtime.
+    #[cfg(not(target_arch = "wasm32"))]
+    debug_assert!(
+        tokio::runtime::Handle::try_current().is_err(),
+        "a scan of the Mathverse corpus ran on an async runtime's thread"
+    );
 
-    // Local hypothesis names already in scope feed the dependency-neighbor
-    // channel of the premise selector.
-    let context_names: Vec<&str> = goal
-        .local_ctx
-        .iter()
-        .map(|decl| decl.name.as_str())
-        .collect();
+    // This channel looks up GLOBAL dependency neighbors, not binder labels.
+    // Use the same checked constant projection as the elaborator, including
+    // actual current metavariable assignments in local types/let values.
+    let context_keys = clean_elab::tactic::mathverse_context_names(state.metas(), &goal.local_ctx);
+    let context_names: Vec<&str> = context_keys.iter().map(String::as_str).collect();
 
-    crate::mathverse_provider::global().candidates_for_goal(&goal.target, &context_names)
+    provider.candidates_for_goal(&goal.target, &context_names)
 }
 
 /// Build LLM-facing guidance for the current proof state.
@@ -2448,7 +2626,7 @@ pub(crate) fn llm_guidance_for_state_and_profile(
 
 /// Build LLM-facing guidance for a specific live goal under a domain profile.
 pub(crate) fn llm_guidance_for_goal_and_profile(
-    _state: &InternalProofState,
+    state: &InternalProofState,
     goal: Option<&Goal>,
     env: &Environment,
     domain_profile: ObligationDomainProfile,
@@ -2457,7 +2635,7 @@ pub(crate) fn llm_guidance_for_goal_and_profile(
         relevant_lemmas: select_relevant_lemmas_for_goal_and_profile(goal, env, domain_profile, 16),
         search_hints: generate_search_hints_for_goal(goal, env),
         suggested_tactics: suggest_tactics_for_goal_and_profile(goal, env, domain_profile),
-        mathverse_candidates: mathverse_candidates_for_goal(goal, env),
+        mathverse_candidates: mathverse_candidates_for_goal(state, goal),
     }
 }
 
@@ -2481,6 +2659,17 @@ fn select_relevant_lemmas_for_goal_and_profile(
     domain_profile: ObligationDomainProfile,
     max_lemmas: usize,
 ) -> Vec<RelevantLemma> {
+    // Premise selection reads every constant of the environment: work for the
+    // pool, under a request's deadline, never for a runtime worker (R36: the
+    // `llm` snapshots, `openObligation`'s, and the searches). Tests build with
+    // debug assertions, so a request path that brings it back to the runtime
+    // fails every test that takes the path. A pool thread is a plain thread,
+    // outside any runtime. wasm has no runtime (and no tokio).
+    #[cfg(not(target_arch = "wasm32"))]
+    debug_assert!(
+        tokio::runtime::Handle::try_current().is_err(),
+        "premise selection over the whole environment ran on an async runtime's thread"
+    );
     let generic = select_relevant_lemmas_for_goal(goal, env, max_lemmas);
     if domain_profile == ObligationDomainProfile::General {
         return generic;
@@ -2513,10 +2702,17 @@ fn select_profile_lemmas(
 
     let mut scored = Vec::new();
     for info in env.constants() {
+        // A scan past its request's deadline stops: the pool drops what an
+        // interrupted request's work returns (`handlers/work.rs`).
+        if clean_kernel::tc::poll_deadline() {
+            break;
+        }
         if !is_prop_type(&info.type_) {
             continue;
         }
-        let name = info.name.to_string();
+        let Some(name) = kernel_name_source_spelling(&info.name) else {
+            continue;
+        };
         let type_pp = pp_expr(&info.type_, env);
         let haystack = format!("{name} {type_pp}").to_ascii_lowercase();
         let score = keywords
@@ -2568,6 +2764,10 @@ fn select_relevant_lemmas_for_goal(
     // Build premise database from environment
     let mut premise_db = PremiseDatabase::new();
     for info in env.constants() {
+        // As in `select_profile_lemmas`: stop past the request's deadline.
+        if clean_kernel::tc::poll_deadline() {
+            break;
+        }
         // Only include theorems/lemmas (things with Prop types)
         if is_prop_type(&info.type_) {
             premise_db.add(info.name.clone(), info.type_.clone());
@@ -2589,12 +2789,14 @@ fn select_relevant_lemmas_for_goal(
     selector
         .select_with_scores(&goal.target)
         .into_iter()
-        .map(|(premise, score)| RelevantLemma {
-            name: premise.name.to_string(),
-            type_pp: pp_expr(&premise.statement, env),
-            relevance: score,
-            provenance: None,
-            trust: None,
+        .filter_map(|(premise, score)| {
+            Some(RelevantLemma {
+                name: kernel_name_source_spelling(&premise.name)?,
+                type_pp: pp_expr(&premise.statement, env),
+                relevance: score,
+                provenance: None,
+                trust: None,
+            })
         })
         .collect()
 }
@@ -2661,9 +2863,12 @@ fn generate_search_hints_for_goal(goal: Option<&Goal>, env: &Environment) -> Vec
     for hyp in hyps {
         let hyp_pp = pp_expr(&hyp.ty, env);
         if looks_like_equality_target(&hyp_pp) {
+            let Some(name) = local_name_source_spelling(&hyp.name) else {
+                continue;
+            };
             hints.push(format!(
                 "Hypothesis {} is an equality - try: rw [{}]",
-                hyp.name, hyp.name
+                name, name
             ));
             break; // Only suggest first
         }
@@ -2739,7 +2944,10 @@ fn suggest_tactics_for_goal_and_profile(
     for hyp in &goal.local_ctx {
         let hyp_pp = pp_expr(&hyp.ty, env);
         if looks_like_equality_target(&hyp_pp) {
-            push_unique(&format!("rw [{}]", hyp.name));
+            let Some(name) = local_name_source_spelling(&hyp.name) else {
+                continue;
+            };
+            push_unique(&format!("rw [{name}]"));
             break;
         }
     }
@@ -2760,6 +2968,10 @@ fn profile_tactic_prefix(domain_profile: ObligationDomainProfile) -> &'static [&
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(test)]
+#[path = "proof_state/typed_names.rs"]
+mod typed_name_tests;
 
 #[cfg(test)]
 mod tests {
@@ -2987,8 +3199,9 @@ mod tests {
             .expect("new proof state should have one goal")
             .local_ctx
             .push(LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "n".to_string(),
+                name: SurfaceName::generated_path("n"),
                 ty: nat,
                 value: None,
             });
@@ -3099,6 +3312,7 @@ mod tests {
             max_states: 4096,
             min_schema_version: "clean-proof-state-v3".to_string(),
             max_schema_version: "clean-proof-state-v2".to_string(),
+            timeout_ms: None,
         };
 
         let err = request
@@ -3152,6 +3366,7 @@ mod tests {
             max_states: 4096,
             min_schema_version: PROOF_STATE_SCHEMA_VERSION.to_string(),
             max_schema_version: PROOF_STATE_SCHEMA_VERSION.to_string(),
+            timeout_ms: None,
         };
 
         let validation = request

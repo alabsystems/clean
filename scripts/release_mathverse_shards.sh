@@ -164,7 +164,7 @@ echo
 
 # ---- Step 1: Build mathverse_shard binary in release mode ------------------------
 echo "--- Building mathverse_shard (release) ---"
-cargo build --locked --release -p clean-mathverse --bin mathverse_shard --message-format=short -j "$CARGO_BUILD_JOBS"
+targo --unverified build --locked --release -p clean-mathverse --bin mathverse_shard --message-format=short -j "$CARGO_BUILD_JOBS"
 # Cargo wrapper redirects release artifacts into target/user/release (#2380);
 # fall back to the stock target/release path if the user-dir layout is absent.
 MATHVERSE_SHARD=""

@@ -2,7 +2,7 @@
  "prefix": "ir_fw",
  "body": "flat::types::FlatFlags::with",
  "core_digest": "08de27321bd401ee31d2f1064b0f0161f2474ae56d0385b22eed95eabb0bed9d",
- "defs_digest": "fe708a0e306b7bf88032afeae869fb42774d6f28ee376570e6f2cd3ac229c479",
+ "defs_digest": "1a1ed25e14b4fdd8c4024bd00776d8b898be35a16bc42c8f52799116439c013e",
  "def_count": 4,
  "def_count_note": "ONE alias (ir_fw_tflags -- the first minted struct row the MODULE ITSELF names, in its const and insertfield) plus the one block, the func and the module.",
  "artifact_core_digest": "1d4c941b83fad172e218a74735e29c2c652d9102423c657cc36c944faefff6c6",

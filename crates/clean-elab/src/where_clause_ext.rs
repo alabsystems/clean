@@ -11,7 +11,8 @@
 use std::collections::{HashMap, HashSet};
 
 use clean_parser::{
-    Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceMatchArm, SurfacePattern,
+    Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceMatchArm, SurfaceName,
+    SurfacePattern,
 };
 
 use crate::where_desugar::WhereClause;
@@ -45,7 +46,7 @@ impl Default for WhereClauseExtConfig {
 pub(crate) enum WhereBindingKind {
     Simple,
     Recursive {
-        deps: Vec<String>,
+        deps: Vec<SurfaceName>,
     },
     Pattern {
         pattern: SurfacePattern,
@@ -58,7 +59,7 @@ pub(crate) enum WhereBindingKind {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExtWhereBinding {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) kind: WhereBindingKind,
     pub(crate) params: Vec<SurfaceBinder>,
     pub(crate) return_type: Option<SurfaceExpr>,
@@ -70,8 +71,8 @@ pub(crate) struct ExtWhereBinding {
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub(crate) enum WhereClauseExtError {
-    #[error("cyclic extended where-clause dependency: {}", names.join(" -> "))]
-    DependencyCycle { names: Vec<String>, span: Span },
+    #[error("cyclic extended where-clause dependency: {}", names.iter().map(ToString::to_string).collect::<Vec<_>>().join(" -> "))]
+    DependencyCycle { names: Vec<SurfaceName>, span: Span },
     #[error("where clause has {count} bindings, exceeds max {max}")]
     ExceededMaxBindings {
         count: usize,
@@ -85,19 +86,19 @@ pub(crate) enum WhereClauseExtError {
         span: Span,
     },
     #[error("pattern binding `{name}` is not allowed here")]
-    PatternBindingNotAllowed { name: String, span: Span },
+    PatternBindingNotAllowed { name: SurfaceName, span: Span },
     #[error("guarded binding `{name}` is not allowed here")]
-    GuardNotAllowed { name: String, span: Span },
+    GuardNotAllowed { name: SurfaceName, span: Span },
     #[error("recursive binding `{name}` is not allowed here")]
-    RecursiveBindingNotAllowed { name: String, span: Span },
+    RecursiveBindingNotAllowed { name: SurfaceName, span: Span },
     #[error("type inference for binding `{name}` is not allowed here")]
-    TypeInferenceNotAllowed { name: String, span: Span },
+    TypeInferenceNotAllowed { name: SurfaceName, span: Span },
     #[error("duplicate where binding `{name}`")]
-    DuplicateBinding { name: String, span: Span },
+    DuplicateBinding { name: SurfaceName, span: Span },
     #[error("binding `{name}` depends on unresolved sibling `{dep}`")]
     UnresolvedDependency {
-        name: String,
-        dep: String,
+        name: SurfaceName,
+        dep: SurfaceName,
         span: Span,
     },
 }
@@ -106,23 +107,23 @@ pub(crate) enum WhereClauseExtError {
 pub(crate) struct WhereClauseExtResult {
     pub(crate) bindings: Vec<ExtWhereBinding>,
     pub(crate) recursive_groups: Vec<Vec<usize>>,
-    pub(crate) inferred_types: HashMap<String, SurfaceExpr>,
+    pub(crate) inferred_types: HashMap<SurfaceName, SurfaceExpr>,
 }
 
 #[must_use]
 pub(crate) fn classify_binding(
     clause: &WhereClause,
-    all_names: &HashSet<String>,
+    all_names: &HashSet<SurfaceName>,
 ) -> WhereBindingKind {
-    let locals: HashSet<&str> = clause
+    let locals: HashSet<&SurfaceName> = clause
         .params
         .iter()
-        .map(|b| b.name.as_str())
-        .filter(|n| *n != "_")
+        .map(|b| &b.name)
+        .filter(|n| !n.is_unescaped_component("_"))
         .collect();
-    let mut deps: Vec<String> = collect_free_idents(&clause.body)
+    let mut deps: Vec<SurfaceName> = collect_free_idents(&clause.body)
         .into_iter()
-        .filter(|n| n != &clause.name && !locals.contains(n.as_str()) && all_names.contains(n))
+        .filter(|n| n != &clause.name && !locals.contains(n) && all_names.contains(n))
         .collect();
     deps.sort_unstable();
     deps.dedup();
@@ -135,7 +136,7 @@ pub(crate) fn classify_binding(
 
 #[must_use]
 pub(crate) fn classify_bindings(clauses: &[WhereClause]) -> Vec<(usize, WhereBindingKind)> {
-    let all_names: HashSet<String> = clauses.iter().map(|c| c.name.clone()).collect();
+    let all_names: HashSet<SurfaceName> = clauses.iter().map(|c| c.name.clone()).collect();
     clauses
         .iter()
         .enumerate()
@@ -236,12 +237,12 @@ pub(crate) fn order_bindings(
             });
         }
     }
-    let all_names: HashSet<String> = name_to_idx.keys().cloned().collect();
+    let all_names: HashSet<SurfaceName> = name_to_idx.keys().cloned().collect();
     let mut edges = vec![Vec::<usize>::new(); bindings.len()];
     let mut in_degree = vec![0usize; bindings.len()];
     for (idx, binding) in bindings.iter().enumerate() {
         for dep in binding_deps(binding, &all_names)? {
-            if let Some(dep_idx) = name_to_idx.get(dep.as_str()).copied() {
+            if let Some(dep_idx) = name_to_idx.get(&dep).copied() {
                 if dep_idx != idx && !edges[dep_idx].contains(&idx) {
                     edges[dep_idx].push(idx);
                     in_degree[idx] += 1;
@@ -459,18 +460,18 @@ fn let_rec(binding: &ExtWhereBinding, inner_body: SurfaceExpr) -> SurfaceExpr {
 
 fn binding_deps(
     binding: &ExtWhereBinding,
-    all_names: &HashSet<String>,
-) -> Result<Vec<String>, WhereClauseExtError> {
-    let mut locals: HashSet<String> = binding
+    all_names: &HashSet<SurfaceName>,
+) -> Result<Vec<SurfaceName>, WhereClauseExtError> {
+    let mut locals: HashSet<SurfaceName> = binding
         .params
         .iter()
         .map(|b| b.name.clone())
-        .filter(|n| n != "_")
+        .filter(|n| !n.is_unescaped_component("_"))
         .collect();
     if let WhereBindingKind::Pattern { pattern, .. } = &binding.kind {
         let mut names = Vec::new();
         pattern.collect_var_names(&mut names);
-        locals.extend(names.into_iter().filter(|n| n != "_"));
+        locals.extend(names.into_iter().filter(|n| !n.is_unescaped_component("_")));
     }
     let mut free = collect_free_idents(&binding.body);
     for expr in binding.params.iter().filter_map(|b| b.ty.as_deref()) {
@@ -491,7 +492,7 @@ fn binding_deps(
         WhereBindingKind::Recursive { deps } => free.extend(deps.iter().cloned()),
         WhereBindingKind::Simple => {}
     }
-    let mut deps: Vec<String> = free
+    let mut deps: Vec<SurfaceName> = free
         .into_iter()
         .filter(|n| n != &binding.name && !locals.contains(n) && all_names.contains(n))
         .collect();
@@ -568,7 +569,9 @@ fn expr_depth(expr: &SurfaceExpr) -> usize {
             .iter()
             .map(binder_depth)
             .fold(expr_depth(body), usize::max),
-        SurfaceExpr::Let(_, b, v, body) | SurfaceExpr::LetRec(_, b, v, body) => {
+        SurfaceExpr::Let(_, b, v, body)
+        | SurfaceExpr::Have(_, b, v, body)
+        | SurfaceExpr::LetRec(_, b, v, body) => {
             binder_depth(b).max(expr_depth(v)).max(expr_depth(body))
         }
         SurfaceExpr::Arrow(_, l, r) | SurfaceExpr::Ascription(_, l, r) => {
@@ -593,5 +596,58 @@ fn expr_depth(expr: &SurfaceExpr) -> usize {
         | SurfaceExpr::LiftMethod(_, e)
         | SurfaceExpr::UniverseInst(_, e, _) => expr_depth(e),
         _ => 0,
+    }
+}
+
+#[cfg(test)]
+mod typed_name_tests {
+    use super::*;
+
+    #[test]
+    fn staged_where_dependencies_preserve_dotted_components() {
+        let quoted = SurfaceName::component("A.f", true);
+        let nested = SurfaceName::generated_path("A.f");
+        let clause = WhereClause {
+            name: SurfaceName::generated_path("owner"),
+            params: vec![SurfaceBinder::new_typed(
+                nested.clone(),
+                None,
+                SurfaceBinderInfo::Explicit,
+            )],
+            return_type: None,
+            body: SurfaceExpr::Ident(Span::dummy(), quoted.clone()),
+            span: Span::dummy(),
+        };
+        let all_names = [quoted.clone(), nested].into_iter().collect();
+        let WhereBindingKind::Recursive { deps } = classify_binding(&clause, &all_names) else {
+            panic!("quoted sibling must not be shadowed by nested binder");
+        };
+        assert_eq!(deps, vec![quoted]);
+    }
+
+    #[test]
+    fn staged_where_wildcard_does_not_shadow_quoted_underscore() {
+        let quoted = SurfaceName::component("_", true);
+        let mut clause = WhereClause {
+            name: SurfaceName::generated_path("owner"),
+            params: vec![SurfaceBinder::new_typed(
+                SurfaceName::component("_", false),
+                None,
+                SurfaceBinderInfo::Explicit,
+            )],
+            return_type: None,
+            body: SurfaceExpr::Ident(Span::dummy(), quoted.clone()),
+            span: Span::dummy(),
+        };
+        let all_names = [quoted.clone()].into_iter().collect();
+        let WhereBindingKind::Recursive { deps } = classify_binding(&clause, &all_names) else {
+            panic!("unnamed binder cannot shadow a real quoted identifier");
+        };
+        assert_eq!(deps, vec![quoted.clone()]);
+        clause.params[0].name = quoted;
+        assert!(matches!(
+            classify_binding(&clause, &all_names),
+            WhereBindingKind::Simple
+        ));
     }
 }

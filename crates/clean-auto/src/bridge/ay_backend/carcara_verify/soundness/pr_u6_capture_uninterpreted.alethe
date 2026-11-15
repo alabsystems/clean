@@ -1,0 +1,3 @@
+(assume a0 (not (= (h oth) (oth (mk a b)))))
+(step t1 (cl (= (oth (mk a b)) (oth (mk a b)))) :rule refl)
+(step t2 (cl) :rule resolution :premises (a0 t1))

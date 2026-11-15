@@ -17,7 +17,7 @@
 //! ## Scope: KExpr as Intentional Subset
 //!
 //! The `KExpr` inductive models nine expression forms: sort, bvar, app, lam,
-//! pi, const, let, projection, and natural literal. It is still a subset of
+//! pi, const, let, projection, and a tagged Nat/String literal leaf. It is still a subset of
 //! the production kernel expression surface: unsupported production forms and
 //! metadata must not be inferred from the reflected theorems.
 //!
@@ -44,12 +44,19 @@ pub use core_spec::{
     ir_w2a_ud_module_defs, ir_w2a_uo_module_defs, ir_w2a_ur_module_defs, ir_w2b_al_module_defs,
     ir_w2b_pd_module_defs, ir_w2b_pm_module_defs, ir_w2b_pp_module_defs, ir_w2c_ci_module_defs,
     ir_w2c_ga_module_defs, ir_w3_os_module_defs, ir_w3_ou_module_defs, ir_w4_fc_module_defs,
+    ACCEPTS_IN_PROOF_NAMES, ACCEPTS_TC_NAT_NAME_ALIASES, ACCEPTS_TC_QUOT_NAME_ALIASES,
+    ACCEPTS_TC_STRING_NAME_ALIASES, BMEM_CORE_NAMES, BMEM_TRIE_NAMES, CTR_NAMES, CTR_STACK_NAMES,
+    E5_NAMES, ITF_NAMES, IT_PC_NAMES, IT_SCTR_NAMES, LZD_PC_NAMES, LZD_SCTR_NAMES,
+    NATIVE_NAT_PROOF_NAMES, SLOT_LEMMA_NAMES, STACK_AXES_MINTED_NAMES, STACK_AXES_NAMES,
+    STACK_AXES_WITNESS_NAMES, STACK_MINTED_NAMES, STACK_SPLIT_NAMES, STACK_THEOREM_NAMES,
+    STK_WITNESS_NAMES, STRING_LITERAL_PROOF_NAMES, STRING_LIT_CODEC_PROOF_NAMES,
 };
 pub(crate) mod decl_budget;
 mod declaration_registration;
 mod definition;
 mod definition_registration;
 mod error;
+mod model_units;
 mod reducible;
 mod tc_spec;
 #[cfg(test)]
@@ -61,6 +68,7 @@ mod verification;
 
 pub use definition::SpecDefinition;
 pub use error::SpecError;
+pub(crate) use model_units::ModelUnitSource;
 pub use type_checker_spec::{
     check_defeq_spec, check_type_spec, CompletenessWitness, DefeqAlgorithm, TypeCheckStep,
     TypeCheckerSpec,
@@ -91,6 +99,13 @@ pub struct Specification {
     /// exists so the generator can build the complete live specification
     /// against the freshly rendered script before publishing any file.
     red_env_script_override: Option<String>,
+    /// Fresh semantic-name table paired with a generated script. Early literal
+    /// aliases must consume it before the late red-environment registration.
+    red_env_interning_override: Option<String>,
+    /// Where `register_model_unit` reads the `.clean` model units from. Always
+    /// the files in production; the fidelity oracle switches it to the
+    /// retained literals or to a planted text (`model_units.rs`).
+    model_unit_source: ModelUnitSource,
 }
 
 impl Specification {
@@ -99,7 +114,7 @@ impl Specification {
     /// # Errors
     /// Returns `SpecError` if specification construction fails.
     pub fn new() -> Result<Self, SpecError> {
-        Self::new_with_optional_red_env_script(None)
+        Self::new_with_optional_red_env_script(None, None)
     }
 
     /// Build the complete specification while injecting a freshly rendered
@@ -114,17 +129,59 @@ impl Specification {
     /// fails parsing, elaboration, or kernel checking.
     #[doc(hidden)]
     pub fn new_with_red_env_reflection_script(script: &str) -> Result<Self, SpecError> {
-        Self::new_with_optional_red_env_script(Some(script.to_string()))
+        Self::new_with_optional_red_env_script(Some(script.to_string()), None)
+    }
+
+    /// Validate a fresh script and its semantic-name table through the entire
+    /// specification before either artifact is published. Early builtin aliases
+    /// consume this table instead of requiring the old committed table to know
+    /// names newly reserved by the generator.
+    ///
+    /// # Errors
+    /// Returns `SpecError` for a malformed table or any failed full-spec stage.
+    #[doc(hidden)]
+    pub fn new_with_red_env_reflection_artifacts(
+        script: &str,
+        interning: &str,
+    ) -> Result<Self, SpecError> {
+        crate::red_env_reflect::parse_interning_tsv(interning)
+            .map_err(|error| SpecError::EnvError(error.to_string()))?;
+        Self::new_with_optional_red_env_script(
+            Some(script.to_string()),
+            Some(interning.to_string()),
+        )
+    }
+
+    /// Resolve a model builtin or named witness through the same validated
+    /// semantic-name table as the generated reduction environment. This is a bounded adapter,
+    /// not a representation theorem for arbitrary structural kernel names.
+    pub(crate) fn reflected_name_tag(&self, name: &str) -> Result<u64, SpecError> {
+        crate::red_env_reflect::name_tag_in_table(
+            self.red_env_interning_override
+                .as_deref()
+                .unwrap_or(crate::red_env_reflect::COMMITTED_INTERNING_TSV),
+            name,
+        )
+        .map_err(|error| SpecError::EnvError(error.to_string()))
     }
 
     fn new_with_optional_red_env_script(
         red_env_script_override: Option<String>,
+        red_env_interning_override: Option<String>,
     ) -> Result<Self, SpecError> {
         let mut spec = Specification {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override,
+            red_env_interning_override,
+            model_unit_source: ModelUnitSource::default(),
         };
+        // The same opt-out as `core_spec::Specification::new_empty`, which
+        // carries the full rationale and the measurements. Both constructors
+        // need it: this one serves `Specification::new()` (the full spec),
+        // that one serves the bundle constructors.
+        spec.env
+            .set_option("relaxedAutoImplicit".to_string(), Some("false".to_string()));
 
         // Arm the kernel's ambient per-declaration runaway guard for the whole
         // build, and restore the thread's previous budget on the way out.
@@ -185,6 +242,10 @@ impl Specification {
                 .register_nat_shiftright_def()
                 .map_err(|e| SpecError::EnvError(e.to_string())),
         )?;
+        // E4d: the native-Nat folds of the bitwise heads and `Nat.shiftRight`,
+        // whose closures exist only from here on.
+        decl_budget::begin_declaration();
+        spec.add_accepts_tc_native_nat_late()?;
 
         Ok(())
     }
@@ -193,6 +254,18 @@ impl Specification {
     #[must_use]
     pub fn env(&self) -> &Environment {
         &self.env
+    }
+
+    /// Consume this specification and transfer its kernel environment.
+    ///
+    /// Retains the actual declarations, provenance and environment options
+    /// without cloning their indexes. Specification-side source/registration
+    /// bookkeeping is dropped. This is an ownership transfer, not a proof or
+    /// an admission capability: consumers still check the exact terms and
+    /// rooted authority closures needed by their own semantic model.
+    #[must_use]
+    pub fn into_environment(self) -> Environment {
+        self.env
     }
 
     /// Get mutable access to the environment.

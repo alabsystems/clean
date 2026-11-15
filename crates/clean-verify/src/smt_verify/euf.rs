@@ -708,7 +708,7 @@ fn structural_accept(step_id: SmtStepId) -> StepVerdict {
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -858,7 +858,7 @@ mod tests {
         let eq_aa = dag.add_term(SmtTerm::App(SmtSymbol::Named("=".to_string()), vec![a, a]));
         let step_id = SmtStepId(0);
         let verdict = check_refl(&dag, step_id, &[eq_aa]);
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -889,7 +889,7 @@ mod tests {
 
         let derived = vec![Some(vec![eq_ab])];
         let verdict = check_symm(&dag, SmtStepId(1), &[eq_ba], &[SmtStepId(0)], &derived);
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -910,7 +910,7 @@ mod tests {
             &[SmtStepId(0), SmtStepId(1)],
             &derived,
         );
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -949,7 +949,7 @@ mod tests {
 
         let clause = vec![neq_ab, neq_bc, eq_ac];
         let verdict = check_eq_transitive(&dag, SmtStepId(0), &clause);
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -977,7 +977,7 @@ mod tests {
 
         let clause = vec![neq, eq_conc];
         let verdict = check_eq_congruent(&dag, SmtStepId(0), &clause);
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -998,7 +998,7 @@ mod tests {
         // Clause: (not (= a b)) (not (p a)) (p b)
         let clause = vec![neq, neg_pa, pb];
         let verdict = check_eq_congruent_pred(&dag, SmtStepId(0), &clause);
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -1017,7 +1017,7 @@ mod tests {
 
         let derived = vec![Some(vec![eq_ab])];
         let verdict = check_cong(&dag, SmtStepId(1), &[eq_fafb], &[SmtStepId(0)], &derived);
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]
@@ -1122,7 +1122,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "transitivity should be valid: {:?}",
             verdict.detail
         );
@@ -1150,7 +1150,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "congruence should be valid: {:?}",
             verdict.detail
         );
@@ -1191,7 +1191,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "deep congruence should be valid: {:?}",
             verdict.detail
         );
@@ -1239,7 +1239,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "reflexivity should be valid: {:?}",
             verdict.detail
         );
@@ -1278,7 +1278,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "multiple functions should be valid: {:?}",
             verdict.detail
         );
@@ -1307,7 +1307,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "nested functions should be valid: {:?}",
             verdict.detail
         );
@@ -1338,7 +1338,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "binary function congruence should be valid: {:?}",
             verdict.detail
         );
@@ -1389,7 +1389,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "symmetry should work: {:?}",
             verdict.detail
         );
@@ -1424,7 +1424,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "long chain should be valid: {:?}",
             verdict.detail
         );
@@ -1452,7 +1452,7 @@ mod tests {
         let verdict = check_euf_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "one violated disequality suffices: {:?}",
             verdict.detail
         );

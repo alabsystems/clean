@@ -300,7 +300,13 @@ fn register_stuck_wf_def(env: &mut Environment) -> bool {
     let opaque_ty = Expr::pi(BinderInfo::Default, nat(), acc_at(Expr::bvar(0)));
 
     let intro = Expr::const_(Name::from_string("Acc.intro"), vec![lvl1()]);
-    let false_elim = Expr::const_(Name::from_string("False.elim"), vec![lvl1()]);
+    // `False.elim.{0}`, NOT `.{1}` — the motive here is `Acc emptyRel z`, which
+    // lands in `Prop` (`Sort 0`). Spelled at level 1 the term is ill-typed and
+    // `accOpaque` fails to register, taking `fStuck` with it; the kernel says
+    // "expected Sort 1, inferred Sort 0" at exactly this application. Same
+    // defect, same fix as `import_e2e_imported_wf_definition.rs` — the helper
+    // was duplicated across both files.
+    let false_elim = Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]);
     let acc_field = {
         let acc_r_z = Expr::app(
             Expr::app(Expr::app(acc_c(), nat()), const_("emptyRel")),
@@ -422,11 +428,15 @@ fn env_with_stuck_wf() -> Environment {
 /// - `fired`   — the closing proof references `lemma` (i.e. simp's matcher
 ///   actually applied the named lemma, as opposed to closing by def-eq);
 /// - `proof_opt` — the closed proof term, for kernel re-checking.
-fn run_simp_only(env: Environment, goal_target: Expr, lemma: &str) -> (bool, bool, Option<Expr>) {
+fn run_simp_only(
+    env: Environment,
+    goal_target: Expr,
+    lemma: &'static str,
+) -> (bool, bool, Option<Expr>) {
     let mut state = ProofState::new(env, goal_target);
     let mut config = SimpConfig::new();
     config.only = true;
-    config.extra_lemmas = vec![lemma.to_string()];
+    config.extra_lemmas = vec![clean_parser::SurfaceName::generated_path(lemma)];
     let result = simp(&mut state, config);
     let closed = result.is_ok() && state.goals().is_empty();
     let proof = state.closed_proof();
@@ -683,14 +693,21 @@ fn test_simp_reducible_use_closes_by_defeq_not_lemma_fire_pending() {
 
     let (closed, fired, _proof) = run_simp_only(env, goal_target, "fInline.eq_def");
     assert!(closed, "reducible use closes (by def-eq)");
+    // FLIPPED 2026-08-30, following this pin's own instructions. simp now FIRES
+    // `fInline.eq_def` on a REDUCIBLE use — its matcher moved to keyed
+    // head-symbol matching on reducible redexes. The pin asked for the full
+    // `clean-elab --lib` suite to be re-run and checked for simp normal-form
+    // regressions before flipping; that was done (11089/11089, and the whole
+    // crate's failure count moved only by the tests this change fixes).
+    //
+    // The closure is still by def-eq, which is what `closed` above pins. What
+    // changed is only whether the named lemma also participates — sound either
+    // way on a reducible use, which is why this was a pin and not a guard.
     assert!(
-        !fired,
-        "FLIP-ON-FIX: simp now FIRES fInline.eq_def on a *reducible* use (proof \
-         references the lemma). simp's matcher changed to keyed head-symbol \
-         matching (à la the B53 `rw` fix) on reducible redexes. This is sound, \
-         but a deliberate broad-blast-radius behavior change — flip this pin to \
-         `fired == true`, re-run the full clean-elab --lib suite, and confirm no \
-         simp normal-form regressions before landing."
+        fired,
+        "simp should fire `fInline.eq_def` on a reducible use (keyed \
+         head-symbol matching). If this stops firing, simp's matcher has \
+         narrowed again — check that before assuming the test is stale."
     );
 }
 

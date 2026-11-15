@@ -161,10 +161,50 @@ fn find_undef_level_param_in_level(l: &Level, allowed: &[Name]) -> Option<Name> 
 /// Returns the first Param name referenced in Sort or Const levels
 /// that is not in `allowed`.
 /// Lean 4: get_undef_param in level.cpp, called by check_level in type_checker.cpp
+///
+/// The walk visits the expression as the DAG it is. A subterm with no level
+/// parameter at all (the cached `has_level_param` flag, the same metadata the
+/// neighbouring fvar/mvar checks read) cannot hold an undefined one and is
+/// skipped; a subterm reached through a SHARED `Arc` (strong count above one)
+/// is walked the first time only. Lean's `get_undef_param` is a
+/// `find(e, ...)` over the expression cache, which visits a shared subterm
+/// once for the same reason. The answer is unchanged: a pruned subterm
+/// contains no parameter, and by the time a shared subterm is met again the
+/// first visit has already walked all of it without returning. Measured
+/// 2026-09-23 as the hot spot of `upgrade_axiom_stubs_checked` on a Mathlib
+/// import (80% of a 5 s sample at t=650 s of `Mathlib/Order/Basic.lean`,
+/// `reports/lean4-replacement-audit-2026-09-24/performance.json`): the old
+/// walk expanded a shared proof DAG into its tree.
 pub(super) fn find_undef_level_param(e: &Expr, allowed: &[Name]) -> Option<Name> {
     use crate::expr::ZFCSetExpr;
-    let mut expr_stack = vec![e];
-    while let Some(curr) = expr_stack.pop() {
+    if !e.has_level_param_quick() {
+        return None;
+    }
+    // Each entry carries its `Arc`'s address when that `Arc` is SHARED. The
+    // seen-mark is taken when an entry is POPPED (visited), never when it is
+    // pushed: a node's whole subtree is walked before anything pushed ahead of
+    // it is popped, so the first VISIT of a shared subterm happens exactly
+    // where the tree walk meets it, and a later visit is skippable because
+    // the first returned nothing. Marking on push skipped a shared subterm
+    // whose first occurrence was still waiting on the stack while a later
+    // occurrence was reached first — the same verdict with a different first
+    // hit (`test_find_undef_level_param_later_sibling_shared_subterm_keeps_first_hit`).
+    fn push<'a>(stack: &mut Vec<(&'a Expr, Option<usize>)>, child: &'a std::sync::Arc<Expr>) {
+        if !child.has_level_param_quick() {
+            return;
+        }
+        let shared = (std::sync::Arc::strong_count(child) > 1)
+            .then_some(std::sync::Arc::as_ptr(child) as usize);
+        stack.push((&**child, shared));
+    }
+    let mut expr_stack: Vec<(&Expr, Option<usize>)> = vec![(e, None)];
+    let mut seen_shared: hashbrown::HashSet<usize> = hashbrown::HashSet::new();
+    while let Some((curr, shared)) = expr_stack.pop() {
+        if let Some(ptr) = shared {
+            if !seen_shared.insert(ptr) {
+                continue;
+            }
+        }
         match curr.kind() {
             ExprKind::Sort(l) => {
                 if let Some(undef) = find_undef_level_param_in_level(l, allowed) {
@@ -180,72 +220,72 @@ pub(super) fn find_undef_level_param(e: &Expr, allowed: &[Name]) -> Option<Name>
             }
             ExprKind::BVar(_) | ExprKind::FVar(_) | ExprKind::Lit(_) => {}
             ExprKind::App(f, a) => {
-                expr_stack.push(a);
-                expr_stack.push(f);
+                push(&mut expr_stack, a);
+                push(&mut expr_stack, f);
             }
             ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-                expr_stack.push(body);
-                expr_stack.push(ty);
+                push(&mut expr_stack, body);
+                push(&mut expr_stack, ty);
             }
             ExprKind::Let(_, ty, val, body, _) => {
-                expr_stack.push(body);
-                expr_stack.push(val);
-                expr_stack.push(ty);
+                push(&mut expr_stack, body);
+                push(&mut expr_stack, val);
+                push(&mut expr_stack, ty);
             }
             ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
-                expr_stack.push(inner);
+                push(&mut expr_stack, inner);
             }
             ExprKind::SProp
             | ExprKind::CubicalInterval
             | ExprKind::CubicalI0
             | ExprKind::CubicalI1 => {}
             ExprKind::CubicalPath { ty, left, right } => {
-                expr_stack.push(right);
-                expr_stack.push(left);
-                expr_stack.push(ty);
+                push(&mut expr_stack, right);
+                push(&mut expr_stack, left);
+                push(&mut expr_stack, ty);
             }
-            ExprKind::CubicalPathLam { body } => expr_stack.push(body),
+            ExprKind::CubicalPathLam { body } => push(&mut expr_stack, body),
             ExprKind::CubicalPathApp { path, arg } => {
-                expr_stack.push(arg);
-                expr_stack.push(path);
+                push(&mut expr_stack, arg);
+                push(&mut expr_stack, path);
             }
             ExprKind::CubicalHComp { ty, phi, u, base } => {
-                expr_stack.push(base);
-                expr_stack.push(u);
-                expr_stack.push(phi);
-                expr_stack.push(ty);
+                push(&mut expr_stack, base);
+                push(&mut expr_stack, u);
+                push(&mut expr_stack, phi);
+                push(&mut expr_stack, ty);
             }
             ExprKind::CubicalTransp { ty, phi, base } => {
-                expr_stack.push(base);
-                expr_stack.push(phi);
-                expr_stack.push(ty);
+                push(&mut expr_stack, base);
+                push(&mut expr_stack, phi);
+                push(&mut expr_stack, ty);
             }
             ExprKind::CubicalCoe { ty, r, s, base } => {
-                expr_stack.push(base);
-                expr_stack.push(s);
-                expr_stack.push(r);
-                expr_stack.push(ty);
+                push(&mut expr_stack, base);
+                push(&mut expr_stack, s);
+                push(&mut expr_stack, r);
+                push(&mut expr_stack, ty);
             }
             ExprKind::ZFCSet(set_expr) => match set_expr {
                 ZFCSetExpr::Empty | ZFCSetExpr::Infinity => {}
                 ZFCSetExpr::Singleton(a)
                 | ZFCSetExpr::Union(a)
                 | ZFCSetExpr::PowerSet(a)
-                | ZFCSetExpr::Choice(a) => expr_stack.push(a),
+                | ZFCSetExpr::Choice(a) => push(&mut expr_stack, a),
                 ZFCSetExpr::Pair(a, b)
                 | ZFCSetExpr::Separation { set: a, pred: b }
                 | ZFCSetExpr::Replacement { set: a, func: b } => {
-                    expr_stack.push(b);
-                    expr_stack.push(a);
+                    push(&mut expr_stack, b);
+                    push(&mut expr_stack, a);
                 }
             },
             ExprKind::ZFCMem { element, set } => {
-                expr_stack.push(set);
-                expr_stack.push(element);
+                push(&mut expr_stack, set);
+                push(&mut expr_stack, element);
             }
             ExprKind::ZFCComprehension { domain, pred } => {
-                expr_stack.push(pred);
-                expr_stack.push(domain);
+                push(&mut expr_stack, pred);
+                push(&mut expr_stack, domain);
             }
         }
     }
@@ -294,11 +334,15 @@ impl Environment {
     /// SOUNDNESS: the only paths to `Ok` are `infer_sort(type)` succeeding AND
     /// (for value-bearing decls) `check_type(value, type)` succeeding against
     /// `self`. No code path stamps a verdict without the kernel's checker
-    /// returning `Ok`. The duplicate-name check is intentionally skipped: the
-    /// caller checks a constant NOT yet present in the base env (the base holds
-    /// only the trusted dependency closure, never the target's own decls), so a
-    /// name collision here would be a caller bug, not a soundness hole — the
-    /// term is still fully type-checked either way.
+    /// returning `Ok`. The duplicate-name check is intentionally skipped, and
+    /// that makes ORDER the caller's obligation: `self` may already hold the
+    /// declaration being checked (PARAGON's base holds every target module's
+    /// own declarations), and a value that mentions itself, or a resident
+    /// declaration that depends on it, then type-checks against its own
+    /// declared type. Measured 2026-09-23: `forged3_self : False :=
+    /// forged3_self` passed this check against such a base. A caller that
+    /// re-checks a `.olean` must replay in Lean's order and refuse such a value
+    /// before it gets here (`clean_olean::replay_order`, `Lean/Replay.lean`).
     ///
     /// # Errors
     /// Same variants as [`Environment::add_decl`] except `DuplicateName` (never
@@ -334,7 +378,12 @@ impl Environment {
         decl: &Declaration,
         heartbeat_override: Option<u32>,
     ) -> Result<(), EnvError> {
-        self.check_decl_readonly_with_policy(decl, heartbeat_override, true, true)
+        // Under `KernelTheory::Lean` the check runs in Lean's SAFE context (a
+        // safe declaration may not use an unsafe or partial constant,
+        // `type_checker.cpp` `infer_constant`); the extended theory keeps the
+        // historical permissive posture.
+        let permissive = self.kernel_theory() == super::KernelTheory::Extended;
+        self.check_decl_readonly_with_policy(decl, heartbeat_override, permissive, permissive)
     }
 
     /// Run the full read-only declaration check in a safe, total context.
@@ -541,41 +590,31 @@ impl Environment {
 
         // (5)-(7) Type checking. A fresh per-call TypeChecker borrows `self`
         // immutably; nothing here mutates the environment.
-        let mut tc = crate::tc::TypeChecker::with_mode(self, self.mode);
+        // Every environment-wide setting comes from ONE snapshot
+        // (`Environment::checker_settings`), which the reference entry
+        // classifies field by field.
+        let settings = self.checker_settings();
+        let mut tc = crate::tc::TypeChecker::with_mode(self, settings.mode);
         tc.set_allow_unsafe(allow_unsafe);
         tc.set_allow_partial(allow_partial);
         // Coq lane: use cumulative subtyping (`Prop ≤ Set ≤ Type`). No-op
         // (== non-cumulative) when the env flag is off, i.e. the Lean/olean lane.
-        tc.set_cumulative(self.cumulative);
+        tc.set_cumulative(settings.cumulative);
         // Tier-2 escalation: an explicit override wins over `self.options`, so a
         // per-constant retry can raise the cap WITHOUT mutating the shared env.
         // Falls through to the env option when `None` (the Tier-1 / default path).
-        match heartbeat_override {
-            Some(limit) => tc.set_heartbeat_limit(limit),
-            None => {
-                if let Some(Some(val_str)) = self.options.get("maxHeartbeats") {
-                    if let Ok(limit) = val_str.parse::<u32>() {
-                        tc.set_heartbeat_limit(limit);
-                    }
-                }
-            }
+        if let Some(limit) = heartbeat_override.or(settings.max_heartbeats) {
+            tc.set_heartbeat_limit(limit);
         }
-        if let Some(Some(val_str)) = self.options.get("tcMaxCacheEntries") {
-            if let Ok(max) = val_str.parse::<usize>() {
-                tc.set_max_cache_entries(max);
-            }
+        if let Some(max) = settings.max_cache_entries {
+            tc.set_max_cache_entries(max);
         }
         // Enable the heartbeat profiler if `profileHeartbeats` is set — mirrors
         // `add_decl`'s Phase-1 (the readonly check path had `set_profiler_active_
         // name` but never enabled the profiler, so HeartbeatExceeded errors from
         // this path carried no breakdown). Verdict-neutral: the profiler only
         // observes tick attribution; it never changes reduction or acceptance.
-        if self
-            .options
-            .get("profileHeartbeats")
-            .and_then(|v| v.as_deref())
-            .is_some_and(|v| v == "true" || v == "1")
-        {
+        if settings.profile_heartbeats {
             tc.enable_heartbeat_profiler();
         }
         let tc = tc;
@@ -843,16 +882,16 @@ impl Environment {
             // Type-check the declaration
             let is_theorem = matches!(&decl, Declaration::Theorem { .. });
             {
-                let mut tc = crate::tc::TypeChecker::with_mode(&*self, self.mode);
+                // One snapshot of the environment-wide settings (see
+                // `check_decl_readonly_with_policy`).
+                let settings = self.checker_settings();
+                let mut tc = crate::tc::TypeChecker::with_mode(&*self, settings.mode);
                 // Coq lane: cumulative subtyping (no-op off the Coq lane).
-                tc.set_cumulative(self.cumulative);
+                tc.set_cumulative(settings.cumulative);
 
                 // Apply maxHeartbeats from file-scope `set_option` if present.
-                // The option value is stored as `Option<String>` in env.options.
-                if let Some(Some(val_str)) = self.options.get("maxHeartbeats") {
-                    if let Ok(limit) = val_str.parse::<u32>() {
-                        tc.set_heartbeat_limit(limit);
-                    }
+                if let Some(limit) = settings.max_heartbeats {
+                    tc.set_heartbeat_limit(limit);
                 }
 
                 // Apply tcMaxCacheEntries from `set_option` if present. Bounding
@@ -864,22 +903,15 @@ impl Environment {
                 // returns it for a structurally-equal-but-context-distinct read,
                 // producing a def-eq FALSE-negative (rejecting a valid proof).
                 // See docs/METAMATH_KERNEL_VERIFICATION.md.
-                if let Some(Some(val_str)) = self.options.get("tcMaxCacheEntries") {
-                    if let Ok(max) = val_str.parse::<usize>() {
-                        tc.set_max_cache_entries(max);
-                    }
+                if let Some(max) = settings.max_cache_entries {
+                    tc.set_max_cache_entries(max);
                 }
 
                 // Enable heartbeat profiler if `profileHeartbeats` option is set.
                 // When enabled, HeartbeatExceeded errors include a breakdown of
                 // where the budget was spent (by operation category and constant name).
                 // Part of #3399.
-                if self
-                    .options
-                    .get("profileHeartbeats")
-                    .and_then(|v| v.as_deref())
-                    .is_some_and(|v| v == "true" || v == "1")
-                {
+                if settings.profile_heartbeats {
                     tc.enable_heartbeat_profiler();
                 }
 
@@ -1454,6 +1486,10 @@ impl Environment {
         Ok(())
     }
 }
+
+#[cfg(test)]
+#[path = "decl_add_undef_param_tests.rs"]
+mod undef_param_dag_tests;
 
 #[cfg(test)]
 mod mm_axiom_only_tests {

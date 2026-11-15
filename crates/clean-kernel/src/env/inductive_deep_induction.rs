@@ -101,7 +101,7 @@ impl Environment {
         if !tv.is_large_elim {
             return oos(format!("{ind} has restricted elimination (v1 Type-valued)"));
         }
-        let deep_name = Name::from_string(&format!("{ind}.deep_ind"));
+        let deep_name = ind.clone().str("deep_ind");
         if self.constants.contains_key(&deep_name) {
             return oos(format!("{deep_name} already exists"));
         }
@@ -110,7 +110,7 @@ impl Environment {
         {
             return oos("True/True.intro are not registered in this environment");
         }
-        let rec_name = Name::from_string(&format!("{ind}.rec"));
+        let rec_name = ind.clone().str("rec");
         let Some(rec) = self.get_recursor(&rec_name).cloned() else {
             return oos(format!("{rec_name} is not registered"));
         };
@@ -364,12 +364,9 @@ impl Environment {
             )));
         }
         let (fields, ihs) = locals.split_at(nf);
-        let suffix = ctor
-            .to_string()
-            .rsplit_once('.')
-            .map(|(_, s)| s.to_string())
-            .unwrap_or_else(|| ctor.to_string());
-        let all_ctor = Name::from_string(&format!("{container}.All.{suffix}"));
+        let all_ctor = ctor
+            .with_parent(container.clone().str("All"))
+            .ok_or_else(|| inv(format!("anonymous constructor in {container}")))?;
         let mut args: Vec<Expr> = c_args.to_vec();
         args.extend(preds.iter().cloned());
         args.extend(fields.iter().map(|(_, fv, _)| fv.clone()));

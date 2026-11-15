@@ -341,3 +341,103 @@ subDir = "sub/pkg"
         "[require.source] subDir must reach the Dependency"
     );
 }
+
+/// `[leanOptions]` (package) and a library's `leanOptions` table reach the
+/// config: dotted keys decode as nested tables and are flattened back to
+/// Lake's option names (gap G50: they used to be dropped in silence).
+#[test]
+fn parse_lean_options_tables() {
+    let content = r#"
+name = "opts"
+
+[leanOptions]
+pp.unicode.fun = true
+autoImplicit = false
+maxHeartbeats = 400000
+
+[[lean_lib]]
+name = "Opts"
+leanOptions = { relaxedAutoImplicit = false }
+"#;
+    let cfg = LakeConfig::parse_toml(content).expect("lakefile.toml parses");
+    let mut args: Vec<String> = cfg
+        .package
+        .lean_options
+        .iter()
+        .map(LeanOption::define_arg)
+        .collect();
+    // A table has no duplicate names, so its order decides nothing.
+    args.sort();
+    assert_eq!(
+        args,
+        vec![
+            "autoImplicit=false",
+            "maxHeartbeats=400000",
+            "pp.unicode.fun=true"
+        ]
+    );
+    assert!(cfg.package.unreadable_lean_args.is_empty());
+    assert_eq!(
+        cfg.libs[0].lean_options[0].define_arg(),
+        "relaxedAutoImplicit=false"
+    );
+}
+
+/// A value that is no `LeanOptionValue` leaves the table unreadable, which a
+/// build refuses, rather than half-applied.
+#[test]
+fn parse_lean_options_table_with_float_is_unreadable() {
+    let cfg = LakeConfig::parse_toml("name = \"o\"\n[leanOptions]\nratio = 0.5\n")
+        .expect("lakefile.toml parses");
+    assert!(cfg.package.lean_options.is_empty());
+    assert_eq!(cfg.package.unreadable_lean_args.len(), 1);
+}
+
+/// Lake 4.8's `decodeLeanOptions` also takes an ARRAY of `[name, value]`
+/// pairs or `{ name, value }` tables; that form must load (it once failed the
+/// whole lakefile with "invalid type: sequence, expected a map").
+#[test]
+fn parse_lean_options_array_form() {
+    let content = r#"
+name = "arr"
+leanOptions = [{name = "autoImplicit", value = false}, ["maxHeartbeats", 400000]]
+"#;
+    let cfg = LakeConfig::parse_toml(content).expect("array-form leanOptions loads");
+    let args: Vec<String> = cfg
+        .package
+        .lean_options
+        .iter()
+        .map(LeanOption::define_arg)
+        .collect();
+    assert_eq!(args, vec!["autoImplicit=false", "maxHeartbeats=400000"]);
+    assert!(cfg.package.unreadable_lean_args.is_empty());
+}
+
+/// A malformed array entry is unreadable (a build refuses), not dropped.
+#[test]
+fn parse_lean_options_array_form_malformed_is_unreadable() {
+    let cfg = LakeConfig::parse_toml("name = \"o\"\nleanOptions = [[\"autoImplicit\"]]\n")
+        .expect("lakefile.toml parses");
+    assert!(cfg.package.lean_options.is_empty());
+    assert_eq!(cfg.package.unreadable_lean_args.len(), 1);
+}
+
+/// `weakLeanArgs` (package and library) reaches the config; Lake 4.8 passes
+/// it to `lean` ahead of the `leanArgs`.
+#[test]
+fn parse_weak_lean_args() {
+    let content = r#"
+name = "weak"
+weakLeanArgs = ["-DautoImplicit=false"]
+
+[[lean_lib]]
+name = "W"
+weakLeanArgs = ["-DrelaxedAutoImplicit=false"]
+"#;
+    let cfg = LakeConfig::parse_toml(content).expect("lakefile.toml parses");
+    assert_eq!(cfg.package.weak_lean_args, vec!["-DautoImplicit=false"]);
+    assert_eq!(
+        cfg.libs[0].weak_lean_args,
+        vec!["-DrelaxedAutoImplicit=false"]
+    );
+}

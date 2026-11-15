@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
 done
 if [[ ! -x "$BIN" ]]; then
   echo "[coind-full-green] building clean (release)..." >&2
-  (cd "$REPO_ROOT" && cargo build --locked --release -p clean)
+  (cd "$REPO_ROOT" && targo --unverified build --locked --release -p clean)
 fi
 [[ -x "$BIN" ]] || { echo "[coind-full-green] FAIL: no executable clean binary at $BIN" >&2; exit 1; }
 

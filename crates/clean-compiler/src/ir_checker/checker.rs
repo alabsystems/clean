@@ -6,6 +6,7 @@
 //!
 //! Contains `IRChecker` and the public `check_decl`/`check_decls` entry points.
 
+use super::layout::{check_ctor_layout, check_set_tag, CtorCell};
 use super::{is_object_type, IRError, LocalContext, MAX_CTOR_FIELDS, MAX_CTOR_TAG};
 use crate::compiler_env::CompilerEnv;
 use crate::ir::{CtorInfo, FnId, IRArg, IRBody, IRDecl, IRExpr, IRType, JoinPointId, VarId};
@@ -177,8 +178,9 @@ impl<'a> IRChecker<'a> {
         }
     }
 
-    /// Check constructor limits and consistency (Rules C1, C2).
-    fn check_ctor(&self, info: &CtorInfo) -> Result<(), IRError> {
+    /// Check constructor limits and consistency (Rules C1, C2). `cell` says
+    /// whether the value is boxed or a heap cell, which decides its tag bound.
+    fn check_ctor(&self, info: &CtorInfo, cell: CtorCell) -> Result<(), IRError> {
         if info.tag > MAX_CTOR_TAG {
             return Err(IRError::CtorTagTooLarge {
                 name: info.name.clone(),
@@ -207,7 +209,8 @@ impl<'a> IRChecker<'a> {
             });
         }
 
-        Ok(())
+        // Rule C1 at the runtime header's 8-bit widths (see `layout`).
+        check_ctor_layout(info, cell)
     }
 
     /// Rule C3: Constructor arg count must match object field count.
@@ -311,7 +314,7 @@ impl<'a> IRChecker<'a> {
     fn check_expr(&self, expr: &IRExpr) -> Result<(), IRError> {
         match expr {
             IRExpr::Ctor { info, args } => {
-                self.check_ctor(info)?;
+                self.check_ctor(info, CtorCell::ByShape)?;
                 self.check_ctor_arg_count(info, args)?;
                 self.check_args(args)
             }
@@ -431,7 +434,7 @@ impl<'a> IRChecker<'a> {
 
             IRExpr::Reuse { var, ctor, args } => {
                 self.check_object_var(*var, "reuse slot")?;
-                self.check_ctor(ctor)?;
+                self.check_ctor(ctor, CtorCell::Heap)?;
                 self.check_ctor_arg_count(ctor, args)?;
                 self.check_args(args)
             }
@@ -496,8 +499,9 @@ impl<'a> IRChecker<'a> {
                 self.check_var(*value)?;
                 self.check_body(rest)
             }
-            IRBody::SetTag { var, rest, .. } => {
+            IRBody::SetTag { var, tag, rest } => {
                 self.check_object_var(*var, "setTag target")?;
+                check_set_tag(*tag)?;
                 self.check_body(rest)
             }
             IRBody::USet {
@@ -526,7 +530,7 @@ impl<'a> IRChecker<'a> {
                     if !seen_tags.insert(alt.ctor.tag) {
                         return Err(IRError::DuplicateCaseTag { tag: alt.ctor.tag });
                     }
-                    self.check_ctor(&alt.ctor)?;
+                    self.check_ctor(&alt.ctor, CtorCell::ByShape)?;
                     self.check_body(&alt.body)?;
                 }
                 if let Some(def) = default {

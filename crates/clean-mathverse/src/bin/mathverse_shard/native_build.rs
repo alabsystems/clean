@@ -16,7 +16,7 @@ use clean_mathverse::build_library_native::{
     build_native_shard_with_config, seed_native_environment, NativeBuildConfig,
 };
 
-pub fn cmd_build_native(args: &[String]) {
+pub(crate) fn cmd_build_native(args: &[String]) {
     // `--gate-clean` produces a shard that passes `shard_verify::native_gate`
     // (NN-content excluded, prelude constants skipped). Default keeps the
     // historical whole-environment export.

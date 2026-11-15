@@ -19,6 +19,7 @@ use clean_auto::bridge::ay_contract::{AyLogic, ResidualTrustSource};
 use clean_kernel::mode::CleanMode;
 use clean_kernel::sorry::local_ay_reconstruction_success_count;
 use clean_kernel::{env::Declaration, Environment, Expr, FVarId, Level, Name};
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 fn make_trusted_ay_term(target: Expr) -> Expr {
@@ -62,8 +63,9 @@ fn test_assert_goal_hypotheses_with_drop_count_skips_sort_hypotheses() {
         setup_nat_env(),
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "A".to_string(),
+            name: SurfaceName::component("A", false),
             ty: Expr::type_(),
             value: None,
         }],
@@ -86,8 +88,9 @@ fn test_assert_goal_hypotheses_with_drop_count_counts_unsupported_non_sort_hypot
         setup_nat_env(),
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(2),
-            name: "x".to_string(),
+            name: SurfaceName::component("x", false),
             ty: Expr::const_(Name::from_string("Nat"), vec![]),
             value: None,
         }],
@@ -113,8 +116,9 @@ fn test_assert_goal_hypotheses_with_drop_count_accepts_supported_hypotheses() {
         setup_nat_env(),
         supported.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(3),
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: supported,
             value: None,
         }],
@@ -169,8 +173,9 @@ fn test_select_verified_ay_proof_returns_fully_verified_direct_proof_without_tru
         setup_prop_env(false),
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(4),
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: target.clone(),
             value: None,
         }],
@@ -214,8 +219,9 @@ fn test_select_verified_ay_proof_rejects_invalid_clean_direct_proof_and_recovers
         setup_prop_env(false),
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(14),
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: target.clone(),
             value: None,
         }],
@@ -323,8 +329,9 @@ fn test_select_verified_ay_proof_prefers_cleaner_bridge_candidate() {
         setup_prop_env(true),
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(5),
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: target.clone(),
             value: None,
         }],
@@ -449,8 +456,9 @@ fn test_strict_qf_uf_replaces_partially_trusted_direct_proof_with_zero_trust_rec
         setup_prop_env(false),
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(12),
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: target.clone(),
             value: None,
         }],
@@ -501,8 +509,9 @@ fn test_strict_qf_uf_accepts_fully_verified_direct_proof() {
         setup_prop_env(false),
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(10),
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: target.clone(),
             value: None,
         }],
@@ -545,8 +554,9 @@ fn test_strict_qf_uf_without_direct_proof_uses_zero_trust_recovery() {
         setup_prop_env(false),
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(11),
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: target.clone(),
             value: None,
         }],

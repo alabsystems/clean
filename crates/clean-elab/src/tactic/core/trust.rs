@@ -28,7 +28,7 @@ pub struct TrustedAyProvenanceLedger {
 
 impl TrustedAyProvenanceLedger {
     /// Total number of typed trustedAy steps with a residual source.
-    pub fn typed_total(self) -> u32 {
+    pub(crate) fn typed_total(self) -> u32 {
         self.arithmetic_boundary_steps
             .saturating_add(self.alethe_trust_steps)
             .saturating_add(self.theory_bv_bitblast_steps)
@@ -110,7 +110,7 @@ pub struct TrustedArithProvenanceLedger {
 
 impl TrustedArithProvenanceLedger {
     /// Total number of typed `trustedArith` steps with a coarse source class.
-    pub fn typed_total(self) -> u32 {
+    pub(crate) fn typed_total(self) -> u32 {
         self.direct_steps
             .saturating_add(self.goal_close_helper_steps)
             .saturating_add(self.target_rewrite_helper_steps)

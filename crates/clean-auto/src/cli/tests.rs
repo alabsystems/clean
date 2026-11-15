@@ -175,6 +175,38 @@ fn catalog_is_non_empty_and_names_unique() {
 }
 
 #[test]
+fn catalog_builds_checked_goals() {
+    for demo in catalog() {
+        let (env, goal) = (demo.build)().expect("bundled demo setup succeeds");
+        let ty = clean_kernel::TypeChecker::new(&env)
+            .infer_type_full(&goal)
+            .expect("demo goal type checks in its constructed environment");
+        assert_eq!(ty, clean_kernel::Expr::prop(), "demo {}", demo.name);
+    }
+}
+
+#[test]
+fn demo_setup_returns_each_kernel_registration_refusal() {
+    use clean_kernel::{Declaration, Environment, Expr, KernelEnvError, Name};
+
+    for declaration in ["Eq", "Eq.refl", "A", "a"] {
+        let mut env = Environment::new();
+        let name = Name::from_string(declaration);
+        env.add_decl(Declaration::Axiom {
+            name: name.clone(),
+            level_params: vec![],
+            type_: Expr::prop(),
+        })
+        .expect("checked conflicting declaration");
+        let result = super::build_eq_refl_demo_in(env);
+        assert!(
+            matches!(result, Err(AutoCliError::DemoSetup(KernelEnvError::DuplicateName(ref duplicate))) if duplicate == &name),
+            "setup must return the real refusal for {declaration}: {result:?}"
+        );
+    }
+}
+
+#[test]
 fn features_descriptor_is_well_formed() {
     let descriptors: Vec<&'static FeatureDescriptor> = FEATURES.iter().collect();
     ensure_unique_paths(&descriptors).expect("descriptor paths must be unique");

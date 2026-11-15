@@ -23,7 +23,9 @@
 
 use std::collections::{BTreeSet, VecDeque};
 
-use clean_kernel::{is_foundational_axiom, is_trust_marker, ConstantKind, Environment, Name};
+use clean_kernel::{
+    is_canonical_foundational_constant, is_trust_marker, ConstantKind, Environment, Name,
+};
 
 /// The soundness floor of a closure — its weakest link. Ordered worst → best so that
 /// `min` over a closure yields the floor.
@@ -78,23 +80,28 @@ impl Goodness {
 }
 
 /// Local goodness contribution + floor of a single closure node.
-fn local_score(name: &Name, kind: ConstantKind, has_value: bool) -> (f64, FloorLevel) {
+///
+/// `canonical_foundation` is whether the node IS the kernel's canonical
+/// foundational declaration (`Environment::is_canonical_foundational_axiom`:
+/// structural name AND exact statement) — never the name alone.
+fn local_score(
+    name: &Name,
+    kind: ConstantKind,
+    has_value: bool,
+    canonical_foundation: bool,
+) -> (f64, FloorLevel) {
     if is_trust_marker(name) {
         return (-100.0, FloorLevel::Unsound);
     }
-    if kind == ConstantKind::Axiom {
-        if is_foundational_axiom(name) {
-            // Bedrock: trusted, but not "work" — a small positive anchor.
-            return (0.5, FloorLevel::Foundational);
-        }
-        // Domain-specific axiom: a real soundness debt.
-        return (-5.0, FloorLevel::AxiomDependent);
-    }
     // A kernel-checked declaration. Theorems are the substance; defs/opaque support.
+    // The axiom arms return from inside the match, so no arm is unreachable.
     let base = match kind {
+        // Bedrock: trusted, but not "work" — a small positive anchor.
+        ConstantKind::Axiom if canonical_foundation => return (0.5, FloorLevel::Foundational),
+        // Domain-specific axiom: a real soundness debt.
+        ConstantKind::Axiom => return (-5.0, FloorLevel::AxiomDependent),
         ConstantKind::Theorem => 1.0,
         ConstantKind::Definition | ConstantKind::Opaque => 0.5,
-        ConstantKind::Axiom => unreachable!("handled above"),
     };
     // A present value means there is content the kernel re-checked.
     let value_bonus = if has_value { 0.25 } else { 0.0 };
@@ -123,21 +130,26 @@ pub fn closure_goodness(env: &Environment, root: &Name) -> Option<Goodness> {
         let Some(info) = env.get_const(&name) else {
             // A referenced name absent from the env (e.g. a bare axiom token). Score it
             // structurally by name classification so the floor still reflects it.
+            // An ABSENT name is never a canonical foundation: the kernel's
+            // foundations are declarations, and a bare name proves nothing.
             if is_trust_marker(&name) {
                 trust_markers.insert(name.to_string());
                 g_mass += -100.0;
                 floor = floor.min(FloorLevel::Unsound);
-            } else if !is_foundational_axiom(&name) {
+            } else {
                 domain_axioms.insert(name.to_string());
                 g_mass += -5.0;
                 floor = floor.min(FloorLevel::AxiomDependent);
-            } else {
-                g_mass += 0.5;
             }
             continue;
         };
 
-        let (s, node_floor) = local_score(&name, info.kind, info.value.is_some());
+        let (s, node_floor) = local_score(
+            &name,
+            info.kind,
+            info.value.is_some(),
+            is_canonical_foundational_constant(info),
+        );
         g_mass += s;
         floor = floor.min(node_floor);
         match node_floor {
@@ -202,35 +214,46 @@ mod tests {
 
     #[test]
     fn test_local_score_classifies_bedrock_domain_and_unsound() {
-        // Foundational axiom → small positive, Foundational floor.
-        let (s, f) = local_score(&name("propext"), ConstantKind::Axiom, false);
+        // The canonical foundational axiom → small positive, Foundational floor.
+        let (s, f) = local_score(&name("propext"), ConstantKind::Axiom, false, true);
         assert!(s > 0.0 && f == FloorLevel::Foundational);
+        // The same NAME without the canonical declaration → a domain axiom.
+        let (s, f) = local_score(&name("propext"), ConstantKind::Axiom, false, false);
+        assert!(s < 0.0 && f == FloorLevel::AxiomDependent);
         // A non-foundational axiom → penalty, AxiomDependent floor.
-        let (s, f) = local_score(&name("MyDomain.bigAxiom"), ConstantKind::Axiom, false);
+        let (s, f) = local_score(
+            &name("MyDomain.bigAxiom"),
+            ConstantKind::Axiom,
+            false,
+            false,
+        );
         assert!(s < 0.0 && f == FloorLevel::AxiomDependent);
         // A theorem → positive contribution, Foundational floor.
-        let (s, f) = local_score(&name("MyThm"), ConstantKind::Theorem, true);
+        let (s, f) = local_score(&name("MyThm"), ConstantKind::Theorem, true, false);
         assert!(s > 1.0 && f == FloorLevel::Foundational);
     }
 
     #[test]
     fn test_closure_goodness_walks_and_aggregates() {
-        use clean_kernel::expr::BinderData;
         let mut env = Environment::default();
-        // Foundational axiom propext : Prop (stand-in type; we only score structure).
-        let prop = Expr::sort(Level::zero());
-        env.add_decl(Declaration::Axiom {
-            name: name("propext"),
-            level_params: vec![],
-            type_: prop,
-        })
-        .expect("add propext");
-        // A domain axiom whose TYPE references propext: `T : propext → propext`. A Prop is
-        // a valid Pi domain, so this type-checks, and the closure walk reaches propext.
-        let t_type = Expr::pi(
-            BinderData::default(),
-            Expr::const_str("propext"),
-            Expr::const_str("propext"),
+        // The kernel's canonical `propext` (a stand-in `propext : Prop` would
+        // be a domain axiom: foundational is the canonical declaration, never
+        // the name — see `test_closure_goodness_stand_in_foundation_is_domain`).
+        env.init_propext().expect("canonical propext");
+        let statement = env
+            .get_const(&name("propext"))
+            .expect("propext present")
+            .type_
+            .clone();
+        // A domain axiom whose TYPE references propext: `T : @Eq stmt propext
+        // propext`, so the closure walk reaches propext.
+        let t_type = Expr::apps(
+            Expr::const_(name("Eq"), vec![Level::zero()]),
+            [
+                statement,
+                Expr::const_str("propext"),
+                Expr::const_str("propext"),
+            ],
         );
         env.add_decl(Declaration::Axiom {
             name: name("MyDomain.T"),
@@ -254,5 +277,24 @@ mod tests {
 
         // A missing root → None.
         assert!(closure_goodness(&env, &name("DoesNotExist")).is_none());
+    }
+
+    /// A declaration that only SHARES a foundational name is not the bedrock:
+    /// a stand-in `propext : Prop`, and `«propext»`-style spoofs generally,
+    /// score as domain axioms (before 2026-09-28 the name alone made them
+    /// foundational).
+    #[test]
+    fn test_closure_goodness_stand_in_foundation_is_domain() {
+        let mut env = Environment::default();
+        env.add_decl(Declaration::Axiom {
+            name: name("propext"),
+            level_params: vec![],
+            type_: Expr::sort(Level::zero()),
+        })
+        .expect("add stand-in propext");
+        let g = closure_goodness(&env, &name("propext")).expect("propext present");
+        assert_eq!(g.floor, FloorLevel::AxiomDependent);
+        assert!(g.domain_axioms.contains(&"propext".to_string()));
+        assert!(!g.is_foundational());
     }
 }

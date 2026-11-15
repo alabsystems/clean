@@ -15,8 +15,8 @@
 
 use clean_ck0::rawexpr::BinderInfo;
 use clean_ck0::{
-    add_inductive, AdmitError, Budget, Constructor, Env, InductiveDecl, MinimalEnv, Name, RawExpr,
-    RawLevel, Term,
+    add_inductive, AdmitError, BigNat, Budget, Constructor, Env, InductiveDecl, MinimalEnv, Name,
+    RawExpr, RawLevel, RawLit, Term,
 };
 
 fn n(s: &str) -> Name {
@@ -95,21 +95,35 @@ fn nat_decl() -> InductiveDecl {
     }
 }
 
-/// `List.{u} (A : Type u) : Type u` with `nil : List A`, `cons : A -> List A ->
-/// List A`. num_params=1.
+/// `Sort (max 1 u_i)`: a level that is PROVABLY nonzero, as Lean spells
+/// `PSum`/`PProd`'s (`Sort (max 1 u v)`). The list fixture lives here so its
+/// recursor large-eliminates for the reason Lean's kernel accepts
+/// (`is_not_zero`); at `u := 1` it is `Sort 1`, the level every use below
+/// instantiates. A bare `Sort u` list may be `Prop` (`u := 0`), and Lean's
+/// kernel gives a two-constructor `Prop` no large eliminator (2026-10-17).
+fn r_sort_max1_param(i: u32) -> RawExpr {
+    RawExpr::Sort(RawLevel::Max(
+        Box::new(RawLevel::Succ(Box::new(RawLevel::Zero))),
+        Box::new(RawLevel::Param(i)),
+    ))
+}
+
+/// `List.{u} (A : Sort (max 1 u)) : Sort (max 1 u)` with `nil : List A`,
+/// `cons : A -> List A -> List A`. num_params=1. (At `u := 1`, the level the
+/// tests use, this is `Type -> Type`.)
 fn list_decl() -> InductiveDecl {
     let b = boot(&[("List", 1), ("List.nil", 1), ("List.cons", 1)]);
-    // List : Type u -> Type u
-    let ty = vlvl(&b, &r_pi(r_sort_param(0), r_sort_param(0)), 1);
-    // nil : (A : Type u) -> List A
+    // List : Sort (max 1 u) -> Sort (max 1 u)
+    let ty = vlvl(&b, &r_pi(r_sort_max1_param(0), r_sort_max1_param(0)), 1);
+    // nil : (A : Sort (max 1 u)) -> List A
     let nil_ty = r_pi(
-        r_sort_param(0),
+        r_sort_max1_param(0),
         r_app(r_const_p("List", vec![RawLevel::Param(0)]), r_bvar(0)),
     );
-    // cons : (A : Type u) -> A -> List A -> List A
+    // cons : (A : Sort (max 1 u)) -> A -> List A -> List A
     let list_a = |db: u32| r_app(r_const_p("List", vec![RawLevel::Param(0)]), r_bvar(db));
     let cons_ty = r_pi(
-        r_sort_param(0), // A   (bvar increases inward)
+        r_sort_max1_param(0), // A   (bvar increases inward)
         r_pi(r_bvar(0), r_pi(list_a(1), list_a(2))),
     );
     InductiveDecl {
@@ -522,39 +536,73 @@ fn on_big_stack<F: FnOnce() + Send + 'static>(f: F) {
         .expect("join");
 }
 
+/// `Deep : Type` with one constructor of `fields` fields `Prop`: a right-nested
+/// Pi chain of `fields` arrows ending in `Deep`.
+fn deep_ctor_decl(fields: u32) -> InductiveDecl {
+    let b = boot(&[("Deep", 0), ("Deep.mk", 0)]);
+    let ty = vlvl(&b, &r_sort(1), 0);
+    let mut field_chain = r_const("Deep"); // return type
+    for _ in 0..fields {
+        field_chain = r_pi(r_sort(0), field_chain);
+    }
+    let mk_ty = vlvl(&b, &field_chain, 0);
+    InductiveDecl {
+        name: n("Deep"),
+        num_level_params: 0,
+        num_params: 0,
+        type_: ty,
+        constructors: vec![Constructor {
+            name: n("Deep.mk"),
+            type_: mk_ty,
+        }],
+    }
+}
+
 #[test]
-fn test_positivity_stack_safe_max_depth_admitted() {
+fn test_positivity_stack_safe_at_max_depth_then_the_recursor_is_refused() {
     on_big_stack(|| {
         // A constructor type that is a right-nested Pi chain at the *deepest
         // admissible* depth (MAX_VALIDATE_DEPTH arrows), each domain a harmless
-        // `Type`. The chokepoint admits it (it is exactly at the cap) and the
+        // `Prop`. The chokepoint admits it (it is exactly at the cap) and the
         // iterative positivity check must not overflow. `on_big_stack` gives the
         // *recursive* `validate_rec`/`Drop` room; the point under test is that
-        // positivity itself (explicit work stack) stays flat.
-        let depth = clean_ck0::MAX_VALIDATE_DEPTH;
-        let b = boot(&[("Deep", 0), ("Deep.mk", 0)]);
-        let ty = vlvl(&b, &r_sort(1), 0);
-        let mut field_chain = r_const("Deep"); // return type
-                                               // The whole ctor type's depth must stay <= cap: the chain is `depth`
-                                               // Pi nodes ending in a Const, so use `depth - 1` arrows to leave room
-                                               // for the leaf and stay within the cap.
-        for _ in 0..(depth - 1) {
-            field_chain = r_pi(r_sort(0), field_chain);
-        }
-        let mk_ty = vlvl(&b, &field_chain, 0);
-        let decl = InductiveDecl {
-            name: n("Deep"),
-            num_level_params: 0,
-            num_params: 0,
-            type_: ty,
-            constructors: vec![Constructor {
-                name: n("Deep.mk"),
-                type_: mk_ty,
-            }],
-        };
+        // positivity itself (explicit work stack) stays flat. The whole ctor
+        // type's depth must stay <= cap: the chain is `depth` Pi nodes ending in
+        // a Const, so `depth - 1` arrows leave room for the leaf.
+        let decl = deep_ctor_decl(clean_ck0::MAX_VALIDATE_DEPTH - 1);
         let mut env = MinimalEnv::new();
-        add_inductive(&mut env, decl).expect("max-depth positive ctor admitted");
+        // Positivity runs before derivation, so a derivation refusal means it
+        // passed. Derivation then refuses before building anything (R166): the
+        // ι rule binds the motive, the minor and the 1,023 fields, 1,025
+        // variables, so it is deeper than the bound every term the checker
+        // walks is held to (built, its type would be 2,050 deep and the rule
+        // 2,049). Before R166 this was admitted, and its rule's ι reduct is now
+        // past the reduct bound too.
+        match add_inductive(&mut env, decl) {
+            Err(AdmitError::Derivation { detail, .. }) => assert!(
+                detail.contains("a constructor's ι rule binds 1025 variables"),
+                "refused by the rule-width check: {detail}"
+            ),
+            other => panic!("expected the derived recursor refused, got {other:?}"),
+        }
     });
+}
+
+/// Control for the refusal above: 500 fields give a recursor type 1,004 deep
+/// and a rule 1,003 deep, within the bound, and admission fits an 8 MiB
+/// thread, the main thread's size.
+#[test]
+fn test_positivity_control_500_fields_admitted_on_a_main_sized_stack() {
+    let outcome = std::thread::Builder::new()
+        .stack_size(8 * 1024 * 1024)
+        .spawn(|| {
+            let mut env = MinimalEnv::new();
+            add_inductive(&mut env, deep_ctor_decl(500)).map_err(|e| e.to_string())
+        })
+        .expect("spawn")
+        .join()
+        .expect("admission returns rather than unwinding");
+    assert_eq!(outcome, Ok(()));
 }
 
 #[test]
@@ -934,22 +982,23 @@ fn test_nat_rec_iota_on_zero_and_succ() {
     assert_eq!(w, expected_zero, "Nat.rec on zero ~> z");
 
     // rec applied to (succ zero): the succ ι-rule fires →
-    //   s zero (rec motive z s zero) = Nat.succ (rec motive z s zero).
-    // WHNF only reduces the head, so the result is `Nat.succ (rec ... zero)`
-    // (head = Nat.succ). It is def-eq to `Nat.succ Nat.zero` once the inner
-    // recursor on zero reduces — checked via is_def_eq (full conversion).
+    //   s zero (rec motive z s zero) = Nat.succ (rec motive z s zero),
+    // and whnf then reduces that `Nat.succ` natively, as pinned Lean's `whnf`
+    // does: `reduce_nat` whnf's the argument to `Nat.zero`, which
+    // `is_nat_lit_ext` reads as 0, and returns the literal 1
+    // (`src/kernel/type_checker.cpp` v4.30.0-rc2, `reduce_nat` and `whnf`).
+    // Before R166 ck0 stopped at `Nat.succ (rec ... zero)`.
     let succ_zero = r_app(r_const("Nat.succ"), r_const("Nat.zero"));
     let app_succ = r_apps(elim, vec![r_motive, r_z, r_s, succ_zero]);
     let t_succ = Term::validate_closed(&env, &app_succ).expect("validates");
     let mut budget2 = Budget::default_budget();
     let w2 = clean_ck0::whnf(&env, &t_succ, &mut budget2).expect("whnf");
-    // Head must be Nat.succ applied to one arg.
-    let (h2, a2) = w2.unfold_apps();
-    assert!(
-        matches!(h2.kind(), clean_ck0::term::TermKind::Const(c) if *c.name() == n("Nat.succ")),
-        "Nat.rec on (succ zero) whnf head is Nat.succ"
+    let one = Term::validate_closed(&env, &RawExpr::Lit(RawLit::Nat(BigNat::from_u64(1))))
+        .expect("literal 1");
+    assert_eq!(
+        w2, one,
+        "Nat.rec on (succ zero) whnf's to the literal 1, as in Lean"
     );
-    assert_eq!(a2.len(), 1, "succ applied to one arg");
     // Full conversion: the whole thing is def-eq to `Nat.succ Nat.zero`.
     let expected_succ =
         Term::validate_closed(&env, &r_app(r_const("Nat.succ"), r_const("Nat.zero")))
@@ -1004,7 +1053,8 @@ fn test_list_rec_iota_at_concrete_level_recursive_minor() {
     //        List.cons Nat head ih)
     //   Nat            -- the single param A
     //   <major>
-    // List is large-eliminating (List : Type u), so the Elim level vector is
+    // List is large-eliminating (its level `max 1 u` is provably nonzero), so
+    // the Elim level vector is
     // [motive_level, ind_level]. The motive lands in `List.{1} Nat : Sort 1`,
     // hence motive_level = 1; the inductive level is the CONCRETE 1.
     let motive = RawExpr::Lam(

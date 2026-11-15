@@ -49,8 +49,8 @@ use crate::spec::Specification;
 
 /// `delta_reduct` of a bare constant, the term both δ lemmas talk about.
 const DR: &str = "(delta_reduct (red_def the_red_env) (KExpr.const n us))";
-/// Its definitional value lookup.
-const DV: &str = "(defval_for (red_def the_red_env) n)";
+/// Its guarded, universe-instantiated value lookup; no raw-absence converse.
+const DV: &str = "(kdef_value_at (red_def the_red_env) n us)";
 
 impl Specification {
     /// The δ half, the head-shape lemma, and the spine induction.
@@ -62,11 +62,11 @@ impl Specification {
         Ok(())
     }
 
-    /// The δ half: a constant whose spine does not δ-unfold has no value.
+    /// A constant that does not δ-unfold has no guarded value at its universes.
     ///
-    /// This is the CONVERSE of `delta_reduct_none_of_defval_none`, which the
-    /// tree already has; the direction needed here does not exist, because
-    /// nothing until now had to read δ-deadness *out* of a neutral witness.
+    /// Raw absence still implies δ-deadness, but its converse is false when
+    /// a declaration is present with the wrong universe arity. The result here
+    /// deliberately names kdef_value_at, not the raw defval_for lookup.
     fn add_defval_none_inversion(&mut self) -> Result<(), SpecError> {
         let spine = "(apply_spine (kapp_args (KExpr.const n us)) v)";
         let cont = "(fun (o : OptionType KExpr) => opt_bind KExpr KExpr o \
@@ -93,7 +93,7 @@ impl Specification {
         self.add_recursive_def(
             &src,
             "defval_none_of_delta_reduct_none: a constant whose spine does not delta-unfold has no \
-             definitional value. The CONVERSE of delta_reduct_none_of_defval_none, which the tree \
+             guarded instantiated value at its supplied universes. This is not raw declaration absence. The tree \
              already had; this direction was missing because nothing until now needed to read \
              delta-deadness back OUT of a neutral witness. \
              \

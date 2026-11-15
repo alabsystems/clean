@@ -913,16 +913,50 @@ pub fn env_knows(env: &Environment, name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::build_eval_ir_spec_with_stack;
+    use crate::test_utils::{
+        build_eval_ir_spec_with_stack, build_implementation_soundness_spec_with_stack,
+    };
     use clean_kernel::BinderInfo;
 
-    // These lib-suite tests all use the EvalIR bundle: it is two stages, builds
-    // in seconds, and contains genuinely recursive families to walk. The richer
-    // `ImplementationSoundness` bundle would let them assert against
-    // `KernelInferAccepts` directly, but it cannot build at HEAD — see the
-    // header of `tests/vacuity_firewall.rs` for the exact stage-table
-    // inconsistency — so the `KernelInferAccepts` assertions live in that
-    // integration test against the full spec instead.
+    // These lib-suite tests use the EvalIR bundle: it is two stages, builds in
+    // seconds, and contains genuinely recursive families to walk. The richer
+    // `ImplementationSoundness` bundle builds too and carries
+    // `KernelInferAccepts`, but not the vocabulary the full-spec assertions in
+    // `tests/vacuity_firewall.rs` also need — which is why those stay on the
+    // full spec. `test_the_impl_soundness_bundle_lacks_the_full_spec_vocabulary`
+    // holds that reason, so it cannot go stale the way "it cannot build" did.
+
+    /// Why the `KernelInferAccepts` assertions run on the FULL spec: the
+    /// `ImplementationSoundness` bundle builds (`0933fa615` moved the two
+    /// Full-only stages that broke it out of it) and registers the relation,
+    /// its witness and both `DENIED_EXACT` names, but no inductive under
+    /// `DENIED_PREFIX` (so the instrument-is-live check there would fail) and
+    /// none of the pass-side relations `every_generated_relation_passes_the_firewall`
+    /// audits. When this fails, the bundle grew them: move those assertions
+    /// onto it, and delete this test.
+    #[test]
+    fn test_the_impl_soundness_bundle_lacks_the_full_spec_vocabulary() {
+        let spec = build_implementation_soundness_spec_with_stack();
+        for name in ["KernelInferAccepts", "LamInferWitness"]
+            .into_iter()
+            .chain(DENIED_EXACT.iter().copied())
+        {
+            assert!(
+                env_knows(spec.env(), name),
+                "the bundle must register {name}"
+            );
+        }
+        assert!(
+            discover_relations(&spec, DENIED_PREFIX).is_empty(),
+            "the bundle now registers an inductive under {DENIED_PREFIX:?}"
+        );
+        for name in ["KernelInfers", "ImplInfer"] {
+            assert!(
+                !env_knows(spec.env(), name),
+                "the bundle now registers {name}"
+            );
+        }
+    }
 
     /// The deny predicate is the whole instrument; test it directly rather than
     /// only through a spec audit, where a bug in it would look like a clean

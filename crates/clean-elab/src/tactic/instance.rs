@@ -9,7 +9,6 @@
 
 use crate::instances::{extract_class_app, DEFAULT_PRIORITY};
 use crate::tactic::{have_, let_, ProofState, TacticError, TacticResult};
-use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprKind, FVarId};
 
 /// Introduce a local instance for the current goal.
@@ -33,7 +32,12 @@ use clean_kernel::{Expr, ExprKind, FVarId};
 ///   current goal's local context.
 /// ENSURES: If `ty` is a typeclass application and an instance table exists,
 ///   the value is registered as an instance for that class.
-pub fn let_i(state: &mut ProofState, name: &str, ty: Expr, value: Expr) -> TacticResult {
+pub fn let_i(
+    state: &mut ProofState,
+    name: &clean_parser::SurfaceName,
+    ty: Expr,
+    value: Expr,
+) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -48,13 +52,7 @@ pub fn let_i(state: &mut ProofState, name: &str, ty: Expr, value: Expr) -> Tacti
     // Register in instance table if available (#2233)
     if let Some((class_name, _)) = class_info {
         if let Some(instances) = state.instances.as_mut() {
-            instances.add_instance(
-                Name::from_string(name),
-                class_name,
-                value,
-                ty,
-                DEFAULT_PRIORITY,
-            );
+            instances.add_instance(name.name().clone(), class_name, value, ty, DEFAULT_PRIORITY);
         }
     }
 
@@ -81,7 +79,7 @@ pub fn let_i(state: &mut ProofState, name: &str, ty: Expr, value: Expr) -> Tacti
 /// ENSURES: On `Ok`, a proof obligation subgoal for `ty` is created via `have_`.
 /// ENSURES: If `ty` is a typeclass application and an instance table exists,
 ///   the hypothesis fvar is registered as an instance for that class.
-pub fn have_i(state: &mut ProofState, name: &str, ty: Expr) -> TacticResult {
+pub fn have_i(state: &mut ProofState, name: &clean_parser::SurfaceName, ty: Expr) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -109,7 +107,7 @@ pub fn have_i(state: &mut ProofState, name: &str, ty: Expr) -> TacticResult {
         if let Some(instances) = state.instances.as_mut() {
             let inst_expr = Expr::from_kind(ExprKind::FVar(inst_fvar));
             instances.add_instance(
-                Name::from_string(name),
+                name.name().clone(),
                 class_name,
                 inst_expr,
                 ty_for_inst,
@@ -142,7 +140,7 @@ pub fn have_i(state: &mut ProofState, name: &str, ty: Expr) -> TacticResult {
 /// ENSURES: On `Ok`, the resolved instance value is added to the local context
 ///   as a let-binding and registered in the instance table.
 /// ENSURES: On `Err(InstanceSynthesisFailed)`, no matching instance was found.
-pub fn infer_i(state: &mut ProofState, name: &str, ty: Expr) -> TacticResult {
+pub fn infer_i(state: &mut ProofState, name: &clean_parser::SurfaceName, ty: Expr) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -165,7 +163,7 @@ pub fn infer_i(state: &mut ProofState, name: &str, ty: Expr) -> TacticResult {
             })
             .ok_or_else(|| TacticError::InstanceSynthesisFailed {
                 class: "instance".into(),
-                ty: format!("{ty:?}"),
+                ty: crate::error_render::term(&ty),
             })?
     } else {
         // No instance table available — cannot resolve instances
@@ -183,13 +181,7 @@ pub fn infer_i(state: &mut ProofState, name: &str, ty: Expr) -> TacticResult {
     // Register resolved instance in instance table (#2233)
     if let Some((class_name, _)) = class_info {
         if let Some(instances) = state.instances.as_mut() {
-            instances.add_instance(
-                Name::from_string(name),
-                class_name,
-                value,
-                ty,
-                DEFAULT_PRIORITY,
-            );
+            instances.add_instance(name.name().clone(), class_name, value, ty, DEFAULT_PRIORITY);
         }
     }
 

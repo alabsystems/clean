@@ -149,7 +149,10 @@ pub(crate) fn validate_attribute_for_decl(
     if let Some(allowed) = valid_decl_kinds(attr_name) {
         if !allowed.contains(&decl_kind) {
             return Err(ElabError::Unsupported {
-                feature: format!("@[{attr_name}] cannot be applied to {decl_kind:?} declarations"),
+                feature: format!(
+                    "@[{attr_name}] cannot be applied to {} declarations",
+                    crate::error_render::opaque(&decl_kind)
+                ),
             });
         }
     }
@@ -160,7 +163,7 @@ pub(crate) fn validate_attribute_for_decl(
 /// the given attribute from the current environment.
 #[must_use]
 pub(crate) fn supports_file_scope_attribute_removal(attr_name: &str) -> bool {
-    matches!(attr_name, "simp")
+    matches!(attr_name, "simp" | "instance")
 }
 
 /// Detect conflicts among a set of attributes. Returns first conflicting pair.

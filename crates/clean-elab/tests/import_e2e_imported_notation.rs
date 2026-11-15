@@ -19,15 +19,26 @@
 //!    entry with NO clean-side notation/structure metadata, and the method body
 //!    reduces through the kernel's generic structure projection.
 //!
-//! 2. **Custom mixfix notation** (`infixl:65 " ⊕ " => Foo.bar`,
-//!    `notation:65 a " ⊕ " b => Foo.bar a b`) is a user-extensible parser
+//! 2. **Custom mixfix notation** (`infixl:65 " ⊗ " => Foo.bar`,
+//!    `notation:65 a " ⊗ " b => Foo.bar a b`) is a user-extensible parser
 //!    extension. clean's `notation`/`infixl`/… commands parse and *register* the
 //!    notation into the dynamic custom-operator registry, and the surface parser
 //!    DOES consult that registry while parsing a *later* expression: a custom
-//!    operator symbol like `⊕` is recognized and `x ⊕ y` is expanded to the
-//!    registered target, so `Color.red ⊕ Color.green` routes to
+//!    operator symbol like `⊗` is recognized and `x ⊗ y` is expanded to the
+//!    registered target, so `Color.red ⊗ Color.green` routes to
 //!    `Color.combine Color.red Color.green` and reaches the kernel. Locked in
 //!    below against an imported target.
+//!
+//!    **The symbol must not re-lex to a single BUILT-IN operator token.**
+//!    `register_custom_operator_ns` (`clean-parser`, `grammar/custom_notation.rs`)
+//!    skips those deliberately, so that a user notation cannot shadow the
+//!    hand-written builtin precedence handling. The skip is SILENT — nothing is
+//!    reported at the declaration — so this file pins it explicitly below
+//!    (`test_builtin_operator_symbol_is_not_overridable_by_custom_infix`)
+//!    rather than leaving it to be rediscovered. This lock-in used `⊕` until
+//!    `e7ddb6995` made `A ⊕ B` the builtin `Sum` infix (Lean's `infixr:30`) and
+//!    added `TokenKind::Oplus` to that skip list, which turned this lock-in red
+//!    without touching it; `⊗` is not a builtin token and carries the same claim.
 //!
 //! 3. **Zero-variable atom aliases** (`notation "GG" => Color.green`) DO work
 //!    end-to-end: the elaborator's `expand_simple_notation_aliases` pass rewrites
@@ -367,13 +378,16 @@ fn test_atom_alias_notation_resolves_imported_const() {
 // =============================================================================
 // LOCK-IN (custom infix): a custom infix notation attached to an imported decl
 // IS usable in a later expression, because the surface parser consults the
-// dynamically-registered custom-operator registry — the operator symbol `⊕` is
-// recognized and `x ⊕ y` is expanded to the registered `Color.combine` target.
+// dynamically-registered custom-operator registry — the operator symbol `⊗` is
+// recognized and `x ⊗ y` is expanded to the registered `Color.combine` target.
 //
 // We probe the FULL `notation` + use flow and lock in the outcome: the `def`
 // elaborates and kernel-checks, its stored body references the intended target
 // `Color.combine`, and it reduces to the notation's intended result `green`
-// (NOT red) — i.e. the `⊕` routed all the way through the registered expansion.
+// (NOT red) — i.e. the `⊗` routed all the way through the registered expansion.
+//
+// `⊗` is deliberately NOT a built-in operator token; the builtin-collision case
+// is a different property and is pinned separately in the test after this one.
 // =============================================================================
 
 #[test]
@@ -382,13 +396,13 @@ fn test_custom_infix_notation_on_imported_decl_routes_and_reduces() {
 
     let result = try_elaborate_decls_into(
         &mut env,
-        "infixl:65 \" ⊕ \" => Color.combine\n\
-         def usesInfix : Color := Color.red ⊕ Color.green",
+        "infixl:65 \" ⊗ \" => Color.combine\n\
+         def usesInfix : Color := Color.red ⊗ Color.green",
     );
 
     // The custom infix works end-to-end: the declaration elaborates and
     // kernel-checks, `usesInfix`'s stored body references the intended target
-    // `Color.combine` (proving `⊕` routed to the registered expansion rather
+    // `Color.combine` (proving `⊗` routed to the registered expansion rather
     // than dropping the operator), and it reduces to the notation's intended
     // result `green`.
     let routed_correctly = result.is_ok()
@@ -404,9 +418,9 @@ fn test_custom_infix_notation_on_imported_decl_routes_and_reduces() {
 
     assert!(
         routed_correctly,
-        "LOCK-IN: custom infix `⊕` on an imported decl must route to \
+        "LOCK-IN: custom infix `⊗` on an imported decl must route to \
          Color.combine and reduce to green — the parser consults the dynamic \
-         custom-operator registry, so `Color.red ⊕ Color.green` expands to \
+         custom-operator registry, so `Color.red ⊗ Color.green` expands to \
          `Color.combine Color.red Color.green` and reaches the kernel."
     );
 
@@ -415,5 +429,79 @@ fn test_custom_infix_notation_on_imported_decl_routes_and_reduces() {
     assert!(
         !def_eq(&env, &const_("usesInfix"), &const_("Color.red")),
         "the custom infix result must be green, never red"
+    );
+}
+
+// =============================================================================
+// PIN (builtin collision): a custom infix whose symbol re-lexes to a single
+// BUILT-IN operator token is NOT registered, and the skip is SILENT.
+//
+// `register_custom_operator_ns` (clean-parser, `grammar/custom_notation.rs`)
+// returns early when `is_builtin_operator_token` matches the symbol's single
+// token, so that a user notation cannot shadow the hand-written builtin
+// precedence handling. `⊕` became such a token in `e7ddb6995`, which made
+// `A ⊕ B` the builtin `Sum` infix (Lean's `infixr:30`).
+//
+// Two halves, because the silence is the part that bites:
+//
+//  * the `infixl` DECLARATION itself succeeds — nothing is reported, so a user
+//    gets no signal that their notation was dropped;
+//  * the later USE falls through to the builtin, which is observable here
+//    because this hand-built import env ships no `Sum`: the error names `Sum`,
+//    never `Color.combine`. That is the proof the operator routed to the
+//    builtin rather than to the registered expansion.
+//
+// This is a FIDELITY GAP against Lean, where the user's `infixl` would be a
+// second notation for the same symbol and the elaborator would disambiguate by
+// type. It is pinned rather than fixed: registering the symbol would shadow
+// builtin `⊕`/`Sum` parsing file-wide, which is a capability loss, and erroring
+// on the declaration would newly reject upstream-Lean corpus files that
+// redeclare builtin-shaped notation. Pinning it means a change of behaviour
+// here has to be deliberate.
+// =============================================================================
+
+#[test]
+fn test_builtin_operator_symbol_is_not_overridable_by_custom_infix() {
+    // Half 1: the declaration alone is accepted, silently, with no effect.
+    let mut decl_only_env = imported_notation_env();
+    let decl_only =
+        try_elaborate_decls_into(&mut decl_only_env, "infixl:65 \" ⊕ \" => Color.combine");
+    assert!(
+        decl_only.is_ok(),
+        "PIN: the builtin-colliding `infixl` declaration is accepted silently \
+         today; if it starts reporting, this pin is what says so: {decl_only:?}"
+    );
+
+    // Half 2: the later use routes to the BUILTIN `⊕` (= `Sum`), not to the
+    // declared `Color.combine`.
+    let mut env = imported_notation_env();
+    let result = try_elaborate_decls_into(
+        &mut env,
+        "infixl:65 \" ⊕ \" => Color.combine\n\
+         def usesInfix : Color := Color.red ⊕ Color.green",
+    );
+
+    let err = result.expect_err(
+        "PIN: `Color.red ⊕ Color.green` must route to the builtin `Sum`, which \
+         this hand-built import env does not ship, so elaboration must fail. If \
+         it now succeeds, `⊕` became overridable and the lock-in above should \
+         move back onto it.",
+    );
+    assert!(
+        err.contains("declaration 1"),
+        "PIN: the failure must be at the USE (declaration 1), not at the \
+         notation declaration (declaration 0) — the skip is silent: {err}"
+    );
+    assert!(
+        err.contains("Sum"),
+        "PIN: the error must name the builtin `Sum` the operator routed to: {err}"
+    );
+    assert!(
+        !err.contains("Color.combine"),
+        "PIN: the declared expansion must not appear — it was never registered: {err}"
+    );
+    assert!(
+        env.get_const(&Name::from_string("usesInfix")).is_none(),
+        "PIN: nothing is registered for a declaration that failed to elaborate"
     );
 }

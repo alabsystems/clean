@@ -53,20 +53,17 @@
 //! ## Why the assertions are batched rather than one per test
 //!
 //! Every `KernelInferAccepts` assertion below needs a spec containing that
-//! relation, `Typing`, `has_type` and the witness inductives, and the only
-//! bundle that currently builds with all of them is the FULL spec — which takes
-//! minutes. The cheaper `ImplementationSoundness` bundle would be the natural
-//! choice and is what an earlier revision of this file used, but it **cannot
-//! build at HEAD**: `add_env_closed_checkers_depth` registers
-//! `bool_false_ne_true_t` (`env_closed_checkers_depth.rs:232`) and is marked
-//! `in_impl_soundness: false` (`bundles.rs:907-910`), while
-//! `opt_rec_bool_true_inv` in the `defeq_fuel` stage (`in_impl_soundness: true`)
-//! references it — so the bundle is internally inconsistent and
-//! `build_implementation_soundness_spec_with_stack` panics with
-//! `Unknown identifier: bool_false_ne_true_t`. That is a pre-existing defect in
-//! that bundle, independent of the firewall; fixing it belongs to whoever owns
-//! the stage table, and when it is fixed these assertions can move back onto the
-//! cheap bundle unchanged.
+//! relation, `Typing`, `has_type`, the witness inductives AND a `TypingCtx*`
+//! inductive (so the deny prefix is live), and the pass-side audit needs
+//! `KernelInfers` and `ImplInfer`. The only bundle that registers all of them is
+//! the FULL spec — which takes minutes. The cheaper `ImplementationSoundness`
+//! bundle builds, and registers `KernelInferAccepts`, `Typing` and `has_type`,
+//! but none of the rest; the lib test
+//! `test_the_impl_soundness_bundle_lacks_the_full_spec_vocabulary` pins exactly
+//! that, and fails the day the bundle grows them, which is the day these
+//! assertions should move onto it. (This paragraph used to say the bundle could
+//! not BUILD, citing a `bool_false_ne_true_t` stage-table inconsistency that
+//! `a6490949c` had already fixed in its own ancestry; nothing checked it.)
 //!
 //! So the expensive build happens twice in this file, not eight times.
 
@@ -145,6 +142,13 @@ const MUST_PASS_PREFIXES: &[&str] = &[
     // downstream A4 statement vacuously true while every axiom gate stayed
     // green, which is exactly the failure this file exists to prevent.
     "Encodes",
+    // Crystal E4's algorithmic relations: `KernelAcceptsIn` and its
+    // typed-conversion successor `KernelAcceptsTcIn`. They were registered in
+    // the Full bundle and reached by NO prefix here -- the recorded shape of
+    // miss, a third time. Under the default deny set this holds them to zero
+    // contact with the layer-2 `Typing` family; the E4-specific audit below
+    // additionally denies their OWN declarative targets.
+    "KernelAccepts",
 ];
 
 /// The complete set of findings the firewall reports on `KernelInferAccepts`, as
@@ -870,5 +874,95 @@ fn the_micro_band_keeps_its_vacuity_self_label() {
         MICRO_BAND_MEMBERS.len(),
         MICRO_BAND_PROVENANCE,
         MICRO_BAND_UNLABELLED_TAIL.len()
+    );
+}
+
+/// Crystal E4's declarative targets. An E4 algorithmic arm that SUPPLIED one of
+/// these would make `kernel_accepts_in_sound` / `kernel_accepts_tc_in_sound`
+/// the identity on that arm -- the `KernelInferAccepts.const` defect again, one
+/// layer up. The default deny set does not name them (`TypingCtx` is not a
+/// prefix of `TypingProjIn`, `TypingTcIn` or `TypingCDPCtxConvIn`), so the E4
+/// relations are audited against a config that does.
+const E4_TARGETS: &[&str] = &["TypingProjIn", "TypingTcIn", "TypingCDPCtxConvIn"];
+
+/// The E4 algorithmic relations and the premise relations their arms carry.
+const E4_ALGORITHMIC: &[&str] = &[
+    "KernelAcceptsIn",
+    "KernelAcceptsTcIn",
+    "ProjStructIn",
+    "ProjParamsIn",
+    "ProjFieldIn",
+    "UnitLikeIn",
+    "StructCtorIn",
+    "RecKAdmitIn",
+];
+
+fn e4_config() -> FirewallConfig {
+    let mut config = FirewallConfig::default();
+    for target in E4_TARGETS {
+        config.denied_exact.insert((*target).to_string());
+    }
+    config
+}
+
+/// GATE CLAUSE 4 (crystal **E4**): the env-indexed algorithmic relations never
+/// reach their own declarative targets, at any polarity -- with a CONTROL that
+/// shows the walker, given this deny set, rejects a relation that does.
+#[test]
+fn e4_algorithmic_relations_never_reach_their_declarative_targets() {
+    let mut spec = build_spec_with_stack();
+    for target in E4_TARGETS {
+        assert!(
+            env_knows(spec.env(), target),
+            "E4 target `{target}` is absent, so denying it denies nothing"
+        );
+    }
+    let config = e4_config();
+    for name in E4_ALGORITHMIC {
+        assert!(env_knows(spec.env(), name), "{name} must be registered");
+        let report = audit_relation_with(&spec, name, &config);
+        println!(
+            "FIREWALL E4 {name}: {} constructor(s), {} name(s) visited, {} breach(es)",
+            report.roots.len(),
+            report.visited,
+            report.breaches.len()
+        );
+        assert!(
+            !report.roots.is_empty(),
+            "{name}: no constructor scanned\n{}",
+            report.render()
+        );
+        assert!(
+            report.is_pristine(),
+            "{name} reaches an E4 declarative target or a layer-2 typing name:\n{}",
+            report.render()
+        );
+    }
+
+    // THE CONTROL: an algorithmic-looking relation whose arm SUPPLIES the target.
+    spec.add_inductive(
+        "inductive KernelAcceptsForgedControl (R : RedEnv) (tenv : KDeclEnv) : ListType CtxEntryIn -> KExpr -> KExpr -> Type\n\
+         | cheat : forall (G : ListType CtxEntryIn) (e : KExpr) (T : KExpr), TypingTcIn R tenv Bool.true G e T -> KernelAcceptsForgedControl R tenv G e T",
+        "Firewall control only: an arm that hands the declarative target to its eliminator.",
+    )
+    .expect("the control relation registers");
+    let caught = audit_relation_with(&spec, "KernelAcceptsForgedControl", &config);
+    assert!(
+        caught
+            .strict_findings()
+            .iter()
+            .any(|f| f.ctor == "KernelAcceptsForgedControl.cheat" && f.denied == "TypingTcIn"),
+        "THE CONTROL FAILED: an arm supplying TypingTcIn must be a STRICT finding under the E4 \
+         deny set, or this gate detects nothing.\n{}",
+        caught.render()
+    );
+    // And the default deny set alone does NOT see it: the E4 entries are what
+    // make this audit bite.
+    let blind = audit_relation(&spec, "KernelAcceptsForgedControl");
+    assert!(
+        blind.is_pristine(),
+        "the default deny set unexpectedly names an E4 target; this control no longer isolates \
+         the E4 deny entries.\n{}",
+        blind.render()
     );
 }

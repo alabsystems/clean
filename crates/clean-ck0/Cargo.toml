@@ -1,11 +1,54 @@
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
 #
-# clean-ck0 — the FROZEN decision-core SEED of the ck2 kernel (design:
-# designs/2026-06-16-ck2-kernel.md, milestone M0). This crate contains ONLY the
-# seed layer: Name / Level / BigNat / RawExpr / Term private types + the
-# Term::validate chokepoint + the two-valued Verdict. No whnf/def_eq/infer/
-# recursors/certs (those are M1+).
+# clean-ck0 — the decision-core SEED of the ck2 kernel (design:
+# designs/2026-06-16-ck2-kernel.md, which calls the seed frozen). src/lib.rs is
+# the account of what the crate carries, milestone by milestone:
+#   M0  the seed layer: Name / Level / BigNat / RawExpr / Term private types,
+#       the Term::validate chokepoint, the two-valued Verdict;
+#   M1  the decision core: whnf, def_eq, infer / check / infer_sort;
+#   M2  inductive admission with recursor derivation;
+#   M3  mutual and nested inductive admission.
+# This header used to describe M0 alone ("No whnf/def_eq/infer/recursors");
+# src/ has carried all four since.
+#
+# The genesis pin is STALE. genesis/ck0/MANIFEST.txt pins the seed by sha256 at
+# one commit and the source has moved since. Measured on 2026-11-12 at Clean
+# 404419f76 with the manifest's own method (the checksum step of
+# genesis/ck0/verify.sh): 39 of its 48 listed files fail, and the file set
+# genesis/ck0/generate_manifest.sh selects is 92 files, 44 of them unlisted.
+# No gate runs that check, so nothing goes red. Re-pinning the seed to current
+# source is plan unit Q6 (below); re-run the check before quoting a figure, and
+# read Q6's row before calling the pin current.
+#
+# Role in the kernel self-proof (docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md,
+# which amends docs/DECISIONS.md R29): the member of the re-check quorum that is
+# built by stock rustc. "Built by stock rustc" is a property of the run that
+# built it, not of this manifest. The bounded independent export reader now
+# accepts the dependent-function core and checked single inductive/recursor
+# exports (export/, ck0-replay), including nested mutual exports.
+# Quotient signatures/computation and canonical literals/native folds are checked.
+# Q2 qualification and the current rule table are recorded in the reports.
+# Q2 measurements are in the reports; counted quorum integration is Q0/Q4.
+#
+# Who links it.
+#   Inside this workspace, nothing depends on this crate outside
+#   [dev-dependencies]: clean-kernel's and clean-olean's tests are its only
+#   users here.
+#   Outside it, that is NOT so (read 2026-11-12 from the sibling checkouts'
+#   origin/main: ty 55fc18824, Trust a3e917947). ty's crates/tla-check has
+#   `clean-ck0 = { workspace = true, optional = true }` under [dependencies],
+#   enabled by its feature `clean-cic`, which is in that crate's default
+#   features; non-test code calls it (src/ck0_bridge.rs translates
+#   clean_kernel::Expr into RawExpr; src/cleancic.rs fails a certification
+#   closed when ck0 rejects a term clean-kernel accepted). Trust's
+#   crates/trust-spec-temporal links tla-check under [dependencies] with
+#   `default-features = false, features = ["im", "bumpalo", "clean-cic"]`,
+#   patches clean-ck0 to its first-party/clean checkout, and its manifest says
+#   "Both Clean checkers are part of that authority closure". So this crate is
+#   production code in an authority closure there, with the stale pin above
+#   (docs/DECISIONS.md, 2026-11-12, "clean-ck0 is linked in production outside
+#   this workspace"; plan units P1 and Q6).
 [package]
 name = "clean-ck0"
 version.workspace = true
@@ -14,15 +57,50 @@ rust-version.workspace = true
 authors.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "ck2 kernel frozen decision-core seed (M0): private Term/Level/Name/BigNat + validate chokepoint"
+description = "ck2 kernel decision-core seed (M0-M3): private validated terms, whnf/def_eq/infer, and single, mutual and nested inductive admission with derived recursors; a re-checker with a bounded independent export reader; a dev-dependency inside the Clean workspace, linked in production by ty's tla-check (feature clean-cic) and through it by Trust; its genesis manifest (genesis/ck0) is stale and re-pinning it is self-proof plan unit Q6"
 
 [lints]
 workspace = true
 
 [dependencies]
+sha2 = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 num-bigint.workspace = true
 num-traits.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]
 proptest.workspace = true
+
+[features]
+default = []
+export = ["dep:serde", "dep:serde_json", "dep:sha2"]
+
+[[bin]]
+name = "ck0-replay"
+required-features = ["export"]
+
+[[test]]
+name = "export_reader"
+required-features = ["export"]
+
+[[test]]
+name = "export_inductives"
+required-features = ["export"]
+
+[[test]]
+name = "export_mutual"
+required-features = ["export"]
+
+[[test]]
+name = "export_nested"
+required-features = ["export"]
+
+[[test]]
+name = "export_nested_general"
+required-features = ["export"]
+
+[[test]]
+name = "export_quotient"
+required-features = ["export"]

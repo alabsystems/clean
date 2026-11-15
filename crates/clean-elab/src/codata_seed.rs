@@ -185,18 +185,40 @@ fn coind_source() -> Result<String, ElabError> {
 /// after the LAST declaration lands. `what` names the section in diagnostics.
 fn inject_section(env: &mut Environment, src: &str, what: &str) -> Result<(), ElabError> {
     let decls = clean_parser::parse_file(src).map_err(|e| ElabError::Unsupported {
-        feature: format!("codata seed ({what}): embedded source failed to parse: {e:?}"),
+        feature: format!(
+            "codata seed ({what}): embedded source failed to parse: {}",
+            e
+        ),
     })?;
     let mut candidate = env.clone();
     for (i, decl) in decls.iter().enumerate() {
-        crate::elaborate_decl_and_register(&mut candidate, decl).map_err(|e| {
+        let result = crate::elaborate_decl_and_register(&mut candidate, decl).map_err(|e| {
             ElabError::Unsupported {
                 feature: format!(
                     "codata seed ({what}): declaration {i} failed to elaborate/kernel-check \
-                     (env left untouched): {e:?}"
+                     (env left untouched): {}",
+                    e
                 ),
             }
         })?;
+        fn first_failure(result: &crate::ElabResult) -> Option<&ElabError> {
+            match result {
+                crate::ElabResult::Failed { error, .. } => Some(error),
+                crate::ElabResult::Diagnosed { diagnostics, .. } => {
+                    diagnostics.first().map(|d| &d.error)
+                }
+                crate::ElabResult::Multiple(results) => results.iter().find_map(first_failure),
+                _ => None,
+            }
+        }
+        if let Some(error) = first_failure(&result) {
+            return Err(ElabError::Unsupported {
+                feature: format!(
+                    "codata seed ({what}): declaration {i} contains a failed declaration \
+                     (env left untouched): {error}"
+                ),
+            });
+        }
     }
     *env = candidate;
     Ok(())
@@ -209,6 +231,21 @@ fn inject_section(env: &mut Environment, src: &str, what: &str) -> Result<(), El
 /// swap), fail-closed (first failing declaration aborts with its error and
 /// leaves `env` untouched). Call this ONLY from codata elaboration paths —
 /// never from the default entry point.
+fn in_seed_namespace(name: &clean_kernel::Name) -> bool {
+    let prefix = clean_kernel::Name::anon().str("Codata");
+    let mut current = name;
+    loop {
+        current = match current.inner() {
+            clean_kernel::name::NameInner::Anon => return false,
+            clean_kernel::name::NameInner::Str(parent, _)
+            | clean_kernel::name::NameInner::Num(parent, _) => parent,
+        };
+        if current == &prefix {
+            return true;
+        }
+    }
+}
+
 pub(crate) fn ensure_codata_seeds(env: &mut Environment) -> Result<(), ElabError> {
     // Already seeded iff EVERY witness is present. A partial occupation (some
     // witnesses, or a squatted sentinel alone) deliberately falls through to
@@ -226,8 +263,8 @@ pub(crate) fn ensure_codata_seeds(env: &mut Environment) -> Result<(), ElabError
     // shadow either side.
     if let Some(occupied) = env
         .constants()
-        .map(|c| c.name.to_string())
-        .find(|n| n.starts_with("Codata."))
+        .map(|c| c.name.clone())
+        .find(in_seed_namespace)
     {
         return Err(ElabError::Unsupported {
             feature: format!(
@@ -286,6 +323,22 @@ mod tests {
     use super::*;
     use clean_kernel::Name;
 
+    #[test]
+    fn nested_seed_failure_rolls_back_successful_siblings() {
+        let mut env = Environment::with_prelude();
+        let before = env.num_constants();
+        let result = inject_section(
+            &mut env,
+            "namespace Codata\ndef sibling : Nat := 0\ndef bad : Nat := true\nend Codata",
+            "failure-control",
+        );
+        assert!(result.is_err(), "nested failed leaf must abort injection");
+        assert_eq!(env.num_constants(), before);
+        assert!(env
+            .get_const(&Name::from_string("Codata.sibling"))
+            .is_none());
+    }
+
     /// The default elaboration path must not grow the env: seeds are lazy.
     #[test]
     fn test_codata_seed_default_env_untouched() {
@@ -299,7 +352,7 @@ mod tests {
         );
         let codata_consts = env
             .constants()
-            .filter(|c| c.name.to_string().starts_with("Codata."))
+            .filter(|c| in_seed_namespace(&c.name))
             .count();
         assert_eq!(
             codata_consts, 0,

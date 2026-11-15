@@ -270,7 +270,10 @@ pub fn cert_simp(state: &mut ProofState) -> TacticResult {
 }
 
 /// Configurable implementation for tests and future command surfaces.
-pub fn cert_simp_with_config(state: &mut ProofState, config: &CertSimpConfig) -> TacticResult {
+pub(crate) fn cert_simp_with_config(
+    state: &mut ProofState,
+    config: &CertSimpConfig,
+) -> TacticResult {
     if state.current_goal().is_none() {
         return Err(TacticError::NoGoals);
     }
@@ -310,7 +313,10 @@ pub fn cert_simp_with_config(state: &mut ProofState, config: &CertSimpConfig) ->
 ///
 /// Axiom-backed candidates are skipped: the tactic only selects existing
 /// definitions with exposed bodies and constructive theorems.
-pub(crate) fn cert_simp_lemma_names(state: &ProofState, config: &CertSimpConfig) -> Vec<String> {
+pub(crate) fn cert_simp_lemma_names(
+    state: &ProofState,
+    config: &CertSimpConfig,
+) -> Vec<clean_parser::SurfaceName> {
     let mut out = Vec::new();
     push_existing_candidates(state, BASE_CERT_SIMP_CANDIDATES, &mut out);
     push_existing_candidates(state, LIST_CERT_SIMP_CANDIDATES, &mut out);
@@ -355,7 +361,11 @@ pub(crate) fn cert_simp_blocker_heads(state: &ProofState, limit: usize) -> Vec<S
     visitor.heads
 }
 
-fn push_existing_candidates(state: &ProofState, candidates: &[&str], out: &mut Vec<String>) {
+fn push_existing_candidates(
+    state: &ProofState,
+    candidates: &[&str],
+    out: &mut Vec<clean_parser::SurfaceName>,
+) {
     for candidate in candidates {
         let name = Name::from_string(candidate);
         let Some(decl) = state.env().get_const(&name) else {
@@ -373,7 +383,10 @@ fn push_existing_candidates(state: &ProofState, candidates: &[&str], out: &mut V
             ConstantKind::Axiom | ConstantKind::Opaque => false,
         };
         if eligible {
-            push_unique(out, (*candidate).to_string());
+            let identity = clean_parser::SurfaceName::from_name(name);
+            if !out.contains(&identity) {
+                out.push(identity);
+            }
         }
     }
 }

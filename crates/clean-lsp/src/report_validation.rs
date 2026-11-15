@@ -1919,6 +1919,34 @@ mod tests {
         r.trim().is_empty() || r.contains("\"stub\": true")
     }
 
+    /// REFUSAL PIN over the whole module, added 2026-09-16.
+    ///
+    /// MEASURED: `reports/lsp-infoview-parity.json` is 15 bytes of
+    /// `{"stub": true}`, so `fixture_is_stub()` is TRUE and every one of the
+    /// tests below returns at its first line after an `eprintln!("SKIP: ...")`.
+    /// None of them has ever reached an assertion in this checkout. The skips
+    /// are deliberate and are NOT removed here — the remedy is a real minted
+    /// report, which is evidence work, not a test edit.
+    ///
+    /// What this pin buys: the day a real report is minted, THIS test fails
+    /// loudly and whoever minted it is told, in one place, that the
+    /// `fixture_is_stub()` early returns below are now dead and must be
+    /// deleted. Without it the report could land and the module could stay
+    /// skipping, silently, exactly as it does today.
+    ///
+    /// Note the one thing this pin does NOT distinguish: `report()` uses
+    /// `unwrap_or_default()`, so a DELETED fixture also reads as a stub and this
+    /// pin would still pass. It fails on a real report, which is its purpose.
+    #[test]
+    fn lsp_infoview_parity_fixture_is_a_stub_so_every_test_in_this_module_skips() {
+        assert!(
+            fixture_is_stub(),
+            "reports/lsp-infoview-parity.json is no longer a stub: delete the \
+             `fixture_is_stub()` early return from every test in this module so \
+             they assert against the real report instead of skipping"
+        );
+    }
+
     #[test]
     fn lsp_infoview_parity_report_is_rust_validated_fail_closed() {
         if fixture_is_stub() {

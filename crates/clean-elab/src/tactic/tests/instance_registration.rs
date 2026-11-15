@@ -44,7 +44,13 @@ fn test_let_i_registers_instance_in_table() {
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
     let value = Expr::const_(Name::from_string("classical_dec"), vec![]);
-    let_i(&mut state, "inst", ty, value).unwrap();
+    let_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+        value,
+    )
+    .unwrap();
 
     // The instance should be registered in the table
     let instances = state.instances().expect("should have instance table");
@@ -60,7 +66,12 @@ fn test_have_i_registers_instance_in_table() {
     let mut state = state_with_class("Decidable");
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
-    have_i(&mut state, "inst", ty).unwrap();
+    have_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+    )
+    .unwrap();
 
     // The instance should be registered in the table
     let instances = state.instances().expect("should have instance table");
@@ -77,7 +88,12 @@ fn test_have_i_creates_subgoal() {
     let original_goal_count = state.goals.len();
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
-    have_i(&mut state, "inst", ty).unwrap();
+    have_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+    )
+    .unwrap();
 
     // have_i should create a subgoal for proving the instance type
     assert_eq!(
@@ -119,7 +135,12 @@ fn test_infer_i_registers_resolved_instance() {
 
     let mut state = ProofState::with_instances(env, target, instances);
 
-    infer_i(&mut state, "inst", dec_ty).unwrap();
+    infer_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        dec_ty,
+    )
+    .unwrap();
 
     // After inferI, the resolved instance should also be registered as a local instance
     let instances = state.instances().expect("should have instance table");
@@ -141,11 +162,19 @@ fn test_let_i_without_instance_table_still_adds_to_context() {
 
     let ty = Expr::const_(Name::from_string("A"), vec![]);
     let value = Expr::const_(Name::from_string("a"), vec![]);
-    let_i(&mut state, "inst", ty, value).unwrap();
+    let_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+        value,
+    )
+    .unwrap();
 
     let goal = state.current_goal().unwrap();
     assert!(
-        goal.local_ctx.iter().any(|d| d.name == "inst"),
+        goal.local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("inst")),
         "letI should add to local context even without instance table"
     );
 }

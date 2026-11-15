@@ -15,6 +15,7 @@ use crate::oracle::{
 };
 use crate::premise::{MePoSelector, PremiseDatabase, PremiseId};
 use crate::proof_result::{build_hypothesis_proof_context, HypothesisWithProofFVar};
+use crate::search_stop::SearchStop;
 use crate::solver_cache::obligation_digest;
 use crate::solver_cache::record::{AttemptResult, SmtStatsSnapshot, SolverEngine};
 use crate::solver_cache::store;
@@ -38,6 +39,17 @@ const MAX_INJECTED_PREMISES: usize = 8;
 /// this many hypotheses (one per candidate level), each independently
 /// kernel-re-checked when its proof is closed.
 const MAX_LEVEL_CANDIDATES: usize = 3;
+
+/// One SMT attempt: its outcome, and whether a count of the language stopped
+/// one of its solves before it decided.
+pub(crate) struct SmtAttempt {
+    /// What the attempt answered.
+    pub(crate) outcome: AutomationOutcome,
+    /// Whether a solve stopped at the SMT solver's CDCL conflict limit
+    /// (`smt::SMT_CONFLICT_LIMIT`). A typed signal, so a counted search need
+    /// not read it back out of the outcome's reason text.
+    pub(crate) conflict_limit_reached: bool,
+}
 
 impl AutomationEngine {
     /// Canonical detailed entrypoint using the forward-compatible query type.
@@ -273,11 +285,12 @@ impl AutomationEngine {
             }
             RoutedEngine::Induction => {
                 let base_ctx = proof_context.cloned().unwrap_or_default();
+                let stop = SearchStop::new(start.checked_add(query.timeout));
                 let term = self.try_induction_lane(
                     env,
                     query.goal,
                     &base_ctx,
-                    start + query.timeout,
+                    &stop,
                     crate::engine_induction::INDUCTION_FUEL,
                 )?;
                 let induction_ctx = if base_ctx.is_empty() {
@@ -298,11 +311,12 @@ impl AutomationEngine {
                     .map(|(hyp, fvar, _origin)| (hyp.clone(), *fvar))
                     .collect();
                 let superpos_start = Instant::now();
+                let stop = SearchStop::new(start.checked_add(query.timeout));
                 let superpos_result = self.try_superposition_prove_with_fvars_until(
                     env,
                     query.goal,
                     &superposition_hypotheses,
-                    Some(start + query.timeout),
+                    Some(&stop),
                 );
                 emit_attempt_telemetry(
                     obligation,
@@ -369,6 +383,33 @@ impl AutomationEngine {
         obligation: Option<&str>,
         attempt_start: Instant,
     ) -> AutomationOutcome {
+        self.try_smt_attempt(
+            env,
+            goal,
+            hypotheses,
+            premise_db,
+            proof_context,
+            start,
+            obligation,
+            attempt_start,
+        )
+        .outcome
+    }
+
+    /// [`Self::try_smt_detailed`], also saying whether the SMT conflict limit
+    /// stopped a solve ([`SmtAttempt`]).
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn try_smt_attempt(
+        &self,
+        env: &Environment,
+        goal: &Expr,
+        hypotheses: &[HypothesisWithProofFVar],
+        premise_db: Option<&PremiseDatabase>,
+        proof_context: Option<&LocalContext>,
+        start: Instant,
+        obligation: Option<&str>,
+        attempt_start: Instant,
+    ) -> SmtAttempt {
         let mut bridge = SmtBridge::new(env);
         bridge.set_max_instantiation_rounds(self.max_smt_rounds);
         if let Some(ctx) = proof_context {
@@ -424,7 +465,14 @@ impl AutomationEngine {
                 source: AutomationSource::Smt,
                 time_ms: elapsed_ms(start),
             },
-            Ok(SmtVerificationResult::Refuted(_model)) => AutomationOutcome::Refuted {
+            // A satisfying assignment of the bridge's ABSTRACTION is not a
+            // refutation: operations outside its theories are uninterpreted,
+            // so VALID goals get models too. Report "not proved", with the
+            // model labelled for what it is. (Reporting `Refuted` here also
+            // made the engine skip the superposition and oracle lanes for a
+            // goal they might have proved.)
+            Ok(refuted @ SmtVerificationResult::Refuted(_)) => AutomationOutcome::Unknown {
+                reason: refuted.unvalidated_model_reason().unwrap_or_default(),
                 source: AutomationSource::Smt,
                 time_ms: elapsed_ms(start),
             },
@@ -447,7 +495,10 @@ impl AutomationEngine {
             &outcome,
             smt_stats,
         );
-        outcome
+        SmtAttempt {
+            outcome,
+            conflict_limit_reached: bridge.conflict_limit_reached(),
+        }
     }
 
     pub(crate) fn try_oracle_detailed(
@@ -678,11 +729,12 @@ impl AutomationEngine {
                 .iter()
                 .map(|(hyp, fvar, _)| (hyp.clone(), *fvar))
                 .collect();
+            let stop = SearchStop::new(Some(deadline));
             if let Some(result) = self.try_superposition_prove_with_fvars_until(
                 env,
                 query.goal,
                 &superposition_hyps,
-                Some(deadline),
+                Some(&stop),
             ) {
                 if let Some(verified) = self.close_injected_proof(
                     env,
@@ -862,11 +914,12 @@ impl AutomationEngine {
                 .iter()
                 .map(|(hyp, fvar, _)| (hyp.clone(), *fvar))
                 .collect();
+            let stop = SearchStop::new(Some(deadline));
             if let Some(result) = self.try_superposition_prove_with_fvars_until(
                 env,
                 &goal_norm,
                 &superposition_hyps,
-                Some(deadline),
+                Some(&stop),
             ) {
                 if let Some(verified) = self.close_injected_proof(
                     env,
@@ -960,7 +1013,8 @@ impl AutomationEngine {
     /// them at sub-positions — lifting each rewrite through the surrounding
     /// application spine with `congrArg`/`congr` and stitching the residual with
     /// `Eq.trans` — recursing until the goal reduces to reflexivity. It is bounded
-    /// by [`REWRITE_DEPTH`] and the caller's wall-clock `deadline`. The search is
+    /// by [`REWRITE_DEPTH`] and stopped by the caller's wall-clock `deadline`
+    /// (polled through a [`SearchStop`] where the rewrite's counts go on). The search is
     /// run at sub-positions of BOTH the RAW goal and (as a fallback) its
     /// whnf-normalized form (the same operator-notation pre-pass the direct closer
     /// uses), mirroring [`Self::try_project_law_defeq`]. The raw attempt is what
@@ -995,6 +1049,7 @@ impl AutomationEngine {
         // Each projected law `∀ x…, l = r` is a directed rewrite fact
         // `(witness, equation_type)`; the engine's sub-term rewriter peels the `∀`
         // telescope and first-order matches at a sub-position.
+        let stop = SearchStop::new(Some(deadline));
         let facts: Vec<(Expr, Expr)> = laws
             .iter()
             .map(|(law_ty, law_term)| (law_term.clone(), law_ty.clone()))
@@ -1012,7 +1067,7 @@ impl AutomationEngine {
         // goal (…@926) *before* the normalized one (…@934). Kernel-gated as ever:
         // `prove_eq_rewrite` checks every term against the raw goal, and the result
         // is re-checked by `close_injected_proof` below.
-        if let Some(term) = self.prove_eq_rewrite(env, ctx, goal, &facts, deadline, REWRITE_DEPTH) {
+        if let Some(term) = self.prove_eq_rewrite(env, ctx, goal, &facts, &stop, REWRITE_DEPTH) {
             if let Some(verified) =
                 self.close_injected_proof(env, goal, Some(ctx), &term, &[], start)
             {
@@ -1028,7 +1083,7 @@ impl AutomationEngine {
         // def-eq to it), the sole soundness gate for this lane.
         if goal_changed {
             if let Some(term) =
-                self.prove_eq_rewrite(env, ctx, &goal_norm, &facts, deadline, REWRITE_DEPTH)
+                self.prove_eq_rewrite(env, ctx, &goal_norm, &facts, &stop, REWRITE_DEPTH)
             {
                 return self.close_injected_proof(env, goal, Some(ctx), &term, &[], start);
             }
@@ -1427,8 +1482,9 @@ fn elapsed_ms(start: Instant) -> u64 {
 }
 
 /// Strength rank of a non-`Verified` outcome (`Verified` short-circuits and is
-/// never merged). Refuted (a counter-model) is the most informative, then a
-/// strategy that established information (`Unverified`), then bare `Unknown`.
+/// never merged). Refuted (a VALIDATED counter-model; no engine produces one
+/// today) is the most informative, then a strategy that established
+/// information (`Unverified`), then bare `Unknown`.
 fn outcome_rank(outcome: &AutomationOutcome) -> u8 {
     match outcome {
         AutomationOutcome::Verified(_) => 3,

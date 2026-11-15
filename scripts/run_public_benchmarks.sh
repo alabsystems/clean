@@ -43,9 +43,9 @@ Artifact output:
   reports/benchmarks/publication/<run-id>/raw/criterion/server_ops
 
 Benchmark commands:
-  cargo bench --locked --message-format=short -j 1 --package clean-kernel --bench kernel_bench -- --output-format bencher
-  cargo bench --locked --message-format=short -j 1 --package clean-kernel --bench cert_macro_bench -- --output-format bencher
-  cargo bench --locked --message-format=short -j 1 --package clean-server --bench server_ops -- --output-format bencher
+  targo --unverified bench --locked --message-format=short -j 1 --package clean-kernel --bench kernel_bench -- --output-format bencher
+  targo --unverified bench --locked --message-format=short -j 1 --package clean-kernel --bench cert_macro_bench -- --output-format bencher
+  targo --unverified bench --locked --message-format=short -j 1 --package clean-server --bench server_ops -- --output-format bencher
 USAGE
 }
 
@@ -142,7 +142,7 @@ run_benchmark() {
 
     mkdir -p "$criterion_home"
     CRITERION_HOME="$criterion_home" \
-        cargo bench --locked --message-format=short -j "$CARGO_BUILD_JOBS" --package "$package" --bench "$target" -- --output-format bencher \
+        targo --unverified bench --locked --message-format=short -j "$CARGO_BUILD_JOBS" --package "$package" --bench "$target" -- --output-format bencher \
         >"$out/raw/$target.stdout.txt" \
         2>"$stderr_log"
 }

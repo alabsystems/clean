@@ -90,11 +90,25 @@ fn assert_match_definition_uses_int_of_nat(name: &str, decl_src: &str) {
 /// #2727: wildcard first-arm inference must thread the enclosing expected type.
 #[test]
 fn test_match_first_arm_wildcard_threads_expected_type() {
+    // A wildcard first arm with a later arm behind it is refused, as pinned
+    // Lean 4.8.0 refuses it ("redundant alternative", measured 2026-10-16;
+    // G62). The expected type still threads through a wildcard-only match.
     assert_match_definition_uses_int_of_nat(
         "match_first_arm_wildcard_int",
         r"def match_first_arm_wildcard_int (b : Bool) : Int := match b with
+            | _ => 0",
+    );
+    let mut env = Environment::with_prelude();
+    let decl = parse_decl_for_elab(
+        r"def match_first_arm_wildcard_redundant (b : Bool) : Int := match b with
             | _ => 0
             | Bool.true => 1",
+    )
+    .expect("parses");
+    let result = crate::elaborate_decl_and_register(&mut env, &decl);
+    assert!(
+        matches!(result, Err(ElabError::RedundantAlternative { .. })),
+        "an arm behind a wildcard is a redundant alternative, got {result:?}"
     );
 }
 
@@ -126,7 +140,7 @@ fn test_match_arm_nat_rec_body_elaborates_for_micro_expr() {
             | let_ : MicroExpr -> MicroExpr -> MicroExpr -> MicroExpr
             | opaque_ : MicroExpr -> MicroExpr",
         r"def micro_inline_nat_rec (body : MicroExpr) (val : MicroExpr) : MicroExpr := match body with
-            | MicroExpr.bvar i => Nat.rec (fun _ => MicroExpr) val (fun n _ => MicroExpr.bvar n) i
+            | MicroExpr.bvar i => @Nat.rec (fun _ => MicroExpr) val (fun n _ => MicroExpr.bvar n) i
             | _ => val",
     ];
 

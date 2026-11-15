@@ -46,7 +46,46 @@ impl DeclarationTrustSummary {
         self.trusted_ay_count += other.trusted_ay_count;
     }
 
+    /// Fold the trust markers a declaration's CONSTANT CLOSURE reaches
+    /// ([`super::DomainAxiomClosure::trust_markers_of_name`]) into this
+    /// summary of its own terms, so a verdict read off the summary is the
+    /// closure's verdict. A marker the own terms already show changes nothing;
+    /// one they do not show — reached through a lemma, an alias, an instance —
+    /// is recorded as explicit (non-synthetic) sorry debt or as one trusted
+    /// reference. Returns whether the closure added debt the own terms did not
+    /// carry.
+    pub fn absorb_closure_markers<'a>(
+        &mut self,
+        markers: impl IntoIterator<Item = &'a crate::name::Name>,
+    ) -> bool {
+        use super::axiom_audit::{is_sorry_marker, name_has_components};
+        let mut added = false;
+        // Structural marker tests (never the printed name), as every
+        // trust-marker classification is.
+        for marker in markers {
+            if is_sorry_marker(marker) {
+                if !self.has_sorry() {
+                    self.has_explicit_sorry = true;
+                    added = true;
+                }
+            } else if name_has_components(marker, "trustedArith") {
+                if self.trusted_arith_count == 0 {
+                    self.trusted_arith_count = 1;
+                    added = true;
+                }
+            } else if name_has_components(marker, "trustedAy") && self.trusted_ay_count == 0 {
+                self.trusted_ay_count = 1;
+                added = true;
+            }
+        }
+        added
+    }
+
     /// Compute declaration trust data for a single expression.
+    ///
+    /// OWN TERMS ONLY: this reads the constants the expression mentions, not
+    /// what they reach. A verdict about a declaration must also read its
+    /// constant closure — see [`Self::absorb_closure_markers`].
     pub fn from_expr(expr: &Expr) -> Self {
         let (has_explicit_sorry, has_synthetic_sorry, trusted_arith_count, trusted_ay_count) =
             expr.trust_scan();
@@ -98,6 +137,11 @@ impl SorrySummary {
 
 impl ConstantInfo {
     /// Compute the declaration's trust summary from its stored type and body.
+    ///
+    /// OWN TERMS ONLY (any occurrence of a marker, whatever its arguments, but
+    /// not through the constants the declaration cites). A pass/fail or trust
+    /// decision must read the closure too:
+    /// [`DeclarationTrustSummary::absorb_closure_markers`].
     pub fn trust_summary(&self) -> DeclarationTrustSummary {
         let mut summary = DeclarationTrustSummary::from_expr(&self.type_);
         if let Some(value) = &self.value {

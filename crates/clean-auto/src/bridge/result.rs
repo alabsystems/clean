@@ -35,7 +35,9 @@ pub struct SmtProofResult {
 
 impl SmtProofResult {
     /// Create a proof result with a kernel proof term and proof step.
-    pub fn new(
+    /// `pub(crate)`: construction takes a [`ProofStep`], which stays
+    /// crate-private (#2882) — external callers only consume results.
+    pub(crate) fn new(
         method: ProofMethod,
         sketch: impl Into<String>,
         proof: Expr,
@@ -103,7 +105,13 @@ pub enum SmtVerificationResult {
         /// The proof method that established UNSAT.
         method: ProofMethod,
     },
-    /// SMT found a counterexample: negated goal is satisfiable.
+    /// The translated negated goal is satisfiable IN THE BRIDGE'S ABSTRACTION.
+    ///
+    /// This is not a validated counterexample: the bridge lowers constant-headed
+    /// applications outside its theories (`Bool.and`, `HXor.hXor`, `UInt32`
+    /// arithmetic, ...) to uninterpreted functions, so a model here can falsify a
+    /// VALID goal (e.g. `∀ a : Bool, (a && true) = a`). Callers must not report it
+    /// as one without evaluating the goal themselves.
     Refuted(SmtModel),
     /// SMT solver could not determine satisfiability (timeout, resource limit,
     /// lossy translation, or incomplete decision procedure).
@@ -124,7 +132,9 @@ impl SmtVerificationResult {
         matches!(self, Self::Verified(_))
     }
 
-    /// Check if the result is a refutation (counterexample found).
+    /// Check if the translated negated goal was satisfiable in the bridge's
+    /// abstraction (the `Refuted` variant). NOT a validated counterexample —
+    /// see [`Self::Refuted`].
     pub fn is_refuted(&self) -> bool {
         matches!(self, Self::Refuted(_))
     }
@@ -139,14 +149,29 @@ impl SmtVerificationResult {
         matches!(self, Self::Unknown(_))
     }
 
-    /// Extract a human-readable summary if the result is a refutation.
+    /// A human-readable summary of the `Refuted` variant's model — an
+    /// UNVALIDATED model of the bridge's abstraction, labelled as such.
     ///
-    /// Returns `None` for non-refutation results. This is the public read
-    /// surface for the `Refuted` variant since `SmtModel` stays crate-private (#2882).
-    pub fn refutation_summary(&self) -> Option<String> {
+    /// Returns `None` for other results. This is the public read surface for
+    /// the `Refuted` variant since `SmtModel` stays crate-private (#2882).
+    pub(crate) fn refutation_summary(&self) -> Option<String> {
         match self {
             Self::Refuted(model) => Some(model.display_summary()),
             _ => None,
         }
+    }
+
+    /// The honest non-proof report of a `Refuted` result, for a caller that
+    /// surfaces the SMT verdict: the goal was NOT proved, and the model is a
+    /// model of the solver's abstraction only — never a refutation of the goal
+    /// or a counterexample to it. `None` for other results.
+    pub fn unvalidated_model_reason(&self) -> Option<String> {
+        self.refutation_summary().map(|summary| {
+            format!(
+                "not proved: the negated goal is satisfiable in the solver's abstraction, \
+                 where operations outside its theories are uninterpreted ({summary}) — \
+                 not a refutation of the goal"
+            )
+        })
     }
 }

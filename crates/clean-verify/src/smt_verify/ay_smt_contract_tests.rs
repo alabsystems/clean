@@ -127,7 +127,7 @@ fn test_verify_contract_trust_gap_in_full_mode() {
             violation,
             ContractViolation::UnexpectedTrustStep {
                 actual: StepTrustLevel::Trusted,
-                required: StepTrustLevel::KernelVerified,
+                required: StepTrustLevel::StepChecked,
                 ..
             }
         )

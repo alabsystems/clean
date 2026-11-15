@@ -1,0 +1,30 @@
+{
+ "schema": "clean.crystal.a0.discharge.v2",
+ "targets": {
+  "clean::escapes": {
+   "escaping_callees": {
+    "clean::decl_a": {
+     "clause": "a",
+     "model": "fixture model A",
+     "residual": "residual A"
+    },
+    "clean::decl_b": {
+     "clause": "a",
+     "model": "fixture model B",
+     "residual": "residual B"
+    }
+   },
+   "clause_b_theorems": []
+  },
+  "clean::partial": {
+   "escaping_callees": {
+    "clean::decl_a": {
+     "clause": "a",
+     "model": "only the first is covered",
+     "residual": "decl_b is deliberately absent"
+    }
+   },
+   "clause_b_theorems": []
+  }
+ }
+}

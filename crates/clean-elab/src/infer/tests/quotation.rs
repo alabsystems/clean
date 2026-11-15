@@ -264,7 +264,7 @@ fn test_q_pattern_duplicate_binder_direct_match() {
     // Pattern: $x $x - construct App(QAntiquot("x"), QAntiquot("x"))
     let antiquot_x = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
-        content: QAntiquotContent::Simple("x".to_string()),
+        content: QAntiquotContent::Simple(SurfaceName::generated_path("x")),
     };
     let pattern_surface = SurfaceExpr::App(
         Span::dummy(),
@@ -288,7 +288,11 @@ fn test_q_pattern_duplicate_binder_direct_match() {
     // Verify x was bound to Type
     let bindings = match_result.unwrap().bindings;
     assert_eq!(bindings.len(), 1, "Should have exactly one binding for x");
-    assert_eq!(bindings[0].0, "x", "Binding name should be 'x'");
+    assert_eq!(
+        bindings[0].0,
+        SurfaceName::generated_path("x"),
+        "Binding name should be 'x'"
+    );
 }
 
 #[test]
@@ -310,7 +314,7 @@ fn test_q_pattern_duplicate_binder_direct_mismatch() {
     // Pattern: $x $x - construct App(QAntiquot("x"), QAntiquot("x"))
     let antiquot_x = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
-        content: QAntiquotContent::Simple("x".to_string()),
+        content: QAntiquotContent::Simple(SurfaceName::generated_path("x")),
     };
     let pattern_surface = SurfaceExpr::App(
         Span::dummy(),
@@ -373,11 +377,11 @@ fn test_q_pattern_duplicate_binder_dedup() {
     // Pattern: $x $y $x - App(App($x, $y), $x)
     let antiquot_x = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
-        content: QAntiquotContent::Simple("x".to_string()),
+        content: QAntiquotContent::Simple(SurfaceName::generated_path("x")),
     };
     let antiquot_y = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
-        content: QAntiquotContent::Simple("y".to_string()),
+        content: QAntiquotContent::Simple(SurfaceName::generated_path("y")),
     };
     // Inner: $x $y
     let inner_pattern = SurfaceExpr::App(
@@ -413,9 +417,15 @@ fn test_q_pattern_duplicate_binder_dedup() {
     );
 
     // Verify binding names are x and y
-    let names: Vec<_> = bindings.iter().map(|(n, _, _)| n.as_str()).collect();
-    assert!(names.contains(&"x"), "Should have binding for x");
-    assert!(names.contains(&"y"), "Should have binding for y");
+    let names: Vec<_> = bindings.iter().map(|(n, _, _)| n.name()).collect();
+    assert!(
+        names.contains(&&Name::from_string("x")),
+        "Should have binding for x"
+    );
+    assert!(
+        names.contains(&&Name::from_string("y")),
+        "Should have binding for y"
+    );
 }
 
 #[test]
@@ -584,7 +594,7 @@ fn test_elaborate_antiquot_outside_q_fails() {
 
     let surface = SurfaceExpr::QAntiquot {
         span: clean_parser::Span::dummy(),
-        content: QAntiquotContent::Simple("x".to_string()),
+        content: QAntiquotContent::Simple(SurfaceName::generated_path("x")),
     };
 
     let result = ctx.elaborate(&surface);
@@ -880,7 +890,7 @@ fn test_extract_splice_pattern_var() {
     let splice_antiquot = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: None,
             at_least_one: false,
         },
@@ -892,7 +902,11 @@ fn test_extract_splice_pattern_var() {
         1,
         "Should extract one pattern variable from splice"
     );
-    assert_eq!(vars[0].0, "xs", "Variable name should be 'xs'");
+    assert_eq!(
+        vars[0].0,
+        SurfaceName::generated_path("xs"),
+        "Variable name should be 'xs'"
+    );
     assert!(
         vars[0].1.is_none(),
         "Splice var should have no type annotation"
@@ -912,7 +926,7 @@ fn test_extract_splice_pattern_var_dedup() {
     let splice_antiquot = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: None,
             at_least_one: false,
         },
@@ -930,7 +944,11 @@ fn test_extract_splice_pattern_var_dedup() {
         "Duplicate splice should be deduplicated, got {:?}",
         vars
     );
-    assert_eq!(vars[0].0, "xs", "Variable name should be 'xs'");
+    assert_eq!(
+        vars[0].0,
+        SurfaceName::generated_path("xs"),
+        "Variable name should be 'xs'"
+    );
 }
 
 /// Test splice elaboration in patterns creates metavariables (q_pattern.rs:181-196)
@@ -945,7 +963,7 @@ fn test_elaborate_splice_pattern_with_mvars() {
     let splice_antiquot = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: None,
             at_least_one: false,
         },
@@ -962,7 +980,7 @@ fn test_elaborate_splice_pattern_with_mvars() {
 
     // Should create a metavariable for xs
     assert!(
-        mvar_map.contains_key("xs"),
+        mvar_map.contains_key(&SurfaceName::generated_path("xs")),
         "mvar_map should contain 'xs': {:?}",
         mvar_map.keys().collect::<Vec<_>>()
     );
@@ -987,7 +1005,7 @@ fn test_elaborate_splice_pattern_mvar_reuse() {
     let splice_antiquot = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: None,
             at_least_one: false,
         },
@@ -1014,7 +1032,10 @@ fn test_elaborate_splice_pattern_mvar_reuse() {
         "Duplicate splice should reuse metavariable, got {:?}",
         mvar_map.keys().collect::<Vec<_>>()
     );
-    assert!(mvar_map.contains_key("xs"), "mvar_map should contain 'xs'");
+    assert!(
+        mvar_map.contains_key(&SurfaceName::generated_path("xs")),
+        "mvar_map should contain 'xs'"
+    );
 }
 
 /// Test splice antiquotation processing in quotation.rs:process_qq_antiquots
@@ -1030,7 +1051,7 @@ fn test_process_splice_antiquot() {
     let splice_antiquot = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: None,
             at_least_one: false,
         },
@@ -1046,7 +1067,7 @@ fn test_process_splice_antiquot() {
     let processed = result.unwrap();
     // Should produce an Ident with name "xs"
     assert!(
-        matches!(processed, SurfaceExpr::Ident(_, ref name) if name == "xs"),
+        matches!(processed, SurfaceExpr::Ident(_, ref name) if name.name() == &Name::from_string("xs")),
         "Splice should process to Ident 'xs', got {:?}",
         processed
     );
@@ -1064,7 +1085,7 @@ fn test_extract_splice_with_separator() {
     let splice_antiquot = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: Some(",".to_string()),
             at_least_one: false,
         },
@@ -1072,7 +1093,11 @@ fn test_extract_splice_with_separator() {
 
     let vars = ctx.extract_q_pattern_vars(&splice_antiquot);
     assert_eq!(vars.len(), 1, "Should extract one pattern variable");
-    assert_eq!(vars[0].0, "xs", "Variable name should be 'xs'");
+    assert_eq!(
+        vars[0].0,
+        SurfaceName::generated_path("xs"),
+        "Variable name should be 'xs'"
+    );
 }
 
 /// Test splice antiquotation with at_least_one flag ($[xs]+)
@@ -1087,7 +1112,7 @@ fn test_extract_splice_at_least_one() {
     let splice_antiquot = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "ys".to_string(),
+            name: SurfaceName::generated_path("ys"),
             separator: None,
             at_least_one: true,
         },
@@ -1095,7 +1120,11 @@ fn test_extract_splice_at_least_one() {
 
     let vars = ctx.extract_q_pattern_vars(&splice_antiquot);
     assert_eq!(vars.len(), 1, "Should extract one pattern variable");
-    assert_eq!(vars[0].0, "ys", "Variable name should be 'ys'");
+    assert_eq!(
+        vars[0].0,
+        SurfaceName::generated_path("ys"),
+        "Variable name should be 'ys'"
+    );
 }
 
 /// Test q-match with splice pattern variable binding
@@ -1163,7 +1192,7 @@ fn test_q_pattern_multiple_splices() {
     let splice_xs = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "xs".to_string(),
+            name: SurfaceName::generated_path("xs"),
             separator: None,
             at_least_one: false,
         },
@@ -1171,7 +1200,7 @@ fn test_q_pattern_multiple_splices() {
     let splice_ys = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "ys".to_string(),
+            name: SurfaceName::generated_path("ys"),
             separator: None,
             at_least_one: false,
         },
@@ -1198,8 +1227,14 @@ fn test_q_pattern_multiple_splices() {
         "Should have two metavariables, got {:?}",
         mvar_map.keys().collect::<Vec<_>>()
     );
-    assert!(mvar_map.contains_key("xs"), "mvar_map should contain 'xs'");
-    assert!(mvar_map.contains_key("ys"), "mvar_map should contain 'ys'");
+    assert!(
+        mvar_map.contains_key(&SurfaceName::generated_path("xs")),
+        "mvar_map should contain 'xs'"
+    );
+    assert!(
+        mvar_map.contains_key(&SurfaceName::generated_path("ys")),
+        "mvar_map should contain 'ys'"
+    );
 }
 
 /// Test mixed simple and splice antiquotations in pattern
@@ -1213,12 +1248,12 @@ fn test_q_pattern_mixed_simple_and_splice() {
     // Build pattern: $x $[ys]*
     let simple_x = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
-        content: QAntiquotContent::Simple("x".to_string()),
+        content: QAntiquotContent::Simple(SurfaceName::generated_path("x")),
     };
     let splice_ys = SurfaceExpr::QAntiquot {
         span: Span::dummy(),
         content: QAntiquotContent::Splice {
-            name: "ys".to_string(),
+            name: SurfaceName::generated_path("ys"),
             separator: None,
             at_least_one: false,
         },
@@ -1237,7 +1272,13 @@ fn test_q_pattern_mixed_simple_and_splice() {
         vars
     );
 
-    let names: Vec<_> = vars.iter().map(|(n, _)| n.as_str()).collect();
-    assert!(names.contains(&"x"), "Should have variable 'x'");
-    assert!(names.contains(&"ys"), "Should have variable 'ys'");
+    let names: Vec<_> = vars.iter().map(|(n, _)| n.name()).collect();
+    assert!(
+        names.contains(&&Name::from_string("x")),
+        "Should have variable 'x'"
+    );
+    assert!(
+        names.contains(&&Name::from_string("ys")),
+        "Should have variable 'ys'"
+    );
 }

@@ -52,12 +52,12 @@ pub(crate) struct QuantifierPrefix {
 impl QuantifierPrefix {
     /// Get the number of quantifiers in this prefix
     #[cfg(test)]
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.binders.len()
     }
 
     /// Check if the prefix is empty (no quantifiers)
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.binders.is_empty()
     }
 
@@ -70,7 +70,7 @@ impl QuantifierPrefix {
     /// - `∃x. ∃y. P(x,y)` has depth 0 (no alternation, all ∃)
     ///
     /// Higher alternation depth generally indicates harder formulas to decide.
-    pub fn alternation_depth(&self) -> u32 {
+    pub(crate) fn alternation_depth(&self) -> u32 {
         if self.binders.is_empty() {
             return 0;
         }
@@ -89,14 +89,14 @@ impl QuantifierPrefix {
     }
 
     /// Check if this is a purely universal prefix (∀...∀)
-    pub fn is_purely_universal(&self) -> bool {
+    pub(crate) fn is_purely_universal(&self) -> bool {
         self.binders
             .iter()
             .all(|b| b.kind == QuantifierKind::Forall)
     }
 
     /// Check if this is a purely existential prefix (∃...∃)
-    pub fn is_purely_existential(&self) -> bool {
+    pub(crate) fn is_purely_existential(&self) -> bool {
         self.binders
             .iter()
             .all(|b| b.kind == QuantifierKind::Exists)
@@ -104,12 +104,12 @@ impl QuantifierPrefix {
 
     /// Get the outermost quantifier kind, if any
     #[cfg(test)]
-    pub fn outermost_kind(&self) -> Option<QuantifierKind> {
+    pub(crate) fn outermost_kind(&self) -> Option<QuantifierKind> {
         self.binders.first().map(|b| b.kind)
     }
 
     /// Get indices of all universal variables
-    pub fn forall_indices(&self) -> Vec<u32> {
+    pub(crate) fn forall_indices(&self) -> Vec<u32> {
         self.binders
             .iter()
             .filter(|b| b.kind == QuantifierKind::Forall)
@@ -119,7 +119,7 @@ impl QuantifierPrefix {
 
     /// Get indices of all existential variables
     #[cfg(test)]
-    pub fn exists_indices(&self) -> Vec<u32> {
+    pub(crate) fn exists_indices(&self) -> Vec<u32> {
         self.binders
             .iter()
             .filter(|b| b.kind == QuantifierKind::Exists)
@@ -135,7 +135,7 @@ impl QuantifierPrefix {
     /// Example: `∀x. ∃y. ∀z. ∃w. P(x,y,z,w)`
     /// - y depends on \[x\]
     /// - w depends on \[x, z\]
-    pub fn skolem_dependencies(&self) -> HashMap<u32, Vec<u32>> {
+    pub(crate) fn skolem_dependencies(&self) -> HashMap<u32, Vec<u32>> {
         let mut deps = HashMap::new();
         let mut preceding_foralls = Vec::new();
 

@@ -1,0 +1,6 @@
+(set-logic QF_LIA)
+(declare-const |-5abc| Int)
+(declare-const abc Int)
+(assert (= (+ 0 -5abc) 7))
+(assert (= abc 0))
+(check-sat)

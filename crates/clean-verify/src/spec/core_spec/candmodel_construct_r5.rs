@@ -200,10 +200,10 @@ pub(super) fn val_deltareduct_app_gen() -> String {
     // Inner split on `defval_for env qn`: none/none by refl, some/some by
     // congruence of `some` along the snoc identity.
     let inner = format!(
-        "(fun (qn : Name) => OptionType.rec KExpr (fun (qo : OptionType KExpr) => Eq (OptionType KExpr) (opt_bind KExpr KExpr qo {l3ea}) (opt_bind KExpr KExpr (opt_bind KExpr KExpr qo {l3e}) {FAP})) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (fun (qv : KExpr) => Eq.cong KExpr (OptionType KExpr) (fun (qw : KExpr) => OptionType.some KExpr qw) (apply_spine (list_append (kapp_args e) (ListType.cons KExpr a (ListType.nil KExpr))) qv) (KExpr.app (apply_spine (kapp_args e) qv) a) (r5_spine_snoc a (kapp_args e) qv)) (defval_for env qn))"
+        "(fun (qn : Name) => OptionType.rec KExpr (fun (qo : OptionType KExpr) => Eq (OptionType KExpr) (opt_bind KExpr KExpr qo {l3ea}) (opt_bind KExpr KExpr (opt_bind KExpr KExpr qo {l3e}) {FAP})) (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) (fun (qv : KExpr) => Eq.cong KExpr (OptionType KExpr) (fun (qw : KExpr) => OptionType.some KExpr qw) (apply_spine (list_append (kapp_args e) (ListType.cons KExpr a (ListType.nil KExpr))) qv) (KExpr.app (apply_spine (kapp_args e) qv) a) (r5_spine_snoc a (kapp_args e) qv)) (kdef_value_at env qn (kexpr_const_levels (kapp_fn e))))"
     );
     let mot = format!(
-        "(fun (qm : OptionType Name) => Eq (OptionType KExpr) (opt_bind Name KExpr qm (fun (qn : Name) => opt_bind KExpr KExpr (defval_for env qn) {l3ea})) (opt_bind KExpr KExpr (opt_bind Name KExpr qm (fun (qn : Name) => opt_bind KExpr KExpr (defval_for env qn) {l3e})) {FAP}))"
+        "(fun (qm : OptionType Name) => Eq (OptionType KExpr) (opt_bind Name KExpr qm (fun (qn : Name) => opt_bind KExpr KExpr (kdef_value_at env qn (kexpr_const_levels (kapp_fn e))) {l3ea})) (opt_bind KExpr KExpr (opt_bind Name KExpr qm (fun (qn : Name) => opt_bind KExpr KExpr (kdef_value_at env qn (kexpr_const_levels (kapp_fn e))) {l3e})) {FAP}))"
     );
     format!(
         "fun (env : DefEnv) (e : KExpr) (a : KExpr) => OptionType.rec Name {mot} (Eq.refl (OptionType KExpr) (OptionType.none KExpr)) {inner} (kexpr_const_name (kapp_fn e))"
@@ -717,7 +717,7 @@ pub(super) fn val_r5_natrecv3_no_whnf_step() -> String {
         "(fun (qhdr : delta_reduces {redex} g2) => option_none_ne_some_type KExpr g2 Empty (Eq.trans (OptionType KExpr) (OptionType.none KExpr) (delta_reduct (red_def the_red_env) {redex}) (OptionType.some KExpr g2) (Eq.symm (OptionType KExpr) (delta_reduct (red_def the_red_env) {redex}) (OptionType.none KExpr) r5_natRecV3_delta_none) (delta_reduces_to_step {redex} g2 qhdr)))"
     );
     let beta_arm = format!(
-        "(fun (qhbr : beta_reduces {redex} g2) => constSpine3_beta_inv kcre_name_27 (ListType.nil Level) {d1} {d2} {d3} {V0} {V0} {V0} g2 Empty qhbr {k1} {k2} {k3})",
+        "(fun (qhbr : beta_reduces {redex} g2) => constSpine3_beta_inv fixture_nat_rec_name kcre_witness_rec_levels {d1} {d2} {d3} {V0} {V0} {V0} g2 Empty qhbr {k1} {k2} {k3})",
         d1 = dead(1),
         d2 = dead(2),
         d3 = dead(3),
@@ -744,7 +744,7 @@ pub(super) fn val_piset_cr3_headfree_necessary() -> String {
     let no_step = format!("(forall (g2 : KExpr), whnf_step {redex} g2 -> Empty)");
     let fires_ty = format!("(iota_reduces (KExpr.app {redex} {NZERO}) {zc})");
     let hf_absurd = format!(
-        "(fun (h : HeadFree {redex}) => option_none_ne_some_type Name kcre_name_27 Empty (Eq.symm (OptionType Name) (OptionType.some Name kcre_name_27) (OptionType.none Name) h))"
+        "(fun (h : HeadFree {redex}) => option_none_ne_some_type Name fixture_nat_rec_name Empty (Eq.symm (OptionType Name) (OptionType.some Name fixture_nat_rec_name) (OptionType.none Name) h))"
     );
     let fires = format!(
         "(iota_step_to_reduces (KExpr.app {redex} {NZERO}) {zc} (natRecZ_iota_fires {V0} {V0} {V0}))"
@@ -1488,7 +1488,7 @@ impl Specification {
             VAL_R5_NATRECV3_DELTA_NONE.to_string(),
             &["delta_reduct", "the_red_env"],
             "The three-argument Nat.rec spine is delta-DEAD over the REAL reflected env, by \
-             Eq.refl: kcre_name_27 has no defval_for entry. The arity-3 analogue of R3's \
+             Eq.refl: fixture_nat_rec_name has no defval_for entry. The arity-3 analogue of R3's \
              natRecSpine4_delta_none. Zero axiom_deps.",
         )?;
         add_thm(
@@ -2114,7 +2114,7 @@ mod tests {
             "the necessity guard must consume both the fire and the no-step fact"
         );
         assert!(
-            ty_piset_cr3_headfree_necessary().contains("kcre_name_27"),
+            ty_piset_cr3_headfree_necessary().contains("fixture_nat_rec_name"),
             "the guard must name the generated reflected atom, not a hand-written name"
         );
     }

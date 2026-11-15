@@ -1986,11 +1986,13 @@ impl Environment {
         Ok(())
     }
 
-    /// Register `List.not_mem_nil {α} (a : α) : ¬ List.Mem a []` (constructive,
-    /// via `List.Mem.casesOn` on the empty index) and the `Finset`-level
+    /// Register `List.not_mem_nil {α} (a : α) : ¬ a ∈ []` (constructive, via
+    /// `List.Mem.casesOn` on the empty index) and the `Finset`-level
     /// `Finset.mem_empty {α} (a : α) : ¬ Finset.Mem a Finset.empty`, which holds
     /// because `Finset.Mem a Finset.empty` quot-reduces to `List.Mem a []`.
     fn init_finset_mem_empty(&mut self) -> Result<(), EnvError> {
+        // `List.instMembership` names the statement of `List.not_mem_nil`.
+        self.init_list_mem()?;
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
         let type_u = Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone())));
@@ -2024,12 +2026,43 @@ impl Environment {
         let fempty_of = |a: &Expr| Expr::app(finset_empty.clone(), a.clone());
         let fmem = |a: &Expr, x: Expr, f: Expr| Expr::apps(finset_mem.clone(), [a.clone(), x, f]);
 
-        // ── List.not_mem_nil {α} (a : α) : ¬ List.Mem a [] ──────────────────
+        // ── List.not_mem_nil {α} (a : α) : ¬ a ∈ [] ─────────────────────────
+        // Lean states it through the `Membership` instance (4.8.0 and
+        // v4.30.0-rc2 alike: `@List.not_mem_nil : ∀ {α} (a : α), ¬a ∈ []`),
+        // i.e. `¬ @Membership.mem α (List α) (@List.instMembership α) [] a`
+        // (collection-first, Clean's spelling of `∈`). The raw `¬ List.Mem a []`
+        // it used to state is definitionally equal (the instance is reducible
+        // and projects to the flip of `List.Mem`), so the proof below is
+        // unchanged, but `simp` matches syntactically: the raw statement could
+        // never rewrite a surface `a ∈ []`, and the import's
+        // first-registered-wins rule kept it in place of Lean's (it was a
+        // bare-spelled row of data/prelude_collision_census.json).
+        let mem_via_inst = |alpha: &Expr, a: Expr, l: Expr| {
+            Expr::apps(
+                Expr::const_(
+                    Name::from_string("Membership.mem"),
+                    vec![u_level.clone(), u_level.clone()],
+                ),
+                [
+                    alpha.clone(),
+                    list_of(alpha),
+                    Expr::app(
+                        Expr::const_(
+                            Name::from_string("List.instMembership"),
+                            vec![u_level.clone()],
+                        ),
+                        alpha.clone(),
+                    ),
+                    l,
+                    a,
+                ],
+            )
+        };
         let nmn_type = {
             let mut b = EnvDeclBuilder::new();
             let (alpha_id, alpha) = b.fresh_local(type_u.clone());
             let (a_id, a) = b.fresh_local(alpha.clone());
-            let concl = not(mem(&alpha, a.clone(), nil_of(&alpha)));
+            let concl = not(mem_via_inst(&alpha, a.clone(), nil_of(&alpha)));
             let e = b.mk_pi(a_id, BinderInfo::Default, alpha.clone(), concl);
             let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
             b.finish(e)
@@ -2141,6 +2174,12 @@ impl Environment {
             type_: nmn_type,
             value: nmn_value,
         })?;
+        // `@[simp]` in Lean 4.8.0 `Init`, registered with the declaration as
+        // `List.mem_cons` is (`init_multiset_mem`; trust-ir G25).
+        self.register_simp_lemma(
+            Name::from_string("List.not_mem_nil"),
+            crate::env::SimpPriority::Default,
+        );
 
         // ── Finset.mem_empty {α} (a : α) : ¬ Finset.Mem a Finset.empty ──────
         // `Finset.Mem a Finset.empty` reduces (Subtype.val + Quot.lift) to

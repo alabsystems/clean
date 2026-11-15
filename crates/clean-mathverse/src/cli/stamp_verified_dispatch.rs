@@ -38,6 +38,8 @@ use crate::cli::closure_load::{
     build_closure_shards_for_target, load_targets_closure, load_targets_closure_mmap,
 };
 use crate::cli::closure_shards_dispatch::{cache_dir_is_populated, default_closure_cache_dir};
+use crate::cli::parallel_verify::cross::{demote_users_of_not_admitted, RunModule};
+use crate::cli::stamp_family_audit::refuse_forged_family_members;
 use crate::cli::{MathverseCliError, StampVerifiedArgs};
 use crate::lean4::olean::olean_bridge::convert_olean_to_mathverse;
 use crate::library::{
@@ -268,10 +270,6 @@ fn classify_fallback_message(msg: &str) -> FallbackClass {
     {
         FallbackClass::Malformed
     } else {
-        // Note: CrossValidationFailure ("Cross-validation failure: ...") also lands
-        // here. It is a kernel/micro-checker disagreement that should never reach
-        // the axiom-fallback path; if `other` is ever nonzero, inspect the raw
-        // `axiom_fallback_names` to rule it out.
         FallbackClass::Other
     }
 }
@@ -744,11 +742,12 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
             (closure.env, Some(summary))
         }
         None => {
-            // WS17: import-verification prelude (lossy `extends`-structure stubs
-            // suppressed) — see `load_targets_closure`.
-            let prelude = clean_kernel::Environment::try_with_prelude_for_import()
-                .map_err(|e| MathverseCliError::StampPrelude(e.to_string()))?;
-            (prelude, None)
+            // No closure root: Lean's replay environment with nothing loaded
+            // (`Environment::for_lean_replay`). A module's reference to anything
+            // outside itself is then an unknown constant, as it is for
+            // `leanchecker` without the module's imports; Clean's prelude is
+            // not Lean's `Init` and is never a stand-in for it.
+            (clean_kernel::Environment::for_lean_replay(), None)
         }
     };
     // P0 (kernel completeness, KERNEL_COMPLETENESS_ROADMAP.md): allow raising or
@@ -764,6 +763,13 @@ pub(crate) fn cmd_stamp_verified(args: StampVerifiedArgs) -> Result<(), Mathvers
             initial_env.set_option("maxHeartbeats".to_string(), Some(hb));
         }
     }
+    // Lean's kernel theory for every check this re-check lane runs
+    // (`clean_kernel::env::kernel_theory`): no reducer for a constant Lean
+    // treats as opaque, and Lean's SAFE context, so a safe declaration that uses
+    // an unsafe or partial constant is the kernel's own error (measured
+    // 2026-09-24: `forged5_unsafe : False := unsafeCast True.intro` was stamped
+    // KernelVerified here before).
+    initial_env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
     // DIAGNOSTIC (TCB-neutral): `CLEAN_PROFILE_HEARTBEATS=1` enables the kernel
     // heartbeat profiler so `HeartbeatExceeded` errors carry a per-category tick
     // snapshot (IsDefEq/InferType/Whnf/...) — mirrors the same hook in
@@ -1496,8 +1502,15 @@ fn single_pass_verify_streaming(
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut heuristic_kernel_verified = 0u32;
     let mut used_stems: BTreeSet<String> = BTreeSet::new();
+    let mut run_modules: Vec<RunModule> = Vec::new();
+    let mut family_refusals = 0usize;
 
     for path in order {
+        let shard_path = unique_shard_path(out_dir, path, &mut used_stems);
+        run_modules.push(RunModule {
+            olean: path.to_path_buf(),
+            shard: shard_path.clone(),
+        });
         // Convert THIS module now; write its (heuristic) shard to out_dir.
         let (buf, convert) = match convert_olean_to_mathverse(path) {
             Ok(x) => x,
@@ -1507,17 +1520,26 @@ fn single_pass_verify_streaming(
             }
         };
         heuristic_kernel_verified += convert.kernel_verified_from_tc;
-        let shard_path = unique_shard_path(out_dir, path, &mut used_stems);
         std::fs::write(&shard_path, &buf)?;
         let reader = ShardReader::from_bytes(&buf)?;
         let mut one = MathverseLibrary::new(TrustPolicy::permissive());
         one.load_shard(&reader)?;
-        let (next_env, rep) = verify_corpus_incremental_with_env_policy(
+        let (next_env, mut rep) = verify_corpus_incremental_with_env_policy(
             &one,
             env,
             InductiveReplayPolicy::LeanFaithful,
         );
         env = next_env;
+        // The shard carried each family member's TYPE only: compare the
+        // members the `.olean` stores (recursor rules included) with the ones
+        // the kernel just regenerated (`stamp_family_audit.rs`).
+        family_refusals +=
+            refuse_forged_family_members(&mut rep, &env, path).map_err(|reason| {
+                MathverseCliError::StampClosure {
+                    module: path.display().to_string(),
+                    reason: format!("re-read the stored inductive families: {reason}"),
+                }
+            })?;
         // Roll-elide the just-verified module's proof values before the next one,
         // bounding peak RSS. Idempotent: only newly-added values are dropped.
         env.elide_proof_values(elide);
@@ -1525,12 +1547,42 @@ fn single_pass_verify_streaming(
         converted += 1;
         // `buf`, `reader`, `one` drop here — freed before the next module.
     }
+    // Each module was verified by its own call, so the masked-failure taint
+    // did not cross module boundaries: replay order across the run is restored
+    // here, over the shards just written (`parallel_verify_cross.rs`). A
+    // refused stored family member was stamped before its refusal, so its
+    // users are demoted even in a one-module run.
+    demote_across_run(&mut acc, &run_modules, family_refusals > 0)?;
     Ok(StreamVerifyOutput {
         report: acc,
         converted,
         failed,
         heuristic_kernel_verified,
     })
+}
+
+/// The cross-module replay pass for a sequential multi-module run, and for any
+/// run in which a stamped family member was refused afterwards
+/// (`include_single_module`).
+fn demote_across_run(
+    report: &mut IncrementalVerifyReport,
+    modules: &[RunModule],
+    include_single_module: bool,
+) -> Result<(), MathverseCliError> {
+    if modules.len() < 2 && !include_single_module {
+        return Ok(());
+    }
+    let pool = rayon::ThreadPoolBuilder::new()
+        .build()
+        .map_err(|e| MathverseCliError::StampPrelude(format!("rayon pool: {e}")))?;
+    let demoted = demote_users_of_not_admitted(report, modules, &pool);
+    if demoted > 0 {
+        eprintln!(
+            "stamp-verified: replay order demoted {demoted} constant(s) that use a \
+             non-admitted constant of another module of this run"
+        );
+    }
+    Ok(())
 }
 
 /// Legacy merged path: convert ALL targets upfront, write their shards, load them
@@ -1547,12 +1599,17 @@ fn stamp_merged_convert_and_verify(
     let mut failed: Vec<(String, String)> = Vec::new();
     let mut heuristic_kernel_verified = 0u32;
     let mut used_stems: BTreeSet<String> = BTreeSet::new();
+    let mut run_modules: Vec<RunModule> = Vec::new();
 
     for olean in oleans {
+        let shard_path = unique_shard_path(out_dir, olean, &mut used_stems);
+        run_modules.push(RunModule {
+            olean: olean.clone(),
+            shard: shard_path.clone(),
+        });
         match convert_olean_to_mathverse(olean) {
             Ok((buf, convert)) => {
                 heuristic_kernel_verified += convert.kernel_verified_from_tc;
-                let shard_path = unique_shard_path(out_dir, olean, &mut used_stems);
                 std::fs::write(&shard_path, &buf)?;
                 shards.push(ShardReader::from_bytes(&buf)?);
                 converted += 1;
@@ -1575,12 +1632,27 @@ fn stamp_merged_convert_and_verify(
     for shard in &shards {
         lib.load_shard(shard)?;
     }
-    let report = verify_corpus_incremental_with_env_policy(
+    let (env, mut report) = verify_corpus_incremental_with_env_policy(
         &lib,
         initial_env,
         InductiveReplayPolicy::LeanFaithful,
-    )
-    .1;
+    );
+    // Compare every stored inductive-family member with the kernel's
+    // regeneration (`stamp_family_audit.rs`).
+    let mut family_refusals = 0usize;
+    for module in &run_modules {
+        if module.shard.exists() {
+            family_refusals += refuse_forged_family_members(&mut report, &env, &module.olean)
+                .map_err(|reason| MathverseCliError::StampClosure {
+                    module: module.olean.display().to_string(),
+                    reason: format!("re-read the stored inductive families: {reason}"),
+                })?;
+        }
+    }
+    drop(env);
+    // The merged library's masked-failure taint already crosses modules; the
+    // pass also covers what the taint does not (stand-ins, refusals).
+    demote_across_run(&mut report, &run_modules, family_refusals > 0)?;
     Ok(StreamVerifyOutput {
         report,
         converted,

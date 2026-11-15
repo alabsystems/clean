@@ -21,7 +21,9 @@
 
 use crate::do_notation::{desugar_do_block, DoElement};
 use crate::ElabError;
-use clean_parser::{DoCatchClause, DoElem, Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr};
+use clean_parser::{
+    DoCatchClause, DoElem, Span, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName,
+};
 
 // ---------------------------------------------------------------------------
 // Error type for extended do-notation
@@ -66,9 +68,9 @@ impl From<DoExtError> for ElabError {
 // ---------------------------------------------------------------------------
 
 /// Build `Bind.bind action (fun name => body)`.
-fn mk_bind(name: &str, action: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
+fn mk_bind(name: &SurfaceName, action: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
     let bind = SurfaceExpr::ident("Bind.bind");
-    let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+    let binder = SurfaceBinder::new_typed(name.clone(), None, SurfaceBinderInfo::Explicit);
     let continuation = SurfaceExpr::lambda(vec![binder], body);
     SurfaceExpr::app(bind, vec![action, continuation])
 }
@@ -80,8 +82,8 @@ fn mk_pure(val: SurfaceExpr) -> SurfaceExpr {
 }
 
 /// Build `let name := val in body`.
-fn mk_let(name: &str, val: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
-    let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+fn mk_let(name: &SurfaceName, val: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
+    let binder = SurfaceBinder::new_typed(name.clone(), None, SurfaceBinderInfo::Explicit);
     SurfaceExpr::Let(Span::dummy(), binder, Box::new(val), Box::new(body))
 }
 
@@ -132,7 +134,7 @@ pub(crate) fn desugar_try_catch(
 #[derive(Debug, Clone)]
 pub(crate) struct CatchClause {
     /// Exception binder name
-    pub(crate) binder: String,
+    pub(crate) binder: SurfaceName,
     /// Optional exception type (uses `tryCatchThe` when present)
     pub(crate) exc_type: Option<SurfaceExpr>,
     /// Handler body as do-elements
@@ -159,7 +161,7 @@ fn desugar_single_catch(
         desugar_do_block(&clause.body)?
     };
 
-    let binder = SurfaceBinder::new(&clause.binder, None, SurfaceBinderInfo::Explicit);
+    let binder = SurfaceBinder::new_typed(clause.binder.clone(), None, SurfaceBinderInfo::Explicit);
     let handler_fn = SurfaceExpr::lambda(vec![binder], handler_body);
 
     if let Some(ref exc_ty) = clause.exc_type {
@@ -185,11 +187,11 @@ fn desugar_single_catch(
 /// The actual StateT lifting is handled by the full elaboration pipeline;
 /// surface desugaring produces `let x := new_val in rest`.
 pub(crate) fn desugar_reassign(
-    var: &str,
+    var: &SurfaceName,
     new_val: &SurfaceExpr,
     rest: &[DoElement],
 ) -> Result<SurfaceExpr, ElabError> {
-    if var.is_empty() {
+    if var.is_anonymous() {
         return Err(DoExtError::InvalidReassignTarget(var.to_string()).into());
     }
     let rest_expr = desugar_do_block(rest)?;
@@ -256,7 +258,7 @@ pub(crate) fn desugar_repeat(body: &[DoElement]) -> Result<SurfaceExpr, ElabErro
         vec![SurfaceExpr::ident("PUnit.unit")],
     );
     let yield_pure = mk_pure(yield_step);
-    let step_body = mk_bind("_", body_expr, yield_pure);
+    let step_body = mk_bind(&SurfaceName::generated_path("_"), body_expr, yield_pure);
 
     // Step function: fun _ _ => step_body
     let iter_binder = SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit);
@@ -306,7 +308,7 @@ pub(crate) fn desugar_parser_try_catch(
 // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[allow(dead_code)]
 pub(crate) fn desugar_parser_reassign(
-    var: &str,
+    var: &SurfaceName,
     new_val: &SurfaceExpr,
     rest: &[DoElem],
 ) -> Result<SurfaceExpr, ElabError> {
@@ -341,9 +343,9 @@ fn desugar_single_ext(elem: &DoElem) -> Result<SurfaceExpr, ElabError> {
         DoElem::Expr(_, expr) => Ok(*expr.clone()),
         DoElem::Return(_, expr) => Ok(mk_pure(*expr.clone())),
         DoElem::Bind(_, _, action) => Ok(*action.clone()),
-        DoElem::Let(_, _, _) | DoElem::LetMut(_, _, _) => Err(ElabError::NotImplemented(
-            "do block cannot end with a let binding".into(),
-        )),
+        DoElem::Let(_, _, _) | DoElem::Have(_, _, _) | DoElem::LetMut(_, _, _) => Err(
+            ElabError::NotImplemented("do block cannot end with a let binding".into()),
+        ),
         DoElem::If(_, cond, then_b, else_b) => {
             let then_expr = desugar_do_elems_ext(then_b)?;
             let else_expr = if let Some(e) = else_b {
@@ -389,17 +391,23 @@ fn desugar_compound_ext(first: &DoElem, rest: &[DoElem]) -> Result<SurfaceExpr, 
     let rest_expr = desugar_do_elems_ext(rest)?;
     match first {
         DoElem::Bind(_, binder, action) => {
-            let name = if binder.name == "_" {
-                "_"
-            } else {
-                &binder.name
-            };
+            let name = &binder.name;
             Ok(mk_bind(name, *action.clone(), rest_expr))
         }
         DoElem::Let(_, binder, value) | DoElem::LetMut(_, binder, value) => {
             Ok(mk_let(&binder.name, *value.clone(), rest_expr))
         }
-        DoElem::Expr(_, expr) => Ok(mk_bind("_", *expr.clone(), rest_expr)),
+        DoElem::Have(span, binder, value) => Ok(SurfaceExpr::Have(
+            *span,
+            binder.clone(),
+            value.clone(),
+            Box::new(rest_expr),
+        )),
+        DoElem::Expr(_, expr) => Ok(mk_bind(
+            &SurfaceName::generated_path("_"),
+            *expr.clone(),
+            rest_expr,
+        )),
         DoElem::Return(_, expr) => Ok(mk_pure(*expr.clone())),
         DoElem::If(_, cond, then_b, else_b) => {
             let then_expr = desugar_do_elems_ext(then_b)?;
@@ -414,7 +422,11 @@ fn desugar_compound_ext(first: &DoElem, rest: &[DoElem]) -> Result<SurfaceExpr, 
                 Box::new(then_expr),
                 Box::new(else_expr),
             );
-            Ok(mk_bind("_", if_expr, rest_expr))
+            Ok(mk_bind(
+                &SurfaceName::generated_path("_"),
+                if_expr,
+                rest_expr,
+            ))
         }
         DoElem::For(_, binder, collection, body) => {
             let for_expr = crate::do_notation::desugar_for_in(
@@ -422,11 +434,19 @@ fn desugar_compound_ext(first: &DoElem, rest: &[DoElem]) -> Result<SurfaceExpr, 
                 collection,
                 &crate::do_notation::from_parser_do_elems(body),
             )?;
-            Ok(mk_bind("_", for_expr, rest_expr))
+            Ok(mk_bind(
+                &SurfaceName::generated_path("_"),
+                for_expr,
+                rest_expr,
+            ))
         }
         DoElem::TryCatch(_, try_body, catches, finally_body) => {
             let tc_expr = desugar_parser_try_catch(try_body, catches, finally_body.as_deref())?;
-            Ok(mk_bind("_", tc_expr, rest_expr))
+            Ok(mk_bind(
+                &SurfaceName::generated_path("_"),
+                tc_expr,
+                rest_expr,
+            ))
         }
         DoElem::Reassign(_, var, new_val) => Ok(mk_let(var, *new_val.clone(), rest_expr)),
         DoElem::DbgTrace(_, msg) => {
@@ -438,12 +458,20 @@ fn desugar_compound_ext(first: &DoElem, rest: &[DoElem]) -> Result<SurfaceExpr, 
         DoElem::Repeat(_, body) => {
             let elements = crate::do_notation::from_parser_do_elems(body);
             let repeat_expr = desugar_repeat(&elements)?;
-            Ok(mk_bind("_", repeat_expr, rest_expr))
+            Ok(mk_bind(
+                &SurfaceName::generated_path("_"),
+                repeat_expr,
+                rest_expr,
+            ))
         }
         DoElem::While(_, cond, body) => {
             let elements = crate::do_notation::from_parser_do_elems(body);
             let while_expr = crate::do_notation::desugar_while(cond, &elements)?;
-            Ok(mk_bind("_", while_expr, rest_expr))
+            Ok(mk_bind(
+                &SurfaceName::generated_path("_"),
+                while_expr,
+                rest_expr,
+            ))
         }
         DoElem::Break(_) => Ok(desugar_break()),
         DoElem::Continue(_) => Ok(desugar_continue()),

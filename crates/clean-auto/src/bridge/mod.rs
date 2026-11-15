@@ -27,7 +27,8 @@
 //! Public bridge outcomes are typed:
 //! - `Verified` carries a kernel proof term
 //! - `Unverified` records UNSAT without a reconstructed kernel proof
-//! - `Refuted` records a counterexample / refutation path
+//! - `Refuted` records that the translated negated goal is satisfiable in the
+//!   bridge's abstraction — an UNVALIDATED model, never a counterexample
 //! - `Unknown` preserves solver inconclusive states separately
 //!
 //! # Public Capability Surface
@@ -98,7 +99,7 @@
 //! match bridge.prove(&goal) {
 //!     Ok(SmtVerificationResult::Verified(proof)) => { /* kernel proof found */ }
 //!     Ok(SmtVerificationResult::Unverified { .. }) => { /* UNSAT but no proof term */ }
-//!     Ok(SmtVerificationResult::Refuted(_)) => { /* counterexample found */ }
+//!     Ok(SmtVerificationResult::Refuted(_)) => { /* not proved: a model of the abstraction */ }
 //!     Ok(SmtVerificationResult::Unknown(reason)) => { /* solver inconclusive */ }
 //!     Err(e) => { /* translation error */ }
 //! }
@@ -110,6 +111,7 @@ pub mod proof_trust;
 // Cross-crate classifier contract for the proof-producing SMT translator.
 // Exposes SmtLogicalForm and classify_for_proof_translation without making
 // expr_classifier public. Part of #2810.
+mod division_semantics;
 pub mod proof_translation_contract;
 
 // Ay SMT backend (enabled via ay-smt feature)
@@ -118,7 +120,15 @@ pub mod proof_translation_contract;
 // (clean-server's ay_contract_ratchet forbids new references), leaving interior
 // items uncalled. Scoped allow until the AY lane deletes or rewires them.
 #[allow(dead_code)]
-#[cfg(feature = "ay-smt")]
+#[cfg(all(feature = "ay-smt", not(target_arch = "wasm32")))]
+pub(crate) mod ay_backend;
+
+// wasm32: the ay solver stack does not build (libc signal APIs), so the
+// backend is replaced by a stub tree that keeps the pure-data contract types
+// compiling while every solver entry point stays native-only.
+#[allow(dead_code)]
+#[cfg(all(feature = "ay-smt", target_arch = "wasm32"))]
+#[path = "ay_backend/wasm_stub.rs"]
 pub(crate) mod ay_backend;
 
 // Curated cross-crate ay contract — the supported public in-repo ay API.
@@ -160,7 +170,7 @@ mod prove_implication;
 pub(crate) mod quantifier;
 // AY decommission debt: see the ay_backend note above.
 #[allow(dead_code)]
-#[cfg(feature = "ay-smt")]
+#[cfg(all(feature = "ay-smt", not(target_arch = "wasm32")))]
 pub(crate) mod rat_smt;
 mod result;
 mod scoring;
@@ -322,6 +332,10 @@ pub struct SmtBridge<'env> {
     /// Each entry stores `(type, expr)` in the current de Bruijn scope so
     /// nested `Exists.intro` goals can reuse witnesses opened by `Exists.elim`.
     bound_exists_witnesses: RefCell<Vec<(Expr, Expr)>>,
+    /// Whether a sub-bridge this bridge ran (the closed equality-implication
+    /// lane) stopped at the SMT conflict limit. See
+    /// [`Self::conflict_limit_reached`].
+    sub_bridge_conflict_limit_reached: bool,
 }
 
 /// A pending universal quantifier hypothesis awaiting instantiation
@@ -401,7 +415,15 @@ impl<'env> SmtBridge<'env> {
             or_elim_active: RefCell::new(Vec::new()),
             exists_elim_active: RefCell::new(Vec::new()),
             bound_exists_witnesses: RefCell::new(Vec::new()),
+            sub_bridge_conflict_limit_reached: false,
         }
+    }
+
+    /// Whether a solve this bridge ran, its own or a sub-bridge's, stopped at
+    /// the SMT solver's CDCL conflict limit (`smt::SMT_CONFLICT_LIMIT`, a
+    /// constant of the language) before it decided.
+    pub(crate) fn conflict_limit_reached(&self) -> bool {
+        self.smt.conflict_limit_reached() || self.sub_bridge_conflict_limit_reached
     }
 
     /// Set the local context for FVar type resolution.

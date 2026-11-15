@@ -24,6 +24,12 @@
 //! - strict lean4-core gate: `do` over `List` is REJECTED (Lean core has no
 //!   List monad instance — GAP_SWEEP §5 OVER_ACCEPT-01).
 //!
+//! SUPERSEDED 2026-09-28 (`docs/issues/2026-09-28-prelude-pure-proves-false.md`):
+//! the stubs themselves proved `False`, so `Pure.pure` / `Bind.bind` are now
+//! Lean's class projections, `do` lowers straight to them with an instance
+//! argument, and the materialization pass is deleted — there are no stub
+//! applications left to rewrite. These probes pin the same verdicts.
+//!
 //! These tests drive the SAME pipeline as `clean check`
 //! (`parse_file → preprocess_decl_with_context → elaborate_decl_and_register`),
 //! so a pass/fail here matches the observable `clean check` verdict.

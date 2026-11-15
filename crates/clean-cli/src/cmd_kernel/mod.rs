@@ -4,7 +4,7 @@
 
 //! Dispatcher for `clean kernel …`.
 //!
-//! Epic #3436 Phase 3: bundles four orphan kernel binaries under a single
+//! Epic #3436 Phase 3: bundles six orphan kernel binaries under a single
 //! top-level verb tree. See `clean_kernel::cli::KernelCommands` for the
 //! user-facing surface.
 //!

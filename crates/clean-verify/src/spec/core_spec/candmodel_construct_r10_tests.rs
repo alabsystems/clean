@@ -331,7 +331,7 @@ fn test_candmodel_r10_counterexample_is_real_and_stuck() {
     );
     let val = val_r10_piset_cr3_unrestricted_refuted();
     assert!(
-        val.contains("kcre_name_27") && val.contains("kcre_name_18"),
+        val.contains("fixture_nat_rec_name") && val.contains("fixture_nat_zero_name"),
         "the counterexample must be built from the GENERATED reflected atoms"
     );
     assert!(

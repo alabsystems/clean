@@ -655,7 +655,7 @@ pub(crate) enum FpPredOp {
 /// forms the conflict. We check whether the conflict is indeed unsatisfiable
 /// by evaluating concrete floating-point operations.
 ///
-/// Returns `KernelVerified` if a concrete contradiction is found,
+/// Returns `StepChecked` if a concrete contradiction is found,
 /// `StructurallyAccepted` if the clause contains non-concrete terms that
 /// cannot be fully evaluated, or `Trusted` on error.
 pub(crate) fn check_fp_lemma(
@@ -1089,7 +1089,7 @@ fn round_shift_right_u128(value: u128, shift: u32, sign: bool, rm: RoundingMode)
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -1247,7 +1247,7 @@ mod tests {
         let verdict = check_fp_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect concrete FP contradiction; detail: {:?}",
             verdict.detail
         );

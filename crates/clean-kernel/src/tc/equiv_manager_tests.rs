@@ -128,18 +128,23 @@ fn test_deep_compound() {
     ));
 }
 
-/// #1777: Proj equivalence ignores struct name (Lean 4 equiv_manager.cpp:103).
+/// #1777 pinned the pinned v4.30.0-rc2 `equiv_manager.cpp:103`, whose `Proj`
+/// arm compared only the index and the subject. Lean v4.33.1 compares the
+/// structure name too (leanprover/lean4#14631), and so does Clean since
+/// decision R147: an index means a field of one structure's layout.
 #[test]
-fn test_proj_ignores_struct_name() {
+fn test_proj_compares_struct_name() {
     use crate::Name;
     let mut em = EquivManager::new();
     let inner = Arc::new(mk_sort(0));
     let mk_proj = |name: &str, idx: u32| {
         Expr::from_kind(ExprKind::Proj(Name::from_string(name), idx, inner.clone()))
     };
-    // Same index, different struct name → equiv (Lean 4 parity)
-    assert!(em.is_equiv(&mk_proj("Prod", 0), &mk_proj("PProd", 0), false));
-    // Different index → not equiv
+    // Same structure and index → equiv.
+    assert!(em.is_equiv(&mk_proj("Prod", 0), &mk_proj("Prod", 0), false));
+    // Same index, different structure → not equiv.
+    assert!(!em.is_equiv(&mk_proj("Prod", 0), &mk_proj("PProd", 0), false));
+    // Different index → not equiv.
     assert!(!em.is_equiv(&mk_proj("Prod", 0), &mk_proj("Prod", 1), false));
 }
 
@@ -178,5 +183,36 @@ fn test_equiv_manager_grows_without_bound() {
         em.len() >= 20_000,
         "should accumulate >=20K entries, got {}",
         em.len()
+    );
+}
+
+/// Lean v4.33.1 (leanprover/lean4#14631) dropped the union-find for pair caches
+/// keyed on full expression equality, which compares a projection's structure
+/// name. Clean keeps the union-find, so its `Proj` arm must compare the name:
+/// `Proj(A, 0, x)` and `Proj(B, 0, x)` select different field layouts and are
+/// not structurally equal. The same-name pair is the control.
+#[test]
+fn equiv_manager_does_not_equate_projections_of_different_structures() {
+    use crate::name::Name;
+
+    let x = Expr::const_(Name::from_string("x"), vec![]);
+    let proj_a = Expr::proj(Name::from_string("A"), 0, x.clone());
+    let proj_a_again = Expr::proj(Name::from_string("A"), 0, x.clone());
+    let proj_b = Expr::proj(Name::from_string("B"), 0, x);
+
+    let mut em = EquivManager::new();
+    assert!(
+        em.is_equiv(&proj_a, &proj_a_again, true),
+        "control: two A.0 projections of the same term are equivalent"
+    );
+    let mut em = EquivManager::new();
+    assert!(
+        !em.is_equiv(&proj_a, &proj_b, true),
+        "A.0 x and B.0 x must not be structurally equivalent"
+    );
+    let mut em = EquivManager::new();
+    assert!(
+        !em.is_equiv(&proj_a, &proj_b, false),
+        "A.0 x and B.0 x must not be structurally equivalent (no hash pre-filter)"
     );
 }

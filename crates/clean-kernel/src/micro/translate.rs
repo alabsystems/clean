@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Translation from main kernel types to micro-checker types,
-//! and cross-validation entry point.
+//! and the test-oriented diversity diagnostic.
 
 use std::sync::Arc;
 
@@ -14,7 +14,7 @@ use crate::expr::{stack_safe, BigNat, Expr, ExprKind, Literal};
 use crate::level::Level;
 
 use super::checker::MicroChecker;
-use super::types::{CrossValidationError, MicroCert, MicroExpr, MicroLevel, MicroLiteral};
+use super::types::{MicroCert, MicroExpr, MicroLevel, MicroLiteral};
 
 /// Convert a kernel [`BigNat`] (little-endian u64 limbs) into the
 /// micro-checker's OWN [`num_bigint::BigUint`]. This is a pure data
@@ -104,7 +104,7 @@ impl MicroLevel {
     /// polymorphic constants (e.g. `Eq.{u}`, `Eq.refl.{u}`) translate at all so
     /// they are PRESENT in the read-only env (presence is the fail-closed
     /// coverage gate). The load-bearing reduction re-check is level-free.
-    pub fn from_kernel_erased(level: &Level) -> MicroLevel {
+    pub(crate) fn from_kernel_erased(level: &Level) -> MicroLevel {
         stack_safe(|| Self::from_kernel_erased_impl(level))
     }
 
@@ -669,6 +669,8 @@ pub enum DiversityOutcome {
 ///
 /// Any `Unsupported` from either check is propagated (fail-closed). Any
 /// disagreement is reported.
+/// Diagnostic used by `tests/micro_diversity_gate.rs` only. No production
+/// kernel verdict is fenced by this check.
 pub fn diversity_check_rfl(
     env: &super::MicroEnv,
     inferred_type: &Expr,
@@ -794,73 +796,5 @@ fn micro_expr_of_cert_impl(cert: &MicroCert) -> MicroExpr {
         MicroCert::Proj { idx, expr_cert, .. } => {
             MicroExpr::Proj(*idx, Arc::new(micro_expr_of_cert(expr_cert)))
         }
-    }
-}
-
-/// Cross-validate type inference result using the micro-checker.
-///
-/// This function is called in debug builds to verify that the main kernel's
-/// type inference agrees with the independent micro-checker.
-///
-/// # Arguments
-/// - `expr`: The expression that was type-checked
-/// - `inferred_type`: The type inferred by the main kernel
-/// - `cert`: The proof certificate from the main kernel
-///
-/// # Returns
-/// - `Ok(true)` if cross-validation succeeded
-/// - `Ok(false)` if validation was skipped (unsupported constructs)
-/// - `Err(CrossValidationError)` if the micro-checker disagrees
-///
-/// # Contract
-///
-/// REQUIRES: `expr` is a valid kernel Expr
-/// REQUIRES: `inferred_type` is the type inferred by main kernel for `expr`
-/// REQUIRES: `cert` is a valid proof certificate witnessing `expr : inferred_type`
-/// ENSURES: Returns `Ok(true)` if micro-checker confirms the typing
-/// ENSURES: Returns `Ok(false)` if expression/certificate uses unsupported constructs
-/// ENSURES: Returns `Err(CrossValidationError)` if micro-checker disagrees
-pub fn cross_validate_with_micro(
-    expr: &Expr,
-    inferred_type: &Expr,
-    cert: &ProofCert,
-) -> Result<bool, CrossValidationError> {
-    // Try to convert expression to MicroExpr
-    let Ok(micro_expr) = MicroExpr::from_kernel(expr) else {
-        return Ok(false); // Skip validation for unsupported expressions
-    };
-
-    // Try to convert certificate to MicroCert
-    let Some(micro_cert) = MicroCert::from_proof_cert(cert) else {
-        return Ok(false); // Skip validation for unsupported certificates
-    };
-
-    // Try to convert inferred type to MicroExpr
-    let Ok(micro_inferred_type) = MicroExpr::from_kernel(inferred_type) else {
-        return Ok(false); // Skip validation for unsupported types
-    };
-
-    // Run the micro-checker
-    let mut micro_checker = MicroChecker::new();
-    let micro_result = micro_checker.verify(&micro_cert, &micro_expr);
-
-    match micro_result {
-        Ok(micro_type) => {
-            // Compare types (structural equality after WHNF)
-            // Note: MicroChecker doesn't have delta reduction, so we compare structurally
-            if micro_type != micro_inferred_type {
-                return Err(CrossValidationError::Disagreement {
-                    expr: format!("{expr:?}"),
-                    main_type: format!("{inferred_type:?}"),
-                    micro_type: format!("{micro_type:?}"),
-                });
-            }
-            Ok(true)
-        }
-        Err(e) => Err(CrossValidationError::VerificationFailed {
-            expr: format!("{expr:?}"),
-            main_type: format!("{inferred_type:?}"),
-            error: e,
-        }),
     }
 }

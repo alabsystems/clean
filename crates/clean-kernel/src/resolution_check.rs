@@ -2447,7 +2447,12 @@ pub fn encode_clauses_lit(clauses: &[Vec<(u32, bool)>]) -> Expr {
 /// Literal-id encoding of one step `Clean.Res.Step.mk resolvent prem1 prem2 pivot`,
 /// with `prem1`/`prem2`/`pivot` as BigNat literals (so the trie's `prem` lookups
 /// reduce natively).
-pub fn encode_step_lit(resolvent: &[(u32, bool)], prem1: u32, prem2: u32, pivot_var: u32) -> Expr {
+pub(crate) fn encode_step_lit(
+    resolvent: &[(u32, bool)],
+    prem1: u32,
+    prem2: u32,
+    pivot_var: u32,
+) -> Expr {
     Expr::apps(
         Expr::const_str(names::STEP_MK),
         [

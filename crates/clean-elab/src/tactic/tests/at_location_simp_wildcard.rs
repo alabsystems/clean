@@ -34,8 +34,9 @@ fn test_simp_at_all_preserves_trivial_hypotheses() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h_triv".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h_triv"),
             ty: h_triv_ty,
             value: None,
         }],
@@ -48,7 +49,10 @@ fn test_simp_at_all_preserves_trivial_hypotheses() {
     if result.is_ok() {
         if let Some(goal) = state.current_goal() {
             // h_triv should still exist in the context (possibly simplified)
-            let has_hyp = goal.local_ctx.iter().any(|d| d.name == "h_triv");
+            let has_hyp = goal
+                .local_ctx
+                .iter()
+                .any(|d| d.name == clean_parser::SurfaceName::generated_path("h_triv"));
             assert!(
                 has_hyp,
                 "simp_at_all should NOT remove trivial hypotheses (Lean 4 simp at * semantics)"
@@ -74,8 +78,9 @@ fn test_simp_all_removes_trivial_hypotheses() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h_triv".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h_triv"),
             ty: h_triv_ty,
             value: None,
         }],
@@ -85,7 +90,10 @@ fn test_simp_all_removes_trivial_hypotheses() {
     // simp_all should make progress (at least removing the trivial hyp)
     if result.is_ok() {
         if let Some(goal) = state.current_goal() {
-            let has_triv = goal.local_ctx.iter().any(|d| d.name == "h_triv");
+            let has_triv = goal
+                .local_ctx
+                .iter()
+                .any(|d| d.name == clean_parser::SurfaceName::generated_path("h_triv"));
             assert!(!has_triv, "simp_all SHOULD remove trivial x = x hypotheses");
         }
     }
@@ -116,14 +124,16 @@ fn test_simp_at_all_no_cross_rewriting() {
         n_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h_eq".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_eq"),
                 ty: h_eq_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_prop".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_prop"),
                 ty: h_prop_ty.clone(),
                 value: None,
             },
@@ -134,7 +144,11 @@ fn test_simp_at_all_no_cross_rewriting() {
     // Whether simp_at_all succeeds or fails, h_prop should NOT have been
     // rewritten using h_eq. P(x) should remain as-is (no x → y rewrite).
     if let Some(goal) = state.current_goal() {
-        if let Some(h_prop) = goal.local_ctx.iter().find(|d| d.name == "h_prop") {
+        if let Some(h_prop) = goal
+            .local_ctx
+            .iter()
+            .find(|d| d.name == clean_parser::SurfaceName::generated_path("h_prop"))
+        {
             // h_prop.ty should still contain x, not y
             // Since simp_at with default config won't have h_eq as a lemma,
             // h_prop should be unchanged or only beta/eta simplified.
@@ -180,8 +194,9 @@ fn test_simp_at_all_skips_prop_let_bindings() {
     .expect("hpx axiom should register");
 
     let let_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h_let".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h_let"),
         ty: make_p(x.clone()),
         value: Some(hpx.clone()),
     };
@@ -194,7 +209,7 @@ fn test_simp_at_all_skips_prop_let_bindings() {
     let h_let = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h_let")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h_let"))
         .expect("h_let should remain in the local context");
 
     assert_eq!(

@@ -128,16 +128,24 @@ fn scan_file(path: &std::path::Path, out: &mut Vec<Violation>) {
 fn contains_token(hay: &str, needle: &str) -> bool {
     let bytes = hay.as_bytes();
     let nlen = needle.len();
+    // A rejected match is skipped by the needle's first char, not by one byte:
+    // for a needle that starts with a multi-byte char, `abs + 1` is not a char
+    // boundary and slicing `hay` there panics.
+    let step = needle.chars().next().map_or(1, char::len_utf8);
     let mut start = 0usize;
-    while let Some(pos) = hay[start..].find(needle) {
+    while let Some(pos) = hay.get(start..).and_then(|rest| rest.find(needle)) {
         let abs = start.saturating_add(pos);
-        let before_ok = abs == 0 || !is_ident_byte(bytes[abs.saturating_sub(1)]);
-        let after_idx = abs.saturating_add(nlen);
-        let after_ok = after_idx >= bytes.len() || !is_ident_byte(bytes[after_idx]);
+        let before_ok = abs
+            .checked_sub(1)
+            .and_then(|i| bytes.get(i))
+            .is_none_or(|&b| !is_ident_byte(b));
+        let after_ok = bytes
+            .get(abs.saturating_add(nlen))
+            .is_none_or(|&b| !is_ident_byte(b));
         if before_ok && after_ok {
             return true;
         }
-        start = abs.saturating_add(1);
+        start = abs.saturating_add(step);
         if start >= hay.len() {
             break;
         }
@@ -147,4 +155,31 @@ fn contains_token(hay: &str, needle: &str) -> bool {
 
 fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
+}
+
+#[cfg(test)]
+mod tests {
+    use super::contains_token;
+
+    #[test]
+    fn contains_token_respects_identifier_boundaries() {
+        assert!(contains_token("let x: f64 = 0;", "f64"));
+        assert!(contains_token("f64", "f64"));
+        assert!(contains_token("(f64)", "f64"));
+        assert!(!contains_token("xf64y", "f64"));
+        assert!(!contains_token("Inf64", "f64"));
+        assert!(!contains_token("f64_bits", "f64"));
+        // The first occurrence is rejected, a later one is a token.
+        assert!(contains_token("af64 f64", "f64"));
+        assert!(!contains_token("", "f64"));
+    }
+
+    /// Regression (Trust verified lane, 2026-10-02): after a rejected match the
+    /// search restarted at `abs + 1`, which for a needle starting with a
+    /// multi-byte char is inside that char, and `hay[start..]` panicked.
+    #[test]
+    fn contains_token_multibyte_needle_restarts_on_a_char_boundary() {
+        assert!(contains_token("a\u{e9} \u{e9}", "\u{e9}"));
+        assert!(!contains_token("a\u{e9}b\u{e9}c", "\u{e9}"));
+    }
 }

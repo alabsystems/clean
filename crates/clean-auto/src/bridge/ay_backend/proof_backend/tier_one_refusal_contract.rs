@@ -86,3 +86,36 @@ fn tier_zero_never_reads_the_certificate_at_all() {
         "tier 0 must not verify, and must not care that no certificate was rendered"
     );
 }
+
+/// A script that used `push`/`pop` is refused at the Carcara fallback, with its reason, before
+/// Carcara runs (Carcara reads one query; third-party/carcara/DOWNSTREAM.md, fix 37). A complete
+/// native check, which reads ay's own scopes, still verifies.
+#[test]
+fn tier_one_refuses_the_carcara_fallback_for_a_script_with_scopes() {
+    let mut backend = tier_one_backend();
+    backend.assert_formula("(> 1 0)");
+    let unscoped =
+        backend.verify_proof_if_required(&Some("(step t1 (cl) :rule hole)".into()), &None);
+    let other_reason =
+        matches!(&unscoped, Err(AyError::VerificationFailed(r)) if !r.contains("push/pop"));
+    assert!(
+        other_reason,
+        "anti-vacuity: without scopes the fallback is refused for another reason, got {unscoped:?}"
+    );
+
+    backend.push();
+    backend.assert_formula("(< 1 0)");
+    backend.pop();
+    let scoped = backend.verify_proof_if_required(&Some("(step t1 (cl) :rule hole)".into()), &None);
+    assert!(
+        matches!(&scoped, Err(AyError::VerificationFailed(reason))
+            if reason == super::verification::SCOPED_SCRIPT_REFUSAL),
+        "a scoped script must be refused before Carcara, got {scoped:?}"
+    );
+    assert!(
+        backend
+            .verify_proof_if_required(&None, &Some(ProofQuality::default()))
+            .expect("tier 1 accepts a complete native check"),
+        "a complete native check reads ay's scopes and is unaffected"
+    );
+}

@@ -10,7 +10,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Both are printed by `Display for Function` only when they are not the default. Read the notes in ir_h2.tags.json.",
-  "functy": 147,
+  "functy": 149,
   "functy_note": "Pinned VERBATIM and re-pinned under review: a body has one header signature, so there is nothing to intern it against, and the emitted text carries no signature table. Read the notes in ir_h2.tags.json.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
@@ -50,7 +50,7 @@
  "enums": [
   {
    "canonical": 0,
-   "crate_id": 127,
+   "crate_id": 135,
    "alias": "ir_pv_tprio",
    "rust_type": "env::types::SimpPriority",
    "observed_crate_id_by_producer": {

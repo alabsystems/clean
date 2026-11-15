@@ -12,7 +12,7 @@ use crate::error::CompilerError;
 use crate::ir::{CtorInfo, IRArg, IRType, JoinPointId, VarId};
 use clean_kernel::{FVarId, Name};
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Pre-computed constructor metadata for IR lowering (Part of #1953).
 ///
@@ -62,6 +62,8 @@ pub struct ToIRState {
     /// has fewer args than the function's arity, we emit `PartialApply` instead
     /// of `Apply`.
     arities: HashMap<Name, u16>,
+    /// Affirmed only by environment-aware lowering of the exact source layout.
+    byte_array_string: bool,
     /// Constructor metadata for correct CtorInfo generation (Part of #1953).
     /// Maps constructor names to their tag and field layout info. When present,
     /// `LetValue::Ctor`, `LetValue::Reuse`, and `Alt::Ctor` use real tag/field
@@ -91,7 +93,14 @@ pub struct ToIRState {
     /// it carries no `known_nat_value`; a `BitVec.ofNatLT numBits n h` decode
     /// (the `USize.ofNatLT` carrier chain) recognizes the width through this
     /// sentinel and targets `USize` (see `lower_scalar_width_nat_decode`).
-    numbits_vars: std::collections::HashSet<VarId>,
+    numbits_vars: HashSet<VarId>,
+    /// Variables bound from an LCNF binder whose type is a source scalar
+    /// (`rc::insert::is_scalar_type`): LCNF RC inserted no `inc`/`dec` for
+    /// them, yet boxing can still give them an object representation (the
+    /// result of a boxed callee). Exported through
+    /// [`super::ToIROutput::rc_unmanaged`] for `rc_repair::rc_repair_boxed`
+    /// (WS6.2).
+    rc_unmanaged: HashSet<VarId>,
 }
 
 impl Default for ToIRState {
@@ -110,11 +119,13 @@ impl ToIRState {
             next_jp: 0,
             warnings: RefCell::new(Vec::new()),
             arities: HashMap::new(),
+            byte_array_string: false,
             ctor_env: HashMap::new(),
             inductive_env: HashMap::new(),
             var_types: HashMap::new(),
             known_nat_values: HashMap::new(),
-            numbits_vars: std::collections::HashSet::new(),
+            numbits_vars: HashSet::new(),
+            rc_unmanaged: HashSet::new(),
         }
     }
 
@@ -131,11 +142,13 @@ impl ToIRState {
             next_jp: 0,
             warnings: RefCell::new(Vec::new()),
             arities,
+            byte_array_string: false,
             ctor_env: HashMap::new(),
             inductive_env: HashMap::new(),
             var_types: HashMap::new(),
             known_nat_values: HashMap::new(),
-            numbits_vars: std::collections::HashSet::new(),
+            numbits_vars: HashSet::new(),
+            rc_unmanaged: HashSet::new(),
         }
     }
 
@@ -155,17 +168,27 @@ impl ToIRState {
             next_jp: 0,
             warnings: RefCell::new(Vec::new()),
             arities,
+            byte_array_string: false,
             ctor_env,
             inductive_env,
             var_types: HashMap::new(),
             known_nat_values: HashMap::new(),
-            numbits_vars: std::collections::HashSet::new(),
+            numbits_vars: HashSet::new(),
+            rc_unmanaged: HashSet::new(),
         }
     }
 
     /// Look up the arity (parameter count) of a named function.
     pub(super) fn get_arity(&self, name: &Name) -> Option<u16> {
         self.arities.get(name).copied()
+    }
+
+    pub(super) fn set_byte_array_string(&mut self, enabled: bool) {
+        self.byte_array_string = enabled;
+    }
+
+    pub(super) fn is_byte_array_string_constructor(&self, name: &Name) -> bool {
+        self.byte_array_string && *name == Name::from_string("String.ofByteArray")
     }
 
     /// Look up the full constructor metadata for a projection's inductive type.
@@ -252,6 +275,20 @@ impl ToIRState {
     /// Whether a variable is bound to `System.Platform.numBits`.
     pub(super) fn is_numbits_var(&self, var: VarId) -> bool {
         self.numbits_vars.contains(&var)
+    }
+
+    /// Record that `var` was bound from an LCNF binder of type `lcnf_ty`; if
+    /// that type is a source scalar, LCNF RC left it unmanaged (see the
+    /// `rc_unmanaged` field doc).
+    pub(super) fn note_lcnf_binder_type(&mut self, var: VarId, lcnf_ty: &clean_kernel::Expr) {
+        if crate::rc::insert::is_scalar_type(lcnf_ty) {
+            self.rc_unmanaged.insert(var);
+        }
+    }
+
+    /// Take the recorded RC-unmanaged variables (see `note_lcnf_binder_type`).
+    pub(super) fn take_rc_unmanaged(&mut self) -> HashSet<VarId> {
+        std::mem::take(&mut self.rc_unmanaged)
     }
 
     /// Look up the IRType for a VarId. Part of #2123 (Bug 2).

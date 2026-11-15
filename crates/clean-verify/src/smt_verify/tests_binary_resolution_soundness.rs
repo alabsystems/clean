@@ -94,7 +94,7 @@ fn test_3346_issue_example_accepts_correct_resolvent() {
     );
     assert_eq!(
         verdict.trust_level,
-        StepTrustLevel::KernelVerified,
+        StepTrustLevel::StepChecked,
         "#3346 positive control: polarity-correct resolvent {{a, b, c}} \
          must be accepted: {:?}",
         verdict.detail
@@ -241,7 +241,7 @@ fn test_3346_premise_order_invariance_positive() {
     );
     assert_eq!(
         verdict.trust_level,
-        StepTrustLevel::KernelVerified,
+        StepTrustLevel::StepChecked,
         "#3346 invariance: premise order [C2, C1] must still accept the \
          polarity-correct resolvent {{a, b, c}}: {:?}",
         verdict.detail
@@ -307,7 +307,7 @@ fn test_3346_pivot_passed_as_negative_polarity_invariance() {
     );
     assert_eq!(
         verdict.trust_level,
-        StepTrustLevel::KernelVerified,
+        StepTrustLevel::StepChecked,
         "#3346 invariance: pivot passed as `~a` must still accept the \
          polarity-correct resolvent {{a, b, c}}: {:?}",
         verdict.detail
@@ -351,7 +351,7 @@ fn test_3346_both_tautological_preserves_all_non_pivot_polarities() {
     );
     assert_eq!(
         verdict_accept.trust_level,
-        StepTrustLevel::KernelVerified,
+        StepTrustLevel::StepChecked,
         "#3346 both-tautological: true resolvent {{a, ~a, b, c}} must be \
          accepted: {:?}",
         verdict_accept.detail

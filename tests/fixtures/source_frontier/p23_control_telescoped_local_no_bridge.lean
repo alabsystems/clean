@@ -1,3 +1,6 @@
+-- Updated 2026-11-06: explicitly reducible aliases and explicit class
+-- projection arguments repair Lean source preconditions. All original bytes
+-- and oracle decisions remain in reports/source-frontier-header-2026-11-06/.
 -- p23 — CLASS I, the general capability, with the `decEq` bridge removed from
 -- the picture.
 --
@@ -19,8 +22,8 @@
 class MyD (p : Prop) where
   ev : Nat
 
-def MyDEq (α : Type) : Type := (x : α) → (y : α) → MyD (x = y)
+@[reducible] def MyDEq (α : Type) : Type := (x : α) → (y : α) → MyD (x = y)
 
-def evAt (p : Prop) [MyD p] : Nat := MyD.ev
+def evAt (p : Prop) [MyD p] : Nat := MyD.ev p
 
 def usesTelescope {α : Type} [MyDEq α] (a b : α) : Nat := evAt (a = b)

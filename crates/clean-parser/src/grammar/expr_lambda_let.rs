@@ -12,6 +12,18 @@ use crate::ParseError;
 use super::decl::EquationArmBoundary;
 use super::Parser;
 
+/// The alias [`Parser::combine_patterns_as_tuple`] gives a last equation
+/// position that is itself a tuple or anonymous-constructor pattern. Nothing
+/// refers to it, and nothing may: it is an unspellable name
+/// ([`SurfaceName::unspellable`]). It used to be the plain identifier
+/// `_eqn_last`, which the arm's body then read instead of a global of that
+/// spelling: with `def _eqn_last : Nat × Nat := (40, 41)`, the arm `| 0, (a,
+/// b) => _eqn_last.1 + a + b` computed `a + a + b` and `e1 0 (1, 2) = 4` was
+/// accepted by `rfl` (measured 2026-09-25; Lean 4.8.0: 43).
+fn last_position_alias() -> SurfaceName {
+    SurfaceName::unspellable("_eqn_last", 0)
+}
+
 impl Parser {
     /// Parse lambda body: x y z => e or (x : T) (y : U) => e
     /// Returns (`lambda_expr`, `is_pattern_matching`) where `is_pattern_matching`
@@ -51,6 +63,29 @@ impl Parser {
             // parse error rather than silently building an ill-typed tuple.
             let arity = raw_arms.first().map_or(1, |(pats, _)| pats.len());
 
+            // A SINGLE arm over several positions is `fun p₀ p₁ … => body`
+            // and takes the interleaved shape below — one `fun`, one
+            // single-arm `match` per position — so a later position's TYPE
+            // sees the earlier positions already destructured (Lean's
+            // `match` generalizes its discriminant over the whole expected
+            // type; a lambda that binds every position first cannot). The
+            // tuple encoding stays for MULTI-arm lambdas, whose arms need a
+            // joint match.
+            let raw_arms = if arity > 1 {
+                match <[(Vec<SurfacePattern>, SurfaceExpr); 1]>::try_from(raw_arms) {
+                    Ok([(patterns, body)]) => {
+                        let mut fresh_idx = 0_usize;
+                        let layers: Vec<(SurfaceBinder, Option<(Span, SurfacePattern)>)> = patterns
+                            .into_iter()
+                            .map(|pattern| Self::pattern_binder_layer(pattern, &mut fresh_idx))
+                            .collect();
+                        return Ok(Self::interleaved_pattern_lambda(start_span, layers, body));
+                    }
+                    Err(raw_arms) => raw_arms,
+                }
+            } else {
+                raw_arms
+            };
             let mut arms = Vec::with_capacity(raw_arms.len());
             for (patterns, body) in raw_arms {
                 if patterns.len() != arity {
@@ -74,8 +109,12 @@ impl Parser {
 
             // Single scrutinee binder `_x`; the elaborator's curried-pattern
             // path peels the tuple arity from the arm patterns.
-            let scrutinee = SurfaceExpr::Ident(start_span, "_x".to_string());
-            let binder = SurfaceBinder::new("_x".to_string(), None, SurfaceBinderInfo::Explicit);
+            let scrutinee = SurfaceExpr::Ident(start_span, SurfaceName::pattern_lambda_binder());
+            let binder = SurfaceBinder::new_typed(
+                SurfaceName::pattern_lambda_binder(),
+                None,
+                SurfaceBinderInfo::Explicit,
+            );
             let match_expr = SurfaceExpr::Match(start_span, None, Box::new(scrutinee), arms);
             // Return as PatternMatchLambda to signal app_expr to stop
             return Ok(SurfaceExpr::PatternMatchLambda(
@@ -112,11 +151,41 @@ impl Parser {
     /// `Prod.mk p0 (Prod.mk p1 p2)`. This is the pattern-side mirror of the
     /// scrutinee tuple built in the match-lambda desugaring, and matches the
     /// combination performed by multi-scrutinee `match` (see `match_body`).
-    fn combine_patterns_as_tuple(patterns: Vec<SurfacePattern>) -> SurfacePattern {
+    ///
+    /// The elaborator reads the number of positions back off that spine
+    /// (`top_level_prod_pattern_arity`), and a LAST position that is itself a
+    /// tuple or anonymous-constructor pattern is spelled with the same
+    /// `Prod.mk`, so it used to be counted as more positions: `| n, (x, _) =>
+    /// …` read three, found two binders in the type, and the whole tuple was
+    /// matched against the first discriminant ("expected constructor of Nat,
+    /// got constructor Prod.mk of Prod"). Lean's arity is syntactic
+    /// (`getMatchAltsNumPatterns`, `Lean/Elab/BindersUtil.lean:44`). Such a
+    /// last position is therefore wrapped in an as-pattern under a
+    /// compiler-authored alias: the spine ends there, and an as-pattern
+    /// matches exactly what its inner pattern matches. Only for two or more
+    /// positions — a single position never starts a spine, and its own
+    /// pattern is what the recursion lowerings read.
+    pub(in crate::grammar) fn combine_patterns_as_tuple(
+        mut patterns: Vec<SurfacePattern>,
+    ) -> SurfacePattern {
+        let prod_mk = SurfaceName::generated_path("Prod.mk");
+        if patterns.len() >= 2 {
+            if let Some(last) = patterns.pop() {
+                let extends_spine = matches!(
+                    &last,
+                    SurfacePattern::Ctor(name, fields) if *name == prod_mk && fields.len() == 2
+                );
+                patterns.push(if extends_spine {
+                    SurfacePattern::As(last_position_alias(), Box::new(last))
+                } else {
+                    last
+                });
+            }
+        }
         patterns
             .into_iter()
             .rev()
-            .reduce(|acc, pat| SurfacePattern::Ctor("Prod.mk".to_string(), vec![pat, acc]))
+            .reduce(|acc, pat| SurfacePattern::Ctor(prod_mk.clone(), vec![pat, acc]))
             // Only reached if `patterns` were empty, which callers never do
             // (each arm parses at least one pattern before the first comma).
             .unwrap_or(SurfacePattern::Wildcard)
@@ -281,42 +350,32 @@ impl Parser {
     /// - `fun (a, b) => a` ⇒ `fun _x => match _x with | (a, b) => a`
     /// - `fun x (a, b) => a` ⇒ `fun x _x1 => match _x1 with | (a, b) => a`
     fn destructuring_lambda_body(&mut self, start_span: Span) -> Result<SurfaceExpr, ParseError> {
-        // Collected lambda binders (fresh names for patterns).
-        let mut binders: Vec<SurfaceBinder> = Vec::new();
-        // (scrutinee_name, pattern) for each destructuring parameter, in order.
-        let mut patterns: Vec<(String, Span, SurfacePattern)> = Vec::new();
+        // One layer per lambda position: the binder, and the pattern it is
+        // matched against when the position was written as one.
+        let mut layers: Vec<(SurfaceBinder, Option<(Span, SurfacePattern)>)> = Vec::new();
         let mut fresh_idx = 0_usize;
 
         loop {
             match self.current_kind() {
                 TokenKind::LAngle => {
-                    let span = self.current_span();
                     let pattern = self.pattern()?;
-                    let name = self.fresh_destructuring_name(&mut fresh_idx);
-                    binders.push(SurfaceBinder::new(
-                        name.clone(),
-                        None,
-                        SurfaceBinderInfo::Explicit,
-                    ));
-                    patterns.push((name, span, pattern));
+                    layers.push(Self::pattern_binder_layer(pattern, &mut fresh_idx));
                 }
                 TokenKind::LParen if self.paren_group_has_top_level_comma(0) => {
-                    let span = self.current_span();
                     let pattern = self.pattern()?;
-                    let name = self.fresh_destructuring_name(&mut fresh_idx);
-                    binders.push(SurfaceBinder::new(
-                        name.clone(),
-                        None,
-                        SurfaceBinderInfo::Explicit,
-                    ));
-                    patterns.push((name, span, pattern));
+                    layers.push(Self::pattern_binder_layer(pattern, &mut fresh_idx));
                 }
-                TokenKind::LParen => binders.extend(self.explicit_binders()?),
-                TokenKind::LBrace => binders.extend(self.implicit_binders()?),
-                TokenKind::LBracket => binders.extend(self.instance_binders()?),
+                TokenKind::LParen => {
+                    layers.extend(self.explicit_binders()?.into_iter().map(|b| (b, None)));
+                }
+                TokenKind::LBrace => {
+                    layers.extend(self.implicit_binders()?.into_iter().map(|b| (b, None)));
+                }
+                TokenKind::LBracket => {
+                    layers.extend(self.instance_binders()?.into_iter().map(|b| (b, None)));
+                }
                 TokenKind::Ident(_) | TokenKind::Underscore => {
-                    // Reuse the simple-binder logic by parsing a single binder.
-                    binders.push(self.simple_lambda_binder()?);
+                    layers.push((self.simple_lambda_binder()?, None));
                 }
                 _ => break,
             }
@@ -328,37 +387,92 @@ impl Parser {
 
         self.expect(&TokenKind::FatArrow)?;
         let body = self.expr()?;
-        let span = start_span.merge(body.span());
-
-        // Wrap the body in nested single-arm matches, innermost (last pattern)
-        // first so the textual binder order is preserved.
-        let mut result = body;
-        for (name, pat_span, pattern) in patterns.into_iter().rev() {
-            let scrutinee = SurfaceExpr::Ident(pat_span, name);
-            let arm = SurfaceMatchArm {
-                span: pat_span,
-                pattern,
-                body: result,
-            };
-            result = SurfaceExpr::Match(pat_span, None, Box::new(scrutinee), vec![arm]);
-        }
-
-        Ok(SurfaceExpr::PatternMatchLambda(
-            span,
-            binders,
-            Box::new(result),
-        ))
+        Ok(Self::interleaved_pattern_lambda(start_span, layers, body))
     }
 
-    /// Mint a fresh, source-invisible scrutinee name for a destructuring binder.
-    fn fresh_destructuring_name(&self, idx: &mut usize) -> String {
-        let name = if *idx == 0 {
-            "_x".to_string()
-        } else {
-            format!("_x{idx}")
-        };
-        *idx += 1;
-        name
+    /// One lambda position written as a PATTERN: a plain variable or `_` is
+    /// the binder itself (no match), anything else gets a fresh,
+    /// source-invisible binder that a single-arm `match` destructures.
+    pub(in crate::grammar) fn pattern_binder_layer(
+        pattern: SurfacePattern,
+        fresh_idx: &mut usize,
+    ) -> (SurfaceBinder, Option<(Span, SurfacePattern)>) {
+        let span = pattern.span();
+        match pattern {
+            SurfacePattern::Var(name) => (
+                SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit),
+                None,
+            ),
+            SurfacePattern::Wildcard => (
+                SurfaceBinder::new_typed(
+                    SurfaceName::generated_path("_"),
+                    None,
+                    SurfaceBinderInfo::Explicit,
+                ),
+                None,
+            ),
+            pattern => {
+                let name = SurfaceName::unspellable("_dx", *fresh_idx as u64);
+                *fresh_idx += 1;
+                (
+                    SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit),
+                    Some((span, pattern)),
+                )
+            }
+        }
+    }
+
+    /// `fun p₀ p₁ … => body` as Lean elaborates it: one `fun` per position,
+    /// each pattern position destructured by a single-arm `match` on its own
+    /// binder BEFORE the next position is bound —
+    ///
+    /// ```text
+    /// fun _dx0 => match _dx0 with
+    ///   | p₀ => fun _dx1 => match _dx1 with
+    ///     | p₁ => … body
+    /// ```
+    ///
+    /// The interleaving is what makes a DEPENDENT later position work:
+    /// `fun ⟨_, _⟩ ⟨_, _⟩ ⟨hac, hbd⟩ ↦ …` against `∀ a b : α × β, a ≤ b → …`
+    /// has `⟨hac, hbd⟩ : a ≤ b`, and only a `match` on `a` performed before
+    /// `b` and the hypothesis are bound can rewrite their types to the
+    /// destructured `(x, y)` (the match motive generalizes its discriminant
+    /// over the whole expected type). The pre-2026-09-11 shape bound every
+    /// position first and matched afterwards, so the hypothesis kept its
+    /// undestructured type and the kernel refused the proof
+    /// (`Mathlib/Order/Basic.lean`'s `Prod` preorder instance, plus the eight
+    /// `LT (α × β)` rows behind it).
+    ///
+    /// The outermost node is a `PatternMatchLambda` so `app_expr` treats the
+    /// lambda as it always has; its body is the plain nest.
+    fn interleaved_pattern_lambda(
+        start_span: Span,
+        layers: Vec<(SurfaceBinder, Option<(Span, SurfacePattern)>)>,
+        body: SurfaceExpr,
+    ) -> SurfaceExpr {
+        let span = start_span.merge(body.span());
+        let mut result = body;
+        for (binder, destructure) in layers.into_iter().rev() {
+            let inner = match destructure {
+                Some((pat_span, pattern)) => {
+                    let scrutinee = SurfaceExpr::Ident(pat_span, binder.name.clone());
+                    let arm = SurfaceMatchArm {
+                        span: pat_span,
+                        pattern,
+                        body: result,
+                    };
+                    SurfaceExpr::Match(pat_span, None, Box::new(scrutinee), vec![arm])
+                }
+                None => result,
+            };
+            result = SurfaceExpr::Lambda(span, vec![binder], Box::new(inner));
+        }
+        match result {
+            SurfaceExpr::Lambda(s, binders, inner) => {
+                SurfaceExpr::PatternMatchLambda(s, binders, inner)
+            }
+            other => other,
+        }
     }
 
     /// Parse a single simple `fun` binder: `x` or `x : T` or `_` (with optional
@@ -367,13 +481,13 @@ impl Parser {
         let span = self.current_span();
         let name = match self.current_kind() {
             TokenKind::Ident(name) => {
-                let name = name.clone();
+                let name = self.name_token(name)?;
                 self.advance();
                 name
             }
             TokenKind::Underscore => {
                 self.advance();
-                "_".to_string()
+                SurfaceName::generated_path("_")
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -419,6 +533,7 @@ impl Parser {
             self.advance(); // consume dot
             match self.current_kind().clone() {
                 TokenKind::Ident(field) => {
+                    let field = SurfaceName::component(field, self.current().ident_escaped);
                     let field_span = self.current_span();
                     self.advance();
                     let span = result.span().merge(field_span);
@@ -445,7 +560,7 @@ impl Parser {
                         result = SurfaceExpr::Proj(
                             span,
                             Box::new(result),
-                            Projection::Named(kw_str.to_string()),
+                            Projection::Named(SurfaceName::component(kw_str, false)),
                         );
                     } else {
                         break;
@@ -538,12 +653,13 @@ impl Parser {
         let span = binder.span.merge(right.span());
 
         // Membership is a special case: `a ∈ b` desugars to `Membership.mem b a`.
-        if matches!(kind, TokenKind::Elem | TokenKind::NotElem) {
+        // Exactly the membership guards (`∈`, `∉`) carry no relation name.
+        let Some(op) = op else {
             let mem_expr = SurfaceExpr::App(
                 span,
                 Box::new(SurfaceExpr::Ident(
                     binder.span,
-                    "Membership.mem".to_string(),
+                    SurfaceName::global_path("Membership.mem"),
                 )),
                 vec![SurfaceArg::positional(right), SurfaceArg::positional(left)],
             );
@@ -551,18 +667,23 @@ impl Parser {
             if matches!(kind, TokenKind::NotElem) {
                 return Ok(Some(SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(binder.span, "Not".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        binder.span,
+                        SurfaceName::global_path("Not"),
+                    )),
                     vec![SurfaceArg::positional(mem_expr)],
                 )));
             }
 
             return Ok(Some(mem_expr));
-        }
+        };
 
-        let op = op.expect("op is Some for non-membership guards");
         Ok(Some(SurfaceExpr::App(
             span,
-            Box::new(SurfaceExpr::Ident(binder.span, op.to_string())),
+            Box::new(SurfaceExpr::Ident(
+                binder.span,
+                SurfaceName::global_path(op),
+            )),
             vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
         )))
     }
@@ -652,15 +773,23 @@ impl Parser {
         }
 
         // Anonymous instance let: `letI : T := v in body` — Part of #8, Part of #2550
-        // No name, just a type annotation. Desugar to `let _anon : T := v in body`.
+        // No name, just a type annotation. It binds `this`, as Lean 4's
+        // `letI`/`haveI` do (`haveIdDecl` with the name omitted). It used to
+        // bind `_anon`, an ordinary identifier, so a body naming a global
+        // `_anon` read the instance instead: with `def _anon : Nat := 77`,
+        // `letI : Nat := 5; _anon + 1` computed 6 and was accepted by `rfl`
+        // (measured 2026-09-25; Lean 4.8.0: 78).
         if self.check(&TokenKind::Colon) {
             self.advance(); // consume :
             let ty = self.expr()?;
             self.expect(&TokenKind::ColonEq)?;
             let val = self.parse_let_value_layout(let_col)?;
             let body = self.let_body_after_value()?;
-            let binder =
-                SurfaceBinder::new("_anon".to_string(), Some(ty), SurfaceBinderInfo::Explicit);
+            let binder = SurfaceBinder::new_typed(
+                SurfaceName::generated_path("this"),
+                Some(ty),
+                SurfaceBinderInfo::Explicit,
+            );
             let span = start_span.merge(body.span());
             return Ok(SurfaceExpr::Let(
                 span,
@@ -677,7 +806,7 @@ impl Parser {
             TokenKind::Ident(_) => self.ident()?,
             TokenKind::Underscore => {
                 self.advance();
-                "_".to_string()
+                SurfaceName::generated_path("_")
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -797,7 +926,7 @@ impl Parser {
         };
 
         let span = start_span.merge(body.span());
-        let binder = SurfaceBinder::new(name, binder_ty, SurfaceBinderInfo::Explicit);
+        let binder = SurfaceBinder::new_typed(name, binder_ty, SurfaceBinderInfo::Explicit);
 
         if is_rec {
             Ok(SurfaceExpr::LetRec(
@@ -833,7 +962,7 @@ impl Parser {
         &mut self,
         start_span: Span,
         let_col: u32,
-        name: String,
+        name: SurfaceName,
         params: Vec<SurfaceBinder>,
         ret_ty: Option<SurfaceExpr>,
     ) -> Result<SurfaceExpr, ParseError> {
@@ -865,7 +994,7 @@ impl Parser {
 
         let body = self.let_body_after_value()?;
         let span = start_span.merge(body.span());
-        let binder = SurfaceBinder::new(name, binder_ty, SurfaceBinderInfo::Explicit);
+        let binder = SurfaceBinder::new_typed(name, binder_ty, SurfaceBinderInfo::Explicit);
         Ok(SurfaceExpr::LetRec(
             span,
             binder,
@@ -898,7 +1027,7 @@ impl Parser {
                 TokenKind::Ident(_) => names.push(self.ident()?),
                 TokenKind::Underscore => {
                     self.advance();
-                    names.push("_".to_string());
+                    names.push(SurfaceName::generated_path("_"));
                 }
                 _ => break,
             }
@@ -950,24 +1079,32 @@ impl Parser {
             return Ok(body);
         }
 
-        if names.len() == 1 {
-            // Single name: let (a) := e; body -> let a := e; body
-            let span = start_span.merge(body.span());
-            let binder = SurfaceBinder::new(
-                names
-                    .into_iter()
-                    .next()
-                    .expect("invariant: names.len() == 1 checked above"),
-                ty_annot,
-                SurfaceBinderInfo::Explicit,
-            );
-            return Ok(SurfaceExpr::Let(
-                span,
-                binder,
-                Box::new(val),
-                Box::new(body),
-            ));
-        }
+        // Single name: let (a) := e; body -> let a := e; body
+        //
+        // Only for the PARENTHESIS: a one-element `⟨a⟩` is an anonymous
+        // constructor, never a parenthesis (Lean's `elabAnonymousCtor`,
+        // `Lean/Elab/BuiltinNotation.lean:43-100`), so `let ⟨a⟩ := e`
+        // destructures below. Reading it as `let a := e` bound `a` to the
+        // whole `Nonempty` in `let ⟨x⟩ := ‹Nonempty α›`
+        // (`Function.const_injective`, Mathlib `Logic/Function/Basic.lean`).
+        let names = if is_angle {
+            names
+        } else {
+            match <[SurfaceName; 1]>::try_from(names) {
+                Ok([name]) => {
+                    let span = start_span.merge(body.span());
+                    let binder =
+                        SurfaceBinder::new_typed(name, ty_annot, SurfaceBinderInfo::Explicit);
+                    return Ok(SurfaceExpr::Let(
+                        span,
+                        binder,
+                        Box::new(val),
+                        Box::new(body),
+                    ));
+                }
+                Err(names) => names,
+            }
+        };
 
         if is_angle {
             // Anonymous-constructor let-destructure `let ⟨a, b, c⟩ := e; body`.
@@ -986,9 +1123,50 @@ impl Parser {
                 Some(ty) => SurfaceExpr::Ascription(start_span, Box::new(val), Box::new(ty)),
                 None => val,
             };
-            let pattern = Self::combine_patterns_as_tuple(
-                names.into_iter().map(SurfacePattern::Var).collect(),
-            );
+            let pattern =
+                Self::anonymous_ctor_pattern(names.into_iter().map(SurfacePattern::Var).collect());
+            let arm = SurfaceMatchArm {
+                span: start_span,
+                pattern,
+                body,
+            };
+            return Ok(SurfaceExpr::Match(
+                start_span,
+                None,
+                Box::new(scrut),
+                vec![arm],
+            ));
+        }
+
+        // A name bound twice (`let (x, x) := e`) is a NON-LINEAR pattern:
+        // Lean 4 rejects it ("variable `x` occurred more than once"). The
+        // projection desugaring below would bind each position in turn, so the
+        // last one silently won and `(let (x, x) := (1, 2); x) = 2 := rfl`
+        // was accepted (measured 2026-09-25). Hand such a tuple to the
+        // elaborator as the `match` it abbreviates, whose linearity check
+        // refuses it loudly with the variable's name.
+        let wildcard = SurfaceName::generated_path("_");
+        let repeated = names
+            .iter()
+            .enumerate()
+            .any(|(i, n)| *n != wildcard && names[..i].contains(n));
+        if let (true, Some((last, init))) = (repeated, names.split_last()) {
+            let scrut = match ty_annot {
+                Some(ty) => SurfaceExpr::Ascription(start_span, Box::new(val), Box::new(ty)),
+                None => val,
+            };
+            let prod_mk = SurfaceName::generated_path("Prod.mk");
+            let position = |n: &SurfaceName| {
+                if *n == wildcard {
+                    SurfacePattern::Wildcard
+                } else {
+                    SurfacePattern::Var(n.clone())
+                }
+            };
+            // Right-nested, as the tuple is: `(a, b, c)` is `(a, (b, c))`.
+            let pattern = init.iter().rev().fold(position(last), |acc, n| {
+                SurfacePattern::Ctor(prod_mk.clone(), vec![position(n), acc])
+            });
             let arm = SurfaceMatchArm {
                 span: start_span,
                 pattern,
@@ -1009,7 +1187,9 @@ impl Parser {
         //   ...
         //   let name_n := Prod.snd (Prod.snd^(n-1) _tpl) in
         //   body
-        let tpl_name = "_tpl".to_string();
+        // Unspellable: `_tpl` was an ordinary identifier, so a tuple component
+        // or a body naming a global `_tpl` read this temporary instead.
+        let tpl_name = SurfaceName::unspellable("_tpl", 0);
         let n = names.len();
 
         // Build the innermost body first, then wrap outward
@@ -1035,7 +1215,10 @@ impl Parser {
             for _ in 0..snd_count {
                 target = SurfaceExpr::App(
                     start_span,
-                    Box::new(SurfaceExpr::Ident(start_span, "Prod.snd".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        start_span,
+                        SurfaceName::global_path("Prod.snd"),
+                    )),
                     vec![SurfaceArg::positional(target)],
                 );
             }
@@ -1043,16 +1226,20 @@ impl Parser {
             // Apply the final fst or snd
             let proj_expr = SurfaceExpr::App(
                 start_span,
-                Box::new(SurfaceExpr::Ident(start_span, proj.to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    start_span,
+                    SurfaceName::global_path(proj),
+                )),
                 vec![SurfaceArg::positional(target)],
             );
 
-            let binder = SurfaceBinder::new(names[i].clone(), None, SurfaceBinderInfo::Explicit);
+            let binder =
+                SurfaceBinder::new_typed(names[i].clone(), None, SurfaceBinderInfo::Explicit);
             result = SurfaceExpr::Let(start_span, binder, Box::new(proj_expr), Box::new(result));
         }
 
         // Wrap everything in let _tpl := val in ...
-        let tpl_binder = SurfaceBinder::new(tpl_name, None, SurfaceBinderInfo::Explicit);
+        let tpl_binder = SurfaceBinder::new_typed(tpl_name, None, SurfaceBinderInfo::Explicit);
         Ok(SurfaceExpr::Let(
             start_span,
             tpl_binder,
@@ -1146,7 +1333,7 @@ impl Parser {
         if let TokenKind::Ident(name) = self.current_kind() {
             if matches!(self.peek_kind(1), Some(TokenKind::Colon)) {
                 // Check it's not ColonEq
-                let name = name.clone();
+                let name = self.name_token(name)?;
                 self.advance(); // consume ident
                 self.advance(); // consume :
                 let prop = self.expr()?;
@@ -1195,7 +1382,10 @@ impl Parser {
         let span = start_span.merge(else_branch.span());
         Ok(SurfaceExpr::App(
             span,
-            Box::new(SurfaceExpr::Ident(start_span, "cond".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path("cond"),
+            )),
             vec![
                 SurfaceArg::positional(cond),
                 SurfaceArg::positional(then_branch),
@@ -1389,7 +1579,6 @@ impl Parser {
                 | TokenKind::Private
                 | TokenKind::Protected
                 | TokenKind::Public
-                | TokenKind::Module
                 | TokenKind::Partial
                 | TokenKind::Unsafe
                 | TokenKind::Noncomputable
@@ -1466,7 +1655,6 @@ impl Parser {
                 | TokenKind::Private
                 | TokenKind::Protected
                 | TokenKind::Public
-                | TokenKind::Module
                 | TokenKind::Partial
                 | TokenKind::Unsafe
                 | TokenKind::Noncomputable
@@ -1545,7 +1733,10 @@ impl Parser {
                 }
             } else {
                 // First step without `:=` — it's just the relation, with an implicit rfl
-                SurfaceCalcJustification::Term(SurfaceExpr::Ident(step_span, "rfl".to_string()))
+                SurfaceCalcJustification::Term(SurfaceExpr::Ident(
+                    step_span,
+                    SurfaceName::global_path("rfl"),
+                ))
             };
 
             let end = match &proof {
@@ -1630,7 +1821,7 @@ impl Parser {
         // Create application: anonymousCtor args...
         Ok(SurfaceExpr::App(
             start_span.merge(end_span),
-            Box::new(SurfaceExpr::Ident(start_span, "anonymousCtor".to_string())),
+            Box::new(SurfaceExpr::Ident(start_span, anonymous_constructor_head())),
             args.into_iter().map(SurfaceArg::positional).collect(),
         ))
     }

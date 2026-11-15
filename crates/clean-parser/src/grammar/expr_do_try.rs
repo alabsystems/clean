@@ -71,7 +71,7 @@ impl Parser {
             if self.eat(&TokenKind::LeftArrow) {
                 let val = self.parse_do_elem_expr()?;
                 let span = start_span.merge(val.span());
-                let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+                let binder = SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit);
                 return Ok(DoElem::Bind(span, binder, Box::new(val)));
             }
             if self.eat(&TokenKind::ColonEq) {
@@ -275,7 +275,7 @@ impl Parser {
             TokenKind::Ident(_) => self.ident()?,
             TokenKind::Underscore => {
                 self.advance();
-                "_".to_string()
+                SurfaceName::generated_path("_")
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -335,7 +335,9 @@ impl Parser {
         }
 
         // Desugar to: catch __catch_x => match __catch_x with | arm1 | arm2 ...
-        let fresh_name = "__catch_x".to_string();
+        // Unspellable: the binder encloses the arms' bodies, so a spellable
+        // `__catch_x` captured their references to a global of that spelling.
+        let fresh_name = SurfaceName::unspellable("__catch_x", 0);
         let match_discr = SurfaceExpr::Ident(catch_span, fresh_name.clone());
         let match_elem = DoElem::Match(catch_span, vec![match_discr], arms);
 
@@ -399,7 +401,7 @@ impl Parser {
                 // No `|` — treat as regular bind if pattern is a simple variable
                 if let SurfacePattern::Var(name) = pat {
                     let span = start_span.merge(action.span());
-                    let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+                    let binder = SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit);
                     return Ok(Some(DoElem::Bind(span, binder, Box::new(action))));
                 }
                 // Constructor pattern without fallback — error
@@ -459,10 +461,13 @@ impl Parser {
         // early-return — see the doc comment above.
         let pure_unit = SurfaceExpr::App(
             start_span,
-            Box::new(SurfaceExpr::Ident(start_span, "pure".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path("pure"),
+            )),
             vec![SurfaceArg::positional(SurfaceExpr::Ident(
                 start_span,
-                "Unit.unit".to_string(),
+                SurfaceName::global_path("Unit.unit"),
             ))],
         );
         let then_branch = vec![DoElem::Expr(start_span, Box::new(pure_unit))];
@@ -507,10 +512,13 @@ impl Parser {
         // never early-return — see the doc comment above.
         let pure_unit = SurfaceExpr::App(
             start_span,
-            Box::new(SurfaceExpr::Ident(start_span, "pure".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                start_span,
+                SurfaceName::global_path("pure"),
+            )),
             vec![SurfaceArg::positional(SurfaceExpr::Ident(
                 start_span,
-                "Unit.unit".to_string(),
+                SurfaceName::global_path("Unit.unit"),
             ))],
         );
         let else_branch = vec![DoElem::Expr(start_span, Box::new(pure_unit))];

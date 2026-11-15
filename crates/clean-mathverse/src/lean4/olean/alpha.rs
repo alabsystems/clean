@@ -414,7 +414,7 @@ impl<'a> LoweringCtx<'a> {
                 let flat = FlatExpr::lit_str(string_idx);
                 self.writer.add_expr(flat)
             }
-            ParsedExpr::MData(inner) => {
+            ParsedExpr::MData(_, inner) => {
                 // MData is a metadata wrapper; lower the inner expression
                 // directly (transparent).
                 self.lower_expr(inner)
@@ -719,7 +719,7 @@ fn walk_expr_for_proof_info(expr: &ParsedExpr, info: &mut ProofInfo) {
             walk_expr_for_proof_info(val, info);
             walk_expr_for_proof_info(body, info);
         }
-        ParsedExpr::MData(inner) => {
+        ParsedExpr::MData(_, inner) => {
             walk_expr_for_proof_info(inner, info);
         }
         ParsedExpr::Proj(_name, _field, inner) => {
@@ -744,7 +744,7 @@ fn expr_depth(expr: &ParsedExpr) -> usize {
         ParsedExpr::LetE(_, ty, val, body, _) => {
             1 + expr_depth(ty).max(expr_depth(val)).max(expr_depth(body))
         }
-        ParsedExpr::MData(inner) | ParsedExpr::Proj(_, _, inner) => 1 + expr_depth(inner),
+        ParsedExpr::MData(_, inner) | ParsedExpr::Proj(_, _, inner) => 1 + expr_depth(inner),
         // Leaf nodes (BVar, FVar, MVar, Sort, Const, Lit).
         _ => 1,
     }
@@ -1698,7 +1698,7 @@ mod tests {
         let mut writer = ShardWriter::new();
         let mut ctx = LoweringCtx::new(&mut writer);
         let inner = ParsedExpr::BVar(5);
-        let expr = ParsedExpr::MData(Box::new(inner));
+        let expr = ParsedExpr::MData(Vec::new(), Box::new(inner));
         let idx = ctx.lower_expr(&expr);
 
         let mut buf = Vec::new();

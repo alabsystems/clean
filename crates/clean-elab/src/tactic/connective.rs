@@ -6,6 +6,8 @@
 //!
 //! These tactics work with logical connectives (And, Or, Iff, False, Not).
 
+use clean_parser::SurfaceName;
+
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
@@ -68,16 +70,18 @@ pub fn split_(state: &mut ProofState) -> TacticResult {
             // Tags are focus metadata only; the kernel-checked proof term is
             // unchanged.
             let left_goal = Goal {
+                case_binders: vec![],
                 meta_id: left_meta_id,
                 target: left_ty,
                 local_ctx: goal.local_ctx.clone(),
-                tag: Some("left".into()),
+                tag: Some(SurfaceName::generated_path("left")),
             };
             let right_goal = Goal {
+                case_binders: vec![],
                 meta_id: right_meta_id,
                 target: right_ty,
                 local_ctx: goal.local_ctx.clone(),
-                tag: Some("right".into()),
+                tag: Some(SurfaceName::generated_path("right")),
             };
 
             state.goals.push_front(right_goal);
@@ -121,16 +125,18 @@ pub fn split_(state: &mut ProofState) -> TacticResult {
             // Tags are focus metadata only; the kernel-checked proof term is
             // unchanged.
             let mp_goal = Goal {
+                case_binders: vec![],
                 meta_id: mp_meta_id,
                 target: mp_ty,
                 local_ctx: goal.local_ctx.clone(),
-                tag: Some("mp".into()),
+                tag: Some(SurfaceName::generated_path("mp")),
             };
             let mpr_goal = Goal {
+                case_binders: vec![],
                 meta_id: mpr_meta_id,
                 target: mpr_ty,
                 local_ctx: goal.local_ctx.clone(),
-                tag: Some("mpr".into()),
+                tag: Some(SurfaceName::generated_path("mpr")),
             };
 
             state.goals.push_front(mpr_goal);
@@ -187,11 +193,28 @@ fn split_ite(state: &mut ProofState, goal: &Goal) -> TacticResult {
     // intact whether it is the head (Prop goal) or nested (e.g. inside `Eq`).
     let target = state.metas.instantiate(&goal.target);
 
-    // Find the first `@ite.{u} α c inst a b` subterm in the target. If there is
-    // no `ite` (and the head was not `And`/`Iff`), this is the terminal
-    // `split` mismatch — report it directly so the error is independent of
-    // which auxiliary constants happen to be registered.
-    let Some(ite) = find_first_ite(&target) else {
+    // Find the first SPLITTABLE `@ite.{u} α c inst a b` subterm in the target
+    // — one whose condition and instance are closed with respect to the goal
+    // (see `find_first_ite`). If there is no `ite` (and the head was not
+    // `And`/`Iff`), this is the terminal `split` mismatch — report it directly
+    // so the error is independent of which auxiliary constants happen to be
+    // registered. If the only `ite`s are under a binder they mention, say so
+    // and name the fix instead of building a term the kernel must refuse.
+    let mut saw_bound_candidate = false;
+    let Some(ite) = find_first_ite(&target, &mut saw_bound_candidate) else {
+        if saw_bound_candidate {
+            return Err(TacticError::GoalMismatch(
+                "split: every `if-then-else` in the goal is under a binder and its \
+                 condition (or `Decidable` instance) mentions the bound variable, so it \
+                 cannot be case-split from outside that binder (Lean: `Could not split \
+                 an if or match expression in the goal`). Options: `intro` the binder \
+                 first so the condition is closed; beta-reduce the goal so the `if` is \
+                 applied to concrete arguments (`show <goal with the if exposed>`, \
+                 `simp only []`, or `unfold` the definition that applies it); or split \
+                 on the condition directly with `by_cases`"
+                    .to_string(),
+            ));
+        }
         return Err(TacticError::GoalMismatch(
             "split requires goal of form And a b, Iff a b, or one containing an if-then-else"
                 .to_string(),
@@ -249,22 +272,37 @@ fn split_ite(state: &mut ProofState, goal: &Goal) -> TacticResult {
     // hand back an id still bound by a live `lambda` (capture).
     let h_fvar = FVarId::new(state.goal_binder_base(goal));
 
-    // ¬c = c → False (matches `Decidable.isFalse`'s argument type).
-    let false_const = Expr::const_(Name::from_string("False"), vec![]);
-    let neg_c = Expr::pi(BinderInfo::Default, ite.cond.clone(), false_const);
+    // `¬c`, with the `Not` head: Lean's `split` gives `h✝ : ¬c` (pinned
+    // Lean 4.8.0, v4.30.0-rc2 and v4.36.0-rc2, 2026-11-13). `Not c` unfolds
+    // to `c → False`, `Decidable.isFalse`'s argument type, so the branch
+    // lambda still typechecks; simp reads a negation off the `Not` head
+    // only, so the arrow spelling left `simp only [h]` unable to rewrite `c`.
+    let neg_c = Expr::app(
+        Expr::const_(Name::from_string("Not"), vec![]),
+        ite.cond.clone(),
+    );
 
-    // Branch contexts: `h : ¬c` (false) and `h : c` (true).
+    // Branch contexts: `h : ¬c` (false) and `h : c` (true). Lean's `split`
+    // names this hypothesis INACCESSIBLY (`h✝`), so it can never shadow a
+    // user's own `h`. Ours is accessible as `h` for convenience, so it must
+    // at least not shadow: measured 2026-09-13, with a user `h : min2 a b = c`
+    // in scope the branch `h` hid it and `omega` — which resolves hypotheses
+    // by name — read the wrong one and refused an honestly-true goal. Take
+    // the first free `h`, `h1`, `h2`, … instead.
+    let h_name = super::tauto::fresh_hyp_name(&goal.local_ctx, "h");
     let mut false_ctx = goal.local_ctx.clone();
     false_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: h_fvar,
-        name: "h".to_string(),
+        name: h_name.clone(),
         ty: neg_c.clone(),
         value: None,
     });
     let mut true_ctx = goal.local_ctx.clone();
     true_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: h_fvar,
-        name: "h".to_string(),
+        name: h_name,
         ty: ite.cond.clone(),
         value: None,
     });
@@ -307,12 +345,14 @@ fn split_ite(state: &mut ProofState, goal: &Goal) -> TacticResult {
     // Push subgoals: false/`¬c` case first (so `isTrue`/`c` case is solved
     // first, matching Lean's `split` ordering where the positive case leads).
     let false_goal = Goal {
+        case_binders: goal.case_binders.clone(),
         meta_id: false_meta,
         target: false_target,
         local_ctx: false_ctx,
         tag: None,
     };
     let true_goal = Goal {
+        case_binders: goal.case_binders.clone(),
         meta_id: true_meta,
         target: true_target,
         local_ctx: true_ctx,
@@ -384,22 +424,58 @@ fn match_ite(expr: &Expr) -> Option<IteApp> {
     })
 }
 
-/// Find the first `ite` subterm in `expr` in a deterministic pre-order
-/// traversal (head-first, then arguments/binder-bodies left-to-right).
-fn find_first_ite(expr: &Expr) -> Option<IteApp> {
+/// Find the first SPLITTABLE `ite` subterm in `expr` in a deterministic
+/// pre-order traversal (head-first, then arguments/binder-bodies
+/// left-to-right).
+///
+/// A candidate is splittable only when its condition `c` and its `Decidable c`
+/// instance have **no loose bound variables** — Lean's `FindSplitImpl.isCandidate?`
+/// (`Lean/Meta/Tactic/SplitIf.lean`: `!(e.getArg! 1 5).hasLooseBVars`). Those
+/// two components are the ones `split_ite` lifts OUT of the goal into the
+/// `Decidable.casesOn` spine, the motive's binder type, `¬c`, and the branch
+/// hypotheses `h : c` / `h : ¬c`; a de Bruijn index that was bound inside the
+/// goal is unbound there, and the kernel refuses the term with "Unbound
+/// variable index: n" — an internal error in place of a refusal. Measured
+/// 2026-09-13 (Trust battery row r11): `unfold min2` used to leave
+/// `(fun a b => if a < b then a else b) a b ≤ a`, and the finder returned the
+/// `ite` under the two lambdas with `cond = BVar(1) < BVar(0)`. `unfold` now
+/// contracts that redex itself (`unfold::unfold_const_beta`); this guard keeps
+/// `split` honest on every other way such a goal can arise (a user-written
+/// `(fun x => if x < b then …) a`, a `∀ x, if x = 0 then …`, …).
+///
+/// The `then`/`else` values and `α` are NOT required to be closed: they are
+/// only ever substituted back at the candidate's own position (same binder
+/// depth), so an `ite` under a lambda whose condition is closed splits fine —
+/// as in Lean.
+///
+/// A candidate that fails the check is skipped, and the search continues into
+/// its arguments (a closed `ite` nested in a loose one is still found — Lean's
+/// `visit` does the same); `saw_bound` is set so the caller can name the fix.
+/// As in Lean, the binder DOMAIN of a lambda is not searched (a `Pi`'s is:
+/// `A → B` may carry the split in `A`).
+fn find_first_ite(expr: &Expr, saw_bound: &mut bool) -> Option<IteApp> {
     crate::stack_safe(|| {
         if let Some(ite) = match_ite(expr) {
-            return Some(ite);
+            if !ite.cond.has_loose_bvars() && !ite.inst.has_loose_bvars() {
+                return Some(ite);
+            }
+            *saw_bound = true;
+            // Fall through: a splittable `ite` may sit inside this one's args.
         }
         match expr.kind() {
-            ExprKind::App(f, a) => find_first_ite(f).or_else(|| find_first_ite(a)),
-            ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-                find_first_ite(ty).or_else(|| find_first_ite(body))
+            ExprKind::App(f, a) => {
+                find_first_ite(f, saw_bound).or_else(|| find_first_ite(a, saw_bound))
             }
-            ExprKind::Let(_, ty, val, body, _) => find_first_ite(ty)
-                .or_else(|| find_first_ite(val))
-                .or_else(|| find_first_ite(body)),
-            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) => find_first_ite(inner),
+            ExprKind::Lam(_, _, body) => find_first_ite(body, saw_bound),
+            ExprKind::Pi(_, ty, body) => {
+                find_first_ite(ty, saw_bound).or_else(|| find_first_ite(body, saw_bound))
+            }
+            ExprKind::Let(_, ty, val, body, _) => find_first_ite(ty, saw_bound)
+                .or_else(|| find_first_ite(val, saw_bound))
+                .or_else(|| find_first_ite(body, saw_bound)),
+            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) => {
+                find_first_ite(inner, saw_bound)
+            }
             _ => None,
         }
     })
@@ -453,6 +529,7 @@ pub fn and_intros(state: &mut ProofState) -> TacticResult {
         let meta_id = state.fresh_meta(leaf_ty.clone());
         let meta_expr = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(meta_id)));
         leaf_goals.push(Goal {
+            case_binders: goal.case_binders.clone(),
             meta_id,
             target: leaf_ty,
             local_ctx: goal.local_ctx.clone(),
@@ -571,6 +648,7 @@ pub fn left_(state: &mut ProofState) -> TacticResult {
             state.close_goal(&goal, proof)?;
 
             let left_goal = Goal {
+                case_binders: goal.case_binders.clone(),
                 meta_id: left_meta_id,
                 target: left_ty,
                 local_ctx: goal.local_ctx.clone(),
@@ -618,6 +696,7 @@ pub fn right_(state: &mut ProofState) -> TacticResult {
             state.close_goal(&goal, proof)?;
 
             let right_goal = Goal {
+                case_binders: goal.case_binders.clone(),
                 meta_id: right_meta_id,
                 target: right_ty,
                 local_ctx: goal.local_ctx.clone(),
@@ -678,6 +757,7 @@ pub fn exfalso(state: &mut ProofState) -> TacticResult {
 
     // Add the new goal (prove False)
     let new_goal = Goal {
+        case_binders: goal.case_binders.clone(),
         meta_id: new_meta_id,
         target: false_type,
         local_ctx: goal.local_ctx.clone(),
@@ -811,7 +891,8 @@ pub fn contradiction(state: &mut ProofState) -> TacticResult {
 /// ENSURES: On Ok, original goal is closed with `byContradiction` proof
 /// ENSURES: On Ok, new goal `False` is pushed with `h : ¬goal` in context
 /// ENSURES: On Err(EnvironmentMissing), `Classical.byContradiction` not loaded
-pub fn by_contra(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn by_contra(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "by_contra")?;
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Check that Classical.byContradiction exists
@@ -824,8 +905,14 @@ pub fn by_contra(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 
     let false_type = Expr::const_(Name::from_string("False"), vec![]);
 
-    // The negation of the goal: goal → False
-    let neg_goal = Expr::pi(BinderInfo::Default, goal.target.clone(), false_type.clone());
+    // The negation of the goal, `¬goal` with the `Not` head as Mathlib's
+    // `by_contra h` states it. Lean states this hypothesis with the `Not` head; simp reads a
+    // negation off that head only, so a `c → False` here would not rewrite
+    // `c` to `False` (`tests_simp_lemma_sources`).
+    let neg_goal = Expr::app(
+        Expr::const_(Name::from_string("Not"), vec![]),
+        goal.target.clone(),
+    );
 
     // Create the new hypothesis h : ¬goal — GOAL-DERIVED minting (see
     // existential.rs by_cases): cursor-minted ids drift out of the scope
@@ -839,8 +926,9 @@ pub fn by_contra(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     // Create the new local context with h : ¬goal
     let mut new_ctx = goal.local_ctx.clone();
     new_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: hyp_name.to_string(),
+        name: hyp_name.clone(),
         ty: neg_goal.clone(),
         value: None,
     });
@@ -866,6 +954,7 @@ pub fn by_contra(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 
     // Add the new goal (prove False with h : ¬goal in context)
     let new_goal = Goal {
+        case_binders: goal.case_binders.clone(),
         meta_id: new_meta_id,
         target: false_type,
         local_ctx: new_ctx,

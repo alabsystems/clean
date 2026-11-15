@@ -1,0 +1,7 @@
+(assume d0 (= f (lambda ((x Int)) (+ x 1))))
+(assume a1 (not (= (f 5) (+ 5 1))))
+(step t1 (cl (= 5 5)) :rule eq_reflexive)
+(step t2 (cl (= (f 5) ((lambda ((x Int)) (+ x 1)) 5))) :rule ho_cong :premises (d0 t1))
+(step t3 (cl (= ((lambda ((x Int)) (+ x 1)) 5) (+ 5 1))) :rule beta_equiv)
+(step t4 (cl (= (f 5) (+ 5 1))) :rule trans :premises (t2 t3))
+(step t5 (cl) :rule resolution :premises (a1 t4))

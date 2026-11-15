@@ -13,8 +13,7 @@ use clean_elab::tactic::{
     ProofTrustLedger, TrustedArithProvenanceLedger, TrustedAyProvenanceLedger,
 };
 use clean_kernel::env::DeclarationTrustSummary;
-use clean_kernel::expr::ZFCSetExpr;
-use clean_kernel::{Environment, Expr, ExprKind, TypeChecker};
+use clean_kernel::{Environment, Expr, TypeChecker};
 
 fn saturating_trust_count(count: usize, label: &'static str) -> u32 {
     match u32::try_from(count) {
@@ -30,97 +29,11 @@ fn saturating_trust_count(count: usize, label: &'static str) -> u32 {
     }
 }
 
+/// Sorry occurrences in the term: every `sorryAx` / `sorry` application
+/// spine counted once, WHATEVER its arguments (a non-literal flag, a partial
+/// application, a bare constant) — the kernel's recognizer, not a copy of it.
 fn count_sorry_terms(expr: &Expr) -> u32 {
-    fn push_zfc_children<'a>(stack: &mut Vec<&'a Expr>, set_expr: &'a ZFCSetExpr) {
-        match set_expr {
-            ZFCSetExpr::Empty | ZFCSetExpr::Infinity => {}
-            ZFCSetExpr::Singleton(expr)
-            | ZFCSetExpr::Union(expr)
-            | ZFCSetExpr::PowerSet(expr)
-            | ZFCSetExpr::Choice(expr) => stack.push(expr.as_ref()),
-            ZFCSetExpr::Pair(left, right) => {
-                stack.push(left.as_ref());
-                stack.push(right.as_ref());
-            }
-            ZFCSetExpr::Separation { set, pred } | ZFCSetExpr::Replacement { set, func: pred } => {
-                stack.push(set.as_ref());
-                stack.push(pred.as_ref());
-            }
-        }
-    }
-
-    let mut total = 0u32;
-    let mut stack = vec![expr];
-    while let Some(curr) = stack.pop() {
-        let is_sorry_term = matches!(curr.kind(), ExprKind::App(_, _)) && curr.is_sorry();
-        total = total.saturating_add(u32::from(is_sorry_term));
-
-        match curr.kind() {
-            ExprKind::BVar(_)
-            | ExprKind::FVar(_)
-            | ExprKind::Sort(_)
-            | ExprKind::Const(_, _)
-            | ExprKind::Lit(_)
-            | ExprKind::SProp
-            | ExprKind::CubicalInterval
-            | ExprKind::CubicalI0
-            | ExprKind::CubicalI1 => {}
-            ExprKind::App(fun, arg) => {
-                stack.push(fun.as_ref());
-                stack.push(arg.as_ref());
-            }
-            ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-                stack.push(ty.as_ref());
-                stack.push(body.as_ref());
-            }
-            ExprKind::Let(_, ty, value, body, _) => {
-                stack.push(ty.as_ref());
-                stack.push(value.as_ref());
-                stack.push(body.as_ref());
-            }
-            ExprKind::Proj(_, _, inner) | ExprKind::MData(_, inner) | ExprKind::Squash(inner) => {
-                stack.push(inner.as_ref());
-            }
-            ExprKind::CubicalPath { ty, left, right } => {
-                stack.push(ty.as_ref());
-                stack.push(left.as_ref());
-                stack.push(right.as_ref());
-            }
-            ExprKind::CubicalPathLam { body } => stack.push(body.as_ref()),
-            ExprKind::CubicalPathApp { path, arg } => {
-                stack.push(path.as_ref());
-                stack.push(arg.as_ref());
-            }
-            ExprKind::CubicalHComp { ty, phi, u, base } => {
-                stack.push(ty.as_ref());
-                stack.push(phi.as_ref());
-                stack.push(u.as_ref());
-                stack.push(base.as_ref());
-            }
-            ExprKind::CubicalTransp { ty, phi, base } => {
-                stack.push(ty.as_ref());
-                stack.push(phi.as_ref());
-                stack.push(base.as_ref());
-            }
-            ExprKind::CubicalCoe { ty, r, s, base } => {
-                stack.push(ty.as_ref());
-                stack.push(r.as_ref());
-                stack.push(s.as_ref());
-                stack.push(base.as_ref());
-            }
-            ExprKind::ZFCSet(set_expr) => push_zfc_children(&mut stack, set_expr),
-            ExprKind::ZFCMem { element, set } => {
-                stack.push(element.as_ref());
-                stack.push(set.as_ref());
-            }
-            ExprKind::ZFCComprehension { domain, pred } => {
-                stack.push(domain.as_ref());
-                stack.push(pred.as_ref());
-            }
-        }
-    }
-
-    total
+    u32::try_from(expr.count_sorry_occurrences()).unwrap_or(u32::MAX)
 }
 
 fn trust_ledger_from_closed_proof(proof_term: &Expr) -> ProofTrustLedger {
@@ -154,8 +67,13 @@ pub(crate) fn build_verified_prove_result(
     let verified = TypeChecker::with_mode(env, env.mode())
         .check_type(proof_term, goal)
         .is_ok();
-    let trust_summary =
-        trust_summary_from_ledger_with_closed_proof(trust_ledger, Some(proof_term), verified, 0);
+    let trust_summary = trust_summary_from_ledger_with_closed_proof(
+        env,
+        trust_ledger,
+        Some(proof_term),
+        verified,
+        0,
+    );
 
     // SOUNDNESS: `status` MUST follow the kernel re-check computed above. The
     // `Verified` variant is documented as "a kernel-checkable proof term was
@@ -211,13 +129,15 @@ pub(crate) fn prove_result_from_smt_verification(
             time_ms: 0,
             time_ns: None,
         },
-        SmtVerificationResult::Refuted(_) => ProveResult {
+        // A model of the bridge's ABSTRACTION, not a counterexample: report
+        // "not proved" with the model labelled as unvalidated.
+        refuted @ SmtVerificationResult::Refuted(_) => ProveResult {
             found: false,
             proof_term: None,
             proof_sketch: None,
             method: None,
-            status: ProveStatus::Refuted,
-            reason: None,
+            status: ProveStatus::Unknown,
+            reason: refuted.unvalidated_model_reason(),
             trust_summary: None,
             time_ms: 0,
             time_ns: None,

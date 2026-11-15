@@ -11,11 +11,12 @@ mod classical;
 mod search;
 
 use clean_kernel::expr::ExprKind;
-use clean_kernel::Expr;
+use clean_kernel::{Expr, Name};
 
+use super::proof_manipulation::cases_fvar;
 use super::{
-    assumption, cases, clear, contradiction, exprs_syntactically_equal, intro, is_false, left_,
-    match_and, match_iff, match_not, match_or, rfl, right_, solve_by_elim, split_, trivial,
+    assumption, contradiction, exprs_syntactically_equal, intro, is_false, left_, match_and,
+    match_iff, match_not, match_or, rfl, right_, solve_by_elim, split_, trivial,
     try_tactic_preserving_state, Goal, LocalDecl, ProofState, TacticError, TacticResult,
 };
 use crate::stack_safe;
@@ -104,13 +105,13 @@ fn preprocess_tauto_context(state: &mut ProofState) -> Result<(), TacticError> {
             }
 
             if is_true_const(&ty_whnf) || is_trivial_equality(&ty_whnf) {
-                clear(state, &decl.name)?;
+                super::hypothesis::clear_fvar_unchecked(state, decl.fvar)?;
                 progress = true;
                 break;
             }
 
             if match_and(&ty_whnf).is_some() {
-                cases(state, &decl.name)?;
+                cases_fvar(state, decl.fvar)?;
                 progress = true;
                 break;
             }
@@ -120,7 +121,7 @@ fn preprocess_tauto_context(state: &mut ProofState) -> Result<(), TacticError> {
             // reachable by solve_by_elim. Terminates: mp/mpr are Pis, which
             // this arm never re-matches.
             if match_iff(&ty_whnf).is_some() {
-                cases(state, &decl.name)?;
+                cases_fvar(state, decl.fvar)?;
                 progress = true;
                 break;
             }
@@ -135,12 +136,12 @@ fn preprocess_tauto_context(state: &mut ProofState) -> Result<(), TacticError> {
 }
 
 /// Find the first disjunctive hypothesis in the local context.
-fn find_or_hypothesis(state: &mut ProofState, goal: &Goal) -> Option<String> {
+fn find_or_hypothesis(state: &mut ProofState, goal: &Goal) -> Option<clean_kernel::FVarId> {
     for decl in &goal.local_ctx {
         let ty = state.metas.instantiate(&decl.ty);
         let ty_whnf = state.whnf(goal, &ty);
         if match_or(&ty_whnf).is_some() {
-            return Some(decl.name.clone());
+            return Some(decl.fvar);
         }
     }
     None
@@ -179,20 +180,31 @@ const DEFAULT_TAUTO_MAX_ATOM_SPLITS: usize = 24;
 const MAX_ATOM_CANDIDATES: usize = 4;
 
 /// Generate a fresh hypothesis name
-pub(crate) fn fresh_hyp_name(local_ctx: &[LocalDecl], base: &str) -> String {
-    let name = base.to_string();
-    let mut counter = 0;
+pub(crate) fn fresh_hyp_name(local_ctx: &[LocalDecl], base: &str) -> clean_parser::SurfaceName {
+    fresh_hyp_name_typed(
+        local_ctx,
+        &clean_parser::SurfaceName::from_name(Name::anon().str(base)),
+    )
+}
 
+pub(crate) fn fresh_hyp_name_typed(
+    local_ctx: &[LocalDecl],
+    base: &clean_parser::SurfaceName,
+) -> clean_parser::SurfaceName {
+    let mut counter = 0u64;
     loop {
         let candidate = if counter == 0 {
-            name.clone()
+            base.clone()
+        } else if let Some(text) = base.component_text() {
+            clean_parser::SurfaceName::from_name(Name::anon().str(format!("{text}{counter}")))
         } else {
-            format!("{name}{counter}")
+            clean_parser::SurfaceName::from_name(base.name().clone().num(counter))
         };
-
         if !local_ctx.iter().any(|d| d.name == candidate) {
             return candidate;
         }
-        counter += 1;
+        counter = counter
+            .checked_add(1)
+            .expect("finite local context cannot exhaust u64 names");
     }
 }

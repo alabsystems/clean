@@ -1,0 +1,7 @@
+(assume h1 (forall ((x U)) (P x)))
+(assume h2 (not (forall ((z U)) (P z))))
+(anchor :step s :args ((z U) (:= (x U) z)))
+(step s.t1 (cl (= (P x) (P z))) :rule refl)
+(step s (cl (= (forall ((x U)) (P x)) (forall ((z U)) (P z)))) :rule bind)
+(step t2 (cl (not (= (forall ((x U)) (P x)) (forall ((z U)) (P z)))) (not (forall ((x U)) (P x))) (forall ((z U)) (P z))) :rule equiv_pos2)
+(step t3 (cl) :rule resolution :premises (s t2 h1 h2))

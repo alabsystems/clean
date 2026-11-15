@@ -32,7 +32,7 @@ impl Default for GroebnerConfig {
 }
 
 /// Result of Groebner preprocessing.
-pub struct GroebnerResult {
+pub(crate) struct GroebnerResult {
     /// Additional affine constraints derived from the equality ideal.
     pub linear_constraints: Vec<LinearConstraint>,
     /// Reserved for future non-negativity witnesses.
@@ -43,7 +43,7 @@ pub(crate) type Monomial = Vec<(usize, u32)>;
 
 /// Integer polynomial with sparse monomial storage.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct IntPolynomial {
+pub(crate) struct IntPolynomial {
     pub(crate) terms: BTreeMap<Monomial, i128>,
 }
 
@@ -51,13 +51,13 @@ pub struct IntPolynomial {
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
 impl IntPolynomial {
-    pub fn zero() -> Self {
+    pub(crate) fn zero() -> Self {
         Self {
             terms: BTreeMap::new(),
         }
     }
 
-    pub fn constant(c: i128) -> Self {
+    pub(crate) fn constant(c: i128) -> Self {
         if c == 0 {
             return Self::zero();
         }
@@ -66,13 +66,13 @@ impl IntPolynomial {
         Self { terms }
     }
 
-    pub fn var(idx: usize) -> Self {
+    pub(crate) fn var(idx: usize) -> Self {
         let mut terms = BTreeMap::new();
         terms.insert(vec![(idx, 1)], 1);
         Self { terms }
     }
 
-    pub fn from_terms<I>(terms: I) -> Self
+    pub(crate) fn from_terms<I>(terms: I) -> Self
     where
         I: IntoIterator<Item = (Monomial, i128)>,
     {
@@ -83,11 +83,11 @@ impl IntPolynomial {
         poly
     }
 
-    pub fn is_zero(&self) -> bool {
+    pub(crate) fn is_zero(&self) -> bool {
         self.terms.is_empty()
     }
 
-    pub fn degree(&self) -> usize {
+    pub(crate) fn degree(&self) -> usize {
         self.terms
             .keys()
             .map(|mono| {
@@ -99,7 +99,7 @@ impl IntPolynomial {
             .unwrap_or(0)
     }
 
-    pub fn add(&self, other: &Self) -> Self {
+    pub(crate) fn add(&self, other: &Self) -> Self {
         let mut result = self.clone();
         for (mono, coeff) in &other.terms {
             result.add_term(mono.clone(), *coeff);
@@ -107,7 +107,7 @@ impl IntPolynomial {
         result
     }
 
-    pub fn sub(&self, other: &Self) -> Self {
+    pub(crate) fn sub(&self, other: &Self) -> Self {
         let mut result = self.clone();
         for (mono, coeff) in &other.terms {
             result.add_term(mono.clone(), -*coeff);
@@ -115,7 +115,7 @@ impl IntPolynomial {
         result
     }
 
-    pub fn negate(&self) -> Self {
+    pub(crate) fn negate(&self) -> Self {
         Self::from_terms(
             self.terms
                 .iter()
@@ -123,7 +123,7 @@ impl IntPolynomial {
         )
     }
 
-    pub fn mul(&self, other: &Self) -> Self {
+    pub(crate) fn mul(&self, other: &Self) -> Self {
         let mut result = Self::zero();
         for (lhs_mono, lhs_coeff) in &self.terms {
             for (rhs_mono, rhs_coeff) in &other.terms {

@@ -3,7 +3,7 @@
 // Licensed under the Apache License, Version 2.0
 
 use super::*;
-use crate::register::{kernel_check_failure_count, reset_kernel_check_counter};
+use crate::register::{kernel_check_failures_on_this_thread, reset_kernel_check_counter};
 use clean_kernel::sorry::with_sorry_location_key;
 use clean_kernel::{Environment, ExprKind, Name};
 use clean_parser::{parse_expr, DeclModifiers};
@@ -317,10 +317,11 @@ fn test_process_imports_euclidean_geometry() {
     let mut env = Environment::new();
 
     // Process Euclidean geometry imports
-    let paths = vec![vec!["Mathlib", "Geometry", "Euclidean", "Basic"]
-        .into_iter()
-        .map(String::from)
-        .collect()];
+    let paths = vec![clean_parser::SurfaceName::from_name(
+        ["Mathlib", "Geometry", "Euclidean", "Basic"]
+            .into_iter()
+            .fold(Name::anon(), |name, component| name.str(component)),
+    )];
     process_imports(&mut env, &paths).unwrap();
 
     // Verify EuclideanSpace and related types are now available
@@ -346,10 +347,11 @@ fn test_process_imports_real_basic() {
     let mut env = Environment::new();
 
     // Process Real import
-    let paths = vec![vec!["Mathlib", "Data", "Real", "Basic"]
-        .into_iter()
-        .map(String::from)
-        .collect()];
+    let paths = vec![clean_parser::SurfaceName::from_name(
+        ["Mathlib", "Data", "Real", "Basic"]
+            .into_iter()
+            .fold(Name::anon(), |name, component| name.str(component)),
+    )];
     process_imports(&mut env, &paths).unwrap();
 
     // Verify Real is now available
@@ -381,10 +383,11 @@ fn test_process_imports_real_basic() {
 fn test_process_imports_mathlib_zmod_basic_surface_type() {
     prelude_providers::reset_mathlib_init();
     let mut env = Environment::new();
-    let paths = vec![vec!["Mathlib", "Data", "ZMod", "Basic"]
-        .into_iter()
-        .map(String::from)
-        .collect()];
+    let paths = vec![clean_parser::SurfaceName::from_name(
+        ["Mathlib", "Data", "ZMod", "Basic"]
+            .into_iter()
+            .fold(Name::anon(), |name, component| name.str(component)),
+    )];
 
     process_imports(&mut env, &paths).unwrap();
 
@@ -413,10 +416,11 @@ fn test_process_imports_mathlib_zmod_basic_surface_type() {
 fn test_process_imports_unknown_fails_closed() {
     let mut env = Environment::new();
 
-    let paths = vec![vec!["Some", "Unknown", "Module"]
-        .into_iter()
-        .map(String::from)
-        .collect()];
+    let paths = vec![clean_parser::SurfaceName::from_name(
+        ["Some", "Unknown", "Module"]
+            .into_iter()
+            .fold(Name::anon(), |name, component| name.str(component)),
+    )];
     let err = process_imports(&mut env, &paths)
         .expect_err("an import that resolves to nothing must not succeed");
     let ElabError::UnresolvedImport { module, .. } = &err else {
@@ -431,10 +435,11 @@ fn test_process_imports_unknown_permissive_is_ignored() {
     use crate::ImportPolicy;
 
     let mut env = Environment::new();
-    let paths = vec![vec!["Some", "Unknown", "Module"]
-        .into_iter()
-        .map(String::from)
-        .collect()];
+    let paths = vec![clean_parser::SurfaceName::from_name(
+        ["Some", "Unknown", "Module"]
+            .into_iter()
+            .fold(Name::anon(), |name, component| name.str(component)),
+    )];
     process_imports_with_policy(&mut env, &paths, ImportPolicy::Permissive)
         .expect("permissive mode must keep warn-and-continue");
 }
@@ -456,10 +461,11 @@ fn test_process_imports_lean_elab_tactic_succeeds_via_shim() {
     // *success*, never even reached the shim this test is named for). The shim
     // provides the same opaque meta types the assertions below require, in O(1).
     let mut env = Environment::new();
-    let paths = vec![vec!["Lean", "Elab", "Tactic"]
-        .into_iter()
-        .map(String::from)
-        .collect()];
+    let paths = vec![clean_parser::SurfaceName::from_name(
+        ["Lean", "Elab", "Tactic"]
+            .into_iter()
+            .fold(Name::anon(), |name, component| name.str(component)),
+    )];
     // FailClosed on purpose: `Lean` / `Lean.*` is a DECLARED provider
     // (`prelude_providers::has_declared_prelude`), so the shim must remain
     // resolvable under the default policy and not need the permissive opt-out.
@@ -469,12 +475,11 @@ fn test_process_imports_lean_elab_tactic_succeeds_via_shim() {
     // Whichever path served the import, the core Lean meta types must resolve so
     // meta-referencing declarations elaborate.
     assert!(
-        env.get_const(&clean_kernel::Name::from_string("Lean.Syntax"))
-            .is_some(),
+        env.get_const(&Name::from_string("Lean.Syntax")).is_some(),
         "meta shim (or real olean) must make `Lean.Syntax` resolvable",
     );
     assert!(
-        env.get_const(&clean_kernel::Name::from_string("Lean.Elab.Tactic.TacticM"))
+        env.get_const(&Name::from_string("Lean.Elab.Tactic.TacticM"))
             .is_some(),
         "meta shim (or real olean) must make `Lean.Elab.Tactic.TacticM` resolvable",
     );
@@ -566,7 +571,7 @@ fn test_file_context_basic() {
     // Add a variable
     let binder = SurfaceBinder {
         span: Span::dummy(),
-        name: "P".to_string(),
+        name: clean_parser::SurfaceName::generated_path("P"),
         ty: Some(Box::new(SurfaceExpr::type_())),
         default: None,
         info: SurfaceBinderInfo::Implicit,
@@ -575,7 +580,10 @@ fn test_file_context_basic() {
 
     assert!(ctx.has_variables());
     assert_eq!(ctx.current_variables().len(), 1);
-    assert_eq!(ctx.current_variables()[0].name, "P");
+    assert_eq!(
+        ctx.current_variables()[0].name,
+        clean_parser::SurfaceName::generated_path("P")
+    );
 }
 
 #[test]
@@ -587,7 +595,7 @@ fn test_file_context_section_scope() {
     // Add variable outside section
     let binder1 = SurfaceBinder {
         span: Span::dummy(),
-        name: "A".to_string(),
+        name: clean_parser::SurfaceName::generated_path("A"),
         ty: Some(Box::new(SurfaceExpr::type_())),
         default: None,
         info: SurfaceBinderInfo::Implicit,
@@ -600,7 +608,7 @@ fn test_file_context_section_scope() {
     // Add variable inside section
     let binder2 = SurfaceBinder {
         span: Span::dummy(),
-        name: "B".to_string(),
+        name: clean_parser::SurfaceName::generated_path("B"),
         ty: Some(Box::new(SurfaceExpr::type_())),
         default: None,
         info: SurfaceBinderInfo::Implicit,
@@ -613,7 +621,10 @@ fn test_file_context_section_scope() {
     ctx.exit_section();
 
     assert_eq!(ctx.current_variables().len(), 1);
-    assert_eq!(ctx.current_variables()[0].name, "A");
+    assert_eq!(
+        ctx.current_variables()[0].name,
+        clean_parser::SurfaceName::generated_path("A")
+    );
 }
 
 #[test]
@@ -638,11 +649,13 @@ theorem uses_P (x : P) : P := x
             // Should have 2 binders: P (from variable) and x (from theorem)
             assert_eq!(binders.len(), 2, "Expected 2 binders after preprocessing");
             assert_eq!(
-                binders[0].name, "P",
+                binders[0].name,
+                clean_parser::SurfaceName::generated_path("P"),
                 "First binder should be P from variable"
             );
             assert_eq!(
-                binders[1].name, "x",
+                binders[1].name,
+                clean_parser::SurfaceName::generated_path("x"),
                 "Second binder should be x from theorem"
             );
         }
@@ -681,7 +694,10 @@ def add_P (x y : P) : P := sorry
                 binders.len() >= 4,
                 "Expected at least 4 binders: {binders:?}"
             );
-            assert_eq!(binders[0].name, "P");
+            assert_eq!(
+                binders[0].name,
+                clean_parser::SurfaceName::generated_path("P")
+            );
         }
         _ => panic!("Expected Def"),
     }
@@ -1036,9 +1052,9 @@ fn test_kernel_check_rejects_ill_typed() {
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     match reg {
         Err(ElabError::KernelCheckFailed { name, detail }) => {
@@ -1086,9 +1102,9 @@ fn test_kernel_check_always_enforces_type_check() {
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     match reg {
         Err(ElabError::KernelCheckFailed { name, detail }) => {
@@ -1135,9 +1151,9 @@ fn test_kernel_check_definition_type_mismatch_returns_kernel_check_failed() {
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     match reg {
         Err(ElabError::KernelCheckFailed { name, detail }) => {
@@ -1184,9 +1200,9 @@ fn test_kernel_check_accepts_valid() {
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     assert!(
         reg.is_ok(),
@@ -1220,9 +1236,9 @@ fn test_kernel_check_rejects_ill_typed_without_structural_insert() {
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     match reg {
         Err(ElabError::KernelCheckFailed { name, detail }) => {
@@ -1269,9 +1285,9 @@ fn test_kernel_check_definition_type_mismatch_rejects_without_structural_insert(
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     match reg {
         Err(ElabError::KernelCheckFailed { name, detail }) => {
@@ -1313,9 +1329,9 @@ fn test_kernel_check_axiom_invalid_type_records_and_rejects() {
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     match reg {
         Err(ElabError::KernelCheckFailed { name, detail }) => {
@@ -1356,9 +1372,9 @@ fn test_kernel_check_opaque_without_value_invalid_type_records_and_rejects() {
         modifiers: DeclModifiers::default(),
     };
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg = register_elab_result(&mut env, &result);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     match reg {
         Err(ElabError::KernelCheckFailed { name, detail }) => {
@@ -1585,7 +1601,7 @@ fn test_registration_warning_synthetic_sorry() {
 
         let decl = SurfaceDecl::Theorem {
             span: Span::dummy(),
-            name: "synthetic_sorry".to_string(),
+            name: clean_parser::SurfaceName::generated_path("synthetic_sorry"),
             universe_params: vec![],
             binders: vec![],
             ty: Box::new(parse_expr("True").expect("should parse theorem type")),
@@ -1939,6 +1955,34 @@ fn test_no_hole_decl_records_no_hole_context() {
 }
 
 #[test]
+fn test_hole_context_retains_dependent_local_identities() {
+    let env = Environment::new();
+    let decl = clean_parser::parse_decl("def dependent (A : Type) (x : A) : A := (_ : A)")
+        .expect("dependent declaration parses");
+    let mut ctx = ElabCtx::new(&env);
+    ctx.elab_decl(&decl).expect("declaration elaborates");
+    let holes = ctx.collect_hole_contexts();
+    assert_eq!(holes.len(), 1);
+    let hole = &holes[0];
+    assert_eq!(hole.local_bindings.len(), 2);
+    let carrier = hole.local_bindings[0].0;
+    assert_eq!(hole.local_bindings[0].1, "A");
+    assert_eq!(hole.local_bindings[1].1, "x");
+    assert_eq!(hole.local_bindings[1].2, clean_kernel::Expr::fvar(carrier));
+    assert_eq!(hole.expected_type, clean_kernel::Expr::fvar(carrier));
+    assert_eq!(
+        hole.render(),
+        (
+            "A".to_string(),
+            vec![
+                ("A".to_string(), "Type".to_string()),
+                ("x".to_string(), "A".to_string())
+            ]
+        )
+    );
+}
+
+#[test]
 fn test_body_hole_records_declaration_type() {
     use clean_parser::parse_decl;
 
@@ -2015,11 +2059,28 @@ fn test_namespace_collects_inner_failures_without_dropping_siblings() {
     // `ElabResult::Failed` leaf) and the good siblings must still be registered.
     // B18: `def b : Nat := "x"` (String vs Nat) is now caught by the elaborator's
     // def-body `ensureHasType` (`reject_body_type_mismatch`) — a LOUD elaboration
-    // error — so the ill-typed term is NEVER shipped to `add_decl` and the
-    // kernel-check tally stays 0. The failure is not deferred to the kernel, yet
-    // the block still does not abort and the failing leaf is still recorded.
+    // error — so the ill-typed term is NEVER shipped to `add_decl`. The failure
+    // is not deferred to the kernel, yet the block still does not abort and the
+    // failing leaf is still recorded.
+    //
+    // Read that off the LEAF, which names the one declaration under test. The
+    // process-global `kernel_check_failure_count()` cannot express it: every
+    // sibling test in this binary shares that counter, so "it is 0" is a claim
+    // about the whole process. `kernel_check_failures_on_this_thread()` is the
+    // same observation scoped to this test's own thread.
+    match failed.first() {
+        Some(ElabResult::Failed { name, error, .. }) => {
+            assert_eq!(name, "T.b", "the recorded failure must be T.b");
+            assert!(
+                matches!(**error, ElabError::TypeMismatch { .. }),
+                "B18: T.b must fail with an ELABORATION type mismatch, never a \
+                 deferred kernel check, got: {error:?}"
+            );
+        }
+        other => panic!("expected exactly one Failed leaf for T.b, got: {other:?}"),
+    }
     assert_eq!(
-        kernel_check_failure_count(),
+        kernel_check_failures_on_this_thread(),
         0,
         "B18: the type mismatch is caught at elaboration, never reaching the kernel"
     );
@@ -2065,10 +2126,10 @@ fn test_empty_list_in_tuple_component_infers_element_type_and_universe() {
     // Empty list as the *first* tuple component.
     let decl_fst = parse_decl("def ij_tup_empty_fst : (List Nat × Nat) := ([], Nat.zero)").unwrap();
 
-    let before = kernel_check_failure_count();
+    let before = kernel_check_failures_on_this_thread();
     let reg_snd = elaborate_decl_and_register(&mut env, &decl_snd);
     let reg_fst = elaborate_decl_and_register(&mut env, &decl_fst);
-    let after = kernel_check_failure_count();
+    let after = kernel_check_failures_on_this_thread();
 
     assert!(
         reg_snd.is_ok(),

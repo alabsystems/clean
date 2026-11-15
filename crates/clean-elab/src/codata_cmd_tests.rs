@@ -12,6 +12,120 @@ use crate::elaborate_decl_and_register;
 use clean_kernel::{Environment, Name};
 use clean_parser::parse_file;
 
+#[test]
+fn typed_codata_carrier_uses_actual_registered_root_qualified_owner() {
+    use crate::codata_cmd::{registered_definition_name, retain_registered_carrier};
+    use clean_parser::SurfaceDecl;
+    for (source, expected) in [
+        (
+            "def _root_.«Carrier.dot» : Type := Prop",
+            Name::anon().str("Carrier.dot"),
+        ),
+        (
+            "def «_root_».«Carrier.dot» : Type := Prop",
+            Name::anon().str("_root_").str("Carrier.dot"),
+        ),
+    ] {
+        let mut env = Environment::default();
+        let decl = parse_file(source).expect("owner fixture parses").remove(0);
+        let SurfaceDecl::Def { name, .. } = &decl else {
+            panic!("expected definition")
+        };
+        let registered =
+            elaborate_decl_and_register(&mut env, &decl).expect("actual definition registers");
+        assert_eq!(registered_definition_name(&registered).unwrap(), expected);
+        assert!(env.get_const(&expected).is_some());
+        let mut carrier = None;
+        retain_registered_carrier(name, &decl, &registered, &mut carrier).unwrap();
+        assert_eq!(carrier, Some(expected));
+        assert!(retain_registered_carrier(name, &decl, &registered, &mut carrier).is_err());
+    }
+    assert!(registered_definition_name(&crate::ElabResult::Skipped).is_err());
+}
+
+#[test]
+fn typed_codata_companions_preserve_component_and_constructor_twins() {
+    use crate::codata_cmd::{affix_name, child_name, pair_name};
+    use clean_parser::SurfaceName;
+    let quoted = SurfaceName::component("T.dot", true);
+    let nested = SurfaceName::generated_path("T.dot");
+    assert_ne!(quoted, nested);
+    assert_eq!(
+        child_name(&quoted, "corec").name(),
+        &Name::anon().str("T.dot").str("corec")
+    );
+    assert_ne!(child_name(&quoted, "corec"), child_name(&nested, "corec"));
+    let digit = SurfaceName::component("7", true);
+    let numeric = SurfaceName::from_name(Name::anon().num(7));
+    assert_eq!(
+        affix_name(&digit, "head_", "").name(),
+        &Name::anon().str("head_7")
+    );
+    assert_eq!(
+        affix_name(&numeric, "head_", "").name(),
+        &Name::anon().num(7).str("head_")
+    );
+    assert_ne!(
+        pair_name(&quoted, "_", &digit),
+        pair_name(&nested, "_", &digit)
+    );
+    assert_ne!(
+        pair_name(&quoted, "_", &digit),
+        pair_name(&quoted, "_", &numeric)
+    );
+}
+
+#[test]
+fn typed_codata_slot_suffix_is_exact_and_unsupported_shapes_refuse() {
+    use crate::codata_cmd::{affix_name, strip_slot_suffix};
+    use clean_parser::SurfaceName;
+    let field = SurfaceName::from_name(Name::anon().str("owner.dot").str("field.dot"));
+    let slot = affix_name(&field, "", "F");
+    assert_eq!(strip_slot_suffix(&slot), Some(field.clone()));
+    let projected_twin = SurfaceName::generated_path("owner.dot.field.dotF");
+    assert_ne!(strip_slot_suffix(&projected_twin), Some(field));
+    assert_eq!(
+        strip_slot_suffix(&SurfaceName::from_name(Name::anon().num(7))),
+        None
+    );
+    assert_eq!(strip_slot_suffix(&SurfaceName::component("F", true)), None);
+    assert_eq!(
+        strip_slot_suffix(&SurfaceName::component("field", true)),
+        None
+    );
+}
+
+#[test]
+fn typed_codata_recursion_and_universe_matching_do_not_use_display() {
+    use crate::codata_cmd::{ident, is_self_at_params, mentions};
+    use clean_parser::{LevelExpr, Span, SurfaceExpr, SurfaceName};
+    let quoted = SurfaceName::component("T.dot", true);
+    let nested = SurfaceName::generated_path("T.dot");
+    assert!(is_self_at_params(&ident(&quoted), &quoted, &[], None));
+    assert!(!is_self_at_params(&ident(&nested), &quoted, &[], None));
+    assert!(!mentions(&ident(&nested), &quoted));
+    let u = SurfaceName::component("u.dot", true);
+    let instantiate = |level| {
+        SurfaceExpr::UniverseInst(
+            Span::dummy(),
+            Box::new(ident(&quoted)),
+            vec![LevelExpr::Param(level)],
+        )
+    };
+    assert!(is_self_at_params(
+        &instantiate(u.clone()),
+        &quoted,
+        &[],
+        Some(&u)
+    ));
+    assert!(!is_self_at_params(
+        &instantiate(SurfaceName::generated_path("u.dot")),
+        &quoted,
+        &[],
+        Some(&u)
+    ));
+}
+
 /// Elaborate + register every decl in `code`, panicking on the first failure.
 fn elab_all(code: &str) -> Environment {
     let mut env = Environment::with_prelude();
@@ -36,25 +150,25 @@ fn elab_expect_err(code: &str) -> crate::ElabError {
 }
 
 const STREAM_SRC: &str = r#"
-codata Stream (A : Type) where
+codata Strm (A : Type) where
   head : A
-  tail : Stream A
+  tail : Strm A
 "#;
 
 #[test]
 fn test_codata_stream_generates_companions() {
     let env = elab_all(STREAM_SRC);
     for name in [
-        "Stream",
-        "Stream.shapeF",
-        "Stream.posF",
-        "Stream.tgtF",
-        "Stream.head",
-        "Stream.tail",
-        "Stream.corecStep",
-        "Stream.corec",
-        "Stream.head_corec",
-        "Stream.tail_corec",
+        "Strm",
+        "Strm.shapeF",
+        "Strm.posF",
+        "Strm.tgtF",
+        "Strm.head",
+        "Strm.tail",
+        "Strm.corecStep",
+        "Strm.corec",
+        "Strm.head_corec",
+        "Strm.tail_corec",
     ] {
         assert!(
             env.get_const(&Name::from_string(name)).is_some(),
@@ -75,10 +189,10 @@ fn test_codata_stream_computes_through_the_encoding() {
     // registered axiom.
     let src = format!(
         "{STREAM_SRC}
-def natsFrom (n : Nat) : Stream Nat := Stream.corec (fun k => k) Nat.succ n
-theorem h0 : Stream.head (natsFrom 0) = 0 := rfl
-theorem h1 : Stream.head (Stream.tail (natsFrom 0)) = 1 := rfl
-theorem h2 : Stream.head (Stream.tail (Stream.tail (natsFrom 0))) = 2 := rfl
+def natsFrom (n : Nat) : Strm Nat := Strm.corec (fun k => k) Nat.succ n
+theorem h0 : Strm.head (natsFrom 0) = 0 := rfl
+theorem h1 : Strm.head (Strm.tail (natsFrom 0)) = 1 := rfl
+theorem h2 : Strm.head (Strm.tail (Strm.tail (natsFrom 0))) = 2 := rfl
 "
     );
     let env = elab_all(&src);
@@ -102,10 +216,10 @@ fn test_codata_stream_encoding_survives_small_thread_stack() {
     // the red zone regresses below one elaborator cycle again.
     let src = format!(
         "{STREAM_SRC}
-def natsFrom (n : Nat) : Stream Nat := Stream.corec (fun k => k) Nat.succ n
-theorem h0 : Stream.head (natsFrom 0) = 0 := rfl
-theorem h1 : Stream.head (Stream.tail (natsFrom 0)) = 1 := rfl
-theorem h2 : Stream.head (Stream.tail (Stream.tail (natsFrom 0))) = 2 := rfl
+def natsFrom (n : Nat) : Strm Nat := Strm.corec (fun k => k) Nat.succ n
+theorem h0 : Strm.head (natsFrom 0) = 0 := rfl
+theorem h1 : Strm.head (Strm.tail (natsFrom 0)) = 1 := rfl
+theorem h2 : Strm.head (Strm.tail (Strm.tail (natsFrom 0))) = 2 := rfl
 "
     );
     let handle = std::thread::Builder::new()
@@ -336,13 +450,13 @@ fn test_collision_codata_then_import_never_clobbers_seeds() {
 fn test_codef_stream_e2e() {
     let src = format!(
         "{STREAM_SRC}
-codef natsFrom (n : Nat) : Stream Nat where
+codef natsFrom (n : Nat) : Strm Nat where
   head := n
   tail := natsFrom (Nat.succ n)
 
-theorem n0 : Stream.head (natsFrom 5) = 5 := rfl
-theorem n1 : Stream.head (Stream.tail (natsFrom 5)) = 6 := rfl
-theorem n2 : Stream.head (Stream.tail (Stream.tail (natsFrom 5))) = 7 := rfl
+theorem n0 : Strm.head (natsFrom 5) = 5 := rfl
+theorem n1 : Strm.head (Strm.tail (natsFrom 5)) = 6 := rfl
+theorem n2 : Strm.head (Strm.tail (Strm.tail (natsFrom 5))) = 7 := rfl
 "
     );
     let env = elab_all(&src);
@@ -392,7 +506,7 @@ theorem k2 : BT2.label (BT2.right (skew2 0)) = 2 := rfl
 fn test_codef_missing_clause_rejected() {
     let src = format!(
         "{STREAM_SRC}
-codef bad1 (n : Nat) : Stream Nat where
+codef bad1 (n : Nat) : Strm Nat where
   head := n
 "
     );
@@ -410,8 +524,8 @@ fn test_codef_unguarded_rejected() {
     let mut env = Environment::with_prelude();
     let src = format!(
         "{STREAM_SRC}
-codef bad2 (n : Nat) : Stream Nat where
-  head := Stream.head (bad2 n)
+codef bad2 (n : Nat) : Strm Nat where
+  head := Strm.head (bad2 n)
   tail := bad2 n
 "
     );
@@ -831,14 +945,14 @@ fn test_codata_mk_e2e() {
     // (depth-1 guardedness) at the term level.
     let src = format!(
         "{STREAM_SRC}
-def prefixed : Stream Nat := Stream.mk 7 (Stream.corec (fun k => k) Nat.succ 0)
-theorem p0 : Stream.head prefixed = 7 := rfl
-theorem p1 : Stream.head (Stream.tail prefixed) = 0 := rfl
-theorem p2 : Stream.head (Stream.tail (Stream.tail prefixed)) = 1 := rfl
+def prefixed : Strm Nat := Strm.mk 7 (Strm.corec (fun k => k) Nat.succ 0)
+theorem p0 : Strm.head prefixed = 7 := rfl
+theorem p1 : Strm.head (Strm.tail prefixed) = 0 := rfl
+theorem p2 : Strm.head (Strm.tail (Strm.tail prefixed)) = 1 := rfl
 "
     );
     let env = elab_all(&src);
-    for name in ["Stream.mk", "Stream.head_mk", "Stream.tail_mk"] {
+    for name in ["Strm.mk", "Strm.head_mk", "Strm.tail_mk"] {
         assert!(
             env.get_const(&Name::from_string(name)).is_some(),
             "constructor companion {name} must register"
@@ -979,14 +1093,14 @@ fn test_codef_mk_guarded_e2e() {
     // self-call — compiled via the Bool-flag buffered state.
     let src = format!(
         "{STREAM_SRC}
-codef alternate (s : Nat) : Stream Nat where
+codef alternate (s : Nat) : Strm Nat where
   head := s
-  tail := Stream.mk (Nat.add s 100) (alternate (Nat.succ s))
+  tail := Strm.mk (Nat.add s 100) (alternate (Nat.succ s))
 
-theorem g0 : Stream.head (alternate 0) = 0 := rfl
-theorem g1 : Stream.head (Stream.tail (alternate 0)) = 100 := rfl
-theorem g2 : Stream.head (Stream.tail (Stream.tail (alternate 0))) = 1 := rfl
-theorem g3 : Stream.head (Stream.tail (Stream.tail (Stream.tail (alternate 0)))) = 101 := rfl
+theorem g0 : Strm.head (alternate 0) = 0 := rfl
+theorem g1 : Strm.head (Strm.tail (alternate 0)) = 100 := rfl
+theorem g2 : Strm.head (Strm.tail (Strm.tail (alternate 0))) = 1 := rfl
+theorem g3 : Strm.head (Strm.tail (Strm.tail (Strm.tail (alternate 0)))) = 101 := rfl
 "
     );
     let env = elab_all(&src);
@@ -1002,9 +1116,9 @@ fn test_codef_mk_guarded_bad_inner_rejected() {
     // rejects loudly.
     let src = format!(
         "{STREAM_SRC}
-codef bad4 (s : Nat) : Stream Nat where
+codef bad4 (s : Nat) : Strm Nat where
   head := s
-  tail := Stream.mk 1 (Stream.corec (fun k => bad4 k) (fun k => k) s)
+  tail := Strm.mk 1 (Strm.corec (fun k => bad4 k) (fun k => k) s)
 "
     );
     let mut env = Environment::with_prelude();
@@ -1020,15 +1134,15 @@ fn test_codef_mk_guarded_depth2_e2e() {
     // Two nested constructor layers around the self-call.
     let src = format!(
         "{STREAM_SRC}
-codef three (s : Nat) : Stream Nat where
+codef three (s : Nat) : Strm Nat where
   head := s
-  tail := Stream.mk 100 (Stream.mk 200 (three (Nat.succ s)))
+  tail := Strm.mk 100 (Strm.mk 200 (three (Nat.succ s)))
 
-theorem e0 : Stream.head (three 7) = 7 := rfl
-theorem e1 : Stream.head (Stream.tail (three 7)) = 100 := rfl
-theorem e2 : Stream.head (Stream.tail (Stream.tail (three 7))) = 200 := rfl
-theorem e3 : Stream.head (Stream.tail (Stream.tail (Stream.tail (three 7)))) = 8 := rfl
-theorem e4 : Stream.head (Stream.tail (Stream.tail (Stream.tail (Stream.tail (three 7))))) = 100 := rfl
+theorem e0 : Strm.head (three 7) = 7 := rfl
+theorem e1 : Strm.head (Strm.tail (three 7)) = 100 := rfl
+theorem e2 : Strm.head (Strm.tail (Strm.tail (three 7))) = 200 := rfl
+theorem e3 : Strm.head (Strm.tail (Strm.tail (Strm.tail (three 7)))) = 8 := rfl
+theorem e4 : Strm.head (Strm.tail (Strm.tail (Strm.tail (Strm.tail (three 7))))) = 100 := rfl
 "
     );
     elab_all(&src);
@@ -1069,7 +1183,7 @@ fn test_rank7_is2_fixture_file_elaborates() {
 /// `codef` mints a [`CodataOrigin`] hint, and a hand-written definition does not.
 ///
 /// The negative control is the point of the test. `C.corec` is a
-/// USER-DERIVABLE name -- nothing stops anyone writing `def Stream.corec` --
+/// USER-DERIVABLE name -- nothing stops anyone writing `def Strm.corec` --
 /// so if recognition ever keyed off the name, a hand-written constant would be
 /// indistinguishable from a generated one. The origin exists precisely so
 /// recognition never has to guess, and it must be minted ONLY by the generator.

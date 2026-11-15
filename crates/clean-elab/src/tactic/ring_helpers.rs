@@ -194,14 +194,11 @@ pub(crate) fn ring_flatten_add(left: RingExpr, right: RingExpr) -> RingExpr {
 
     terms = ring_collect_like_terms(terms);
 
-    match terms.len() {
-        0 => RingExpr::Const(0),
-        1 => terms.pop().expect("terms has exactly 1 element"),
-        _ => {
-            terms.sort();
-            RingExpr::Add(terms)
-        }
+    if terms.len() > 1 {
+        terms.sort();
+        return RingExpr::Add(terms);
     }
+    terms.pop().unwrap_or(RingExpr::Const(0))
 }
 
 /// Flatten multiplication: a * (b * c) → Mul([a, b, c])
@@ -265,14 +262,11 @@ pub(crate) fn ring_flatten_mul(left: RingExpr, right: RingExpr) -> RingExpr {
         result.insert(0, RingExpr::Const(const_product));
     }
 
-    match result.len() {
-        0 => RingExpr::Const(1),
-        1 => result.pop().expect("result has exactly 1 element"),
-        _ => {
-            result.sort();
-            RingExpr::Mul(result)
-        }
+    if result.len() > 1 {
+        result.sort();
+        return RingExpr::Mul(result);
     }
+    result.pop().unwrap_or(RingExpr::Const(1))
 }
 
 /// Multiply a list of factors, distributing over any Add factors.

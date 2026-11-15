@@ -133,7 +133,7 @@ impl Environment {
             } else {
                 motive_ty.clone()
             };
-            result_ty = Expr::pi(BinderInfo::Implicit, lifted, result_ty);
+            result_ty = Expr::pi(BinderInfo::Default, lifted, result_ty);
         }
 
         // Add parameters (outermost)

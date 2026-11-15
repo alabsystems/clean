@@ -93,7 +93,7 @@ impl CompilerEnv {
     ///
     /// Callers pass the same `&[IRDecl]` used to construct this env.
     #[inline]
-    pub fn get_decl<'a>(&self, name: &Name, decls: &'a [IRDecl]) -> Option<&'a IRDecl> {
+    pub(crate) fn get_decl<'a>(&self, name: &Name, decls: &'a [IRDecl]) -> Option<&'a IRDecl> {
         self.decl_index.get(name).map(|&i| &decls[i])
     }
 

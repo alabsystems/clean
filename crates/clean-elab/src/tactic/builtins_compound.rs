@@ -12,9 +12,11 @@
 //! elaboration — tactics needing `elaborate()` (Have, Let, Suffices, Match)
 //! remain hardcoded for now and will migrate in Wave 6.
 
+use clean_parser::SurfaceName;
+
 use std::sync::Arc;
 
-use super::registry::{CompoundTacticEntry, TacticRegistry};
+use super::registry::{CompoundTacticEntry, TacticEval, TacticRegistry};
 use super::{ProofState, TacticError};
 use clean_parser::SurfaceTactic;
 
@@ -59,11 +61,17 @@ pub(crate) fn register_compound_tactics(registry: &mut TacticRegistry) {
 /// leaks into the next bullet's allocation.
 fn focus_branch_fvar_base(ps: &ProofState) -> u64 {
     // Same quantity `intro` allocates from for the focused goal — factored onto
-    // `ProofState` as `goal_fvar_base` so both paths share one definition
-    // (#2533). Falls back to `fvar_base` when there is no focused goal.
+    // `ProofState` as `goal_binder_base` so both paths share one definition
+    // (#2533). It must be the SCOPE-aware base: a goal whose context lost a
+    // still-bound local (`clear`, or the major premise a `cases`/`induction`
+    // case no longer lists) would otherwise reset `next_fvar` to that local's
+    // id, and `goal_binder_base` only counts scope ids below `next_fvar` — the
+    // bullet's first `intro` would capture it. Identical to the context-only
+    // base wherever nothing narrowed. Falls back to `fvar_base` when there is
+    // no focused goal.
     ps.goals
         .front()
-        .map_or(ps.fvar_base, |goal| ps.goal_fvar_base(goal))
+        .map_or(ps.fvar_base, |goal| ps.goal_binder_base(goal))
 }
 
 /// `(tacs)` — parenthesized tactic sequence, just runs the sequence.
@@ -113,28 +121,30 @@ fn compound_focus() -> CompoundTacticEntry {
                     detail: "unexpected variant".into(),
                 });
             };
-            if ps.goals.is_empty() {
-                return Err(TacticError::NoGoals);
-            }
-            // PARALLEL sibling reset: run this bullet's body from the shared
-            // base derived from goal 0's context, not from a `next_fvar` value
-            // leaked by an earlier sibling bullet. See `focus_branch_fvar_base`.
-            let branch_fvar_base = focus_branch_fvar_base(ps);
-            ps.next_fvar = branch_fvar_base;
-            let rest = ps.goals.split_off(1);
-            let result = eval.eval_seq(ps, tacs);
-            // If the focused goal fully closed, its FVars are consumed into the
-            // proof term; restore `next_fvar` to the shared base so the next
-            // sibling bullet allocates the same ids. If residual goals remain
-            // (the `focus` keyword does not force closure), keep the advanced
-            // value so later tactics don't collide with those goals' FVars.
-            if result.is_ok() && ps.goals.is_empty() {
-                ps.next_fvar = branch_fvar_base;
-            }
-            ps.goals.extend(rest);
-            result
+            with_focused_goal(eval, ps, |eval, ps| eval.eval_seq(ps, tacs))
         }),
     }
+}
+
+/// Run one operation on goal 0, preserving its siblings and the same FVar
+/// allocation boundary used by the `focus` tactic. Residual goals remain open.
+pub(super) fn with_focused_goal(
+    eval: &mut dyn TacticEval,
+    ps: &mut ProofState,
+    run: impl FnOnce(&mut dyn TacticEval, &mut ProofState) -> Result<(), TacticError>,
+) -> Result<(), TacticError> {
+    if ps.goals.is_empty() {
+        return Err(TacticError::NoGoals);
+    }
+    let branch_fvar_base = focus_branch_fvar_base(ps);
+    ps.next_fvar = branch_fvar_base;
+    let rest = ps.goals.split_off(1);
+    let result = run(eval, ps);
+    if result.is_ok() && ps.goals.is_empty() {
+        ps.next_fvar = branch_fvar_base;
+    }
+    ps.goals.extend(rest);
+    result
 }
 
 /// `{ tacs }` — focus on the first goal, run tactics, require closure.
@@ -389,25 +399,31 @@ fn compound_case() -> CompoundTacticEntry {
                     detail: "unexpected variant".into(),
                 });
             };
+            super::pattern::names::require_binding_name(tag, "case")?;
+            for binder in binders {
+                super::pattern::names::require_binding_name(binder, "case")?;
+            }
             // An anonymous tag (`case _ =>` / `next =>`) focuses the FIRST
             // available goal regardless of its tag, matching Lean's anonymous
             // `binderIdent` case tag. Otherwise match by exact tag, then by
-            // dot-suffix, then by prefix.
-            let idx = if tag == "_" {
+            // component suffix, then by component prefix. The shape checks
+            // above apply before exact matching too: relative constructor
+            // syntax has no case-selector meaning, even for a constructed AST.
+            let idx = if tag.is_unescaped_component("_") {
                 (!ps.goals.is_empty()).then_some(0)
             } else {
                 ps.goals
                     .iter()
-                    .position(|g| g.tag.as_deref() == Some(tag.as_str()))
+                    .position(|g| g.tag.as_ref() == Some(tag))
                     .or_else(|| {
-                        ps.goals.iter().position(|g| {
-                            g.tag.as_deref().is_some_and(|t| name_suffix_match(t, tag))
-                        })
+                        ps.goals
+                            .iter()
+                            .position(|g| g.tag.as_ref().is_some_and(|t| name_suffix_match(t, tag)))
                     })
                     .or_else(|| {
-                        ps.goals.iter().position(|g| {
-                            g.tag.as_deref().is_some_and(|t| name_prefix_match(t, tag))
-                        })
+                        ps.goals
+                            .iter()
+                            .position(|g| g.tag.as_ref().is_some_and(|t| name_prefix_match(t, tag)))
                     })
             };
             match idx {
@@ -419,14 +435,10 @@ fn compound_case() -> CompoundTacticEntry {
                     });
                 }
             }
-            // Rename the case's auto-generated inaccessible hypotheses to the
-            // user-supplied binder names (Lean: `case tag x₁ … xₙ => tac`).
-            // `cases`/`induction` name constructor fields `{goal_tag}_{N}` and
-            // induction hypotheses `ih_{goal_tag}_{N}`; binders map positionally
-            // over fields first, then IH hypotheses. `_` leaves a hypothesis
-            // unrenamed. This mirrors `eval_induction_alts`' renaming.
+            // Like `rename_i`, `case` names the last inaccessible locals;
+            // a short name list does not start at the first constructor field.
             if !binders.is_empty() {
-                rename_case_binders(ps, binders);
+                super::builtins_wave3::rename_inaccessible_binders(ps, binders)?;
             }
             // Focus the matched goal: run the case's tactics on it alone, then
             // require it to be solved (Lean's `case` fails if `tac` leaves the
@@ -434,83 +446,71 @@ fn compound_case() -> CompoundTacticEntry {
             // focused case and so signal an unsolved case — surface them as an
             // error rather than silently re-queuing.
             let remaining = ps.goals.split_off(1);
-            eval.eval_seq(ps, tacs)?;
-            if !ps.goals.is_empty() {
-                let count = ps.goals.len();
-                ps.goals.extend(remaining);
+            let result = eval.eval_seq(ps, tacs);
+            let count = ps.goals.len();
+            // A failed case body may retain its focused goals, but may never
+            // discard the unrelated obligations detached for this focus.
+            ps.goals.extend(remaining);
+            result?;
+            if count != 0 {
                 return Err(TacticError::UnsolvedGoals {
                     count,
                     detail: format!("case '{tag}' was not closed by its tactics"),
                 });
             }
-            ps.goals.extend(remaining);
             Ok(())
         }),
     }
 }
 
 /// Check if `tag` is a dot-component suffix of `goal_tag`.
-fn name_suffix_match(goal_tag: &str, tag: &str) -> bool {
-    goal_tag.ends_with(tag)
-        && (goal_tag.len() == tag.len()
-            || goal_tag.as_bytes()[goal_tag.len() - tag.len() - 1] == b'.')
+pub(super) fn name_suffix_match(goal_tag: &SurfaceName, tag: &SurfaceName) -> bool {
+    !tag.is_anonymous() && !tag.is_relative_constructor() && goal_tag.has_suffix(tag)
 }
 
 /// Check if `tag` is a dot-component prefix of `goal_tag`.
-fn name_prefix_match(goal_tag: &str, tag: &str) -> bool {
-    goal_tag.starts_with(tag)
-        && (goal_tag.len() == tag.len() || goal_tag.as_bytes()[tag.len()] == b'.')
+pub(super) fn name_prefix_match(goal_tag: &SurfaceName, tag: &SurfaceName) -> bool {
+    !tag.is_anonymous() && !tag.is_relative_constructor() && goal_tag.has_prefix(tag)
 }
 
-/// Rename the focused case's auto-generated inaccessible hypotheses positionally
-/// to the user-supplied `binders` (the `case tag x₁ … xₙ => tac` form).
-///
-/// `cases`/`induction` name constructor fields `{goal_tag}_{N}` and induction
-/// hypotheses `ih_{goal_tag}_{N}`. Binders map positionally over the fields (in
-/// order) first, then the IH hypotheses (in order); a `_` binder leaves the
-/// corresponding hypothesis unrenamed. Extra binders beyond the available
-/// auto-generated hypotheses are ignored (matching the lenient positional
-/// renaming used by `eval_induction_alts`). Operates on `ps.goals[0]` (the goal
-/// already focused by the `case` handler); a no-op when there is no focused goal.
-///
-/// The focused goal is taken through [`ProofState::current_goal_mut`], not
-/// `ps.goals.front_mut()`, so the context mutation goes through the accessor
-/// that invalidates the TypeChecker cache — the invariant every other
-/// context-mutating tactic in this crate follows.
-///
-/// Scope, stated honestly: today this rename is name-only, and `TcCaches` is
-/// keyed by `Expr`/`FVarId` (+ transparency), neither of which a rename
-/// changes, while `build_local_ctx` re-reads the names on every `with_tc` call.
-/// So no cached answer is actually stale — this restores the invariant rather
-/// than fixing an observed miscomputation. It stops being free the moment this
-/// function does anything more than rename (change a type, insert or drop a
-/// decl), which is exactly when a silent stale-cache bug would appear.
-pub(crate) fn rename_case_binders(ps: &mut ProofState, binders: &[String]) {
-    let Some(goal) = ps.current_goal_mut() else {
-        return;
-    };
-    let goal_tag = goal.tag.clone().unwrap_or_default();
-    let field_prefix = format!("{goal_tag}_");
-    let ih_prefix = format!("ih_{goal_tag}_");
-
-    // Collect indices of auto-generated hypotheses: fields first, then IHs.
-    // The `ih_` hypotheses also start with `{goal_tag}_`-shaped substrings, so
-    // exclude them from the field pass to keep the two groups disjoint.
-    let mut auto_hyp_indices: Vec<usize> = Vec::new();
-    for (i, decl) in goal.local_ctx.iter().enumerate() {
-        if decl.name.starts_with(&field_prefix) && !decl.name.starts_with(&ih_prefix) {
-            auto_hyp_indices.push(i);
-        }
-    }
-    for (i, decl) in goal.local_ctx.iter().enumerate() {
-        if decl.name.starts_with(&ih_prefix) {
-            auto_hyp_indices.push(i);
-        }
-    }
-
+/// Rename an elimination alternative's selected fields in order.
+/// Unlike `case`/`rename_i`, a `| ctor x … =>` alternative names its fields
+/// from the beginning of the eliminator's field inventory.
+pub(crate) fn rename_alternative_binders(
+    goal: &mut super::Goal,
+    binders: &[SurfaceName],
+    explicit: bool,
+) {
+    let auto_hyp_indices = alternative_binder_indices(goal, explicit);
     for (binder, &hyp_idx) in binders.iter().zip(auto_hyp_indices.iter()) {
-        if binder != "_" {
-            goal.local_ctx[hyp_idx].name = binder.clone();
+        if !binder.is_unescaped_component("_") {
+            super::target_equation::name_local_shadowing(goal, hyp_idx, binder);
         }
     }
+}
+
+/// Ordinary alternatives name explicit fields and induction hypotheses.
+/// The `@constructor` spelling names every surviving field, including implicit
+/// and instance-implicit fields. Ownership still comes from the eliminator.
+pub(super) fn alternative_binder_indices(goal: &super::Goal, explicit: bool) -> Vec<usize> {
+    case_binder_indices(goal)
+        .into_iter()
+        .filter(|&index| {
+            explicit || goal.local_ctx[index].binder_info.info == clean_kernel::BinderInfo::Default
+        })
+        .collect()
+}
+
+/// Case ownership is supplied by the eliminator, not guessed from a label.
+/// Cleared/reverted FVars cannot select unrelated surviving declarations.
+pub(super) fn case_binder_indices(goal: &super::Goal) -> Vec<usize> {
+    let mut indices = Vec::new();
+    for fvar in &goal.case_binders {
+        if let Some(index) = goal.local_ctx.iter().position(|decl| &decl.fvar == fvar) {
+            if !indices.contains(&index) {
+                indices.push(index);
+            }
+        }
+    }
+    indices
 }

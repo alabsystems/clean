@@ -41,7 +41,7 @@ if [[ "$(uname -m)" != "arm64" ]]; then
 fi
 
 echo "[1/4] building on-chip FP-divsqrt harness..."
-( cd "$HARNESS_DIR" && cargo build --release --bin fp_cvt_harness )
+( cd "$HARNESS_DIR" && targo --unverified build --release --bin fp_cvt_harness )
 
 echo "[2/4] running real AArch64 fdiv/fsqrt on this chip..."
 "$HARNESS_DIR/target/release/fp_cvt_harness" "$GEN" --divsqrt

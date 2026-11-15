@@ -130,17 +130,26 @@ pub(crate) fn push_neg_expr(expr: &Expr, state: &mut ProofState) -> Expr {
             return make_forall_push_neg(&binder_ty, &not_body);
         }
 
-        // ¬(a ≤ b) → b < a
-        if let Some((_ty, a, b)) = match_le(&inner) {
+        // ¬(a ≤ b) → b < a. Both spellings, and the result keeps the spelling
+        // the input had — see [`match_le_any`] / [`is_raw_nat_rel`].
+        if let Some((_ty, a, b)) = match_le_any(&inner) {
             if is_nat_type(&_ty) {
-                return super::tc_app::nat_lt_tc(b, a);
+                return if is_raw_nat_rel(&inner) {
+                    nat_lt_raw(b, a)
+                } else {
+                    super::tc_app::nat_lt_tc(b, a)
+                };
             }
         }
 
         // ¬(a < b) → b ≤ a
-        if let Some((_ty, a, b)) = match_lt(&inner) {
+        if let Some((_ty, a, b)) = match_lt_any(&inner) {
             if is_nat_type(&_ty) {
-                return super::tc_app::nat_le_tc(b, a);
+                return if is_raw_nat_rel(&inner) {
+                    nat_le_raw(b, a)
+                } else {
+                    super::tc_app::nat_le_tc(b, a)
+                };
             }
         }
 
@@ -328,6 +337,94 @@ pub fn match_lt(expr: &Expr) -> Option<(Expr, Expr, Expr)> {
     None
 }
 
+/// Match a RAW `Nat` comparison `Nat.le a b` / `Nat.lt a b` — the spelling that
+/// names the kernel constant directly instead of going through the `LE`/`LT`
+/// typeclass.
+///
+/// Both spellings denote the same proposition: `instLENat` / `instLTNat` are
+/// reducible wrappers, so `@LE.le Nat instLENat a b` and `Nat.le a b` are
+/// definitionally equal and the kernel accepts a proof of either against the
+/// other. The argument is recorded in
+/// `clean-kernel/src/env/nat_totality_proof.rs`'s module header, which is why
+/// `Nat.not_lt` / `Nat.not_le` can be declared in one spelling and applied in
+/// the other.
+///
+/// REQUIRES: `head` is `"Nat.le"` or `"Nat.lt"`.
+/// ENSURES: Returns `(Nat, lhs, rhs)` only for an EXACTLY two-argument
+/// application whose head is the named constant; the type component is the
+/// `Nat` constant, which no typeclass argument carries in this spelling.
+/// ENSURES: Returns `None` for every other head, arity or spelling — in
+/// particular for the typeclass spine, which [`match_le`] / [`match_lt`] own.
+fn match_nat_rel_raw(expr: &Expr, head: &str) -> Option<(Expr, Expr, Expr)> {
+    let args = expr.get_app_args();
+    if args.len() != 2 {
+        return None;
+    }
+    let ExprKind::Const(name, _) = expr.get_app_fn().kind() else {
+        return None;
+    };
+    if name.to_string() != head {
+        return None;
+    }
+    Some((super::tc_app::nat_type(), args[0].clone(), args[1].clone()))
+}
+
+/// Match a `≤` comparison in EITHER spelling — the `LE.le` typeclass spine or
+/// the raw `Nat.le a b` constant application.
+///
+/// Only the typeclass spelling was matched before this existed, so a
+/// hypothesis written `Not (Nat.le x y)` was invisible to
+/// `omega`'s negated-relation normalization and to `push_neg`; `omega` then
+/// failed on goals it proves in the sugar spelling. See the sibling
+/// [`match_lt_any`].
+///
+/// ENSURES: Returns exactly what [`match_le`] returns when that matches.
+/// ENSURES: Otherwise returns the raw-spelling match, with `Nat` as the type.
+pub(crate) fn match_le_any(expr: &Expr) -> Option<(Expr, Expr, Expr)> {
+    match_le(expr).or_else(|| match_nat_rel_raw(expr, "Nat.le"))
+}
+
+/// Match a `<` comparison in EITHER spelling — the `LT.lt` typeclass spine or
+/// the raw `Nat.lt a b` constant application.
+///
+/// ENSURES: Returns exactly what [`match_lt`] returns when that matches.
+/// ENSURES: Otherwise returns the raw-spelling match, with `Nat` as the type.
+pub(crate) fn match_lt_any(expr: &Expr) -> Option<(Expr, Expr, Expr)> {
+    match_lt(expr).or_else(|| match_nat_rel_raw(expr, "Nat.lt"))
+}
+
+/// Build the raw `Nat.le lhs rhs` application.
+///
+/// ENSURES: Returns `App(App(Const("Nat.le", []), lhs), rhs)`.
+pub(crate) fn nat_le_raw(lhs: Expr, rhs: Expr) -> Expr {
+    Expr::app(
+        Expr::app(Expr::const_(Name::from_string("Nat.le"), vec![]), lhs),
+        rhs,
+    )
+}
+
+/// Build the raw `Nat.lt lhs rhs` application.
+///
+/// ENSURES: Returns `App(App(Const("Nat.lt", []), lhs), rhs)`.
+pub(crate) fn nat_lt_raw(lhs: Expr, rhs: Expr) -> Expr {
+    Expr::app(
+        Expr::app(Expr::const_(Name::from_string("Nat.lt"), vec![]), lhs),
+        rhs,
+    )
+}
+
+/// Whether `expr` is the RAW `Nat.le` / `Nat.lt` spelling rather than the
+/// typeclass spine.
+///
+/// The rewrite built for a raw-spelled hypothesis must keep the raw head on
+/// both sides of its `Eq`, so that the rewritten hypothesis matches a
+/// raw-spelled goal syntactically rather than only definitionally.
+///
+/// ENSURES: `true` only for a two-argument application of `Nat.le` or `Nat.lt`.
+pub(crate) fn is_raw_nat_rel(expr: &Expr) -> bool {
+    match_nat_rel_raw(expr, "Nat.le").is_some() || match_nat_rel_raw(expr, "Nat.lt").is_some()
+}
+
 /// Match a ≥ comparison
 /// REQUIRES: `expr` is a well-formed comparison expression.
 /// ENSURES: Returns `(ty, lhs, rhs)` only for fully-applied `GE.ge` spines.
@@ -412,10 +509,12 @@ fn is_prop(expr: &Expr) -> bool {
 /// Make a Not expression
 /// False, And, Or are not universe-polymorphic (Prop-level), so vec![] is correct.
 /// REQUIRES: `p` is a proposition expression.
-/// ENSURES: Returns the arrow-to-`False` encoding of `Not p`.
+/// ENSURES: Returns `Not p`, with the `Not` head, as Mathlib's `push_neg`
+/// states it (`¬(P ∨ Q)` becomes `¬P ∧ ¬Q`): simp reads a negation off that
+/// head only, so the unfolded `p → False` left `push_neg at h; simp only [h]`
+/// unable to rewrite `P` to `False`. `match_not` still reads both forms.
 pub(crate) fn make_not(p: &Expr) -> Expr {
-    // Not P = P → False
-    Expr::arrow(p.clone(), Expr::const_(Name::from_string("False"), vec![]))
+    Expr::app(Expr::const_(Name::from_string("Not"), vec![]), p.clone())
 }
 
 /// Make an And expression
@@ -507,7 +606,10 @@ pub fn contrapose(state: &mut ProofState) -> TacticResult {
 /// ENSURES: On `Ok(())`, only the named hypothesis type is rewritten to
 /// `¬Q -> ¬P`.
 /// ENSURES: On error, the goal target and local context are unchanged.
-pub fn contrapose_hyp(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn contrapose_hyp(
+    state: &mut ProofState,
+    hyp_name: &clean_parser::SurfaceName,
+) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -516,7 +618,8 @@ pub fn contrapose_hyp(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     let hyp_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     let hyp_decl = hyp_decl.clone();
     let (contrapositive, eq_proof) = contrapose_with_proof(state, &hyp_decl.ty)?;

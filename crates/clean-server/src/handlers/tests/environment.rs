@@ -2,6 +2,7 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use super::{launch_token_of, temp_rooted_state};
 use crate::handlers::*;
 use clean_kernel::env::TrustedEnvExt;
 
@@ -11,6 +12,7 @@ async fn test_get_environment_empty() {
 
     let params = GetEnvironmentParams {
         include_json: false,
+        timeout_ms: None,
     };
 
     let response = handle_get_environment(&state, RequestId::Number(1), params).await;
@@ -38,7 +40,10 @@ async fn test_get_environment_empty() {
 async fn test_get_environment_with_json() {
     let state = ServerState::new();
 
-    let params = GetEnvironmentParams { include_json: true };
+    let params = GetEnvironmentParams {
+        include_json: true,
+        timeout_ms: None,
+    };
 
     let response = handle_get_environment(&state, RequestId::Number(1), params).await;
     assert!(
@@ -86,13 +91,14 @@ async fn test_get_environment_json_serialization() {
 async fn test_save_environment_bincode() {
     use std::fs;
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join(format!("clean_test_env_{}.bincode", std::process::id()));
 
     let params = SaveEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
+        timeout_ms: None,
     };
 
     let response = handle_save_environment(&state, RequestId::Number(1), params).await;
@@ -117,13 +123,14 @@ async fn test_save_environment_bincode() {
 async fn test_save_environment_json() {
     use std::fs;
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join(format!("clean_test_env_{}.json", std::process::id()));
 
     let params = SaveEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
+        timeout_ms: None,
     };
 
     let response = handle_save_environment(&state, RequestId::Number(1), params).await;
@@ -148,13 +155,14 @@ async fn test_save_environment_json() {
 async fn test_save_environment_default_format() {
     use std::fs;
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join(format!("clean_test_env_default_{}.bin", std::process::id()));
 
     let params = SaveEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: None, // Should default to bincode
+        timeout_ms: None,
     };
 
     let response = handle_save_environment(&state, RequestId::Number(1), params).await;
@@ -173,11 +181,18 @@ async fn test_save_environment_default_format() {
 
 #[tokio::test]
 async fn test_save_environment_invalid_path() {
-    let state = ServerState::new();
+    let state = temp_rooted_state();
 
     let params = SaveEnvironmentParams {
-        path: "/nonexistent/directory/that/does/not/exist/file.bin".to_string(),
+        path: std::env::temp_dir()
+            .join(format!(
+                "clean_test_no_such_dir_{}/does/not/exist/file.bin",
+                std::process::id()
+            ))
+            .to_string_lossy()
+            .to_string(),
         format: None,
+        timeout_ms: None,
     };
 
     let response = handle_save_environment(&state, RequestId::Number(1), params).await;
@@ -196,7 +211,7 @@ async fn test_save_environment_invalid_path() {
 async fn test_load_environment_bincode() {
     use std::fs;
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join(format!("clean_test_load_{}.bincode", std::process::id()));
 
@@ -204,6 +219,7 @@ async fn test_load_environment_bincode() {
     let save_params = SaveEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
+        timeout_ms: None,
     };
     let save_response = handle_save_environment(&state, RequestId::Number(1), save_params).await;
     assert!(
@@ -218,6 +234,8 @@ async fn test_load_environment_bincode() {
         format: Some("bincode".to_string()),
         replace: true,
         replace_unchecked: true,
+        token: launch_token_of(&state),
+        timeout_ms: None,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -241,7 +259,7 @@ async fn test_load_environment_bincode() {
 async fn test_load_environment_json() {
     use std::fs;
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join(format!("clean_test_load_{}.json", std::process::id()));
 
@@ -249,6 +267,7 @@ async fn test_load_environment_json() {
     let save_params = SaveEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
+        timeout_ms: None,
     };
     let save_response = handle_save_environment(&state, RequestId::Number(1), save_params).await;
     assert!(
@@ -263,6 +282,8 @@ async fn test_load_environment_json() {
         format: Some("json".to_string()),
         replace: true,
         replace_unchecked: true,
+        token: launch_token_of(&state),
+        timeout_ms: None,
     };
     let load_response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -281,13 +302,21 @@ async fn test_load_environment_json() {
 
 #[tokio::test]
 async fn test_load_environment_nonexistent_file() {
-    let state = ServerState::new();
+    let state = temp_rooted_state();
 
     let params = LoadEnvironmentParams {
-        path: "/nonexistent/file/that/does/not/exist.bin".to_string(),
+        path: std::env::temp_dir()
+            .join(format!(
+                "clean_test_no_such_dir_{}/exist.bin",
+                std::process::id()
+            ))
+            .to_string_lossy()
+            .to_string(),
         format: None,
         replace: true,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
 
     let response = handle_load_environment(&state, RequestId::Number(1), params).await;
@@ -305,7 +334,7 @@ async fn test_load_environment_nonexistent_file() {
 async fn test_load_environment_replace_flag() {
     use std::fs;
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let temp_dir = std::env::temp_dir();
     let temp_file = temp_dir.join(format!("clean_test_replace_{}.bincode", std::process::id()));
 
@@ -313,6 +342,7 @@ async fn test_load_environment_replace_flag() {
     let save_params = SaveEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
+        timeout_ms: None,
     };
     let save_response = handle_save_environment(&state, RequestId::Number(1), save_params).await;
     assert!(
@@ -327,6 +357,8 @@ async fn test_load_environment_replace_flag() {
         format: Some("bincode".to_string()),
         replace: true,
         replace_unchecked: true,
+        token: launch_token_of(&state),
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(2), load_params).await;
     assert!(
@@ -341,6 +373,8 @@ async fn test_load_environment_replace_flag() {
         format: Some("bincode".to_string()),
         replace: false,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
     let response2 = handle_load_environment(&state, RequestId::Number(3), load_params2).await;
     assert!(
@@ -391,11 +425,13 @@ async fn test_load_environment_result_json_serialization() {
 
 #[tokio::test]
 async fn test_import_module_nonexistent() {
-    let state = ServerState::new();
+    let state = temp_rooted_state();
 
     let params = ImportModuleParams {
         module: "NonExistent.Module.That.Does.Not.Exist".to_string(),
         search_paths: vec![],
+        timeout_ms: None,
+        token: launch_token_of(&state),
     };
 
     let response = handle_import_module(&state, RequestId::Number(1), params).await;
@@ -439,7 +475,7 @@ async fn test_import_module_success_adds_constants_to_environment() {
     )
     .expect("write import-module fixture");
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let baseline_constants = {
         let env = state.env.read().await;
         assert!(
@@ -452,6 +488,8 @@ async fn test_import_module_success_adds_constants_to_environment() {
     let params = ImportModuleParams {
         module: "ServerFixture".to_string(),
         search_paths: vec![fixture_root.path().to_string_lossy().to_string()],
+        timeout_ms: None,
+        token: launch_token_of(&state),
     };
 
     let response = handle_import_module(&state, RequestId::Number(2), params).await;
@@ -534,6 +572,7 @@ async fn test_server_state_with_env_preloaded() {
     // Query the environment via the handler
     let params = GetEnvironmentParams {
         include_json: false,
+        timeout_ms: None,
     };
     let response = handle_get_environment(&state, RequestId::Number(1), params).await;
     assert!(
@@ -600,6 +639,7 @@ async fn test_preloaded_env_get_environment_counts() {
     let state = prelude_state();
     let params = GetEnvironmentParams {
         include_json: false,
+        timeout_ms: None,
     };
     let response = handle_get_environment(&state, RequestId::Number(1), params).await;
     assert!(
@@ -634,7 +674,7 @@ async fn test_load_environment_merge_preserves_existing() {
         type_: Expr::sort(clean_kernel::Level::Zero),
     };
     env.add_decl_unchecked(decl);
-    let state = ServerState::new().with_env(env);
+    let state = temp_rooted_state().with_env(env);
 
     // Save a different environment to a temp file
     let mut env2 = clean_kernel::Environment::new();
@@ -655,6 +695,8 @@ async fn test_load_environment_merge_preserves_existing() {
         format: Some("bincode".to_string()),
         replace: false,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     assert!(
@@ -666,6 +708,7 @@ async fn test_load_environment_merge_preserves_existing() {
     // Verify both axioms exist
     let get_params = GetEnvironmentParams {
         include_json: false,
+        timeout_ms: None,
     };
     let get_response = handle_get_environment(&state, RequestId::Number(2), get_params).await;
     let result: GetEnvironmentResult =
@@ -717,12 +760,14 @@ async fn test_load_environment_merge_rejects_uncheckable_theorem_or_opaque() {
     env.save_to_file(&temp_file).expect("save should work");
 
     // Load via merge into empty state
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let load_params = LoadEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: false,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     let err = response
@@ -787,12 +832,14 @@ async fn test_load_environment_merge_rejects_value_less_definition() {
     ));
     fs::write(&temp_file, serde_json::to_string(&json).unwrap()).expect("write fixture");
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let load_params = LoadEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
         replace: false,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     let err = response
@@ -866,12 +913,14 @@ async fn test_load_environment_merge_replays_inductive_family_checked() {
     ));
     env2.save_to_file(&temp_file).expect("save should work");
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let load_params = LoadEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: false,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     assert!(
@@ -944,12 +993,14 @@ async fn test_load_environment_merge_rejects_tampered_constructor() {
     ));
     fs::write(&temp_file, serde_json::to_string(&json).unwrap()).expect("write fixture");
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let load_params = LoadEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("json".to_string()),
         replace: false,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     let err = response
@@ -999,12 +1050,14 @@ async fn test_load_environment_replace_requires_unchecked_flag() {
     ));
     env2.save_to_file(&temp_file).expect("save should work");
 
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let load_params = LoadEnvironmentParams {
         path: temp_file.to_string_lossy().to_string(),
         format: Some("bincode".to_string()),
         replace: true,
         replace_unchecked: false,
+        token: None,
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     let err = response
@@ -1029,12 +1082,14 @@ async fn test_load_environment_replace_requires_unchecked_flag() {
 /// path always re-checks; the flag must never look like it applies there).
 #[tokio::test]
 async fn test_load_environment_replace_unchecked_requires_replace() {
-    let state = ServerState::new();
+    let state = temp_rooted_state();
     let load_params = LoadEnvironmentParams {
         path: "/tmp/never_read_because_params_invalid.bincode".to_string(),
         format: Some("bincode".to_string()),
         replace: false,
         replace_unchecked: true,
+        token: launch_token_of(&state),
+        timeout_ms: None,
     };
     let response = handle_load_environment(&state, RequestId::Number(1), load_params).await;
     let err = response

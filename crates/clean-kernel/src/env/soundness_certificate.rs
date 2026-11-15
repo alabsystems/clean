@@ -5,7 +5,8 @@
 //! THE SOUNDNESS CERTIFICATE — one mechanical check that proves Clean sound.
 //!
 //! See `designs/2026-06-08-soundness-certificate.md` (authoritative). The
-//! certificate runs five mechanical claims over the FULL environment and emits a
+//! certificate runs the six mechanical claims below over the FULL environment
+//! and emits a
 //! single auditable certificate. It FAILS CLOSED on any violation; GREEN ⟺ the
 //! environment is consistent (no closed proof of `False`) RELATIVE to the
 //! explicitly-enumerated Trusted Base (the kernel checker + the printed,
@@ -32,7 +33,8 @@ use std::fmt;
 use serde::Serialize;
 
 use super::axiom_audit::{
-    is_foundational_axiom, is_trust_marker, ADMITTED_DOMAIN_AXIOMS, FOUNDATIONAL_AXIOMS,
+    is_canonical_foundational_constant, is_trust_marker, name_has_components,
+    ADMITTED_DOMAIN_AXIOMS,
 };
 use super::carrier_refutation::{
     scan_admitted_axioms, scan_opacity_masked_axioms, CarrierCensus, MaskedAxiom,
@@ -452,9 +454,6 @@ pub(super) fn partition_axioms(env: &Environment) -> AxiomPartition {
     let mut trust = BTreeSet::new();
     let mut builtin_quot = BTreeSet::new();
 
-    let admitted_set: BTreeSet<&str> = ADMITTED_DOMAIN_AXIOMS.iter().copied().collect();
-    let foundational_set: BTreeSet<&str> = FOUNDATIONAL_AXIOMS.iter().copied().collect();
-
     for c in env.constants() {
         if c.kind != ConstantKind::Axiom {
             continue;
@@ -485,14 +484,17 @@ pub(super) fn partition_axioms(env: &Environment) -> AxiomPartition {
         // Not a trust marker → part of the trusted axiom base.
         trusted.insert(name.clone());
 
-        // A name may appear in both curated lists (the historical
-        // FOUNDATIONAL_AXIOMS retains documentation entries that are excluded
-        // from the Constructive gate). The admitted-domain classification is
-        // authoritative per `is_foundational_axiom`, which excludes admitted
-        // names from the foundational set.
-        if admitted_set.contains(name.as_str()) {
+        // Admitted-domain first (structural name). Foundational only when the
+        // declaration IS the kernel's canonical one — structural name AND
+        // exact canonical statement, never the printed name: a spoof
+        // (`«Quot.sound»`, or `propext` with another statement) lands in
+        // `other`, where the certificate counts it.
+        if ADMITTED_DOMAIN_AXIOMS
+            .iter()
+            .any(|d| name_has_components(&c.name, d))
+        {
             admitted_domain.insert(name);
-        } else if is_foundational_axiom(&c.name) || foundational_set.contains(name.as_str()) {
+        } else if is_canonical_foundational_constant(c) {
             foundational.insert(name);
         } else {
             other.insert(name);
@@ -616,7 +618,8 @@ impl Environment {
         Ok(env)
     }
 
-    /// Run the five mechanical claims over the FULL environment and emit THE
+    /// Run the six mechanical claims (C1, C2, C3, C4, C4', C5) over the FULL
+    /// environment and emit THE
     /// Soundness Certificate. See the module docs / design doc.
     #[cfg(any(test, feature = "math-overlays"))]
     #[must_use]

@@ -395,8 +395,12 @@ async fn test_prove_true_goal_reports_verified_or_unverified_status() {
     assert_prove_status_invariants(&result);
 }
 
+/// `¬False` is satisfiable, but a satisfying assignment of the SMT bridge's
+/// abstraction is never reported as a refutation: the same bridge produces
+/// models for VALID goals whose operations it abstracts (decide review,
+/// 2026-09-28). The status is `Unknown` and the reason labels the model.
 #[tokio::test]
-async fn test_prove_false_goal_reports_refuted_status() {
+async fn test_prove_false_goal_is_not_reported_refuted_on_an_smt_model() {
     let state = prelude_state();
     let params = ProveParams {
         goal: "False".to_string(),
@@ -413,7 +417,13 @@ async fn test_prove_false_goal_reports_refuted_status() {
     );
 
     let result: ProveResult = serde_json::from_value(response.result.unwrap()).unwrap();
-    assert_eq!(result.status, ProveStatus::Refuted);
+    assert_eq!(result.status, ProveStatus::Unknown, "{result:?}");
+    let reason = result.reason.as_deref().unwrap_or_default();
+    assert!(
+        reason.contains("solver's abstraction") && reason.contains("not a refutation"),
+        "the model must be labelled unvalidated, got: {reason:?}"
+    );
+    assert!(!reason.contains("counterexample:"), "{reason:?}");
     assert_prove_status_invariants(&result);
 }
 

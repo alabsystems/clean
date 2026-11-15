@@ -23,7 +23,7 @@ fn test_parse_s_interpolation_lit_and_expr() {
                 parts[0]
             );
             assert!(
-                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "name"),
+                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("name").name()),
                 "expected expr name, got {:?}",
                 parts[1]
             );
@@ -61,11 +61,11 @@ fn test_parse_s_interpolation_multiple_exprs() {
             assert_eq!(*kind, InterpolatedStringKind::String);
             assert_eq!(parts.len(), 3);
             assert!(
-                matches!(&parts[0], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "x")
+                matches!(&parts[0], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("x").name())
             );
             assert!(matches!(&parts[1], InterpolationPart::Literal(s) if s == " and "));
             assert!(
-                matches!(&parts[2], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "y")
+                matches!(&parts[2], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("y").name())
             );
         }
         other => panic!("expected InterpolatedStr, got {other:?}"),
@@ -162,7 +162,7 @@ fn test_parse_m_interpolation() {
             assert_eq!(parts.len(), 2);
             assert!(matches!(&parts[0], InterpolationPart::Literal(s) if s == "error: "));
             assert!(
-                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "msg")
+                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("msg").name())
             );
         }
         other => panic!("expected InterpolatedStr, got {other:?}"),
@@ -182,7 +182,7 @@ fn test_parse_f_interpolation() {
             assert_eq!(parts.len(), 2);
             assert!(matches!(&parts[0], InterpolationPart::Literal(s) if s == "x = "));
             assert!(
-                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "x")
+                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("x").name())
             );
         }
         other => panic!("expected InterpolatedStr, got {other:?}"),
@@ -202,7 +202,7 @@ fn test_parse_s_interpolation_x_eq_x() {
             assert_eq!(parts.len(), 2);
             assert!(matches!(&parts[0], InterpolationPart::Literal(s) if s == "x = "));
             assert!(
-                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "x")
+                matches!(&parts[1], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("x").name())
             );
         }
         other => panic!("expected InterpolatedStr, got {other:?}"),
@@ -222,7 +222,7 @@ fn test_parse_s_interpolation_arithmetic_exprs() {
             assert_eq!(parts.len(), 5);
             // {a}
             assert!(
-                matches!(&parts[0], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "a"),
+                matches!(&parts[0], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("a").name()),
                 "expected ident a, got {:?}",
                 parts[0]
             );
@@ -230,7 +230,7 @@ fn test_parse_s_interpolation_arithmetic_exprs() {
             assert!(matches!(&parts[1], InterpolationPart::Literal(s) if s == " + "));
             // {b}
             assert!(
-                matches!(&parts[2], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if n == "b"),
+                matches!(&parts[2], InterpolationPart::Expr(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("b").name()),
                 "expected ident b, got {:?}",
                 parts[2]
             );

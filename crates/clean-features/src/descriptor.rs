@@ -25,8 +25,8 @@ const ALL_STABILITIES: &[Stability] = &[
 
 /// Top-level grouping for a feature.
 ///
-/// Controls the section in `clean features` and the branch in the explore TUI
-/// tree.
+/// Controls the section grouping in `clean features` output. (An "explore
+/// TUI" this doc once named does not exist.)
 #[non_exhaustive]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -264,24 +264,31 @@ pub struct FeatureDescriptor {
     pub references: &'static [Reference],
     /// Top-level verb this descriptor lives under (e.g. `"kernel"` for
     /// `kernel.verify`). Used by Phase 4 of Epic #3436 to group `clean
-    /// features` output by verb tree. When `Some(root)`, `path[0]` must equal
+    /// features` output by verb tree — grouping that has NOT landed: today nothing
+    /// reads this field outside validation, and `clean features` groups by
+    /// category then stability only. When `Some(root)`, `path[0]` must equal
     /// `root`; `None` opts out of domain-root grouping.
     ///
     /// Default is `None` so pre-Phase-4 descriptor literals continue to
     /// compile without change.
     pub domain_root: Option<&'static str>,
     /// Alias command forms for shortened or alternate invocations (e.g.
-    /// `["clean kern verify", "clean k verify"]`). Each entry is a full
-    /// shell-quoted command as a user would type it, including the `clean`
-    /// prefix. Used by Phase 5 of Epic #3436 to surface abbreviations in
-    /// `clean help <path>` and to drive "did you mean" resolution.
+    /// `["clean kern verify", "clean k verify"]`). For most categories each
+    /// entry is a full command including the `clean` prefix — but
+    /// `Category::OperatorTools` inverts this: the drift gate REQUIRES its
+    /// forms to be a single bare token (the standalone binary's name), no
+    /// `clean` prefix. The Phase-5 uses this doc once promised (`clean help`
+    /// surfacing, "did you mean") have not landed: today the field feeds docs
+    /// and drift gates only.
     ///
     /// Default is `&[]` (no aliases).
     pub alternative_forms: &'static [&'static str],
     /// Cargo feature flag the descriptor is gated behind (e.g.
-    /// `"carcara-verify"`, `"math-overlays"`). Used by Phase 5 of Epic #3436
-    /// to produce actionable missing-feature messages and to filter the
-    /// feature index when a build was compiled without the gate.
+    /// `"carcara-verify"`, `"math-overlays"`). Documentation for readers and
+    /// individual handlers; the Phase-5 uses once promised here (index
+    /// filtering, synthesized missing-feature messages) have not landed —
+    /// nothing filters by this field, and missing-feature errors are each
+    /// handler's own.
     ///
     /// Default is `None` (feature is unconditionally available).
     pub feature_gate: Option<&'static str>,

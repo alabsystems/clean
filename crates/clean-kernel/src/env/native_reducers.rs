@@ -23,6 +23,46 @@ use std::sync::LazyLock;
 /// like `Nat.decEq`, `String.decEq`, `UInt32.decEq`, etc.
 pub type NativeReducerFn = fn(args: &[&Expr]) -> Option<Expr>;
 
+/// Installation custody travels with the actual function, including clones and
+/// local-fact transplants. No serialized flag or public callback constructor can
+/// claim builtin custody. This does not grant native-fold admission.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum NativeReducerRegistration {
+    Builtin(NativeReducerFn),
+    External(NativeReducerFn),
+}
+
+impl NativeReducerRegistration {
+    fn function(&self) -> &NativeReducerFn {
+        match self {
+            Self::Builtin(function) | Self::External(function) => function,
+        }
+    }
+}
+
+/// The existing private builtin code computes only from explicit arguments and
+/// closed constructors; it has no caller local-context provider. Keep that
+/// context-independence invariant in this trusted-code installation owner.
+pub(super) fn owned_builtin_registry(
+) -> &'static std::collections::HashMap<Name, NativeReducerRegistration> {
+    static REGISTRY: LazyLock<std::collections::HashMap<Name, NativeReducerRegistration>> =
+        LazyLock::new(|| {
+            let mut scratch = Environment::default();
+            scratch.init_builtin_native_reducers();
+            scratch
+                .native_reducers
+                .into_iter()
+                .map(|(name, registration)| {
+                    (
+                        name,
+                        NativeReducerRegistration::Builtin(*registration.function()),
+                    )
+                })
+                .collect()
+        });
+    &REGISTRY
+}
+
 /// Well-known names for native reducer registration.
 mod names {
     use crate::name::Name;
@@ -625,12 +665,24 @@ impl Environment {
     /// receives the arguments of a fully-applied constant and returns
     /// `Some(result)` if native reduction succeeds.
     pub fn register_native_reducer(&mut self, name: Name, reducer: NativeReducerFn) {
-        self.native_reducers.insert(name, reducer);
+        self.native_reducers
+            .insert(name, NativeReducerRegistration::External(reducer));
     }
 
     /// Look up a native reducer for a constant.
     pub fn get_native_reducer(&self, name: &Name) -> Option<&NativeReducerFn> {
-        self.native_reducers.get(name)
+        self.native_reducers
+            .get(name)
+            .map(NativeReducerRegistration::function)
+    }
+
+    /// Structural installation custody only: custom registrations keep scoped
+    /// inference, even when they reuse a builtin name or function address.
+    #[cfg(not(debug_assertions))]
+    pub(crate) fn has_only_owned_native_reducers(&self) -> bool {
+        self.native_reducers
+            .values()
+            .all(|registration| matches!(registration, NativeReducerRegistration::Builtin(_)))
     }
 
     /// Register all built-in native reducers.
@@ -1024,7 +1076,7 @@ mod tests {
     /// Test end-to-end: reduce_native on a TypeChecker fires for Nat.decEq.
     #[test]
     fn test_reduce_native_fires_nat_dec_eq() {
-        let mut env = Environment::new();
+        let mut env = Environment::with_prelude();
         env.init_native_reducers();
         let tc = TypeChecker::new(&env);
 

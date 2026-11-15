@@ -125,7 +125,7 @@ fn test_specialize_single_arg() {
     let mut state = ProofState::new(env, target);
 
     // Introduce h : forall (y : Nat), Nat
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // Now we have h : Nat in context, goal is Nat.
     // We need a hypothesis that's actually a Pi type.
@@ -135,15 +135,22 @@ fn test_specialize_single_arg() {
     let target2 = Expr::arrow(inner_pi, nat_ty());
     let mut state2 = ProofState::new(env2, target2);
 
-    intro(&mut state2, "h").unwrap();
+    intro(&mut state2, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // h : forall (x : Nat), Nat. Specialize with 0.
-    let result = specialize_single(&mut state2, "h", nat_lit(0));
+    let result = specialize_single(
+        &mut state2,
+        &clean_parser::SurfaceName::generated_path("h"),
+        nat_lit(0),
+    );
     assert!(result.is_ok(), "specialize with Nat literal should succeed");
 
     // After specialization, h should have type Nat (codomain instantiated)
     let goal = state2.current_goal().unwrap();
-    let h_decl = goal.local_ctx.iter().find(|d| d.name == "h");
+    let h_decl = goal
+        .local_ctx
+        .iter()
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"));
     assert!(h_decl.is_some(), "h should still exist after specialize");
 }
 
@@ -152,7 +159,11 @@ fn test_specialize_nonexistent_fails() {
     let env = setup_nat_env();
     let mut state = ProofState::new(env, nat_ty());
 
-    let result = specialize_single(&mut state, "ghost", nat_lit(0));
+    let result = specialize_single(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("ghost"),
+        nat_lit(0),
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(_))),
         "specialize on nonexistent hypothesis should fail"
@@ -176,11 +187,15 @@ fn test_specialize_multiple_args() {
     let target = Expr::arrow(inner, nat_ty());
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // h : forall (x : Nat) (y : Nat), Nat
     // Specialize with two args
-    let result = specialize_multi(&mut state, "h", &[nat_lit(1), nat_lit(2)]);
+    let result = specialize_multi(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &[nat_lit(1), nat_lit(2)],
+    );
     assert!(
         result.is_ok(),
         "specialize_multi with two Nat args should succeed"
@@ -188,7 +203,10 @@ fn test_specialize_multiple_args() {
 
     // After both specializations, h should be Nat
     let goal = state.current_goal().unwrap();
-    let h_decl = goal.local_ctx.iter().find(|d| d.name == "h");
+    let h_decl = goal
+        .local_ctx
+        .iter()
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"));
     assert!(h_decl.is_some(), "h should exist after multi-specialize");
 }
 
@@ -198,7 +216,11 @@ fn test_specialize_multi_empty_args() {
     let mut state = ProofState::new(env, nat_ty());
 
     // Empty args should be a no-op
-    let result = specialize_multi(&mut state, "anything", &[]);
+    let result = specialize_multi(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("anything"),
+        &[],
+    );
     assert!(
         result.is_ok(),
         "specialize_multi with no args should be no-op"
@@ -210,7 +232,11 @@ fn test_specialize_multi_nonexistent_fails() {
     let env = setup_nat_env();
     let mut state = ProofState::new(env, nat_ty());
 
-    let result = specialize_multi(&mut state, "ghost", &[nat_lit(0)]);
+    let result = specialize_multi(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("ghost"),
+        &[nat_lit(0)],
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(_))),
         "specialize_multi on nonexistent hypothesis should fail"
@@ -276,9 +302,13 @@ fn test_specialize_single_result_not_pi_succeeds() {
     let target = Expr::arrow(forall_fn, f0.clone());
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
-    let result = specialize_multi(&mut state, "h", &[nat_lit(0)]);
+    let result = specialize_multi(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &[nat_lit(0)],
+    );
     assert!(
         result.is_ok(),
         "specialize with a non-Pi result type (f 0) must succeed: {:?}",
@@ -291,7 +321,7 @@ fn test_specialize_single_result_not_pi_succeeds() {
         .local_ctx
         .iter()
         .rev()
-        .find(|d| d.name == "h")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("h should exist after specialize");
     let h_ty = state.whnf(goal, &h_decl.ty);
     assert!(
@@ -317,9 +347,13 @@ fn test_specialize_two_args_result_not_pi_succeeds() {
     let target = Expr::arrow(forall_nm, f01);
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
-    let result = specialize_multi(&mut state, "h", &[nat_lit(0), nat_lit(1)]);
+    let result = specialize_multi(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &[nat_lit(0), nat_lit(1)],
+    );
     assert!(
         result.is_ok(),
         "specialize with two args ending in a non-Pi result (f 0 1) must succeed: {:?}",
@@ -350,15 +384,23 @@ fn test_specialize_implication_codomain_not_pi_succeeds() {
     );
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "h").unwrap(); // h : p -> q
-    intro(&mut state, "hp").unwrap(); // hp : p
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap(); // h : p -> q
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hp")).unwrap(); // hp : p
 
     let hp = {
         let goal = state.current_goal().unwrap();
-        let decl = goal.local_ctx.iter().find(|d| d.name == "hp").unwrap();
+        let decl = goal
+            .local_ctx
+            .iter()
+            .find(|d| d.name == clean_parser::SurfaceName::generated_path("hp"))
+            .unwrap();
         Expr::fvar(decl.fvar)
     };
-    let result = specialize_multi(&mut state, "h", &[hp]);
+    let result = specialize_multi(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &[hp],
+    );
     assert!(
         result.is_ok(),
         "specialize on an implication (codomain q is a bare Prop) must succeed: {:?}",
@@ -382,9 +424,13 @@ fn test_specialize_too_many_args_fails_closed() {
     let target = Expr::arrow(forall_fn, Expr::app(f_const(), nat_lit(0)));
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
-    let result = specialize_multi(&mut state, "h", &[nat_lit(0), nat_lit(1), nat_lit(2)]);
+    let result = specialize_multi(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &[nat_lit(0), nat_lit(1), nat_lit(2)],
+    );
     assert!(
         matches!(result, Err(TacticError::GoalMismatch(_))),
         "specialize with more args than binders must fail closed (GoalMismatch), got {:?}",
@@ -414,14 +460,20 @@ fn test_generalize_replaces_term() {
     // variable `n` and leaves the goal otherwise unchanged (no occurrence to
     // abstract). Verified against `lean`: `generalize n + 1 = m` on a goal not
     // mentioning `n + 1` succeeds.
-    generalize_in_goal(&mut state, nat_lit(42), "n")
-        .expect("generalize over an absent term should still introduce n (Lean 4 semantics)");
+    generalize_in_goal(
+        &mut state,
+        nat_lit(42),
+        &clean_parser::SurfaceName::generated_path("n"),
+    )
+    .expect("generalize over an absent term should still introduce n (Lean 4 semantics)");
 
     let goal = state
         .current_goal()
         .expect("a goal should remain after generalize");
     assert!(
-        goal.local_ctx.iter().any(|d| d.name == "n"),
+        goal.local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("n")),
         "generalize should introduce the fresh variable n even when the term is absent"
     );
 }
@@ -443,7 +495,7 @@ fn test_generalize_at_hypothesis() {
     let target = Expr::arrow(p_a.clone(), a_type.clone());
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // h has type: P a. Generalizing only that local would change its type to
     // `forall (n : A), P n`, which is not definitionally equal to `P a` and
@@ -451,7 +503,12 @@ fn test_generalize_at_hypothesis() {
     // replacement boundary must therefore fail closed rather than retype the
     // existing FVar/metavariable scope in place.
     let old_goal = state.current_goal().unwrap().clone();
-    let result = generalize_at(&mut state, a, "n", "h");
+    let result = generalize_at(
+        &mut state,
+        a,
+        &clean_parser::SurfaceName::generated_path("n"),
+        &clean_parser::SurfaceName::generated_path("h"),
+    );
     assert!(
         matches!(result, Err(TacticError::GoalMismatch(ref detail)) if detail.contains("explicit proof")),
         "generalize_at without a transport proof must fail closed, got: {result:?}"
@@ -476,10 +533,15 @@ fn test_generalize_at_term_not_in_hyp() {
     let target = Expr::arrow(nat_ty(), nat_ty());
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
 
     // h : Nat, try to generalize nat_lit(99) which doesn't appear in Nat
-    let result = generalize_at(&mut state, nat_lit(99), "n", "h");
+    let result = generalize_at(
+        &mut state,
+        nat_lit(99),
+        &clean_parser::SurfaceName::generated_path("n"),
+        &clean_parser::SurfaceName::generated_path("h"),
+    );
     assert!(
         matches!(result, Err(TacticError::InvalidTarget { .. })),
         "generalize_at should fail when term not in hypothesis"
@@ -491,7 +553,12 @@ fn test_generalize_at_nonexistent_hyp() {
     let env = setup_nat_env();
     let mut state = ProofState::new(env, nat_ty());
 
-    let result = generalize_at(&mut state, nat_lit(5), "n", "ghost");
+    let result = generalize_at(
+        &mut state,
+        nat_lit(5),
+        &clean_parser::SurfaceName::generated_path("n"),
+        &clean_parser::SurfaceName::generated_path("ghost"),
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(_))),
         "generalize_at should fail for nonexistent hypothesis"
@@ -509,10 +576,10 @@ fn test_revert_moves_to_goal() {
     let target = Expr::arrow(nat_ty(), nat_ty());
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     // Now: x : Nat |- Nat
 
-    revert_single(&mut state, "x").unwrap();
+    revert_single(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     // After revert: |- Nat -> Nat (Pi type)
     let goal = state.current_goal().unwrap();
@@ -523,7 +590,9 @@ fn test_revert_moves_to_goal() {
 
     // x should no longer be in context
     assert!(
-        goal.local_ctx.iter().all(|d| d.name != "x"),
+        goal.local_ctx
+            .iter()
+            .all(|d| d.name != clean_parser::SurfaceName::generated_path("x")),
         "x should be removed from context after revert"
     );
 }
@@ -539,11 +608,18 @@ fn test_revert_multiple() {
     let target = Expr::arrow(nat_ty(), Expr::arrow(nat_ty(), nat_ty()));
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "x").unwrap();
-    intro(&mut state, "y").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("y")).unwrap();
     // Now: x : Nat, y : Nat |- Nat
 
-    revert_many(&mut state, &["y", "x"]).unwrap();
+    revert_many(
+        &mut state,
+        &[
+            &clean_parser::SurfaceName::generated_path("y"),
+            &clean_parser::SurfaceName::generated_path("x"),
+        ],
+    )
+    .unwrap();
 
     // After revert: |- Nat -> Nat -> Nat
     let goal = state.current_goal().unwrap();
@@ -564,9 +640,15 @@ fn test_revert_many_nonexistent_fails() {
     let target = Expr::arrow(nat_ty(), nat_ty());
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
-    let result = revert_many(&mut state, &["x", "ghost"]);
+    let result = revert_many(
+        &mut state,
+        &[
+            &clean_parser::SurfaceName::generated_path("x"),
+            &clean_parser::SurfaceName::generated_path("ghost"),
+        ],
+    );
     // x succeeds, ghost fails
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(_))),
@@ -596,21 +678,22 @@ fn test_revert_with_dependencies() {
     let target = Expr::pi(BinderInfo::Default, a_type.clone(), inner);
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "x").unwrap();
-    intro(&mut state, "h").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap();
     // x : A, h : P x |- A
 
     // Revert x should also revert h (since h's type mentions x's fvar)
-    let reverted = revert_with_deps(&mut state, "x").unwrap();
+    let reverted =
+        revert_with_deps(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     // Both h and x should be reverted (h first since it depends on x)
     assert!(
-        reverted.contains(&"h".to_string()),
+        reverted.contains(&clean_parser::SurfaceName::generated_path("h")),
         "h should be reverted as dependent of x, reverted: {:?}",
         reverted
     );
     assert!(
-        reverted.contains(&"x".to_string()),
+        reverted.contains(&clean_parser::SurfaceName::generated_path("x")),
         "x should be in the reverted list"
     );
 
@@ -629,19 +712,22 @@ fn test_revert_with_deps_no_dependents() {
     let target = Expr::arrow(nat_ty(), Expr::arrow(nat_ty(), nat_ty()));
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "x").unwrap();
-    intro(&mut state, "y").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("y")).unwrap();
     // x : Nat, y : Nat |- Nat
 
     // Revert y has no dependents
-    let reverted = revert_with_deps(&mut state, "y").unwrap();
+    let reverted =
+        revert_with_deps(&mut state, &clean_parser::SurfaceName::generated_path("y")).unwrap();
     assert_eq!(reverted.len(), 1, "only y should be reverted");
-    assert_eq!(reverted[0], "y");
+    assert_eq!(reverted[0], clean_parser::SurfaceName::generated_path("y"));
 
     // x should still be in context
     let goal = state.current_goal().unwrap();
     assert!(
-        goal.local_ctx.iter().any(|d| d.name == "x"),
+        goal.local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("x")),
         "x should remain in context"
     );
 }
@@ -651,7 +737,10 @@ fn test_revert_with_deps_nonexistent() {
     let env = setup_nat_env();
     let mut state = ProofState::new(env, nat_ty());
 
-    let result = revert_with_deps(&mut state, "ghost");
+    let result = revert_with_deps(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("ghost"),
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(_))),
         "revert_with_deps on nonexistent should fail"
@@ -668,13 +757,13 @@ fn test_revert_then_intro_roundtrip() {
     let target = Expr::arrow(nat_ty(), nat_ty());
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     // x : Nat |- Nat
 
-    revert_single(&mut state, "x").unwrap();
+    revert_single(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     // |- Nat -> Nat
 
-    intro(&mut state, "x2").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x2")).unwrap();
     // x2 : Nat |- Nat
 
     let goal = state.current_goal().unwrap();
@@ -683,5 +772,8 @@ fn test_revert_then_intro_roundtrip() {
         1,
         "should have exactly one hypothesis after roundtrip"
     );
-    assert_eq!(goal.local_ctx[0].name, "x2");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("x2")
+    );
 }

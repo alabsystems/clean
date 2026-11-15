@@ -13,12 +13,12 @@
 //! ```
 //!
 //! ```text
-//! bb0(%0: struct.1017, %1: struct.1017):
+//! bb0(%0: struct.815, %1: struct.815):
 //!     %2 = extractfield u8 %0, 0
 //!     %3 = extractfield u8 %1, 0
 //!     %4 = or u8 %2, %3
-//!     %5 = const struct.1017 { 0 }
-//!     %6 = insertfield struct.1017 %5, 0, %4
+//!     %5 = const struct.815 { 0 }
+//!     %6 = insertfield struct.815 %5, 0, %4
 //!     ret %6
 //! }
 //! ```
@@ -30,7 +30,7 @@
 //! once, and the two write lanes landed in `emitted_cfg.rs` ahead of this
 //! chain, with their discrimination proofs in `lane_matrix_writes.rs`). Every
 //! earlier chain returns a scalar or a constant materialized in one piece;
-//! this body materializes a one-field TEMPLATE (`const struct.1017 { 0 }`) and
+//! this body materializes a one-field TEMPLATE (`const struct.815 { 0 }`) and
 //! writes a COMPUTED value into slot 0 of it. The returned spine is therefore
 //! the template's, not either argument's — `ir_fw_on_junk_tail` executes that:
 //! junk-tailed inputs, clean-tailed output.
@@ -116,14 +116,14 @@ const SRC_FLAT_FLAGS_WITH: &str = "def flat_flags_with (a : FlatFlagsR) (b : Fla
 /// spells the template as the raw `(IRConst.aggv (IRConst.vcons (IRConst.int_
 /// ir_d0) IRConst.vnil))` spine where the hand line named `ir_cvar ir_d0`, and
 /// names its OWN `ir_fw_tflags` alias where the hand line borrowed the sibling
-/// chain's `ir_fc_tflags` (both delta to `IRTy.struct_ 1017`). `ir_fw_func`
+/// chain's `ir_fc_tflags` (both delta to `IRTy.struct_ 815`). `ir_fw_func`
 /// and `ir_fw_module` minted byte-identical; `ir_fw_tflags` is minted-only.
 const MINTED_IR_FW: &str = include_str!("generated/ir_fw.defs.txt");
 
 /// Registration rationales, one per minted line, in script order.
 const MINTED_IR_FW_DOCS: &[&str] = &[
-    "ir_fw_tflags: struct.1017 (FlatFlags), the aggregate this body's const and insertfield name -- the first minted STRUCT the module itself carries. The hand transcription reused the sibling chain's ir_fc_tflags alias here; the mint gives each chain its own namespace, and the two are definitionally equal (both delta to IRTy.struct_ 1017). The crate-level id lives in generated/ir_fw.tags.json, exactly as the 2026-08-19 load-type correction requires of every aggregate the registered term names. DerivedProved, zero axiom_deps.",
-    "ir_fw_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fw.core.txt; reader B's copy of the same body is tests/fixtures/flat_flags_with.trust-ir.txt). Read self.0 into %2, read other.0 into %3, OR them into %4, materialize the one-field TEMPLATE struct.1017 { 0 } into %5, write %4 into field 0 of %5 giving %6, return %6. \n\nThe template-then-write shape is the compiler's, not a stylistic choice here: a transcription that skipped the const and 'constructed' the result directly would be a shorter body than the shipped artifact, and the agg_consts + insertfields lanes of tests/crystal_a1_lineage/flat_flags_with.rs are what make it fail. The insertfield's FIELD INDEX and its source/value operands are compared by the write lane that landed ahead of this chain (lane_matrix_writes.rs carries its discrimination proof). DerivedProved, zero axiom_deps.",
+    "ir_fw_tflags: struct.815 (FlatFlags), the aggregate this body's const and insertfield name -- the first minted STRUCT the module itself carries. The hand transcription reused the sibling chain's ir_fc_tflags alias here; the mint gives each chain its own namespace, and the two are definitionally equal (both delta to IRTy.struct_ 815). The crate-level id lives in generated/ir_fw.tags.json, exactly as the 2026-08-19 load-type correction requires of every aggregate the registered term names. DerivedProved, zero axiom_deps.",
+    "ir_fw_b0: THE WHOLE BODY, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fw.core.txt; reader B's copy of the same body is tests/fixtures/flat_flags_with.trust-ir.txt). Read self.0 into %2, read other.0 into %3, OR them into %4, materialize the one-field TEMPLATE struct.815 { 0 } into %5, write %4 into field 0 of %5 giving %6, return %6. \n\nThe template-then-write shape is the compiler's, not a stylistic choice here: a transcription that skipped the const and 'constructed' the result directly would be a shorter body than the shipped artifact, and the agg_consts + insertfields lanes of tests/crystal_a1_lineage/flat_flags_with.rs are what make it fail. The insertfield's FIELD INDEX and its source/value operands are compared by the write lane that landed ahead of this chain (lane_matrix_writes.rs carries its discrimination proof). DerivedProved, zero axiom_deps.",
     "ir_fw_func: FlatFlags::with as EvalIR -- TWO parameters (self at SSA id 0, other at 1), entry block 0, a single block. Same signature shape as the sibling ir_fc_func. DerivedProved, zero axiom_deps.",
     "ir_fw_module: the module for FlatFlags::with, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text) and reader C (this elaborated term) agree on it, with an EMPTY unwitnessed ledger; see crate::ir_mint. Originally transcribed from measured output -- the verbatim trust-ir trustc emitted for the shipped kernel (irdump2, trustc 10130575c, 2026-08-20; three clean non-incremental builds, byte-identical coverage.json), recorded at tests/fixtures/flat_flags_with.trust-ir.txt and checked graph-for-graph AND instruction-for-instruction, including the NEW insertfields write lane, by tests/crystal_a1_lineage/flat_flags_with.rs. \n\nEVIDENCE BOUNDARY, stated where it can be quoted: the producer's interpreter differential is NOT-RUN on this body (0 samples, recorded in the lineage fixture). The chain's evidence is derived-MIR agreed + markers_exact + flip-lineage equality + the kernel-executed witnesses below -- NOT an interpreter differential, and nothing in this module claims one. DerivedProved, zero axiom_deps.",
 ];
@@ -252,7 +252,7 @@ mod tests {
             minted_line("ir_fw_b0").contains(
                 "IRInst.const_ ir_fw_tflags (IRConst.aggv (IRConst.vcons (IRConst.int_ ir_d0) IRConst.vnil))"
             ),
-            "the TEMPLATE: const struct.1017 {{ 0 }}, transcribed as the aggregate constant it is"
+            "the TEMPLATE: const struct.815 {{ 0 }}, transcribed as the aggregate constant it is"
         );
         assert!(
             minted_line("ir_fw_b0").contains("IRInst.insertfield ir_fw_tflags ir_d5 ir_d0 ir_d4"),

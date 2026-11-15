@@ -1,0 +1,601 @@
+{
+ "schema": "crystal-link3-reconcile-baseline/2",
+ "rule_version": "crystal-link3-reconcile/11",
+ "what": "Crystal link 3 per-call-site reconciliation baseline. Every metric is a BAD count, derived by scripts/crystal_link3_reconcile.py from the artifact below. Do not hand-edit: the seal and the same-artifact reproduction check refuse it. Lower it only with --rebase.",
+ "artifact": {
+  "manifest_path": "$HOME/clean/target/crystal-lane/dump-link-O3-s17b/callees/clean_kernel.callees.manifest.json",
+  "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+  "module_path": "$HOME/clean/target/crystal-lane/dump-link-O3-s17b/callees/clean_kernel.callees.trust-ir.txt",
+  "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef",
+  "module_bytes": 47310097,
+  "obligations": 6273
+ },
+ "subject": {
+  "crate": "clean_kernel",
+  "filter": "local:tc::infer::<impl tc::TypeChecker<'env>>::infer_type",
+  "roots": [
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast::{closure#0}",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc::{closure#0}",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl::{closure#0}",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl::{closure#1}",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner::{closure#0}",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_inner::{closure#1}",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_full",
+   "<local root> -> tc::infer::<impl tc::TypeChecker<'env>>::infer_type_infer_only",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type -> <std::result::Result<T, E> as std::ops::Try>::branch",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type -> <std::result::Result<T, F> as std::ops::FromResidual<std::result::Result<std::convert::Infallible, E>>>::from_residual",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast -> <std::cell::Ref<'_, T> as std::ops::Deref>::deref",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast -> <std::result::Result<T, E> as std::ops::Try>::branch",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast -> <std::sync::Arc<T, A> as std::ops::Deref>::deref",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast -> std::cell::RefCell::<T>::borrow",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc -> <std::cell::RefMut<'_, T> as std::ops::Deref>::deref",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc -> <std::result::Result<T, E> as std::ops::Try>::branch",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc -> <std::result::Result<T, F> as std::ops::FromResidual<std::result::Result<std::convert::Infallible, E>>>::from_residual",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc -> <std::sync::Arc<T, A> as std::convert::AsRef<T>>::as_ref",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc -> std::cell::Cell::<T>::get",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc -> std::cell::RefCell::<T>::borrow_mut",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_arc::{closure#0} -> <std::sync::Arc<T, A> as std::clone::Clone>::clone",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl -> <std::cell::RefMut<'_, T> as std::ops::DerefMut>::deref_mut",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl -> core::bool::<impl bool>::then",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl -> std::cell::Cell::<T>::get",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl -> std::cell::Cell::<T>::set",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_fast_impl -> std::cell::RefCell::<T>::borrow_mut",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_full -> std::cell::Cell::<T>::get",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_full -> std::cell::Cell::<T>::set",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_infer_only -> std::cell::Cell::<T>::get",
+   "tc::infer::<impl tc::TypeChecker<'env>>::infer_type_infer_only -> std::cell::Cell::<T>::set"
+  ]
+ },
+ "metrics": {
+  "escaping_rows_per_instance": 143,
+  "escaping_rows_module_wide": 211,
+  "escaping_call_sites": 603,
+  "silent_havoc_call_sites": 3,
+  "unkeyed_call_sites": 0,
+  "refused_roots": 0,
+  "premise_sites_lowered_as_havoc": 27,
+  "unreconciled": 0,
+  "drop_glue_assumption_sites": 1179
+ },
+ "info": {
+  "manifest_escaping_rows": 143,
+  "manifest_escaping_rows_distinct": 139,
+  "intrinsic_instances": 180,
+  "intrinsic_instances_by_worst_site": {
+   "intrinsic-havoc": 111,
+   "intrinsic-modelled-seq": 68,
+   "unevidenced": 1
+  },
+  "per_instance_reviewers_rule_obligation_names_it": 142,
+  "per_instance_trustir_native_counts_as_modelled": 143,
+  "per_site_reviewers_rule_escaping": 508,
+  "escaping_call_sites_by_class": {
+   "indirect": 9,
+   "intrinsic-havoc": 328,
+   "intrinsic-unevidenced": 95,
+   "mir-unavailable": 160,
+   "virtual": 11
+  },
+  "call_sites_by_classification": {
+   "atomic-seq-premise": 406,
+   "escaping": 603,
+   "foreign-terminal": 27,
+   "member-call": 8792,
+   "panic-terminal": 829
+  },
+  "refused_roots": [],
+  "drop_glue_assumption_obligations": 1197,
+  "drop_glue_assumption_distinct_types": 115,
+  "roots_subsumed": 6,
+  "sites_keyed_by_producer_bb_only": 95,
+  "manifest_intrinsic_rows": 112,
+  "producer_declares_site_evidence": true,
+  "premise_sites_lowered_as_call": 0,
+  "declared_premise_functions": 0
+ },
+ "escaping_callees": [
+  "indirect|clean_kernel::tc::def_eq::delta_helpers::<impl clean_kernel::tc::TypeChecker<'_>>::reduce_native::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>",
+  "indirect|std::thread::local::LocalKey::<clean_kernel::tc::decl_budget::DeclBudget>::try_with::<{closure@crates/clean-kernel/src/tc/decl_budget.rs:125:17: 125:20}, u64>::<__trust_args@b117504927846c57c2d9f0e0c5cdcc99>",
+  "indirect|std::thread::local::LocalKey::<clean_kernel::tc::decl_budget::DeclBudget>::try_with::<{closure@crates/clean-kernel/src/tc/decl_budget.rs:153:17: 153:20}, bool>::<__trust_args@fa3079f16b3e004ff197c7185a745926>",
+  "indirect|std::thread::local::LocalKey::<clean_kernel::tc::decl_budget::DeclBudget>::try_with::<{closure@crates/clean-kernel/src/tc/decl_budget.rs:193:17: 193:20}, bool>::<__trust_args@a6222ff262563431abaa6dcbdbf98a87>",
+  "indirect|std::thread::local::LocalKey::<core::cell::Cell<(u64, u64)>>::try_with::<{closure@std::hash::random::RandomState::new::{closure#0}}, std::hash::random::RandomState>::<__trust_args@8d26bd3cb901d02545be6a46198e3d6f>",
+  "intrinsic|core::intrinsics::align_of_val::<clean_kernel::tc::local_context::LocalContext>::<__trust_args@0321294dbcea109adee7b343f47c07fd>",
+  "intrinsic|core::intrinsics::align_of_val::<str>::<__trust_args@f438e0a5cd6215245b95f2f0eefde2da>",
+  "intrinsic|core::intrinsics::arith_offset::<(clean_kernel::expr::types::FVarId, ())>::<__trust_args@e2e8a5cc2774cf4858ac3452aeb66fef>",
+  "intrinsic|core::intrinsics::arith_offset::<(clean_kernel::expr::types::FVarId, usize)>::<__trust_args@02e3f519f121b2f844a33f578767564d>",
+  "intrinsic|core::intrinsics::arith_offset::<clean_kernel::level::Level>::<__trust_args@2188175c7c24d59812e972b212b2c9e2>",
+  "intrinsic|core::intrinsics::arith_offset::<clean_kernel::tc::heartbeat_profiler::types::ProfileEntry>::<__trust_args@e1c5517f065217fd2356a7d20313bed4>",
+  "intrinsic|core::intrinsics::arith_offset::<clean_kernel::tc::heartbeat_profiler::types::ProfileNameEntry>::<__trust_args@557dcdc887eb46b237b8aec4de7c0d61>",
+  "intrinsic|core::intrinsics::arith_offset::<clean_kernel::tc::heartbeat_profiler::types::ProfilePositionEntry>::<__trust_args@fdfdf686478af3c8e5c6277ec6fe98cc>",
+  "intrinsic|core::intrinsics::arith_offset::<clean_kernel::tc::heartbeat_profiler::types::ProfileTacticEntry>::<__trust_args@3b70d98a6f0ffa4fab6cc9d5fa1590ae>",
+  "intrinsic|core::intrinsics::arith_offset::<clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@d3ecd8d102ee4035e03918af8403359b>",
+  "intrinsic|core::intrinsics::arith_offset::<u32>::<__trust_args@aaa400f0b99a9dd0d60caf0d26fcdec3>",
+  "intrinsic|core::intrinsics::arith_offset::<u8>::<__trust_args@9eb75f82a1f1d141819e81715e8e7e0e>",
+  "intrinsic|core::intrinsics::assert_inhabited::<(clean_kernel::name::Name, clean_kernel::expr::types::MDataValue)>::<__trust_args@a22c1456d8fc5dc1815017eb80422e63>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*const clean_kernel::level::Level>::<__trust_args@6aab761364007513d6ad9113e8061537>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*const clean_kernel::tc::heartbeat_profiler::types::ProfileEntry>::<__trust_args@e9ebf66d5744c2392bb134c1d16dfd4f>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*const clean_kernel::tc::heartbeat_profiler::types::ProfileNameEntry>::<__trust_args@825464f2a840867aeb975db1a528ccb3>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*const clean_kernel::tc::heartbeat_profiler::types::ProfilePositionEntry>::<__trust_args@ac6b711934880cfb8e947b984b232b4e>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*const clean_kernel::tc::heartbeat_profiler::types::ProfileTacticEntry>::<__trust_args@9bcc8d39d6a0d31a05e88fcb668ce295>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*const clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@b016d990d6080e519025401b4254b0a4>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*const u32>::<__trust_args@55c3f6ca151af809ab2c8073ca1860ce>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*mut clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@793791bdb0c1f7d78f2356acc03028e0>",
+  "intrinsic|core::intrinsics::assert_inhabited::<*mut u32>::<__trust_args@12d6139f710e4c149c48b48ee9eb0d74>",
+  "intrinsic|core::intrinsics::assert_inhabited::<alloc::vec::Vec<clean_kernel::tc::reduction::cofib::CofibAtom>>::<__trust_args@484ec787a0226f15d6927b1d3c74f1b7>",
+  "intrinsic|core::intrinsics::assert_inhabited::<clean_kernel::expr::Expr>::<__trust_args@8efbea94db68bd1c5158af1fdcf32aa2>",
+  "intrinsic|core::intrinsics::assert_inhabited::<clean_kernel::level::Level>::<__trust_args@2188175c7c24d59812e972b212b2c9e2>",
+  "intrinsic|core::intrinsics::assert_inhabited::<clean_kernel::tc::expr_location::ExprPathStep>::<__trust_args@735871abafd0ef839a34f2e043811f06>",
+  "intrinsic|core::intrinsics::assert_inhabited::<clean_kernel::tc::local_context::LocalDecl>::<__trust_args@988c94f2533918b4e841e7dab939ccaf>",
+  "intrinsic|core::intrinsics::assert_inhabited::<core::mem::maybe_uninit::MaybeUninit<[&clean_kernel::expr::Expr; 8]>>::<__trust_args@20ad5b3626c0bc1929cdd2770d00650c>",
+  "intrinsic|core::intrinsics::assert_inhabited::<core::mem::maybe_uninit::MaybeUninit<[<clean_kernel::name::Name as core::cmp::Ord>::cmp::NameComponent<'_>; 8]>>::<__trust_args@2ef319df56e57fd026640cc5da0e1e4f>",
+  "intrinsic|core::intrinsics::assert_inhabited::<core::mem::maybe_uninit::MaybeUninit<[clean_kernel::expr::Expr; 8]>>::<__trust_args@41d8585c9ce31a8f7292da7143825d51>",
+  "intrinsic|core::intrinsics::assert_inhabited::<core::mem::maybe_uninit::MaybeUninit<[clean_kernel::level::Level; 2]>>::<__trust_args@f722afbc92bd492505d8c633214d32b0>",
+  "intrinsic|core::intrinsics::cold_path",
+  "intrinsic|core::intrinsics::compare_bytes",
+  "intrinsic|core::intrinsics::copy::<clean_kernel::level::Level>::<__trust_args@2188175c7c24d59812e972b212b2c9e2>",
+  "intrinsic|core::intrinsics::copy::<clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@d3ecd8d102ee4035e03918af8403359b>",
+  "intrinsic|core::intrinsics::copy::<hashbrown::control::tag::Tag>::<__trust_args@bd794f9115b0c9f3dc787ecdd33a1447>",
+  "intrinsic|core::intrinsics::copy::<hashbrown::control::tag::Tag>::<__trust_args@dfdb2bc336fcdbff1da93a9cb2f70a3d>",
+  "intrinsic|core::intrinsics::copy::<u32>::<__trust_args@aaa400f0b99a9dd0d60caf0d26fcdec3>",
+  "intrinsic|core::intrinsics::ctlz::<u64>::<__trust_args@38453d3f917236100a16f2b4c91d4ab8>",
+  "intrinsic|core::intrinsics::ctlz_nonzero::<usize>::<__trust_args@c8da168efb3f7e435104899fbc5ff592>",
+  "intrinsic|core::intrinsics::ctpop::<usize>::<__trust_args@c8da168efb3f7e435104899fbc5ff592>",
+  "intrinsic|core::intrinsics::cttz::<u64>::<__trust_args@38453d3f917236100a16f2b4c91d4ab8>",
+  "intrinsic|core::intrinsics::cttz_nonzero::<u64>::<__trust_args@38453d3f917236100a16f2b4c91d4ab8>",
+  "intrinsic|core::intrinsics::exact_div::<usize>::<__trust_args@c8da168efb3f7e435104899fbc5ff592>",
+  "intrinsic|core::intrinsics::ptr_offset_from::<(clean_kernel::cache::TypeCheckId, clean_kernel::expr::Expr)>::<__trust_args@a96a430b02237ebec709bc9cb1737960>",
+  "intrinsic|core::intrinsics::ptr_offset_from::<(clean_kernel::expr::Expr, clean_kernel::expr::Expr)>::<__trust_args@c78ca77c85241c72439a00316d1704d6>",
+  "intrinsic|core::intrinsics::ptr_offset_from::<(clean_kernel::expr::types::FVarId, usize)>::<__trust_args@02e3f519f121b2f844a33f578767564d>",
+  "intrinsic|core::intrinsics::ptr_offset_from::<(clean_kernel::tc::def_eq::DefEqCacheKey, ())>::<__trust_args@45b7b6823f86c1c559d3946db01a0cee>",
+  "intrinsic|core::intrinsics::ptr_offset_from::<(clean_kernel::tc::def_eq::DefEqCacheKey, bool)>::<__trust_args@75104a75551fad77c43059c1d609a7d0>",
+  "intrinsic|core::intrinsics::ptr_offset_from::<(core::option::Option<clean_kernel::expr::types::FVarId>, std::collections::hash::map::HashMap<clean_kernel::tc::infer_arc_memo::InferArcMemoNode, (alloc::sync::Arc<clean_kernel::expr::Expr>, clean_kernel::expr::Expr, core::option::Option<alloc::sync::Arc<clean_kernel::cert::types::ProofCert>>)>)>::<__trust_args@efd904cc7d1df724c9d4d1e2cfd4da7a>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<&clean_kernel::expr::Expr>::<__trust_args@682bda810a594fc633cff984d1adc61e>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<(clean_kernel::tc::reduction::cofib::Cofib, clean_kernel::expr::Expr)>::<__trust_args@8e36c20842d23ea2c198ea713cab35a7>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<<clean_kernel::name::Name as core::cmp::Ord>::cmp::NameComponent<'_>>::<__trust_args@f05ce7ec1810db2d48f3422b34cd2f6a>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<alloc::vec::Vec<clean_kernel::tc::reduction::cofib::CofibAtom>>::<__trust_args@484ec787a0226f15d6927b1d3c74f1b7>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::expr::Expr>::<__trust_args@8efbea94db68bd1c5158af1fdcf32aa2>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::level::Level>::<__trust_args@2188175c7c24d59812e972b212b2c9e2>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::name::Name>::<__trust_args@b30ee1ff15b64bf7433786b66af2ecf5>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::tc::heartbeat_profiler::types::ProfileEntry>::<__trust_args@e1c5517f065217fd2356a7d20313bed4>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::tc::heartbeat_profiler::types::ProfileNameEntry>::<__trust_args@557dcdc887eb46b237b8aec4de7c0d61>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::tc::heartbeat_profiler::types::ProfilePositionEntry>::<__trust_args@fdfdf686478af3c8e5c6277ec6fe98cc>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::tc::heartbeat_profiler::types::ProfileTacticEntry>::<__trust_args@3b70d98a6f0ffa4fab6cc9d5fa1590ae>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@d3ecd8d102ee4035e03918af8403359b>",
+  "intrinsic|core::intrinsics::ptr_offset_from_unsigned::<u32>::<__trust_args@aaa400f0b99a9dd0d60caf0d26fcdec3>",
+  "intrinsic|core::intrinsics::rotate_left::<u64>::<__trust_args@38453d3f917236100a16f2b4c91d4ab8>",
+  "intrinsic|core::intrinsics::saturating_add::<u32>::<__trust_args@aaa400f0b99a9dd0d60caf0d26fcdec3>",
+  "intrinsic|core::intrinsics::saturating_add::<u64>::<__trust_args@38453d3f917236100a16f2b4c91d4ab8>",
+  "intrinsic|core::intrinsics::saturating_add::<usize>::<__trust_args@c8da168efb3f7e435104899fbc5ff592>",
+  "intrinsic|core::intrinsics::saturating_sub::<u32>::<__trust_args@aaa400f0b99a9dd0d60caf0d26fcdec3>",
+  "intrinsic|core::intrinsics::saturating_sub::<usize>::<__trust_args@c8da168efb3f7e435104899fbc5ff592>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *const clean_kernel::level::Level>::<__trust_args@64b91d0abc39e7fdc5b49e4c70fa6777>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *const clean_kernel::tc::heartbeat_profiler::types::ProfileEntry>::<__trust_args@b5fecfde57e159721a0ec403b54da48f>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *const clean_kernel::tc::heartbeat_profiler::types::ProfileNameEntry>::<__trust_args@9d61a61272732e4c30653b5a1d287eb0>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *const clean_kernel::tc::heartbeat_profiler::types::ProfilePositionEntry>::<__trust_args@bc93ce61f6ce24257f7dac81a095354b>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *const clean_kernel::tc::heartbeat_profiler::types::ProfileTacticEntry>::<__trust_args@921aa457e3506a9d47d8c787cb42da23>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *const clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@65f20029d0c159183fa54a04ecbe6caf>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *const u32>::<__trust_args@9cd21cc736d33347fa954aa5e10b22e5>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *mut clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@865bcbd63b5151aefe734429aa8a7dd5>",
+  "intrinsic|core::intrinsics::select_unpredictable::<*mut *mut u32>::<__trust_args@5b5a069c3cbb770cc10bd7b4dff08c06>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*const clean_kernel::level::Level>>::<__trust_args@85997ee4f38c6dc7f95c4458842c6b02>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*const clean_kernel::tc::heartbeat_profiler::types::ProfileEntry>>::<__trust_args@629eefea3a5bfe2c0e631ef3c2c404de>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*const clean_kernel::tc::heartbeat_profiler::types::ProfileNameEntry>>::<__trust_args@23b380e1582954dce2f042586f928883>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*const clean_kernel::tc::heartbeat_profiler::types::ProfilePositionEntry>>::<__trust_args@50fc1f8154e1e3168c6ca661a1150740>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*const clean_kernel::tc::heartbeat_profiler::types::ProfileTacticEntry>>::<__trust_args@7e66d0e717570a7fd8b0f5793334a5a0>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*const clean_kernel::tc::reduction::cofib::CofibAtom>>::<__trust_args@8a57d056240b592279a09678c337bb28>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*const u32>>::<__trust_args@d716f07961a74236b3e6ca62469e96d7>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*mut clean_kernel::tc::reduction::cofib::CofibAtom>>::<__trust_args@ebc06faa85a85908f96006f2291f7c40>",
+  "intrinsic|core::intrinsics::select_unpredictable::<core::mem::maybe_uninit::MaybeUninit<*mut u32>>::<__trust_args@3797a269fe70b84c5f2aea4301e4a871>",
+  "intrinsic|core::intrinsics::simd::simd_eq::<core::core_arch::arm_shared::neon::uint8x8_t, core::core_arch::arm_shared::neon::uint8x8_t>::<__trust_args@628ecb08a7b934c879fa8f4708912184>",
+  "intrinsic|core::intrinsics::simd::simd_extract::<core::core_arch::arm_shared::neon::uint64x1_t, u64>::<__trust_args@ce6c692013fe3984b2d6a27458d0631a>",
+  "intrinsic|core::intrinsics::simd::simd_ge::<core::core_arch::arm_shared::neon::int8x8_t, core::core_arch::arm_shared::neon::uint8x8_t>::<__trust_args@c8f3cacb17f291d114a0f53171cf87b0>",
+  "intrinsic|core::intrinsics::simd::simd_lt::<core::core_arch::arm_shared::neon::int8x8_t, core::core_arch::arm_shared::neon::uint8x8_t>::<__trust_args@c8f3cacb17f291d114a0f53171cf87b0>",
+  "intrinsic|core::intrinsics::simd::simd_or::<core::core_arch::arm_shared::neon::uint8x8_t>::<__trust_args@611d3b990e33be258b6219243fa60c76>",
+  "intrinsic|core::intrinsics::simd::simd_splat::<core::core_arch::arm_shared::neon::uint8x8_t, u8>::<__trust_args@46f29ec32ff68a1336abcb1281272271>",
+  "intrinsic|core::intrinsics::size_of_val::<[clean_kernel::tc::reduction::cofib::CofibAtom]>::<__trust_args@b28d1fe76a4fc68d375e0afb31e0a5ae>",
+  "intrinsic|core::intrinsics::size_of_val::<[u32]>::<__trust_args@97135f0f258011ba174b83e52c99d0d0>",
+  "intrinsic|core::intrinsics::size_of_val::<[u64]>::<__trust_args@7442ffbaf45338669552b7064418d1c7>",
+  "intrinsic|core::intrinsics::size_of_val::<[u8]>::<__trust_args@b0d20c9dc161b48862be22aa96143f29>",
+  "intrinsic|core::intrinsics::size_of_val::<clean_kernel::tc::local_context::LocalContext>::<__trust_args@0321294dbcea109adee7b343f47c07fd>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<&clean_kernel::expr::Expr>::<__trust_args@682bda810a594fc633cff984d1adc61e>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<<clean_kernel::name::Name as core::cmp::Ord>::cmp::NameComponent<'_>>::<__trust_args@f05ce7ec1810db2d48f3422b34cd2f6a>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<clean_kernel::level::Level>::<__trust_args@2188175c7c24d59812e972b212b2c9e2>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<clean_kernel::tc::heartbeat_profiler::types::ProfileEntry>::<__trust_args@e1c5517f065217fd2356a7d20313bed4>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<clean_kernel::tc::heartbeat_profiler::types::ProfileNameEntry>::<__trust_args@557dcdc887eb46b237b8aec4de7c0d61>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<clean_kernel::tc::heartbeat_profiler::types::ProfilePositionEntry>::<__trust_args@fdfdf686478af3c8e5c6277ec6fe98cc>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<clean_kernel::tc::heartbeat_profiler::types::ProfileTacticEntry>::<__trust_args@3b70d98a6f0ffa4fab6cc9d5fa1590ae>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<clean_kernel::tc::reduction::cofib::CofibAtom>::<__trust_args@d3ecd8d102ee4035e03918af8403359b>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<hashbrown::raw::RawTableInner>::<__trust_args@6d4a0d8a61c0bfa7e6d84e14969c57ef>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<hashbrown::raw::RawTableInner>::<__trust_args@76f754a887b578ab9847721848b31ba8>",
+  "intrinsic|core::intrinsics::typed_swap_nonoverlapping::<u32>::<__trust_args@aaa400f0b99a9dd0d60caf0d26fcdec3>",
+  "intrinsic|core::intrinsics::write_bytes::<core::mem::maybe_uninit::MaybeUninit<hashbrown::control::tag::Tag>>::<__trust_args@4b0bc281b2c3fd0f74398f7426e06a1d>",
+  "intrinsic|core::intrinsics::write_bytes::<core::mem::maybe_uninit::MaybeUninit<hashbrown::control::tag::Tag>>::<__trust_args@add17ff8f331ba624aba8c7a83d92a29>",
+  "intrinsic|core::intrinsics::write_bytes::<u8>::<__trust_args@9eb75f82a1f1d141819e81715e8e7e0e>",
+  "mir-unavailable|<alloc::string::String as core::clone::Clone>::clone",
+  "mir-unavailable|__trust_crate@c82c5f8d9d3d6b59::hashbrown::raw::Fallibility::alloc_err",
+  "mir-unavailable|__trust_crate@c82c5f8d9d3d6b59::hashbrown::raw::Fallibility::capacity_overflow",
+  "mir-unavailable|ahash::random_state::RandomState::from_keys",
+  "mir-unavailable|alloc::sync::arcinner_layout_for_value_layout",
+  "mir-unavailable|core::fmt::Formatter::<'_>::debug_tuple_field1_finish::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>",
+  "mir-unavailable|core::fmt::num::imp::<impl core::fmt::Display for u32>::fmt",
+  "mir-unavailable|core::slice::memchr::memchr_aligned",
+  "mir-unavailable|core::slice::sort::stable::drift::sqrt_approx",
+  "mir-unavailable|foldhash::seed::gen_per_hasher_seed",
+  "mir-unavailable|foldhash::seed::global::GlobalSeed::init_slow",
+  "mir-unavailable|getrandom::backends::getentropy::util_libc::last_os_error",
+  "mir-unavailable|stacker::_grow",
+  "mir-unavailable|stacker::remaining_stack",
+  "mir-unavailable|std::sys::random::hashmap_random_keys",
+  "mir-unavailable|std::sys::sync::once::queue::Once::call",
+  "virtual|<dyn ahash::random_state::RandomSource as ahash::random_state::RandomSource>::gen_hasher_seed::<__trust_args@069a182c7060ffeec9ade85b5180d736>",
+  "virtual|<dyn clean_kernel::env::ConstantSource as clean_kernel::env::ConstantSource>::get::<__trust_args@b4fd7adf6686f877499c8e199842ec5b>",
+  "virtual|<dyn core::ops::function::FnMut(usize) -> bool as core::ops::function::FnMut<(usize,)>>::call_mut::<__trust_args@2242312e14b2b011fbab981b193530dd>",
+  "virtual|<dyn for<'_, '_> core::ops::function::Fn(&'_ clean_kernel::level::Level, &'_ clean_kernel::level::Level) -> bool as core::ops::function::Fn<(&clean_kernel::level::Level, &clean_kernel::level::Level)>>::call::<__trust_args@98818953af06e289491832949fb32256>",
+  "virtual|<dyn for<'_> core::ops::function::Fn(&'_ mut hashbrown::raw::RawTableInner, usize) -> u64 as core::ops::function::Fn<(&mut hashbrown::raw::RawTableInner, usize)>>::call::<__trust_args@6aa00c49fea7875f28fa8d3ffbe697a9>",
+  "virtual|<dyn for<'_> core::ops::function::Fn(&'_ mut hashbrown::raw::RawTableInner, usize) -> u64 as core::ops::function::Fn<(&mut hashbrown::raw::RawTableInner, usize)>>::call::<__trust_args@cf86d4bc5a6c9dbd6fbeda899dfc5ef8>"
+ ],
+ "site_table_sha256": "67fa0217407d65d23d636124927a2ab1ec45b7d130772d1fc7c7e6e0f9891c30",
+ "history": [
+  {
+   "date": "2026-09-24T06:14:25Z",
+   "reason": "Initial baseline, 2026-09-23, rule /2 after adversarial review: per-call-site reconciliation of dump-link-O3-dp (control arm, prebuilt sysroot). Replaces the manifest's 31 (a vacuous intrinsic fold; decision memo B6 / section 6 step 3). Adds, per review: subject pin (crate, filter, roots multiset), unmatched silent-havoc sites counted as unreconciled, foreign terminals must be {extern#N} items, unknown [trust-*-assumption] tags refused, and unproven drop-glue sites (MIR Drop edges the walk never follows) ratcheted separately. Every figure is derived from the artifact by this script.",
+   "script_sha256": "a09662d5457ab11070e92a251901a71509c01694de2a9bb643e102ef80cf1666",
+   "artifact": {
+    "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+    "module_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 95,
+    "refused_roots": 6,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   }
+  },
+  {
+   "date": "2026-09-24T20:55:33Z",
+   "reason": "Step 17 (callee-sidecar ledger), rule /2 -> /3 through the declared migration (the /2 baseline's own artifact dump-link-O3-dp reproduces every figure, the pinned callee set and the site-table digest under /3). New artifact: dump-link-O3-s17b, the SHIPPING eight-lane configuration, cut by seal-s17 (trust wmain 22e3134189 + uncommitted callee_sidecar.rs step-17 edits). unkeyed_call_sites 95 -> 0: the v3 producer's MIR bb keys every row and /3 verifies each row against the module evidence AT its bb; the 95 cold_path sites carry no module trace, so they are keyed by the producer's bb ALONE (info sites_keyed_by_producer_bb_only=95) and stay escaping as intrinsic-unevidenced -- a producer KEY is accepted, never a producer verdict. refused_roots 6 -> 0: the six infer_type_fast* closure roots are recorded subsumed by the producer (DefId-matched Item member plus a named parent member edge) and each is independently re-verified here (member id, Item body, instance path, uniqueness, parent edge). Every other ratcheted figure is unchanged; the producer's 829 per-site intrinsic verdicts and its 112 Intrinsic escaping rows agree with this script's re-derivation (unreconciled 0), and per_instance stays 211 (the manifest's own trust-ir-rule count is 143).",
+   "script_sha256": "7305aea5ce2e7c82a60236b7664f32d491a46d52171142803653dd71c9074ebb",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 95,
+    "refused_roots": 6,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+    "module_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/2",
+    "to": "crystal-link3-reconcile/3",
+    "why": "/3 keys a v3 manifest's sites by the producer's MIR `bb` (verified against the block's module evidence), re-derives and cross-checks the producer's per-site intrinsic `evidence`, stops counting a manifest `Intrinsic` escaping row twice, and credits a `subsumed:` root only after verifying it; on a v2 manifest (the /2 baseline's artifact) none of these applies, so the old artifact must measure identically",
+    "old_artifact_reproduced_exactly": true
+   }
+  },
+  {
+   "date": "2026-09-24T22:19:25Z",
+   "reason": "Step 18 (premise-decls lane, first increment): rule /3 -> /4 through the declared migration, re-pinned on the baseline's OWN artifact dump-link-O3-s17b, which reproduces every figure, the pinned escaping-callee set and the site-table digest under /4 (it carries no declaration). /4 admits bodiless declarations after the members only for {extern#N} foreign items named by a manifest whose producer declares premise_decls, and counts a foreign-terminal site lowered as call @decl (obligation kept, no halting assert) as a premise lowered as a CALL. The lane-ON dump (dump-link-O3-s18on, seal-s18) measures premise_sites_lowered_as_havoc 27 -> 0 with every other figure and the site-table digest equal; it is NOT locked in here because the lane is off by default and a lane-off shipping dump must keep passing.",
+   "script_sha256": "a70e8aaedfdfc4147f7f72af666dd656bed1e4809ead1fe1ee10f1ab7ce57ad8",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/3",
+    "to": "crystal-link3-reconcile/4",
+    "why": "/4 admits bodiless DECLARATIONS after the members (#functions = #members + #declarations; each bodiless, unique, an {extern#N} foreign item, called by a member) -- the trust bridge's `premise-decls` lane lowers a FOREIGN premise as `call @decl` instead of `assert false; undef` -- and counts a foreign-terminal site whose block holds that call and no halting assert as a premise lowered as a CALL, not in premise_sites_lowered_as_havoc. The site's classification is unchanged (foreign-terminal), so the site table is too. A /3 artifact carries no declaration, so it must measure identically",
+    "old_artifact_reproduced_exactly": true
+   }
+  },
+  {
+   "date": "2026-09-25T00:44:05Z",
+   "reason": "rule /4 -> /5 (foreign-callback lane, cmpxchg-by-strength, untypeable-callable absent-callee spelling, ub-terminal): migrated on the baseline's own s17b artifact, which must reproduce exactly",
+   "script_sha256": "984febbafdf5c955bfe4a2bf1f9a7118145590e0356d6d565d43aa3246b701a6",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/4",
+    "to": "crystal-link3-reconcile/5",
+    "why": "/5 admits the trust sidecar's `foreign-callback` lane -- a call row classed `foreign-callback-terminal: <callee>` (a foreign item whose signature takes a function pointer) is a PREMISE counted separately from `foreign-terminal`, only when the manifest's `foreign_callbacks` row carries a contract, names the site and lists member callbacks -- and keys native `cmpxchg` evidence by strength (`cmpxchg weak` is evidence for `atomic_cxchgweak` only, plain `cmpxchg` for `atomic_cxchg` only). A /4 artifact carries no foreign-callback row and no weak cmpxchg, and its strong cmpxchg sites are evidence exactly as before; /5 also reads the bridge's `indirect call `X` through an untypeable callable receiver` absent-callee spelling as naming X (a /4 run REFUSED an artifact carrying one, so no /4 baseline holds one), and reads a `ub-terminal` row (the sidecar's undefined-behavior halt, one predicate with the bridge's) evidenced by the bridge's `reaching `X` is undefined behavior` obligation, which /4 did not collect, so a /4 artifact holding one gains evidence and cannot reproduce. So a /4 artifact must measure identically",
+    "old_artifact_reproduced_exactly": true
+   }
+  },
+  {
+   "date": "2026-09-25T03:14:53Z",
+   "reason": "rule /6 (crystal plan step 18): a call_indirect lowered WITHOUT its fail-closed marker (the trust sidecar's indirect-by-value lane) is admitted only from a manifest naming the lane and an all-member, scan-complete indirect row, and is counted in the informational indirect_sites_dispatched_by_value; the baseline's own artifact (dump-link-O3-s17b) carries the marker before every call_indirect, so it reproduces exactly",
+   "script_sha256": "2c681200396cdec4259502ef789a2c4e86995c8b62df6f13f915e4fb6b9a659e",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/5",
+    "to": "crystal-link3-reconcile/6",
+    "why": "/6 reads the trust sidecar's VALUE lanes (crystal plan step 18). A `call_indirect` whose block carries no `assert` of a `const bool false` (the bridge's fail-closed marker) dispatches BY VALUE, and it is admitted only from a manifest whose producer block names the `indirect-by-value` lane AND whose indirect row for that member states an enumeration that is all members and unmarked by the crate-wide scan; anything else is REFUSED. Such a site keeps its `indirect` classification (it is still escaping for `closed`) and is also counted in the informational `indirect_sites_dispatched_by_value`. Every /5 artifact carries the marker in front of every call_indirect (memo B6, measured), so it must measure identically",
+    "old_artifact_reproduced_exactly": true
+   }
+  },
+  {
+   "date": "2026-09-25T05:12:02Z",
+   "reason": "rule /6 -> /7 at the merge of crystal/c-e3 (crystal E3): /7 admits skipped block labels only under a declared abort_cleanup lane; migrated on the baseline's own artifact, which must reproduce exactly",
+   "script_sha256": "2611f4ced538990c858deede833bae26834d7d76148c7339f5bb7ea67a021162",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/6",
+    "to": "crystal-link3-reconcile/7",
+    "why": "/7 admits a module whose block labels SKIP (crystal E3): the trust bridge's `abort-cleanup` lane lowers no unwind cleanup edge, so a member's cleanup blocks are unreachable and are not lowered, and the labels (still MIR block indices) may then have holes. /7 accepts such a module only from a manifest whose producer block names `abort_cleanup`, and no row may be keyed to a skipped label; anything else is REFUSED. A /6 artifact has dense labels and no such lane, so it must measure identically",
+    "old_artifact_reproduced_exactly": true
+   }
+  },
+  {
+   "date": "2026-09-25T07:22:26Z",
+   "reason": "crystal plan step 19 + decision D9 (decision memo section 14): rule /7 -> /9 on the baseline's OWN artifact dump-link-O3-s17b. /8 (the trust sidecar's intrinsic-arms lane: exact-arm evidence, supplied intrinsic bodies, charged preconditions; ctpop imaged) is a pure refinement there (no tag, no supplied body, no lane). /9 is D9: a native atomic the Clean projector images by sequential expansion is an atomic-seq-premise site under the ENVIRONMENT premise SEQ, a DECLARED RECLASSIFICATION -- the artifact reproduces the baseline's site-table digest exactly once the one move (atomic-seq-premise -> escaping/intrinsic-unprojectable) is undone, 406 sites moved, no ratcheted figure rose",
+   "script_sha256": "a214a40b10e3f99bf9fd8509f26d95de0da9da00bc346b593dbf8a01ca97d417",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 143,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 603,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 211,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 1009,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/7",
+    "to": "crystal-link3-reconcile/9",
+    "why": "/8 reads the trust sidecar's `intrinsic-arms` lane (crystal plan step 19): an intrinsic site lowered as its exact arm (instructions tagged custom(1900000+k), the head's template, only projectable opcodes, a charged precondition carried as its `[trust-intrinsic-precondition]` obligation, `compare_bytes` calling a supplied body) is `intrinsic-modelled` with evidence `exact-arm:<head>`, admitted only from a manifest whose producer names the lane; the module may carry supplied intrinsic bodies between the members and the declarations. /8 also images `ctpop` (the projector's U::CtPop). A /7 artifact carries no tag, no supplied body, no precondition obligation, no ctpop op and no lane, so it must measure identically",
+    "reclassification": {
+     "atomic-seq-premise": [
+      "escaping",
+      "intrinsic-unprojectable"
+     ]
+    },
+    "reclassified_sites": 406,
+    "old_artifact_reproduced_modulo_reclassification": true
+   }
+  },
+  {
+   "date": "2026-09-25T09:48:01Z",
+   "reason": "crystal D1: rule /10 -- a by-value call_indirect is admitted only when every enumerated target (an unambiguous tiling of member names) is declared at the call's own functy definition and the call passes its arity; the shim-adapter shape needs its lane named; tls_cells rows (decision D11) are validated and the TLS premise's ops counted; a pure refinement on the baseline's own artifact (dump-link-O3-s17b), which carries the marker before every call_indirect and no rows",
+   "script_sha256": "72a0634c73e7714f7c64e1696aa80c9629523fca10b130a7ac9be368b6bbccf6",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 143,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 603,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 143,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 603,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/9",
+    "to": "crystal-link3-reconcile/10",
+    "why": "/10 is crystal D1: a markerless call_indirect (rule /6) is admitted only when, in addition, every target its member's indirect row enumerates -- read by an UNAMBIGUOUS tiling of member names -- is a function whose declared functy DEFINITION equals the call's and the call passes that functy's arity (the bridge's exactness claim, re-derived); a call shaped as the trust sidecar's `shim-adapter` (the unit environment `const () phantomdata`, then the argument tuple as one `insertfield` per lane over a typed `const (..) {..}` seed, each lane written once) is admitted only from a producer naming that lane, and counted in `indirect_sites_dispatched_through_shim_adapter`; a manifest's `tls_cells` rows (lane `tls-cells`, decision D11) are validated and the TLS input premise's ops counted, information only. Every /9 artifact carries the marker in front of every call_indirect and no `tls_cells` rows, so it must measure identically",
+    "old_artifact_reproduced_exactly": true
+   }
+  },
+  {
+   "date": "2026-09-25T11:25:15Z",
+   "reason": "rule /11 (crystal decision memo section 18): a ub-terminal row's evidence is the UB obligation SITING the halting assert the Clean projector images as unreachable (fn ub_halt_image), and supplied ABI thunks (the trust sidecar's fnptr-thunks lane, decision D13) are admitted and a shim site is credited through its exact thunk; migrated on the baseline's own artifact (dump-link-O3-s17b), which carries no thunk and no ub-terminal site, so every figure reproduces",
+   "script_sha256": "473dc83e7f5a9ed921af4f2d362a60e1a1b09e8da6f603293ac36e0505bb3b66",
+   "artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "metrics": {
+    "escaping_rows_per_instance": 143,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 603,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_metrics": {
+    "escaping_rows_per_instance": 143,
+    "escaping_rows_module_wide": 211,
+    "escaping_call_sites": 603,
+    "silent_havoc_call_sites": 3,
+    "unkeyed_call_sites": 0,
+    "refused_roots": 0,
+    "premise_sites_lowered_as_havoc": 27,
+    "unreconciled": 0,
+    "drop_glue_assumption_sites": 1179
+   },
+   "from_artifact": {
+    "manifest_sha256": "d6421a25b57db4b04d05def929eff53cced0d8b432300ccb5811a54fdbb370a1",
+    "module_sha256": "a65518bd39bb58ffb61b7f1186b1b0a03f7f4c4c229a651fd028e6cdf9b396ef"
+   },
+   "rule_migration": {
+    "from": "crystal-link3-reconcile/10",
+    "to": "crystal-link3-reconcile/11",
+    "why": "/11 is decision memo \u00a718. (a) A `ub-terminal` row's evidence moves to what the Clean projector images: the bridge's `reaching `X` is undefined behavior` obligation must SITE the halting `assert` of a `const bool false` bound before it in that block -- the node the projector's `fn ub_halt_image` images as `unreachable` (ub, refused by E2's sanctioned-panic arm), not merely stand beside some false assert. (b) Crystal D13: SUPPLIED ABI thunks (`; #producer: trust-abi-thunk`, the trust sidecar's `fnptr-thunks` lane) may follow the supplied intrinsic bodies, each checked to be EXACTLY the rust-call spread of one member shim, and a markerless call_indirect whose enumerated targets are shims is admitted through their thunks when each thunk is declared at the call's functy and no constant names a shim as a value; counted in `indirect_sites_dispatched_through_abi_thunk`. Every /10 artifact carries no thunk, and the bridge sites every UB halt obligation at its halting assert, so it must measure identically",
+    "old_artifact_reproduced_exactly": true
+   }
+  }
+ ],
+ "seal": "32af5fa574d2848b9c9282e6ed4d8b07711d4fbe2ac150262cb2667bd1893368"
+}

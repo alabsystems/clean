@@ -6,10 +6,18 @@
 
 use super::*;
 
-fn recursive_extra_param(name: &str, binder_info: BinderInfo) -> RecursiveExtraParam {
-    RecursiveExtraParam {
-        name: name.to_string(),
+fn recursive_param(
+    name: &'static str,
+    binder_info: BinderInfo,
+    fvar: FVarId,
+    type_: Expr,
+) -> RecursiveParam {
+    RecursiveParam {
+        name: SurfaceName::generated_path(name),
         binder_info,
+        captured_section: false,
+        fvar,
+        type_,
     }
 }
 
@@ -26,30 +34,37 @@ fn test_is_match_on_decreasing_arg_basic() {
 
     // Set up a recursive def context
     ctx.recursive_def_ctx = Some(RecursiveDefContext {
-        func_name: "f".to_string(),
+        func_name: SurfaceName::generated_path("f"),
         decreasing_arg_pos: 0,
-        decreasing_arg_name: "n".to_string(),
+        decreasing_arg_name: SurfaceName::generated_path("n"),
         inductive_type_name: None,
         ih_fvar: None,
         ih_type: None,
         ih_map: HashMap::new(),
         sibling_names: Vec::new(),
-        extra_params: vec![],
+        sibling_types: Vec::new(),
+        parameters: vec![],
+        generalized_params: Vec::new(),
+        index_params: Vec::new(),
         wf_measure: None,
+        outer_locals_floor: None,
     });
 
     // Test: scrutinee matches decreasing arg
-    let scrutinee = SurfaceExpr::Ident(Span::new(0, 1), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::new(0, 1), SurfaceName::generated_path("n"));
     assert!(ctx.is_match_on_decreasing_arg(&scrutinee));
 
     // Test: scrutinee doesn't match
-    let scrutinee2 = SurfaceExpr::Ident(Span::new(0, 1), "m".to_string());
+    let scrutinee2 = SurfaceExpr::Ident(Span::new(0, 1), SurfaceName::generated_path("m"));
     assert!(!ctx.is_match_on_decreasing_arg(&scrutinee2));
 
     // Test: parenthesized scrutinee matches
     let scrutinee3 = SurfaceExpr::Paren(
         Span::new(0, 3),
-        Box::new(SurfaceExpr::Ident(Span::new(1, 2), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::new(1, 2),
+            SurfaceName::generated_path("n"),
+        )),
     );
     assert!(ctx.is_match_on_decreasing_arg(&scrutinee3));
 
@@ -58,7 +73,10 @@ fn test_is_match_on_decreasing_arg_basic() {
         Span::new(0, 5),
         Box::new(SurfaceExpr::Paren(
             Span::new(1, 4),
-            Box::new(SurfaceExpr::Ident(Span::new(2, 3), "n".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::new(2, 3),
+                SurfaceName::generated_path("n"),
+            )),
         )),
     );
     assert!(ctx.is_match_on_decreasing_arg(&scrutinee4));
@@ -72,7 +90,7 @@ fn test_is_match_on_decreasing_arg_no_context() {
     let ctx = ElabCtx::new(&env);
 
     // Without recursive context, should always return false
-    let scrutinee = SurfaceExpr::Ident(Span::new(0, 1), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::new(0, 1), SurfaceName::generated_path("n"));
     assert!(!ctx.is_match_on_decreasing_arg(&scrutinee));
 }
 
@@ -89,36 +107,45 @@ fn test_recursive_call_ih_substitution() {
     let mut ctx = ElabCtx::new(&env);
 
     // Create a fresh IH fvar to use in the test
+    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
+    let k_fvar = ctx.push_local(SurfaceName::generated_path("k"), nat_ty.clone());
     let ih_fvar = ctx.push_local(
-        "ih_k".to_string(),
+        SurfaceName::generated_path("ih_k"),
         Expr::const_(Name::from_string("Nat"), vec![]),
     );
 
     // Set up recursive context: function "f" with decreasing arg at position 0
     let mut ih_map = HashMap::new();
-    ih_map.insert("k".to_string(), ih_fvar);
+    ih_map.insert(k_fvar, ih_fvar);
 
     ctx.recursive_def_ctx = Some(RecursiveDefContext {
-        func_name: "f".to_string(),
+        func_name: SurfaceName::generated_path("f"),
         decreasing_arg_pos: 0,
-        decreasing_arg_name: "n".to_string(),
+        decreasing_arg_name: SurfaceName::generated_path("n"),
         inductive_type_name: Some(Name::from_string("Nat")),
         ih_fvar: Some(ih_fvar),
         ih_type: Some(Expr::const_(Name::from_string("Nat"), vec![])),
         ih_map,
         sibling_names: Vec::new(),
-        extra_params: vec![],
+        sibling_types: Vec::new(),
+        parameters: vec![recursive_param("n", BinderInfo::Default, k_fvar, nat_ty)],
+        generalized_params: Vec::new(),
+        index_params: Vec::new(),
         wf_measure: None,
+        outer_locals_floor: None,
     });
 
     // Build surface expression: f k
     // This is a recursive call where k is a pattern variable with an IH
     let surface = SurfaceExpr::App(
         Span::new(0, 3),
-        Box::new(SurfaceExpr::Ident(Span::new(0, 1), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::new(0, 1),
+            SurfaceName::generated_path("f"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             Span::new(2, 3),
-            "k".to_string(),
+            SurfaceName::generated_path("k"),
         ))],
     );
 
@@ -140,7 +167,8 @@ fn test_recursive_call_ih_substitution() {
         }
     }
 
-    ctx.pop_local(); // clean up the pushed local
+    ctx.pop_local(); // ih_k
+    ctx.pop_local(); // k
 }
 
 /// Test that recursive fields are correctly identified from recursor rules (#381)
@@ -207,12 +235,23 @@ fn test_recursive_numeral_add_arm_includes_ih_binder() {
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let arm = SurfaceMatchArm {
         span: Span::dummy(),
-        pattern: SurfacePattern::NumeralAdd(Box::new(SurfacePattern::Var("k".to_string())), 1),
-        body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+        pattern: SurfacePattern::NumeralAdd(
+            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
+            1,
+        ),
+        body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
     };
 
     let alt = ctx
-        .elaborate_match_arm(&arm, 1, "Nat", &nat_ty, &nat_ty, &[], true)
+        .elaborate_match_arm(
+            &arm,
+            1,
+            &SurfaceName::generated_path("Nat"),
+            &nat_ty,
+            &nat_ty,
+            &[],
+            true,
+        )
         .expect("recursive numeral-add arm should elaborate");
 
     assert_eq!(
@@ -233,11 +272,22 @@ fn test_recursive_numeral_add_offset_two_arm_fails_closed() {
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
     let arm = SurfaceMatchArm {
         span: Span::dummy(),
-        pattern: SurfacePattern::NumeralAdd(Box::new(SurfacePattern::Var("k".to_string())), 2),
-        body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+        pattern: SurfacePattern::NumeralAdd(
+            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
+            2,
+        ),
+        body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
     };
 
-    let result = ctx.elaborate_match_arm(&arm, 1, "Nat", &nat_ty, &nat_ty, &[], true);
+    let result = ctx.elaborate_match_arm(
+        &arm,
+        1,
+        &SurfaceName::generated_path("Nat"),
+        &nat_ty,
+        &nat_ty,
+        &[],
+        true,
+    );
     assert!(
         matches!(result, Err(ElabError::NotImplemented(ref msg)) if msg.contains("recursive `n + 2` numeral-add patterns")),
         "recursive `n + 2` numeral-add arm should fail closed when reached directly; \
@@ -331,20 +381,25 @@ fn test_detect_recursion_through_lift_method() {
     // The recursive call `f x` is wrapped in LiftMethod(<- f x)
     let recursive_call = SurfaceExpr::App(
         Span::new(0, 0),
-        Box::new(SurfaceExpr::Ident(Span::new(0, 0), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::new(0, 0),
+            SurfaceName::generated_path("f"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             Span::new(0, 0),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
     let body = SurfaceExpr::LiftMethod(Span::new(0, 0), Box::new(recursive_call));
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(
         info.is_recursive,
         "Should detect recursive call through LiftMethod wrapper"
     );
     assert_eq!(info.calls.len(), 1);
-    assert!(matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == "x"));
+    assert!(
+        matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n.name() == &Name::from_string("x"))
+    );
 }
 
 #[test]
@@ -356,14 +411,17 @@ fn test_detect_recursion_lift_method_no_call() {
     // LiftMethod wraps a non-recursive call — should not detect recursion
     let non_recursive_call = SurfaceExpr::App(
         Span::new(0, 0),
-        Box::new(SurfaceExpr::Ident(Span::new(0, 0), "g".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::new(0, 0),
+            SurfaceName::generated_path("g"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             Span::new(0, 0),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
     let body = SurfaceExpr::LiftMethod(Span::new(0, 0), Box::new(non_recursive_call));
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(
         !info.is_recursive,
         "Should not detect recursion for non-recursive LiftMethod"
@@ -380,27 +438,35 @@ fn test_detect_recursion_nested_lift_method_in_app() {
     // App(h, [LiftMethod(App(f, [x]))])
     let recursive_call = SurfaceExpr::App(
         Span::new(0, 0),
-        Box::new(SurfaceExpr::Ident(Span::new(0, 0), "f".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::new(0, 0),
+            SurfaceName::generated_path("f"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::Ident(
             Span::new(0, 0),
-            "x".to_string(),
+            SurfaceName::generated_path("x"),
         ))],
     );
     let body = SurfaceExpr::App(
         Span::new(0, 0),
-        Box::new(SurfaceExpr::Ident(Span::new(0, 0), "h".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::new(0, 0),
+            SurfaceName::generated_path("h"),
+        )),
         vec![SurfaceArg::positional(SurfaceExpr::LiftMethod(
             Span::new(0, 0),
             Box::new(recursive_call),
         ))],
     );
-    let info = detect_recursion("f", &body);
+    let info = detect_recursion(&SurfaceName::generated_path("f"), &body);
     assert!(
         info.is_recursive,
         "Should detect recursion through LiftMethod nested in App argument"
     );
     assert_eq!(info.calls.len(), 1);
-    assert!(matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n == "x"));
+    assert!(
+        matches!(info.calls[0].args[0], RecursiveArg::Var(ref n) if n.name() == &Name::from_string("x"))
+    );
 }
 
 /// Test that recursive call substitution applies extra params to IH (#1386).
@@ -420,44 +486,58 @@ fn test_recursive_call_ih_with_extra_params() {
 
     // Push local "cutoff : Nat" — the extra param
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let _cutoff_fvar = ctx.push_local("cutoff".to_string(), nat_ty.clone());
+    let k_fvar = ctx.push_local(SurfaceName::generated_path("k"), nat_ty.clone());
+    let cutoff_fvar = ctx.push_local(SurfaceName::generated_path("cutoff"), nat_ty.clone());
 
     // Create IH with generalized type: Nat → Nat (takes cutoff, returns Nat)
     let ih_type = Expr::pi(BinderInfo::Default, nat_ty.clone(), nat_ty.clone());
-    let ih_fvar = ctx.push_local("ih_k".to_string(), ih_type);
+    let ih_fvar = ctx.push_local(SurfaceName::generated_path("ih_k"), ih_type);
 
     let mut ih_map = HashMap::new();
-    ih_map.insert("k".to_string(), ih_fvar);
+    ih_map.insert(k_fvar, ih_fvar);
 
     ctx.recursive_def_ctx = Some(RecursiveDefContext {
-        func_name: "lift_at".to_string(),
+        func_name: SurfaceName::generated_path("lift_at"),
         decreasing_arg_pos: 0,
-        decreasing_arg_name: "e".to_string(),
+        decreasing_arg_name: SurfaceName::generated_path("e"),
         inductive_type_name: Some(Name::from_string("Nat")),
         ih_fvar: Some(ih_fvar),
-        ih_type: Some(nat_ty),
+        ih_type: Some(nat_ty.clone()),
         ih_map,
         sibling_names: Vec::new(),
-        extra_params: vec![recursive_extra_param("cutoff", BinderInfo::Default)],
+        sibling_types: Vec::new(),
+        parameters: vec![
+            recursive_param("e", BinderInfo::Default, k_fvar, nat_ty.clone()),
+            recursive_param("cutoff", BinderInfo::Default, cutoff_fvar, nat_ty),
+        ],
+        generalized_params: vec![1],
+        index_params: Vec::new(),
         wf_measure: None,
+        outer_locals_floor: None,
     });
 
     // Build surface expression: lift_at k (Nat.succ cutoff)
     // Position 0 is the decreasing arg "k", position 1 is the extra param value
     let surface = SurfaceExpr::App(
         Span::new(0, 10),
-        Box::new(SurfaceExpr::Ident(Span::new(0, 7), "lift_at".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::new(0, 7),
+            SurfaceName::generated_path("lift_at"),
+        )),
         vec![
-            SurfaceArg::positional(SurfaceExpr::Ident(Span::new(8, 9), "k".to_string())),
+            SurfaceArg::positional(SurfaceExpr::Ident(
+                Span::new(8, 9),
+                SurfaceName::generated_path("k"),
+            )),
             SurfaceArg::positional(SurfaceExpr::App(
                 Span::new(10, 25),
                 Box::new(SurfaceExpr::Ident(
                     Span::new(10, 18),
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                 )),
                 vec![SurfaceArg::positional(SurfaceExpr::Ident(
                     Span::new(19, 25),
-                    "cutoff".to_string(),
+                    SurfaceName::generated_path("cutoff"),
                 ))],
             )),
         ],
@@ -494,7 +574,8 @@ fn test_recursive_call_ih_with_extra_params() {
     }
 
     ctx.pop_local();
-    ctx.pop_local(); // ih_k, cutoff
+    ctx.pop_local(); // cutoff
+    ctx.pop_local(); // k
 }
 
 /// Test that recursive call substitution replays omitted implicit extra params
@@ -509,8 +590,9 @@ fn test_recursive_call_ih_with_implicit_and_explicit_extra_params() {
     let mut ctx = ElabCtx::new(&env);
 
     let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let inst_fvar = ctx.push_local("inst".to_string(), nat_ty.clone());
-    let x_fvar = ctx.push_local("x".to_string(), nat_ty.clone());
+    let k_fvar = ctx.push_local(SurfaceName::generated_path("k"), nat_ty.clone());
+    let inst_fvar = ctx.push_local(SurfaceName::generated_path("inst"), nat_ty.clone());
+    let x_fvar = ctx.push_local(SurfaceName::generated_path("x"), nat_ty.clone());
 
     // IH generalizes over the omitted implicit argument and the explicit one.
     let ih_type = Expr::pi(
@@ -518,36 +600,47 @@ fn test_recursive_call_ih_with_implicit_and_explicit_extra_params() {
         nat_ty.clone(),
         Expr::pi(BinderInfo::Default, nat_ty.clone(), nat_ty.clone()),
     );
-    let ih_fvar = ctx.push_local("ih_k".to_string(), ih_type);
+    let ih_fvar = ctx.push_local(SurfaceName::generated_path("ih_k"), ih_type);
 
     let mut ih_map = HashMap::new();
-    ih_map.insert("k".to_string(), ih_fvar);
+    ih_map.insert(k_fvar, ih_fvar);
 
     ctx.recursive_def_ctx = Some(RecursiveDefContext {
-        func_name: "carryImplicit".to_string(),
+        func_name: SurfaceName::generated_path("carryImplicit"),
         decreasing_arg_pos: 0,
-        decreasing_arg_name: "n".to_string(),
+        decreasing_arg_name: SurfaceName::generated_path("n"),
         inductive_type_name: Some(Name::from_string("Nat")),
         ih_fvar: Some(ih_fvar),
-        ih_type: Some(nat_ty),
+        ih_type: Some(nat_ty.clone()),
         ih_map,
         sibling_names: Vec::new(),
-        extra_params: vec![
-            recursive_extra_param("inst", BinderInfo::Implicit),
-            recursive_extra_param("x", BinderInfo::Default),
+        sibling_types: Vec::new(),
+        parameters: vec![
+            recursive_param("n", BinderInfo::Default, k_fvar, nat_ty.clone()),
+            recursive_param("inst", BinderInfo::Implicit, inst_fvar, nat_ty.clone()),
+            recursive_param("x", BinderInfo::Default, x_fvar, nat_ty),
         ],
+        generalized_params: vec![1, 2],
+        index_params: Vec::new(),
         wf_measure: None,
+        outer_locals_floor: None,
     });
 
     let surface = SurfaceExpr::App(
         Span::new(0, 20),
         Box::new(SurfaceExpr::Ident(
             Span::new(0, 13),
-            "carryImplicit".to_string(),
+            SurfaceName::generated_path("carryImplicit"),
         )),
         vec![
-            SurfaceArg::positional(SurfaceExpr::Ident(Span::new(14, 15), "k".to_string())),
-            SurfaceArg::positional(SurfaceExpr::Ident(Span::new(16, 17), "x".to_string())),
+            SurfaceArg::positional(SurfaceExpr::Ident(
+                Span::new(14, 15),
+                SurfaceName::generated_path("k"),
+            )),
+            SurfaceArg::positional(SurfaceExpr::Ident(
+                Span::new(16, 17),
+                SurfaceName::generated_path("x"),
+            )),
         ],
     );
 
@@ -576,7 +669,8 @@ fn test_recursive_call_ih_with_implicit_and_explicit_extra_params() {
 
     ctx.pop_local();
     ctx.pop_local();
-    ctx.pop_local(); // ih_k, x, inst
+    ctx.pop_local(); // inst
+    ctx.pop_local(); // k
 }
 
 // =============================================================================

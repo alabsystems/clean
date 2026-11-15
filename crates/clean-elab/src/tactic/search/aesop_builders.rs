@@ -124,19 +124,19 @@ pub(super) fn apply_unfold_rule(
 /// ENSURES: On `Err(RuleApplicationFailed)`, `tactic_name` was not one of the supported built-ins.
 pub(super) fn apply_tactic_rule(state: &mut ProofState, tactic_name: &Name) -> TacticResult {
     // Look up and invoke the named tactic
-    match tactic_name.to_string().as_str() {
+    match super::atomic_name(tactic_name) {
         // Built-in tactics that can be registered as Aesop rules
-        "simp" => simp(state, SimpConfig::default()),
-        "trivial" => trivial(state),
-        "assumption" => assumption(state),
-        "rfl" => rfl(state),
-        "reduce_eq" => reduce_eq(state),
-        "decide" => decide(state),
-        "tauto" => tauto(state),
+        Some("simp") => simp(state, SimpConfig::default()),
+        Some("trivial") => trivial(state),
+        Some("assumption") => assumption(state),
+        Some("rfl") => rfl(state),
+        Some("reduce_eq") => reduce_eq(state),
+        Some("decide") => decide(state),
+        Some("tauto") => tauto(state),
         // User-defined tactics would need a registry
-        other => Err(TacticError::RuleApplicationFailed {
+        _ => Err(TacticError::RuleApplicationFailed {
             rule: "tactic".into(),
-            detail: format!("unknown tactic '{other}'"),
+            detail: format!("unknown tactic '{tactic_name}'"),
         }),
     }
 }
@@ -160,7 +160,7 @@ pub(super) fn apply_tactic_rule(state: &mut ProofState, tactic_name: &Name) -> T
 /// REQUIRES: `witness_type` and `local_ctx` are interpreted in the same local context as `goal`.
 /// ENSURES: Returned expressions are candidate witnesses whose types heuristically match `witness_type`.
 /// ENSURES: Duplicate witness expressions are removed before returning.
-pub fn enumerate_witnesses(
+pub(crate) fn enumerate_witnesses(
     state: &ProofState,
     goal: &Goal,
     witness_type: &Expr,
@@ -197,23 +197,22 @@ pub fn enumerate_witnesses(
 
     // Strategy 3: Try common literal values based on type name
     if let ExprKind::Const(type_name, _) = ty_head.kind() {
-        let name_str = type_name.to_string();
-        match name_str.as_str() {
-            "Nat" => {
+        match super::atomic_name(type_name) {
+            Some("Nat") => {
                 // Already added Nat.zero via constructor above
                 // Add literal 0 as backup (different representation)
                 witnesses.push(Expr::nat_lit(0));
                 witnesses.push(Expr::nat_lit(1));
             }
-            "Int" => {
+            Some("Int") => {
                 witnesses.push(Expr::nat_lit(0));
             }
-            "Bool" => {
+            Some("Bool") => {
                 // true and false should be added via constructors
                 witnesses.push(Expr::const_(Name::from_string("Bool.true"), vec![]));
                 witnesses.push(Expr::const_(Name::from_string("Bool.false"), vec![]));
             }
-            "String" => {
+            Some("String") => {
                 witnesses.push(Expr::str_lit(""));
             }
             _ => {}
@@ -342,17 +341,17 @@ pub(super) fn apply_destruct_rule(
     }
 
     // Try to find matching hypotheses for each parameter
-    // Track the name of the first matched hypothesis (the one to clear)
+    // Track the identity of the first matched hypothesis (the one to clear)
     let mut matched_args: Vec<Option<Expr>> = vec![None; params.len()];
-    let mut first_matched_hyp_name: Option<String> = None;
+    let mut first_matched_hyp: Option<clean_kernel::FVarId> = None;
 
     for (i, (param_ty, _bi)) in params.iter().enumerate() {
         for decl in local_ctx {
             if types_match_simple(param_ty, &decl.ty) {
                 matched_args[i] = Some(Expr::fvar(decl.fvar));
                 // Track the first matched hypothesis for clearing
-                if first_matched_hyp_name.is_none() {
-                    first_matched_hyp_name = Some(decl.name.clone());
+                if first_matched_hyp.is_none() {
+                    first_matched_hyp = Some(decl.fvar);
                 }
                 break;
             }
@@ -369,11 +368,10 @@ pub(super) fn apply_destruct_rule(
     }
 
     // Must have a hypothesis to clear
-    let hyp_to_clear =
-        first_matched_hyp_name.ok_or_else(|| TacticError::RuleApplicationFailed {
-            rule: "destruct".into(),
-            detail: "no hypothesis to clear".into(),
-        })?;
+    let hyp_to_clear = first_matched_hyp.ok_or_else(|| TacticError::RuleApplicationFailed {
+        rule: "destruct".into(),
+        detail: "no hypothesis to clear".into(),
+    })?;
 
     // Instantiate conclusion with matched arguments
     let conclusion_inst = instantiate_conclusion(&conclusion, &params, &matched_args);
@@ -399,7 +397,7 @@ pub(super) fn apply_destruct_rule(
     have_(state, &hyp_name, conclusion_inst, Some(proof))?;
 
     // Clear the matched hypothesis (this is what distinguishes destruct from forward)
-    crate::tactic::hypothesis::clear(state, &hyp_to_clear)?;
+    crate::tactic::hypothesis::clear_fvar_unchecked(state, hyp_to_clear)?;
 
     Ok(())
 }
@@ -445,17 +443,22 @@ fn instantiate_conclusion(
 }
 
 /// Generate a fresh hypothesis name for forward rules
-fn generate_forward_hyp_name(local_ctx: &[LocalDecl], rule_name: &Name) -> String {
-    let base = format!("h_{}", rule_name.to_string().replace('.', "_"));
-
-    // Find a unique name
-    let mut candidate = base.clone();
-    let mut suffix = 1;
-    while local_ctx.iter().any(|d| d.name == candidate) {
-        candidate = format!("{base}_{suffix}");
-        suffix += 1;
+pub(super) fn generate_forward_hyp_name(
+    local_ctx: &[LocalDecl],
+    rule_name: &Name,
+) -> clean_parser::SurfaceName {
+    // Preserve the complete rule identity; numeric suffixes are compiler-owned,
+    // not a rendering that merges dotted, quoted, or numeric-string names.
+    let base = rule_name.clone().str("_aesop_forward");
+    for suffix in 0..=local_ctx.len() {
+        let suffix =
+            u64::try_from(suffix).expect("local context index fits Name numeric component");
+        let candidate = clean_parser::SurfaceName::from_name(base.clone().num(suffix));
+        if !local_ctx.iter().any(|decl| decl.name == candidate) {
+            return candidate;
+        }
     }
-    candidate
+    unreachable!("a finite local context cannot occupy one more distinct candidate than its size")
 }
 
 /// Parse an existential goal to extract the witness type.
@@ -463,13 +466,13 @@ fn generate_forward_hyp_name(local_ctx: &[LocalDecl], rule_name: &Name) -> Strin
 /// For `Exists {α} p` where `p : α → Prop`, returns `α`.
 /// ENSURES: Returns `Some(α)` exactly for `Exists` applications with at least one argument.
 /// ENSURES: Returns `None` for non-`Exists` expressions or malformed `Exists` applications.
-pub fn extract_exists_witness_type(expr: &Expr) -> Option<Expr> {
+pub(crate) fn extract_exists_witness_type(expr: &Expr) -> Option<Expr> {
     // Exists {α} p is App(App(Const("Exists", _), α), p)
     let head = expr.get_app_fn();
     let args = expr.get_app_args();
 
     match head.kind() {
-        ExprKind::Const(name, _) if name.to_string() == "Exists" => {
+        ExprKind::Const(name, _) if name == &Name::from_string("Exists") => {
             if !args.is_empty() {
                 Some(args[0].clone())
             } else {

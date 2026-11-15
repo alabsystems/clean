@@ -25,7 +25,10 @@ use super::{ProofState, TacticError};
 use crate::unify::{MetaId, MetaState};
 use clean_kernel::Expr;
 use clean_kernel::FVarId;
-use clean_parser::{SurfaceExpr, SurfaceTactic};
+use clean_parser::{SurfaceExpr, SurfaceName, SurfaceTactic};
+
+mod name_argument;
+pub use name_argument::{decode_name_argument, encode_name_argument};
 
 // Re-export TacticArgPattern from the parser crate where it is canonically defined.
 // The parser owns this type because it controls how arguments are parsed.
@@ -35,7 +38,7 @@ pub use clean_parser::TacticPatterns;
 /// Extra local visible to a pending refine goal that was created by elaboration.
 #[derive(Debug, Clone)]
 pub struct RefinePendingLocal {
-    pub name: String,
+    pub name: SurfaceName,
     pub fvar: FVarId,
     pub ty: Expr,
 }
@@ -48,7 +51,7 @@ pub struct RefinePendingGoal {
     /// Name of the `?name` synthetic hole this goal came from, if any. Threaded
     /// into the tactic goal's `tag` by the refine bridge so `case name => …` can
     /// select it. `None` for anonymous holes (`_`, `?`, `?_`).
-    pub tag: Option<String>,
+    pub tag: Option<SurfaceName>,
 }
 
 /// Result of elaborating a refine expression against the current goal.
@@ -89,13 +92,16 @@ pub enum BoundValue {
     /// A hypothesis the tactic introduced into the local context, identified by
     /// its actual (post-`intro`) name. Threaded as the `Ident` that names it, so
     /// a later `exact x` resolves the same hypothesis.
-    Hyp { name: String, ident: SurfaceExpr },
+    Hyp {
+        name: SurfaceName,
+        ident: SurfaceExpr,
+    },
 }
 
 impl BoundValue {
     /// The surface expression this value substitutes into later `do` statements.
     #[must_use]
-    pub fn as_surface(&self) -> &SurfaceExpr {
+    pub(crate) fn as_surface(&self) -> &SurfaceExpr {
         match self {
             BoundValue::Hyp { ident, .. } => ident,
         }
@@ -104,7 +110,7 @@ impl BoundValue {
     /// The name the value is known by (e.g. the introduced hypothesis name for
     /// [`BoundValue::Hyp`]).
     #[must_use]
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> &SurfaceName {
         match self {
             BoundValue::Hyp { name, .. } => name,
         }
@@ -122,11 +128,47 @@ impl BoundValue {
 /// dependent compound tactics (Have, Let, Suffices, Match) to elaborate
 /// surface expressions and infer types without direct `ElabCtx` access.
 pub trait TacticEval {
+    /// The file's explicit source world, if one was selected. Without one,
+    /// world-sensitive tactics consult the proof environment before the oracle.
+    fn source_world(&self) -> Option<clean_kernel::LeanWorld> {
+        None
+    }
+
     /// Evaluate a single tactic against the proof state.
     /// REQUIRES: `ps` is the proof state currently being elaborated for `tac`.
     /// REQUIRES: `tac` is a well-formed parser-produced tactic node.
     /// ENSURES: On Ok, all state changes from elaborating `tac` are reflected in `ps`.
     fn eval(&mut self, ps: &mut ProofState, tac: &SurfaceTactic) -> Result<(), TacticError>;
+
+    /// Record that `tac` ran, without dispatching it.
+    ///
+    /// Failure **attribution** (`crates/clean-elab/src/infer/tactic_trace.rs`)
+    /// is derived from the dispatch stack maintained by [`Self::eval`], so a
+    /// handler that services a tactic *itself* instead of delegating would
+    /// leave that tactic out of the chain and the resulting diagnostic would
+    /// name its parent. `run_conv_body`'s conv-mode `congr` interception is
+    /// the one such site; it calls this so the chain still reads
+    /// ``` `conv` > `congr` ```.
+    ///
+    /// Diagnostic only: the default implementation is a no-op, and no
+    /// evaluator's proof-producing behaviour depends on it.
+    fn note_tactic(&mut self, _tac: &SurfaceTactic) {}
+
+    /// Record the binder names of a hypothesis a tactic introduced with a `∀`
+    /// type written in place (`have h : ∀ {n m : Nat}, … := …`), so a later
+    /// `h (n := a)` can bind by name: kernel terms keep no binder names, and
+    /// Lean reads them off the local's type (`Lean/Elab/App.lean:803-815`).
+    ///
+    /// Names only select argument positions in a term the kernel re-checks;
+    /// the default implementation records nothing, which leaves such a call
+    /// the loud refusal it was.
+    fn note_local_forall_binder_names(
+        &mut self,
+        _fvar: FVarId,
+        _surface_ty: &SurfaceExpr,
+        _ty: &Expr,
+    ) {
+    }
 
     /// Evaluate a sequence of tactics against the proof state.
     /// REQUIRES: each entry in `tacs` is well-formed tactic syntax for the current goal context.
@@ -138,6 +180,33 @@ pub trait TacticEval {
     /// REQUIRES: `expr` is valid surface syntax for the active elaboration context.
     /// ENSURES: On Ok, the returned `Expr` is usable by tactic handlers in the same context.
     fn elaborate(&mut self, expr: &SurfaceExpr) -> Result<Expr, TacticError>;
+
+    /// Elaborate a surface expression with NO expected type at all.
+    ///
+    /// [`TacticEval::elaborate`] leaves whatever expected type the enclosing
+    /// TERM elaboration armed in place, because it is a bare
+    /// `ElabCtx::elaborate`. That is right for a tactic argument the goal
+    /// should type, and wrong for one Lean deliberately elaborates blind: a
+    /// `cases`/`induction` target (`Lean/Elab/Tactic/Induction.lean`:895
+    /// `elabTerm view.term none` and :1040 `elabTerm stx none`) and the value
+    /// of an un-ascribed `have h := e`. Under a pattern lambda whose binder
+    /// domain is `Subtype p`, `cases Subsingleton.elim x y` had
+    /// `Subsingleton.elim`'s implicit carrier fixed to `Subtype p` before its
+    /// explicit `x : α` was checked — `Mathlib/Logic/Basic.lean`'s
+    /// `instance [Subsingleton α] (p) : Subsingleton (Subtype p)`.
+    ///
+    /// The default implementation falls back to [`TacticEval::elaborate`], so
+    /// an evaluator without an expected-type channel (a unit-test stub) is
+    /// unchanged rather than silently pretending to have cleared one.
+    ///
+    /// # Soundness
+    ///
+    /// Removing a hint can only make elaboration less determined, never more
+    /// permissive: every term produced here is still typed by `infer_type` and
+    /// re-checked by the kernel.
+    fn elaborate_no_expected(&mut self, expr: &SurfaceExpr) -> Result<Expr, TacticError> {
+        self.elaborate(expr)
+    }
 
     /// Elaborate a surface expression against a known expected type.
     ///
@@ -188,9 +257,27 @@ pub trait TacticEval {
         expr: &SurfaceExpr,
     ) -> Result<ElaboratedRefine, TacticError>;
 
+    /// Elaborate a term with NO expected type — a rewrite rule (`rw [e]`) —
+    /// reporting the metavariables its elaboration left open exactly as
+    /// [`TacticEval::elaborate_refine`] does, so the caller can import them
+    /// into the proof state (`import_open_term`) and solve them against the
+    /// goal. The default is a plain [`TacticEval::elaborate`] with nothing
+    /// pending, for an evaluator that has no elaborator metavariable state.
+    fn elaborate_open(
+        &mut self,
+        ps: &ProofState,
+        expr: &SurfaceExpr,
+    ) -> Result<ElaboratedRefine, TacticError> {
+        let _ = ps;
+        Ok(ElaboratedRefine {
+            term: self.elaborate(expr)?,
+            pending_goals: Vec::new(),
+        })
+    }
+
     /// Get the elaborator metavariable state backing refined proof terms.
     /// ENSURES: Returned metas contain the pending metavariables referenced by
-    /// results from `elaborate_refine`.
+    /// results from `elaborate_refine` and `elaborate_open`.
     fn metas(&self) -> &MetaState;
 
     /// Metaprogramming Phase 8: bind `name` to an already-elaborated kernel
@@ -217,7 +304,7 @@ pub trait TacticEval {
     /// normal pipeline (e.g. `exact g` type-checks `g` against the goal). The
     /// caller is responsible for clearing the binding (see
     /// [`TacticEval::clear_value_binding`]) so it never leaks past the body.
-    fn set_value_binding(&mut self, name: &str, value: Expr) {
+    fn set_value_binding(&mut self, name: &SurfaceName, value: Expr) {
         let _ = (name, value);
     }
 
@@ -228,7 +315,7 @@ pub trait TacticEval {
     ///
     /// The default implementation is a no-op (paired with the no-op
     /// `set_value_binding`).
-    fn clear_value_binding(&mut self, name: &str) {
+    fn clear_value_binding(&mut self, name: &SurfaceName) {
         let _ = name;
     }
 
@@ -268,11 +355,10 @@ pub trait TacticEval {
         ps: &mut ProofState,
         tac: &SurfaceTactic,
     ) -> Result<Option<BoundValue>, TacticError> {
-        // Snapshot the introduced-hypothesis names visible before the tactic so
-        // we can detect what `intro`-style tactics added afterward.
-        let before: Vec<String> = ps
+        // Snapshot identities: a newly introduced local may repeat a user name.
+        let before: Vec<FVarId> = ps
             .current_goal()
-            .map(|g| g.local_ctx.iter().map(|d| d.name.clone()).collect())
+            .map(|g| g.local_ctx.iter().map(|d| d.fvar).collect())
             .unwrap_or_default();
 
         // Run the tactic through the normal kernel-checked path.
@@ -298,7 +384,7 @@ pub trait TacticEval {
             .local_ctx
             .iter()
             .rev()
-            .find(|d| !before.contains(&d.name))
+            .find(|d| !before.contains(&d.fvar))
             .map(|d| d.name.clone());
         match introduced {
             Some(name) => Ok(Some(BoundValue::Hyp {
@@ -380,7 +466,7 @@ impl TacticRegistry {
     /// REQUIRES: `entry.name` matches the dispatch name for the dedicated compound variant.
     /// ENSURES: `get_compound(&entry.name)` returns the newly registered handler.
     /// ENSURES: Any previous compound entry with the same name is replaced; simple entries are unchanged.
-    pub fn register_compound(&mut self, entry: CompoundTacticEntry) {
+    pub(crate) fn register_compound(&mut self, entry: CompoundTacticEntry) {
         self.compound.insert(entry.name.clone(), entry);
     }
 
@@ -392,7 +478,7 @@ impl TacticRegistry {
 
     /// Look up a compound tactic handler by name.
     /// ENSURES: Returns `Some` iff a compound tactic entry is registered under `name`.
-    pub fn get_compound(&self, name: &str) -> Option<&CompoundTacticEntry> {
+    pub(crate) fn get_compound(&self, name: &str) -> Option<&CompoundTacticEntry> {
         self.compound.get(name)
     }
 
@@ -400,6 +486,37 @@ impl TacticRegistry {
     /// ENSURES: Returns `true` exactly when `get(name)` would return `Some(_)`.
     pub fn is_registered(&self, name: &str) -> bool {
         self.entries.contains_key(name)
+    }
+
+    /// Build the error for a tactic name that is not registered, suggesting the
+    /// closest registered names when there are any.
+    ///
+    /// Searches BOTH maps. `names()` deliberately excludes compound-only names
+    /// because it feeds the parser's keyword list; a user who mistypes `conv`
+    /// or `calc` still deserves the suggestion, so this does not reuse it.
+    ///
+    /// Everything here was already in scope at every site that minted the bare
+    /// error, and no site called any of it: a user who typed `inhabit` was told
+    /// `unknown tactic 'inhabit'` and nothing more.
+    #[must_use]
+    pub(crate) fn unknown_tactic(&self, name: &str) -> TacticError {
+        let all: Vec<&str> = self
+            .entries
+            .keys()
+            .chain(self.compound.keys())
+            .map(String::as_str)
+            .collect();
+        let suggestions = crate::agent_diagnostics::nearest_string_candidates(name, all, 3);
+        if suggestions.is_empty() {
+            // No near miss. Three alphabetically-first tactic names would be
+            // noise dressed as help.
+            TacticError::UnknownTactic(name.to_string())
+        } else {
+            TacticError::UnknownTacticWithSuggestions {
+                name: name.to_string(),
+                suggestions,
+            }
+        }
     }
 
     /// All registered tactic names (for parser keyword list).

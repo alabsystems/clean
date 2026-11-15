@@ -146,7 +146,10 @@ impl Specification {
         self.add_to_kexpr_at_lift()?;
         self.add_to_kexpr_at_instantiate()?;
         self.add_operational_boundary_soundness()?;
+        self.add_impl_literal_soundness()?;
         self.add_sound_arms()?;
+        self.add_impl_literal_soundness_witnesses()?;
+        self.add_impl_constant_soundness_witnesses()?;
         Ok(())
     }
 
@@ -154,9 +157,8 @@ impl Specification {
     ///
     /// Stated in C4's per-rule style — induction hypotheses as explicit
     /// arguments — rather than as `ImplInfer.rec` minors, because the assembled
-    /// theorem needs *all nine* minors and `lit` is not among them (see the
-    /// module header). A partial set of arms is a real deliverable; a partial
-    /// `ImplInfer.rec` is not a term at all.
+    /// theorem needs all nine minors. The literal minor is registered by
+    /// `add_impl_literal_soundness`; metadata uses the inner derivation.
     fn add_sound_arms(&mut self) -> Result<(), SpecError> {
         // ── app ─────────────────────────────────────────────────────────────
         // ctx_rep.rs's coverage table lists exactly three things this rule needs
@@ -165,7 +167,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_app".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (f : ImplExpr) (a : ImplExpr) (F : ImplExpr) ",
                 "(bd : BinderData) (A : ImplExpr) (B : ImplExpr) (A2 : ImplExpr), ",
                 "ImplWhnfTo F (ImplExpr.pi bd A B) -> ImplIsLe A2 A -> ",
@@ -177,7 +179,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (f : ImplExpr) (a : ImplExpr) (F : ImplExpr) ",
                     "(bd : BinderData) (A : ImplExpr) (B : ImplExpr) (A2 : ImplExpr) ",
                     "(hw : ImplWhnfTo F (ImplExpr.pi bd A B)) (hle : ImplIsLe A2 A) ",
@@ -257,7 +259,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_sort".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (l : Level), ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.sort l) rho) ",
                 "(to_kexpr (ImplExpr.sort (Level.succ l)) rho)"
@@ -265,7 +267,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (l : Level) => TypingCtxConv.sort tenvK Gk l"
                 )
                 .to_string(),
@@ -288,30 +290,27 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_const".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (nm : Name) (us : ListType Level) (Ak : KExpr), ",
-                "Eq (OptionType KExpr) (tenvK nm) (OptionType.some KExpr Ak) -> ",
+                "Eq (OptionType KExpr) (kdecl_type_at tenvK nm us) (OptionType.some KExpr Ak) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.const nm us) rho) Ak"
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (nm : Name) (us : ListType Level) (Ak : KExpr) ",
-                    "(hget : Eq (OptionType KExpr) (tenvK nm) (OptionType.some KExpr Ak)) => ",
+                    "(hget : Eq (OptionType KExpr) (kdecl_type_at tenvK nm us) (OptionType.some KExpr Ak)) => ",
                     "TypingCtxConv.const tenvK Gk nm us Ak hget"
                 )
                 .to_string(),
             ),
             is_axiom: false,
             description: concat!(
-                "M4 — the `const` rule, bridged. The layer-2 environment is consulted directly, ",
-                "which is why the conclusion's type is the RAW `Ak` rather than a translation: ",
-                "TypingCtxConv.const's environment is `Name -> OptionType KExpr` with NO `us` ",
-                "argument, so layer 2 is universe-blind and cannot express a ",
-                "universe-instantiated constant type. That gap is layer 2's, is inherited ",
-                "unchanged from KernelInfers, and is NOT closed by the retarget — recorded here ",
-                "rather than hidden behind a representation hypothesis. Zero axiom_deps."
+                "M4 — the `const` rule uses the computed, arity-checked signature lookup at ",
+                "the node's actual universe list. The assembled theorem derives this graph ",
+                "premise from schematic environment representation; no fixed instantiated ",
+                "type is stored in KDeclEnv. This is a model bridge, not Rust refinement."
             )
             .to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -325,7 +324,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_mdata".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (e : ImplExpr) (T : ImplExpr), ",
                 "TypingCtxConv tenvK Gk (to_kexpr e rho) (to_kexpr T rho) -> ",
                 "TypingCtxConv tenvK Gk (to_kexpr (ImplExpr.mdata e) rho) (to_kexpr T rho)"
@@ -333,7 +332,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (e : ImplExpr) (T : ImplExpr) ",
                     "(ih : TypingCtxConv tenvK Gk (to_kexpr e rho) (to_kexpr T rho)) => ih"
                 )
@@ -356,8 +355,10 @@ impl Specification {
         })?;
 
         self.add_binder_arms()?;
-        self.add_scoping()?;
+        let kvalue = self.add_scoping()?;
         self.add_kinfers_bridge_arms()?;
+        // LAST: the sharp assembly dispatches to the arms registered just above.
+        self.add_kinfers_assembly(kvalue)?;
         Ok(())
     }
 
@@ -388,7 +389,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_kinfers_lam".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) (rho : ",
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
                 ": ImplExpr) (l : Level) (bt : ImplExpr), KernelInfers tenv G (to_kexpr A ",
                 "rho) (to_kexpr S rho) -> ImplWhnfTo S (ImplExpr.sort l) -> KernelInfers ",
@@ -403,7 +404,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ListType ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) (rho : ListType ",
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ",
                     "ImplExpr) (l : Level) (bt : ImplExpr) (ihA : KernelInfers tenv G (to_kexpr ",
                     "A rho) (to_kexpr S rho)) (hs : ImplWhnfTo S (ImplExpr.sort l)) (ihb : ",
@@ -446,7 +447,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_kinfers_lam_scoped".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) (rho : ",
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S ",
                 ": ImplExpr) (l : Level) (bt : ImplExpr), ImplScoped x b Nat.zero -> ImplLC ",
                 "bt Nat.zero -> KernelInfers tenv G (to_kexpr A rho) (to_kexpr S rho) -> ",
@@ -459,7 +460,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (rho : ListType ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) (rho : ListType ",
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S : ",
                     "ImplExpr) (l : Level) (bt : ImplExpr) (hsc : ImplScoped x b Nat.zero) (hlc ",
                     ": ImplLC bt Nat.zero) (ihA : KernelInfers tenv G (to_kexpr A rho) (to_kexpr ",
@@ -500,7 +501,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_pi_scoped".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ",
+                "forall (tenv : KDeclEnv) (Gk : ListType KExpr) (rho : ",
                 "ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 ",
                 ": ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ImplScoped x b ",
                 "Nat.zero -> ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplWhnfTo S2 ",
@@ -513,7 +514,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (Gk : ListType KExpr) (rho : ListType ",
+                    "fun (tenv : KDeclEnv) (Gk : ListType KExpr) (rho : ListType ",
                     "Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) (b : ImplExpr) (S1 : ",
                     "ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level) (hsc : ImplScoped x b ",
                     "Nat.zero) (hs1 : ImplWhnfTo S1 (ImplExpr.sort l1)) (hs2 : ImplWhnfTo S2 ",
@@ -562,7 +563,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_bridge_app_witness".to_string(),
             type_src: concat!(
-                "KernelInfers (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                "KernelInfers (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                 "KExpr) (KExpr.app (KExpr.lam (KExpr.sort (Level.succ Level.zero)) ",
                 "(KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort (Level.succ ",
                 "Level.zero))",
@@ -570,7 +571,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "impl_bridge_app (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "impl_bridge_app (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                     "KExpr) (ListType.nil Nat) (ImplExpr.lam (BinderData.mk BinderInfo.default ",
                     "Multiplicity.many) (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort ",
                     "Level.zero)) (ImplExpr.sort Level.zero) (ImplExpr.pi (BinderData.mk ",
@@ -580,18 +581,18 @@ impl Specification {
                     "Level.zero)) (ImplExpr.sort (Level.succ Level.zero)) (ImplExpr.sort ",
                     "(Level.succ Level.zero)) impl_whnf_to_whnf_to impl_is_le_defeq ",
                     "to_kexpr_at_instantiate (KernelInfers.lam (fun (nm : Name) => ",
-                    "OptionType.none KExpr) (ListType.nil KExpr) (KExpr.sort (Level.succ ",
+                    "OptionType.none KConstSig) (ListType.nil KExpr) (KExpr.sort (Level.succ ",
                     "Level.zero)) (KExpr.sort Level.zero) (KExpr.sort (Level.succ Level.zero)) ",
                     "(KExpr.sort (Level.succ (Level.succ Level.zero))) (Level.succ (Level.succ ",
-                    "Level.zero)) (KernelInfers.sort (fun (nm : Name) => OptionType.none KExpr) ",
+                    "Level.zero)) (KernelInfers.sort (fun (nm : Name) => OptionType.none KConstSig) ",
                     "(ListType.nil KExpr) (Level.succ Level.zero)) (whnf_to.refl (KExpr.sort ",
                     "(Level.succ (Level.succ Level.zero))) (is_whnf.sort (Level.succ (Level.succ ",
                     "Level.zero)))) (KernelInfers.sort (fun (nm : Name) => OptionType.none ",
-                    "KExpr) (ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) ",
+                    "KConstSig) (ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) ",
                     "(ListType.nil KExpr)) Level.zero)) (ImplWhnfTo.done (ImplExpr.pi ",
                     "(BinderData.mk BinderInfo.default Multiplicity.many) (ImplExpr.sort ",
                     "(Level.succ Level.zero)) (ImplExpr.sort (Level.succ Level.zero)))) ",
-                    "(KernelInfers.sort (fun (nm : Name) => OptionType.none KExpr) (ListType.nil ",
+                    "(KernelInfers.sort (fun (nm : Name) => OptionType.none KConstSig) (ListType.nil ",
                     "KExpr) Level.zero) (ImplIsLe.refl (ImplExpr.sort (Level.succ Level.zero)))",
                 )
                 .to_string(),
@@ -624,6 +625,119 @@ impl Specification {
             ])),
             axiom_deps: HashSet::new(),
         })?;
+
+        // ── let_ into KernelInfers, every premise discharged ────────────────
+        //
+        // THE LAST MISSING ARM of this codomain. `impl_bridge_let` is a rule
+        // with five hypotheses nothing had ever supplied: two forall-premises
+        // (this stage's own `impl_whnf_to_whnf_to` and `impl_is_le_defeq`,
+        // which is precisely why the arm cannot live in `ctx_rep.rs` beside the
+        // bridge) and three equations. Until they are supplied, the bridge is a
+        // conditional statement, not a derivation — the landing rule's "no
+        // capability without its caller", applied to a spec constant.
+        //
+        // The assembly is `impl_sound_let_scoped`'s, VERBATIM, with
+        // `TypingCtxConv` swapped for `KernelInfers`. That is the reusable
+        // finding: the zeta equation, which is the only hard one, does not
+        // mention the codomain at all. It relates two genuinely different
+        // operations — layer 1 substitutes a free variable BY NAME
+        // (`expr/subst.rs`, the deployed `Let` arm at `tc/infer.rs:614-617`),
+        // layer 2 instantiates a de Bruijn binder — and it is settled by
+        // composition rather than a fourth induction: rewrite the layer-1
+        // subject by `impl_subst_is_abstract_instantiate`, then push the
+        // translation through by `to_kexpr_at_instantiate`.
+        //
+        // `ImplLC v Nat.zero` is the one hypothesis lam does not carry, and the
+        // deployed arm forces it rather than the proof: `impl_subst_fvar`
+        // inserts the value RAW where abstract-then-instantiate inserts it
+        // LIFTED, so the two agree only on a locally-closed value. lam never
+        // substitutes a value at all.
+        self.add_definition(SpecDefinition {
+            name: "impl_kinfers_let_scoped".to_string(),
+            type_src: concat!(
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
+                "(rho : ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) ",
+                "(b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr), ",
+                "ImplScoped x b Nat.zero -> ImplLC bt Nat.zero -> ImplLC v Nat.zero -> ",
+                "ImplWhnfTo S (ImplExpr.sort l) -> ImplIsLe Tv ty -> ",
+                "KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho) -> ",
+                "KernelInfers tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho) -> ",
+                "KernelInfers tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                "(to_kexpr bt (ListType.cons Nat x rho)) -> ",
+                "KernelInfers tenvK Gk (to_kexpr (ImplExpr.let_ nm ty v b) rho) ",
+                "(to_kexpr (impl_subst_fvar bt x v) rho)"
+            )
+            .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
+                    "(rho : ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) ",
+                    "(b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr) ",
+                    "(hsc : ImplScoped x b Nat.zero) (hlcbt : ImplLC bt Nat.zero) ",
+                    "(hlcv : ImplLC v Nat.zero) ",
+                    "(hs : ImplWhnfTo S (ImplExpr.sort l)) (hle : ImplIsLe Tv ty) ",
+                    "(ihty : KernelInfers tenvK Gk (to_kexpr ty rho) (to_kexpr S rho)) ",
+                    "(ihv : KernelInfers tenvK Gk (to_kexpr v rho) (to_kexpr Tv rho)) ",
+                    "(ihb : KernelInfers tenvK (ListType.cons KExpr (to_kexpr ty rho) Gk) ",
+                    "(to_kexpr (impl_open b x) (ListType.cons Nat x rho)) ",
+                    "(to_kexpr bt (ListType.cons Nat x rho))) => ",
+                    "impl_bridge_let tenvK Gk rho x nm ty v b S l Tv bt ",
+                    "impl_whnf_to_whnf_to impl_is_le_defeq hs hle ihty ihv ihb ",
+                    "(to_kexpr_open rho x b Nat.zero hsc) ",
+                    "(to_kexpr_abstract rho x bt Nat.zero hlcbt) ",
+                    "(Eq.trans KExpr (to_kexpr (impl_subst_fvar bt x v) rho) ",
+                    "(to_kexpr_at (impl_instantiate_at (impl_abstract_fvar bt x) v Nat.zero) ",
+                    "rho Nat.zero) ",
+                    "(instantiate (to_kexpr_at (impl_abstract_fvar bt x) rho ",
+                    "(Nat.succ Nat.zero)) (to_kexpr v rho)) ",
+                    "(Eq.cong ImplExpr KExpr ",
+                    "(fun (w : ImplExpr) => to_kexpr_at w rho Nat.zero) ",
+                    "(impl_subst_fvar bt x v) ",
+                    "(impl_instantiate_at (impl_abstract_fvar bt x) v Nat.zero) ",
+                    "(impl_subst_is_abstract_instantiate v hlcv x bt Nat.zero)) ",
+                    "(to_kexpr_at_instantiate rho v (impl_abstract_fvar bt x) Nat.zero))"
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "THE LAST MISSING KernelInfers ARM — the let_ rule with every premise ",
+                "discharged, and the reason impl_bridge_let stops being a conditional ",
+                "statement and becomes a derivation. It could not be assembled in ctx_rep.rs ",
+                "where the bridge lives: two of the five hypotheses are THIS stage's ",
+                "impl_whnf_to_whnf_to and impl_is_le_defeq, and add_ctx_rep runs first. ",
+                "The assembly is impl_sound_let_scoped's VERBATIM with TypingCtxConv swapped ",
+                "for KernelInfers, and that is the reusable finding: the zeta equation — the ",
+                "only hard premise, relating a layer-1 substitution BY NAME to a layer-2 de ",
+                "Bruijn instantiation — does not mention the codomain at all, so one ",
+                "composition serves both. No fourth induction: rewrite the layer-1 subject by ",
+                "impl_subst_is_abstract_instantiate, then push the translation through by ",
+                "to_kexpr_at_instantiate. ",
+                "ImplLC v Nat.zero is the hypothesis lam does not carry and the DEPLOYED arm ",
+                "forces it, not the proof: impl_subst_fvar inserts the value RAW where ",
+                "abstract-then-instantiate inserts it LIFTED, so the two agree only on a ",
+                "locally-closed value. ",
+                "WHAT IT DOES NOT CLAIM: not that ImplInfer is sound into KernelInfers. This ",
+                "is one rule assembled; the rule-by-rule induction that would consume the ",
+                "arms is a separate object and is not written. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "impl_bridge_let".to_string(),
+                "impl_whnf_to_whnf_to".to_string(),
+                "impl_is_le_defeq".to_string(),
+                "to_kexpr_open".to_string(),
+                "to_kexpr_abstract".to_string(),
+                "impl_subst_is_abstract_instantiate".to_string(),
+                "to_kexpr_at_instantiate".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
         Ok(())
     }
 
@@ -653,7 +767,7 @@ impl Specification {
     /// proof then inducts on the derivation, so each constructor hands over its
     /// children's scoping facts directly and no `Bool.and` decomposition
     /// plumbing appears anywhere. Census-neutral (`add_inductive`).
-    fn add_scoping(&mut self) -> Result<(), SpecError> {
+    fn add_scoping(&mut self) -> Result<String, SpecError> {
         self.add_inductive(
             concat!(
                 "inductive ImplScoped (x : Nat) : ImplExpr -> Nat -> Type\n",
@@ -915,8 +1029,8 @@ impl Specification {
                     "(fun (lt : ImplLit) (d0 : Nat) => ",
                     "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
                     "(impl_lit_to_kexpr z)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (KExpr.lit k)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (KExpr.lit k)) lt) ",
+                    "(fun (k : Nat) => Eq.refl KExpr (literal_nat k)) ",
+                    "(fun (k : Nat) => Eq.refl KExpr (literal_string k)) lt) ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_se : ImplScoped x e0 d0) ",
                     "(ri : Eq KExpr (to_kexpr_at (impl_instantiate_at e0 (ImplExpr.fvar x) d0) ",
                     "(ListType.cons Nat x rho) d0) (to_kexpr_at e0 rho (Nat.succ d0))) => ri) ",
@@ -971,9 +1085,18 @@ impl Specification {
         self.add_subst_is_abstract_instantiate()?;
         self.add_ctx_bridge()?;
         self.add_sound_guard()?;
-        self.add_assembly()?;
+        self.add_tenvrepc()?;
+        let kvalue = self.add_assembly()?;
+        // add_assembly moved OUT to add_sound_arms, after
+        // add_kinfers_bridge_arms: the sharp-codomain assembly dispatches to
+        // impl_kinfers_* and those are registered there, so running the
+        // assembly here left them Unknown. Measured, not guessed --
+        // `ElabError("value of impl_infer_kinfers_sound: Unknown identifier:
+        // impl_kinfers_lam_scoped")`. Scratch elaboration cannot catch this
+        // class: it appends to an ALREADY-BUILT spec where every constant
+        // exists regardless of which stage minted it.
         self.add_sound_witnesses()?;
-        Ok(())
+        Ok(kvalue)
     }
 
     /// `Nat.sub d i = 0 → Lt d (succ i)` — the one ordering bridge the `let_`
@@ -1512,7 +1635,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_let_scoped".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) ",
                 "(b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr), ",
                 "ImplScoped x b Nat.zero -> ImplLC bt Nat.zero -> ImplLC v Nat.zero -> ",
@@ -1528,7 +1651,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) ",
                     "(b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr) ",
                     "(hsc : ImplScoped x b Nat.zero) (hlcbt : ImplLC bt Nat.zero) ",
@@ -1818,8 +1941,8 @@ impl Specification {
                     "(fun (lt : ImplLit) (d0 : Nat) => ",
                     "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
                     "(impl_lit_to_kexpr z)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (KExpr.lit k)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (KExpr.lit k)) lt) ",
+                    "(fun (k : Nat) => Eq.refl KExpr (literal_nat k)) ",
+                    "(fun (k : Nat) => Eq.refl KExpr (literal_string k)) lt) ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_le : ImplLC e0 d0) ",
                     "(ri : Eq KExpr (to_kexpr_at e0 (ListType.cons Nat x rho) d0) ",
                     "(to_kexpr_at (impl_abstract_at e0 x d0) rho (Nat.succ d0))) => ri) ",
@@ -1873,7 +1996,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_lam_scoped".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                 "(b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr), ",
                 "ImplScoped x b Nat.zero -> ImplLC bt Nat.zero -> ",
@@ -1888,7 +2011,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                     "(b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr) ",
                     "(hsc : ImplScoped x b Nat.zero) (hlc : ImplLC bt Nat.zero) ",
@@ -1935,7 +2058,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_pi_scoped".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                 "(b : ImplExpr) (S1 : ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ",
                 "ImplScoped x b Nat.zero -> ",
@@ -1950,7 +2073,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                     "(b : ImplExpr) (S1 : ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level) ",
                     "(hsc : ImplScoped x b Nat.zero) ",
@@ -2015,7 +2138,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_lam".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                 "(b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr), ",
                 "ImplWhnfTo S (ImplExpr.sort l) -> ",
@@ -2033,7 +2156,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                     "(b : ImplExpr) (S : ImplExpr) (l : Level) (bt : ImplExpr) ",
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) ",
@@ -2110,7 +2233,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_pi".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                 "(b : ImplExpr) (S1 : ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level), ",
                 "ImplWhnfTo S1 (ImplExpr.sort l1) -> ImplWhnfTo S2 (ImplExpr.sort l2) -> ",
@@ -2126,7 +2249,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (x : Nat) (bd : BinderData) (A : ImplExpr) ",
                     "(b : ImplExpr) (S1 : ImplExpr) (S2 : ImplExpr) (l1 : Level) (l2 : Level) ",
                     "(hs1 : ImplWhnfTo S1 (ImplExpr.sort l1)) ",
@@ -2190,7 +2313,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_sound_let".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                "forall (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                 "(rho : ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) ",
                 "(b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr), ",
                 "ImplWhnfTo S (ImplExpr.sort l) -> ImplIsLe Tv ty -> ",
@@ -2212,7 +2335,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (Gk : ListType KExpr) ",
+                    "fun (tenvK : KDeclEnv) (Gk : ListType KExpr) ",
                     "(rho : ListType Nat) (x : Nat) (nm : Name) (ty : ImplExpr) (v : ImplExpr) ",
                     "(b : ImplExpr) (S : ImplExpr) (l : Level) (Tv : ImplExpr) (bt : ImplExpr) ",
                     "(hs : ImplWhnfTo S (ImplExpr.sort l)) (hle : ImplIsLe Tv ty) ",
@@ -2661,7 +2784,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "impl_kinfers_app".to_string(),
             type_src: concat!(
-                "forall (tenvK : Name -> OptionType KExpr) (rho : ListType Nat) ",
+                "forall (tenvK : KDeclEnv) (rho : ListType Nat) ",
                 "(Gk : ListType KExpr) (f : ImplExpr) (a : ImplExpr) (F : ImplExpr) ",
                 "(bd : BinderData) (A : ImplExpr) (B : ImplExpr) (A2 : ImplExpr), ",
                 "KernelInfers tenvK Gk (to_kexpr f rho) (to_kexpr F rho) -> ",
@@ -2674,7 +2797,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenvK : Name -> OptionType KExpr) (rho : ListType Nat) ",
+                    "fun (tenvK : KDeclEnv) (rho : ListType Nat) ",
                     "(Gk : ListType KExpr) (f : ImplExpr) (a : ImplExpr) (F : ImplExpr) ",
                     "(bd : BinderData) (A : ImplExpr) (B : ImplExpr) (A2 : ImplExpr) ",
                     "(hf : KernelInfers tenvK Gk (to_kexpr f rho) (to_kexpr F rho)) ",
@@ -3042,14 +3165,14 @@ impl Specification {
                     // is an ImplLit.rec application), so layer 2's `lift_at`
                     // cannot iota-reduce past it and the two sides are not
                     // definitionally equal until `lt` is a constructor. Hence
-                    // the split; both arms then land on `KExpr.lit n`, which
+                    // the split; both arms then land on a tagged `KExpr.lit`, which
                     // `lift_at` does discard. (`sort`/`const` need no split —
                     // their translations are already constructor-headed.)
                     "(fun (lt : ImplLit) (k : Nat) => ",
                     "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
                     "(lift_at (impl_lit_to_kexpr z) k c)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (KExpr.lit n)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (KExpr.lit n)) ",
+                    "(fun (n : Nat) => Eq.refl KExpr (literal_nat n)) ",
+                    "(fun (n : Nat) => Eq.refl KExpr (literal_string n)) ",
                     "lt) ",
                     // ── mdata — ERASED by the translation, so the IH is the
                     // whole proof: both sides reduce to the inner term's.
@@ -3496,8 +3619,8 @@ impl Specification {
                     "(instantiate_at (impl_lit_to_kexpr z) ",
                     "(to_kexpr_at a rho Nat.zero)",
                     " d)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (KExpr.lit n)) ",
-                    "(fun (n : Nat) => Eq.refl KExpr (KExpr.lit n)) ",
+                    "(fun (n : Nat) => Eq.refl KExpr (literal_nat n)) ",
+                    "(fun (n : Nat) => Eq.refl KExpr (literal_string n)) ",
                     "lt) ",
                     // ── mdata — erased by the translation on both sides ──────
                     "(fun (inner : ImplExpr) ",
@@ -3565,8 +3688,8 @@ impl Specification {
     /// the scoping each of their rules needs — computed FROM the derivation.
     ///
     /// Defined by `ImplInfer.rec` into `Type`, so it is not a comment about
-    /// coverage but a function of the derivation: `Empty` at `lit`, `ImplUnit`
-    /// at the leaves, and at every recursive rule the conjunction of that rule's
+    /// coverage but a function of the derivation: `ImplUnit` at every leaf,
+    /// including both literal kinds, and at every recursive rule the conjunction of that rule's
     /// scoping side conditions with its children's guards.
     ///
     /// This is what makes "7 of 9, and 7 is the ceiling" checkable rather than
@@ -3669,8 +3792,8 @@ impl Specification {
                     "Eq (OptionType ImplExpr) (lctx_lookup zG y) ",
                     "(OptionType.some ImplExpr Ay) -> ImplFreshLC zn2 Ay Nat.zero) ",
                     "(AndType rty (AndType rv rb))))))) ",
-                    // lit — PERMANENTLY out of scope.
-                    "(fun (in2 : Nat) (iG : LCtx) (ilt : ImplLit) => Empty) ",
+                    // Both literal kinds are supported by the typing model.
+                    "(fun (in2 : Nat) (iG : LCtx) (ilt : ImplLit) => ImplUnit) ",
                     // mdata — transparent, so the guard is the inner one.
                     "(fun (mn : Nat) (mn1 : Nat) (mG : LCtx) (me : ImplExpr) (mT : ImplExpr) ",
                     "(_mh : ImplInfer tenv lps mn mG me mT mn1) (mih : Type) => mih) ",
@@ -3681,12 +3804,11 @@ impl Specification {
             is_axiom: false,
             description: concat!(
                 "M4's COVERAGE GUARD, computed FROM the derivation rather than asserted about ",
-                "it. Defined by ImplInfer.rec into Type: Empty at lit, ImplUnit at the ",
-                "obligation-free leaves (sort / fvar / const), and at every recursive rule the ",
+                "it. Defined by ImplInfer.rec into Type: ImplUnit at the ",
+                "obligation-free leaves (sort / fvar / const / lit), and at every recursive rule the ",
                 "conjunction of that rule's scoping side conditions with its children's guards. ",
-                "This makes \"7 of 9, and 7 is the ceiling\" a fact in the environment. lit is ",
-                "Empty because TypingCtxConv has no literal rule to bridge into — the same ",
-                "permanent gap KernelInfers had, unaffected by the retarget. bvar does not ",
+                "Literal cases no longer require Empty: Nat and String have distinct encoded ",
+                "representations and their own typing rules. bvar does not ",
                 "appear at all because it is not a rule: layer 1 REFUTES it ",
                 "(impl_infer_bvar_rejects, tc/infer.rs:350). ",
                 "THE SCOPING FIELDS ARE EXACTLY WHAT THE PROVED ARMS ASK FOR, per rule and not ",
@@ -3949,8 +4071,8 @@ impl Specification {
                     "(fun (lt : ImplLit) (d0 : Nat) => ",
                     "ImplLit.rec (fun (z : ImplLit) => Eq KExpr (impl_lit_to_kexpr z) ",
                     "(lift_at (impl_lit_to_kexpr z) d0 (Nat.succ Nat.zero))) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (KExpr.lit k)) ",
-                    "(fun (k : Nat) => Eq.refl KExpr (KExpr.lit k)) lt) ",
+                    "(fun (k : Nat) => Eq.refl KExpr (literal_nat k)) ",
+                    "(fun (k : Nat) => Eq.refl KExpr (literal_string k)) lt) ",
                     "(fun (e0 : ImplExpr) (d0 : Nat) (_le : ImplFreshLC x e0 d0) ",
                     "(ri : Eq KExpr (to_kexpr_at e0 (ListType.cons Nat x rho) d0) ",
                     "(lift_at (to_kexpr_at e0 rho d0) d0 (Nat.succ Nat.zero))) => ri) ",
@@ -4058,7 +4180,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "tconv_var_of_var_type".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (i : Nat) ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) ",
                 "(Tk : KExpr), ",
                 "Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk) -> ",
                 "TypingCtxConv tenv G (KExpr.bvar i) Tk"
@@ -4066,7 +4188,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (i : Nat) ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) (i : Nat) ",
                     "(Tk : KExpr) ",
                     "(h : Eq (OptionType KExpr) (ctx_var_type G i) (OptionType.some KExpr Tk)) => ",
                     "OptionType.rec KExpr ",
@@ -4130,46 +4252,49 @@ impl Specification {
     /// The motive quantifies over `rho` and `Gk` *inside*, because both change
     /// at a binder while the layer-1 context is an index of the relation — so
     /// they cannot be fixed outside the induction.
-    fn add_assembly(&mut self) -> Result<(), SpecError> {
-        // The environment representation the `const` rule needs.
+    /// `TEnvRepC` alone, split out of `add_assembly`.
+    ///
+    /// It must be registered EARLY because `add_sound_witnesses`
+    /// (`tenvrepc_empty`) consumes it, while the two assembled theorems must be
+    /// registered LATE because they dispatch to `impl_kinfers_*`. Those pull in
+    /// opposite directions, and keeping the definition with the theorems satisfies
+    /// neither -- measured twice, once in each direction:
+    /// `Unknown identifier: impl_kinfers_lam_scoped`, then
+    /// `type of tenvrepc_empty: Unknown identifier: TEnvRepC`.
+    fn add_tenvrepc(&mut self) -> Result<(), SpecError> {
         self.add_definition_reducible(SpecDefinition {
             name: "TEnvRepC".to_string(),
-            type_src: "(Name -> OptionType ImplConstInfo) -> (Name -> OptionType KExpr) -> Prop"
-                .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (tenv : Name -> OptionType ImplConstInfo) ",
-                    "(tenvK : Name -> OptionType KExpr) => ",
-                    "forall (nm : Name) (ci : ImplConstInfo) (us : ListType Level) ",
-                    "(rho : ListType Nat), ",
-                    "Eq (OptionType ImplConstInfo) (tenv nm) (OptionType.some ImplConstInfo ci) -> ",
-                    "Eq (OptionType KExpr) (tenvK nm) (OptionType.some KExpr ",
-                    "(to_kexpr (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) rho))"
-                )
-                .to_string(),
-            ),
+            type_src: "(Name -> OptionType ImplConstInfo) -> KDeclEnv -> Type".to_string(),
+            value_src: Some("SchematicTEnvRep".to_string()),
             is_axiom: false,
             description: concat!(
-                "ENVIRONMENT REPRESENTATION for the assembled theorem's const rule. Quantifying ",
-                "over `us` AND `rho` makes it satisfiable only for constants whose translated ",
-                "type depends on neither — i.e. level-monomorphic constants with fvar-free ",
-                "types. That is not a shortcut, it is FORCED: TypingCtxConv.const's environment ",
-                "is `Name -> OptionType KExpr` with no `us` argument, so layer 2 is ",
-                "universe-blind and cannot express a universe-instantiated constant type. The ",
-                "gap is inherited from KernelInfers and is untouched by the retarget; widening ",
-                "it is a layer-2 modelling change, not an M4 obligation. Zero axiom_deps."
+                "ENVIRONMENT REPRESENTATION identifies each successful implementation-model ",
+                "lookup with one stored schematic signature and structural No-FVar evidence. ",
+                "The universe-dependent lookup equation is DERIVED by schematic_tenv_lookup ",
+                "from the actual arity premise. Schematic closedness, parameter support, ",
+                "source admission, and production execution correspondence remain separate."
             )
             .to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
             elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "to_kexpr".to_string(),
-                "impl_inst_levels".to_string(),
-            ])),
+            dependencies: Some(HashSet::from(["SchematicTEnvRep".to_string()])),
             axiom_deps: HashSet::new(),
         })?;
+        Ok(())
+    }
+
+    /// Registers `impl_infer_sound` and RETURNS the sharp-codomain proof term.
+    ///
+    /// The term is built here because it reuses this function's guard
+    /// projections, but it cannot be REGISTERED here: `impl_infer_sound_witness`
+    /// consumes `impl_infer_sound` early, while the sharp theorem dispatches to
+    /// `impl_kinfers_*` which is registered later. Handing the string back is
+    /// what lets one function build it and a later one register it, without
+    /// duplicating twenty-odd guard projections that would then drift.
+    fn add_assembly(&mut self) -> Result<String, SpecError> {
+        // The environment representation the `const` rule needs.
 
         // ── guard sub-terms, written once and reused by the projections ──────
         let lam_decl = "(LocalDecl.mk ln1 lA (OptionType.none ImplExpr) lbd)";
@@ -4232,7 +4357,7 @@ impl Specification {
 
         let value = format!(
             "fun (tenv : Name -> OptionType ImplConstInfo) \
-             (tenvK : Name -> OptionType KExpr) (lps : ListType Name) \
+             (tenvK : KDeclEnv) (lps : ListType Name) \
              (te : TEnvRepC tenv tenvK) (n : Nat) (G : LCtx) (e : ImplExpr) \
              (T : ImplExpr) (m : Nat) (h : ImplInfer tenv lps n G e T m) => \
              ImplInfer.rec tenv lps {motive} \
@@ -4254,7 +4379,7 @@ impl Specification {
              (cci : ImplConstInfo) \
              (cget : Eq (OptionType ImplConstInfo) (tenv cnm) \
              (OptionType.some ImplConstInfo cci)) \
-             (_car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) \
+             (car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) \
              (_clv : Eq Bool (impl_levels_ok lps cus) Bool.true) \
              (_cuf : Eq Bool (impl_const_unsafe cci) Bool.false) \
              (_cpf : Eq Bool (impl_const_partial cci) Bool.false) => \
@@ -4262,7 +4387,7 @@ impl Specification {
              (_c : CtxRep Gk rho cG) => \
              TypingCtxConv.const tenvK Gk cnm cus \
              (to_kexpr (impl_inst_levels (impl_const_lps cci) cus (impl_const_type cci)) rho) \
-             (te cnm cci cus rho cget)) \
+             (schematic_tenv_lookup tenv tenvK te cnm cci cus rho cget car)) \
              \
              (fun (an : Nat) (an1 : Nat) (an2 : Nat) (aG : LCtx) (af : ImplExpr) \
              (aa : ImplExpr) (aF : ImplExpr) (abd : BinderData) (aA : ImplExpr) \
@@ -4411,14 +4536,224 @@ impl Specification {
              (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g)))))))) \
              \
              (fun (in2 : Nat) (iG : LCtx) (ilt : ImplLit) => \
-             fun (g : Empty) (rho : ListType Nat) (Gk : ListType KExpr) \
+             fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
              (_c : CtxRep Gk rho iG) => \
-             Empty.rec (fun (_z : Empty) => TypingCtxConv tenvK Gk \
-             (to_kexpr (ImplExpr.lit ilt) rho) (to_kexpr (impl_lit_type ilt) rho)) g) \
+             impl_sound_lit tenvK Gk rho ilt) \
              \
              (fun (mn : Nat) (mn1 : Nat) (mG : LCtx) (me : ImplExpr) (mT : ImplExpr) \
              (mh : ImplInfer tenv lps mn mG me mT mn1) \
              (mih : {motive} mn mG me mT mn1 mh) => \
+             fun (g : ImplSoundGuard tenv lps mn mG me mT mn1 mh) \
+             (rho : ListType Nat) (Gk : ListType KExpr) (c : CtxRep Gk rho mG) => \
+             mih g rho Gk c) \
+             \
+             n G e T m h"
+        );
+        // THE SHARP-CODOMAIN MIRROR (see
+        // designs/2026-09-18-the-algorithmic-codomain-is-one-assembly-away.md).
+        // Same recursor, same ImplSoundGuard, same guard projections, same minor
+        // binder structure -- that structure is fixed by ImplInfer's constructors
+        // and so cannot differ. Only the motive's codomain and eight dispatch
+        // expressions change. pi/let_/lit are pure NAME swaps, their sharp twins
+        // taking premises in the identical order; app and lam additionally reorder,
+        // and neither reordering is visible from the names.
+        let kmotive = "(fun (n0 : Nat) (G0 : LCtx) (e0 : ImplExpr) (T0 : ImplExpr) (m0 : Nat) \
+                       (h0 : ImplInfer tenv lps n0 G0 e0 T0 m0) => \
+                       ImplSoundGuard tenv lps n0 G0 e0 T0 m0 h0 -> \
+                       forall (rho : ListType Nat) (Gk : ListType KExpr), \
+                       CtxRep Gk rho G0 -> \
+                       KernelInfers tenvK Gk (to_kexpr e0 rho) (to_kexpr T0 rho))";
+
+        let kvalue = format!(
+            "fun (tenv : Name -> OptionType ImplConstInfo) \
+             (tenvK : KDeclEnv) (lps : ListType Name) \
+             (te : TEnvRepC tenv tenvK) (n : Nat) (G : LCtx) (e : ImplExpr) \
+             (T : ImplExpr) (m : Nat) (h : ImplInfer tenv lps n G e T m) => \
+             ImplInfer.rec tenv lps {kmotive} \
+             \
+             (fun (sn : Nat) (sG : LCtx) (sl : Level) \
+             (_shl : Eq Bool (level_params_ok lps sl) Bool.true) => \
+             fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
+             (_c : CtxRep Gk rho sG) => impl_bridge_sort tenvK Gk rho sl) \
+             \
+             (fun (vn : Nat) (vG : LCtx) (vx : Nat) (vA : ImplExpr) \
+             (vlk : Eq (OptionType ImplExpr) (lctx_lookup vG vx) \
+             (OptionType.some ImplExpr vA)) => \
+             fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
+             (c : CtxRep Gk rho vG) => \
+             impl_bridge_fvar tenvK Gk rho vG vx vA c vlk) \
+             \
+             (fun (cn : Nat) (cG : LCtx) (cnm : Name) (cus : ListType Level) \
+             (cci : ImplConstInfo) \
+             (cget : Eq (OptionType ImplConstInfo) (tenv cnm) \
+             (OptionType.some ImplConstInfo cci)) \
+             (car : Eq Nat (name_list_len (impl_const_lps cci)) (level_list_len cus)) \
+             (_clv : Eq Bool (impl_levels_ok lps cus) Bool.true) \
+             (_cuf : Eq Bool (impl_const_unsafe cci) Bool.false) \
+             (_cpf : Eq Bool (impl_const_partial cci) Bool.false) => \
+             fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
+             (_c : CtxRep Gk rho cG) => \
+             impl_bridge_const tenvK tenv Gk rho cnm cus cci \
+             (fun (nm2 : Name) (us2 : ListType Level) (ci2 : ImplConstInfo) \
+             (g2 : Eq (OptionType ImplConstInfo) (tenv nm2) \
+             (OptionType.some ImplConstInfo ci2)) \
+             (a2 : Eq Nat (name_list_len (impl_const_lps ci2)) (level_list_len us2)) => \
+             schematic_tenv_lookup tenv tenvK te nm2 ci2 us2 rho g2 a2) cget car) \
+             \
+             (fun (an : Nat) (an1 : Nat) (an2 : Nat) (aG : LCtx) (af : ImplExpr) \
+             (aa : ImplExpr) (aF : ImplExpr) (abd : BinderData) (aA : ImplExpr) \
+             (aB : ImplExpr) (aA2 : ImplExpr) \
+             (ahf : ImplInfer tenv lps an aG af aF an1) \
+             (ahw : ImplWhnfTo aF (ImplExpr.pi abd aA aB)) \
+             (aha : ImplInfer tenv lps an1 aG aa aA2 an2) \
+             (ahle : ImplIsLe aA2 aA) \
+             (aihf : {kmotive} an aG af aF an1 ahf) \
+             (aiha : {kmotive} an1 aG aa aA2 an2 aha) => \
+             fun (g : AndType (ImplSoundGuard tenv lps an aG af aF an1 ahf) \
+             (ImplSoundGuard tenv lps an1 aG aa aA2 an2 aha)) \
+             (rho : ListType Nat) (Gk : ListType KExpr) (c : CtxRep Gk rho aG) => \
+             impl_kinfers_app tenvK rho Gk af aa aF abd aA aB aA2 \
+             (aihf (AndType.left (ImplSoundGuard tenv lps an aG af aF an1 ahf) \
+             (ImplSoundGuard tenv lps an1 aG aa aA2 an2 aha) g) rho Gk c) ahw \
+             (aiha (AndType.right (ImplSoundGuard tenv lps an aG af aF an1 ahf) \
+             (ImplSoundGuard tenv lps an1 aG aa aA2 an2 aha) g) rho Gk c) ahle) \
+             \
+             (fun (ln : Nat) (ln1 : Nat) (ln2 : Nat) (lG : LCtx) (lbd : BinderData) \
+             (lA : ImplExpr) (lb : ImplExpr) (lS : ImplExpr) (ll : Level) \
+             (lbt : ImplExpr) \
+             (lhA : ImplInfer tenv lps ln lG lA lS ln1) \
+             (lhS : ImplWhnfTo lS (ImplExpr.sort ll)) \
+             (lhb : ImplInfer tenv lps (Nat.succ ln1) (LCtx.snoc lG {lam_decl}) \
+             (impl_open lb ln1) lbt ln2) \
+             (lihA : {kmotive} ln lG lA lS ln1 lhA) \
+             (lihb : {kmotive} (Nat.succ ln1) (LCtx.snoc lG {lam_decl}) \
+             (impl_open lb ln1) lbt ln2 lhb) => \
+             fun (g : AndType (ImplScoped ln1 lb Nat.zero) {lam_r1}) \
+             (rho : ListType Nat) (Gk : ListType KExpr) (c : CtxRep Gk rho lG) => \
+             impl_kinfers_lam_scoped tenvK Gk rho ln1 lbd lA lb lS ll lbt \
+             (AndType.left (ImplScoped ln1 lb Nat.zero) {lam_r1} g) \
+             (AndType.left (ImplLC lbt Nat.zero) {lam_r2} \
+             (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g)) \
+             (lihA (AndType.left {lam_ga} {lam_gb} \
+             (AndType.right {lam_cf} {lam_r4} \
+             (AndType.right (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
+             (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
+             (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))))) rho Gk c) \
+             lhS \
+             (lihb (AndType.right {lam_ga} {lam_gb} \
+             (AndType.right {lam_cf} {lam_r4} \
+             (AndType.right (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
+             (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
+             (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))))) \
+             (ListType.cons Nat ln1 rho) \
+             (ListType.cons KExpr (to_kexpr lA rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho lG ln1 lA (OptionType.none ImplExpr) lbd c \
+             (AndType.left (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
+             (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
+             (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))) \
+             (AndType.left {lam_cf} {lam_r4} \
+             (AndType.right (ImplFreshLC ln1 lA Nat.zero) {lam_r3} \
+             (AndType.right (ImplLC lbt Nat.zero) {lam_r2} \
+             (AndType.right (ImplScoped ln1 lb Nat.zero) {lam_r1} g))))))) \
+             \
+             (fun (pn : Nat) (pn1 : Nat) (pn2 : Nat) (pG : LCtx) (pbd : BinderData) \
+             (pA : ImplExpr) (pb : ImplExpr) (pS1 : ImplExpr) (pS2 : ImplExpr) \
+             (pl1 : Level) (pl2 : Level) \
+             (phA : ImplInfer tenv lps pn pG pA pS1 pn1) \
+             (phS1 : ImplWhnfTo pS1 (ImplExpr.sort pl1)) \
+             (phb : ImplInfer tenv lps (Nat.succ pn1) (LCtx.snoc pG {pi_decl}) \
+             (impl_open pb pn1) pS2 pn2) \
+             (phS2 : ImplWhnfTo pS2 (ImplExpr.sort pl2)) \
+             (pihA : {kmotive} pn pG pA pS1 pn1 phA) \
+             (pihb : {kmotive} (Nat.succ pn1) (LCtx.snoc pG {pi_decl}) \
+             (impl_open pb pn1) pS2 pn2 phb) => \
+             fun (g : AndType (ImplScoped pn1 pb Nat.zero) {pi_r1}) \
+             (rho : ListType Nat) (Gk : ListType KExpr) (c : CtxRep Gk rho pG) => \
+             impl_bridge_pi_scoped tenvK Gk rho pn1 pbd pA pb pS1 pS2 pl1 pl2 \
+             (AndType.left (ImplScoped pn1 pb Nat.zero) {pi_r1} g) \
+             phS1 phS2 \
+             (pihA (AndType.left {pi_ga} {pi_gb} \
+             (AndType.right {pi_cf} {pi_r3} \
+             (AndType.right (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
+             (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)))) rho Gk c) \
+             (pihb (AndType.right {pi_ga} {pi_gb} \
+             (AndType.right {pi_cf} {pi_r3} \
+             (AndType.right (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
+             (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)))) \
+             (ListType.cons Nat pn1 rho) \
+             (ListType.cons KExpr (to_kexpr pA rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho pG pn1 pA (OptionType.none ImplExpr) pbd c \
+             (AndType.left (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
+             (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)) \
+             (AndType.left {pi_cf} {pi_r3} \
+             (AndType.right (ImplFreshLC pn1 pA Nat.zero) {pi_r2} \
+             (AndType.right (ImplScoped pn1 pb Nat.zero) {pi_r1} g)))))) \
+             \
+             (fun (zn : Nat) (zn1 : Nat) (zn2 : Nat) (zn3 : Nat) (zG : LCtx) \
+             (znm : Name) (zty : ImplExpr) (zv : ImplExpr) (zb : ImplExpr) \
+             (zS : ImplExpr) (zl : Level) (zTv : ImplExpr) (zbt : ImplExpr) \
+             (zhty : ImplInfer tenv lps zn zG zty zS zn1) \
+             (zhS : ImplWhnfTo zS (ImplExpr.sort zl)) \
+             (zhv : ImplInfer tenv lps zn1 zG zv zTv zn2) \
+             (zhle : ImplIsLe zTv zty) \
+             (zhb : ImplInfer tenv lps (Nat.succ zn2) (LCtx.snoc zG {let_decl}) \
+             (impl_open zb zn2) zbt zn3) \
+             (zihty : {kmotive} zn zG zty zS zn1 zhty) \
+             (zihv : {kmotive} zn1 zG zv zTv zn2 zhv) \
+             (zihb : {kmotive} (Nat.succ zn2) (LCtx.snoc zG {let_decl}) \
+             (impl_open zb zn2) zbt zn3 zhb) => \
+             fun (g : AndType (ImplScoped zn2 zb Nat.zero) {let_r1}) \
+             (rho : ListType Nat) (Gk : ListType KExpr) (c : CtxRep Gk rho zG) => \
+             impl_kinfers_let_scoped tenvK Gk rho zn2 znm zty zv zb zS zl zTv zbt \
+             (AndType.left (ImplScoped zn2 zb Nat.zero) {let_r1} g) \
+             (AndType.left (ImplLC zbt Nat.zero) {let_r2} \
+             (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g)) \
+             (AndType.left (ImplLC zv Nat.zero) {let_r3} \
+             (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
+             (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g))) \
+             zhS zhle \
+             (zihty (AndType.left {let_gt} {let_r6} \
+             (AndType.right {let_cf} {let_r5} \
+             (AndType.right (ImplFreshLC zn2 zty Nat.zero) {let_r4} \
+             (AndType.right (ImplLC zv Nat.zero) {let_r3} \
+             (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
+             (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g)))))) rho Gk c) \
+             (zihv (AndType.left {let_gv} {let_gb} \
+             (AndType.right {let_gt} {let_r6} \
+             (AndType.right {let_cf} {let_r5} \
+             (AndType.right (ImplFreshLC zn2 zty Nat.zero) {let_r4} \
+             (AndType.right (ImplLC zv Nat.zero) {let_r3} \
+             (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
+             (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g))))))) rho Gk c) \
+             (zihb (AndType.right {let_gv} {let_gb} \
+             (AndType.right {let_gt} {let_r6} \
+             (AndType.right {let_cf} {let_r5} \
+             (AndType.right (ImplFreshLC zn2 zty Nat.zero) {let_r4} \
+             (AndType.right (ImplLC zv Nat.zero) {let_r3} \
+             (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
+             (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g))))))) \
+             (ListType.cons Nat zn2 rho) \
+             (ListType.cons KExpr (to_kexpr zty rho) Gk) \
+             (ctx_rep_snoc_fresh Gk rho zG zn2 zty (OptionType.some ImplExpr zv) \
+             (BinderData.mk BinderInfo.default Multiplicity.many) c \
+             (AndType.left (ImplFreshLC zn2 zty Nat.zero) {let_r4} \
+             (AndType.right (ImplLC zv Nat.zero) {let_r3} \
+             (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
+             (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g)))) \
+             (AndType.left {let_cf} {let_r5} \
+             (AndType.right (ImplFreshLC zn2 zty Nat.zero) {let_r4} \
+             (AndType.right (ImplLC zv Nat.zero) {let_r3} \
+             (AndType.right (ImplLC zbt Nat.zero) {let_r2} \
+             (AndType.right (ImplScoped zn2 zb Nat.zero) {let_r1} g)))))))) \
+             \
+             (fun (in2 : Nat) (iG : LCtx) (ilt : ImplLit) => \
+             fun (_g : ImplUnit) (rho : ListType Nat) (Gk : ListType KExpr) \
+             (_c : CtxRep Gk rho iG) => \
+             impl_bridge_lit tenvK Gk rho ilt) \
+             \
+             (fun (mn : Nat) (mn1 : Nat) (mG : LCtx) (me : ImplExpr) (mT : ImplExpr) \
+             (mh : ImplInfer tenv lps mn mG me mT mn1) \
+             (mih : {kmotive} mn mG me mT mn1 mh) => \
              fun (g : ImplSoundGuard tenv lps mn mG me mT mn1 mh) \
              (rho : ListType Nat) (Gk : ListType KExpr) (c : CtxRep Gk rho mG) => \
              mih g rho Gk c) \
@@ -4430,7 +4765,7 @@ impl Specification {
             name: "impl_infer_sound".to_string(),
             type_src: concat!(
                 "forall (tenv : Name -> OptionType ImplConstInfo) ",
-                "(tenvK : Name -> OptionType KExpr) (lps : ListType Name), ",
+                "(tenvK : KDeclEnv) (lps : ListType Name), ",
                 "TEnvRepC tenv tenvK -> ",
                 "forall (n : Nat) (G : LCtx) (e : ImplExpr) (T : ImplExpr) (m : Nat) ",
                 "(h : ImplInfer tenv lps n G e T m), ",
@@ -4454,14 +4789,14 @@ impl Specification {
                 "be fixed outside the induction. Each binder minor instantiates them at ",
                 "`cons x rho` and `cons (to_kexpr A rho) Gk` and builds the extended context ",
                 "representation with ctx_rep_snoc_fresh. ",
-                "The nine minors are exactly the seven proved arms, one Empty.rec, and one ",
+                "The nine minors are eight proved arms and one ",
                 "identity: sort/const are direct, fvar is ctx_rep_lookup composed with ",
                 "tconv_var_of_var_type, app/lam/pi/let_ are impl_sound_app / ",
-                "impl_sound_lam_scoped / impl_sound_pi_scoped / impl_sound_let_scoped, lit is ",
-                "discharged by Empty.rec because the guard reduces to Empty there, and mdata is ",
+                "impl_sound_lam_scoped / impl_sound_pi_scoped / impl_sound_let_scoped, lit uses ",
+                "impl_sound_lit for both tagged literal kinds, and mdata is ",
                 "the inner call because the translation erases it. ",
-                "WHAT IS ASSUMED, stated plainly: TEnvRepC (layer 2 is universe-blind — ",
-                "inherited from KernelInfers, untouched by the retarget), CtxRep (whose two ",
+                "WHAT IS ASSUMED, stated plainly: TEnvRepC (one schematic signature and ",
+                "No-FVar per successful lookup, not an instantiated-output equation), CtxRep (whose two ",
                 "equation fields ctx_rep_snoc_fresh now DERIVES from freshness rather than ",
                 "assuming), and the guard's per-rule scoping, which is a genuine invariant of ",
                 "the deployed checker. Nothing here is an axiom: DerivedProved, EMPTY axiom ",
@@ -4484,13 +4819,14 @@ impl Specification {
                 "impl_sound_lam_scoped".to_string(),
                 "impl_sound_pi_scoped".to_string(),
                 "impl_sound_let_scoped".to_string(),
+                "impl_sound_lit".to_string(),
                 "TypingCtxConv.sort".to_string(),
                 "TypingCtxConv.const".to_string(),
-                "Empty.rec".to_string(),
             ])),
             axiom_deps: HashSet::new(),
         })?;
-        Ok(())
+
+        Ok(kvalue)
     }
 
     /// Non-vacuity witnesses for everything M4 assumes.
@@ -4502,9 +4838,74 @@ impl Specification {
     /// green. `impl_infer_sound` is conditional on `TEnvRepC`, `CtxRep` and
     /// `ImplSoundGuard`, so each needs an inhabitant, and the theorem itself
     /// needs to be seen producing a derivation.
+    /// Registers the sharp-codomain theorem, LAST, from the term `add_assembly`
+    /// built. Ordering measured three times, once per direction it can fail.
+    fn add_kinfers_assembly(&mut self, kvalue: String) -> Result<(), SpecError> {
+        // THE SHARP CODOMAIN. Same hypotheses as impl_infer_sound, same guard,
+        // and a conclusion in KernelInfers rather than TypingCtxConv.
+        //
+        // WHY THAT MATTERS AND IS NOT BOOKKEEPING. TypingCtxConv.conv is
+        // UNRESTRICTED, so `TypingCtxConv Gk e T` says only that T is SOME
+        // member of the conversion class -- certificate gap-4 states this and
+        // draws the consequence that the type index is not a function of the
+        // derivation. KernelInfers.app/.let_ instead carry their whnf_to and
+        // DefEq premises as WITNESSED FIELDS, so this theorem's conclusion pins
+        // the index: it says THE CHECKER RETURNED T. That is the claim gap-4
+        // records as unavailable.
+        //
+        // It is a transcription, not a new proof: every arm already existed in
+        // KernelInfers form, including the three SCOPED binder arms, and all
+        // three premise/source correspondence obligations already had
+        // dischargers (impl_whnf_to_whnf_to, impl_is_le_defeq,
+        // to_kexpr_at_instantiate). The design note has the arm table.
+        self.add_definition(SpecDefinition {
+            name: "impl_infer_kinfers_sound".to_string(),
+            type_src: concat!(
+                "forall (tenv : Name -> OptionType ImplConstInfo) ",
+                "(tenvK : KDeclEnv) (lps : ListType Name), ",
+                "TEnvRepC tenv tenvK -> ",
+                "forall (n : Nat) (G : LCtx) (e : ImplExpr) (T : ImplExpr) (m : Nat) ",
+                "(h : ImplInfer tenv lps n G e T m), ",
+                "ImplSoundGuard tenv lps n G e T m h -> ",
+                "forall (rho : ListType Nat) (Gk : ListType KExpr), ",
+                "CtxRep Gk rho G -> ",
+                "KernelInfers tenvK Gk (to_kexpr e rho) (to_kexpr T rho)"
+            )
+            .to_string(),
+            value_src: Some(kvalue),
+            is_axiom: false,
+            description: concat!(
+                "THE ALGORITHMIC CODOMAIN. Every ImplInfer derivation whose guard is ",
+                "inhabited translates, under any context representation, to a KernelInfers ",
+                "derivation on the erased terms -- the SHARP codomain, where the operational ",
+                "steps are witnessed fields rather than absorbed into an unrestricted conv. ",
+                "Read certificate gap-4 for what the TypingCtxConv version does NOT claim. ",
+                "Assembled from arms that already existed: impl_bridge_sort / _fvar / _const ",
+                "/ _pi_scoped / _lit, impl_kinfers_app / _lam_scoped / _let_scoped, and the ",
+                "mdata identity. Same ImplSoundGuard as impl_infer_sound, verified by the ",
+                "sharp and weak lam arms taking the identical two scoping premises. ",
+                "Still assumed, exactly as M4 assumes them: TEnvRepC, CtxRep, and the ",
+                "guard's per-rule scoping. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "ImplInfer".to_string(),
+                "KernelInfers".to_string(),
+                "CtxRep".to_string(),
+                "ImplSoundGuard".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+        Ok(())
+    }
+
     fn add_sound_witnesses(&mut self) -> Result<(), SpecError> {
         let tenv = "(fun (nm : Name) => OptionType.none ImplConstInfo)";
-        let tenvk = "(fun (nm : Name) => OptionType.none KExpr)";
+        let tenvk = "(fun (nm : Name) => OptionType.none KConstSig)";
         // The sort derivation written OUT, not named. ImplSoundGuard recurses on
         // the DERIVATION via ImplInfer.rec, so it only iota-reduces once the
         // derivation is a literal constructor application — a named constant
@@ -4597,22 +4998,13 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "tenvrepc_empty".to_string(),
             type_src: format!("TEnvRepC {tenv} {tenvk}"),
-            value_src: Some(format!(
-                "fun (nm : Name) (ci : ImplConstInfo) (us : ListType Level) \
-                 (rho : ListType Nat) \
-                 (h : Eq (OptionType ImplConstInfo) (OptionType.none ImplConstInfo) \
-                 (OptionType.some ImplConstInfo ci)) => \
-                 option_none_ne_some ImplConstInfo ci \
-                 (Eq (OptionType KExpr) ({tenvk} nm) (OptionType.some KExpr \
-                 (to_kexpr (impl_inst_levels (impl_const_lps ci) us (impl_const_type ci)) rho))) h"
-            )),
+            value_src: Some("schematic_tenv_empty".to_string()),
             is_axiom: false,
             description: concat!(
                 "TEnvRepC IS INHABITED: the empty layer-1 environment represents the empty ",
                 "layer-2 one, vacuously — its resolution hypothesis is `none = some ci`, which ",
-                "option_none_ne_some eliminates. Small, but it is the difference between a ",
-                "hypothesis and an unsatisfiable one, and impl_infer_sound's const rule rests ",
-                "on it. Zero axiom_deps."
+                "option_none_ne_some_type eliminates. The separate nonempty polymorphic ",
+                "witness demonstrates universe-dependent applicability. Zero axiom_deps."
             )
             .to_string(),
             category: AxiomCategory::DerivedLemma,
@@ -4621,7 +5013,7 @@ impl Specification {
             elaborated_value: None,
             dependencies: Some(HashSet::from([
                 "TEnvRepC".to_string(),
-                "option_none_ne_some".to_string(),
+                "schematic_tenv_empty".to_string(),
             ])),
             axiom_deps: HashSet::new(),
         })?;

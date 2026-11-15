@@ -162,9 +162,17 @@ fn test_init_state_m_creates_constants() {
         env.get_const(&Name::from_string("StateM")).is_some(),
         "StateM should be defined"
     );
+    // `StateM.pure` was a phantom axiom (absent upstream) until 2026-09-28;
+    // `StateM σ` is now Lean's `StateT σ Id`, whose `pure` is
+    // `StateT.instMonad`'s, so the phantom is gone.
     assert!(
-        env.get_const(&Name::from_string("StateM.pure")).is_some(),
-        "StateM.pure should be defined"
+        env.get_const(&Name::from_string("StateM.pure")).is_none(),
+        "StateM.pure is a phantom constant and must not be registered"
+    );
+    assert_eq!(
+        env.get_const(&Name::from_string("StateM")).map(|c| c.kind),
+        Some(ConstantKind::Definition),
+        "StateM is Lean's reducible definition, not an axiom"
     );
 }
 
@@ -321,6 +329,8 @@ fn test_full_monad_stack_for_do_notation() {
     env.init_state_t().expect("init_state_t");
     env.init_state_m().expect("init_state_m");
     env.init_monad_classes().expect("init_monad_classes");
+    env.init_core_monad_instances()
+        .expect("init_core_monad_instances");
 
     // All constants should coexist without conflicts
     let tc = TypeChecker::new(&env);
@@ -336,8 +346,11 @@ fn test_full_monad_stack_for_do_notation() {
         ("StateT", vec![Level::zero(), Level::zero()]),
         ("StateT.pure", vec![Level::zero(), Level::zero()]),
         ("StateM", vec![Level::zero()]),
-        ("StateM.pure", vec![Level::zero()]),
+        ("StateT.instMonad", vec![Level::zero(), Level::zero()]),
+        ("Id.instMonad", vec![Level::zero()]),
+        ("instMonadIO", vec![]),
         ("Pure.pure", vec![Level::zero(), Level::zero()]),
+        ("Bind.bind", vec![Level::zero(), Level::zero()]),
     ];
 
     for (name, levels) in &constants {

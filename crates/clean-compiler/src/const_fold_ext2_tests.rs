@@ -1575,23 +1575,62 @@ fn test_fold_bitwise_uint8_shift_left_drops_high_bits() {
     assert!(matches!(r, Some(IRLiteral::UInt8(0xF0))), "got {r:?}");
 }
 
+// Lean 4 reduces the shift AMOUNT mod the bit width. The next three tests used
+// to be `*_past_width_is_zero` and asserted `0`; that was the evaluator's
+// saturating guard of the day, not Lean, and not what the kernel proves.
+
 #[test]
-fn test_fold_bitwise_uint8_shift_left_past_width_is_zero() {
-    // Shift amount >= bit width: runtime yields 0 (conservative, total).
+fn test_fold_bitwise_uint8_shift_left_by_the_width_is_the_identity() {
+    // 8 % 8 = 0: `(0xFF : UInt8) <<< 8 = 0xFF`.
     let r = fold_bitwise(
         "UInt8.shiftLeft",
         &[IRLiteral::UInt8(0xFF), IRLiteral::UInt8(8)],
     );
-    assert!(matches!(r, Some(IRLiteral::UInt8(0))), "got {r:?}");
+    assert!(matches!(r, Some(IRLiteral::UInt8(0xFF))), "got {r:?}");
+    // 9 % 8 = 1, and the result still wraps to the byte: 0x1FE -> 0xFE.
+    let r = fold_bitwise(
+        "UInt8.shiftLeft",
+        &[IRLiteral::UInt8(0xFF), IRLiteral::UInt8(9)],
+    );
+    assert!(matches!(r, Some(IRLiteral::UInt8(0xFE))), "got {r:?}");
+    // Lean's own doc-style example: `(1 : UInt8) <<< 254 = 64` (254 % 8 = 6).
+    let r = fold_bitwise(
+        "UInt8.shiftLeft",
+        &[IRLiteral::UInt8(1), IRLiteral::UInt8(254)],
+    );
+    assert!(matches!(r, Some(IRLiteral::UInt8(64))), "got {r:?}");
 }
 
 #[test]
-fn test_fold_bitwise_uint64_shift_left_past_width_is_zero() {
+fn test_fold_bitwise_uint64_shift_left_by_the_width_is_the_identity() {
     let r = fold_bitwise(
         "UInt64.shiftLeft",
         &[IRLiteral::UInt64(0x1), IRLiteral::UInt64(64)],
     );
-    assert!(matches!(r, Some(IRLiteral::UInt64(0))), "got {r:?}");
+    assert!(matches!(r, Some(IRLiteral::UInt64(1))), "got {r:?}");
+    let r = fold_bitwise(
+        "UInt64.shiftLeft",
+        &[IRLiteral::UInt64(0x1), IRLiteral::UInt64(65)],
+    );
+    assert!(matches!(r, Some(IRLiteral::UInt64(2))), "got {r:?}");
+    assert!(
+        !matches!(r, Some(IRLiteral::UInt64(0))),
+        "saturation is back"
+    );
+}
+
+#[test]
+fn test_fold_bitwise_uint16_shift_amount_is_reduced_mod_16() {
+    let r = fold_bitwise(
+        "UInt16.shiftLeft",
+        &[IRLiteral::UInt16(1), IRLiteral::UInt16(17)],
+    );
+    assert!(matches!(r, Some(IRLiteral::UInt16(2))), "got {r:?}");
+    let r = fold_bitwise(
+        "UInt16.shiftRight",
+        &[IRLiteral::UInt16(0x8000), IRLiteral::UInt16(16)],
+    );
+    assert!(matches!(r, Some(IRLiteral::UInt16(0x8000))), "got {r:?}");
 }
 
 #[test]
@@ -1604,12 +1643,25 @@ fn test_fold_bitwise_uint16_shift_right() {
 }
 
 #[test]
-fn test_fold_bitwise_uint32_shift_right_past_width_is_zero() {
+fn test_fold_bitwise_uint32_shift_right_by_the_width_is_the_identity() {
+    // 32 % 32 = 0: `(0xFFFF_FFFF : UInt32) >>> 32 = 0xFFFF_FFFF`, not `0`.
     let r = fold_bitwise(
         "UInt32.shiftRight",
         &[IRLiteral::UInt32(0xFFFF_FFFF), IRLiteral::UInt32(32)],
     );
-    assert!(matches!(r, Some(IRLiteral::UInt32(0))), "got {r:?}");
+    assert!(
+        matches!(r, Some(IRLiteral::UInt32(0xFFFF_FFFF))),
+        "got {r:?}"
+    );
+    // 33 % 32 = 1.
+    let r = fold_bitwise(
+        "UInt32.shiftRight",
+        &[IRLiteral::UInt32(0xFFFF_FFFF), IRLiteral::UInt32(33)],
+    );
+    assert!(
+        matches!(r, Some(IRLiteral::UInt32(0x7FFF_FFFF))),
+        "got {r:?}"
+    );
 }
 
 #[test]

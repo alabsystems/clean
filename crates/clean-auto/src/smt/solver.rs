@@ -56,6 +56,48 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
+/// SEM — a constant of the language: the conflict limit of every SMT solver's
+/// CDCL core.
+///
+/// Every other loop of an SMT solve is bounded by a count: the DPLL(T)
+/// iterations (`MAX_DPLL_T_ITERATIONS`), the Nelson-Oppen passes, the simplex
+/// pivots and the bridge's instantiation rounds. The CDCL search inside one
+/// iteration was the exception: its limit was `u64::MAX`, so only a caller's
+/// clock could end a hard propositional core, and whether a goal was decided
+/// moved with machine load. With this limit, a solve that spends it answers
+/// [`super::SmtResult::Unknown`] and the bridge reports
+/// [`SMT_CONFLICT_LIMIT_REASON`], the same on every host.
+///
+/// The count is the CDCL solver's lifetime conflicts, so it bounds all the
+/// DPLL(T) iterations and E-matching re-solves of one SMT solver together.
+///
+/// Why 10,000 (measured 2026-10-14, when it was set):
+/// * The language needs almost none of it. Across 1,269 SMT solves (944 in
+///   clean-auto's unit and integration tests, 325 in clean-elab's unit tests
+///   matching `smt`, `auto`, `grind` or `decide`) the most conflicts any solve
+///   spent was 1; the theories, not the CDCL search, decide them.
+/// * A bigger count buys no proofs. The bridge rebuilds kernel proofs
+///   structurally, not from a resolution trace: every pigeonhole core it
+///   refuted (6 to 10 holes, 440 to 78,688 conflicts) came back `Unverified`.
+/// * What one solve that spends it costs: the ten-hole pigeonhole core takes
+///   about 0.7 s in a debug build and 0.12 s in release on a loaded host
+///   (2026-10-14, load averages 36 to 52). The limit is per solver, and a
+///   search can build several (the induction lane builds one per base-engine
+///   attempt). So the limit bounds a search's SMT work by a count, not by a
+///   time, and nothing here shows a whole search fits a caller's backstop.
+///   The decision record gives a whole search's measured cost.
+///
+/// Changing it changes which goals the language's SMT automation decides, so
+/// it moves only with a decision record entry
+/// (`docs/DECISIONS.md`, R-SMT-CONFLICT-LIMIT-20261014), never per call.
+pub(crate) const SMT_CONFLICT_LIMIT: u64 = 10_000;
+
+/// The bridge's `Unknown` reason, and a counted search's stop, when an SMT
+/// solve spent [`SMT_CONFLICT_LIMIT`]. Static text, so an embedder can carry it
+/// as a `&'static str` refusal label.
+pub(crate) const SMT_CONFLICT_LIMIT_REASON: &str = "the SMT solver's CDCL core spent its conflict \
+     limit (clean-auto's SMT_CONFLICT_LIMIT, a constant of the language) before deciding";
+
 /// Result of the Nelson-Oppen equality fixpoint loop (#2366).
 enum NelsonOppenResult {
     /// Fixpoint reached — no new equalities in the last pass.
@@ -184,13 +226,18 @@ pub(crate) struct SmtSolver {
     fixpoint_deduction_source: HashMap<Var, usize>,
     /// Cumulative theory-side runtime totals surfaced through `SmtStats`.
     theory_runtime_totals: TheoryRuntimeTotals,
+    /// Set when a CDCL solve stopped at [`SMT_CONFLICT_LIMIT`]. Sticky: once
+    /// spent, the limit stays spent for this solver.
+    conflict_limit_reached: bool,
 }
 
 impl SmtSolver {
     /// Create a new SMT solver
     pub(crate) fn new() -> Self {
+        let mut sat = CdclSolver::new(0);
+        sat.set_conflict_limit(SMT_CONFLICT_LIMIT);
         SmtSolver {
-            sat: CdclSolver::new(0),
+            sat,
             theories: Vec::new(),
             var_to_theory: BTreeMap::new(),
             theory_to_var: HashMap::new(),
@@ -210,7 +257,13 @@ impl SmtSolver {
             fixpoint_seen_deduced: HashSet::new(),
             fixpoint_deduction_source: HashMap::new(),
             theory_runtime_totals: TheoryRuntimeTotals::default(),
+            conflict_limit_reached: false,
         }
+    }
+
+    /// Whether a solve on this solver stopped at [`SMT_CONFLICT_LIMIT`].
+    pub(crate) fn conflict_limit_reached(&self) -> bool {
+        self.conflict_limit_reached
     }
 
     /// Add a theory solver, returns its index
@@ -455,22 +508,33 @@ impl SmtSolver {
 #[cfg(test)]
 impl SmtSolver {
     /// Get a reference to the terms (test-only, #2386).
-    pub fn terms(&self) -> &[SmtTerm] {
+    pub(crate) fn terms(&self) -> &[SmtTerm] {
         &self.terms
     }
 
     /// Get a reference to a theory solver by index (test-only, #2386).
-    pub fn get_theory(&self, idx: usize) -> Option<&dyn TheorySolver> {
+    pub(crate) fn get_theory(&self, idx: usize) -> Option<&dyn TheorySolver> {
         self.theories.get(idx).map(AsRef::as_ref)
     }
 
     /// Get a mutable reference to a theory solver by index (test-only, #2386).
-    pub fn get_theory_mut(&mut self, idx: usize) -> Option<&mut (dyn TheorySolver + '_)> {
+    pub(crate) fn get_theory_mut(&mut self, idx: usize) -> Option<&mut (dyn TheorySolver + '_)> {
         if idx >= self.theories.len() {
             return None;
         }
         self.mark_theory_sync_dirty();
         Some(self.theories[idx].as_mut())
+    }
+
+    /// The deepest decision level on the CDCL trail (test-only): `0` when the
+    /// core is at its root.
+    pub(crate) fn sat_trail_max_level(&self) -> u32 {
+        self.sat
+            .trail_entries()
+            .iter()
+            .map(|entry| entry.level)
+            .max()
+            .unwrap_or(0)
     }
 }
 

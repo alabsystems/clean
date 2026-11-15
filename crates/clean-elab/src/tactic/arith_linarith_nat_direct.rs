@@ -14,16 +14,14 @@
 //! directly* (rather than refuting hypotheses). It matches a Nat comparison
 //! goal whose two sides share an additive symbolic core differing by a concrete
 //! literal offset, e.g. `core + p  <op>  core + q`, and synthesizes a kernel
-//! term out of the `Nat.le` inductive constructors:
-//!
-//! - `Nat.le.refl : (k : Nat) → Nat.le k k`
-//! - `Nat.le.step : {n m : Nat} → Nat.le n m → Nat.le n (Nat.succ m)`
+//! term for it.
 //!
 //! To prove `Nat.le P Q` where `P` and `Q` share a core and `eval(Q) - eval(P)
-//! = d >= 0`, we build `Nat.le.step^d (Nat.le.refl P) : Nat.le P (Nat.succ^d P)`.
-//! Because `P + d` definitionally reduces to `Nat.succ^d P` for a concrete
-//! literal `d` (the Nat.add recursor unfolds on its second argument), the
-//! synthesized term is kernel-def-eq to the declared target `Nat.le P Q`.
+//! = d >= 0`, the term compares the two literal offsets once, through the
+//! kernel's `Nat.ble` literal fold ([`super::nat_le_bridge`]): its size and its
+//! kernel cost do not depend on `d`. It used to be `Nat.le.step^d (Nat.le.refl
+//! P)`, a term whose depth was the gap — `(h : v < 0x110000) ⊢ v < 2 ^ 32` asked
+//! for 4,293,853,184 constructor applications.
 //!
 //! Every term produced here is handed back to `state.close_goal`, which runs a
 //! genuine `infer_type` + WHNF + `is_def_eq` check against the target. A wrong
@@ -36,6 +34,7 @@ use clean_kernel::name::Name;
 use clean_kernel::Expr;
 
 use super::nat_expr_eval::eval_nat_expr;
+use super::nat_le_bridge::{nat_le_between, nat_le_lits, nat_le_trans, nat_le_weaken_upper};
 
 /// A Nat comparison goal, normalized to `Nat.le lhs rhs`.
 ///
@@ -113,39 +112,6 @@ fn split_core_offset(expr: &Expr) -> Option<(Expr, u64)> {
         // Any other symbolic head (fvar, const variable, mul, ...): offset 0.
         _ => Some((expr.clone(), 0)),
     }
-}
-
-/// Build `Nat.le P Q` where `Q` is `Nat.succ^d P` (`d >= 0`).
-///
-/// `Nat.le.step^d (Nat.le.refl base)`. The result type is
-/// `Nat.le base (Nat.succ^d base)`, which the kernel checks def-eq against the
-/// declared `Nat.le base Q` since `base + d` reduces to `Nat.succ^d base`.
-///
-/// `Nat.le.step : {n m : Nat} → Nat.le n m → Nat.le n (Nat.succ m)`. The kernel
-/// does **not** auto-insert implicit arguments, so each application provides
-/// `@Nat.le.step base current_upper prev` explicitly, where `current_upper`
-/// tracks the current right endpoint (`base`, then `Nat.succ base`, …).
-pub(crate) fn nat_le_via_steps(base: &Expr, steps: u64) -> Expr {
-    build_le_via_steps(base, steps)
-}
-
-fn build_le_via_steps(base: &Expr, steps: u64) -> Expr {
-    let le_refl = Expr::const_(Name::from_string("Nat.le.refl"), vec![]);
-    let le_step = Expr::const_(Name::from_string("Nat.le.step"), vec![]);
-    let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
-
-    // Nat.le.refl base : Nat.le base base
-    let mut proof = Expr::app(le_refl, base.clone());
-    let mut current_upper = base.clone();
-    for _ in 0..steps {
-        // @Nat.le.step base current_upper proof : Nat.le base (Nat.succ current_upper)
-        proof = Expr::apps(
-            le_step.clone(),
-            [base.clone(), current_upper.clone(), proof],
-        );
-        current_upper = Expr::app(succ.clone(), current_upper);
-    }
-    proof
 }
 
 /// Normalize a Nat comparison goal target to a `Nat.le` obligation.
@@ -243,11 +209,16 @@ pub(crate) fn try_prove_nat_inequality_direct(target: &Expr) -> Option<Expr> {
         if lhs_off > rhs_off {
             return None;
         }
-        let steps = rhs_off - lhs_off;
-        // Prove `Nat.le le_lhs le_rhs` by weakening the RHS `steps` times from
-        // `Nat.le.refl le_lhs`. `le_lhs + steps` reduces to `Nat.succ^steps
-        // le_lhs`, def-eq to `le_rhs` (= shared_core + rhs_off).
-        return Some(build_le_via_steps(&le_lhs, steps));
+        if lhs_off == rhs_off {
+            return Some(Expr::app(
+                Expr::const_(Name::from_string("Nat.le.refl"), vec![]),
+                le_lhs,
+            ));
+        }
+        // One literal comparison of the offsets (`nat_le_between`); `None` when
+        // the two sides share the core only up to a left-literal reordering,
+        // which no term here can bridge definitionally.
+        return nat_le_between(&le_lhs, &le_rhs);
     }
 
     // `0 ≤ R` for any (symbolic) Nat R: provable via `Nat.zero_le R : Nat.le 0 R`.
@@ -499,8 +470,8 @@ fn try_prove_nat_sub_shape(target: &Expr) -> Option<Expr> {
 /// `@Nat.sub_le_sub_right HL X (hyp : HL ≤ X) k : HL - k ≤ X - k`. When the goal
 /// LHS `GL` is exactly `HL - k` (as a concrete value, or syntactically), the
 /// produced term proves the goal directly; when `GL ≤ HL - k` as concrete values
-/// the result is weakened down to `GL` via `Nat.le.step`-anchored re-derivation
-/// from the lowered endpoint. The reproduced case is `(h : a ≥ 3) ⊢ a - 2 ≥ 1`:
+/// the result is weakened down to `GL` through a literal comparison
+/// `GL ≤ HL - k`. The reproduced case is `(h : a ≥ 3) ⊢ a - 2 ≥ 1`:
 /// the goal normalizes to `Nat.le 1 (a - 2)`, the hyp to `Nat.le 3 a`, and
 /// `Nat.sub_le_sub_right (h) 2 : 3 - 2 ≤ a - 2`; `3 - 2` reduces to `1`, matching
 /// `GL`.
@@ -562,19 +533,13 @@ fn try_prove_nat_sub_mono_from_hyp(target: &Expr, hyps: &[(Expr, Expr)]) -> Opti
         }
         // gl < lowered: weaken the LHS down from `lowered` to `gl`. We have
         // `base : Nat.le lowered (X - k)`; since `gl ≤ lowered`, `gl ≤ X - k`
-        // follows by `Nat.le_trans (Nat.le.refl-stepped gl ≤ lowered) base`.
-        let gl_le_lowered = nat_le_via_steps(&Expr::nat_lit(gl), lowered - gl);
-        let le_trans = Expr::const_(Name::from_string("Nat.le_trans"), vec![]);
-        let lowered_lit = Expr::nat_lit(lowered);
-        return Some(Expr::apps(
-            le_trans,
-            [
-                Expr::nat_lit(gl),
-                lowered_lit,
-                le_rhs.clone(),
-                gl_le_lowered,
-                base,
-            ],
+        // follows by `Nat.le_trans (gl ≤ lowered, a literal comparison) base`.
+        return Some(nat_le_trans(
+            &Expr::nat_lit(gl),
+            &Expr::nat_lit(lowered),
+            &le_rhs,
+            nat_le_lits(gl, lowered),
+            base,
         ));
     }
     None
@@ -680,7 +645,8 @@ fn try_prove_nat_minmax_shape(target: &Expr) -> Option<Expr> {
 ///
 /// This covers the transitivity shape `(h : a ≤ b) ⊢ a ≤ b + 1`: the goal
 /// shares the lhs `a` and the rhs core `b` with the hypothesis, so the proof is
-/// `Nat.le.step^(d_g - d_h) h` (here `Nat.le.step h : Nat.le a (Nat.succ b)`).
+/// `Nat.le_trans h (core + d_h ≤ core + d_g)`, the second premise a single
+/// literal comparison of the offsets (constant-size in `d_g - d_h`).
 ///
 /// `hyps` is a slice of `(hyp_fvar_expr, hyp_type)` pairs from the goal's local
 /// context. The synthesized term is still re-checked by `state.close_goal`.
@@ -793,12 +759,11 @@ pub(crate) fn try_prove_nat_inequality_direct_with_hyps(
         if h_rhs_core != goal_rhs_core || goal_rhs_off < h_rhs_off {
             continue;
         }
-        let steps = goal_rhs_off - h_rhs_off;
-        // `hyp_fvar : Nat.le L (h_rhs_core + h_rhs_off)`; weaken the RHS
-        // `steps` times. `Nat.le.step` needs the explicit endpoint, which is
-        // `h_rhs` initially. We re-derive via the same builder anchored at the
-        // hypothesis proof.
-        return Some(build_le_step_from(hyp_fvar, &le_lhs, &h_rhs, steps));
+        // `hyp_fvar : Nat.le L h_rhs` with `h_rhs ≡ core + h_rhs_off`; weaken
+        // the upper endpoint to `le_rhs ≡ core + goal_rhs_off`.
+        if let Some(proof) = nat_le_weaken_upper(hyp_fvar.clone(), &le_lhs, &h_rhs, &le_rhs) {
+            return Some(proof);
+        }
     }
 
     // 2.5. Matched-symbolic-core shifted inequality: goal `Nat.le (cl + k_l)
@@ -849,8 +814,9 @@ pub(crate) fn try_prove_nat_inequality_direct_with_hyps(
 ///      `HL + c = cl + h_l + c` is def-eq to `cl + k_l = GL`.
 ///      `HR + c = cr + h_r + c`, whose offset on `cr` is `h_r + c`.
 ///   3. Weaken the RHS upper endpoint from `cr + (h_r + c)` up to `cr + k_r`
-///      via `Nat.le.step^(k_r - (h_r + c))` (needs `k_r ≥ h_r + c`, which the
-///      validity condition guarantees for `c = k_l - h_l`).
+///      by `Nat.le_trans` with the literal comparison `h_r + c ≤ k_r` lifted
+///      over `cr` (needs `k_r ≥ h_r + c`, which the validity condition
+///      guarantees for `c = k_l - h_l`).
 ///
 /// Returns `None` (fail closed) when `k_l < h_l` (out-of-scope padding
 /// direction) or the integer-slack condition fails — both leave the goal for
@@ -861,7 +827,7 @@ pub(crate) fn try_prove_nat_inequality_direct_with_hyps(
 /// has mismatched cores (goal LHS core `b` ≠ hyp LHS core `a`) → `None`.
 fn try_prove_nat_shifted_le_from_hyp(
     goal_lhs: &Expr,
-    _goal_rhs: &Expr,
+    goal_rhs: &Expr,
     goal_rhs_core: &Expr,
     goal_rhs_off: u64,
     hyps: &[(Expr, Expr)],
@@ -906,7 +872,6 @@ fn try_prove_nat_shifted_le_from_hyp(
         if k_r < padded_rhs_off {
             continue; // goal not provable from this hypothesis; fail closed.
         }
-        let rhs_steps = k_r - padded_rhs_off;
 
         // Step 2: pad the hypothesis on the right by `c`.
         //   Nat.add_le_add_right HL HR hyp c : Nat.le (HL + c) (HR + c)
@@ -928,13 +893,15 @@ fn try_prove_nat_shifted_le_from_hyp(
         };
 
         // The `padded` proof has type `Nat.le GL (cr + padded_rhs_off)` (def-eq).
-        // Weaken the upper endpoint `rhs_steps` times up to `cr + k_r = GR`.
+        // Weaken the upper endpoint up to `cr + k_r = GR`.
         let upper = if padded_rhs_off == 0 {
             goal_rhs_core.clone()
         } else {
             nat_add(goal_rhs_core.clone(), Expr::nat_lit(padded_rhs_off))
         };
-        return Some(build_le_step_from(&padded, goal_lhs, &upper, rhs_steps));
+        if let Some(proof) = nat_le_weaken_upper(padded, goal_lhs, &upper, goal_rhs) {
+            return Some(proof);
+        }
     }
     None
 }
@@ -952,9 +919,11 @@ fn try_prove_nat_shifted_le_from_hyp(
 ///      and to a `≤ GL` endpoint we then weaken from when `c = 0` (ga ≤ ha).
 ///   2. weaken the LHS endpoint down to `GL` (when `ga ≤ ha + c`) — handled by
 ///      threading the proof through the shared core: we re-anchor on `GL` via
-///      `Nat.le.refl`/`Nat.le_trans` only in the `ga < ha` arm.
-///   3. weaken the RHS literal `hr + c` up to `gr` via `Nat.le.step` (needs
-///      `gr ≥ hr + c`, which the validity bound guarantees for the chosen `c`).
+///      `Nat.le_trans` with the offset comparison `ga ≤ ha` lifted over the
+///      core, only in the `ga < ha` arm.
+///   3. weaken the RHS literal `hr + c` up to `gr` by `Nat.le_trans` with the
+///      literal comparison `hr + c ≤ gr` (needs `gr ≥ hr + c`, which the
+///      validity bound guarantees for the chosen `c`).
 ///
 /// We only synthesize when `c` exists with `ga ≤ ha + c` and `hr + c ≤ gr`,
 /// i.e. `max(0, ga - ha) ≤ gr - hr`. Otherwise return `None` and fail closed.
@@ -1037,9 +1006,11 @@ fn try_prove_nat_le_offset_from_hyp(
             (padded, padded_lhs.clone())
         } else if ga < padded_lhs_off {
             // GL = core + ga, padded_lhs = core + padded_lhs_off, ga < off.
-            // q : Nat.le GL padded_lhs  via Nat.le.step weakening from GL.
+            // q : Nat.le GL padded_lhs  — the offsets compared over the core.
             let gl = nat_add(goal_core.clone(), Expr::nat_lit(ga));
-            let q = build_le_via_steps(&gl, padded_lhs_off - ga);
+            let Some(q) = nat_le_between(&gl, &padded_lhs) else {
+                continue;
+            };
             // Nat.le_trans GL padded_lhs (hr+c) q padded : Nat.le GL (hr+c)
             let le_trans = Expr::const_(Name::from_string("Nat.le_trans"), vec![]);
             let combined = Expr::apps(
@@ -1059,33 +1030,18 @@ fn try_prove_nat_le_offset_from_hyp(
         };
 
         // Step 3: weaken the RHS literal from `hr + c` up to `gr`.
-        let rhs_steps = gr.checked_sub(padded_rhs_val)?;
+        if gr < padded_rhs_val {
+            return None;
+        }
         // The current proof has type `Nat.le GL (hr + c)`; weaken the upper
-        // endpoint `rhs_steps` times to reach `Nat.le GL gr`.
+        // endpoint to reach `Nat.le GL gr` (both literals: core `0`).
         let gl_expr = nat_add(goal_core.clone(), Expr::nat_lit(ga));
         let upper = Expr::nat_lit(padded_rhs_val);
-        return Some(build_le_step_from(
-            &proof_le_padded_rhs,
-            &gl_expr,
-            &upper,
-            rhs_steps,
-        ));
+        if let Some(proof) = nat_le_weaken_upper(proof_le_padded_rhs, &gl_expr, &upper, goal_rhs) {
+            return Some(proof);
+        }
     }
     None
-}
-
-/// Weaken a hypothesis proof `hyp : Nat.le lhs upper` by `steps`, giving
-/// `Nat.le lhs (Nat.succ^steps upper)` via `@Nat.le.step lhs · ·` applications.
-fn build_le_step_from(hyp: &Expr, lhs: &Expr, upper: &Expr, steps: u64) -> Expr {
-    let le_step = Expr::const_(Name::from_string("Nat.le.step"), vec![]);
-    let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
-    let mut proof = hyp.clone();
-    let mut current_upper = upper.clone();
-    for _ in 0..steps {
-        proof = Expr::apps(le_step.clone(), [lhs.clone(), current_upper.clone(), proof]);
-        current_upper = Expr::app(succ.clone(), current_upper);
-    }
-    proof
 }
 
 #[cfg(test)]

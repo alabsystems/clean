@@ -32,7 +32,11 @@ pub struct NativeVerificationBundle {
     ///
     /// Producers may leave this empty while routing a request-only handoff to a
     /// verifier. Release/admission consumers must require matching evidence
-    /// bundles for the requests they are admitting.
+    /// bundles for the requests they are admitting. The must-refuse corpus
+    /// cannot express this (`refuse/native_bundle_required_for_admission`):
+    /// the verdict needs a bundle sidecar beside the module, which one wire
+    /// artifact cannot carry; the rung is `validate_module_with_bundle`'s
+    /// tests (`coverage_assurance.rs`).
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Vec::is_empty")
@@ -123,6 +127,11 @@ pub struct SourceGenerationAuthority {
     bundle_digest: ProofDigest,
 }
 
+#[cfg(not(feature = "clean-expr"))]
+mod observed_source_mint;
+#[cfg(not(feature = "clean-expr"))]
+mod observed_source_query;
+
 impl SourceGenerationAuthority {
     /// Mint one authority for a bundle built directly from live source lowering.
     ///
@@ -194,6 +203,8 @@ impl NativeVerificationBundle {
     }
 
     pub fn validate(&self) -> Result<(), Vec<NativeVerificationBundleError>> {
+        #[cfg(feature = "native-validation-observer")]
+        super::validation_observer::record();
         let mut errors = Vec::new();
 
         // EXACT-match by design (NOT a `MIN_READ_VERSION..=SCHEMA_VERSION` range
@@ -221,13 +232,36 @@ impl NativeVerificationBundle {
                 field: "trust_ir_module_digest",
             });
         }
-        let actual_module_digest = self.module.stable_digest();
-        if self.trust_ir_module_digest != actual_module_digest {
-            errors.push(NativeVerificationBundleError::TrustIrModuleDigestMismatch {
-                expected: actual_module_digest,
-                actual: self.trust_ir_module_digest,
-            });
+        // A module the binary writer cannot encode has no identity to
+        // authenticate. Refuse before the infallible digest, retaining the
+        // full module and continuing the other independent diagnostics. The
+        // pre-check is the writer itself in check mode
+        // (`Module::wire_image_refusals`, D1a), so it cannot omit a construct
+        // the writer refuses — its hand-written predecessor here omitted the
+        // producer-internal `Ty::Error`, and `validate` then panicked inside
+        // `stable_digest`. Every refused carrier is reported (the first of
+        // each class), in the writer's precedence order.
+        let refusals = self.module.wire_image_refusals();
+        let unencodable_identity = !refusals.is_empty();
+        for refusal in &refusals {
+            let (location, construct) = no_wire_identity_site(&self.module, refusal);
+            errors.push(
+                NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity {
+                    location,
+                    construct,
+                },
+            );
         }
+        if !unencodable_identity {
+            let actual_module_digest = self.module.stable_digest();
+            if self.trust_ir_module_digest != actual_module_digest {
+                errors.push(NativeVerificationBundleError::TrustIrModuleDigestMismatch {
+                    expected: actual_module_digest,
+                    actual: self.trust_ir_module_digest,
+                });
+            }
+        }
+        self.validate_rust_reference_spelling(&mut errors);
         if let Some(source_digest) = self.source_digest()
             && source_digest.is_zero()
         {
@@ -255,6 +289,16 @@ impl NativeVerificationBundle {
             &self.module.proof_certificates,
         ) {
             errors.push(NativeVerificationBundleError::Lineage(lineage_errors));
+        }
+
+        // One formula wherever the module states one: a payload and an
+        // `smtlib` rendering that is not its one text (in any schema trust-ir
+        // owns) are two claims, and nothing downstream may pick (the replay
+        // atoms are held to it in `validate_replay_context`).
+        for site in self.module.formulas_stating_two_texts_iter() {
+            errors.push(NativeVerificationBundleError::FormulaTextsDisagree {
+                site: site.into_owned(),
+            });
         }
 
         self.validate_lineage_digests(&mut errors);
@@ -302,7 +346,41 @@ impl NativeVerificationBundle {
             write_digest_stable(&mut bytes, &evidence.stable_digest());
         }
 
-        ProofDigest::sha256_domain("trust_ir.native.verification.bundle.v6", &bytes)
+        ProofDigest::sha256_domain("trust_ir.native.verification.bundle.v8", &bytes)
+    }
+
+    /// This bundle with EXACTLY the coverage write-back allowlist erased — the
+    /// image `coverage_replay_context_digest` hashes (see its docs for the
+    /// allowlist and why each entry is on it). The bundle is destructured with
+    /// no `..` (here, where its private field is nameable), so a field added
+    /// to it is a compile error until it is classified; `_` means BOUND.
+    #[cfg(feature = "fmt")]
+    pub(crate) fn coverage_write_back_erased(&self) -> Self {
+        let mut erased = self.clone();
+        let Self {
+            schema_version: _,
+            producer: _,
+            input: _,
+            provenance: _,
+            serialization: _,
+            diagnostics: _,
+            trust_ir_module_digest,
+            compiler_facts: _,
+            module,
+            lineage,
+            requests,
+            evidence_bundles,
+            // Transient, outside every digest; a clone never carries it.
+            source_generation_live: _,
+        } = &mut erased;
+        super::coverage::erase_module_write_back_state(module);
+        // ERASED: the carriers bound to the module digest a write-back moves.
+        *lineage = ProofLineageManifest::default();
+        requests.clear();
+        evidence_bundles.clear();
+        // Recomputed, so the erased module's WHOLE wire image is in the image.
+        *trust_ir_module_digest = module.stable_digest();
+        erased
     }
 
     /// Return the transport/digest/ABI identity exported to native consumers.
@@ -369,6 +447,88 @@ impl NativeVerificationBundle {
         artifacts: Vec<NativeEvidenceArtifact>,
     ) -> Result<NativeEvidenceBundle, NativeVerificationBundleError> {
         NativeEvidenceBundle::from_request(self.trust_ir_module_digest, request, artifacts)
+    }
+
+    /// Whether this build can replay a certificate in the Clean kernel at all
+    /// (the `clean-expr` feature). `false` means
+    /// [`Self::kernel_replayed_certificates`] is empty for every bundle — a
+    /// kernel-less consumer derives no kernel-replayed coverage, it never
+    /// assumes it.
+    #[must_use]
+    pub const fn kernel_replay_available() -> bool {
+        cfg!(feature = "clean-expr")
+    }
+
+    /// Every certificate of this bundle's module that THIS PROCESS replays in
+    /// the Clean kernel, keyed by its [`ProofCertificateRef`], with the
+    /// classified family of the claim the replay re-established — `None` when
+    /// it replayed but its claim family is UNCLASSIFIED (and so establishes no
+    /// coverage).
+    ///
+    /// This is the per-CERTIFICATE form of the per-obligation replay set
+    /// [`Self::validate`] computes for TrustVc imports: the same capability
+    /// (`NativeProofAuthority`, the module-bound contract rechecker), the same
+    /// status floor (the certificate's obligation is `Discharged` or
+    /// `Certified`), asked about each certificate on its own. A certificate
+    /// whose SIBLING replayed is not in the map: an SMT or `Trusted`
+    /// certificate on an obligation that also carries a replayed `CleanCic`
+    /// gains nothing from it.
+    ///
+    /// A certificate is skipped (never guessed at) when its obligation id
+    /// names no obligation or more than one, and when the obligation's
+    /// formula states no ONE SMT-LIB text
+    /// ([`crate::proof::ProofFormula::smtlib_text`]: an opaque payload, or an
+    /// `smtlib2` payload its rendering contradicts). The contract grounder
+    /// reads only that text; this check does not depend on the grounder: when
+    /// the text exists, the payload and any rendering ARE it, so whichever
+    /// field a grounding read, the replay proved the obligation's one formula.
+    /// It is a second read of the same rule, not an independent record of
+    /// what the kernel grounded. The map says what was REPLAYED;
+    /// it does not validate the bundle, and a consumer deriving coverage from
+    /// it runs [`Self::validate`] too (`trust_ir_build::coverage_establishment_report`
+    /// does). Kernel-less builds return an empty map.
+    #[must_use]
+    pub fn kernel_replayed_certificates(
+        &self,
+    ) -> BTreeMap<ProofCertificateRef, Option<crate::proof::KernelClaimFamily>> {
+        use crate::proof::ModuleProofAuthority;
+        let mut replayed = BTreeMap::new();
+        for certificate in &self.module.proof_certificates {
+            let mut owners = self
+                .module
+                .proof_obligations
+                .iter()
+                .filter(|obligation| obligation.id == certificate.obligation);
+            let (Some(obligation), None) = (owners.next(), owners.next()) else {
+                continue;
+            };
+            if !obligation.status.is_discharged_tier() {
+                continue;
+            }
+            // Only an obligation that states ONE SMT-LIB text has a claim a
+            // replay can have proved.
+            if obligation
+                .formula
+                .as_ref()
+                .and_then(crate::proof::ProofFormula::smtlib_text)
+                .is_none()
+            {
+                continue;
+            }
+            // One replay per certificate that classifies: `Some(family)` is,
+            // by the trait's contract, a replay exactly as `replays_authority`
+            // would run it. Only an unclassified answer needs the plain
+            // replay, to tell "replayed, unclassified" from "not replayed".
+            // (Both were asked of every certificate: two kernel replays.)
+            let family =
+                NativeProofAuthority.replayed_claim_family(&self.module, obligation, certificate);
+            if family.is_some()
+                || NativeProofAuthority.replays_authority(&self.module, obligation, certificate)
+            {
+                replayed.insert(certificate.lineage_ref(), family);
+            }
+        }
+        replayed
     }
 
     /// Resolve artifact bytes for a digest-bound native evidence artifact.
@@ -896,8 +1056,9 @@ impl NativeVerificationBundle {
             );
         }
         match obligation.status {
-            ProofStatus::Discharged | ProofStatus::Certified
-                if native_authority_replayed(obligation, &self.module.proof_certificates) => {}
+            status
+                if status.is_discharged_tier()
+                    && native_authority_replayed(&self.module, obligation) => {}
             ProofStatus::Pending => {
                 return native_semantic_bridge_report(
                     bridge,
@@ -1466,6 +1627,43 @@ impl NativeVerificationBundle {
         }
     }
 
+    /// A Rust reference carries no permission instruction
+    /// (`docs/SPEC_RATIFICATIONS.md`, the section of that name). Refused here in
+    /// any function stamped `Producer::TRust`, through the one proved
+    /// predicate the validator reads too,
+    /// [`crate::InstShape::uses_borrow_permissions`]. One error per offending
+    /// node, in module order.
+    ///
+    /// The section's second key, every function of a bundle whose input is a
+    /// Rust MIR body (the MIR bridge stamps `Producer::TrustIr`), is NOT
+    /// applied yet: the bridge still emits `Borrow` / `BorrowMut` until its
+    /// respelling lands on Trust's main, and trust-mc's attack fixtures mint
+    /// from RustMir bundles that carry them until its alias change lands there
+    /// (the design's landing order). The stamp is claim metadata: this catches
+    /// a producer regression, not an adversary.
+    fn validate_rust_reference_spelling(&self, errors: &mut Vec<NativeVerificationBundleError>) {
+        for function in &self.module.functions {
+            if function.producer != Some(Producer::TRust) {
+                continue;
+            }
+            for block in &function.blocks {
+                for (index, node) in block.body.iter().enumerate() {
+                    if node.inst.uses_borrow_permissions() {
+                        errors.push(
+                            NativeVerificationBundleError::RustReferenceAsPermissionBorrow {
+                                location: format!(
+                                    "function '{}' bb{} #{index}",
+                                    function.name,
+                                    block.id.index()
+                                ),
+                            },
+                        );
+                    }
+                }
+            }
+        }
+    }
+
     fn validate_provenance(&self, errors: &mut Vec<NativeVerificationBundleError>) {
         if self.provenance.producer_version.is_empty() {
             errors.push(NativeVerificationBundleError::EmptyProvenanceField(
@@ -1495,6 +1693,46 @@ impl NativeVerificationBundle {
         }
         for tool in &self.provenance.toolchain {
             validate_tool_identity("provenance.toolchain", tool, errors);
+        }
+        self.validate_source_languages(errors);
+    }
+
+    /// Schema 8 (WS4.16, F-080): the language SET must contain the primary
+    /// scalar, and must cover every function of the bound module AND every
+    /// authenticated dependency it imports, under the total map
+    /// [`NativeSourceLanguage::candidates_for_producer`]. An empty set
+    /// contains nothing and covers nothing; `producer: None` — on a function
+    /// or on an import row — is covered only by an explicit `Unknown`
+    /// member, never by omission.
+    fn validate_source_languages(&self, errors: &mut Vec<NativeVerificationBundleError>) {
+        let provenance = &self.provenance;
+        if !provenance
+            .source_languages
+            .contains(&provenance.source_language)
+        {
+            errors.push(
+                NativeVerificationBundleError::BundlePrimaryLanguageUncovered {
+                    primary: provenance.source_language,
+                    source_languages: provenance.source_languages.clone(),
+                },
+            );
+        }
+        for (producer, functions) in provenance.uncovered_functions(&self.module) {
+            errors.push(NativeVerificationBundleError::BundleLanguageUncovered {
+                producer,
+                functions,
+                source_languages: provenance.source_languages.clone(),
+            });
+        }
+        for (import, name, producer) in provenance.uncovered_imports(&self.module) {
+            errors.push(
+                NativeVerificationBundleError::BundleImportLanguageUncovered {
+                    import,
+                    name,
+                    producer,
+                    source_languages: provenance.source_languages.clone(),
+                },
+            );
         }
     }
 
@@ -1576,6 +1814,9 @@ impl NativeVerificationBundle {
         let mut monomorphization_facts = BTreeMap::new();
         let mut monomorphization_digests = BTreeMap::new();
         let mut monomorphization_symbols = BTreeMap::new();
+        // One layout table for every fact: each type the facts name is laid
+        // out once, not once per fact.
+        let layouts = self.module.layout_table();
 
         for fact in &self.compiler_facts.adt_layouts {
             if !adt_fact_ids.insert(fact.id) {
@@ -1583,7 +1824,7 @@ impl NativeVerificationBundle {
                     fact.id,
                 ));
             }
-            validate_adt_layout_fact(&self.module, fact, errors);
+            validate_adt_layout_fact(&layouts, fact, errors);
         }
 
         for fact in &self.compiler_facts.fat_pointers {
@@ -1620,7 +1861,7 @@ impl NativeVerificationBundle {
             }
             pointer_offset_facts.insert(fact.id, fact);
             validate_pointer_offset_fact(
-                &self.module,
+                &layouts,
                 fact,
                 &known_functions,
                 &known_obligations,
@@ -1635,13 +1876,7 @@ impl NativeVerificationBundle {
                 ));
             }
             cast_facts.insert(fact.id, fact);
-            validate_cast_fact(
-                &self.module,
-                fact,
-                &known_functions,
-                &known_obligations,
-                errors,
-            );
+            validate_cast_fact(&layouts, fact, &known_functions, &known_obligations, errors);
         }
 
         for fact in &self.compiler_facts.monomorphizations {
@@ -1712,8 +1947,10 @@ impl NativeVerificationBundle {
                         field: "generic_args[].ty",
                     });
                 }
+                // A pointer-width const argument is a value at the bundle
+                // module's pointer width (SPEC_RATIFICATIONS §3.3).
                 if let NativeGenericArg::Const { ty, value } = arg
-                    && !value.value_matches_ty(ty)
+                    && !value.value_matches_ty(ty, self.module.pointer_bits())
                 {
                     errors.push(NativeVerificationBundleError::InvalidCompilerFact {
                         fact: NativeCompilerFactRef::Monomorphization(fact.id),
@@ -2053,10 +2290,8 @@ impl NativeVerificationBundle {
             .proof_obligations
             .iter()
             .filter(|obligation| {
-                matches!(
-                    obligation.status,
-                    ProofStatus::Discharged | ProofStatus::Certified
-                ) && native_authority_replayed(obligation, &self.module.proof_certificates)
+                obligation.status.is_discharged_tier()
+                    && native_authority_replayed(&self.module, obligation)
             })
             .map(|obligation| obligation.id)
             .collect();
@@ -2141,6 +2376,7 @@ impl NativeVerificationBundle {
                 &request_obligations,
                 &self.compiler_facts,
                 request.provenance().replay_context(),
+                &self.module.pred_table(),
                 errors,
             );
 
@@ -2300,6 +2536,45 @@ impl NativeVerificationBundle {
 
             match request {
                 NativeVerificationRequest::TrustVc(trust_vc) => {
+                    // THE SIDECAR IS NOT THE IR. `RequestObligationFunctionMismatch`
+                    // above binds the request to `compiler_facts.obligation_source
+                    // .function`, which is a producer-declared sidecar row. A
+                    // discharge request is answered by LOWERING THE `Assert` AT THE
+                    // OBLIGATION'S SITE, so for that mode the module obligation is
+                    // the load-bearing binding and it must agree too.
+                    //
+                    // Without this, trust-ir admitted requests that trust-vc's own
+                    // gate refuses — including the shape this crate's own positive
+                    // discharge fixture used to be built from (`function: None,
+                    // site: None`, sidecar `function: Some(f)`) — so the seam could
+                    // not carry a bundle trust-ir had blessed. trust-ir was the
+                    // wrong side: it checked the claim about the obligation instead
+                    // of the obligation.
+                    if trust_vc.mode == TrustVcVerificationMode::DischargeProofObligations
+                        && let Some(function) = trust_vc.function
+                    {
+                        for obligation in &request_obligations {
+                            let Some(declared) = self
+                                .module
+                                .proof_obligations
+                                .iter()
+                                .find(|candidate| candidate.id == *obligation)
+                            else {
+                                continue;
+                            };
+                            let sited_in = declared.site.map(|site| site.function);
+                            if sited_in != Some(function) {
+                                errors.push(
+                                    NativeVerificationBundleError::TrustVcDischargeObligationNotSitedInFunction {
+                                        request: request_id,
+                                        obligation: *obligation,
+                                        expected: function,
+                                        actual: sited_in,
+                                    },
+                                );
+                            }
+                        }
+                    }
                     validate_trust_vc_request(
                         trust_vc,
                         &known_certificate_evidence,
@@ -2317,6 +2592,26 @@ impl NativeVerificationBundle {
                 }
             }
         }
+
+        validate_trust_vc_request_modes_do_not_collide(&self.requests, errors);
+    }
+
+    #[cfg(test)]
+    pub(super) fn request_errors_original_for_observed_tests(
+        &self,
+    ) -> Vec<NativeVerificationBundleError> {
+        let mut errors = Vec::new();
+        self.validate_requests(&mut errors);
+        errors
+    }
+
+    #[cfg(test)]
+    pub(super) fn evidence_errors_original_for_observed_tests(
+        &self,
+    ) -> Vec<NativeVerificationBundleError> {
+        let mut errors = Vec::new();
+        self.validate_evidence_bundles(&mut errors);
+        errors
     }
 
     fn validate_evidence_bundles(&self, errors: &mut Vec<NativeVerificationBundleError>) {
@@ -2402,34 +2697,76 @@ impl NativeVerificationBundle {
 /// CleanCic terms can qualify, and only when `clean-expr` supplies the real
 /// kernel. SAT replay establishes only an embedded CNF, not the CNF↔program
 /// semantic binding, so it deliberately is not an authority adapter here.
+///
+/// MODULE-BOUND (WS1.1): the replay runs with the bundle's own module in scope,
+/// through the `ModuleCleanCicRechecker` path, so a free-name contract clause
+/// is re-checked only when its binding resolves to a Nat-valued IR place of
+/// THAT module. The module-free path would refuse every such clause.
 struct NativeProofAuthority;
 
-impl crate::proof::ProofAuthorityRechecker for NativeProofAuthority {
+impl crate::proof::ModuleProofAuthority for NativeProofAuthority {
     fn replays_authority(
         &self,
+        module: &crate::Module,
         obligation: &ProofObligation,
         certificate: &ProofCertificate,
     ) -> bool {
         #[cfg(feature = "clean-expr")]
         {
-            let clean = crate::proof::CleanCicProofAuthorityRechecker {
+            let clean = crate::proof::CleanCicModuleProofAuthority {
                 clean_cic: &crate::clean_expr_lowering::contract::KernelCleanCicRechecker,
             };
-            if clean.replays_authority(obligation, certificate) {
+            if crate::proof::ModuleProofAuthority::replays_authority(
+                &clean,
+                module,
+                obligation,
+                certificate,
+            ) {
                 return true;
             }
         }
         #[cfg(not(feature = "clean-expr"))]
-        let _ = (obligation, certificate);
+        let _ = (module, obligation, certificate);
         false
+    }
+
+    /// The same single capability as [`Self::replays_authority`], asked what
+    /// it replayed: the contract rechecker classifies the claims it accepts
+    /// (`KernelCleanCicRechecker::rechecked_claim_family`). Kernel-less builds
+    /// replay nothing and therefore classify nothing.
+    fn replayed_claim_family(
+        &self,
+        module: &crate::Module,
+        obligation: &ProofObligation,
+        certificate: &ProofCertificate,
+    ) -> Option<crate::proof::KernelClaimFamily> {
+        #[cfg(feature = "clean-expr")]
+        {
+            let clean = crate::proof::CleanCicModuleProofAuthority {
+                clean_cic: &crate::clean_expr_lowering::contract::KernelCleanCicRechecker,
+            };
+            crate::proof::ModuleProofAuthority::replayed_claim_family(
+                &clean,
+                module,
+                obligation,
+                certificate,
+            )
+        }
+        #[cfg(not(feature = "clean-expr"))]
+        {
+            let _ = (module, obligation, certificate);
+            None
+        }
     }
 }
 
-fn native_authority_replayed(
-    obligation: &ProofObligation,
-    certificates: &[ProofCertificate],
-) -> bool {
-    crate::proof::obligation_has_replayed_authority(obligation, certificates, &NativeProofAuthority)
+fn native_authority_replayed(module: &crate::Module, obligation: &ProofObligation) -> bool {
+    crate::proof::obligation_has_replayed_module_authority(
+        module,
+        obligation,
+        &module.proof_certificates,
+        &NativeProofAuthority,
+    )
 }
 
 pub(crate) fn native_semantic_bridge_report(
@@ -2772,7 +3109,57 @@ pub enum NativeVerificationBundleError {
         expected: ProofDigest,
         actual: ProofDigest,
     },
+    /// The embedded module has no wire identity to authenticate its claimed
+    /// digest against: the binary writer refuses a construct or count in it
+    /// (`Module::wire_image_refusals`). It is refused, never removed to
+    /// obtain an identity.
+    TrustIrModuleHasNoWireIdentity {
+        location: String,
+        construct: &'static str,
+    },
+    /// A permission instruction (`Borrow`, `BorrowMut`, `EndBorrow`) at
+    /// `location`, in a function stamped `Producer::TRust`. A Rust producer
+    /// spells every reference as the place's address or a `Copy` of it
+    /// (`docs/SPEC_RATIFICATIONS.md`, "A Rust reference carries no permission
+    /// instruction"). Every authority minted from or checked against the
+    /// bundle inherits the refusal, because minting and `authorizes_bundle`
+    /// both call `validate()`.
+    RustReferenceAsPermissionBorrow {
+        location: String,
+    },
     EmptyProvenanceField(&'static str),
+    /// Schema 8: `provenance.source_languages` does not contain the primary
+    /// `provenance.source_language`. Rejected: the set is what the bundle
+    /// claims, and a primary outside it is a contradiction, not a default.
+    BundlePrimaryLanguageUncovered {
+        primary: NativeSourceLanguage,
+        source_languages: BTreeSet<NativeSourceLanguage>,
+    },
+    /// Schema 8: functions of `bundle.module` stamped `producer` have no
+    /// covering language in `provenance.source_languages`
+    /// ([`NativeSourceLanguage::candidates_for_producer`]). One row per
+    /// distinct producer; `producer: None` names the unstamped functions,
+    /// which only an explicit `Unknown` member covers. Rejected: a
+    /// two-language package must SAY both languages, and an unstamped
+    /// function is never covered by omission.
+    BundleLanguageUncovered {
+        producer: Option<Producer>,
+        functions: Vec<FuncId>,
+        source_languages: BTreeSet<NativeSourceLanguage>,
+    },
+    /// Schema 8: an authenticated DEPENDENCY of `bundle.module`
+    /// (`Module.imports`) was produced by a frontend no language in
+    /// `provenance.source_languages` covers. Rejected: the package a bundle
+    /// verifies includes what its module imports and inherits discharges
+    /// from, so a root module could otherwise state ONE language while its
+    /// Clean half sat behind an import row. `producer: None` is UNRECORDED on
+    /// an import row and is covered only by an explicit `Unknown` member.
+    BundleImportLanguageUncovered {
+        import: ImportId,
+        name: String,
+        producer: Option<Producer>,
+        source_languages: BTreeSet<NativeSourceLanguage>,
+    },
     InvalidToolIdentityField {
         field: &'static str,
         component: &'static str,
@@ -3104,11 +3491,154 @@ pub enum NativeVerificationBundleError {
         suite: NativeVerifierSuite,
         kind: NativeEvidenceArtifactKind,
     },
+    /// A `TrustVcVerificationMode::DischargeProofObligations` request left
+    /// `function` unset.
+    ///
+    /// SCOPING: this is the load-bearing requirement of discharge mode. A
+    /// request that names no function cannot be obligation-scoped, and setting
+    /// `function: Some(f)` is what arms the two existing mode-independent
+    /// checks — `MissingFunction` and `RequestObligationFunctionMismatch` —
+    /// that confine the request to obligations actually sourced to `f`.
+    /// Without it a discharge request could cite any obligation in the module.
+    MissingTrustVcDischargeFunction(NativeRequestId),
+    /// A `TrustVcVerificationMode::DischargeProofObligations` request carried a
+    /// proof certificate.
+    ///
+    /// Discharge asks trust-vc to PRODUCE a proof, not to check one somebody
+    /// else produced. A request that carries both is ambiguous about which
+    /// half is authority, so it is refused rather than silently resolved. This
+    /// fires IN ADDITION to the unconditional certificate loop's own errors.
+    TrustVcDischargeRequestCarriesCertificate {
+        request: NativeRequestId,
+        obligation: ProofId,
+        prover: String,
+    },
+    /// A `TrustVcVerificationMode::DischargeProofObligations` request cited an
+    /// obligation whose MODULE site is not in the function the request names.
+    ///
+    /// SCOPING, SECOND HALF. `RequestObligationFunctionMismatch` binds a
+    /// request to `compiler_facts.obligation_source.function`, which is a
+    /// producer-declared SIDECAR row. Discharge is answered by lowering the
+    /// `Assert` at the obligation's own site, so for that mode the module
+    /// obligation must agree too — otherwise the sidecar and the IR can
+    /// disagree about which body is being proved and the bundle is still
+    /// admitted.
+    ///
+    /// `actual` is `None` for an obligation with no site at all, which is the
+    /// legacy/unscoped shape `ProofObligation::site` documents. An unsited
+    /// obligation is not an obligation about a body, so discharge mode refuses
+    /// it rather than choosing a body for it.
+    TrustVcDischargeObligationNotSitedInFunction {
+        request: NativeRequestId,
+        obligation: ProofId,
+        expected: FuncId,
+        actual: Option<FuncId>,
+    },
+    /// One obligation is cited by BOTH a certificate-import/merge request and
+    /// a `DischargeProofObligations` request in the same bundle.
+    ///
+    /// The bundle would then say two different things about where the
+    /// obligation's authority comes from: an imported certificate somebody
+    /// else produced, and a proof trust-vc is being asked to produce. Nothing
+    /// downstream reconciles them — the Trust-side import boundary folds
+    /// admitted certificates without reading the report verdict at all — so a
+    /// trust-vc REFUTATION of the obligation in one request would be invisible
+    /// beside an admitted certificate for it in the other.
+    ///
+    /// This is the same argument `TrustVcDischargeRequestCarriesCertificate`
+    /// already makes WITHIN one request, applied across requests, and it is
+    /// refused for the same reason: the ambiguity is not resolvable here, so
+    /// it must not be resolved silently.
+    TrustVcObligationBothImportedAndDischarged {
+        obligation: ProofId,
+        importing: NativeRequestId,
+        discharging: NativeRequestId,
+    },
+    /// A formula the module states ([`crate::Module::stated_formulas`]: an
+    /// obligation's, a summary clause, a spec carrier) states two texts: it is
+    /// in a schema trust-ir owns, and its `smtlib` rendering is not the one
+    /// text its payload states in that schema — a different `smtlib2`
+    /// payload, a `pred.N` citation of another predicate or of none, or a
+    /// claim, which states none
+    /// ([`crate::proof::ProofFormula::states_two_texts`]). Refused whatever
+    /// any status says: a verifier handed it could solve one text while a
+    /// certificate, a caller or a linker reads the other.
+    FormulaTextsDisagree {
+        site: crate::proof::FormulaSite,
+    },
+}
+
+#[cfg(test)]
+pub(super) fn wire_identity_site_original_for_observed_tests(
+    module: &Module,
+    row: &crate::BinaryProjectionError,
+) -> (String, &'static str) {
+    no_wire_identity_site(module, row)
+}
+
+/// Where and what a writer refusal names, as
+/// [`NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity`] reports
+/// it: the location strings and construct names this error carried before
+/// D1a, for the carriers it already named.
+fn no_wire_identity_site(
+    module: &crate::Module,
+    refusal: &crate::BinaryProjectionError,
+) -> (String, &'static str) {
+    use crate::BinaryProjectionError as Refusal;
+    let function_name = |function: u32| {
+        module
+            .function_by_id(crate::FuncId::new(function))
+            .map_or("?", |f| f.name.as_str())
+            .to_owned()
+    };
+    match refusal {
+        Refusal::ConstructAheadOfWireTag {
+            construct,
+            site: Some(site),
+        } => (
+            format!(
+                "function '{}' bb{} #{}",
+                function_name(site.function),
+                site.block,
+                site.index
+            ),
+            *construct,
+        ),
+        Refusal::ConstructAheadOfWireTag {
+            construct,
+            site: None,
+        } => ("module".into(), *construct),
+        Refusal::InlinedScopeChainUnencodable { function, scope } => (
+            format!(
+                "function '{}' lexical scope #{scope}",
+                function_name(*function)
+            ),
+            "ScopeData.inlined_at",
+        ),
+        Refusal::CompletenessClaimUnencodable => ("module".into(), "Module.completeness"),
+        Refusal::SignatureAbiUnencodable { signature, .. } => (
+            format!("signature #{signature}"),
+            "FuncTy.abi (a typed signature ABI past its encoding limits)",
+        ),
+        Refusal::ProducerInternalType => ("module".into(), "Ty::Error (producer-internal)"),
+        Refusal::CountExceedsFormat { what, count } => (
+            format!("{what} ({count} entries)"),
+            "a count past the binary format's u32 limit",
+        ),
+        // The projection-only refusals (a v38 spelling, an omission) are
+        // never a writer refusal; named by their text if one ever were.
+        _ => ("module".into(), "a construct the binary writer refuses"),
+    }
 }
 
 impl core::fmt::Display for NativeVerificationBundleError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         match self {
+            NativeVerificationBundleError::FormulaTextsDisagree { site } => write!(
+                f,
+                "{site} states two formulas: its payload, read in its schema, and its smtlib \
+                 rendering are not one text"
+            ),
             NativeVerificationBundleError::UnsupportedSchemaVersion(version) => {
                 write!(
                     f,
@@ -3137,9 +3667,71 @@ impl core::fmt::Display for NativeVerificationBundleError {
                     "native verification bundle claims TrustIr module digest {actual}, but the embedded module hashes to {expected}"
                 )
             }
+            NativeVerificationBundleError::TrustIrModuleHasNoWireIdentity {
+                location,
+                construct,
+            } => write!(
+                f,
+                "native verification bundle module has no wire identity: {location} carries \
+                 {construct}, which has no binary carrier yet"
+            ),
+            NativeVerificationBundleError::RustReferenceAsPermissionBorrow { location } => write!(
+                f,
+                "native verification bundle carries Rust producer output with a permission \
+                 instruction at {location}: a Rust reference is spelled as the place's address \
+                 (or a copy of it), never as borrow, borrow_mut or end_borrow"
+            ),
             NativeVerificationBundleError::EmptyProvenanceField(field) => {
                 write!(f, "native verification bundle has empty {field}")
             }
+            NativeVerificationBundleError::BundlePrimaryLanguageUncovered {
+                primary,
+                source_languages,
+            } => write!(
+                f,
+                "native verification bundle declares primary source language {primary:?} outside its provenance.source_languages {source_languages:?}"
+            ),
+            NativeVerificationBundleError::BundleLanguageUncovered {
+                producer,
+                functions,
+                source_languages,
+            } => {
+                let functions: Vec<String> = functions
+                    .iter()
+                    .map(|function| format!("f{}", function.index()))
+                    .collect();
+                match producer {
+                    Some(producer) => write!(
+                        f,
+                        "native verification bundle provenance.source_languages {source_languages:?} covers none of {:?} for producer {producer:?} function(s) [{}]",
+                        NativeSourceLanguage::candidates_for_producer(Some(producer)),
+                        functions.join(", ")
+                    ),
+                    None => write!(
+                        f,
+                        "native verification bundle provenance.source_languages {source_languages:?} has no Unknown member for the unstamped (producer: None) function(s) [{}]",
+                        functions.join(", ")
+                    ),
+                }
+            }
+            NativeVerificationBundleError::BundleImportLanguageUncovered {
+                import,
+                name,
+                producer,
+                source_languages,
+            } => match producer {
+                Some(producer) => write!(
+                    f,
+                    "native verification bundle provenance.source_languages {source_languages:?} covers none of {:?} for imported module {name:?} (import {}) produced by {producer:?}",
+                    NativeSourceLanguage::candidates_for_producer(Some(producer)),
+                    import.index()
+                ),
+                None => write!(
+                    f,
+                    "native verification bundle provenance.source_languages {source_languages:?} has no Unknown member for imported module {name:?} (import {}), whose producer is UNRECORDED",
+                    import.index()
+                ),
+            },
             NativeVerificationBundleError::InvalidToolIdentityField { field, component } => {
                 write!(
                     f,
@@ -3686,6 +4278,41 @@ impl core::fmt::Display for NativeVerificationBundleError {
             } => write!(
                 f,
                 "native verification evidence for request {request}/{suite} has cross-suite artifact kind {kind:?}"
+            ),
+            NativeVerificationBundleError::MissingTrustVcDischargeFunction(request) => write!(
+                f,
+                "native verification request {request} asks TrustVc to discharge obligations without naming a function"
+            ),
+            NativeVerificationBundleError::TrustVcDischargeRequestCarriesCertificate {
+                request,
+                obligation,
+                prover,
+            } => write!(
+                f,
+                "native verification request {request} asks TrustVc to discharge obligations but carries certificate {obligation}/{prover}"
+            ),
+            NativeVerificationBundleError::TrustVcDischargeObligationNotSitedInFunction {
+                request,
+                obligation,
+                expected,
+                actual,
+            } => match actual {
+                Some(actual) => write!(
+                    f,
+                    "native verification request {request} asks TrustVc to discharge obligation {obligation} in function {expected}, but it is sited in function {actual}"
+                ),
+                None => write!(
+                    f,
+                    "native verification request {request} asks TrustVc to discharge obligation {obligation} in function {expected}, but it has no site"
+                ),
+            },
+            NativeVerificationBundleError::TrustVcObligationBothImportedAndDischarged {
+                obligation,
+                importing,
+                discharging,
+            } => write!(
+                f,
+                "obligation {obligation} is both imported by native verification request {importing} and discharged by request {discharging}"
             ),
         }
     }

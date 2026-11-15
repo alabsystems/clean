@@ -88,7 +88,8 @@ def _resolve_invocation(repo_root: Path) -> list[str]:
         return [legacy_on_path]
 
     return [
-        "cargo",
+        "targo",
+        "--unverified",
         "run",
         "--locked",
         "--quiet",

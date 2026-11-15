@@ -1,0 +1,252 @@
+{
+  "schema": "crystal-link4-executability-baseline/v1",
+  "what": "crystal link 4 executability ratchet; every metric is a BAD count, derived by scripts/crystal_link4_executability.py from the callee sidecar",
+  "metrics": {
+    "infer_type.non_returning_bodies": 2079,
+    "infer_type.unprojectable_bodies": 305,
+    "infer_type.unprojectable_bodies_operator_level": 309,
+    "infer_type.unprojectable_bodies_projector": 801,
+    "infer_type.value_havoc_undefs": 6251,
+    "infer_type_fast.non_returning_bodies": 2079,
+    "infer_type_fast.unprojectable_bodies": 305,
+    "infer_type_fast.unprojectable_bodies_operator_level": 309,
+    "infer_type_fast.unprojectable_bodies_projector": 801,
+    "infer_type_fast.value_havoc_undefs": 6251,
+    "targets.non_returning": 3,
+    "tick_heartbeat.non_returning_bodies": 347,
+    "tick_heartbeat.unprojectable_bodies": 66,
+    "tick_heartbeat.unprojectable_bodies_operator_level": 67,
+    "tick_heartbeat.unprojectable_bodies_projector": 172,
+    "tick_heartbeat.value_havoc_undefs": 576
+  },
+  "identity": {
+    "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+    "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+    "semantics_digest": "cfb3b9977039730540590deb7ad20b251e44da119f3677f0f3f128a88cc0893e",
+    "script_sha256": "4a466301daf42310d59509c099b048bfa5e7c6a62956a2daaf75bbd083c87af2"
+  },
+  "history": [
+    {
+      "action": "init",
+      "reason": "first measurement 2026-09-23 on target/crystal-lane/dump-link-O3-dp (clean wlzd 95b5f80d8); decision memo 2026-09-23 plan step 3: link-4 executability ratchet (reproduces the l4 review's 1,442/2,508 and 975; gates the stricter EvalIR fault model)",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2054,
+        "infer_type.unprojectable_bodies": 975,
+        "infer_type.unprojectable_bodies_operator_level": 979,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2054,
+        "infer_type_fast.unprojectable_bodies": 975,
+        "infer_type_fast.unprojectable_bodies_operator_level": 979,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 332,
+        "tick_heartbeat.unprojectable_bodies": 156,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 157,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "e6d5f01b59749003776f2ca47669c6c85fb6aeb34ad4a2e4cbf13bdf43b7468f",
+        "script_sha256": "744cceae4ce6e0d329910ad20feddf973c893f779709233249aea2548276b293"
+      }
+    },
+    {
+      "action": "reseat",
+      "reason": "2026-09-23 adversarial review (lens: does the ratchet report MORE executable/projectable bodies than the truth?). The kind-only projectability model missed the projector's OPERAND refusals: types fatptr<slice>, closure.N, [ty.N x M], fatptr<dyn>, functy.N, char (recursively under &/*/Rc), negative Int constants (also inside aggregates) and unimageable globals. Added gated family unimaged_operand and metric *.unprojectable_bodies_projector, derived from crystal_a2_project main.rs fn ty / fn cst / the global loop; the model agrees body-for-body with the prebuilt a2project --usize-bits 64 run on all 2,783 sidecar members. Same artifact, instrument change only: non_returning 2054->2128 (tick_heartbeat 332->358); projector-level unprojectable 1379/2508 (tick_heartbeat 256/424). Also: --rebase now refuses a lower count on an UNCHANGED artifact (instrument moves go through --reseat), and --reseat may change the metric set.",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2128,
+        "infer_type.unprojectable_bodies": 975,
+        "infer_type.unprojectable_bodies_operator_level": 979,
+        "infer_type.unprojectable_bodies_projector": 1379,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2128,
+        "infer_type_fast.unprojectable_bodies": 975,
+        "infer_type_fast.unprojectable_bodies_operator_level": 979,
+        "infer_type_fast.unprojectable_bodies_projector": 1379,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 358,
+        "tick_heartbeat.unprojectable_bodies": 156,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 157,
+        "tick_heartbeat.unprojectable_bodies_projector": 256,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "9131cdc2003c107434d989ae9aca2ca0fe044296aa0f17bf63ab1fabde2f8006",
+        "script_sha256": "25ef7d37f6cf8b5e9d9e06da37cec84fc7f6d0cd5d38f5eb45e978e9f6fa7302"
+      }
+    },
+    {
+      "action": "reseat",
+      "reason": "2026-09-24 crystal E3: a gep INDEX that is a havoc undef is a definite EvalIR fault (ir_gep_eval sums its indices through ir_as_int, whose undef_ arm is none, and ir_opt_add propagates none: type_error not_int), and the ratchet had no rule for it (remaining-plan item e3-exact-lowering, measured there as +17). Added to family undef_other with anchor group undef.gep.index; self-test body 17 pins it. Same artifact, instrument change only: infer_type/infer_type_fast non_returning 2128->2145, tick_heartbeat 358 unchanged, every other metric unchanged. Needed before E3's typed seeds are measured: lifting the seed faults otherwise reads bodies whose next instruction is an undef-index gep as returning.",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2145,
+        "infer_type.unprojectable_bodies": 975,
+        "infer_type.unprojectable_bodies_operator_level": 979,
+        "infer_type.unprojectable_bodies_projector": 1379,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2145,
+        "infer_type_fast.unprojectable_bodies": 975,
+        "infer_type_fast.unprojectable_bodies_operator_level": 979,
+        "infer_type_fast.unprojectable_bodies_projector": 1379,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 358,
+        "tick_heartbeat.unprojectable_bodies": 156,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 157,
+        "tick_heartbeat.unprojectable_bodies_projector": 256,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "7ac2c804ee6dbc5737c452ffbdc60fdde8e49347c49b821354e79349fd22b95d",
+        "script_sha256": "0b76b2cc97f6a822761596a703ecd6a901acbfdafb5391eab7f2d8f41efd73a0"
+      }
+    },
+    {
+      "action": "reseat",
+      "reason": "crystal decision D9 (decision memo section 14): the projector images a NATIVE atomic (atomicrmw xchg/add/sub/and/or/xor, strong cmpxchg, atomic_load, atomic_store, fence) by sequential expansion into existing load/binop/icmp/select/store nodes, exact under the ENVIRONMENT premise SEQ; this instrument derives the images from the projector's fn seq_atomic_image, types the atomic's operand, and checks its pointer as a load/store base. Also: supplied intrinsic bodies (the trust sidecar's intrinsic-arms lane) are admitted between the members and the declarations. Same artifact, instrument change only: infer_type/infer_type_fast unprojectable 975->875, operator-level 979->879, projector 1379->1305, non_returning 2145->2138; tick_heartbeat unprojectable 156->155, operator-level 157->156, projector 256->255; value havocs and targets unchanged. The model agreed body-for-body with the real a2project on all 118 atomic-bearing bodies of dump-link-O3-me3off",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2138,
+        "infer_type.unprojectable_bodies": 875,
+        "infer_type.unprojectable_bodies_operator_level": 879,
+        "infer_type.unprojectable_bodies_projector": 1305,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2138,
+        "infer_type_fast.unprojectable_bodies": 875,
+        "infer_type_fast.unprojectable_bodies_operator_level": 879,
+        "infer_type_fast.unprojectable_bodies_projector": 1305,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 358,
+        "tick_heartbeat.unprojectable_bodies": 155,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 156,
+        "tick_heartbeat.unprojectable_bodies_projector": 255,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "c25a01a3fb4324e76fc04c88583170d87e4b80075cf60b92aa88b51d57215af0",
+        "script_sha256": "ecab5cee07270cae6af1e3572e0cb0e7438fe9f58792431e90972f0937f89543"
+      }
+    },
+    {
+      "action": "reseat",
+      "reason": "merge of crystal/c-e3b onto crystal/lzd: the combined instrument images the D10 atomics (c-s19; named D9 in that branch's history entry) AND pins the uninit.lane anchors with the not-gated pending_const_images figure (c-e3b); reseated on the baseline's own artifact, every metric must be unchanged",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2138,
+        "infer_type.unprojectable_bodies": 875,
+        "infer_type.unprojectable_bodies_operator_level": 879,
+        "infer_type.unprojectable_bodies_projector": 1305,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2138,
+        "infer_type_fast.unprojectable_bodies": 875,
+        "infer_type_fast.unprojectable_bodies_operator_level": 879,
+        "infer_type_fast.unprojectable_bodies_projector": 1305,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 358,
+        "tick_heartbeat.unprojectable_bodies": 155,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 156,
+        "tick_heartbeat.unprojectable_bodies_projector": 255,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "0e2d532b2f0a07c7ef5b23f280e02e2c0e01c96044b55c1900bd757fb81a9505",
+        "script_sha256": "ecd0fba8e6b35a38ef524e759f5df21e2d2cb1068303a9c2c39b0478585af7c5"
+      }
+    },
+    {
+      "action": "reseat",
+      "reason": "crystal D1 instrument change, reseated on the baseline's own artifact (dump-link-O3-dp): borrow_mut is imaged as borrow (a declared shared arm, one arm in trust-ir's reference interpreter; 679 infer_type-closure bodies carried it), a by-value call_indirect with an exact, complete, same-signature dispatch set returns when a target does (and its targets join the closure), a certified trust_rust.thread_local_addr is imaged under decision D11, and a call_indirect whose callee is a copy at a non-function type is a definite fault (callee_not_fnptr)",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2097,
+        "infer_type.unprojectable_bodies": 305,
+        "infer_type.unprojectable_bodies_operator_level": 309,
+        "infer_type.unprojectable_bodies_projector": 953,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2097,
+        "infer_type_fast.unprojectable_bodies": 305,
+        "infer_type_fast.unprojectable_bodies_operator_level": 309,
+        "infer_type_fast.unprojectable_bodies_projector": 953,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 354,
+        "tick_heartbeat.unprojectable_bodies": 66,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 67,
+        "tick_heartbeat.unprojectable_bodies_projector": 218,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "fb6e04a076ba281a71926581a773fc40e42df46fa49e36946eaed6cab943422b",
+        "script_sha256": "698f41974c1e1836ca8c5e826c2c89b5a75d9a8884d5e8e2f56f2fb907f30b78"
+      }
+    },
+    {
+      "action": "reseat",
+      "reason": "decision memo section 18 instrument change, reseated on the baseline's own artifact (dump-link-O3-dp): the projector images bitcast ptr -> ptr as copy (ptr) under --ptr-bitcast-identity (D12, the lead's ruling), a top-level negative integer constant as its width-W bit pattern, and the assert an undefined-behaviour halt obligation sites as unreachable (lead's ruling on D10); link 4 derives each from the projector; a supplied ABI thunk (decision D13, trust lane fnptr-thunks) is checked exact and a shim site is credited through it. Same artifact, instrument change only: infer_type/infer_type_fast non_returning 2097->2079, projector-level unprojectable 953->829; tick_heartbeat non_returning 354->347, projector-level unprojectable 218->181; every other metric unchanged. The model agreed body-for-body with the real a2project (--usize-bits 64 --tls-cells --ptr-bitcast-identity) on all 595 ptr-bitcast-bearing and all 155 negative-constant-bearing bodies of dump-link-O3-d13on",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2079,
+        "infer_type.unprojectable_bodies": 305,
+        "infer_type.unprojectable_bodies_operator_level": 309,
+        "infer_type.unprojectable_bodies_projector": 829,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2079,
+        "infer_type_fast.unprojectable_bodies": 305,
+        "infer_type_fast.unprojectable_bodies_operator_level": 309,
+        "infer_type_fast.unprojectable_bodies_projector": 829,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 347,
+        "tick_heartbeat.unprojectable_bodies": 66,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 67,
+        "tick_heartbeat.unprojectable_bodies_projector": 181,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "7beeae1cf8f282fe94c25adc69e1e8db8487eaae9f59a9955ea2113506cd1caa",
+        "script_sha256": "461eeb38b3f4f2ceedb6d8fef8b0ee9084162dbb09d8e89baba0ddeae713d504"
+      }
+    },
+    {
+      "action": "reseat",
+      "reason": "E5: fat-pointer/vtable images leave the refused set (28 trait-object bodies; dp infer_type 829->801, tick_heartbeat 181->172), measured 2026-09-28. Locked in by --reseat: --rebase refuses (same dp artifact; the drop is the instrument's -- projector images, typed ptr_metadata, the link-4 model), and every earlier instrument change on this baseline was reseated the same way",
+      "metrics": {
+        "infer_type.non_returning_bodies": 2079,
+        "infer_type.unprojectable_bodies": 305,
+        "infer_type.unprojectable_bodies_operator_level": 309,
+        "infer_type.unprojectable_bodies_projector": 801,
+        "infer_type.value_havoc_undefs": 6251,
+        "infer_type_fast.non_returning_bodies": 2079,
+        "infer_type_fast.unprojectable_bodies": 305,
+        "infer_type_fast.unprojectable_bodies_operator_level": 309,
+        "infer_type_fast.unprojectable_bodies_projector": 801,
+        "infer_type_fast.value_havoc_undefs": 6251,
+        "targets.non_returning": 3,
+        "tick_heartbeat.non_returning_bodies": 347,
+        "tick_heartbeat.unprojectable_bodies": 66,
+        "tick_heartbeat.unprojectable_bodies_operator_level": 67,
+        "tick_heartbeat.unprojectable_bodies_projector": 172,
+        "tick_heartbeat.value_havoc_undefs": 576
+      },
+      "identity": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1",
+        "semantics_digest": "cfb3b9977039730540590deb7ad20b251e44da119f3677f0f3f128a88cc0893e",
+        "script_sha256": "4a466301daf42310d59509c099b048bfa5e7c6a62956a2daaf75bbd083c87af2"
+      }
+    }
+  ],
+  "payload_sha256": "c387fa993f9b90489110ec0cb9ee36357045f7c95aa0ee88b451978f853543f7"
+}

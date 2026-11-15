@@ -264,7 +264,7 @@ fn test_string_lit_to_constructor_unicode() {
 fn test_try_string_lit_expansion_basic() {
     use crate::tc::string_lit_to_constructor;
 
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let lit = Expr::from_kind(ExprKind::Lit(crate::expr::Literal::String("A".into())));
     let expected = string_lit_to_constructor("A");
@@ -278,7 +278,7 @@ fn test_try_string_lit_expansion_basic() {
 fn test_try_string_lit_expansion_empty() {
     use crate::tc::string_lit_to_constructor;
 
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let lit = Expr::from_kind(ExprKind::Lit(crate::expr::Literal::String("".into())));
     let expected = string_lit_to_constructor("");
@@ -292,7 +292,7 @@ fn test_try_string_lit_expansion_empty() {
 fn test_try_string_lit_expansion_multi_char() {
     use crate::tc::string_lit_to_constructor;
 
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let lit = Expr::from_kind(ExprKind::Lit(crate::expr::Literal::String("hi".into())));
     let expected = string_lit_to_constructor("hi");
@@ -306,7 +306,7 @@ fn test_try_string_lit_expansion_multi_char() {
 fn test_try_string_lit_expansion_symmetric() {
     use crate::tc::string_lit_to_constructor;
 
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let lit = Expr::from_kind(ExprKind::Lit(crate::expr::Literal::String("X".into())));
     let expected = string_lit_to_constructor("X");
@@ -333,7 +333,7 @@ fn test_try_string_lit_expansion_different_strings() {
 fn test_try_string_lit_expansion_unicode() {
     use crate::tc::string_lit_to_constructor;
 
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let lit = Expr::from_kind(ExprKind::Lit(crate::expr::Literal::String("α".into())));
     let expected = string_lit_to_constructor("α");

@@ -173,10 +173,10 @@ impl Environment {
         };
         let result_level = result_level.clone();
 
-        let map_name = Name::from_string(&format!("{container}.map"));
+        let map_name = container.clone().str("map");
 
         // ── Recursor gates ────────────────────────────────────────────────
-        let rec_name = Name::from_string(&format!("{container}.rec"));
+        let rec_name = container.clone().str("rec");
         let Some(rec) = self.get_recursor(&rec_name).cloned() else {
             return oos(format!("{rec_name} is not registered"));
         };

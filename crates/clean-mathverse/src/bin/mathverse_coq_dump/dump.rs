@@ -39,7 +39,7 @@ const MAX_CONSECUTIVE_FAILURES: u32 = 20;
 /// small). Prevents a pathological module from thrashing forever.
 const MAX_TOTAL_RESTARTS: u32 = 500;
 
-pub struct DumpConfig {
+pub(crate) struct DumpConfig {
     pub sertop_path: std::path::PathBuf,
     pub timeout: Duration,
     pub validate: bool,
@@ -97,7 +97,7 @@ impl Session<'_> {
 }
 
 /// Dump one module end-to-end; writes `<sexp_path>` and `<meta_path>`.
-pub fn dump_module(
+pub(crate) fn dump_module(
     cfg: &DumpConfig,
     module: &str,
     sexp_path: &Path,

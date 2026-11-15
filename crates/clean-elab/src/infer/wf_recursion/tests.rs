@@ -12,7 +12,97 @@ use super::pre_definition::{PreDefinition, TerminationMeasure};
 use clean_kernel::name::Name;
 use clean_kernel::sorry::create_sorry_term;
 use clean_kernel::{Environment, Expr, FVarId, Level};
-use clean_parser::{Span, SurfaceExpr};
+use clean_parser::{Span, SurfaceExpr, SurfaceName};
+
+#[test]
+fn typed_measure_parameter_twins_are_not_display_aliases() {
+    let names = vec![
+        SurfaceName::component("n.dot", true),
+        SurfaceName::generated_path("n.dot"),
+        SurfaceName::component("7", true),
+        SurfaceName::from_name(Name::anon().num(7)),
+    ];
+    for (index, name) in names.iter().enumerate() {
+        let measure = SurfaceExpr::Ident(Span::dummy(), name.clone());
+        assert_eq!(
+            super::measure_params::mentioned_params(&measure, &names),
+            Some(vec![index])
+        );
+        assert_eq!(
+            super::measure_params::sole_mentioned_param(&measure, &names),
+            Some(index)
+        );
+    }
+}
+
+#[test]
+fn typed_surface_sum_routing_rejects_quoted_head_twin() {
+    let measure = |name| {
+        SurfaceExpr::App(
+            Span::dummy(),
+            Box::new(SurfaceExpr::Ident(Span::dummy(), name)),
+            vec![
+                clean_parser::SurfaceArg::positional(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::component("a", false),
+                )),
+                clean_parser::SurfaceArg::positional(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::component("b", false),
+                )),
+            ],
+        )
+    };
+    assert!(super::measure_shape::is_surface_nat_sum(&measure(
+        SurfaceName::generated_path("HAdd.hAdd")
+    )));
+    assert!(!super::measure_shape::is_surface_nat_sum(&measure(
+        SurfaceName::component("HAdd.hAdd", true)
+    )));
+}
+
+#[test]
+fn typed_nat_rewrite_dispatch_rejects_quoted_builtin_twins() {
+    use super::nat_rewrite::{match_add, match_mul, match_positivity, match_sub};
+    let a = Expr::fvar(FVarId::new(801));
+    let b = Expr::fvar(FVarId::new(802));
+    let matches: [(&str, fn(&Expr) -> Option<(Expr, Expr)>); 3] = [
+        ("Nat.add", match_add),
+        ("Nat.sub", match_sub),
+        ("Nat.mul", match_mul),
+    ];
+    for (builtin, match_op) in matches {
+        let make = |name| Expr::apps(Expr::const_(name, vec![]), [a.clone(), b.clone()]);
+        assert_eq!(
+            match_op(&make(Name::from_string(builtin))),
+            Some((a.clone(), b.clone()))
+        );
+        assert_eq!(match_op(&make(Name::anon().str(builtin))), None);
+    }
+    let positive = |name| Expr::apps(Expr::const_(name, vec![]), [Expr::nat_lit(0), a.clone()]);
+    assert_eq!(
+        match_positivity(&positive(Name::from_string("Nat.lt"))),
+        Some(a.clone())
+    );
+    assert_eq!(
+        match_positivity(&positive(Name::anon().str("Nat.lt"))),
+        None
+    );
+    let le = |succ| {
+        Expr::apps(
+            Expr::const_str("Nat.le"),
+            [
+                Expr::app(Expr::const_(succ, vec![]), Expr::nat_lit(0)),
+                a.clone(),
+            ],
+        )
+    };
+    assert_eq!(
+        match_positivity(&le(Name::from_string("Nat.succ"))),
+        Some(a.clone())
+    );
+    assert_eq!(match_positivity(&le(Name::anon().str("Nat.succ"))), None);
+}
 
 #[test]
 fn test_pre_definition_creation() {
@@ -31,21 +121,27 @@ fn test_pre_definition_creation() {
 #[test]
 fn test_termination_measure_creation() {
     let measure = TerminationMeasure {
-        params: vec!["n".to_string()],
-        measure_expr: Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        params: vec![SurfaceName::component("n", false)],
+        measure_expr: Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::component("n", false),
+        )),
         decreasing_by: None,
     };
-    assert_eq!(measure.params, vec!["n".to_string()]);
+    assert_eq!(measure.params, vec![SurfaceName::component("n", false)]);
 }
 
 #[test]
 fn test_termination_measure_with_decreasing_by() {
     let measure = TerminationMeasure {
-        params: vec!["n".to_string()],
-        measure_expr: Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        params: vec![SurfaceName::component("n", false)],
+        measure_expr: Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::component("n", false),
+        )),
         decreasing_by: Some(Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "simp_arith".to_string(),
+            SurfaceName::generated_path("simp_arith"),
         ))),
     };
     assert!(measure.decreasing_by.is_some());
@@ -196,7 +292,10 @@ fn test_mutual_psum_injection_out_of_bounds() {
 #[test]
 fn test_mutual_pack_info_creation() {
     let info = MutualPackInfo {
-        func_names: vec!["f".to_string(), "g".to_string()],
+        func_names: vec![
+            SurfaceName::component("f", false),
+            SurfaceName::component("g", false),
+        ],
         func_types: vec![
             Expr::arrow(Expr::const_str("Nat"), Expr::const_str("A")),
             Expr::arrow(Expr::const_str("Nat"), Expr::const_str("B")),
@@ -263,10 +362,10 @@ fn test_equation_case_extraction_empty() {
 #[test]
 fn test_equation_case_construction() {
     let case = EquationCase {
-        params: vec![("n".to_string(), Expr::const_str("Nat"))],
+        params: vec![(SurfaceName::component("n", false), Expr::const_str("Nat"))],
         lhs_arg: Expr::app(Expr::const_str("Nat.succ"), Expr::const_str("n")),
         rhs: Expr::const_str("result"),
     };
     assert_eq!(case.params.len(), 1);
-    assert_eq!(case.params[0].0, "n");
+    assert_eq!(case.params[0].0, SurfaceName::component("n", false));
 }

@@ -285,7 +285,8 @@ class RustAuditSubprocessTests(unittest.TestCase):
         self.assertEqual(
             cmd,
             [
-                "cargo",
+                "targo",
+                "--unverified",
                 "run",
                 "--locked",
                 "--quiet",

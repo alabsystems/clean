@@ -41,15 +41,33 @@ pub mod dep_graph;
 pub mod error;
 pub mod export;
 pub mod expr;
+pub mod fixed_cohort;
 pub mod header;
 pub mod import;
 pub mod import_reverification_metric;
+pub mod semr_bool_body;
+pub mod semr_scalar;
+// The compiled-IR decoder: `clean olean ir-census` (`cli`) and `.olean`
+// import's late-binding judgement read it.
+pub(crate) mod lean_ir;
 pub mod level;
 pub mod metamath;
 pub mod module;
+pub mod ndjson;
 pub mod olean_level;
 pub mod payload;
+pub mod payload_entry; // KR1 increment 3: a Clean payload through the reference entry (R143)
+pub mod recheck_closed;
 pub mod region;
+pub mod replay_families;
+// `clean olean replay`'s engine; its only production caller is the CLI verb.
+pub mod replay_census;
+#[cfg(any(feature = "cli", test))]
+mod replay_module;
+pub mod replay_order;
+#[cfg(any(test, feature = "test-support"))]
+pub mod test_support;
+pub mod toolchain_identity;
 pub mod verify_batch;
 pub mod verify_batch_full;
 pub mod verify_cache;
@@ -57,6 +75,7 @@ pub mod verify_parallel;
 pub mod verify_report;
 #[cfg(test)]
 mod verify_report_tests;
+pub(crate) mod world;
 
 pub use bootstrap_verify::{
     categorize_failures, format_report, verify_bootstrap_lane, verify_bootstrap_lane_in_env,
@@ -66,27 +85,52 @@ pub use error::{OleanError, OleanResult};
 pub use expr::{expr_tags, BigNat, ParsedBinderInfo, ParsedExpr, ParsedLiteral};
 pub use header::{OleanHeader, HEADER_SIZE, MAGIC, VERSION};
 pub use import::{
-    active_stdlib_toolchain, alias_resolvable_toolchain_versions,
-    convert_parsed_constant_to_const_info, convert_parsed_constant_to_declaration,
-    convert_parsed_constant_to_type_stub, default_search_paths, default_toolchain_versions,
-    discover_olean_parts, find_module_olean, load_module_with_deps, load_module_with_deps_bounded,
-    load_module_with_deps_bounded_shared, load_module_with_deps_bounded_shared_with_policy,
-    load_module_with_deps_cached, load_module_with_deps_parallel, load_module_with_deps_shared,
+    active_stdlib_toolchain, add_global_instance_entry, alias_resolvable_toolchain_versions,
+    clean_payload_imports_required, convert_parsed_constant_to_const_info,
+    convert_parsed_constant_to_declaration, convert_parsed_constant_to_type_stub,
+    default_fn_binder_idx, default_search_paths, default_toolchain_versions, discover_olean_parts,
+    find_module_olean, has_global_instance_entry, import_world_for_file, lean_accepts_restatement,
+    load_module_with_deps, load_module_with_deps_bounded, load_module_with_deps_bounded_shared,
+    load_module_with_deps_bounded_shared_with_policy, load_module_with_deps_cached,
+    load_module_with_deps_cached_guarded, load_module_with_deps_parallel,
+    load_module_with_deps_replaying_module, load_module_with_deps_shared,
     load_module_with_deps_shared_with_policy, load_module_with_deps_with_import_policy,
-    load_modules_with_deps, load_modules_with_deps_with_import_policy, load_olean_file,
-    load_olean_file_with_import_policy, load_parsed_module, load_parsed_module_with_import_policy,
+    load_modules_with_deps, load_modules_with_deps_checked,
+    load_modules_with_deps_with_import_policy, load_olean_file, load_olean_file_with_import_policy,
+    load_parsed_module, load_parsed_module_at_index,
+    load_parsed_module_at_index_with_import_policy, load_parsed_module_with_import_policy,
+    load_typed_module_with_deps_bounded, load_typed_module_with_deps_bounded_shared,
+    load_typed_module_with_deps_cached, load_typed_module_with_deps_parallel,
     parse_imports_and_const_names_only, parse_imports_only, parse_module, parse_module_file,
     parse_module_incremental, parse_module_incremental_types_only, parse_module_parts,
-    parse_module_types_only, toolchain_versions_from_search_paths, ActiveStdlibToolchain,
-    ConstantConvertSession, ExprSharingStats, ImportError, ImportKinds, LoadSummary, ModuleCache,
-    OleanImportPolicy, SearchPathBuilder, SkippedConstant, UnpinnedOleanImportPolicy,
+    parse_module_types_only, parse_typed_imports, read_artifact, require_clean_payload_imports,
+    resolve_typed_module_path, scoped_instance_idx, search_paths_in_world, source_world_for_file,
+    source_world_of, stored_family_members, toolchain_versions_from_search_paths,
+    type_binder_name_idx, type_binder_names, typed_module_rel_path, ActiveStdlibToolchain,
+    ArtifactDepth, ArtifactRead, CapturedModuleBytes, ConstantConvertSession, DefaultFnBinderState,
+    DeferredRecursor, DeferredRecursorStatus, ExprSharingStats, ImportError, ImportKinds,
+    ImportWorld, ImportWorldRefusal, LeanWorldScope, LoadSummary, ModuleCache, OleanImportPolicy,
+    ScopedInstanceState, SearchPathBuilder, SkippedConstant, SourceWorldDecision,
+    SourceWorldRefusal, StoredFamilyMembers, TypeBinderNameState, TypedImport, TypedImportFlags,
+    UnpinnedOleanImportPolicy,
 };
+pub use import::{load_modules_with_deps_checked_with_limits, ModuleCaptureLimits};
 pub use import_reverification_metric::{
     compute_import_reverification_metric, ImportReverificationMetric, MetricError,
     METRIC_SCHEMA_VERSION,
 };
+pub use recheck_closed::reference_base::{reference_base_closed, ReferenceBase};
+pub use recheck_closed::{
+    promote_origins_after_closed_recheck, recheck_closed, ClosedRecheck, ClosedRecheckOptions,
+    ClosedRecheckRefusal, ClosedRecheckReport, ImportedConeGate, ImportedConeVerdict, RecheckLevel,
+};
 
 // Domain-prefixed alias for collision-free imports
+pub use import::runtime::{
+    extract_olean_runtime_parts, RuntimeBody, RuntimeDeclaration, RuntimeDeclarationRow,
+    RuntimeFamily, RuntimeOleanInput, RuntimeOleanPart, RuntimePartExtraction, RuntimePartIdentity,
+    RuntimeRecursorRule,
+};
 pub use import::ImportError as OleanImportError;
 pub use level::{level_tags, ParsedLevel};
 pub use module::{
@@ -127,6 +171,90 @@ pub fn parse_header(bytes: &[u8]) -> OleanResult<OleanHeader> {
     OleanHeader::parse(bytes)
 }
 
+/// Read and parse the header of the `.olean` part at `path`: the first 88
+/// bytes, which hold a v2 header whole and a v1 header (56 bytes) with room
+/// to spare.
+///
+/// # Errors
+///
+/// The file cannot be read, or its header does not parse
+/// ([`OleanHeader::parse`]).
+pub fn read_olean_header(path: impl AsRef<std::path::Path>) -> OleanResult<OleanHeader> {
+    use std::io::Read as _;
+    let mut bytes = Vec::with_capacity(header::HEADER_SIZE_V2);
+    std::fs::File::open(path)?
+        .take(header::HEADER_SIZE_V2 as u64)
+        .read_to_end(&mut bytes)?;
+    OleanHeader::parse(&bytes)
+}
+
+// ---------------------------------------------------------------------------
+// Lean worlds (docs/DECISIONS.md R38, R81): every Lean-written `.olean` part
+// an environment reads is of one world of `crates/clean-olean/lean_worlds.tsv`.
+// A loader that reads parts itself holds a `LeanWorldScope` to the same rule.
+// ---------------------------------------------------------------------------
+
+/// Declare that `env` reads the Lean world `world` (a row of
+/// `crates/clean-olean/lean_worlds.tsv`, e.g. `v4.13.0`), before any part of
+/// it is loaded. A Measured world's parts load only into an environment
+/// that declared it; the Oracle, Historical and Frontend-only worlds load
+/// without a declaration, and declaring one only fixes the environment to it.
+///
+/// # Errors
+///
+/// [`ImportError::UnknownLeanWorld`] for a world no row names or a Canary
+/// world; [`ImportError::MixedLeanWorlds`] when `env` already reads another
+/// world.
+pub fn declare_environment_world(
+    env: &mut clean_kernel::env::Environment,
+    world: &str,
+) -> Result<(), ImportError> {
+    import::declare_world(env, world)
+}
+
+/// The Lean world `env` reads: bound by the first Lean-written part loaded
+/// into it, or by [`declare_environment_world`]. `None` while it holds no
+/// Lean part (Clean-written parts are of no world).
+#[must_use]
+pub fn environment_world(env: &clean_kernel::env::Environment) -> Option<&'static str> {
+    import::bound_world(env)
+}
+
+/// The Lean world of the `.olean` part at `path`, as an environment that
+/// declared nothing reads it: `Some(world)` for a Lean-written part of a
+/// world such an environment loads, `None` for a part Clean's exporter wrote.
+///
+/// # Errors
+///
+/// The file cannot be read or parsed, or its world is refused
+/// ([`ImportError::UnsupportedLeanWorld`]).
+pub fn lean_world_of_olean_file(
+    path: impl AsRef<std::path::Path>,
+) -> Result<Option<&'static str>, ImportError> {
+    let path = path.as_ref();
+    let bytes = std::fs::read(path).map_err(|source| ImportError::FileUnreadable {
+        path: path.to_path_buf(),
+        source,
+    })?;
+    let label = path.display().to_string();
+    import::part_world(&label, &bytes)
+}
+
+impl ImportError {
+    /// A refusal of an `.olean` part's Lean world (R38, R81). No import
+    /// policy may stand anything in for the module it refused: there is no
+    /// warn-and-continue mode.
+    #[must_use]
+    pub fn is_world_refusal(&self) -> bool {
+        matches!(
+            self,
+            Self::UnsupportedLeanWorld { .. }
+                | Self::MixedLeanWorlds { .. }
+                | Self::UnknownLeanWorld { .. }
+        )
+    }
+}
+
 pub use export::OleanExporter;
 pub use region::{is_ptr, is_scalar, unbox_scalar, CompactedRegion};
 
@@ -147,6 +275,38 @@ pub fn pinned_lean_lib_path() -> Option<std::path::PathBuf> {
     lean_toolchain::resolve_pinned_lean(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
         .ok()
         .map(|resolved| resolved.lib_path)
+}
+
+/// Resolve an INSTALLED Lean standard library by its exact, fully-qualified
+/// toolchain name (`leanprover/lean4:v4.8.0`), for a toolchain Clean measures
+/// against besides the workspace pin — trust-ir's Lean 4.8.0 semantics are
+/// one (`crates/clean-olean/tests/native_fold_canon_lean_v4_8_0.rs`).
+///
+/// Looks only for that toolchain's own elan directory under `$ELAN_HOME` and
+/// `~/.elan` (the roots [`pinned_lean_lib_path`] searches). It never runs
+/// `elan` — which would install a missing toolchain as a side effect — and it
+/// never answers with a different version: `None` means exactly that
+/// toolchain is not installed here.
+#[must_use]
+pub fn installed_lean_lib_path(toolchain: &str) -> Option<std::path::PathBuf> {
+    lean_toolchain::installed_lean_lib(toolchain)
+}
+
+/// The `lean` executable of the exact toolchain [`pinned_lean_lib_path`]
+/// resolves: `<toolchain>/lib/lean` → `<toolchain>/bin/lean`, returned only
+/// when that file exists.
+///
+/// This is the only in-tree Lean locator that honours the workspace pin; the
+/// PATH / `~/.elan/bin/lean` lookups elsewhere may answer with any installed
+/// version. Measured 2026-09-15 on this checkout: `lib/lean` is
+/// `~/.elan/toolchains/leanprover--lean4---v4.30.0-rc2/lib/lean`, so this
+/// returns `…/leanprover--lean4---v4.30.0-rc2/bin/lean`, whose `--version` is
+/// `Lean (version 4.30.0-rc2, …, commit 3dc1a088b6d2…, Release)`.
+#[must_use]
+pub fn pinned_lean_binary() -> Option<std::path::PathBuf> {
+    let lib = pinned_lean_lib_path()?;
+    let binary = lib.parent()?.parent()?.join("bin").join("lean");
+    binary.is_file().then_some(binary)
 }
 
 /// Return the exact repository-pinned Lean standard library or an actionable

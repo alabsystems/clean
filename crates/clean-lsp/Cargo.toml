@@ -27,13 +27,6 @@ clean-kernel.workspace = true
 clean-parser.workspace = true
 clean-elab.workspace = true
 
-# LSP framework
-tower-lsp = "0.20"
-# Note: Use lsp-types 0.94 to match tower-lsp's internal dependency
-
-# Async runtime
-tokio = { workspace = true, features = ["rt-multi-thread", "sync", "macros", "io-util"] }
-
 # Error handling
 thiserror.workspace = true
 
@@ -54,6 +47,20 @@ ropey = "1.6"
 # in.
 clean-features = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
+
+# Native-only: tower-lsp and tokio's server runtime have no wasm32 backend
+# (stdio/TCP transports, rt-multi-thread); the LSP server surface is
+# target-gated to match, leaving the `cli` argument/descriptor surface and
+# `report_validation` available on wasm.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# LSP framework
+tower-lsp = "0.20"
+tower-service = "0.3.3"
+futures-util = { workspace = true, features = ["sink"] }
+# Note: Use lsp-types 0.94 to match tower-lsp's internal dependency
+
+# Async runtime
+tokio = { workspace = true, features = ["full"] }
 
 [dev-dependencies]
 tempfile.workspace = true

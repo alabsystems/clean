@@ -48,6 +48,11 @@ pub(super) enum CoreSpecBundle {
     /// this bundle is two stages and builds in a fraction of the full spec's
     /// time.
     EvalIr,
+    /// The stage prefix that registers the `.clean` model units (foundation
+    /// types through `add_expr_model`) — what the W1 fidelity oracle builds
+    /// twice, from the files and from the retained literals (`model_units.rs`).
+    #[cfg_attr(not(test), allow(dead_code))]
+    ModelUnits,
 }
 
 /// One stage in the ordered core-spec registration plan.
@@ -105,6 +110,20 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: true,
     },
+    // Literal payloads use a reversible tag inside KExpr.lit. Register the
+    // codec before typing so both judgments and the implementation bridge
+    // use the same distinct Nat/String representations.
+    CoreSpecStage {
+        apply: Specification::add_literal_model,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // Pure signatures must be available to the recursor metadata carrier.
+    CoreSpecStage {
+        apply: Specification::add_declaration_signature_carrier,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
     // Recursor environment model (#2859 computational-iota/delta track, Increment B):
     // OptionType + RecRule/RecRules/RecMeta/RecEnv + option_some_inj. Additive
     // substrate for the computational iota_step; depends only on expr_model
@@ -114,9 +133,44 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: true,
     },
-    // Computational iota_step substrate (#2859 track, Increment C): list/spine
-    // helpers, then iota_reduct + iota_step + determinism. Depends on rec_env
-    // (RecEnv/lookups) + expr_model (kapp_fn) + foundation (ListType/Nat/Bool).
+    CoreSpecStage {
+        apply: Specification::add_declaration_lookup_reflexivity,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // Raw level instantiation and arity lengths must precede both declaration
+    // signatures and polymorphic delta. Semantic/Le-dependent proofs stay in
+    // the later universe substrate. All definitions are moved unchanged.
+    CoreSpecStage {
+        apply: Specification::add_univ_instantiation_syntax,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // Guarded RHS data and Boolean views have no late arity-reflection dependency.
+    CoreSpecStage {
+        apply: Specification::add_recursor_rhs_instantiation_syntax,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_recursor_rhs_instantiation_guard_views,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // Schematic declaration data and structural universe support are early
+    // prerequisites, not assertions of source admission or typing validity.
+    CoreSpecStage {
+        apply: Specification::add_universe_param_support,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_declaration_signatures,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // Shared constant head views and iota list/core operations follow stored
+    // signatures and raw instantiation, ready for the direct universe migration.
     CoreSpecStage {
         apply: Specification::add_iota_step,
         in_substitution: true,
@@ -133,7 +187,12 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: true,
     },
-    // RedEnv = RecEnv × DefEnv + red_rec / red_def projections (split out of
+    CoreSpecStage {
+        apply: Specification::add_ind_ctor_env,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // RedEnv = RecEnv × DefEnv × IndCtorEnv with its projections (split out of
     // add_par_reduces_cd so it precedes the families). Needs RecEnv (add_rec_env)
     // + DefEnv (add_delta_step_core).
     CoreSpecStage {
@@ -141,22 +200,16 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: true,
     },
-    // REFLECTED FOUNDATION-CORE ENV (Front #1 Stage 2 artifact, now the
-    // Stage-3 VALUE SUBSTRATE): kernel_core_red_env — the real kernel
-    // environment's foundation core (19 recursors with their REAL RecMeta
-    // counts + REAL rule rhss, level-erased; 50 real definition values)
-    // mechanically reflected into a value-ful RedEnv literal by the
-    // red_env_reflect generator, under three documented trust edges
-    // (injective name interning / level erasure / coverage-with-skips ledger)
-    // and pinned 1:1 to the live kernel env by
-    // tests/kernel_core_red_env_fidelity.rs. Registers the generated def
-    // script (kcre_nat_*/kcre_name_* atoms + the env term). MOVED EARLY (was
-    // full-bundle-only after add_env_closed_checkers) for Front #1 Stage 3:
-    // the_red_env (next stage) is now a value-level ALIAS of it, so every
-    // bundle containing the_red_env must register the script first.
-    // Dependencies are all earlier stages (RedEnv/RecEnv/DefEnv ctors,
-    // KExpr/Name/Level/ListType, Nat/Bool). Census-neutral (value-ful
-    // Definitions only).
+    // Reflected finite foundation-core environment: actual ordered declaration
+    // signatures/bodies and recursor signatures/rules from an artifact-independent
+    // source seed. Raw five-constructor universes and validated finite name
+    // interning are retained. Recursor rules are selected only for immediate
+    // source Lambda RHSs in MajorAfterMinors layout, before MData erasure.
+    // Active iota uses that signature, actual head universes, and field/arity
+    // guards. The independent structural fidelity gate and coverage/refusal
+    // ledger pin this bounded source image; they are not generic Rust reduction,
+    // substitution, admission, or compiler refinement proofs. Register before
+    // the_red_env alias. Census and exact coverage are generated, not hardcoded.
     CoreSpecStage {
         apply: Specification::add_kernel_core_red_env,
         in_substitution: true,
@@ -174,15 +227,6 @@ const STAGES: &[CoreSpecStage] = &[
     // family tightening (later) can pin to it.
     CoreSpecStage {
         apply: Specification::add_the_red_env,
-        in_substitution: true,
-        in_impl_soundness: true,
-    },
-    // RecEnvClosed faithful-interface predicate (#2859 track, Increment E):
-    // every looked-up rule's rhs is closed (instantiate_at-invariant). E-core
-    // consumes its projector. Depends only on rec_env (recrule_for/recrule_rhs)
-    // + expr_model (instantiate_at) + foundation.
-    CoreSpecStage {
-        apply: Specification::add_rec_env_closed,
         in_substitution: true,
         in_impl_soundness: true,
     },
@@ -307,6 +351,21 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: true,
     },
+    CoreSpecStage {
+        apply: Specification::add_iota_option_type_views,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_iota_contractum_declines,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_iota_reduct_views,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
     // Const-head-guarded commutations (#2859 track, Increment E crux): kapp_fn /
     // kapp_args commute with instantiate_at on a const-headed (redex) spine.
     // After add_iota_subst (option_none_ne_some, list_map_append).
@@ -315,11 +374,57 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: true,
     },
+    // Promote unchanged arithmetic/head/structural proofs before the closure
+    // carriers. Stored schematic RHS closedness derives both legacy and
+    // universe-instantiated invariance for the guarded iota operator.
+    CoreSpecStage {
+        apply: Specification::add_iota_order_primitives,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_closed_bvar_primitives,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_delta_head_invariance,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_closedness_arithmetic,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_universe_closedness_syntax,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_closed_at_invariance,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_rec_env_closed,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
     // E-core assembly (#2859 track, Increment E): iota_reduct_some_inv (the CPS
     // inverter) + iota_subst_commutes. After add_iota_subst_const (the const-head
     // commutes) + add_iota_subst (opt_bind_some_inv, list_map commutes).
     CoreSpecStage {
         apply: Specification::add_iota_core,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // These unchanged proofs have only earlier structural/arithmetic
+    // dependencies. Polymorphic delta needs them to DERIVE invariance of an
+    // instantiated body from the schematic body's closedness.
+    CoreSpecStage {
+        apply: Specification::add_expr_model_inst_ceiling,
         in_substitution: true,
         in_impl_soundness: true,
     },
@@ -370,18 +475,6 @@ const STAGES: &[CoreSpecStage] = &[
     // Lift cancellation and substitution interchange
     CoreSpecStage {
         apply: Specification::add_expr_model_lift_cancel,
-        in_substitution: true,
-        in_impl_soundness: true,
-    },
-    // de Bruijn keystone (Stage-0 Brick 1): bvar_ceiling + inst_above_ceiling_id
-    // (instantiate_at is the identity above the free-variable ceiling). Placed
-    // AFTER add_expr_model_lift_cancel and after foundation_arith_positivity /
-    // iota_core / expr_model / whnf_lemmas so all deps exist (Le helpers from
-    // iota_core, nat_sub_pos_succ / nat_pos_witness_from_succ_eq from
-    // foundation_arith_positivity, instantiate_at_* unfoldings from whnf_lemmas,
-    // instantiate_bvar_at_below from expr_model). Zero new axioms.
-    CoreSpecStage {
-        apply: Specification::add_expr_model_inst_ceiling,
         in_substitution: true,
         in_impl_soundness: true,
     },
@@ -712,6 +805,18 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: true,
     },
+    // Nat equality reflection is live here; computed lookup graph inversion
+    // must precede the schematic closure and typing-coherence consumers.
+    CoreSpecStage {
+        apply: Specification::add_declaration_signature_lookup,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    CoreSpecStage {
+        apply: Specification::add_delta_signature_lookup,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
     // ENV-CLOSURE CHECKERS (Front #1 Stage 1, the_red_env discharge program):
     // the Bool closure checkers (rec_env_closed_b / rec_env_lift_closed_b /
     // def_env_closed_b / def_env_lift_closed_b + the rec_rules_closed_b leg)
@@ -872,9 +977,127 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: false,
     },
+    // Raw universe syntax/substitution and its semantic Level substrate must
+    // be available to the target typing layer. This is the unchanged prefix
+    // of add_univ_poly; confluence-dependent lemmas remain at the late slot.
+    CoreSpecStage {
+        apply: Specification::add_univ_poly_substrate,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_univ_poly_structural,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
     CoreSpecStage {
         apply: Specification::add_dependent_sn_richmodel,
         in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Substitutivity of the step relation and the accessibility facts built on
+    // it. AFTER richmodel, which mints the psubst tower they consume
+    // (psubst_instantiate, instantiate_eq_psubst, up, scons, idsubst); their
+    // other dependencies -- beta_reduces/whnf_step/whnf_acc, and the let_
+    // discrimination family -- are earlier still.
+    //
+    // Nothing of this shape existed: searched by statement, the only constants
+    // relating two steps with a substitution between them were the_red_env and
+    // wRecSpine1_step_inv. Every one carries its iota and delta residuals as
+    // hypotheses rather than holes.
+    CoreSpecStage {
+        apply: Specification::add_beta_subst_congr,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // A NECESSARY CONDITION on CandModel tenv, composed from the telescope's own
+    // redConst and cr1: every constant tenv assigns a type to is forced to be
+    // whnf_acc as a bare const, so CandModel tenv is uninhabited for any tenv
+    // that types a constant whose delta-body diverges. The first constraint on
+    // the inhabitation hypothesis derived from the structure rather than from a
+    // candidate that approximates it. Needs CandModel, hence after
+    // add_dependent_sn_richmodel; placed beside the other CandModel-facing
+    // stage. Nothing here needs the substitution lemmas.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_necessary,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // What a whnf_step out of an APPLICATION can be -- the app sibling of
+    // whnf_step_let_inv, and what the beta twin of redlet_blind needs. Five
+    // continuations over fifteen beta_reduces arms, eleven refuted by the
+    // app_ne_* family; iota and delta are carried to the caller, as everywhere
+    // in this chain. A general fact about the step relation, tied to no
+    // candidate. Needs only beta_reduces/whnf_step and the app discrimination
+    // families, all earlier.
+    CoreSpecStage {
+        apply: Specification::add_step_app_inversion,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Omega is not strongly normalizing, kernel-checked -- and with it, pi_elim
+    // at the type-blind candidate is FALSE rather than merely refused, with the
+    // four iota/delta side conditions DISCHARGED by computation rather than
+    // carried (delta_step/iota_step are definitions over delta_reduct/iota_reduct,
+    // and both compute to none on a lam and on a bvar-headed application).
+    // Every statement is about whnf_acc/whnf_step alone; the CandModel reading
+    // is in designs/2026-09-18-is-candmodel-uninhabited.md. Needs both
+    // inversions from the stage above.
+    CoreSpecStage {
+        apply: Specification::add_omega_not_sn,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // Closedness of raw universe instantiation and identity of parallel
+    // substitution on closed syntax. Follows richmodel's upn_apply_lt;
+    // neither these lemmas nor the reorder assert Rust correspondence.
+    CoreSpecStage {
+        apply: Specification::add_universe_closedness,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_declaration_lookup_closedness,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Pure support/lookup/typing preservation has no model-to-model bridge
+    // dependency. Register it before the subject-reduction interface, whose
+    // schematic body typing uses these results. Controls stay in the late
+    // bridge stage where their counterexample prerequisites are available.
+    CoreSpecStage {
+        apply: Specification::add_universe_support_fusion,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // These three unchanged structural head views are also needed by the
+    // faithful checker in the reduced bundles. They require neither support
+    // fusion nor the full delta-universe closure stage below.
+    CoreSpecStage {
+        apply: Specification::add_universe_instantiation_head_views,
+        in_substitution: true,
+        in_impl_soundness: true,
+    },
+    // Operational delta universe closure follows from stored body support,
+    // actual guarded lookup, and the preceding substitution-fusion theorem.
+    CoreSpecStage {
+        apply: Specification::add_delta_universe_instantiation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_declaration_lookup_instantiation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_typingctx_universe_instantiation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_typingctxconv_universe_instantiation,
+        in_substitution: false,
         in_impl_soundness: false,
     },
     // Stratified Hurkens/Girard BLOCK (stratified_hurkens_block.rs): port of
@@ -2037,7 +2260,463 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: true,
         in_impl_soundness: false,
     },
-    // REAL-ENV CONFLUENCE DISCHARGE: the hypothesis-free Church-Rosser corollaries
+    // R18 OF THE CANDIDATE-MODEL LADDER: THE SEMANTIC TRANSFER — the item R17
+    // named as its next one. r18_xval_sval proves R17's seven-constructor
+    // interpretation agrees with R12's five-constructor one on every term the
+    // OLD system types, at every valuation: induction on the WK derivation,
+    // var/sort by Eq.refl, pi/app by R14's two congruence helpers, lam by R13's
+    // funext at the arrow shape. NO new semantic machinery — every arm is
+    // r14_val_lift's arm with the lifting stripped out. NOT definitional: Eq.refl
+    // at the statement is refused (both sides are recursors stuck on a variable
+    // derivation).
+    //
+    // What it unlocks. r18_xval_env_congr is NATIVE at all seven constructors
+    // (R13's engine re-run on xval, so it holds at konst and let_ too).
+    // r18_xval_step / r18_xval_step_star / r18_xval_conv carry R16's val_step,
+    // val_step_star and val_conv onto xval, and r18_xval_lift / r18_xval_psub /
+    // r18_xval_inst carry R14's val_lift / val_psub / val_inst. Those last three
+    // also change the SUBJECT — their left sides read wkc_lift / wkc_psub /
+    // wkc_inst, R17's seven-constructor operations — and R17's subsingleton
+    // (r17_wkc_deriv_unique, through r17_xval_irrel) closes that in ONE step
+    // instead of a commutation induction. That is the subsingleton's first
+    // consumer outside R17. r18_xval_inst spends the transfer a THIRD time,
+    // under vconsD, because R14 extends the valuation by an sval.
+    //
+    // SCOPE, pinned not argued: every Group-C theorem quantifies over h : WK,
+    // so none reaches a konst- or let_-headed WKC derivation, and
+    // r18_lift_at_wkc_probe (the same proof at an arbitrary WKC derivation) is
+    // REFUSED by the kernel. r18_xval_psub's right side still reads venvSubD,
+    // which is WK-indexed: a WKC-indexed valuation construction is a DEFINITION,
+    // not a corollary, so the substitution lemma transfers on its SUBJECT and
+    // not on its valuation. No SN capstone; nothing here advances
+    // whnf_terminates_well_typed_dependent or discharges CandModel.
+    //
+    // MUST follow add_candmodel_construct_r17 (xval, r17_wk_wkc, wkc_lift,
+    // r17_xval_irrel), add_candmodel_construct_r16 (r16_val_step,
+    // r16_val_step_star, r16_val_conv), add_candmodel_construct_r14
+    // (r14_val_lift, r14_sval_pi_congr, r14_vapply_congr) and
+    // add_candmodel_construct_r13 (r13_vd_arr_funext, r13_venvD_funext).
+    // ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r18,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R19 OF THE CANDIDATE-MODEL LADDER: THE FIRST NATIVE SEMANTIC LEMMA.
+    // r19_xval_lift is r18_xval_lift with h : WK widened to h : WKC -- R14's
+    // val_lift proved by induction on WKC, so it holds at konst and let_
+    // derivations, which the transported R18 stack provably cannot reach.
+    //
+    // Five of the seven arms are R14's val_lift arms with sval replaced by xval
+    // and wk_lift by wkc_lift, reusing r14_sval_pi_congr / r14_vapply_congr /
+    // r13_vd_arr_funext / r14_venvLift_vcons VERBATIM -- every one of those is a
+    // statement about VALUES and VALUATIONS and none mentions a derivation, so
+    // the ladder's semantic helper layer is indifferent to which shape system it
+    // serves. The konst arm is Eq.refl (xval's konst clause discards its
+    // valuation, so weakening has nothing to say); the let_ arm costs one step
+    // more than lam, because the clause reads the valuation extended by the
+    // VALUE's interpretation.
+    //
+    // THE VAR ARM IS WHERE R18 PAYS FOR ITSELF. R14's var arm is a four-step
+    // chain through two sval-side cast lemmas; this rung needs neither, because
+    // r17_wkc_lift_var and the embedding of r14_wk_lift_var derive one judgment,
+    // r17_xval_irrel equates their interpretations and r18_xval_sval moves one to
+    // sval. Any later native rung inherits the same shortcut wherever a WK-side
+    // lemma already exists for the object in hand.
+    //
+    // MEASUREMENTS, not decoration: r19_native_extends_transported states R18's
+    // TYPE and proves it with R19's VALUE (the two are different proofs, so
+    // statement drift would otherwise be invisible), and r19_lift_reaches_konst /
+    // r19_lift_reaches_let instantiate the lemma at R17's REAL konst and let_
+    // witnesses -- the constants r18_xval_lift has no instance of at all.
+    //
+    // NOT done: only val_lift went native. psub / inst / step / step_star / conv
+    // are still transported and still scoped to h : WK, and a native val_psub
+    // needs a WKC-indexed venvSubD first, which is a DEFINITION. No SN capstone.
+    //
+    // MUST follow add_candmodel_construct_r18 (r18_xval_sval) and therefore all
+    // of R13/R14/R17. ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r19,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R20 OF THE CANDIDATE-MODEL LADDER: THE NATIVE SUBSTITUTION LEMMA, plus the
+    // definition R18 and R19 both declined to invent and the native beta law it
+    // buys.
+    //
+    // r20_xvenvSubD is venvSubD with WK/sval replaced by WKC/xval. R18 recorded
+    // that a WKC-indexed valuation construction "is a DEFINITION, not a corollary
+    // of this rung" and left r18_xval_psub's right-hand side WK-indexed; R19
+    // repeated the point. This rung makes the definition deliberately, the way
+    // venvSubD was made in R14, and everything else follows.
+    //
+    // r20_xvenvSubD_agrees is the one-line bridge: pointwise the claim IS
+    // r18_xval_sval, and r13_venvD_funext turns that into an equality of
+    // valuations. Load-bearing, because the native and transported substitution
+    // lemmas read DIFFERENT valuations on their right-hand sides and without it
+    // cannot be compared at all. STRICTLY NARROWER than the definition, and
+    // pinned: r20_agrees_at_wkc_probe claims it at an arbitrary WKC hypothesis
+    // and the kernel REFUSES, venvSubD being WK-indexed.
+    //
+    // r20_xval_psub is R14's val_psub at seven constructors. var is Eq.refl (the
+    // operation is stated with a substitution HYPOTHESIS, so the derivation it
+    // produces at a variable IS the hypothesis -- which is what r20_xvenvSubD is
+    // defined to make true); konst is Eq.refl; let_ costs one congruence more
+    // than lam, in the extension value. R19 is consumed in EXACTLY ONE PLACE --
+    // r20_xvenvSub_up's successor branch is r20_xval_lift0 -- which is the whole
+    // dependency of substitution on weakening, made visible.
+    //
+    // r20_xval_inst is R14's val_inst over wkc_inst, and r20_xval_beta is the
+    // payoff: the interpretation of a beta redex's contractum equals the
+    // interpretation of the redex, at ANY WKC derivation. wkc_inst is precisely
+    // what R17's wkc_step calls at its head-beta arm, so this is the semantic
+    // half of subject reduction's hardest case. Controlled by
+    // r20_beta_arg_shape_probe (argument typed at d rather than domSk d: REFUSED).
+    //
+    // NOT done: the step law is still transported and still scoped to h : WK.
+    // What R20 supplies is the missing INGREDIENT, not the induction over
+    // whnf_step. No SN capstone.
+    //
+    // MUST follow add_candmodel_construct_r19 (r19_xval_lift) and therefore R18,
+    // R17, R14, R13. ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r20,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R21 OF THE CANDIDATE-MODEL LADDER: THE NATIVE STEP LAW. R15's val_step_sem
+    // at seven constructors -- from a whnf_step out of a WKC-typed term, hand
+    // back a WKC derivation of the reduct TOGETHER WITH the equation saying its
+    // interpretation is the original's -- plus r21_xval_step, the forall-form at
+    // any derivation of the reduct.
+    //
+    // Five arms are R15's with sval -> xval and the casts moved to r17_wkcCastT /
+    // r20_xval_cast_term, which R20 built for exactly this and which is spent
+    // nine times here. konst is a REFUTATION: an inert constant admits no
+    // whnf_step at all (r17_const_no_step), the third rung running where R17's
+    // inertness restriction pays. let_ has FOUR cases through letRedex_whnf_inv:
+    // zeta closes through r20_xval_inst and then on the nose, because xval's let_
+    // clause IS the extended-valuation reading (r17_xval_zeta = Eq.refl, paying
+    // off where it was built for); the ANNOTATION case is Eq.refl after the cast,
+    // xval never reading a let_'s annotation; the value case is one Eq.cong; the
+    // body case is the body hypothesis at the value-extended valuation.
+    //
+    // THE ONE NEW PIECE is r21_xval_lam_inv, the SEMANTIC lambda inversion.
+    // r17_wkc_lam_inv gives only the body DERIVATION, and the head-beta case also
+    // needs the equation; no subsingleton argument supplies it, there being no
+    // WKC.lam to rebuild without the annotation's own derivation. So the type is
+    // COMPUTED at nine heads (r21_xvalLamT) and the impossible ones die by
+    // computation, R15's discipline.
+    //
+    // NOT done: val_step_star and val_conv are still transported and still scoped
+    // to h : WK. R16 derives val_conv through r15_val_star_sem, and that whnfStar
+    // induction has not been redone -- a different shape of work from R19-R21.
+    // No SN capstone.
+    //
+    // MUST follow add_candmodel_construct_r20 (r20_xval_cast_term, r20_xval_inst)
+    // and therefore R19, R18, R17, R16 (PropBox, r16_unbox), R15
+    // (r15_whnf_stepT_inv), R14, R13. ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r21,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R22 OF THE CANDIDATE-MODEL LADDER: THE NATIVE CONVERSION LEMMA, and with it
+    // the whole R14/R16 semantic stack standing on WKC rather than on the
+    // five-constructor system it extends.
+    //
+    // SHORT BY CONSTRUCTION: r22_xval_star_sem is an induction on whnfStar, not
+    // on the derivation, so it has TWO arms and neither knows how many
+    // constructors the shape system has. The seven-constructor work is all inside
+    // r21_xval_step_sem, consumed once in the step arm.
+    //
+    // r22_xval_conv needs NO PropBox and NO irrelevance hypothesis, and both
+    // differ from how the sval side got there. No box because val_conv's
+    // conclusion is a MEMBERSHIP and vcarD s v t is a Type, so it is handed to
+    // the star form as its own C. No irrelevance because the derivation the star
+    // form returns at the FIRST sequence is reused at the SECOND, where R15 could
+    // only state val_conv conditionally on irrelevance and R16 discharged it.
+    //
+    // With this rung every transported theorem of R18 has a native counterpart,
+    // and each is pinned by a drift check stating R18's TYPE and proving it with
+    // the native VALUE. What that IS: the layer a reducibility argument stands on
+    // -- weakening, substitution, instantiation, beta, one step, conversion, over
+    // a system with const and let_. What it is NOT: a reducibility argument or an
+    // SN result. Nothing in R18-R22 advances
+    // whnf_terminates_well_typed_dependent or discharges CandModel, and WKC still
+    // has seven constructors against KExpr's nine, still no conversion RULE,
+    // still shapes rather than types in its context, still INERT constants only.
+    //
+    // MUST follow add_candmodel_construct_r21 (r21_xval_step_sem) and therefore
+    // all of R13-R20. ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r22,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R23 OF THE CANDIDATE-MODEL LADDER: ADEQUACY AND NORMALIZATION at seven
+    // constructors, and the computed fact that says how much every
+    // membership-shaped result of R18-R23 actually claims.
+    //
+    // r23_xval_good is R12's sval_good carried across: every WKC derivation's
+    // interpretation, at a GOOD valuation, is a GOOD value. Both new arms are
+    // cheap -- konst is goodSet_whnfAcc and that is the whole arm (an inert
+    // constant denotes the top candidate), and let_ is the body's hypothesis at
+    // the valuation extended by the VALUE's interpretation, with goodEnvD_vconsD
+    // supplying the extension's goodness.
+    //
+    // r23_xval_members_sn is NORMALIZATION: every member of the candidate a
+    // WKC-typed term denotes is whnf_acc. UNCONDITIONAL -- no CandModel
+    // hypothesis anywhere in its closure -- and NOT VACUOUS, which is two
+    // separate registered facts: r23_sn_fires_at_konst feeds R17's real
+    // r17_konst_mem_witness through it and gets whnf_acc of that constant, so the
+    // candidate is INHABITED and the theorem FIRES; r23_omega_excluded_at_konst
+    // and r23_omega_excluded_at_let run the other edge at both new constructors.
+    //
+    // IT IS NOT THE SN CAPSTONE, and the gap is not a matter of degree:
+    // whnf_terminates_well_typed_dependent is about TypingCtx, the dependent TERM
+    // judgment, where WKC is a SHAPE system whose contexts carry Sk's and not
+    // types. Nothing here discharges M : CandModel tenv.
+    //
+    // r23_vcar_arr_is_top is Eq.refl and that is the point: vcarD at an ARROW
+    // shape DISCARDS its value and returns the top candidate. So at an arrow a
+    // membership carries no information -- members_sn degenerates to
+    // whnf_acc x -> whnf_acc x and r22_xval_conv degenerates to the identity --
+    // and the content of every membership-shaped result lives at ty and kd, where
+    // r23_vcar_ty_is_the_set (also Eq.refl) says the candidate IS the denoted
+    // set. A fact about R12's vcarD, true of r16_val_conv on the sval side all
+    // along, new only in being written down. The control
+    // r23_vcar_ty_collapse_probe claims the arrow collapse at ty and is REFUSED.
+    //
+    // MUST follow add_candmodel_construct_r22 and therefore all of R12-R22 (R12's
+    // candidate machinery, R17's witnesses, R18's transfer for the drift check).
+    // ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r23,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R24 OF THE CANDIDATE-MODEL LADDER: THE REDUCIBILITY INTERFACE. r24_RedAt is
+    // membership in the candidate a ty-shaped type denotes -- Sk.ty being exactly
+    // where vcarD is faithful (r23_vcar_ty_is_the_set), and where terms live,
+    // WKC typing the TYPE level.
+    //
+    // r24_red_beta_expand is R1's candExpHF_beta landed on the candidates R23
+    // supplies: the lemma a Tait fundamental theorem spends at its lam case. It
+    // exists BECAUSE a beta redex is NEUTRAL -- the spec's Neutral sends every
+    // app head to ConstFreeUnit, which is R1's own pivot -- and because the redex
+    // is HeadFree (its kapp_fn is a lam, whose kexpr_const_name is none), so the
+    // HeadFree-restricted class suffices and isCandHI_weaken is the single step
+    // from what R23 proves to what the engine wants.
+    //
+    // THE ZETA CONTRAST is carried mechanically, not as one constant: the
+    // intended AndType does not typecheck because GoodEnvD is a Type 1 and
+    // AndType is Type 0-valued in this NON-CUMULATIVE kernel (universe level
+    // conflict: 1 vs 0), and no Type 1 conjunction exists. What holds instead:
+    // r24_red_beta_expand is registered, R1's zeta_expansion_not_generic is
+    // registered, and r24_zeta_engine_probe -- the same engine at r24_RedAt with
+    // the redex swapped to let_ -- is REFUSED. Neutral (let_ ..) is Empty, so cr3
+    // never reaches a zeta redex, and R1 exhibits a genuine candidate set
+    // containing a let-contractum while EXCLUDING its redex.
+    //
+    // CONSEQUENCE for a fundamental theorem over this system: its lam case is
+    // supplied and its let_ case is unavailable by ANY per-set argument. The
+    // honest options are to restrict the term judgment to zeta-free terms, or to
+    // carry whnfAcc_zeta_expand (which holds only at the base whole-SN set) as an
+    // explicit hypothesis. This rung deliberately does not choose; it makes the
+    // choice visible instead of burying it in a let_ arm.
+    //
+    // STILL MISSING, and now the whole gap: a term typing judgment on this
+    // lineage. R6 has one (SynTy) with a Tait fundamental theorem
+    // (synTy_fundamental), but over candInterp, which R11 PROVED is not
+    // conversion-invariant -- which is why R12 moved here. The two halves are in
+    // different lineages. No SN capstone.
+    //
+    // MUST follow add_candmodel_construct_r23 and therefore all of R12-R23, plus
+    // R1/R5 (candExpHF_beta, zeta_expansion_not_generic) and R10
+    // (isCandHI_weaken). ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r24,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R25 OF THE CANDIDATE-MODEL LADDER: THE ARROW CANDIDATE -- the non-dependent
+    // function type over R17's system, with BOTH semantic rules a Tait
+    // fundamental theorem needs at it.
+    //
+    // r25_arrow A B is KExpr.pi A (lift_at B 0 1). Two computations must line up
+    // for r25_arrowWkc to typecheck, and neither is arranged here: piShape Sk.ty t
+    // computes to Sk.ty (a pi of two TYPES is a type) and domSk Sk.ty computes to
+    // Sk.ty (so wkc_lift0 produces exactly the codomain premise WKC.pi wants).
+    // Both are R12's definitions computing; this is the first place in the ladder
+    // that depends on them agreeing.
+    //
+    // r25_red_arrow_is_the_function_space is Eq.refl: mkTyD Sk.ty t C computes to
+    // C and vcarD Sk.ty V computes to V, so reducibility at A -> B unfolds with NO
+    // lemma to `forall a, RedAt A a -> B' (app t a)` -- where B' is the codomain
+    // read LIFTED at the junk extension, which is what the lift in the type former
+    // is for. r20_xval_lift0 identifies B' with B and is the only work in either
+    // rule; built in R20 for venvSub_up's successor branch, this is its second
+    // consumer.
+    //
+    // r25_red_app is the ELIMINATION rule (a fundamental theorem's app case):
+    // unfolding plus one transport. r25_red_lam is the INTRODUCTION rule (its lam
+    // case) and the one that needed an ENGINE -- r24_red_beta_expand under the
+    // same transport run the other way. Its family-shaped premise is R1's honest
+    // interface, not a weakening chosen here.
+    //
+    // Both are pinned by refusals: r25_app_no_transport_probe drops the transport
+    // (refused -- hf a ha inhabits the LIFTED reading, not B's own) and
+    // r25_lam_no_acc_probe drops the engine's whnf_acc premises (refused).
+    //
+    // STILL NOT a term typing judgment. What is added is the pair of semantic
+    // rules such a judgment's lam and app cases would discharge against. Writing
+    // the judgment needs a term context of TYPES with lifting under binders, and
+    // its fundamental theorem needs a substitution-composition lemma
+    // (instantiate (psubst (up sg) b) a = psubst (scons a sg) b) that R1 records
+    // as deferred -- its module doc says the substitution-step lemmas do NOT exist
+    // spec-side. THAT lemma, not the engine, is the next concrete obligation.
+    //
+    // The fragment is ZETA-FREE (R24's contrast: no per-set engine reaches let_)
+    // and NON-DEPENDENT (xval's pi clause reads its codomain at junk, R17's
+    // recorded piShape erasure). Both exclusions are visible in the type former
+    // rather than hidden in a proof. No SN capstone.
+    //
+    // MUST follow add_candmodel_construct_r24 (r24_RedAt, r24_red_beta_expand,
+    // r24_red_members_sn) and R20 (r20_xval_lift0). ZERO new axioms, ZERO new
+    // inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r25,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R26 OF THE CANDIDATE-MODEL LADDER: THE SINGLE-CONTRACTUM ENGINE, ported to
+    // the HeadFree candidate class, and the lam rule in the form a fundamental
+    // theorem actually supplies it.
+    //
+    // R25's lam rule takes R1's FAMILY premise (the contractum for every
+    // betaStar-development of the body), which is R1's honest engine interface
+    // but NOT what a fundamental theorem's lam case produces -- that case
+    // produces the SINGLE contractum. R2 bridges those with candExp_beta_subst,
+    // which could not be used here for one narrow reason: it requires IsCandSet
+    // (UNRESTRICTED cr3) where R23's adequacy yields IsCandHI, weakening to
+    // IsCandHF and no further, and no candExpHF_beta_subst existed.
+    //
+    // THE PORT IS MECHANICAL, and that is measured rather than asserted.
+    // candSet_betaStar_closed's own description says it iterates "the cr2 face",
+    // and cr2 is UNRESTRICTED in both classes -- only cr3 differs, by taking a
+    // HeadFree witness. So r26_candHF_betaStar_closed is R2's term with IsCandSet
+    // -> IsCandHF and isCandSet_cr2 -> isCandHF_cr2, the same weakening R5 applied
+    // to candExp_beta. test_candmodel_r26_is_r2s_proof_with_two_names_changed
+    // checks that by renaming BACK and comparing to R2's own source string, and
+    // r26_star_cr1_probe swaps cr2 for cr1 and is REFUSED.
+    //
+    // r26_lam_premise_is_the_induction_hypothesis is the half-line that makes the
+    // rule usable: psubst_scons_instantiate (already in the tree, DerivedProved,
+    // zero axiom_deps) says psubst (scons a s) b = instantiate (psubst (up s) b) a,
+    // so the premise r26_red_lam_one wants IS reducibility of psubst (scons a s) b
+    // -- precisely what an induction on a term judgment hands back at its lam case.
+    //
+    // WITH THIS RUNG all three cases of a Tait fundamental theorem over the
+    // WKC/xval lineage have semantic counterparts: var (the substitution
+    // hypothesis, part of the statement), app (r25_red_app), lam
+    // (r26_red_lam_one + the bridge). What remains is the JUDGMENT, not a lemma.
+    //
+    // RecEnvClosed (red_rec the_red_env) is CARRIED, not discharged --
+    // betaStar_inst_transport takes it and the spec passes it as a premise rather
+    // than proving it at the_red_env, so every Group-B constant carries it and
+    // r26_one_no_recenv_probe (which drops it) is REFUSED.
+    //
+    // The fragment is unchanged: zeta-free (R24's contrast) and NON-DEPENDENT
+    // (R17's piShape erasure, visible in r25_arrow's lift). No SN capstone; see
+    // docs/issues/2026-09-17-fundamental-theorem-route-on-the-wkc-lineage.md §4
+    // for what would still not follow.
+    //
+    // MUST follow add_candmodel_construct_r25 and therefore R12-R25, plus R2
+    // (betaStar_inst_transport, the ported proof) and R5 (candExpHF_beta).
+    // ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r26,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R27 OF THE CANDIDATE-MODEL LADDER: VARIABLES ARE REDUCIBLE, and RedAt is
+    // derivation-irrelevant. The two facts a Tait fundamental theorem needs that
+    // are about r24_RedAt ITSELF rather than about a rule, neither of which
+    // existed when R26 said "what remains is the JUDGMENT, not a lemma".
+    //
+    // r27_red_irrel: r24_RedAt mentions a WKC derivation, and a fundamental
+    // theorem's arms each hold a DIFFERENT one from the one its statement was
+    // handed -- tvar the context's, tapp and tlam their nodes' -- so the
+    // statement cannot be uniform without this. One Eq.substType off
+    // r17_xval_irrel; the subsingleton's fifth consumer outside R17.
+    //
+    // r27_red_var: every de Bruijn variable is reducible at EVERY type, the
+    // classical pivot of a Tait argument. bvar i is Neutral (the spec's Neutral
+    // sends a bvar to ConstFreeUnit), is HeadFree (kapp_fn of a bvar is itself,
+    // kexpr_const_name none), and CANNOT STEP (r15_whnf_stepT_inv at a bvar head
+    // has no continuations), so cr3 applies with a vacuous reduct premise. It is
+    // what lets the lam case close: that case must hand R1's engine whnf_acc of
+    // the substituted body, the body is only reducible once an argument is
+    // substituted, and the classical escape is to substitute a VARIABLE.
+    //
+    // THE NEUTRALITY PREMISE IS LOAD-BEARING AND PINNED: r27_lam_reducible_probe
+    // runs the identical cr3 route at a LAMBDA and the kernel REFUSES it, because
+    // Neutral sends a lam to Empty. If that ever passed, r24_RedAt would be total
+    // and every membership result in R18-R26 would be worthless.
+    //
+    // MUST follow add_candmodel_construct_r26 (r24_RedAt, r24_red_isCandHF,
+    // r24_red_members_sn) and R17 (r17_xval_irrel), plus R5/R10 (isCandHF_cr3)
+    // and R15 (r15_whnf_stepT_inv). ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r27,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R28 OF THE CANDIDATE-MODEL LADDER: THE TYPE VOCABULARY. `InertTy` — the
+    // `ty`-shaped types built from inert reflected constants by `r25_arrow` —
+    // with the four facts about them a Tait `lam` case consumes, plus
+    // `r28_inertTy_not_total`, which is non-degeneracy as a THEOREM rather than
+    // a refused probe.
+    //
+    // MUST follow R27 (`r27_red_irrel`, `r27_red_var`), R25 (`r25_arrow`,
+    // `r25_arrowWkc`) and R17 (`WKC.konst`, `r17_const_no_step`). Registration
+    // is sequential; getting this backwards breaks the whole spec build at
+    // elaboration rather than at compile time.
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r28,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // R29: THE TERM JUDGMENT AND ITS FUNDAMENTAL THEOREM. `TmC`,
+    // `r29_fundamental`, and the capstone `r29_sn` — `TmC G e T` implies
+    // `whnf_acc e`. This is the cell that was empty for seventeen rungs: R12
+    // left the `SynTy` lineage because R11 PROVED `candInterp` is not
+    // conversion-invariant, and the lineage that replaced it grew the whole
+    // metatheory with no term judgment at all.
+    //
+    // MUST follow R28 — every R29 statement is over `InertTy` and its facts —
+    // and R26 (`r26_red_lam_one`,
+    // `r26_lam_premise_is_the_induction_hypothesis`).
+    CoreSpecStage {
+        apply: Specification::add_candmodel_construct_r29,
+        in_substitution: true,
+        in_impl_soundness: false,
+    },
+    // WITNESSES for the premise gate's two flags (TmC, r29_ctxOK): TmC.var takes
+    // no premises, so r29_sn's premise has a closed inhabitant; the InertTy base
+    // DISCHARGES defval_for/recmeta_for concretely at Name.anonymous, where every
+    // other use carries them as hypotheses. FULL-ONLY: it names R29 (TmC,
+    // r29_ctxOK) and R28 (InertTy), so it can be in no bundle they are not in;
+    // 663429f61 put it in the impl-soundness bundle, which has neither, and that
+    // bundle stopped building (`Unknown identifier: TmC`). Held by
+    // test_a_stage_is_in_no_bundle_its_vocabulary_is_missing_from below.
+    CoreSpecStage {
+        apply: Specification::add_r29_premise_witnesses,
+        in_substitution: false,
+        in_impl_soundness: false,
+    }, // REAL-ENV CONFLUENCE DISCHARGE: the hypothesis-free Church-Rosser corollaries
     // (par_reduces_c_star_diamond_faithful / par_reduces_p_star_diamond_faithful) —
     // the generic star-diamonds (add_par_reduces_p_topdev) instantiated at
     // env := red_rec faithful_red_env with the four interface hypotheses discharged
@@ -2166,9 +2845,40 @@ const STAGES: &[CoreSpecStage] = &[
     // add_dependent_sn_richmodel is Substitution-only, so the only bundle
     // containing its whole dependency closure is Full — same pattern as
     // add_closedness_bundle. Census-NEUTRAL: one genuine inductive, four
-    // value-bearing defs, seven kernel-checked theorems, ZERO new axioms.
+    // value-bearing defs (five as of the Pi brick), ten kernel-checked theorems,
+    // ZERO new axioms.
     CoreSpecStage {
         apply: Specification::add_micro_verifies_r0,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // THE MICRO BAND'S TOTALITY CONTRAST. micro_soundness.rs exposes
+    // micro_has_type as a TOTAL (degenerate) predicate; micro_verifies_r0.rs
+    // builds the faithful successor MicroVerifies and registers a rejection at
+    // ONE index (mv_bvar_nil_reject). What was missing is the HEADLINE: a
+    // rejection at one index is a fact about that index, while "the family is
+    // NOT TOTAL" is the claim that separates a faithful family from a degenerate
+    // one, and no such statement existed. mv_not_total is that claim, one line
+    // off the rejection witness; mv_totality_contrast pairs it with
+    // micro_has_type_total so both facts are kernel-checked side by side.
+    //
+    // Kept as a PAIR rather than retiring the vacuous band: retirement is a
+    // separate act with its own review, and a deletion would leave the reader to
+    // take the degeneracy on trust. No producer is re-pointed at MicroVerifies,
+    // honouring the Brick-6 fresh-names constraint (micro_soundness.rs:33-38) --
+    // a retained producer over a non-total family would derive Empty.
+    //
+    // CLAIMS NOTHING about the Rust checker: MicroVerifies carries three arms
+    // (Sort checker.rs:319-327, BVar checker.rs:363-381, Pi checker.rs:464-510)
+    // and absence of a
+    // derivation elsewhere means "outside the modeled fragment", NOT "the checker
+    // rejects". The whole-checker relating proof remains unstarted.
+    //
+    // FULL-ONLY, because MicroVerifies is: MUST follow add_micro_soundness
+    // (micro_has_type_total) and add_micro_verifies_r0 (mv_bvar_nil_reject).
+    // ZERO new axioms, ZERO new inductives.
+    CoreSpecStage {
+        apply: Specification::add_micro_totality_contrast,
         in_substitution: false,
         in_impl_soundness: false,
     },
@@ -2355,6 +3065,14 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The canonical freshness guards live in env_extensions (also used by the
+    // implementation-only bundle). These general guard proofs and actual
+    // KernelAddDeclAccepts callers need the full env-preservation stage above.
+    CoreSpecStage {
+        apply: Specification::add_env_freshness,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // SAT verification: CDCL invariant specifications (S01-S06).
     // Uses only Nat and Eq from foundation types, so can go at the end.
     CoreSpecStage {
@@ -2419,15 +3137,19 @@ const STAGES: &[CoreSpecStage] = &[
     // β-chain, the Nat contract, option/list helpers) is guaranteed registered.
     // Full-bundle only.
     CoreSpecStage {
+        apply: Specification::add_recursor_generic_rhs_instances,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
         apply: Specification::add_snschema,
         in_substitution: false,
         in_impl_soundness: false,
     },
-    // Universe-polymorphism rung (7th fragment increment, opener): semantic
-    // Level theory — evalL/substL, the semantic order levelLeqSem/levelEqSem,
-    // evalL_substL, and the substitution-stability theorems, ported from the
-    // Aristotle-proven r3-univ-poly guide. Terminal lemma layer (consumes only
-    // foundation Nat/Bool/Le + Level + Eq machinery). Full-bundle only.
+    // Later universe-polymorphism lemmas: confluence-dependent sort
+    // injectivity, example typing/subtyping, and term-substitution
+    // commutations. The unchanged raw/semantic substrate now precedes
+    // richmodel; this remaining terminal layer stays Full-bundle only.
     CoreSpecStage {
         apply: Specification::add_univ_poly,
         in_substitution: false,
@@ -2511,6 +3233,22 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // Phase A's two configuration equations, which locate the stuck site one
+    // call deeper than ir_lz's. Same MUST-follow-add_eval_ir_steps rule as the
+    // lzb row above, for the same reason.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzc_steps,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Phase B's two, and the same MUST-follow-add_eval_ir_steps rule: they say
+    // the FIVE-body derived module is still running at the step ir_lzc halts
+    // at, and one further.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzd_steps,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     CoreSpecStage {
         apply: Specification::add_eval_ir_cost,
         in_substitution: false,
@@ -2525,6 +3263,135 @@ const STAGES: &[CoreSpecStage] = &[
     // AFTER add_eval_ir_activation, for the names given above.
     CoreSpecStage {
         apply: Specification::add_eval_ir_lzb_activation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Phase-B's return-slot lemmas. AFTER add_eval_ir_steps (they name `ir_steps`
+    // and `ir_steps_add`) and independent of everything lzb: they are stated
+    // against their OWN one-function module, because the pattern they close is
+    // an instruction shape rather than the designated target's body.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_slot_lemmas,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Phase B's FRESHNESS substrate: the two Nat facts that let a
+    // representation relation survive the return-slot alloca. MUST follow
+    // add_eval_ir_slot_lemmas, whose `ir_mem_lookup_skip` it discharges.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzd_fresh,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The frame-stacking family -- the compositional call rule. Same
+    // placement as in EVAL_IR_STAGE_APPLY; the two lists must agree.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stack,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The MINTED half of that family (scripts/gen_stack_lemmas.py): the 61
+    // ir_stk_* and 40 ir_mext_* declarations, each its own const so a refusal is
+    // named. MUST follow add_eval_ir_stack (its four definitions) and
+    // add_eval_ir_lzd_fresh (ir_bool_false_ne_true).
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stack_minted,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // S3 / S5 and the module-extension transport, hand-authored over the minted
+    // ir_stk_step / ir_mext_steps. MUST follow add_eval_ir_stack_minted.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stack_theorems,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The stacking SPLIT keyed on the fetched node (E1): R/F/T over the minted
+    // node-keyed twin ir_stkn_step, the dests contract form, the generic call
+    // step ir_call_push, and the R/F witnesses at the ir_lzc run. MUST follow
+    // add_eval_ir_stack_theorems (ir_stk_activation) and add_eval_ir_lzc_steps
+    // (the two run theorems the witnesses cite). Same placement as in
+    // EVAL_IR_STAGE_APPLY; the two lists must agree.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stack_split,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The two axes the split left open (E1's open items): the bottom frame's
+    // dests over an ABSTRACT body (the minted ir_bdst_* family) and the module
+    // axis keyed on the outcome class (the minted ir_mexto_* twin), minted by
+    // scripts/gen_stack_axes.py, then the theorems over them. MUST follow
+    // add_eval_ir_stack_split (ir_stkn_arm_*, ir_stk_split_*) and
+    // add_eval_ir_lzd_steps (the run the dests witness cites). Same placement
+    // as in EVAL_IR_STAGE_APPLY; the two lists must agree.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stack_axes_minted,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stack_axes,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Phase B's DERIVED deref activation. MUST follow add_eval_ir_lzd_fresh and
+    // add_eval_ir_lzd_steps.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzd_activation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // E2: the step-indexed contract device -- sanctioned halts, ir_safe,
+    // ir_ctr_at, the exact-run adapter and contract-table soundness. MUST follow
+    // add_eval_ir_steps, add_eval_ir_lzd_fresh (ir_bool_false_ne_true) and
+    // add_eval_ir_machine (the atomic arm's pin). Same placement as in
+    // EVAL_IR_STAGE_APPLY; the two lists must agree.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_ctr,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // E2: Level::is_zero's local obligations in step-indexed form (minted by
+    // scripts/gen_lzd_sctr.py). MUST follow add_eval_ir_lzd_activation (the
+    // exact deref and leaves) and add_eval_ir_ctr.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzd_sctr,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // E2's open item: a contract read three ways at an ARBITRARY caller stack
+    // (the split lifted through ir_stk_clear_of_mid and the minted classifier
+    // converse), and its witness at the deref contract. MUST follow
+    // add_eval_ir_lzd_sctr (ir_lzd_deref_ctr), add_eval_ir_ctr and
+    // add_eval_ir_stack_axes_minted. Same placement as in EVAL_IR_STAGE_APPLY.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_ctr_stack,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Crystal E5 (memo §23): the wide-pointer kinds' shape, typed metadata, the
+    // vtable image and the refused wide `icmp`, as kernel-checked equations.
+    // MUST follow add_eval_ir_lzd_fresh (ir_mem_lookup_update_skip). Same
+    // placement as in EVAL_IR_STAGE_APPLY; the two lists must agree.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_e5,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ByteV1 S1a (designs/2026-10-01-evalir-bytev1-memory.md §2.2): the ladder trie with
+    // full-key buckets and the Nat-keyed function fetch `ir_func_trie_find`. MUST follow
+    // add_eval_ir_lzd_fresh (ir_nat_eqb_ne_trans, ir_nat_eqb_sound). Same placement as in
+    // EVAL_IR_STAGE_APPLY; the two lists must agree.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_bmem_trie,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ByteV1 core: F1's byte objects and load refinement, S3-core's step shape, S1b's field
+    // paths, S2a's codec. MUST follow add_eval_ir_bmem_trie (ir_bt_*) and add_eval_ir_bits'
+    // division (ir_nat_divmod). Same placement as in EVAL_IR_STAGE_APPLY.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_bmem_core,
         in_substitution: false,
         in_impl_soundness: false,
     },
@@ -2601,21 +3468,38 @@ const STAGES: &[CoreSpecStage] = &[
     // estimated: 14 inductive types + their 14 recursors + 71 constructors + 40
     // `add_recursive_def` + 15 `add_definition`-family.
     //
-    // Measured aside, recorded because it is easy to misattribute to this lane:
-    // the ImplementationSoundness bundle is ALREADY BROKEN at HEAD, independently
-    // of this stage group. `add_defeq_fuel` (in_impl_soundness: true) registers
-    // `opt_rec_bool_true_inv`, whose proof term needs `bool_false_ne_true_t`,
-    // which only `add_env_closed_checkers_depth` registers — and that stage is
-    // `in_impl_soundness: false`. So the subset spec fails to elaborate with
-    // `Unknown identifier: bool_false_ne_true_t`. Verified by running
-    // `cargo test --release -p clean-verify --lib implementation_soundness_admissibility`
-    // at this lane's parent commit (3 failed, 98.41s, same error) and again with
-    // the lane present (3 failed, 100.43s, same error) — identical either way.
-    // Fixing it means giving that bundle `add_env_closed_checkers_depth`, which is
-    // a separate change with its own dependency closure to check; it is NOT done
-    // here so this commit stays scoped to C1.
+    // HISTORICAL aside, kept because it is easy to misattribute to this lane and
+    // CORRECTED 2026-09-17 — read the flags, not this paragraph. It described the
+    // ImplementationSoundness bundle being broken at HEAD by `add_defeq_fuel`,
+    // and parenthesised that stage as `in_impl_soundness: true`. It is
+    // `in_impl_soundness: false` and has been since the block ~70 lines above
+    // flipped it, which is the same block that records the fix. So the break this
+    // paragraph describes is CLOSED, and the parenthetical was describing the
+    // pre-flip state while reading as a statement about the tree.
+    //
+    // What was true, and is the reusable part: `add_defeq_fuel` registers
+    // `opt_rec_bool_true_inv`, whose proof term applies `bool_false_ne_true_t`,
+    // and the only registrar of that lemma is `add_env_closed_checkers_depth`,
+    // which is `in_impl_soundness: false` because it depends in turn on
+    // `add_dependent_sn_richmodel`'s `lt_to_le_succ`. The subset spec therefore
+    // failed to elaborate with `Unknown identifier: bool_false_ne_true_t`,
+    // breaking all 6 tests in
+    // implementation_soundness_{admissibility,check_decomposition}_tests.rs. It
+    // was fixed from the CONSUMER side — by excluding the three terminal
+    // defeq-completeness stages — rather than by dragging the Girard SN lane into
+    // the subset, which is why the flag now reads `false`.
+    //
+    // The stale-comment class this is an instance of: a flag quoted in prose beside
+    // the declaration that carries it, which then moves. Read the struct literal.
     CoreSpecStage {
         apply: Specification::add_impl_infer_syntax,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Positional/zipped parameter lookup agreement under the actual arity
+    // premise. Needs the early universe substrate and the syntax above.
+    CoreSpecStage {
+        apply: Specification::add_universe_lookup_bridge,
         in_substitution: false,
         in_impl_soundness: false,
     },
@@ -2657,6 +3541,44 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // Raw universe instantiation commutes with C4's translation at every
+    // renaming/depth. Actual Rust smart substitution remains a separate proof.
+    CoreSpecStage {
+        apply: Specification::add_universe_instantiation_bridge,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Concrete support controls use the earlier lookup-disagreement witness;
+    // the general fusion proofs have already been registered before SRB.
+    CoreSpecStage {
+        apply: Specification::add_universe_support_fusion_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_delta_universe_instantiation_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_declaration_lookup_instantiation_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Schematic stored types without FVars need one representation equation
+    // at nil; the all-renaming equation is derived before M4 consumes it.
+    CoreSpecStage {
+        apply: Specification::add_universe_schematic_rep,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // One stored schematic signature plus No-FVar derives lookup for each
+    // arity-correct instantiation; no dynamic output equation is assumed.
+    CoreSpecStage {
+        apply: Specification::add_schematic_tenv_rep,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // ── M4 / the crystal: impl_infer_sound ──────────────────────────────
     // designs/2026-07-29-unified-implinfer-relation.md step M4. Runs AFTER
     // add_ctx_rep because it consumes C4's representation apparatus verbatim
@@ -2667,6 +3589,384 @@ const STAGES: &[CoreSpecStage] = &[
     // Terminal and Full-only for the same reasons as C1/C4: purely additive.
     CoreSpecStage {
         apply: Specification::add_impl_infer_sound,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ALGORITHMIC IMPLIES DECLARATIVE at the fixed env: KernelInfers -> TypingCtxConv.
+    // Placed after add_impl_infer_sound, which is forced by the COMPOSITION
+    // registered alongside it: impl_infer_sound_via_kinfers consumes
+    // impl_infer_kinfers_sound, minted there. The bridge itself needs only
+    // whnf_to_preserves_def_eq (add_implementation_soundness_whnf_decomposition,
+    // much earlier) and KernelInfers/TypingCtxConv (add_dependent_sn_richmodel,
+    // earlier still), so this position satisfies every constraint rather than the
+    // loosest one. With this, impl_infer_sound is a CONSEQUENCE of
+    // impl_infer_kinfers_sound rather than an independently maintained twin, and
+    // the sharp codomain is stronger by exactly the content conv discards.
+    // FULL-ONLY, like both stages it consumes: 13d62dc3a put it in the
+    // impl-soundness bundle, which registers neither KernelInfers nor
+    // impl_infer_kinfers_sound, and that bundle stopped building (`Unknown
+    // identifier: KernelInfers`) -- masked from 663429f61 on by the earlier TmC
+    // failure. Held by test_a_stage_is_in_no_bundle_its_vocabulary_is_missing_from.
+    CoreSpecStage {
+        apply: Specification::add_kinfers_declarative,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Additive semantic acceptance frontier. Legacy raw DefEq, its syntactic
+    // sort-injectivity/confluence results, and all fixed-seed callers remain
+    // unchanged. These stages share an explicit R through finite traces,
+    // conversion and typing, and include actual non-seed/smart-Pi callers.
+    CoreSpecStage {
+        apply: Specification::add_universe_semantic_bridge,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_acceptance_in,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_acceptance_legacy,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_acceptance_constants,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Semantic replacement of actual CURRENT model operators. Iota still
+    // erases universes; these preservation proofs do not assert Rust fidelity.
+    CoreSpecStage {
+        apply: Specification::add_semantic_spine_compat,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_delta_compat,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_recursor_rhs_instantiation_guards,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_recursor_rhs_instantiation_structural,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_recursor_rhs_instantiation_semantic,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_head_discriminators,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_delta_reduct_compat,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_iota_compat,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_parallel_compat,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_join,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_injectivity,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_wh3_soundness_in,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_universe_substitution,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_closedness,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Same-substitution closure from schematic environment syntax, through
+    // actual modeled delta/iota and all semantic conversion/typing cases.
+    // Current iota is still universe-blind and requires parameter-free RHSs.
+    CoreSpecStage {
+        apply: Specification::add_semantic_iota_universe_instantiation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_reduction_universe_instantiation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_typing_universe_instantiation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Late RHS proofs reuse checked arity, structural fusion and semantic transport.
+    CoreSpecStage {
+        apply: Specification::add_recursor_rhs_instantiation_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_recursor_schematic_rhs_common,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_nat_schematic_rhs_instances,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_w_schematic_rhs_instances,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_recursor_schematic_rhs_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_iota_contractum_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_iota_reduct_view_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_iota_contractum_decline_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_iota_prepass_guard_controls,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Raw universe comparison with proved adequate fuel, and bounded dependent
+    // projection telescope computations. Neither claims full Rust refinement.
+    CoreSpecStage {
+        apply: Specification::add_universe_geq_core,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_projection_level_zero,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_universe_geq_stabilization,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_projection_telescope,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_projection_unused_binder,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_universe_geq_bounded_offsets,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_universe_normalization_offset_spine,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Derive app/constant/Pi generation from the actual semantic typing judgment.
+    CoreSpecStage {
+        apply: Specification::add_semantic_typing_inversion,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_term_instantiation,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_typed_spine,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_semantic_typed_spine_forward,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Constructive typing of the existing schematic Nat.zero RHS and a real
+    // nonzero-universe guarded caller; not a generic admission/SR assumption.
+    CoreSpecStage {
+        apply: Specification::add_nat_zero_rhs_typing,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Reconstruct both sides of the actual synthetic Nat.zero step for arbitrary
+    // typed motive/minor arguments, using the existing typed-spine carrier.
+    CoreSpecStage {
+        apply: Specification::add_nat_zero_rhs_general,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Actual reflected Nat.zero stored/instance typing and real guarded caller,
+    // followed by checked transport to the emitted four-signature environment.
+    CoreSpecStage {
+        apply: Specification::add_reflected_nat_zero_typing,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_reflected_nat_zero_source_bridge,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Actual metadata lookup, inferred subject/type formation, and WH3
+    // conversion feed the guarded telescope and derived constructor spine.
+    CoreSpecStage {
+        apply: Specification::add_projection_metadata,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Derive the selected actual argument's type from the checked constructor
+    // spine; dependent projection-domain conversion remains a separate step.
+    CoreSpecStage {
+        apply: Specification::add_semantic_typed_spine_select,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Constructor metadata excludes head unfolding; current parallel reduction
+    // then transports the complete constructor head and actual argument slots.
+    CoreSpecStage {
+        apply: Specification::add_constructor_projection,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Actual projection extraction has its own parallel relation and transports
+    // new child steps. Acceptance waits for confluence and dependent typing.
+    CoreSpecStage {
+        apply: Specification::add_projection_reduction,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // General actual Nat.zero input/guarded-step/raw-output typing from typed
+    // motive/minor arguments in the emitted finite signature environment.
+    CoreSpecStage {
+        apply: Specification::add_reflected_nat_zero_general,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Explicit relation composition for the projection extension. This does
+    // not replace the acceptance judgments or add an admission assumption.
+    CoreSpecStage {
+        apply: Specification::add_projection_confluence,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Additive semantic conversion for CDP, retaining actual reduction paths.
+    // The existing typing and acceptance judgments remain unchanged.
+    CoreSpecStage {
+        apply: Specification::add_projection_semantic,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Recover dependent field and raw-spine typing from actual whole typings.
+    // This adds no projection-expression typing or source admission rule.
+    CoreSpecStage {
+        apply: Specification::add_projection_typing,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Crystal E4: the env-indexed algorithmic successor of KernelInfersIn whose
+    // whnf premises are projection-extended parallel reductions (major pre-pass
+    // and projection-of-constructor), sound into TypingCDPCtxConvIn. Needs the
+    // CDP typing/conversion above, the WH3 soundness bridge and the projection
+    // metadata fixture; FULL-ONLY like every stage it consumes.
+    CoreSpecStage {
+        apply: Specification::add_acceptance_cdp_in,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Derive ordered constructor returns from existing modeled admission,
+    // with a finite reflected ProdType connection, not Rust admission soundness.
+    CoreSpecStage {
+        apply: Specification::add_constructor_return_coherence,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Raw named/indexed guard facts and the finite captured Eq connection.
+    // This does not replace admission, conversion or typing judgments.
+    CoreSpecStage {
+        apply: Specification::add_named_indexed_guard,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Whole listed-block return checking; no admission or typing migration.
+    CoreSpecStage {
+        apply: Specification::add_named_block_return,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Exact ordered table lookup preservation, including cross-kind shadowing.
+    // No source-completeness, admission or typing judgment is added.
+    CoreSpecStage {
+        apply: Specification::add_ind_ctor_table,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Complete supplied raw lists: input-only lookups and direct whole return.
+    // Full only; no positivity, source completeness or acceptance migration.
+    CoreSpecStage {
+        apply: Specification::add_raw_block_return,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Recover original modeled admission from sound structural history and
+    // a computed complete-node lookup. No Rust reuse or promotion bridge.
+    CoreSpecStage {
+        apply: Specification::add_stored_family_admission,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Exact supplied declaration payloads, fresh/reuse admission, and ordered
+    // request chains. Reuses stored-history proofs; not a Rust execution bridge.
+    CoreSpecStage {
+        apply: Specification::add_declaration_input_admission,
         in_substitution: false,
         in_impl_soundness: false,
     },
@@ -2700,6 +4000,25 @@ const STAGES: &[CoreSpecStage] = &[
     // artifact cannot carry a body for is supplied as a stated assumption.
     CoreSpecStage {
         apply: Specification::add_eval_ir_lzb_correct,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // Phase B's cost function for the DERIVED chain. MUST follow
+    // add_eval_ir_lzb_correct: `ir_lzd_cost_exceeds_lzb_on_maxzz` names
+    // `ir_lzb_cost`, and the whole file names `Level` and `level_is_zero`.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzd_correct,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // E2's first instance: the Level::is_zero contract table, its local
+    // obligation, ir_ctr_group_sound on it, and the partial-correctness-plus-
+    // safety acceptance theorem with its cross-check against the structural A4.
+    // Full-only (Level, level_is_zero, EncodesLevelArcD, ir_outcome_is_ret,
+    // ir_lzd_never_faults). MUST follow add_eval_ir_lzd_correct and
+    // add_eval_ir_lzd_sctr.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_lzd_pc,
         in_substitution: false,
         in_impl_soundness: false,
     },
@@ -2891,7 +4210,9 @@ const STAGES: &[CoreSpecStage] = &[
         in_impl_soundness: false,
     },
     // W4 — the FLOAT-COMPARISON lane (plan §5 W4, 2026-08-25) — the LAST
-    // lane: with it every one of the 28 IRInst constructors has battery rows.
+    // lane: with it every one of the THIR lowerer's 28 IRInst constructors has
+    // battery rows (Phase B added two more, from the trust-ir bridge, whose
+    // battery fixture the lzd chain owes).
     // Like W3 this wave changed the semantics itself: the fcmp dispatch arm
     // computes (ir_fcmp_eval, 12 real predicates over the classified binary64
     // substrate — eval_ir_fcmp.rs, registered inside add_eval_ir_ops), so
@@ -2994,6 +4315,16 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_fbq,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_fng,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // The float SUB chain, 2026-08-20: `env::native_reducers_float::
     // reduce_float_sub::{closure#0}` — the `fsub` row of the 2026-08-19 width
     // tranche (`data/crystal_width_tranche_2026-08-19.json`). AFTER
@@ -3011,7 +4342,7 @@ const STAGES: &[CoreSpecStage] = &[
     // (the insertfields/stores write lanes landed ahead of it), and the first
     // VOID return. A4 splits into an outcome half (void, at ir_eval) and a
     // heap half (the 3-step configuration's memory IS ir_mem_update at the
-    // receiver with field 81 rewritten), because the machine's ret discards
+    // receiver with field 83 rewritten), because the machine's ret discards
     // the heap; A5 holds FULLY SYMBOLICALLY at both — the float trio's defeq
     // wall does not apply, since ir_vals_set on a symbolic spine is inert
     // (measured in the EvalIR scratchpad, 61/61 PASS, ~5.5 s declaration
@@ -3123,6 +4454,151 @@ const STAGES: &[CoreSpecStage] = &[
         in_substitution: false,
         in_impl_soundness: false,
     },
+    // The FIRST chain minted from a body of `TypeChecker::infer_type`'s DERIVED
+    // CLOSURE rather than from the crate module: function index 102 of the
+    // callee sidecar's partial bundle, `<[level::Level; 2] as
+    // smallvec::Array>::size`.
+    //
+    // MUST FOLLOW add_eval_ir_meta_tag, and the dependency is exact rather than
+    // stylistic: `ir_its_machine_sound` (A5) names `ir_ret_int_inj`, which THAT
+    // stage registers and no earlier one does. It also needs `ir_run_le_ret`
+    // (add_eval_ir_fuel) and `ir_outcome_is_ret` (add_eval_ir_correct), both of
+    // which meta_tag already depends on, so one placement covers all three.
+    //
+    // Placed here rather than beside the lz chains for that reason, and NOT
+    // because it is related to the meta-tag body: the two share a shape (zero
+    // parameters, so A4 quantifies over nothing but heap and fuel) and nothing
+    // else. First measured by putting it after add_eval_ir_lzd_correct, where
+    // the full spec died at `Unknown identifier: ir_ret_int_inj` after eleven
+    // and a half minutes.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_its,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // *** THE DESIGNATED TARGET. *** `TypeChecker::infer_type` itself, minted
+    // from function index 0 of the callee sidecar's partial bundle. It calls two
+    // functions it does not define and halts `stuck no_func` at the first; A4 is
+    // NOT claimed over it (the ir_lz posture).
+    //
+    // Needs only the EvalIR machine and `ir_vl2`/`ir_nl2`; placed beside
+    // add_eval_ir_its because the two share a dump and a reader, not because of
+    // any dependency between them.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_it,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The caller for the 2026-09-16 `IRConst.phantomdata` extension:
+    // `<ControlFlow<()> as Try>::from_output`, function 331 of the same bundle.
+    // Two nodes, one of them an aggregate constant whose spine carries the new
+    // constructor -- reader A cannot project this body without it.
+    //
+    // Needs `ir_outcome_is_ret` (add_eval_ir_correct); placed here beside the
+    // other two sidecar chains.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_cf,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The caller for the 2026-09-16 tuple image, and the aggregate-construction
+    // gap made concrete: `AppArgsIter::size_hint`, six instructions, the first
+    // chain carrying an `IRTy.tuple_`, and it FAULTS at its own insertfield.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_sh,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The designated target WITH its size-one cut defined: infer_type together
+    // with tick_heartbeat, twenty-six blocks across two bodies. `call 1`
+    // resolves here where ir_it_module goes stuck at it, and the machine halts
+    // one frame deeper, inside the heartbeat.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_itc,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The target's WHOLE DISPATCH, over an AUTHORED heartbeat model -- the
+    // ir_lzb posture. MUST follow add_eval_ir_it (it names `ir_it_func` and
+    // `ir_it_tresult` rather than transcribing them) and is complementary to
+    // ir_itc: that chain shows the cut is real against the compiler's own body,
+    // this one shows what infer_type DOES once the heartbeat answers.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_itb,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The target RUNNING TO COMPLETION, over BOTH authored models. MUST follow
+    // add_eval_ir_itb: it names `ir_itb_hb` rather than restating it, so the
+    // heartbeat executed here is the same term ir_itb ran. Its content is the
+    // TRANSPORT property -- the payload the inference model returns is
+    // universally quantified and comes back out of infer_type unaltered.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_itd,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The transport tail as a SEAM -- over ir_it_module alone, at an arbitrary
+    // heap, with no callee named in the statement. MUST follow both
+    // add_eval_ir_it (for `ir_it_module`) and add_eval_ir_slot_lemmas (for
+    // `ir_mem_lookup_head` / `ir_mem_update_head`, which discharge the two
+    // suspended memory operations).
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_ite,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // THE ASSUME-GUARANTEE ACTIVATION for infer_type: A4-shaped, over an
+    // ABSTRACT module, with the two callee contracts as premises. MUST follow
+    // add_eval_ir_ite (both seams), add_eval_ir_stack_theorems (S3/S5 and
+    // ir_mext_run) and add_eval_ir_lzd_fresh (ir_bool_false_ne_true).
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_itf,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The stacking split's T witness (E1): ir_itb_hb's one-step standalone run
+    // lifted through the split's T case to EXACTLY ir_it_ag_hc1_at_itd's
+    // statement. Full-only: MUST follow add_eval_ir_itf (ir_it_ag_itd_fs,
+    // ir_it_ag_itd_hbsp), add_eval_ir_itb (ir_itb_hb) and
+    // add_eval_ir_stack_split.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stk_witness,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // The two axes' witnesses and necessity refutations: E1's T witness through
+    // ir_stk_activation_dests_gen from ONE run, F across both axes at the
+    // meta-tag OOB run, and the two refutations showing ir_mext_ok's exclusions
+    // are necessary. Full-only: MUST follow add_eval_ir_stk_witness,
+    // add_eval_ir_itf (ir_it_hg_nil), add_eval_ir_meta_tag and
+    // add_eval_ir_w2c_synth.
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_stack_axes_witness,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // E2's SECOND instance: TypeChecker::infer_type through the step-indexed
+    // contract device -- the body's local obligation (minted by
+    // scripts/gen_it_sctr.py), the refusals of its switch default and its Err
+    // arm, and the acceptance predicate. Full-only: MUST follow add_eval_ir_itf
+    // (the abstract-module step lemmas and seams), add_eval_ir_ctr (the device)
+    // and add_eval_ir_correct (ir_outcome_is_ret).
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_it_sctr,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
+    // ...and its three-member MUTUAL contract table (infer_type, tick_heartbeat,
+    // infer_type_fast), ir_ctr_group_sound on it, the partial-correctness-plus-
+    // safety theorem ir_it_pc, and the cross-check with EXACTLY
+    // ir_it_ag_correct's type. MUST follow add_eval_ir_it_sctr and
+    // add_whnf_progress (LiftP).
+    CoreSpecStage {
+        apply: Specification::add_eval_ir_it_pc,
+        in_substitution: false,
+        in_impl_soundness: false,
+    },
     // The ELEVENTH chain, 2026-08-20: `env::types::SimpPriority::value` — the
     // FIRST chained body that COMPUTES AN ADDRESS AND DEREFERENCES IT. Its
     // Custom arm materialises a byte offset, `gep`s the receiver by it, and
@@ -3197,6 +4673,19 @@ const INTERVAL_ARITH_STAGE_APPLY: &[CoreSpecStageApply] = &[
     Specification::add_interval_arith_spec,
 ];
 
+/// The stage prefix whose registration functions call `register_model_unit`
+/// (`add_foundation_types`, `add_expr_model`) plus the arithmetic stages that
+/// sit between them in `STAGES` — `add_expr_model`'s unfolding lemmas cite
+/// `nat_sub_self` from that layer. Nothing after `add_expr_model` is included.
+const MODEL_UNITS_STAGE_APPLY: &[CoreSpecStageApply] = &[
+    Specification::add_foundation_types,
+    Specification::add_foundation_arith_lemmas,
+    Specification::add_foundation_arith_witnesses,
+    Specification::add_foundation_arith_positivity,
+    Specification::add_foundation_arith_transport,
+    Specification::add_expr_model,
+];
+
 /// Foundation types + the EvalIR stage. Nothing else: the EvalIR stage's only
 /// prerequisites are `Nat`, `Bool` (both from `add_foundation_types`) and `Eq`.
 const EVAL_IR_STAGE_APPLY: &[CoreSpecStageApply] = &[
@@ -3216,11 +4705,53 @@ const EVAL_IR_STAGE_APPLY: &[CoreSpecStageApply] = &[
     // MUST follow add_eval_ir_steps: these are the designated target's exact
     // step counts and they are the only lzb declarations naming `ir_steps`.
     Specification::add_eval_ir_lzb_steps,
+    // MUST follow add_eval_ir_steps for the same reason: ir_lzc_max_running_at_8
+    // names ir_config_outcome and ir_lzc_max_stuck_at_9 names ir_steps.
+    Specification::add_eval_ir_lzc_steps,
+    // MUST follow add_eval_ir_steps for the same reason.
+    Specification::add_eval_ir_lzd_steps,
     Specification::add_eval_ir_activation,
     // MUST follow add_eval_ir_activation: the segment lemmas name
     // `ir_frames_tail` / `ir_config_frames` from that stage, and `ir_steps_add`
     // from add_eval_ir_steps.
     Specification::add_eval_ir_lzb_activation,
+    // Phase-B's return-slot lemmas belong to this bundle for the same reason the
+    // activation leaves do: they need nothing but Nat/Bool/Eq and the IR types,
+    // and the work they support is iterative machine-shape reasoning that must
+    // not pay the full spec's build. MUST follow add_eval_ir_steps, whose
+    // `ir_steps` / `ir_steps_add` the segment and chain lemmas name.
+    Specification::add_eval_ir_slot_lemmas,
+    // MUST follow add_eval_ir_slot_lemmas for `ir_mem_lookup_skip`.
+    Specification::add_eval_ir_lzd_fresh,
+    // The frame-stacking family: the compositional call rule. MUST follow
+    // add_eval_ir_lzd_fresh (for `ir_bool_false_ne_true`) and add_eval_ir_steps.
+    Specification::add_eval_ir_stack,
+    Specification::add_eval_ir_stack_minted,
+    Specification::add_eval_ir_stack_theorems,
+    // The stacking split keyed on the fetched node (E1). MUST follow
+    // add_eval_ir_stack_theorems and add_eval_ir_lzc_steps.
+    Specification::add_eval_ir_stack_split,
+    // The two axes the split left open. MUST follow add_eval_ir_stack_split and
+    // add_eval_ir_lzd_steps. Same placement as in STAGES.
+    Specification::add_eval_ir_stack_axes_minted,
+    Specification::add_eval_ir_stack_axes,
+    // MUST follow add_eval_ir_lzd_fresh and add_eval_ir_lzd_steps.
+    Specification::add_eval_ir_lzd_activation,
+    // E2's device and Level::is_zero's step-indexed local obligations. MUST
+    // follow add_eval_ir_lzd_activation. Same placement as in STAGES.
+    Specification::add_eval_ir_ctr,
+    Specification::add_eval_ir_lzd_sctr,
+    // E2's open item, the three-way reading at an arbitrary caller stack. MUST
+    // follow add_eval_ir_lzd_sctr. Same placement as in STAGES.
+    Specification::add_eval_ir_ctr_stack,
+    // Crystal E5 (memo §23). MUST follow add_eval_ir_lzd_fresh. Same placement
+    // as in STAGES.
+    Specification::add_eval_ir_e5,
+    // ByteV1 S1a: the Nat-keyed store and function fetch. MUST follow
+    // add_eval_ir_lzd_fresh. Same placement as in STAGES.
+    Specification::add_eval_ir_bmem_trie,
+    // ByteV1 core. MUST follow add_eval_ir_bmem_trie. Same placement as in STAGES.
+    Specification::add_eval_ir_bmem_core,
 ];
 
 /// Apply the ordered stages for the requested bundle to the specification.
@@ -3262,6 +4793,9 @@ fn run_bundle_stages(spec: &mut Specification, bundle: CoreSpecBundle) -> Result
                     .any(|apply| std::ptr::fn_addr_eq(*apply, stage.apply))
             }
             CoreSpecBundle::EvalIr => EVAL_IR_STAGE_APPLY
+                .iter()
+                .any(|apply| std::ptr::fn_addr_eq(*apply, stage.apply)),
+            CoreSpecBundle::ModelUnits => MODEL_UNITS_STAGE_APPLY
                 .iter()
                 .any(|apply| std::ptr::fn_addr_eq(*apply, stage.apply)),
         };
@@ -3314,4 +4848,190 @@ pub(super) fn build_defeq_iota_delta_gen_prefix(spec: &mut Specification) -> Res
         "build_defeq_iota_delta_gen_prefix: add_defeq_iota_delta_gen stage missing from STAGES"
             .to_string(),
     ))
+}
+
+/// Check the actual ordered production stages through universe closedness,
+/// without making a focused regression wait for unrelated terminal proofs.
+#[cfg(test)]
+pub(super) fn build_universe_closedness_prefix(spec: &mut Specification) -> Result<(), SpecError> {
+    crate::spec::decl_budget::with_spec_declaration_budget(|| {
+        let last = Specification::add_universe_closedness as CoreSpecStageApply;
+        for stage in STAGES {
+            (stage.apply)(spec)?;
+            if std::ptr::fn_addr_eq(stage.apply, last) {
+                return Ok(());
+            }
+        }
+        Err(SpecError::ParseError(
+            "build_universe_closedness_prefix: closedness stage missing from STAGES".to_string(),
+        ))
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    /// Every `CoreSpecStage`'s two bundle flags, read out of the struct
+    /// literals rather than out of the prose around them.
+    fn declared_flags(src: &str) -> std::collections::BTreeMap<String, (bool, bool)> {
+        let mut out = std::collections::BTreeMap::new();
+        for chunk in src.split("apply: Specification::").skip(1) {
+            let Some(name) = chunk.split(&[',', ' ', '\n'][..]).next() else {
+                continue;
+            };
+            let head: String = chunk.chars().take(220).collect();
+            let flag = |k: &str| -> Option<bool> {
+                head.split(k)
+                    .nth(1)?
+                    .trim_start()
+                    .strip_prefix(':')?
+                    .trim_start()
+                    .starts_with("true")
+                    .into()
+            };
+            let (Some(sub), Some(imp)) = (flag("in_substitution"), flag("in_impl_soundness"))
+            else {
+                continue;
+            };
+            out.insert(name.to_string(), (sub, imp));
+        }
+        out
+    }
+
+    /// Find every comment that quotes a stage's flag as `` `add_x`
+    /// (in_flag: value) `` and return the ones that DISAGREE with the struct
+    /// literal. Returns `(stage, flag, quoted, actual)`.
+    fn quoted_flag_drift(src: &str) -> Vec<(String, String, bool, bool)> {
+        let declared = declared_flags(src);
+        let mut bad = Vec::new();
+        for (i, piece) in src.split("`add_").enumerate() {
+            if i == 0 {
+                continue;
+            }
+            let Some((name, rest)) = piece.split_once('`') else {
+                continue;
+            };
+            // Only spaces, newlines and comment markers may separate the name
+            // from the parenthetical; anything else is ordinary prose.
+            let gap: String = rest
+                .chars()
+                .take_while(|c| *c == ' ' || *c == '\n' || *c == '/')
+                .collect();
+            let Some(paren) = rest[gap.len()..].strip_prefix("(in_") else {
+                continue;
+            };
+            let Some((claim, _)) = paren.split_once(')') else {
+                continue;
+            };
+            let Some((flag, val)) = claim.split_once(':') else {
+                continue;
+            };
+            let quoted = val.trim() == "true";
+            let key = format!("add_{name}");
+            let Some((sub, imp)) = declared.get(&key) else {
+                continue;
+            };
+            let actual = match flag.trim() {
+                "substitution" => *sub,
+                "impl_soundness" => *imp,
+                _ => continue,
+            };
+            if quoted != actual {
+                bad.push((key, format!("in_{}", flag.trim()), quoted, actual));
+            }
+        }
+        bad
+    }
+
+    /// THE GATE. A comment may not quote a bundle flag the declaration
+    /// contradicts.
+    ///
+    /// This fired for real: a paragraph in this file described
+    /// `add_defeq_fuel` as `in_impl_soundness: true` while the struct literal
+    /// seventy lines above said `false` — the comment was written before the
+    /// flag was flipped and then read, for months, as a statement about the
+    /// tree. A flag quoted in prose beside the declaration that carries it is
+    /// the whole class; there is no way to keep the two in step by reading.
+    #[test]
+    fn test_no_comment_quotes_a_bundle_flag_the_declaration_contradicts() {
+        // The stage table only, never this module: the control below plants a
+        // deliberate contradiction in a string literal, and scanning the whole
+        // file would read that plant as a real one.
+        let src = include_str!("bundles.rs")
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("the stage table precedes this module");
+        let drift = quoted_flag_drift(src);
+        assert!(
+            drift.is_empty(),
+            "comments quote bundle flags that the stage table contradicts: {drift:?}"
+        );
+    }
+
+    /// A stage may be in no bundle that lacks a stage whose declarations it
+    /// names. The pairs are the measured ones, both of which stopped the
+    /// implementation-soundness bundle from building (10 lib tests):
+    /// `add_r29_premise_witnesses` sat in it without R29 (`TmC`, `r29_ctxOK`)
+    /// or R28 (`InertTy`) -- `Unknown identifier: TmC` -- and, once that was
+    /// removed, `add_kinfers_declarative` sat in it without
+    /// `add_dependent_sn_richmodel` (`KernelInfers`) or `add_impl_infer_sound`
+    /// (`impl_infer_kinfers_sound`) -- `Unknown identifier: KernelInfers`.
+    /// Read from the struct literals, so it costs no specification build and
+    /// fails before any does.
+    #[test]
+    fn test_a_stage_is_in_no_bundle_its_vocabulary_is_missing_from() {
+        let src = include_str!("bundles.rs")
+            .split("#[cfg(test)]\nmod tests {")
+            .next()
+            .expect("the stage table precedes this module");
+        let flags = declared_flags(src);
+        for (stage, needs) in [
+            ("add_r29_premise_witnesses", "add_candmodel_construct_r29"),
+            ("add_r29_premise_witnesses", "add_candmodel_construct_r28"),
+            ("add_candmodel_construct_r29", "add_candmodel_construct_r28"),
+            ("add_kinfers_declarative", "add_dependent_sn_richmodel"),
+            ("add_kinfers_declarative", "add_impl_infer_sound"),
+        ] {
+            let (Some(&(s_sub, s_imp)), Some(&(n_sub, n_imp))) =
+                (flags.get(stage), flags.get(needs))
+            else {
+                panic!("{stage} or {needs} is not in the stage table");
+            };
+            assert!(
+                (!s_sub || n_sub) && (!s_imp || n_imp),
+                "{stage} (in_substitution: {s_sub}, in_impl_soundness: {s_imp}) is in a bundle \
+                 that {needs} (in_substitution: {n_sub}, in_impl_soundness: {n_imp}) is not, \
+                 so that bundle registers it without the declarations it names"
+            );
+        }
+    }
+
+    /// THE GATE'S OWN CONTROL. A checker nobody has seen fail is `exit 0`
+    /// wearing a test's clothes — and this one passes vacuously the moment no
+    /// comment uses the quoting form at all. So demonstrate it on a synthetic
+    /// input that carries the exact defect, and on its corrected twin.
+    #[test]
+    fn test_the_flag_drift_checker_actually_detects_drift() {
+        const BAD: &str = "// see `add_thing` (in_impl_soundness: true) for why\n\
+             CoreSpecStage {\n\
+             apply: Specification::add_thing,\n\
+             in_substitution: false,\n\
+             in_impl_soundness: false,\n\
+             },\n";
+        let found = quoted_flag_drift(BAD);
+        assert_eq!(
+            found.len(),
+            1,
+            "the checker missed a comment contradicting its own stage: {found:?}"
+        );
+        assert_eq!(found[0].0, "add_thing");
+        assert_eq!(found[0].1, "in_impl_soundness");
+        assert!(found[0].2, "the comment's claim was true");
+        assert!(!found[0].3, "the declaration says false");
+
+        let good = BAD.replace("(in_impl_soundness: true)", "(in_impl_soundness: false)");
+        assert!(
+            quoted_flag_drift(&good).is_empty(),
+            "the checker reports drift on a comment that AGREES with the table"
+        );
+    }
 }

@@ -17,7 +17,7 @@
 #   version              Target version (e.g., 1.1.0)
 #
 # Options:
-#   --skip-tests         Skip running cargo test (for re-runs after tests pass)
+#   --skip-tests         Skip running targo --unverified test (for re-runs after tests pass)
 #   --skip-build         Skip release build/check (for re-runs after build succeeds)
 #   --skip-shards        Skip shard building (use existing shards)
 #   --lean-lib-dir=DIR   Lean 4 library directory for .olean shard building
@@ -61,7 +61,7 @@ Arguments:
   version              Target version (e.g., 1.1.0)
 
 Options:
-  --skip-tests         Skip running cargo test (for re-runs after tests pass)
+  --skip-tests         Skip running targo --unverified test (for re-runs after tests pass)
   --skip-build         Skip release build/check (for re-runs after build succeeds)
   --skip-shards        Skip shard building (use existing shards)
   --lean-lib-dir=DIR   Lean 4 library directory for .olean shard building
@@ -164,9 +164,9 @@ if [ "$DRY_RUN" = true ]; then
     echo "--- Dry run mode: showing steps without executing ---"
     echo
     echo "Would run:"
-    echo "  1. cargo test --locked -p clean-mathverse --lib --message-format=short -j $CARGO_BUILD_JOBS"
-    echo "  2. cargo build --locked -p clean-mathverse --release --message-format=short -j $CARGO_BUILD_JOBS"
-    echo "  3. cargo check --locked -p clean-mathverse --message-format=short -j $CARGO_BUILD_JOBS"
+    echo "  1. targo --unverified test --locked -p clean-mathverse --lib --message-format=short -j $CARGO_BUILD_JOBS"
+    echo "  2. targo --unverified build --locked -p clean-mathverse --release --message-format=short -j $CARGO_BUILD_JOBS"
+    echo "  3. targo --unverified check --locked -p clean-mathverse --message-format=short -j $CARGO_BUILD_JOBS"
     echo "  4. Build shards (lean4 .olean, Clean-native, structured importers)"
     echo "  5. Verify shards (blake3 checksums)"
     echo "  6. Package into tar.zst with manifest"
@@ -181,7 +181,7 @@ if [ "$SKIP_TESTS" = true ]; then
     echo
 else
     echo "--- Step ${STEP}/${TOTAL_STEPS}: Running clean-mathverse library tests ---"
-    if cargo test --locked -p clean-mathverse --lib --message-format=short -j "$CARGO_BUILD_JOBS" 2>&1; then
+    if targo --unverified test --locked -p clean-mathverse --lib --message-format=short -j "$CARGO_BUILD_JOBS" 2>&1; then
         echo "  PASS: All clean-mathverse lib tests passed"
     else
         echo "  FAIL: Some clean-mathverse lib tests failed" >&2
@@ -190,14 +190,14 @@ else
     echo
 fi
 
-# ---- Step 2-3: Release build and final cargo check --------------------------
+# ---- Step 2-3: Release build and final targo --unverified check --------------------------
 STEP=$((STEP + 1))
 if [ "$SKIP_BUILD" = true ]; then
     echo "--- Skipping build/check (--skip-build) ---"
     echo
 else
     echo "--- Step ${STEP}/${TOTAL_STEPS}: Building clean-mathverse in release mode ---"
-    if cargo build --locked -p clean-mathverse --release --message-format=short -j "$CARGO_BUILD_JOBS" 2>&1; then
+    if targo --unverified build --locked -p clean-mathverse --release --message-format=short -j "$CARGO_BUILD_JOBS" 2>&1; then
         echo "  PASS: Release build succeeded"
     else
         echo "  FAIL: Release build failed" >&2
@@ -205,11 +205,11 @@ else
     fi
     echo
     STEP=$((STEP + 1))
-    echo "--- Step ${STEP}/${TOTAL_STEPS}: Final clean-mathverse cargo check ---"
-    if cargo check --locked -p clean-mathverse --message-format=short -j "$CARGO_BUILD_JOBS" 2>&1; then
-        echo "  PASS: cargo check succeeded"
+    echo "--- Step ${STEP}/${TOTAL_STEPS}: Final clean-mathverse targo --unverified check ---"
+    if targo --unverified check --locked -p clean-mathverse --message-format=short -j "$CARGO_BUILD_JOBS" 2>&1; then
+        echo "  PASS: targo --unverified check succeeded"
     else
-        echo "  FAIL: cargo check failed" >&2
+        echo "  FAIL: targo --unverified check failed" >&2
         ERRORS=$((ERRORS + 1))
     fi
     echo
@@ -226,7 +226,7 @@ else
     MATHVERSE_SHARD="target/release/mathverse_shard"
     if [ ! -x "$MATHVERSE_SHARD" ]; then
         echo "  Building mathverse_shard binary..."
-        cargo build --locked --release -p clean-mathverse --bin mathverse_shard --message-format=short -j "$CARGO_BUILD_JOBS"
+        targo --unverified build --locked --release -p clean-mathverse --bin mathverse_shard --message-format=short -j "$CARGO_BUILD_JOBS"
     fi
 
     # Build lean4 .olean shards if lean lib dir is specified
@@ -254,7 +254,7 @@ else
     # "$SHARD_DIR/raw" and silently produced nothing).
     MATHVERSE_CONVERT="target/release/mathverse_convert"
     if [ ! -x "$MATHVERSE_CONVERT" ]; then
-        cargo build --locked --release -p clean-mathverse --bin mathverse_convert --message-format=short -j "$CARGO_BUILD_JOBS" 2>/dev/null || true
+        targo --unverified build --locked --release -p clean-mathverse --bin mathverse_convert --message-format=short -j "$CARGO_BUILD_JOBS" 2>/dev/null || true
     fi
     if [ -x "$MATHVERSE_CONVERT" ]; then
         if [ -d "$DATA_DIR/raw" ]; then
@@ -380,8 +380,8 @@ cat >>"$CHANGELOG_PATH" <<CHANGELOG_EOF2
 ## Upgrade Guide
 
 1. Download new shards: ./scripts/download_mathverse_library.sh --version=${TARGET_VERSION}
-2. Verify integrity: CARGO_BUILD_JOBS=1 cargo run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse_shard -- verify data/mathverse-library/
-3. Use the CLI: CARGO_BUILD_JOBS=1 cargo run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse -- stats
+2. Verify integrity: CARGO_BUILD_JOBS=1 targo --unverified run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse_shard -- verify data/mathverse-library/
+3. Use the CLI: CARGO_BUILD_JOBS=1 targo --unverified run --locked --message-format=short -j 1 -p clean-mathverse --bin mathverse -- stats
 
 CHANGELOG_EOF2
 

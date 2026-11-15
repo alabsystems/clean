@@ -116,11 +116,15 @@ uint64_t clean_unbox_uint64(clean_obj* o) { return clean_unbox_uint64__hdr(o); }
 uint32_t clean_unbox_uint32(clean_obj* o) { return clean_unbox_uint32__hdr(o); }
 double clean_unbox_float(clean_obj* o) { return clean_unbox_float__hdr(o); }
 void clean_inc(clean_obj* o) { clean_inc__hdr(o); }
-void clean_inc_n(clean_obj* o, uint32_t n) { clean_inc_n__hdr(o, n); }
+void clean_inc_n(clean_obj* o, size_t n) { clean_inc_n__hdr(o, n); }
 bool clean_is_exclusive(clean_obj* o) { return clean_is_exclusive__hdr(o); }
 clean_obj* clean_ctor_get(clean_obj* o, size_t idx) { return clean_ctor_get__hdr(o, idx); }
 void clean_ctor_set(clean_obj* o, size_t idx, clean_obj* v) { clean_ctor_set__hdr(o, idx, v); }
-uint8_t clean_obj_tag(clean_obj* o) { return clean_obj_tag__hdr(o); }
+/* The trust-cg lane imports clean_obj_tag as `ptr -> u32`
+ * (emit_trust_ir_runtime.rs), the width the header's read returns: a boxed
+ * constructor tag is read whole (299 stays 299; the old 8-bit import read 43),
+ * and a boxed value above UINT32_MAX saturates as the header documents. */
+uint32_t clean_obj_tag(clean_obj* o) { return clean_obj_tag__hdr(o); }
 void clean_ctor_set_tag(clean_obj* o, uint8_t new_tag) { clean_ctor_set_tag__hdr(o, new_tag); }
 
 uint8_t clean_ctor_get_uint8(clean_obj* o, unsigned offset) { return clean_ctor_get_uint8__hdr(o, offset); }

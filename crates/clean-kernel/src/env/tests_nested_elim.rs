@@ -45,7 +45,7 @@ fn add_nat(env: &mut Environment) {
 /// Helper: create an environment with List already defined.
 /// `List.{u} : Type u → Type u` (real Lean's List former — provably nonzero
 /// result, keeps large elimination under the [R1] gate).
-fn make_env_with_list() -> Environment {
+pub(super) fn make_env_with_list() -> Environment {
     let mut env = Environment::new();
     let u = Name::from_string("u");
     let list = Name::from_string("List");
@@ -103,7 +103,7 @@ fn make_env_with_list() -> Environment {
 
 /// The canonical Tree fixture: `Tree | node : List Tree → Tree` with
 /// `List.{0} Tree` (Tree : Type 0).
-fn tree_decl() -> InductiveDecl {
+pub(super) fn tree_decl() -> InductiveDecl {
     let tree = Name::from_string("Tree");
     let tree_ref = Expr::const_(tree.clone(), vec![]);
     let node_type = Expr::pi(

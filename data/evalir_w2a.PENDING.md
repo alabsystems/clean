@@ -34,7 +34,8 @@ agreement row — is UNKNOWN until a big machine runs it.** Per
   `wide_bool`/`wide_agg`.
 * `crates/clean-verify/tests/fixtures/synth/synth_{select,undef,unreachable,
   extractelement,unop}.trust-ir.txt` — the authored E2 twins, each
-  self-declaring `SYNTHETIC MODULE` in `; #synthetic:` directive lines.
+  self-declaring `SYNTHETIC MODULE` in top-level `; synthetic:` comment
+  lines above the `fn` header (see finding 6(a) for why they moved).
 * `crates/clean-verify/tests/crystal_a3_semdiff/synth_chains.rs` — **5 chains
   / 19 inputs**, `Synthetic`-labeled, E3 absent by construction on every
   chain; two DECLARED executor deltas (below).
@@ -95,7 +96,13 @@ agreement row — is UNKNOWN until a big machine runs it.** Per
    here, both worth reporting upstream):**
    (a) inside a function header only `; #...` DIRECTIVE lines are skipped —
    a free-text `; comment` between `{` and `bb0` is a parse error
-   ("expected 'bb'"); the fixtures use `; #synthetic:` directive lines.
+   ("expected 'bb'"); the fixtures first used `; #synthetic:` directive
+   lines there. trust-ir 9fb64ff8 (WS4.2, strict parser) then refused every
+   `; #word` directive outside its TEXT_DIRECTIVES table ("unknown directive
+   `#synthetic` — refusing rather than dropping it", trust-ir@7b9146ba
+   crates/trust-ir/src/parser.rs:300-303), so the fixtures now carry the
+   declaration as plain top-level `; synthetic:` comments ABOVE the `fn`
+   line, where free-text comments parse on both parsers.
    (b) the parser is byte-indexed and PANICS on a char boundary
    (`parser.rs:99`) when a directive line contains multi-byte UTF-8 (an
    em-dash did it); the fixtures are pure ASCII.

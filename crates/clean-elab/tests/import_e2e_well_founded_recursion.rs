@@ -139,7 +139,12 @@ fn acc_proof(x: Expr) -> Expr {
         Expr::app(Expr::app(acc_c(), nat()), empty_rel()),
         Expr::bvar(1),
     );
-    let false_elim = Expr::const_(Name::from_string("False.elim"), vec![lvl1()]);
+    // `False.elim.{0}` — the motive is `Acc emptyRel y`, which lands in `Prop`
+    // (`Sort 0`). This is the THIRD copy of the same duplicated helper bug
+    // (see `import_e2e_imported_wf_definition.rs` and
+    // `import_e2e_simp_imported_lemma_match.rs`); spelled at level 1 the term
+    // is ill-typed and the declaration silently fails to register.
+    let false_elim = Expr::const_(Name::from_string("False.elim"), vec![Level::zero()]);
     let body = Expr::app(Expr::app(false_elim, acc_r_y), Expr::bvar(0));
     // h : emptyRel y x  (under [y]: y = BVar0, x is the closed argument)
     let rel_y_x = Expr::app(Expr::app(empty_rel(), Expr::bvar(0)), x.clone());
@@ -492,29 +497,77 @@ fn test_clean_elab_def_through_imported_acc_rec_reduces_correctly() {
 
 // ---------------------------------------------------------------------------
 // FLIP-ON-FIX pin: WF recursion does NOT reduce definitionally through a
-// *named, opaque* accessibility proof. This matches Lean exactly — a `def`
-// returning `Acc r x : Prop` stays opaque to whnf, so `Acc.rec` never sees an
-// `Acc.intro` head and the iota rule cannot fire. Lean closes this gap only
-// with the *propositional* `WellFounded.fixFEq` equation, never by kernel iota.
-// Pinned (not `#[ignore]`d) so it flips to a failure — prompting an assertion
-// update — if Clean ever gains definitional unfolding here. The main probe
-// above proves reduction works through an *inlined* Acc.intro.
+// *named, OPAQUE* accessibility proof. Lean closes this gap only with the
+// *propositional* `WellFounded.fixFEq` equation, never by kernel iota. Pinned
+// (not `#[ignore]`d) so it flips to a failure — prompting an assertion update —
+// if Clean ever gains definitional unfolding here. The main probe above proves
+// reduction works through an *inlined* Acc.intro.
+//
+// THE WITNESS MUST BE A REAL `Declaration::Opaque`, and this fixture used to
+// declare a plain `def accProof`. The prose claimed "a `def` returning
+// `Acc r x : Prop` stays opaque to whnf"; that is FALSE of clean's kernel,
+// which is transparency-blind by construction — `Environment::unfold_definition`
+// blocks only `ConstantKind::Opaque`, and `try_iota_reduction` full-whnfs the
+// major premise INCLUDING delta (`use_delta_for_iota` returns an unconditional
+// `true`). So `accProof 3` delta-unfolded to `Acc.intro …`, `Acc.rec` iota
+// fired, `Nat.add 3 3` native-folded, and the pin failed against the literal
+// `6`. The fixture, not the assertion, was wrong: it is re-registered below as
+// `Declaration::Opaque`, which is the shape a Lean-compiled `.olean` WF
+// function actually ships and the shape the prose always described.
 // ---------------------------------------------------------------------------
 
 #[test]
 fn test_wf_recursion_through_named_acc_proof_is_stuck_pending() {
+    // Elaborate `accProof` as an ordinary `def` in a scratch env only to obtain
+    // its kernel-checked type and value, then register those as an `Opaque`
+    // constant in the real env. Re-using the elaborator this way keeps the
+    // witness term identical to the one the surface syntax produces, instead of
+    // hand-building an `Acc.intro` spine whose universe levels are easy to get
+    // wrong.
+    const EMPTY_REL: &str = "def emptyRel (a b : Nat) : Prop := False\n";
+    const ACC_PROOF: &str = "def accProof (x : Nat) : Acc emptyRel x :=\n  \
+         @Acc.intro Nat emptyRel x (fun (y : Nat) (h : emptyRel y x) => False.elim h)\n";
+
+    let (acc_proof_ty, acc_proof_val, acc_proof_levels) = {
+        let mut scratch = imported_acc_env();
+        elaborate_decls_into(&mut scratch, &format!("{EMPTY_REL}{ACC_PROOF}"));
+        let info = scratch
+            .get_const(&Name::from_string("accProof"))
+            .expect("accProof should elaborate as a def in the scratch env");
+        (
+            info.type_.clone(),
+            info.value
+                .clone()
+                .expect("accProof must carry a value to re-register as opaque"),
+            info.level_params.clone(),
+        )
+    };
+
     let mut env = imported_acc_env();
+    elaborate_decls_into(&mut env, EMPTY_REL);
+    env.add_decl(clean_kernel::Declaration::Opaque {
+        name: Name::from_string("accProof"),
+        level_params: acc_proof_levels,
+        type_: acc_proof_ty,
+        value: acc_proof_val,
+    })
+    .expect("accProof should register as an Opaque accessibility witness");
 
     elaborate_decls_into(
         &mut env,
-        "def emptyRel (a b : Nat) : Prop := False\n\
-         def accProof (x : Nat) : Acc emptyRel x :=\n  \
-           @Acc.intro Nat emptyRel x (fun (y : Nat) (h : emptyRel y x) => False.elim h)\n\
-         def accFix (F : (x : Nat) -> ((y : Nat) -> emptyRel y x -> Nat) -> Nat) \
+        "def accFix (F : (x : Nat) -> ((y : Nat) -> emptyRel y x -> Nat) -> Nat) \
            (x : Nat) (a : Acc emptyRel x) : Nat :=\n  \
            @Acc.rec Nat emptyRel (fun a _ => Nat) (fun x h ih => F x ih) x a\n\
          def addSelf (x : Nat) : Nat :=\n  \
            accFix (fun n recf => Nat.add n n) x (accProof x)",
+    );
+
+    // The witness really is opaque — if this ever stops holding the pin below
+    // is measuring the wrong thing again.
+    assert!(
+        env.get_const(&Name::from_string("accProof"))
+            .is_some_and(|i| matches!(i.kind, clean_kernel::ConstantKind::Opaque)),
+        "the accessibility witness must be registered OPAQUE, not as a plain def"
     );
 
     let tc = TypeChecker::new(&env);

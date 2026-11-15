@@ -38,13 +38,16 @@
 //! tactic layers retry, and the cert recursion — having nothing to check —
 //! spins. Measured: `--decl-budget 1` on a one-line `def` ran at 98% CPU
 //! instead of reporting `diverged`. So exhaustion is observed only where the
-//! code agreed to look, and the cert path now agrees. Consequently the bound is *deterministic* —
-//! the same input spends the same ticks on any machine at any load — and it is
-//! only as tight as the tick sites are dense. A pathology that spends its time
-//! between ticks (for example, one whose cost is per-tick allocation SIZE
-//! rather than tick COUNT — see
-//! `docs/issues/2026-08-21-cert-clone-exponential-tree-mirror.md`) is NOT
-//! bounded by this mechanism, and this module does not claim otherwise.
+//! code agreed to look, and the cert path now agrees. The bound counts ticks, never time, but it
+//! is NOT exactly reproducible (identical `grind` runs were measured a few ticks apart, 2026-09-30),
+//! and it is only as tight as the tick sites are dense. Since 2026-10-14 the structural walks
+//! between ticks are charged too: a checker converts the kernel work units its operations spent
+//! past its ticks' allowance (`crate::work_meter`: equality walks, cache probes, fold and
+//! equivalence walks) into ticks and draws them here as well as from its own heartbeat, once per
+//! unit however checkers nest (`tc/work_account.rs`). A pathology whose cost is per-tick
+//! allocation SIZE rather than walked nodes (see
+//! `docs/issues/2026-08-21-cert-clone-exponential-tree-mirror.md`) is still NOT bounded by this
+//! mechanism, and this module does not claim otherwise.
 //!
 //! # Disabled by default, everywhere
 //!
@@ -172,10 +175,15 @@ pub fn declaration_budget_exhausted() -> bool {
 ///
 /// Restores both the limit and the remaining count, so a suspension cannot be
 /// used to refill a declaration that has already spent its fuel.
+///
+/// The ambient DEADLINE (`deadline.rs`) is suspended over the same region, for
+/// the same reason: seeding a fixed set of declarations is not the work a
+/// deadline bounds, and seeding interrupted half-way would leave the
+/// environment half-seeded.
 pub fn with_declaration_budget_suspended<T>(f: impl FnOnce() -> T) -> T {
     let saved = BUDGET.with(|b| (b.limit.get(), b.remaining.get()));
     BUDGET.with(|b| b.limit.set(0));
-    let out = f();
+    let out = super::deadline::with_deadline_suspended(f);
     BUDGET.with(|b| {
         b.limit.set(saved.0);
         b.remaining.set(saved.1);
@@ -201,6 +209,38 @@ pub(super) fn consume_declaration_budget() -> bool {
         b.remaining.set(remaining - 1);
         true
     })
+}
+
+/// Spend `ticks` ambient ticks at once: the heartbeats a checker's structural
+/// walks converted into (`crate::work_meter`). Saturates at zero, where
+/// [`declaration_budget_exhausted`] latches; a no-op while disabled.
+#[inline]
+pub(super) fn consume_declaration_budget_many(ticks: u64) {
+    BUDGET.with(|b| {
+        if b.limit.get() == 0 {
+            return;
+        }
+        b.remaining.set(b.remaining.get().saturating_sub(ticks));
+    });
+}
+
+/// This thread's `(limit, remaining)`, for a caller that runs checks on
+/// worker threads under the same budget
+/// (`env::stub_upgrade_parallel`).
+#[must_use]
+pub(crate) fn declaration_budget_state() -> (u64, u64) {
+    BUDGET.with(|b| (b.limit.get(), b.remaining.get()))
+}
+
+/// Set this thread's `(limit, remaining)` exactly. Crate-internal: the one
+/// caller gives a worker the calling thread's state, resets the worker
+/// afterwards, and charges the calling thread what the workers spent — it
+/// never grants more than [`declaration_budget_state`] reported.
+pub(crate) fn restore_declaration_budget_state(limit: u64, remaining: u64) {
+    BUDGET.with(|b| {
+        b.limit.set(limit);
+        b.remaining.set(remaining);
+    });
 }
 
 #[cfg(test)]

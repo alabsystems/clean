@@ -1,0 +1,8 @@
+# key	function	aterm source	the SPECS.md clause the harness asserts
+h6_of_hash	h6_of_hash_spec	amacs src/protocol/anchor.rs h6_of_hash	amacs SPECS.md: h6_of_hash(hash) = hash >> 40 ensures result == hash / 1099511627776 and result <= 16777215
+level_bit	level_bit_spec	amacs src/language/rust.rs level_bit	aterm docs/PLAN-tests-to-specs-2026-10-15.md F1-ready table row 2 (amacs SPECS.md gives level_bit no clause, only a refused form): level_bit(depth) = if depth < 32 {2^depth} else {0} (a power of two whose bit is depth; 0 past 31)
+exited_zero	exited_zero_spec	aterm-keeper src/core.rs exited_zero	aterm-keeper SPECS.md classify-death-table: exited_zero(s) iff s & 0x7f = 0 and (s >> 8) & 0xff = 0, read arithmetically on s as u32
+does_token_fit	does_token_fit_spec	aterm-lz4 src/block/decompress_safe.rs does_token_fit	aterm-lz4 SPECS.md token-fit-table: does_token_fit(t) iff (t >> 4) < 15 and (t & 0x0F) < 15
+dir_safe_for_private_write	dir_safe_for_private_write_spec	aterm-types src/fs_restricted.rs dir_safe_for_private_write	aterm-types SPECS.md fs-dir-safe-predicate: result iff owner = uid and mode & 0o022 = 0, read arithmetically
+safe_mode	safe_mode_spec	atpkg src/extract.rs safe_mode	atpkg SPECS.md extract-safe-mode: safe_mode(m, d) = 0o755 if d or m & 0o111 != 0 else 0o644, never setuid/setgid/sticky or group/other-writable
+creation_flags	creation_flags_spec	aterm-uds src/spawn.rs creation_flags	aterm-uds SPECS.md creation-flags-rule: the non-console bits are extra's, the console bits are k(c, have); at most one console bit is set (the clause's other corollary, not shows(result, have), is not covered: the harness does not copy shows)

@@ -29,7 +29,13 @@ fn test_all_surface_expr_variants_have_builtin_kinds() {
     let registry = TermElabRegistry::new();
 
     let test_cases: Vec<(&str, SurfaceExpr)> = vec![
-        ("ident", SurfaceExpr::Ident(Span::dummy(), "x".into())),
+        (
+            "ident",
+            SurfaceExpr::Ident(
+                Span::dummy(),
+                clean_parser::SurfaceName::generated_path("x"),
+            ),
+        ),
         ("hole", SurfaceExpr::Hole(Span::dummy())),
         (
             "paren",
@@ -39,7 +45,10 @@ fn test_all_surface_expr_variants_have_builtin_kinds() {
             "app",
             SurfaceExpr::App(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "f".into())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    clean_parser::SurfaceName::generated_path("f"),
+                )),
                 vec![],
             ),
         ),

@@ -40,14 +40,27 @@ BIN="${REPO_ROOT}/target/release/clean"
 if [[ "${1:-}" == "--bin" ]]; then
   BIN="${2:?--bin requires a path argument}"
 fi
-[[ -x "$BIN" ]] || { echo "[u2-battery] FAIL: no executable clean binary at $BIN" >&2; exit 1; }
 
 FIX="${REPO_ROOT}/tests/fixtures/universes"
 OUT_JSON="${REPO_ROOT}/reports/u2-battery.json"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Provenance: fixtures and this script must be tracked and clean.
+# PROVENANCE FIRST, BEFORE THE BINARY CHECK.
+#
+# Both refusals are unconditional; only their ORDER is a choice, and it is
+# load-bearing for this gate's own demonstration. The registry replays
+# `u2_battery`'s arm in a sandbox assembled from the working tree, and since
+# 2026-09-15 that sandbox gets a cargo target dir of its OWN — so
+# `target/release/clean` does not exist there, and with the binary check first
+# the arm died on a missing binary before it could exercise the guard it exists
+# to demonstrate. `--demonstrate` correctly refused the result: "the UNMUTATED
+# gate already exits 1 — a red arm on a red tree proves nothing".
+#
+# Provenance does not need the binary, so checking it first costs nothing and
+# makes the guard demonstrable without a release build. It is also the right
+# order on its own terms: whether the inputs are trustworthy is prior to whether
+# we are equipped to measure them.
 for f in "$FIX"/*.lean "scripts/u2_battery.sh"; do
   rel="${f#"$REPO_ROOT"/}"
   git -C "$REPO_ROOT" ls-files --error-unmatch "$rel" > /dev/null 2>&1 \
@@ -56,10 +69,17 @@ done
 DIRTY="$(git -C "$REPO_ROOT" status --porcelain -- "$FIX" scripts/u2_battery.sh)"
 [[ -z "$DIRTY" ]] || { echo "[u2-battery] FAIL: gate inputs dirty:"$'\n'"$DIRTY" >&2; exit 1; }
 
+[[ -x "$BIN" ]] || { echo "[u2-battery] FAIL: no executable clean binary at $BIN" >&2; exit 1; }
+
 pass_probe() { # file expected_pass_count
   local f="$1" want="$2"
   local out
-  out="$("$BIN" check --prelude builtin "$FIX/$f" 2>&1 | grep -E "passed" | tail -1)"
+  # The summary line exactly. A bare `grep passed | tail -1` read the LAST line
+  # mentioning "passed", and since 29de4ae8b (2026-09-25) `clean check` follows
+  # the summary with "  N passed declaration(s) rest on non-foundational
+  # axiom(s) ..." whenever a file declares an axiom: p52's 5/5 read as a FAIL
+  # (measured 2026-10-16).
+  out="$("$BIN" check --prelude builtin "$FIX/$f" 2>&1 | grep -E "^ *[0-9]+ passed, [0-9]+ failed" | tail -1)"
   [[ "$out" == *" $want passed, 0 failed"* ]] \
     || { echo "[u2-battery] FAIL: $f expected '$want passed, 0 failed', got: $out" >&2; exit 1; }
   echo "  PASS-pinned  $f ($want decls)"
@@ -87,7 +107,13 @@ pass_probe p08_implicit_mk.lean 2
 pass_probe p09_concrete_solve.lean 2
 pass_probe p13_poly_mtower_corec.lean 21
 pass_probe p14_at_explicit_universe_inst.lean 6
-pass_probe p11_codata_upoly.lean 5
+# p11 RE-PINNED 5 -> 19 on 2026-10-16, a count change and not a behaviour
+# change: b452e97c8 (2026-09-25) made every codata/codef command return the
+# declarations it registers instead of `Skipped`, so `clean check` now checks
+# and counts `codata GP`'s 14 generated declarations (GP, GP.head, GP.tail,
+# GP.corec, GP.mk and their companions and computation laws) beside the five
+# it counted before. All 19 pass; nothing in the fixture moved.
+pass_probe p11_codata_upoly.lean 19
 pass_probe p15_sigma_over_type.lean 2
 pass_probe p10_inductive_default.lean 6
 pass_probe p16_two_universe_mcore.lean 13
@@ -95,16 +121,27 @@ pass_probe p17_hk_functor_args.lean 7
 pass_probe p19_cmp_arrow_precedence.lean 7
 pass_probe p18_hk_poly_const_arg.lean 2
 pass_probe p20_level_generalization.lean 7
-# p46 (2026-08-25, U2 rung-4 explicitness channel) is the PASS companion to
-# p21's refusal below, and it is not optional: a MUST_FAIL probe cannot tell a
-# precise refusal from an over-broad one, because both satisfy it. Four
-# neighbouring shapes, one per way a level reaches declaration close without
-# being a leak out of a closed list — a complete written `.{u, v}`, a
+# p46 (2026-08-25, U2 rung-4 explicitness channel) is a PASS companion to the
+# written-list refusal (p54 since 2026-10-19), and it is not optional: a
+# MUST_FAIL probe cannot tell a precise refusal from an over-broad one, because
+# both satisfy it. Four neighbouring shapes — a complete written `.{u, v}`, a
 # DETERMINED `Type _` hole under a written list, no written list at all
-# (p21's body minus the `.{u}`), and the `universe`-merged case the rung-4
+# (p21's `leak` minus the `.{u}`), and the `universe`-merged case the rung-4
 # scope cut existed for. Each is followed by an `@f.{...}` use site that
-# forces the registered ARITY, which is how p21's divergence was measured.
+# forces the registered ARITY.
 pass_probe p46_explicit_list_complete.lean 8
+# p21 FLIPPED BACK 2026-10-19 from a FAIL pin to a PASS pin, and renamed back
+# from `p21_explicit_list_closed_MUST_FAIL.lean`. A refusal-REMOVING re-pin,
+# landed on its own with its MUST_FAIL twin p54 (below). The 2026-08-25 flip
+# read Lean's `sortDeclLevelParams` as treating a written list as exhaustive;
+# it appends every used level the list does not name, and
+# `levelMVarToParamTypesPreDecls` (Lean/Elab/MutualDef.lean:1406) makes a
+# level metavariable left in the declaration's TYPE such a level. The pinned
+# v4.30.0-rc2 accepts this file with no error (`leak.{u, u_1}`,
+# `noAns.{u, u_1}`), and its use sites force arity 2. BEFORE (tip 6ef3be510,
+# this gate): FAIL with 'the explicit universe list `.{u}` is closed'. The
+# history is docs/FRONTEND_CLASS_LEDGER.md class (164).
+pass_probe p21_explicit_list_autoextends.lean 5
 pass_probe p22_exists_working_forms.lean 5
 pass_probe p23_exists_intro.lean 3
 pass_probe p24_prelude_fidelity.lean 23
@@ -217,6 +254,18 @@ pass_probe p49_mint_collision_independence.lean 6
 # never wrote `u_0`. The bridge's DELIBERATE rigidity inside a tactic block is
 # a different thing and is p42's.
 pass_probe p50_rigid_does_not_leak_across_decls.lean 6
+# p53 ADDED 2026-09-10: `universe u v w` declares NAMES, and a declaration's
+# level parameters are the ones that OCCUR in it (Lean's collectLevelParams).
+# preprocess.rs used to merge EVERY declared universe into EVERY declaration,
+# so `class Cls (α : Type u)` registered as `Cls.{u, v, w}` and each later
+# `[Cls α]` binder minted two level metavariables nothing could constrain --
+# `useIt`/`clsThm2` died at the kernel with `Type mismatch: expected Cls α,
+# got Cls α` (levels differ). Measured 4/2 before, 6/0 after; the controls
+# (`universe u` alone; `Type*` everywhere) were 6/0 throughout, so the only
+# variable is the unused declared names. The walk is syntactic and fail-closed
+# (crates/clean-elab/src/universe_occurrence.rs): a tactic block anywhere
+# outside a field default falls back to the old over-inclusive merge.
+pass_probe p53_unused_declared_universe.lean 6
 
 echo "[u2-battery] pinned failures (the solver gap + defaults + gates):"
 fail_probe p06_rigid_refusal_MUST_FAIL.lean 'Type mismatch: expected Sort u, got Type'
@@ -233,7 +282,13 @@ fail_probe p30_autobound_rigid_refusal_MUST_FAIL.lean 'Type mismatch: expected S
 # merely inferred. p32 pins that the fix did not become over-strict.
 fail_probe p31_mutual_rigid_refusal_MUST_FAIL.lean 'Type mismatch: expected Sort u, got Type'
 fail_probe p39_hole_rigid_refusal_MUST_FAIL.lean "cannot assign rigid universe parameter u := 1"
-fail_probe p40_hole_level_conflict_MUST_FAIL.lean "universe level conflict: Zero vs Succ(Zero)"
+# 2026-09-10 rendering-only correction: 954a9ea94e (2026-08-31) replaced
+# Debug levels in unify_meta's concrete-conflict diagnostic with
+# error_render::level (Display). The ground-level checks and Level::leq guard
+# did not change: p40 still refuses expected level 0 versus inferred level 1.
+# Keep both ordered levels and the nonzero-exit check, not a generic conflict
+# substring. p37's eight passing declarations retain the permitted direction.
+fail_probe p40_hole_level_conflict_MUST_FAIL.lean "universe level conflict: 0 vs 1"
 # p42 is p41's genuinely-conflicting twin: a Type-monomorphic lemma applied
 # inside a rigid `Sort u` goal needs `u := 1`, and the SEEDED rigid set now
 # refuses it inside the tactic block with the same message the declaration
@@ -249,28 +304,16 @@ fail_probe p42_tactic_bridge_rigid_refusal_MUST_FAIL.lean "cannot assign rigid u
 # generated. If this fragment degrades back into that raw Sort mismatch,
 # the Pi arm of `infer_level_for_type` has regressed to generating nothing.
 fail_probe p44_pi_sort_meta_rigid_MUST_FAIL.lean "cannot assign rigid universe parameter u := 0"
-# p21 FLIPPED 2026-08-25 (U2 rung-4 explicitness channel) from a PASS pin to a
-# FAIL pin, and renamed from `p21_explicit_list_autoextends.lean` — the old
-# name states the behaviour that just went away. This is a DELIBERATE
-# refusal-ADDING re-pin, exactly the kind the battery's fail-closed contract
-# requires to be landed on its own: it was carved out of U2 stage 3 for that
-# reason (plan §3 delta 3c), because bundling it would have voided that
-# stage's byte-identical-battery verification.
-#
-# BEFORE (release binary at d549a50bf, this same gate): `2 passed, 0 failed`.
-# `leak` declares ONE universe parameter via `.{u}` and REGISTERED WITH TWO —
-# the second generalized out of a `Type _` hole and appended to the list its
-# author closed. Nothing unsound followed (the kernel re-check is untouched;
-# the arity-2 term is well-typed), but the registered interface was not the
-# declared one and the only report was at a use site: `@leak.{0}` →
-# `UniverseLevelMismatch { name: "leak", expected: 2, actual: 1 }`, blaming
-# the caller for writing the arity `leak`'s own source declares.
-#
-# Lean's `sortDeclLevelParams` errors at the DECLARATION instead: a non-empty
-# user level list is exhaustive. If this probe ever passes again, the closure
-# regressed; if its fragment changes shape, read p46 before assuming the
-# refusal is still precise.
-fail_probe p21_explicit_list_closed_MUST_FAIL.lean 'the explicit universe list `.{u}` is closed'
+# p54 ADDED 2026-10-19, p21's MUST_FAIL twin: the written-list refusal that
+# remains. A level left ONLY in a declaration's value is never generalized;
+# Lean refuses it ("declaration `useZ` contains universe level metavariables
+# ... in the declaration body", pinned v4.30.0-rc2), and Clean refuses it when
+# the declaration wrote a `.{...}` list. With no written list Clean still
+# generalizes it (the OPEN half of class (164)). If this probe ever passes, the
+# value-only refusal regressed; read p21 and p46 before assuming a new refusal
+# here is precise.
+fail_probe p54_explicit_list_value_only_level_MUST_FAIL.lean \
+  'that its type does not mention and the explicit universe list `.{u}` does not name'
 # p47 ADDED 2026-08-26 (U2 stage-3 deferral 1). This is p30's
 # silent-monomorphization class reached through the MINT-NAME door, and it is
 # a refusal-ADDING re-pin of a shape that PASSED before — a new FAIL pin, not
@@ -310,6 +353,26 @@ fail_probe p47_autobound_mint_name_collision_MUST_FAIL.lean 'Type mismatch: expe
 # "reject any `?` in a universe name".
 fail_probe p51_reserved_mint_namespace_MUST_FAIL.lean \
   '`?u_0` is not a universe parameter name: the `?` space is reserved'
+
+# p52 ADDED here 2026-09-19, not by the commit that added the FIXTURE. The simp
+# binder-domain fix landed `tests/fixtures/universes/p52_simp_binder_domain.lean`
+# without a probe line, and this battery's `split` is built from the probes that
+# RUN while its `fixtures` map is globbed from the directory — so the file was in
+# one and not the other and `parity_tiers --check` went FAIL-CLOSED on
+# `in fixtures only: ['p52']`, blocking every lane's push. That the two halves
+# disagree at all is the useful part: a fixture cannot be added here without
+# being pinned.
+#
+# What it pins: simp must not bind a `Prop`-declared lemma binder to a `Sort u`
+# term. Simp mints one metavariable per lemma binder with the PLACEHOLDER type
+# `Expr::type_()` and `MetaState::assign` never type-checks, so `capRhs`'s
+# `(p : Prop)` binder used to capture `γ : Sort v` and the ill-typed `@capRhs γ`
+# reached `close_goal`'s `infer_type_strict`. The third declaration is the one
+# that matters — both lemmas are offered, and the honest universe-polymorphic
+# one only gets its turn if the ill-typed match is refused first. The two
+# controls either side of it keep the guard from being satisfied by refusing
+# everything. Measured today: 5 passed, 0 failed.
+pass_probe p52_simp_binder_domain.lean 5
 
 
 GIT_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
@@ -371,12 +434,16 @@ report = {
             "P21 FLIPPED 2026-08-25 (U2 rung-4 explicitness channel) from a "
             "PASS pin to a FAIL pin, and was renamed "
             "p21_explicit_list_autoextends.lean -> "
-            "p21_explicit_list_closed_MUST_FAIL.lean: an explicit `.{...}` "
-            "universe list is now CLOSED, as in Lean's sortDeclLevelParams. "
-            "Before, `def leak.{u}` whose body leaked a second level "
-            "REGISTERED WITH ARITY 2 and only a use site reported it "
-            "(UniverseLevelMismatch expected 2 actual 1 — blaming the "
-            "caller). The channel is ElabCtx::file_universe_params: "
+            "p21_explicit_list_closed_MUST_FAIL.lean, on the reading that an "
+            "explicit `.{...}` universe list is exhaustive in Lean's "
+            "sortDeclLevelParams; it FLIPPED BACK 2026-10-19 (renamed back, "
+            "PASS pin, 5 decls), because Lean appends every used level the "
+            "list does not name and generalizes a level metavariable left in "
+            "the declaration's TYPE into one (v4.30.0-rc2: leak.{u, u_1}, "
+            "noAns.{u, u_1}; FRONTEND_CLASS_LEDGER class (164)). P54 added "
+            "the same day pins the refusal that remains: a level left only "
+            "in the VALUE under a written list, which Lean refuses too. The "
+            "channel is ElabCtx::file_universe_params: "
             "preprocess merges file-scope `universe` names into the same "
             "vector as the written list, and subtracting them is what "
             "recovers the written list, which is precisely the distinction "

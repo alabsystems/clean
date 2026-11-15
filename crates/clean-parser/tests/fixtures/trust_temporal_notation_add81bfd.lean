@@ -1,0 +1,15 @@
+prefix:100 "□" => _root_.Trust.Temporal.Always
+prefix:100 "◇" => _root_.Trust.Temporal.Eventually
+infixl:50 " ~> " => _root_.Trust.Temporal.LeadsTo
+infixl:45 " ⊨ " => _root_.Trust.Temporal.Satisfies
+infixl:65 " ⊞ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.add
+infixl:65 " ⊟ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.sub
+infix:50 " ≐ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.eq
+infix:50 " ≢ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.neq
+infix:50 " ≼ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.le
+infix:50 " ≻ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.gt
+infix:50 " ≺ " => _root_.Trust.Protocol.lt
+infix:50 " ≽ " => _root_.Trust.Protocol.ge
+infixr:35 " ⋏ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.and
+infixr:30 " ⋎ " => _root_.Trust.Temporal.FiniteModel.ScalarExpr.or
+infix:40 " ≔ " => _root_.Trust.Protocol.set

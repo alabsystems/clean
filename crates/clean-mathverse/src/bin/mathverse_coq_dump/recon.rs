@@ -36,7 +36,7 @@ use clean_mathverse::coq::alpha::Sexp;
 
 /// What an already-dumped importer-form name denotes.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FormEntry {
+pub(crate) enum FormEntry {
     /// `(CoqInductive <name> <idx> ...)` — inductive block `idx`.
     Ind(u32),
     /// A `(Ctor <name> ...)` entry: constructor `ctor_idx` of `block`'s
@@ -56,7 +56,7 @@ pub enum FormEntry {
 /// the SEMI-QUALIFIED atoms Coq pretty-prints (`ssralg.GRing.Ring.type`,
 /// `eqtype.Equality.Pack` — measured live on the mathcomp 1.19 container) by
 /// unique-suffix match; a missing or ambiguous atom fails the salvage closed.
-pub struct DumpNameIndex {
+pub(crate) struct DumpNameIndex {
     forms: HashMap<String, FormEntry>,
 }
 
@@ -70,7 +70,7 @@ impl DumpNameIndex {
     /// pass over line heads; unreadable files are skipped and `out_dir`'s own
     /// entries win over same-named sibling entries (they only shrink or
     /// stale-shift the resolvable set — fail closed either way).
-    pub fn load(out_dir: &Path) -> Self {
+    pub(crate) fn load(out_dir: &Path) -> Self {
         let mut forms = HashMap::new();
         Self::scan_dir(out_dir, &mut forms, true);
         let canon_out = out_dir.canonicalize().ok();
@@ -118,7 +118,7 @@ impl DumpNameIndex {
 
     /// Build from explicit entries (tests, and the run overlay's base).
     #[cfg(test)]
-    pub fn from_entries(entries: Vec<(&str, FormEntry)>) -> Self {
+    pub(crate) fn from_entries(entries: Vec<(&str, FormEntry)>) -> Self {
         Self {
             forms: entries
                 .into_iter()
@@ -133,7 +133,7 @@ impl DumpNameIndex {
     /// resolution behavior): an exact match wins; otherwise the UNIQUE name
     /// ending in `.<atom>`. Zero or several candidates → `None` (fail
     /// closed).
-    pub fn resolve(&self, atom: &str) -> Option<(&str, &FormEntry)> {
+    pub(crate) fn resolve(&self, atom: &str) -> Option<(&str, &FormEntry)> {
         let non_ctor = |e: &&FormEntry| !matches!(e, FormEntry::Ctor { .. });
         if let Some((name, form)) = self.forms.get_key_value(atom).filter(|(_, e)| non_ctor(e)) {
             return Some((name.as_str(), form));
@@ -154,7 +154,7 @@ impl DumpNameIndex {
 
 /// Scan one dump line for a top-level importer form, recording the declared
 /// name plus (for inductives) every `(Ctor <name> ...)` constructor entry.
-pub fn scan_form_line(line: &str, forms: &mut HashMap<String, FormEntry>) {
+pub(crate) fn scan_form_line(line: &str, forms: &mut HashMap<String, FormEntry>) {
     let mut toks = line.split_whitespace();
     match toks.next() {
         Some("(CoqInductive") => {
@@ -204,7 +204,7 @@ pub fn scan_form_line(line: &str, forms: &mut HashMap<String, FormEntry>) {
 pub type RunOverlay = HashMap<String, FormEntry>;
 
 /// Scan an in-memory dump buffer (the run's emitted forms so far).
-pub fn scan_buffer(buf: &str) -> RunOverlay {
+pub(crate) fn scan_buffer(buf: &str) -> RunOverlay {
     let mut forms = HashMap::new();
     for line in buf.lines() {
         scan_form_line(line, &mut forms);
@@ -216,7 +216,7 @@ pub fn scan_buffer(buf: &str) -> RunOverlay {
 /// override the file index per fully-qualified name; the inductive currently
 /// being reconstructed resolves to itself (it exists in NEITHER index — its
 /// MInd crashed — or only as the stale type-only stand-in).
-pub struct NameScope<'a> {
+pub(crate) struct NameScope<'a> {
     pub file: &'a DumpNameIndex,
     pub run: &'a RunOverlay,
     /// Fully-qualified name of the inductive under reconstruction, if any.
@@ -225,7 +225,7 @@ pub struct NameScope<'a> {
 
 /// A resolved pretty-printed atom, in importer-dialect reference terms.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Resolved {
+pub(crate) enum Resolved {
     Ind(String, u32),
     Ctor(String, u32, u32),
     Const(String),
@@ -237,7 +237,7 @@ impl NameScope<'_> {
     /// constructor entries INCLUDED (unlike [`DumpNameIndex::resolve`]):
     /// constructor references (`eqtype.Equality.Pack`) are exactly what the
     /// crash-family constructor types mention. Ambiguity fails closed.
-    pub fn resolve(&self, atom: &str) -> Option<Resolved> {
+    pub(crate) fn resolve(&self, atom: &str) -> Option<Resolved> {
         if let Some(s) = self.self_ind {
             if s == atom || s.ends_with(&format!(".{atom}")) {
                 return Some(Resolved::Ind(s.to_string(), 0));
@@ -288,7 +288,7 @@ fn to_resolved(name: &str, e: &FormEntry) -> Resolved {
 
 /// Header facts extracted from a `Print <inductive>.` Notice text.
 #[derive(Debug, PartialEq, Eq)]
-pub struct PrintHeader {
+pub(crate) struct PrintHeader {
     /// `Record` | `Structure` | `Class` | `Variant` | `Inductive`.
     pub keyword: String,
     /// The SHORT name printed after the keyword.
@@ -307,7 +307,7 @@ pub struct PrintHeader {
 /// COINDUCTIVE blocks (their statement-only axiomatization is the correct
 /// semantics — no sound inductive replay), MUTUAL blocks (`with` alternative
 /// at top level), and any unrecognized shape.
-pub fn parse_print_inductive(text: &str) -> Option<PrintHeader> {
+pub(crate) fn parse_print_inductive(text: &str) -> Option<PrintHeader> {
     // The declaration runs to the first '.' at bracket-depth 0 followed by
     // whitespace/EOF (qualified names' dots have no following whitespace;
     // the trailing "Arguments ..." / "has primitive projections" prose is
@@ -500,7 +500,7 @@ fn is_ident_or_hole(s: &str) -> bool {
 /// stack (de Bruijn `Rel`, innermost = 0). `Type` collapses to the importer's
 /// single-level `(Sort (Type 1))` model — the same collapse the importer
 /// applies to raw named global levels, so parsed and raw payloads agree.
-pub fn parse_check_type(text: &str, scope: &NameScope<'_>) -> Option<Sexp> {
+pub(crate) fn parse_check_type(text: &str, scope: &NameScope<'_>) -> Option<Sexp> {
     let toks = tokenize_type(text);
     let mut p = TypeParser {
         toks: &toks,
@@ -729,7 +729,7 @@ fn atom(s: &str) -> Sexp {
 /// `order_mixin` FIELD binder suffix-resolved to the pending
 /// `Num.NumDomain.order_mixin` constant, whose own type defers on `class_of`
 /// — a two-cycle that left the whole family stand-in).
-pub fn referenced_names(text: &str, scope: &NameScope<'_>) -> Vec<String> {
+pub(crate) fn referenced_names(text: &str, scope: &NameScope<'_>) -> Vec<String> {
     let mut out = Vec::new();
     for tok in tokenize_type(text) {
         let name = tok.strip_prefix('@').unwrap_or(&tok);
@@ -754,14 +754,14 @@ pub fn referenced_names(text: &str, scope: &NameScope<'_>) -> Vec<String> {
 
 /// A pretty-printed atom that can denote a global reference: a dotted path
 /// of identifier segments (`ssralg.GRing.Ring.type`), nothing else.
-pub fn is_path_atom(atom: &str) -> bool {
+pub(crate) fn is_path_atom(atom: &str) -> bool {
     !atom.is_empty() && atom.split('.').all(is_ident)
 }
 
 /// Count the leading `Prod` binders of a dialect/serapi arity telescope and
 /// check the codomain is a syntactic sort (what the checked `add_inductive`
 /// replay requires of a type former).
-pub fn arity_shape(arity: &Sexp) -> (u32, bool) {
+pub(crate) fn arity_shape(arity: &Sexp) -> (u32, bool) {
     let mut cur = arity;
     let mut n = 0u32;
     loop {

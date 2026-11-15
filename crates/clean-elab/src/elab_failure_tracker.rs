@@ -56,7 +56,9 @@ impl ElabFailureTracker {
     /// Map an [`ElabError`] into a coarse failure category.
     #[must_use]
     pub fn categorize(error: &ElabError) -> ElabFailureCategory {
-        match error {
+        // Look through the tactic-attribution wrapper: it names WHICH tactic
+        // failed, it does not change WHAT failed.
+        match error.innermost() {
             ElabError::TypeMismatch { .. }
             | ElabError::ProofTypeMismatch { .. }
             | ElabError::MatchArmTypeMismatch { .. }
@@ -90,6 +92,7 @@ impl ElabFailureTracker {
             // censuses must not disagree about the same failure.
             ElabError::UnknownIdent(_)
             | ElabError::UnknownIdentWithSuggestions { .. }
+            | ElabError::UnknownIdentDeferred { .. }
             | ElabError::UnresolvedDotTarget { .. }
             | ElabError::AutoBoundHeadOverApplied { .. }
             | ElabError::RecursionOutsideFragment { .. }

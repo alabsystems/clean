@@ -81,7 +81,11 @@ pub fn ring(state: &mut ProofState) -> TacticResult {
 
     Err(TacticError::ArithmeticFailed {
         tactic: "ring".to_string(),
-        reason: format!("normalized forms differ:\n  LHS: {lhs_norm:?}\n  RHS: {rhs_norm:?}"),
+        reason: format!(
+            "normalized forms differ:\n  LHS: {}\n  RHS: {}",
+            crate::error_render::opaque(&lhs_norm),
+            crate::error_render::opaque(&rhs_norm)
+        ),
     })
 }
 
@@ -131,7 +135,9 @@ pub fn ring_nf(state: &mut ProofState) -> TacticResult {
     Err(TacticError::ArithmeticFailed {
         tactic: "ring_nf".to_string(),
         reason: format!(
-            "proof construction failed without trustedArith\n  LHS norm: {lhs_norm:?}\n  RHS norm: {rhs_norm:?}"
+            "proof construction failed without trustedArith\n  LHS norm: {}\n  RHS norm: {}",
+            crate::error_render::opaque(&lhs_norm),
+            crate::error_render::opaque(&rhs_norm)
         ),
     })
 }

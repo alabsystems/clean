@@ -1,0 +1,207 @@
+{
+  "schema": "crystal-sidecar-width-census-v1",
+  "crate_module": {
+    "path": "target/crystal-lane/dump-sidecar-O3/clean_kernel.trust-ir.txt",
+    "functions": 5617,
+    "instruction_bearing": 3915
+  },
+  "closure_complete_in_the_module_alone": 1579,
+  "blocked_by_declarations": 2336,
+  "bodies_with_an_indirect_call": 0,
+  "distinct_blocking_declarations": 1702,
+  "blocking_declarations_by_kind": {
+    "local-unlowered": 723,
+    "foreign": 979
+  },
+  "ambiguous_instance_rows": 841,
+  "blocked_only_by_foreign": 1364,
+  "blocked_only_by_local_unlowered": 830,
+  "blocked_mixed": 142,
+  "top_foreign_blockers": [
+    {
+      "bodies_blocked": 396,
+      "kind": "foreign",
+      "path": "std::fmt::Formatter::<'a>::write_str"
+    },
+    {
+      "bodies_blocked": 127,
+      "kind": "foreign",
+      "path": "std::clone::impls::<impl std::clone::Clone for u64>::clone"
+    },
+    {
+      "bodies_blocked": 96,
+      "kind": "foreign",
+      "path": "<std::sync::Arc<T, A> as std::clone::Clone>::clone"
+    },
+    {
+      "bodies_blocked": 92,
+      "kind": "foreign",
+      "path": "<std::sync::Arc<T, A> as std::clone::Clone>::clone"
+    },
+    {
+      "bodies_blocked": 38,
+      "kind": "foreign",
+      "path": "std::hash::Hash::hash"
+    },
+    {
+      "bodies_blocked": 38,
+      "kind": "foreign",
+      "path": "<std::string::String as std::clone::Clone>::clone"
+    },
+    {
+      "bodies_blocked": 35,
+      "kind": "foreign",
+      "path": "std::clone::impls::<impl std::clone::Clone for u32>::clone"
+    },
+    {
+      "bodies_blocked": 34,
+      "kind": "foreign",
+      "path": "std::fmt::Formatter::<'a>::write_fmt"
+    },
+    {
+      "bodies_blocked": 31,
+      "kind": "foreign",
+      "path": "std::clone::impls::<impl std::clone::Clone for usize>::clone"
+    },
+    {
+      "bodies_blocked": 29,
+      "kind": "foreign",
+      "path": "std::fmt::format"
+    },
+    {
+      "bodies_blocked": 29,
+      "kind": "foreign",
+      "path": "std::hint::must_use"
+    },
+    {
+      "bodies_blocked": 26,
+      "kind": "foreign",
+      "path": "hashbrown::HashSet::<T, S, A>::contains"
+    },
+    {
+      "bodies_blocked": 25,
+      "kind": "foreign",
+      "path": "<T as std::string::ToString>::to_string"
+    },
+    {
+      "bodies_blocked": 23,
+      "kind": "foreign",
+      "path": "hashbrown::HashSet::<T, S, A>::insert"
+    },
+    {
+      "bodies_blocked": 21,
+      "kind": "foreign",
+      "path": "<T as std::string::ToString>::to_string"
+    },
+    {
+      "bodies_blocked": 21,
+      "kind": "foreign",
+      "path": "<T as std::string::ToString>::to_string"
+    },
+    {
+      "bodies_blocked": 20,
+      "kind": "foreign",
+      "path": "std::cmp::impls::<impl std::cmp::PartialEq<&B> for &A>::eq"
+    },
+    {
+      "bodies_blocked": 19,
+      "kind": "foreign",
+      "path": "<u64 as std::default::Default>::default"
+    },
+    {
+      "bodies_blocked": 19,
+      "kind": "foreign",
+      "path": "std::option::Option::<T>::as_deref"
+    },
+    {
+      "bodies_blocked": 19,
+      "kind": "foreign",
+      "path": "std::option::Option::<T>::expect"
+    }
+  ],
+  "top_local_unlowered_blockers": [
+    {
+      "bodies_blocked": 654,
+      "kind": "local-unlowered",
+      "path": "name::Name::from_string_uncached"
+    },
+    {
+      "bodies_blocked": 22,
+      "kind": "local-unlowered",
+      "path": "env::core_eq::<impl env::Environment>::init_eq"
+    },
+    {
+      "bodies_blocked": 20,
+      "kind": "local-unlowered",
+      "path": "env::Environment::get_const"
+    },
+    {
+      "bodies_blocked": 19,
+      "kind": "local-unlowered",
+      "path": "env::logic_true_false::<impl env::Environment>::init_true_false"
+    },
+    {
+      "bodies_blocked": 17,
+      "kind": "local-unlowered",
+      "path": "env::data_types_nat::<impl env::Environment>::init_nat"
+    },
+    {
+      "bodies_blocked": 12,
+      "kind": "local-unlowered",
+      "path": "env::data_types_nat::<impl env::Environment>::bool_surface_missing_symbol"
+    },
+    {
+      "bodies_blocked": 12,
+      "kind": "local-unlowered",
+      "path": "env::logic_or::<impl env::Environment>::init_or"
+    },
+    {
+      "bodies_blocked": 11,
+      "kind": "local-unlowered",
+      "path": "env::data_types_nat::<impl env::Environment>::register_bool_surface"
+    },
+    {
+      "bodies_blocked": 11,
+      "kind": "local-unlowered",
+      "path": "env::core::trust::<impl env::Environment>::init_sorry_ax"
+    },
+    {
+      "bodies_blocked": 11,
+      "kind": "local-unlowered",
+      "path": "env::logic_connectives::<impl env::Environment>::init_and"
+    }
+  ],
+  "reach_of_deriving_the_top_foreign_declarations": [
+    {
+      "top_foreign_declarations": 1,
+      "bodies_gained": 391,
+      "closure_complete": 1970
+    },
+    {
+      "top_foreign_declarations": 5,
+      "bodies_gained": 447,
+      "closure_complete": 2026
+    },
+    {
+      "top_foreign_declarations": 20,
+      "bodies_gained": 611,
+      "closure_complete": 2190
+    },
+    {
+      "top_foreign_declarations": 100,
+      "bodies_gained": 768,
+      "closure_complete": 2347
+    },
+    {
+      "top_foreign_declarations": 979,
+      "bodies_gained": 1364,
+      "closure_complete": 2943
+    }
+  ],
+  "meaning": "FOREIGN declarations are what the callee sidecar derives; LOCAL-UNLOWERED ones are bodies of this crate the producer declined to lower and no sidecar can reach them. A row here is closure ELIGIBILITY only -- it says nothing about whether a body is correct, which is links 3-5 and is per chain.",
+  "provenance": {
+    "clean_rev": "9c1f75909bc4bf579069e324a50fa0fd04f2562d",
+    "arm": "release/-O3 lib-only clean-kernel, sidecar driver seal-sidecar",
+    "note": "closure eligibility only; not correctness"
+  }
+}

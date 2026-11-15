@@ -21,7 +21,7 @@
 #     the kernel test build needs, and NO [[bin]]/[[test]]/[[bench]] targets
 #     (those pull in clean-elab/clean-parser/criterion siblings);
 #   * write a one-member [workspace] root manifest;
-#   * run: cargo test -p clean-kernel --lib --features math-overlays nn_verify
+#   * run: targo --unverified test -p clean-kernel --lib --features math-overlays nn_verify
 #
 # This script DOES NOT modify clean-kernel source. It only reads the source
 # tree and writes into a scratch build directory.
@@ -37,10 +37,10 @@
 #
 # Environment
 # -----------
-#   KERNEL_TEST_FILTER   Test name filter passed to `cargo test`.
+#   KERNEL_TEST_FILTER   Test name filter passed to `targo --unverified test`.
 #                        Default: "nn_verify".  Set to "" to run all lib tests.
 #   KERNEL_FEATURES      Cargo feature list. Default: "math-overlays".
-#   SKIP_TEST=1          Assemble + `cargo build` only; skip running tests.
+#   SKIP_TEST=1          Assemble + `targo --unverified build` only; skip running tests.
 #
 # Exit status is the exit status of the cargo invocation.
 set -euo pipefail
@@ -201,14 +201,14 @@ if [[ -n "$KERNEL_TEST_FILTER" ]]; then
   cargo_args+=("$KERNEL_TEST_FILTER")
 fi
 
-echo "==> running: cargo ${cargo_args[*]}"
+echo "==> running: targo --unverified ${cargo_args[*]}"
 echo "==>   (in $BUILD_DIR)"
 
 if [[ "${SKIP_TEST:-0}" == "1" ]]; then
-  ( cd "$BUILD_DIR" && cargo build -p clean-kernel --lib --features "$KERNEL_FEATURES" )
+  ( cd "$BUILD_DIR" && targo --unverified build -p clean-kernel --lib --features "$KERNEL_FEATURES" )
   echo "==> SKIP_TEST=1: build only, tests not run."
 else
-  ( cd "$BUILD_DIR" && cargo "${cargo_args[@]}" )
+  ( cd "$BUILD_DIR" && targo --unverified "${cargo_args[@]}" )
 fi
 
 echo "==> done. Standalone workspace at: $BUILD_DIR"

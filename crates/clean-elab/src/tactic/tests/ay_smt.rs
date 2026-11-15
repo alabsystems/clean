@@ -19,6 +19,7 @@ use clean_kernel::env::Declaration;
 use clean_kernel::sorry::{
     local_ay_reconstruction_success_count, reset_local_ay_reconstruction_success_counter,
 };
+use clean_parser::SurfaceName;
 
 // =========================================================================
 // Setup helpers
@@ -111,8 +112,9 @@ fn prop_local_decl(id: u64, name: &str) -> (Expr, LocalDecl) {
     (
         Expr::fvar(fvar),
         LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: name.to_string(),
+            name: SurfaceName::component(name, false),
             ty: Expr::prop(),
             value: None,
         },
@@ -147,8 +149,9 @@ fn test_ay_prop_and_elim_left() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: ay_make_and(p, q),
             value: None,
         }],
@@ -169,8 +172,9 @@ fn test_ay_prop_or_intro_left() {
         env,
         ay_make_or(p.clone(), q),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: p,
             value: None,
         }],
@@ -190,8 +194,9 @@ fn test_ay_prop_not_from_hypothesis() {
         env,
         ay_make_not(q.clone()),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: SurfaceName::component("h", false),
             ty: ay_make_not(q),
             value: None,
         }],
@@ -214,14 +219,16 @@ fn test_ay_prop_contradiction_from_hyps() {
         false_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: SurfaceName::component("h1", false),
                 ty: p.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: SurfaceName::component("h2", false),
                 ty: ay_make_not(p),
                 value: None,
             },
@@ -245,14 +252,16 @@ fn test_ay_prop_disjunctive_syllogism() {
         q.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_fvar,
-                name: "h1".to_string(),
+                name: SurfaceName::component("h1", false),
                 ty: ay_make_or(p.clone(), q),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_fvar,
-                name: "h2".to_string(),
+                name: SurfaceName::component("h2", false),
                 ty: ay_make_not(p),
                 value: None,
             },
@@ -319,20 +328,23 @@ fn test_ay_arith_hypothesis_le() {
         le_ty.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_a,
-                name: "a".to_string(),
+                name: SurfaceName::component("a", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_b,
-                name: "b".to_string(),
+                name: SurfaceName::component("b", false),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h,
-                name: "h".to_string(),
+                name: SurfaceName::component("h", false),
                 ty: le_ty.clone(),
                 value: None,
             },
@@ -367,32 +379,37 @@ fn test_ay_arith_transitivity() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_a,
-                name: "a".to_string(),
+                name: SurfaceName::component("a", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_b,
-                name: "b".to_string(),
+                name: SurfaceName::component("b", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_c,
-                name: "c".to_string(),
+                name: SurfaceName::component("c", false),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h1,
-                name: "h1".to_string(),
+                name: SurfaceName::component("h1", false),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h2,
-                name: "h2".to_string(),
+                name: SurfaceName::component("h2", false),
                 ty: h2_ty,
                 value: None,
             },
@@ -423,20 +440,23 @@ fn test_ay_arith_lt_implies_le() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_a,
-                name: "a".to_string(),
+                name: SurfaceName::component("a", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_b,
-                name: "b".to_string(),
+                name: SurfaceName::component("b", false),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h,
-                name: "h".to_string(),
+                name: SurfaceName::component("h", false),
                 ty: h_ty,
                 value: None,
             },
@@ -470,20 +490,23 @@ fn test_ay_smt_eq_symmetry() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_a,
-                name: "a".to_string(),
+                name: SurfaceName::component("a", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_b,
-                name: "b".to_string(),
+                name: SurfaceName::component("b", false),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h,
-                name: "h".to_string(),
+                name: SurfaceName::component("h", false),
                 ty: h_ty,
                 value: None,
             },
@@ -517,32 +540,37 @@ fn test_ay_smt_eq_transitivity() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_a,
-                name: "a".to_string(),
+                name: SurfaceName::component("a", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_b,
-                name: "b".to_string(),
+                name: SurfaceName::component("b", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_c,
-                name: "c".to_string(),
+                name: SurfaceName::component("c", false),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h1,
-                name: "h1".to_string(),
+                name: SurfaceName::component("h1", false),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h2,
-                name: "h2".to_string(),
+                name: SurfaceName::component("h2", false),
                 ty: h2_ty,
                 value: None,
             },
@@ -566,8 +594,9 @@ fn test_ay_smt_qf_uf_reflexivity() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: fvar_a,
-            name: "a".to_string(),
+            name: SurfaceName::component("a", false),
             ty: nat_ty,
             value: None,
         }],
@@ -616,14 +645,16 @@ fn test_ay_arith_weakening() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_a,
-                name: "a".to_string(),
+                name: SurfaceName::component("a", false),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h,
-                name: "h".to_string(),
+                name: SurfaceName::component("h", false),
                 ty: h_ty,
                 value: None,
             },
@@ -657,32 +688,37 @@ fn test_ay_arith_mixed_inequality_transitivity() {
         target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_a,
-                name: "a".to_string(),
+                name: SurfaceName::component("a", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_b,
-                name: "b".to_string(),
+                name: SurfaceName::component("b", false),
                 ty: nat_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_c,
-                name: "c".to_string(),
+                name: SurfaceName::component("c", false),
                 ty: nat_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h1,
-                name: "h1".to_string(),
+                name: SurfaceName::component("h1", false),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: fvar_h2,
-                name: "h2".to_string(),
+                name: SurfaceName::component("h2", false),
                 ty: h2_ty,
                 value: None,
             },

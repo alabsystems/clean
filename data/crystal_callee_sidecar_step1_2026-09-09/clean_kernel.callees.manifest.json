@@ -1,0 +1,28 @@
+{
+  "schema": "trust-ir-callee-sidecar-v1",
+  "crate": "clean_kernel",
+  "filter": "LevelArc as std::ops::Deref",
+  "producer": {
+    "instance_recipe": "Instance::try_resolve(fully_monomorphized, site_def_id, rebuild_site_args(site_args)) -> instance_mir -> try_instantiate_mir_and_normalize_erasing_regions",
+    "extractor": "trust_mir_extract::extract_function_faithful",
+    "call_naming": "every direct call renamed to exact_def_path_str_with_args of its RESOLVED instance; members named the same way",
+    "bridge": "trust_ir_bridge::lower_to_trust_ir_functions_preferring_bundled_bodies (expected-absent set EMPTY; a bundled body is CALLED, never replaced by a name-keyed std summary)",
+    "rewrites": ["differential::rewrite_bool_not_icmp", "differential::rewrite_array_insert_fields"],
+    "terminal_predicate": "trust_mir_extract::is_diverging_panic_or_abort_terminal"
+  },
+  "closed": true,
+  "closed_meaning": "every root resolved, every direct call of every member is a member or a recognised panic terminal, no member refused, fuel not exhausted; false means the bundle is NOT a model of its roots",
+  "lowering": "ok",
+  "roots": [
+    {"caller": "<level::LevelArc as std::ops::Deref>::deref", "callee_def_path": "std::option::Option::<T>::expect", "crate_decl_func_ids": [4939], "resolved": "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>", "sidecar_func_id": 0, "outcome": "resolved"},
+    {"caller": "<level::LevelArc as std::ops::Deref>::deref", "callee_def_path": "std::option::Option::<T>::as_deref", "crate_decl_func_ids": [4938], "resolved": "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>", "sidecar_func_id": 1, "outcome": "resolved"}
+  ],
+  "members": [
+    {"sidecar_func_id": 0, "name": "core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>", "instance_kind": "Item", "def_path": "std::option::Option::<T>::expect", "mir_blocks": 4, "extracted_blocks": 4, "calls": [{"site": "core::option::expect_failed", "resolved": "core::option::expect_failed", "class": "panic-terminal"}]},
+    {"sidecar_func_id": 1, "name": "core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>", "instance_kind": "Item", "def_path": "std::option::Option::<T>::as_deref", "mir_blocks": 6, "extracted_blocks": 6, "calls": [{"site": "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>", "resolved": "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>", "class": "member"}]},
+    {"sidecar_func_id": 2, "name": "<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>", "instance_kind": "Item", "def_path": "<Arc<T, A> as Deref>::deref", "mir_blocks": 1, "extracted_blocks": 1, "calls": []}
+  ],
+  "panic_terminals": ["core::option::expect_failed"],
+  "escaping": [],
+  "artifacts": {"text": "clean_kernel.callees.trust-ir.txt", "text_bytes": 6462, "binary": "clean_kernel.callees.trust-ir.bin", "binary_bytes": 5154}
+}

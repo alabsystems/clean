@@ -102,10 +102,21 @@ pub enum SelfFunc {
 /// first-use index the core module uses.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ObservedTags {
-    /// canonical enum index -> the `enum.N` the artifact printed
-    pub enums: Vec<u32>,
-    /// canonical struct index -> the `struct.N` the artifact printed
-    pub structs: Vec<u32>,
+    /// canonical enum index -> the `enum.N` the artifact printed IN AN
+    /// INSTRUCTION.
+    ///
+    /// A map rather than a vector, and filtered by USE, for the reason the
+    /// `funcs` lane below is: under a chain's tag table the reader is
+    /// pre-seeded with the whole `enums` lane, so the raw->canonical map holds
+    /// entries this body never named. Reporting those would make
+    /// `interface_aggregates::check_aggregates` compare the lane against
+    /// itself. A PARAMETER type is not here either: it reaches the lane
+    /// through `Tags::canon_ty` instead, which is why `ir_fs` pins an `enums`
+    /// row (canonical 1, `enum.178`) that no instruction in its body names.
+    pub enums: BTreeMap<u32, u32>,
+    /// canonical struct index -> the `struct.N` the artifact printed IN AN
+    /// INSTRUCTION. See [`ObservedTags::enums`].
+    pub structs: BTreeMap<u32, u32>,
     /// canonical func index -> the `@func.N` the artifact printed.
     ///
     /// A map rather than a vector because [`SELF_FUNC_INDEX`] is present only
@@ -114,9 +125,16 @@ pub struct ObservedTags {
     pub funcs: BTreeMap<u32, u32>,
     /// canonical global index -> the `@global.N` the artifact printed.
     ///
-    /// Always EMPTY today, and not because no body has a global: the reader
-    /// REFUSES a `global_addr` outright, so an interned one can never reach
-    /// here. See `Reader::r_global`.
+    /// EMPTY on every BARE read (`read`, `read_with_tags`, `read_with_self`,
+    /// `read_with_pins`): those entry points carry no global namespace, and a
+    /// `global_addr` under them is REFUSED rather than interned, because the
+    /// per-body module they emit prints a hard-coded empty `(globals)` list
+    /// and a canonical index into it would denote an entry the module does
+    /// not declare. Under [`read_body`] — the entry point `project` uses, with
+    /// the chain's tag-table `globals` lane as the namespace — a `global_addr`
+    /// resolves through that namespace (or interns above it on first use) and
+    /// the raw id lands here, in canonical order, for `project` to compare
+    /// against the pins. See `Reader::global_index`.
     pub globals: Vec<u32>,
     /// how the body's own id reached this read
     pub self_func: SelfFunc,
@@ -128,6 +146,13 @@ pub struct ObservedTags {
     /// the plain fixed-width integer (reader C could never reproduce a
     /// distinction Clean's `IRTy` does not have).
     pub usize_seen: u32,
+    /// How many TUPLE types the body spells. Same posture as `usize_seen`:
+    /// the arity-only image erases the element types, so the count is what a
+    /// tag table pins and what makes a same-arity swap visible.
+    pub tuple_seen: u32,
+    /// Exactly how many `isize` tokens this body contained, counted the same
+    /// way and pinned separately.
+    pub isize_seen: u32,
     /// The `functy.N` in the header. RECORDED, never gated: it is a whole-crate
     /// signature-table index, it moves under a producer change with no
     /// instruction changed, and `scripts/crystal_fixture_freshness.py` already
@@ -181,12 +206,16 @@ pub fn read_with_pins(
     self_func: SelfFunc,
     usize_bits: Option<u32>,
 ) -> Result<(Sx, ObservedTags), EmittedError> {
-    read_body(
+    // A BARE read: no global namespace, so a `global_addr` is refused — see
+    // `Reader::global_index`.
+    read_one(
         text,
         self_func,
         SELF_FUNC_INDEX,
         &BTreeMap::new(),
         usize_bits,
+        None,
+        None,
     )
 }
 
@@ -206,6 +235,15 @@ pub fn read_with_pins(
 /// still has to be a row of the tag table, and a call to the WRONG sibling is a
 /// different core module.
 ///
+/// `global_namespace` is the chain's tag-table `globals` lane, crate-level
+/// `@global.N` id -> canonical index. Its PRESENCE is what lets a
+/// `global_addr` read at all: every bare entry point above carries none and
+/// refuses the instruction (the per-body module prints an empty `(globals)`
+/// list, so a canonical index into it would name nothing), while `project`
+/// reads through this one and then checks the observed globals against the
+/// pins and the module-table preamble. An id the namespace does not carry
+/// still interns above it, and still has to be a row of the tag table.
+///
 /// # Errors
 /// Returns [`EmittedError`] exactly as [`read`] does.
 pub(crate) fn read_body(
@@ -214,9 +252,57 @@ pub(crate) fn read_body(
     self_canonical: u32,
     namespace: &BTreeMap<u32, u32>,
     usize_bits: Option<u32>,
+    global_namespace: &BTreeMap<u32, u32>,
+    agg_namespace: (&BTreeMap<u32, u32>, &BTreeMap<u32, u32>),
+) -> Result<(Sx, ObservedTags), EmittedError> {
+    read_one(
+        text,
+        self_func,
+        self_canonical,
+        namespace,
+        usize_bits,
+        Some(global_namespace),
+        Some(agg_namespace),
+    )
+}
+
+/// The one reader every entry point goes through. `global_namespace` is
+/// `None` for a bare read and `Some` under a chain's tag table; nothing else
+/// distinguishes the two, and that one difference is exactly whether a
+/// `global_addr` is refused or resolved.
+fn read_one(
+    text: &str,
+    self_func: SelfFunc,
+    self_canonical: u32,
+    namespace: &BTreeMap<u32, u32>,
+    usize_bits: Option<u32>,
+    global_namespace: Option<&BTreeMap<u32, u32>>,
+    agg_namespace: Option<(&BTreeMap<u32, u32>, &BTreeMap<u32, u32>)>,
 ) -> Result<(Sx, ObservedTags), EmittedError> {
     let mut r = Reader::with_self_at(self_func, self_canonical, namespace);
     r.usize_bits = usize_bits;
+    // The AGGREGATE namespaces, the `funcs` and `globals` pattern one lane
+    // over. A bare read passes none and interns from 0 in first-seen order,
+    // which is what every entry point but `project` has always done. Under a
+    // chain's tag table the reader starts from the lane, so two bodies of one
+    // module that name DIFFERENT aggregates resolve to different canonical
+    // indices instead of both claiming 0 — which is what made a module
+    // assembled from two artifacts inexpressible.
+    if let Some((enums, structs)) = agg_namespace {
+        r.enums = enums.clone();
+        r.structs = structs.clone();
+    }
+    if let Some(ns) = global_namespace {
+        // A newly-seen global interns ABOVE everything the chain accounts
+        // for, the `funcs` arithmetic one namespace over — except that no
+        // index is reserved here, so with an empty lane the first one is `0`.
+        r.next_global = ns
+            .values()
+            .copied()
+            .max()
+            .map_or(0, |m| m.saturating_add(1));
+        r.global_namespace = Some(ns.clone());
+    }
     let sx = r.run(text)?;
     let invert = |m: &BTreeMap<u32, u32>| {
         let mut v: Vec<(u32, u32)> = m.iter().map(|(raw, canon)| (*canon, *raw)).collect();
@@ -230,8 +316,21 @@ pub(crate) fn read_body(
         .cloned()
         .partition(|p| p.block == entry);
     let tags = ObservedTags {
-        enums: invert(&r.enums),
-        structs: invert(&r.structs),
+        // The aggregates THIS body named in an instruction — never a
+        // pre-seeded lane entry, and never a parameter type. Same shape and
+        // same reason as the `funcs` lane just below.
+        enums: r
+            .enums
+            .iter()
+            .filter(|(raw, _)| r.enum_used.contains(*raw))
+            .map(|(raw, canon)| (*canon, *raw))
+            .collect(),
+        structs: r
+            .structs
+            .iter()
+            .filter(|(raw, _)| r.struct_used.contains(*raw))
+            .map(|(raw, canon)| (*canon, *raw))
+            .collect(),
         // SELF and the callees the body actually NAMED — never a pre-seeded
         // sibling the body does not call. That keeps this lane meaning what it
         // has always meant: the crate ids THIS body witnessed.
@@ -247,6 +346,8 @@ pub(crate) fn read_body(
         globals: invert(&r.globals),
         self_func,
         usize_seen: r.usize_seen,
+        tuple_seen: r.tuple_seen,
+        isize_seen: r.isize_seen,
         functy: r.functy,
         interface: Interface {
             function_name: r.fn_name.clone(),
@@ -273,9 +374,14 @@ pub(crate) fn read_body(
 /// and ignores the remainder is not total over its own input, and no
 /// enumeration of erasures can cover what it drops.
 ///
+/// `base` is the number of lines that precede `text` in the file it was cut
+/// from — the module-table preamble `emitted_globals::split_preamble` took off
+/// the front — so every `line` a refusal here names is the FILE line. It is 0
+/// for every fixture without a preamble.
+///
 /// # Errors
 /// Returns [`EmittedError`] when the text holds fewer or more than `n` bodies.
-pub(crate) fn split_bodies(text: &str, n: usize) -> Result<Vec<String>, EmittedError> {
+pub(crate) fn split_bodies(text: &str, n: usize, base: usize) -> Result<Vec<String>, EmittedError> {
     let mut out: Vec<String> = Vec::new();
     let mut cur = String::new();
     let mut open = false;
@@ -285,7 +391,7 @@ pub(crate) fn split_bodies(text: &str, n: usize) -> Result<Vec<String>, EmittedE
         if out.len() == n {
             if !code.is_empty() {
                 return Err(EmittedError::Syntax {
-                    line: i + 1,
+                    line: base + i + 1,
                     msg: format!(
                         "`{code}` follows the closing brace of the last of the {n} function \
                          bod{} this chain's tag table declares. A text carrying an extra \
@@ -309,7 +415,7 @@ pub(crate) fn split_bodies(text: &str, n: usize) -> Result<Vec<String>, EmittedE
     }
     if open {
         return Err(EmittedError::Syntax {
-            line: text.lines().count(),
+            line: base + text.lines().count(),
             msg: "the last function body has no closing brace. `Display for Function` always \
                   emits one, so text that runs out without it is a TRUNCATED artifact — and \
                   reading a truncated body as a complete one is the same erasure as ignoring a \
@@ -319,7 +425,7 @@ pub(crate) fn split_bodies(text: &str, n: usize) -> Result<Vec<String>, EmittedE
     }
     if out.len() != n {
         return Err(EmittedError::Syntax {
-            line: text.lines().count(),
+            line: base + text.lines().count(),
             msg: format!(
                 "this chain's tag table declares {n} function bod{}, and the emitted text holds \
                  {}",
@@ -337,11 +443,22 @@ pub(super) struct Reader {
     funcs: BTreeMap<u32, u32>,
     /// The crate-level `@func.N` ids a `call` in THIS body actually named.
     func_used: BTreeSet<u32>,
+    /// The aggregate ids this body named IN AN INSTRUCTION, as opposed to the
+    /// ones pre-seeded from the chain's lanes.
+    enum_used: BTreeSet<u32>,
+    struct_used: BTreeSet<u32>,
     /// The next canonical index a newly-seen callee takes.
     next_func: u32,
     /// The canonical index this body's own `(func N …)` carries.
     self_canonical: u32,
+    /// The crate-level `@global.N` ids a `global_addr` in THIS body named,
+    /// each at its canonical index. Only ever populated under a namespace.
     globals: BTreeMap<u32, u32>,
+    /// The chain's tag-table `globals` lane (crate id -> canonical), or
+    /// `None` on a bare read — in which case a `global_addr` is refused.
+    global_namespace: Option<BTreeMap<u32, u32>>,
+    /// The next canonical index a newly-seen global takes, above the lane.
+    next_global: u32,
     line: usize,
     fn_name: String,
     /// The header's linkage keyword, PRE-SET to the value the producer
@@ -358,6 +475,8 @@ pub(super) struct Reader {
     clauses: BTreeSet<String>,
     usize_bits: Option<u32>,
     usize_seen: u32,
+    tuple_seen: u32,
+    isize_seen: u32,
 }
 
 impl Default for Reader {
@@ -367,9 +486,13 @@ impl Default for Reader {
             structs: BTreeMap::new(),
             funcs: BTreeMap::new(),
             func_used: BTreeSet::new(),
+            enum_used: BTreeSet::new(),
+            struct_used: BTreeSet::new(),
             next_func: 1,
             self_canonical: SELF_FUNC_INDEX,
             globals: BTreeMap::new(),
+            global_namespace: None,
+            next_global: 0,
             line: 0,
             fn_name: String::new(),
             linkage: DEFAULT_LINKAGE.to_string(),
@@ -382,6 +505,8 @@ impl Default for Reader {
             clauses: BTreeSet::new(),
             usize_bits: None,
             usize_seen: 0,
+            tuple_seen: 0,
+            isize_seen: 0,
         }
     }
 }
@@ -557,6 +682,30 @@ impl Reader {
             "u32" => n("uint", "32"),
             "u64" => n("uint", "64"),
             "u128" => n("uint", "128"),
+            // A TUPLE, spelled `(a, b, ...)` by the producer. `IRTy.tuple_`
+            // takes a Nat and the reflected module has no tuple table to index,
+            // so that Nat is the ARITY -- and the element types are ERASED.
+            //
+            // Counted, exactly as `usize` is and for the same reason: two tuple
+            // types of the same arity read to the SAME `(tuple k)`, so the core
+            // text cannot tell `(u32, bool)` from `(u64, ptr)`. The count is what
+            // a tag table can pin and what makes that swap visible; the resolved
+            // core is not asked to carry it.
+            _ if s.starts_with('(') && s.ends_with(')') && s.contains(',') => {
+                let inner = &s[1..s.len() - 1];
+                let mut depth = 0i32;
+                let mut arity = 1usize;
+                for c in inner.chars() {
+                    match c {
+                        '(' | '<' | '[' => depth += 1,
+                        ')' | '>' | ']' => depth -= 1,
+                        ',' if depth == 0 => arity += 1,
+                        _ => {}
+                    }
+                }
+                self.tuple_seen += 1;
+                n("tuple", &arity.to_string())
+            }
             "usize" => match self.usize_bits {
                 // Resolved to the plain fixed-width integer and COUNTED. The
                 // core module does not remember the token was `usize` -- the
@@ -573,16 +722,80 @@ impl Reader {
                      read through it."
                 )))),
             },
+            // `isize` rides the SAME pin as `usize`, and that is a language
+            // guarantee rather than a convenience: Rust defines both as the
+            // width of the platform's pointer, so a target where they differ
+            // does not exist to be wrong about. What is NOT shared is the site
+            // count -- the tag table pins `usize` and `isize` sites
+            // separately, so a chain cannot satisfy one token's pin with the
+            // other's occurrences.
+            //
+            // Resolved to the SIGNED fixed-width integer. The core module does
+            // not remember the token was `isize`, exactly as it does not
+            // remember `usize`; the recorded posture is the site count.
+            "isize" => match self.usize_bits {
+                Some(bits) => {
+                    self.isize_seen += 1;
+                    n("int", &bits.to_string())
+                }
+                None => Err(self.core(CoreError::NoImage(format!(
+                    "type `{s}` without a pinned target width: `isize` is TARGET-DEPENDENT, and \
+                     resolving it silently would bake an unstated word-size assumption into the \
+                     core module. Pin the chain's tag-table `usize` lane (a target fact -- Rust \
+                     defines `isize` and `usize` as the same width) and read through it."
+                )))),
+            },
             "f32" => n("float", "32"),
             "f64" => n("float", "64"),
             _ => {
                 if let Some(k) = s.strip_prefix("enum.") {
                     let id = k.parse::<u32>().map_err(|_| self.syn("bad enum id"))?;
-                    return n("enum", &Self::intern(&mut self.enums, id).to_string());
+                    let k = Self::intern(&mut self.enums, id);
+                    self.enum_used.insert(id);
+                    return n("enum", &k.to_string());
                 }
                 if let Some(k) = s.strip_prefix("struct.") {
                     let id = k.parse::<u32>().map_err(|_| self.syn("bad struct id"))?;
-                    return n("struct", &Self::intern(&mut self.structs, id).to_string());
+                    let k = Self::intern(&mut self.structs, id);
+                    self.struct_used.insert(id);
+                    return n("struct", &k.to_string());
+                }
+                if let Some(kind) = s.strip_prefix("fatptr<").and_then(|x| x.strip_suffix('>')) {
+                    // `&str` images as a fat pointer to bytes,
+                    // `IRTy.fatptr_ (IRTy.uint_ 8)`; crystal E5 (decision memo
+                    // §23) gives the M0 producer's three other kinds their OWN
+                    // constructors: `container_len` -> `(containerlen)`,
+                    // `container_vtable` -> `(containervtable)`, and `dyn.N` ->
+                    // `(fatdyn N)`, keeping the trait id. Reader A spells them
+                    // the same way. `slice ty.N` stays REFUSED here and in reader
+                    // A alike, which is what keeps the image INJECTIVE on the
+                    // accepted fragment: `fatptr` takes one type argument
+                    // (`shape.rs`), so str and slice would collapse if both were
+                    // accepted. The pointer-type operand is inert at evaluation;
+                    // since E5 the METADATA type of `ptr_metadata` is not (the
+                    // machine reads the word at it), which is why it is spelled
+                    // exactly rather than erased.
+                    if kind == "str" {
+                        return Ok(Sx::tag("fatptr", vec![n("uint", "8")?]));
+                    }
+                    if kind == "container_len" {
+                        return t("containerlen");
+                    }
+                    if kind == "container_vtable" {
+                        return t("containervtable");
+                    }
+                    if let Some(id) = kind.strip_prefix("dyn.") {
+                        let trait_id = id
+                            .parse::<u32>()
+                            .map_err(|_| self.syn(format!("bad trait id in `{s}`")))?;
+                        return n("fatdyn", &trait_id.to_string());
+                    }
+                    return Err(self.core(CoreError::NoImage(format!(
+                        "fat pointer kind `{kind}` in type `{s}`: `str`, `container_len`, \
+                         `container_vtable` and `dyn.N` have declared images; a `slice ty.N` fat \
+                         pointer is REFUSED in both readers so that the image stays injective on \
+                         the accepted fragment"
+                    ))));
                 }
                 Err(self.core(CoreError::NoImage(format!("type `{s}`"))))
             }
@@ -597,12 +810,32 @@ impl Reader {
         if let Some(inner) = s.strip_prefix('{').and_then(|x| x.strip_suffix('}')) {
             let mut elems = vec![];
             for e in inner.split(',').map(str::trim).filter(|e| !e.is_empty()) {
+                // Crystal E3b: an UNWRITTEN aggregate lane (trust-ir `Constant::Uninit`, printed
+                // `uninit`) images as `(undef)` -- `IRConst.undef_`, which `ir_const_value`
+                // materialises as the `IRScalar.undef_` lane the machine already gives an
+                // unwritten cell: `ir_insert_field` replaces it, `ir_ef_at` hands it back, and
+                // every evaluator that needs a value rejects it. Read ONLY as a lane: a whole
+                // constant `uninit` falls through to the refusal below, as trust-ir's validator
+                // refuses it.
+                if e == "uninit" {
+                    elems.push(Sx::tag("undef", vec![]));
+                    continue;
+                }
                 elems.push(self.cst(e)?);
             }
             return Ok(Sx::tag("agg", elems));
         }
         if s.chars().all(|c| c.is_ascii_digit()) && !s.is_empty() {
             return Ok(Sx::tag("int", vec![Sx::a(s.to_string())]));
+        }
+        if s == "phantomdata" {
+            // The zero-sized marker, 2026-09-16. Read as its OWN tag, never
+            // rewritten to `unit`: the producer keeps `Constant::PhantomData`
+            // distinct (trust_ir constant.rs:140) and prints it by this name,
+            // so merging the two here would make two different emitted bodies
+            // project to one core module and reader B would stop being able to
+            // tell them apart.
+            return Ok(Sx::tag("phantomdata", vec![]));
         }
         Err(self.core(CoreError::NoImage(format!("constant literal `{s}`"))))
     }
@@ -668,25 +901,49 @@ impl Reader {
     pub(super) fn self_canonical(&self) -> u32 {
         self.self_canonical
     }
-    /// A `global_addr` is REFUSED, and that is the `global-index` blind slot
-    /// being closed rather than tolerated.
+    /// The canonical index of a crate-level `@global.N` id — or a REFUSAL on
+    /// a bare read, which is the `global-index` blind slot kept closed on the
+    /// path that cannot account for it.
     ///
     /// Both readers used to intern the global id for the instruction and then
     /// emit `(globals)` — a hard-coded EMPTY list — so `(globaladdr 0)` named
     /// an entry the module does not declare. That is the 2026-08-20 callee
     /// collision's exact shape, one namespace out, and it was latent only
-    /// because no chained body addresses a global (measured: all eleven).
-    /// `mint` already refuses a non-empty global list and `decode` refuses a
-    /// module with globals in it, so a body with a global could never have been
-    /// minted anyway — it could only have been read into an incoherent core
-    /// module. It is now refused at the read.
-    pub(super) fn r_global(&mut self, id: u32) -> Result<u32, EmittedError> {
-        Err(self.core(CoreError::NoImage(format!(
-            "`global_addr @global.{id}`: this reader emits a module whose `(globals)` list is \
-             empty, so a canonical global index would denote an entry the module does not \
-             declare. Projecting one needs the global list to be projected too — which is a \
-             producer-side and minter-side change, not a reader-side default"
-        ))))
+    /// because no chained body addressed a global (measured: all eleven, then
+    /// all eighteen). From 2026-08-20 to 2026-09-09 the instruction was
+    /// refused outright. It is now read on exactly ONE path: under a chain's
+    /// tag-table `globals` lane, via [`read_body`], where `project` goes on to
+    /// compare every observed global against its pin and the module-table
+    /// preamble that carries its bytes. A BARE read still emits the empty
+    /// list and still refuses — the message names the global and the empty
+    /// list that would make the module incoherent, and now says where to
+    /// read it instead.
+    ///
+    /// Under a namespace this is the `func_index` pattern one namespace over:
+    /// a pinned id resolves to its canonical index, an unpinned one interns
+    /// above the lane on first use, and either way the raw id is recorded so
+    /// [`ObservedTags::globals`] reports what THIS body addressed.
+    pub(super) fn global_index(&mut self, id: u32) -> Result<u32, EmittedError> {
+        let Some(ns) = &self.global_namespace else {
+            return Err(self.core(CoreError::NoImage(format!(
+                "`global_addr @global.{id}`: a bare read emits a module whose `(globals)` list \
+                 is empty, so a canonical global index would denote an entry the module does \
+                 not declare; read it through project under a tag table with a globals lane"
+            ))));
+        };
+        if let Some(n) = self.globals.get(&id) {
+            return Ok(*n);
+        }
+        let n = match ns.get(&id) {
+            Some(pinned) => *pinned,
+            None => {
+                let n = self.next_global;
+                self.next_global = n.saturating_add(1);
+                n
+            }
+        };
+        self.globals.insert(id, n);
+        Ok(n)
     }
 
     /// Record a memory instruction's alignment operand, in reader A's own

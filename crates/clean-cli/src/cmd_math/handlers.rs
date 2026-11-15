@@ -7,9 +7,14 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use clean_kernel::{env::DeclarationTrustSummary, Environment, Expr};
+use clean_server::proof_state as server_proof_state;
+// The embedded proof-state attempt drives the in-process server handlers,
+// which are native-only (tokio); the wire/proof-state types above stay on
+// wasm.
+#[cfg(not(target_arch = "wasm32"))]
 use clean_server::{
     handlers::{handle_apply_tactic, handle_open_obligation, ApplyTacticParams, ServerState},
-    proof_state as server_proof_state, RequestId, Response,
+    RequestId, Response,
 };
 use serde::Serialize;
 use serde_json::Value;
@@ -509,6 +514,7 @@ fn run_obligation_prove_embedded(
         max_states: 128,
         min_schema_version: server_proof_state::PROOF_STATE_SCHEMA_VERSION.to_owned(),
         max_schema_version: server_proof_state::PROOF_STATE_SCHEMA_VERSION.to_owned(),
+        timeout_ms: None,
     };
 
     run_embedded_proof_attempt(root, project, fingerprint, request, tactics)
@@ -1563,7 +1569,15 @@ fn verify_kernel_evidence_payload(
         parse_kernel_evidence_certificate(evidence_value).ok_or("kernel-evidence-incomplete")??;
     let obligation_goal = obligation_goal.ok_or("kernel-evidence-missing-obligation-goal")?;
 
-    if !DeclarationTrustSummary::from_expr(&proof_expr).is_fully_verified() {
+    // The evidence is re-checked in the prelude environment below; its trust
+    // debt is read there too — the term's own markers (any occurrence) AND
+    // every marker its constant closure reaches.
+    let env = Environment::with_prelude();
+    let mut trust = DeclarationTrustSummary::from_expr(&proof_expr);
+    let markers =
+        clean_kernel::env::DomainAxiomClosure::new().trust_markers_of_expr(&env, &proof_expr);
+    trust.absorb_closure_markers(markers.iter());
+    if !trust.is_fully_verified() {
         return Err("kernel-evidence-trust-debt");
     }
 
@@ -1582,7 +1596,6 @@ fn verify_kernel_evidence_payload(
         return Err("kernel-evidence-target-hash-mismatch");
     }
 
-    let env = Environment::with_prelude();
     let mut verifier = CertVerifier::with_mode(&env, env.mode());
     let verified_type = verifier
         .verify(&certificate, &proof_expr)
@@ -2289,6 +2302,7 @@ fn write_proof_attempt_report(json: bool, report: &ProofAttemptReport) -> Result
     })
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn run_embedded_proof_attempt(
     root: PathBuf,
     project: &MathProjectManifest,
@@ -2315,6 +2329,22 @@ fn run_embedded_proof_attempt(
     .map_err(|_| MathError::Failed("embedded proof-state prove thread panicked".to_owned()))?
 }
 
+/// wasm32 variant: the embedded proof-state attempt needs the in-process
+/// server handlers (tokio), which are native-only.
+#[cfg(target_arch = "wasm32")]
+fn run_embedded_proof_attempt(
+    _root: PathBuf,
+    _project: &MathProjectManifest,
+    _fingerprint: String,
+    _request: server_proof_state::OpenObligationRequest,
+    _tactics: Vec<String>,
+) -> Result<ProofAttemptReport, MathError> {
+    Err(MathError::Failed(
+        "the embedded proof-state attempt is native-only and unavailable on wasm".to_owned(),
+    ))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 async fn embedded_proof_attempt_from_open(
     state: &ServerState,
     open: Response,

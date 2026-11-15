@@ -16,7 +16,7 @@
 //! **What is new here, and it is the reason this chain could not have been
 //! minted a day ago:**
 //!
-//! * Its enum is interned at **127** and its widths are **32** and **64**, all
+//! * Its enum is interned at **135** (127 before the 2026-10-07 rebaseline) and its widths are **32** and **64**, all
 //!   outside the registered `ir_d0..ir_d16` atom pool. `mint::nat` REFUSES a
 //!   numeral above the pool and must go on doing so — every slot it guards is a
 //!   position in the module — but a bit width and a constant VALUE are not
@@ -24,7 +24,7 @@
 //!   it: the minted script says `IRTy.uint_ 32` and `IRConst.int_ 1000`, and
 //!   `m4` reads them back out of the ELABORATED TERM through `ExprKind::Lit`.
 //! * `Tags::alias_defs` used to format every interning id as `ir_d{id}`
-//!   unconditionally. At 127 that mints `IRTy.enum_ ir_d127` — a constant the
+//!   unconditionally. At 127 (now 135) that minted `IRTy.enum_ ir_d127` — a constant the
 //!   specification does not declare — and nothing in `ir_mint` would have
 //!   caught it; it would have surfaced as an elaboration failure at
 //!   registration, in a different file, with no mention of the tag table.
@@ -35,8 +35,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -152,7 +151,7 @@ fn m3_mint_reproduces_the_registered_script() {
 fn m3_data_render_as_literals_and_positions_still_refuse() {
     let script = ir_mint::IR_PV_DEFS;
     for expect in [
-        "IRTy.enum_ 127",
+        "IRTy.enum_ 135",
         "IRTy.uint_ 32",
         "IRTy.int_ 64",
         "IRConst.int_ 1000",
@@ -172,19 +171,26 @@ fn m3_data_render_as_literals_and_positions_still_refuse() {
         );
     }
     assert!(
-        !script.contains("ir_d127") && !script.contains("ir_d32") && !script.contains("ir_d64"),
-        "and NOT as `ir_d127` / `ir_d32` / `ir_d64`. The first names a constant the \
+        !script.contains("ir_d135") && !script.contains("ir_d32") && !script.contains("ir_d64"),
+        "and NOT as `ir_d135` / `ir_d32` / `ir_d64`. The first names a constant the \
          specification does not declare at all; the other two are declared, but as `Nat.add` \
          terms that `ir_mint::decode`'s delta+beta reducer cannot peel to `Nat.succ`, so reader \
          C would refuse the very module it is meant to read back.\n{script}"
     );
 
-    // The refusal half. Until 2026-08-22 this used `level_is_zero` as the live
-    // specimen (its SSA ids run to 20, above the then ir_d0..ir_d16 pool); the
-    // pool is ir_d0..ir_d63 now and that body MINTS (`crystal_a2_mint_lz.rs`),
-    // so the specimen is a FORGED position above the widened pool instead —
-    // the same numeral, in a structural slot, must still refuse by name.
-    let forged = ir_mint::IR_PV_CORE.replace("(results 2)", "(results 99)");
+    // The refusal half, and the specimen has had to move TWICE for the same
+    // reason: it must name a position the pool does not cover, and the pool
+    // keeps widening. Until 2026-08-22 it was `level_is_zero` (SSA ids to 20,
+    // above the then ir_d0..ir_d16 pool); that body MINTS under ir_d0..ir_d63
+    // (`crystal_a2_mint_lz.rs`), so it became a forged `(results 99)`; and on
+    // 2026-09-16 the structural pool widened again to ir_d0..ir_d130 for
+    // `tick_heartbeat`, whose SSA ids reach 130 — which silently turned 99
+    // into a numeral the minter ACCEPTS, so this pin stopped refusing and said
+    // nothing for four days. 131 is one above `mint::MAX_STRUCTURAL_ATOM`.
+    //
+    // If it stops refusing again, the pool has widened again: read that
+    // constant and move this specimen, never loosen the assertion.
+    let forged = ir_mint::IR_PV_CORE.replace("(results 2)", "(results 131)");
     assert_ne!(forged, ir_mint::IR_PV_CORE, "the forgery must bite");
     let sx = ir_mint::parse(&forged).expect("the forged core still parses");
     let e = ir_mint::mint(&sx, PREFIX, &tags())
@@ -240,13 +246,13 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("load enum.127, ptr %0"),
-        "the emitted body must still name enum.127; if it does not, the artifact was re-interned \
+        FIXTURE.contains("load enum.135, ptr %0"),
+        "the emitted body must still name enum.135; if it does not, the artifact was re-interned \
          and this table needs a one-line REVIEWED re-pin — which is a different thing from the \
          proved module having stopped matching"
     );
     assert!(
-        ir_mint::IR_PV_TAGS.contains("\"crate_id\": 127"),
+        ir_mint::IR_PV_TAGS.contains("\"crate_id\": 135"),
         "and the committed table must record it"
     );
 }
@@ -265,12 +271,12 @@ fn m7_alias_the_interning_id_is_a_term_the_spec_can_elaborate() {
         .lines;
     assert_eq!(
         a.first().map(String::as_str),
-        Some("def ir_pv_tprio : IRTy := IRTy.enum_ 127"),
-        "the alias must name the crate id as a LITERAL, not as `ir_d127`"
+        Some("def ir_pv_tprio : IRTy := IRTy.enum_ 135"),
+        "the alias must name the crate id as a LITERAL, not as `ir_d135`"
     );
     // Exercise the other arm through the same public behavior, without making
     // the implementation helper part of `ir_mint`'s external API.
-    let small_id = ir_mint::IR_PV_TAGS.replace("\"crate_id\": 127", "\"crate_id\": 13");
+    let small_id = ir_mint::IR_PV_TAGS.replace("\"crate_id\": 135", "\"crate_id\": 13");
     assert_ne!(
         small_id,
         ir_mint::IR_PV_TAGS,

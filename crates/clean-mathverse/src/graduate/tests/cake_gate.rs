@@ -67,10 +67,10 @@ fn test_cake_gate_rejects_tampered_record() {
 
     let report = verify_cake_shard(&shard_path).expect("gate runs on tampered record");
     assert!(
-        report.violations.iter().any(|v| matches!(
-            v,
-            CakeGateViolation::MissingGraduationNote { .. }
-        )),
+        report
+            .violations
+            .iter()
+            .any(|v| matches!(v, CakeGateViolation::MissingGraduationNote { .. })),
         "tampered record must break the binding-digest note; violations: {:?}",
         report.violations
     );

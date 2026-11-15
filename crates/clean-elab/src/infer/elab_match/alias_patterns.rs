@@ -22,7 +22,10 @@ fn build_surface_app(func: SurfaceExpr, args: Vec<SurfaceExpr>) -> SurfaceExpr {
 fn build_nat_succ_chain(mut expr: SurfaceExpr, k: u64) -> SurfaceExpr {
     for _ in 0..k {
         expr = build_surface_app(
-            SurfaceExpr::Ident(clean_parser::Span::dummy(), "Nat.succ".to_string()),
+            SurfaceExpr::Ident(
+                clean_parser::Span::dummy(),
+                SurfaceName::global_path("Nat.succ"),
+            ),
             vec![expr],
         );
     }
@@ -30,27 +33,27 @@ fn build_nat_succ_chain(mut expr: SurfaceExpr, k: u64) -> SurfaceExpr {
 }
 
 pub(in crate::infer) fn wrap_alias_surface_body(
-    alias_name: &str,
+    alias_name: &SurfaceName,
     alias_value: SurfaceExpr,
     body: &SurfaceExpr,
 ) -> SurfaceExpr {
     SurfaceExpr::Let(
         clean_parser::Span::dummy(),
-        SurfaceBinder::new(alias_name.to_string(), None, SurfaceBinderInfo::Explicit),
+        SurfaceBinder::new_typed(alias_name.clone(), None, SurfaceBinderInfo::Explicit),
         Box::new(alias_value),
         Box::new(body.clone()),
     )
 }
 
 pub(in crate::infer) fn prepend_do_alias_binding(
-    alias_name: &str,
+    alias_name: &SurfaceName,
     alias_value: SurfaceExpr,
     body: &[DoElem],
 ) -> Vec<DoElem> {
     let mut rewritten = Vec::with_capacity(body.len() + 1);
     rewritten.push(DoElem::Let(
         clean_parser::Span::dummy(),
-        SurfaceBinder::new(alias_name.to_string(), None, SurfaceBinderInfo::Explicit),
+        SurfaceBinder::new_typed(alias_name.clone(), None, SurfaceBinderInfo::Explicit),
         Box::new(alias_value),
     ));
     rewritten.extend(body.iter().cloned());
@@ -115,16 +118,16 @@ pub(in crate::infer) fn expand_do_or_match_arms(arms: &[DoMatchArm]) -> Vec<DoMa
 }
 
 impl<'a> ElabCtx<'a> {
-    fn is_available_match_alias_name(&self, candidate: &str) -> bool {
+    fn is_available_match_alias_name(&self, candidate: &SurfaceName) -> bool {
         self.lookup_local(candidate).is_none()
             && !self
                 .shared_if_let_scrutinees
                 .iter()
                 .any(|active| active == candidate)
-            && self.env.get_const(&Name::from_string(candidate)).is_none()
+            && self.env.get_const(candidate.name()).is_none()
     }
 
-    pub(in crate::infer) fn fresh_match_alias_name(&mut self) -> String {
+    pub(in crate::infer) fn fresh_match_alias_name(&mut self) -> SurfaceName {
         const BASE: &str = "__match_alias";
 
         // Advance a counter on EVERY call so sibling and nested wildcard fields
@@ -144,7 +147,7 @@ impl<'a> ElabCtx<'a> {
         loop {
             let suffix = self.next_fvar;
             self.next_fvar += 1;
-            let candidate = format!("{BASE}_{suffix}");
+            let candidate = SurfaceName::from_name(Name::anon().str(format!("{BASE}_{suffix}")));
             if self.is_available_match_alias_name(&candidate) {
                 return candidate;
             }
@@ -155,20 +158,20 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         context: &str,
         scrutinee_ty: &Expr,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
     ) -> Result<(SurfacePattern, SurfaceExpr), ElabError> {
         let type_name = self.get_type_name(scrutinee_ty)?;
-        let expected_inductive = Name::from_string(&type_name);
+        let expected_inductive = type_name.name().clone();
         // Resolve through opened namespaces too, falling back to the literal
         // qualification so the UnknownIdent diagnostic names what the user wrote.
         let full_ctor = self.ctor_pattern_full_name(ctor_name, &type_name);
-        let ctor_name = Name::from_string(&full_ctor);
+        let ctor_name = full_ctor.name().clone();
         let ctor_info = self
             .env
             .get_constructor(&ctor_name)
             .cloned()
-            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.clone()))?;
+            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
         if ctor_info.inductive_name != expected_inductive {
             return Err(ElabError::NotImplemented(format!(
                 "{context}: nested constructor {full_ctor} does not belong to field type {type_name}"
@@ -233,7 +236,7 @@ impl<'a> ElabCtx<'a> {
                         inner_pat.clone(),
                         SurfaceExpr::Ident(
                             clean_parser::Span::dummy(),
-                            format!("{type_name}.zero"),
+                            type_name.append(&SurfaceName::generated_path("zero")),
                         ),
                     )),
                     SurfaceLit::Nat(k) => Ok((
@@ -241,13 +244,14 @@ impl<'a> ElabCtx<'a> {
                         build_nat_succ_chain(
                             SurfaceExpr::Ident(
                                 clean_parser::Span::dummy(),
-                                format!("{type_name}.zero"),
+                                type_name.append(&SurfaceName::generated_path("zero")),
                             ),
                             *k,
                         ),
                     )),
                     _ => Err(ElabError::NotImplemented(format!(
-                        "{context}: non-Nat literal alias pattern {lit:?}"
+                        "{context}: non-Nat literal alias pattern {}",
+            crate::error_render::lit(lit)
                     ))),
                 }
             }
@@ -270,8 +274,9 @@ impl<'a> ElabCtx<'a> {
                 self.rewrite_as_ctor_pattern(context, scrutinee_ty, ctor_name, sub_pats)
             }
             _ => Err(ElabError::NotImplemented(format!(
-                "{context}: as-pattern with inner pattern {inner_pat:?} is not supported; \
-                 only variable, wildcard, literal, numeral-add, and constructor inner patterns are currently handled"
+                "{context}: as-pattern with inner pattern {} is not supported; \
+                 only variable, wildcard, literal, numeral-add, and constructor inner patterns are currently handled",
+                crate::error_render::pattern(inner_pat)
             ))),
         }
     }

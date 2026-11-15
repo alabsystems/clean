@@ -1,0 +1,31 @@
+{
+  "revision": "1ffadbf63246159a02b7443f8fab4a0400388001",
+  "scope": "Complete immutable Rust source inputs for a sequential UInt32 leaf model; not native artifact authority",
+  "files": {
+    "crates/clean-runtime/src/object_model.rs": {
+      "sha256": "0cea35dcfc1bc034c55254c3d585bf58e3f627f465dcb319226967775eb4a671",
+      "git_blob": "8a4ccb3605f9b3e89b6dbe3144628b2dd1f8f58e",
+      "bytes": 17903
+    },
+    "crates/clean-runtime/src/runtime/ctor_scalar.rs": {
+      "sha256": "6cab70395f281189a500c1bc93c98ba72d45ebec1bbc5397fd59c2ce622a7562",
+      "git_blob": "657b26adc7d844e5c66230d847707bc0fa909284",
+      "bytes": 18074
+    },
+    "crates/clean-runtime/src/rc_core.rs": {
+      "sha256": "e7e239ce957e898a06257e00d82c27cf67d162e0573e167d26b510c20082aec2",
+      "git_blob": "5220658e2c1d20f6fbd9372b713c597c5670c5bc",
+      "bytes": 15295
+    },
+    "crates/clean-runtime/src/runtime/refcount.rs": {
+      "sha256": "614a811b14ae8084e44f0833006a8e4d0bdb04706532f3aa27c061f59562882b",
+      "git_blob": "284f08abef0f055cfda0edd21b1e1ffc4345d5d9",
+      "bytes": 1413
+    },
+    "crates/clean-runtime/src/runtime/public_api.rs": {
+      "sha256": "1c7a25fea627e48d599dc20f5d2c808436ba4ce38730155fa1cbeb1dbb054987",
+      "git_blob": "e1767691bcbc8254b0ca737911b6e046efaf8bba",
+      "bytes": 22969
+    }
+  }
+}

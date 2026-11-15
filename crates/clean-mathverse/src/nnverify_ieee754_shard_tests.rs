@@ -202,7 +202,9 @@ fn shard_registers_and_kernel_rechecks_with_empty_closure() {
     for &thm in &[
         "NNVerify.FloatRational.rounding_error_le_half_ulp",
         "NNVerify.FloatRational.rounding_error_le_half_ulp_denormal",
-        "NNVerify.FloatRational.float_to_rat_exact_discharge_01",
+        // `float_to_rat_exact_discharge_01` is no longer registered by the
+        // kernel (2026-09-26, native-fold authority): it rested on a reducer
+        // computing the opaque placeholder `Float.toRatExact`.
     ] {
         assert!(
             verify.empty_closure_verified.iter().any(|n| n == thm),

@@ -1119,3 +1119,63 @@ fn collect_raw_consts(e: &RawExpr) -> HashSet<String> {
     }
     out
 }
+
+// ===========================================================================
+// The large-elimination gate across the bridge: a `Sort u` family.
+// ===========================================================================
+
+/// `name.{u} : Sort level | a | b` in `clean-kernel`.
+fn clean_enum_at(env: &mut Environment, name: &str, level: KLevel) {
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
+    let u = KName::from_string("u");
+    let ind = KName::from_string(name);
+    let self_ref = Expr::const_(ind.clone(), vec![KLevel::param(u.clone())]);
+    env.add_inductive(InductiveDecl {
+        level_params: vec![u],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: ind.clone(),
+            type_: Expr::sort(level),
+            constructors: ["a", "b"]
+                .into_iter()
+                .map(|c| Constructor {
+                    name: KName::from_string(&format!("{name}.{c}")),
+                    type_: self_ref.clone(),
+                })
+                .collect(),
+        }],
+    })
+    .unwrap_or_else(|e| panic!("clean-kernel admits {name}: {e}"));
+}
+
+/// The same family through both kernels must get the same eliminator.
+/// `clean-kernel` follows Lean (`Level::is_nonzero`): `SUB : Sort u | a | b`
+/// eliminates only into `Prop`, `TUB : Sort (u+1) | a | b` large-eliminates.
+/// `clean-ck0` used to exempt any level that was not provably zero, so it
+/// re-derived a LARGE `SUB.rec` from the very declaration `clean-kernel`
+/// had admitted with a `Prop`-only one (measured before the 2026-10-17 fix).
+#[test]
+fn ck0_and_clean_kernel_agree_on_sort_u_large_elimination() {
+    let u = || KLevel::param(KName::from_string("u"));
+    let mut clean_env = Environment::new();
+    clean_enum_at(&mut clean_env, "SUB", u());
+    clean_enum_at(&mut clean_env, "TUB", KLevel::succ(u()));
+    for (name, expected) in [("SUB", false), ("TUB", true)] {
+        let kname = KName::from_string(name);
+        let clean_large = clean_env
+            .get_inductive(&kname)
+            .expect("admitted")
+            .is_large_elim;
+        assert_eq!(
+            clean_large, expected,
+            "clean-kernel on {name} (pinned Lean)"
+        );
+        let mut ck_env = MinimalEnv::new();
+        let ck_name = admit_inductive(&clean_env, &mut ck_env, &kname);
+        assert_eq!(
+            ck_env.inductive_large_elim(&ck_name),
+            Some(clean_large),
+            "ck0 must re-derive {name}'s eliminator as clean-kernel and Lean do"
+        );
+    }
+}

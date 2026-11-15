@@ -12,10 +12,10 @@
 
 use crate::expr::{BinderData, BinderInfo, Expr, ExprKind};
 use crate::inductive::{
-    consume_type_annotations, count_pi_args, get_return_type, InductiveDecl, InductiveError,
-    InductiveType, RecursorArgOrder, RecursorRule, RecursorVal,
+    consume_type_annotations, count_pi_args, get_return_type, head_beta_spine, InductiveDecl,
+    InductiveError, InductiveType, RecursorArgOrder, RecursorRule, RecursorVal,
 };
-use crate::level::Level;
+use crate::level::{Level, ZeroReading};
 use crate::name::Name;
 use crate::tc::is_prop_type;
 use std::sync::Arc;
@@ -67,9 +67,11 @@ impl Environment {
         &self,
         ind_name: &Name,
         decl: &InductiveDecl,
+        result_level: &Level,
         ctor_infos: &[CtorInfo],
         all_ctor_infos: &[CtorInfo],
         minor_idx_offset: usize,
+        zero: ZeroReading,
     ) -> Result<RecursorVal, EnvError> {
         let ind_type = decl
             .types
@@ -77,13 +79,14 @@ impl Environment {
             .find(|t| &t.name == ind_name)
             .ok_or_else(|| EnvError::UnknownInductive(ind_name.clone()))?;
 
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
 
         // Lean 4: for Prop-valued inductives that can only eliminate into Prop,
         // the recursor does NOT get an extra motive universe parameter.
         let prop_only = elim_only_at_universe_zero(
             self,
-            &ind_type.type_,
+            zero,
+            result_level,
             &ind_type.constructors,
             decl.num_params,
             decl.types.len(),
@@ -130,6 +133,7 @@ impl Environment {
                 |(idx, (ctor_name, num_fields, recursive_flags, field_types, _indices))| {
                     let rhs = self.build_recursor_rule_rhs(
                         &rec_name,
+                        ctor_name,
                         &rec_level_params,
                         decl.num_params,
                         num_motives,
@@ -153,7 +157,13 @@ impl Environment {
 
         // Determine if this type supports K-axiom (UIP) reduction.
         // K-like types have a unique constructor that can be inferred from indices.
-        let is_k = self.is_k_like(ind_type, decl.num_params, decl.types.len());
+        let is_k = self.is_k_like(
+            zero,
+            ind_type,
+            result_level,
+            decl.num_params,
+            decl.types.len(),
+        );
 
         Ok(RecursorVal {
             name: rec_name,
@@ -200,7 +210,7 @@ impl Environment {
         decl: &InductiveDecl,
     ) -> Result<RecursorVal, EnvError> {
         let ind_name = &ind_type.name;
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
 
         // Parameter domain `A : a_dom`, read verbatim from the type former
         // `Π (A : a_dom). Sort _` (shape-guaranteed by the caller).
@@ -380,7 +390,7 @@ impl Environment {
         decl: &InductiveDecl,
     ) -> Result<RecursorVal, EnvError> {
         let ind_name = &ind_type.name;
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
 
         // Constructor names, read positionally from the shape-guaranteed decl:
         // [0] = north, [1] = south, [2] = merid.
@@ -590,9 +600,11 @@ impl Environment {
         &self,
         ind_name: &Name,
         decl: &InductiveDecl,
+        result_level: &Level,
         ctor_infos: &[CtorInfo],
         all_ctor_infos: &[CtorInfo],
         minor_idx_offset: usize,
+        zero: ZeroReading,
     ) -> Result<RecursorVal, EnvError> {
         let ind_type = decl
             .types
@@ -600,12 +612,13 @@ impl Environment {
             .find(|t| &t.name == ind_name)
             .ok_or_else(|| EnvError::UnknownInductive(ind_name.clone()))?;
 
-        let cases_name = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_name = ind_name.clone().str("casesOn");
 
         // Lean 4: Prop-only elimination → no extra motive universe param.
         let prop_only = elim_only_at_universe_zero(
             self,
-            &ind_type.type_,
+            zero,
+            result_level,
             &ind_type.constructors,
             decl.num_params,
             decl.types.len(),
@@ -692,7 +705,7 @@ impl Environment {
                 },
             )
             .collect();
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
         let rules: Vec<RecursorRule> = cases_this_type_infos
             .iter()
             .enumerate()
@@ -700,6 +713,7 @@ impl Environment {
                 |(idx, (ctor_name, num_fields, recursive_flags, field_types, _indices))| {
                     let rhs = self.build_recursor_rule_rhs(
                         &rec_name,
+                        ctor_name,
                         &cases_level_params,
                         decl.num_params,
                         num_motives,
@@ -722,7 +736,13 @@ impl Environment {
             .collect();
 
         // K-axiom applies to casesOn as well
-        let is_k = self.is_k_like(ind_type, decl.num_params, decl.types.len());
+        let is_k = self.is_k_like(
+            zero,
+            ind_type,
+            result_level,
+            decl.num_params,
+            decl.types.len(),
+        );
 
         Ok(RecursorVal {
             name: cases_name,
@@ -746,9 +766,12 @@ impl Environment {
         &self,
         ind_name: &Name,
         decl: &InductiveDecl,
+        result_level: &Level,
         ctor_infos: &[CtorInfo],
         all_ctor_infos: &[CtorInfo],
         minor_idx_offset: usize,
+        std_rec_ty: &Expr,
+        zero: ZeroReading,
     ) -> Result<RecursorVal, EnvError> {
         let ind_type = decl
             .types
@@ -756,12 +779,13 @@ impl Environment {
             .find(|t| &t.name == ind_name)
             .ok_or_else(|| EnvError::UnknownInductive(ind_name.clone()))?;
 
-        let rec_on_name = Name::from_string(&format!("{ind_name}.recOn"));
+        let rec_on_name = ind_name.clone().str("recOn");
 
         // Lean 4: Prop-only elimination → no extra motive universe param.
         let prop_only = elim_only_at_universe_zero(
             self,
-            &ind_type.type_,
+            zero,
+            result_level,
             &ind_type.constructors,
             decl.num_params,
             decl.types.len(),
@@ -797,13 +821,10 @@ impl Environment {
         // Build recOn rules. The RHS lambda has the same structure as the standard rec
         // RHS — λ params motives minors fields. minor fields... IH... — because
         // try_iota_reduction normalizes argument gathering before application.
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
-        let std_rec_ty = self
-            .recursors
-            .get(&rec_name)
-            .expect("rec must be registered before recOn")
-            .type_
-            .clone();
+        // `std_rec_ty` is the family's `.rec` type, passed in rather than read
+        // back from the registry: the imported-family check regenerates recOn
+        // before any `.rec` is registered (env/imported_family.rs).
+        let rec_name = ind_name.clone().str("rec");
         // Build recOn rules for THIS type's constructors only.
         let rules: Vec<RecursorRule> = ctor_infos
             .iter()
@@ -812,6 +833,7 @@ impl Environment {
                 |(idx, (ctor_name, num_fields, recursive_flags, field_types, _indices))| {
                     let rhs = self.build_recursor_rule_rhs(
                         &rec_name,
+                        ctor_name,
                         &rec_on_level_params,
                         decl.num_params,
                         num_motives,
@@ -820,7 +842,7 @@ impl Environment {
                         field_types,
                         total_minors,
                         minor_idx_offset + idx,
-                        &std_rec_ty,
+                        std_rec_ty,
                         &decl.types,
                     );
                     RecursorRule {
@@ -834,7 +856,13 @@ impl Environment {
             .collect();
 
         // K-axiom applies to recOn as well
-        let is_k = self.is_k_like(ind_type, decl.num_params, decl.types.len());
+        let is_k = self.is_k_like(
+            zero,
+            ind_type,
+            result_level,
+            decl.num_params,
+            decl.types.len(),
+        );
 
         Ok(RecursorVal {
             name: rec_on_name,
@@ -896,11 +924,17 @@ impl Environment {
     /// of its return type is one of the block inductives. Strict-argument-only
     /// occurrences (`Prod String V`, `List (Prod String V)` before its outer
     /// container is eliminated) return `false` — see `get_recursive_field_flags`.
+    ///
+    /// Lean's `is_rec_argument` whnfs the field and each body of its Pi spine
+    /// before it looks (`inductive.cpp:383-390`); [`head_beta_spine`] is that
+    /// walk with β only, so a nested auxiliary field left as the redex
+    /// `(fun _ => Nat → T) fst` is recursive, as in Lean.
     fn field_is_eliminably_recursive(
         field_ty: &Expr,
         ind_name_set: &std::collections::HashSet<&Name>,
     ) -> bool {
-        let ret_ty = get_return_type(field_ty);
+        let spine = head_beta_spine(field_ty);
+        let ret_ty = get_return_type(&spine);
         let head = ret_ty.get_app_fn();
         matches!(&head.kind, ExprKind::Const(name, _) if ind_name_set.contains(name))
     }
@@ -1033,7 +1067,14 @@ impl Environment {
     /// - `Or` is NOT K-like: has two constructors
     /// - Phantom args NOT K-like: `mk : Nat → Bad4 0` — phantom doesn't fill index
     /// - Mutual inductives NOT K-like: even if one type qualifies individually
-    fn is_k_like(&self, ind_type: &InductiveType, num_params: u32, num_types: usize) -> bool {
+    fn is_k_like(
+        &self,
+        zero: ZeroReading,
+        ind_type: &InductiveType,
+        result_level: &Level,
+        num_params: u32,
+        num_types: usize,
+    ) -> bool {
         // K requires a non-mutual declaration (Lean 4 inductive.cpp:555)
         if num_types != 1 {
             return false;
@@ -1044,13 +1085,11 @@ impl Environment {
             return false;
         }
 
-        // K requires the type to be in Prop (Sort 0).
-        let result_type = get_return_type(&ind_type.type_);
-        let is_prop = match &result_type.kind {
-            ExprKind::Sort(level) => level.is_zero(),
-            _ => false,
-        };
-        if !is_prop {
+        // K requires the type to be an inductive predicate: Lean's
+        // `is_zero(m_result_level)` (inductive.cpp:557), on the result level
+        // found up to whnf, never the syntactic codomain; structural under the
+        // Lean theories (DECISIONS R150).
+        if !zero.is_zero(result_level) {
             return false;
         }
 

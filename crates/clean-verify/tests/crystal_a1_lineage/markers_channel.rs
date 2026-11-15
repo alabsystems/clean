@@ -118,6 +118,13 @@ fn the_marker_channel_reports_false_on_a_real_difference() {
 /// The scope of the vacuity is itself a measurement, and is pinned so it cannot drift
 /// unremarked: if a future build makes every candidate zero-marker, the witnesses above would
 /// still pass while the channel had gone dark on the whole population.
+///
+/// AUDIT r14 M14-7: this is the DRIFT DETECTOR and nothing else. It used to carry the
+/// coherence properties too, and they were decorative there: with the exact triple pinned on
+/// the line above them, no mutation could fail the exhaustion assertion or the `nonzero > 0`
+/// assertion without failing the pin first. An assertion that cannot be the first to fail is
+/// not being tested. The properties moved to their own test, where they are checked against
+/// values this pin does NOT fix.
 #[test]
 fn the_scope_of_the_vacuity_is_pinned() {
     let j = evidence();
@@ -131,23 +138,58 @@ fn the_scope_of_the_vacuity_is_pinned() {
     let nonzero = p["of_those_comparing_MORE_THAN_ZERO"]
         .as_u64()
         .expect("nonzero");
+    assert_eq!((exact_true, zero, nonzero), (1082, 1055, 27));
+    assert_eq!(
+        j["crate"].as_str(),
+        Some("clean-kernel (THE SHIPPED KERNEL, not a probe)")
+    );
+}
+
+/// The population must COHERE, independently of what the snapshot above pins.
+///
+/// AUDIT r14 M14-7. Two compositions, and the second is the one that makes this test able to
+/// fail on its own: `markers_exact_true + markers_exact_false == derived_mir_agreed` spans the
+/// WHOLE agreed population, and `derived_mir_agreed` and `markers_exact_false` are outside the
+/// pinned triple. So a fixture that mis-states either is caught HERE and nowhere else, which is
+/// what "independent" has to mean for an assertion to be worth its ink. The fixture already
+/// carried all three numbers (1082 + 459 = 1541) and nothing had ever added them up.
+#[test]
+fn the_marker_channel_population_coheres() {
+    let j = evidence();
+    let p = &j["population"];
+    let exact_true = p["markers_exact_true"]
+        .as_u64()
+        .expect("markers_exact_true");
+    let exact_false = p["markers_exact_false"]
+        .as_u64()
+        .expect("markers_exact_false");
+    let agreed = p["derived_mir_agreed"]
+        .as_u64()
+        .expect("derived_mir_agreed");
+    let zero = p["of_those_comparing_ZERO_marker_lines"]
+        .as_u64()
+        .expect("zero");
+    let nonzero = p["of_those_comparing_MORE_THAN_ZERO"]
+        .as_u64()
+        .expect("nonzero");
     assert_eq!(
         zero + nonzero,
         exact_true,
-        "the two classes must exhaust markers_exact=true"
+        "the two vacuity classes must exhaust markers_exact=true"
     );
-    assert_eq!((exact_true, zero, nonzero), (1082, 1055, 27));
+    assert_eq!(
+        exact_true + exact_false,
+        agreed,
+        "every body with an `agreed` derived-MIR verdict carries the flag either true or \
+         false; if these do not add up, the population is not the one it says it is"
+    );
     assert!(
         nonzero > 0,
         "if NO body compares a marker line, `markers_exact` has gone dark across the whole \
          population and every `true` in every chain fixture is vacuous"
     );
     assert!(
-        p["markers_exact_false"].as_u64().is_some_and(|n| n > 0),
+        exact_false > 0,
         "if the flag is never false, it is not a gate"
-    );
-    assert_eq!(
-        j["crate"].as_str(),
-        Some("clean-kernel (THE SHIPPED KERNEL, not a probe)")
     );
 }

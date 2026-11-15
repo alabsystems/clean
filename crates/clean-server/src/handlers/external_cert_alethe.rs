@@ -9,9 +9,10 @@
 use super::external_cert::VerifyExternalCertParams;
 use super::state::ServerState;
 use super::types::ns_from_us;
+use super::work::WorkError;
 use crate::rpc::{RequestId, Response, RpcError};
 use clean_elab::cert::external::{
-    verify_alethe_certificate, ExternalCertError, ExternalCertificate,
+    verify_alethe_certificate_until, ExternalCertError, ExternalCertErrorCode, ExternalCertificate,
 };
 use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
@@ -36,6 +37,30 @@ async fn apply_test_delay() {
 #[cfg(not(test))]
 async fn apply_test_delay() {}
 
+/// Runs `verify` on the server's work pool (`work.rs`), so the runtime worker that awaits it stays
+/// free and the request's `tokio::time::timeout` can fire while it runs: a timeout around a
+/// synchronous call made on the worker could not, and held the worker until the call returned. A
+/// verifier handed the request's deadline (the Alethe checker) stops there by itself; the others
+/// are linear in their input. Work past the deadline is never reported (the `timeout` error code),
+/// and abandoned work holds a pool slot until it ends, so it cannot pile up. A panic is re-raised
+/// on the awaiting task.
+pub(super) async fn verify_blocking<T: Send + 'static>(
+    state: &ServerState,
+    deadline: Option<Instant>,
+    verify: impl FnOnce() -> Result<T, ExternalCertError> + Send + 'static,
+) -> Result<T, ExternalCertError> {
+    match state.work.run(deadline, verify).await {
+        Ok(result) => result,
+        Err(WorkError::Interrupted) => Err(ExternalCertError {
+            code: ExternalCertErrorCode::Timeout,
+            detail: "the check ran past its deadline".to_string(),
+        }),
+        Err(WorkError::Unavailable(detail)) => Err(ExternalCertError::proof_verification_failed(
+            format!("the verification task did not finish: {detail}"),
+        )),
+    }
+}
+
 /// Result of verifying an Alethe certificate.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VerifyAletheCertResult {
@@ -58,7 +83,7 @@ pub struct VerifyAletheCertResult {
 ///
 /// Verifies that the provided Alethe proof is accepted by Carcara as a fully
 /// checked proof of the given SMT-LIB2 problem's unsatisfiability.
-#[instrument(skip(state))]
+#[instrument(skip(state, params))]
 pub async fn handle_verify_alethe_certificate(
     state: &ServerState,
     id: RequestId,
@@ -66,11 +91,18 @@ pub async fn handle_verify_alethe_certificate(
 ) -> Response {
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
+    // The checker stops at the response's deadline (none past the clock's range).
+    let deadline = start.checked_add(timeout);
 
     let result = tokio::time::timeout(timeout, async {
         apply_test_delay().await;
         match params.certificate {
-            ExternalCertificate::Alethe(cert) => verify_alethe_certificate(&cert),
+            ExternalCertificate::Alethe(cert) => {
+                verify_blocking(state, deadline, move || {
+                    verify_alethe_certificate_until(&cert, deadline)
+                })
+                .await
+            }
             _ => Err(ExternalCertError::invalid_schema(
                 "expected alethe_certificate".to_string(),
             )),
@@ -96,7 +128,7 @@ pub async fn handle_verify_alethe_certificate(
                 Response::error(RequestId::Null, RpcError::internal_error(e.to_string()))
             })
         }
-        Ok(Err(err)) => {
+        Ok(Err(err)) if err.code != ExternalCertErrorCode::Timeout => {
             state
                 .metrics
                 .record_request("verify_alethe_certificate", false, elapsed_us);
@@ -111,7 +143,8 @@ pub async fn handle_verify_alethe_certificate(
                 Response::error(RequestId::Null, RpcError::internal_error(e.to_string()))
             })
         }
-        Err(_) => {
+        // The response's timeout fired, or the checker stopped at its deadline.
+        Ok(Err(_)) | Err(_) => {
             state
                 .metrics
                 .record_request("verify_alethe_certificate", false, elapsed_us);

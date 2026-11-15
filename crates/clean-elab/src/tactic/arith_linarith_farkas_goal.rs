@@ -15,28 +15,45 @@
 //! the hyp-only combiners introduce the negated goal, so the synthesized term is
 //! never the target and `close_goal` rejects it (the reproduced t1/t2/t5 errors).
 //!
-//! ## Construction (by-contradiction Farkas sum, Nat)
+//! ## The shared Farkas core
 //!
-//! 1. `Classical.byContradiction {G} (fun (hg : ¬G) => <False>)` wraps the goal,
-//!    putting `hg : ¬G` (i.e. `G → False`) in scope.
-//! 2. `¬G` is turned into a *positive* `Nat.le` via `Nat.not_le` + `Iff.mp`:
-//!    `¬(GL ≤ GR)` ⟹ `GR < GL` ≡ `Nat.le (Nat.succ GR) GL`. (`Nat.lt b a` is the
-//!    reducible def `Nat.le (Nat.succ b) a`.) This is the missing `from_negated_goal`
-//!    accumulator.
-//! 3. The hypotheses (each at its certificate multiplier) and the negated-goal
-//!    accumulator are folded with the EXISTING [`SortLeAcc::combine`] (which emits
+//! 1. The goal is normalized to `Nat.le GL GR`, and the case in which it FAILS
+//!    is a positive `Nat.le (GR+1) GL` fact — a [`NegGoalFact`].
+//! 2. The hypotheses (each at its multiplier) and that fact (at its own
+//!    multiplier) are folded with [`SortLeAcc::combine`] (which emits
 //!    `Nat.add_le_add`), producing one `acc : Nat.le L R` whose summed endpoints
 //!    are, by Farkas, a contradiction (`R + k ≤ R`, `k ≥ 1`).
-//! 4. `L` is proved equal to `Nat.add R k` (`k` the positive Farkas gap) by the
+//! 3. `L` is proved equal to `Nat.add R k` (`k` the positive Farkas gap) by the
 //!    EXISTING linear-equality synthesizer
 //!    [`super::arith_linarith_nat_eq::try_prove_nat_equality_direct`] — sound iff
 //!    the two canonical linear forms match, which they do precisely when the
-//!    certificate is a genuine UNSAT witness. `acc` is transported along that
+//!    multipliers are a genuine UNSAT witness. `acc` is transported along that
 //!    equality (`Eq.ndrec`) to `acc' : Nat.le (R + k) R`, then handed to the
 //!    EXISTING symbolic contradiction closer
 //!    [`super::arith_linarith_close::try_close_contradictory_le_generic`], which
 //!    derives `False` (shared core `R`, offsets `k > 0`).
-//! 5. The `False` proof is sealed under the `byContradiction` lambda.
+//!
+//! ## Two wrappers over that core — and why the order matters
+//!
+//! The core is choice-free. Only the wrapper that brings the failing case into
+//! scope had a choice of routes:
+//!
+//! * [`try_build_constructive_goal_split_proof`] (tried FIRST) splits on
+//!   `Nat.le_or_lt GL GR : Or (Nat.le GL GR) (Nat.le (succ GR) GL)` with
+//!   `Or.rec`. That lemma is proved by double induction over `Nat.rec`
+//!   (`env/algebra_nat_mul_cancel_proof.rs`), so the whole term is
+//!   CONSTRUCTIVE, and the `inr` binder already HAS the type the core wants.
+//! * [`try_build_farkas_goal_proof`] (the fallback) seals under
+//!   `Classical.byContradiction` and manufactures the same fact from `¬G` with
+//!   `Nat.not_le` + `Iff.mp`. In this kernel `Classical.byContradiction` is a
+//!   Diaconescu-derived theorem, so its closure reaches `Classical.choice`.
+//!   `Environment::axiom_deps` filters the foundational axioms out, so a row
+//!   reconstructed this way still reports an EMPTY axiom closure there — the
+//!   cost is visible only through `Environment::foundational_axiom_deps`.
+//!
+//! [`try_build_constructive_goal_proof_from_context`] runs the constructive
+//! wrapper with no mathverse certificate at all, for the goals whose atoms the
+//! `FVarId`-keyed mathverse parser cannot name.
 //!
 //! ## Soundness
 //!
@@ -45,22 +62,25 @@
 //! `is_def_eq`) and ultimately by `add_decl`. A miscomputed gap yields either a
 //! non-contradictory sum (the symbolic closer returns `None` → fail closed) or a
 //! term whose type does not match the goal (`close_goal` rejects → fail closed).
-//! A FALSE goal has no UNSAT certificate, so this builder is never invoked for
-//! it; even if it were, the linear-form equality gate would reject. Every
-//! constant used (`Classical.byContradiction`, `Nat.not_le`, `Iff.mp`,
-//! `Nat.add_le_add`, `Nat.le_trans`, `Nat.le.refl`, `Nat.le.step`,
-//! `Nat.lt_irrefl`, `Eq.ndrec`, `False.elim`, and the `Nat.add_comm` /
-//! `Nat.add_assoc` / `congrArg` the equality synthesizer emits) is a constructive
-//! prelude theorem or recursor — zero domain-specific axioms.
+//! A FALSE goal has no positive-constant Farkas gap under any enumerated
+//! multiplier assignment, so no term is built for it at all. Every constant used
+//! (`Nat.le_or_lt`, `Or.rec`, `Nat.add_le_add`, `Nat.le_trans`, `Nat.le.refl`,
+//! `Nat.le.step`, `Nat.lt_irrefl`, `Nat.zero_le`, `Eq.ndrec`, `False.elim`, and
+//! the `Nat.add_comm` / `Nat.add_assoc` / `congrArg` the equality synthesizer
+//! emits) is a constructive prelude theorem or recursor — zero domain-specific
+//! axioms and, on the constructive route, zero classical ones.
 
-use clean_kernel::expr::{BinderInfo, ExprKind};
-use clean_kernel::level::Level;
+use clean_kernel::expr::BinderInfo;
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, FVarId};
 
 use super::arith_linarith_chain::{detect_sort, extract_le_args_full};
 use super::arith_linarith_close::try_close_contradictory_le_generic;
-use super::arith_linarith_proof::find_hyp_type;
+use super::arith_linarith_farkas_nat::{
+    goal_multiplier_bound, inject_nonneg_to_cancel, mk_nat_eq, nat_add, nat_farkas_gap,
+    nat_hyp_acc_candidates, neg_goal_lhs_endpoint, negated_goal_fact_classical,
+    normalize_nat_goal_to_le, scale_nat_acc, transport_le_lhs,
+};
 use super::arith_linarith_scale::SortLeAcc;
 use super::omega_tactic::MathverseCertificate;
 use super::{Goal, ProofState};
@@ -105,17 +125,6 @@ pub(crate) fn try_build_farkas_goal_proof(
         return None;
     };
 
-    // Active hypotheses with positive multipliers, each a Nat `≤`/`<`/`=`.
-    //
-    // Primary set: those the certificate flagged with a positive coefficient.
-    // Once the implicit `0 ≤ v` non-negativity constraints participate in the
-    // certified refutation, the 0/1 coefficient attribution can drop a genuinely
-    // contributing hypothesis (the UNSAT witness is credited to the synthetic
-    // nonneg + negated-goal rows instead). So when the flagged set is empty —
-    // *or* it fails to reconstruct — fall back to ALL parseable hypotheses, each
-    // at multiplier 1. This never threatens soundness: an irrelevant hypothesis
-    // leaves an uncancellable residual (the gap is then not a positive constant)
-    // and the kernel re-check rejects any wrong term.
     let flagged: Vec<(usize, i128)> = certificate
         .coefficients
         .iter()
@@ -123,45 +132,17 @@ pub(crate) fn try_build_farkas_goal_proof(
         .filter(|&(i, &c)| c > 0 && i < hypothesis_fvars.len())
         .map(|(i, &c)| (i, c))
         .collect();
-    let all_at_one: Vec<(usize, i128)> = (0..hypothesis_fvars.len()).map(|i| (i, 1)).collect();
+    let assignments =
+        candidate_assignments(&flagged, hypothesis_fvars, goal, &goal_le_lhs, &goal_le_rhs);
 
-    // The 0/1 certificate collapses the true Farkas multiplier to 1, so a
-    // *scaled*-monotonicity goal like `2*a ≤ 2*b` from `a ≤ b` (multiplier 2) is
-    // not reconstructible from the flagged/all-at-one sets alone. Derive an upper
-    // multiplier bound from the goal's linear coefficients and enumerate uniform
-    // multiplier assignments `1..=bound` (each hypothesis at the same `m`). This
-    // covers the `c·x ≤ c·y` family (single dominant multiplier) without an
-    // unbounded search. Soundness is unaffected: a wrong multiplier leaves an
-    // uncancellable residual (no positive-constant gap) and the kernel re-check
-    // rejects any wrong term. The bound is capped to keep the search cheap.
-    let mult_bound = goal_multiplier_bound(&goal_le_lhs, &goal_le_rhs);
-    let scaled_sets: Vec<Vec<(usize, i128)>> = (2..=mult_bound)
-        .map(|m| (0..hypothesis_fvars.len()).map(|i| (i, m)).collect())
-        .collect();
-
-    // Fresh by-contradiction hypothesis `hg : ¬G`.
+    // Fresh by-contradiction hypothesis `hg : ¬G`, converted to the positive
+    // `Nat.le (GR+1) GL` fact the Farkas fold consumes.
     let hg_fvar = state.fresh_fvar();
+    let neg_fact = negated_goal_fact_classical(&goal_le_lhs, &goal_le_rhs, hg_fvar)?;
 
-    // Build the False proof inside the by-contra context, trying the flagged set
-    // first (preserves certificate-supplied multipliers > 1), then all-at-one,
-    // then the derived uniform-multiplier assignments (scaled monotonicity).
-    let candidate_active: Vec<&[(usize, i128)]> = std::iter::once(flagged.as_slice())
-        .chain(std::iter::once(all_at_one.as_slice()))
-        .chain(scaled_sets.iter().map(Vec::as_slice))
-        .collect();
-    let false_proof = candidate_active
-        .into_iter()
-        .filter(|active| !active.is_empty())
-        .find_map(|active| {
-            build_false_from_farkas(
-                goal,
-                &goal_le_lhs,
-                &goal_le_rhs,
-                active,
-                hypothesis_fvars,
-                hg_fvar,
-            )
-        })?;
+    let false_proof = assignments
+        .iter()
+        .find_map(|a| build_false_from_farkas(goal, a, hypothesis_fvars, &neg_fact))?;
 
     // Seal under `Classical.byContradiction {G} (fun (hg : ¬G) => false_proof)`.
     let false_ty = Expr::const_(Name::from_string("False"), vec![]);
@@ -175,25 +156,299 @@ pub(crate) fn try_build_farkas_goal_proof(
     Some(Expr::app(Expr::app(by_contra, goal.target.clone()), lambda))
 }
 
-/// Build the `False` proof given the by-contra hypothesis `hg : ¬G`.
+/// CONSTRUCTIVE Farkas-with-goal reconstruction — the choice-free sibling of
+/// [`try_build_farkas_goal_proof`], and the one omega tries first.
 ///
-/// Folds the active hypotheses (each at its certificate multiplier), the negated
-/// goal, and — crucially — the implicit Nat non-negativity facts `0 ≤ v` needed
-/// to close the residual. Equality hypotheses are tried in both orientations.
-fn build_false_from_farkas(
+/// ## Why a second wrapper at all
+///
+/// The Farkas *core* (fold the hypotheses and the refuted goal with
+/// `Nat.add_le_add`, cancel the atoms with `Nat.zero_le`, transport along a
+/// linear-form equality, close the constant gap with
+/// `Nat.le_trans`/`Nat.lt_irrefl`) is already axiom-free. Only the WRAPPER that
+/// puts `¬G` in scope was classical: `Classical.byContradiction` is, in this
+/// kernel, a Diaconescu-derived theorem (`env/classical_em_proof.rs`), so every
+/// row it reconstructs reaches `Classical.choice`, `propext` and `funext`.
+/// `Environment::axiom_deps` FILTERS the foundational axioms out, so that
+/// dependency does not show up there at all — it is visible only through
+/// `Environment::foundational_axiom_deps`. A lane that reports
+/// `axiom_closure: Empty` from `axiom_deps` would therefore have gone classical
+/// silently.
+///
+/// ## The constructive wrapper
+///
+/// Over `Nat` the disjunction is DECIDABLE and already proved by double
+/// induction over `Nat.rec`:
+///
+/// ```text
+/// Nat.le_or_lt GL GR : Or (Nat.le GL GR) (Nat.le (Nat.succ GR) GL)
+/// ```
+///
+/// (`env/algebra_nat_mul_cancel_proof.rs::register_nat_le_or_lt`). `Or.rec` on
+/// it gives the same two cases a `byContradiction` would, with none of the
+/// choice:
+///
+/// - `inl (hle : Nat.le GL GR)` — that IS the normalized goal; return it.
+/// - `inr (hgt : Nat.le (succ GR) GL)` — the binder already has the type the
+///   Farkas fold wants (the classical lane had to manufacture it from `¬G` with
+///   `Nat.not_le` + `Iff.mp`), so the shared core builds `False` from it and
+///   `False.elim` returns the goal.
+///
+/// The result is typed at the NORMALIZED `Nat.le GL GR`; `state.close_goal`
+/// re-checks it against the original target (`Nat.lt a b` is the reducible
+/// `Nat.le (succ a) b`, and `Nat.add a 1` reduces to `Nat.succ a`), which is the
+/// soundness gate as everywhere else in this module.
+///
+/// Returns `None` whenever any precondition fails — the caller then falls
+/// through to the classical lane and ultimately fails closed.
+pub(crate) fn try_build_constructive_goal_split_proof(
+    state: &mut ProofState,
+    goal: &Goal,
+    certificate: &MathverseCertificate,
+    hypothesis_fvars: &[FVarId],
+) -> Option<Expr> {
+    let flagged: Vec<(usize, i128)> = certificate
+        .coefficients
+        .iter()
+        .enumerate()
+        .filter(|&(i, &c)| c > 0 && i < hypothesis_fvars.len())
+        .map(|(i, &c)| (i, c))
+        .collect();
+    build_constructive_goal_split(state, goal, &flagged, hypothesis_fvars)
+}
+
+/// The same constructive builder, run WITHOUT a mathverse certificate — its own
+/// Farkas-gap test is the decision procedure.
+///
+/// This exists because the certified mathverse path cannot always get here. The
+/// mathverse linear parser names atoms by `FVarId`
+/// (`arith_mathverse_parse::linear::expr_to_linear_direct` maps `ExprKind::FVar`
+/// and nothing else), so a Nat term with an opaque application head —
+/// `UInt32.toNat d`, `Nat.xor a b`, any function call — parses to NOTHING:
+/// `extract_certified_mathverse_constraints` returns `None`, the certified
+/// block never runs, and omega reports "could not extract linear constraints"
+/// even though the goal is a one-step linear consequence of its hypotheses.
+///
+/// The Farkas builder does not share that limitation: its linear forms come
+/// from `arith_linarith_nat_eq::parse_nat_linear_form`, which is keyed by
+/// **`Expr`** and atomizes an unrecognized head as an opaque atom. So the whole
+/// decision can be made here: fold the hypotheses and the refuted goal, and ask
+/// whether the residual is a positive constant. No constant gap ⇒ `None`, and
+/// `close_goal` re-checks whatever is built — fail-closed on both ends.
+pub(crate) fn try_build_constructive_goal_proof_from_context(
+    state: &mut ProofState,
+    goal: &Goal,
+) -> Option<Expr> {
+    let hypothesis_fvars: Vec<FVarId> = goal
+        .local_ctx
+        .iter()
+        .filter(|d| !nat_hyp_acc_candidates(goal, d.fvar).is_empty())
+        .map(|d| d.fvar)
+        .collect();
+    if hypothesis_fvars.is_empty() {
+        return None;
+    }
+    build_constructive_goal_split(state, goal, &[], &hypothesis_fvars)
+}
+
+fn build_constructive_goal_split(
+    state: &mut ProofState,
+    goal: &Goal,
+    flagged: &[(usize, i128)],
+    hypothesis_fvars: &[FVarId],
+) -> Option<Expr> {
+    // Required constants — bail (fail closed) if the environment lacks any.
+    // `Nat.le_or_lt` is the constructive totality lemma; the rest are the
+    // recursor/eliminator plumbing.
+    for c in [
+        "Nat.le_or_lt",
+        "Or",
+        "Or.rec",
+        "False.elim",
+        "Nat.add_le_add",
+    ] {
+        if state.env().get_const(&Name::from_string(c)).is_none() {
+            tracing::debug!("constructive_goal_split: missing constant {c}");
+            return None;
+        }
+    }
+
+    let Some((goal_le_lhs, goal_le_rhs)) = normalize_nat_goal_to_le(&goal.target) else {
+        tracing::debug!("constructive_goal_split: goal not a Nat comparison");
+        return None;
+    };
+
+    // The two `Or` sides, spelled EXACTLY as `Nat.le_or_lt GL GR`'s type does
+    // (`lt_of x y = le_of (succ x) y` in `algebra_nat_mul_cancel_proof.rs`).
+    let side_le = nat_le_raw(&goal_le_lhs, &goal_le_rhs);
+    let side_gt = nat_le_raw(&nat_succ(&goal_le_rhs), &goal_le_lhs);
+
+    // The `inr` binder IS the positive refuted-goal fact — no conversion needed.
+    let hgt_fvar = state.fresh_fvar();
+    let neg_fact = NegGoalFact {
+        lhs: neg_goal_lhs_endpoint(&goal_le_rhs)?,
+        rhs: goal_le_lhs.clone(),
+        proof: Expr::fvar(hgt_fvar),
+    };
+
+    let assignments =
+        candidate_assignments(flagged, hypothesis_fvars, goal, &goal_le_lhs, &goal_le_rhs);
+    let false_proof = assignments
+        .iter()
+        .find_map(|a| build_false_from_farkas(goal, a, hypothesis_fvars, &neg_fact))?;
+
+    // `fun (hle : Nat.le GL GR) => hle`
+    let case_inl = Expr::lam(BinderInfo::Default, side_le.clone(), Expr::bvar(0));
+    // `fun (hgt : Nat.le (succ GR) GL) => False.elim (Nat.le GL GR) <false>`
+    let case_inr = Expr::lam(
+        BinderInfo::Default,
+        side_gt.clone(),
+        super::arith_linarith_close::wrap_false_elim(false_proof, &side_le).abstract_fvar(hgt_fvar),
+    );
+    // `fun (_ : Or A B) => Nat.le GL GR`
+    let or_ty = Expr::apps(
+        Expr::const_(Name::from_string("Or"), vec![]),
+        [side_le.clone(), side_gt.clone()],
+    );
+    let motive = Expr::lam(BinderInfo::Default, or_ty, side_le.clone());
+    let major = Expr::apps(
+        Expr::const_(Name::from_string("Nat.le_or_lt"), vec![]),
+        [goal_le_lhs, goal_le_rhs],
+    );
+
+    Some(Expr::apps(
+        Expr::const_(Name::from_string("Or.rec"), vec![]),
+        [side_le, side_gt, motive, case_inl, case_inr, major],
+    ))
+}
+
+/// `Nat.le a b` in the raw (non-typeclass) spelling `Nat.le_or_lt` uses.
+fn nat_le_raw(a: &Expr, b: &Expr) -> Expr {
+    Expr::apps(
+        Expr::const_(Name::from_string("Nat.le"), vec![]),
+        [a.clone(), b.clone()],
+    )
+}
+
+/// `Nat.succ a`.
+fn nat_succ(a: &Expr) -> Expr {
+    Expr::app(
+        Expr::const_(Name::from_string("Nat.succ"), vec![]),
+        a.clone(),
+    )
+}
+
+/// One positive `Nat.le` fact standing for the refuted goal: the declared
+/// endpoints `(GR+1, GL)` plus a term whose type is def-eq to
+/// `Nat.le (GR+1) GL`.
+///
+/// Two producers build one: [`negated_goal_fact_classical`] (from
+/// `hg : ¬G` via `Nat.not_le` + `Iff.mp`, the `Classical.byContradiction` lane)
+/// and [`negated_goal_fact_constructive`] (the `inr` binder of
+/// `Nat.le_or_lt`, which already HAS that type). Everything downstream of this
+/// struct is shared and choice-free.
+pub(super) struct NegGoalFact {
+    pub(super) lhs: Expr,
+    pub(super) rhs: Expr,
+    pub(super) proof: Expr,
+}
+
+/// A candidate Farkas multiplier assignment: one multiplier per active
+/// hypothesis, plus the multiplier on the refuted goal.
+///
+/// The negated goal needs its own multiplier because the "divide the atom out"
+/// family lives there and nowhere else: `(h : 2*n < 42) ⊢ n < 21` is
+/// `1·h + 2·(¬goal)`, which no assignment that fixes the goal at 1 can express.
+struct FarkasAssignment {
+    hyps: Vec<(usize, i128)>,
+    neg_goal: i128,
+}
+
+/// The multiplier assignments to try, in order.
+///
+/// 1. The certificate-flagged hypotheses at their certificate multipliers, goal
+///    at 1 — the historical set, tried first so a certificate that already
+///    carries real multipliers keeps its exact reconstruction.
+/// 2. Every parseable hypothesis at a uniform `m`, goal at `g`, for every
+///    `(m, g)` in `1..=bound`. The 0/1 certificate collapses the true Farkas
+///    multiplier to 1, so the scaled families (`3*n < 63` from `n < 21`,
+///    `n < 21` from `2*n < 42`) are only reachable by enumeration.
+///
+/// `bound` is the largest literal coefficient appearing in the goal or in any
+/// parseable hypothesis, capped — so the search is small and data-driven rather
+/// than a fixed grid. Soundness is unaffected by any of this: a wrong
+/// multiplier leaves an uncancellable residual (the Farkas gap is then not a
+/// positive constant) and the kernel re-check rejects any wrong term.
+fn candidate_assignments(
+    flagged: &[(usize, i128)],
+    hypothesis_fvars: &[FVarId],
     goal: &Goal,
     goal_le_lhs: &Expr,
     goal_le_rhs: &Expr,
-    active: &[(usize, i128)],
+) -> Vec<FarkasAssignment> {
+    let mut out: Vec<FarkasAssignment> = Vec::new();
+    if !flagged.is_empty() {
+        out.push(FarkasAssignment {
+            hyps: flagged.to_vec(),
+            neg_goal: 1,
+        });
+    }
+
+    let bound = farkas_multiplier_bound(goal, goal_le_lhs, goal_le_rhs);
+    for m in 1..=bound {
+        for g in 1..=bound {
+            let hyps: Vec<(usize, i128)> = (0..hypothesis_fvars.len()).map(|i| (i, m)).collect();
+            // A hypothesis-free refutation (goal + implicit non-negativity only)
+            // is legitimate, but only at `m == 1` — there is nothing to scale.
+            if hyps.is_empty() && m != 1 {
+                continue;
+            }
+            out.push(FarkasAssignment { hyps, neg_goal: g });
+        }
+    }
+    out
+}
+
+/// Upper bound on the Farkas multipliers to enumerate: the largest literal
+/// coefficient in the normalized goal endpoints or in any Nat comparison
+/// hypothesis. Capped so the search stays cheap; a genuine
+/// higher-coefficient problem simply fails closed (no wrong term is ever
+/// emitted).
+fn farkas_multiplier_bound(goal: &Goal, goal_le_lhs: &Expr, goal_le_rhs: &Expr) -> i128 {
+    const CAP: i128 = 8;
+    let mut bound = goal_multiplier_bound(goal_le_lhs, goal_le_rhs);
+    for decl in &goal.local_ctx {
+        let Some((alpha, _op, a, b)) = extract_le_args_full(&decl.ty) else {
+            continue;
+        };
+        if detect_sort(&alpha) != Some(ArithSort::Nat) {
+            continue;
+        }
+        let side_bound = goal_multiplier_bound(&a, &b);
+        if side_bound > bound {
+            bound = side_bound;
+        }
+    }
+    bound.clamp(1, CAP)
+}
+
+/// Build the `False` proof from one multiplier assignment.
+///
+/// Folds the active hypotheses (each at its multiplier), the refuted goal (at
+/// its own multiplier), and — crucially — the implicit Nat non-negativity facts
+/// `0 ≤ v` needed to close the residual. Equality hypotheses are tried in both
+/// orientations.
+fn build_false_from_farkas(
+    goal: &Goal,
+    assignment: &FarkasAssignment,
     hypothesis_fvars: &[FVarId],
-    hg_fvar: FVarId,
+    neg_fact: &NegGoalFact,
 ) -> Option<Expr> {
     // Each active hypothesis contributes one (≤/<) or two (= : both orientations)
     // candidate `Nat.le` facts. Try every orientation combination; equality-heavy
     // goals are rare, and we bound the search to keep it cheap.
-    let mut candidate_sets: Vec<Vec<SortLeAcc>> = Vec::with_capacity(active.len());
-    let mut coeffs: Vec<i128> = Vec::with_capacity(active.len());
-    for &(idx, coeff) in active {
+    let mut candidate_sets: Vec<Vec<SortLeAcc>> = Vec::with_capacity(assignment.hyps.len());
+    let mut coeffs: Vec<i128> = Vec::with_capacity(assignment.hyps.len());
+    for &(idx, coeff) in &assignment.hyps {
         let fvar = hypothesis_fvars[idx];
         let cands = nat_hyp_acc_candidates(goal, fvar);
         if cands.is_empty() {
@@ -214,11 +469,10 @@ fn build_false_from_farkas(
     for combo in 0..combos {
         if let Some(proof) = try_one_orientation(
             goal,
-            goal_le_lhs,
-            goal_le_rhs,
             &candidate_sets,
             &coeffs,
-            hg_fvar,
+            neg_fact,
+            assignment.neg_goal,
             combo,
         ) {
             return Some(proof);
@@ -231,11 +485,10 @@ fn build_false_from_farkas(
 /// `combo` as a mixed-radix index over `candidate_sets`).
 fn try_one_orientation(
     goal: &Goal,
-    goal_le_lhs: &Expr,
-    goal_le_rhs: &Expr,
     candidate_sets: &[Vec<SortLeAcc>],
     coeffs: &[i128],
-    hg_fvar: FVarId,
+    neg_fact: &NegGoalFact,
+    neg_coeff: i128,
     combo: usize,
 ) -> Option<Expr> {
     // Fold the chosen-orientation hypotheses (each at its certificate multiplier)
@@ -259,8 +512,16 @@ fn try_one_orientation(
         });
     }
 
-    // Negated-goal positive `Nat.le NG_lhs NG_rhs` (= `succ GR ≤ GL`) from `hg`.
-    let neg_goal_acc = from_negated_nat_goal(goal_le_lhs, goal_le_rhs, hg_fvar)?;
+    // Refuted-goal positive `Nat.le NG_lhs NG_rhs` (= `succ GR ≤ GL`), at its
+    // own multiplier.
+    let neg_goal_acc = scale_nat_acc(
+        SortLeAcc::nat_from_parts(
+            neg_fact.lhs.clone(),
+            neg_fact.rhs.clone(),
+            neg_fact.proof.clone(),
+        )?,
+        neg_coeff,
+    )?;
 
     // Fold hyps (if any) with the negated goal. With no parseable hypotheses the
     // refutation is goal+nonneg only (e.g. the goal itself forces a Nat bound).
@@ -272,11 +533,34 @@ fn try_one_orientation(
         return None;
     }
 
-    // Compute the residual `base_acc.lhs - base_acc.rhs` and cancel every
-    // positive Nat-atom coefficient with the implicit `0 ≤ v` fact. This is the
-    // Farkas positive combination that mixes a hypothesis with the implicit
-    // bound: `(b - a - 2 ≥ 0 from hyp) + (a ≥ 0 implicit) ⟹ (b - 2 ≥ 0)`.
-    let acc = inject_nonneg_to_cancel(goal, base_acc)?;
+    let false_ty = Expr::const_(Name::from_string("False"), vec![]);
+    close_nat_le_by_farkas_gap(goal, base_acc, &false_ty)
+}
+
+/// The closing half of the Farkas core, shared with the hypothesis-only
+/// builders (`arith_linarith_proof`): from `acc : Nat.le L R` whose residual
+/// `L - R` is a non-negative combination of Nat atoms plus a positive
+/// constant, prove `target` by `False.elim`.
+///
+/// Cancel every atom with a positive residual coefficient by `0 ≤ v`
+/// ([`inject_nonneg_to_cancel`]), prove `L' = R' + k` for the constant gap
+/// `k ≥ 1` with the linear-equality synthesizer, transport `acc` along it and
+/// close `R' + k ≤ R'`. `None` when the residual has a negative atom
+/// coefficient, a non-positive constant, or an atom no `0 ≤ v` fact covers.
+/// The term is re-checked by the caller's `close_goal`.
+pub(crate) fn close_nat_le_by_farkas_gap(
+    goal: &Goal,
+    acc: SortLeAcc,
+    target: &Expr,
+) -> Option<Expr> {
+    if acc.sort != ArithSort::Nat {
+        return None;
+    }
+    // Compute the residual `acc.lhs - acc.rhs` and cancel every positive
+    // Nat-atom coefficient with the implicit `0 ≤ v` fact. This is the Farkas
+    // positive combination that mixes a hypothesis with the implicit bound:
+    // `(b - a - 2 ≥ 0 from hyp) + (a ≥ 0 implicit) ⟹ (b - 2 ≥ 0)`.
+    let acc = inject_nonneg_to_cancel(goal, acc)?;
 
     // `acc : Nat.le L R`. By Farkas, `L` equals `R + k` for some `k ≥ 1` as
     // linear forms. Find `k` from the linear-form gap.
@@ -305,446 +589,15 @@ fn try_one_orientation(
     let acc_transported = transport_le_lhs(&acc.proof, &acc.lhs, &acc.rhs, &r_plus_k, &eq_proof);
 
     // Derive `False` via the symbolic closer (shared core `R`, offsets k, 0).
-    let false_ty = Expr::const_(Name::from_string("False"), vec![]);
     let closed = try_close_contradictory_le_generic(
         ArithSort::Nat,
         &acc_transported,
         &r_plus_k,
         &acc.rhs,
-        &false_ty,
+        target,
     );
     if closed.is_none() {
         tracing::debug!("farkas_goal: symbolic contradiction closer returned None for (R+k, R)");
     }
     closed
-}
-
-/// Build a Nat accumulator from a hypothesis `fvar`, normalizing `<`/`>`/`≥` to
-/// the canonical `Nat.le` orientation with correct endpoints.
-///
-/// - `a ≤ b` → endpoints `(a, b)`, proof `fvar`.
-/// - `a < b` → endpoints `(a + 1, b)`; `fvar : Nat.lt a b` is def-eq
-///   `Nat.le (Nat.succ a) b` ≡ `Nat.le (a + 1) b`, so the kernel accepts it.
-/// - `a ≥ b` → `(b, a)`; `a > b` → `(b + 1, a)`.
-///
-/// Returns `None` for non-Nat hypotheses (the builder is Nat-only) or unparsable
-/// comparison heads.
-fn nat_hyp_acc(goal: &Goal, fvar: FVarId) -> Option<SortLeAcc> {
-    let h_ty = find_hyp_type(goal, fvar)?;
-    let head = h_ty.get_app_fn();
-    let ExprKind::Const(name, _) = head.kind() else {
-        return None;
-    };
-    let name_s = name.to_string();
-    let (alpha, _op, a, b) = extract_le_args_full(&h_ty)?;
-    if detect_sort(&alpha)? != ArithSort::Nat {
-        return None;
-    }
-    let one = Expr::nat_lit(1);
-    let proof = Expr::fvar(fvar);
-    // `extract_le_args_full` reports GE/GT as Le/Lt WITHOUT swapping operands,
-    // so reconstruct the `Nat.le` orientation from the surface head. An LT/GT
-    // hypothesis `a < b` is `Nat.lt a b`, reducibly `Nat.le (a + 1) b`, so the
-    // `fvar` proof kernel-checks against the declared `(a + 1, b)` endpoints.
-    let (lhs, rhs) = match name_s.as_str() {
-        "LE.le" | "Nat.le" => (a, b),
-        "LT.lt" | "Nat.lt" => (nat_add(&a, &one), b),
-        "GE.ge" => (b, a),
-        "GT.gt" => (nat_add(&b, &one), a),
-        _ => return None,
-    };
-    SortLeAcc::nat_from_parts(lhs, rhs, proof)
-}
-
-/// Candidate `Nat.le` orientations a hypothesis can contribute to the Farkas
-/// sum. Inequalities give exactly one oriented fact; a Nat **equality**
-/// `h : a = b` gives BOTH `a ≤ b` and `b ≤ a` (each provable from `h`), and the
-/// residual solver picks whichever orientation cancels the goal/atoms.
-///
-/// The `Eq` orientations are built by transporting `Nat.le.refl a` along `h`:
-/// - `a ≤ b`: `@Eq.ndrec Nat a (fun z => Nat.le a z) (Nat.le.refl a) b h`.
-/// - `b ≤ a`: `@Eq.ndrec Nat a (fun z => Nat.le z a) (Nat.le.refl a) b h`.
-/// Both use only `Nat.le.refl` and `Eq.ndrec` (constructive prelude); the kernel
-/// re-check of the final term is the soundness gate.
-fn nat_hyp_acc_candidates(goal: &Goal, fvar: FVarId) -> Vec<SortLeAcc> {
-    if let Some(acc) = nat_hyp_acc(goal, fvar) {
-        return vec![acc];
-    }
-    // Equality hypothesis path.
-    let Some(h_ty) = find_hyp_type(goal, fvar) else {
-        return Vec::new();
-    };
-    let head = h_ty.get_app_fn();
-    let ExprKind::Const(name, _) = head.kind() else {
-        return Vec::new();
-    };
-    if !name.to_string().contains("Eq") {
-        return Vec::new();
-    }
-    let args = h_ty.get_app_args();
-    // `@Eq Nat a b` has args [Nat, a, b].
-    if args.len() != 3 || !is_nat_const(args[0]) {
-        return Vec::new();
-    }
-    let a = args[1].clone();
-    let b = args[2].clone();
-    let h = Expr::fvar(fvar);
-    let mut out = Vec::new();
-    // a ≤ b
-    if let Some(acc) = SortLeAcc::nat_from_parts(
-        a.clone(),
-        b.clone(),
-        eq_to_le_le(&a, &b, &h, EqLeDir::Forward),
-    ) {
-        out.push(acc);
-    }
-    // b ≤ a
-    if let Some(acc) = SortLeAcc::nat_from_parts(
-        b.clone(),
-        a.clone(),
-        eq_to_le_le(&a, &b, &h, EqLeDir::Backward),
-    ) {
-        out.push(acc);
-    }
-    out
-}
-
-#[derive(Clone, Copy)]
-enum EqLeDir {
-    /// `h : a = b` ⟹ `Nat.le a b`.
-    Forward,
-    /// `h : a = b` ⟹ `Nat.le b a`.
-    Backward,
-}
-
-/// Build a `Nat.le` proof from a Nat equality `h : a = b` by transporting
-/// `Nat.le.refl a` along `h`.
-fn eq_to_le_le(a: &Expr, b: &Expr, h: &Expr, dir: EqLeDir) -> Expr {
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let nat_le = Expr::const_(Name::from_string("Nat.le"), vec![]);
-    let le_refl = Expr::const_(Name::from_string("Nat.le.refl"), vec![]);
-    // refl : Nat.le a a
-    let refl = Expr::app(le_refl, a.clone());
-    // motive : fun z => Nat.le a z   (Forward)  or  fun z => Nat.le z a (Backward)
-    let motive = match dir {
-        EqLeDir::Forward => {
-            let body = Expr::apps(nat_le, [a.clone(), Expr::bvar(0)]);
-            Expr::lam(BinderInfo::Default, nat_ty.clone(), body)
-        }
-        EqLeDir::Backward => {
-            let body = Expr::apps(nat_le, [Expr::bvar(0), a.clone()]);
-            Expr::lam(BinderInfo::Default, nat_ty.clone(), body)
-        }
-    };
-    // @Eq.ndrec.{0,1} Nat a motive refl b h : motive[b]
-    let eq_ndrec = Expr::const_(
-        Name::from_string("Eq.ndrec"),
-        vec![Level::zero(), Level::succ(Level::zero())],
-    );
-    Expr::apps(
-        eq_ndrec,
-        [nat_ty, a.clone(), motive, refl, b.clone(), h.clone()],
-    )
-}
-
-fn is_nat_const(e: &Expr) -> bool {
-    matches!(e.kind(), ExprKind::Const(n, _) if n.to_string() == "Nat")
-}
-
-/// Scale a Nat accumulator by `coeff ≥ 1` via repeated self-addition
-/// (`Nat.add_le_add`). `coeff == 1` returns it unchanged.
-fn scale_nat_acc(base: SortLeAcc, coeff: i128) -> Option<SortLeAcc> {
-    if coeff < 1 {
-        return None;
-    }
-    if coeff == 1 {
-        return Some(base);
-    }
-    // Rebuild `base` `coeff` times and fold; `SortLeAcc` is not `Clone`, so
-    // capture its parts and reconstruct each summand.
-    let SortLeAcc {
-        lhs, rhs, proof, ..
-    } = base;
-    let mut acc = SortLeAcc::nat_from_parts(lhs.clone(), rhs.clone(), proof.clone())?;
-    for _ in 1..coeff {
-        let next = SortLeAcc::nat_from_parts(lhs.clone(), rhs.clone(), proof.clone())?;
-        acc = acc.combine(next)?;
-    }
-    Some(acc)
-}
-
-/// Fold the implicit Nat non-negativity facts `0 ≤ v` into `acc` so every atom
-/// with a *positive* residual coefficient is cancelled, leaving a pure constant
-/// gap.
-///
-/// `acc : Nat.le L R` summarizes the hyp+neg_goal combination. Its residual is
-/// `d = linearForm(L) − linearForm(R)`. The genuine UNSAT witness has, for every
-/// atom `v`, a residual coefficient `d_v ≥ 0` (the negative direction can never
-/// be cancelled by a `0 ≤ v` fact, which only *adds* `v` to the right side):
-/// folding `d_v` copies of `0 ≤ v` adds `d_v·v` to `R`, zeroing the atom. If any
-/// atom has `d_v < 0`, this is NOT a `hyp + nonneg` refutation — return `None`
-/// and fail closed (the caller falls through).
-///
-/// Each `0 ≤ v` is `Nat.zero_le v : Nat.le 0 v`. The fold uses the same
-/// `SortLeAcc::combine` (`Nat.add_le_add`); the assembled term is kernel-checked
-/// by `close_goal`, so a wrong cancellation cannot be accepted.
-///
-/// Soundness: `0 ≤ v` holds for every Nat `v`. We only ever add it on the LHS as
-/// a `0` and on the RHS as `v` (never subtract), so the combination stays a valid
-/// `≤` and the only goals it can close are genuinely true ones.
-fn inject_nonneg_to_cancel(goal: &Goal, acc: SortLeAcc) -> Option<SortLeAcc> {
-    let diff = linear_diff(&acc.lhs, &acc.rhs)?;
-
-    // Nat-typed atoms eligible for a `0 ≤ v` fact, keyed by atom Expr.
-    let mut nat_atoms = std::collections::HashSet::new();
-    for d in &goal.local_ctx {
-        if matches!(d.ty.kind(), ExprKind::Const(n, _) if n.to_string() == "Nat") {
-            nat_atoms.insert(Expr::fvar(d.fvar));
-        }
-    }
-
-    let mut result = acc;
-    for (atom, &coeff) in &diff.coeffs {
-        if coeff == 0 {
-            continue;
-        }
-        // A leftover atom must be a Nat variable with a POSITIVE residual to be
-        // cancellable by `0 ≤ v`. Anything else means this orientation/combo is
-        // not a `hyp + nonneg` witness.
-        if coeff < 0 || !nat_atoms.contains(atom) {
-            return None;
-        }
-        let count = u64::try_from(coeff).ok()?;
-        // Fold `count` copies of `Nat.zero_le atom : Nat.le 0 atom`.
-        let zero = Expr::nat_lit(0);
-        for _ in 0..count {
-            let zero_le = Expr::const_(Name::from_string("Nat.zero_le"), vec![]);
-            let proof = Expr::app(zero_le, atom.clone());
-            let nonneg = SortLeAcc::nat_from_parts(zero.clone(), atom.clone(), proof)?;
-            result = result.combine(nonneg)?;
-        }
-    }
-    Some(result)
-}
-
-/// Linear-form difference `lhs - rhs` (atom coeffs and constant) using the
-/// shared Nat linear-form parser.
-fn linear_diff(lhs: &Expr, rhs: &Expr) -> Option<NatDiff> {
-    let lf = super::arith_linarith_nat_eq::parse_nat_linear_form(lhs)?;
-    let rf = super::arith_linarith_nat_eq::parse_nat_linear_form(rhs)?;
-    let mut coeffs = std::collections::HashMap::new();
-    for (atom, &c) in &lf.coeffs {
-        *coeffs.entry(atom.clone()).or_insert(0_i128) += i128::from(c);
-    }
-    for (atom, &c) in &rf.coeffs {
-        *coeffs.entry(atom.clone()).or_insert(0_i128) -= i128::from(c);
-    }
-    coeffs.retain(|_, c| *c != 0);
-    Some(NatDiff {
-        coeffs,
-        constant: i128::from(lf.constant) - i128::from(rf.constant),
-    })
-}
-
-struct NatDiff {
-    coeffs: std::collections::HashMap<Expr, i128>,
-    // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
-    // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
-    #[allow(dead_code)]
-    constant: i128,
-}
-
-/// Build the negated-goal accumulator `Nat.le (succ GR) GL` from `hg : ¬G`.
-///
-/// `Nat.not_le GL GR : Iff (Nat.le GL GR → False) (Nat.lt GR GL)` (tc form), so
-/// `Iff.mp (Nat.not_le GL GR) hg : Nat.lt GR GL`, which is the reducible def
-/// `Nat.le (Nat.succ GR) GL`. We declare the accumulator endpoints as
-/// `(Nat.succ GR, GL)`; the `Nat.lt` proof is def-eq to `Nat.le (succ GR) GL`,
-/// so the downstream `Nat.add_le_add` application kernel-checks.
-fn from_negated_nat_goal(
-    goal_le_lhs: &Expr,
-    goal_le_rhs: &Expr,
-    hg_fvar: FVarId,
-) -> Option<SortLeAcc> {
-    use super::tc_app::{nat_le_tc, nat_lt_tc};
-
-    let not_le = Expr::const_(Name::from_string("Nat.not_le"), vec![]);
-    // Nat.not_le GL GR : Iff (@LE.le Nat _ GL GR → False) (@LT.lt Nat _ GR GL)
-    let iff = Expr::apps(not_le, [goal_le_lhs.clone(), goal_le_rhs.clone()]);
-
-    // The two `Iff` Props (must be supplied explicitly — the kernel does NOT
-    // auto-insert implicits in raw term application):
-    //   a := (@LE.le Nat _ GL GR) → False   (the negated goal, = hg's type)
-    //   b := @LT.lt Nat _ GR GL             (the positive consequence)
-    let false_ty = Expr::const_(Name::from_string("False"), vec![]);
-    let prop_a = Expr::pi(
-        BinderInfo::Default,
-        nat_le_tc(goal_le_lhs.clone(), goal_le_rhs.clone()),
-        false_ty,
-    );
-    let prop_b = nat_lt_tc(goal_le_rhs.clone(), goal_le_lhs.clone());
-
-    // @Iff.mp a b iff hg : b   (b ≡ Nat.le (succ GR) GL).
-    let iff_mp = Expr::const_(Name::from_string("Iff.mp"), vec![]);
-    let lt_proof = Expr::apps(iff_mp, [prop_a, prop_b, iff, Expr::fvar(hg_fvar)]);
-
-    // Accumulator LHS endpoint: the collapsed literal `GR+1` when GR is a
-    // concrete literal (so the constant is a single literal leaf), and the
-    // additive form `Nat.add GR 1` when GR is symbolic. Both are def-eq to
-    // `Nat.succ GR` (`Nat.add GR 1` reduces to `Nat.succ (GR + 0)` ≡ `Nat.succ
-    // GR`), so the `Nat.lt`-typed `lt_proof` (= `Nat.le (succ GR) GL`)
-    // kernel-checks against `Nat.le <endpoint> GL`. Using the `Nat.add` form
-    // rather than a raw `Nat.succ` keeps the endpoint inside the linear-form
-    // fragment the downstream equality synthesizer
-    // (`try_prove_nat_equality_direct`) can canonicalize — a bare `Nat.succ`
-    // atom would otherwise defeat it. The kernel re-check is the soundness gate.
-    let neg_lhs = match super::nat_expr_eval::eval_nat_expr(goal_le_rhs) {
-        Some(v) => Expr::nat_lit(v.checked_add(1)?),
-        None => nat_add(goal_le_rhs, &Expr::nat_lit(1)),
-    };
-
-    SortLeAcc::nat_from_parts(neg_lhs, goal_le_lhs.clone(), lt_proof)
-}
-
-/// Normalize a Nat comparison goal `target` to `(GL, GR)` of `Nat.le GL GR`.
-///
-/// Mirrors the normalization in `arith_linarith_nat_direct::normalize_nat_comparison`:
-/// - `a ≤ b` → `(a, b)`
-/// - `a < b` → `(a + 1, b)`
-/// - `a ≥ b` → `(b, a)`     (operands swapped)
-/// - `a > b` → `(b + 1, a)` (operands swapped)
-///
-/// `extract_le_args_full` collapses GE/GT to Le/Lt *without* swapping operands,
-/// so the swap is done here from the raw application args keyed on the surface
-/// head. The orientation is the soundness-relevant part: the negated-goal proof
-/// is built from `(GL, GR)`, and the whole term is kernel-rechecked, so a wrong
-/// orientation fails closed rather than proving a false goal.
-///
-/// Returns `None` for non-Nat or non-comparison goals.
-fn normalize_nat_goal_to_le(target: &Expr) -> Option<(Expr, Expr)> {
-    let head = target.get_app_fn();
-    let ExprKind::Const(name, _) = head.kind() else {
-        return None;
-    };
-    let name_s = name.to_string();
-    let args = target.get_app_args();
-
-    // Typeclass forms `@Rel.{u} Nat inst a b` carry the sort in `args[0]`;
-    // direct forms `Nat.{le,lt} a b` are implicitly Nat.
-    let (a, b) = if args.len() == 4 {
-        if !is_nat_const(args[0]) {
-            return None;
-        }
-        match name_s.as_str() {
-            "LE.le" | "LT.lt" | "GE.ge" | "GT.gt" => (args[2].clone(), args[3].clone()),
-            _ => return None,
-        }
-    } else if args.len() == 2 {
-        match name_s.as_str() {
-            "Nat.le" | "Nat.lt" => (args[0].clone(), args[1].clone()),
-            _ => return None,
-        }
-    } else {
-        return None;
-    };
-
-    let one = Expr::nat_lit(1);
-    match name_s.as_str() {
-        "LE.le" | "Nat.le" => Some((a, b)),
-        "LT.lt" | "Nat.lt" => Some((nat_add(&a, &one), b)),
-        "GE.ge" => Some((b, a)),
-        "GT.gt" => Some((nat_add(&b, &one), a)),
-        _ => None,
-    }
-}
-
-/// Upper bound on the uniform hypothesis multiplier to try for a scaled-
-/// monotonicity goal, derived from the largest atom coefficient appearing in the
-/// goal's (normalized) `Nat.le` endpoints. For `2*a ≤ 2*b` this is `2`; for a
-/// coefficient-free goal it is `1` (no scaled set generated). Capped at a small
-/// constant so the search stays cheap; a genuine higher-coefficient goal that
-/// exceeds the cap simply fails closed (no wrong term is ever emitted).
-fn goal_multiplier_bound(lhs: &Expr, rhs: &Expr) -> i128 {
-    const CAP: i128 = 8;
-    let mut bound: i128 = 1;
-    for side in [lhs, rhs] {
-        if let Some(form) = super::arith_linarith_nat_eq::parse_nat_linear_form(side) {
-            for &c in form.coeffs.values() {
-                let mag = i128::from(c).abs();
-                if mag > bound {
-                    bound = mag;
-                }
-            }
-        }
-    }
-    bound.min(CAP)
-}
-
-/// Compute the Farkas gap `k = linearForm(lhs) - linearForm(rhs)` when it is a
-/// pure non-negative constant (all atom coefficients cancel). Returns `None`
-/// when the difference is not a constant (not a genuine contradiction shape).
-fn nat_farkas_gap(lhs: &Expr, rhs: &Expr) -> Option<u64> {
-    let lf = super::arith_linarith_nat_eq::parse_nat_linear_form(lhs)?;
-    let rf = super::arith_linarith_nat_eq::parse_nat_linear_form(rhs)?;
-    // Every atom coefficient must match (cancel in the difference).
-    for (atom, &lc) in &lf.coeffs {
-        if rf.coeffs.get(atom).copied().unwrap_or(0) != lc {
-            return None;
-        }
-    }
-    for (atom, &rc) in &rf.coeffs {
-        if lf.coeffs.get(atom).copied().unwrap_or(0) != rc {
-            return None;
-        }
-    }
-    let diff = lf.constant.checked_sub(rf.constant)?;
-    if diff < 1 {
-        return None;
-    }
-    u64::try_from(diff).ok()
-}
-
-/// `@Eq.ndrec Nat L (fun z => Nat.le z R) proof newL eq : Nat.le newL R`
-/// where `proof : Nat.le L R` and `eq : L = newL`.
-fn transport_le_lhs(proof: &Expr, l: &Expr, r: &Expr, new_l: &Expr, eq: &Expr) -> Expr {
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    let nat_le = Expr::const_(Name::from_string("Nat.le"), vec![]);
-    // motive : fun (z : Nat) => Nat.le z R
-    let motive = {
-        let body = Expr::apps(nat_le, [Expr::bvar(0), r.clone()]);
-        Expr::lam(BinderInfo::Default, nat_ty.clone(), body)
-    };
-    // @Eq.ndrec.{0,1} Nat L motive proof newL eq
-    let eq_ndrec = Expr::const_(
-        Name::from_string("Eq.ndrec"),
-        vec![Level::zero(), Level::succ(Level::zero())],
-    );
-    Expr::apps(
-        eq_ndrec,
-        [
-            nat_ty,
-            l.clone(),
-            motive,
-            proof.clone(),
-            new_l.clone(),
-            eq.clone(),
-        ],
-    )
-}
-
-/// `Nat.add a b`.
-fn nat_add(a: &Expr, b: &Expr) -> Expr {
-    Expr::apps(
-        Expr::const_(Name::from_string("Nat.add"), vec![]),
-        [a.clone(), b.clone()],
-    )
-}
-
-/// `@Eq Nat l r`.
-fn mk_nat_eq(l: &Expr, r: &Expr) -> Expr {
-    let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-    Expr::apps(
-        Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
-        [nat_ty, l.clone(), r.clone()],
-    )
 }

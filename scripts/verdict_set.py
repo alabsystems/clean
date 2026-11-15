@@ -69,12 +69,22 @@ Declared, and verified present (fail-closed if a symbol moves):
 
 CLOSURE AND ITS HONEST LIMIT
 ----------------------------
-From those roots the closure follows path-qualified in-crate references
-(`crate::`, `super::`, `self::`, including `use` brace groups) at MODULE
-granularity, transitively, to a fixed point. `mod` declarations are NOT edges
-(a module that declares a submodule does not thereby use it). Cross-crate
-references are recorded, not followed. Unresolved references are recorded, not
-dropped.
+From those roots the closure follows in-crate references at MODULE
+granularity, transitively, to a fixed point. Two spellings are edges:
+path-qualified references (`crate::`, `super::`, `self::`, including `use`
+brace groups), and a BARE `foo::` in a file that itself declares `mod foo;` —
+Rust resolves that first segment against the items in scope, so it is a real
+use of the child module. `mod` declarations are still NOT edges on their own
+(a module that declares a submodule does not thereby use it): the bare form
+requires an actual `foo::` occurrence in the same file's production text.
+Cross-crate references are recorded, not followed. Unresolved references are
+recorded, not dropped.
+
+The bare form was missing until audit r17 and the omission was load-bearing:
+27 modules and 15,542 lines of reachable production code — including the whole
+of clean-olean's `import::{load,parse,path,module_cache_direct}` IO surface and
+clean-verify's `spec::core_spec` — were referenced by exactly that spelling and
+counted by nothing.
 
 That is a REFERENCE closure, not a CALL closure. The call closure needs the
 per-body call graph from the same trust-host whole-crate dump `spine_set.py`
@@ -249,7 +259,11 @@ def is_test_path(rel: Path) -> bool:
     if "tests" in parts or "tests2" in parts:
         return True
     name = rel.name
-    return bool(re.search(r"(^test_|_tests?\.rs$|^tests?\.rs$|^tests_)", name)) or "test" in name
+    # AUDIT r13 M13-2: the unanchored substring, removed from four scanners at
+    # r11 M11-3 and left here under a docstring claiming "same predicate as the
+    # two bypass ratchets". Anchored forms only, so five live production
+    # env/algebra_nat_*testbit* modules stop being excluded by their names.
+    return bool(re.search(r"(^test_|_tests?\.rs$|^tests?\.rs$|^tests_)", name))
 
 
 def production_text(text: str, rel: Path) -> str:
@@ -309,6 +323,36 @@ def production_lines(text: str, rel: Path) -> list[tuple[int, str]]:
 
 PATH_REF_RE = re.compile(r"\b(crate|super|self)((?:::[A-Za-z_][A-Za-z0-9_]*)+)")
 IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+# A file that declares `mod foo;` may then write `foo::Item` and `use foo::{..}`
+# with NO `crate::`/`super::`/`self::` prefix — Rust resolves the bare first
+# segment against the items in scope, and `mod foo;` puts `foo` there. Such a
+# reference is a genuine USE of the child module, so it is an edge.
+#
+# This does NOT make a `mod` declaration an edge: the declaration alone adds
+# nothing, and CHILD_USE_RE must find an actual unqualified `foo::` occurrence
+# in the same file's production text. The distinction is what the two regexes
+# below encode, and audit r17 measured what conflating them cost — 27 modules
+# and 15,542 lines of reachable production code, including the whole of
+# clean-olean's `import::{load,parse,path,module_cache_direct}` IO surface,
+# were reachable by exactly this spelling and invisible to the closure.
+#
+# The reading is EXACT rather than heuristic: within one file `mod foo;` claims
+# the name `foo`, so a colliding `use ... as foo` does not compile, and a bare
+# `foo::` in that file can only mean the child module. `(?<![:A-Za-z0-9_])`
+# keeps `std::path::PathBuf` from reading as a use of a child `mod path;`.
+CHILD_MOD_DECL_RE = re.compile(
+    r"^[ \t]*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_][A-Za-z0-9_]*)\s*;", re.M
+)
+
+
+def child_mod_uses(stripped: str) -> set[str]:
+    """Names of child modules this file BOTH declares (`mod foo;`) and USES."""
+    out: set[str] = set()
+    for name in set(CHILD_MOD_DECL_RE.findall(stripped)):
+        if re.search(rf"(?<![:A-Za-z0-9_]){re.escape(name)}::", stripped):
+            out.add(name)
+    return out
 
 IO_TOKENS: tuple[tuple[str, str], ...] = (
     (r"\bstd::fs\b", "std::fs"),
@@ -415,6 +459,8 @@ def module_refs(
         if re.match(r"\s*::\s*\{", tail):
             for ident in _expand_use_group(stripped, m.end() + tail.index("{")):
                 candidates.add(base + (ident,))
+    for name in child_mod_uses(stripped):
+        candidates.add(tuple(self_mod) + (name,))
     resolved: set[tuple[str, ...]] = set()
     unresolved: set[str] = set()
     for segs in candidates:
@@ -842,8 +888,11 @@ RULES = {
 
 EDGE_POLICY = {
     "granularity": "module (one .rs file, or a dir with mod.rs)",
-    "edges_followed": "path-qualified in-crate references: crate::, super::, self::, including the "
-    "identifiers of `use ...::{a, b}` brace groups; resolved to the longest prefix that names a module",
+    "edges_followed": "in-crate references at module granularity, in two spellings: (1) path-qualified "
+    "— crate::, super::, self::, including the identifiers of `use ...::{a, b}` brace groups; and (2) a "
+    "BARE `foo::` inside a file that itself declares `mod foo;`, which Rust resolves to that child "
+    "module. Both resolve to the longest prefix that names a module. A `mod` declaration alone is NOT "
+    "an edge — spelling (2) requires an actual unqualified `foo::` in the same file's production text",
     "edges_not_followed": "`mod x;` declarations (declaring a submodule is not using it); references "
     "that occur only inside `#[cfg(test)] mod` bodies (test code is not production verdict surface); "
     "edges into test modules (recorded in test_modules_not_followed, never silently dropped); "
@@ -1431,6 +1480,35 @@ def self_test() -> int:
             failures.append("closure: cfg(test)-only reference pulled a module into the surface")
         loader.write_text(loader_saved)
         (root / "crates/clean-olean/src/testonly.rs").unlink()
+
+        # Arm 12b2: a BARE `foo::` in a file declaring `mod foo;` IS an edge,
+        # and the declaration WITHOUT such a reference still is not. Both
+        # halves in one derive, because the defect this arm pins was a rule
+        # that got the second half right and never asked the first.
+        _write(root / "crates/clean-olean/src/import/load_register/childused.rs", "pub fn helper() {}\n")
+        _write(root / "crates/clean-olean/src/import/load_register/childunused.rs", "pub fn idle() {}\n")
+        loader.write_text(
+            loader_saved
+            + "\nmod childused;\nmod childunused;\npub fn probe() { childused::helper(); }\n"
+        )
+        after_bare = derive()
+        reached_bare = {
+            m["path"]
+            for part in ("a_pure_rust", "b_io_bearing")
+            for m in after_bare["partitions"][part]["members"]
+        }
+        used = "crates/clean-olean/src/import/load_register/childused.rs"
+        unused = "crates/clean-olean/src/import/load_register/childunused.rs"
+        if used in reached_bare and unused not in reached_bare:
+            _ok("closure: a bare `foo::` under `mod foo;` is an edge; the bare declaration is not")
+        elif used not in reached_bare:
+            failures.append("closure: a bare child-module reference was not followed")
+        else:
+            failures.append("closure: an unreferenced `mod foo;` declaration became an edge")
+        loader.write_text(loader_saved)
+        (root / "crates/clean-olean/src/import/load_register/childused.rs").unlink()
+        (root / "crates/clean-olean/src/import/load_register/childunused.rs").unlink()
+        (root / "crates/clean-olean/src/import/load_register").rmdir()
 
         # Arm 12c: scope gaps are emitted as dated corrections ------------
         doc_c2 = json.loads(census.read_text())

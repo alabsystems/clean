@@ -82,15 +82,18 @@ pub(crate) fn ctor_set(o: LeanObjPtr, idx: usize, v: LeanObjPtr) {
     }
 }
 
-/// Get the constructor tag of an object. For scalars, returns the unboxed value
-/// truncated to `u8` (matching C semantics).
+/// Get the constructor tag of an object, 32 bits wide as the C header's
+/// `clean_obj_tag` reads it. For a scalar, the whole unboxed value (299 stays
+/// 299; an 8-bit read gave 43); a boxed value above `u32::MAX`, which no
+/// constructor tag reaches, reads as `u32::MAX` (see
+/// `object_model::obj_tag`).
 #[inline]
-pub(crate) fn obj_tag(o: LeanObjPtr) -> u8 {
+pub(crate) fn obj_tag(o: LeanObjPtr) -> u32 {
     if is_scalar(o) {
-        lean_unbox(o) as u8
+        u32::try_from(lean_unbox(o)).unwrap_or(u32::MAX)
     } else {
         // SAFETY: non-scalar means valid heap pointer.
-        unsafe { (*o).header.tag }
+        u32::from(unsafe { (*o).header.tag })
     }
 }
 

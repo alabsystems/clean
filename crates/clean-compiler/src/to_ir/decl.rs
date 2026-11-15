@@ -17,7 +17,7 @@ use crate::ir::{IRDecl, IRType, VarId};
 use crate::lcnf::{Decl, DeclValue};
 use crate::opt::lambda_lift::{lambda_lift_decls, lambda_lift_default, LiftConfig};
 use clean_kernel::{ConstructorVal, Name};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 /// Result of IR lowering, including any diagnostic warnings.
 ///
@@ -29,6 +29,18 @@ pub struct ToIROutput {
     pub decls: Vec<IRDecl>,
     /// Accumulated diagnostic warnings from conversion.
     pub warnings: Vec<String>,
+    /// Per lowered declaration, the IR variables bound from an LCNF binder
+    /// whose type is a source scalar (`rc::insert::is_scalar_type`). LCNF RC
+    /// inserted no `inc`/`dec` for them, so if boxing gives one an object
+    /// representation it is unmanaged; `rc_repair::rc_repair_boxed` manages
+    /// exactly these (plus the variables boxing introduces). WS6.2.
+    pub rc_unmanaged: HashMap<Name, HashSet<VarId>>,
+    #[cfg(feature = "trust-ir-backend")]
+    /// The Rust callees of the batch (Trust plan step 3.2, C2): each
+    /// `rust`-backend extern declaration's symbol and lowered signature. An
+    /// extern declaration lowers to no `IRDecl`, so without this its call
+    /// sites would see an unknown callee and box their scalar arguments.
+    pub(crate) rust_externs: Vec<crate::rust_abi::RustExternSig>,
 }
 
 /// Convert an L5CNF Decl to IRDecl (no cross-declaration arity info).
@@ -74,8 +86,22 @@ pub fn lower_decl_with_env(
     ctor_env: &HashMap<Name, CtorMeta>,
     inductive_env: &HashMap<Name, CtorMeta>,
 ) -> Result<(Option<IRDecl>, Vec<String>), CompilerError> {
+    lower_decl_tracking_rc(decl, arities, ctor_env, inductive_env, false)
+        .map(|(ir_decl, warnings, _)| (ir_decl, warnings))
+}
+
+/// [`lower_decl_with_env`], also returning the declaration's RC-unmanaged
+/// variables (see [`ToIROutput::rc_unmanaged`]).
+fn lower_decl_tracking_rc(
+    decl: &Decl,
+    arities: &HashMap<Name, u16>,
+    ctor_env: &HashMap<Name, CtorMeta>,
+    inductive_env: &HashMap<Name, CtorMeta>,
+    byte_array_string: bool,
+) -> Result<(Option<IRDecl>, Vec<String>, HashSet<VarId>), CompilerError> {
     let mut state =
         ToIRState::with_arities_and_ctors(arities.clone(), ctor_env.clone(), inductive_env.clone());
+    state.set_byte_array_string(byte_array_string);
 
     // Convert parameters
     let params: Vec<(VarId, IRType)> = decl
@@ -95,11 +121,12 @@ pub fn lower_decl_with_env(
     let body = match &decl.body {
         DeclValue::Code(code) => lower_code(code, &mut state)?,
         DeclValue::Extern(_) => {
-            return Ok((None, state.drain_warnings()));
+            return Ok((None, state.drain_warnings(), HashSet::new()));
         }
     };
 
     let warnings = state.drain_warnings();
+    let rc_unmanaged = state.take_rc_unmanaged();
     Ok((
         Some(IRDecl {
             name: decl.name.clone(),
@@ -108,6 +135,7 @@ pub fn lower_decl_with_env(
             body,
         }),
         warnings,
+        rc_unmanaged,
     ))
 }
 
@@ -139,6 +167,16 @@ pub(crate) fn lower_decls_with_env_and_arities(
     inductive_env: &HashMap<Name, CtorMeta>,
     external_arities: &HashMap<Name, u16>,
 ) -> Result<ToIROutput, CompilerError> {
+    lower_decls_with_source_layout(decls, ctor_env, inductive_env, external_arities, false)
+}
+
+fn lower_decls_with_source_layout(
+    decls: &[Decl],
+    ctor_env: &HashMap<Name, CtorMeta>,
+    inductive_env: &HashMap<Name, CtorMeta>,
+    external_arities: &HashMap<Name, u16>,
+    byte_array_string: bool,
+) -> Result<ToIROutput, CompilerError> {
     // Lambda-lift all declarations to eliminate Code::Fun nodes before IR
     // lowering. Produces the original decls (with Code::Fun replaced by
     // references to lifted top-level functions) plus new decls for each
@@ -156,9 +194,19 @@ pub(crate) fn lower_decls_with_env_and_arities(
 
     let mut lowered = Vec::new();
     let mut all_warnings = Vec::new();
+    let mut rc_unmanaged = HashMap::new();
+    #[cfg(feature = "trust-ir-backend")]
+    let rust_externs = lifted_decls
+        .iter()
+        .filter_map(crate::rust_abi::RustExternSig::of_decl)
+        .collect();
     for decl in &lifted_decls {
-        let (ir_decl, warnings) = lower_decl_with_env(decl, &arities, ctor_env, inductive_env)?;
+        let (ir_decl, warnings, unmanaged) =
+            lower_decl_tracking_rc(decl, &arities, ctor_env, inductive_env, byte_array_string)?;
         if let Some(ir_decl) = ir_decl {
+            if !unmanaged.is_empty() {
+                rc_unmanaged.insert(ir_decl.name.clone(), unmanaged);
+            }
             lowered.push(ir_decl);
         }
         all_warnings.extend(warnings);
@@ -166,6 +214,9 @@ pub(crate) fn lower_decls_with_env_and_arities(
     Ok(ToIROutput {
         decls: lowered,
         warnings: all_warnings,
+        rc_unmanaged,
+        #[cfg(feature = "trust-ir-backend")]
+        rust_externs,
     })
 }
 
@@ -225,5 +276,11 @@ pub fn to_ir_with_env(
     let ctors: Vec<&ConstructorVal> = env.constructors().collect();
     let (ctor_env, inductive_env) = build_ctor_env(&ctors)?;
     let external_arities = build_external_arities(env);
-    lower_decls_with_env_and_arities(decls, &ctor_env, &inductive_env, &external_arities)
+    lower_decls_with_source_layout(
+        decls,
+        &ctor_env,
+        &inductive_env,
+        &external_arities,
+        crate::string_layout::has_byte_array_string_layout(env),
+    )
 }

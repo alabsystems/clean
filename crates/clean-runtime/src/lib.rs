@@ -29,6 +29,9 @@ pub mod ffi_exports;
 pub mod io_runtime;
 pub mod native;
 pub(crate) mod object_model;
+pub(crate) mod rc_core;
+#[cfg(test)]
+mod rc_sticky_tests;
 pub mod runtime;
 pub mod task;
 
@@ -55,13 +58,188 @@ pub use runtime::{
     clean_unbox_uint32, clean_unbox_uint64, CleanExternalClass, CleanObj, LeanObjPtr,
 };
 
-use std::path::PathBuf;
+use std::fs;
+use std::io;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
-/// Get the path to the runtime include directory.
+/// File name generated code `#include`s; the only file `include/` holds.
+const RUNTIME_HEADER_FILE: &str = "clean_runtime.h";
+
+/// Why [`try_include_dir`] could not produce a directory holding the header.
+#[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
+pub enum IncludeDirError {
+    /// The cache directory under `std::env::temp_dir()` could not be created.
+    #[error("cannot create runtime include cache directory {dir}: {source}")]
+    CreateDir {
+        /// The directory that could not be created.
+        dir: PathBuf,
+        /// The underlying I/O failure.
+        #[source]
+        source: io::Error,
+    },
+    /// The header could not be written to its per-process staging file.
+    #[error("cannot write runtime header staging file {path}: {source}")]
+    WriteStaging {
+        /// The staging file that could not be written.
+        path: PathBuf,
+        /// The underlying I/O failure.
+        #[source]
+        source: io::Error,
+    },
+    /// The fully written staging file could not be renamed into place.
+    #[error("cannot move runtime header staging file {from} into place at {to}: {source}")]
+    Rename {
+        /// The staging file.
+        from: PathBuf,
+        /// The final header path.
+        to: PathBuf,
+        /// The underlying I/O failure.
+        #[source]
+        source: io::Error,
+    },
+    /// After the rename the file did not read back as the embedded header.
+    #[error("{path} does not hold the embedded runtime header after materialization")]
+    Verify {
+        /// The header path that failed the read-back.
+        path: PathBuf,
+    },
+}
+
+/// Get the path to a directory containing `clean_runtime.h`.
 ///
-/// Returns the directory containing `clean_runtime.h` and other headers.
+/// The returned directory holds a `clean_runtime.h` byte-identical to
+/// [`runtime_header`] — the copy embedded in this binary — or, if that could
+/// not be arranged, the cache directory that materialization failed in (never
+/// a path this function merely hopes holds the header).
+///
+/// Resolution order:
+/// 1. The crate's own `include/` directory as recorded at compile time
+///    (`CARGO_MANIFEST_DIR`), **only when** it actually holds that header.
+/// 2. Otherwise the embedded header is materialized into
+///    `std::env::temp_dir()/clean-runtime-include-<fnv1a64 of the header>/`
+///    (idempotent; written to a per-process staging file and renamed into
+///    place, so two processes racing cannot tear it) and that directory is
+///    returned.
+///
+/// Why not the compile-time path alone: it is wrong whenever the compiled
+/// artifact outlives the source tree it was compiled from. Measured
+/// 2026-09-15: the `libclean_runtime` rlib in the shared `target/debug` had
+/// been compiled from a since-deleted gate-demonstration sandbox
+/// (`.../T/clean-gate-demo/<id>/tree-build/crates/clean-runtime`), because
+/// Cargo names a path dependency's artifacts by its workspace-RELATIVE path
+/// and a sandbox build at another absolute root overwrites the real tree's
+/// units; every `-I<that path>/include` then failed with
+/// `fatal error: 'clean_runtime.h' file not found`. A relocated checkout or a
+/// published crate whose `include/` is not on disk fails the same way.
+///
+/// Infallible by design: every caller today is a test that hands the result to
+/// a C compiler as `-I`, and a test's only response to an error is to panic
+/// with the same "file not found" the compiler already reports. Callers that
+/// need to know WHY materialization failed use [`try_include_dir`].
 pub fn include_dir() -> PathBuf {
+    match try_include_dir() {
+        Ok(dir) => dir,
+        Err(_) => materialized_include_root(&std::env::temp_dir()),
+    }
+}
+
+/// Fallible form of [`include_dir`]: the same resolution, but a directory is
+/// returned only when it has been read back holding the embedded header.
+pub fn try_include_dir() -> Result<PathBuf, IncludeDirError> {
+    resolve_include_dir(&compile_time_include_dir(), &std::env::temp_dir())
+}
+
+/// The `include/` directory of the crate as it was laid out at compile time.
+fn compile_time_include_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("include")
+}
+
+/// Prefer `compile_time` when it holds the embedded header; otherwise
+/// materialize under `cache_root`.
+fn resolve_include_dir(compile_time: &Path, cache_root: &Path) -> Result<PathBuf, IncludeDirError> {
+    if holds_embedded_header(&compile_time.join(RUNTIME_HEADER_FILE)) {
+        return Ok(compile_time.to_path_buf());
+    }
+    materialize_header(cache_root)
+}
+
+/// True when `path` reads back byte-identical to [`runtime_header`].
+fn holds_embedded_header(path: &Path) -> bool {
+    fs::read(path).is_ok_and(|bytes| bytes == runtime_header().as_bytes())
+}
+
+/// FNV-1a 64 over the header bytes: a dependency-free key that is stable
+/// across toolchains (unlike `DefaultHasher`) and changes with the header's
+/// content, so two binaries embedding different headers never share a cache
+/// directory.
+fn header_content_key(header: &[u8]) -> u64 {
+    const OFFSET_BASIS: u64 = 0xcbf2_9ce4_8422_2325;
+    const PRIME: u64 = 0x0000_0100_0000_01b3;
+    header.iter().fold(OFFSET_BASIS, |hash, &byte| {
+        (hash ^ u64::from(byte)).wrapping_mul(PRIME)
+    })
+}
+
+/// The cache directory the embedded header is materialized into.
+fn materialized_include_root(cache_root: &Path) -> PathBuf {
+    cache_root.join(format!(
+        "clean-runtime-include-{:016x}",
+        header_content_key(runtime_header().as_bytes())
+    ))
+}
+
+/// Distinguishes staging files written by different threads of one process;
+/// the process id distinguishes processes.
+static STAGING_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+/// Write the embedded header into its cache directory under `cache_root`,
+/// unless a byte-identical copy is already there.
+///
+/// The write goes to a staging file unique to this process and thread and is
+/// then `rename`d over the final name in the same directory. On POSIX that is
+/// `rename(2)`, which replaces the target atomically, so a concurrent reader
+/// sees either no header, the previous complete header, or the new complete
+/// one — never a partial file. On Windows `std::fs::rename` is
+/// `MoveFileExW(MOVEFILE_REPLACE_EXISTING)`, which is not documented atomic;
+/// there the read-back below is what a caller's guarantee rests on. Two
+/// racing writers produce identical files, so whichever rename lands last
+/// changes nothing.
+fn materialize_header(cache_root: &Path) -> Result<PathBuf, IncludeDirError> {
+    let dir = materialized_include_root(cache_root);
+    let target = dir.join(RUNTIME_HEADER_FILE);
+    if holds_embedded_header(&target) {
+        return Ok(dir);
+    }
+    fs::create_dir_all(&dir).map_err(|source| IncludeDirError::CreateDir {
+        dir: dir.clone(),
+        source,
+    })?;
+    let staging = dir.join(format!(
+        ".{RUNTIME_HEADER_FILE}.{}.{}.tmp",
+        std::process::id(),
+        STAGING_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    if let Err(source) = fs::write(&staging, runtime_header()) {
+        let _ = fs::remove_file(&staging);
+        return Err(IncludeDirError::WriteStaging {
+            path: staging,
+            source,
+        });
+    }
+    if let Err(source) = fs::rename(&staging, &target) {
+        let _ = fs::remove_file(&staging);
+        return Err(IncludeDirError::Rename {
+            from: staging,
+            to: target,
+            source,
+        });
+    }
+    if !holds_embedded_header(&target) {
+        return Err(IncludeDirError::Verify { path: target });
+    }
+    Ok(dir)
 }
 
 /// Get the C header content as a string.
@@ -126,11 +304,142 @@ pub fn runtime_lib() -> Option<PathBuf> {
 mod tests {
     use super::*;
 
+    fn read_header(dir: &Path) -> String {
+        fs::read_to_string(dir.join(RUNTIME_HEADER_FILE))
+            .unwrap_or_else(|err| panic!("{} should be readable: {err}", dir.display()))
+    }
+
+    /// Directory entries of `dir`, sorted — the staging-file check.
+    fn entries(dir: &Path) -> Vec<String> {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .expect("cache directory should be listable")
+            .map(|entry| {
+                entry
+                    .expect("directory entry should be readable")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// The contract every caller relies on: whatever branch resolved, the
+    /// returned directory holds THE header this binary embeds.
     #[test]
-    fn test_include_dir_exists() {
+    fn test_include_dir_holds_the_embedded_header() {
         let dir = include_dir();
-        // Directory may not exist yet if headers haven't been generated
-        assert!(dir.ends_with("include"));
+        assert_eq!(read_header(&dir), runtime_header());
+        let checked = try_include_dir().expect("header should be resolvable or materializable");
+        assert_eq!(checked, dir);
+    }
+
+    #[test]
+    fn test_resolve_include_dir_prefers_compile_time_dir_that_holds_the_header() {
+        let tree = tempfile::tempdir().expect("tempdir");
+        let include = tree.path().join("include");
+        fs::create_dir_all(&include).expect("create include dir");
+        fs::write(include.join(RUNTIME_HEADER_FILE), runtime_header()).expect("write header");
+        let cache = tempfile::tempdir().expect("tempdir");
+
+        let got = resolve_include_dir(&include, cache.path()).expect("resolve");
+
+        assert_eq!(got, include);
+        assert!(
+            entries(cache.path()).is_empty(),
+            "no cache directory should be created when the compile-time one serves"
+        );
+    }
+
+    #[test]
+    fn test_resolve_include_dir_materializes_when_compile_time_dir_is_absent() {
+        let tree = tempfile::tempdir().expect("tempdir");
+        let absent = tree.path().join("include");
+        let cache = tempfile::tempdir().expect("tempdir");
+
+        let got = resolve_include_dir(&absent, cache.path()).expect("materialize");
+
+        assert_eq!(got, materialized_include_root(cache.path()));
+        assert_eq!(read_header(&got), runtime_header());
+        assert_eq!(
+            entries(&got),
+            vec![RUNTIME_HEADER_FILE.to_string()],
+            "only the header, no staging file, may remain"
+        );
+    }
+
+    #[test]
+    fn test_resolve_include_dir_ignores_a_compile_time_header_that_differs() {
+        // A stale binary next to an edited tree: the tree's header is not the
+        // one this binary embeds, so it must not be served.
+        let tree = tempfile::tempdir().expect("tempdir");
+        let include = tree.path().join("include");
+        fs::create_dir_all(&include).expect("create include dir");
+        fs::write(
+            include.join(RUNTIME_HEADER_FILE),
+            format!(
+                "{}\n/* edited after this binary was built */\n",
+                runtime_header()
+            ),
+        )
+        .expect("write header");
+        let cache = tempfile::tempdir().expect("tempdir");
+
+        let got = resolve_include_dir(&include, cache.path()).expect("materialize");
+
+        assert_ne!(got, include);
+        assert_eq!(read_header(&got), runtime_header());
+    }
+
+    #[test]
+    fn test_materialize_header_replaces_a_stale_cache_entry() {
+        let cache = tempfile::tempdir().expect("tempdir");
+        let dir = materialized_include_root(cache.path());
+        fs::create_dir_all(&dir).expect("create cache dir");
+        fs::write(dir.join(RUNTIME_HEADER_FILE), "/* torn or foreign */").expect("write stale");
+
+        let got = materialize_header(cache.path()).expect("materialize");
+
+        assert_eq!(got, dir);
+        assert_eq!(read_header(&got), runtime_header());
+        assert_eq!(entries(&got), vec![RUNTIME_HEADER_FILE.to_string()]);
+    }
+
+    #[test]
+    fn test_materialize_header_is_idempotent() {
+        let cache = tempfile::tempdir().expect("tempdir");
+
+        let first = materialize_header(cache.path()).expect("first materialization");
+        let second = materialize_header(cache.path()).expect("second materialization");
+
+        assert_eq!(first, second);
+        assert_eq!(read_header(&second), runtime_header());
+        assert_eq!(entries(&second), vec![RUNTIME_HEADER_FILE.to_string()]);
+    }
+
+    #[test]
+    fn test_materialize_header_fails_closed_when_cache_root_is_a_file() {
+        let tree = tempfile::tempdir().expect("tempdir");
+        let not_a_dir = tree.path().join("not-a-dir");
+        fs::write(&not_a_dir, "").expect("write file");
+
+        let err = materialize_header(&not_a_dir).expect_err("a file cannot be a cache root");
+
+        assert!(
+            matches!(err, IncludeDirError::CreateDir { .. }),
+            "unexpected error: {err}"
+        );
+    }
+
+    #[test]
+    fn test_header_content_key_is_fnv1a64_and_content_sensitive() {
+        // Published FNV-1a 64 vectors.
+        assert_eq!(header_content_key(b""), 0xcbf2_9ce4_8422_2325);
+        assert_eq!(header_content_key(b"a"), 0xaf63_dc4c_8601_ec8c);
+        let header = runtime_header().as_bytes();
+        let edited = [header, b"\n"].concat();
+        assert_ne!(header_content_key(header), header_content_key(&edited));
     }
 
     #[test]

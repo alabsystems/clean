@@ -505,9 +505,11 @@ impl MiterProvenance {
     /// Returns the first [`SatProvError`] encountered (fail-closed).
     pub fn validate(&self, clauses: &[Vec<SatLit>]) -> Result<(), SatProvError> {
         // 0. Basic shape.
-        if self.ir_out.len() as u32 != self.width
-            || self.machine_out.len() as u32 != self.width
-            || self.diff.len() as u32 != self.width
+        // Exact: a length past `u32::MAX` is never equal to the width (a
+        // truncating `len() as u32` would admit `2^32 + width` entries).
+        if u32::try_from(self.ir_out.len()) != Ok(self.width)
+            || u32::try_from(self.machine_out.len()) != Ok(self.width)
+            || u32::try_from(self.diff.len()) != Ok(self.width)
         {
             return Err(SatProvError::ShapeMismatch(
                 "ir_out / machine_out / diff length disagrees with width".into(),

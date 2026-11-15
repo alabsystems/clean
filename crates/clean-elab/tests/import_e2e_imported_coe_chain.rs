@@ -488,15 +488,23 @@ fn test_imported_coe_single_step_a_to_b_reduces_to_b2() {
         .and_then(|i| i.value.clone())
         .expect("coercedB body");
     let referenced = body.collect_constants();
+    // The coercion is pinned by the INSTANCE it goes through, not by the raw
+    // coercion function. `@Coe.coe A B instCoeAB A.a` is the Lean-faithful
+    // elaboration; `aToB` lives inside `instCoeAB` and appears only once the
+    // instance is unfolded, so naming it here pinned an implementation detail
+    // rather than the property. The property — that the imported instance is
+    // actually used — is what `instCoeAB` asserts, and the reduction below is
+    // the semantic check.
     assert!(
         referenced.contains(&Name::from_string("Coe.coe"))
-            && referenced.contains(&Name::from_string("aToB")),
+            && referenced.contains(&Name::from_string("instCoeAB")),
         "coercedB must go through the imported Coe.coe projection and the A->B \
-         coercion fn aToB, got: {referenced:?}"
+         instance instCoeAB, got: {referenced:?}"
     );
     assert!(
-        !referenced.contains(&Name::from_string("bToC")),
-        "a single A->B coercion must NOT pull in the B->C step bToC, got: {referenced:?}"
+        !referenced.contains(&Name::from_string("instCoeBC"))
+            && !referenced.contains(&Name::from_string("bToC")),
+        "a single A->B coercion must NOT pull in the B->C step, got: {referenced:?}"
     );
 
     assert_eq!(
@@ -540,11 +548,14 @@ fn test_imported_coe_chain_a_to_c_composes_both_steps_and_reduces_to_c2() {
         referenced.contains(&Name::from_string("Coe.coe")),
         "coercedC must go through the imported Coe.coe projection, got: {referenced:?}"
     );
+    // Both STEPS must be present, pinned by their instances — see the note at
+    // the single-step site. Composition is exactly "both instances participate".
     assert!(
-        referenced.contains(&Name::from_string("aToB"))
-            && referenced.contains(&Name::from_string("bToC")),
+        referenced.contains(&Name::from_string("instCoeAB"))
+            && referenced.contains(&Name::from_string("instCoeBC")),
         "a transitive A->C coercion must compose BOTH imported steps \
-         (the A->B fn aToB AND the B->C fn bToC), got: {referenced:?}"
+         (the A->B instance instCoeAB AND the B->C instance instCoeBC), \
+         got: {referenced:?}"
     );
 
     // The payoff: the composed coercion reduces to C.c2. C.c2 is distinct from

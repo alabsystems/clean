@@ -28,7 +28,8 @@ fn setup_eq_goal_with_hyp(
         env,
         eq_target,
         vec![LocalDecl {
-            name: "h".to_string(),
+            binder_info: Default::default(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             fvar: FVarId::new(0),
             ty: h_ty,
             value: None,
@@ -67,14 +68,16 @@ fn setup_nat_sum_goal_with_two_hyps(goal_lhs: Expr, goal_rhs: Expr) -> ProofStat
         make_eq(nat.clone(), goal_lhs, goal_rhs),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(nat.clone(), nat_var("a"), nat_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(nat, nat_var("c"), nat_var("d")),
                 value: None,
             },
@@ -104,7 +107,9 @@ fn test_linear_combination_proof_builder_missing_hyp() {
     let state = setup_eq_goal_with_hyp(env, x.clone(), y.clone(), x, y);
     let goal = state.current_goal().unwrap().clone();
 
-    let coeffs = vec![LinearCoeff::one("nonexistent")];
+    let coeffs = vec![LinearCoeff::one(
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    )];
     let result = build_linear_combination_eq_proof(&state, &goal, &coeffs);
     assert!(result.is_none(), "missing hypothesis should return None");
 }
@@ -118,7 +123,11 @@ fn test_linear_combination_proof_builder_rational_coeff_fails_closed() {
     let state = setup_eq_goal_with_hyp(env, x.clone(), y.clone(), x, y);
     let goal = state.current_goal().unwrap().clone();
 
-    let coeffs = vec![LinearCoeff::new("h", 1, 2)]; // rational 1/2
+    let coeffs = vec![LinearCoeff::new(
+        &clean_parser::SurfaceName::generated_path("h"),
+        1,
+        2,
+    )]; // rational 1/2
     let result = build_linear_combination_eq_proof(&state, &goal, &coeffs);
     assert!(
         result.is_none(),
@@ -145,7 +154,9 @@ fn test_proof_builder_identity_coeff_produces_proof() {
     let state = setup_eq_goal_with_hyp(env, x.clone(), y.clone(), x, y);
     let goal = state.current_goal().unwrap().clone();
 
-    let coeffs = vec![LinearCoeff::one("h")];
+    let coeffs = vec![LinearCoeff::one(
+        &clean_parser::SurfaceName::generated_path("h"),
+    )];
     let result = build_linear_combination_eq_proof(&state, &goal, &coeffs);
     assert!(
         result.is_some(),
@@ -164,7 +175,9 @@ fn test_proof_builder_identity_closes_goal_and_extracts_proof_term() {
     let mut state = setup_eq_goal_with_hyp(env, x.clone(), y.clone(), x, y);
     let goal = state.current_goal().unwrap().clone();
 
-    let coeffs = vec![LinearCoeff::one("h")];
+    let coeffs = vec![LinearCoeff::one(
+        &clean_parser::SurfaceName::generated_path("h"),
+    )];
     let proof = build_linear_combination_eq_proof(&state, &goal, &coeffs)
         .expect("identity coefficient should produce proof");
 
@@ -191,7 +204,9 @@ fn test_proof_builder_identity_trust_ledger_clean() {
     let mut state = setup_eq_goal_with_hyp(env, x.clone(), y.clone(), x, y);
     let goal = state.current_goal().unwrap().clone();
 
-    let coeffs = vec![LinearCoeff::one("h")];
+    let coeffs = vec![LinearCoeff::one(
+        &clean_parser::SurfaceName::generated_path("h"),
+    )];
     let proof = build_linear_combination_eq_proof(&state, &goal, &coeffs)
         .expect("identity coefficient should produce proof");
 
@@ -219,7 +234,10 @@ fn test_proof_builder_symmetry_coeff_produces_proof() {
     let state = setup_eq_goal_with_hyp(env, x.clone(), y.clone(), y, x);
     let goal = state.current_goal().unwrap().clone();
 
-    let coeffs = vec![LinearCoeff::int("h", -1)];
+    let coeffs = vec![LinearCoeff::int(
+        &clean_parser::SurfaceName::generated_path("h"),
+        -1,
+    )];
     let result = build_linear_combination_eq_proof(&state, &goal, &coeffs);
     assert!(
         result.is_some(),
@@ -236,7 +254,10 @@ fn test_proof_builder_symmetry_closes_goal_clean_ledger() {
     let mut state = setup_eq_goal_with_hyp(env, x.clone(), y.clone(), y, x);
     let goal = state.current_goal().unwrap().clone();
 
-    let coeffs = vec![LinearCoeff::int("h", -1)];
+    let coeffs = vec![LinearCoeff::int(
+        &clean_parser::SurfaceName::generated_path("h"),
+        -1,
+    )];
     let proof = build_linear_combination_eq_proof(&state, &goal, &coeffs)
         .expect("symmetry coefficient should produce proof");
 
@@ -274,7 +295,10 @@ fn test_proof_builder_two_hyp_commuted_goal_uses_scratch_normalization() {
     let mut state = setup_nat_sum_goal_with_two_hyps(goal_lhs, goal_rhs);
     let goal = state.current_goal().expect("goal should exist").clone();
 
-    let coeffs = vec![LinearCoeff::one("h1"), LinearCoeff::one("h2")];
+    let coeffs = vec![
+        LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+        LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+    ];
     let proof = build_linear_combination_eq_proof(&state, &goal, &coeffs)
         .expect("two-hypothesis commuted goal should reconstruct via scratch normalization");
 
@@ -315,7 +339,10 @@ fn test_linear_combination_tactic_two_hyp_commuted_goal_closes_without_trusted_a
 
     linear_combination(
         &mut state,
-        vec![LinearCoeff::one("h1"), LinearCoeff::one("h2")],
+        vec![
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+        ],
     )
     .expect("linear_combination should close the commuted two-hypothesis goal");
 

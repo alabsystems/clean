@@ -58,8 +58,29 @@ pub(super) fn lower_let(
         return Ok(lowered);
     }
 
+    // A ZERO-argument `LetValue::FVar` is a pure alias of an already-lowered
+    // local (`let outer := inner`): the shape `to_lcnf::expr_to_let_value`
+    // mints for a bare variable in value position (since 2026-09-15) and the
+    // inliner's `splice_code` mints for a substituted binder. Lowering it as
+    // a `ClosureApply` with no arguments — what the generic arm below does —
+    // was correct only through the runtime: `clean_apply_0` short-circuits to
+    // the identity on a non-closure (`clean_runtime.c`), and an UNBOXED
+    // scalar source would have reached it as a `clean_obj*`. Binding the name
+    // to the source's own `IRArg` emits nothing, keeps the source's recorded
+    // IR type and known-`Nat`-value evidence (both are keyed by `VarId`), and
+    // is exactly the renaming the C5b scalar-carrier arm above performs. An
+    // erased source stays erased under its new name.
+    if let LetValue::FVar { fvar, args } = &decl.value {
+        if args.is_empty() {
+            let source = state.get_var(*fvar)?;
+            state.bind_alias(decl.fvar_id, source);
+            return lower_code(body, state);
+        }
+    }
+
     // Normal let binding
     let var_id = state.bind_var(decl.fvar_id);
+    state.note_lcnf_binder_type(var_id, &decl.ty);
     let (expr, ty) = lower_let_value(&decl.value, state, Some(&decl.ty))?;
     // Track variable types for scalar type inference in _sset. Part of #2123.
     state.record_var_type(var_id, ty.clone());
@@ -69,7 +90,11 @@ pub(super) fn lower_let(
     // IS the literal operand). Pure bookkeeping — the emitted IR for these
     // bindings is unchanged.
     match &decl.value {
-        LetValue::Lit(clean_kernel::Literal::Nat(n)) => {
+        // A typed `UIntW` literal (WS6.4 `UIntW.ofNat` fold) is not a `Nat`:
+        // it is never recorded as `Nat` width evidence.
+        LetValue::Lit(clean_kernel::Literal::Nat(n))
+            if super::code::typed_uint_literal(n, Some(&decl.ty)).is_none() =>
+        {
             if let Some(value) = n.to_u64() {
                 state.record_known_nat_value(var_id, value);
             }
@@ -417,9 +442,16 @@ fn lower_scalar_carrier_ctor(
 
     match state.get_var_type(carrier_var) {
         Some(ty) if *ty == target => {
-            // Identity: the construction is pure renaming, no IR emitted.
+            // Identity: the construction is pure renaming, no IR emitted —
+            // except the releases of the other operands it no longer stores.
             state.bind_alias(decl.fvar_id, IRArg::Var(carrier_var));
-            Ok(Some(lower_code(body, state)?))
+            let rest = lower_code(body, state)?;
+            Ok(Some(release_dropped_operands(
+                args,
+                Some(*carrier_fvar),
+                state,
+                rest,
+            )))
         }
         // An object-typed carrier has NO affirmative boxed-scalar evidence:
         // it may be a heap ctor (`BitVec.ofFin`), and no runtime unbox route
@@ -577,8 +609,11 @@ fn lower_scalar_width_nat_decode(
     }
 
     let var_id = state.bind_var(decl.fvar_id);
+    state.note_lcnf_binder_type(var_id, &decl.ty);
     state.record_var_type(var_id, target.clone());
     let rest = lower_code(body, state)?;
+    // The unbox only READS the operand the replaced call consumed.
+    let rest = release_dropped_operands(args, None, state, rest);
     Ok(Some(IRBody::VDecl {
         var: var_id,
         ty: target.clone(),
@@ -588,6 +623,44 @@ fn lower_scalar_width_nat_decode(
         },
         rest: Box::new(rest),
     }))
+}
+
+/// A rewrite that REPLACES an LCNF call or constructor by a read (a decode)
+/// or by an alias drops that application's consumptions: LCNF RC balanced
+/// every operand for being consumed there (every call position is owned
+/// under the all-owned ABI, `rc::abi_owned_map`; a constructor stores its
+/// fields). Release each object-typed operand the rewrite no longer consumes
+/// — one `dec` per occurrence, `keep` (the aliased carrier, whose reference
+/// the alias inherits) excepted once. Found by the WS6.2 linearity verifier:
+/// every `UIntN.ofNat` / `ofNatLT` / `Char.ofNatAux` decode leaked its `Nat`
+/// operand.
+fn release_dropped_operands(
+    args: &[Arg],
+    keep: Option<FVarId>,
+    state: &ToIRState,
+    rest: IRBody,
+) -> IRBody {
+    let mut kept = false;
+    let mut releases = Vec::new();
+    for arg in args {
+        let Arg::FVar(fvar) = arg else { continue };
+        if !kept && keep == Some(*fvar) {
+            kept = true;
+            continue;
+        }
+        if let Ok(IRArg::Var(var)) = state.get_var(*fvar) {
+            if state.get_var_type(var).is_some_and(IRType::is_object) {
+                releases.push(var);
+            }
+        }
+    }
+    releases
+        .into_iter()
+        .rev()
+        .fold(rest, |rest, var| IRBody::Dec {
+            var,
+            rest: Box::new(rest),
+        })
 }
 
 /// R2 scalar-carrier chain, step 2 — `BitVec.ofFin w f` over an
@@ -650,7 +723,13 @@ fn lower_bitvec_of_fin_alias(
     }
 
     state.bind_alias(decl.fvar_id, IRArg::Var(fin_var));
-    Ok(Some(lower_code(body, state)?))
+    let rest = lower_code(body, state)?;
+    Ok(Some(release_dropped_operands(
+        args,
+        Some(*fin_fvar),
+        state,
+        rest,
+    )))
 }
 
 /// Check if a LetValue is an RC pseudo-operation.

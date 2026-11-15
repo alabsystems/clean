@@ -14,7 +14,7 @@
 
 use super::Parser;
 use crate::lexer::TokenKind;
-use crate::surface::{Span, SurfaceTactic};
+use crate::surface::{Span, SurfaceName, SurfaceTactic};
 use crate::ParseError;
 
 impl Parser {
@@ -22,32 +22,36 @@ impl Parser {
     pub(crate) fn parse_tactic_simpa(
         &mut self,
         span: Span,
-        only: bool,
+        mut only: bool,
     ) -> Result<SurfaceTactic, ParseError> {
-        let lemmas = if self.check(&TokenKind::LBracket) {
+        // `simpa optConfig (&" only")? ("[" … "]")? ("using" term)?` — the
+        // same prefix as `simp` (`parse_tactic_simp`). `only` used to be left
+        // unconsumed here, so `· simpa only [H] using hp` parsed `simpa`
+        // with no lemmas and then died on an "unknown tactic `only`"
+        // (`Prop.forall_iff`'s `<;> simpa only [H]`, measured 2026-09-11).
+        self.eat_tactic_config_items();
+        if matches!(self.current_kind(), TokenKind::Ident(ref s) if s == "only") {
             self.advance();
-            let mut lemmas = Vec::new();
-            if !self.check(&TokenKind::RBracket) {
-                lemmas.push(self.expr()?);
-                while self.eat(&TokenKind::Comma) {
-                    if self.check(&TokenKind::RBracket) {
-                        break;
-                    }
-                    lemmas.push(self.expr()?);
-                }
-            }
-            self.expect(&TokenKind::RBracket)?;
-            lemmas
+            only = true;
+        }
+        // The lemma list is `simp`'s (`←`/`-` modifiers, `*`); `simpa` has no
+        // hypothesis-wildcard channel of its own yet, so `[*]` is recorded as
+        // nothing to add (as before, when it did not parse at all).
+        let (lemmas, use_hypotheses) = if self.check(&TokenKind::LBracket) {
+            self.parse_simp_lemmas()?
         } else {
-            Vec::new()
+            (Vec::new(), false)
         };
         // Optional `using <term>`: `using` is an ordinary identifier token, not a
-        // reserved keyword, so we match it by name. The term that follows is a
-        // full expression (e.g. `Bool.xor_comm a b`).
+        // reserved keyword, so we match it by name. The term is a tactic-line
+        // term: it stops at the next line's bullet or tactic
+        // (`parse_tactic_expr`), where a bare `expr()` swallowed the following
+        // `· simpa …` line as further arguments (`·` is the cdot-function
+        // token) — six of them, in a `by_cases`/bullet proof.
         let using_term = if matches!(self.current_kind(), TokenKind::Ident(name) if name == "using")
         {
             self.advance();
-            Some(self.expr()?)
+            Some(self.parse_tactic_expr()?)
         } else {
             None
         };
@@ -55,6 +59,7 @@ impl Parser {
             span,
             only,
             lemmas,
+            use_hypotheses,
             using_term,
         })
     }
@@ -63,20 +68,24 @@ impl Parser {
     // Tactic helper methods (split from tactic.rs)
     // =========================================================================
 
-    /// Try to eat an identifier, returning its name if successful
-    pub(crate) fn try_eat_ident(&mut self) -> Option<String> {
+    /// Try to eat an identifier, returning its name if successful. A Lean
+    /// keyword is not one (`crate::lexer::Token::lean_keyword`): Lean's
+    /// `ident` does not match it, so an identifier list ends there.
+    pub(crate) fn try_eat_ident(&mut self) -> Option<SurfaceName> {
         match self.current_kind().clone() {
+            TokenKind::Ident(_) if self.current().lean_keyword => None,
             TokenKind::Ident(name) => {
                 // Don't consume keywords that start tactic sub-parsers
-                if self.is_tactic_keyword(&name) {
+                if !self.current().ident_escaped && self.is_tactic_keyword(&name) {
                     return None;
                 }
                 // Don't consume registered tactic names — they start a new tactic.
                 // This ensures `intro rcases h` stops the ident list at `rcases`
                 // when `rcases` is in the pattern map.
-                if self.tactic_pattern(&name).is_some() {
+                if !self.current().ident_escaped && self.tactic_pattern(&name).is_some() {
                     return None;
                 }
+                let name = SurfaceName::component(name, self.current().ident_escaped);
                 self.advance();
                 Some(name)
             }
@@ -85,9 +94,10 @@ impl Parser {
     }
 
     /// Expect an identifier, returning its name
-    pub(crate) fn expect_ident(&mut self, context: &str) -> Result<String, ParseError> {
+    pub(crate) fn expect_ident(&mut self, context: &str) -> Result<SurfaceName, ParseError> {
         match self.current_kind().clone() {
             TokenKind::Ident(name) => {
+                let name = self.name_token(&name)?;
                 self.advance();
                 Ok(name)
             }
@@ -104,7 +114,7 @@ impl Parser {
     }
 
     /// Parse a list of identifiers (stops at non-ident or tactic keyword)
-    pub(crate) fn parse_ident_list(&mut self) -> Vec<String> {
+    pub(crate) fn parse_ident_list(&mut self) -> Vec<SurfaceName> {
         let mut names = Vec::new();
         while let Some(name) = self.try_eat_ident() {
             names.push(name);

@@ -21,6 +21,32 @@ pip install -e .
 <!-- markdown-link-check-disable-next-line -->
 - Clean-server running (default: http://localhost:8000)
 
+## Status: this client cannot reach `clean server`
+
+`CleanVerifier` POSTs JSON-RPC over HTTP. `clean server` has no HTTP transport.
+It reads line-delimited JSON-RPC over TCP, or messages over WebSocket
+(`docs/JSON_RPC_API.md`). Its trust boundary also refuses any connection whose
+first message is not `authenticate` with the server's launch token: an HTTP
+request line gets error `-32006` and the connection is closed.
+
+To talk to the server, a client must:
+
+1. open the TCP port (or a WebSocket) at `127.0.0.1`, the one address the
+   server binds: `localhost` may resolve to `::1` first, where another user
+   can listen on the same port;
+2. send `{"jsonrpc":"2.0","method":"authenticate","params":{"token":"<launch token>"},"id":0}`
+   as its first line;
+3. then send one request per line.
+
+The server prints the token on standard error and writes it to
+`server-<port>.token` in `$XDG_RUNTIME_DIR/clean` (else `$HOME/.clean/run`),
+mode 0600. Rust clients read it with `clean_server::client_launch_token`, which
+also honours `CLEAN_SERVER_TOKEN` and `CLEAN_SERVER_TOKEN_FILE` and reads the
+default file only for `127.0.0.1` (`clean_server::client_server_address` spells
+`localhost` that way). Until this
+package speaks that transport, the examples below describe its API, not a
+working connection.
+
 ## Usage
 
 ### Basic Verification

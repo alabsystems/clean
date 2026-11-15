@@ -17,6 +17,7 @@ use std::fmt::Write as _;
 
 use super::core::{for_each_inst, Sx};
 use super::error::{CoreError, MintError};
+use super::mint_globals::{check_global_namespace, global, parse_globals};
 use super::shape::{self, Arg};
 use super::tags::Tags;
 
@@ -46,10 +47,18 @@ impl MintedScript {
 /// names, and the Clean alias minted for it. An aggregate the table does not
 /// list is a hard refusal, never an invented id.
 ///
+/// A module's `(globals …)` list mints as one `def {prefix}_g{k} : IRGlobal`
+/// per entry, placed after the alias definitions and before the first block
+/// — see [`check_global_namespace`] for what the list must agree with. An
+/// EMPTY list mints the literal `(IRList.nil IRGlobal)` it always did, so every
+/// chain without a global is byte-identical under this lane.
+///
 /// # Errors
 /// Returns [`MintError`] on a malformed core module, a construct outside the
-/// Clean fragment, an unwitnessed flag, an aggregate absent from `tags`, or a
-/// numeral outside the registered `ir_d0..ir_d63` atom pool.
+/// Clean fragment, an unwitnessed flag, an aggregate absent from `tags`, a
+/// global index the `(globals …)` list, the instructions and the tag table's
+/// `globals` lane do not all account for, or a numeral outside the registered
+/// `ir_d0..ir_d130` atom pool.
 pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintError> {
     let body = core.tagged("module")?;
     let funcs = body[0].tagged("funcs")?;
@@ -68,20 +77,23 @@ pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintEr
         ))
         .into());
     }
-    if !body[1].tagged("globals")?.is_empty() {
-        return Err(CoreError::NoImage(
-            "module globals: no chain registers one, so minting them is unimplemented rather than \
-             approximated"
-                .into(),
-        )
-        .into());
-    }
+    let globals = parse_globals(body[1].tagged("globals")?)?;
     let parsed: Vec<&[Sx]> = funcs
         .iter()
         .map(|f| f.tagged("func"))
         .collect::<Result<_, _>>()?;
     check_func_namespace(core, &parsed, tags)?;
+    check_global_namespace(core, &globals, tags)?;
     let mut lines = tags.alias_defs();
+    // Globals FIRST: a block may take a global's address, and the module line
+    // names every global, so the definitions land between the aliases and the
+    // first block. A module with none emits no line here.
+    let mut global_names = Vec::new();
+    for g in &globals {
+        let name = format!("{prefix}_g{}", g.index);
+        lines.push(format!("def {name} : IRGlobal := {}", global(g, tags)?));
+        global_names.push(name);
+    }
     let mut func_names = Vec::new();
     for (f, canonical) in parsed.iter().zip(&declared) {
         let own = u32::try_from(f[0].num()?)
@@ -123,11 +135,93 @@ pub fn mint(core: &Sx, prefix: &str, tags: &Tags) -> Result<MintedScript, MintEr
     for n in func_names.iter().rev() {
         list = format!("(IRList.cons IRFunc {n} {list})");
     }
-    // The list is already parenthesised, which is what every chain before this
-    // lane minted and what `IRModule.mk`'s first argument position needs.
-    lines.push(format!(
-        "def {prefix}_module : IRModule := IRModule.mk {list} (IRList.nil IRGlobal)"
-    ));
+    // The global list is spelled the same way, and its empty case is the
+    // literal `(IRList.nil IRGlobal)` every chain before the globals lane
+    // minted — byte for byte, which every one of their M3 gates asserts.
+    let mut glist = String::from("(IRList.nil IRGlobal)");
+    for n in global_names.iter().rev() {
+        glist = format!("(IRList.cons IRGlobal {n} {glist})");
+    }
+    // The lists are already parenthesised, which is what every chain before
+    // this lane minted and what `IRModule.mk`'s argument positions need.
+    //
+    // This still mints `IRModule.mk`, deliberately, and the Phase-B note that
+    // used to stand here has come true rather than been deleted. It read:
+    // "Phase B adds an additive `IRModule.mkv` carrying a derived encodings
+    // table, but the minter arm for it rides on the globals rendering of
+    // Phase-A job A:S6, which is not in this worktree; both arms land together
+    // in B4/B5." This lane IS where the two met — the globals rendering above
+    // is that A:S6 work — so the `mkv` arm is now unblocked and is still not
+    // taken here. Every chain minted by this function stays an `IRModule.mk`,
+    // which is exactly the term the M3 byte-identity fixtures pin and what
+    // makes the EvalIR extension conservative over them by iota. A chain that
+    // needs an encodings table gets the `mkv` arm beside this one, never by
+    // changing what this line emits.
+    // THE ENCODINGS LIST, and the `mkv` arm it selects.
+    //
+    // Empty table -> `IRModule.mk`, byte for byte what every chain before
+    // Phase B minted, which is what their M3 gates assert. A table WITH rows
+    // -> `IRModule.mkv`, which carries them, and `ir_mod_encs` reads them
+    // back. That split is the whole conservativity argument: `mk` sends
+    // `ir_mod_encs` to the empty table and the encoding-aware load
+    // iota-reduces to the identity there, so adding `mkv` cannot move a term
+    // any older chain minted.
+    let mut enc_names = Vec::new();
+    for (i, e) in tags.encodings.iter().enumerate() {
+        let name = format!("{prefix}_e{i}");
+        let payload = ty(&super::core::parse(&e.payload)?, tags)?;
+        // *** THE KEY IS THE CRATE ID, NOT THE CANONICAL INDEX. ***
+        //
+        // `ir_enc_matches` compares the row's first `Nat` against the number an
+        // `IRTy.enum_` / `IRTy.struct_` carries — and an aggregate renders as
+        // the chain's ALIAS, whose definition carries the CRATE-level id (see
+        // `ty` above). So a row minted at the canonical index keys on a number
+        // no type in the module ever presents.
+        //
+        // That is not hypothetical: `ir_lzd`'s first two rows shipped that way
+        // on 2026-09-10 and were silently inert — worse than inert, because
+        // canonical 1 and crate id 1 both exist here, so one row fired at the
+        // WRONG TYPE and another re-entered itself until its fuel ran out.
+        // Nothing caught it until the machine was executed at those types,
+        // which is why `the_encodings_keys_are_the_ids_the_aliases_carry`
+        // exists beside this line.
+        //
+        // Resolving through `enum_alias`/`struct_alias` also makes a row whose
+        // canonical index the tag table does not name a REFUSAL rather than a
+        // numeral standing for nothing — the same rule the function namespace
+        // has.
+        let crate_id = match e.kind {
+            super::tags::EncKind::Niche { .. } => tags.enum_alias(e.canonical)?.0,
+            super::tags::EncKind::Wrap { .. } => tags.struct_alias(e.canonical)?.0,
+        };
+        let k = nat(u128::from(crate_id))?;
+        lines.push(match e.kind {
+            super::tags::EncKind::Niche {
+                none_variant,
+                some_variant,
+            } => format!(
+                "def {name} : IREnc := IREnc.nicheptr {k} {} {} {payload}",
+                nat(u128::from(none_variant))?,
+                nat(u128::from(some_variant))?,
+            ),
+            super::tags::EncKind::Wrap { slot, fields } => format!(
+                "def {name} : IREnc := IREnc.ptrwrap {k} {} {} {payload}",
+                nat(u128::from(slot))?,
+                nat(u128::from(fields))?,
+            ),
+        });
+        enc_names.push(name);
+    }
+    let head = if enc_names.is_empty() {
+        format!("IRModule.mk {list} {glist}")
+    } else {
+        let mut elist = String::from("(IRList.nil IREnc)");
+        for n in enc_names.iter().rev() {
+            elist = format!("(IRList.cons IREnc {n} {elist})");
+        }
+        format!("IRModule.mkv {list} {glist} {elist}")
+    };
+    lines.push(format!("def {prefix}_module : IRModule := {head}"));
     Ok(MintedScript { lines })
 }
 
@@ -188,8 +282,11 @@ fn check_func_namespace(core: &Sx, fs: &[&[Sx]], tags: &Tags) -> Result<(), Mint
 /// A STRUCTURAL INDEX: `ir_dN`, or a refusal naming the numeral the atom pool
 /// lacks.
 ///
-/// The pool is `ir_d0..ir_d63` since 2026-08-22 (the designated target's SSA
-/// ids reach 20; the spec registers the atoms in `eval_ir_crystal.rs`). The
+/// The pool is `ir_d0..ir_d130` since 2026-09-16, `ir_d0..ir_d63` before that
+/// (the designated target's SSA ids reach 20 alone and 39 in its own minted
+/// body; 130 is the max SSA result id of `tc::heartbeat::tick_heartbeat`, the
+/// callee whose absence makes infer_type's transitive closure cyclic). The
+/// spec registers the atoms in `eval_ir_crystal.rs`. The
 /// DATA pool cutoff in [`nat_data`] deliberately stays at 16: widening it
 /// would respell data slots of already-minted artifacts (`(IRConst.int_ 63)`
 /// in the meta_tag chain would become `ir_d63`), and byte-identity of every
@@ -200,13 +297,24 @@ fn check_func_namespace(core: &Sx, fs: &[&[Sx]], tags: &Tags) -> Result<(), Mint
 /// refusal is the point: a `(func 20 …)` minted as a bare `20` would register a
 /// module naming a numeral the specification never introduced, and nothing
 /// downstream would say so.
-fn nat(n: u128) -> Result<String, MintError> {
-    if n <= 63 {
+pub(super) fn nat(n: u128) -> Result<String, MintError> {
+    if n <= MAX_STRUCTURAL_ATOM {
         Ok(format!("ir_d{n}"))
     } else {
         Err(MintError::Numeral(n))
     }
 }
+
+/// The highest numeral the specification declares as a structural `ir_d<N>`
+/// atom -- `eval_ir_crystal.rs` registers `ir_d65..ir_d130` (2026-09-16), and
+/// `generated/ir_itc.defs.txt` really does name `ir_d130`.
+///
+/// It is a CONSTANT because the bound and the refusal message drifted the day
+/// the pool widened: the check moved to 130 and `MintError::Numeral` went on
+/// saying `ir_d0..ir_d63`, which is a false statement in a user-facing error
+/// and is what let two refusal pins stop refusing without anyone reading a
+/// wrong number. The message is now formatted from this value.
+pub(crate) const MAX_STRUCTURAL_ATOM: u128 = 130;
 
 /// The crate-level INTERNING ID of an aggregate, as the chain's alias
 /// definition names it.
@@ -343,7 +451,7 @@ fn inst(sx: &Sx, tags: &Tags) -> Result<String, MintError> {
     })
 }
 
-fn arg(kind: Arg, a: &Sx, tags: &Tags) -> Result<String, MintError> {
+pub(super) fn arg(kind: Arg, a: &Sx, tags: &Tags) -> Result<String, MintError> {
     Ok(match kind {
         Arg::Ty => ty(a, tags)?,
         Arg::Val | Arg::Blk | Arg::Nat => nat(a.num()?)?,

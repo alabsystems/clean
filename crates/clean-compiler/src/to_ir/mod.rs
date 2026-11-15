@@ -48,6 +48,8 @@ pub(crate) mod state;
 pub(crate) mod types;
 
 #[cfg(test)]
+mod sort_field_tests;
+#[cfg(test)]
 mod tests;
 
 // ════════════════════════════════════════════════════════════════════════════

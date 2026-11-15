@@ -99,11 +99,11 @@ fn test_parse_do_if_let() {
             match &elems[0] {
                 DoElem::IfLet(_, pat, scrutinee, then_branch, else_branch) => {
                     assert!(
-                        matches!(pat, SurfacePattern::Ctor(name, _) if name == "some"),
+                        matches!(pat, SurfacePattern::Ctor(name, _) if (name).name() == crate::SurfaceName::generated_path("some").name()),
                         "Expected Ctor(some, ...) pattern, got {pat:?}"
                     );
                     assert!(
-                        matches!(scrutinee.as_ref(), SurfaceExpr::Ident(_, ref n) if n == "opt")
+                        matches!(scrutinee.as_ref(), SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("opt").name())
                     );
                     assert_eq!(then_branch.len(), 1);
                     assert!(matches!(&then_branch[0], DoElem::Return(_, _)));
@@ -126,7 +126,10 @@ fn test_parse_do_if_decidable() {
             assert_eq!(elems.len(), 1);
             match &elems[0] {
                 DoElem::IfDecidable(_, witness, _prop, then_branch, else_branch) => {
-                    assert_eq!(witness, "h");
+                    assert_eq!(
+                        (witness).name(),
+                        crate::SurfaceName::generated_path("h").name()
+                    );
                     assert_eq!(then_branch.len(), 1);
                     assert!(matches!(&then_branch[0], DoElem::Return(_, _)));
                     let else_b = else_branch.as_ref().expect("should have else branch");
@@ -202,7 +205,9 @@ fn test_parse_do_unless_lowers_to_if() {
             assert_eq!(elems.len(), 2);
             match &elems[0] {
                 DoElem::If(_, cond, then_branch, else_branch) => {
-                    assert!(matches!(cond.as_ref(), SurfaceExpr::Ident(_, name) if name == "cond"));
+                    assert!(
+                        matches!(cond.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("cond").name())
+                    );
                     assert_eq!(then_branch.len(), 1);
                     // The "skip" branch is a SEQUENCED `pure ()` (Expr), NOT a
                     // `return ()`: inside a block with a later `return`, an early
@@ -211,7 +216,7 @@ fn test_parse_do_unless_lowers_to_if() {
                         &then_branch[0],
                         DoElem::Expr(_, expr)
                             if matches!(expr.as_ref(), SurfaceExpr::App(_, func, _)
-                                if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "pure"))
+                                if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("pure").name()))
                     ));
                     let else_branch = else_branch
                         .as_ref()
@@ -239,7 +244,9 @@ fn test_parse_do_when_lowers_to_if() {
             assert_eq!(elems.len(), 2);
             match &elems[0] {
                 DoElem::If(_, cond, then_branch, else_branch) => {
-                    assert!(matches!(cond.as_ref(), SurfaceExpr::Ident(_, name) if name == "cond"));
+                    assert!(
+                        matches!(cond.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("cond").name())
+                    );
                     // then-branch = the body (`return 1`).
                     assert_eq!(then_branch.len(), 1);
                     assert!(matches!(&then_branch[0], DoElem::Return(_, _)));
@@ -250,7 +257,7 @@ fn test_parse_do_when_lowers_to_if() {
                         &else_branch[0],
                         DoElem::Expr(_, expr)
                             if matches!(expr.as_ref(), SurfaceExpr::App(_, func, _)
-                                if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "pure"))
+                                if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("pure").name()))
                     ));
                 }
                 other => panic!("Expected DoElem::If, got {other:?}"),
@@ -267,7 +274,9 @@ fn test_parse_do_have_lowers_to_let() {
     match expr {
         SurfaceExpr::Do(_, elems) => {
             assert_eq!(elems.len(), 2);
-            assert!(matches!(&elems[0], DoElem::Let(_, binder, _) if binder.name == "h"));
+            assert!(
+                matches!(&elems[0], DoElem::Have(_, binder, _) if (binder.name).name() == crate::SurfaceName::generated_path("h").name())
+            );
             assert!(matches!(&elems[1], DoElem::Return(_, _)));
         }
         other => panic!("Expected Do, got {other:?}"),
@@ -281,22 +290,28 @@ fn test_parse_do_have_with_binders() {
         SurfaceExpr::Do(_, elems) => {
             assert_eq!(elems.len(), 2);
             match &elems[0] {
-                DoElem::Let(_, binder, val) => {
-                    assert_eq!(binder.name, "f");
+                DoElem::Have(_, binder, val) => {
+                    assert_eq!(
+                        (binder.name).name(),
+                        crate::SurfaceName::generated_path("f").name()
+                    );
                     assert!(binder.ty.is_some(), "expected explicit return type");
                     match val.as_ref() {
                         SurfaceExpr::Lambda(_, binders, body) => {
                             assert_eq!(binders.len(), 1);
-                            assert_eq!(binders[0].name, "n");
+                            assert_eq!(
+                                (binders[0].name).name(),
+                                crate::SurfaceName::generated_path("n").name()
+                            );
                             assert!(matches!(
                                 body.as_ref(),
-                                SurfaceExpr::Ident(_, name) if name == "n"
+                                SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("n").name()
                             ));
                         }
                         other => panic!("Expected lambda-wrapped have value, got {other:?}"),
                     }
                 }
-                other => panic!("Expected DoElem::Let, got {other:?}"),
+                other => panic!("Expected DoElem::Have, got {other:?}"),
             }
             assert!(matches!(&elems[1], DoElem::Return(_, _)));
         }
@@ -309,18 +324,21 @@ fn test_parse_do_have_with_binders_wraps_full_function_type() {
     let expr = Parser::parse_expr("do have f (n : Nat) : Nat := n; return f 0").unwrap();
     match expr {
         SurfaceExpr::Do(_, elems) => match &elems[0] {
-            DoElem::Let(_, binder, _) => match binder.ty.as_deref() {
+            DoElem::Have(_, binder, _) => match binder.ty.as_deref() {
                 Some(SurfaceExpr::Pi(_, binders, body)) => {
                     assert_eq!(binders.len(), 1);
-                    assert_eq!(binders[0].name, "n");
+                    assert_eq!(
+                        (binders[0].name).name(),
+                        crate::SurfaceName::generated_path("n").name()
+                    );
                     assert!(matches!(
                         body.as_ref(),
-                        SurfaceExpr::Ident(_, name) if name == "Nat"
+                        SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("Nat").name()
                     ));
                 }
                 other => panic!("Expected Pi binder type for do-have function, got {other:?}"),
             },
-            other => panic!("Expected DoElem::Let, got {other:?}"),
+            other => panic!("Expected DoElem::Have, got {other:?}"),
         },
         other => panic!("Expected Do, got {other:?}"),
     }
@@ -335,7 +353,7 @@ fn test_parse_do_let_rec() {
             match &elems[0] {
                 DoElem::LetRec(_, decls) => {
                     assert_eq!(decls.len(), 1);
-                    assert_eq!(decls[0].0.name, "f");
+                    assert_eq!(decls[0].0.name, crate::SurfaceName::generated_path("f"));
                     assert!(matches!(decls[0].1.as_ref(), SurfaceExpr::Lambda(_, _, _)));
                 }
                 other => panic!("Expected DoElem::LetRec, got {other:?}"),
@@ -354,10 +372,13 @@ fn test_parse_do_let_rec_with_binders_wraps_full_function_type() {
             DoElem::LetRec(_, decls) => match decls[0].0.ty.as_deref() {
                 Some(SurfaceExpr::Pi(_, binders, body)) => {
                     assert_eq!(binders.len(), 1);
-                    assert_eq!(binders[0].name, "n");
+                    assert_eq!(
+                        (binders[0].name).name(),
+                        crate::SurfaceName::generated_path("n").name()
+                    );
                     assert!(matches!(
                         body.as_ref(),
-                        SurfaceExpr::Ident(_, name) if name == "Nat"
+                        SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("Nat").name()
                     ));
                 }
                 other => panic!("Expected Pi binder type for do-let-rec function, got {other:?}"),
@@ -382,8 +403,8 @@ fn test_parse_do_let_rec_mutual_and() {
             match &elems[0] {
                 DoElem::LetRec(_, decls) => {
                     assert_eq!(decls.len(), 2, "expected 2 mutual declarations");
-                    assert_eq!(decls[0].0.name, "f");
-                    assert_eq!(decls[1].0.name, "g");
+                    assert_eq!(decls[0].0.name, crate::SurfaceName::generated_path("f"));
+                    assert_eq!(decls[1].0.name, crate::SurfaceName::generated_path("g"));
                     assert!(matches!(decls[0].1.as_ref(), SurfaceExpr::Lambda(_, _, _)));
                     assert!(matches!(decls[1].1.as_ref(), SurfaceExpr::Lambda(_, _, _)));
                 }
@@ -407,9 +428,9 @@ fn test_parse_do_let_rec_triple_and() {
             match &elems[0] {
                 DoElem::LetRec(_, decls) => {
                     assert_eq!(decls.len(), 3, "expected 3 mutual declarations");
-                    assert_eq!(decls[0].0.name, "a");
-                    assert_eq!(decls[1].0.name, "b");
-                    assert_eq!(decls[2].0.name, "c");
+                    assert_eq!(decls[0].0.name, crate::SurfaceName::generated_path("a"));
+                    assert_eq!(decls[1].0.name, crate::SurfaceName::generated_path("b"));
+                    assert_eq!(decls[2].0.name, crate::SurfaceName::generated_path("c"));
                 }
                 other => panic!("Expected DoElem::LetRec, got {other:?}"),
             }
@@ -428,7 +449,7 @@ fn test_parse_do_assert_as_expr() {
                 DoElem::Expr(_, expr) => match expr.as_ref() {
                     SurfaceExpr::App(_, func, args) => {
                         assert!(
-                            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "assert!")
+                            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("assert!").name())
                         );
                         assert_eq!(args.len(), 1);
                     }
@@ -451,7 +472,7 @@ fn test_parse_do_debug_assert_as_expr() {
                 DoElem::Expr(_, expr) => match expr.as_ref() {
                     SurfaceExpr::App(_, func, _) => {
                         assert!(
-                            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "debug_assert!")
+                            matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("debug_assert!").name())
                         );
                     }
                     other => panic!("Expected debug_assert! application, got {other:?}"),
@@ -476,7 +497,7 @@ fn test_parse_do_match_expr() {
                     assert_eq!(arms.len(), 2);
                     assert!(matches!(
                         &arms[0].patterns[0],
-                        SurfacePattern::Ctor(name, args) if name == "some" && args.len() == 1
+                        SurfacePattern::Ctor(name, args) if (name).name() == crate::SurfaceName::generated_path("some").name() && args.len() == 1
                     ));
                     assert!(matches!(&arms[1].patterns[0], SurfacePattern::Wildcard));
                 }
@@ -511,8 +532,12 @@ fn test_parse_do_let_expr_pure() {
             assert_eq!(elems.len(), 2);
             match &elems[0] {
                 DoElem::LetExpr(_, pat, discr, kind, fallback) => {
-                    assert!(matches!(pat, SurfacePattern::Ctor(name, _) if name == "some"));
-                    assert!(matches!(discr.as_ref(), SurfaceExpr::Ident(_, name) if name == "x"));
+                    assert!(
+                        matches!(pat, SurfacePattern::Ctor(name, _) if (name).name() == crate::SurfaceName::generated_path("some").name())
+                    );
+                    assert!(
+                        matches!(discr.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("x").name())
+                    );
                     assert_eq!(*kind, DoLetExprKind::Pure);
                     assert_eq!(fallback.len(), 1);
                     assert!(matches!(&fallback[0], DoElem::Return(_, _)));
@@ -534,7 +559,9 @@ fn test_parse_do_let_expr_bind() {
             assert_eq!(elems.len(), 2);
             match &elems[0] {
                 DoElem::LetExpr(_, pat, _, kind, fallback) => {
-                    assert!(matches!(pat, SurfacePattern::Ctor(name, _) if name == "some"));
+                    assert!(
+                        matches!(pat, SurfacePattern::Ctor(name, _) if (name).name() == crate::SurfaceName::generated_path("some").name())
+                    );
                     assert_eq!(*kind, DoLetExprKind::Bind);
                     assert_eq!(fallback.len(), 1);
                     assert!(matches!(&fallback[0], DoElem::Return(_, _)));
@@ -559,10 +586,17 @@ fn test_parse_do_pattern_reassign_pair() {
                     // (a, b) → Prod.mk [Var("a"), Var("b")]
                     match pat {
                         SurfacePattern::Ctor(name, args) => {
-                            assert_eq!(name, "Prod.mk");
+                            assert_eq!(
+                                (name).name(),
+                                crate::SurfaceName::generated_path("Prod.mk").name()
+                            );
                             assert_eq!(args.len(), 2);
-                            assert!(matches!(&args[0], SurfacePattern::Var(n) if n == "a"));
-                            assert!(matches!(&args[1], SurfacePattern::Var(n) if n == "b"));
+                            assert!(
+                                matches!(&args[0], SurfacePattern::Var(n) if (n).name() == crate::SurfaceName::generated_path("a").name())
+                            );
+                            assert!(
+                                matches!(&args[1], SurfacePattern::Var(n) if (n).name() == crate::SurfaceName::generated_path("b").name())
+                            );
                         }
                         other => panic!("Expected Ctor(Prod.mk), got {other:?}"),
                     }
@@ -585,11 +619,16 @@ fn test_parse_do_pattern_reassign_triple() {
                 DoElem::PatternReassign(_, pat, _) => {
                     // (a, b, c) → Prod.mk [Var("a"), Prod.mk [Var("b"), Var("c")]]
                     match pat {
-                        SurfacePattern::Ctor(name, args) if name == "Prod.mk" => {
+                        SurfacePattern::Ctor(name, args)
+                            if (name).name()
+                                == crate::SurfaceName::generated_path("Prod.mk").name() =>
+                        {
                             assert_eq!(args.len(), 2);
-                            assert!(matches!(&args[0], SurfacePattern::Var(n) if n == "a"));
+                            assert!(
+                                matches!(&args[0], SurfacePattern::Var(n) if (n).name() == crate::SurfaceName::generated_path("a").name())
+                            );
                             assert!(matches!(&args[1], SurfacePattern::Ctor(n, inner)
-                                if n == "Prod.mk" && inner.len() == 2));
+                                if (n).name() == crate::SurfaceName::generated_path("Prod.mk").name() && inner.len() == 2));
                         }
                         other => panic!("Expected nested Prod.mk, got {other:?}"),
                     }
@@ -616,7 +655,10 @@ fn test_parse_do_try_catch_flat() {
                     assert_eq!(try_body.len(), 1, "try body should have one element");
                     assert_eq!(catches.len(), 1, "should have one catch clause");
                     assert!(finally_body.is_none(), "no finally clause");
-                    assert_eq!(catches[0].binder, "e");
+                    assert_eq!(
+                        (catches[0].binder).name(),
+                        crate::SurfaceName::generated_path("e").name()
+                    );
                 }
                 other => panic!("Expected TryCatch, got {other:?}"),
             }
@@ -686,11 +728,13 @@ fn test_parse_do_let_tuple_pattern_desugars_to_match() {
             match &elems[0] {
                 DoElem::Match(_, discrs, arms) => {
                     assert_eq!(discrs.len(), 1);
-                    assert!(matches!(discrs[0], SurfaceExpr::Ident(_, ref n) if n == "p"));
+                    assert!(
+                        matches!(discrs[0], SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("p").name())
+                    );
                     assert_eq!(arms.len(), 1, "irrefutable: exactly one arm");
                     assert!(matches!(
                         &arms[0].patterns[0],
-                        SurfacePattern::Ctor(name, args) if name == "Prod.mk" && args.len() == 2
+                        SurfacePattern::Ctor(name, args) if (name).name() == crate::SurfaceName::generated_path("Prod.mk").name() && args.len() == 2
                     ));
                     // The arm body carries the continuation (`pure (a + b)`).
                     assert_eq!(arms[0].body.len(), 1);
@@ -715,7 +759,7 @@ fn test_parse_do_let_anon_ctor_pattern_desugars_to_match() {
                         && arms.len() == 1
                         && matches!(
                             &arms[0].patterns[0],
-                            SurfacePattern::Ctor(name, args) if name == "Prod.mk" && args.len() == 2
+                            SurfacePattern::Ctor(name, args) if (name).name() == crate::SurfaceName::generated_path("Prod.mk").name() && args.len() == 2
                         )
             ));
         }
@@ -789,7 +833,7 @@ fn test_parse_do_let_tuple_pattern_monadic_bind_desugars() {
                                     && matches!(
                                         &arms[0].patterns[0],
                                         SurfacePattern::Ctor(name, args)
-                                            if name == "Prod.mk" && args.len() == 2
+                                            if (name).name() == crate::SurfaceName::generated_path("Prod.mk").name() && args.len() == 2
                                     )
                         ));
                     }

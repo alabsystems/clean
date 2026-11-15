@@ -1,0 +1,8 @@
+(set-logic ALL)
+(declare-datatype P ((mk (fst Int) (snd Int)) (other (oth Int))))
+(declare-datatype L (par (X) ((mk) (cns (hd X)))))
+(declare-const a Int)
+(declare-const b Int)
+(define-fun ap2 ((f (-> Int Int P)) (x Int) (y Int)) P (f x y))
+(assert (not (= (snd (ap2 (as mk (-> Int Int P)) a b)) b)))
+(check-sat)

@@ -286,8 +286,7 @@ pub(crate) fn partial_eval(
                 (&l, &r),
                 (PartialValue::Concrete(_), PartialValue::Concrete(_))
             ) {
-                eval_native(&full)
-                    .map_or_else(|_| PartialValue::Symbolic(full), PartialValue::Concrete)
+                eval_native(&full).map_or(PartialValue::Symbolic(full), PartialValue::Concrete)
             } else {
                 PartialValue::Symbolic(full)
             }
@@ -297,8 +296,7 @@ pub(crate) fn partial_eval(
             let subst = partial_to_expr(&inner);
             let full = NativeExpr::UnaryOp(*op, Box::new(subst));
             if matches!(&inner, PartialValue::Concrete(_)) {
-                eval_native(&full)
-                    .map_or_else(|_| PartialValue::Symbolic(full), PartialValue::Concrete)
+                eval_native(&full).map_or(PartialValue::Symbolic(full), PartialValue::Concrete)
             } else {
                 PartialValue::Symbolic(full)
             }

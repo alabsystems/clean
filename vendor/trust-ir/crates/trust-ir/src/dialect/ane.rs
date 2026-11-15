@@ -22,6 +22,16 @@
 //! `decode*` helpers and the [`AneSpec`] view exist so a consumer can
 //! pattern-match the payload without re-parsing attributes; a backend that
 //! offloads to the ANE registers its own lowering.
+//!
+//! # Not a tensor vocabulary
+//!
+//! `ane.*` ops are opaque hardware descriptors, not tensor operations: they
+//! carry no shape typing, no semantics and no proof obligation, and nothing
+//! here or in the builder helpers states what a `tensor_conv` or
+//! `tensor_matmul` computes. The white-box annex's ruling (matmul/conv as
+//! contract instances, not string-named ops) governs any future tensor region,
+//! which stays deferred (`designs/2026-09-01-tensor-region-scoping.md` §6,
+//! decided 2026-10-02).
 
 use crate::dialect::{AttrValue, Dialect, DialectError, DialectInst};
 use crate::ty::Ty;

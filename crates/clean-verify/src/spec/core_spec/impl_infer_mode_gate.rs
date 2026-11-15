@@ -96,6 +96,7 @@ impl Specification {
     pub(super) fn add_impl_infer_mode_gate(&mut self) -> Result<(), SpecError> {
         self.add_mode_gate_types()?;
         self.add_mode_gate_theorems()?;
+        self.add_deployed_partition()?;
         Ok(())
     }
 
@@ -112,9 +113,18 @@ impl Specification {
 | classical : CleanModeM
 | setTheoretic : CleanModeM",
             "The kernel's logical mode, transcribing clean_kernel::CleanMode \
-             (mode.rs:36,45,61,87,97,106). `constructive` is the #[default] — the \
-             mode every declaration is admitted under unless explicitly changed, \
-             which is why the side lemma below is stated at exactly that mode.",
+             (mode.rs:36,45,61,87,97,106). `constructive` is the #[default] — but \
+             it is NOT the mode declarations are admitted under on the deployed \
+             path. AUDIT r16 M16-3, measured on a RELEASE build: \
+             `Environment::with_prelude().mode()` is `Classical`, because \
+             `init_classical()` (env/logic_decidable.rs:519-523) upgrades \
+             Constructive -> Classical and nothing sets it back, and \
+             `env/decl_add.rs:846` carries it into admission. \
+             `Environment::new().mode()` is Constructive, so the flip is the \
+             prelude — and `clean check` (cmd_core.rs:111,121) goes through the \
+             prelude. The side lemma below is stated at `constructive`, so its \
+             premise is FALSE of every `clean check`; see \
+             `deployed_admission_mode_is_what_the_side_lemma_assumes`.",
         )?;
 
         let arm_ctors = ARMS
@@ -281,6 +291,52 @@ impl Specification {
         Ok(())
     }
 
+    /// The partition AT THE DEPLOYED MODE, derived by the kernel rather than
+    /// typed into prose.
+    ///
+    /// The side lemma above is stated at `CleanMode::Constructive`, the
+    /// `#[default]`. `clean check` does not admit there: measured on a release
+    /// build, `Environment::with_prelude().mode()` is `Classical`, pinned by
+    /// `deployed_admission_mode_is_what_the_side_lemma_assumes` in
+    /// `impl_infer_tests.rs`. At Classical the cubical and ZFC gates still close
+    /// (8 + 3 arms), but `mode_has_sprop classical` is TRUE, so `sprop` and
+    /// `squash` are OPEN and unmodelled. The deployed accounting is therefore
+    /// 21 of 24, not 23, with `proj`, `sprop` and `squash` uncovered.
+    ///
+    /// That fraction has been "corrected" three times in CLAUDE.md because it
+    /// was TYPED. These declarations make it a COMPUTATION: `arm_covered_at_classical`
+    /// is defined from `arm_modelled` and `arm_gate`, and one `Eq.refl` per arm
+    /// is emitted FROM THE SAME `ARMS` TABLE the gates are built from, so a new
+    /// arm or a moved gate changes the theorems in the same edit or fails to
+    /// elaborate. Nothing here is a number a human wrote down.
+    fn add_deployed_partition(&mut self) -> Result<(), SpecError> {
+        self.add_recursive_def(
+            "def arm_covered_at_classical (a : ReleaseArm) : Bool := \
+Bool.or (arm_modelled a) (Bool.not (arm_gate CleanModeM.classical a))",
+            "An arm is ACCOUNTED FOR at the deployed mode when ImplInfer models it, \
+             or when its mode gate closes there so the release dispatcher cannot \
+             reach past it. Anything else is an arm the deployed checker really \
+             runs and the relation really does not cover.",
+        )?;
+        for (i, a) in ARMS.iter().enumerate() {
+            let modelled = i < CORE_ARMS && *a != "proj";
+            // At Classical: cubical and ZFC gates CLOSE (covered); sprop/squash OPEN.
+            let gated = a.starts_with("cubical") || a.starts_with("zfc");
+            let covered = modelled || gated;
+            let want = if covered { "Bool.true" } else { "Bool.false" };
+            self.add_recursive_def(
+                &format!(
+                    "def arm_covered_classical_{a} : \
+Eq Bool (arm_covered_at_classical ReleaseArm.{a}) {want} := Eq.refl Bool {want}"
+                ),
+                "One arm of the deployed partition, by computation. Generated from \
+                 the ARMS table, so it cannot disagree with the gate definitions \
+                 beside it.",
+            )?;
+        }
+        Ok(())
+    }
+
     fn add_mode_gate_theorems(&mut self) -> Result<(), SpecError> {
         // ── THE SIDE LEMMA ─────────────────────────────────────────────────
         // Stated as `and (extension a) (gate constructive a) = false`, i.e.
@@ -293,8 +349,9 @@ impl Specification {
             "Eq Bool (Bool.and (arm_is_extension a) (arm_gate CleanModeM.constructive a)) Bool.false",
             "Eq.refl Bool Bool.false",
             concat!(
-                "THE MODE-GATE SIDE LEMMA: in Constructive mode — the #[default], and the ",
-                "mode every declaration is admitted under unless explicitly changed — NO ",
+                "THE MODE-GATE SIDE LEMMA: in Constructive mode — the #[default], which ",
+                "audit r16 M16-3 measured is NOT the deployed admission mode (with_prelude ",
+                "is Classical) — NO ",
                 "extension arm's gate is open. Read as an implication: an arm being an ",
                 "extension arm forces its Constructive gate closed, so all 13 return ",
                 "Err(ModeRequired) BEFORE any recursion (infer_cubical.rs:25,38,55,122,162,",

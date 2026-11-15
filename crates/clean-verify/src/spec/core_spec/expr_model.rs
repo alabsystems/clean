@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use crate::spec::definition::SpecDefinition;
 use crate::spec::error::SpecError;
+use crate::spec::model_units::ModelUnit;
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
 
@@ -22,118 +23,7 @@ impl Specification {
         // Name is registered BEFORE Level because the real kernel Level algebra's
         // `param` constructor carries a Name (level/mod.rs:81-92). Hoisting Name
         // keeps `Level.param : Name -> Level` well-scoped at elaboration time.
-        self.add_inductive(
-            r"inductive Name : Type
-| anonymous : Name
-| str : Name → Nat → Name",
-            "Kernel names for the current KExpr const fragment.",
-        )?;
-
-        // Universe levels — the FULL production kernel algebra
-        // (clean-kernel/src/level/mod.rs:81-92):
-        //   Level = zero | succ | max | imax | param Name
-        // The kernel has no level metavariable, so this is the complete
-        // constructor set. `param n` is an opaque base level in this fragment
-        // (terms carry no level-variable binders). Adding `param` as the 5th
-        // constructor extends Level.rec with a 5th (param) minor premise —
-        // every Level.rec consumer (level_eqb / *_refl / *_eq) carries it.
-        self.add_inductive(
-            r"inductive Level : Type
-| zero : Level
-| succ : Level → Level
-| max : Level → Level → Level
-| imax : Level → Level → Level
-| param : Name → Level",
-            "Universe levels — the full production kernel Level algebra \
-             (zero|succ|max|imax|param Name).",
-        )?;
-
-        self.add_inductive(
-            r"inductive ListType (α : Type) : Type
-| nil : ListType α
-| cons : α → ListType α → ListType α",
-            "Polymorphic lists used for const universe parameters.",
-        )?;
-
-        // KExpr inductive type (9 constructors). `let_` is the GENUINE let
-        // binder (type, value, body; body under one binder), promoted from the
-        // former reducible `app (lam ty body) val` surface alias — mirroring the
-        // real kernel's ExprKind::Let. `proj` and `lit` were appended after the
-        // original constructors so existing KExpr.rec minor positions stayed
-        // stable as the reflected model grew.
-        self.add_inductive(
-            r"inductive KExpr : Type
-| sort : Level → KExpr
-| bvar : Nat → KExpr
-| app : KExpr → KExpr → KExpr
-| lam : KExpr → KExpr → KExpr
-| pi : KExpr → KExpr → KExpr
-| const : Name → ListType Level → KExpr
-| let_ : KExpr → KExpr → KExpr → KExpr
-| proj : Name → Nat → KExpr → KExpr
-| lit : Nat → KExpr",
-            "Kernel expression type with 9 constructors: sort, bvar, app, lam, pi, const, let_, proj, lit (proj/lit rung, task #31).",
-        )?;
-
-        // lift_bvar_at: helper for lift_at (bvar case)
-        self.add_recursive_def(
-            r"def lift_bvar_at (idx : Nat) (cutoff : Nat) (amount : Nat) : KExpr := Nat.rec (fun _ => KExpr) (KExpr.bvar (Nat.add idx amount)) (fun _ _ => KExpr.bvar idx) (Nat.sub cutoff idx)",
-            "Compute lifted bvar: if idx >= cutoff, add amount; else keep. Part of #410.",
-        )?;
-
-        // lift_at: lift bound variables above cutoff by amount
-        self.add_recursive_def(
-            r"def lift_at (e : KExpr) (cutoff : Nat) (amount : Nat) : KExpr := match e with
-| KExpr.sort n => KExpr.sort n
-| KExpr.bvar i => lift_bvar_at i cutoff amount
-| KExpr.app f a => KExpr.app (lift_at f cutoff amount) (lift_at a cutoff amount)
-| KExpr.lam ty body => KExpr.lam (lift_at ty cutoff amount) (lift_at body (Nat.succ cutoff) amount)
-| KExpr.pi ty body => KExpr.pi (lift_at ty cutoff amount) (lift_at body (Nat.succ cutoff) amount)
-| KExpr.const n us => KExpr.const n us
-| KExpr.let_ ty val body => KExpr.let_ (lift_at ty cutoff amount) (lift_at val cutoff amount) (lift_at body (Nat.succ cutoff) amount)
-| KExpr.proj s i sub => KExpr.proj s i (lift_at sub cutoff amount)
-| KExpr.lit n => KExpr.lit n",
-            "Lift bound variables >= cutoff by amount. Part of #410. proj/lit: proj recurses, lit is a leaf.",
-        )?;
-
-        // lift: lift all bound variables by amount (cutoff = 0)
-        self.add_recursive_def(
-            r"def lift (e : KExpr) (amount : Nat) : KExpr := lift_at e Nat.zero amount",
-            "Lift all bound variables by amount (lift_at with cutoff 0). Part of #410.",
-        )?;
-
-        // instantiate_bvar_geq: helper for instantiate_bvar_at (idx >= depth)
-        self.add_recursive_def(
-            r"def instantiate_bvar_geq (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := Nat.rec (fun _ => KExpr) (lift_at val Nat.zero depth) (fun _ _ => KExpr.bvar (Nat.sub idx (Nat.succ Nat.zero))) (Nat.sub idx depth)",
-            "Helper: if idx == depth, substitute with lifted val; if idx > depth, decrement. Part of #643.",
-        )?;
-
-        // instantiate_bvar_at: helper for instantiate_at (bvar case)
-        self.add_recursive_def(
-            r"def instantiate_bvar_at (idx : Nat) (depth : Nat) (val : KExpr) : KExpr := Nat.rec (fun _ => KExpr) (instantiate_bvar_geq idx depth val) (fun _ _ => KExpr.bvar idx) (Nat.sub depth idx)",
-            "Helper: three-way comparison idx vs depth for bvar substitution. Part of #643.",
-        )?;
-
-        // instantiate_at: substitute val for BVar(depth), tracking binders
-        self.add_recursive_def(
-            r"def instantiate_at (body : KExpr) (val : KExpr) (depth : Nat) : KExpr := match body with
-| KExpr.sort n => KExpr.sort n
-| KExpr.bvar i => instantiate_bvar_at i depth val
-| KExpr.app f a => KExpr.app (instantiate_at f val depth) (instantiate_at a val depth)
-| KExpr.lam ty b => KExpr.lam (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth))
-| KExpr.pi ty b => KExpr.pi (instantiate_at ty val depth) (instantiate_at b val (Nat.succ depth))
-| KExpr.const n us => KExpr.const n us
-| KExpr.let_ ty v b => KExpr.let_ (instantiate_at ty val depth) (instantiate_at v val depth) (instantiate_at b val (Nat.succ depth))
-| KExpr.proj s i sub => KExpr.proj s i (instantiate_at sub val depth)
-| KExpr.lit n => KExpr.lit n",
-            "Substitute val for BVar(depth), incrementing depth under binders. Part of #643. proj/lit: proj recurses, lit is a leaf.",
-        )?;
-
-        // instantiate: substitute val for BVar(0) (wrapper)
-        self.add_recursive_def(
-            r"def instantiate (body : KExpr) (val : KExpr) : KExpr := instantiate_at body val Nat.zero",
-            "Substitute val for BVar(0) (wrapper for instantiate_at). Part of #643.",
-        )?;
+        self.register_model_unit(ModelUnit::ExprModelCore)?;
 
         // instantiate_at_bvar: unfolding lemma for bvar case
         self.add_definition(SpecDefinition {
@@ -373,53 +263,7 @@ impl Specification {
         // yet). See designs/2026-06-14-computational-iota-delta-track.md (Increment A).
 
         // kapp_fn: the head of an application spine (peel KExpr.app on the left).
-        self.add_recursive_def(
-            r"def kapp_fn (e : KExpr) : KExpr := match e with
-| KExpr.sort n => KExpr.sort n
-| KExpr.bvar i => KExpr.bvar i
-| KExpr.app f a => kapp_fn f
-| KExpr.lam ty b => KExpr.lam ty b
-| KExpr.pi ty b => KExpr.pi ty b
-| KExpr.const n us => KExpr.const n us
-| KExpr.let_ ty v b => KExpr.let_ ty v b
-| KExpr.proj s i sub => KExpr.proj s i sub
-| KExpr.lit n => KExpr.lit n",
-            "Head of an application spine: kapp_fn (app .. (app head a1) .. an) = head. Spine \
-             recognizer for the computational iota_step substrate. Part of #2859 (Increment A).",
-        )?;
-
-        // kapp_arg_count: the number of arguments in an application spine.
-        self.add_recursive_def(
-            r"def kapp_arg_count (e : KExpr) : Nat := match e with
-| KExpr.sort n => Nat.zero
-| KExpr.bvar i => Nat.zero
-| KExpr.app f a => Nat.succ (kapp_arg_count f)
-| KExpr.lam ty b => Nat.zero
-| KExpr.pi ty b => Nat.zero
-| KExpr.const n us => Nat.zero
-| KExpr.let_ ty v b => Nat.zero
-| KExpr.proj s i sub => Nat.zero
-| KExpr.lit n => Nat.zero",
-            "Argument count of an application spine: kapp_arg_count (app .. (app head a1) .. an) = n. \
-             Part of #2859 (Increment A).",
-        )?;
-
-        // is_const_app: whether the spine head is a `const` (a candidate
-        // recursor/constructor head).
-        self.add_recursive_def(
-            r"def is_const_app (e : KExpr) : Bool := match e with
-| KExpr.sort n => Bool.false
-| KExpr.bvar i => Bool.false
-| KExpr.app f a => is_const_app f
-| KExpr.lam ty b => Bool.false
-| KExpr.pi ty b => Bool.false
-| KExpr.const n us => Bool.true
-| KExpr.let_ ty v b => Bool.false
-| KExpr.proj s i sub => Bool.false
-| KExpr.lit n => Bool.false",
-            "Whether an application spine is headed by a const (recursor/constructor candidate). \
-             Part of #2859 (Increment A).",
-        )?;
+        self.register_model_unit(ModelUnit::ExprModelSpine)?;
 
         // kapp_fn_app: unfolding — the head of `app f a` is the head of `f`.
         self.add_definition(SpecDefinition {

@@ -276,6 +276,11 @@ impl OptionsRegistry {
             "Automatically introduce unbound variables as implicit arguments",
         );
         self.register(
+            "checkBinderAnnotations",
+            OptionValue::Bool(true),
+            "Check that bracketed declaration and forall binders have class types",
+        );
+        self.register(
             "relaxedAutoImplicit",
             OptionValue::Bool(true),
             "Use relaxed auto-implicit resolution (single-letter variables)",
@@ -392,6 +397,18 @@ impl OptionsRegistry {
                 "Annotate numeric literals with their type",
             ),
             ("pp.mvars", true, "Display metavariables"),
+            // Lake's `math` template sets it in `[leanOptions]`; pinned Lean
+            // 4.8.0 accepts `-Dpp.unicode.fun=true`.
+            (
+                "pp.unicode.fun",
+                false,
+                "Print `fun x ↦ e` rather than `fun x => e`",
+            ),
+            (
+                "pp.privateNames",
+                false,
+                "Display the internal names of private declarations",
+            ),
         ] {
             self.register(name, OptionValue::Bool(default), desc);
         }
@@ -440,6 +457,15 @@ impl OptionsRegistry {
 /// error rather than a silent no-op (gap sweep B21).
 static STANDARD_OPTION_REGISTRY: std::sync::LazyLock<OptionsRegistry> =
     std::sync::LazyLock::new(OptionsRegistry::new);
+
+/// The declared default of a standard option in the shared registry, or `None`
+/// for a name the registry does not declare. The command-line `-D` path
+/// (`crate::command_line_options`) types its values by this, as Lean's
+/// `set_config_option` types them by the option's declaration.
+#[must_use]
+pub(crate) fn standard_option_default(name: &str) -> Option<&'static OptionValue> {
+    STANDARD_OPTION_REGISTRY.get_default(name)
+}
 
 /// Infer the [`OptionValue`] kind from the raw textual value the parser stores
 /// for a `set_option` command.
@@ -513,6 +539,38 @@ pub(crate) fn validate_command_option_lenient(
         Err(OptionError::UnknownOption { .. }) => Ok(false),
         Err(e) => Err(e),
     }
+}
+
+/// Checked boundary into the legacy dotted option-key protocol. Components
+/// containing dots and numeric components have no injective representation in
+/// that protocol; they are refused, never confused with a different option.
+pub(crate) fn surface_option_key(
+    name: &clean_parser::SurfaceName,
+) -> Result<String, crate::ElabError> {
+    use clean_kernel::name::NameInner;
+    let mut parts = Vec::new();
+    let mut current = name.name();
+    while !current.is_anon() {
+        match current.inner() {
+            NameInner::Str(parent, text) if !text.is_empty() && !text.contains('.') => {
+                parts.push(text.as_ref());
+                current = parent;
+            }
+            _ => {
+                return Err(crate::ElabError::NotImplemented(format!(
+                    "option identity {} is not representable in the legacy option-key protocol",
+                    crate::error_render::surface_name(name)
+                )))
+            }
+        }
+    }
+    if parts.is_empty() || name.is_relative_constructor() {
+        return Err(crate::ElabError::NotImplemented(
+            "empty or relative option name".into(),
+        ));
+    }
+    parts.reverse();
+    Ok(parts.join("."))
 }
 
 // ============================================================================
@@ -637,3 +695,44 @@ impl<'a> FileOptions<'a> {
 #[cfg(test)]
 #[path = "options_registry_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod typed_option_tests {
+    #[test]
+    fn unsupported_option_names_use_diagnostic_spelling_without_minting_keys() {
+        use clean_kernel::Name;
+        use clean_parser::SurfaceName;
+        for (name, label) in [
+            (SurfaceName::component("pp.all", true), "«pp.all»"),
+            (
+                SurfaceName::from_name(Name::anon().num(7)),
+                "<internal name 7>",
+            ),
+        ] {
+            let error = super::surface_option_key(&name).unwrap_err();
+            let crate::ElabError::NotImplemented(message) = error else {
+                panic!("unexpected option refusal variant");
+            };
+            assert_eq!(
+                message,
+                format!("option identity {label} is not representable in the legacy option-key protocol")
+            );
+        }
+    }
+
+    #[test]
+    fn legacy_option_protocol_preserves_only_unambiguous_component_keys() {
+        use clean_kernel::Name;
+        use clean_parser::SurfaceName;
+        assert_eq!(
+            super::surface_option_key(&SurfaceName::generated_path("pp.all")).unwrap(),
+            "pp.all"
+        );
+        assert!(super::surface_option_key(&SurfaceName::component("pp.all", true)).is_err());
+        assert!(super::surface_option_key(&SurfaceName::from_name(Name::anon().num(7))).is_err());
+        assert!(super::surface_option_key(
+            &SurfaceName::generated_path("pp").with_relative_constructor()
+        )
+        .is_err());
+    }
+}

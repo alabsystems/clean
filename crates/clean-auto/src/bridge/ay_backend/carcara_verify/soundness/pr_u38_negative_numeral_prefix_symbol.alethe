@@ -1,0 +1,4 @@
+(assume a0 (= (+ 0 -5 abc) 7))
+(assume a1 (= abc 0))
+(step t1 (cl (not (= (+ 0 -5 abc) 7)) (not (= abc 0))) :rule la_generic :args (1 (- 1)))
+(step t2 (cl) :rule resolution :premises (a0 a1 t1))

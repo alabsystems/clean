@@ -21,6 +21,7 @@ mod rebind;
 #[cfg(test)]
 pub(crate) use abstract_fvar::abstract_fvar_in_expr;
 pub(crate) use rebind::convert_fvar_cert_to_bvar;
+pub(super) use rebind::RebindClosedMemo;
 
 use std::sync::Arc;
 use std::sync::LazyLock;
@@ -30,12 +31,36 @@ use crate::name::Name;
 use crate::tc::TypeChecker;
 use crate::TypeError;
 
+// Clear structural summaries on normal/error outer inference exits and initial
+// unwinding. This does not repair the existing inference-depth/context state
+// after a caught panic: checker reuse after unwinding is not supported here.
+// The existing typing memo and context lifecycle are unchanged.
+pub(super) struct ClearRebindMemo<'a>(pub(super) &'a std::cell::RefCell<RebindClosedMemo>);
+
+impl Drop for ClearRebindMemo<'_> {
+    fn drop(&mut self) {
+        self.0.borrow_mut().clear();
+    }
+}
+
 /// Pre-interned names for type inference (avoids repeated allocation).
-static NAME_NAT: LazyLock<Name> = LazyLock::new(|| Name::from_string("Nat"));
-static NAME_STRING: LazyLock<Name> = LazyLock::new(|| Name::from_string("String"));
 static NAME_ZFC_SET: LazyLock<Name> = LazyLock::new(|| Name::from_string("ZFC.Set"));
 
 impl<'env> TypeChecker<'env> {
+    fn rebind_certificate_body(
+        &self,
+        cert: crate::cert::ProofCert,
+        fvar_id: crate::expr::FVarId,
+    ) -> crate::cert::ProofCert {
+        rebind::convert_with_closed_memo(
+            cert,
+            fvar_id,
+            0,
+            &mut self.rebind_closed_memo.borrow_mut(),
+            self.max_cache_entries,
+        )
+    }
+
     /// Infer the type of an expression with proof certificate generation.
     ///
     /// Returns both the inferred type and a proof certificate that can
@@ -59,6 +84,7 @@ impl<'env> TypeChecker<'env> {
         &self,
         e: &Expr,
     ) -> Result<(Expr, crate::cert::ProofCert), TypeError> {
+        let _metered = self.begin_operation();
         // The returned certificate is retained by the caller (replayed /
         // serialized), so the shared-`Arc` memo must cache REAL certs, not the
         // discard-path placeholder. See `cert_retained` and
@@ -82,6 +108,30 @@ impl<'env> TypeChecker<'env> {
         Ok(result)
     }
 
+    /// [`Self::infer_type_with_cert`] in **full check mode** (`infer_only =
+    /// false`): the certificate-path counterpart of `infer_type_full`, which
+    /// runs whichever `infer_type` body the profile compiles.
+    ///
+    /// Check mode is where the App argument, Lam domain and Let type/value
+    /// checks fire. Without this entry point an integration test can compare
+    /// the release body against the certificate body only in infer-only mode,
+    /// so the errors those checks raise (and the `ExprLocation` they carry)
+    /// were never compared (`tests/release_infer_parity.rs`). Part of #3425.
+    ///
+    /// # Contract
+    /// REQUIRES: as [`Self::infer_type_with_cert`].
+    /// ENSURES: same result as [`Self::infer_type_with_cert`] with
+    /// `infer_only = false`; `infer_only` is restored on return.
+    pub fn infer_type_with_cert_full(
+        &self,
+        e: &Expr,
+    ) -> Result<(Expr, crate::cert::ProofCert), TypeError> {
+        let prev = self.infer_only.replace(false);
+        let result = self.infer_type_with_cert(e);
+        self.infer_only.set(prev);
+        result
+    }
+
     /// Implementation of type inference with certificates (called via stacker::maybe_grow).
     ///
     /// Every recursive call goes through `stack_safe` to prevent stack overflow
@@ -92,11 +142,12 @@ impl<'env> TypeChecker<'env> {
         e: &Expr,
     ) -> Result<(Expr, crate::cert::ProofCert), TypeError> {
         // Track WW: bracket the WHOLE inference recursion so `infer_arc_memo`
-        // persists across it (collapsing the shared-`Arc` DAG to linear work) and
+        // persists across it (reusing admitted shared-`Arc` keys) and
         // is cleared exactly once when the outermost frame returns — at which
         // point the memoized `Arc` addresses become reusable and must not leak
         // into a later top-level inference call.
         let depth = self.infer_memo_depth.get();
+        let _clear_rebind = (depth == 0).then(|| ClearRebindMemo(&self.rebind_closed_memo));
         self.infer_memo_depth.set(depth + 1);
         let result = stack_safe(|| self.infer_type_with_cert_inner(e));
         self.infer_memo_depth.set(depth);
@@ -118,42 +169,64 @@ impl<'env> TypeChecker<'env> {
     /// freed and reused while the entry lives. The memo is cleared by the
     /// outermost `infer_type_with_cert_impl` frame. See the `infer_arc_memo`
     /// soundness note in `tc/mod.rs`.
+    ///
+    /// The returned Arc is installed directly in the parent certificate. Memo
+    /// hits therefore preserve the certified node itself, not only descendants
+    /// of a fresh shallow clone. The public Expr-root API still returns a value.
     pub(crate) fn infer_type_with_cert_arc(
         &self,
         arc: &Arc<Expr>,
-    ) -> Result<(Expr, crate::cert::ProofCert), TypeError> {
+    ) -> Result<(Expr, Arc<crate::cert::ProofCert>), TypeError> {
+        let _metered = self.metered_scope();
+        if self.sharing_replay.is_some() {
+            return self
+                .infer_type_with_cert_impl(arc.as_ref())
+                .map(|(ty, cert)| (ty, Arc::new(cert)));
+        }
+        // Do not leave an entry outside the outer inference frame that owns
+        // its lifetime. Normal App-child callers already have such a frame.
+        if self.infer_memo_depth.get() == 0 {
+            self.ensure_cache_theory();
+            return self
+                .infer_type_with_cert_impl(arc.as_ref())
+                .map(|(ty, cert)| (ty, Arc::new(cert)));
+        }
         let infer_only = self.infer_only.get();
-        let key = (Arc::as_ptr(arc) as usize, infer_only, self.ctx_len());
+        let needs_cert = !infer_only || self.cert_retained.get();
+        let key = self.infer_arc_memo_key(arc);
         if let Some((_pin, ty, cert)) = self.infer_arc_memo.borrow().get(&key) {
-            return Ok((ty.clone(), cert.clone()));
+            if let Some(cert) = cert {
+                return Ok((ty.clone(), cert.clone()));
+            }
+            if !needs_cert {
+                // Only the discard-only internal path may return a placeholder.
+                // Public retained inference sets cert_retained before entering.
+                return Ok((
+                    ty.clone(),
+                    Arc::new(crate::cert::ProofCert::Sort {
+                        level: crate::level::Level::zero(),
+                    }),
+                ));
+            }
         }
         let (ty, cert) = self.infer_type_with_cert_impl(arc.as_ref())?;
-        // Cert-clone economy (Track WW): in `infer_only=true` (inference) mode the
-        // certificate is ultimately discarded by the public `infer_type`
-        // (`cross_validate_with_micro` runs only when `infer_only=false`), so we
-        // cache a cheap placeholder rather than pay to keep one alive; the
-        // freshly-computed `cert` is still returned to THIS caller intact, only
-        // later memo HITS get the placeholder. In `check_type`
-        // (`infer_only=false`) and in retained mode the real cert is cached and
-        // returned so the micro-checker cross-validation remains exact.
-        //
-        // Caching the real cert is no longer the exponential it once was. When
-        // `ProofCert` children were `Box`, this `cert.clone()` deep-copied the
-        // memoized sub-certificate on every DAG hit and each parent re-embedded
-        // it by value, so the retained certificate mirrored the EXPANDED term at
-        // `Θ(branching^depth)` — measured at 2^(d+2)-3 nodes, and the cause of
-        // the `data_tree-mirror-size` divergence. Children are now
-        // `Arc<ProofCert>`, so this clone copies one node and bumps refcounts.
-        let cached_cert = if infer_only && !self.cert_retained.get() {
-            crate::cert::ProofCert::Sort {
-                level: crate::level::Level::zero(),
+        let cert = Arc::new(cert);
+        // A fast-inference re-entry can have cached only a type. Full checking
+        // and retained inference must derive a REAL certificate and upgrade
+        // that entry in either window, before considering any new-admission
+        // rotation. No certificate is weakened or replaced by a placeholder.
+        let mut memo = self.infer_arc_memo.borrow_mut();
+        if let Some(entry) = memo.get_mut(&key) {
+            if needs_cert {
+                entry.1 = ty.clone();
+                entry.2 = Some(cert.clone());
             }
         } else {
-            cert.clone()
-        };
-        self.infer_arc_memo
-            .borrow_mut()
-            .insert(key, (arc.clone(), ty.clone(), cached_cert));
+            memo.insert_if_absent_with(key, self.max_cache_entries, || {
+                let cached_cert = needs_cert.then(|| cert.clone());
+                (arc.clone(), ty.clone(), cached_cert)
+            });
+        }
         Ok((ty, cert))
     }
 }

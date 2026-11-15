@@ -1,0 +1,128 @@
+use super::{Parser, ParserError, Reserved, Token};
+use crate::ast::*;
+use crate::CarcaraResult;
+use crate::{ast::rare_rules::*, Error};
+
+#[derive(Debug, Clone)]
+enum Body {
+    Conclusion(Rc<Term>),
+    Premise(Vec<Rc<Term>>),
+    Args(Vec<String>),
+}
+
+struct BodyDefinition<'a> {
+    args: &'a Vec<String>,
+    premises: &'a Vec<Rc<Term>>,
+    conclusion: Option<Rc<Term>>,
+}
+
+impl<'p, 's> Parser<'p, 's> {
+    fn parse_rare_parameters(&mut self) -> CarcaraResult<(String, TypeParameter)> {
+        self.expect_token(Token::OpenParen)?;
+        let name = self.expect_symbol()?;
+        let sort = self.parse_sort()?;
+
+        let attribute = if let Token::Keyword(_) = self.current_token {
+            let attribute = self.expect_keyword()?;
+            if attribute == "list" {
+                Ok(AttributeParameters::List)
+            } else {
+                Err(Error::Parser(
+                    ParserError::InvalidRareArgAttribute(attribute),
+                    self.current_position,
+                ))
+            }
+        } else {
+            Ok(AttributeParameters::None)
+        }?;
+        self.expect_token(Token::CloseParen)?;
+
+        self.declare_symbol(name.clone(), sort.clone());
+
+        Ok((name, TypeParameter { sort, attribute }))
+    }
+
+    fn parse_body(&mut self) -> CarcaraResult<Body> {
+        let qualified_arg = self.expect_keyword()?;
+        match qualified_arg.as_str() {
+            "conclusion" => {
+                let rewrite_term = self.parse_term()?;
+                Ok(Body::Conclusion(rewrite_term))
+            }
+            "args" => {
+                self.expect_token(Token::OpenParen)?;
+                let args = self.parse_sequence(Parser::expect_symbol, false)?;
+                Ok(Body::Args(args))
+            }
+            "premises" => {
+                self.expect_token(Token::OpenParen)?;
+                let terms = self.parse_sequence(
+                    |parser| {
+                        let term = parser.parse_term()?;
+                        Ok(term)
+                    },
+                    false,
+                )?;
+                Ok(Body::Premise(terms))
+            }
+            _ => Err(Error::Parser(
+                ParserError::InvalidRareRuleAttribute(qualified_arg),
+                self.current_position,
+            )),
+        }
+    }
+
+    fn parse_rule(&mut self) -> CarcaraResult<RuleDefinition> {
+        self.expect_token(Token::OpenParen)?;
+        self.expect_token(Token::ReservedWord(Reserved::DeclareRareRule))?;
+        let name = self.expect_symbol()?;
+        self.expect_token(Token::OpenParen)?;
+        let parameters = self.parse_sequence(Self::parse_rare_parameters, false)?;
+
+        let body_definitions = BodyDefinition {
+            args: &vec![],
+            premises: &vec![],
+            conclusion: None,
+        };
+
+        let body = self.parse_sequence(Self::parse_body, false)?;
+        let body = body.iter().fold(body_definitions, |mut body, x| {
+            match x {
+                Body::Conclusion(term) => body.conclusion = Some((*term).clone()),
+                Body::Premise(term) => body.premises = term,
+                Body::Args(args) => body.args = args,
+            }
+            body
+        });
+
+        if body.conclusion.is_none() {
+            return Err(Error::Parser(
+                ParserError::UndefinedRareConclusion(name),
+                self.current_position,
+            ));
+        }
+
+        Ok(RuleDefinition {
+            name,
+            parameters: parameters.iter().cloned().collect(),
+            arguments: body.args.clone(),
+            premises: body.premises.clone(),
+            conclusion: body.conclusion.unwrap(),
+            is_elaborated: false,
+        })
+    }
+
+    pub(crate) fn parse_rare(&mut self) -> CarcaraResult<Rules> {
+        let mut rules = vec![];
+        while self.current_token != Token::Eof {
+            rules.push(self.parse_rule()?);
+        }
+
+        Ok(RareStatements {
+            rules: rules
+                .iter()
+                .map(|x| (x.name.clone(), (*x).clone()))
+                .collect(),
+        })
+    }
+}

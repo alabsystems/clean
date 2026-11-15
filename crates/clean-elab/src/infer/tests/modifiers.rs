@@ -248,7 +248,7 @@ fn test_private_def_visible_in_same_namespace() {
 
     // Elaborate inside namespace "Foo" — should find it
     let mut ctx = ElabCtx::new(&env);
-    ctx.namespace_prefix = "Foo".to_owned();
+    ctx.namespace_prefix = SurfaceName::generated_path("Foo");
     let surface = parse_expr("Foo.helper")
         .map_err(|e| ElabError::ParseError(e.to_string()))
         .unwrap();
@@ -299,7 +299,7 @@ fn test_private_def_visible_in_child_namespace() {
 
     // Elaborate inside namespace "Foo.Bar" (child of Foo) — should find it
     let mut ctx = ElabCtx::new(&env);
-    ctx.namespace_prefix = "Foo.Bar".to_owned();
+    ctx.namespace_prefix = SurfaceName::generated_path("Foo.Bar");
     let surface = parse_expr("Foo.helper")
         .map_err(|e| ElabError::ParseError(e.to_string()))
         .unwrap();
@@ -325,7 +325,7 @@ fn test_private_def_not_visible_from_sibling_namespace() {
 
     // Elaborate inside namespace "Bar" — should NOT find it
     let mut ctx = ElabCtx::new(&env);
-    ctx.namespace_prefix = "Bar".to_owned();
+    ctx.namespace_prefix = SurfaceName::generated_path("Bar");
     let surface = parse_expr("Foo.helper")
         .map_err(|e| ElabError::ParseError(e.to_string()))
         .unwrap();

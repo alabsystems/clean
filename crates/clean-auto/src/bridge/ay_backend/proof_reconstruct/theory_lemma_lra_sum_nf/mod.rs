@@ -22,12 +22,68 @@ mod identical_suffix;
 #[cfg(test)]
 mod identical_suffix_tests;
 #[cfg(test)]
+mod leaf_cap_tests;
+#[cfg(test)]
 mod tests;
 mod transport;
 #[cfg(test)]
 mod transport_stack_safe_tests;
 
 use transport::{build_right_assoc_expr, normalize_cmp_proof};
+
+/// The most additive leaves a symbolic closeout may expand its two endpoints
+/// into, together. Past it [`try_close_int_additive_nf`] declines (`None`),
+/// which every caller already treats as "this lemma is not reconstructed here".
+///
+/// WHY A CAP, AND WHY ON LEAVES. `scale_bound` realizes a Farkas multiplier
+/// `k` by a binary doubling chain (`power = power + power`), so the weighted
+/// accumulator it hands this module is `O(log k)` SHARED nodes — the kernel
+/// checks it as the DAG it is (`ExprEqWalk`'s `Arc::ptr_eq` short-circuit). But the
+/// normal form is a MULTISET of leaves: [`IntAddNf::flatten`], the quadratic
+/// [`build_close_shape`] match and the proof transport all walk the sums as
+/// TREES, so a multiplier `k` becomes `k` copies of every atom of its bound.
+/// Measured (trustc, 2026-09-25): a `2^30 · x ≥ 2^63` capacity row under
+/// `x < 2^32` through three alias equalities recursed in `flatten` for more
+/// than 11 minutes at a 184 GB footprint; at `k = 2^16` it took 100 s, at
+/// `2^14` 11 s, at `2^12` no measurable cost. A cap on the multiplier alone
+/// would be the wrong quantity — the expansion is `Σ kᵢ · |boundᵢ|` — so the
+/// leaves are counted directly, over the shared structure, before any walk.
+pub(super) const MAX_SUM_NF_LEAVES: u64 = 1 << 12;
+
+/// The number of additive leaves [`IntAddNf::flatten`] would visit in `expr`,
+/// or `None` once that number exceeds `cap`.
+///
+/// Memoized on node ADDRESS, so the count costs time linear in the SHARED
+/// size of `expr` (a doubling chain of depth `d` is `O(d)` here, `2^d` in
+/// `flatten`). Sound as a gate in both directions: a memo hit returns the
+/// count of the very node it was computed for (the borrow of `expr` keeps
+/// every node alive and unmoved for the whole walk), and a miss only costs
+/// time.
+pub(super) fn additive_leaf_count_within(expr: &Expr, cap: u64) -> Option<u64> {
+    fn go(
+        expr: &Expr,
+        cap: u64,
+        memo: &mut std::collections::HashMap<*const Expr, u64>,
+    ) -> Option<u64> {
+        crate::bridge::stack_safe(|| {
+            let expr = expr.strip_mdata();
+            let key: *const Expr = expr;
+            if let Some(&count) = memo.get(&key) {
+                return Some(count);
+            }
+            let count = match IntAddNf::as_flatten_add(expr) {
+                Some((a, b)) => go(a, cap, memo)?.checked_add(go(b, cap, memo)?)?,
+                None => 1,
+            };
+            if count > cap {
+                return None;
+            }
+            memo.insert(key, count);
+            Some(count)
+        })
+    }
+    go(expr, cap, &mut std::collections::HashMap::new())
+}
 
 /// Additive normal form for Int expressions.
 ///
@@ -314,6 +370,15 @@ pub(super) fn try_close_int_additive_nf(
         identical_suffix::try_close_identical_raw_add_suffix(op, acc_lhs, acc_rhs, acc_proof)
     {
         return Some(false_proof);
+    }
+
+    // Bound the tree walks below BEFORE they start (see [`MAX_SUM_NF_LEAVES`]).
+    // The identical-suffix fast path above peels one right-spine level per
+    // step, so it is linear in the DAG depth and needs no cap.
+    let lhs_leaves = additive_leaf_count_within(acc_lhs, MAX_SUM_NF_LEAVES)?;
+    let rhs_leaves = additive_leaf_count_within(acc_rhs, MAX_SUM_NF_LEAVES)?;
+    if lhs_leaves.checked_add(rhs_leaves)? > MAX_SUM_NF_LEAVES {
+        return None;
     }
 
     let lhs_nf = IntAddNf::from_expr(acc_lhs);

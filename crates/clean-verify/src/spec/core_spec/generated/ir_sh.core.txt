@@ -1,0 +1,20 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (const (uint 64) (int 0)))
+            (node (results 2) (undef (enum 0)))
+            (node (results 3) (undef (tuple 2)))
+            (node (results 4) (insertfield (tuple 2) 3 0 1))
+            (node (results 5) (insertfield (tuple 2) 4 1 2))
+            (node (results) (ret (vals 5)))
+          ))
+      ))
+  )
+  (globals)
+)

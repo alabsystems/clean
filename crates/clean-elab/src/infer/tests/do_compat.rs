@@ -74,8 +74,12 @@ fn test_elab_do_let_rec_with_binders_uses_full_function_type() {
 
 #[test]
 fn test_elab_do_let_expr_pure_elaborates() {
-    let expr = elab_with_prelude_bare("do let_expr x := Bool.true | return Bool.false; return x")
-        .expect("pure let_expr should elaborate with prelude constructors");
+    let expr = elab_with_prelude_bare(
+        // A refutable pattern: with `x` the fallback alternative is selected by
+        // no value, a redundant alternative (G62).
+        "do\n  let_expr Bool.true := Bool.true | return Bool.false\n  return Bool.true",
+    )
+    .expect("pure let_expr should elaborate with prelude constructors");
     assert!(
         matches!(
             expr.kind(),
@@ -88,7 +92,7 @@ fn test_elab_do_let_expr_pure_elaborates() {
 #[test]
 fn test_elab_do_let_expr_bind_elaborates() {
     let expr = elab_with_prelude_bare(
-        "do let_expr x <- Pure.pure Bool.true | return Bool.false; return x",
+        "do\n  let_expr Bool.true <- Pure.pure Bool.true | return Bool.false\n  return Bool.true",
     )
     .expect("monadic let_expr should elaborate with prelude");
     assert!(

@@ -13,14 +13,14 @@
 #[cfg(test)]
 mod tests {
     use std::collections::HashMap;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use crate::build_library::{build_lean4_library, BuildConfig};
     use crate::shard::ShardReader;
     use crate::shard_reconstruct::{
         reconstruct_from_shard_with_level_lists, reconstruct_level_params,
     };
-    use crate::types::{MathverseConstantHeader, NO_VALUE};
+    use crate::types::NO_VALUE;
 
     use clean_kernel::{Declaration, Environment, Name};
 
@@ -45,7 +45,7 @@ mod tests {
     }
 
     /// Collect .mathverse shard files from output directory (base/ and delta/).
-    fn collect_shard_files(output_dir: &PathBuf) -> Vec<PathBuf> {
+    fn collect_shard_files(output_dir: &Path) -> Vec<PathBuf> {
         let mut shard_files: Vec<PathBuf> = Vec::new();
         for subdir in &["base", "delta"] {
             let dir = output_dir.join(subdir);
@@ -92,7 +92,7 @@ mod tests {
         name: String,
         type_expr: clean_kernel::Expr,
         value_expr: Option<clean_kernel::Expr>,
-        level_params: Vec<clean_kernel::Name>,
+        level_params: Vec<Name>,
     }
 
     /// Load and reconstruct all constants from shard files.
@@ -274,7 +274,7 @@ mod tests {
                 }
             }
             checked += 1;
-            if checked % 5000 == 0 {
+            if checked.is_multiple_of(5000) {
                 eprintln!(
                     "    progress: {checked}/{with_values} ({thm_pass} thm, {def_pass} def, {fail} fail)"
                 );
@@ -380,6 +380,7 @@ mod tests {
             modules: vec!["Init".to_string()],
             shard_size_limit: 5000,
             max_file_size: 2_500_000,
+            file_limit: 0,
             verbose: true,
             ..BuildConfig::default()
         };

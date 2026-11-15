@@ -75,13 +75,25 @@ fn toolchain_lib() -> Option<std::path::PathBuf> {
 /// real import environment (where the olean provides these definitions).
 fn register_out_param_gadgets(env: &mut Environment) {
     for name in ["outParam", "semiOutParam"] {
+        let name = Name::from_string(name);
+        // The kernel prelude has registered `outParam` itself since
+        // 2026-08-09 (`clean-kernel/src/env/order_structures.rs`,
+        // `init_out_param`: byte-for-byte Lean's identity definition,
+        // idempotent via `get_const`), so a `with_prelude()` environment
+        // already carries it and a second `add_decl` is refused —
+        // `DuplicateName(outParam)`, measured 2026-09-15 on the first run of
+        // this test on a box with the pinned toolchain installed. Register
+        // only what is absent, with the prelude's own idempotence rule.
+        if env.get_const(&name).is_some() {
+            continue;
+        }
         let u = Name::from_string("u");
         let sort_u = Expr::from_kind(ExprKind::Sort(Level::param(u.clone())));
         // outParam.{u} : Sort u → Sort u := fun α => α
         let ty = Expr::pi(BinderInfo::Default, sort_u.clone(), sort_u.clone());
         let val = Expr::lam(BinderInfo::Default, sort_u, Expr::bvar(0));
         env.add_decl(clean_kernel::env::Declaration::Definition {
-            name: Name::from_string(name),
+            name,
             level_params: vec![u],
             type_: ty,
             value: val,

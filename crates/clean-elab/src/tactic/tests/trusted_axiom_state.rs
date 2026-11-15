@@ -56,14 +56,16 @@ fn test_mathverse_parity_fail_closed_without_trusted_axioms() {
         Expr::const_(Name::from_string("False"), vec![]),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: nat,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_even".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_even"),
                 ty: Expr::app(
                     Expr::const_(Name::from_string("Even"), vec![]),
                     Expr::fvar(n_fvar),
@@ -71,8 +73,9 @@ fn test_mathverse_parity_fail_closed_without_trusted_axioms() {
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_odd".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_odd"),
                 ty: Expr::app(
                     Expr::const_(Name::from_string("Odd"), vec![]),
                     Expr::fvar(n_fvar),
@@ -122,7 +125,9 @@ fn test_mathverse_parity_fail_closed_without_trusted_axioms() {
 fn test_trusted_axiom_count_tracks_close_with_trusted_arith() {
     use crate::tactic::arith_linarith::{close_with_trusted_arith, enable_arith_location_tracking};
     reset_all_counters();
-    let env = Environment::with_prelude();
+    let mut env = Environment::with_prelude();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for this low-level trustedArith fixture");
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let (x, y) = (FVarId::new(0), FVarId::new(1));
     let goal_ty = make_nat_le_tc(Expr::fvar(x), Expr::fvar(y));
@@ -132,14 +137,16 @@ fn test_trusted_axiom_count_tracks_close_with_trusted_arith() {
         goal_ty,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x,
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: nat.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: y,
-                name: "y".into(),
+                name: clean_parser::SurfaceName::generated_path("y"),
                 ty: nat,
                 value: None,
             },
@@ -286,7 +293,9 @@ fn test_force_trusted_ay_fail_closed_keeps_trust_ledger_zero() {
 #[serial]
 fn test_sorry_tactic_uses_explicit_sorry_provenance_with_prelude() {
     reset_all_counters();
-    let env = Environment::with_prelude();
+    let mut env = Environment::with_prelude();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for this low-level sorry fixture");
     let mut state = ProofState::new(env, Expr::prop());
 
     // Snapshot global counters before the tactic call. Non-serial tests
@@ -361,7 +370,10 @@ fn test_trust_ledger_isolation_between_concurrent_proof_states() {
     use std::sync::Arc;
     use std::thread;
 
-    let env = Arc::new(setup_env_with_parity());
+    let mut env = setup_env_with_parity();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for this low-level sorry/trustedArith fixture");
+    let env = Arc::new(env);
 
     for _run in 0..4 {
         let mut handles: Vec<thread::JoinHandle<(String, ProofTrustLedger)>> = Vec::new();
@@ -402,7 +414,9 @@ fn test_trust_ledger_isolation_between_concurrent_proof_states() {
 
 #[test]
 fn test_trust_ledger_tracks_sorry_through_merge_meta_state() {
-    let env = Environment::with_prelude();
+    let mut env = Environment::with_prelude();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for this low-level sorry fixture");
     let mut parent = ProofState::new(env, Expr::prop());
     let goal = parent.current_goal().expect("goal should exist").clone();
     let mut focused = parent.clone_with_goal(goal);
@@ -494,4 +508,30 @@ fn test_merge_meta_state_adopts_exact_ay_provenance_branch() {
     assert_eq!(ledger.trusted_ay_provenance.alethe_trust_steps, 0);
     assert_eq!(ledger.trusted_ay_provenance.local_gap_steps, 1);
     assert_eq!(ledger.trusted_ay_provenance.unclassified_steps, 0);
+}
+
+#[test]
+fn test_sorry_requires_an_explicit_admission_fragment() {
+    let env = Environment::with_prelude();
+    assert!(env.stub_theory_axioms().is_empty());
+    let mut state = ProofState::new(env, Expr::prop());
+    let error = sorry(&mut state).expect_err("default context contains no admission signature");
+    assert!(
+        matches!(error, TacticError::EnvironmentMissing { ref constant } if constant == "sorry"),
+        "{error}"
+    );
+    assert!(!state.is_complete());
+    assert_eq!(state.trusted_axiom_count(), 0);
+    assert!(state.env().stub_theory_axioms().is_empty());
+    state
+        .env_mut()
+        .init_admission_stub_theory()
+        .expect("explicit caller opt-in");
+    sorry(&mut state).expect("opted-in admission remains available");
+    assert!(state.is_complete());
+    assert_eq!(state.trust_ledger().sorry_count, 1);
+    assert!(state
+        .closed_proof()
+        .expect("admitted term")
+        .is_non_synthetic_sorry());
 }

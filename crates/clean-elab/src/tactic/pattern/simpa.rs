@@ -4,6 +4,9 @@
 
 //! simpa tactic: simp followed by assumption.
 
+use super::names::local_name_matches;
+use clean_parser::SurfaceName;
+
 use clean_kernel::Expr;
 
 use super::super::{assumption, simp, ProofState, SimpConfig, TacticError, TacticResult};
@@ -39,8 +42,18 @@ pub fn simpa(state: &mut ProofState) -> TacticResult {
 pub fn simpa_with_config(
     state: &mut ProofState,
     config: SimpConfig,
-    using_hyp: Option<&str>,
+    using_hyp: Option<&SurfaceName>,
 ) -> TacticResult {
+    if let Some(name) = using_hyp {
+        super::names::require_binding_name(name, "simpa")?;
+    }
+    // With a named hypothesis, ONLY that hypothesis may close the goal: the
+    // simp step must not close it by `assumption` from another local (Lean's
+    // `simpa … using h` checks `h` alone; G49, review r4t s1).
+    let mut config = config;
+    if using_hyp.is_some() {
+        config.assumption_closer = simp::AssumptionCloser::Off;
+    }
     // First try simp
     let simp_result = simp(state, config);
 
@@ -54,8 +67,8 @@ pub fn simpa_with_config(
         if let Some(hyp_name) = using_hyp {
             // Try to use the specific hypothesis
             let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-            for decl in &goal.local_ctx {
-                if decl.name == hyp_name {
+            for decl in goal.local_ctx.iter().rev() {
+                if local_name_matches(&decl.name, hyp_name) {
                     // Check if this hypothesis can close the goal
                     // (#2229: use goal's local context so FVars resolve)
                     if state.is_def_eq(&goal, &decl.ty, &goal.target) {
@@ -63,6 +76,7 @@ pub fn simpa_with_config(
                         state.close_goal(&goal, Expr::fvar(decl.fvar))?;
                         return Ok(());
                     }
+                    break; // A shadowed older local is not the named hypothesis.
                 }
             }
             return Err(TacticError::no_progress("simpa"));
@@ -81,7 +95,7 @@ pub fn simpa_with_config(
 ///
 /// REQUIRES: `state.goals` is non-empty
 /// ENSURES: Equivalent to `simpa_with_config` with `config.extra_lemmas = lemmas`
-pub fn simpa_only(state: &mut ProofState, lemmas: Vec<String>) -> TacticResult {
+pub fn simpa_only(state: &mut ProofState, lemmas: Vec<SurfaceName>) -> TacticResult {
     let mut config = SimpConfig::new();
     config.extra_lemmas = lemmas;
     simpa_with_config(state, config, None)

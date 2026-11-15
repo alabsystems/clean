@@ -10,7 +10,7 @@ use clean_kernel::{Expr, Level};
 
 fn mk_entry(name: &str, is_noncomputable: bool) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: SurfaceName::component(name, false),
         ty: None,
         body: Expr::sort(Level::zero()),
         is_noncomputable,
@@ -19,7 +19,7 @@ fn mk_entry(name: &str, is_noncomputable: bool) -> MutualEntry {
 
 fn mk_entry_with_body(name: &str, body: Expr) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: SurfaceName::component(name, false),
         ty: None,
         body,
         is_noncomputable: false,
@@ -43,7 +43,13 @@ fn test_mutual_block_add_entry() {
     block.add_entry(mk_entry("bar", false));
     assert_eq!(block.len(), 2);
     assert!(!block.is_empty());
-    assert_eq!(block.names(), vec!["foo", "bar"]);
+    assert_eq!(
+        block.names(),
+        vec![
+            &SurfaceName::generated_path("foo"),
+            &SurfaceName::generated_path("bar")
+        ]
+    );
 }
 
 #[test]
@@ -223,8 +229,16 @@ fn test_build_dep_graph_no_self_edge() {
 
 #[test]
 fn test_collect_surface_refs_ident() {
-    let names = vec!["foo", "bar", "baz"];
-    let expr = SurfaceExpr::Ident(clean_parser::Span::dummy(), "bar".to_string());
+    let owned_names = [
+        SurfaceName::generated_path("foo"),
+        SurfaceName::generated_path("bar"),
+        SurfaceName::generated_path("baz"),
+    ];
+    let names: Vec<_> = owned_names.iter().collect();
+    let expr = SurfaceExpr::Ident(
+        clean_parser::Span::dummy(),
+        SurfaceName::generated_path("bar"),
+    );
     let mut refs = HashSet::new();
     collect_surface_refs(&expr, &names, &mut refs);
     assert!(refs.contains(&1));
@@ -233,12 +247,16 @@ fn test_collect_surface_refs_ident() {
 
 #[test]
 fn test_collect_surface_refs_nested_app() {
-    let names = vec!["f", "g"];
+    let owned_names = [
+        SurfaceName::generated_path("f"),
+        SurfaceName::generated_path("g"),
+    ];
+    let names: Vec<_> = owned_names.iter().collect();
     let span = clean_parser::Span::dummy();
-    let inner = SurfaceExpr::Ident(span, "g".to_string());
+    let inner = SurfaceExpr::Ident(span, SurfaceName::generated_path("g"));
     let expr = SurfaceExpr::App(
         span,
-        Box::new(SurfaceExpr::Ident(span, "f".to_string())),
+        Box::new(SurfaceExpr::Ident(span, SurfaceName::generated_path("f"))),
         vec![clean_parser::SurfaceArg {
             span,
             expr: inner,
@@ -253,8 +271,12 @@ fn test_collect_surface_refs_nested_app() {
 
 #[test]
 fn test_collect_surface_refs_no_match() {
-    let names = vec!["foo"];
-    let expr = SurfaceExpr::Ident(clean_parser::Span::dummy(), "other".to_string());
+    let owned_name = SurfaceName::generated_path("foo");
+    let names = vec![&owned_name];
+    let expr = SurfaceExpr::Ident(
+        clean_parser::Span::dummy(),
+        SurfaceName::generated_path("other"),
+    );
     let mut refs = HashSet::new();
     collect_surface_refs(&expr, &names, &mut refs);
     assert!(refs.is_empty());

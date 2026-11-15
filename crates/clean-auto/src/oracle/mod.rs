@@ -315,7 +315,7 @@ impl OracleRequest {
     }
 
     /// Build a request directly from a kernel goal and optional local context.
-    pub fn from_goal_and_context(goal: &Expr, local_ctx: Option<&LocalContext>) -> Self {
+    pub(crate) fn from_goal_and_context(goal: &Expr, local_ctx: Option<&LocalContext>) -> Self {
         let mut request = Self::new(format!("{goal}"));
 
         if let Some(local_ctx) = local_ctx {

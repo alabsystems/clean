@@ -166,7 +166,11 @@ fn test_unfold_goal_instantiates_definition_levels() {
     );
     let mut state = ProofState::new(env, target);
 
-    unfold(&mut state, "MyId").expect("unfold must accept a universe-polymorphic definition");
+    unfold(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("MyId"),
+    )
+    .expect("unfold must accept a universe-polymorphic definition");
 
     let new_target = state
         .current_goal()
@@ -203,16 +207,24 @@ fn test_unfold_at_hypothesis_instantiates_definition_levels() {
         eq_at(Level::succ(Level::zero()), n_ty(), n_const(), n_const()),
     );
     let mut state = ProofState::new(env, goal_ty);
-    intro(&mut state, "hid").expect("intro the hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hid"),
+    )
+    .expect("intro the hypothesis");
 
-    unfold_at(&mut state, "MyId", "hid")
-        .expect("unfold at h must accept a universe-polymorphic definition");
+    unfold_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("MyId"),
+        &clean_parser::SurfaceName::generated_path("hid"),
+    )
+    .expect("unfold at h must accept a universe-polymorphic definition");
 
     let goal = state.current_goal().expect("unfold_at keeps one goal");
     let hyp = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "hid")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("hid"))
         .expect("hid survives the rewrite");
     assert!(
         level_params_in(&hyp.ty).is_empty(),
@@ -264,7 +276,11 @@ fn test_unfold_monomorphic_definition_unchanged() {
     let target = eq_at(Level::succ(Level::zero()), n_ty(), my_id_n, n_const());
     let mut state = ProofState::new(env, target);
 
-    unfold(&mut state, "MyIdN").expect("unfold must keep working on a monomorphic definition");
+    unfold(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("MyIdN"),
+    )
+    .expect("unfold must keep working on a monomorphic definition");
     let new_target = state
         .current_goal()
         .expect("unfold keeps one goal")
@@ -293,15 +309,23 @@ fn test_unfold_at_monomorphic_definition_unchanged() {
         eq_at(Level::succ(Level::zero()), n_ty(), n_const(), n_const()),
     );
     let mut state = ProofState::new(env, goal_ty);
-    intro(&mut state, "hid").expect("intro the hypothesis");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hid"),
+    )
+    .expect("intro the hypothesis");
 
-    unfold_at(&mut state, "MyIdN", "hid")
-        .expect("unfold at h must keep working on a monomorphic definition");
+    unfold_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("MyIdN"),
+        &clean_parser::SurfaceName::generated_path("hid"),
+    )
+    .expect("unfold at h must keep working on a monomorphic definition");
     let goal = state.current_goal().expect("unfold_at keeps one goal");
     let hyp = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "hid")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("hid"))
         .expect("hid survives the rewrite");
     assert!(
         level_params_in(&hyp.ty).is_empty(),

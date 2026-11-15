@@ -5,7 +5,7 @@
 //! Declaration preprocessing with file-scope variable injection.
 
 use crate::file_context::FileContext;
-use clean_parser::SurfaceDecl;
+use clean_parser::{SurfaceDecl, SurfaceName};
 
 /// Preprocess a declaration to include file-scope variables.
 ///
@@ -24,9 +24,28 @@ use clean_parser::SurfaceDecl;
 /// A (possibly modified) declaration with variables prepended to binders.
 #[must_use]
 pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileContext) -> SurfaceDecl {
-    fn merge_universe_params(file_params: &[String], decl_params: &[String]) -> Vec<String> {
+    /// The declaration's level parameters: the file-declared universes it
+    /// USES (Lean's `collectLevelParams` rule — `universe u v` followed by
+    /// `class C (α : Type u)` is `C.{u}`, not `C.{u, v}`), then its own
+    /// explicit `.{…}` list. `used` is `None` when
+    /// [`crate::universe_occurrence::used_universe_names`] could not see the
+    /// whole declaration (a tactic block, say); then EVERY declared universe
+    /// is merged, which is the over-inclusive behaviour every declaration had
+    /// before 2026-09-10 and can drop nothing. Over-inclusion is not free: an
+    /// unused parameter on a class is a level metavariable nothing can ever
+    /// solve at each `[C α]` binder, and the declaration dies at the kernel
+    /// with `Type mismatch: expected C α, got C α` (module doc of
+    /// `universe_occurrence`).
+    fn merge_universe_params(
+        file_params: &[SurfaceName],
+        decl_params: &[SurfaceName],
+        used: Option<&std::collections::HashSet<String>>,
+    ) -> Vec<SurfaceName> {
         let mut out = Vec::new();
         for p in file_params {
+            if used.is_some_and(|u| !u.contains(&p.to_string())) {
+                continue;
+            }
             if !out.contains(p) {
                 out.push(p.clone());
             }
@@ -39,9 +58,17 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
         out
     }
 
+    // A pruning request belongs to the one declaration it was made for; the
+    // arms below record a fresh one when that declaration needs it.
+    file_ctx.set_pending_section_prune(decl.span(), None);
+
     match decl {
         // Variable declarations add their binders to the context
-        SurfaceDecl::Variable { binders, span } => {
+        SurfaceDecl::Variable {
+            binders,
+            span,
+            visibility,
+        } => {
             // `apply_variable_command` resolves Lean's binder-annotation-UPDATE
             // form (`variable (P Q a b)`, `variable {P Q}`: no type ascription,
             // so it re-binds an ALREADY-DECLARED variable in place rather than
@@ -59,6 +86,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             SurfaceDecl::Variable {
                 span: *span,
                 binders: full,
+                visibility: *visibility,
             }
         }
 
@@ -109,11 +137,6 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             let has_file_universes = file_ctx.has_universe_params();
             let has_file_variables = file_ctx.has_variables();
             if has_file_universes || has_file_variables {
-                let new_universe_params = if has_file_universes {
-                    merge_universe_params(file_ctx.current_universe_params(), universe_params)
-                } else {
-                    universe_params.clone()
-                };
                 let new_binders = if has_file_variables {
                     // Lean parity: prepend only the USED section variables
                     // (dependency fixpoint + instance activation + own-binder
@@ -122,16 +145,31 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     // then mints fresh metavariables nothing can solve, and
                     // the decl dies at the kernel with "contains free
                     // variables" (the 2026-08-15 Mathlib Logic/Basic class).
-                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                    let selection = crate::section_var_selection::select_section_binders(
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
                         file_ctx.included_variables(),
                     );
+                    // An incomplete scan prepends every section variable and
+                    // asks the elaboration of THIS declaration to drop the
+                    // unused ones (`crate::infer::section_prune`).
+                    file_ctx.set_pending_section_prune(*span, selection.prune);
+                    let mut new_binders = selection.binders;
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {
                     binders.clone()
+                };
+                let new_universe_params = if has_file_universes {
+                    let used = crate::universe_occurrence::used_universe_names(decl, &new_binders);
+                    merge_universe_params(
+                        file_ctx.current_universe_params(),
+                        universe_params,
+                        used.as_ref(),
+                    )
+                } else {
+                    universe_params.clone()
                 };
                 SurfaceDecl::Theorem {
                     span: *span,
@@ -167,11 +205,6 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             let has_file_universes = file_ctx.has_universe_params();
             let has_file_variables = file_ctx.has_variables();
             if has_file_universes || has_file_variables {
-                let new_universe_params = if has_file_universes {
-                    merge_universe_params(file_ctx.current_universe_params(), universe_params)
-                } else {
-                    universe_params.clone()
-                };
                 let new_binders = if has_file_variables {
                     // Lean parity: prepend only the USED section variables
                     // (dependency fixpoint + instance activation + own-binder
@@ -180,16 +213,31 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     // then mints fresh metavariables nothing can solve, and
                     // the decl dies at the kernel with "contains free
                     // variables" (the 2026-08-15 Mathlib Logic/Basic class).
-                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                    let selection = crate::section_var_selection::select_section_binders(
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
                         file_ctx.included_variables(),
                     );
+                    // An incomplete scan prepends every section variable and
+                    // asks the elaboration of THIS declaration to drop the
+                    // unused ones (`crate::infer::section_prune`).
+                    file_ctx.set_pending_section_prune(*span, selection.prune);
+                    let mut new_binders = selection.binders;
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {
                     binders.clone()
+                };
+                let new_universe_params = if has_file_universes {
+                    let used = crate::universe_occurrence::used_universe_names(decl, &new_binders);
+                    merge_universe_params(
+                        file_ctx.current_universe_params(),
+                        universe_params,
+                        used.as_ref(),
+                    )
+                } else {
+                    universe_params.clone()
                 };
                 SurfaceDecl::Def {
                     span: *span,
@@ -221,11 +269,6 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             let has_file_universes = file_ctx.has_universe_params();
             let has_file_variables = file_ctx.has_variables();
             if has_file_universes || has_file_variables {
-                let new_universe_params = if has_file_universes {
-                    merge_universe_params(file_ctx.current_universe_params(), universe_params)
-                } else {
-                    universe_params.clone()
-                };
                 let new_binders = if has_file_variables {
                     // Lean parity: prepend only the USED section variables
                     // (dependency fixpoint + instance activation + own-binder
@@ -234,16 +277,31 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     // then mints fresh metavariables nothing can solve, and
                     // the decl dies at the kernel with "contains free
                     // variables" (the 2026-08-15 Mathlib Logic/Basic class).
-                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                    let selection = crate::section_var_selection::select_section_binders(
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
                         file_ctx.included_variables(),
                     );
+                    // An incomplete scan prepends every section variable and
+                    // asks the elaboration of THIS declaration to drop the
+                    // unused ones (`crate::infer::section_prune`).
+                    file_ctx.set_pending_section_prune(*span, selection.prune);
+                    let mut new_binders = selection.binders;
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {
                     binders.clone()
+                };
+                let new_universe_params = if has_file_universes {
+                    let used = crate::universe_occurrence::used_universe_names(decl, &new_binders);
+                    merge_universe_params(
+                        file_ctx.current_universe_params(),
+                        universe_params,
+                        used.as_ref(),
+                    )
+                } else {
+                    universe_params.clone()
                 };
                 SurfaceDecl::Axiom {
                     span: *span,
@@ -251,6 +309,61 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params: new_universe_params,
                     binders: new_binders,
                     ty: ty.clone(),
+                    attrs: attrs.clone(),
+                    modifiers: *modifiers,
+                }
+            } else {
+                decl.clone()
+            }
+        }
+
+        // Opaque - prepend the section variables its header and value use, as
+        // for an axiom (review r6 fix round: `variable {α} [Inhabited α]` then
+        // `opaque o : α` is served by the section's instance in Lean).
+        SurfaceDecl::Opaque {
+            span,
+            name,
+            universe_params,
+            binders,
+            ty,
+            val,
+            attrs,
+            modifiers,
+        } => {
+            let has_file_universes = file_ctx.has_universe_params();
+            let has_file_variables = file_ctx.has_variables();
+            if has_file_universes || has_file_variables {
+                let new_binders = if has_file_variables {
+                    let selection = crate::section_var_selection::select_section_binders(
+                        file_ctx.current_variables(),
+                        decl,
+                        Some(file_ctx.macro_ctx()),
+                        file_ctx.included_variables(),
+                    );
+                    file_ctx.set_pending_section_prune(*span, selection.prune);
+                    let mut new_binders = selection.binders;
+                    new_binders.extend(binders.iter().cloned());
+                    new_binders
+                } else {
+                    binders.clone()
+                };
+                let new_universe_params = if has_file_universes {
+                    let used = crate::universe_occurrence::used_universe_names(decl, &new_binders);
+                    merge_universe_params(
+                        file_ctx.current_universe_params(),
+                        universe_params,
+                        used.as_ref(),
+                    )
+                } else {
+                    universe_params.clone()
+                };
+                SurfaceDecl::Opaque {
+                    span: *span,
+                    name: name.clone(),
+                    universe_params: new_universe_params,
+                    binders: new_binders,
+                    ty: ty.clone(),
+                    val: val.clone(),
                     attrs: attrs.clone(),
                     modifiers: *modifiers,
                 }
@@ -277,6 +390,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params: merge_universe_params(
                         file_ctx.current_universe_params(),
                         universe_params,
+                        crate::universe_occurrence::used_universe_names(decl, binders).as_ref(),
                     ),
                     binders: binders.clone(),
                     ty: ty.clone(),
@@ -307,6 +421,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params: merge_universe_params(
                         file_ctx.current_universe_params(),
                         universe_params,
+                        crate::universe_occurrence::used_universe_names(decl, binders).as_ref(),
                     ),
                     binders: binders.clone(),
                     ty: ty.clone(),
@@ -339,6 +454,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params: merge_universe_params(
                         file_ctx.current_universe_params(),
                         universe_params,
+                        crate::universe_occurrence::used_universe_names(decl, binders).as_ref(),
                     ),
                     binders: binders.clone(),
                     extends: extends.clone(),
@@ -371,6 +487,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     universe_params: merge_universe_params(
                         file_ctx.current_universe_params(),
                         universe_params,
+                        crate::universe_occurrence::used_universe_names(decl, binders).as_ref(),
                     ),
                     binders: binders.clone(),
                     extends: extends.clone(),
@@ -414,15 +531,11 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
             fields,
             priority,
             modifiers,
+            compiler_attrs,
         } => {
             let has_file_universes = file_ctx.has_universe_params();
             let has_file_variables = file_ctx.has_variables();
             if has_file_universes || has_file_variables {
-                let new_universe_params = if has_file_universes {
-                    merge_universe_params(file_ctx.current_universe_params(), universe_params)
-                } else {
-                    universe_params.clone()
-                };
                 let new_binders = if has_file_variables {
                     // Lean parity: prepend only the USED section variables
                     // (dependency fixpoint + instance activation + own-binder
@@ -431,16 +544,31 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     // then mints fresh metavariables nothing can solve, and
                     // the decl dies at the kernel with "contains free
                     // variables" (the 2026-08-15 Mathlib Logic/Basic class).
-                    let mut new_binders = crate::infer::elaborate_decl::used_section_binders(
+                    let selection = crate::section_var_selection::select_section_binders(
                         file_ctx.current_variables(),
                         decl,
                         Some(file_ctx.macro_ctx()),
                         file_ctx.included_variables(),
                     );
+                    // An incomplete scan prepends every section variable and
+                    // asks the elaboration of THIS declaration to drop the
+                    // unused ones (`crate::infer::section_prune`).
+                    file_ctx.set_pending_section_prune(*span, selection.prune);
+                    let mut new_binders = selection.binders;
                     new_binders.extend(binders.iter().cloned());
                     new_binders
                 } else {
                     binders.clone()
+                };
+                let new_universe_params = if has_file_universes {
+                    let used = crate::universe_occurrence::used_universe_names(decl, &new_binders);
+                    merge_universe_params(
+                        file_ctx.current_universe_params(),
+                        universe_params,
+                        used.as_ref(),
+                    )
+                } else {
+                    universe_params.clone()
                 };
                 SurfaceDecl::Instance {
                     span: *span,
@@ -451,6 +579,7 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
                     fields: fields.clone(),
                     priority: *priority,
                     modifiers: *modifiers,
+                    compiler_attrs: compiler_attrs.clone(),
                 }
             } else {
                 decl.clone()
@@ -458,6 +587,21 @@ pub fn preprocess_decl_with_context(decl: &SurfaceDecl, file_ctx: &mut FileConte
         }
 
         // All other declarations pass through unchanged
+        // `#guard_msgs … in cmd`: `cmd` is an ordinary command of this
+        // file and takes the section's variables and universes like any
+        // other (Lean elaborates it in the same scope).
+        SurfaceDecl::GuardMsgs {
+            span,
+            doc,
+            spec,
+            cmd,
+        } => SurfaceDecl::GuardMsgs {
+            span: *span,
+            doc: doc.clone(),
+            spec: spec.clone(),
+            cmd: Box::new(preprocess_decl_with_context(cmd, file_ctx)),
+        },
+
         _ => decl.clone(),
     }
 }

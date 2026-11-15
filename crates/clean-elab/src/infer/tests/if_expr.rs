@@ -58,25 +58,26 @@ fn contains_meta_fvar(expr: &Expr) -> bool {
 
 #[test]
 fn test_if_let_var_pattern() {
-    // if let x := e then t else f
-    // Variable patterns are irrefutable, so this optimizes to: let x := e in t
-    // (no casesOn needed since the pattern always matches)
-    let expr = elab("if let x := 42 then x else 0").unwrap();
+    // if let x := e then t else f is `match e with | x => t | _ => f`: the
+    // `_` alternative is selected by no value. Pinned Lean 4.8.0 refuses it
+    // ("redundant alternative", measured 2026-10-16); Clean used to lower it
+    // to `let x := e in t` (G62).
+    let result = elab("if let x := 42 then x else 0");
     assert!(
-        matches!(expr.kind(), ExprKind::Let(_, _, _, _, _)),
-        "expected Let for irrefutable if-let var pattern, got {expr:?}"
+        matches!(result, Err(ElabError::RedundantAlternative { .. })),
+        "an irrefutable if-let var pattern is a redundant alternative, got {result:?}"
     );
 }
 
 #[test]
 fn test_if_let_wildcard_pattern() {
-    // if let _ := e then t else f
-    // Wildcard patterns are irrefutable, so this optimizes to: let _ := e in t
-    // (no casesOn needed since the pattern always matches)
-    let expr = elab("if let _ := 42 then 1 else 0").unwrap();
+    // if let _ := e then t else f: pinned Lean 4.8.0 refuses it ("redundant
+    // alternative", measured 2026-10-16); Clean used to lower it to
+    // `let _ := e in t` (G62).
+    let result = elab("if let _ := 42 then 1 else 0");
     assert!(
-        matches!(expr.kind(), ExprKind::Let(_, _, _, _, _)),
-        "expected Let for irrefutable if-let wildcard pattern, got {expr:?}"
+        matches!(result, Err(ElabError::RedundantAlternative { .. })),
+        "an irrefutable if-let wildcard is a redundant alternative, got {result:?}"
     );
 }
 
@@ -88,12 +89,15 @@ fn test_if_decidable_basic() {
     let mut ctx = ElabCtx::new(&env);
 
     // Build surface expression directly since parsing `if h : True then ...` needs True defined
-    let prop = SurfaceExpr::Ident(clean_parser::Span::dummy(), "True".to_string());
+    let prop = SurfaceExpr::Ident(
+        clean_parser::Span::dummy(),
+        SurfaceName::generated_path("True"),
+    );
     let then_br = SurfaceExpr::Lit(clean_parser::Span::dummy(), SurfaceLit::Nat(1));
     let else_br = SurfaceExpr::Lit(clean_parser::Span::dummy(), SurfaceLit::Nat(0));
     let surface = SurfaceExpr::IfDecidable(
         clean_parser::Span::dummy(),
-        "h".to_string(),
+        SurfaceName::generated_path("h"),
         Box::new(prop),
         Box::new(then_br),
         Box::new(else_br),
@@ -104,7 +108,11 @@ fn test_if_decidable_basic() {
     let result = ctx.elaborate(&surface);
     // We expect UnknownIdent for "True" since it's not in the empty environment
     assert!(
-        matches!(result, Err(ElabError::UnknownIdent(ref name)) if name == "True"),
+        result
+            .as_ref()
+            .err()
+            .and_then(ElabError::unknown_ident_name)
+            == Some("True"),
         "expected UnknownIdent(True), got {result:?}"
     );
 }
@@ -118,12 +126,15 @@ fn test_if_decidable_with_prop_env() {
 
     let mut ctx = ElabCtx::new(&env);
 
-    let prop = SurfaceExpr::Ident(clean_parser::Span::dummy(), "True".to_string());
+    let prop = SurfaceExpr::Ident(
+        clean_parser::Span::dummy(),
+        SurfaceName::generated_path("True"),
+    );
     let then_br = SurfaceExpr::Lit(clean_parser::Span::dummy(), SurfaceLit::Nat(1));
     let else_br = SurfaceExpr::Lit(clean_parser::Span::dummy(), SurfaceLit::Nat(0));
     let surface = SurfaceExpr::IfDecidable(
         clean_parser::Span::dummy(),
-        "h".to_string(),
+        SurfaceName::generated_path("h"),
         Box::new(prop),
         Box::new(then_br),
         Box::new(else_br),
@@ -147,10 +158,15 @@ fn test_if_decidable_failures_restore_expected_and_branch_locals_for_reuse() {
     let mut ctx = ElabCtx::new(&env);
     let outer_expected = Expr::type_();
     ctx.current_expected_type = Some(outer_expected.clone());
-    ctx.push_local("outerWitness".to_string(), Expr::prop());
+    ctx.push_local(SurfaceName::generated_path("outerWitness"), Expr::prop());
     let locals_before = ctx.locals.clone();
 
-    let ident = |name: &str| SurfaceExpr::Ident(clean_parser::Span::dummy(), name.to_string());
+    let ident = |name: &'static str| {
+        SurfaceExpr::Ident(
+            clean_parser::Span::dummy(),
+            SurfaceName::generated_path(name),
+        )
+    };
     let true_prop = ident("True");
     let valid_branch = ident("Prop");
 
@@ -158,7 +174,12 @@ fn test_if_decidable_failures_restore_expected_and_branch_locals_for_reuse() {
     // type but before introducing either witness.
     let missing_prop = ident("missingDecidableCondition");
     assert!(ctx
-        .elab_if_decidable("h", &missing_prop, &valid_branch, &valid_branch)
+        .elab_if_decidable(
+            &SurfaceName::generated_path("h"),
+            &missing_prop,
+            &valid_branch,
+            &valid_branch
+        )
         .is_err());
     assert_eq!(ctx.locals, locals_before);
     assert_eq!(ctx.current_expected_type, Some(outer_expected.clone()));
@@ -166,31 +187,52 @@ fn test_if_decidable_failures_restore_expected_and_branch_locals_for_reuse() {
     // Failure in each branch occurs with a different `h` local active.
     let missing_then = ident("missingThenBranch");
     assert!(ctx
-        .elab_if_decidable("h", &true_prop, &missing_then, &valid_branch)
+        .elab_if_decidable(
+            &SurfaceName::generated_path("h"),
+            &true_prop,
+            &missing_then,
+            &valid_branch
+        )
         .is_err());
     assert_eq!(ctx.locals, locals_before);
     assert_eq!(ctx.current_expected_type, Some(outer_expected.clone()));
-    assert!(ctx.lookup_local("h").is_none());
+    assert!(ctx
+        .lookup_local(&SurfaceName::generated_path("h"))
+        .is_none());
 
     let missing_else = ident("missingElseBranch");
     assert!(ctx
-        .elab_if_decidable("h", &true_prop, &valid_branch, &missing_else)
+        .elab_if_decidable(
+            &SurfaceName::generated_path("h"),
+            &true_prop,
+            &valid_branch,
+            &missing_else
+        )
         .is_err());
     assert_eq!(ctx.locals, locals_before);
     assert_eq!(ctx.current_expected_type, Some(outer_expected.clone()));
-    assert!(ctx.lookup_local("h").is_none());
+    assert!(ctx
+        .lookup_local(&SurfaceName::generated_path("h"))
+        .is_none());
 
     // The same context remains usable, and a successful retry also restores
     // the exact surrounding expected/local state.
     let result = ctx
-        .elab_if_decidable("h", &true_prop, &valid_branch, &valid_branch)
+        .elab_if_decidable(
+            &SurfaceName::generated_path("h"),
+            &true_prop,
+            &valid_branch,
+            &valid_branch,
+        )
         .expect("context should remain reusable after decidable-if failures");
     assert!(
         matches!(result.get_app_fn().kind(), ExprKind::Const(name, _) if name.to_string() == "dite")
     );
     assert_eq!(ctx.locals, locals_before);
     assert_eq!(ctx.current_expected_type, Some(outer_expected));
-    assert!(ctx.lookup_local("h").is_none());
+    assert!(ctx
+        .lookup_local(&SurfaceName::generated_path("h"))
+        .is_none());
 }
 
 // =========================================================================
@@ -308,7 +350,10 @@ fn test_issue1702_ite_has_five_args() {
 
     // Build: if True then 1 else 0
     // True is Prop-valued, matching ite's (c : Prop) parameter.
-    let cond = Box::new(SurfaceExpr::Ident(Span::dummy(), "True".to_string()));
+    let cond = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("True"),
+    ));
     let then_br = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1)));
     let else_br = Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)));
     let surface = SurfaceExpr::If(Span::dummy(), cond, then_br, else_br);
@@ -407,7 +452,7 @@ fn test_issue1702_if_let_ctor_uses_constructor_index() {
         Span::dummy(),
         Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "MyOpt.mySome".to_string(),
+            SurfaceName::generated_path("MyOpt.mySome"),
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Lit(
             Span::dummy(),
@@ -419,7 +464,7 @@ fn test_issue1702_if_let_ctor_uses_constructor_index() {
     // Match the FIRST constructor in MyOpt to distinguish correct ctor-index placement:
     // - Correct ordering: alt_ctor0=then, alt_ctor1=else (possibly lambda-wrapped)
     // - Regressed hardcoded ordering would swap these positions
-    let pat = SurfacePattern::Ctor("myNone".to_string(), vec![]);
+    let pat = SurfacePattern::Ctor(SurfaceName::generated_path("myNone"), vec![]);
     let surface = SurfaceExpr::IfLet(Span::dummy(), pat, scrutinee, then_br, else_br);
 
     let mut ctx = ElabCtx::new(&env);
@@ -499,7 +544,7 @@ fn test_issue1719_if_let_excess_subpats_return_ctor_arity_mismatch() {
         Span::dummy(),
         Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "MyOpt.mySome".to_string(),
+            SurfaceName::generated_path("MyOpt.mySome"),
         )),
         vec![SurfaceArg::positional(SurfaceExpr::Lit(
             Span::dummy(),
@@ -512,10 +557,10 @@ fn test_issue1719_if_let_excess_subpats_return_ctor_arity_mismatch() {
     // Pattern with 2 sub-patterns when mySome only has 1 field.
     // This should now fail closed with ConstructorPatternArityMismatch.
     let pat = SurfacePattern::Ctor(
-        "mySome".to_string(),
+        SurfaceName::generated_path("mySome"),
         vec![
-            SurfacePattern::Var("x".to_string()),
-            SurfacePattern::Var("y".to_string()),
+            SurfacePattern::Var(SurfaceName::generated_path("x")),
+            SurfacePattern::Var(SurfaceName::generated_path("y")),
         ],
     );
     let surface = SurfaceExpr::IfLet(Span::dummy(), pat, scrutinee, then_br, else_br);
@@ -551,10 +596,13 @@ fn test_if_let_ctor_nested_literal_pattern_elaborates() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::Ctor(
-            "Nat.succ".to_string(),
+            SurfaceName::generated_path("Nat.succ"),
             vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
@@ -583,13 +631,16 @@ fn test_if_let_ctor_nested_numeral_add_pattern_elaborates() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::Ctor(
-            "Nat.succ".to_string(),
+            SurfaceName::generated_path("Nat.succ"),
             vec![SurfacePattern::NumeralAdd(
-                Box::new(SurfacePattern::Var("k".to_string())),
+                Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                 1,
             )],
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
@@ -610,14 +661,20 @@ fn test_if_let_recursive_nested_ctor_pattern_typechecks() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::Ctor(
-            "Option.some".to_string(),
+            SurfaceName::generated_path("Option.some"),
             vec![SurfacePattern::Ctor(
-                "Option.some".to_string(),
-                vec![SurfacePattern::Var("x".to_string())],
+                SurfaceName::generated_path("Option.some"),
+                vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
             )],
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "opt".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("opt"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
 
@@ -669,9 +726,18 @@ fn test_issue2786_if_enum_valued_branches_share_result_type() {
     let mut ctx = ElabCtx::new(&env);
 
     // Build: if True then Ordering.eq else Ordering.gt
-    let cond = Box::new(SurfaceExpr::Ident(Span::dummy(), "True".to_string()));
-    let then_br = Box::new(SurfaceExpr::Ident(Span::dummy(), "Ordering.eq".to_string()));
-    let else_br = Box::new(SurfaceExpr::Ident(Span::dummy(), "Ordering.gt".to_string()));
+    let cond = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("True"),
+    ));
+    let then_br = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("Ordering.eq"),
+    ));
+    let else_br = Box::new(SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::generated_path("Ordering.gt"),
+    ));
     let surface = SurfaceExpr::If(Span::dummy(), cond, then_br, else_br);
 
     let expr = ctx

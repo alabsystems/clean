@@ -514,7 +514,10 @@ fn test_convert_hyp_not_found() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, a);
 
-    let result = convert_hyp(&mut state, "nonexistent");
+    let result = convert_hyp(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s == "nonexistent"));
 }
 

@@ -1,0 +1,75 @@
+{
+  "schema": "clean.model_unit_declarations/1",
+  "what_this_is": "Every top-level declaration of every model unit under crates/clean-verify/spec/, by unit, in source order. scripts/model_islands.py reads THIS FILE rather than parsing Clean itself, so its accounting no longer rests on a regex over Clean source.",
+  "how_it_is_checked": "crates/clean-verify/src/spec/model_units/agreement.rs re-derives this census with the REAL Clean parser (declarations_of_source, the same function the production loader uses) and refuses any disagreement in either direction. So a declaration the parser accepts and a regex would miss cannot be invisible to the island accounting -- which was the last hole in its completeness claim.",
+  "not_claimed": "This is a census of TOP-LEVEL declarations. Constructors and the recursor families the kernel generates from an inductive are NOT counted here; they enter the environment with their parent declaration.",
+  "units": {
+    "expr_model_core": [
+      "Name",
+      "Level",
+      "ListType",
+      "KExpr",
+      "lift_bvar_at",
+      "lift_at",
+      "lift",
+      "instantiate_bvar_geq",
+      "instantiate_bvar_at",
+      "instantiate_at",
+      "instantiate"
+    ],
+    "expr_model_spine": [
+      "kapp_fn",
+      "kapp_arg_count",
+      "is_const_app"
+    ],
+    "foundation_agreement": [
+      "fa_nat_zero",
+      "fa_nat_succ",
+      "fa_nat_add_zero",
+      "fa_nat_add_succ",
+      "fa_nat_pred_zero",
+      "fa_nat_pred_succ",
+      "fa_nat_sub_zero",
+      "fa_nat_sub_succ",
+      "fa_nat_rec",
+      "fa_eq_refl",
+      "fa_eq_rec",
+      "fa_bool_true",
+      "fa_bool_false",
+      "fa_bool_rec",
+      "fa_nat_sort",
+      "fa_bool_sort",
+      "fa_empty_sort",
+      "fa_eq_is_prop",
+      "fa_empty_elim"
+    ],
+    "foundation_empty_and": [
+      "Empty",
+      "AndType"
+    ],
+    "foundation_eq": [
+      "Eq"
+    ],
+    "foundation_nat": [
+      "Nat",
+      "Nat.add",
+      "Nat.pred",
+      "Nat.sub"
+    ],
+    "foundation_order": [
+      "Lt",
+      "Le"
+    ],
+    "foundation_prod": [
+      "ProdType"
+    ]
+  },
+  "count": 43,
+  "ambient": [
+    "Bool",
+    "Bool.false",
+    "Bool.rec",
+    "Bool.true"
+  ],
+  "ambient_note": "Every constant the model's own declarations reference that no model unit declares, DERIVED FROM THE KERNEL (the elaborated type and value of each census declaration, minus everything the model brings in including generated constructors and recursors) by crates/clean-verify/src/spec/model_units/agreement.rs::the_ambient_interface_is_what_the_census_records. An ambient name is supplied by whichever environment the model is elaborated in -- the spec's foundation in clean-verify, the compiler prelude in an island -- so each needs an agreement witness for the same reason a prelude-owned declaration does. A text scan cannot compute this: it cannot tell a binder from a constant."
+}

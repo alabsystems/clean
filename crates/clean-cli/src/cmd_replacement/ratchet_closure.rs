@@ -38,11 +38,31 @@ use super::*;
 /// `mm_gate` drops any verified theorem whose transitive `$p` closure is not
 /// itself verified. The full argument is the `trust` prose on the site's row in
 /// `data/unchecked_decl_ratchet.json`.
-pub(crate) const SANCTIONED_ADD_DECL_BYPASS_SITES: &[(&str, &str, u32)] = &[(
-    "crates/clean-kernel/src/env/decl_add.rs",
-    "add_decl_unchecked",
-    1,
-)];
+pub(crate) const SANCTIONED_ADD_DECL_BYPASS_SITES: &[(&str, &str, u32)] = &[
+    (
+        "crates/clean-kernel/src/env/decl_add.rs",
+        "add_decl_unchecked",
+        1,
+    ),
+    // AUDIT r11 M11-6: the two `TrustedEnvExt for Environment` delegations,
+    // capped at one call each. Each body is one forward to the inherent method
+    // of the same name and confers no capability -- reaching the line requires
+    // already holding an `Environment`, which can call the inherent method
+    // directly. They are SITES because audit r10 had excluded the whole FILE,
+    // and a file skip is a suppression: measured, one extra
+    // `self.add_decl_unchecked(..)` planted inside an existing delegation body
+    // was invisible to every scanner then, while the pre-r10 scanner caught it.
+    (
+        "crates/clean-kernel/src/env/trusted_ext.rs",
+        "add_decl_unchecked",
+        1,
+    ),
+    (
+        "crates/clean-kernel/src/env/trusted_ext.rs",
+        "add_decl_structural",
+        1,
+    ),
+];
 
 fn sanctioned_cap(file: &str, method: &str) -> Option<u32> {
     SANCTIONED_ADD_DECL_BYPASS_SITES

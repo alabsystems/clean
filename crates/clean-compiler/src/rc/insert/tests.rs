@@ -670,3 +670,227 @@ fn test_duplicate_local_occurrence_transfers_once() {
     assert_eq!(count_rc_ops(body, "_inc", fvar(1)), 1, "{result}");
     assert_eq!(count_rc_ops(body, "_dec", fvar(1)), 0, "{result}");
 }
+
+// --- WS6.2: releases the post-boxing linearity verifier found missing ---
+
+fn call(dest: u64, f: &str, args: &[u64], rest: Code) -> Code {
+    Code::let_bind(
+        LetDecl::new(
+            fvar(dest),
+            name("_x"),
+            nat_type(),
+            LetValue::Const {
+                name: name(f),
+                levels: vec![],
+                args: args.iter().map(|a| Arg::FVar(fvar(*a))).collect(),
+            },
+        ),
+        rest,
+    )
+}
+
+fn two_way(scrutinee: u64, zero: Code, one: Code) -> Code {
+    Code::Cases(Cases {
+        type_name: name("Bool"),
+        result_type: nat_type(),
+        scrutinee: fvar(scrutinee),
+        alts: vec![
+            Alt::Ctor {
+                ctor_name: name("Bool.false"),
+                params: vec![],
+                body: Box::new(zero),
+            },
+            Alt::Ctor {
+                ctor_name: name("Bool.true"),
+                params: vec![],
+                body: Box::new(one),
+            },
+        ],
+    })
+}
+
+fn decl_of(params: &[u64], code: Code) -> Decl {
+    Decl::new(
+        name("f"),
+        vec![],
+        nat_type(),
+        params
+            .iter()
+            .map(|p| Param::new(fvar(*p), name("p"), nat_type()))
+            .collect(),
+        code,
+        false,
+    )
+}
+
+fn alt_body(code: &Code, idx: usize) -> &Code {
+    fn find(code: &Code) -> &Cases {
+        match code {
+            Code::Let(_, rest) => find(rest),
+            Code::Cases(cases) => cases,
+            other => panic!("expected a cases, got {other:?}"),
+        }
+    }
+    find(code).alts[idx].body()
+}
+
+/// A non-param local live into a `cases` but dead in one branch is released
+/// at the head of THAT branch (Lean's `ExplicitRC` rule for `case`). The
+/// shape of `List.get`'s recursion: `r` is used only on the second branch.
+#[test]
+fn ws62_local_dead_in_a_branch_is_released_at_its_head() {
+    // def f (p c) := let r := g(p); cases c | false => return p' | true => h(r)
+    let code = call(
+        2,
+        "g",
+        &[0],
+        two_way(
+            1,
+            call(3, "k", &[], Code::ret(fvar(3))),
+            call(4, "h", &[2], Code::ret(fvar(4))),
+        ),
+    );
+    let decl = decl_of(&[0, 1], code);
+    let result = insert_rc(&decl, &BorrowMap::new());
+    let body = rc_body(&result);
+    assert_eq!(
+        count_rc_ops(alt_body(body, 0), "_dec", fvar(2)),
+        1,
+        "r is dead on the false branch and must be released there: {result}"
+    );
+    // Twin: on the branch that consumes `r` there is no dec (the call takes it).
+    assert_eq!(
+        count_rc_ops(alt_body(body, 1), "_dec", fvar(2)),
+        0,
+        "r is consumed on the true branch, never also released: {result}"
+    );
+    // Params keep their death dec at every return instead.
+    assert_eq!(
+        count_rc_ops(alt_body(body, 0), "_dec", fvar(0)),
+        1,
+        "{result}"
+    );
+}
+
+/// The scrutinee itself, dead in every branch: released at each branch head.
+/// The shape of `Nat.max`'s `Nat.ble` result.
+#[test]
+fn ws62_dead_scrutinee_is_released_in_every_branch() {
+    // def f (p) := let b := ble(p); cases b | false => return q | true => return q
+    let code = call(
+        1,
+        "ble",
+        &[0],
+        two_way(
+            1,
+            call(2, "k", &[], Code::ret(fvar(2))),
+            call(3, "k", &[], Code::ret(fvar(3))),
+        ),
+    );
+    let decl = decl_of(&[0], code);
+    let result = insert_rc(&decl, &BorrowMap::new());
+    let body = rc_body(&result);
+    for idx in 0..2 {
+        assert_eq!(
+            count_rc_ops(alt_body(body, idx), "_dec", fvar(1)),
+            1,
+            "branch {idx} must release the dead scrutinee: {result}"
+        );
+    }
+    // Twin: a SCALAR-typed scrutinee needs no RC at all.
+    let scalar = Code::let_bind(
+        LetDecl::new(
+            fvar(1),
+            name("b"),
+            Expr::const_str("Bool"),
+            LetValue::Const {
+                name: name("ble"),
+                levels: vec![],
+                args: vec![Arg::FVar(fvar(0))],
+            },
+        ),
+        two_way(
+            1,
+            call(2, "k", &[], Code::ret(fvar(2))),
+            call(3, "k", &[], Code::ret(fvar(3))),
+        ),
+    );
+    let result = insert_rc(&decl_of(&[0], scalar), &BorrowMap::new());
+    assert_eq!(
+        count_rc_ops(rc_body(&result), "_dec", fvar(1)),
+        0,
+        "{result}"
+    );
+}
+
+/// A projection that is its structure's LAST use releases the structure
+/// right after the field was inc'd (Lean's `ExplicitRC` rule for `proj`).
+/// The shape of `List.instGetElem?NatLtLength`'s `some v` arm.
+#[test]
+fn ws62_structure_whose_last_use_is_a_projection_is_released() {
+    // def f (p) := let o := g(p); let v := o.0; return v
+    let code = call(
+        1,
+        "g",
+        &[0],
+        Code::let_bind(
+            LetDecl::new(
+                fvar(2),
+                name("v"),
+                nat_type(),
+                LetValue::Proj {
+                    type_name: name("Option"),
+                    idx: 0,
+                    structure: fvar(1),
+                },
+            ),
+            Code::ret(fvar(2)),
+        ),
+    );
+    let result = insert_rc(&decl_of(&[0], code), &BorrowMap::new());
+    let body = rc_body(&result);
+    assert_eq!(
+        count_rc_ops(body, "_inc", fvar(2)),
+        1,
+        "field inc: {result}"
+    );
+    assert_eq!(
+        count_rc_ops(body, "_dec", fvar(1)),
+        1,
+        "structure release: {result}"
+    );
+    // The inc of the field comes BEFORE the structure's release.
+    let printed = format!("{result}");
+    let inc_at = printed.find("_inc").expect("inc printed");
+    let dec_at = printed.rfind("_dec").expect("dec printed");
+    assert!(
+        inc_at < dec_at,
+        "inc the field while the parent is alive: {printed}"
+    );
+
+    // Twin: a structure still used after the projection is NOT released there.
+    let code = call(
+        1,
+        "g",
+        &[0],
+        Code::let_bind(
+            LetDecl::new(
+                fvar(2),
+                name("v"),
+                nat_type(),
+                LetValue::Proj {
+                    type_name: name("Option"),
+                    idx: 0,
+                    structure: fvar(1),
+                },
+            ),
+            call(3, "h", &[2, 1], Code::ret(fvar(3))),
+        ),
+    );
+    let result = insert_rc(&decl_of(&[0], code), &BorrowMap::new());
+    assert_eq!(
+        count_rc_ops(rc_body(&result), "_dec", fvar(1)),
+        0,
+        "the later consuming use takes the structure: {result}"
+    );
+}

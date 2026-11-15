@@ -75,7 +75,10 @@ pub fn exact_with_cert(state: &mut ProofState, proof: Expr) -> CertifiedTacticRe
 /// REQUIRES: Current goal target is a Pi/forall type (after WHNF)
 /// ENSURES: On Ok, hypothesis is introduced and a domain type ProofCert is returned
 /// ENSURES: On Err(GoalMismatch), goal target is not a Pi type; state is unchanged
-pub fn intro_with_cert(state: &mut ProofState, name: &str) -> CertifiedTacticResult {
+pub fn intro_with_cert(
+    state: &mut ProofState,
+    name: &clean_parser::SurfaceName,
+) -> CertifiedTacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // WHNF to expose the Pi
@@ -91,8 +94,9 @@ pub fn intro_with_cert(state: &mut ProofState, name: &str) -> CertifiedTacticRes
 
             // Create the new local declaration
             let local_decl = LocalDecl {
+                binder_info: *bi,
                 fvar,
-                name: name.to_string(),
+                name: name.clone(),
                 ty: domain.as_ref().clone(),
                 value: None,
             };
@@ -123,6 +127,7 @@ pub fn intro_with_cert(state: &mut ProofState, name: &str) -> CertifiedTacticRes
                 meta_id: new_meta_id,
                 target: new_target,
                 local_ctx: new_ctx,
+                case_binders: goal.case_binders.clone(),
                 tag: None,
             };
 
@@ -186,7 +191,8 @@ pub fn assumption_with_cert(state: &mut ProofState) -> CertifiedTacticResult {
         }
     }
 
-    Err(TacticError::HypothesisNotFound(
-        "no matching hypothesis found".into(),
+    Err(crate::tactic::display::no_matching_hypothesis(
+        state,
+        "assumption",
     ))
 }

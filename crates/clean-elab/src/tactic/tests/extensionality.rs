@@ -131,18 +131,30 @@ fn test_ext_config_default() {
 
 #[test]
 fn test_ext_config_with_name() {
-    let config = ExtConfig::with_name("x");
+    let config = ExtConfig::with_name(&clean_parser::SurfaceName::generated_path("x"));
     assert_eq!(config.names.len(), 1);
-    assert_eq!(config.names[0].as_deref(), Some("x"));
+    assert_eq!(
+        config.names[0].as_ref(),
+        Some(&clean_parser::SurfaceName::generated_path("x"))
+    );
     assert!(config.depth.is_none());
 }
 
 #[test]
 fn test_ext_config_with_names() {
-    let config = ExtConfig::with_names(&["x", "y"]);
+    let config = ExtConfig::with_names(&[
+        &clean_parser::SurfaceName::generated_path("x"),
+        &clean_parser::SurfaceName::generated_path("y"),
+    ]);
     assert_eq!(config.names.len(), 2);
-    assert_eq!(config.names[0].as_deref(), Some("x"));
-    assert_eq!(config.names[1].as_deref(), Some("y"));
+    assert_eq!(
+        config.names[0].as_ref(),
+        Some(&clean_parser::SurfaceName::generated_path("x"))
+    );
+    assert_eq!(
+        config.names[1].as_ref(),
+        Some(&clean_parser::SurfaceName::generated_path("y"))
+    );
 }
 
 #[test]
@@ -185,14 +197,17 @@ fn test_funext_introduces_var() {
     );
 
     let mut state = ProofState::new(env, target);
-    let result = funext(&mut state, "x");
+    let result = funext(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(result.is_ok(), "funext should succeed: {result:?}");
 
     // After funext, there should be a goal with x in context
     let goal = state
         .current_goal()
         .expect("should have a goal after funext");
-    let has_x = goal.local_ctx.iter().any(|d| d.name == "x");
+    let has_x = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("x"));
     assert!(has_x, "funext should introduce variable 'x' into context");
 }
 
@@ -217,7 +232,7 @@ fn test_funext_non_function_fails() {
     );
 
     let mut state = ProofState::new(env, target);
-    let result = funext(&mut state, "x");
+    let result = funext(&mut state, &clean_parser::SurfaceName::generated_path("x"));
     assert!(
         result.is_err(),
         "funext should fail on non-function equality"
@@ -248,11 +263,14 @@ fn test_ext_function_equality() {
     );
 
     let mut state = ProofState::new(env, target);
-    let result = ext(&mut state, "n");
+    let result = ext(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(result.is_ok(), "ext should succeed on f = g: {result:?}");
 
     let goal = state.current_goal().expect("should have goal after ext");
-    let has_n = goal.local_ctx.iter().any(|d| d.name == "n");
+    let has_n = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("n"));
     assert!(has_n, "ext should introduce variable 'n'");
 }
 
@@ -287,7 +305,10 @@ fn test_ext_multi_auto_name() {
     );
 
     let goal = state.current_goal().expect("should have goal");
-    let has_x = goal.local_ctx.iter().any(|d| d.name == "x");
+    let has_x = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("x"));
     assert!(has_x, "auto-named ext should introduce 'x'");
 }
 
@@ -314,7 +335,10 @@ fn test_ext_multi_multiple_args() {
     );
 
     let mut state = ProofState::new(env, target);
-    let config = ExtConfig::with_names(&["x", "y"]);
+    let config = ExtConfig::with_names(&[
+        &clean_parser::SurfaceName::generated_path("x"),
+        &clean_parser::SurfaceName::generated_path("y"),
+    ]);
     let result = ext_multi(&mut state, &config);
     assert!(
         result.is_ok(),
@@ -325,8 +349,14 @@ fn test_ext_multi_multiple_args() {
     let goal = state
         .current_goal()
         .expect("should have goal after ext_multi");
-    let has_x = goal.local_ctx.iter().any(|d| d.name == "x");
-    let has_y = goal.local_ctx.iter().any(|d| d.name == "y");
+    let has_x = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("x"));
+    let has_y = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("y"));
     assert!(has_x, "ext_multi should introduce 'x'");
     assert!(has_y, "ext_multi should introduce 'y'");
 }
@@ -336,14 +366,14 @@ fn test_ext_multi_multiple_args() {
 // ---------------------------------------------------------------------------
 
 #[test]
-fn test_congr_non_equality_fails() {
+fn test_congr_non_equality_goal_is_left_unchanged() {
     let env = setup_env_with_congr();
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
 
-    // Goal is just a type, not an equality -- congr should fail
+    // Goal is just a type, not an equality: Lean's `congr` hands it back.
     let mut state = ProofState::new(env, a_ty);
-    let result = congr(&mut state);
-    assert!(result.is_err(), "congr should fail on non-equality goal");
+    congr(&mut state).expect("congr does not fail on a non-equality goal");
+    assert_eq!(state.goals().len(), 1, "the goal is left as it was");
 }
 
 #[test]
@@ -382,7 +412,7 @@ fn test_congr_depth_zero_with_config() {
     let a_ty = Expr::const_(Name::from_string("A"), vec![]);
     let a = Expr::const_(Name::from_string("a"), vec![]);
 
-    // Goal: a = a (rfl-solvable, but congr at depth 0 should be a no-op)
+    // Goal: a = a (closed by `congr 0`: only the split is depth-limited)
     let target = Expr::app(
         Expr::app(
             Expr::app(
@@ -396,14 +426,11 @@ fn test_congr_depth_zero_with_config() {
 
     let mut state = ProofState::new(env, target);
     let config = ExtConfig::with_depth(0);
-    let goals_before = state.goals().len();
     let result = congr_with_config(&mut state, &config);
-    assert!(result.is_ok(), "congr_with_config at depth 0 is a no-op");
-    assert_eq!(
-        state.goals().len(),
-        goals_before,
-        "congr_with_config at depth 0 should not change goals"
-    );
+    assert!(result.is_ok(), "congr_with_config at depth 0 succeeds");
+    // Lean's `congr 0` still runs `congrPre`, which closes `a = a` by
+    // `Eq.refl` (only the SPLIT is depth-limited).
+    assert_eq!(state.goals().len(), 0, "`congr 0` closes a reflexive goal");
 }
 
 #[test]
@@ -490,7 +517,8 @@ fn test_funext_pointwise_exact_kernel_checks() {
     let target = mk_eq(Expr::arrow(a.clone(), a.clone()), f, g);
     let mut state = ProofState::new(env.clone(), target.clone());
 
-    funext(&mut state, "x").expect("funext should transform f = g");
+    funext(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("funext should transform f = g");
 
     // Solve the pointwise goal `f x = g x` with `h x`.
     let x_fvar = state
@@ -498,7 +526,7 @@ fn test_funext_pointwise_exact_kernel_checks() {
         .expect("pointwise goal present")
         .local_ctx
         .iter()
-        .find(|d| d.name == "x")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("x"))
         .map(|d| d.fvar)
         .expect("funext introduced x");
     let h = Expr::const_(Name::from_string("h"), vec![]);
@@ -532,7 +560,8 @@ fn test_funext_pointwise_rfl_kernel_checks() {
     let target = mk_eq(Expr::arrow(a.clone(), a.clone()), eta, f);
     let mut state = ProofState::new(env.clone(), target.clone());
 
-    funext(&mut state, "x").expect("funext should transform (fun x => f x) = f");
+    funext(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("funext should transform (fun x => f x) = f");
     rfl(&mut state).expect("rfl should close the pointwise goal");
 
     assert!(state.is_complete(), "no goals should remain");
@@ -570,21 +599,21 @@ fn test_funext_two_arg_kernel_checks() {
     let target = mk_eq(Expr::arrow(a.clone(), aa), h, k);
     let mut state = ProofState::new(env.clone(), target.clone());
 
-    funext(&mut state, "a").expect("first funext");
-    funext(&mut state, "b").expect("second funext");
+    funext(&mut state, &clean_parser::SurfaceName::generated_path("a")).expect("first funext");
+    funext(&mut state, &clean_parser::SurfaceName::generated_path("b")).expect("second funext");
 
     // Solve `h a b = k a b` with `hyp a b`.
     let goal = state.current_goal().expect("pointwise goal present");
     let a_fvar = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "a")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("a"))
         .map(|d| d.fvar)
         .expect("a introduced");
     let b_fvar = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "b")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("b"))
         .map(|d| d.fvar)
         .expect("b introduced");
     let hyp = Expr::const_(Name::from_string("hyp"), vec![]);
@@ -622,7 +651,7 @@ fn test_funext_non_function_errs_goal_mismatch() {
         a,
     );
     let mut state = ProofState::new(env, target);
-    match funext(&mut state, "x") {
+    match funext(&mut state, &clean_parser::SurfaceName::generated_path("x")) {
         Err(TacticError::GoalMismatch(_)) => {}
         other => panic!("funext on non-function equality must GoalMismatch, got {other:?}"),
     }
@@ -642,7 +671,8 @@ fn test_funext_wrong_pointwise_rfl_errs() {
     let target = mk_eq(Expr::arrow(a.clone(), a.clone()), f, g);
     let mut state = ProofState::new(env, target);
 
-    funext(&mut state, "x").expect("funext transforms the goal");
+    funext(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("funext transforms the goal");
     assert!(
         rfl(&mut state).is_err(),
         "rfl must fail on the non-reflexive pointwise goal f x = g x"

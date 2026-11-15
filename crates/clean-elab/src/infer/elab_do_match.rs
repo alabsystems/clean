@@ -37,7 +37,8 @@ impl<'a> ElabCtx<'a> {
                     return Ok(Expr::app(m, alpha));
                 }
 
-                let val = self.elaborate(expr)?;
+                let val =
+                    self.elaborate_with_expected_type(expr, self.expected_do_result_alpha())?;
                 let val_ty = self.infer_type(&val)?;
                 Ok(Expr::app(m, val_ty))
             }
@@ -111,9 +112,17 @@ impl<'a> ElabCtx<'a> {
             ));
         }
 
+        // Non-linear patterns are refused as in a term `match` (class N,
+        // `check_pattern_linear`); the discriminants of one arm form one
+        // pattern. A do-block `let (x, x) := p` is such a match.
+        for arm in arms {
+            let whole =
+                SurfacePattern::Ctor(SurfaceName::generated_path("Prod.mk"), arm.patterns.clone());
+            self.check_pattern_linear(&whole)?;
+        }
         let expanded_arms = expand_do_or_match_arms(arms);
 
-        // Two-discriminant do-match (`match a, b with | p1, p2 => …`) — Track FF.
+        // Multi-discriminant do-match (`match a, b with | p1, p2 => …`) — Track FF.
         //
         // The plain-`match` parser tuples both discriminants and arm patterns
         // into a right-nested `Prod.mk` (see `grammar/expr_match.rs::match_body`),
@@ -121,7 +130,7 @@ impl<'a> ElabCtx<'a> {
         // `Prod.casesOn`. The *do*-block parser (`grammar/expr_do.rs::parse_do_match`)
         // deliberately leaves both un-tupled, deferring to the elaborator. The
         // scrutinee is tupled below; here we apply the SAME right-nested `Prod.mk`
-        // tupling to each arm's two patterns, so every arm carries exactly one
+        // tupling to each arm's patterns, so every arm carries exactly one
         // pattern and the rest of the pipeline (single-pattern `casesOn` dispatch)
         // handles it unchanged. Without this, `elab_do_match_arm` hard-rejected
         // multi-pattern arms with "multi-discriminant match in do block with
@@ -131,21 +140,24 @@ impl<'a> ElabCtx<'a> {
         // same surface-syntax desugaring the parser performs for the
         // expression-level form.
         //
-        // Scope gate: only the exactly-two-discriminant form. Three-or-more
-        // discriminants with a leading *variable*-binding pattern (`match ty,
-        // lhs, rhs with | ty, .vector …, .vector … => …` in
-        // `semICmpInst`/`semBinOp`) drive a nested mixed var/ctor `Prod.casesOn`
-        // the do-match path does not yet build correctly — it produced a
-        // kernel-rejected term and synthetic-sorry recovery. Those fall through
-        // to the existing honest "multi-discriminant" error, keeping every file
-        // free of new sorry/kernel-fail artifacts while still landing the
-        // two-discriminant win.
-        let two_discriminant = discrs.len() == 2
+        // Scope: every multi-discriminant form. The tupling was first
+        // gated to exactly two discriminants because a three-discriminant
+        // match with a leading variable pattern (`match ty, lhs, rhs with |
+        // ty, .vector …, .vector … => …`, `semICmpInst`/`semBinOp`) once
+        // lowered to a kernel-rejected term. That no longer reproduces at
+        // this revision: the probe pairs in `tests/rm1_elab_fixes_e2e.rs`
+        // (three discriminants, a leading variable, a literal column, a
+        // catch-all) elaborate, kernel-check and agree with Lean 4.8.0 on
+        // each `rfl` and its mutation. Leaving three or more un-tupled sent
+        // every arm's second and later patterns unbound (`Unknown identifier:
+        // a`, K5 probe a5). The kernel re-checks the `Prod.casesOn` term
+        // either way.
+        let multi_discriminant = discrs.len() >= 2
             && expanded_arms
                 .iter()
                 .all(|arm| arm.patterns.len() == discrs.len());
         let tupled_arms: Vec<DoMatchArm>;
-        let arms = if two_discriminant {
+        let arms = if multi_discriminant {
             tupled_arms = expanded_arms
                 .iter()
                 .map(|arm| {
@@ -155,10 +167,13 @@ impl<'a> ElabCtx<'a> {
                         .cloned()
                         .rev()
                         .reduce(|acc, pat| {
-                            SurfacePattern::Ctor("Prod.mk".to_string(), vec![pat, acc])
+                            SurfacePattern::Ctor(
+                                SurfaceName::generated_path("Prod.mk"),
+                                vec![pat, acc],
+                            )
                         })
-                        // The `two_discriminant` gate guarantees every arm has
-                        // exactly two patterns, so `reduce` always yields the
+                        // The `multi_discriminant` gate guarantees every arm has
+                        // one pattern per discriminant (at least two), so `reduce` always yields the
                         // nested `Prod.mk`; the `unwrap_or_else` is a defensive
                         // fallback that simply preserves a lone pattern so any
                         // malformed arm still reaches an honest downstream error.
@@ -212,6 +227,28 @@ impl<'a> ElabCtx<'a> {
             return self.elaborate_do_q_match(&scrutinee, &scrutinee_ty, arms);
         }
 
+        let normalized_arms = arms
+            .iter()
+            .cloned()
+            .map(|mut arm| {
+                if arm.patterns.len() == 1 {
+                    arm.patterns[0] =
+                        self.normalize_match_pattern_names(&arm.patterns[0], &scrutinee_ty)?;
+                }
+                Ok(arm)
+            })
+            .collect::<Result<Vec<_>, ElabError>>()?;
+        let arms = &normalized_arms;
+        // Lean refuses an alternative no value selects; behind a catch-all
+        // every alternative is one (G62).
+        if arms.iter().all(|arm| arm.patterns.len() == 1) {
+            if let Some(alt) =
+                self.first_alternative_after_catch_all(arms.iter().map(|arm| &arm.patterns[0]))
+            {
+                return Err(elab_match::redundant_alternative("the do-block match", alt));
+            }
+        }
+
         if arms.len() == 1 {
             let rewritten_simple_arm = if arms[0].patterns.len() == 1 {
                 match &arms[0].patterns[0] {
@@ -248,7 +285,7 @@ impl<'a> ElabCtx<'a> {
                         let body_inst = self.metas.instantiate(&body_expr);
                         let body_abs = body_inst.abstract_fvar(fvar);
                         return Ok(Expr::let_named(
-                            Name::from_string(name),
+                            name.name().clone(),
                             scrutinee_ty,
                             scrutinee,
                             body_abs,
@@ -271,8 +308,20 @@ impl<'a> ElabCtx<'a> {
         }
 
         let type_name = self.get_type_name(&scrutinee_ty)?;
-        let cases_on_name = Name::from_string(&format!("{type_name}.casesOn"));
-        let branch_ty = self.infer_do_match_branch_ty(&arms[0], &scrutinee_ty, &type_name)?;
+        let cases_on_name = type_name.name().clone().str("casesOn");
+        // Preserve the action's expected m α across branch elaboration.
+        // Inferring from an Id action unfolds it to α, which then makes
+        // nested do branches incorrectly receive a non-monadic expected type.
+        let branch_ty = if self
+            .expected_do_result_components()
+            .is_some_and(|(_, _, m, _)| !self.has_metavars(&m))
+        {
+            self.current_expected_type
+                .clone()
+                .ok_or_else(|| ElabError::InternalInvariant("do result type disappeared".into()))?
+        } else {
+            self.infer_do_match_branch_ty(&arms[0], &scrutinee_ty, &type_name)?
+        };
         let elim_levels = self.eliminator_levels(&cases_on_name, &scrutinee_ty, &branch_ty)?;
         let eliminator = self.apply_eliminator_params(
             Expr::const_(cases_on_name.clone(), elim_levels),
@@ -282,19 +331,23 @@ impl<'a> ElabCtx<'a> {
         let motive = Expr::lam(BinderInfo::Default, scrutinee_ty.clone(), branch_ty.clone());
         let ind_info = self
             .env
-            .get_inductive(&Name::from_string(&type_name))
+            .get_inductive(type_name.name())
             .cloned()
-            .ok_or_else(|| ElabError::UnknownIdent(type_name.clone()))?;
+            .ok_or_else(|| ElabError::UnknownIdent(type_name.to_string()))?;
         let eliminator_metadata =
             self.match_eliminator_metadata(&type_name, &cases_on_name, true)?;
-        let num_motives = eliminator_metadata.recursor.num_motives as usize;
+        let num_motives = eliminator_metadata.eliminator_num_motives();
         if num_motives == 0 {
             return Err(ElabError::InternalInvariant(format!(
                 "do-match eliminator `{cases_on_name}` declares no motives"
             )));
         }
-        let selected_motive_idx =
-            self.selected_motive_index(&ind_info, num_motives, "do mutual-inductive match")?;
+        // Lean's member `casesOn` has the one motive slot (G33).
+        let selected_motive_idx = if eliminator_metadata.member_cases_on {
+            0
+        } else {
+            self.selected_motive_index(&ind_info, num_motives, "do mutual-inductive match")?
+        };
 
         // Nested inductives (#3396) lower into a mutual block: `Value` with a
         // `List Value` field becomes `Value` + an auxiliary `Value._List`. The
@@ -353,7 +406,7 @@ impl<'a> ElabCtx<'a> {
         if let Some(ordered_alts) =
             self.try_build_ctor_ordered_do_match_alts(arms, &type_name, &scrutinee_ty, &branch_ty)?
         {
-            let ind_info = self.env.get_inductive(&Name::from_string(&type_name));
+            let ind_info = self.env.get_inductive(type_name.name());
             for (index, alt) in ordered_alts.into_iter().enumerate() {
                 primary_alts.push(alt);
                 applied_primary_minor_names
@@ -365,7 +418,7 @@ impl<'a> ElabCtx<'a> {
                 primary_alts.push(alt);
                 applied_primary_minor_names.push(arm.patterns.first().and_then(|pattern| {
                     self.top_level_ctor_target_name(&type_name, pattern)
-                        .map(|name| Name::from_string(&name))
+                        .map(|name| name.name().clone())
                 }));
             }
         }
@@ -374,17 +427,24 @@ impl<'a> ElabCtx<'a> {
         // may occur before or after this member's authenticated constructor
         // slice; their PUnit inhabitant (or genuine wildcard/default value)
         // discharges the unreachable slots without an axiom.
-        self.apply_do_match_aux_minors(
-            &mut result,
-            arms,
-            &type_name,
-            &scrutinee_ty,
-            &branch_ty,
-            aux_punit_unit.as_ref(),
-            &primary_alts,
-            &applied_primary_minor_names,
-            &eliminator_metadata.recursor,
-        )?;
+        if eliminator_metadata.member_cases_on {
+            // Lean's member `casesOn` takes this member's minors only (G33).
+            for alt in &primary_alts {
+                result = Expr::app(result, alt.clone());
+            }
+        } else {
+            self.apply_do_match_aux_minors(
+                &mut result,
+                arms,
+                &type_name,
+                &scrutinee_ty,
+                &branch_ty,
+                aux_punit_unit.as_ref(),
+                &primary_alts,
+                &applied_primary_minor_names,
+                &eliminator_metadata.recursor,
+            )?;
+        }
 
         if !eliminator_metadata.major_after_motive {
             result = Expr::app(result, scrutinee);
@@ -404,7 +464,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         result: &mut Expr,
         arms: &[DoMatchArm],
-        type_name: &str,
+        type_name: &SurfaceName,
         scrutinee_ty: &Expr,
         branch_ty: &Expr,
         aux_punit_unit: Option<&Expr>,
@@ -412,11 +472,7 @@ impl<'a> ElabCtx<'a> {
         applied_primary_minor_names: &[Option<Name>],
         rec: &clean_kernel::RecursorVal,
     ) -> Result<(), ElabError> {
-        let Some(ind_info) = self
-            .env
-            .get_inductive(&Name::from_string(type_name))
-            .cloned()
-        else {
+        let Some(ind_info) = self.env.get_inductive(type_name.name()).cloned() else {
             return Ok(());
         };
         if rec.num_motives <= 1 {
@@ -434,8 +490,9 @@ impl<'a> ElabCtx<'a> {
         )?;
         if primary_alts.len() != primary_range.len() {
             return Err(ElabError::InternalInvariant(format!(
-                "do multi-motive match compiled {} primary alternatives for authenticated range {primary_range:?}",
-                primary_alts.len()
+                "do multi-motive match compiled {} primary alternatives for authenticated range {}",
+                primary_alts.len(),
+                crate::error_render::opaque(&primary_range)
             )));
         }
 
@@ -515,7 +572,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         first_arm: &DoMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Expr, ElabError> {
         if first_arm.patterns.len() != 1 {
             return self.infer_do_body_ty(&first_arm.body);
@@ -523,11 +580,8 @@ impl<'a> ElabCtx<'a> {
 
         match &first_arm.patterns[0] {
             SurfacePattern::Var(name) => {
-                let full_ctor_name = format!("{type_name}.{name}");
-                let is_nullary_ctor = self
-                    .env
-                    .get_constructor(&Name::from_string(&full_ctor_name))
-                    .is_some();
+                let full_ctor_name = type_name.append(name);
+                let is_nullary_ctor = self.env.get_constructor(full_ctor_name.name()).is_some();
                 if is_nullary_ctor {
                     self.infer_do_body_ty(&first_arm.body)
                 } else {
@@ -581,11 +635,11 @@ impl<'a> ElabCtx<'a> {
 
     fn infer_do_match_ctor_branch_ty(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         arm: &DoMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Expr, ElabError> {
         self.with_temporary_local_scope(|this| {
             this.infer_do_match_ctor_branch_ty_inner(
@@ -600,26 +654,26 @@ impl<'a> ElabCtx<'a> {
 
     fn infer_do_match_ctor_branch_ty_inner(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         arm: &DoMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
     ) -> Result<Expr, ElabError> {
         let normalized_sub_pats: Vec<SurfacePattern> = sub_pats
             .iter()
             .map(normalize_nested_nat_numeral_add_pattern)
             .collect();
-        let full_ctor = if ctor_name.contains('.') {
-            ctor_name.to_string()
+        let full_ctor = if !ctor_name.parent().is_anonymous() {
+            ctor_name.clone()
         } else {
-            format!("{type_name}.{ctor_name}")
+            type_name.append(ctor_name)
         };
         let ctor_info = self
             .env
-            .get_constructor(&Name::from_string(&full_ctor))
+            .get_constructor(full_ctor.name())
             .cloned()
-            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.clone()))?;
+            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
         ensure_ctor_pattern_arity(
             "do-match arm pattern",
             &full_ctor,
@@ -629,8 +683,7 @@ impl<'a> ElabCtx<'a> {
         if normalized_sub_pats.is_empty() {
             return self.infer_do_body_ty(&arm.body);
         }
-        let field_types =
-            self.compute_ctor_field_types(&Name::from_string(&full_ctor), scrutinee_ty)?;
+        let field_types = self.compute_ctor_field_types(full_ctor.name(), scrutinee_ty)?;
         if field_types.len() != normalized_sub_pats.len() {
             return Err(ElabError::InternalInvariant(format!(
                 "constructor metadata `{full_ctor}` exposes {} fields but the do-match pattern has {} slots",
@@ -646,7 +699,7 @@ impl<'a> ElabCtx<'a> {
             let field_ty = Self::open_field_type_with_fvars(&field_ty, &prior_fvars);
             let var_name = match pat {
                 SurfacePattern::Var(n) => n.clone(),
-                _ => "_".to_string(),
+                _ => SurfaceName::generated_path("_"),
             };
             let fvar = self.push_local(var_name, field_ty.clone());
             fvar_tys.push((fvar, field_ty));
@@ -668,7 +721,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         arm: &DoMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
         branch_ty: &Expr,
     ) -> Result<Expr, ElabError> {
         let pattern = if arm.patterns.len() == 1 {
@@ -681,15 +734,12 @@ impl<'a> ElabCtx<'a> {
 
         match pattern {
             SurfacePattern::Var(name) => {
-                let full_ctor_name = if name.contains('.') {
+                let full_ctor_name = if !name.parent().is_anonymous() {
                     name.clone()
                 } else {
-                    format!("{type_name}.{name}")
+                    type_name.append(name)
                 };
-                let is_nullary_ctor = self
-                    .env
-                    .get_constructor(&Name::from_string(&full_ctor_name))
-                    .is_some();
+                let is_nullary_ctor = self.env.get_constructor(full_ctor_name.name()).is_some();
                 if is_nullary_ctor {
                     self.elab_do_body_with_outer_continuation(&arm.body)
                 } else {
@@ -737,7 +787,8 @@ impl<'a> ElabCtx<'a> {
                         }
                     }
                     _ => Err(ElabError::NotImplemented(format!(
-                        "do-match arm pattern: non-Nat literal {lit:?}"
+                        "do-match arm pattern: non-Nat literal {}",
+                        crate::error_render::lit(lit)
                     ))),
                 }
             }
@@ -787,18 +838,19 @@ impl<'a> ElabCtx<'a> {
                 self.elab_do_match_arm(&rewritten_arm, scrutinee_ty, type_name, branch_ty)
             }
             _ => Err(ElabError::NotImplemented(format!(
-                "do-match arm pattern: {pattern:?}"
+                "do-match arm pattern: {}",
+                crate::error_render::pattern(pattern)
             ))),
         }
     }
 
     fn elab_do_match_ctor_arm(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         arm: &DoMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
         branch_ty: &Expr,
     ) -> Result<Expr, ElabError> {
         self.elab_do_match_ctor_arm_with_fallback(
@@ -828,11 +880,11 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn elab_do_match_ctor_arm_with_fallback(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         arm: &DoMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
         branch_ty: &Expr,
         fallback_alt: Option<&Expr>,
     ) -> Result<Expr, ElabError> {
@@ -852,11 +904,11 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn elab_do_match_ctor_arm_with_fallback_inner(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         arm: &DoMatchArm,
         scrutinee_ty: &Expr,
-        type_name: &str,
+        type_name: &SurfaceName,
         branch_ty: &Expr,
         fallback_alt: Option<&Expr>,
     ) -> Result<Expr, ElabError> {
@@ -864,16 +916,16 @@ impl<'a> ElabCtx<'a> {
             .iter()
             .map(normalize_nested_nat_numeral_add_pattern)
             .collect();
-        let full_ctor = if ctor_name.contains('.') {
-            ctor_name.to_string()
+        let full_ctor = if !ctor_name.parent().is_anonymous() {
+            ctor_name.clone()
         } else {
-            format!("{type_name}.{ctor_name}")
+            type_name.append(ctor_name)
         };
         let ctor_info = self
             .env
-            .get_constructor(&Name::from_string(&full_ctor))
+            .get_constructor(full_ctor.name())
             .cloned()
-            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.clone()))?;
+            .ok_or_else(|| ElabError::UnknownIdent(full_ctor.to_string()))?;
         ensure_ctor_pattern_arity(
             "do-match arm pattern",
             &full_ctor,
@@ -883,8 +935,7 @@ impl<'a> ElabCtx<'a> {
         if normalized_sub_pats.is_empty() {
             return self.elab_do_body_with_outer_continuation(&arm.body);
         }
-        let field_types =
-            self.compute_ctor_field_types(&Name::from_string(&full_ctor), scrutinee_ty)?;
+        let field_types = self.compute_ctor_field_types(full_ctor.name(), scrutinee_ty)?;
         if field_types.len() != normalized_sub_pats.len() {
             return Err(ElabError::InternalInvariant(format!(
                 "constructor metadata `{full_ctor}` exposes {} fields but the do-match pattern has {} slots",
@@ -900,7 +951,7 @@ impl<'a> ElabCtx<'a> {
             let field_ty = Self::open_field_type_with_fvars(&field_ty, &prior_fvars);
             let var_name = match pat {
                 SurfacePattern::Var(n) => n.clone(),
-                _ => "_".to_string(),
+                _ => SurfaceName::generated_path("_"),
             };
             let fvar = self.push_local(var_name, field_ty.clone());
             fvar_tys.push((fvar, field_ty.clone()));
@@ -922,12 +973,14 @@ impl<'a> ElabCtx<'a> {
                 .fold(fallback_alt.clone(), |acc, (fvar, _)| {
                     Expr::app(acc, Expr::fvar(*fvar))
                 });
-            let mut result = arm_body;
-            for plan in nested_plans.iter().rev() {
-                result =
-                    self.apply_nested_pattern_plan(result, plan, branch_ty, Some(&fallback_body))?;
-            }
-            result
+            // One arm-scope binding of the fallback, not one inlined copy per
+            // nested `casesOn` level (see `apply_nested_plans_with_fallback`).
+            self.apply_nested_plans_with_fallback(
+                &nested_plans,
+                arm_body,
+                branch_ty,
+                &fallback_body,
+            )?
         } else {
             self.apply_nested_field_plans(&nested_plans, arm_body, branch_ty)?
         };

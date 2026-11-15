@@ -1,0 +1,52 @@
+import SemRBooleanWPComposition
+import SemRBooleanWPBranches
+import SemRNativeWP
+
+#check SemRBooleanWP.const_wp_sound
+#check SemRBooleanWP.copy_wp_sound
+#check SemRBooleanWP.select_wp_sound
+#check SemRBooleanWP.return_wp_sound
+#check SemRBooleanWP.branch_step
+#check SemRBooleanWP.conditional_step
+#check SemRBooleanWP.compose
+#check SemRBooleanWP.negate_correct
+#check SemRBooleanWP.scalar_not_is_type_error
+#print axioms SemRBooleanWP.const_wp_sound
+#print axioms SemRBooleanWP.copy_wp_sound
+#print axioms SemRBooleanWP.select_wp_sound
+#print axioms SemRBooleanWP.return_wp_sound
+#print axioms SemRBooleanWP.branch_step
+#print axioms SemRBooleanWP.conditional_step
+#print axioms SemRBooleanWP.compose
+#print axioms SemRBooleanWP.negate_correct
+#print axioms SemRBooleanWP.scalar_not_is_type_error
+
+#check SemRBooleanWPComposition.scalar_wp_step
+#check SemRBooleanWPComposition.straightLine_wp_sound
+#check SemRBooleanWPComposition.straightLine_wp_run
+#check SemRBooleanWPComposition.straightLine_wp_excludes_violation
+#check SemRBooleanWPComposition.negate_correct_via_composition
+#print axioms SemRBooleanWPComposition.scalar_wp_step
+#print axioms SemRBooleanWPComposition.straightLine_wp_sound
+#print axioms SemRBooleanWPComposition.straightLine_wp_run
+#print axioms SemRBooleanWPComposition.straightLine_wp_excludes_violation
+#print axioms SemRBooleanWPComposition.negate_correct_via_composition
+
+#print axioms SemRBooleanWPBranches.args_wp_sound
+#print axioms SemRBooleanWPBranches.jump_wp_sound
+#print axioms SemRBooleanWPBranches.branch_wp_sound
+#print axioms SemRBooleanWPBranches.conditional_wp_sound
+#print axioms SemRBooleanWPBranches.arm_wp_sound
+#print axioms SemRBooleanWPBranches.diamond_wp_sound
+#print axioms SemRBooleanWPBranches.diamond_wp_run
+#print axioms SemRBooleanWPBranches.swap_precondition
+#print axioms SemRBooleanWPBranches.alias_precondition
+#print axioms SemRBooleanWPBranches.choose_correct
+#print axioms SemRBooleanWPBranches.wrong_arity_excluded
+#print axioms SemRBooleanWPBranches.missing_operand_excluded
+#print axioms SemRBooleanWPBranches.wrong_parameter_type_excluded
+#print axioms SemRBooleanWPBranches.alias_correct
+#print axioms SemRBooleanWPBranches.mutation_witness
+
+#print axioms SemRNativeWP.guarded_vc_implies_wp
+#print axioms SemRNativeWP.guarded_vc_implies_run

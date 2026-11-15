@@ -1,0 +1,3 @@
+/var/folders/xg/p7rmcgnn72n3s8dnc_wcxln40000gn/T/x1-where-hint-bbuaagh7/bad.lean:6:2: error: The termination measure of a structurally recursive function must be one of the parameters 'x✝', but
+  0
+isn't one of these.

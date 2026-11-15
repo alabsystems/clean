@@ -10,30 +10,17 @@
 //! failure the document gets ONE "imports unavailable" diagnostic, not a flood
 //! of per-declaration unknown-constant errors.
 //!
-//! The `.olean`-backed lane is gated on the pinned toolchain being installed
-//! (skip-with-eprintln, mirroring
-//! `crates/clean-elab/tests/instance_priority_import_probe.rs`); the failure
-//! shaping and header-collection lanes run everywhere.
+//! The `.olean`-backed lane uses the editor's import discovery, including the
+//! checkout pin and `ELAN_HOME`. It requires the fixture when
+//! `CLEAN_OLEAN_REQUIRE_PINNED_LEAN=1`; otherwise an unavailable fixture skips
+//! with an explicit message. Failure shaping and header collection run everywhere.
 
 use super::{imports, CleanBackend};
 use crate::document::Document;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::Arc;
 use tower_lsp::lsp_types::Url;
 use tower_lsp::LspService;
-
-/// The pinned toolchain the shared `.olean` loader's default search paths
-/// discover via elan. Mirrors `instance_priority_import_probe.rs`.
-const PINNED_TOOLCHAIN: &str = "leanprover--lean4---v4.30.0-rc2";
-
-fn v4_30_lib_path() -> Option<PathBuf> {
-    let home = std::env::var("HOME").ok()?;
-    let lib = PathBuf::from(home)
-        .join(".elan/toolchains")
-        .join(PINNED_TOOLCHAIN)
-        .join("lib/lean");
-    lib.join("Init.olean").is_file().then_some(lib)
-}
 
 async fn open_and_check(
     backend: &CleanBackend,
@@ -62,10 +49,17 @@ async fn open_and_check(
 /// shares the cached closure and stays clean too.
 #[tokio::test]
 async fn test_import_init_core_theorem_using_imported_constant_yields_no_diagnostics() {
-    let Some(_lib) = v4_30_lib_path() else {
-        eprintln!("Skipping: {PINNED_TOOLCHAIN} not installed");
+    let file = Path::new("/lsp-import-init-core.lean");
+    if !clean_elab::olean_available_for_module(&clean_kernel::Name::from_string("Init.Core"), file)
+    {
+        assert_ne!(
+            std::env::var("CLEAN_OLEAN_REQUIRE_PINNED_LEAN").as_deref(),
+            Ok("1"),
+            "required Init.Core fixture is unavailable through editor import discovery",
+        );
+        eprintln!("Skipping: Init.Core unavailable through editor import discovery");
         return;
-    };
+    }
 
     let text = "import Init.Core\n\ntheorem uses_imported (p : Prop) (h : p) : \
                 Not (Not p) := not_not_intro h\n";
@@ -74,8 +68,8 @@ async fn test_import_init_core_theorem_using_imported_constant_yields_no_diagnos
     // actually carry the imported constant, so the assertion below fails with
     // a precise cause when the loader (rather than the elaborator) regresses.
     let closure = imports::shared_import_closure(
-        &[vec!["Init".to_string(), "Core".to_string()]],
-        Some(Path::new("/lsp-import-init-core.lean")),
+        &[clean_parser::SurfaceName::generated_path("Init.Core")],
+        Some(file),
     )
     .expect("Init.Core closure should load from the pinned toolchain");
     assert!(
@@ -139,10 +133,9 @@ async fn test_theorem_using_unimported_constant_reports_diagnostics() {
 #[tokio::test]
 async fn test_import_closure_failure_yields_single_imports_unavailable_diagnostic() {
     let uri_path = "/lsp-import-injected-failure.lean";
-    let modules = vec![vec![
-        "LspImportTest".to_string(),
-        "InjectedFailure".to_string(),
-    ]];
+    let modules = vec![clean_parser::SurfaceName::generated_path(
+        "LspImportTest.InjectedFailure",
+    )];
     imports::inject_outcome_for_test(
         &modules,
         Some(Path::new(uri_path)),
@@ -188,10 +181,9 @@ async fn test_import_closure_failure_yields_single_imports_unavailable_diagnosti
 #[tokio::test]
 async fn test_cached_import_closure_is_reused_as_the_document_base_env() {
     let uri_path = "/lsp-import-injected-success.lean";
-    let modules = vec![vec![
-        "LspImportTest".to_string(),
-        "InjectedSuccess".to_string(),
-    ]];
+    let modules = vec![clean_parser::SurfaceName::generated_path(
+        "LspImportTest.InjectedSuccess",
+    )];
     let marker_env = clean_kernel::Environment::try_with_prelude()
         .expect("prelude environment should initialize for the marker closure");
     imports::inject_outcome_for_test(
@@ -239,8 +231,8 @@ fn test_import_paths_of_decls_collects_all_header_modules() {
     assert_eq!(
         paths,
         vec![
-            vec!["Alpha".to_string(), "Beta".to_string()],
-            vec!["Gamma".to_string()],
+            clean_parser::SurfaceName::generated_path("Alpha.Beta"),
+            clean_parser::SurfaceName::generated_path("Gamma"),
         ],
         "both import declarations should contribute their module paths",
     );

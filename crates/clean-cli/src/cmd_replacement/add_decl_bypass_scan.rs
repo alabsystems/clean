@@ -51,8 +51,10 @@
 //! by `sanctioned_add_decl_sites_match_the_source_scanner`. There is no second
 //! allowlist here.
 
+use super::rust_source_scope;
 use super::sorry_bypass_syntax::{cfg_test_item_ranges, lex_rust_tokens};
 use super::*;
+use std::collections::BTreeSet;
 
 /// A `// SOUNDNESS:` comment must sit within this many lines above the call.
 /// Same window as `SOUNDNESS_WINDOW` in `scripts/check_add_decl_ratchet.py`.
@@ -66,19 +68,6 @@ pub(crate) struct MeasuredAddDeclBypass {
     pub(crate) file: String,
     pub(crate) line: usize,
     pub(crate) method: String,
-}
-
-/// True for test FILES. Mirrors `is_test_path` in
-/// `scripts/check_add_decl_ratchet.py` exactly — including its final
-/// `"test" in name` clause, which subsumes the regex before it. Mirroring
-/// rather than tightening is deliberate: a Rust scan that classified MORE files
-/// as production than the Python one would go red on a tree the registered
-/// gate calls clean, and the first fix anyone reached for would be to switch
-/// one of them off.
-fn is_add_decl_test_path(relative_path: &str) -> bool {
-    let mut components = relative_path.split('/');
-    let name = relative_path.rsplit('/').next().unwrap_or(relative_path);
-    components.any(|part| part == "tests" || part == "tests2") || name.contains("test")
 }
 
 /// Production `add_decl_*` dot-call sites in one file's source.
@@ -101,18 +90,36 @@ pub(crate) fn add_decl_bypass_lines_in_production(
 
     let mut hits = Vec::new();
     for index in 0..production.len() {
-        if !production[index].is_punct(b'.') {
+        // CLOSED BY CONSTRUCTION (audit r11, self-review of the r10 M10-5 fix).
+        //
+        // r10 replaced "a leading `.`" with "a leading `.` OR `Environment::` /
+        // `TrustedEnvExt::`" -- still a LIST of call shapes, and a list is
+        // always one spelling short. Measured right after landing it:
+        // `<Environment as TrustedEnvExt>::add_decl_unchecked(..)`, an import
+        // alias and a generic `T::add_decl_unchecked(..)` were all still
+        // invisible.
+        //
+        // The rule is the NAME in call position, whatever precedes it, minus
+        // the two things that are not calls: a definition (`fn <name>`) and the
+        // file that defines the door (ADD_DECL_DELEGATION_FILES). A new way to
+        // spell a path cannot reopen this.
+        let name_at = index;
+        if production
+            .get(index.wrapping_sub(1))
+            .is_some_and(|t| t.is_ident("fn"))
+        {
             continue;
         }
         let Some(method) = ADD_DECL_BYPASS_METHODS.iter().find(|method| {
             production
-                .get(index + 1)
+                .get(name_at)
                 .is_some_and(|token| token.is_ident(method))
         }) else {
             continue;
         };
+        // the `(` follows the method name, wherever the name sat
         if !production
-            .get(index + 2)
+            .get(name_at + 1)
             .is_some_and(|token| token.is_punct(b'('))
         {
             continue;
@@ -131,30 +138,49 @@ pub(crate) fn add_decl_bypass_lines_in_production(
 
 /// Re-derive every production `add_decl_*` bypass call site under
 /// `<repo_root>/crates`.
+/// Every file [`measure_add_decl_bypass_sites`] will read, as repo-relative
+/// slash paths — the SET the Python producer must agree with.
+#[cfg(test)]
+pub(crate) fn add_decl_scan_scope(root: &Path) -> BTreeSet<String> {
+    let scope = rust_source_scope::classify(root);
+    let root = root.canonicalize().unwrap_or_else(|_| root.to_path_buf());
+    scope
+        .all
+        .iter()
+        .filter(|p| scope.in_scope(p))
+        .filter_map(|p| p.strip_prefix(&root).ok())
+        .map(|r| r.to_string_lossy().replace('\\', "/"))
+        .collect()
+}
+
 pub(crate) fn measure_add_decl_bypass_sites(
     repo_root: &Path,
 ) -> Result<Vec<MeasuredAddDeclBypass>, String> {
-    let crates_root = repo_root.join("crates");
     let mut measured = Vec::new();
-    for entry in WalkDir::new(&crates_root)
-        .into_iter()
-        .filter_map(Result::ok)
-    {
-        if !entry.file_type().is_file()
-            || entry.path().extension().and_then(|ext| ext.to_str()) != Some("rs")
-        {
+    // AUDIT r14 M14-11: ONE target-side rule, shared with the Python producer
+    // of this same lane id, and the producer WALKS the classification rather
+    // than re-deriving a second file set beside it. A filename predicate
+    // answered a different question than the Python `classify_paths` did, so
+    // the two producers were not even blind in the same place: 675 lines of
+    // `crates/clean-elab/tests/soundness_gate/{common,baseline}.rs` compiled
+    // into a production `[[bin]]` that `scripts/kernel_soundness_gate.sh` RUNS
+    // were test code here and production there, while this producer is the one
+    // that mints reports/deny-sorry-launch-evidence.json for the
+    // `fallback-denial` scorecard row.
+    let scope = rust_source_scope::classify(repo_root);
+    let canonical_root = repo_root
+        .canonicalize()
+        .unwrap_or_else(|_| repo_root.to_path_buf());
+    for path in &scope.all {
+        if !scope.in_scope(path) {
             continue;
         }
-        let relative_path = entry
-            .path()
-            .strip_prefix(repo_root)
-            .unwrap_or(entry.path())
+        let relative_path = path
+            .strip_prefix(&canonical_root)
+            .unwrap_or(path)
             .to_string_lossy()
             .replace('\\', "/");
-        if is_add_decl_test_path(&relative_path) {
-            continue;
-        }
-        let source = fs::read_to_string(entry.path()).map_err(|error| {
+        let source = fs::read_to_string(path).map_err(|error| {
             format!("failed to read {relative_path} for the add_decl bypass scan: {error}")
         })?;
         for (line, method) in add_decl_bypass_lines_in_production(&source).map_err(|message| {

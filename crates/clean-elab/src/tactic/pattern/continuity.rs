@@ -164,8 +164,10 @@ pub fn continuity_with_config(state: &mut ProofState, config: ContinuityConfig) 
 pub(crate) fn is_continuity_goal(expr: &Expr) -> bool {
     let head = get_app_head(expr);
     if let ExprKind::Const(name, _) = head.kind() {
-        let s = name.to_string();
-        s == "Continuous" || s == "ContinuousAt" || s == "ContinuousOn" || s == "ContinuousWithinAt"
+        matches!(
+            super::util::builtin_component(name),
+            Some("Continuous" | "ContinuousAt" | "ContinuousOn" | "ContinuousWithinAt")
+        )
     } else {
         false
     }

@@ -58,6 +58,18 @@
 //! independent obstruction — fuel exhaustion — which no amount of fidelity
 //! repairs. Three refutations, three distinct causes, three distinct fixes.
 //!
+//! **That sentence was one object short until 2026-09-17, and the missing one
+//! was the third.** `bvar` and `cx_stuck` each had a term refuting `hnf` at the
+//! DEPLOYED loop (`nf_head`'s missing arm, then `hnf_is_false`), but the fuel
+//! obstruction had only a WITNESS — `whnf_fuel_red_wh_starves` shows the
+//! faithful loop returns `cx_stuck` unchanged at fuel 1 — and its consequence
+//! for `hnf` was asserted in that witness's own description rather than
+//! checked. `hnf_wh_is_false` (`iota_prepass.rs`) is now that consequence as a
+//! term: `hnf_is_false` with `whnf_fuel_red` swapped for `whnf_fuel_red_wh`. It
+//! costs one line, because `cx_not_nf_head` is a fact about the TERM and not
+//! about the reducer that emitted it. So the count is three refutations because
+//! three refutations exist, not because three causes were found.
+//!
 //! # What `hnf_conv` must therefore say
 //!
 //! ```text
@@ -204,7 +216,7 @@ impl Specification {
                 &[],
                 "(KExpr.const n us)",
                 "nf_head.constdead n us \
-              (delta_reduct_eq_none_of_defval_none (red_def the_red_env) \
+              (delta_reduct_no_value_at (red_def the_red_env) \
               (KExpr.const n us) n \
               (Eq.refl (OptionType Name) (OptionType.some Name n)) (hstuck Nat.zero))",
             ),
@@ -262,8 +274,8 @@ impl Specification {
              \
              EIGHT OF NINE CONSTRUCTORS DISCHARGE OUTRIGHT. sort, pi, lit and proj are rigid \
              (proj's arm takes any subject); lam and bvar have their own nf_head arms; a const is \
-             constdead because reduce_once_red_wh's const arm IS defval_for, so the stuck \
-             hypothesis is delta-deadness definitionally; and a let_ cannot be stuck at all, since \
+             constdead because reduce_once_red_wh's const arm uses guarded instantiated lookup, so the stuck \
+             hypothesis gives operational delta-deadness (not raw definition absence); and a let_ cannot be stuck at all, since \
              the step always fires on it. \
              \
              ONLY app IS RESIDUAL, and it is a PREMISE, not an assumption — the difference being \
@@ -430,7 +442,15 @@ impl Specification {
              \
              Identical to def_eq_fuel except that both reductions go through whnf_fuel_red_wh, \
              which performs the major-premise whnf pre-pass the DEPLOYED kernel performs \
-             (micro/checker.rs:777) and the original reflected loop omits. Derived from the same \
+             and the original reflected loop omits. CITATION CORRECTED 2026-09-17: this \
+             read micro/checker.rs:777, and a reader who checked it landed on the MICRO \
+             checker, whose own doc comment says it NEVER calls the kernel's \
+             whnf/is_def_eq/recursor reduction -- so the citation made the claim look \
+             weaker than it is. The pre-pass is in the main kernel's own iota path: \
+             try_iota_reduction (clean-kernel/src/tc/reduction/mod.rs) whnfs the major \
+             premise before matching, through whnf_impl or whnf_core_no_delta according \
+             to use_delta. The micro checker does it too, independently, which is what \
+             makes a disagreement between them detectable at all. Derived from the same \
              source constant by one substitution, so the two cannot drift. \
              \
              WHY THE ALGORITHM AND NOT JUST THE PREMISE. def_eq_fuel_complete's hnf premise is \

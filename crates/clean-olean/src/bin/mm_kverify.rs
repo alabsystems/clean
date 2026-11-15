@@ -42,7 +42,7 @@ fn main() -> ExitCode {
         .collect();
     if positional.len() < 2 {
         eprintln!("usage: mm_kverify <path.mm> [max_provables] [--exposure]");
-        return ExitCode::FAILURE;
+        return ExitCode::from(2);
     }
     let path = positional[1];
     let limit = positional

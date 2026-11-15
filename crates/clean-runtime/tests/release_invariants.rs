@@ -5,14 +5,20 @@
 //! Release-mode runtime invariant ratchets for #2825.
 //!
 //! The parent tests re-exec this same integration test binary and assert on the
-//! child exit status so aborting invariant checks can be verified directly.
+//! child exit status so the stopping invariant checks can be verified directly.
+//! A violated invariant ends the child with `clean panic: <msg>` on stderr and
+//! exit status 1 (Lean's `lean_internal_panic`, docs/DECISIONS.md R86) -- never
+//! a crash signal, which would make macOS write a crash report on every run.
 
 use std::process::Command;
 
 use clean_runtime::{
-    clean_alloc_ctor, clean_box, clean_ctor_get, clean_dec, clean_mk_string, clean_reset,
-    clean_reuse, clean_unbox,
+    clean_alloc_ctor, clean_box, clean_ctor_get, clean_dec, clean_mk_string, clean_obj_tag,
+    clean_reset, clean_reuse, clean_unbox, native,
 };
+
+/// The status a violated runtime invariant ends the process with (`lean_panic`).
+const PANIC_STATUS: i32 = 1;
 
 fn spawn_child(child_mode: &str, child_test_name: &str) -> std::process::Output {
     let exe = std::env::current_exe().expect("cannot get current exe path");
@@ -52,8 +58,10 @@ fn release_invariant_heap_unbox_aborts() {
     );
 
     assert!(
-        !output.status.success(),
-        "heap unbox child should abort.\nstdout: {}\nstderr: {}",
+        output.status.code() == Some(PANIC_STATUS),
+        "heap unbox child should stop with exit status {PANIC_STATUS}, got {:?}.\n\
+         stdout: {}\nstderr: {}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -61,7 +69,7 @@ fn release_invariant_heap_unbox_aborts() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("lean_unbox: pointer is not a scalar"),
-        "abort message should mention the scalar invariant, got stderr:\n{}",
+        "panic message should mention the scalar invariant, got stderr:\n{}",
         stderr,
     );
 }
@@ -108,8 +116,10 @@ fn release_invariant_ctor_get_oob_aborts() {
     );
 
     assert!(
-        !output.status.success(),
-        "ctor_get OOB child should abort.\nstdout: {}\nstderr: {}",
+        output.status.code() == Some(PANIC_STATUS),
+        "ctor_get OOB child should stop with exit status {PANIC_STATUS}, got {:?}.\n\
+         stdout: {}\nstderr: {}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -117,7 +127,7 @@ fn release_invariant_ctor_get_oob_aborts() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("field index out of bounds"),
-        "abort message should mention index out of bounds, got stderr:\n{}",
+        "panic message should mention index out of bounds, got stderr:\n{}",
         stderr,
     );
 }
@@ -142,8 +152,10 @@ fn release_invariant_ctor_get_on_string_aborts() {
     );
 
     assert!(
-        !output.status.success(),
-        "ctor_get on string child should abort.\nstdout: {}\nstderr: {}",
+        output.status.code() == Some(PANIC_STATUS),
+        "ctor_get on string child should stop with exit status {PANIC_STATUS}, got {:?}.\n\
+         stdout: {}\nstderr: {}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -151,7 +163,7 @@ fn release_invariant_ctor_get_on_string_aborts() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("pointer is not a constructor"),
-        "abort message should mention kind mismatch, got stderr:\n{}",
+        "panic message should mention kind mismatch, got stderr:\n{}",
         stderr,
     );
 }
@@ -179,8 +191,10 @@ fn release_invariant_reuse_field_count_mismatch_aborts() {
     );
 
     assert!(
-        !output.status.success(),
-        "reuse layout mismatch child should abort.\nstdout: {}\nstderr: {}",
+        output.status.code() == Some(PANIC_STATUS),
+        "reuse layout mismatch child should stop with exit status {PANIC_STATUS}, got {:?}.\n\
+         stdout: {}\nstderr: {}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -188,7 +202,7 @@ fn release_invariant_reuse_field_count_mismatch_aborts() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("field count must match slot capacity"),
-        "abort message should mention field count mismatch, got stderr:\n{}",
+        "panic message should mention field count mismatch, got stderr:\n{}",
         stderr,
     );
 }
@@ -212,8 +226,10 @@ fn release_invariant_reuse_fallback_field_count_oob_aborts() {
     );
 
     assert!(
-        !output.status.success(),
-        "reuse fallback oversized field-count child should abort.\nstdout: {}\nstderr: {}",
+        output.status.code() == Some(PANIC_STATUS),
+        "reuse fallback oversized field-count child should stop with exit status \
+         {PANIC_STATUS}, got {:?}.\nstdout: {}\nstderr: {}",
+        output.status,
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr),
     );
@@ -221,7 +237,62 @@ fn release_invariant_reuse_fallback_field_count_oob_aborts() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
         stderr.contains("fields.len() exceeds u8::MAX on fallback allocation"),
-        "abort message should mention fallback field-count bound, got stderr:\n{}",
+        "panic message should mention fallback field-count bound, got stderr:\n{}",
         stderr,
     );
+}
+
+// -- Bug class: boxed constructor tag wider than the 8-bit tag read ---------
+
+#[test]
+fn release_invariant_child_obj_tag_reads_wide_boxed_tag_whole() {
+    if std::env::var("CLEAN_RUNTIME_CHILD").as_deref() != Ok("obj_tag_reads_wide_boxed_tag_whole") {
+        return;
+    }
+    // Nullary constructors 256 / 299 / 65535 of a wide enum (an 8-bit read gave
+    // 0 / 43 / 255), then boxed values past the 32-bit tag, which saturate.
+    let wide: [usize; 5] = [256, 299, 65535, 1 << 32, (1 << 32) + 5];
+    let public: Vec<String> = wide
+        .iter()
+        .map(|&v| u64::from(clean_obj_tag(clean_box(v))).to_string())
+        .collect();
+    let native_tags: Vec<String> = wide
+        .iter()
+        .map(|&v| {
+            // SAFETY: `box_val` returns a tagged scalar, which `obj_tag` reads
+            // without dereferencing.
+            let tag = unsafe { native::obj_tag(native::box_val(v)) };
+            u64::from(tag).to_string()
+        })
+        .collect();
+    println!("read tags {}", public.join(" "));
+    println!("native tags {}", native_tags.join(" "));
+}
+
+#[test]
+fn release_invariant_obj_tag_reads_wide_boxed_tag_whole() {
+    let output = spawn_child(
+        "obj_tag_reads_wide_boxed_tag_whole",
+        "release_invariant_child_obj_tag_reads_wide_boxed_tag_whole",
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "both Rust tag reads must return a boxed tag above 255 whole, never abort or wrap.\n\
+         stdout: {stdout}\nstderr: {}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    let expected = "256 299 65535 4294967295 4294967295";
+    assert!(
+        stdout.contains(&format!("read tags {expected}\n"))
+            && stdout.contains(&format!("native tags {expected}\n")),
+        "clean_obj_tag and native::obj_tag must read the whole tag and saturate past u32::MAX \
+         (want {expected:?}), got stdout:\n{stdout}",
+    );
+}
+
+#[test]
+fn release_invariant_obj_tag_reads_boxed_tag_255() {
+    assert_eq!(clean_obj_tag(clean_box(255)), 255);
+    assert_eq!(clean_obj_tag(clean_box(0)), 0);
 }

@@ -11,7 +11,8 @@ use super::{
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
 use std::ops::ControlFlow;
-use std::time::Instant;
+
+use crate::search_stop::SearchStop;
 
 /// A wrapper for clause priority queue ordering
 pub(super) struct PrioritizedClause {
@@ -61,8 +62,35 @@ pub(crate) struct SuperpositionProver {
     strategy: SelectionStrategy,
     /// Maximum clause size (for fair enumeration)
     max_clause_size: usize,
+    /// Summed term size of the clauses in `unprocessed`; see `MAX_PASSIVE_WEIGHT`.
+    passive_weight: usize,
     /// Statistics
     pub stats: ProverStats,
+}
+
+/// Budget for the summed term size of the clauses WAITING in the passive set.
+///
+/// `max_iterations` bounds the number of given-clause steps and a caller's
+/// backstop the wall clock, but neither bounds MEMORY: one step can generate thousands of
+/// clauses, and every one of them used to be queued whatever its size. Measured
+/// 2026-09-20 on `Mathlib/Logic/Basic.lean` (release binary, the `grind` →
+/// `decide` → superposition recovery path, no deadline): the process sawtoothed
+/// between 7 GB and 22 GB on a 36 GB box, with the sampled stack inside
+/// `prove_until`. Reaching the budget ends the run as
+/// [`ProverResult::ResourceLimit`] — no proof is claimed, exactly like running
+/// out of iterations — so soundness is untouched and the caller's next closer
+/// runs. A clause is at most `max_clause_size` (100) nodes once the oversized
+/// ones are refused at the door, so this is on the order of tens of thousands of
+/// waiting clauses, far above what the closed-goal corpus needs.
+const MAX_PASSIVE_WEIGHT: usize = 2_000_000;
+
+/// Summed term size of a clause's literals (the unit `max_clause_size` counts).
+fn clause_weight(clause: &Clause) -> usize {
+    clause
+        .literals
+        .iter()
+        .map(|l| l.lhs.size() + l.rhs.size())
+        .sum()
 }
 
 /// Prover statistics
@@ -118,6 +146,7 @@ impl SuperpositionProver {
             clause_archive: HashMap::new(),
             strategy: SelectionStrategy::SizeFirst,
             max_clause_size: 100,
+            passive_weight: 0,
             stats: ProverStats::default(),
         }
     }
@@ -133,6 +162,7 @@ impl SuperpositionProver {
             clause_archive: HashMap::new(),
             strategy: SelectionStrategy::SizeFirst,
             max_clause_size: 100,
+            passive_weight: 0,
             stats: ProverStats::default(),
         }
     }
@@ -168,6 +198,7 @@ impl SuperpositionProver {
         }
 
         let priority = self.compute_priority(&clause);
+        self.passive_weight += clause_weight(&clause);
         self.unprocessed
             .push(PrioritizedClause { clause, priority });
         self.stats.generated += 1;
@@ -211,37 +242,56 @@ impl SuperpositionProver {
     }
 
     /// Like [`Self::prove`], but additionally bails with [`ProverResult::ResourceLimit`]
-    /// the moment a wall-clock `deadline` is reached.
+    /// once the caller's backstop (`stop`) has fired.
     ///
     /// The given-clause loop is the hot search loop: a single saturation run can
     /// generate an exponentially growing clause set, so a fixed `max_iterations`
     /// bound is not a *time* bound (one runaway saturation was observed running
-    /// ~29 min). Polling the deadline INSIDE the loop (before every given-clause
+    /// ~29 min). Polling the backstop INSIDE the loop (once per given-clause
     /// step — `Instant::now()` is ~tens of ns) makes the prover return within a
-    /// small grace of `deadline` regardless of how explosive the clause set is.
+    /// small grace of it regardless of how explosive the clause set is.
     /// Passing `None` preserves the pure iteration-bounded behavior.
     ///
-    /// Soundness is unchanged: a deadline only causes an *earlier* `ResourceLimit`
-    /// (no proof claimed), exactly like exhausting `max_iterations`.
+    /// The poll comes AFTER the step's counts (the iteration bound and the
+    /// work-budget charge) have admitted the step and after the cheap checks
+    /// that can decide the run (saturation, the empty clause), never ahead of
+    /// them. It latches in `stop`: a caller reads [`SearchStop::has_fired`] to
+    /// tell a run the clock cut short from one its counts ended.
+    ///
+    /// Soundness is unchanged: a backstop only causes an *earlier*
+    /// `ResourceLimit` (no proof claimed), exactly like exhausting
+    /// `max_iterations`.
     pub(crate) fn prove_until(
         &mut self,
         max_iterations: u64,
-        deadline: Option<Instant>,
+        stop: Option<&SearchStop>,
     ) -> ProverResult {
         for _ in 0..max_iterations {
-            // Poll the wall-clock deadline before each given-clause step. A single
-            // iteration can generate/​simplify many clauses, so this is the finest
-            // bail point inside the hot loop; `Instant::now()` is ~tens of ns.
-            if let Some(deadline) = deadline {
-                if Instant::now() >= deadline {
-                    return ProverResult::ResourceLimit;
-                }
+            // The DETERMINISTIC bound: charge this given-clause step to the
+            // declaration's automation work budget (`crate::work_budget`, the
+            // shape of Lean's `maxHeartbeats` / `Core.checkMaxHeartbeats`).
+            // One unit per processed clause the step is about to be checked
+            // against (forward subsumption, demodulation and generation are all
+            // linear in the active set) plus one for the step itself, so the
+            // charge tracks the loop's real, quadratically growing cost rather
+            // than its iteration count. `max_iterations` and the backstop bound
+            // ONE run; neither bounded the declaration, which is how
+            // `Function.Injective.dite` spent 1,421 s here and then failed
+            // anyway (measured 2026-09-26, see `work_budget.rs`). Exhaustion
+            // ends the run as `ResourceLimit` — no proof claimed, exactly like
+            // running out of iterations.
+            let step_units = u64::try_from(self.processed.len())
+                .unwrap_or(u64::MAX)
+                .saturating_add(1);
+            if !crate::work_budget::charge("superposition", step_units) {
+                return ProverResult::ResourceLimit;
             }
             // Select the next clause to process
             let given = match self.unprocessed.pop() {
                 Some(pc) => pc.clause,
                 None => return ProverResult::Saturated,
             };
+            self.passive_weight = self.passive_weight.saturating_sub(clause_weight(&given));
 
             // Check for empty clause
             if given.is_empty() {
@@ -249,14 +299,16 @@ impl SuperpositionProver {
             }
 
             // Skip if clause is too large
-            if given
-                .literals
-                .iter()
-                .map(|l| l.lhs.size() + l.rhs.size())
-                .sum::<usize>()
-                > self.max_clause_size
-            {
+            if clause_weight(&given) > self.max_clause_size {
                 continue;
+            }
+
+            // The counts admitted this step and nothing has decided the run:
+            // only now may the backstop stop it, before the step's work. One
+            // step can generate and simplify many clauses, so this is the finest
+            // bail point inside the hot loop.
+            if stop.is_some_and(SearchStop::backstop_fired) {
+                return ProverResult::ResourceLimit;
             }
 
             // Forward simplification
@@ -282,12 +334,21 @@ impl SuperpositionProver {
 
                 if clause.is_tautology() {
                     self.stats.tautologies += 1;
+                } else if clause_weight(&clause) > self.max_clause_size {
+                    // It would be skipped the moment it was selected (above);
+                    // queueing it only holds its memory until then.
+                    self.stats.generated += 1;
                 } else {
                     let priority = self.compute_priority(&clause);
+                    self.passive_weight += clause_weight(&clause);
                     self.unprocessed
                         .push(PrioritizedClause { clause, priority });
                     self.stats.generated += 1;
                 }
+            }
+            // The passive set is the prover's memory; see `MAX_PASSIVE_WEIGHT`.
+            if self.passive_weight > MAX_PASSIVE_WEIGHT {
+                return ProverResult::ResourceLimit;
             }
         }
 

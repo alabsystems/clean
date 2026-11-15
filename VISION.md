@@ -61,7 +61,7 @@ million-operation-per-second batch throughput.
 | Batch throughput | 1M ops/sec | Same gate |
 | .olean compatibility | Init + Std + Mathlib | Init + Std lanes. Mathlib is further along than "stub fallback": real `.olean` Mathlib targets kernel-verify through Clean — see `docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md` — whose larger counts are plan prose whose generating JSON was never committed, so `docs/STATUS_ONE_TRUST.md` records that tier UNKNOWN rather than promote them — and the non-regressing pinned slice `data/mathlib_kv_ratchet.json`, which is the committed evidence here. Elaborating Mathlib **source** is the open frontier: `data/source_elab_ratchet.json` + the dated run in `reports/source-elab/` |
 | Lean 4 cross-validation | Broad real-corpus parity | `metrics/lean4_parity.json` — a bounded synthetic core-calculus baseline, not a corpus result; broader frontend parity remains gated |
-| Self-verified kernel | End-to-end model, Rust checker, and binary correspondence | Nine-constructor, ten-rung reflected metatheory with zero domain/debt census; shipping checker/binary correspondence incomplete. Live status: `docs/CRYSTAL_STATUS.md` |
+| Self-verified kernel | A Lean-defined checker (`kcheck`) proved sound against a set-theoretic model, per universe bound, compiled by Trust and deciding every authority-bearing acceptance | By design, not in fact. Whether a `kcheck` exists and which units are done is read from the plan's unit rows and the artifact each row names, never from this cell: `docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md`. Until `kcheck_sound` is re-checked, decision R29 leaves the authority with the Rust kernel under the fenced theory, whose open residuals are the plan's lane F. The nine-constructor, ten-rung reflected metatheory (zero domain/debt census) stays as evidence about fragments, and that plan takes it off the route; `docs/CRYSTAL_STATUS.md` is Crystal as it stood when R29 stopped new chains on it, not live status |
 | Open release-impacting bugs | 0 | Volatile; use the live release-issue hygiene gate, not a frozen count |
 
 **Do not quote a latency or throughput number from this document.** Benchmark
@@ -85,7 +85,7 @@ BENCHMARKS.md.
 | 3. Automation | SMT/ATP integration via ay, proof reconstruction, Nelson-Oppen | Trust-gated |
 | 4. .olean Import + Server | Load selected `.olean` files, JSON-RPC API | Working slices; full validation is opt-in |
 | 5. Verification Expansion | C verification (ACSL/CompCert), Rust semantics (VIR/NLL/stacked borrows) | Building |
-| 6. Self-Verification | Reflected metatheory plus implementation/binary correspondence | Active, bounded; recursive checker spine remains unproved |
+| 6. Self-Verification | A proved Lean-defined checker (`kcheck`) that replays the Rust kernel's untrusted advice; the reflected metatheory is kept as evidence | Route adopted 2026-11-12 and by design until its in-fact conditions hold; the Rust kernel is still trusted |
 | 7. AI Integration | Universal Proof Database, cross-system proof import, LLM proof automation | Building; replacement replay evidence remains stubbed |
 
 ## Strategic Approach
@@ -108,14 +108,50 @@ apples-to-apples benchmark suite.
 Not just Lean code. Verify C programs with ACSL specifications. Verify Rust with parsed-source ingestion, VIR lowering, NLL borrow checking, and stacked-borrows aliasing checks. Bridge to SMT solving via ay. Clean becomes the universal verification backend. C examples live in `crates/clean-c-sem/src/examples.rs` (8 worked examples with ACSL specs and separation logic contracts). Rust examples live in `crates/clean-rust-sem/src/examples.rs`, backed by file fixtures under `crates/clean-rust-sem/examples/`, and exercise source parsing, VIR lowering, NLL, and stacked-borrows evaluation.
 
 ### Phase 4: Self-Verification Target
-The target is to reduce the kernel TCB by proving implementation properties in
-Clean and replayable certificates. Today the reflected metatheory is active and
-substantial: its live census has no domain-specific axiom or `DerivedProved`
-debt, and its strongest normalization results keep the `CandModel` hypothesis
-explicit. That does not prove the literal recursive Rust checker or compiled
-binary. Clean still trusts the Rust kernel, three foundational axioms, the
-build/toolchain path, OS, and hardware as documented by the soundness and
-self-verification certificates.
+The target is one theorem about the running artifact: if the shipped checker
+accepts a declaration at universe bound N with axioms within the plan's fixed
+set Ax0, the statement is true in a set-theoretic model. The route was adopted
+by the owner on 2026-11-12 and is recorded in
+`docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md`:
+
+- **By design the trust root becomes `kcheck`, a checker defined in Lean.** The
+  Rust kernel is then no longer trusted. It is to produce advice; `kcheck` is to
+  replay that advice and decide. Soundness is to be proved directly against the
+  model, for every advice string, one universe bound at a time, with one
+  semantic lemma per rule shared by the declarative judgment and the checker.
+- **By design `kcheck` is compiled by Trust**, one compiler with two front ends:
+  Lean is to reach machine code through Clean's lowering, trust-ir and trust-cg,
+  the path Rust takes. The proved term is then the compiled source, and the step
+  from source to bytes is to be closed once, in the compiler, by a proved
+  validator of its output. Every trusted checker is to be written in Lean; Rust
+  is for untrusted producers and a thin shell. Today `clean run` reaches bytes
+  through emitted C and the host C compiler, and the trust-ir lane is
+  feature-gated.
+- **By design the pattern repeats.** A pinned statement, an untrusted producer
+  and a small proved checker are to serve the kernel first, then the compiler,
+  then Trust's verifier. The end state is Clean merged into Trust, with Trust
+  verifying and compiling its own source as Trust plus Lean.
+
+All of this is by design. The plan's section "Owner directive: make it so in
+fact" lists five conditions under which it may be called true in fact, each
+shown by an artifact a gate mints, and this document claims none of them. Today
+Clean still trusts the Rust kernel, three foundational axioms, the build/toolchain path, OS, and hardware as documented by
+the soundness and self-verification certificates. The reflected metatheory in
+`clean-verify` remains as evidence about fragments: its live census has no
+domain-specific axiom or `DerivedProved` debt, and its strongest normalization
+results keep the `CandModel` hypothesis explicit. It does not prove the literal
+recursive Rust checker or compiled binary. Decision R29 in `docs/DECISIONS.md`
+stopped the new work it lists there (new Crystal chains, new
+`CandModel`-conditional theorems for fragments with proof irrelevance) and
+capped the rest of that work at one non-merge commit in four (decision R4's
+cap); the 2026-11-12 plan stops the Crystal part outright and is what takes
+this stack off the route.
+
+Three limits hold at the end state as well. A generation cannot prove more
+consistency than its base, so the loop improves speed, coverage and engineering,
+not logical strength. A checker checking its own soundness proof settles nothing
+alone, so the quorum of independent re-checkers stays. Soundness is per universe
+bound.
 
 ## The 4/δ Principle
 
@@ -152,7 +188,7 @@ mathematically impossible.
 - Model checking (TLA+)
 - Neural guidance (LLM provers)
 
-Clean as the substrate. tRust as the language. ay as the decision procedure. All verified software flows through this stack.
+Trust compiles Rust and Lean together, and Clean is its Lean language: front end, kernel (the trust root), Lean→trust-ir compiler and runtime. Clean also ships standalone as a full Lean 4 toolchain built from the same crates (owner, 2026-09-30; `designs/2026-09-30-clean-trust-unified-vision.md`). trust-ir is the one IR, trust-cg the one backend, and ay the decision procedure. The trust root is the Rust kernel today and, by design, the Lean-defined `kcheck` (Phase 4 above). Beyond the kernel the end state is Clean merged into Trust, the environment unified before the repositories are, and Trust verifying and compiling its own source as Trust plus Lean (owner, 2026-11-12; `docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md`).
 
 ## Related Designs
 
@@ -163,7 +199,7 @@ Clean as the substrate. tRust as the language. ay as the decision procedure. All
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| Kernel | Working TCB | Core checker exists; implementation-correctness proof incomplete |
+| Kernel | Working TCB | Core checker exists; implementation-correctness proof incomplete. By design it becomes an untrusted advice producer for `kcheck` (Phase 4) |
 | Parser | Working slices | Broad Lean-shaped syntax; full Lean surface parity not claimed |
 | Elaborator | Working slices | Tactics and major declarations exist; frontend parity remains gated |
 | Automation | Trust-gated | SMT/ATP integration and proof reconstruction exist; trustedAy/trustedArith boundaries remain part of the trust story |
@@ -171,7 +207,7 @@ Clean as the substrate. tRust as the language. ay as the decision procedure. All
 | .olean Import | Working slices | Init/Std/select lanes; full proof validation is opt-in. Real Mathlib `.olean` targets do kernel-verify through Clean — the committed evidence is the pinned slice `data/mathlib_kv_ratchet.json`; the larger milestone counts are unbacked plan prose and are recorded UNKNOWN in `docs/STATUS_ONE_TRUST.md`. The stub fallback lane remains separate, explicitly-labelled lane and is never green evidence |
 | C Verification | USABLE | ACSL specifications with worked examples in `crates/clean-c-sem/src/examples.rs` |
 | Rust Semantics | BUILDING | Source ingestion, VIR lowering, NLL borrow checking, stacked-borrows evaluation, and a Lean-facing ownership proof-bundle API are implemented, with worked examples in `crates/clean-rust-sem/src/examples.rs` / `crates/clean-rust-sem/examples/`; next gaps are broader Rust spec-language / downstream proof-discharge work beyond the ownership bundle landed in #2944 |
-| Self-Verification | ACTIVE, BOUNDED | Nine-constructor reflected calculus, ten modeling rungs, three flagship theorems, zero domain-axiom/DerivedProved debt, and dated independent Lean replay. Fidelity covers selected fragments; the production recursive checker and binary remain unproved end to end. |
+| Self-Verification (the `clean-verify` reflected stack) | LEGACY, OFF THE ROUTE, CAPPED | Nine-constructor reflected calculus, ten modeling rungs, three flagship theorems, zero domain-axiom/DerivedProved debt, and dated independent Lean replay. Fidelity covers selected fragments; the production recursive checker and binary remain unproved end to end. Kept as evidence about fragments: decision R29 stopped the new work it lists and capped the rest at one non-merge commit in four, and the 2026-11-12 plan stops the Crystal part outright and takes the stack off the route. The adopted route (Phase 4) is to replace a proof about the Rust kernel with a proved Lean-defined checker; it is by design, and the plan names the artifact for each unit. |
 
 **Overall:** Clean has substantial working infrastructure, but the current
 release should be described as a trust-accounted verification platform with
@@ -197,3 +233,18 @@ verification workflows. It is not there yet.
 ---
 
 *Track progress via GitHub Issues.*
+
+---
+
+## Citation ledger (D1)
+
+Under `scripts/check_doc_claims.py` D1 since the gate landed (`3fa04c6c1`,
+2026-08-26, one of its four navigation docs). One declaration, added
+2026-09-15 with no prose change, when `metrics` became an `IGNORED_ROOTS` row
+of that checker: a citation under a gitignored root is checked by declaration
+alone and never by what a box holds on disk, so the success-criteria row above
+that points at `metrics/lean4_parity.json` has to say what writes it.
+
+<!-- claim: absent metrics/lean4_parity.json gitignored runtime output (.gitignore:41 `metrics/`, `git ls-files metrics` is empty), written by `write_parity_summary` in crates/clean-kernel/tests/lean4_parity.rs when `cargo test --locked -p clean-kernel --test lean4_parity --features test-utils -- lean4_parity_check` runs; present only on a box that has run that test -->
+
+

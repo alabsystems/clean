@@ -10,7 +10,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
-  "functy": 859,
+  "functy": 903,
   "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The producer A/B record has this index at 1094/1091/857 over its three dumps and reader A's 2026-08-21 laneREG dump says 856 -- four dumps, four values, the recorded whole-crate drift class at its most mobile. The pin compares reader B's header against the FIXTURE-ERA 859; reader A's value is RECORDED in ir_ep.mint.json, NEVER COMPARED, like observed_ty.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
@@ -31,7 +31,7 @@
     "index": 0,
     "ssa": 1,
     "ty": "enum#0",
-    "observed_ty": "enum.184",
+    "observed_ty": "enum.225",
     "note": "The join, and the first chained join to bind an AGGREGATE. The canonical form is what makes this row producer-invariant: the raw token has been observed at enum.181, enum.176, enum.182 and enum.184 across six dumps of an unchanged body."
    }
   ],
@@ -48,7 +48,7 @@
  "enums": [
   {
    "canonical": 0,
-   "crate_id": 184,
+   "crate_id": 225,
    "alias": "ir_ep_tstep",
    "rust_type": "tc::expr_location::ExprPathStep",
    "observed_crate_id_by_producer": {

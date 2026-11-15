@@ -10,37 +10,129 @@
 //! can proceed against the original expression.
 
 use crate::cert::ProofCert;
-use crate::expr::{stack_safe, FVarId};
+use crate::expr::{stack_safe, Expr, FVarAbstraction, FVarId};
 use crate::tc::local_context::checked_add_u32;
+use std::collections::HashMap;
 use std::sync::Arc;
+
+#[path = "rebind_support.rs"]
+mod support;
+use support::SupportContext;
+#[path = "rebind_closed_memo.rs"]
+mod closed_memo;
+pub(in crate::tc) use closed_memo::RebindClosedMemo;
 
 /// Convert FVar certificates back to BVar certificates.
 /// Stack-safe wrapper for deeply nested proof certificates.
 pub(crate) fn convert_fvar_cert_to_bvar(cert: ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
-    convert_fvar_cert_to_bvar_ref(&cert, fvar_id, depth)
+    let mut context = RebindContext::new(fvar_id);
+    if context.support.cert(&cert).unchanged_at(depth) {
+        drop(context);
+        cert
+    } else {
+        context.convert_ref(&cert, depth)
+    }
 }
 
-fn convert_fvar_cert_to_bvar_ref(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
-    stack_safe(|| convert_fvar_cert_to_bvar_impl(cert, fvar_id, depth))
+pub(super) fn convert_with_closed_memo(
+    cert: ProofCert,
+    fvar_id: FVarId,
+    depth: u32,
+    memo: &mut RebindClosedMemo,
+    cap: usize,
+) -> ProofCert {
+    let mut context = RebindContext {
+        fvar_id,
+        memo: HashMap::new(),
+        support: SupportContext::with_closed_memo(fvar_id, Some((memo, cap))),
+        expressions: FVarAbstraction::new(fvar_id),
+    };
+    if context.support.cert(&cert).unchanged_at(depth) {
+        drop(context);
+        cert
+    } else {
+        context.convert_ref(&cert, depth)
+    }
 }
 
-fn convert_fvar_cert_to_bvar_impl(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
+/// One abstraction, with a fixed FVar and memoized Arc edges.
+///
+/// SOUNDNESS: rebinding is a pure function of the certificate, FVar and binder
+/// depth. The FVar is fixed for this call; depth is part of every key because
+/// both FVar replacement and pre-existing BVar shifts depend on it. Borrowed
+/// input Arcs keep the keyed allocations alive for the entire memo lifetime.
+/// Only actual Arc child edges are cached, never a temporary/root value's
+/// address. Hits share the converted Arc, not a freshly rebuilt subtree.
+///
+/// This preserves the existing traversal's fields and checked index arithmetic;
+/// it is not a typing cache or an acceptance shortcut. In particular, absence
+/// of the target FVar does not imply unchanged BVars or certificate type fields.
+struct RebindContext<'a, 'memo> {
+    fvar_id: FVarId,
+    memo: HashMap<(*const ProofCert, u32), (&'a Arc<ProofCert>, Arc<ProofCert>)>,
+    support: SupportContext<'a, 'memo>,
+    expressions: FVarAbstraction<'a>,
+}
+
+impl<'a, 'memo> RebindContext<'a, 'memo> {
+    fn new(fvar_id: FVarId) -> Self {
+        Self {
+            fvar_id,
+            memo: HashMap::new(),
+            support: SupportContext::new(fvar_id),
+            expressions: FVarAbstraction::new(fvar_id),
+        }
+    }
+
+    fn convert_ref(&mut self, cert: &'a ProofCert, depth: u32) -> ProofCert {
+        stack_safe(|| convert_fvar_cert_to_bvar_impl(cert, self, depth))
+    }
+
+    fn abstract_expr(&mut self, expr: &'a Expr, depth: u32) -> Expr {
+        self.expressions.at(expr, depth)
+    }
+
+    fn convert_arc(&mut self, cert: &'a Arc<ProofCert>, depth: u32) -> Arc<ProofCert> {
+        // Reusing an unaffected node also preserves sharing across DIFFERENT
+        // binder depths and successive abstractions. The summary accounts for
+        // certificate BVars, every transformed type field and checked depth.
+        if self.support.arc(cert).unchanged_at(depth) {
+            return Arc::clone(cert);
+        }
+        let key = (Arc::as_ptr(cert), depth);
+        if let Some((_, converted)) = self.memo.get(&key) {
+            return Arc::clone(converted);
+        }
+        let converted = Arc::new(self.convert_ref(cert.as_ref(), depth));
+        self.memo.insert(key, (cert, Arc::clone(&converted)));
+        converted
+    }
+}
+
+fn convert_fvar_cert_to_bvar_impl<'a>(
+    cert: &'a ProofCert,
+    context: &mut RebindContext<'a, '_>,
+    depth: u32,
+) -> ProofCert {
+    // One unit per certificate node rebuilt (`crate::work_meter`); the
+    // expression fields it abstracts pay for their own nodes.
+    crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
     match cert {
         // Leaf cases: no recursive cert conversion, only abstract types
         ProofCert::FVar { .. }
         | ProofCert::Sort { .. }
         | ProofCert::BVar { .. }
         | ProofCert::Const { .. }
-        | ProofCert::Lit { .. } => rebind_leaf(cert, fvar_id, depth),
+        | ProofCert::Lit { .. } => rebind_leaf(cert, context, depth),
         // Core CIC binder forms (depth-incrementing)
         ProofCert::Lam { .. } | ProofCert::Pi { .. } | ProofCert::Let { .. } => {
-            rebind_binder(cert, fvar_id, depth)
+            rebind_binder(cert, context, depth)
         }
         // Core CIC compound forms
         ProofCert::App { .. }
         | ProofCert::DefEq { .. }
         | ProofCert::MData { .. }
-        | ProofCert::Proj { .. } => rebind_compound(cert, fvar_id, depth),
+        | ProofCert::Proj { .. } => rebind_compound(cert, context, depth),
         // Cubical mode extensions
         ProofCert::CubicalInterval
         | ProofCert::CubicalEndpoint { .. }
@@ -49,22 +141,27 @@ fn convert_fvar_cert_to_bvar_impl(cert: &ProofCert, fvar_id: FVarId, depth: u32)
         | ProofCert::CubicalPathApp { .. }
         | ProofCert::CubicalHComp { .. }
         | ProofCert::CubicalTransp { .. }
-        | ProofCert::CubicalCoe { .. } => rebind_cubical(cert, fvar_id, depth),
+        | ProofCert::CubicalCoe { .. } => rebind_cubical(cert, context, depth),
         // ZFC and Impredicative mode extensions
-        _ => rebind_zfc_impredicative(cert, fvar_id, depth),
+        _ => rebind_zfc_impredicative(cert, context, depth),
     }
 }
 
 /// Leaf cert cases: FVar, Sort, BVar, Const, Lit — abstract types only.
-fn rebind_leaf(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
+fn rebind_leaf<'a>(
+    cert: &'a ProofCert,
+    context: &mut RebindContext<'a, '_>,
+    depth: u32,
+) -> ProofCert {
+    let fvar_id = context.fvar_id;
     match cert {
         ProofCert::FVar { id, type_ } if *id == fvar_id => ProofCert::BVar {
             idx: depth,
-            expected_type: Box::new(type_.abstract_fvar_at(fvar_id, depth)),
+            expected_type: Box::new(context.abstract_expr(type_, depth)),
         },
         ProofCert::FVar { id, type_ } => ProofCert::FVar {
             id: *id,
-            type_: Box::new(type_.abstract_fvar_at(fvar_id, depth)),
+            type_: Box::new(context.abstract_expr(type_, depth)),
         },
         ProofCert::Sort { level } => ProofCert::Sort {
             level: level.clone(),
@@ -75,7 +172,7 @@ fn rebind_leaf(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             } else {
                 *idx
             },
-            expected_type: Box::new(expected_type.abstract_fvar_at(fvar_id, depth)),
+            expected_type: Box::new(context.abstract_expr(expected_type, depth)),
         },
         ProofCert::Const {
             name,
@@ -84,18 +181,22 @@ fn rebind_leaf(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
         } => ProofCert::Const {
             name: name.clone(),
             levels: levels.clone(),
-            type_: Box::new(type_.abstract_fvar_at(fvar_id, depth)),
+            type_: Box::new(context.abstract_expr(type_, depth)),
         },
         ProofCert::Lit { lit, type_ } => ProofCert::Lit {
             lit: lit.clone(),
-            type_: Box::new(type_.abstract_fvar_at(fvar_id, depth)),
+            type_: Box::new(context.abstract_expr(type_, depth)),
         },
         _ => unreachable!("rebind_leaf called with non-leaf cert"),
     }
 }
 
 /// Binder cert cases: Lam, Pi, Let — depth-incrementing body recursion.
-fn rebind_binder(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
+fn rebind_binder<'a>(
+    cert: &'a ProofCert,
+    context: &mut RebindContext<'a, '_>,
+    depth: u32,
+) -> ProofCert {
     let d1 = checked_add_u32(depth, 1, "abstract_fvar depth");
     match cert {
         ProofCert::Lam {
@@ -105,9 +206,9 @@ fn rebind_binder(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             result_type,
         } => ProofCert::Lam {
             binder_info: *binder_info,
-            arg_type_cert: Arc::new(convert_fvar_cert_to_bvar_ref(arg_type_cert, fvar_id, depth)),
-            body_cert: Arc::new(convert_fvar_cert_to_bvar_ref(body_cert, fvar_id, d1)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            arg_type_cert: context.convert_arc(arg_type_cert, depth),
+            body_cert: context.convert_arc(body_cert, d1),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         ProofCert::Pi {
             binder_info,
@@ -117,9 +218,9 @@ fn rebind_binder(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             body_level,
         } => ProofCert::Pi {
             binder_info: *binder_info,
-            arg_type_cert: Arc::new(convert_fvar_cert_to_bvar_ref(arg_type_cert, fvar_id, depth)),
+            arg_type_cert: context.convert_arc(arg_type_cert, depth),
             arg_level: arg_level.clone(),
-            body_type_cert: Arc::new(convert_fvar_cert_to_bvar_ref(body_type_cert, fvar_id, d1)),
+            body_type_cert: context.convert_arc(body_type_cert, d1),
             body_level: body_level.clone(),
         },
         ProofCert::Let {
@@ -128,17 +229,21 @@ fn rebind_binder(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             body_cert,
             result_type,
         } => ProofCert::Let {
-            type_cert: Arc::new(convert_fvar_cert_to_bvar_ref(type_cert, fvar_id, depth)),
-            value_cert: Arc::new(convert_fvar_cert_to_bvar_ref(value_cert, fvar_id, depth)),
-            body_cert: Arc::new(convert_fvar_cert_to_bvar_ref(body_cert, fvar_id, d1)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            type_cert: context.convert_arc(type_cert, depth),
+            value_cert: context.convert_arc(value_cert, depth),
+            body_cert: context.convert_arc(body_cert, d1),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         _ => unreachable!("rebind_binder called with non-binder cert"),
     }
 }
 
 /// Compound cert cases: App, DefEq, MData, Proj — recursive on subcerts and types.
-fn rebind_compound(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
+fn rebind_compound<'a>(
+    cert: &'a ProofCert,
+    context: &mut RebindContext<'a, '_>,
+    depth: u32,
+) -> ProofCert {
     match cert {
         ProofCert::App {
             fn_cert,
@@ -146,10 +251,10 @@ fn rebind_compound(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             arg_cert,
             result_type,
         } => ProofCert::App {
-            fn_cert: Arc::new(convert_fvar_cert_to_bvar_ref(fn_cert, fvar_id, depth)),
-            fn_type: Box::new(fn_type.abstract_fvar_at(fvar_id, depth)),
-            arg_cert: Arc::new(convert_fvar_cert_to_bvar_ref(arg_cert, fvar_id, depth)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            fn_cert: context.convert_arc(fn_cert, depth),
+            fn_type: Box::new(context.abstract_expr(fn_type, depth)),
+            arg_cert: context.convert_arc(arg_cert, depth),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         ProofCert::DefEq {
             inner,
@@ -157,9 +262,9 @@ fn rebind_compound(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             actual_type,
             eq_steps,
         } => ProofCert::DefEq {
-            inner: Arc::new(convert_fvar_cert_to_bvar_ref(inner, fvar_id, depth)),
-            expected_type: Box::new(expected_type.abstract_fvar_at(fvar_id, depth)),
-            actual_type: Box::new(actual_type.abstract_fvar_at(fvar_id, depth)),
+            inner: context.convert_arc(inner, depth),
+            expected_type: Box::new(context.abstract_expr(expected_type, depth)),
+            actual_type: Box::new(context.abstract_expr(actual_type, depth)),
             eq_steps: eq_steps.clone(),
         },
         ProofCert::MData {
@@ -168,8 +273,8 @@ fn rebind_compound(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             result_type,
         } => ProofCert::MData {
             metadata: metadata.clone(),
-            inner_cert: Arc::new(convert_fvar_cert_to_bvar_ref(inner_cert, fvar_id, depth)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            inner_cert: context.convert_arc(inner_cert, depth),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         ProofCert::Proj {
             struct_name,
@@ -180,16 +285,20 @@ fn rebind_compound(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
         } => ProofCert::Proj {
             struct_name: struct_name.clone(),
             idx: *idx,
-            expr_cert: Arc::new(convert_fvar_cert_to_bvar_ref(expr_cert, fvar_id, depth)),
-            expr_type: Box::new(expr_type.abstract_fvar_at(fvar_id, depth)),
-            field_type: Box::new(field_type.abstract_fvar_at(fvar_id, depth)),
+            expr_cert: context.convert_arc(expr_cert, depth),
+            expr_type: Box::new(context.abstract_expr(expr_type, depth)),
+            field_type: Box::new(context.abstract_expr(field_type, depth)),
         },
         _ => unreachable!("rebind_compound called with non-compound cert"),
     }
 }
 
 /// Mode-specific cert cases: Cubical extensions.
-fn rebind_cubical(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
+fn rebind_cubical<'a>(
+    cert: &'a ProofCert,
+    context: &mut RebindContext<'a, '_>,
+    depth: u32,
+) -> ProofCert {
     match cert {
         ProofCert::CubicalInterval => ProofCert::CubicalInterval,
         ProofCert::CubicalEndpoint { is_one } => ProofCert::CubicalEndpoint { is_one: *is_one },
@@ -199,10 +308,10 @@ fn rebind_cubical(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             left_cert,
             right_cert,
         } => ProofCert::CubicalPath {
-            ty_cert: Arc::new(convert_fvar_cert_to_bvar_ref(ty_cert, fvar_id, depth)),
+            ty_cert: context.convert_arc(ty_cert, depth),
             ty_level: ty_level.clone(),
-            left_cert: Arc::new(convert_fvar_cert_to_bvar_ref(left_cert, fvar_id, depth)),
-            right_cert: Arc::new(convert_fvar_cert_to_bvar_ref(right_cert, fvar_id, depth)),
+            left_cert: context.convert_arc(left_cert, depth),
+            right_cert: context.convert_arc(right_cert, depth),
         },
         ProofCert::CubicalPathLam {
             body_cert,
@@ -211,9 +320,9 @@ fn rebind_cubical(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
         } => {
             let d1 = checked_add_u32(depth, 1, "abstract_fvar depth");
             ProofCert::CubicalPathLam {
-                body_cert: Arc::new(convert_fvar_cert_to_bvar_ref(body_cert, fvar_id, d1)),
-                body_type: Box::new(body_type.abstract_fvar_at(fvar_id, depth)),
-                result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+                body_cert: context.convert_arc(body_cert, d1),
+                body_type: Box::new(context.abstract_expr(body_type, depth)),
+                result_type: Box::new(context.abstract_expr(result_type, depth)),
             }
         }
         ProofCert::CubicalPathApp {
@@ -222,10 +331,10 @@ fn rebind_cubical(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             path_type,
             result_type,
         } => ProofCert::CubicalPathApp {
-            path_cert: Arc::new(convert_fvar_cert_to_bvar_ref(path_cert, fvar_id, depth)),
-            arg_cert: Arc::new(convert_fvar_cert_to_bvar_ref(arg_cert, fvar_id, depth)),
-            path_type: Box::new(path_type.abstract_fvar_at(fvar_id, depth)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            path_cert: context.convert_arc(path_cert, depth),
+            arg_cert: context.convert_arc(arg_cert, depth),
+            path_type: Box::new(context.abstract_expr(path_type, depth)),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         ProofCert::CubicalHComp {
             ty_cert,
@@ -234,11 +343,11 @@ fn rebind_cubical(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             base_cert,
             result_type,
         } => ProofCert::CubicalHComp {
-            ty_cert: Arc::new(convert_fvar_cert_to_bvar_ref(ty_cert, fvar_id, depth)),
-            phi_cert: Arc::new(convert_fvar_cert_to_bvar_ref(phi_cert, fvar_id, depth)),
-            u_cert: Arc::new(convert_fvar_cert_to_bvar_ref(u_cert, fvar_id, depth)),
-            base_cert: Arc::new(convert_fvar_cert_to_bvar_ref(base_cert, fvar_id, depth)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            ty_cert: context.convert_arc(ty_cert, depth),
+            phi_cert: context.convert_arc(phi_cert, depth),
+            u_cert: context.convert_arc(u_cert, depth),
+            base_cert: context.convert_arc(base_cert, depth),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         ProofCert::CubicalTransp {
             ty_cert,
@@ -246,10 +355,10 @@ fn rebind_cubical(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             base_cert,
             result_type,
         } => ProofCert::CubicalTransp {
-            ty_cert: Arc::new(convert_fvar_cert_to_bvar_ref(ty_cert, fvar_id, depth)),
-            phi_cert: Arc::new(convert_fvar_cert_to_bvar_ref(phi_cert, fvar_id, depth)),
-            base_cert: Arc::new(convert_fvar_cert_to_bvar_ref(base_cert, fvar_id, depth)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            ty_cert: context.convert_arc(ty_cert, depth),
+            phi_cert: context.convert_arc(phi_cert, depth),
+            base_cert: context.convert_arc(base_cert, depth),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         ProofCert::CubicalCoe {
             ty_cert,
@@ -258,29 +367,33 @@ fn rebind_cubical(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
             base_cert,
             result_type,
         } => ProofCert::CubicalCoe {
-            ty_cert: Arc::new(convert_fvar_cert_to_bvar_ref(ty_cert, fvar_id, depth)),
-            r_cert: Arc::new(convert_fvar_cert_to_bvar_ref(r_cert, fvar_id, depth)),
-            s_cert: Arc::new(convert_fvar_cert_to_bvar_ref(s_cert, fvar_id, depth)),
-            base_cert: Arc::new(convert_fvar_cert_to_bvar_ref(base_cert, fvar_id, depth)),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            ty_cert: context.convert_arc(ty_cert, depth),
+            r_cert: context.convert_arc(r_cert, depth),
+            s_cert: context.convert_arc(s_cert, depth),
+            base_cert: context.convert_arc(base_cert, depth),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         _ => unreachable!("rebind_cubical called with non-Cubical cert"),
     }
 }
 
 /// Mode-specific cert cases: ZFC and Impredicative extensions.
-fn rebind_zfc_impredicative(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> ProofCert {
+fn rebind_zfc_impredicative<'a>(
+    cert: &'a ProofCert,
+    context: &mut RebindContext<'a, '_>,
+    depth: u32,
+) -> ProofCert {
     match cert {
         ProofCert::ZFCSet { kind, result_type } => ProofCert::ZFCSet {
-            kind: convert_fvar_in_zfc_set_kind(kind, fvar_id, depth),
-            result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+            kind: convert_fvar_in_zfc_set_kind(kind, context, depth),
+            result_type: Box::new(context.abstract_expr(result_type, depth)),
         },
         ProofCert::ZFCMem {
             elem_cert,
             set_cert,
         } => ProofCert::ZFCMem {
-            elem_cert: Arc::new(convert_fvar_cert_to_bvar_ref(elem_cert, fvar_id, depth)),
-            set_cert: Arc::new(convert_fvar_cert_to_bvar_ref(set_cert, fvar_id, depth)),
+            elem_cert: context.convert_arc(elem_cert, depth),
+            set_cert: context.convert_arc(set_cert, depth),
         },
         ProofCert::ZFCComprehension {
             var_ty_cert,
@@ -289,50 +402,44 @@ fn rebind_zfc_impredicative(cert: &ProofCert, fvar_id: FVarId, depth: u32) -> Pr
         } => {
             let d1 = checked_add_u32(depth, 1, "abstract_fvar depth");
             ProofCert::ZFCComprehension {
-                var_ty_cert: Arc::new(convert_fvar_cert_to_bvar_ref(var_ty_cert, fvar_id, depth)),
-                pred_cert: Arc::new(convert_fvar_cert_to_bvar_ref(pred_cert, fvar_id, d1)),
-                result_type: Box::new(result_type.abstract_fvar_at(fvar_id, depth)),
+                var_ty_cert: context.convert_arc(var_ty_cert, depth),
+                pred_cert: context.convert_arc(pred_cert, d1),
+                result_type: Box::new(context.abstract_expr(result_type, depth)),
             }
         }
         ProofCert::SProp => ProofCert::SProp,
         ProofCert::Squash { inner_cert } => ProofCert::Squash {
-            inner_cert: Arc::new(convert_fvar_cert_to_bvar_ref(inner_cert, fvar_id, depth)),
+            inner_cert: context.convert_arc(inner_cert, depth),
         },
         _ => unreachable!("rebind_zfc_impredicative called with non-ZFC/Impredicative cert"),
     }
 }
 
 /// Helper to convert FVar occurrences in ZFC set certificate kind
-fn convert_fvar_in_zfc_set_kind(
-    kind: &crate::cert::ZFCSetCertKind,
-    fvar_id: FVarId,
+fn convert_fvar_in_zfc_set_kind<'a>(
+    kind: &'a crate::cert::ZFCSetCertKind,
+    context: &mut RebindContext<'a, '_>,
     depth: u32,
 ) -> crate::cert::ZFCSetCertKind {
     use crate::cert::ZFCSetCertKind;
     match kind {
         ZFCSetCertKind::Empty => ZFCSetCertKind::Empty,
         ZFCSetCertKind::Infinity => ZFCSetCertKind::Infinity,
-        ZFCSetCertKind::Singleton(c) => {
-            ZFCSetCertKind::Singleton(Arc::new(convert_fvar_cert_to_bvar_ref(c, fvar_id, depth)))
-        }
+        ZFCSetCertKind::Singleton(c) => ZFCSetCertKind::Singleton(context.convert_arc(c, depth)),
         ZFCSetCertKind::Pair(c1, c2) => ZFCSetCertKind::Pair(
-            Arc::new(convert_fvar_cert_to_bvar_ref(c1, fvar_id, depth)),
-            Arc::new(convert_fvar_cert_to_bvar_ref(c2, fvar_id, depth)),
+            context.convert_arc(c1, depth),
+            context.convert_arc(c2, depth),
         ),
-        ZFCSetCertKind::Union(c) => {
-            ZFCSetCertKind::Union(Arc::new(convert_fvar_cert_to_bvar_ref(c, fvar_id, depth)))
-        }
-        ZFCSetCertKind::PowerSet(c) => {
-            ZFCSetCertKind::PowerSet(Arc::new(convert_fvar_cert_to_bvar_ref(c, fvar_id, depth)))
-        }
+        ZFCSetCertKind::Union(c) => ZFCSetCertKind::Union(context.convert_arc(c, depth)),
+        ZFCSetCertKind::PowerSet(c) => ZFCSetCertKind::PowerSet(context.convert_arc(c, depth)),
         ZFCSetCertKind::Separation {
             set_cert,
             pred_cert,
         } => {
             let d1 = checked_add_u32(depth, 1, "abstract_fvar depth");
             ZFCSetCertKind::Separation {
-                set_cert: Arc::new(convert_fvar_cert_to_bvar_ref(set_cert, fvar_id, depth)),
-                pred_cert: Arc::new(convert_fvar_cert_to_bvar_ref(pred_cert, fvar_id, d1)),
+                set_cert: context.convert_arc(set_cert, depth),
+                pred_cert: context.convert_arc(pred_cert, d1),
             }
         }
         ZFCSetCertKind::Replacement {
@@ -341,12 +448,25 @@ fn convert_fvar_in_zfc_set_kind(
         } => {
             let d1 = checked_add_u32(depth, 1, "abstract_fvar depth");
             ZFCSetCertKind::Replacement {
-                set_cert: Arc::new(convert_fvar_cert_to_bvar_ref(set_cert, fvar_id, depth)),
-                func_cert: Arc::new(convert_fvar_cert_to_bvar_ref(func_cert, fvar_id, d1)),
+                set_cert: context.convert_arc(set_cert, depth),
+                func_cert: context.convert_arc(func_cert, d1),
             }
         }
-        ZFCSetCertKind::Choice(c) => {
-            ZFCSetCertKind::Choice(Arc::new(convert_fvar_cert_to_bvar_ref(c, fvar_id, depth)))
-        }
+        ZFCSetCertKind::Choice(c) => ZFCSetCertKind::Choice(context.convert_arc(c, depth)),
     }
 }
+
+#[cfg(test)]
+#[path = "rebind_dag_tests.rs"]
+mod dag_tests;
+
+// The inference/replay half of the same suite, split out 2026-09-16 when
+// `rebind_dag_tests.rs` crossed 1000 lines. It reaches `core_allocations`
+// through `dag_tests` rather than redefining it.
+#[cfg(test)]
+#[path = "rebind_dag_infer_tests.rs"]
+mod dag_infer_tests;
+
+#[cfg(test)]
+#[path = "rebind_expression_memo_tests.rs"]
+mod expression_memo_tests;

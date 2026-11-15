@@ -14,18 +14,19 @@
 //! file-derived search-path fingerprint, so every open document sharing an
 //! import header shares one loaded closure.
 
+use clean_parser::SurfaceName;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
-/// Cache key: the canonical (sorted, deduplicated) dotted module names of a
+/// Cache key: the sorted, deduplicated structural module names of a
 /// document's import header plus the extra `.olean` search paths derived from
 /// the document's on-disk location (its nearest Lake root). Two documents with
 /// the same header in the same project share one entry; toolchain-default
 /// search paths are process-stable and therefore not part of the key.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 struct ImportClosureKey {
-    modules: Vec<String>,
+    modules: Vec<SurfaceName>,
     search_paths: Vec<PathBuf>,
 }
 
@@ -51,7 +52,7 @@ fn cache_guard() -> MutexGuard<'static, HashMap<ImportClosureKey, ImportClosureO
 
 /// Collect the import header of a parsed document: every module path of every
 /// `import` declaration, in source order.
-pub(crate) fn import_paths_of_decls(decls: &[clean_parser::SurfaceDecl]) -> Vec<Vec<String>> {
+pub(crate) fn import_paths_of_decls(decls: &[clean_parser::SurfaceDecl]) -> Vec<SurfaceName> {
     decls
         .iter()
         .filter_map(|decl| match decl {
@@ -71,7 +72,7 @@ pub(crate) fn import_paths_of_decls(decls: &[clean_parser::SurfaceDecl]) -> Vec<
 /// than duplicating it. The lock is intentionally held across the load — the
 /// load is the expensive step and every waiter wants its result.
 pub(crate) fn shared_import_closure(
-    import_paths: &[Vec<String>],
+    import_paths: &[SurfaceName],
     file_path: Option<&Path>,
 ) -> ImportClosureOutcome {
     let key = closure_key(import_paths, file_path);
@@ -84,12 +85,12 @@ pub(crate) fn shared_import_closure(
     outcome
 }
 
-fn closure_key(import_paths: &[Vec<String>], file_path: Option<&Path>) -> ImportClosureKey {
+fn closure_key(import_paths: &[SurfaceName], file_path: Option<&Path>) -> ImportClosureKey {
     let search_paths = file_path
         .map(clean_elab::lake_import_search_paths_for_file)
         .unwrap_or_default();
-    let mut modules: Vec<String> = import_paths.iter().map(|path| path.join(".")).collect();
-    modules.sort();
+    let mut modules = import_paths.to_vec();
+    modules.sort_by(|a, b| a.name().cmp(b.name()));
     modules.dedup();
     ImportClosureKey {
         modules,
@@ -107,12 +108,7 @@ fn closure_key(import_paths: &[Vec<String>], file_path: Option<&Path>) -> Import
 fn load_import_closure(key: &ImportClosureKey) -> ImportClosureOutcome {
     let mut env = clean_kernel::Environment::try_with_prelude()
         .map_err(|e| format!("prelude initialization failed: {e}"))?;
-    let paths: Vec<Vec<String>> = key
-        .modules
-        .iter()
-        .map(|module| module.split('.').map(str::to_owned).collect())
-        .collect();
-    clean_elab::process_import_batch_with_search_paths(&mut env, &paths, &key.search_paths)
+    clean_elab::process_import_batch_with_search_paths(&mut env, &key.modules, &key.search_paths)
         .map_err(|e| e.to_string())?;
     Ok(Arc::new(env))
 }
@@ -123,10 +119,38 @@ fn load_import_closure(key: &ImportClosureKey) -> ImportClosureOutcome {
 /// test process.
 #[cfg(test)]
 pub(crate) fn inject_outcome_for_test(
-    import_paths: &[Vec<String>],
+    import_paths: &[SurfaceName],
     file_path: Option<&Path>,
     outcome: ImportClosureOutcome,
 ) {
     let key = closure_key(import_paths, file_path);
     cache_guard().insert(key, outcome);
+}
+
+#[cfg(test)]
+mod typed_key_tests {
+    use super::*;
+
+    #[test]
+    fn import_cache_distinguishes_component_boundaries() {
+        let nested = clean_parser::parse_name("A.B").unwrap();
+        let quoted = clean_parser::parse_name("«A.B»").unwrap();
+        assert_ne!(
+            closure_key(std::slice::from_ref(&nested), None),
+            closure_key(std::slice::from_ref(&quoted), None)
+        );
+        let both = closure_key(&[nested, quoted], None);
+        assert_eq!(both.modules.len(), 2);
+    }
+
+    #[test]
+    fn import_cache_deduplicates_only_equal_structural_names() {
+        let a = clean_parser::parse_name("A").unwrap();
+        let escaped_a = clean_parser::parse_name("«A»").unwrap();
+        let b = clean_parser::parse_name("B").unwrap();
+        assert_eq!(
+            closure_key(&[a.clone(), escaped_a, b.clone()], None),
+            closure_key(&[b, a], None)
+        );
+    }
 }

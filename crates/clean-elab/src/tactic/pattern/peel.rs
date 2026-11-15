@@ -4,6 +4,9 @@
 
 //! peel tactic: strip matching universal quantifiers from a hypothesis and the goal.
 
+use super::names::local_name_matches;
+use clean_parser::SurfaceName;
+
 use crate::stack_safe;
 use clean_kernel::{Expr, ExprKind};
 
@@ -28,7 +31,8 @@ use super::super::{intro, ProofState, TacticError, TacticResult};
 /// ENSURES: On Ok, `min(hyp_foralls, goal_foralls)` intro steps have been applied
 /// ENSURES: On Err(InvalidTarget), the named hypothesis has zero leading forall quantifiers
 /// ENSURES: On Err(HypothesisNotFound), no hypothesis with `hyp_name` exists
-pub fn peel(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn peel(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
+    super::names::require_binding_name(hyp_name, "peel")?;
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -39,7 +43,8 @@ pub fn peel(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     let hyp = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
     let hyp_type = hyp.ty.clone();
@@ -60,7 +65,7 @@ pub fn peel(state: &mut ProofState, hyp_name: &str) -> TacticResult {
     let to_intro = hyp_foralls.min(goal_foralls);
 
     for i in 0..to_intro {
-        let name = format!("x{i}");
+        let name = SurfaceName::from_name(clean_kernel::Name::anon().str(format!("x{i}")));
         intro(state, &name)?;
     }
 

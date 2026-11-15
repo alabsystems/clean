@@ -71,7 +71,12 @@ pub(crate) use crate::lcnf::LetDecl;
 /// (Unit, PUnit) also skip RC as they carry no runtime data.
 ///
 /// Conservative: unknown types return `false` (assumed to be possible refs).
-fn is_scalar_type(ty: &Expr) -> bool {
+///
+/// `to_ir` records the variables this predicate exempts
+/// ([`crate::to_ir::ToIROutput::rc_unmanaged`]): their FINAL representation
+/// can still be an object (the result of a boxed callee, WS6.2), and
+/// [`crate::rc_repair::rc_repair_boxed`] manages exactly those.
+pub(crate) fn is_scalar_type(ty: &Expr) -> bool {
     let head = ty.strip_mdata().get_app_fn();
     if let ExprKind::Const(name, _) = head.kind() {
         SCALAR_TYPES.contains(name)
@@ -392,6 +397,14 @@ fn insert_rc_join_point(
 }
 
 /// Insert RC for cases expression: process each branch independently.
+///
+/// A non-parameter local that is live into the `cases` (the scrutinee, or a
+/// value some OTHER branch still uses) but dead in a branch is released at
+/// the head of that branch — Lean's `ExplicitRC` rule for `case`. Without it
+/// the local was never released on that branch: a leak the WS6.2 linearity
+/// verifier refuses (`Nat.max`'s `Nat.ble` result, `List.get`'s recursive
+/// result on the index-zero branch). Parameters need no such `dec`: they
+/// take their death `dec` on every return path ([`insert_rc_return`]).
 fn insert_rc_cases(cases: &Cases, live: &mut LiveVars, ctx: &mut RCContext<'_>) -> Code {
     let saved_live = live.clone();
     let mut branch_lives: Vec<HashSet<FVarId>> = Vec::new();
@@ -403,6 +416,45 @@ fn insert_rc_cases(cases: &Cases, live: &mut LiveVars, ctx: &mut RCContext<'_>) 
             let (new_alt, final_live) = process_case_alt(alt, &mut branch_live, ctx);
             branch_lives.push(final_live);
             new_alt
+        })
+        .collect();
+    let mut case_live: HashSet<FVarId> = HashSet::new();
+    for branch in &branch_lives {
+        case_live.extend(branch);
+    }
+    case_live.insert(cases.scrutinee);
+    let new_alts: Vec<Alt> = new_alts
+        .into_iter()
+        .zip(&branch_lives)
+        .map(|(alt, branch_live)| {
+            let mut dead: Vec<FVarId> = case_live
+                .iter()
+                .filter(|v| {
+                    !branch_live.contains(v) && !ctx.is_param(**v) && ctx.needs_rc(**v, live)
+                })
+                .copied()
+                .collect();
+            if dead.is_empty() {
+                return alt;
+            }
+            dead.sort_by_key(|v| v.as_u64());
+            let release = |body: Code, ctx: &mut RCContext<'_>| {
+                dead.iter()
+                    .rev()
+                    .fold(body, |rest, v| wrap_dec(*v, rest, ctx))
+            };
+            match alt {
+                Alt::Ctor {
+                    ctor_name,
+                    params,
+                    body,
+                } => Alt::Ctor {
+                    ctor_name,
+                    params,
+                    body: Box::new(release(*body, ctx)),
+                },
+                Alt::Default(body) => Alt::Default(Box::new(release(*body, ctx))),
+            }
         })
         .collect();
     for branch in &branch_lives {

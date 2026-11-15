@@ -240,12 +240,18 @@ fn rw_iff_no_match_fails_closed() {
 // adapter is a strict fallback only when `match_equality` returns Err).
 // ---------------------------------------------------------------------------
 
+//
+// `rewrite`, not `rw`: `rw`'s trailing `with_reducible rfl` closes the
+// reflexive main goal `b = b`, so pinned Lean 4.8.0 refuses `rw [h] at ha;
+// exact ha` ("no goals to be solved") and accepts this script (integ/r5
+// 2026-10-16, ledger (154)). The Eq-shaped local-hypothesis rewrite under test
+// is the same for both.
 #[test]
 fn rw_eq_local_hyp_still_works() {
     assert_tactic_theorem_axioms(
         "rw_eq_regression",
         "theorem rw_eq_regression (a b : Nat) (h : a = b) (ha : a = a) : b = b := by \
-         rw [h] at ha; exact ha",
+         rewrite [h] at ha; exact ha",
         &[],
     );
 }

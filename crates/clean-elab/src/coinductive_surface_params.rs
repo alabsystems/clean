@@ -47,20 +47,20 @@
 //! greatest-fixpoint lowering is monomorphic; only DECLARATION parameters
 //! lift here.
 
-use super::{all_idents, known_constant, mentions, unsupported, ElabError, Environment};
-use clean_parser::{SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr};
+use super::{all_predicate_idents, known_constant, mentions, unsupported, ElabError, Environment};
+use clean_parser::{SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName};
 
 /// Validate the declaration-parameter row against its envelope. Every
 /// refusal is named; the returned row is the validated binders verbatim
 /// (explicit info, explicit `P`-free types).
 pub(super) fn validate_params(
     what: &str,
-    short: &str,
+    short: &SurfaceName,
     env: &Environment,
     binders: &[SurfaceBinder],
 ) -> Result<Vec<SurfaceBinder>, ElabError> {
     for (i, b) in binders.iter().enumerate() {
-        if b.name == "_" {
+        if b.name.is_unescaped_component("_") {
             return Err(unsupported(format!(
                 "{what}: declares the anonymous declaration parameter `_`; \
                  every parameter must be NAMED — the whole companion family \
@@ -93,15 +93,15 @@ pub(super) fn validate_params(
                 b.name, b.name
             )));
         };
-        if b.name == short {
+        if short.has_prefix(&b.name) {
             return Err(unsupported(format!(
                 "{what}: declaration parameter `{}` is named after the \
-                 predicate itself; every occurrence of `{short}` in a \
+                 predicate or its qualified root; every occurrence of `{short}` in a \
                  constructor must be the recursive predicate, not a local",
                 b.name
             )));
         }
-        if b.name.contains("_coind") {
+        if super::has_generated_marker(&b.name) {
             return Err(unsupported(format!(
                 "{what}: declaration parameter `{}` carries the `_coind` \
                  marker reserved for generated binder names — it could be \
@@ -128,9 +128,9 @@ pub(super) fn validate_params(
         // Free variables of a parameter type: earlier parameters and
         // existing constants only — the same auto-bind hazard as premises,
         // at the outermost Π domain of every companion.
-        let mut bound: Vec<&str> = Vec::new();
-        let mut fvs: Vec<&str> = Vec::new();
-        all_idents(bty, &mut bound, &mut fvs).map_err(|label| {
+        let mut bound: Vec<&SurfaceName> = Vec::new();
+        let mut fvs: Vec<&SurfaceName> = Vec::new();
+        all_predicate_idents(bty, short, &mut bound, &mut fvs).map_err(|label| {
             unsupported(format!(
                 "{what}: the type of declaration parameter `{}` uses the \
                  non-applicative surface form `{label}`; parameter types \
@@ -140,7 +140,7 @@ pub(super) fn validate_params(
             ))
         })?;
         for fv in fvs {
-            if binders[..i].iter().any(|p| p.name == fv) || known_constant(env, fv) {
+            if binders[..i].iter().any(|p| &p.name == fv) || known_constant(env, fv) {
                 continue;
             }
             return Err(unsupported(format!(
@@ -166,8 +166,8 @@ pub(super) fn validate_params(
 /// context.
 pub(super) fn check_param_row(
     args: &[SurfaceArg],
-    param_names: &[String],
-    short: &str,
+    param_names: &[SurfaceName],
+    short: &SurfaceName,
 ) -> Result<(), String> {
     for (i, p) in param_names.iter().enumerate() {
         let ok = matches!(
@@ -182,7 +182,7 @@ pub(super) fn check_param_row(
                  is FIXED across the whole declaration, and a position that \
                  varies across occurrences is an INDEX, not a parameter \
                  (declare it as an index instead)",
-                param_names.join(" "),
+                super::join_names(param_names),
                 i + 1
             ));
         }
@@ -197,18 +197,18 @@ pub(super) fn check_param_row(
 #[allow(clippy::too_many_arguments)]
 pub(super) fn check_ctor_binders(
     what: &str,
-    short: &str,
+    short: &SurfaceName,
     env: &Environment,
     ci: usize,
-    shared: &[String],
-    param_names: &[String],
-    ctor_name: &str,
+    shared: &[SurfaceName],
+    param_names: &[SurfaceName],
+    ctor_name: &SurfaceName,
     ctor_binders: &[SurfaceBinder],
-    subst_vars: &[String],
+    subst_vars: &[SurfaceName],
 ) -> Result<(), ElabError> {
     for (bi, b) in ctor_binders.iter().enumerate() {
         let where_ = format!("{what}: constructor `{ctor_name}`");
-        if b.name == "_" {
+        if b.name.is_unescaped_component("_") {
             return Err(unsupported(format!(
                 "{where_} declares an anonymous binder `_`; an ∃-bound \
                  variable must be NAMED so the generated intro theorem \
@@ -240,10 +240,10 @@ pub(super) fn check_ctor_binders(
                 b.name, b.name
             )));
         };
-        if b.name == short {
+        if short.has_prefix(&b.name) {
             return Err(unsupported(format!(
                 "{where_} declares binder `{}` named after the \
-                 predicate itself; every occurrence of `{short}` in a \
+                 predicate or its qualified root; every occurrence of `{short}` in a \
                  premise must be the recursive predicate, not a local",
                 b.name
             )));
@@ -255,10 +255,10 @@ pub(super) fn check_ctor_binders(
                  a recursive occurrence `{short} {} …` would no longer \
                  apply the FIXED parameter row",
                 b.name,
-                param_names.join(" ")
+                super::join_names(param_names)
             )));
         }
-        if b.name.contains("_coind") {
+        if super::has_generated_marker(&b.name) {
             return Err(unsupported(format!(
                 "{where_} declares binder `{}`, which carries the \
                  `_coind` marker reserved for generated binder names — \
@@ -302,9 +302,9 @@ pub(super) fn check_ctor_binders(
         // variables, EARLIER binders, declaration parameters and existing
         // constants only — the same auto-bind hazard as premises, at the
         // ∃ domain position.
-        let mut bound: Vec<&str> = Vec::new();
-        let mut fvs: Vec<&str> = Vec::new();
-        all_idents(bty, &mut bound, &mut fvs).map_err(|label| {
+        let mut bound: Vec<&SurfaceName> = Vec::new();
+        let mut fvs: Vec<&SurfaceName> = Vec::new();
+        all_predicate_idents(bty, short, &mut bound, &mut fvs).map_err(|label| {
             unsupported(format!(
                 "{where_}: the type of binder `{}` uses the \
                  non-applicative surface form `{label}`; binder types \
@@ -315,7 +315,7 @@ pub(super) fn check_ctor_binders(
         })?;
         for fv in fvs {
             if subst_vars.iter().any(|v| v == fv)
-                || ctor_binders[..bi].iter().any(|p| p.name == fv)
+                || ctor_binders[..bi].iter().any(|p| &p.name == fv)
                 || param_names.iter().any(|p| p == fv)
                 || known_constant(env, fv)
             {

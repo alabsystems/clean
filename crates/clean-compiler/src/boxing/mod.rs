@@ -10,6 +10,11 @@ pub(crate) mod boxed_version;
 pub(crate) mod cast;
 pub(crate) mod config;
 pub(crate) mod context;
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) mod entry_check;
+mod native_signature;
+#[cfg(test)]
+mod native_signature_tests;
 pub(crate) mod visit;
 
 #[cfg(test)]
@@ -108,9 +113,71 @@ pub fn explicit_boxing_decl(
 /// - Boxed versions are generated (if config enabled) for declarations satisfying `requires_boxed_version`.
 /// - Auxiliary declarations created during boxing are included in the output.
 pub fn explicit_boxing_with_config(decls: &[IRDecl], config: &BoxingConfig) -> Vec<IRDecl> {
+    explicit_boxing_with_optional_kernel_env(decls, None, config)
+}
+
+/// Preserve an already scalar native call only when its original kernel
+/// declaration confirms the complete ABI. This does not expose a synthetic
+/// declaration to partial applications or change their boxed closure ABI.
+pub(crate) fn explicit_boxing_with_kernel_env(
+    decls: &[IRDecl],
+    env: &clean_kernel::Environment,
+    config: &BoxingConfig,
+) -> Vec<IRDecl> {
+    explicit_boxing_with_optional_kernel_env(decls, Some(env), config)
+}
+
+fn explicit_boxing_with_optional_kernel_env(
+    decls: &[IRDecl],
+    env: Option<&clean_kernel::Environment>,
+    config: &BoxingConfig,
+) -> Vec<IRDecl> {
     let mut result = Vec::with_capacity(decls.len() * 2);
     for decl in decls {
-        let mut ctx = BoxingContext::new(decl, decls, config);
+        let mut ctx = BoxingContext::new(decl, decls, config).with_kernel_env(env);
+        for (var, ty) in &decl.params {
+            ctx.set_var_type(*var, ty.clone());
+        }
+        let transformed_body = visit_body(&decl.body, &mut ctx);
+        result.extend(ctx.take_aux_decls());
+        result.push(IRDecl {
+            name: decl.name.clone(),
+            params: decl.params.clone(),
+            return_type: decl.return_type.clone(),
+            body: transformed_body,
+        });
+    }
+    if config.generate_boxed_versions {
+        let boxed_versions: Vec<_> = result
+            .iter()
+            .filter(|d| requires_boxed_version(d))
+            .map(mk_boxed_version)
+            .collect();
+        result.extend(boxed_versions);
+    }
+    dedup_decls_by_name(&mut result);
+    result
+}
+
+#[cfg(feature = "trust-ir-backend")]
+/// [`explicit_boxing_with_config`], resolving call sites against
+/// `signatures` as well as `decls` (Trust plan step 3.2).
+///
+/// `signatures` are signature-only declarations whose bodies are never
+/// emitted — a Rust callee (a call to Rust at its carrier ABI) or a native
+/// carrier primitive (one machine operation). Resolving against them is what
+/// passes a scalar argument UNBOXED and types the result as the scalar it
+/// is; an unknown callee would box both. Only `decls` are transformed and
+/// returned.
+pub(crate) fn explicit_boxing_with_signatures(
+    decls: &[IRDecl],
+    signatures: &[IRDecl],
+    config: &BoxingConfig,
+) -> Vec<IRDecl> {
+    let lookup: Vec<IRDecl> = decls.iter().chain(signatures).cloned().collect();
+    let mut result = Vec::with_capacity(decls.len());
+    for decl in decls {
+        let mut ctx = BoxingContext::new(decl, &lookup, config);
         for (var, ty) in &decl.params {
             ctx.set_var_type(*var, ty.clone());
         }

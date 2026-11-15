@@ -65,6 +65,11 @@ pub(crate) fn cases_array_to_mono(
     depth: usize,
 ) -> Code {
     if let Some(Alt::Ctor { params, body, .. }) = cases.alts.first() {
+        // Generic cases lowering already placed field projections in body.
+        // An additional extraction call would consume the same scrutinee.
+        if params.is_empty() {
+            return code_to_mono_with_depth(body, state, next_fvar, env, depth + 1);
+        }
         let p = params.first();
         let p_fvar = p.map(|p| p.fvar_id).unwrap_or_else(|| {
             let fvar = FVarId::new(*next_fvar);
@@ -96,7 +101,8 @@ pub(crate) fn cases_array_to_mono(
 
 /// Transform String cases (single constructor) to let binding.
 ///
-/// String has single constructor, extract with toList.
+/// The byte-backed constructor extracts a ByteArray and erases its proof.
+/// The legacy List-Char source model retains its existing extraction path.
 pub(crate) fn cases_string_to_mono(
     cases: &Cases,
     state: &mut ToMonoState,
@@ -104,6 +110,46 @@ pub(crate) fn cases_string_to_mono(
     env: &Environment,
     depth: usize,
 ) -> Code {
+    if crate::string_layout::has_byte_array_string_layout(env) {
+        if let [Alt::Ctor {
+            ctor_name,
+            params,
+            body,
+        }] = cases.alts.as_slice()
+        {
+            if *ctor_name == Name::from_string("String.ofByteArray") {
+                // Generic cases puts the field projections inside the body;
+                // letvalue_to_mono rewrites those before RC insertion.
+                if params.is_empty() {
+                    return code_to_mono_with_depth(body, state, next_fvar, env, depth + 1);
+                }
+                if let [bytes, proof] = params.as_slice() {
+                    let mono_body = code_to_mono_with_depth(body, state, next_fvar, env, depth + 1);
+                    let proof_decl = LetDecl {
+                        fvar_id: proof.fvar_id,
+                        name: proof.name.clone(),
+                        ty: erased_expr(),
+                        value: LetValue::Erased,
+                    };
+                    let bytes_decl = LetDecl {
+                        fvar_id: bytes.fvar_id,
+                        name: bytes.name.clone(),
+                        ty: to_mono_type(&bytes.ty),
+                        value: LetValue::Const {
+                            name: Name::from_string("String.toByteArray"),
+                            levels: vec![],
+                            args: vec![Arg::FVar(cases.scrutinee)],
+                        },
+                    };
+                    return Code::Let(
+                        bytes_decl,
+                        Box::new(Code::Let(proof_decl, Box::new(mono_body))),
+                    );
+                }
+            }
+        }
+        return default_cases_to_mono(cases, state, next_fvar, env, depth);
+    }
     if let Some(Alt::Ctor { params, body, .. }) = cases.alts.first() {
         let p = params.first();
         let p_fvar = p.map(|p| p.fvar_id).unwrap_or_else(|| {
@@ -145,6 +191,9 @@ pub(crate) fn cases_byte_array_to_mono(
     depth: usize,
 ) -> Code {
     if let Some(Alt::Ctor { params, body, .. }) = cases.alts.first() {
+        if params.is_empty() {
+            return code_to_mono_with_depth(body, state, next_fvar, env, depth + 1);
+        }
         let p = params.first();
         let p_fvar = p.map(|p| p.fvar_id).unwrap_or_else(|| {
             let fvar = FVarId::new(*next_fvar);
@@ -334,7 +383,7 @@ pub(crate) fn cases_task_to_mono(
 /// ```text
 /// let val := x; body
 /// ```
-pub fn trivial_struct_to_mono(
+pub(crate) fn trivial_struct_to_mono(
     info: &TrivialStructureInfo,
     cases: &Cases,
     state: &mut ToMonoState,

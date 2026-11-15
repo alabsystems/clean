@@ -11,6 +11,8 @@ use crate::cli::toolchain;
 use crate::config::LakeConfig;
 use crate::error::{LakeError, LakeResult};
 use crate::manifest::{LakeManifest, ManifestPackage};
+use clean_kernel::{name::NameInner, Name};
+use clean_parser::SurfaceName;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -28,7 +30,9 @@ pub struct Workspace {
     /// Lake manifest from lake-manifest.json (if present)
     manifest: Option<LakeManifest>,
     /// Resolved module paths
-    module_paths: HashMap<String, PathBuf>,
+    module_paths: HashMap<Name, PathBuf>,
+    /// Indexing refusals remain visible; a checked graph/build cannot ignore them.
+    module_index_errors: Vec<String>,
     /// Directory that replaces the configured build directory while set.
     ///
     /// Used by check-only builds, which must write their `.olean` files
@@ -69,6 +73,7 @@ impl Workspace {
             toolchain_version,
             manifest,
             module_paths: HashMap::new(),
+            module_index_errors: Vec::new(),
             build_dir_override: None,
         };
 
@@ -102,6 +107,7 @@ impl Workspace {
             toolchain_version,
             manifest: None,
             module_paths: HashMap::new(),
+            module_index_errors: Vec::new(),
             build_dir_override: None,
         }
     }
@@ -144,6 +150,7 @@ impl Workspace {
             toolchain_version,
             manifest,
             module_paths: HashMap::new(),
+            module_index_errors: Vec::new(),
             build_dir_override: None,
         };
 
@@ -173,13 +180,13 @@ impl Workspace {
 
     /// Get the resolved toolchain version from `lean-toolchain`, if present.
     #[must_use]
-    pub fn toolchain_version(&self) -> Option<&str> {
+    pub(crate) fn toolchain_version(&self) -> Option<&str> {
         self.toolchain_version.as_deref()
     }
 
     /// Get the manifest (if present)
     #[must_use]
-    pub fn manifest(&self) -> Option<&LakeManifest> {
+    pub(crate) fn manifest(&self) -> Option<&LakeManifest> {
         self.manifest.as_ref()
     }
 
@@ -249,7 +256,7 @@ impl Workspace {
 
     /// Get the packages directory
     #[must_use]
-    pub fn packages_dir(&self) -> PathBuf {
+    pub(crate) fn packages_dir(&self) -> PathBuf {
         self.manifest.as_ref().map_or_else(
             || self.root.join(".lake/packages"),
             |m| self.root.join(&m.packages_dir),
@@ -259,6 +266,7 @@ impl Workspace {
     /// Index all module files in the workspace
     fn index_modules(&mut self) {
         self.module_paths.clear();
+        self.module_index_errors.clear();
 
         for src_dir in self.source_dirs() {
             if !src_dir.exists() {
@@ -284,57 +292,156 @@ impl Workspace {
                 .follow_links(true)
                 .into_iter()
                 .filter_entry(|e| e.depth() == 0 || e.file_name() != ".lake")
-                .filter_map(Result::ok)
             {
-                let path = entry.path();
-                if path.file_name().is_some_and(|name| name == "lakefile.lean") {
-                    continue;
-                }
-                if path.extension().is_some_and(|e| e == "lean") {
-                    // Convert path to module name
-                    if let Ok(rel_path) = path.strip_prefix(&src_dir) {
-                        let module_name = Self::path_to_module_name(rel_path);
+                let entry = match entry {
+                    Ok(entry) => entry,
+                    Err(error) => {
+                        self.module_index_errors.push(error.to_string());
+                        continue;
+                    }
+                };
+                self.index_module_path(&src_dir, entry.path());
+            }
+        }
+    }
+
+    /// Process one path delivered by the workspace walker. Keeping the exact
+    /// path boundary separate also lets non-UTF8 refusal be tested on filesystems
+    /// that reject such directory entries before the walker can see them.
+    fn index_module_path(&mut self, src_dir: &Path, path: &Path) {
+        if path.file_name().is_some_and(|name| name == "lakefile.lean") {
+            return;
+        }
+        if path
+            .extension()
+            .is_some_and(|extension| extension == "lean")
+        {
+            if let Ok(relative) = path.strip_prefix(src_dir) {
+                match Self::path_to_module_name(relative) {
+                    Ok(module_name) => {
                         self.module_paths
                             .entry(module_name)
                             .or_insert_with(|| path.to_path_buf());
                     }
+                    Err(error) => self
+                        .module_index_errors
+                        .push(format!("{}: {error}", path.display())),
                 }
             }
         }
     }
 
     /// Convert a relative path to a module name
-    fn path_to_module_name(path: &Path) -> String {
-        let parts: Vec<_> = path
-            .with_extension("")
-            .components()
-            .filter_map(|c| c.as_os_str().to_str())
-            .map(String::from)
-            .collect();
-
-        parts.join(".")
+    fn path_to_module_name(path: &Path) -> LakeResult<Name> {
+        let mut name = Name::anon();
+        for component in path.with_extension("").components() {
+            let std::path::Component::Normal(text) = component else {
+                return Err(LakeError::InvalidConfig(
+                    "module path must be relative normal components".into(),
+                ));
+            };
+            let text = text.to_str().ok_or_else(|| {
+                LakeError::InvalidConfig("module path has a non-UTF8 component".into())
+            })?;
+            name = name.str(text);
+        }
+        Self::module_name_path(&name, "lean")?;
+        Ok(name)
     }
 
-    /// Convert a module name to a relative path
-    fn module_name_to_path(module_name: &str) -> PathBuf {
-        let parts: Vec<&str> = module_name.split('.').collect();
+    /// Convert a module name to a relative path.
+    ///
+    /// TEST-ONLY: the five call sites are all in the `#[cfg(test)]` child
+    /// `workspace_tests.rs`, so the lib unit correctly sees it as dead. Gated
+    /// rather than deleted -- deleting it breaks those tests, and leaving it
+    /// ungated reds `clippy --workspace --all-targets -- -D warnings`.
+    #[cfg(test)]
+    fn module_name_to_path(module_name: &str) -> LakeResult<PathBuf> {
+        Self::module_name_path(&Self::parse_module_name(module_name)?, "lean")
+    }
+
+    pub(crate) fn parse_module_name(spelling: &str) -> LakeResult<Name> {
+        let name = clean_parser::parse_name(spelling)
+            .map_err(|error| LakeError::InvalidConfig(format!("invalid module name: {error}")))?;
+        if name.is_relative_constructor() {
+            return Err(LakeError::InvalidConfig(
+                "relative constructor is not a module name".into(),
+            ));
+        }
+        Ok(name.into_name())
+    }
+
+    fn module_source_spelling(name: &Name) -> LakeResult<String> {
+        let spelling = SurfaceName::from_name(name.clone())
+            .source_spelling()
+            .ok_or_else(|| {
+                LakeError::InvalidConfig("module has no source identifier spelling".into())
+            })?;
+        if Self::parse_module_name(&spelling)? != *name {
+            return Err(LakeError::InvalidConfig(
+                "module source spelling changes structural identity".into(),
+            ));
+        }
+        Ok(spelling)
+    }
+
+    /// Filesystem components are Str only. Append the suffix to the leaf:
+    /// replacing an extension would collapse `«A.B»` into `A.lean`.
+    fn module_name_path(name: &Name, suffix: &str) -> LakeResult<PathBuf> {
+        let mut parts = Vec::new();
+        let mut current = name;
+        loop {
+            match current.inner() {
+                NameInner::Anon => break,
+                NameInner::Str(parent, text) => {
+                    if text.is_empty()
+                        || matches!(text.as_ref(), "." | "..")
+                        || text.contains(['/', '\\', '\0'])
+                    {
+                        return Err(LakeError::InvalidConfig(
+                            "module name has an invalid filesystem component".into(),
+                        ));
+                    }
+                    parts.push(text.as_ref());
+                    current = parent;
+                }
+                NameInner::Num(..) => {
+                    return Err(LakeError::InvalidConfig(
+                        "numeric Name component has no module source path".into(),
+                    ))
+                }
+            }
+        }
+        if parts.is_empty() {
+            return Err(LakeError::InvalidConfig(
+                "anonymous module name has no source path".into(),
+            ));
+        }
         let mut path = PathBuf::new();
-        for part in parts {
+        for part in parts.into_iter().rev() {
             path.push(part);
         }
-        path.with_extension("lean")
+        let mut bytes = path.into_os_string();
+        bytes.push(format!(".{suffix}"));
+        Ok(PathBuf::from(bytes))
     }
 
     /// Find a module's source file
     #[must_use]
     pub fn find_module(&self, module_name: &str) -> Option<PathBuf> {
+        self.find_module_name(&Self::parse_module_name(module_name).ok()?)
+    }
+
+    /// Resolve the exact typed module name without display parsing.
+    #[must_use]
+    pub fn find_module_name(&self, module_name: &Name) -> Option<PathBuf> {
+        let rel_path = Self::module_name_path(module_name, "lean").ok()?;
         // Check indexed modules first
         if let Some(path) = self.module_paths.get(module_name) {
             return Some(path.clone());
         }
 
         // Try to construct path
-        let rel_path = Self::module_name_to_path(module_name);
         for src_dir in self.source_dirs() {
             let src_path = src_dir.join(&rel_path);
             if src_path.exists() {
@@ -353,29 +460,56 @@ impl Workspace {
         None
     }
 
-    /// Get the .olean file path for a module
+    /// The directory of the DEPENDENCY package [`Self::find_module_name`]
+    /// resolves `module_name` into, or `None` when it resolves into this
+    /// workspace's own package (or nowhere). Same search order, so the
+    /// package named is the one whose source is elaborated.
     #[must_use]
-    pub fn olean_path(&self, module_name: &str) -> PathBuf {
-        let rel_path = Self::module_name_to_path(module_name).with_extension("olean");
-        self.lib_dir().join(rel_path)
+    pub(crate) fn module_package_dir(&self, module_name: &Name) -> Option<PathBuf> {
+        if self.module_paths.contains_key(module_name) {
+            return None;
+        }
+        let rel_path = Self::module_name_path(module_name, "lean").ok()?;
+        if self
+            .source_dirs()
+            .iter()
+            .any(|dir| dir.join(&rel_path).exists())
+        {
+            return None;
+        }
+        self.package_dirs()
+            .into_iter()
+            .find(|dir| dir.join(&rel_path).exists())
+    }
+
+    /// Get the .olean file path for a module
+    pub fn olean_path(&self, module_name: &str) -> LakeResult<PathBuf> {
+        self.olean_path_name(&Self::parse_module_name(module_name)?)
+    }
+
+    /// Checked output path for an exact typed module identity.
+    pub(crate) fn olean_path_name(&self, module_name: &Name) -> LakeResult<PathBuf> {
+        Ok(self
+            .lib_dir()
+            .join(Self::module_name_path(module_name, "olean")?))
     }
 
     /// Get the .olean.server file path for a module.
     ///
     /// This corresponds to `OLeanLevel::Server` and contains LSP server metadata.
     /// The file is only loaded if the base .olean exists (server-gates-private semantics).
-    #[must_use]
-    pub fn olean_server_path(&self, module_name: &str) -> PathBuf {
-        self.olean_path(module_name).with_extension("olean.server")
+    pub fn olean_server_path(&self, module_name: &str) -> LakeResult<PathBuf> {
+        Ok(self.olean_path(module_name)?.with_extension("olean.server"))
     }
 
     /// Get the .olean.private file path for a module.
     ///
     /// This corresponds to `OLeanLevel::Private` and contains private implementation details.
     /// The file is only loaded if both the base .olean and .olean.server exist.
-    #[must_use]
-    pub fn olean_private_path(&self, module_name: &str) -> PathBuf {
-        self.olean_path(module_name).with_extension("olean.private")
+    pub fn olean_private_path(&self, module_name: &str) -> LakeResult<PathBuf> {
+        Ok(self
+            .olean_path(module_name)?
+            .with_extension("olean.private"))
     }
 
     /// Platform path-list separator (`;` on Windows, `:` elsewhere).
@@ -406,8 +540,9 @@ impl Workspace {
     /// This is the single definition of what `lake env` means, shared by the
     /// reporting path and by the child-process path. They used to disagree:
     /// the library printed `LEAN_PATH=…` while the CLI spawned `lake env <cmd>`
-    /// with nothing but inherited environment, so `lake env lean Foo.lean`
-    /// could not resolve a single import.
+    /// with nothing but inherited environment, so a tool run that way could
+    /// not resolve a single import. (The CLI refuses a Lean toolchain program
+    /// there; see `clean-cli`'s `cmd_lake/env_guard.rs`.)
     #[must_use]
     pub fn env_pairs(&self) -> Vec<(String, String)> {
         vec![
@@ -456,48 +591,111 @@ impl Workspace {
     /// lib's module set is determined by its globs. When `globs` is empty the
     /// historical root-based selection is preserved unchanged: each root module
     /// plus every module whose name has that root as a prefix.
-    pub fn lib_modules(&self, lib_name: &str) -> Vec<String> {
+    pub fn lib_modules(&self, lib_name: &str) -> LakeResult<Vec<String>> {
+        self.lib_module_names(lib_name)?
+            .iter()
+            .map(Self::module_source_spelling)
+            .collect()
+    }
+
+    /// Library selection compares typed component prefixes, never rendered dots.
+    pub(crate) fn lib_module_names(&self, lib_name: &str) -> LakeResult<Vec<Name>> {
+        self.validate_module_index()?;
         let Some(lib) = self.config.libs.iter().find(|l| l.name == lib_name) else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
 
         if !lib.globs.is_empty() {
-            let globs = crate::glob::parse_globs(&lib.globs);
-            let mut modules: Vec<String> = self
-                .module_paths
-                .keys()
-                .filter(|name| globs.iter().any(|g| g.matches(name)))
-                .cloned()
-                .collect();
-            modules.sort();
-            return modules;
+            let mut globs = Vec::new();
+            for spec in &lib.globs {
+                let glob = crate::glob::ModuleGlob::parse(spec).ok_or_else(|| {
+                    LakeError::InvalidConfig(format!("invalid module glob: {spec}"))
+                })?;
+                globs.push((Self::parse_module_name(&glob.module)?, glob.kind));
+            }
+            let mut modules = Vec::new();
+            for name in self.all_module_names() {
+                if globs.iter().any(|(root, kind)| match kind {
+                    crate::glob::GlobKind::One => &name == root,
+                    crate::glob::GlobKind::AndSubmodules => Self::name_is_under(&name, root),
+                    crate::glob::GlobKind::Submodules => {
+                        &name != root && Self::name_is_under(&name, root)
+                    }
+                }) {
+                    modules.push(name);
+                }
+            }
+            return Ok(modules);
         }
 
-        // No explicit globs: preserve the historical root-prefix behavior
-        // exactly (the default glob set in Lake is each root as
-        // `.andSubmodules`, but the legacy prefix match is retained verbatim
-        // so build outputs for glob-free libs are unchanged).
+        // A module prefix is a component prefix: Foo is not the parent of FooBar
+        // or of the single filesystem component «Foo.Bar».
         let roots = lib.root_modules();
         let mut modules = vec![];
         for root in roots {
+            let root = Self::parse_module_name(&root)?;
             // Add the root module
             modules.push(root.clone());
 
             // Add all submodules
             for name in self.module_paths.keys() {
-                if name.starts_with(&root) && name != &root {
+                if Self::name_is_under(name, &root) && name != &root {
                     modules.push(name.clone());
                 }
             }
         }
 
-        modules
+        modules.sort();
+        Ok(modules)
+    }
+
+    pub(crate) fn name_is_under(name: &Name, root: &Name) -> bool {
+        let mut current = name;
+        loop {
+            if current == root {
+                return true;
+            }
+            match current.inner() {
+                NameInner::Anon => return false,
+                NameInner::Str(parent, _) | NameInner::Num(parent, _) => current = parent,
+            }
+        }
+    }
+
+    /// Every filesystem entry that could not be indexed is retained explicitly.
+    #[must_use]
+    pub fn module_index_errors(&self) -> &[String] {
+        &self.module_index_errors
+    }
+
+    /// Refuse a partial index before using the typed module population.
+    pub fn validate_module_index(&self) -> LakeResult<()> {
+        if self.module_index_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(LakeError::InvalidConfig(format!(
+                "module indexing refused: {}",
+                self.module_index_errors.join("; ")
+            )))
+        }
+    }
+
+    /// Exact indexed module identities, including names without a source spelling.
+    /// Consumers needing a complete readable graph must also check indexing errors.
+    #[must_use]
+    pub fn all_module_names(&self) -> Vec<Name> {
+        let mut names: Vec<_> = self.module_paths.keys().cloned().collect();
+        names.sort();
+        names
     }
 
     /// Get all modules that need to be built
-    #[must_use]
-    pub fn all_modules(&self) -> Vec<String> {
-        self.module_paths.keys().cloned().collect()
+    pub fn all_modules(&self) -> LakeResult<Vec<String>> {
+        self.validate_module_index()?;
+        self.all_module_names()
+            .iter()
+            .map(Self::module_source_spelling)
+            .collect()
     }
 
     /// Parse direct source imports for every indexed module.
@@ -506,147 +704,65 @@ impl Workspace {
     /// external package imports because callers use it for source provenance
     /// and trust audits, not just local build scheduling.
     pub fn import_graph(&self) -> LakeResult<HashMap<String, Vec<String>>> {
+        self.import_graph_names()?
+            .into_iter()
+            .map(|(module, imports)| {
+                Ok((
+                    Self::module_source_spelling(&module)?,
+                    imports
+                        .iter()
+                        .map(Self::module_source_spelling)
+                        .collect::<LakeResult<_>>()?,
+                ))
+            })
+            .collect()
+    }
+
+    /// Source-order direct import names from the parser's typed header scanner.
+    /// This graph preserves duplicate source imports; it is not a build closure
+    /// or a completeness attestation for unsupported header syntax.
+    pub fn import_graph_names(&self) -> LakeResult<HashMap<Name, Vec<Name>>> {
+        self.validate_module_index()?;
         let mut graph = HashMap::new();
 
-        for module in self.all_modules() {
+        for module in self.all_module_names() {
             let src_path = self
-                .find_module(&module)
-                .ok_or_else(|| LakeError::ModuleNotFound(module.clone()))?;
+                .find_module_name(&module)
+                .ok_or_else(|| LakeError::ModuleNotFound(module.to_string()))?;
             let content = std::fs::read_to_string(src_path)?;
-            graph.insert(module, Self::imports_from_source(&content));
+            graph.insert(
+                module,
+                clean_parser::notation_seed::scan_imports(&content)
+                    .into_iter()
+                    .map(SurfaceName::into_name)
+                    .collect(),
+            );
         }
 
         Ok(graph)
     }
 
-    /// Extract the import statements declared in a Lean source string.
-    ///
-    /// Handles line and nested block comments, string literals, and the
-    /// `public`/`private import` qualifiers so commented-out or quoted imports
-    /// are not picked up.
-    pub(crate) fn imports_from_source(content: &str) -> Vec<String> {
-        let mut imports = Vec::new();
-        let mut block_comment_depth = 0usize;
-        let mut in_string = false;
-
-        for line in content.lines() {
-            let code =
-                Self::strip_non_code_from_line(line, &mut block_comment_depth, &mut in_string);
-            let tokens = code.split_whitespace().collect::<Vec<_>>();
-            let start = match tokens.as_slice() {
-                ["import", ..] => 1,
-                ["public", "import", ..] | ["private", "import", ..] => 2,
-                _ => continue,
-            };
-
-            for token in &tokens[start..] {
-                if matches!(*token, "all" | "public" | "private") {
-                    continue;
-                }
-                if let Some(module) = Self::normalize_lean_name_token(token) {
-                    if !imports.contains(&module) {
-                        imports.push(module);
-                    }
-                }
-            }
-        }
-
-        imports
-    }
-
-    fn normalize_lean_name_token(token: &str) -> Option<String> {
-        let token = token.trim_matches(|ch: char| {
-            !(ch.is_alphanumeric() || matches!(ch, '_' | '.' | '\'' | '«' | '»'))
-        });
-        (!token.is_empty()).then(|| token.to_string())
-    }
-
-    fn strip_non_code_from_line(
-        line: &str,
-        block_comment_depth: &mut usize,
-        in_string: &mut bool,
-    ) -> String {
-        let mut out = String::new();
-        let mut i = 0usize;
-        let bytes = line.as_bytes();
-
-        while i < line.len() {
-            if *block_comment_depth > 0 {
-                if bytes[i..].starts_with(b"/-") {
-                    *block_comment_depth += 1;
-                    i += 2;
-                } else if bytes[i..].starts_with(b"-/") {
-                    *block_comment_depth -= 1;
-                    i += 2;
-                } else {
-                    let ch = line[i..].chars().next().expect("valid char boundary");
-                    i += ch.len_utf8();
-                }
-                continue;
-            }
-
-            if *in_string {
-                if bytes[i] == b'\\' {
-                    i += 1;
-                    if i < line.len() {
-                        let ch = line[i..].chars().next().expect("valid char boundary");
-                        i += ch.len_utf8();
-                    }
-                } else if bytes[i] == b'"' {
-                    *in_string = false;
-                    i += 1;
-                } else {
-                    let ch = line[i..].chars().next().expect("valid char boundary");
-                    i += ch.len_utf8();
-                }
-                continue;
-            }
-
-            if bytes[i..].starts_with(b"--") {
-                break;
-            }
-            if bytes[i..].starts_with(b"/-") {
-                *block_comment_depth += 1;
-                i += 2;
-                continue;
-            }
-            if bytes[i] == b'"' {
-                *in_string = true;
-                out.push(' ');
-                i += 1;
-                continue;
-            }
-
-            let ch = line[i..].chars().next().expect("valid char boundary");
-            out.push(ch);
-            i += ch.len_utf8();
-        }
-
-        out
-    }
-
     /// Check if a module needs rebuilding
-    #[must_use]
-    pub fn needs_rebuild(&self, module_name: &str) -> bool {
+    pub fn needs_rebuild(&self, module_name: &str) -> LakeResult<bool> {
+        self.validate_module_index()?;
+        let olean = self.olean_path(module_name)?;
         let Some(src) = self.find_module(module_name) else {
-            return false;
+            return Err(LakeError::ModuleNotFound(module_name.into()));
         };
-
-        let olean = self.olean_path(module_name);
 
         // Rebuild if .olean doesn't exist
         if !olean.exists() {
-            return true;
+            return Ok(true);
         }
 
         // Rebuild if source is newer
         let src_time = std::fs::metadata(&src).and_then(|m| m.modified()).ok();
         let olean_time = std::fs::metadata(&olean).and_then(|m| m.modified()).ok();
 
-        match (src_time, olean_time) {
+        Ok(match (src_time, olean_time) {
             (Some(src_t), Some(olean_t)) => src_t > olean_t,
             _ => true,
-        }
+        })
     }
 
     /// Create workspace directories
@@ -657,7 +773,7 @@ impl Workspace {
     }
 
     /// Validate that declared dependencies are satisfied by the manifest
-    pub fn validate_dependencies(&self) -> LakeResult<()> {
+    pub(crate) fn validate_dependencies(&self) -> LakeResult<()> {
         if self.config.package.dependencies.is_empty() {
             return Ok(());
         }
@@ -671,249 +787,5 @@ impl Workspace {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_path_to_module_name() {
-        assert_eq!(
-            Workspace::path_to_module_name(Path::new("MyLib/Core.lean")),
-            "MyLib.Core"
-        );
-        assert_eq!(
-            Workspace::path_to_module_name(Path::new("Main.lean")),
-            "Main"
-        );
-        assert_eq!(
-            Workspace::path_to_module_name(Path::new("A/B/C.lean")),
-            "A.B.C"
-        );
-    }
-
-    #[test]
-    fn test_module_name_to_path() {
-        assert_eq!(
-            Workspace::module_name_to_path("MyLib.Core"),
-            PathBuf::from("MyLib/Core.lean")
-        );
-        assert_eq!(
-            Workspace::module_name_to_path("Main"),
-            PathBuf::from("Main.lean")
-        );
-    }
-
-    #[test]
-    fn test_workspace_new() {
-        let tmp = TempDir::new().unwrap();
-        let ws = Workspace::new(tmp.path(), "test");
-        assert_eq!(ws.config().package.name, "test");
-        assert!(ws.toolchain().is_none());
-    }
-
-    #[test]
-    fn test_workspace_load() {
-        let tmp = TempDir::new().unwrap();
-
-        // Create lakefile.lean
-        let lakefile = tmp.path().join("lakefile.lean");
-        fs::write(&lakefile, "package test\nlean_lib Test").unwrap();
-
-        // Create a source file
-        let src = tmp.path().join("Test.lean");
-        fs::write(&src, "-- Test module").unwrap();
-        fs::copy(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../tests/fixtures/lean_toolchain/repo-root/lean-toolchain"),
-            tmp.path().join("lean-toolchain"),
-        )
-        .unwrap();
-
-        let ws = Workspace::load(tmp.path()).unwrap();
-        assert_eq!(ws.config().package.name, "test");
-        assert_eq!(ws.toolchain(), Some("leanprover/lean4:v4.13.0"));
-        assert_eq!(ws.toolchain_version(), Some("v4.13.0"));
-        assert!(
-            ws.find_module("Test").is_some(),
-            "workspace should find 'Test' module"
-        );
-        assert!(
-            !ws.all_modules().iter().any(|module| module == "lakefile"),
-            "workspace should not index lakefile.lean as a buildable module"
-        );
-    }
-
-    #[test]
-    fn test_workspace_load_toml() {
-        let tmp = TempDir::new().unwrap();
-
-        // A TOML-configured project (no lakefile.lean) must load natively.
-        let lakefile = tmp.path().join("lakefile.toml");
-        fs::write(
-            &lakefile,
-            "name = \"test\"\n\n[[lean_lib]]\nname = \"Test\"\n",
-        )
-        .unwrap();
-
-        let src = tmp.path().join("Test.lean");
-        fs::write(&src, "-- Test module").unwrap();
-
-        let ws = Workspace::load(tmp.path()).unwrap();
-        assert_eq!(ws.config().package.name, "test");
-        assert!(
-            ws.find_module("Test").is_some(),
-            "TOML workspace should find 'Test' module"
-        );
-        assert!(
-            ws.config().libs.iter().any(|lib| lib.name == "Test"),
-            "TOML workspace should parse the [[lean_lib]] target"
-        );
-    }
-
-    #[test]
-    fn test_workspace_load_ignores_comment_lines_in_toolchain() {
-        let tmp = TempDir::new().unwrap();
-        let lakefile = tmp.path().join("lakefile.lean");
-        fs::write(&lakefile, "package test\nlean_lib Test").unwrap();
-        fs::write(
-            tmp.path().join("lean-toolchain"),
-            "\n# repo note\n-- Lean version\nleanprover/lean4:v4.29.1\n",
-        )
-        .unwrap();
-
-        let ws = Workspace::load(tmp.path()).unwrap();
-        assert_eq!(ws.toolchain(), Some("leanprover/lean4:v4.29.1"));
-        assert_eq!(ws.toolchain_version(), Some("v4.29.1"));
-    }
-
-    #[test]
-    fn test_workspace_load_rejects_multiple_toolchain_identifiers() {
-        let tmp = TempDir::new().unwrap();
-        let lakefile = tmp.path().join("lakefile.lean");
-        fs::write(&lakefile, "package test\nlean_lib Test").unwrap();
-        fs::write(
-            tmp.path().join("lean-toolchain"),
-            "leanprover/lean4:v4.29.1\nleanprover/lean4:v4.28.0\n",
-        )
-        .unwrap();
-
-        let err = Workspace::load(tmp.path()).unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("must contain a single toolchain identifier"));
-    }
-
-    #[test]
-    fn test_workspace_olean_path() {
-        let tmp = TempDir::new().unwrap();
-        let ws = Workspace::new(tmp.path(), "test");
-
-        let olean = ws.olean_path("MyLib.Core");
-        assert!(olean.to_string_lossy().contains("MyLib"));
-        assert!(olean.to_string_lossy().ends_with(".olean"));
-    }
-
-    /// Create a `.lean` source file for `module_name` under `root`,
-    /// translating the dotted module name into the matching directory layout.
-    fn write_module(root: &Path, module_name: &str) {
-        let rel = Workspace::module_name_to_path(module_name);
-        let path = root.join(rel);
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).unwrap();
-        }
-        fs::write(&path, format!("-- module {module_name}")).unwrap();
-    }
-
-    /// Build a workspace from an inline lakefile plus a set of module files.
-    fn workspace_with_modules(lakefile: &str, modules: &[&str]) -> (TempDir, Workspace) {
-        let tmp = TempDir::new().unwrap();
-        fs::write(tmp.path().join("lakefile.lean"), lakefile).unwrap();
-        for module in modules {
-            write_module(tmp.path(), module);
-        }
-        let ws = Workspace::load(tmp.path()).unwrap();
-        (tmp, ws)
-    }
-
-    #[test]
-    fn test_lib_modules_submodules_glob_excludes_self_and_unrelated() {
-        let lakefile = "package p\nlean_lib Foo where\n  globs := #[.submodules `Foo]\n";
-        let (_tmp, ws) =
-            workspace_with_modules(lakefile, &["Foo", "Foo.Bar", "Foo.Baz", "Qux", "FooBar"]);
-
-        let mut modules = ws.lib_modules("Foo");
-        modules.sort();
-
-        assert_eq!(
-            modules,
-            vec!["Foo.Bar".to_string(), "Foo.Baz".to_string()],
-            ".submodules Foo should include Foo.Bar/Foo.Baz but not Foo, Qux, or FooBar"
-        );
-    }
-
-    #[test]
-    fn test_lib_modules_and_submodules_glob_includes_self() {
-        let lakefile = "package p\nlean_lib Foo where\n  globs := #[.andSubmodules `Foo]\n";
-        let (_tmp, ws) = workspace_with_modules(lakefile, &["Foo", "Foo.Bar", "Qux"]);
-
-        let mut modules = ws.lib_modules("Foo");
-        modules.sort();
-
-        assert_eq!(
-            modules,
-            vec!["Foo".to_string(), "Foo.Bar".to_string()],
-            ".andSubmodules Foo should include Foo and Foo.Bar but not Qux"
-        );
-    }
-
-    #[test]
-    fn test_lib_modules_one_glob_includes_only_named_module() {
-        let lakefile = "package p\nlean_lib Foo where\n  globs := #[.one `Foo]\n";
-        let (_tmp, ws) = workspace_with_modules(lakefile, &["Foo", "Foo.Bar", "Qux"]);
-
-        let modules = ws.lib_modules("Foo");
-
-        assert_eq!(
-            modules,
-            vec!["Foo".to_string()],
-            ".one Foo should include only Foo"
-        );
-    }
-
-    #[test]
-    fn test_lib_modules_empty_globs_preserves_root_prefix_behavior() {
-        // Regression pin: a lib without explicit globs must behave exactly as
-        // before — each root plus every module whose name has the root as a
-        // prefix (legacy prefix match, no glob filtering).
-        let lakefile = "package p\nlean_lib Foo\n";
-        let (_tmp, ws) = workspace_with_modules(lakefile, &["Foo", "Foo.Bar", "Foo.Baz", "Qux"]);
-
-        let mut modules = ws.lib_modules("Foo");
-        modules.sort();
-
-        assert_eq!(
-            modules,
-            vec!["Foo".to_string(), "Foo.Bar".to_string(), "Foo.Baz".to_string()],
-            "empty globs should include the root and its prefixed submodules, excluding unrelated Qux"
-        );
-    }
-
-    #[test]
-    fn test_lib_modules_union_of_multiple_globs() {
-        let lakefile = "package p\nlean_lib Lib where\n  globs := #[.one `Foo, .submodules `Bar]\n";
-        let (_tmp, ws) = workspace_with_modules(
-            lakefile,
-            &["Foo", "Foo.Inner", "Bar", "Bar.A", "Bar.B", "Qux"],
-        );
-
-        let mut modules = ws.lib_modules("Lib");
-        modules.sort();
-
-        assert_eq!(
-            modules,
-            vec!["Bar.A".to_string(), "Bar.B".to_string(), "Foo".to_string()],
-            "union of .one Foo and .submodules Bar"
-        );
-    }
-}
+#[path = "workspace_tests.rs"]
+mod tests;

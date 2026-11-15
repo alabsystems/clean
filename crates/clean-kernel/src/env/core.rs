@@ -945,6 +945,21 @@ impl Environment {
             vec![Name::from_string("val"), Name::from_string("property")],
         )?;
 
+        // Through the checked metadata boundary, as every other producer of
+        // binder metadata outside elaboration's registration sites: the names
+        // and kinds are validated against the constructor just admitted,
+        // slot for slot and complete, before anything is written.
+        self.add_checked_param_infos(
+            &Name::from_string("Subtype.mk"),
+            vec![
+                (Name::from_string("α"), BinderInfo::Implicit),
+                (Name::from_string("p"), BinderInfo::Implicit),
+                (Name::from_string("val"), BinderInfo::Default),
+                (Name::from_string("property"), BinderInfo::Default),
+            ],
+            true,
+        )?;
+
         self.subtype_init = true;
         Ok(())
     }

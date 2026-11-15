@@ -102,6 +102,7 @@ use clean_parser::{DoElem, QAntiquotContent, Span, SurfaceArg, SurfaceExpr, Surf
 use super::registration::{quotation_category, MacroRegistrationError};
 use crate::infer::user_tactic::{as_throw_error_message_in, is_throw_error_call};
 use clean_macro::{Syntax, SyntaxQuote};
+use clean_parser::SurfaceName;
 
 /// Reserved prefix marking a `let`-binding introduced by a fresh-name effect
 /// (`mkFreshId` / `addMacroScope`). A `$name` resolving to such a binding is
@@ -114,7 +115,7 @@ const FRESH_MARKER_SENTINEL: &str = "__clean_fresh_marker__";
 /// names in the arm's pattern, e.g. `["x"]` for `` `(wrap $x) ``). A `$name`
 /// referencing one of these is a *pattern* variable and stays an antiquotation
 /// in the produced quotation; any other `$name` must resolve to a `let` binding.
-type PatternVars = [String];
+type PatternVars = [SurfaceName];
 
 /// If `arm_expansion` is a *computed* (`do`-block) `macro_rules` RHS, evaluate
 /// the supported subset to the equivalent quotation and return it as a
@@ -166,7 +167,7 @@ fn eval_do_block(
     // Quotation bindings introduced by leading `let n := `(…)`` or
     // `let n <- `(…)`` statements. Each value is the *parsed body* of the bound
     // quotation, ready to splice.
-    let mut env: Vec<(String, SurfaceExpr)> = Vec::new();
+    let mut env: Vec<(SurfaceName, SurfaceExpr)> = Vec::new();
 
     let Some((last, leading)) = elems.split_last() else {
         return Err(unsupported("empty do-block has no quotation value"));
@@ -177,7 +178,7 @@ fn eval_do_block(
             // A pure `let n := `(…)`` binds a quotation value usable by later
             // `$n` antiquotations. The bound value must itself be a quotation we
             // can resolve in the current environment.
-            DoElem::Let(_, binder, value) => {
+            DoElem::Let(_, binder, value) | DoElem::Have(_, binder, value) => {
                 // `let f := addMacroScope ident` introduces a fresh hygienic
                 // name per expansion. Bind it to a fresh-marker sentinel rather
                 // than resolving a quotation.
@@ -227,7 +228,7 @@ fn eval_do_block(
 fn eval_value_elem(
     elem: &DoElem,
     pattern_vars: &PatternVars,
-    env: &[(String, SurfaceExpr)],
+    env: &[(SurfaceName, SurfaceExpr)],
 ) -> Result<SyntaxQuote, MacroRegistrationError> {
     match elem {
         // `return `(…)`` or a bare trailing `` `(…) ``: the value is a quotation,
@@ -266,7 +267,7 @@ fn eval_value_elem(
 fn eval_value_expr(
     value: &SurfaceExpr,
     pattern_vars: &PatternVars,
-    env: &[(String, SurfaceExpr)],
+    env: &[(SurfaceName, SurfaceExpr)],
 ) -> Result<SyntaxQuote, MacroRegistrationError> {
     let SurfaceExpr::SyntaxQuote(_, content) = value else {
         return Err(unsupported(
@@ -311,29 +312,42 @@ fn fresh_name_prefix(value: &SurfaceExpr) -> Option<&'static str> {
 }
 
 /// Whether `name` denotes the `mkFreshId` fresh-identifier effect.
-fn is_fresh_id_ident(name: &str) -> bool {
-    matches!(
-        name,
-        "mkFreshId" | "Lean.mkFreshId" | "mkFreshUserName" | "Lean.Macro.mkFreshId"
-    )
+fn is_fresh_id_ident(name: &SurfaceName) -> bool {
+    [
+        "mkFreshId",
+        "Lean.mkFreshId",
+        "mkFreshUserName",
+        "Lean.Macro.mkFreshId",
+    ]
+    .iter()
+    .any(|path| name == &SurfaceName::generated_path(path))
 }
 
 /// Whether `name` denotes the `addMacroScope` hygiene effect.
-fn is_add_macro_scope_ident(name: &str) -> bool {
-    matches!(
-        name,
-        "addMacroScope"
-            | "Lean.addMacroScope"
-            | "MonadQuotation.addMacroScope"
-            | "Lean.MonadQuotation.addMacroScope"
-    )
+fn is_add_macro_scope_ident(name: &SurfaceName) -> bool {
+    [
+        "addMacroScope",
+        "Lean.addMacroScope",
+        "MonadQuotation.addMacroScope",
+        "Lean.MonadQuotation.addMacroScope",
+    ]
+    .iter()
+    .any(|path| name == &SurfaceName::generated_path(path))
 }
 
 /// Build the sentinel `SurfaceExpr` a fresh-name binding resolves to: a bare
 /// identifier whose name carries the [`FRESH_MARKER_SENTINEL`] prefix plus the
 /// gensym prefix. [`rewrite_fresh_markers`] turns it into a fresh-marker node.
 fn fresh_marker_sentinel(prefix: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), format!("{FRESH_MARKER_SENTINEL}{prefix}"))
+    SurfaceExpr::Ident(
+        Span::dummy(),
+        SurfaceName::from_name(
+            clean_kernel::Name::anon()
+                .str(FRESH_MARKER_SENTINEL)
+                .num(0)
+                .str(prefix),
+        ),
+    )
 }
 
 /// Rewrite every sentinel identifier (see [`fresh_marker_sentinel`]) in a lowered
@@ -343,11 +357,16 @@ fn fresh_marker_sentinel(prefix: &str) -> SurfaceExpr {
 fn rewrite_fresh_markers(syntax: Syntax) -> Syntax {
     match syntax {
         Syntax::Ident(_, ref name) => {
-            if let Some(prefix) = name.strip_prefix(FRESH_MARKER_SENTINEL) {
-                Syntax::mk_fresh_marker(prefix)
-            } else {
-                syntax
+            // An internal numeric component distinguishes the marker from
+            // every source spelling, including escaped sentinel-like names.
+            if let clean_kernel::name::NameInner::Str(base, prefix) = name.name().inner() {
+                if base.as_ref() == &clean_kernel::Name::anon().str(FRESH_MARKER_SENTINEL).num(0) {
+                    return Syntax::mk_fresh_marker(&SurfaceName::from_name(
+                        clean_kernel::Name::anon().str(prefix.as_ref()),
+                    ));
+                }
             }
+            syntax
         }
         Syntax::Node(node) => {
             let kind = node.kind.clone();
@@ -396,7 +415,7 @@ fn rewrite_fresh_markers(syntax: Syntax) -> Syntax {
 /// defers honestly rather than rendering a template as if it were a value.
 fn eval_throw_error(
     value: &SurfaceExpr,
-    env: &[(String, SurfaceExpr)],
+    env: &[(SurfaceName, SurfaceExpr)],
 ) -> Option<Result<SyntaxQuote, MacroRegistrationError>> {
     if !is_throw_error_call(value) {
         return None;
@@ -418,7 +437,7 @@ fn eval_throw_error(
 fn resolve_value_to_body(
     value: &SurfaceExpr,
     pattern_vars: &PatternVars,
-    env: &[(String, SurfaceExpr)],
+    env: &[(SurfaceName, SurfaceExpr)],
 ) -> Result<SurfaceExpr, MacroRegistrationError> {
     let SurfaceExpr::SyntaxQuote(_, content) = value else {
         return Err(unsupported(
@@ -438,7 +457,7 @@ fn resolve_value_to_body(
 fn resolve_antiquots(
     expr: &SurfaceExpr,
     pattern_vars: &PatternVars,
-    env: &[(String, SurfaceExpr)],
+    env: &[(SurfaceName, SurfaceExpr)],
 ) -> Result<SurfaceExpr, MacroRegistrationError> {
     match expr {
         SurfaceExpr::QAntiquot {
@@ -544,7 +563,7 @@ fn resolve_antiquots(
 /// antiquotations are the matched pattern variables. A pattern we cannot parse
 /// yields an empty set (so every `$name` in the body must then resolve to a
 /// `let` binding, and an unresolved one defers honestly).
-fn collect_pattern_vars(pattern: &SurfaceExpr) -> Vec<String> {
+fn collect_pattern_vars(pattern: &SurfaceExpr) -> Vec<SurfaceName> {
     let SurfaceExpr::SyntaxQuote(_, content) = pattern else {
         return Vec::new();
     };
@@ -557,7 +576,7 @@ fn collect_pattern_vars(pattern: &SurfaceExpr) -> Vec<String> {
 }
 
 /// Walk a parsed quotation body, recording every `$name` simple antiquotation.
-fn collect_simple_antiquots(expr: &SurfaceExpr, out: &mut Vec<String>) {
+fn collect_simple_antiquots(expr: &SurfaceExpr, out: &mut Vec<SurfaceName>) {
     match expr {
         SurfaceExpr::QAntiquot {
             content: QAntiquotContent::Simple(name),
@@ -589,8 +608,20 @@ fn collect_simple_antiquots(expr: &SurfaceExpr, out: &mut Vec<String>) {
 /// metaprogram-time `if` in the subset decides on).
 fn literal_bool(expr: &SurfaceExpr) -> Option<bool> {
     match expr {
-        SurfaceExpr::Ident(_, name) if name == "true" || name == "True" => Some(true),
-        SurfaceExpr::Ident(_, name) if name == "false" || name == "False" => Some(false),
+        SurfaceExpr::Ident(_, name)
+            if ["true", "True"]
+                .iter()
+                .any(|path| name == &SurfaceName::generated_path(path)) =>
+        {
+            Some(true)
+        }
+        SurfaceExpr::Ident(_, name)
+            if ["false", "False"]
+                .iter()
+                .any(|path| name == &SurfaceName::generated_path(path)) =>
+        {
+            Some(false)
+        }
         SurfaceExpr::Paren(_, inner) => literal_bool(inner),
         _ => None,
     }

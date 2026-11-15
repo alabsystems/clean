@@ -1,0 +1,5 @@
+(set-logic QF_LIA)
+(declare-const |-1| Int)
+(assert (= |-1| 3))
+(assert (not (= |-1| 3)))
+(check-sat)

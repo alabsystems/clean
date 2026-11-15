@@ -41,38 +41,38 @@ use crate::spec::Specification;
 //   1.9999999999999998 = 4611686018427387903 (the ceil-carry edge)
 
 // ── fneg / fabs: the sign-bit operations ───────────────────────────────────
-const SRC_WR_FNEG_ONE: &str = "def ir_exact_fneg_one : Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
-const SRC_WR_FNEG_MZERO: &str = "def ir_exact_fneg_mzero : Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 0)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
-const SRC_WR_FNEG_NAN: &str = "def ir_exact_fneg_nan : Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.float_ 18444492273895866368)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 18444492273895866368))";
-const SRC_WR_FNEG_JUNK: &str = "def ir_exact_fneg_junk_refused : Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 18446744073709551616)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
-const SRC_WR_FABS_MONE: &str = "def ir_exact_fabs_mone : Eq IRStepResult (ir_unop_eval IRUnOp.fabs (IRTy.float_ 64) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
-const SRC_WR_FABS_MZERO: &str = "def ir_exact_fabs_mzero : Eq IRStepResult (ir_unop_eval IRUnOp.fabs (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 0)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
-const SRC_WR_FABS_NAN_NEG: &str = "def ir_exact_fabs_nan_neg : Eq IRStepResult (ir_unop_eval IRUnOp.fabs (IRTy.float_ 64) (IRScalar.float_ 18444492273895866368)) (IRStepResult.value (IRScalar.float_ 9221120237041090560)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9221120237041090560))";
+const SRC_WR_FNEG_ONE: &str = "def ir_exact_fneg_one : @Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
+const SRC_WR_FNEG_MZERO: &str = "def ir_exact_fneg_mzero : @Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 0)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
+const SRC_WR_FNEG_NAN: &str = "def ir_exact_fneg_nan : @Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.float_ 18444492273895866368)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 18444492273895866368))";
+const SRC_WR_FNEG_JUNK: &str = "def ir_exact_fneg_junk_refused : @Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 64) (IRScalar.float_ 18446744073709551616)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
+const SRC_WR_FABS_MONE: &str = "def ir_exact_fabs_mone : @Eq IRStepResult (ir_unop_eval IRUnOp.fabs (IRTy.float_ 64) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
+const SRC_WR_FABS_MZERO: &str = "def ir_exact_fabs_mzero : @Eq IRStepResult (ir_unop_eval IRUnOp.fabs (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 0)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
+const SRC_WR_FABS_NAN_NEG: &str = "def ir_exact_fabs_nan_neg : @Eq IRStepResult (ir_unop_eval IRUnOp.fabs (IRTy.float_ 64) (IRScalar.float_ 18444492273895866368)) (IRStepResult.value (IRScalar.float_ 9221120237041090560)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9221120237041090560))";
 
 // ── fmin / fmax: the NaN-ignoring minimum/maximum ──────────────────────────
-const SRC_WR_FMIN_ORD: &str = "def ir_exact_fmin_ordered : Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
-const SRC_WR_FMAX_ORD: &str = "def ir_exact_fmax_ordered : Eq IRStepResult (ir_binop_eval IRBinOp.fmax (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
-const SRC_WR_FMIN_NEG: &str = "def ir_exact_fmin_neg_pair : Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 13835058055282163712) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.float_ 13835058055282163712)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13835058055282163712))";
-const SRC_WR_FMIN_NAN_L: &str = "def ir_exact_fmin_nan_left : Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
-const SRC_WR_FMAX_NAN_R: &str = "def ir_exact_fmax_nan_right : Eq IRStepResult (ir_binop_eval IRBinOp.fmax (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
-const SRC_WR_FMIN_NINF: &str = "def ir_exact_fmin_ninf : Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 18442240474082181120) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.float_ 18442240474082181120)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 18442240474082181120))";
-const SRC_WR_FMIN_NAN_BOTH: &str = "def ir_exact_fmin_nan_both_refused : Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
-const SRC_WR_FMIN_ZPAIR: &str = "def ir_exact_fmin_zero_pair_refused : Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 0) (IRScalar.float_ 9223372036854775808)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
-const SRC_WR_FMAX_ZPAIR: &str = "def ir_exact_fmax_zero_pair_refused : Eq IRStepResult (ir_binop_eval IRBinOp.fmax (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
+const SRC_WR_FMIN_ORD: &str = "def ir_exact_fmin_ordered : @Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
+const SRC_WR_FMAX_ORD: &str = "def ir_exact_fmax_ordered : @Eq IRStepResult (ir_binop_eval IRBinOp.fmax (IRTy.float_ 64) (IRScalar.float_ 4607182418800017408) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
+const SRC_WR_FMIN_NEG: &str = "def ir_exact_fmin_neg_pair : @Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 13835058055282163712) (IRScalar.float_ 13830554455654793216)) (IRStepResult.value (IRScalar.float_ 13835058055282163712)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13835058055282163712))";
+const SRC_WR_FMIN_NAN_L: &str = "def ir_exact_fmin_nan_left : @Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
+const SRC_WR_FMAX_NAN_R: &str = "def ir_exact_fmax_nan_right : @Eq IRStepResult (ir_binop_eval IRBinOp.fmax (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904) (IRScalar.float_ 9221120237041090560)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
+const SRC_WR_FMIN_NINF: &str = "def ir_exact_fmin_ninf : @Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 18442240474082181120) (IRScalar.float_ 4607182418800017408)) (IRStepResult.value (IRScalar.float_ 18442240474082181120)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 18442240474082181120))";
+const SRC_WR_FMIN_NAN_BOTH: &str = "def ir_exact_fmin_nan_both_refused : @Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560) (IRScalar.float_ 9221120237041090560)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
+const SRC_WR_FMIN_ZPAIR: &str = "def ir_exact_fmin_zero_pair_refused : @Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 64) (IRScalar.float_ 0) (IRScalar.float_ 9223372036854775808)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
+const SRC_WR_FMAX_ZPAIR: &str = "def ir_exact_fmax_zero_pair_refused : @Eq IRStepResult (ir_binop_eval IRBinOp.fmax (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808) (IRScalar.float_ 0)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
 
 // ── ffloor / fceil / ftrunc: exponent-guided integer rounding ──────────────
-const SRC_WR_FLOOR_POS: &str = "def ir_exact_ffloor_pos : Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 4609434218613702656)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
-const SRC_WR_FLOOR_NEG: &str = "def ir_exact_ffloor_neg : Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 13832806255468478464)) (IRStepResult.value (IRScalar.float_ 13835058055282163712)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13835058055282163712))";
-const SRC_WR_CEIL_NEG: &str = "def ir_exact_fceil_neg : Eq IRStepResult (ir_unop_eval IRUnOp.fceil (IRTy.float_ 64) (IRScalar.float_ 13832806255468478464)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
-const SRC_WR_TRUNC_NEG: &str = "def ir_exact_ftrunc_neg : Eq IRStepResult (ir_unop_eval IRUnOp.ftrunc (IRTy.float_ 64) (IRScalar.float_ 13832806255468478464)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
-const SRC_WR_FLOOR_SMALL_NEG: &str = "def ir_exact_ffloor_small_neg : Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 13826050856027422720)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
-const SRC_WR_CEIL_SMALL_NEG: &str = "def ir_exact_fceil_small_neg_keeps_mzero : Eq IRStepResult (ir_unop_eval IRUnOp.fceil (IRTy.float_ 64) (IRScalar.float_ 13826050856027422720)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
-const SRC_WR_TRUNC_SMALL_POS: &str = "def ir_exact_ftrunc_small_pos : Eq IRStepResult (ir_unop_eval IRUnOp.ftrunc (IRTy.float_ 64) (IRScalar.float_ 4602678819172646912)) (IRStepResult.value (IRScalar.float_ 0)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
-const SRC_WR_CEIL_CARRY: &str = "def ir_exact_fceil_carry : Eq IRStepResult (ir_unop_eval IRUnOp.fceil (IRTy.float_ 64) (IRScalar.float_ 4611686018427387903)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
-const SRC_WR_FLOOR_INT: &str = "def ir_exact_ffloor_already_int : Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
-const SRC_WR_FLOOR_MZERO: &str = "def ir_exact_ffloor_mzero : Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
-const SRC_WR_FLOOR_INF: &str = "def ir_exact_ffloor_inf : Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 9218868437227405312)) (IRStepResult.value (IRScalar.float_ 9218868437227405312)) := Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9218868437227405312))";
-const SRC_WR_FLOOR_NAN: &str = "def ir_exact_ffloor_nan_refused : Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560)) ir_float_fault := Eq.refl IRStepResult ir_float_fault";
+const SRC_WR_FLOOR_POS: &str = "def ir_exact_ffloor_pos : @Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 4609434218613702656)) (IRStepResult.value (IRScalar.float_ 4607182418800017408)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4607182418800017408))";
+const SRC_WR_FLOOR_NEG: &str = "def ir_exact_ffloor_neg : @Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 13832806255468478464)) (IRStepResult.value (IRScalar.float_ 13835058055282163712)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13835058055282163712))";
+const SRC_WR_CEIL_NEG: &str = "def ir_exact_fceil_neg : @Eq IRStepResult (ir_unop_eval IRUnOp.fceil (IRTy.float_ 64) (IRScalar.float_ 13832806255468478464)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
+const SRC_WR_TRUNC_NEG: &str = "def ir_exact_ftrunc_neg : @Eq IRStepResult (ir_unop_eval IRUnOp.ftrunc (IRTy.float_ 64) (IRScalar.float_ 13832806255468478464)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
+const SRC_WR_FLOOR_SMALL_NEG: &str = "def ir_exact_ffloor_small_neg : @Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 13826050856027422720)) (IRStepResult.value (IRScalar.float_ 13830554455654793216)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 13830554455654793216))";
+const SRC_WR_CEIL_SMALL_NEG: &str = "def ir_exact_fceil_small_neg_keeps_mzero : @Eq IRStepResult (ir_unop_eval IRUnOp.fceil (IRTy.float_ 64) (IRScalar.float_ 13826050856027422720)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
+const SRC_WR_TRUNC_SMALL_POS: &str = "def ir_exact_ftrunc_small_pos : @Eq IRStepResult (ir_unop_eval IRUnOp.ftrunc (IRTy.float_ 64) (IRScalar.float_ 4602678819172646912)) (IRStepResult.value (IRScalar.float_ 0)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 0))";
+const SRC_WR_CEIL_CARRY: &str = "def ir_exact_fceil_carry : @Eq IRStepResult (ir_unop_eval IRUnOp.fceil (IRTy.float_ 64) (IRScalar.float_ 4611686018427387903)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
+const SRC_WR_FLOOR_INT: &str = "def ir_exact_ffloor_already_int : @Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 4611686018427387904)) (IRStepResult.value (IRScalar.float_ 4611686018427387904)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 4611686018427387904))";
+const SRC_WR_FLOOR_MZERO: &str = "def ir_exact_ffloor_mzero : @Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 9223372036854775808)) (IRStepResult.value (IRScalar.float_ 9223372036854775808)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9223372036854775808))";
+const SRC_WR_FLOOR_INF: &str = "def ir_exact_ffloor_inf : @Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 9218868437227405312)) (IRStepResult.value (IRScalar.float_ 9218868437227405312)) := @Eq.refl IRStepResult (IRStepResult.value (IRScalar.float_ 9218868437227405312))";
+const SRC_WR_FLOOR_NAN: &str = "def ir_exact_ffloor_nan_refused : @Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 64) (IRScalar.float_ 9221120237041090560)) ir_float_fault := @Eq.refl IRStepResult ir_float_fault";
 
 impl Specification {
     /// The residue band's executed witnesses, the duplication pin, and the
@@ -87,8 +87,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_ltb_pre_agrees (a : Nat) (b : Nat) : ",
-                "Eq Bool (ir_f64_ltb a b) (ir_f64_ltb_pre a b) := ",
-                "Eq.refl Bool (ir_f64_ltb_pre a b)",
+                "@Eq Bool (ir_f64_ltb a b) (ir_f64_ltb_pre a b) := ",
+                "@Eq.refl Bool (ir_f64_ltb_pre a b)",
             ),
             "THE PIN ON THE BAND'S ONE DUPLICATED DEFINITION: the residue band's value order \
              (ir_f64_ltb_pre, registered before the arithmetic dispatchers because fmin/fmax \
@@ -142,8 +142,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_frem_unmodelled (t : IRTy) (a : IRScalar) (b : IRScalar) : ",
-                "Eq IRStepResult (ir_binop_eval IRBinOp.frem t a b) ir_float_fault := ",
-                "Eq.refl IRStepResult ir_float_fault",
+                "@Eq IRStepResult (ir_binop_eval IRBinOp.frem t a b) ir_float_fault := ",
+                "@Eq.refl IRStepResult ir_float_fault",
             ),
             "frem is the tagged `unmodelled float_domain` outcome at EVERY type and operand \
              pair — the dated refusal (2026-08-25): the pinned interpreter ANSWERS f64 frem \
@@ -158,8 +158,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_fsqrt_unmodelled (t : IRTy) (a : IRScalar) : ",
-                "Eq IRStepResult (ir_unop_eval IRUnOp.fsqrt t a) ir_float_fault := ",
-                "Eq.refl IRStepResult ir_float_fault",
+                "@Eq IRStepResult (ir_unop_eval IRUnOp.fsqrt t a) ir_float_fault := ",
+                "@Eq.refl IRStepResult ir_float_fault",
             ),
             "fsqrt is the tagged `unmodelled float_domain` outcome at EVERY type and operand \
              — the dated refusal (2026-08-25) the plan itself names ('fsqrt is the hard one \
@@ -173,9 +173,9 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_fdiv_fin_fin_unmodelled (a : Nat) (b : Nat) : ",
-                "Eq (IROption Nat) (ir_f64_div_at a b IRF64Class.fin_ IRF64Class.fin_) ",
-                "(IROption.none Nat) := ",
-                "Eq.refl (IROption Nat) (IROption.none Nat)",
+                "@Eq (IROption Nat) (ir_f64_div_at a b IRF64Class.fin_ IRF64Class.fin_) ",
+                "(@IROption.none Nat) := ",
+                "@Eq.refl (IROption Nat) (@IROption.none Nat)",
             ),
             "fdiv on the FINITE fragment refuses at EVERY operand pair — the existing named \
              build item (eval_ir_float_fin: the shared rounding tail's cost blow-up, \
@@ -188,8 +188,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_fneg_f32_unmodelled (a : IRScalar) : ",
-                "Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 32) a) ir_float_fault := ",
-                "Eq.refl IRStepResult ir_float_fault",
+                "@Eq IRStepResult (ir_unop_eval IRUnOp.fneg (IRTy.float_ 32) a) ir_float_fault := ",
+                "@Eq.refl IRStepResult ir_float_fault",
             ),
             "A residue unop at binary32 is the tagged `unmodelled float_domain` outcome at \
              every operand — the ir_fcmp_f32_unmodelled boundary carried to the unary \
@@ -202,8 +202,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_fmin_f32_unmodelled (a : IRScalar) (b : IRScalar) : ",
-                "Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 32) a b) ir_float_fault := ",
-                "Eq.refl IRStepResult ir_float_fault",
+                "@Eq IRStepResult (ir_binop_eval IRBinOp.fmin (IRTy.float_ 32) a b) ir_float_fault := ",
+                "@Eq.refl IRStepResult ir_float_fault",
             ),
             "The binary32 boundary through the binary dispatcher's fmin arm, at every \
              operand pair. DerivedProved, zero axiom_deps.",
@@ -211,8 +211,8 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_ffloor_f32_unmodelled (a : IRScalar) : ",
-                "Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 32) a) ir_float_fault := ",
-                "Eq.refl IRStepResult ir_float_fault",
+                "@Eq IRStepResult (ir_unop_eval IRUnOp.ffloor (IRTy.float_ 32) a) ir_float_fault := ",
+                "@Eq.refl IRStepResult ir_float_fault",
             ),
             "The binary32 boundary through the rounding family's ffloor arm, at every \
              operand. DerivedProved, zero axiom_deps.",
@@ -257,8 +257,8 @@ impl Specification {
             self.add_recursive_def(
                 &format!(
                     "def {name} (src : IRTy) (dst : IRTy) (a : IRScalar) : \
-                     Eq IRStepResult (ir_cast_eval IRCastOp.{op} src dst a) ir_float_fault := \
-                     Eq.refl IRStepResult ir_float_fault"
+                     @Eq IRStepResult (ir_cast_eval IRCastOp.{op} src dst a) ir_float_fault := \
+                     @Eq.refl IRStepResult ir_float_fault"
                 ),
                 &format!(
                     "Cast {op} is the tagged `unmodelled float_domain` outcome at EVERY source \

@@ -10,28 +10,31 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use crate::macro_cmd::{
     expand_macro, MacroDef, MacroError, MacroPatternPart, MacroRegistry, MacroScoping,
 };
-use clean_parser::SurfaceExpr;
+use clean_parser::{SurfaceExpr, SurfaceName};
 
 #[derive(Debug, Clone, thiserror::Error)]
 #[non_exhaustive]
 pub(crate) enum MacroAnalysisError {
     #[error("expansion trace failed for macro '{name}': {source}")]
     ExpansionFailed {
-        name: String,
+        name: SurfaceName,
         #[source]
         source: MacroError,
     },
     #[error("macro '{name}' exceeded max expansion depth {max_depth}")]
-    DepthExceeded { name: String, max_depth: usize },
+    DepthExceeded { name: SurfaceName, max_depth: usize },
     #[error("cycle detected in macro dependencies: {cycle:?}")]
-    CycleDetected { cycle: Vec<String> },
+    CycleDetected { cycle: Vec<SurfaceName> },
     #[error("hygiene violation in macro '{macro_name}': {detail}")]
-    HygieneViolation { macro_name: String, detail: String },
+    HygieneViolation {
+        macro_name: SurfaceName,
+        detail: String,
+    },
 }
 
 #[derive(Debug, Clone)]
 pub(crate) struct ExpansionStep {
-    pub(crate) macro_name: String,
+    pub(crate) macro_name: SurfaceName,
     pub(crate) arg_count: usize,
     // Staged Lean4-parity scaffold with no caller yet (tests included): kept per the
     // keep-and-annotate doctrine — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
@@ -50,7 +53,7 @@ pub(crate) struct ExpansionTrace {
 /// Expand a macro with full tracing of each step.
 pub(crate) fn traced_expand(
     registry: &MacroRegistry,
-    name: &str,
+    name: &SurfaceName,
     args: &[SurfaceExpr],
 ) -> Result<ExpansionTrace, MacroAnalysisError> {
     let result =
@@ -74,7 +77,7 @@ pub(crate) fn traced_expand(
 /// Expand with depth-limited recursive tracing through chained macros.
 pub(crate) fn traced_expand_recursive(
     registry: &MacroRegistry,
-    name: &str,
+    name: &SurfaceName,
     args: &[SurfaceExpr],
     max_depth: usize,
 ) -> Result<ExpansionTrace, MacroAnalysisError> {
@@ -90,7 +93,7 @@ pub(crate) fn traced_expand_recursive(
 
 fn trace_step(
     registry: &MacroRegistry,
-    name: &str,
+    name: &SurfaceName,
     args: &[SurfaceExpr],
     depth: usize,
     max_depth: usize,
@@ -114,7 +117,7 @@ fn trace_step(
         depth,
     });
     if let Some(inner_name) = extract_head_name(&result) {
-        if registry.is_registered(&inner_name) && inner_name != name {
+        if registry.is_registered(&inner_name) && &inner_name != name {
             let inner_args = extract_app_args(&result);
             return trace_step(
                 registry,
@@ -158,7 +161,7 @@ pub(crate) fn classify_macro(registry: &MacroRegistry, def: &MacroDef) -> MacroP
 }
 
 #[must_use]
-pub(crate) fn classify_all(registry: &MacroRegistry) -> BTreeMap<String, MacroPattern> {
+pub(crate) fn classify_all(registry: &MacroRegistry) -> BTreeMap<SurfaceName, MacroPattern> {
     registry
         .all_macros()
         .map(|d| (d.name.clone(), classify_macro(registry, d)))
@@ -171,7 +174,7 @@ pub(crate) fn classify_all(registry: &MacroRegistry) -> BTreeMap<String, MacroPa
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HygieneIssue {
-    pub(crate) macro_name: String,
+    pub(crate) macro_name: SurfaceName,
     pub(crate) detail: String,
     pub(crate) severity: HygieneSeverity,
 }
@@ -206,7 +209,10 @@ pub(crate) fn validate_hygiene(registry: &MacroRegistry, def: &MacroDef) -> Vec<
         });
     }
     for name in &template_names {
-        if COMMON_LEAN_NAMES.contains(&name.as_str()) {
+        if COMMON_LEAN_NAMES
+            .iter()
+            .any(|fixed| name.name() == SurfaceName::generated_path(fixed).name())
+        {
             issues.push(HygieneIssue {
                 macro_name: def.name.clone(),
                 detail: format!("template references common name '{name}'"),
@@ -240,9 +246,9 @@ pub(crate) fn validate_all_hygiene(registry: &MacroRegistry) -> Vec<HygieneIssue
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct ExpansionStats {
-    pub(crate) expansion_counts: HashMap<String, usize>,
-    pub(crate) max_depths: HashMap<String, usize>,
-    pub(crate) output_sizes: HashMap<String, usize>,
+    pub(crate) expansion_counts: HashMap<SurfaceName, usize>,
+    pub(crate) max_depths: HashMap<SurfaceName, usize>,
+    pub(crate) output_sizes: HashMap<SurfaceName, usize>,
 }
 
 impl ExpansionStats {
@@ -276,12 +282,12 @@ impl ExpansionStats {
     }
 
     #[must_use]
-    pub(crate) fn count_for(&self, name: &str) -> usize {
+    pub(crate) fn count_for(&self, name: &SurfaceName) -> usize {
         self.expansion_counts.get(name).copied().unwrap_or(0)
     }
 
     #[must_use]
-    pub(crate) fn max_depth_for(&self, name: &str) -> usize {
+    pub(crate) fn max_depth_for(&self, name: &SurfaceName) -> usize {
         self.max_depths.get(name).copied().unwrap_or(0)
     }
 
@@ -298,15 +304,15 @@ impl ExpansionStats {
 
 #[derive(Debug, Clone)]
 pub(crate) struct MacroDependencyGraph {
-    pub(crate) edges: BTreeMap<String, BTreeSet<String>>,
-    pub(crate) reverse_edges: BTreeMap<String, BTreeSet<String>>,
+    pub(crate) edges: BTreeMap<SurfaceName, BTreeSet<SurfaceName>>,
+    pub(crate) reverse_edges: BTreeMap<SurfaceName, BTreeSet<SurfaceName>>,
 }
 
 impl MacroDependencyGraph {
     #[must_use]
     pub(crate) fn build(registry: &MacroRegistry) -> Self {
-        let mut edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        let mut reverse_edges: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        let mut edges: BTreeMap<SurfaceName, BTreeSet<SurfaceName>> = BTreeMap::new();
+        let mut reverse_edges: BTreeMap<SurfaceName, BTreeSet<SurfaceName>> = BTreeMap::new();
         for def in registry.all_macros() {
             let mut deps = BTreeSet::new();
             for name in collect_names(&def.expansion_template) {
@@ -331,17 +337,17 @@ impl MacroDependencyGraph {
     }
 
     #[must_use]
-    pub(crate) fn dependencies_of(&self, name: &str) -> BTreeSet<String> {
+    pub(crate) fn dependencies_of(&self, name: &SurfaceName) -> BTreeSet<SurfaceName> {
         self.edges.get(name).cloned().unwrap_or_default()
     }
 
     #[must_use]
-    pub(crate) fn dependents_of(&self, name: &str) -> BTreeSet<String> {
+    pub(crate) fn dependents_of(&self, name: &SurfaceName) -> BTreeSet<SurfaceName> {
         self.reverse_edges.get(name).cloned().unwrap_or_default()
     }
 
     #[must_use]
-    pub(crate) fn leaves(&self) -> BTreeSet<String> {
+    pub(crate) fn leaves(&self) -> BTreeSet<SurfaceName> {
         self.edges
             .iter()
             .filter(|(_, d)| d.is_empty())
@@ -350,7 +356,7 @@ impl MacroDependencyGraph {
     }
 
     #[must_use]
-    pub(crate) fn roots(&self) -> BTreeSet<String> {
+    pub(crate) fn roots(&self) -> BTreeSet<SurfaceName> {
         self.reverse_edges
             .iter()
             .filter(|(_, d)| d.is_empty())
@@ -360,11 +366,11 @@ impl MacroDependencyGraph {
 
     /// Detect cycles via BFS from each node.
     #[must_use]
-    pub(crate) fn detect_cycle(&self) -> Option<Vec<String>> {
+    pub(crate) fn detect_cycle(&self) -> Option<Vec<SurfaceName>> {
         for start in self.edges.keys() {
             let mut visited = HashSet::new();
             let mut queue = VecDeque::new();
-            let mut parent: HashMap<String, String> = HashMap::new();
+            let mut parent: HashMap<SurfaceName, SurfaceName> = HashMap::new();
             queue.push_back(start.clone());
             visited.insert(start.clone());
             while let Some(current) = queue.pop_front() {
@@ -392,15 +398,15 @@ impl MacroDependencyGraph {
 
     /// Compute a topological ordering. Returns `None` if cycles exist.
     #[must_use]
-    pub(crate) fn topological_order(&self) -> Option<Vec<String>> {
-        let mut in_deg: BTreeMap<String, usize> = BTreeMap::new();
+    pub(crate) fn topological_order(&self) -> Option<Vec<SurfaceName>> {
+        let mut in_deg: BTreeMap<SurfaceName, usize> = BTreeMap::new();
         for (name, deps) in &self.edges {
             in_deg.entry(name.clone()).or_insert(0);
             for dep in deps {
                 *in_deg.entry(dep.clone()).or_insert(0) += 1;
             }
         }
-        let mut queue: VecDeque<String> = in_deg
+        let mut queue: VecDeque<SurfaceName> = in_deg
             .iter()
             .filter(|(_, &d)| d == 0)
             .map(|(n, _)| n.clone())
@@ -431,7 +437,7 @@ impl MacroDependencyGraph {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TemplateDescription {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) structure: String,
     pub(crate) parameters: Vec<String>,
     pub(crate) scoping: MacroScoping,
@@ -470,7 +476,7 @@ pub(crate) fn extract_all_templates(registry: &MacroRegistry) -> Vec<TemplateDes
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct OptimizationHint {
-    pub(crate) macro_name: String,
+    pub(crate) macro_name: SurfaceName,
     pub(crate) suggestion: String,
     pub(crate) kind: OptimizationKind,
 }
@@ -531,15 +537,15 @@ pub(crate) fn suggest_optimizations(registry: &MacroRegistry) -> Vec<Optimizatio
 // Helpers
 // =============================================================================
 
-fn collect_names(expr: &SurfaceExpr) -> HashSet<String> {
+fn collect_names(expr: &SurfaceExpr) -> HashSet<SurfaceName> {
     let mut names = HashSet::new();
     collect_names_inner(expr, &mut names);
     names
 }
 
-fn collect_names_inner(expr: &SurfaceExpr, out: &mut HashSet<String>) {
+fn collect_names_inner(expr: &SurfaceExpr, out: &mut HashSet<SurfaceName>) {
     match expr {
-        SurfaceExpr::Ident(_, n) => {
+        SurfaceExpr::Ident(_, n) if !n.is_relative_constructor() => {
             out.insert(n.clone());
         }
         SurfaceExpr::App(_, f, args) => {
@@ -549,7 +555,9 @@ fn collect_names_inner(expr: &SurfaceExpr, out: &mut HashSet<String>) {
             }
         }
         SurfaceExpr::Lambda(_, _, b) | SurfaceExpr::Pi(_, _, b) => collect_names_inner(b, out),
-        SurfaceExpr::Arrow(_, l, r) | SurfaceExpr::Let(_, _, l, r) => {
+        SurfaceExpr::Arrow(_, l, r)
+        | SurfaceExpr::Let(_, _, l, r)
+        | SurfaceExpr::Have(_, _, l, r) => {
             collect_names_inner(l, out);
             collect_names_inner(r, out);
         }
@@ -573,16 +581,16 @@ fn count_holes(expr: &SurfaceExpr) -> usize {
         }
         SurfaceExpr::Paren(_, i) => count_holes(i),
         SurfaceExpr::Lambda(_, _, b) | SurfaceExpr::Pi(_, _, b) => count_holes(b),
-        SurfaceExpr::Arrow(_, l, r) | SurfaceExpr::Let(_, _, l, r) => {
-            count_holes(l) + count_holes(r)
-        }
+        SurfaceExpr::Arrow(_, l, r)
+        | SurfaceExpr::Let(_, _, l, r)
+        | SurfaceExpr::Have(_, _, l, r) => count_holes(l) + count_holes(r),
         _ => 0,
     }
 }
 
-fn extract_head_name(expr: &SurfaceExpr) -> Option<String> {
+fn extract_head_name(expr: &SurfaceExpr) -> Option<SurfaceName> {
     match expr {
-        SurfaceExpr::Ident(_, n) => Some(n.clone()),
+        SurfaceExpr::Ident(_, n) if !n.is_relative_constructor() => Some(n.clone()),
         SurfaceExpr::App(_, f, _) => extract_head_name(f),
         SurfaceExpr::Paren(_, i) => extract_head_name(i),
         _ => None,
@@ -602,9 +610,9 @@ fn expr_node_count(expr: &SurfaceExpr) -> usize {
             1 + expr_node_count(f) + a.iter().map(|x| expr_node_count(&x.expr)).sum::<usize>()
         }
         SurfaceExpr::Lambda(_, _, b) | SurfaceExpr::Pi(_, _, b) => 1 + expr_node_count(b),
-        SurfaceExpr::Arrow(_, l, r) | SurfaceExpr::Let(_, _, l, r) => {
-            1 + expr_node_count(l) + expr_node_count(r)
-        }
+        SurfaceExpr::Arrow(_, l, r)
+        | SurfaceExpr::Let(_, _, l, r)
+        | SurfaceExpr::Have(_, _, l, r) => 1 + expr_node_count(l) + expr_node_count(r),
         SurfaceExpr::Paren(_, i) | SurfaceExpr::Ascription(_, i, _) => 1 + expr_node_count(i),
         _ => 1,
     }
@@ -619,6 +627,7 @@ fn describe_template(expr: &SurfaceExpr) -> String {
         SurfaceExpr::Pi(_, _, _) => "pi".to_owned(),
         SurfaceExpr::Arrow(_, _, _) => "arrow".to_owned(),
         SurfaceExpr::Let(_, _, _, _) => "let".to_owned(),
+        SurfaceExpr::Have(_, _, _, _) => "have".to_owned(),
         SurfaceExpr::Paren(_, i) => describe_template(i),
         SurfaceExpr::Lit(_, _) => "literal".to_owned(),
         _ => "other".to_owned(),

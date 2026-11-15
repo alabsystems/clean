@@ -23,8 +23,14 @@ fn test_polyrith_cert_constant_coefficients() {
     use super::super::polynomial::Polynomial;
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(2, 1)),
-            ("h2".to_string(), Polynomial::constant(-1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(2, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(-1, 1),
+            ),
         ],
         verified: true,
         explanation: "test".to_string(),
@@ -41,9 +47,15 @@ fn test_polyrith_cert_constant_coefficients() {
     }
 
     assert_eq!(coeffs.len(), 2);
-    assert_eq!(coeffs[0].hyp_name, "h1");
+    assert_eq!(
+        coeffs[0].hyp_name,
+        clean_parser::SurfaceName::generated_path("h1")
+    );
     assert_eq!(coeffs[0].coeff, (2, 1));
-    assert_eq!(coeffs[1].hyp_name, "h2");
+    assert_eq!(
+        coeffs[1].hyp_name,
+        clean_parser::SurfaceName::generated_path("h2")
+    );
     assert_eq!(coeffs[1].coeff, (-1, 1));
 }
 
@@ -54,7 +66,7 @@ fn test_polyrith_cert_variable_coefficient_fails_closed() {
     let x_poly = Polynomial::var(0); // x (not constant)
 
     let cert = PolyrithCertificate {
-        coefficients: vec![("h1".to_string(), x_poly)],
+        coefficients: vec![(clean_parser::SurfaceName::generated_path("h1"), x_poly)],
         verified: true,
         explanation: "test".to_string(),
     };
@@ -74,8 +86,14 @@ fn test_polyrith_cert_zero_coefficient_skipped() {
     use super::super::polynomial::Polynomial;
     let cert = PolyrithCertificate {
         coefficients: vec![
-            ("h1".to_string(), Polynomial::constant(0, 1)),
-            ("h2".to_string(), Polynomial::constant(1, 1)),
+            (
+                clean_parser::SurfaceName::generated_path("h1"),
+                Polynomial::constant(0, 1),
+            ),
+            (
+                clean_parser::SurfaceName::generated_path("h2"),
+                Polynomial::constant(1, 1),
+            ),
         ],
         verified: true,
         explanation: "test".to_string(),
@@ -91,7 +109,10 @@ fn test_polyrith_cert_zero_coefficient_skipped() {
     }
 
     assert_eq!(coeffs.len(), 1, "zero coefficient should be skipped");
-    assert_eq!(coeffs[0].hyp_name, "h2");
+    assert_eq!(
+        coeffs[0].hyp_name,
+        clean_parser::SurfaceName::generated_path("h2")
+    );
 }
 
 // ============================================================================
@@ -122,8 +143,9 @@ fn setup_polyrith_eq_state(
         env,
         eq_target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: hyp_name.to_string(),
+            name: clean_parser::SurfaceName::component(hyp_name, false),
             ty: h_ty,
             value: None,
         }],
@@ -140,7 +162,10 @@ fn test_polyrith_cert_to_proof_builder_e2e() {
     use super::super::polynomial::Polynomial;
 
     let cert = PolyrithCertificate {
-        coefficients: vec![("h".to_string(), Polynomial::constant(1, 1))],
+        coefficients: vec![(
+            clean_parser::SurfaceName::generated_path("h"),
+            Polynomial::constant(1, 1),
+        )],
         verified: true,
         explanation: "test cert".to_string(),
     };
@@ -198,7 +223,10 @@ fn test_polyrith_cert_symmetry_proof_carry_e2e() {
     use super::super::polynomial::Polynomial;
 
     let cert = PolyrithCertificate {
-        coefficients: vec![("h".to_string(), Polynomial::constant(-1, 1))],
+        coefficients: vec![(
+            clean_parser::SurfaceName::generated_path("h"),
+            Polynomial::constant(-1, 1),
+        )],
         verified: true,
         explanation: "test symmetry cert".to_string(),
     };
@@ -240,7 +268,10 @@ fn test_polyrith_cert_rational_coeff_falls_through() {
     use super::super::polynomial::Polynomial;
 
     let cert = PolyrithCertificate {
-        coefficients: vec![("h".to_string(), Polynomial::constant(1, 2))],
+        coefficients: vec![(
+            clean_parser::SurfaceName::generated_path("h"),
+            Polynomial::constant(1, 2),
+        )],
         verified: true,
         explanation: "test rational cert".to_string(),
     };

@@ -1,0 +1,4 @@
+ACCEPT value=407 cursor=3
+ACCEPT value=407 cursor=4
+REFUSE no token at 2
+REFUSE token 12 at 1 is not a digit

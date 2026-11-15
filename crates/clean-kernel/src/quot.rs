@@ -46,7 +46,7 @@ pub mod names {
 }
 
 /// Information about a quotient primitive
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct QuotVal {
     /// Name of the quotient primitive
     pub name: Name,

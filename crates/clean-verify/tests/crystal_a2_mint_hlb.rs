@@ -71,8 +71,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -316,21 +315,21 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        CALLER.contains("bb0(%0: struct.29):") && CALLEE.contains("bb0(%0: struct.29):"),
-        "both receivers must still be struct.29; if not, the artifact was re-interned and this \
+        CALLER.contains("bb0(%0: struct.765):") && CALLEE.contains("bb0(%0: struct.765):"),
+        "both receivers must still be struct.765; if not, the artifact was re-interned and this \
          table needs a one-line REVIEWED re-pin"
     );
     assert!(
-        ir_mint::IR_HLB_TAGS.contains("\"crate_id\": 29"),
+        ir_mint::IR_HLB_TAGS.contains("\"crate_id\": 765"),
         "and the committed table must record it"
     );
     assert!(
-        CALLER.contains("call @func.3657("),
-        "the caller's one call must still name @func.3657"
+        CALLER.contains("call @func.1729("),
+        "the caller's one call must still name @func.1729"
     );
     assert!(
-        ir_mint::IR_HLB_TAGS.contains("\"crate_id\": 3657")
-            && ir_mint::IR_HLB_TAGS.contains("\"crate_id\": 3658"),
+        ir_mint::IR_HLB_TAGS.contains("\"crate_id\": 1729")
+            && ir_mint::IR_HLB_TAGS.contains("\"crate_id\": 1730"),
         "…and the funcs lane must pin BOTH ids: the callee's, and the caller's own, which the \
          emitted text names nowhere at all"
     );
@@ -394,8 +393,8 @@ fn m10_both_bodies_project_under_their_pinned_interfaces() {
 fn m10_the_interface_pins_bite() {
     let t = tags();
     for (from, to, slot) in [
-        ("(functy.435)", "(functy.436)", "signature index"),
-        ("(functy.433)", "(functy.434)", "signature index"),
+        ("(functy.410)", "(functy.411)", "signature index"),
+        ("(functy.408)", "(functy.409)", "signature index"),
         (
             "rustcc fn @expr::meta::ExprMeta::has",
             "ccc fn @expr::meta::ExprMeta::has",
@@ -407,17 +406,17 @@ fn m10_the_interface_pins_bite() {
             "calling convention",
         ),
         (
-            "bb0(%0: struct.29):\n    %1 = call",
+            "bb0(%0: struct.765):\n    %1 = call",
             "bb0(%0: u64):\n    %1 = call",
             "parameter",
         ),
         (
-            "bb0(%0: struct.29):\n    %1 = extractfield",
+            "bb0(%0: struct.765):\n    %1 = extractfield",
             "bb0(%0: struct.999):\n    %1 = extractfield",
             "parameter",
         ),
         (
-            "call @func.3657(%0)",
+            "call @func.1729(%0)",
             "call @func.9999(%0)",
             "not in the chain's tag table",
         ),

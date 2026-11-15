@@ -197,7 +197,7 @@ impl Specification {
 
         self.add_recursive_def(
             &format!(
-                "def ir_f64_sig (n : Nat) : Nat := Bool.rec (fun (_ : Bool) => Nat) \
+                "def ir_f64_sig (n : Nat) : Nat := @Bool.rec (fun (_ : Bool) => Nat) \
                  (Nat.add {P52} (ir_f64_frac n)) (ir_f64_frac n) \
                  (ir_nat_iszero (ir_f64_ebits n))"
             ),
@@ -212,7 +212,7 @@ impl Specification {
 
         self.add_recursive_def(
             concat!(
-                "def ir_f64_sc (n : Nat) : Nat := Bool.rec (fun (_ : Bool) => Nat) ",
+                "def ir_f64_sc (n : Nat) : Nat := @Bool.rec (fun (_ : Bool) => Nat) ",
                 "(Nat.pred (ir_f64_ebits n)) Nat.zero (ir_nat_iszero (ir_f64_ebits n))",
             ),
             "The scale: the exponent of the significand's LOW bit, offset so that the value is \
@@ -322,7 +322,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_q (m : Nat) (bp : Nat) (bn : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) (ir_f64_q0 m bp bn) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) (ir_f64_q0 m bp bn) ",
                 "(Nat.succ (ir_f64_q0 m bp bn)) (ir_f64_rup m bp bn)",
             ),
             "The rounded significand. DerivedProved, zero axiom_deps.",
@@ -340,7 +340,7 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def ir_f64_qf (m : Nat) (bp : Nat) (bn : Nat) : Nat := \
-                 Bool.rec (fun (_ : Bool) => Nat) (ir_f64_q m bp bn) {P52} \
+                 @Bool.rec (fun (_ : Bool) => Nat) (ir_f64_q m bp bn) {P52} \
                  (ir_f64_carry m bp bn)"
             ),
             "The final significand: the rounded one, or 2^52 when it carried. Exact rather than \
@@ -351,7 +351,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_f64_sfx (m : Nat) (bp : Nat) (bn : Nat) : Nat := ",
-                "Bool.rec (fun (_ : Bool) => Nat) (ir_f64_rsh m bp bn) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) (ir_f64_rsh m bp bn) ",
                 "(Nat.succ (ir_f64_rsh m bp bn)) (ir_f64_carry m bp bn)",
             ),
             "The right shift the exponent must account for, bumped by one when the significand \
@@ -385,8 +385,8 @@ impl Specification {
         self.add_recursive_def(
             &format!(
                 "def ir_f64_magout (m : Nat) (bp : Nat) (bn : Nat) : Nat := \
-                 Bool.rec (fun (_ : Bool) => Nat) \
-                 (Bool.rec (fun (_ : Bool) => Nat) (ir_f64_magn m bp bn) ir_f64_inf_mag \
+                 @Bool.rec (fun (_ : Bool) => Nat) \
+                 (@Bool.rec (fun (_ : Bool) => Nat) (ir_f64_magn m bp bn) ir_f64_inf_mag \
                  (Bool.not (ir_nat_ltb (ir_f64_ex m bp bn) 2047))) \
                  (ir_f64_qf m bp bn) \
                  (ir_nat_ltb (ir_f64_qf m bp bn) {P52})"

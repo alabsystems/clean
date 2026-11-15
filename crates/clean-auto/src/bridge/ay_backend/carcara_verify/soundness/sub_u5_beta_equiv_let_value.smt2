@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-const x Bool)
+(declare-const z Bool)
+(declare-const a Bool)
+(assert (not (= ((lambda ((x Bool)) (and (forall ((w Bool)) (or w (not w))) (let ((y x)) y))) true) (and (forall ((w Bool)) (or w (not w))) (let ((y x)) y)))))
+(check-sat)

@@ -196,6 +196,17 @@ impl<'a> ElabCtx<'a> {
                 ))
             }
 
+            SurfaceExpr::Have(span, binder, val, body) => {
+                let new_val = self.process_qq_antiquots(val)?;
+                let new_body = self.process_qq_antiquots(body)?;
+                Ok(SurfaceExpr::Have(
+                    *span,
+                    binder.clone(),
+                    Box::new(new_val),
+                    Box::new(new_body),
+                ))
+            }
+
             SurfaceExpr::Paren(span, inner) => {
                 let new_inner = self.process_qq_antiquots(inner)?;
                 Ok(SurfaceExpr::Paren(*span, Box::new(new_inner)))

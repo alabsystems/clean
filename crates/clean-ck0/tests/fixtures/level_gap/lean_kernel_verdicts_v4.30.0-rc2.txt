@@ -1,0 +1,36 @@
+# lean 4.30.0-rc2
+S imax u v + 1, field alpha -> beta	REJECT (kernel) universe level of type_of(arg #3) of 'Sa.mk' is too big for the corresponding inductive datatype
+S max u v + 1, field alpha -> beta	ACCEPT
+T imax u (v+1) + 1, field Sort (v+1)	REJECT (kernel) universe level of type_of(arg #1) of 'T1.mk' is too big for the corresponding inductive datatype
+T imax u (v+1) + 1, field Sort (imax u v)	ACCEPT
+def : Sort (imax u (v+1) + 2) := Sort (max u (v+1) + 1)	REJECT (kernel) declaration type mismatch, 'd1' has type   Type ((max u (v + 1)) + 1) but it is expected to have type   Type ((imax u (v + 1)) + 1)
+def : Sort (max u (v+1) + 2) := Sort (max u (v+1) + 1)	ACCEPT
+P Sort (imax u 0), field Type	REJECT (kernel) universe level of type_of(arg #1) of 'P1.mk' is too big for the corresponding inductive datatype
+P Prop, field Type	ACCEPT
+proof irrelevance at Sort 0	ACCEPT
+proof irrelevance at Sort (max 0 0)	REJECT (kernel) declaration type mismatch, 'pmax.irr' has type   ∀ (h1 h2 : pmax), Eq h1 h1 but it is expected to have type   ∀ (h1 h2 : pmax), Eq h1 h2
+proof irrelevance at Sort (imax 0 0)	REJECT (kernel) declaration type mismatch, 'pimax.irr' has type   ∀ (h1 h2 : pimax), Eq h1 h1 but it is expected to have type   ∀ (h1 h2 : pimax), Eq h1 h2
+def-eq at w := max u v, rhs max v u	REJECT (kernel) declaration type mismatch, 'B1.t' has type   Type (max u v) → Type (max u v) but it is expected to have type   Type (max u v) → B1
+def-eq at w := max u v, rhs max u v	ACCEPT
+universe check at w := max u v, rhs max v u	REJECT (kernel) universe level of type_of(arg #1) of 'G1.I.mk' is too big for the corresponding inductive datatype
+universe check at w := max u v, rhs max u v	ACCEPT
+C universe check, a = 0	REJECT (kernel) universe level of type_of(arg #2) of 'Cg1.mk' is too big for the corresponding inductive datatype
+C universe check, a = 1	REJECT (kernel) universe level of type_of(arg #2) of 'Cg2.mk' is too big for the corresponding inductive datatype
+C universe check, a = max u v	REJECT (kernel) universe level of type_of(arg #2) of 'Cg3.mk' is too big for the corresponding inductive datatype
+C universe check, a = max v u	REJECT (kernel) universe level of type_of(arg #2) of 'Cg4.mk' is too big for the corresponding inductive datatype
+C universe check, control succ (max u v)	ACCEPT
+C def-eq, a = 0	REJECT (kernel) declaration type mismatch, 'Cd1' has type   Type (max (u + 1) (v + 1)) but it is expected to have type   Type ((imax 0 (max u v)) + 1)
+C def-eq, a = 1	REJECT (kernel) declaration type mismatch, 'Cd2' has type   Type (max (u + 1) (v + 1)) but it is expected to have type   Type ((imax 1 (max u v)) + 1)
+C def-eq, a = max u v	REJECT (kernel) declaration type mismatch, 'Cd3' has type   Type (max (u + 1) (v + 1)) but it is expected to have type   Type ((imax (max u v) (max u v)) + 1)
+C def-eq, a = max v u	REJECT (kernel) declaration type mismatch, 'Cd4' has type   Type (max (u + 1) (v + 1)) but it is expected to have type   Type ((imax (max v u) (max u v)) + 1)
+C def-eq, control succ (succ (max u v))	ACCEPT
+C typed sort, universe check, a = 0	REJECT (kernel) universe level of type_of(arg #1) of 'Kg1.mk' is too big for the corresponding inductive datatype
+C typed sort, universe check, a = 1	REJECT (kernel) universe level of type_of(arg #1) of 'Kg2.mk' is too big for the corresponding inductive datatype
+C typed sort, universe check, a = max u v	REJECT (kernel) universe level of type_of(arg #1) of 'Kg3.mk' is too big for the corresponding inductive datatype
+C typed sort, universe check, a = max v u	REJECT (kernel) universe level of type_of(arg #1) of 'Kg4.mk' is too big for the corresponding inductive datatype
+C typed sort, universe check, control max u v	ACCEPT
+C typed sort, def-eq, a = 0	REJECT (kernel) declaration type mismatch, 'Kd1' has type   Type (imax 0 (max u v)) but it is expected to have type   Type (max u v)
+C typed sort, def-eq, a = 1	REJECT (kernel) declaration type mismatch, 'Kd2' has type   Type (imax 1 (max u v)) but it is expected to have type   Type (max u v)
+C typed sort, def-eq, a = max u v	REJECT (kernel) declaration type mismatch, 'Kd3' has type   Type (imax (max u v) (max u v)) but it is expected to have type   Type (max u v)
+C typed sort, def-eq, a = max v u	REJECT (kernel) declaration type mismatch, 'Kd4' has type   Type (imax (max v u) (max u v)) but it is expected to have type   Type (max u v)
+C typed sort, def-eq, control max u v	ACCEPT

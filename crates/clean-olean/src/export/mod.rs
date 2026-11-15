@@ -11,6 +11,8 @@ mod api;
 mod constant_info;
 mod expr;
 mod module_data;
+#[cfg(test)]
+mod payload_layout_tests;
 mod primitives;
 #[cfg(test)]
 mod tests;
@@ -31,4 +33,6 @@ pub struct OleanExporter {
     pub(super) strings: std::collections::HashMap<String, usize>,
     /// Name interning table (name -> offset)
     pub(super) names: std::collections::HashMap<String, usize>,
+    /// Kernel names never use display strings as cache keys.
+    pub(super) kernel_names: std::collections::HashMap<clean_kernel::name::Name, usize>,
 }

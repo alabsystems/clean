@@ -1,0 +1,6 @@
+namespace_head_over_nat.lean:11:4: error: Type mismatch
+  n.succ
+has type
+  Tm
+but is expected to have type
+  Nat

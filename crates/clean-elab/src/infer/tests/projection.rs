@@ -88,10 +88,28 @@ fn test_namespace_projection_resolves_const() {
     }
 }
 
+/// A WRITTEN dotted identifier is one name (Lean 4.8.0 `resolveGlobalName`
+/// tries the full name first): with a global value `pairVal : Pair` and a
+/// global `pairVal.snd`, `pairVal.snd` is the constant. Projecting the value
+/// instead proved `def Foo : S := ⟨5⟩; def Foo.x : Nat := 9; Foo.x = 5` by
+/// `rfl` (measured 2026-09-26; Lean: `9`).
 #[test]
-fn test_projection_prefers_struct_over_namespace_const() {
+fn test_dotted_identifier_prefers_the_global_of_the_full_name() {
     let env = pair_env_with_namespaced_const();
     let expr = elab_with_env(&env, "pairVal.snd").unwrap();
+    match expr.kind() {
+        ExprKind::Const(name, _) => assert_eq!(name, &Name::from_string("pairVal.snd")),
+        other => panic!("expected the constant `pairVal.snd`, got {other:?}"),
+    }
+}
+
+/// `(pairVal).snd` projects the TERM `(pairVal)`: it is not one identifier,
+/// so the structure field is read even though a constant `pairVal.snd`
+/// exists (Lean 4.8.0 agrees).
+#[test]
+fn test_parenthesized_receiver_projects_the_struct_field() {
+    let env = pair_env_with_namespaced_const();
+    let expr = elab_with_env(&env, "(pairVal).snd").unwrap();
 
     match expr.kind() {
         ExprKind::Proj(struct_name, idx, target) => {
@@ -163,23 +181,26 @@ fn test_projection_receiver_error_and_namespace_retry_restore_expected_context()
     let mut ctx = ElabCtx::new(&env);
     let outer_expected = Expr::type_();
     ctx.current_expected_type = Some(outer_expected.clone());
-    ctx.push_local("outerProjectionLocal".to_string(), Expr::prop());
+    ctx.push_local(
+        SurfaceName::generated_path("outerProjectionLocal"),
+        Expr::prop(),
+    );
     let locals_before = ctx.locals.clone();
     let span = clean_parser::Span::dummy();
 
     // This reaches the fallible receiver attempt after the result-level expected
     // type has been hidden. Neither the receiver error nor its failed qualified
     // fallback may strand `current_expected_type = None`.
-    let missing_receiver = SurfaceExpr::Ident(span, "MissingReceiver".to_string());
-    let missing_field = Projection::Named("field".to_string());
+    let missing_receiver = SurfaceExpr::Ident(span, SurfaceName::generated_path("MissingReceiver"));
+    let missing_field = Projection::Named(SurfaceName::generated_path("field"));
     assert!(ctx.elab_proj(&missing_receiver, &missing_field).is_err());
     assert_eq!(ctx.current_expected_type, Some(outer_expected.clone()));
     assert_eq!(ctx.locals, locals_before);
 
     // Reuse the same context for the namespace-only success path. `Foo` is not
     // a value, but `Foo.bar` is a real declaration.
-    let namespace_receiver = SurfaceExpr::Ident(span, "Foo".to_string());
-    let namespace_field = Projection::Named("bar".to_string());
+    let namespace_receiver = SurfaceExpr::Ident(span, SurfaceName::generated_path("Foo"));
+    let namespace_field = Projection::Named(SurfaceName::generated_path("bar"));
     let result = ctx
         .elab_proj(&namespace_receiver, &namespace_field)
         .expect("namespace fallback should remain usable after receiver failure");
@@ -220,7 +241,7 @@ fn test_namespace_only_fails_when_no_constant_exists() {
     // Neither NonExistent nor NonExistent.foo exists
     let err = elab_with_env(&env, "NonExistent.foo").expect_err("should fail");
 
-    assert!(matches!(err, ElabError::UnknownIdent(s) if s == "NonExistent"));
+    assert_eq!(err.unknown_ident_name(), Some("NonExistent"), "{err:?}");
 }
 
 #[test]
@@ -416,15 +437,21 @@ fn test_issue796_linear_done_decl_registers_after_cover() {
 }
 
 #[test]
-fn test_issue796_linear_left_decl_registers_after_cover() {
+fn test_linear_left_rejects_unresolved_auto_bound_parameter_type() {
     let mut env = issue796_cover_env();
     let linear_left = parse_decl_for_elab(
         r"inductive LinearLeft : Cover x y z -> Prop
 | left : LinearLeft c -> LinearLeft (.left c)",
     )
     .unwrap();
-    crate::elaborate_decl_and_register(&mut env, &linear_left)
-        .expect("LinearLeft should elaborate and register after Cover");
+    let err = crate::elaborate_decl_and_register(&mut env, &linear_left)
+        .expect_err("Lean rejects unresolved implicits in the auto-bound c type");
+    assert!(
+        err.to_string()
+            .contains("cannot synthesize implicit arguments"),
+        "unexpected error: {err}"
+    );
+    assert!(env.get_const(&Name::from_string("LinearLeft")).is_none());
 }
 
 /// Regression test for #3421: dot notation `.ok`/`.error` not resolved for Except type.
@@ -508,13 +535,19 @@ fn test_issue3421_except_dot_error_with_user_error_type() {
     // Test 2: Expression-level test for .error with expected type
     let except_myerror_nat = Expr::app(
         Expr::app(
-            Expr::const_(Name::from_string("Except"), vec![Level::zero()]),
+            Expr::const_(
+                Name::from_string("Except"),
+                vec![Level::zero(), Level::zero()],
+            ),
             Expr::const_(Name::from_string("MyError"), vec![]),
         ),
         Expr::const_(Name::from_string("Nat"), vec![]),
     );
     let mut ctx = ElabCtx::new(&env);
-    let ctor = ctx.elab_leading_dot_ctor_with_expected_type(".error", &except_myerror_nat);
+    let ctor = ctx.elab_leading_dot_ctor_with_expected_type(
+        &SurfaceName::component("error", false).with_relative_constructor(),
+        &except_myerror_nat,
+    );
     assert!(
         ctor.is_ok(),
         "elab_leading_dot_ctor_with_expected_type should resolve .error, got {ctor:?}"
@@ -606,7 +639,10 @@ fn test_track_gh_leading_dot_ctor_ambiguous_suffix_rejected() {
     // Two inductives own a `.shared` constructor → ambiguous → recovery refuses.
     let mut ctx = ElabCtx::new(&env);
     let meta = ctx.fresh_meta(Expr::type_());
-    let resolved = ctx.elab_leading_dot_ctor_with_expected_type(".shared", &meta);
+    let resolved = ctx.elab_leading_dot_ctor_with_expected_type(
+        &SurfaceName::component("shared", false).with_relative_constructor(),
+        &meta,
+    );
     assert!(
         resolved.is_err(),
         "ambiguous .shared with a metavar expected type must not resolve, got {resolved:?}"

@@ -46,7 +46,7 @@ pub const T32C_SPECTRAL_SUBMULTIPLICATIVITY: ProofStatus = ProofStatus::DerivedP
 
 /// Result of a spectral norm computation via power iteration.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct SpectralNormResult {
+pub(crate) struct SpectralNormResult {
     /// Computed spectral norm (largest singular value).
     pub spectral_norm: f64,
     /// Whether the iteration converged (relative change < tolerance).
@@ -78,7 +78,7 @@ pub struct SpectralNormResult {
 /// A [`SpectralNormResult`] with the computed norm, convergence flag,
 /// iteration count, and final relative change.
 #[must_use]
-pub fn spectral_norm_power_iteration(
+pub(crate) fn spectral_norm_power_iteration(
     matrix: &[Vec<f64>],
     max_iterations: usize,
     tolerance: f64,
@@ -198,7 +198,7 @@ pub fn spectral_norm_power_iteration(
 /// norm is at or below the claimed value (within floating-point tolerance).
 ///
 /// Returns `Ok(result)` if the bound holds, `Err(message)` otherwise.
-pub fn verify_spectral_norm_bound(
+pub(crate) fn verify_spectral_norm_bound(
     matrix: &[Vec<f64>],
     claimed_bound: f64,
     max_iterations: usize,
@@ -232,7 +232,7 @@ pub fn verify_spectral_norm_bound(
 /// Returns an [`Interval`] where `lower` is the spectral norm of the midpoint
 /// matrix and `upper` is the spectral norm of the absolute-bound matrix.
 #[must_use]
-pub fn spectral_norm_interval(
+pub(crate) fn spectral_norm_interval(
     interval_matrix: &[Vec<Interval>],
     max_iterations: usize,
     tolerance: f64,
@@ -292,7 +292,7 @@ pub fn spectral_norm_interval(
 ///
 /// T32b: Frobenius-spectral relation.
 #[must_use]
-pub fn frobenius_to_spectral_bound(matrix: &[Vec<f64>]) -> f64 {
+pub(crate) fn frobenius_to_spectral_bound(matrix: &[Vec<f64>]) -> f64 {
     let sum_sq: f64 = matrix
         .iter()
         .flat_map(|row| row.iter())
@@ -323,7 +323,7 @@ pub fn frobenius_to_spectral_bound(matrix: &[Vec<f64>]) -> f64 {
 ///
 /// Upper bound on sigma_max(W + u*v^T).
 #[must_use]
-pub fn spectral_norm_rank_one_update(sigma_w: f64, u: &[f64], v: &[f64]) -> f64 {
+pub(crate) fn spectral_norm_rank_one_update(sigma_w: f64, u: &[f64], v: &[f64]) -> f64 {
     let u_norm = u.iter().map(|x| x * x).sum::<f64>().sqrt();
     let v_norm = v.iter().map(|x| x * x).sum::<f64>().sqrt();
     sigma_w + u_norm * v_norm
@@ -341,7 +341,7 @@ pub fn spectral_norm_rank_one_update(sigma_w: f64, u: &[f64], v: &[f64]) -> f64 
 /// claimed Lipschitz constant within tolerance.
 ///
 /// Returns `Ok(sigma)` if |claimed - sigma_max| < tolerance, `Err` otherwise.
-pub fn verify_lipschitz_via_spectral(
+pub(crate) fn verify_lipschitz_via_spectral(
     matrix: &[Vec<f64>],
     claimed_lipschitz: f64,
     max_iterations: usize,
@@ -372,7 +372,11 @@ pub fn verify_lipschitz_via_spectral(
 ///
 /// Returns `None` if the matrix has rank <= 1 (sigma_2 ~ 0).
 #[must_use]
-pub fn spectral_gap(matrix: &[Vec<f64>], max_iterations: usize, tolerance: f64) -> Option<f64> {
+pub(crate) fn spectral_gap(
+    matrix: &[Vec<f64>],
+    max_iterations: usize,
+    tolerance: f64,
+) -> Option<f64> {
     if matrix.is_empty() {
         return None;
     }
@@ -460,7 +464,7 @@ pub fn spectral_gap(matrix: &[Vec<f64>], max_iterations: usize, tolerance: f64) 
 ///
 /// Returns `Ok((sigma_a, sigma_b, sigma_ab))` if the inequality holds,
 /// `Err` otherwise.
-pub fn verify_submultiplicativity(
+pub(crate) fn verify_submultiplicativity(
     a: &[Vec<f64>],
     b: &[Vec<f64>],
     max_iterations: usize,

@@ -114,9 +114,21 @@ fn test_error_accum_chains_axiom_free() {
 /// half-ulp bound, not assumed.
 #[test]
 fn test_fl_op_rel_error_discharges_both_precisions() {
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // both discharges evaluate `Rat.roundToNearestEven`, an OPAQUE placeholder
+    // only its native reducer gives a value; native folds now need a canonical
+    // definition, so neither is registered. The ∀ accumulation lemmas are.
     let env = make_prelude_env();
-    assert_axiom_free_theorem(&env, "NNVerify.FloatRational.fl_op_rel_error_discharge_f32");
-    assert_axiom_free_theorem(&env, "NNVerify.FloatRational.fl_op_rel_error_discharge_f64");
+    for name in [
+        "NNVerify.FloatRational.fl_op_rel_error_discharge_f32",
+        "NNVerify.FloatRational.fl_op_rel_error_discharge_f64",
+    ] {
+        assert!(
+            env.get_const(&Name::from_string(name)).is_none(),
+            "{name} rests on an unjustified fold and must not be registered"
+        );
+    }
+    assert_axiom_free_theorem(&env, "NNVerify.FloatRational.error_accum_step");
 }
 
 /// The concrete γ_n / (1+u)^n bounds REDUCE in-kernel for small n at the small

@@ -32,12 +32,13 @@ impl Environment {
             return Ok(());
         }
 
-        // Initialize `True`/`False` FIRST so `Decidable.isFalse` is built with the
-        // real `(p → False)` negation type, never the impredicative `∀ q, q`
-        // fallback below. Without this, an env that reaches `init_decidable`
-        // before `init_true_false` permanently locks in the fallback shape, and a
-        // later concrete `Decidable` instance whose `isFalse` branch targets the
-        // real `False` (e.g. `Nat.decEq`) fails to type-check. `init_true_false`
+        // Initialize `True`/`False` (and with them `Not`) FIRST so
+        // `Decidable.isFalse` is built with the real `¬p` negation type, never
+        // the impredicative `∀ q, q` fallback below. Without this, an env that
+        // reaches `init_decidable` before `init_true_false` permanently locks in
+        // the fallback shape, and a later concrete `Decidable` instance whose
+        // `isFalse` branch targets the real `False` (e.g. `Nat.decEq`) fails to
+        // type-check. `init_true_false`
         // only depends on `init_eq`, so there is no cycle. (Robustness fix for the
         // call-order hazard; complements the same ordering in `init_decidable_eq`.)
         self.init_true_false()?;
@@ -68,12 +69,22 @@ impl Environment {
             b.finish(r)
         };
 
-        // Decidable.isFalse : ∀ (p : Prop), (p → False) → Decidable p
+        // Decidable.isFalse : {p : Prop} → (h : ¬p) → Decidable p, the
+        // argument stated with the `Not` head as Lean states it (`Init.Prelude`).
+        // A `cases d` / `match` on it then hands the negative branch `h : ¬p`,
+        // which simp reads as `p = False`; the unfolded `p → False` it is
+        // definitionally equal to is, to simp, a conditional rule. The
+        // impredicative fallback (no `False` yet) keeps its arrow: `Not` is
+        // registered by `init_true_false` alongside `False`.
         let is_false_type = {
             let mut b = EnvDeclBuilder::new();
             let (p_id, p_var) = b.fresh_local(prop.clone());
-            // h : p → False
-            let not_p = {
+            let not_p = if self.true_false_init {
+                Expr::app(
+                    Expr::const_(Name::from_string("Not"), vec![]),
+                    p_var.clone(),
+                )
+            } else {
                 let mut c = EnvDeclBuilder::child_of(&b);
                 let (x_id, _) = c.fresh_local(p_var.clone());
                 c.mk_pi(x_id, BinderInfo::Default, p_var.clone(), false_type.clone())
@@ -154,7 +165,6 @@ impl Environment {
             let bool_const = Expr::const_(Name::from_string("Bool"), vec![]);
             let bool_true = Expr::const_(Name::from_string("Bool.true"), vec![]);
             let bool_false = Expr::const_(Name::from_string("Bool.false"), vec![]);
-            let false_const = Expr::const_(Name::from_string("False"), vec![]);
 
             // Type: (p : Prop) → [inst : Decidable p] → Bool
             let decide_bool_type = {
@@ -174,7 +184,7 @@ impl Environment {
 
             // value: fun {p} (inst : Decidable p) =>
             //   @Decidable.rec.{1} p (fun _ => Bool)
-            //     (fun (_ : p → False) => Bool.false)   -- isFalse minor
+            //     (fun (_ : ¬p) => Bool.false)          -- isFalse minor
             //     (fun (_ : p)         => Bool.true)    -- isTrue  minor
             //     inst
             let decide_bool_value = {
@@ -194,18 +204,13 @@ impl Environment {
                         bool_const.clone(),
                     ))
                 };
-                // isFalse minor : (h : p → False) => Bool.false
+                // isFalse minor : (h : ¬p) => Bool.false — the binder as
+                // `Decidable.isFalse` states its argument.
                 let minor_false = {
-                    let not_p = {
-                        let mut d = EnvDeclBuilder::child_of(&b);
-                        let (x_id, _) = d.fresh_local(p_var.clone());
-                        d.finish_child(d.mk_pi(
-                            x_id,
-                            BinderInfo::Default,
-                            p_var.clone(),
-                            false_const.clone(),
-                        ))
-                    };
+                    let not_p = Expr::app(
+                        Expr::const_(Name::from_string("Not"), vec![]),
+                        p_var.clone(),
+                    );
                     let mut c = EnvDeclBuilder::child_of(&b);
                     let (h_id, _) = c.fresh_local(not_p.clone());
                     c.finish_child(c.mk_lam(h_id, BinderInfo::Default, not_p, bool_false.clone()))
@@ -427,21 +432,13 @@ impl Environment {
 
         let or_const = Expr::const_(Name::from_string("Or"), vec![]);
 
-        // Classical.em : (p : Prop) → Or p (p → False)
+        // Classical.em : (p : Prop) → p ∨ ¬p, `¬p` with the `Not` head as
+        // Lean states it (`Init.Core`); see `Decidable.isFalse` above.
+        let not_const = Expr::const_(Name::from_string("Not"), vec![]);
         let em_type = {
             let mut b = EnvDeclBuilder::new();
             let (p_id, p_var) = b.fresh_local(prop.clone());
-            // ¬p = p → False
-            let not_p = {
-                let mut c = EnvDeclBuilder::child_of(&b);
-                let (x_id, _) = c.fresh_local(p_var.clone());
-                c.mk_pi(
-                    x_id,
-                    BinderInfo::Default,
-                    p_var.clone(),
-                    false_const.clone(),
-                )
-            };
+            let not_p = Expr::app(not_const.clone(), p_var.clone());
             let r = Expr::app(Expr::app(or_const.clone(), p_var), not_p);
             let r = b.mk_pi(p_id, BinderInfo::Default, prop.clone(), r);
             b.finish(r)
@@ -466,23 +463,15 @@ impl Environment {
             }
         }
 
-        // Classical.byContradiction : {p : Prop} → ((p → False) → False) → p
+        // Classical.byContradiction : {p : Prop} → (¬p → False) → p, as Lean
+        // states it (`Init.Classical`).
         let by_contradiction_type = {
             let mut b = EnvDeclBuilder::new();
             let (p_id, p_var) = b.fresh_local(prop.clone());
-            // (p → False) → False
+            // ¬p → False
             let h_ty = {
                 let mut c = EnvDeclBuilder::child_of(&b);
-                let not_p_inner = {
-                    let mut d = EnvDeclBuilder::child_of(&c);
-                    let (x_id, _) = d.fresh_local(p_var.clone());
-                    d.mk_pi(
-                        x_id,
-                        BinderInfo::Default,
-                        p_var.clone(),
-                        false_const.clone(),
-                    )
-                };
+                let not_p_inner = Expr::app(not_const.clone(), p_var.clone());
                 let (np_id, _) = c.fresh_local(not_p_inner.clone());
                 c.mk_pi(np_id, BinderInfo::Default, not_p_inner, false_const.clone())
             };

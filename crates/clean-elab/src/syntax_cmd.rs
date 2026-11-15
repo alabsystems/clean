@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use clean_parser::lexer::{Token, TokenKind};
-use clean_parser::{SurfaceExpr, SurfaceLit, SyntaxPatternItem};
+use clean_parser::{SurfaceExpr, SurfaceLit, SurfaceName, SyntaxPatternItem};
 
 /// Standard Lean syntax categories.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -292,6 +292,16 @@ fn collapse(mut captures: Vec<SyntaxMatch>) -> SyntaxMatch {
 }
 
 fn token_matches_literal(token: &Token, literal: &str) -> bool {
+    // A quoted identifier is not the unquoted syntax keyword, even when its
+    // structural name is equal. Explicit quoted literals retain their flags.
+    if token.ident_escaped {
+        let candidates = clean_parser::lexer::Lexer::tokenize(literal);
+        return matches!((&token.kind, candidates.as_slice()),
+            (TokenKind::Ident(actual), [expected, eof])
+                if matches!(eof.kind,TokenKind::Eof)
+                    && expected.ident_escaped
+                    && matches!(&expected.kind,TokenKind::Ident(text) if text==actual));
+    }
     token_text(token).is_some_and(|text| {
         text == literal
             || matches!(
@@ -312,6 +322,10 @@ fn token_matches_literal(token: &Token, literal: &str) -> bool {
 
 fn token_expr(token: &Token) -> Option<SurfaceExpr> {
     match &token.kind {
+        TokenKind::Ident(text) => Some(SurfaceExpr::Ident(
+            token.span,
+            SurfaceName::component(text.clone(), token.ident_escaped),
+        )),
         TokenKind::NatLit(n) => Some(SurfaceExpr::Lit(token.span, SurfaceLit::nat(n.clone()))),
         TokenKind::StringLit(s) => {
             Some(SurfaceExpr::Lit(token.span, SurfaceLit::String(s.clone())))
@@ -320,7 +334,8 @@ fn token_expr(token: &Token) -> Option<SurfaceExpr> {
         TokenKind::CharLit(c) => Some(SurfaceExpr::Lit(token.span, SurfaceLit::Char(*c))),
         TokenKind::Underscore => Some(SurfaceExpr::Hole(token.span)),
         TokenKind::Eof | TokenKind::Error(_) => None,
-        _ => token_text(token).map(|text| SurfaceExpr::Ident(token.span, text)),
+        _ => token_text(token)
+            .map(|text| SurfaceExpr::Ident(token.span, SurfaceName::component(text, false))),
     }
 }
 
@@ -374,3 +389,36 @@ fn token_text(token: &Token) -> Option<String> {
 #[cfg(test)]
 #[path = "syntax_cmd_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+mod typed_name_tests {
+    use super::*;
+
+    fn token(source: &str) -> Token {
+        clean_parser::lexer::Lexer::tokenize(source).remove(0)
+    }
+
+    #[test]
+    fn token_capture_preserves_escaped_identifier_components() {
+        for spelling in ["«A.B»", "«_»", "«Type»"] {
+            let expected = clean_parser::parse_name(spelling).unwrap();
+            let SurfaceExpr::Ident(_, actual) = token_expr(&token(spelling)).unwrap() else {
+                panic!("escaped identifier must stay an identifier");
+            };
+            assert!(actual.same_syntax(&expected));
+        }
+        assert!(matches!(
+            token_expr(&token("_")),
+            Some(SurfaceExpr::Hole(_))
+        ));
+    }
+
+    #[test]
+    fn quoted_keyword_token_does_not_match_unquoted_literal() {
+        assert!(!token_matches_literal(&token("«if»"), "if"));
+        assert!(token_matches_literal(&token("«if»"), "«if»"));
+        assert!(token_matches_literal(&token("if"), "if"));
+        assert!(!token_matches_literal(&token("if"), "«if»"));
+        assert!(!token_matches_literal(&token("«A.B»"), "A.B"));
+    }
+}

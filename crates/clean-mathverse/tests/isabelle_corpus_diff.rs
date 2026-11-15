@@ -73,6 +73,7 @@ fn clear_env() {
         "ISA_RETRY_LEDGER",
         "ISA_TRUSTED_LEDGER",
         "ISA_RETRY_SKIP_REGISTRY_REFRESH",
+        "ISA_VERIFY_LOCK_PATH",
     ] {
         clean_mathverse::process_env::remove_persistent(var);
     }
@@ -278,6 +279,10 @@ fn cli_verbs_wire_corpus_diff_and_incremental_import() {
 
     let dir = std::env::temp_dir().join(format!("isa_incr_cli_{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("mk tmpdir");
+    // The verb holds the machine-wide verify lock (`$HOME/isabelle-work` by
+    // default); a test takes its own, in its own directory.
+    let verify_lock = dir.join(".clean_verify.lock");
+    clean_mathverse::process_env::set_persistent("ISA_VERIFY_LOCK_PATH", &verify_lock);
 
     let mut lines: Vec<&str> = FIXTURE.lines().filter(|l| !l.trim().is_empty()).collect();
     lines.sort_by_key(|l| serial_of(l));
@@ -350,6 +355,8 @@ fn cli_verbs_wire_corpus_diff_and_incremental_import() {
         new_snap.exists(),
         "incremental import wrote the new snapshot"
     );
+    assert!(!verify_lock.exists(), "each verb released its verify lock");
+    clean_mathverse::process_env::remove_persistent("ISA_VERIFY_LOCK_PATH");
 
     let _ = std::fs::remove_dir_all(&dir);
 }

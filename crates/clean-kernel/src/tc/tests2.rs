@@ -31,6 +31,7 @@ mod lift_expr;
 mod local_context;
 mod mutual_inductive;
 mod nat_bignum_parity;
+mod nat_pow_exponent_cap;
 mod nat_reduction;
 mod no_confusion;
 mod no_confusion_fallback2_tests;

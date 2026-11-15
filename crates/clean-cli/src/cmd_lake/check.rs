@@ -10,15 +10,20 @@ use std::path::PathBuf;
 
 /// Run linters on the project.
 ///
-/// Lints each library root module by running the default lint rule set over
-/// its parsed surface syntax (see [`super::lint`]). The pass reports
-/// parse/type-level errors plus the cheap, sound semantic warnings
-/// (unused/shadowed bindings, missing docs on public declarations) with
-/// per-issue line/column locations and a structured per-module summary.
+/// SCOPE. Lints every module of each selected library — its `globs` when it
+/// sets them (which replace its roots, as in Lake: the root itself is then
+/// linted only if a glob selects it), otherwise its roots and their
+/// submodules — and every workspace module those import, transitively — by running the default lint rule set over its parsed
+/// surface syntax (see [`super::lint`]): parse errors plus the cheap, sound
+/// semantic warnings (unused/shadowed bindings, missing docs on public
+/// declarations).
 ///
-/// Deeper, elaboration-driven rules (unsolved-goal diagnostics, dead `simp`
-/// lemmas, environment-resolved unused imports) are deferred follow-ups; this
-/// pass is intentionally portable (no network, no `.olean` resolution).
+/// NON-CREDITING. Nothing is elaborated or kernel-checked, so a module with no
+/// lint issue is reported as exactly that — never `OK`. It used to print
+/// `<root> - OK` / `No lint issues found.` for a package whose non-root
+/// `Basic.lean` held `theorem bad : 1 = 2 := rfl`: it linted the root modules
+/// only, and its `OK` read as a verdict on the package (round-24
+/// verification of 29de4ae8b). `clean lake check-build` is the check.
 pub(super) fn lake_lint(
     target: Option<String>,
     verbose: bool,
@@ -35,32 +40,39 @@ pub(super) fn lake_lint(
 
     let ws = Workspace::from_config(&cwd, config);
 
-    let targets: Vec<String> = if let Some(ref name) = target {
-        ws.config()
-            .libs
-            .iter()
-            .filter(|l| l.name == *name)
-            .flat_map(clean_lake::LeanLib::root_modules)
-            .collect()
-    } else {
-        ws.config()
-            .libs
-            .iter()
-            .flat_map(clean_lake::LeanLib::root_modules)
-            .collect()
-    };
+    let libs: Vec<String> = ws
+        .config()
+        .libs
+        .iter()
+        .filter(|l| target.as_ref().is_none_or(|name| l.name == *name))
+        .map(|l| l.name.clone())
+        .collect();
+    let targets = lint_scope(&ws, &libs)?;
 
     if targets.is_empty() {
         println!("No targets to lint.");
         return Ok(());
     }
 
+    println!(
+        "Lint scope: {} module(s) of {} (each library's `globs` when it sets them, otherwise its \
+         roots and their submodules; plus the workspace modules those import).",
+        targets.len(),
+        libs.join(", ")
+    );
+    println!(
+        "Syntactic lint only: nothing is elaborated or kernel-checked, so this credits no \
+         declaration. `clean lake check-build` checks them."
+    );
+
     let mut total = LintSummary::default();
     let mut modules_with_issues = 0usize;
+    let mut unread = Vec::new();
 
     for root in &targets {
         let Some(module_path) = ws.find_module(root) else {
-            eprintln!("  {root} - source not found (skipped)");
+            eprintln!("  {root} - source not found (NOT linted)");
+            unread.push(root.clone());
             continue;
         };
         if verbose {
@@ -73,7 +85,7 @@ pub(super) fn lake_lint(
         let summary = report.summary();
 
         if report.issues.is_empty() {
-            println!("  {root} - OK");
+            println!("  {root} - no lint issues");
         } else {
             modules_with_issues += 1;
             println!(
@@ -101,8 +113,21 @@ pub(super) fn lake_lint(
         total.warnings += summary.warnings;
     }
 
+    let linted = targets.len() - unread.len();
+    // A module in scope that could not be read was not linted: the run does
+    // not report "no issues" over it.
+    if !unread.is_empty() {
+        anyhow::bail!(
+            "lint could not read {} of {} module(s) in scope: {}",
+            unread.len(),
+            targets.len(),
+            unread.join(", ")
+        );
+    }
     if total.total() == 0 {
-        println!("No lint issues found.");
+        println!(
+            "No lint issues found in {linted} module(s) (syntactic lint; no declaration was checked)."
+        );
         Ok(())
     } else {
         eprintln!(
@@ -117,6 +142,31 @@ pub(super) fn lake_lint(
         }
         Ok(())
     }
+}
+
+/// The modules `lake lint` reads for `libs`: each library's modules
+/// ([`clean_lake::Workspace::lib_modules`]) plus every workspace module they
+/// import, transitively. Sorted and de-duplicated.
+fn lint_scope(ws: &clean_lake::Workspace, libs: &[String]) -> anyhow::Result<Vec<String>> {
+    use std::collections::BTreeSet;
+
+    let mut scope = BTreeSet::new();
+    for lib in libs {
+        scope.extend(ws.lib_modules(lib)?);
+    }
+    if scope.is_empty() {
+        return Ok(Vec::new());
+    }
+    let graph = ws.import_graph()?;
+    let mut work: Vec<String> = scope.iter().cloned().collect();
+    while let Some(module) = work.pop() {
+        for import in graph.get(&module).into_iter().flatten() {
+            if graph.contains_key(import) && scope.insert(import.clone()) {
+                work.push(import.clone());
+            }
+        }
+    }
+    Ok(scope.into_iter().collect())
 }
 
 /// Check if build would succeed (dry run)
@@ -148,6 +198,7 @@ pub(super) fn lake_check_build(
     };
 
     if result.failed.is_empty() {
+        super::build::print_disclosures(&result.disclosures);
         println!("Build check passed.");
         Ok(())
     } else {
@@ -291,6 +342,7 @@ fn check_targets_elaborate(
         }
         anyhow::bail!("Check failed with {} error(s)", result.failed.len());
     }
+    super::build::print_disclosures(&result.disclosures);
     Ok(())
 }
 
@@ -425,6 +477,39 @@ mod tests {
             result.is_err(),
             "module with a parse error should fail the lint"
         );
+    }
+
+    /// Round-24 verification of 29de4ae8b: `lake lint` printed `P - OK` /
+    /// `No lint issues found.` for a package whose non-root module held a
+    /// failing theorem — it read the root modules only. The non-root module
+    /// is now in scope (its parse error is found), and a clean lint no longer
+    /// claims `OK`.
+    #[test]
+    fn test_lake_lint_reads_non_root_modules() {
+        let dir = lake_project_with_module("import Demo.Basic\n/-- Doc. -/\ndef f : Nat := 1\n");
+        std::fs::create_dir_all(dir.path().join("Demo")).expect("mkdir");
+        std::fs::write(dir.path().join("Demo/Basic.lean"), "def g : := \n").expect("write");
+        let result = lake_lint(None, false, Some(dir.path().to_path_buf()));
+        assert!(
+            result.is_err(),
+            "a parse error in a non-root module must fail the lint"
+        );
+    }
+
+    /// A workspace module the root imports but that is not a submodule of the
+    /// root is in scope too.
+    #[test]
+    fn test_lake_lint_scope_follows_workspace_imports() {
+        let dir = lake_project_with_module("import Helper\n/-- Doc. -/\ndef f : Nat := 1\n");
+        std::fs::write(
+            dir.path().join("Helper.lean"),
+            "/-- Doc. -/\ndef h : Nat := 2\n",
+        )
+        .expect("write");
+        let config = super::super::load_project_config(dir.path()).expect("config");
+        let ws = clean_lake::Workspace::from_config(dir.path(), config);
+        let targets = lint_scope(&ws, &["Demo".to_string()]).expect("scope");
+        assert_eq!(targets, vec!["Demo".to_string(), "Helper".to_string()]);
     }
 
     #[test]

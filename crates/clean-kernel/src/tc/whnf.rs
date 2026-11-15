@@ -119,6 +119,7 @@ impl<'env> TypeChecker<'env> {
     /// - **Idempotent**: `whnf(whnf(e)) == whnf(e)` (enforced by debug assertion)
     /// - **Meaning-preserving**: `is_def_eq(e, whnf(e))` for all well-typed `e`
     pub fn whnf(&self, e: &Expr) -> Expr {
+        self.ensure_cache_theory();
         // No stack_safe here — whnf_impl already wraps its inner call
         // in stack_safe, and all recursive paths go through whnf_impl.
         self.whnf_impl(e)
@@ -129,6 +130,9 @@ impl<'env> TypeChecker<'env> {
     /// Every recursive call goes through `stack_safe` to prevent stack overflow
     /// on deeply nested expressions. See #1455.
     pub(super) fn whnf_impl(&self, e: &Expr) -> Expr {
+        // Metered from before the cache peek: a hit is not free when its key
+        // comparison walks a long term (`work_account.rs`).
+        let _metered = self.metered_scope();
         // Lean 4 parity: skip cache/whnf_core for kinds that are already in WHNF.
         // Reference: type_checker.cpp:639-656 — whnf() returns immediately for
         // BVar, Sort, MVar, Pi, Lit, Lambda, and non-let FVar.
@@ -178,6 +182,10 @@ impl<'env> TypeChecker<'env> {
         // timeout on cheap repeated lookups).
         if let Some(cached) = self.whnf_cache.borrow_mut().get(e) {
             return cached;
+        }
+
+        if self.constructor_is_already_whnf(e) {
+            return e.clone();
         }
 
         self.inc_heartbeat();
@@ -257,7 +265,7 @@ impl<'env> TypeChecker<'env> {
         // Cache all WHNF results including identity — prevents O(n^2+) re-traversal
         // on stuck app chains (axiom/opaque head). Matches Lean 4. See #1584.
         // Sliding window eviction retains hot entries across trim cycles (#2410).
-        {
+        if !self.heartbeat_exhausted() && !self.level_sharing_recorded() {
             let mut cache = self.whnf_cache.borrow_mut();
             cache.trim_if_needed(self.max_cache_entries);
             cache.insert(e.clone(), result.clone());
@@ -283,9 +291,11 @@ impl<'env> TypeChecker<'env> {
     ///
     /// Per-mode policy (only consulted when `honor_reducibility` is on):
     /// - `All`: never blocks (everything unfolds, incl. `@[irreducible]`).
-    /// - `Default`/`Instances` (B14): only `@[irreducible]` is gated;
+    /// - `Default` (B14): only `@[irreducible]` is gated;
     ///   `Regular`/`@[reducible]`/theorem heads keep their pre-B14 unfolding, so
     ///   ordinary def-eq/WHNF completeness is preserved.
+    /// - `Instances` (G47 — instance synthesis): only `@[reducible]` heads and
+    ///   registered instances unfold; a semireducible `def` stays folded.
     /// - `Reducible` (B15 — simp/`withReducible`): only `@[reducible]`
     ///   (abbreviation) heads unfold; `Regular` (semireducible), `@[irreducible]`,
     ///   and `Opaque` (theorem) heads stay folded. This is the transparency
@@ -305,12 +315,22 @@ impl<'env> TypeChecker<'env> {
                 .env
                 .get_const(name)
                 .is_some_and(|info| !info.reducibility.should_unfold(TransparencyMode::Reducible)),
-            // Default / Instances: preserve the B14 behavior exactly (Irreducible
-            // only) so the existing honor-reducibility callers are unchanged.
-            TransparencyMode::Default | TransparencyMode::Instances => self
+            // Default: preserve the B14 behavior exactly (Irreducible only) so
+            // the existing honor-reducibility callers are unchanged.
+            TransparencyMode::Default => self
                 .env
                 .get_const(name)
                 .is_some_and(|info| info.reducibility == crate::env::Reducibility::Irreducible),
+            // Instances (G47 — instance synthesis, Lean's `.instances`): only
+            // `@[reducible]` heads and registered INSTANCES unfold, exactly the
+            // rule `Environment::unfold_with_transparency` states for this
+            // mode; a plain (semireducible) `def` stays folded, so `def M a :=
+            // Option a` is not `Option` to instance search.
+            TransparencyMode::Instances => self.env.get_const(name).is_some_and(|info| {
+                !info.reducibility.should_unfold(TransparencyMode::Instances)
+                    && !(self.env.is_instance(name)
+                        && info.reducibility != crate::env::Reducibility::Opaque)
+            }),
         }
     }
 
@@ -327,6 +347,7 @@ impl<'env> TypeChecker<'env> {
     ///   `whnf_core(e, false, false)` without `unfold_definition`.
     ///   Used by `is_def_eq_core` Phase 5.
     pub(super) fn whnf_core_no_delta(&self, e: &Expr, cheap_proj: bool) -> Expr {
+        let _metered = self.metered_scope();
         // Cache read is unconditional — matches Lean 4 m_whnf_core behavior.
         // Cheap-mode calls benefit from full-mode cached results since full
         // reduction is strictly more reduced (safe to reuse). Part of #1768.
@@ -381,6 +402,7 @@ impl<'env> TypeChecker<'env> {
     /// ENSURES: `is_def_eq(e, result)` holds (definitional equality preserved)
     /// ENSURES: Only unfolds definitions permitted by `mode`
     pub fn whnf_with_transparency(&self, e: &Expr, mode: TransparencyMode) -> Expr {
+        let _metered = self.begin_operation();
         // No stack_safe here — whnf_recurse (called by whnf_core_inner) already
         // wraps WithTransparency recursion in stack_safe.
         self.whnf_with_transparency_impl(e, mode)
@@ -632,47 +654,7 @@ impl<'env> TypeChecker<'env> {
             // so this avoids an O(spine) walk + SmallVec collect per WHNF on
             // every head-normal application. `e` is unchanged ⇒ identical args.
             let args = e.get_app_args();
-            // Count how many nested lambdas we can consume
-            let num_args = args.len();
-            let mut body = &f;
-            let mut m = 0usize;
-            while let ExprKind::Lam(_, _, inner_body) = &body.kind {
-                m += 1;
-                if m >= num_args {
-                    break;
-                }
-                body = inner_body;
-            }
-            // body is now the innermost lambda body, m = number of lambdas consumed
-            // Extract the actual body (unwrap the last Lam)
-            let inner_body = if let ExprKind::Lam(_, _, b) = &body.kind {
-                b.as_ref()
-            } else {
-                // m was incremented past available lambdas — shouldn't happen
-                // but handle gracefully
-                body
-            };
-
-            // Build the substitution values: args[num_args-m .. num_args] in reverse
-            // BVar(0) = args[num_args - m] (first consumed arg)
-            // BVar(m-1) = args[num_args - 1] (last consumed arg)
-            // But actually: we consumed the FIRST m args (args[0..m]).
-            // The lambda telescope is: λ x₀. λ x₁. ... λ xₘ₋₁. body
-            // args[0] corresponds to x₀ = BVar(m-1) in body
-            // args[1] corresponds to x₁ = BVar(m-2) in body
-            // args[m-1] corresponds to xₘ₋₁ = BVar(0) in body
-            // So vals[i] = args[m-1-i] for BVar(i)
-            let mut vals: smallvec::SmallVec<[Expr; 8]> = smallvec::SmallVec::with_capacity(m);
-            for i in 0..m {
-                vals.push(args[m - 1 - i].clone());
-            }
-
-            let mut reduced = inner_body.instantiate_rev(&vals);
-
-            // Apply remaining args (if any) that weren't consumed by lambdas
-            for arg in &args[m..] {
-                reduced = Expr::app(reduced, (*arg).clone());
-            }
+            let reduced = super::beta::apply_lambdas(&f, &args);
 
             // PERF-CLASS GUARD (carrier tower) — projection-spine bypass.
             // If this head-unfold+beta just materialized a native-Nat grind

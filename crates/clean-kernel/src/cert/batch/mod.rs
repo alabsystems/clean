@@ -19,6 +19,10 @@ pub use build_types::{BatchBuildInput, BatchBuildResult, BatchBuildStats, Builde
 pub use runner::{BatchBuildVerifier, BatchVerifier};
 pub use verify::{
     batch_verify, batch_verify_sequential, batch_verify_sequential_with_stats,
-    batch_verify_with_stats, batch_verify_with_stats_progress, batch_verify_with_stats_threads,
-    batch_verify_with_threads, BatchVerifyInput, BatchVerifyResult, BatchVerifyStats,
+    batch_verify_with_stats, batch_verify_with_threads, BatchVerifyInput, BatchVerifyResult,
+    BatchVerifyStats,
 };
+// Crate-internal since 2026-10-15: `BatchVerifier` (`with_progress`, `with_threads`) is how
+// callers outside the kernel reach them, and none called them directly.
+#[cfg(test)]
+pub(crate) use verify::{batch_verify_with_stats_progress, batch_verify_with_stats_threads};

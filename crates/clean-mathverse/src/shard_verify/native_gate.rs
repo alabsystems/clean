@@ -171,7 +171,7 @@ pub fn verify_native_shard(path: &Path) -> Result<NativeGateReport, NativeGateEr
         path: path.to_path_buf(),
         source,
     })?;
-    let reader = ShardReader::from_bytes(&bytes)
+    let reader = ShardReader::from_bytes_strict_provenance(&bytes)
         .map_err(|error| NativeGateError::ShardRead(error.to_string()))?;
     let mut env = native_replay_environment();
     let mut rejected_names = HashSet::new();
@@ -203,7 +203,7 @@ pub fn verify_native_shard_dir(dir: &Path) -> Result<NativeGateReport, NativeGat
             path: path.to_path_buf(),
             source,
         })?;
-        let reader = ShardReader::from_bytes(&bytes)
+        let reader = ShardReader::from_bytes_strict_provenance(&bytes)
             .map_err(|error| NativeGateError::ShardRead(error.to_string()))?;
         let shard_report =
             verify_native_reader(&reader, &mut env, &mut rejected_names, &mut seen_names);

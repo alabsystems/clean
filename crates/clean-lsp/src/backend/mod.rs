@@ -8,8 +8,13 @@
 
 pub(crate) mod analysis;
 pub(crate) mod background;
+#[cfg(test)]
+mod bound_goal_tests;
 mod code_actions;
+mod declaration_term_info;
+mod document_elab;
 mod document_ops;
+mod goal_spans;
 mod helpers;
 mod hover;
 #[cfg(test)]
@@ -19,15 +24,19 @@ mod language_server;
 mod links;
 mod navigation;
 #[cfg(test)]
+mod plain_term_goal_tests;
+#[cfg(test)]
 mod registration_warning_tests;
 mod selection_range;
 pub(crate) mod semantic_tokens;
+mod source_mask;
+mod term_goal_selection;
 #[cfg(test)]
 mod tests;
 mod type_hierarchy;
 pub(crate) mod warnings;
 
-use crate::document::{Document, ElaboratedDecl};
+use crate::document::Document;
 use crate::rpc::{
     PanelWidgetInstance, PositionedInteractiveGoals, PositionedTermGoal, Range as RpcRange,
     RpcSessionManager, WidgetSource,
@@ -137,6 +146,7 @@ pub(crate) struct TacticGoalSnapshot {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(test)]
 pub(crate) struct TacticSnapshotBridgeGap {
     pub(crate) post_tactic_range: Range,
     pub(crate) tactic_script: String,
@@ -307,6 +317,7 @@ impl CleanBackend {
         })
     }
 
+    #[cfg(test)]
     fn has_live_hole_expected_type_state(&self) -> bool {
         self.documents.iter().any(|entry| {
             entry
@@ -317,35 +328,18 @@ impl CleanBackend {
         })
     }
 
-    /// Find the hole context at `position` in `doc`, preferring the
-    /// innermost (narrowest) hole when several overlap. Returns the recorded
-    /// hole-local expected type the elaborator demanded at that hole.
-    fn hole_expected_type_at_position(&self, doc: &Document, position: Position) -> Option<String> {
-        let elab = doc.elaborated.as_ref()?;
-        elab.holes
-            .iter()
-            .filter(|hole| {
-                let start = doc.offset_to_position(hole.start);
-                let end = doc.offset_to_position(hole.end);
-                position_after_or_equal(position, start) && position_before(position, end)
-            })
-            // Prefer the smallest matching hole span so a nested hole wins over
-            // an enclosing one.
-            .min_by_key(|hole| hole.end.saturating_sub(hole.start))
-            .map(format_hole_goal)
-    }
-
-    fn elaborated_decl_at_position<'a>(
+    /// Find a recorded hole context at `position`, preferring the narrowest
+    /// overlapping span. Invalid byte spans cannot become clamped LSP ranges.
+    fn hole_context_at_position<'a>(
         &self,
         doc: &'a Document,
         position: Position,
-    ) -> Option<&'a ElaboratedDecl> {
+    ) -> Option<&'a crate::document::HoleContext> {
         let elab = doc.elaborated.as_ref()?;
-        elab.declarations.iter().find(|decl| {
-            let start = doc.offset_to_position(decl.start);
-            let end = doc.offset_to_position(decl.end);
-            position_after_or_equal(position, start) && position_before(position, end)
-        })
+        elab.holes
+            .iter()
+            .filter(|hole| recorded_span_contains(doc, hole.start, hole.end, position))
+            .min_by_key(|hole| hole.end.saturating_sub(hole.start))
     }
 
     #[allow(deprecated)] // Lean4-compatible panel widget shape still carries optional name.
@@ -465,12 +459,11 @@ impl CleanBackend {
 
     /// Refresh the structured goal state for `uri` in the RPC goal registry.
     ///
-    /// Sources the same live data as `$/lean/plainGoal` / `$/lean/plainTermGoal`:
-    /// range-local tactic goal snapshots (parsed back into structured
-    /// [`InteractiveGoals`]) and hole contexts / declaration types recorded
-    /// during elaboration (as [`InteractiveTermGoal`] entries). Term-goal
-    /// entries are pushed narrowest-first — holes (innermost first) before
-    /// enclosing declarations — because the registry lookup is first-match.
+    /// Sources range-local tactic snapshots and recorded hole contexts.
+    /// The RPC term-goal registry also retains its existing declaration-type
+    /// fallback; that fallback is separate from `$/lean/plainTermGoal`, whose
+    /// ranged responses require a captured hole. Term entries are pushed
+    /// narrowest-first because the registry lookup is first-match.
     fn refresh_infoview_goals(&self, uri: &Url) {
         let doc_is_elaborated = self
             .documents
@@ -562,52 +555,130 @@ impl CleanBackend {
     pub(crate) fn plain_goal(
         &self,
         params: crate::rpc::PlainGoalParams,
-    ) -> crate::rpc::PlainGoalResponse {
+    ) -> Option<crate::rpc::PlainGoalResponse> {
         let has_elaborated_doc = self
             .documents
             .get(&params.text_document.uri)
             .is_some_and(|doc| doc.elaborated.is_some());
         if has_elaborated_doc && self.has_live_tactic_goal_state() {
             if let Some(snapshots) = self.tactic_goal_snapshots.get(&params.text_document.uri) {
-                if let Some(snapshot) = snapshots.value().iter().find(|snapshot| {
-                    position_after_or_equal(params.position, snapshot.range.start)
-                        && position_before(params.position, snapshot.range.end)
-                }) {
-                    return crate::rpc::PlainGoalResponse {
-                        goals: Some(snapshot.goals.clone()),
+                if let Some(snapshot) = snapshots
+                    .value()
+                    .iter()
+                    .rev()
+                    .filter(|snapshot| {
+                        position_after_or_equal(params.position, snapshot.range.start)
+                            && (position_before(params.position, snapshot.range.end)
+                                || (snapshot.range.start == snapshot.range.end
+                                    && params.position == snapshot.range.start))
+                    })
+                    .min_by_key(|snapshot| {
+                        (
+                            snapshot
+                                .range
+                                .end
+                                .line
+                                .saturating_sub(snapshot.range.start.line),
+                            snapshot
+                                .range
+                                .end
+                                .character
+                                .saturating_sub(snapshot.range.start.character),
+                        )
+                    })
+                {
+                    let goals = snapshot.goals.clone();
+                    let rendered = if goals.is_empty() {
+                        "no goals".to_string()
+                    } else {
+                        goals
+                            .iter()
+                            .map(|goal| format!("```lean\n{goal}\n```"))
+                            .collect::<Vec<_>>()
+                            .join("\n---\n")
                     };
+                    return Some(crate::rpc::PlainGoalResponse { rendered, goals });
                 }
             }
         }
 
-        crate::rpc::PlainGoalResponse { goals: None }
+        None
     }
 
-    /// Handle $/lean/plainTermGoal
-    ///
-    /// Returns the expected type at a position as plain text. A hole-local
-    /// expected type (recorded during elaboration for `_`/`sorry` holes that
-    /// constitute a declaration's body) takes precedence over the enclosing
-    /// declaration's type, so a cursor on the hole reports the goal the
-    /// elaborator demanded there rather than the whole-declaration type.
+    /// Handle $/lean/plainTermGoal, retaining the document guard while reading
+    /// its captured state so closing a file cannot race a second lookup.
+    pub(crate) fn plain_term_goal_request(
+        &self,
+        params: crate::rpc::PlainTermGoalParams,
+    ) -> tower_lsp::jsonrpc::Result<Option<crate::rpc::PlainTermGoalResponse>> {
+        let doc = self
+            .documents
+            .get(&params.text_document.uri)
+            .ok_or_else(|| tower_lsp::jsonrpc::Error {
+                code: tower_lsp::jsonrpc::ErrorCode::ContentModified,
+                message: format!(
+                    "Cannot process request to closed file '{}'",
+                    params.text_document.uri
+                )
+                .into(),
+                data: None,
+            })?;
+        Ok(self.plain_term_goal_from_document(&doc, params.position))
+    }
+
+    /// Test helper for the optional captured state, independent of wire errors.
+    #[cfg(test)]
     pub(crate) fn plain_term_goal(
         &self,
         params: crate::rpc::PlainTermGoalParams,
-    ) -> crate::rpc::PlainTermGoalResponse {
-        if let Some(doc) = self.documents.get(&params.text_document.uri) {
-            if doc.elaborated.is_some() && self.has_live_hole_expected_type_state() {
-                if let Some(goal) = self.hole_expected_type_at_position(&doc, params.position) {
-                    return crate::rpc::PlainTermGoalResponse { goal: Some(goal) };
-                }
-            }
-            if let Some(decl) = self.elaborated_decl_at_position(&doc, params.position) {
-                return crate::rpc::PlainTermGoalResponse {
-                    goal: Some(decl.type_str.clone()),
-                };
+    ) -> Option<crate::rpc::PlainTermGoalResponse> {
+        let doc = self.documents.get(&params.text_document.uri)?;
+        self.plain_term_goal_from_document(&doc, params.position)
+    }
+
+    /// Read a captured term goal from an open document.
+    ///
+    /// Returns JSON null without a captured term goal at this position.
+    /// A declaration's public type and range are not term-local expected-type
+    /// observations. Hole metadata remains available when a generic term
+    /// observation could not be finalized (for example, an unsolved term).
+    fn plain_term_goal_from_document(
+        &self,
+        doc: &Document,
+        position: Position,
+    ) -> Option<crate::rpc::PlainTermGoalResponse> {
+        let info = term_goal_selection::at_position(doc, position);
+        let hole = self.hole_context_at_position(doc, position);
+        if let Some(info) = info {
+            let captured_hole_is_inner = hole.is_some_and(|hole| {
+                info.start <= hole.start
+                    && hole.end <= info.end
+                    && hole.end - hole.start < info.end - info.start
+            });
+            let partial_hole_has_type = info.is_partial
+                && info.goal.is_none()
+                && hole.is_some_and(|hole| hole.start == info.start && hole.end == info.end);
+            if !captured_hole_is_inner && !partial_hole_has_type {
+                return info
+                    .goal
+                    .as_ref()
+                    .map(|goal| crate::rpc::PlainTermGoalResponse {
+                        goal: goal.clone(),
+                        range: RpcRange {
+                            start: doc.offset_to_position(info.start),
+                            end: doc.offset_to_position(info.end),
+                        },
+                    });
             }
         }
-
-        crate::rpc::PlainTermGoalResponse { goal: None }
+        let hole = hole?;
+        Some(crate::rpc::PlainTermGoalResponse {
+            goal: format_hole_goal(hole),
+            range: RpcRange {
+                start: doc.offset_to_position(hole.start),
+                end: doc.offset_to_position(hole.end),
+            },
+        })
     }
 }
 
@@ -622,13 +693,9 @@ impl CleanBackend {
 /// ⊢ Q
 /// ```
 ///
-/// When no hypotheses are in scope, only the expected type is returned
-/// (unchanged from the pre-local-context behaviour), so body-level and
-/// no-binder holes report a bare expected type.
+/// Lean's `InteractiveTermGoal.pretty` retains the turnstile even when the
+/// local context is empty.
 fn format_hole_goal(hole: &crate::document::HoleContext) -> String {
-    if hole.local_bindings.is_empty() {
-        return hole.expected_type.clone();
-    }
     let mut out = String::new();
     for (name, ty) in &hole.local_bindings {
         out.push_str(name);
@@ -644,6 +711,20 @@ fn format_hole_goal(hole: &crate::document::HoleContext) -> String {
 fn position_after_or_equal(position: Position, boundary: Position) -> bool {
     position.line > boundary.line
         || (position.line == boundary.line && position.character >= boundary.character)
+}
+
+/// Validate source byte boundaries before comparing UTF-16 request positions.
+fn recorded_span_contains(doc: &Document, start: usize, end: usize, position: Position) -> bool {
+    if start >= end || end > doc.content.len_bytes() {
+        return false;
+    }
+    if doc.content.char_to_byte(doc.content.byte_to_char(start)) != start
+        || doc.content.char_to_byte(doc.content.byte_to_char(end)) != end
+    {
+        return false;
+    }
+    position_after_or_equal(position, doc.offset_to_position(start))
+        && position_after_or_equal(doc.offset_to_position(end), position)
 }
 
 fn position_before(position: Position, boundary: Position) -> bool {

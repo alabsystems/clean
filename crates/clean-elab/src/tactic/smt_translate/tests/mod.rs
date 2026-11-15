@@ -13,6 +13,8 @@ mod arithmetic;
 mod exists;
 mod fallback;
 mod fvar_apps;
+#[cfg(feature = "ay-smt")]
+mod integer_solver;
 mod logic;
 mod mdata_nat_type_args;
 mod parity_gaps;

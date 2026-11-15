@@ -81,8 +81,9 @@ fn test_aesop_disjunction_backtrack_right() {
         env,
         goal,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hB".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hB"),
             ty: Expr::const_(Name::from_string("B"), vec![]),
             value: None,
         }],
@@ -136,8 +137,9 @@ fn test_aesop_unsafe_priority_backtracks_after_dead_end() {
         env,
         goal,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hB".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hB"),
             ty: b,
             value: None,
         }],
@@ -198,14 +200,16 @@ fn test_aesop_nested_backtrack() {
         goal,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "hB".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hB"),
                 ty: b,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "hD".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hD"),
                 ty: d,
                 value: None,
             },
@@ -294,8 +298,9 @@ fn test_aesop_implication_chain_backtrack() {
         env,
         e,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hA".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hA"),
             ty: a,
             value: None,
         }],
@@ -351,14 +356,16 @@ fn test_aesop_conjunction_and_node() {
         goal,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "hA".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hA"),
                 ty: a,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "hB".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hB"),
                 ty: b,
                 value: None,
             },
@@ -429,14 +436,16 @@ fn test_aesop_probability_ordering() {
         goal,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "hA".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hA"),
                 ty: a,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "hB".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hB"),
                 ty: b,
                 value: None,
             },

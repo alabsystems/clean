@@ -31,9 +31,14 @@ fn cli_parse_cert_verify_external() {
     let cli = Cli::try_parse_from(["clean", "cert", "verify-external", "cert.json"]).unwrap();
     match cli.command {
         Commands::Cert { command } => match command {
-            CertCommands::VerifyExternal { cert, verbose } => {
+            CertCommands::VerifyExternal {
+                cert,
+                verbose,
+                timeout_ms,
+            } => {
                 assert_eq!(cert, PathBuf::from("cert.json"));
                 assert!(!verbose);
+                assert_eq!(timeout_ms, 600_000);
             }
             _ => panic!("Expected VerifyExternal command"),
         },
@@ -67,10 +72,12 @@ fn cli_parse_cert_verify_external_batch() {
                 certs,
                 threads,
                 verbose,
+                timeout_ms,
             } => {
                 assert_eq!(certs, PathBuf::from("certs.json"));
                 assert_eq!(threads, 0);
                 assert!(!verbose);
+                assert_eq!(timeout_ms, 600_000);
             }
             _ => panic!("Expected VerifyExternalBatch command"),
         },
@@ -105,6 +112,26 @@ fn cli_parse_cert_verify_external_batch_threads() {
     }
 }
 
+#[test]
+fn cli_parse_cert_verify_external_timeout() {
+    use clap::Parser;
+    let cli = Cli::try_parse_from([
+        "clean",
+        "cert",
+        "verify-external",
+        "--timeout-ms",
+        "0",
+        "cert.json",
+    ])
+    .unwrap();
+    match cli.command {
+        Commands::Cert {
+            command: CertCommands::VerifyExternal { timeout_ms, .. },
+        } => assert_eq!(timeout_ms, 0),
+        _ => panic!("Expected VerifyExternal command"),
+    }
+}
+
 // ========== Integration tests ==========
 
 #[test]
@@ -112,6 +139,7 @@ fn cert_verify_external_fixture_farkas_passes() {
     handle_cert_command(CertCommands::VerifyExternal {
         cert: fixture_path("gamma_crown_farkas_valid.json"),
         verbose: false,
+        timeout_ms: 600_000,
     })
     .expect("gamma-crown Farkas fixture should verify");
 }
@@ -121,6 +149,7 @@ fn cert_verify_external_fixture_entailment_passes() {
     handle_cert_command(CertCommands::VerifyExternal {
         cert: fixture_path("gamma_crown_entailment_valid.json"),
         verbose: true,
+        timeout_ms: 600_000,
     })
     .expect("gamma-crown entailment fixture should verify");
 }
@@ -131,6 +160,7 @@ fn cert_verify_external_fixture_batch_passes() {
         certs: fixture_path("gamma_crown_batch_valid.json"),
         threads: 2,
         verbose: true,
+        timeout_ms: 600_000,
     })
     .expect("gamma-crown batch fixture should verify");
 }
@@ -140,6 +170,7 @@ fn cert_verify_external_fixture_alethe_matches_feature_gate() {
     let result = handle_cert_command(CertCommands::VerifyExternal {
         cert: fixture_path("ay_alethe_envelope.json"),
         verbose: true,
+        timeout_ms: 600_000,
     });
 
     #[cfg(feature = "carcara-verify")]
@@ -196,6 +227,7 @@ fn cert_verify_external_fixture_alethe_holey_reports_verification_failure() {
     let err = handle_cert_command(CertCommands::VerifyExternal {
         cert: cert_path,
         verbose: true,
+        timeout_ms: 600_000,
     })
     .expect_err("holey Alethe fixture should fail at the CLI boundary");
     let err_text = format!("{err:#}");
@@ -218,6 +250,7 @@ fn cert_verify_external_invalid_json_fails() {
     let result = handle_cert_command(CertCommands::VerifyExternal {
         cert: cert_path,
         verbose: false,
+        timeout_ms: 600_000,
     });
     assert!(result.is_err(), "invalid JSON should fail");
 }
@@ -227,6 +260,7 @@ fn cert_verify_external_nonexistent_fails() {
     let result = handle_cert_command(CertCommands::VerifyExternal {
         cert: PathBuf::from("/nonexistent/cert.json"),
         verbose: false,
+        timeout_ms: 600_000,
     });
     assert!(result.is_err(), "nonexistent file should fail");
 }
@@ -241,6 +275,58 @@ fn cert_verify_external_batch_empty() {
         certs: certs_path,
         threads: 0,
         verbose: false,
+        timeout_ms: 600_000,
     })
     .expect("Empty batch should succeed");
+}
+
+/// `--timeout-ms` bounds an Alethe check: `refl` over two chains of conjunctions of two quantifiers
+/// over the level below, named apart, where level `i`'s two quantifiers bind `x(i-1)` at different
+/// indices and the leaves read every `xi`, compares every path with that path's bindings, `2^40`
+/// times, which the vendored checker's step budget does not bound (`third-party/carcara/
+/// DOWNSTREAM.md`, "The checker stops at a deadline"). It is refused as `timeout` once the limit
+/// passes.
+#[cfg(feature = "carcara-verify")]
+#[test]
+fn cert_verify_external_alethe_stops_at_its_timeout() {
+    let declarations: String = (0..=40)
+        .map(|i| format!("(declare-const x{i} Int)"))
+        .collect();
+    let problem =
+        format!("(set-logic ALL)(declare-const p Bool){declarations}(assert p)(assert (not p))");
+    let leaves: String = (0..=40).map(|i| format!(" (= x{i} 0)")).collect();
+    // The levels are defined in the proof, where the binders they are used under capture the names
+    // `xi` their definitions read (a problem's definitions may not be captured).
+    let mut proof =
+        format!("(define-fun a0 () Bool (and{leaves}))(define-fun b0 () Bool (and{leaves}))");
+    for i in 1..=40 {
+        let j = i - 1;
+        proof += &format!(
+            "(define-fun a{i} () Bool \
+               (and (forall ((x{j} Int)) a{j}) (forall ((y Int) (x{j} Int)) a{j})))\
+             (define-fun b{i} () Bool \
+               (and (forall ((x{j} Int)) b{j}) (forall ((w Int) (x{j} Int)) b{j})))"
+        );
+    }
+    proof += "(step t1 (cl (= (forall ((x40 Int)) a40) (forall ((x40 Int)) b40))) :rule refl)\
+        (assume h1 p)(assume h2 (not p))(step t2 (cl) :rule resolution :premises (h1 h2))";
+    let cert = serde_json::json!({
+        "type": "alethe_certificate",
+        "version": "1.0",
+        "problem": problem,
+        "proof": proof,
+    });
+    let dir = tempfile::tempdir().expect("tempdir should be created");
+    let cert_path = dir.path().join("alpha_chain.json");
+    fs::write(&cert_path, cert.to_string()).expect("write should succeed");
+
+    let started = std::time::Instant::now();
+    let err = handle_cert_command(CertCommands::VerifyExternal {
+        cert: cert_path,
+        verbose: false,
+        timeout_ms: 200,
+    })
+    .expect_err("the check must stop at its timeout");
+    assert!(format!("{err:#}").contains("timeout"), "{err:#}");
+    assert!(started.elapsed() < std::time::Duration::from_secs(60));
 }

@@ -21,6 +21,12 @@ fn nat_axiom_env(name: &str) -> Environment {
 fn assert_surface_typechecks_as_nat(surface: &SurfaceExpr, context: &str) {
     let env = nat_axiom_env("n");
     let mut ctx = ElabCtx::new(&env);
+    if matches!(surface, SurfaceExpr::Do(..)) {
+        ctx.current_expected_type = Some(Expr::app(
+            Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+            Expr::const_(Name::from_string("Nat"), vec![]),
+        ));
+    }
     let result = ctx
         .elaborate(surface)
         .unwrap_or_else(|err| panic!("{context} should elaborate, got {err:?}"));
@@ -90,7 +96,10 @@ fn test_do_match_nat_literal_one_pattern_typechecks() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -129,7 +138,10 @@ fn test_do_match_nat_literal_two_pattern_typechecks() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -180,7 +192,10 @@ fn partial_nat_literal_matches_fail_closed() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),

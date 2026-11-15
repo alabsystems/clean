@@ -11,39 +11,44 @@ use super::mutual_decl_ext2::*;
 use crate::mutual_decl::{MutualBlock, MutualEntry};
 use crate::mutual_decl_ext::partition_into_sccs;
 use clean_kernel::{BinderInfo, Expr, Level, Name};
+use clean_parser::SurfaceName;
+
+fn fixture_name(name: &'static str) -> SurfaceName {
+    SurfaceName::generated_path(name)
+}
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-fn mk_entry(name: &str) -> MutualEntry {
+fn mk_entry(name: &'static str) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: fixture_name(name),
         ty: None,
         body: Expr::sort(Level::zero()),
         is_noncomputable: false,
     }
 }
 
-fn mk_entry_noncomp(name: &str) -> MutualEntry {
+fn mk_entry_noncomp(name: &'static str) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: fixture_name(name),
         ty: None,
         body: Expr::sort(Level::zero()),
         is_noncomputable: true,
     }
 }
 
-fn mk_entry_with_type(name: &str, ty: Expr) -> MutualEntry {
+fn mk_entry_with_type(name: &'static str, ty: Expr) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: fixture_name(name),
         ty: Some(ty),
         body: Expr::sort(Level::zero()),
         is_noncomputable: false,
     }
 }
 
-fn mk_entry_with_body(name: &str, body: Expr) -> MutualEntry {
+fn mk_entry_with_body(name: &'static str, body: Expr) -> MutualEntry {
     MutualEntry {
-        name: name.to_string(),
+        name: fixture_name(name),
         ty: None,
         body,
         is_noncomputable: false,
@@ -66,7 +71,7 @@ fn mk_pi_type(depth: usize) -> Expr {
 // Test scaffolding not exercised by every including build — kept per the 2026-07-30
 // keep-and-annotate sweep; see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md.
 #[allow(dead_code)]
-fn mk_recursive_body(name: &str, num_params: usize) -> Expr {
+fn mk_recursive_body(name: &'static str, num_params: usize) -> Expr {
     // \x0 \x1 ... \xn => name (BVar 0)
     let inner = Expr::app(Expr::const_str(name), Expr::bvar(0));
     let mut body = inner;
@@ -114,7 +119,7 @@ fn test_config_custom_values() {
 #[test]
 fn test_detect_structural_nonrecursive_body() {
     let body = mk_nonrecursive_body(2);
-    let kind = detect_structural_recursion(&body, "f", &default_config());
+    let kind = detect_structural_recursion(&body, &fixture_name("f"), &default_config());
     assert_eq!(kind, RecursionKind::NonRecursive);
 }
 
@@ -122,7 +127,7 @@ fn test_detect_structural_nonrecursive_body() {
 fn test_detect_structural_no_params() {
     // Body is just a constant, no lambdas.
     let body = Expr::const_str("f");
-    let kind = detect_structural_recursion(&body, "f", &default_config());
+    let kind = detect_structural_recursion(&body, &fixture_name("f"), &default_config());
     assert_eq!(kind, RecursionKind::NonRecursive);
 }
 
@@ -131,7 +136,7 @@ fn test_detect_structural_recursive_with_bvar_arg() {
     // \x => f x  — recursive call with BVar arg = structural candidate
     let inner = Expr::app(Expr::const_str("f"), Expr::bvar(0));
     let body = Expr::lam(BinderInfo::Default, Expr::sort(Level::zero()), inner);
-    let kind = detect_structural_recursion(&body, "f", &default_config());
+    let kind = detect_structural_recursion(&body, &fixture_name("f"), &default_config());
     assert_eq!(kind, RecursionKind::Structural { param_idx: 0 });
 }
 
@@ -140,7 +145,7 @@ fn test_detect_structural_recursive_without_structural_decrease() {
     // \x => f (const "other")  — recursive but no structural decrease
     let inner = Expr::app(Expr::const_str("f"), Expr::const_str("other"));
     let body = Expr::lam(BinderInfo::Default, Expr::sort(Level::zero()), inner);
-    let kind = detect_structural_recursion(&body, "f", &default_config());
+    let kind = detect_structural_recursion(&body, &fixture_name("f"), &default_config());
     assert_eq!(kind, RecursionKind::WellFounded);
 }
 
@@ -159,7 +164,7 @@ fn test_detect_structural_self_ref_in_let() {
             false,
         ),
     );
-    let kind = detect_structural_recursion(&body, "g", &default_config());
+    let kind = detect_structural_recursion(&body, &fixture_name("g"), &default_config());
     assert_eq!(kind, RecursionKind::Structural { param_idx: 0 });
 }
 
@@ -176,7 +181,7 @@ fn test_detect_structural_deeply_nested() {
             Expr::lam(BinderInfo::Default, Expr::sort(Level::zero()), inner),
         ),
     );
-    let kind = detect_structural_recursion(&body, "f", &default_config());
+    let kind = detect_structural_recursion(&body, &fixture_name("f"), &default_config());
     assert_eq!(kind, RecursionKind::Structural { param_idx: 0 });
 }
 
@@ -232,7 +237,7 @@ fn test_wf_marker_has_measure_for_lambda_body() {
     let groups = partition_into_sccs(&block);
     let markers = collect_wf_markers(&groups, &block, &default_config());
     // f has lambda body -> measure inferred
-    let f_marker = markers.iter().find(|m| m.def_name == "f");
+    let f_marker = markers.iter().find(|m| m.def_name == fixture_name("f"));
     assert!(f_marker.is_some());
     assert!(f_marker.unwrap().measure.is_some());
 }
@@ -297,9 +302,9 @@ fn test_forward_ref_from_block() {
     let resolver = ForwardRefResolver::from_block(&block);
     assert_eq!(resolver.len(), 2);
     assert!(!resolver.is_empty());
-    assert!(resolver.lookup("f").is_some());
-    assert!(resolver.lookup("g").is_some());
-    assert!(resolver.lookup("h").is_none());
+    assert!(resolver.lookup(&fixture_name("f")).is_some());
+    assert!(resolver.lookup(&fixture_name("g")).is_some());
+    assert!(resolver.lookup(&fixture_name("h")).is_none());
 }
 
 #[test]
@@ -310,13 +315,13 @@ fn test_forward_ref_resolve() {
     let mut resolver = ForwardRefResolver::from_block(&block);
     assert_eq!(resolver.unresolved().len(), 2);
 
-    assert!(resolver.resolve("f"));
+    assert!(resolver.resolve(&fixture_name("f")));
     assert_eq!(resolver.unresolved().len(), 1);
-    assert!(resolver.lookup("f").unwrap().resolved);
-    assert!(!resolver.lookup("g").unwrap().resolved);
+    assert!(resolver.lookup(&fixture_name("f")).unwrap().resolved);
+    assert!(!resolver.lookup(&fixture_name("g")).unwrap().resolved);
 
     // Resolving again returns false.
-    assert!(!resolver.resolve("f"));
+    assert!(!resolver.resolve(&fixture_name("f")));
 }
 
 #[test]
@@ -326,10 +331,13 @@ fn test_forward_ref_resolution_order() {
     block.add_entry(mk_entry("b"));
     block.add_entry(mk_entry("c"));
     let mut resolver = ForwardRefResolver::from_block(&block);
-    resolver.resolve("c");
-    resolver.resolve("a");
-    resolver.resolve("b");
-    assert_eq!(resolver.resolution_order(), &["c", "a", "b"]);
+    resolver.resolve(&fixture_name("c"));
+    resolver.resolve(&fixture_name("a"));
+    resolver.resolve(&fixture_name("b"));
+    assert_eq!(
+        resolver.resolution_order(),
+        &[fixture_name("c"), fixture_name("a"), fixture_name("b")]
+    );
 }
 
 #[test]
@@ -346,7 +354,7 @@ fn test_forward_ref_with_typed_entry() {
     let ty = mk_pi_type(2);
     block.add_entry(mk_entry_with_type("f", ty.clone()));
     let resolver = ForwardRefResolver::from_block(&block);
-    let entry = resolver.lookup("f").unwrap();
+    let entry = resolver.lookup(&fixture_name("f")).unwrap();
     // Placeholder type should be the user-provided type.
     assert!(!entry.resolved);
 }
@@ -359,7 +367,7 @@ fn test_infer_types_no_annotation() {
     block.add_entry(mk_entry("f"));
     let types = infer_mutual_types(&block);
     assert_eq!(types.len(), 1);
-    assert_eq!(types[0].name, "f");
+    assert_eq!(types[0].name, fixture_name("f"));
     assert!(!types[0].is_user_provided);
 }
 
@@ -379,9 +387,9 @@ fn test_infer_types_preserves_order() {
     block.add_entry(mk_entry_with_type("b", mk_pi_type(1)));
     block.add_entry(mk_entry("c"));
     let types = infer_mutual_types(&block);
-    assert_eq!(types[0].name, "a");
-    assert_eq!(types[1].name, "b");
-    assert_eq!(types[2].name, "c");
+    assert_eq!(types[0].name, fixture_name("a"));
+    assert_eq!(types[1].name, fixture_name("b"));
+    assert_eq!(types[2].name, fixture_name("c"));
     assert_eq!(types[0].index, 0);
     assert_eq!(types[1].index, 1);
     assert_eq!(types[2].index, 2);
@@ -512,7 +520,7 @@ fn test_unfold_hints_nonrecursive_always() {
     let kinds = vec![RecursionKind::NonRecursive];
     let hints = assign_unfold_hints(&block, &kinds);
     assert_eq!(hints.len(), 1);
-    assert_eq!(hints[0], ("f".to_string(), UnfoldHint::Always));
+    assert_eq!(hints[0], (fixture_name("f"), UnfoldHint::Always));
 }
 
 #[test]
@@ -543,20 +551,23 @@ fn test_collect_universe_params_empty() {
 
 #[test]
 fn test_collect_universe_params_single() {
-    let lists = vec![vec!["u".to_string(), "v".to_string()]];
+    let lists = vec![vec![fixture_name("u"), fixture_name("v")]];
     let result = collect_universe_params(&lists, &default_config()).unwrap();
-    assert_eq!(result.params, vec!["u", "v"]);
+    assert_eq!(result.params, vec![fixture_name("u"), fixture_name("v")]);
 }
 
 #[test]
 fn test_collect_universe_params_merge_unique() {
     let lists = vec![
-        vec!["u".to_string()],
-        vec!["v".to_string()],
-        vec!["u".to_string(), "w".to_string()],
+        vec![fixture_name("u")],
+        vec![fixture_name("v")],
+        vec![fixture_name("u"), fixture_name("w")],
     ];
     let result = collect_universe_params(&lists, &default_config()).unwrap();
-    assert_eq!(result.params, vec!["u", "v", "w"]);
+    assert_eq!(
+        result.params,
+        vec![fixture_name("u"), fixture_name("v"), fixture_name("w")]
+    );
 }
 
 #[test]
@@ -565,7 +576,11 @@ fn test_collect_universe_params_exceeds_limit() {
         max_universe_params: 2,
         ..default_config()
     };
-    let lists = vec![vec!["u".to_string(), "v".to_string(), "w".to_string()]];
+    let lists = vec![vec![
+        fixture_name("u"),
+        fixture_name("v"),
+        fixture_name("w"),
+    ]];
     let result = collect_universe_params(&lists, &config);
     assert!(result.is_err());
 }
@@ -573,11 +588,11 @@ fn test_collect_universe_params_exceeds_limit() {
 #[test]
 fn test_validate_universe_compatibility_ok() {
     let shared = MutualUniverseParams {
-        params: vec!["u".to_string(), "v".to_string()],
+        params: vec![fixture_name("u"), fixture_name("v")],
     };
     let lists = vec![
-        vec!["u".to_string()],
-        vec!["u".to_string(), "v".to_string()],
+        vec![fixture_name("u")],
+        vec![fixture_name("u"), fixture_name("v")],
     ];
     let result = validate_universe_compatibility(&lists, &shared);
     assert!(result.is_ok());
@@ -586,9 +601,9 @@ fn test_validate_universe_compatibility_ok() {
 #[test]
 fn test_validate_universe_compatibility_unknown_param() {
     let shared = MutualUniverseParams {
-        params: vec!["u".to_string()],
+        params: vec![fixture_name("u")],
     };
-    let lists = vec![vec!["u".to_string(), "w".to_string()]];
+    let lists = vec![vec![fixture_name("u"), fixture_name("w")]];
     let result = validate_universe_compatibility(&lists, &shared);
     assert!(result.is_err());
 }
@@ -603,7 +618,7 @@ fn test_analyze_ext2_basic() {
     block.dep_graph.add_edge(0, 1);
     block.dep_graph.add_edge(1, 0);
     let groups = partition_into_sccs(&block);
-    let universe_lists = vec![vec!["u".to_string()], vec!["u".to_string()]];
+    let universe_lists = vec![vec![fixture_name("u")], vec![fixture_name("u")]];
     let result = analyze_mutual_block_ext2(&block, &groups, &universe_lists, &default_config())
         .expect("analysis should succeed");
     assert!(!result.strata.is_empty());
@@ -611,7 +626,7 @@ fn test_analyze_ext2_basic() {
     assert_eq!(result.inferred_types.len(), 2);
     assert_eq!(result.recursion_kinds.len(), 2);
     assert_eq!(result.unfold_hints.len(), 2);
-    assert_eq!(result.universe_params.params, vec!["u"]);
+    assert_eq!(result.universe_params.params, vec![fixture_name("u")]);
 }
 
 #[test]
@@ -620,4 +635,72 @@ fn test_analyze_ext2_rejects_empty() {
     let groups = vec![];
     let result = analyze_mutual_block_ext2(&block, &groups, &[], &default_config());
     assert!(result.is_err());
+}
+
+#[test]
+fn staged_recursion_identity_does_not_use_display_or_suffix() {
+    let exact = SurfaceName::from_name(Name::anon().str("A").str("f"));
+    let quoted = SurfaceName::component("A.f", true);
+    let short = SurfaceName::component("f", false);
+    assert_eq!(exact.to_string(), quoted.to_string());
+    let body = Expr::lam(
+        BinderInfo::Default,
+        Expr::prop(),
+        Expr::const_(exact.name().clone(), vec![]),
+    );
+    assert_eq!(
+        detect_structural_recursion(&body, &exact, &default_config()),
+        RecursionKind::WellFounded
+    );
+    assert_eq!(
+        detect_structural_recursion(&body, &quoted, &default_config()),
+        RecursionKind::NonRecursive
+    );
+    assert_eq!(
+        detect_structural_recursion(&body, &short, &default_config()),
+        RecursionKind::NonRecursive
+    );
+}
+
+#[test]
+fn staged_forward_and_universe_tables_keep_structural_twins() {
+    let dotted = SurfaceName::component("A.f", true);
+    let nested = fixture_name("A.f");
+    let numeral_text = SurfaceName::component("7", true);
+    let numeric = SurfaceName::from_name(Name::anon().num(7));
+    let names = vec![
+        dotted.clone(),
+        nested.clone(),
+        numeral_text.clone(),
+        numeric.clone(),
+    ];
+    let mut block = MutualBlock::new();
+    for name in &names {
+        block.add_entry(MutualEntry {
+            name: name.clone(),
+            ty: Some(Expr::prop()),
+            body: Expr::prop(),
+            is_noncomputable: false,
+        });
+    }
+    let mut resolver = ForwardRefResolver::from_block(&block);
+    assert_eq!(resolver.len(), names.len());
+    assert!(resolver.resolve(&dotted));
+    assert!(!resolver.lookup(&nested).expect("nested row").resolved);
+    assert!(
+        !resolver
+            .lookup(&numeral_text)
+            .expect("text numeral row")
+            .resolved
+    );
+    assert!(!resolver.lookup(&numeric).expect("numeric row").resolved);
+    let shared = collect_universe_params(std::slice::from_ref(&names), &default_config())
+        .expect("four exact universes");
+    assert_eq!(shared.params, names);
+    validate_universe_compatibility(&[vec![numeric]], &shared).expect("exact numeric member");
+    assert!(validate_universe_compatibility(
+        &[vec![SurfaceName::from_name(Name::anon().num(8))]],
+        &shared
+    )
+    .is_err());
 }

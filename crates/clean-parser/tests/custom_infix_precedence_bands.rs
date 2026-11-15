@@ -34,7 +34,9 @@ use clean_parser::{parse_file, SurfaceArg, SurfaceDecl, SurfaceExpr, SurfaceLit}
 /// loudly instead of silently matching.
 fn render(e: &SurfaceExpr) -> String {
     match e {
-        SurfaceExpr::Ident(_, s) => s.clone(),
+        SurfaceExpr::Ident(_, s) => s
+            .source_spelling()
+            .expect("fixture identifier has exact source spelling"),
         SurfaceExpr::Lit(_, SurfaceLit::Nat(n)) => n.to_string(),
         SurfaceExpr::Paren(_, inner) => render(inner),
         SurfaceExpr::App(_, f, args) => {
@@ -58,7 +60,11 @@ fn probe(decls: &str, expr: &str) -> String {
         .unwrap_or_else(|e| panic!("`{expr}` (with `{decls}`) should parse the file, got: {e}"));
     for decl in &parsed {
         match decl {
-            SurfaceDecl::Def { name, val, .. } if name == "probe" => return render(val),
+            SurfaceDecl::Def { name, val, .. }
+                if name.name() == clean_parser::SurfaceName::generated_path("probe").name() =>
+            {
+                return render(val)
+            }
             SurfaceDecl::RawDecl { content, .. } => panic!(
                 "`{expr}` (with `{decls}`) fell into error recovery: {content:?}\n{parsed:#?}"
             ),
@@ -431,7 +437,7 @@ fn test_low_precedence_postfix_still_fails_closed() {
     assert!(
         !decls
             .iter()
-            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name == "rejected")),
+            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
         "unsupported low-precedence postfix must not leave a partial definition: {decls:#?}",
     );
 }
@@ -444,7 +450,7 @@ fn test_level_50_custom_infix_still_does_not_chain_with_a_comparison() {
     assert!(
         !decls
             .iter()
-            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name == "rejected")),
+            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("rejected").name())),
         "a comparison must not chain onto a level-50 custom infix: {decls:#?}",
     );
 }

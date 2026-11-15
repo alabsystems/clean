@@ -14,22 +14,31 @@ use clean_kernel::level::Level;
 
 #[test]
 fn test_linear_coeff_one() {
-    let coeff = LinearCoeff::one("h1");
-    assert_eq!(coeff.hyp_name, "h1");
+    let coeff = LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1"));
+    assert_eq!(
+        coeff.hyp_name,
+        clean_parser::SurfaceName::generated_path("h1")
+    );
     assert_eq!(coeff.coeff, (1, 1));
 }
 
 #[test]
 fn test_linear_coeff_int() {
-    let coeff = LinearCoeff::int("h2", -3);
-    assert_eq!(coeff.hyp_name, "h2");
+    let coeff = LinearCoeff::int(&clean_parser::SurfaceName::generated_path("h2"), -3);
+    assert_eq!(
+        coeff.hyp_name,
+        clean_parser::SurfaceName::generated_path("h2")
+    );
     assert_eq!(coeff.coeff, (-3, 1));
 }
 
 #[test]
 fn test_linear_coeff_rational() {
-    let coeff = LinearCoeff::new("h3", 2, 5);
-    assert_eq!(coeff.hyp_name, "h3");
+    let coeff = LinearCoeff::new(&clean_parser::SurfaceName::generated_path("h3"), 2, 5);
+    assert_eq!(
+        coeff.hyp_name,
+        clean_parser::SurfaceName::generated_path("h3")
+    );
     assert_eq!(coeff.coeff, (2, 5));
 }
 
@@ -97,7 +106,7 @@ fn test_dsimp_at_no_goals() {
     let mut state = ProofState::new(env, target);
     state.goals.clear();
 
-    let result = dsimp_at(&mut state, "h");
+    let result = dsimp_at(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -125,8 +134,9 @@ fn make_reducible_hyp_pair(p: &Expr) -> (Expr, Expr, LocalDecl, Expr, LocalDecl)
         false,
     );
     let h1 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h1".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h1"),
         ty: h1_ty.clone(),
         value: None,
     };
@@ -142,8 +152,9 @@ fn make_reducible_hyp_pair(p: &Expr) -> (Expr, Expr, LocalDecl, Expr, LocalDecl)
         false,
     );
     let h2 = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h2".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h2"),
         ty: h2_ty.clone(),
         value: None,
     };
@@ -261,9 +272,17 @@ fn test_lift_config_default() {
 
 #[test]
 fn test_lift_config_builder() {
-    let config = LiftConfig::new().with_name("x_int").with_proof("hx");
-    assert_eq!(config.new_name, Some("x_int".to_string()));
-    assert_eq!(config.proof_name, Some("hx".to_string()));
+    let config = LiftConfig::new()
+        .with_name(&clean_parser::SurfaceName::generated_path("x_int"))
+        .with_proof(&clean_parser::SurfaceName::generated_path("hx"));
+    assert_eq!(
+        config.new_name,
+        Some(clean_parser::SurfaceName::generated_path("x_int"))
+    );
+    assert_eq!(
+        config.proof_name,
+        Some(clean_parser::SurfaceName::generated_path("hx"))
+    );
 }
 
 #[test]
@@ -273,7 +292,11 @@ fn test_lift_no_goals() {
     let mut state = ProofState::new(env, target);
     state.goals.clear();
 
-    let result = lift(&mut state, "x", None);
+    let result = lift(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("x"),
+        None,
+    );
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -283,7 +306,11 @@ fn test_lift_var_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = lift(&mut state, "nonexistent", None);
+    let result = lift(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        None,
+    );
     assert!(
         matches!(result, Err(TacticError::HypothesisNotFound(ref s)) if s.contains("not found"))
     );
@@ -298,7 +325,12 @@ fn test_let_i_no_goals() {
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
     let value = Expr::const_(Name::from_string("inst"), vec![]);
-    let result = let_i(&mut state, "inst", ty, value);
+    let result = let_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+        value,
+    );
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -310,10 +342,19 @@ fn test_let_i_adds_to_context() {
 
     let ty = Expr::const_(Name::from_string("A"), vec![]);
     let value = Expr::const_(Name::from_string("a"), vec![]);
-    let_i(&mut state, "inst", ty.clone(), value).unwrap();
+    let_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty.clone(),
+        value,
+    )
+    .unwrap();
 
     let goal = state.current_goal().unwrap();
-    assert!(goal.local_ctx.iter().any(|d| d.name == "inst"));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("inst")));
 }
 
 #[test]
@@ -324,7 +365,11 @@ fn test_have_i_no_goals() {
     state.goals.clear();
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
-    let result = have_i(&mut state, "inst", ty);
+    let result = have_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+    );
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -336,7 +381,11 @@ fn test_infer_i_no_goals() {
     state.goals.clear();
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
-    let result = infer_i(&mut state, "inst", ty);
+    let result = infer_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+    );
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -371,10 +420,18 @@ fn test_infer_i_adds_to_context() {
     let mut state = ProofState::with_instances(env, target, instances);
 
     let ty = Expr::const_(Name::from_string("Decidable"), vec![]);
-    infer_i(&mut state, "inst", ty).unwrap();
+    infer_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        ty,
+    )
+    .unwrap();
 
     let goal = state.current_goal().unwrap();
-    assert!(goal.local_ctx.iter().any(|d| d.name == "inst"));
+    assert!(goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("inst")));
 }
 
 // ========== Tests for infer_i with InstanceTable ==========
@@ -425,10 +482,19 @@ fn test_infer_i_with_instance_table_resolves_instance() {
     let mut state = ProofState::with_instances(env, target, instances);
 
     // Try to infer Add Nat - should resolve to instAddNat
-    infer_i(&mut state, "inst", add_nat).unwrap();
+    infer_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        add_nat,
+    )
+    .unwrap();
 
     let goal = state.current_goal().unwrap();
-    let inst_decl = goal.local_ctx.iter().find(|d| d.name == "inst").unwrap();
+    let inst_decl = goal
+        .local_ctx
+        .iter()
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("inst"))
+        .unwrap();
 
     // The value should be the instance expression, not a sorry
     let value = inst_decl
@@ -455,7 +521,11 @@ fn test_infer_i_without_instance_table_returns_error() {
     let add_nat = Expr::app(Expr::const_(add_class, vec![]), nat_ty);
 
     // Without instance table, infer_i should fail (not silently create sorry)
-    let result = infer_i(&mut state, "inst", add_nat);
+    let result = infer_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        add_nat,
+    );
     assert!(
         result.is_err(),
         "infer_i without instance table should return error"
@@ -481,7 +551,11 @@ fn test_infer_i_with_unregistered_class_returns_error() {
     );
 
     // With instance table but unregistered class, infer_i should fail
-    let result = infer_i(&mut state, "inst", unknown_ty);
+    let result = infer_i(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("inst"),
+        unknown_ty,
+    );
     assert!(
         result.is_err(),
         "infer_i with unregistered class should return error"

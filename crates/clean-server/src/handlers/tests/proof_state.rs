@@ -39,6 +39,7 @@ fn minimal_open_obligation_request(
         max_states: 4,
         min_schema_version: crate::proof_state::PROOF_STATE_SCHEMA_VERSION.to_string(),
         max_schema_version: crate::proof_state::PROOF_STATE_SCHEMA_VERSION.to_string(),
+        timeout_ms: None,
     }
 }
 
@@ -324,6 +325,7 @@ async fn test_open_obligation_follow_up_handlers_cover_snapshot_apply_extract() 
         GetProofStateParams {
             state_id: opened.state_id.clone(),
             format: crate::proof_state::OutputFormat::Llm,
+            timeout_ms: None,
         },
     )
     .await;
@@ -378,6 +380,7 @@ async fn test_open_obligation_follow_up_handlers_cover_snapshot_apply_extract() 
         GetProofStateParams {
             state_id: applied.new_state_id.clone(),
             format: crate::proof_state::OutputFormat::Full,
+            timeout_ms: None,
         },
     )
     .await;
@@ -404,6 +407,7 @@ async fn test_open_obligation_follow_up_handlers_cover_snapshot_apply_extract() 
         ExtractProofParams {
             state_id: applied.new_state_id.clone(),
             format: "certificate".to_string(),
+            timeout_ms: None,
         },
     )
     .await;
@@ -445,6 +449,7 @@ async fn test_search_tactics_uses_sat_pb_profile_ranking() {
         ProofStateGoalSearchParams {
             state_id: opened.state_id,
             goal_id,
+            timeout_ms: None,
         },
     )
     .await;
@@ -490,6 +495,7 @@ async fn test_search_tactics_uses_nn_verify_profile_ranking() {
         ProofStateGoalSearchParams {
             state_id: opened.state_id,
             goal_id,
+            timeout_ms: None,
         },
     )
     .await;
@@ -533,6 +539,7 @@ async fn test_search_theorems_exposes_and_ranks_by_domain_profile() {
         ProofStateGoalSearchParams {
             state_id: sat_opened.state_id,
             goal_id: sat_goal_id,
+            timeout_ms: None,
         },
     )
     .await;
@@ -565,6 +572,7 @@ async fn test_search_theorems_exposes_and_ranks_by_domain_profile() {
         ProofStateGoalSearchParams {
             state_id: nn_opened.state_id,
             goal_id: nn_goal_id,
+            timeout_ms: None,
         },
     )
     .await;
@@ -614,6 +622,7 @@ async fn test_search_theorems_uses_trusted_project_theorem_index_json() {
         ProofStateGoalSearchParams {
             state_id: opened.state_id,
             goal_id,
+            timeout_ms: None,
         },
     )
     .await;
@@ -709,6 +718,7 @@ async fn test_search_theorems_uses_requested_non_front_goal() {
         ProofStateGoalSearchParams {
             state_id: split_result.new_state_id.clone(),
             goal_id: split_result.new_goals[0].goal_id.clone(),
+            timeout_ms: None,
         },
     )
     .await;
@@ -726,6 +736,7 @@ async fn test_search_theorems_uses_requested_non_front_goal() {
         ProofStateGoalSearchParams {
             state_id: split_result.new_state_id,
             goal_id: split_result.new_goals[1].goal_id.clone(),
+            timeout_ms: None,
         },
     )
     .await;
@@ -803,6 +814,7 @@ async fn test_open_obligation_constructive_only_rejects_sorry_apply() {
         GetProofStateParams {
             state_id: opened.state_id.clone(),
             format: crate::proof_state::OutputFormat::Llm,
+            timeout_ms: None,
         },
     )
     .await;
@@ -942,6 +954,7 @@ async fn test_proof_state_failure_explain_retain_and_close_lifecycle() {
         GetProofStateParams {
             state_id: opened.state_id,
             format: crate::proof_state::OutputFormat::Llm,
+            timeout_ms: None,
         },
     )
     .await;
@@ -1069,6 +1082,7 @@ async fn test_get_proof_state() {
     let get_params = GetProofStateParams {
         state_id: init_result.state_id.clone(),
         format: crate::proof_state::OutputFormat::Llm,
+        timeout_ms: None,
     };
     let get_response = handle_get_proof_state(&state, RequestId::Number(2), get_params).await;
     assert!(
@@ -1091,6 +1105,7 @@ async fn test_get_proof_state_invalid_id() {
     let params = GetProofStateParams {
         state_id: "ps_invalid123456789012345678901234".to_string(),
         format: crate::proof_state::OutputFormat::Llm,
+        timeout_ms: None,
     };
 
     let response = handle_get_proof_state(&state, RequestId::Number(1), params).await;
@@ -1112,6 +1127,7 @@ async fn test_extract_proof_invalid_state_id() {
     let params = ExtractProofParams {
         state_id: "ps_00000000000000000000000000000000".to_string(),
         format: "term".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_extract_proof(&state, RequestId::Number(1), params).await;
@@ -1134,6 +1150,7 @@ async fn test_extract_proof_malformed_state_id() {
     let params = ExtractProofParams {
         state_id: "not_a_valid_id".to_string(),
         format: "term".to_string(),
+        timeout_ms: None,
     };
 
     let response = handle_extract_proof(&state, RequestId::Number(1), params).await;
@@ -1172,6 +1189,7 @@ async fn test_extract_proof_incomplete_proof() {
     let extract_params = ExtractProofParams {
         state_id: init_result.state_id.clone(),
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response = handle_extract_proof(&state, RequestId::Number(2), extract_params).await;
     assert!(
@@ -1203,6 +1221,7 @@ async fn test_get_proof_state_full_format() {
     let get_params = GetProofStateParams {
         state_id: init_result.state_id.clone(),
         format: crate::proof_state::OutputFormat::Full,
+        timeout_ms: None,
     };
     let get_response = handle_get_proof_state(&state, RequestId::Number(2), get_params).await;
     assert!(
@@ -1254,6 +1273,7 @@ async fn test_get_proof_state_trust_summary_present() {
     let get_params = GetProofStateParams {
         state_id: init_result.state_id.clone(),
         format: crate::proof_state::OutputFormat::Llm,
+        timeout_ms: None,
     };
     let get_response = handle_get_proof_state(&state, RequestId::Number(2), get_params).await;
     assert!(get_response.error.is_none());
@@ -1293,6 +1313,7 @@ async fn test_get_proof_state_trust_summary_stable_across_reads() {
         let params = GetProofStateParams {
             state_id: init_result.state_id.clone(),
             format: crate::proof_state::OutputFormat::Full,
+            timeout_ms: None,
         };
         let resp = handle_get_proof_state(&state, RequestId::Number(2), params).await;
         let api: crate::proof_state::ApiProofState =
@@ -1303,6 +1324,7 @@ async fn test_get_proof_state_trust_summary_stable_across_reads() {
         let params = GetProofStateParams {
             state_id: init_result.state_id.clone(),
             format: crate::proof_state::OutputFormat::Full,
+            timeout_ms: None,
         };
         let resp = handle_get_proof_state(&state, RequestId::Number(3), params).await;
         let api: crate::proof_state::ApiProofState =
@@ -1349,6 +1371,7 @@ async fn test_get_proof_state_trust_summary_reports_arith_provenance() {
     let get_params = GetProofStateParams {
         state_id,
         format: crate::proof_state::OutputFormat::Full,
+        timeout_ms: None,
     };
     let get_response = handle_get_proof_state(&state, RequestId::Number(3), get_params).await;
     assert!(get_response.error.is_none(), "{:?}", get_response.error);

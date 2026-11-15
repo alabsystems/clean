@@ -21,6 +21,10 @@ fn bignat_bit_length(n: &BigNat) -> usize {
 }
 
 impl BigNat {
+    /// The largest exponent Lean's kernel folds `Nat.pow` at
+    /// (`ReducePowMaxExp`, `type_checker.cpp`, v4.30.0-rc2).
+    pub(crate) const POW_MAX_EXP: u64 = 1 << 24;
+
     /// Multi-limb division: self / other.
     ///
     /// Returns `(quotient, remainder)`. Returns `None` if other is zero.
@@ -199,10 +203,20 @@ impl BigNat {
 
     /// Multi-limb exponentiation: self^exp.
     ///
-    /// Returns None if the result would exceed 1024 bits (16 limbs)
-    /// to bound allocation. Also returns None for large exponents
-    /// to prevent excessive computation.
+    /// Returns None for an exponent above `2^24`, whatever the
+    /// base, as Lean's kernel declines (`reduce_pow`); and None if the result
+    /// would exceed 1024 bits (16 limbs), to bound allocation.
     pub fn checked_pow_big(&self, exp: &BigNat) -> Option<BigNat> {
+        // Lean's `reduce_pow` folds `Nat.pow` only when the exponent is at
+        // most `ReducePowMaxExp = 1 << 24`, and returns none above it for
+        // EVERY base (`type_checker.cpp`, v4.30.0-rc2); the kernel then
+        // δ-unfolds `Nat.pow` and fails with deep recursion. The `0^n` and
+        // `1^n` shortcuts below folded any exponent, so Clean admitted
+        // `Nat.pow 1 16777217 = 1 := rfl`, which pinned Lean refuses
+        // (`replay_forged/ReplayForgedPowCap`).
+        if !exp.to_u64().is_some_and(|e| e <= Self::POW_MAX_EXP) {
+            return None;
+        }
         // 0^0 = 1, x^0 = 1
         if exp.is_zero() {
             return Some(BigNat::Small(1));

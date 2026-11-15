@@ -24,7 +24,6 @@
 //! 3. Closing the original goal with `Expr::let_named` that wraps the continuation
 
 use crate::unify::{MetaState, Unifier, UnifyResult};
-use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprKind, FVarId};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
@@ -64,7 +63,12 @@ use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
 ///          (value subgoal + continuation with `x : ty` in context)
 /// ENSURES: The `LocalDecl` for `x` has `value = Some(v)` (transparent to type checker)
 /// ENSURES: On Err(TypeMismatch), value type does not unify with `ty`; state unchanged
-pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -> TacticResult {
+pub fn let_(
+    state: &mut ProofState,
+    name: &clean_parser::SurfaceName,
+    ty: Expr,
+    value: Option<Expr>,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     if let Some(val) = value {
@@ -93,8 +97,9 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
                 };
 
                 let local_decl = LocalDecl {
+                    binder_info: Default::default(),
                     fvar,
-                    name: name.to_string(),
+                    name: name.clone(),
                     ty: ty.clone(),
                     value: Some(val.clone()),
                 };
@@ -111,7 +116,7 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
                 // The proof of the original goal is:
                 // let x : T := val in <continuation>
                 let proof_term = Expr::let_named(
-                    Name::from_string(name),
+                    name.name().clone(),
                     ty,
                     val,
                     new_meta_expr.abstract_fvar(fvar),
@@ -125,7 +130,8 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
                     meta_id: new_meta_id,
                     target: goal.target.clone(),
                     local_ctx: new_ctx,
-                    tag: None,
+                    case_binders: goal.case_binders.clone(),
+                    tag: goal.tag.clone(),
                 };
 
                 state.goals.push_front(new_goal);
@@ -158,8 +164,9 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
         // The continuation can also use the transparent let local, so stamp
         // its metavariable with the extended context.
         let local_decl = LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: name.to_string(),
+            name: name.clone(),
             ty: ty.clone(),
             value: Some(val_meta_expr.clone()),
         };
@@ -171,7 +178,7 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
         // The proof of the original goal is:
         // let x : T := <val_proof> in <continuation>
         let proof_term = Expr::let_named(
-            Name::from_string(name),
+            name.name().clone(),
             ty.clone(),
             val_meta_expr.clone(),
             cont_meta_expr.abstract_fvar(fvar),
@@ -185,6 +192,7 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
             meta_id: val_meta_id,
             target: ty,
             local_ctx: goal.local_ctx.clone(),
+            case_binders: Vec::new(),
             tag: None,
         };
 
@@ -193,7 +201,8 @@ pub fn let_(state: &mut ProofState, name: &str, ty: Expr, value: Option<Expr>) -
             meta_id: cont_meta_id,
             target: goal.target.clone(),
             local_ctx: new_ctx,
-            tag: None,
+            case_binders: goal.case_binders.clone(),
+            tag: goal.tag.clone(),
         };
 
         // Insert goals (value first, then continuation)

@@ -22,12 +22,6 @@ use clean_compiler::emit_c::emit_c;
 use clean_compiler::ir::{FnId, IRAlt, IRArg, IRBody, IRDecl, IRExpr, IRType, JoinPointId};
 use test_helpers::{arg, mixed_ctor, name, obj_ctor, var};
 
-/// Path to clean_runtime.h include directory, relative to clean-compiler crate root.
-fn runtime_include_dir() -> std::path::PathBuf {
-    let manifest = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest.join("../clean-runtime/include")
-}
-
 /// Compile emitted C code against the real clean_runtime.h.
 ///
 /// Uses `cc -c` (compile only, no link) since we don't have the runtime .c
@@ -42,7 +36,11 @@ fn assert_c_compiles_with(decl: &IRDecl, extra_decls: &[IRDecl]) {
     let src_path = dir.path().join("test_emit.c");
     std::fs::write(&src_path, &emitted).expect("failed to write temp file");
 
-    let include_dir = runtime_include_dir();
+    // Only the header is needed (compile, no link), so the runtime crate's own
+    // resolver serves: its compile-time `include/` when that really holds the
+    // embedded header, else the embedded copy materialized to a cache dir —
+    // never a bare compile-time path (see runtime_fixture.rs for why).
+    let include_dir = clean_runtime::include_dir();
     assert!(
         include_dir.join("clean_runtime.h").exists(),
         "clean_runtime.h not found at {:?}",

@@ -268,11 +268,11 @@ fn test_ordering_comparison_types() {
         assert_type_is_sort(&tc, &ord_const.type_, "Ord");
     }
 
-    // Test compare function
+    // `export Ord (compare)` is a resolver alias; the stored projection is Ord.compare.
     let cmp_const = env
-        .get_const(&Name::from_string("compare"))
-        .expect("expected to find compare in environment");
-    assert_type_is_sort(&tc, &cmp_const.type_, "compare");
+        .get_const(&Name::from_string("Ord.compare"))
+        .expect("expected to find Ord.compare in environment");
+    assert_type_is_sort(&tc, &cmp_const.type_, "Ord.compare");
 
     // Test LT, LE typeclasses
     let lt_const = env
@@ -317,7 +317,7 @@ fn test_inhabited_nonempty_types() {
         .expect("expected to find Inhabited.mk in environment");
     assert_type_is_sort(&tc, &mk_const.type_, "Inhabited.mk");
 
-    // Test Nonempty (proof-relevant version)
+    // Test Nonempty, the proposition that an inhabitant exists.
     let nonempty_name = Name::from_string("Nonempty");
     let _ne_ind = env.get_inductive(&nonempty_name).unwrap_or_else(|| {
         panic!(
@@ -332,11 +332,12 @@ fn test_inhabited_nonempty_types() {
         .expect("expected to find Nonempty.intro in environment");
     assert_type_is_sort(&tc, &intro_const.type_, "Nonempty.intro");
 
-    // Test default function
+    // `export Inhabited (default)` is a source resolver alias, not a second
+    // kernel declaration. Inspect the actual class projection.
     let default_const = env
-        .get_const(&Name::from_string("default"))
-        .expect("expected to find default in environment");
-    assert_type_is_sort(&tc, &default_const.type_, "default");
+        .get_const(&Name::from_string("Inhabited.default"))
+        .expect("expected to find Inhabited.default in environment");
+    assert_type_is_sort(&tc, &default_const.type_, "Inhabited.default");
 
     // Test instInhabitedNat (Nat is inhabited with default 0)
     let inst_const = env
@@ -705,11 +706,17 @@ fn test_conv_types() {
 
     let tc = TypeChecker::new(&env);
 
-    // Test Conv (conversion tactic monad)
+    // Pinned Lean's conversion operations use the ordinary TacticM monad;
+    // there is no separate Lean.Elab.Tactic.Conv.Conv declaration.
     let conv_const = env
-        .get_const(&Name::from_string("Lean.Elab.Tactic.Conv.Conv"))
-        .expect("expected to find Lean.Elab.Tactic.Conv.Conv in environment");
-    assert_type_is_sort(&tc, &conv_const.type_, "Conv");
+        .get_const(&Name::from_string("Lean.Elab.Tactic.TacticM"))
+        .expect("expected to find Lean.Elab.Tactic.TacticM in environment");
+    assert_type_is_sort(&tc, &conv_const.type_, "TacticM");
+
+    let convert_const = env
+        .get_const(&Name::from_string("Lean.Elab.Tactic.Conv.convert"))
+        .expect("expected to find the conversion runner in environment");
+    assert_type_is_sort(&tc, &convert_const.type_, "Conv.convert");
 
     // Test changeLhs
     let changelhs_const = env
@@ -740,22 +747,29 @@ fn test_linter_types() {
     };
 
     let mut env = Environment::default();
-    load_module_with_deps(&mut env, "Lean.Linter.Basic", &[lib_path])
-        .expect("Failed to load Lean.Linter.Basic");
+    // Linter.Basic now owns option selection. The runtime linter structure
+    // and its registry are declared by Lean.Elab.Command.
+    load_module_with_deps(&mut env, "Lean.Elab.Command", &[lib_path])
+        .expect("Failed to load Lean.Elab.Command");
 
     let tc = TypeChecker::new(&env);
 
     // Test Linter
     let linter_const = env
-        .get_const(&Name::from_string("Lean.Linter.Linter"))
-        .expect("expected to find Lean.Linter.Linter in environment");
+        .get_const(&Name::from_string("Lean.Elab.Command.Linter"))
+        .expect("expected to find Lean.Elab.Command.Linter in environment");
     assert_type_is_sort(&tc, &linter_const.type_, "Linter");
 
-    // Test getLinters
+    // The current registry is an IO.Ref, read by addLinter and command
+    // elaboration; the old getLinters declaration is no longer present.
     let getlinters_const = env
-        .get_const(&Name::from_string("Lean.Linter.getLinters"))
-        .expect("expected to find Lean.Linter.getLinters in environment");
-    assert_type_is_sort(&tc, &getlinters_const.type_, "getLinters");
+        .get_const(&Name::from_string("Lean.Elab.Command.lintersRef"))
+        .expect("expected to find Lean.Elab.Command.lintersRef in environment");
+    assert_type_is_sort(&tc, &getlinters_const.type_, "lintersRef");
+    let add_linter = env
+        .get_const(&Name::from_string("Lean.Elab.Command.addLinter"))
+        .expect("expected to find Lean.Elab.Command.addLinter in environment");
+    assert_type_is_sort(&tc, &add_linter.type_, "addLinter");
 }
 
 #[test]
@@ -837,11 +851,17 @@ fn test_mvar_context_types() {
         .expect("expected to find Lean.MVarId in environment");
     assert_type_is_sort(&tc, &mvarid_const.type_, "MVarId");
 
-    // Test MetavarContext.assignExpr
+    // The pinned module exports the explicit-context update as Lean.assignExp;
+    // the monadic assignment operation is Lean.MVarId.assign.
     let assign_const = env
-        .get_const(&Name::from_string("Lean.MetavarContext.assignExpr"))
-        .expect("expected to find Lean.MetavarContext.assignExpr in environment");
-    assert_type_is_sort(&tc, &assign_const.type_, "MetavarContext.assignExpr");
+        .get_const(&Name::from_string("Lean.assignExp"))
+        .expect("expected to find Lean.assignExp in environment");
+    assert_type_is_sort(&tc, &assign_const.type_, "assignExp");
+
+    let monadic_assign = env
+        .get_const(&Name::from_string("Lean.MVarId.assign"))
+        .expect("expected to find Lean.MVarId.assign in environment");
+    assert_type_is_sort(&tc, &monadic_assign.type_, "MVarId.assign");
 
     // Test instantiateMVars
     let inst_const = env

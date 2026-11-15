@@ -29,25 +29,48 @@ pub(super) fn syntax_to_do_elem(syntax: &Syntax) -> Option<DoElem> {
         // Pre-existing bug: these were snake_case, never caught because
         // Do blocks bypass expand_macros. Fixed as part of #2211.
         "doBind" if node.children.len() == 2 => {
-            let name = node.children[0].as_ident()?.to_string();
+            let name = node.children[0].as_ident()?.clone();
             let action = syntax_to_surface(&node.children[1])?;
-            let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+            let binder = SurfaceBinder {
+                span: Span::dummy(),
+                name,
+                ty: None,
+                default: None,
+                info: SurfaceBinderInfo::Explicit,
+            };
             Some(DoElem::Bind(Span::dummy(), binder, Box::new(action)))
         }
         "doLet" if node.children.len() == 2 => {
-            let name = node.children[0].as_ident()?.to_string();
+            let name = node.children[0].as_ident()?.clone();
             let val = syntax_to_surface(&node.children[1])?;
-            let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+            let binder = SurfaceBinder {
+                span: Span::dummy(),
+                name,
+                ty: None,
+                default: None,
+                info: SurfaceBinderInfo::Explicit,
+            };
             Some(DoElem::Let(Span::dummy(), binder, Box::new(val)))
+        }
+        "doHave" if node.children.len() == 2 => {
+            let binder = super::helpers::syntax_to_binder(&node.children[0])?;
+            let value = syntax_to_surface(&node.children[1])?;
+            Some(DoElem::Have(Span::dummy(), binder, Box::new(value)))
         }
         "doReturn" if node.children.len() == 1 => {
             let expr = syntax_to_surface(&node.children[0])?;
             Some(DoElem::Return(Span::dummy(), Box::new(expr)))
         }
         "doLetMut" if node.children.len() == 2 => {
-            let name = node.children[0].as_ident()?.to_string();
+            let name = node.children[0].as_ident()?.clone();
             let val = syntax_to_surface(&node.children[1])?;
-            let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+            let binder = SurfaceBinder {
+                span: Span::dummy(),
+                name,
+                ty: None,
+                default: None,
+                info: SurfaceBinderInfo::Explicit,
+            };
             Some(DoElem::LetMut(Span::dummy(), binder, Box::new(val)))
         }
         "doElem" if node.children.len() == 1 => {
@@ -87,7 +110,7 @@ pub(super) fn syntax_to_do_elem(syntax: &Syntax) -> Option<DoElem> {
             ))
         }
         "doIfDecidable" if node.children.len() >= 3 => {
-            let witness = node.children[0].as_ident()?.to_string();
+            let witness = node.children[0].as_ident()?.clone();
             let prop = syntax_to_surface(&node.children[1])?;
             let then_seq = syntax_to_do_seq(&node.children[2])?;
             let else_seq = if node.children.len() >= 4 {
@@ -104,10 +127,16 @@ pub(super) fn syntax_to_do_elem(syntax: &Syntax) -> Option<DoElem> {
             ))
         }
         "doFor" if node.children.len() == 3 => {
-            let name = node.children[0].as_ident()?.to_string();
+            let name = node.children[0].as_ident()?.clone();
             let collection = syntax_to_surface(&node.children[1])?;
             let body = syntax_to_do_seq(&node.children[2])?;
-            let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+            let binder = SurfaceBinder {
+                span: Span::dummy(),
+                name,
+                ty: None,
+                default: None,
+                info: SurfaceBinderInfo::Explicit,
+            };
             Some(DoElem::For(
                 Span::dummy(),
                 binder,
@@ -146,7 +175,7 @@ pub(super) fn syntax_to_do_elem(syntax: &Syntax) -> Option<DoElem> {
                 if let Syntax::Node(n) = child {
                     match n.kind.name_str() {
                         "doCatch" if n.children.len() >= 2 => {
-                            let binder = n.children[0].as_ident()?.to_string();
+                            let binder = n.children[0].as_ident()?.clone();
                             let (exc_type, body_idx) = if n.children.len() >= 3 {
                                 // May have exc_type between binder and body
                                 if let Some(ty) = syntax_to_surface(&n.children[1]) {
@@ -196,7 +225,7 @@ pub(super) fn syntax_to_do_elem(syntax: &Syntax) -> Option<DoElem> {
             // Encoded as flat pairs: [name1, val1, name2, val2, ...]
             let mut decls = Vec::new();
             for pair in node.children.chunks(2) {
-                let name = pair[0].as_ident()?.to_string();
+                let name = pair[0].as_ident()?.clone();
                 let val = syntax_to_surface(&pair[1])?;
                 let binder = SurfaceBinder {
                     span: Span::dummy(),
@@ -249,7 +278,7 @@ pub(super) fn syntax_to_do_elem(syntax: &Syntax) -> Option<DoElem> {
         "doBreak" => Some(DoElem::Break(Span::dummy())),
         "doContinue" => Some(DoElem::Continue(Span::dummy())),
         "doReassign" if node.children.len() == 2 => {
-            let name = node.children[0].as_ident()?.to_string();
+            let name = node.children[0].as_ident()?.clone();
             let val = syntax_to_surface(&node.children[1])?;
             Some(DoElem::Reassign(Span::dummy(), name, Box::new(val)))
         }

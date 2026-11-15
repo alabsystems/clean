@@ -28,8 +28,17 @@ use clean_kernel::{Environment, Name};
 
 use crate::error::ElabError;
 
-/// Default priority for `@[default_instance]` when none is specified.
-pub const DEFAULT_INSTANCE_PRIORITY: u32 = 1000;
+/// Default priority for **`@[default_instance]`** when none is specified.
+///
+/// Named `DEFAULT_INSTANCE_ATTR_PRIORITY`, not `DEFAULT_INSTANCE_PRIORITY`, to
+/// keep it distinct from `clean_kernel::DEFAULT_INSTANCE_PRIORITY` (100) —
+/// which is a different quantity for a different attribute and would otherwise
+/// be a same-name/different-value collision across two crates used together.
+/// This one is the `@[default_instance]` priority (open-metavariable
+/// defaulting, lean4 `addDefaultInstance`); that one is the priority the
+/// kernel seeds its own instances with. Lean gives both attributes the same
+/// `default` = 1000 when unannotated, via `getAttrParamOptPrio`.
+pub const DEFAULT_INSTANCE_ATTR_PRIORITY: u32 = 1000;
 
 /// Information about a registered default instance.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -46,7 +55,7 @@ pub(crate) struct DefaultInstanceInfo {
 /// elaboration-layer data structure — the kernel [`Environment`] does not
 /// track these registrations directly.
 #[derive(Debug, Clone, Default)]
-pub struct AttributeHandlerRegistry {
+pub(crate) struct AttributeHandlerRegistry {
     /// Declarations registered as coercions via `@[coe]`.
     coercions: HashMap<Name, ()>,
     /// Declarations registered as initialization functions via `@[init]`.
@@ -60,7 +69,7 @@ pub struct AttributeHandlerRegistry {
 impl AttributeHandlerRegistry {
     /// Create a new, empty registry.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -70,12 +79,12 @@ impl AttributeHandlerRegistry {
 
     /// Check if a declaration is registered as a coercion.
     #[must_use]
-    pub fn is_coercion(&self, name: &Name) -> bool {
+    pub(crate) fn is_coercion(&self, name: &Name) -> bool {
         self.coercions.contains_key(name)
     }
 
     /// Iterate over all registered coercion names.
-    pub fn coercions(&self) -> impl Iterator<Item = &Name> {
+    pub(crate) fn coercions(&self) -> impl Iterator<Item = &Name> {
         self.coercions.keys()
     }
 
@@ -91,7 +100,7 @@ impl AttributeHandlerRegistry {
 
     /// Check if a declaration is registered as an initialization function.
     #[must_use]
-    pub fn is_init_fn(&self, name: &Name) -> bool {
+    pub(crate) fn is_init_fn(&self, name: &Name) -> bool {
         self.init_fns.contains_key(name)
     }
 
@@ -115,7 +124,7 @@ impl AttributeHandlerRegistry {
 
     /// Check if a declaration is registered as a default instance.
     #[must_use]
-    pub fn is_default_instance(&self, name: &Name) -> bool {
+    pub(crate) fn is_default_instance(&self, name: &Name) -> bool {
         self.default_instances.contains_key(name)
     }
 
@@ -126,7 +135,7 @@ impl AttributeHandlerRegistry {
     }
 
     /// Iterate over all registered default instances.
-    pub fn default_instances(&self) -> impl Iterator<Item = &DefaultInstanceInfo> {
+    pub(crate) fn default_instances(&self) -> impl Iterator<Item = &DefaultInstanceInfo> {
         self.default_instances.values()
     }
 
@@ -142,7 +151,7 @@ impl AttributeHandlerRegistry {
 
     /// Check if a declaration is registered as a match pattern discriminator.
     #[must_use]
-    pub fn is_match_pattern(&self, name: &Name) -> bool {
+    pub(crate) fn is_match_pattern(&self, name: &Name) -> bool {
         self.match_patterns.contains_key(name)
     }
 
@@ -259,7 +268,7 @@ pub(crate) fn handle_default_instance(
         decl_name.clone(),
         DefaultInstanceInfo {
             name: decl_name.clone(),
-            priority: priority.unwrap_or(DEFAULT_INSTANCE_PRIORITY),
+            priority: priority.unwrap_or(DEFAULT_INSTANCE_ATTR_PRIORITY),
         },
     );
     Ok(())
@@ -325,19 +334,19 @@ impl std::fmt::Debug for UserAttributeRegistry {
 impl UserAttributeRegistry {
     /// Create an empty registry.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Register a handler for the custom attribute `@[name]`. A later registration
     /// for the same name replaces the earlier one (last-wins, as in Lean).
-    pub fn register(&mut self, name: impl Into<String>, handler: UserAttributeHandler) {
+    pub(crate) fn register(&mut self, name: impl Into<String>, handler: UserAttributeHandler) {
         self.handlers.insert(name.into(), handler);
     }
 
     /// Whether a handler is registered for `@[name]`.
     #[must_use]
-    pub fn is_registered(&self, name: &str) -> bool {
+    pub(crate) fn is_registered(&self, name: &str) -> bool {
         self.handlers.contains_key(name)
     }
 
@@ -355,7 +364,12 @@ impl UserAttributeRegistry {
     /// Dispatch the handler for `@[name]` against `target`. Fails with
     /// [`ElabError::Unsupported`] if no handler is registered for `name`;
     /// otherwise propagates the handler's own result.
-    pub fn dispatch(&self, name: &str, target: &Name, env: &Environment) -> Result<(), ElabError> {
+    pub(crate) fn dispatch(
+        &self,
+        name: &str,
+        target: &Name,
+        env: &Environment,
+    ) -> Result<(), ElabError> {
         let handler = self
             .handlers
             .get(name)

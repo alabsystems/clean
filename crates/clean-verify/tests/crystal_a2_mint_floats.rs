@@ -44,8 +44,7 @@
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -288,7 +287,7 @@ fn m10_the_interface_pins_bite() {
         for (from, to, slot) in [
             ("%1: f64", "%1: f32", "parameter"),
             ("rustcc fn @", "ccc fn @", "calling convention"),
-            ("(functy.381)", "(functy.382)", "functy"),
+            ("(functy.363)", "(functy.364)", "functy"),
         ] {
             let mutated = c.fixture.replace(from, to);
             assert_ne!(mutated, c.fixture, "{}: the mutation must bite", c.prefix);

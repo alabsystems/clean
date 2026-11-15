@@ -84,5 +84,14 @@ fn test_import_file_bad_data() {
     let err = Lean4BatchImporter::new(Lean4BatchConfig::new(dir.path().to_path_buf()))
         .import_file(&bad, &mut ShardWriter::new())
         .unwrap_err();
-    assert!(err.to_string().contains("Lean4"), "got: {err}");
+    // The artifact reader (docs/DECISIONS.md R113) refuses the file before any
+    // constant is parsed, naming the path and the parse failure.
+    assert!(
+        matches!(
+            &err,
+            MathverseError::ArtifactRefused { path, reason }
+                if path.ends_with("bad.olean") && reason.contains("invalid magic bytes")
+        ),
+        "got: {err}"
+    );
 }

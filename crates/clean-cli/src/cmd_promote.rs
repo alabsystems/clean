@@ -13,13 +13,21 @@ use std::io::{self, Write};
 /// Subcommands for `clean promote`.
 #[derive(Subcommand)]
 pub(crate) enum PromoteCommands {
-    /// List all DerivedPending definitions and proof availability
+    /// List the promotion candidates and proof availability
+    ///
+    /// A candidate is a DerivedLemma whose proof status is DerivedPending. A
+    /// DerivedPending definition in another category is not a candidate and is
+    /// not listed: the inductive-type and recursor registrations are
+    /// FoundationalRule and sit outside this pipeline.
     List {
         /// Show detailed information (type signatures, axiom deps)
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Run the full promotion pipeline on all DerivedPending definitions
+    /// Run the full promotion pipeline over the candidates `list` prints
+    ///
+    /// The same set: the DerivedLemma definitions whose proof status is
+    /// DerivedPending.
     Run {
         /// Show per-definition results
         #[arg(short, long)]
@@ -75,7 +83,7 @@ pub(crate) fn handle_promote_list(verbose: bool) -> Result<()> {
 
     writeln!(
         out,
-        "DerivedPending definitions ({} total):\n",
+        "DerivedPending DerivedLemma definitions ({} total):\n",
         candidates.len()
     )?;
     for def in &candidates {

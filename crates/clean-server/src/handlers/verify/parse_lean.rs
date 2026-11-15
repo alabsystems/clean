@@ -3,9 +3,32 @@
 // SPDX-License-Identifier: Apache-2.0
 
 //! Lean file parser for extracting theorem/lemma declarations and sorry locations.
+//!
+//! # Where it runs, and its deadline
+//!
+//! `verifyFile`, `fillSorries` and `composeProof` parse the file a request
+//! sends, up to the transport's 10 MiB, so the parse is request work: it runs
+//! on the work pool under the request's deadline (`handlers/work.rs`), never
+//! on a runtime worker (until R87, 2026-10-17, it ran there).
+//! [`parse_lean_file`] asserts that in debug builds.
+//!
+//! The parse is not linear in the file: the declaration scan searches the
+//! rest of the file once per `theorem`/`lemma` line until one parses (the
+//! line's first occurrence, then the next `:=`), so a file of many such lines
+//! costs their count times its length. It reads the deadline: the clock before
+//! each such line (one search is up to a file's length of work, so a poll
+//! that reads the clock once every 1,024 would overshoot by 1,024 of them),
+//! and the kernel's poll before each line it scans for holes. Past the
+//! deadline it stops, and its caller's `run_until` drops what it returned.
+//! The hole scan was quadratic in a line's holes as well (it stripped the
+//! line's comments again for each candidate, and searched to the line's end
+//! for a token the line no longer held); it strips each line once and
+//! searches each token once now.
 
 use super::types::{ExtractedTheorem, SorryLocation};
+use crate::handlers::work::deadline_passed_now;
 use clean_elab::tactic::script_runner::comment_strip::strip_block_comments;
+use clean_kernel::tc::poll_deadline;
 
 const EXPLICIT_HOLE_TOKENS: &[&str] = &["sorry", "admit"];
 
@@ -34,8 +57,12 @@ fn is_identifier_char(c: char) -> bool {
 /// scanning, so tokens hidden inside comments are never reported as holes.
 pub(crate) fn explicit_hole_token_at(line: &str, column: usize) -> Option<&'static str> {
     let block_stripped = strip_block_comments(line);
-    let comment_free = strip_line_comment(&block_stripped);
+    hole_token_in(strip_line_comment(&block_stripped), column)
+}
 
+/// [`explicit_hole_token_at`] on a line whose comments are stripped already
+/// (`strip_line_comment(&strip_block_comments(line))`).
+fn hole_token_in(comment_free: &str, column: usize) -> Option<&'static str> {
     for &token in EXPLICIT_HOLE_TOKENS {
         let end = column.checked_add(token.len())?;
         if comment_free.get(column..end) != Some(token) {
@@ -61,24 +88,40 @@ pub(crate) fn explicit_hole_token_at(line: &str, column: usize) -> Option<&'stat
 
 fn collect_explicit_holes(line: &str) -> Vec<usize> {
     let comment_free = strip_line_comment(line);
+    // What `explicit_hole_token_at(line, column)` checks a candidate against,
+    // the same for every candidate of the line: stripped once.
+    let block_stripped = strip_block_comments(line);
+    let checked = strip_line_comment(&block_stripped);
     let mut columns = Vec::new();
     let mut search_start = 0usize;
+    // Each token's first occurrence at or after the last search start (`None`:
+    // none after it). It stays the first at or after a later start for as long
+    // as it is not before that start, so each token's search moves forward
+    // only, and the line is searched once per token.
+    let mut next: Vec<Option<usize>> = EXPLICIT_HOLE_TOKENS
+        .iter()
+        .map(|&token| comment_free.find(token))
+        .collect();
 
     while search_start < comment_free.len() {
-        let next_match = EXPLICIT_HOLE_TOKENS
-            .iter()
-            .filter_map(|&token| {
-                comment_free[search_start..]
+        for (found, &token) in next.iter_mut().zip(EXPLICIT_HOLE_TOKENS) {
+            if found.is_some_and(|column| column < search_start) {
+                *found = comment_free[search_start..]
                     .find(token)
-                    .map(|offset| (search_start + offset, token))
-            })
+                    .map(|offset| search_start + offset);
+            }
+        }
+        let next_match = next
+            .iter()
+            .zip(EXPLICIT_HOLE_TOKENS)
+            .filter_map(|(found, &token)| found.map(|column| (column, token)))
             .min_by_key(|(column, _)| *column);
 
         let Some((column, token)) = next_match else {
             break;
         };
 
-        if explicit_hole_token_at(line, column).is_some() {
+        if hole_token_in(checked, column).is_some() {
             columns.push(column);
         }
 
@@ -97,18 +140,43 @@ fn collect_explicit_holes(line: &str) -> Vec<usize> {
 /// [`strip_block_comments`] replaces comment content with spaces, keeping
 /// newlines intact.
 ///
-/// Returns `(Option<ExtractedTheorem>, Vec<SorryLocation>)`
+/// Returns `(Option<ExtractedTheorem>, Vec<SorryLocation>)`. Under a deadline
+/// that passes while it parses, it stops with an error, which its caller's
+/// `run_until` drops (the module's notes above).
 pub(crate) fn parse_lean_file(
     content: &str,
 ) -> Result<(Option<ExtractedTheorem>, Vec<SorryLocation>), String> {
+    // A request's parse is work for the pool, never for a runtime worker
+    // (the module's notes). Tests build with debug assertions, so a request
+    // path that brings it back to the runtime fails every test that takes it.
+    debug_assert!(
+        tokio::runtime::Handle::try_current().is_err(),
+        "a request's Lean file was parsed on an async runtime's thread"
+    );
+
     // Strip block comments across the whole file so multiline `/- ... -/`
     // spanning several lines cannot hide or expose false holes/theorems.
     let stripped = strip_block_comments(content);
 
+    let mut sorries = explicit_holes(&stripped)?;
+    let theorem = first_declaration(&stripped, &mut sorries)?;
+    Ok((theorem, sorries))
+}
+
+/// What a parse its deadline interrupted answers (its caller's `run_until`
+/// drops it).
+const INTERRUPTED: &str = "the parse was interrupted at its deadline";
+
+/// The explicit holes of a file whose block comments are stripped. Polls the
+/// deadline before each line.
+pub(crate) fn explicit_holes(stripped: &str) -> Result<Vec<SorryLocation>, String> {
     // Find explicit user holes in source text. Trusted tactic usage is tracked
     // semantically via the proof-state trust ledger after tactic execution.
     let mut sorries = Vec::new();
     for (line_idx, line) in stripped.lines().enumerate() {
+        if poll_deadline() {
+            return Err(INTERRUPTED.to_string());
+        }
         for col in collect_explicit_holes(line) {
             sorries.push(SorryLocation {
                 line: line_idx + 1,
@@ -117,7 +185,16 @@ pub(crate) fn parse_lean_file(
             });
         }
     }
+    Ok(sorries)
+}
 
+/// The first `theorem`/`lemma` of a file whose block comments are stripped,
+/// naming it as the context of `sorries`. Reads the clock before each such
+/// line: each searches the rest of the file.
+pub(crate) fn first_declaration(
+    stripped: &str,
+    sorries: &mut [SorryLocation],
+) -> Result<Option<ExtractedTheorem>, String> {
     let mut theorem: Option<ExtractedTheorem> = None;
 
     // Find theorem/lemma declaration (simple string-based parsing)
@@ -139,6 +216,10 @@ pub(crate) fn parse_lean_file(
         };
 
         if let Some(kw) = keyword {
+            // What follows searches the rest of the file: read the clock.
+            if deadline_passed_now() {
+                return Err(INTERRUPTED.to_string());
+            }
             // Found a theorem/lemma declaration
             let after_keyword = &trimmed[kw.len()..];
 
@@ -193,7 +274,7 @@ pub(crate) fn parse_lean_file(
                     let original_proof = proof[..proof_end].trim().to_string();
 
                     // Update sorry contexts
-                    for sorry in &mut sorries {
+                    for sorry in sorries.iter_mut() {
                         sorry.context = Some(name.clone());
                     }
 
@@ -210,5 +291,5 @@ pub(crate) fn parse_lean_file(
         }
     }
 
-    Ok((theorem, sorries))
+    Ok(theorem)
 }

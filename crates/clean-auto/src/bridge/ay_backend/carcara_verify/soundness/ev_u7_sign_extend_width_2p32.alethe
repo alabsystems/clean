@@ -1,0 +1,3 @@
+(assume nc (not (= (= ((_ sign_extend 4294967295) #b1) ((_ sign_extend 4294967295) #b0)) true)))
+(step s (cl (= (= ((_ sign_extend 4294967295) #b1) ((_ sign_extend 4294967295) #b0)) true)) :rule evaluate)
+(step done (cl) :rule resolution :premises (nc s))

@@ -34,15 +34,19 @@
 //!   lane) or a user redefinition is never clobbered, and import-suppressed
 //!   preludes (no `Add.add`) are left untouched.
 //!
-//! Sibling coverage (B101): `Add`/`Mul`/`Sub` land. `Div` is DESCOPED —
-//! the homogeneous `Div` class is absent from `Environment::with_prelude`
-//! (kernel `init_div` exists in `clean-kernel/src/env/algebra_hetero.rs`
-//! but `init_prelude_algebra` never calls it), so no honest bridge value
-//! can name `Div.div`; registering the class is kernel-prelude (co-tenant)
-//! work. Until then `x / y` over a user carrier stays the loud
+//! Sibling coverage (B101): `Add`/`Mul`/`Sub` land. `Div`/`Mod` are NOT
+//! seeded as instances: since 2026-09-30 the default kernel prelude has the
+//! `Div` / `Mod` classes and Lean's `instHDiv` / `instHMod` constants
+//! (`clean-kernel` `env/lean_arith_bridges.rs`, where Lean's floor lemmas are
+//! stated through them), but registering the division bridge with the
+//! resolver is a separate change to what `/` elaborates to, and this seed does
+//! not make it. `x / y` over a user carrier stays the loud
 //! `FailedToSynthesizeInstance { goal: "HDiv …" }`. `Neg` needs no bridge:
 //! unary `-` elaborates through `Neg.neg` directly and the kernel prelude
 //! already registers `Neg` as a class.
+//!
+//! Where the kernel prelude already DEFINES a bridge constant (it defines all
+//! five since 2026-09-30), this seed only REGISTERS it, at the same priority.
 
 use clean_kernel::{BinderInfo, Declaration, Environment, Expr, KernelInstanceInfo, Level, Name};
 
@@ -122,7 +126,26 @@ pub(crate) fn seed_hetero_bridges(env: &mut Environment) {
 /// when the bridge constant already exists or an ingredient is missing.
 fn seed_bridge(env: &mut Environment, spec: &BridgeSpec) {
     let inst_name = Name::from_string(spec.inst_name);
-    if env.get_const(&inst_name).is_some() {
+    if let Some(existing) = env.get_const(&inst_name) {
+        // Since 2026-09-30 the DEFAULT kernel prelude defines Lean's bridge
+        // constants itself (`clean-kernel` `env/lean_arith_bridges.rs`: Lean's
+        // floor lemmas are stated through them) but does not register them
+        // as instances. Register exactly that constant, at exactly the
+        // priority this seed always used, so user `Add`/`Mul`/`Sub` instances
+        // keep reaching their operators. Anything else of that name — an
+        // imported bridge already registered, or a user declaration of a
+        // different shape — is left alone, as before.
+        let registered = env.is_instance(&inst_name);
+        let kernel_bridge = existing.type_ == bridge_type(spec);
+        if !registered && kernel_bridge {
+            env.register_instance(KernelInstanceInfo {
+                name: inst_name,
+                class_name: Name::from_string(spec.hetero_class),
+                priority: BRIDGE_INSTANCE_PRIORITY,
+                type_: None,
+                value: None,
+            });
+        }
         return;
     }
     let ingredients = [
@@ -156,16 +179,7 @@ fn seed_bridge(env: &mut Environment, spec: &BridgeSpec) {
         )
     };
 
-    // {α : Type u} → [inst : Homog α] → Hetero α α α
-    let type_ = Expr::pi(
-        BinderInfo::Implicit,
-        type_u.clone(),
-        Expr::pi(
-            BinderInfo::InstImplicit,
-            homog_alpha(0),
-            hetero_alpha3(spec.hetero_class),
-        ),
-    );
+    let type_ = bridge_type(spec);
     // fun {α} [inst] => Hetero.mk α α α (Homog.method α inst)
     let method_call = Expr::apps(
         Expr::const_(Name::from_string(spec.homog_method), vec![u.clone()]),
@@ -216,4 +230,26 @@ fn seed_bridge(env: &mut Environment, spec: &BridgeSpec) {
         type_: None,
         value: None,
     });
+}
+
+/// `{α : Type u} → [inst : Homog α] → Hetero α α α` — Lean's bridge type.
+fn bridge_type(spec: &BridgeSpec) -> Expr {
+    let u = Level::param(Name::from_string("u"));
+    let type_u = Expr::sort(Level::succ(u.clone()));
+    let homog = Expr::app(
+        Expr::const_(Name::from_string(spec.homog_class), vec![u.clone()]),
+        Expr::bvar(0),
+    );
+    let hetero = Expr::apps(
+        Expr::const_(
+            Name::from_string(spec.hetero_class),
+            vec![u.clone(), u.clone(), u],
+        ),
+        [Expr::bvar(1), Expr::bvar(1), Expr::bvar(1)],
+    );
+    Expr::pi(
+        BinderInfo::Implicit,
+        type_u,
+        Expr::pi(BinderInfo::InstImplicit, homog, hetero),
+    )
 }

@@ -17,7 +17,7 @@
 //! the widest fully-flippable body in `clean-kernel` after `Level::kind_ord` —
 //! and recorded it as **not chainable**, for one specific reason:
 //!
-//! > LINK 3. Every arm materializes `const enum.13 { k }` — a
+//! > LINK 3. Every arm materializes `const enum.17 { k }` — a
 //! > `trust_ir::Constant::Aggregate`. Clean's `IRConst` has SEVEN constructors
 //! > (int_, bool_, unit_, null_, undef_, float_, func_) and no aggregate form,
 //! > so `ir_const_eval` has no case for the construct this body emits. Closing
@@ -41,7 +41,7 @@
 //! candidates emit the SAME constant shape:
 //!
 //! ```text
-//! mode::CleanMode::from_source_system     %3 = const enum.13  { 0 }
+//! mode::CleanMode::from_source_system     %3 = const enum.17  { 0 }
 //! <tc::ExprPathStep as Clone>::clone      %4 = const enum.181 { 0 }
 //! ```
 //!
@@ -64,7 +64,7 @@
 //! | distinct answers | 2 (Bool) | 5 (u8) | **5 modes out of 12 tags — a many-to-one map** |
 //! | argument | `&self`, loaded from the heap | `&self`, loaded from the heap | **BY VALUE — no load, no heap at all** |
 //! | answer | `IRConst.bool_` | `IRConst.int_` | **`IRConst.aggv` — an aggregate constant** |
-//! | join parameter | `bool` | `u8` | **`enum.13`, an aggregate** |
+//! | join parameter | `bool` | `u8` | **`enum.17`, an aggregate** |
 //!
 //! The by-value argument is the structurally new thing and it changes the
 //! representation premise: [`EncodesSourceSystemVal`] relates an `IRScalar` to a
@@ -119,10 +119,10 @@ const MINTED_IR_FS: &str = include_str!("generated/ir_fs.defs.txt");
 
 /// Registration rationales, one per minted line, in script order.
 const MINTED_IR_FS_DOCS: &[&str] = &[
-    "ir_fs_tmode: enum.13, the CleanMode enum id the emitted body names in `const enum.13 { k }`. Unlike every earlier chain's type shorthand this one is SEMANTIC INPUT, not decoration: ir_const_agg_eval consults ir_ty_is_agg on it, so an aggregate constant at a scalar type is type_error not_agg. The particular id 13 is still not consulted. DerivedProved, zero axiom_deps.",
-    "ir_fs_tsrc: enum.178 (fixture era), the SourceSystem enum the body takes BY VALUE -- INTERFACE-ONLY, named by NOTHING in the module: the argument's discriminant is read straight off the SSA value, so the type occurs only in the header the core module cannot hold. Registered so the tag table's canonical-1 pin (the one that makes the parameter-type row producer-invariant, `enum#1`) is an elaborated term and not only a JSON row. It has already moved once (laneREG 2026-08-21 dump: 176), which is why the pin is canonical rather than verbatim. DerivedProved, zero axiom_deps.",
+    "ir_fs_tmode: enum.17, the CleanMode enum id the emitted body names in `const enum.17 { k }`. Unlike every earlier chain's type shorthand this one is SEMANTIC INPUT, not decoration: ir_const_agg_eval consults ir_ty_is_agg on it, so an aggregate constant at a scalar type is type_error not_agg. The particular id 13 is still not consulted. DerivedProved, zero axiom_deps.",
+    "ir_fs_tsrc: enum.211 (fixture era), the SourceSystem enum the body takes BY VALUE -- INTERFACE-ONLY, named by NOTHING in the module: the argument's discriminant is read straight off the SSA value, so the type occurs only in the header the core module cannot hold. Registered so the tag table's canonical-1 pin (the one that makes the parameter-type row producer-invariant, `enum#1`) is an elaborated term and not only a JSON row. It has already moved once (laneREG 2026-08-21 dump: 176), which is why the pin is canonical rather than verbatim. DerivedProved, zero axiom_deps.",
     "ir_fs_b0: entry block, MINTED FROM THE EMITTED ARTIFACT (generated/ir_fs.core.txt; reader B's copy of the same body is tests/fixtures/from_source_system.trust-ir.txt). NO LOAD -- the argument arrives by value as %0, so the body reads its discriminant directly with extractfield u8 %0, 0. ELEVEN explicit switch cases and a NON-CONTIGUOUS case list: 0..9 map to bb1..bb10, then 11 maps to bb11, and tag 10 (PVS) is the value the DEFAULT edge carries. exhaustive_enum_unreachable is Bool.false and that is the MEASURED value read off the artifact binary by reader A, the flag's one witness: the default is reached on every PVS. DerivedProved, zero axiom_deps.",
-    "ir_fs_b1: Lean4 => Constructive, materialized as the AGGREGATE CONSTANT `const enum.13 { 0 }` -- the construct that made this body unchainable until IRConst gained an aggregate form. DerivedProved, zero axiom_deps.",
+    "ir_fs_b1: Lean4 => Constructive, materialized as the AGGREGATE CONSTANT `const enum.17 { 0 }` -- the construct that made this body unchainable until IRConst gained an aggregate form. DerivedProved, zero axiom_deps.",
     "ir_fs_b2: Coq => Impredicative. DerivedProved, zero axiom_deps.",
     "ir_fs_b3: Agda => Constructive. A SEPARATE block from Lean4's even though the answer is the same constant, as emitted -- the compiler does not share arms, and a module that did would be a different CFG. DerivedProved, zero axiom_deps.",
     "ir_fs_b4: CubicalAgda => Cubical. The one arm whose mode carries the cubical layer, and the arm the A5 witnesses instantiate. DerivedProved, zero axiom_deps.",
@@ -134,7 +134,7 @@ const MINTED_IR_FS_DOCS: &[&str] = &[
     "ir_fs_b10: MetamathSet => Classical. DerivedProved, zero axiom_deps.",
     "ir_fs_b11: ACL2 => Classical. Reached by the ONLY non-contiguous explicit case, selector 11 -- the arm a case table transcribed as 0..10 would silently misroute. DerivedProved, zero axiom_deps.",
     "ir_fs_b12: the DEFAULT edge => Classical, i.e. PVS (tag 10). The emitted body routes the TENTH tag through the default rather than the last one, so the default is neither a trap nor the tail of the enum -- it is one specific reachable variant in the middle of the range. DerivedProved, zero axiom_deps.",
-    "ir_fs_b13: the JOIN block, taking an AGGREGATE block parameter (bb13(%1: enum.13)) and returning it. Not a Bool and not a u8: this is the first chain in the spec whose join carries a structured value, so the answer travels through the machine as an IRScalar.aggv rather than as a scalar. DerivedProved, zero axiom_deps.",
+    "ir_fs_b13: the JOIN block, taking an AGGREGATE block parameter (bb13(%1: enum.17)) and returning it. Not a Bool and not a u8: this is the first chain in the spec whose join carries a structured value, so the answer travels through the machine as an IRScalar.aggv rather than as a scalar. DerivedProved, zero axiom_deps.",
     "ir_fs_func: CleanMode::from_source_system as EvalIR -- one parameter (the SourceSystem, by value, SSA id 0), entry block 0, FOURTEEN blocks, matching the emitted body's control-flow graph exactly. DerivedProved, zero axiom_deps.",
     "ir_fs_module: the module for from_source_system, MINTED from the emitted trust-ir rather than transcribed from it. Reader A (the artifact binary), reader B (the emitted text, tests/fixtures/from_source_system.trust-ir.txt) and reader C (this elaborated term) agree on it -- modulo the one-entry unwitnessed ledger, the switch's unprinted exhaustive flag; see crate::ir_mint. DerivedProved, zero axiom_deps.",
 ];
@@ -223,7 +223,7 @@ impl Specification {
         self.add_recursive_def(SRC_CLEAN_MODE_FROM_SOURCE, "clean_mode_from_source: the reflected CleanMode::from_source_system (mode.rs:184-196). NOT a predicate and not an injection: twelve source systems map onto FIVE of the six modes, many-to-one -- Lean4/Agda share Constructive, the three HOL systems plus MetamathSet, PVS and ACL2 share Classical, Mizar and MetamathZFC share SetTheoretic. The equality theorem below therefore cannot be discharged by any case split smaller than the full twelve. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_CLEAN_MODE_OF_TAG, "clean_mode_of_tag: a total left inverse of clean_mode_tag on 0..5, by a chain of decidable Nat equalities. Total means it must answer somewhere off the tag range: every n >= 5 answers settheoretic, which is correct AT 5 and arbitrary above it. That arbitrariness is harmless and is stated rather than hidden -- clean_mode_of_tag_tag only ever applies it to a real tag, and the A5 that uses it obtains its argument from clean_mode_tag. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_CLEAN_MODE_OF_TAG_TAG, "clean_mode_of_tag_tag: clean_mode_of_tag inverts clean_mode_tag on every CleanModeR, by CleanModeR.rec with six Eq.refl arms -- the kernel computes each tag and re-selects the mode. This is what upgrades the A5 below from a statement about a NUMBER to a statement about a MODE. DerivedProved, zero axiom_deps.")?;
-        self.add_inductive(SRC_ENCODESSOURCESYSTEMVAL, "EncodesSourceSystemVal v s: the IRScalar v is the BY-VALUE representation of source system s. \n\nNo memory argument, and that is the structurally new thing about this chain: the emitted body takes its argument by value (`bb0(%0: enum.178)`) and performs NO load, so there is no heap for a representation premise to constrain. The two earlier chains both had to pin a live cell with an ir_mem_lookup equation because their argument was a reference; this one has nothing to pin, and saying so is the honest premise rather than a weaker one. \n\nPayload-agnostic on purpose: the element spine fs is universally quantified, because the body reads field 0 and nothing else -- measured, in the emitted body: one extractfield at index 0, then a switch. SourceSystem is fieldless so a real value's spine is ir_sp0, but quantifying makes the theorem hold for every spine and makes the 'reads only the tag' claim checked rather than asserted. \n\nSAME OPEN LAYOUT OBLIGATION as eval_ir_repr's, carried forward rather than laundered: these are trust-ir DECLARATION-INDEX tags, which is what the emitted body switches on; the Rust enum is niche-encoded downstream of trust-ir. DerivedProved, zero axiom_deps.")?;
+        self.add_inductive(SRC_ENCODESSOURCESYSTEMVAL, "EncodesSourceSystemVal v s: the IRScalar v is the BY-VALUE representation of source system s. \n\nNo memory argument, and that is the structurally new thing about this chain: the emitted body takes its argument by value (`bb0(%0: enum.211)`) and performs NO load, so there is no heap for a representation premise to constrain. The two earlier chains both had to pin a live cell with an ir_mem_lookup equation because their argument was a reference; this one has nothing to pin, and saying so is the honest premise rather than a weaker one. \n\nPayload-agnostic on purpose: the element spine fs is universally quantified, because the body reads field 0 and nothing else -- measured, in the emitted body: one extractfield at index 0, then a switch. SourceSystem is fieldless so a real value's spine is ir_sp0, but quantifying makes the theorem hold for every spine and makes the 'reads only the tag' claim checked rather than asserted. \n\nSAME OPEN LAYOUT OBLIGATION as eval_ir_repr's, carried forward rather than laundered: these are trust-ir DECLARATION-INDEX tags, which is what the emitted body switches on; the Rust enum is niche-encoded downstream of trust-ir. DerivedProved, zero axiom_deps.")?;
         // The module is REPLAYED from the minted script, line for line — the
         // eval_ir_mode.rs / eval_ir_priority.rs posture: Clean's parser and
         // elaborator still turn the text into the term the theorems are about.

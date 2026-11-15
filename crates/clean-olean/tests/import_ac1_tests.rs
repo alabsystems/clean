@@ -18,6 +18,12 @@ use clean_kernel::name::Name;
 use clean_olean::{load_module_with_deps, pinned_lean_lib_path, LoadSummary};
 use std::path::PathBuf;
 
+#[path = "support/recursor_ownership.rs"]
+mod recursor_ownership;
+
+#[path = "support/skipped_constants.rs"]
+mod skipped_constants;
+
 fn get_lean_lib_path() -> Option<PathBuf> {
     pinned_lean_lib_path()
 }
@@ -381,163 +387,9 @@ fn error_category_str(e: &clean_kernel::tc::TypeError) -> String {
     }
 }
 
-struct TcResults {
-    ok: u32,
-    errors: std::collections::BTreeMap<String, Vec<String>>,
-    unknown_consts: std::collections::BTreeMap<String, u32>,
-    heartbeat_exceeded: u32,
-    heartbeat_exceeded_names: Vec<String>,
-}
-
-fn run_tc_on_types(env: &Environment) -> TcResults {
-    use clean_kernel::tc::TypeChecker;
-    let mut results = TcResults {
-        ok: 0,
-        errors: std::collections::BTreeMap::new(),
-        unknown_consts: std::collections::BTreeMap::new(),
-        heartbeat_exceeded: 0,
-        heartbeat_exceeded_names: Vec::new(),
-    };
-    let start = std::time::Instant::now();
-    for (i, ci) in env.constants().enumerate() {
-        if (i + 1) % 5000 == 0 {
-            eprintln!(
-                "  Types progress: {}/{} ({:.1}s)...",
-                i + 1,
-                env.num_constants(),
-                start.elapsed().as_secs_f64()
-            );
-        }
-        let tc = TypeChecker::new(env);
-        match tc.infer_type(&ci.type_) {
-            Ok(_) => results.ok += 1,
-            Err(e) => {
-                if let clean_kernel::tc::TypeError::UnknownConst(ref name) = e {
-                    *results.unknown_consts.entry(name.to_string()).or_default() += 1;
-                }
-                let cat = error_category_str(&e);
-                let samples = results.errors.entry(cat).or_default();
-                if samples.len() < 5 {
-                    samples.push(format!("{}: {e:?}", ci.name));
-                }
-            }
-        }
-    }
-    results
-}
-
-fn run_tc_on_values(env: &Environment) -> TcResults {
-    use clean_kernel::tc::TypeChecker;
-    let mut results = TcResults {
-        ok: 0,
-        errors: std::collections::BTreeMap::new(),
-        unknown_consts: std::collections::BTreeMap::new(),
-        heartbeat_exceeded: 0,
-        heartbeat_exceeded_names: Vec::new(),
-    };
-    let start = std::time::Instant::now();
-    let mut checked = 0u32;
-    for ci in env.constants() {
-        if let Some(val) = &ci.value {
-            checked += 1;
-            if checked.is_multiple_of(5000) {
-                eprintln!(
-                    "  Values progress: {checked} ({:.1}s)...",
-                    start.elapsed().as_secs_f64()
-                );
-            }
-            let mut tc = TypeChecker::new(env);
-            // Use unlimited heartbeat (0) to match Lean 4's kernel behavior.
-            // Lean 4's kernel type checker has no heartbeat limit — it uses a
-            // cooperative interrupt flag (`check_system`), not a deterministic
-            // counter. The prior 200K limit was 10x below clean's own default
-            // of 2M, causing 621 false timeout failures. With unlimited budget,
-            // this diagnostic separates real errors from artificial timeouts.
-            // Part of #3134.
-            tc.set_heartbeat_limit(0);
-            match tc.infer_type(val) {
-                Ok(_) => results.ok += 1,
-                Err(clean_kernel::tc::TypeError::HeartbeatExceeded { .. }) => {
-                    results.heartbeat_exceeded += 1;
-                    results.heartbeat_exceeded_names.push(ci.name.to_string());
-                }
-                Err(e) => {
-                    if let clean_kernel::tc::TypeError::UnknownConst(ref name) = e {
-                        *results.unknown_consts.entry(name.to_string()).or_default() += 1;
-                    }
-                    let cat = error_category_str(&e);
-                    let samples = results.errors.entry(cat).or_default();
-                    if samples.len() < 5 {
-                        samples.push(format!("{}: {e:?}", ci.name));
-                    }
-                }
-            }
-        }
-    }
-    results
-}
-
-fn print_tc_results(label: &str, results: &TcResults) {
-    let fail: u32 = results.errors.values().map(|v| v.len() as u32).sum();
-    let total = results.ok + fail + results.heartbeat_exceeded;
-    let rate = if total > 0 {
-        results.ok as f64 / total as f64 * 100.0
-    } else {
-        0.0
-    };
-    if results.heartbeat_exceeded > 0 {
-        println!(
-            "\n  {label} TC: {}/{total} OK ({rate:.1}%), {} heartbeat exceeded",
-            results.ok, results.heartbeat_exceeded
-        );
-    } else {
-        println!("\n  {label} TC: {}/{total} OK ({rate:.1}%)", results.ok);
-    }
-    if !results.errors.is_empty() {
-        println!("\n  {label} errors by category:");
-        for (cat, samples) in &results.errors {
-            println!("    {cat}: {} errors", samples.len());
-            for s in samples.iter().take(3) {
-                println!("      {s}");
-            }
-        }
-    }
-    if !results.unknown_consts.is_empty() {
-        println!(
-            "\n  {label} UnknownConst names ({} unique):",
-            results.unknown_consts.len()
-        );
-        for (name, count) in &results.unknown_consts {
-            println!("    {name}: {count} occurrences");
-        }
-    }
-    if !results.heartbeat_exceeded_names.is_empty() {
-        // Group by namespace prefix (first two components)
-        let mut ns_counts: std::collections::BTreeMap<String, u32> =
-            std::collections::BTreeMap::new();
-        for name in &results.heartbeat_exceeded_names {
-            let prefix = name.split('.').take(2).collect::<Vec<_>>().join(".");
-            *ns_counts.entry(prefix).or_default() += 1;
-        }
-        println!(
-            "\n  {label} heartbeat exceeded by namespace ({} unique prefixes):",
-            ns_counts.len()
-        );
-        let mut sorted: Vec<_> = ns_counts.into_iter().collect();
-        sorted.sort_by_key(|x| std::cmp::Reverse(x.1));
-        for (ns, count) in sorted.iter().take(30) {
-            println!("    {ns}: {count}");
-        }
-        if sorted.len() > 30 {
-            println!("    ... and {} more prefixes", sorted.len() - 30);
-        }
-        // Also print first 20 full names
-        println!("\n  {label} first 20 heartbeat-exceeded names:");
-        for name in results.heartbeat_exceeded_names.iter().take(20) {
-            println!("    {name}");
-        }
-    }
-}
+#[path = "support/ac1_tc_diagnostic.rs"]
+mod ac1_tc_diagnostic;
+use ac1_tc_diagnostic::{print_tc_results, run_tc_on_types, run_tc_on_values};
 
 fn run_tc_diagnostic(lib_path: &std::path::Path, module: &str) {
     let lib_path = lib_path.to_path_buf();
@@ -3028,28 +2880,34 @@ fn test_ac1_int_native_reducers_work() {
             println!("Int.neg(ofNat 5) = Int.negSucc 4: OK");
         }
 
-        // --- Int.beq ---
-        // Int.beq (Int.ofNat 42) (Int.ofNat 42) should reduce to Bool.true
+        // --- Pinned Int equality ---
+        // Lean 4.30 supplies Int.beq' for kernel reduction. Int.beq is a
+        // legacy Clean-prelude helper, absent from this imported environment;
+        // an undeclared head must not acquire native reduction authority.
         {
-            let expr = Expr::app(
-                Expr::app(Expr::const_str("Int.beq"), mk_int_of_nat(42)),
-                mk_int_of_nat(42),
+            let legacy = Expr::apps(
+                Expr::const_str("Int.beq"),
+                [mk_int_of_nat(42), mk_int_of_nat(42)],
             );
-            let result = tc.whnf(&expr);
-            let head = result.get_app_fn();
-            if let ExprKind::Const(name, _) = head.kind() {
-                assert_eq!(
-                    name.to_string(),
-                    "Bool.true",
-                    "Int.beq(42, 42) should be Bool.true"
-                );
-            } else {
-                panic!(
-                    "Int.beq(42, 42) should reduce to Bool.true, got: {:?}",
-                    head.kind()
-                );
+            assert!(env.get_const(&Name::from_string("Int.beq")).is_none());
+            assert!(tc.infer_type(&legacy).is_err());
+            assert_eq!(tc.whnf(&legacy), legacy);
+            assert!(env.get_const(&Name::from_string("Int.beq'")).is_some());
+            for (lhs, rhs, expected) in [
+                (mk_int_of_nat(42), mk_int_of_nat(42), "Bool.true"),
+                (mk_int_of_nat(42), mk_int_of_nat(43), "Bool.false"),
+                (mk_int_neg_succ(2), mk_int_neg_succ(2), "Bool.true"),
+                (mk_int_neg_succ(2), mk_int_neg_succ(1), "Bool.false"),
+                (mk_int_of_nat(42), mk_int_neg_succ(2), "Bool.false"),
+                (mk_int_neg_succ(2), mk_int_of_nat(42), "Bool.false"),
+            ] {
+                let expr = Expr::apps(Expr::const_str("Int.beq'"), [lhs, rhs]);
+                tc.check_type(&expr, &Expr::const_str("Bool"))
+                    .expect("pinned Int equality expression is well typed");
+                let result = tc.whnf(&expr);
+                assert_eq!(result, Expr::const_str(expected), "{expr:?}");
             }
-            println!("Int.beq(42, 42) = Bool.true: OK");
+            println!("Pinned Int.beq' equal/unequal constructor cases: OK");
         }
 
         // --- Int.sub ---
@@ -3087,11 +2945,10 @@ fn test_ac1_int_native_reducers_work() {
     });
 }
 
-/// Verify that UInt conversion reducers work on a loaded Init environment.
+/// Verify typed UInt conversion/bitwise semantics on a loaded Init environment.
 ///
-/// Exercises UInt8.ofNat (wrapping), cross-width conversions
-/// (UInt32.toUInt8, UInt8.toUInt32), and Fin.val on real olean-loaded
-/// environment.
+/// Exercises UInt wrapping, cross-width conversions and bitwise operations,
+/// observing the genuine UInt/BitVec/Fin carrier through its typed toNat projection.
 ///
 /// Part of #3134
 #[test]
@@ -3102,100 +2959,165 @@ fn test_ac1_uint_conversion_reducers_work() {
     };
     clean_kernel::test_utils::run_with_stack(clean_kernel::test_utils::LARGE_STACK, move || {
         use clean_kernel::expr::{Expr, ExprKind, Literal};
-        use clean_kernel::tc::TypeChecker;
+        use clean_kernel::tc::{TypeChecker, TypeError};
 
         let mut env = Environment::default();
         load_module_with_deps(&mut env, "Init", std::slice::from_ref(&lib_path))
             .expect("Failed to load Init");
 
-        let tc = TypeChecker::new(&env);
+        let uint =
+            |ty: &str, n| Expr::app(Expr::const_str(&format!("{ty}.ofNat")), Expr::nat_lit(n));
+        let unary = |head: &str, value| Expr::app(Expr::const_str(head), value);
+        let binary = |head: &str, left, right| Expr::apps(Expr::const_str(head), [left, right]);
+        // Keep all eight original numerical cases, with actual UInt operands.
+        let cases = [
+            ("UInt8.ofNat(300)", "UInt8", uint("UInt8", 300), 44),
+            ("UInt8.ofNat(100)", "UInt8", uint("UInt8", 100), 100),
+            (
+                "UInt32.ofNat(4294967300)",
+                "UInt32",
+                uint("UInt32", 4_294_967_300),
+                4,
+            ),
+            ("UInt64.ofNat(42)", "UInt64", uint("UInt64", 42), 42),
+            (
+                "UInt32.toUInt8(258)",
+                "UInt8",
+                unary("UInt32.toUInt8", uint("UInt32", 258)),
+                2,
+            ),
+            (
+                "UInt8.toUInt32(200)",
+                "UInt32",
+                unary("UInt8.toUInt32", uint("UInt8", 200)),
+                200,
+            ),
+            (
+                "UInt8.land(0xFF, 0x0F)",
+                "UInt8",
+                binary("UInt8.land", uint("UInt8", 0xFF), uint("UInt8", 0x0F)),
+                15,
+            ),
+            (
+                "UInt8.xor(0xAA, 0xFF)",
+                "UInt8",
+                binary("UInt8.xor", uint("UInt8", 0xAA), uint("UInt8", 0xFF)),
+                85,
+            ),
+        ];
+        assert_eq!(cases.len(), 8);
 
-        // Helper: assert WHNF reduces to a nat literal with the expected value
-        let assert_reduces_to_nat = |label: &str, expr: &Expr, expected: u64| {
+        for (index, (label, target, expr, expected)) in cases.iter().enumerate() {
+            let tc = TypeChecker::new(&env);
+            let target_type = Expr::const_str(target);
+            tc.check_type(expr, &target_type)
+                .unwrap_or_else(|error| panic!("{label}: ill-typed UInt input: {error}"));
             let result = tc.whnf(expr);
-            match result.kind() {
-                ExprKind::Lit(Literal::Nat(n)) => {
-                    assert_eq!(
-                        n.to_u64(),
-                        Some(expected),
-                        "{label}: expected {expected}, got {:?}",
-                        n.to_u64()
-                    );
-                    println!("{label} = {expected}: OK");
-                }
-                _ => panic!(
-                    "{label}: expected Nat literal {expected}, got: {:?}",
-                    result.kind()
-                ),
+            tc.check_type(&result, &target_type)
+                .unwrap_or_else(|error| panic!("{label}: WHNF changed UInt result type: {error}"));
+
+            if index == 0 {
+                // Pinned Lean's genuine carrier is a UInt8 constructor over
+                // BitVec 8, never a Nat literal or fictional UInt8.mk.
+                assert!(matches!(result.get_app_fn().kind(),
+                    ExprKind::Const(name, _) if name == &Name::from_string("UInt8.ofBitVec")));
+                let args = result.get_app_args();
+                assert_eq!(args.len(), 1);
+                tc.check_type(
+                    args[0],
+                    &Expr::app(Expr::const_str("BitVec"), Expr::nat_lit(8)),
+                )
+                .expect("UInt8.ofBitVec must retain its typed BitVec 8 payload");
             }
-        };
 
-        // --- UInt8.ofNat wrapping ---
-        // UInt8.ofNat 300 should reduce to 300 % 256 = 44
-        {
-            let expr = Expr::app(Expr::const_str("UInt8.ofNat"), Expr::nat_lit(300));
-            assert_reduces_to_nat("UInt8.ofNat(300)", &expr, 44);
-        }
-
-        // --- UInt8.ofNat identity ---
-        // UInt8.ofNat 100 should reduce to 100
-        {
-            let expr = Expr::app(Expr::const_str("UInt8.ofNat"), Expr::nat_lit(100));
-            assert_reduces_to_nat("UInt8.ofNat(100)", &expr, 100);
-        }
-
-        // --- UInt32.ofNat wrapping ---
-        // UInt32.ofNat 4294967300 = 4294967300 % 2^32 = 4
-        {
-            let expr = Expr::app(
-                Expr::const_str("UInt32.ofNat"),
-                Expr::nat_lit(4_294_967_300),
+            let observed = unary(&format!("{target}.toNat"), result);
+            let original_observed = unary(&format!("{target}.toNat"), expr.clone());
+            let nat_type = Expr::const_str("Nat");
+            tc.check_type(&observed, &nat_type)
+                .unwrap_or_else(|error| panic!("{label}: toNat observation is ill-typed: {error}"));
+            tc.check_type(&original_observed, &nat_type)
+                .unwrap_or_else(|error| panic!("{label}: original toNat is ill-typed: {error}"));
+            assert!(
+                tc.is_def_eq(&original_observed, &observed),
+                "{label}: checked WHNF changed the observed UInt value"
             );
-            assert_reduces_to_nat("UInt32.ofNat(4294967300)", &expr, 4);
-        }
-
-        // --- UInt64.ofNat small value ---
-        // UInt64.ofNat 42 should reduce to 42
-        {
-            let expr = Expr::app(Expr::const_str("UInt64.ofNat"), Expr::nat_lit(42));
-            assert_reduces_to_nat("UInt64.ofNat(42)", &expr, 42);
-        }
-
-        // --- Cross-width: UInt32.toUInt8 ---
-        // UInt32.toUInt8(258) = 258 % 256 = 2
-        {
-            let expr = Expr::app(Expr::const_str("UInt32.toUInt8"), Expr::nat_lit(258));
-            assert_reduces_to_nat("UInt32.toUInt8(258)", &expr, 2);
-        }
-
-        // --- Cross-width: UInt8.toUInt32 (widening) ---
-        // UInt8.toUInt32(200) = 200 (identity for widening)
-        {
-            let expr = Expr::app(Expr::const_str("UInt8.toUInt32"), Expr::nat_lit(200));
-            assert_reduces_to_nat("UInt8.toUInt32(200)", &expr, 200);
-        }
-
-        // --- UInt8 bitwise: land ---
-        // UInt8.land 0xFF 0x0F = 0x0F = 15
-        {
-            let expr = Expr::app(
-                Expr::app(Expr::const_str("UInt8.land"), Expr::nat_lit(0xFF)),
-                Expr::nat_lit(0x0F),
+            let actual = tc.whnf(&observed);
+            tc.check_type(&actual, &nat_type)
+                .unwrap_or_else(|error| panic!("{label}: observed WHNF is not Nat: {error}"));
+            match actual.kind() {
+                ExprKind::Lit(Literal::Nat(n)) => assert_eq!(
+                    n.to_u64(),
+                    Some(*expected),
+                    "{label}: incorrect typed Nat observation"
+                ),
+                other => panic!("{label}: expected observed Nat literal {expected}, got {other:?}"),
+            }
+            assert!(
+                tc.is_def_eq(&observed, &Expr::nat_lit(*expected)),
+                "{label}: expected result not def-eq"
             );
-            assert_reduces_to_nat("UInt8.land(0xFF, 0x0F)", &expr, 15);
-        }
-
-        // --- UInt8 bitwise: xor ---
-        // UInt8.xor 0xAA 0xFF = 0x55 = 85
-        {
-            let expr = Expr::app(
-                Expr::app(Expr::const_str("UInt8.xor"), Expr::nat_lit(0xAA)),
-                Expr::nat_lit(0xFF),
+            assert!(
+                !tc.is_def_eq(&observed, &Expr::nat_lit(expected + 1)),
+                "{label}: incorrect result accepted"
             );
-            assert_reduces_to_nat("UInt8.xor(0xAA, 0xFF)", &expr, 85);
+            println!("{label}: typed {target}, toNat = {expected}, wrong result refused");
         }
 
-        println!("\n=== All UInt conversion/bitwise integration tests passed ===");
+        // The old four conversion/bitwise applications used Nat literals
+        // where UInt operands were required. They must now fail full checking.
+        let ill_typed = [
+            (
+                "raw narrowing",
+                "UInt8",
+                unary("UInt32.toUInt8", Expr::nat_lit(258)),
+            ),
+            (
+                "raw widening",
+                "UInt32",
+                unary("UInt8.toUInt32", Expr::nat_lit(200)),
+            ),
+            (
+                "raw land",
+                "UInt8",
+                binary("UInt8.land", Expr::nat_lit(0xFF), Expr::nat_lit(0x0F)),
+            ),
+            (
+                "raw xor",
+                "UInt8",
+                binary("UInt8.xor", Expr::nat_lit(0xAA), Expr::nat_lit(0xFF)),
+            ),
+            (
+                "wrong narrowing width",
+                "UInt8",
+                unary("UInt32.toUInt8", uint("UInt8", 258)),
+            ),
+            (
+                "wrong widening width",
+                "UInt32",
+                unary("UInt8.toUInt32", uint("UInt32", 200)),
+            ),
+            (
+                "wrong land width",
+                "UInt8",
+                binary("UInt8.land", uint("UInt32", 0xFF), uint("UInt8", 0x0F)),
+            ),
+            (
+                "wrong xor width",
+                "UInt8",
+                binary("UInt8.xor", uint("UInt8", 0xAA), uint("UInt32", 0xFF)),
+            ),
+        ];
+        assert_eq!(ill_typed.len(), 8);
+        for (label, target, expr) in &ill_typed {
+            let tc = TypeChecker::new(&env);
+            let result = tc.check_type(expr, &Expr::const_str(target));
+            assert!(
+                matches!(&result, Err(TypeError::TypeMismatch { .. })),
+                "{label}: expected strict UInt operand TypeMismatch, got {result:?}"
+            );
+        }
+
+        println!("\n=== All eight typed UInt cases and sixteen negative controls passed ===");
     });
 }
 
@@ -3382,11 +3304,12 @@ fn test_ac1_axiom_stub_upgrade() {
     });
 }
 
-/// Validate that ALL Init constants load without conversion errors.
+/// Validate that Init loads without skipped replayable declarations.
 ///
-/// This test checks that the olean loading pipeline (parse -> convert ->
-/// register) produces 0 skipped constants. Skipped constants indicate
-/// conversion failures that silently degrade the environment.
+/// Keep every raw skipped record. Lean excludes stored unsafe/partial
+/// declarations from replay, so those compiler artifacts are disclosed
+/// separately from conversion failures and kernel refusals. Eligibility comes
+/// from the last stored part of the same module, never the displayed name.
 ///
 /// Part of #3134
 #[test]
@@ -3403,24 +3326,74 @@ fn test_ac1_zero_skipped_constants() {
 
         let total_skipped: usize = summaries.iter().map(|s| s.skipped_constants.len()).sum();
         let total_added: usize = summaries.iter().map(|s| s.added_constants).sum();
+        let audit = skipped_constants::audit_skipped_constants(&summaries);
+        assert_eq!(audit.rows.len(), total_skipped, "lost raw skipped records");
 
-        println!("\n=== Zero Skipped Constants Check ===");
+        println!("\n=== Zero Skipped Replayable Constants Check ===");
         println!("  Modules loaded: {}", summaries.len());
         println!("  Constants added: {total_added}");
-        println!("  Constants skipped: {total_skipped}");
+        println!("  Raw constants skipped (not proved): {total_skipped}");
+        let deferred: Vec<_> = summaries
+            .iter()
+            .enumerate()
+            .flat_map(|(summary_ordinal, summary)| {
+                summary
+                    .deferred_recursors
+                    .iter()
+                    .map(move |row| (summary_ordinal, row))
+            })
+            .collect();
+        let resolved = deferred
+            .iter()
+            .filter(|(_, row)| row.status == clean_olean::DeferredRecursorStatus::Resolved)
+            .count();
+        println!("  Original early recursor occurrences deferred/resolved: {}/{resolved} (structural binding, not proof)", deferred.len());
+        println!(
+            "  All original skip/deferred occurrences retained (not proved): {}",
+            total_skipped + deferred.len()
+        );
+        for (summary_ordinal, row) in &deferred {
+            println!("    deferred summary {summary_ordinal} source constant {}: {} dependencies={:?} initial_refusal={} status={:?}", row.source_constant_ordinal, row.name, row.missing_dependencies, row.initial_refusal, row.status);
+        }
+        assert_eq!(deferred.len(), resolved, "unresolved early family record");
+        println!(
+            "  Raw compiler artifacts excluded from Lean replay: {}",
+            audit.excluded_count()
+        );
+        println!(
+            "  Raw conversion/refusal/unresolved-eligibility failures: {}",
+            audit.failure_count()
+        );
+        println!(
+            "  Eligibility/accounting errors: {}",
+            audit.accounting_errors.len()
+        );
 
         if total_skipped > 0 {
             println!("  Skipped constant details:");
-            for summary in &summaries {
-                for sc in &summary.skipped_constants {
-                    println!("    {}: {}", sc.name, sc.reason);
-                }
+            for row in &audit.rows {
+                let disposition = if row.excluded_from_replay {
+                    "excluded from replay; not proved"
+                } else {
+                    "FAILURE"
+                };
+                println!(
+                    "    summary {} row {} {:?}: {}: {} [{disposition}]",
+                    row.summary_ordinal, row.row_ordinal, row.module, row.name, row.reason
+                );
             }
+        }
+        for error in &audit.accounting_errors {
+            println!("    ACCOUNTING FAILURE: {error}");
         }
 
         assert_eq!(
-            total_skipped, 0,
-            "Expected 0 skipped constants during Init loading, got {total_skipped}"
+            audit.failure_count(), 0,
+            "Skipped replayable or unresolved declarations during Init loading; {total_skipped} raw records retained"
+        );
+        assert!(
+            audit.accounting_errors.is_empty(),
+            "Invalid skipped-record eligibility/accounting"
         );
 
         // Also verify minimum constant count threshold
@@ -3428,6 +3401,34 @@ fn test_ac1_zero_skipped_constants() {
             total_added > 50000,
             "Expected >50,000 constants from Init, got {total_added}"
         );
+        // The actual pinned cohort that formerly failed in base/server parts:
+        // both proof-only families must have a real regenerated motive universe
+        // and a refreshed derived flag after private dependencies arrive.
+        const MODULE: &str = "Init.Data.String.Lemmas.Pattern.String.ForwardSearcher";
+        let prefix = format!("_private.{MODULE}.0.String.Slice.Pattern.Model.ForwardSliceSearcher");
+        for family in ["PartialMatch", "IsTable"] {
+            let name = Name::from_string(&format!("{prefix}.{family}"));
+            assert!(
+                env.get_inductive(&name)
+                    .expect("pinned family")
+                    .is_large_elim,
+                "stale restrictive flag for {name}"
+            );
+            let rec_name = name.clone().str("rec");
+            let rec = env
+                .get_recursor(&rec_name)
+                .expect("strictly admitted authoritative recursor");
+            assert_eq!(rec.inductive_name, name);
+            assert_eq!(rec.level_params, vec![Name::from_string("u")]);
+            assert_eq!(
+                deferred
+                    .iter()
+                    .filter(|(_, row)| row.name == rec_name)
+                    .count(),
+                2,
+                "both original base/server occurrences retained"
+            );
+        }
     });
 }
 
@@ -3448,7 +3449,7 @@ fn test_ac1_zero_skipped_constants() {
 /// `RecursorVal::inductive_name` is not an ownership oracle for nested
 /// inductives. Lean generates auxiliary recursors such as
 /// `Lean.Syntax.rec_1`, whose major premise eliminates a container (`Array`,
-/// `List`, ...), and Clean deliberately preserves the auxiliary family name in
+/// `List`, ...), and Clean deliberately preserves the original family root in
 /// `inductive_name`. The kernel-authoritative owner is instead
 /// `RecursorVal::major_induct()`, recovered from the exact recursor type.
 ///
@@ -3485,6 +3486,7 @@ fn test_ac1_recursor_registration_integrity() {
         let mut auxiliary_families = Vec::new();
         let mut suffix_counts: std::collections::BTreeMap<String, u32> =
             std::collections::BTreeMap::new();
+        let pinned_auxiliaries = recursor_ownership::pinned_auxiliaries();
 
         for rec in env.recursors() {
             total += 1;
@@ -3526,44 +3528,30 @@ fn test_ac1_recursor_registration_integrity() {
                 continue;
             };
 
-            if env.get_inductive(&rec.inductive_name).is_some() {
-                // Ordinary recursors eliminate the inductive named by their
-                // family metadata.
-                if major_name != &rec.inductive_name {
-                    invalid_ordinary_owner += 1;
-                    if invalid_ordinary_owner <= 5 {
-                        println!(
-                            "  Ordinary recursor {name_str} has family {} but major {major_name}",
-                            rec.inductive_name
-                        );
-                    }
-                }
-            } else {
-                // A missing `inductive_name` is valid only for Lean's generated
-                // nested-inductive companions `Family.rec_N`. Bind that
-                // exception to an existing family head and to the exact
-                // recursor name; arbitrary missing owners still fail closed.
-                let valid_auxiliary =
-                    name_str
-                        .rsplit_once(".rec_")
-                        .is_some_and(|(family, index)| {
-                            !index.is_empty()
-                                && index.bytes().all(|byte| byte.is_ascii_digit())
-                                && rec.inductive_name == rec.name
-                                && env.get_inductive(&Name::from_string(family)).is_some()
-                        });
-                if valid_auxiliary {
+            match recursor_ownership::audit_owner(&env, rec, &pinned_auxiliaries) {
+                Ok(recursor_ownership::Owner::Ordinary) => {}
+                Ok(recursor_ownership::Owner::PinnedAuxiliary) => {
                     auxiliary_family_count += 1;
                     auxiliary_names.insert(name_str.clone());
                     auxiliary_families.push(format!(
                         "{name_str}: family={}, major={major_name}",
                         rec.inductive_name
                     ));
-                } else {
+                }
+                Err(recursor_ownership::OwnershipProblem::Ordinary(reason)) => {
+                    invalid_ordinary_owner += 1;
+                    if invalid_ordinary_owner <= 5 {
+                        println!(
+                            "  Invalid ordinary recursor {name_str}: family={}, major={major_name}: {reason}",
+                            rec.inductive_name
+                        );
+                    }
+                }
+                Err(recursor_ownership::OwnershipProblem::Auxiliary(reason)) => {
                     invalid_auxiliary_owner += 1;
                     if invalid_auxiliary_owner <= 5 {
                         println!(
-                            "  Invalid auxiliary owner for {name_str}: family={}, major={major_name}",
+                            "  Invalid auxiliary owner for {name_str}: family={}, major={major_name}: {reason}",
                             rec.inductive_name
                         );
                     }
@@ -3675,12 +3663,12 @@ fn test_ac1_recursor_registration_integrity() {
         );
         assert_eq!(
             invalid_ordinary_owner, 0,
-            "Expected ordinary recursors' family and major inductives to agree, \
+            "Expected ordinary recursor names, resident families and major inductives to agree, \
              {invalid_ordinary_owner} disagreed"
         );
         assert_eq!(
             invalid_auxiliary_owner, 0,
-            "Expected every non-inductive family label to be an exact nested rec_N companion, \
+            "Expected exact pinned nested recursors with canonical resident roots and container majors, \
              {invalid_auxiliary_owner} were invalid"
         );
         assert_eq!(
@@ -3718,8 +3706,11 @@ fn test_ac1_recursor_registration_integrity() {
         ]);
         assert_eq!(
             auxiliary_names, expected_auxiliary_names,
-            "Pinned Lean auxiliary-recursors drifted; review every new non-inductive family label"
+            "Pinned Lean auxiliary-recursors drifted; review every new nested companion"
         );
+        let rejected_forgery_controls =
+            recursor_ownership::assert_forged_owners_rejected(&env, &pinned_auxiliaries);
+        println!("  Rejected ownership-forgery controls: {rejected_forgery_controls}");
 
         // Stored recursors use one of Lean's canonical suffix families. Init
         // currently stores `.rec`/`.rec_N`; `.casesOn` entries are ordinarily
@@ -4487,34 +4478,110 @@ fn test_ac1_type_mismatch_3_constants() {
     });
 }
 
-/// TRUST-BOUNDARY SHRINK: re-type-check the bootstrap `Init` lane so its
-/// constants become genuinely `KernelVerified` (0 -> N), and surface any
-/// bootstrap constant the kernel rejects as a FINDING.
+/// The complete input identity of this test binary's shared Init measurement.
+/// Follow structural module names exactly as the loader does and bind every
+/// artifact part, including an absent companion, without retaining an environment.
+fn init_bootstrap_input_identity(
+    lib_path: &std::path::Path,
+) -> std::collections::BTreeMap<PathBuf, Option<blake3::Hash>> {
+    let search_paths = [lib_path.to_path_buf()];
+    let mut pending: Vec<_> = clean_olean::INIT_BOOTSTRAP_MODULES
+        .iter()
+        .map(|module| Name::from_string(module))
+        .collect();
+    let mut visited = std::collections::BTreeSet::new();
+    let mut identity = std::collections::BTreeMap::new();
+    while let Some(module) = pending.pop() {
+        if !visited.insert(module.clone()) {
+            continue;
+        }
+        let path = clean_olean::resolve_typed_module_path(&module, &search_paths)
+            .expect("resolve Init bootstrap input");
+        let bytes = std::fs::read(&path).expect("read Init bootstrap input");
+        let imports = clean_olean::parse_typed_imports(&bytes)
+            .expect("read Init bootstrap structural imports");
+        pending.extend(imports.into_iter().map(|import| import.module_name));
+        identity.insert(path.clone(), Some(blake3::hash(&bytes)));
+        for extension in ["olean.server", "olean.private"] {
+            let companion = path.with_extension(extension);
+            let digest = match std::fs::read(&companion) {
+                Ok(bytes) => Some(blake3::hash(&bytes)),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => None,
+                Err(error) => panic!("read Init bootstrap input {}: {error}", companion.display()),
+            };
+            identity.insert(companion, digest);
+        }
+    }
+    identity
+}
+
+/// These two accounting tests consume one complete, process-local measurement
+/// of the same pinned input. Keep every finding and timing, never cache a kernel
+/// environment, and fail if the library path or any input bytes change.
+/// Call only inside the tests' existing LARGE_STACK threads. A failed initializer
+/// panics as before and leaves OnceLock empty, so another test cannot reuse it.
+fn init_bootstrap_report(
+    lib_path: &std::path::Path,
+) -> &'static clean_olean::BootstrapVerifyReport {
+    struct Measurement {
+        lib_path: PathBuf,
+        inputs: std::collections::BTreeMap<PathBuf, Option<blake3::Hash>>,
+        report: clean_olean::BootstrapVerifyReport,
+    }
+    static MEASUREMENT: std::sync::OnceLock<Measurement> = std::sync::OnceLock::new();
+
+    let lib_path = lib_path
+        .canonicalize()
+        .expect("resolve pinned Lean library");
+    let measurement = MEASUREMENT.get_or_init(|| {
+        let inputs = init_bootstrap_input_identity(&lib_path);
+        let report = clean_olean::verify_init_bootstrap(std::slice::from_ref(&lib_path))
+            .expect("verify Init bootstrap");
+        assert_eq!(
+            inputs,
+            init_bootstrap_input_identity(&lib_path),
+            "Init bootstrap inputs changed during the measurement"
+        );
+        Measurement {
+            lib_path: lib_path.clone(),
+            inputs,
+            report,
+        }
+    });
+    assert_eq!(
+        measurement.lib_path, lib_path,
+        "Init bootstrap library path changed"
+    );
+    assert_eq!(
+        measurement.inputs,
+        init_bootstrap_input_identity(&lib_path),
+        "Init bootstrap inputs changed before report consumption"
+    );
+    &measurement.report
+}
+
+/// LOCAL consistency-check measurement for the bootstrap `Init` lane, retaining
+/// every rejected declaration as a finding.
 ///
 /// This is the toolchain-gated measurement of the `bootstrap_verify` entry
-/// point: it loads the full `Init` closure and runs the `add_decl`-equivalent
-/// re-check (`infer_sort` + `check_type`) over exactly that lane, reporting the
-/// `KernelVerified` count. The structural import path admits these constants
-/// WITHOUT kernel type-checking (stored `KernelVerified`: 0); a passing re-check
-/// moves them out of the trusted-but-unchecked set.
+/// point: it loads the full `Init` closure and runs local `infer_sort` and
+/// `check_type` checks over the requested typed population. The environment's
+/// dependencies remain assumed. The historical `kernel_verified` field is a
+/// local pass count, not fresh admission or a trust-boundary shrink.
 ///
-/// The in-memory soundness of the re-check (0 -> N and ill-typed surfacing) is
-/// proven without a toolchain by `bootstrap_verify::tests`; this test measures
-/// the REAL `Init` number when a matching Lean toolchain is installed.
+/// In-memory accounting and failure controls live in `bootstrap_verify::tests`;
+/// this test measures the actual local `Init` count with a matching toolchain.
 #[test]
 fn test_ac1_bootstrap_lane_kernel_verified() {
-    use clean_olean::verify_init_bootstrap;
-
     let Some(lib_path) = require_ac1_lean() else {
         eprintln!("Skipping test: Lean 4 not found");
         return;
     };
     clean_kernel::test_utils::run_with_stack(clean_kernel::test_utils::LARGE_STACK, move || {
-        let report =
-            verify_init_bootstrap(std::slice::from_ref(&lib_path)).expect("verify Init bootstrap");
+        let report = init_bootstrap_report(&lib_path);
 
-        eprintln!("\n=== Bootstrap lane KernelVerified (Init) ===");
-        eprintln!("{}", clean_olean::format_report(&report));
+        eprintln!("\n=== Bootstrap local checks (Init; dependencies assumed) ===");
+        eprintln!("{}", clean_olean::format_report(report));
         if !report.failures.is_empty() {
             eprintln!("  Finding categories:");
             for (cat, n) in clean_olean::categorize_failures(&report.failures) {
@@ -4522,59 +4589,78 @@ fn test_ac1_bootstrap_lane_kernel_verified() {
             }
         }
 
-        // The whole point: the Init lane's KernelVerified count goes 0 -> N.
+        // The local-check lane must observe at least one actual passing target.
         assert!(
             report.kernel_verified > 0,
-            "Init bootstrap lane must have >0 KernelVerified constants after re-check"
+            "Init bootstrap lane must have >0 locally passing constants"
         );
         assert!(
             report.loaded_constants > 100,
             "Init closure should register a substantial constant set, got {}",
             report.loaded_constants
         );
-        // Re-check ADDS verification: the verified count can never exceed the
-        // loaded set (an ill-typed import would only lower the pass count).
+        // One local verdict per typed identity cannot exceed the denominator.
         assert!(report.kernel_verified <= report.loaded_constants);
     });
 }
 
 /// Pillar-2 item 5 (G5): compute the dep-closure re-verified-FRACTION metric
-/// over the real `Init` bootstrap lane and assert it is a well-formed,
-/// consistent, ratchetable number. Gated behind `CLEAN_AC1_FULL_VALIDATION`
+/// over the real `Init` bootstrap lane and assert local accounting is a
+/// consistent, ratchetable number. This is not fresh admission evidence.
+/// Gated behind `CLEAN_AC1_FULL_VALIDATION`
 /// (needs a matching Lean toolchain); the in-memory metric logic (fraction,
-/// clamp, ratchet, JSON round-trip) is unit-tested toolchain-free in
+/// invalid-count refusal, ratchet, JSON round-trip) is unit-tested toolchain-free in
 /// `clean_olean::import_reverification_metric`.
 #[test]
 fn test_ac1_import_reverification_metric_init_lane() {
-    use clean_olean::{verify_init_bootstrap, ImportReverificationMetric};
+    use clean_olean::ImportReverificationMetric;
 
     let Some(lib_path) = require_ac1_lean() else {
         eprintln!("Skipping test: Lean 4 not found");
         return;
     };
     clean_kernel::test_utils::run_with_stack(clean_kernel::test_utils::LARGE_STACK, move || {
-        let report =
-            verify_init_bootstrap(std::slice::from_ref(&lib_path)).expect("verify Init bootstrap");
+        let report = init_bootstrap_report(&lib_path);
 
-        // The metric is exactly (loaded, kernel_verified) reshaped as a fraction.
+        // Preserve the report's actual typed counts and all failed findings.
         let metric = ImportReverificationMetric::new(
             "Init",
             report.loaded_constants,
             report.kernel_verified,
             None,
+        )
+        .with_check_results(
+            report.failed_constants,
+            report
+                .failures
+                .iter()
+                .enumerate()
+                .map(|(index, failure)| {
+                    (
+                        format!("finding[{index}] {}", failure.name),
+                        failure.error.clone(),
+                    )
+                })
+                .collect(),
+            report.local_check_accounting_errors.clone(),
         );
         eprintln!(
-            "\n=== Import re-verification metric (Init) ===\n{}/{} re-verified (fraction {:.4})",
+            "\n=== Local import-check metric (Init; dependencies assumed) ===\n{}/{} passed (fraction {:?})",
             metric.reverified, metric.total_imported, metric.fraction
         );
 
         // Well-formed + internally consistent.
         assert_eq!(metric.total_imported, report.loaded_constants);
         assert_eq!(metric.reverified, report.kernel_verified);
-        assert!(
-            metric.fraction >= 0.0 && metric.fraction <= 1.0,
-            "fraction must be a proper fraction, got {}",
-            metric.fraction
+        let fraction = metric
+            .checked_fraction()
+            .expect("valid exact local accounting");
+        assert!((0.0..=1.0).contains(&fraction));
+        assert_eq!(metric.check_failed, Some(report.failed_constants));
+        assert_eq!(metric.check_errors.len(), report.failures.len());
+        assert_eq!(
+            metric.reverified.checked_add(report.failed_constants),
+            Some(metric.total_imported)
         );
         assert!(
             metric.total_imported > 100,
@@ -4592,6 +4678,6 @@ fn test_ac1_import_reverification_metric_init_lane() {
         assert_eq!(back, metric);
 
         // Ratchet: this measurement never regresses against itself.
-        assert!(!metric.ratchet_regressed(&metric));
+        assert!(!metric.ratchet_regressed(&metric).unwrap());
     });
 }

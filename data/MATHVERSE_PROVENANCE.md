@@ -11,7 +11,7 @@ MUST NOT be confused. All four are emitted by data/MATHVERSE_PROVENANCE.json
 
 | JSON field | Value | Definition | Authority |
 |-----------|-------|------------|-----------|
-| `importer_source_systems` | 69 | `SourceSystem` enum variants. Canonical importer count. | crates/clean-mathverse/src/types.rs |
+| `importer_source_systems` | 70 | `SourceSystem` enum variants (`Lean4 = 0` … `Cake = 69`). Canonical importer count. | crates/clean-mathverse/src/types.rs |
 | `provenance_records` | 131 | Distinct repo clones with reproducibility metadata (`.sources` length). Canonical provenance record count. | data/MATHVERSE_PROVENANCE.json |
 | `census_target_repos` | 238 | Census target repos scanned by the wide census. Canonical census target count. | data/MATHVERSE_LIBRARIES.md |
 | `shards_produced` | 107 | `.mathverse` shard files in release `mathverse-v0.9.0`. Canonical shard count. | GitHub Release assets |
@@ -27,8 +27,12 @@ The older unqualified `total_systems` / `total_declarations` fields remain as ba
 
 The legacy crates/clean-mathverse/data/mathverse_summary.json `systems: 158` field reflects the
 v0.9.0 pipeline's per-sub-package rollup (e.g., Mathlib4 split across several sub-sections).
-It is superseded by data/mathverse_summary_v1.0.0.json `source_systems: 69`, which matches
-`importer_source_systems` above. See data/MATHVERSE_LIBRARIES.md for the definition.
+It is superseded by data/mathverse_summary_v1.0.0.json `source_systems: 69`, which matched
+`importer_source_systems` at that release (2026-04-16) and no longer does: `Cake` landed
+2026-06-10 (`f47e4f128`) and the live count is **70**. The v1.0.0 summary is a dated release
+snapshot and is deliberately NOT retro-edited — it is correct about the release it names. See
+data/MATHVERSE_LIBRARIES.md for the definition and for why the live figure stood wrong for
+three months.
 
 **Total Declarations (Converted Pipeline):** 3,254,463 (data/mathverse_summary_v1.0.0.json / release `mathverse_summary.json`)
 

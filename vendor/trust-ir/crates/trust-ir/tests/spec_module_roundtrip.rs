@@ -73,6 +73,7 @@ fn module_with_specs() -> Module {
         ],
         origin: SpecOrigin::Embedded,
         enforcement: SpecEnforcementMode::Linked,
+        temporal: Vec::new(),
     };
 
     let sandbox = SpecModule {
@@ -85,6 +86,7 @@ fn module_with_specs() -> Module {
         proofs: vec![],
         origin: SpecOrigin::External("crates/aterm-spec-models/specs/Sandbox.tla".to_string()),
         enforcement: SpecEnforcementMode::DesignOnly,
+        temporal: Vec::new(),
     };
 
     module.spec_modules.push(ring);
@@ -95,7 +97,7 @@ fn module_with_specs() -> Module {
 #[test]
 fn spec_modules_roundtrip_binary() {
     let m = module_with_specs();
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("binary decode");
     assert_eq!(m, back, "binary roundtrip must be lossless");
     assert_eq!(back.spec_modules.len(), 2);
@@ -119,7 +121,7 @@ fn legacy_v9_spec_module_decodes_with_empty_proofs() {
     let mut sm = SpecModule::new("ring");
     sm.actions.push("Push".to_string());
     m.spec_modules.push(sm);
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("decode");
     assert!(back.spec_modules[0].proofs.is_empty());
     assert_eq!(m, back);
@@ -324,7 +326,7 @@ fn cross_format_bin_to_json_to_text_preserves_specs() {
     // another, decode again. SpecModules must survive every hop.
     let m = module_with_specs();
 
-    let bin = trust_ir::binary::serialize_module(&m);
+    let bin = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let from_bin = trust_ir::binary::deserialize_module(&bin).expect("bin");
 
     let json = serde_json::to_vec_pretty(&from_bin).expect("json enc");
@@ -346,7 +348,7 @@ fn legacy_module_without_specs_still_roundtrips() {
     let m = Module::new("no_specs");
     assert!(m.spec_modules.is_empty());
 
-    let bin = trust_ir::binary::serialize_module(&m);
+    let bin = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bin).expect("bin");
     assert!(back.spec_modules.is_empty());
     assert_eq!(m, back);

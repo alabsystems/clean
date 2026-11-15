@@ -437,7 +437,7 @@ fn is_contradiction(ineq: &LinearInequality) -> bool {
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -642,7 +642,7 @@ mod tests {
         let farkas = vec![(1, 1), (1, 1)];
 
         let verdict = check_lra_farkas(&dag, SmtStepId(0), &clause, &farkas);
-        assert_eq!(verdict.trust_level, StepTrustLevel::KernelVerified);
+        assert_eq!(verdict.trust_level, StepTrustLevel::StepChecked);
     }
 
     #[test]

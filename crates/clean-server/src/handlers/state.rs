@@ -8,6 +8,10 @@
 //! - `ServerMetrics`: Runtime metrics for monitoring and optimization
 //! - `ServerState`: Shared state including environment, metrics, and configuration
 
+use super::core::run_with_env;
+use super::off_runtime::Shared;
+use super::shared_env::SharedEnv;
+use crate::rpc::RpcError;
 use crate::session_env::{SessionEnv, SessionId};
 use crate::startup;
 use clean_kernel::{Environment, TypeChecker};
@@ -17,7 +21,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 /// Server-wide runtime metrics for monitoring and optimization
 ///
@@ -202,10 +206,35 @@ pub struct CacheMetrics {
     pub(crate) def_eq_cache_entries: AtomicU64,
 }
 
+/// The cache counters of one type checker, taken where the checker ran (a
+/// work-pool thread) and recorded where the request answers.
+#[derive(Debug, Clone, Default)]
+pub(crate) struct TypeCheckerSample {
+    type_cache: Option<clean_kernel::TypeCheckCacheStats>,
+    whnf_cache_entries: usize,
+    def_eq_cache_entries: usize,
+}
+
+impl TypeCheckerSample {
+    /// Sample `tc`'s caches.
+    pub(crate) fn of(tc: &TypeChecker<'_>) -> Self {
+        Self {
+            type_cache: tc.type_cache_stats(),
+            whnf_cache_entries: tc.whnf_cache_entries(),
+            def_eq_cache_entries: tc.def_eq_cache_entries(),
+        }
+    }
+}
+
 impl CacheMetrics {
     /// Record cache metrics from a type checker instance.
     pub fn record_type_checker(&self, tc: &TypeChecker<'_>) {
-        if let Some(stats) = tc.type_cache_stats() {
+        self.record_sample(&TypeCheckerSample::of(tc));
+    }
+
+    /// Record cache metrics sampled from a type checker.
+    pub(crate) fn record_sample(&self, sample: &TypeCheckerSample) {
+        if let Some(stats) = &sample.type_cache {
             self.type_cache_hits
                 .fetch_add(stats.hits, Ordering::Relaxed);
             self.type_cache_misses
@@ -219,24 +248,37 @@ impl CacheMetrics {
         }
 
         self.whnf_cache_entries
-            .store(tc.whnf_cache_entries() as u64, Ordering::Relaxed);
+            .store(sample.whnf_cache_entries as u64, Ordering::Relaxed);
         self.def_eq_cache_entries
-            .store(tc.def_eq_cache_entries() as u64, Ordering::Relaxed);
+            .store(sample.def_eq_cache_entries as u64, Ordering::Relaxed);
     }
 }
 
+/// A swarm worker's session, behind a lock of its own: `addDecl`s to one
+/// session are checked one at a time, in the order they reach the lock
+/// (tokio's `Mutex` is fair), and never wait for another session's.
+///
+/// The session itself is a [`Shared`] value: an `addDecl` copies it on the
+/// work pool from a share it hands its work, never on the runtime, and
+/// replaces the share when its declaration is accepted. Whoever lets the last
+/// share of a session go (the map closing it, an `addDecl` holding it when it
+/// was closed, a replaced one) frees it off the runtime (`off_runtime.rs`).
+pub(crate) type SessionHandle = Arc<Mutex<Shared<SessionEnv>>>;
+
 /// Shared server state
 pub struct ServerState {
-    /// The kernel environment (shared, read-mostly)
-    pub(crate) env: Arc<RwLock<Environment>>,
+    /// The kernel environment (shared, read-mostly; `shared_env.rs` says how
+    /// a writer changes it).
+    pub(crate) env: SharedEnv,
     /// Per-session isolated environments for swarm workers.
     ///
     /// Each entry is a worker's private overlay over a shared base snapshot of
     /// `env`. A worker's in-progress or rejected declarations live only in its
     /// [`SessionEnv`] overlay and are dropped on session close, so they can
     /// never pollute the shared corpus environment. See
-    /// [`crate::session_env`].
-    pub(crate) sessions: RwLock<HashMap<SessionId, SessionEnv>>,
+    /// [`crate::session_env`]. The map is held only to look a session up, open
+    /// one or close one; a session's own lock guards its overlay.
+    pub(crate) sessions: RwLock<HashMap<SessionId, SessionHandle>>,
     /// Default timeout for operations (ms)
     pub(crate) default_timeout_ms: u64,
     /// GPU acceleration enabled
@@ -255,8 +297,12 @@ pub struct ServerState {
     /// Avoids re-parsing the same .olean files across repeated importModule calls.
     pub(crate) olean_cache: Arc<clean_olean::ModuleCache>,
     /// Cached tactic argument patterns for the parser.
-    /// Computed once at startup from the built-in tactic registry.
-    pub(crate) tactic_patterns: TacticPatterns,
+    /// Computed once at startup from the built-in tactic registry; shared, so
+    /// work handed to [`Self::work`] can parse with them.
+    pub(crate) tactic_patterns: Arc<TacticPatterns>,
+    /// The threads requests' synchronous work runs on, under each request's
+    /// deadline (`handlers/work.rs`).
+    pub(crate) work: super::work::WorkPool,
     /// Repo-root lean-toolchain identifier, if present.
     pub(crate) lean_toolchain: Option<String>,
     /// Resolved Lean version requested by `lean-toolchain`, if available.
@@ -273,6 +319,16 @@ pub struct ServerState {
     /// registered as the process-global so the proof-state choke point can reach
     /// it without threading a handle through every signature.
     pub(crate) mathverse: crate::mathverse_provider::MathverseProvider,
+    /// The directory `saveEnvironment`, `loadEnvironment` and `importModule`
+    /// are confined to, as its real path (`trust_boundary::confine`): the
+    /// directory the state was made in, or the root it was made for. `None`
+    /// when that does not resolve, and then every path is refused.
+    pub(crate) workspace_root: Option<std::path::PathBuf>,
+    /// The token a connection presents first, and `replace_unchecked` and
+    /// `importModule` in their own params. `None` when the system's random
+    /// source could not be read, and then every check of it refuses (a
+    /// transport will not start).
+    pub(crate) launch_token: Option<crate::LaunchToken>,
 }
 
 impl ServerState {
@@ -281,9 +337,10 @@ impl ServerState {
     pub fn new() -> Self {
         let cwd = std::env::current_dir().ok();
         let toolchain = startup::read_workspace_toolchain(cwd.as_deref());
+        let workspace_root = cwd.as_deref().and_then(real_root);
 
         Self {
-            env: Arc::new(RwLock::new(Environment::new())),
+            env: SharedEnv::new(Environment::new()),
             sessions: RwLock::new(HashMap::new()),
             default_timeout_ms: 5000,
             gpu_enabled: false,
@@ -293,11 +350,14 @@ impl ServerState {
             theorem_index: crate::proof_state::ProjectTheoremIndexProvider::default(),
             cache_metrics: CacheMetrics::default(),
             olean_cache: Arc::new(clean_olean::ModuleCache::new()),
-            tactic_patterns: clean_elab::tactic::builtins::builtin_tactic_patterns(),
+            tactic_patterns: Arc::new(clean_elab::tactic::builtins::builtin_tactic_patterns()),
+            work: super::work::WorkPool::with_default_limit(),
             lean_toolchain: toolchain.identifier,
             lean_toolchain_version: toolchain.resolved_version,
             widgets: RwLock::new(crate::rpc_widgets::WidgetState::new()),
             mathverse: Self::init_mathverse_provider(),
+            workspace_root,
+            launch_token: new_launch_token(),
         }
     }
 
@@ -318,9 +378,10 @@ impl ServerState {
     #[must_use]
     pub fn from_root(root: &Path) -> Self {
         let toolchain = startup::read_workspace_toolchain(Some(root));
+        let workspace_root = real_root(root);
 
         Self {
-            env: Arc::new(RwLock::new(Environment::new())),
+            env: SharedEnv::new(Environment::new()),
             sessions: RwLock::new(HashMap::new()),
             default_timeout_ms: 5000,
             gpu_enabled: false,
@@ -330,12 +391,35 @@ impl ServerState {
             theorem_index: crate::proof_state::ProjectTheoremIndexProvider::default(),
             cache_metrics: CacheMetrics::default(),
             olean_cache: Arc::new(clean_olean::ModuleCache::new()),
-            tactic_patterns: clean_elab::tactic::builtins::builtin_tactic_patterns(),
+            tactic_patterns: Arc::new(clean_elab::tactic::builtins::builtin_tactic_patterns()),
+            work: super::work::WorkPool::with_default_limit(),
             lean_toolchain: toolchain.identifier,
             lean_toolchain_version: toolchain.resolved_version,
             widgets: RwLock::new(crate::rpc_widgets::WidgetState::new()),
             mathverse: Self::init_mathverse_provider(),
+            workspace_root,
+            launch_token: new_launch_token(),
         }
+    }
+
+    /// Confine the file methods to `root` instead (a test's scratch
+    /// directory); a root that does not resolve refuses every path.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn with_workspace_root(mut self, root: &Path) -> Self {
+        self.workspace_root = real_root(root);
+        self
+    }
+
+    /// The workspace root the file methods are confined to, as a real path.
+    pub(crate) fn workspace_root(&self) -> Option<&Path> {
+        self.workspace_root.as_deref()
+    }
+
+    /// The token connections, `replace_unchecked` and `importModule` must
+    /// present.
+    pub(crate) fn launch_token(&self) -> Option<&crate::LaunchToken> {
+        self.launch_token.as_ref()
     }
 
     /// Create with GPU enabled
@@ -355,7 +439,7 @@ impl ServerState {
     /// Create with a pre-populated environment (e.g. from --init/--stdlib pre-loading)
     #[must_use]
     pub fn with_env(mut self, env: Environment) -> Self {
-        self.env = Arc::new(RwLock::new(env));
+        self.env = SharedEnv::new(env);
         self
     }
 
@@ -426,31 +510,89 @@ impl ServerState {
     /// declarations live only in that overlay until the session is closed
     /// (dropped), so an in-progress or rejected proof cannot pollute the
     /// shared corpus. Returns the new [`SessionId`].
-    pub async fn create_session(&self) -> SessionId {
-        let base = {
-            let env = self.env.read().await;
-            Arc::new(env.clone())
-        };
+    ///
+    /// Snapshotting copies the environment (the base, then the overlay from
+    /// it): work that grows with the environment, so it runs on the work pool,
+    /// in its lock order (a slot, then a read hold on the environment), never
+    /// on the runtime (R87, 2026-10-17). It has no deadline: no
+    /// request asks for it, and a copy reads none. So it waits, with no bound
+    /// of its own, for a free work slot and then for the environment: behind
+    /// the requests holding every slot (each until its timeout, its work up to
+    /// its next deadline read) and behind a writer. A caller that needs a
+    /// bound awaits it inside a timeout of its own.
+    ///
+    /// # Errors
+    ///
+    /// The internal error when the work pool could not run the copy (no work
+    /// thread could be started).
+    pub async fn create_session(&self) -> Result<SessionId, RpcError> {
+        let session = run_with_env(self, None, |held| {
+            SessionEnv::new(Arc::new(Environment::clone(&held.env)))
+        })
+        .await
+        .map_err(|error| error.into_rpc_error(std::time::Duration::ZERO))?;
         let id = SessionId::new();
         self.sessions
             .write()
             .await
-            .insert(id, SessionEnv::new(base));
-        id
+            .insert(id, Arc::new(Mutex::new(Shared::new(session))));
+        Ok(id)
+    }
+
+    /// The open session `id`, if any. The session map is held only for the
+    /// look-up.
+    pub(crate) async fn session(&self, id: &SessionId) -> Option<SessionHandle> {
+        self.sessions.read().await.get(id).cloned()
     }
 
     /// Close (roll back) a session, dropping its overlay.
     ///
     /// Returns `true` if a session with this ID was present. Dropping the
     /// [`SessionEnv`] discards every session-local declaration; the shared
-    /// base environment is never mutated, so the corpus stays pristine.
+    /// base environment is never mutated, so the corpus stays pristine. An
+    /// `addDecl` that has already looked the session up (holding its lock, or
+    /// queued on it) finishes on the closed session, as if it ran before the
+    /// close, and what it adds is dropped with it.
+    ///
+    /// A session holds a whole environment (its overlay), so the closed one is
+    /// freed off the runtime (`off_runtime.rs`), after the session map's lock
+    /// is let go: by the map's share here when it is the last, or by the
+    /// `addDecl` that still holds the session, when that lets it go.
     pub async fn drop_session(&self, id: &SessionId) -> bool {
-        self.sessions.write().await.remove(id).is_some()
+        let removed = self.sessions.write().await.remove(id);
+        removed.is_some()
     }
 
     /// Number of currently open worker sessions.
     pub async fn session_count(&self) -> usize {
         self.sessions.read().await.len()
+    }
+}
+
+/// `root`'s real path, the form confinement compares against.
+fn real_root(root: &Path) -> Option<std::path::PathBuf> {
+    match std::fs::canonicalize(root) {
+        Ok(real) => Some(real),
+        Err(error) => {
+            tracing::error!(
+                root = %root.display(),
+                %error,
+                "the workspace root does not resolve; every file method's path is refused"
+            );
+            None
+        }
+    }
+}
+
+/// A launch token for a new state; `None` (every check of it refusing) when
+/// the system's random source cannot be read.
+fn new_launch_token() -> Option<crate::LaunchToken> {
+    match crate::LaunchToken::generate() {
+        Ok(token) => Some(token),
+        Err(error) => {
+            tracing::error!(%error, "no launch token; every connection will be refused");
+            None
+        }
     }
 }
 

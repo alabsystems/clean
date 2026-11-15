@@ -20,7 +20,7 @@
 //! [`NotationSeed`] is an ordered list of [`SeededNotation`] entries, each one
 //! a notation *command* recovered from another module's source. A seed is
 //! replayed through the SAME registration path a file-local declaration takes
-//! ([`crate::Parser::seed_notation`] →
+//! (`Parser::seed_notation` →
 //! `Parser::register_custom_operator_ns`), so a seeded notation is neither more nor
 //! less capable than a declared one: whatever shape the registry models
 //! (fixed-arity infix/prefix/postfix, closed multi-hole mixfix, nullary
@@ -59,6 +59,7 @@
 
 use crate::grammar::Parser;
 use crate::surface::{DeclScope, NotationItem, NotationKind, SurfaceDecl, SurfaceExpr};
+use crate::SurfaceName;
 
 /// One notation command recovered from another module, ready to be registered.
 #[derive(Debug, Clone)]
@@ -69,12 +70,15 @@ pub struct SeededNotation {
     pub precedence: Option<u32>,
     /// The literal/variable pattern between the keyword and `=>`.
     pub pattern: Vec<NotationItem>,
-    /// The term to the right of `=>`.
-    pub expansion: SurfaceExpr,
+    /// The term to the right of `=>`, its free references marked where the
+    /// notation was declared (`crate::mark_template_free_references`), or
+    /// the reason that walk refused it: a refused notation is still seeded,
+    /// so that its uses are refused rather than read as other syntax.
+    pub expansion: Result<SurfaceExpr, crate::TemplateRefusal>,
     /// FULL declaring namespace path for a `scoped` notation; `None` for a
     /// plain one (always active once imported). A `local` notation is never
     /// seeded at all.
-    pub scope_ns: Option<String>,
+    pub scope_ns: Option<SurfaceName>,
 }
 
 /// An ordered collection of notation commands harvested from a file's imports.
@@ -136,7 +140,7 @@ impl NotationSeed {
         // Namespace path stack. `namespace A` pushes `Some("A")` (or
         // `Some("Outer.A")` when nested); `section`/`noncomputable section`
         // pushes `None` because a section does not extend the namespace path.
-        let mut ns_stack: Vec<Option<String>> = Vec::new();
+        let mut ns_stack: Vec<Option<SurfaceName>> = Vec::new();
         // `/- … -/` nesting depth. Lean's block comments nest.
         let mut comment_depth: usize = 0;
         let mut idx = 0usize;
@@ -150,10 +154,9 @@ impl NotationSeed {
                 continue;
             }
             if let Some(rest) = strip_keyword(trimmed, "namespace") {
-                let name = rest.split_whitespace().next().unwrap_or("");
-                if !name.is_empty() {
+                if let Ok(name) = crate::parse_name(rest.trim()) {
                     let full = match ns_stack.iter().rev().flatten().next() {
-                        Some(parent) => format!("{parent}.{name}"),
+                        Some(parent) => parent.append(&name),
                         None => name.to_owned(),
                     };
                     ns_stack.push(Some(full));
@@ -209,7 +212,7 @@ impl NotationSeed {
             // `local` notation is consumed (so its continuation lines are not
             // re-scanned) but never recorded: Lean does not export it.
             if !command.local {
-                self.record_command(&text, &ns_stack);
+                self.record_command(&text, &ns_stack, command.scoped_ns);
             }
             idx += consumed;
         }
@@ -218,8 +221,15 @@ impl NotationSeed {
 
     /// Parse one recovered command and record every notation declaration it
     /// produced, tagged with the namespace in force at its source position.
-    fn record_command(&mut self, text: &str, ns_stack: &[Option<String>]) {
-        let scope_ns = ns_stack.iter().rev().flatten().next().cloned();
+    fn record_command(
+        &mut self,
+        text: &str,
+        ns_stack: &[Option<SurfaceName>],
+        scoped_ns: Option<SurfaceName>,
+    ) {
+        // `scoped[NS]` names its namespace outright; it does not nest in the
+        // enclosing one (Mathlib expands it under `_root_.NS`).
+        let scope_ns = scoped_ns.or_else(|| ns_stack.iter().rev().flatten().next().cloned());
         for decl in parse_notation_command(text) {
             let SurfaceDecl::Notation {
                 kind,
@@ -243,25 +253,23 @@ impl NotationSeed {
                 },
                 DeclScope::Default | DeclScope::Local => None,
             };
+            // An imported notation's free references resolve where it was
+            // declared; no binder of the importing file can capture them.
+            let namespace = scope_ns
+                .as_ref()
+                .map_or_else(clean_kernel::Name::anon, |ns| ns.name().clone());
+            let expansion =
+                crate::grammar::hygienic_expansion(&pattern, &expansion, &namespace, &[], None);
             self.entries.push(SeededNotation {
                 kind,
                 precedence,
                 pattern,
-                expansion: *expansion,
+                expansion,
                 scope_ns: entry_ns,
             });
         }
     }
 }
-
-/// Header modifiers Lean 4's module system allows in front of `import`.
-///
-/// The pinned Mathlib checkout (`43ad0e9d2`) is module-system source: of its
-/// 25,590 import commands, **24,640 are `public import`** and 469 are
-/// `public meta import`; a bare `import` is the minority at 451. A scanner
-/// that only knew the bare spelling read ZERO imports from a Mathlib file and
-/// silently harvested nothing — measured before this list existed.
-const IMPORT_MODIFIERS: [&str; 4] = ["public", "private", "protected", "meta"];
 
 /// The module names a Lean source file imports, in source order.
 ///
@@ -271,54 +279,43 @@ const IMPORT_MODIFIERS: [&str; 4] = ["public", "private", "protected", "meta"];
 /// machinery [`NotationSeed::harvest_module_source`] uses, so the copyright
 /// block every Mathlib file opens with — and any `import` quoted inside a
 /// docstring — is not mistaken for the header.
+///
+/// Each line is read with the header's own grammar
+/// (`Parser::header_line_modules`: `public`? `meta`? `import` `all`?), which
+/// the scanner needs: the pinned Mathlib checkout (`43ad0e9d2`) is
+/// module-system source, where of its 25,590 import commands **24,640 are
+/// `public import`** and 469 are `public meta import`, and a bare `import` is
+/// the minority at 451. A scanner that only knew the bare spelling read ZERO
+/// imports from a Mathlib file and silently harvested nothing.
 #[must_use]
-pub fn scan_imports(source: &str) -> Vec<String> {
+pub fn scan_imports(source: &str) -> Vec<SurfaceName> {
     let mut modules = Vec::new();
     let mut comment_depth = 0usize;
     for line in source.lines() {
         let (code, depth_after) = strip_comments(line, comment_depth);
         comment_depth = depth_after;
         let trimmed = code.trim();
-        if trimmed.is_empty() {
+        if trimmed.is_empty() || trimmed == "module" || trimmed == "prelude" {
             continue;
         }
-        // `module` opens a module-system file; `prelude` opens a core file.
-        // Neither ends the header.
-        if trimmed == "module" || trimmed == "prelude" {
-            continue;
-        }
-        let mut tokens = trimmed.split_whitespace().peekable();
-        while tokens.peek().is_some_and(|t| IMPORT_MODIFIERS.contains(t)) {
-            tokens.next();
-        }
-        if tokens.next() != Some("import") {
-            // First non-header command: the import block is over.
+        // The header grammar, without Lean's header refusals: Lean resolves
+        // the imports of a header it reports errors on (a `public import` in a
+        // file with no `module`), and this scanner reads a line without the
+        // `module` line before it. A file's refusal is `parse_file`'s.
+        let Ok((names, whole_line)) = Parser::header_line_modules(trimmed) else {
+            break;
+        };
+        if names.is_empty() {
             break;
         }
-        // `import all Foo` re-exports; the module named is still `Foo`.
-        if tokens.peek() == Some(&"all") {
-            tokens.next();
-        }
-        if let Some(module) = tokens.next() {
-            if is_module_name(module) {
-                modules.push(module.to_owned());
-            }
+        modules.extend(names);
+        // `import A B`: Lean 4.8.0 imports `A`, and `B` is the first
+        // (erroneous) command of the body, which ends the header.
+        if !whole_line {
+            break;
         }
     }
     modules
-}
-
-/// Whether `s` is a plausible dotted Lean module name.
-fn is_module_name(s: &str) -> bool {
-    !s.is_empty()
-        && !s.starts_with('.')
-        && !s.ends_with('.')
-        && s.split('.').all(|seg| {
-            !seg.is_empty()
-                && seg
-                    .chars()
-                    .all(|c| c.is_alphanumeric() || c == '_' || c == '\'')
-        })
 }
 
 /// What a candidate notation line was recognised as.
@@ -327,6 +324,9 @@ struct NotationCommand<'a> {
     body: &'a str,
     /// `local notation …` — file-local in Lean, never exported.
     local: bool,
+    /// Mathlib's `scoped[NS]`: the ABSOLUTE namespace the notation is scoped
+    /// to, in place of the one in force at its source position.
+    scoped_ns: Option<SurfaceName>,
 }
 
 /// The core notation command keywords. Order is irrelevant:
@@ -340,7 +340,13 @@ fn classify_notation_command(trimmed: &str) -> Option<NotationCommand<'_>> {
     let body = strip_attribute_prefix(trimmed);
     let mut rest = body;
     let mut local = false;
+    let mut scoped_ns = None;
     loop {
+        if let Some((namespace, after)) = strip_scoped_in_namespace(rest) {
+            scoped_ns = Some(namespace);
+            rest = after;
+            continue;
+        }
         if let Some(after) = strip_keyword(rest, "scoped") {
             rest = after;
             continue;
@@ -359,7 +365,23 @@ fn classify_notation_command(trimmed: &str) -> Option<NotationCommand<'_>> {
     NOTATION_KEYWORDS
         .iter()
         .find(|kw| starts_with_command(rest, kw))?;
-    Some(NotationCommand { body, local })
+    Some(NotationCommand {
+        body,
+        local,
+        scoped_ns,
+    })
+}
+
+/// Mathlib's `scoped[NS]` modifier (`Mathlib/Tactic/ScopedNS.lean`,
+/// `"scoped" "[" ident "]"`): the namespace it names and the text after it.
+/// `None` for plain `scoped`, which [`strip_keyword`] handles, and for a
+/// bracket whose content is not a name.
+fn strip_scoped_in_namespace(s: &str) -> Option<(SurfaceName, &str)> {
+    let rest = s.strip_prefix("scoped")?.trim_start();
+    let inner = rest.strip_prefix('[')?;
+    let close = inner.find(']')?;
+    let namespace = crate::parse_name(inner[..close].trim()).ok()?;
+    Some((namespace, inner[close + 1..].trim_start()))
 }
 
 /// Whether `s` begins with the command keyword `kw` followed by something that
@@ -414,8 +436,16 @@ fn command_is_complete(text: &str) -> bool {
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0usize;
     let mut in_string = false;
+    let mut in_identifier = false;
     while i < chars.len() {
         let c = chars[i];
+        if in_identifier {
+            if c == '»' {
+                in_identifier = false;
+            }
+            i += 1;
+            continue;
+        }
         if in_string {
             if c == '\\' {
                 i += 2;
@@ -424,6 +454,11 @@ fn command_is_complete(text: &str) -> bool {
             if c == '"' {
                 in_string = false;
             }
+            i += 1;
+            continue;
+        }
+        if c == '«' {
+            in_identifier = true;
             i += 1;
             continue;
         }
@@ -464,6 +499,7 @@ fn strip_comments(line: &str, mut depth: usize) -> (String, usize) {
     let chars: Vec<char> = line.chars().collect();
     let mut i = 0usize;
     let mut in_string = false;
+    let mut in_identifier = false;
     while i < chars.len() {
         let c = chars[i];
         let next = chars.get(i + 1).copied();
@@ -486,6 +522,14 @@ fn strip_comments(line: &str, mut depth: usize) -> (String, usize) {
             i += 1;
             continue;
         }
+        if in_identifier {
+            out.push(c);
+            if c == '»' {
+                in_identifier = false;
+            }
+            i += 1;
+            continue;
+        }
         if in_string {
             out.push(c);
             if c == '\\' && next.is_some() {
@@ -496,6 +540,12 @@ fn strip_comments(line: &str, mut depth: usize) -> (String, usize) {
             if c == '"' {
                 in_string = false;
             }
+            i += 1;
+            continue;
+        }
+        if c == '«' {
+            in_identifier = true;
+            out.push(c);
             i += 1;
             continue;
         }

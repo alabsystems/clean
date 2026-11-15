@@ -91,8 +91,10 @@ fn test_builtin_macro_if_then_else() {
     // In an empty environment, we need to define ite first
     let mut env = Environment::new();
 
-    // First need Decidable type
-    check_and_add_decl(&mut env, "axiom Decidable : Prop -> Type").expect("Decidable axiom");
+    // First need Decidable, declared as a class: pinned Lean refuses
+    // `[d : Decidable c]` over an axiom `Decidable : Prop -> Type` (see
+    // `test_instance_binder_over_axiom_decidable_refused`).
+    check_and_add_decl(&mut env, "class Decidable (p : Prop) : Type").expect("Decidable class");
 
     // Define a minimal ite function: ite (c : Prop) (t e : Type) : Type
     check_and_add_decl(
@@ -109,6 +111,23 @@ fn test_builtin_macro_if_then_else() {
     // The macro should expand without panic; exact result depends on instance resolution
     // For now just verify it doesn't panic
     let _ = result;
+}
+
+/// Negative control: `Decidable` declared as a plain axiom is not a class, so
+/// an instance-implicit binder over it is refused, as pinned Lean refuses it.
+#[test]
+fn test_instance_binder_over_axiom_decidable_refused() {
+    let mut env = Environment::new();
+    check_and_add_decl(&mut env, "axiom Decidable : Prop -> Type").expect("Decidable axiom");
+    let err = check_and_add_decl(
+        &mut env,
+        "def ite (c : Prop) [d : Decidable c] (t e : Type) : Type := t",
+    )
+    .expect_err("`[d : Decidable c]` over an axiom must be refused");
+    assert!(
+        err.contains("not a class instance"),
+        "expected the non-class binder refusal, got: {err}"
+    );
 }
 
 #[test]
@@ -213,13 +232,17 @@ fn test_macro_expansion_preserves_semantics() {
     let expr = parse_expr("identity Type").unwrap();
     let result = ctx.elaborate(&expr);
 
-    // Should preserve the semantics: identity Type == Type
-    if let Ok(kernel_expr) = result {
-        assert!(
-            matches!(kernel_expr.kind(), ExprKind::Sort(_)),
-            "identity Type should elaborate to Sort"
-        );
-    }
+    // Should preserve the semantics: identity Type == Type.
+    //
+    // FAIL-CLOSED since 2026-09-15. This assertion used to sit inside
+    // `if let Ok(kernel_expr) = result`, so an elaboration ERROR skipped it
+    // and the test passed having checked nothing about the property in its
+    // own name.
+    let kernel_expr = result.expect("`identity Type` should elaborate");
+    assert!(
+        matches!(kernel_expr.kind(), ExprKind::Sort(_)),
+        "identity Type should elaborate to Sort"
+    );
 }
 
 #[test]
@@ -232,24 +255,26 @@ fn test_multiple_macro_declarations() {
     let macro1 = parse_decl("macro_rules | `(m1 $x) => `($x)");
     let macro2 = parse_decl("macro_rules | `(m2 $x) => `(m1 $x)");
 
-    if let Ok(decl1) = macro1 {
-        ctx.elab_decl(&decl1).unwrap();
-    }
-    if let Ok(decl2) = macro2 {
-        ctx.elab_decl(&decl2).unwrap();
-    }
+    // FAIL-CLOSED since 2026-09-15. Both registrations and the expansion used
+    // to be guarded by `if let Ok(...)`, so a parse failure registered NOTHING
+    // and the elaboration below then failed into a skipped assertion: the test
+    // could pass having declared no macros and expanded none, which is exactly
+    // the property its name claims.
+    let decl1 = macro1.expect("the `m1` macro_rules declaration should parse");
+    ctx.elab_decl(&decl1).unwrap();
+    let decl2 = macro2.expect("the `m2` macro_rules declaration should parse");
+    ctx.elab_decl(&decl2).unwrap();
 
     // Try to use chained macros: m2 Type should expand to m1 Type then to Type
     let expr = parse_expr("m2 Type").unwrap();
     let expanded = ctx.elaborate(&expr);
 
     // Chained macro expansion should work
-    if let Ok(kernel_expr) = expanded {
-        assert!(
-            matches!(kernel_expr.kind(), ExprKind::Sort(_)),
-            "m2 Type should elaborate to Sort, got {kernel_expr:?}"
-        );
-    }
+    let kernel_expr = expanded.expect("`m2 Type` should elaborate through the macro chain");
+    assert!(
+        matches!(kernel_expr.kind(), ExprKind::Sort(_)),
+        "m2 Type should elaborate to Sort, got {kernel_expr:?}"
+    );
 }
 
 #[test]
@@ -261,20 +286,43 @@ fn test_syntax_extension_with_expression() {
     // Register syntax: myType expands to Type
     let syntax_decl = parse_decl("macro_rules | `(myType) => `(Type)");
 
-    if let Ok(decl) = syntax_decl {
-        ctx.elab_decl(&decl).unwrap();
+    // FAIL-CLOSED since 2026-09-15. THREE nested `if let Ok(...)` guards stood
+    // between this test and its assertion — the declaration parse, the
+    // expression parse and the elaboration — so a failure at any one of them
+    // passed the test silently.
+    let decl = syntax_decl.expect("the `myType` macro_rules declaration should parse");
+    ctx.elab_decl(&decl).unwrap();
 
-        // Now elaborate myType
-        if let Ok(surface) = parse_expr("myType") {
-            let result = ctx.elaborate(&surface);
-            if let Ok(expr) = result {
-                assert!(
-                    matches!(expr.kind(), ExprKind::Sort(_)),
-                    "myType should elaborate to Sort"
-                );
-            }
-        }
-    }
+    // Now elaborate myType.
+    //
+    // MEASURED WALL, 2026-09-15 — and it was found by deleting the three
+    // `if let Ok(...)` guards that used to stand here. A NULLARY macro pattern
+    // never reaches the registry: `MacroRegistry::try_expand`
+    // (crates/clean-macro/src/registry.rs:359) opens with
+    // `let kind = syntax.kind()?`, and `Syntax::kind()` (syntax.rs:339) is
+    // `Some` only for `Syntax::Node`. A bare identifier is an ATOM, so its kind
+    // is `None` and the lookup returns before consulting a single macro. The
+    // two sibling tests above pass because their patterns take `$x`, which
+    // makes the use site a Node.
+    //
+    // PINNED AS A REFUSAL, not skipped. `expect_err` means that on the day
+    // nullary expansion lands this test FAILS LOUDLY and whoever landed it
+    // replaces the pin with the target assertion, which is:
+    //
+    //     assert!(matches!(expr.kind(), ExprKind::Sort(_)));
+    //
+    // A skip would have let that fix land unnoticed, which is how this gap
+    // survived in the first place.
+    let surface = parse_expr("myType").expect("`myType` should parse");
+    let err = ctx.elaborate(&surface).expect_err(
+        "nullary macro expansion is a MEASURED GAP: if `myType` now elaborates, \
+         delete this pin and assert ExprKind::Sort instead",
+    );
+    assert!(
+        format!("{err:?}").contains("UnknownIdent"),
+        "the nullary-macro wall is an UnknownIdent at the use site; a different \
+         error means the cause moved and this pin no longer describes it: {err:?}"
+    );
 }
 
 #[test]

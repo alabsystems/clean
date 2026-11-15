@@ -75,7 +75,8 @@ pub struct WideChain {
     /// Committed fixtures `(file, printed name)`, subject first.
     pub fixtures: &'static [(&'static str, &'static str)],
     /// The function id each fixture's body must carry so committed call
-    /// operands resolve (`has_loose_bvars` calls `@func.3657`).
+    /// operands resolve (`has_loose_bvars` calls `@func.1729`; `@func.3657` before the
+    /// 2026-10-07 rebaseline).
     pub func_ids: &'static [u32],
     /// struct/enum declarations the composed module needs (the crate-level
     /// dump carries no type tables).
@@ -93,7 +94,7 @@ pub struct WideChain {
     /// How the returned value is wrapped on the Clean side.
     pub encoding: WideEncoding,
     /// How faithfully E2's type declarations model the real Rust types —
-    /// `TagSurrogate` for `strict_monads`, whose struct.441 declaration is a
+    /// `TagSurrogate` for `strict_monads`, whose struct.586 declaration is a
     /// self-consistent surrogate layout, `Exact` everywhere else.
     pub enum_model: EnumModel,
     /// The declared clean-minus-trust cost offset (see the module doc).
@@ -161,7 +162,7 @@ fn bvar_in_range() -> WideChain {
         fixtures: &[("bvar_in_range.trust-ir.txt", "@expr::bvar_in_range")],
         func_ids: &[0],
         type_decls: "",
-        sigs: vec![(467, vec![Ty::U32, Ty::U32, Ty::U32], vec![Ty::Bool])],
+        sigs: vec![(435, vec![Ty::U32, Ty::U32, Ty::U32], vec![Ty::Bool])],
         clean_module: "ir_br_module",
         clean_fid: "ir_d0",
         clean_defs: clean_verify::spec::ir_br_module_defs(),
@@ -200,7 +201,7 @@ fn is_valid_char() -> WideChain {
         )],
         func_ids: &[0],
         type_decls: "",
-        sigs: vec![(377, vec![Ty::U64], vec![Ty::Bool])],
+        sigs: vec![(359, vec![Ty::U64], vec![Ty::Bool])],
         clean_module: "ir_vc_module",
         clean_fid: "ir_d0",
         clean_defs: clean_verify::spec::ir_vc_module_defs(),
@@ -230,7 +231,7 @@ fn flat_flags_contains() -> WideChain {
     let case = |label, x: u64, y: u64| WideInput {
         label,
         clean_tail: agg1_args_tail(&[x, y]),
-        trust: WideTrustInput::Args(vec![iv_struct1(1017, iv_u8(x)), iv_struct1(1017, iv_u8(y))]),
+        trust: WideTrustInput::Args(vec![iv_struct1(815, iv_u8(x)), iv_struct1(815, iv_u8(y))]),
         shipped: None,
     };
     WideChain {
@@ -240,8 +241,8 @@ fn flat_flags_contains() -> WideChain {
             "@flat::types::FlatFlags::contains",
         )],
         func_ids: &[0],
-        type_decls: "struct @FlatFlags { u8 } id=1017",
-        sigs: vec![(488, vec![struct_ty(1017), struct_ty(1017)], vec![Ty::Bool])],
+        type_decls: "struct @FlatFlags { u8 } id=815",
+        sigs: vec![(459, vec![struct_ty(815), struct_ty(815)], vec![Ty::Bool])],
         clean_module: "ir_fc_module",
         clean_fid: "ir_d0",
         clean_defs: clean_verify::spec::ir_fc_module_defs(),
@@ -270,7 +271,7 @@ fn flat_flags_with() -> WideChain {
     let case = |label, x: u64, y: u64| WideInput {
         label,
         clean_tail: agg1_args_tail(&[x, y]),
-        trust: WideTrustInput::Args(vec![iv_struct1(1017, iv_u8(x)), iv_struct1(1017, iv_u8(y))]),
+        trust: WideTrustInput::Args(vec![iv_struct1(815, iv_u8(x)), iv_struct1(815, iv_u8(y))]),
         shipped: None,
     };
     WideChain {
@@ -280,11 +281,11 @@ fn flat_flags_with() -> WideChain {
             "@flat::types::FlatFlags::with",
         )],
         func_ids: &[0],
-        type_decls: "struct @FlatFlags { u8 } id=1017",
+        type_decls: "struct @FlatFlags { u8 } id=815",
         sigs: vec![(
-            489,
-            vec![struct_ty(1017), struct_ty(1017)],
-            vec![struct_ty(1017)],
+            460,
+            vec![struct_ty(815), struct_ty(815)],
+            vec![struct_ty(815)],
         )],
         clean_module: "ir_fw_module",
         clean_fid: "ir_d0",
@@ -312,7 +313,7 @@ fn node_id_index() -> WideChain {
         label,
         clean_tail: format!("(ir_vl1 {}) ir_mem0 ir_d0", wide_agg1(n)),
         trust: WideTrustInput::Args(vec![iv_struct1(
-            323,
+            210,
             iv_u32(u32::try_from(n).expect("u32 domain")),
         )]),
         shipped: None,
@@ -324,8 +325,8 @@ fn node_id_index() -> WideChain {
             "@cert::builder::state::NodeId::index",
         )],
         func_ids: &[0],
-        type_decls: "struct @NodeId { u32 } id=323",
-        sigs: vec![(97, vec![struct_ty(323)], vec![Ty::Usize])],
+        type_decls: "struct @NodeId { u32 } id=210",
+        sigs: vec![(85, vec![struct_ty(210)], vec![Ty::Usize])],
         clean_module: "ir_ni_module",
         clean_fid: "ir_d0",
         clean_defs: clean_verify::spec::ir_ni_module_defs(),
@@ -371,7 +372,7 @@ fn get_char_val_trunc() -> WideChain {
         )],
         func_ids: &[0],
         type_decls: "",
-        sigs: vec![(370, vec![Ty::Unit, Ty::U64], vec![Ty::U32])],
+        sigs: vec![(352, vec![Ty::Unit, Ty::U64], vec![Ty::U32])],
         clean_module: "ir_gc_module",
         clean_fid: "ir_d0",
         clean_defs: clean_verify::spec::ir_gc_module_defs(),
@@ -401,7 +402,7 @@ fn has_loose_bvars() -> WideChain {
     let case = |label, meta: u64| WideInput {
         label,
         clean_tail: format!("(ir_vl1 {}) ir_mem0 ir_d0", wide_agg1(meta)),
-        trust: WideTrustInput::Args(vec![iv_struct1(29, iv_u64(meta))]),
+        trust: WideTrustInput::Args(vec![iv_struct1(765, iv_u64(meta))]),
         shipped: None,
     };
     WideChain {
@@ -416,13 +417,13 @@ fn has_loose_bvars() -> WideChain {
                 "@expr::meta::ExprMeta::loose_bvar_range",
             ),
         ],
-        // The caller's committed text calls `@func.3657`; the callee body must
+        // The caller's committed text calls `@func.1729`; the callee body must
         // carry that id for the call to resolve.
-        func_ids: &[0, 3657],
-        type_decls: "struct @ExprMeta { u64 } id=29",
+        func_ids: &[0, 1729],
+        type_decls: "struct @ExprMeta { u64 } id=765",
         sigs: vec![
-            (435, vec![struct_ty(29)], vec![Ty::Bool]),
-            (433, vec![struct_ty(29)], vec![Ty::U32]),
+            (410, vec![struct_ty(765)], vec![Ty::Bool]),
+            (408, vec![struct_ty(765)], vec![Ty::U32]),
         ],
         clean_module: "ir_hlb_module",
         clean_fid: "ir_d0",
@@ -453,7 +454,7 @@ fn loose_bvar_range() -> WideChain {
     let case = |label, meta: u64| WideInput {
         label,
         clean_tail: format!("(ir_vl1 {}) ir_mem0 ir_d0", wide_agg1(meta)),
-        trust: WideTrustInput::Args(vec![iv_struct1(29, iv_u64(meta))]),
+        trust: WideTrustInput::Args(vec![iv_struct1(765, iv_u64(meta))]),
         shipped: None,
     };
     WideChain {
@@ -463,8 +464,8 @@ fn loose_bvar_range() -> WideChain {
             "@expr::meta::ExprMeta::loose_bvar_range",
         )],
         func_ids: &[0],
-        type_decls: "struct @ExprMeta { u64 } id=29",
-        sigs: vec![(433, vec![struct_ty(29)], vec![Ty::U32])],
+        type_decls: "struct @ExprMeta { u64 } id=765",
+        sigs: vec![(408, vec![struct_ty(765)], vec![Ty::U32])],
         // The SAME minted module as `has_loose_bvars` — the callee is its
         // function 1. The gate registers shared defs once; this chain reuses
         // them at `ir_d1`.
@@ -491,7 +492,7 @@ fn loose_bvar_range() -> WideChain {
 }
 
 /// `Environment::set_lean4_core_strict_monads` — **`store`** (the heap write)
-/// + `insertfield` at field 81 + void return, against the SAME prepared heap
+/// + `insertfield` at field 83 + void return, against the SAME prepared heap
 /// the stage's concrete witnesses pin (`ir_sm_heap0`).
 fn strict_monads() -> WideChain {
     let case = |label, b: bool| {
@@ -510,9 +511,9 @@ fn strict_monads() -> WideChain {
                 // instructions of harness overhead, counted from this text.
                 text: format!(
                     "fn @g2_wide_harness(functy.900) {{\nbb0:\n    \
-                     %0 = alloca struct.441\n    \
-                     %1 = const struct.441 {{ {zeros} }}\n    \
-                     store struct.441 %1, ptr %0\n    \
+                     %0 = alloca struct.586\n    \
+                     %1 = const struct.586 {{ {zeros} }}\n    \
+                     store struct.586 %1, ptr %0\n    \
                      %2 = const bool {lit}\n    \
                      call @func.0(%0, %2)\n    \
                      ret\n}}\n",
@@ -530,15 +531,15 @@ fn strict_monads() -> WideChain {
             "@env::Environment::set_lean4_core_strict_monads",
         )],
         func_ids: &[0],
-        // A SURROGATE layout: the real struct.441 is Environment's 82
+        // A SURROGATE layout: the real struct.586 is Environment's 562
         // heterogeneous fields; E2 needs only a self-consistent layout in
-        // which field 81 round-trips, because the harness both writes and
+        // which field 83 round-trips, because the harness both writes and
         // (via the subject) rewrites through the same declaration. Sound for
         // THIS body for the same reason TagSurrogate is sound for
         // `level_kind_ord`: nothing observed depends on the elided detail.
         type_decls: SM_TYPE_DECL.as_str(),
         sigs: vec![
-            (404, vec![Ty::Ptr, Ty::Bool], vec![]),
+            (385, vec![Ty::Ptr, Ty::Bool], vec![]),
             (900, vec![], vec![]),
         ],
         clean_module: "ir_sm_module",
@@ -550,7 +551,8 @@ fn strict_monads() -> WideChain {
         total_domain: false,
         // MEASURED 2026-08-24 on this box: the interpreter ACCEPTS the
         // whole-struct load/store of the 82-field surrogate (unit @4 steps on
-        // both inputs), so this lane declares no refusal allowance — a future
+        // both inputs; the surrogate is 84 fields since the 2026-10-07
+        // field-83 re-derivation), so this lane declares no refusal allowance — a future
         // refusal at the pinned trust-ir rev would be a red worth seeing.
         // The VALUE this chain measures is the void return; the heap write
         // itself is pinned kernel-side by the stage's ir_sm_exact /
@@ -587,7 +589,7 @@ fn simp_priority_value() -> WideChain {
             // zeros to hand E2 the fully-initialized memory any real caller's
             // frame would hold.
             text: "fn @g2_wide_harness(functy.901) {\nbb0:\n    \
-                   %0 = alloca enum.127\n    \
+                   %0 = alloca enum.135\n    \
                    %1 = const u32 0\n    \
                    store u32 %1, ptr %0\n    \
                    %2 = const i64 4\n    \
@@ -616,7 +618,7 @@ fn simp_priority_value() -> WideChain {
             // byte-offset access pattern.
             text: format!(
                 "fn @g2_wide_harness(functy.901) {{\nbb0:\n    \
-                 %0 = alloca enum.127\n    \
+                 %0 = alloca enum.135\n    \
                  %1 = const u32 1\n    \
                  store u32 %1, ptr %0\n    \
                  %2 = const i64 4\n    \
@@ -639,9 +641,9 @@ fn simp_priority_value() -> WideChain {
             "@env::types::SimpPriority::value",
         )],
         func_ids: &[0],
-        type_decls: "enum @SimpPriority repr(u32) { Default, Custom(u32) } id=127",
+        type_decls: "enum @SimpPriority repr(u32) { Default, Custom(u32) } id=135",
         sigs: vec![
-            (147, vec![Ty::Ptr], vec![Ty::U32]),
+            (149, vec![Ty::Ptr], vec![Ty::U32]),
             (901, vec![], vec![Ty::U32]),
         ],
         clean_module: "ir_pv_module",
@@ -677,18 +679,18 @@ fn struct_ty(id: u32) -> Ty {
     Ty::Struct(trust_ir::value::StructId::new(id))
 }
 
-/// The surrogate struct.441 declaration: 81 `u8` fields + `bool` at field 81.
+/// The surrogate struct.586 declaration: 83 `u8` fields + `bool` at field 83.
 static SM_TYPE_DECL: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
-    let fields = std::iter::repeat_n("u8", 81)
+    let fields = std::iter::repeat_n("u8", 83)
         .chain(std::iter::once("bool"))
         .collect::<Vec<_>>()
         .join(", ");
-    format!("struct @EnvSurrogate {{ {fields} }} id=441")
+    format!("struct @EnvSurrogate {{ {fields} }} id=586")
 });
 
-/// The 82-field zero constant for the surrogate struct: 81 `0`s + `false`.
+/// The 84-field zero constant for the surrogate struct: 83 `0`s + `false`.
 fn sm_const_fields() -> String {
-    let mut fields = vec!["0"; 81];
+    let mut fields = vec!["0"; 83];
     fields.push("false");
     fields.join(", ")
 }

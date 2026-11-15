@@ -75,7 +75,7 @@ fn test_match_ctor_nested_literal_zero_pattern_elaborates() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -84,7 +84,7 @@ fn test_match_ctor_nested_literal_zero_pattern_elaborates() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                     vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1)),
@@ -111,7 +111,7 @@ fn test_match_ctor_nested_numeral_add_pattern_elaborates() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -120,9 +120,9 @@ fn test_match_ctor_nested_numeral_add_pattern_elaborates() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                     vec![SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         1,
                     )],
                 ),
@@ -150,7 +150,7 @@ fn test_match_ctor_nested_numeral_add_offset_two_pattern_elaborates() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -159,9 +159,9 @@ fn test_match_ctor_nested_numeral_add_offset_two_pattern_elaborates() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                     vec![SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         2,
                     )],
                 ),
@@ -189,7 +189,7 @@ fn test_match_as_ctor_nested_literal_pattern_elaborates() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -198,9 +198,9 @@ fn test_match_as_ctor_nested_literal_pattern_elaborates() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "whole".to_string(),
+                    SurfaceName::generated_path("whole"),
                     Box::new(SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
+                        SurfaceName::generated_path("Nat.succ"),
                         vec![SurfacePattern::Lit(SurfaceLit::Nat(0))],
                     )),
                 ),
@@ -228,7 +228,7 @@ fn test_match_as_ctor_nested_numeral_add_pattern_elaborates() {
     use clean_parser::{Span, SurfaceMatchArm, SurfacePattern};
 
     let env = nat_axiom_env();
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -237,11 +237,11 @@ fn test_match_as_ctor_nested_numeral_add_pattern_elaborates() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::As(
-                    "whole".to_string(),
+                    SurfaceName::generated_path("whole"),
                     Box::new(SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
+                        SurfaceName::generated_path("Nat.succ"),
                         vec![SurfacePattern::NumeralAdd(
-                            Box::new(SurfacePattern::Var("k".to_string())),
+                            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                             1,
                         )],
                     )),
@@ -273,23 +273,26 @@ fn test_match_ctor_recursive_nested_ctor_pattern_typechecks() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "opt".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("opt"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Option.none".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Option.none"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Option.some".to_string(),
+                    SurfaceName::generated_path("Option.some"),
                     vec![SurfacePattern::Ctor(
-                        "Option.some".to_string(),
-                        vec![SurfacePattern::Var("x".to_string())],
+                        SurfaceName::generated_path("Option.some"),
+                        vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
                     )],
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "x".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x")),
             },
             // Cover `Option.some Option.none` with a real fallback. The nested
             // constructor regression is about lowering depth, not accepting a
@@ -328,14 +331,17 @@ fn test_match_ctor_nested_numeral_add_non_nat_field_fails_closed() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "optb".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("optb"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Option.some".to_string(),
+                    SurfaceName::generated_path("Option.some"),
                     vec![SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         2,
                     )],
                 ),
@@ -352,7 +358,10 @@ fn test_match_ctor_nested_numeral_add_non_nat_field_fails_closed() {
     let mut ctx = ElabCtx::new(&env);
     let result = ctx.elaborate(&match_expr);
     assert!(
-        matches!(result, Err(ElabError::NotImplemented(ref msg)) if msg.contains("does not belong to field type Bool")),
+        // Refused at pattern-name normalization (the field's `n + k` needs a
+        // `Nat`, DECISIONS R138), before the nested-constructor plan, whose
+        // "does not belong to field type" it used to reach.
+        matches!(result, Err(ElabError::NotImplemented(ref msg)) if msg.contains("only supported for Nat scrutinees") && msg.contains("Bool")),
         "nested `k + 2` on Option Bool should fail closed instead of silently never matching, got {result:?}"
     );
 }
@@ -367,13 +376,16 @@ fn test_nested_ctor_nonzero_nat_literal_sub_pattern() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
                 // Pattern: Nat.succ(1) — matches exactly 2
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                     vec![SurfacePattern::Lit(SurfaceLit::Nat(1))],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)),

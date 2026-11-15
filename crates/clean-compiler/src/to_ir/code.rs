@@ -15,7 +15,7 @@ use super::types::expr_to_ir_type;
 use crate::error::CompilerError;
 use crate::ir::{CtorInfo, FnId, IRAlt, IRArg, IRBody, IRExpr, IRLiteral, IRType, VarId};
 use crate::lcnf::{Alt, Arg, Code, LetValue};
-use clean_kernel::{Expr, Literal, Name};
+use clean_kernel::{Expr, ExprKind, Literal, Name};
 
 /// Convert L5CNF Code to IRBody.
 pub fn lower_code(code: &Code, state: &mut ToIRState) -> Result<IRBody, CompilerError> {
@@ -152,6 +152,14 @@ pub(super) fn lower_const_application(
     // `Nat`/`Bool` constructors are already rewritten to literals / `Bool`
     // shims by `to_mono` and never reach here as constructor `Const`s.
     if state.lookup_ctor_meta(name).is_some() {
+        if *name == Name::from_string("String.ofByteArray") {
+            if state.is_byte_array_string_constructor(name) {
+                return lower_byte_array_string_constructor(name, args, state);
+            }
+            return Err(CompilerError::Unsupported(
+                "String.ofByteArray requires its checked byte-backed source layout".to_string(),
+            ));
+        }
         let (ctor_info, ir_args) = lower_ctor_parts(name, args, state)?;
         return Ok((
             IRExpr::Ctor {
@@ -188,9 +196,18 @@ pub(super) fn lower_const_application(
     // the primitives from the slice before boxing (the trust-ir native-BinOp
     // path's whole point) silently reverted to boxed `Ptr` intermediates and
     // fail-closed at the emitter's `declared != bty` check. Name set mirrors
-    // `emit_trust_ir::uint_arith_binop` / `emit_wasm::wasm_arith`; the
-    // feature-gated correspondence test pins the tables against drift.
-    let ty = match (uint_arith_scalar_ty(name), declared_ty) {
+    // `emit_trust_ir::uint_arith_binop`; the feature-gated correspondence
+    // test pins the tables against drift.
+    let native_result = uint_arith_scalar_ty(name);
+    #[cfg(feature = "trust-ir-backend")]
+    let native_result = native_result.or_else(|| {
+        matches!(
+            crate::carrier_prims::carrier_prim(name, false),
+            Some(crate::carrier_prims::CarrierPrim::Cmp(..))
+        )
+        .then_some(IRType::Bool)
+    });
+    let ty = match (native_result, declared_ty) {
         (Some(prim), Some(decl_ty)) if expr_to_ir_type(decl_ty).is_ok_and(|d| d == prim) => prim,
         _ => IRType::Object,
     };
@@ -203,12 +220,57 @@ pub(super) fn lower_const_application(
     ))
 }
 
-/// The fixed-width UInt arithmetic primitives the backends realize natively
-/// (`UInt{8,16,32,64}.{add,sub,mul}`), mapped to their scalar result type.
-/// Mirrors `emit_trust_ir::uint_arith_binop` and `emit_wasm::wasm_arith`;
-/// kept name-only here so the default (feature-less) build can consult it.
+/// The genuine byte-backed constructor calls the flat-carrier bridge. Its
+/// proof remains an erased OBJECT argument, including in partial applications.
+fn lower_byte_array_string_constructor(
+    name: &Name,
+    args: &[Arg],
+    state: &ToIRState,
+) -> Result<(IRExpr, IRType), CompilerError> {
+    if args.len() > 2 {
+        return Err(CompilerError::CtorSpineMisaligned {
+            ctor: name.clone(),
+            args: args.len(),
+            num_params: 0,
+            num_fields: 2,
+        });
+    }
+    if args.first().is_some_and(|arg| !matches!(arg, Arg::FVar(_))) {
+        return Err(CompilerError::Unsupported(
+            "String.ofByteArray requires a computational ByteArray payload".to_string(),
+        ));
+    }
+    let mut ir_args = lower_args(args, state)?;
+    if ir_args.len() == 2 {
+        ir_args[1] = IRArg::Erased;
+    }
+    let fn_id = FnId(name.clone());
+    let expr = if ir_args.len() < 2 {
+        IRExpr::PartialApply {
+            fn_id,
+            arity: 2,
+            args: ir_args,
+        }
+    } else {
+        IRExpr::Apply {
+            fn_id,
+            args: ir_args,
+        }
+    };
+    Ok((expr, IRType::Object))
+}
+
+/// The fixed-width UInt primitives the trust-ir backend realizes natively
+/// (`UInt{8,16,32,64}.{add,sub,mul,land,lor}`), mapped to their scalar result
+/// type. Mirrors `emit_trust_ir::uint_arith_binop` exactly (pinned by
+/// `test_uint_arith_tables_agree`); `emit_wasm::wasm_arith` realizes the
+/// `add`/`sub`/`mul` subset and refuses a `land`/`lor`/`xor` call loudly. Kept
+/// name-only here so the default (feature-less) build can consult it.
 pub(crate) fn uint_arith_scalar_ty(name: &Name) -> Option<IRType> {
     let s = name.to_string();
+    if *name != Name::from_string(&s) {
+        return None;
+    }
     let (prefix, suffix) = s.rsplit_once('.')?;
     let ty = match prefix {
         "UInt8" => IRType::UInt8,
@@ -217,7 +279,11 @@ pub(crate) fn uint_arith_scalar_ty(name: &Name) -> Option<IRType> {
         "UInt64" => IRType::UInt64,
         _ => return None,
     };
-    matches!(suffix, "add" | "sub" | "mul").then_some(ty)
+    matches!(
+        suffix,
+        "add" | "sub" | "mul" | "land" | "lor" | "xor" | "shiftLeft" | "shiftRight"
+    )
+    .then_some(ty)
 }
 
 /// Compute the correct IR projection expression for a field given its constructor's
@@ -324,6 +390,39 @@ pub(crate) fn compute_proj_expr(
     }
 }
 
+/// A `Nat` literal whose binding is declared at EXACTLY `UInt8`/`16`/`32`/`64`
+/// (the typed literal the WS6.4 `UIntW.ofNat` fold produces) lowers to the
+/// typed `IRLiteral` of that width, never to the `Nat` representation.
+///
+/// Only an in-range value is typed: an out-of-range literal at a `UIntW`
+/// declared type (which the fold never produces) keeps the historical `Nat`
+/// lowering unchanged rather than being guessed into range.
+pub(super) fn typed_uint_literal(
+    n: &clean_kernel::BigNat,
+    declared_ty: Option<&Expr>,
+) -> Option<(IRLiteral, IRType)> {
+    let ExprKind::Const(name, levels) = declared_ty?.kind() else {
+        return None;
+    };
+    if !levels.is_empty() {
+        return None;
+    }
+    let v = n.to_u64()?;
+    match name.to_string().as_str() {
+        "UInt8" => u8::try_from(v)
+            .ok()
+            .map(|v| (IRLiteral::UInt8(v), IRType::UInt8)),
+        "UInt16" => u16::try_from(v)
+            .ok()
+            .map(|v| (IRLiteral::UInt16(v), IRType::UInt16)),
+        "UInt32" => u32::try_from(v)
+            .ok()
+            .map(|v| (IRLiteral::UInt32(v), IRType::UInt32)),
+        "UInt64" => Some((IRLiteral::UInt64(v), IRType::UInt64)),
+        _ => None,
+    }
+}
+
 /// Convert an L5CNF LetValue to IR expression and type.
 pub(super) fn lower_let_value(
     value: &LetValue,
@@ -333,8 +432,11 @@ pub(super) fn lower_let_value(
     match value {
         LetValue::Lit(lit) => match lit {
             Literal::String(s) => Ok((IRExpr::String(s.to_string()), IRType::Object)),
-            _ => {
-                let (ir_lit, ty) = lower_literal(lit)?;
+            Literal::Nat(n) => {
+                let (ir_lit, ty) = match typed_uint_literal(n, declared_ty) {
+                    Some(typed) => typed,
+                    None => lower_literal(lit)?,
+                };
                 Ok((IRExpr::Lit(ir_lit), ty))
             }
         },
@@ -406,6 +508,14 @@ pub(super) fn lower_let_value(
             levels: _,
             args,
         } => {
+            if state.is_byte_array_string_constructor(name) {
+                return lower_byte_array_string_constructor(name, args, state);
+            }
+            if *name == Name::from_string("String.ofByteArray") {
+                return Err(CompilerError::Unsupported(
+                    "String.ofByteArray requires its checked byte-backed source layout".to_string(),
+                ));
+            }
             let (ctor_info, ir_args) = lower_ctor_parts(name, args, state)?;
             Ok((
                 IRExpr::Ctor {
@@ -424,6 +534,11 @@ pub(super) fn lower_let_value(
         } => {
             // Reuse: allocate in a prior Reset slot if available, else fresh alloc.
             // The runtime checks ref count == 1 and either mutates or allocates.
+            if *ctor_name == Name::from_string("String.ofByteArray") {
+                return Err(CompilerError::Unsupported(
+                    "flat String cannot reuse a constructor-cell reset slot".to_string(),
+                ));
+            }
             let (ctor_info, ir_args) = lower_ctor_parts(ctor_name, args, state)?;
 
             match state.get_var(*slot)? {
@@ -475,14 +590,27 @@ pub(super) fn ctor_field_args<'a>(
 /// Lower a constructor application to its `CtorInfo` + runtime IR args.
 ///
 /// With constructor metadata: drops the `num_params` leading parameter args
-/// ([`ctor_field_args`], hard error on any misaligned spine), then walks the
-/// field args POSITIONALLY against `field_types`, keeping only the pairs
-/// whose arg survives erasure — so `CtorInfo.field_types[i]` is exactly the
-/// type of `args[i]` and downstream layout partitioning
-/// (`partition_ctor_fields`) can never pair a value with another field's
-/// type. Erased fields (dropped proofs, type-valued fields) are absent from
-/// both the runtime args and the layout, matching the historical behavior of
-/// `lower_ctor_args` + the old best-effort alignment.
+/// ([`ctor_field_args`], hard error on any misaligned spine), then pairs every
+/// field arg POSITIONALLY with its DECLARED `field_types` entry, so
+/// `CtorInfo.field_types[i]` is exactly the type of `args[i]` and downstream
+/// layout partitioning (`partition_ctor_fields`) can never pair a value with
+/// another field's type.
+///
+/// EVERY declared field keeps its slot; an erased argument fills it with a
+/// boxed unit (`IRArg::Erased` emits as `clean_box(0)`). The consumers read
+/// this object by the DECLARED layout — `compute_proj_expr` counts the
+/// declared `field_types` of the projection metadata, and the synthesized
+/// recursor arms bind fields by the declared constructor type — so a producer
+/// that dropped an erased argument built a SHORTER object than every reader
+/// assumed. Measured 2026-09-25 through `clean run`, against pinned Lean
+/// v4.30.0-rc2: `((PUnit.unit, 5) : PUnit × Nat).2` printed `1` at exit 0
+/// (Lean: `5`) — `Prod.mk` was allocated with one field and `.2` read slot 1
+/// past its end; `some PUnit.unit` matched as `some _` and `for x in xs do
+/// IO.println x` (whose loop step is `ForInStep.yield PUnit.unit`) died with
+/// SIGSEGV, reading field 0 of an object the producer had built as the bare
+/// scalar `box(tag)`. Keeping the slot is also Lean's own rule: a
+/// constructor's runtime layout is a property of the constructor, never of
+/// the argument it happens to be applied to.
 ///
 /// Without metadata: the historical fallback (`make_ctor_info` with
 /// all-`Object` fields sized to the surviving args) is preserved for
@@ -501,14 +629,18 @@ fn lower_ctor_parts(
     let field_args = ctor_field_args(name, meta, lcnf_args)?;
     let mut ir_args = Vec::with_capacity(field_args.len());
     let mut field_types = Vec::with_capacity(meta.field_types.len());
-    for (arg, ty) in field_args.iter().zip(meta.field_types.iter()) {
-        match lower_arg(arg, state)? {
-            IRArg::Erased => {}
-            ir_arg => {
-                ir_args.push(ir_arg);
-                field_types.push(ty.clone());
-            }
+    for (field, (arg, ty)) in field_args.iter().zip(meta.field_types.iter()).enumerate() {
+        let ir_arg = lower_arg(arg, state)?;
+        // An erased argument can only stand in an OBJECT slot (a boxed unit);
+        // a scalar slot fed an erased value has no faithful representation.
+        if matches!(ir_arg, IRArg::Erased) && !ty.is_rc_type() {
+            return Err(CompilerError::Unsupported(format!(
+                "constructor {name} field {field}: an erased argument cannot fill a \
+                 {ty:?} slot"
+            )));
         }
+        ir_args.push(ir_arg);
+        field_types.push(ty.clone());
     }
     let num_scalars = field_types.iter().filter(|t| t.is_scalar()).count() as u32;
     let num_objects = field_types.iter().filter(|t| t.is_rc_type()).count() as u32;

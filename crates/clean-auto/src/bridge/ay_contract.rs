@@ -8,13 +8,27 @@
 //! ay types through this module. The raw backend (`ay_backend`) stays
 //! provider-internal behind this explicit re-export list. Part of #2760.
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use super::ay_backend::{
     certify_kernel_term, deserialize_context, deserialize_term, reconstruct_and_certify_ay_proof,
-    serialize_context, serialize_term, verify_alethe_proof, AyBackend, AyBackendConfig, AyError,
-    AyLogic, AyProofBackend, AyProofQuality, AyProofResult, AyResult, AySolveEnvelope,
-    AySolveResult, AySolveVerification, AyTerm, AyUnknownReason, AyVerificationLevel,
-    AyVerificationSummary, CertifiedPayload, KernelReconstructionCandidate, NotCertified,
-    ProofProfile, ReconstructionQuality, ReducedContext, ReducedLocalDecl, ResidualTrustSource,
+    serialize_context, serialize_term, verify_alethe_proof, verify_alethe_proof_until, AyBackend,
+    AyBackendConfig, AyError, AyLogic, AyProofBackend, AyProofQuality, AyProofResult, AyResult,
+    AySolveEnvelope, AySolveResult, AySolveVerification, AyTerm, AyUnknownReason,
+    AyVerificationLevel, AyVerificationSummary, CertifiedPayload, KernelReconstructionCandidate,
+    NotCertified, ProofProfile, ReconstructionQuality, ReducedContext, ReducedLocalDecl,
+    ResidualTrustSource, ResidualTrustSummary, TriggerPolicy, TrustBudget, VariableMapping,
+    VerifyError,
+};
+
+// wasm32: the ay solver stack does not build, so only the pure-data subset of
+// the contract (backed by the `ay_backend/wasm_stub.rs` tree) is exported.
+// Solver entry points and solver-owned handle types are native-only.
+#[cfg(target_arch = "wasm32")]
+pub use super::ay_backend::{
+    verify_alethe_proof, AyBackend, AyBackendConfig, AyError, AyLogic, AyProofBackend,
+    AyProofQuality, AyProofResult, AyResult, AySolveEnvelope, AySolveResult, AySolveVerification,
+    AyTerm, AyUnknownReason, AyVerificationLevel, AyVerificationSummary,
+    KernelReconstructionCandidate, ProofProfile, ReconstructionQuality, ResidualTrustSource,
     ResidualTrustSummary, TriggerPolicy, TrustBudget, VariableMapping, VerifyError,
 };
 
@@ -46,6 +60,7 @@ pub use super::ay_backend::{
 // Raw ay provider types that appear in AyBackend public method signatures.
 // Re-exported here so downstream crates can name them without adding a direct
 // `ay` dependency. Part of #3014.
+#[cfg(not(target_arch = "wasm32"))]
 pub use ay::{Model, SolveResult, Sort, Term, UnknownReason};
 
 /// Build identity reported by the AY revision-evidence API linked into Clean.
@@ -63,6 +78,9 @@ pub struct LinkedAyProvenance {
 }
 
 /// Return revision evidence from the AY library actually linked into Clean.
+/// Native-only: on wasm32 no AY library is linked, so there is no evidence to
+/// report.
+#[cfg(not(target_arch = "wasm32"))]
 #[must_use]
 pub fn linked_ay_provenance() -> LinkedAyProvenance {
     let readiness =

@@ -84,8 +84,9 @@ fn test_linarith_real_single_concrete_replay_avoids_trusted_axioms() {
         real_false_env(),
         false_const,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -143,20 +144,23 @@ fn test_linarith_real_chain_concrete_replay_avoids_trusted_axioms() {
         false_const,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_id,
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: real_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -233,14 +237,16 @@ fn test_linarith_real_symbolic_additive_replay_avoids_trusted_axioms() {
         false_const,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: m_id,
-                name: "m".into(),
+                name: clean_parser::SurfaceName::generated_path("m"),
                 ty: Expr::const_(Name::from_string("Int"), vec![]),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_id,
-                name: "h".into(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: h_ty,
                 value: None,
             },
@@ -307,14 +313,16 @@ fn test_linarith_real_additive_concrete_replay_avoids_trusted_axioms() {
         false_const,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },

@@ -21,13 +21,16 @@
 //! elaboration of every body) is needed.
 
 use std::collections::{BTreeSet, HashMap};
+use std::sync::Arc;
 
 use clean_kernel::Name;
-use clean_parser::{OpenPath, Span, SurfaceDecl};
+use clean_parser::{OpenPath, Span, SurfaceDecl, SurfaceName, TemplateSiteId};
 
 use super::{
-    BatchRejection, DeclHeader, DeclOutcome, DeclStatus, NoHeaderReason, Site, SourceUnit, UnitId,
+    BatchRejection, CheckedJudgment, DeclHeader, DeclOutcome, DeclStatus, NoHeaderReason, Site,
+    SourceUnit, UnitId,
 };
+use crate::namespace::NamespaceState;
 use crate::{
     elaborate_decl_and_register_with_context_and_warning, preprocess_decl_with_context,
     FileContext, HoleContext, RegistrationWarning,
@@ -50,7 +53,7 @@ use crate::{
 /// file level would become `M.Foo` inside `namespace M` — so it is carried
 /// rather than reconstructed.
 #[derive(Debug, Clone)]
-pub enum LexicalDirective {
+pub(super) enum LexicalDirective {
     /// `open A B (c) hiding d renaming e -> f`.
     Open {
         /// The opened paths, with their selective/hiding/renaming clauses.
@@ -65,12 +68,36 @@ pub enum LexicalDirective {
     /// scope-immune and survive an `end`.
     Export {
         /// The source namespace.
-        namespace: Vec<String>,
+        namespace: SurfaceName,
         /// The exported short names.
-        names: Vec<String>,
+        names: Vec<SurfaceName>,
         /// The namespace current where this was written.
         issued_in: Name,
     },
+}
+
+/// A `notation`, `macro` or `macro_rules` template this batch declares, and
+/// where it was declared.
+///
+/// Its declaration pre-resolves the template's free names, as Lean
+/// pre-resolves a quotation's identifiers (`crate::namespace::
+/// TemplateResolution`), and this walk runs that declaration — against
+/// `base`, which holds none of the batch's declarations, and under none of
+/// its `open`s, which the walk does not apply. So the record the declaration
+/// leaves in every later snapshot names what the template would mean with an
+/// empty batch: `def Satisfies …` then `notation:50 M " ⊨ " F:50 =>
+/// Satisfies M F` in the same namespace recorded nothing for `Satisfies`.
+/// Like an `open`, the record is therefore made again for each declaration,
+/// against the environment it is elaborated in
+/// ([`super::exec::elab_ctx_for`]), from the namespace state and the
+/// directives in force HERE.
+pub(super) struct TemplateDeclaration {
+    /// The declaring command, under which the template's record is kept.
+    pub(super) site: TemplateSiteId,
+    /// The namespace state where the template was declared.
+    pub(super) namespace_state: NamespaceState,
+    /// Every `open` / `export` in force where the template was declared.
+    pub(super) directives: Vec<LexicalDirective>,
 }
 
 /// What role a node plays in scheduling.
@@ -93,7 +120,7 @@ pub enum NodeClass {
 
 /// Where a node is in the pipeline.
 #[derive(Debug)]
-pub enum NodeStatus {
+pub(super) enum NodeStatus {
     /// Not yet elaborated.
     Pending,
     /// Kernel-registered.
@@ -105,47 +132,53 @@ pub enum NodeStatus {
 }
 
 /// One planned declaration.
-pub struct Node {
+pub(super) struct Node {
     /// Unit it was written in.
-    pub unit: UnitId,
+    pub(super) unit: UnitId,
     /// Its span.
-    pub span: Span,
+    pub(super) span: Span,
     /// Position in authored order across the whole batch.
-    pub order: usize,
+    pub(super) order: usize,
     /// The declaration to elaborate, after `variable`/`universe` threading.
-    pub decl: SurfaceDecl,
+    pub(super) decl: SurfaceDecl,
     /// Lexical context frozen at this declaration's source position.
-    pub lex: FileContext,
+    pub(super) lex: FileContext,
     /// `set_option … in` overrides wrapping this declaration, outermost first.
-    pub option_overrides: Vec<(String, Option<String>)>,
+    pub(super) option_overrides: Vec<(String, Option<String>)>,
     /// Every `open` / `export` in force at this declaration's source position,
     /// in the order written. Replayed against the elaboration environment; see
     /// [`LexicalDirective`].
-    pub directives: Vec<LexicalDirective>,
+    pub(super) directives: Vec<LexicalDirective>,
+    /// Every template this batch declared before this declaration, in the
+    /// order written: their records in `lex` are made again where it is
+    /// elaborated ([`TemplateDeclaration`]).
+    pub(super) templates: Vec<Arc<TemplateDeclaration>>,
     /// What role it plays.
-    pub class: NodeClass,
+    pub(super) class: NodeClass,
     /// Canonical name, assigned HERE and never re-derived. Anonymous
     /// declarations (an unnamed `instance`, a `mutual` block) have none.
-    pub name: Option<Name>,
+    pub(super) name: Option<Name>,
     /// Its staged signature, once the header phase runs.
-    pub header: Option<DeclHeader>,
+    pub(super) header: Option<DeclHeader>,
     /// Why it has no staged signature, when it has none.
-    pub no_header: Option<NoHeaderReason>,
+    pub(super) no_header: Option<NoHeaderReason>,
     /// Constants it introduced.
-    pub introduces: BTreeSet<Name>,
+    pub(super) introduces: BTreeSet<Name>,
     /// Constants its elaborated term named.
-    pub depends_on: BTreeSet<Name>,
+    pub(super) depends_on: BTreeSet<Name>,
     /// Registration warning, if any.
-    pub warning: Option<RegistrationWarning>,
+    pub(super) warning: Option<RegistrationWarning>,
     /// Hole contexts captured while elaborating it.
-    pub hole_contexts: Vec<HoleContext>,
+    pub(super) hole_contexts: Vec<HoleContext>,
+    /// Anonymous proof judgments retained after successful command registration.
+    pub(super) checked_judgments: Vec<CheckedJudgment>,
     /// Where it is in the pipeline.
-    pub status: NodeStatus,
+    pub(super) status: NodeStatus,
 }
 
 impl Node {
     /// Where this node was written.
-    pub fn site(&self) -> Site {
+    pub(super) fn site(&self) -> Site {
         Site {
             unit: self.unit,
             span: self.span,
@@ -153,7 +186,7 @@ impl Node {
     }
 
     /// A name for diagnostics, even when no canonical name was assigned.
-    pub fn display_name(&self) -> String {
+    pub(super) fn display_name(&self) -> String {
         match &self.name {
             Some(name) => name.to_string(),
             None => format!("<anonymous declaration at {:?}>", self.span),
@@ -162,20 +195,24 @@ impl Node {
 }
 
 /// Every node of the batch, plus whatever the plan phase already refused.
-pub struct Plan {
+pub(super) struct Plan {
     /// Nodes in authored order.
-    pub nodes: Vec<Node>,
+    pub(super) nodes: Vec<Node>,
     /// Plan-phase refusals — today, name collisions.
-    pub rejections: Vec<BatchRejection>,
+    pub(super) rejections: Vec<BatchRejection>,
     /// The `open` / `export` directives still in force at the end of the batch.
     /// Replayed into the caller's context once the batch has published, so the
     /// caller resumes with the aliases the source actually established.
-    pub trailing_directives: Vec<LexicalDirective>,
+    pub(super) trailing_directives: Vec<LexicalDirective>,
+    /// Every template the batch declares, in the order written. Their records
+    /// are made again in the caller's context once the batch has published,
+    /// so a later batch reads what each template names.
+    pub(super) templates: Vec<Arc<TemplateDeclaration>>,
 }
 
 impl Plan {
     /// Index of every node that is still awaiting elaboration.
-    pub fn pending(&self) -> Vec<usize> {
+    pub(super) fn pending(&self) -> Vec<usize> {
         self.nodes
             .iter()
             .enumerate()
@@ -185,7 +222,7 @@ impl Plan {
     }
 
     /// Convert to the caller-facing outcome list, preserving authored order.
-    pub fn into_outcomes(self) -> Vec<DeclOutcome> {
+    pub(super) fn into_outcomes(self) -> Vec<DeclOutcome> {
         self.nodes
             .into_iter()
             .map(|node| DeclOutcome {
@@ -209,6 +246,7 @@ impl Plan {
                 depends_on: node.depends_on,
                 warning: node.warning,
                 hole_contexts: node.hole_contexts,
+                checked_judgments: node.checked_judgments,
             })
             .collect()
     }
@@ -219,7 +257,7 @@ impl Plan {
 ///
 /// `base` receives only what the lexical pass produces — imports, option state,
 /// aesop rule sets. No declaration of this batch is registered here.
-pub fn plan(
+pub(super) fn plan(
     base: &mut clean_kernel::Environment,
     file_ctx: &mut FileContext,
     units: &[SourceUnit<'_>],
@@ -231,6 +269,7 @@ pub fn plan(
         rejections: Vec::new(),
         claimed: HashMap::new(),
         directives: vec![Vec::new()],
+        templates: Vec::new(),
     };
     for unit in units {
         ctx.walk(unit.id, unit.decls, Nesting::TopLevel);
@@ -240,6 +279,7 @@ pub fn plan(
         nodes: ctx.nodes,
         rejections: ctx.rejections,
         trailing_directives,
+        templates: ctx.templates,
     }
 }
 
@@ -270,6 +310,9 @@ struct Walk<'a> {
     /// One frame per lexical scope. Frame 0 is scope-immune: `export` aliases
     /// live there because Lean keeps them for the rest of the file.
     directives: Vec<Vec<LexicalDirective>>,
+    /// Every template declared so far, in the order written. Not scoped: a
+    /// template's record outlives the `section` it was declared in.
+    templates: Vec<Arc<TemplateDeclaration>>,
 }
 
 impl Walk<'_> {
@@ -288,9 +331,14 @@ impl Walk<'_> {
     ) {
         match decl {
             SurfaceDecl::Namespace { name, decls, .. } => {
+                let namespace = name
+                    .qualify_under(&SurfaceName::from_name(
+                        self.fc.namespace_state().current_namespace().clone(),
+                    ))
+                    .into_name();
                 self.fc
                     .namespace_state_mut()
-                    .enter_namespace(Name::from_string(name));
+                    .enter_resolved_namespace(namespace);
                 self.fc.namespace_state_mut().push_scope();
                 self.fc.enter_local_scope();
                 self.directives.push(Vec::new());
@@ -316,7 +364,27 @@ impl Walk<'_> {
                 ..
             } => {
                 let mut overrides = option_overrides.to_vec();
-                overrides.push((name.clone(), value.clone()));
+                let key = match crate::options_registry::surface_option_key(name) {
+                    Ok(key) => key,
+                    Err(error) => {
+                        // Retain the authored wrapper as a refused node. Do not
+                        // execute its inner declaration under a different key.
+                        self.push_lexical_marker(
+                            unit,
+                            decl,
+                            NodeStatus::Refused(BatchRejection::Elaboration {
+                                name: None,
+                                site: Site {
+                                    unit,
+                                    span: decl.span(),
+                                },
+                                error: Box::new(error),
+                            }),
+                        );
+                        return;
+                    }
+                };
+                overrides.push((key, value.clone()));
                 self.walk_one(unit, inner, nesting, &overrides);
             }
             // A `mutual … end` block is ONE atomic node. Its members already
@@ -342,12 +410,20 @@ impl Walk<'_> {
             // Commands: elaborated in authored order AFTER the batch registers,
             // because `attribute` and `deriving` name declarations this batch
             // introduces. They register nothing themselves.
+            //
+            // `#guard_msgs … in cmd` is one command whatever `cmd` is: the
+            // messages it compares are the ones `cmd` produces when it runs.
             SurfaceDecl::Example { .. }
             | SurfaceDecl::Check { .. }
             | SurfaceDecl::Eval { .. }
+            | SurfaceDecl::Reduce { .. }
             | SurfaceDecl::Print { .. }
+            | SurfaceDecl::PrintAxioms { .. }
+            | SurfaceDecl::Guard { .. }
+            | SurfaceDecl::GuardMsgs { .. }
             | SurfaceDecl::Attribute { .. }
             | SurfaceDecl::DerivingInstance { .. }
+            | SurfaceDecl::Prelude { .. }
             | SurfaceDecl::RawDecl { .. } => {
                 self.push_node(unit, decl, nesting, option_overrides, NodeClass::Command);
             }
@@ -384,7 +460,7 @@ impl Walk<'_> {
                 if let Some(frame) = self.directives.last_mut() {
                     frame.push(directive);
                 }
-                self.push_lexical_marker(unit, decl);
+                self.push_lexical_marker(unit, decl, NodeStatus::LexicalOrCommand);
             }
             // `include x` / `omit x`: a lexical directive on the FILE CONTEXT,
             // applied in authored order like `variable`. Handled here rather
@@ -394,11 +470,11 @@ impl Walk<'_> {
             // Mathlib puts them) would otherwise be dropped on the floor.
             SurfaceDecl::IncludeVars { names, .. } => {
                 self.fc.include_variables(names);
-                self.push_lexical_marker(unit, decl);
+                self.push_lexical_marker(unit, decl, NodeStatus::LexicalOrCommand);
             }
             SurfaceDecl::OmitVars { names, .. } => {
                 self.fc.omit_variables(names);
-                self.push_lexical_marker(unit, decl);
+                self.push_lexical_marker(unit, decl, NodeStatus::LexicalOrCommand);
             }
             SurfaceDecl::Export {
                 namespace, names, ..
@@ -410,14 +486,17 @@ impl Walk<'_> {
                 };
                 // Frame 0: an `export` alias survives `end`.
                 self.directives[0].push(directive);
-                self.push_lexical_marker(unit, decl);
+                self.push_lexical_marker(unit, decl, NodeStatus::LexicalOrCommand);
             }
             // Everything else lexical — `import`, `variable`, `universe`,
             // file-scope `set_option`, `notation`, `macro`, `syntax`, `elab`.
             // These are applied HERE, in authored order, so every snapshot
             // taken after this point carries them and no snapshot taken before
             // it does. Unlike `open`, none of them expands against the set of
-            // declarations that exist, so applying them early is exact.
+            // declarations that exist, so applying them early is exact — but
+            // for the pre-resolution of a template's free names, which is made
+            // again where each declaration is elaborated
+            // ([`TemplateDeclaration`]).
             _ => {
                 self.apply_lexical(unit, decl, nesting);
             }
@@ -431,7 +510,7 @@ impl Walk<'_> {
 
     /// Record an `open` / `export` as a node so it is reported in authored
     /// order, without applying it: it is replayed at elaboration time instead.
-    fn push_lexical_marker(&mut self, unit: UnitId, decl: &SurfaceDecl) {
+    fn push_lexical_marker(&mut self, unit: UnitId, decl: &SurfaceDecl, status: NodeStatus) {
         self.nodes.push(Node {
             unit,
             span: decl.span(),
@@ -440,6 +519,7 @@ impl Walk<'_> {
             lex: self.fc.lexical_snapshot(),
             option_overrides: Vec::new(),
             directives: self.directives_in_force(),
+            templates: self.templates.clone(),
             class: NodeClass::Lexical,
             name: None,
             header: None,
@@ -448,7 +528,8 @@ impl Walk<'_> {
             depends_on: BTreeSet::new(),
             warning: None,
             hole_contexts: Vec::new(),
-            status: NodeStatus::LexicalOrCommand,
+            checked_judgments: Vec::new(),
+            status,
         });
     }
 
@@ -465,10 +546,27 @@ impl Walk<'_> {
         //
         // A failure here is recorded and the walk continues: a bad `open`
         // must not silently delete every declaration after it.
+        //
+        // A template's declaration records its pre-resolution under its own
+        // span; a record made by this call is a `TemplateDeclaration` (the
+        // `Arc` held across the call tells a new record from an old one, which
+        // another unit's declaration at the same span may have left).
+        let site = TemplateSiteId::of_span(processed.span());
+        let before = self.fc.namespace_state().template_site(site).cloned();
         let status = match elaborate_decl_and_register_with_context_and_warning(
             self.base, &processed, self.fc,
         ) {
-            Ok(_) => NodeStatus::LexicalOrCommand,
+            Ok(registered) => match registered.result.source_error_message() {
+                Some(message) => NodeStatus::Refused(BatchRejection::Elaboration {
+                    name: None,
+                    site: Site {
+                        unit,
+                        span: decl.span(),
+                    },
+                    error: Box::new(crate::ElabError::CommandFailed { message }),
+                }),
+                None => NodeStatus::LexicalOrCommand,
+            },
             Err(error) => NodeStatus::Refused(BatchRejection::Elaboration {
                 name: None,
                 site: Site {
@@ -478,6 +576,22 @@ impl Walk<'_> {
                 error: Box::new(error),
             }),
         };
+        let recorded = self
+            .fc
+            .namespace_state()
+            .template_site(site)
+            .is_some_and(|after| {
+                before
+                    .as_ref()
+                    .is_none_or(|before| !Arc::ptr_eq(before, after))
+            });
+        if recorded {
+            self.templates.push(Arc::new(TemplateDeclaration {
+                site,
+                namespace_state: self.fc.namespace_state().clone(),
+                directives: self.directives_in_force(),
+            }));
+        }
         self.nodes.push(Node {
             unit,
             span: decl.span(),
@@ -486,6 +600,7 @@ impl Walk<'_> {
             lex: self.fc.lexical_snapshot(),
             option_overrides: Vec::new(),
             directives: self.directives_in_force(),
+            templates: self.templates.clone(),
             class: NodeClass::Lexical,
             name: None,
             header: None,
@@ -494,6 +609,7 @@ impl Walk<'_> {
             depends_on: BTreeSet::new(),
             warning: None,
             hole_contexts: Vec::new(),
+            checked_judgments: Vec::new(),
             status,
         });
     }
@@ -544,6 +660,7 @@ impl Walk<'_> {
             lex: self.fc.lexical_snapshot(),
             option_overrides: option_overrides.to_vec(),
             directives: self.directives_in_force(),
+            templates: self.templates.clone(),
             class,
             name,
             header: None,
@@ -552,6 +669,7 @@ impl Walk<'_> {
             depends_on: BTreeSet::new(),
             warning: None,
             hole_contexts: Vec::new(),
+            checked_judgments: Vec::new(),
             status,
         });
     }
@@ -566,14 +684,14 @@ impl Walk<'_> {
     /// them out of the header index instead of staging an unstable name.
     fn canonical_name(&self, decl: &SurfaceDecl) -> Option<Name> {
         let short = crate::preprocess_ext::decl_name(decl)?;
-        if short.is_empty() {
+        if short.is_anonymous() {
             return None;
         }
         let ns = self.fc.namespace_state().current_namespace();
-        Some(if ns.is_anon() {
-            Name::from_string(short)
-        } else {
-            Name::from_string(&format!("{ns}.{short}"))
-        })
+        Some(
+            short
+                .qualify_under(&SurfaceName::from_name(ns.clone()))
+                .into_name(),
+        )
     }
 }

@@ -5,7 +5,8 @@
 //! Shared helper logic for checked `refine` goal translation.
 
 use crate::unify::{MetaId, MetaState};
-use clean_kernel::{Expr, ExprFolder, ExprKind, FVarId};
+use clean_kernel::{name::NameInner, Expr, ExprFolder, ExprKind, FVarId, Name};
+use clean_parser::SurfaceName;
 use std::collections::{HashMap, HashSet};
 
 use super::super::core::{Goal, ProofState, TacticError, TacticResult};
@@ -15,7 +16,7 @@ use super::super::registry::RefinePendingGoal;
 pub(crate) struct PendingRefineGoal {
     pub(crate) meta_id: MetaId,
     pub(crate) locals: Vec<crate::tactic::registry::RefinePendingLocal>,
-    pub(crate) tag: Option<String>,
+    pub(crate) tag: Option<SurfaceName>,
 }
 
 /// Bridge elaborated refine terms into the tactic proof state.
@@ -65,8 +66,61 @@ pub(crate) fn refine_elaborated_from_pending_with_tags(
     term: Expr,
     elab_metas: &MetaState,
     pending_goals: &[RefinePendingGoal],
-    tags: &[Option<String>],
+    tags: &[Option<SurfaceName>],
 ) -> TacticResult {
+    let pending_goals = tagged_pending_goals(pending_goals, tags)?;
+    refine_elaborated_with_goals(state, term, elab_metas, &pending_goals)
+}
+
+/// [`refine_elaborated_from_pending_with_tags`] for an elaborated
+/// ELIMINATOR application whose minor premises bind the arms' pattern
+/// variables over still-open goals — the term of a tactic `match` (`refine
+/// match … with | p => ?armᵢ`, Lean's own expansion).
+///
+/// Each open arm goal's stored target names the pattern variables as the
+/// tactic FVars of its own scope, while the minor premise binds them as
+/// lambda binders. That is exactly the assembled-recursor shape of `cases`
+/// and `induction` (#38): strict inference compares the minor premise's
+/// BVar-bound type with the meta's FVar-carrying stored type and refuses a
+/// valid term ("expected (n : Nat) → motive (some n), got Nat → T[some n✝]").
+/// So the term is closed as they close theirs (`close_goal_assembled`):
+/// leniently inferred, its type def-eq-checked against the goal target, and
+/// re-checked STRICTLY by `verify_tactic_proof` once the arms are solved —
+/// and by the kernel at registration.
+pub(crate) fn refine_eliminator_from_pending_with_tags(
+    state: &mut ProofState,
+    term: Expr,
+    elab_metas: &MetaState,
+    pending_goals: &[RefinePendingGoal],
+    tags: &[Option<SurfaceName>],
+) -> TacticResult {
+    let pending_goals = tagged_pending_goals(pending_goals, tags)?;
+    if state.goals.is_empty() {
+        return Err(TacticError::NoGoals);
+    }
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let (mapping, new_goals) = import_pending_goals_with(
+        state,
+        &goal,
+        elab_metas,
+        &pending_goals,
+        PendingLocalIds::ByDepth,
+    )?;
+    let translated_term = remap_elab_metas(&term, &mapping, elab_metas)?;
+    state.close_goal_assembled(&goal, translated_term)?;
+    for new_goal in new_goals.into_iter().rev() {
+        state.goals.push_front(new_goal);
+    }
+    Ok(())
+}
+
+/// The pending goals of an elaborated refine term, each carrying its tag:
+/// the explicit `tags` entry when one is given, else the tag the goal
+/// already carries.
+fn tagged_pending_goals(
+    pending_goals: &[RefinePendingGoal],
+    tags: &[Option<SurfaceName>],
+) -> Result<Vec<PendingRefineGoal>, TacticError> {
     if !tags.is_empty() && tags.len() != pending_goals.len() {
         return Err(TacticError::ElaborationFailed {
             detail: format!(
@@ -76,7 +130,7 @@ pub(crate) fn refine_elaborated_from_pending_with_tags(
             ),
         });
     }
-    let pending_goals = pending_goals
+    Ok(pending_goals
         .iter()
         .enumerate()
         .map(|(idx, goal)| PendingRefineGoal {
@@ -91,8 +145,7 @@ pub(crate) fn refine_elaborated_from_pending_with_tags(
                 None => goal.tag.clone(),
             },
         })
-        .collect::<Vec<_>>();
-    refine_elaborated_with_goals(state, term, elab_metas, &pending_goals)
+        .collect())
 }
 
 pub(crate) fn refine_elaborated_with_goals(
@@ -106,6 +159,86 @@ pub(crate) fn refine_elaborated_with_goals(
     }
 
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let (mapping, new_goals) = import_pending_goals(state, &goal, elab_metas, pending_goals)?;
+    let translated_term = remap_elab_metas(&term, &mapping, elab_metas)?;
+    finish_refine(state, &goal, translated_term, new_goals)
+}
+
+/// Import an OPEN elaborated term — one elaborated with no expected type,
+/// a `rw` rule — into the proof state: every metavariable its elaboration
+/// left open becomes a tactic-scope metavariable (with the goal's context
+/// plus the locals it captured), and the term is rewritten to mention those.
+/// Nothing is closed: the caller solves the imported metavariables against
+/// the goal (`rw` unifies the rewritten side with a subterm) and may push the
+/// goals of any that remain as side goals.
+///
+/// ENSURES: On Ok, the returned term mentions no elaborator metavariable, and
+/// the returned goals are the imported metavariables in `pending_goals` order
+pub(crate) fn import_open_term(
+    state: &mut ProofState,
+    term: Expr,
+    elab_metas: &MetaState,
+    pending_goals: &[RefinePendingGoal],
+) -> Result<(Expr, Vec<Goal>), TacticError> {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+    let pending_goals = pending_goals
+        .iter()
+        .map(|goal| PendingRefineGoal {
+            meta_id: goal.meta_id,
+            locals: goal.locals.clone(),
+            tag: goal.tag.clone(),
+        })
+        .collect::<Vec<_>>();
+    let (mapping, new_goals) = import_pending_goals(state, &goal, elab_metas, &pending_goals)?;
+    let translated_term = remap_elab_metas(&term, &mapping, elab_metas)?;
+    Ok((translated_term, new_goals))
+}
+
+/// Translate each pending elaborator metavariable into a tactic-scope one
+/// (context: `goal`'s plus the locals it captured) and return the mapping
+/// with the goals those metavariables stand for.
+fn import_pending_goals(
+    state: &mut ProofState,
+    goal: &Goal,
+    elab_metas: &MetaState,
+    pending_goals: &[PendingRefineGoal],
+) -> Result<(HashMap<MetaId, MetaId>, Vec<Goal>), TacticError> {
+    import_pending_goals_with(
+        state,
+        goal,
+        elab_metas,
+        pending_goals,
+        PendingLocalIds::Fresh,
+    )
+}
+
+/// How the tactic FVar of a pending goal's captured local is chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PendingLocalIds {
+    /// From the global counter (`fresh_fvar`).
+    Fresh,
+    /// By binder depth: the `k`-th local a pending goal captures — the `k`-th
+    /// binder enclosing its hole below the goal's own proof position — gets
+    /// `goal_binder_base(goal) + k`, the id `close_fvars` resolves at that
+    /// depth. Sibling goals then reuse ids at equal depths, exactly as the
+    /// branches of `cases` do (`cases_core`'s per-branch reset): every arm of
+    /// an eliminator is its own lambda chain. A global counter numbered the
+    /// SECOND binding arm's first local one past the first arm's, at depth 0
+    /// of its own lambda, and its assignment was refused as a scope
+    /// violation. A local shared by several goals (a column-split match's
+    /// common prefix) keeps the one id it got first.
+    ByDepth,
+}
+
+fn import_pending_goals_with(
+    state: &mut ProofState,
+    goal: &Goal,
+    elab_metas: &MetaState,
+    pending_goals: &[PendingRefineGoal],
+    ids: PendingLocalIds,
+) -> Result<(HashMap<MetaId, MetaId>, Vec<Goal>), TacticError> {
+    let depth_base = state.goal_binder_base(goal);
+    let mut depth_max = state.next_fvar;
     let mut mapping = HashMap::new();
     // Several branch metavariables can capture the same elaborator local. This
     // happens for a column-split match: every leaf goal sees the outer
@@ -115,7 +248,7 @@ pub(crate) fn refine_elaborated_with_goals(
     // goals, so their assignments no longer fit the binders surrounding the
     // translated match term (all goals can close while the root proof remains
     // unconstructible).
-    let mut shared_local_fvars: HashMap<FVarId, (FVarId, String, Expr)> = HashMap::new();
+    let mut shared_local_fvars: HashMap<FVarId, (FVarId, SurfaceName, Expr)> = HashMap::new();
     let mut new_goals = Vec::new();
 
     for pending_goal in pending_goals {
@@ -124,29 +257,41 @@ pub(crate) fn refine_elaborated_with_goals(
                 .get(pending_goal.meta_id)
                 .ok_or_else(|| TacticError::ElaborationFailed {
                     detail: format!(
-                        "refine referenced missing elaborator meta {:?}",
-                        pending_goal.meta_id
+                        "refine referenced missing elaborator meta ?m{}",
+                        pending_goal.meta_id.0
                     ),
                 })?;
         let mut local_ctx = goal.local_ctx.clone();
         let mut local_fvars = HashMap::new();
-        for local in &pending_goal.locals {
+        let mut introduced_binders = Vec::new();
+        for (depth, local) in pending_goal.locals.iter().enumerate() {
             let translated_local_ty = remap_elab_metas(&local.ty, &mapping, elab_metas)?;
             let translated_local_ty = remap_pending_local_fvars(&translated_local_ty, &local_fvars);
             let translated_local_fvar = if let Some((translated, prior_name, prior_ty)) =
                 shared_local_fvars.get(&local.fvar)
             {
-                if prior_name != &local.name || prior_ty != &translated_local_ty {
+                if !prior_name.same_syntax(&local.name) || prior_ty != &translated_local_ty {
                     return Err(TacticError::ElaborationFailed {
                         detail: format!(
-                            "shared refine local {:?} changed from `{}` : {:?} to `{}` : {:?}",
-                            local.fvar, prior_name, prior_ty, local.name, translated_local_ty
+                            "shared refine local {} changed from `{}` : {} to `{}` : {}",
+                            crate::error_render::fvar(local.fvar, None),
+                            prior_name,
+                            crate::error_render::term(prior_ty),
+                            local.name,
+                            crate::error_render::term(&translated_local_ty)
                         ),
                     });
                 }
                 *translated
             } else {
-                let translated = state.fresh_fvar();
+                let translated = match ids {
+                    PendingLocalIds::Fresh => state.fresh_fvar(),
+                    PendingLocalIds::ByDepth => {
+                        let id = depth_base.saturating_add(depth as u64);
+                        depth_max = depth_max.max(id.saturating_add(1));
+                        FVarId::new(id)
+                    }
+                };
                 shared_local_fvars.insert(
                     local.fvar,
                     (translated, local.name.clone(), translated_local_ty.clone()),
@@ -154,7 +299,9 @@ pub(crate) fn refine_elaborated_with_goals(
                 translated
             };
             local_fvars.insert(local.fvar, translated_local_fvar);
+            introduced_binders.push(translated_local_fvar);
             local_ctx.push(crate::tactic::LocalDecl {
+                binder_info: Default::default(),
                 fvar: translated_local_fvar,
                 name: local.name.clone(),
                 ty: translated_local_ty,
@@ -170,12 +317,21 @@ pub(crate) fn refine_elaborated_with_goals(
             meta_id: new_meta_id,
             target: translated_ty,
             local_ctx,
-            tag: pending_goal.tag.clone(),
+            // A named hole starts a new case: its positional binders are only
+            // the locals introduced by this pending goal, in captured order.
+            // An unnamed successor keeps the existing case's exact IDs.
+            tag: pending_goal.tag.clone().or_else(|| goal.tag.clone()),
+            case_binders: if pending_goal.tag.is_some() {
+                introduced_binders
+            } else {
+                goal.case_binders.clone()
+            },
         });
     }
-
-    let translated_term = remap_elab_metas(&term, &mapping, elab_metas)?;
-    finish_refine(state, &goal, translated_term, new_goals)
+    // Depth-chosen ids never pull the global counter back: unrelated later
+    // allocations stay past every id handed out here.
+    state.next_fvar = state.next_fvar.max(depth_max);
+    Ok((mapping, new_goals))
 }
 
 /// Close the current goal with `proof` and push `new_goals` to the front.
@@ -219,7 +375,7 @@ pub(crate) fn elaborate_placeholder_term(
     new_goals: &mut Vec<Goal>,
 ) -> Result<(Expr, Expr), TacticError> {
     match expr.kind() {
-        ExprKind::Const(name, _) if is_placeholder_name(&name.to_string()) => {
+        ExprKind::Const(name, _) if is_placeholder_name(name) => {
             let expected_ty = expected_ty.ok_or_else(|| TacticError::ElaborationFailed {
                 detail: "refine placeholder requires an expected type".into(),
             })?;
@@ -230,7 +386,8 @@ pub(crate) fn elaborate_placeholder_term(
                 meta_id: new_meta_id,
                 target: expected_ty.clone(),
                 local_ctx: goal.local_ctx.clone(),
-                tag: None,
+                tag: goal.tag.clone(),
+                case_binders: goal.case_binders.clone(),
             });
             Ok((Expr::fvar(MetaState::to_fvar(new_meta_id)), expected_ty))
         }
@@ -245,7 +402,8 @@ pub(crate) fn elaborate_placeholder_term(
                 _ => {
                     return Err(TacticError::ElaborationFailed {
                         detail: format!(
-                            "refine application expected a function type, got {func_ty:?}"
+                            "refine application expected a function type, got {}",
+                            crate::error_render::term(&func_ty)
                         ),
                     });
                 }
@@ -291,11 +449,13 @@ pub(crate) fn elaborate_placeholder_term(
     }
 }
 
-/// Check if a name represents a refine placeholder (`_`, `?`, or `?_`-prefixed).
+/// Check the legacy atomic-constant refine placeholder convention.
 ///
-/// ENSURES: Returns `true` iff `name` is `"_"`, `"?"`, or starts with `"?_"`
-pub(crate) fn is_placeholder_name(name: &str) -> bool {
-    name == "_" || name == "?" || name.starts_with("?_")
+/// Typed source holes use elaborator metas; this older kernel-expression API
+/// recognizes only one actual Str component, never a projected hierarchy.
+pub(crate) fn is_placeholder_name(name: &Name) -> bool {
+    matches!(name.inner(), NameInner::Str(parent, text)
+        if parent.is_anon() && (text.as_ref() == "_" || text.as_ref() == "?" || text.starts_with("?_")))
 }
 
 struct ElabMetaRemapper<'a> {
@@ -352,8 +512,8 @@ fn remap_elab_metas(
     } else {
         Err(TacticError::ElaborationFailed {
             detail: format!(
-                "refine term retains unresolved elaborator metas {:?}",
-                remapper.residual
+                "refine term retains unresolved elaborator metas {}",
+                crate::error_render::opaque(&remapper.residual)
             ),
         })
     }
@@ -388,6 +548,227 @@ mod tests {
     use crate::tactic::registry::{RefinePendingGoal, RefinePendingLocal};
     use clean_kernel::{BinderInfo, Environment, Level, Name};
 
+    fn case_state(target: impl FnOnce(&Expr) -> Expr) -> (ProofState, Expr, FVarId) {
+        let mut env = Environment::default();
+        env.init_nat().expect("Nat init");
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let outer = FVarId::new(0);
+        let mut state = ProofState::with_context(
+            env,
+            target(&nat),
+            vec![crate::tactic::LocalDecl {
+                binder_info: Default::default(),
+                fvar: outer,
+                name: SurfaceName::component("outer.field", true),
+                ty: nat.clone(),
+                value: None,
+            }],
+        );
+        let goal = state.goals.front_mut().unwrap();
+        goal.tag = Some(SurfaceName::component("outer.case", true));
+        goal.case_binders = vec![outer];
+        (state, nat, outer)
+    }
+
+    #[test]
+    fn typed_refine_named_cases_bind_only_new_locals_and_keep_exact_tags() {
+        let names = [
+            Name::anon().str("branch.dot"),
+            Name::anon().str("branch").str("dot"),
+            Name::anon().str("branch").str("7"),
+            Name::anon().str("branch").num(7),
+        ];
+        for (index, name) in names.iter().enumerate() {
+            let (mut state, nat, outer) =
+                case_state(|nat| Expr::arrow(nat.clone(), Expr::arrow(nat.clone(), nat.clone())));
+            let mut elab_metas = MetaState::new();
+            let local_name = SurfaceName::from_name(name.clone());
+            let branch_fvar = FVarId::new(17);
+            let second_fvar = FVarId::new(27);
+            let second_name = SurfaceName::component("second", false);
+            let branch_meta = elab_metas.fresh_with_locals(
+                nat.clone(),
+                vec![
+                    (local_name.clone(), branch_fvar, nat.clone()),
+                    (second_name.clone(), second_fvar, nat.clone()),
+                ],
+            );
+            let actual_tag = SurfaceName::from_name(names[(index + 1) % names.len()].clone());
+            let term = Expr::lam(
+                BinderInfo::Default,
+                nat.clone(),
+                Expr::lam(
+                    BinderInfo::Default,
+                    nat.clone(),
+                    Expr::fvar(MetaState::to_fvar(branch_meta)),
+                ),
+            );
+            refine_elaborated_from_pending_with_tags(
+                &mut state,
+                term,
+                &elab_metas,
+                &[RefinePendingGoal {
+                    meta_id: branch_meta,
+                    locals: vec![
+                        RefinePendingLocal {
+                            name: local_name.clone(),
+                            fvar: branch_fvar,
+                            ty: nat.clone(),
+                        },
+                        RefinePendingLocal {
+                            name: second_name.clone(),
+                            fvar: second_fvar,
+                            ty: nat,
+                        },
+                    ],
+                    tag: Some(local_name.clone()),
+                }],
+                &[Some(actual_tag.clone())],
+            )
+            .expect("typed named branch bridge");
+            let goal = state.current_goal().unwrap().clone();
+            assert_eq!(goal.tag, Some(actual_tag));
+            assert_eq!(goal.local_ctx.len(), 3);
+            assert_eq!(goal.local_ctx[1].name, local_name);
+            assert_eq!(goal.local_ctx[2].name, second_name);
+            assert_eq!(
+                goal.case_binders,
+                vec![goal.local_ctx[1].fvar, goal.local_ctx[2].fvar]
+            );
+            assert!(!goal.case_binders.contains(&outer));
+            state
+                .close_goal(&goal, Expr::fvar(goal.local_ctx[2].fvar))
+                .expect("checked branch close");
+            assert!(state.is_complete());
+        }
+    }
+
+    #[test]
+    fn typed_refine_unnamed_successor_keeps_existing_case_identity() {
+        let (mut state, nat, outer) = case_state(Clone::clone);
+        let before = state.current_goal().unwrap().clone();
+        let mut elab_metas = MetaState::new();
+        let pending = elab_metas.fresh(nat);
+        refine_elaborated_from_pending(
+            &mut state,
+            Expr::fvar(MetaState::to_fvar(pending)),
+            &elab_metas,
+            &[RefinePendingGoal {
+                meta_id: pending,
+                locals: vec![],
+                tag: None,
+            }],
+        )
+        .expect("unnamed successor bridge");
+        let after = state.current_goal().unwrap().clone();
+        assert_eq!(after.tag, before.tag);
+        assert_eq!(after.case_binders, before.case_binders);
+        state
+            .close_goal(&after, Expr::fvar(outer))
+            .expect("checked outer local close");
+        assert!(state.is_complete());
+    }
+
+    #[test]
+    fn typed_refine_legacy_placeholder_dispatch_is_atomic_not_display_based() {
+        for text in ["_", "?", "?_hole"] {
+            let atomic = Name::anon().str(text);
+            assert!(is_placeholder_name(&atomic));
+            assert_eq!(
+                super::super::refine::count_placeholders(&Expr::const_(atomic.clone(), vec![])),
+                1
+            );
+            assert!(!is_placeholder_name(&atomic.clone().str("field")));
+            assert!(!is_placeholder_name(&atomic.num(7)));
+        }
+        assert!(!is_placeholder_name(&Name::anon()));
+        assert!(!is_placeholder_name(&Name::anon().num(7)));
+        let (mut state, _, outer) = case_state(Clone::clone);
+        let before = state.current_goal().unwrap().clone();
+        super::super::refine::refine(&mut state, Expr::const_(Name::anon().str("_"), vec![]))
+            .expect("legacy placeholder bridge");
+        let after = state.current_goal().unwrap().clone();
+        assert_eq!(after.tag, before.tag);
+        assert_eq!(after.case_binders, before.case_binders);
+        state
+            .close_goal(&after, Expr::fvar(outer))
+            .expect("checked placeholder close");
+        assert!(state.is_complete());
+    }
+
+    #[test]
+    fn typed_assertion_resets_new_proof_case_and_preserves_continuation() {
+        let (mut state, nat, outer) = case_state(Clone::clone);
+        let before = state.current_goal().unwrap().clone();
+        let name = SurfaceName::component("asserted.dot", true);
+        super::super::assert_(&mut state, &name, nat).expect("typed assertion");
+        let proof = state.current_goal().unwrap().clone();
+        assert!(proof.tag.is_none());
+        assert!(proof.case_binders.is_empty());
+        state
+            .close_goal(&proof, Expr::fvar(outer))
+            .expect("checked assertion proof");
+        let continuation = state.current_goal().unwrap().clone();
+        assert_eq!(continuation.tag, before.tag);
+        assert_eq!(continuation.case_binders, before.case_binders);
+        let asserted = continuation.local_ctx.last().unwrap();
+        assert_eq!(asserted.name, name);
+        assert_ne!(asserted.name, SurfaceName::generated_path("asserted.dot"));
+        state
+            .close_goal(&continuation, Expr::fvar(asserted.fvar))
+            .expect("checked continuation");
+        assert!(state.is_complete());
+    }
+
+    #[test]
+    fn typed_refine_shared_local_refuses_changed_lexical_annotation() {
+        let (mut state, nat, _) = case_state(|nat| Expr::arrow(nat.clone(), nat.clone()));
+        let mut elab_metas = MetaState::new();
+        let shared = FVarId::new(17);
+        let plain = SurfaceName::component("_", false);
+        let quoted = SurfaceName::component("_", true);
+        assert_eq!(plain, quoted);
+        assert!(!plain.same_syntax(&quoted));
+        let left =
+            elab_metas.fresh_with_locals(nat.clone(), vec![(plain.clone(), shared, nat.clone())]);
+        let right =
+            elab_metas.fresh_with_locals(nat.clone(), vec![(quoted.clone(), shared, nat.clone())]);
+        let error = refine_elaborated_from_pending(
+            &mut state,
+            Expr::lam(
+                BinderInfo::Default,
+                nat.clone(),
+                Expr::fvar(MetaState::to_fvar(left)),
+            ),
+            &elab_metas,
+            &[
+                RefinePendingGoal {
+                    meta_id: left,
+                    locals: vec![RefinePendingLocal {
+                        name: plain,
+                        fvar: shared,
+                        ty: nat.clone(),
+                    }],
+                    tag: None,
+                },
+                RefinePendingGoal {
+                    meta_id: right,
+                    locals: vec![RefinePendingLocal {
+                        name: quoted,
+                        fvar: shared,
+                        ty: nat,
+                    }],
+                    tag: None,
+                },
+            ],
+        )
+        .expect_err("one captured FVar cannot change wildcard visibility");
+        assert!(
+            matches!(error, TacticError::ElaborationFailed { detail } if detail.contains("shared refine local"))
+        );
+        assert!(!state.is_complete());
+    }
+
     #[test]
     fn test_refine_elaborated_from_pending_remaps_gapped_local_fvars() {
         let mut env = Environment::new();
@@ -399,7 +780,7 @@ mod tests {
         let branch_fvar = FVarId::new(7);
         let branch_meta = elab_metas.fresh_with_locals(
             nat.clone(),
-            vec![("k".to_string(), branch_fvar, nat.clone())],
+            vec![(SurfaceName::component("k", false), branch_fvar, nat.clone())],
         );
         let term = Expr::lam(
             BinderInfo::Default,
@@ -414,7 +795,7 @@ mod tests {
             &[RefinePendingGoal {
                 meta_id: branch_meta,
                 locals: vec![RefinePendingLocal {
-                    name: "k".to_string(),
+                    name: SurfaceName::component("k", false),
                     fvar: branch_fvar,
                     ty: nat.clone(),
                 }],
@@ -466,7 +847,7 @@ mod tests {
         let mut state = ProofState::new(env, Expr::arrow(nat.clone(), prod_nat));
         let mut elab_metas = MetaState::new();
         let shared_fvar = FVarId::new(17);
-        let captured = vec![("x".to_string(), shared_fvar, nat.clone())];
+        let captured = vec![(SurfaceName::component("x", false), shared_fvar, nat.clone())];
         let left = elab_metas.fresh_with_locals(nat.clone(), captured.clone());
         let right = elab_metas.fresh_with_locals(nat.clone(), captured);
         let pair = Expr::apps(
@@ -483,7 +864,7 @@ mod tests {
         );
         let term = Expr::lam(BinderInfo::Default, nat.clone(), pair);
         let pending_local = RefinePendingLocal {
-            name: "x".to_string(),
+            name: SurfaceName::component("x", false),
             fvar: shared_fvar,
             ty: nat.clone(),
         };

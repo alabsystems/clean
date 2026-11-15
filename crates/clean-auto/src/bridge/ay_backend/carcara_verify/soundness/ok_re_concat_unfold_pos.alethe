@@ -1,0 +1,4 @@
+(assume h0 (str.in_re s (re.++ (str.to_re "a") (str.to_re "b"))))
+(assume nc (not (= s (str.++ "a" "b"))))
+(step s (cl (= s (str.++ "a" "b"))) :rule re_concat_unfold_pos :premises (h0))
+(step done (cl) :rule resolution :premises (nc s))

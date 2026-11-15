@@ -11,20 +11,22 @@
 //! ```text
 //! PassManager (L5CNF):  lambda_lift -> to_mono -> optimize -> rc
 //!                                                              |
-//! L5IR pipeline:                     to_ir -> explicit_boxing -> emit_{c,rust}
+//! L5IR pipeline:  to_ir -> explicit_boxing -> rc_repair_boxed -> verify_rc_linearity -> emit_{c,rust}
 //! ```
 
 use super::{PassError, PassManager, Phase};
-use crate::boxing::{explicit_boxing_with_config, BoxingConfig};
+use crate::boxing::BoxingConfig;
 use crate::emit_c::{emit_c_with_config, CEmitConfig};
 use crate::emit_rust::{emit_rust_with_config, RustEmitConfig};
 use crate::error::CompilerError;
 use crate::ffi_verify::verify_extern_signature;
+use crate::implemented_by::CodeMeaning;
 use crate::ir::IRDecl;
 use crate::ir_checker::IRError;
 use crate::lcnf::{Decl, DeclValue};
 use crate::opt::OptConfig;
 use crate::rc::RCConfig;
+use crate::rc_repair::{rc_repair_boxed, verify_rc_linearity, RcRepairMode};
 use crate::to_ir::{to_ir_with_env, ToIROutput};
 use clean_kernel::Environment;
 use thiserror::Error;
@@ -51,10 +53,20 @@ pub struct PipelineArtifacts {
     pub rc_decls: Vec<Decl>,
     /// Lowered IR before boxing.
     pub ir_decls: Vec<IRDecl>,
-    /// Lowered IR after explicit boxing.
+    /// Lowered IR after explicit boxing and the post-boxing RC repair
+    /// (`rc_repair::rc_repair_boxed`); every object variable of it passed the
+    /// `rc_repair::verify_rc_linearity` gate (WS6.2).
     pub boxed_ir_decls: Vec<IRDecl>,
     /// Non-fatal IR-lowering diagnostics.
     pub warnings: Vec<String>,
+    #[cfg(feature = "trust-ir-backend")]
+    /// The batch's Rust callees (Trust plan step 3.2, C2); empty outside
+    /// the Rust-ABI pipeline's inputs.
+    pub(crate) rust_externs: Vec<crate::rust_abi::RustExternSig>,
+    #[cfg(feature = "trust-ir-backend")]
+    /// Whether `Nat` is carried by the pinned `trust_bignum::Nat` handle
+    /// (Trust plan step 3.2, C3) — set only by the Rust-ABI pipeline.
+    pub(crate) nat_handles: bool,
 }
 
 impl PipelineArtifacts {
@@ -79,7 +91,11 @@ impl PipelineArtifacts {
         &self,
         config: &crate::emit_trust_ir::TrustIrConfig,
     ) -> Result<trust_ir::Module, crate::emit_trust_ir::TrustIrError> {
-        crate::emit_trust_ir::emit_trust_ir_with_config(&self.boxed_ir_decls, config)
+        let module = crate::emit_trust_ir::emit_trust_ir_with_config(&self.boxed_ir_decls, config)?;
+        if config.runtime_lowering == crate::emit_trust_ir::RuntimeLowering::ExternCalls {
+            crate::boxing::entry_check::check_generated_uint32_entries(&module, &self.ir_decls)?;
+        }
+        Ok(module)
     }
 }
 
@@ -109,11 +125,102 @@ pub enum PipelineError {
 /// stages (to_ir -> explicit_boxing) which operate on a different representation.
 ///
 /// Intermediate artifacts are captured at each phase boundary for diagnostics.
+///
+/// After boxing, the RC operations LCNF RC could not insert (variables whose
+/// source type is scalar but whose final representation is an object, and
+/// boxing's own temporaries) are added by `rc_repair::rc_repair_boxed`, and
+/// every object variable of every declaration must then pass
+/// `rc_repair::verify_rc_linearity` — a non-linear body is a compile error
+/// ([`CompilerError::RcLinearity`]), never an emitted double release or leak
+/// (WS6.2).
+///
+/// Every legacy `compile_lcnf_*` entry runs through here, and it first
+/// refuses an environment whose `@[implemented_by]` ORDER record is not
+/// empty ([`CompilerError::ImplementedByOrder`],
+/// `crate::implemented_by::refuse_order`), as the lowering entries do and as
+/// the Rust ABI's batch (`compile_lcnf_decls_at_rust_abi`) does:
+/// declarations lowered before an `attribute [implemented_by]` command and
+/// compiled after it are refused too. A declaration with a body whose name
+/// is `@[extern]` is refused ([`CompilerError::ExternWithBody`]): compiled
+/// Lean calls the symbol and never that body.
 pub fn compile_lcnf_decls(
     decls: &[Decl],
     env: &Environment,
     config: &PipelineConfig,
 ) -> Result<PipelineArtifacts, PipelineError> {
+    compile_lcnf_decls_for(decls, env, config, CodeMeaning::LeanCompiled)
+}
+
+/// [`compile_lcnf_decls`] for declarations lowered under `meaning`
+/// (`crate::to_lcnf::constant_to_decl_with_meaning`). `meaning` must be the
+/// one `decls` were lowered under. Under [`CodeMeaning::KernelValue`] the
+/// order refusal does not apply: it is about which body Lean's compiled code
+/// runs, and kernel-value declarations substitute no reference. No pass of
+/// the pipeline substitutes one either: instance and carrier-primitive
+/// resolution decline on an attributed constant
+/// (`crate::implemented_by::has_compiler_attr`).
+pub fn compile_lcnf_decls_for(
+    decls: &[Decl],
+    env: &Environment,
+    config: &PipelineConfig,
+    meaning: CodeMeaning,
+) -> Result<PipelineArtifacts, PipelineError> {
+    compile_lcnf_decls_inner(decls, env, config, RcRepairMode::Enabled, meaning, None)
+}
+
+/// [`compile_lcnf_decls`] with the post-boxing RC repair explicitly selected.
+///
+/// `RcRepairMode::Disabled` (test builds only) exists for the mutation
+/// control: the linearity verifier still runs, so disabling the repair can
+/// only turn a build into a refusal, never into a looser artifact.
+#[cfg(test)]
+pub(crate) fn compile_lcnf_decls_with_rc_repair(
+    decls: &[Decl],
+    env: &Environment,
+    config: &PipelineConfig,
+    rc_repair: RcRepairMode,
+) -> Result<PipelineArtifacts, PipelineError> {
+    compile_lcnf_decls_inner(
+        decls,
+        env,
+        config,
+        rc_repair,
+        CodeMeaning::LeanCompiled,
+        None,
+    )
+}
+
+/// Run the maintained batch pipeline under an explicit checked runtime
+/// binding closure; every submitted declaration/reference is checked too.
+pub fn compile_lcnf_decls_in_runtime_closure(
+    decls: &[Decl],
+    env: &Environment,
+    config: &PipelineConfig,
+    closure: &crate::RuntimeBindingClosure,
+) -> Result<PipelineArtifacts, PipelineError> {
+    compile_lcnf_decls_inner(
+        decls,
+        env,
+        config,
+        RcRepairMode::Enabled,
+        CodeMeaning::LeanCompiled,
+        Some(closure),
+    )
+}
+
+fn compile_lcnf_decls_inner(
+    decls: &[Decl],
+    env: &Environment,
+    config: &PipelineConfig,
+    rc_repair: RcRepairMode,
+    meaning: CodeMeaning,
+    closure: Option<&crate::RuntimeBindingClosure>,
+) -> Result<PipelineArtifacts, PipelineError> {
+    match closure {
+        Some(closure) => closure.declarations(env, decls)?,
+        None => crate::implemented_by::refuse_order_for(env, meaning)?,
+    }
+    refuse_extern_bodies(decls, env, meaning)?;
     verify_extern_decls(decls)?;
 
     // Build the PassManager with all L5CNF passes registered
@@ -121,21 +228,45 @@ pub fn compile_lcnf_decls(
 
     // Run Base phase (lambda_lift + to_mono) — captures mono snapshot
     let mono_decls = manager.run_batch_until_phase(decls, env, Phase::Base)?;
+    if let Some(closure) = closure {
+        closure.transformed_declarations(env, &mono_decls)?;
+    }
 
     // Run through Mono phase (optimize) — captures optimized snapshot
     let optimized_decls = manager.run_batch_until_phase(decls, env, Phase::Mono)?;
+    if let Some(closure) = closure {
+        closure.transformed_declarations(env, &optimized_decls)?;
+    }
 
     // Run through Impure phase (RC) — captures RC snapshot
     let rc_decls = manager.run_batch(decls, env)?;
+    if let Some(closure) = closure {
+        closure.transformed_declarations(env, &rc_decls)?;
+    }
 
     // L5IR stages (different representation — not expressible as PassManager passes)
     let ToIROutput {
         decls: ir_decls,
         warnings,
+        rc_unmanaged,
+        ..
     } = to_ir_with_env(&rc_decls, env)?;
-    let boxed_ir_decls = explicit_boxing_with_config(&ir_decls, &config.boxing);
+    if let Some(closure) = closure {
+        closure.ir_declarations(env, &ir_decls)?;
+    }
+    let boxed_ir_decls =
+        crate::boxing::explicit_boxing_with_kernel_env(&ir_decls, env, &config.boxing);
+    let boxed_ir_decls = match rc_repair {
+        RcRepairMode::Enabled => rc_repair_boxed(&ir_decls, boxed_ir_decls, &rc_unmanaged),
+        #[cfg(test)]
+        RcRepairMode::Disabled => boxed_ir_decls,
+    };
 
+    if let Some(closure) = closure {
+        closure.ir_declarations(env, &boxed_ir_decls)?;
+    }
     verify_recursor_calls_certifiable(&boxed_ir_decls, env)?;
+    verify_rc_linearity(&boxed_ir_decls)?;
 
     Ok(PipelineArtifacts {
         mono_decls,
@@ -144,7 +275,146 @@ pub fn compile_lcnf_decls(
         ir_decls,
         boxed_ir_decls,
         warnings,
+        #[cfg(feature = "trust-ir-backend")]
+        rust_externs: Vec::new(),
+        #[cfg(feature = "trust-ir-backend")]
+        nat_handles: false,
     })
+}
+
+#[cfg(feature = "trust-ir-backend")]
+/// The Rust-ABI pipeline (Trust plan step 3.2): [`compile_lcnf_decls`] with
+/// the carrier boundary switched on.
+///
+/// * Instance resolution and carrier-primitive resolution run at every
+///   optimization level ([`PassManager::rust_abi_pipeline`]).
+/// * Boxing resolves call sites against the batch's Rust callees and the
+///   native carrier primitives as well as its own declarations, so a scalar
+///   argument of `inc` or `UInt64.add` is passed unboxed and the result is
+///   scalar. Neither has a body here: a Rust callee is a call to Rust, a
+///   primitive is one machine operation.
+/// * No boxed closure-ABI wrappers and no boxed-constant helpers are made:
+///   nothing at the carrier boundary takes a function's address, and every
+///   constant is a machine literal.
+/// * Reset/reuse is off: a carrier closure allocates no constructor.
+pub(crate) fn compile_lcnf_decls_at_rust_abi(
+    decls: &[Decl],
+    env: &Environment,
+    config: &PipelineConfig,
+    nat_handles: bool,
+) -> Result<PipelineArtifacts, PipelineError> {
+    // `compile_rust_abi` refuses such an environment first, with its own
+    // tag; this keeps every batch entry of the pipeline refusing it.
+    crate::implemented_by::refuse_order(env)?;
+    refuse_extern_bodies(decls, env, CodeMeaning::LeanCompiled)?;
+    verify_extern_decls(decls)?;
+    let rc_config = RCConfig::minimal();
+    let manager = PassManager::rust_abi_pipeline(&config.opt, &rc_config, nat_handles);
+    let mono_decls = manager.run_batch_until_phase(decls, env, Phase::Base)?;
+    let optimized_decls = manager.run_batch_until_phase(decls, env, Phase::Mono)?;
+    let rc_decls = manager.run_batch(decls, env)?;
+    let ToIROutput {
+        decls: ir_decls,
+        warnings,
+        rc_unmanaged,
+        rust_externs,
+    } = to_ir_with_env(&rc_decls, env)?;
+    let signatures = carrier_signature_decls(&ir_decls, &rust_externs, nat_handles);
+    let boxed_ir_decls = crate::boxing::explicit_boxing_with_signatures(
+        &ir_decls,
+        &signatures,
+        &BoxingConfig::minimal(),
+    );
+    let boxed_ir_decls = rc_repair_boxed(&ir_decls, boxed_ir_decls, &rc_unmanaged);
+    verify_recursor_calls_certifiable(&boxed_ir_decls, env)?;
+    verify_rc_linearity(&boxed_ir_decls)?;
+    Ok(PipelineArtifacts {
+        mono_decls,
+        optimized_decls,
+        rc_decls,
+        ir_decls,
+        boxed_ir_decls,
+        warnings,
+        rust_externs,
+        nat_handles,
+    })
+}
+
+#[cfg(feature = "trust-ir-backend")]
+/// Signature-only declarations (body `Unreachable`, never emitted) for the
+/// Rust callees and for every native carrier primitive a body of `decls`
+/// calls without defining it: what boxing resolves those call sites against.
+fn carrier_signature_decls(
+    decls: &[IRDecl],
+    rust_externs: &[crate::rust_abi::RustExternSig],
+    nat_handles: bool,
+) -> Vec<IRDecl> {
+    use crate::ir::{IRBody, VarId};
+    let defined: std::collections::HashSet<&clean_kernel::Name> =
+        decls.iter().map(|d| &d.name).collect();
+    let signature = |name: clean_kernel::Name, params: Vec<crate::ir::IRType>, ret| IRDecl {
+        name,
+        params: params
+            .into_iter()
+            .enumerate()
+            .map(|(i, t)| (VarId(i as u32), t))
+            .collect(),
+        return_type: ret,
+        body: IRBody::Unreachable,
+    };
+    let mut out: Vec<IRDecl> = rust_externs
+        .iter()
+        .filter(|e| !defined.contains(&e.name))
+        .map(|e| signature(e.name.clone(), e.params.clone(), e.ret.clone()))
+        .collect();
+    let mut seen: std::collections::BTreeSet<String> =
+        out.iter().map(|d| d.name.to_string()).collect();
+    for decl in decls {
+        let mut callees = Vec::new();
+        apply_callees(&decl.body, &mut callees);
+        for callee in callees {
+            if defined.contains(&callee) || !seen.insert(callee.to_string()) {
+                continue;
+            }
+            if let Some(prim) = crate::carrier_prims::carrier_prim(&callee, nat_handles) {
+                out.push(signature(callee, prim.params(), prim.ret()));
+            }
+        }
+    }
+    out
+}
+
+#[cfg(feature = "trust-ir-backend")]
+/// Every saturated-call (`Apply`) callee of `body`, in body order.
+fn apply_callees(body: &crate::ir::IRBody, out: &mut Vec<clean_kernel::Name>) {
+    use crate::ir::{IRBody, IRExpr};
+    match body {
+        IRBody::VDecl { value, rest, .. } => {
+            if let IRExpr::Apply { fn_id, .. } = value {
+                out.push(fn_id.0.clone());
+            }
+            apply_callees(rest, out);
+        }
+        IRBody::JDecl { body, rest, .. } => {
+            apply_callees(body, out);
+            apply_callees(rest, out);
+        }
+        IRBody::Inc { rest, .. }
+        | IRBody::Dec { rest, .. }
+        | IRBody::Set { rest, .. }
+        | IRBody::SetTag { rest, .. }
+        | IRBody::USet { rest, .. }
+        | IRBody::SSet { rest, .. } => apply_callees(rest, out),
+        IRBody::Case { alts, default, .. } => {
+            for alt in alts {
+                apply_callees(&alt.body, out);
+            }
+            if let Some(d) = default {
+                apply_callees(d, out);
+            }
+        }
+        IRBody::Jmp { .. } | IRBody::Ret(_) | IRBody::Unreachable => {}
+    }
 }
 
 /// Fail-closed guard (C5a, tightened for link-honesty): refuse any compiled
@@ -238,6 +508,20 @@ fn verify_recursor_calls_certifiable(
     Ok(())
 }
 
+/// Each of `decls` with a body (not an extern declaration) whose name is
+/// `@[extern]` in `env`, refused under `meaning`
+/// (`crate::implemented_by::refuse_extern_body`).
+fn refuse_extern_bodies(
+    decls: &[Decl],
+    env: &Environment,
+    meaning: CodeMeaning,
+) -> Result<(), CompilerError> {
+    decls
+        .iter()
+        .filter(|decl| !matches!(decl.body, DeclValue::Extern(_)))
+        .try_for_each(|decl| crate::implemented_by::refuse_extern_body(env, &decl.name, meaning))
+}
+
 fn verify_extern_decls(decls: &[Decl]) -> Result<(), CompilerError> {
     for decl in decls {
         let DeclValue::Extern(extern_data) = &decl.body else {
@@ -306,22 +590,204 @@ pub fn compile_lcnf_to_trust_ir_with_report(
     pipeline_config: &PipelineConfig,
     emit_config: &crate::emit_trust_ir::TrustIrConfig,
 ) -> Result<(trust_ir::Module, crate::emit_trust_ir_tv::TvMintReport), PipelineError> {
-    let mut module = compile_lcnf_decls(decls, env, pipeline_config)?.emit_trust_ir(emit_config)?;
+    compile_lcnf_to_trust_ir_with_report_for(
+        decls,
+        env,
+        pipeline_config,
+        emit_config,
+        CodeMeaning::LeanCompiled,
+    )
+}
+
+/// [`compile_lcnf_to_trust_ir_with_report`] for declarations lowered under
+/// `meaning` (as [`compile_lcnf_decls_for`]). The translation-validation
+/// pass compares each declaration with its KERNEL definition, so it can
+/// certify a [`CodeMeaning::KernelValue`] build's declarations, never a
+/// substituted one.
+#[cfg(feature = "trust-ir-backend")]
+pub fn compile_lcnf_to_trust_ir_with_report_for(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+    meaning: CodeMeaning,
+) -> Result<(trust_ir::Module, crate::emit_trust_ir_tv::TvMintReport), PipelineError> {
+    compile_lcnf_to_trust_ir_ordered(decls, env, pipeline_config, emit_config, meaning, None)
+}
+
+/// The maintained TrustIR pipeline with an explicit checked runtime closure.
+/// Existing TV, IR verification and backend licensing policies still apply.
+#[cfg(feature = "trust-ir-backend")]
+pub fn compile_lcnf_to_trust_ir_in_runtime_closure(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+    closure: &crate::RuntimeBindingClosure,
+) -> Result<trust_ir::Module, PipelineError> {
+    compile_lcnf_to_trust_ir_ordered(
+        decls,
+        env,
+        pipeline_config,
+        emit_config,
+        CodeMeaning::LeanCompiled,
+        Some(closure),
+    )
+    .map(|(module, _)| module)
+}
+
+#[cfg(feature = "trust-ir-backend")]
+fn compile_lcnf_to_trust_ir_ordered(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+    meaning: CodeMeaning,
+    closure: Option<&crate::RuntimeBindingClosure>,
+) -> Result<(trust_ir::Module, crate::emit_trust_ir_tv::TvMintReport), PipelineError> {
+    let artifacts = match closure {
+        Some(closure) => {
+            compile_lcnf_decls_in_runtime_closure(decls, env, pipeline_config, closure)?
+        }
+        None => compile_lcnf_decls_for(decls, env, pipeline_config, meaning)?,
+    };
+    // The L5IR checker, as the C and Rust lanes run it (`check_ir`): a shape
+    // it refuses (e.g. a constructor the runtime header cannot hold) is
+    // refused here at build time, never emitted for a runtime panic to catch.
+    crate::ir_checker::check_decls(&artifacts.boxed_ir_decls)?;
+    let module = artifacts.emit_trust_ir(emit_config)?;
+    certify_trust_ir(module, decls, env, emit_config)
+}
+
+/// [`compile_lcnf_to_trust_ir_with_report`] with typed BOUNDARY carriers for
+/// the named exports (two-language roadmap WS6.9, F-102; DG-70 option (a)).
+///
+/// Every export keeps its boxed body under its existing symbol and gains a
+/// by-value wrapper under [`CarrierExport::symbol`](crate::emit_trust_ir::boundary::CarrierExport::symbol)
+/// whose structure / inductive parameters are `Ty::Struct` / `Ty::Enum` with a
+/// normative layout. The allocating half of the marshaller is a set of
+/// kernel-checked helper definitions compiled by THIS pipeline (so the RC
+/// linearity gate and the C back end see them); the wrapper only dispatches
+/// and projects. An export with no total carrier is refused as
+/// [`TrustIrError::NoTotalCarrier`](crate::emit_trust_ir::TrustIrError::NoTotalCarrier).
+/// With no exports this is exactly [`compile_lcnf_to_trust_ir_with_report`].
+#[cfg(feature = "trust-ir-backend")]
+pub fn compile_lcnf_to_trust_ir_with_carrier_exports(
+    decls: &[Decl],
+    env: &Environment,
+    pipeline_config: &PipelineConfig,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+    exports: &[clean_kernel::Name],
+) -> Result<
+    (
+        trust_ir::Module,
+        crate::emit_trust_ir_tv::TvMintReport,
+        Vec<crate::emit_trust_ir::boundary::CarrierExport>,
+    ),
+    PipelineError,
+> {
+    if exports.is_empty() {
+        let (module, report) =
+            compile_lcnf_to_trust_ir_with_report(decls, env, pipeline_config, emit_config)?;
+        return Ok((module, report, Vec::new()));
+    }
+    let plan = crate::emit_trust_ir::boundary::plan_carrier_exports(env, decls, exports)?;
+    let artifacts = compile_lcnf_decls(&plan.decls, &plan.env, pipeline_config)?;
+    crate::ir_checker::check_decls(&artifacts.boxed_ir_decls)?;
+    let module = crate::emit_trust_ir::emit_trust_ir_with_carriers(
+        &artifacts.boxed_ir_decls,
+        emit_config,
+        &plan.exports,
+    )?;
+    let (module, report) = certify_trust_ir(module, &plan.decls, &plan.env, emit_config)?;
+    Ok((module, report, plan.exports))
+}
+
+/// The translation-validation pass shared by the trust-ir entry points.
+#[cfg(feature = "trust-ir-backend")]
+fn certify_trust_ir(
+    mut module: trust_ir::Module,
+    decls: &[Decl],
+    env: &Environment,
+    emit_config: &crate::emit_trust_ir::TrustIrConfig,
+) -> Result<(trust_ir::Module, crate::emit_trust_ir_tv::TvMintReport), PipelineError> {
     let mut report = crate::emit_trust_ir_tv::TvMintReport::default();
     if emit_config.certify_translation {
+        let mut identity_skips = Vec::new();
         // The comparand source of truth: each compiled decl's ORIGINAL kernel
         // definition Expr, straight from the environment (never re-derived
         // from any lowered form). Decls without a stored value (axioms,
         // externs, …) simply have nothing to certify against.
+        // A BOUND mint (WS6.7(b)) also names each comparand's source: the
+        // declaration and the closure digest of THIS environment, the one the
+        // comparand is read from. The minter asks for it only once the kernel
+        // has certified the decl (`source_of` below), so no closure is digested
+        // for a decl that is skipped or refused first. A closure that cannot
+        // be digested yields the reason instead: the decl was still JUDGED (a
+        // miscompile is refused, never skipped) and is then skipped with that
+        // reason, never bound partially.
+        let mut source_decls: std::collections::BTreeMap<String, clean_kernel::Name> =
+            std::collections::BTreeMap::new();
         let originals: Vec<(String, clean_kernel::Expr)> = decls
             .iter()
             .filter_map(|d| {
-                env.get_const(&d.name)
-                    .and_then(|ci| ci.value.clone())
-                    .map(|v| (d.name.to_string(), v))
+                let label = crate::emit_trust_ir::names::wire_name(&d.name);
+                // An IMPORTED callee (WS6.8) is a body-less declaration here;
+                // its translation was validated — or not — in the artifact
+                // that defines it, and the import producer decides from THAT
+                // certificate what the client may inherit. Nothing to mint.
+                if emit_config.imported_callees.contains_key(&label) {
+                    return None;
+                }
+                if !d
+                    .level_params
+                    .iter()
+                    .all(crate::emit_trust_ir::names::is_legacy_name)
+                    || !crate::emit_trust_ir::names::legacy_source_identity_supported(&d.ty)
+                    || d.params.iter().any(|p| {
+                        !crate::emit_trust_ir::names::legacy_source_identity_supported(&p.ty)
+                    })
+                {
+                    identity_skips.push((
+                        label,
+                        "legacy TV declaration signature identity is unmeasured".to_owned(),
+                    ));
+                    return None;
+                }
+                let value = env.get_const(&d.name).and_then(|ci| ci.value.clone())?;
+                source_decls.insert(label.clone(), d.name.clone());
+                Some((label, value))
             })
             .collect();
-        report = crate::emit_trust_ir_tv::certify_backend_translation(&mut module, &originals);
+        report = if emit_config.bind_certificates {
+            let source_of = |label: &str| {
+                let decl = source_decls.get(label)?;
+                Some(
+                    env.closure_digest(decl)
+                        .map(|bytes| trust_ir::proof::SourceDefinitionRef {
+                            decl: decl.to_string(),
+                            closure_digest: trust_ir::proof::ProofDigest {
+                                algorithm: trust_ir::proof::ProofDigestAlgorithm::Sha256,
+                                bytes,
+                            },
+                        })
+                        .map_err(|reason| reason.to_string()),
+                )
+            };
+            crate::emit_trust_ir_tv::certify_backend_translation_bound_in_environment(
+                &mut module,
+                &originals,
+                &source_of,
+                env,
+            )
+        } else {
+            crate::emit_trust_ir_tv::certify_backend_translation_in_environment(
+                &mut module,
+                &originals,
+                env,
+            )
+        };
+        report.skipped.extend(identity_skips);
         if !report.refused.is_empty() {
             return Err(
                 crate::emit_trust_ir::TrustIrError::TranslationRefused(std::mem::take(

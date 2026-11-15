@@ -313,7 +313,18 @@ impl Environment {
 
         // The discharge: ONE instance of the per-concrete-float rounding axiom,
         // proved by kernel computation (Eq.refl) rather than asserted.
-        self.register_float_to_rat_exact_discharge_01(&c)?;
+        //
+        // SOUNDNESS (2026-09-26, `docs/issues/2026-09-26-kernel-native-fold-by-
+        // name.md`): that computation is the native reducer's, and
+        // `Float.toRatExact` is an OPAQUE whose stored value is the placeholder
+        // `fun _ => Rat.zero` — no definition justifies what the reducer
+        // returns. Native folds now fire only over a canonical definition
+        // (`native_fold_authority.rs`), so the discharge is registered only
+        // when THIS environment holds one; today no environment does, and the
+        // exactness claim stays the axiom `float_to_rational_exact` above.
+        if self.native_fold_authorized(&Name::from_string("Float.toRatExact")) {
+            self.register_float_to_rat_exact_discharge_01(&c)?;
+        }
 
         self.nn_verify_float_rational_init = true;
 

@@ -1,0 +1,2776 @@
+{
+  "schema_version": "tactic-family-lean-verdicts-v1",
+  "family": "g_auto",
+  "generated_by": "scripts/tactic_parity/mint_lean_verdicts.py --family g_auto",
+  "minted_at_utc": "2026-10-28T06:23:07+00:00",
+  "lean_world": {
+    "id": "v4.30.0-rc2",
+    "toolchain": "leanprover/lean4:v4.30.0-rc2",
+    "githash": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+    "version_line": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)"
+  },
+  "rule": "tactic-family-lean-verdict-v1",
+  "method": {
+    "lean_args": [
+      "--json"
+    ],
+    "suffix": "#print axioms <row> per declared row",
+    "cross_check": "per-row split: import Init + preceding helpers + row"
+  },
+  "files": {
+    "decide.lean": {
+      "fixture_sha256": "d515ee7ec22df31c28712cdcf77d4899d6762f563a52c7c7b4aa335a4ccb854b",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_auto_decide": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_decide_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_decide_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_decide_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_decide_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_decide_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_decide_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_decide_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_decide_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_native_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "p_auto_native_01._native.native_decide.ax_1_1"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_native_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "p_auto_native_02._native.native_decide.ax_1_1"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        }
+      }
+    },
+    "norm_num.lean": {
+      "fixture_sha256": "580b4145c1c16b1676e37de96edd342e7d49481863d483411acf8cdfe0edf067",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_auto_norm_num": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\n⊢ 2 ≤ 3"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 2 + 2 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 55,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 51,
+              "data": "unsolved goals\n⊢ 3 * 4 = 12"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 55,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 51,
+              "data": "unsolved goals\n⊢ 10 - 4 = 6"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_05": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 53,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 49,
+              "data": "unsolved goals\n⊢ ¬3 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_06": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\n⊢ 0 < 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_07": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 1 + 1 < 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_08": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 55,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 51,
+              "data": "unsolved goals\n⊢ 12 / 4 = 3"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_09": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 2 ^ 3 = 8"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_10": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 68,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unsolved goals\na : Nat\nh : a = 2\n⊢ a + 2 = 4"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_11": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 56,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unsolved goals\n⊢ 100 * 0 = 0"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_12": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 56,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unsolved goals\n⊢ 0 + 37 = 37"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_13": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\n⊢ 5 ≠ 7"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_14": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 61,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 57,
+              "data": "unsolved goals\n⊢ (2 + 3) * 4 = 20"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_norm_num_15": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "norm_num"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\n⊢ 1 + 1 = 2"
+            }
+          ],
+          "split_verdict": "reject"
+        }
+      }
+    },
+    "omega.lean": {
+      "fixture_sha256": "5434cdce12778737bd783ce28ab90051122204f2e64c05518cf4ae219763a8db",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_auto_omega": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_omega_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_10": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_11": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_12": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_13": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_14": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_15": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_16": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_17": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_18": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_19": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_omega_20": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        }
+      }
+    },
+    "linear.lean": {
+      "fixture_sha256": "b41c42d5e6266492b3d703f90dc9f28a9bd621d60000229109d0ba257c46b1af",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_auto_linear": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 82,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 78,
+              "data": "unsolved goals\na b c : Nat\nh1 : a ≤ b\nh2 : b ≤ c\n⊢ a ≤ c"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 66,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 62,
+              "data": "unsolved goals\na b : Nat\nh : a < b\n⊢ a ≤ b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 66,
+              "data": "unsolved goals\na b : Nat\nh : a + 2 ≤ b\n⊢ a < b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 68,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unsolved goals\na : Nat\nh : 2 * a ≤ 4\n⊢ a ≤ 2"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_05": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 82,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 78,
+              "data": "unsolved goals\na b c : Nat\nh1 : a ≤ b\nh2 : b < c\n⊢ a < c"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_06": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 78,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 74,
+              "data": "unsolved goals\na : Nat\nh1 : a < 3\nh2 : 3 < a\n⊢ False"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_07": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 66,
+              "data": "unsolved goals\na b : Int\nh : a ≤ b\n⊢ a - 1 ≤ b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_08": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 80,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 76,
+              "data": "unsolved goals\na b : Int\nh1 : a < b\nh2 : b < a\n⊢ False"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_09": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 82,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 78,
+              "data": "unsolved goals\na b c : Nat\nh1 : a < b\nh2 : b ≤ c\n⊢ a < c"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_linarith_10": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "linarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 66,
+              "data": "unsolved goals\na b : Nat\nh : a ≤ b\n⊢ a ≤ b + 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_nlinarith_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "nlinarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 57,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 53,
+              "data": "unsolved goals\na : Nat\n⊢ 0 ≤ a * a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_nlinarith_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "nlinarith"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 75,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 71,
+              "data": "unsolved goals\na b : Nat\nh : a ≤ b\n⊢ a * a ≤ b * b"
+            }
+          ],
+          "split_verdict": "reject"
+        }
+      }
+    },
+    "ring_positivity.lean": {
+      "fixture_sha256": "c925dad285a2a6d93854e35a400e7d01195dce9175bf56645d4d12683e1d21fc",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_auto_ring_positivity": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_ring_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "ring"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 92,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 88,
+              "data": "unsolved goals\na b : Nat\n⊢ (a + b) * (a + b) = a * a + 2 * (a * b) + b * b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_ring_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "ring"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 48,
+              "data": "unsolved goals\na : Nat\n⊢ 0 + a = a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_ring_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "ring"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 58,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unsolved goals\na b : Nat\n⊢ a + b = b + a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_ring_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "ring"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 74,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unsolved goals\na b c : Nat\n⊢ a * (b + c) = a * b + a * c"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_positivity_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "positivity"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 48,
+              "data": "unsolved goals\n⊢ 0 < 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_positivity_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "positivity"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\nn : Nat\n⊢ 0 ≤ n"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_positivity_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "positivity"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 58,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unsolved goals\nn : Nat\n⊢ 0 < n + 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_positivity_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "positivity"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 58,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unsolved goals\nn : Nat\n⊢ 0 ≤ n * n"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_positivity_05": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "positivity"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 86,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 82,
+              "data": "unsolved goals\na b : Nat\nha : 0 < a\nhb : 0 < b\n⊢ 0 < a * b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_positivity_06": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "positivity"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 58,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unsolved goals\nn : Nat\n⊢ 0 ≤ n + 3"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_gcongr_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "gcongr"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 72,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 68,
+              "data": "unsolved goals\na b : Nat\nh : a ≤ b\n⊢ a + 1 ≤ b + 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_gcongr_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "gcongr"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 74,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unsolved goals\na b c : Nat\nh : a ≤ b\n⊢ a + c ≤ b + c"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_gcongr_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "gcongr"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 74,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unsolved goals\na b c : Nat\nh : a ≤ b\n⊢ c + a ≤ c + b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_gcongr_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "gcongr"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 90,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 86,
+              "data": "unsolved goals\na b c d : Nat\nh1 : a ≤ b\nh2 : c ≤ d\n⊢ a + c ≤ b + d"
+            }
+          ],
+          "split_verdict": "reject"
+        }
+      }
+    },
+    "logic.lean": {
+      "fixture_sha256": "4c230374b1c42842e0cf8213eeda083924ba71030dce9274e35596ca6c9a4663",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_auto_logic": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\np : Prop\nh : p\n⊢ p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\nh : p ∧ q\n⊢ q ∧ p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\nh : p ∨ q\n⊢ q ∨ p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 66,
+              "data": "unsolved goals\np q : Prop\nhp : p\nhq : q\n⊢ p ∧ q"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_05": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 69,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 65,
+              "data": "unsolved goals\np q : Prop\nh : p → q\nhp : p\n⊢ q"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_06": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\np : Prop\n⊢ p → p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_07": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 80,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 76,
+              "data": "unsolved goals\np q r : Prop\nh1 : p → q\nh2 : q → r\n⊢ p → r"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_08": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 63,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 59,
+              "data": "unsolved goals\np : Prop\nh : p ∧ ¬p\n⊢ False"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_09": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 38,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 34,
+              "data": "unsolved goals\n⊢ True"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_10": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 40,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 36,
+              "data": "unsolved goals\n⊢ ¬False"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_11": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\nh : ¬(p ∨ q)\n⊢ ¬p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_12": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\n⊢ ∃ n, n = 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_13": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 69,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 65,
+              "data": "unsolved goals\np : Nat → Prop\nh : ∀ (n : Nat), p n\n⊢ p 3"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_14": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 69,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 65,
+              "data": "unsolved goals\np q : Prop\nh : p ↔ q\nhp : p\n⊢ q"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_15": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 63,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 59,
+              "data": "unsolved goals\na b : Nat\nh : a = b\n⊢ b = a"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_16": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 77,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 73,
+              "data": "unsolved goals\nxs : List Nat\nh : xs = []\n⊢ xs.length = 0"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_17": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 81,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 77,
+              "data": "unsolved goals\no : Option Nat\nh : o = none\n⊢ o.isNone = true"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_aesop_18": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "aesop"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 78,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 74,
+              "data": "unsolved goals\np q r : Prop\nh : p ∧ q ∧ r\n⊢ (p ∧ q) ∧ r"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\np : Prop\n⊢ p → p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 56,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unsolved goals\np q : Prop\n⊢ p ∧ q → p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_03": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 56,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unsolved goals\np q : Prop\n⊢ p ∧ q → q"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_04": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\np : Prop\n⊢ ¬(p ∧ ¬p)"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_05": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\n⊢ (p → q) → ¬q → ¬p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_06": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 51,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 47,
+              "data": "unsolved goals\np : Prop\n⊢ p ∨ ¬p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_07": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 48,
+              "data": "unsolved goals\np : Prop\n⊢ p → ¬¬p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_08": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 52,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 48,
+              "data": "unsolved goals\np : Prop\n⊢ ¬¬p → p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_09": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\n⊢ p ∨ q → q ∨ p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_10": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\n⊢ p ∧ q ↔ q ∧ p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_11": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 70,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 66,
+              "data": "unsolved goals\np q r : Prop\n⊢ (p → q ∧ r) → p → q"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_12": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 54,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unsolved goals\np : Prop\n⊢ False → p"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_13": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 53,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 49,
+              "data": "unsolved goals\np : Prop\n⊢ p → True"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_14": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\n⊢ (p ↔ q) → p → q"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_15": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 65,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 61,
+              "data": "unsolved goals\np q : Prop\n⊢ (p ∨ q) ∧ ¬p → q"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_tauto_16": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "tauto"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 64,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 60,
+              "data": "unsolved goals\np q : Prop\n⊢ (p → q) ∨ (q → p)"
+            }
+          ],
+          "split_verdict": "reject"
+        }
+      }
+    },
+    "closure_search.lean": {
+      "fixture_sha256": "a75d4b9b534b68c56579a1063edde0824011c6e71cc05255d1735c3426567ab4",
+      "lean_exit": 1,
+      "rows": {
+        "canary_env_g_auto_closure_search": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 3,
+              "col": 13,
+              "data": "Function expected at\n  List.reverse_append\nbut this term has type\n  (?m.25 ++ ?m.26).reverse = List.reverse ?m.26 ++ List.reverse ?m.25\n\nNote: Expected a function because this term is being applied to the argument\n  as"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "gsDouble": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_10": {
+          "verdict": "reject",
+          "class": "elab-error",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 47,
+              "data": "`grind` failed\ncase grind\nh : ¬gsDouble 2 = 4\n⊢ False\n[grind] Goal diagnostics\n  [facts] Asserted facts\n    [prop] ¬gsDouble 2 = 4\n  [eqc] False propositions\n    [prop] gsDouble 2 = 4\n  [cutsat] Assignment satisfying linear constraints\n    [assign] gsDouble 2 := 1"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_grind_11": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_12": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_13": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_grind_14": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [],
+          "split_verdict": "accept"
+        },
+        "p_auto_cc_01": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "cc"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 96,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 92,
+              "data": "unsolved goals\nf : Nat → Nat\na b c : Nat\nh1 : a = b\nh2 : b = c\n⊢ f a = f c"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_cc_02": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "cc"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 96,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 92,
+              "data": "unsolved goals\nf g : Nat → Nat\na b : Nat\nh1 : f = g\nh2 : a = b\n⊢ f a = g b"
+            }
+          ],
+          "split_verdict": "reject"
+        },
+        "p_auto_search_01": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 49,
+              "data": "Try this:\n  [apply] exact p_auto_grind_04 a a a rfl rfl"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_02": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 49,
+              "data": "Try this:\n  [apply] exact Nat.le_refl a"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_03": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 54,
+              "data": "Try this:\n  [apply] exact p_auto_grind_11 p p h fun a => h"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_04": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 53,
+              "data": "Try this:\n  [apply] exact p_auto_grind_04 (n + 0) (n + 0) n rfl rfl"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_05": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 53,
+              "data": "Try this:\n  [apply] exact Nat.zero_add n"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_06": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 49,
+              "data": "Try this:\n  [apply] exact p_auto_grind_04 a a a rfl rfl"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_07": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 53,
+              "data": "Try this:\n  [apply] exact Nat.le_add_right n 1"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_08": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 63,
+              "data": "Try this:\n  [apply] rw [List.append_right_eq_self]\n  -- no goals"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_09": {
+          "verdict": "accept",
+          "class": null,
+          "axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "unknown_tactics": [],
+          "messages": [
+            {
+              "severity": "information",
+              "line_rel": 1,
+              "col": 53,
+              "data": "Try this:\n  [apply] rw [Nat.add_eq_left]\n  -- no goals"
+            }
+          ],
+          "split_verdict": "accept"
+        },
+        "p_auto_search_10": {
+          "verdict": "reject",
+          "class": "unknown-tactic",
+          "axioms": [
+            "sorryAx"
+          ],
+          "unknown_tactics": [
+            "library_search"
+          ],
+          "messages": [
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 50,
+              "data": "unknown tactic"
+            },
+            {
+              "severity": "error",
+              "line_rel": 1,
+              "col": 46,
+              "data": "unsolved goals\na : Nat\n⊢ a = a"
+            }
+          ],
+          "split_verdict": "reject"
+        }
+      }
+    }
+  },
+  "seal": "dc6b691d4afc11803d8c755034d92e27269223299006dc178f69978283aae41c"
+}

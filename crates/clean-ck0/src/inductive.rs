@@ -25,16 +25,18 @@
 //! **Mutual + nested inductives are M3 (out of scope here)** and are rejected
 //! with [`AdmitError::Unsupported`] — never a fake/weak recursor.
 
-use crate::budget::Budget;
-use crate::infer::InferError;
 use crate::level::Level;
 use crate::name::Name;
-use crate::positivity::{check_positivity_ctor, term_mentions};
+use crate::positivity::{term_mentions, Positivity};
 use crate::rawexpr::BinderInfo;
 use crate::recursor::{build_recursor, RecursorData};
 use crate::staging_env::StagingEnv;
 use crate::term::{Term, TermKind};
 use crate::validate::Env;
+
+mod universe;
+use universe::check_universe_constraint;
+pub(crate) use universe::check_universe_constraint_block;
 
 /// A constructor of an inductive being admitted. The `type_` is a closed
 /// [`Term`] over the inductive's level params, validated *before* admission (its
@@ -195,9 +197,27 @@ pub struct AdmittedInductive {
 /// `Ok(())` on success (including idempotent re-admission of a structurally
 /// identical inductive); every failure is a `Rejected` [`AdmitError`].
 pub fn add_inductive(env: &mut dyn MutableEnv, decl: InductiveDecl) -> Result<(), AdmitError> {
+    let mut shape_decl = decl.clone();
+    {
+        let staging = StagingEnv::new(env, &decl);
+        for ctor in &mut shape_decl.constructors {
+            ctor.type_ = fields::constructor_view(
+                &staging,
+                &ctor.type_,
+                decl.num_params,
+                std::slice::from_ref(&decl.name),
+            )
+            .map_err(|e| AdmitError::Derivation {
+                ind: decl.name.clone(),
+                detail: format!("constructor field reduction: {e}"),
+            })?
+            .type_;
+        }
+    }
+
     // M2 scope guard: reject anything that smells mutual/nested up front so we
     // never derive a fake recursor for an out-of-scope shape.
-    reject_out_of_scope(&decl)?;
+    reject_out_of_scope(&shape_decl)?;
 
     // (1) structural-identity conflict check (idempotency).
     if env.has_inductive(&decl.name) {
@@ -219,14 +239,18 @@ pub fn add_inductive(env: &mut dyn MutableEnv, decl: InductiveDecl) -> Result<()
     // implemented recursor kernel-check to reject the resulting recursor.
     crate::inductive_params::validate_num_params(&decl)?;
 
-    // (2) strict positivity (iterative, stack-safe, fail-closed).
-    for ctor in &decl.constructors {
-        check_positivity_ctor(&*env, &decl.name, &ctor.type_).map_err(|()| {
-            AdmitError::NonPositive {
-                ind: decl.name.clone(),
-                ctor: ctor.name.clone(),
-            }
-        })?;
+    // (2) strict positivity (iterative, stack-safe, fail-closed), one check
+    // for the inductive's constructors (R176).
+    {
+        let mut positivity = Positivity::new(&*env, std::slice::from_ref(&decl.name));
+        for ctor in &shape_decl.constructors {
+            positivity
+                .check_ctor(&ctor.type_)
+                .map_err(|()| AdmitError::NonPositive {
+                    ind: decl.name.clone(),
+                    ctor: ctor.name.clone(),
+                })?;
+        }
     }
 
     // The staging env knows the inductive type former + its constructors (which
@@ -317,78 +341,6 @@ pub(crate) fn inductive_result_level(decl: &InductiveDecl) -> Option<Level> {
     }
 }
 
-/// Every constructor field's sort must be `<=` the inductive's sort
-/// (`ind_sort >= field_sort`), with the standard Prop exception: a `Prop`
-/// inductive (`ind_sort = 0`) admits fields of any sort (Lean impredicativity).
-/// Fail-closed: budget exhaustion or a non-sort field type is a reject.
-/// Block-aware universe constraint: each type's constructor fields are checked
-/// against *that type's* sort. (The field-sort inference resolves block types
-/// through the staging env, so cross-type field references type cleanly.) For a
-/// single-element block this is exactly [`check_universe_constraint`].
-pub(crate) fn check_universe_constraint_block(
-    env: &dyn Env,
-    decl: &InductiveDecl,
-    ind_sort: &Level,
-) -> Result<(), AdmitError> {
-    check_universe_constraint(env, decl, ind_sort)
-}
-
-fn check_universe_constraint(
-    env: &dyn Env,
-    decl: &InductiveDecl,
-    ind_sort: &Level,
-) -> Result<(), AdmitError> {
-    // Prop is impredicative: a Prop-valued inductive may quantify over fields in
-    // any universe (Lean kernel: the level-le check is skipped when the inductive
-    // is in Prop).
-    if ind_sort.is_zero() {
-        return Ok(());
-    }
-    let mut budget = Budget::default_budget();
-    for ctor in &decl.constructors {
-        let (field_tys, _ret) = split_ctor_telescope(&ctor.type_, decl.num_params);
-        // Field domains are typed under a context of [params..., earlier fields].
-        // We type each field's sort in the running context.
-        let mut ctx: Vec<Term> = Vec::new();
-        // Push parameter binder types (the leading Pi domains of the ctor type).
-        let param_binders = pi_domains(&ctor.type_, decl.num_params);
-        for d in &param_binders {
-            ctx.push(d.clone());
-        }
-        for field_ty in &field_tys {
-            let sort =
-                infer_sort_in_ctx(env, &ctx, field_ty, &mut budget).map_err(|e| match e {
-                    InferError::OutOfBudget => AdmitError::OutOfBudget {
-                        ind: decl.name.clone(),
-                    },
-                    _ => AdmitError::UniverseTooLarge {
-                        ind: decl.name.clone(),
-                        ctor: ctor.name.clone(),
-                    },
-                })?;
-            if !Level::is_geq(ind_sort, &sort) {
-                return Err(AdmitError::UniverseTooLarge {
-                    ind: decl.name.clone(),
-                    ctor: ctor.name.clone(),
-                });
-            }
-            ctx.push(field_ty.clone());
-        }
-    }
-    Ok(())
-}
-
-/// Infer the sort of `ty` under a local context — thin wrapper over `infer`'s
-/// context-aware path (added in M2).
-fn infer_sort_in_ctx(
-    env: &dyn Env,
-    ctx: &[Term],
-    ty: &Term,
-    budget: &mut Budget,
-) -> Result<Level, InferError> {
-    crate::infer::infer_sort_in_context(env, ctx, ty, budget)
-}
-
 // ---------------------------------------------------------------------------
 // Telescope helpers shared with the recursor builder.
 // ---------------------------------------------------------------------------
@@ -406,15 +358,14 @@ fn infer_sort_in_ctx(
 /// 2. **no indices** (`num_indices == 0`): an indexed family (e.g. `Eq`) is NOT
 ///    a structure — its constructor's result type pins indices that projections
 ///    cannot recover, so `mk (proj t) ≢ t`;
-/// 3. **non-recursive**: no constructor field mentions any name in `family`
-///    (the inductive itself, or any block member for a mutual). A recursive
-///    field is not projectable in the η sense and would also risk a non-
-///    terminating expansion.
+/// 3. **non-recursive**: no declared constructor binder domain mentions a
+///    family member. This includes parameter annotations. Mutual callers also
+///    require the whole block's shared recursion flag to be false.
 ///
 /// Returns `true` only when structure-η is definitionally valid for `I`.
 pub(crate) fn is_eta_structure(
     ctor_ty: &Term,
-    num_params: u32,
+    _num_params: u32,
     num_indices: u32,
     num_ctors: usize,
     family: &[Name],
@@ -425,16 +376,20 @@ pub(crate) fn is_eta_structure(
     if num_indices != 0 {
         return false;
     }
-    // Non-recursive: no field's type may mention any family member. We strip the
-    // params from the constructor telescope and inspect each field domain (and
-    // its own nested binders, which `term_mentions` traverses in full).
-    let (fields, _ret) = split_ctor_telescope(ctor_ty, num_params);
-    for field_ty in &fields {
-        if family.iter().any(|n| term_mentions(field_ty, n)) {
-            return false;
+    !constructor_mentions_family(ctor_ty, family)
+}
+
+// Lean's shared is_rec flag scans every declared constructor binder domain,
+// including parameter annotations. It does not normalize those domains.
+pub(crate) fn constructor_mentions_family(ctor_ty: &Term, family: &[Name]) -> bool {
+    let mut current = ctor_ty;
+    while let TermKind::Pi(_, domain, body) = current.kind() {
+        if family.iter().any(|name| term_mentions(domain, name)) {
+            return true;
         }
+        current = body;
     }
-    true
+    false
 }
 
 pub(crate) fn split_ctor_telescope(ctor_ty: &Term, num_params: u32) -> (Vec<Term>, Term) {
@@ -497,3 +452,5 @@ pub(crate) fn return_type(t: &Term) -> Term {
     }
     cur
 }
+
+pub(crate) mod fields;

@@ -494,7 +494,7 @@ impl<'a> Parser<'a> {
 }
 
 /// Parse a TPTP problem from a string.
-pub fn parse_tptp(input: &str) -> Result<TptpProblem, TptpParseError> {
+pub(crate) fn parse_tptp(input: &str) -> Result<TptpProblem, TptpParseError> {
     let mut parser = Parser::new(input);
     parser.parse_problem()
 }

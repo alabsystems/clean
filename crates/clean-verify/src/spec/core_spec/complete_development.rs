@@ -531,7 +531,7 @@ impl Specification {
             description: concat!(
                 "L2 core (#2859 Increment F+): the STRUCTURAL-args iota reduct congruence for par_reduces_p. ",
                 "Given the iota-redex boundary (meta, rule) and the two spine congruences as hypotheses — the ",
-                "whole-app kapp_args (app f a) ⇒_p_list kapp_args (app f' a') and the major's own kapp_args ",
+                "whole-app kapp_args (app f a) ⇒_p_list kapp_args (app f' a'), the actual whole-head equality, and the major's own kapp_args ",
                 "major ⇒_p_list kapp_args a' (with major = a) — the (app f a)-side iota reduct (over the generic ",
                 "major) par-reduces to the (app f' a')-side reduct (over a'). The pure 3-layer apply_spine_par_p ",
                 "assembly: outer (extras) + prefix layers via the whole-app spine congruence ",
@@ -670,6 +670,40 @@ impl Specification {
         // par_reduces_p_reduct_cong consumes them.
         self.add_below_boundary_bricks()?;
         self.add_par_reduces_p_spine_cong_below_boundary()?;
+        self.add_definition(SpecDefinition {
+            name: "par_reduces_p_preserves_kapp_fn_below_boundary".to_string(),
+            type_src: r"forall (env : RecEnv) (f : KExpr) (f2 : KExpr) (nm : Name) (meta : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name nm) -> Eq (OptionType RecMeta) (recmeta_for env nm) (OptionType.some RecMeta meta) -> Le (list_length (kapp_args f)) (iota_major_index meta) -> par_reduces_p env f f2 -> Eq KExpr (kapp_fn f) (kapp_fn f2)".to_string(),
+            value_src: Some(r"fun (env : RecEnv) (f : KExpr) (f2 : KExpr) (nm : Name) (meta : RecMeta)
+ (hhead : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name nm))
+ (hmeta : Eq (OptionType RecMeta) (recmeta_for env nm) (OptionType.some RecMeta meta))
+ (hbelow : Le (list_length (kapp_args f)) (iota_major_index meta)) (h : par_reduces_p env f f2) =>
+ par_reduces_p.rec env (fun (s : KExpr) (t : KExpr) (_h : par_reduces_p env s t) => Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (OptionType.some Name nm) -> Le (list_length (kapp_args s)) (iota_major_index meta) -> Eq KExpr (kapp_fn s) (kapp_fn t))
+ (fun (s : KExpr) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn s)) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args s)) (iota_major_index meta)) => Eq.refl KExpr (kapp_fn s))
+ (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (a : KExpr) (a2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ha : par_reduces_p env a a2) (ihA : Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> Eq KExpr (kapp_fn b) (kapp_fn b2)) (iha : Eq (OptionType Name) (kexpr_const_name (kapp_fn a)) (OptionType.some Name nm) -> Le (list_length (kapp_args a)) (iota_major_index meta) -> Eq KExpr (kapp_fn a) (kapp_fn a2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app (KExpr.lam A b) a))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.app (KExpr.lam A b) a))) (iota_major_index meta)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.app (KExpr.lam A b) a)) (kapp_fn (instantiate b2 a2))) ghead)
+ (fun (f : KExpr) (f2 : KExpr) (a : KExpr) (a2 : KExpr) (hf : par_reduces_p env f f2) (ha : par_reduces_p env a a2) (ihf : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name nm) -> Le (list_length (kapp_args f)) (iota_major_index meta) -> Eq KExpr (kapp_fn f) (kapp_fn f2)) (iha : Eq (OptionType Name) (kexpr_const_name (kapp_fn a)) (OptionType.some Name nm) -> Le (list_length (kapp_args a)) (iota_major_index meta) -> Eq KExpr (kapp_fn a) (kapp_fn a2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.app f a))) (iota_major_index meta)) => ihf ghead (le_trans (list_length (kapp_args f)) (Nat.succ (list_length (kapp_args f))) (iota_major_index meta) (Le.step (list_length (kapp_args f)) (list_length (kapp_args f)) (Le.refl (list_length (kapp_args f)))) (Eq.subst Nat (fun (n : Nat) => Le n (iota_major_index meta)) (list_length (kapp_args (KExpr.app f a))) (Nat.succ (list_length (kapp_args f))) (Eq.trans Nat (list_length (kapp_args (KExpr.app f a))) (list_length (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))) (Nat.succ (list_length (kapp_args f))) (Eq.cong (ListType KExpr) Nat list_length (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args_app f a)) (list_length_append_singleton (kapp_args f) a)) glen)))
+ (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ihA : Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.lam A b))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.lam A b))) (iota_major_index meta)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.lam A b)) (kapp_fn (KExpr.lam A2 b2))) ghead)
+ (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ihA : Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.pi A b))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.pi A b))) (iota_major_index meta)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.pi A b)) (kapp_fn (KExpr.pi A2 b2))) ghead)
+ (fun (A : KExpr) (A2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hb : par_reduces_p env b b2) (ihA : Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihb : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.forall_ A b))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.forall_ A b))) (iota_major_index meta)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.forall_ A b)) (kapp_fn (KExpr.forall_ A2 b2))) ghead)
+ (fun (A : KExpr) (A2 : KExpr) (v : KExpr) (v2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hv : par_reduces_p env v v2) (hb : par_reduces_p env b b2) (ihA : Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihv : Eq (OptionType Name) (kexpr_const_name (kapp_fn v)) (OptionType.some Name nm) -> Le (list_length (kapp_args v)) (iota_major_index meta) -> Eq KExpr (kapp_fn v) (kapp_fn v2)) (ihb : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.let_ A v b))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.let_ A v b))) (iota_major_index meta)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.let_ A v b)) (kapp_fn (instantiate b2 v2))) ghead)
+ (fun (e0 : KExpr) (e2 : KExpr) (r : KExpr) (he : par_reduces_p env e0 e2) (hi : iota_step env e2 r) (ihe : Eq (OptionType Name) (kexpr_const_name (kapp_fn e0)) (OptionType.some Name nm) -> Le (list_length (kapp_args e0)) (iota_major_index meta) -> Eq KExpr (kapp_fn e0) (kapp_fn e2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn e0)) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args e0)) (iota_major_index meta)) => Empty.rec (fun (_ : Empty) => Eq KExpr (kapp_fn e0) (kapp_fn r)) (iota_step_below_boundary_absurd env e2 r nm meta Empty (par_reduces_p_preserves_head_const_below_boundary env e0 e2 nm meta ghead hmeta glen he) hmeta (Eq.subst Nat (fun (n : Nat) => Le n (iota_major_index meta)) (list_length (kapp_args e0)) (list_length (kapp_args e2)) (par_reduces_p_list_length_eq env (kapp_args e0) (kapp_args e2) (par_reduces_p_spine_cong_below_boundary env e0 e2 nm meta ghead hmeta glen he)) glen) hi))
+ (fun (A : KExpr) (A2 : KExpr) (v : KExpr) (v2 : KExpr) (b : KExpr) (b2 : KExpr) (hA : par_reduces_p env A A2) (hv : par_reduces_p env v v2) (hb : par_reduces_p env b b2) (ihA : Eq (OptionType Name) (kexpr_const_name (kapp_fn A)) (OptionType.some Name nm) -> Le (list_length (kapp_args A)) (iota_major_index meta) -> Eq KExpr (kapp_fn A) (kapp_fn A2)) (ihv : Eq (OptionType Name) (kexpr_const_name (kapp_fn v)) (OptionType.some Name nm) -> Le (list_length (kapp_args v)) (iota_major_index meta) -> Eq KExpr (kapp_fn v) (kapp_fn v2)) (ihb : Eq (OptionType Name) (kexpr_const_name (kapp_fn b)) (OptionType.some Name nm) -> Le (list_length (kapp_args b)) (iota_major_index meta) -> Eq KExpr (kapp_fn b) (kapp_fn b2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.let_ A v b))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.let_ A v b))) (iota_major_index meta)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.let_ A v b)) (kapp_fn (KExpr.let_ A2 v2 b2))) ghead)
+ (fun (s : Name) (i : Nat) (sub : KExpr) (sub2 : KExpr) (hs : par_reduces_p env sub sub2) (ihs : Eq (OptionType Name) (kexpr_const_name (kapp_fn sub)) (OptionType.some Name nm) -> Le (list_length (kapp_args sub)) (iota_major_index meta) -> Eq KExpr (kapp_fn sub) (kapp_fn sub2)) (ghead : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.proj s i sub))) (OptionType.some Name nm)) (glen : Le (list_length (kapp_args (KExpr.proj s i sub))) (iota_major_index meta)) => option_none_ne_some Name nm (Eq KExpr (kapp_fn (KExpr.proj s i sub)) (kapp_fn (KExpr.proj s i sub2))) ghead)
+ f f2 h hhead hbelow".to_string()),
+            is_axiom: false,
+            description: "Actual ten-arm parallel-iota induction preserves the complete constant head below the major boundary. Derives the iota_p contradiction from existing checked spine-length and name preservation, retaining the actual universe list; no output-head assumption.".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "par_reduces_p.rec".to_string(),
+                "par_reduces_p_spine_cong_below_boundary".to_string(),
+                "par_reduces_p_preserves_head_const_below_boundary".to_string(),
+                "par_reduces_p_list_length_eq".to_string(),
+                "iota_step_below_boundary_absurd".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
         self.add_par_reduces_p_reduct_cong_full()?;
 
         // par_reduces_p_reduct_cong — the ASSEMBLED minimal (LEFT-leg) reduct
@@ -724,6 +758,7 @@ impl Specification {
             dependencies: Some(HashSet::from([
                 "par_reduces_p".to_string(),
                 "par_reduces_p_reduct_cong_spine".to_string(),
+                "par_reduces_p_preserves_kapp_fn_below_boundary".to_string(),
                 "par_reduces_p_spine_cong_below_boundary".to_string(),
                 "par_reduces_p_spine_cong_no_recmeta".to_string(),
                 "recenv_ctor_no_recmeta_cname".to_string(),
@@ -760,7 +795,8 @@ impl Specification {
         // par steps (hL1 head via par_reduces_p_preserves_head_const_below_boundary; hL3
         // major-at-boundary via list_head_drop_len_append + length stability; hL4 head a'
         // via par_reduces_p_preserves_head_const_no_recmeta + recenv_ctor_no_recmeta_cname),
-        // then feeds iota_reduct_par_app_recon (par_reduces_c-free — reused verbatim).
+        // The complete head and major-spine length derive both output guards;
+        // canonical full reconstruction inserts the actual universe instance.
         // With par_reduces_p_reduct_cong's LEFT leg + iota_step_deterministic, this pins
         // the GIVEN opaque (app f' a')-reduct to reduct_m (the RIGHT leg of the minimal join).
         self.add_definition(SpecDefinition {
@@ -778,8 +814,9 @@ impl Specification {
                 "par_reduces_p_preserves_head_const_below_boundary (below-boundary guard reflexive via hidx); hL3 ",
                 "major-at-boundary via list_head_drop_len_append + length stability (par_reduces_p_list_length_eq); ",
                 "hL4 head a' = some cname via par_reduces_p_preserves_head_const_no_recmeta (no-recmeta guard from ",
-                "recenv_ctor_no_recmeta_cname); h2/h5 reused; then feeds iota_reduct_par_app_recon (which is ",
-                "par_reduces_c-free — reused verbatim across the c/p tracks). The RIGHT leg of the (iota,app) ",
+                "recenv_ctor_no_recmeta_cname); h2/h5 reused. Whole-head equality preserves arity and the ",
+                "actual RHS universe arguments; major-spine length preserves field availability. Both guards ",
+                "feed iota_reduct_full_recon. The RIGHT leg of the (iota,app) ",
                 "minimal join: with par_reduces_p_reduct_cong's LEFT leg + iota_step_deterministic, pins the GIVEN ",
                 "opaque (app f' a')-reduct to reduct_m. DerivedProved, zero axiom_deps."
             )
@@ -791,7 +828,9 @@ impl Specification {
             dependencies: Some(HashSet::from([
                 "par_reduces_p".to_string(),
                 "iota_reduct".to_string(),
-                "iota_reduct_par_app_recon".to_string(),
+                "iota_reduct_full_recon".to_string(),
+                "par_reduces_p_preserves_kapp_fn_below_boundary".to_string(),
+                "recursor_rhs_instance".to_string(),
                 "par_reduces_p_spine_cong_below_boundary".to_string(),
                 "par_reduces_p_preserves_head_const_below_boundary".to_string(),
                 "par_reduces_p_preserves_head_const_no_recmeta".to_string(),
@@ -1089,7 +1128,7 @@ impl Specification {
                     "(h3 : Eq (OptionType KExpr) (list_head (list_drop {mi_meta2} (kapp_args e))) (OptionType.some KExpr major)) ",
                     "(h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname2)) ",
                     "(h5 : Eq (OptionType RecRule) (recrule_for env recname2 cname2) (OptionType.some RecRule rule2)) ",
-                    "(h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ {mi_meta2}) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule2)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (kapp_args e)) (recrule_rhs rule2))))) (OptionType.some KExpr t)) => ",
+                    "(h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ {mi_meta2}) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule2)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta2) (recrule_rhs rule2) (kexpr_const_levels (kapp_fn e))))))) (OptionType.some KExpr t)) => ",
                     "Empty.rec (fun (_e : Empty) => C) ",
                     "(le_succ_self_empty {mi_meta} ",
                     "(le_trans (Nat.succ {mi_meta}) {len_e} {mi_meta} {le_succ_at_meta} hbelow)))"
@@ -1192,7 +1231,7 @@ impl Specification {
                     "(h3 : Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (recmeta_num_indices meta2)) (kapp_args e))) (OptionType.some KExpr major)) ",
                     "(h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname2)) ",
                     "(h5 : Eq (OptionType RecRule) (recrule_for env recname2 cname2) (OptionType.some RecRule rule2)) ",
-                    "(h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (recmeta_num_indices meta2))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule2)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (kapp_args e)) (recrule_rhs rule2))))) (OptionType.some KExpr t)) => ",
+                    "(h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (recmeta_num_indices meta2))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule2)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta2) (recrule_rhs rule2) (kexpr_const_levels (kapp_fn e))))))) (OptionType.some KExpr t)) => ",
                     "option_none_ne_some_type RecMeta meta2 C ",
                     "(Eq.trans (OptionType RecMeta) (OptionType.none RecMeta) (recmeta_for env nm) (OptionType.some RecMeta meta2) ",
                     "(Eq.symm (OptionType RecMeta) (recmeta_for env nm) (OptionType.none RecMeta) hnone) ",
@@ -3491,7 +3530,7 @@ fn reduct_cong_spine_pieces() -> (String, String, String, String) {
     let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))".to_string();
     let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))".to_string();
     let nf = "(recrule_num_fields rule)".to_string();
-    let p_rhs = "(recrule_rhs rule)".to_string();
+    let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f a))))".to_string();
     (major_idx, prefix_n, nf, p_rhs)
 }
 
@@ -3506,10 +3545,11 @@ fn reduct_cong_spine_reducts() -> (String, String) {
          (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) {nf}) (kapp_args major)) \
          (apply_spine (list_take {prefix_n} {kargs_fa}) {p_rhs})))"
     );
+    let target_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f' a'))))";
     let reduct_m = format!(
         "(apply_spine (list_drop (Nat.succ {major_idx}) {kargs_fap}) \
          (apply_spine (list_drop (Nat.sub (list_length (kapp_args a')) {nf}) (kapp_args a')) \
-         (apply_spine (list_take {prefix_n} {kargs_fap}) {p_rhs})))"
+         (apply_spine (list_take {prefix_n} {kargs_fap}) {target_rhs})))"
     );
     (r_fa, reduct_m)
 }
@@ -3599,9 +3639,11 @@ fn par_reduces_p_reduct_cong_proof() -> String {
          a major (Eq.symm KExpr major a hbnd) {a_spine})"
     );
 
+    let hheads = format!("(par_reduces_p_preserves_kapp_fn_below_boundary env f f' recname meta {head_f} h2 {le_guard} hf)");
+
     // Assemble via the apply_spine reduct cong: par_reduces_p R_fa reduct_m.
     let assembled = format!(
-        "(par_reduces_p_reduct_cong_spine env f f' a a' major meta rule {whole_spine} {major_spine} hbnd)"
+        "(par_reduces_p_reduct_cong_spine env f f' a a' major meta rule {whole_spine} {major_spine} {hheads} hbnd)"
     );
 
     // Recover e1 = R_fa from h5r (option_some_inj) and transport the SOURCE.
@@ -3649,6 +3691,8 @@ fn par_reduces_p_app_redex_type() -> String {
          Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
          Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
          Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
+         Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true -> \
+         Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true -> \
          Eq KExpr major a -> \
          Eq Nat {major_idx} (list_length (kapp_args f)) -> \
          par_reduces_p env f f' -> par_reduces_p env a a' -> \
@@ -3657,9 +3701,10 @@ fn par_reduces_p_app_redex_type() -> String {
 }
 
 /// Closed proof term for `par_reduces_p_app_redex`. Mirror of the c-side
-/// `iota_reduct_par_app_redex` glue (par_reduces_c.rs ~2146), reconstructing the five
-/// (app f' a')-side lookups from the boundary witnesses + the par steps, then feeding
-/// `iota_reduct_par_app_recon` (which is par_reduces_c-free — reused verbatim):
+/// `iota_reduct_par_app_redex` glue, reconstructing five (app f' a')-side lookups
+/// and deriving both guards from the source boundary witnesses and par steps.
+/// Complete head preservation fixes the actual universe list; spine congruence
+/// fixes major-field availability. Feed the canonical `iota_reduct_full_recon`:
 ///   * hL1 head(app f' a') = some recname — `head f' = some recname` via the p-side
 ///     `par_reduces_p_preserves_head_const_below_boundary` (the below-boundary guard
 ///     reflexive via hidx), lifted by kapp_fn_app;
@@ -3738,9 +3783,23 @@ fn par_reduces_p_app_redex_proof() -> String {
         "(par_reduces_p_preserves_head_const_no_recmeta env a a' cname {head_a} {recmeta_none} ha)"
     );
 
-    // Feed iota_reduct_par_app_recon the five (app f' a')-side lookups.
+    // The actual major-field guard follows from the schematic constructor spine
+    // congruence. The arity guard follows from complete head preservation.
+    let major_spine = format!(
+        "(Eq.substType KExpr (fun (m : KExpr) => par_reduces_p_list env (kapp_args m) (kapp_args a')) a major (Eq.symm KExpr major a hbnd) (par_reduces_p_spine_cong_no_recmeta env a a' cname {head_a} {recmeta_none} ha))"
+    );
+    let fields_out = format!(
+        "(Eq.subst Nat (fun (n : Nat) => Eq Bool (nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero) Bool.true) (list_length (kapp_args major)) (list_length (kapp_args a')) (par_reduces_p_list_length_eq env (kapp_args major) (kapp_args a') {major_spine}) fields)"
+    );
+    let hheads = format!(
+        "(par_reduces_p_preserves_kapp_fn_below_boundary env f f' recname meta {head_f} h2 {le_guard} hf)"
+    );
+    let arity_out = format!(
+        "(Eq.subst KExpr (fun (head : KExpr) => Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels head))) Bool.true) (kapp_fn f) (kapp_fn f') {hheads} arity)"
+    );
+    let (_, reduct_m) = reduct_cong_spine_reducts();
     let recon = format!(
-        "(iota_reduct_par_app_recon env f' a' recname meta cname rule {h_l1} h2 {h_l3} {h_l4} h5)"
+        "(iota_reduct_full_recon env (KExpr.app f' a') {reduct_m} recname meta a' cname rule {h_l1} h2 {h_l3} {h_l4} h5 {fields_out} {arity_out} (Eq.refl KExpr {reduct_m}))"
     );
 
     format!(
@@ -3751,6 +3810,8 @@ fn par_reduces_p_app_redex_proof() -> String {
          (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
          (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
          (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+         (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true) \
          (hbnd : Eq KExpr major a) \
          (hidx : Eq Nat {major_idx} {len_f}) \
          (hf : par_reduces_p env f f') (ha : par_reduces_p env a a') => \
@@ -3800,7 +3861,7 @@ fn par_reduces_p_app_reduct_cong_minimal_proof() -> String {
          disjoint h1 h2 h4 h5 h5r hbnd hidx hf ha)";
     // RIGHT reconstruction: iota_reduct env (app f' a') = some reduct_m.
     let right_recon = "(par_reduces_p_app_redex env f f' a a' recname meta major cname rule \
-         disjoint h1 h2 h4 h5 hbnd hidx hf ha)";
+         disjoint h1 h2 h4 h5 fields arity hbnd hidx hf ha)";
     // rm0 = reduct_m via determinism on the GIVEN hrm0 + the reconstruction.
     let rm0_eq_reduct = format!(
         "(iota_step_deterministic env (KExpr.app f' a') rm0 {reduct_m} hrm0 {right_recon})"
@@ -3820,6 +3881,8 @@ fn par_reduces_p_app_reduct_cong_minimal_proof() -> String {
          (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) \
          (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
          (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+         (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true) \
          (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {r_fa_app}) (OptionType.some KExpr r0)) \
          (hbnd : Eq KExpr major a) \
          (hidx : Eq Nat {major_idx} {len_f}) => \
@@ -3855,6 +3918,7 @@ fn par_reduces_p_reduct_cong_spine_type() -> String {
          (major : KExpr) (meta : RecMeta) (rule : RecRule), \
          par_reduces_p_list env (kapp_args (KExpr.app f a)) (kapp_args (KExpr.app f' a')) -> \
          par_reduces_p_list env (kapp_args major) (kapp_args a') -> \
+         Eq KExpr (kapp_fn f) (kapp_fn f') -> \
          Eq KExpr major a -> \
          par_reduces_p env {r_fa} {reduct_m}"
     )
@@ -3919,13 +3983,20 @@ fn par_reduces_p_reduct_cong_spine_proof() -> String {
          {outer_drop_cong} {middle_spine})"
     );
 
+    let (r_fa, _) = reduct_cong_spine_reducts();
+    let target_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (KExpr.app f' a'))))";
+    let rhs_eq = "(Eq.cong KExpr KExpr (fun (head : KExpr) => recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels head)) (kapp_fn f) (kapp_fn f') hheads)".to_string();
+    let result = format!(
+        "(Eq.substType KExpr (fun (rhs : KExpr) => par_reduces_p env {r_fa} (apply_spine (list_drop (Nat.succ {major_idx}) {kargs_fap}) (apply_spine (list_drop {major_drop_idx_ap} (kapp_args a')) (apply_spine (list_take {prefix_n} {kargs_fap}) rhs)))) {p_rhs} {target_rhs} {rhs_eq} {outer_spine})"
+    );
     format!(
         "fun (env : RecEnv) (f : KExpr) (f' : KExpr) (a : KExpr) (a' : KExpr) \
          (major : KExpr) (meta : RecMeta) (rule : RecRule) \
          (hspine_whole : par_reduces_p_list env (kapp_args (KExpr.app f a)) (kapp_args (KExpr.app f' a'))) \
          (hspine_major : par_reduces_p_list env (kapp_args major) (kapp_args a')) \
+         (hheads : Eq KExpr (kapp_fn f) (kapp_fn f')) \
          (hbnd : Eq KExpr major a) => \
-         {outer_spine}"
+         {result}"
     )
 }
 
@@ -4917,7 +4988,7 @@ fn par_reduces_p_strict_partial_no_iota_proof() -> String {
          (h3 : Eq (OptionType KExpr) (list_head (list_drop {k2} (kapp_args f))) (OptionType.some KExpr major2)) \
          (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major2)) (OptionType.some Name cname2)) \
          (h5 : Eq (OptionType RecRule) (recrule_for env recname2 cname2) (OptionType.some RecRule rule2)) \
-         (h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ {k2}) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule2)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (kapp_args f)) (recrule_rhs rule2))))) (OptionType.some KExpr e2)) => \
+         (h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ {k2}) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major2)) (recrule_num_fields rule2)) (kapp_args major2)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta2) (recmeta_num_motives meta2)) (recmeta_num_minors meta2)) (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta2) (recrule_rhs rule2) (kexpr_const_levels (kapp_fn f))))))) (OptionType.some KExpr e2)) => \
          {refute}))"
     );
     // none-arm: o = none, heq : iota_reduct env f = none -> return heq.
@@ -5032,4 +5103,52 @@ fn par_reduces_p_preserves_head_const_proof() -> String {
         "e e' h hhead"
     )
     .to_string()
+}
+
+#[cfg(test)]
+mod guarded_iota_migration_tests {
+    use crate::spec_axiom_closure::computed_axiom_closure;
+
+    #[test]
+    fn test_guarded_iota_parallel_head_and_reconstruction() {
+        let mut spec = crate::test_utils::build_spec_with_stack();
+        for name in [
+            "par_reduces_p_preserves_kapp_fn_below_boundary",
+            "par_reduces_p_reduct_cong",
+            "par_reduces_p_app_redex",
+            "par_reduces_p_app_reduct_cong_minimal",
+            "app_redex_tri",
+            "fvRel_const_levels",
+            "fvRel_iota_bisim",
+            "rec_env_reduct_not_redex_of_b",
+        ] {
+            spec.verify_definition(name).expect("actual migrated proof");
+            assert!(computed_axiom_closure(&spec, name).is_empty(), "{name}");
+        }
+        for (name, source) in [
+            (
+                "p_guarded_nonzero_head_beta",
+                r"def p_guarded_nonzero_head_beta : Eq KExpr (kapp_fn (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero))))) (kapp_fn (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.sort (Level.succ Level.zero)))) := par_reduces_p_preserves_kapp_fn_below_boundary iota_view_fixture_env (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero)))) (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.sort (Level.succ Level.zero))) (Name.str Name.anonymous Nat.zero) iota_tail_fixture_meta (Eq.refl (OptionType Name) (OptionType.some Name (Name.str Name.anonymous Nat.zero))) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta iota_tail_fixture_meta)) (Le.refl (Nat.succ Nat.zero)) (par_reduces_p.app iota_view_fixture_env (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level)))) (par_reduces_p.beta iota_view_fixture_env (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.sort Level.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.bvar Nat.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.sort (Level.succ Level.zero)))))",
+            ),
+            (
+                "p_guarded_nonzero_reconstruction",
+                r"def p_guarded_nonzero_reconstruction : Eq (OptionType KExpr) (iota_reduct iota_view_fixture_env (KExpr.app (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.sort (Level.succ Level.zero))) (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero))))) (OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.lam (KExpr.sort iota_tail_fixture_level) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero)))) := par_reduces_p_app_redex iota_view_fixture_env (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero)))) (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.sort (Level.succ Level.zero))) (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero))) (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero))) (Name.str Name.anonymous Nat.zero) iota_tail_fixture_meta (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero))) Name.anonymous iota_tail_fixture_rule (rec_env_ctor_no_recmeta_of_b iota_view_fixture_env (Eq.refl Bool Bool.true)) (Eq.refl (OptionType Name) (OptionType.some Name (Name.str Name.anonymous Nat.zero))) (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta iota_tail_fixture_meta)) (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous)) (Eq.refl (OptionType RecRule) (OptionType.some RecRule iota_tail_fixture_rule)) (Eq.refl Bool Bool.true) (Eq.refl Bool Bool.true) (Eq.refl KExpr (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero)))) (Eq.refl Nat (Nat.succ Nat.zero)) (par_reduces_p.app iota_view_fixture_env (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level)))) (par_reduces_p.beta iota_view_fixture_env (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.sort (Level.succ Level.zero)) (KExpr.sort (Level.succ Level.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.sort Level.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.bvar Nat.zero)) (par_reduces_p.refl iota_view_fixture_env (KExpr.sort (Level.succ Level.zero))))) (par_reduces_p.refl iota_view_fixture_env (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero))))",
+            ),
+        ] {
+            spec.add_recursive_def(
+                source,
+                "Actual nonzero guarded iota caller with a beta-reducing prefix.",
+            )
+            .expect("inhabited caller, not an assumed head/step contract");
+            assert!(computed_axiom_closure(&spec, name).is_empty(), "{name}");
+        }
+        for source in [
+            r"def p_guarded_cannot_change_head_universes : Eq KExpr (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.cons Level iota_tail_fixture_level (ListType.nil Level))) (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.nil Level)) := Eq.refl KExpr (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.nil Level))",
+            r"def p_guarded_missing_arity_cannot_fire : Eq (OptionType KExpr) (iota_reduct iota_view_fixture_env (KExpr.app (KExpr.app (KExpr.const (Name.str Name.anonymous Nat.zero) (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero))) (KExpr.app (KExpr.const Name.anonymous (ListType.nil Level)) (KExpr.sort (Level.succ Level.zero))))) (OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.lam (KExpr.sort iota_tail_fixture_level) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero)))) := Eq.refl (OptionType KExpr) (OptionType.some KExpr (KExpr.app (KExpr.app (KExpr.lam (KExpr.sort iota_tail_fixture_level) (KExpr.bvar Nat.zero)) (KExpr.sort (Level.succ Level.zero))) (KExpr.sort (Level.succ Level.zero))))",
+        ] {
+            assert!(spec
+                .add_recursive_def(source, "Deliberately false guarded-iota shortcut.")
+                .is_err());
+        }
+    }
 }

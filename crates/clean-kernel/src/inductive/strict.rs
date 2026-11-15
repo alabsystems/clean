@@ -22,11 +22,13 @@
 //! and AFTER fixed-index promotion (so the param/index boundary is final),
 //! for EVERY inductive declaration, on both the Generate and Skip lanes.
 //!
-//! Known deliberate divergence from Lean: no `whnf` between steps — a block
-//! occurrence hidden behind a definition/redex is rejected rather than
-//! unfolded (fail-closed; design §7).
+//! Known deliberate divergence from Lean: its `whnf` between steps is β
+//! only here ([`head_beta`]) — a block occurrence hidden behind a definition
+//! is rejected rather than unfolded (fail-closed; design §7).
 
-use super::{count_pi_args, get_return_type, mentions_name, InductiveDecl, InductiveError};
+use super::{
+    count_pi_args, get_return_type, head_beta, mentions_name, InductiveDecl, InductiveError,
+};
 use crate::expr::{Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
@@ -123,10 +125,15 @@ impl StrictCtx<'_> {
         self.check_valid_ind_app(&ctor.name, return_type, t, Some(member_idx))
     }
 
-    /// Lean `check_positivity` (inductive.cpp:388-405), syntactic: a field
-    /// may mention the block only along its rightmost Pi spine, ending in a
-    /// valid inductive application.
+    /// Lean `check_positivity` (inductive.cpp:393-408): a field may mention
+    /// the block only along its rightmost Pi spine, ending in a valid
+    /// inductive application. Lean whnfs the field, and each body of its
+    /// spine, before it looks; this step is that `whnf` restricted to β
+    /// ([`head_beta`]), which reads through the redex a dependent container
+    /// parameter leaves in an auxiliary constructor's field
+    /// (`(fun _ => Nat → T) fst`). A δ-hidden occurrence is still refused.
     fn check_field(&self, ctor_name: &Name, field: &Expr, t: u32) -> Result<(), InductiveError> {
+        let field = &head_beta(field);
         if !self.mentions_block(field) {
             return Ok(());
         }
@@ -442,6 +449,61 @@ mod tests {
         };
         let err =
             validate_inductive_strict(&decl).expect_err("negative occurrence must be rejected");
+        assert!(
+            matches!(err, InductiveError::NonPositive(..)),
+            "expected NonPositive, got {err:?}"
+        );
+    }
+    /// `T | mk : field → T` with no parameters and no universe.
+    fn closed_block(field: Expr) -> InductiveDecl {
+        let t = Expr::const_(Name::from_string("T"), Vec::<Level>::new());
+        InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: Name::from_string("T"),
+                type_: Expr::from_kind(ExprKind::Sort(Level::succ(Level::zero()))),
+                constructors: vec![Constructor {
+                    name: Name::from_string("T.mk"),
+                    type_: Expr::pi(BinderInfo::Default, field, t),
+                }],
+            }],
+        }
+    }
+
+    /// A field that is a β-redex, as a dependent container leaves one in a
+    /// nested block's auxiliary constructor: `(fun _ => Nat → T) k` is read
+    /// through β as Lean's `check_positivity` reads it through `whnf` —
+    /// accepted, where the purely syntactic check called `T`'s occurrence
+    /// invalid.
+    #[test]
+    fn test_strict_reads_a_field_through_a_head_redex() {
+        let nat = Expr::const_(Name::from_string("Nat"), Vec::<Level>::new());
+        let t = Expr::const_(Name::from_string("T"), Vec::<Level>::new());
+        let fam = Expr::lam(
+            BinderInfo::Default,
+            nat.clone(),
+            Expr::pi(BinderInfo::Default, nat.clone(), t),
+        );
+        let field = Expr::app(fam, Expr::nat_lit(0));
+        validate_inductive_strict(&closed_block(field))
+            .expect("a positive occurrence behind a head redex is accepted, as in Lean");
+    }
+
+    /// The same redex exposing a NEGATIVE occurrence is refused:
+    /// `(fun _ => T → Nat) k` is `T → Nat` after β.
+    #[test]
+    fn test_strict_redex_exposing_a_negative_occurrence_is_rejected() {
+        let nat = Expr::const_(Name::from_string("Nat"), Vec::<Level>::new());
+        let t = Expr::const_(Name::from_string("T"), Vec::<Level>::new());
+        let fam = Expr::lam(
+            BinderInfo::Default,
+            nat.clone(),
+            Expr::pi(BinderInfo::Default, t, nat),
+        );
+        let field = Expr::app(fam, Expr::nat_lit(0));
+        let err = validate_inductive_strict(&closed_block(field))
+            .expect_err("a negative occurrence behind a head redex is refused");
         assert!(
             matches!(err, InductiveError::NonPositive(..)),
             "expected NonPositive, got {err:?}"

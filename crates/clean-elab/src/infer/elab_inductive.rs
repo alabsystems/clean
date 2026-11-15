@@ -10,11 +10,11 @@ use clean_kernel::{
     BinderInfo, Constructor, Expr, ExprFolder, ExprVisitor, FVarId, InductiveDecl, InductiveType,
     Level, LevelVec,
 };
-use clean_parser::{DeclModifiers, SurfaceBinder, SurfaceCtor, SurfaceExpr};
+use clean_parser::{DeclModifiers, SurfaceBinder, SurfaceCtor, SurfaceExpr, SurfaceName};
 
 use super::{convert_binder_info, ElabCtx, ElabResult};
 
-type AutoImplicitBinder = (String, FVarId, Expr);
+type AutoImplicitBinder = (SurfaceName, FVarId, Expr);
 type RawCtor = (Name, Expr, Vec<AutoImplicitBinder>);
 
 struct LevelParamCollector<'a> {
@@ -194,7 +194,44 @@ fn assign_header_metas(
     })
 }
 
+/// Clean's own `deriving` markers on an inductive (`DeepInduction`,
+/// `ContainerMap`, `ContainerRel`): requests for generated eliminators, not
+/// class names, so neither resolution nor a derive handler sees them.
+fn is_clean_deriving_marker(class: &SurfaceName) -> bool {
+    ["DeepInduction", "ContainerMap", "ContainerRel"]
+        .into_iter()
+        .any(|marker| class.name() == &Name::anon().str(marker))
+}
+
 impl<'a> ElabCtx<'a> {
+    /// Infer the non-recursive field bound in a constructor telescope.
+    /// Opening binders lets later dependent fields contribute their sorts.
+    pub(super) fn constructor_universe_bound(&mut self, ty: &Expr, ignored: &[Name]) -> Level {
+        let mut target = Level::succ(Level::zero());
+        let mut walk = self.metas.instantiate(ty);
+        let mut opened = 0;
+        while let clean_kernel::ExprKind::Pi(_, dom, body) = walk.kind() {
+            if let Ok(l) = self.infer_sort(dom) {
+                let l = self.metas.instantiate_level(&l);
+                let mut ps = Vec::new();
+                l.collect_params(&mut ps);
+                if !ps.iter().any(|p| ignored.contains(p)) {
+                    target = Level::max(target, l);
+                }
+            }
+            let local = self.push_local(
+                SurfaceName::generated_path("_universe_field"),
+                dom.as_ref().clone(),
+            );
+            walk = body.instantiate(&Expr::fvar(local));
+            opened += 1;
+        }
+        for _ in 0..opened {
+            self.pop_local();
+        }
+        target.normalize()
+    }
+
     /// Elaborate an inductive type declaration
     ///
     /// An inductive type has:
@@ -212,21 +249,35 @@ impl<'a> ElabCtx<'a> {
     /// ```
     pub(super) fn elab_inductive(
         &mut self,
-        name: &str,
-        universe_params: &[String],
+        name: &SurfaceName,
+        universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         ty: &SurfaceExpr,
         ctors: &[SurfaceCtor],
-        deriving: &[String],
+        deriving: &[SurfaceName],
         modifiers: &DeclModifiers,
     ) -> Result<ElabResult, ElabError> {
-        let ind_name = Name::from_string(name);
+        let ind_name = name.name().clone();
+
+        // Lean resolves every class of the `deriving` clause before it
+        // elaborates the type: a name that does not resolve fails the whole
+        // declaration (`deriving_log`). Clean's own markers are not classes.
+        self.resolve_deriving_clause(
+            deriving
+                .iter()
+                .filter(|class| !is_clean_deriving_marker(class)),
+        )?;
 
         // Collect fvars and elaborated types for parameters
         // We store the elaborated types to avoid re-elaborating them multiple times
         // (once for push_local, once for ind_ty, and once per constructor)
         let mut param_fvars = Vec::new();
         let mut param_tys = Vec::new();
+
+        // The header includes parameter annotations as well as the result.
+        // A type auto-bound in `(p : α → Prop)` must be supplied to every
+        // constructor self-reference, just like one found in the result type.
+        let header_auto_start = self.auto_implicit_count();
 
         // Elaborate parameters and store both fvars and types
         for binder in binders {
@@ -236,18 +287,29 @@ impl<'a> ElabCtx<'a> {
                 let binder_sort = Expr::sort(self.fresh_universe_param());
                 self.fresh_meta(binder_sort)
             };
+            let binder_ty = self.coerce_type_position(binder_ty);
+            self.check_instance_binder_annotation(binder.info, &binder_ty)?;
             let fvar = self.push_local(binder.name.clone(), binder_ty.clone());
             param_fvars.push(fvar);
             param_tys.push(binder_ty);
         }
 
-        // Record the auto-implicit start before result type elaboration (#2680).
-        // Auto-implicits created during result type elaboration (e.g., α in
-        // `Cover : (x y z : List α) → Type u`) form the header packet.
-        let header_auto_start = self.auto_implicit_count();
-
-        // Elaborate the result type (e.g., Type, Type u, Prop)
-        let result_ty = self.elaborate(ty)?;
+        // Elaborate the result type (e.g., Type, Type u, Prop).
+        //
+        // An omitted result (a Hole), or a literal `Type*`, is an
+        // ASSIGNABLE level solved from the constructor fields below (U2 rung
+        // 5), so it is minted here as a metavariable rather than through
+        // `elab_universe`, where `Type*` is a rigid parameter
+        // (`ElabCtx::fresh_star_universe_param`).
+        let result_ty = if matches!(
+            ty,
+            SurfaceExpr::Hole(_)
+                | SurfaceExpr::Universe(_, clean_parser::UniverseExpr::TypeImplicit)
+        ) {
+            Expr::sort(Level::succ(self.fresh_universe_param()))
+        } else {
+            self.elaborate(ty)?
+        };
 
         let mut result_sort = result_ty.clone();
         while let clean_kernel::ExprKind::Pi(_, _, body) = result_sort.kind() {
@@ -269,7 +331,7 @@ impl<'a> ElabCtx<'a> {
         }
 
         // Freeze the header auto-implicit packet (#2680). This identifies which
-        // auto-implicits are header-level (from result type elaboration) vs
+        // auto-implicits are header-level (from parameters or result) vs
         // constructor-local, enabling the uniform-prefix num_params analysis.
         let header_auto_fvars: Vec<FVarId> = self.auto_implicits[header_auto_start..]
             .iter()
@@ -300,7 +362,7 @@ impl<'a> ElabCtx<'a> {
         // so that constructor types can reference the inductive by its unqualified
         // name. Inside `namespace Foo`, the surface syntax `inductive Color where
         // | red : Color` uses the unqualified name `Color`, not `Foo.Color`.
-        let local_name = name.rsplit('.').next().unwrap_or(name).to_string();
+        let local_name = name.last_component();
         let ind_fvar = self.push_local(local_name, ind_fvar_ty);
 
         // Phase 1: Elaborate all constructor types.
@@ -309,40 +371,47 @@ impl<'a> ElabCtx<'a> {
         // Fix for #2001: replace_fvar_with_const reads self.universe_params at call time;
         // calling it per-constructor inside the elaboration loop means early constructors
         // get fewer universe levels than later ones (or than the final declared count).
-        let mut raw_ctors: Vec<RawCtor> = Vec::new();
-        for ctor in ctors {
-            let ctor_name = Name::from_string(&format!("{}.{}", name, ctor.name));
-            let ctor_auto_implicit_start = self.auto_implicit_count();
-            let ctor_ty_raw = self.elaborate(&ctor.ty)?;
-            // Assign unsolved header-position metas to header FVars (#2680).
-            // e.g., in `done : Cover [] [] []`, the α meta stays unsolved
-            // because nil doesn't constrain it. This ensures all constructors
-            // use the same header FVars for consistent num_params.
-            assign_header_metas(&ctor_ty_raw, &mut self.metas, ind_fvar, &header_auto_fvars);
-            let ctor_auto_implicits = self.take_auto_implicits_since(ctor_auto_implicit_start);
-            raw_ctors.push((ctor_name, ctor_ty_raw, ctor_auto_implicits));
-        }
+        // A `private` family is elaborated under its kernel name
+        // `_private.<module>.0.<name>` (G21 B3), which no source spelling
+        // writes: the qualified alias is the user-facing name.
+        let alias = crate::private_names::private_to_user_name(name.name())
+            .map_or_else(|| name.clone(), SurfaceName::from_name);
+        let raw_ctors: Vec<RawCtor> = self.with_local_name_alias(alias, ind_fvar, |ctx| {
+            let mut raw_ctors = Vec::new();
+            for ctor in ctors {
+                let ctor_name = name.append(&ctor.name).into_name();
+                let ctor_auto_implicit_start = ctx.auto_implicit_count();
+                let ctor_ty_raw = ctx.elaborate(&ctor.ty)?;
+                // Assign unsolved header-position metas to header FVars (#2680).
+                // e.g., in `done : Cover [] [] []`, the α meta stays unsolved
+                // because nil doesn't constrain it. This ensures all constructors
+                // use the same header FVars for consistent num_params.
+                assign_header_metas(&ctor_ty_raw, &mut ctx.metas, ind_fvar, &header_auto_fvars);
+                let ctor_auto_implicits = ctx.take_auto_implicits_since(ctor_auto_implicit_start);
+                raw_ctors.push((ctor_name, ctor_ty_raw, ctor_auto_implicits));
+            }
+            Ok(raw_ctors)
+        })?;
 
         // U2 rung 5: result-sort inference, BEFORE decl-level-param collection
         // so an inferred fresh level is already solved (and instantiated away)
         // when ctor Consts bake in the level-param list. When the result
-        // sort's level still contains an ASSIGNABLE fresh param (the parser's
-        // `.{u}`-with-omitted-sort TypeImplicit default), solve it as the max
+        // sort's level still contains an ASSIGNABLE fresh param, solve it as the max
         // of the raw constructor-field sorts with a Sort-1 floor (enums land
         // on Type 0) — Lean's `inferResultingUniverse` minimality. Field
-        // sorts mentioning the target param (recursive fields) are excluded;
-        // closed domains only (dependent fields approximated away —
-        // conservative: a too-small max fails LOUDLY in add_inductive below,
-        // never unsoundly).
-        // Gate on the SURFACE shape: only the `TypeImplicit` result form (the
-        // parser's omitted-sort default for `.{u}` inductives, or a literal
-        // `Type*`) is inferred. An EXPLICIT sort mentioning auto-bound params
+        // sorts mentioning the target param (recursive fields) are excluded.
+        // Open each constructor binder with a typed local so dependent field
+        // domains contribute their own sorts too. Kernel registration still
+        // checks the final universe constraints independently.
+        // Gate on the SURFACE shape: only an omitted result, a result hole,
+        // or a literal `Type*` is inferred. An EXPLICIT sort mentioning auto-bound params
         // (`: β → Type (max u v)`) must keep its params — they are the
         // declaration's universe parameters, not inference targets (#796
         // regression pin).
         let result_sort_is_implicit = matches!(
             ty,
-            SurfaceExpr::Universe(_, clean_parser::UniverseExpr::TypeImplicit)
+            SurfaceExpr::Hole(_)
+                | SurfaceExpr::Universe(_, clean_parser::UniverseExpr::TypeImplicit)
         );
         if result_sort_is_implicit {
             let result_level_inst = {
@@ -367,21 +436,10 @@ impl<'a> ElabCtx<'a> {
                 if !assignable.is_empty() {
                     let mut target = Level::succ(Level::zero());
                     for (_n, ctor_ty_raw, _ai) in &raw_ctors {
-                        let mut walk = self.metas.instantiate(ctor_ty_raw);
-                        while let clean_kernel::ExprKind::Pi(_, dom, body) = walk.kind() {
-                            if !dom.has_loose_bvars() {
-                                if let Ok(l) = self.infer_sort(dom) {
-                                    let l = self.metas.instantiate_level(&l);
-                                    let mut ps = Vec::new();
-                                    l.collect_params(&mut ps);
-                                    if !ps.iter().any(|p| assignable.contains(p)) {
-                                        target = Level::max(target, l);
-                                    }
-                                }
-                            }
-                            let next = body.as_ref().clone();
-                            walk = next;
-                        }
+                        target = Level::max(
+                            target,
+                            self.constructor_universe_bound(ctor_ty_raw, &assignable),
+                        );
                     }
                     let target = target.normalize();
                     let _ =
@@ -393,6 +451,15 @@ impl<'a> ElabCtx<'a> {
         let mut decl_level_params = Vec::new();
         let ind_ty_levels = self.metas.instantiate_levels(&ind_ty);
         collect_expr_level_params(&ind_ty_levels, &mut decl_level_params);
+        // Header locals have not been abstracted into `ind_ty` yet. Their
+        // types can carry the family's only universe parameters (for example,
+        // `α` in `(p : α → Prop)`), so collect those before freezing self refs.
+        for (_, _, implicit_ty) in &header_packet {
+            let ty = self
+                .metas
+                .instantiate_levels(&self.metas.instantiate(implicit_ty));
+            collect_expr_level_params(&ty, &mut decl_level_params);
+        }
         for (_ctor_name, ctor_ty_raw, ctor_auto_implicits) in &raw_ctors {
             let ctor_ty_levels = self.metas.instantiate_levels(ctor_ty_raw);
             collect_expr_level_params(&ctor_ty_levels, &mut decl_level_params);
@@ -428,9 +495,9 @@ impl<'a> ElabCtx<'a> {
             // Collect unsolved metas remaining in this constructor.
             let mut ctor_meta_ids: Vec<crate::unify::MetaId> = Vec::new();
             collect_expr_meta_fvars(&ctor_ty_raw, &mut ctor_meta_ids);
-            for (_, _, impl_ty) in &ctor_auto_implicits {
-                collect_expr_meta_fvars(impl_ty, &mut ctor_meta_ids);
-            }
+            // Match Lean's extraCtorParams boundary: collect from the constructor
+            // type, not from the types of auto-bound constructor parameters.
+            // The latter must already be inferable (elab_fail/1616.lean).
 
             // Separate ctor-local metas (not shared with ind_ty).
             // These represent per-constructor implicit args from elab_app
@@ -458,7 +525,29 @@ impl<'a> ElabCtx<'a> {
                     *ty = replace_fvar(ty.clone(), meta_fvar, fresh);
                 }
                 meta_ty = replace_fvar(meta_ty, meta_fvar, fresh);
-                extra_ctor_binders.push((format!("_ctor_{}", meta_id.0), fresh, meta_ty));
+                extra_ctor_binders.push((
+                    SurfaceName::from_name(Name::anon().str(format!("_ctor_{}", meta_id.0))),
+                    fresh,
+                    meta_ty,
+                ));
+            }
+
+            let mut unresolved_parameter_metas = Vec::new();
+            for (_, _, ty) in &ctor_auto_implicits {
+                collect_expr_meta_fvars(
+                    &self.metas.instantiate(ty),
+                    &mut unresolved_parameter_metas,
+                );
+            }
+            if !unresolved_parameter_metas.is_empty() {
+                return Err(ElabError::ResidualFreeVariables {
+                    decl_kind: "constructor".into(),
+                    name: ctor_name.to_string(),
+                    detail: format!(
+                        "cannot synthesize implicit arguments in auto-bound parameter types ({} unresolved)",
+                        unresolved_parameter_metas.len()
+                    ),
+                });
             }
 
             // Replace ind_fvar with Const — no extra applied args (#2680 step 6).
@@ -504,10 +593,10 @@ impl<'a> ElabCtx<'a> {
         // Pop inductive fvar
         self.pop_local();
 
-        // Pop param fvars
-        for _ in 0..binders.len() {
-            self.pop_local();
-        }
+        // Auto-bound header locals can be interleaved with explicit parameters.
+        // Remove exactly the parameter IDs; the auto-implicit drain below owns
+        // the remaining header locals.
+        self.locals.retain(|(_, id, _)| !param_fvars.contains(id));
 
         let mut ind_auto_implicits = self.take_auto_implicits();
         let mut promoted_meta_implicits = Vec::new();
@@ -561,7 +650,7 @@ impl<'a> ElabCtx<'a> {
                 })
                 .collect();
             promoted_meta_implicits.push((
-                format!("__auto_meta_{}", meta_id.0),
+                SurfaceName::from_name(Name::anon().str(format!("__auto_meta_{}", meta_id.0))),
                 promoted_fvar,
                 promoted_ty,
             ));
@@ -666,26 +755,34 @@ impl<'a> ElabCtx<'a> {
             // parent declaration's parameter set is already complete, so restore
             // this mutable elaborator state on both success and failure.
             let ind_universe_params_len = self.universe_params.len();
-            let filtered_deriving: Vec<String> = deriving
+            let filtered_deriving: Vec<SurfaceName> = deriving
                 .iter()
-                .filter(|c| {
-                    c.as_str() != "DeepInduction"
-                        && c.as_str() != "ContainerMap"
-                        && c.as_str() != "ContainerRel"
-                })
+                .filter(|c| !is_clean_deriving_marker(c))
                 .cloned()
                 .collect();
-            let result = self.generate_derived_instances_inductive(
-                &registered_candidate,
-                &ind_name,
-                universe_params,
-                binders,
-                ctors,
-                &ind_ty,
-                &filtered_deriving,
-            );
+            // One class at a time: a class that fails is recorded beside the
+            // inductive, which is declared regardless, as Lean declares it
+            // before running any deriving handler (`deriving_log`).
+            // Lean's `DecidableEq` handler throws on a nested type, which
+            // ends the clause; the kernel's own record of nesting decides it.
+            let nesting = match registered_candidate.get_inductive(&ind_name) {
+                Some(val) if !val.is_nested => super::deriving_log::TypeNesting::Flat,
+                _ => super::deriving_log::TypeNesting::Nested,
+            };
+            let instances =
+                self.derive_clause_logged(&ind_name, nesting, &filtered_deriving, |ctx, class| {
+                    ctx.generate_derived_instances_inductive(
+                        &registered_candidate,
+                        &ind_name,
+                        universe_params,
+                        binders,
+                        ctors,
+                        &ind_ty,
+                        std::slice::from_ref(class),
+                    )
+                });
             self.universe_params.truncate(ind_universe_params_len);
-            result?
+            instances
         };
 
         // Use self.universe_params which includes any auto-bound params added
@@ -699,9 +796,15 @@ impl<'a> ElabCtx<'a> {
             ty: ind_ty,
             constructors,
             derived_instances,
-            wants_deep_induction: deriving.iter().any(|c| c.as_str() == "DeepInduction"),
-            wants_container_map: deriving.iter().any(|c| c.as_str() == "ContainerMap"),
-            wants_container_rel: deriving.iter().any(|c| c.as_str() == "ContainerRel"),
+            wants_deep_induction: deriving
+                .iter()
+                .any(|c| c.name() == &Name::anon().str("DeepInduction")),
+            wants_container_map: deriving
+                .iter()
+                .any(|c| c.name() == &Name::anon().str("ContainerMap")),
+            wants_container_rel: deriving
+                .iter()
+                .any(|c| c.name() == &Name::anon().str("ContainerRel")),
             modifiers: *modifiers,
         })
     }

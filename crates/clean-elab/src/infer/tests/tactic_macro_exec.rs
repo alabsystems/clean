@@ -178,26 +178,38 @@ fn test_tactic_macro_wrong_proof_fails_to_close_goal() {
 }
 
 /// Loud rejection (the former pin, flipped per its own doc comment): a macro
-/// whose category is unimplemented AND not a registered syntax category
-/// (`calc` here) is REJECTED at the declaration — the error names the
-/// category and lists the supported ones — never silently skipped into a
-/// registration that can never fire.
+/// whose category is unimplemented AND not a registered syntax category is
+/// REJECTED at the declaration — the error names the category and lists the
+/// supported ones — never silently skipped into a registration that can
+/// never fire.
+///
+/// The category used to be spelled `calc`. That is a Lean 4.8.0 KEYWORD, so
+/// Lean refuses the command before any category lookup ("unexpected token
+/// 'calc'; expected identifier", measured 2026-09-27) and Clean's parser now
+/// does too (`clean_parser::lean_keywords`); the elaborator's rejection is
+/// exercised with the non-keyword unknown category `calcx` (Lean: "unknown
+/// parser `calcx`").
 #[test]
 fn test_unknown_category_macro_rejected_loudly() {
     let env = prop_env();
     let mut ctx = ElabCtx::new(&env);
 
     let patterns = ctx.tactic_registry.tactic_patterns();
-    // The former pin demonstrated this parses; a parse-level rejection would
-    // be a behavior change worth a loud test failure, so expect success.
-    let decl = parse_decl_with_tactics(r#"macro "clc" : calc => `(calc| _)"#, &patterns)
+    let keyword = parse_decl_with_tactics(r#"macro "clc" : calc => `(calc| _)"#, &patterns)
+        .expect_err("`calc` is a Lean keyword, not a category name");
+    assert!(
+        format!("{keyword:?}").contains("keyword in Lean 4.8.0"),
+        "the refusal must say why: {keyword:?}"
+    );
+
+    let decl = parse_decl_with_tactics(r#"macro "clc" : calcx => `(calcx| _)"#, &patterns)
         .expect("declaration should parse");
     let err = ctx
         .elab_decl(&decl)
         .expect_err("an unknown-category macro must be rejected (fail closed)");
     assert!(
         matches!(&err, ElabError::MacroError(msg)
-            if msg.contains("calc") && msg.contains("term") && msg.contains("command")),
+            if msg.contains("calcx") && msg.contains("term") && msg.contains("command")),
         "rejection should name the category and list supported ones, got {err:?}"
     );
 }

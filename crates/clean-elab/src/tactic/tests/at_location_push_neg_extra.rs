@@ -33,8 +33,9 @@ fn unsupported_push_neg_hypothesis_state() -> (ProofState, Expr, Expr) {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty.clone(),
             value: None,
         }],
@@ -57,7 +58,7 @@ pub(super) fn assert_push_neg_failure_keeps_state(
     let h = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("the original hypothesis should remain visible after failure");
     assert_eq!(
         h.ty, *hyp_ty,
@@ -82,14 +83,16 @@ fn test_push_neg_at_rewrites_inside_mdata_wrapper() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: wrapped_hyp_ty,
             value: None,
         }],
     );
 
-    push_neg_at(&mut state, "h").expect("push_neg_at should rewrite inside mdata wrappers");
+    push_neg_at(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("push_neg_at should rewrite inside mdata wrappers");
 
     let goal = state.current_goal().expect("goal should remain open");
     assert_eq!(
@@ -99,7 +102,7 @@ fn test_push_neg_at_rewrites_inside_mdata_wrapper() {
     let h = goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("rewritten hypothesis should remain visible");
     assert_eq!(
         h.ty,
@@ -125,7 +128,7 @@ fn test_push_neg_at_rewrites_inside_mdata_wrapper() {
 fn test_push_neg_at_fails_closed_on_unsupported_implication_domain_rewrite() {
     let (mut state, target, hyp_ty) = unsupported_push_neg_hypothesis_state();
 
-    let result = push_neg_at(&mut state, "h");
+    let result = push_neg_at(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         matches!(result, Err(TacticError::TypeCheckFailed(ref message)) if message.contains("legacy push_neg would rewrite it")),
         "push_neg_at should fail closed when the proof-carry path misses a legacy rewrite: {result:?}"
@@ -146,8 +149,9 @@ fn test_push_neg_wildcard_dispatch_propagates_fail_closed_hypothesis_error() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty.clone(),
             value: None,
         }],
@@ -182,8 +186,9 @@ fn test_push_neg_wildcard_dispatch_propagates_environment_error() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: hyp_ty.clone(),
             value: None,
         }],

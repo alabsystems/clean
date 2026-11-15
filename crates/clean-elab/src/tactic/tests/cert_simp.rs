@@ -25,7 +25,8 @@ fn test_cert_simp_closes_local_rewrite_without_trusted_fallback() {
         make_eq(a_ty, Expr::app(f.clone(), a), Expr::app(f, b)),
     );
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "h").expect("intro should expose local equality");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro should expose local equality");
     let axiom_before = axiom_snapshot();
 
     cert_simp(&mut state).expect("cert_simp should rewrite with the local equality");
@@ -102,8 +103,9 @@ fn test_cert_simp_unfolds_certificate_definition_in_hypothesis() {
         env,
         Expr::const_(Name::from_string("False"), vec![]),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: Expr::const_(Name::from_string("Cert.PB.checkBound"), vec![]),
             value: None,
         }],
@@ -116,7 +118,7 @@ fn test_cert_simp_unfolds_certificate_definition_in_hypothesis() {
         .expect("symbolic bound should not close by simplification alone")
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("simplified hypothesis should keep its name");
     assert!(
         expr_contains_const(&h.ty, "LE.le"),
@@ -180,23 +182,33 @@ fn test_cert_simp_lemma_pack_filters_missing_and_axiom_candidates() {
     let names = super::super::cert_simp::cert_simp_lemma_names(&state, &CertSimpConfig::default());
 
     assert!(
-        names.iter().any(|name| name == "List.map"),
+        names
+            .iter()
+            .any(|name| name.name() == &Name::from_string("List.map")),
         "checked definitions present in the environment should be selected"
     );
     assert!(
-        !names.iter().any(|name| name == "List.filter"),
+        !names
+            .iter()
+            .any(|name| name.name() == &Name::from_string("List.filter")),
         "axiom-backed candidates should be skipped by default"
     );
     assert!(
-        !names.iter().any(|name| name == "List.map_append"),
+        !names
+            .iter()
+            .any(|name| name.name() == &Name::from_string("List.map_append")),
         "axiom-dependent theorem candidates should be skipped by default"
     );
     assert!(
-        !names.iter().any(|name| name == "List.filter_append"),
+        !names
+            .iter()
+            .any(|name| name.name() == &Name::from_string("List.filter_append")),
         "constructive theorem candidates that are not rewrite equations should be skipped"
     );
     assert!(
-        !names.iter().any(|name| name == "List.flatMap"),
+        !names
+            .iter()
+            .any(|name| name.name() == &Name::from_string("List.flatMap")),
         "missing candidates should be ignored"
     );
 }

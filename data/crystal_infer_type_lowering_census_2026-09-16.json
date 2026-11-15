@@ -1,0 +1,98 @@
+{
+  "schema": "clean.crystal_infer_type_lowering_census/v1",
+  "what_this_is": "A PER-MEMBER lowering census of infer_type's derived closure. The bundle lowering is all-or-nothing and names only its FIRST refusal, so it could not say how much of the closure is lowerable or how many distinct refusals remain. Each member is lowered ALONE into a one-function module and the outcome recorded. A solo lowering is a WEAKER question than the bundle's -- a callee that is a bundle member is an absent callee here, which the bridge models fail-soft -- so `solo_ok` does NOT mean a member lowers in the bundle. It answers the question actually asked: how many DISTINCT refusal families stand between this closure and a lowered module.",
+  "measured_utc": "2026-09-16T17:04:38Z",
+  "trust_rev": "b8c392221e9a1a9aa40f2fc1a9e5dab3d967ba2a",
+  "clean_rev_dumped": "2fcab7f2639338aa6af55aa6ba4958a38dec2e29",
+  "filter": "local:tc::infer::<impl tc::TypeChecker<'env>>::infer_type",
+  "member_fuel": 16384,
+  "manifest_sha256": "8245493c01a44a5629f75dde49aa48d36dd7fa0fdfea9b5376020312217dc1e6",
+  "members": 2989,
+  "solo_ok": 2388,
+  "solo_failed": 601,
+  "distinct_messages": 43,
+  "families": [
+    {
+      "id": "A",
+      "name": "atomic intrinsics",
+      "members": 297,
+      "share_pct": 49.4,
+      "kind": "designed quarantine",
+      "note": "The bridge refuses `if atomic.is_some()` unconditionally: forgeable metadata must not become proof authority. Remedy is a compiler-authenticated identity+ordering channel. CONSOLIDATED 2026-09-16: family F (9, 'opaque terminator') is the SAME problem reached by a different path -- all 8 distinct terminators are core::sync::atomic::atomic_load/atomic_compare_exchange, the STD wrappers, which take Ordering as a RUNTIME argument and so fail the extractor's 'concrete Ordering discriminant' check before the bridge's quarantine ever sees them. Parsing them would move them from opaque-terminator to quarantine, not clear them. Atomic-related total is therefore 297 of 601 (49.4%), not 288.",
+      "work_kind": "soundness channel (compiler-authenticated evidence)"
+    },
+    {
+      "id": "B",
+      "name": "transmute",
+      "members": 113,
+      "share_pct": 18.8,
+      "kind": "designed refusal",
+      "note": "Requires layout compatibility AND a validity invariant; refuses to model as a value-preserving cast. Dominated by transmute to Atomic<usize> and MaybeUninit arrays.",
+      "work_kind": "soundness channel (layout + validity proof)"
+    },
+    {
+      "id": "C",
+      "name": "multi-variant Ty::Datatype",
+      "members": 80,
+      "share_pct": 13.3,
+      "kind": "representation gap",
+      "note": "Constructors/selectors exist only in the vcgen/SMT lane. This is exactly the part carved off from the single-variant product fix; now SIZED at 80 members.",
+      "work_kind": "native-lane representation (ctors/selectors)"
+    },
+    {
+      "id": "D",
+      "name": "union field projection",
+      "members": 54,
+      "share_pct": 9.0,
+      "kind": "representation gap",
+      "note": "LazyLock::Data and MaybeUninit. A union has overlapping fields; the trust-ir aggregate spelling has independent ones, so a projection would invent struct semantics.",
+      "work_kind": "IR FORMAT extension (trust-ir has NO Union type)",
+      "format_note": "Measured at the pinned rev 6a7fe3525a: `grep -n \"Union\" crates/trust-ir/src/ty.rs` returns NOTHING. The refusal \"requires a trust-ir union representation\" is literal -- the format cannot spell a union. MaybeUninit<T> is {uninit: (), value: ManuallyDrop<T>} (one ZST + one real field, so no actual overlap) but LazyLock::Data<T,F> is {value: ManuallyDrop<T>, f: ManuallyDrop<F>} with GENUINE overlap, and it is 41 of the 54. A narrow one-non-ZST-field route would not reach the majority, and for MaybeUninit it still faces the uninitialized-read validity question."
+    },
+    {
+      "id": "E",
+      "name": "fat / raw pointer aggregates",
+      "members": 29,
+      "share_pct": 4.8,
+      "kind": "representation gap",
+      "work_kind": "IR FORMAT extension (trust-ir Constant has NO fat-pointer variant)",
+      "format_note": "Measured at the same rev: trust_ir::Constant has 15 variants (Int, U128, Bytes, Float, Bool, Aggregate, Array, Vector, Sequence, Set, Record, Closure, FnDef, SymbolAddr, PhantomData) and NONE is fat-pointer shaped. The bridge says so itself: \"trust-ir's Constant has no fat-pointer spelling (the ratified fat spelling is the PtrFromParts trio)\"."
+    },
+    {
+      "id": "misc",
+      "name": "misc",
+      "members": 28,
+      "share_pct": 4.7,
+      "kind": "assorted",
+      "work_kind": "assorted"
+    }
+  ],
+  "reading": "The chain is BOUNDED. Four-fifths of the closure already lowers in isolation, and the residue is six families rather than six hundred problems. Two of them (A, B) are DESIGNED fail-closed refusals whose remedy is supplying evidence the producer does not carry; three (C, D, E) are representation gaps in the trust-ir aggregate spelling; one (F) is an unmodelled callee. None is a defect of the kind cleared earlier on this lane -- those are exhausted.",
+  "caveat": "`solo_ok` is an UPPER BOUND on what lowers in the bundle, never a lower one. The census is additive and changed no artifact: the emitted manifest is byte-identical before and after it was added.",
+  "classification_correction_2026_09_16": "An earlier reading of this record called D and E 'representation gaps' and recommended them as the largest chunk that is engineering rather than soundness design. BOTH ARE WRONG. Verified at the trust-ir rev Cargo.lock pins: the format has no Union type and no fat-pointer Constant, so D and E are IR FORMAT EXTENSIONS -- a new type/variant, a binary codec version bump, parser and Display, every consumer's match arms, and a move of clean's vendored pin. Substantially larger than a bridge arm. NONE of the six families is merely engineering.",
+  "family_consolidation_2026_09_16": "The census first reported SIX families. Family F ('opaque terminator', 9) turned out to be atomics in disguise: every distinct terminator is a core::sync::atomic std wrapper failing the concrete-Ordering check. There are FIVE families, and atomics are 297 of 601 (49.4%) rather than 288 (47.9%) -- very nearly half the residue is one problem.",
+  "classification_amendment_2026_09_21": {
+    "what_this_amends": "The 2026-09-16 verdict above, which is PRESERVED VERBATIM and is still correct for the lane it was measured on. This amendment narrows it; it does not retract it.",
+    "family_D_union_field_projection": {
+      "prior_verdict": "IR FORMAT extension (trust-ir has NO Union type) -- substantially larger than a bridge arm.",
+      "stands_for": "the SSA VALUE lane. `Inst::ExtractField`/`InsertField` are slot-indexed and slots are independent by construction, so a union read there would hand back a value the program may never have written. That still has no sound representation and still refuses.",
+      "narrowed_by_measurement": "All 54 measured rows are ADDRESS/TYPE walks, not value reads: 41 are LazyLock::force's tail `&*(*this.data.get()).value` (a Deref-rooted borrow) and 13 are `write_box_via_move`'s `(*b).value.value.value = val` (a Deref-rooted projected STORE). On the address walk the bridge already holds the exact byte offset: rustc reports every union field at `FieldsShape::Union(_).offset(i) == Size::ZERO`, the extractor copies it into `AdtLayoutInfo.field_offsets`, `map_type_ctx` copies it into `FieldDef::offset`, and `declared_field_byte_offset` reads it back BEFORE any shape derivation. No union type is needed to emit `gep inbounds i8, base, 0`.",
+      "landed_2026_09_21": "`union_field_at_declared_zero_offset` in trust-ir-bridge/src/lower.rs admits a union field ONLY when `adt_kind == Some(Union)` (rustc's own `adt_def.is_union()`), a layout is recorded, and the RECORDED offset is 0 -- never on the union KIND, because a layout-less union falls to the index spelling `base + k*size_of(field k)`, the `base + 1` defect the central refusal was landed to fix. Used by `address_from_pointer` (forced flat-I8 spelling) and by `field_type_with_defs` (type-only). `field_type` itself is UNCHANGED, so every value-lane caller keeps the identical refusal.",
+      "not_claimed": "A body count. A solo-fail is the FIRST BridgeError a member returned, never the binding one; how many of the 54 then lower end to end is a re-run of the callee sidecar."
+    },
+    "family_C_multi_variant_datatype": {
+      "prior_verdict": "representation gap -- native-lane representation (ctors/selectors), sized at 80 members.",
+      "narrowed_by_measurement": "The native lane does not need SMT constructors/selectors. The flat `__tag` + `__v{v}_{f}` `Ty::Adt` view that 7,855 other definitional ADTs already carry (cell_threading.rs's own census records definitional Ty::Datatype ZERO times) is sufficient, and `lower_adt_as_datatype` is def-path-gated to exactly clean_kernel's Level/Expr/ExprKind -- so the three Lever-A types are the only ones excluded from the mechanism, not a mechanism that is missing.",
+      "landed_2026_09_21": "`record_native_enum_view` (trust-mir-extract/src/ty_convert.rs) files that flat view BESIDE the `Ty::Datatype`, under the disjoint key prefix `__trust_native_enum_view::`, gated on rustc saying `discriminant == variant index` for every variant. `collect_native_enum_views` (bridge) folds it module-wide before any body lowers, re-derives the same gate from the view's own carried discriminants, and prunes every view that can reach itself. Lever A is untouched: the `Ty::Datatype` the vcgen/SMT lane reads is returned unchanged.",
+      "why_the_gate_is_the_soundness_argument": "Both legacy-flat WRITE paths in the bridge store the variant INDEX into the tag lane (`Const::Int(variant as i128)` in the aggregate arm; `explicit_discriminant_trust_ir_const` returns `Int(variant_index as i128)`). For `enum E { A = 5, B = 10 }` that writes `__tag = 0` while a SwitchInt compares against 5 and 10 and takes `otherwise` -- a false narrowing toward `unreachable`. Views that do not satisfy `discriminant == index` are refused at both the producer and the consumer. The underlying write-path defect is REPORTED, not widened: nothing new reaches it.",
+      "scope": "ExprKind only in this increment. `Level` is multi-variant and passes the discriminant gate but `Succ(Arc<Level>)` gives its view a self-loop, so the acyclicity prune drops it -- a structural exclusion, not a name list. `Expr` is single-variant and already served by the 2026-09-16 product expansion.",
+      "not_claimed": "A body count; same reason as family D."
+    },
+    "families_untouched": [
+      "A (atomic intrinsics)",
+      "B (transmute)",
+      "E (fat-pointer constant)",
+      "F (opaque terminator, consolidated into A)"
+    ]
+  }
+}

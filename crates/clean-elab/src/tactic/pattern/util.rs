@@ -10,6 +10,18 @@ use clean_kernel::{Expr, ExprKind};
 
 use super::super::LocalDecl;
 
+/// Only a single root Str component can select a builtin spelling.
+pub(crate) fn builtin_component(name: &Name) -> Option<&str> {
+    match name.inner() {
+        clean_kernel::name::NameInner::Str(parent, text)
+            if matches!(parent.inner(), clean_kernel::name::NameInner::Anon) =>
+        {
+            Some(text.as_ref())
+        }
+        _ => None,
+    }
+}
+
 /// Check if two expressions are structurally equal
 ///
 /// REQUIRES: `a` and `b` are well-formed expressions
@@ -99,7 +111,7 @@ pub(crate) fn is_binary_app(expr: &Expr, func_name: &str) -> bool {
     if let ExprKind::App(f1, _) = expr.kind() {
         if let ExprKind::App(f2, _) = f1.kind() {
             if let ExprKind::Const(name, _) = f2.kind() {
-                return name.to_string() == func_name;
+                return name == &Name::from_string(func_name);
             }
             // Could be more applications (with type args)
             let mut current = f2.as_ref();
@@ -107,7 +119,7 @@ pub(crate) fn is_binary_app(expr: &Expr, func_name: &str) -> bool {
                 current = inner.as_ref();
             }
             if let ExprKind::Const(name, _) = current.kind() {
-                return name.to_string() == func_name;
+                return name == &Name::from_string(func_name);
             }
         }
     }
@@ -158,22 +170,24 @@ pub(crate) fn get_app_head(expr: &Expr) -> &Expr {
 ///
 /// ENSURES: Returned name does not collide with any `LocalDecl.name` in `ctx`
 /// ENSURES: Returns `base` unchanged when it is not already used
-pub(crate) fn generate_fresh_hyp_name(ctx: &[LocalDecl], base: &str) -> String {
+pub(crate) fn generate_fresh_hyp_name(
+    ctx: &[LocalDecl],
+    base: &clean_parser::SurfaceName,
+) -> clean_parser::SurfaceName {
     let existing: std::collections::HashSet<_> = ctx.iter().map(|d| d.name.clone()).collect();
 
     if !existing.contains(base) {
-        return base.to_string();
+        return base.clone();
     }
 
-    for i in 1.. {
-        let name = format!("{base}{i}");
+    for i in 1..=existing.len() + 1 {
+        let name = super::names::generated_suffix(base, &i.to_string());
         if !existing.contains(&name) {
             return name;
         }
     }
 
-    // Should never reach here
-    format!("{}_{}", base, std::process::id())
+    unreachable!("more distinct generated candidates than existing names")
 }
 
 /// Try to extract existential type: exists x : A, P x -> Some((A, lambda x, P x))
@@ -184,8 +198,7 @@ pub(crate) fn try_extract_exists(expr: &Expr) -> Option<(Expr, Expr)> {
     if let ExprKind::App(f, pred) = expr.kind() {
         if let ExprKind::App(exists_const, domain) = f.kind() {
             if let ExprKind::Const(name, _) = exists_const.kind() {
-                let name_str = name.to_string();
-                if name_str == "Exists" || name_str.ends_with(".Exists") {
+                if name == &Name::anon().str("Exists") {
                     return Some((domain.as_ref().clone(), pred.as_ref().clone()));
                 }
             }
@@ -196,8 +209,7 @@ pub(crate) fn try_extract_exists(expr: &Expr) -> Option<(Expr, Expr)> {
     if let ExprKind::App(f, pred) = expr.kind() {
         if let ExprKind::App(sigma_const, domain) = f.kind() {
             if let ExprKind::Const(name, _) = sigma_const.kind() {
-                let name_str = name.to_string();
-                if name_str == "Sigma" || name_str == "PSigma" || name_str.ends_with(".Sigma") {
+                if matches!(builtin_component(name), Some("Sigma" | "PSigma")) {
                     return Some((domain.as_ref().clone(), pred.as_ref().clone()));
                 }
             }
@@ -227,9 +239,9 @@ pub(crate) fn apply_predicate(pred: &Expr, arg: Expr) -> Expr {
 /// Extract the type class name from a type
 ///
 /// ENSURES: Returns the head constant name of `ty` when one exists through nested applications
-pub(crate) fn extract_class_name(ty: &Expr) -> Option<String> {
+pub(crate) fn extract_class_name(ty: &Expr) -> Option<Name> {
     stack_safe(|| match ty.kind() {
-        ExprKind::Const(name, _) => Some(name.to_string()),
+        ExprKind::Const(name, _) => Some(name.clone()),
         ExprKind::App(f, _) => extract_class_name(f),
         _ => None,
     })
@@ -237,11 +249,11 @@ pub(crate) fn extract_class_name(ty: &Expr) -> Option<String> {
 
 /// Check if expression is True
 ///
-/// ENSURES: Returns `true` only for `True` constants (including namespaced forms)
+/// ENSURES: Recognizes only root `True` and the explicit historical `Prop.True`
+/// path, never a quoted single-component or arbitrary suffix lookalike.
 pub(crate) fn is_true_prop(expr: &Expr) -> bool {
     if let ExprKind::Const(name, _) = expr.kind() {
-        let s = name.to_string();
-        s == "True" || s.ends_with(".True")
+        name == &Name::anon().str("True") || name == &Name::anon().str("Prop").str("True")
     } else {
         false
     }
@@ -249,11 +261,11 @@ pub(crate) fn is_true_prop(expr: &Expr) -> bool {
 
 /// Check if expression is False
 ///
-/// ENSURES: Returns `true` only for `False` constants (including namespaced forms)
+/// ENSURES: Recognizes only root `False` and the explicit historical `Prop.False`
+/// path, never a quoted single-component or arbitrary suffix lookalike.
 pub(crate) fn is_false_prop(expr: &Expr) -> bool {
     if let ExprKind::Const(name, _) = expr.kind() {
-        let s = name.to_string();
-        s == "False" || s.ends_with(".False")
+        name == &Name::anon().str("False") || name == &Name::anon().str("Prop").str("False")
     } else {
         false
     }
@@ -268,8 +280,7 @@ pub(crate) fn try_extract_eq(expr: &Expr) -> Option<(Expr, Expr)> {
         if let ExprKind::App(f2, a) = f1.kind() {
             if let ExprKind::App(eq_const, _ty) = f2.kind() {
                 if let ExprKind::Const(name, _) = eq_const.kind() {
-                    let s = name.to_string();
-                    if s == "Eq" || s.ends_with(".Eq") {
+                    if name == &Name::anon().str("Eq") {
                         return Some((a.as_ref().clone(), b.as_ref().clone()));
                     }
                 }
@@ -316,8 +327,10 @@ pub(crate) fn try_infer_expr_type(expr: &Expr) -> Option<Expr> {
         },
         ExprKind::Const(name, levels) => {
             // If it's a type constant, return it
-            let s = name.to_string();
-            if s == "Nat" || s == "Int" || s == "Bool" || s == "String" {
+            if matches!(
+                builtin_component(name),
+                Some("Nat" | "Int" | "Bool" | "String")
+            ) {
                 return Some(Expr::const_(name.clone(), levels.clone()));
             }
             None
@@ -336,11 +349,10 @@ pub(crate) fn try_infer_expr_type(expr: &Expr) -> Option<Expr> {
 pub(crate) fn find_first_type(expr: &Expr) -> Option<Expr> {
     stack_safe(|| match expr.kind() {
         ExprKind::Const(name, levels) => {
-            let s = name.to_string();
             // Common types
             if matches!(
-                s.as_str(),
-                "Nat" | "Int" | "Bool" | "String" | "Float" | "Char"
+                builtin_component(name),
+                Some("Nat" | "Int" | "Bool" | "String" | "Float" | "Char")
             ) {
                 return Some(Expr::const_(name.clone(), levels.clone()));
             }

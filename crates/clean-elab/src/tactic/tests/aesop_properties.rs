@@ -29,8 +29,9 @@ fn property_soundness_no_remaining_goals() {
         env,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p,
             value: None,
         }],
@@ -102,8 +103,9 @@ fn property_determinism_same_result() {
         env1,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -113,8 +115,9 @@ fn property_determinism_same_result() {
         env2,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p,
             value: None,
         }],
@@ -184,8 +187,9 @@ fn property_monotonicity_more_hyps_no_worse() {
         env1,
         p.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -197,14 +201,16 @@ fn property_monotonicity_more_hyps_no_worse() {
         p.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "hp".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hp"),
                 ty: p,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "hq".to_string(),
+                name: clean_parser::SurfaceName::generated_path("hq"),
                 ty: q,
                 value: None,
             },

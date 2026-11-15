@@ -1,0 +1,3 @@
+(assume nc (not (= (bvadd x y x) (bvadd x y))))
+(step s (cl (= (bvadd x y x) (bvadd x y))) :rule aci_simp)
+(step done (cl) :rule resolution :premises (nc s))

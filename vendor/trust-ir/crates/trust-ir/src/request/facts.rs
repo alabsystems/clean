@@ -26,6 +26,16 @@ impl core::fmt::Display for NativeRequestId {
 }
 
 /// Producer of a native verification bundle.
+///
+/// The TOOL that assembled the bundle — distinct from the per-function
+/// [`crate::Producer`] stamped inside `bundle.module`, and from the source
+/// LANGUAGES the bundle declares ([`NativeBundleProvenance::source_languages`]).
+/// A `TrustIr` pipeline legitimately bundles a Rust module, so no rule ties
+/// this value to the language set.
+///
+/// Wire: TMVB envelope tag byte (`binary.rs`) and the stable-digest tag
+/// (`request::digest`) agree variant by variant; both are registered in
+/// `wire-allocations.toml` (`Clean` is tag 4, schema 8).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NativeBundleProducer {
@@ -44,6 +54,13 @@ pub enum NativeBundleProducer {
     /// Native TrustIr transform, MIR-compatibility bridge, or verifier pipeline.
     #[cfg_attr(feature = "serde", serde(rename = "TrustIr"))]
     TrustIr,
+    /// The Clean fused proof language's compiler (`clean compile --emit
+    /// trustir`), the second authoritative producer of the two-language
+    /// package. Schema 8 (WS4.16, F-080): before it a Clean-produced bundle
+    /// could only mislabel itself `TRust` or `TrustIr`, while the deprecated
+    /// `TSwift`/`TC` tags kept their seats.
+    #[cfg_attr(feature = "serde", serde(rename = "Clean"))]
+    Clean,
 }
 
 /// Native input artifact that backs a verification bundle.
@@ -97,6 +114,13 @@ pub enum TrustWpVerificationMode {
 }
 
 /// Source language that produced the native verification bundle.
+///
+/// Schema 8 (WS4.16, F-080) adds `Lean` and `Clean`, so a Clean-produced
+/// function has a language of its own instead of `Other`, and makes the
+/// bundle carry a SET of languages ([`NativeBundleProvenance::source_languages`])
+/// beside this scalar, which schema 8 keeps as the PRIMARY language for one
+/// version. [`Self::candidates_for_producer`] is the total, explicit map from
+/// a function's [`crate::Producer`] to the language(s) that cover it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NativeSourceLanguage {
@@ -107,6 +131,53 @@ pub enum NativeSourceLanguage {
     C,
     TrustIr,
     Other,
+    /// Lean 4 source compiled by the Clean toolchain (the `.lean` half of a
+    /// Clean package). Covers `Producer::Clean` alone or together with
+    /// [`Self::Clean`].
+    Lean,
+    /// Clean fused-proof-language source (`clean compile --emit trustir`).
+    /// Covers `Producer::Clean` alone or together with [`Self::Lean`].
+    Clean,
+}
+
+impl NativeSourceLanguage {
+    /// The source languages that COVER a function stamped `producer`: the
+    /// function is covered by a bundle's language set iff at least one of
+    /// them is in the set. Total and explicit (roadmap WS4.16):
+    ///
+    /// | `Function.producer`      | candidates            |
+    /// |--------------------------|-----------------------|
+    /// | `Some(TRust)`            | `Rust`                |
+    /// | `Some(Clean)`            | `Lean`, `Clean`       |
+    /// | `Some(TrustIr)`          | `TrustIr`             |
+    /// | `Some(TSwift)` (deprec.) | `Swift`               |
+    /// | `Some(TC)` (deprecated)  | `C`                   |
+    /// | `Some(Other(_))`         | `Other`               |
+    /// | `None`                   | `Unknown`             |
+    ///
+    /// `None` maps to `Unknown`, which must itself be IN the set: an
+    /// unstamped function is never covered by omission (the `site` /
+    /// `bindings` none-is-not-a-wildcard rule).
+    pub fn candidates_for_producer(producer: Option<&Producer>) -> &'static [Self] {
+        match producer {
+            Some(Producer::TRust) => &[Self::Rust],
+            Some(Producer::Clean) => &[Self::Lean, Self::Clean],
+            Some(Producer::TrustIr) => &[Self::TrustIr],
+            Some(Producer::TSwift) => &[Self::Swift],
+            Some(Producer::TC) => &[Self::C],
+            Some(Producer::Other(_)) => &[Self::Other],
+            None => &[Self::Unknown],
+        }
+    }
+
+    /// Whether `set` covers a function stamped `producer`: some candidate of
+    /// [`Self::candidates_for_producer`] is a member. An empty set covers
+    /// nothing.
+    pub fn set_covers_producer(set: &BTreeSet<Self>, producer: Option<&Producer>) -> bool {
+        Self::candidates_for_producer(producer)
+            .iter()
+            .any(|language| set.contains(language))
+    }
 }
 
 /// Stable identity for a producer, frontend, verifier, or solver binary.
@@ -244,7 +315,29 @@ impl NativeVerifierSuite {
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NativeBundleProvenance {
     pub producer_version: String,
+    /// The PRIMARY source language. Schema 8 keeps this scalar for one
+    /// version beside [`Self::source_languages`], which must contain it.
     pub source_language: NativeSourceLanguage,
+    /// Every source language of the package this bundle verifies (schema 8,
+    /// WS4.16 / F-080). A bundle is valid only if this set contains the
+    /// primary [`Self::source_language`] AND covers every
+    /// `Function.producer` of `bundle.module` — and every
+    /// `ModuleImport.producer` of its authenticated dependencies, so a
+    /// package cannot state one language by putting its other half behind an
+    /// import ([`Self::uncovered_imports`]) — under
+    /// [`NativeSourceLanguage::candidates_for_producer`], including
+    /// `producer: None`, which is covered only by an explicit `Unknown`
+    /// member. A missing key decodes to the EMPTY set, which covers nothing
+    /// (never a wildcard); the default provenance carries `{Unknown}`, the
+    /// exact set its default primary needs, so a bundle built by
+    /// `NativeVerificationBundle::new` stays self-consistent and every
+    /// stamped function still forces the producer to say its language.
+    ///
+    /// Always serialized (no `skip_serializing_if`): the set is part of what
+    /// the bundle CLAIMS, and an absent claim must read as empty, not as
+    /// "unchanged".
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub source_languages: BTreeSet<NativeSourceLanguage>,
     #[cfg_attr(
         feature = "serde",
         serde(default, skip_serializing_if = "Option::is_none")
@@ -267,10 +360,79 @@ impl Default for NativeBundleProvenance {
         Self {
             producer_version: "unknown".to_string(),
             source_language: NativeSourceLanguage::Unknown,
+            source_languages: BTreeSet::from([NativeSourceLanguage::Unknown]),
             source_artifact: None,
             source_digest: None,
             toolchain: Vec::new(),
         }
+    }
+}
+
+impl NativeBundleProvenance {
+    /// The functions of `module` this provenance's language set does NOT
+    /// cover, grouped by their `Function.producer` (one entry per distinct
+    /// producer, functions in module order). Empty iff every function is
+    /// covered under [`NativeSourceLanguage::candidates_for_producer`].
+    /// This is the whole coverage rule; `NativeVerificationBundle::validate`
+    /// reports each entry as `BundleLanguageUncovered`.
+    pub fn uncovered_functions(&self, module: &Module) -> Vec<(Option<Producer>, Vec<FuncId>)> {
+        let mut uncovered: Vec<(Option<Producer>, Vec<FuncId>)> = Vec::new();
+        for function in &module.functions {
+            let producer = function.producer.as_ref();
+            if NativeSourceLanguage::set_covers_producer(&self.source_languages, producer) {
+                continue;
+            }
+            let id = function.id;
+            match uncovered
+                .iter_mut()
+                .find(|(seen, _)| seen.as_ref() == producer)
+            {
+                Some((_, functions)) => functions.push(id),
+                None => uncovered.push((producer.cloned(), vec![id])),
+            }
+        }
+        uncovered
+    }
+
+    /// The IMPORT rows of `module` this provenance's language set does NOT
+    /// cover, in table order: `(id, name, producer)` per uncovered row.
+    ///
+    /// A dependency is part of the package a bundle verifies. A root module
+    /// whose own functions are all `Producer::TRust`, but which authenticates
+    /// a Clean-produced dependency and inherits its discharges
+    /// (`ProofEvidence::InheritedFromCallee { external: Some(..) }`,
+    /// `FunctionSummary.backed_by`), IS a two-language artifact — G8's "record
+    /// BOTH source languages of a mixed package" is about the package, not
+    /// about one module's function table — so a `{Rust}` claim over it is
+    /// false. Without this the coverage rule stops at the module boundary and
+    /// a two-language package states one language simply by putting its Clean
+    /// half behind an import (WS4.16 review).
+    ///
+    /// `ModuleImport.producer: None` is UNRECORDED and is covered only by an
+    /// explicit `Unknown` member — never by omission, and never read as
+    /// agreement with the importer's own producer. That is the field's own
+    /// documented contract ("a consumer whose rule depends on the producer
+    /// fails closed on `None`"), and the same none-is-not-a-wildcard rule the
+    /// function half applies.
+    pub fn uncovered_imports(&self, module: &Module) -> Vec<(ImportId, String, Option<Producer>)> {
+        module
+            .imports
+            .iter()
+            .enumerate()
+            .filter(|(_, import)| {
+                !NativeSourceLanguage::set_covers_producer(
+                    &self.source_languages,
+                    import.producer.as_ref(),
+                )
+            })
+            .map(|(index, import)| {
+                (
+                    ImportId::new(u32::try_from(index).expect("import table exceeds u32 id space")),
+                    import.name.clone(),
+                    import.producer.clone(),
+                )
+            })
+            .collect()
     }
 }
 
@@ -4141,7 +4303,7 @@ impl NativeCompilerFacts {
     pub fn stable_digest(&self) -> ProofDigest {
         let mut bytes = Vec::new();
         write_compiler_facts_stable(&mut bytes, self);
-        ProofDigest::sha256_domain("trust_ir.native.compiler.facts.v4", &bytes)
+        ProofDigest::sha256_domain("trust_ir.native.compiler.facts.v5", &bytes)
     }
 
     pub fn obligation_source(&self, obligation: ProofId) -> Option<&NativeObligationSource> {

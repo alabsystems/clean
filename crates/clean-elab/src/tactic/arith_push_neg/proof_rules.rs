@@ -358,14 +358,25 @@ pub(super) fn mk_not_exists_eq(
     ))
 }
 
+/// Prove `¬(a ≤ b) = (b < a)` for Nat.
+///
+/// `raw` selects the SPELLING of the two propositions the resulting `Eq`
+/// relates: `false` builds the `LE.le` / `LT.lt` typeclass spines, `true`
+/// builds the raw `Nat.le` / `Nat.lt` constant applications. Only the spelling
+/// changes — the proposition does not, because `instLENat` / `instLTNat` are
+/// reducible wrappers and the two forms are definitionally equal. The witness
+/// is the same `Nat.not_le` either way, and the kernel closes the delta gap
+/// between the witness's declared type and the spelling chosen here (the same
+/// technique [`mk_nat_not_ge_eq`] documents for `GE.ge ⟶ LE.le`).
 pub(super) fn mk_nat_not_le_eq(
     state: &mut ProofState,
     lhs: &Expr,
     rhs: &Expr,
+    raw: bool,
 ) -> Result<Expr, TacticError> {
     require_consts(state, &["Nat.not_le", "Iff.mp", "Iff.mpr", "propext"])?;
-    let old = make_not(&super::super::tc_app::nat_le_tc(lhs.clone(), rhs.clone()));
-    let new = super::super::tc_app::nat_lt_tc(rhs.clone(), lhs.clone());
+    let old = make_not(&nat_le_spelled(raw, lhs.clone(), rhs.clone()));
+    let new = nat_lt_spelled(raw, rhs.clone(), lhs.clone());
     let iff = Expr::app(
         Expr::app(
             Expr::const_(Name::from_string("Nat.not_le"), vec![]),
@@ -376,14 +387,17 @@ pub(super) fn mk_nat_not_le_eq(
     Ok(mk_prop_eq_from_iff(&old, &new, iff))
 }
 
+/// Prove `¬(a < b) = (b ≤ a)` for Nat. `raw` selects the spelling exactly as in
+/// [`mk_nat_not_le_eq`].
 pub(super) fn mk_nat_not_lt_eq(
     state: &mut ProofState,
     lhs: &Expr,
     rhs: &Expr,
+    raw: bool,
 ) -> Result<Expr, TacticError> {
     require_consts(state, &["Nat.not_lt", "Iff.mp", "Iff.mpr", "propext"])?;
-    let old = make_not(&super::super::tc_app::nat_lt_tc(lhs.clone(), rhs.clone()));
-    let new = super::super::tc_app::nat_le_tc(rhs.clone(), lhs.clone());
+    let old = make_not(&nat_lt_spelled(raw, lhs.clone(), rhs.clone()));
+    let new = nat_le_spelled(raw, rhs.clone(), lhs.clone());
     let iff = Expr::app(
         Expr::app(
             Expr::const_(Name::from_string("Nat.not_lt"), vec![]),
@@ -392,6 +406,30 @@ pub(super) fn mk_nat_not_lt_eq(
         rhs.clone(),
     );
     Ok(mk_prop_eq_from_iff(&old, &new, iff))
+}
+
+/// `lhs ≤ rhs` at `Nat`, in the requested spelling.
+///
+/// ENSURES: `raw == false` yields the `@LE.le Nat instLENat` typeclass spine.
+/// ENSURES: `raw == true` yields the raw `Nat.le lhs rhs` application.
+fn nat_le_spelled(raw: bool, lhs: Expr, rhs: Expr) -> Expr {
+    if raw {
+        super::nat_le_raw(lhs, rhs)
+    } else {
+        super::super::tc_app::nat_le_tc(lhs, rhs)
+    }
+}
+
+/// `lhs < rhs` at `Nat`, in the requested spelling.
+///
+/// ENSURES: `raw == false` yields the `@LT.lt Nat instLTNat` typeclass spine.
+/// ENSURES: `raw == true` yields the raw `Nat.lt lhs rhs` application.
+fn nat_lt_spelled(raw: bool, lhs: Expr, rhs: Expr) -> Expr {
+    if raw {
+        super::nat_lt_raw(lhs, rhs)
+    } else {
+        super::super::tc_app::nat_lt_tc(lhs, rhs)
+    }
 }
 
 /// Prove `¬(a ≥ b) = (a < b)` for Nat.

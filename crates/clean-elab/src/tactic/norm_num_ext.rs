@@ -178,7 +178,7 @@ fn eval_extended_inner(expr: &Expr, config: &NormNumExtConfig, depth: u32) -> Op
                 }
             }
             if config.enable_modular {
-                if let Some(val) = try_modular(&op, l, r) {
+                if let Some(val) = try_modular(op_name, l, r) {
                     return Some(val);
                 }
             }
@@ -341,37 +341,44 @@ fn try_gcd(op: &str, l: i128, r: i128) -> Option<i128> {
     }
 }
 
-fn try_modular(op: &str, l: i128, r: i128) -> Option<i128> {
+fn try_modular(name: &Name, l: i128, r: i128) -> Option<i128> {
+    // A projection's carrier does not authenticate its dictionary. Leave all
+    // generic div/mod projections to checked kernel unfolding.
+    let op = [
+        "Nat.mod", "Nat.div", "Int.mod", "Int.div", "Int.emod", "Int.ediv",
+    ]
+    .into_iter()
+    .find(|op| name == &Name::from_string(op))?;
     if r == 0 {
         return match op {
-            "Nat.mod" | "HMod.hMod" | "Mod.mod" => Some(l),
-            "Nat.div" | "HDiv.hDiv" | "Div.div" => Some(0),
+            "Nat.mod" => Some(l),
+            "Nat.div" => Some(0),
             "Int.mod" | "Int.emod" => Some(l),
             "Int.div" | "Int.ediv" => Some(0),
             _ => None,
         };
     }
     match op {
-        "Nat.mod" | "HMod.hMod" | "Mod.mod" => {
+        "Nat.mod" => {
             // Euclidean mod for non-negative operands
-            Some(l.rem_euclid(r))
+            l.checked_rem_euclid(r)
         }
-        "Nat.div" | "HDiv.hDiv" | "Div.div" => {
+        "Nat.div" => {
             // Truncating division
-            Some(l / r)
+            l.checked_div(r)
         }
         // T-division semantics (truncation toward zero); the remainder's
         // sign follows the dividend. Matches Lean 4 `Int.mod` / `Int.div`
         // and clean-kernel's native `reduce_int_mod` (checked_rem) /
         // `reduce_int_div` (checked_div). E.g. (-7) % 3 = -1, (-7) / 3 = -2.
-        "Int.mod" => Some(l % r),
-        "Int.div" => Some(l / r),
+        "Int.mod" => l.checked_rem(r),
+        "Int.div" => l.checked_div(r),
         // Euclidean semantics (remainder always non-negative); the quotient
         // rounds toward negative infinity for positive divisors. Matches
         // Lean 4 `Int.emod` / `Int.ediv`. E.g. (-7) emod 3 = 2,
         // (-7) ediv 3 = -3.
-        "Int.emod" => Some(l.rem_euclid(r)),
-        "Int.ediv" => Some(l.div_euclid(r)),
+        "Int.emod" => l.checked_rem_euclid(r),
+        "Int.ediv" => l.checked_div_euclid(r),
         _ => None,
     }
 }
@@ -401,12 +408,12 @@ fn try_rational_div(op: &str, num: i128, den: i128) -> Option<i128> {
     // Rational division: only returns a value when the result is integral
     // (i.e. `den` divides `num` evenly).
     match op {
-        "Rat.div" | "HDiv.hDiv" | "Div.div" => {
+        "Rat.div" => {
             if den == 0 {
                 return Some(0); // Lean convention: a / 0 = 0
             }
-            if num % den == 0 {
-                Some(num / den)
+            if num.checked_rem(den)? == 0 {
+                num.checked_div(den)
             } else {
                 None // non-integral result — cannot normalize to a single i128
             }
@@ -583,7 +590,7 @@ pub(crate) fn try_close_int_ground_comparison(state: &mut ProofState, goal: &Goa
 }
 
 // ---------------------------------------------------------------------------
-// Ground Nat comparison close (constructive `Nat.le.step` chain witness)
+// Ground Nat comparison close (constant-size `Nat.le_of_ble_eq_true` witness)
 // ---------------------------------------------------------------------------
 
 /// A ground Nat order goal reduced to the canonical `Nat.le low high` shape.
@@ -654,45 +661,33 @@ fn nat_comparison_shape(target: &Expr) -> Option<NatLeShape> {
     Some(NatLeShape { low, high })
 }
 
-/// Build a constructive `Nat.le low high` proof from inductive constructors.
+/// A constant-size proof of `Nat.le low high`:
+/// `@Nat.le_of_ble_eq_true low high (@Eq.refl.{1} Bool Bool.true)`
+/// ([`super::nat_le_bridge::nat_le_lits`]).
 ///
-/// `Nat.le` is the inductive with `Nat.le.refl : (n : Nat) -> Nat.le n n` and
-/// `Nat.le.step : {n m : Nat} -> Nat.le n m -> Nat.le n (Nat.succ m)`. Starting
-/// from `@Nat.le.refl low : Nat.le low low`, each `@Nat.le.step low m _`
-/// advances the upper index by one `Nat.succ`, so `high - low` steps yield
-/// `Nat.le low (Nat.succ^(high-low) low)`, which the kernel checks definitionally
-/// equal to `Nat.le low high` (the native `Nat.succ` reducer collapses the
-/// chain back to the `high` literal).
+/// The kernel decides the argument type `Nat.ble low high = true` by one
+/// literal comparison, as Lean's kernel does, so the term and its check cost
+/// the same whatever the gap. This used to be `@Nat.le.refl low` lifted by one
+/// `Nat.le.step` per unit of `high - low` — a term linear in the gap, which
+/// `try_close_nat_ground_comparison` refused past 4096 steps.
 ///
-/// REQUIRES: `low <= high`.
+/// REQUIRES: `low <= high` for the term to type-check; for `low > high` the
+///   kernel folds `Nat.ble low high` to `false` and rejects the `Eq.refl`.
 pub(crate) fn build_nat_le_witness(low: u64, high: u64) -> Expr {
-    // @Nat.le.refl low : Nat.le low low
-    let mut proof = Expr::app(
-        Expr::const_(Name::from_string("Nat.le.refl"), vec![]),
-        Expr::nat_lit(low),
-    );
-    // For m = low, low+1, ..., high-1: lift Nat.le low m to Nat.le low (succ m).
-    let mut m = low;
-    while m < high {
-        proof = Expr::apps(
-            Expr::const_(Name::from_string("Nat.le.step"), vec![]),
-            [Expr::nat_lit(low), Expr::nat_lit(m), proof],
-        );
-        m += 1;
-    }
-    proof
+    super::nat_le_bridge::nat_le_lits(low, high)
 }
 
-/// Close a TRUE ground Nat `<=` / `<` / `>=` / `>` goal with a constructive
-/// `Nat.le.refl` / `Nat.le.step` witness.
+/// Close a TRUE ground Nat `<=` / `<` / `>=` / `>` goal with a constant-size
+/// `Nat.le_of_ble_eq_true` witness ([`build_nat_le_witness`]).
 ///
-/// SOUNDNESS: the witness is built solely from the `Nat.le` inductive
-/// constructors -- no `sorryAx`, and crucially no `Nat.decLe` / `Nat.decLt`
-/// decidability reducer (the kernel's native `Nat.decLe` reducer emits
-/// `Decidable.isTrue sorryAx`, so extracting a proof from it would smuggle in
-/// `sorryAx`). `close_goal` re-checks the term against the goal type, where the
-/// relation unfolds to the canonical `Nat.le` and the `Nat.succ` chain reduces
-/// to the goal's literal upper bound.
+/// SOUNDNESS: the witness is `Nat.le_of_ble_eq_true` (a constructive prelude
+/// theorem; the same constant, argument order and statement as Lean's `Init`)
+/// applied to `Eq.refl true` -- no `sorryAx`, and crucially no `Nat.decLe` /
+/// `Nat.decLt` decidability reducer (the kernel's native `Nat.decLe` reducer
+/// emits `Decidable.isTrue sorryAx`, so extracting a proof from it would
+/// smuggle in `sorryAx`). `close_goal` re-checks the term against the goal
+/// type, where the relation unfolds to the canonical `Nat.le` and the kernel
+/// folds `Nat.ble low high`; a false comparison gives `false` and is refused.
 ///
 /// REQUIRES: `goal.target` is a recognized ground Nat order comparison.
 /// ENSURES: On `Some(())`, the goal has been closed with a kernel-checked
@@ -700,20 +695,12 @@ pub(crate) fn build_nat_le_witness(low: u64, high: u64) -> Expr {
 /// ENSURES: On `None`, the goal was not a ground Nat comparison or evaluated to
 ///          false; the proof state is unchanged.
 pub(crate) fn try_close_nat_ground_comparison(state: &mut ProofState, goal: &Goal) -> Option<()> {
-    /// Cap on `Nat.le.step` chain length: each step is one term, so an
-    /// unbounded gap (e.g. `0 <= 1_000_000`) would build a pathologically large
-    /// proof term. Beyond this, decline and let `decide` handle it.
-    const MAX_STEPS: u64 = 4096;
-
     let target = state.metas.instantiate(&goal.target);
     let shape = nat_comparison_shape(&target)?;
 
     // The comparison is true exactly when `low <= high`; otherwise reject so the
     // caller does not mis-close a false goal.
     if shape.low > shape.high {
-        return None;
-    }
-    if shape.high - shape.low > MAX_STEPS {
         return None;
     }
 
@@ -810,7 +797,7 @@ pub(crate) fn eval_norm_num_ext_with_config(
                 return Ok(());
             }
             // Ground Nat `<=` / `<` / `>=` / `>` goals are closed with a
-            // constructive `Nat.le.refl` / `Nat.le.step` chain. The kernel's
+            // constant-size `Nat.le_of_ble_eq_true` witness. The kernel's
             // `Nat.decLe` / `Nat.decLt` reducers emit `Decidable.isTrue
             // sorryAx`, so the decidability path would smuggle in `sorryAx`;
             // the `>` / bare `Nat.gt` / bare `Nat.ge` shapes also never reached

@@ -321,6 +321,40 @@ fn register_sum_eq_cons(env: &mut Environment) {
     .expect("structural equation lemma MyList.sum.eq_cons should kernel-check (rfl-provable)");
 }
 
+/// Register the OTHER structural equation lemma,
+/// `MyList.sum.eq_nil : MyList.sum MyList.nil = Nat.zero`, the same way.
+///
+/// A real `.olean` ships one equation per constructor, and `eq_cons` alone is
+/// half an equation set: it rewrites `sum (cons 3 nil)` to `Nat.add 3 (sum
+/// nil)` and then stops, leaving a residue whose last step needs UNFOLDING the
+/// plain `def MyList.sum`. Since B15 (`8aaf2bdc7`) simp's reflexivity closer is
+/// deliberately reducible-transparency only — `close_refl_reducible` refuses
+/// delta on a `Regular` head — so that residue stays open, correctly: making
+/// the closer full-transparency is exactly what B15 removed, and
+/// `simp_discipline_e2e.rs`'s `mval7` pin requires it stay removed.
+///
+/// With both equations the rewrite chain reaches `Nat.add 3 Nat.zero = 3`,
+/// which the reducible closer discharges through `reduce_nat` (not
+/// transparency-gated). That is also what Lean's `simp only [sum.eq_cons,
+/// sum.eq_nil]` does, so the test gets more Lean-faithful, not weaker.
+fn register_sum_eq_nil(env: &mut Environment) {
+    let sum = const_("MyList.sum");
+    let lhs = Expr::app(sum, nil());
+    let ty = nat_eq(lhs, const_("Nat.zero"));
+
+    // proof: @Eq.refl Nat Nat.zero — `sum nil` iota-reduces to `Nat.zero`.
+    let refl = Expr::const_(Name::from_string("Eq.refl"), vec![lvl1()]);
+    let value = Expr::app(Expr::app(refl, nat()), const_("Nat.zero"));
+
+    env.add_decl(Declaration::Theorem {
+        name: Name::from_string("MyList.sum.eq_nil"),
+        level_params: vec![],
+        type_: ty,
+        value,
+    })
+    .expect("structural equation lemma MyList.sum.eq_nil should kernel-check (rfl-provable)");
+}
+
 // ===========================================================================
 // Precondition: the synthesized env is the genuine *import* configuration —
 // MyList.rec is a registered recursor in the MajorAfterMinors layout whose
@@ -571,8 +605,12 @@ fn test_rw_imported_structural_eq_cons_unfolds_use() {
         .expect("fresh proof state has exactly one goal");
 
     // rw [MyList.sum.eq_cons] rewrites sum (cons 1 …) -> Nat.add 1 (sum …) (forward).
-    rewrite(&mut state, "MyList.sum.eq_cons", false)
-        .expect("rw [MyList.sum.eq_cons] should resolve the imported ∀-equation and fire");
+    rewrite(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("MyList.sum.eq_cons"),
+        false,
+    )
+    .expect("rw [MyList.sum.eq_cons] should resolve the imported ∀-equation and fire");
 
     // The remaining goal `Nat.add 1 (sum …) = Nat.add 1 (sum …)` closes by def-eq.
     let close = simp(&mut state, SimpConfig::new());
@@ -618,6 +656,7 @@ fn test_simp_imported_structural_eq_cons_closes_use() {
     let mut env = imported_mylist_env();
     elaborate_decls_into(&mut env, STRUCTURAL_DEFS);
     register_sum_eq_cons(&mut env);
+    register_sum_eq_nil(&mut env);
 
     // Goal: MyList.sum (cons 3 nil) = 3  (a use that reduces: 3 + sum nil = 3 + 0 = 3).
     let lhs_use = Expr::app(const_("MyList.sum"), cons(nat_lit(3), nil()));
@@ -632,7 +671,10 @@ fn test_simp_imported_structural_eq_cons_closes_use() {
 
     let mut cfg = SimpConfig::new();
     cfg.only = true;
-    cfg.extra_lemmas = vec!["MyList.sum.eq_cons".to_string()];
+    cfg.extra_lemmas = vec![
+        clean_parser::SurfaceName::generated_path("MyList.sum.eq_cons"),
+        clean_parser::SurfaceName::generated_path("MyList.sum.eq_nil"),
+    ];
     let res = simp(&mut state, cfg);
     assert!(
         res.is_ok() && state.goals().is_empty(),

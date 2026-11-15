@@ -20,38 +20,36 @@
 //! all — which is both common in practice (partial applications like
 //! `Nat.rec P z s`) and the case with a purely arithmetic reason to be stuck.
 //!
-//! The remaining half — a *fully* applied recursor whose major premise is stuck —
-//! needs the confluence argument, and is not attempted here.
+//! The fully applied case is handled by `stuck_major_immune.rs`, with
+//! confluence/classification suppliers in `stuck_major_confluence.rs`,
+//! `stuck_major_recmeta.rs`, and `slot_dispatch_at.rs`. Its premise excludes
+//! constructor-headed reducts whose matching rule can actually fire: both
+//! sufficient fields and exact arity at the preserved head universes are needed.
+//! A short-field constructor with a matching rule can itself be stuck, so
+//! guarded nonfiring does not imply absence of every constructor-headed reduct.
 //!
-//! **Update: that confluence argument is now COMPLETE.** The stuck-major
-//! classification closes all four alternatives — rigid, lam and δ-dead
-//! recmeta-free const in `stuck_major_confluence.rs`, and the const head
-//! *carrying* recmeta (the case recorded there as circular) in
-//! `stuck_major_recmeta.rs`. So a stuck major provably has no
-//! constructor-headed reduct.
-//!
-//! What is still missing is the **bridge** from that fact to `iota_immune`,
-//! i.e. the fully-applied analogue of `iota_immune_of_under_applied`:
+//! The registered fully applied bridge has the following invariant:
 //!
 //! ```text
 //! iota_immune_of_stuck_major
+//!   (us : ListType Level)                -- retained head universes
 //!   (hdef  : defval_for nm = none)         -- head is δ-dead
 //!   (hrec  : recmeta_for nm = some meta)   -- and a genuine recursor
 //!   (hhead : kexpr_const_name (kapp_fn r) = some nm)
+//!   (hlevels : kexpr_const_levels (kapp_fn r) = us)
 //!   (hslot : list_head (list_drop (major_idx meta) (kapp_args r)) = some maj)
 //!   (hno   : forall cname rule m2, maj =>* m2
 //!              -> kexpr_const_name (kapp_fn m2) = some cname
-//!              -> recrule_for (red_rec the_red_env) nm cname = some rule -> Empty)
+//!              -> recrule_for (red_rec the_red_env) nm cname = some rule
+//!              -> iota_fields_ok rule (kapp_args m2) = true
+//!              -> arity (recmeta_signature meta) us = true -> Empty)
 //!   : iota_immune r
 //! ```
 //!
-//! `hno` is exactly what the completed classification supplies, and the ι side
-//! of this bridge needs nothing new: `iota_reduct_some_inv_type` — the
-//! extraction primitive `iota_step_major_head_none_absurd` and its three
-//! siblings are all built on — already yields the firing `cname` and `rule`
-//! that `hno` consumes. What is missing is only the spine-preservation half,
-//! `major_slot_star_reduces`. Note the
-//! warning above still applies to this slice and is the reason `hno` quantifies
+//! Full guarded success inversion yields the constructor, rule, fields and
+//! arity premises that `hno` consumes. The registered step/star bridge preserves
+//! the head name, exact universe list and major slot while refuting iota inside
+//! the same induction. `hno` quantifies
 //! over reducts of the **major** rather than of its whnf: `wmajor` is *not* a
 //! subterm of `e`, because whnf can grow a term through δ-unfolding, so a
 //! subterm induction is refutable here.
@@ -102,6 +100,29 @@ use crate::spec::Specification;
 const MI: &str = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) \
      (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
 
+const UNDER_LEVELS_CONTROLS: &[&str] = &[
+    r"def under_levels_fixture_meta : RecMeta := RecMeta.mk (Nat.succ Nat.zero) Nat.zero Nat.zero Nat.zero Bool.false (KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort Level.zero)) Nat.zero",
+    r"def under_levels_fixture_env : RedEnv := RedEnv.mk (RecEnv.addRec RecEnv.empty Name.anonymous under_levels_fixture_meta RecRules.nil) DefEnv.empty IndCtorEnv.empty",
+    r"def under_levels_fixture_head : KExpr := KExpr.const Name.anonymous (ListType.cons Level (Level.succ (Level.param Name.anonymous)) (ListType.nil Level))",
+    r"def under_levels_fixture_before : KExpr := KExpr.app under_levels_fixture_head (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.lit Nat.zero))",
+    r"def under_levels_fixture_after : KExpr := KExpr.app under_levels_fixture_head (KExpr.lit Nat.zero)",
+    r"def under_levels_fixture_trace : par_reduces_cd under_levels_fixture_env under_levels_fixture_before under_levels_fixture_after :=
+ par_reduces_cd.app under_levels_fixture_env under_levels_fixture_head under_levels_fixture_head (KExpr.app (KExpr.lam (KExpr.sort Level.zero) (KExpr.bvar Nat.zero)) (KExpr.lit Nat.zero)) (KExpr.lit Nat.zero)
+ (par_reduces_cd.refl under_levels_fixture_env under_levels_fixture_head)
+ (par_reduces_cd.beta under_levels_fixture_env (KExpr.sort Level.zero) (KExpr.sort Level.zero) (KExpr.bvar Nat.zero) (KExpr.bvar Nat.zero) (KExpr.lit Nat.zero) (KExpr.lit Nat.zero)
+ (par_reduces_cd.refl under_levels_fixture_env (KExpr.sort Level.zero))
+ (par_reduces_cd.refl under_levels_fixture_env (KExpr.bvar Nat.zero))
+ (par_reduces_cd.refl under_levels_fixture_env (KExpr.lit Nat.zero)))",
+    r"def under_levels_fixture_preserved :
+ Eq (ListType Level) (kexpr_const_levels (kapp_fn under_levels_fixture_after)) (ListType.cons Level (Level.succ (Level.param Name.anonymous)) (ListType.nil Level)) :=
+ under_applied_levels_preserved_cd under_levels_fixture_env Name.anonymous under_levels_fixture_meta
+ (Eq.refl (OptionType KExpr) (OptionType.none KExpr))
+ (Eq.refl (OptionType RecMeta) (OptionType.some RecMeta under_levels_fixture_meta))
+ under_levels_fixture_before under_levels_fixture_after under_levels_fixture_trace
+ (Eq.refl (OptionType Name) (OptionType.some Name Name.anonymous))
+ (Le.refl (Nat.succ Nat.zero))",
+];
+
 impl Specification {
     /// Under-applied recursor spines are permanently ι-dead.
     pub(super) fn add_stuck_recursor(&mut self) -> Result<(), SpecError> {
@@ -114,6 +135,10 @@ impl Specification {
         self.add_le_succ_weaken()?;
         self.add_major_head_none_absurd()?;
         self.add_under_applied_preserved()?;
+        self.add_under_applied_levels_preserved()?;
+        for source in UNDER_LEVELS_CONTROLS {
+            self.add_recursive_def(source, "Actual under-applied nonzero-universe beta trace and head-level preservation caller.")?;
+        }
         self.add_under_applied_star()?;
         self.add_iota_immune_under_applied()?;
         self.add_bvar_major_chain()?;
@@ -242,7 +267,8 @@ impl Specification {
             "(apply_spine (list_drop (Nat.succ {mi_meta2}) (kapp_args e)) \
              (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) \
              (recrule_num_fields rule2)) (kapp_args major)) \
-             (apply_spine (list_take {pre2} (kapp_args e)) (recrule_rhs rule2))))"
+             (apply_spine (list_take {pre2} (kapp_args e)) (recursor_rhs_instance \
+             (recmeta_signature meta2) (recrule_rhs rule2) (kexpr_const_levels (kapp_fn e))))))"
         );
         self.add_recursive_def(
             &format!(
@@ -705,6 +731,101 @@ impl Specification {
         Ok(())
     }
 
+    /// The old name/length view does not retain universe arguments. This
+    /// companion proves their preservation by the actual parallel-step recursor.
+    fn add_under_applied_levels_preserved(&mut self) -> Result<(), SpecError> {
+        let levels = |e: &str| format!("(kexpr_const_levels (kapp_fn {e}))");
+        let conclusion =
+            |e: &str, e2: &str| format!("Eq (ListType Level) {} {}", levels(e2), levels(e));
+        let goal = |e: &str, e2: &str| {
+            format!(
+                "{} -> Le {} {MI} -> LiftP ({})",
+                Self::ua_head_is(e),
+                Self::ua_len_of(e),
+                conclusion(e, e2)
+            )
+        };
+        let mut arms = String::new();
+        for (slot, entry) in ARM_ORDER.iter().enumerate() {
+            let arm = if let Some(index) = entry {
+                let (payload, pairs, src, tgt) = CD_STRUCTURAL_ARMS[*index];
+                let mut premises = String::new();
+                let mut ihs = String::new();
+                for (i, (from, to)) in pairs.iter().enumerate() {
+                    premises.push_str(&format!("(_p{i} : par_reduces_cd env {from} {to}) "));
+                    ihs.push_str(&format!("(ih{i} : {}) ", goal(from, to)));
+                }
+                let body = if *index == 1 {
+                    format!(
+                        "ih0 hh (le_succ_weaken {} {MI} (Eq.subst Nat \
+                         (fun (z : Nat) => Le z {MI}) {} (Nat.succ {}) {} hl))",
+                        Self::ua_len_of("af"),
+                        Self::ua_len_of(src),
+                        Self::ua_len_of("af"),
+                        Self::len_app("af", "aa")
+                    )
+                } else {
+                    format!(
+                        "option_none_ne_some_type Name nm (LiftP ({})) hh",
+                        conclusion(src, tgt)
+                    )
+                };
+                format!(
+                    "(fun {payload} {premises}{ihs}(hh : {}) (hl : Le {} {MI}) => {body})",
+                    Self::ua_head_is(src),
+                    Self::ua_len_of(src)
+                )
+            } else if slot == 0 {
+                format!(
+                    "(fun (re : KExpr) (hh : {}) (hl : Le {} {MI}) => \
+                    LiftP.up ({}) (Eq.refl (ListType Level) {}))",
+                    Self::ua_head_is("re"),
+                    Self::ua_len_of("re"),
+                    conclusion("re", "re"),
+                    levels("re")
+                )
+            } else if slot == 7 {
+                format!(
+                    "(fun (ie : KExpr) (ie2 : KExpr) (hi : iota_step (red_rec env) ie ie2) \
+                    (hh : {}) (hl : Le {} {MI}) => \
+                    iota_step_below_boundary_absurd (red_rec env) ie ie2 nm meta \
+                    (LiftP ({})) hh hrec hl hi)",
+                    Self::ua_head_is("ie"),
+                    Self::ua_len_of("ie"),
+                    conclusion("ie", "ie2")
+                )
+            } else {
+                debug_assert_eq!(slot, 8);
+                format!("(fun (de : KExpr) (de2 : KExpr) (hd : delta_step (red_def env) de de2) \
+                    (hh : {}) (hl : Le {} {MI}) => \
+                    option_none_ne_some_type KExpr de2 (LiftP ({})) \
+                    (Eq.trans (OptionType KExpr) (OptionType.none KExpr) \
+                    (delta_reduct (red_def env) de) (OptionType.some KExpr de2) \
+                    (Eq.symm (OptionType KExpr) (delta_reduct (red_def env) de) (OptionType.none KExpr) \
+                    (delta_reduct_eq_none_of_defval_none (red_def env) de nm hh hdef)) hd))",
+                    Self::ua_head_is("de"), Self::ua_len_of("de"), conclusion("de", "de2"))
+            };
+            arms.push_str(&arm);
+            arms.push(' ');
+        }
+        let proposition = conclusion("e", "e2");
+        self.add_recursive_def(
+            &format!("def under_applied_levels_preserved_cd \
+                (env : RedEnv) (nm : Name) (meta : RecMeta) \
+                (hdef : Eq (OptionType KExpr) (defval_for (red_def env) nm) (OptionType.none KExpr)) \
+                (hrec : Eq (OptionType RecMeta) (recmeta_for (red_rec env) nm) (OptionType.some RecMeta meta)) \
+                (e : KExpr) (e2 : KExpr) (h : par_reduces_cd env e e2) \
+                (hh : {}) (hl : Le {} {MI}) : {proposition} := \
+                LiftP.rec ({proposition}) (fun (_ : LiftP ({proposition})) => {proposition}) \
+                (fun (hp : {proposition}) => hp) \
+                (par_reduces_cd.rec env (fun (p : KExpr) (q : KExpr) \
+                (_h : par_reduces_cd env p q) => {}) {arms} e e2 h hh hl)",
+                Self::ua_head_is("e"), Self::ua_len_of("e"), goal("p", "q")),
+            "Under-application preserves the actual head universe list through every parallel-step arm. The slot bound rules out iota inside the induction; raw definition absence rules out delta. No assumed target-head or target-universe equation.",
+        )?;
+        Ok(())
+    }
+
     fn under_applied_arms() -> String {
         let mut arms = String::new();
         for (slot, entry) in ARM_ORDER.iter().enumerate() {
@@ -941,6 +1062,42 @@ impl Specification {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guarded_under_applied_universes_and_stuck_invariant() {
+        crate::test_utils::run_with_stack(|| {
+            let mut spec = crate::test_utils::build_spec_with_stack();
+            for name in [
+                "under_applied_levels_preserved_cd",
+                "under_levels_fixture_trace",
+                "under_levels_fixture_preserved",
+                "stuck_major_iota_arm_absurd",
+                "stuck_major_app_arm",
+                "stuck_major_step_inv",
+                "stuck_major_star_inv",
+                "iota_immune_of_stuck_major",
+            ] {
+                let definition = spec.definitions().get(name).expect("registered proof");
+                assert!(!definition.is_axiom, "{name}");
+                assert!(definition.elaborated_value.is_some(), "{name}");
+                assert!(
+                    crate::spec_axiom_closure::computed_axiom_closure(&spec, name).is_empty(),
+                    "{name}"
+                );
+            }
+            for source in [
+                r"def under_levels_forged_erasure :
+ Eq (ListType Level) (kexpr_const_levels (kapp_fn under_levels_fixture_after)) (ListType.nil Level) :=
+ Eq.refl (ListType Level) (ListType.nil Level)",
+                r"def under_levels_forged_bound : Le (Nat.succ Nat.zero) Nat.zero :=
+ Le.refl Nat.zero",
+            ] {
+                assert!(spec
+                    .add_recursive_def(source, "Deliberate universe/bound forgery")
+                    .is_err());
+            }
+        });
+    }
 
     /// The `Le` bound must be an ANTECEDENT and the length an EQUATION. If the
     /// bound were carried in the conclusion too, the `app` arm would need

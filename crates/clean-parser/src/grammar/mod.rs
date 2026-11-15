@@ -7,7 +7,7 @@
 //! Parses tokens into a surface syntax AST.
 
 use crate::lexer::{Lexer, Token, TokenKind};
-use crate::surface::{DocComment, SurfaceDecl, SurfaceExpr};
+use crate::surface::{DocComment, Span, SurfaceDecl, SurfaceExpr};
 use crate::tactic_patterns::{TacticArgPattern, TacticPatterns};
 use crate::{LocatedParseError, ParseError, ParseReport, ParserRecoveryDiagnostic};
 
@@ -74,13 +74,22 @@ use crate::surface::{
 /// Recursive descent parser for Lean 4 syntax. The parser consumes tokens
 /// produced by the lexer and builds a surface syntax AST.
 pub struct Parser {
+    /// Optional syntactic observations. Ordinary parser entry points leave
+    /// this absent; an observation error never becomes a parse error.
+    origins: Option<crate::origins::OriginBuilder>,
     tokens: Vec<Token>,
     pos: usize,
+    /// Declaration visibility inherited from a module header or section.
+    default_visibility: crate::Visibility,
+    default_exposure: Option<bool>,
     /// Lean declaration doc comments (`/-- ... -/`) captured by the lexer while
     /// skipping trivia, in source order. The token stream is unchanged; these
     /// are associated with the declarations that follow them by
     /// [`Parser::parse_file_with_docs`]. Empty for inputs without doc comments.
     doc_comments: Vec<DocComment>,
+    /// Module docs (`/-! ... -/`) the lexer skipped, in source order: the file
+    /// header ends at one (`decl::header`).
+    module_docs: Vec<Span>,
     stop_app_at_newline_lparen: bool,
     stop_app_at_newline_outer_indent: bool,
     /// When true, `atom_expr` treats `do` as an identifier instead of a keyword.
@@ -166,6 +175,14 @@ pub struct Parser {
     /// comma-less Lean 4 style `{ x := 1 y := 2 }` would parse the value of `x`
     /// as `1 y` (application) and then fail to find `}`. See #3517.
     in_struct_field: bool,
+    /// When true, an identifier immediately followed by `:=` is not a
+    /// constructor-argument start in PATTERN position. Set by
+    /// [`Parser::struct_instance_pattern`] while it parses a field's value, so
+    /// the comma-less Lean 4 layout `{ a := x` / newline / `b := y }` stops the
+    /// value of `a` at `x` instead of reading `x b` as a constructor
+    /// application. The pattern twin of `in_struct_field`; real Mathlib writes
+    /// exactly that layout (`Mathlib/Order/Basic.lean:455-459`).
+    in_struct_pattern_field: bool,
     /// When true, identifiers immediately followed by `:=` are not considered
     /// atom starts. Used by `instance_field_value_expr` so that full-expression
     /// parsing of an instance `where`-field value stops at the next field's
@@ -201,6 +218,22 @@ pub struct Parser {
     indent_stack: Vec<u32>,
     /// Metadata parallel to `indent_stack`, used only for recovery diagnostics.
     indent_context_stack: Vec<IndentContext>,
+    /// Lean's `withoutPosition`: `Some(depth)` while the parse is inside a
+    /// bracketed term group (`(…)`, `⟨…⟩`, `{…}`, `[…]`, `#[…]`, `‹…›`) opened
+    /// when `indent_stack` had `depth` frames, and no indentation frame has
+    /// been pushed since. Lean clears the saved position inside every one of
+    /// those groups (`Lean/Parser/Term.lean:183,187,201,210,345`,
+    /// `Init/Data/Array/Basic.lean:29`), so neither `checkColGt` (application
+    /// arguments) nor `checkColGe` (tactic sequences) can cut a bracketed term
+    /// at an enclosing block's column. A block opened INSIDE the group (a
+    /// `by`, a bullet) pushes a frame, which re-establishes a position — so
+    /// the suppression is keyed on the frame count rather than being a plain
+    /// flag. Read through [`Parser::position_suppressed`].
+    position_suppressed_at: Option<usize>,
+    /// The types written in the rcases pattern being parsed (`⟨f, rfl : r =
+    /// _⟩`), in order; the pattern text refers to the `k`-th as `p : #k`.
+    /// Taken by the `rcases`/`obtain`/`rintro` parsers into their tactic node.
+    rcases_pattern_types: Vec<SurfaceExpr>,
     /// Parser recovery diagnostics accumulated by non-breaking report APIs.
     recovery_diagnostics: Vec<ParserRecoveryDiagnostic>,
     /// Indentation diagnostics waiting for the skip/resume location.
@@ -273,12 +306,51 @@ pub struct Parser {
     /// top of this stack and consulted only while its namespace is active
     /// (current, an ancestor of the current path, or opened). See
     /// `custom_notation.rs`.
-    notation_ns_stack: Vec<String>,
+    notation_ns_stack: Vec<crate::SurfaceName>,
     /// Scoped-notation namespaces activated at parse time by simple `open X`
     /// / `open scoped X` commands. Bounded by the enclosing namespace /
     /// section block (saved and truncated by the block parsers) and by an
     /// `open … in`'s body.
-    open_scoped_notation_ns: Vec<String>,
+    open_scoped_notation_ns: Vec<crate::SurfaceName>,
+    /// Names of the section `variable`s in scope (bounded by the enclosing
+    /// namespace / section block, like [`Self::notation_ns_stack`]). A
+    /// notation or macro template records which of its free references name
+    /// one (`surface::template_hygiene`).
+    section_variable_names: Vec<crate::SurfaceName>,
+    /// `set_option hygiene false` is in force: a `notation` declared now is
+    /// expanded without macro scopes (`crate::instantiate_unhygienic_notation_template`).
+    /// Scoped like Lean's options: `… in` for one command, otherwise to the
+    /// end of the enclosing section or namespace.
+    hygiene_off: bool,
+    /// The source positions of the `·` operands of notation templates hoisted
+    /// to placeholders (`expr_app::cdot::hoist_operand`) that no parentheses
+    /// have bound yet: the parentheses around each bind it
+    /// (`expr_app::cdot::desugar`), wherever the template put it — or nowhere.
+    hoisted_operand_cdots: Vec<usize>,
+    /// Token index where the command being parsed began: the first token
+    /// `decl()` saw, before any attribute or modifier. The module-system
+    /// refusals read the modifier prefix between it and the command keyword
+    /// (`decl::module_spelling`).
+    command_start: usize,
+    /// The explicit shared source-world decision; Oracle by default.
+    lean_world: clean_kernel::LeanWorld,
+    // Synthetic future tags exist only in the legacy grammar-model tests.
+    // Production always reads the known world's explicit feature decision.
+    #[cfg(test)]
+    variable_visibility_override: Option<bool>,
+    /// The header `file()` read (plan item `formats-module-spelling-refusals`).
+    file_header: crate::FileHeader,
+    /// A whole-file refusal raised inside a `namespace`/`section` body, whose
+    /// block parser recovers from every other error: the blocks stop, and
+    /// `file()` or the `parse_decl` entry points (`with_latched_refusal`)
+    /// return it.
+    file_refusal: Option<ParseError>,
+    /// Whether the file header recovered an import whose module name does not
+    /// parse (`decl::header`). Lean's header parser stops at its first error
+    /// and pinned Lean reads no command after it, so that error is the file's
+    /// first: from there no later error refuses the whole file, and each is
+    /// recovered like any other.
+    header_recovered: bool,
 }
 
 impl Parser {
@@ -298,7 +370,7 @@ impl Parser {
     /// choose the correct argument parser (nullary, term, ident list, etc.)
     /// instead of the generic comma-separated expression list.
     #[must_use]
-    pub fn new_with_tactics(input: &str, patterns: &TacticPatterns) -> Self {
+    pub(crate) fn new_with_tactics(input: &str, patterns: &TacticPatterns) -> Self {
         Self::build(input, Some(patterns.clone()))
     }
 
@@ -309,14 +381,17 @@ impl Parser {
     /// `notation` command takes, carrying its own declaring namespace (see
     /// [`crate::notation_seed`]). Seeding an empty seed is a no-op and leaves
     /// the custom-notation layers as transparent pass-throughs.
-    pub fn seed_notation(&mut self, seed: &crate::notation_seed::NotationSeed) {
+    pub(crate) fn seed_notation(&mut self, seed: &crate::notation_seed::NotationSeed) {
         for entry in seed.entries() {
             self.register_custom_operator_ns(
                 entry.kind,
                 entry.precedence,
                 &entry.pattern,
-                &entry.expansion,
+                entry.expansion.clone(),
                 entry.scope_ns.clone(),
+                // The harvester reads no `set_option hygiene false`: an
+                // imported template it records is hygienic.
+                true,
             );
         }
     }
@@ -325,11 +400,15 @@ impl Parser {
     /// holds the single canonical field initializer so the two entry points
     /// cannot drift.
     fn build(input: &str, tactic_patterns: Option<TacticPatterns>) -> Self {
-        let (tokens, doc_comments) = Lexer::tokenize_with_docs(input);
+        let (tokens, doc_comments, module_docs) = Lexer::tokenize_with_all_docs(input);
         Self {
+            origins: None,
             tokens,
             doc_comments,
+            module_docs,
             pos: 0,
+            default_visibility: crate::Visibility::Public,
+            default_exposure: None,
             stop_app_at_newline_lparen: false,
             stop_app_at_newline_outer_indent: false,
             forbid_do: false,
@@ -340,11 +419,14 @@ impl Parser {
             stop_app_at_generalizing_using: false,
             in_where_block: false,
             in_struct_field: false,
+            in_struct_pattern_field: false,
             in_instance_field: false,
             in_field_type: false,
             field_delim_depth: 0,
             indent_stack: Vec::new(),
             indent_context_stack: Vec::new(),
+            position_suppressed_at: None,
+            rcases_pattern_types: Vec::new(),
             recovery_diagnostics: Vec::new(),
             pending_recovery_diagnostics: Vec::new(),
             tactic_chain: Vec::new(),
@@ -358,320 +440,61 @@ impl Parser {
             pending_binder_guards: Vec::new(),
             notation_ns_stack: Vec::new(),
             open_scoped_notation_ns: Vec::new(),
+            section_variable_names: Vec::new(),
+            hygiene_off: false,
+            hoisted_operand_cdots: Vec::new(),
+            command_start: 0,
+            lean_world: clean_kernel::LeanWorld::ORACLE,
+            #[cfg(test)]
+            variable_visibility_override: None,
+            file_header: crate::FileHeader::default(),
+            file_refusal: None,
+            header_recovered: false,
         }
+    }
+
+    /// Simulate release-order grammar boundaries in the legacy model tests.
+    /// Unregistered tags here are never production source-world decisions.
+    #[cfg(test)]
+    #[must_use]
+    pub(crate) fn at_lean_world(mut self, world: &'static str) -> Self {
+        self.variable_visibility_override = Some(crate::parse_world::world_at_least(
+            world,
+            crate::parse_world::VARIABLE_VISIBILITY_SINCE,
+        ));
+        self
+    }
+
+    /// Select a known source world. The default constructor remains at the
+    /// oracle; an unknown release cannot be represented by this API.
+    #[must_use]
+    pub fn with_lean_world(mut self, world: clean_kernel::lean_world::LeanWorld) -> Self {
+        self.lean_world = world;
+        #[cfg(test)]
+        {
+            self.variable_visibility_override = None;
+        }
+        self
+    }
+
+    fn variable_visibility(&self) -> bool {
+        #[cfg(test)]
+        if let Some(visible) = self.variable_visibility_override {
+            return visible;
+        }
+        self.lean_world.variable_visibility()
+    }
+
+    pub(crate) fn parse_file_in_world(
+        input: &str,
+        world: clean_kernel::lean_world::LeanWorld,
+    ) -> Result<Vec<SurfaceDecl>, ParseError> {
+        Self::new(input).with_lean_world(world).file()
     }
 
     /// Look up a tactic argument pattern by name.
     pub(crate) fn tactic_pattern(&self, name: &str) -> Option<&TacticArgPattern> {
         self.tactic_patterns.as_ref().and_then(|p| p.get(name))
-    }
-
-    /// Parse an expression
-    ///
-    /// # REQUIRES
-    /// - `input` is valid UTF-8
-    ///
-    /// # ENSURES
-    /// - On success, returns `SurfaceExpr` with valid spans
-    /// - On error, returns `ParseError` indicating failure location
-    /// - Does not panic on malformed input
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if tokenization or parsing fails.
-    pub fn parse_expr(input: &str) -> Result<SurfaceExpr, ParseError> {
-        let mut parser = Parser::new(input);
-        let expr = parser.expr()?;
-        parser.reject_truncating_operator()?;
-        Ok(expr)
-    }
-
-    /// Parse an expression with tactic-pattern-aware parsing.
-    pub fn parse_expr_with_tactics(
-        input: &str,
-        patterns: &TacticPatterns,
-    ) -> Result<SurfaceExpr, ParseError> {
-        let mut parser = Parser::new_with_tactics(input, patterns);
-        let expr = parser.expr()?;
-        parser.reject_truncating_operator()?;
-        Ok(expr)
-    }
-
-    /// After a top-level expression parse, reject a leftover binary operator
-    /// token that Clean's grammar has no rule for and would therefore silently
-    /// DROP along with its right operand.
-    ///
-    /// `>>` (`Seq`, `SeqRight.seqRight`) and `$` (`Dollar`, low-precedence
-    /// application), plus the functor-sequencing siblings `$>`/`<$`, have no
-    /// operator level in the hand-written precedence chain. `parse_expr("m >> n")`
-    /// used to return just `m`, dropping `>> n` — a fully silent truncation in
-    /// term positions (quotation bodies, tactic arguments, nested exprs) where
-    /// no enclosing `expect` catches the orphaned tail (audit P0-6). Turning it
-    /// into a loud `ParseError` keeps the base `parse_expr`'s intentional
-    /// leniency for genuine separators (`,`, `)`, `:=` — the caller consumes
-    /// those) while refusing to hand back a half-consumed operator expression.
-    /// Real `>>`/`$` parses land in Brick 3.
-    ///
-    /// Only fires when the parse actually stopped ON such an operator; ordinary
-    /// trailing tokens still parse leniently (use `parse_expr_with_tactics_exact`
-    /// to reject all trailing input).
-    fn reject_truncating_operator(&mut self) -> Result<(), ParseError> {
-        if let Some(op) = unhandled_binary_operator_symbol(self.current_kind()) {
-            return Err(ParseError::UnexpectedToken {
-                line: self.current_line(),
-                col: self.current().col as usize,
-                message: format!(
-                    "unhandled operator '{op}' — its left operand was parsed \
-                     but Clean has no rule for '{op}', so the rest of the \
-                     expression would be silently dropped"
-                ),
-            });
-        }
-        Ok(())
-    }
-
-    /// Parse an expression requiring all input to be consumed.
-    ///
-    /// Like `parse_expr_with_tactics`, but returns an error if there are
-    /// trailing tokens after the parsed expression. Use this for RPC
-    /// endpoints where partial parsing would silently accept malformed input.
-    pub fn parse_expr_with_tactics_exact(
-        input: &str,
-        patterns: &TacticPatterns,
-    ) -> Result<SurfaceExpr, ParseError> {
-        let mut parser = Parser::new_with_tactics(input, patterns);
-        let expr = parser.expr()?;
-        if !matches!(parser.current_kind(), TokenKind::Eof) {
-            return Err(ParseError::UnexpectedToken {
-                line: parser.current_line(),
-                col: parser.current().col as usize,
-                message: format!(
-                    "trailing input after expression: {:?}",
-                    parser.current_kind()
-                ),
-            });
-        }
-        Ok(expr)
-    }
-
-    /// Parse the *body* of a syntax quotation into a `SurfaceExpr`.
-    ///
-    /// `content` is the raw text captured by the lexer for a `` `(...) ``,
-    /// `` `[...] `` or `` `{...} `` quotation — it still carries the outer
-    /// delimiter pair (e.g. `"(twice $x)"`, `"[rfl]"`, `"{def f := 1}"`). The
-    /// matching outer delimiters are stripped and the inner text is parsed with
-    /// the antiquotation-aware quotation grammar ([`Parser::parse_q_body`]),
-    /// so antiquotations (`$x`, `$(e)`, `$[xs]*`) and infix operator
-    /// desugaring (`$x + $y` ⇒ `HAdd.hAdd $x $y`) are handled the same way the
-    /// surface parser handles them elsewhere.
-    ///
-    /// This is the faithful path for `macro`/`macro_rules` patterns and
-    /// templates: a bare-string reconstruction would silently drop tokens after
-    /// the first antiquotation (e.g. parse `$x + $x` as just `$x`).
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if tokenization or parsing fails, or if there is
-    /// trailing input after the quotation body.
-    pub fn parse_quotation_body(content: &str) -> Result<SurfaceExpr, ParseError> {
-        let trimmed = content.trim();
-        // Strip a single balanced outer delimiter pair, if present.
-        let inner = match trimmed.chars().next() {
-            Some('(') if trimmed.ends_with(')') => &trimmed[1..trimmed.len() - 1],
-            Some('[') if trimmed.ends_with(']') => &trimmed[1..trimmed.len() - 1],
-            Some('{') if trimmed.ends_with('}') => &trimmed[1..trimmed.len() - 1],
-            // No surrounding delimiter (e.g. a bare quoted identifier `` `foo ``).
-            _ => trimmed,
-        };
-
-        let mut parser = Parser::new(inner);
-        let expr = parser.parse_q_body()?;
-        if !matches!(parser.current_kind(), TokenKind::Eof) {
-            return Err(ParseError::UnexpectedToken {
-                line: parser.current_line(),
-                col: parser.current().col as usize,
-                message: format!(
-                    "trailing input after quotation body: {:?}",
-                    parser.current_kind()
-                ),
-            });
-        }
-        Ok(expr)
-    }
-
-    /// Parse a declaration
-    ///
-    /// # REQUIRES
-    /// - `input` is valid UTF-8
-    ///
-    /// # ENSURES
-    /// - On success, returns `SurfaceDecl` variant matching input
-    /// - Named declarations have non-empty names
-    /// - Attributes are parsed and attached to declaration
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if tokenization or parsing fails.
-    pub fn parse_decl(input: &str) -> Result<SurfaceDecl, ParseError> {
-        let mut parser = Parser::new(input);
-        parser.decl()
-    }
-
-    /// Parse a declaration with tactic-pattern-aware parsing.
-    pub fn parse_decl_with_tactics(
-        input: &str,
-        patterns: &TacticPatterns,
-    ) -> Result<SurfaceDecl, ParseError> {
-        let mut parser = Parser::new_with_tactics(input, patterns);
-        parser.decl()
-    }
-
-    /// Like `parse_decl_with_tactics`, but returns an error if there are
-    /// trailing tokens after the parsed declaration. Use this for RPC
-    /// endpoints where partial parsing would silently accept malformed input.
-    /// Part of #2553.
-    pub fn parse_decl_with_tactics_exact(
-        input: &str,
-        patterns: &TacticPatterns,
-    ) -> Result<SurfaceDecl, ParseError> {
-        let mut parser = Parser::new_with_tactics(input, patterns);
-        let decl = parser.decl()?;
-        if !matches!(parser.current_kind(), TokenKind::Eof) {
-            return Err(ParseError::UnexpectedToken {
-                line: parser.current_line(),
-                col: parser.current().col as usize,
-                message: format!(
-                    "trailing input after declaration: {:?}",
-                    parser.current_kind()
-                ),
-            });
-        }
-        Ok(decl)
-    }
-
-    /// Parse a file containing multiple declarations
-    ///
-    /// # REQUIRES
-    /// - `input` is valid UTF-8
-    ///
-    /// # ENSURES
-    /// - Returns declarations in source order
-    /// - Empty input yields empty vector
-    /// - Stops parsing at EOF
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if tokenization or parsing fails.
-    pub fn parse_file(input: &str) -> Result<Vec<SurfaceDecl>, ParseError> {
-        let mut parser = Parser::new(input);
-        parser.file()
-    }
-
-    /// Parse a file and also return captured declaration doc comments
-    /// (`/-- ... -/`), each already associated by source span with the
-    /// declaration that immediately follows it.
-    ///
-    /// This is a non-breaking companion to [`Parser::parse_file`]: the parsed
-    /// declarations are identical, and the doc comments are returned as a
-    /// side-table for IDE hover / documentation generation. Capture is purely
-    /// syntactic — it does not change how any declaration elaborates.
-    ///
-    /// Each [`DocComment`] in the returned vector carries the span of the
-    /// **declaration** it attaches to (not the comment's own span), so callers
-    /// can match a doc to a decl by comparing `doc.span` to `decl_span(decl)`.
-    /// Doc comments with no following declaration are dropped.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if tokenization or parsing fails.
-    pub fn parse_file_with_docs(
-        input: &str,
-    ) -> Result<(Vec<SurfaceDecl>, Vec<DocComment>), ParseError> {
-        let mut parser = Parser::new(input);
-        let raw_docs = std::mem::take(&mut parser.doc_comments);
-        let decls = parser.file()?;
-        let docs = associate_docs(&decls, raw_docs);
-        Ok((decls, docs))
-    }
-
-    pub fn parse_file_with_diagnostics(input: &str) -> Result<ParseReport, ParseError> {
-        let mut parser = Parser::new(input);
-        let decls = parser.file()?;
-        Ok(ParseReport {
-            decls,
-            diagnostics: parser.recovery_diagnostics,
-        })
-    }
-
-    /// Parse a file with tactic-pattern-aware parsing.
-    pub fn parse_file_with_tactics(
-        input: &str,
-        patterns: &TacticPatterns,
-    ) -> Result<Vec<SurfaceDecl>, ParseError> {
-        let mut parser = Parser::new_with_tactics(input, patterns);
-        parser.file()
-    }
-
-    /// Tactic-aware file parser with one unambiguous absolute byte coordinate
-    /// for source-mapped callers.
-    pub fn parse_file_with_tactics_located(
-        input: &str,
-        patterns: &TacticPatterns,
-    ) -> Result<Vec<SurfaceDecl>, LocatedParseError> {
-        let mut parser = Parser::new_with_tactics(input, patterns);
-        let decls = parser.file().map_err(|error| LocatedParseError {
-            byte_offset: parser.current_span().start.min(input.len()),
-            error,
-        })?;
-        if let Some(diagnostic) = parser.recovery_diagnostics.first() {
-            return Err(LocatedParseError {
-                byte_offset: diagnostic.recovery_start.byte.min(input.len()),
-                error: ParseError::UnexpectedToken {
-                    line: diagnostic.recovery_start.line,
-                    col: diagnostic.recovery_start.column,
-                    message: format!(
-                        "strict file parsing rejected recovery `{}`: {}",
-                        diagnostic.code, diagnostic.message
-                    ),
-                },
-            });
-        }
-        Ok(decls)
-    }
-
-    pub fn parse_file_with_tactics_diagnostics(
-        input: &str,
-        patterns: &TacticPatterns,
-    ) -> Result<ParseReport, ParseError> {
-        Self::parse_file_seeded(
-            input,
-            patterns,
-            &crate::notation_seed::NotationSeed::default(),
-        )
-    }
-
-    /// Tactic-aware file parse with the parser's notation registry
-    /// pre-populated from `seed` — the notation the file's imports declare.
-    ///
-    /// With an empty seed this is exactly
-    /// [`Parser::parse_file_with_tactics_diagnostics`], which delegates here so
-    /// the two cannot drift.
-    ///
-    /// # Errors
-    ///
-    /// Returns a `ParseError` if the input cannot be parsed at file level.
-    pub fn parse_file_seeded(
-        input: &str,
-        patterns: &TacticPatterns,
-        seed: &crate::notation_seed::NotationSeed,
-    ) -> Result<ParseReport, ParseError> {
-        let mut parser = Parser::new_with_tactics(input, patterns);
-        parser.seed_notation(seed);
-        let decls = parser.file()?;
-        Ok(ParseReport {
-            decls,
-            diagnostics: parser.recovery_diagnostics,
-        })
     }
 }
 
@@ -681,8 +504,9 @@ impl Parser {
 /// or after the comment's end. The returned [`DocComment`]s carry the span of
 /// the **declaration** they attach to (so callers can match on `decl.span()`),
 /// and the original comment text. When several doc comments precede the same
-/// declaration, the last one wins (matching Lean). Doc comments with no
-/// following declaration are dropped.
+/// declaration, the last one wins in this association helper. Raw comments with
+/// no following declaration are dropped here; file parsing rejects an orphan
+/// declaration doc comment before association.
 ///
 /// Both inputs are in source order, so a single forward scan suffices.
 fn associate_docs(decls: &[SurfaceDecl], raw_docs: Vec<DocComment>) -> Vec<DocComment> {
@@ -713,13 +537,16 @@ fn associate_docs(decls: &[SurfaceDecl], raw_docs: Vec<DocComment>) -> Vec<DocCo
 }
 
 mod custom_notation;
+pub(crate) use custom_notation::hygienic_expansion;
 mod decl;
+mod entry_points;
 mod expr;
 mod expr_app;
 mod expr_binders;
 mod expr_do;
 mod expr_do_compat;
 mod expr_do_try;
+mod expr_exists_kw;
 mod expr_lambda_let;
 mod expr_match;
 mod expr_mul;
@@ -729,7 +556,11 @@ mod macros;
 mod qq;
 mod tactic;
 mod tactic_extra;
+mod tactic_have;
+mod tactic_rcases;
 mod tactic_sub;
+mod tactic_sub_alternatives;
+mod tactic_sub_rw_simp;
 mod tokens;
 
 #[cfg(test)]
@@ -747,7 +578,11 @@ mod tests_exact;
 #[cfg(test)]
 mod tests_interpolation;
 #[cfg(test)]
+mod tests_name_strategy;
+#[cfg(test)]
 mod tests_tactic;
+#[cfg(test)]
+mod tests_tactic_alt_syntax;
 #[cfg(test)]
 mod tests_tactic_calc_do;
 #[cfg(test)]
@@ -755,10 +590,18 @@ mod tests_tactic_dispatch;
 #[cfg(test)]
 mod tests_tactic_generalize;
 #[cfg(test)]
+mod tests_tactic_rcases;
+#[cfg(test)]
 mod tests_tactic_seq_conv;
 #[cfg(test)]
 mod tests_tactic_silence;
 #[cfg(test)]
+mod tests_tactic_targets;
+#[cfg(test)]
+mod tests_term_alt_syntax;
+#[cfg(test)]
 mod tests_termination;
+#[cfg(test)]
+mod tests_variable_in;
 #[cfg(test)]
 mod tests_where;

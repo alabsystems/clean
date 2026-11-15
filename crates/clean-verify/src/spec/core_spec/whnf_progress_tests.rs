@@ -22,6 +22,56 @@ fn build_progress_test_spec() -> Specification {
     crate::test_utils::build_substitution_spec_with_stack()
 }
 
+#[test]
+fn test_guarded_iota_closedness_uses_schematic_instance_lemmas() {
+    let mut spec = crate::test_utils::build_spec_with_stack();
+    for (name, source_dependency) in [
+        ("iota_reduct_some_inv_t", "iota_reduct_some_inv_type"),
+        ("iota_reduct_red_closed", "whnf_red_closed_instL"),
+        ("iota_reduct_defined_red", "whnf_consts_defined_red_instL"),
+    ] {
+        let definition = spec
+            .definitions()
+            .get(name)
+            .expect("actual checked consumer");
+        assert!(!definition.is_axiom, "{name}");
+        assert!(definition.elaborated_value.is_some(), "{name}");
+        assert!(
+            definition
+                .value_src
+                .as_deref()
+                .is_some_and(|value| value.contains(source_dependency)),
+            "{name}"
+        );
+        assert!(computed_axiom_closure(&spec, name).is_empty(), "{name}");
+        spec.verify_definition(name).expect("actual proof rechecks");
+    }
+
+    let signature = "(KConstSig.mk (ListType.cons Name Name.anonymous (ListType.nil Name)) (KExpr.sort Level.zero))";
+    let rhs = "(KExpr.lam (KExpr.sort (Level.param Name.anonymous)) (KExpr.bvar Nat.zero))";
+    let levels = "(ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))";
+    let instance = format!("(recursor_rhs_instance {signature} {rhs} {levels})");
+    let expected = "(KExpr.lam (KExpr.sort (Level.succ Level.zero)) (KExpr.bvar Nat.zero))";
+    spec.add_recursive_def(
+        &format!("def whnf_iota_instance_changes_level : Eq KExpr {instance} {expected} := Eq.refl KExpr {expected}"),
+        "Nonzero instantiation changes the actual binder annotation.",
+    ).expect("actual schematic RHS is instantiated");
+    spec.add_recursive_def(
+        &format!("def whnf_iota_instance_remains_closed : red_closed_at {instance} Nat.zero := whnf_red_closed_instL (paramSubstN (kconst_params {signature}) {levels}) {rhs} Nat.zero (AndType.intro (red_closed_at (KExpr.sort (Level.param Name.anonymous)) Nat.zero) (red_closed_at (KExpr.bvar Nat.zero) (Nat.succ Nat.zero)) ConstFreeUnit.triv (LiftP.up (Le (Nat.succ Nat.zero) (Nat.succ Nat.zero)) (Le.refl (Nat.succ Nat.zero))))"),
+        "The actual instance inherits term closedness from the schematic binder.",
+    ).expect("structural universe preservation proves the changed RHS closed");
+    for name in [
+        "whnf_iota_instance_changes_level",
+        "whnf_iota_instance_remains_closed",
+    ] {
+        assert!(computed_axiom_closure(&spec, name).is_empty(), "{name}");
+    }
+    assert!(spec.add_recursive_def(
+        &format!("def whnf_iota_instance_is_not_raw : Eq KExpr {instance} {rhs} := Eq.refl KExpr {rhs}"),
+        "Deliberately false raw-RHS substitution shortcut must be refused.",
+    ).is_err());
+}
+
 /// The three inductives (const-free unit, stuck-head predicate, progress
 /// witness) register with constructor + recursor surfaces.
 #[test]

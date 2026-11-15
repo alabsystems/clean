@@ -5,6 +5,9 @@
 //! Metavariable state management with union-find level constraints and undo trail.
 
 mod levels;
+#[cfg(test)]
+mod levels_occurs_tests;
+mod scan;
 mod undo;
 
 use crate::stack_safe;
@@ -12,7 +15,7 @@ use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprFolderOpt, FVarId, Level};
 use hashbrown::{HashMap, HashSet};
 
-use super::meta_id::{MetaId, MetaVar, UndoRecord};
+use super::meta_id::{MetaId, MetaKind, MetaVar, UndoRecord};
 
 /// Non-forgeable ownership token for an elaborator-managed metavariable scope.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -76,7 +79,8 @@ pub struct MetaState {
     /// the exact set (a measured constant-factor drag on long unifier
     /// sessions). MAINTENANCE: any new writer of `MetaVar::locals` must
     /// extend this set — `fresh_internal` and `ensure_meta_with_locals`
-    /// are the only writers today (debug-asserted in the reader).
+    /// extend it for new locals, and `merge_from` unions incoming history
+    /// (including retired locals; debug-asserted in the reader).
     pub(super) historical_local_fvars: std::collections::HashSet<FVarId>,
     /// Next fresh metavariable id
     pub(super) next_id: u64,
@@ -119,6 +123,17 @@ pub struct MetaState {
     /// immediately, exactly as before.
     pub(super) postponed_levels: Vec<(Level, Level)>,
 
+    /// Numerals whose carrier was still open when they were elaborated inside
+    /// a postponing `let` value (`ElabCtx::elab_let_value_postponing_numerals`):
+    /// each entry is the value metavariable `?v : ?α` standing for the literal
+    /// and the literal itself. Lean leaves `OfNat ?α n` pending until the rest
+    /// of the term pins `?α` or defaulting makes it `Nat`; the postponing
+    /// `let` drains its entries after its body. Entries are only ever pushed
+    /// (with an undo record, so a rolled-back branch takes its own back) and
+    /// never removed: a drained entry's metavariable is assigned, and an
+    /// assigned entry is skipped.
+    pub(super) postponed_numerals: Vec<(MetaId, clean_kernel::BigNat)>,
+
     // Undo trail fields (Part of #383)
     /// Trail of changes for backtracking. Records are pushed when modifications
     /// are made and replayed in reverse when `pop_scope()` is called.
@@ -157,6 +172,7 @@ impl MetaState {
             historical_local_fvars: std::collections::HashSet::new(),
             next_id: 0,
             postponed_levels: Vec::new(),
+            postponed_numerals: Vec::new(),
             level_parent: HashMap::new(),
             level_concrete: HashMap::new(),
             level_bound: HashMap::new(),
@@ -250,12 +266,69 @@ impl MetaState {
     /// Callers that can see locals must use [`Self::fresh_with_locals`].  An
     /// absent snapshot is never reconstructed from a later unifier context.
     pub fn fresh(&mut self, ty: Expr) -> MetaId {
-        self.fresh_internal(ty, Vec::new(), None)
+        self.fresh_internal(ty, Vec::new(), None, MetaKind::Opaque)
     }
 
     /// Create a fresh metavariable with the given type and captured locals.
-    pub fn fresh_with_locals(&mut self, ty: Expr, locals: Vec<(String, FVarId, Expr)>) -> MetaId {
-        self.fresh_internal(ty, locals, None)
+    pub(crate) fn fresh_with_locals(
+        &mut self,
+        ty: Expr,
+        locals: Vec<(clean_parser::SurfaceName, FVarId, Expr)>,
+    ) -> MetaId {
+        self.fresh_internal(ty, locals, None, MetaKind::Opaque)
+    }
+
+    /// Create a fresh NATURAL metavariable (Lean's `MetavarKind.natural`):
+    /// one whose local context the unifier may approximate (see
+    /// [`MetaKind`]). For implicit arguments, anonymous `_` holes and
+    /// unannotated binder types only.
+    pub(crate) fn fresh_natural_with_locals_at(
+        &mut self,
+        ty: Expr,
+        locals: Vec<(clean_parser::SurfaceName, FVarId, Expr)>,
+        span: Option<clean_parser::Span>,
+    ) -> MetaId {
+        self.fresh_internal(ty, locals, span, MetaKind::Natural)
+    }
+
+    /// Narrow `id`'s captured local scope to the locals in `keep`, keeping
+    /// their order — the in-place form of Lean's `ctxApprox` step, which
+    /// assigns `?n := ?n'` for a fresh `?n'` over the smaller context
+    /// (`Lean/Meta/ExprDefEq.lean:856-890`). Clean's scope is a list read only
+    /// by scope checks, so narrowing it is the same restriction without
+    /// assigning a metavariable other code may still hold (a pending instance
+    /// goal, a `refine` hole).
+    ///
+    /// Returns `false`, changing nothing, unless `id` is an unassigned
+    /// [`MetaKind::Natural`] metavariable. Undo-tracked: a rolled-back scope
+    /// restores the wider context.
+    pub(crate) fn restrict_locals(
+        &mut self,
+        id: MetaId,
+        keep: &std::collections::HashSet<FVarId>,
+    ) -> bool {
+        let Some(meta) = self.metas.get(&id) else {
+            return false;
+        };
+        if meta.kind != MetaKind::Natural || meta.assignment.is_some() {
+            return false;
+        }
+        let narrowed: Vec<_> = meta
+            .locals
+            .iter()
+            .filter(|(_, fvar, _)| keep.contains(fvar))
+            .cloned()
+            .collect();
+        if narrowed.len() == meta.locals.len() {
+            return true;
+        }
+        self.touch();
+        let Some(meta) = self.metas.get_mut(&id) else {
+            return false;
+        };
+        let old_locals = std::mem::replace(&mut meta.locals, narrowed);
+        self.record_undo(UndoRecord::MetaLocals { id, old_locals });
+        true
     }
 
     /// Create a fresh metavariable with the given type, captured locals, and an
@@ -265,20 +338,21 @@ impl MetaState {
     /// user-written hole (`_`) so IDE surfaces can map the metavariable back to
     /// the hole. All other `fresh*` constructors funnel through here with
     /// `span = None`.
-    pub fn fresh_with_locals_at(
+    pub(crate) fn fresh_with_locals_at(
         &mut self,
         ty: Expr,
-        locals: Vec<(String, FVarId, Expr)>,
+        locals: Vec<(clean_parser::SurfaceName, FVarId, Expr)>,
         span: Option<clean_parser::Span>,
     ) -> MetaId {
-        self.fresh_internal(ty, locals, span)
+        self.fresh_internal(ty, locals, span, MetaKind::Opaque)
     }
 
     fn fresh_internal(
         &mut self,
         ty: Expr,
-        locals: Vec<(String, FVarId, Expr)>,
+        locals: Vec<(clean_parser::SurfaceName, FVarId, Expr)>,
         span: Option<clean_parser::Span>,
+        kind: MetaKind,
     ) -> MetaId {
         let id = MetaId(self.next_id);
         let next_id = self
@@ -297,6 +371,7 @@ impl MetaState {
             MetaVar {
                 ty,
                 locals,
+                kind,
                 assignment: None,
                 span,
             },
@@ -327,7 +402,7 @@ impl MetaState {
         &mut self,
         id: MetaId,
         ty: Expr,
-        locals: Vec<(String, FVarId, Expr)>,
+        locals: Vec<(clean_parser::SurfaceName, FVarId, Expr)>,
     ) {
         if self.metas.get(&id).is_none() {
             self.historical_local_fvars
@@ -338,6 +413,7 @@ impl MetaState {
                 MetaVar {
                     ty,
                     locals,
+                    kind: MetaKind::Opaque,
                     assignment: None,
                     span: None,
                 },
@@ -366,7 +442,7 @@ impl MetaState {
     }
 
     /// Convert a metavariable id into the FVarId used in expressions
-    pub fn to_fvar(id: MetaId) -> FVarId {
+    pub(crate) fn to_fvar(id: MetaId) -> FVarId {
         FVarId::new(id.0 | Self::META_FVAR_TAG)
     }
 
@@ -424,7 +500,7 @@ impl MetaState {
     }
 
     /// Get the assignment of a metavariable
-    pub fn get_assignment(&self, id: MetaId) -> Option<&Expr> {
+    pub(crate) fn get_assignment(&self, id: MetaId) -> Option<&Expr> {
         self.metas.get(&id).and_then(|m| m.assignment.as_ref())
     }
 
@@ -550,9 +626,14 @@ impl MetaState {
     /// in `other` but not in `self`. This is used by `all_goals`, `any_goals`,
     /// and `seq_focus` to propagate metavariable assignments from focused
     /// sub-proof-states back into the parent (#1802).
-    pub fn merge_from(&mut self, other: &MetaState) {
+    pub(crate) fn merge_from(&mut self, other: &MetaState) {
         // Conservative: one bump for the whole merge, before any write.
         self.touch();
+        // Focused states can introduce captured locals, including ones whose
+        // metavariables were later rolled back. History stays monotone across
+        // both merges and rollback so temporary binders cannot reuse those IDs.
+        self.historical_local_fvars
+            .extend(other.historical_local_fvars.iter().copied());
         for (id, meta) in &other.metas {
             let Some(existing_assignment) = self
                 .metas

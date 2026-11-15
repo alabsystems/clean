@@ -7,7 +7,7 @@ use crate::{Environment, Expr, Level, Name};
 
 #[test]
 fn test_sorry_counter_increments() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     let initial = sorry_count();
     let env = Environment::new();
     let _ = create_sorry_term(&env, &Expr::prop());
@@ -20,9 +20,83 @@ fn test_sorry_counter_increments() {
     );
 }
 
+/// The per-thread view counts this thread's mints exactly, whatever other
+/// threads mint or reset meanwhile; `reset_sorry_counter` clears it on the
+/// calling thread only.
+#[test]
+fn test_local_sorry_count_isolated_from_other_threads() {
+    // The resets below also zero the process-wide counter other tests read.
+    let ledger = test_gate::exclusive_trust_counters();
+    let env = Environment::new();
+    reset_sorry_counter();
+    assert_eq!(local_sorry_count(), 0, "reset clears this thread's view");
+    let _ = create_sorry_term(&env, &Expr::prop());
+    let _ = create_sorry_term(&env, &Expr::prop());
+    std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                let _admitted = ledger.admit_this_thread();
+                let env = Environment::new();
+                let _ = create_sorry_term(&env, &Expr::prop());
+                assert_eq!(
+                    local_sorry_count(),
+                    1,
+                    "a fresh thread sees only its own mint"
+                );
+                reset_sorry_counter();
+            })
+            .join()
+            .expect("minting thread");
+    });
+    assert_eq!(
+        local_sorry_count(),
+        2,
+        "another thread's mint and reset must not touch this thread's view"
+    );
+    reset_sorry_counter();
+    assert_eq!(local_sorry_count(), 0, "reset clears this thread's view");
+}
+
+/// A thread the ledger guard did not admit cannot mint while the guard is
+/// held: its mint lands only after the guard drops, so the exact global
+/// assertions in this module cannot see another test's sorry (the race this
+/// gate closes: unguarded `init_nn_verify_*` tests mint concurrently).
+#[test]
+fn test_exclusive_trust_counters_concurrent_mint_waits_for_release() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+
+    let ledger = test_gate::exclusive_trust_counters();
+    reset_sorry_counter();
+    let lifetime_before = sorry_lifetime_count();
+    let started = Arc::new(AtomicBool::new(false));
+    let started_in_thread = Arc::clone(&started);
+    let minter = std::thread::spawn(move || {
+        let env = Environment::new();
+        started_in_thread.store(true, Ordering::SeqCst);
+        let _ = create_sorry_term(&env, &Expr::prop());
+    });
+    while !started.load(Ordering::SeqCst) {
+        std::thread::yield_now();
+    }
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    assert_eq!(
+        sorry_count(),
+        0,
+        "an unadmitted thread must not mint while the ledger guard is held"
+    );
+    assert!(!minter.is_finished(), "the unadmitted mint must be blocked");
+    drop(ledger);
+    minter.join().expect("minting thread");
+    assert!(
+        sorry_lifetime_count() > lifetime_before,
+        "the blocked mint must land once the guard drops"
+    );
+}
+
 #[test]
 fn test_sorry_counter_reset() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     let env = Environment::new();
     let _ = create_sorry_term(&env, &Expr::prop());
     reset_sorry_counter();
@@ -41,7 +115,7 @@ fn test_sorry_counter_reset() {
 
 #[test]
 fn test_assert_no_sorry_passes_when_zero() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     // Should not panic when counter is zero
     assert_no_sorry();
@@ -50,7 +124,7 @@ fn test_assert_no_sorry_passes_when_zero() {
 #[test]
 #[should_panic(expected = "sorry term(s) were generated")]
 fn test_assert_no_sorry_panics_when_nonzero() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let env = Environment::new();
     let _ = create_sorry_term(&env, &Expr::prop());
@@ -59,7 +133,7 @@ fn test_assert_no_sorry_panics_when_nonzero() {
 
 #[test]
 fn test_sorry_location_tracking() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     enable_sorry_location_tracking();
     reset_sorry_locations();
@@ -86,7 +160,7 @@ fn test_sorry_location_tracking() {
 
 #[test]
 fn test_sorry_locations_none_without_enabling() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let env = Environment::new();
     let _ = create_sorry_term(&env, &Expr::prop());
@@ -96,13 +170,13 @@ fn test_sorry_locations_none_without_enabling() {
 
 #[test]
 fn test_deny_sorry_not_enabled_by_default() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     let _ = deny_sorry_enabled(); // should not panic
 }
 
 #[test]
 fn test_local_ay_reconstruction_success_counter_is_thread_scoped() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_local_ay_reconstruction_success_counter();
     assert_eq!(
         local_ay_reconstruction_success_count(),
@@ -127,7 +201,7 @@ fn test_local_ay_reconstruction_success_counter_is_thread_scoped() {
 
 #[test]
 fn test_create_sorry_term_uses_sorry_axiom_from_default_env() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     // Environment::new() pre-initializes the polymorphic sorry axiom.
     let env = Environment::new();
@@ -190,7 +264,7 @@ fn extract_sorry_level(term: &Expr) -> Level {
 
 #[test]
 fn test_sorry_level_zero_for_proposition_goal() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let mut env = Environment::new();
     env.add_decl(crate::env::Declaration::Axiom {
@@ -212,7 +286,7 @@ fn test_sorry_level_zero_for_proposition_goal() {
 
 #[test]
 fn test_sorry_level_one_for_type_goal() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let mut env = Environment::new();
     env.add_decl(crate::env::Declaration::Axiom {
@@ -234,7 +308,7 @@ fn test_sorry_level_one_for_type_goal() {
 
 #[test]
 fn test_sorry_level_fallback_for_fvar_goal() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let env = Environment::new();
     let fvar_goal = Expr::fvar(crate::expr::FVarId::new(999));
@@ -249,7 +323,7 @@ fn test_sorry_level_fallback_for_fvar_goal() {
 
 #[test]
 fn test_sorry_explicit_level_overrides_fallback_for_fvar_goal() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let env = Environment::new();
     let fvar_goal = Expr::fvar(crate::expr::FVarId::new(999));
@@ -269,7 +343,7 @@ fn test_sorry_explicit_level_overrides_fallback_for_fvar_goal() {
 
 #[test]
 fn test_smt_proof_fallback_applies_goal_ty() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let env = Environment::default();
     assert!(
@@ -306,7 +380,7 @@ fn test_smt_proof_fallback_applies_goal_ty() {
 
 #[test]
 fn test_smt_proof_fallback_level_for_type_goal() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let mut env = Environment::default();
     env.add_decl(crate::env::Declaration::Axiom {
@@ -338,10 +412,15 @@ fn test_smt_proof_fallback_level_for_type_goal() {
 
 #[test]
 fn test_create_sorry_term_with_kind_uses_sorry_ax_after_bool() {
-    let _serial = crate::test_utils::serial_test_guard();
+    let _ledger = test_gate::exclusive_trust_counters();
     reset_sorry_counter();
     let mut env = Environment::default();
-    env.init_bool().expect("Bool init should expose sorryAx");
+    // F3 keeps Bool initialization free of implicit admission signatures.
+    // This test exercises sorryAx provenance, so opt in before initializing Bool.
+    env.init_sorry()
+        .expect("explicit admission signature fixture");
+    env.init_bool()
+        .expect("Bool exposes sorryAx for the opted-in admission fixture");
 
     let explicit = create_sorry_term_with_kind(&env, &Expr::prop(), SorryKind::Explicit);
     assert!(

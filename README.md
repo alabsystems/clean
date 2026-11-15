@@ -3,7 +3,7 @@
 > A pure-Rust, Lean-shaped theorem-proving and verification stack built for
 > programs and AI agents.
 
-**Author:** Andrew Yates · **License:** Apache-2.0 · **Version:** `0.5.0`
+**Author:** Andrew Yates · **License:** Apache-2.0 · **Version:** `0.9.0`
 (`[workspace.package] version` in `Cargo.toml`)
 
 Clean is a from-scratch Rust implementation of a dependent-type-theory kernel,
@@ -42,12 +42,15 @@ management, or editor experience.
 
 ## Current state
 
+The replacement burndown tracks
+measured case remainders, open work packages and their completion criteria.
+
 Run the commands rather than relying on this prose:
 
 ```bash
 clean features
 clean replacement status --informational
-cargo run --locked -p clean --features math-overlays -- audit soundness
+targo --unverified run --locked -p clean --features math-overlays -- audit soundness
 ```
 
 `replacement status --informational` is a navigation view. A green row means
@@ -66,12 +69,18 @@ Where an artifact is named, read it rather than this cell.
 |---|---|---|
 | Kernel and trust | Dependent checker, universes, inductives/recursors, quotients, literals, projections, explicit axiom/trust audits | C1–C5 (plus C4') pass, but differential evidence is scoped and the Rust kernel remains in the TCB |
 | Parser and elaborator | Broad Lean-shaped declaration, term, tactic, macro, notation, class, structure, recursion, and do-notation support | The governed frontend report is not launch-ready; imports and metaprogramming still have explicit fallback/unsupported paths |
-| Tactics and solvers | Large builtin registry, proof-term construction, strict reconstruction/rejection lanes | `reports/tactic-parity-counts.json` records 56 source-declared representative cases over 8 tactics; it does not execute a Lean-vs-Clean corpus, and the artifact that would accept one, `reports/tactic-parity-full-corpus.json`, is `{"stub": true}` |
+| Tactics and solvers | Large builtin registry, proof-term construction, strict reconstruction/rejection lanes | The two-way evidence is per row: pinned Lean's verdict on every declaration of the G-AUTO and G-SIMP family fixtures is minted into `tests/fixtures/tactic_families/g_auto/LEAN_VERDICTS.json` and its `g_simp` twin, and a measured family run reports `totals.clean_accepts_lean_rejects` (with its in-world subset) in `reports/tactic-families/<family>-latest.json`. The committed latest artifacts are v1 (2026-09-15): they carry no two-way totals until the next measured run, and `scripts/tactic_parity/family_gate.py --check-artifact` refuses them. Of the 111 rows pinned Lean rejects, 92 are probes whose only unknown tactics are Mathlib-world tactics (`aesop`, `norm_num`, `linarith`, …) that `import Init` does not provide; the other 19 are in world, `library_search` (renamed `exact?` in Lean v4.3.0) among them. `reports/tactic-parity-counts.json` (56 source-declared cases over 8 tactics) executes nothing, and `reports/tactic-parity-full-corpus.json` is `{"stub": true}` |
 | `.olean` and Mathlib | Real target-value rechecking, environment replay, and large sampled runs; real Mathlib `.olean` targets do kernel-verify through Clean. The minted pin is `data/mathlib_kv_ratchet.json` — 702 kernel-verified declarations over the two-module slice in `data/kv_ratchet_slice.txt`, re-stamped by `scripts/kv_ratchet_gate.sh` on every full local gate and failing closed if the count drops or a target is only heuristically verified | Rechecking pre-elaborated targets is **not** source elaboration and not a verified dependency closure. The larger counts in `docs/plans/MATHLIB_KV_MILESTONE_2026-07-12.md` are prose whose generating JSON was never committed, so `docs/STATUS_ONE_TRUST.md` records that tier UNKNOWN rather than promote an unbacked number. Mathlib SOURCE elaboration is the open frontier: `data/source_elab_ratchet.json` records 326 of 784 declarations over five pinned files as allow-sorry successes — not a sorry-free claim — with dated runs in `reports/source-elab/`. Native evidence `reports/native-library-replacement.json` is `{"stub": true}`, so `clean replacement native-library coverage-matrix --check-report reports/native-library-replacement.json --json` cannot pass against it |
-| Compiler/runtime | Substantial C, Rust, L5CNF/L5IR, linking, and runtime machinery. `clean compile` runs the real elaborate-check-lower-emit path (`--emit l5ir\|l5cnf\|c\|rust`); `clean run` continues it through `cc`, links the embedded runtime, and executes. TrustIR and object emission need the `trust-ir-backend` feature and an external `trust-cg` | The only minted evidence is one C-emission smoke (`reports/compile-runtime-smoke.json`), which understates the pipeline; entry shapes and external/runtime coverage are bounded |
+| Compiler/runtime | Substantial C, Rust, L5CNF/L5IR, linking, and runtime machinery. `clean compile` runs the real elaborate-check-lower-emit path (`--emit l5ir\|l5cnf\|c\|rust`); `clean run` continues it through `cc`, links the embedded runtime, and executes. TrustIR and object emission need the `trust-ir-backend` feature and an external `trust-cg` | Evidence is a byte-exact differential battery against pinned Lean (`reports/native-exec-battery.json`, `targo --unverified test --locked -p clean --test native_exec_battery`): every program prints exactly Lean's bytes or is refused by name, and none prints a wrong answer at exit 0. It measures fail-closedness, not parity -- most idiomatic programs are still refused, and entry shapes and external/runtime coverage are bounded |
 | Lake and Cake | Clean-owned Lake init/build/run/test. On a `clean lake init` template, `init` + `build` + `test` run entirely in-process and never spawn Lean 4's `lean` or `lake`, even with both on PATH — `reports/lake-replacement-smoke.json` (`no_lean4_delegation`), gated by `crates/clean-cli/tests/lake_replacement_delegation.rs` | That smoke is bounded by its own `non_claims`: it drives only init/build/test, so it does not exercise transitive dependency resolution, `lake serve`, facets/custom targets, or the Mathlib cloud cache. The `serve` verb itself does ship — the Lake-compatible editor entry point is dispatched at `crates/clean-cli/src/cmd_lake/serve.rs`; it is outside this smoke, not absent. Lake still loads Init/Std/Lean/Lake/Mathlib `.olean` data from a Lean toolchain. `clean cake` still shells out: its `olean` backend runs external `lake build` (`crates/clean-cli/src/cmd_cake.rs`), and its `native` backend compiles nothing |
-| LSP/InfoView | A real LSP: 48 methods handled (42 protocol plus six `$/lean/*` procedures), none an unconditional null stub — each computes from live document/parse/elaboration state. Hover resolves the identifier under the cursor against the document and its import closure, falling back to the enclosing declaration (`crates/clean-lsp/src/backend/hover.rs`) | The gap is depth, not coverage: goal state is one snapshot per theorem rather than per tactic step; the symbol index holds only OPEN documents and is purged on `didClose`, so goto-definition into an imported library returns nothing; references/rename are whole-identifier text scans with no scope or shadowing awareness, so a rename can rewrite unrelated occurrences. The parity artifact `reports/lsp-infoview-parity.json` is `{"stub": true}` and the fail-closed validator holds the row at `pending_evidence` |
+| LSP/InfoView | A real LSP: 48 methods handled (42 protocol plus six `$/lean/*` procedures); 45 compute from live document/parse/elaboration state, and the three formatting requests answer `null` by design (withdrawn and not advertised: pinned Lean has no formatter, and Clean's trimmed bytes inside string literals). Hover resolves the identifier under the cursor against the document and its import closure, falling back to the enclosing declaration (`crates/clean-lsp/src/backend/hover.rs`) | The gap is depth, not coverage: goal state is one snapshot per theorem rather than per tactic step; the symbol index holds only OPEN documents and is purged on `didClose`, so goto-definition into an imported library returns nothing; references/rename are whole-identifier text scans with no scope or shadowing awareness, so a rename can rewrite unrelated occurrences. The parity artifact `reports/lsp-infoview-parity.json` is `{"stub": true}` and the fail-closed validator holds the row at `pending_evidence` |
 | Self-verification | Three-foundational-axiom reflected metatheory with confluence, typed-context preservation/inference soundness, and a ten-rung recursor/SN program | Contextual theorems are conditional on explicit candidate/environment interfaces; constant level instantiation, projection/literal typing, and the Rust-state-to-context refinement bridge remain open |
+
+Newer than the table's baseline, and so stated here and not in a cell: the
+Self-verification row describes the reflected `clean-verify` stack. It is
+evidence about fragments, and the kernel self-proof route the owner adopted on
+2026-11-12 takes it off the route. That route is a proved Lean-defined checker,
+which is by design and not in fact ([Self-verification](#self-verification)).
 
 There is deliberately no single “percent complete”: the rows have different
 denominators, and source size or test count is not semantic parity. The table
@@ -82,32 +91,70 @@ release readiness.
 
 ## Quick start
 
+Clean is a component of aterm's self-contained toolchain, alongside AY (the SMT
+solver). The package recipe in `Cargo.toml` enables `clean/carcara-verify`,
+including its required `ay-smt` lane, so rebuilt managed packages can independently
+check Alethe proofs for trust-cg. The default source build exposes
+`cert verify-external` without this checking capability. Recipe changes take
+effect when a new package is built; inspect the installed package with
+`aterm pkg which clean` and `aterm pkg doctor`.
+
+The local release gate checks the recipe and runs valid and invalid Alethe proofs
+through the actual CLI.
+
 Clean's declared minimum is Rust 1.90 (`rust-version` in `Cargo.toml`). A host
 C compiler is needed for C-backend link/run workflows; text emission is not.
 
-There are two checkout shapes, and they do **not** share a toolchain:
+Clean builds with the Trust toolchain (`channel = "trust"` in
+`rust-toolchain.toml`) in both checkout shapes. Install
+[aterm](https://github.com/alabsystems/aterm#install); atpkg installs Trust
+(`aterm pkg install trust` does it by hand, `aterm pkg which targo` shows where
+it lives). Every Rust command names its lane: `targo --unverified <verb>` builds
+with no proof claim, `targo trust <verb>` verifies. atpkg ships Trust for
+Apple-silicon macOS only; there is no public Trust package or supported install
+path on any other platform today.
 
 - The **standalone bootstrap projection**, generated by `publish/transform.py`,
   removes the Trust/TrustIR integration crates `clean-autoform` and
   `clean-reflect` and the Ty/TLA+ crate `clean-tla` (breaking the Clean↔Ty
   release cycle), and resolves its remaining dependencies to attested Git
-  revisions. It is designed to build as an ordinary clone, but the policy record
-  does not yet claim a successful anonymous-clone compile; that remains a
-  promotion gate.
+  revisions. It also leaves out `clean-olean`'s dev-only SemR test cohort: the
+  test dependencies `trust-ir-semr` and `trust-wp-vc`, which pin TrustIR and
+  TrustWP revisions of their own, and the integration tests that use them. The
+  projection vendors one TrustIR snapshot, the production one, and refuses any
+  use of that cohort outside a dev-dependency. It builds as an ordinary clone:
+  Clean's promotion gate compiles the transformed candidate in a fresh
+  anonymous clone. Since 2026-11-14 that gate is the unverified build lane and
+  makes no proof claim (`scripts/test_atpkg_recipe.py`, `targo --unverified
+  build --locked -p clean -p clean-lsp --features clean/carcara-verify`, then
+  the `atpkg_proof_checker` test; the advisory `targo trust check
+  --allow-l0-gaps` of the whole workspace and the public library suite,
+  `scripts/check_public_release_libraries.sh`, are recorded in
+  `publish/config.sh` as the gates to restore). The publication
+  engine refuses to record a mapping whose attestation does not carry
+  `guards.public_clone = "pass"`, and every Clean row in the ledger is
+  `release_mode: "buildable"`. Read the ledger for which revision that is; do
+  not copy one here.
 - This **development workspace** keeps those cross-repository integrations and
   requires no sibling checkouts: `ay`, `trust-ir-contract`, and `tla-core` are
   pinned as exact-revision Git dependencies, and no manifest references
-  `../trust`, `../trust-ir`, `../trust-cg`, or `../ty`. It does pin
-  `channel = "trust"` in `rust-toolchain.toml` — the ALab verifying compiler
-  fork, resolved from a locally linked toolchain — so it does not build on stock
-  Rust as-is. The projection swaps that file and `.cargo/config.toml` for
-  `publish/public-rust-toolchain.toml` and `publish/public-cargo-config.toml`;
-  that swap, not the 1.90 floor alone, is what makes a clone buildable.
+  `../trust`, `../trust-ir`, `../trust-cg`, or `../ty`. **The pin is not a
+  verification claim.** An ordinary build runs in `targo --unverified`, which
+  switches the Trust verifier off for every unit itself — first-party
+  `clean-*` crates included — and makes no proof claim. `.cargo/config.toml`
+  is policy-only: since 2026-10-07 it carries no `-Ztrust-verify=off` (a Targo
+  built from Trust main refuses any project-config off-switch under
+  `targo trust`). Verification is `targo trust <verb>`; CLAUDE.md's
+  *Toolchain posture* section records the verified lane and points at the
+  deliberate strict lane (`scripts/trust_verify_ratchet.sh`) that runs Trust
+  Level-0 verification over `clean-kernel` — a separate gate, and never a
+  property of an ordinary build. The projection ships
+  `publish/public-cargo-config.toml` in place of that config.
 
 From a generated standalone bootstrap candidate:
 
 ```bash
-cargo build --locked --release -p clean --bin clean
+targo --unverified build --locked --release -p clean --bin clean
 
 # Type-check accepted source, then confirm explicit trust debt is rejected.
 target/release/clean check demos/public/kernel_check_success.lean
@@ -180,7 +227,7 @@ trust-marker reachability, opaque-body masking, and adversarial negative
 controls:
 
 ```bash
-cargo run --locked -p clean --features math-overlays -- audit soundness
+targo --unverified run --locked -p clean --features math-overlays -- audit soundness
 ```
 
 Only the `soundness` certificate is compiled behind the `math-overlays`
@@ -197,15 +244,47 @@ That set is pinned exactly, not by allowlist, in
 `crates/clean-verify/tests/axiom_ratchet.rs` — and it is measured over the
 soundness-certificate environment, which is not the prelude a bare
 `clean check` loads. That default environment is censused separately in
-`data/prelude_axiom_ratchet.json`: 296 axioms, of which 289 are
-non-foundational (283 signature debt, two asserted propositions, four trust
-markers), with zero admitted domain axioms and no theorem or definition
-currently reaching that debt. The kernel remains trusted until the
-source-to-binary self-verification bridge is complete.
+`data/prelude_axiom_ratchet.json`, with zero admitted domain axioms, no
+asserted proposition, 16 signature-debt constants and four trust markers; no
+theorem reaches that debt and one definition (`instMonadIO`) does. Its
+baseline is 27 axioms, of which 20 are non-foundational.
+<!-- claim: figure data/prelude_axiom_ratchet.json baseline_axioms_total -->
+<!-- claim: figure data/prelude_axiom_ratchet.json baseline_non_foundational -->
+
+The Rust kernel is the trusted core today. The adopted route replaces it as
+the authority with a proved checker written in Lean; that is by design, not in
+fact (see [Self-verification](#self-verification)).
 
 ## Self-verification
 
-Clean's self-verification work has two separate layers.
+**The adopted route (owner, 2026-11-12).** The trust root is to become `kcheck`,
+a checker defined in Lean that replays untrusted advice from the Rust kernel.
+Its headline theorem is to be semantic soundness against a set-theoretic model,
+per universe bound, for every advice string. By design `kcheck` is Lean
+compiled by Trust (Clean's lowering, trust-ir, trust-cg), so that the proved
+term is the compiled source, and the step from source to bytes is to be closed
+once by a proved validator of the compiler's output. Under the plan trusted
+checkers are therefore to be written in Lean; Rust is for untrusted producers
+and a thin shell. The same three parts — a pinned statement, an untrusted
+producer, a small proved checker — are to repeat for the compiler and for
+Trust's verifier. The route of record, with the artifact that says whether each
+unit is done, is `docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md`.
+
+That is by design, not in fact. Status is not restated here: whether a `kcheck`
+exists and how far it reaches is read from the plan's unit rows and the
+artifact each row names, and what the Lean specification covers from the README
+under `theories/cic_l`. The plan's five in-fact conditions cannot hold before a
+`kcheck` does. Today `clean run` reaches bytes through emitted C and the host C
+compiler, and the trust-ir lane is feature-gated. Until `kcheck_sound` is
+re-checked, decision R29 in `docs/DECISIONS.md` leaves the authority with the
+Rust kernel under the fenced theory, whose open residuals are the plan's
+lane F. The limits are part of the claim:
+soundness is per universe bound, a generation cannot prove more consistency
+than its base, and a checker checking its own soundness proof settles nothing
+alone, so a quorum of independent re-checkers stays.
+
+The work described below predates that route, and the plan takes it off the
+route. It remains as evidence about fragments, in two separate layers.
 
 **Layer 1** models the calculus inside `clean-verify`. Its environment census
 (`data/clean_verify_axiom_ratchet.json`) is 11 value-less constants: three
@@ -228,11 +307,17 @@ axiom closure does **not** discharge. The older context-free `Typing`/`has_type`
 and state-shaped accept relations are fenced as legacy raw models that cannot
 appear in contextual flagship closures.
 
-**Layer 2** must prove that the literal Rust implementation and compiled binary
-refine that model. Bounded differential gates and default-on translation
-certificates cover selected reduction/compiler fragments. They do not yet
-certify the mutually recursive production `infer_type` / `whnf` / `is_def_eq`
-spine end to end.
+**Layer 2** set out to prove that the literal Rust implementation and compiled
+binary refine that model. Decision R29 in `docs/DECISIONS.md` stopped new
+chains in that direction and capped the rest of that work at one non-merge
+commit in four (decision R4's cap), and the 2026-11-12 plan stops the Crystal
+part outright:
+it needs a model of the Rust code first, and the proof is then about the model.
+Bounded differential gates and default-on translation certificates cover
+selected reduction/compiler fragments. They do not certify
+the mutually recursive production `infer_type` / `whnf` / `is_def_eq` spine end
+to end, and the adopted route does not ask them to: by design the Rust kernel
+becomes an untrusted producer whose answers a proved checker re-decides.
 
 The last recorded independent Lean replay was rerun on **2026-08-11**: 5,211
 emitted declarations, 5,871 spec definitions covered, exactly three explicit
@@ -285,24 +370,26 @@ Major crates:
 ## Development and verification
 
 Enforcement is local; there are no hosted workflow gates in this checkout.
-`just gate` and the pre-push hook it installs are what hold the line.
+`just ci`, run once per landing on the tree being landed, and `just gate` are
+what hold the line. The tracked pre-push hook is opt-in and is not the landing
+gate (`docs/DECISIONS.md` R35, in a development checkout).
 
 ```bash
 just                 # list workflows
-just ci              # hooks-check + fmt-check + lint-coverage + clippy + test-fast
+just ci              # the landing gate: fmt-check + lint-coverage + clippy + test-fast
 just test-fast       # publish smoke surface (the workspace default-members)
 just gate            # local fail-closed soundness + quality gate
-just install-hooks   # install the tracked pre-push hook repo-wide
+just install-hooks   # opt-in: install the tracked pre-push hook repo-wide
 
 # Target a subsystem while developing it.
-cargo test --locked -p clean-kernel
-cargo test --locked -p clean-elab
+targo --unverified test --locked -p clean-kernel
+targo --unverified test --locked -p clean-elab
 ```
 
 Run the full suite only when its cost is intended:
 
 ```bash
-cargo test --locked --workspace --message-format=short -j 1
+targo --unverified test --locked --workspace --message-format=short -j 1
 ```
 
 ## Documentation
@@ -315,6 +402,8 @@ These live in a full development checkout, not in a bootstrap projection:
 | Soundness gate and TCB | `docs/SOUNDNESS_CERTIFICATE.md` |
 | Self-verification claim ledger | `docs/SELF_VERIFICATION_CERTIFICATE.md` |
 | Self-verification architecture | `docs/SELF_VERIFICATION_PROGRAM.md` |
+| Kernel self-proof, route of record | `docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md` |
+| Kernel self-proof, dated progress review | Major sections and retained evidence |
 | Trust and correctness register | `docs/VERIFICATION_AUDIT.md` |
 | Public demo contract | `docs/PUBLIC_DEMO.md` |
 | Release readiness | `docs/RELEASE_READINESS.md` |

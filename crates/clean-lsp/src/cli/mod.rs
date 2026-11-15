@@ -41,10 +41,10 @@ pub use descriptors::FEATURES;
 
 /// `clean lsp` argument surface.
 ///
-/// The legacy `clean-lsp` binary takes no arguments and reads/writes the LSP
-/// protocol over stdin/stdout. `--stdio` is accepted for forward compatibility
-/// with editor launch scripts that pass the flag explicitly (the default LSP
-/// convention in VS Code's generic client and several Neovim configurations).
+/// With no transport arguments, `clean-lsp` forwards to `clean lsp` and serves
+/// the LSP protocol over stdin/stdout. The shim forwards explicit arguments too.
+/// `--stdio` is accepted for compatibility with editor launch scripts that pass
+/// the flag explicitly.
 ///
 /// `--tcp <addr>` exposes the existing [`crate::run_server_tcp`] entry point
 /// for integration-testing clients and IDE configurations that prefer a TCP
@@ -68,9 +68,16 @@ pub struct LspArgs {
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum LspCliError {
-    /// TCP transport bind/accept failed.
-    #[error("LSP TCP transport failed: {0}")]
+    /// The transport failed: setup, a read or write, a malformed message, or
+    /// (over stdio) a client that left without a successful shutdown. Over
+    /// TCP only a bind or accept failure ends the server; a connection's own
+    /// failure ends that connection.
+    #[error("LSP transport failed: {0}")]
     Tcp(#[from] std::io::Error),
+    /// The LSP server surface (tower-lsp + tokio) is native-only.
+    #[cfg(target_arch = "wasm32")]
+    #[error("the LSP server is native-only and unavailable on wasm")]
+    UnavailableOnWasm,
 }
 
 // -- Entry points -------------------------------------------------------------
@@ -79,16 +86,25 @@ pub enum LspCliError {
 ///
 /// The top-level `clean-cli` binary constructs the clap args via its own
 /// parser and awaits the resulting future. Stdio mode runs the LSP server
-/// until the client closes stdin; TCP mode runs until the listener accept
-/// loop returns an error.
+/// until the client sends exit or closes stdin; TCP mode runs until the listener accept
+/// loop returns an error. On wasm the server surface (tower-lsp + tokio
+/// transports) is native-only, so the same entry point always refuses.
 pub async fn run(args: LspArgs) -> Result<(), LspCliError> {
-    if let Some(addr) = args.tcp.as_deref() {
-        crate::run_server_tcp(addr).await?;
-        return Ok(());
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = args;
+        return Err(LspCliError::UnavailableOnWasm);
     }
-    // `--stdio` (or no transport flag) → default stdio transport.
-    crate::run_server().await;
-    Ok(())
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        if let Some(addr) = args.tcp.as_deref() {
+            crate::run_server_tcp(addr).await?;
+            return Ok(());
+        }
+        // `--stdio` (or no transport flag) → default stdio transport.
+        crate::run_server().await?;
+        Ok(())
+    }
 }
 
 /// Compile-time assertion that [`FEATURES`] is non-empty. Guards against

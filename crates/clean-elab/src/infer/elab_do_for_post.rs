@@ -38,7 +38,7 @@ impl<'a> ElabCtx<'a> {
         &mut self,
         for_in_expr: Expr,
         beta: &Expr,
-        mut_var_info: &[(String, FVarId, Expr)],
+        mut_var_info: &[(SurfaceName, FVarId, Expr)],
         return_type: &Option<Expr>,
         rest: Option<&[DoElem]>,
     ) -> Result<Expr, ElabError> {
@@ -46,7 +46,7 @@ impl<'a> ElabCtx<'a> {
         let returns_early = return_type.is_some();
 
         // Push post-loop accumulator binding.
-        let fvar_post = self.push_local("__do_post".to_string(), beta.clone());
+        let fvar_post = self.push_local(SurfaceName::unspellable("__do_post", 0), beta.clone());
 
         // Destructure accumulator into mutable variable shadow locals.
         let shadow_vars = if has_reassigns {
@@ -114,7 +114,7 @@ impl<'a> ElabCtx<'a> {
         for (shadow_name, shadow_fvar, shadow_ty, proj_expr) in shadow_vars.iter().rev() {
             let abs = result.abstract_fvar(*shadow_fvar);
             result = Expr::let_named(
-                Name::from_string(shadow_name),
+                shadow_name.name().clone(),
                 shadow_ty.clone(),
                 proj_expr.clone(),
                 abs,
@@ -165,7 +165,7 @@ impl<'a> ElabCtx<'a> {
         ret_ty: &Expr,
         fvar_post: FVarId,
         has_reassigns: bool,
-        mut_var_info: &[(String, FVarId, Expr)],
+        mut_var_info: &[(SurfaceName, FVarId, Expr)],
         rest_expr: Expr,
     ) -> Result<Expr, ElabError> {
         // Extract the Option component from the accumulator.
@@ -195,7 +195,7 @@ impl<'a> ElabCtx<'a> {
         let result_ty = self.infer_type(&rest_expr)?;
 
         // Build some_case: fun (r : rho) => Pure.pure r
-        let fvar_r = self.push_local("__do_ret_val".to_string(), ret_ty.clone());
+        let fvar_r = self.push_local(SurfaceName::unspellable("__do_ret_val", 0), ret_ty.clone());
         let pure_r = self.mk_pure_app_at(ret_ty.clone(), Expr::fvar(fvar_r));
         self.enforce_expr_type(&pure_r, &result_ty)?;
         let some_body = pure_r.abstract_fvar(fvar_r);
@@ -208,7 +208,7 @@ impl<'a> ElabCtx<'a> {
             Expr::const_(Name::from_string("Option"), vec![ret_level.clone()]),
             ret_ty.clone(),
         );
-        let fvar_motive = self.push_local("_".to_string(), option_rho_ty.clone());
+        let fvar_motive = self.push_local(SurfaceName::generated_path("_"), option_rho_ty.clone());
         let motive_body = result_ty.abstract_fvar(fvar_motive);
         self.pop_local();
         let motive = Expr::lam(BinderInfo::Default, option_rho_ty, motive_body);

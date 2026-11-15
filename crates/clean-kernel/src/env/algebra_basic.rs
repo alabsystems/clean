@@ -51,7 +51,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (alpha_id, _alpha) = b.fresh_local(type_u.clone());
             let e = type_u.clone();
-            let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+            let e = b.mk_pi(alpha_id, BinderInfo::Default, type_u.clone(), e);
             b.finish(e)
         };
 
@@ -173,7 +173,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (alpha_id, _alpha) = b.fresh_local(type_u.clone());
             let e = type_u.clone();
-            let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+            let e = b.mk_pi(alpha_id, BinderInfo::Default, type_u.clone(), e);
             b.finish(e)
         };
 
@@ -558,7 +558,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (alpha_id, _alpha) = b.fresh_local(type_u.clone());
             let e = type_u.clone();
-            let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+            let e = b.mk_pi(alpha_id, BinderInfo::Default, type_u.clone(), e);
             b.finish(e)
         };
 

@@ -250,6 +250,17 @@ pub(super) fn lake_env(
                 println!("version: {v}");
             }
             println!("root: {}", cwd.display());
+            // The language every module is compiled in (gap G50): Lake passes
+            // these to `lean` as `-D…`, and `clean lake build` applies them.
+            print_lean_args(
+                "",
+                &config.package.lean_options,
+                &config.package.more_lean_args,
+                &config.package.weak_lean_args,
+            );
+            for line in &config.package.unreadable_lean_args {
+                println!("leanOptions UNREADABLE (a build refuses every module): {line}");
+            }
 
             // Libraries
             if !config.libs.is_empty() {
@@ -259,6 +270,12 @@ pub(super) fn lake_env(
                     let is_default = config.default_targets.contains(&lib.name);
                     let default_marker = if is_default { " (default)" } else { "" };
                     println!("  - {}{}", lib.name, default_marker);
+                    print_lean_args(
+                        "      ",
+                        &lib.lean_options,
+                        &lib.more_lean_args,
+                        &lib.weak_lean_args,
+                    );
                     if verbose {
                         for root in &lib.roots {
                             println!("      root: {root}");
@@ -275,8 +292,19 @@ pub(super) fn lake_env(
                     let is_default = config.default_targets.contains(&exe.name);
                     let default_marker = if is_default { " (default)" } else { "" };
                     println!("  - {}{}", exe.name, default_marker);
+                    print_lean_args(
+                        "      ",
+                        &exe.lean_options,
+                        &exe.more_lean_args,
+                        &exe.weak_lean_args,
+                    );
                     if verbose {
                         println!("      root: {}", exe.root);
+                        if !exe.more_link_args.is_empty() {
+                            // Already resolved for this host when the lakefile
+                            // writes `if System.Platform.isOSX then … else …`.
+                            println!("      moreLinkArgs: {}", exe.more_link_args.join(" "));
+                        }
                     }
                 }
             }
@@ -344,6 +372,29 @@ pub(super) fn lake_env(
     Ok(())
 }
 
+/// One target's `leanOptions` (as Lake's `-D` arguments), `moreLeanArgs` and
+/// `weakLeanArgs`, one line each, nothing when all are empty.
+fn print_lean_args(
+    indent: &str,
+    options: &[clean_lake::LeanOption],
+    more: &[String],
+    weak: &[String],
+) {
+    if !options.is_empty() {
+        let rendered: Vec<String> = options
+            .iter()
+            .map(|o| format!("-D{}", o.define_arg()))
+            .collect();
+        println!("{indent}leanOptions: {}", rendered.join(" "));
+    }
+    if !more.is_empty() {
+        println!("{indent}moreLeanArgs: {}", more.join(" "));
+    }
+    if !weak.is_empty() {
+        println!("{indent}weakLeanArgs: {}", weak.join(" "));
+    }
+}
+
 fn lake_env_command(
     command: &[String],
     cwd: &std::path::Path,
@@ -352,6 +403,10 @@ fn lake_env_command(
     let (program, args) = command
         .split_first()
         .ok_or_else(|| anyhow::anyhow!("lake env command handoff requires a command"))?;
+    // A Lean toolchain program on PATH may be real Lean or a stale reroute;
+    // the guard does not resolve which: refuse it by name before anything is spawned (plan item
+    // `devsurface-lake-env-no-silent-lean`).
+    super::env_guard::refuse_lean_toolchain_program(program)?;
     let diagnostic_cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
 
     if verbose {
@@ -362,9 +417,10 @@ fn lake_env_command(
     }
 
     // Inject the resolved Lake environment. Without this the child inherited
-    // only the ambient environment, so `clean lake env lean Foo.lean` — the
-    // whole point of the `env <cmd>` form, and what CI scripts are built on —
-    // could not resolve a single import. The pairs come from
+    // only the ambient environment, so a tool run as `clean lake env <cmd>` —
+    // the whole point of the form, and what CI scripts are built on — could
+    // not resolve a single import. (A Lean toolchain program never gets here:
+    // `env_guard` refused it above.) The pairs come from
     // `Workspace::env_pairs`, the same definition `clean lake env` reports, so
     // what is printed and what a child actually receives cannot disagree.
     //
@@ -515,6 +571,10 @@ fn dependencies_require_git(dependencies: &[clean_lake::config::Dependency]) -> 
     dependencies.iter().any(|dep| dep.git.is_some())
 }
 
+#[cfg(all(test, unix))]
+#[path = "lake_env_lean_tests.rs"]
+mod lake_env_lean_tests;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,8 +605,8 @@ mod tests {
     }
 
     /// `lake env <cmd>` must hand the child the resolved Lake environment.
-    /// Spawning with only the ambient environment is why `lake env lean
-    /// Foo.lean` could not resolve imports: `LEAN_PATH` never reached the
+    /// Spawning with only the ambient environment is why a tool run through
+    /// `lake env` could not resolve imports: `LEAN_PATH` never reached the
     /// child. The injected pairs must be exactly what `clean lake env` reports.
     #[test]
     fn test_lake_env_command_injects_the_resolved_environment() {

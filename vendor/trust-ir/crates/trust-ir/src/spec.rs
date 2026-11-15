@@ -23,6 +23,11 @@
 //!   explicit [`SpecWaiver`], even when the machine has zero anchors.
 //! * **Ob.4 — machine exists** (no dangling spec name): every anchor, waiver,
 //!   and proof names a `SpecModule` present in the module.
+//! * **S3 — linked surface** (no unreadable certification claim): every
+//!   variable type and invariant formula of a
+//!   [`SpecEnforcementMode::Linked`] machine parses and is well-sorted
+//!   ([`validate_linked_spec_surface`], [`crate::spec_surface`]).
+//!   `DesignOnly` strings stay opaque.
 //!
 //! Behavioral source resolution remains frontend-specific, but an anchor emitted
 //! together with executable TrustIr can bind directly to a module-local
@@ -30,6 +35,11 @@
 //! text for external specifications and for source-facing reports.
 
 use std::collections::{BTreeMap, BTreeSet};
+
+mod observed_executable;
+mod observed_structure;
+pub use observed_executable::validate_spec_executable_links_observed;
+pub use observed_structure::validate_spec_structure_observed;
 
 use crate::spec_proof::{HarnessManifest, HarnessManifestError, link_proofs};
 use crate::value::FuncId;
@@ -63,47 +73,236 @@ impl SpecOrigin {
 
 /// An abstract state variable of a [`SpecModule`].
 ///
-/// `ty` is an opaque textual type tag (e.g. `"Int"`, `"Bool"`, `"0..7"`) — the
-/// standalone IR does not interpret it; it is carried for documentation and for
-/// the consuming checker.
+/// `ty` is a textual type tag (e.g. `"Int"`, `"Bool"`, `"0..7"`). Under
+/// [`SpecEnforcementMode::DesignOnly`] it is opaque, carried for documentation
+/// and for the consuming checker. Under [`SpecEnforcementMode::Linked`] it must
+/// parse as `Bool`, `Int`, `BitVec(<w>)` or `<lo>..<hi>`, and the name must be
+/// an unprimed SMT simple symbol that is not a surface operator
+/// ([`crate::spec_surface`]); anything else is
+/// [`SpecLinkViolation::LinkedVariableUnparsed`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SpecVar {
     /// Variable name (matches a TLA+ `VARIABLES` entry / `Model` var).
     pub name: String,
-    /// Opaque textual type/domain tag (e.g. `"Int"`, `"Bool"`, `"0..7"`).
+    /// Textual type/domain tag (e.g. `"Int"`, `"Bool"`, `"0..7"`); parsed
+    /// only under `Linked` (see the type docs).
     pub ty: String,
+    /// The variable's SMT sort, stated in the wire vocabulary (v46).
+    ///
+    /// `ty` is the AUTHORED surface tag and stays a string: `"0..7"` is a
+    /// range, which no `ClauseSort` spells. `sort` is the domain a checker
+    /// actually reasons over, and it is the axis on which a width-strip
+    /// yields a wrong POSITIVE rather than a refusal — the same argument
+    /// [`crate::proof::ClauseBinding`] records for contract clauses.
+    ///
+    /// `None` = NOT RECORDED, never a wildcard: a consumer that needs the
+    /// sort must refuse the machine rather than guess one from `ty` — but a
+    /// typed carrier binding is still checked against the sort `ty` PARSES
+    /// to ([`Self::effective_sort`]), because that is a carried fact, not a
+    /// guess. When `sort` is present it must AGREE with `ty`'s parsed sort
+    /// ([`crate::spec_surface::parse_spec_var_sort`]) — a disagreement is
+    /// [`SpecLinkViolation::LinkedVariableSortMismatch`], checked in both
+    /// enforcement modes because it is a contradiction between two carried
+    /// facts, not a reading of an opaque `DesignOnly` string.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub sort: Option<crate::proof::ClauseSort>,
 }
 
 impl SpecVar {
-    /// Construct a variable with the given name and opaque type tag.
+    /// Construct a variable with the given name and opaque type tag, and no
+    /// declared [`SpecVar::sort`].
     pub fn new(name: impl Into<String>, ty: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             ty: ty.into(),
+            sort: None,
         }
+    }
+
+    /// Declare this variable's wire sort (v46). It must agree with `ty`.
+    pub fn with_sort(mut self, sort: crate::proof::ClauseSort) -> Self {
+        self.sort = Some(sort);
+        self
+    }
+
+    /// The sort a typed carrier binding of this variable is checked against
+    /// (S4, v46): the declared [`sort`](Self::sort) when recorded, otherwise
+    /// the sort the `ty` tag parses to
+    /// ([`crate::spec_surface::parse_spec_var_sort`]), and `None` only when
+    /// neither is readable.
+    ///
+    /// Both are CARRIED facts, so a binding that contradicts either is a
+    /// contradiction to refuse, not a guess: without the fallback a producer
+    /// could leave `sort` unrecorded on an `"0..7"` variable and bind it at
+    /// `BitVec(64)` — the width strip that turns a false claim into a true
+    /// one. (When both are present they must already agree —
+    /// [`SpecLinkViolation::SpecVariableSortMismatch`].)
+    pub fn effective_sort(&self) -> Option<crate::proof::ClauseSort> {
+        self.sort.clone().or_else(|| {
+            crate::spec_surface::parse_spec_var_sort(&self.ty)
+                .ok()
+                .map(spec_sort_as_clause_sort)
+        })
     }
 }
 
 /// A named invariant of a [`SpecModule`].
 ///
-/// `formula` is an opaque textual predicate (TLA+ / DSL surface syntax); the
-/// standalone IR does not parse it.
+/// Under [`SpecEnforcementMode::DesignOnly`], `formula` is an opaque textual
+/// predicate (TLA+ / DSL surface syntax) and is not parsed. Under
+/// [`SpecEnforcementMode::Linked`] it must be one quantifier-free SMT-LIB2
+/// `Bool` term over the machine's declared, unprimed variables, well-sorted
+/// ([`crate::spec_surface::check_linked_invariant`]); anything else is
+/// [`SpecLinkViolation::LinkedFormulaUnparsed`]. A `Linked` module written in
+/// TLA+ surface syntax is therefore refused.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct SpecInvariant {
     /// Invariant label (e.g. `"BoundedSeq"`).
     pub name: String,
-    /// Opaque textual predicate (TLA+/DSL surface syntax).
+    /// Textual predicate: opaque under `DesignOnly`, an SMT-LIB2 `Bool` term
+    /// under `Linked` (see the type docs).
     pub formula: String,
+    /// The same predicate as a TYPED first-order carrier (v46).
+    ///
+    /// This is the first-order [`ProofFormula`](crate::proof::ProofFormula)
+    /// already used for contract clauses — deliberately NOT a second grammar
+    /// and NOT a CIC core: the leaves are quantifier-free first-order terms,
+    /// with no binder, no `Pi` and no `lambda` (roadmap §2.2 rulings 1 and 2).
+    ///
+    /// Its `bindings` name the machine's own state variables through
+    /// [`ClausePlace::SpecVar`](crate::proof::ClausePlace::SpecVar). An
+    /// invariant is a SINGLE-STATE predicate, so
+    /// [`SpecVarNext`](crate::proof::ClausePlace::SpecVarNext) — the primed
+    /// successor value — is refused here; its only legal home is an action
+    /// relation ([`TemporalForm::WeakFair`]/[`TemporalForm::StrongFair`]).
+    ///
+    /// `None` = NOT RECORDED. An empty `bindings` on a present `typed` reads
+    /// as UNBINDABLE, never as a wildcard (the v41 precedent).
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub typed: Option<crate::proof::ProofFormula>,
 }
 
 impl SpecInvariant {
-    /// Construct an invariant with the given label and opaque formula.
+    /// Construct an invariant with the given label and opaque formula, and no
+    /// typed carrier.
     pub fn new(name: impl Into<String>, formula: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             formula: formula.into(),
+            typed: None,
+        }
+    }
+
+    /// Attach the typed first-order carrier (v46).
+    pub fn with_typed(mut self, typed: crate::proof::ProofFormula) -> Self {
+        self.typed = Some(typed);
+        self
+    }
+}
+
+/// The shape of one named temporal property of a [`SpecModule`] (v46).
+///
+/// First-order leaves only: each `ProofFormula` is a quantifier-free
+/// first-order predicate over the machine's state variables. The temporal
+/// operator is the ENUM TAG, not a term constructor, so nothing here
+/// introduces a binder, a `Pi`, a `lambda` or a `Prop` carrier — the
+/// 2026-08-04 §2 and 2026-08-27 §9 rulings.
+///
+/// `Always`/`Eventually`/`LeadsTo` leaves are SINGLE-STATE predicates. The
+/// fairness variants name an action of the machine and may carry that action's
+/// two-state `relation`, which is the ONLY formula in which
+/// [`ClausePlace::SpecVarNext`](crate::proof::ClausePlace::SpecVarNext) is
+/// legal — a successor value exists only where a transition does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum TemporalForm {
+    /// `[]P` — `P` holds in every reachable state.
+    Always(crate::proof::ProofFormula),
+    /// `<>P` — `P` holds in some reachable state.
+    Eventually(crate::proof::ProofFormula),
+    /// `P ~> Q` — every state satisfying `P` is eventually followed by one
+    /// satisfying `Q`.
+    LeadsTo(crate::proof::ProofFormula, crate::proof::ProofFormula),
+    /// `WF(A)` — weak fairness for the named action.
+    WeakFair {
+        /// Action name; must be declared by the machine.
+        action: String,
+        /// The action's typed two-state relation, if recorded. `None` =
+        /// NOT RECORDED, which a fail-closed consumer treats as unbindable.
+        relation: Option<crate::proof::ProofFormula>,
+    },
+    /// `SF(A)` — strong fairness for the named action.
+    StrongFair {
+        /// Action name; must be declared by the machine.
+        action: String,
+        /// The action's typed two-state relation, if recorded.
+        relation: Option<crate::proof::ProofFormula>,
+    },
+}
+
+impl TemporalForm {
+    /// Short lowercase tag used by diagnostics.
+    pub fn tag(&self) -> &'static str {
+        match self {
+            TemporalForm::Always(_) => "always",
+            TemporalForm::Eventually(_) => "eventually",
+            TemporalForm::LeadsTo(_, _) => "leads-to",
+            TemporalForm::WeakFair { .. } => "weak-fair",
+            TemporalForm::StrongFair { .. } => "strong-fair",
+        }
+    }
+
+    /// Every carried formula, paired with whether it is an ACTION RELATION
+    /// (two-state, so `SpecVarNext` is legal) rather than a state predicate.
+    pub fn formulas(&self) -> Vec<(&crate::proof::ProofFormula, bool)> {
+        self.formulas_iter().collect()
+    }
+
+    /// Borrow carried formulas without allocating. A leads-to antecedent
+    /// precedes its consequent; an unrecorded fairness relation yields none.
+    pub fn formulas_iter(&self) -> impl Iterator<Item = (&crate::proof::ProofFormula, bool)> {
+        let formulas = match self {
+            TemporalForm::Always(p) | TemporalForm::Eventually(p) => [Some((p, false)), None],
+            TemporalForm::LeadsTo(p, q) => [Some((p, false)), Some((q, false))],
+            TemporalForm::WeakFair { relation, .. } | TemporalForm::StrongFair { relation, .. } => {
+                [relation.as_ref().map(|r| (r, true)), None]
+            }
+        };
+        formulas.into_iter().flatten()
+    }
+
+    /// The action this form names, for the fairness variants.
+    pub fn action(&self) -> Option<&str> {
+        match self {
+            TemporalForm::WeakFair { action, .. } | TemporalForm::StrongFair { action, .. } => {
+                Some(action.as_str())
+            }
+            _ => None,
+        }
+    }
+}
+
+/// A named temporal property of a [`SpecModule`] (v46).
+///
+/// The name is the identity a temporal [`ProofObligation`](crate::proof::ProofObligation)
+/// cites through its `spec` backref, so it must be unique within its machine.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct SpecTemporal {
+    /// Property label (e.g. `"EventuallyFull"`), unique within the machine.
+    pub name: String,
+    /// The temporal shape and its first-order leaves.
+    pub form: TemporalForm,
+}
+
+impl SpecTemporal {
+    /// Construct a named temporal property.
+    pub fn new(name: impl Into<String>, form: TemporalForm) -> Self {
+        Self {
+            name: name.into(),
+            form,
         }
     }
 }
@@ -249,22 +448,35 @@ pub struct SpecWaiver {
     pub reason: String,
 }
 
-/// The kind of proof a [`SpecProof`] names. Today the only producer is aterm's
-/// kani harness manifest, so the sole variant is [`ProofKind::Kani`]; the enum
-/// exists so future proof technologies (e.g. a Lean discharge) can be carried
-/// without a breaking schema change.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The kind of proof a [`SpecProof`] names.
+///
+/// [`ProofKind::Kani`] resolves against the build's `HarnessManifest` (L1).
+/// [`ProofKind::CleanTheorem`] (v46) does NOT: it resolves only against a
+/// [`KernelCertifiedTheorems`] witness, which `trust_ir_build` mints from the
+/// `Certified` [`ProofEvidence::CleanCic`](crate::proof::ProofEvidence::CleanCic)
+/// certificates whose kernel re-check actually ran — so `Certified` is still
+/// earned only by the Clean CIC kernel re-check, never by a spec binding (or
+/// a status byte) asserting it.
+#[derive(Debug, Clone, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ProofKind {
     /// A `#[kani::proof]` bounded-model-checking harness.
     Kani,
+    /// A Clean CIC theorem, named exactly as its kernel declaration is
+    /// (e.g. `"NNVerify.farkas_combine_2_le_bound"`).
+    CleanTheorem {
+        /// Fully-qualified kernel theorem name.
+        name: String,
+    },
 }
 
 impl ProofKind {
-    /// Short lowercase tag (`"kani"`) used by the text codec and diagnostics.
+    /// Short lowercase tag (`"kani"` / `"clean-theorem"`) used by the text
+    /// codec and diagnostics.
     pub fn tag(&self) -> &'static str {
         match self {
             ProofKind::Kani => "kani",
+            ProofKind::CleanTheorem { .. } => "clean-theorem",
         }
     }
 }
@@ -342,6 +554,13 @@ pub struct SpecModule {
         serde(default = "SpecEnforcementMode::legacy_compatibility")
     )]
     pub enforcement: SpecEnforcementMode,
+    /// Named temporal properties of this machine (v46).
+    ///
+    /// Appended after `enforcement` — the last positional serde field and the
+    /// last binary field — so every pre-v46 artifact decodes to an empty
+    /// vector without shifting any earlier field.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub temporal: Vec<SpecTemporal>,
 }
 
 impl SpecModule {
@@ -366,6 +585,7 @@ impl SpecModule {
             proofs: Vec::new(),
             origin: SpecOrigin::Embedded,
             enforcement: SpecEnforcementMode::DesignOnly,
+            temporal: Vec::new(),
         }
     }
 
@@ -529,6 +749,99 @@ pub enum SpecLinkViolation {
     },
     /// L1: certifying linkage of this machine requires a harness manifest.
     ProofManifestRequired { machine: String },
+    /// S3: a [`SpecEnforcementMode::Linked`] invariant formula does not read
+    /// as a well-sorted SMT-LIB2 `Bool` term over the machine's declared
+    /// variables ([`crate::spec_surface::check_linked_invariant`]). `detail`
+    /// names the specific reason (syntax, undeclared or primed variable,
+    /// ill-sorted application). Never reported for `DesignOnly`.
+    LinkedFormulaUnparsed {
+        machine: String,
+        invariant: String,
+        detail: String,
+    },
+    /// S3: a [`SpecEnforcementMode::Linked`] variable's type is not one of
+    /// `Bool`, `Int`, `BitVec(<w>)`, `<lo>..<hi>`, or its name is not an
+    /// unprimed SMT simple symbol an invariant could denote, or it shadows a
+    /// surface operator (`and`, `bvadd`, …). Never reported
+    /// for `DesignOnly`.
+    LinkedVariableUnparsed {
+        machine: String,
+        variable: String,
+        detail: String,
+    },
+    /// S3 (v46): a [`SpecEnforcementMode::Linked`] machine's TYPED carrier —
+    /// a typed invariant or a temporal leaf — states no ONE SMT-LIB text
+    /// over the machine's state ([`crate::proof::ProofFormula::smtlib_text`]:
+    /// an opaque schema, a claim schema, a `trust-ir.Pred@1` citation, or an
+    /// `smtlib2` payload beside a different `smtlib` rendering), or its text
+    /// does not read as a well-sorted `Bool` term over its OWN `bindings`, or
+    /// it binds a name no term could denote (not an SMT simple symbol, a
+    /// surface operator, or bound twice). `detail` names the specific reason.
+    /// The bindings are the carrier's whole variable environment: a free
+    /// symbol they do not bind is undeclared, never resolved through the
+    /// machine's `vars` by name. Never reported for `DesignOnly` (its
+    /// `bindings` are still held to S4 in both modes).
+    LinkedTypedCarrierUnparsed {
+        machine: String,
+        subject: &'static str,
+        name: String,
+        detail: String,
+    },
+    /// S3 (v46): a [`SpecEnforcementMode::Linked`] machine's typed invariant
+    /// states a text ([`crate::proof::ProofFormula::smtlib_text`]) that reads
+    /// as a DIFFERENT term from the invariant's own string `formula` once the
+    /// carrier's bound names are replaced by the state variables they index
+    /// ([`crate::spec_surface::linked_renderings_agree`]). `typed` is
+    /// documented as the same predicate as `formula`; a module carrying two
+    /// predicates under one name has not said which one the invariant is, and
+    /// a consumer that reads one rendering would certify against a claim the
+    /// other consumer never saw. Only reported once BOTH renderings read
+    /// (`LinkedFormulaUnparsed` / `LinkedTypedCarrierUnparsed` own the rest)
+    /// and every binding resolves (S4 owns a binding that does not).
+    LinkedTypedCarrierDisagrees {
+        machine: String,
+        invariant: String,
+        detail: String,
+    },
+    /// S4 (v46): a typed carrier's clause binding cannot be read as a
+    /// statement about this machine's state.
+    ///
+    /// `subject`/`name` say WHICH carrier (`"invariant"` / `"temporal"` and
+    /// its label), `binding` is the bound free name, and `detail` the specific
+    /// reason: a place outside the spec-variable index space, an index beyond
+    /// `vars`, a primed `SpecVarNext` in a single-state predicate, or a sort
+    /// that contradicts the variable's declared [`SpecVar::sort`].
+    ///
+    /// Checked in BOTH enforcement modes: it is a contradiction between two
+    /// structured facts the module itself carries, never a reading of an
+    /// opaque `DesignOnly` string.
+    SpecTypedBindingInvalid {
+        machine: String,
+        subject: &'static str,
+        name: String,
+        binding: String,
+        detail: String,
+    },
+    /// S4 (v46): a variable's declared [`SpecVar::sort`] contradicts the sort
+    /// its own `ty` tag parses to. Two carried facts about one domain cannot
+    /// both be believed, and choosing either silently is exactly the
+    /// width-strip hazard the sort exists to close.
+    SpecVariableSortMismatch {
+        machine: String,
+        variable: String,
+        detail: String,
+    },
+    /// S4 (v46): a [`ProofKind::CleanTheorem`] binding is not established by
+    /// the kernel re-check witness ([`KernelCertifiedTheorems`]) — or no
+    /// witness was supplied at all. `Certified` is earned by the Clean kernel
+    /// re-check alone, so an unresolved theorem name is a refusal, never a
+    /// claim taken on faith.
+    CleanTheoremUnresolved {
+        machine: String,
+        action: String,
+        theorem: String,
+        detail: String,
+    },
 }
 
 impl SpecLinkViolation {
@@ -551,6 +864,13 @@ impl SpecLinkViolation {
             SpecLinkViolation::ProjectionMissing { .. } => "L2",
             SpecLinkViolation::ProofUnresolved { .. }
             | SpecLinkViolation::ProofManifestRequired { .. } => "L1",
+            SpecLinkViolation::LinkedFormulaUnparsed { .. }
+            | SpecLinkViolation::LinkedVariableUnparsed { .. }
+            | SpecLinkViolation::LinkedTypedCarrierUnparsed { .. }
+            | SpecLinkViolation::LinkedTypedCarrierDisagrees { .. } => "S3",
+            SpecLinkViolation::SpecTypedBindingInvalid { .. }
+            | SpecLinkViolation::SpecVariableSortMismatch { .. }
+            | SpecLinkViolation::CleanTheoremUnresolved { .. } => "S4",
         }
     }
 
@@ -658,6 +978,67 @@ impl SpecLinkViolation {
                 "[L1 proof-manifest-required] machine {machine:?} declares proof bindings \
                  but no harness manifest was supplied"
             ),
+            SpecLinkViolation::LinkedFormulaUnparsed {
+                machine,
+                invariant,
+                detail,
+            } => format!(
+                "[S3 linked-surface] linked machine {machine:?}: invariant {invariant:?} is \
+                 not a well-sorted SMT-LIB2 Bool term ({detail})"
+            ),
+            SpecLinkViolation::LinkedVariableUnparsed {
+                machine,
+                variable,
+                detail,
+            } => format!(
+                "[S3 linked-surface] linked machine {machine:?}: variable {variable:?} is \
+                 outside the typed surface ({detail})"
+            ),
+            SpecLinkViolation::LinkedTypedCarrierUnparsed {
+                machine,
+                subject,
+                name,
+                detail,
+            } => format!(
+                "[S3 linked-surface] linked machine {machine:?}: the typed carrier of \
+                 {subject} {name:?} is not a well-sorted SMT-LIB2 Bool term over its own \
+                 bindings ({detail})"
+            ),
+            SpecLinkViolation::LinkedTypedCarrierDisagrees {
+                machine,
+                invariant,
+                detail,
+            } => format!(
+                "[S3 linked-surface] linked machine {machine:?}: the typed carrier of invariant \
+                 {invariant:?} is a different predicate from its `formula` ({detail})"
+            ),
+            SpecLinkViolation::SpecTypedBindingInvalid {
+                machine,
+                subject,
+                name,
+                binding,
+                detail,
+            } => format!(
+                "[S4 typed-carrier] machine {machine:?}: {subject} {name:?} binds {binding:?} \
+                 to a place this machine cannot resolve ({detail})"
+            ),
+            SpecLinkViolation::SpecVariableSortMismatch {
+                machine,
+                variable,
+                detail,
+            } => format!(
+                "[S4 typed-carrier] machine {machine:?}: variable {variable:?} declares a sort \
+                 its own type tag contradicts ({detail})"
+            ),
+            SpecLinkViolation::CleanTheoremUnresolved {
+                machine,
+                action,
+                theorem,
+                detail,
+            } => format!(
+                "[S4 typed-carrier] machine {machine:?}: action {action:?} cites Clean theorem \
+                 {theorem:?}, which the kernel re-check witness does not establish ({detail})"
+            ),
         }
     }
 }
@@ -684,6 +1065,57 @@ pub struct SpecCoverage {
     pub actively_anchored: bool,
 }
 
+/// The theorem names a Clean kernel re-check ESTABLISHED for a module (v46).
+///
+/// A [`ProofKind::CleanTheorem`] binding resolves against this set and against
+/// nothing else. It is deliberately NOT resolved against the module's own
+/// `Certified` rows read as claims: `link_spec_modules` runs no kernel, and a
+/// module can write any status it likes, so reading `Certified` here would
+/// grant a spec binding authority on the module's say-so — the L1 analogue is
+/// the externally supplied [`HarnessManifest`], and this is the same shape.
+///
+/// The only sanctioned minter is `trust_ir_build::kernel_certified_theorems`,
+/// which runs the full module validator (the in-process CleanCic kernel
+/// re-check included) and mints from the certificates that pass it — the
+/// module's `Certified` rows earn a place here only through that re-check,
+/// so `Certified` is still earned by the Clean kernel alone. Building one by
+/// hand ([`Self::from_rechecked`]) is a caller-side authority assertion, exactly
+/// like a hand-written manifest.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct KernelCertifiedTheorems {
+    theorems: BTreeSet<String>,
+}
+
+impl KernelCertifiedTheorems {
+    /// The witness for `names`. The caller ASSERTS each was re-checked by the
+    /// Clean kernel; see the type docs for the one sanctioned minter.
+    pub fn from_rechecked(names: impl IntoIterator<Item = String>) -> Self {
+        Self {
+            theorems: names.into_iter().collect(),
+        }
+    }
+
+    /// Whether `name` is an established theorem.
+    pub fn contains(&self, name: &str) -> bool {
+        self.theorems.contains(name)
+    }
+
+    /// The established theorem names, sorted.
+    pub fn iter(&self) -> impl Iterator<Item = &str> {
+        self.theorems.iter().map(String::as_str)
+    }
+
+    /// Number of established theorems.
+    pub fn len(&self) -> usize {
+        self.theorems.len()
+    }
+
+    /// True when no theorem was established.
+    pub fn is_empty(&self) -> bool {
+        self.theorems.is_empty()
+    }
+}
+
 /// Policy inputs for [`link_spec_modules`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct SpecLinkOptions {
@@ -706,6 +1138,9 @@ pub enum SpecNonCertificationReason {
     ExternalProjectionUnresolved { machine: String, action: String },
     /// Proof bindings were intentionally analyzed without a manifest.
     ProofManifestUnverified { machine: String },
+    /// `CleanTheorem` bindings (v46) were analyzed without a kernel re-check
+    /// witness ([`KernelCertifiedTheorems`]), under the exploratory option.
+    CleanTheoremUnverified { machine: String },
 }
 
 impl SpecNonCertificationReason {
@@ -715,6 +1150,7 @@ impl SpecNonCertificationReason {
             Self::DesignOnlyMachine { .. } => "design-only",
             Self::ExternalProjectionUnresolved { .. } => "external-projection-unresolved",
             Self::ProofManifestUnverified { .. } => "proof-manifest-unverified",
+            Self::CleanTheoremUnverified { .. } => "clean-theorem-unverified",
         }
     }
 
@@ -730,6 +1166,9 @@ impl SpecNonCertificationReason {
             Self::ProofManifestUnverified { machine } => {
                 format!("machine {machine:?} has proof bindings with no verified manifest")
             }
+            Self::CleanTheoremUnverified { machine } => format!(
+                "machine {machine:?} has Clean-theorem bindings with no kernel re-check witness"
+            ),
         }
     }
 }
@@ -859,6 +1298,59 @@ pub fn validate_spec_structure(specs: &[SpecModule]) -> Vec<SpecLinkViolation> {
                 "formula",
                 &invariant.formula,
             );
+        }
+        // S4 (v46) — the typed carrier. Structural, so it runs in BOTH
+        // enforcement modes: every check below compares two facts the module
+        // carries in the IR, never the meaning of an opaque `DesignOnly`
+        // string.
+        for variable in &spec.vars {
+            check_var_sort(&mut violations, spec, variable);
+        }
+        for invariant in &spec.invariants {
+            if let Some(typed) = &invariant.typed {
+                check_typed_formula(
+                    &mut violations,
+                    spec,
+                    "invariant",
+                    &invariant.name,
+                    typed,
+                    false,
+                );
+            }
+        }
+        for temporal in duplicate_names(spec.temporal.iter().map(|t| t.name.as_str())) {
+            violations.push(SpecLinkViolation::DuplicateMemberIdentity {
+                machine: spec.name.clone(),
+                member: "temporal",
+                name: temporal.to_string(),
+            });
+        }
+        for property in &spec.temporal {
+            push_blank(&mut violations, spec, "temporal", "name", &property.name);
+            if let Some(action) = property.form.action() {
+                push_blank(&mut violations, spec, "temporal", "action", action);
+                if !is_blank(action) && !is_blank(&spec.name) && !spec.has_action(action) {
+                    violations.push(SpecLinkViolation::ActionMissing {
+                        machine: spec.name.clone(),
+                        action: action.to_string(),
+                        from: "temporal",
+                        detail: format!(
+                            "fairness property {:?} names an action this machine does not declare",
+                            property.name
+                        ),
+                    });
+                }
+            }
+            for (formula, is_action_relation) in property.form.formulas_iter() {
+                check_typed_formula(
+                    &mut violations,
+                    spec,
+                    "temporal",
+                    &property.name,
+                    formula,
+                    is_action_relation,
+                );
+            }
         }
         if let SpecOrigin::External(path) = &spec.origin {
             push_blank(&mut violations, spec, "external origin", "path", path);
@@ -1101,6 +1593,267 @@ pub fn validate_spec_structure(specs: &[SpecModule]) -> Vec<SpecLinkViolation> {
     violations
 }
 
+/// S3: the typed surface of every [`SpecEnforcementMode::Linked`] machine
+/// (roadmap WS1.10, finding F-014).
+///
+/// For each `Linked` machine: every variable name must be an unprimed SMT
+/// simple symbol and every variable type must parse
+/// ([`crate::spec_surface::parse_spec_var_sort`]) —
+/// [`SpecLinkViolation::LinkedVariableUnparsed`] otherwise — and every
+/// invariant formula must be a well-sorted SMT-LIB2 `Bool` term over those
+/// variables ([`crate::spec_surface::check_linked_invariant`]) —
+/// [`SpecLinkViolation::LinkedFormulaUnparsed`] otherwise. Blank names, types
+/// and formulas are left to S0 (`BlankSemanticValue`), which already refuses
+/// them in every mode. `DesignOnly` machines are not read: their strings stay
+/// opaque descriptive text.
+///
+/// Shared by [`link_spec_modules`] (so `trust-ir spec-link` cannot certify an
+/// unreadable invariant) and the module validator.
+pub fn validate_linked_spec_surface(specs: &[SpecModule]) -> Vec<SpecLinkViolation> {
+    use crate::spec_surface::{
+        check_linked_invariant, linked_var_env, linked_var_name_problem, parse_spec_var_sort,
+    };
+    let mut violations = Vec::new();
+    for spec in specs
+        .iter()
+        .filter(|spec| spec.enforcement == SpecEnforcementMode::Linked)
+    {
+        for variable in spec.vars.iter().filter(|v| !is_blank(&v.name)) {
+            let mut problems = Vec::new();
+            if let Some(problem) = linked_var_name_problem(&variable.name) {
+                problems.push(problem);
+            }
+            if !is_blank(&variable.ty)
+                && let Err(problem) = parse_spec_var_sort(&variable.ty)
+            {
+                problems.push(problem);
+            }
+            if !problems.is_empty() {
+                violations.push(SpecLinkViolation::LinkedVariableUnparsed {
+                    machine: spec.name.clone(),
+                    variable: variable.name.clone(),
+                    detail: problems.join("; "),
+                });
+            }
+        }
+        let env = linked_var_env(
+            spec.vars
+                .iter()
+                .map(|variable| (variable.name.as_str(), variable.ty.as_str())),
+        );
+        let mut formula_reads = BTreeSet::new();
+        for invariant in spec.invariants.iter().filter(|i| !is_blank(&i.formula)) {
+            match check_linked_invariant(&invariant.formula, &env) {
+                Ok(()) => {
+                    formula_reads.insert(invariant.name.as_str());
+                }
+                Err(detail) => violations.push(SpecLinkViolation::LinkedFormulaUnparsed {
+                    machine: spec.name.clone(),
+                    invariant: invariant.name.clone(),
+                    detail,
+                }),
+            }
+        }
+        // v46: the typed carriers. Each is read over its OWN bindings, never
+        // over `vars` by name — the bindings are what a consumer resolves the
+        // carrier's free names through, so they are the environment.
+        for invariant in &spec.invariants {
+            if let Some(typed) = &invariant.typed {
+                let carrier_text = check_typed_carrier_text(
+                    &mut violations,
+                    spec,
+                    "invariant",
+                    &invariant.name,
+                    typed,
+                );
+                // Both texts read: they must be ONE predicate. A binding that
+                // does not resolve to a state variable is S4's finding, and
+                // without every name resolved there is no reading of the
+                // carrier over the machine to compare.
+                if let Some(text) = carrier_text
+                    && formula_reads.contains(invariant.name.as_str())
+                {
+                    check_typed_carrier_agrees(&mut violations, spec, invariant, typed, text);
+                }
+            }
+        }
+        for property in &spec.temporal {
+            for (formula, _) in property.form.formulas_iter() {
+                let _reads = check_typed_carrier_text(
+                    &mut violations,
+                    spec,
+                    "temporal",
+                    &property.name,
+                    formula,
+                );
+            }
+        }
+    }
+    normalize_violations(&mut violations);
+    violations
+}
+
+/// S3 (v46): a typed invariant's text — the one SMT-LIB text
+/// [`check_typed_carrier_text`] read — and its string `formula` are ONE
+/// predicate ([`crate::spec_surface::linked_renderings_agree`]). The
+/// carrier's bound names are read as the state variables their `SpecVar`
+/// places index; a carrier with any binding S4 refuses (a non-`SpecVar`
+/// place or an out-of-range index) has no reading over the machine to
+/// compare and is left to S4.
+fn check_typed_carrier_agrees(
+    violations: &mut Vec<SpecLinkViolation>,
+    spec: &SpecModule,
+    invariant: &SpecInvariant,
+    typed: &crate::proof::ProofFormula,
+    text: &str,
+) {
+    use crate::proof::ClausePlace;
+    let mut rename: BTreeMap<&str, &str> = BTreeMap::new();
+    for (bound, binding) in &typed.bindings {
+        let ClausePlace::SpecVar { index } = binding.place else {
+            return;
+        };
+        let Some(variable) = spec.vars.get(index as usize) else {
+            return;
+        };
+        rename.insert(bound.as_str(), variable.name.as_str());
+    }
+    if let Err(detail) =
+        crate::spec_surface::linked_renderings_agree(text, &rename, &invariant.formula)
+    {
+        violations.push(SpecLinkViolation::LinkedTypedCarrierDisagrees {
+            machine: spec.name.clone(),
+            invariant: invariant.name.clone(),
+            detail,
+        });
+    }
+}
+
+/// S3 (v46): a `Linked` machine's typed carrier must READ. Its `bindings`
+/// are its whole variable environment (a bound name that no SMT term could
+/// denote, or one bound twice, is refused first), and its formula must be ONE
+/// SMT-LIB text ([`crate::proof::ProofFormula::smtlib_text`]: an `smtlib2`
+/// payload whose `smtlib` rendering, if any, is that payload) that is one
+/// well-sorted quantifier-free SMT-LIB2 `Bool` term over exactly those names
+/// ([`crate::spec_surface::check_linked_invariant`]). Without this a Linked
+/// machine could certify a typed invariant whose text is garbage beside a
+/// well-formed binding list — the F-014 hole, one layer up.
+///
+/// A carrier that states no one SMT-LIB text over the machine's state is
+/// refused, decided over every schema trust-ir owns
+/// ([`crate::proof::OwnedFormulaSchema`], no wildcard): an `smtlib2` payload
+/// with a different rendering states two texts, a `trust-ir.Pred@1`
+/// citation is a predicate over one value `self`, a claim schema states no
+/// predicate, and an unowned schema's payload is one this linker cannot
+/// read. The text itself is read by trust-ir's one SMT-LIB2 reader
+/// ([`crate::proof::read_smtlib_term`], through
+/// [`crate::spec_surface::check_linked_invariant`]). (This read the
+/// RENDERING whatever the schema and skipped a carrier without one, so a
+/// carrier whose `smtlib2` payload was another predicate certified beside
+/// its agreeing rendering, or with no rendering at all.)
+///
+/// A binding sort outside the surface (`Array`, `Float`, …) is left out of
+/// the environment, so a use of that name is refused as undeclared here; S4
+/// already refuses the binding itself, since no variable's `ty` parses to
+/// such a sort. `DesignOnly` machines never reach this function.
+///
+/// Returns the carrier's text when it read cleanly (no refusal pushed), so
+/// the caller can compare it with its string twin only when there is a
+/// reading.
+fn check_typed_carrier_text<'f>(
+    violations: &mut Vec<SpecLinkViolation>,
+    spec: &SpecModule,
+    subject: &'static str,
+    name: &str,
+    formula: &'f crate::proof::ProofFormula,
+) -> Option<&'f str> {
+    use crate::proof::{ClauseSort, OwnedFormulaSchema};
+    use crate::spec_surface::{
+        SpecSort, SpecVarEnv, check_linked_invariant, linked_var_name_problem,
+    };
+    let mut reads = true;
+    let mut refuse = |detail: String| {
+        reads = false;
+        violations.push(SpecLinkViolation::LinkedTypedCarrierUnparsed {
+            machine: spec.name.clone(),
+            subject,
+            name: name.to_string(),
+            detail,
+        });
+    };
+    let mut env: SpecVarEnv<'_> = BTreeMap::new();
+    let mut seen = BTreeSet::new();
+    for (bound, binding) in &formula.bindings {
+        if !seen.insert(bound.as_str()) {
+            refuse(format!("binding {bound:?} is bound more than once"));
+            env.insert(bound.as_str(), None);
+            continue;
+        }
+        if let Some(problem) = linked_var_name_problem(bound) {
+            refuse(format!("binding {problem}"));
+            continue;
+        }
+        let sort = match &binding.sort {
+            ClauseSort::Bool => SpecSort::Bool,
+            ClauseSort::Int => SpecSort::Int,
+            ClauseSort::BitVec(width) => SpecSort::BitVec(*width),
+            _ => continue,
+        };
+        env.insert(bound.as_str(), Some(sort));
+    }
+    // The one-formula rule, decided over every schema trust-ir owns: only an
+    // `smtlib2` payload is a predicate over this machine's state that a
+    // linker can read.
+    let text = match formula.owned_schema() {
+        Some(OwnedFormulaSchema::Smtlib2) => {
+            let text = formula.smtlib_text();
+            if text.is_none() {
+                refuse(format!(
+                    "the carrier states two SMT-LIB texts: its `smtlib2` payload {:?} and its \
+                     `smtlib` rendering {:?} differ",
+                    formula.payload,
+                    formula.smtlib.as_deref().unwrap_or_default()
+                ));
+            }
+            text
+        }
+        Some(OwnedFormulaSchema::Pred) => {
+            refuse(format!(
+                "the carrier is a `{}` citation {:?}: a refinement predicate over one value \
+                 `self`, not a predicate over this machine's state variables",
+                formula.schema, formula.payload
+            ));
+            None
+        }
+        Some(
+            OwnedFormulaSchema::BvBlastGoal
+            | OwnedFormulaSchema::SatRes
+            | OwnedFormulaSchema::LineageTransformBinding,
+        ) => {
+            refuse(format!(
+                "the carrier is in claim schema {:?}, which states no predicate",
+                formula.schema
+            ));
+            None
+        }
+        None => {
+            refuse(format!(
+                "the carrier states no SMT-LIB text this linker can read: trust-ir does not own \
+                 schema {:?}, so its payload is opaque here and its rendering unchecked against \
+                 it",
+                formula.schema
+            ));
+            None
+        }
+    };
+    if let Some(text) = text
+        && let Err(detail) = check_linked_invariant(text, &env)
+    {
+        refuse(detail);
+    }
+    text.filter(|_| reads)
+}
+
 /// Validate every populated module-local action and projection target.
 ///
 /// This is module-aware S2 integrity shared by the public linker and the full
@@ -1236,7 +1989,7 @@ fn check_executable_target(
 
 /// Run the certifying `spec-link` pass over a module's `SpecModule`s.
 ///
-/// Enforces S0/S1/S2, obligations 1, 3, and 4, and L1/L2 (see module docs).
+/// Enforces S0/S1/S2/S3, obligations 1, 3, and 4, and L1/L2 (see module docs).
 /// Returns a [`SpecLinkReport`] carrying the per-machine coverage, every
 /// violation, and machine-readable non-certification reasons. A supplied
 /// manifest is structurally validated before L1 resolution. Linked proof
@@ -1245,9 +1998,32 @@ fn check_executable_target(
 ///
 /// This is the single source of truth for the obligation logic — both the
 /// `trust-ir-cli spec-link` subcommand and the teeth tests call it.
+///
+/// A v46 [`ProofKind::CleanTheorem`] binding is treated here as it would be
+/// with NO kernel re-check witness: see [`link_spec_modules_with_theorems`],
+/// which this forwards to with `theorems = None`.
 pub fn link_spec_modules(
     module: &Module,
     manifest: Option<&HarnessManifest>,
+    options: SpecLinkOptions,
+) -> Result<SpecLinkReport, HarnessManifestError> {
+    link_spec_modules_with_theorems(module, manifest, None, options)
+}
+
+/// [`link_spec_modules`] with a kernel re-check witness for the v46
+/// [`ProofKind::CleanTheorem`] bindings.
+///
+/// `theorems` plays for Clean-theorem bindings the role `manifest` plays for
+/// Kani ones (L1): a binding resolves only when the witness names its theorem
+/// ([`validate_clean_theorem_bindings`]). With `theorems = None` a Linked
+/// machine's Clean-theorem bindings are a [`SpecLinkViolation::CleanTheoremUnresolved`]
+/// unless the exploratory option is set, in which case the report is
+/// non-certifying ([`SpecNonCertificationReason::CleanTheoremUnverified`]) —
+/// the same policy `manifest = None` applies to Kani bindings.
+pub fn link_spec_modules_with_theorems(
+    module: &Module,
+    manifest: Option<&HarnessManifest>,
+    theorems: Option<&KernelCertifiedTheorems>,
     options: SpecLinkOptions,
 ) -> Result<SpecLinkReport, HarnessManifestError> {
     let specs = &module.spec_modules;
@@ -1260,7 +2036,14 @@ pub fn link_spec_modules(
         });
     }
     violations.extend(validate_spec_executable_links(module));
+    violations.extend(validate_linked_spec_surface(specs));
     let mut non_certifying_reasons = Vec::new();
+    violations.extend(validate_clean_theorem_bindings(
+        specs,
+        theorems,
+        options,
+        &mut non_certifying_reasons,
+    ));
 
     // Ob.3 coverage is controlled solely by the explicit mode. Removing the
     // last anchor from a Linked machine therefore exposes every unwaived action
@@ -1305,7 +2088,14 @@ pub fn link_spec_modules(
     match manifest {
         Some(manifest) => violations.extend(link_proofs(specs, manifest)?),
         None => {
-            for spec in specs.iter().filter(|spec| !spec.proofs.is_empty()) {
+            // A `CleanTheorem` binding does not resolve through the harness
+            // manifest at all (see `validate_clean_theorem_bindings`), so a
+            // machine whose only bindings are Clean theorems must not be told
+            // it needs one.
+            for spec in specs
+                .iter()
+                .filter(|spec| spec.proofs.iter().any(|p| p.kind == ProofKind::Kani))
+            {
                 let linked = spec.enforcement == SpecEnforcementMode::Linked;
                 let exploratory = linked && options.allow_unverified_linked_proofs;
                 if (linked || options.require_manifest_for_design_only) && !exploratory {
@@ -1374,6 +2164,91 @@ pub fn link_spec_modules(
     })
 }
 
+/// S4 (v46): resolve every [`ProofKind::CleanTheorem`] binding against the
+/// kernel re-check witness.
+///
+/// A Clean theorem is NOT resolved against the build's harness manifest, and
+/// NOT against the module's own `Certified` rows — a claim this crate cannot
+/// re-check. It resolves only when the supplied [`KernelCertifiedTheorems`]
+/// names it; that witness is minted by `trust_ir_build` from the certificates
+/// whose CleanCic kernel re-check actually ran, so `Certified` is still earned
+/// by the Clean CIC kernel alone and this function only REFUSES.
+///
+/// Without a witness the policy mirrors L1's for a missing manifest: a
+/// Linked machine (or any machine under `require_manifest_for_design_only`)
+/// gets a [`SpecLinkViolation::CleanTheoremUnresolved`] per binding unless the
+/// exploratory option is set, and a Linked machine is then non-certifying
+/// ([`SpecNonCertificationReason::CleanTheoremUnverified`]). A blank theorem
+/// name is always the S0 blank refusal.
+pub fn validate_clean_theorem_bindings(
+    specs: &[SpecModule],
+    theorems: Option<&KernelCertifiedTheorems>,
+    options: SpecLinkOptions,
+    non_certifying_reasons: &mut Vec<SpecNonCertificationReason>,
+) -> Vec<SpecLinkViolation> {
+    let mut violations = Vec::new();
+    for spec in specs {
+        let bindings: Vec<(&SpecProof, &str)> = spec
+            .proofs
+            .iter()
+            .filter_map(|proof| match &proof.kind {
+                ProofKind::CleanTheorem { name } => Some((proof, name.as_str())),
+                ProofKind::Kani => None,
+            })
+            .collect();
+        if bindings.is_empty() {
+            continue;
+        }
+        for (_, name) in &bindings {
+            if is_blank(name) {
+                push_blank(&mut violations, spec, "proof", "clean theorem", name);
+            }
+        }
+        let linked = spec.enforcement == SpecEnforcementMode::Linked;
+        let exploratory = linked && options.allow_unverified_linked_proofs;
+        match theorems {
+            Some(theorems) => {
+                for (proof, name) in &bindings {
+                    if !is_blank(name) && !theorems.contains(name) {
+                        violations.push(SpecLinkViolation::CleanTheoremUnresolved {
+                            machine: spec.name.clone(),
+                            action: proof.action.clone(),
+                            theorem: (*name).to_string(),
+                            detail: "the kernel re-check witness does not establish it".to_string(),
+                        });
+                    }
+                }
+            }
+            None => {
+                if (linked || options.require_manifest_for_design_only) && !exploratory {
+                    for (proof, name) in &bindings {
+                        if is_blank(name) {
+                            continue;
+                        }
+                        violations.push(SpecLinkViolation::CleanTheoremUnresolved {
+                            machine: spec.name.clone(),
+                            action: proof.action.clone(),
+                            theorem: (*name).to_string(),
+                            detail: "no kernel re-check witness was supplied (the module was \
+                                     not validated through trust_ir_build)"
+                                .to_string(),
+                        });
+                    }
+                }
+                if linked {
+                    non_certifying_reasons.push(
+                        SpecNonCertificationReason::CleanTheoremUnverified {
+                            machine: spec.name.clone(),
+                        },
+                    );
+                }
+            }
+        }
+    }
+    normalize_violations(&mut violations);
+    violations
+}
+
 /// Return each repeated name exactly once, in deterministic lexical order.
 fn duplicate_names<'a>(names: impl IntoIterator<Item = &'a str>) -> BTreeSet<&'a str> {
     let mut seen = BTreeSet::new();
@@ -1388,6 +2263,134 @@ fn duplicate_names<'a>(names: impl IntoIterator<Item = &'a str>) -> BTreeSet<&'a
 
 fn is_blank(value: &str) -> bool {
     value.trim().is_empty()
+}
+
+/// S4 (v46): a declared [`SpecVar::sort`] must agree with the sort its own
+/// `ty` tag parses to. A `ty` that does not parse is reported by S3 (under
+/// `Linked`) and is deliberately NOT second-guessed here — there is then only
+/// one readable fact, so there is no contradiction to report.
+fn check_var_sort(violations: &mut Vec<SpecLinkViolation>, spec: &SpecModule, variable: &SpecVar) {
+    let Some(declared) = &variable.sort else {
+        return;
+    };
+    let Ok(parsed) = crate::spec_surface::parse_spec_var_sort(&variable.ty) else {
+        return;
+    };
+    let expected = spec_sort_as_clause_sort(parsed);
+    if *declared != expected {
+        violations.push(SpecLinkViolation::SpecVariableSortMismatch {
+            machine: spec.name.clone(),
+            variable: variable.name.clone(),
+            detail: format!(
+                "type tag {:?} reads as sort {expected:?}, but the declared sort is {declared:?}",
+                variable.ty
+            ),
+        });
+    }
+}
+
+/// The wire [`ClauseSort`](crate::proof::ClauseSort) a surface
+/// [`SpecSort`](crate::spec_surface::SpecSort) denotes. An integer RANGE is an
+/// `Int` domain: the bounds are a constraint on the value, not a different
+/// sort, which is why the surface tag cannot simply be dropped in favour of
+/// the sort.
+fn spec_sort_as_clause_sort(sort: crate::spec_surface::SpecSort) -> crate::proof::ClauseSort {
+    use crate::proof::ClauseSort;
+    use crate::spec_surface::SpecSort;
+    match sort {
+        SpecSort::Bool => ClauseSort::Bool,
+        SpecSort::Int => ClauseSort::Int,
+        SpecSort::BitVec(width) => ClauseSort::BitVec(width),
+    }
+}
+
+/// S4 (v46): every binding of a typed spec carrier must denote one of THIS
+/// machine's state variables, at a legal index, in the right state, with a
+/// sort the variable's own declaration does not contradict.
+///
+/// `is_action_relation` says whether the formula is a two-state ACTION
+/// relation. Only there does a successor value exist, so only there is
+/// [`ClausePlace::SpecVarNext`](crate::proof::ClausePlace::SpecVarNext) legal.
+fn check_typed_formula(
+    violations: &mut Vec<SpecLinkViolation>,
+    spec: &SpecModule,
+    subject: &'static str,
+    name: &str,
+    formula: &crate::proof::ProofFormula,
+    is_action_relation: bool,
+) {
+    use crate::proof::ClausePlace;
+    for (bound, binding) in &formula.bindings {
+        let mut refuse = |detail: String| {
+            violations.push(SpecLinkViolation::SpecTypedBindingInvalid {
+                machine: spec.name.clone(),
+                subject,
+                name: name.to_string(),
+                binding: bound.clone(),
+                detail,
+            });
+        };
+        let index = match binding.place {
+            ClausePlace::SpecVar { index } => index,
+            ClausePlace::SpecVarNext { index } => {
+                if !is_action_relation {
+                    refuse(format!(
+                        "SpecVarNext {index} names the SUCCESSOR state, which only an action \
+                         relation has; this {subject} is a single-state predicate"
+                    ));
+                    continue;
+                }
+                index
+            }
+            place => {
+                refuse(format!(
+                    "place {place:?} belongs to a function signature, not to a spec machine's \
+                     state; a spec carrier may bind only SpecVar / SpecVarNext"
+                ));
+                continue;
+            }
+        };
+        let Some(variable) = spec.vars.get(index as usize) else {
+            refuse(format!(
+                "state variable {index} is out of range: this machine declares {} variable(s)",
+                spec.vars.len()
+            ));
+            continue;
+        };
+        // The declared `sort` when recorded, else the sort the `ty` tag reads
+        // as: both are carried facts, and a binding contradicting either is
+        // the width strip S4 exists to refuse. Only a variable with NO readable
+        // sort (no `sort`, unparseable `ty` — S3's finding under `Linked`)
+        // leaves nothing to compare.
+        if let Some(declared) = variable.effective_sort()
+            && declared != binding.sort
+        {
+            refuse(format!(
+                "binds state variable {index} ({:?}) at sort {:?}, but the variable declares \
+                 sort {declared:?}",
+                variable.name, binding.sort
+            ));
+        }
+        // A bound name that IS the name of a DIFFERENT state variable is two
+        // readings under one name. The bindings are the carrier's whole
+        // environment, so the binding wins — but anyone who reads the
+        // carrier's `smtlib` text beside the machine's `vars`, as the
+        // agreement check itself must, reads that name as the variable it
+        // spells. The two readings are different predicates, which is exactly
+        // what [`SpecLinkViolation::LinkedTypedCarrierDisagrees`] refuses one
+        // layer up; here it is refused at the binding, in BOTH modes, because
+        // it compares two names the module itself carries. Binding a name to
+        // the variable it spells (the natural spelling) stays legal.
+        if let Some(spelled) = spec.vars.iter().position(|v| v.name == *bound)
+            && spelled != index as usize
+        {
+            refuse(format!(
+                "is the name of state variable {spelled} ({:?}), but this binding indexes state \
+                 variable {index} ({:?}); one name cannot denote two of this machine's variables",
+                spec.vars[spelled].name, variable.name
+            ));
+        }
+    }
 }
 
 fn push_blank(
@@ -1517,6 +2520,45 @@ fn violation_key(violation: &SpecLinkViolation) -> (u8, &str, &str, &str, &str, 
             proof_name,
         } => (13, machine, action, proof_name, "", "", 0),
         SpecLinkViolation::ProofManifestRequired { machine } => (14, machine, "", "", "", "", 0),
+        SpecLinkViolation::LinkedVariableUnparsed {
+            machine,
+            variable,
+            detail,
+        } => (15, machine, variable, detail, "", "", 0),
+        SpecLinkViolation::LinkedFormulaUnparsed {
+            machine,
+            invariant,
+            detail,
+        } => (16, machine, invariant, detail, "", "", 0),
+        SpecLinkViolation::SpecVariableSortMismatch {
+            machine,
+            variable,
+            detail,
+        } => (17, machine, variable, detail, "", "", 0),
+        SpecLinkViolation::SpecTypedBindingInvalid {
+            machine,
+            subject,
+            name,
+            binding,
+            detail,
+        } => (18, machine, subject, name, binding, detail, 0),
+        SpecLinkViolation::CleanTheoremUnresolved {
+            machine,
+            action,
+            theorem,
+            detail,
+        } => (19, machine, action, theorem, detail, "", 0),
+        SpecLinkViolation::LinkedTypedCarrierUnparsed {
+            machine,
+            subject,
+            name,
+            detail,
+        } => (20, machine, subject, name, detail, "", 0),
+        SpecLinkViolation::LinkedTypedCarrierDisagrees {
+            machine,
+            invariant,
+            detail,
+        } => (21, machine, invariant, detail, "", "", 0),
     }
 }
 
@@ -1564,18 +2606,23 @@ mod tests {
 
     fn module_with_specs(specs: Vec<SpecModule>) -> Module {
         let mut module = Module::new("spec-tests");
-        let ty = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
+        let ty = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         let mut function = Function::new(FuncId::new(0), "action", ty, BlockId::new(0));
         let mut entry = Block::new(BlockId::new(0));
         entry
             .body
             .push(InstrNode::new(Inst::Return { values: vec![] }));
         function.blocks.push(entry);
-        module.add_function(function);
+        module
+            .try_add_function(function)
+            .expect("Module::try_add_function: test fixture");
         module.spec_modules = specs;
         module
     }
@@ -1595,7 +2642,7 @@ mod tests {
             name: "ring".to_string(),
             vars: vec![SpecVar::new("seq", "Int")],
             actions: vec!["Push".to_string(), "Pop".to_string()],
-            invariants: vec![SpecInvariant::new("BoundedSeq", "seq <= 7")],
+            invariants: vec![SpecInvariant::new("BoundedSeq", "(<= seq 7)")],
             anchors: vec![SpecAnchor {
                 machine: "ring".to_string(),
                 action: "Push".to_string(),
@@ -1613,6 +2660,7 @@ mod tests {
             proofs: vec![],
             origin: SpecOrigin::External("ring.tla".to_string()),
             enforcement: SpecEnforcementMode::Linked,
+            temporal: Vec::new(),
         }
     }
 
@@ -1839,6 +2887,7 @@ mod tests {
             proofs: vec![],
             origin: SpecOrigin::External("Sandbox.tla".to_string()),
             enforcement: SpecEnforcementMode::DesignOnly,
+            temporal: Vec::new(),
         };
         let report = link(vec![m]);
         assert!(report.is_ok(), "violations: {:?}", report.violations);
@@ -1965,6 +3014,7 @@ mod tests {
             proofs: vec![],
             origin: SpecOrigin::External("Sandbox.tla".to_string()),
             enforcement: SpecEnforcementMode::DesignOnly,
+            temporal: Vec::new(),
         };
         let report = link(vec![m]);
         assert!(report.is_ok(), "violations: {:?}", report.violations);
@@ -2071,16 +3121,22 @@ mod tests {
 
     fn executable_link_module(projection_param: Ty) -> Module {
         let mut module = Module::new("executable-links");
-        let action_ty = module.add_func_type(FuncTy {
-            params: vec![],
-            returns: vec![],
-            is_vararg: false,
-        });
-        let projection_ty = module.add_func_type(FuncTy {
-            params: vec![projection_param],
-            returns: vec![Ty::I32],
-            is_vararg: false,
-        });
+        let action_ty = module
+            .add_func_type(FuncTy {
+                params: vec![],
+                returns: vec![],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
+        let projection_ty = module
+            .add_func_type(FuncTy {
+                params: vec![projection_param],
+                returns: vec![Ty::I32],
+                abi: None,
+                is_vararg: false,
+            })
+            .expect("Module::add_func_type: test fixture");
         for (id, name, ty) in [(0, "action", action_ty), (1, "project", projection_ty)] {
             let mut function = Function::new(FuncId::new(id), name, ty, BlockId::new(0));
             let mut entry = Block::new(BlockId::new(0));
@@ -2088,7 +3144,9 @@ mod tests {
                 .body
                 .push(InstrNode::new(Inst::Return { values: vec![] }));
             function.blocks.push(entry);
-            module.add_function(function);
+            module
+                .try_add_function(function)
+                .expect("Module::try_add_function: test fixture");
         }
 
         let mut spec = SpecModule::linked("Machine");

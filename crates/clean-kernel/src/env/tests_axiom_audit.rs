@@ -32,6 +32,21 @@ fn try_rat_bridge_fallout_env() -> Option<Environment> {
     Some(env)
 }
 
+/// Helper: the kernel's CANONICAL declaration of a foundational axiom (exact
+/// statement and universe arity), for fixtures that need a foundation to be
+/// excluded. A stand-in `propext : Prop` is not foundational: foundational is
+/// the canonical declaration, never the name.
+fn canonical_axiom(name: &str) -> Declaration {
+    let name = Name::from_string(name);
+    let (level_params, type_) = axiom_audit::canonical_certification_foundation(&name)
+        .unwrap_or_else(|| panic!("{name} has a canonical foundation declaration"));
+    Declaration::Axiom {
+        name,
+        level_params,
+        type_,
+    }
+}
+
 /// Helper: exact `axiom_deps` closure as a sorted string set for stable pins.
 fn axiom_dep_names(env: &Environment, name: &str) -> std::collections::BTreeSet<String> {
     env.axiom_deps(&Name::from_string(name))
@@ -146,13 +161,9 @@ fn test_axiom_deps_foundational_axiom_excluded() {
     let mut env = base_env();
     let prop = Expr::prop();
 
-    // Register propext as a foundational axiom
-    let propext = Declaration::Axiom {
-        name: Name::from_string("propext"),
-        level_params: vec![],
-        type_: prop.clone(),
-    };
-    env.add_decl_structural(propext).expect("add propext");
+    // Register the kernel's canonical propext
+    env.add_decl_structural(canonical_axiom("propext"))
+        .expect("add propext");
 
     // Theorem that references propext
     let thm = Declaration::Theorem {
@@ -170,6 +181,95 @@ fn test_axiom_deps_foundational_axiom_excluded() {
         deps.is_empty(),
         "propext is foundational and should not appear in deps"
     );
+}
+
+/// A declaration that merely SHARES a foundational name — `propext : Prop`, a
+/// statement that is not the kernel's — is a domain axiom: it appears in
+/// `axiom_deps`, and a theorem through it is `AxiomDependent`. Before
+/// 2026-09-28 the name alone made it foundational.
+#[test]
+fn test_axiom_deps_stand_in_foundation_name_is_a_domain_axiom() {
+    let mut env = base_env();
+    let prop = Expr::prop();
+    env.add_decl_structural(Declaration::Axiom {
+        name: Name::from_string("propext"),
+        level_params: vec![],
+        type_: prop.clone(),
+    })
+    .expect("add stand-in propext");
+    env.add_decl_structural(Declaration::Theorem {
+        name: Name::from_string("uses_propext"),
+        level_params: vec![],
+        type_: prop,
+        value: Expr::const_str("propext"),
+    })
+    .expect("add theorem");
+
+    let name = Name::from_string("uses_propext");
+    assert_eq!(
+        sorted_names(env.axiom_deps(&name).expect("axiom_deps")),
+        vec!["propext".to_owned()]
+    );
+    assert!(env
+        .foundational_axiom_deps(&name)
+        .expect("foundational_axiom_deps")
+        .is_empty());
+    assert!(matches!(
+        env.proof_quality(&name),
+        Some(ProofQuality::AxiomDependent { .. })
+    ));
+    assert!(!env.is_canonical_foundational_axiom(&Name::from_string("propext")));
+}
+
+/// The printed-form spoofs the round-28 review measured: a user axiom whose
+/// ONE component prints like a foundational axiom (`«Quot.sound»`,
+/// `«Classical.choice»`, `«Eq.refl»`, `«WellFounded.fix»`, `«Quot.lift»`,
+/// `«String.decEq»`), and the fictional `proofIrrel` (declared nowhere by the
+/// kernel), are domain axioms — disclosed by `axiom_deps`, never foundational.
+#[test]
+fn test_axiom_deps_printed_form_and_legacy_whitelist_spoofs_are_domain_axioms() {
+    let prop = Expr::prop();
+    for spoof in [
+        Name::anon().str("Quot.sound"),
+        Name::anon().str("Classical.choice"),
+        Name::anon().str("Eq.refl"),
+        Name::anon().str("WellFounded.fix"),
+        Name::anon().str("Quot.lift"),
+        Name::anon().str("String.decEq"),
+        Name::anon().str("propext.x"),
+        Name::from_string("proofIrrel"),
+    ] {
+        let mut env = base_env();
+        env.add_decl_structural(Declaration::Axiom {
+            name: spoof.clone(),
+            level_params: vec![],
+            type_: prop.clone(),
+        })
+        .expect("add spoof axiom");
+        env.add_decl_structural(Declaration::Theorem {
+            name: Name::from_string("bad"),
+            level_params: vec![],
+            type_: prop.clone(),
+            value: Expr::const_(spoof.clone(), vec![]),
+        })
+        .expect("add theorem");
+        let bad = Name::from_string("bad");
+        let deps = env.axiom_deps(&bad).expect("axiom_deps");
+        assert!(
+            deps.contains(&spoof),
+            "{} must be disclosed as a domain axiom, got {deps:?}",
+            spoof.to_unambiguous_string()
+        );
+        assert!(!is_foundational_axiom(&spoof));
+        assert!(!env.is_canonical_foundational_axiom(&spoof));
+        assert!(matches!(
+            env.proof_quality(&bad),
+            Some(ProofQuality::AxiomDependent { .. })
+        ));
+        let mut closure = DomainAxiomClosure::new();
+        assert!(closure.of_name(&env, &bad).contains(&spoof));
+        assert_eq!(env.soundness_report().domain_axioms, vec![spoof.clone()]);
+    }
 }
 
 #[test]
@@ -336,12 +436,8 @@ fn test_soundness_report_mixed_env() {
     let prop = Expr::prop();
 
     // 1. Foundational axiom (should not count as domain axiom)
-    let propext = Declaration::Axiom {
-        name: Name::from_string("propext"),
-        level_params: vec![],
-        type_: prop.clone(),
-    };
-    env.add_decl_structural(propext).expect("add propext");
+    env.add_decl_structural(canonical_axiom("propext"))
+        .expect("add propext");
 
     // 2. Domain axiom
     let domain_ax = Declaration::Axiom {
@@ -531,17 +627,13 @@ fn test_axiom_deps_multiple_foundational_axioms() {
     let mut env = base_env();
     let prop = Expr::prop();
 
-    // Register several foundational axioms.
+    // Register several canonical foundational axioms.
     // NOTE: `funext` is no longer foundational (it is now a kernel-checked
-    // Theorem derived from Quot.sound), so this synthetic test uses
-    // `proofIrrel` as the fourth still-foundational axiom instead.
-    for name in &["propext", "Classical.choice", "Quot.sound", "proofIrrel"] {
-        let axiom = Declaration::Axiom {
-            name: Name::from_string(name),
-            level_params: vec![],
-            type_: prop.clone(),
-        };
-        env.add_decl_structural(axiom)
+    // Theorem derived from Quot.sound), and `proofIrrel` never was a kernel
+    // axiom (it left the whitelist 2026-09-28), so this synthetic test uses
+    // the quotient primitive `Quot.lift` as the fourth.
+    for name in &["propext", "Classical.choice", "Quot.sound", "Quot.lift"] {
+        env.add_decl_structural(canonical_axiom(name))
             .expect("add foundational axiom");
     }
 
@@ -551,7 +643,7 @@ fn test_axiom_deps_multiple_foundational_axioms() {
             Expr::const_str("propext"),
             Expr::const_str("Classical.choice"),
         ),
-        Expr::app(Expr::const_str("Quot.sound"), Expr::const_str("proofIrrel")),
+        Expr::app(Expr::const_str("Quot.sound"), Expr::const_str("Quot.lift")),
     );
 
     let thm = Declaration::Theorem {
@@ -582,12 +674,8 @@ fn test_axiom_deps_mixed_foundational_and_domain() {
     let prop = Expr::prop();
 
     // Foundational
-    let propext = Declaration::Axiom {
-        name: Name::from_string("propext"),
-        level_params: vec![],
-        type_: prop.clone(),
-    };
-    env.add_decl_structural(propext).expect("add propext");
+    env.add_decl_structural(canonical_axiom("propext"))
+        .expect("add propext");
 
     // Domain-specific
     let domain = Declaration::Axiom {
@@ -1697,12 +1785,8 @@ fn test_foundational_axiom_deps_exposes_classical_choice_behind_empty_axiom_deps
     let mut env = base_env();
     let prop = Expr::prop();
 
-    env.add_decl_structural(Declaration::Axiom {
-        name: Name::from_string("Classical.choice"),
-        level_params: vec![],
-        type_: prop.clone(),
-    })
-    .expect("add Classical.choice");
+    env.add_decl_structural(canonical_axiom("Classical.choice"))
+        .expect("add Classical.choice");
 
     env.add_decl_structural(Declaration::Theorem {
         name: Name::from_string("uses_choice"),
@@ -1742,14 +1826,14 @@ fn test_foundational_axiom_deps_and_axiom_deps_partition_the_closure() {
     let mut env = base_env();
     let prop = Expr::prop();
 
-    for axiom in ["propext", "MyDomain.axiom"] {
-        env.add_decl_structural(Declaration::Axiom {
-            name: Name::from_string(axiom),
-            level_params: vec![],
-            type_: prop.clone(),
-        })
-        .expect("add axiom");
-    }
+    env.add_decl_structural(canonical_axiom("propext"))
+        .expect("add propext");
+    env.add_decl_structural(Declaration::Axiom {
+        name: Name::from_string("MyDomain.axiom"),
+        level_params: vec![],
+        type_: prop.clone(),
+    })
+    .expect("add axiom");
 
     // Proof term mentions both axioms: `propext MyDomain.axiom`.
     env.add_decl_structural(Declaration::Theorem {

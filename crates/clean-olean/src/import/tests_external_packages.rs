@@ -32,6 +32,28 @@ fn test_discover_lake_package_paths_finds_own_build() {
     );
 }
 
+/// `clean lake` writes a project's `.olean`s, and its path dependencies', into
+/// `.lake/build/lib/` directly; that directory is searched. A Lake v4
+/// `.lake/build/lib` (one holding `lean/`) is searched only as `lib/lean`.
+#[test]
+fn test_discover_lake_package_paths_finds_clean_lake_lib_dir() {
+    let temp = TempDir::new().expect("tempdir");
+    let clean_lib = temp.path().join(".lake/build/lib");
+    fs::create_dir_all(&clean_lib).unwrap();
+    fs::write(clean_lib.join("DepPkg.olean"), b"stub").unwrap();
+    let paths = discover_lake_package_paths(temp.path(), |p| fs::read_dir(p));
+    assert_eq!(paths, vec![clean_lib.clone()], "clean lake's lib dir");
+
+    let lake_v4 = temp.path().join(".lake/build/lib/lean");
+    fs::create_dir_all(&lake_v4).unwrap();
+    let paths = discover_lake_package_paths(temp.path(), |p| fs::read_dir(p));
+    assert_eq!(
+        paths,
+        vec![lake_v4],
+        "a Lake v4 lib dir is searched only as lib/lean"
+    );
+}
+
 #[test]
 fn test_discover_lake_package_paths_finds_dependencies() {
     let temp = TempDir::new().expect("tempdir");

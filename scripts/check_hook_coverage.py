@@ -77,6 +77,30 @@ MODE_FULL = "full"
 VALID_MODE = (MODE_BOTH, MODE_FULL)
 ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+# A WAIVED row means "the leg RUNS and PRINTS and does not block". The hook
+# implements that itself; `local_gate.sh` implements it by reporting through
+# `fail_waivable <leg-id> "<msg>"` instead of `fail "<msg>"`, and a leg that
+# still calls plain `fail` exits the whole gate on the spot whatever the table
+# says. Measured 2026-09-14: `no-ignored-tests` was waived, the hook honoured
+# it, and `scripts/local_gate.sh` — the command CLAUDE.md tells every lane to
+# run before pushing — exited 1 at leg 8 of 56 with FORTY-EIGHT legs never
+# reached, the soundness certificate and the workspace lint among them. So the
+# two tables have to agree on this too, not only on which ids exist.
+# `|| fail_waivable <id> "..."` is the idiomatic form for a leg whose command is
+# a pipeline, and `fail_waivable <id> "..."` inside an if-block is the other.
+# Anchoring on the bare call alone missed the first spelling and reported a
+# WAIVED row as having no call site (measured 2026-09-14, on the very next
+# waiver added after this rule landed).
+WAIVABLE_CALL = re.compile(r"^\s*(?:\|\||&&)?\s*fail_waivable\s+(\S+)\s")
+
+# A ratchet whose baseline carries its own owned, expiring, CAPPED debt is
+# never WAIVED: a waiver passes whatever its leg measures, so every growth in
+# every crate lands while it runs (verifier land-clean-r1 P6, 2026-09-29: with
+# paragon-ratchet waived for the kernel/cert batch's +1/+9/+8, an unwrap
+# appended to clean-elab printed NOT BLOCKING). The debt admits exactly what
+# was measured and no more. Leg id -> where its debt lives.
+DEBT_RATCHETS = {"paragon-ratchet": "data/paragon_ratchet.json's `debt`"}
+
 
 class Drift(Exception):
     """A disagreement between the gate, the hook and the policy table."""
@@ -200,19 +224,48 @@ def hook_body_digest(text: str) -> str:
     ratchet's own falsifiability check stops running -- passed every set
     comparison above and sailed. Measured, in a throwaway clone, 2026-08-23.
 
-    So the bodies are pinned too. The region runs from the first `leg_`
-    definition to the end of the HOOK-LEGS block, which is exactly the part of
-    the file that decides what the hook EXECUTES; the long header above it is
-    prose and re-pinning on prose would train people to re-pin without reading.
+    So the bodies are pinned too — and AUDIT r10 M10-3 measured that the region
+    this docstring described was not the region the code took. `start` was
+    anchored on the literal `leg_dep_boundary()`, the FIFTH leg definition, so
+    `leg_gate_registry`, `leg_cargo_test_selectors`, `leg_doc_claims` and
+    `leg_suite_journal` sat outside every digest; `end` stopped at
+    `# HOOK-LEGS END`, leaving the driver, the waiver read, the BLOCKING
+    aggregation and the exit unpinned. 117 of 448 lines were covered. Measured
+    consequences, both with a byte-identical digest and rc=0: replacing
+    `leg_gate_registry()`'s body (the leg that runs the 141-row registry check)
+    with `true`, and turning the final `if [ -z "$BLOCKING" ] ...` into
+    `if true`, i.e. a hook that always exits 0.
+
+    AUDIT r11 M11-2 finished the job. Widening the region to "first `leg_*()`
+    to EOF" still left the 45 executable lines ABOVE the first leg unpinned,
+    and that prefix is not prose: it carries `set -uo pipefail`, the
+    `PUSHED_REFS` drain, `pick_python()`/`PY=` that every leg runs under, the
+    exported `CLEAN_PUSH_RANGES` that fmt-changed judges, and a
+    **deletion-only shortcut that `exit 0`s**. Measured: changing ONE token
+    there (`0000…0) ;;` -> `0000…0|*) ;;`) made the hook print "deletion-only
+    push, nothing to gate." and exit 0 with ZERO of its 30 legs run — while
+    this checker reported the same digest, byte for byte, at rc 0.
+
+    So the digest now covers the WHOLE FILE with comments and blank lines
+    stripped, the way `split_regions` already treats `local_gate.sh` (which has
+    both halves pinned and never had this hole). Stripping keeps the property
+    the old boundary was reaching for -- re-pinning is not triggered by editing
+    a comment -- without excluding code.
     """
-    start = text.find("leg_dep_boundary()")
-    end = text.find("# HOOK-LEGS END")
-    if start < 0 or end < 0 or end <= start:
+    import re as _re
+    stripped = "\n".join(
+        ln for ln in text.split("\n")
+        if ln.strip() and not ln.lstrip().startswith("#")
+    )
+    if not _re.search(r"^leg_[A-Za-z0-9_]+\(\)", text, _re.M):
         raise Drift(
             "scripts/githooks/pre-push no longer has a recognisable leg-definition "
-            "region (first `leg_dep_boundary()` .. `# HOOK-LEGS END`), so what the "
-            "hook actually runs cannot be pinned"
+            "region (no `leg_*()` definition found), so what the hook actually runs "
+            "cannot be pinned"
         )
+    text = stripped
+    start = 0
+    end = len(text)
     body = [
         ln.strip()
         for ln in text[start:end].splitlines()
@@ -265,6 +318,17 @@ def policy_rows() -> list[dict[str, str]]:
                     f"{POLICY.name}:{lineno}: a WAIVED row needs a real owner, not {row['owner']!r} "
                     "-- an unowned waiver is how a red leg becomes permanent"
                 )
+            # audit r10 M10-4: shape alone let a far-future date retire a leg
+            # permanently; same 180-day horizon as the registry and the
+            # source-elab exception.
+            if ISO.match(row["expires"]):
+                import datetime as _dt
+                _h = (_dt.date.today() + _dt.timedelta(days=180)).isoformat()
+                if row["expires"] > _h:
+                    raise Drift(
+                        f"{POLICY.name}:{lineno}: waiver expires={row['expires']} is beyond "
+                        f"the 180-day horizon ({_h}) -- a waiver that outlives review is a "
+                        f"permanent bypass wearing a date")
             if not ISO.match(row["expires"]):
                 raise Drift(
                     f"{POLICY.name}:{lineno}: a WAIVED row needs an expiry as YYYY-MM-DD, "
@@ -287,7 +351,8 @@ def policy_rows() -> list[dict[str, str]]:
 def main(argv: list[str]) -> int:
     update = "--update" in argv[1:]
 
-    regions = split_regions(_read(GATE))
+    gate_text = _read(GATE)
+    regions = split_regions(gate_text)
     gate_ids = regions.ids
     digest = normalized_digest(regions.fast_lines)
     full_digest = normalized_digest(regions.full_lines)
@@ -363,6 +428,15 @@ def main(argv: list[str]) -> int:
         if fn not in fns:
             problems.append(f"the hook declares {leg} but defines no {fn}()")
 
+    for row in rows:
+        if row["status"] == "WAIVED" and row["leg"] in DEBT_RATCHETS:
+            problems.append(
+                f"gate-legs.txt:{row['lineno']}: {row['leg']} is WAIVED, but a waiver passes "
+                "whatever its leg measures -- any growth in any crate lands under it. Record the "
+                f"growth as an owned, expiring debt capped at what was measured in "
+                f"{DEBT_RATCHETS[row['leg']]}, and mark the row IN_HOOK."
+            )
+
     today = date.today().isoformat()
     for row in rows:
         if row["status"] == "WAIVED" and row["expires"] < today:
@@ -370,6 +444,26 @@ def main(argv: list[str]) -> int:
                 f"gate-legs.txt:{row['lineno']}: the waiver for {row['leg']} expired on "
                 f"{row['expires']} (owner {row['owner']}). Fix the leg or re-own the row."
             )
+
+    # A waiver that local_gate.sh cannot act on is a waiver that does not apply
+    # there: the leg still takes the whole gate down at its own line number.
+    waivable_sites = {m.group(1) for m in
+                      (WAIVABLE_CALL.match(line) for line in gate_text.splitlines())
+                      if m is not None}
+    waived_ids = {r["leg"] for r in rows if r["status"] == "WAIVED"}
+    for leg in sorted(waived_ids - waivable_sites):
+        problems.append(
+            f"gate-legs.txt marks {leg} WAIVED, but local_gate.sh has no "
+            f"`fail_waivable {leg} \"...\"` call site — so the leg still exits the whole "
+            "gate on the spot and every later leg never runs. Convert its `fail` call."
+        )
+    for leg in sorted(waivable_sites - waived_ids):
+        problems.append(
+            f"local_gate.sh calls `fail_waivable {leg}` but gate-legs.txt has no WAIVED "
+            f"row for {leg} — the call site outlived its waiver. It currently falls back "
+            "to a hard `fail`, which is safe; restore the plain `fail` call so the code "
+            "says what it does."
+        )
 
     if update:
         if problems:

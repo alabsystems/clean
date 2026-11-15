@@ -217,15 +217,22 @@ pub unsafe fn ctor_set(o: *mut CleanObj, idx: usize, v: LeanObjPtr) {
 
 #[inline]
 #[must_use]
+/// Get the constructor tag, 32 bits wide as every lane reads it (the C
+/// header's `clean_obj_tag`). A boxed (nullary) constructor's tag is its whole
+/// unboxed value (299 stays 299; an 8-bit read gave 43). A boxed value above
+/// `u32::MAX` is no constructor tag (the IR checker bounds tags by 65535) and
+/// reads as `u32::MAX`, which no `case` label equals, so a dispatch takes the
+/// branch the whole value would, never the one its low 32 bits name.
+///
 /// # Safety
 /// `o` must be a valid heap object or tagged scalar.
-pub unsafe fn obj_tag(o: *const CleanObj) -> u8 {
+pub unsafe fn obj_tag(o: *const CleanObj) -> u32 {
     if is_scalar(o) {
-        unbox_val(o) as u8
+        u32::try_from(unbox_val(o)).unwrap_or(u32::MAX)
     } else {
         // SAFETY: `o` is not a scalar (checked above), so it is a valid heap
         // pointer. Dereferencing the header to read the tag field is valid.
-        unsafe { (*o).header.tag }
+        u32::from(unsafe { (*o).header.tag })
     }
 }
 
@@ -502,11 +509,19 @@ fn invariant_violation(msg: &str) -> ! {
     lean_panic(msg)
 }
 
+/// Stop the process: `clean panic: <msg>` on stderr, then exit status 1.
+///
+/// Lean 4's runtime fatal path, matched (pinned v4.30.0-rc2 `libleanrt.a`,
+/// `object.cpp`: `lean_internal_panic` prints its message and calls
+/// `exit(1)`, aborting only under `LEAN_ABORT_ON_PANIC`), and the same status
+/// as the C runtime's `clean_panic`. Never `abort()`: a SIGABRT death is a
+/// crash, and macOS writes a crash report for every one (docs/DECISIONS.md
+/// R86).
 #[cold]
 pub(crate) fn lean_panic(msg: &str) -> ! {
     use std::io::Write;
     let _ = writeln!(std::io::stderr(), "clean panic: {msg}");
-    std::process::abort();
+    std::process::exit(1);
 }
 
 pub(crate) fn runtime_init() {}

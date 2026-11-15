@@ -1,0 +1,17 @@
+(module
+  (funcs
+    (func 0
+      (params)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 0) (const (uint 64) (int 2)))
+            (node (results 1) (copy (uint 64) 0))
+            (node (results) (ret (vals 1)))
+          ))
+      ))
+  )
+  (globals)
+)

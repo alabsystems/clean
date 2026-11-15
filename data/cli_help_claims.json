@@ -1,0 +1,267 @@
+[
+  {
+    "id": "clap lake upload",
+    "help_sha256": "b2d425f008bc56d877b4f326145d0d12524ce1a403d12f828a988412b1c565bc",
+    "triggers": [
+      "A/not-implemented"
+    ],
+    "statement": "lake_upload bails here on every non-dry-run path that found artifacts; an empty build dir returns Ok earlier and --dry-run prints the plan.",
+    "evidence": "crates/clean-cli/src/cmd_lake/cache.rs:399",
+    "anchor": "Reservoir upload is not implemented",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor lake cache get (description)",
+    "help_sha256": "815350f72fe0fa6842fdb368e4fa4df80d50c6c83029193686eb15df76678a92",
+    "triggers": [
+      "A/not-implemented"
+    ],
+    "statement": "lake_cache_get performs no network call and spawns no process: it prints this invocation, else per-directory entry counts, else 'No cache configured'.",
+    "evidence": "crates/clean-cli/src/cmd_lake/cache.rs:21",
+    "anchor": "clean lake exe cache get",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor lake cache put (description)",
+    "help_sha256": "7e7390cf7a99f884a31db9cecb88fd92b3367a1bfd7229e593677ee84a6b3ad7",
+    "triggers": [
+      "A/not-implemented"
+    ],
+    "statement": "Every built .olean is copied into .lake/cache here; no remote write exists anywhere in the file, and the trailing note now says so.",
+    "evidence": "crates/clean-cli/src/cmd_lake/cache.rs:107",
+    "anchor": "std::fs::copy(entry.path(), &cache_path)",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor lake upload (summary)",
+    "help_sha256": "fcb18882e476b285a8370f91b42802f19e8a860d291a79df65c6ecaa9030b1ed",
+    "triggers": [
+      "A/not-implemented"
+    ],
+    "statement": "The verb is declared in clap and reaches this bail on every non-dry-run path with artifacts; Reservoir publish is never performed.",
+    "evidence": "crates/clean-cli/src/cmd_lake/cache.rs:399",
+    "anchor": "Reservoir upload is not implemented",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor lake upload (description)",
+    "help_sha256": "844945d7f6d9e81d09cd53eaa05a76f45ec256ceda20b465213046bf1d6369cd",
+    "triggers": [
+      "A/not-implemented"
+    ],
+    "statement": "--dry-run prints this line plus every artifact path and returns Ok, so it DOES print an upload plan; the old description denied it.",
+    "evidence": "crates/clean-cli/src/cmd_lake/cache.rs:381",
+    "anchor": "Would upload {} file(s):",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor lake upload (example 0)",
+    "help_sha256": "c43cf225c842430800d370a61978285729ea494711029f3055f5f94216bd98c6",
+    "triggers": [
+      "A/not-implemented"
+    ],
+    "statement": "On a built project with artifacts the command ends at this bail, exactly as the example says.",
+    "evidence": "crates/clean-cli/src/cmd_lake/cache.rs:399",
+    "anchor": "Reservoir upload is not implemented",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor commit ipa (description)",
+    "help_sha256": "97bfe615830bb870a2196773130d9c653c39b23cdb934c539ab60568623758aa",
+    "triggers": [
+      "I/no-trust"
+    ],
+    "statement": "setup derives every generator by hashing a seed (no SRS), but this fn builds an n-element s vector and folds n generators: verification is LINEAR, not logarithmic.",
+    "evidence": "crates/clean-fold/src/commit/ipa.rs:232",
+    "anchor": "pub fn verify_opening(",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor check (description)",
+    "help_sha256": "1605a925fba970cf21c280f6e04b73d3a8a644c53add12ad56d9b85127331271",
+    "triggers": [
+      "J/disable"
+    ],
+    "statement": "The per-declaration budget tick returns true unconditionally at limit 0, so `--decl-budget 0` is genuinely unlimited rather than a zero-operation budget.",
+    "evidence": "crates/clean-kernel/src/tc/decl_budget.rs:202",
+    "anchor": "if b.limit.get() == 0 {",
+    "verified": "2026-10-16"
+  },
+  {
+    "id": "descriptor kernel verify-constructive-claims (description)",
+    "help_sha256": "a19ec2f2c25c04450e2ff50c02b878323c1fb1b51d31d3ccbe9c4f35cd3e6a6c",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "is_constructive is closure.is_empty() over axiom_deps, which already filters FOUNDATIONAL_AXIOMS, and the handler returns each of the five documented exit codes.",
+    "evidence": "crates/clean-kernel/src/env/constructive_claims.rs:124",
+    "anchor": "let closure = env.axiom_deps(name)",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor sorry-trace (description)",
+    "help_sha256": "5d94c2a330ab735505d36cfa71749e3801e5b27d9ca5fe4ad152ea095b19afda",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "The verb spawns python3/python on this script, which exists and computes max(1,axioms)*max(1,pi_sites) from data/axiom_audit.json as stated.",
+    "evidence": "crates/clean-cli/src/cmd_sorry_trace.rs:30",
+    "anchor": "TRACER_REL_PATH: &str",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor replacement axiom-audit (summary)",
+    "help_sha256": "549121c26e3c39a5add49ff804460090aa3aaf500ae099f4ee34c290cc88a1a4",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "The verify path is pure Rust (std::fs, serde_json, sha2); the only spawns in cmd_replacement are gh and git, and neither is reachable from here.",
+    "evidence": "crates/clean-cli/src/cmd_replacement/handlers.rs:147",
+    "anchor": "let verification = AxiomAuditVerification::from_args",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor replacement axiom-audit (example 0)",
+    "help_sha256": "89134ad2ded7df94e2e47ac7803a91741f6aa93fe30160da1a6e5a02f5521609",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "--verify (required) and --json are declared flags; the audit is read and re-aggregated with serde_json, spawning no interpreter.",
+    "evidence": "crates/clean-cli/src/cmd_replacement/launch_evidence.rs:273",
+    "anchor": "let source = read_dynamic_artifact(&audit_path)",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor math-map ingest (example 0)",
+    "help_sha256": "55b2e5c4740b8427c6df58b67ef8f9ce852e0821fba96d9c40a62588882022d6",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "Both flags exist; ingest is passed MathMapIngestInputs::none() so no git-apply runner is ever supplied, and report_only then suppresses the nonzero exit.",
+    "evidence": "crates/clean-cli/src/cmd_math_map.rs:234",
+    "anchor": "if args.report_only {",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor prove run (description)",
+    "help_sha256": "c88b1603b1dc338bf9e2edc3fe6121f1936bfac1b783d6a84fc5d37a559338af",
+    "triggers": [
+      "E/inert"
+    ],
+    "statement": "Local re-verification runs on every path except --skip-verify, which returns just above this line; the allowlist is the kernel's 12-name FOUNDATIONAL_AXIOMS.",
+    "evidence": "crates/clean-cli/src/cmd_prove.rs:245",
+    "anchor": "verify_locally(&args.project_dir, &goal)",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor audit soundness (description)",
+    "help_sha256": "7ab7caa5c56b69d4af0889c579a3820655a71a5a0eeb6d5b202fae32095f2458",
+    "triggers": [
+      "I/no-trust"
+    ],
+    "statement": "soundness_certificate() computes C1, C2, C3, C4, C4' and C5; is_sound() conjoins all six, and this bail is what turns a non-SOUND certificate into a nonzero exit. The description enumerates the same six.",
+    "evidence": "crates/clean-cli/src/cmd_audit.rs:332",
+    "anchor": "if !cert.is_sound() {",
+    "verified": "2026-09-13"
+  },
+  {
+    "id": "descriptor mathverse stamp-verified (description)",
+    "help_sha256": "eb1193e49c80a9dda306d7545d2f0daf486c39c66da032f0ff881579a1ad6081",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "This outcome -- a value-LESS axiom discharged by a synthesized kernel proof -- also enters kernel_verified_names, so 'whose value passed check_type' was too narrow.",
+    "evidence": "crates/clean-mathverse/src/verify/incremental/mod.rs:824",
+    "anchor": "    AxiomDischarged,",
+    "verified": "2026-10-25"
+  },
+  {
+    "id": "descriptor mathverse per-constant-verify (description)",
+    "help_sha256": "0dacce46f4479754e3c27f10dee4ca6d8144a44596639795ba25cbb0c4c565c5",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "The kv-cache is consulted only after the demand walk has recomputed the closure and target digests; the verdict lands in receipts and a .vstamp sidecar, never in shard bytes.",
+    "evidence": "crates/clean-mathverse/src/cli/per_constant_load.rs:1719",
+    "anchor": "Some(td) if c.lookup(t, td, cd) => cache_hits += 1",
+    "verified": "2026-11-01"
+  },
+  {
+    "id": "descriptor mathverse trust-receipt verify (description)",
+    "help_sha256": "560a2cd2b1be07ed022c5a63c6b1e4cb66b56bc02f08486e42256de3361c89c9",
+    "triggers": [
+      "F/exclusive-trust"
+    ],
+    "statement": "verify() reads the receipt and leaves JSON and re-derives root, leaf count, axiom closure and within_tcb; no .olean and no kernel appear on the path.",
+    "evidence": "crates/clean-mathverse/src/verify/trust_receipt.rs:322",
+    "anchor": "recomputed.merkle_root == self.merkle_root",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor mathverse convert (description)",
+    "help_sha256": "f4cc913cdb4facfb2e4bfa024ba3c074ed20fb996e198c988bf6509539f40e02",
+    "triggers": [
+      "E/inert"
+    ],
+    "statement": "Not a clap subcommand, but `clean mathverse build-library` spawns the binary as `mathverse_convert all <data-dir>` -- so 'every caller is a release script' was false.",
+    "evidence": "crates/clean-mathverse/src/cli/build_library_dispatch.rs:249",
+    "anchor": "failed to spawn mathverse_convert",
+    "verified": "2026-09-28"
+  },
+  {
+    "id": "descriptor mathverse shard (description)",
+    "help_sha256": "2c330452a9e95f7ca07649d83afa3c1a4b95e23cff63b4f60ac1d7021b2ca1c8",
+    "triggers": [
+      "E/inert"
+    ],
+    "statement": "Nothing in the clean process spawns this binary; its 11 dispatch arms include the destructive `stamp`, and the caller roster now names coq_refresh.sh, which the first sweep missed.",
+    "evidence": "crates/clean-mathverse/src/bin/mathverse_shard/main.rs:127",
+    "anchor": "\"stamp\" =>",
+    "verified": "2026-09-01"
+  },
+  {
+    "id": "descriptor eval (example 1)",
+    "help_sha256": "da9fd7cfb7db1dc31a3bf788f5f7c63bf5ea4f90fb64274ca6c384472be4d55a",
+    "triggers": [
+      "H/minimal"
+    ],
+    "statement": "eval_expr builds Environment::new() \u2014 the minimal env registering native ops plus the three Sort-u axioms \u2014 so names beyond it (Nat.succ included) are unknown; the caption now says so.",
+    "evidence": "crates/clean-cli/src/cmd_core.rs:2936",
+    "anchor": "let env = Environment::new();",
+    "verified": "2026-11-14"
+  },
+  {
+    "id": "descriptor verify tla (description)",
+    "help_sha256": "4a77de83e75cd9a40a6055181f1b80ca18597aa00d9e56ccf1c1d9f45badf0e9",
+    "triggers": [
+      "E/inert"
+    ],
+    "statement": "`--verbose` is inert under `--json`: the cited line is the whole JSON arm and it passes only the obligation and the result, so `args.verbose` reaches nothing. The human arm one line below is the only reader (`print_human_result(.., args.verbose)`), where the tactic list prints unconditionally and verbose adds the temporal/induction shape, the tactic hint and the certificate size.",
+    "evidence": "crates/clean-tla/src/cli.rs:199",
+    "anchor": "print_json_result(&obligation, &result)?;",
+    "verified": "2026-09-13"
+  },
+  {
+    "id": "descriptor eval (description)",
+    "help_sha256": "2feb7137622cde8fa7b35eb7782adf99bee2e94995d3b7e9cce3fe70624c7e1d",
+    "triggers": [
+      "H/minimal"
+    ],
+    "statement": "The minimal environment `clean eval` elaborates against is `Environment::new()` (built in `eval_expr` in crates/clean-cli/src/cmd_core.rs), and it is NOT empty: the cited line begins three `init_*` calls, run inside `crate::tc::with_deadline_suspended` (which only suspends a caller's deadline while they run), that register `sorry`, `trustedArith` and `trustedAy` through `init_polymorphic_axiom` (crates/clean-kernel/src/env/core/trust.rs \u2014 an implicit binder over `Sort u` returning that variable, i.e. `{a : Sort u} -> a`, an inhabitant of every type), followed by `ensure_native_reducers()`. No prelude is loaded, so any other name is unknown.",
+    "evidence": "crates/clean-kernel/src/env/mod.rs:3633",
+    "anchor": "env.init_sorry()",
+    "verified": "2026-11-14"
+  },
+  {
+    "id": "descriptor project check (description)",
+    "help_sha256": "1dfac84edd2b42c411a5900548aaa57f06ad2c09963beef15b1eef544c8952f8",
+    "triggers": [
+      "F/exclusive-trust",
+      "I/no-trust"
+    ],
+    "statement": "A declaration is credited only when its cited closure passes both legs. The imported-cone leg is ImportedConeVerdict::passed(allow_sorry) (reached through check_import_gate::gate_declaration): no refusal, no imported axiom, and every trust marker waived -- which happens only with allow_sorry (the command's --allow-sorry) and only for a marker whose head is `sorry` or `sorryAx` (SORRY_MARKERS); trustedArith/trustedAy markers and imported axioms are never waived. The local leg (cmd_project/declarations.rs would_credit and record_project_decl) waives only an ExplicitSorry/SyntheticSorry registration warning under allow_sorry, and a kernel check failure is decided before the sorry policy. So 'reaches no trust marker (a `sorry` only under `--allow-sorry`)' is what the code does; the previous wording ('reaches no `sorry` or trust marker') was false for every --allow-sorry run, and project_check_cli's project_check_descriptor_states_the_sorry_waiver_its_crediting_rule_applies now pins it.",
+    "evidence": "crates/clean-olean/src/recheck_closed/imported.rs:135",
+    "anchor": "pub fn passed(&self, allow_sorry: bool) -> bool",
+    "verified": "2026-11-14"
+  }
+]

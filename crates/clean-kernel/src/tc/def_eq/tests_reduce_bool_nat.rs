@@ -19,8 +19,22 @@ fn add_def(env: &mut Environment, name: &str, ty: Expr, value: Expr) {
     env.extend_constants_unchecked(std::iter::once(info));
 }
 
+/// Declare `Lean.reduceBool`/`Lean.reduceNat` as Lean's `Init` does: an opaque
+/// whose value is the identity (`opaque Lean.reduceBool (b : Bool) : Bool :=
+/// b`). The rule `reduceBool c ≡ c` is justified by that value and by nothing
+/// else (`env/native_fold_authority.rs`), so an environment that does not
+/// declare them — every one these tests built before 2026-09-26 — no longer
+/// evaluates them.
+fn install_reduce_identities(env: &mut Environment) {
+    for (name, ty) in [("Lean.reduceBool", "Bool"), ("Lean.reduceNat", "Nat")] {
+        let ty = Expr::const_(Name::from_string(ty), vec![]);
+        let arrow = Expr::pi(crate::expr::BinderInfo::Default, ty.clone(), ty.clone());
+        let id = Expr::lam(crate::expr::BinderInfo::Default, ty, Expr::bvar(0));
+        add_opaque(env, name, arrow, id);
+    }
+}
+
 /// Helper: add an opaque declaration to the environment.
-#[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 fn add_opaque(env: &mut Environment, name: &str, ty: Expr, value: Expr) {
     let mut info = ConstantInfo::new(Name::from_string(name), vec![], ty, Some(value), false);
     info.kind = ConstantKind::Opaque;
@@ -36,6 +50,7 @@ fn add_opaque(env: &mut Environment, name: &str, ty: Expr, value: Expr) {
 fn test_reduce_bool_const_true() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     // myConst := Bool.true
     add_def(
         &mut env,
@@ -69,6 +84,7 @@ fn test_reduce_bool_const_true() {
 fn test_reduce_bool_const_false() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     add_def(
         &mut env,
         "myConst",
@@ -100,6 +116,7 @@ fn test_reduce_bool_const_false() {
 fn test_reduce_bool_unknown_const_returns_none() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     let tc = TypeChecker::new(&env);
 
     let expr = Expr::app(
@@ -119,6 +136,7 @@ fn test_reduce_bool_unknown_const_returns_none() {
 fn test_reduce_bool_no_args_returns_none() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     let tc = TypeChecker::new(&env);
 
     let expr = Expr::const_(Name::from_string("Lean.reduceBool"), vec![]);
@@ -134,6 +152,7 @@ fn test_reduce_bool_no_args_returns_none() {
 fn test_reduce_bool_nat_valued_const_returns_none() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     add_def(
         &mut env,
         "natConst",
@@ -159,6 +178,7 @@ fn test_reduce_bool_nat_valued_const_returns_none() {
 fn test_reduce_bool_chain_definition() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     add_def(
         &mut env,
         "b",
@@ -200,6 +220,7 @@ fn test_reduce_bool_chain_definition() {
 fn test_reduce_nat_const_literal() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     add_def(
         &mut env,
         "myNat",
@@ -231,6 +252,7 @@ fn test_reduce_nat_const_literal() {
 fn test_reduce_nat_const_zero() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     add_def(
         &mut env,
         "myZero",
@@ -261,8 +283,9 @@ fn test_reduce_nat_const_zero() {
 /// (via native reducer for Nat.add + WHNF).
 #[test]
 fn test_reduce_nat_with_arithmetic() {
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     env.init_arith_native_reducers();
 
     // mySum := Nat.add 3 4
@@ -301,6 +324,7 @@ fn test_reduce_nat_with_arithmetic() {
 fn test_reduce_nat_unknown_const_returns_none() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     let tc = TypeChecker::new(&env);
 
     let expr = Expr::app(
@@ -320,6 +344,7 @@ fn test_reduce_nat_unknown_const_returns_none() {
 fn test_reduce_nat_no_args_returns_none() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     let tc = TypeChecker::new(&env);
 
     let expr = Expr::const_(Name::from_string("Lean.reduceNat"), vec![]);
@@ -335,6 +360,7 @@ fn test_reduce_nat_no_args_returns_none() {
 fn test_reduce_nat_bool_valued_const_returns_none() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     add_def(
         &mut env,
         "boolConst",
@@ -358,8 +384,9 @@ fn test_reduce_nat_bool_valued_const_returns_none() {
 /// Other native reducers (Nat.decEq etc.) should still work alongside reduceBool/reduceNat.
 #[test]
 fn test_other_native_reducers_unaffected() {
-    let mut env = Environment::new();
+    let mut env = Environment::with_prelude();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     let tc = TypeChecker::new(&env);
 
     // Nat.decEq 3 3 should still work
@@ -381,6 +408,7 @@ fn test_other_native_reducers_unaffected() {
 fn test_reduce_bool_applied_to_literal_bool_true() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     let tc = TypeChecker::new(&env);
 
     // Lean.reduceBool(Bool.true) — argument is already a constructor
@@ -406,6 +434,7 @@ fn test_reduce_bool_applied_to_literal_bool_true() {
 fn test_reduce_nat_applied_to_literal() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
     let tc = TypeChecker::new(&env);
 
     // Lean.reduceNat(42) — argument is already a Nat literal
@@ -453,6 +482,7 @@ fn nullary_probe_reducer(args: &[&Expr]) -> Option<Expr> {
 fn test_whnf_consults_native_reducer_for_nullary_const() {
     let mut env = Environment::new();
     env.init_native_reducers();
+    install_reduce_identities(&mut env);
 
     // `ZeroAry.k : Nat := 7`, with a native reducer claiming 42.
     add_def(
@@ -470,13 +500,19 @@ fn test_whnf_consults_native_reducer_for_nullary_const() {
     let bare = Expr::const_(Name::from_string("ZeroAry.k"), vec![]);
     let reduced = tc.whnf(&bare);
 
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // this used to assert 42 — a reducer overriding the head's own δ answer
+    // (7), which is the very shape that let a user definition prove `False`.
+    // whnf still CONSULTS the registry for a nullary constant (the
+    // Int32.minValue path), and native-fold authority now refuses a reducer
+    // whose head the environment does not hold canonically, so δ decides.
     match reduced.kind() {
         ExprKind::Lit(Literal::Nat(n)) => {
             assert_eq!(
                 n.to_u64(),
-                Some(42),
-                "whnf of a nullary Const returned {n:?}: 7 means delta won and the \
-                 native reducer was never consulted, which is the Int32.minValue bug"
+                Some(7),
+                "whnf of a user nullary Const returned {n:?}: 42 means a native \
+                 reducer overrode the constant's own definition"
             );
         }
         other => panic!("expected a Nat literal from whnf, got {other:?}"),

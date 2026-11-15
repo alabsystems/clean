@@ -57,6 +57,17 @@
 #   bash scripts/install-git-hooks.sh --status    # same, but always exits 0
 #   bash scripts/install-git-hooks.sh --uninstall # stop using the tracked hooks
 #
+# From the main checkout or from ANY linked worktree the command is the same,
+# and so is its effect: `core.hooksPath` lives in the repository's SHARED
+# config, so one install gates every checkout of the clone, each running the
+# `scripts/githooks/pre-push` at its own checked-out sha (a worktree whose sha
+# predates that file finds no hook and pushes ungated, as `--status` counts).
+# Installing is the OPERATOR's act on their clone -- a lane working in a
+# worktree reports this command rather than running it:
+#   cd <any checkout> && bash scripts/install-git-hooks.sh && bash scripts/install-git-hooks.sh --check
+# `scripts/test_install_git_hooks.sh` exercises both, from a linked worktree, in
+# a throwaway repository.
+#
 # There is no environment-variable bypass. A leg that is legitimately red gets
 # an owned, expiring `WAIVED` row in `scripts/githooks/gate-legs.txt` that the hook
 # reads -- visible, reviewed, and self-retiring. The only way past the hook is
@@ -188,15 +199,36 @@ fi
 # empty hook directory, so no worktree could ever have run its own tracked hook.
 #
 # Anything with a REAL hook in it is somebody else's tooling and is refused.
-samples_only() {
+#
+# RUN FROM A LINKED WORKTREE (2026-09-24). `samples_only` used to read the
+# configured path relative to the CURRENT directory and to treat a directory
+# that does not exist as holding a real hook. In a linked worktree `.git` is a
+# FILE, so a relative `.git/hooks` resolves to nothing there and the installer
+# refused -- "holds a real hook" -- a configuration it takes over from the main
+# checkout. Measured in a sandbox repository: install from the main checkout
+# took `.git/hooks` over, the identical install from its linked worktree exited
+# 1. Git resolves a RELATIVE hooksPath against the root of whichever worktree
+# the hook runs in, so the honest question has one answer PER worktree: the
+# path is taken over only if, resolved in every one of them, it is absent or
+# holds nothing but `.sample` files. An absent directory holds no hook.
+no_real_hook_in() {
   local dir="$1" f base
-  [ -d "$dir" ] || return 1
+  [ -d "$dir" ] || return 0
   for f in "$dir"/*; do
     [ -e "$f" ] || continue
     base="${f##*/}"
     case "$base" in *.sample) continue ;; esac
     return 1
   done
+  return 0
+}
+samples_only() {
+  local path="$1" wt
+  case "$path" in /*) no_real_hook_in "$path"; return ;; esac
+  while read -r wt; do
+    [ -n "$wt" ] || continue
+    no_real_hook_in "$wt/$path" || return 1
+  done <<<"$(git worktree list --porcelain 2>/dev/null | sed -n 's/^worktree //p')"
   return 0
 }
 if [ -n "$current" ] && [ "$current" != "$HOOKS_DIR" ] && samples_only "$current"; then
@@ -228,6 +260,20 @@ for hook in "$HOOKS_DIR"/*; do
   chmod +x "$hook"
 done
 [ -f "$LEGACY_DIR/pre-push" ] && chmod +x "$LEGACY_DIR/pre-push"
+
+# Say WHERE the setting lands when this runs from a linked worktree: git keeps
+# core.hooksPath in the repository's SHARED config, so an install from any
+# worktree is an install for the main checkout and every sibling too. That is
+# the design (one `git config` covers every worktree, each running its own
+# tracked copy), but it is the operator's clone being changed, and a lane
+# running this from its own worktree should see that before it happens.
+git_dir="$(git rev-parse --path-format=absolute --git-dir 2>/dev/null || true)"
+common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null || true)"
+if [ -n "$common_dir" ] && [ "$common_dir" != "$git_dir" ]; then
+  echo "NOTE: run from a LINKED worktree. core.hooksPath is written to the SHARED"
+  echo "      config ($common_dir/config): the main checkout and every linked"
+  echo "      worktree get the hook, each running the copy at its own checked-out sha."
+fi
 
 git config --local core.hooksPath "$HOOKS_DIR"
 echo "Clean git hooks: installed (core.hooksPath = $HOOKS_DIR)"

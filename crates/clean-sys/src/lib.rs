@@ -47,6 +47,7 @@
 //! ```text
 //! cargo +nightly miri test -p clean-sys
 //! ```
+//! STOCK EXCEPTION (Trust lacks miri; measured `targo --unverified miri` -> `error: no such command: miri`, and the seal ships no rust-src).
 //! Note: Miri may not support all FFI patterns.
 
 use clean_kernel::{
@@ -128,7 +129,8 @@ pub extern "C" fn clean_env_new() -> *mut CleanEnv {
 /// If `path` is NULL, only the default search paths are used:
 /// 1. `MATHLIB_PATH` environment variable entries (if set)
 /// 2. `LEAN_PATH` environment variable entries
-/// 3. `~/.elan/toolchains/<version>/lib/lean`
+/// 3. the checkout's pinned toolchain (`lean-toolchain`), and no other
+///    installed toolchain (docs/DECISIONS.md R81)
 ///
 /// Returns NULL on error and sets `err_out` if provided.
 ///
@@ -620,7 +622,30 @@ mod tests {
         }
     }
 
-    // Gated: hangs at _dyld_start on macOS (#2950)
+    // Gated: hangs at _dyld_start on macOS (#2950).
+    //
+    // RE-MEASURED 2026-09-15 and the gate STANDS. Built with
+    // `--features ffi-tests` (35.95 s, compiles clean — nothing has rotted
+    // behind this flag) and each test run directly from the binary under a 90 s
+    // ceiling: both exit 124, libtest printing
+    // `has been running for over 60 seconds`. So this is not a stale exclusion
+    // and these tests must NOT be wired into scripts/local_gate.sh — a leg that
+    // runs them hangs the gate.
+    //
+    // Recorded because nothing else records it: this repo has no CI
+    // (CLAUDE.md, *No GitHub CI*), so `ffi-tests` is enabled by no manifest, no
+    // alias, no recipe and no gate, and these two FFI-safety tests therefore
+    // run in NO LANE ANYWHERE. That is a real coverage hole, not a tidy
+    // exclusion, and it is the reason to keep #2950 open rather than closed.
+    //
+    // ONE THING THE STATED CAUSE DOES NOT EXPLAIN, for whoever picks up #2950:
+    // `test_null_pointer_handling` below loads nothing — it only calls FFI
+    // entry points with NULL — yet it hangs identically. The binary itself
+    // starts fine (a filter selecting zero tests returns instantly), so
+    // "_dyld_start" may describe only `test_env_with_init`, and the null-path
+    // hang may be a separate defect in an FFI entry point rather than a loader
+    // problem. Narrowing which call blocks is the next step, and it wants an
+    // owner of that surface.
     #[cfg(feature = "ffi-tests")]
     #[test]
     fn test_env_with_init() {
@@ -671,7 +696,13 @@ mod tests {
 
     /// Test that NULL pointers are handled gracefully by all functions.
     // Gated: hangs at _dyld_start on macOS (#2950)
-    #[cfg(feature = "ffi-tests")]
+    /// UN-GATED 2026-09-15. Every assertion below is a pure NULL-argument
+    /// check — fast, deterministic, and touching no module loading. It was
+    /// gated only because it SHARED A FUNCTION BODY with the
+    /// `clean_env_with_init(NULL, ...)` call that now lives in
+    /// `test_null_env_with_init_does_not_crash`, so ~13 FFI-safety assertions
+    /// were compiled by no configuration on account of six lines at the end of
+    /// the same function.
     #[test]
     fn test_null_pointer_handling() {
         // clean_env_free(NULL) - should not crash
@@ -721,9 +752,38 @@ mod tests {
         // clean_whnf(NULL, NULL) - should return NULL
         let whnf = unsafe { clean_whnf(ptr::null_mut(), ptr::null()) };
         assert!(whnf.is_null());
+    }
 
+    /// The tail of the old `test_null_pointer_handling`, kept GATED — and it is
+    /// the only part that ever needed gating.
+    ///
+    /// ROOT CAUSE, measured 2026-09-15 by sampling the hung process. The
+    /// recorded rationale for this gate was "hangs at _dyld_start on macOS
+    /// (#2950)". That is WRONG, and it is not a hang at all. `sample` on the
+    /// blocked thread shows:
+    ///
+    ///     tests::test_null_pointer_handling        lib.rs:727
+    ///     clean_env_with_init                      lib.rs:157
+    ///     clean_olean::import::load::load_module_with_deps
+    ///     ...::load_module_recursive
+    ///     ...::load_typed_module_recursive         (repeating, deeply)
+    ///
+    /// `clean_env_with_init(NULL, ...)` means "use the DEFAULT search paths",
+    /// which end at `~/.elan/toolchains/<version>/lib/lean`. The comment below
+    /// assumed Init would NOT be found — false on any box with a Lean
+    /// toolchain installed (this one has three, each carrying Init.olean). So
+    /// the call finds Init and recursively loads its entire import closure:
+    /// real work with no bound, inside a unit test, which reads as a hang.
+    ///
+    /// It stays gated because nothing in the API can opt out — a non-NULL
+    /// `path` only PREPENDS to the defaults, so a test cannot ask for an empty
+    /// search set. Giving `default_search_paths()` an opt-out is a production
+    /// change and belongs with the owner of #2950, together with the question
+    /// of whether an unbounded recursive load is the right behaviour here.
+    #[cfg(feature = "ffi-tests")]
+    #[test]
+    fn test_null_env_with_init_does_not_crash() {
         // clean_env_with_init(NULL, NULL) - should handle gracefully
-        // (may fail due to Init not found, but should not crash)
         let env = unsafe { clean_env_with_init(ptr::null(), ptr::null_mut()) };
         if !env.is_null() {
             unsafe { clean_env_free(env) };

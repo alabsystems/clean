@@ -37,7 +37,7 @@ impl<'a> ElabCtx<'a> {
         ctors: &[SurfaceCtor],
         ctor_names: &[Name],
     ) -> Result<DerivedInstance, ElabError> {
-        let instance_name = Name::from_string(&format!("inst{ind_name}BEq"));
+        let instance_name = crate::derive::builtin_instance_name(ind_name, "BEq");
         let class_name = Name::from_string("BEq");
         let num_params = binders.len();
         let is_monomorphic = num_params == 0;
@@ -129,8 +129,7 @@ impl<'a> ElabCtx<'a> {
         // Detect nested inductive containers in any ctor field (#3434). When
         // detected, `ind_name.casesOn` gets a mutual-block signature that our
         // single-motive casesOn application can't match.
-        let ind_name_str = ind_name.to_string();
-        let has_nested_container = any_ctor_has_nested_container(self.env, &ind_name_str, ctors);
+        let has_nested_container = any_ctor_has_nested_container(self.env, ind_name, ctors);
 
         // Generate BEq comparison using casesOn for multi-constructor inductives.
         //
@@ -288,52 +287,10 @@ impl<'a> ElabCtx<'a> {
         );
 
         Ok(DerivedInstance {
-            name: Name::from_string(&format!("inst{ind_name}Repr")),
+            name: crate::derive::builtin_instance_name(ind_name, "Repr"),
             class_name: Name::from_string("Repr"),
             ty: instance_ty,
             val: provisional_val,
-            priority: 100,
-            level_params: vec![],
-        })
-    }
-
-    /// Derive Inhabited for an inductive type
-    ///
-    /// Uses the first constructor as the default value.
-    pub(super) fn derive_inhabited_inductive(
-        &mut self,
-        ind_name: &Name,
-        binders: &[SurfaceBinder],
-        ctors: &[SurfaceCtor],
-        ctor_names: &[Name],
-    ) -> Result<DerivedInstance, ElabError> {
-        if !binders.is_empty() || ctor_names.is_empty() || !all_ctors_nullary(ctors) {
-            return Err(ElabError::Unsupported {
-                feature: format!(
-                    "deriving Inhabited for `{ind_name}` requires a monomorphic inductive with a closed nullary constructor"
-                ),
-            });
-        }
-
-        let instance_name = Name::from_string(&format!("inst{ind_name}Inhabited"));
-        let class_name = Name::from_string("Inhabited");
-        let u = Level::succ(Level::zero());
-        let ind_type = Expr::const_(ind_name.clone(), vec![]);
-        let instance_ty = Expr::app(
-            Expr::const_(class_name.clone(), vec![u.clone()]),
-            ind_type.clone(),
-        );
-        let default_val = Expr::const_(ctor_names[0].clone(), vec![]);
-        let instance_val = Expr::apps(
-            Expr::const_(Name::from_string("Inhabited.mk"), vec![u]),
-            [ind_type, default_val],
-        );
-
-        Ok(DerivedInstance {
-            name: instance_name,
-            class_name,
-            ty: instance_ty,
-            val: instance_val,
             priority: 100,
             level_params: vec![],
         })
@@ -367,7 +324,7 @@ impl<'a> ElabCtx<'a> {
         ctors: &[SurfaceCtor],
         ctor_names: &[Name],
     ) -> Result<DerivedInstance, ElabError> {
-        let instance_name = Name::from_string(&format!("inst{ind_name}DecidableEq"));
+        let instance_name = crate::derive::builtin_instance_name(ind_name, "DecidableEq");
         let class_name = Name::from_string("DecidableEq");
         let num_params = binders.len();
         let is_monomorphic = num_params == 0;
@@ -537,13 +494,15 @@ fn all_param_fields(binders: &[SurfaceBinder], ctors: &[SurfaceCtor]) -> Option<
     if ctors.len() != 1 || binders.is_empty() {
         return None;
     }
-    let pnames: Vec<&str> = binders.iter().map(|b| b.name.as_str()).collect();
+    let pnames: Vec<&clean_parser::SurfaceName> = binders.iter().map(|b| &b.name).collect();
     let mut field_params = Vec::new();
     let mut cur = peel(&ctors[0].ty);
     while let SurfaceExpr::Arrow(_, dom, cod) = cur {
         match peel(dom) {
             SurfaceExpr::Ident(_, n) => {
-                let idx = pnames.iter().position(|p| p == n)?;
+                let idx = pnames
+                    .iter()
+                    .position(|p| !n.is_relative_constructor() && *p == n)?;
                 field_params.push(idx);
             }
             _ => return None,
@@ -576,7 +535,7 @@ pub(super) fn multi_ctor_param_fields(
     if binders.is_empty() || ctors.is_empty() {
         return None;
     }
-    let pnames: Vec<&str> = binders.iter().map(|b| b.name.as_str()).collect();
+    let pnames: Vec<&clean_parser::SurfaceName> = binders.iter().map(|b| &b.name).collect();
     let mut per_ctor = Vec::with_capacity(ctors.len());
     for ctor in ctors {
         let mut field_params = Vec::new();
@@ -584,7 +543,9 @@ pub(super) fn multi_ctor_param_fields(
         while let SurfaceExpr::Arrow(_, dom, cod) = cur {
             match peel(dom) {
                 SurfaceExpr::Ident(_, n) => {
-                    let idx = pnames.iter().position(|p| p == n)?;
+                    let idx = pnames
+                        .iter()
+                        .position(|p| !n.is_relative_constructor() && *p == n)?;
                     field_params.push(idx);
                 }
                 _ => return None,

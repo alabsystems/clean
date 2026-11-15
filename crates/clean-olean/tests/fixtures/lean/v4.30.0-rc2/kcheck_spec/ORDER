@@ -1,0 +1,7 @@
+# The kcheck specification over the CIC_L judgment and its set model, for
+# `crates/clean-olean/tests/kcheck_spec.rs` (plan unit D1, Revision 3). The
+# specification imports `CICL.*` and `CICLModel.*`, so both are compiled first.
+# The family has no module of its own.
+theory cic_l
+theory cic_l_model
+theory kcheck_spec

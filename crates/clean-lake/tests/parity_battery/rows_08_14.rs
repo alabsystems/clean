@@ -142,7 +142,7 @@ fn row10_init_lib_template_builds() {
     // Template pins: the toolchain is Clean's own (never a Lean 4 identifier),
     // and the scaffold module carries the pinned starter definition.
     let toolchain = fs::read_to_string(dir.join("lean-toolchain")).expect("toolchain written");
-    assert_eq!(toolchain, "clean:stable\n", "pinned init toolchain");
+    assert_eq!(toolchain, "clean\n", "pinned init toolchain");
     let module = fs::read_to_string(dir.join("ParityLib.lean")).expect("scaffold written");
     assert!(
         module.contains("def hello := \"world\""),

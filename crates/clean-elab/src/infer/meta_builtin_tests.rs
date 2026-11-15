@@ -10,10 +10,11 @@
 //! `tests/user_tactic_exec.rs`.
 
 use super::*;
+use clean_kernel::Name;
 use clean_parser::{Projection, Span, SurfaceArg, SurfaceExpr};
 
 fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), name.to_owned())
+    SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path(name))
 }
 
 fn name_lit(name: &str) -> SurfaceExpr {
@@ -32,7 +33,7 @@ fn proj(base: &str, field: &str) -> SurfaceExpr {
     SurfaceExpr::Proj(
         Span::dummy(),
         Box::new(ident(base)),
-        Projection::Named(field.to_owned()),
+        Projection::Named(SurfaceName::from_name(Name::anon().str(field))),
     )
 }
 
@@ -42,7 +43,7 @@ fn test_mkconst_rewrites_to_ident() {
     let body = app(ident("mkConst"), vec![name_lit("Nat.zero")]);
     let out = rewrite_meta_builtins(&body).expect("mkConst is a recognized builtin");
     assert!(
-        matches!(&out, SurfaceExpr::Ident(_, n) if n == "Nat.zero"),
+        matches!(&out, SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat.zero")),
         "mkConst `Nat.zero should rewrite to the identifier Nat.zero, got {out:?}"
     );
 }
@@ -53,7 +54,7 @@ fn test_mkconst_with_levels_drops_levels() {
     let body = app(ident("mkConst"), vec![name_lit("Foo"), ident("bar")]);
     let out = rewrite_meta_builtins(&body).expect("mkConst/2 is recognized");
     assert!(
-        matches!(&out, SurfaceExpr::Ident(_, n) if n == "Foo"),
+        matches!(&out, SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Foo")),
         "mkConst `Foo us should rewrite to Foo, got {out:?}"
     );
 }
@@ -66,9 +67,13 @@ fn test_mkapp_rewrites_to_application() {
     let SurfaceExpr::App(_, func, args) = out else {
         panic!("expected an application, got something else");
     };
-    assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "f"));
+    assert!(
+        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("f"))
+    );
     assert_eq!(args.len(), 1);
-    assert!(matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n == "x"));
+    assert!(
+        matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("x"))
+    );
 }
 
 #[test]
@@ -82,12 +87,12 @@ fn test_nested_mkapp_mkconst_collapses() {
         panic!("expected an application");
     };
     assert!(
-        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat.succ"),
+        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat.succ")),
         "head should collapse to Nat.succ, got {func:?}"
     );
     assert_eq!(args.len(), 1);
     assert!(
-        matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n == "Nat.zero"),
+        matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat.zero")),
         "arg should collapse to Nat.zero"
     );
 }
@@ -103,7 +108,9 @@ fn test_mkapp3_rewrites_three_args() {
     let SurfaceExpr::App(_, func, args) = out else {
         panic!("expected an application");
     };
-    assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "f"));
+    assert!(
+        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("f"))
+    );
     assert_eq!(args.len(), 3, "mkApp3 should apply three arguments");
 }
 
@@ -113,7 +120,7 @@ fn test_expr_const_projection_rewrites_to_ident() {
     let body = app(proj("Expr", "const"), vec![name_lit("Foo"), ident("bar")]);
     let out = rewrite_meta_builtins(&body).expect("Expr.const is recognized");
     assert!(
-        matches!(&out, SurfaceExpr::Ident(_, n) if n == "Foo"),
+        matches!(&out, SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Foo")),
         "Expr.const `Foo us should rewrite to Foo, got {out:?}"
     );
 }
@@ -174,9 +181,11 @@ fn test_builtin_under_application_arg_is_rewritten() {
     let SurfaceExpr::App(_, func, args) = out else {
         panic!("expected an application");
     };
-    assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "f"));
     assert!(
-        matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n == "Nat.zero"),
+        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("f"))
+    );
+    assert!(
+        matches!(&args[0].expr, SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat.zero")),
         "the nested mkConst should collapse to Nat.zero"
     );
 }
@@ -188,7 +197,7 @@ fn test_mkapp_with_named_arg_defers() {
     let named = SurfaceArg {
         span: Span::dummy(),
         expr: ident("g"),
-        name: Some("f".to_owned()),
+        name: Some(SurfaceName::generated_path("f")),
     };
     let body = SurfaceExpr::App(
         Span::dummy(),
@@ -221,13 +230,17 @@ fn test_mklambda_rewrites_to_lambda() {
         panic!("expected a lambda, got something else");
     };
     assert_eq!(binders.len(), 1, "single binder");
-    assert_eq!(binders[0].name, "x", "binder name preserved");
+    assert_eq!(
+        binders[0].name,
+        SurfaceName::generated_path("x"),
+        "binder name preserved"
+    );
     assert!(
-        matches!(binders[0].ty.as_deref(), Some(SurfaceExpr::Ident(_, n)) if n == "Nat"),
+        matches!(binders[0].ty.as_deref(), Some(SurfaceExpr::Ident(_, n)) if n.name() == &Name::from_string("Nat")),
         "binder type should be Nat"
     );
     assert!(
-        matches!(lam_body.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat.zero"),
+        matches!(lam_body.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat.zero")),
         "nested mkConst body should collapse to Nat.zero, got {lam_body:?}"
     );
 }
@@ -248,9 +261,9 @@ fn test_mkforall_rewrites_to_pi() {
         panic!("expected a Pi, got something else");
     };
     assert_eq!(binders.len(), 1);
-    assert_eq!(binders[0].name, "x");
+    assert_eq!(binders[0].name, SurfaceName::generated_path("x"));
     assert!(
-        matches!(pi_body.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat"),
+        matches!(pi_body.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat")),
         "Pi body should collapse to Nat, got {pi_body:?}"
     );
 }
@@ -272,8 +285,10 @@ fn test_expr_lam_with_trailing_binderinfo_drops_it() {
     let SurfaceExpr::Lambda(_, binders, lam_body) = out else {
         panic!("expected a lambda");
     };
-    assert_eq!(binders[0].name, "x");
-    assert!(matches!(lam_body.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat.zero"));
+    assert_eq!(binders[0].name, SurfaceName::generated_path("x"));
+    assert!(
+        matches!(lam_body.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat.zero"))
+    );
 }
 
 #[test]
@@ -294,12 +309,14 @@ fn test_mklambda_with_binderinfo_drops_second_arg() {
     let SurfaceExpr::Lambda(_, binders, lam_body) = out else {
         panic!("expected a lambda");
     };
-    assert_eq!(binders[0].name, "x");
+    assert_eq!(binders[0].name, SurfaceName::generated_path("x"));
     assert!(
-        matches!(binders[0].ty.as_deref(), Some(SurfaceExpr::Ident(_, n)) if n == "Nat"),
+        matches!(binders[0].ty.as_deref(), Some(SurfaceExpr::Ident(_, n)) if n.name() == &Name::from_string("Nat")),
         "type slot for mkLambda/4 should be the 3rd argument (Nat)"
     );
-    assert!(matches!(lam_body.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat.zero"));
+    assert!(
+        matches!(lam_body.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("Nat.zero"))
+    );
 }
 
 #[test]
@@ -316,7 +333,7 @@ fn test_expr_forall_projection_rewrites_to_pi() {
     );
     let out = rewrite_meta_builtins(&body).expect("Expr.forallE is recognized");
     assert!(
-        matches!(&out, SurfaceExpr::Pi(_, binders, _) if binders.len() == 1 && binders[0].name == "x"),
+        matches!(&out, SurfaceExpr::Pi(_, binders, _) if binders.len() == 1 && binders[0].name == SurfaceName::generated_path("x")),
         "Expr.forallE should rewrite to a Pi binding x, got {out:?}"
     );
 }
@@ -359,7 +376,7 @@ fn test_mklambda_non_name_literal_does_not_lower_to_lambda() {
         "a non-literal-name mkLambda must not be lowered to a Lambda, got {out:?}"
     );
     assert!(
-        matches!(&out, SurfaceExpr::App(_, head, _) if matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n == "mkLambda")),
+        matches!(&out, SurfaceExpr::App(_, head, _) if matches!(head.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("mkLambda"))),
         "the deferred mkLambda head must be preserved, got {out:?}"
     );
 }
@@ -403,7 +420,9 @@ fn test_lambda_under_application_arg_is_rewritten() {
     let SurfaceExpr::App(_, func, args) = out else {
         panic!("expected an application");
     };
-    assert!(matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "f"));
+    assert!(
+        matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string("f"))
+    );
     assert!(
         matches!(&args[0].expr, SurfaceExpr::Lambda(_, _, _)),
         "the nested mkLambda should collapse to a lambda argument"

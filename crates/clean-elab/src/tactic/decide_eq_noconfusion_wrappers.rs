@@ -115,27 +115,6 @@ pub(super) fn to_int_view(expr: &Expr) -> Option<IntView> {
     }
 }
 
-pub(super) fn eq_level_for_type(ty: &Expr) -> Option<Level> {
-    match ty.get_app_fn().kind() {
-        ExprKind::Const(name, levels) => match name.to_string().as_str() {
-            "Nat" | "Bool" | "Char" | "String" | "Int" | "Fin" | "UInt8" | "UInt16" | "UInt32"
-            | "UInt64" | "Unit" | "Empty" => Some(Level::succ(Level::zero())),
-            // `List α : Type u` and `Option α : Type u` for `α : Type u`, so the
-            // Eq carrier lives at `Sort (u+1)`.
-            "List" | "Option" => levels.first().cloned().map(Level::succ),
-            // `Prod α β : Type (max u v)` and `Sum α β : Type (max u v)`, so the
-            // Eq carrier lives at `Sort (max u v + 1)` in both cases.
-            "Prod" | "Sum" => match (levels.first(), levels.get(1)) {
-                (Some(u), Some(v)) => Some(Level::succ(Level::max(u.clone(), v.clone()))),
-                _ => None,
-            },
-            _ => None,
-        },
-        ExprKind::Sort(level) => Some(Level::succ(level.clone())),
-        _ => None,
-    }
-}
-
 pub(super) fn char_type() -> Expr {
     Expr::const_(Name::from_string("Char"), vec![])
 }

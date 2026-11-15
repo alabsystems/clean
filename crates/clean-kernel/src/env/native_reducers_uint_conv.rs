@@ -8,6 +8,15 @@
 //! - ofNat (Nat → UIntN): computes n % modulus
 //! - Cross-width conversions (UIntN → UIntM): narrowing with modulus, widening identity
 //! - Fin.val (identity on Nat literals)
+//!
+//! A reducer is an ACCELERATION, never a definition. The twelve fixed-width
+//! conversions (`UInt{8,16,32,64}.toUInt{8,16,32,64}`) are real, axiom-free
+//! prelude definitions `<target>.ofNat (<source>.toNat x)` (WS6.10,
+//! `Environment::uint_conversion_decl`), and `native_reducers_uint_conv_tests.rs`
+//! checks every reducer against that definition's δ-unfolding. The eight
+//! `USize` conversions have reducers and NO constant: the native prelude has no
+//! platform-width-bound `USize.ofNat` to define them by, so `a.toUSize` stays
+//! an unknown identifier there (the olean import supplies the genuine ones).
 
 use crate::env::Environment;
 use crate::expr::{Expr, ExprKind, Literal};

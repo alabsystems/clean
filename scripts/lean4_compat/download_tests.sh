@@ -33,7 +33,19 @@ mkdir -p lean4_tests
 
 echo "Fetching file list from Lean 4 repo..."
 
-# Get list of .lean files from tests/lean directory at pinned commit
+# The pinned selection. Since v4.30 Lean keeps these regression files under
+# tests/elab and tests/elab_fail rather than tests/lean, so a manifest that
+# records `upstream_paths` (name -> repo path at the pinned commit) is fetched
+# file by file from those paths; an older manifest without it falls back to
+# listing tests/lean as before.
+if python3 -c "import json,sys; sys.exit(0 if json.load(open('MANIFEST.json')).get('upstream_paths') else 1)"; then
+    python3 -c "
+import json
+m = json.load(open('MANIFEST.json'))
+for name, path in sorted(m['upstream_paths'].items()):
+    print(f'https://raw.githubusercontent.com/leanprover/lean4/{m[\"lean4_commit\"]}/{path}')
+" > /tmp/lean4_test_urls.txt
+else
 curl -sL "https://api.github.com/repos/leanprover/lean4/contents/tests/lean?ref=$LEAN4_COMMIT" \
     -H "Accept: application/vnd.github.v3+json" | \
     python3 -c "
@@ -46,6 +58,7 @@ for item in data:
         url = f'https://raw.githubusercontent.com/leanprover/lean4/{commit}/tests/lean/{item[\"name\"]}'
         print(url)
 " > /tmp/lean4_test_urls.txt
+fi
 
 TOTAL=$(wc -l < /tmp/lean4_test_urls.txt)
 echo "Found $TOTAL test files"

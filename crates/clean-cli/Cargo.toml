@@ -56,6 +56,7 @@ clean-rust-sem = { workspace = true, features = ["cli"] }
 clean-auto = { workspace = true, features = ["cli"] }
 clean-compiler = { workspace = true, features = ["cli"] }
 clean-runtime.workspace = true
+clean-native.workspace = true
 clean-lake.workspace = true
 clean-cake.workspace = true
 clean-lsp = { workspace = true, features = ["cli"] }
@@ -64,16 +65,13 @@ clean-verify = { path = "../clean-verify" }
 clean-fold.workspace = true
 clean-features = { workspace = true, features = ["serde", "clap-interop"] }
 clean-mathverse.workspace = true
-termimad = "0.34"
 thiserror.workspace = true
 anyhow.workspace = true
-tokio.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 clap = { workspace = true }
 rayon.workspace = true
 walkdir.workspace = true
-rustyline = "18"
 serde = { workspace = true }
 serde_json = { workspace = true }
 # Factory status validates committed Cargo manifest/lock dependency evidence.
@@ -83,6 +81,15 @@ blake3.workspace = true
 sha2.workspace = true
 tempfile.workspace = true
 ark-std = { workspace = true }
+
+# Native-only: tokio's full feature set does not build on wasm (the async
+# dispatch of the server/LSP verbs is native-only), termimad's terminal
+# backend (crossterm) and rustyline's line editor have no wasm32 port. The
+# help renderer, REPL, and math proof-state verbs are target-gated to match.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["full"] }
+termimad = "0.34"
+rustyline = "18"
 
 [dev-dependencies]
 # Real-corpus search->use e2e test (front #4): needs the mathverse_use tactic

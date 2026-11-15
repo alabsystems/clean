@@ -563,8 +563,10 @@ fn test_literal_patterns_on_native_nat_reduce_correctly() {
         .expect("native Nat.casesOn should be a registered recursor");
     assert_eq!(
         rec.arg_order,
-        clean_kernel::RecursorArgOrder::MajorAfterMinors,
-        "native casesOn uses the MajorAfterMinors layout"
+        clean_kernel::RecursorArgOrder::MajorAfterMotive,
+        "native casesOn uses the MajorAfterMotive layout — the Lean-faithful \
+         one. It was MajorAfterMinors until the kernel fixed it; that layout \
+         broke iota reduction (clean-kernel tc/tests2/no_confusion_value_tests.rs)"
     );
 
     elaborate_decls_into(
@@ -604,5 +606,53 @@ fn test_literal_patterns_on_native_nat_reduce_correctly() {
         whnf_head_const(&env, &Expr::app(const_("predOrN"), nat_lit(0))).as_deref(),
         Some("Nat.zero"),
         "native predOrN 0 must reduce to 0"
+    );
+}
+
+// This literal starts inside the explicit outer constructor. Unlike top-level
+// numeric arms, it reaches nested-pattern planning directly. Keep one concrete
+// arm plus a wildcard so constructor-column splitting cannot hide that path.
+#[test]
+fn test_nested_nonzero_literal_on_imported_nat_reduces_correctly() {
+    let mut env = imported_nat_env();
+    assert!(
+        env.get_recursor(&Name::from_string("Nat.casesOn"))
+            .is_none(),
+        "the test must retain the imported definitional casesOn path"
+    );
+    assert_eq!(
+        env.get_recursor(&Name::from_string("Nat.rec"))
+            .expect("imported Nat.rec must remain registered")
+            .arg_order,
+        clean_kernel::RecursorArgOrder::MajorAfterMinors,
+        "the definition of casesOn reorders its major before applying Nat.rec"
+    );
+
+    elaborate_decls_into(
+        &mut env,
+        "def nestedImported (n : Nat) : Nat := match n with\n  \
+         | Nat.succ 4 => Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero))))))\n  \
+         | _ => Nat.zero",
+    );
+
+    // Nat.succ 4 matches exactly 5. In particular 1 must take the fallback:
+    // replacing the nested literal by Nat.zero swaps these two observations.
+    for (input, expected) in [(0, 0), (1, 0), (4, 0), (5, 7), (6, 0)] {
+        let call = Expr::app(const_("nestedImported"), nat_lit(input));
+        assert!(
+            def_eq(&env, &call, &nat_lit(expected)),
+            "nestedImported {input} must reduce to {expected}; got {:?}",
+            TypeChecker::new(&env).whnf(&call).kind()
+        );
+        let wrong = if expected == 7 { 0 } else { 7 };
+        assert!(
+            !def_eq(&env, &call, &nat_lit(wrong)),
+            "nestedImported {input} must not reduce to the other branch ({wrong})"
+        );
+    }
+    assert!(
+        env.get_recursor(&Name::from_string("Nat.casesOn"))
+            .is_none(),
+        "elaboration must not turn the imported casesOn definition into a recursor"
     );
 }

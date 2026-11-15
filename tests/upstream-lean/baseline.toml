@@ -1,0 +1,234 @@
+# Baseline for the upstream-Lean drop-in invariant.
+#
+# Author: Andrew Yates | Copyright 2026 Andrew Yates | License: Apache-2.0
+#
+# Mirrors trust/tests/upstream-rust/baseline.toml. It records WHAT upstream
+# Lean this repo claims to accept, at WHICH revision, through WHICH surface —
+# and, like its Rust sibling, its per-surface `status` fields are seeds that
+# must be populated by a real run, never by intuition.
+#
+# THE INVARIANT THIS EXISTS TO MEASURE
+#
+#   "vanilla Lean is valid input."
+#
+# The ratified surface names a three-clause instrument: a baseline pin, an
+# expiring exceptions ledger, and a gate that FAILS. Measured 2026-09-01 at
+# clean HEAD c89b44931, all three were incomplete:
+#
+#   * clause 1 (pin) — partially met. tests/lean4_compat/MANIFEST.json pins
+#     leanprover/lean4 v4.27.0 with per-file sha256, which is a real pin. But
+#     the SELECTION is arbitrary: scripts/lean4_compat/download_tests.sh reads
+#     GitHub's directory listing (alphabetical) and stops at `MAX=100`, so the
+#     corpus is the alphabetical first 100 of ~2500 files, not a sample chosen
+#     for coverage of anything.
+#   * clause 2 (ledger) — ABSENT. There was no exceptions file with owners and
+#     expiries anywhere under tests/lean4_compat/.
+#   * clause 3 (a gate that fails) — ABSENT at the level that matters. Two
+#     partial instruments exist and NEITHER is in the pre-push gate
+#     (scripts/local_gate.sh mentions no lean4 corpus, no clean-parser and no
+#     clean-elab leg):
+#       - crates/clean-parser/src/lean4_compat.rs::lean4_parser_compatibility_suite
+#         walks the 100 files and asserts a 85% floor against a measured 90%.
+#         A floor is a ratchet, not a ledger: it says how MANY may fail, never
+#         WHICH, so a fixed file and a newly broken one net to zero.
+#       - crates/clean-elab/tests/phase1_full_corpus.rs is print-only AND
+#         self-skipping (returns early unless CLEAN_PHASE1_FULL_CORPUS=1); it
+#         reports PASS/PART/TIME/FAIL per file and asserts nothing about them.
+#
+#   And the level this repo's contract actually lives at is unmeasured by both:
+#   NOTHING routes a single upstream Lean corpus file through `emit_trust_ir`.
+#   Verified 2026-09-01 — no file under crates/ mentions both `lean4_compat`
+#   and `emit_trust_ir`. The parser suite stops at parse; the elab lane stops at
+#   elaborate-and-check. TrustIr is the contract this repo owes trust-cg, so
+#   "vanilla Lean is valid input" is unmeasured precisely where it is load-
+#   bearing. corpus.toml + run_upstream_lean.py close that.
+
+# RE-PINNED 2026-10-01 to v4.30.0-rc2 (3dc1a088b6d2), the revision clean's own
+# `lean-toolchain` names; the v4.27.0 pin was one of Trust's G2 conjuncts red on a
+# fixable mismatch. The SAME 100 file names were kept, so the selection defect
+# below is inherited unchanged: at v4.30 Lean keeps them under tests/elab (42)
+# and tests/elab_fail (58), not tests/lean, so MANIFEST.json now records each
+# file's `upstream_paths` and download_tests.sh fetches by those paths. Three
+# files changed upstream (1363, 1845, 247); the corpus classification was
+# regenerated for them. MEASURED at the re-pin with `clean --features
+# trust-ir-backend` built from clean 3c82461cd: the 56 probes give the SAME
+# outcomes on the old and the new corpus — 52 match their pins, and 4 drifted
+# before this change and are red on main as well (1569.foo, 1657.natrec_inner and
+# 2077.foo now `rejected` where `lowers` is pinned; 2115.foo now `lowers` where
+# `rejected` is pinned). Those four are clean's own lowering drift since the
+# 2026-09-20 seeding. Read against REAL Lean 4.8.0 (the frontend's target) and
+# v4.30.0-rc2, measured 2026-10-01:
+#   * 2115.foo — both Leans accept; clean now lowers it. A genuine improvement;
+#     its pin is now `lowers` (corpus.toml).
+#   * 1657.natrec_inner — Lean 4.8.0 rejects only the file's `def foldr` ("'foldr'
+#     has already been declared"; 4.8.0 Init has a root `foldr`, v4.30 does not)
+#     and still elaborates `natrec_inner`; clean refuses `foldr` faithfully but
+#     then fails the whole file, so `natrec_inner` is not lowered. Open.
+#   * 1569.foo — Lean 4.8.0 errors `unknown identifier 'typo'`; clean warns, skips
+#     the simp lemma, and rejects `foo`. Different diagnosis; open.
+#   * 2077.foo — Lean 4.8.0 accepts (`true true true`); clean rejects it ("import
+#     served by Clean's hand-written prelude"). A regression; open. The committed
+# frontend_run_artifacts still record Lean 4.27 runs of inputs that did not
+# change, and say so in their own `lean4_version` field.
+#
+# RE-MEASURED 2026-10-07 (m16, clean a16c05051, `clean` built `--features
+# trust-ir-backend` from that tree, load average 30-42) with the SUBJECT and its
+# IMPORT ENVIRONMENT pinned for the first time: the runner builds the binary it
+# measures (`--build`) or takes one it is told (`--clean-bin`), never PATH, and
+# runs every probe with this file's Lean library as the ONLY import path. Two
+# things that measurement settled:
+#   * The six `import Lean` probes (1878, 2005, 2077, 2273, 247, 2505) read
+#     `timeout` under the old 60 s WALL budget because loading the pinned `Lean`
+#     package (260,817 constants) costs 87-91 s of user CPU -- 97-191 s of wall
+#     time -- before any declaration elaborates. Given the time, all six end
+#     `rejected`. The budget is now 240 s of CPU (RLIMIT_CPU), so the verdict
+#     measures the subject, not the load. The 2026-09-20 seeding finished all 56
+#     inside 60 s each, so its six `import Lean` pins were not taken against this
+#     library.
+#   * The three drifted probes, decided against REAL Lean: 1569.foo and
+#     1657.natrec_inner live in upstream tests/elab_fail and real Lean refuses
+#     the whole module (`lean <file> -c out.c` exits 1 and writes no C, on
+#     v4.30.0-rc2 and on 4.8.0), so clean's `rejected` is the faithful answer and
+#     the pins moved to it. 2077.foo is the opposite: Lean accepts and clean does
+#     not. It is pinned `rejected` as an OPEN divergence, the 18th tests/elab
+#     file clean refuses. 9 probes now pin `lowers`, 47 `rejected`.
+#   * 2077's ELABORATION layers were then fixed (clean 2026-10-07, each with a
+#     regression test): trailing optParam defaults filled with or without an
+#     expected type, ``name literals lexed as one token and resolved, `name
+#     literals elaborated as `Lean.Name` values (and kept through the macro
+#     round trip), and `m!` expanded as Lean's macro expands it. The file now
+#     elaborates whole; it is refused at LOWERING, as any `import Lean` file is
+#     (`import Lean` + `def foo : Nat := 1` -> `unsupported IR type expression:
+#     Sort(..)`: `to_ir_with_env` takes constructor metadata for every
+#     constructor in the environment and the real library has `Sort`-typed
+#     fields). Re-measured with `--build` on that tree: 56/56 match their pins,
+#     0 findings, 1508 s including the build, load 23-35; no probe moved.
+#   * 2077.foo's LOWERING refusal was then fixed (clean 2026-10-08): a constructor
+#     field typed by a universe (`Sort u`, `SProp`) is a type, erased at runtime
+#     as Lean's compiler erases it, instead of refusing the environment's whole
+#     constructor table (`clean_compiler::to_ir::types::ctor_field_ir_type`).
+#     Measured with `--clean-bin` (release, `--features trust-ir-backend`): 2077.foo
+#     moved `rejected` -> `lowers`, matching real Lean v4.30.0-rc2 (accepts, emits
+#     C, prints `true true true`); the other 55 probes matched their pins. 2077.foo
+#     is re-pinned `lowers`: 10 probes now pin `lowers`, 46 `rejected`.
+
+schema_version = "0.1.0"
+id = "upstream-lean.toolchain-baseline.2026-09-01"
+
+[upstream]
+channel = "lean4"
+# Copied from tests/lean4_compat/MANIFEST.json. `run_upstream_lean.py` re-reads
+# that manifest on every run and FAILS if these drift apart: two pins that can
+# disagree are not a pin.
+revision = "leanprover/lean4:3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc"
+version = "v4.30.0-rc2"
+snapshot_date = "2026-10-01"
+corpus_path = "tests/lean4_compat/lean4_tests"
+manifest_path = "tests/lean4_compat/MANIFEST.json"
+file_count = 100
+
+[local]
+revision = "clean:main"
+branch = "main"
+workspace = "clean"
+
+[corpus]
+# KNOWN DEFECT, stated rather than hidden. The 100 files are the alphabetical
+# head of leanprover/lean4 `tests/lean` at the pinned commit — `download_tests.sh`
+# iterates the GitHub contents listing and breaks at MAX=100. That is a
+# convenience slice, not a sample: it over-weights whatever sorts first and says
+# nothing about the constructs it never reached.
+#
+# The repair is a stratified re-selection (by construct family, with the
+# families named and counted) and a bump of MANIFEST.json. It is deliberately
+# NOT done here: re-selecting the corpus without first having a gate that reads
+# it would change the numbers before anything could notice, and
+# scripts/lean4_compat/ is outside this instrument's scope. Recorded so the
+# defect is inherited knowingly.
+selection = "alphabetical-head"
+selection_is_representative = false
+selection_defect = "scripts/lean4_compat/download_tests.sh takes the alphabetical first MAX=100 of the pinned tests/lean directory; coverage of Lean constructs is incidental."
+
+[seeding]
+# SEEDED 2026-09-20. This block used to open "corpus.toml is UNSEEDED", and the
+# instructions below used to be a TODO. Both are now false: corpus.toml carries
+# 56 probes, measured by running the lowering with a `clean` built
+# `--features trust-ir-backend` — the build the change that landed this
+# instrument had not performed. 11 are pinned `lowers` and 45 `rejected`. None
+# was guessed; a fabricated `expected` column is worse than an empty one,
+# because it makes the gate green while measuring nothing.
+#
+# The ramp below is kept as written. While corpus.toml was empty,
+# run_upstream_lean.py printed UNSEEDED loudly and exited 0, so this leg could
+# sit in the pre-push gate without blocking every push on work nobody had done;
+# on `unseeded_until` it starts FAILING. That is the same self-expiring
+# discipline the exception rows use: a ramp that cannot rot silently, because
+# the deadline is in the file and the gate reads it.
+#
+# WHAT THE SEEDING DID NOT CLOSE, stated so the next reader does not infer it:
+# Trust's G2 conjunct `zero_upstream_lean_semantic_regressions` refuses any
+# probe pinned other than `lowers`, so 45 of these 56 are refusals it cannot
+# accept. Seeding turned "this leg measures nothing" into "this leg measures a
+# real 11 of 56". That is progress; it is not the conjunct going green.
+#
+# TO RE-SEED (a maintainer, after a lowering change):
+#   tests/upstream-lean/run_upstream_lean.py --build --seed-from-corpus-dir
+#   # (--build runs `targo --unverified build --release -p clean --features
+#   #  trust-ir-backend` and measures exactly that binary; since 2026-10-07 the
+#   #  runner never takes a `clean` it was not built or named)
+#   # review every row it proposes, then commit corpus.toml
+# NOTE the package is `clean`, not `clean-cli`: the shim is deprecated and does
+# not accept `--emit trustir`, so building it produces a binary that seeds
+# nothing and says so only indirectly.
+unseeded_until = "2026-12-01"
+seed_command = "tests/upstream-lean/run_upstream_lean.py --build --seed-from-corpus-dir"
+
+# --- surfaces -----------------------------------------------------------------
+#
+# Every `status` below is `unknown` — "not yet classified". These are seeds, NOT
+# a compatibility claim. Do NOT hand-edit them to "compatible"; that fabricates a
+# drop-in-parity claim. Each value must come from a real run recorded in
+# reports/. Valid values mirror the Rust-side BaselineStatus:
+#   compatible | diverged | missing_local | missing_upstream | unknown
+
+[[entries]]
+id = "lean.parse"
+title = "upstream Lean parses"
+surface = "parser"
+upstream_artifact = "leanprover/lean4 tests/lean/*.lean"
+local_artifact = "crates/clean-parser"
+status = "unknown"
+labels = ["upstream-lean", "parser"]
+
+[entries.expectation]
+upstream_behavior = "Lean 4 parses the file at the pinned revision"
+local_behavior = "clean-parser produces a tree, or a LOUD ParseError — never a fabricated tree"
+compatibility_rule = "a silent misparse is never acceptable; a loud gap is accountable by an active exception row"
+
+[[entries]]
+id = "lean.elab"
+title = "upstream Lean elaborates and type-checks"
+surface = "elaborator"
+upstream_artifact = "leanprover/lean4 tests/lean/*.lean"
+local_artifact = "crates/clean-elab"
+status = "unknown"
+labels = ["upstream-lean", "elaborator"]
+
+[entries.expectation]
+upstream_behavior = "Lean 4 elaborates and kernel-checks every declaration"
+local_behavior = "clean elaborates and kernel-checks the same declarations"
+compatibility_rule = "an elaboration failure must be covered by an active exception row"
+
+[[entries]]
+id = "lean.trust-ir"
+title = "upstream Lean lowers to TrustIr"
+surface = "trust_ir"
+upstream_artifact = "leanprover/lean4 tests/lean/*.lean"
+local_artifact = "crates/clean-compiler/src/emit_trust_ir.rs"
+status = "unknown"
+labels = ["upstream-lean", "trust-ir", "contract"]
+
+[entries.expectation]
+upstream_behavior = "n/a — TrustIr is Trust's contract, not an upstream Lean surface"
+local_behavior = "`clean compile <file> --decl <name> --emit trustir` emits a textual TrustIr module"
+compatibility_rule = "this is the surface the two-language plan's drop-in claim actually rests on, and it is the one no pre-existing runner measured"

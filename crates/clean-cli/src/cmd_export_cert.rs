@@ -24,7 +24,7 @@ use anyhow::{anyhow, bail};
 use clean_elab::register::reset_kernel_check_counter;
 use clean_elab::{
     elaborate_decl_and_register_with_context_and_warning, kernel_check_failure_count,
-    preprocess_decl_with_context, ElabResult, FileContext,
+    preprocess_decl_with_context, ElabResult, FileContext, RegistrationWarningKind,
 };
 use clean_kernel::cert::bundle::CertBundle;
 use clean_kernel::cert::{CrossProjectCert, ProofCert, ProverInfo, ProverSystem};
@@ -38,6 +38,10 @@ use crate::cli::ExportCertArgs;
 
 /// Top-level dispatch for `clean export-cert`.
 pub(crate) fn handle_export_cert_command(args: ExportCertArgs) -> anyhow::Result<()> {
+    // The verdict below reads the process-wide trust counters, so no other
+    // in-process run may reset or bump them in between (the test harness is
+    // exactly such a concurrent caller).
+    let _guard = crate::cmd_core::check_file_lock();
     reset_sorry_counter();
     reset_kernel_check_counter();
     let result = run_export(&args)?;
@@ -47,13 +51,63 @@ pub(crate) fn handle_export_cert_command(args: ExportCertArgs) -> anyhow::Result
     }
 
     print_summary(&result);
-    if result.exported == 0 && !args.allow_empty {
+    // A run that refused anything is not an export. Before this gate a failed
+    // declaration, a `sorry`, a kernel check failure or a sorry-tainted
+    // exported theorem were each PRINTED and the command still exited 0
+    // (round-22 verification), so a caller reading the exit code was told the
+    // file certified. `--allow-empty` waives only the empty-bundle refusal
+    // (one entry of `export_refusals`); it never waives any other.
+    let refusals = export_refusals(&result);
+    if !refusals.is_empty() {
         bail!(
-            "export-cert: no theorems exported from {} (use --allow-empty to suppress)",
-            args.file.display()
+            "export-cert: {} refused: {}",
+            args.file.display(),
+            refusals.join("; ")
         );
     }
     Ok(())
+}
+
+/// Every reason this run is not a clean export, one entry per class.
+///
+/// The empty-bundle refusal is one of them, decided HERE and not after the
+/// bundle is saved: it used to be checked in the handler after `run_export`
+/// had already written the (empty) bundle to `--out`, so a refused run left an
+/// artifact behind (round-24 verification of 29de4ae8b).
+fn export_refusals(result: &RunResult) -> Vec<String> {
+    let mut refusals = Vec::new();
+    if !result.failures.is_empty() {
+        refusals.push(format!("{} declaration(s) failed", result.failures.len()));
+    }
+    if result.sorry_axioms_observed > 0 {
+        refusals.push(format!(
+            "{} declaration(s) whose constant closure reaches sorry",
+            result.sorry_axioms_observed
+        ));
+    }
+    if result.kernel_check_failures > 0 {
+        refusals.push(format!(
+            "{} kernel check failure(s) observed during elaboration",
+            result.kernel_check_failures
+        ));
+    }
+    let tainted: Vec<&str> = result
+        .per_decl_axiom_closure
+        .iter()
+        .filter(|d| !d.trust_markers.is_empty())
+        .map(|d| d.declaration.as_str())
+        .collect();
+    if !tainted.is_empty() {
+        refusals.push(format!(
+            "exported theorem(s) whose closure reaches a trust marker: {}",
+            tainted.join(", ")
+        ));
+    }
+    // Last, so a refusal for a failed declaration is named first.
+    if result.exported == 0 && !result.allow_empty {
+        refusals.push("no theorems exported (use --allow-empty to suppress)".to_string());
+    }
+    refusals
 }
 
 #[derive(Debug, Serialize)]
@@ -70,7 +124,15 @@ struct ExportReport {
     exported_theorems: Vec<String>,
     duration_ms: u128,
     project: String,
+    /// Declarations of this run whose constant closure reaches `sorryAx` /
+    /// `sorry` — in any position, behind any alias or cited lemma — counted as
+    /// `clean check`'s `trust_summary.sorry_axioms` counts them. Until
+    /// `Clean-export-cert-report-v3` this was the elaborator's count of sorry
+    /// terms CREATED, which a sorry reached through a cited constant never
+    /// raised; that count is `sorry_terms_minted`.
     sorry_axioms_observed: u64,
+    /// Sorry terms the elaborator created during the run (additive in v3).
+    sorry_terms_minted: u64,
     kernel_check_failures: u64,
     /// Per-decl transitive AXIOM-CLOSURE dump (#97 increment #3).
     ///
@@ -82,6 +144,14 @@ struct ExportReport {
     per_decl_axiom_closure: Vec<DeclAxiomClosure>,
     /// True iff EVERY exported theorem's closure is foundational-only.
     all_axiom_closures_foundational_only: bool,
+    /// Imported modules taken from artifacts AS BUILT, with no source
+    /// compared (see `import_binding.rs`): the exported statements hold of
+    /// those artifacts' definitions, which the bundle's environment carries.
+    artifact_imports: Vec<String>,
+    /// Whether the bundle was written (false on a refused run).
+    bundle_written: bool,
+    /// Why the run was refused; empty on a clean export.
+    refusals: Vec<String>,
 }
 
 /// One theorem's transitive axiom-closure entry.
@@ -117,15 +187,24 @@ struct RunResult {
     duration_ms: u128,
     project: String,
     sorry_axioms_observed: u64,
+    sorry_terms_minted: u64,
     kernel_check_failures: u64,
     per_decl_axiom_closure: Vec<DeclAxiomClosure>,
     all_axiom_closures_foundational_only: bool,
+    /// See [`ExportReport::artifact_imports`].
+    artifact_imports: Vec<String>,
+    /// Whether the bundle was written to `out` (never on a refused run).
+    written: bool,
+    /// `--allow-empty`: an export of zero theorems is not refused.
+    allow_empty: bool,
 }
 
 impl RunResult {
     fn to_report(&self) -> ExportReport {
         ExportReport {
-            schema_version: "Clean-export-cert-report-v2",
+            // v3: `sorry_axioms_observed` is the closure census (see the
+            // field), and `sorry_terms_minted` is new.
+            schema_version: "Clean-export-cert-report-v3",
             command: "clean export-cert",
             file: self.file.display().to_string(),
             out: self.out.display().to_string(),
@@ -138,9 +217,13 @@ impl RunResult {
             duration_ms: self.duration_ms,
             project: self.project.clone(),
             sorry_axioms_observed: self.sorry_axioms_observed,
+            sorry_terms_minted: self.sorry_terms_minted,
             kernel_check_failures: self.kernel_check_failures,
             per_decl_axiom_closure: self.per_decl_axiom_closure.clone(),
             all_axiom_closures_foundational_only: self.all_axiom_closures_foundational_only,
+            artifact_imports: self.artifact_imports.clone(),
+            bundle_written: self.written,
+            refusals: export_refusals(self),
         }
     }
 }
@@ -156,9 +239,13 @@ fn compute_axiom_closures(env: &Environment, names: &[Name]) -> Vec<DeclAxiomClo
         .map(|name| {
             let deps = env.axiom_deps(name).unwrap_or_default();
             let trust = env.trust_marker_deps(name).unwrap_or_default();
-            let mut non_foundational: Vec<String> = deps.iter().map(ToString::to_string).collect();
+            // Unambiguous rendering: a one-component `«Eq.refl»` must not read
+            // as the kernel's `Eq.refl`.
+            let mut non_foundational: Vec<String> =
+                deps.iter().map(Name::to_unambiguous_string).collect();
             non_foundational.sort();
-            let mut trust_markers: Vec<String> = trust.iter().map(ToString::to_string).collect();
+            let mut trust_markers: Vec<String> =
+                trust.iter().map(Name::to_unambiguous_string).collect();
             trust_markers.sort();
             DeclAxiomClosure {
                 declaration: name.to_string(),
@@ -189,9 +276,16 @@ fn run_export(args: &ExportCertArgs) -> anyhow::Result<RunResult> {
     let declarations_parsed = decls.len();
 
     let mut env = Environment::with_prelude();
+    // The gate's base: the environment BEFORE any import. Everything an
+    // `import` loads enters structurally (never type-checked), so a
+    // declaration's cited closure is re-admitted by the kernel over this base
+    // before the declaration may be exported — exactly as `clean check`
+    // credits it. Without this, `export-cert` exported a theorem citing an
+    // imported artifact whose proof was never checked (module-trust
+    // 2026-09-26: a leftover `sorry`, a flipped proof term, an imported axiom).
+    let mut import_gate = clean_olean::ImportedConeGate::new(&env);
     let mut file_ctx = FileContext::new();
-    let import_search_paths = clean_elab::lake_import_search_paths_for_file(&args.file);
-    file_ctx.set_import_search_paths(import_search_paths);
+    file_ctx.set_import_context_for_file(&args.file);
 
     let mut certs: HashMap<Name, ProofCert> = HashMap::new();
     let mut xproj_certs: HashMap<Name, CrossProjectCert> = HashMap::new();
@@ -199,6 +293,12 @@ fn run_export(args: &ExportCertArgs) -> anyhow::Result<RunResult> {
     let mut exported_theorems: Vec<String> = Vec::new();
     let mut skipped: usize = 0;
     let mut skipped_axioms: usize = 0;
+    let mut import_binding = crate::import_binding::ImportBinding::default();
+    let mut artifact_imports: Vec<String> = Vec::new();
+    // The sorry census, as `clean check` takes it: a registered declaration
+    // (examples included) whose constant closure reaches `sorryAx` / `sorry`.
+    let mut sorry_closure = clean_kernel::env::DomainAxiomClosure::new();
+    let mut sorry_declarations: u64 = 0;
 
     for decl in &decls {
         let processed_decl = preprocess_decl_with_context(decl, &mut file_ctx);
@@ -211,6 +311,42 @@ fn run_export(args: &ExportCertArgs) -> anyhow::Result<RunResult> {
             &mut file_ctx,
         ) {
             Ok(registered) => {
+                let mut leaves: Vec<&ElabResult> = Vec::new();
+                registered.result.leaf_decls(&mut leaves);
+                for leaf in leaves {
+                    if matches!(leaf, ElabResult::Failed { .. }) {
+                        continue;
+                    }
+                    if clean_elab::register::registration_warning_for_leaf_in(
+                        &mut sorry_closure,
+                        &env,
+                        leaf,
+                    )
+                    .is_some_and(|warning| {
+                        matches!(
+                            warning.kind,
+                            RegistrationWarningKind::ExplicitSorry
+                                | RegistrationWarningKind::SyntheticSorry
+                        )
+                    }) {
+                        sorry_declarations = sorry_declarations.saturating_add(1);
+                    }
+                    if let Err(reason) = crate::check_import_gate::gate_declaration(
+                        &mut import_gate,
+                        &env,
+                        leaf,
+                        false,
+                    ) {
+                        let declaration = match leaf {
+                            ElabResult::Theorem { name, .. } => Some(name.to_string()),
+                            _ => crate::cmd_core::surface_decl_name(decl),
+                        };
+                        failures.push(ExportFailure {
+                            declaration,
+                            reason: format!("cited closure not credited: {reason}"),
+                        });
+                    }
+                }
                 process_elab_result(
                     &registered.result,
                     &env,
@@ -225,11 +361,39 @@ fn run_export(args: &ExportCertArgs) -> anyhow::Result<RunResult> {
             }
             Err(err) => {
                 failures.push(ExportFailure {
-                    declaration: None,
+                    declaration: crate::cmd_core::surface_decl_name(decl),
                     reason: format!("elaboration error: {err}"),
                 });
+                // A failed `import` leaves a partial environment; nothing is
+                // exported (or counted accepted) against it.
+                if matches!(decl, clean_parser::SurfaceDecl::Import { .. }) {
+                    break;
+                }
             }
         }
+        // An `import` just loaded artifacts: each must be the build of its
+        // source where that source is present (module-trust round 27,
+        // `import_binding.rs`); otherwise nothing is exported against it.
+        if matches!(decl, clean_parser::SurfaceDecl::Import { .. }) {
+            let findings = import_binding.examine(&file_ctx);
+            artifact_imports.extend(findings.disclosures);
+            if !findings.refusals.is_empty() {
+                failures.extend(findings.refusals.into_iter().map(|reason| ExportFailure {
+                    declaration: None,
+                    reason,
+                }));
+                break;
+            }
+        }
+    }
+    // Imports nested inside a block: examined too.
+    {
+        let findings = import_binding.examine(&file_ctx);
+        artifact_imports.extend(findings.disclosures);
+        failures.extend(findings.refusals.into_iter().map(|reason| ExportFailure {
+            declaration: None,
+            reason,
+        }));
     }
 
     let exported = certs.len();
@@ -244,20 +408,8 @@ fn run_export(args: &ExportCertArgs) -> anyhow::Result<RunResult> {
     let all_axiom_closures_foundational_only =
         per_decl_axiom_closure.iter().all(|d| d.foundational_only);
 
-    let bundle = CertBundle::build(&project, clean_version, env, certs, xproj_certs, None)
-        .map_err(|e| anyhow!("bundle build failed: {e}"))?;
-
-    if let Some(parent) = args.out.parent() {
-        if !parent.as_os_str().is_empty() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| anyhow!("creating directory {}: {e}", parent.display()))?;
-        }
-    }
-    bundle
-        .save(&args.out)
-        .map_err(|e| anyhow!("writing {}: {e}", args.out.display()))?;
-
-    Ok(RunResult {
+    let bundle_project = project.clone();
+    let mut result = RunResult {
         file: args.file.clone(),
         out: args.out.clone(),
         declarations_parsed,
@@ -268,11 +420,46 @@ fn run_export(args: &ExportCertArgs) -> anyhow::Result<RunResult> {
         exported_theorems,
         duration_ms: start.elapsed().as_millis(),
         project,
-        sorry_axioms_observed: sorry_count(),
+        sorry_axioms_observed: sorry_declarations,
+        sorry_terms_minted: sorry_count(),
         kernel_check_failures: kernel_check_failure_count(),
         per_decl_axiom_closure,
         all_axiom_closures_foundational_only,
-    })
+        artifact_imports,
+        written: false,
+        allow_empty: args.allow_empty,
+    };
+
+    // A refused run writes NO bundle: an artifact at `--out` is what a
+    // downstream `clean kernel cert verify` consumes as this file's export,
+    // and it must not exist for a file that did not export cleanly. The
+    // bundle is BUILT only for a run that will be written: the trust
+    // constructor re-derives the whole environment from the canonical base
+    // (`clean_kernel::cert::bundle_recheck`), and a run already refused (a
+    // cited artifact the import gate did not credit, say) must report that
+    // refusal, not the rebuild's view of the same defect.
+    if export_refusals(&result).is_empty() {
+        let bundle = CertBundle::build(
+            &bundle_project,
+            clean_version,
+            env,
+            certs,
+            xproj_certs,
+            None,
+        )
+        .map_err(|e| anyhow!("bundle build failed: {e}"))?;
+        if let Some(parent) = args.out.parent() {
+            if !parent.as_os_str().is_empty() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| anyhow!("creating directory {}: {e}", parent.display()))?;
+            }
+        }
+        bundle
+            .save(&args.out)
+            .map_err(|e| anyhow!("writing {}: {e}", args.out.display()))?;
+        result.written = true;
+    }
+    Ok(result)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -288,6 +475,12 @@ fn process_elab_result(
     skipped_axioms: &mut usize,
 ) {
     match result {
+        ElabResult::Diagnosed { result, diagnostics } => {
+            failures.push(ExportFailure {
+                declaration: result.declaration_name().map(ToString::to_string),
+                reason: diagnostics.iter().map(|d| d.error.to_string()).collect::<Vec<_>>().join("\n"),
+            });
+        }
         ElabResult::Theorem { name, proof, .. } => {
             export_theorem(
                 env,
@@ -314,6 +507,17 @@ fn process_elab_result(
                 );
             }
         }
+        // A `Failed` inner decl (a member of a namespace / section / mutual
+        // block) is a declaration that did NOT check. It used to fall into the
+        // `skipped` arm below, so `namespace A … theorem bad : 1 = 2 := rfl …
+        // end A` printed `skipped: 1 non-theorem declarations` and exited 0
+        // (round-22 verification). It is a failure, named and counted as one.
+        ElabResult::Failed { name, error, .. } => {
+            failures.push(ExportFailure {
+                declaration: Some(name.clone()),
+                reason: format!("elaboration error: {error}"),
+            });
+        }
         ElabResult::Axiom { name, .. } => {
             if include_axioms {
                 // Axioms have no proof term to certify — they enter the
@@ -331,9 +535,6 @@ fn process_elab_result(
         | ElabResult::Structure { .. }
         | ElabResult::Instance { .. }
         | ElabResult::Command(_)
-        // A `Failed` inner decl has no proof term to certify (it never
-        // type-checked), so it produces no cert — count it as skipped here.
-        | ElabResult::Failed { .. }
         // An `example` is anonymous and never registered (B02): there is no
         // environment `Name` for a cert to reference, so it exports nothing.
         | ElabResult::Example { .. }
@@ -406,7 +607,16 @@ fn derive_project_name(file: &Path) -> String {
 fn print_summary(result: &RunResult) {
     println!("export-cert: {}", result.file.display());
     println!("  parsed:    {} declarations", result.declarations_parsed);
-    println!("  exported:  {} theorems", result.exported);
+    // On a refused run nothing was exported: say how many theorems were
+    // accepted, never that they were exported next to `bundle: not written`.
+    if result.written {
+        println!("  exported:  {} theorems", result.exported);
+    } else {
+        println!(
+            "  exported:  0 theorems ({} accepted; refused run, nothing written)",
+            result.exported
+        );
+    }
     if result.skipped > 0 {
         println!("  skipped:   {} non-theorem declarations", result.skipped);
     }
@@ -420,12 +630,42 @@ fn print_summary(result: &RunResult) {
             println!("    - {label}: {}", f.reason);
         }
     }
-    println!("  bundle:    {}", result.out.display());
+    if result.written {
+        println!("  bundle:    {}", result.out.display());
+    } else {
+        println!("  bundle:    not written (refused run)");
+    }
+    if !result.artifact_imports.is_empty() {
+        println!(
+            "  imports:   {} {}:",
+            result.artifact_imports.len(),
+            crate::import_binding::DISCLOSURE_HEADING
+        );
+        for row in result
+            .artifact_imports
+            .iter()
+            .take(crate::import_binding::DISCLOSURE_ROWS_SHOWN)
+        {
+            println!("    - {row}");
+        }
+        if result.artifact_imports.len() > crate::import_binding::DISCLOSURE_ROWS_SHOWN {
+            println!(
+                "    … and {} more (all of them are in the `--json-report`)",
+                result.artifact_imports.len() - crate::import_binding::DISCLOSURE_ROWS_SHOWN
+            );
+        }
+    }
     println!("  duration:  {} ms", result.duration_ms);
     if result.sorry_axioms_observed > 0 {
         println!(
-            "  trust:     {} sorry axioms observed during elaboration",
+            "  trust:     {} declaration(s) whose constant closure reaches sorry",
             result.sorry_axioms_observed,
+        );
+    }
+    if result.sorry_terms_minted != result.sorry_axioms_observed && result.sorry_terms_minted > 0 {
+        println!(
+            "  trust:     {} sorry term(s) created during elaboration",
+            result.sorry_terms_minted,
         );
     }
     if result.kernel_check_failures > 0 {
@@ -435,10 +675,18 @@ fn print_summary(result: &RunResult) {
         );
     }
     // Per-decl axiom-closure verdict (#97 increment #3).
+    // On a refused run nothing was exported, and a theorem refused by the
+    // import gate has no closure worth vouching for: name them as what they
+    // are.
+    let theorems = if result.written {
+        "exported theorems"
+    } else {
+        "accepted (NOT exported) theorems"
+    };
     if !result.per_decl_axiom_closure.is_empty() {
         if result.all_axiom_closures_foundational_only {
             println!(
-                "  axioms:    all {} exported theorems have axiom closure ⊆ \
+                "  axioms:    all {} {theorems} have axiom closure ⊆ \
                  {{propext, Quot.sound, Classical.choice}}",
                 result.per_decl_axiom_closure.len(),
             );
@@ -449,7 +697,7 @@ fn print_summary(result: &RunResult) {
                 .filter(|d| !d.foundational_only)
                 .collect();
             println!(
-                "  axioms:    {} of {} exported theorems escape the foundational set:",
+                "  axioms:    {} of {} {theorems} escape the foundational set:",
                 escaping.len(),
                 result.per_decl_axiom_closure.len(),
             );
@@ -543,10 +791,13 @@ mod tests {
         let args = fresh_args(lean_path, bundle_path.clone());
         let err = handle_export_cert_command(args)
             .expect_err("broken theorem should produce a non-zero exit");
+        // Refused for the failed declaration itself (named in the report),
+        // not merely for exporting nothing.
         assert!(
-            err.to_string().contains("no theorems exported"),
+            err.to_string().contains("refused: 1 declaration(s) failed"),
             "unexpected error: {err}",
         );
+        assert!(!bundle_path.exists(), "a refused run writes no bundle");
     }
 
     #[test]
@@ -566,4 +817,239 @@ mod tests {
         assert_eq!(bundle.theorem_count(), 1);
         assert!(bundle.has_theorem("trivial2"));
     }
+
+    /// Round-22 verification of `317f48b45` (and clean `main`): a theorem
+    /// that failed inside a `namespace` / `section` was reported as `skipped:
+    /// 1 non-theorem declarations`, a failure or a `sorry` was printed, and
+    /// every one of these exited 0 with a bundle written.
+    #[test]
+    fn export_cert_refuses_every_failed_or_tainted_run_and_writes_no_bundle() {
+        let attacks: &[(&str, &str, Option<&str>)] = &[
+            (
+                "namespace",
+                "namespace A\ntheorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := rfl\nend A\n",
+                Some("A.bad"),
+            ),
+            (
+                "section",
+                "section S\ntheorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := rfl\nend S\n",
+                Some("bad"),
+            ),
+            (
+                "top level",
+                "theorem good : 1 = 1 := rfl\ntheorem bad : 1 = 2 := rfl\n",
+                Some("bad"),
+            ),
+            (
+                "sorry theorem in a namespace",
+                "theorem good : 1 = 1 := rfl\nnamespace A\ntheorem bad : 1 = 2 := sorry\nend A\n",
+                None,
+            ),
+        ];
+        for (label, source, failed_name) in attacks {
+            let dir = tempfile::tempdir().expect("create temp dir");
+            let lean_path = write_tmp(dir.path(), "attack.lean", source);
+            let bundle_path = dir.path().join("attack.cleancert");
+            let report_path = dir.path().join("attack.json");
+            let mut args = fresh_args(lean_path, bundle_path.clone());
+            args.json_report = Some(report_path.clone());
+            // `--allow-empty` must not waive a refusal either.
+            args.allow_empty = true;
+            let err = handle_export_cert_command(args)
+                .expect_err(&format!("{label}: a refused run must exit non-zero"));
+            assert!(
+                err.to_string().contains("refused"),
+                "{label}: unexpected error: {err}"
+            );
+            assert!(
+                !bundle_path.exists(),
+                "{label}: a refused run must not write a bundle"
+            );
+            let report: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&report_path).expect("report"))
+                    .expect("report parses");
+            assert_eq!(report["bundle_written"], false, "{label}");
+            assert!(
+                !report["refusals"].as_array().expect("refusals").is_empty(),
+                "{label}"
+            );
+            if let Some(name) = failed_name {
+                let failures = report["failures"].as_array().expect("failures");
+                assert!(
+                    failures
+                        .iter()
+                        .any(|f| f["declaration"].as_str() == Some(*name)),
+                    "{label}: the failed theorem must be NAMED as a failure, got {failures:?}"
+                );
+                assert_eq!(
+                    report["skipped"], 0,
+                    "{label}: a failed theorem is not a skipped non-theorem"
+                );
+            } else {
+                // The only row with no named failure is the sorry attack: it
+                // must be refused FOR the sorry, not for an unrelated reason.
+                let refusals = report["refusals"].as_array().expect("refusals");
+                assert!(
+                    refusals
+                        .iter()
+                        .filter_map(|r| r.as_str())
+                        .any(|r| r.contains("sorry") || r.contains("trust marker")),
+                    "{label}: a sorry-tainted run must be refused for the sorry / trust marker, got {refusals:?}"
+                );
+            }
+        }
+    }
+
+    /// Round-24 verification of 29de4ae8b: an export of zero theorems without
+    /// `--allow-empty` exited 1 but had already written the empty bundle to
+    /// `--out`. A refused run writes nothing; `--allow-empty` still writes.
+    #[test]
+    fn export_cert_empty_export_is_refused_before_anything_is_written() {
+        for (label, source) in [
+            ("definitions only", "def my_zero : Nat := Nat.zero\n"),
+            ("comment only", "-- nothing here\n"),
+        ] {
+            let dir = tempfile::tempdir().expect("create temp dir");
+            let lean_path = write_tmp(dir.path(), "empty.lean", source);
+            let bundle_path = dir.path().join("empty.cleancert");
+            let report_path = dir.path().join("empty.json");
+            let mut args = fresh_args(lean_path.clone(), bundle_path.clone());
+            args.json_report = Some(report_path.clone());
+            let err = handle_export_cert_command(args)
+                .expect_err(&format!("{label}: an empty export must be refused"));
+            assert!(
+                err.to_string().contains("no theorems exported"),
+                "{label}: unexpected error: {err}"
+            );
+            assert!(
+                !bundle_path.exists(),
+                "{label}: a refused empty export must not write a bundle"
+            );
+            let report: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&report_path).expect("report"))
+                    .expect("report parses");
+            assert_eq!(report["bundle_written"], false, "{label}");
+
+            let mut args = fresh_args(lean_path, bundle_path.clone());
+            args.allow_empty = true;
+            handle_export_cert_command(args)
+                .unwrap_or_else(|e| panic!("{label}: --allow-empty must accept: {e}"));
+            assert!(
+                bundle_path.exists(),
+                "{label}: --allow-empty writes the bundle"
+            );
+        }
+    }
+
+    /// Measured on origin/main 4bacc8770: `axiom proofIrrel : False` (a name
+    /// on the old foundational whitelist, declared nowhere by the kernel) and a
+    /// theorem of `False` through it exported with "all exported theorems have
+    /// axiom closure ⊆ {propext, Quot.sound, Classical.choice}", and the bundle
+    /// verified `all_passed` with nothing disclosed. Now the closure names the
+    /// axiom, and the bundle's verify result discloses it.
+    #[test]
+    fn export_cert_discloses_a_legacy_whitelist_name_axiom() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let lean_path = write_tmp(
+            dir.path(),
+            "spoof.lean",
+            "axiom proofIrrel : False
+theorem bad : False := proofIrrel
+",
+        );
+        let bundle_path = dir.path().join("spoof.cleancert");
+        let report_path = dir.path().join("spoof.json");
+        let mut args = fresh_args(lean_path, bundle_path.clone());
+        args.json_report = Some(report_path.clone());
+        handle_export_cert_command(args).expect("an axiom-backed export is not refused");
+        let report: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&report_path).expect("report"))
+                .expect("report parses");
+        assert_eq!(report["all_axiom_closures_foundational_only"], false);
+        assert_eq!(
+            report["per_decl_axiom_closure"][0]["non_foundational_axioms"],
+            serde_json::json!(["proofIrrel"])
+        );
+
+        let bundle = CertBundle::load(&bundle_path).expect("load bundle");
+        let result = bundle.verify_all().expect("verify bundle");
+        assert!(result.all_passed());
+        assert!(result
+            .axioms
+            .other_axioms
+            .contains(&"proofIrrel".to_string()));
+        assert_eq!(
+            result.axioms.theorem_assumptions,
+            vec![("bad".to_string(), vec!["proofIrrel".to_string()])]
+        );
+    }
+
+    /// `sorry_axioms_observed` is the closure census `clean check` takes
+    /// (`trust_summary.sorry_axioms`): a declaration whose constant closure
+    /// reaches `sorryAx`, in any position. Measured on origin/main 4bacc8770:
+    /// `clean check` counted 1 and 2 for these sources while export-cert
+    /// reported 0 for both — it counted the elaborator's CREATED sorry terms,
+    /// which a non-literal `@sorryAx` and a sorry behind an alias never raise.
+    #[test]
+    fn export_cert_sorry_census_is_the_closure_census() {
+        for (label, source, census) in [
+            (
+                "example with a non-literal flag",
+                "theorem ok : True := True.intro\nexample : False := @sorryAx False (!true)\n",
+                1,
+            ),
+            (
+                "sorry behind an alias",
+                "def s := @sorryAx\ntheorem ok : True := True.intro\ntheorem bad : False := s False true\n",
+                2,
+            ),
+        ] {
+            let dir = tempfile::tempdir().expect("create temp dir");
+            let lean_path = write_tmp(dir.path(), "sorry.lean", source);
+            let bundle_path = dir.path().join("sorry.cleancert");
+            let report_path = dir.path().join("sorry.json");
+            let mut args = fresh_args(lean_path, bundle_path.clone());
+            args.json_report = Some(report_path.clone());
+            let err = handle_export_cert_command(args)
+                .expect_err(&format!("{label}: a sorry-reaching run is refused"));
+            assert!(
+                err.to_string()
+                    .contains("declaration(s) whose constant closure reaches sorry"),
+                "{label}: the refusal names the sorry census: {err}"
+            );
+            let report: serde_json::Value =
+                serde_json::from_str(&std::fs::read_to_string(&report_path).expect("report"))
+                    .expect("report parses");
+            assert_eq!(report["schema_version"], "Clean-export-cert-report-v3");
+            assert_eq!(report["sorry_axioms_observed"], census, "{label}: {report}");
+            assert_eq!(report["sorry_terms_minted"], 0, "{label}: {report}");
+            assert!(!bundle_path.exists(), "{label}: a refused run writes no bundle");
+        }
+    }
+
+    /// A one-component `«Quot.sound»` prints exactly like the kernel's
+    /// `Quot.sound`; it is refused at the declaration, so nothing is exported.
+    #[test]
+    fn export_cert_refuses_a_printed_form_foundation_spoof() {
+        let dir = tempfile::tempdir().expect("create temp dir");
+        let lean_path = write_tmp(
+            dir.path(),
+            "spoof.lean",
+            "axiom «Quot.sound» : False
+theorem bad : False := «Quot.sound»
+",
+        );
+        let bundle_path = dir.path().join("spoof.cleancert");
+        let err = handle_export_cert_command(fresh_args(lean_path, bundle_path.clone()))
+            .expect_err("a reserved kernel name must refuse the export");
+        assert!(
+            err.to_string().contains("declaration(s) failed"),
+            "unexpected error: {err}"
+        );
+        assert!(!bundle_path.exists(), "a refused run writes no bundle");
+    }
 }
+
+#[cfg(test)]
+#[path = "cmd_export_cert_gate_tests.rs"]
+mod gate_tests;

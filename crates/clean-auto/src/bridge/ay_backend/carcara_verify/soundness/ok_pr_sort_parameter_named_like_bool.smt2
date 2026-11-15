@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-datatypes ((Box 1)) ((par (Bool) ((mk (val Bool))))))
+(declare-const a (Box Bool))
+(declare-const b (Box Bool))
+(declare-const c (Box Bool))
+(assert (distinct (val a) (val b) (val c)))
+(check-sat)

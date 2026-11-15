@@ -59,13 +59,14 @@ pub struct InstanceExtEntry {
 
 impl InstanceExtEntry {
     fn encode_payload(&self) -> Vec<u8> {
-        let mut payload = Vec::with_capacity(PRIORITY_BYTES + self.class_name.to_string().len());
-        payload.extend_from_slice(&(self.priority as u64).to_le_bytes());
-        payload.extend_from_slice(self.class_name.to_string().as_bytes());
-        payload
+        super::ext_name_payload::encode(&self.class_name, self.priority)
     }
 
     fn decode_payload(bytes: &[u8]) -> Option<(Name, u32)> {
+        if super::ext_name_payload::is_versioned(bytes) {
+            return super::ext_name_payload::decode(bytes);
+        }
+        // Explicit legacy display projection, not a fallback for versioned data.
         if bytes.len() < PRIORITY_BYTES {
             return None;
         }
@@ -97,6 +98,14 @@ impl PersistentExtEntry for InstanceExtEntry {
             // (Without this, every imported stdlib `@[instance]` was silently
             // invisible to typeclass resolution.)
             EnvExtensionEntryData::Object(bytes) => {
+                if super::ext_name_payload::is_versioned(bytes) {
+                    let (class_name, priority) = Self::decode_payload(bytes)?;
+                    return Some(Self {
+                        instance_name: entry.name.clone(),
+                        class_name,
+                        priority,
+                    });
+                }
                 Self::decode_payload(bytes).unwrap_or((Name::anon(), DEFAULT_INSTANCE_PRIORITY))
             }
             EnvExtensionEntryData::Scalar(_) => return None,

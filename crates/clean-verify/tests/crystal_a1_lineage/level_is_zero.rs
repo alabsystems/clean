@@ -492,6 +492,69 @@ fn regex_lite_const_i64(text: &str) -> Vec<(&str, u64)> {
         .collect()
 }
 
+/// The `ir_lzb_deref` model's Arc-data offset, and the thing that keeps the
+/// spec and the machine in step.
+///
+/// AUDIT r16 M16-6 found this as a THIRD, unrecorded clause of the clause-(a)
+/// residual: four committed artifacts enumerated it as exactly two things, and
+/// `designs/2026-08-26-a0-semantic-no-escape.md` states the residual as the
+/// identity `Some(x).as_deref().expect(_) == &*x`, which the model did not
+/// implement — it returned the loaded field word, `x`, where
+/// `<Arc<T> as Deref>::deref` returns the address of the Arc's DATA, past the
+/// strong/weak header. That was not a weak assumption but a false one: it made
+/// `EncodesLevelArcF` unsatisfiable by any real `Level` heap at exactly the
+/// `Succ`/`Max`/`IMax` nodes link 4 is about.
+///
+/// **The strengthening has landed.** `ir_lzb_deref` carries a `const i64 16`
+/// and a `gep`, `EncodesLevelArcF` places each child at `Nat.add b ir_d16`, and
+/// the two `Eq.refl` cost equations moved with it (`ir_lzb_cost_halts_max`
+/// 37 → 41, `ir_lzb_cost_halts_imax` 20 → 22). So the model no longer ASSUMES
+/// an offset of zero — it assumes THIS one, and this test is what says the
+/// machine still agrees. If `Arc`'s header ever changed size, the spec would be
+/// describing a heap the compiler does not build, and the failure would
+/// otherwise be silent: every theorem over `ir_lzb_module` would still be
+/// kernel-checked, and every one of them would be about the wrong memory.
+#[test]
+fn deref_model_arc_data_offset_is_what_the_model_assumes() {
+    use clean_kernel::level::Level;
+    use std::sync::Arc;
+    /// What `ir_lzb_deref` computes: the stored field word plus this, spelled
+    /// `IRConst.int_ ir_d16` in `SRC_DEREF_B0` and `Nat.add b ir_d16` in
+    /// `EncodesLevelArcF`'s three recursive arms.
+    const ARC_DATA_OFFSET_THE_MODEL_ASSUMES: usize = 16;
+    /// What the machine does, measured. Ledger row A-CLZ-DEREF-ARC-DATA-OFFSET.
+    const ARC_DATA_OFFSET_MEASURED: usize = 16;
+
+    let opt: Option<Arc<Level>> = Some(Arc::new(Level::zero()));
+    // SAFETY: `Option<Arc<Level>>` is niche-packed to exactly one pointer-sized
+    // word -- asserted by `deref_model_layout_premise_none_is_the_null_niche`
+    // below, which is the premise this test extends. The word is read as an
+    // integer and never dereferenced.
+    let stored: usize = unsafe { *(std::ptr::addr_of!(opt).cast::<usize>()) };
+    let data = opt.as_deref().expect("Some") as *const Level as usize;
+    let measured = data.wrapping_sub(stored);
+    assert_eq!(
+        measured, ARC_DATA_OFFSET_MEASURED,
+        "the Arc data offset moved. Every theorem over `ir_lzb_module` stands on \
+         the gap between the pointer stored in a `LevelArc` field and what \
+         `<LevelArc as Deref>::deref` returns (the Arc's DATA pointer). The \
+         recorded measurement is {}; the machine now says {}. Re-measure before \
+         touching anything else.",
+        ARC_DATA_OFFSET_MEASURED, measured
+    );
+    assert_eq!(
+        measured, ARC_DATA_OFFSET_THE_MODEL_ASSUMES,
+        "the model and the machine have come apart. `ir_lzb_deref` geps by {} \
+         and `EncodesLevelArcF` places every child at `b + {}`, but the machine's \
+         offset is {}. Nothing here would fail on its own: the spec would still \
+         kernel-check, and every theorem over `ir_lzb_module` would be about a \
+         heap the compiler does not build. Change the model's `IRConst.int_` and \
+         the relation's three recursive arms together, and re-derive \
+         `ir_lzb_cost_halts_max` / `ir_lzb_cost_halts_imax`.",
+        ARC_DATA_OFFSET_THE_MODEL_ASSUMES, ARC_DATA_OFFSET_THE_MODEL_ASSUMES, measured
+    );
+}
+
 /// The `ir_lzb_deref` model's LAYOUT premise, pinned as a compiled assertion.
 ///
 /// The clause-(a) residual (owner ruling 2026-08-27, `data/crystal_a0_discharge.json`)

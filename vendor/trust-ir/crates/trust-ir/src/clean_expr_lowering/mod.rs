@@ -35,6 +35,10 @@ pub mod castoverflow;
 pub mod contract;
 pub mod divnonzero;
 pub mod indexinbounds;
+// WS1.13 slice 1: the pinned statement grounder of the `clean_island` anchor —
+// what a `lean.theorem` row's first-order formula MEANS as a kernel
+// proposition over island constants. Fail-closed like `contract`.
+pub mod island;
 pub mod negationoverflow;
 pub mod shiftinrange;
 

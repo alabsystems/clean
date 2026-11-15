@@ -48,9 +48,12 @@ const SEARCH_DESC: FeatureDescriptor = FeatureDescriptor {
     summary: "Search Mathverse Library declarations by name or semantic type",
     description: "Searches the loaded `.mathverse` shards for declarations matching a pattern. \
          `--mode name` runs a case-insensitive substring match on declaration \
-         names — fast, suitable for interactive browsing. `--mode type` runs a \
-         BM25 semantic search over names and types — slower, higher recall when \
-         you know what you want to prove but not its Lean 4 name. Results \
+         names — fast, suitable for interactive browsing. `--mode type` is a \
+         TYPE-DIRECTED structural search: the pattern must NAME AN EXISTING \
+         declaration (exact, then loose resolution), whose type anchors a \
+         discrimination-tree query for declarations with similar types — it is \
+         find-things-shaped-like-this, not free-text search, and a pattern that \
+         resolves to no declaration is an error. Results \
          include the source system, import confidence, and declaration kind. \
          Pass `--json` for machine-readable output.",
     category: Category::Import,
@@ -61,8 +64,8 @@ const SEARCH_DESC: FeatureDescriptor = FeatureDescriptor {
             what: "name-substring search for `Nat.add`",
         },
         Example {
-            cmd: "clean mathverse search \"group theory\" --mode type --limit 10",
-            what: "BM25 semantic search, top 10 results",
+            cmd: "clean mathverse search Nat.add_comm --mode type --limit 10",
+            what: "the 10 declarations whose types are structurally nearest to Nat.add_comm's",
         },
     ],
     see_also: &["mathverse info", "mathverse stats", "mathverse systems"],
@@ -146,7 +149,10 @@ const SYSTEMS_DESC: FeatureDescriptor = FeatureDescriptor {
 const REPLAY_CORPUS_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "replay-corpus"],
     summary: "Generate deterministic Mathverse replay production-corpus evidence",
-    description: "Scans the checked-in Mathlib/Batteries Mathverse tactic corpus and \
+    description: "Scans the LOCAL Mathlib/Batteries tactic corpus under \
+         `data/raw/mathlib4/` — gitignored, provisioned by the mathverse \
+         download tooling, NOT checked in (a fresh clone has no corpus until it \
+         is fetched) — and \
          writes fail-closed replay accounting as JSON. This is the Rust-owned \
          replacement for the old Python production-corpus generator; it records \
          found, rejected, unsupported, and bounded native-gate-witness obligations \
@@ -192,8 +198,14 @@ const STAMP_VERIFIED_DESC: FeatureDescriptor = FeatureDescriptor {
          `.olean` files (or directories) to `.mathverse` shards via the heuristic \
          importer — which stores zero KernelVerified — then re-verifies the merged \
          corpus in Clean's own kernel and destructively stamps `KernelVerified` into \
-         the shard bytes for exactly the constants whose value passed the kernel's \
-         `check_type`. The stored KernelVerified count is re-read from disk and \
+         the shard bytes for exactly the constants the kernel ACCEPTED. That is \
+         three arms, not one: a value re-checked through `add_decl`'s \
+         `infer_sort`/`check_type`; an inductive-family member admitted by a \
+         checked `add_inductive` replay or a type match against a member the \
+         kernel already built; and a value-LESS axiom discharged by a proof term \
+         Clean synthesizes for its stated type. All three are kernel-established \
+         — but only the first re-checks a value the shard carried. \
+         The stored KernelVerified count is re-read from disk and \
          reported. Pass `--closure-root <lib/lean>` to load a target module's \
          TRANSITIVE IMPORT CLOSURE (plus sibling lake packages) into the kernel \
          environment first, so real Mathlib modules — whose proofs reference \
@@ -238,7 +250,9 @@ const PER_CONSTANT_VERIFY_DESC: FeatureDescriptor = FeatureDescriptor {
          changed proof always re-verifies. `--receipt` mints a Merkle trust receipt \
          (P4) over the kernel-verified target(s); `--print-digests` audits \
          determinism of the demand walk. SOUNDNESS: the closure is trusted imported \
-         context — only the named target(s) are kernel-checked and stamped.",
+         context — only the named target(s) are kernel-checked and earn a verdict. \
+         (Unlike `stamp-verified`, nothing here rewrites shard bytes: the verdict \
+         lands in receipts, leaves and the `.vstamp` sidecar.)",
     category: Category::Import,
     stability: Stability::Usable,
     examples: &[
@@ -814,7 +828,9 @@ const BUILD_LIBRARY_DESC: FeatureDescriptor = FeatureDescriptor {
     description: "Orchestrates the complete pipeline that produces a \
          downloader-compatible `mathverse-library-v*.tar.zst` release: \
          verifies/installs prereqs (git, cargo, b3sum, zstd), clones the \
-         upstream proof system sources configured in `data/mathverse_sources.toml` \
+         upstream proof system sources — the clone list is HARDCODED in \
+         `scripts/download_all_libraries.sh` (`data/mathverse_sources.toml` \
+         documents the sources but nothing reads it as configuration) \
          (including Lean 3 mathlib3 — note \
          that Lean 3 import is text-based and does not require a Lean 3 \
          toolchain), runs `mathverse_convert all` to produce `.mathverse` shards, \
@@ -1022,7 +1038,7 @@ const GRADUATION_RECORD_DESC: FeatureDescriptor = FeatureDescriptor {
                   --from data/graduation/nat-fib-sum-sq/nat-fib-sum-sq-graduated.graduation.json \
                   --shard data/graduation/nat-fib-sum-sq/nat-fib-sum-sq-graduated.mathverse \
                   --out data/graduation/nat-fib-sum-sq/nat-fib-sum-sq.record.json",
-            what: "project a full graduation record + shard into the compact git record.json",
+            what: "project the full record and shard a graduation run writes into the compact git record.json",
         },
         Example {
             cmd: "clean mathverse graduation-record \
@@ -1080,12 +1096,12 @@ const RATCHET_CHECK_DESC: FeatureDescriptor = FeatureDescriptor {
          `data/mathlib_kv_ratchet.json`. Pure read + integer comparison — never \
          touches the kernel or a shard byte, so it can only turn the gate RED, \
          never promote a constant. Subsumes the retired \
-         `scripts/check_kv_ratchet.py`.",
+         the retired `scripts/check_kv_ratchet.py`.",
     category: Category::Import,
     stability: Stability::Usable,
     examples: &[Example {
         cmd: "clean mathverse ratchet check --summary data/last_stamp_summary.json --json",
-        what: "compare a saved stamp summary against the ratchet baseline (JSON)",
+        what: "compare the summary a prior stamp run writes against the ratchet baseline (JSON)",
     }],
     see_also: &["mathverse ratchet update", "mathverse stamp-verified"],
     references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],
@@ -1104,12 +1120,12 @@ const RATCHET_UPDATE_DESC: FeatureDescriptor = FeatureDescriptor {
          run can never be ratcheted. Rewrites the baseline JSON \
          (`kernel_verified_baseline`, `stored_kernel_verified_baseline`, \
          date-only `last_updated`) while preserving the existing operator \
-         `notes`. Subsumes `scripts/check_kv_ratchet.py --update`.",
+         `notes`. Subsumes the retired `scripts/check_kv_ratchet.py --update`.",
     category: Category::Import,
     stability: Stability::Usable,
     examples: &[Example {
         cmd: "clean mathverse ratchet update --summary data/last_stamp_summary.json",
-        what: "raise the ratchet baseline from a real corpus stamp summary",
+        what: "raise the ratchet baseline from the summary a real corpus stamp run writes",
     }],
     see_also: &["mathverse ratchet check", "mathverse stamp-verified"],
     references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],
@@ -1136,7 +1152,7 @@ const ELISION_GATE_DESC: FeatureDescriptor = FeatureDescriptor {
     stability: Stability::Usable,
     examples: &[Example {
         cmd: "clean mathverse elision-gate data/kv_elision_opaque.json data/kv_elision_oat.json",
-        what: "fail closed if opaque-and-theorem dropped a KernelVerified constant opaque kept",
+        what: "fail closed if opaque-and-theorem dropped a KernelVerified constant opaque kept; both inputs are manifests the paired stamp runs write",
     }],
     see_also: &["mathverse stamp-verified", "mathverse fingerprint"],
     references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],
@@ -1161,7 +1177,7 @@ const FINGERPRINT_DESC: FeatureDescriptor = FeatureDescriptor {
     stability: Stability::Usable,
     examples: &[Example {
         cmd: "clean mathverse fingerprint reports/kv-manifest.json --json",
-        what: "print a manifest's recorded reproducibility env fingerprint as JSON",
+        what: "print the recorded reproducibility env fingerprint of a manifest a stamp run writes, as JSON",
     }],
     see_also: &["mathverse stamp-verified", "mathverse elision-gate"],
     references: &[MATHVERSE_DESIGN_REF, ISSUE_3436],

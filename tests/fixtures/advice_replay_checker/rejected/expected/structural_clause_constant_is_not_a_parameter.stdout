@@ -1,0 +1,3 @@
+$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/rejected/structural_clause_constant_is_not_a_parameter.lean:4:0: error: The termination measure of a structurally recursive function must be one of the parameters 'tag' and 'x✝', but
+  0
+isn't one of these.

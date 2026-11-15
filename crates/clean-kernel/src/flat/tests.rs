@@ -623,6 +623,7 @@ proptest! {
 /// - Out-of-bounds accesses
 ///
 /// Run with: `cargo +nightly miri test flat::tests::miri_`
+/// STOCK EXCEPTION (Trust lacks miri; measured `targo --unverified miri` -> `error: no such command: miri`, and the seal ships no rust-src).
 ///
 /// All 7 tests pass under Miri, verifying no UB in flat serialization paths.
 mod miri_tests {

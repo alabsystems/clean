@@ -7,6 +7,8 @@
 /// A parsed attribute like `@[instance 50]` or `@[defaultInstance]`
 ///
 /// Covers core Lean 4 builtin attributes. Based on Lean 4 reference documentation.
+use super::name::SurfaceName;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Attribute {
     // === Type class instance attributes ===
@@ -35,6 +37,13 @@ pub enum Attribute {
     Refl,
     /// `@[symm]` - register symmetry lemma
     Symm,
+    /// `@[grind]` and its modifier family (`=`, `←`, `cases`, `ext`, …).
+    ///
+    /// Lean's `grind` attribute (`Lean/Meta/Tactic/Grind/Attr.lean`) takes an
+    /// optional `grindMod`. The modifier is PARSED and carried rather than
+    /// skipped because the kinds are not interchangeable: a `←` lemma applied
+    /// left to right would rewrite in the wrong direction.
+    Grind(GrindAttrKind),
 
     // === Reducibility attributes ===
     /// `@[reducible]` - unfold during elaboration and definitional equality
@@ -66,7 +75,7 @@ pub enum Attribute {
     /// `@[export name]` - export function to C with given name
     Export(String),
     /// `@[implemented_by name]` - replace with external implementation
-    ImplementedBy(String),
+    ImplementedBy(SurfaceName),
 
     // === Documentation/deprecation ===
     /// `@[deprecated]` or `@[deprecated "message"]` - mark as deprecated
@@ -88,9 +97,51 @@ pub enum Attribute {
     /// `@[aesop ...]` - aesop rule registration
     Aesop(AesopAttr),
 
+    // === Attribute kinds ===
+    /// `local <attr>` — Lean's `attrKind := optional («scoped» <|> «local»)`
+    /// in front of an attribute (`Lean/Parser/Term.lean`): the attribute is in
+    /// force until the enclosing section or namespace ends. Lifted out of
+    /// [`Self::Unknown`] only for the attributes whose scoping Clean models —
+    /// today `simp`, `csimp` and `instance`; every other `local …` keeps its legacy
+    /// `Unknown("local")` spelling.
+    Local(Box<Attribute>),
+    /// `scoped <attr>`: the attribute is in force wherever the CURRENT
+    /// namespace is active (`namespace`, `open`). Lifted out of
+    /// the parser's error arm for `instance` and `csimp`; every other `scoped …`
+    /// attribute is still a parse error.
+    Scoped(Box<Attribute>),
+
     // === Fallback ===
-    /// Unknown attribute (stored for error reporting)
+    /// Named attribute, handled by name when modeled or retained for diagnostics.
     Unknown(String),
+}
+
+/// The modifier on an `@[grind …]` attribute.
+///
+/// Mirrors the shapes of Lean's `Lean.Meta.Grind.AttrKind`
+/// (`Lean/Meta/Tactic/Grind/Attr.lean`, `getAttrKindCore`). Anything outside
+/// the modeled set is kept VERBATIM in [`GrindAttrKind::Unmodeled`] rather than
+/// rejected — `@[grind ←]`, `@[grind cases]` and `@[grind ext]` all occur in
+/// Mathlib and must keep elaborating.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum GrindAttrKind {
+    /// Bare `@[grind]` — Lean's `AttrKind.infer`.
+    #[default]
+    Infer,
+    /// `@[grind =]` / `@[grind = gen]` — E-match on the equation's LHS.
+    EqLhs,
+    /// `@[grind →]` — forward.
+    Forward,
+    /// `@[grind ←]` / `@[grind ← gen]` — backward.
+    Backward,
+    /// `@[grind cases]` / `@[grind cases eager]`.
+    Cases,
+    /// `@[grind ext]`.
+    Ext,
+    /// `@[grind intro]`.
+    Intro,
+    /// Any other modifier, kept verbatim.
+    Unmodeled(String),
 }
 
 /// Simp lemma priority

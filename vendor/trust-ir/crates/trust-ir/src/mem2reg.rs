@@ -15,9 +15,9 @@
 //!
 //! The cost is IR bloat: a tiny straight-line action that would be a handful
 //! of arithmetic SSA values balloons into dozens of `Alloca`/`Load`/`Store`
-//! nodes. Downstream `trust-cg` would eventually promote these via SROA/
-//! mem2reg anyway, but only after paying to materialize, type-check, and
-//! schedule all that memory traffic. Promoting the obvious cases *here*,
+//! nodes. Downstream `trust-cg` can promote supported shapes when its selected
+//! optimization pipeline includes SROA, but only after paying to materialize
+//! and type-check that memory traffic. Promoting the obvious cases *here*,
 //! cheaply, shrinks the IR before it ever reaches codegen.
 //!
 //! # What this pass does (and only this)
@@ -26,11 +26,12 @@
 //! the allocas for which promotion is **provably value-identical with zero phi
 //! insertion**. An alloca is promoted iff:
 //!
-//! 1. **It never escapes.** The alloca's result `ValueId` is used *only* as
+//! 1. **It never escapes.** A scalar alloca's result `ValueId` is used *only* as
 //!    the `ptr` operand of `Load`/`Store`. It is never GEP'd, never stored as
 //!    a value, never passed to a call, never returned, never used as any other
-//!    operand. (Escape detection reuses [`rewrite_inst`]; see
-//!    [`alloca_escapes_in_inst`].)
+//!    operand. Escape detection and SSA rewriting share one exhaustive operand
+//!    walker, so a newly added instruction variant cannot be missed by one
+//!    path while being handled by the other.
 //!
 //! 2. **All of its loads and stores live in a single block.** This is the
 //!    conservative subset that needs no phi/block-param insertion: within one
@@ -44,6 +45,11 @@
 //!    contents; we never invent a value for it, so such an alloca is rejected
 //!    outright (left as memory). Within a single block, "dominated by a prior
 //!    store" is simply "a store to this alloca appears earlier in the block".
+//!
+//! 4. **The alloca, every store, and every load have exactly the same type.**
+//!    An opaque pointer permits differently typed memory accesses, but those
+//!    are not scalar identity: a narrow load extracts bytes and a wider access
+//!    can exceed the allocation or read bytes a prior store did not initialize.
 //!
 //! When an alloca qualifies, each promoted `Load`'s result is rewritten to the
 //! live stored value (function-wide, via [`rewrite_inst`]), and the now-dead
@@ -61,13 +67,26 @@
 //! dominance-safe because the load's def dominates all of its uses (SSA), and
 //! the forwarded store dominates the load (it precedes it in the same block),
 //! so the store value dominates every use of the load result.
+//!
+//! After scalar-register forwarding, a bounded fixed-count integer-array
+//! subset additionally admits same-typed constant-offset GEPs and pointer
+//! `Copy` aliases. Every access remains in the allocation block, uses exactly
+//! the element type, satisfies alignment/bounds, and reads a prior store to
+//! that lane. Live casts and other address uses refuse promotion; only a
+//! genuinely unused `PtrToInt` leaf may disappear. No source-memory load moves:
+//! destination forwarding preserves the original snapshot, not a borrowed
+//! view into possibly changing memory. Counts never size analysis collections.
 
 use crate::dialect::{AttrValue, DialectInst};
 use crate::inst::{BindingFrameDef, Inst, SwitchCase};
 use crate::node::InstrNode;
-use crate::value::ValueId;
+use crate::value::{FuncId, ValueId};
 use crate::{Function, Module};
 use std::collections::{HashMap, HashSet};
+
+mod fixed_slots;
+#[cfg(test)]
+mod fixed_slots_tests;
 
 // ---------------------------------------------------------------------------
 // SSA value remapping (shared with the canonical pretty-printer in `format`).
@@ -100,8 +119,32 @@ pub fn rewrite_node(node: &mut InstrNode, map: &HashMap<ValueId, ValueId>) {
 /// variant so that adding a new variant fails to compile rather than silently
 /// skipping a `ValueId`.
 pub fn rewrite_inst(inst: &mut Inst, map: &HashMap<ValueId, ValueId>) {
-    let lookup = |v: &ValueId| -> ValueId { *map.get(v).unwrap_or(v) };
+    rewrite_inst_with(inst, &mut |value| *map.get(value).unwrap_or(value));
+}
+
+/// Visit and optionally replace every `ValueId` operand in `inst`.
+///
+/// Keeping the exhaustive variant match behind this callback lets escape
+/// analysis inspect all operands once while [`rewrite_inst`] applies an actual
+/// substitution through the same code path.
+fn rewrite_inst_with(inst: &mut Inst, lookup: &mut impl FnMut(&ValueId) -> ValueId) {
     match inst {
+        // Trust (wave-DS): the dropped pointer is an ordinary operand for substitution --
+        // and because a drop USES the pointer, escape analysis sees the alloca as escaping,
+        // which is correct: an alloca that is dropped cannot be promoted to a register.
+        Inst::Drop { ptr, .. } => {
+            *ptr = lookup(ptr);
+        }
+        // Amendment D: the dropped pointer (an escape, as for `Drop`) and the
+        // normal-edge arguments.
+        Inst::DropInvoke {
+            ptr, normal_args, ..
+        } => {
+            *ptr = lookup(ptr);
+            for a in normal_args {
+                *a = lookup(a);
+            }
+        }
         Inst::BinOp { lhs, rhs, .. }
         | Inst::Overflow { lhs, rhs, .. }
         | Inst::ICmp { lhs, rhs, .. }
@@ -193,15 +236,16 @@ pub fn rewrite_inst(inst: &mut Inst, map: &HashMap<ValueId, ValueId>) {
                 *a = lookup(a);
             }
             for case in cases {
-                rewrite_switch_case(case, map);
+                rewrite_switch_case(case, lookup);
             }
         }
-        Inst::Call { args, .. } => {
+        Inst::Call { args, .. } | Inst::CallCannotUnwind { args, .. } => {
             for a in args {
                 *a = lookup(a);
             }
         }
-        Inst::CallIndirect { callee, args, .. } => {
+        Inst::CallIndirect { callee, args, .. }
+        | Inst::CallIndirectCannotUnwind { callee, args, .. } => {
             *callee = lookup(callee);
             for a in args {
                 *a = lookup(a);
@@ -211,6 +255,17 @@ pub fn rewrite_inst(inst: &mut Inst, map: &HashMap<ValueId, ValueId>) {
             for v in values {
                 *v = lookup(v);
             }
+        }
+        Inst::MakeAggregate { fields, .. }
+        | Inst::MakeClosure {
+            captures: fields, ..
+        } => {
+            for field in fields.iter_mut() {
+                *field = lookup(field);
+            }
+        }
+        Inst::ArraySplat { value, .. } => {
+            *value = lookup(value);
         }
         Inst::ExtractField { aggregate, .. } => {
             *aggregate = lookup(aggregate);
@@ -239,8 +294,43 @@ pub fn rewrite_inst(inst: &mut Inst, map: &HashMap<ValueId, ValueId>) {
             // No ValueId operands. `Constant::Closure { func, .. }`
             // references a `FuncId`, not a `ValueId`.
         }
-        Inst::Assume { cond } | Inst::Assert { cond } => {
+        Inst::Assume { cond } => {
             *cond = lookup(cond);
+        }
+        Inst::Assert { cond, kind, site } => {
+            *cond = lookup(cond);
+            if let Some(operands) = kind.operands_mut() {
+                for operand in operands {
+                    *operand = lookup(operand);
+                }
+            }
+            // Amendment P: a run-time location is an SSA use.
+            if let Some(location) = site
+                .as_mut()
+                .and_then(crate::inst::PanicSite::location_value_mut)
+            {
+                *location = lookup(location);
+            }
+        }
+        Inst::AssertInvoke {
+            cond,
+            kind,
+            site,
+            normal_args,
+            ..
+        } => {
+            *cond = lookup(cond);
+            if let Some(operands) = kind.operands_mut() {
+                for operand in operands {
+                    *operand = lookup(operand);
+                }
+            }
+            if let Some(location) = site.location_value_mut() {
+                *location = lookup(location);
+            }
+            for a in normal_args {
+                *a = lookup(a);
+            }
         }
         Inst::Unreachable => {}
         Inst::Select {
@@ -265,8 +355,24 @@ pub fn rewrite_inst(inst: &mut Inst, map: &HashMap<ValueId, ValueId>) {
         Inst::Dealloc { ptr } => {
             *ptr = lookup(ptr);
         }
+        // WS3.20 bulk memory: every operand is an SSA value, and an alloca
+        // named by any of them ESCAPES (the escape probe above runs this
+        // walker), so a promoted cell can never be bulk-copied behind mem2reg's
+        // back.
+        Inst::MemCopy {
+            dst, src, bytes, ..
+        } => {
+            *dst = lookup(dst);
+            *src = lookup(src);
+            *bytes = lookup(bytes);
+        }
+        Inst::MemSet { dst, byte, bytes } => {
+            *dst = lookup(dst);
+            *byte = lookup(byte);
+            *bytes = lookup(bytes);
+        }
         Inst::OpenFrame { def } => {
-            rewrite_frame_def(def, map);
+            rewrite_frame_def(def);
         }
         Inst::BindSlot { frame, value, .. } => {
             *frame = lookup(frame);
@@ -294,24 +400,40 @@ pub fn rewrite_inst(inst: &mut Inst, map: &HashMap<ValueId, ValueId>) {
                 *a = lookup(a);
             }
         }
+        // Amendment D, Part 2: `CallIndirect`'s operands and the normal-edge
+        // arguments.
+        Inst::InvokeIndirect {
+            callee,
+            args,
+            normal_args,
+            ..
+        } => {
+            *callee = lookup(callee);
+            for a in args {
+                *a = lookup(a);
+            }
+            for a in normal_args {
+                *a = lookup(a);
+            }
+        }
         // A landing pad has no SSA value operands (it PRODUCES values).
         Inst::LandingPad { .. } => {}
         Inst::Resume { exn } => {
             *exn = lookup(exn);
         }
         Inst::DialectOp(op) => {
-            rewrite_dialect(op, map);
+            rewrite_dialect(op, lookup);
         }
     }
 }
 
-fn rewrite_switch_case(case: &mut SwitchCase, map: &HashMap<ValueId, ValueId>) {
+fn rewrite_switch_case(case: &mut SwitchCase, lookup: &mut impl FnMut(&ValueId) -> ValueId) {
     for a in &mut case.args {
-        *a = *map.get(a).unwrap_or(a);
+        *a = lookup(a);
     }
 }
 
-fn rewrite_frame_def(_def: &mut BindingFrameDef, _map: &HashMap<ValueId, ValueId>) {
+fn rewrite_frame_def(_def: &mut BindingFrameDef) {
     // `BindingFrameDef` carries a `BindingFrameId` and a list of
     // `BindingSlot { name, ty }`. Neither carries `ValueId` operands —
     // `frame` and `value` are carried by `BindSlot`/`LoadSlot`/`CloseFrame`
@@ -320,8 +442,7 @@ fn rewrite_frame_def(_def: &mut BindingFrameDef, _map: &HashMap<ValueId, ValueId
     // that add value operands have an obvious rewrite point.
 }
 
-fn rewrite_dialect(op: &mut DialectInst, map: &HashMap<ValueId, ValueId>) {
-    let lookup = |v: &ValueId| -> ValueId { *map.get(v).unwrap_or(v) };
+fn rewrite_dialect(op: &mut DialectInst, lookup: &mut impl FnMut(&ValueId) -> ValueId) {
     for v in &mut op.operands {
         *v = lookup(v);
     }
@@ -346,13 +467,43 @@ fn rewrite_dialect(op: &mut DialectInst, map: &HashMap<ValueId, ValueId>) {
 // The pass.
 // ---------------------------------------------------------------------------
 
-/// Run [`promote_allocas_function`] on every function in `module`.
+/// Run scalar promotion and, on a canonical 64-bit scalar-layout target,
+/// fixed-slot integer-array promotion on unprotected functions in `module`.
 ///
 /// Pure compile-time rewrite: the generated machine-code behavior is
 /// unchanged (see the module docs for the identical-output argument).
+/// Functions named by a module proof obligation are left unchanged until a
+/// proof-aware pass variant supplies both transform-specific verification and
+/// a validated proof-table transaction. An unscoped obligation conservatively
+/// protects the complete module. This keeps instruction-site coordinates and
+/// proof authority from silently becoming stale during the migration to
+/// proof-carrying passes.
 pub fn promote_allocas_module(module: &mut Module) {
+    // The fixed-slot planner checks byte extents in u64. Canonical scalar
+    // alignment alone also admits wasm32, whose address arithmetic needs a
+    // narrower bound; leave that target untouched by this new subset.
+    let canonical_scalar_layout =
+        module.target_has_canonical_scalar_layout() && module.pointer_bits() == 64;
+    let mut protect_all_functions = false;
+    let mut protected_functions: HashSet<FuncId> = HashSet::new();
+    for obligation in &module.proof_obligations {
+        match (obligation.function, obligation.site) {
+            (Some(function), site) => {
+                protected_functions.insert(function);
+                if let Some(site) = site {
+                    protected_functions.insert(site.function);
+                }
+            }
+            (None, Some(site)) => {
+                protected_functions.insert(site.function);
+            }
+            (None, None) => protect_all_functions = true,
+        }
+    }
     for func in &mut module.functions {
-        promote_allocas_function(func);
+        if !protect_all_functions && !protected_functions.contains(&func.id) {
+            promote_allocas_in_layout(func, canonical_scalar_layout);
+        }
     }
 }
 
@@ -360,28 +511,63 @@ pub fn promote_allocas_module(module: &mut Module) {
 /// `func` to SSA values in place.
 ///
 /// Returns the number of allocas promoted (useful for tests / metrics).
+/// A function carrying a summary, function- or instruction-level proof
+/// annotations, or call-site proof context, is left unchanged. Summary clauses
+/// can name SSA values even when no instruction uses those values; preserving
+/// their authority needs a proof-aware transaction, not ordinary forwarding.
+/// In particular, a function-level
+/// [`crate::proof::ProofAnnotation::ProofRef`] may carry replayed module
+/// authority even when this function is called without its containing module.
+/// This function cannot see module-level proof obligations; callers with a
+/// complete [`Module`] should use [`promote_allocas_module`], which also
+/// protects externally sited facts. This function-only API remains scalar-only:
+/// fixed-slot array promotion needs canonical 64-bit module-layout authority.
 pub fn promote_allocas_function(func: &mut Function) -> usize {
-    // A `ValueId` strictly greater than every id the function already uses, so
-    // it can never collide with a real operand. Used as a sentinel by the
-    // `rewrite_inst`-based escape probe. If the id space is exhausted
-    // (`u32::MAX` already in use — never happens for a JIT-compiled function),
-    // bail rather than risk a colliding sentinel that could mask an escape.
-    let max_id = func.max_value_id();
-    if max_id == u32::MAX {
+    promote_allocas_in_layout(func, false)
+}
+
+fn promote_allocas_in_layout(func: &mut Function, canonical_scalar_layout: bool) -> usize {
+    if func.summary.is_some()
+        || !func.proofs.is_empty()
+        || func.blocks.iter().any(|block| {
+            block
+                .body
+                .iter()
+                .any(|node| !node.proofs.is_empty() || node.proof_context.is_some())
+        })
+    {
         return 0;
     }
-    let sentinel = ValueId::new(max_id + 1);
 
+    // Register forwarding first can make the address cast of a fixed array
+    // genuinely unused. The second, no-phi planner still rejects any live
+    // integer address; it never assumes a cast roundtrip preserves provenance.
+    let mut has_fixed_arrays = false;
+    let scalars = promote_scalar_allocas(func, &mut has_fixed_arrays);
+    scalars
+        + if canonical_scalar_layout && has_fixed_arrays {
+            fixed_slots::promote(func)
+        } else {
+            0
+        }
+}
+
+fn promote_scalar_allocas(func: &mut Function, has_fixed_arrays: &mut bool) -> usize {
     // 1. Collect candidate allocas: result id -> defining (block_idx, inst_idx).
     //    Only `Alloca` with `count == None` (a single slot) is considered; a
     //    dynamically-counted alloca is an array, never a scalar register.
     let mut candidates: HashMap<ValueId, (usize, usize)> = HashMap::new();
+    let mut candidate_types = HashMap::new();
     for (bi, block) in func.blocks.iter().enumerate() {
         for (ii, node) in block.body.iter().enumerate() {
-            if let Inst::Alloca { count: None, .. } = node.inst
+            *has_fixed_arrays |= matches!(node.inst, Inst::Alloca { count: Some(_), .. });
+            if let Inst::Alloca {
+                ty, count: None, ..
+            } = &node.inst
                 && let Some(&result) = node.results.first()
             {
                 candidates.insert(result, (bi, ii));
+                candidate_types.insert(result, ty.clone());
             }
         }
     }
@@ -397,16 +583,18 @@ pub fn promote_allocas_function(func: &mut Function) -> usize {
     let mut accesses: HashMap<ValueId, Vec<Access>> = HashMap::new();
     let mut use_block: HashMap<ValueId, Option<usize>> = HashMap::new();
 
-    for (bi, block) in func.blocks.iter().enumerate() {
-        for (ii, node) in block.body.iter().enumerate() {
+    for (bi, block) in func.blocks.iter_mut().enumerate() {
+        for (ii, node) in block.body.iter_mut().enumerate() {
             // The candidate's own defining `Alloca` node defines (not uses) the
             // id, and `rewrite_inst` only touches operands, so the escape probe
             // below never flags an `Alloca` against its own result.
-            match &node.inst {
-                Inst::Load { ptr, volatile, .. } if candidates.contains_key(ptr) => {
-                    if *volatile {
-                        // A volatile load is observable memory traffic; deleting
-                        // it would change behavior. Leave the alloca as memory.
+            match &mut node.inst {
+                Inst::Load {
+                    ty, ptr, volatile, ..
+                } if candidates.contains_key(ptr) => {
+                    if *volatile || candidate_types.get(ptr) != Some(&*ty) {
+                        // Volatile traffic is observable; a differently typed
+                        // load is not the identity on the stored SSA value.
                         disqualify(&mut candidates, &mut accesses, &mut use_block, *ptr);
                     } else {
                         record_access(
@@ -421,6 +609,7 @@ pub fn promote_allocas_function(func: &mut Function) -> usize {
                     }
                 }
                 Inst::Store {
+                    ty,
                     ptr,
                     value,
                     volatile,
@@ -433,7 +622,7 @@ pub fn promote_allocas_function(func: &mut Function) -> usize {
                     }
                     // `value == ptr` (degenerate self-store) disqualified ptr above.
                     if candidates.contains_key(ptr) {
-                        if *volatile {
+                        if *volatile || candidate_types.get(ptr) != Some(&*ty) {
                             disqualify(&mut candidates, &mut accesses, &mut use_block, *ptr);
                         } else {
                             record_access(
@@ -448,16 +637,25 @@ pub fn promote_allocas_function(func: &mut Function) -> usize {
                         }
                     }
                 }
-                _ => {
+                inst => {
                     // Any other instruction that mentions a candidate id as an
                     // operand is an escape (GEP base, call arg, return, copy,
                     // cast, select, a Store whose *value* is the candidate while
-                    // its ptr is not, etc.). Detect via the `rewrite_inst` probe
-                    // so new `Inst` variants are covered automatically.
-                    for cand in candidates.keys().cloned().collect::<Vec<_>>() {
-                        if alloca_escapes_in_inst(&node.inst, cand, sentinel) {
-                            disqualify(&mut candidates, &mut accesses, &mut use_block, cand);
+                    // its ptr is not, etc.). Inspect each operand exactly once
+                    // through the same exhaustive walker used for rewriting.
+                    // This is O(total operands), rather than probing every
+                    // candidate alloca against every instruction.
+                    let mut escaping = Vec::new();
+                    rewrite_inst_with(inst, &mut |value| {
+                        if candidates.contains_key(value) {
+                            escaping.push(*value);
                         }
+                        *value
+                    });
+                    escaping.sort_unstable();
+                    escaping.dedup();
+                    for candidate in escaping {
+                        disqualify(&mut candidates, &mut accesses, &mut use_block, candidate);
                     }
                 }
             }
@@ -486,15 +684,13 @@ pub fn promote_allocas_function(func: &mut Function) -> usize {
             None => continue,
         };
 
-        // Linear scan of the block, tracking the live stored value.
-        // We must visit accesses in instruction order.
-        let mut ordered: Vec<&Access> = accs.iter().collect();
-        ordered.sort_by_key(|a| a.inst);
-
+        // Accesses were appended during the single forward block walk, so
+        // they are already in instruction order. Preserve that ordering
+        // without allocating and sorting a second pointer vector per alloca.
         let mut current: Option<ValueId> = None;
         let mut local_loads: Vec<usize> = Vec::new();
         let mut local_stores: Vec<usize> = Vec::new();
-        for a in ordered {
+        for a in accs {
             debug_assert_eq!(a.block, block);
             if a.is_store {
                 // Record the freshly-stored value as live.
@@ -550,11 +746,26 @@ pub fn promote_allocas_function(func: &mut Function) -> usize {
         return 0;
     }
 
+    apply_promotions(func, value_remap, deletions);
+    promoted_count
+}
+
+/// Shared authority/debug-preserving commit step for the scalar and fixed-slot
+/// planners. Each planner completes escape, initialization and type checks
+/// before publishing any substitution or deletion here.
+fn apply_promotions(
+    func: &mut Function,
+    mut value_remap: HashMap<ValueId, ValueId>,
+    deletions: HashMap<usize, Vec<usize>>,
+) {
     // This pass changes the semantic TrustIR artifact. The source-provenance
     // carrier is compiler authority, so a generic transform must invalidate it
     // rather than recomputing self-authenticating digests around a stale
     // compiler-source claim.
     func.source_provenance = None;
+    // Likewise the license's evidence (v61), which names the digest of the
+    // body before this rewrite.
+    func.invalidate_gate_evidence();
 
     // 3b. Resolve forwarding chains. A promoted load can forward a value that
     //     is *itself* a promoted load result (e.g. `store(P,%5); %6=load(P);
@@ -642,17 +853,25 @@ pub fn promote_allocas_function(func: &mut Function) -> usize {
         });
     }
 
-    // 5. Delete the promoted alloca/load/store nodes. Delete in descending
-    //    index order per block so earlier indices stay valid.
+    // 5. Delete the promoted alloca/load/store nodes in one stable compaction
+    //    per block. Repeated `Vec::remove`, even in descending index order,
+    //    shifts a suffix for every removal and is quadratic for the dense
+    //    register-file traffic this pass is intended to eliminate.
     for (bi, mut idxs) in deletions {
         idxs.sort_unstable();
         idxs.dedup();
-        for &i in idxs.iter().rev() {
-            func.blocks[bi].body.remove(i);
-        }
+        let mut deleted = idxs.into_iter().peekable();
+        let mut index = 0usize;
+        func.blocks[bi].body.retain(|_| {
+            let remove = deleted.peek().copied() == Some(index);
+            if remove {
+                deleted.next();
+            }
+            index += 1;
+            !remove
+        });
+        debug_assert!(deleted.next().is_none());
     }
-
-    promoted_count
 }
 
 /// Permanently drop `cand` from consideration, clearing every record of it.
@@ -706,30 +925,6 @@ struct Access {
     is_store: bool,
 }
 
-/// Returns `true` if `cand` is used inside `inst` as anything other than the
-/// `ptr` of a `Load`/`Store` (i.e. the alloca escapes through this
-/// instruction).
-///
-/// Implemented as a non-destructive probe over [`rewrite_inst`]: clone the
-/// instruction, remap `cand -> sentinel`, then for `Load`/`Store` restore the
-/// (legitimately remapped) `ptr` back to `cand`. If the probe still differs
-/// from the original, `cand` appeared in some non-`ptr` operand position and
-/// therefore escapes. Reusing `rewrite_inst` means new `Inst` variants are
-/// covered automatically — there is no second hand-written operand walker to
-/// keep in sync.
-fn alloca_escapes_in_inst(inst: &Inst, cand: ValueId, sentinel: ValueId) -> bool {
-    let mut probe = inst.clone();
-    let map: HashMap<ValueId, ValueId> = std::iter::once((cand, sentinel)).collect();
-    rewrite_inst(&mut probe, &map);
-    match &mut probe {
-        Inst::Load { ptr, .. } | Inst::Store { ptr, .. } if *ptr == sentinel => {
-            *ptr = cand;
-        }
-        _ => {}
-    }
-    &probe != inst
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -737,8 +932,9 @@ mod tests {
     use crate::constant::Constant;
     use crate::inst::{BinOp, Inst};
     use crate::node::InstrNode;
+    use crate::proof::{ObligationKind, ProofAnnotation, ProofObligation, ProofStatus};
     use crate::ty::Ty;
-    use crate::value::{BlockId, FuncId, FuncTyId};
+    use crate::value::{BlockId, FuncId, FuncTyId, ProofId};
 
     fn v(n: u32) -> ValueId {
         ValueId::new(n)
@@ -821,6 +1017,14 @@ mod tests {
             crate::proof::ProofDigest::sha256([2; 32]),
             Vec::new(),
         ));
+        // v61: a license whose evidence names the body before the rewrite.
+        f.body_gate = Some(crate::BodyGate::Gated {
+            authority: "clean-kernel-tv".into(),
+            evidence: Some(crate::GateEvidence {
+                obligation: crate::ProofId::new(0),
+                body_digest: crate::proof::ProofDigest::sha256([3; 32]),
+            }),
+        });
         let mut blk = Block::new(b(0));
         // %0 = alloca i64
         blk.body.push(alloca(0));
@@ -841,6 +1045,11 @@ mod tests {
         assert!(
             f.source_provenance.is_none(),
             "a semantic rewrite must invalidate compiler source authority"
+        );
+        assert_eq!(
+            f.body_gate,
+            Some(crate::BodyGate::gated("clean-kernel-tv")),
+            "a semantic rewrite drops the license's evidence and keeps the license"
         );
 
         let blk = &f.blocks[0];
@@ -864,6 +1073,71 @@ mod tests {
             }
             _ => unreachable!(),
         }
+    }
+
+    #[test]
+    fn function_with_instruction_proof_metadata_is_not_rewritten() {
+        let mut f = empty_func();
+        let mut blk = Block::new(b(0));
+        blk.body
+            .push(alloca(0).with_proof(ProofAnnotation::InBounds));
+        blk.body.push(konst(1, 7));
+        blk.body.push(store(0, 1));
+        blk.body.push(load(2, 0));
+        blk.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
+        f.blocks.push(blk);
+
+        assert_eq!(promote_allocas_function(&mut f), 0);
+        assert_eq!(block_count_kinds(&f.blocks[0]), (1, 1, 1));
+        assert_eq!(f.blocks[0].body[0].proofs, vec![ProofAnnotation::InBounds]);
+    }
+
+    #[test]
+    fn function_with_function_proof_metadata_is_not_rewritten() {
+        let mut f = empty_func();
+        f.proofs.push(ProofAnnotation::ProofRef(ProofId::new(7)));
+        let mut blk = Block::new(b(0));
+        blk.body.push(alloca(0));
+        blk.body.push(konst(1, 7));
+        blk.body.push(store(0, 1));
+        blk.body.push(load(2, 0));
+        blk.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
+        f.blocks.push(blk);
+
+        assert_eq!(promote_allocas_function(&mut f), 0);
+        assert_eq!(block_count_kinds(&f.blocks[0]), (1, 1, 1));
+        assert_eq!(f.proofs, vec![ProofAnnotation::ProofRef(ProofId::new(7))]);
+    }
+
+    #[test]
+    fn module_wrapper_preserves_functions_named_by_proof_obligations() {
+        let mut module = Module::new("proof-bearing");
+        let mut f = empty_func();
+        let mut blk = Block::new(b(0));
+        blk.body.push(alloca(0));
+        blk.body.push(konst(1, 7));
+        blk.body.push(store(0, 1));
+        blk.body.push(load(2, 0));
+        blk.body
+            .push(InstrNode::new(Inst::Return { values: vec![v(2)] }));
+        f.blocks.push(blk);
+        module.functions.push(f);
+        module.proof_obligations.push(
+            ProofObligation::new(
+                ProofId::new(0),
+                ObligationKind::TranslationValidation,
+                ProofStatus::Pending,
+                "the source function and lowered function agree",
+            )
+            .with_function(FuncId::new(0)),
+        );
+
+        promote_allocas_module(&mut module);
+
+        assert_eq!(block_count_kinds(&module.functions[0].blocks[0]), (1, 1, 1));
+        assert_eq!(module.proof_obligations.len(), 1);
     }
 
     /// Multiple stores: each load reads the most-recent prior store value.

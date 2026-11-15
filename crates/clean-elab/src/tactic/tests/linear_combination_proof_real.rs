@@ -89,8 +89,9 @@ fn setup_real_identity_goal() -> ProofState {
         env,
         make_eq(real.clone(), real_var("a"), real_var("b")),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq(real, real_var("a"), real_var("b")),
             value: None,
         }],
@@ -123,8 +124,9 @@ fn setup_real_fractional_direct_goal() -> ProofState {
         env,
         make_eq(real.clone(), goal_lhs, goal_rhs),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq(real, real_var("a"), real_var("b")),
             value: None,
         }],
@@ -149,14 +151,16 @@ fn setup_real_add_right_cancel_goal() -> ProofState {
         make_eq(real.clone(), real_var("a"), real_var("b")),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(real.clone(), real_var("a"), real_var("b")),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(real.clone(), real_var("c"), real_var("c")),
                 value: None,
             },
@@ -212,8 +216,13 @@ fn expr_contains_const(expr: &Expr, needle: &str) -> bool {
 fn test_linear_combination_real_integer_coeff_closes_without_trust() {
     let mut state = setup_real_identity_goal();
 
-    linear_combination(&mut state, vec![LinearCoeff::one("h")])
-        .expect("linear_combination should close the Real identity goal");
+    linear_combination(
+        &mut state,
+        vec![LinearCoeff::one(
+            &clean_parser::SurfaceName::generated_path("h"),
+        )],
+    )
+    .expect("linear_combination should close the Real identity goal");
 
     assert!(
         state.is_complete(),
@@ -260,15 +269,22 @@ fn test_linear_combination_real_negative_coeff_closes_without_trust() {
         env,
         make_eq(real.clone(), real_var("b"), real_var("a")),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_eq(real, real_var("a"), real_var("b")),
             value: None,
         }],
     );
 
-    linear_combination(&mut state, vec![LinearCoeff::int("h", -1)])
-        .expect("linear_combination should close the Real symmetry goal");
+    linear_combination(
+        &mut state,
+        vec![LinearCoeff::int(
+            &clean_parser::SurfaceName::generated_path("h"),
+            -1,
+        )],
+    )
+    .expect("linear_combination should close the Real symmetry goal");
 
     assert!(
         state.is_complete(),
@@ -297,8 +313,16 @@ fn test_proof_builder_real_fractional_direct_close() {
     let mut state = setup_real_fractional_direct_goal();
     let goal = state.current_goal().expect("goal should exist").clone();
 
-    let proof = build_linear_combination_eq_proof(&state, &goal, &[LinearCoeff::new("h", 1, 2)])
-        .expect("Real fractional direct close should produce a proof via congr_arg");
+    let proof = build_linear_combination_eq_proof(
+        &state,
+        &goal,
+        &[LinearCoeff::new(
+            &clean_parser::SurfaceName::generated_path("h"),
+            1,
+            2,
+        )],
+    )
+    .expect("Real fractional direct close should produce a proof via congr_arg");
 
     state
         .close_goal(&goal, proof)
@@ -333,8 +357,15 @@ fn test_proof_builder_real_fractional_direct_close() {
 fn test_linear_combination_tactic_real_fractional_direct_closes_without_trust() {
     let mut state = setup_real_fractional_direct_goal();
 
-    linear_combination(&mut state, vec![LinearCoeff::new("h", 1, 2)])
-        .expect("linear_combination should close Real fractional direct goal without trustedArith");
+    linear_combination(
+        &mut state,
+        vec![LinearCoeff::new(
+            &clean_parser::SurfaceName::generated_path("h"),
+            1,
+            2,
+        )],
+    )
+    .expect("linear_combination should close Real fractional direct goal without trustedArith");
 
     assert!(
         state.is_complete(),
@@ -371,7 +402,10 @@ fn test_proof_builder_real_add_right_cancel_closes_without_trust() {
     let proof = build_linear_combination_eq_proof(
         &state,
         &goal,
-        &[LinearCoeff::one("h1"), LinearCoeff::one("h2")],
+        &[
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+        ],
     )
     .expect("Real cancellation bridge should reconstruct the proof");
 
@@ -395,7 +429,10 @@ fn test_linear_combination_real_cancellation_bridge_closes_without_trust() {
 
     linear_combination(
         &mut state,
-        vec![LinearCoeff::one("h1"), LinearCoeff::one("h2")],
+        vec![
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h2")),
+        ],
     )
     .expect("linear_combination should close the Real cancellation goal");
 

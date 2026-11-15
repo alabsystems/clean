@@ -136,26 +136,36 @@ fn test_every_position_shape_gets_its_companions() {
     }
 }
 
-/// A constructor with several recursive arguments AND an indexed one is
-/// refused BY NAME, not left to fail as a confusing kernel error.
+/// The shape VC-6 used to refuse now WORKS, and the refusal is gone.
 ///
-/// This is the honest edge of the probed envelope: the k-fold branch template
-/// is validated for Sums of bare children only. The refusal must also be
-/// transactional — the definitional tier still works for such a codata, so
-/// the user's recourse (drop `deriving Coind`) has to leave a clean env.
+/// The refusal claimed a constructor with several recursive arguments, one of
+/// them an indexed family, could not have its tier built. That was written
+/// from "no worked precedent", never measured. Measured, the shape is fine —
+/// what actually broke was two unrelated generator bugs (§12), both of which
+/// hit far more ordinary shapes. This test is the retired refusal's negative:
+/// if anyone re-adds it, this fails.
 #[test]
-fn test_mixed_kfold_is_refused_by_name() {
+fn test_the_retired_kfold_refusal_stays_retired() {
     let src = "
-codata Bad (A : Type) where
-  | Mix : Bad A → (A → Bad A) → Bad A
+codata Mx (A : Type) where
+  | Mix : Mx A → (A → Mx A) → Mx A
 deriving Coind
 ";
-    let err = elaborate(src).expect_err("mixed k-fold must be refused");
-    let msg = format!("{err:?}");
-    assert!(
-        msg.contains("deriving Coind") && msg.contains("INDEXED family"),
-        "the refusal must name the shape it cannot build, got: {msg}"
-    );
+    let env = elaborate(src).expect("the k-fold indexed-family shape must be accepted");
+    for n in [
+        "Mx.Mix_eta",
+        "Mx.MixChild0",
+        "Mx.MixChild1",
+        "Mx.MixChild0_compute",
+        "Mx.MixChild1_compute",
+        "Mx.CasesP",
+        "Mx.cases",
+    ] {
+        assert!(
+            env.get_const(&Name::from_string(n)).is_some(),
+            "the full tier must be emitted for the once-refused shape ({n})"
+        );
+    }
 }
 
 /// The whole fixture, including the laws that are NOT `rfl`.
@@ -247,6 +257,13 @@ fn test_corner_shapes_check() {
         // three constructors, the LAST carrying payloads
         "Tri.cases_used",
         "Tri.three_eta_used",
+        // regression pins for the two generator bugs of 2026-08-29 (§12)
+        "Sc.cases_used", // lone ctor, first argument recursive
+        "Mx.cases_used", // ... at k-fold arity with an indexed family
+        "Mx.eta_used",
+        "Cp.cases_used", // payload AFTER a child
+        "Iv.cases_used", // payload BETWEEN two children
+        "Dv.cases_used", // family domain mentioning a payload (control)
     ] {
         assert!(
             env.get_const(&Name::from_string(n)).is_some(),
@@ -285,6 +302,117 @@ fn test_tower_names_are_reserved() {
         assert!(
             msg.contains("collides with the generated companion"),
             "the refusal must name the collision for `{bad}`, got: {msg}"
+        );
+    }
+}
+
+/// Universe-polymorphic variant codata, with the full coinductive tier.
+///
+/// The anti-vacuity half is the instantiation at a TYPE-valued parameter
+/// (`St.{1} Type`). Checking only at `Nat` would prove nothing: a fresh level
+/// metavariable that silently solves to `0` yields a well-typed,
+/// kernel-accepted, strictly WEAKER declaration — the same hazard that made
+/// `elab_hole` pin every `_` to `Sort 1`. A monomorphic generator passes a
+/// `Nat`-only test and fails this one.
+#[test]
+fn test_universe_polymorphic_fixture() {
+    let src = include_str!("../data/variant_codata/universe_poly.lean");
+    let env = elaborate(src).expect("the universe-polymorphic fixture must check");
+    for n in [
+        "St.shapeF",
+        "St.posF",
+        "St.head",
+        "St.Cons",
+        "St.corec",
+        "St.ext",
+        "St.Cons_eta",
+        "St.ConsChild",
+        "St.CasesP",
+        "St.cases",
+        // the consumers, which is what says the tier is usable at `.{u}`
+        "bigNil",
+        "big_cases",
+        "cons_eta",
+        "forever",
+        "forever_unfolds",
+        // the `T.{u}` self-reference spelling, and the two spellings mixed
+        "sf_cases",
+        "mixed_cases",
+    ] {
+        assert!(
+            env.get_const(&Name::from_string(n)).is_some(),
+            "universe-polymorphic declaration {n} must register"
+        );
+    }
+}
+
+/// Every generated declaration carries the declared universe parameter.
+///
+/// Without the `set_uparams` sweep the family would register as monomorphic
+/// and every use site would silently pin `u := 0` — green tests, wrong
+/// theorems.
+#[test]
+fn test_universe_param_is_stamped_on_generated_heads() {
+    let src = "
+codata Up.{u} (A : Type u) where
+  | C : A → Up A → Up A
+deriving Coind
+";
+    let env = elaborate(src).expect("`codata Up.{u}` must elaborate");
+    for n in [
+        "Up.shapeF",
+        "Up.head",
+        "Up.C",
+        "Up.ext",
+        "Up.C_eta",
+        "Up.cases",
+    ] {
+        let c = env
+            .get_const(&Name::from_string(n))
+            .unwrap_or_else(|| panic!("{n} must register"));
+        assert_eq!(
+            c.level_params.len(),
+            1,
+            "{n} must carry the declared universe parameter, not be monomorphic"
+        );
+    }
+}
+
+/// A self-reference at a DIFFERENT universe is not the carrier.
+///
+/// `Bad.{0} A` inside `codata Bad.{u}` denotes another type entirely, so
+/// accepting it would silently monomorphise the declaration. The negative
+/// half of letting `T.{u} A` through: the widening must not become "any
+/// universe instantiation of the right name".
+#[test]
+fn test_self_reference_at_a_different_universe_is_refused() {
+    let src = "
+codata Bad.{u} (A : Type u) where
+  | C : Bad.{0} A → Bad A
+";
+    let err = elaborate(src).expect_err("a foreign-universe self-reference must be refused");
+    let msg = format!("{err:?}");
+    assert!(
+        msg.contains("occurs neither as"),
+        "the refusal must name the occurrence problem, got: {msg}"
+    );
+}
+
+/// The generated ITree carrier is definitionally equal to ITreeEco's.
+///
+/// VC-7's first obstacle: ITreeEco declared its own empty inductive `NoPos`
+/// where the generator emits `PEmpty`, and two distinct inductives are never
+/// definitionally equal. With ITreeEco moved to `PEmpty`, both the position
+/// functor and the carrier agree by `rfl` — so the 716 declarations built on
+/// that carrier would survive redefining it as the generated one.
+#[test]
+fn test_itree_carrier_is_defeq() {
+    let src = include_str!("../data/variant_codata/itree_carrier_defeq.lean");
+    let env = elaborate(src).expect("the carrier-defeq fixture must check");
+    for n in ["pos_agrees", "carrier_agrees"] {
+        assert!(
+            env.get_const(&Name::from_string(n)).is_some(),
+            "{n} must register — it is the evidence VC-7 rests on"
         );
     }
 }

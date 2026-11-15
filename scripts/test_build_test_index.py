@@ -252,7 +252,7 @@ class BuildTestIndexTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
-                "cargo test --locked --message-format=short -j 1 -p alpha --lib -- nested::alpha_test",
+                "targo --unverified test --locked --message-format=short -j 1 -p alpha --lib -- nested::alpha_test",
             )
 
     def test_query_supports_integration_tests(self) -> None:
@@ -271,7 +271,7 @@ class BuildTestIndexTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
-                "cargo test --locked --message-format=short -j 1 -p beta --test integration -- beta_integration",
+                "targo --unverified test --locked --message-format=short -j 1 -p beta --test integration -- beta_integration",
             )
 
     def test_query_supports_nested_integration_tree_targets(self) -> None:
@@ -290,7 +290,7 @@ class BuildTestIndexTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
-                "cargo test --locked --message-format=short -j 1 -p beta --test tree_case -- nested::beta_tree_test",
+                "targo --unverified test --locked --message-format=short -j 1 -p beta --test tree_case -- nested::beta_tree_test",
             )
 
     def test_query_supports_nested_modules_under_flat_integration_harness(self) -> None:
@@ -309,7 +309,7 @@ class BuildTestIndexTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
-                "cargo test --locked --message-format=short -j 1 -p beta --test integration -- basic::beta_nested_integration",
+                "targo --unverified test --locked --message-format=short -j 1 -p beta --test integration -- basic::beta_nested_integration",
             )
 
     def test_query_supports_binary_targets(self) -> None:
@@ -319,19 +319,19 @@ class BuildTestIndexTests(unittest.TestCase):
             for pattern, expected in [
                 (
                     "root_bin_test",
-                    "cargo test --locked --message-format=short -j 1 -p gamma --bin gamma -- root_bin_test",
+                    "targo --unverified test --locked --message-format=short -j 1 -p gamma --bin gamma -- root_bin_test",
                 ),
                 (
                     "tool_nested_test",
-                    "cargo test --locked --message-format=short -j 1 -p gamma --bin tool -- nested::tool_nested_test",
+                    "targo --unverified test --locked --message-format=short -j 1 -p gamma --bin tool -- nested::tool_nested_test",
                 ),
                 (
                     "worker_main_test",
-                    "cargo test --locked --message-format=short -j 1 -p gamma --bin worker -- worker_main_test",
+                    "targo --unverified test --locked --message-format=short -j 1 -p gamma --bin worker -- worker_main_test",
                 ),
                 (
                     "worker_helper_test",
-                    "cargo test --locked --message-format=short -j 1 -p gamma --bin worker -- helper::worker_helper_test",
+                    "targo --unverified test --locked --message-format=short -j 1 -p gamma --bin worker -- helper::worker_helper_test",
                 ),
             ]:
                 stdout = io.StringIO()
@@ -366,7 +366,7 @@ class BuildTestIndexTests(unittest.TestCase):
                                 "module": "stale",
                                 "file": "stale.rs",
                                 "line": 1,
-                                "cargo_cmd": "cargo test --locked --message-format=short -j 1 -p gamma -- stale",
+                                "cargo_cmd": "targo --unverified test --locked --message-format=short -j 1 -p gamma -- stale",
                                 "package": "gamma",
                                 "kind": "lib",
                             }
@@ -391,7 +391,7 @@ class BuildTestIndexTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             self.assertEqual(
                 stdout.getvalue().strip(),
-                "cargo test --locked --message-format=short -j 1 -p gamma --bin worker -- worker_main_test",
+                "targo --unverified test --locked --message-format=short -j 1 -p gamma --bin worker -- worker_main_test",
             )
 
             payload = json.loads(cache_path.read_text(encoding="utf-8"))
@@ -401,7 +401,7 @@ class BuildTestIndexTests(unittest.TestCase):
     def test_fixtures_do_not_reintroduce_unbounded_cargo_examples(self) -> None:
         source = Path(__file__).read_text(encoding="utf-8")
 
-        self.assertNotIn("cargo test" + " -p gamma -- stale", source)
+        self.assertNotIn("targo --unverified test" + " -p gamma -- stale", source)
 
 
 if __name__ == "__main__":

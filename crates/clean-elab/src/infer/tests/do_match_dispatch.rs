@@ -92,7 +92,10 @@ fn test_elab_do_match_empty_arms_returns_not_implemented() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![], // empty arms
         )],
     );
@@ -115,7 +118,7 @@ fn test_elab_do_match_empty_discriminants_fail_closed_without_context_or_sorry_l
     let env = nat_axiom_env();
     let mut ctx = ElabCtx::new(&env);
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
-    let sentinel = ctx.push_local("sentinel".to_string(), nat.clone());
+    let sentinel = ctx.push_local(SurfaceName::generated_path("sentinel"), nat.clone());
     ctx.push_local_instance(sentinel, nat.clone());
     ctx.instance_cache
         .insert("sentinel-cache".to_string(), Expr::fvar(sentinel));
@@ -193,8 +196,8 @@ fn test_elab_do_match_multi_discriminant_reaches_prod_mk_path() {
         vec![DoElem::Match(
             Span::dummy(),
             vec![
-                SurfaceExpr::Ident(Span::dummy(), "x".to_string()),
-                SurfaceExpr::Ident(Span::dummy(), "y".to_string()),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x")),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("y")),
             ],
             vec![DoMatchArm {
                 span: Span::dummy(),
@@ -229,15 +232,15 @@ fn test_elab_do_match_multi_discriminant_ctor_arm_returns_error() {
         vec![DoElem::Match(
             Span::dummy(),
             vec![
-                SurfaceExpr::Ident(Span::dummy(), "x".to_string()),
-                SurfaceExpr::Ident(Span::dummy(), "y".to_string()),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x")),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("y")),
             ],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![
-                        SurfacePattern::Ctor("Nat.zero".to_string(), vec![]),
-                        SurfacePattern::Ctor("Nat.zero".to_string(), vec![]),
+                        SurfacePattern::Ctor(SurfaceName::generated_path("Nat.zero"), vec![]),
+                        SurfacePattern::Ctor(SurfaceName::generated_path("Nat.zero"), vec![]),
                     ],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
@@ -285,11 +288,17 @@ fn test_elab_do_match_unknown_ctor_is_hard_error() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
-                    patterns: vec![SurfacePattern::Ctor("Nat.nonexistent".to_string(), vec![])],
+                    patterns: vec![SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Nat.nonexistent"),
+                        vec![],
+                    )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
                         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
@@ -329,7 +338,10 @@ fn test_elab_do_match_wildcard_not_last_falls_back_to_sequential() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -341,7 +353,10 @@ fn test_elab_do_match_wildcard_not_last_falls_back_to_sequential() {
                 },
                 DoMatchArm {
                     span: Span::dummy(),
-                    patterns: vec![SurfacePattern::Ctor("Nat.zero".to_string(), vec![])],
+                    patterns: vec![SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Nat.zero"),
+                        vec![],
+                    )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
                         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
@@ -353,11 +368,13 @@ fn test_elab_do_match_wildcard_not_last_falls_back_to_sequential() {
 
     let mut ctx = ElabCtx::new(&env);
     let result = ctx.elaborate(&surface);
-    // The wildcard-first arm triggers sequential fallback which still works
-    // because the first wildcard arm catches everything
+    // The `Nat.zero` arm behind the wildcard is selected by no value: pinned
+    // Lean 4.8.0 refuses such a match ("redundant alternative", measured
+    // 2026-10-16), and so does Clean since round-5 lane D (G62). This test
+    // used to assert the sequential fallback ACCEPTED it.
     assert!(
-        result.is_ok(),
-        "wildcard-not-last should fall back to sequential and still elaborate, got {result:?}"
+        matches!(result, Err(ElabError::RedundantAlternative { .. })),
+        "a do-match arm behind a wildcard is a redundant alternative, got {result:?}"
     );
 }
 
@@ -373,11 +390,17 @@ fn test_elab_do_match_duplicate_ctor_falls_back_to_sequential() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
-                    patterns: vec![SurfacePattern::Ctor("Nat.zero".to_string(), vec![])],
+                    patterns: vec![SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Nat.zero"),
+                        vec![],
+                    )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
                         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
@@ -385,7 +408,10 @@ fn test_elab_do_match_duplicate_ctor_falls_back_to_sequential() {
                 },
                 DoMatchArm {
                     span: Span::dummy(),
-                    patterns: vec![SurfacePattern::Ctor("Nat.zero".to_string(), vec![])],
+                    patterns: vec![SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Nat.zero"),
+                        vec![],
+                    )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
                         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1))),
@@ -434,8 +460,8 @@ fn test_elab_do_match_multi_discriminant_prod_mk_elaborates() {
         vec![DoElem::Match(
             Span::dummy(),
             vec![
-                SurfaceExpr::Ident(Span::dummy(), "x".to_string()),
-                SurfaceExpr::Ident(Span::dummy(), "y".to_string()),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x")),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("y")),
             ],
             vec![DoMatchArm {
                 span: Span::dummy(),
@@ -468,8 +494,8 @@ fn test_elab_do_match_polymorphic_discriminants_use_exact_prod_levels() {
         vec![DoElem::Match(
             Span::dummy(),
             vec![
-                SurfaceExpr::Ident(Span::dummy(), "x".to_string()),
-                SurfaceExpr::Ident(Span::dummy(), "y".to_string()),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x")),
+                SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("y")),
             ],
             vec![DoMatchArm {
                 span: Span::dummy(),
@@ -535,7 +561,10 @@ fn test_elab_do_trailing_bind_returns_error() {
         vec![DoElem::Bind(
             Span::dummy(),
             SurfaceBinder::new("x", None, SurfaceBinderInfo::Explicit),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "Type".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("Type"),
+            )),
         )],
     );
 
@@ -561,10 +590,16 @@ fn test_elab_do_if_no_else_produces_pure_unit() {
         Span::dummy(),
         vec![DoElem::If(
             Span::dummy(),
-            Box::new(SurfaceExpr::Ident(Span::dummy(), "True".to_string())),
+            Box::new(SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("True"),
+            )),
             vec![DoElem::Return(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "Unit.unit".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("Unit.unit"),
+                )),
             )],
             None, // no else branch
         )],

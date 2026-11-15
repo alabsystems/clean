@@ -36,6 +36,7 @@ use clean_kernel::{
 
 use crate::engine::AutomationEngine;
 use crate::engine_induction_aux::in_synthesis;
+use crate::search_stop::SearchStop;
 
 /// The peeled, environment-resolved target of one induction step.
 ///
@@ -204,7 +205,7 @@ impl AutomationEngine {
         motive: &Expr,
         motive_level: &Level,
         base_ctx: &LocalContext,
-        deadline: std::time::Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
         let rec_levels = recursor_levels(target, motive_level)?;
@@ -240,7 +241,7 @@ impl AutomationEngine {
                 n_binders,
                 n_recursive,
                 base_ctx,
-                deadline,
+                stop,
                 fuel,
             )?;
 
@@ -289,7 +290,7 @@ impl AutomationEngine {
         n_binders: u32,
         n_recursive: u32,
         base_ctx: &LocalContext,
-        deadline: std::time::Instant,
+        stop: &SearchStop,
         fuel: u32,
     ) -> Option<Expr> {
         let mut ctx = base_ctx.clone();
@@ -317,7 +318,7 @@ impl AutomationEngine {
         // hypotheses at them, and closes the residual equation by rewriting with
         // those specialised IHs — the step `add_assoc` / `append_assoc` need.
         let conclusion = type_checker(env, &ctx).whnf(&current);
-        let mut term = match self.prove_goal_rewrite(env, &conclusion, &ctx, deadline, fuel) {
+        let mut term = match self.prove_goal_rewrite(env, &conclusion, &ctx, stop, fuel) {
             Some(t) => t,
             // Non-recursive-eliminator fallback. A minor of a *non-recursive*
             // constructor (`Int.ofNat`, `Int.negSucc` — each carries a `Nat`
@@ -344,7 +345,7 @@ impl AutomationEngine {
                 for (fvar, bd, dom) in binders.iter().rev() {
                     generalized = Expr::pi(*bd, dom.clone(), generalized.abstract_fvar(*fvar));
                 }
-                let proof = self.try_induction_lane(env, &generalized, base_ctx, deadline, fuel)?;
+                let proof = self.try_induction_lane(env, &generalized, base_ctx, stop, fuel)?;
                 // Re-apply the proof `∀ fields, conclusion` to the opened fields,
                 // in binder order, recovering a term of type `conclusion`.
                 let mut applied = proof;

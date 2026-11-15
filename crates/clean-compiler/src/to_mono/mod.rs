@@ -142,7 +142,7 @@ fn decl_fn_type(decl: &Decl) -> Expr {
 /// In Lean 4, `lcErased` marks values whose types have been erased
 /// (proofs, type parameters, etc). These values exist at compile time
 /// but have no runtime representation.
-pub fn lc_erased_name() -> Name {
+pub(crate) fn lc_erased_name() -> Name {
     Name::from_string("lcErased")
 }
 
@@ -150,21 +150,21 @@ pub fn lc_erased_name() -> Name {
 ///
 /// In Lean 4, `lcAny` marks type dependencies that cannot be determined
 /// statically. This is the fallback when type information is lost.
-pub fn lc_any_name() -> Name {
+pub(crate) fn lc_any_name() -> Name {
     Name::from_string("lcAny")
 }
 
 /// Create the lcErased expression.
 ///
 /// Returns `Const(lcErased, [])` - a nullary constant.
-pub fn erased_expr() -> Expr {
+pub(crate) fn erased_expr() -> Expr {
     Expr::const_(lc_erased_name(), vec![])
 }
 
 /// Create the lcAny expression.
 ///
 /// Returns `Const(lcAny, [])` - a nullary constant.
-pub fn any_expr() -> Expr {
+pub(crate) fn any_expr() -> Expr {
     Expr::const_(lc_any_name(), vec![])
 }
 
@@ -179,7 +179,7 @@ pub(crate) fn red_arg_name(name: &Name) -> Name {
 /// Check if an expression is the lcErased marker.
 ///
 /// Returns true if `e` is `Const(lcErased, _)`.
-pub fn is_erased(e: &Expr) -> bool {
+pub(crate) fn is_erased(e: &Expr) -> bool {
     matches!(e.kind(), ExprKind::Const(name, _) if *name == lc_erased_name())
 }
 

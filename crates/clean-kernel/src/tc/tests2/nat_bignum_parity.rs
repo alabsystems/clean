@@ -64,7 +64,9 @@ fn expect_bignat(e: &Expr) -> BigNat {
 
 /// Assert that `op(a, b)` reduces (via whnf AND is_def_eq) to `expected`.
 fn assert_binop_reduces(op: &str, a: Expr, b: Expr, expected: &Expr) {
-    let env = Environment::new();
+    // The prelude holds the canonical definitions the folds are justified by
+    // (`env/native_fold_authority.rs`); an empty environment folds nothing.
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
     let e = nat_binop(op, a, b);
 
@@ -136,7 +138,17 @@ fn test_bignum_gcd_3limb_reduces() {
     let b = a.checked_mul_big(&BigNat::Small(4)).expect("within bound");
     let expected = big(a.gcd_big(&b));
     assert_eq!(expect_bignat(&expected), a);
-    assert_binop_reduces("Nat.gcd", big(a), big(b), &expected);
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // the prelude declares no `Nat.gcd`, and a native fold fires only over a
+    // canonical definition (`env/native_fold_authority.rs`). Folding it by
+    // name is what let a user's `Nat.gcd := fun _ _ => 0` prove `False`. The
+    // canonical gcd fold is pinned over Lean's own `Init` in
+    // `crates/clean-olean/tests/native_fold_canon_lean.rs`.
+    // The arithmetic itself is `BigNat::gcd_big`, checked above.
+    let env = Environment::with_prelude();
+    let tc = TypeChecker::new(&env);
+    let e = nat_binop("Nat.gcd", big(a), big(b));
+    assert_eq!(tc.whnf(&e), e, "an undeclared Nat.gcd must stay stuck");
 }
 
 #[test]
@@ -150,7 +162,7 @@ fn test_bignum_pow_small_3limb_base_reduces() {
 
 #[test]
 fn test_bignum_beq_3limb_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let a = two_pow_128();
@@ -178,7 +190,7 @@ fn test_bignum_beq_3limb_reduces() {
 
 #[test]
 fn test_bignum_ble_3limb_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let a = two_pow_128();
@@ -205,7 +217,7 @@ fn test_bignum_ble_3limb_reduces() {
 
 #[test]
 fn test_bignum_soundness_add_sub_roundtrip() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^200 = limbs [0, 0, 0, 2^8] (200 = 3*64 + 8).
@@ -227,7 +239,7 @@ fn test_bignum_soundness_add_sub_roundtrip() {
 
 #[test]
 fn test_bignum_succ_3limb_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // succ(2^128) = 2^128 + 1.

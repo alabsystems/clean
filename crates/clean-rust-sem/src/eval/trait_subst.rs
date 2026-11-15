@@ -116,7 +116,7 @@ impl Interpreter {
                     .iter()
                     .map(|arm| MatchArm {
                         pattern: arm.pattern.clone(),
-                        guard: arm.guard.as_ref().map(&rec),
+                        guard: arm.guard.as_ref().map(rec),
                         body: rec(&arm.body),
                     })
                     .collect(),
@@ -264,7 +264,7 @@ impl Interpreter {
                         },
                         AsmOperand::Out { constraint, expr } => AsmOperand::Out {
                             constraint: constraint.clone(),
-                            expr: expr.as_ref().map(&rec),
+                            expr: expr.as_ref().map(rec),
                         },
                         AsmOperand::InOut {
                             constraint,
@@ -273,7 +273,7 @@ impl Interpreter {
                         } => AsmOperand::InOut {
                             constraint: constraint.clone(),
                             in_expr: rec(in_expr),
-                            out_expr: out_expr.as_ref().map(&rec),
+                            out_expr: out_expr.as_ref().map(rec),
                         },
                         AsmOperand::Const(expr) => AsmOperand::Const(rec(expr)),
                         AsmOperand::Sym(symbol) => {

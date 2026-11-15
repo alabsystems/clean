@@ -31,6 +31,9 @@ const EXPECTED_NAMES: &[&str] = &[
     // C4 app witness that could not be FIRED there
     "impl_kinfers_lam",
     "impl_kinfers_lam_scoped",
+    // the let_ arm, assembled here for the same reason and for one more: its
+    // bridge carries two forall-premises that ARE this stage's theorems
+    "impl_kinfers_let_scoped",
     "impl_bridge_pi_scoped",
     "impl_bridge_app_witness",
     // the ImplInfer rules the retarget discharges
@@ -38,6 +41,7 @@ const EXPECTED_NAMES: &[&str] = &[
     "impl_sound_sort",
     "impl_sound_const",
     "impl_sound_mdata",
+    "impl_sound_lit",
     "impl_sound_lam",
     "impl_sound_pi",
     "impl_sound_let",
@@ -66,6 +70,8 @@ const EXPECTED_NAMES: &[&str] = &[
     "tenvrepc_empty",
     "impl_sound_guard_witness",
     "impl_infer_sound_witness",
+    "impl_infer_sound_nat_literal",
+    "impl_infer_sound_string_literal",
 ];
 
 #[test]
@@ -99,6 +105,29 @@ fn test_impl_infer_sound_increment_is_proved_and_census_neutral() {
             env.get_const(&Name::from_string(name)).is_some(),
             "`{name}` never reached the kernel environment"
         );
+    }
+
+    // Check actual proof dependencies, not only the authored metadata. The
+    // assembled witnesses must consume the theorem with a constructible guard.
+    for name in [
+        "impl_sound_lit",
+        "impl_infer_sound_nat_literal",
+        "impl_infer_sound_string_literal",
+    ] {
+        let closure = crate::spec_axiom_closure::computed_axiom_closure(&spec, name);
+        assert!(closure.is_empty(), "{name} has hidden axioms: {closure:?}");
+        spec.verify_definition(name)
+            .unwrap_or_else(|error| panic!("{name} must recheck: {error:?}"));
+    }
+    for name in [
+        "impl_infer_sound_nat_literal",
+        "impl_infer_sound_string_literal",
+    ] {
+        let def = defs.get(name).expect("assembled literal witness");
+        let proof = def.value_src.as_deref().expect("literal witness proof");
+        assert!(proof.contains("impl_infer_sound "));
+        assert!(proof.contains("ImplUnit.mk"));
+        assert!(!def.type_src.contains("->"));
     }
 
     // ── census 11 ──────────────────────────────────────────────────────────
@@ -169,8 +198,17 @@ fn test_impl_infer_sound_increment_is_proved_and_census_neutral() {
 
     // ── the arms land in TypingCtxConv, which is the WHOLE POINT of M4 ──────
     // C4 bridged into KernelInfers and stopped at four rules because
-    // KernelInfers has no conversion rule. If someone retargeted these back to
-    // KernelInfers the app arm could not exist at all, so pin the codomain.
+    // KernelInfers has no conversion rule, so pin THESE arms' codomain.
+    //
+    // CORRECTED 2026-09-18. This comment used to end "if someone retargeted
+    // these back to KernelInfers the app arm could not exist at all". That is
+    // now false: `impl_kinfers_app` IS that arm, it exists, and
+    // `impl_infer_kinfers_sound` assembles all eight rules in the KernelInfers
+    // codomain. What the assertion below still pins is that the M4 arms
+    // themselves stay in TypingCtxConv -- the two lanes are kept SEPARATE and
+    // both are wanted, the weak one because its conv absorbs the operational
+    // steps and the sharp one because it does not. Retargeting these in place
+    // would collapse that distinction, which is what the pin is for.
     for name in ["impl_sound_app", "impl_sound_sort", "impl_sound_const"] {
         let arm = defs.get(name).unwrap_or_else(|| panic!("`{name}` missing"));
         assert!(

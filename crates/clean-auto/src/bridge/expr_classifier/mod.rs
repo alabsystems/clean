@@ -20,6 +20,7 @@
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprKind};
 
+use super::division_semantics::IntDivisionRounding;
 use crate::bridge::name_match::name_eq_any;
 // pub(super) so test submodules can access via `use super::*`
 pub(super) use crate::bridge::name_match::name_eq_str;
@@ -108,6 +109,7 @@ pub(crate) enum LogicalForm {
         ty: Expr,
         lhs: Expr,
         rhs: Expr,
+        int_rounding: Option<IntDivisionRounding>,
         original: Expr,
     },
     #[allow(dead_code)]
@@ -115,6 +117,7 @@ pub(crate) enum LogicalForm {
         ty: Expr,
         lhs: Expr,
         rhs: Expr,
+        int_rounding: Option<IntDivisionRounding>,
         original: Expr,
     },
     #[allow(dead_code)]
@@ -276,7 +279,6 @@ fn classify_comparison(name: &Name, n: usize, args: &[&Expr]) -> Option<LogicalF
     };
     let lhs = args[n - 2].clone();
     let rhs = args[n - 1].clone();
-
     Some(match head.family {
         CmpFamily::Lt => LogicalForm::Lt { ty, lhs, rhs },
         CmpFamily::Le => LogicalForm::Le { ty, lhs, rhs },
@@ -344,6 +346,23 @@ fn classify_arithmetic(name: &Name, n: usize, args: &[&Expr], expr: &Expr) -> Op
     let lhs = args[n - 2].clone();
     let rhs = args[n - 1].clone();
 
+    let int_rounding = if matches!(head.family, ArithFamily::Div | ArithFamily::Mod)
+        && matches!(ty.strip_mdata().kind(), ExprKind::Const(ty, _) if name_eq_str(ty, "Int"))
+    {
+        // A carrier is not an instance dictionary. Generic projections must
+        // first reduce through the actual checked instance; a custom Int
+        // division must never silently receive the built-in interpretation.
+        Some(if name_eq_any(name, &["Int.div", "Int.mod"]) {
+            IntDivisionRounding::Truncating
+        } else if name_eq_any(name, &["Int.ediv", "Int.emod"]) {
+            IntDivisionRounding::Euclidean
+        } else {
+            return None;
+        })
+    } else {
+        None
+    };
+
     Some(match head.family {
         ArithFamily::Add => LogicalForm::Add {
             ty,
@@ -367,12 +386,14 @@ fn classify_arithmetic(name: &Name, n: usize, args: &[&Expr], expr: &Expr) -> Op
             ty,
             lhs,
             rhs,
+            int_rounding,
             original,
         },
         ArithFamily::Mod => LogicalForm::Mod {
             ty,
             lhs,
             rhs,
+            int_rounding,
             original,
         },
         ArithFamily::Neg => unreachable!("handled above"),

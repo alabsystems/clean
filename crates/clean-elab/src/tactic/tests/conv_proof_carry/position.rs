@@ -24,7 +24,11 @@ fn test_conv_rw_binder_body_path_preserves_proof_chain_without_trust() {
     );
     let goal = Expr::pi(BinderInfo::Default, make_eq_n(x.clone(), y.clone()), target);
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
     conv_rw(
@@ -34,7 +38,7 @@ fn test_conv_rw_binder_body_path_preserves_proof_chain_without_trust() {
             ConvPosition::EqLhs,
             ConvPosition::AppArg,
         ],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("binder-body conv_rw should lift the rewrite proof through the Pi body");
@@ -49,7 +53,8 @@ fn test_conv_rw_binder_body_path_preserves_proof_chain_without_trust() {
         "binder-body conv_rw should rewrite only the selected occurrence"
     );
 
-    intro(&mut state, "n").expect("Pi target should still introduce after the rewrite");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("n"))
+        .expect("Pi target should still introduce after the rewrite");
     rfl(&mut state).expect("rewritten binder-body target should close by reflexivity");
     assert_no_trusted_fallback(&state, "conv_rw binder body", axiom_before);
     assert!(
@@ -75,14 +80,19 @@ fn test_conv_rw_binder_type_path_preserves_proof_chain_without_trust() {
         ),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
-    intro(&mut state, "hy").expect("intro should add the witness for the rewritten type");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hy"))
+        .expect("intro should add the witness for the rewritten type");
     let axiom_before = axiom_snapshot();
 
     conv_rw(
         &mut state,
         vec![ConvPosition::BinderType, ConvPosition::AppArg],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("binder-type conv_rw should lift the rewrite proof through the Pi type");
@@ -93,7 +103,11 @@ fn test_conv_rw_binder_type_path_preserves_proof_chain_without_trust() {
         "binder-type conv_rw should rewrite the focused binder type"
     );
 
-    intro(&mut state, "hy2").expect("rewritten Pi target should remain introducible");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hy2"),
+    )
+    .expect("rewritten Pi target should remain introducible");
     let hy2 = local_fvar_by_name(&state, "hy2");
     exact(&mut state, Expr::fvar(hy2))
         .expect("the rewritten binder assumption should close the goal");
@@ -121,7 +135,11 @@ fn test_conv_rw_let_body_path_preserves_proof_chain_without_trust() {
     );
     let goal = Expr::pi(BinderInfo::Default, make_eq_n(x.clone(), y.clone()), target);
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
     conv_rw(
@@ -131,7 +149,7 @@ fn test_conv_rw_let_body_path_preserves_proof_chain_without_trust() {
             ConvPosition::EqLhs,
             ConvPosition::AppArg,
         ],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("let-body conv_rw should lift the rewrite proof through the let body");
@@ -181,12 +199,22 @@ fn test_conv_rw_let_value_path_preserves_proof_chain_without_trust() {
         ),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
-    intro(&mut state, "hy").expect("intro should add a witness for the rewritten let body");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hy"))
+        .expect("intro should add a witness for the rewritten let body");
     let axiom_before = axiom_snapshot();
 
-    conv_rw(&mut state, vec![ConvPosition::LetValue], "hxy", false)
-        .expect("let-value conv_rw should lift the rewrite proof through the let value");
+    conv_rw(
+        &mut state,
+        vec![ConvPosition::LetValue],
+        &clean_parser::SurfaceName::generated_path("hxy"),
+        false,
+    )
+    .expect("let-value conv_rw should lift the rewrite proof through the let value");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -228,14 +256,19 @@ fn test_conv_rw_let_type_path_preserves_proof_chain_without_trust() {
         ),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
-    intro(&mut state, "hy").expect("intro should add a witness for the rewritten goal");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hy"))
+        .expect("intro should add a witness for the rewritten goal");
     let axiom_before = axiom_snapshot();
 
     conv_rw(
         &mut state,
         vec![ConvPosition::LetType, ConvPosition::AppArg],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("let-type conv_rw should lift the rewrite proof through the let type");

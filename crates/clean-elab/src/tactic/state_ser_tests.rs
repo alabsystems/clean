@@ -69,8 +69,9 @@ fn test_serialize_single_goal() {
 #[test]
 fn test_serialize_local_context() {
     let decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(42),
-        name: "h".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: prop(),
         value: None,
     };
@@ -187,14 +188,16 @@ fn test_json_round_trip() {
 fn test_json_round_trip_with_context() {
     let ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "x".to_owned(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             ty: const_expr("Nat"),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "h".to_owned(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: prop(),
             value: None,
         },
@@ -386,8 +389,9 @@ fn test_is_solved_all_closed() {
 #[test]
 fn test_serialize_let_binding_local() {
     let decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(10),
-        name: "x".to_owned(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         ty: const_expr("Nat"),
         value: Some(const_expr("Nat.zero")),
     };

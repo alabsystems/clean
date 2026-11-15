@@ -39,7 +39,7 @@ use crate::stack_safe;
 /// ENSURES: No positivity proof is assumed or fabricated.
 /// ENSURES: Returns `Err(NoGoals)` when no goals remain; `Err(HypothesisNotFound)`
 ///   when the named hypothesis does not exist.
-pub fn positivity_at(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn positivity_at(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     positivity_at_with_config(state, hyp_name, PositivityAtConfig::new())
 }
 
@@ -48,7 +48,7 @@ pub fn positivity_at(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 #[non_exhaustive]
 pub struct PositivityAtConfig {
     /// Name for the generated positivity hypothesis
-    pub result_name: Option<String>,
+    pub result_name: Option<clean_parser::SurfaceName>,
     /// Whether to try stronger claims (positive vs non-negative)
     pub try_stronger: bool,
 }
@@ -68,8 +68,8 @@ impl PositivityAtConfig {
     }
 
     #[must_use]
-    pub fn with_name(mut self, name: &str) -> Self {
-        self.result_name = Some(name.to_string());
+    pub fn with_name(mut self, name: &clean_parser::SurfaceName) -> Self {
+        self.result_name = Some(name.clone());
         self
     }
 }
@@ -85,7 +85,7 @@ impl PositivityAtConfig {
 /// ENSURES: No positivity proof is assumed or fabricated.
 pub fn positivity_at_with_config(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &clean_parser::SurfaceName,
     config: PositivityAtConfig,
 ) -> TacticResult {
     if state.goals.is_empty() {
@@ -98,7 +98,8 @@ pub fn positivity_at_with_config(
     let hyp = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
 
     let hyp_ty = hyp.ty.clone();
@@ -113,7 +114,7 @@ pub fn positivity_at_with_config(
     // Generate the result name
     let result_name = config
         .result_name
-        .unwrap_or_else(|| format!("{hyp_name}_pos"));
+        .unwrap_or_else(|| super::pattern::names::generated_suffix(hyp_name, "_pos"));
 
     // Create the positivity proposition based on analysis
     let pos_prop = make_positivity_prop(&expr_to_analyze, positivity_result, config.try_stronger);

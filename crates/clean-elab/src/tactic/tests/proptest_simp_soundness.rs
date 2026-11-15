@@ -411,13 +411,25 @@ fn assert_generated_simp_case(case: SimpCase) {
     let result = match tactic {
         SimpTactic::Default => simp_default(&mut state),
         SimpTactic::RwWithIntro => {
-            intro(&mut state, "h").expect("intro should succeed");
-            simp_rw(&mut state, vec!["h".to_string()])
+            intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+                .expect("intro should succeed");
+            simp_rw(
+                &mut state,
+                vec![clean_parser::SurfaceName::generated_path("h")],
+            )
         }
         SimpTactic::RwWithTwoIntros => {
-            intro(&mut state, "h1").expect("first intro should succeed");
-            intro(&mut state, "h2").expect("second intro should succeed");
-            simp_rw(&mut state, vec!["h1".to_string(), "h2".to_string()])
+            intro(&mut state, &clean_parser::SurfaceName::generated_path("h1"))
+                .expect("first intro should succeed");
+            intro(&mut state, &clean_parser::SurfaceName::generated_path("h2"))
+                .expect("second intro should succeed");
+            simp_rw(
+                &mut state,
+                vec![
+                    clean_parser::SurfaceName::generated_path("h1"),
+                    clean_parser::SurfaceName::generated_path("h2"),
+                ],
+            )
         }
     };
 
@@ -446,6 +458,21 @@ fn test_generated_simp_soundness_local_rewrite_chain_case() {
         mid_name: "B".to_string(),
         rhs_name: "C".to_string(),
     });
+}
+
+#[test]
+#[serial]
+fn test_generated_simp_soundness_reused_names_across_fresh_environments() {
+    // The full rich suite found `R Oj5m = Oj5m` after an earlier generated
+    // environment registered a different statement under the same `R_simp`
+    // name. Each case must use its own declaration, including after returning
+    // to the first spelling; a cache of names alone cannot distinguish them.
+    for val_name in ["A", "Oj5m", "A"] {
+        assert_generated_simp_case(SimpCase::SingleRewriteBool {
+            fn_name: "R".to_string(),
+            val_name: val_name.to_string(),
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------

@@ -295,6 +295,19 @@ fn build_verify_json(
         "ready_count": inspect.ready_count,
         "incomplete_count": inspect.incomplete_count,
         "failures": failures,
+        "environment_recheck": {
+            "passed": result.environment.passed(),
+            "pinned_to_base": result.environment.pinned_to_base,
+            "constants_readmitted": result.environment.constants_readmitted,
+            "families_readmitted": result.environment.families_readmitted,
+            "redefined_base": result.environment.redefined_base,
+            "refusals": result
+                .environment
+                .refusals
+                .iter()
+                .map(|(name, reason)| serde_json::json!({ "name": name, "reason": reason }))
+                .collect::<Vec<_>>(),
+        },
         "load_time_ms": load_time.as_millis(),
         "verify_time_ms": verify_time.as_millis(),
     })
@@ -360,6 +373,18 @@ fn render_verify_human(
         "Trust level: {}\n",
         trust_level_str(result.trust_level)
     ));
+    let recheck = &result.environment;
+    out.push_str(&format!(
+        "Environment re-check: {} pinned to the canonical base, {} constant(s) and {} \
+         famil(ies) re-admitted by the kernel, {} refused\n",
+        recheck.pinned_to_base,
+        recheck.constants_readmitted,
+        recheck.families_readmitted,
+        recheck.refusals.len()
+    ));
+    for (name, reason) in &recheck.refusals {
+        out.push_str(&format!("  {} {name} ({reason})\n", red("REFUSED:")));
+    }
     out.push_str(&format!(
         "Timing: load {:.1}ms, verify {:.1}ms\n",
         load_time.as_secs_f64() * 1000.0,

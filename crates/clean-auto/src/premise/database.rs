@@ -113,7 +113,7 @@ impl PremiseDatabase {
     }
 
     /// Get the frequency of a constant
-    pub fn const_frequency(&self, name: &Name) -> usize {
+    pub(crate) fn const_frequency(&self, name: &Name) -> usize {
         self.const_freq.get(name).copied().unwrap_or(0)
     }
 

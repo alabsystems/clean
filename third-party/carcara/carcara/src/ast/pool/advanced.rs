@@ -1,0 +1,185 @@
+use super::{Datatype, FreeVars, PrimitivePool, TermPool};
+use crate::ast::{Rc, Sort, Term};
+use std::sync::{Arc, RwLock};
+
+pub struct ContextPool {
+    pub(crate) global_pool: Arc<PrimitivePool>,
+    pub(crate) inner: Arc<RwLock<PrimitivePool>>,
+}
+
+impl Default for ContextPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ContextPool {
+    pub fn new() -> Self {
+        Self {
+            global_pool: Arc::new(PrimitivePool::new()),
+            inner: Arc::new(RwLock::new(PrimitivePool::new())),
+        }
+    }
+
+    pub fn from_global(global_pool: &Arc<PrimitivePool>) -> Self {
+        Self {
+            global_pool: global_pool.clone(),
+            inner: Arc::new(RwLock::new(PrimitivePool::new())),
+        }
+    }
+
+    pub fn from_previous(ctx_pool: &Self) -> Self {
+        Self {
+            global_pool: ctx_pool.global_pool.clone(),
+            inner: ctx_pool.inner.clone(),
+        }
+    }
+}
+
+impl TermPool for ContextPool {
+    fn add(&mut self, term: Term) -> Rc<Term> {
+        // If the global pool has the term
+        if let Some(entry) = self.global_pool.terms.get(&term) {
+            return entry.clone();
+        }
+        let mut ctx_guard = self.inner.write().unwrap();
+        let term = ctx_guard.terms.add(term);
+        ctx_guard.compute_sort(&term);
+        term
+    }
+
+    fn find(&self, term: &Term) -> Option<Rc<Term>> {
+        if let Some(entry) = self.global_pool.terms.get(term) {
+            return Some(entry.clone());
+        }
+        self.inner.read().unwrap().terms.get(term).cloned()
+    }
+
+    fn add_sort(&mut self, sort: Sort) -> Rc<Sort> {
+        // If the global pool has the sort
+        if let Some(entry) = self.global_pool.sorts.get(&sort) {
+            return entry.clone();
+        }
+        let mut ctx_guard = self.inner.write().unwrap();
+        ctx_guard.sorts.add(sort)
+    }
+
+    fn sort(&self, term: &Rc<Term>) -> Rc<Sort> {
+        if let Some(sort) = self.global_pool.sorts_cache.get(term) {
+            sort.clone()
+        } else {
+            // A sort inserted by context
+            self.inner.read().unwrap().sorts_cache[term].clone()
+        }
+    }
+
+    fn free_vars(&mut self, term: &Rc<Term>) -> FreeVars {
+        self.inner
+            .write()
+            .unwrap()
+            .free_vars_with_priorities(term, [&self.global_pool])
+    }
+
+    fn get_datatype(&self, name: &str) -> &Datatype {
+        self.global_pool.get_datatype(name)
+    }
+}
+
+// =========================================================================
+
+pub struct LocalPool {
+    pub(crate) ctx_pool: ContextPool,
+    pub(crate) inner: PrimitivePool,
+}
+
+impl Default for LocalPool {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl LocalPool {
+    pub fn new() -> Self {
+        Self {
+            ctx_pool: ContextPool::new(),
+            inner: PrimitivePool::new(),
+        }
+    }
+
+    /// Instantiates a new `LocalPool` from a previous `ContextPool` (makes
+    /// sure the context is shared between threads).
+    pub fn from_previous(ctx_pool: &ContextPool) -> Self {
+        Self {
+            ctx_pool: ContextPool::from_previous(ctx_pool),
+            inner: PrimitivePool::new(),
+        }
+    }
+}
+
+impl TermPool for LocalPool {
+    fn add(&mut self, term: Term) -> Rc<Term> {
+        // If there is a constant pool and has the term
+        if let Some(entry) = self.ctx_pool.global_pool.terms.get(&term) {
+            entry.clone()
+        }
+        // If this term was inserted by the context
+        else if let Some(entry) = self.ctx_pool.inner.read().unwrap().terms.get(&term) {
+            entry.clone()
+        } else {
+            self.inner.add(term)
+        }
+    }
+
+    fn find(&self, term: &Term) -> Option<Rc<Term>> {
+        if let Some(entry) = self.ctx_pool.global_pool.terms.get(term) {
+            return Some(entry.clone());
+        }
+        if let Some(entry) = self.ctx_pool.inner.read().unwrap().terms.get(term) {
+            return Some(entry.clone());
+        }
+        self.inner.terms.get(term).cloned()
+    }
+
+    fn add_sort(&mut self, sort: Sort) -> Rc<Sort> {
+        // If there is a constant pool and has the sort
+        if let Some(entry) = self.ctx_pool.global_pool.sorts.get(&sort) {
+            entry.clone()
+        }
+        // If this sort was inserted by the context
+        else if let Some(entry) = self.ctx_pool.inner.read().unwrap().sorts.get(&sort) {
+            entry.clone()
+        } else {
+            self.inner.add_sort(sort)
+        }
+    }
+
+    fn sort(&self, term: &Rc<Term>) -> Rc<Sort> {
+        if let Some(sort) = self.ctx_pool.global_pool.sorts_cache.get(term) {
+            sort.clone()
+        }
+        // A sort inserted by context
+        else if let Some(entry) = self.ctx_pool.inner.read().unwrap().sorts_cache.get(term) {
+            entry.clone()
+        } else {
+            self.inner.sorts_cache[term].clone()
+        }
+    }
+
+    fn free_vars(&mut self, term: &Rc<Term>) -> FreeVars {
+        self.inner.free_vars_with_priorities(
+            term,
+            [
+                &self.ctx_pool.global_pool,
+                &self.ctx_pool.inner.read().unwrap(),
+            ],
+        )
+    }
+
+    // Modified in Clean: datatypes are declared only while parsing, into the global pool. The
+    // thread-local `inner` pool never has any, so reading it panicked ("no entry found for key")
+    // the first time a rule (`dt_project`, see third-party/carcara/DOWNSTREAM.md, C2) looked a
+    // datatype up in the parallel checker.
+    fn get_datatype(&self, name: &str) -> &Datatype {
+        self.ctx_pool.global_pool.get_datatype(name)
+    }
+}

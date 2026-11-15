@@ -6,7 +6,7 @@
 
 use clean_macro::quotation::parse_quotation;
 use clean_macro::{Syntax, SyntaxKind, SyntaxQuote};
-use clean_parser::{NotationItem, NotationKind, SurfaceExpr, SyntaxPatternItem};
+use clean_parser::{NotationItem, NotationKind, SurfaceExpr, SurfaceName, SyntaxPatternItem};
 
 use super::surface_to_syntax;
 
@@ -75,6 +75,9 @@ pub(super) fn syntax_quote_from_body(body: &SurfaceExpr, content: &str) -> Synta
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum MacroRegistrationError {
+    /// A source category cannot be represented by the single-component protocol.
+    #[error("syntax category must be one non-relative string name component")]
+    SyntaxCategoryName,
     /// Failed to parse a syntax quotation
     #[error("failed to parse syntax quotation: {0}")]
     QuotationParse(String),
@@ -91,11 +94,84 @@ pub enum MacroRegistrationError {
     /// fabricated expansion. The `String` is the rendered message.
     #[error("{0}")]
     MacroThrowError(String),
+    /// A macro or notation template whose binding structure Clean does not
+    /// model exactly ([`clean_parser::TemplateRefusal`]). The declaration is
+    /// refused; it is never registered with a template read another way.
+    #[error("template refused: {0}")]
+    TemplateRefused(String),
+}
+
+impl MacroRegistrationError {
+    /// The registration error refusing a template (see
+    /// [`Self::TemplateRefused`]).
+    pub(super) fn refused(refusal: &clean_parser::TemplateRefusal) -> Self {
+        Self::TemplateRefused(refusal.reason().to_owned())
+    }
+}
+
+/// The expansion registered for a macro or notation Clean refuses: an
+/// identifier no source can spell and nothing resolves, so every use that
+/// reaches it fails as an unknown identifier — the use is refused, never
+/// read as other syntax.
+pub(super) fn refused_expansion_quote(reason: &str) -> SyntaxQuote {
+    SyntaxQuote::new(
+        Syntax::ident(&SurfaceName::unspellable(
+            &format!("refused notation or macro template: {reason}"),
+            0,
+        )),
+        SyntaxKind::term(),
+    )
 }
 
 /// Convert a surface expression that may contain a syntax quotation into a `SyntaxQuote`.
 pub(super) fn surface_expr_to_syntax_quote(
     expr: &SurfaceExpr,
+) -> Result<SyntaxQuote, MacroRegistrationError> {
+    surface_expr_to_template_quote(expr, None)
+}
+
+/// Where a macro's EXPANSION template is declared: its namespace and the
+/// section variables in scope there. See
+/// [`clean_parser::mark_template_free_references`].
+pub(super) struct TemplateSite<'a> {
+    pub(super) namespace: &'a clean_kernel::Name,
+    pub(super) section_variables: &'a [SurfaceName],
+    /// The declaring command, whose pre-resolution of the template's free
+    /// names every use reads ([`clean_parser::TemplateOrigin::site`]).
+    pub(super) site: Option<clean_parser::TemplateSiteId>,
+}
+
+/// [`surface_expr_to_syntax_quote`] for a macro's expansion template: its free
+/// references are marked hygienic, so no binder at the use site captures
+/// them (`macro "H " x:term : term => `(gf $x)` calls the global `gf` even
+/// where a parameter `gf` is in scope, as in Lean 4).
+pub(super) fn surface_expr_to_expansion_quote(
+    expr: &SurfaceExpr,
+    site: &TemplateSite<'_>,
+) -> Result<SyntaxQuote, MacroRegistrationError> {
+    surface_expr_to_template_quote(expr, Some(site))
+}
+
+fn hygienic_body(
+    body: SurfaceExpr,
+    site: Option<&TemplateSite<'_>>,
+) -> Result<SurfaceExpr, MacroRegistrationError> {
+    match site {
+        Some(site) => clean_parser::mark_template_free_references(
+            &body,
+            &[],
+            site.namespace,
+            site.section_variables,
+            site.site,
+        )
+        .map_err(|refusal| MacroRegistrationError::refused(&refusal)),
+        None => Ok(body),
+    }
+}
+
+fn surface_expr_to_template_quote(
+    expr: &SurfaceExpr,
+    site: Option<&TemplateSite<'_>>,
 ) -> Result<SyntaxQuote, MacroRegistrationError> {
     match expr {
         SurfaceExpr::SyntaxQuote(_, content) => {
@@ -106,15 +182,15 @@ pub(super) fn surface_expr_to_syntax_quote(
             // term template that could silently never fire.
             if let Some((head, body)) = quotation_category_head(content) {
                 let wrapped = format!("({body})");
-                return clean_parser::parse_quotation_body(&wrapped)
-                    .map(|parsed| {
-                        SyntaxQuote::new(surface_to_syntax(&parsed), quotation_category(content))
-                    })
-                    .map_err(|e| {
-                        MacroRegistrationError::QuotationParse(format!(
-                            "in `({head}| …)` quotation body `{body}`: {e}"
-                        ))
-                    });
+                let parsed = clean_parser::parse_quotation_body(&wrapped).map_err(|e| {
+                    MacroRegistrationError::QuotationParse(format!(
+                        "in `({head}| …)` quotation body `{body}`: {e}"
+                    ))
+                })?;
+                return Ok(SyntaxQuote::new(
+                    surface_to_syntax(&hygienic_body(parsed, site)?),
+                    quotation_category(content),
+                ));
             }
             // Faithful path: parse the quotation body with the antiquotation- and
             // operator-aware quotation grammar, then lower to macro `Syntax`. This
@@ -126,21 +202,136 @@ pub(super) fn surface_expr_to_syntax_quote(
             // we never regress previously-handled shapes.
             match clean_parser::parse_quotation_body(content) {
                 Ok(body) => Ok(SyntaxQuote::new(
-                    surface_to_syntax(&body),
+                    surface_to_syntax(&hygienic_body(body, site)?),
                     quotation_category(content),
                 )),
                 Err(_) => {
-                    let raw = format!("`{content}");
-                    parse_quotation(&raw)
-                        .map_err(|e| MacroRegistrationError::QuotationParse(e.to_string()))
+                    let quote = legacy_quotation(content)?;
+                    Ok(match site {
+                        Some(site) => SyntaxQuote::new(
+                            mark_legacy_template(quote.syntax, site, &mut Vec::new()),
+                            quote.category,
+                        ),
+                        None => quote,
+                    })
                 }
             }
         }
         other => Ok(SyntaxQuote::new(
-            surface_to_syntax(other),
+            surface_to_syntax(&hygienic_body(other.clone(), site)?),
             SyntaxKind::term(),
         )),
     }
+}
+
+/// The quotation `content` read by the legacy simplified parser, the reader
+/// of the quotations the quotation grammar cannot parse (a typed
+/// antiquotation `$x:term`, …). Its grammar is an application of
+/// identifiers, literals, parentheses and antiquotations: it has no binder.
+fn legacy_quotation(content: &str) -> Result<SyntaxQuote, MacroRegistrationError> {
+    parse_quotation(&format!("`{content}"))
+        .map_err(|e| MacroRegistrationError::QuotationParse(e.to_string()))
+}
+
+/// Whether `kind` is an antiquotation node of the legacy quotation reader,
+/// whose identifiers name the macro's pattern variables.
+fn is_legacy_antiquotation(kind: &SyntaxKind) -> bool {
+    [
+        SyntaxKind::antiquot(),
+        SyntaxKind::antiquot_typed(),
+        SyntaxKind::antiquot_splice(),
+        SyntaxKind::antiquot_splice_typed(),
+    ]
+    .contains(kind)
+}
+
+/// Mark every identifier of a legacy-read template (see [`legacy_quotation`])
+/// as a free reference of the template declared at `site`, exactly as
+/// [`clean_parser::mark_template_free_references`] marks a parsed one: the
+/// legacy grammar binds nothing, so every identifier outside an
+/// antiquotation is free, and resolves where the macro is declared — never
+/// with the opens or the locals of a use (`section open A macro "M" x:term :
+/// term => `(Nat.add kq $x:term) end` reads `A.kq` everywhere). `spellings`
+/// collects the marked names, which the declaration pre-resolves.
+fn mark_legacy_template(
+    syntax: Syntax,
+    site: &TemplateSite<'_>,
+    spellings: &mut Vec<SurfaceName>,
+) -> Syntax {
+    match syntax {
+        Syntax::Ident(info, name) => {
+            let inert = name.is_anonymous()
+                || name.is_relative_constructor()
+                || name.is_global_reference()
+                || name.template_origin().is_some()
+                || name.template_scope().is_some()
+                || ["_", "Type", "Prop"]
+                    .iter()
+                    .any(|keyword| name.is_unescaped_component(keyword));
+            if inert {
+                return Syntax::Ident(info, name);
+            }
+            let origin = std::sync::Arc::new(clean_parser::TemplateOrigin {
+                namespace: site.namespace.clone(),
+                section_variable: site.section_variables.contains(&name),
+                site: site.site,
+            });
+            if !spellings.contains(&name) {
+                spellings.push(name.clone());
+            }
+            Syntax::Ident(info, name.with_template_origin(origin))
+        }
+        Syntax::Node(mut node) if !is_legacy_antiquotation(&node.kind) => {
+            node.children = std::mem::take(&mut node.children)
+                .into_iter()
+                .map(|child| mark_legacy_template(child, site, spellings))
+                .collect();
+            Syntax::Node(node)
+        }
+        other => other,
+    }
+}
+
+/// Every spelling a use of the macro expansion `expr` resolves as a GLOBAL
+/// name, which the declaration pre-resolves (see
+/// [`clean_parser::template_free_reference_spellings`]); read with the same
+/// grammar the registration reads the template with, the quotation grammar
+/// or the legacy one.
+///
+/// # Errors
+///
+/// A template the hygiene walk refuses, or a quotation neither grammar
+/// reads.
+pub(crate) fn macro_template_spellings(
+    expr: &SurfaceExpr,
+    namespace: &clean_kernel::Name,
+) -> Result<Vec<SurfaceName>, MacroRegistrationError> {
+    let body = match expr {
+        SurfaceExpr::SyntaxQuote(_, content) => match quotation_category_head(content) {
+            Some((_, body)) => clean_parser::parse_quotation_body(&format!("({body})")),
+            None => match clean_parser::parse_quotation_body(content) {
+                Ok(body) => Ok(body),
+                Err(_) => {
+                    let quote = legacy_quotation(content)?;
+                    let mut spellings = Vec::new();
+                    let site = TemplateSite {
+                        namespace,
+                        section_variables: &[],
+                        site: None,
+                    };
+                    let _ = mark_legacy_template(quote.syntax, &site, &mut spellings);
+                    return Ok(spellings);
+                }
+            },
+        },
+        other => Ok(other.clone()),
+    };
+    // A body neither grammar reads refuses at registration, which reports it.
+    let Ok(body) = body else {
+        return Ok(Vec::new());
+    };
+    clean_parser::template_free_reference_spellings(&body, &[], namespace)
+        .map_err(|refusal| MacroRegistrationError::refused(&refusal))
 }
 
 /// Convert a syntax pattern (from `syntax` decl) to Syntax AST.
@@ -174,7 +365,10 @@ fn syntax_pattern_item_to_syntax(item: &SyntaxPatternItem) -> Syntax {
                 Syntax::mk_antiquot(name)
             }
         }
-        SyntaxPatternItem::CategoryRef(cat) => Syntax::mk_antiquot(cat),
+        // Category labels are a textual protocol field, not a rendered Name.
+        SyntaxPatternItem::CategoryRef(cat) => {
+            Syntax::mk_antiquot(&SurfaceName::component(cat, false))
+        }
         SyntaxPatternItem::Optional(inner) => {
             let inner_syn = syntax_pattern_to_syntax(inner);
             Syntax::node(SyntaxKind::app("optional"), vec![inner_syn])
@@ -212,7 +406,7 @@ pub(super) fn pattern_to_name(items: &[SyntaxPatternItem]) -> String {
         .iter()
         .filter_map(|item| match item {
             SyntaxPatternItem::Literal(s) => Some(s.replace(' ', "_")),
-            SyntaxPatternItem::Variable { name, .. } => Some(name.clone()),
+            SyntaxPatternItem::Variable { name, .. } => Some(name.to_string()),
             _ => None,
         })
         .collect::<Vec<_>>()
@@ -223,7 +417,7 @@ pub(super) fn pattern_to_name(items: &[SyntaxPatternItem]) -> String {
 pub(super) fn notation_pattern_to_syntax(
     kind: NotationKind,
     items: &[NotationItem],
-) -> (Syntax, SyntaxKind, Vec<String>) {
+) -> (Syntax, SyntaxKind, Vec<SurfaceName>) {
     let mut children = Vec::new();
     let mut var_names = Vec::new();
 
@@ -308,7 +502,7 @@ pub(super) fn notation_to_name(kind: NotationKind, items: &[NotationItem]) -> St
         .iter()
         .map(|i| match i {
             NotationItem::Literal(s) => s.trim().replace(' ', "_"),
-            NotationItem::Variable(v) => v.clone(),
+            NotationItem::Variable(v) => v.to_string(),
         })
         .collect();
 

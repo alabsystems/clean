@@ -37,9 +37,18 @@ fn test_if_let_numeral_add_one_pattern_supported() {
 
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
-        SurfacePattern::NumeralAdd(Box::new(SurfacePattern::Var("k".to_string())), 1),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+        SurfacePattern::NumeralAdd(
+            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
+            1,
+        ),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("k"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
 
@@ -101,9 +110,18 @@ fn test_if_let_numeral_add_offset_two_pattern_supported() {
 
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
-        SurfacePattern::NumeralAdd(Box::new(SurfacePattern::Var("k".to_string())), 2),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+        SurfacePattern::NumeralAdd(
+            Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
+            2,
+        ),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("n"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("k"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
 

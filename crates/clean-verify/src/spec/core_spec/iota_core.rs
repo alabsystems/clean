@@ -4,15 +4,15 @@
 
 //! Increment E (#2859 computational-iota/delta track): the E-core assembly.
 //!
-//! `iota_reduct` is a 5-level nested `opt_bind` chain. `iota_reduct_some_inv` is
-//! the CPS inverter: from `iota_reduct env e = some e'` it recovers the five
-//! intermediate witnesses (recursor name, metadata, major premise, constructor
-//! name, rule) together with each lookup equation and the reduct equation
-//! `some REDUCT = some e'`, delivered to a continuation (the fragment has no
-//! Sigma/Exists). Built by nesting `opt_bind_some_inv` five times, one per
-//! `opt_bind` level. This is the decomposition the E-core commutation
-//! (`iota_subst_commutes`) consumes to know `e` is a genuine redex with const
-//! heads. See `designs/2026-06-14-computational-iota-delta-track.md` (Increment E).
+//! `iota_reduct` has five outer lookups followed by a guarded tail. The canonical
+//! full CPS views in `iota_reduct_views.rs` recover the recursor name, metadata,
+//! major, constructor name and rule; all five lookup equations; sufficient-field
+//! and head-universe-arity guards; and the actual once-instantiated contractum.
+//! The compatibility `iota_reduct_some_inv` views retain the five lookups and
+//! `some CONTRACTUM = some e'` but omit the guards. The E-core commutation proofs
+//! consume the full views: five successful lookups alone cannot reconstruct a
+//! successful reduction. See `designs/2026-06-14-computational-iota-delta-track.md`
+//! for the original Increment E design, before the guarded-tail migration.
 
 use std::collections::HashSet;
 
@@ -66,98 +66,7 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
 
-        // The arithmetic + reduct sub-terms of iota_reduct (verbatim from its def).
-        let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
-        let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
-        let extras = format!("(list_drop (Nat.succ {major_idx}) (kapp_args e))");
-        let fields =
-            "(list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major))";
-        let prefix = format!("(list_take {prefix_n} (kapp_args e))");
-        let reduct = format!(
-            "(apply_spine {extras} (apply_spine {fields} (apply_spine {prefix} (recrule_rhs rule))))"
-        );
-
-        // The opt_bind continuations L2..L6 (verbatim from iota_reduct, bottom-up).
-        let l6 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct})");
-        let l5 = format!(
-            "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {l6})"
-        );
-        let l4 = format!(
-            "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {l5})"
-        );
-        let l3 = format!("(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e))) {l4})");
-        let l2 = format!(
-            "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {l3})"
-        );
-
-        // The continuation type the inverter delivers to.
-        let kont = format!(
-            "(forall (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule), \
-             Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) -> \
-             Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta) -> \
-             Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major) -> \
-             Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
-             Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
-             Eq (OptionType KExpr) (OptionType.some KExpr {reduct}) (OptionType.some KExpr e') -> \
-             C)"
-        );
-
-        let value = format!(
-            "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Prop) \
-             (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) \
-             (k : {kont}) => \
-             opt_bind_some_inv Name KExpr (kexpr_const_name (kapp_fn e)) {l2} e' C h \
-             (fun (recname : Name) \
-             (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-             (h1r : Eq (OptionType KExpr) ({l2} recname) (OptionType.some KExpr e')) => \
-             opt_bind_some_inv RecMeta KExpr (recmeta_for env recname) {l3} e' C h1r \
-             (fun (meta : RecMeta) \
-             (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-             (h2r : Eq (OptionType KExpr) ({l3} meta) (OptionType.some KExpr e')) => \
-             opt_bind_some_inv KExpr KExpr (list_head (list_drop {major_idx} (kapp_args e))) {l4} e' C h2r \
-             (fun (major : KExpr) \
-             (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-             (h3r : Eq (OptionType KExpr) ({l4} major) (OptionType.some KExpr e')) => \
-             opt_bind_some_inv Name KExpr (kexpr_const_name (kapp_fn major)) {l5} e' C h3r \
-             (fun (cname : Name) \
-             (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-             (h4r : Eq (OptionType KExpr) ({l5} cname) (OptionType.some KExpr e')) => \
-             opt_bind_some_inv RecRule KExpr (recrule_for env recname cname) {l6} e' C h4r \
-             (fun (rule : RecRule) \
-             (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-             (h5r : Eq (OptionType KExpr) ({l6} rule) (OptionType.some KExpr e')) => \
-             k recname meta major cname rule h1 h2 h3 h4 h5 h5r))))))"
-        );
-
-        self.add_definition(SpecDefinition {
-            name: "iota_reduct_some_inv".to_string(),
-            type_src: format!(
-                "forall (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Prop), \
-                 Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e') -> {kont} -> C"
-            ),
-            value_src: Some(value),
-            is_axiom: false,
-            description: concat!(
-                "CPS inversion of iota_reduct's 5-level opt_bind chain: from iota_reduct env e = some e', ",
-                "recover the recursor name, metadata, major premise, constructor name and rule with each ",
-                "lookup equation and the reduct equation some REDUCT = some e', delivered to a continuation. ",
-                "Five nested opt_bind_some_inv. The decomposition iota_subst_commutes consumes. DerivedProved, ",
-                "zero axiom_deps. Part of #2859 (Increment E)."
-            )
-            .to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "iota_reduct".to_string(),
-                "opt_bind_some_inv".to_string(),
-                "kexpr_const_name".to_string(),
-                "recmeta_for".to_string(),
-                "recrule_for".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
+        // Canonical guarded success views are registered before this stage.
 
         // apply_spine3_inst: instantiate_at distributes through the three nested
         // apply_spine layers of the iota reduct (extras / fields / prefix), pushing
@@ -521,18 +430,21 @@ impl Specification {
         // REDUCT = apply_spine ext (apply_spine fld (apply_spine pre rhs)) with
         //   ext = list_drop (succ major_idx) (kapp_args e)  [extras]
         //   fld = list_drop (len(kapp_args major) - nf) (kapp_args major)  [fields]
-        //   pre = list_take prefix_n (kapp_args e)  [prefix], rhs = recrule_rhs rule.
+        //   pre = list_take prefix_n (kapp_args e)  [prefix]
+        //   rhs = recursor_rhs_instance meta.signature rule.rhs (head levels of e).
         // Each segment survives inst: ext_i = map F ext (kapp_drop_inst, h1),
         // pre_i = map F pre (kapp_take_inst, h1), fld_i = map F fld
-        // (kapp_fields_inst, h4); the rhs slot stays bare and equals inst rhs only
-        // because the env is closed (recenv_closed_rhs, h5); apply_spine3_inst pushes
+        // (kapp_fields_inst, h4). Here inst means term substitution: the already
+        // universe-instantiated rhs stays fixed because stored structural closure
+        // derives its instance closure (recenv_closed_rhs_instance, h5).
+        // apply_spine3_inst pushes
         // inst through the three apply_spine layers; option_some_inj on h5r gives
         // REDUCT = e'.
         {
             let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
             let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
             let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
+            let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))";
             let fmap = "(fun (a0 : KExpr) => instantiate_at a0 v d)";
 
             // original-side segments (on e / major)
@@ -544,7 +456,7 @@ impl Specification {
             let reduct =
                 format!("(apply_spine {ext} (apply_spine {fld} (apply_spine {pre} {p_rhs})))");
 
-            // inst-side segments (on inst e / inst major); rhs slot stays bare.
+            // Term-substituted segments; the universe-instantiated rhs stays fixed.
             let ext_i =
                 format!("(list_drop (Nat.succ {major_idx}) (kapp_args (instantiate_at e v d)))");
             let fld_i = format!("(list_drop (Nat.sub (list_length (kapp_args (instantiate_at major v d))) {nf}) (kapp_args (instantiate_at major v d)))");
@@ -570,7 +482,7 @@ impl Specification {
                  {pre_i} {mpre} (kapp_take_inst v d recname e {prefix_n} h1)) \
                  (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mpre} Z) \
                  {p_rhs} {i_rhs} \
-                 (Eq.symm KExpr {i_rhs} {p_rhs} (recenv_closed_rhs env recname cname rule v d closed h5))))"
+                 (Eq.symm KExpr {i_rhs} {p_rhs} (recenv_closed_rhs_instance env recname cname rule (recmeta_signature meta) (kexpr_const_levels (kapp_fn e)) v d closed h5))))"
             );
 
             // middle: apply_spine fld_i (apply_spine pre_i rhs)
@@ -657,7 +569,7 @@ impl Specification {
                     "kapp_take_inst".to_string(),
                     "kapp_fields_inst".to_string(),
                     "apply_spine3_inst".to_string(),
-                    "recenv_closed_rhs".to_string(),
+                    "recenv_closed_rhs_instance".to_string(),
                     "option_some_inj".to_string(),
                     "Eq.cong".to_string(),
                     "Eq.trans".to_string(),
@@ -671,104 +583,13 @@ impl Specification {
         // directed iota step (iota_step = graph of iota_reduct):
         //   RecEnvClosed env -> iota_reduct env e = some e'
         //     -> iota_reduct env (inst e) = some (inst e').
-        // Inverts the LHS via iota_reduct_some_inv (recovering the 5 redex
-        // witnesses + lookups + the reduct equation), then reconstructs the
-        // inst-side reduct via opt_bind_some_intro 5×: the head-const lookups
-        // survive inst (kexpr_const_name_instantiate_const, levels 1 & 4), the
-        // major premise survives (iota_major_inst, level 3), the metadata/rule
-        // lookups are unchanged (h2, h5), and the reduct slot is closed by
-        // iota_reduct_inst_eq (level 6). The const-head rigidity is what makes the
-        // kapp_fn-vs-inst non-commutation never bite.
+        // Full inversion retains both actual guards as well as the five lookups.
+        // Constant-head and constructor-spine invariance transport the arity and
+        // field guards; iota_major_inst transports the major lookup. Metadata and
+        // rule lookups stay fixed, and iota_reduct_inst_eq transports the actual
+        // once-instantiated contractum. Canonical full reconstruction then proves
+        // success of the term-substituted redex.
         {
-            let ei = "(instantiate_at e v d)";
-            let im = "(instantiate_at major v d)";
-            let iep = "(instantiate_at e' v d)";
-            let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
-            let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
-
-            // The reduct, parameterized by the e-expr and major-expr (mirrors
-            // iota_reduct's def + iota_reduct_some_inv exactly).
-            let mk_reduct = |es: &str, ms: &str| -> String {
-                format!(
-                    "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args {es})) \
-                     (apply_spine (list_drop (Nat.sub (list_length (kapp_args {ms})) (recrule_num_fields rule)) (kapp_args {ms})) \
-                     (apply_spine (list_take {prefix_n} (kapp_args {es})) (recrule_rhs rule))))"
-                )
-            };
-            let reduct_orig = mk_reduct("e", "major");
-            let reduct_i_majvar = mk_reduct(ei, "major");
-            let reduct_i_majinst = mk_reduct(ei, im);
-
-            // The inst-side opt_bind continuations (iota_reduct's def with e:=inst e;
-            // f4sub/f5sub carry major:=inst major for the level-4/5 obligations).
-            let f5 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct_i_majvar})");
-            let f4 = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {f5})"
-            );
-            let f3 = format!(
-                "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {f4})"
-            );
-            let f2 = format!(
-                "(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args {ei}))) {f3})"
-            );
-            let f1 = format!(
-                "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {f2})"
-            );
-            let f5sub =
-                format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct_i_majinst})");
-            let f4sub = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {f5sub})"
-            );
-
-            // Inst-side lookups: heads survive inst (levels 1 & 4); major survives (3).
-            let h1i = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {ei})) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) \
-                 (kexpr_const_name_instantiate_const v d recname e h1) h1)"
-            );
-            let h3i = format!("(iota_major_inst v d recname e {major_idx} major h1 h3)");
-            let h4i = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {im})) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) \
-                 (kexpr_const_name_instantiate_const v d cname major h4) h4)"
-            );
-            // Level-6: some REDUCT_i = some (inst e') via iota_reduct_inst_eq + cong.
-            let hf6 = format!(
-                "(Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => OptionType.some KExpr X) \
-                 {reduct_i_majinst} {iep} \
-                 (iota_reduct_inst_eq env v d e e' recname meta major cname rule closed h1 h4 h5 h5r))"
-            );
-
-            // The nested opt_bind_some_intro chain (outside-in, 5 levels).
-            let recon = format!(
-                "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {ei})) {f1} recname {iep} {h1i} \
-                 (opt_bind_some_intro RecMeta KExpr (recmeta_for env recname) {f2} meta {iep} h2 \
-                 (opt_bind_some_intro KExpr KExpr (list_head (list_drop {major_idx} (kapp_args {ei}))) {f3} {im} {iep} {h3i} \
-                 (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {im})) {f4sub} cname {iep} {h4i} \
-                 (opt_bind_some_intro RecRule KExpr (recrule_for env recname cname) {f5sub} rule {iep} h5 {hf6}))))"
-            );
-
-            // The continuation k passed to iota_reduct_some_inv (binders match kont).
-            let kont_lambda = format!(
-                "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_orig}) (OptionType.some KExpr e')) => \
-                 {recon})"
-            );
-
-            let goal_c = format!(
-                "(Eq (OptionType KExpr) (iota_reduct env {ei}) (OptionType.some KExpr {iep}))"
-            );
-
-            let value = format!(
-                "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (v : KExpr) (d : Nat) \
-                 (closed : RecEnvClosed env) \
-                 (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) => \
-                 iota_reduct_some_inv env e e' {goal_c} h {kont_lambda}"
-            );
-
             self.add_definition(SpecDefinition {
                 name: "iota_subst_commutes".to_string(),
                 type_src: concat!(
@@ -778,23 +599,37 @@ impl Specification {
                     "Eq (OptionType KExpr) (iota_reduct env (instantiate_at e v d)) (OptionType.some KExpr (instantiate_at e' v d))"
                 )
                 .to_string(),
-                value_src: Some(value),
+                value_src: Some(r"fun (env : RecEnv) (e : KExpr) (e' : KExpr) (v : KExpr) (d : Nat) (closed : RecEnvClosed env)
+ (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) =>
+iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (instantiate_at e v d)) (OptionType.some KExpr (instantiate_at e' v d))) h
+ (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
+ (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname))
+ (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
+ (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major))
+ (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
+ (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
+ (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (returned : Eq KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))) =>
+ iota_reduct_full_recon env (instantiate_at e v d) (instantiate_at e' v d) recname mta (instantiate_at major v d) cname rule
+ (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at e v d))) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) (kexpr_const_name_instantiate_const v d recname e h1) h1) h2 (iota_major_inst v d recname e (iota_major_index mta) major h1 h3) (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (instantiate_at major v d))) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) (kexpr_const_name_instantiate_const v d cname major h4) h4) h5
+ (Eq.trans Bool (iota_fields_ok rule (kapp_args (instantiate_at major v d))) (iota_fields_ok rule (kapp_args major)) Bool.true
+ (Eq.cong Nat Bool (fun (n : Nat) => nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero)
+ (list_length (kapp_args (instantiate_at major v d))) (list_length (kapp_args major)) (Eq.trans Nat (list_length (kapp_args (instantiate_at major v d))) (list_length (list_map (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major))) (list_length (kapp_args major))
+ (Eq.cong (ListType KExpr) Nat list_length (kapp_args (instantiate_at major v d)) (list_map (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major)) (instantiate_at_kapp_args_const v d cname major h4)) (list_map_length (fun (z : KExpr) => (instantiate_at z v d)) (kapp_args major)))) fields) (Eq.trans Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true
+ (Eq.cong KExpr Bool (fun (h : KExpr) => (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels h)))) (kapp_fn (instantiate_at e v d)) (kapp_fn e) (delta_head_const_invariant_inst v d recname e h1)) arity) (Eq.symm KExpr (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (instantiate_at e' v d) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (instantiate_at e v d))))) (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) (instantiate_at e' v d)
+ (Eq.cong KExpr KExpr (fun (head : KExpr) => (iota_contractum mta rule (kapp_args (instantiate_at e v d)) (kapp_args (instantiate_at major v d)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels head)))) (kapp_fn (instantiate_at e v d)) (kapp_fn e) (delta_head_const_invariant_inst v d recname e h1)) (iota_reduct_inst_eq env v d e e' recname mta major cname rule closed h1 h4 h5 (Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => OptionType.some KExpr z) (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) e' (Eq.symm KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) returned))))))".to_string()),
                 is_axiom: false,
-                description: "E-core result: instantiate_at commutes past the directed iota step. From a closed env and iota_reduct env e = some e', derive iota_reduct env (inst e) = some (inst e'). Inverts via iota_reduct_some_inv then reconstructs via opt_bind_some_intro 5× (const-head lookups survive inst, major survives, metadata/rule unchanged, reduct slot closed by iota_reduct_inst_eq). The par_subst iota arm consumes this. DerivedProved, zero axiom_deps. Part of #2859 (Increment E).".to_string(),
+                description: "Direct guarded iota commutation: full inversion retains field and universe-arity guards; actual head and constructor-spine invariance transports both guards, stored structural RHS closure derives instance invariance, and canonical reconstruction closes the real operator graph.".to_string(),
                 category: AxiomCategory::DerivedLemma,
                 proof_status: ProofStatus::DerivedProved,
                 elaborated_type: None,
                 elaborated_value: None,
                 dependencies: Some(HashSet::from([
-                    "iota_reduct".to_string(),
-                    "iota_reduct_some_inv".to_string(),
-                    "opt_bind_some_intro".to_string(),
+                    "iota_reduct_full_inv".to_string(),
+                    "iota_reduct_full_recon".to_string(),
                     "iota_reduct_inst_eq".to_string(),
-                    "iota_major_inst".to_string(),
-                    "kexpr_const_name_instantiate_const".to_string(),
-                    "recenv_closed_rhs".to_string(),
-                    "Eq.cong".to_string(),
-                    "Eq.trans".to_string(),
+                    "delta_head_const_invariant_inst".to_string(),
+                    "list_map_length".to_string(),
                 ])),
                 axiom_deps: HashSet::new(),
             })?;
@@ -812,7 +647,7 @@ impl Specification {
             let reduct = format!(
                 "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args e)) \
                  (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) \
-                 (apply_spine (list_take {prefix_n} (kapp_args e)) (recrule_rhs rule))))"
+                 (apply_spine (list_take {prefix_n} (kapp_args e)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))))"
             );
             let value = format!(
                 "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (C : Prop) \
@@ -1552,26 +1387,37 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "iota_reduct_app_over".to_string(),
             type_src: r#"forall (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr), (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (recmeta_num_indices m0))) (list_length (kapp_args f))) -> (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (list_length (kapp_args f))) -> Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a))"#.to_string(),
-            value_src: Some(r#"fun (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr) (hov : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (recmeta_num_indices m0))) (list_length (kapp_args f)))) (hovp : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.add (Nat.add (recmeta_num_params m0) (recmeta_num_motives m0)) (recmeta_num_minors m0)) (list_length (kapp_args f)))) (h : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) => iota_reduct_some_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a))) h (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname)) (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) (h3 : Eq (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f))) (OptionType.some KExpr major)) (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) (h5r : Eq (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule))))) (OptionType.some KExpr f1)) => opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn (KExpr.app f a))) (fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args (KExpr.app f a)))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) (fun (rule : RecRule) => OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule))))))))) recname (KExpr.app f1 a) (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname) (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a)) h1) (opt_bind_some_intro RecMeta KExpr (recmeta_for env recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args (KExpr.app f a)))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) (fun (rule : RecRule) => OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule)))))))) meta (KExpr.app f1 a) h2 (opt_bind_some_intro KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args (KExpr.app f a)))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) (fun (rule : RecRule) => OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule))))))) major (KExpr.app f1 a) (Eq.trans (OptionType KExpr) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args (KExpr.app f a)))) (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))))) (OptionType.some KExpr major) (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) L)) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args_app f a)) (list_head_drop_append_some (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args f) a major h3)) (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) (fun (rule : RecRule) => OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule)))))) cname (KExpr.app f1 a) h4 (opt_bind_some_intro RecRule KExpr (recrule_for env recname cname) (fun (rule : RecRule) => OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule))))) rule (KExpr.app f1 a) h5 (Eq.trans (OptionType KExpr) (OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule))))) (OptionType.some KExpr (KExpr.app (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) a)) (OptionType.some KExpr (KExpr.app f1 a)) (Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => OptionType.some KExpr X) (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule)))) (KExpr.app (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) a) (Eq.trans KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule)))) (apply_spine (list_append (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) (KExpr.app (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) a) (Eq.trans KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule)))) (apply_spine (list_append (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule)))) (apply_spine (list_append (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) (Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine L (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule)))) (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (list_append (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (Eq.trans (ListType KExpr) (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args (KExpr.app f a))) (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))) (list_append (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) L) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args_app f a)) (list_drop_append_ge (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f) a (hov recname meta h1 h2)))) (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine (list_append (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) Z) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (recrule_rhs rule))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule))) (Eq.cong (ListType KExpr) KExpr (fun (L : ListType KExpr) => apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine L (recrule_rhs rule))) (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (Eq.trans (ListType KExpr) (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args (KExpr.app f a))) (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr)))) (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (Eq.cong (ListType KExpr) (ListType KExpr) (fun (L : ListType KExpr) => list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) L) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args_app f a)) (list_take_append_le (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f) a (hovp recname meta h1 h2)))))) (apply_spine_snoc (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) a (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))))) (Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => OptionType.some KExpr (KExpr.app X a)) (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) f1 (option_some_inj KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args f)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args f)) (recrule_rhs rule)))) f1 h5r))))))))"#.to_string()),
+            value_src: Some(r"fun (env : RecEnv) (f : KExpr) (a : KExpr) (f1 : KExpr)
+ (hov : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.succ (iota_major_index m0)) (list_length (kapp_args f)))) (hovp : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (iota_prefix_count m0) (list_length (kapp_args f)))) (h : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1)) =>
+iota_reduct_full_inv env f f1 (Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr (KExpr.app f1 a))) h
+ (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
+ (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name recname))
+ (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
+ (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args f))) (OptionType.some KExpr major))
+ (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
+ (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
+ (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) (returned : Eq KExpr f1 (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))) =>
+ iota_reduct_full_recon env (KExpr.app f a) (KExpr.app f1 a) recname mta major cname rule
+ h1 h2 (list_head_drop_append_some (iota_major_index mta) (kapp_args f) a major h3) h4 h5 fields arity (Eq.symm KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (KExpr.app f1 a) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a) (KExpr.app f1 a) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a)
+ (Eq.cong (ListType KExpr) KExpr (fun (xs : ListType KExpr) => (apply_spine xs (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (list_drop (Nat.succ (iota_major_index mta)) (kapp_args (KExpr.app f a))) (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr)))
+ (list_drop_append_ge (Nat.succ (iota_major_index mta)) (kapp_args f) a (hov recname mta h1 h2))) (Eq.trans KExpr (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))) (KExpr.app (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) a) (Eq.cong (ListType KExpr) KExpr (fun (xs : ListType KExpr) => (apply_spine (list_append (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) (ListType.cons KExpr a (ListType.nil KExpr))) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine xs (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))) (list_take (iota_prefix_count mta) (kapp_args (KExpr.app f a))) (list_take (iota_prefix_count mta) (kapp_args f))
+ (list_take_append_le (iota_prefix_count mta) (kapp_args f) a (hovp recname mta h1 h2))) (apply_spine_snoc (list_drop (Nat.succ (iota_major_index mta)) (kapp_args f)) a (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (iota_prefix_count mta) (kapp_args f)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))))
+ (Eq.cong KExpr KExpr (fun (x : KExpr) => KExpr.app x a) (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) f1 (Eq.symm KExpr f1 (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) returned)))))".to_string()),
             is_axiom: false,
-            description: "Over-application identity for iota: if iota_reduct env f = some f1 and the recursor's major window + rule prefix lie within kapp_args f (the Le side-conditions), then iota_reduct env (app f a) = some (app f1 a). The extra over-applied arg rides untouched past the reduct spine. Inverts via iota_reduct_some_inv, rebuilds the chain with opt_bind_some_intro x5, transporting each spine segment over [a] via list_drop_append_ge / list_take_append_le / list_head_drop_append_some / apply_spine_snoc, then option_some_inj. DerivedProved, zero axiom_deps. Part of #2859 (iota,app over-application).".to_string(),
+            description: "Direct guarded application-spine proof: retain actual field/arity guards from full inversion, transport the major window and spine segments, and reconstruct through the actual once-instantiated tail.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
             elaborated_value: None,
             dependencies: Some(HashSet::from([
-                    "iota_reduct".to_string(),
-                    "iota_reduct_some_inv".to_string(),
-                    "opt_bind_some_intro".to_string(),
-                    "list_drop_append_ge".to_string(),
-                    "list_take_append_le".to_string(),
-                    "list_head_drop_append_some".to_string(),
-                    "apply_spine_snoc".to_string(),
-                    "kapp_args_app".to_string(),
-                    "kapp_fn_app".to_string(),
-                    "option_some_inj".to_string(),
-                    "Eq.cong".to_string(),
-                    "Eq.trans".to_string(),
+                "iota_reduct_full_inv".to_string(),
+                "iota_reduct_full_recon".to_string(),
+                "list_head_drop_append_some".to_string(),
+                "list_head_drop_append_some_inv".to_string(),
+                "list_take_append_le".to_string(),
+                "list_drop_append_ge".to_string(),
+                "apply_spine_snoc".to_string(),
             ])),
             axiom_deps: HashSet::new(),
         })?;
@@ -1584,66 +1430,11 @@ impl Specification {
 
         // le_zero_n: Le 0 n for all n. Nat.rec on n; zero via Le.refl 0, succ via
         // Le.step.
-        self.add_definition(SpecDefinition {
-            name: "le_zero_n".to_string(),
-            type_src: "forall (n : Nat), Le Nat.zero n".to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (n : Nat) => Nat.rec (fun (n0 : Nat) => Le Nat.zero n0) ",
-                    "(Le.refl Nat.zero) ",
-                    "(fun (m : Nat) (ih : Le Nat.zero m) => Le.step Nat.zero m ih) ",
-                    "n"
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "Le 0 n for all n: Nat.rec on n (Le.refl base, Le.step succ). DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Le".to_string(),
-                "Le.refl".to_string(),
-                "Le.step".to_string(),
-                "Nat.rec".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
 
         // le_succ_succ: Le a b -> Le (succ a) (succ b). Le.rec on the proof; the
         // first index a is promoted to a PARAMETER, so the motive ranges over the
         // second index only. refl arm: Le (succ a) (succ a) via Le.refl; step arm:
         // Le (succ a) (succ (succ m)) from Le (succ a) (succ m) via Le.step.
-        self.add_definition(SpecDefinition {
-            name: "le_succ_succ".to_string(),
-            type_src: "forall (a : Nat) (b : Nat), Le a b -> Le (Nat.succ a) (Nat.succ b)"
-                .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (a : Nat) (b : Nat) (h : Le a b) => ",
-                    "Le.rec a (fun (j : Nat) (_ : Le a j) => Le (Nat.succ a) (Nat.succ j)) ",
-                    "(Le.refl (Nat.succ a)) ",
-                    "(fun (m : Nat) (_hm : Le a m) (ihm : Le (Nat.succ a) (Nat.succ m)) => ",
-                    "Le.step (Nat.succ a) (Nat.succ m) ihm) ",
-                    "b h"
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "Le a b -> Le (succ a) (succ b). Le.rec on the proof (a promoted to parameter; motive over the 2nd index): refl via Le.refl (succ a), step via Le.step. DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Le".to_string(),
-                "Le.refl".to_string(),
-                "Le.step".to_string(),
-                "Le.rec".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
 
         // (nat_add_zero_right and nat_add_succ_right are already registered in
         // foundation_arith_lemmas.rs; reused below.)
@@ -1651,33 +1442,6 @@ impl Specification {
         // le_trans: Le a b -> Le b c -> Le a c. Le.rec on the second proof (b
         // promoted to parameter, motive over c): refl arm c=b returns hab; step arm
         // Le a (succ m) from Le a m (IH) via Le.step.
-        self.add_definition(SpecDefinition {
-            name: "le_trans".to_string(),
-            type_src: "forall (a : Nat) (b : Nat) (c : Nat), Le a b -> Le b c -> Le a c"
-                .to_string(),
-            value_src: Some(
-                concat!(
-                    "fun (a : Nat) (b : Nat) (c : Nat) (hab : Le a b) (hbc : Le b c) => ",
-                    "Le.rec b (fun (j : Nat) (_ : Le b j) => Le a j) ",
-                    "hab ",
-                    "(fun (m : Nat) (_hm : Le b m) (ihm : Le a m) => Le.step a m ihm) ",
-                    "c hbc"
-                )
-                .to_string(),
-            ),
-            is_axiom: false,
-            description: "Transitivity of Le: Le a b -> Le b c -> Le a c. Le.rec on the second proof (b parameter, motive over c): refl arm returns hab, step arm via Le.step. DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
-            category: AxiomCategory::DerivedLemma,
-            proof_status: ProofStatus::DerivedProved,
-            elaborated_type: None,
-            elaborated_value: None,
-            dependencies: Some(HashSet::from([
-                "Le".to_string(),
-                "Le.step".to_string(),
-                "Le.rec".to_string(),
-            ])),
-            axiom_deps: HashSet::new(),
-        })?;
 
         // le_add_self_left: Le a (a + b). Nat.rec on b; zero via nat_add_zero_right
         // + Le.refl, succ via nat_add_succ_right + Le.step on the IH.
@@ -2007,7 +1771,7 @@ impl Specification {
                 concat!(
                     "(apply_spine (list_drop (Nat.succ {majidx_meta}) (kapp_args f)) ",
                     "(apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) ",
-                    "(apply_spine (list_take {prefix_meta} (kapp_args f)) (recrule_rhs rule))))"
+                    "(apply_spine (list_take {prefix_meta} (kapp_args f)) (recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))))"
                 ),
                 majidx_meta = majidx_meta,
                 prefix_meta = prefix_meta,
@@ -2579,102 +2343,10 @@ impl Specification {
         // over-application hypothesis h5r is unused (the converse rebuild of
         // iota_reduct env f is independent of e1).
         {
-            let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
-            let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
-            let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
-            // major_idx / prefix over a metavariable m0 (for hwin's continuation type).
             let major_idx_of = |m: &str| -> String {
                 format!("(Nat.add (Nat.add (Nat.add (recmeta_num_params {m}) (recmeta_num_motives {m})) (recmeta_num_minors {m})) (recmeta_num_indices {m}))")
             };
             let len_f = "(list_length (kapp_args f))";
-
-            // the bare reduct over kapp_args f / kapp_args major (= delivered f1).
-            let reduct_f = format!(
-                "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args f)) \
-                 (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) {nf}) (kapp_args major)) \
-                 (apply_spine (list_take {prefix_n} (kapp_args f)) {p_rhs})))"
-            );
-
-            // iota_reduct env f opt_bind continuations (the def, with e := f), L6..L2.
-            let lf6 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct_f})");
-            let lf5 = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {lf6})"
-            );
-            let lf4 = format!(
-                "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {lf5})"
-            );
-            let lf3 = format!("(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args f))) {lf4})");
-            let lf2 = format!(
-                "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {lf3})"
-            );
-
-            // The reduct over kapp_args (app f a) (as recovered in h5r of the inversion).
-            let reduct_app = format!(
-                "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args (KExpr.app f a))) \
-                 (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) {nf}) (kapp_args major)) \
-                 (apply_spine (list_take {prefix_n} (kapp_args (KExpr.app f a))) {p_rhs})))"
-            );
-
-            // h1 transferred to f: kexpr_const_name (kapp_fn f) = some recname.
-            let h1f = "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn f)) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname) (Eq.cong KExpr (OptionType Name) (fun (H : KExpr) => kexpr_const_name H) (kapp_fn f) (kapp_fn (KExpr.app f a)) (Eq.symm KExpr (kapp_fn (KExpr.app f a)) (kapp_fn f) (kapp_fn_app f a))) h1)";
-
-            // h3 transferred to (kapp_args f ++ [a]): head (drop major_idx (kapp_args f ++ [a])) = some major.
-            let h3_app = format!(
-                "(Eq.trans (OptionType KExpr) \
-                 (list_head (list_drop {major_idx} (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))))) \
-                 (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) \
-                 (OptionType.some KExpr major) \
-                 (Eq.cong (ListType KExpr) (OptionType KExpr) (fun (L : ListType KExpr) => list_head (list_drop {major_idx} L)) \
-                 (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args (KExpr.app f a)) \
-                 (Eq.symm (ListType KExpr) (kapp_args (KExpr.app f a)) (list_append (kapp_args f) (ListType.cons KExpr a (ListType.nil KExpr))) (kapp_args_app f a))) \
-                 h3)"
-            );
-
-            // h3 recovered over kapp_args f (the converse, via list_head_drop_append_some_inv + hwin).
-            let h3f = format!(
-                "(list_head_drop_append_some_inv {major_idx} (kapp_args f) a major \
-                 (hwin recname meta {h1f} h2) {h3_app})"
-            );
-
-            // The rebuild of iota_reduct env f = some (reduct over f), 5x opt_bind_some_intro.
-            let recon = format!(
-                "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn f)) {lf2} recname {reduct_f} {h1f} \
-                 (opt_bind_some_intro RecMeta KExpr (recmeta_for env recname) {lf3} meta {reduct_f} h2 \
-                 (opt_bind_some_intro KExpr KExpr (list_head (list_drop {major_idx} (kapp_args f))) {lf4} major {reduct_f} {h3f} \
-                 (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn major)) {lf5} cname {reduct_f} h4 \
-                 (opt_bind_some_intro RecRule KExpr (recrule_for env recname cname) {lf6} rule {reduct_f} h5 \
-                 (Eq.refl (OptionType KExpr) (OptionType.some KExpr {reduct_f})))))))"
-            );
-
-            // The continuation k passed to iota_reduct_some_inv (binders match kont
-            // for (app f a)). We deliver f1 := reduct over f to the OUTER continuation kc.
-            let kont_lambda = format!(
-                "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1)) => \
-                 kc {reduct_f} ({recon}))"
-            );
-
-            let value = format!(
-                "fun (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr) \
-                 (hwin : (forall (rn : Name) (m0 : RecMeta), \
-                 Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> \
-                 Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> \
-                 Le (Nat.succ {major_idx_m0}) {len_f})) \
-                 (h : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1)) \
-                 (C : Prop) \
-                 (kc : (forall (f1 : KExpr), Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> C)) => \
-                 iota_reduct_some_inv env (KExpr.app f a) e1 C h {kont_lambda}",
-                major_idx_m0 = major_idx_of("m0"),
-                len_f = len_f,
-                kont_lambda = kont_lambda,
-            );
-
             let type_src = format!(
                 "forall (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr), \
                  (forall (rn : Name) (m0 : RecMeta), \
@@ -2690,25 +2362,30 @@ impl Specification {
             self.add_definition(SpecDefinition {
                 name: "iota_reduct_app_inner".to_string(),
                 type_src,
-                value_src: Some(value),
+                value_src: Some(r"fun (env : RecEnv) (f : KExpr) (a : KExpr) (e1 : KExpr)
+ (hwin : (forall (rn : Name) (m0 : RecMeta), Eq (OptionType Name) (kexpr_const_name (kapp_fn f)) (OptionType.some Name rn) -> Eq (OptionType RecMeta) (recmeta_for env rn) (OptionType.some RecMeta m0) -> Le (Nat.succ (iota_major_index m0)) (list_length (kapp_args f)))) (h : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1))
+ (C : Prop) (k : forall (f1 : KExpr), Eq (OptionType KExpr) (iota_reduct env f) (OptionType.some KExpr f1) -> C) => iota_reduct_full_inv env (KExpr.app f a) e1 C h
+ (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
+ (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname))
+ (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
+ (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args (KExpr.app f a)))) (OptionType.some KExpr major))
+ (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
+ (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
+ (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) (returned : Eq KExpr e1 (iota_contractum mta rule (kapp_args (KExpr.app f a)) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))) => k (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f))))
+ (iota_reduct_full_recon env f (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))) recname mta major cname rule h1 h2
+ (list_head_drop_append_some_inv (iota_major_index mta) (kapp_args f) a major (hwin recname mta h1 h2) h3)
+ h4 h5 fields arity (Eq.refl KExpr (iota_contractum mta rule (kapp_args f) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))))))".to_string()),
                 is_axiom: false,
-                description: "Converse over-application identity for iota (the (a)-join CONVERSE of iota_reduct_app_over): if iota_reduct env (app f a) = some e1 and the recovered major window lies STRICTLY inside kapp_args f (the hwin continuation: Le (succ major_idx(m0)) (length (kapp_args f))), then f itself is a redex — CPS-deliver some f1 with iota_reduct env f = some f1. Inverts iota_reduct env (app f a) via iota_reduct_some_inv; the head lookups transfer verbatim (kapp_fn_app), the major lookup over kapp_args f recovers via list_head_drop_append_some_inv from h3 over kapp_args f ++ [a] (kapp_args_app) + hwin. Rebuilds via opt_bind_some_intro x5 (the reduct slot is the bare reduct over kapp_args f, = the delivered f1, so L6 is Eq.refl). DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
+                description: "Guard-preserving converse over-application: an accepted application whose major is already inside f yields an accepted f. Full inversion retains the actual field-count and universe-arity guards; full reconstruction uses the same head universes and instantiated rule, not only the five successful lookups.".to_string(),
                 category: AxiomCategory::DerivedLemma,
                 proof_status: ProofStatus::DerivedProved,
                 elaborated_type: None,
                 elaborated_value: None,
                 dependencies: Some(HashSet::from([
-                    "iota_reduct".to_string(),
-                    "iota_reduct_some_inv".to_string(),
-                    "opt_bind_some_intro".to_string(),
+                    "iota_reduct_full_inv".to_string(),
+                    "iota_reduct_full_recon".to_string(),
                     "list_head_drop_append_some_inv".to_string(),
-                    "kapp_args_app".to_string(),
-                    "kapp_fn_app".to_string(),
-                    "Le".to_string(),
-                    "Eq.refl".to_string(),
-                    "Eq.cong".to_string(),
-                    "Eq.trans".to_string(),
-                    "Eq.symm".to_string(),
                 ])),
                 axiom_deps: HashSet::new(),
             })?;
@@ -2951,7 +2628,7 @@ impl Specification {
                 format!("(Nat.add (Nat.add (recmeta_num_params {m}) (recmeta_num_motives {m})) (recmeta_num_minors {m}))")
             };
             let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
+            let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))";
             let major_idx = major_idx_of("meta");
             let prefix_n = prefix_of("meta");
             let len_f = "(list_length (kapp_args f))";
@@ -3167,7 +2844,7 @@ impl Specification {
             let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
             let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
             let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
+            let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))";
             let kargs_app = "(kapp_args (KExpr.app f a))";
             let reduct_app = format!(
                 "(apply_spine (list_drop (Nat.succ {major_idx}) {kargs_app}) \
@@ -3239,7 +2916,7 @@ impl Specification {
                 format!("(Nat.add (Nat.add (recmeta_num_params {m}) (recmeta_num_motives {m})) (recmeta_num_minors {m}))")
             };
             let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
+            let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn f)))";
             let major_idx = major_idx_of("meta");
             let prefix_n = prefix_of("meta");
             let len_f = "(list_length (kapp_args f))";
@@ -3265,6 +2942,8 @@ impl Specification {
                  Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major) -> \
                  Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) -> \
                  Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule) -> \
+                 Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true -> \
+                 Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true -> \
                  Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1) -> \
                  Eq KExpr major a -> Eq Nat {major_idx} {len_f} -> C)"
             );
@@ -3311,7 +2990,7 @@ impl Specification {
             );
             let keq_arm = format!(
                 "(fun (heq : Eq Nat {major_idx} {len_f}) => \
-                 k recname meta major cname rule h1 h2 h3 h4 h5 h5r {major_eq_a} heq)"
+                 k recname meta major cname rule h1 h2 h3 h4 h5 hfields harity (Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => OptionType.some KExpr z) {reduct_app} e1 (Eq.symm KExpr e1 {reduct_app} returned)) {major_eq_a} heq)"
             );
 
             // STRICT arm: killed by hnone via iota_reduct_app_inner (identical to the
@@ -3354,14 +3033,16 @@ impl Specification {
                  (hsome : Eq (OptionType KExpr) (iota_reduct env (KExpr.app f a)) (OptionType.some KExpr e1)) \
                  (hnone : Eq (OptionType KExpr) (iota_reduct env f) (OptionType.none KExpr)) \
                  (C : Prop) (k : {k_type}) => \
-                 iota_reduct_some_inv env (KExpr.app f a) e1 C hsome \
+                 iota_reduct_full_inv env (KExpr.app f a) e1 C hsome \
                  (fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
                  (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn (KExpr.app f a))) (OptionType.some Name recname)) \
                  (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
                  (h3 : {h3_type}) \
                  (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
                  (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr e1)) => \
+                 (hfields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+                 (harity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) (level_list_len (kexpr_const_levels (kapp_fn f)))) Bool.true) \
+                 (returned : Eq KExpr e1 {reduct_app}) => \
                  nat_le_succ_or {major_idx} {len_f} {hle} C \
                  {keq_arm} \
                  {strict_arm})",
@@ -3395,7 +3076,7 @@ impl Specification {
                 elaborated_value: None,
                 dependencies: Some(HashSet::from([
                     "iota_reduct".to_string(),
-                    "iota_reduct_some_inv".to_string(),
+                    "iota_reduct_full_inv".to_string(),
                     "iota_reduct_app_inner".to_string(),
                     "list_head_drop_some_le_succ".to_string(),
                     "list_head_drop_len_append".to_string(),
@@ -4161,7 +3842,7 @@ impl Specification {
             let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
             let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
             let nf = "(recrule_num_fields rule)";
-            let p_rhs = "(recrule_rhs rule)";
+            let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))";
             let fmap = "(fun (a0 : KExpr) => lift_at a0 c a)";
 
             // original-side segments (on e / major)
@@ -4198,7 +3879,7 @@ impl Specification {
                  {pre_l} {mpre} (kapp_take_lift c a e {prefix_n})) \
                  (Eq.cong KExpr KExpr (fun (Z : KExpr) => apply_spine {mpre} Z) \
                  {p_rhs} {l_rhs} \
-                 (Eq.symm KExpr {l_rhs} {p_rhs} (recenv_lift_closed_rhs env recname cname rule c a liftclosed h5))))"
+                 (Eq.symm KExpr {l_rhs} {p_rhs} (recenv_lift_closed_rhs_instance env recname cname rule (recmeta_signature meta) (kexpr_const_levels (kapp_fn e)) c a liftclosed h5))))"
             );
 
             // middle: apply_spine fld_l (apply_spine pre_l rhs)
@@ -4281,7 +3962,7 @@ impl Specification {
                     "kapp_take_lift".to_string(),
                     "kapp_fields_lift".to_string(),
                     "lift_apply_spine3".to_string(),
-                    "recenv_lift_closed_rhs".to_string(),
+                    "recenv_lift_closed_rhs_instance".to_string(),
                     "option_some_inj".to_string(),
                     "Eq.cong".to_string(),
                     "Eq.trans".to_string(),
@@ -4375,95 +4056,6 @@ impl Specification {
         // and the reduct slot is closed by iota_reduct_lift_eq (level 6). No const-head
         // guard needed (lift never changes the head).
         {
-            let el = "(lift_at e c a)";
-            let ml = "(lift_at major c a)";
-            let epl = "(lift_at e' c a)";
-            let major_idx = "(Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))";
-            let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta))";
-
-            // The reduct, parameterized by the e-expr and major-expr (mirrors
-            // iota_reduct's def + iota_reduct_some_inv exactly).
-            let mk_reduct = |es: &str, ms: &str| -> String {
-                format!(
-                    "(apply_spine (list_drop (Nat.succ {major_idx}) (kapp_args {es})) \
-                     (apply_spine (list_drop (Nat.sub (list_length (kapp_args {ms})) (recrule_num_fields rule)) (kapp_args {ms})) \
-                     (apply_spine (list_take {prefix_n} (kapp_args {es})) (recrule_rhs rule))))"
-                )
-            };
-            let reduct_orig = mk_reduct("e", "major");
-            let reduct_l_majvar = mk_reduct(el, "major");
-            let reduct_l_majlift = mk_reduct(el, ml);
-
-            // The lift-side opt_bind continuations (iota_reduct's def with e:=lift e;
-            // f4sub/f5sub carry major:=lift major for the level-4/5 obligations).
-            let f5 = format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct_l_majvar})");
-            let f4 = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {f5})"
-            );
-            let f3 = format!(
-                "(fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) {f4})"
-            );
-            let f2 = format!(
-                "(fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop {major_idx} (kapp_args {el}))) {f3})"
-            );
-            let f1 = format!(
-                "(fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) {f2})"
-            );
-            let f5sub =
-                format!("(fun (rule : RecRule) => OptionType.some KExpr {reduct_l_majlift})");
-            let f4sub = format!(
-                "(fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) {f5sub})"
-            );
-
-            // Lift-side lookups: heads survive lift (levels 1 & 4); major survives (3).
-            let h1l = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {el})) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) \
-                 (kexpr_const_name_lift c a e) h1)"
-            );
-            let h3l = format!("(iota_major_lift c a e {major_idx} major h3)");
-            let h4l = format!(
-                "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {ml})) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) \
-                 (kexpr_const_name_lift c a major) h4)"
-            );
-            // Level-6: some REDUCT_l = some (lift e') via iota_reduct_lift_eq + cong.
-            let hf6 = format!(
-                "(Eq.cong KExpr (OptionType KExpr) (fun (X : KExpr) => OptionType.some KExpr X) \
-                 {reduct_l_majlift} {epl} \
-                 (iota_reduct_lift_eq env c a e e' recname meta major cname rule liftclosed h5 h5r))"
-            );
-
-            // The nested opt_bind_some_intro chain (outside-in, 5 levels).
-            let recon = format!(
-                "opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {el})) {f1} recname {epl} {h1l} \
-                 (opt_bind_some_intro RecMeta KExpr (recmeta_for env recname) {f2} meta {epl} h2 \
-                 (opt_bind_some_intro KExpr KExpr (list_head (list_drop {major_idx} (kapp_args {el}))) {f3} {ml} {epl} {h3l} \
-                 (opt_bind_some_intro Name KExpr (kexpr_const_name (kapp_fn {ml})) {f4sub} cname {epl} {h4l} \
-                 (opt_bind_some_intro RecRule KExpr (recrule_for env recname cname) {f5sub} rule {epl} h5 {hf6}))))"
-            );
-
-            // The continuation k passed to iota_reduct_some_inv (binders match kont).
-            let kont_lambda = format!(
-                "(fun (recname : Name) (meta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule) \
-                 (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname)) \
-                 (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta meta)) \
-                 (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} (kapp_args e))) (OptionType.some KExpr major)) \
-                 (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
-                 (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
-                 (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_orig}) (OptionType.some KExpr e')) => \
-                 {recon})"
-            );
-
-            let goal_l = format!(
-                "(Eq (OptionType KExpr) (iota_reduct env {el}) (OptionType.some KExpr {epl}))"
-            );
-
-            let value = format!(
-                "fun (env : RecEnv) (e : KExpr) (e' : KExpr) (c : Nat) (a : Nat) \
-                 (liftclosed : RecEnvLiftClosed env) \
-                 (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) => \
-                 iota_reduct_some_inv env e e' {goal_l} h {kont_lambda}"
-            );
-
             self.add_definition(SpecDefinition {
                 name: "iota_lift_commutes".to_string(),
                 type_src: concat!(
@@ -4473,22 +4065,37 @@ impl Specification {
                     "Eq (OptionType KExpr) (iota_reduct env (lift_at e c a)) (OptionType.some KExpr (lift_at e' c a))"
                 )
                 .to_string(),
-                value_src: Some(value),
+                value_src: Some(r"fun (env : RecEnv) (e : KExpr) (e' : KExpr) (c : Nat) (a : Nat) (liftclosed : RecEnvLiftClosed env)
+ (h : Eq (OptionType KExpr) (iota_reduct env e) (OptionType.some KExpr e')) =>
+iota_reduct_full_inv env e e' (Eq (OptionType KExpr) (iota_reduct env (lift_at e c a)) (OptionType.some KExpr (lift_at e' c a))) h
+ (fun (recname : Name) (mta : RecMeta) (major : KExpr) (cname : Name) (rule : RecRule)
+ (h1 : Eq (OptionType Name) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname))
+ (h2 : Eq (OptionType RecMeta) (recmeta_for env recname) (OptionType.some RecMeta mta))
+ (h3 : Eq (OptionType KExpr) (list_head (list_drop (iota_major_index mta) (kapp_args e))) (OptionType.some KExpr major))
+ (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname))
+ (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule))
+ (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)
+ (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true) (returned : Eq KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e))))) =>
+ iota_reduct_full_recon env (lift_at e c a) (lift_at e' c a) recname mta (lift_at major c a) cname rule
+ (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (lift_at e c a))) (kexpr_const_name (kapp_fn e)) (OptionType.some Name recname) (kexpr_const_name_lift c a e) h1) h2 (iota_major_lift c a e (iota_major_index mta) major h3) (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn (lift_at major c a))) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname) (kexpr_const_name_lift c a major) h4) h5
+ (Eq.trans Bool (iota_fields_ok rule (kapp_args (lift_at major c a))) (iota_fields_ok rule (kapp_args major)) Bool.true
+ (Eq.cong Nat Bool (fun (n : Nat) => nat_eqb (Nat.sub (recrule_num_fields rule) n) Nat.zero)
+ (list_length (kapp_args (lift_at major c a))) (list_length (kapp_args major)) (Eq.trans Nat (list_length (kapp_args (lift_at major c a))) (list_length (list_map (fun (z : KExpr) => (lift_at z c a)) (kapp_args major))) (list_length (kapp_args major))
+ (Eq.cong (ListType KExpr) Nat list_length (kapp_args (lift_at major c a)) (list_map (fun (z : KExpr) => (lift_at z c a)) (kapp_args major)) (lift_at_kapp_args c a major)) (list_map_length (fun (z : KExpr) => (lift_at z c a)) (kapp_args major)))) fields) (Eq.trans Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn (lift_at e c a))))) (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels (kapp_fn e)))) Bool.true
+ (Eq.cong KExpr Bool (fun (h : KExpr) => (nat_eqb (name_list_len (kconst_params (recmeta_signature mta))) (level_list_len (kexpr_const_levels h)))) (kapp_fn (lift_at e c a)) (kapp_fn e) (delta_head_const_invariant_lift c a recname e h1)) arity) (Eq.symm KExpr (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (lift_at e c a))))) (lift_at e' c a) (Eq.trans KExpr (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn (lift_at e c a))))) (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) (lift_at e' c a)
+ (Eq.cong KExpr KExpr (fun (head : KExpr) => (iota_contractum mta rule (kapp_args (lift_at e c a)) (kapp_args (lift_at major c a)) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels head)))) (kapp_fn (lift_at e c a)) (kapp_fn e) (delta_head_const_invariant_lift c a recname e h1)) (iota_reduct_lift_eq env c a e e' recname mta major cname rule liftclosed h5 (Eq.cong KExpr (OptionType KExpr) (fun (z : KExpr) => OptionType.some KExpr z) (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) e' (Eq.symm KExpr e' (iota_contractum mta rule (kapp_args e) (kapp_args major) (recursor_rhs_instance (recmeta_signature mta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))) returned))))))".to_string()),
                 is_axiom: false,
-                description: "LIFT E-core keystone: lift_at commutes past the directed iota step. From a lift-closed env and iota_reduct env e = some e', derive iota_reduct env (lift e) = some (lift e'). Inverts via iota_reduct_some_inv then reconstructs via opt_bind_some_intro 5× (const-head lookups survive lift via kexpr_const_name_lift, major survives via iota_major_lift, metadata/rule unchanged, reduct slot closed by iota_reduct_lift_eq). UNCONDITIONAL (no head-const guard). The full-relation par_lift_full_c iota arm consumes this. DerivedProved, zero axiom_deps. Part of #2859 (LIFT E-core).".to_string(),
+                description: "Direct guarded iota commutation: full inversion retains field and universe-arity guards; actual head and constructor-spine invariance transports both guards, stored structural RHS closure derives instance invariance, and canonical reconstruction closes the real operator graph.".to_string(),
                 category: AxiomCategory::DerivedLemma,
                 proof_status: ProofStatus::DerivedProved,
                 elaborated_type: None,
                 elaborated_value: None,
                 dependencies: Some(HashSet::from([
-                    "iota_reduct".to_string(),
-                    "iota_reduct_some_inv".to_string(),
-                    "opt_bind_some_intro".to_string(),
+                    "iota_reduct_full_inv".to_string(),
+                    "iota_reduct_full_recon".to_string(),
                     "iota_reduct_lift_eq".to_string(),
-                    "iota_major_lift".to_string(),
-                    "kexpr_const_name_lift".to_string(),
-                    "Eq.cong".to_string(),
-                    "Eq.trans".to_string(),
+                    "delta_head_const_invariant_lift".to_string(),
+                    "list_map_length".to_string(),
                 ])),
                 axiom_deps: HashSet::new(),
             })?;
@@ -5334,6 +4941,97 @@ impl Specification {
             })?;
         }
 
+        Ok(())
+    }
+}
+
+impl Specification {
+    /// Unchanged foundational proof prerequisites, registered before iota closure.
+    pub(super) fn add_iota_order_primitives(&mut self) -> Result<(), SpecError> {
+        self.add_definition(SpecDefinition {
+            name: "le_zero_n".to_string(),
+            type_src: "forall (n : Nat), Le Nat.zero n".to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (n : Nat) => Nat.rec (fun (n0 : Nat) => Le Nat.zero n0) ",
+                    "(Le.refl Nat.zero) ",
+                    "(fun (m : Nat) (ih : Le Nat.zero m) => Le.step Nat.zero m ih) ",
+                    "n"
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: "Le 0 n for all n: Nat.rec on n (Le.refl base, Le.step succ). DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "Le".to_string(),
+                "Le.refl".to_string(),
+                "Le.step".to_string(),
+                "Nat.rec".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "le_succ_succ".to_string(),
+            type_src: "forall (a : Nat) (b : Nat), Le a b -> Le (Nat.succ a) (Nat.succ b)"
+                .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (a : Nat) (b : Nat) (h : Le a b) => ",
+                    "Le.rec a (fun (j : Nat) (_ : Le a j) => Le (Nat.succ a) (Nat.succ j)) ",
+                    "(Le.refl (Nat.succ a)) ",
+                    "(fun (m : Nat) (_hm : Le a m) (ihm : Le (Nat.succ a) (Nat.succ m)) => ",
+                    "Le.step (Nat.succ a) (Nat.succ m) ihm) ",
+                    "b h"
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: "Le a b -> Le (succ a) (succ b). Le.rec on the proof (a promoted to parameter; motive over the 2nd index): refl via Le.refl (succ a), step via Le.step. DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "Le".to_string(),
+                "Le.refl".to_string(),
+                "Le.step".to_string(),
+                "Le.rec".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "le_trans".to_string(),
+            type_src: "forall (a : Nat) (b : Nat) (c : Nat), Le a b -> Le b c -> Le a c"
+                .to_string(),
+            value_src: Some(
+                concat!(
+                    "fun (a : Nat) (b : Nat) (c : Nat) (hab : Le a b) (hbc : Le b c) => ",
+                    "Le.rec b (fun (j : Nat) (_ : Le b j) => Le a j) ",
+                    "hab ",
+                    "(fun (m : Nat) (_hm : Le b m) (ihm : Le a m) => Le.step a m ihm) ",
+                    "c hbc"
+                )
+                .to_string(),
+            ),
+            is_axiom: false,
+            description: "Transitivity of Le: Le a b -> Le b c -> Le a c. Le.rec on the second proof (b parameter, motive over c): refl arm returns hab, step arm via Le.step. DerivedProved, zero axiom_deps. Part of #2859 ((iota,app) minimal join).".to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "Le".to_string(),
+                "Le.step".to_string(),
+                "Le.rec".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
         Ok(())
     }
 }

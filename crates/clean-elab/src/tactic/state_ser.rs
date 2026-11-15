@@ -210,10 +210,10 @@ pub(crate) fn serialize_expr(expr: &Expr) -> SerializedExpr {
 /// Serialize a [`LocalDecl`] into its portable representation.
 pub(crate) fn serialize_local_decl(decl: &LocalDecl) -> SerializedLocalDecl {
     SerializedLocalDecl {
-        name: decl.name.clone(),
+        name: decl.name.to_string(),
         ty: serialize_expr(&decl.ty),
         value: decl.value.as_ref().map(serialize_expr),
-        binder_info: "default".to_owned(),
+        binder_info: binder_info_str(decl.binder_info.info),
     }
 }
 

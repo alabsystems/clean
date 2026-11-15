@@ -43,9 +43,27 @@ use crate::tc::TypeChecker;
 /// the phase that must remove it. Rows matching an entry are skipped;
 /// everything else MUST match ground truth.
 const SKIP_OPS: &[(&str, &str, &str)] = &[
-    // (empty) — Phase 2 seeded `Char.utf8Size` (a `Bool.rec`/`Nat.ble`-over-
+    // Phase 2 seeded `Char.utf8Size` (a `Bool.rec`/`Nat.ble`-over-
     // `Char.toNat` body, value-equal to Lean's), so `Char.utf8Size (Char.ofNat
     // cp)` now computes definitionally in the whnf lane; its rows are checked.
+    //
+    // 2026-09-26, native-fold authority (`env/native_fold_authority.rs`,
+    // `docs/issues/2026-09-26-kernel-native-fold-by-name.md`): the prelude
+    // declares NO `String.utf8ByteSize` and NO `String.isEmpty`, so their
+    // rows computed only because a registered reducer fired on a name the
+    // environment does not hold. A fold now needs the canonical definition;
+    // these rows return when the prelude defines the two heads (or run
+    // against Lean's `Init`, where the reducers are admitted).
+    (
+        "string",
+        "utf8ByteSize",
+        "prelude declares no String.utf8ByteSize (fold needs a definition)",
+    ),
+    (
+        "string",
+        "isEmpty",
+        "prelude declares no String.isEmpty (fold needs a definition)",
+    ),
 ];
 
 /// `<T>.decLe` has no native reducer; its rows run through full kernel whnf

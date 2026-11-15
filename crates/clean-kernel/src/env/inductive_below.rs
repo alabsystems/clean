@@ -15,7 +15,7 @@ use super::inductive_below_minors::{
     bind_params, build_below_minor, build_brec_on_minor, build_f_type, build_ind_app,
     get_ind_universe, get_nth_pi_domain, make_below_levels, make_ind_levels, mk_pprod,
 };
-use super::inductive_fixed_indices::{is_prop_former_type, CtorInfo};
+use super::inductive_fixed_indices::CtorInfo;
 use super::types::{Declaration, EnvError};
 use super::Environment;
 
@@ -53,7 +53,10 @@ impl Environment {
         if !ind_val.is_recursive {
             return false;
         }
-        !is_prop_former_type(&ind_type.type_)
+        // The result sort up to whnf (Lean `isPropFormerType` reduces too): a
+        // `δ`-`Prop` family gets no `.below`, and neither does a type former
+        // that is not a sort even after reduction.
+        self.type_former_is_prop(&ind_type.type_) == Some(false)
     }
 
     /// Build `.below`: `{motive : Ind → Sort u} → Ind → Sort (max 1 u)`
@@ -64,8 +67,8 @@ impl Environment {
         ctor_infos: &[CtorInfo],
     ) -> Result<Declaration, EnvError> {
         let ind_name = &ind_type.name;
-        let below_name = Name::from_string(&format!("{ind_name}.below"));
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let below_name = ind_name.clone().str("below");
+        let rec_name = ind_name.clone().str("rec");
 
         let rec_val = self
             .recursors
@@ -117,8 +120,8 @@ impl Environment {
         ctor_infos: &[CtorInfo],
     ) -> Result<Declaration, EnvError> {
         let ind_name = &ind_type.name;
-        let below_name = Name::from_string(&format!("{ind_name}.below"));
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let below_name = ind_name.clone().str("below");
+        let rec_name = ind_name.clone().str("rec");
 
         let rec_val = self
             .recursors
@@ -154,7 +157,7 @@ impl Environment {
         );
 
         Ok(Declaration::Definition {
-            name: Name::from_string(&format!("{ind_name}.brecOn")),
+            name: ind_name.clone().str("brecOn"),
             level_params: brec_level_params,
             type_: brec_type,
             value,
@@ -334,7 +337,7 @@ fn build_brec_on_value(
         mb.finish_child(mb.mk_lam(x_id, BinderInfo::Default, ind_app.clone(), pair_ty))
     };
 
-    let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+    let rec_name = ind_name.clone().str("rec");
     let rec_levels = {
         let mut lvls = vec![rlvl.clone()];
         lvls.extend_from_slice(ind_levels);

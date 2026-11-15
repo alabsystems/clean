@@ -59,7 +59,7 @@ impl Ord for GoalQueueEntry {
 /// - DepthFirst: Vec (stack, LIFO)
 /// - BreadthFirst: VecDeque (queue, FIFO)
 #[derive(Debug)]
-pub struct GoalQueue {
+pub(crate) struct GoalQueue {
     /// Strategy being used
     strategy: AesopStrategy,
     /// Priority queue for best-first search
@@ -71,13 +71,13 @@ pub struct GoalQueue {
 impl GoalQueue {
     /// Create a new empty queue with default strategy (best-first)
     /// ENSURES: Returns an empty queue using `AesopStrategy::default()`.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::with_strategy(AesopStrategy::default())
     }
 
     /// Create a new empty queue with the given strategy
     /// ENSURES: Returns an empty queue that will pop entries according to `strategy`.
-    pub fn with_strategy(strategy: AesopStrategy) -> Self {
+    pub(crate) fn with_strategy(strategy: AesopStrategy) -> Self {
         GoalQueue {
             strategy,
             heap: BinaryHeap::new(),
@@ -88,7 +88,13 @@ impl GoalQueue {
     /// Push a goal onto the queue
     /// REQUIRES: `goal_id` identifies a goal managed by the same search tree the queue will later query.
     /// ENSURES: The queued entry records the supplied priority and iteration metadata.
-    pub fn push(&mut self, goal_id: GoalId, priority: Percent, last_expanded: usize, added: usize) {
+    pub(crate) fn push(
+        &mut self,
+        goal_id: GoalId,
+        priority: Percent,
+        last_expanded: usize,
+        added: usize,
+    ) {
         let entry = GoalQueueEntry {
             goal_id,
             priority,
@@ -117,7 +123,7 @@ impl GoalQueue {
     /// REQUIRES: `tree` is the search tree whose `GoalId`s were previously pushed into this queue.
     /// ENSURES: Returns `Some(goal_id)` only for goals whose current `GoalState` is active.
     /// ENSURES: Inactive queued entries may be discarded while searching for the next active goal.
-    pub fn pop_active_goal(&mut self, tree: &SearchTree) -> Option<GoalId> {
+    pub(crate) fn pop_active_goal(&mut self, tree: &SearchTree) -> Option<GoalId> {
         match self.strategy {
             AesopStrategy::BestFirst => {
                 while let Some(entry) = self.heap.pop() {

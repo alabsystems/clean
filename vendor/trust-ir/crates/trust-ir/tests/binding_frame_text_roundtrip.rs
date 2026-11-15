@@ -60,11 +60,14 @@ fn b(n: u32) -> BlockId {
 /// - `CloseFrame` for both frames (emits no result value).
 fn module_with_all_binding_frames() -> Module {
     let mut module = Module::new("binding_frame_text_rt");
-    let ft = module.add_func_type(FuncTy {
-        params: vec![Ty::I64, Ty::Bool],
-        returns: vec![Ty::I64],
-        is_vararg: false,
-    });
+    let ft = module
+        .add_func_type(FuncTy {
+            params: vec![Ty::I64, Ty::Bool],
+            returns: vec![Ty::I64],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let mut func = Function::new(FuncId::new(0), "exists_lower", ft, b(0));
     let mut block = Block::new(b(0));
     block.params.push((v(0), Ty::I64));
@@ -131,7 +134,9 @@ fn module_with_all_binding_frames() -> Module {
         .body
         .push(InstrNode::new(Inst::Return { values: vec![v(5)] }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 

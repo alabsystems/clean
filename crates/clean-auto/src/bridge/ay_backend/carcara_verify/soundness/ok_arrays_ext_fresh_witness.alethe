@@ -1,0 +1,4 @@
+(assume h (not (= (store c x v) c)))
+(assume nc (not (not (= (select (store c x v) (choice ((k Int)) (or (= (store c x v) c) (not (= (select (store c x v) k) (select c k)))))) (select c (choice ((k Int)) (or (= (store c x v) c) (not (= (select (store c x v) k) (select c k))))))))))
+(step s (cl (not (= (select (store c x v) (choice ((k Int)) (or (= (store c x v) c) (not (= (select (store c x v) k) (select c k)))))) (select c (choice ((k Int)) (or (= (store c x v) c) (not (= (select (store c x v) k) (select c k))))))))) :rule arrays_ext :premises (h))
+(step done (cl) :rule resolution :premises (nc s))

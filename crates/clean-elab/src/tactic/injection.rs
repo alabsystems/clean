@@ -35,7 +35,10 @@ use super::core::TacticResult;
 /// ENSURES: On Err(HypothesisNotFound), `hyp_name` is not in the local context
 /// ENSURES: On Err(GoalMismatch), the hypothesis is not an equality of same-constructor terms
 pub fn eval_injection(ctx: &mut TacticCtx<'_>, hyp_name: &Name) -> TacticResult {
-    super::inductive_reasoning::injection(ctx.state, &hyp_name.to_string())
+    super::inductive_reasoning::injection(
+        ctx.state,
+        &clean_parser::SurfaceName::from_name(hyp_name.clone()),
+    )
 }
 
 /// Discriminate tactic via `TacticCtx`.
@@ -51,7 +54,10 @@ pub fn eval_injection(ctx: &mut TacticCtx<'_>, hyp_name: &Name) -> TacticResult 
 /// ENSURES: On Ok, the current goal is closed (contradiction from distinct constructors)
 /// ENSURES: On Err(GoalMismatch), the hypothesis does not match the pattern
 pub fn eval_discriminate(ctx: &mut TacticCtx<'_>, hyp_name: &Name) -> TacticResult {
-    super::inductive_reasoning::discriminate(ctx.state, &hyp_name.to_string())
+    super::inductive_reasoning::discriminate(
+        ctx.state,
+        &clean_parser::SurfaceName::from_name(hyp_name.clone()),
+    )
 }
 
 /// Injection tactic taking a string hypothesis name.
@@ -62,7 +68,8 @@ pub fn eval_discriminate(ctx: &mut TacticCtx<'_>, hyp_name: &Name) -> TacticResu
 /// REQUIRES: same as [`eval_injection`]
 /// ENSURES: same as [`eval_injection`]
 pub fn eval_injection_str(ctx: &mut TacticCtx<'_>, hyp_name: &str) -> TacticResult {
-    super::inductive_reasoning::injection(ctx.state, hyp_name)
+    let name = super::pattern::names::parse_binding_name(hyp_name, "injection")?;
+    super::inductive_reasoning::injection(ctx.state, &name)
 }
 
 /// Discriminate tactic taking a string hypothesis name.
@@ -73,7 +80,8 @@ pub fn eval_injection_str(ctx: &mut TacticCtx<'_>, hyp_name: &str) -> TacticResu
 /// REQUIRES: same as [`eval_discriminate`]
 /// ENSURES: same as [`eval_discriminate`]
 pub fn eval_discriminate_str(ctx: &mut TacticCtx<'_>, hyp_name: &str) -> TacticResult {
-    super::inductive_reasoning::discriminate(ctx.state, hyp_name)
+    let name = super::pattern::names::parse_binding_name(hyp_name, "discriminate")?;
+    super::inductive_reasoning::discriminate(ctx.state, &name)
 }
 
 /// Check whether a hypothesis `h : lhs = rhs` has both sides as constructor

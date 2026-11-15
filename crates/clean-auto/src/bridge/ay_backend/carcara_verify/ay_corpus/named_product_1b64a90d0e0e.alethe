@@ -1,0 +1,5 @@
+(define-fun @ay_cbb_t1_0_w0 () (_ BitVec 64) #b0000000000000000000000000000000000000000000000000000000000000001)
+(define-fun @ay_cbb_t1_0_w2 () (_ BitVec 64) (bvmul sa_v82 @ay_cbb_t1_0_w0))
+(assume t0 (not (= (bvmul sa_v82 #b0000000000000000000000000000000000000000000000000000000000000001) sa_v82)))
+(step t1.cbb2.pr (cl (= @ay_cbb_t1_0_w2 sa_v82)) :rule poly_simp)
+(step t2 (cl) :rule resolution :premises (t0 t1.cbb2.pr))

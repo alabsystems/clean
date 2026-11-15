@@ -1,0 +1,3 @@
+(assume nc (not (= ((lambda ((x Bool)) (forall ((y Bool)) (or y x y_renamed))) y) (forall ((y_renamed Bool)) (or y_renamed y y_renamed)))))
+(step s (cl (= ((lambda ((x Bool)) (forall ((y Bool)) (or y x y_renamed))) y) (forall ((y_renamed Bool)) (or y_renamed y y_renamed)))) :rule beta_equiv)
+(step done (cl) :rule resolution :premises (nc s))

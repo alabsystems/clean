@@ -29,7 +29,12 @@
 
 use crate::error::ElabError;
 use clean_kernel::Name;
-use clean_parser::{SurfaceBinder, SurfaceBinderInfo, SurfaceExpr};
+use clean_parser::{SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName};
+
+/// A fixed compiler-authored path, never user display text.
+fn generated_ident(path: &'static str) -> SurfaceExpr {
+    SurfaceExpr::Ident(clean_parser::Span::dummy(), SurfaceName::global_path(path))
+}
 
 // ---------------------------------------------------------------------------
 // IO type names
@@ -110,10 +115,10 @@ pub(crate) const IO_OPERATIONS: &[&str] = &[
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn is_io_type(expr: &SurfaceExpr) -> bool {
     match expr {
-        SurfaceExpr::Ident(_, name) => name == IO_TYPE_NAME,
+        SurfaceExpr::Ident(_, name) => name.name() == &Name::from_string(IO_TYPE_NAME),
         SurfaceExpr::App(_, func, _) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                name == IO_TYPE_NAME
+                name.name() == &Name::from_string(IO_TYPE_NAME)
             } else {
                 false
             }
@@ -129,10 +134,10 @@ pub(crate) fn is_io_unit(expr: &SurfaceExpr) -> bool {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                if name != IO_TYPE_NAME || args.len() != 1 {
+                if name.name() != &Name::from_string(IO_TYPE_NAME) || args.len() != 1 {
                     return false;
                 }
-                matches!(&args[0].expr, SurfaceExpr::Ident(_, arg_name) if arg_name == IO_UNIT_TYPE)
+                matches!(&args[0].expr, SurfaceExpr::Ident(_, arg_name) if arg_name.name() == &Name::from_string(IO_UNIT_TYPE))
             } else {
                 false
             }
@@ -148,10 +153,10 @@ pub(crate) fn is_io_uint32(expr: &SurfaceExpr) -> bool {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                if name != IO_TYPE_NAME || args.len() != 1 {
+                if name.name() != &Name::from_string(IO_TYPE_NAME) || args.len() != 1 {
                     return false;
                 }
-                matches!(&args[0].expr, SurfaceExpr::Ident(_, arg_name) if arg_name == IO_UINT32_TYPE)
+                matches!(&args[0].expr, SurfaceExpr::Ident(_, arg_name) if arg_name.name() == &Name::from_string(IO_UINT32_TYPE))
             } else {
                 false
             }
@@ -169,7 +174,7 @@ pub(crate) fn io_result_type(expr: &SurfaceExpr) -> Option<&SurfaceExpr> {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             if let SurfaceExpr::Ident(_, name) = func.as_ref() {
-                if name == IO_TYPE_NAME && args.len() == 1 {
+                if name.name() == &Name::from_string(IO_TYPE_NAME) && args.len() == 1 {
                     return Some(&args[0].expr);
                 }
             }
@@ -182,8 +187,8 @@ pub(crate) fn io_result_type(expr: &SurfaceExpr) -> Option<&SurfaceExpr> {
 /// Check if a name is a known IO operation.
 #[must_use]
 #[cfg_attr(not(test), expect(dead_code))]
-pub(crate) fn is_io_operation(name: &str) -> bool {
-    IO_OPERATIONS.contains(&name)
+pub(crate) fn is_io_operation(name: &SurfaceName) -> bool {
+    name_to_io_op(name.name()).is_some()
 }
 
 // ---------------------------------------------------------------------------
@@ -220,8 +225,8 @@ pub(crate) enum MainValidation {
 /// # ENSURES
 /// - Returns `MainValidation` indicating validity and signature variant
 #[cfg_attr(not(test), expect(dead_code))]
-pub(crate) fn validate_main(name: &str, ty: Option<&SurfaceExpr>) -> MainValidation {
-    if name != "main" {
+pub(crate) fn validate_main(name: &SurfaceName, ty: Option<&SurfaceExpr>) -> MainValidation {
+    if name.name() != &Name::anon().str("main") {
         return MainValidation::NotMain;
     }
 
@@ -240,7 +245,7 @@ pub(crate) fn validate_main(name: &str, ty: Option<&SurfaceExpr>) -> MainValidat
     }
 
     // Check for bare `IO` (missing result type annotation)
-    if matches!(ty, SurfaceExpr::Ident(_, n) if n == IO_TYPE_NAME) {
+    if matches!(ty, SurfaceExpr::Ident(_, n) if n.name() == &Name::from_string(IO_TYPE_NAME)) {
         return MainValidation::InvalidMainType {
             actual_type: "IO (missing result type)".to_owned(),
         };
@@ -269,9 +274,13 @@ pub(crate) fn validate_main(name: &str, ty: Option<&SurfaceExpr>) -> MainValidat
 /// IO.bind action (fun x => rest)
 /// ```
 #[cfg_attr(not(test), expect(dead_code))]
-pub(crate) fn mk_io_bind(name: &str, action: SurfaceExpr, body: SurfaceExpr) -> SurfaceExpr {
-    let bind_fn = SurfaceExpr::ident(IO_BIND);
-    let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+pub(crate) fn mk_io_bind(
+    name: &SurfaceName,
+    action: SurfaceExpr,
+    body: SurfaceExpr,
+) -> SurfaceExpr {
+    let bind_fn = generated_ident(IO_BIND);
+    let binder = SurfaceBinder::new_typed(name.clone(), None, SurfaceBinderInfo::Explicit);
     let continuation = SurfaceExpr::lambda(vec![binder], body);
     SurfaceExpr::app(bind_fn, vec![action, continuation])
 }
@@ -288,7 +297,7 @@ pub(crate) fn mk_io_bind(name: &str, action: SurfaceExpr, body: SurfaceExpr) -> 
 /// - Returns nested `IO.bind` applications threading each step
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn desugar_io_binds(
-    steps: &[(String, SurfaceExpr)],
+    steps: &[(SurfaceName, SurfaceExpr)],
     terminal: SurfaceExpr,
 ) -> SurfaceExpr {
     steps.iter().rev().fold(terminal, |body, (name, action)| {
@@ -305,7 +314,7 @@ pub(crate) fn desugar_io_binds(
 /// Builds: `IO.pure val`
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_pure(val: SurfaceExpr) -> SurfaceExpr {
-    let pure_fn = SurfaceExpr::ident(IO_PURE);
+    let pure_fn = generated_ident(IO_PURE);
     SurfaceExpr::app(pure_fn, vec![val])
 }
 
@@ -314,7 +323,7 @@ pub(crate) fn mk_io_pure(val: SurfaceExpr) -> SurfaceExpr {
 /// Builds: `IO.pure ()`
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_pure_unit() -> SurfaceExpr {
-    mk_io_pure(SurfaceExpr::ident("Unit.unit"))
+    mk_io_pure(generated_ident("Unit.unit"))
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +335,7 @@ pub(crate) fn mk_io_pure_unit() -> SurfaceExpr {
 /// Equivalent to `IO.bind action (fun x => IO.pure (f x))` but more direct.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_map(f: SurfaceExpr, action: SurfaceExpr) -> SurfaceExpr {
-    let map_fn = SurfaceExpr::ident(IO_MAP);
+    let map_fn = generated_ident(IO_MAP);
     SurfaceExpr::app(map_fn, vec![f, action])
 }
 
@@ -350,11 +359,11 @@ pub(crate) fn mk_io_map(f: SurfaceExpr, action: SurfaceExpr) -> SurfaceExpr {
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_try_catch(
     action: SurfaceExpr,
-    err_name: &str,
+    err_name: &SurfaceName,
     handler: SurfaceExpr,
 ) -> SurfaceExpr {
-    let try_catch_fn = SurfaceExpr::ident(IO_TRY_CATCH);
-    let binder = SurfaceBinder::new(err_name, None, SurfaceBinderInfo::Explicit);
+    let try_catch_fn = generated_ident(IO_TRY_CATCH);
+    let binder = SurfaceBinder::new_typed(err_name.clone(), None, SurfaceBinderInfo::Explicit);
     let handler_fn = SurfaceExpr::lambda(vec![binder], handler);
     SurfaceExpr::app(try_catch_fn, vec![action, handler_fn])
 }
@@ -366,28 +375,28 @@ pub(crate) fn mk_io_try_catch(
 /// Build `IO.Ref.new init_val`.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_ref_new(init_val: SurfaceExpr) -> SurfaceExpr {
-    let ref_new = SurfaceExpr::ident(IO_REF_NEW);
+    let ref_new = generated_ident(IO_REF_NEW);
     SurfaceExpr::app(ref_new, vec![init_val])
 }
 
 /// Build `IO.Ref.get ref_expr`.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_ref_get(ref_expr: SurfaceExpr) -> SurfaceExpr {
-    let ref_get = SurfaceExpr::ident(IO_REF_GET);
+    let ref_get = generated_ident(IO_REF_GET);
     SurfaceExpr::app(ref_get, vec![ref_expr])
 }
 
 /// Build `IO.Ref.set ref_expr new_val`.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_ref_set(ref_expr: SurfaceExpr, new_val: SurfaceExpr) -> SurfaceExpr {
-    let ref_set = SurfaceExpr::ident(IO_REF_SET);
+    let ref_set = generated_ident(IO_REF_SET);
     SurfaceExpr::app(ref_set, vec![ref_expr, new_val])
 }
 
 /// Build `IO.Ref.modify ref_expr f`.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_ref_modify(ref_expr: SurfaceExpr, f: SurfaceExpr) -> SurfaceExpr {
-    let ref_modify = SurfaceExpr::ident(IO_REF_MODIFY);
+    let ref_modify = generated_ident(IO_REF_MODIFY);
     SurfaceExpr::app(ref_modify, vec![ref_expr, f])
 }
 
@@ -398,21 +407,21 @@ pub(crate) fn mk_io_ref_modify(ref_expr: SurfaceExpr, f: SurfaceExpr) -> Surface
 /// Build `IO.println msg`.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_println(msg: SurfaceExpr) -> SurfaceExpr {
-    let println_fn = SurfaceExpr::ident(IO_PRINTLN);
+    let println_fn = generated_ident(IO_PRINTLN);
     SurfaceExpr::app(println_fn, vec![msg])
 }
 
 /// Build `IO.print msg`.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_print(msg: SurfaceExpr) -> SurfaceExpr {
-    let print_fn = SurfaceExpr::ident(IO_PRINT);
+    let print_fn = generated_ident(IO_PRINT);
     SurfaceExpr::app(print_fn, vec![msg])
 }
 
 /// Build `IO.getLine`.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn mk_io_get_line() -> SurfaceExpr {
-    SurfaceExpr::ident(IO_GET_LINE)
+    generated_ident(IO_GET_LINE)
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +466,7 @@ impl From<IoMonadError> for ElabError {
 /// and emit appropriate metadata for the compiler backend.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn check_io_entry_point(
-    name: &str,
+    name: &SurfaceName,
     ty: Option<&SurfaceExpr>,
 ) -> Result<Option<MainValidation>, ElabError> {
     match validate_main(name, ty) {
@@ -482,7 +491,7 @@ pub(crate) fn check_io_entry_point(
 /// `terminal` result in an empty program.
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn build_io_program(
-    steps: &[(String, SurfaceExpr)],
+    steps: &[(SurfaceName, SurfaceExpr)],
     terminal: Option<SurfaceExpr>,
 ) -> Result<SurfaceExpr, ElabError> {
     let terminal = terminal.unwrap_or_else(mk_io_pure_unit);
@@ -494,10 +503,12 @@ pub(crate) fn build_io_program(
     Ok(desugar_io_binds(steps, terminal))
 }
 
-/// Convert a kernel `Name` to a string for IO operation matching.
+/// Return a fixed operation label only after exact typed-name matching.
 #[must_use]
 #[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn name_to_io_op(name: &Name) -> Option<&'static str> {
-    let s = name.to_string();
-    IO_OPERATIONS.iter().find(|&&op| op == s).copied()
+    IO_OPERATIONS
+        .iter()
+        .find(|&&op| name == &Name::from_string(op))
+        .copied()
 }

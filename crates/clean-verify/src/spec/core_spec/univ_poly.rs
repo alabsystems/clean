@@ -30,10 +30,10 @@ use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
 impl Specification {
-    /// Universe-polymorphism rung: semantic Level theory. Registered AFTER
-    /// `add_snschema` (terminal lemma layer; consumes only foundation
-    /// Nat/Bool/Le + Level + Eq machinery, all registered far earlier).
-    pub(super) fn add_univ_poly(&mut self) -> Result<(), SpecError> {
+    /// Semantic universe theory and substitution composition, registered before
+    /// the typing judgments. Raw operations are installed earlier by
+    /// add_univ_instantiation_syntax; no proof term changes in the split.
+    pub(super) fn add_univ_poly_substrate(&mut self) -> Result<(), SpecError> {
         // ── natMax: the standard double-recursion max on Nat.
         //    max 0 b = b; max (succ a) 0 = succ a; max (succ a)(succ b) = succ (max a b).
         self.add_recursive_def(
@@ -51,11 +51,6 @@ impl Specification {
         self.add_recursive_def(
             "def evalL (v : Name -> Nat) (l : Level) : Nat := Level.rec (fun (_ : Level) => Nat) Nat.zero (fun (l0 : Level) (ih : Nat) => Nat.succ ih) (fun (a : Level) (b : Level) (iha : Nat) (ihb : Nat) => natMax iha ihb) (fun (a : Level) (b : Level) (iha : Nat) (ihb : Nat) => imaxNat iha ihb) (fun (n : Name) => v n) l",
             "evalL v l: valuation semantics of a Level under v : Name -> Nat (Level.rec; imax via imaxNat). The semantic ground of the universe-polymorphism rung. UnivPoly rung.",
-        )?;
-        // ── substL: level substitution — param n ↦ s n, homomorphic elsewhere.
-        self.add_recursive_def(
-            "def substL (s : Name -> Level) (l : Level) : Level := Level.rec (fun (_ : Level) => Level) Level.zero (fun (l0 : Level) (ih : Level) => Level.succ ih) (fun (a : Level) (b : Level) (iha : Level) (ihb : Level) => Level.max iha ihb) (fun (a : Level) (b : Level) (iha : Level) (ihb : Level) => Level.imax iha ihb) (fun (n : Name) => s n) l",
-            "substL s l: level substitution (param n -> s n, homomorphic elsewhere). The instantiation operation of universe polymorphism. UnivPoly rung.",
         )?;
         // ── The semantic order and equivalence: forall-valuations. This is the
         //    definition that makes stability-under-substitution PROVABLE (the
@@ -104,95 +99,21 @@ impl Specification {
             "levelEqSem a b -> levelEqSem (substL s a) (substL s b) — semantic level equivalence is stable under substitution (Eq.trans chain through the composed valuation). UnivPoly rung.",
         )?;
 
-        // ── Brick A2: the const-instantiation layer (guide §3). mapLL (Level-list
-        //    map — mapLT is KExpr-only), substL composition, positional lookup
-        //    list_getD (defaulting Level.zero out of range), paramSubst (the
-        //    substitution a const's level list induces), instL (KExpr level
-        //    instantiation, over the FULL 9-ctor KExpr — let_/proj/lit arms are
-        //    homomorphic, absent from the 6-ctor guide), instLevels (the spec
-        //    shape of the kernel's instantiate_level_params in infer_const).
-        self.add_recursive_def(
-            "def mapLL (f : Level -> Level) (l : ListType Level) : ListType Level := ListType.rec Level (fun (_ : ListType Level) => ListType Level) (ListType.nil Level) (fun (x : Level) (rest : ListType Level) (ih : ListType Level) => ListType.cons Level (f x) ih) l",
-            "mapLL f l: map over a Level list (the Level companion of mapLT). UnivPoly rung A2.",
-        )?;
+        // Substitution composition stays in this proof substrate. The raw
+        // operations and positional lookup machinery now register before delta.
         self.add_recursive_def(
             "def substL_substL (s : Name -> Level) (t : Name -> Level) (l : Level) : Eq Level (substL s (substL t l)) (substL (fun (n : Name) => substL s (t n)) l) := Level.rec (fun (l0 : Level) => Eq Level (substL s (substL t l0)) (substL (fun (n : Name) => substL s (t n)) l0)) (Eq.refl Level Level.zero) (fun (l0 : Level) (ih : Eq Level (substL s (substL t l0)) (substL (fun (n : Name) => substL s (t n)) l0)) => Eq.cong Level Level (fun (w : Level) => Level.succ w) (substL s (substL t l0)) (substL (fun (n : Name) => substL s (t n)) l0) ih) (fun (a : Level) (b : Level) (iha : Eq Level (substL s (substL t a)) (substL (fun (n : Name) => substL s (t n)) a)) (ihb : Eq Level (substL s (substL t b)) (substL (fun (n : Name) => substL s (t n)) b)) => Eq.trans Level (Level.max (substL s (substL t a)) (substL s (substL t b))) (Level.max (substL (fun (n : Name) => substL s (t n)) a) (substL s (substL t b))) (Level.max (substL (fun (n : Name) => substL s (t n)) a) (substL (fun (n : Name) => substL s (t n)) b)) (Eq.cong Level Level (fun (w : Level) => Level.max w (substL s (substL t b))) (substL s (substL t a)) (substL (fun (n : Name) => substL s (t n)) a) iha) (Eq.cong Level Level (fun (w : Level) => Level.max (substL (fun (n : Name) => substL s (t n)) a) w) (substL s (substL t b)) (substL (fun (n : Name) => substL s (t n)) b) ihb)) (fun (a : Level) (b : Level) (iha : Eq Level (substL s (substL t a)) (substL (fun (n : Name) => substL s (t n)) a)) (ihb : Eq Level (substL s (substL t b)) (substL (fun (n : Name) => substL s (t n)) b)) => Eq.trans Level (Level.imax (substL s (substL t a)) (substL s (substL t b))) (Level.imax (substL (fun (n : Name) => substL s (t n)) a) (substL s (substL t b))) (Level.imax (substL (fun (n : Name) => substL s (t n)) a) (substL (fun (n : Name) => substL s (t n)) b)) (Eq.cong Level Level (fun (w : Level) => Level.imax w (substL s (substL t b))) (substL s (substL t a)) (substL (fun (n : Name) => substL s (t n)) a) iha) (Eq.cong Level Level (fun (w : Level) => Level.imax (substL (fun (n : Name) => substL s (t n)) a) w) (substL s (substL t b)) (substL (fun (n : Name) => substL s (t n)) b) ihb)) (fun (n : Name) => Eq.refl Level (substL s (t n))) l",
             "substL s (substL t l) = substL (substL s . t) l — level substitution composes (Level.rec; zero/param rfl, succ cong, max/imax two-cong chains). UnivPoly rung A2.",
         )?;
-        self.add_recursive_def(
-            "def list_getD (l : ListType Level) (i : Nat) : Level := ListType.rec Level (fun (_ : ListType Level) => Nat -> Level) (fun (i0 : Nat) => Level.zero) (fun (x : Level) (rest : ListType Level) (ih : Nat -> Level) => fun (i0 : Nat) => Nat.rec (fun (_ : Nat) => Level) x (fun (i1 : Nat) (_ : Level) => ih i1) i0) l i",
-            "list_getD l i: positional Level-list lookup defaulting to zero out of range (unreachable for well-formed consts — the typing rule pins the length). UnivPoly rung A2.",
-        )?;
-        // nameIdx: position of a name in a decl's level-param name list (none if
-        // absent). The spec Level.param carries Name (not the guide's positional
-        // Nat), so the instantiation substitution matches the kernel's
-        // instantiate_level_params: look the param name up in the decl's
-        // param-name list, take the corresponding level from us, else leave the
-        // param untouched.
-        self.add_recursive_def(
-            "def nameIdx (names : ListType Name) (n : Name) : OptionType Nat := ListType.rec Name (fun (_ : ListType Name) => OptionType Nat) (OptionType.none Nat) (fun (x : Name) (rest : ListType Name) (ih : OptionType Nat) => Bool.rec (fun (_ : Bool) => OptionType Nat) (OptionType.rec Nat (fun (_ : OptionType Nat) => OptionType Nat) (OptionType.none Nat) (fun (i : Nat) => OptionType.some Nat (Nat.succ i)) ih) (OptionType.some Nat Nat.zero) (name_eqb n x)) names",
-            "nameIdx names n: position of n in a param-name list (Bool.rec on name_eqb; hit -> some 0, miss -> succ-mapped tail lookup). UnivPoly rung A2.",
-        )?;
-        self.add_recursive_def(
-            "def paramSubstN (names : ListType Name) (us : ListType Level) (n : Name) : Level := OptionType.rec Nat (fun (_ : OptionType Nat) => Level) (Level.param n) (fun (i : Nat) => list_getD us i) (nameIdx names n)",
-            "paramSubstN names us: the level substitution a const's level list induces — param n -> us[position of n in names], unknown params untouched (the kernel's instantiate_level_params semantics at spec shape). UnivPoly rung A2.",
-        )?;
-        // instL: KExpr level instantiation — substL every sort level and every
-        // const level-list entry; homomorphic on all 9 constructors (let_/proj/
-        // lit arms are the clean-verify extension beyond the 6-ctor guide).
-        self.add_recursive_def(
-            "def instL (s : Name -> Level) (e : KExpr) : KExpr := KExpr.rec (fun (_ : KExpr) => KExpr) (fun (u : Level) => KExpr.sort (substL s u)) (fun (i : Nat) => KExpr.bvar i) (fun (f : KExpr) (a : KExpr) (ihf : KExpr) (iha : KExpr) => KExpr.app ihf iha) (fun (A : KExpr) (b : KExpr) (ihA : KExpr) (ihb : KExpr) => KExpr.lam ihA ihb) (fun (A : KExpr) (B : KExpr) (ihA : KExpr) (ihB : KExpr) => KExpr.pi ihA ihB) (fun (n : Name) (us : ListType Level) => KExpr.const n (mapLL (substL s) us)) (fun (A : KExpr) (v : KExpr) (b : KExpr) (ihA : KExpr) (ihv : KExpr) (ihb : KExpr) => KExpr.let_ ihA ihv ihb) (fun (sn : Name) (i : Nat) (sub : KExpr) (ihsub : KExpr) => KExpr.proj sn i ihsub) (fun (v : Nat) => KExpr.lit v) e",
-            "instL s e: level instantiation over the FULL 9-ctor KExpr (substL on sorts and const level lists, homomorphic elsewhere; bvar/lit untouched). The spec shape of the kernel's level instantiation. UnivPoly rung A2.",
-        )?;
-        self.add_recursive_def(
-            "def instLevels (names : ListType Name) (T : KExpr) (us : ListType Level) : KExpr := instL (paramSubstN names us) T",
-            "instLevels names T us: instantiate a declared level-schematic type at a const's level list (the kernel's type.instantiate_level_params(decl.params, us) at spec shape). UnivPoly rung A2.",
-        )?;
 
-        // ── sort_injectivity (canonical-cond guide port, re-homed here because it
-        // needs kexpr_sort_inj which registers after pi_injectivity_def_eq's stage):
-        // DefEq (sort u)(sort v) -> u = v. Same 3-way confluence route as
-        // pi_never_defeq_sort — def_eq_joinable strips DefEq to a common reduct, the
-        // sort-tower par_cd_sort_injectivity pins it, kexpr_sort_inj drops KExpr->Level.
-        // Levels inert (no level-defeq) so the conclusion is syntactic Eq Level.
-        // Zero axiom_deps; the 8 i-args project RedEnvFaithful the_red_env inline.
-        self.add_recursive_def(
-            "def sort_injectivity (hf : RedEnvFaithful the_red_env) (u : Level) (v : Level) (h : DefEq (KExpr.sort u) (KExpr.sort v)) : Eq Level u v := Eq.cong KExpr Level (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Level) (fun (k : Level) => k) (fun (_ : Nat) => u) (fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => u) (fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => u) (fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => u) (fun (_ : Name) (_ : ListType Level) => u) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) (_ : Level) => u) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Level) => u) (fun (_ : Nat) => u) e) (KExpr.sort u) (KExpr.sort v) (par_cd_sort_injectivity the_red_env u v (def_eq_joinable (redenv_faithful_i1 the_red_env hf) (redenv_faithful_i2 the_red_env hf) (redenv_faithful_i3 the_red_env hf) (redenv_faithful_i4 the_red_env hf) (redenv_faithful_i5 the_red_env hf) (redenv_faithful_i6 the_red_env hf) (redenv_faithful_i7 the_red_env hf) (redenv_faithful_i8 the_red_env hf) (KExpr.sort u) (KExpr.sort v) h))",
-            "sort_injectivity: DefEq (sort u)(sort v) -> u = v via def_eq_joinable -> par_cd_sort_injectivity (Eq KExpr) then an inlined KExpr.rec level-projector + Eq.cong (kexpr_sort_inj is staged later, so inlined). Carries RedEnvFaithful the_red_env; zero axiom_deps. Canonical-cond guide port.",
-        )?;
+        Ok(())
+    }
 
-        // ── CUMULATIVITY (Sort subtyping) Phase 1 — ported from the cumulativity
-        // guide, reusing the landed semantic Level machinery. Sort cumulativity is
-        // the universe-subtyping the real kernel's is_le implements (Sort u accepted
-        // where Sort v expected when u <= v). Phase 2 (cumul_transitive) is deferred
-        // (needs leSub inversion lemmas not yet in-spec). leSub/HasType are Type-
-        // valued judgment inductives (matching the Typing/TypingCtxConv idiom); the
-        // semantic order levelLeqSem is COMPLETE for a <= max a b (levelLeq_max_left)
-        // where the conservative syntactic level_leb is not.
-        self.add_recursive_def(
-            "def levelLeqSem_refl (a : Level) : levelLeqSem a a := fun (v : Name -> Nat) => Le.refl (evalL v a)",
-            "levelLeqSem_refl: the semantic level order is reflexive (Le.refl pointwise). UnivPoly cumulativity.",
-        )?;
-        self.add_recursive_def(
-            "def levelLeqSem_trans (a : Level) (b : Level) (c : Level) (h1 : levelLeqSem a b) (h2 : levelLeqSem b c) : levelLeqSem a c := fun (v : Name -> Nat) => le_trans (evalL v a) (evalL v b) (evalL v c) (h1 v) (h2 v)",
-            "levelLeqSem_trans: the semantic level order is transitive (le_trans pointwise). UnivPoly cumulativity.",
-        )?;
-        self.add_inductive(
-            "inductive leSub : KExpr -> KExpr -> Type\n| refl : forall (e : KExpr), leSub e e\n| sortCumul : forall (u : Level) (v : Level), levelLeqSem u v -> leSub (KExpr.sort u) (KExpr.sort v)\n| pi : forall (A1 : KExpr) (A2 : KExpr) (B1 : KExpr) (B2 : KExpr), leSub A2 A1 -> leSub B1 B2 -> leSub (KExpr.pi A1 B1) (KExpr.pi A2 B2)",
-            "leSub a b: the cumulative subtyping order (refl; Sort u <= Sort v when levelLeqSem u v; pi contravariant-domain/covariant-codomain). The order is_le implements. UnivPoly cumulativity.",
-        )?;
-        self.add_inductive(
-            "inductive HasType : KExpr -> KExpr -> Type\n| sort : forall (u : Level), HasType (KExpr.sort u) (KExpr.sort (Level.succ u))\n| pi : forall (A : KExpr) (B : KExpr) (u : Level) (v : Level), HasType A (KExpr.sort u) -> HasType B (KExpr.sort v) -> HasType (KExpr.pi A B) (KExpr.sort (Level.imax u v))\n| sub : forall (e : KExpr) (T1 : KExpr) (T2 : KExpr), HasType e T1 -> leSub T1 T2 -> HasType e T2",
-            "HasType e T: a context-free typing judgment WITH the cumulative subsumption rule (sub: e:T1, T1<=T2 => e:T2) — the typing entry point of is_le. UnivPoly cumulativity.",
-        )?;
-        self.add_recursive_def(
-            "def cumul_sort_sound (u : Level) (w : Level) : AndType (HasType (KExpr.sort u) (KExpr.sort (Level.succ u))) (leSub (KExpr.sort u) (KExpr.sort (Level.max u w))) := AndType.intro (HasType (KExpr.sort u) (KExpr.sort (Level.succ u))) (leSub (KExpr.sort u) (KExpr.sort (Level.max u w))) (HasType.sort u) (leSub.sortCumul u (Level.max u w) (levelLeq_max_left u w))",
-            "cumul_sort_sound u w: the sort-cumulativity base — Sort u : Sort (succ u) AND Sort u <= Sort (max u w) (via levelLeq_max_left). UnivPoly cumulativity target (a).",
-        )?;
-        self.add_recursive_def(
-            "def cumul_pi_sound (e : KExpr) (A1 : KExpr) (A2 : KExpr) (B1 : KExpr) (B2 : KExpr) (he : HasType e (KExpr.pi A1 B1)) (hA : leSub A2 A1) (hB : leSub B1 B2) : HasType e (KExpr.pi A2 B2) := HasType.sub e (KExpr.pi A1 B1) (KExpr.pi A2 B2) he (leSub.pi A1 A2 B1 B2 hA hB)",
-            "cumul_pi_sound: pi subtyping soundness (contravariant domain, covariant codomain) — e : pi A1 B1, A2<=A1, B1<=B2 => e : pi A2 B2. UnivPoly cumulativity target (b).",
-        )?;
+    /// Pure structural commutations, after the early semantic substrate and
+    /// before typing/metatheory. The exact checked terms have no SRB, C4, or
+    /// implementation-model dependency. Includes the shared generic congruence.
+    pub(super) fn add_univ_poly_structural(&mut self) -> Result<(), SpecError> {
+        self.add_universe_congruence()?;
 
         // ── UnivPoly typing Phase 1: instL / level-instantiation commutation
         // lemmas (complete proof terms ported from the univ-poly2 guide). These are
@@ -237,6 +158,58 @@ impl Specification {
         self.add_recursive_def(
             "def instL_instL (s : Name -> Level) (t : Name -> Level) (e : KExpr) : Eq KExpr (instL s (instL t e)) (instL (fun (nm : Name) => substL s (t nm)) e) := KExpr.rec (fun (e0 : KExpr) => Eq KExpr (instL s (instL t e0)) (instL (fun (nm : Name) => substL s (t nm)) e0)) (fun (u : Level) => Eq.cong Level KExpr (fun (w : Level) => KExpr.sort w) (substL s (substL t u)) (substL (fun (nm : Name) => substL s (t nm)) u) (substL_substL s t u)) (fun (i : Nat) => Eq.refl KExpr (KExpr.bvar i)) (fun (f : KExpr) (a : KExpr) (ihf : Eq KExpr (instL s (instL t f)) (instL (fun (nm : Name) => substL s (t nm)) f)) (iha : Eq KExpr (instL s (instL t a)) (instL (fun (nm : Name) => substL s (t nm)) a)) => Eq.trans KExpr (KExpr.app (instL s (instL t f)) (instL s (instL t a))) (KExpr.app (instL (fun (nm : Name) => substL s (t nm)) f) (instL s (instL t a))) (KExpr.app (instL (fun (nm : Name) => substL s (t nm)) f) (instL (fun (nm : Name) => substL s (t nm)) a)) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app w (instL s (instL t a))) (instL s (instL t f)) (instL (fun (nm : Name) => substL s (t nm)) f) ihf) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.app (instL (fun (nm : Name) => substL s (t nm)) f) w) (instL s (instL t a)) (instL (fun (nm : Name) => substL s (t nm)) a) iha)) (fun (A : KExpr) (bb : KExpr) (ihA : Eq KExpr (instL s (instL t A)) (instL (fun (nm : Name) => substL s (t nm)) A)) (ihb : Eq KExpr (instL s (instL t bb)) (instL (fun (nm : Name) => substL s (t nm)) bb)) => Eq.trans KExpr (KExpr.lam (instL s (instL t A)) (instL s (instL t bb))) (KExpr.lam (instL (fun (nm : Name) => substL s (t nm)) A) (instL s (instL t bb))) (KExpr.lam (instL (fun (nm : Name) => substL s (t nm)) A) (instL (fun (nm : Name) => substL s (t nm)) bb)) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam w (instL s (instL t bb))) (instL s (instL t A)) (instL (fun (nm : Name) => substL s (t nm)) A) ihA) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.lam (instL (fun (nm : Name) => substL s (t nm)) A) w) (instL s (instL t bb)) (instL (fun (nm : Name) => substL s (t nm)) bb) ihb)) (fun (A : KExpr) (bb : KExpr) (ihA : Eq KExpr (instL s (instL t A)) (instL (fun (nm : Name) => substL s (t nm)) A)) (ihb : Eq KExpr (instL s (instL t bb)) (instL (fun (nm : Name) => substL s (t nm)) bb)) => Eq.trans KExpr (KExpr.pi (instL s (instL t A)) (instL s (instL t bb))) (KExpr.pi (instL (fun (nm : Name) => substL s (t nm)) A) (instL s (instL t bb))) (KExpr.pi (instL (fun (nm : Name) => substL s (t nm)) A) (instL (fun (nm : Name) => substL s (t nm)) bb)) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi w (instL s (instL t bb))) (instL s (instL t A)) (instL (fun (nm : Name) => substL s (t nm)) A) ihA) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.pi (instL (fun (nm : Name) => substL s (t nm)) A) w) (instL s (instL t bb)) (instL (fun (nm : Name) => substL s (t nm)) bb) ihb)) (fun (n : Name) (us : ListType Level) => Eq.cong (ListType Level) KExpr (fun (w : ListType Level) => KExpr.const n w) (mapLL (substL s) (mapLL (substL t) us)) (mapLL (substL (fun (nm : Name) => substL s (t nm))) us) (mapLL_mapLL s t us)) (fun (ty : KExpr) (vv : KExpr) (bb : KExpr) (ihty : Eq KExpr (instL s (instL t ty)) (instL (fun (nm : Name) => substL s (t nm)) ty)) (ihv : Eq KExpr (instL s (instL t vv)) (instL (fun (nm : Name) => substL s (t nm)) vv)) (ihb : Eq KExpr (instL s (instL t bb)) (instL (fun (nm : Name) => substL s (t nm)) bb)) => Eq.trans KExpr (KExpr.let_ (instL s (instL t ty)) (instL s (instL t vv)) (instL s (instL t bb))) (KExpr.let_ (instL (fun (nm : Name) => substL s (t nm)) ty) (instL s (instL t vv)) (instL s (instL t bb))) (KExpr.let_ (instL (fun (nm : Name) => substL s (t nm)) ty) (instL (fun (nm : Name) => substL s (t nm)) vv) (instL (fun (nm : Name) => substL s (t nm)) bb)) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ w (instL s (instL t vv)) (instL s (instL t bb))) (instL s (instL t ty)) (instL (fun (nm : Name) => substL s (t nm)) ty) ihty) (Eq.trans KExpr (KExpr.let_ (instL (fun (nm : Name) => substL s (t nm)) ty) (instL s (instL t vv)) (instL s (instL t bb))) (KExpr.let_ (instL (fun (nm : Name) => substL s (t nm)) ty) (instL (fun (nm : Name) => substL s (t nm)) vv) (instL s (instL t bb))) (KExpr.let_ (instL (fun (nm : Name) => substL s (t nm)) ty) (instL (fun (nm : Name) => substL s (t nm)) vv) (instL (fun (nm : Name) => substL s (t nm)) bb)) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ (instL (fun (nm : Name) => substL s (t nm)) ty) w (instL s (instL t bb))) (instL s (instL t vv)) (instL (fun (nm : Name) => substL s (t nm)) vv) ihv) (Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.let_ (instL (fun (nm : Name) => substL s (t nm)) ty) (instL (fun (nm : Name) => substL s (t nm)) vv) w) (instL s (instL t bb)) (instL (fun (nm : Name) => substL s (t nm)) bb) ihb))) (fun (sn : Name) (i : Nat) (sub : KExpr) (ihsub : Eq KExpr (instL s (instL t sub)) (instL (fun (nm : Name) => substL s (t nm)) sub)) => Eq.cong KExpr KExpr (fun (w : KExpr) => KExpr.proj sn i w) (instL s (instL t sub)) (instL (fun (nm : Name) => substL s (t nm)) sub) ihsub) (fun (v : Nat) => Eq.refl KExpr (KExpr.lit v)) e",
             "instL_instL: instL/level-instantiation commutation lemma (univ-poly2 guide, DerivedProved). UnivPoly typing.",
+        )?;
+
+        Ok(())
+    }
+
+    /// Later universe lemmas, retaining their original position after
+    /// `add_snschema`: unlike the substrate, these consume confluence and
+    /// term-substitution machinery.
+    pub(super) fn add_univ_poly(&mut self) -> Result<(), SpecError> {
+        // ── sort_injectivity (canonical-cond guide port, re-homed here because it
+        // needs kexpr_sort_inj which registers after pi_injectivity_def_eq's stage):
+        // DefEq (sort u)(sort v) -> u = v. Same 3-way confluence route as
+        // pi_never_defeq_sort — def_eq_joinable strips DefEq to a common reduct, the
+        // sort-tower par_cd_sort_injectivity pins it, kexpr_sort_inj drops KExpr->Level.
+        // Levels inert (no level-defeq) so the conclusion is syntactic Eq Level.
+        // Zero axiom_deps; the 8 i-args project RedEnvFaithful the_red_env inline.
+        self.add_recursive_def(
+            "def sort_injectivity (hf : RedEnvFaithful the_red_env) (u : Level) (v : Level) (h : DefEq (KExpr.sort u) (KExpr.sort v)) : Eq Level u v := Eq.cong KExpr Level (fun (e : KExpr) => KExpr.rec (fun (_ : KExpr) => Level) (fun (k : Level) => k) (fun (_ : Nat) => u) (fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => u) (fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => u) (fun (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) => u) (fun (_ : Name) (_ : ListType Level) => u) (fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Level) (_ : Level) (_ : Level) => u) (fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Level) => u) (fun (_ : Nat) => u) e) (KExpr.sort u) (KExpr.sort v) (par_cd_sort_injectivity the_red_env u v (def_eq_joinable (redenv_faithful_i1 the_red_env hf) (redenv_faithful_i2 the_red_env hf) (redenv_faithful_i3 the_red_env hf) (redenv_faithful_i4 the_red_env hf) (redenv_faithful_i5 the_red_env hf) (redenv_faithful_i6 the_red_env hf) (redenv_faithful_i7 the_red_env hf) (redenv_faithful_i8 the_red_env hf) (KExpr.sort u) (KExpr.sort v) h))",
+            "sort_injectivity: DefEq (sort u)(sort v) -> u = v via def_eq_joinable -> par_cd_sort_injectivity (Eq KExpr) then an inlined KExpr.rec level-projector + Eq.cong (kexpr_sort_inj is staged later, so inlined). Carries RedEnvFaithful the_red_env; zero axiom_deps. Canonical-cond guide port.",
+        )?;
+
+        // ── CUMULATIVITY (Sort subtyping) Phase 1 — ported from the cumulativity
+        // guide, reusing the landed semantic Level machinery. Sort cumulativity is
+        // the universe-subtyping the real kernel's is_le implements (Sort u accepted
+        // where Sort v expected when u <= v). Phase 2 (cumul_transitive) is deferred
+        // (needs leSub inversion lemmas not yet in-spec). leSub/HasType are Type-
+        // valued judgment inductives (matching the Typing/TypingCtxConv idiom); the
+        // semantic order levelLeqSem is COMPLETE for a <= max a b (levelLeq_max_left)
+        // where the conservative syntactic level_leb is not.
+        self.add_recursive_def(
+            "def levelLeqSem_refl (a : Level) : levelLeqSem a a := fun (v : Name -> Nat) => Le.refl (evalL v a)",
+            "levelLeqSem_refl: the semantic level order is reflexive (Le.refl pointwise). UnivPoly cumulativity.",
+        )?;
+        self.add_recursive_def(
+            "def levelLeqSem_trans (a : Level) (b : Level) (c : Level) (h1 : levelLeqSem a b) (h2 : levelLeqSem b c) : levelLeqSem a c := fun (v : Name -> Nat) => le_trans (evalL v a) (evalL v b) (evalL v c) (h1 v) (h2 v)",
+            "levelLeqSem_trans: the semantic level order is transitive (le_trans pointwise). UnivPoly cumulativity.",
+        )?;
+        self.add_inductive(
+            "inductive leSub : KExpr -> KExpr -> Type\n| refl : forall (e : KExpr), leSub e e\n| sortCumul : forall (u : Level) (v : Level), levelLeqSem u v -> leSub (KExpr.sort u) (KExpr.sort v)\n| pi : forall (A1 : KExpr) (A2 : KExpr) (B1 : KExpr) (B2 : KExpr), leSub A2 A1 -> leSub B1 B2 -> leSub (KExpr.pi A1 B1) (KExpr.pi A2 B2)",
+            "leSub a b: the cumulative subtyping order (refl; Sort u <= Sort v when levelLeqSem u v; pi contravariant-domain/covariant-codomain). The order is_le implements. UnivPoly cumulativity.",
+        )?;
+        self.add_inductive(
+            "inductive HasType : KExpr -> KExpr -> Type\n| sort : forall (u : Level), HasType (KExpr.sort u) (KExpr.sort (Level.succ u))\n| pi : forall (A : KExpr) (B : KExpr) (u : Level) (v : Level), HasType A (KExpr.sort u) -> HasType B (KExpr.sort v) -> HasType (KExpr.pi A B) (KExpr.sort (Level.imax u v))\n| sub : forall (e : KExpr) (T1 : KExpr) (T2 : KExpr), HasType e T1 -> leSub T1 T2 -> HasType e T2",
+            "HasType e T: a context-free typing judgment WITH the cumulative subsumption rule (sub: e:T1, T1<=T2 => e:T2) — the typing entry point of is_le. UnivPoly cumulativity.",
+        )?;
+        self.add_recursive_def(
+            "def cumul_sort_sound (u : Level) (w : Level) : AndType (HasType (KExpr.sort u) (KExpr.sort (Level.succ u))) (leSub (KExpr.sort u) (KExpr.sort (Level.max u w))) := AndType.intro (HasType (KExpr.sort u) (KExpr.sort (Level.succ u))) (leSub (KExpr.sort u) (KExpr.sort (Level.max u w))) (HasType.sort u) (leSub.sortCumul u (Level.max u w) (levelLeq_max_left u w))",
+            "cumul_sort_sound u w: the sort-cumulativity base — Sort u : Sort (succ u) AND Sort u <= Sort (max u w) (via levelLeq_max_left). UnivPoly cumulativity target (a).",
+        )?;
+        self.add_recursive_def(
+            "def cumul_pi_sound (e : KExpr) (A1 : KExpr) (A2 : KExpr) (B1 : KExpr) (B2 : KExpr) (he : HasType e (KExpr.pi A1 B1)) (hA : leSub A2 A1) (hB : leSub B1 B2) : HasType e (KExpr.pi A2 B2) := HasType.sub e (KExpr.pi A1 B1) (KExpr.pi A2 B2) he (leSub.pi A1 A2 B1 B2 hA hB)",
+            "cumul_pi_sound: pi subtyping soundness (contravariant domain, covariant codomain) — e : pi A1 B1, A2<=A1, B1<=B2 => e : pi A2 B2. UnivPoly cumulativity target (b).",
         )?;
 
         Ok(())

@@ -105,7 +105,13 @@ fn classify_helper(env: &Environment, name_str: &str) -> HelperStatus {
             sorry_free: false,
         };
     };
-    let sorry_free = !info.sorry_summary().has_sorry;
+    // Own terms AND constant closure: a helper that cites a sorry'd lemma is
+    // not sorry-free.
+    let sorry_free = !info.sorry_summary().has_sorry
+        && !clean_kernel::env::DomainAxiomClosure::new()
+            .trust_markers_of_name(env, &name)
+            .iter()
+            .any(clean_kernel::is_sorry_marker);
     let kind = match info.kind {
         ConstantKind::Theorem => HelperKind::Theorem,
         ConstantKind::Opaque if sorry_free => HelperKind::Opaqueclean,

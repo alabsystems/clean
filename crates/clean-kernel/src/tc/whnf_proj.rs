@@ -12,7 +12,6 @@
 
 use crate::expr::{stack_safe, Expr, ExprKind};
 use crate::name::Name;
-use crate::tc::reduction::string_lit_to_constructor;
 use crate::tc::whnf::WhnfMode;
 use crate::tc::TypeChecker;
 use std::sync::Arc;
@@ -101,8 +100,8 @@ impl<'env> TypeChecker<'env> {
         };
 
         let proj_whnf = match &proj_whnf.kind {
-            ExprKind::Lit(crate::expr::Literal::String(s)) => {
-                let expanded = string_lit_to_constructor(s);
+            ExprKind::Lit(crate::expr::Literal::String(s)) if self.string_literal_admitted() => {
+                let expanded = self.expand_admitted_string_literal(s);
                 // String literal expansion produces `String.ofList (List.cons ...)` which
                 // requires delta reduction to reach the `String.mk` constructor form
                 // needed for projection extraction. Use full WHNF for all modes —
@@ -125,19 +124,21 @@ impl<'env> TypeChecker<'env> {
         let head = proj_whnf.get_app_fn();
         if let ExprKind::Const(ctor_name, _) = &head.kind {
             if let Some(ctor_val) = self.env.get_constructor(ctor_name) {
-                // Lean 4 parity: reduce_proj_core does NOT check that the
-                // constructor's inductive name matches the Proj's struct name.
-                // This is critical for type aliases: if `Substring` is an
-                // abbreviation for `Substring.Raw`, a Proj("Substring", 0, e)
-                // where e WHNFs to `Substring.Raw.mk(...)` must still reduce.
-                // Lean 4 type_checker.cpp:358-373 — only checks is_constructor
-                // and field index bounds, not the struct name.
-                // Part of #3209.
-                let field_idx = (ctor_val.num_params as usize).saturating_add(idx as usize);
-                let args = proj_whnf.get_app_args();
-                if let Some(reduced) = args.get(field_idx) {
-                    // Re-enter WHNF on the extracted field
-                    return self.whnf_recurse(reduced, mode);
+                // Lean v4.33.1 `reduce_proj_core` (leanprover/lean4#14632): the
+                // structure name selects whose field layout `idx` indexes, so a
+                // constructor of any OTHER inductive is not projected and the
+                // projection stays stuck. `infer_proj` refuses a projection
+                // whose name is not its subject's type head, so only unchecked
+                // content reaches this. The pinned v4.30.0-rc2 did not check;
+                // decision R147 records the deviation (#3209's alias case cannot
+                // come out of Lean's `infer_proj`).
+                if ctor_val.inductive_name == *struct_name {
+                    let field_idx = (ctor_val.num_params as usize).saturating_add(idx as usize);
+                    let args = proj_whnf.get_app_args();
+                    if let Some(reduced) = args.get(field_idx) {
+                        // Re-enter WHNF on the extracted field
+                        return self.whnf_recurse(reduced, mode);
+                    }
                 }
             }
         }
@@ -145,9 +146,12 @@ impl<'env> TypeChecker<'env> {
         Expr::proj(struct_name.clone(), idx, proj_whnf)
     }
 
-    /// Lean 4-style outer WHNF loop with a lazy monad stage:
-    /// whnf_core (no-delta) -> reduce_native -> reduce_nat -> try_monad_reduce
-    /// -> unfold_definition -> repeat.
+    /// Lean 4-style outer WHNF loop:
+    /// whnf_core (no-delta) -> reduce_native -> reduce_nat -> unfold_definition
+    /// -> repeat. (A `try_monad_reduce` stage that gave content to the
+    /// instance-less `Bind.bind` / `Pure.pure` axioms sat before the unfold
+    /// until 2026-09-28; those constants are now class projections that
+    /// unfold by ordinary delta — `docs/issues/2026-09-28-prelude-pure-proves-false.md`.)
     ///
     /// Gives reduce_nat/reduce_native a chance to fire after every delta step.
     /// Reference: Lean 4 type_checker.cpp:659-681.
@@ -180,17 +184,7 @@ impl<'env> TypeChecker<'env> {
                 return reduced;
             }
 
-            // Lazy monadic reduction: short-circuit bind chains for StateT,
-            // ExceptT, and abstract Bind.bind before delta-unfolding the
-            // full bind definition (which materializes O(2^N) paths).
-            // Part of #3401.
-            if let Some(reduced) = self.try_monad_reduce(&t1) {
-                if reduced == t1 {
-                    return reduced;
-                }
-                if let Some(cached) = self.whnf_cache.borrow_mut().get(&reduced) {
-                    return cached;
-                }
+            if let Some(reduced) = self.reduce_type_argument_prefix(&t1) {
                 t = reduced;
                 continue;
             }
@@ -371,7 +365,7 @@ impl<'env> TypeChecker<'env> {
             return None;
         };
 
-        let value = self.env.unfold_definition(name, levels)?;
+        let value = self.unfold_definition_in_theory(name, levels)?;
         #[cfg(feature = "reduction-stats")]
         crate::tc::reduction_stats::record_unfold(name, false);
         // GRIND TRACE: a nat-binop DEFINITION being delta-unfolded to its

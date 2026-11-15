@@ -32,14 +32,22 @@ use crate::unify::MetaState;
 ///   proof and replaced by a pointwise equality subgoal.
 /// ENSURES: On `Ok(())`, the generated subgoal reuses the original local context
 ///   and `intro` is applied to expose the fresh argument.
-pub fn funext(state: &mut ProofState, var_name: &str) -> TacticResult {
+pub fn funext(state: &mut ProofState, var_name: &clean_parser::SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = goal.target.clone();
 
     // Check if target is an equality
     let (ty, lhs, rhs, _levels) = match_equality(&target)?;
 
-    // Check if the type is a function type
+    // Check if the type is a function type. Lean's `funext` tactic reaches it
+    // by `apply funext`, whose unifier sees through a `def` alias, so a folded
+    // `def Behavior := Nat → Nat` carrier is weak-head normalized (default
+    // transparency) before the `Pi` match; the structural match alone refused
+    // `b = c` with `b c : Behavior`, which pinned Lean 4.8.0 accepts.
+    let ty = match ty.kind() {
+        ExprKind::Pi(..) => ty,
+        _ => state.whnf(&goal, &ty),
+    };
     let (binder_info, dom, cod) = match ty.kind() {
         ExprKind::Pi(bi, binder_type, body) => {
             (*bi, binder_type.as_ref().clone(), body.as_ref().clone())
@@ -69,13 +77,30 @@ pub fn funext(state: &mut ProofState, var_name: &str) -> TacticResult {
     // goal-derived, so the snapshot/restore is belt-and-braces rather than
     // load-bearing, but it stays: it keeps the cursor tight.)
     let saved_next_fvar = state.next_fvar;
-    let fvar_expr = Expr::fvar(state.fresh_fvar());
-    let result_ty = state.whnf(&goal, &cod.clone().instantiate(&fvar_expr));
+    let placeholder = state.fresh_fvar();
+    let fvar_expr = Expr::fvar(placeholder);
+    // The placeholder must be IN SCOPE for the inference below. A DEPENDENT
+    // codomain instantiates to a term that MENTIONS it (`β x`), so inferring
+    // its type against the unextended goal fails with an unknown free
+    // variable, both level lookups return `None`, and the fallback mints
+    // `funext` with fresh level METAVARIABLES that nothing then solves —
+    // `Type mismatch: expected Sort ?u_6, got Sort u + 1`. The non-dependent
+    // case never noticed, because `cod` has no loose BVar there and the
+    // instantiated codomain does not mention the placeholder at all.
+    let mut infer_goal = goal.clone();
+    infer_goal.local_ctx.push(super::LocalDecl {
+        binder_info: Default::default(),
+        fvar: placeholder,
+        name: var_name.clone(),
+        ty: dom.clone(),
+        value: None,
+    });
+    let result_ty = state.whnf(&infer_goal, &cod.clone().instantiate(&fvar_expr));
 
     // Compute universe levels for Eq and funext from the actual types.
     // Domain sort → u, codomain sort → v, so Eq.{v} and funext.{u, v}.
-    let dom_sort = state.infer_type(&goal, &dom).ok();
-    let result_sort = state.infer_type(&goal, &result_ty).ok();
+    let dom_sort = state.infer_type(&infer_goal, &dom).ok();
+    let result_sort = state.infer_type(&infer_goal, &result_ty).ok();
     let (eq_expr, funext_expr) = match (&dom_sort, &result_sort) {
         (Some(ds), Some(rs)) => match (ds.kind(), rs.kind()) {
             (ExprKind::Sort(u), ExprKind::Sort(v)) => (
@@ -122,6 +147,7 @@ pub fn funext(state: &mut ProofState, var_name: &str) -> TacticResult {
         meta_id: new_meta,
         target: new_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     });
 
@@ -181,6 +207,7 @@ pub fn propext(state: &mut ProofState) -> TacticResult {
         meta_id: new_meta,
         target: iff_type,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
 
@@ -229,7 +256,7 @@ pub fn propext(state: &mut ProofState) -> TacticResult {
 ///   `funext`/`propext` proof and replaced by a membership-iff subgoal.
 /// ENSURES: On `Ok(())`, the generated subgoal inherits the original local
 ///   context and `intro` is applied to expose the element argument.
-pub fn set_ext(state: &mut ProofState, var_name: &str) -> TacticResult {
+pub fn set_ext(state: &mut ProofState, var_name: &clean_parser::SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = goal.target.clone();
 
@@ -285,6 +312,7 @@ pub fn set_ext(state: &mut ProofState, var_name: &str) -> TacticResult {
         meta_id: new_meta,
         target: new_target,
         local_ctx: goal.local_ctx.clone(),
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
 

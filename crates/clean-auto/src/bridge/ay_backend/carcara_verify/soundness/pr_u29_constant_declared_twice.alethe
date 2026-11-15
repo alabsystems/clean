@@ -1,0 +1,3 @@
+(assume a0 (= y x))
+(assume a1 (not (= y x)))
+(step t2 (cl) :rule resolution :premises (a0 a1))

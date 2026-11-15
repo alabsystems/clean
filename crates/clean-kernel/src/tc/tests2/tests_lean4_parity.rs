@@ -85,7 +85,7 @@ fn bool_false() -> Expr {
 /// via checked_pow_big (was stuck — "no mpz"). n^0 = 1 and n^1 = n unchanged.
 #[test]
 fn test_nat_pow_bignat_base() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let big_base = bignat_2limb(1, 1); // = 2^64 + 1
@@ -113,7 +113,7 @@ fn test_nat_pow_bignat_base() {
 /// Nat.pow with u64 base and small exponent should still work.
 #[test]
 fn test_nat_pow_u64_base_normal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 3^4 = 81
@@ -126,7 +126,7 @@ fn test_nat_pow_u64_base_normal() {
 /// Nat.pow producing a result > u64 but within u128 should produce BigNat.
 #[test]
 fn test_nat_pow_result_exceeds_u64() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^64 overflows u64 but fits in u128.
@@ -141,7 +141,7 @@ fn test_nat_pow_result_exceeds_u64() {
 /// Nat.pow(0, 0) = 1 (standard convention).
 #[test]
 fn test_nat_pow_zero_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     assert!(
@@ -157,7 +157,7 @@ fn test_nat_pow_zero_zero() {
 /// Nat.add with u128-range inputs should produce correct BigNat results.
 #[test]
 fn test_nat_add_u64_overflow_produces_bignat() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // u64::MAX + 1 = 2^64 = BigNat::Big([0, 1])
@@ -171,7 +171,7 @@ fn test_nat_add_u64_overflow_produces_bignat() {
 /// Nat.add with two large u64 values producing a 2-limb BigNat.
 #[test]
 fn test_nat_add_two_large_u64() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // (2^63) + (2^63) = 2^64 = BigNat::Big([0, 1])
@@ -186,7 +186,7 @@ fn test_nat_add_two_large_u64() {
 /// Nat.mul with u64 overflow should produce BigNat.
 #[test]
 fn test_nat_mul_u64_overflow_produces_bignat() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^32 * 2^32 = 2^64 = BigNat::Big([0, 1])
@@ -204,7 +204,7 @@ fn test_nat_mul_u64_overflow_produces_bignat() {
 /// Nat.succ at u64::MAX boundary should produce BigNat.
 #[test]
 fn test_nat_succ_u64_max_produces_bignat() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.succ(u64::MAX) = 2^64 = BigNat::Big([0, 1])
@@ -220,7 +220,7 @@ fn test_nat_succ_u64_max_produces_bignat() {
 /// Previously stuck at the u128 cap.
 #[test]
 fn test_nat_add_3limb_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // (2^128 + 1) + 1 = 2^128 + 2 = limbs [2, 0, 1].
@@ -235,7 +235,7 @@ fn test_nat_add_3limb_reduces() {
 /// BigNat comparison (beq) with 2-limb values should work.
 #[test]
 fn test_nat_beq_bignat_equal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // beq(2^64, 2^64) should reduce to Bool.true
@@ -249,7 +249,7 @@ fn test_nat_beq_bignat_equal() {
 /// BigNat comparison (beq) with different 2-limb values.
 #[test]
 fn test_nat_beq_bignat_not_equal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let a = bignat_2limb(0, 1); // 2^64
@@ -263,7 +263,7 @@ fn test_nat_beq_bignat_not_equal() {
 /// BigNat comparison (ble) with 2-limb values.
 #[test]
 fn test_nat_ble_bignat() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let a = bignat_2limb(0, 1); // 2^64
@@ -278,7 +278,7 @@ fn test_nat_ble_bignat() {
 /// Previously stuck because 3-limb values could not convert to u128.
 #[test]
 fn test_nat_ble_3limb_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let big3 = bignat_3limb(0, 0, 1); // 2^128
@@ -293,7 +293,7 @@ fn test_nat_ble_3limb_reduces() {
 /// via checked_div_big. Previously stuck on the u64-only get_nat_val path.
 #[test]
 fn test_nat_div_bignat_operands_reduce() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let big = bignat_2limb(100, 1); // = 100 + 2^64
@@ -309,7 +309,7 @@ fn test_nat_div_bignat_operands_reduce() {
 /// via checked_mod_big. Previously stuck on the u64-only get_nat_val path.
 #[test]
 fn test_nat_mod_bignat_operands_reduce() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     let big = bignat_2limb(7, 1); // = 7 + 2^64
@@ -323,7 +323,7 @@ fn test_nat_mod_bignat_operands_reduce() {
 /// Division by zero returns 0, even at u64 boundary values.
 #[test]
 fn test_nat_div_by_zero_u64_max() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     assert!(
@@ -335,7 +335,7 @@ fn test_nat_div_by_zero_u64_max() {
 /// Modulo by zero returns the dividend.
 #[test]
 fn test_nat_mod_by_zero_u64_max() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     assert!(
@@ -348,7 +348,7 @@ fn test_nat_mod_by_zero_u64_max() {
 /// reduces via the multi-limb BigNat path. shiftLeft(1, 64) = 2^64.
 #[test]
 fn test_nat_shift_left_at_64_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // shiftLeft(1, 64) = 2^64 = limbs [0, 1].
@@ -363,7 +363,7 @@ fn test_nat_shift_left_at_64_reduces() {
 /// now reduces. shiftLeft(3, 63) = 3 * 2^63 = limbs [2^63, 1].
 #[test]
 fn test_nat_shift_left_value_overflow_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 3 << 63 = 27670116110564327424 = limbs [2^63, 1].
@@ -377,7 +377,7 @@ fn test_nat_shift_left_value_overflow_reduces() {
 /// Shift right >= 64 produces 0.
 #[test]
 fn test_nat_shift_right_large_shift() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     assert!(
@@ -393,7 +393,7 @@ fn test_nat_shift_right_large_shift() {
 /// multi-limb BigNat path (within the 16-limb / 1024-bit allocation bound).
 #[test]
 fn test_nat_mul_past_u128_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^64 * 2^64 = 2^128 = limbs [0, 0, 1].
@@ -412,7 +412,7 @@ fn test_nat_mul_past_u128_reduces() {
 /// reduces. u128::MAX + 1 = 2^128 = limbs [0, 0, 1].
 #[test]
 fn test_nat_add_past_u128_reduces() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // u128::MAX = BigNat::Big([u64::MAX, u64::MAX]); +1 = 2^128.
@@ -658,7 +658,7 @@ fn test_level_max_commutative() {
 /// Nat.succ on a BigNat (2-limb) value.
 #[test]
 fn test_nat_succ_bignat_2limb() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.succ(2^64) = 2^64 + 1
@@ -673,7 +673,7 @@ fn test_nat_succ_bignat_2limb() {
 /// Chained Nat.succ producing BigNat.
 #[test]
 fn test_nat_succ_chain_to_bignat() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.succ(Nat.succ(u64::MAX - 1)) = u64::MAX + 1 = 2^64
@@ -691,7 +691,7 @@ fn test_nat_succ_chain_to_bignat() {
 /// Nat.add with one BigNat and one small value.
 #[test]
 fn test_nat_add_bignat_plus_small() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^64 + 5 = BigNat([5, 1])
@@ -706,7 +706,7 @@ fn test_nat_add_bignat_plus_small() {
 /// Nat.add with two BigNat values (both 2-limb).
 #[test]
 fn test_nat_add_two_bignats() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^64 + 2^64 = 2^65 = BigNat([0, 2])
@@ -722,7 +722,7 @@ fn test_nat_add_two_bignats() {
 /// Nat.mul with BigNat input and small multiplier.
 #[test]
 fn test_nat_mul_bignat_times_small() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^64 * 2 = 2^65 = BigNat([0, 2])
@@ -741,24 +741,36 @@ fn test_nat_mul_bignat_times_small() {
 /// gcd(0, 0) = 0.
 #[test]
 fn test_nat_gcd_zero_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // the prelude declares no `Nat.gcd`, and a native fold fires only over a
+    // canonical definition (`env/native_fold_authority.rs`). Folding it by
+    // name is what let a user's `Nat.gcd := fun _ _ => 0` prove `False`. The
+    // canonical gcd fold is pinned over Lean's own `Init` in
+    // `crates/clean-olean/tests/native_fold_canon_lean.rs`.
     assert!(
-        tc.is_def_eq(&nat_binop("Nat.gcd", nat(0), nat(0)), &nat(0)),
-        "Nat.gcd(0, 0) should reduce to 0"
+        !tc.is_def_eq(&nat_binop("Nat.gcd", nat(0), nat(0)), &nat(0)),
+        "an undeclared Nat.gcd must not fold by name"
     );
 }
 
 /// gcd(n, n) = n.
 #[test]
 fn test_nat_gcd_same() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // the prelude declares no `Nat.gcd`, and a native fold fires only over a
+    // canonical definition (`env/native_fold_authority.rs`). Folding it by
+    // name is what let a user's `Nat.gcd := fun _ _ => 0` prove `False`. The
+    // canonical gcd fold is pinned over Lean's own `Init` in
+    // `crates/clean-olean/tests/native_fold_canon_lean.rs`.
     assert!(
-        tc.is_def_eq(&nat_binop("Nat.gcd", nat(42), nat(42)), &nat(42)),
-        "Nat.gcd(42, 42) should reduce to 42"
+        !tc.is_def_eq(&nat_binop("Nat.gcd", nat(42), nat(42)), &nat(42)),
+        "an undeclared Nat.gcd must not fold by name"
     );
 }
 
@@ -781,7 +793,7 @@ fn test_offset_zero_zero() {
 /// Nat.succ peeling: succ(succ(0)) =?= 2.
 #[test]
 fn test_offset_succ_peeling() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     assert!(

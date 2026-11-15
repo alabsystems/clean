@@ -13,12 +13,14 @@
 # reproducing an authority-bearing projection never consults a mutable sibling
 # checkout or a freshly resolved graph:
 #
-#   cargo build --locked --release --manifest-path scripts/crystal_a2_project/Cargo.toml
+#   targo --unverified build --locked --release --manifest-path scripts/crystal_a2_project/Cargo.toml
 #   ./target/release/a2project <crate.trust-ir.bin> <fn-name> <out-dir> [slug]
 #
-# Nothing in the Clean test suite runs it. `crates/clean-verify/tests/crystal_a2_mint.rs`
+# Nothing in the Clean test suite runs it over a dump. `crates/clean-verify/tests/crystal_a2_mint.rs`
 # checks its OUTPUT against two independent in-tree readers, which is the whole point: a
-# defect here shows up as a disagreement, not as a silent pass.
+# defect here shows up as a disagreement, not as a silent pass. Its own unit tests and its
+# `-D warnings` lint are RUN by scripts/check_lint_coverage.py on every invocation -- the
+# pre-push hook's `lint-coverage` leg and scripts/local_gate.sh.
 
 [workspace]
 

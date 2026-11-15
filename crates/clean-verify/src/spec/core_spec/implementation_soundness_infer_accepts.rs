@@ -295,6 +295,39 @@ impl Specification {
         // The declared signature KernelState -> KExpr -> KExpr -> Type is
         // unchanged, so every applied/hypothesis position across the soundness
         // chain still type-checks unmodified.
+        // READ THIS BEFORE QUOTING THE WORD "FAITHFUL" BELOW.
+        //
+        // The description on this registration calls the inductive faithful and
+        // says each constructor carries EXACTLY the content of the per-case
+        // axiom it replaced. Both halves are true of the TRANSCRIPTION and
+        // neither is a statement about what the arms ESTABLISH, which is the
+        // reading the word invites. Three of the five arms are pinned as
+        // genuinely vacuous by this repo's own firewall
+        // (`crates/clean-verify/tests/vacuity_firewall.rs`, PINNED_FINDINGS):
+        //
+        //     KernelInferAccepts.const -> has_type   Class::Strict, depth 0
+        //     KernelInferAccepts.lam   -> Typing     Class::Strict, depth 2
+        //     KernelInferAccepts.pi    -> Typing     Class::Strict, depth 2
+        //
+        // and `KernelInputAdmissible st e := is_closed e`
+        // (`implementation_soundness.rs`) discards `st` entirely, so the guards
+        // on the `const` and `app` arms do not mention the kernel state they
+        // are written over.
+        //
+        // CLAUDE.md and `ctx_rep.rs` both describe this relation as the
+        // RETIRED implementation model, superseded by `ImplInfer`. That
+        // retirement is step M7 of
+        // `designs/2026-07-29-unified-implinfer-relation.md` and M7 HAS NOT
+        // LANDED: this stage is still live in `bundles.rs`, and
+        // `tc_infer_type_rule` / `tc_infer_soundness` / `tc_infer_type_correct`
+        // still state their hypotheses in terms of this relation and not of
+        // `ImplInfer`. So a reader who takes the prose at face value will
+        // believe the shipped theorems quantify over the good relation. They do
+        // not, yet.
+        //
+        // Nothing here is a defect to patch in place — the firewall records
+        // these as expected findings, and rewriting the arms is M7's job. What
+        // was missing was this note at the site the prose is about.
         self.add_inductive(
             r"inductive KernelInferAccepts (st : KernelState) : KExpr → KExpr → Type
 | sort : forall (l : Level) (T : KExpr), Eq KExpr (KExpr.sort (Level.succ l)) T → KernelInferAccepts st (KExpr.sort l) T

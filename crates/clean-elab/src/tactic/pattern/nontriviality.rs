@@ -23,7 +23,7 @@ impl NontrivialityConfig {
     }
 
     #[must_use]
-    pub fn with_type(mut self, ty: Expr) -> Self {
+    pub(crate) fn with_type(mut self, ty: Expr) -> Self {
         self.type_expr = Some(ty);
         self
     }
@@ -87,7 +87,10 @@ pub fn nontriviality_with_config(
     );
 
     // Generate a fresh hypothesis name
-    let hyp_name = generate_fresh_hyp_name(&goal.local_ctx, "h_nontrivial");
+    let hyp_name = generate_fresh_hyp_name(
+        &goal.local_ctx,
+        &clean_parser::SurfaceName::generated_path("h_nontrivial"),
+    );
 
     // Introduce the fact through a proof-carrying continuation.  The first
     // generated goal must establish it; only the continuation may use it.
@@ -133,8 +136,7 @@ fn try_extract_ne(expr: &Expr) -> Option<(Expr, Expr)> {
         if let ExprKind::App(f2, a) = f1.kind() {
             if let ExprKind::App(ne_const, _ty) = f2.kind() {
                 if let ExprKind::Const(name, _) = ne_const.kind() {
-                    let s = name.to_string();
-                    if s == "Ne" || s.ends_with(".Ne") {
+                    if name == &Name::anon().str("Ne") {
                         return Some((a.as_ref().clone(), b.as_ref().clone()));
                     }
                 }
@@ -145,8 +147,7 @@ fn try_extract_ne(expr: &Expr) -> Option<(Expr, Expr)> {
     // Also check for Not (Eq a b) = App(Not, App(App(App(Eq, ty), a), b))
     if let ExprKind::App(not_const, eq_expr) = expr.kind() {
         if let ExprKind::Const(name, _) = not_const.kind() {
-            let s = name.to_string();
-            if s == "Not" || s.ends_with(".Not") {
+            if name == &Name::anon().str("Not") {
                 return try_extract_eq(eq_expr);
             }
         }

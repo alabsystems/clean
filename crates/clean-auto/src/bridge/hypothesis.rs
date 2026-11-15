@@ -19,7 +19,7 @@ use clean_kernel::{Expr, FVarId};
 /// Consolidates the optional parameters for `add_hypothesis` and
 /// `add_hypothesis_with_prefix_analysis`.
 #[derive(Clone, Debug, Default)]
-pub struct HypothesisOpts {
+pub(crate) struct HypothesisOpts {
     /// FVarId for proof reconstruction (links hypothesis to local context entry).
     pub fvar: Option<FVarId>,
     /// Quantifier origin for E-matching relevance scoring.
@@ -28,18 +28,18 @@ pub struct HypothesisOpts {
 
 impl HypothesisOpts {
     /// Create default options (no fvar, no origin).
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Set the FVarId for proof reconstruction.
-    pub fn with_fvar(mut self, fvar: FVarId) -> Self {
+    pub(crate) fn with_fvar(mut self, fvar: FVarId) -> Self {
         self.fvar = Some(fvar);
         self
     }
 
     /// Set the quantifier origin for E-matching scoring.
-    pub fn with_origin(mut self, origin: QuantifierOrigin) -> Self {
+    pub(crate) fn with_origin(mut self, origin: QuantifierOrigin) -> Self {
         self.origin = Some(origin);
         self
     }

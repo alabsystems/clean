@@ -1,0 +1,5 @@
+(assume a0 (= (+ 1 1) 7))
+(step t1 (cl (= (= (+ 1 1) 7) false)) :rule evaluate)
+(step t2 (cl (not (= (= (+ 1 1) 7) false)) (not (= (+ 1 1) 7)) false) :rule equiv_pos2)
+(step t3 (cl (not false)) :rule false)
+(step t4 (cl) :rule resolution :premises (t2 t1 a0 t3))

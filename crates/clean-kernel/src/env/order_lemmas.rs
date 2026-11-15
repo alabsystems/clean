@@ -997,7 +997,10 @@ impl Environment {
     /// ENSURES: On success, `Nat.lt_of_lt_of_le` is a `Declaration::Theorem`
     ///          with `proof_quality == Constructive`.
     /// ENSURES: Idempotent — a no-op if the constant is already registered.
-    fn register_nat_lt_of_lt_of_le_proof(&mut self) -> Result<(), EnvError> {
+    // Visibility widened (was private) so the prelude can register the
+    // STANDALONE theorem without also pulling in `instTransNatLtLeLt`: see
+    // `init_prelude_extended`.
+    pub(crate) fn register_nat_lt_of_lt_of_le_proof(&mut self) -> Result<(), EnvError> {
         let name = Name::from_string("Nat.lt_of_lt_of_le");
         if self.get_const(&name).is_some() {
             return Ok(());
@@ -1019,14 +1022,15 @@ impl Environment {
         let hbc_type = nat_le_tc(bv.clone(), c.clone());
         let (hbc_id, hbc) = b.fresh_local(hbc_type.clone());
 
-        // Type: ∀ a b c, LT.lt a b → LE.le b c → LT.lt a c
+        // Type: ∀ {a b c}, LT.lt a b → LE.le b c → LT.lt a c — Lean's binders
+        // (pinned v4.30.0-rc2: `@Nat.lt_of_lt_of_le : ∀ {n m k : Nat}, …`).
         let ty = {
             let concl = nat_lt_tc(a.clone(), c.clone());
             let e = b.mk_pi(hbc_id, BinderInfo::Default, hbc_type.clone(), concl);
             let e = b.mk_pi(hab_id, BinderInfo::Default, hab_type.clone(), e);
-            let e = b.mk_pi(c_id, BinderInfo::Default, nat_const.clone(), e);
-            let e = b.mk_pi(bv_id, BinderInfo::Default, nat_const.clone(), e);
-            let e = b.mk_pi(a_id, BinderInfo::Default, nat_const.clone(), e);
+            let e = b.mk_pi(c_id, BinderInfo::Implicit, nat_const.clone(), e);
+            let e = b.mk_pi(bv_id, BinderInfo::Implicit, nat_const.clone(), e);
+            let e = b.mk_pi(a_id, BinderInfo::Implicit, nat_const.clone(), e);
             b.finish(e)
         };
 
@@ -1039,9 +1043,9 @@ impl Environment {
             );
             let e = b.mk_lam(hbc_id, BinderInfo::Default, hbc_type, body);
             let e = b.mk_lam(hab_id, BinderInfo::Default, hab_type, e);
-            let e = b.mk_lam(c_id, BinderInfo::Default, nat_const.clone(), e);
-            let e = b.mk_lam(bv_id, BinderInfo::Default, nat_const.clone(), e);
-            let e = b.mk_lam(a_id, BinderInfo::Default, nat_const.clone(), e);
+            let e = b.mk_lam(c_id, BinderInfo::Implicit, nat_const.clone(), e);
+            let e = b.mk_lam(bv_id, BinderInfo::Implicit, nat_const.clone(), e);
+            let e = b.mk_lam(a_id, BinderInfo::Implicit, nat_const.clone(), e);
             b.finish(e)
         };
 

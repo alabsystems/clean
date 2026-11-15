@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-const b Bool)
+(assert (or b (! false :named true)))
+(assert b)
+(assert true)
+(check-sat)

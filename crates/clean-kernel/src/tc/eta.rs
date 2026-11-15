@@ -174,13 +174,13 @@ impl<'env> TypeChecker<'env> {
         }
 
         // Guard 4: Not for Prop-typed structures (avoid duplicating proof terms).
-        // Fall back to full inference when quick fails. Part of #3134.
-        let type_of_type_raw = self
-            .try_infer_type_quick(e_type_whnf)
-            .or_else(|| self.infer_type_infer_only(e_type_whnf).ok())?;
-        let type_of_type = self.whnf_impl(&type_of_type_raw);
-        if type_of_type.is_prop() {
-            return None;
+        // Lean v4.33.1's `to_cnstr_when_structure` asks `is_prop`, which since
+        // leanprover/lean4#14807 / #14843 requires the type's type to be a
+        // sort: a type whose type is stuck is not read as "not Prop", and the
+        // major stays as it is (decision R147).
+        match self.is_prop(e_type_whnf) {
+            Ok(false) => {}
+            Ok(true) | Err(_) => return None,
         }
 
         self.expand_eta_struct(e_type_whnf, e)

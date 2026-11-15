@@ -73,6 +73,7 @@ fn test_ay_omega_hypothesis_forwarding_uses_no_trusted_axioms() {
     let b = Expr::const_(Name::from_string("b"), vec![]);
     let h_ty = make_eq(a_ty.clone(), a.clone(), b.clone());
     let h_decl = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
         name: "h".to_string(),
         ty: h_ty,

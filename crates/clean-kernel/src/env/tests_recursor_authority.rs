@@ -298,3 +298,301 @@ fn read_only_recursor_authentication_rejects_overapplied_constructor_return_spin
         "overapplied constructor return must report its exact arity, got {error}"
     );
 }
+
+/// `IhNat | zero | succ (n : IhNat)`: the smallest recursive family, so its
+/// `succ` rule carries an induction-hypothesis argument.
+fn recursive_nat(name: &str) -> InductiveDecl {
+    let ind_name = Name::from_string(name);
+    let ind = Expr::const_(ind_name.clone(), vec![]);
+    InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: ind_name,
+            type_: Expr::type_(),
+            constructors: vec![
+                Constructor {
+                    name: Name::from_string(&format!("{name}.zero")),
+                    type_: ind.clone(),
+                },
+                Constructor {
+                    name: Name::from_string(&format!("{name}.succ")),
+                    type_: Expr::arrow(ind.clone(), ind),
+                },
+            ],
+        }],
+    }
+}
+
+/// Rebuild `rhs` (a lambda telescope over params, motive, minors and fields)
+/// with the major premise of its induction hypothesis `I.rec … n` replaced by
+/// the hypothesis's own second argument, the `zero` minor: `I.rec m z s z`.
+fn with_ill_typed_ih_major(rhs: &Expr, rec_name: &Name) -> Expr {
+    match rhs.kind() {
+        ExprKind::Lam(binder, ty, body) => Expr::lam(
+            *binder,
+            ty.as_ref().clone(),
+            with_ill_typed_ih_major(body, rec_name),
+        ),
+        ExprKind::App(f, ih) => {
+            assert!(
+                matches!(ih.get_app_fn().kind(), ExprKind::Const(n, _) if n == rec_name),
+                "the succ rule's last argument must be the induction hypothesis, got {ih:?}"
+            );
+            let args = ih.get_app_args();
+            assert_eq!(args.len(), 4, "IH is `rec motive zero succ n`, got {ih:?}");
+            let forged = Expr::apps(
+                ih.get_app_fn().clone(),
+                [
+                    args[0].clone(),
+                    args[1].clone(),
+                    args[2].clone(),
+                    args[1].clone(),
+                ],
+            );
+            Expr::app(f.as_ref().clone(), forged)
+        }
+        other => panic!("unexpected succ rule body {other:?}"),
+    }
+}
+
+/// leanprover/lean4#15705 (and the stored-artifact shape of #14806): Lean's
+/// `check_recursors` inferred a rule's reduct with `infer_only = true`, so an
+/// induction-hypothesis argument of the wrong type was never checked, because
+/// the minor's result type does not mention it. Here the `succ` rule's IH is
+/// `IhNat.rec motive zero succ zero`: the major is the `zero` MINOR, of type
+/// `motive IhNat.zero`, where an `IhNat` is required. Clean must refuse the
+/// forged rule on each authority path a recursor record takes:
+/// - import: `admit_imported_recursor` compares a stored record with the one the
+///   kernel generates from the resident family (Lean's
+///   `checkPostponedRecursors`);
+/// - stamping: `validate_and_stamp_recursor` runs a FULL `check_type` of each
+///   rule's reduct (the check upstream's `infer_only` skipped);
+/// - read-only: `authenticate_recursor_readonly`, the same subject-reduction
+///   check without the stamp.
+/// The honest record is the control on every path.
+#[test]
+fn recursor_rule_with_ill_typed_ih_argument_is_refused() {
+    let mut env = Environment::new();
+    env.add_inductive(recursive_nat("IhNat"))
+        .expect("valid recursive family should register");
+    let rec_name = Name::from_string("IhNat.rec");
+    let honest = env
+        .get_recursor(&rec_name)
+        .expect("generated recursor")
+        .clone();
+    assert_eq!(honest.rules.len(), 2);
+    assert_eq!(
+        honest.rules[1].constructor_name,
+        Name::from_string("IhNat.succ")
+    );
+    let mut forged = honest.clone();
+    forged.rules[1].rhs = with_ill_typed_ih_major(&honest.rules[1].rhs, &rec_name);
+    assert_ne!(
+        forged.rules[1].rhs, honest.rules[1].rhs,
+        "subject: the forgery must differ"
+    );
+
+    // Import path.
+    env.admit_imported_recursor(
+        honest.clone(),
+        &mut imported_family::GeneratedRecursorCache::new(),
+    )
+    .unwrap_or_else(|error| panic!("control: the honest record must be admitted: {error:?}"));
+    let error = env
+        .admit_imported_recursor(
+            forged.clone(),
+            &mut imported_family::GeneratedRecursorCache::new(),
+        )
+        .expect_err("a stored rule with an ill-typed IH must not be admitted");
+    assert!(
+        matches!(&error, EnvError::ImportedFamilyRecordMismatch { .. }),
+        "the import refusal must be the family-record comparison, got {error:?}"
+    );
+
+    // Stamping and read-only paths, over the resident table.
+    env.authenticate_recursor_readonly(&rec_name)
+        .unwrap_or_else(|error| panic!("control: the honest rules must authenticate: {error}"));
+    env.declaration_verification
+        .insert(rec_name.clone(), DeclarationVerification::StructuralOnly);
+    env.validate_and_stamp_recursor(&rec_name)
+        .unwrap_or_else(|error| panic!("control: honest rules must validate: {error:?}"));
+
+    *env.recursors
+        .get_mut(&rec_name)
+        .expect("generated recursor") = forged;
+    env.declaration_verification
+        .insert(rec_name.clone(), DeclarationVerification::StructuralOnly);
+    let error = format!(
+        "{:?}",
+        env.validate_and_stamp_recursor(&rec_name)
+            .expect_err("an ill-typed induction hypothesis must not earn full authority")
+    );
+    assert!(
+        error.contains("rule 1") && error.contains("violates subject reduction"),
+        "the stamping refusal must name the succ rule's subject-reduction check, got {error}"
+    );
+    assert_eq!(
+        env.declaration_verification(&rec_name),
+        Some(DeclarationVerification::StructuralOnly)
+    );
+    let error = env
+        .authenticate_recursor_readonly(&rec_name)
+        .expect_err("a forged rule must not authenticate");
+    assert!(
+        error.contains("rule 1") && error.contains("violates subject reduction"),
+        "the read-only refusal must name the succ rule's subject-reduction check, got {error}"
+    );
+}
+
+#[test]
+fn test_recursor_preserves_constructor_field_binder_annotations() {
+    let mut env = Environment::new();
+    env.init_eq().expect("Eq");
+    env.init_nat().expect("genuine Nat");
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let dict_name = Name::from_string("BinderDict");
+    let dict = Expr::const_(dict_name.clone(), vec![]);
+    env.add_inductive_core(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: dict_name,
+            type_: Expr::type_(),
+            constructors: vec![Constructor {
+                name: Name::from_string("BinderDict.mk"),
+                type_: Expr::arrow(nat.clone(), dict.clone()),
+            }],
+        }],
+    })
+    .expect("checked dictionary family");
+    let probe_name = Name::from_string("BinderProbe");
+    let probe = Expr::const_(probe_name.clone(), vec![]);
+    let at_n = Expr::app(probe.clone(), Expr::bvar(0));
+    let mut constructors = Vec::new();
+    let mut expected = Vec::new();
+    for (name, binder) in [
+        ("implicit", BinderInfo::Implicit),
+        ("strict", BinderInfo::StrictImplicit),
+        ("explicit", BinderInfo::Default),
+    ] {
+        constructors.push(Constructor {
+            name: probe_name.clone().str(name),
+            type_: Expr::pi(binder, nat.clone(), at_n.clone()),
+        });
+        expected.push(vec![binder]);
+    }
+    let eq_n = Expr::apps(
+        Expr::const_(Name::from_string("Eq"), vec![Level::succ(Level::zero())]),
+        [nat.clone(), Expr::bvar(0), Expr::bvar(0)],
+    );
+    constructors.push(Constructor {
+        name: probe_name.clone().str("dependentExplicit"),
+        type_: Expr::pi(
+            BinderInfo::Default,
+            nat.clone(),
+            Expr::pi(
+                BinderInfo::Default,
+                eq_n,
+                Expr::app(probe.clone(), Expr::bvar(1)),
+            ),
+        ),
+    });
+    expected.push(vec![BinderInfo::Default, BinderInfo::Default]);
+    constructors.push(Constructor {
+        name: probe_name.clone().str("instance"),
+        type_: Expr::pi(
+            BinderInfo::InstImplicit,
+            dict,
+            Expr::app(probe, Expr::const_(Name::from_string("Nat.zero"), vec![])),
+        ),
+    });
+    expected.push(vec![BinderInfo::InstImplicit]);
+    env.add_inductive_core(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: probe_name,
+            type_: Expr::arrow(nat, Expr::type_()),
+            constructors,
+        }],
+    })
+    .expect("checked indexed family");
+    let rec = env
+        .get_recursor(&Name::from_string("BinderProbe.rec"))
+        .expect("generated recursor");
+    let mut cursor = &rec.type_;
+    let ExprKind::Pi(motive, _, body) = &cursor.kind else {
+        panic!("motive binder");
+    };
+    assert_eq!(motive.info, BinderInfo::Implicit);
+    cursor = body;
+    for field_infos in &expected {
+        let ExprKind::Pi(_, minor, body) = &cursor.kind else {
+            panic!("minor binder");
+        };
+        let mut field_cursor = &**minor;
+        for expected in field_infos {
+            let ExprKind::Pi(binder, _, body) = &field_cursor.kind else {
+                panic!("constructor field binder");
+            };
+            assert_eq!(binder.info, *expected);
+            field_cursor = body;
+        }
+        cursor = body;
+    }
+    for (rule, field_infos) in rec.rules.iter().zip(expected) {
+        let mut cursor = &rule.rhs;
+        for _ in 0..rec.num_params + rec.num_motives + rec.num_minors {
+            let ExprKind::Lam(binder, _, body) = &cursor.kind else {
+                panic!("rule prefix lambda");
+            };
+            assert_eq!(binder.info, BinderInfo::Default);
+            cursor = body;
+        }
+        for expected in field_infos {
+            let ExprKind::Lam(binder, _, body) = &cursor.kind else {
+                panic!("rule field lambda");
+            };
+            assert_eq!(binder.info, expected);
+            cursor = body;
+        }
+    }
+}
+
+#[test]
+fn empty_recursor_motives_remain_explicit_in_every_eliminator_order() {
+    let mut env = Environment::with_prelude();
+    for (name, type_) in [
+        ("EmptyMotiveProp", Expr::prop()),
+        ("EmptyMotiveType", Expr::type_()),
+    ] {
+        env.add_inductive(InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: Name::from_string(name),
+                type_,
+                constructors: vec![],
+            }],
+        })
+        .expect("checked empty family");
+        for suffix in ["rec", "casesOn", "recOn"] {
+            let name = Name::from_string(name).str(suffix);
+            let constant = env.get_const(&name).expect("generated eliminator");
+            let ExprKind::Pi(motive, _, body) = constant.type_.kind() else {
+                panic!("motive binder");
+            };
+            assert_eq!(motive.info, BinderInfo::Default, "{name}");
+            let ExprKind::Pi(major, _, _) = body.kind() else {
+                panic!("major binder");
+            };
+            assert_eq!(major.info, BinderInfo::Default, "{name}");
+            assert_eq!(
+                env.declaration_verification(&name),
+                Some(DeclarationVerification::FullKernelCheck),
+                "{name}"
+            );
+        }
+    }
+}

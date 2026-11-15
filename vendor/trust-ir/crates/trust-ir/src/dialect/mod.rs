@@ -57,6 +57,7 @@ pub mod avx512;
 pub mod gpu;
 pub mod inst;
 pub mod lowering;
+pub mod schema;
 pub mod trust_rust;
 pub mod vector;
 
@@ -144,6 +145,9 @@ pub enum DialectError {
     LoweringFailed { pass: String, reason: String },
     /// The fixed-point iteration did not converge within `max_iters`.
     FixpointNotReached { max_iters: usize },
+    /// A lowering pass needed a fresh value id in `function` and none is left
+    /// (a definition already holds `u32::MAX`): refused, never wrapped.
+    ValueIdSpaceExhausted { function: crate::value::FuncId },
 }
 
 impl From<NameError> for DialectError {
@@ -177,6 +181,12 @@ impl core::fmt::Display for DialectError {
                     "dialect lowering did not converge after {max_iters} iterations"
                 )
             }
+            DialectError::ValueIdSpaceExhausted { function } => write!(
+                f,
+                "dialect lowering of function {} needs a fresh value id: {}",
+                function.index(),
+                crate::value::IdSpaceExhausted::of::<crate::value::ValueId>()
+            ),
         }
     }
 }
@@ -406,7 +416,9 @@ mod tests {
                 "ghost", "op",
             )))));
         func.blocks.push(block);
-        module.add_function(func);
+        module
+            .try_add_function(func)
+            .expect("Module::try_add_function: test fixture");
 
         let err = reg.validate_module(&module).unwrap_err();
         assert!(matches!(err, DialectError::UnknownDialect { .. }));

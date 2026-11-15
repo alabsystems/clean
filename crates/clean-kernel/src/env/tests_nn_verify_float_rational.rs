@@ -12,60 +12,6 @@ use crate::expr::{Expr, ExprKind, Literal};
 use crate::name::Name;
 use crate::tc::TypeChecker;
 
-/// Every `Rat.mk (Int.ofNat n) d` in a term, as (numerator, denominator) Debug
-/// spellings of the two literals.
-///
-/// Structural on purpose: the SHAPE comes from the term and only the literal
-/// values are compared as text, so this survives any change to how expressions
-/// are rendered. The previous form matched whole-expression substrings against
-/// `Display`, which broke the moment `Display` improved.
-fn rat_literals(e: &Expr) -> Vec<(String, String)> {
-    fn lit_debug(e: &Expr) -> Option<String> {
-        match e.kind() {
-            ExprKind::Lit(Literal::Nat(n)) => Some(format!("{n:?}")),
-            _ => None,
-        }
-    }
-    fn head_is(e: &Expr, name: &str) -> bool {
-        matches!(e.kind(), ExprKind::Const(n, _) if n.to_string() == name)
-    }
-    let mut out = Vec::new();
-    fn walk(e: &Expr, out: &mut Vec<(String, String)>) {
-        if let ExprKind::App(f, den) = e.kind() {
-            if let ExprKind::App(mk, num_app) = f.kind() {
-                if head_is(mk, "Rat.mk") {
-                    if let ExprKind::App(of_nat, num) = num_app.kind() {
-                        if head_is(of_nat, "Int.ofNat") {
-                            if let (Some(n), Some(d)) = (lit_debug(num), lit_debug(den)) {
-                                out.push((n, d));
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        match e.kind() {
-            ExprKind::App(f, a) => {
-                walk(f, out);
-                walk(a, out);
-            }
-            ExprKind::Lam(_, t, b) | ExprKind::Pi(_, t, b) => {
-                walk(t, out);
-                walk(b, out);
-            }
-            ExprKind::Let(_, t, v, b, _) => {
-                walk(t, out);
-                walk(v, out);
-                walk(b, out);
-            }
-            ExprKind::Proj(_, _, sub) => walk(sub, out),
-            _ => {}
-        }
-    }
-    walk(e, &mut out);
-    out
-}
-
 /// Structural search for a `Nat` literal by value.
 ///
 /// This used to assert `format!("{}", ty).contains("Small(1074)")` — matching
@@ -148,13 +94,24 @@ fn ulp_exact(bits: u64) -> Expr {
     )
 }
 
-/// Native-reduce a `Float.toRatExact`/`Float.ulpExact` application and render
-/// the emitted `Rat.mk (Int.ofNat n | Int.negSucc n) den` as a string.
+/// Run the REGISTERED reducer for a `Float.toRatExact`/`Float.ulpExact`/
+/// `Rat.roundToNearestEven` application directly — its unit contract — and
+/// render the emitted `Rat.mk (Int.ofNat n | Int.negSucc n) den`.
+///
+/// Called directly since 2026-09-26: these heads are OPAQUE placeholders
+/// (`fun _ => Rat.zero`) whose value only the reducer supplies, so native-fold
+/// authority (`native_fold_authority.rs`) refuses them in the kernel
+/// (`test_kernel_refuses_opaque_float_placeholder_folds`). The IEEE-754
+/// arithmetic the reducers implement stays pinned here.
 fn reduce_and_show(env: &Environment, e: &Expr) -> String {
-    let tc = TypeChecker::with_mode(env, env.mode());
-    let reduced = tc
-        .reduce_native_for_test(e)
-        .expect("native reducer should fire");
+    let ExprKind::Const(head, _) = e.get_app_fn().kind() else {
+        panic!("expected a constant head, got {e:?}");
+    };
+    let reducer = env
+        .get_native_reducer(head)
+        .unwrap_or_else(|| panic!("{head} has a registered reducer"));
+    let args: Vec<&Expr> = e.get_app_args().into_iter().collect();
+    let reduced = reducer(&args).expect("native reducer should compute");
     let args = reduced.get_app_args();
     let num = match args
         .first()
@@ -502,7 +459,9 @@ fn test_total_declaration_count() {
         .constants()
         .filter(|c| c.name.to_string().starts_with(prefix))
         .count();
-    assert_eq!(count, 12, "expected 12 float-rational declarations");
+    // 11 since 2026-09-26: `float_to_rat_exact_discharge_01` is registered only
+    // where native-fold authority admits `Float.toRatExact` (none today).
+    assert_eq!(count, 11, "expected 11 float-rational declarations");
 }
 
 // === Stage A: native exact float→rational decomposition ===
@@ -600,84 +559,76 @@ fn test_ulp_exact_denormal_floor_reduces() {
     }
 }
 
-/// `Float.toRatExact (Float.mk 0.1)` is *definitionally equal* in the kernel to
-/// the exact rational `Rat.mk (Int.ofNat 7205759403792794) (2^56)` — i.e. the
-/// kernel itself confirms the computation (this is what makes the discharge
-/// theorem's `Eq.refl` proof check).
+/// RE-DECIDED 2026-09-26: `Float.toRatExact` is an OPAQUE placeholder, so the
+/// kernel no longer equates `toRatExact (mk 0.1)` with any rational — not the
+/// exact one, not a wrong one. The reducer's arithmetic is pinned directly by
+/// `test_to_rat_exact_reduces_all_regimes`.
 #[test]
-fn test_to_rat_exact_is_def_eq_to_exact_rational() {
+fn test_to_rat_exact_is_not_def_eq_without_a_definition() {
     let env = make_prelude_env();
     let tc = TypeChecker::with_mode(&env, env.mode());
     let lhs = to_rat_exact(0.1f64.to_bits());
-    let rhs = Expr::apps(
-        Expr::const_(Name::from_string("Rat.mk"), vec![]),
-        [
-            Expr::app(
-                Expr::const_(Name::from_string("Int.ofNat"), vec![]),
-                Expr::nat_lit(7205759403792794),
-            ),
-            Expr::nat_lit(72057594037927936), // 2^56
-        ],
+    let rat = |den: u64| {
+        Expr::apps(
+            Expr::const_(Name::from_string("Rat.mk"), vec![]),
+            [
+                Expr::app(
+                    Expr::const_(Name::from_string("Int.ofNat"), vec![]),
+                    Expr::nat_lit(7205759403792794),
+                ),
+                Expr::nat_lit(den),
+            ],
+        )
+    };
+    assert!(
+        !tc.is_def_eq(&lhs, &rat(72057594037927936)),
+        "2^56: the exact value"
     );
     assert!(
-        tc.is_def_eq(&lhs, &rhs),
-        "kernel must reduce Float.toRatExact(mk 0.1) to the exact 0.1 rational"
-    );
-    // And a sanity NON-equality: it must NOT be def-eq to a different rational
-    // (e.g. with denominator 2^55), proving the check is discriminating.
-    let wrong = Expr::apps(
-        Expr::const_(Name::from_string("Rat.mk"), vec![]),
-        [
-            Expr::app(
-                Expr::const_(Name::from_string("Int.ofNat"), vec![]),
-                Expr::nat_lit(7205759403792794),
-            ),
-            Expr::nat_lit(36028797018963968), // 2^55, half the true denominator
-        ],
-    );
-    assert!(
-        !tc.is_def_eq(&lhs, &wrong),
-        "must distinguish the true 0.1 rational from a wrong one"
+        !tc.is_def_eq(&lhs, &rat(36028797018963968)),
+        "2^55: a wrong value"
     );
 }
 
-/// The discharge theorem `float_to_rat_exact_discharge_01` is a real
-/// `Theorem` (not an Axiom), type-checks, and has an EMPTY non-foundational
-/// axiom closure — the per-float exactness fact is now CHECKED, not asserted.
+/// `float_to_rat_exact_discharge_01` is no longer registered (see below).
 #[test]
-fn test_discharge_01_is_checked_theorem_with_empty_closure() {
+fn test_discharge_01_is_not_registered_without_a_definition() {
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // the discharge was "proved by computation", and the computation was the
+    // native reducer's over the OPAQUE placeholder `Float.toRatExact :=
+    // fun _ => Rat.zero` — no definition justified it. Native folds now need a
+    // canonical definition, so the overlay registers the discharge only where
+    // one exists (none today); the exactness claim stays the axiom.
     let env = make_env();
     let name = Name::from_string("NNVerify.FloatRational.float_to_rat_exact_discharge_01");
-
-    let info = env
-        .get_const(&name)
-        .expect("discharge theorem should be registered");
-    assert_eq!(
-        info.kind,
-        ConstantKind::Theorem,
-        "discharge must be a Theorem proved by computation, not an Axiom"
+    assert!(
+        env.get_const(&name).is_none(),
+        "the discharge rests on an unjustified fold and must not be registered"
     );
+    assert!(env
+        .get_const(&Name::from_string(
+            "NNVerify.FloatRational.float_to_rational_exact"
+        ))
+        .is_some());
+}
 
-    // It type-checks against its stated Eq type.
+/// The kernel no longer computes the opaque placeholders by name.
+#[test]
+fn test_kernel_refuses_opaque_float_placeholder_folds() {
+    let env = make_prelude_env();
     let tc = TypeChecker::with_mode(&env, env.mode());
-    let e = Expr::const_(name.clone(), vec![]);
-    let _ = tc
-        .infer_type(&e)
-        .expect("discharge theorem must type-check");
-
-    // Non-foundational axiom closure is empty: no `sorry`, no domain axioms.
-    let deps = env
-        .axiom_deps(&name)
-        .expect("axiom_deps available for discharge theorem");
-    let deps_str: std::collections::HashSet<String> = deps.iter().map(|n| n.to_string()).collect();
-    assert!(
-        !deps_str.contains("sorry") && !deps_str.contains("sorryAx"),
-        "discharge must not depend on sorry; got {deps_str:?}"
-    );
-    assert!(
-        deps_str.is_empty(),
-        "discharge non-foundational closure must be empty; got {deps_str:?}"
-    );
+    for e in [to_rat_exact(0.1f64.to_bits()), ulp_exact(1.0f64.to_bits())] {
+        assert!(
+            tc.reduce_native_for_test(&e).is_none(),
+            "an opaque placeholder must not fold: {e:?}"
+        );
+    }
+    assert!(env
+        .native_fold_verdict(&Name::from_string("Float.toRatExact"))
+        .is_err());
+    assert!(env
+        .native_fold_verdict(&Name::from_string("Rat.roundToNearestEven"))
+        .is_err());
 }
 
 // ===== Stage B: the GENERAL half-ulp rounding lemma (incl. denormals) =====
@@ -799,95 +750,29 @@ fn test_round_to_nearest_even_reduces_all_regimes() {
     );
 }
 
-/// The four per-constant discharges of `rounding_error_bound` — normal,
-/// subnormal (floored ulp), tie (ties-to-even), and exact (error 0) — are
-/// kernel-checked `Theorem`s (NOT axioms), with EMPTY non-foundational axiom
-/// closures. Each pairs (a) an `Eq.refl` discharge that the native
-/// `Rat.roundToNearestEven` REDUCES `q` to the literal rounded value, with
-/// (b) the half-ulp BOUND `2·|round q − q| ≤ ulp` on that value, proved by the
-/// concrete non-negativity witness `Int.NonNeg.mk`. Together they REDUCE the
-/// bound in-kernel for all four cases.
+/// RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+/// the four per-constant discharges of `rounding_error_bound` (and their
+/// `round_discharge_*` equations) evaluated `Rat.roundToNearestEven`, an OPAQUE
+/// placeholder whose value only its native reducer supplies. Native folds now
+/// need a canonical definition (`native_fold_authority.rs`), so none of them is
+/// registered, and the general half-ulp lemmas they instantiated still are.
 #[test]
-fn test_rounding_error_bound_discharges_axiom_free() {
+fn test_rounding_error_bound_discharges_not_registered_without_a_definition() {
     let env = make_prelude_env();
-    let tc = TypeChecker::with_mode(&env, env.mode());
-    // The subnormal case is now discharged at the TRUE binary64 floored-ulp
-    // scale `2^-1074` (denominator `2^1074`, a 17-limb `Big` bignat): q =
-    // 5·2^-1075 = 2.5 floored-ulps, ties-to-even DOWN to grid index 2, error =
-    // ulp/2 EXACTLY → both LHS (`2·|round−q|`) and RHS (`ulp`) are `1/2^1074`.
-    // `2^1074`'s top (and only nonzero) limb is `1125899906842624` (= 2^50,
-    // since 1074 = 16·64 + 50), so the den is `Big([...0, 1125899906842624])`.
-    // This LITERAL reduces in-kernel (the `Nat.pred` + arbitrary-precision `Int`
-    // reducers close the Rat-blowup wall) — `tc.infer_type` below type-checks it.
-    // (tag, LHS numerator/denominator, RHS numerator/denominator) as the
-    // `Rat.mk (Int.ofNat n) d` values the bound must pin. The denominator is a
-    // FRAGMENT of the literal's Debug spelling so the 17-limb subnormal `Big`
-    // can be matched by its top limb without writing 2^1074 out.
-    //
-    // This was a table of whole-expression substrings
-    // (`"Nat(Small(2))) Nat(Small(16))"`) matched against `format!("{}", ty)`.
-    // Those markers encoded the OLD `Display`, a hybrid that printed
-    // applications Lean-style but literals in Debug spelling. Once Display
-    // learned real Lean notation in 6d1663115 the markers could match nothing —
-    // and `{:?}` does not restore them either, because Debug separates
-    // application arguments with `, ` where the old Display used a space. The
-    // values being pinned are properties of the TERM, so read them off it.
-    let cases = [
-        (
-            "normal",
-            ("Small(2)", "Small(16)"),
-            ("Small(1)", "Small(4)"),
-        ),
-        (
-            "subnormal",
-            ("Small(1)", "1125899906842624"),
-            ("Small(1)", "1125899906842624"),
-        ),
-        ("tie", ("Small(2)", "Small(4)"), ("Small(1)", "Small(2)")),
-        ("exact", ("Small(0)", "Small(4)"), ("Small(1)", "Small(4)")),
-    ];
-    for (tag, lhs_marker, rhs_marker) in cases {
-        let bound = Name::from_string(&format!(
-            "NNVerify.FloatRational.rounding_error_bound_discharge_{tag}"
-        ));
-        let round_eq = Name::from_string(&format!("NNVerify.FloatRational.round_discharge_{tag}"));
-        for name in [&bound, &round_eq] {
-            let info = env
-                .get_const(name)
-                .unwrap_or_else(|| panic!("{name:?} missing"));
-            assert_eq!(
-                info.kind,
-                ConstantKind::Theorem,
-                "{name:?} must be a Theorem"
-            );
-            let _ = tc
-                .infer_type(&Expr::const_(name.clone(), vec![]))
-                .unwrap_or_else(|e| panic!("{name:?} must type-check: {e:?}"));
-            let deps = env
-                .axiom_deps(name)
-                .unwrap_or_else(|| panic!("{name:?}: axiom_deps None"));
-            let ds: std::collections::HashSet<String> =
-                deps.iter().map(|x| x.to_string()).collect();
+    for tag in ["normal", "subnormal", "tie", "exact"] {
+        for name in [
+            format!("NNVerify.FloatRational.rounding_error_bound_discharge_{tag}"),
+            format!("NNVerify.FloatRational.round_discharge_{tag}"),
+        ] {
             assert!(
-                !ds.contains("sorry") && !ds.contains("sorryAx"),
-                "{name:?} must not depend on sorry; got {ds:?}"
-            );
-            assert!(ds.is_empty(), "{name:?} closure must be empty; got {ds:?}");
-        }
-        // The bound's stated type is `LHS ≤ RHS` with the expected operands.
-        // These markers are `BigNat`/`Literal` DEBUG spellings
-        // (`Nat(Small(16))`, `Nat(Big(`). They matched only while
-        // `Display for Expr` fell back to `Debug`; since 6d1663115 Display
-        // speaks Lean notation and a literal renders as `16`. Ask for `{:?}`
-        // explicitly, which is what this table always meant — rather than
-        // rewriting the exact rational values it pins.
-        let bty = &env.get_const(&bound).unwrap().type_;
-        let found = rat_literals(bty);
-        for (side, (num, den)) in [("LHS", lhs_marker), ("RHS", rhs_marker)] {
-            assert!(
-                found.iter().any(|(n, d)| n == num && d.contains(den)),
-                "{tag}: bound {side} Rat.mk {num}/{den} not among {found:?}"
+                env.get_const(&Name::from_string(&name)).is_none(),
+                "{name} rests on an unjustified fold and must not be registered"
             );
         }
     }
+    assert!(env
+        .get_const(&Name::from_string(
+            "NNVerify.FloatRational.rounding_error_le_half_ulp"
+        ))
+        .is_some());
 }

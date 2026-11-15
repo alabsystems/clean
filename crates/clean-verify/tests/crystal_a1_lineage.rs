@@ -330,7 +330,7 @@ mod node_id_index;
 // placement: crates/clean-verify/tests/crystal_a1_lineage.rs, with the other
 // per-chain modules (e.g. after `mod meta_tag_shl;`).
 // The strict_monads chain — the first MUTATING body (load → insertfield at
-// field 81 → store → void ret) and the first user of the insertfields/stores
+// field 83 → store → void ret) and the first user of the insertfields/stores
 // write lanes; its evidence pins the interpreter differential as NOT-RUN.
 #[path = "crystal_a1_lineage/strict_monads.rs"]
 mod strict_monads;
@@ -483,6 +483,30 @@ fn numeral_names_carry_their_values() {
             let a: u32 = a.parse().unwrap_or_else(|_| panic!("ir_d{k} := {body}"));
             let b: u32 = b.parse().unwrap_or_else(|_| panic!("ir_d{k} := {body}"));
             assert_eq!(a + b, *k, "ir_d{k} is Nat.add ir_d{a} ir_d{b}");
+        } else if body.starts_with("Nat.succ ") && !body.contains("Nat.add") {
+            // NESTED succ, e.g. `Nat.succ (Nat.succ ir_d63)`. The 2026-09-16
+            // widening (9e1d4df2d) introduced this form because `ir_d64` was
+            // already taken, so `ir_d65` reaches back to `ir_d63` and applies
+            // two successors.
+            //
+            // The guarantee is UNCHANGED, not loosened: this still resolves the
+            // numeral to a value and asserts it equals its name. Counting the
+            // successors and adding them to the base is the same check the
+            // single-succ arm makes, at depth. The `Nat.add` guard keeps a
+            // mixed form (`Nat.succ (Nat.add ..)`) out of this arm so it still
+            // reaches the panic below rather than being miscounted.
+            let depth =
+                u32::try_from(body.matches("Nat.succ").count()).expect("succ depth fits in u32");
+            let base: u32 = body
+                .rsplit_once("ir_d")
+                .map(|(_, tail)| tail.trim_end_matches(')').trim().to_string())
+                .and_then(|t| t.parse::<u32>().ok())
+                .unwrap_or_else(|| panic!("ir_d{k} := {body}"));
+            assert_eq!(
+                base + depth,
+                *k,
+                "ir_d{k} is {depth} successors above ir_d{base}"
+            );
         } else {
             panic!(
                 "ir_d{k} := {body} — an unrecognised numeral form. The type lanes read `ir_dK` as \

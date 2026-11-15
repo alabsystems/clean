@@ -1,16 +1,16 @@
 {
  "schema": "clean.crystal.freshness_scope/v2",
- "what_this_is": "The clean-kernel SOURCE the newest crystal revalidation record was measured at. Whether a chained BODY drifted is a question only trustc can answer, and the record is its DATED answer; this pins the tree that answer covers, so a pre-push gate and a suite row can decide -- with no Trust compiler and no dump -- whether it still covers the tree in front of them. Derivable: `scripts/crystal_freshness_scope.py --emit`.",
- "record": "data/crystal_chain_revalidation_2026-08-21_lane18.json",
- "covered_clean_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
- "clean_kernel_src_sha256": "3be1b403bfafc28121a5ded48e179257057e35ee9713f5d3ae7d9b463dc3b526",
- "clean_kernel_src_file_count": 1892,
+ "what_this_is": "The clean-kernel SOURCE the newest crystal revalidation record was measured at. Whether a chained BODY drifted is a question only trustc can answer, and the record is its DATED answer; this pins the tree that answer covers, so a pre-push gate and a suite row can decide -- with no Trust compiler and no dump -- whether it still covers the tree in front of them. Derivable: `scripts/crystal_freshness_scope.py --emit`, checked by `--emit --check`. When the record's rev is not a commit here, the kernel tree is read at `kernel_tree_read_at`, a pushed commit whose kernel source digests to the record's clean_kernel_src_sha256 (named once with --witness).",
+ "record": "data/crystal_chain_revalidation_2026-11-14_athead_6e2c1dab4.json",
+ "covered_clean_rev": "6e2c1dab4a4498814ac458d1148b3e842a2fc508",
+ "clean_kernel_src_sha256": "c08e1ec76c48c87530d91e7bb9941b7bd74b9361b722b6bcb91e1dfc7dc8e57a",
+ "clean_kernel_src_file_count": 2124,
  "digest_definition": "sha256 over, in sorted path order, `<repo-relative path>\\0<sha256 of file bytes>\\n` for every crates/clean-kernel/src/**/*.rs plus crates/clean-kernel/Cargo.toml, walked from the filesystem.",
  "body_digest_definition": "Per chained def_path, sha256 over, in the order `items` lists them, `<anchors joined by ::>\\0<the item's CODE text>\\n`. An item is located by finding its anchor in a string-, char- and comment-MASKED copy of the file (so a brace in a literal or a comment cannot cut the span), taking the anchor's line start extended back over any #[...] attributes, and ending at the `}` matching the first depth-0 `{` or at the first depth-0 `;`. The item's CODE text is that span with COMMENTS blanked, blank lines dropped and trailing whitespace stripped -- a comment cannot move an emitted instruction -- while string and char literals are kept byte-for-byte, because those are data the compiler emits. `items` pins the body's own item plus the items in that file whose layout or signature its emitted code depends on; `items_why` says which and why. If any item cannot be located UNAMBIGUOUSLY the entry records body_sha256: null and body_extraction: \"file-fallback: <reason>\", and the check compares `sha256` -- the whole FILE -- for that def_path instead.",
  "chained_body_sources": {
   "bvar_in_range": {
    "file": "crates/clean-kernel/src/expr/mod.rs",
-   "sha256": "5fd1bc0db51566a599c3d144593515a9998531a2d805cc072307f7387fdbb3db",
+   "sha256": "5b26612aadb7cdb2992f337af5c0e4ab8a31b19510b52c740f25bf3363e5e197",
    "must_contain": "fn bvar_in_range",
    "items": [
     [
@@ -202,7 +202,7 @@
   },
   "is_valid_char": {
    "file": "crates/clean-kernel/src/env/native_reducers_char.rs",
-   "sha256": "19befb08a8228dac92c36ddbc9339536a0caa000275d77f80529e390771a6b82",
+   "sha256": "3b712a472188e7967bc24210613a51b8c5645e567c5597aaaebf27c714a024ad",
    "must_contain": "fn is_valid_char",
    "items": [
     [
@@ -215,7 +215,7 @@
   },
   "level_is_zero": {
    "file": "crates/clean-kernel/src/level/mod.rs",
-   "sha256": "efbb8a123f1a2eac24e6df3a95b20dbeb6a9dc03e4b90486f24b92be95c223b7",
+   "sha256": "3e5b44931d0a5d2ec8d876f858fcc1e4e6b1d796b153bd12f16f32968e22327e",
    "must_contain": "fn is_zero",
    "items": [
     [
@@ -237,7 +237,7 @@
   },
   "level_kind_ord": {
    "file": "crates/clean-kernel/src/level/mod.rs",
-   "sha256": "efbb8a123f1a2eac24e6df3a95b20dbeb6a9dc03e4b90486f24b92be95c223b7",
+   "sha256": "3e5b44931d0a5d2ec8d876f858fcc1e4e6b1d796b153bd12f16f32968e22327e",
    "must_contain": "fn kind_ord",
    "items": [
     [
@@ -256,7 +256,7 @@
   },
   "meta_tag_shl": {
    "file": "crates/clean-kernel/src/tc/local_context.rs",
-   "sha256": "d5dc97f9c0306c77a25bafabd96ea9623e353fb698439e80d50927bab955517a",
+   "sha256": "b15817a4c791ddd6b586edf9aa07faefbbec6a2689cbc015549138e1b24de899",
    "must_contain": "META_TAG",
    "items": [
     [
@@ -270,7 +270,7 @@
   },
   "node_id_index": {
    "file": "crates/clean-kernel/src/cert/builder/state.rs",
-   "sha256": "2d8f40dcc1f7de095bc02f7668afb463def303101b783437f51ef20b0f229595",
+   "sha256": "b16318ec5ccb1cad921064841aef6ba97b4a36f45e1718c69b80ae01952b4afd",
    "must_contain": "fn index",
    "items": [
     [
@@ -286,7 +286,7 @@
   },
   "simp_priority_value": {
    "file": "crates/clean-kernel/src/env/types.rs",
-   "sha256": "6d62a0159012c04e97d89582df3b6179e0f4d08515c1e7a00b2fa6a8877e3e0b",
+   "sha256": "51d00e087772d0157cdb17f102a23c7bfbdd5f2c53c8a589b455614ba676d4a2",
    "must_contain": "fn value",
    "items": [
     [
@@ -303,7 +303,7 @@
   },
   "strict_monads": {
    "file": "crates/clean-kernel/src/env/mod.rs",
-   "sha256": "0eca2ddf7fbf7b34f1118effce987f81400489e7f4161829df100aa2793a9bdc",
+   "sha256": "70001276fd009c21ae3f7affb7272d0586c225e0d2a325d11cc71b8ff23a6d29",
    "must_contain": "fn set_lean4_core_strict_monads",
    "items": [
     [
@@ -314,7 +314,7 @@
     ]
    ],
    "items_why": "one field store into Environment, at an offset chosen by that struct's layout -- a field added there moves this body with its own text unchanged",
-   "body_sha256": "3b39e23c95ca6d976b3b418599b97009743aa2f644e003752e4e7fc933885c3e",
+   "body_sha256": "1cf8e82e854b1c3b5e26d16bea284bff5ddd2f6421b21a1df5c67a43be5d0651",
    "body_extraction": "item"
   }
  },

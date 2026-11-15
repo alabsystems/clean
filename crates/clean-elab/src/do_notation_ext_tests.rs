@@ -19,17 +19,17 @@ fn expect_ok(result: Result<SurfaceExpr, crate::ElabError>) -> SurfaceExpr {
     result.expect("desugaring should succeed")
 }
 
-fn is_app_of(expr: &SurfaceExpr, name: &str) -> bool {
+fn is_app_of(expr: &SurfaceExpr, name: &'static str) -> bool {
     if let SurfaceExpr::App(_, func, _) = expr {
         if let SurfaceExpr::Ident(_, ident_name) = func.as_ref() {
-            return ident_name == name;
+            return ident_name.name() == &clean_kernel::Name::from_string(name);
         }
     }
     false
 }
 
-fn is_ident(expr: &SurfaceExpr, name: &str) -> bool {
-    matches!(expr, SurfaceExpr::Ident(_, n) if n == name)
+fn is_ident(expr: &SurfaceExpr, name: &'static str) -> bool {
+    matches!(expr, SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string(name))
 }
 
 fn app_args(expr: &SurfaceExpr) -> Option<&[clean_parser::SurfaceArg]> {
@@ -46,7 +46,7 @@ fn action(name: &str) -> DoElement {
 
 fn bind(name: &str, act: &str) -> DoElement {
     DoElement::Bind {
-        name: Some(name.into()),
+        name: Some(clean_parser::SurfaceName::component(name, false)),
         action: Box::new(SurfaceExpr::ident(act)),
     }
 }
@@ -65,7 +65,7 @@ fn test_try_catch_basic_untyped() {
     let result = expect_ok(desugar_try_catch(
         &[action("action1")],
         &[CatchClause {
-            binder: "e".into(),
+            binder: clean_parser::SurfaceName::generated_path("e"),
             exc_type: None,
             body: vec![action("handler")],
         }],
@@ -85,7 +85,7 @@ fn test_try_catch_typed() {
     let result = expect_ok(desugar_try_catch(
         &[action("action1")],
         &[CatchClause {
-            binder: "e".into(),
+            binder: clean_parser::SurfaceName::generated_path("e"),
             exc_type: Some(SurfaceExpr::ident("IOError")),
             body: vec![action("handler")],
         }],
@@ -109,7 +109,7 @@ fn test_try_catch_with_finally() {
     let result = expect_ok(desugar_try_catch(
         &[action("action1")],
         &[CatchClause {
-            binder: "e".into(),
+            binder: clean_parser::SurfaceName::generated_path("e"),
             exc_type: None,
             body: vec![action("handler")],
         }],
@@ -140,7 +140,7 @@ fn test_try_empty_body_errors() {
     let result = desugar_try_catch(
         &[],
         &[CatchClause {
-            binder: "e".into(),
+            binder: clean_parser::SurfaceName::generated_path("e"),
             exc_type: None,
             body: vec![action("handler")],
         }],
@@ -162,12 +162,12 @@ fn test_try_multiple_catches_fold_left() {
         &[action("body")],
         &[
             CatchClause {
-                binder: "e1".into(),
+                binder: clean_parser::SurfaceName::generated_path("e1"),
                 exc_type: None,
                 body: vec![action("h1")],
             },
             CatchClause {
-                binder: "e2".into(),
+                binder: clean_parser::SurfaceName::generated_path("e2"),
                 exc_type: Some(SurfaceExpr::ident("T")),
                 body: vec![action("h2")],
             },
@@ -186,7 +186,7 @@ fn test_try_catch_empty_handler_defaults_to_pure_unit() {
     let result = expect_ok(desugar_try_catch(
         &[action("body")],
         &[CatchClause {
-            binder: "e".into(),
+            binder: clean_parser::SurfaceName::generated_path("e"),
             exc_type: None,
             body: vec![],
         }],
@@ -203,19 +203,23 @@ fn test_try_catch_empty_handler_defaults_to_pure_unit() {
 fn test_reassign_produces_let() {
     // x := 42; pure x
     let result = expect_ok(desugar_reassign(
-        "x",
+        &clean_parser::SurfaceName::generated_path("x"),
         &SurfaceExpr::ident("new_val"),
         &[ret("x")],
     ));
     assert!(
-        matches!(&result, SurfaceExpr::Let(_, binder, _, _) if binder.name == "x"),
+        matches!(&result, SurfaceExpr::Let(_, binder, _, _) if binder.name == clean_parser::SurfaceName::generated_path("x")),
         "should produce let x := new_val in rest, got {result:?}"
     );
 }
 
 #[test]
 fn test_reassign_empty_var_errors() {
-    let result = desugar_reassign("", &SurfaceExpr::ident("val"), &[ret("x")]);
+    let result = desugar_reassign(
+        &clean_parser::SurfaceName::from_name(clean_kernel::Name::anon()),
+        &SurfaceExpr::ident("val"),
+        &[ret("x")],
+    );
     assert!(result.is_err(), "empty variable name should error");
 }
 
@@ -223,11 +227,11 @@ fn test_reassign_empty_var_errors() {
 fn test_reassign_chain() {
     // x := a; x := b; pure x
     let result = expect_ok(desugar_reassign(
-        "x",
+        &clean_parser::SurfaceName::generated_path("x"),
         &SurfaceExpr::ident("a"),
         &[
             DoElement::LetMut {
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 value: Box::new(SurfaceExpr::ident("b")),
             },
             ret("x"),
@@ -398,7 +402,7 @@ fn test_ext_try_catch_direct() {
         )],
         vec![DoCatchClause {
             span: Span::dummy(),
-            binder: "e".into(),
+            binder: clean_parser::SurfaceName::generated_path("e"),
             exc_type: None,
             body: vec![DoElem::Return(
                 Span::dummy(),
@@ -437,14 +441,14 @@ fn test_ext_reassign_in_compound() {
     let elems = vec![
         DoElem::Reassign(
             Span::dummy(),
-            "counter".into(),
+            clean_parser::SurfaceName::generated_path("counter"),
             Box::new(SurfaceExpr::ident("new_val")),
         ),
         DoElem::Return(Span::dummy(), Box::new(SurfaceExpr::ident("counter"))),
     ];
     let result = expect_ok(desugar_do_elems_ext(&elems));
     assert!(
-        matches!(&result, SurfaceExpr::Let(_, binder, _, _) if binder.name == "counter"),
+        matches!(&result, SurfaceExpr::Let(_, binder, _, _) if binder.name == clean_parser::SurfaceName::generated_path("counter")),
         "reassign should produce let-shadowing, got {result:?}"
     );
 }

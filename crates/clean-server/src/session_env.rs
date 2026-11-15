@@ -108,22 +108,14 @@ pub enum SessionEnvError {
 ///
 /// Dropping a `SessionEnv` is the rollback: the shared `base` is never
 /// mutated, so a worker's in-progress or rejected work cannot pollute the
-/// corpus.
+/// corpus. A clone shares the base and copies the overlay, so a speculative
+/// addition runs on a clone that replaces the session only when it is kept
+/// (`addDecl` does, on the work pool).
+#[derive(Clone)]
 pub struct SessionEnv {
     /// Shared corpus snapshot. Reference-counted and never mutated here.
     base: Arc<Environment>,
     /// Private working overlay (materialized from `base`).
-    overlay: Environment,
-}
-
-/// A point-in-time snapshot of a [`SessionEnv`] overlay.
-///
-/// Produced by [`SessionEnv::checkpoint`] and consumed by
-/// [`SessionEnv::restore`] to undo speculative additions while preserving the
-/// session's earlier accepted work. Opaque on purpose — callers treat it as a
-/// rollback token, not a readable environment.
-#[must_use]
-pub struct OverlayCheckpoint {
     overlay: Environment,
 }
 
@@ -290,26 +282,6 @@ impl SessionEnv {
         self.overlay
             .num_constants()
             .saturating_sub(self.base.num_constants())
-    }
-
-    /// Take a checkpoint of the current overlay.
-    ///
-    /// The returned [`OverlayCheckpoint`] captures every session-local decl
-    /// accepted so far. Pass it to [`Self::restore`] to undo any decls added
-    /// after the checkpoint — used to roll back exactly one speculative
-    /// `add_decl` (a kernel-valid decl rejected by a downstream policy) without
-    /// discarding the session's earlier accepted work. The shared base is never
-    /// touched.
-    pub fn checkpoint(&self) -> OverlayCheckpoint {
-        OverlayCheckpoint {
-            overlay: self.overlay.clone(),
-        }
-    }
-
-    /// Restore the overlay to a previously-taken [`OverlayCheckpoint`],
-    /// discarding any decls added since.
-    pub fn restore(&mut self, checkpoint: OverlayCheckpoint) {
-        self.overlay = checkpoint.overlay;
     }
 
     /// Discard every session-local addition, restoring the overlay to the

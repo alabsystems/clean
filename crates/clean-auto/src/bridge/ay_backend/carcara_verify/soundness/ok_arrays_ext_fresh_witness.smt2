@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-const x Int)
+(declare-const v Int)
+(declare-const c (Array Int Int))
+(assert (not (= (store c x v) c)))
+(assert (not (not (= (select (store c x v) (choice ((k Int)) (or (= (store c x v) c) (not (= (select (store c x v) k) (select c k)))))) (select c (choice ((k Int)) (or (= (store c x v) c) (not (= (select (store c x v) k) (select c k))))))))))
+(check-sat)

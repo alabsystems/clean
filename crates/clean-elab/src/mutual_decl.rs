@@ -29,7 +29,7 @@ use crate::dep_graph::DependencyGraph;
 use crate::error::ElabError;
 use crate::infer::{ElabCtx, ElabResult};
 use clean_kernel::Expr;
-use clean_parser::{SurfaceDecl, SurfaceExpr};
+use clean_parser::{SurfaceDecl, SurfaceExpr, SurfaceName};
 use std::collections::HashSet;
 
 /// A single entry in a mutual definition block.
@@ -39,7 +39,7 @@ use std::collections::HashSet;
 #[derive(Debug, Clone)]
 pub(crate) struct MutualEntry {
     /// Declaration name (unqualified).
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     /// Optional type annotation (kernel `Expr` after elaboration, or `None`
     /// if the type should be inferred).
     pub(crate) ty: Option<Expr>,
@@ -89,7 +89,7 @@ impl MutualBlock {
     ///
     /// This must be called after all entries have been added.
     pub(crate) fn build_dep_graph(&mut self) {
-        let names: Vec<&str> = self.declarations.iter().map(|e| e.name.as_str()).collect();
+        let names: Vec<&SurfaceName> = self.declarations.iter().map(|e| &e.name).collect();
         self.dep_graph = DependencyGraph::new();
 
         for (from_idx, entry) in self.declarations.iter().enumerate() {
@@ -124,16 +124,20 @@ impl MutualBlock {
                 .any(|&i| i < n && self.declarations[i].is_noncomputable);
 
             if has_computable && has_noncomputable {
-                let cycle_names: Vec<&str> = cycle
+                let cycle_names: Vec<&SurfaceName> = cycle
                     .iter()
                     .filter(|&&i| i < n)
-                    .map(|&i| self.declarations[i].name.as_str())
+                    .map(|&i| &self.declarations[i].name)
                     .collect();
                 return Err(ElabError::Unsupported {
                     feature: format!(
                         "mutual recursion between computable and noncomputable \
                          declarations: {}",
-                        cycle_names.join(", ")
+                        cycle_names
+                            .iter()
+                            .map(|name| name.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
                     ),
                 });
             }
@@ -204,8 +208,8 @@ impl MutualBlock {
 
     /// Return the names of all declarations in this block.
     #[must_use]
-    pub(crate) fn names(&self) -> Vec<&str> {
-        self.declarations.iter().map(|e| e.name.as_str()).collect()
+    pub(crate) fn names(&self) -> Vec<&SurfaceName> {
+        self.declarations.iter().map(|e| &e.name).collect()
     }
 }
 
@@ -215,12 +219,11 @@ impl MutualBlock {
 
 /// Collect references to declarations in `names` that appear as `Const`
 /// expressions in `expr`.
-fn collect_const_refs(expr: &Expr, names: &[&str], out: &mut HashSet<usize>) {
+fn collect_const_refs(expr: &Expr, names: &[&SurfaceName], out: &mut HashSet<usize>) {
     match expr.kind() {
         clean_kernel::expr::ExprKind::Const(name, _) => {
-            let name_str = name.to_string();
             for (idx, &decl_name) in names.iter().enumerate() {
-                if name_str == decl_name || name_str.ends_with(&format!(".{decl_name}")) {
+                if name == decl_name.name() {
                     out.insert(idx);
                 }
             }
@@ -248,7 +251,11 @@ fn collect_const_refs(expr: &Expr, names: &[&str], out: &mut HashSet<usize>) {
 
 /// Collect identifier references from a surface expression for pre-elaboration
 /// dependency analysis.
-pub(crate) fn collect_surface_refs(expr: &SurfaceExpr, names: &[&str], out: &mut HashSet<usize>) {
+pub(crate) fn collect_surface_refs(
+    expr: &SurfaceExpr,
+    names: &[&SurfaceName],
+    out: &mut HashSet<usize>,
+) {
     match expr {
         SurfaceExpr::Ident(_, name) => {
             for (idx, &decl_name) in names.iter().enumerate() {
@@ -266,7 +273,9 @@ pub(crate) fn collect_surface_refs(expr: &SurfaceExpr, names: &[&str], out: &mut
         SurfaceExpr::Lambda(_, _binders, body) | SurfaceExpr::Pi(_, _binders, body) => {
             collect_surface_refs(body, names, out);
         }
-        SurfaceExpr::Let(_, _binder, val, body) | SurfaceExpr::LetRec(_, _binder, val, body) => {
+        SurfaceExpr::Let(_, _binder, val, body)
+        | SurfaceExpr::Have(_, _binder, val, body)
+        | SurfaceExpr::LetRec(_, _binder, val, body) => {
             collect_surface_refs(val, names, out);
             collect_surface_refs(body, names, out);
         }
@@ -299,12 +308,10 @@ pub(crate) fn collect_surface_refs(expr: &SurfaceExpr, names: &[&str], out: &mut
 pub(crate) fn build_mutual_block_from_surface(decls: &[SurfaceDecl]) -> MutualBlock {
     let mut block = MutualBlock::new();
 
-    let names: Vec<&str> = decls
+    let names: Vec<&SurfaceName> = decls
         .iter()
         .filter_map(|d| match d {
-            SurfaceDecl::Def { name, .. } | SurfaceDecl::Theorem { name, .. } => {
-                Some(name.as_str())
-            }
+            SurfaceDecl::Def { name, .. } | SurfaceDecl::Theorem { name, .. } => Some(name),
             _ => None,
         })
         .collect();

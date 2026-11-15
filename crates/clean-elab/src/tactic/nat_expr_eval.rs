@@ -14,6 +14,36 @@ use clean_kernel::{Expr, ExprKind};
 
 use crate::stack_safe;
 
+/// A text switch is permitted only after exact structural builtin recognition.
+fn builtin_name(name: &clean_kernel::Name) -> Option<&'static str> {
+    [
+        "Nat.zero",
+        "Nat.one",
+        "Nat.succ",
+        "OfNat.ofNat",
+        "Nat.add",
+        "HAdd.hAdd",
+        "Add.add",
+        "Nat.mul",
+        "HMul.hMul",
+        "Mul.mul",
+        "Nat.sub",
+        "HSub.hSub",
+        "Sub.sub",
+        "Nat.pow",
+        "HPow.hPow",
+        "Pow.pow",
+        "Nat.mod",
+        "Nat.div",
+        "Nat.gcd",
+        "instOfNatNat",
+        "Zero.toOfNat0",
+        "One.toOfNat1",
+    ]
+    .into_iter()
+    .find(|text| name == &clean_kernel::Name::from_string(text))
+}
+
 /// Evaluate a natural number expression to a concrete `u64` value.
 ///
 /// # Supported heads
@@ -26,8 +56,9 @@ use crate::stack_safe;
 /// - `Nat.mul`, `HMul.hMul`, `Mul.mul` (multiplication)
 /// - `Nat.sub`, `HSub.hSub`, `Sub.sub` (saturating subtraction)
 /// - `Nat.pow`, `HPow.hPow`, `Pow.pow` (exponentiation)
-/// - `Nat.mod`, `HMod.hMod`, `Mod.mod` (modulo, `n % 0 = n`)
-/// - `Nat.div`, `HDiv.hDiv`, `Div.div` (truncating division, `n / 0 = 0`)
+/// - `Nat.mod` (modulo, `n % 0 = n`)
+/// - `Nat.div` (truncating division, `n / 0 = 0`)
+/// Generic division/remainder projections require checked dictionary unfolding.
 /// - `Nat.gcd` (Euclidean GCD, `gcd 0 y = y`, `gcd x 0 = x`)
 ///
 /// # Contract
@@ -45,10 +76,12 @@ pub(crate) fn eval_nat_expr(expr: &Expr) -> Option<u64> {
         ExprKind::Lit(clean_kernel::expr::Literal::Nat(n)) => n.to_u64(),
 
         ExprKind::Const(name, _) => {
-            let name_str = name.to_string();
-            if name_str == "Nat.zero" {
+            let name_str = builtin_name(name);
+            if name_str == Some("Nat.zero") {
                 Some(0)
-            } else if name_str == "Nat.one" || name_str == "1" {
+            } else if name_str == Some("Nat.one")
+                || matches!(name.inner(), clean_kernel::name::NameInner::Num(parent, 1) if parent.is_anon())
+            {
                 Some(1)
             } else {
                 None
@@ -58,7 +91,7 @@ pub(crate) fn eval_nat_expr(expr: &Expr) -> Option<u64> {
         ExprKind::App(_, _) => {
             let args = expr.get_app_args();
             if let ExprKind::Const(op_name, _) = expr.get_app_fn().kind() {
-                let op_str = op_name.to_string();
+                let op_str = builtin_name(op_name)?;
 
                 // Unary: Nat.succ
                 if op_str == "Nat.succ" {
@@ -79,7 +112,7 @@ pub(crate) fn eval_nat_expr(expr: &Expr) -> Option<u64> {
                 // in `close_goal` remains the soundness gate regardless.
                 if op_str == "OfNat.ofNat" && args.len() == 3 {
                     if let ExprKind::Const(ty_name, _) = args[0].kind() {
-                        if ty_name.to_string() == "Nat" {
+                        if ty_name == &clean_kernel::Name::from_string("Nat") {
                             return eval_nat_expr(args[1]);
                         }
                     }
@@ -90,7 +123,7 @@ pub(crate) fn eval_nat_expr(expr: &Expr) -> Option<u64> {
                     let l = eval_nat_expr(args[args.len() - 2])?;
                     let r = eval_nat_expr(args[args.len() - 1])?;
 
-                    match op_str.as_str() {
+                    match op_str {
                         // Addition
                         "Nat.add" | "HAdd.hAdd" | "Add.add" => {
                             return l.checked_add(r);
@@ -113,13 +146,13 @@ pub(crate) fn eval_nat_expr(expr: &Expr) -> Option<u64> {
                         // case as the dividend. The kernel's native `Nat.mod`
                         // reducer agrees, so a `rfl`/witness close still
                         // type-checks.
-                        "Nat.mod" | "HMod.hMod" | "Mod.mod" => {
+                        "Nat.mod" => {
                             return Some(l.checked_rem(r).unwrap_or(l));
                         }
                         // Truncating division (Lean 4 convention: `n / 0 = 0`).
                         // `checked_div` returns `None` on a zero divisor; Lean
                         // defines that case as `0`.
-                        "Nat.div" | "HDiv.hDiv" | "Div.div" => {
+                        "Nat.div" => {
                             return Some(l.checked_div(r).unwrap_or(0));
                         }
                         // Euclidean GCD. Lean 4's `Nat.gcd` is the bare prelude
@@ -167,8 +200,8 @@ pub(crate) fn eval_nat_expr(expr: &Expr) -> Option<u64> {
 /// # Recognized forms
 ///
 /// - `Lit(Nat n)`
-/// - `Nat.zero`, `Nat.one`, and a constant whose *name* is a decimal numeral
-///   (a legacy spelling the `fin_cases` / `interval_cases` readers accepted)
+/// - `Nat.zero`, `Nat.one`, and a constant with one actual `Name::Num` component
+///   (the legacy numeric identity, never a quoted decimal string component)
 /// - `Nat.succ e` — one greater than `e`, recursively
 /// - `@OfNat.ofNat α n inst` — the value is the `n` index. Reading the index
 ///   rather than the instance is what `OfNat`'s own contract guarantees, and it
@@ -195,15 +228,16 @@ pub(crate) fn read_nat_numeral(expr: &Expr) -> Option<u64> {
     stack_safe(|| match expr.kind() {
         ExprKind::Lit(clean_kernel::expr::Literal::Nat(n)) => n.to_u64(),
 
-        ExprKind::Const(name, _) => {
-            let name_str = name.to_string();
-            match name_str.as_str() {
-                "Nat.zero" => Some(0),
-                "Nat.one" => Some(1),
-                // Legacy spelling: a constant literally named "0", "1", …
-                other => other.parse().ok(),
-            }
-        }
+        ExprKind::Const(name, _) => match builtin_name(name) {
+            Some("Nat.zero") => Some(0),
+            Some("Nat.one") => Some(1),
+            _ => match name.inner() {
+                clean_kernel::name::NameInner::Num(parent, value) if parent.is_anon() => {
+                    Some(*value)
+                }
+                _ => None,
+            },
+        },
 
         ExprKind::MData(_, inner) => read_nat_numeral(inner),
 
@@ -212,7 +246,7 @@ pub(crate) fn read_nat_numeral(expr: &Expr) -> Option<u64> {
                 return None;
             };
             let args = expr.get_app_args();
-            match op_name.to_string().as_str() {
+            match builtin_name(op_name)? {
                 "Nat.succ" => read_nat_numeral(args.last()?)?.checked_add(1),
                 // `@OfNat.ofNat α n inst`: the numeral is the second argument.
                 "OfNat.ofNat" if args.len() >= 2 => read_nat_numeral(args[1]),
@@ -224,12 +258,14 @@ pub(crate) fn read_nat_numeral(expr: &Expr) -> Option<u64> {
         // field 0 is fixed by their own definition are read here; anything else
         // would need the instance's *type* to recover `n`, which is not
         // available without a typing context.
-        ExprKind::Proj(struct_name, 0, inst) if struct_name.to_string() == "OfNat" => {
+        ExprKind::Proj(struct_name, 0, inst)
+            if struct_name == &clean_kernel::Name::from_string("OfNat") =>
+        {
             let ExprKind::Const(inst_name, _) = inst.get_app_fn().kind() else {
                 return None;
             };
             let inst_args = inst.get_app_args();
-            match inst_name.to_string().as_str() {
+            match builtin_name(inst_name)? {
                 // `instOfNatNat n : OfNat Nat n` is `⟨n⟩`.
                 "instOfNatNat" => read_nat_numeral(inst_args.first()?),
                 // `Zero.toOfNat0 : [Zero α] → OfNat α 0` is `⟨Zero.zero⟩`.
@@ -256,4 +292,53 @@ fn nat_gcd(mut a: u64, mut b: u64) -> u64 {
         a = t;
     }
     a
+}
+
+#[cfg(test)]
+mod typed_identity_tests {
+    use super::*;
+    use clean_kernel::Name;
+
+    #[test]
+    fn arithmetic_heads_require_exact_names_not_equal_display() {
+        let apply = |name| {
+            Expr::apps(
+                Expr::const_(name, vec![]),
+                [Expr::nat_lit(2), Expr::nat_lit(3)],
+            )
+        };
+        assert_eq!(
+            eval_nat_expr(&apply(Name::anon().str("Nat").str("add"))),
+            Some(5)
+        );
+        assert_eq!(eval_nat_expr(&apply(Name::anon().str("Nat.add"))), None);
+    }
+
+    #[test]
+    fn decimal_string_constant_is_not_a_numeric_name_literal() {
+        assert_eq!(
+            read_nat_numeral(&Expr::const_(Name::anon().num(7), vec![])),
+            Some(7)
+        );
+        for text in ["7", "07"] {
+            assert_eq!(
+                read_nat_numeral(&Expr::const_(Name::anon().str(text), vec![])),
+                None
+            );
+        }
+    }
+
+    #[test]
+    fn ofnat_projection_does_not_accept_a_quoted_instance_head_twin() {
+        let projection =
+            |instance| Expr::proj(Name::anon().str("OfNat"), 0, Expr::const_(instance, vec![]));
+        assert_eq!(
+            read_nat_numeral(&projection(Name::anon().str("Zero").str("toOfNat0"))),
+            Some(0)
+        );
+        assert_eq!(
+            read_nat_numeral(&projection(Name::anon().str("Zero.toOfNat0"))),
+            None
+        );
+    }
 }

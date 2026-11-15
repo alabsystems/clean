@@ -306,6 +306,7 @@ fn build_single_root(
         modules: vec![],
         shard_size_limit: config.shard_size_limit,
         max_file_size: config.max_file_size,
+        file_limit: config.file_limit,
         // Each root gets a distinct shard-name namespace so its `_0000..` files
         // do not overwrite earlier roots' shards on disk, and appends to the
         // shared manifest (initialized once by `build_mathlib_library`) rather

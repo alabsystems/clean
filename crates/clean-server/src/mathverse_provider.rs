@@ -54,17 +54,17 @@ const MAX_CANDIDATES: usize = 16;
 #[derive(Clone, Default)]
 pub struct MathverseProvider {
     inner: Arc<Mutex<Option<MathverseLibrary>>>,
+    /// Whether `inner` holds a library: fixed when the provider is built, and
+    /// read without the lock. A scan holds the lock for as long as it runs (on
+    /// the work pool), and the request threads ask this to decide whether to
+    /// take a work slot for one: through the lock, they waited for the scan.
+    loaded: bool,
 }
 
 impl std::fmt::Debug for MathverseProvider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let loaded = self
-            .inner
-            .lock()
-            .map(|guard| guard.is_some())
-            .unwrap_or(false);
         f.debug_struct("MathverseProvider")
-            .field("loaded", &loaded)
+            .field("loaded", &self.is_loaded())
             .finish()
     }
 }
@@ -115,6 +115,7 @@ impl MathverseProvider {
 
         Self {
             inner: Arc::new(Mutex::new(Some(library))),
+            loaded: true,
         }
     }
 
@@ -139,13 +140,13 @@ impl MathverseProvider {
         }
     }
 
-    /// Whether a corpus is loaded (vs. the corpus-less empty default).
+    /// Whether a corpus is loaded (vs. the corpus-less empty default) and
+    /// usable: a library whose lock a panicking scan poisoned answers no
+    /// candidates, as before. Never waits for a scan in progress (a poison
+    /// check takes no lock).
     #[must_use]
     pub fn is_loaded(&self) -> bool {
-        self.inner
-            .lock()
-            .map(|guard| guard.is_some())
-            .unwrap_or(false)
+        self.loaded && !self.inner.is_poisoned()
     }
 
     /// Number of constants in the loaded corpus (0 when corpus-less).
@@ -160,8 +161,9 @@ impl MathverseProvider {
 
     /// Search the corpus for trust-filtered candidates relevant to `goal`.
     ///
-    /// `context_names` are the local hypothesis names already in scope (used for
-    /// dependency-neighbor search). Returns an empty vector when no corpus is
+    /// `context_names` are checked global constant keys from local types/values
+    /// (used for dependency-neighbor search), never local binder labels.
+    /// Returns an empty vector when no corpus is
     /// loaded, when the mutex is poisoned, or when nothing relevant is found.
     #[must_use]
     pub fn candidates_for_goal(
@@ -342,6 +344,50 @@ mod tests {
             !provider.is_loaded(),
             "a directory with no shards yields a corpus-less provider"
         );
+    }
+
+    /// `is_loaded` took the library's lock, which a scan holds for as long as
+    /// it runs (on the work pool): a request thread asking whether to take a
+    /// work slot for a scan waited for another request's scan. Here the test
+    /// holds the lock as a scan would; the answer must come meanwhile. The
+    /// wait is a one-minute hang detector.
+    #[test]
+    fn is_loaded_never_waits_for_a_scan() {
+        let dir = tempdir().expect("tempdir");
+        write_corpus_shard(dir.path(), "corpus_lemma");
+        let provider = MathverseProvider::from_dir(dir.path());
+        let scanning = provider.inner.lock().expect("the library's lock");
+        let (answer, answered) = std::sync::mpsc::channel();
+        let asking = provider.clone();
+        std::thread::spawn(move || {
+            let _ = answer.send(asking.is_loaded());
+        });
+        let loaded = answered
+            .recv_timeout(std::time::Duration::from_secs(60))
+            .expect("is_loaded answered while a scan held the library");
+        assert!(loaded, "the corpus is loaded");
+        drop(scanning);
+    }
+
+    /// A library whose lock a panicking scan poisoned answers no candidates,
+    /// and `is_loaded` said so when it read the library through the lock. It
+    /// reads a flag now, so it must still check the poison (which takes no
+    /// lock): otherwise a request takes a work slot for a scan that cannot
+    /// answer (review of 2026-10-18).
+    #[test]
+    fn a_poisoned_library_is_not_loaded() {
+        let dir = tempdir().expect("tempdir");
+        write_corpus_shard(dir.path(), "corpus_lemma");
+        let provider = MathverseProvider::from_dir(dir.path());
+        assert!(provider.is_loaded(), "this test's premise: a loaded corpus");
+        let poisoning = provider.clone();
+        let poisoned = std::thread::spawn(move || {
+            let _scanning = poisoning.inner.lock();
+            panic!("a scan panics holding the library (this test's own panic)");
+        })
+        .join();
+        assert!(poisoned.is_err(), "this test's premise: the scan panicked");
+        assert!(!provider.is_loaded());
     }
 
     #[test]

@@ -10,8 +10,12 @@ use serde::{Deserialize, Serialize};
 
 pub mod grammar;
 pub mod interpolation;
+pub mod lean_keywords;
 pub mod lexer;
 pub mod notation_seed;
+pub mod origins;
+#[cfg(test)]
+mod parse_world;
 pub mod surface;
 pub mod surface_tactic;
 pub mod surface_tactic_types;
@@ -20,34 +24,50 @@ pub mod tactic_patterns;
 #[cfg(test)]
 mod include_omit_tests;
 #[cfg(test)]
+mod keyword_headed_instance_name_tests;
+#[cfg(test)]
 mod lean4_compat;
 #[cfg(test)]
 mod lean4_features;
 #[cfg(test)]
 mod putnam_bench_compat;
 #[cfg(test)]
+mod reduce_command_tests;
+#[cfg(test)]
 mod syntax_boundary_regressions;
 
+pub use clean_kernel::lean_world::{LeanWorld, UnknownLeanWorld};
 pub use grammar::Parser;
 pub use interpolation::InterpolationPart;
 pub use lexer::InterpolatedStringKind;
 pub use notation_seed::{NotationSeed, SeededNotation};
 pub use surface::{
+    anonymous_constructor_head, is_anonymous_constructor_head, is_type_ascription_without_type,
     AesopAttr, AesopBuilder, AesopIndexMode, AesopPhase, Attribute, AttributeCommandAttr,
     CodataBody, ConvEnterArg, DeclModifiers, DeclScope, DecreasingBy, DoCatchClause, DoElem,
-    DoLetExprKind, DoMatchArm, LevelExpr, MacroArm, NotationItem, NotationKind, OpenPath,
-    OpenRename, PrecedenceLevel, Projection, QAntiquotContent, QQuotationKind, SimpPriority, Span,
-    SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceCalcJustification, SurfaceCalcStep,
-    SurfaceCtor, SurfaceDecl, SurfaceExpr, SurfaceField, SurfaceFieldAssign, SurfaceInductionAlt,
-    SurfaceLit, SurfaceMatchArm, SurfacePattern, SurfaceRwRule, SurfaceTactic,
-    SurfaceTacticLocation, SyntaxPatternItem, TacticMatchArm, TerminationBy, TerminationHints,
-    TerminationKind, UniverseExpr, Visibility, WhereLocalDef,
+    DoLetExprKind, DoMatchArm, GrindAttrKind, GuardMsgsOrdering, GuardMsgsSeverity,
+    GuardMsgsSpecElt, GuardMsgsWhitespace, LevelExpr, MacroArm, NotationItem, NotationKind,
+    OpenPath, OpenRename, PrecedenceLevel, Projection, QAntiquotContent, QQuotationKind, SimpPhase,
+    SimpPriority, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceCalcJustification,
+    SurfaceCalcStep, SurfaceCtor, SurfaceDecl, SurfaceExpr, SurfaceField, SurfaceFieldAssign,
+    SurfaceInductionAlt, SurfaceLit, SurfaceMatchArm, SurfacePattern, SurfaceRCasesTarget,
+    SurfaceRwRule, SurfaceSimpArg, SurfaceTactic, SurfaceTacticLocation, SyntaxPatternItem,
+    TacticMatchArm, TerminationBy, TerminationHints, TerminationKind, UniverseExpr, Visibility,
+    WhereLocalDef, TYPE_ASCRIPTION_WITHOUT_TYPE,
 };
-pub use tactic_patterns::{TacticArgPattern, TacticPatterns};
+pub use surface::{
+    instantiate_notation_template, instantiate_tactic_template,
+    instantiate_unhygienic_notation_template, mark_template_free_references,
+    template_free_reference_spellings, NameComponentSyntax, SurfaceName, SurfaceNameError,
+    TemplateOrigin, TemplateRefusal, TemplateScope, TemplateSiteId,
+};
+pub use tactic_patterns::{TacticArgPattern, TacticPatterns, GRIND_ONLY_MARKER};
 
 /// Common imports for parser users.
 pub mod prelude {
-    pub use crate::{parse_decl, parse_expr, parse_file, ParseError, ParseReport, Parser};
+    pub use crate::{
+        parse_decl, parse_decl_exact, parse_expr, parse_file, ParseError, ParseReport, Parser,
+    };
     pub use crate::{Span, SurfaceBinder, SurfaceBinderInfo, SurfaceDecl, SurfaceExpr};
 }
 
@@ -69,7 +89,7 @@ pub fn parse_expr(input: &str) -> Result<SurfaceExpr, ParseError> {
     Parser::parse_expr(input)
 }
 
-/// Parse a string into a surface declaration
+/// Parse a declaration prefix. Use [`parse_decl_exact`] to require complete input.
 ///
 /// # REQUIRES
 /// - `input` is valid UTF-8
@@ -86,10 +106,25 @@ pub fn parse_decl(input: &str) -> Result<SurfaceDecl, ParseError> {
     Parser::parse_decl(input)
 }
 
+/// Parse exactly one surface declaration, allowing trailing whitespace and comments.
+///
+/// # Errors
+///
+/// Returns a `ParseError` if parsing fails or tokens remain after the declaration.
+pub fn parse_decl_exact(input: &str) -> Result<SurfaceDecl, ParseError> {
+    Parser::parse_decl_exact(input)
+}
+
+/// Parse one exact structural source identifier, including quoted components.
+/// This is not the kernel's lossy dotted-display parser and rejects trailing input.
+pub fn parse_name(input: &str) -> Result<SurfaceName, ParseError> {
+    Parser::parse_name(input)
+}
+
 /// Parse the body of a syntax quotation (`` `(...) ``) into a surface
 /// expression, handling antiquotations and infix-operator desugaring.
 ///
-/// See [`Parser::parse_quotation_body`] for the full contract. `content` is the
+/// See `Parser::parse_quotation_body` for the full contract. `content` is the
 /// raw text captured by the lexer, still including the outer delimiter pair.
 ///
 /// # Errors
@@ -114,6 +149,14 @@ pub fn parse_quotation_body(content: &str) -> Result<SurfaceExpr, ParseError> {
 /// Returns a `ParseError` if the input contains invalid declarations.
 pub fn parse_file(input: &str) -> Result<Vec<SurfaceDecl>, ParseError> {
     Parser::parse_file(input)
+}
+
+/// Parse a file in an explicitly selected known Lean source world.
+///
+/// # Errors
+/// Returns the first parse refusal, with the same recovery policy as [`parse_file`].
+pub fn parse_file_in_world(input: &str, world: LeanWorld) -> Result<Vec<SurfaceDecl>, ParseError> {
+    Parser::parse_file_in_world(input, world)
 }
 
 /// Parse a file and return declarations plus parser recovery diagnostics.
@@ -226,6 +269,20 @@ pub fn parse_file_seeded(
     Parser::parse_file_seeded(input, patterns, seed)
 }
 
+/// The notation-seeded file parser in a selected source world. Default APIs
+/// still use [`LeanWorld::ORACLE`].
+///
+/// # Errors
+/// Returns a `ParseError` if file parsing fails.
+pub fn parse_file_seeded_in_world(
+    input: &str,
+    patterns: &TacticPatterns,
+    seed: &NotationSeed,
+    world: LeanWorld,
+) -> Result<ParseReport, ParseError> {
+    Parser::parse_file_seeded_in_world(input, patterns, seed, world)
+}
+
 /// Source location for parser recovery diagnostics.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -293,6 +350,55 @@ pub struct ParseReport {
     pub decls: Vec<SurfaceDecl>,
     /// Recovery events observed while parsing.
     pub diagnostics: Vec<ParserRecoveryDiagnostic>,
+    /// The file's header: whether it is a module, and its header imports.
+    /// The header's imports are ALSO in `decls`, as the `SurfaceDecl::Import`
+    /// nodes they always were, in the same order.
+    pub header: FileHeader,
+}
+
+/// A Lean file's header as pinned Lean v4.30.0-rc2 reads it
+/// (`Lean.Parser.Module.header`: `module`? `prelude`? `import`*), recorded as
+/// `Lean.Elab.HeaderSyntax.toModuleHeader` records it (plan item
+/// `formats-module-spelling-refusals`).
+///
+/// Lean's implicit `Init` imports (`HeaderSyntax.imports`, `includeInit`) are
+/// not listed: these are the imports the file writes. A file Clean refuses for
+/// its header (a `public`, `meta` or `all` import without `module`, `public
+/// import all`, or a doc comment inside an import) has no report. A header
+/// import whose module name does not parse otherwise (`import all` with no
+/// name after it) is recovered as a `RawDecl` placeholder in `decls` and is
+/// not listed, and pinned Lean refuses that file too. The header ends there,
+/// as Lean's header parser stops at its first error: the imports after it are
+/// not listed either. When `decls` holds no placeholder, a recorded header is
+/// one pinned Lean reads without a header error.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FileHeader {
+    /// Explicit `prelude`: do not supply implicit Init or builtin declarations.
+    pub is_prelude: bool,
+    /// The file begins with `module` (`HeaderSyntax.isModule`): it is a
+    /// module-system module.
+    pub is_module: bool,
+    /// The header's imports, in source order.
+    pub imports: Vec<ImportSpec>,
+}
+
+/// One header import: Lean's `Lean.Import` (`Lean/Setup.lean`), filled as
+/// `HeaderSyntax.imports` fills it from `public? meta? import all? <name>`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ImportSpec {
+    /// The imported module.
+    pub module: SurfaceName,
+    /// Lean's `isExported := publicTk.isSome || moduleTk.isNone`: the import
+    /// is re-exported to the file's importers. Every import of a file that is
+    /// not a module is; in a module only a `public import` is.
+    pub is_exported: bool,
+    /// `meta import`: the module's definitions are imported for compile-time
+    /// execution too.
+    pub is_meta: bool,
+    /// `import all`: the module's private data is imported as well.
+    pub import_all: bool,
 }
 
 /// Errors from parsing Lean 4 source code into a surface AST.
@@ -323,8 +429,61 @@ pub enum ParseError {
     /// `Succ` nodes with no bound, so a pathological `Sort (u + 9999)` either
     /// over-accepted (33..depth-limit) or blew the macro-expansion depth. Reject
     /// `n > 32` here, matching Lean's loud rejection.
+    ///
+    /// `file()` refuses the whole file on it instead of recovering at the next
+    /// command (`ParseError::refuses_file`; a `namespace`/`section` body
+    /// recovers it like any other error). The exception is a file whose header
+    /// recovered an import whose module name does not parse: Lean's first
+    /// message is that header error and pinned Lean reads no command after it,
+    /// so `file()` recovers this error as a `RawDecl` too (`module` / `import
+    /// all` / `def big (X : Sort (u + 9999)) : Nat := 0`).
     #[error("universe level offset `{offset}` exceeds maximum offset `{max}`")]
     UniverseOffsetTooLarge { offset: u64, max: u64 },
+    /// A use of a notation whose template Clean refuses, or an operand the
+    /// template cannot take where it stands (`TemplateRefusal`). The use is
+    /// refused; it is never read with another meaning.
+    #[error("Notation refused at {line}:{col}: {message}")]
+    NotationRefused {
+        line: usize,
+        col: usize,
+        message: String,
+    },
+    /// A module-system spelling pinned Lean refuses (plan item
+    /// `formats-module-spelling-refusals`): a `public`, `meta` or `all`
+    /// header import in a file with no `module` header, `public import all`,
+    /// or a modifier Lean's grammar does not take in front of `import`,
+    /// `section` or `variable` (`private import`, `private section`,
+    /// `public variable` before v4.36.0-rc1, ...), a doc comment among those
+    /// modifiers or inside a header import (`public /-- d -/ import`, `import
+    /// /-! d -/ X`). `line` (1-based) and `col` (0-based, in codepoints) are
+    /// Lean's position and `message` its words, so the error prints exactly as
+    /// `lean` prints it after the file name (the default stream: no end
+    /// position is carried).
+    /// Like [`ParseError::UniverseOffsetTooLarge`] it refuses the whole file,
+    /// in a `namespace`/`section` body too, with the same exception: after
+    /// the header recovered an import whose module name does not parse,
+    /// `file()` and the block body recover it as a `RawDecl` like any other
+    /// error, since Lean's first message is that header error and pinned
+    /// Lean reads no command after it.
+    #[error("{line}:{col}: error: {message}")]
+    ModuleSyntaxRefused {
+        line: usize,
+        col: usize,
+        message: String,
+    },
+}
+
+impl ParseError {
+    /// Whether the file parser refuses the whole file on this error instead
+    /// of recovering at the next command, unless the file header already
+    /// recovered an import (whose error is then the file's first): `file()`
+    /// then recovers both variants (`Parser::header_recovered`).
+    pub(crate) fn refuses_file(&self) -> bool {
+        matches!(
+            self,
+            Self::UniverseOffsetTooLarge { .. } | Self::ModuleSyntaxRefused { .. }
+        )
+    }
 }
 
 /// Lean's `maxUniverseOffset` (default 32): the largest syntactic universe
@@ -350,375 +509,220 @@ pub struct LocatedParseError {
 /// Use `ParserParseError` when importing from multiple crates with `ParseError` types.
 pub type ParserParseError = ParseError;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+/// Ordinary parser output alongside independently fallible observations.
+#[derive(Debug)]
+pub struct ParsedWithOrigins<T> {
+    pub parsed: T,
+    pub origins: Result<SourceOrigins, OriginCaptureError>,
+}
 
-    #[test]
-    fn located_file_error_reports_absolute_utf8_byte_offset() {
-        let source = "def café : Nat := 0\ndef bad : Nat := )\n";
-        let patterns = TacticPatterns::default();
-        let failure = parse_file_with_tactics_located(source, &patterns)
-            .expect_err("the unmatched close delimiter must be rejected");
-        assert_eq!(failure.byte_offset, source.find("def bad").unwrap());
+/// Observation failure, never a semantic parser refusal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+#[error("source-origin capture unavailable: {0}")]
+pub struct OriginCaptureError(pub(crate) &'static str);
+
+/// An opaque, capture-owned source node identity.
+#[derive(Debug, Clone)]
+pub struct OriginId {
+    owner: std::sync::Arc<()>,
+    index: usize,
+}
+
+impl PartialEq for OriginId {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.owner, &other.owner) && self.index == other.index
+    }
+}
+
+impl Eq for OriginId {}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OriginKind {
+    DeclarationName,
+    Identifier,
+    Literal,
+    Hole,
+    NamedHole,
+    Parentheses,
+    Application,
+}
+
+/// Edges describe the actual written expression, not elaborated arguments.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OriginChildRole {
+    Parenthesized,
+    ApplicationHead,
+    ApplicationArgument(usize),
+}
+
+#[derive(Debug, Clone)]
+enum OriginCore {
+    DeclarationName(SurfaceName),
+    Ident(SurfaceName),
+    Lit(SurfaceLit),
+    Hole,
+    NamedHole(SurfaceName),
+    Paren(usize),
+    App {
+        head: usize,
+        args: Vec<(Span, usize)>,
+    },
+}
+
+/// A genuine source span, with the old semantic AST span retained separately.
+#[derive(Debug, Clone)]
+pub struct OriginNode {
+    span: Span,
+    ast_span: Span,
+    core: OriginCore,
+}
+
+impl OriginNode {
+    #[must_use]
+    pub fn span(&self) -> Span {
+        self.span
     }
 
-    #[test]
-    fn test_parse_identity() {
-        let expr = parse_expr("fun x => x").unwrap();
-        assert!(matches!(expr, SurfaceExpr::Lambda(_, _, _)));
-    }
-
-    #[test]
-    fn test_parse_def() {
-        let decl = parse_decl("def id (x : Type) := x").unwrap();
-        match decl {
-            SurfaceDecl::Def { name, .. } => assert_eq!(name, "id"),
-            _ => panic!("expected Def"),
+    #[must_use]
+    pub fn kind(&self) -> OriginKind {
+        match self.core {
+            OriginCore::DeclarationName(_) => OriginKind::DeclarationName,
+            OriginCore::Ident(_) => OriginKind::Identifier,
+            OriginCore::Lit(_) => OriginKind::Literal,
+            OriginCore::Hole => OriginKind::Hole,
+            OriginCore::NamedHole(_) => OriginKind::NamedHole,
+            OriginCore::Paren(_) => OriginKind::Parentheses,
+            OriginCore::App { .. } => OriginKind::Application,
         }
     }
 
-    /// Head identifier of a binary `App` (the operator that was lowered to).
-    fn binop_head(expr: &SurfaceExpr) -> &str {
-        match expr {
-            SurfaceExpr::App(_, head, args) => {
-                assert_eq!(args.len(), 2, "expected a binary application: {expr:?}");
-                match head.as_ref() {
-                    SurfaceExpr::Ident(_, name) => name.as_str(),
-                    other => panic!("expected ident head, got {other:?}"),
-                }
+    fn edges(&self) -> Vec<(OriginChildRole, usize)> {
+        match &self.core {
+            OriginCore::Paren(inner) => vec![(OriginChildRole::Parenthesized, *inner)],
+            OriginCore::App { head, args } => {
+                std::iter::once((OriginChildRole::ApplicationHead, *head))
+                    .chain(
+                        args.iter()
+                            .enumerate()
+                            .map(|(i, (_, node))| (OriginChildRole::ApplicationArgument(i), *node)),
+                    )
+                    .collect()
             }
-            other => panic!("expected App, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_parse_bitwise_operators_lower_to_h_ops() {
-        assert_eq!(binop_head(&parse_expr("a &&& b").unwrap()), "HAnd.hAnd");
-        assert_eq!(binop_head(&parse_expr("a ||| b").unwrap()), "HOr.hOr");
-        assert_eq!(binop_head(&parse_expr("a ^^^ b").unwrap()), "HXor.hXor");
-        assert_eq!(
-            binop_head(&parse_expr("a <<< b").unwrap()),
-            "HShiftLeft.hShiftLeft"
-        );
-        assert_eq!(
-            binop_head(&parse_expr("a >>> b").unwrap()),
-            "HShiftRight.hShiftRight"
-        );
-        // Bool `&&`/`||` lower to `and`/`or`.
-        assert_eq!(binop_head(&parse_expr("a && b").unwrap()), "and");
-        assert_eq!(binop_head(&parse_expr("a || b").unwrap()), "or");
-    }
-
-    #[test]
-    fn test_parse_bitwise_precedence() {
-        // `+`(65) binds tighter than `&&&`(60): `a &&& b + c` = `a &&& (b + c)`.
-        let e = parse_expr("a &&& b + c").unwrap();
-        assert_eq!(binop_head(&e), "HAnd.hAnd");
-        if let SurfaceExpr::App(_, _, args) = &e {
-            assert_eq!(binop_head(&args[1].expr), "HAdd.hAdd");
-        }
-
-        // `&&&`(60) binds tighter than `=`(50): `a = b &&& c` = `a = (b &&& c)`.
-        let e = parse_expr("a = b &&& c").unwrap();
-        assert_eq!(binop_head(&e), "Eq");
-        if let SurfaceExpr::App(_, _, args) = &e {
-            assert_eq!(binop_head(&args[1].expr), "HAnd.hAnd");
-        }
-
-        // `&&&`(60) binds tighter than `|||`(55): `a ||| b &&& c` = `a ||| (b &&& c)`.
-        let e = parse_expr("a ||| b &&& c").unwrap();
-        assert_eq!(binop_head(&e), "HOr.hOr");
-        if let SurfaceExpr::App(_, _, args) = &e {
-            assert_eq!(binop_head(&args[1].expr), "HAnd.hAnd");
-        }
-
-        // `<<<`(75) binds tighter than `+`(65): `a + b <<< c` = `a + (b <<< c)`.
-        let e = parse_expr("a + b <<< c").unwrap();
-        assert_eq!(binop_head(&e), "HAdd.hAdd");
-        if let SurfaceExpr::App(_, _, args) = &e {
-            assert_eq!(binop_head(&args[1].expr), "HShiftLeft.hShiftLeft");
-        }
-    }
-
-    #[test]
-    fn test_parse_arrow_chain() {
-        let expr = parse_expr("A -> B -> C").unwrap();
-        // Right associative: A -> (B -> C)
-        match expr {
-            SurfaceExpr::Arrow(_, left, right) => {
-                assert!(matches!(*left, SurfaceExpr::Ident(_, _)));
-                assert!(matches!(*right, SurfaceExpr::Arrow(_, _, _)));
-            }
-            _ => panic!("expected Arrow"),
-        }
-    }
-
-    #[test]
-    fn test_parse_projection_index() {
-        let expr = parse_expr("x.1").unwrap();
-        match expr {
-            SurfaceExpr::Proj(_, base, Projection::Index(1)) => {
-                assert!(matches!(*base, SurfaceExpr::Ident(_, ref name) if name == "x"));
-            }
-            other => panic!("expected projection, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_parse_projection_named_after_app() {
-        let expr = parse_expr("(f x).field").unwrap();
-        match expr {
-            SurfaceExpr::Proj(_, base, Projection::Named(ref field)) => {
-                assert_eq!(field, "field");
-                let inner = match base.as_ref() {
-                    SurfaceExpr::Paren(_, inner) => inner.as_ref(),
-                    other => other,
-                };
-                assert!(
-                    matches!(inner, SurfaceExpr::App(_, _, _)),
-                    "expected application base, got {inner:?}"
-                );
-            }
-            other => panic!("expected named projection, got {other:?}"),
-        }
-    }
-
-    #[test]
-    fn test_parse_syntax_quote_preserved() {
-        let expr = parse_expr("`(x)").unwrap();
-        match expr {
-            SurfaceExpr::SyntaxQuote(_, content) => assert!(content.contains('x')),
-            other => panic!("expected syntax quote, got {other:?}"),
-        }
-    }
-
-    // =========================================================================
-    // Aesop attribute parsing tests
-    //
-    // These tests verify that @[aesop] attributes produce Attribute::Aesop
-    // variants with correct phase, builder, and priority.
-    // =========================================================================
-
-    /// Test @[aesop safe] produces correct Aesop variant
-    #[test]
-    fn test_parse_aesop_safe_attribute() {
-        // Test basic parsing - declaration name should be correct
-        let decl = parse_decl("@[aesop safe] theorem my_thm : True := trivial").unwrap();
-        match decl {
-            SurfaceDecl::Theorem { name, .. } => assert_eq!(name, "my_thm"),
-            _ => panic!("expected Theorem"),
-        }
-    }
-
-    /// Test @[aesop unsafe 30%] parses correctly
-    #[test]
-    fn test_parse_aesop_unsafe_attribute_with_priority() {
-        let decl = parse_decl("@[aesop unsafe 30%] def my_def := 42").unwrap();
-        match decl {
-            SurfaceDecl::Def { name, .. } => assert_eq!(name, "my_def"),
-            _ => panic!("expected Def"),
-        }
-    }
-
-    /// Test @[aesop safe apply] parses correctly
-    #[test]
-    fn test_parse_aesop_safe_apply_attribute() {
-        let decl = parse_decl("@[aesop safe apply] theorem intro_rule : True := trivial").unwrap();
-        match decl {
-            SurfaceDecl::Theorem { name, .. } => assert_eq!(name, "intro_rule"),
-            _ => panic!("expected Theorem"),
-        }
-    }
-
-    /// Test @[aesop norm simp] parses correctly
-    #[test]
-    fn test_parse_aesop_norm_simp_attribute() {
-        let decl = parse_decl("@[aesop norm simp] theorem simp_rule : True := trivial").unwrap();
-        match decl {
-            SurfaceDecl::Theorem { name, .. } => assert_eq!(name, "simp_rule"),
-            _ => panic!("expected Theorem"),
-        }
-    }
-
-    /// Test that grammar produces Aesop variant (not Unknown)
-    ///
-    /// This test directly exercises the attribute parser to verify it returns
-    /// Attribute::Aesop, not Attribute::Unknown.
-    #[test]
-    fn test_aesop_attribute_produces_aesop_variant() {
-        use crate::grammar::Parser;
-
-        // Parse just the attribute part to verify correct variant
-        let mut parser = Parser::new("@[aesop safe] x");
-        let attrs = parser.attributes().unwrap();
-        assert_eq!(attrs.len(), 1);
-        match &attrs[0] {
-            Attribute::Aesop(attr) => {
-                assert_eq!(attr.phase, AesopPhase::Safe);
-                assert_eq!(attr.builder, AesopBuilder::Apply); // default
-                assert_eq!(attr.priority, None);
-            }
-            Attribute::Unknown(name) => {
-                panic!("Expected Attribute::Aesop, got Attribute::Unknown({name})")
-            }
-            _ => panic!("Expected Attribute::Aesop"),
-        }
-    }
-
-    /// Test unsafe attribute with priority parses to correct values
-    #[test]
-    fn test_aesop_unsafe_priority_values() {
-        use crate::grammar::Parser;
-
-        let mut parser = Parser::new("@[aesop unsafe 30%] x");
-        let attrs = parser.attributes().unwrap();
-        assert_eq!(attrs.len(), 1);
-        match &attrs[0] {
-            Attribute::Aesop(attr) => {
-                assert_eq!(attr.phase, AesopPhase::Unsafe);
-                assert_eq!(attr.builder, AesopBuilder::Apply);
-                assert_eq!(attr.priority, Some(30));
-            }
-            _ => panic!("Expected Attribute::Aesop"),
-        }
-    }
-
-    /// Test norm phase with simp builder
-    #[test]
-    fn test_aesop_norm_simp_values() {
-        use crate::grammar::Parser;
-
-        let mut parser = Parser::new("@[aesop norm simp] x");
-        let attrs = parser.attributes().unwrap();
-        assert_eq!(attrs.len(), 1);
-        match &attrs[0] {
-            Attribute::Aesop(attr) => {
-                assert_eq!(attr.phase, AesopPhase::Norm);
-                assert_eq!(attr.builder, AesopBuilder::Simp);
-            }
-            _ => panic!("Expected Attribute::Aesop"),
-        }
-    }
-
-    /// Test all builder types
-    #[test]
-    fn test_aesop_all_builders() {
-        use crate::grammar::Parser;
-
-        let cases = [
-            ("@[aesop safe apply] x", AesopBuilder::Apply),
-            ("@[aesop safe cases] x", AesopBuilder::Cases),
-            ("@[aesop safe constructors] x", AesopBuilder::Constructors),
-            ("@[aesop safe destruct] x", AesopBuilder::Destruct),
-            ("@[aesop safe forward] x", AesopBuilder::Forward),
-            ("@[aesop norm simp] x", AesopBuilder::Simp),
-            ("@[aesop safe tactic] x", AesopBuilder::Tactic),
-            ("@[aesop safe unfold] x", AesopBuilder::Unfold),
-        ];
-
-        for (input, expected_builder) in cases {
-            let mut parser = Parser::new(input);
-            let attrs = parser.attributes().unwrap();
-            match &attrs[0] {
-                Attribute::Aesop(attr) => {
-                    assert_eq!(attr.builder, expected_builder, "Failed for input: {input}");
-                }
-                _ => panic!("Expected Attribute::Aesop for input: {input}"),
-            }
-        }
-    }
-
-    /// Test parsing rule set names in aesop attribute
-    #[test]
-    fn test_aesop_rule_set_single() {
-        use crate::grammar::Parser;
-
-        let mut parser = Parser::new("@[aesop safe apply, Measurable] x");
-        let attrs = parser.attributes().unwrap();
-        assert_eq!(attrs.len(), 1);
-        match &attrs[0] {
-            Attribute::Aesop(attr) => {
-                assert_eq!(attr.phase, AesopPhase::Safe);
-                assert_eq!(attr.builder, AesopBuilder::Apply);
-                assert_eq!(attr.rule_sets, vec!["Measurable"]);
-            }
-            _ => panic!("Expected Attribute::Aesop"),
-        }
-    }
-
-    /// Test parsing multiple rule sets
-    #[test]
-    fn test_aesop_rule_set_multiple() {
-        use crate::grammar::Parser;
-
-        let mut parser = Parser::new("@[aesop safe, Measurable, Continuous] x");
-        let attrs = parser.attributes().unwrap();
-        assert_eq!(attrs.len(), 1);
-        match &attrs[0] {
-            Attribute::Aesop(attr) => {
-                assert_eq!(attr.phase, AesopPhase::Safe);
-                assert_eq!(attr.builder, AesopBuilder::Apply); // default
-                assert_eq!(attr.rule_sets, vec!["Measurable", "Continuous"]);
-            }
-            _ => panic!("Expected Attribute::Aesop"),
-        }
-    }
-
-    /// Test that no rule sets results in empty vec
-    #[test]
-    fn test_aesop_no_rule_sets() {
-        use crate::grammar::Parser;
-
-        let mut parser = Parser::new("@[aesop safe apply] x");
-        let attrs = parser.attributes().unwrap();
-        match &attrs[0] {
-            Attribute::Aesop(attr) => {
-                assert!(attr.rule_sets.is_empty());
-            }
-            _ => panic!("Expected Attribute::Aesop"),
-        }
-    }
-
-    /// Test unsafe with priority and rule set
-    #[test]
-    fn test_aesop_unsafe_priority_with_rule_set() {
-        use crate::grammar::Parser;
-
-        let mut parser = Parser::new("@[aesop unsafe 50% apply, GCongr] x");
-        let attrs = parser.attributes().unwrap();
-        match &attrs[0] {
-            Attribute::Aesop(attr) => {
-                assert_eq!(attr.phase, AesopPhase::Unsafe);
-                assert_eq!(attr.priority, Some(50));
-                assert_eq!(attr.builder, AesopBuilder::Apply);
-                assert_eq!(attr.rule_sets, vec!["GCongr"]);
-            }
-            _ => panic!("Expected Attribute::Aesop"),
-        }
-    }
-
-    /// Test parsing declare_aesop_rule_sets command
-    #[test]
-    fn test_parse_declare_aesop_rule_sets() {
-        let decl = parse_decl("declare_aesop_rule_sets [Measurable, Continuous]").unwrap();
-        match decl {
-            SurfaceDecl::DeclareAesopRuleSets { names, .. } => {
-                assert_eq!(names, vec!["Measurable", "Continuous"]);
-            }
-            _ => panic!("expected DeclareAesopRuleSets, got {:?}", decl),
-        }
-    }
-
-    /// Test parsing declare_aesop_rule_sets with single name
-    #[test]
-    fn test_parse_declare_aesop_rule_sets_single() {
-        let decl = parse_decl("declare_aesop_rule_sets [GCongr]").unwrap();
-        match decl {
-            SurfaceDecl::DeclareAesopRuleSets { names, .. } => {
-                assert_eq!(names, vec!["GCongr"]);
-            }
-            _ => panic!("expected DeclareAesopRuleSets"),
+            _ => Vec::new(),
         }
     }
 }
+
+/// Missing syntax and unsupported syntax are deliberately distinct.
+#[derive(Debug, Clone)]
+pub enum OriginAvailability {
+    NotPresent,
+    Unavailable,
+    Located(OriginId),
+}
+
+#[derive(Debug, Clone)]
+pub enum OriginRoot {
+    Expression(OriginAvailability),
+    Declaration {
+        name: OriginId,
+        ty: OriginAvailability,
+        value: OriginAvailability,
+    },
+}
+
+/// Immutable observations reachable from successful returned declarations or
+/// the returned expression. Discarded parse attempts are not exposed.
+#[derive(Debug, Clone)]
+pub struct SourceOrigins {
+    source: std::sync::Arc<str>,
+    owner: std::sync::Arc<()>,
+    nodes: Vec<OriginNode>,
+    roots: Vec<OriginRoot>,
+}
+
+impl SourceOrigins {
+    #[must_use]
+    pub fn source(&self) -> &str {
+        &self.source
+    }
+
+    #[must_use]
+    pub fn roots(&self) -> &[OriginRoot] {
+        &self.roots
+    }
+
+    #[must_use]
+    pub fn node(&self, id: &OriginId) -> Option<&OriginNode> {
+        std::sync::Arc::ptr_eq(&self.owner, &id.owner)
+            .then(|| self.nodes.get(id.index))
+            .flatten()
+    }
+
+    #[must_use]
+    pub fn text(&self, id: &OriginId) -> Option<&str> {
+        let span = self.node(id)?.span;
+        self.source.get(span.start..span.end)
+    }
+
+    #[must_use]
+    pub fn children(&self, id: &OriginId) -> Option<Vec<(OriginChildRole, OriginId)>> {
+        Some(
+            self.node(id)?
+                .edges()
+                .into_iter()
+                .map(|(role, index)| {
+                    (
+                        role,
+                        OriginId {
+                            owner: self.owner.clone(),
+                            index,
+                        },
+                    )
+                })
+                .collect(),
+        )
+    }
+
+    /// Transfer an existing origin only on exact supported surface-tree
+    /// agreement, including AST/argument spans and all name hygiene metadata.
+    /// A clone is a valid pass-through. Rewritten/generated syntax requires a
+    /// separate explicit provenance contract, which this API does not supply.
+    #[must_use]
+    pub fn pass_through(&self, id: &OriginId, expr: &SurfaceExpr) -> Option<OriginId> {
+        self.node(id)?;
+        origins::agrees(&self.nodes, id.index, expr).then(|| id.clone())
+    }
+}
+
+impl SurfaceName {
+    /// Compare spelling, hygiene marks and global-reference policy for
+    /// source-origin pass-through, preserving semantic equality and hashing.
+    #[must_use]
+    pub fn same_origin_metadata(&self, other: &Self) -> bool {
+        self.same_origin_metadata_for_capture(other)
+    }
+}
+
+impl Parser {
+    /// Parse with original-source observations for the documented core subset.
+    /// The parse verdict and semantic AST use the ordinary parser unchanged.
+    pub fn parse_expr_with_origins(
+        input: &str,
+    ) -> Result<ParsedWithOrigins<SurfaceExpr>, ParseError> {
+        Self::parse_expr_with_origin_capture(input)
+    }
+
+    /// File companion with actual declaration-name token origins for
+    /// def/theorem/axiom/opaque and core type/value origins when available.
+    /// Recovery invalidates the sidecar, while preserving the ordinary AST.
+    pub fn parse_file_with_origins(
+        input: &str,
+    ) -> Result<ParsedWithOrigins<Vec<SurfaceDecl>>, ParseError> {
+        Self::parse_file_with_origin_capture(input)
+    }
+}
+
+#[cfg(test)]
+#[path = "lib_tests.rs"]
+mod tests;

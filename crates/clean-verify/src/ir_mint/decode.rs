@@ -47,26 +47,20 @@ pub fn decode(env: &Environment, module_const: &str, tags: &Tags) -> Result<Sx, 
         .clone()
         .ok_or_else(|| DecodeError::NoValue(module_const.to_string()))?;
     let d = Decoder { env, tags };
+    // No `IRModule.mkv` arm: nothing mints one yet, so it would be unreachable.
     let (funcs, globals) = d.ctor2(&value, "IRModule.mk", "the module")?;
     let fs = d.list(&funcs, "IRFunc", "the function list")?;
-    let gs = d.list(&globals, "IRGlobal", "the global list")?;
-    if !gs.is_empty() {
-        return Err(DecodeError::Shape {
-            at: "the global list".into(),
-            msg: format!("expected no globals, found {}", gs.len()),
-        });
-    }
     let mut out = Vec::new();
     for f in &fs {
         out.push(d.func(f)?);
     }
     Ok(Sx::tag(
         "module",
-        vec![Sx::tag("funcs", out), Sx::tag("globals", vec![])],
+        vec![Sx::tag("funcs", out), d.globals(&globals)?],
     ))
 }
 
-struct Decoder<'a> {
+pub(super) struct Decoder<'a> {
     env: &'a Environment,
     tags: &'a Tags,
 }
@@ -112,7 +106,13 @@ impl Decoder<'_> {
         }
     }
 
-    fn ctor(&self, e: &Expr, name: &str, at: &str, arity: usize) -> Result<Vec<Expr>, DecodeError> {
+    pub(super) fn ctor(
+        &self,
+        e: &Expr,
+        name: &str,
+        at: &str,
+        arity: usize,
+    ) -> Result<Vec<Expr>, DecodeError> {
         let (h, args) = self.head(e, at)?;
         if h != name {
             return Err(DecodeError::Shape {
@@ -135,7 +135,7 @@ impl Decoder<'_> {
     }
 
     /// `IRList α` — `IRList.nil α` / `IRList.cons α x rest`.
-    fn list(&self, e: &Expr, elem: &str, at: &str) -> Result<Vec<Expr>, DecodeError> {
+    pub(super) fn list(&self, e: &Expr, elem: &str, at: &str) -> Result<Vec<Expr>, DecodeError> {
         let mut out = Vec::new();
         let mut cur = e.clone();
         loop {
@@ -270,7 +270,10 @@ impl Decoder<'_> {
             .find(|s| s.clean == h)
             .ok_or_else(|| DecodeError::Shape {
                 at: "an instruction".into(),
-                msg: format!("`{h}` is not one of the 28 declared IRInst constructors"),
+                msg: format!(
+                    "`{h}` is not one of the {} declared IRInst constructors",
+                    shape::INSTS.len()
+                ),
             })?;
         if args.len() != sh.args.len() {
             return Err(DecodeError::Shape {
@@ -285,7 +288,7 @@ impl Decoder<'_> {
         Ok(Sx::tag(sh.core, out))
     }
 
-    fn arg(&self, kind: Arg, e: &Expr, at: &str) -> Result<Sx, DecodeError> {
+    pub(super) fn arg(&self, kind: Arg, e: &Expr, at: &str) -> Result<Sx, DecodeError> {
         Ok(match kind {
             Arg::Ty => self.ty(e)?,
             Arg::Val | Arg::Blk | Arg::Nat | Arg::Data => Sx::a(self.nat(e, at)?.to_string()),
@@ -368,7 +371,10 @@ impl Decoder<'_> {
             .find(|s| s.clean == h)
             .ok_or_else(|| DecodeError::Shape {
                 at: "a type".into(),
-                msg: format!("`{h}` is not one of the 18 declared IRTy constructors"),
+                msg: format!(
+                    "`{h}` is not one of the {} core-spelled IRTy constructors",
+                    shape::TYS.len()
+                ),
             })?;
         if args.len() != sh.args.len() {
             return Err(DecodeError::Shape {

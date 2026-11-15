@@ -9,9 +9,9 @@
 //! The reader, the printer, the minter and the decoder all read this table, so
 //! they cannot disagree about an instruction's arity or field order — only
 //! about its content, which is what the gate compares. It is also the
-//! name-parity table: `super::tests` fails closed if any Clean `IRInst`,
-//! `IRTy`, `IRConst` or operator constructor is missing an entry, or if any
-//! entry names a constructor the specification does not declare.
+//! supported-subset table. Tests compare every listed telescope against the
+//! installed syntax. The two byte-only atomics and Release are deliberately
+//! outside this text-mint fragment and fail closed in minting and decoding.
 
 /// What one argument slot of an instruction holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,7 +30,7 @@ pub(crate) enum Arg {
     /// The distinction is the numeral policy, and it is not cosmetic. Every
     /// `Arg::Nat` slot names a position in this module -- an SSA id, a block
     /// id, a function id -- and those are small by construction,
-    /// so they render through the registered `ir_d0..ir_d63` atom pool and a
+    /// so they render through the registered `ir_d0..ir_d130` atom pool and a
     /// numeral outside it is a REFUSAL: a `(func 20 ...)` that minted as a bare
     /// `20` would be a module nothing in the spec had named. A datum is not a
     /// position: `u32`'s width is 32 and `SimpPriority::Default`'s value is
@@ -73,8 +73,8 @@ macro_rules! shape {
     };
 }
 
-/// All 28 instruction shapes — one per `IRInst` constructor, no more and no
-/// fewer. Order is `IRInst`'s declaration order.
+/// The 30 supported instruction images, in canonical declaration order.
+/// Byte-only atomics and Release are deliberately not text-mint capabilities.
 pub(crate) const INSTS: &[InstShape] = &[
     shape!(
         "binop",
@@ -155,8 +155,8 @@ pub(crate) const INSTS: &[InstShape] = &[
         // The FIELD INDEX is `Arg::Data`, not `Arg::Nat`, since 2026-08-22: it
         // names a position within a TYPE, not within this module — the same
         // side of the structural/datum line as the type's own width — and the
-        // artifact carries a real field index of 81
-        // (`env::Environment::set_lean4_core_strict_monads`, struct.441),
+        // artifact carries a real field index of 81 (83 since the 2026-10-07
+        // re-derivation: `env::Environment::set_lean4_core_strict_monads`, struct.586),
         // which the HAND transcription of that body already spells as the
         // bare literal its downstream theorems prove against. Every field
         // index in every minted artifact before this change is at most 2, so
@@ -185,6 +185,10 @@ pub(crate) const INSTS: &[InstShape] = &[
         "IRInst.select",
         [Arg::Ty, Arg::Val, Arg::Val, Arg::Val]
     ),
+    // The trust-ir bridge's two (Phase B). Printed forms, from the committed
+    // callee sidecar: `%7 = borrow %6` and `%3 = copy struct.0 %2`.
+    shape!("borrow", "IRInst.borrow", [Arg::Val]),
+    shape!("copy", "IRInst.copy", [Arg::Ty, Arg::Val]),
 ];
 
 /// One type shape: core mnemonic, Clean constructor, and the kinds of its
@@ -200,7 +204,8 @@ pub(crate) struct TyShape {
     pub(crate) args: &'static [Arg],
 }
 
-/// All 18 type shapes — one per `IRTy` constructor.
+/// All 21 type shapes — one per `IRTy` constructor the cell machine executes
+/// (the 18 legacy ones and crystal E5's three fat kinds).
 pub(crate) const TYS: &[TyShape] = &[
     TyShape {
         core: "bool",
@@ -292,6 +297,28 @@ pub(crate) const TYS: &[TyShape] = &[
         clean: "IRTy.func_",
         args: &[Arg::Nat],
     },
+    // Crystal E5 (decision memo §23): the three fat-pointer kinds the M0
+    // producer spells and the cell machine now admits as shape class 5. Each is
+    // its OWN Clean constructor, so the image stays INJECTIVE: `(containerlen)`
+    // is not `Str`'s `(fatptr (uint 8))`, and `(fatdyn N)` keeps the trait id
+    // (a content hash, so a DATUM, not a position). The appended ByteV1
+    // constructors the cell projector never emits (`usize_`, `fatstr_`,
+    // `fatslice_`) still have no core spelling.
+    TyShape {
+        core: "fatdyn",
+        clean: "IRTy.fatdyn_",
+        args: &[Arg::Data],
+    },
+    TyShape {
+        core: "containerlen",
+        clean: "IRTy.containerlen_",
+        args: &[],
+    },
+    TyShape {
+        core: "containervtable",
+        clean: "IRTy.containervtable_",
+        args: &[],
+    },
 ];
 
 /// One constant shape.
@@ -332,6 +359,16 @@ pub(crate) const CONSTS: &[ConstShape] = &[
     ConstShape {
         core: "undef",
         clean: "IRConst.undef_",
+        args: &[],
+    },
+    // The zero-sized marker, 2026-09-16. Kept DISTINCT from "unit" on both
+    // sides: the producer keeps `Constant::PhantomData` distinct from
+    // `Constant::Unit` (trust_ir constant.rs:140) and prints it by its own
+    // name, so a shape row that mapped it onto `IRConst.unit_` would make two
+    // different emitted bodies project to one core module.
+    ConstShape {
+        core: "phantomdata",
+        clean: "IRConst.phantomdata",
         args: &[],
     },
     ConstShape {

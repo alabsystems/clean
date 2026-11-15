@@ -8,10 +8,17 @@
 //! SAT-COMP unsat certificate — and their helpers (certificate emission, LRAT
 //! trim) are isolated here so [`super`] can stay under the 500-line file cap.
 //!
-//! Every runner returns the SAT/SMT-COMP exit-code contract:
-//!   * `0` — proof verified
-//!   * `10` — proof invalid (not a refutation)
-//!   * `1` — error (I/O, parse, unknown format)
+//! The SAT/SMT-COMP exit-code contract, and where each runner departs from it:
+//!   * `0` — proof verified; [`run_smtcomp`] also exits `0` on `holey`
+//!   * `10` — proof invalid (not a refutation); the default mode's `s HOLEY`
+//!     lands here, and so does a proof [`run_satcomp`] could not verify at all
+//!   * `1` — error (I/O, parse, unknown format); [`run_satcomp`] reserves this
+//!     for an unreadable FILE and reports a verification error as `10`
+//!
+//! `--strict`, `--certificate` and `--trim` are read by [`run_pipeline`] alone.
+//! The other three runners touch none of them. No runner acts on `--format` at
+//! all: `run_pipeline` hands it to `warn_if_format_hint_mismatches`, which can
+//! only print, and detection decides the format everywhere.
 //!
 //! Exit-code and stdout/stderr parity with the legacy `proof_check` binary is
 //! a hard contract (competition judges consume it verbatim). Do not alter
@@ -136,8 +143,13 @@ fn read_pipeline_inputs(args: &ProofCheckInputs<'_>) -> Result<(Vec<u8>, Vec<u8>
     Ok((formula_bytes, proof_bytes))
 }
 
-/// If `--format <hint>` was provided and auto-detection disagrees, emit the
-/// conventional warning line (consumed by some judging scripts).
+/// If `--format <hint>` was provided and detection produced a DIFFERENT known
+/// format, emit the conventional warning line (consumed by some judging
+/// scripts).
+///
+/// This is everything `--format` does. Detection decides the format in every
+/// mode, so the hint never selects anything, and a proof whose format is
+/// `Unknown` warns about nothing — it simply fails downstream.
 fn warn_if_format_hint_mismatches(
     hint: Option<crate::sat_verify::pipeline::ProofFormat>,
     proof_bytes: &[u8],
@@ -145,7 +157,7 @@ fn warn_if_format_hint_mismatches(
     let Some(hint) = hint else { return };
     let detected = detect_format(proof_bytes);
     if detected != crate::sat_verify::pipeline::ProofFormat::Unknown && detected != hint {
-        eprintln!("c WARNING: requested format {hint} but auto-detected {detected}; using {hint}",);
+        eprintln!("c WARNING: --format says {hint} but {detected} was detected; using {detected}");
     }
 }
 
@@ -175,13 +187,13 @@ fn handle_unified_verdict(
     }
 
     // SOUNDNESS (root cause C): strict mode rejects any proof that is not
-    // FULLY kernel-verified. `steps_trusted > 0` catches blindly-trusted steps,
+    // FULLY certificate-checked. `steps_trusted > 0` catches blindly-trusted steps,
     // but a proof can also be "holey" — structurally accepted (unchecked theory
     // lemmas / boolean-rule catch-alls) with `steps_trusted == 0`, yet still
     // lean on a false clause laundered into the empty-clause derivation. A
-    // strict verdict is a discharge claim, so require `KernelVerified`. See
+    // strict verdict is a discharge claim, so require `CertificateChecked`. See
     // docs/SOUNDNESS_FINDINGS_CLEAN_VERIFY_2026-07.md.
-    if args.strict && unified.valid && unified.trust_level != TrustLevel::KernelVerified {
+    if args.strict && unified.valid && unified.trust_level != TrustLevel::CertificateChecked {
         println!("s INVALID");
         if unified.steps_trusted > 0 {
             eprintln!(
@@ -191,7 +203,7 @@ fn handle_unified_verdict(
         } else {
             eprintln!(
                 "c strict mode: holey proof rejected (trust: {}); structurally-accepted \
-                 steps are not kernel-verified",
+                 steps are not certificate-checked",
                 unified.trust_level,
             );
         }
@@ -213,14 +225,14 @@ fn handle_unified_verdict(
     }
 
     // SOUNDNESS (root cause C): `s VERIFIED` is a discharge claim — the proof is
-    // a fully kernel-verified refutation. `unified.valid` is only a *structural*
+    // a fully certificate-checked refutation. `unified.valid` is only a *structural*
     // signal ("derives the empty clause") that is true even when the empty
     // clause rests on an unchecked, structurally-accepted step's (possibly
     // false) clause. Mirror `run_smtcomp`: only accept when the trust level is
-    // `KernelVerified`; a holey/partially-verified proof is reported `s HOLEY`
+    // `CertificateChecked`; a holey/partially-verified proof is reported `s HOLEY`
     // and does NOT exit as verified. See
     // docs/SOUNDNESS_FINDINGS_CLEAN_VERIFY_2026-07.md.
-    if unified.valid && unified.trust_level == TrustLevel::KernelVerified {
+    if unified.valid && unified.trust_level == TrustLevel::CertificateChecked {
         println!("s VERIFIED");
         EXIT_VERIFIED
     } else if unified.valid && unified.steps_trusted == 0 {
@@ -228,7 +240,7 @@ fn handle_unified_verdict(
         println!("s HOLEY");
         eprintln!(
             "c holey: proof derives the empty clause but has structurally-accepted \
-             step(s) (trust: {}); not a kernel-verified refutation",
+             step(s) (trust: {}); not a certificate-checked refutation",
             unified.trust_level,
         );
         EXIT_INVALID
@@ -290,7 +302,7 @@ pub fn run_smtcomp(args: &ProofCheckInputs<'_>) -> i32 {
             let (verdict, exit_code) = if !unified.valid {
                 ("invalid", EXIT_INVALID)
             } else if unified.steps_trusted == 0
-                && unified.trust_level == TrustLevel::KernelVerified
+                && unified.trust_level == TrustLevel::CertificateChecked
             {
                 ("valid", EXIT_VERIFIED)
             } else if unified.steps_trusted == 0 {
@@ -358,7 +370,7 @@ pub fn run_satcomp(args: &ProofCheckInputs<'_>) -> i32 {
             // true even for a holey proof whose empty clause was laundered from a
             // structurally-accepted step. See
             // docs/SOUNDNESS_FINDINGS_CLEAN_VERIFY_2026-07.md.
-            if unified.valid && unified.trust_level == TrustLevel::KernelVerified {
+            if unified.valid && unified.trust_level == TrustLevel::CertificateChecked {
                 println!("s VERIFIED");
                 EXIT_VERIFIED
             } else if unified.valid {
@@ -366,7 +378,7 @@ pub fn run_satcomp(args: &ProofCheckInputs<'_>) -> i32 {
                 // (structurally-accepted or trusted holes): not a discharge.
                 println!("s NOT VERIFIED");
                 eprintln!(
-                    "c not fully kernel-verified (trust: {}, trusted steps: {})",
+                    "c not fully certificate-checked (trust: {}, trusted steps: {})",
                     unified.trust_level, unified.steps_trusted,
                 );
                 EXIT_INVALID

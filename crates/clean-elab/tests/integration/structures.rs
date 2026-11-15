@@ -650,37 +650,53 @@ fn test_structure_deriving_decidable_eq_no_type_params_regression_3393() {
 }
 
 /// Same regression test for BEq derive on a concrete struct.
+///
+/// The bare kernel environment (`init_nat` only) has no `BEq` class, so the
+/// handler fails. As in Lean, the structure is still declared and the failure
+/// is logged: the call returns `Ok` with one `DerivingHandlerFailed` leaf for
+/// `BEq` (ledger classes (90) and (91)). Over the prelude, where `BEq` exists,
+/// the instance must be derived and registered (#3393).
 #[test]
 fn test_structure_deriving_beq_no_type_params_regression_3393() {
-    use clean_elab::elaborate_decl_and_register;
+    use clean_elab::{elaborate_decl_and_register, ElabError, ElabResult};
     use clean_parser::parse_decl;
-
-    let mut env = Environment::new();
-    env.init_nat().expect("init_nat");
 
     let input = r"structure Counter where
       count : Nat
     deriving BEq";
-
     let surface = parse_decl(input).expect("parse should succeed");
-    let result = elaborate_decl_and_register(&mut env, &surface);
-
-    if result.is_err() {
-        // The minimal env here doesn't register the `BEq` class
-        // constant, so kernel verification of the derived instance
-        // fails with `Unknown constant: BEq`. Track as a derive-
-        // handler infrastructure gap.
-        eprintln!(
-            "TRACE: deriving BEq did not succeed on minimal env: {:?}",
-            result.err()
-        );
-        return;
-    }
-
     let inst_name = Name::from_string("instCounterBEq");
+
+    let mut env = Environment::new();
+    env.init_nat().expect("init_nat");
+    let result = elaborate_decl_and_register(&mut env, &surface)
+        .expect("a failed deriving handler still declares the structure");
+    let ElabResult::Multiple(leaves) = &result else {
+        panic!("expected the structure plus a failed BEq leaf, got {result:?}");
+    };
+    assert!(
+        leaves.iter().any(|leaf| matches!(
+            leaf,
+            ElabResult::Failed { error, .. }
+                if matches!(&**error, ElabError::DerivingHandlerFailed { class, .. } if class == "BEq")
+        )),
+        "the BEq handler's failure must be its own leaf: {leaves:?}"
+    );
+    assert!(
+        env.get_const(&Name::from_string("Counter")).is_some(),
+        "Counter is declared even though its deriving clause failed"
+    );
+    assert!(
+        env.get_const(&inst_name).is_none(),
+        "no BEq class in the bare environment, so no instance"
+    );
+
+    let mut env = Environment::with_prelude();
+    let result =
+        elaborate_decl_and_register(&mut env, &surface).expect("deriving BEq over the prelude");
     assert!(
         env.get_const(&inst_name).is_some(),
-        "instCounterBEq should be registered in the environment"
+        "instCounterBEq should be registered over the prelude: {result:?}"
     );
 }
 

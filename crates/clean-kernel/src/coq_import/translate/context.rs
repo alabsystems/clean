@@ -40,7 +40,7 @@ impl InductiveMapping {
     }
 
     #[must_use]
-    pub fn with_constructors(mut self, constructors: impl Into<Vec<Name>>) -> Self {
+    pub(crate) fn with_constructors(mut self, constructors: impl Into<Vec<Name>>) -> Self {
         self.constructors = constructors.into();
         self
     }
@@ -110,16 +110,16 @@ impl TranslationContext {
     }
 
     #[must_use]
-    pub fn lookup_global(&self, name: &CoqName) -> Option<&Name> {
+    pub(crate) fn lookup_global(&self, name: &CoqName) -> Option<&Name> {
         self.globals.get(name)
     }
 
     #[must_use]
-    pub fn lookup_inductive(&self, name: &CoqName) -> Option<&InductiveMapping> {
+    pub(crate) fn lookup_inductive(&self, name: &CoqName) -> Option<&InductiveMapping> {
         self.inductives.get(name)
     }
 
-    pub fn import_stdlib_type_mappings(&mut self) {
+    pub(crate) fn import_stdlib_type_mappings(&mut self) {
         for mapping in COQ_STDLIB_TYPE_MAPPINGS {
             self.insert_global_aliases(mapping.coq_aliases, mapping.lean_name);
         }
@@ -129,7 +129,7 @@ impl TranslationContext {
         self.insert_stdlib_inductive_mappings(COQ_STDLIB_INDUCTIVE_MAPPINGS);
     }
 
-    pub fn import_stdlib_propositions(&mut self) {
+    pub(crate) fn import_stdlib_propositions(&mut self) {
         for mapping in COQ_STDLIB_PROPOSITION_MAPPINGS {
             self.insert_global_aliases(mapping.coq_aliases, mapping.lean_name);
         }

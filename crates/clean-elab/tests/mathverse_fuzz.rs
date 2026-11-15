@@ -530,8 +530,9 @@ fn run_clean_mathverse(f: &Formula) -> CleanAnswer {
     // each fvar referenced in a hypothesis type to also live in local_ctx.
     let mut local_ctx: Vec<LocalDecl> = (0..f.num_vars)
         .map(|i| LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(i as u64),
-            name: format!("x{i}"),
+            name: clean_parser::SurfaceName::from_name(Name::anon().str(format!("x{i}"))),
             ty: int_t.clone(),
             value: None,
         })
@@ -540,8 +541,9 @@ fn run_clean_mathverse(f: &Formula) -> CleanAnswer {
     // Then the constraint hypotheses (indices 1000..).
     for (i, c) in f.constraints.iter().enumerate() {
         local_ctx.push(LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new((1_000 + i) as u64),
-            name: format!("h{i}"),
+            name: clean_parser::SurfaceName::from_name(Name::anon().str(format!("h{i}"))),
             ty: build_constraint_expr(c),
             value: None,
         });

@@ -85,6 +85,7 @@ pub(super) fn lake_run(
 
     let result = ctx.build_target(&exe.name)?;
     if !result.failed.is_empty() {
+        refuse_native_fallback_under_lean_options(ctx.workspace(), &result.failed, "run")?;
         match ensure_and_run_executable(ctx.workspace(), &exe, args, verbose) {
             Ok(()) => return Ok(()),
             Err(native_err) => {
@@ -141,8 +142,13 @@ fn select_executable(
     match config.exes.as_slice() {
         [single] => Ok(single.clone()),
         [] => anyhow::bail!("No executable targets defined. Use `lean_exe` in lakefile.lean."),
-        _ => {
-            anyhow::bail!("Multiple executables found. Specify one with `clean lake run <target>`.")
+        exes => {
+            let names: Vec<&str> = exes.iter().map(|exe| exe.name.as_str()).collect();
+            anyhow::bail!(
+                "Multiple executables found ({}) and no default. Specify one with \
+                 `clean lake run <target>`.",
+                names.join(", ")
+            )
         }
     }
 }
@@ -248,6 +254,7 @@ pub(super) fn lake_exe(
 
     let result = ctx.build_target(&exe.name)?;
     if !result.failed.is_empty() {
+        refuse_native_fallback_under_lean_options(ctx.workspace(), &result.failed, "exe")?;
         match ensure_and_run_executable(ctx.workspace(), exe, args, verbose) {
             Ok(()) => return Ok(()),
             Err(native_err) => {
@@ -269,6 +276,42 @@ pub(super) fn lake_exe(
 
     ensure_and_run_executable(ctx.workspace(), exe, args, verbose)
 }
+
+/// After a failed checked build, `lake exe` / `lake run` fall back to the
+/// native pipeline, which elaborates the root WITHOUT the lakefile's
+/// `leanOptions` / `moreLeanArgs` / `weakLeanArgs` (gap G50). When a failed
+/// module is compiled under such arguments — or its arguments cannot be
+/// determined — the failure may be exactly the refusal those options cause
+/// (`autoImplicit false` refusing an undefined type), and the fallback would
+/// link and run what Lake refuses. Refuse it then; the legacy fallback stays
+/// for packages whose modules carry no options.
+fn refuse_native_fallback_under_lean_options(
+    workspace: &clean_lake::Workspace,
+    failed: &[(String, String)],
+    verb: &str,
+) -> anyhow::Result<()> {
+    let governed = failed.iter().find(|(module, _)| {
+        !workspace
+            .module_lean_args(module)
+            .is_ok_and(|a| a.is_empty())
+    });
+    let Some((module, _)) = governed else {
+        return Ok(());
+    };
+    for (failed_module, err) in failed {
+        eprintln!("build error in {failed_module}: {err}");
+    }
+    anyhow::bail!(
+        "build failed; aborting {verb}. {module} is compiled under the lakefile's leanOptions / \
+         moreLeanArgs / weakLeanArgs, which Clean's native pipeline does not apply, so it is not \
+         built natively in place of the refused checked build.\nBuild failures:\n{}",
+        format_build_failures(failed)
+    )
+}
+
+#[cfg(test)]
+#[path = "exe_options_tests.rs"]
+mod exe_options_tests;
 
 /// Run a native executable at the given path
 fn run_native_executable(
@@ -1208,7 +1251,7 @@ lean_test native_test_second where
             "IO.println emitted source should call the native shim: {emitted_source}"
         );
         assert!(
-            emitted_source.contains("clean_mk_string(\"hi\")"),
+            emitted_source.contains("clean_mk_string_from_bytes(\"hi\", 2)"),
             "IO.println emitted source should lower the string literal payload: {emitted_source}"
         );
         assert!(
@@ -1335,7 +1378,7 @@ lean_test native_test_second where
         let emitted_source =
             std::fs::read_to_string(&source).expect("escaped IO should emit C source");
         assert!(
-            emitted_source.contains("clean_mk_string(\"hi\\nthere\")"),
+            emitted_source.contains("clean_mk_string_from_bytes(\"hi\\nthere\", 8)"),
             "escaped IO.println source should preserve the newline payload as a C escape: {emitted_source}"
         );
         assert!(
@@ -1385,7 +1428,7 @@ lean_test native_test_second where
             "IO.print emitted source should include the shared native-build shim: {emitted_source}"
         );
         assert!(
-            emitted_source.contains("clean_mk_string(\"hi\")"),
+            emitted_source.contains("clean_mk_string_from_bytes(\"hi\", 2)"),
             "IO.print emitted source should allocate the literal payload: {emitted_source}"
         );
         assert!(
@@ -1439,7 +1482,7 @@ lean_test native_test_second where
             "IO.eprintln emitted source should include the shared native-build stderr shim: {emitted_source}"
         );
         assert!(
-            emitted_source.contains("clean_mk_string(\"warn\")"),
+            emitted_source.contains("clean_mk_string_from_bytes(\"warn\", 4)"),
             "IO.eprintln emitted source should allocate the literal payload: {emitted_source}"
         );
         assert!(
@@ -1497,13 +1540,18 @@ lean_test native_test_second where
             emitted_source.contains("clean_alloc_closure"),
             "sequenced IO should lower the continuation lambda to a closure value: {emitted_source}"
         );
+        // The do block's `@Bind.bind IO (Monad.toBind IO instMonadIO)` is
+        // inlined to the instance's field `IO.bind` before lowering
+        // (`native_monad_inline.rs`, 2026-09-28: `Bind.bind` is Lean's class
+        // projection now, no longer an instance-less axiom that proved
+        // `False`), so the call lands on the `IO.bind` shim.
         assert!(
-            emitted_source.contains("l_Bind_bind("),
-            "sequenced IO should call the desugared bind symbol: {emitted_source}"
+            emitted_source.contains("l_IO_bind("),
+            "sequenced IO should call the IO bind symbol: {emitted_source}"
         );
         assert!(
-            emitted_source.contains("clean_obj* l_Bind_bind"),
-            "sequenced IO should include the shared native-build bind shim: {emitted_source}"
+            emitted_source.contains("clean_obj* l_IO_bind"),
+            "sequenced IO should include the shared native-build IO bind shim: {emitted_source}"
         );
 
         let output = Command::new(&artifact)
@@ -1791,7 +1839,7 @@ lean_test native_test_second where
             "native lake test should include the bounded IO.println shim: {emitted_source}"
         );
         assert!(
-            emitted_source.contains("clean_mk_string(\"test ok\")"),
+            emitted_source.contains("clean_mk_string_from_bytes(\"test ok\", 7)"),
             "native lake test should preserve the test stdout payload: {emitted_source}"
         );
 
@@ -1838,13 +1886,18 @@ lean_test native_test_second where
             emitted_source.contains("clean_alloc_closure"),
             "sequenced lake test IO should lower the continuation lambda to a closure value: {emitted_source}"
         );
+        // The do block's `@Bind.bind IO (Monad.toBind IO instMonadIO)` is
+        // inlined to the instance's field `IO.bind` before lowering
+        // (`native_monad_inline.rs`, 2026-09-28: `Bind.bind` is Lean's class
+        // projection now, no longer an instance-less axiom that proved
+        // `False`), so the call lands on the `IO.bind` shim.
         assert!(
-            emitted_source.contains("l_Bind_bind("),
-            "sequenced lake test IO should call the desugared bind symbol: {emitted_source}"
+            emitted_source.contains("l_IO_bind("),
+            "sequenced lake test IO should call the IO bind symbol: {emitted_source}"
         );
         assert!(
-            emitted_source.contains("clean_obj* l_Bind_bind"),
-            "sequenced lake test IO should include the shared native-build bind shim: {emitted_source}"
+            emitted_source.contains("clean_obj* l_IO_bind"),
+            "sequenced lake test IO should include the shared native-build IO bind shim: {emitted_source}"
         );
 
         let output = Command::new(&artifact)

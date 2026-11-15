@@ -5,16 +5,23 @@
 //! `.olean` import closure, folded with the kernel/elision **fingerprint**.
 //!
 //! Why a closure hash is the *complete and correct* key: a module's verification
-//! verdict is a pure function of its own bytes plus the bytes of everything it
-//! transitively imports (its terms cannot reference any constant outside that
-//! closure — see [`clean_olean::verify_batch::build_import_closures`]) together
-//! with the kernel behaviour the fingerprint pins down. Therefore:
+//! verdict is a pure function of the bytes of every part the loader reads for it
+//! and for everything it transitively imports — each closure member's `.olean`,
+//! `.olean.server` and `.olean.private`, trailers included (its terms cannot
+//! reference any constant outside that closure — see
+//! [`clean_olean::verify_batch::build_import_closures`]) — together with the
+//! kernel behaviour the fingerprint pins down. Therefore:
 //!
 //! * fingerprint change (kernel/heartbeat/elision/…) ⇒ every closure hash
 //!   changes ⇒ a full, honest re-verify;
-//! * one changed `.olean` ⇒ only that module **and its transitive dependents**
-//!   (the modules whose closures contain it) get a new hash ⇒ only they re-run;
+//! * one changed part of a module ⇒ only that module **and its transitive
+//!   dependents** (the modules whose closures contain it) get a new hash ⇒ only
+//!   they re-run;
 //! * nothing changed ⇒ every hash matches ⇒ a near-instant re-import.
+//!
+//! Before R113 (docs/DECISIONS.md) only the `.olean` of each member was hashed,
+//! so a replaced `.olean.private` or `.olean.server` replayed a verdict minted
+//! over parts the base no longer held (finding B2).
 //!
 //! The cache never makes a verdict *more* trusting: a hit replays a verdict the
 //! kernel already minted for byte-identical inputs under an identical
@@ -31,7 +38,9 @@ use super::parallel_verify::ModuleVerdicts;
 
 /// Cache schema version. Bump on any change to [`ModuleVerdicts`]'s shape or to
 /// the closure-hash recipe — older files then load as empty (a safe cold start).
-pub(crate) const CACHE_SCHEMA_VERSION: u32 = 1;
+/// Version 2 (R113) hashes every part of each closure member, not its `.olean`
+/// alone, so a version-1 cache keyed on `.olean` bytes is never served.
+pub(crate) const CACHE_SCHEMA_VERSION: u32 = 2;
 
 /// One module's cached verdict, tagged with the closure hash it was computed for.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -115,6 +124,12 @@ impl ImportCache {
 /// out-of-`root` dependency change (a stdlib/Batteries/Aesop/lake-package bump)
 /// re-keys every module whose closure contains it — closing the stale-reuse gap
 /// that a root-only closure left open.
+///
+/// A member's digest is [`crate::cli::closure_load::source_olean_digest`]: its
+/// `.olean`, `.olean.private` and `.olean.server`, each length-prefixed, an
+/// absent companion a length-0 region — every part the base loader reads. A
+/// member whose part exists but cannot be read leaves every target holding it
+/// WITHOUT a hash, which is a cache miss (never the hash of an empty file).
 pub(crate) fn compute_closure_hashes(
     oleans: &[PathBuf],
     root: &Path,
@@ -127,37 +142,36 @@ pub(crate) fn compute_closure_hashes(
         search_paths,
     );
 
-    // Hash the union of all files appearing in any closure, once each.
-    let mut file_hash: HashMap<PathBuf, String> = HashMap::new();
+    // Digest the parts of every member appearing in any closure, once each;
+    // `None` for a member some part of which could not be read.
+    let mut file_hash: HashMap<PathBuf, Option<String>> = HashMap::new();
     for members in closures.values() {
         for p in members {
             if !file_hash.contains_key(p) {
-                let h = std::fs::read(p)
-                    .map(|b| blake3::hash(&b).to_hex().to_string())
-                    .unwrap_or_default();
+                let h = crate::cli::closure_load::source_olean_digest(p)
+                    .ok()
+                    .map(|(digest, _len)| blake3::Hash::from(digest).to_hex().to_string());
                 file_hash.insert(p.clone(), h);
             }
         }
     }
 
     // Per target: blake3 over (fingerprint, then each closure member's
-    // `path=filehash`). build_import_closures already sorts members, so the
-    // digest is deterministic and order-independent across runs.
+    // `path=partsdigest`). build_import_closures already sorts members, so the
+    // digest is deterministic and order-independent across runs. A member whose
+    // parts could not be read drops its target: no key, so it misses the cache.
     let mut out: HashMap<PathBuf, String> = HashMap::new();
-    for (target, members) in &closures {
+    'targets: for (target, members) in &closures {
         let mut hasher = blake3::Hasher::new();
         hasher.update(fingerprint.as_bytes());
         hasher.update(b"\x00");
         for p in members {
+            let Some(Some(digest)) = file_hash.get(p) else {
+                continue 'targets;
+            };
             hasher.update(p.to_string_lossy().as_bytes());
             hasher.update(b"=");
-            hasher.update(
-                file_hash
-                    .get(p)
-                    .map(String::as_str)
-                    .unwrap_or("")
-                    .as_bytes(),
-            );
+            hasher.update(digest.as_bytes());
             hasher.update(b"\x00");
         }
         out.insert(target.clone(), hasher.finalize().to_hex().to_string());
@@ -272,6 +286,123 @@ mod tests {
         assert_ne!(
             h1, h2,
             "an out-of-root dep change MUST re-key the dependent's closure hash"
+        );
+    }
+
+    /// `Char`'s closure copied into a fresh root, with `Init` beside it.
+    fn char_closure(tmp: &Path) -> (PathBuf, PathBuf) {
+        let (src_char, src_init) = stdlib_fixture();
+        let root = tmp.join("root");
+        std::fs::create_dir_all(root.join("Init")).expect("mkdir");
+        let char_m = root.join("Init/Char.olean");
+        std::fs::copy(&src_char, &char_m).expect("copy the committed Char fixture");
+        std::fs::copy(&src_init, root.join("Init.olean")).expect("copy the committed Init fixture");
+        (root, char_m)
+    }
+
+    fn char_hash(root: &Path, char_m: &Path) -> Option<String> {
+        let search: Vec<&Path> = vec![root];
+        compute_closure_hashes(&[char_m.to_path_buf()], root, &search, "fp").remove(char_m)
+    }
+
+    /// B2 (R113): the loader reads a closure member's `.olean.server` and
+    /// `.olean.private` too (and any trailer each carries), so a change to
+    /// either must leave no closure holding the member on its old key. Before
+    /// R113 only `.olean` bytes were hashed, so `--incremental` replayed a
+    /// stale verdict over parts it never read.
+    ///
+    /// The committed fixture has no companion parts, and the parts written
+    /// here are ones the artifact reader refuses. On the target that leaves
+    /// Char without a key (the closure walk cannot read it: a cache miss). On
+    /// the dependency `Init` the walk keeps the member and the key hashes the
+    /// part's bytes, so each content keys Char differently.
+    #[test]
+    fn test_companion_change_rekeys_closure_hash() {
+        for companion in ["olean.private", "olean.server"] {
+            for member in ["Init/Char.olean", "Init.olean"] {
+                let tmp = tempfile::tempdir().expect("tempdir");
+                let (root, char_m) = char_closure(tmp.path());
+                let without = char_hash(&root, &char_m).expect("Char hashes without the part");
+                let part = root.join(member).with_extension(companion);
+                std::fs::write(&part, b"first part bytes").expect("write part");
+                let first = char_hash(&root, &char_m);
+                std::fs::write(&part, b"other part bytes").expect("rewrite part");
+                let other = char_hash(&root, &char_m);
+                match member {
+                    "Init/Char.olean" => assert_eq!(
+                        (first.as_deref(), other.as_deref()),
+                        (None, None),
+                        "a `.{companion}` the reader refuses must leave the target Char without a key"
+                    ),
+                    _ => {
+                        let first = first.expect("Char keyed over a dependency's part");
+                        let other = other.expect("Char keyed over a dependency's part");
+                        assert_ne!(
+                            first, without,
+                            "an added `{member}` `.{companion}` must re-key Char's closure hash"
+                        );
+                        assert_ne!(
+                            other, first,
+                            "a changed `{member}` `.{companion}` must re-key Char's closure hash"
+                        );
+                    }
+                }
+                std::fs::remove_file(&part).expect("remove part");
+                assert_eq!(
+                    char_hash(&root, &char_m).as_deref(),
+                    Some(without.as_str()),
+                    "removing the `{member}` `.{companion}` must restore Char's key without it"
+                );
+            }
+        }
+    }
+
+    /// The digest every closure key is built from covers each part's bytes, so a
+    /// companion change re-keys whatever the closure walk makes of it.
+    #[test]
+    fn test_source_olean_digest_covers_every_part() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (_root, char_m) = char_closure(tmp.path());
+        let digest = || {
+            crate::cli::closure_load::source_olean_digest(&char_m)
+                .expect("digest Char's parts")
+                .0
+        };
+        let without = digest();
+        let mut seen = vec![without];
+        for companion in ["olean.private", "olean.server"] {
+            let part = char_m.with_extension(companion);
+            for bytes in [&b"first part bytes"[..], &b"other part bytes"[..]] {
+                std::fs::write(&part, bytes).expect("write part");
+                let d = digest();
+                assert!(
+                    !seen.contains(&d),
+                    "`.{companion}` content {bytes:?} must give a digest no other state gave"
+                );
+                seen.push(d);
+            }
+            std::fs::remove_file(&part).expect("remove part");
+            assert_eq!(
+                digest(),
+                without,
+                "removing `.{companion}` restores the digest"
+            );
+        }
+    }
+
+    /// A closure member part that exists but cannot be read is a cache MISS
+    /// (no hash for the target), never the hash of an empty file.
+    #[test]
+    fn test_unreadable_part_is_a_cache_miss() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let (root, char_m) = char_closure(tmp.path());
+        assert!(char_hash(&root, &char_m).is_some(), "control: Char hashes");
+        // A directory where the private part belongs: it exists, and reading it fails.
+        std::fs::create_dir(char_m.with_extension("olean.private")).expect("mkdir part");
+        assert_eq!(
+            char_hash(&root, &char_m),
+            None,
+            "an unreadable part must leave the target without a closure hash"
         );
     }
 

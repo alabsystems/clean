@@ -48,24 +48,17 @@ impl ExternalCertError {
         }
     }
 
-    pub fn length_mismatch(detail: String) -> Self {
+    pub(crate) fn length_mismatch(detail: String) -> Self {
         ExternalCertError {
             code: ExternalCertErrorCode::LengthMismatch,
             detail,
         }
     }
 
-    pub fn unsupported_constraint_kind(detail: String) -> Self {
+    pub(crate) fn unsupported_constraint_kind(detail: String) -> Self {
         ExternalCertError {
             code: ExternalCertErrorCode::UnsupportedConstraintKind,
             detail,
-        }
-    }
-
-    pub fn rational_overflow() -> Self {
-        ExternalCertError {
-            code: ExternalCertErrorCode::RationalOverflow,
-            detail: "rational arithmetic overflow".to_string(),
         }
     }
 
@@ -114,6 +107,8 @@ pub enum ExternalCertErrorCode {
     ProofVerificationFailed,
     /// Required proof verifier (e.g. Carcara) is not available.
     VerifierNotAvailable,
+    /// Verification reached its deadline before it ended; the certificate is not accepted.
+    Timeout,
 }
 
 impl ExternalCertErrorCode {
@@ -128,6 +123,7 @@ impl ExternalCertErrorCode {
             ExternalCertErrorCode::UnsupportedConstraintKind => "unsupported_constraint_kind",
             ExternalCertErrorCode::ProofVerificationFailed => "proof_verification_failed",
             ExternalCertErrorCode::VerifierNotAvailable => "verifier_not_available",
+            ExternalCertErrorCode::Timeout => "timeout",
         }
     }
 }

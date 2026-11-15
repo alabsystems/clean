@@ -382,7 +382,7 @@ pub(crate) fn mk_iff_mpr(a: &Expr, b: &Expr, h_iff: &Expr, hb: &Expr) -> Expr {
 /// `[P₀]` → `P₀`
 /// `[P₀, P₁]` → `And P₀ P₁`
 /// `[P₀, P₁, P₂]` → `And P₀ (And P₁ P₂)`
-#[cfg(any(test, feature = "ay-smt"))]
+#[cfg(any(test, all(feature = "ay-smt", not(target_arch = "wasm32"))))]
 pub(crate) fn and_chain_type(props: &[Expr]) -> Expr {
     assert!(!props.is_empty(), "and_chain_type: empty props");
     if props.len() == 1 {
@@ -405,7 +405,7 @@ pub(crate) fn and_chain_type(props: &[Expr]) -> Expr {
 /// Navigation: apply `And.right` `position` times to reach the sub-chain starting
 /// at `a_position`, then `And.left` to extract (unless `position == total - 1`,
 /// which is the innermost element with no further And wrapper).
-#[cfg(any(test, feature = "ay-smt"))]
+#[cfg(any(test, all(feature = "ay-smt", not(target_arch = "wasm32"))))]
 pub(crate) fn extract_and_conjunct(h: &Expr, position: usize, total: usize) -> Expr {
     assert!(total >= 1, "extract_and_conjunct: total must be >= 1");
     assert!(
@@ -430,7 +430,7 @@ pub(crate) fn extract_and_conjunct(h: &Expr, position: usize, total: usize) -> E
 /// binders provide proofs of each conjunct as `bvar(n-1-i)` for conjunct `i`.
 ///
 /// Builds `And.intro a₀ (And a₁ ...) bvar(n-1) (And.intro a₁ a₂ bvar(n-2) bvar(n-3) ...)`.
-#[cfg(any(test, feature = "ay-smt"))]
+#[cfg(any(test, all(feature = "ay-smt", not(target_arch = "wasm32"))))]
 pub(crate) fn build_and_chain_from_bvars(conjuncts: &[Expr], offset: usize, total: usize) -> Expr {
     let remaining = conjuncts.len() - offset;
     let proof_of_current = Expr::bvar((total - 1 - offset) as u32);

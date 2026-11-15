@@ -1,22 +1,25 @@
 // Copyright 2026 Andrew Yates.0
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 //
-//! Environment-preservation theorems for the kernel add_decl entry point (#461).
+//! Preservation theorems for a modeled fresh-extension relation (#461).
 //!
-//! This module bridges the production kernel's `Environment::add_decl` to the
-//! specification's `DefinitionalExtension` soundness chain.  It adds:
+//! `KernelAddDeclAccepts` carries `ConstantExtension` or `InductiveExtension`
+//! evidence. These conditional theorems compose that evidence into the
+//! specification's `DefinitionalExtension` soundness chain. They do not establish
+//! a correspondence with actual Rust `Environment::add_decl` or `add_inductive`
+//! success. The relation has no input-declaration index or validated reuse case.
 //!
-//! - `KernelAddDeclAccepts`: opaque predicate for successful `add_decl`
-//! - `KernelAddDeclChain`: reflexive-transitive closure of successful `add_decl`
-//! - `kernel_add_decl_extends_env`: successful `add_decl` is a definitional extension
-//! - `kernel_add_decl_preserves_env_valid_raw`: raw env-validity projection (constructive)
-//! - `kernel_add_decl_preserves_local_ctx_wf_raw`: raw local-context projection (constructive)
+//! - `KernelAddDeclAccepts`: genuine relation of witnessed fresh-extension steps
+//! - `KernelAddDeclChain`: reflexive-transitive closure of those modeled steps
+//! - `kernel_add_decl_extends_env`: each witnessed step is a definitional extension
+//! - `kernel_add_decl_preserves_env_valid_raw`: raw env-validity projection
+//! - `kernel_add_decl_preserves_local_ctx_wf_raw`: raw local-context projection
 //! - `KernelAddDeclPreservesEnvValid`: state-indexed env-validity wrapper
 //! - `kernel_add_decl_preserves_local_ctx_wf`: state-indexed local-context wrapper
-//! - `KernelAddDeclPreservesEnvSound`: derived—`add_decl` preserves `EnvSound`
-//! - `KernelAddDeclPreservesState`: derived—`add_decl` preserves `KernelStateMatchesSpec`
-//! - `KernelAddDeclSound`: derived—combined end-to-end theorem (inductive step)
-//! - `KernelAddDeclChainSound`: derived—fold the one-step theorem across any chain
+//! - `KernelAddDeclPreservesEnvSound`: conditional model-level soundness preservation
+//! - `KernelAddDeclPreservesState`: conditional modeled-state preservation
+//! - `KernelAddDeclSound`: combined conditional model-preservation theorem
+//! - `KernelAddDeclChainSound`: fold that theorem across witnessed modeled steps
 
 use std::collections::HashSet;
 
@@ -30,36 +33,28 @@ impl Specification {
         &mut self,
     ) -> Result<(), SpecError> {
         // =========================================================
-        // PART 21c: Environment preservation through add_decl (#461)
+        // PART 21c: Modeled fresh-extension preservation (#461)
         // =========================================================
         //
-        // The production kernel's `Environment::add_decl` is the sole entry
-        // point for extending the environment with new constants/inductives.
-        // This slice names that operation in the specification and states the
-        // preservation properties needed to chain forward-simulation across
-        // multiple declaration additions.
-
-        // KernelAddDeclAccepts: was an opaque `KEnv -> KEnv -> Type` HelperAxiom
-        // ("Environment::add_decl transformed env into env'"). It is now a FAITHFUL
-        // inductive — the same Accepts-decomposition playbook as KernelDefEqAccepts /
-        // KernelInferAccepts / KernelCheckAccepts. A successful add_decl performs
-        // EITHER a constant extension OR an inductive extension, so the two
-        // constructors carry exactly that evidence (ConstantExtension /
-        // InductiveExtension — themselves inductives whose .mk already bundles the
-        // freshness / well-typedness / positivity / well-formedness the real add_decl
-        // verified). NO extra guard is needed: the validity lives inside
-        // ConstantExtension / InductiveExtension. Draining the opaque axiom to this
-        // inductive is a genuine census drop (no new axiom); the external Trust
-        // producer must now supply the extension evidence — the faithful requirement
-        // (add_decl success = a valid extension was performed).
+        // This slice models fresh constant and inductive extensions. It does not
+        // identify Rust entry points or represent every successful production call.
+        // KernelAddDeclAccepts was an opaque KEnv -> KEnv -> Type HelperAxiom;
+        // its two genuine constructors now require ConstantExtension or
+        // InductiveExtension evidence, including the model's freshness, typing,
+        // positivity and well-formedness premises. The preservation proofs below
+        // eliminate that evidence; they do not derive it from an execution result.
+        // Relating supported actual executions to these modeled steps remains a
+        // separate obligation. There is no input-declaration index or validated
+        // reuse constructor here; unchanged state alone does not validate a
+        // re-registration input.
         self.add_inductive(
             r"inductive KernelAddDeclAccepts : KEnv -> KEnv -> Type
 | const_case : forall (env : KEnv) (env' : KEnv), ConstantExtension env env' -> KernelAddDeclAccepts env env'
 | inductive_case : forall (env : KEnv) (env' : KEnv), InductiveExtension env env' -> KernelAddDeclAccepts env env'",
-            "KernelAddDeclAccepts env env': the production kernel's add_decl transformed \
-             env into env' — faithfully, EITHER a constant extension (const_case, carrying \
-             ConstantExtension) or an inductive extension (inductive_case, carrying \
-             InductiveExtension). Formerly an opaque HelperAxiom.",
+            "KernelAddDeclAccepts env env': a witnessed modeled fresh-extension step, \
+             either ConstantExtension or InductiveExtension. This genuine relation \
+             has no input-declaration index or validated reuse case; it does not itself \
+             encode a successful Rust call. Formerly an opaque HelperAxiom.",
         )?;
 
         // kernel_add_decl_extends_env: was the opaque bridge HelperAxiom; now a
@@ -84,11 +79,12 @@ impl Specification {
                 .to_string(),
             ),
             is_axiom: false,
-            description: "Bridge, now DERIVED: a successful add_decl corresponds to a valid \
-                          definitional-extension step. Proof = case on KernelAddDeclAccepts \
-                          (const_case -> DefinitionalExtension.const_; inductive_case -> \
-                          DefinitionalExtension.inductive_). Formerly a HelperAxiom bridge; \
-                          zero axiom_deps.".to_string(),
+            description: "Derived model bridge: a witnessed KernelAddDeclAccepts step \
+             entails DefinitionalExtension. Proof = case on the supplied extension \
+             evidence (const_case -> DefinitionalExtension.const_; inductive_case -> \
+             DefinitionalExtension.inductive_). Actual execution-to-evidence \
+             correspondence is not proved here. Formerly a HelperAxiom bridge; \
+             zero axiom_deps.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedProved,
             elaborated_type: None,
@@ -182,7 +178,7 @@ impl Specification {
                 "kernel_add_decl_preserves_env_valid_raw env env' henv hadd"
             ).to_string()),
             is_axiom: false,
-            description: "State-indexed env-validity preservation wrapper for add_decl. It factors through the constructive raw env-validity projection kernel_add_decl_preserves_env_valid_raw (DefinitionalExtension.trans) while keeping downstream proofs on KernelStateEnvValid.".to_string(),
+            description: "State-indexed env-validity preservation wrapper for a witnessed KernelAddDeclAccepts step. It factors through the constructive raw env-validity projection kernel_add_decl_preserves_env_valid_raw (DefinitionalExtension.trans) while keeping downstream proofs on KernelStateEnvValid.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
             elaborated_type: None,
@@ -280,7 +276,7 @@ impl Specification {
                 "kernel_add_decl_preserves_local_ctx_wf_raw env env' ctx hctx hadd"
             ).to_string()),
             is_axiom: false,
-            description: "State-indexed local-context preservation wrapper for add_decl. It factors through the constructive raw local-context projection kernel_add_decl_preserves_local_ctx_wf_raw (KernelLocalCtxWellFormed.rec env-transport) while keeping downstream proofs on KernelStateLocalCtxWellFormed.".to_string(),
+            description: "State-indexed local-context preservation wrapper for a witnessed KernelAddDeclAccepts step. It factors through the constructive raw local-context projection kernel_add_decl_preserves_local_ctx_wf_raw (KernelLocalCtxWellFormed.rec env-transport) while keeping downstream proofs on KernelStateLocalCtxWellFormed.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
             elaborated_type: None,
@@ -297,7 +293,7 @@ impl Specification {
         })?;
 
         // =========================================================
-        // Derived corollary: add_decl preserves EnvSound (spec-level)
+        // Derived corollary: modeled fresh extensions preserve EnvSound
         // =========================================================
 
         self.add_definition(SpecDefinition {
@@ -312,7 +308,7 @@ impl Specification {
                 "hsound"
             ).to_string()),
             is_axiom: false,
-            description: "Derived corollary: add_decl preserves spec-level environment soundness by composing the implementation-to-spec bridge with definitional_extension_sound.".to_string(),
+            description: "Derived corollary: a witnessed KernelAddDeclAccepts step preserves spec-level environment soundness by composing kernel_add_decl_extends_env with definitional_extension_sound.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
             elaborated_type: None,
@@ -337,13 +333,12 @@ impl Specification {
         })?;
 
         // =========================================================
-        // Derived theorem: add_decl preserves KernelStateMatchesSpec
+        // Derived theorem: modeled fresh extensions preserve KernelStateMatchesSpec
         // =========================================================
         //
-        // This is the main environment-preservation theorem for #461.
-        // It takes a valid kernel state, a successful add_decl on the
-        // environment component, and returns a proof that the new state
-        // (with extended env, same local context) also matches the spec.
+        // This conditional model theorem takes a matching modeled state and a
+        // witnessed KernelAddDeclAccepts step, then reconstructs the matching
+        // state with its extended environment and unchanged local context.
 
         self.add_definition(SpecDefinition {
             name: "KernelAddDeclPreservesState".to_string(),
@@ -366,7 +361,7 @@ impl Specification {
                 "hadd)"
             ).to_string()),
             is_axiom: false,
-            description: "Main environment-preservation theorem: successful add_decl preserves KernelStateMatchesSpec. Decomposes the summary alias, applies the constructive env-validity and local-ctx-wf preservation projections, and rebuilds the summary.".to_string(),
+            description: "Conditional model-preservation theorem: a witnessed KernelAddDeclAccepts step preserves KernelStateMatchesSpec. Decomposes the summary alias, applies the constructive env-validity and local-ctx-wf preservation projections, and rebuilds the summary.".to_string(),
             category: AxiomCategory::DerivedLemma,
             proof_status: ProofStatus::DerivedPending,
             elaborated_type: None,
@@ -390,14 +385,14 @@ impl Specification {
         })?;
 
         // =========================================================
-        // Combined end-to-end add_decl soundness theorem
+        // Combined conditional model-preservation theorem
         // =========================================================
         //
-        // This is the inductive step for the refinement chain:
-        //   given a valid, sound kernel state, a successful add_decl
-        //   produces a new state that is BOTH valid AND sound.
-        // Together with KernelInitialStateValid (base case), this
-        // enables reasoning about arbitrary sequences of add_decl.
+        // This is the inductive step for chains of witnessed model extensions.
+        // Given a matching, sound modeled state and KernelAddDeclAccepts evidence,
+        // it returns both modeled-state matching and EnvSound for the destination.
+        // KernelInitialStateValid supplies the base for such modeled chains;
+        // actual-call correspondence and input validation remain separate.
 
         self.add_definition(SpecDefinition {
             name: "KernelAddDeclSound".to_string(),
@@ -425,13 +420,13 @@ impl Specification {
             ),
             is_axiom: false,
             description: concat!(
-                "End-to-end add_decl soundness theorem (inductive step): ",
-                "a successful add_decl on a valid, sound kernel state produces ",
-                "a new state that is both structurally valid (KernelStateMatchesSpec) ",
-                "and semantically sound (EnvSound). Composes KernelAddDeclPreservesState ",
-                "with KernelAddDeclPreservesEnvSound into a single ProdType pair. Together ",
-                "with KernelInitialStateValid, this closes the inductive soundness ",
-                "chain for arbitrary sequences of kernel declarations. Part of #461."
+                "Combined conditional model-preservation theorem: given a matching, ",
+                "sound modeled state and a witnessed KernelAddDeclAccepts step, ",
+                "the destination satisfies both KernelStateMatchesSpec and EnvSound. ",
+                "Composes KernelAddDeclPreservesState with KernelAddDeclPreservesEnvSound ",
+                "into one ProdType pair. With KernelInitialStateValid, this supports ",
+                "chains of witnessed model extensions, not an unproved correspondence ",
+                "with all successful Rust calls or validation of reused inputs. Part of #461."
             )
             .to_string(),
             category: AxiomCategory::DerivedLemma,

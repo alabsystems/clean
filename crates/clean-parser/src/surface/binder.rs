@@ -4,6 +4,8 @@
 
 //! Binder, termination hint, and open-path types for surface syntax.
 
+use super::name::SurfaceName;
+
 use super::expr::SurfaceExpr;
 use super::span::Span;
 
@@ -36,7 +38,7 @@ pub enum TerminationKind {
     WellFounded,
     /// Structural recursion: `termination_by structural <param>`
     /// The inner String is the parameter name to recurse on.
-    Structural(String),
+    Structural(SurfaceName),
     /// Query mode: `termination_by?` - asks Lean to show inferred termination
     Query,
 }
@@ -47,6 +49,7 @@ pub enum TerminationKind {
 /// - `termination_by args => measure` (well-founded with measure)
 /// - `termination_by measure` (well-founded, new syntax)
 /// - `termination_by structural x` (structural recursion on param x)
+/// - `termination_by structural args => x` (names arguments after the colon)
 /// - `termination_by?` (query: show inferred termination)
 ///
 /// Example: `termination_by x y => x.length + y.length`
@@ -60,9 +63,22 @@ pub struct TerminationBy {
     /// Kind of termination (well-founded, structural, or query)
     pub kind: TerminationKind,
     /// Parameter names bound in the measure (may be empty for newer syntax or structural)
-    pub params: Vec<String>,
-    /// The termination measure expression (None for structural or query)
+    pub params: Vec<SurfaceName>,
+    /// The measure expression (also retained for structural arrow clauses;
+    /// None for short structural clauses and query mode)
     pub measure: Option<Box<SurfaceExpr>>,
+}
+
+impl TerminationBy {
+    /// The measure of a well-founded `termination_by <measure>` clause, the
+    /// one shape the elaborator lowers through `WellFounded.fix`; `None` for
+    /// `structural`, `?`, or a clause with no measure.
+    pub fn well_founded_measure(&self) -> Option<&SurfaceExpr> {
+        match self.kind {
+            TerminationKind::WellFounded => self.measure.as_deref(),
+            TerminationKind::Structural(_) | TerminationKind::Query => None,
+        }
+    }
 }
 
 /// Decreasing proof tactic for recursive definitions
@@ -96,7 +112,7 @@ pub struct TerminationHints {
 pub struct SurfaceBinder {
     pub span: Span,
     /// Binder name (can be "_" for anonymous)
-    pub name: String,
+    pub name: SurfaceName,
     /// Optional type annotation
     pub ty: Option<Box<SurfaceExpr>>,
     /// Optional default value (e.g., `(x := 5)` or `(x : Nat := 5)`)
@@ -112,9 +128,14 @@ impl SurfaceBinder {
     /// - `span` is dummy (0, 0)
     /// - `default` is None
     pub fn new(name: impl Into<String>, ty: Option<SurfaceExpr>, info: SurfaceBinderInfo) -> Self {
+        Self::new_typed(SurfaceName::component(name.into(), false), ty, info)
+    }
+
+    /// Preserve an already parsed or generated structural binder identity.
+    pub fn new_typed(name: SurfaceName, ty: Option<SurfaceExpr>, info: SurfaceBinderInfo) -> Self {
         Self {
             span: Span::dummy(),
-            name: name.into(),
+            name,
             ty: ty.map(Box::new),
             default: None,
             info,
@@ -149,15 +170,15 @@ impl SurfaceBinder {
 /// Renaming entry in an open command.
 #[derive(Debug, Clone)]
 pub struct OpenRename {
-    pub from: String,
-    pub to: String,
+    pub from: SurfaceName,
+    pub to: SurfaceName,
 }
 
 /// Path opened with optional selective names
 #[derive(Debug, Clone)]
 pub struct OpenPath {
-    pub path: Vec<String>,
-    pub names: Vec<String>,
-    pub hiding: Vec<String>,
+    pub path: SurfaceName,
+    pub names: Vec<SurfaceName>,
+    pub hiding: Vec<SurfaceName>,
     pub renaming: Vec<OpenRename>,
 }

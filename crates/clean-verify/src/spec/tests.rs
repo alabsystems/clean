@@ -8,6 +8,44 @@ use clean_kernel::{Environment, Expr, Level, Name, Reducibility};
 use std::collections::{HashMap, HashSet};
 
 #[test]
+fn consuming_environment_preserves_actual_declarations_options_and_authority() {
+    let mut env = Environment::default();
+    env.init_eq().expect("checked equality prelude");
+    env.init_bool().expect("checked Boolean prelude");
+    env.set_option("maxHeartbeats".into(), Some("123456".into()));
+    let mut spec = Specification {
+        env,
+        definitions: HashMap::new(),
+        red_env_script_override: None,
+        red_env_interning_override: None,
+        model_unit_source: ModelUnitSource::default(),
+    };
+    spec.add_recursive_def(
+        "def transfer_boolean_refl : Eq Bool Bool.true Bool.true := Eq.refl Bool Bool.true",
+        "Ownership transfer retains the actual checked declaration",
+    )
+    .expect("checked definition");
+    spec.verify_definition("transfer_boolean_refl")
+        .expect("independent kernel replay");
+    let name = Name::from_string("transfer_boolean_refl");
+    let before = spec.env().get_const(&name).expect("present declaration") as *const _;
+    let env = spec.into_environment();
+    let after = env.get_const(&name).expect("transferred declaration");
+    assert_eq!(
+        before, after as *const _,
+        "transfer must not clone the declaration index"
+    );
+    assert_eq!(
+        env.get_option("maxHeartbeats").and_then(Option::as_deref),
+        Some("123456")
+    );
+    assert!(env.axiom_deps(&name).expect("known root").is_empty());
+    assert!(env.trust_marker_deps(&name).expect("known root").is_empty());
+    let audit = env.audit_certification(&after.type_, &Expr::const_(name, vec![]));
+    assert!(audit.issues.is_empty(), "{audit:?}");
+}
+
+#[test]
 fn test_specification_creation() {
     let spec = build_spec_with_stack();
     assert!(spec.definitions().contains_key("Eq"));
@@ -63,6 +101,8 @@ fn checked_eq_cong_keeps_domain_and_codomain_universes_distinct() {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: ModelUnitSource::default(),
         };
         spec.add_inductive(
             r"inductive Eq (α : Sort u) : α → α → Prop
@@ -197,6 +237,8 @@ fn test_eq_inductive_registration_821() {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: ModelUnitSource::default(),
         };
 
         // Add Nat first (prerequisite for Eq test expression).
@@ -272,6 +314,8 @@ fn test_eq_inductive_with_nat_add_context_821() {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: ModelUnitSource::default(),
         };
 
         // Add Nat inductive (arrow syntax; parser doesn't handle binder form).
@@ -343,6 +387,8 @@ fn test_eq_inductive_isolation_findings_821() {
                 env: Environment::new(),
                 definitions: HashMap::new(),
                 red_env_script_override: None,
+                red_env_interning_override: None,
+                model_unit_source: ModelUnitSource::default(),
             };
 
             // Add Eq inductive FIRST (before Nat or anything else).
@@ -398,6 +444,8 @@ fn test_eq_inductive_nat_add_zero_value_821() {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: ModelUnitSource::default(),
         };
 
         // Using "Type u" triggers auto-binding of universe param u.

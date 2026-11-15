@@ -2,155 +2,168 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Tactic-mode `match` lowering for phase 3D elab registrations.
+//! Tactic-mode match dispatch follows actual elaborator hole identities.
 
 use std::collections::HashSet;
 use std::sync::Arc;
 
-use super::registry::{CompoundTacticEntry, RefinePendingGoal, RefinePendingLocal};
-use super::{LocalDecl, TacticError};
-use crate::unify::MetaState;
-use clean_kernel::{Environment, Expr, ExprKind, Name};
+use super::registry::{CompoundTacticEntry, RefinePendingGoal};
+use super::TacticError;
+use clean_kernel::Name;
 use clean_parser::{
-    Span, SurfaceArg, SurfaceExpr, SurfaceLit, SurfaceMatchArm, SurfacePattern, SurfaceTactic,
-    TacticMatchArm,
+    Span, SurfaceArg, SurfaceExpr, SurfaceMatchArm, SurfaceName, SurfaceTactic, TacticMatchArm,
 };
 
-/// `match discrs with | pat => tacs | ...` — tactic-mode pattern matching.
-///
-/// Lowers tactic `match` to term `match` with one hole per arm, then routes the
-/// resulting subgoals through synthetic `case` tactics.
-///
-/// Fixes #1848: previously ran first arm unconditionally.
+/// Every source arm owns a generated named hole. Recursor reordering, aliases,
+/// column splitting and repeated wildcard branches may change the number and
+/// order of pending goals; actual hole tags retain the source-arm relation.
+/// No constructor display, guessed order or unrelated fresh metavariable can
+/// choose which tactic body runs for a pending goal.
 pub(crate) fn compound_match() -> CompoundTacticEntry {
     CompoundTacticEntry {
         name: "match".into(),
         handler: Arc::new(|eval, ps, tac| {
-            let SurfaceTactic::Match(span, discrs, arms) = tac else {
-                return Err(TacticError::InvalidTarget {
-                    tactic: "match".into(),
-                    detail: "unexpected syntax variant".into(),
-                });
+            let SurfaceTactic::Match(span, hyp, discrs, arms) = tac else {
+                return Err(invalid_match("unexpected syntax variant"));
             };
-
             if arms.is_empty() {
                 return if ps.goals.is_empty() {
                     Ok(())
                 } else {
-                    Err(TacticError::InvalidTarget {
-                        tactic: "match".into(),
-                        detail: "no arms provided".into(),
-                    })
+                    Err(invalid_match("no arms provided"))
                 };
             }
-
-            let discr_exprs: Vec<Expr> = discrs
-                .iter()
-                .map(|d| eval.elaborate(d))
-                .collect::<Result<_, _>>()?;
-            let existing_metas: HashSet<_> = eval.metas().iter().map(|(id, _)| id).collect();
-            let case_order = match discr_exprs.as_slice() {
-                [discr] => planned_case_order(ps.env(), &eval.infer_type(discr)?, arms),
-                _ => (0..arms.len()).collect(),
+            if discrs.is_empty() {
+                return Err(invalid_match("no discriminants provided"));
+            }
+            if hyp.is_some() && discrs.len() != 1 {
+                return Err(invalid_match(
+                    "an annotated (`h : e`) discriminant must be the only one",
+                ));
+            }
+            // `match h : e with`: Lean's `matchDiscr` generalizes `e` in the
+            // goal with `h : e = x`, matches on `x`, and every arm's goal has
+            // `h : e = <the arm's pattern>` (Lean 4.8 `Lean/Elab/Match.lean`,
+            // the `h :` discriminant). The same generalization `cases h : e`
+            // performs (`target_equation`): the equation stays a binder of the
+            // target while the fresh variable is matched, and is introduced
+            // as `h` in every arm goal the match produced.
+            let generalized;
+            let discrs: &[SurfaceExpr] = match hyp {
+                Some(eq_name) => {
+                    super::pattern::names::require_binding_name(eq_name, "match")?;
+                    let scrutinee = eval.elaborate_no_expected(&discrs[0])?;
+                    let var = super::target_equation::generalize_annotated_target(
+                        ps, scrutinee, "match",
+                    )?;
+                    generalized = [SurfaceExpr::Ident(discrs[0].span(), var)];
+                    &generalized
+                }
+                None => discrs,
             };
             let match_expr = build_tactic_match_expr(*span, discrs, arms);
             let refined = eval.elaborate_refine(ps, &match_expr)?;
-            let pending_goals = if refined.pending_goals.len() == case_order.len() {
-                refined.pending_goals.clone()
-            } else {
-                let current_goal = ps.current_goal().ok_or(TacticError::NoGoals)?;
-                recover_pending_goals_from_new_metas(
-                    eval.metas(),
-                    &current_goal.target,
-                    &current_goal.local_ctx,
-                    &existing_metas,
-                )
-            };
-
-            if pending_goals.len() != case_order.len() {
-                return Err(TacticError::InvalidTarget {
-                    tactic: "match".into(),
-                    detail: format!(
-                        "match elaborated to {} pending goal(s) for {} tactic arm(s)",
-                        pending_goals.len(),
-                        case_order.len()
-                    ),
-                });
-            }
-
-            let tags: Vec<Option<String>> = (0..pending_goals.len())
-                .map(|idx| Some(format!("match_{}", idx + 1)))
+            let case_order = pending_arm_order(&refined.pending_goals, arms.len())?;
+            let tags: Vec<Option<SurfaceName>> = refined
+                .pending_goals
+                .iter()
+                .map(|pending| Some(match_goal_tag(pending.meta_id.as_u64())))
                 .collect();
-            super::term_close::refine_elaborated_from_pending_with_tags(
+            super::term_close::refine_eliminator_from_pending_with_tags(
                 ps,
                 refined.term,
                 eval.metas(),
-                &pending_goals,
+                &refined.pending_goals,
                 &tags,
             )?;
+            if let Some(eq_name) = hyp {
+                super::target_equation::intro_in_leading_goals(
+                    ps,
+                    tags.len(),
+                    std::slice::from_ref(eq_name),
+                    "match",
+                )?;
+            }
 
-            for (idx, arm_idx) in case_order.into_iter().enumerate() {
+            // Each arm goal is its own lambda chain (`PendingLocalIds::ByDepth`
+            // numbered the pattern variables from the shared base), so a
+            // tactic of one arm must allocate from THAT arm's binder base —
+            // the per-branch reset `cases` and `·` perform. The import left
+            // `next_fvar` past the deepest arm's binders; a hypothesis an
+            // earlier, shallower arm minted from there (`rw [e] at hk`) sat
+            // above its binder depth, and `close_fvars` refused the assembled
+            // proof ("tactic block completed but no proof term produced").
+            let outer_next_fvar = ps.next_fvar;
+            for (tag, arm_idx) in tags.into_iter().zip(case_order) {
+                let tag = tag.ok_or_else(|| invalid_match("missing generated case tag"))?;
+                if let Some(base) = ps
+                    .goals
+                    .iter()
+                    .find(|goal| goal.tag.as_ref() == Some(&tag))
+                    .map(|goal| ps.goal_binder_base(goal))
+                {
+                    ps.next_fvar = base;
+                }
                 let case_tactic = SurfaceTactic::Case(
                     arms[arm_idx].span,
-                    format!("match_{}", idx + 1),
+                    tag,
                     Vec::new(),
                     arms[arm_idx].tactics.clone(),
                 );
-                eval.eval(ps, &case_tactic)?;
+                let outcome = eval.eval(ps, &case_tactic);
+                ps.next_fvar = ps.next_fvar.max(outer_next_fvar);
+                outcome?;
             }
-
             Ok(())
         }),
     }
 }
 
-fn recover_pending_goals_from_new_metas(
-    metas: &MetaState,
-    goal_target: &Expr,
-    goal_locals: &[LocalDecl],
-    existing: &HashSet<crate::unify::MetaId>,
-) -> Vec<RefinePendingGoal> {
-    let goal_target = metas.instantiate_levels(&metas.instantiate(goal_target));
-    let goal_fvars: HashSet<_> = goal_locals.iter().map(|decl| decl.fvar).collect();
-    let mut recovered = metas
-        .iter()
-        .filter(|(meta_id, meta)| {
-            !existing.contains(meta_id)
-                && meta.assignment.is_none()
-                && metas.instantiate_levels(&metas.instantiate(&meta.ty)) == goal_target
-        })
-        .map(|(meta_id, meta)| RefinePendingGoal {
-            meta_id,
-            locals: meta
-                .locals
-                .iter()
-                .filter(|(_, fvar, _)| !goal_fvars.contains(fvar))
-                .map(|(name, fvar, ty)| RefinePendingLocal {
-                    name: name.clone(),
-                    fvar: *fvar,
-                    ty: metas.instantiate_levels(&metas.instantiate(ty)),
-                })
-                .collect(),
-            // The `match` tactic supplies its own `match_N` tags via the
-            // `_with_tags` slice, which overrides this; recovered goals carry no
-            // synthetic-hole name.
-            tag: None,
-        })
-        .collect::<Vec<_>>();
-    recovered.sort_by_key(|goal| goal.meta_id.as_u64());
-    recovered
+fn invalid_match(detail: impl Into<String>) -> TacticError {
+    TacticError::InvalidTarget {
+        tactic: "match".into(),
+        detail: detail.into(),
+    }
 }
 
+fn match_arm_tag(index: usize) -> SurfaceName {
+    SurfaceName::from_name(Name::anon().num(0x544d_4152).num(index as u64))
+}
+
+fn match_goal_tag(meta_id: u64) -> SurfaceName {
+    SurfaceName::from_name(Name::anon().num(0x544d_474c).num(meta_id))
+}
+
+/// Validate the actual pending-goal census before modifying proof state.
+/// Distinct goals may belong to one arm; one meta may not appear twice.
+fn pending_arm_order(
+    pending: &[RefinePendingGoal],
+    arm_count: usize,
+) -> Result<Vec<usize>, TacticError> {
+    let arm_tags: Vec<_> = (0..arm_count).map(match_arm_tag).collect();
+    let mut seen = HashSet::new();
+    pending.iter().map(|goal| {
+        if !seen.insert(goal.meta_id) {
+            return Err(invalid_match(format!("duplicate pending match goal {:?}", goal.meta_id)));
+        }
+        let tag = goal.tag.as_ref().ok_or_else(|| invalid_match(format!(
+            "pending match goal {:?} has no source-arm identity; resolve its open elaboration goal before tactic dispatch", goal.meta_id
+        )))?;
+        arm_tags.iter().position(|expected| expected.same_syntax(tag)).ok_or_else(|| invalid_match(format!(
+            "pending match goal {:?} has an unknown source-arm identity {tag}", goal.meta_id
+        )))
+    }).collect()
+}
+
+/// The term `match discrs with | pat => ?armᵢ …` whose holes the arms'
+/// tactics fill — Lean's own expansion of the tactic `match` (a `refine` of
+/// that term). An annotated discriminant was generalized by the caller.
 fn build_tactic_match_expr(
     span: Span,
     discrs: &[SurfaceExpr],
     arms: &[TacticMatchArm],
 ) -> SurfaceExpr {
-    // RIGHT-nested tuple fold — `a, b, c` packs as `Prod.mk a (Prod.mk b c)` —
-    // matching the right-nested tuple PATTERNS the arm parser produces
-    // (`(p, q, r)` → `Prod.mk p (Prod.mk q r)`), and the term-mode `match_body`
-    // scrutinee fold. The previous LEFT fold only agreed for exactly two
-    // discriminants (brick B05, docs/plans/GAP_SWEEP_2026-07-09.md).
+    // RIGHT-nested tuple agrees with the parser's multi-pattern representation.
     let scrutinee = discrs
         .iter()
         .cloned()
@@ -159,122 +172,24 @@ fn build_tactic_match_expr(
             let pair_span = expr.span().merge(acc.span());
             SurfaceExpr::App(
                 pair_span,
-                Box::new(SurfaceExpr::Ident(pair_span, "Prod.mk".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    pair_span,
+                    SurfaceName::global_path("Prod.mk"),
+                )),
                 vec![SurfaceArg::positional(expr), SurfaceArg::positional(acc)],
             )
         })
-        .expect("tactic match requires at least one discriminant");
+        .expect("caller requires a discriminant");
     let arms = arms
         .iter()
-        .map(|arm| SurfaceMatchArm {
+        .enumerate()
+        .map(|(index, arm)| SurfaceMatchArm {
             span: arm.span,
             pattern: arm.pattern.clone(),
-            body: SurfaceExpr::Hole(arm.span),
+            body: SurfaceExpr::NamedHole(arm.span, match_arm_tag(index)),
         })
         .collect();
     SurfaceExpr::Match(span, None, Box::new(scrutinee), arms)
-}
-
-fn planned_case_order(env: &Environment, discr_ty: &Expr, arms: &[TacticMatchArm]) -> Vec<usize> {
-    type_name_of(discr_ty)
-        .and_then(|type_name| ctor_order_case_plan(env, &type_name, arms))
-        .unwrap_or_else(|| (0..arms.len()).collect())
-}
-
-fn type_name_of(expr: &Expr) -> Option<String> {
-    match &**expr.get_app_fn() {
-        ExprKind::Const(name, _) => Some(name.to_string()),
-        _ => None,
-    }
-}
-
-fn ctor_order_case_plan(
-    env: &Environment,
-    type_name: &str,
-    arms: &[TacticMatchArm],
-) -> Option<Vec<usize>> {
-    let ctor_order = &env
-        .get_inductive(&Name::from_string(type_name))?
-        .constructor_names;
-    let mut specific = Vec::new();
-    let mut wildcard = None;
-
-    for (idx, arm) in arms.iter().enumerate() {
-        match &arm.pattern {
-            SurfacePattern::Wildcard => {
-                if wildcard.is_some() || idx + 1 != arms.len() {
-                    return None;
-                }
-                wildcard = Some(idx);
-            }
-            _ => {
-                let full_ctor = top_level_ctor_target_name(env, type_name, &arm.pattern)?;
-                if specific.iter().any(|(name, _)| name == &full_ctor) {
-                    return None;
-                }
-                specific.push((full_ctor, idx));
-            }
-        }
-    }
-
-    let mut ordered = Vec::with_capacity(ctor_order.len());
-    for ctor_name in ctor_order {
-        let ctor_name = ctor_name.to_string();
-        if let Some((_, idx)) = specific.iter().find(|(name, _)| name == &ctor_name) {
-            ordered.push(*idx);
-            continue;
-        }
-        if let Some(idx) = wildcard {
-            ordered.push(idx);
-            continue;
-        }
-        return None;
-    }
-
-    if specific
-        .iter()
-        .any(|(name, _)| !ctor_order.iter().any(|ctor| ctor.to_string() == *name))
-    {
-        return None;
-    }
-
-    let mut unique = Vec::new();
-    for idx in ordered {
-        if !unique.contains(&idx) {
-            unique.push(idx);
-        }
-    }
-    Some(unique)
-}
-
-fn top_level_ctor_target_name(
-    env: &Environment,
-    type_name: &str,
-    pattern: &SurfacePattern,
-) -> Option<String> {
-    match pattern {
-        SurfacePattern::Ctor(ctor_name, _) => Some(if ctor_name.contains('.') {
-            ctor_name.clone()
-        } else {
-            format!("{type_name}.{ctor_name}")
-        }),
-        SurfacePattern::Lit(SurfaceLit::Nat(0)) => Some(format!("{type_name}.zero")),
-        SurfacePattern::Lit(SurfaceLit::Nat(_)) | SurfacePattern::NumeralAdd(_, _) => {
-            Some(format!("{type_name}.succ"))
-        }
-        SurfacePattern::Var(name) => {
-            let full_ctor = if name.contains('.') {
-                name.clone()
-            } else {
-                format!("{type_name}.{name}")
-            };
-            env.get_constructor(&Name::from_string(&full_ctor))
-                .filter(|info| info.num_fields == 0)
-                .map(|_| full_ctor)
-        }
-        SurfacePattern::As(_, inner) => top_level_ctor_target_name(env, type_name, inner),
-        _ => None,
-    }
 }
 
 #[cfg(test)]

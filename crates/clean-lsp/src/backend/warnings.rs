@@ -7,11 +7,13 @@ use super::analysis::{
     collect_ident_locations, collect_locations_from_binders, collect_used_idents, IdentLocation,
 };
 use crate::document::{Warning, WarningCode};
+use clean_kernel::Name;
+use clean_parser::SurfaceName;
 use std::collections::{HashMap, HashSet};
 
 /// Binder information for unused-variable detection.
 struct BinderInfo {
-    name: String,
+    name: SurfaceName,
     start: usize,
     end: usize,
 }
@@ -26,7 +28,7 @@ pub(super) fn collect_sorry_usage(
     match expr {
         SurfaceExpr::Ident(span, name) => {
             // Check for sorry, admit, or native_decide (which can hide incomplete proofs)
-            if name == "sorry" || name == "admit" {
+            if name.is_unescaped_component("sorry") || name.is_unescaped_component("admit") {
                 locations.push(IdentLocation {
                     name: name.clone(),
                     start: span.start,
@@ -57,7 +59,9 @@ pub(super) fn collect_sorry_usage(
             collect_sorry_usage(left, locations);
             collect_sorry_usage(right, locations);
         }
-        SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::LetRec(_, binder, val, body) => {
+        SurfaceExpr::Let(_, binder, val, body)
+        | SurfaceExpr::Have(_, binder, val, body)
+        | SurfaceExpr::LetRec(_, binder, val, body) => {
             if let Some(ty) = &binder.ty {
                 collect_sorry_usage(ty, locations);
             }
@@ -166,7 +170,7 @@ pub(super) fn collect_sorry_usage(
         // Synthetic sorry: the elaborator inserted this sorry, treat as sorry usage
         SurfaceExpr::SyntheticSorry(span) => {
             locations.push(IdentLocation {
-                name: "sorry".to_string(),
+                name: SurfaceName::generated_path("sorry"),
                 start: span.start,
                 end: span.end,
             });
@@ -189,7 +193,10 @@ pub(super) fn collect_sorry_usage_do_elem(
 ) {
     use clean_parser::DoElem;
     match elem {
-        DoElem::Bind(_, _, action) | DoElem::Let(_, _, action) | DoElem::LetMut(_, _, action) => {
+        DoElem::Bind(_, _, action)
+        | DoElem::Let(_, _, action)
+        | DoElem::Have(_, _, action)
+        | DoElem::LetMut(_, _, action) => {
             collect_sorry_usage(action, locations);
         }
         DoElem::LetRec(_, bindings) => {
@@ -338,7 +345,7 @@ pub(crate) fn detect_sorry_warnings(decl: &clean_parser::SurfaceDecl) -> Vec<War
 }
 
 /// Collect names marked as deprecated via `attribute [deprecated] ...`
-pub(crate) fn collect_deprecated_names(decls: &[clean_parser::SurfaceDecl]) -> HashSet<String> {
+pub(crate) fn collect_deprecated_names(decls: &[clean_parser::SurfaceDecl]) -> HashSet<Name> {
     let mut deprecated = HashSet::new();
 
     for decl in decls {
@@ -355,7 +362,7 @@ pub(crate) fn collect_deprecated_names(decls: &[clean_parser::SurfaceDecl]) -> H
 
                 if is_deprecated {
                     for name in names {
-                        deprecated.insert(name.clone());
+                        deprecated.insert(name.name().clone());
                     }
                 }
             }
@@ -374,11 +381,11 @@ pub(crate) fn collect_deprecated_names(decls: &[clean_parser::SurfaceDecl]) -> H
 /// Convert identifier occurrences to deprecation warnings
 pub(super) fn warnings_for_deprecated_usage(
     locations: Vec<IdentLocation>,
-    deprecated_names: &HashSet<String>,
+    deprecated_names: &HashSet<Name>,
 ) -> Vec<Warning> {
     locations
         .into_iter()
-        .filter(|loc| deprecated_names.contains(&loc.name))
+        .filter(|loc| deprecated_names.contains(loc.name.name()))
         .map(|loc| Warning {
             start: loc.start,
             end: loc.end,
@@ -392,7 +399,7 @@ pub(super) fn warnings_for_deprecated_usage(
 /// Detect usage of deprecated names within a declaration
 pub(crate) fn detect_deprecated_usage(
     decl: &clean_parser::SurfaceDecl,
-    deprecated_names: &HashSet<String>,
+    deprecated_names: &HashSet<Name>,
 ) -> Vec<Warning> {
     use clean_parser::SurfaceDecl;
 
@@ -614,12 +621,16 @@ pub(crate) fn detect_unused_variables(decl: &clean_parser::SurfaceDecl) -> Vec<W
     // Check each binder
     for binder in binders {
         // Skip anonymous binders (names starting with _)
-        if binder.name.starts_with('_') {
+        if binder
+            .name
+            .component_text()
+            .is_some_and(|text| text.starts_with('_'))
+        {
             continue;
         }
 
         // Check if the binder is used
-        if !used.contains(&binder.name) {
+        if !used.contains(binder.name.name()) {
             warnings.push(Warning {
                 start: binder.start,
                 end: binder.end,
@@ -649,15 +660,19 @@ pub(crate) fn detect_duplicate_binders(decl: &clean_parser::SurfaceDecl) -> Vec<
     };
 
     // Map each non-anonymous name to the span of its first occurrence.
-    let mut first_seen: HashMap<String, (usize, usize)> = HashMap::new();
+    let mut first_seen: HashMap<Name, (usize, usize)> = HashMap::new();
     for binder in &binders {
         // Anonymous binders (`_`-prefixed) are intentionally repeatable.
-        if binder.name.starts_with('_') {
+        if binder
+            .name
+            .component_text()
+            .is_some_and(|text| text.starts_with('_'))
+        {
             continue;
         }
-        match first_seen.get(&binder.name) {
+        match first_seen.get(binder.name.name()) {
             None => {
-                first_seen.insert(binder.name.clone(), (binder.start, binder.end));
+                first_seen.insert(binder.name.name().clone(), (binder.start, binder.end));
             }
             Some(&(first_start, first_end)) => {
                 warnings.push(Warning {

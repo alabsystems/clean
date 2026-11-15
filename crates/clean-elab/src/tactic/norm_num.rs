@@ -23,9 +23,11 @@ use super::norm_num_kernel::norm_num_kernel_proof;
 use super::proof_term::{reduce_eq, rfl};
 // The in-crate `decide` fallback MUST be the kernel-evaluating ladder
 // (`decide::eval_decide`, the same function the `decide` token is registered
-// to), not the bare SMT bridge. `smt::decide` answers "found counterexample —
-// goal is not valid" on TRUE ground goals such as `(2:Nat) ≤ 3`, which
-// `eval_decide` proves outright; `eval_decide` still ends in `smt::decide`, so
+// to), not the bare SMT bridge. `smt::decide` fails ("found no proof: the
+// negated goal is satisfiable in the solver's abstraction …"; before
+// 2026-09-28 it misreported this as "found counterexample — goal is not
+// valid") on TRUE ground goals such as `(2:Nat) ≤ 3`, which `eval_decide`
+// proves outright; `eval_decide` still ends in `smt::decide`, so
 // this is strictly additive. Do not "simplify" this back to `super::smt::decide`.
 use super::decide::eval_decide as decide;
 
@@ -39,6 +41,8 @@ use super::decide::eval_decide as decide;
 /// - `Int.mul`, `HMul.hMul`, `Mul.mul` — multiplication
 /// - `Int.sub`, `HSub.hSub`, `Sub.sub` — subtraction
 /// - `Int.neg`, `HNeg.hNeg`, `Neg.neg` — negation
+/// - `Int.div` / `Int.mod` — truncating division / remainder
+/// - `Int.ediv` / `Int.emod` — Euclidean division / remainder
 /// - Nat literals (promoted to Int via implicit coercion)
 ///
 /// # Contract
@@ -94,7 +98,7 @@ fn try_eval_int_binary_direct(f: &Expr, arg: &Expr) -> Option<i64> {
     };
     let l = eval_int_expr(arg1)?;
     let r = eval_int_expr(arg)?;
-    eval_int_binop(&name.to_string(), l, r)
+    eval_int_binop(name, l, r)
 }
 
 /// Try evaluating an app-spine binary form: `op inst... a b`.
@@ -108,7 +112,7 @@ fn try_eval_int_binary_spine(expr: &Expr) -> Option<i64> {
     };
     let l = eval_int_expr(all_args[all_args.len() - 2])?;
     let r = eval_int_expr(all_args[all_args.len() - 1])?;
-    eval_int_binop(&op_name.to_string(), l, r)
+    eval_int_binop(op_name, l, r)
 }
 
 /// Apply a binary Int operation by name.
@@ -117,12 +121,28 @@ fn try_eval_int_binary_spine(expr: &Expr) -> Option<i64> {
 /// (truncation toward zero; remainder sign follows the dividend) and the
 /// zero-divisor totalizations `a / 0 = 0`, `a % 0 = a`. These match
 /// clean-kernel's native `reduce_int_div` / `reduce_int_mod` reducers
-/// byte-for-byte, so a `rfl` close produced after this evaluation stays
-/// kernel-checkable. Euclidean `Int.emod` / `Int.ediv` are deliberately
-/// *not* handled here: the kernel has no native reducer for them, so a
-/// `rfl` close would fail type-checking (same reasoning that excludes
-/// `Nat.lcm` from the extended evaluator).
-fn eval_int_binop(op: &str, l: i64, r: i64) -> Option<i64> {
+/// byte-for-byte. `Int.ediv` / `Int.emod` instead follow the checked Euclidean
+/// definitions. Generic division projections require their actual dictionary
+/// to be unfolded by the kernel; this environment-free evaluator cannot infer
+/// its meaning from an `Int` carrier or from the projection's name.
+fn eval_int_binop(name: &Name, l: i64, r: i64) -> Option<i64> {
+    let op = [
+        "Int.add",
+        "HAdd.hAdd",
+        "Add.add",
+        "Int.mul",
+        "HMul.hMul",
+        "Mul.mul",
+        "Int.sub",
+        "HSub.hSub",
+        "Sub.sub",
+        "Int.div",
+        "Int.mod",
+        "Int.ediv",
+        "Int.emod",
+    ]
+    .into_iter()
+    .find(|op| name == &Name::from_string(op))?;
     match op {
         "Int.add" | "HAdd.hAdd" | "Add.add" => l.checked_add(r),
         "Int.mul" | "HMul.hMul" | "Mul.mul" => l.checked_mul(r),
@@ -130,7 +150,7 @@ fn eval_int_binop(op: &str, l: i64, r: i64) -> Option<i64> {
         // Int.div: T-division, totalized as `a / 0 = 0`. `checked_div`
         // returns `None` only on the `i64::MIN / -1` overflow, where the
         // kernel reducer also declines, leaving the term symbolic.
-        "Int.div" | "HDiv.hDiv" | "Div.div" => {
+        "Int.div" => {
             if r == 0 {
                 Some(0)
             } else {
@@ -140,11 +160,25 @@ fn eval_int_binop(op: &str, l: i64, r: i64) -> Option<i64> {
         // Int.mod: T-remainder, totalized as `a % 0 = a`. `checked_rem`
         // returns `None` only on the `i64::MIN % -1` overflow, matching the
         // kernel reducer.
-        "Int.mod" | "HMod.hMod" | "Mod.mod" => {
+        "Int.mod" => {
             if r == 0 {
                 Some(l)
             } else {
                 l.checked_rem(r)
+            }
+        }
+        "Int.ediv" => {
+            if r == 0 {
+                Some(0)
+            } else {
+                l.checked_div_euclid(r)
+            }
+        }
+        "Int.emod" => {
+            if r == 0 {
+                Some(l)
+            } else {
+                l.checked_rem_euclid(r)
             }
         }
         _ => None,

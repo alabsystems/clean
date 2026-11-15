@@ -11,6 +11,28 @@ use super::*;
 /// Extracted from `ElabCtx::new` to keep constructor size manageable.
 /// Uses proper universe levels from `const_info.level_params` when building
 /// fallback instance expressions (Part of #1828).
+/// The declaring namespace of every IMPORTED `scoped instance` in `env`, as
+/// the olean loader recorded it (`clean_olean::ScopedInstanceState`). Feeds
+/// `ElabCtx::instance_visible`, which already gates source-declared scoped
+/// instances on `open` / namespace entry (Lean's `activateScoped`); until
+/// 2026-09-10 an imported `scoped instance` was simply global, so
+/// `example (α : Type) [LE α] : LT α := inferInstance` passed through
+/// Mathlib's `Classical.Order.instOrd` where Lean fails.
+fn imported_scoped_instances(env: &Environment) -> HashMap<Name, Name> {
+    env.get_ext_state::<clean_olean::ScopedInstanceState>(clean_olean::scoped_instance_idx())
+        .map(|state| state.scope_of.clone())
+        .unwrap_or_default()
+}
+
+/// Every `local instance` the environment records. A context built without a
+/// `FileContext` has no instance in force as `local` (it declares none), so all
+/// of them are hidden, as Lean hides another module's `local instance`; a
+/// context built for a file replaces this with the file's instance state
+/// (`FileContext::instance_view`).
+fn other_modules_local_instances(env: &Environment) -> std::collections::HashSet<Name> {
+    env.local_instance_names().cloned().collect()
+}
+
 fn init_instances_from_env(env: &Environment) -> InstanceTable {
     let mut instances = InstanceTable::new();
 
@@ -111,10 +133,30 @@ fn init_instances_from_env(env: &Environment) -> InstanceTable {
     }
     instances.sort_instances_by_priority();
 
+    // Lean indexes an instance by its type after a REDUCIBLE telescope
+    // (`Lean/Meta/Instances.lean` `mkInstanceKey`), so an instance filed here
+    // under an alias class (`DecidableLT`, from `clean-olean`'s syntactic
+    // filing) also answers goals of the class the alias unfolds to. Record
+    // which registered classes are such aliases; the resolver reads their
+    // buckets for final-class goals (`resolve_instance_candidates`).
+    let aliases =
+        crate::instance_alias::class_aliases_by_final(env, &class_names, |n| instances.is_class(n));
+    instances.set_class_aliases(aliases);
+
     instances
 }
 
 impl<'a> ElabCtx<'a> {
+    pub(crate) fn set_source_world(&mut self, world: clean_kernel::LeanWorld) {
+        self.source_world = Some(world);
+    }
+
+    pub(crate) fn set_tactic_goal_capture(
+        &mut self,
+        capture: Option<crate::tactic::TacticGoalCapture>,
+    ) {
+        self.tactic_goal_capture = capture;
+    }
     /// Create a new elaboration context for the given environment.
     ///
     /// # ENSURES
@@ -127,8 +169,20 @@ impl<'a> ElabCtx<'a> {
 
         Self {
             env,
+            source_world: None,
             locals: local_bindings::LocalBindings::new(),
+            local_name_aliases: Vec::new(),
+            single_theorem_capture: None,
             shared_if_let_scrutinees: Vec::new(),
+            structural_rec_sites: Vec::new(),
+            recursive_changed_params: std::collections::HashSet::new(),
+            recursive_call_miss: None,
+            where_termination: Vec::new(),
+            aux_decl_locals: std::collections::HashSet::new(),
+            let_rec_lift: let_rec_lift::LetRecLiftState::default(),
+            mutual_lift_entries: Vec::new(),
+            mutual_eq_lemmas: Vec::new(),
+            logged_deriving_failures: Vec::new(),
             universe_params: Vec::new(),
             file_universe_params: Vec::new(),
             file_universe_scope_known: false,
@@ -138,8 +192,36 @@ impl<'a> ElabCtx<'a> {
             level_mint: crate::level_mint::LevelMint::new(),
             instances,
             local_instances: Vec::new(),
-            hidden_instances: std::collections::HashSet::new(),
-            scoped_instances: HashMap::new(),
+            hidden_instances: other_modules_local_instances(env),
+            scoped_instances: imported_scoped_instances(env),
+            foreign_private_decls: std::sync::Arc::default(),
+            private_module_known: false,
+            instance_view: None,
+            classical_tactic_scope: 0,
+            instance_search_steps: 0,
+            failed_local_subgoals: std::collections::HashSet::new(),
+            instance_search_stuck: false,
+            user_default_instance_answers: 0,
+            open_numeral_let_types: Vec::new(),
+            let_rec_settled_open_numerals: 0,
+            numeral_postpone_depth: 0,
+            postponing_let_depth: 0,
+            postponing_scope_start: 0,
+            defer_user_defaults: 0,
+            deferred_user_default_goals: 0,
+            user_default_priority_floor: None,
+            lean_order_ground_refusal: None,
+            lean_default_points: 0,
+            binop_tree_plans: Vec::new(),
+            redex_binder_domains: None,
+            redex_binder_escaped: false,
+            pinned_redex_binder_types: None,
+            pinned_lambda_binder_types: Vec::new(),
+            settle_floor: None,
+            bne_beq_head: None,
+            alias_instance_heads: HashMap::new(),
+            struct_lit_trees: Vec::new(),
+            struct_lit_join_parent: false,
             default_instances: HashMap::new(),
             instance_cache: HashMap::new(),
             tc_caches: RefCell::new(TcCaches::default()),
@@ -158,6 +240,9 @@ impl<'a> ElabCtx<'a> {
             meta_value_bindings: HashMap::new(),
             collected_aesop_attrs: Vec::new(),
             collected_simp_attrs: Vec::new(),
+            collected_local_simp: Vec::new(),
+            collected_local_csimp: Vec::new(),
+            collected_scoped_csimp: Vec::new(),
             collected_reducibility: Vec::new(),
             collected_extern: Vec::new(),
             collected_export: Vec::new(),
@@ -167,8 +252,10 @@ impl<'a> ElabCtx<'a> {
             collected_always_inline: Vec::new(),
             collected_specialize: Vec::new(),
             collected_csimp: Vec::new(),
+            collected_definition_attrs: Vec::new(),
             collected_congr: Vec::new(),
             collected_ext: Vec::new(),
+            collected_grind: Vec::new(),
             collected_refl: Vec::new(),
             collected_symm: Vec::new(),
             collected_macro_inline: Vec::new(),
@@ -180,6 +267,7 @@ impl<'a> ElabCtx<'a> {
             collected_init: Vec::new(),
             collected_default_instance: Vec::new(),
             collected_instance_attrs: Vec::new(),
+            collected_scoped_instance_attrs: Vec::new(),
             collected_class_attrs: Vec::new(),
             collected_derive_handler: Vec::new(),
             collected_attribute_removals: Vec::new(),
@@ -190,27 +278,45 @@ impl<'a> ElabCtx<'a> {
             section_binder_stack: Vec::new(),
             included_var_stack: Vec::new(),
             current_expected_type: None,
+            dot_elim: Default::default(),
             recursive_def_ctx: None,
             explicit_mode: false,
+            value_is_explicit_app: false,
             suppress_binop_homogenize: false,
+            lambda_postpone: Default::default(),
+            postponed_open_carrier_instances: Vec::new(),
+            do_pure_obligations: Vec::new(),
             do_monad_info: None,
             do_control_info: None,
             do_control_stack: None,
             do_wrapped_monad: None,
             do_loop_ctx: None,
             do_mut_vars: Vec::new(),
+            do_active_mut_vars: Vec::new(),
             do_pure_state: false,
             pending_level_assigns: RefCell::new(Vec::new()),
             namespace_state: crate::namespace::NamespaceState::new(),
-            namespace_prefix: String::new(),
+            namespace_prefix: SurfaceName::default(),
+            decl_site_namespace: None,
             local_options: HashMap::new(),
             match_dependent_motive: None,
             match_dependent_motive_indices: 0,
             match_index_discriminating_punit: None,
             nested_mutual_aux_arms: None,
             hole_names: HashMap::new(),
+            local_forall_binder_names: HashMap::new(),
+            surface_forall_binder_names: Vec::new(),
             self_reference: None,
             unstaged_siblings: Vec::new(),
+            tactic_trace: tactic_trace::TacticTrace::default(),
+            tactic_goal_capture: None,
+            term_info_capture: None,
+            term_contexts: Vec::new(),
+            term_info_stack: Vec::new(),
+            term_local_display_names: HashMap::new(),
+            tactic_goal_block: None,
+            section_prune: None,
+            section_prune_outcome: None,
         }
     }
 
@@ -226,7 +332,7 @@ impl<'a> ElabCtx<'a> {
     /// # ENSURES
     /// - Returns all collected aesop attributes (moves ownership)
     /// - After call, internal collection is empty
-    pub fn take_aesop_attrs(&mut self) -> Vec<(Name, AesopAttr)> {
+    pub(crate) fn take_aesop_attrs(&mut self) -> Vec<(Name, AesopAttr)> {
         std::mem::take(&mut self.collected_aesop_attrs)
     }
 
@@ -235,13 +341,29 @@ impl<'a> ElabCtx<'a> {
         std::mem::take(&mut self.collected_simp_attrs)
     }
 
+    /// Take the simp lemmas a `local simp` registered (a subset of
+    /// [`Self::take_simp_attrs`]), for scoped retirement.
+    pub(crate) fn take_scoped_csimp(&mut self) -> Vec<(Name, Name)> {
+        std::mem::take(&mut self.collected_scoped_csimp)
+    }
+
+    pub(crate) fn take_local_csimp(&mut self) -> Vec<Name> {
+        std::mem::take(&mut self.collected_local_csimp)
+    }
+
+    pub(crate) fn take_local_simp(&mut self) -> Vec<Name> {
+        std::mem::take(&mut self.collected_local_simp)
+    }
+
     /// Take collected reducibility attributes for registration
     pub(crate) fn take_reducibility(&mut self) -> Vec<(Name, Reducibility)> {
         std::mem::take(&mut self.collected_reducibility)
     }
 
     /// Take collected extern bindings for registration
-    pub(crate) fn take_extern(&mut self) -> Vec<(Name, String)> {
+    pub(crate) fn take_extern(
+        &mut self,
+    ) -> Vec<(Name, String, crate::declared_here::AttributeSite)> {
         std::mem::take(&mut self.collected_extern)
     }
 
@@ -280,6 +402,10 @@ impl<'a> ElabCtx<'a> {
         std::mem::take(&mut self.collected_csimp)
     }
 
+    pub(crate) fn take_definition_attrs(&mut self) -> Vec<crate::definition_attrs::NamedAttribute> {
+        std::mem::take(&mut self.collected_definition_attrs)
+    }
+
     /// Take collected congr lemmas for registration
     pub(crate) fn take_congr(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_congr)
@@ -288,6 +414,11 @@ impl<'a> ElabCtx<'a> {
     /// Take collected ext lemmas for registration
     pub(crate) fn take_ext(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_ext)
+    }
+
+    /// Take collected `@[grind]` registrations for registration.
+    pub(crate) fn take_grind(&mut self) -> Vec<(Name, clean_kernel::env::GrindAttrKind)> {
+        std::mem::take(&mut self.collected_grind)
     }
 
     /// Take collected refl lemmas for registration
@@ -316,7 +447,7 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Take collected @[implemented_by] bindings for registration
-    pub(crate) fn take_implemented_by(&mut self) -> Vec<(Name, String)> {
+    pub(crate) fn take_implemented_by(&mut self) -> Vec<crate::implemented_by::ImplementedByUse> {
         std::mem::take(&mut self.collected_implemented_by)
     }
 
@@ -346,6 +477,12 @@ impl<'a> ElabCtx<'a> {
         std::mem::take(&mut self.collected_instance_attrs)
     }
 
+    /// Take the `local instance` / `scoped instance` attributes collected
+    /// this declaration.
+    pub(crate) fn take_scoped_instance_attrs(&mut self) -> Vec<(Name, u32, ScopedInstanceAttr)> {
+        std::mem::take(&mut self.collected_scoped_instance_attrs)
+    }
+
     /// Take the `attribute [class] X` targets collected this declaration.
     pub(crate) fn take_class_attrs(&mut self) -> Vec<Name> {
         std::mem::take(&mut self.collected_class_attrs)
@@ -369,13 +506,11 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Also syncs `namespace_prefix` from `NamespaceState.current_namespace()`
     /// so that `qualify_name()` correctly prefixes declaration names (#3410).
-    pub fn set_namespace_state(&mut self, state: crate::namespace::NamespaceState) {
+    pub(crate) fn set_namespace_state(&mut self, state: crate::namespace::NamespaceState) {
         // Sync namespace_prefix from the NamespaceState's current namespace
         // so that qualify_name() correctly prefixes declaration names (#3410).
         let current_ns = state.current_namespace();
-        if !current_ns.is_anon() {
-            self.namespace_prefix = current_ns.to_string();
-        }
+        self.namespace_prefix = SurfaceName::from_name(current_ns.clone());
         self.namespace_state = state;
     }
 
@@ -404,8 +539,20 @@ impl<'a> ElabCtx<'a> {
     pub fn with_instances(env: &'a Environment, instances: InstanceTable) -> Self {
         Self {
             env,
+            source_world: None,
             locals: local_bindings::LocalBindings::new(),
+            local_name_aliases: Vec::new(),
+            single_theorem_capture: None,
             shared_if_let_scrutinees: Vec::new(),
+            structural_rec_sites: Vec::new(),
+            recursive_changed_params: std::collections::HashSet::new(),
+            recursive_call_miss: None,
+            where_termination: Vec::new(),
+            aux_decl_locals: std::collections::HashSet::new(),
+            let_rec_lift: let_rec_lift::LetRecLiftState::default(),
+            mutual_lift_entries: Vec::new(),
+            mutual_eq_lemmas: Vec::new(),
+            logged_deriving_failures: Vec::new(),
             universe_params: Vec::new(),
             file_universe_params: Vec::new(),
             file_universe_scope_known: false,
@@ -415,8 +562,36 @@ impl<'a> ElabCtx<'a> {
             level_mint: crate::level_mint::LevelMint::new(),
             instances,
             local_instances: Vec::new(),
-            hidden_instances: std::collections::HashSet::new(),
-            scoped_instances: HashMap::new(),
+            hidden_instances: other_modules_local_instances(env),
+            scoped_instances: imported_scoped_instances(env),
+            foreign_private_decls: std::sync::Arc::default(),
+            private_module_known: false,
+            instance_view: None,
+            classical_tactic_scope: 0,
+            instance_search_steps: 0,
+            failed_local_subgoals: std::collections::HashSet::new(),
+            instance_search_stuck: false,
+            user_default_instance_answers: 0,
+            open_numeral_let_types: Vec::new(),
+            let_rec_settled_open_numerals: 0,
+            numeral_postpone_depth: 0,
+            postponing_let_depth: 0,
+            postponing_scope_start: 0,
+            defer_user_defaults: 0,
+            deferred_user_default_goals: 0,
+            user_default_priority_floor: None,
+            lean_order_ground_refusal: None,
+            lean_default_points: 0,
+            binop_tree_plans: Vec::new(),
+            redex_binder_domains: None,
+            redex_binder_escaped: false,
+            pinned_redex_binder_types: None,
+            pinned_lambda_binder_types: Vec::new(),
+            settle_floor: None,
+            bne_beq_head: None,
+            alias_instance_heads: HashMap::new(),
+            struct_lit_trees: Vec::new(),
+            struct_lit_join_parent: false,
             default_instances: HashMap::new(),
             instance_cache: HashMap::new(),
             tc_caches: RefCell::new(TcCaches::default()),
@@ -435,6 +610,9 @@ impl<'a> ElabCtx<'a> {
             meta_value_bindings: HashMap::new(),
             collected_aesop_attrs: Vec::new(),
             collected_simp_attrs: Vec::new(),
+            collected_local_simp: Vec::new(),
+            collected_local_csimp: Vec::new(),
+            collected_scoped_csimp: Vec::new(),
             collected_reducibility: Vec::new(),
             collected_extern: Vec::new(),
             collected_export: Vec::new(),
@@ -444,8 +622,10 @@ impl<'a> ElabCtx<'a> {
             collected_always_inline: Vec::new(),
             collected_specialize: Vec::new(),
             collected_csimp: Vec::new(),
+            collected_definition_attrs: Vec::new(),
             collected_congr: Vec::new(),
             collected_ext: Vec::new(),
+            collected_grind: Vec::new(),
             collected_refl: Vec::new(),
             collected_symm: Vec::new(),
             collected_macro_inline: Vec::new(),
@@ -457,6 +637,7 @@ impl<'a> ElabCtx<'a> {
             collected_init: Vec::new(),
             collected_default_instance: Vec::new(),
             collected_instance_attrs: Vec::new(),
+            collected_scoped_instance_attrs: Vec::new(),
             collected_class_attrs: Vec::new(),
             collected_derive_handler: Vec::new(),
             collected_attribute_removals: Vec::new(),
@@ -467,27 +648,45 @@ impl<'a> ElabCtx<'a> {
             section_binder_stack: Vec::new(),
             included_var_stack: Vec::new(),
             current_expected_type: None,
+            dot_elim: Default::default(),
             recursive_def_ctx: None,
             explicit_mode: false,
+            value_is_explicit_app: false,
             suppress_binop_homogenize: false,
+            lambda_postpone: Default::default(),
+            postponed_open_carrier_instances: Vec::new(),
+            do_pure_obligations: Vec::new(),
             do_monad_info: None,
             do_control_info: None,
             do_control_stack: None,
             do_wrapped_monad: None,
             do_loop_ctx: None,
             do_mut_vars: Vec::new(),
+            do_active_mut_vars: Vec::new(),
             do_pure_state: false,
             pending_level_assigns: RefCell::new(Vec::new()),
             namespace_state: crate::namespace::NamespaceState::new(),
-            namespace_prefix: String::new(),
+            namespace_prefix: SurfaceName::default(),
+            decl_site_namespace: None,
             local_options: HashMap::new(),
             match_dependent_motive: None,
             match_dependent_motive_indices: 0,
             match_index_discriminating_punit: None,
             nested_mutual_aux_arms: None,
             hole_names: HashMap::new(),
+            local_forall_binder_names: HashMap::new(),
+            surface_forall_binder_names: Vec::new(),
             self_reference: None,
             unstaged_siblings: Vec::new(),
+            tactic_trace: tactic_trace::TacticTrace::default(),
+            tactic_goal_capture: None,
+            term_info_capture: None,
+            term_contexts: Vec::new(),
+            term_info_stack: Vec::new(),
+            term_local_display_names: HashMap::new(),
+            tactic_goal_block: None,
+            section_prune: None,
+            section_prune_outcome: None,
         }
     }
 
@@ -504,7 +703,11 @@ impl<'a> ElabCtx<'a> {
         defaults: &[(Name, Name, u32)],
     ) {
         self.hidden_instances = hidden;
-        self.scoped_instances = scoped;
+        // The file's own `scoped instance`s on top of the IMPORTED ones (the
+        // olean's `scoped` entries, seeded at construction): both must keep
+        // gating on `open`, so this merges rather than replaces.
+        self.scoped_instances = imported_scoped_instances(self.env);
+        self.scoped_instances.extend(scoped);
         self.default_instances.clear();
         for (inst, class, priority) in defaults {
             self.default_instances
@@ -512,6 +715,30 @@ impl<'a> ElabCtx<'a> {
                 .or_default()
                 .push((inst.clone(), *priority));
         }
+    }
+
+    /// Inject the module's CURRENT instance state
+    /// ([`crate::FileContext::instance_view`]): from here on it alone decides
+    /// which instances resolution may pick (`instance_visible`), and the
+    /// entries whose priority or position differ from the environment's
+    /// global table are re-sorted into Lean's order in this context's table.
+    pub(crate) fn set_instance_view(&mut self, view: crate::instance_store::InstanceView) {
+        self.hidden_instances = view.hidden();
+        let changed: Vec<Name> = view.overrides.keys().cloned().collect();
+        self.instances
+            .apply_instance_entries(&changed, &view.overrides, self.env);
+        self.instance_view = Some(view);
+    }
+
+    /// Inject the `private` declarations of other modules, which no name in
+    /// this declaration may resolve to (see `FileContext::
+    /// foreign_private_decls`).
+    pub(crate) fn set_foreign_private_decls(
+        &mut self,
+        names: std::sync::Arc<std::collections::HashSet<Name>>,
+    ) {
+        self.foreign_private_decls = names;
+        self.private_module_known = true;
     }
 
     /// Get mutable access to the instance table
@@ -552,14 +779,18 @@ impl<'a> ElabCtx<'a> {
     /// [`super::NestedMutualAuxArms`].
     pub(crate) fn set_nested_mutual_aux_arms(
         &mut self,
-        source: Option<(String, Vec<clean_parser::SurfaceMatchArm>, Vec<String>)>,
+        source: Option<(
+            SurfaceName,
+            Vec<clean_parser::SurfaceMatchArm>,
+            Vec<(SurfaceName, SurfaceExpr)>,
+        )>,
     ) {
         self.nested_mutual_aux_arms =
             source.map(
-                |(container_short, arms, sibling_func_names)| NestedMutualAuxArms {
-                    container_short,
+                |(container_name, arms, sibling_signatures)| NestedMutualAuxArms {
+                    container_name,
                     arms,
-                    sibling_func_names,
+                    sibling_signatures,
                 },
             );
     }
@@ -612,7 +843,7 @@ impl<'a> ElabCtx<'a> {
 
     /// Set universe parameters for the current declaration
     #[must_use]
-    pub fn with_universe_params(mut self, params: Vec<String>) -> Self {
+    pub fn with_universe_params(mut self, params: Vec<SurfaceName>) -> Self {
         self.universe_params = params;
         self
     }

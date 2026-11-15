@@ -75,8 +75,9 @@ fn test_exact_question_prefers_local_hypotheses() {
     let mut state = ProofState::new(env, const_expr("A"));
     let local_fvar = state.fresh_fvar();
     state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: local_fvar,
-        name: "h_local".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h_local"),
         ty: const_expr("A"),
         value: None,
     });

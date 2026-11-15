@@ -1,0 +1,316 @@
+; TrustIr text format v1
+; E5 SLICES (crystal decision memo section 23). NOT a compiler-emitted module.
+; The six slice functions are VERBATIM instruction lines of the m0off callee sidecar
+; (trust seal-m0 rev 7781c8b800; callees text sha256 d3884376b2a47078014dfd604ef376f9354a6ba668729c20b1e6bb4d91fc61c5),
+; each wrapped in a header naming its free operands and a `ret`, then put in trust-ir's own
+; canonical form (`trust_ir::format::canonical`: dense SSA renumbering, nothing else):
+;   e5::get_const_d14          <- clean_kernel::env::Environment::get_const, lines 18338-18355 (%29..%46)
+;   e5::get_const_vtable_read  <- the same body, lines 18338-18345 (%29..%36): D14's vtable read
+;   e5::get_const_rebuild      <- the same body, lines 18354-18355 (%45..%46): the trait-object rebuild
+;   e5::name_eq_arc_str_deref  <- <clean_kernel::name::Name as PartialEq>::eq, lines 31140-31147 (%107..%114)
+;   e5::name_eq_ptr_eq         <- <clean_kernel::name::Name as PartialEq>::eq, lines 31073-31074, 31078-31080
+;   e5::nameinner_clone_data   <- <clean_kernel::name::NameInner as Clone>::clone, lines 27906-27911 (%69..%74)
+; The struct rows are the dump's own (ids 4, 6, 53, 54, 77, 78, 90, 91). The e5::drive_* functions,
+; the e5_* globals and e5::control_thin_icmp are SYNTHETIC: drivers for trust-ir's reference
+; interpreter that build a buffer of markers (0x1000 + byte offset) and vtables
+; [drop = 0, size = 24, align], call one slice, and observe what it returns. Their EvalIR twins
+; are kernel runs over the minted slices (tests/eval_ir/e5_fat_images.rs).
+; e5_m0off_slices.trust-ir.bin beside this file is its binary encoding (serialize_module of the
+; parsed text), which the projector reads; the projector's test holds the two equal through
+; trust_ir::format::canonical, comment lines aside.
+module "e5_m0off_slices"
+
+struct @"core::marker::PhantomData" {  } size=0 align=1 id=4
+
+struct @"alloc::alloc::Global" {  } size=0 align=1 id=6
+
+struct @"core::ptr::non_null::NonNull" { pointer: fatptr<container_vtable> @0 } size=16 align=8 repr=transparent id=53
+
+struct @"alloc::sync::Arc" { ptr: struct.53 @0, phantom: struct.4 @16, alloc: struct.6 @16 } size=16 align=8 id=54
+
+struct @"core::sync::atomic::private::Align8" { 0: usize @0 } size=8 align=8 repr=c id=77
+
+struct @"core::cell::UnsafeCell" { value: struct.77 @0 } size=8 align=8 repr=transparent id=78
+
+struct @"core::ptr::non_null::NonNull" { pointer: fatptr<container_len> @0 } size=16 align=8 repr=transparent id=90
+
+struct @"alloc::sync::Arc" { ptr: struct.90 @0, phantom: struct.4 @16, alloc: struct.6 @16 } size=16 align=8 id=91
+
+functy.0 = (struct.54) -> (fatptr<dyn.265360036>)
+
+functy.1 = (struct.90) -> (fatptr<str>)
+
+functy.2 = (struct.90, struct.90) -> (bool)
+
+functy.3 = (struct.90) -> (ptr)
+
+functy.4 = () -> (u64)
+
+functy.5 = () -> (bool)
+
+functy.6 = (ptr, ptr) -> (bool)
+
+functy.7 = (struct.54) -> (usize)
+
+functy.8 = (ptr, ptr) -> (fatptr<dyn.265360036>)
+
+functy.9 = () -> (usize)
+
+type ty.0 = u64
+
+type ty.1 = usize
+
+global internal @e5_buf [ty.0 x 8] = array[ 4096, 4104, 4112, 4120, 4128, 4136, 4144, 4152 ]
+
+global internal @e5_vt_align8 [ty.1 x 3] = array[ 0, 24, 8 ]
+
+global internal @e5_vt_align16 [ty.1 x 3] = array[ 0, 24, 16 ]
+
+global internal @e5_vt_align32 [ty.1 x 3] = array[ 0, 24, 32 ]
+
+fn @"e5::get_const_d14"(functy.0) {
+bb0(%0: struct.54):
+    %1 = extractfield struct.53 %0, 0
+    %2 = copy struct.53 %1
+    %3 = extractfield fatptr<container_vtable> %2, 0
+    %4 = ptr_data fatptr<container_vtable> %3
+    %5 = ptr_metadata fatptr<container_vtable> %3 to ptr
+    %6 = const i64 16
+    %7 = gep inbounds i8, ptr %5, %6
+    %8 = load usize, ptr %7
+    %9 = const usize 1
+    %10 = const usize 0
+    %11 = const usize 16
+    %12 = sub usize %8, %9  ; #proof: wrapping
+    %13 = add usize %11, %12  ; #proof: wrapping
+    %14 = sub usize %10, %8  ; #proof: wrapping
+    %15 = and usize %13, %14  ; #proof: wrapping
+    %16 = gep inbounds i8, ptr %4, %15
+    %17 = ptr_from_parts fatptr<dyn.265360036> ptr %16, ptr %5
+    %18 = copy fatptr<dyn.265360036> %17  ; #proof: shared_borrow
+    ret %18
+}
+
+fn @"e5::get_const_vtable_read"(functy.7) {
+bb0(%0: struct.54):
+    %1 = extractfield struct.53 %0, 0
+    %2 = copy struct.53 %1
+    %3 = extractfield fatptr<container_vtable> %2, 0
+    %4 = ptr_data fatptr<container_vtable> %3
+    %5 = ptr_metadata fatptr<container_vtable> %3 to ptr
+    %6 = const i64 16
+    %7 = gep inbounds i8, ptr %5, %6
+    %8 = load usize, ptr %7
+    ret %8
+}
+
+fn @"e5::get_const_rebuild"(functy.8) {
+bb0(%0: ptr, %1: ptr):
+    %2 = ptr_from_parts fatptr<dyn.265360036> ptr %0, ptr %1
+    %3 = copy fatptr<dyn.265360036> %2  ; #proof: shared_borrow
+    ret %3
+}
+
+fn @"e5::name_eq_arc_str_deref"(functy.1) {
+bb0(%0: struct.90):
+    %1 = copy struct.90 %0
+    %2 = extractfield fatptr<container_len> %1, 0
+    %3 = ptr_data fatptr<container_len> %2
+    %4 = const i64 16
+    %5 = gep inbounds i8, ptr %3, %4
+    %6 = ptr_metadata fatptr<container_len> %2 to u64
+    %7 = ptr_from_parts fatptr<str> ptr %5, u64 %6
+    %8 = copy fatptr<str> %7  ; #proof: shared_borrow
+    ret %8
+}
+
+fn @"e5::name_eq_ptr_eq"(functy.2) {
+bb0(%0: struct.90, %1: struct.90):
+    %2 = copy struct.90 %0
+    %3 = extractfield fatptr<container_len> %2, 0
+    %4 = copy struct.90 %1
+    %5 = extractfield fatptr<container_len> %4, 0
+    %6 = icmp eq fatptr<container_len> %3, %5
+    ret %6
+}
+
+fn @"e5::nameinner_clone_data"(functy.3) {
+bb0(%0: struct.90):
+    %1 = copy struct.90 %0
+    %2 = extractfield fatptr<container_len> %1, 0
+    %3 = ptr_data fatptr<container_len> %2
+    %4 = const i64 0
+    %5 = gep struct.78, ptr %3, %4
+    %6 = copy ptr %5
+    ret %6
+}
+
+fn @"e5::drive_d14_align8"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = global_addr @global.1
+    %2 = ptr_from_parts fatptr<container_vtable> ptr %0, ptr %1
+    %3 = const struct.53 { { 0, 0 } }
+    %4 = insertfield struct.53 %3, 0, %2
+    %5 = const struct.54 { { { 0, 0 } }, {  }, {  } }
+    %6 = insertfield struct.54 %5, 0, %4
+    %7 = call @func.0(%6)
+    %8 = ptr_data fatptr<dyn.265360036> %7
+    %9 = load u64, ptr %8
+    ret %9
+}
+
+fn @"e5::drive_d14_align16"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = global_addr @global.2
+    %2 = ptr_from_parts fatptr<container_vtable> ptr %0, ptr %1
+    %3 = const struct.53 { { 0, 0 } }
+    %4 = insertfield struct.53 %3, 0, %2
+    %5 = const struct.54 { { { 0, 0 } }, {  }, {  } }
+    %6 = insertfield struct.54 %5, 0, %4
+    %7 = call @func.0(%6)
+    %8 = ptr_data fatptr<dyn.265360036> %7
+    %9 = load u64, ptr %8
+    ret %9
+}
+
+fn @"e5::drive_d14_align32"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = global_addr @global.3
+    %2 = ptr_from_parts fatptr<container_vtable> ptr %0, ptr %1
+    %3 = const struct.53 { { 0, 0 } }
+    %4 = insertfield struct.53 %3, 0, %2
+    %5 = const struct.54 { { { 0, 0 } }, {  }, {  } }
+    %6 = insertfield struct.54 %5, 0, %4
+    %7 = call @func.0(%6)
+    %8 = ptr_data fatptr<dyn.265360036> %7
+    %9 = load u64, ptr %8
+    ret %9
+}
+
+fn @"e5::drive_vtable_read_align8"(functy.9) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = global_addr @global.1
+    %2 = ptr_from_parts fatptr<container_vtable> ptr %0, ptr %1
+    %3 = const struct.53 { { 0, 0 } }
+    %4 = insertfield struct.53 %3, 0, %2
+    %5 = const struct.54 { { { 0, 0 } }, {  }, {  } }
+    %6 = insertfield struct.54 %5, 0, %4
+    %7 = call @func.1(%6)
+    ret %7
+}
+
+fn @"e5::drive_vtable_read_align16"(functy.9) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = global_addr @global.2
+    %2 = ptr_from_parts fatptr<container_vtable> ptr %0, ptr %1
+    %3 = const struct.53 { { 0, 0 } }
+    %4 = insertfield struct.53 %3, 0, %2
+    %5 = const struct.54 { { { 0, 0 } }, {  }, {  } }
+    %6 = insertfield struct.54 %5, 0, %4
+    %7 = call @func.1(%6)
+    ret %7
+}
+
+fn @"e5::drive_vtable_read_align32"(functy.9) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = global_addr @global.3
+    %2 = ptr_from_parts fatptr<container_vtable> ptr %0, ptr %1
+    %3 = const struct.53 { { 0, 0 } }
+    %4 = insertfield struct.53 %3, 0, %2
+    %5 = const struct.54 { { { 0, 0 } }, {  }, {  } }
+    %6 = insertfield struct.54 %5, 0, %4
+    %7 = call @func.1(%6)
+    ret %7
+}
+
+fn @"e5::drive_rebuild_data"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = const i64 16
+    %2 = gep inbounds i8, ptr %0, %1
+    %3 = global_addr @global.2
+    %4 = call @func.2(%2, %3)
+    %5 = ptr_data fatptr<dyn.265360036> %4
+    %6 = load u64, ptr %5
+    ret %6
+}
+
+fn @"e5::drive_rebuild_vtable_align"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = const i64 16
+    %2 = gep inbounds i8, ptr %0, %1
+    %3 = global_addr @global.2
+    %4 = call @func.2(%2, %3)
+    %5 = ptr_metadata fatptr<dyn.265360036> %4 to ptr
+    %6 = gep inbounds i8, ptr %5, %1
+    %7 = load u64, ptr %6
+    ret %7
+}
+
+fn @"e5::drive_arc_str_data"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = const u64 5
+    %2 = ptr_from_parts fatptr<container_len> ptr %0, u64 %1
+    %3 = const struct.90 { { 0, 0 } }
+    %4 = insertfield struct.90 %3, 0, %2
+    %5 = call @func.3(%4)
+    %6 = ptr_data fatptr<str> %5
+    %7 = load u64, ptr %6
+    ret %7
+}
+
+fn @"e5::drive_arc_str_len"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = const u64 5
+    %2 = ptr_from_parts fatptr<container_len> ptr %0, u64 %1
+    %3 = const struct.90 { { 0, 0 } }
+    %4 = insertfield struct.90 %3, 0, %2
+    %5 = call @func.3(%4)
+    %6 = ptr_metadata fatptr<str> %5 to u64
+    ret %6
+}
+
+fn @"e5::drive_ptr_eq"(functy.5) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = const u64 5
+    %2 = ptr_from_parts fatptr<container_len> ptr %0, u64 %1
+    %3 = const struct.90 { { 0, 0 } }
+    %4 = insertfield struct.90 %3, 0, %2
+    %5 = call @func.4(%4, %4)
+    ret %5
+}
+
+fn @"e5::drive_nameinner_clone_data"(functy.4) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = const u64 3
+    %2 = ptr_from_parts fatptr<container_len> ptr %0, u64 %1
+    %3 = const struct.90 { { 0, 0 } }
+    %4 = insertfield struct.90 %3, 0, %2
+    %5 = call @func.5(%4)
+    %6 = load u64, ptr %5
+    ret %6
+}
+
+fn @"e5::control_thin_icmp"(functy.6) {
+bb0(%0: ptr, %1: ptr):
+    %2 = icmp eq ptr %0, %1
+    ret %2
+}
+
+fn @"e5::drive_control_thin_icmp"(functy.5) {
+bb0:
+    %0 = global_addr @global.0
+    %1 = call @func.18(%0, %0)
+    ret %1
+}

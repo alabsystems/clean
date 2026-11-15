@@ -1,0 +1,6 @@
+# The VF4 theory `theories/chk_lia` (the checker `ChkLIA` and the statement pin
+# `ChkLIASpec`, an importable library since R162), compiled into this family's
+# staging directory first; then the negative-control module that imports the pin
+# (so loading it loads all three).
+theory chk_lia
+ChkLIAPlanted

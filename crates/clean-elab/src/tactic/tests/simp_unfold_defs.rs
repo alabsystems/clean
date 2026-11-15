@@ -103,7 +103,9 @@ fn test_simp_unfolds_user_supplied_definition_close_via_rfl() {
     let mut state = ProofState::new(env, goal);
 
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("my_id".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("my_id"));
 
     simp(&mut state, config).expect("simp [my_id] should unfold my_id and close via rfl");
     assert!(
@@ -129,8 +131,12 @@ fn test_simp_unfolds_multiple_definitions_nested() {
     let mut state = ProofState::new(env, goal);
 
     let mut config = SimpConfig::new();
-    config.extra_lemmas.push("apply_once".to_string());
-    config.extra_lemmas.push("my_id".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("apply_once"));
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("my_id"));
 
     simp(&mut state, config)
         .expect("simp [apply_once, my_id] should unfold both and close via rfl");
@@ -154,8 +160,11 @@ fn test_simp_only_unfolds_user_supplied_definition() {
     let goal = make_eq_n(Expr::app(my_id, a.clone()), a);
     let mut state = ProofState::new(env, goal);
 
-    simp_only(&mut state, vec!["my_id".to_string()])
-        .expect("simp only [my_id] should unfold my_id and close via rfl");
+    simp_only(
+        &mut state,
+        vec![clean_parser::SurfaceName::generated_path("my_id")],
+    )
+    .expect("simp only [my_id] should unfold my_id and close via rfl");
     assert!(state.goals().is_empty());
 }
 
@@ -180,14 +189,19 @@ fn test_simp_only_at_unfolds_user_supplied_definition_in_hypothesis() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty.clone(),
             value: None,
         }],
     );
 
-    let result = simp_only_at(&mut state, "h", vec!["my_id".to_string()]);
+    let result = simp_only_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        vec![clean_parser::SurfaceName::generated_path("my_id")],
+    );
     assert!(
         result.is_ok(),
         "simp only [my_id] at h should unfold my_id in the hypothesis: {result:?}"
@@ -197,7 +211,7 @@ fn test_simp_only_at_unfolds_user_supplied_definition_in_hypothesis() {
     let h = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "h")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("h should still be in context");
     assert_ne!(
         h.ty, h_ty,
@@ -224,8 +238,9 @@ fn test_simp_only_at_unfolds_multiple_definitions_in_hypothesis() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty.clone(),
             value: None,
         }],
@@ -233,8 +248,11 @@ fn test_simp_only_at_unfolds_multiple_definitions_in_hypothesis() {
 
     let result = simp_only_at(
         &mut state,
-        "h",
-        vec!["apply_once".to_string(), "my_id".to_string()],
+        &clean_parser::SurfaceName::generated_path("h"),
+        vec![
+            clean_parser::SurfaceName::generated_path("apply_once"),
+            clean_parser::SurfaceName::generated_path("my_id"),
+        ],
     );
     assert!(
         result.is_ok(),
@@ -245,7 +263,7 @@ fn test_simp_only_at_unfolds_multiple_definitions_in_hypothesis() {
     let h = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "h")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("h should still be in context");
     assert_ne!(
         h.ty, h_ty,
@@ -279,7 +297,9 @@ fn test_simp_does_not_unfold_axioms() {
 
     let mut config = SimpConfig::new();
     config.only_simplify = true; // don't try to close — just verify no crash
-    config.extra_lemmas.push("b".to_string());
+    config
+        .extra_lemmas
+        .push(clean_parser::SurfaceName::generated_path("b"));
 
     let result = simp(&mut state, config);
     // We expect NoProgress: `b` is an axiom and cannot be unfolded, so

@@ -269,7 +269,7 @@ impl Specification {
     /// R0-R9. Also requires `add_typing_def_eq` (`DefEq`, `DefEq.beta`),
     /// `add_delta_step` (`defval_for`), `add_iota_step` (`recmeta_for`,
     /// `RecMeta`) and the generated `kernel_core_red_env` atoms
-    /// (`kcre_name_12`).
+    /// (`fixture_def_env_name`).
     pub(super) fn add_candmodel_construct_r11(&mut self) -> Result<(), SpecError> {
         // --- Group A: the judgment and its capstones ---
         self.add_inductive(
@@ -426,7 +426,7 @@ impl Specification {
                 ty_synty_p_konst_pi_witness(),
                 val_synty_p_konst_pi_witness(),
                 vec!["SynTyP", "the_red_env"],
-                "THE DELIVERABLE'S WITNESS: the REAL reflected kernel constant kcre_name_12 (the \
+                "THE DELIVERABLE'S WITNESS: the REAL reflected kernel constant fixture_def_env_name (the \
                  inductive type DefEnv) typed at the PI type pi (sort 0) (sort 0). R9 named `no \
                  rule reaches a const at a PI type at all' as the newest gap and R10 closed it \
                  SEMANTICALLY; this is the same fact inside the JUDGMENT. Both side conditions — \

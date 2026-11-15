@@ -44,7 +44,7 @@ fn nat_binop(op_name: &str, a: Expr, b: Expr) -> Expr {
 
 #[test]
 fn test_reduce_nat_succ_literal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.succ(5) should be def_eq to 6
@@ -56,7 +56,7 @@ fn test_reduce_nat_succ_literal() {
 
 #[test]
 fn test_reduce_nat_succ_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.succ(0) should be def_eq to 1
@@ -84,7 +84,7 @@ fn test_reduce_nat_succ_not_equal() {
 
 #[test]
 fn test_reduce_nat_add_basic() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.add(2, 3) = 5
@@ -96,7 +96,7 @@ fn test_reduce_nat_add_basic() {
 
 #[test]
 fn test_reduce_nat_add_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.add(0, 0) = 0
@@ -114,7 +114,7 @@ fn test_reduce_nat_add_zero() {
 
 #[test]
 fn test_reduce_nat_add_commutativity() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.add(3, 7) = Nat.add(7, 3)
@@ -133,7 +133,7 @@ fn test_reduce_nat_add_commutativity() {
 
 #[test]
 fn test_reduce_nat_sub_basic() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.sub(7, 3) = 4
@@ -145,7 +145,7 @@ fn test_reduce_nat_sub_basic() {
 
 #[test]
 fn test_reduce_nat_sub_saturating() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.sub(3, 7) = 0 (saturating)
@@ -161,7 +161,7 @@ fn test_reduce_nat_sub_saturating() {
 
 #[test]
 fn test_reduce_nat_mul_basic() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.mul(6, 7) = 42
@@ -173,7 +173,7 @@ fn test_reduce_nat_mul_basic() {
 
 #[test]
 fn test_reduce_nat_mul_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.mul(0, 100) = 0
@@ -189,7 +189,7 @@ fn test_reduce_nat_mul_zero() {
 
 #[test]
 fn test_reduce_nat_div_basic() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.div(10, 3) = 3
@@ -201,7 +201,7 @@ fn test_reduce_nat_div_basic() {
 
 #[test]
 fn test_reduce_nat_div_by_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.div(10, 0) = 0 (Lean 4 convention)
@@ -217,7 +217,7 @@ fn test_reduce_nat_div_by_zero() {
 
 #[test]
 fn test_reduce_nat_mod_basic() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.mod(10, 3) = 1
@@ -229,7 +229,7 @@ fn test_reduce_nat_mod_basic() {
 
 #[test]
 fn test_reduce_nat_mod_by_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.mod(10, 0) = 10 (Lean 4 convention: n % 0 = n)
@@ -245,25 +245,37 @@ fn test_reduce_nat_mod_by_zero() {
 
 #[test]
 fn test_reduce_nat_gcd() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.gcd(12, 8) = 4
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // the prelude declares no `Nat.gcd`, and a native fold fires only over a
+    // canonical definition (`env/native_fold_authority.rs`). Folding it by
+    // name is what let a user's `Nat.gcd := fun _ _ => 0` prove `False`. The
+    // canonical gcd fold is pinned over Lean's own `Init` in
+    // `crates/clean-olean/tests/native_fold_canon_lean.rs`.
     assert!(
-        tc.is_def_eq(&nat_binop("Nat.gcd", nat(12), nat(8)), &nat(4)),
-        "Nat.gcd(12, 8) should reduce to 4"
+        !tc.is_def_eq(&nat_binop("Nat.gcd", nat(12), nat(8)), &nat(4)),
+        "an undeclared Nat.gcd must not fold by name"
     );
 }
 
 #[test]
 fn test_reduce_nat_gcd_with_zero() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.gcd(0, 5) = 5
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // the prelude declares no `Nat.gcd`, and a native fold fires only over a
+    // canonical definition (`env/native_fold_authority.rs`). Folding it by
+    // name is what let a user's `Nat.gcd := fun _ _ => 0` prove `False`. The
+    // canonical gcd fold is pinned over Lean's own `Init` in
+    // `crates/clean-olean/tests/native_fold_canon_lean.rs`.
     assert!(
-        tc.is_def_eq(&nat_binop("Nat.gcd", nat(0), nat(5)), &nat(5)),
-        "Nat.gcd(0, 5) should reduce to 5"
+        !tc.is_def_eq(&nat_binop("Nat.gcd", nat(0), nat(5)), &nat(5)),
+        "an undeclared Nat.gcd must not fold by name"
     );
 }
 
@@ -273,7 +285,7 @@ fn test_reduce_nat_gcd_with_zero() {
 
 #[test]
 fn test_reduce_nat_pow_basic() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.pow(2, 10) = 1024
@@ -285,7 +297,7 @@ fn test_reduce_nat_pow_basic() {
 
 #[test]
 fn test_reduce_nat_pow_zero_exp() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.pow(5, 0) = 1
@@ -317,7 +329,7 @@ fn test_reduce_nat_pow_large_exponent_no_reduce() {
 
 #[test]
 fn test_reduce_nat_beq_equal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.beq(5, 5) = Bool.true
@@ -330,7 +342,7 @@ fn test_reduce_nat_beq_equal() {
 
 #[test]
 fn test_reduce_nat_beq_not_equal() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.beq(5, 6) = Bool.false
@@ -343,7 +355,7 @@ fn test_reduce_nat_beq_not_equal() {
 
 #[test]
 fn test_reduce_nat_ble_true() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.ble(3, 5) = Bool.true
@@ -356,7 +368,7 @@ fn test_reduce_nat_ble_true() {
 
 #[test]
 fn test_reduce_nat_ble_false() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.ble(5, 3) = Bool.false
@@ -373,7 +385,7 @@ fn test_reduce_nat_ble_false() {
 
 #[test]
 fn test_reduce_nat_land() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.land(0xFF, 0x0F) = 0x0F = 15
@@ -385,7 +397,7 @@ fn test_reduce_nat_land() {
 
 #[test]
 fn test_reduce_nat_lor() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.lor(0xF0, 0x0F) = 0xFF = 255
@@ -397,7 +409,7 @@ fn test_reduce_nat_lor() {
 
 #[test]
 fn test_reduce_nat_xor() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.xor(0xFF, 0x0F) = 0xF0 = 240
@@ -409,7 +421,7 @@ fn test_reduce_nat_xor() {
 
 #[test]
 fn test_reduce_nat_shift_left() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.shiftLeft(1, 10) = 1024
@@ -421,7 +433,7 @@ fn test_reduce_nat_shift_left() {
 
 #[test]
 fn test_reduce_nat_shift_right() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.shiftRight(1024, 5) = 32
@@ -446,7 +458,7 @@ fn test_reduce_nat_shift_left_large() {
 
 #[test]
 fn test_reduce_nat_shift_right_large() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.shiftRight(1024, 64) = 0 (shift >= 64 returns 0)
@@ -474,7 +486,7 @@ fn test_reduce_nat_add_not_wrong() {
 
 #[test]
 fn test_reduce_nat_succ_nested() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.succ(Nat.succ(0)) = 2
@@ -492,7 +504,7 @@ fn test_reduce_nat_succ_nested() {
 /// The implementation returns None for y >= 64. Verify the boundary is exact.
 #[test]
 fn test_reduce_nat_shift_left_boundary_63() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.shiftLeft(1, 63) = 2^63 = 9223372036854775808
@@ -524,7 +536,7 @@ fn test_reduce_nat_shift_left_overflow_returns_none() {
 /// Nat.shiftRight boundary: y=63 should reduce to 0 for any value < 2^63.
 #[test]
 fn test_reduce_nat_shift_right_boundary_63() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.shiftRight(u64::MAX, 63) = 1 (only the top bit survives)
@@ -589,7 +601,7 @@ fn test_reduce_nat_succ_u64_max_no_panic() {
 /// but the exponent cap check should pass since v2 <= REDUCE_POW_MAX_EXP.
 #[test]
 fn test_reduce_nat_pow_at_exponent_cap() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // Nat.pow(1, 2^24) = 1 (1^n = 1 for all n)
@@ -604,7 +616,7 @@ fn test_reduce_nat_pow_at_exponent_cap() {
 /// Nat.pow: verify that pow(2, 63) = 2^63 (within u64 range and exponent cap).
 #[test]
 fn test_reduce_nat_pow_2_63() {
-    let env = Environment::new();
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
     // 2^63 = 9223372036854775808, fits in u64

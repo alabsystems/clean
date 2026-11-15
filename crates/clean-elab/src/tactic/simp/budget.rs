@@ -60,10 +60,11 @@
 //! the initial target (the old formula counted it with `usize::MAX` as the cap,
 //! which is itself unbounded on a share-heavy term).
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
-use clean_kernel::Expr;
+use clean_kernel::{Expr, FVarId};
 
 use super::expr_node_count_capped;
 
@@ -75,6 +76,10 @@ const NODE_GROWTH_FACTOR: usize = 32;
 /// Floor for `max_nodes`, so a tiny goal still gets room to expand. Matches the
 /// historical between-steps growth budget.
 const NODE_FLOOR: usize = 4096;
+
+/// How far past `max_nodes` a βζ-normal form may reach before
+/// [`SimpBudget::admit_before_zeta`] refuses to build it.
+const ZETA_GUARD_FACTOR: u64 = 64;
 
 /// Absolute clamp on `max_nodes`, and the cap used when measuring the initial
 /// target. 4,194,304 nodes is far beyond any legitimate goal (the pinned
@@ -102,6 +107,16 @@ pub(crate) enum BudgetTrip {
     Fuel,
     /// A frame produced a term larger than `max_nodes`.
     Size,
+    /// The DECLARATION's automation work budget is spent
+    /// (`clean_auto::charge_automation_work`, the shape of Lean's
+    /// `maxHeartbeats`). Unlike the other two this is not about this
+    /// traversal: every simp frame and lemma attempt of the declaration draws
+    /// from one pot, so a declaration whose `simp`/`simp_rw` calls keep
+    /// finding work cannot run unboundedly while each traversal stays inside
+    /// its own fuel. Measured motivation: one `simp_rw` in
+    /// `Function.Injective.linearOrder` (`Mathlib/Order/Basic.lean`) took
+    /// 189.5 s and the declaration then failed (2026-09-26 slice report).
+    Declaration,
 }
 
 /// The work/growth budget for one `simp_expr` traversal.
@@ -119,6 +134,20 @@ pub(crate) struct SimpBudget {
     max_nodes: usize,
     /// Sticky trip reason. Once `Some`, the traversal is over.
     trip: Cell<Option<BudgetTrip>>,
+    /// Typeclass answers this traversal has already paid for (`None` = no
+    /// instance), keyed by the LOCAL CONTEXT the question was asked in and
+    /// then by the class goal. Lean's `synthInstance` keeps a cache for the
+    /// same reason — a lemma like `eq_iff_true_of_subsingleton` asks
+    /// `Subsingleton α` at every equation simp visits, and each question
+    /// otherwise builds an elaboration context from scratch — and Lean's key
+    /// carries the local instances too: the same class goal has a different
+    /// answer under a binder that supplies an instance. Keyed on the class
+    /// goal alone, a "no instance" recorded at the top level silenced every
+    /// rewrite under `∀ (i : C α), …` (measured 2026-09-20: `simp` made no
+    /// progress where pinned Lean rewrites), and an answer naming one
+    /// binder's free variable was handed to its sibling, where it is out of
+    /// scope.
+    instance_memo: RefCell<HashMap<Vec<FVarId>, HashMap<Expr, Option<Expr>>>>,
 }
 
 impl SimpBudget {
@@ -148,6 +177,7 @@ impl SimpBudget {
             initial_fuel: fuel,
             max_nodes,
             trip: Cell::new(None),
+            instance_memo: RefCell::new(HashMap::new()),
         }
     }
 
@@ -167,6 +197,9 @@ impl SimpBudget {
         if self.trip.get().is_some() {
             return false;
         }
+        if !self.charge_declaration() {
+            return false;
+        }
         match self.fuel.get().checked_sub(1) {
             Some(remaining) => {
                 self.fuel.set(remaining);
@@ -177,6 +210,30 @@ impl SimpBudget {
                 false
             }
         }
+    }
+
+    /// Charge one lemma-match attempt to the declaration's automation work
+    /// budget. Attempts, not frames, are where a `simp_rw` spends its time (the
+    /// audit's sample of the 189.5 s one: 83% in
+    /// `try_apply_simp_lemma_unguarded`), and a frame may try hundreds of
+    /// candidates, so a frame-only charge would under-count exactly the case
+    /// the budget exists for.
+    ///
+    /// ENSURES: returns `false` iff the traversal has tripped (now or earlier);
+    ///   the caller must then not attempt the lemma.
+    pub(crate) fn charge_attempt(&self) -> bool {
+        self.trip.get().is_none() && self.charge_declaration()
+    }
+
+    /// One unit against the declaration's automation work budget; on
+    /// exhaustion the traversal trips with [`BudgetTrip::Declaration`], so it
+    /// unwinds fail-closed like any other trip.
+    fn charge_declaration(&self) -> bool {
+        if clean_auto::charge_automation_work("simp", 1) {
+            return true;
+        }
+        self.trip.set(Some(BudgetTrip::Declaration));
+        false
     }
 
     /// Check a produced term against the size limit.
@@ -198,12 +255,70 @@ impl SimpBudget {
         true
     }
 
+    /// Check a term BEFORE β/ζ-reducing it: refuse (and trip) when its
+    /// βζ-normal form would exceed the size limit by [`ZETA_GUARD_FACTOR`]. A
+    /// `let` the match compiler binds once (G76) is copied to every use by
+    /// [`super::reduce::beta_reduce`], so the reduct of a small term can be
+    /// exponentially large; [`Self::admit`] on the reduct would refuse it, but
+    /// only after building it. The normal form bounds one pass's reduct from
+    /// above only roughly (a pass leaves the redexes it creates), so the
+    /// factor keeps the pre-check to terms far past anything [`Self::admit`]
+    /// accepts; a refusal is a `simp` that fails, never one that proves more.
+    pub(crate) fn admit_before_zeta(&self, input: &Expr) -> bool {
+        if self.trip.get().is_some() {
+            return false;
+        }
+        if self.max_nodes == usize::MAX {
+            return true;
+        }
+        let limit = u64::try_from(self.max_nodes)
+            .unwrap_or(u64::MAX)
+            .saturating_mul(ZETA_GUARD_FACTOR);
+        if super::zeta_size::beta_zeta_size_reaches(input, limit) {
+            self.trip.set(Some(BudgetTrip::Size));
+            return false;
+        }
+        true
+    }
+
     /// Reset the fuel for the next top-level step. A tripped budget stays
     /// tripped: refuelling it would hide the failure the caller must report.
     pub(crate) fn refuel(&self) {
         if self.trip.get().is_none() {
             self.fuel.set(self.initial_fuel);
         }
+    }
+
+    /// The memoised answer to the class goal `class_ty` asked in the local
+    /// context whose free variables are `scope` (outermost first), computing
+    /// it with `synthesize` on first request. The answer is a candidate only:
+    /// the caller re-checks it against the slot it fills every time.
+    ///
+    /// `scope` is part of the key because the answer depends on it: a binder
+    /// simp has opened may itself be the instance. Binder temporaries are
+    /// never reused (`binder::fresh_binder_fvar`), so two contexts with the
+    /// same free variables are the same context.
+    pub(crate) fn memo_instance(
+        &self,
+        scope: &[FVarId],
+        class_ty: &Expr,
+        synthesize: impl FnOnce() -> Option<Expr>,
+    ) -> Option<Expr> {
+        if let Some(known) = self
+            .instance_memo
+            .borrow()
+            .get(scope)
+            .and_then(|answers| answers.get(class_ty))
+        {
+            return known.clone();
+        }
+        let found = synthesize();
+        self.instance_memo
+            .borrow_mut()
+            .entry(scope.to_vec())
+            .or_default()
+            .insert(class_ty.clone(), found.clone());
+        found
     }
 
     /// Has this traversal exceeded its budget?
@@ -232,6 +347,7 @@ impl SimpBudget {
                  the goal is left unchanged",
                 self.max_nodes
             )),
+            BudgetTrip::Declaration => Some(crate::decl_work_budget::exhausted_detail()),
         }
     }
 }
@@ -334,5 +450,30 @@ mod tests {
         assert!(budget.max_nodes <= NODE_CEILING);
         assert!(budget.initial_fuel >= FUEL_FLOOR);
         assert!(!budget.is_tripped());
+    }
+
+    /// `let x := e; pair x x`, `levels` deep: `≈ 3·2^levels` nodes once
+    /// normalized (a `let`-bound match alternative, G76).
+    fn let_tower(levels: usize) -> Expr {
+        let c = |name: &str| Expr::const_(Name::from_string(name), vec![]);
+        let mut e = c("leaf");
+        for _ in 0..levels {
+            e = Expr::let_named(
+                Name::from_string("x"),
+                c("T"),
+                e,
+                Expr::app(Expr::app(c("pair"), Expr::bvar(0)), Expr::bvar(0)),
+                false,
+            );
+        }
+        e
+    }
+
+    #[test]
+    fn test_budget_admit_before_zeta_refuses_an_exponential_reduct() {
+        let budget = SimpBudget::with_limits(u64::MAX, 4096);
+        assert!(budget.admit_before_zeta(&let_tower(3)));
+        assert!(!budget.admit_before_zeta(&let_tower(20)));
+        assert_eq!(budget.trip_reason(), Some(BudgetTrip::Size));
     }
 }

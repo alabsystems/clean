@@ -1,0 +1,579 @@
+-- Link 4 W4 (CrystalVC M0, the second falsifier): the obligation-checked symbolic-execution device over EvalIR. Its soundness theorems are ir_vcg_run_sound and ir_vcg_check_sound; section 5, the engine, is untrusted and only ever checked. Record: reports/crystal-lane/2026-09-30-link4-m0/w4/README.md.
+
+-- == 1. VALUES: symbolic Nats, environments, symbolic scalars and their denotations; Church-and and Bool/Option helpers ==
+
+inductive VcgNat : Type
+| lit : Nat -> VcgNat
+| var : Nat -> Nat -> VcgNat
+
+def ir_vcg_nth (l : IRList Nat) (i : Nat) : Nat := IRList.rec Nat (fun (_ : IRList Nat) => Nat -> Nat) (fun (_ : Nat) => Nat.zero) (fun (x : Nat) (_ : IRList Nat) (ih : Nat -> Nat) => fun (j : Nat) => Nat.rec (fun (_ : Nat) => Nat) x (fun (jp : Nat) (_ : Nat) => ih jp) j) l i
+
+inductive VcgEnv : Type
+| mk : IRList Nat -> IRList IRScalar -> VcgEnv
+
+def ir_vcg_ens (env : VcgEnv) : IRList Nat := VcgEnv.rec (fun (_ : VcgEnv) => IRList Nat) (fun (ns : IRList Nat) (_ : IRList IRScalar) => ns) env
+
+def ir_vcg_ess (env : VcgEnv) : IRList IRScalar := VcgEnv.rec (fun (_ : VcgEnv) => IRList IRScalar) (fun (_ : IRList Nat) (ss : IRList IRScalar) => ss) env
+
+def ir_vcg_snth (l : IRList IRScalar) (i : Nat) : IRScalar := IRList.rec IRScalar (fun (_ : IRList IRScalar) => Nat -> IRScalar) (fun (_ : Nat) => IRScalar.undef_) (fun (x : IRScalar) (_ : IRList IRScalar) (ih : Nat -> IRScalar) => fun (j : Nat) => Nat.rec (fun (_ : Nat) => IRScalar) x (fun (jp : Nat) (_ : IRScalar) => ih jp) j) l i
+
+def ir_vcg_nden (env : VcgEnv) (n : VcgNat) : Nat := VcgNat.rec (fun (_ : VcgNat) => Nat) (fun (k : Nat) => k) (fun (i : Nat) (k : Nat) => Nat.add (ir_vcg_nth (ir_vcg_ens env) i) k) n
+
+inductive VcgVal : Type
+| undef_ : VcgVal
+| bool_ : Bool -> VcgVal
+| int_ : VcgNat -> VcgVal
+| float_ : Nat -> VcgVal
+| unit_ : VcgVal
+| ptr_ : VcgNat -> VcgVal
+| nullptr_ : VcgVal
+| fat_ : VcgNat -> VcgNat -> VcgVal
+| fnptr_ : Nat -> VcgVal
+| aggv : VcgVal -> VcgVal
+| vnil : VcgVal
+| vcons : VcgVal -> VcgVal -> VcgVal
+| opq : Nat -> VcgVal
+
+def ir_vcg_vden (env : VcgEnv) (v : VcgVal) : IRScalar := VcgVal.rec (fun (_ : VcgVal) => IRScalar) IRScalar.undef_ (fun (b : Bool) => IRScalar.bool_ b) (fun (n : VcgNat) => IRScalar.int_ (ir_vcg_nden env n)) (fun (n : Nat) => IRScalar.float_ n) IRScalar.unit_ (fun (a : VcgNat) => IRScalar.ptr_ (ir_vcg_nden env a)) IRScalar.nullptr_ (fun (d : VcgNat) (md : VcgNat) => IRScalar.fat_ (ir_vcg_nden env d) (ir_vcg_nden env md)) (fun (f : Nat) => IRScalar.fnptr_ f) (fun (_ : VcgVal) (ih : IRScalar) => IRScalar.aggv ih) IRScalar.vnil (fun (_ : VcgVal) (_ : VcgVal) (ihx : IRScalar) (ihr : IRScalar) => IRScalar.vcons ihx ihr) (fun (i : Nat) => ir_vcg_snth (ir_vcg_ess env) i) v
+
+def ir_vcg_vlden (env : VcgEnv) (l : IRList VcgVal) : IRList IRScalar := IRList.rec VcgVal (fun (_ : IRList VcgVal) => IRList IRScalar) (IRList.nil IRScalar) (fun (v : VcgVal) (_ : IRList VcgVal) (ih : IRList IRScalar) => IRList.cons IRScalar (ir_vcg_vden env v) ih) l
+
+def ir_vcg_and (A : Prop) (B : Prop) : Prop := forall (C : Prop), (A -> B -> C) -> C
+
+def ir_vcg_and_intro (A : Prop) (B : Prop) (a : A) (b : B) : ir_vcg_and A B := fun (C : Prop) (k : A -> B -> C) => k a b
+
+def ir_vcg_and_fst (A : Prop) (B : Prop) (h : ir_vcg_and A B) : A := h A (fun (x : A) (_ : B) => x)
+
+def ir_vcg_and_snd (A : Prop) (B : Prop) (h : ir_vcg_and A B) : B := h B (fun (_ : A) (y : B) => y)
+
+def ir_vcg_band_l (a : Bool) (b : Bool) (h : Eq Bool (Bool.and a b) Bool.true) : Eq Bool a Bool.true := Bool.rec (fun (x : Bool) => Eq Bool (Bool.and x b) Bool.true -> Eq Bool x Bool.true) (fun (hf : Eq Bool Bool.false Bool.true) => hf) (fun (_ : Eq Bool b Bool.true) => Eq.refl Bool Bool.true) a h
+
+def ir_vcg_band_r (a : Bool) (b : Bool) (h : Eq Bool (Bool.and a b) Bool.true) : Eq Bool b Bool.true := Bool.rec (fun (x : Bool) => Eq Bool (Bool.and x b) Bool.true -> Eq Bool b Bool.true) (fun (hf : Eq Bool Bool.false Bool.true) => ir_bool_false_ne_true (Eq Bool b Bool.true) hf) (fun (ht : Eq Bool b Bool.true) => ht) a h
+
+def ir_vcg_bor_elim (a : Bool) (b : Bool) (h : Eq Bool (Bool.or a b) Bool.true) (C : Prop) (ha : Eq Bool a Bool.true -> C) (hb : Eq Bool b Bool.true -> C) : C := Bool.rec (fun (x : Bool) => Eq Bool (Bool.or x b) Bool.true -> (Eq Bool x Bool.true -> C) -> C) (fun (h0 : Eq Bool b Bool.true) (_ : Eq Bool Bool.false Bool.true -> C) => hb h0) (fun (_ : Eq Bool Bool.true Bool.true) (k : Eq Bool Bool.true Bool.true -> C) => k (Eq.refl Bool Bool.true)) a h ha
+
+def ir_vcg_bcase (b : Bool) (P : Bool -> Prop) (hf : Eq Bool b Bool.false -> P Bool.false) (ht : Eq Bool b Bool.true -> P Bool.true) : P b := Bool.rec (fun (x : Bool) => Eq Bool b x -> P x) hf ht b (Eq.refl Bool b)
+
+def ir_vcg_some_inj (A : Type) (x : A) (y : A) (h : Eq (IROption A) (IROption.some A x) (IROption.some A y)) : Eq A x y := Eq.subst (IROption A) (fun (o : IROption A) => Eq A x (IROption.rec A (fun (_ : IROption A) => A) x (fun (z : A) => z) o)) (IROption.some A x) (IROption.some A y) h (Eq.refl A x)
+
+def ir_vcg_none_some (A : Type) (y : A) (h : Eq (IROption A) (IROption.none A) (IROption.some A y)) (C : Prop) : C := Eq.subst (IROption A) (fun (o : IROption A) => IROption.rec A (fun (_ : IROption A) => Prop) (Eq Bool Bool.true Bool.true) (fun (_ : A) => C) o) (IROption.none A) (IROption.some A y) h (Eq.refl Bool Bool.true)
+
+def ir_vcg_ocase (A : Type) (o : IROption A) (P : IROption A -> Prop) (hn : Eq (IROption A) o (IROption.none A) -> P (IROption.none A)) (hs : forall (x : A), Eq (IROption A) o (IROption.some A x) -> P (IROption.some A x)) : P o := IROption.rec A (fun (o0 : IROption A) => Eq (IROption A) o o0 -> P o0) hn hs o (Eq.refl (IROption A) o)
+
+-- == 2. MEMORY INTERFACE: cells, facts, symbolic lookup/update, the memory-step resume functions and their soundness. This section is what ByteV1 replaces. ==
+
+inductive VcgCell : Type
+| mk : VcgNat -> VcgVal -> Bool -> VcgCell
+
+def ir_vcg_cden (env : VcgEnv) (c : VcgCell) : IRMemSlot := VcgCell.rec (fun (_ : VcgCell) => IRMemSlot) (fun (a : VcgNat) (v : VcgVal) (lv : Bool) => IRMemSlot.mk (ir_vcg_nden env a) (ir_vcg_vden env v) lv) c
+
+def ir_vcg_memden (env : VcgEnv) (fresh : IRList VcgCell) (mem : IRList IRMemSlot) : IRList IRMemSlot := IRList.rec VcgCell (fun (_ : IRList VcgCell) => IRList IRMemSlot) mem (fun (c : VcgCell) (_ : IRList VcgCell) (ih : IRList IRMemSlot) => IRList.cons IRMemSlot (ir_vcg_cden env c) ih) fresh
+
+inductive VcgFact : Type
+| look : VcgNat -> VcgVal -> Bool -> VcgFact
+| lt : VcgNat -> VcgNat -> VcgFact
+| borrow : IRList VcgCell -> VcgNat -> VcgFact
+
+def ir_vcg_fact_holds (env : VcgEnv) (mem : IRList IRMemSlot) (f : VcgFact) : Prop := VcgFact.rec (fun (_ : VcgFact) => Prop) (fun (a : VcgNat) (v : VcgVal) (lv : Bool) => Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (IRMemSlot.mk (ir_vcg_nden env a) (ir_vcg_vden env v) lv))) (fun (x : VcgNat) (y : VcgNat) => Eq Bool (ir_nat_ltb (ir_vcg_nden env x) (ir_vcg_nden env y)) Bool.true) (fun (pre : IRList VcgCell) (a : VcgNat) => Eq IRStepResult (ir_borrow_eval (ir_vcg_memden env pre mem) (IRScalar.ptr_ (ir_vcg_nden env a))) (IRStepResult.value (IRScalar.ptr_ (ir_vcg_nden env a)))) f
+
+def ir_vcg_facts_hold (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) : Prop := IRList.rec VcgFact (fun (_ : IRList VcgFact) => Prop) (Eq Bool Bool.true Bool.true) (fun (f : VcgFact) (_ : IRList VcgFact) (ih : Prop) => ir_vcg_and (ir_vcg_fact_holds env mem f) ih) fs
+
+def ir_vcg_nbeq (x : VcgNat) (y : VcgNat) : Bool := VcgNat.rec (fun (_ : VcgNat) => VcgNat -> Bool) (fun (n : Nat) => fun (y0 : VcgNat) => VcgNat.rec (fun (_ : VcgNat) => Bool) (fun (m : Nat) => ir_nat_eqb n m) (fun (_ : Nat) (_ : Nat) => Bool.false) y0) (fun (i : Nat) (k : Nat) => fun (y0 : VcgNat) => VcgNat.rec (fun (_ : VcgNat) => Bool) (fun (_ : Nat) => Bool.false) (fun (j : Nat) (l : Nat) => Bool.and (ir_nat_eqb i j) (ir_nat_eqb k l)) y0) x y
+
+def ir_vcg_nbeq_sound (env : VcgEnv) (x : VcgNat) (y : VcgNat) (h : Eq Bool (ir_vcg_nbeq x y) Bool.true) : Eq Nat (ir_vcg_nden env x) (ir_vcg_nden env y) := VcgNat.rec (fun (x0 : VcgNat) => forall (y0 : VcgNat), Eq Bool (ir_vcg_nbeq x0 y0) Bool.true -> Eq Nat (ir_vcg_nden env x0) (ir_vcg_nden env y0)) (fun (n : Nat) => fun (y0 : VcgNat) => VcgNat.rec (fun (y1 : VcgNat) => Eq Bool (ir_vcg_nbeq (VcgNat.lit n) y1) Bool.true -> Eq Nat (ir_vcg_nden env (VcgNat.lit n)) (ir_vcg_nden env y1)) (fun (m : Nat) (hm : Eq Bool (ir_nat_eqb n m) Bool.true) => ir_nat_eqb_sound n m hm) (fun (j : Nat) (l : Nat) (hb : Eq Bool Bool.false Bool.true) => ir_bool_false_ne_true (Eq Nat n (Nat.add (ir_vcg_nth (ir_vcg_ens env) j) l)) hb) y0) (fun (i : Nat) (k : Nat) => fun (y0 : VcgNat) => VcgNat.rec (fun (y1 : VcgNat) => Eq Bool (ir_vcg_nbeq (VcgNat.var i k) y1) Bool.true -> Eq Nat (ir_vcg_nden env (VcgNat.var i k)) (ir_vcg_nden env y1)) (fun (m : Nat) (hb : Eq Bool Bool.false Bool.true) => ir_bool_false_ne_true (Eq Nat (Nat.add (ir_vcg_nth (ir_vcg_ens env) i) k) m) hb) (fun (j : Nat) (l : Nat) (hb : Eq Bool (Bool.and (ir_nat_eqb i j) (ir_nat_eqb k l)) Bool.true) => Eq.subst Nat (fun (j0 : Nat) => Eq Nat (Nat.add (ir_vcg_nth (ir_vcg_ens env) i) k) (Nat.add (ir_vcg_nth (ir_vcg_ens env) j0) l)) i j (ir_nat_eqb_sound i j (ir_vcg_band_l (ir_nat_eqb i j) (ir_nat_eqb k l) hb)) (Eq.subst Nat (fun (l0 : Nat) => Eq Nat (Nat.add (ir_vcg_nth (ir_vcg_ens env) i) k) (Nat.add (ir_vcg_nth (ir_vcg_ens env) i) l0)) k l (ir_nat_eqb_sound k l (ir_vcg_band_r (ir_nat_eqb i j) (ir_nat_eqb k l) hb)) (Eq.refl Nat (Nat.add (ir_vcg_nth (ir_vcg_ens env) i) k)))) y0) x y h
+
+def ir_vcg_lt_hit (f : VcgFact) (c : VcgNat) (a : VcgNat) : Bool := VcgFact.rec (fun (_ : VcgFact) => Bool) (fun (_ : VcgNat) (_ : VcgVal) (_ : Bool) => Bool.false) (fun (x : VcgNat) (y : VcgNat) => Bool.and (ir_vcg_nbeq x a) (ir_vcg_nbeq y c)) (fun (_ : IRList VcgCell) (_ : VcgNat) => Bool.false) f
+
+def ir_vcg_distinct (fs : IRList VcgFact) (c : VcgNat) (a : VcgNat) : Bool := IRList.rec VcgFact (fun (_ : IRList VcgFact) => Bool) Bool.false (fun (f : VcgFact) (_ : IRList VcgFact) (ih : Bool) => Bool.or (ir_vcg_lt_hit f c a) ih) fs
+
+def ir_vcg_lt_hit_sound (env : VcgEnv) (mem : IRList IRMemSlot) (f : VcgFact) (c : VcgNat) (a : VcgNat) (hfact : ir_vcg_fact_holds env mem f) (hh : Eq Bool (ir_vcg_lt_hit f c a) Bool.true) : Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false := VcgFact.rec (fun (f0 : VcgFact) => ir_vcg_fact_holds env mem f0 -> Eq Bool (ir_vcg_lt_hit f0 c a) Bool.true -> Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false) (fun (x : VcgNat) (v : VcgVal) (lv : Bool) (_ : ir_vcg_fact_holds env mem (VcgFact.look x v lv)) (hb : Eq Bool Bool.false Bool.true) => ir_bool_false_ne_true (Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false) hb) (fun (x : VcgNat) (y : VcgNat) (hl : Eq Bool (ir_nat_ltb (ir_vcg_nden env x) (ir_vcg_nden env y)) Bool.true) (hb : Eq Bool (Bool.and (ir_vcg_nbeq x a) (ir_vcg_nbeq y c)) Bool.true) => ir_nat_ltb_ne (ir_vcg_nden env a) (ir_vcg_nden env c) (Eq.subst Nat (fun (z : Nat) => Eq Bool (ir_nat_ltb (ir_vcg_nden env a) z) Bool.true) (ir_vcg_nden env y) (ir_vcg_nden env c) (ir_vcg_nbeq_sound env y c (ir_vcg_band_r (ir_vcg_nbeq x a) (ir_vcg_nbeq y c) hb)) (Eq.subst Nat (fun (z : Nat) => Eq Bool (ir_nat_ltb z (ir_vcg_nden env y)) Bool.true) (ir_vcg_nden env x) (ir_vcg_nden env a) (ir_vcg_nbeq_sound env x a (ir_vcg_band_l (ir_vcg_nbeq x a) (ir_vcg_nbeq y c) hb)) hl))) (fun (pre : IRList VcgCell) (x : VcgNat) (_ : ir_vcg_fact_holds env mem (VcgFact.borrow pre x)) (hb : Eq Bool Bool.false Bool.true) => ir_bool_false_ne_true (Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false) hb) f hfact hh
+
+def ir_vcg_distinct_sound (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (c : VcgNat) (a : VcgNat) (h : Eq Bool (ir_vcg_distinct fs c a) Bool.true) : Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false := IRList.rec VcgFact (fun (fs0 : IRList VcgFact) => ir_vcg_facts_hold env mem fs0 -> Eq Bool (ir_vcg_distinct fs0 c a) Bool.true -> Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false) (fun (_ : Eq Bool Bool.true Bool.true) (hb : Eq Bool Bool.false Bool.true) => ir_bool_false_ne_true (Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false) hb) (fun (f : VcgFact) (rest : IRList VcgFact) (ih : ir_vcg_facts_hold env mem rest -> Eq Bool (ir_vcg_distinct rest c a) Bool.true -> Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false) (hf0 : ir_vcg_and (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest)) (hd : Eq Bool (Bool.or (ir_vcg_lt_hit f c a) (ir_vcg_distinct rest c a)) Bool.true) => ir_vcg_bor_elim (ir_vcg_lt_hit f c a) (ir_vcg_distinct rest c a) hd (Eq Bool (ir_nat_eqb (ir_vcg_nden env c) (ir_vcg_nden env a)) Bool.false) (fun (hh : Eq Bool (ir_vcg_lt_hit f c a) Bool.true) => ir_vcg_lt_hit_sound env mem f c a (ir_vcg_and_fst (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0) hh) (fun (ht : Eq Bool (ir_vcg_distinct rest c a) Bool.true) => ih (ir_vcg_and_snd (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0) ht)) fs hf h
+
+def ir_vcg_look_hit (f : VcgFact) (a : VcgNat) (ih : IROption VcgCell) : IROption VcgCell := VcgFact.rec (fun (_ : VcgFact) => IROption VcgCell) (fun (fa : VcgNat) (fv : VcgVal) (flv : Bool) => Bool.rec (fun (_ : Bool) => IROption VcgCell) ih (IROption.some VcgCell (VcgCell.mk fa fv flv)) (ir_vcg_nbeq fa a)) (fun (_ : VcgNat) (_ : VcgNat) => ih) (fun (_ : IRList VcgCell) (_ : VcgNat) => ih) f
+
+def ir_vcg_lookup_base (fs : IRList VcgFact) (a : VcgNat) : IROption VcgCell := IRList.rec VcgFact (fun (_ : IRList VcgFact) => IROption VcgCell) (IROption.none VcgCell) (fun (f : VcgFact) (_ : IRList VcgFact) (ih : IROption VcgCell) => ir_vcg_look_hit f a ih) fs
+
+def ir_vcg_lookup_base_sound (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (a : VcgNat) (c : VcgCell) (h : Eq (IROption VcgCell) (ir_vcg_lookup_base fs a) (IROption.some VcgCell c)) : Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c)) := IRList.rec VcgFact (fun (fs0 : IRList VcgFact) => ir_vcg_facts_hold env mem fs0 -> forall (c0 : VcgCell), Eq (IROption VcgCell) (ir_vcg_lookup_base fs0 a) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (fun (_ : Eq Bool Bool.true Bool.true) (c0 : VcgCell) (hn : Eq (IROption VcgCell) (IROption.none VcgCell) (IROption.some VcgCell c0)) => ir_vcg_none_some VcgCell c0 hn (Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0)))) (fun (f : VcgFact) (rest : IRList VcgFact) (ih : ir_vcg_facts_hold env mem rest -> forall (c0 : VcgCell), Eq (IROption VcgCell) (ir_vcg_lookup_base rest a) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (hf0 : ir_vcg_and (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest)) => VcgFact.rec (fun (f0 : VcgFact) => ir_vcg_fact_holds env mem f0 -> forall (c0 : VcgCell), Eq (IROption VcgCell) (ir_vcg_look_hit f0 a (ir_vcg_lookup_base rest a)) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (fun (fa : VcgNat) (fv : VcgVal) (flv : Bool) (hfa : Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env fa)) (IROption.some IRMemSlot (IRMemSlot.mk (ir_vcg_nden env fa) (ir_vcg_vden env fv) flv))) (c0 : VcgCell) => ir_vcg_bcase (ir_vcg_nbeq fa a) (fun (b : Bool) => Eq (IROption VcgCell) (Bool.rec (fun (_ : Bool) => IROption VcgCell) (ir_vcg_lookup_base rest a) (IROption.some VcgCell (VcgCell.mk fa fv flv)) b) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (fun (_ : Eq Bool (ir_vcg_nbeq fa a) Bool.false) (hl : Eq (IROption VcgCell) (ir_vcg_lookup_base rest a) (IROption.some VcgCell c0)) => ih (ir_vcg_and_snd (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0) c0 hl) (fun (hbeq : Eq Bool (ir_vcg_nbeq fa a) Bool.true) (hl : Eq (IROption VcgCell) (IROption.some VcgCell (VcgCell.mk fa fv flv)) (IROption.some VcgCell c0)) => Eq.subst VcgCell (fun (c1 : VcgCell) => Eq (IROption IRMemSlot) (ir_mem_lookup mem (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c1))) (VcgCell.mk fa fv flv) c0 (ir_vcg_some_inj VcgCell (VcgCell.mk fa fv flv) c0 hl) (Eq.subst Nat (fun (z : Nat) => Eq (IROption IRMemSlot) (ir_mem_lookup mem z) (IROption.some IRMemSlot (IRMemSlot.mk (ir_vcg_nden env fa) (ir_vcg_vden env fv) flv))) (ir_vcg_nden env fa) (ir_vcg_nden env a) (ir_vcg_nbeq_sound env fa a hbeq) hfa))) (fun (x : VcgNat) (y : VcgNat) (_ : ir_vcg_fact_holds env mem (VcgFact.lt x y)) (c0 : VcgCell) (hl : Eq (IROption VcgCell) (ir_vcg_lookup_base rest a) (IROption.some VcgCell c0)) => ih (ir_vcg_and_snd (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0) c0 hl) (fun (pre : IRList VcgCell) (x : VcgNat) (_ : ir_vcg_fact_holds env mem (VcgFact.borrow pre x)) (c0 : VcgCell) (hl : Eq (IROption VcgCell) (ir_vcg_lookup_base rest a) (IROption.some VcgCell c0)) => ih (ir_vcg_and_snd (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0) c0 hl) f (ir_vcg_and_fst (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0)) fs hf c h
+
+def ir_vcg_cell_step (fs : IRList VcgFact) (c : VcgCell) (a : VcgNat) (ih : IROption VcgCell) : IROption VcgCell := VcgCell.rec (fun (_ : VcgCell) => IROption VcgCell) (fun (ca : VcgNat) (_ : VcgVal) (_ : Bool) => Bool.rec (fun (_ : Bool) => IROption VcgCell) (Bool.rec (fun (_ : Bool) => IROption VcgCell) (IROption.none VcgCell) ih (ir_vcg_distinct fs ca a)) (IROption.some VcgCell c) (ir_vcg_nbeq ca a)) c
+
+def ir_vcg_lookup (fs : IRList VcgFact) (fresh : IRList VcgCell) (a : VcgNat) : IROption VcgCell := IRList.rec VcgCell (fun (_ : IRList VcgCell) => IROption VcgCell) (ir_vcg_lookup_base fs a) (fun (c : VcgCell) (_ : IRList VcgCell) (ih : IROption VcgCell) => ir_vcg_cell_step fs c a ih) fresh
+
+def ir_vcg_eqb_of_beq (env : VcgEnv) (x : VcgNat) (y : VcgNat) (hb : Eq Bool (ir_vcg_nbeq x y) Bool.true) : Eq Bool (ir_nat_eqb (ir_vcg_nden env x) (ir_vcg_nden env y)) Bool.true := Eq.subst Nat (fun (z : Nat) => Eq Bool (ir_nat_eqb (ir_vcg_nden env x) z) Bool.true) (ir_vcg_nden env x) (ir_vcg_nden env y) (ir_vcg_nbeq_sound env x y hb) (ir_nat_eqb_refl (ir_vcg_nden env x))
+
+def ir_vcg_lookup_sound (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (fresh : IRList VcgCell) (a : VcgNat) (c : VcgCell) (h : Eq (IROption VcgCell) (ir_vcg_lookup fs fresh a) (IROption.some VcgCell c)) : Eq (IROption IRMemSlot) (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c)) := IRList.rec VcgCell (fun (fr : IRList VcgCell) => forall (c0 : VcgCell), Eq (IROption VcgCell) (ir_vcg_lookup fs fr a) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup (ir_vcg_memden env fr mem) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (fun (c0 : VcgCell) (hl : Eq (IROption VcgCell) (ir_vcg_lookup_base fs a) (IROption.some VcgCell c0)) => ir_vcg_lookup_base_sound env mem fs hf a c0 hl) (fun (cell : VcgCell) (rest : IRList VcgCell) (ih : forall (c0 : VcgCell), Eq (IROption VcgCell) (ir_vcg_lookup fs rest a) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup (ir_vcg_memden env rest mem) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) => VcgCell.rec (fun (cell0 : VcgCell) => forall (c0 : VcgCell), Eq (IROption VcgCell) (ir_vcg_cell_step fs cell0 a (ir_vcg_lookup fs rest a)) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup (IRList.cons IRMemSlot (ir_vcg_cden env cell0) (ir_vcg_memden env rest mem)) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (fun (ca : VcgNat) (cv : VcgVal) (clv : Bool) (c0 : VcgCell) => ir_vcg_bcase (ir_vcg_nbeq ca a) (fun (b : Bool) => Eq (IROption VcgCell) (Bool.rec (fun (_ : Bool) => IROption VcgCell) (Bool.rec (fun (_ : Bool) => IROption VcgCell) (IROption.none VcgCell) (ir_vcg_lookup fs rest a) (ir_vcg_distinct fs ca a)) (IROption.some VcgCell (VcgCell.mk ca cv clv)) b) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup (IRList.cons IRMemSlot (ir_vcg_cden env (VcgCell.mk ca cv clv)) (ir_vcg_memden env rest mem)) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (fun (_ : Eq Bool (ir_vcg_nbeq ca a) Bool.false) => ir_vcg_bcase (ir_vcg_distinct fs ca a) (fun (b2 : Bool) => Eq (IROption VcgCell) (Bool.rec (fun (_ : Bool) => IROption VcgCell) (IROption.none VcgCell) (ir_vcg_lookup fs rest a) b2) (IROption.some VcgCell c0) -> Eq (IROption IRMemSlot) (ir_mem_lookup (IRList.cons IRMemSlot (ir_vcg_cden env (VcgCell.mk ca cv clv)) (ir_vcg_memden env rest mem)) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0))) (fun (_ : Eq Bool (ir_vcg_distinct fs ca a) Bool.false) (hn : Eq (IROption VcgCell) (IROption.none VcgCell) (IROption.some VcgCell c0)) => ir_vcg_none_some VcgCell c0 hn (Eq (IROption IRMemSlot) (ir_mem_lookup (IRList.cons IRMemSlot (ir_vcg_cden env (VcgCell.mk ca cv clv)) (ir_vcg_memden env rest mem)) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c0)))) (fun (hd : Eq Bool (ir_vcg_distinct fs ca a) Bool.true) (hl : Eq (IROption VcgCell) (ir_vcg_lookup fs rest a) (IROption.some VcgCell c0)) => Eq.subst Bool (fun (b3 : Bool) => Eq (IROption IRMemSlot) (Bool.rec (fun (_ : Bool) => IROption IRMemSlot) (ir_mem_lookup (ir_vcg_memden env rest mem) (ir_vcg_nden env a)) (IROption.some IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv)) b3) (IROption.some IRMemSlot (ir_vcg_cden env c0))) Bool.false (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a)) (Eq.symm Bool (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a)) Bool.false (ir_vcg_distinct_sound env mem fs hf ca a hd)) (ih c0 hl))) (fun (hb : Eq Bool (ir_vcg_nbeq ca a) Bool.true) (hl : Eq (IROption VcgCell) (IROption.some VcgCell (VcgCell.mk ca cv clv)) (IROption.some VcgCell c0)) => Eq.subst VcgCell (fun (c1 : VcgCell) => Eq (IROption IRMemSlot) (ir_mem_lookup (IRList.cons IRMemSlot (ir_vcg_cden env (VcgCell.mk ca cv clv)) (ir_vcg_memden env rest mem)) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c1))) (VcgCell.mk ca cv clv) c0 (ir_vcg_some_inj VcgCell (VcgCell.mk ca cv clv) c0 hl) (Eq.subst Bool (fun (b3 : Bool) => Eq (IROption IRMemSlot) (Bool.rec (fun (_ : Bool) => IROption IRMemSlot) (ir_mem_lookup (ir_vcg_memden env rest mem) (ir_vcg_nden env a)) (IROption.some IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv)) b3) (IROption.some IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv))) Bool.true (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a)) (Eq.symm Bool (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a)) Bool.true (ir_vcg_eqb_of_beq env ca a hb)) (Eq.refl (IROption IRMemSlot) (IROption.some IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv)))))) cell) fresh c h
+
+def ir_vcg_ucell (fs : IRList VcgFact) (c : VcgCell) (a : VcgNat) (v : VcgVal) (rest : IRList VcgCell) (ih : IROption (IRList VcgCell)) : IROption (IRList VcgCell) := VcgCell.rec (fun (_ : VcgCell) => IROption (IRList VcgCell)) (fun (ca : VcgNat) (_ : VcgVal) (clv : Bool) => Bool.rec (fun (_ : Bool) => IROption (IRList VcgCell)) (Bool.rec (fun (_ : Bool) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (IROption.rec (IRList VcgCell) (fun (_ : IROption (IRList VcgCell)) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (fun (l : IRList VcgCell) => IROption.some (IRList VcgCell) (IRList.cons VcgCell c l)) ih) (ir_vcg_distinct fs ca a)) (IROption.some (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca v clv) rest)) (ir_vcg_nbeq ca a)) c
+
+def ir_vcg_update (fs : IRList VcgFact) (fresh : IRList VcgCell) (a : VcgNat) (v : VcgVal) : IROption (IRList VcgCell) := IRList.rec VcgCell (fun (_ : IRList VcgCell) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (fun (c : VcgCell) (rest : IRList VcgCell) (ih : IROption (IRList VcgCell)) => ir_vcg_ucell fs c a v rest ih) fresh
+
+def ir_vcg_mupd_goal (env : VcgEnv) (mem : IRList IRMemSlot) (fr : IRList VcgCell) (a : VcgNat) (v : VcgVal) (f2 : IRList VcgCell) : Prop := Eq (IRList IRMemSlot) (ir_mem_update (ir_vcg_memden env fr mem) (ir_vcg_nden env a) (ir_vcg_vden env v)) (ir_vcg_memden env f2 mem)
+
+def ir_vcg_update_hit (env : VcgEnv) (mem : IRList IRMemSlot) (ca : VcgNat) (cv : VcgVal) (clv : Bool) (rest : IRList VcgCell) (a : VcgNat) (v : VcgVal) (hb : Eq Bool (ir_vcg_nbeq ca a) Bool.true) : ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v (IRList.cons VcgCell (VcgCell.mk ca v clv) rest) :=
+  Eq.subst Bool
+    (fun (b3 : Bool) => Eq (IRList IRMemSlot)
+      (Bool.rec (fun (_ : Bool) => IRList IRMemSlot)
+        (IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv) (ir_mem_update (ir_vcg_memden env rest mem) (ir_vcg_nden env a) (ir_vcg_vden env v)))
+        (IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env v) clv) (ir_vcg_memden env rest mem)) b3)
+      (IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env v) clv) (ir_vcg_memden env rest mem)))
+    Bool.true (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a))
+    (Eq.symm Bool (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a)) Bool.true (ir_vcg_eqb_of_beq env ca a hb))
+    (Eq.refl (IRList IRMemSlot) (IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env v) clv) (ir_vcg_memden env rest mem)))
+
+def ir_vcg_update_skip (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (ca : VcgNat) (cv : VcgVal) (clv : Bool) (rest : IRList VcgCell) (a : VcgNat) (v : VcgVal) (hd : Eq Bool (ir_vcg_distinct fs ca a) Bool.true) (l : IRList VcgCell) (hl : ir_vcg_mupd_goal env mem rest a v l) : ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v (IRList.cons VcgCell (VcgCell.mk ca cv clv) l) :=
+  Eq.subst Bool
+    (fun (b3 : Bool) => Eq (IRList IRMemSlot)
+      (Bool.rec (fun (_ : Bool) => IRList IRMemSlot)
+        (IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv) (ir_mem_update (ir_vcg_memden env rest mem) (ir_vcg_nden env a) (ir_vcg_vden env v)))
+        (IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env v) clv) (ir_vcg_memden env rest mem)) b3)
+      (IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv) (ir_vcg_memden env l mem)))
+    Bool.false (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a))
+    (Eq.symm Bool (ir_nat_eqb (ir_vcg_nden env ca) (ir_vcg_nden env a)) Bool.false (ir_vcg_distinct_sound env mem fs hf ca a hd))
+    (ir_eq_cong (IRList IRMemSlot) (IRList IRMemSlot) (fun (t : IRList IRMemSlot) => IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env ca) (ir_vcg_vden env cv) clv) t)
+      (ir_mem_update (ir_vcg_memden env rest mem) (ir_vcg_nden env a) (ir_vcg_vden env v)) (ir_vcg_memden env l mem) hl)
+
+def ir_vcg_update_cell (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (ca : VcgNat) (cv : VcgVal) (clv : Bool) (rest : IRList VcgCell) (a : VcgNat) (v : VcgVal) (ih : forall (f2 : IRList VcgCell), Eq (IROption (IRList VcgCell)) (ir_vcg_update fs rest a v) (IROption.some (IRList VcgCell) f2) -> ir_vcg_mupd_goal env mem rest a v f2) (f2 : IRList VcgCell) (h : Eq (IROption (IRList VcgCell)) (ir_vcg_ucell fs (VcgCell.mk ca cv clv) a v rest (ir_vcg_update fs rest a v)) (IROption.some (IRList VcgCell) f2)) : ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f2 :=
+  ir_vcg_bcase (ir_vcg_nbeq ca a)
+    (fun (b : Bool) => Eq (IROption (IRList VcgCell))
+       (Bool.rec (fun (_ : Bool) => IROption (IRList VcgCell))
+         (Bool.rec (fun (_ : Bool) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell))
+           (IROption.rec (IRList VcgCell) (fun (_ : IROption (IRList VcgCell)) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (fun (l : IRList VcgCell) => IROption.some (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca cv clv) l)) (ir_vcg_update fs rest a v))
+           (ir_vcg_distinct fs ca a))
+         (IROption.some (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca v clv) rest)) b)
+       (IROption.some (IRList VcgCell) f2) -> ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f2)
+    (fun (_ : Eq Bool (ir_vcg_nbeq ca a) Bool.false) =>
+      ir_vcg_bcase (ir_vcg_distinct fs ca a)
+        (fun (b2 : Bool) => Eq (IROption (IRList VcgCell))
+           (Bool.rec (fun (_ : Bool) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell))
+             (IROption.rec (IRList VcgCell) (fun (_ : IROption (IRList VcgCell)) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (fun (l : IRList VcgCell) => IROption.some (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca cv clv) l)) (ir_vcg_update fs rest a v)) b2)
+           (IROption.some (IRList VcgCell) f2) -> ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f2)
+        (fun (_ : Eq Bool (ir_vcg_distinct fs ca a) Bool.false) (hn : Eq (IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (IROption.some (IRList VcgCell) f2)) =>
+          ir_vcg_none_some (IRList VcgCell) f2 hn (ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f2))
+        (fun (hd : Eq Bool (ir_vcg_distinct fs ca a) Bool.true) =>
+          ir_vcg_ocase (IRList VcgCell) (ir_vcg_update fs rest a v)
+            (fun (o : IROption (IRList VcgCell)) => Eq (IROption (IRList VcgCell))
+               (IROption.rec (IRList VcgCell) (fun (_ : IROption (IRList VcgCell)) => IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (fun (l : IRList VcgCell) => IROption.some (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca cv clv) l)) o)
+               (IROption.some (IRList VcgCell) f2) -> ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f2)
+            (fun (_ : Eq (IROption (IRList VcgCell)) (ir_vcg_update fs rest a v) (IROption.none (IRList VcgCell))) (hn : Eq (IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (IROption.some (IRList VcgCell) f2)) =>
+              ir_vcg_none_some (IRList VcgCell) f2 hn (ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f2))
+            (fun (l : IRList VcgCell) (hu : Eq (IROption (IRList VcgCell)) (ir_vcg_update fs rest a v) (IROption.some (IRList VcgCell) l)) (hs : Eq (IROption (IRList VcgCell)) (IROption.some (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca cv clv) l)) (IROption.some (IRList VcgCell) f2)) =>
+              Eq.subst (IRList VcgCell) (fun (f3 : IRList VcgCell) => ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f3)
+                (IRList.cons VcgCell (VcgCell.mk ca cv clv) l) f2 (ir_vcg_some_inj (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca cv clv) l) f2 hs)
+                (ir_vcg_update_skip env mem fs hf ca cv clv rest a v hd l (ih l hu)))))
+    (fun (hb : Eq Bool (ir_vcg_nbeq ca a) Bool.true) (hs : Eq (IROption (IRList VcgCell)) (IROption.some (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca v clv) rest)) (IROption.some (IRList VcgCell) f2)) =>
+      Eq.subst (IRList VcgCell) (fun (f3 : IRList VcgCell) => ir_vcg_mupd_goal env mem (IRList.cons VcgCell (VcgCell.mk ca cv clv) rest) a v f3)
+        (IRList.cons VcgCell (VcgCell.mk ca v clv) rest) f2 (ir_vcg_some_inj (IRList VcgCell) (IRList.cons VcgCell (VcgCell.mk ca v clv) rest) f2 hs)
+        (ir_vcg_update_hit env mem ca cv clv rest a v hb))
+    h
+
+def ir_vcg_update_sound (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (fresh : IRList VcgCell) (a : VcgNat) (v : VcgVal) (fr2 : IRList VcgCell) (h : Eq (IROption (IRList VcgCell)) (ir_vcg_update fs fresh a v) (IROption.some (IRList VcgCell) fr2)) : ir_vcg_mupd_goal env mem fresh a v fr2 :=
+  IRList.rec VcgCell
+    (fun (fr : IRList VcgCell) => forall (f2 : IRList VcgCell), Eq (IROption (IRList VcgCell)) (ir_vcg_update fs fr a v) (IROption.some (IRList VcgCell) f2) -> ir_vcg_mupd_goal env mem fr a v f2)
+    (fun (f2 : IRList VcgCell) (hn : Eq (IROption (IRList VcgCell)) (IROption.none (IRList VcgCell)) (IROption.some (IRList VcgCell) f2)) =>
+      ir_vcg_none_some (IRList VcgCell) f2 hn (ir_vcg_mupd_goal env mem (IRList.nil VcgCell) a v f2))
+    (fun (cell : VcgCell) (rest : IRList VcgCell) (ih : forall (f2 : IRList VcgCell), Eq (IROption (IRList VcgCell)) (ir_vcg_update fs rest a v) (IROption.some (IRList VcgCell) f2) -> ir_vcg_mupd_goal env mem rest a v f2) =>
+      VcgCell.rec
+        (fun (cell0 : VcgCell) => forall (f2 : IRList VcgCell), Eq (IROption (IRList VcgCell)) (ir_vcg_ucell fs cell0 a v rest (ir_vcg_update fs rest a v)) (IROption.some (IRList VcgCell) f2) -> ir_vcg_mupd_goal env mem (IRList.cons VcgCell cell0 rest) a v f2)
+        (fun (ca : VcgNat) (cv : VcgVal) (clv : Bool) => ir_vcg_update_cell env mem fs hf ca cv clv rest a v ih)
+        cell)
+    fresh fr2 h
+
+def ir_vcg_r_load (m : IRModule) (s : IRMachine) (rs : IRList Nat) (t : IRTy) (o : IROption IRMemSlot) : IRConfig := ir_bind_result s rs (ir_load_view (ir_mod_encs m) t (ir_load_slot o))
+
+def ir_vcg_r_borrow (s : IRMachine) (rs : IRList Nat) (a : Nat) (o : IROption IRMemSlot) : IRConfig := ir_bind_result s rs (ir_borrow_slot a o)
+
+def ir_vcg_r_store (s : IRMachine) (o : IROption IRMemSlot) (u : IRList IRMemSlot) : IRConfig := IROption.rec IRMemSlot (fun (_ : IROption IRMemSlot) => IRConfig) (IRConfig.halted (IROutcome.ub IRFault.bad_addr)) (fun (cl : IRMemSlot) => Bool.rec (fun (_ : Bool) => IRConfig) (IRConfig.halted (IROutcome.ub IRFault.bad_addr)) (ir_advance (ir_set_mem s u)) (ir_slot_live cl)) o
+
+def ir_vcg_oL (A : Type) (o : IROption A) (k : A -> IRConfig) : IRConfig := IROption.rec A (fun (_ : IROption A) => IRConfig) (IRConfig.halted IROutcome.fuel_out) k o
+
+def ir_vcg_oR (A : Type) (o : IROption A) (k : A -> IRConfig) : IRConfig := IROption.rec A (fun (_ : IROption A) => IRConfig) (IRConfig.halted (IROutcome.stuck IRFault.no_frame)) k o
+
+def ir_vcg_cfg_ne (h : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) (C : Prop) : C := Eq.subst IRConfig (fun (c : IRConfig) => IRConfig.rec (fun (_ : IRConfig) => Prop) (fun (_ : IRMachine) => C) (fun (o : IROutcome) => IROutcome.rec (fun (_ : IROutcome) => Prop) (fun (_ : IRList IRScalar) => C) (fun (_ : IRFault) => C) (fun (_ : IRFault) => C) (fun (_ : IRFault) => C) (fun (_ : IRFault) => C) (Eq Bool Bool.true Bool.true) o) c) (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame)) h (Eq.refl Bool Bool.true)
+
+def ir_vcg_fact_at (fs : IRList VcgFact) (j : Nat) : VcgFact := IRList.rec VcgFact (fun (_ : IRList VcgFact) => Nat -> VcgFact) (fun (_ : Nat) => VcgFact.lt (VcgNat.lit Nat.zero) (VcgNat.lit (Nat.succ Nat.zero))) (fun (f : VcgFact) (_ : IRList VcgFact) (ih : Nat -> VcgFact) => fun (k : Nat) => Nat.rec (fun (_ : Nat) => VcgFact) f (fun (kp : Nat) (_ : VcgFact) => ih kp) k) fs j
+
+def ir_vcg_fact_at_holds (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (j : Nat) : ir_vcg_fact_holds env mem (ir_vcg_fact_at fs j) :=
+  IRList.rec VcgFact (fun (fs0 : IRList VcgFact) => ir_vcg_facts_hold env mem fs0 -> forall (k : Nat), ir_vcg_fact_holds env mem (ir_vcg_fact_at fs0 k))
+    (fun (_ : Eq Bool Bool.true Bool.true) (k : Nat) => Eq.refl Bool Bool.true)
+    (fun (f : VcgFact) (rest : IRList VcgFact) (ih : ir_vcg_facts_hold env mem rest -> forall (k : Nat), ir_vcg_fact_holds env mem (ir_vcg_fact_at rest k)) (hf0 : ir_vcg_and (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest)) (k : Nat) =>
+      Nat.rec (fun (k0 : Nat) => ir_vcg_fact_holds env mem (ir_vcg_fact_at (IRList.cons VcgFact f rest) k0))
+        (ir_vcg_and_fst (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0)
+        (fun (kp : Nat) (_ : ir_vcg_fact_holds env mem (ir_vcg_fact_at (IRList.cons VcgFact f rest) kp)) => ih (ir_vcg_and_snd (ir_vcg_fact_holds env mem f) (ir_vcg_facts_hold env mem rest) hf0) kp) k)
+    fs hf j
+
+def ir_vcg_bf_l1 (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (sm : IRMachine) (rs : IRList Nat) (f : VcgFact) : IRConfig := VcgFact.rec (fun (_ : VcgFact) => IRConfig) (fun (_ : VcgNat) (_ : VcgVal) (_ : Bool) => IRConfig.halted IROutcome.fuel_out) (fun (_ : VcgNat) (_ : VcgNat) => IRConfig.halted IROutcome.fuel_out) (fun (_ : IRList VcgCell) (_ : VcgNat) => ir_step m sm) f
+
+def ir_vcg_bf_r1 (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (sm : IRMachine) (rs : IRList Nat) (f : VcgFact) : IRConfig := VcgFact.rec (fun (_ : VcgFact) => IRConfig) (fun (_ : VcgNat) (_ : VcgVal) (_ : Bool) => IRConfig.halted (IROutcome.stuck IRFault.no_frame)) (fun (_ : VcgNat) (_ : VcgNat) => IRConfig.halted (IROutcome.stuck IRFault.no_frame)) (fun (pre : IRList VcgCell) (a : VcgNat) => ir_bind_result sm rs (ir_borrow_eval (ir_vcg_memden env pre mem) (IRScalar.ptr_ (ir_vcg_nden env a)))) f
+
+def ir_vcg_bf_l2 (env : VcgEnv) (sm : IRMachine) (rs : IRList Nat) (f : VcgFact) : IRConfig := VcgFact.rec (fun (_ : VcgFact) => IRConfig) (fun (_ : VcgNat) (_ : VcgVal) (_ : Bool) => IRConfig.halted IROutcome.fuel_out) (fun (_ : VcgNat) (_ : VcgNat) => IRConfig.halted IROutcome.fuel_out) (fun (_ : IRList VcgCell) (a : VcgNat) => ir_bind_result sm rs (IRStepResult.value (IRScalar.ptr_ (ir_vcg_nden env a)))) f
+
+def ir_vcg_bf_r2 (tg : IRConfig) (f : VcgFact) : IRConfig := VcgFact.rec (fun (_ : VcgFact) => IRConfig) (fun (_ : VcgNat) (_ : VcgVal) (_ : Bool) => IRConfig.halted (IROutcome.stuck IRFault.no_frame)) (fun (_ : VcgNat) (_ : VcgNat) => IRConfig.halted (IROutcome.stuck IRFault.no_frame)) (fun (_ : IRList VcgCell) (_ : VcgNat) => tg) f
+
+def ir_vcg_look_ok (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (fresh : IRList VcgCell) (a : VcgNat) (K1 : IRConfig) (KR : IROption IRMemSlot -> IRConfig) (tg : IRConfig) (h1 : Eq IRConfig (ir_vcg_oL VcgCell (ir_vcg_lookup fs fresh a) (fun (_ : VcgCell) => K1)) (ir_vcg_oR VcgCell (ir_vcg_lookup fs fresh a) (fun (_ : VcgCell) => KR (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a))))) (h2 : Eq IRConfig (ir_vcg_oL VcgCell (ir_vcg_lookup fs fresh a) (fun (c : VcgCell) => KR (IROption.some IRMemSlot (ir_vcg_cden env c)))) (ir_vcg_oR VcgCell (ir_vcg_lookup fs fresh a) (fun (_ : VcgCell) => tg))) : Eq IRConfig K1 tg :=
+  ir_vcg_ocase VcgCell (ir_vcg_lookup fs fresh a)
+    (fun (o : IROption VcgCell) => Eq IRConfig (ir_vcg_oL VcgCell o (fun (_ : VcgCell) => K1)) (ir_vcg_oR VcgCell o (fun (_ : VcgCell) => KR (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)))) -> Eq IRConfig (ir_vcg_oL VcgCell o (fun (c : VcgCell) => KR (IROption.some IRMemSlot (ir_vcg_cden env c)))) (ir_vcg_oR VcgCell o (fun (_ : VcgCell) => tg)) -> Eq IRConfig K1 tg)
+    (fun (_ : Eq (IROption VcgCell) (ir_vcg_lookup fs fresh a) (IROption.none VcgCell)) (h1n : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) => ir_vcg_cfg_ne h1n (Eq IRConfig K1 tg))
+    (fun (c : VcgCell) (hl : Eq (IROption VcgCell) (ir_vcg_lookup fs fresh a) (IROption.some VcgCell c)) (h1s : Eq IRConfig K1 (KR (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)))) (h2s : Eq IRConfig (KR (IROption.some IRMemSlot (ir_vcg_cden env c))) tg) =>
+      Eq.trans IRConfig K1 (KR (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a))) tg h1s
+        (Eq.trans IRConfig (KR (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a))) (KR (IROption.some IRMemSlot (ir_vcg_cden env c))) tg
+          (ir_eq_cong (IROption IRMemSlot) IRConfig KR (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_vcg_lookup_sound env mem fs hf fresh a c hl))
+          h2s))
+    h1 h2
+
+def ir_vcg_store_ok (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (fresh : IRList VcgCell) (a : VcgNat) (v : VcgVal) (K1 : IRConfig) (KS : IROption IRMemSlot -> IRList IRMemSlot -> IRConfig) (tg : IRConfig) (h1 : Eq IRConfig (ir_vcg_oL VcgCell (ir_vcg_lookup fs fresh a) (fun (_ : VcgCell) => ir_vcg_oL (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (_ : IRList VcgCell) => K1))) (ir_vcg_oR VcgCell (ir_vcg_lookup fs fresh a) (fun (_ : VcgCell) => ir_vcg_oR (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (_ : IRList VcgCell) => KS (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v)))))) (h2 : Eq IRConfig (ir_vcg_oL VcgCell (ir_vcg_lookup fs fresh a) (fun (c : VcgCell) => ir_vcg_oL (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (fr2 : IRList VcgCell) => KS (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_vcg_memden env fr2 mem)))) (ir_vcg_oR VcgCell (ir_vcg_lookup fs fresh a) (fun (_ : VcgCell) => ir_vcg_oR (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (_ : IRList VcgCell) => tg)))) : Eq IRConfig K1 tg :=
+  ir_vcg_ocase VcgCell (ir_vcg_lookup fs fresh a)
+    (fun (o : IROption VcgCell) => Eq IRConfig (ir_vcg_oL VcgCell o (fun (_ : VcgCell) => ir_vcg_oL (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (_ : IRList VcgCell) => K1))) (ir_vcg_oR VcgCell o (fun (_ : VcgCell) => ir_vcg_oR (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (_ : IRList VcgCell) => KS (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v))))) -> Eq IRConfig (ir_vcg_oL VcgCell o (fun (c : VcgCell) => ir_vcg_oL (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (fr2 : IRList VcgCell) => KS (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_vcg_memden env fr2 mem)))) (ir_vcg_oR VcgCell o (fun (_ : VcgCell) => ir_vcg_oR (IRList VcgCell) (ir_vcg_update fs fresh a v) (fun (_ : IRList VcgCell) => tg))) -> Eq IRConfig K1 tg)
+    (fun (_ : Eq (IROption VcgCell) (ir_vcg_lookup fs fresh a) (IROption.none VcgCell)) (h1n : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) => ir_vcg_cfg_ne h1n (Eq IRConfig K1 tg))
+    (fun (c : VcgCell) (hl : Eq (IROption VcgCell) (ir_vcg_lookup fs fresh a) (IROption.some VcgCell c)) =>
+      ir_vcg_ocase (IRList VcgCell) (ir_vcg_update fs fresh a v)
+        (fun (u : IROption (IRList VcgCell)) => Eq IRConfig (ir_vcg_oL (IRList VcgCell) u (fun (_ : IRList VcgCell) => K1)) (ir_vcg_oR (IRList VcgCell) u (fun (_ : IRList VcgCell) => KS (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v)))) -> Eq IRConfig (ir_vcg_oL (IRList VcgCell) u (fun (fr2 : IRList VcgCell) => KS (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_vcg_memden env fr2 mem))) (ir_vcg_oR (IRList VcgCell) u (fun (_ : IRList VcgCell) => tg)) -> Eq IRConfig K1 tg)
+        (fun (_ : Eq (IROption (IRList VcgCell)) (ir_vcg_update fs fresh a v) (IROption.none (IRList VcgCell))) (h1n : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) => ir_vcg_cfg_ne h1n (Eq IRConfig K1 tg))
+        (fun (fr2 : IRList VcgCell) (hu : Eq (IROption (IRList VcgCell)) (ir_vcg_update fs fresh a v) (IROption.some (IRList VcgCell) fr2)) (h1s : Eq IRConfig K1 (KS (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v)))) (h2s : Eq IRConfig (KS (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_vcg_memden env fr2 mem)) tg) =>
+          Eq.trans IRConfig K1 (KS (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v))) tg h1s
+            (Eq.subst (IROption IRMemSlot) (fun (o : IROption IRMemSlot) => Eq IRConfig (KS o (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v))) tg)
+              (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a))
+              (Eq.symm (IROption IRMemSlot) (ir_mem_lookup (ir_vcg_memden env fresh mem) (ir_vcg_nden env a)) (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_vcg_lookup_sound env mem fs hf fresh a c hl))
+              (Eq.subst (IRList IRMemSlot) (fun (u2 : IRList IRMemSlot) => Eq IRConfig (KS (IROption.some IRMemSlot (ir_vcg_cden env c)) u2) tg)
+                (ir_vcg_memden env fr2 mem) (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v))
+                (Eq.symm (IRList IRMemSlot) (ir_mem_update (ir_vcg_memden env fresh mem) (ir_vcg_nden env a) (ir_vcg_vden env v)) (ir_vcg_memden env fr2 mem) (ir_vcg_update_sound env mem fs hf fresh a v fr2 hu))
+                h2s))))
+    h1 h2
+
+def ir_vcg_borrowf_ok (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (sm : IRMachine) (rs : IRList Nat) (tg : IRConfig) (f : VcgFact) (hfa : ir_vcg_fact_holds env mem f) (h1 : Eq IRConfig (ir_vcg_bf_l1 m env mem sm rs f) (ir_vcg_bf_r1 m env mem sm rs f)) (h2 : Eq IRConfig (ir_vcg_bf_l2 env sm rs f) (ir_vcg_bf_r2 tg f)) : Eq IRConfig (ir_step m sm) tg :=
+  VcgFact.rec
+    (fun (f0 : VcgFact) => ir_vcg_fact_holds env mem f0 -> Eq IRConfig (ir_vcg_bf_l1 m env mem sm rs f0) (ir_vcg_bf_r1 m env mem sm rs f0) -> Eq IRConfig (ir_vcg_bf_l2 env sm rs f0) (ir_vcg_bf_r2 tg f0) -> Eq IRConfig (ir_step m sm) tg)
+    (fun (x : VcgNat) (v : VcgVal) (lv : Bool) (_ : ir_vcg_fact_holds env mem (VcgFact.look x v lv)) (h1n : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) => ir_vcg_cfg_ne h1n (Eq IRConfig (ir_step m sm) tg))
+    (fun (x : VcgNat) (y : VcgNat) (_ : ir_vcg_fact_holds env mem (VcgFact.lt x y)) (h1n : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted (IROutcome.stuck IRFault.no_frame))) => ir_vcg_cfg_ne h1n (Eq IRConfig (ir_step m sm) tg))
+    (fun (pre : IRList VcgCell) (a : VcgNat) (hb : Eq IRStepResult (ir_borrow_eval (ir_vcg_memden env pre mem) (IRScalar.ptr_ (ir_vcg_nden env a))) (IRStepResult.value (IRScalar.ptr_ (ir_vcg_nden env a)))) (h1s : Eq IRConfig (ir_step m sm) (ir_bind_result sm rs (ir_borrow_eval (ir_vcg_memden env pre mem) (IRScalar.ptr_ (ir_vcg_nden env a))))) (h2s : Eq IRConfig (ir_bind_result sm rs (IRStepResult.value (IRScalar.ptr_ (ir_vcg_nden env a)))) tg) =>
+      Eq.trans IRConfig (ir_step m sm) (ir_bind_result sm rs (ir_borrow_eval (ir_vcg_memden env pre mem) (IRScalar.ptr_ (ir_vcg_nden env a)))) tg h1s
+        (Eq.trans IRConfig (ir_bind_result sm rs (ir_borrow_eval (ir_vcg_memden env pre mem) (IRScalar.ptr_ (ir_vcg_nden env a)))) (ir_bind_result sm rs (IRStepResult.value (IRScalar.ptr_ (ir_vcg_nden env a)))) tg
+          (ir_eq_cong IRStepResult IRConfig (fun (x : IRStepResult) => ir_bind_result sm rs x) (ir_borrow_eval (ir_vcg_memden env pre mem) (IRScalar.ptr_ (ir_vcg_nden env a))) (IRStepResult.value (IRScalar.ptr_ (ir_vcg_nden env a))) hb)
+          h2s))
+    f hfa h1 h2
+
+-- == 3. MACHINE AND STEPS: symbolic frames/machines, the step kinds, the per-step obligations, and the run's soundness ==
+
+inductive VcgBind : Type
+| mk : Nat -> VcgVal -> VcgBind
+
+def ir_vcg_locden (env : VcgEnv) (l : IRList VcgBind) : IRList IRBinding := IRList.rec VcgBind (fun (_ : IRList VcgBind) => IRList IRBinding) (IRList.nil IRBinding) (fun (b : VcgBind) (_ : IRList VcgBind) (ih : IRList IRBinding) => IRList.cons IRBinding (VcgBind.rec (fun (_ : VcgBind) => IRBinding) (fun (i : Nat) (v : VcgVal) => IRBinding.mk i (ir_vcg_vden env v)) b) ih) l
+
+inductive VcgFrame : Type
+| mk : Nat -> Nat -> Nat -> IRList VcgBind -> IROption (IRList Nat) -> VcgFrame
+
+def ir_vcg_fden (env : VcgEnv) (d : IRList Nat) (f : VcgFrame) : IRFrame := VcgFrame.rec (fun (_ : VcgFrame) => IRFrame) (fun (fn : Nat) (bl : Nat) (pc : Nat) (loc : IRList VcgBind) (ds : IROption (IRList Nat)) => IRFrame.mk fn bl pc (ir_vcg_locden env loc) (IROption.rec (IRList Nat) (fun (_ : IROption (IRList Nat)) => IRList Nat) d (fun (x : IRList Nat) => x) ds)) f
+
+def ir_vcg_framesden (env : VcgEnv) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFrame) : IRList IRFrame := IRList.rec VcgFrame (fun (_ : IRList VcgFrame) => IRList IRFrame) r (fun (f : VcgFrame) (_ : IRList VcgFrame) (ih : IRList IRFrame) => IRList.cons IRFrame (ir_vcg_fden env d f) ih) fs
+
+inductive VcgMach : Type
+| mk : IRList VcgFrame -> IRList VcgCell -> VcgNat -> VcgMach
+
+def ir_vcg_mden (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (s : VcgMach) : IRMachine := VcgMach.rec (fun (_ : VcgMach) => IRMachine) (fun (fs : IRList VcgFrame) (fresh : IRList VcgCell) (na : VcgNat) => IRMachine.mk (ir_vcg_framesden env d r fs) (ir_vcg_memden env fresh mem) (ir_vcg_nden env na)) s
+
+def ir_vcg_mfresh (s : VcgMach) : IRList VcgCell := VcgMach.rec (fun (_ : VcgMach) => IRList VcgCell) (fun (_ : IRList VcgFrame) (fresh : IRList VcgCell) (_ : VcgNat) => fresh) s
+
+inductive VcgStep : Type
+| pure : VcgMach -> VcgStep
+| load : VcgMach -> IRList Nat -> IRTy -> VcgNat -> VcgStep
+| borrowl : VcgMach -> IRList Nat -> VcgNat -> VcgStep
+| borrowf : VcgMach -> IRList Nat -> Nat -> VcgStep
+| store : VcgMach -> VcgNat -> VcgVal -> VcgStep
+| fin : VcgMach -> IRList VcgCell -> VcgNat -> IRList VcgVal -> VcgStep
+| stop : VcgMach -> VcgStep
+
+def ir_vcg_start (st : VcgStep) : VcgMach := VcgStep.rec (fun (_ : VcgStep) => VcgMach) (fun (s : VcgMach) => s) (fun (s : VcgMach) (_ : IRList Nat) (_ : IRTy) (_ : VcgNat) => s) (fun (s : VcgMach) (_ : IRList Nat) (_ : VcgNat) => s) (fun (s : VcgMach) (_ : IRList Nat) (_ : Nat) => s) (fun (s : VcgMach) (_ : VcgNat) (_ : VcgVal) => s) (fun (s : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => s) (fun (s : VcgMach) => s) st
+
+def ir_vcg_end_cfg (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (st : VcgStep) : IRConfig := VcgStep.rec (fun (_ : VcgStep) => IRConfig) (fun (_ : VcgMach) => IRConfig.halted IROutcome.fuel_out) (fun (_ : VcgMach) (_ : IRList Nat) (_ : IRTy) (_ : VcgNat) => IRConfig.halted IROutcome.fuel_out) (fun (_ : VcgMach) (_ : IRList Nat) (_ : VcgNat) => IRConfig.halted IROutcome.fuel_out) (fun (_ : VcgMach) (_ : IRList Nat) (_ : Nat) => IRConfig.halted IROutcome.fuel_out) (fun (_ : VcgMach) (_ : VcgNat) (_ : VcgVal) => IRConfig.halted IROutcome.fuel_out) (fun (_ : VcgMach) (fr : IRList VcgCell) (na : VcgNat) (vals : IRList VcgVal) => ir_ret_to d r (ir_vcg_memden env fr mem) (ir_vcg_nden env na) (ir_vcg_vlden env vals)) (fun (s : VcgMach) => IRConfig.running (ir_vcg_mden env mem d r s)) st
+
+def ir_vcg_target (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (st : VcgStep) (rest : IRList VcgStep) : IRConfig := IRList.rec VcgStep (fun (_ : IRList VcgStep) => IRConfig) (ir_vcg_end_cfg env mem d r st) (fun (st2 : VcgStep) (_ : IRList VcgStep) (_ : IRConfig) => IRConfig.running (ir_vcg_mden env mem d r (ir_vcg_start st2))) rest
+
+def ir_vcg_l1 (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (st : VcgStep) : IRConfig := VcgStep.rec (fun (_ : VcgStep) => IRConfig)
+  (fun (s : VcgMach) => ir_step m (ir_vcg_mden env mem d r s))
+  (fun (s : VcgMach) (rs : IRList Nat) (t : IRTy) (a : VcgNat) => ir_vcg_oL VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => ir_step m (ir_vcg_mden env mem d r s)))
+  (fun (s : VcgMach) (rs : IRList Nat) (a : VcgNat) => ir_vcg_oL VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => ir_step m (ir_vcg_mden env mem d r s)))
+  (fun (s : VcgMach) (rs : IRList Nat) (j : Nat) => ir_vcg_bf_l1 m env mem (ir_vcg_mden env mem d r s) rs (ir_vcg_fact_at fs j))
+  (fun (s : VcgMach) (a : VcgNat) (v : VcgVal) => ir_vcg_oL VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => ir_vcg_oL (IRList VcgCell) (ir_vcg_update fs (ir_vcg_mfresh s) a v) (fun (_ : IRList VcgCell) => ir_step m (ir_vcg_mden env mem d r s))))
+  (fun (s : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => ir_step m (ir_vcg_mden env mem d r s))
+  (fun (s : VcgMach) => IRConfig.running (ir_vcg_mden env mem d r s)) st
+
+def ir_vcg_r1 (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (st : VcgStep) (tg : IRConfig) : IRConfig := VcgStep.rec (fun (_ : VcgStep) => IRConfig)
+  (fun (_ : VcgMach) => tg)
+  (fun (s : VcgMach) (rs : IRList Nat) (t : IRTy) (a : VcgNat) => ir_vcg_oR VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => ir_vcg_r_load m (ir_vcg_mden env mem d r s) rs t (ir_mem_lookup (ir_vcg_memden env (ir_vcg_mfresh s) mem) (ir_vcg_nden env a))))
+  (fun (s : VcgMach) (rs : IRList Nat) (a : VcgNat) => ir_vcg_oR VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => ir_vcg_r_borrow (ir_vcg_mden env mem d r s) rs (ir_vcg_nden env a) (ir_mem_lookup (ir_vcg_memden env (ir_vcg_mfresh s) mem) (ir_vcg_nden env a))))
+  (fun (s : VcgMach) (rs : IRList Nat) (j : Nat) => ir_vcg_bf_r1 m env mem (ir_vcg_mden env mem d r s) rs (ir_vcg_fact_at fs j))
+  (fun (s : VcgMach) (a : VcgNat) (v : VcgVal) => ir_vcg_oR VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => ir_vcg_oR (IRList VcgCell) (ir_vcg_update fs (ir_vcg_mfresh s) a v) (fun (_ : IRList VcgCell) => ir_vcg_r_store (ir_vcg_mden env mem d r s) (ir_mem_lookup (ir_vcg_memden env (ir_vcg_mfresh s) mem) (ir_vcg_nden env a)) (ir_mem_update (ir_vcg_memden env (ir_vcg_mfresh s) mem) (ir_vcg_nden env a) (ir_vcg_vden env v)))))
+  (fun (_ : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => tg)
+  (fun (_ : VcgMach) => tg) st
+
+def ir_vcg_l2 (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (st : VcgStep) : IRConfig := VcgStep.rec (fun (_ : VcgStep) => IRConfig)
+  (fun (_ : VcgMach) => IRConfig.halted IROutcome.fuel_out)
+  (fun (s : VcgMach) (rs : IRList Nat) (t : IRTy) (a : VcgNat) => ir_vcg_oL VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (c : VcgCell) => ir_vcg_r_load m (ir_vcg_mden env mem d r s) rs t (IROption.some IRMemSlot (ir_vcg_cden env c))))
+  (fun (s : VcgMach) (rs : IRList Nat) (a : VcgNat) => ir_vcg_oL VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (c : VcgCell) => ir_vcg_r_borrow (ir_vcg_mden env mem d r s) rs (ir_vcg_nden env a) (IROption.some IRMemSlot (ir_vcg_cden env c))))
+  (fun (s : VcgMach) (rs : IRList Nat) (j : Nat) => ir_vcg_bf_l2 env (ir_vcg_mden env mem d r s) rs (ir_vcg_fact_at fs j))
+  (fun (s : VcgMach) (a : VcgNat) (v : VcgVal) => ir_vcg_oL VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (c : VcgCell) => ir_vcg_oL (IRList VcgCell) (ir_vcg_update fs (ir_vcg_mfresh s) a v) (fun (fr2 : IRList VcgCell) => ir_vcg_r_store (ir_vcg_mden env mem d r s) (IROption.some IRMemSlot (ir_vcg_cden env c)) (ir_vcg_memden env fr2 mem))))
+  (fun (_ : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => IRConfig.halted IROutcome.fuel_out)
+  (fun (_ : VcgMach) => IRConfig.halted IROutcome.fuel_out) st
+
+def ir_vcg_r2 (fs : IRList VcgFact) (st : VcgStep) (tg : IRConfig) : IRConfig := VcgStep.rec (fun (_ : VcgStep) => IRConfig)
+  (fun (_ : VcgMach) => IRConfig.halted IROutcome.fuel_out)
+  (fun (s : VcgMach) (_ : IRList Nat) (_ : IRTy) (a : VcgNat) => ir_vcg_oR VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => tg))
+  (fun (s : VcgMach) (_ : IRList Nat) (a : VcgNat) => ir_vcg_oR VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => tg))
+  (fun (_ : VcgMach) (_ : IRList Nat) (j : Nat) => ir_vcg_bf_r2 tg (ir_vcg_fact_at fs j))
+  (fun (s : VcgMach) (a : VcgNat) (v : VcgVal) => ir_vcg_oR VcgCell (ir_vcg_lookup fs (ir_vcg_mfresh s) a) (fun (_ : VcgCell) => ir_vcg_oR (IRList VcgCell) (ir_vcg_update fs (ir_vcg_mfresh s) a v) (fun (_ : IRList VcgCell) => tg)))
+  (fun (_ : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => IRConfig.halted IROutcome.fuel_out)
+  (fun (_ : VcgMach) => IRConfig.halted IROutcome.fuel_out) st
+
+def ir_vcg_lhs (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (T : IRList VcgStep) : IRList IRConfig := IRList.rec VcgStep (fun (_ : IRList VcgStep) => IRList IRConfig) (IRList.nil IRConfig) (fun (st : VcgStep) (_ : IRList VcgStep) (ih : IRList IRConfig) => IRList.cons IRConfig (ir_vcg_l1 m env mem d r fs st) (IRList.cons IRConfig (ir_vcg_l2 m env mem d r fs st) ih)) T
+
+def ir_vcg_rhs (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (T : IRList VcgStep) : IRList IRConfig := IRList.rec VcgStep (fun (_ : IRList VcgStep) => IRList IRConfig) (IRList.nil IRConfig) (fun (st : VcgStep) (rest : IRList VcgStep) (ih : IRList IRConfig) => IRList.cons IRConfig (ir_vcg_r1 m env mem d r fs st (ir_vcg_target env mem d r st rest)) (IRList.cons IRConfig (ir_vcg_r2 fs st (ir_vcg_target env mem d r st rest)) ih)) T
+
+def ir_vcg_adv (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (st : VcgStep) : IRConfig := VcgStep.rec (fun (_ : VcgStep) => IRConfig) (fun (s : VcgMach) => ir_step m (ir_vcg_mden env mem d r s)) (fun (s : VcgMach) (_ : IRList Nat) (_ : IRTy) (_ : VcgNat) => ir_step m (ir_vcg_mden env mem d r s)) (fun (s : VcgMach) (_ : IRList Nat) (_ : VcgNat) => ir_step m (ir_vcg_mden env mem d r s)) (fun (s : VcgMach) (_ : IRList Nat) (_ : Nat) => ir_step m (ir_vcg_mden env mem d r s)) (fun (s : VcgMach) (_ : VcgNat) (_ : VcgVal) => ir_step m (ir_vcg_mden env mem d r s)) (fun (s : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => ir_step m (ir_vcg_mden env mem d r s)) (fun (s : VcgMach) => IRConfig.running (ir_vcg_mden env mem d r s)) st
+
+def ir_vcg_step_ok (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (st : VcgStep) (tg : IRConfig) (h1 : Eq IRConfig (ir_vcg_l1 m env mem d r fs st) (ir_vcg_r1 m env mem d r fs st tg)) (h2 : Eq IRConfig (ir_vcg_l2 m env mem d r fs st) (ir_vcg_r2 fs st tg)) : Eq IRConfig (ir_vcg_adv m env mem d r st) tg :=
+  VcgStep.rec
+    (fun (st0 : VcgStep) => Eq IRConfig (ir_vcg_l1 m env mem d r fs st0) (ir_vcg_r1 m env mem d r fs st0 tg) -> Eq IRConfig (ir_vcg_l2 m env mem d r fs st0) (ir_vcg_r2 fs st0 tg) -> Eq IRConfig (ir_vcg_adv m env mem d r st0) tg)
+    (fun (s : VcgMach) (h1s : Eq IRConfig (ir_step m (ir_vcg_mden env mem d r s)) tg) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted IROutcome.fuel_out)) => h1s)
+    (fun (s : VcgMach) (rs : IRList Nat) (t : IRTy) (a : VcgNat) => ir_vcg_look_ok env mem fs hf (ir_vcg_mfresh s) a (ir_step m (ir_vcg_mden env mem d r s)) (fun (o : IROption IRMemSlot) => ir_vcg_r_load m (ir_vcg_mden env mem d r s) rs t o) tg)
+    (fun (s : VcgMach) (rs : IRList Nat) (a : VcgNat) => ir_vcg_look_ok env mem fs hf (ir_vcg_mfresh s) a (ir_step m (ir_vcg_mden env mem d r s)) (fun (o : IROption IRMemSlot) => ir_vcg_r_borrow (ir_vcg_mden env mem d r s) rs (ir_vcg_nden env a) o) tg)
+    (fun (s : VcgMach) (rs : IRList Nat) (j : Nat) => ir_vcg_borrowf_ok m env mem (ir_vcg_mden env mem d r s) rs tg (ir_vcg_fact_at fs j) (ir_vcg_fact_at_holds env mem fs hf j))
+    (fun (s : VcgMach) (a : VcgNat) (v : VcgVal) => ir_vcg_store_ok env mem fs hf (ir_vcg_mfresh s) a v (ir_step m (ir_vcg_mden env mem d r s)) (fun (o : IROption IRMemSlot) (u : IRList IRMemSlot) => ir_vcg_r_store (ir_vcg_mden env mem d r s) o u) tg)
+    (fun (s : VcgMach) (fr : IRList VcgCell) (na : VcgNat) (vals : IRList VcgVal) (h1s : Eq IRConfig (ir_step m (ir_vcg_mden env mem d r s)) tg) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted IROutcome.fuel_out)) => h1s)
+    (fun (s : VcgMach) (h1s : Eq IRConfig (IRConfig.running (ir_vcg_mden env mem d r s)) tg) (_ : Eq IRConfig (IRConfig.halted IROutcome.fuel_out) (IRConfig.halted IROutcome.fuel_out)) => h1s)
+    st h1 h2
+
+def ir_vcg_slen (st : VcgStep) (k : Nat) : Nat := VcgStep.rec (fun (_ : VcgStep) => Nat) (fun (_ : VcgMach) => Nat.succ k) (fun (_ : VcgMach) (_ : IRList Nat) (_ : IRTy) (_ : VcgNat) => Nat.succ k) (fun (_ : VcgMach) (_ : IRList Nat) (_ : VcgNat) => Nat.succ k) (fun (_ : VcgMach) (_ : IRList Nat) (_ : Nat) => Nat.succ k) (fun (_ : VcgMach) (_ : VcgNat) (_ : VcgVal) => Nat.succ k) (fun (_ : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => Nat.succ k) (fun (_ : VcgMach) => k) st
+
+def ir_vcg_len (T : IRList VcgStep) : Nat := IRList.rec VcgStep (fun (_ : IRList VcgStep) => Nat) Nat.zero (fun (st : VcgStep) (_ : IRList VcgStep) (ih : Nat) => ir_vcg_slen st ih) T
+
+def ir_vcg_adv_steps (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (st : VcgStep) (k : Nat) : Eq IRConfig (ir_steps (ir_vcg_slen st k) m (IRConfig.running (ir_vcg_mden env mem d r (ir_vcg_start st)))) (ir_steps k m (ir_vcg_adv m env mem d r st)) := VcgStep.rec (fun (st0 : VcgStep) => Eq IRConfig (ir_steps (ir_vcg_slen st0 k) m (IRConfig.running (ir_vcg_mden env mem d r (ir_vcg_start st0)))) (ir_steps k m (ir_vcg_adv m env mem d r st0))) (fun (s : VcgMach) => Eq.refl IRConfig (ir_steps k m (ir_step m (ir_vcg_mden env mem d r s)))) (fun (s : VcgMach) (_ : IRList Nat) (_ : IRTy) (_ : VcgNat) => Eq.refl IRConfig (ir_steps k m (ir_step m (ir_vcg_mden env mem d r s)))) (fun (s : VcgMach) (_ : IRList Nat) (_ : VcgNat) => Eq.refl IRConfig (ir_steps k m (ir_step m (ir_vcg_mden env mem d r s)))) (fun (s : VcgMach) (_ : IRList Nat) (_ : Nat) => Eq.refl IRConfig (ir_steps k m (ir_step m (ir_vcg_mden env mem d r s)))) (fun (s : VcgMach) (_ : VcgNat) (_ : VcgVal) => Eq.refl IRConfig (ir_steps k m (ir_step m (ir_vcg_mden env mem d r s)))) (fun (s : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => Eq.refl IRConfig (ir_steps k m (ir_step m (ir_vcg_mden env mem d r s)))) (fun (s : VcgMach) => Eq.refl IRConfig (ir_steps k m (IRConfig.running (ir_vcg_mden env mem d r s)))) st
+
+def ir_vcg_start_cfg (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (T : IRList VcgStep) : IRConfig := IRList.rec VcgStep (fun (_ : IRList VcgStep) => IRConfig) (IRConfig.halted IROutcome.fuel_out) (fun (st : VcgStep) (_ : IRList VcgStep) (_ : IRConfig) => IRConfig.running (ir_vcg_mden env mem d r (ir_vcg_start st))) T
+
+def ir_vcg_final (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (T : IRList VcgStep) : IRConfig := IRList.rec VcgStep (fun (_ : IRList VcgStep) => IRConfig) (IRConfig.halted IROutcome.fuel_out) (fun (st : VcgStep) (rest : IRList VcgStep) (ih : IRConfig) => IRList.rec VcgStep (fun (_ : IRList VcgStep) => IRConfig) (ir_vcg_end_cfg env mem d r st) (fun (_ : VcgStep) (_ : IRList VcgStep) (_ : IRConfig) => ih) rest) T
+
+def ir_vcg_claim (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (T : IRList VcgStep) : Prop := Eq IRConfig (ir_steps (ir_vcg_len T) m (ir_vcg_start_cfg env mem d r T)) (ir_vcg_final env mem d r T)
+
+def ir_vcg_tail (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (st : VcgStep) (rest : IRList VcgStep) (hc : ir_vcg_claim m env mem d r rest) : Eq IRConfig (ir_steps (ir_vcg_len rest) m (ir_vcg_target env mem d r st rest)) (ir_vcg_final env mem d r (IRList.cons VcgStep st rest)) :=
+  IRList.rec VcgStep
+    (fun (rest0 : IRList VcgStep) => ir_vcg_claim m env mem d r rest0 -> Eq IRConfig (ir_steps (ir_vcg_len rest0) m (ir_vcg_target env mem d r st rest0)) (ir_vcg_final env mem d r (IRList.cons VcgStep st rest0)))
+    (fun (_ : ir_vcg_claim m env mem d r (IRList.nil VcgStep)) => Eq.refl IRConfig (ir_vcg_end_cfg env mem d r st))
+    (fun (st2 : VcgStep) (rest2 : IRList VcgStep) (_ : ir_vcg_claim m env mem d r rest2 -> Eq IRConfig (ir_steps (ir_vcg_len rest2) m (ir_vcg_target env mem d r st rest2)) (ir_vcg_final env mem d r (IRList.cons VcgStep st rest2))) (hc2 : ir_vcg_claim m env mem d r (IRList.cons VcgStep st2 rest2)) => hc2)
+    rest hc
+
+def ir_vcg_chd (l : IRList IRConfig) : IRConfig := IRList.rec IRConfig (fun (_ : IRList IRConfig) => IRConfig) (IRConfig.halted IROutcome.fuel_out) (fun (x : IRConfig) (_ : IRList IRConfig) (_ : IRConfig) => x) l
+
+def ir_vcg_ctl (l : IRList IRConfig) : IRList IRConfig := IRList.rec IRConfig (fun (_ : IRList IRConfig) => IRList IRConfig) (IRList.nil IRConfig) (fun (_ : IRConfig) (rest : IRList IRConfig) (_ : IRList IRConfig) => rest) l
+
+def ir_vcg_run_sound (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (T : IRList VcgStep) (hob : Eq (IRList IRConfig) (ir_vcg_lhs m env mem d r fs T) (ir_vcg_rhs m env mem d r fs T)) : ir_vcg_claim m env mem d r T :=
+  IRList.rec VcgStep
+    (fun (T0 : IRList VcgStep) => Eq (IRList IRConfig) (ir_vcg_lhs m env mem d r fs T0) (ir_vcg_rhs m env mem d r fs T0) -> ir_vcg_claim m env mem d r T0)
+    (fun (_ : Eq (IRList IRConfig) (IRList.nil IRConfig) (IRList.nil IRConfig)) => Eq.refl IRConfig (IRConfig.halted IROutcome.fuel_out))
+    (fun (st : VcgStep) (rest : IRList VcgStep) (ih : Eq (IRList IRConfig) (ir_vcg_lhs m env mem d r fs rest) (ir_vcg_rhs m env mem d r fs rest) -> ir_vcg_claim m env mem d r rest) (hob0 : Eq (IRList IRConfig) (ir_vcg_lhs m env mem d r fs (IRList.cons VcgStep st rest)) (ir_vcg_rhs m env mem d r fs (IRList.cons VcgStep st rest))) =>
+      Eq.trans IRConfig (ir_steps (ir_vcg_slen st (ir_vcg_len rest)) m (IRConfig.running (ir_vcg_mden env mem d r (ir_vcg_start st)))) (ir_steps (ir_vcg_len rest) m (ir_vcg_adv m env mem d r st)) (ir_vcg_final env mem d r (IRList.cons VcgStep st rest)) (ir_vcg_adv_steps m env mem d r st (ir_vcg_len rest))
+      (Eq.subst IRConfig (fun (c : IRConfig) => Eq IRConfig (ir_steps (ir_vcg_len rest) m c) (ir_vcg_final env mem d r (IRList.cons VcgStep st rest)))
+        (ir_vcg_target env mem d r st rest) (ir_vcg_adv m env mem d r st)
+        (Eq.symm IRConfig (ir_vcg_adv m env mem d r st) (ir_vcg_target env mem d r st rest)
+          (ir_vcg_step_ok m env mem d r fs hf st (ir_vcg_target env mem d r st rest)
+            (ir_eq_cong (IRList IRConfig) IRConfig ir_vcg_chd (ir_vcg_lhs m env mem d r fs (IRList.cons VcgStep st rest)) (ir_vcg_rhs m env mem d r fs (IRList.cons VcgStep st rest)) hob0)
+            (ir_eq_cong (IRList IRConfig) IRConfig (fun (x : IRList IRConfig) => ir_vcg_chd (ir_vcg_ctl x)) (ir_vcg_lhs m env mem d r fs (IRList.cons VcgStep st rest)) (ir_vcg_rhs m env mem d r fs (IRList.cons VcgStep st rest)) hob0)))
+        (ir_vcg_tail m env mem d r st rest (ih (ir_eq_cong (IRList IRConfig) (IRList IRConfig) (fun (x : IRList IRConfig) => ir_vcg_ctl (ir_vcg_ctl x)) (ir_vcg_lhs m env mem d r fs (IRList.cons VcgStep st rest)) (ir_vcg_rhs m env mem d r fs (IRList.cons VcgStep st rest)) hob0)))))
+    T hob
+
+-- == 4. CHECK AND CONTRACT GLUE: ir_vcg_check, ir_vcg_check_sound, and the call/return composition with the step-indexed contract device ==
+
+def ir_vcg_safe_run (G : IROutcome -> Prop) (m : IRModule) (n : Nat) (k : Nat) (c0 : IRConfig) (c1 : IRConfig) (hrun : Eq IRConfig (ir_steps k m c0) c1) (hs : ir_safe G m n c1) : ir_safe G m n c0 := ir_safe_pad G m n k c0 (Eq.subst IRConfig (fun (x : IRConfig) => ir_safe G m n x) c1 (ir_steps k m c0) (Eq.symm IRConfig (ir_steps k m c0) c1 hrun) hs)
+
+def ir_vcg_safe_call (m : IRModule) (E : IRList Nat -> IRList IRFrame -> IRMachine) (Q : IRList IRMemSlot -> Nat -> IRList IRScalar -> Prop) (n : Nat) (s : IRMachine) (d2 : IRList Nat) (r2 : IRList IRFrame) (hstep : Eq IRConfig (ir_step m s) (IRConfig.running (E d2 r2))) (hc : ir_ctr_at m E Q n) (G : IROutcome -> Prop) (hK : forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m n (ir_ret_to d2 r2 mem2 na2 vs)) : ir_safe G m n (IRConfig.running s) :=
+  Nat.rec (fun (k : Nat) => ir_ctr_at m E Q k -> (forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m k (ir_ret_to d2 r2 mem2 na2 vs)) -> ir_safe G m k (IRConfig.running s))
+    (fun (_ : ir_ctr_at m E Q Nat.zero) (_ : forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m Nat.zero (ir_ret_to d2 r2 mem2 na2 vs)) => ir_safe_zero_running G m s)
+    (fun (k : Nat) (_ : ir_ctr_at m E Q k -> (forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m k (ir_ret_to d2 r2 mem2 na2 vs)) -> ir_safe G m k (IRConfig.running s)) (hck : ir_ctr_at m E Q (Nat.succ k)) (hKk : forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m (Nat.succ k) (ir_ret_to d2 r2 mem2 na2 vs)) =>
+      ir_safe_succ_running G m k s (Eq.subst IRConfig (fun (x : IRConfig) => ir_safe G m k x) (IRConfig.running (E d2 r2)) (ir_step m s) (Eq.symm IRConfig (ir_step m s) (IRConfig.running (E d2 r2)) hstep) (ir_safe_down G m k (IRConfig.running (E d2 r2)) (hck G d2 r2 hKk))))
+    n hc hK
+
+def ir_vcg_safe_call1 (m : IRModule) (E : IRList Nat -> IRList IRFrame -> IRMachine) (Q : IRList IRMemSlot -> Nat -> IRList IRScalar -> Prop) (n : Nat) (s : IRMachine) (d2 : IRList Nat) (r2 : IRList IRFrame) (hstep : Eq IRConfig (ir_step m s) (IRConfig.running (E d2 r2))) (hc : ir_ctr_at m E Q n) (G : IROutcome -> Prop) (hK : forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m n (ir_ret_to d2 r2 mem2 na2 vs)) : ir_safe G m (Nat.succ n) (IRConfig.running s) := ir_safe_succ_running G m n s (Eq.subst IRConfig (fun (x : IRConfig) => ir_safe G m n x) (IRConfig.running (E d2 r2)) (ir_step m s) (Eq.symm IRConfig (ir_step m s) (IRConfig.running (E d2 r2)) hstep) (hc G d2 r2 hK))
+
+def ir_vcg_bindp (ps : IRList Nat) (vs : IRList VcgVal) (loc : IRList VcgBind) : IRList VcgBind := IRList.rec Nat (fun (_ : IRList Nat) => IRList VcgVal -> IRList VcgBind) (fun (_ : IRList VcgVal) => loc) (fun (p : Nat) (_ : IRList Nat) (ih : IRList VcgVal -> IRList VcgBind) => fun (ws : IRList VcgVal) => IRList.rec VcgVal (fun (_ : IRList VcgVal) => IRList VcgBind) loc (fun (w : VcgVal) (wrest : IRList VcgVal) (_ : IRList VcgBind) => IRList.cons VcgBind (VcgBind.mk p w) (ih wrest)) ws) ps vs
+
+def ir_vcg_resume (s : VcgMach) (rs : IRList Nat) (vals : IRList VcgVal) (na2 : VcgNat) : VcgMach := VcgMach.rec (fun (_ : VcgMach) => VcgMach) (fun (fs : IRList VcgFrame) (_ : IRList VcgCell) (_ : VcgNat) => VcgMach.mk (IRList.rec VcgFrame (fun (_ : IRList VcgFrame) => IRList VcgFrame) (IRList.nil VcgFrame) (fun (f : VcgFrame) (rest : IRList VcgFrame) (_ : IRList VcgFrame) => IRList.cons VcgFrame (VcgFrame.rec (fun (_ : VcgFrame) => VcgFrame) (fun (fn : Nat) (bl : Nat) (pc : Nat) (loc : IRList VcgBind) (ds : IROption (IRList Nat)) => VcgFrame.mk fn bl (Nat.succ pc) (ir_vcg_bindp rs vals loc) ds) f) rest) fs) (IRList.nil VcgCell) na2) s
+
+def ir_vcg_last_start (T : IRList VcgStep) : VcgMach := IRList.rec VcgStep (fun (_ : IRList VcgStep) => VcgMach) (VcgMach.mk (IRList.nil VcgFrame) (IRList.nil VcgCell) (VcgNat.lit Nat.zero)) (fun (st : VcgStep) (rest : IRList VcgStep) (ih : VcgMach) => IRList.rec VcgStep (fun (_ : IRList VcgStep) => VcgMach) (ir_vcg_start st) (fun (_ : VcgStep) (_ : IRList VcgStep) (_ : VcgMach) => ih) rest) T
+
+def ir_vcg_lastden (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (T : IRList VcgStep) : IRMachine := ir_vcg_mden env mem d r (ir_vcg_last_start T)
+
+def ir_vcg_obl_x (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (T : IRList VcgStep) : IRList IRConfig := IRList.cons IRConfig (ir_vcg_start_cfg env mem d r T) (IRList.cons IRConfig (ir_vcg_final env mem d r T) (ir_vcg_lhs m env mem d r fs T))
+
+def ir_vcg_obl_c (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (T : IRList VcgStep) : IRList IRConfig := IRList.cons IRConfig (ir_vcg_start_cfg env mem d r T) (IRList.cons IRConfig (ir_vcg_final env mem d r T) (IRList.cons IRConfig (ir_step m (ir_vcg_lastden env mem d r T)) (ir_vcg_lhs m env mem d r fs T)))
+
+def ir_vcg_seg_exact (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (T : IRList VcgStep) (c0 : IRConfig) (c1 : IRConfig) (hob : Eq (IRList IRConfig) (ir_vcg_obl_x m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig c1 (ir_vcg_rhs m env mem d r fs T)))) : Eq IRConfig (ir_steps (ir_vcg_len T) m c0) c1 :=
+  Eq.subst IRConfig (fun (x : IRConfig) => Eq IRConfig (ir_steps (ir_vcg_len T) m x) c1) (ir_vcg_start_cfg env mem d r T) c0
+    (ir_eq_cong (IRList IRConfig) IRConfig ir_vcg_chd (ir_vcg_obl_x m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig c1 (ir_vcg_rhs m env mem d r fs T))) hob)
+    (Eq.subst IRConfig (fun (x : IRConfig) => Eq IRConfig (ir_steps (ir_vcg_len T) m (ir_vcg_start_cfg env mem d r T)) x) (ir_vcg_final env mem d r T) c1
+      (ir_eq_cong (IRList IRConfig) IRConfig (fun (x : IRList IRConfig) => ir_vcg_chd (ir_vcg_ctl x)) (ir_vcg_obl_x m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig c1 (ir_vcg_rhs m env mem d r fs T))) hob)
+      (ir_vcg_run_sound m env mem d r fs hf T (ir_eq_cong (IRList IRConfig) (IRList IRConfig) (fun (x : IRList IRConfig) => ir_vcg_ctl (ir_vcg_ctl x)) (ir_vcg_obl_x m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig c1 (ir_vcg_rhs m env mem d r fs T))) hob)))
+
+def ir_vcg_seg_run_to_last (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (T : IRList VcgStep) (c0 : IRConfig) (cn : IRConfig) (hob : Eq (IRList IRConfig) (ir_vcg_obl_c m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig (IRConfig.running (ir_vcg_lastden env mem d r T)) (IRList.cons IRConfig cn (ir_vcg_rhs m env mem d r fs T))))) : Eq IRConfig (ir_steps (ir_vcg_len T) m c0) (IRConfig.running (ir_vcg_lastden env mem d r T)) :=
+  ir_vcg_seg_exact m env mem d r fs hf T c0 (IRConfig.running (ir_vcg_lastden env mem d r T))
+    (ir_eq_cong (IRList IRConfig) (IRList IRConfig) (fun (x : IRList IRConfig) => IRList.cons IRConfig (ir_vcg_chd x) (IRList.cons IRConfig (ir_vcg_chd (ir_vcg_ctl x)) (ir_vcg_ctl (ir_vcg_ctl (ir_vcg_ctl x))))) (ir_vcg_obl_c m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig (IRConfig.running (ir_vcg_lastden env mem d r T)) (IRList.cons IRConfig cn (ir_vcg_rhs m env mem d r fs T)))) hob)
+
+def ir_vcg_seg_step_last (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (T : IRList VcgStep) (c0 : IRConfig) (cn : IRConfig) (hob : Eq (IRList IRConfig) (ir_vcg_obl_c m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig (IRConfig.running (ir_vcg_lastden env mem d r T)) (IRList.cons IRConfig cn (ir_vcg_rhs m env mem d r fs T))))) : Eq IRConfig (ir_step m (ir_vcg_lastden env mem d r T)) cn :=
+  ir_eq_cong (IRList IRConfig) IRConfig (fun (x : IRList IRConfig) => ir_vcg_chd (ir_vcg_ctl (ir_vcg_ctl x))) (ir_vcg_obl_c m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig (IRConfig.running (ir_vcg_lastden env mem d r T)) (IRList.cons IRConfig cn (ir_vcg_rhs m env mem d r fs T)))) hob
+
+def ir_vcg_seg_call1 (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (T : IRList VcgStep) (c0 : IRConfig) (cn : IRConfig) (hob : Eq (IRList IRConfig) (ir_vcg_obl_c m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig (IRConfig.running (ir_vcg_lastden env mem d r T)) (IRList.cons IRConfig cn (ir_vcg_rhs m env mem d r fs T))))) (G : IROutcome -> Prop) (N : Nat) (hs : ir_safe G m N cn) : ir_safe G m (Nat.succ N) c0 :=
+  ir_vcg_safe_run G m (Nat.succ N) (ir_vcg_len T) c0 (IRConfig.running (ir_vcg_lastden env mem d r T)) (ir_vcg_seg_run_to_last m env mem d r fs hf T c0 cn hob)
+    (ir_safe_succ_running G m N (ir_vcg_lastden env mem d r T) (Eq.subst IRConfig (fun (x : IRConfig) => ir_safe G m N x) cn (ir_step m (ir_vcg_lastden env mem d r T)) (Eq.symm IRConfig (ir_step m (ir_vcg_lastden env mem d r T)) cn (ir_vcg_seg_step_last m env mem d r fs T c0 cn hob)) hs))
+
+def ir_vcg_seg_call2 (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (T : IRList VcgStep) (c0 : IRConfig) (E : IRList Nat -> IRList IRFrame -> IRMachine) (Q : IRList IRMemSlot -> Nat -> IRList IRScalar -> Prop) (d2 : IRList Nat) (r2 : IRList IRFrame) (hob : Eq (IRList IRConfig) (ir_vcg_obl_c m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig (IRConfig.running (ir_vcg_lastden env mem d r T)) (IRList.cons IRConfig (IRConfig.running (E d2 r2)) (ir_vcg_rhs m env mem d r fs T))))) (G : IROutcome -> Prop) (N : Nat) (hc : ir_ctr_at m E Q N) (hK : forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m N (ir_ret_to d2 r2 mem2 na2 vs)) : ir_safe G m N c0 :=
+  ir_vcg_safe_run G m N (ir_vcg_len T) c0 (IRConfig.running (ir_vcg_lastden env mem d r T)) (ir_vcg_seg_run_to_last m env mem d r fs hf T c0 (IRConfig.running (E d2 r2)) hob)
+    (ir_vcg_safe_call m E Q N (ir_vcg_lastden env mem d r T) d2 r2 (ir_vcg_seg_step_last m env mem d r fs T c0 (IRConfig.running (E d2 r2)) hob) hc G hK)
+
+def ir_vcg_check (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (T : IRList VcgStep) (c0 : IRConfig) (c1 : IRConfig) : Prop := Eq (IRList IRConfig) (ir_vcg_obl_x m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig c1 (ir_vcg_rhs m env mem d r fs T)))
+
+def ir_vcg_check_call (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (T : IRList VcgStep) (c0 : IRConfig) (cn : IRConfig) : Prop := Eq (IRList IRConfig) (ir_vcg_obl_c m env mem d r fs T) (IRList.cons IRConfig c0 (IRList.cons IRConfig (IRConfig.running (ir_vcg_lastden env mem d r T)) (IRList.cons IRConfig cn (ir_vcg_rhs m env mem d r fs T))))
+
+def ir_vcg_check_sound (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (T : IRList VcgStep) (c0 : IRConfig) (c1 : IRConfig) (hob : ir_vcg_check m env mem d r fs T c0 c1) : Eq IRConfig (ir_steps (ir_vcg_len T) m c0) c1 := ir_vcg_seg_exact m env mem d r fs hf T c0 c1 hob
+
+def ir_vcg_seg_ret (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (fs : IRList VcgFact) (hf : ir_vcg_facts_hold env mem fs) (T : IRList VcgStep) (c0 : IRConfig) (mX : IRList IRMemSlot) (nX : Nat) (vX : IRList IRScalar) (hob : ir_vcg_check m env mem d r fs T c0 (ir_ret_to d r mX nX vX)) (G : IROutcome -> Prop) (n : Nat) (Q : IRList IRMemSlot -> Nat -> IRList IRScalar -> Prop) (hK : forall (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar), Q mem2 na2 vs -> ir_safe G m (Nat.succ n) (ir_ret_to d r mem2 na2 vs)) (hq : Q mX nX vX) : ir_safe G m n c0 := ir_vcg_safe_run G m n (ir_vcg_len T) c0 (ir_ret_to d r mX nX vX) (ir_vcg_check_sound m env mem d r fs hf T c0 (ir_ret_to d r mX nX vX) hob) (ir_safe_down G m n (ir_ret_to d r mX nX vX) (hK mX nX vX hq))
+
+def ir_vcg_ext1_k (mem : IRList IRMemSlot) (na : Nat) (x : IRScalar) (K : IRList IRMemSlot -> Nat -> IRList IRScalar -> Prop) (h : forall (mem2 : IRList IRMemSlot) (na2 : Nat), MemExt mem na mem2 na2 -> K mem2 na2 (ir_vl1 x)) (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar) (hq : forall (C : Prop), (MemExt mem na mem2 na2 -> Eq (IRList IRScalar) vs (ir_vl1 x) -> C) -> C) : K mem2 na2 vs := hq (K mem2 na2 vs) (fun (e : MemExt mem na mem2 na2) (hv : Eq (IRList IRScalar) vs (ir_vl1 x)) => Eq.subst (IRList IRScalar) (fun (y : IRList IRScalar) => K mem2 na2 y) (ir_vl1 x) vs (Eq.symm (IRList IRScalar) vs (ir_vl1 x) hv) (h mem2 na2 e))
+
+def ir_vcg_fhd (fs : IRList VcgFact) : VcgFact := IRList.rec VcgFact (fun (_ : IRList VcgFact) => VcgFact) (VcgFact.lt (VcgNat.lit Nat.zero) (VcgNat.lit Nat.zero)) (fun (f : VcgFact) (_ : IRList VcgFact) (_ : VcgFact) => f) fs
+
+def ir_vcg_ftl (fs : IRList VcgFact) : IRList VcgFact := IRList.rec VcgFact (fun (_ : IRList VcgFact) => IRList VcgFact) (IRList.nil VcgFact) (fun (_ : VcgFact) (t : IRList VcgFact) (_ : IRList VcgFact) => t) fs
+
+def ir_vcg_facts_intro (env : VcgEnv) (mem : IRList IRMemSlot) (fs : IRList VcgFact) : ir_vcg_fact_holds env mem (ir_vcg_fhd fs) -> ir_vcg_facts_hold env mem (ir_vcg_ftl fs) -> ir_vcg_facts_hold env mem fs := IRList.rec VcgFact (fun (x : IRList VcgFact) => ir_vcg_fact_holds env mem (ir_vcg_fhd x) -> ir_vcg_facts_hold env mem (ir_vcg_ftl x) -> ir_vcg_facts_hold env mem x) (fun (_ : ir_vcg_fact_holds env mem (ir_vcg_fhd (IRList.nil VcgFact))) (_ : ir_vcg_facts_hold env mem (ir_vcg_ftl (IRList.nil VcgFact))) => Eq.refl Bool Bool.true) (fun (f : VcgFact) (t : IRList VcgFact) (_ : ir_vcg_fact_holds env mem (ir_vcg_fhd t) -> ir_vcg_facts_hold env mem (ir_vcg_ftl t) -> ir_vcg_facts_hold env mem t) (h : ir_vcg_fact_holds env mem f) (tl : ir_vcg_facts_hold env mem t) => fun (C : Prop) (k : ir_vcg_fact_holds env mem f -> ir_vcg_facts_hold env mem t -> C) => k h tl) fs
+
+def ir_vcg_ret_frames (m : IRModule) (env : VcgEnv) (mem : IRList IRMemSlot) (d : IRList Nat) (r : IRList IRFrame) (T : IRList VcgStep) : IRList IRFrame := ir_frames_tail (ir_config_frames (ir_step m (ir_vcg_lastden env mem d r T)))
+
+def ir_vcg_ret1 (d : IRList Nat) (r : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) (x : IRScalar) : IRConfig := ir_ret_to d r mem na (ir_vl1 x)
+
+def ir_vcg_look (mem : IRList IRMemSlot) (a : Nat) (v : IRScalar) : Prop := Eq (IROption IRMemSlot) (ir_mem_lookup mem a) (IROption.some IRMemSlot (IRMemSlot.mk a v Bool.true))
+
+def ir_vcg_ltt (a : Nat) (na : Nat) : Prop := Eq Bool (ir_nat_ltb a na) Bool.true
+
+def ir_vcg_env2 (x0 : Nat) (x1 : Nat) : VcgEnv := VcgEnv.mk (IRList.cons Nat x0 (IRList.cons Nat x1 (IRList.nil Nat))) (IRList.nil IRScalar)
+
+def ir_vcg_env2s (x0 : Nat) (x1 : Nat) (w : IRScalar) : VcgEnv := VcgEnv.mk (IRList.cons Nat x0 (IRList.cons Nat x1 (IRList.nil Nat))) (IRList.cons IRScalar w (IRList.nil IRScalar))
+
+def ir_vcg_env3 (x0 : Nat) (x1 : Nat) (x2 : Nat) : VcgEnv := VcgEnv.mk (IRList.cons Nat x0 (IRList.cons Nat x1 (IRList.cons Nat x2 (IRList.nil Nat)))) (IRList.nil IRScalar)
+
+def ir_vcg_env4 (x0 : Nat) (x1 : Nat) (x2 : Nat) (x3 : Nat) : VcgEnv := VcgEnv.mk (IRList.cons Nat x0 (IRList.cons Nat x1 (IRList.cons Nat x2 (IRList.cons Nat x3 (IRList.nil Nat))))) (IRList.nil IRScalar)
+
+def ir_vcg_env5 (x0 : Nat) (x1 : Nat) (x2 : Nat) (x3 : Nat) (x4 : Nat) : VcgEnv := VcgEnv.mk (IRList.cons Nat x0 (IRList.cons Nat x1 (IRList.cons Nat x2 (IRList.cons Nat x3 (IRList.cons Nat x4 (IRList.nil Nat)))))) (IRList.nil IRScalar)
+
+def ir_vcg_env5s (x0 : Nat) (x1 : Nat) (x2 : Nat) (x3 : Nat) (x4 : Nat) (w : IRScalar) : VcgEnv := VcgEnv.mk (IRList.cons Nat x0 (IRList.cons Nat x1 (IRList.cons Nat x2 (IRList.cons Nat x3 (IRList.cons Nat x4 (IRList.nil Nat)))))) (IRList.cons IRScalar w (IRList.nil IRScalar))
+
+def ir_vcg_env6s (x0 : Nat) (x1 : Nat) (x2 : Nat) (x3 : Nat) (x4 : Nat) (x5 : Nat) (w : IRScalar) : VcgEnv := VcgEnv.mk (IRList.cons Nat x0 (IRList.cons Nat x1 (IRList.cons Nat x2 (IRList.cons Nat x3 (IRList.cons Nat x4 (IRList.cons Nat x5 (IRList.nil Nat))))))) (IRList.cons IRScalar w (IRList.nil IRScalar))
+
+def ir_vcg_resume2 (s : VcgMach) (rs : IRList Nat) (vals : IRList VcgVal) (fresh : IRList VcgCell) (na2 : VcgNat) : VcgMach := VcgMach.rec (fun (_ : VcgMach) => VcgMach) (fun (fs : IRList VcgFrame) (_ : IRList VcgCell) (_ : VcgNat) => VcgMach.mk (IRList.rec VcgFrame (fun (_ : IRList VcgFrame) => IRList VcgFrame) (IRList.nil VcgFrame) (fun (f : VcgFrame) (rest : IRList VcgFrame) (_ : IRList VcgFrame) => IRList.cons VcgFrame (VcgFrame.rec (fun (_ : VcgFrame) => VcgFrame) (fun (fn : Nat) (bl : Nat) (pc : Nat) (loc : IRList VcgBind) (ds : IROption (IRList Nat)) => VcgFrame.mk fn bl (Nat.succ pc) (ir_vcg_bindp rs vals loc) ds) f) rest) fs) fresh na2) s
+
+def ir_vcg_exact_k (mX : IRList IRMemSlot) (nX : Nat) (vX : IRList IRScalar) (K : IRList IRMemSlot -> Nat -> IRList IRScalar -> Prop) (h : K mX nX vX) (mem2 : IRList IRMemSlot) (na2 : Nat) (vs : IRList IRScalar) (hq : ir_post_exact mX nX vX mem2 na2 vs) : K mem2 na2 vs := hq K h
+
+def ir_vcg_live (mem : IRList IRMemSlot) (na : Nat) (s : IRScalar) : Prop := forall (mx : IRList IRMemSlot) (nx : Nat), MemExt mem na mx nx -> Eq IRStepResult (ir_borrow_eval mx s) (IRStepResult.value s)
+
+-- == 5. ENGINE (untrusted): placeholder execution and reification; its output is only ever CHECKED ==
+
+def ir_vcg_B : Nat := ir_nat_pow2 (Nat.add ir_d31 ir_d33)
+
+def ir_vcg_base (i : Nat) : Nat := Nat.rec (fun (_ : Nat) => Nat) ir_vcg_B (fun (_ : Nat) (ih : Nat) => Nat.add ih ir_vcg_B) i
+
+def ir_vcg_pnats (nv : Nat) : IRList Nat := Nat.rec (fun (_ : Nat) => Nat -> IRList Nat) (fun (_ : Nat) => IRList.nil Nat) (fun (_ : Nat) (ih : Nat -> IRList Nat) => fun (i : Nat) => IRList.cons Nat (ir_vcg_base i) (ih (Nat.succ i))) nv Nat.zero
+
+def ir_vcg_pscal (nv : Nat) : IRList IRScalar := Nat.rec (fun (_ : Nat) => Nat -> IRList IRScalar) (fun (_ : Nat) => IRList.nil IRScalar) (fun (_ : Nat) (ih : Nat -> IRList IRScalar) => fun (i : Nat) => IRList.cons IRScalar (IRScalar.fnptr_ (ir_vcg_base i)) (ih (Nat.succ i))) nv Nat.zero
+
+def ir_vcg_penv (nv : Nat) : VcgEnv := VcgEnv.mk (ir_vcg_pnats nv) (ir_vcg_pscal nv)
+
+def ir_vcg_fact_mem (env : VcgEnv) (fs : IRList VcgFact) : IRList IRMemSlot := IRList.rec VcgFact (fun (_ : IRList VcgFact) => IRList IRMemSlot) (IRList.nil IRMemSlot) (fun (f : VcgFact) (_ : IRList VcgFact) (ih : IRList IRMemSlot) => VcgFact.rec (fun (_ : VcgFact) => IRList IRMemSlot) (fun (a : VcgNat) (v : VcgVal) (lv : Bool) => IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env a) (ir_vcg_vden env v) lv) ih) (fun (_ : VcgNat) (_ : VcgNat) => ih) (fun (_ : IRList VcgCell) (a : VcgNat) => IRList.cons IRMemSlot (IRMemSlot.mk (ir_vcg_nden env a) IRScalar.undef_ Bool.true) ih) f) fs
+
+def ir_vcg_mlen (l : IRList IRMemSlot) : Nat := IRList.rec IRMemSlot (fun (_ : IRList IRMemSlot) => Nat) Nat.zero (fun (_ : IRMemSlot) (_ : IRList IRMemSlot) (ih : Nat) => Nat.succ ih) l
+
+def ir_vcg_place (nv : Nat) (fs : IRList VcgFact) (s : VcgMach) : IRMachine := ir_vcg_mden (ir_vcg_penv nv) (ir_vcg_fact_mem (ir_vcg_penv nv) fs) (IRList.nil Nat) (IRList.nil IRFrame) s
+
+def ir_vcg_lit_of (k : Nat) : Nat := Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (kp : Nat) (_ : Nat) => Nat.succ kp) k
+
+def ir_vcg_rfind (n : Nat) (cnt : Nat) (i : Nat) : VcgNat := Nat.rec (fun (_ : Nat) => Nat -> VcgNat) (fun (_ : Nat) => VcgNat.lit (ir_vcg_lit_of n)) (fun (_ : Nat) (ih : Nat -> VcgNat) => fun (i0 : Nat) => Bool.rec (fun (_ : Bool) => VcgNat) (ih (Nat.succ i0)) (VcgNat.var i0 (ir_vcg_lit_of (Nat.sub n (ir_vcg_base i0)))) (ir_nat_ltb n (ir_vcg_base (Nat.succ i0)))) cnt i
+
+def ir_vcg_rnat (nv : Nat) (n : Nat) : VcgNat := Bool.rec (fun (_ : Bool) => VcgNat) (ir_vcg_rfind n nv Nat.zero) (VcgNat.lit (ir_vcg_lit_of n)) (ir_nat_ltb n ir_vcg_B)
+
+def ir_vcg_rval (nv : Nat) (v : IRScalar) : VcgVal := IRScalar.rec (fun (_ : IRScalar) => VcgVal) VcgVal.undef_ (fun (b : Bool) => VcgVal.bool_ b) (fun (n : Nat) => VcgVal.int_ (ir_vcg_rnat nv n)) (fun (n : Nat) => VcgVal.float_ (ir_vcg_lit_of n)) VcgVal.unit_ (fun (a : Nat) => VcgVal.ptr_ (ir_vcg_rnat nv a)) VcgVal.nullptr_ (fun (d : Nat) (md : Nat) => VcgVal.fat_ (ir_vcg_rnat nv d) (ir_vcg_rnat nv md)) (fun (f : Nat) => VcgNat.rec (fun (_ : VcgNat) => VcgVal) (fun (k : Nat) => VcgVal.fnptr_ k) (fun (i : Nat) (_ : Nat) => VcgVal.opq i) (ir_vcg_rnat nv f)) (fun (_ : IRScalar) (ih : VcgVal) => VcgVal.aggv ih) VcgVal.vnil (fun (_ : IRScalar) (_ : IRScalar) (ihx : VcgVal) (ihr : VcgVal) => VcgVal.vcons ihx ihr) v
+
+def ir_vcg_rcell (nv : Nat) (c : IRMemSlot) : VcgCell := IRMemSlot.rec (fun (_ : IRMemSlot) => VcgCell) (fun (a : Nat) (v : IRScalar) (lv : Bool) => VcgCell.mk (ir_vcg_rnat nv a) (ir_vcg_rval nv v) lv) c
+
+def ir_vcg_rmem (nv : Nat) (k : Nat) (l : IRList IRMemSlot) : IRList VcgCell := IRList.rec IRMemSlot (fun (_ : IRList IRMemSlot) => Nat -> IRList VcgCell) (fun (_ : Nat) => IRList.nil VcgCell) (fun (c : IRMemSlot) (_ : IRList IRMemSlot) (ih : Nat -> IRList VcgCell) => fun (k0 : Nat) => Nat.rec (fun (_ : Nat) => IRList VcgCell) (IRList.nil VcgCell) (fun (kp : Nat) (_ : IRList VcgCell) => IRList.cons VcgCell (ir_vcg_rcell nv c) (ih kp)) k0) l k
+
+def ir_vcg_rlocals (nv : Nat) (l : IRList IRBinding) : IRList VcgBind := IRList.rec IRBinding (fun (_ : IRList IRBinding) => IRList VcgBind) (IRList.nil VcgBind) (fun (b : IRBinding) (_ : IRList IRBinding) (ih : IRList VcgBind) => IRList.cons VcgBind (IRBinding.rec (fun (_ : IRBinding) => VcgBind) (fun (i : Nat) (v : IRScalar) => VcgBind.mk i (ir_vcg_rval nv v)) b) ih) l
+
+def ir_vcg_rframe (nv : Nat) (last : Bool) (f : IRFrame) : VcgFrame := IRFrame.rec (fun (_ : IRFrame) => VcgFrame) (fun (fn : Nat) (bl : Nat) (pc : Nat) (loc : IRList IRBinding) (ds : IRList Nat) => VcgFrame.mk fn bl pc (ir_vcg_rlocals nv loc) (Bool.rec (fun (_ : Bool) => IROption (IRList Nat)) (IROption.some (IRList Nat) ds) (IROption.none (IRList Nat)) last)) f
+
+def ir_vcg_fl_nil (l : IRList IRFrame) : Bool := IRList.rec IRFrame (fun (_ : IRList IRFrame) => Bool) Bool.true (fun (_ : IRFrame) (_ : IRList IRFrame) (_ : Bool) => Bool.false) l
+
+def ir_vcg_rframes (nv : Nat) (l : IRList IRFrame) : IRList VcgFrame := IRList.rec IRFrame (fun (_ : IRList IRFrame) => IRList VcgFrame) (IRList.nil VcgFrame) (fun (f : IRFrame) (rest : IRList IRFrame) (ih : IRList VcgFrame) => IRList.cons VcgFrame (ir_vcg_rframe nv (ir_vcg_fl_nil rest) f) ih) l
+
+def ir_vcg_rmach (nv : Nat) (nfc : Nat) (s : IRMachine) : VcgMach := IRMachine.rec (fun (_ : IRMachine) => VcgMach) (fun (fs : IRList IRFrame) (mem : IRList IRMemSlot) (na : Nat) => VcgMach.mk (ir_vcg_rframes nv fs) (ir_vcg_rmem nv (Nat.sub (ir_vcg_mlen mem) nfc) mem) (ir_vcg_rnat nv na)) s
+
+def ir_vcg_next (m : IRModule) (nv : Nat) (fs : IRList VcgFact) (s : VcgMach) : IROption VcgMach := IRConfig.rec (fun (_ : IRConfig) => IROption VcgMach) (fun (s2 : IRMachine) => IROption.some VcgMach (ir_vcg_rmach nv (ir_vcg_mlen (ir_vcg_fact_mem (ir_vcg_penv nv) fs)) s2)) (fun (_ : IROutcome) => IROption.none VcgMach) (ir_step m (ir_vcg_place nv fs s))
+
+def ir_vcg_mframes (s : VcgMach) : IRList VcgFrame := VcgMach.rec (fun (_ : VcgMach) => IRList VcgFrame) (fun (fs : IRList VcgFrame) (_ : IRList VcgCell) (_ : VcgNat) => fs) s
+
+def ir_vcg_mna (s : VcgMach) : VcgNat := VcgMach.rec (fun (_ : VcgMach) => VcgNat) (fun (_ : IRList VcgFrame) (_ : IRList VcgCell) (na : VcgNat) => na) s
+
+def ir_vcg_lget (l : IRList VcgBind) (k : Nat) : VcgVal := IRList.rec VcgBind (fun (_ : IRList VcgBind) => VcgVal) VcgVal.undef_ (fun (b : VcgBind) (_ : IRList VcgBind) (ih : VcgVal) => VcgBind.rec (fun (_ : VcgBind) => VcgVal) (fun (i : Nat) (v : VcgVal) => Bool.rec (fun (_ : Bool) => VcgVal) ih v (ir_nat_eqb i k)) b) l
+
+def ir_vcg_getd (s : VcgMach) (k : Nat) : VcgVal := IRList.rec VcgFrame (fun (_ : IRList VcgFrame) => VcgVal) VcgVal.undef_ (fun (f : VcgFrame) (_ : IRList VcgFrame) (_ : VcgVal) => VcgFrame.rec (fun (_ : VcgFrame) => VcgVal) (fun (_ : Nat) (_ : Nat) (_ : Nat) (loc : IRList VcgBind) (_ : IROption (IRList Nat)) => ir_vcg_lget loc k) f) (ir_vcg_mframes s)
+
+def ir_vcg_addr (v : VcgVal) : VcgNat := VcgVal.rec (fun (_ : VcgVal) => VcgNat) (VcgNat.lit Nat.zero) (fun (_ : Bool) => VcgNat.lit Nat.zero) (fun (_ : VcgNat) => VcgNat.lit Nat.zero) (fun (_ : Nat) => VcgNat.lit Nat.zero) (VcgNat.lit Nat.zero) (fun (a : VcgNat) => a) (VcgNat.lit Nat.zero) (fun (dd : VcgNat) (_ : VcgNat) => dd) (fun (_ : Nat) => VcgNat.lit Nat.zero) (fun (_ : VcgVal) (_ : VcgNat) => VcgNat.lit Nat.zero) (VcgNat.lit Nat.zero) (fun (_ : VcgVal) (_ : VcgVal) (_ : VcgNat) (_ : VcgNat) => VcgNat.lit Nat.zero) (fun (_ : Nat) => VcgNat.lit Nat.zero) v
+
+def ir_vcg_bindex (fs : IRList VcgFact) (a : VcgNat) : IROption Nat := IRList.rec VcgFact (fun (_ : IRList VcgFact) => Nat -> IROption Nat) (fun (_ : Nat) => IROption.none Nat) (fun (f : VcgFact) (_ : IRList VcgFact) (ih : Nat -> IROption Nat) => fun (j : Nat) => VcgFact.rec (fun (_ : VcgFact) => IROption Nat) (fun (_ : VcgNat) (_ : VcgVal) (_ : Bool) => ih (Nat.succ j)) (fun (_ : VcgNat) (_ : VcgNat) => ih (Nat.succ j)) (fun (_ : IRList VcgCell) (x : VcgNat) => Bool.rec (fun (_ : Bool) => IROption Nat) (ih (Nat.succ j)) (IROption.some Nat j) (ir_vcg_nbeq x a)) f) fs Nat.zero
+
+def ir_vcg_is_bottom (s : VcgMach) : Bool := IRList.rec VcgFrame (fun (_ : IRList VcgFrame) => Bool) Bool.false (fun (f : VcgFrame) (rest : IRList VcgFrame) (_ : Bool) => IRList.rec VcgFrame (fun (_ : IRList VcgFrame) => Bool) Bool.true (fun (_ : VcgFrame) (_ : IRList VcgFrame) (_ : Bool) => Bool.false) rest) (ir_vcg_mframes s)
+
+def ir_vcg_resolve (s : VcgMach) (ids : IRList Nat) : IRList VcgVal := IRList.rec Nat (fun (_ : IRList Nat) => IRList VcgVal) (IRList.nil VcgVal) (fun (i : Nat) (_ : IRList Nat) (ih : IRList VcgVal) => IRList.cons VcgVal (ir_vcg_getd s i) ih) ids
+
+def ir_vcg_nmem (l : IRList Nat) (k : Nat) : Bool := IRList.rec Nat (fun (_ : IRList Nat) => Bool) Bool.false (fun (x : Nat) (_ : IRList Nat) (ih : Bool) => Bool.or (ir_nat_eqb x k) ih) l
+
+def ir_vcg_classify_inst (stops : IRList Nat) (fs : IRList VcgFact) (s : VcgMach) (rs : IRList Nat) (i : IRInst) : VcgStep := IRInst.rec (fun (_ : IRInst) => VcgStep)
+  (fun (_ : IRBinOp) (_ : IRTy) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRUnOp) (_ : IRTy) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IROverflowOp) (_ : IRTy) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRICmpOp) (_ : IRTy) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRFCmpOp) (_ : IRTy) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRCastOp) (_ : IRTy) (_ : IRTy) (_ : Nat) => VcgStep.pure s)
+  (fun (t : IRTy) (p : Nat) (_ : Bool) => VcgStep.load s rs t (ir_vcg_addr (ir_vcg_getd s p)))
+  (fun (_ : IRTy) (p : Nat) (v : Nat) (_ : Bool) => VcgStep.store s (ir_vcg_addr (ir_vcg_getd s p)) (ir_vcg_getd s v))
+  (fun (_ : IRTy) (_ : IROption Nat) => VcgStep.pure s)
+  (fun (_ : IRTy) (_ : Nat) (_ : IRList Nat) (_ : Bool) => VcgStep.pure s)
+  (fun (_ : IRTy) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRTy) (_ : IRTy) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRTy) (_ : IRTy) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : Nat) (_ : IRList Nat) => VcgStep.pure s)
+  (fun (_ : Nat) (_ : Nat) (_ : IRList Nat) (_ : Nat) (_ : IRList Nat) => VcgStep.pure s)
+  (fun (_ : Nat) (_ : Nat) (_ : IRList Nat) (_ : IRList IRSwitchCase) (_ : Bool) => VcgStep.pure s)
+  (fun (fid : Nat) (_ : IRList Nat) => Bool.rec (fun (_ : Bool) => VcgStep) (VcgStep.pure s) (VcgStep.stop s) (ir_vcg_nmem stops fid))
+  (fun (_ : Nat) (_ : Nat) (_ : IRList Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (ids : IRList Nat) => Bool.rec (fun (_ : Bool) => VcgStep) (VcgStep.pure s) (VcgStep.fin s (ir_vcg_mfresh s) (ir_vcg_mna s) (ir_vcg_resolve s ids)) (ir_vcg_is_bottom s))
+  (fun (_ : IRTy) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRTy) (_ : Nat) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRTy) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRTy) (_ : IRConst) => VcgStep.pure s)
+  (fun (_ : Nat) => VcgStep.pure s)
+  (fun (_ : IRTy) => VcgStep.pure s)
+  (fun (_ : Nat) => VcgStep.pure s)
+  (VcgStep.pure s)
+  (fun (_ : IRTy) (_ : Nat) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (p : Nat) => IROption.rec Nat (fun (_ : IROption Nat) => VcgStep) (VcgStep.borrowl s rs (ir_vcg_addr (ir_vcg_getd s p))) (fun (j : Nat) => VcgStep.borrowf s rs j) (ir_vcg_bindex fs (ir_vcg_addr (ir_vcg_getd s p))))
+  (fun (_ : IRTy) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  (fun (_ : Nat) (_ : Nat) (_ : Nat) => VcgStep.pure s)
+  i
+
+def ir_vcg_fetch (m : IRModule) (s : VcgMach) : IROption IRNode := IRList.rec VcgFrame (fun (_ : IRList VcgFrame) => IROption IRNode) (IROption.none IRNode) (fun (f : VcgFrame) (_ : IRList VcgFrame) (_ : IROption IRNode) => VcgFrame.rec (fun (_ : VcgFrame) => IROption IRNode) (fun (fn : Nat) (bl : Nat) (pc : Nat) (_ : IRList VcgBind) (_ : IROption (IRList Nat)) => IROption.rec IRFunc (fun (_ : IROption IRFunc) => IROption IRNode) (IROption.none IRNode) (fun (fu : IRFunc) => IROption.rec IRBlock (fun (_ : IROption IRBlock) => IROption IRNode) (IROption.none IRNode) (fun (b : IRBlock) => ir_nodes_get (ir_block_nodes b) pc) (ir_block_find (ir_func_blocks fu) bl)) (ir_func_find (ir_mod_funcs m) fn)) f) (ir_vcg_mframes s)
+
+def ir_vcg_classify (m : IRModule) (stops : IRList Nat) (fs : IRList VcgFact) (s : VcgMach) : VcgStep := IROption.rec IRNode (fun (_ : IROption IRNode) => VcgStep) (VcgStep.pure s) (fun (nd : IRNode) => IRNode.rec (fun (_ : IRNode) => VcgStep) (fun (i : IRInst) (rs : IRList Nat) => ir_vcg_classify_inst stops fs s rs i) nd) (ir_vcg_fetch m s)
+
+def ir_vcg_is_fin (st : VcgStep) : Bool := VcgStep.rec (fun (_ : VcgStep) => Bool) (fun (_ : VcgMach) => Bool.false) (fun (_ : VcgMach) (_ : IRList Nat) (_ : IRTy) (_ : VcgNat) => Bool.false) (fun (_ : VcgMach) (_ : IRList Nat) (_ : VcgNat) => Bool.false) (fun (_ : VcgMach) (_ : IRList Nat) (_ : Nat) => Bool.false) (fun (_ : VcgMach) (_ : VcgNat) (_ : VcgVal) => Bool.false) (fun (_ : VcgMach) (_ : IRList VcgCell) (_ : VcgNat) (_ : IRList VcgVal) => Bool.true) (fun (_ : VcgMach) => Bool.true) st
+
+def ir_vcg_cfg_mach (c : IRConfig) : IRMachine := IRConfig.rec (fun (_ : IRConfig) => IRMachine) (fun (s : IRMachine) => s) (fun (_ : IROutcome) => IRMachine.mk (IRList.nil IRFrame) (IRList.nil IRMemSlot) Nat.zero) c
+
+def ir_vcg_trace_c (m : IRModule) (stops : IRList Nat) (nv : Nat) (fs : IRList VcgFact) (fuel : Nat) (c0 : IRMachine) : IRList VcgStep := Nat.rec (fun (_ : Nat) => IRMachine -> IRList VcgStep) (fun (_ : IRMachine) => IRList.nil VcgStep) (fun (_ : Nat) (ih : IRMachine -> IRList VcgStep) => fun (c : IRMachine) => Bool.rec (fun (_ : Bool) => IRList VcgStep) (IRConfig.rec (fun (_ : IRConfig) => IRList VcgStep) (fun (c2 : IRMachine) => IRList.cons VcgStep (ir_vcg_classify m stops fs (ir_vcg_rmach nv (ir_vcg_mlen (ir_vcg_fact_mem (ir_vcg_penv nv) fs)) c)) (ih c2)) (fun (_ : IROutcome) => IRList.cons VcgStep (ir_vcg_classify m stops fs (ir_vcg_rmach nv (ir_vcg_mlen (ir_vcg_fact_mem (ir_vcg_penv nv) fs)) c)) (IRList.nil VcgStep)) (ir_step m c)) (IRList.cons VcgStep (ir_vcg_classify m stops fs (ir_vcg_rmach nv (ir_vcg_mlen (ir_vcg_fact_mem (ir_vcg_penv nv) fs)) c)) (IRList.nil VcgStep)) (ir_vcg_is_fin (ir_vcg_classify m stops fs (ir_vcg_rmach nv (ir_vcg_mlen (ir_vcg_fact_mem (ir_vcg_penv nv) fs)) c)))) fuel c0
+
+def ir_vcg_trace (m : IRModule) (stops : IRList Nat) (nv : Nat) (fs : IRList VcgFact) (s0 : VcgMach) (fuel : Nat) : IRList VcgStep := ir_vcg_trace_c m stops nv fs fuel (ir_vcg_place nv fs s0)

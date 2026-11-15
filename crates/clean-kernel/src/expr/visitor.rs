@@ -122,6 +122,8 @@ pub trait ExprFolder {
     // ════════════════════════════════════════════════════════════════════
 
     fn fold_expr(&mut self, expr: &Expr) -> Expr {
+        // One unit of kernel work per node rebuilt (`crate::work_meter`).
+        crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
         stack_safe(|| match expr.kind() {
             ExprKind::BVar(idx) => self.fold_bvar(*idx),
             ExprKind::FVar(id) => self.fold_fvar(*id),
@@ -271,6 +273,8 @@ pub trait ExprVisitor {
     // ════════════════════════════════════════════════════════════════════
 
     fn visit_expr(&mut self, expr: &Expr) -> Self::Result {
+        // One unit of kernel work per node visited (`crate::work_meter`).
+        crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
         stack_safe(|| match expr.kind() {
             ExprKind::BVar(idx) => self.visit_bvar(*idx),
             ExprKind::FVar(id) => self.visit_fvar(*id),

@@ -288,6 +288,32 @@ fn test_match_ctor_nested_inaccessible_local_projection_fails_closed() {
 }
 
 #[test]
+fn test_match_ctor_nested_inaccessible_bound_local_projection_fails_closed() {
+    let mut env = Environment::with_prelude();
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("n"),
+        level_params: vec![],
+        type_: Expr::const_(Name::from_string("Nat"), vec![]),
+    })
+    .unwrap();
+
+    // The `expect` IS the assertion -- it panics unless the fixture elaborates --
+    // and the resulting `Expr` is deliberately unused. Bound to `_` so that
+    // intent is explicit rather than tripping `unused_must_use`.
+    let _ = elab_with_env(&env, "let p := (0, 0); p.fst")
+        .expect("the receiver fixture must be a real bound local projection");
+    let result = elab_with_env(
+        &env,
+        "let p := (0, 0); match n with | Nat.succ .(p.fst) => 1 | _ => 0",
+    );
+    assert!(
+        matches!(&result, Err(ElabError::NotImplemented(msg))
+            if msg.contains("nested inaccessible pattern requires field-level definitional equality checking")),
+        "a bound receiver must not turn an inaccessible projection into a constructor or wildcard, got {result:?}"
+    );
+}
+
+#[test]
 fn test_match_ctor_nested_inaccessible_nonconstructor_app_fails_closed() {
     let mut env = Environment::with_prelude();
     env.add_decl(Declaration::Axiom {
@@ -410,7 +436,7 @@ fn test_match_arm_type_mismatch_returns_error() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "b".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("b"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -418,12 +444,12 @@ fn test_match_arm_type_mismatch_returns_error() {
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Bool.false".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Bool.false"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(42)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Bool.true".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Bool.true"), vec![]),
                 body: SurfaceExpr::Universe(Span::dummy(), UniverseExpr::Prop),
             },
         ],
@@ -455,7 +481,7 @@ fn test_issue1726_match_arms_same_type_succeeds() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "b".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("b"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -463,12 +489,12 @@ fn test_issue1726_match_arms_same_type_succeeds() {
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Bool.false".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Bool.false"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Bool.true".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Bool.true"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1)),
             },
         ],
@@ -543,7 +569,7 @@ fn test_match_lit_nat_zero_pattern() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -556,7 +582,7 @@ fn test_match_lit_nat_zero_pattern() {
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Var("x".to_string()),
+                pattern: SurfacePattern::Var(SurfaceName::generated_path("x")),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
         ],
@@ -585,7 +611,7 @@ fn test_match_numeral_add_pattern() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -599,10 +625,10 @@ fn test_match_numeral_add_pattern() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::NumeralAdd(
-                    Box::new(SurfacePattern::Var("k".to_string())),
+                    Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                     1,
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
         ],
     );
@@ -629,7 +655,7 @@ fn test_match_nonzero_nat_literal_pattern_supported() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -675,7 +701,7 @@ fn test_match_nat_literal_2_pattern_supported() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -720,7 +746,7 @@ fn test_match_numeral_add_offset_two_pattern_supported() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -734,10 +760,10 @@ fn test_match_numeral_add_offset_two_pattern_supported() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::NumeralAdd(
-                    Box::new(SurfacePattern::Var("k".to_string())),
+                    Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                     2,
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
@@ -767,7 +793,7 @@ fn test_match_nat_literal_pattern_requires_nat_scrutinee() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "b".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("b"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -811,7 +837,7 @@ fn test_match_numeral_add_pattern_requires_nat_scrutinee() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "b".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("b"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -820,15 +846,15 @@ fn test_match_numeral_add_pattern_requires_nat_scrutinee() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::NumeralAdd(
-                    Box::new(SurfacePattern::Var("k".to_string())),
+                    Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                     1,
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Wildcard,
-                body: SurfaceExpr::Ident(Span::dummy(), "b".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("b")),
             },
         ],
     );
@@ -854,7 +880,7 @@ fn test_match_or_pattern_expands_to_separate_arms() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "b".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("b"));
 
     // match b with | Bool.true | Bool.false => 0
     // Or-pattern should expand to: | Bool.true => 0 | Bool.false => 0
@@ -865,8 +891,14 @@ fn test_match_or_pattern_expands_to_separate_arms() {
         vec![SurfaceMatchArm {
             span: Span::dummy(),
             pattern: SurfacePattern::Or(
-                Box::new(SurfacePattern::Ctor("Bool.true".to_string(), vec![])),
-                Box::new(SurfacePattern::Ctor("Bool.false".to_string(), vec![])),
+                Box::new(SurfacePattern::Ctor(
+                    SurfaceName::generated_path("Bool.true"),
+                    vec![],
+                )),
+                Box::new(SurfacePattern::Ctor(
+                    SurfaceName::generated_path("Bool.false"),
+                    vec![],
+                )),
             ),
             body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
         }],
@@ -898,11 +930,11 @@ fn test_match_shadowing_fvar_type_rejected() {
     let mut ctx = ElabCtx::new(&env);
 
     // Push a local named "Nat" with type Type -- this FVar shadows the global Nat.
-    let nat_fvar = ctx.push_local("Nat".to_string(), Expr::type_());
+    let nat_fvar = ctx.push_local(SurfaceName::generated_path("Nat"), Expr::type_());
 
     // Push a local "x" whose type is FVar(nat_fvar) -- i.e., x : Nat where
     // "Nat" refers to the local FVar, not Const("Nat").
-    let _x_fvar = ctx.push_local("x".to_string(), Expr::fvar(nat_fvar));
+    let _x_fvar = ctx.push_local(SurfaceName::generated_path("x"), Expr::fvar(nat_fvar));
 
     // match x with | Nat.zero => 0 | Nat.succ k => k
     // infer_type(x) = FVar(nat_fvar); the scrutinee's type is the opaque
@@ -910,20 +942,23 @@ fn test_match_shadowing_fvar_type_rejected() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Nat.zero".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Nat.zero"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
-                    vec![SurfacePattern::Var("k".to_string())],
+                    SurfaceName::generated_path("Nat.succ"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
         ],
     );
@@ -931,9 +966,13 @@ fn test_match_shadowing_fvar_type_rejected() {
     let result = ctx.elaborate(&match_expr);
     let err = result.expect_err("match on an opaque shadowing binder type must be rejected");
     let msg = format!("{err:?}");
+    // The local `Nat` is an opaque type, never the global inductive of the
+    // same spelling: pattern planning refuses the constructor pattern at
+    // once. (It used to read the binder's NAME as `Nat`, plan a `Nat`
+    // case split, and rely on the eliminator boundary downstream to refuse.)
     assert!(
-        msg.contains("registered inductive scrutinee"),
-        "expected the authenticated eliminator-boundary rejection, got {msg}"
+        msg.contains("constructor pattern requires an inductive scrutinee type"),
+        "expected the opaque-scrutinee rejection, got {msg}"
     );
 }
 
@@ -950,8 +989,8 @@ fn test_match_opaque_fvar_type_returns_error() {
     let mut ctx = ElabCtx::new(&env);
 
     // Push a type parameter and a value of that type
-    let alpha_fvar = ctx.push_local("alpha".to_string(), Expr::type_());
-    let _x_fvar = ctx.push_local("x".to_string(), Expr::fvar(alpha_fvar));
+    let alpha_fvar = ctx.push_local(SurfaceName::generated_path("alpha"), Expr::type_());
+    let _x_fvar = ctx.push_local(SurfaceName::generated_path("x"), Expr::fvar(alpha_fvar));
 
     // match x with | y => y
     // Single-arm var pattern uses let-binding shortcut — doesn't call get_type_name.
@@ -959,20 +998,23 @@ fn test_match_opaque_fvar_type_returns_error() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Some".to_string(),
-                    vec![SurfacePattern::Var("v".to_string())],
+                    SurfaceName::generated_path("Some"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("v"))],
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "v".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("v")),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Wildcard,
-                body: SurfaceExpr::Ident(Span::dummy(), "x".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("x")),
             },
         ],
     );
@@ -1018,7 +1060,7 @@ fn test_match_scrutinee_type_solved_meta_normalization() {
 
     // Push local `x : ?α` where ?α is solved to Nat but the type expression
     // still refers to the raw metavar FVar.
-    let _x_fvar = ctx.push_local("x".to_string(), meta_ty);
+    let _x_fvar = ctx.push_local(SurfaceName::generated_path("x"), meta_ty);
 
     // match x with | Nat.zero => 0 | Nat.succ k => k
     // Without scrutinee-type normalization, the motive binder would carry
@@ -1026,20 +1068,23 @@ fn test_match_scrutinee_type_solved_meta_normalization() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Nat.zero".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Nat.zero"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
-                    vec![SurfacePattern::Var("k".to_string())],
+                    SurfaceName::generated_path("Nat.succ"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "k".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("k")),
             },
         ],
     );
@@ -1099,4 +1144,161 @@ fn test_trkc_depelim_eq_symm_axiom_deps_empty() {
         dep_names.is_empty(),
         "symm must have an empty axiom closure (genuine dependent-elimination proof), got {dep_names:?}"
     );
+}
+
+fn inaccessible_receiver_collision_env(unary_fst: bool) -> Environment {
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
+
+    let mut env = Environment::with_prelude();
+    let owner = Name::anon().str("p");
+    let owner_ty = Expr::const_(owner.clone(), vec![]);
+    let fst_ty = if unary_fst {
+        Expr::pi(
+            BinderInfo::Default,
+            Expr::const_(Name::anon().str("Nat"), vec![]),
+            owner_ty.clone(),
+        )
+    } else {
+        owner_ty.clone()
+    };
+    env.add_inductive(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: owner.clone(),
+            type_: Expr::type_(),
+            constructors: vec![
+                Constructor {
+                    name: owner.clone().str("fst"),
+                    type_: fst_ty,
+                },
+                Constructor {
+                    name: owner.clone().str("other"),
+                    type_: owner_ty.clone(),
+                },
+            ],
+        }],
+    })
+    .expect("real kernel must register the colliding constructor family");
+    env.add_decl(Declaration::Axiom {
+        name: Name::anon().str("o"),
+        level_params: vec![],
+        type_: Expr::app(
+            Expr::const_(Name::anon().str("Option"), vec![Level::zero()]),
+            owner_ty,
+        ),
+    })
+    .unwrap();
+    env
+}
+
+fn require_inaccessible_receiver_refusal(result: Result<Expr, ElabError>) {
+    assert!(
+        matches!(&result, Err(ElabError::NotImplemented(message))
+            if message.contains("nested inaccessible pattern requires field-level definitional equality checking")),
+        "the actual receiver expression must retain field-defeq refusal, not become a global constructor or wildcard: {result:?}"
+    );
+}
+
+#[test]
+fn inaccessible_projection_namespace_constructor_without_receiver_stays_supported() {
+    let env = inaccessible_receiver_collision_env(false);
+    let expression = elab_with_env(&env, "match o with | Option.some .(p.fst) => 1 | _ => 0")
+        .expect("without a receiver, p.fst is the genuine registered constructor");
+    assert!(
+        expression
+            .collect_constants()
+            .contains(&Name::anon().str("p").str("casesOn")),
+        "the inaccessible constructor must produce the exact nested p eliminator: {expression:?}"
+    );
+}
+
+#[test]
+fn inaccessible_projection_bound_receiver_cannot_select_colliding_constructor() {
+    let env = inaccessible_receiver_collision_env(false);
+    let projected = elab_with_env(&env, "let p := (0, 1); p.fst")
+        .expect("ordinary expression elaboration must honor the actual product receiver");
+    let ctx = ElabCtx::new(&env);
+    assert!(ctx.is_def_eq(&projected, &Expr::nat_lit(0)));
+    assert!(ctx.is_def_eq(
+        &ctx.infer_type(&projected)
+            .expect("the normal receiver projection is typed"),
+        &Expr::const_(Name::anon().str("Nat"), vec![]),
+    ));
+    require_inaccessible_receiver_refusal(elab_with_env(
+        &env,
+        "let p := (0, 1); match o with | Option.some .(p.fst) => 1 | _ => 0",
+    ));
+}
+
+#[test]
+fn inaccessible_projection_escaped_component_is_not_split_by_receiver_prefix() {
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
+
+    let mut env = inaccessible_receiver_collision_env(false);
+    let owner = Name::anon().str("QuotedCarrier");
+    let quoted = Name::anon().str("p.fst");
+    assert_ne!(quoted, Name::anon().str("p").str("fst"));
+    // Exact kernel/imported names need not have a source namespace prefix.
+    // This is a real checked constructor row, not an alias or a Display parse.
+    env.add_inductive(InductiveDecl {
+        level_params: vec![],
+        num_params: 0,
+        types: vec![InductiveType {
+            name: owner.clone(),
+            type_: Expr::type_(),
+            constructors: vec![
+                Constructor {
+                    name: quoted.clone(),
+                    type_: Expr::const_(owner.clone(), vec![]),
+                },
+                Constructor {
+                    name: owner.clone().str("other"),
+                    type_: Expr::const_(owner.clone(), vec![]),
+                },
+            ],
+        }],
+    })
+    .expect("the exact quoted-component constructor must be kernel-registered");
+    env.add_decl(Declaration::Axiom {
+        name: Name::anon().str("q"),
+        level_params: vec![],
+        type_: Expr::app(
+            Expr::const_(Name::anon().str("Option"), vec![Level::zero()]),
+            Expr::const_(owner.clone(), vec![]),
+        ),
+    })
+    .unwrap();
+    let surface = parse_expr("«p.fst»").unwrap();
+    assert!(matches!(surface, SurfaceExpr::Ident(_, ref name)
+        if name.name() == &quoted
+            && name.component_syntax() == [clean_parser::NameComponentSyntax::Escaped]));
+    let expression = elab_with_env(
+        &env,
+        "let p := (0, 1); match q with | Option.some .(«p.fst») => 1 | _ => 0",
+    )
+    .expect("one escaped component is an identifier, not a projection from local p");
+    let constants = expression.collect_constants();
+    assert!(constants.contains(&owner.str("casesOn")));
+    assert!(!constants.contains(&Name::anon().str("p").str("casesOn")));
+}
+
+#[test]
+fn inaccessible_projection_constructor_app_head_respects_receiver() {
+    let env = inaccessible_receiver_collision_env(true);
+    let expression = elab_with_env(
+        &env,
+        "match o with | Option.some .(p.fst Nat.zero) => 1 | _ => 0",
+    )
+    .expect("without a receiver, the applied head is the real p.fst constructor");
+    assert!(expression
+        .collect_constants()
+        .contains(&Name::anon().str("p").str("casesOn")));
+    let projected = elab_with_env(&env, "let p := ((fun x : Nat => x), 1); p.fst Nat.zero")
+        .expect("the close receiver twin must actually project and apply a local function");
+    assert!(ElabCtx::new(&env).is_def_eq(&projected, &Expr::nat_lit(0)));
+    require_inaccessible_receiver_refusal(elab_with_env(
+        &env,
+        "let p := ((fun x : Nat => x), 1); match o with | Option.some .(p.fst Nat.zero) => 1 | _ => 0",
+    ));
 }

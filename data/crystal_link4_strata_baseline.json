@@ -1,0 +1,87 @@
+{
+  "schema": "crystal-link4-strata-baseline/v1",
+  "what": "crystal link 4 strata ratchet (M0 W2); every metric is a BAD count per arm, derived by scripts/crystal_link4_strata.py from the callee sidecars",
+  "metrics": {
+    "dp.asserts.stand_in": 1470,
+    "dp.asserts.unclassified": 0,
+    "dp.cfg_cut.gating_edges_not_cut": 18,
+    "dp.layout_mixing.objects": 59,
+    "dp.layout_mixing.roots": 841,
+    "dp.layout_mixing.sites": 1119,
+    "m0off.asserts.stand_in": 1470,
+    "m0off.asserts.unclassified": 0,
+    "m0off.cfg_cut.gating_edges_not_cut": 18,
+    "m0off.layout_mixing.objects": 59,
+    "m0off.layout_mixing.roots": 841,
+    "m0off.layout_mixing.sites": 1084,
+    "m0on.asserts.stand_in": 1129,
+    "m0on.asserts.unclassified": 0,
+    "m0on.cfg_cut.gating_edges_not_cut": 18,
+    "m0on.layout_mixing.objects": 59,
+    "m0on.layout_mixing.roots": 844,
+    "m0on.layout_mixing.sites": 1092
+  },
+  "identity": {
+    "arms": {
+      "dp": {
+        "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+        "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1"
+      },
+      "m0off": {
+        "manifest_sha256": "20754418c1fb6bdcbeeba263800a77e68f15b629adbd8dd8ed9ae3fe092220b2",
+        "text_sha256": "d3884376b2a47078014dfd604ef376f9354a6ba668729c20b1e6bb4d91fc61c5"
+      },
+      "m0on": {
+        "manifest_sha256": "fae6ca1e99a7c8de39a69f49761fe1a4a07a133c45b2a7bf409b3d7eb28a2352",
+        "text_sha256": "8e0554c1480bf9839f4ee7e0617255386a78af799effb3b92866e79e5ee1f18f"
+      }
+    },
+    "script_sha256": "696b3a19ad674235f6ef02b2c3f34a1159953b6034af9b56e00f05fdce40aaad",
+    "sources_digest": "84266730dca68b6035a2000ee785489d4836564a9c93c83bde13df2b7a25e051"
+  },
+  "history": [
+    {
+      "action": "init",
+      "reason": "first measurement 2026-09-30 (crystal link 4 M0 work item W2, adopted plan section 6 item 2): the three M0 arms dp (link 4's executability baseline artifact, manifest ec7a86c7) and memo section 21's m0off (20754418) / m0on (fae6ca1e), the latter two as immutable clonefile copies under target/crystal-lane/link4-strata-arms; dp reproduces the plan's 2,508 bodies / 249,535 instructions and D18's 2,558 const-false asserts (1,345 br / 775 unreachable / 411 havoc) exactly",
+      "metrics": {
+        "dp.asserts.stand_in": 1470,
+        "dp.asserts.unclassified": 0,
+        "dp.cfg_cut.gating_edges_not_cut": 18,
+        "dp.layout_mixing.objects": 59,
+        "dp.layout_mixing.roots": 841,
+        "dp.layout_mixing.sites": 1119,
+        "m0off.asserts.stand_in": 1470,
+        "m0off.asserts.unclassified": 0,
+        "m0off.cfg_cut.gating_edges_not_cut": 18,
+        "m0off.layout_mixing.objects": 59,
+        "m0off.layout_mixing.roots": 841,
+        "m0off.layout_mixing.sites": 1084,
+        "m0on.asserts.stand_in": 1129,
+        "m0on.asserts.unclassified": 0,
+        "m0on.cfg_cut.gating_edges_not_cut": 18,
+        "m0on.layout_mixing.objects": 59,
+        "m0on.layout_mixing.roots": 844,
+        "m0on.layout_mixing.sites": 1092
+      },
+      "identity": {
+        "arms": {
+          "dp": {
+            "manifest_sha256": "ec7a86c7e46598c6f6748f3865b62b0b9a4276906d4d5d935243d326ba74789c",
+            "text_sha256": "00f82b7fd277df6c177d3878c6e555339d3cc7b7360fab3f9cfa011bfc001ba1"
+          },
+          "m0off": {
+            "manifest_sha256": "20754418c1fb6bdcbeeba263800a77e68f15b629adbd8dd8ed9ae3fe092220b2",
+            "text_sha256": "d3884376b2a47078014dfd604ef376f9354a6ba668729c20b1e6bb4d91fc61c5"
+          },
+          "m0on": {
+            "manifest_sha256": "fae6ca1e99a7c8de39a69f49761fe1a4a07a133c45b2a7bf409b3d7eb28a2352",
+            "text_sha256": "8e0554c1480bf9839f4ee7e0617255386a78af799effb3b92866e79e5ee1f18f"
+          }
+        },
+        "script_sha256": "696b3a19ad674235f6ef02b2c3f34a1159953b6034af9b56e00f05fdce40aaad",
+        "sources_digest": "84266730dca68b6035a2000ee785489d4836564a9c93c83bde13df2b7a25e051"
+      }
+    }
+  ],
+  "payload_sha256": "46a702ea0cfa93ad02e6d1266f7f024a9b7e69b36a5652970373327a90340c35"
+}

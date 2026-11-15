@@ -4,6 +4,12 @@
 
 //! Tests for the clean LSP backend.
 
+#[path = "tests/typed_name_tests.rs"]
+mod typed_name_tests;
+
+#[path = "tests/formatting_withdrawn_tests.rs"]
+mod formatting_withdrawn_tests;
+
 use super::analysis::parse_lean_text;
 use super::helpers::{
     compute_folding_ranges, extract_identifier_from_error, ranges_overlap,
@@ -423,7 +429,7 @@ def use_old : Nat := old
 
     let decls = clean_parser::parse_file(text).unwrap();
     let deprecated = collect_deprecated_names(&decls);
-    assert!(deprecated.contains("old"));
+    assert!(deprecated.contains(&clean_kernel::Name::anon().str("old")));
 
     let warnings: Vec<_> = decls
         .iter()
@@ -1940,18 +1946,21 @@ fn test_inlay_hints_include_inferred_def_result_type() {
         warnings: vec![],
         declarations: vec![
             ElaboratedDecl {
+                identity: clean_kernel::Name::anon().str("inferred"),
                 name: "inferred".to_string(),
                 type_str: "Nat".to_string(),
                 start: inferred_start,
                 end: inferred_end,
             },
             ElaboratedDecl {
+                identity: clean_kernel::Name::anon().str("explicit"),
                 name: "explicit".to_string(),
                 type_str: "Nat".to_string(),
                 start: explicit_start,
                 end: explicit_end,
             },
         ],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -1987,11 +1996,13 @@ fn test_inlay_hints_respect_requested_range() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("inferred"),
             name: "inferred".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def inferred := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -2104,11 +2115,13 @@ fn test_get_inlay_hints_carry_resolvable_data_payload() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("inferred"),
             name: "inferred".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def inferred := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -2141,11 +2154,13 @@ fn test_resolve_inlay_hint_attaches_full_signature_tooltip() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("inferred"),
             name: "inferred".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def inferred := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -2333,11 +2348,13 @@ fn test_resolve_completion_item_enriches_detail_and_documentation() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("resolved"),
             name: "resolved".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def resolved := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -2439,11 +2456,13 @@ fn test_plain_goal_returns_none_until_tactic_state_is_tracked() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("demo"),
             name: "demo".to_string(),
             type_str: "True".to_string(),
             start: 0,
             end: "theorem demo : True := by\n  trivial".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -2456,8 +2475,13 @@ fn test_plain_goal_returns_none_until_tactic_state_is_tracked() {
     });
 
     assert!(
-        response.goals.is_none(),
+        response.is_none(),
         "plainGoal is currently a non-parity baseline: tactic goal state is not tracked yet"
+    );
+    assert_eq!(
+        serde_json::to_value(response).expect("plainGoal reply should serialize"),
+        serde_json::Value::Null,
+        "a missing snapshot is a null result, not an empty response object"
     );
 }
 
@@ -2472,11 +2496,13 @@ fn test_plain_goal_returns_live_tactic_snapshot_when_elaboration_tracks_goals() 
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("demo"),
             name: "demo".to_string(),
             type_str: "True".to_string(),
             start: 0,
             end: "theorem demo : True := by\n  trivial".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -2496,19 +2522,53 @@ fn test_plain_goal_returns_live_tactic_snapshot_when_elaboration_tracks_goals() 
     });
 
     assert_eq!(
-        response.goals,
+        response.as_ref().map(|response| response.goals.clone()),
         Some(vec!["⊢ True".to_string()]),
         "plainGoal should return the live tactic snapshot covering the requested position"
     );
+    assert_eq!(
+        serde_json::to_value(&response).expect("plainGoal reply should serialize"),
+        serde_json::json!({"goals": ["⊢ True"], "rendered": "```lean\n⊢ True\n```"}),
+        "a live snapshot must carry Lean's plain and Markdown forms"
+    );
 
     let outside_snapshot = backend.plain_goal(crate::rpc::PlainGoalParams {
-        text_document: crate::rpc::TextDocumentIdentifier { uri },
+        text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
         position: Position::new(0, 0),
     });
     assert!(
-        outside_snapshot.goals.is_none(),
+        outside_snapshot.is_none(),
         "plainGoal should keep range-local tactic snapshots fail-closed"
     );
+    assert_eq!(
+        serde_json::to_value(outside_snapshot).expect("missing snapshot should serialize"),
+        serde_json::Value::Null
+    );
+
+    for (goals, rendered) in [
+        (vec![], "no goals"),
+        (
+            vec!["h : Nat\n⊢ h = h".to_string(), "⊢ True".to_string()],
+            "```lean\nh : Nat\n⊢ h = h\n```\n---\n```lean\n⊢ True\n```",
+        ),
+    ] {
+        backend.tactic_goal_snapshots.insert(
+            uri.clone(),
+            vec![TacticGoalSnapshot {
+                range: Range::new(Position::new(1, 2), Position::new(1, 9)),
+                goals: goals.clone(),
+            }],
+        );
+        let response = backend.plain_goal(crate::rpc::PlainGoalParams {
+            text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
+            position: Position::new(1, 4),
+        });
+        assert_eq!(
+            serde_json::to_value(response).expect("snapshot reply should serialize"),
+            serde_json::json!({"goals": goals, "rendered": rendered}),
+            "an empty snapshot is solved, and multiple goals retain Markdown separators"
+        );
+    }
 }
 
 #[tokio::test]
@@ -2531,7 +2591,7 @@ async fn test_plain_goal_live_elaboration_populates_tactic_snapshot() {
     });
 
     assert_eq!(
-        response.goals,
+        response.map(|response| response.goals),
         Some(vec!["⊢ True".to_string()]),
         "plainGoal should expose the tactic snapshot produced during live document elaboration"
     );
@@ -2541,7 +2601,7 @@ async fn test_plain_goal_live_elaboration_populates_tactic_snapshot() {
         position: Position::new(0, 0),
     });
     assert!(
-        outside_snapshot.goals.is_none(),
+        outside_snapshot.is_none(),
         "live elaboration tactic snapshots should stay range-local"
     );
 }
@@ -2566,8 +2626,8 @@ async fn test_plain_goal_live_elaboration_uses_typed_post_tactic_snapshot_when_t
     });
 
     let goals = response
-        .goals
-        .expect("plainGoal should expose the typed post-tactic snapshot at the tactic span");
+        .expect("plainGoal should expose the typed post-tactic snapshot at the tactic span")
+        .goals;
     assert_eq!(goals.len(), 1);
     assert!(
         goals[0].contains("Sort") || goals[0].contains("Prop"),
@@ -2579,7 +2639,7 @@ async fn test_plain_goal_live_elaboration_uses_typed_post_tactic_snapshot_when_t
         position: Position::new(0, 0),
     });
     assert!(
-        outside_snapshot.goals.is_none(),
+        outside_snapshot.is_none(),
         "typed post-tactic snapshots should stay tied to the tactic span"
     );
 }
@@ -2660,9 +2720,9 @@ async fn test_plain_goal_bound_theorem_requires_theorem_local_context_for_post_t
     });
 
     assert_eq!(
-        response.goals,
+        response.map(|response| response.goals),
         Some(vec!["p : Prop\n⊢ Prop".to_string()]),
-        "a bound theorem shows the binder-aware INITIAL goal; the typed post-tactic snapshot stays refused until proof_state_for_tactic_target takes the binder telescope"
+        "a bound theorem must show the actual typed local context at skip"
     );
 }
 
@@ -2686,7 +2746,7 @@ async fn test_plain_goal_bound_theorem_initial_goal_renders_binders_as_hypothese
     });
 
     assert_eq!(
-        response.goals,
+        response.map(|response| response.goals),
         Some(vec!["n : Nat\nh : n = n\n⊢ n = n".to_string()]),
         "each theorem binder should appear as a hypothesis line above the initial target"
     );
@@ -2696,36 +2756,34 @@ async fn test_plain_goal_bound_theorem_initial_goal_renders_binders_as_hypothese
         position: Position::new(0, 0),
     });
     assert!(
-        outside_snapshot.goals.is_none(),
+        outside_snapshot.is_none(),
         "binder-aware initial snapshots stay range-local"
     );
 }
 
-#[test]
-fn test_bound_theorem_initial_goal_renders_implicit_and_instance_binders() {
+#[tokio::test]
+async fn test_bound_theorem_initial_goal_renders_implicit_and_instance_binders() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
     let uri = Url::parse("file:///binder-initial-goal-kinds.lean").unwrap();
     let text = "theorem bound_hyp {p : Prop} (hp : p) [inst : Decidable p] : p := by\n  skip\n"
         .to_string();
-    let doc = Document::new(uri, 1, text.clone(), "lean".to_string());
-    let decls =
-        clean_parser::parse_file_with_tactics(&text, &CleanBackend::builtin_tactic_patterns())
-            .expect("bound theorem should parse with tactic syntax");
-    let clean_parser::SurfaceDecl::Theorem {
-        binders, ty, proof, ..
-    } = &decls[0]
-    else {
-        panic!("expected theorem declaration");
-    };
-
-    let env = clean_kernel::Environment::new();
-    let snapshot =
-        CleanBackend::tactic_goal_snapshot_from_theorem(&doc, &text, &env, binders, ty, proof)
-            .expect("bound theorem should produce a binder-aware initial snapshot");
-
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text, "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+    let response = backend
+        .plain_goal(crate::rpc::PlainGoalParams {
+            text_document: crate::rpc::TextDocumentIdentifier { uri },
+            position: Position::new(1, 3),
+        })
+        .expect("the real producer must preserve all binder kinds");
     assert_eq!(
-        snapshot.goals,
+        response.goals,
         vec!["p : Prop\nhp : p\ninst : Decidable p\n⊢ p".to_string()],
-        "implicit, explicit, and instance binders all render as hypothesis lines"
+        "implicit, explicit and instance locals come from the actual typed context"
     );
 }
 
@@ -3026,14 +3084,12 @@ async fn test_live_hover_renders_lean_syntax_type_not_debug() {
 }
 
 #[tokio::test]
-async fn test_plain_term_goal_sorry_hole_renders_lean_syntax_type_not_debug() {
+async fn test_plain_term_goal_captured_hole_renders_lean_syntax_type_not_debug() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
     let uri = Url::parse("file:///sorry-hole-pretty-type.lean").unwrap();
-    // The `sorry`-body hole path copies the declaration's `type_str` into the
-    // hole context verbatim, so this exercises the pretty-printed rendering
-    // end-to-end through `$/lean/plainTermGoal`.
-    let text = "def g : Nat → Nat := sorry\n".to_string();
+    // Require an actual span-tagged expected type from elaboration.
+    let text = "def g : Nat → Nat := _\n".to_string();
 
     backend.documents.insert(
         uri.clone(),
@@ -3042,7 +3098,7 @@ async fn test_plain_term_goal_sorry_hole_renders_lean_syntax_type_not_debug() {
     backend.parse_document(&uri).await;
     backend.elaborate_document(&uri).await;
 
-    let hole_offset = text.find("sorry").expect("text contains the hole token");
+    let hole_offset = text.find('_').expect("text contains the hole token");
     let hole_position = backend
         .documents
         .get(&uri)
@@ -3053,11 +3109,16 @@ async fn test_plain_term_goal_sorry_hole_renders_lean_syntax_type_not_debug() {
         text_document: crate::rpc::TextDocumentIdentifier { uri },
         position: hole_position,
     });
-    let goal = response
-        .goal
-        .expect("plainTermGoal on a `sorry` body should report the hole-local expected type");
+    let response =
+        response.expect("plainTermGoal on a captured body hole should report the recorded goal");
+    assert_eq!(response.range.start, hole_position);
     assert_eq!(
-        goal, "Nat -> Nat",
+        response.range.end,
+        Position::new(hole_position.line, hole_position.character + 1)
+    );
+    let goal = response.goal;
+    assert_eq!(
+        goal, "⊢ Nat → Nat",
         "plainTermGoal must expose the pretty-printed Lean type, not Rust Debug structure"
     );
 }
@@ -3843,6 +3904,202 @@ async fn test_live_references_exclude_checked_declaration_when_requested() {
     );
 }
 
+/// RENAME MUST NOT EDIT COMMENTS OR STRING LITERALS.
+///
+/// `find_references` was a raw `text.find` scan with identifier-boundary
+/// checks and nothing else, and `create_rename_edits` turns every occurrence it
+/// returns into a `TextEdit`. So `rename` rewrote the name inside
+/// `-- ren_decl is the interesting one` and inside `"ren_decl"` — a silent edit
+/// to text the user never meant to touch, and the one failure mode of rename
+/// that a user cannot undo by reading the diff, because it looks correct.
+///
+/// This pins all four positions at once: code (must rename), line comment,
+/// block comment and string literal (must not). It is written against
+/// `create_rename_edits` rather than only `find_references` because the edit
+/// list is what actually reaches the user's file.
+#[tokio::test]
+async fn test_rename_does_not_edit_comments_or_string_literals() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///rename-masking.lean").unwrap();
+    let text = concat!(
+        "axiom ren_decl : Nat\n",
+        "-- ren_decl is the interesting one\n",
+        "/- ren_decl again, /- nested -/ still commented ren_decl -/\n",
+        "def s : String := \"ren_decl\"\n",
+        "#check ren_decl\n",
+    )
+    .to_string();
+
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text.clone(), "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+    backend.elaborate_document(&uri).await;
+
+    // Six occurrences in the text; exactly two are code — the declaration and
+    // the `#check`. If this ever reads 6, the mask is not being consulted.
+    assert_eq!(
+        text.matches("ren_decl").count(),
+        6,
+        "the fixture must carry four non-code occurrences, or it tests nothing"
+    );
+
+    let references = backend.find_references("ren_decl", true);
+    assert_eq!(
+        references.len(),
+        2,
+        "find_references returned a comment or string occurrence: {references:#?}"
+    );
+
+    let edit = backend.create_rename_edits("ren_decl", "renamed");
+    let changes = edit.changes.expect("rename must produce changes");
+    let edits = changes.get(&uri).expect("edits for the open document");
+    assert_eq!(
+        edits.len(),
+        2,
+        "rename would have rewritten a comment or a string literal: {edits:#?}"
+    );
+
+    // And it really does rename the two it should: apply the edits by offset,
+    // highest first, and check the result.
+    let doc = backend.documents.get(&uri).expect("document stays open");
+    let mut offsets: Vec<usize> = edits
+        .iter()
+        .map(|e| doc.position_to_offset(e.range.start))
+        .collect();
+    drop(doc);
+    offsets.sort_unstable();
+    let mut renamed = text.clone();
+    for at in offsets.into_iter().rev() {
+        renamed.replace_range(at..at + "ren_decl".len(), "renamed");
+    }
+    assert!(
+        renamed.starts_with("axiom renamed : Nat"),
+        "the declaration was not renamed: {renamed}"
+    );
+    assert!(
+        renamed.contains("#check renamed"),
+        "the use was not renamed: {renamed}"
+    );
+    assert!(
+        renamed.contains("-- ren_decl is the interesting one"),
+        "the line comment was edited: {renamed}"
+    );
+    assert!(
+        renamed.contains("still commented ren_decl -/"),
+        "the nested block comment was edited: {renamed}"
+    );
+    assert!(
+        renamed.contains("\"ren_decl\""),
+        "the string literal was edited: {renamed}"
+    );
+}
+
+/// `prepareRename` must refuse a position inside a comment or a string.
+///
+/// The three surfaces have to agree. Once `create_rename_edits` stops
+/// producing an edit for a commented occurrence, a `prepareRename` that still
+/// said "yes" would offer a rename that then does nothing at the position the
+/// user was pointing at — which reads as a broken editor, not as a refusal.
+#[tokio::test]
+async fn test_prepare_rename_refuses_inside_a_comment_or_string() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+    let uri = Url::parse("file:///prepare-rename-masking.lean").unwrap();
+    let text = concat!(
+        "axiom ren_decl : Nat\n",
+        "-- ren_decl in a comment\n",
+        "def s : String := \"ren_decl\"\n",
+    )
+    .to_string();
+
+    backend.documents.insert(
+        uri.clone(),
+        Document::new(uri.clone(), 1, text.clone(), "lean".to_string()),
+    );
+    backend.parse_document(&uri).await;
+
+    let doc = backend.documents.get(&uri).expect("document stays open");
+    let at = |needle: &str, skip: usize| -> Position {
+        let mut from = 0usize;
+        for _ in 0..skip {
+            from = text[from..].find(needle).expect("occurrence") + from + 1;
+        }
+        let off = text[from..].find(needle).expect("occurrence") + from;
+        doc.offset_to_position(off + 1)
+    };
+    let in_code = at("ren_decl", 0);
+    let in_comment = at("ren_decl", 1);
+    let in_string = at("ren_decl", 2);
+    drop(doc);
+
+    assert!(
+        backend.prepare_rename_at(&uri, in_code).is_some(),
+        "the declaration itself must still be renameable"
+    );
+    assert!(
+        backend.prepare_rename_at(&uri, in_comment).is_none(),
+        "prepareRename offered a rename anchored in a line comment"
+    );
+    assert!(
+        backend.prepare_rename_at(&uri, in_string).is_none(),
+        "prepareRename offered a rename anchored in a string literal"
+    );
+}
+
+/// `documentHighlight` is document-local, and stays that way after the scan was
+/// split out of `find_references`.
+///
+/// It used to reach this result by scanning EVERY open document and filtering
+/// the answers down to one URI — wasteful before the code mask and worse after
+/// it, since each document now also gets a mask built and thrown away. The scan
+/// is now per-document; this pins the behaviour that refactor must not change,
+/// with a second open document carrying the same identifier so a regression to
+/// the workspace-wide scan is visible rather than silent.
+#[tokio::test]
+async fn test_document_highlights_do_not_leak_across_documents() {
+    let (service, _socket) = LspService::new(CleanBackend::new);
+    let backend = service.inner();
+
+    let here = Url::parse("file:///highlight-here.lean").unwrap();
+    let there = Url::parse("file:///highlight-there.lean").unwrap();
+    let text_here = "axiom hl_decl : Nat\n#check hl_decl\n".to_string();
+    let text_there = "#check hl_decl\n#check hl_decl\n".to_string();
+
+    backend.documents.insert(
+        here.clone(),
+        Document::new(here.clone(), 1, text_here.clone(), "lean".to_string()),
+    );
+    backend.documents.insert(
+        there.clone(),
+        Document::new(there.clone(), 1, text_there, "lean".to_string()),
+    );
+    backend.parse_document(&here).await;
+    backend.parse_document(&there).await;
+
+    let doc = backend.documents.get(&here).expect("document stays open");
+    let at = doc.offset_to_position(text_here.find("hl_decl").expect("the declaration") + 1);
+    drop(doc);
+
+    let highlights = backend
+        .document_highlights_at(&here, at)
+        .expect("the identifier under the cursor has occurrences");
+    assert_eq!(
+        highlights.len(),
+        2,
+        "documentHighlight returned occurrences from another document: {highlights:#?}"
+    );
+
+    // And the cross-document view is still the one that sees all four.
+    assert_eq!(
+        backend.find_references("hl_decl", true).len(),
+        4,
+        "find_references must still be workspace-wide"
+    );
+}
+
 #[tokio::test]
 async fn test_live_references_find_open_document_use_across_files() {
     let (service, _socket) = LspService::new(CleanBackend::new);
@@ -3907,7 +4164,7 @@ async fn test_live_references_find_open_document_use_across_files() {
 }
 
 #[test]
-fn test_plain_term_goal_returns_decl_type_boundary_not_hole_expected_type() {
+fn test_plain_term_goal_does_not_substitute_decl_type_for_missing_term_capture() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
     let uri = Url::parse("file:///plain-term-goal.lean").unwrap();
@@ -3917,11 +4174,13 @@ fn test_plain_term_goal_returns_decl_type_boundary_not_hole_expected_type() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("answer"),
             name: "answer".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def answer : Nat := 42".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -3932,10 +4191,22 @@ fn test_plain_term_goal_returns_decl_type_boundary_not_hole_expected_type() {
         text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
         position: Position::new(0, 4),
     });
+    assert!(
+        inside_decl.is_none(),
+        "a declaration type is not a captured term-local expected type"
+    );
     assert_eq!(
-        inside_decl.goal.as_deref(),
-        Some("Nat"),
-        "plainTermGoal currently exposes declaration type_str inside declaration spans"
+        backend
+            .documents
+            .get(&uri)
+            .unwrap()
+            .elaborated
+            .as_ref()
+            .unwrap()
+            .declarations[0]
+            .type_str,
+        "Nat",
+        "declaration metadata remains available to its existing consumers"
     );
 
     let outside_decl = backend.plain_term_goal(crate::rpc::PlainTermGoalParams {
@@ -3943,8 +4214,8 @@ fn test_plain_term_goal_returns_decl_type_boundary_not_hole_expected_type() {
         position: Position::new(2, 0),
     });
     assert!(
-        outside_decl.goal.is_none(),
-        "plainTermGoal is a boundary baseline, not hole-local expected-type parity"
+        outside_decl.is_none(),
+        "a position without captured term-goal metadata returns null"
     );
 
     let end_boundary = backend.plain_term_goal(crate::rpc::PlainTermGoalParams {
@@ -3954,13 +4225,13 @@ fn test_plain_term_goal_returns_decl_type_boundary_not_hole_expected_type() {
         position: Position::new(0, "def answer : Nat := 42".len() as u32),
     });
     assert!(
-        end_boundary.goal.is_none(),
-        "plainTermGoal uses half-open declaration ranges and should not include the end boundary"
+        end_boundary.is_none(),
+        "a declaration end does not supply term-goal metadata"
     );
 }
 
 #[tokio::test]
-async fn test_plain_term_goal_uses_live_checked_document_declaration_type() {
+async fn test_plain_term_goal_live_checked_decl_without_term_capture_returns_none() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
     let uri = Url::parse("file:///live-plain-term-goal.lean").unwrap();
@@ -3994,12 +4265,13 @@ async fn test_plain_term_goal_uses_live_checked_document_declaration_type() {
         position: Position::new(0, 4),
     });
 
-    let goal = response
-        .goal
-        .expect("plainTermGoal should read declaration type from live elaboration state");
-    assert_eq!(
-        goal, expected_type,
-        "plainTermGoal should expose the exact checked declaration type"
+    assert!(
+        !expected_type.is_empty(),
+        "checked declaration metadata is retained"
+    );
+    assert!(
+        response.is_none(),
+        "a checked declaration type alone does not supply term-goal metadata"
     );
 }
 
@@ -4038,7 +4310,7 @@ async fn test_plain_term_goal_live_checked_document_stays_declaration_range_only
     });
 
     assert!(
-        response.goal.is_none(),
+        response.is_none(),
         "plainTermGoal should not reuse live declaration type evidence outside declaration ranges"
     );
 }
@@ -4066,11 +4338,13 @@ fn test_has_live_hole_expected_type_state_false_without_holes() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("x"),
             name: "x".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def x : Nat := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -4169,9 +4443,8 @@ async fn test_plain_term_goal_reports_hole_local_expected_type_for_body_hole() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
     let uri = Url::parse("file:///hole-term-goal.lean").unwrap();
-    // The body is a bare hole (`sorry`), so the hole-local expected type is the
-    // declaration's own elaborated type.
-    let text = "def answer : Nat := sorry\n".to_string();
+    // The body underscore records a genuine elaborator context.
+    let text = "def answer : Nat := _\n".to_string();
 
     backend.documents.insert(
         uri.clone(),
@@ -4188,14 +4461,14 @@ async fn test_plain_term_goal_reports_hole_local_expected_type_for_body_hole() {
     assert_eq!(
         elaborated.holes.len(),
         1,
-        "a bare `sorry` body should record exactly one hole context, got {:?}",
+        "a body underscore should record exactly one hole context, got {:?}",
         elaborated.holes
     );
     let recorded = &elaborated.holes[0];
-    let hole_offset = text.find("sorry").expect("text contains the hole token");
+    let hole_offset = text.find('_').expect("text contains the hole token");
     assert_eq!(
         recorded.start, hole_offset,
-        "hole start should be the `sorry` token offset"
+        "hole start should be the underscore token offset"
     );
 
     assert!(
@@ -4203,9 +4476,10 @@ async fn test_plain_term_goal_reports_hole_local_expected_type_for_body_hole() {
         "predicate must flip true once a hole context is recorded"
     );
 
-    // Cursor on the hole reports the hole-local expected type, which equals the
-    // declaration's elaborated type.
-    let expected = elaborated.declarations[0].type_str.clone();
+    // Capture remains available when the unfilled hole prevents registration.
+    // Its expected type and token range are independent of declaration metadata.
+    assert_eq!(recorded.expected_type, "Nat");
+    assert_eq!((recorded.start, recorded.end), (20, 21));
     let on_hole = backend.plain_term_goal(crate::rpc::PlainTermGoalParams {
         text_document: crate::rpc::TextDocumentIdentifier { uri: uri.clone() },
         position: backend
@@ -4214,11 +4488,10 @@ async fn test_plain_term_goal_reports_hole_local_expected_type_for_body_hole() {
             .map(|doc| doc.offset_to_position(hole_offset))
             .expect("document open"),
     });
-    assert_eq!(
-        on_hole.goal.as_deref(),
-        Some(expected.as_str()),
-        "plainTermGoal on the hole should report the hole-local expected type"
-    );
+    let response = on_hole.expect("the captured body hole supplies a goal");
+    assert_eq!(response.goal, "⊢ Nat");
+    assert_eq!(response.range.start, Position::new(0, 20));
+    assert_eq!(response.range.end, Position::new(0, 21));
 }
 
 #[tokio::test]
@@ -4286,8 +4559,8 @@ async fn test_plain_term_goal_reports_subterm_hole_expected_type() {
             .expect("document open"),
     });
     let goal = on_hole
-        .goal
-        .expect("plainTermGoal on the sub-term hole should report a goal");
+        .expect("plainTermGoal on the sub-term hole should report a goal")
+        .goal;
     assert!(
         goal.contains("Nat"),
         "sub-term hole goal should resolve to Nat, got {goal}"
@@ -4385,8 +4658,8 @@ async fn test_plain_term_goal_body_hole_under_binder_shows_local_context() {
             .expect("document open"),
     });
     let goal = on_hole
-        .goal
-        .expect("plainTermGoal on the hole under a binder should report a goal");
+        .expect("plainTermGoal on the hole under a binder should report a goal")
+        .goal;
     // The goal renders the local hypothesis above the turnstile, then the
     // expected type after it (Lean infoview block).
     assert!(
@@ -4415,8 +4688,7 @@ async fn test_plain_term_goal_no_binder_hole_omits_local_context_block() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
     let uri = Url::parse("file:///hole-no-binder.lean").unwrap();
-    // A body hole with NO binders in scope reports just the expected type:
-    // no local-context block and no turnstile (B60/B64 formatting preserved).
+    // Lean's plain term goal keeps the turnstile with no local hypotheses.
     let text = "def answer : Nat := _\n".to_string();
 
     backend
@@ -4460,29 +4732,22 @@ async fn test_plain_term_goal_no_binder_hole_omits_local_context_block() {
             .expect("document open"),
     });
     let goal = on_hole
-        .goal
-        .expect("plainTermGoal on the no-binder hole should report a goal");
-    assert!(
-        !goal.contains('⊢'),
-        "a no-binder goal must omit the turnstile / local-context block, got {goal}"
-    );
-    assert!(
-        goal.contains("Nat"),
-        "a no-binder goal is just the expected type, got {goal}"
-    );
+        .expect("plainTermGoal on the no-binder hole should report a goal")
+        .goal;
+    assert_eq!(goal, "⊢ Nat", "the empty context still has a goal prefix");
 }
 
 #[test]
 fn test_format_hole_goal_with_and_without_local_context() {
     use crate::document::HoleContext;
-    // No bindings: bare expected type, unchanged formatting.
+    // No bindings: Lean still includes the goal prefix.
     let bare = HoleContext {
         start: 0,
         end: 1,
         expected_type: "Nat".to_string(),
         local_bindings: vec![],
     };
-    assert_eq!(format_hole_goal(&bare), "Nat");
+    assert_eq!(format_hole_goal(&bare), "⊢ Nat");
 
     // With bindings: Lean infoview-style block with the turnstile.
     let with_ctx = HoleContext {
@@ -4514,6 +4779,7 @@ fn test_hole_expected_type_prefers_narrowest_overlapping_hole() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![],
+        term_infos: Vec::new(),
         holes: vec![
             crate::document::HoleContext {
                 start: 10,
@@ -4534,16 +4800,18 @@ fn test_hole_expected_type_prefers_narrowest_overlapping_hole() {
 
     let doc_ref = backend.documents.get(&uri).expect("document open");
     // Offset 15 lies inside both holes; the inner (narrower) one wins.
-    let inner = backend.hole_expected_type_at_position(&doc_ref, doc.offset_to_position(15));
-    assert_eq!(inner.as_deref(), Some("INNER"));
+    let inner = backend.hole_context_at_position(&doc_ref, doc.offset_to_position(15));
+    assert_eq!(inner.map(|hole| hole.expected_type.as_str()), Some("INNER"));
     // Offset 11 lies only inside the outer hole.
-    let outer = backend.hole_expected_type_at_position(&doc_ref, doc.offset_to_position(11));
-    assert_eq!(outer.as_deref(), Some("OUTER"));
-    // Offset 16 is the half-open end of both holes: no match.
-    let none = backend.hole_expected_type_at_position(&doc_ref, doc.offset_to_position(16));
+    let outer = backend.hole_context_at_position(&doc_ref, doc.offset_to_position(11));
+    assert_eq!(outer.map(|hole| hole.expected_type.as_str()), Some("OUTER"));
+    // Lean's includeStop also selects the narrowest term at its end.
+    let end = backend.hole_context_at_position(&doc_ref, doc.offset_to_position(16));
+    assert_eq!(end.map(|hole| hole.expected_type.as_str()), Some("INNER"));
+    let none = backend.hole_context_at_position(&doc_ref, doc.offset_to_position(17));
     assert!(
         none.is_none(),
-        "hole ranges are half-open on the end boundary"
+        "a point beyond both recorded terms has no captured goal"
     );
 }
 
@@ -4558,11 +4826,13 @@ fn test_rpc_get_widgets_uses_elaborated_declaration_panel() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("answer"),
             name: "answer".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def answer : Nat := 42".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -4612,7 +4882,7 @@ fn test_rpc_get_widgets_uses_elaborated_declaration_panel() {
             session_id: connected.session_id,
             method: "Lean.Widget.getWidgetSource".to_string(),
             params: serde_json::json!({
-                "hash": DECLARATION_PANEL_WIDGET_HASH,
+                "hash": DECLARATION_PANEL_WIDGET_HASH.to_string(),
                 "pos": {"line": 0, "character": 4}
             }),
         })
@@ -4698,7 +4968,7 @@ async fn test_rpc_get_widgets_uses_live_checked_document_declaration_panels() {
             session_id: connected.session_id,
             method: "Lean.Widget.getWidgetSource".to_string(),
             params: serde_json::json!({
-                "hash": TYPE_PANEL_WIDGET_HASH,
+                "hash": TYPE_PANEL_WIDGET_HASH.to_string(),
                 "pos": query_position
             }),
         })
@@ -4917,11 +5187,13 @@ fn test_rpc_get_widgets_exposes_type_panel_only_inside_declaration_range() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("first"),
             name: "first".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def first : Nat := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -4953,7 +5225,7 @@ fn test_rpc_get_widgets_exposes_type_panel_only_inside_declaration_range() {
             session_id: connected.session_id,
             method: "Lean.Widget.getWidgetSource".to_string(),
             params: serde_json::json!({
-                "hash": TYPE_PANEL_WIDGET_HASH,
+                "hash": TYPE_PANEL_WIDGET_HASH.to_string(),
                 "pos": {"line": 0, "character": 4}
             }),
         })
@@ -4973,11 +5245,13 @@ fn test_rpc_get_widgets_refresh_clears_stale_elaboration_widgets() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("stale"),
             name: "stale".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def stale : Nat := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -5027,79 +5301,6 @@ fn test_rpc_get_widgets_refresh_clears_stale_elaboration_widgets() {
 }
 
 #[tokio::test]
-async fn test_range_formatting_trims_trailing_whitespace_in_selection() {
-    let (service, _socket) = LspService::new(CleanBackend::new);
-    let backend = service.inner();
-    let uri = Url::parse("file:///range-fmt.lean").unwrap();
-    // Line 0 has trailing spaces; the range covers lines 0–1 fully.
-    let text = "def a := 1   \ndef b := 2\n".to_string();
-    backend.documents.insert(
-        uri.clone(),
-        Document::new(uri.clone(), 1, text, "lean".to_string()),
-    );
-
-    let result = LanguageServer::range_formatting(
-        backend,
-        DocumentRangeFormattingParams {
-            text_document: TextDocumentIdentifier { uri: uri.clone() },
-            range: Range {
-                start: Position::new(0, 0),
-                end: Position::new(2, 0),
-            },
-            options: FormattingOptions::default(),
-            work_done_progress_params: WorkDoneProgressParams::default(),
-        },
-    )
-    .await
-    .expect("range_formatting should not fail")
-    .expect("range_formatting should return edits");
-
-    assert_eq!(result.len(), 1, "expected a single replacement edit");
-    let edit = &result[0];
-    assert!(
-        !edit.new_text.contains("   \n"),
-        "trailing whitespace should be trimmed; got {:?}",
-        edit.new_text
-    );
-    assert!(edit.new_text.contains("def a := 1\n"));
-    assert!(edit.new_text.contains("def b := 2"));
-}
-
-#[tokio::test]
-async fn test_range_formatting_no_changes_returns_empty() {
-    let (service, _socket) = LspService::new(CleanBackend::new);
-    let backend = service.inner();
-    let uri = Url::parse("file:///range-fmt-clean.lean").unwrap();
-    let text = "def a := 1\ndef b := 2".to_string();
-    backend.documents.insert(
-        uri.clone(),
-        Document::new(uri.clone(), 1, text, "lean".to_string()),
-    );
-
-    let result = LanguageServer::range_formatting(
-        backend,
-        DocumentRangeFormattingParams {
-            text_document: TextDocumentIdentifier { uri: uri.clone() },
-            range: Range {
-                start: Position::new(0, 0),
-                end: Position::new(1, 10),
-            },
-            options: FormattingOptions::default(),
-            work_done_progress_params: WorkDoneProgressParams::default(),
-        },
-    )
-    .await
-    .expect("range_formatting should not fail")
-    .expect("range_formatting should return Some(empty) for clean text");
-
-    assert!(
-        result.is_empty(),
-        "clean selection should yield no edits, got {:?}",
-        result
-    );
-}
-
-#[tokio::test]
 async fn test_linked_editing_range_returns_all_in_document_occurrences() {
     let (service, _socket) = LspService::new(CleanBackend::new);
     let backend = service.inner();
@@ -5138,74 +5339,6 @@ async fn test_linked_editing_range_returns_all_in_document_occurrences() {
         result.word_pattern.is_none(),
         "default word pattern should defer to the editor"
     );
-}
-
-#[tokio::test]
-async fn test_on_type_formatting_trims_trailing_whitespace_on_newline() {
-    let (service, _socket) = LspService::new(CleanBackend::new);
-    let backend = service.inner();
-    let uri = Url::parse("file:///on-type.lean").unwrap();
-    // Line 0 has trailing whitespace; the user just pressed Enter and the
-    // cursor is now on line 1, column 0.
-    let text = "def a := 1   \n".to_string();
-    backend.documents.insert(
-        uri.clone(),
-        Document::new(uri.clone(), 1, text, "lean".to_string()),
-    );
-
-    let result = LanguageServer::on_type_formatting(
-        backend,
-        DocumentOnTypeFormattingParams {
-            text_document_position: TextDocumentPositionParams {
-                text_document: TextDocumentIdentifier { uri: uri.clone() },
-                position: Position::new(1, 0),
-            },
-            ch: "\n".to_string(),
-            options: FormattingOptions::default(),
-        },
-    )
-    .await
-    .expect("on_type_formatting should not fail")
-    .expect("on_type_formatting should return edits");
-
-    assert_eq!(
-        result.len(),
-        1,
-        "expected one delete-trailing-whitespace edit"
-    );
-    let edit = &result[0];
-    assert_eq!(edit.new_text, "");
-    // Edit deletes columns 10..13 (the three trailing spaces) on line 0.
-    assert_eq!(edit.range.start, Position::new(0, 10));
-    assert_eq!(edit.range.end, Position::new(0, 13));
-}
-
-#[tokio::test]
-async fn test_on_type_formatting_no_op_when_line_clean() {
-    let (service, _socket) = LspService::new(CleanBackend::new);
-    let backend = service.inner();
-    let uri = Url::parse("file:///on-type-clean.lean").unwrap();
-    let text = "def a := 1\n".to_string();
-    backend.documents.insert(
-        uri.clone(),
-        Document::new(uri.clone(), 1, text, "lean".to_string()),
-    );
-
-    let result = LanguageServer::on_type_formatting(
-        backend,
-        DocumentOnTypeFormattingParams {
-            text_document_position: TextDocumentPositionParams {
-                text_document: TextDocumentIdentifier { uri: uri.clone() },
-                position: Position::new(1, 0),
-            },
-            ch: "\n".to_string(),
-            options: FormattingOptions::default(),
-        },
-    )
-    .await
-    .expect("on_type_formatting should not fail")
-    .expect("on_type_formatting should return Some");
-    assert!(result.is_empty(), "clean line should yield no edits");
 }
 
 #[tokio::test]
@@ -5476,11 +5609,13 @@ fn test_get_inlay_hints_disabled_returns_empty() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("inferred"),
             name: "inferred".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def inferred := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -5514,11 +5649,13 @@ async fn test_did_change_configuration_disables_inlay_hint_request() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("inferred"),
             name: "inferred".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def inferred := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -5807,11 +5944,13 @@ async fn test_goto_type_definition_resolves_to_type_decl_location() {
             errors: vec![],
             warnings: vec![],
             declarations: vec![ElaboratedDecl {
+                identity: clean_kernel::Name::anon().str("val"),
                 name: "val".to_string(),
                 type_str: "MyType".to_string(),
                 start: val_start,
                 end: text.len(),
             }],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         });
@@ -5894,12 +6033,14 @@ async fn test_goto_type_definition_builtin_type_returns_none() {
             errors: vec![],
             warnings: vec![],
             declarations: vec![ElaboratedDecl {
+                identity: clean_kernel::Name::anon().str("plain"),
                 name: "plain".to_string(),
                 // `Nat` is a prelude type with no in-workspace declaration.
                 type_str: "Nat".to_string(),
                 start: plain_start,
                 end: text.len(),
             }],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         });
@@ -6412,11 +6553,13 @@ fn test_resolve_code_lens_enriches_title_with_elaborated_type() {
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("foo"),
             name: "foo".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: "def foo := 1".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -7740,7 +7883,7 @@ async fn test_elaboration_records_widget_module_attribute_decl() {
             session_id: connected.session_id,
             method: "Lean.Widget.getWidgetSource".to_string(),
             params: serde_json::json!({
-                "hash": USER_WIDGET_PANEL_HASH,
+                "hash": USER_WIDGET_PANEL_HASH.to_string(),
                 "pos": query_position
             }),
         })
@@ -7866,11 +8009,13 @@ fn test_rpc_call_get_interactive_goals_returns_hypothesis_bundles_for_fixture_th
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("demo"),
             name: "demo".to_string(),
             type_str: "True".to_string(),
             start: 0,
             end: "theorem demo : True := by\n  trivial".len(),
         }],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -7946,11 +8091,13 @@ fn test_rpc_call_get_interactive_term_goal_prefers_hole_context_over_declaration
         errors: vec![],
         warnings: vec![],
         declarations: vec![ElaboratedDecl {
+            identity: clean_kernel::Name::anon().str("foo"),
             name: "foo".to_string(),
             type_str: "Nat".to_string(),
             start: 0,
             end: hole_start + 1,
         }],
+        term_infos: Vec::new(),
         holes: vec![crate::document::HoleContext {
             start: hole_start,
             end: hole_start + 1,
@@ -8015,6 +8162,7 @@ fn test_refresh_infoview_goals_clears_stale_goal_state_when_snapshots_removed() 
         errors: vec![],
         warnings: vec![],
         declarations: vec![],
+        term_infos: Vec::new(),
         holes: vec![],
         widget_modules: vec![],
     });
@@ -8060,6 +8208,25 @@ fn test_refresh_infoview_goals_clears_stale_goal_state_when_snapshots_removed() 
     );
 }
 
+fn real_tactic_observations_for_commit(
+    text: &str,
+) -> Vec<clean_elab::tactic::TacticGoalObservation> {
+    let (progress, _receiver) = tokio::sync::mpsc::unbounded_channel();
+    let (_, _, _, observations) = CleanBackend::elaborate_text_blocking(
+        text,
+        IncrementalState::default(),
+        None,
+        &CleanBackend::builtin_tactic_patterns(),
+        clean_kernel::Environment::new(),
+        &progress,
+    );
+    assert!(
+        !observations.is_empty(),
+        "commit control must exercise actual producer data"
+    );
+    observations
+}
+
 #[tokio::test]
 async fn test_commit_elaboration_discards_stale_version_result() {
     let (service, _socket) = LspService::new(CleanBackend::new);
@@ -8081,11 +8248,12 @@ async fn test_commit_elaboration_discards_stale_version_result() {
             errors: vec![],
             warnings: vec![],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         },
         IncrementalState::default(),
-        &clean_kernel::Environment::new(),
+        real_tactic_observations_for_commit(text),
         None,
     );
 
@@ -8123,11 +8291,12 @@ async fn test_commit_elaboration_stores_result_at_matching_version() {
             errors: vec![],
             warnings: vec![],
             declarations: vec![],
+            term_infos: Vec::new(),
             holes: vec![],
             widget_modules: vec![],
         },
         IncrementalState::default(),
-        &clean_kernel::Environment::new(),
+        real_tactic_observations_for_commit(text),
         None,
     );
 
@@ -8142,7 +8311,7 @@ async fn test_commit_elaboration_stores_result_at_matching_version() {
     );
     assert!(
         backend.tactic_goal_snapshots.get(&uri).is_some(),
-        "commit should rebuild the by-block tactic snapshot"
+        "commit should retain the actual by-block tactic observations"
     );
 }
 
@@ -8482,4 +8651,219 @@ async fn test_rapid_did_changes_only_newest_generation_commits() {
         elaborated.declarations[0].name, "third_gen",
         "only the newest generation's result may be committed"
     );
+}
+
+#[test]
+fn csimp_module_header_attribute_visibility_in_document_elaboration() {
+    for (source, accepted) in [
+        (
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/header_private_global.lean"
+            ),
+            false,
+        ),
+        (
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/header_default_global.lean"
+            ),
+            false,
+        ),
+        (
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/header_private_scoped.lean"
+            ),
+            false,
+        ),
+        (
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/header_private_local.lean"),
+            true,
+        ),
+        (
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/header_public_axiom.lean"),
+            true,
+        ),
+        (
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/header_public_section.lean"
+            ),
+            true,
+        ),
+        (
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/header_section_restore.lean"
+            ),
+            true,
+        ),
+        (
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/private.lean"),
+            true,
+        ),
+    ] {
+        let (progress, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (document, _, _, _) = CleanBackend::elaborate_text_blocking(
+            source,
+            IncrementalState::default(),
+            None,
+            &CleanBackend::builtin_tactic_patterns(),
+            clean_kernel::Environment::with_prelude(),
+            &progress,
+        );
+        if accepted {
+            assert!(document.errors.is_empty(), "{:?}", document.errors);
+        } else {
+            assert!(
+                document
+                    .errors
+                    .iter()
+                    .any(|error| error.message.contains("must be public")),
+                "{:?}",
+                document.errors
+            );
+        }
+    }
+}
+
+#[test]
+fn module_definition_exposure_in_document_elaboration() {
+    let cases = [
+        (
+            "plain",
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/exposure_plain_public.lean"
+            ),
+            false,
+        ),
+        (
+            "explicit",
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/exposure_explicit_refl.lean"
+            ),
+            true,
+        ),
+        (
+            "reflexive",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_reflexive.lean"),
+            true,
+        ),
+        (
+            "private",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_private.lean"),
+            true,
+        ),
+        (
+            "exposed",
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/exposure_exposed_defs.lean"
+            ),
+            true,
+        ),
+        (
+            "abbrev",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_abbrev.lean"),
+            true,
+        ),
+        (
+            "section",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_section.lean"),
+            true,
+        ),
+        (
+            "parenthesized",
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/exposure_parenthesized.lean"
+            ),
+            true,
+        ),
+        (
+            "by_rfl",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_by_rfl.lean"),
+            true,
+        ),
+        (
+            "parameters",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_parameters.lean"),
+            true,
+        ),
+        (
+            "explicit_defeq",
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/exposure_explicit_defeq.lean"
+            ),
+            false,
+        ),
+        (
+            "no_expose",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_no_expose.lean"),
+            false,
+        ),
+        (
+            "section_override",
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/exposure_section_override.lean"
+            ),
+            false,
+        ),
+        (
+            "public_helper",
+            include_str!(
+                "../../../../reports/csimp-2026-11-12/fixtures/exposure_public_helper.lean"
+            ),
+            false,
+        ),
+        (
+            "example",
+            include_str!("../../../../reports/csimp-2026-11-12/fixtures/exposure_example.lean"),
+            true,
+        ),
+    ];
+    for (name, source, accepted) in cases {
+        let (progress, _receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (document, _, _, _) = CleanBackend::elaborate_text_blocking(
+            source,
+            IncrementalState::default(),
+            None,
+            &CleanBackend::builtin_tactic_patterns(),
+            clean_kernel::Environment::with_prelude(),
+            &progress,
+        );
+        assert_eq!(
+            document.errors.is_empty(),
+            accepted,
+            "{name}: {:?}",
+            document.errors
+        );
+        if !accepted {
+            assert!(
+                document
+                    .errors
+                    .iter()
+                    .any(|error| error.message.contains("Not a definitional equality")),
+                "{name}: {:?}",
+                document.errors
+            );
+        }
+    }
+}
+
+#[test]
+fn alias_commands_retain_editor_identity_and_span() {
+    for (source, name, kind) in [
+        (
+            "alias copied := original",
+            "copied",
+            CommandKind::Definition,
+        ),
+        (
+            "alias ⟨forward, backward⟩ := equivalence",
+            "forward",
+            CommandKind::Theorem,
+        ),
+    ] {
+        let parsed = clean_parser::parse_file_with_diagnostics(source).expect("alias syntax");
+        assert!(parsed.diagnostics.is_empty());
+        let (actual_kind, actual_name, span) = CleanBackend::classify_decl(&parsed.decls[0]);
+        assert_eq!(actual_kind, kind);
+        assert_eq!(actual_name.as_deref(), Some(name));
+        assert_eq!(span, (0, source.len()));
+    }
 }

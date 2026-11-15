@@ -128,7 +128,7 @@ fn test_verify_completed_proof_intro_assumption_succeeds() {
     let target = Expr::arrow(a.clone(), a);
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     assumption(&mut state).unwrap();
     assert!(state.is_complete());
 
@@ -171,7 +171,14 @@ fn test_verify_completed_proof_multi_binder() {
     let target = Expr::arrow(a.clone(), Expr::arrow(b, a));
 
     let mut state = ProofState::new(env, target);
-    intros(&mut state, vec!["x".to_string(), "y".to_string()]).unwrap();
+    intros(
+        &mut state,
+        vec![
+            clean_parser::SurfaceName::generated_path("x"),
+            clean_parser::SurfaceName::generated_path("y"),
+        ],
+    )
+    .unwrap();
     assumption(&mut state).unwrap();
     assert!(state.is_complete());
 
@@ -205,7 +212,7 @@ fn test_verify_completed_proof_open_fvar_does_not_pass() {
     let target = Expr::arrow(a.clone(), a);
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     // Do NOT close. The goal is open, the FVar is dangling.
     assert!(!state.is_complete());
 
@@ -234,7 +241,7 @@ fn test_verify_incomplete_proof_fails() {
     let target = Expr::arrow(a.clone(), a);
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     // Do NOT close the goal — should fail completeness check.
     assert!(!state.is_complete());
 
@@ -459,7 +466,7 @@ fn test_verify_batch_with_failure() {
     // Proof 2: incomplete (just intro, no close)
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let mut state2 = ProofState::new(env.clone(), Expr::arrow(a.clone(), a));
-    intro(&mut state2, "x").unwrap();
+    intro(&mut state2, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     let result = verify_batch(&[&state1, &state2]);
     assert!(!result.all_verified());
@@ -526,7 +533,7 @@ fn test_collect_all_diagnostics_incomplete_proof() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let target = Expr::arrow(a.clone(), a);
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
 
     let diagnostics = collect_all_diagnostics(&state);
     assert!(!diagnostics.is_empty());

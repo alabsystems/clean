@@ -146,7 +146,7 @@ fn elab_fixture(file: &str) -> Vec<(String, Result<(), String>)> {
             }
             Err(error) => {
                 let name = crate::preprocess_ext::decl_name(decl)
-                    .map_or_else(|| format!("<decl {}>", verdicts.len()), str::to_string);
+                    .map_or_else(|| format!("<decl {}>", verdicts.len()), ToString::to_string);
                 verdicts.push((name, Err(format!("{error:?}"))));
             }
         }
@@ -234,12 +234,12 @@ fn test_tactic_bridge_rigid_conflict_still_refuses_loudly() {
 fn test_stage3_bridge_mints_cannot_alias_by_name() {
     use crate::infer::ElabCtx;
     use crate::tactic::ProofState;
-    use clean_kernel::name::Name;
+
     use clean_kernel::{Environment, Expr};
 
     let env = Environment::with_prelude();
     let mut elab = ElabCtx::new(&env);
-    elab.set_decl_universe_params(&["u".to_owned()]);
+    elab.set_decl_universe_params(&[clean_parser::SurfaceName::generated_path("u")]);
     // Header elaboration mints before the `by` block is entered.
     let header = [elab.fresh_universe_param(), elab.fresh_universe_param()];
 
@@ -247,7 +247,7 @@ fn test_stage3_bridge_mints_cannot_alias_by_name() {
     let mut ps = ProofState::with_context(env.clone(), Expr::prop(), Vec::new());
     let mut tactic_rigid = elab.metas.rigid_level_params_snapshot();
     for name in &elab.universe_params {
-        tactic_rigid.insert(Name::from_string(name));
+        tactic_rigid.insert(name.name().clone());
     }
     ps.seed_universe_world(
         elab.universe_params.clone(),
@@ -331,7 +331,7 @@ fn test_stage3_bridge_shares_the_mint_handle_not_a_snapshot() {
 fn test_stage3_tactic_exit_realization_leaves_elabctx_levels_alone() {
     use crate::infer::ElabCtx;
     use crate::tactic::ProofState;
-    use clean_kernel::name::Name;
+
     use clean_kernel::{Environment, Expr, Level};
 
     let env = Environment::with_prelude();
@@ -341,7 +341,7 @@ fn test_stage3_tactic_exit_realization_leaves_elabctx_levels_alone() {
     let mut ps = ProofState::with_context(env.clone(), Expr::prop(), Vec::new());
     let mut tactic_rigid = elab.metas.rigid_level_params_snapshot();
     for name in &elab.universe_params {
-        tactic_rigid.insert(Name::from_string(name));
+        tactic_rigid.insert(name.name().clone());
     }
     ps.seed_universe_world(
         elab.universe_params.clone(),

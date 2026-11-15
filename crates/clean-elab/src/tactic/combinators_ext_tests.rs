@@ -45,13 +45,15 @@ fn multi_goal_state(env: Environment) -> ProofState {
         meta_id: meta_b,
         target: b,
         local_ctx: vec![],
-        tag: Some("goal_B".into()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal_B")),
+        case_binders: Vec::new(),
     });
     ps.goals.push_back(Goal {
         meta_id: meta_c,
         target: c,
         local_ctx: vec![],
-        tag: Some("goal_C".into()),
+        tag: Some(clean_parser::SurfaceName::generated_path("goal_C")),
+        case_binders: Vec::new(),
     });
     ps
 }
@@ -98,13 +100,15 @@ fn split_tactic(ctx: &mut TacticCtx<'_>) -> TacticResult {
         meta_id: sub2,
         target: target.clone(),
         local_ctx: vec![],
-        tag: Some("split_2".into()),
+        tag: Some(clean_parser::SurfaceName::generated_path("split_2")),
+        case_binders: Vec::new(),
     });
     ctx.state.goals.push_front(Goal {
         meta_id: sub1,
         target,
         local_ctx: vec![],
-        tag: Some("split_1".into()),
+        tag: Some(clean_parser::SurfaceName::generated_path("split_1")),
+        case_binders: Vec::new(),
     });
 
     Ok(())

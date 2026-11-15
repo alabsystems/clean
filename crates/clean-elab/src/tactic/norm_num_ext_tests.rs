@@ -305,6 +305,15 @@ fn test_eval_extended_int_ediv_negative_euclidean() {
 }
 
 #[test]
+fn test_eval_extended_does_not_guess_division_dictionary() {
+    for head in ["HDiv.hDiv", "Div.div", "HMod.hMod", "Mod.mod"] {
+        let expr = int_binop_neg7_3(head);
+        assert_eq!(eval_extended(&expr, &default_config(), 0), None, "{head}");
+        assert_eq!(eval_nat_expr(&expr), None, "{head}");
+    }
+}
+
+#[test]
 fn test_eval_extended_int_mod_positive_unchanged() {
     // Positive operands: T-division and Euclidean agree, 7 % 3 = 1.
     let seven = Expr::app(
@@ -543,6 +552,34 @@ fn test_config_default_values() {
 // =========================================================================
 
 /// Build `<op> a b` as a binary application of a named constant.
+/// Declare `Nat.gcd : Nat → Nat → Nat`, which every real environment carries
+/// (`Environment::init_nat_gcd`, not reachable from this crate) and which a
+/// bare `Environment::new()` does not.
+///
+/// The kernel's native `Nat.gcd` REDUCER is registered independently of the
+/// declaration, so `Nat.gcd 12 18` used to reduce in an environment that
+/// cannot type it. That only stayed invisible while unification handed the
+/// `rfl` proof the REDUCED spelling: `@Eq.refl Nat 6` names no constant the
+/// environment lacks. Lean assigns a bare metavariable the term AS WRITTEN
+/// (`isDefEqQuickOther` → `processAssignment'`, no `whnf` on that path) and
+/// Clean now does too, so the proof is `@Eq.refl Nat (Nat.gcd 12 18)` and the
+/// constant must be declared — as it is in every file that can write `Nat.gcd`
+/// in the first place.
+fn declare_nat_gcd(env: &mut Environment) {
+    use clean_kernel::env::Declaration;
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    env.add_decl(Declaration::Axiom {
+        name: Name::from_string("Nat.gcd"),
+        level_params: vec![],
+        type_: Expr::pi(
+            BinderInfo::Default,
+            nat.clone(),
+            Expr::pi(BinderInfo::Default, nat.clone(), nat),
+        ),
+    })
+    .expect("Nat.gcd : Nat → Nat → Nat must register");
+}
+
 fn binop_nat(op: &str, a: u64, b: u64) -> Expr {
     Expr::app(
         Expr::app(
@@ -600,30 +637,47 @@ fn test_eval_extended_nested_gcd_mod() {
 }
 
 #[test]
-fn test_tactic_gcd_equality() {
-    // Goal: Nat.gcd 12 18 = 6. Closes via rfl: Nat.gcd is a native kernel
-    // reducer, so the produced Eq.refl proof type-checks.
+fn test_tactic_gcd_axiom_equality_stays_open() {
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // `declare_nat_gcd` declares `Nat.gcd` as an AXIOM, and this used to close
+    // `Nat.gcd 12 18 = 6` because the kernel's gcd fold fired on the name — an
+    // axiom computing, the shape the E4c reproduction turned into `False`. A
+    // native fold now needs a canonical definition, so the goal stays open.
     let mut env = Environment::new();
     env.init_nat().unwrap();
     env.init_eq().unwrap();
+
+    declare_nat_gcd(&mut env);
 
     let goal = nat_eq_goal(binop_nat("Nat.gcd", 12, 18), Expr::nat_lit(6));
     let mut state = ProofState::new(env, goal);
-    eval_norm_num_ext(&mut state).expect("norm_num_ext should close Nat.gcd 12 18 = 6");
-    assert!(state.is_complete());
+    assert!(
+        eval_norm_num_ext(&mut state).is_err(),
+        "an axiom Nat.gcd must not be computed"
+    );
+    assert!(!state.is_complete());
 }
 
 #[test]
-fn test_tactic_gcd_coprime_equality() {
-    // Goal: Nat.gcd 9 28 = 1 (coprime).
+fn test_tactic_gcd_axiom_coprime_equality_stays_open() {
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // `declare_nat_gcd` declares `Nat.gcd` as an AXIOM, and this used to close
+    // `Nat.gcd 9 28 = 1` because the kernel's gcd fold fired on the name — an
+    // axiom computing, the shape the E4c reproduction turned into `False`. A
+    // native fold now needs a canonical definition, so the goal stays open.
     let mut env = Environment::new();
     env.init_nat().unwrap();
     env.init_eq().unwrap();
 
+    declare_nat_gcd(&mut env);
+
     let goal = nat_eq_goal(binop_nat("Nat.gcd", 9, 28), Expr::nat_lit(1));
     let mut state = ProofState::new(env, goal);
-    eval_norm_num_ext(&mut state).expect("norm_num_ext should close Nat.gcd 9 28 = 1");
-    assert!(state.is_complete());
+    assert!(
+        eval_norm_num_ext(&mut state).is_err(),
+        "an axiom Nat.gcd must not be computed"
+    );
+    assert!(!state.is_complete());
 }
 
 #[test]
@@ -1207,8 +1261,9 @@ fn test_int_ground_comparison_proof_is_sorry_free_and_kernel_checks() {
 }
 
 // =========================================================================
-// Ground Nat `<=` / `<` / `>=` comparison close (constructive `Nat.le.step`
-// chain witness).
+// Ground Nat `<=` / `<` / `>=` comparison close (constructive witness; a
+// `Nat.le.step` chain until it became the constant-size
+// `Nat.le_of_ble_eq_true` bridge).
 //
 // Divergence: Lean 4 `norm_num` / `decide` close ground Nat order goals. Clean
 // already closed the `<=` / `<` (and typeclass `>=`) shapes via a sound
@@ -1312,8 +1367,8 @@ fn test_decide_nat_ge_bare_false_rejected() {
 
 #[test]
 fn test_nat_ge_ground_comparison_proof_is_sorry_free_and_kernel_checks() {
-    // SOUNDNESS guard: the witness closing `Nat.ge 5 2` must be a
-    // `Nat.le.refl` / `Nat.le.step` chain — kernel-checkable, AND free of both
+    // SOUNDNESS guard: the witness closing `Nat.ge 5 2` must be the
+    // `Nat.le_of_ble_eq_true` bridge — kernel-checkable, AND free of both
     // `sorryAx` (which the native `Nat.decLe` reducer would otherwise inject
     // via `Decidable.isTrue sorryAx`) and the `trustedAy` SMT axiom.
     fn contains_const(expr: &Expr, name_str: &str) -> bool {
@@ -1339,10 +1394,11 @@ fn test_nat_ge_ground_comparison_proof_is_sorry_free_and_kernel_checks() {
         .closed_proof()
         .expect("a completed proof state must yield a closed proof term");
 
-    // The witness must be built from the Nat.le inductive constructors.
+    // The witness must be the constant-size `Nat.le_of_ble_eq_true` bridge,
+    // never the `Nat.decLe` decidability reducer.
     assert!(
-        contains_const(&proof, "Nat.le.refl") || contains_const(&proof, "Nat.le.step"),
-        "Nat comparison close must use the Nat.le constructors, got {proof:?}"
+        contains_const(&proof, "Nat.le_of_ble_eq_true") && !contains_const(&proof, "Nat.decLe"),
+        "Nat comparison close must use Nat.le_of_ble_eq_true, got {proof:?}"
     );
     assert!(
         !contains_const(&proof, "sorryAx"),
@@ -1382,11 +1438,12 @@ fn test_nat_ge_ground_comparison_proof_is_sorry_free_and_kernel_checks() {
 // `Decidable.isTrue sorryAx`. The goal was either left open or closed with a
 // `sorryAx`-tainted term.
 //
-// Fix: teach `eval_nat_expr` to evaluate `Nat.mod` / `Nat.div` (and the
-// `HMod.hMod` / `Mod.mod` / `HDiv.hDiv` / `Div.div` heterogeneous heads) with
+// Fix: teach `eval_nat_expr` to evaluate `Nat.mod` / `Nat.div` with
 // Lean 4 semantics (`n % 0 = n`, `n / 0 = 0`). The kernel has native
 // `Nat.mod` / `Nat.div` reducers, so the `Nat.le` witness still type-checks:
 // `close_goal` reduces the operand to its literal before checking the chain.
+// Generic projections must first be unfolded with their actual dictionary;
+// the environment-free evaluator does not assign them a built-in meaning.
 // =========================================================================
 
 /// Build `Nat.mod a b` (bare prelude head).
@@ -1499,8 +1556,8 @@ fn test_norm_num_ext_nat_mod_eq_closes() {
 
 #[test]
 fn test_nat_mod_comparison_proof_is_sorry_free_and_kernel_checks() {
-    // SOUNDNESS guard: closing `Nat.le (17 % 5) 4` must use a constructive
-    // `Nat.le.refl` / `Nat.le.step` chain — kernel-checkable, AND free of both
+    // SOUNDNESS guard: closing `Nat.le (17 % 5) 4` must use the constructive
+    // `Nat.le_of_ble_eq_true` bridge — kernel-checkable, AND free of both
     // `sorryAx` (which the native `Nat.decLe` reducer injects via
     // `Decidable.isTrue sorryAx`) and the `trustedAy` SMT axiom. The kernel's
     // native `Nat.mod` reducer collapses the operand to `2` during the recheck.
@@ -1529,8 +1586,8 @@ fn test_nat_mod_comparison_proof_is_sorry_free_and_kernel_checks() {
         .expect("a completed proof state must yield a closed proof term");
 
     assert!(
-        contains_const(&proof, "Nat.le.refl") || contains_const(&proof, "Nat.le.step"),
-        "Nat comparison close must use the Nat.le constructors, got {proof:?}"
+        contains_const(&proof, "Nat.le_of_ble_eq_true") && !contains_const(&proof, "Nat.decLe"),
+        "Nat comparison close must use Nat.le_of_ble_eq_true, got {proof:?}"
     );
     assert!(
         !contains_const(&proof, "sorryAx"),

@@ -1,0 +1,3 @@
+(assume nc (not (= (+ x (+ y x)) (+ x y x))))
+(step s (cl (= (+ x (+ y x)) (+ x y x))) :rule aci_simp)
+(step done (cl) :rule resolution :premises (nc s))

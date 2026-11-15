@@ -17,383 +17,65 @@
 
 use crate::expr::{Expr, ExprKind};
 use crate::level::Level;
-use crate::name::Name;
+use crate::name::{Name, NameInner};
 use hashbrown::HashSet;
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::types::{ConstantInfo, ConstantKind, Declaration};
 use super::{DeclarationVerification, Environment};
 
-/// Lean 4 foundational axioms that are NOT counted as domain-specific trust gaps.
+/// The kernel's canonical foundational axioms, by STRUCTURAL name.
 ///
-/// These are part of the Lean 4 logical foundation and are always accepted.
-/// Any axiom not in this list is considered a domain-specific axiom that represents
-/// an unproved assumption.
+/// An axiom counts as foundational only when it IS the kernel's own
+/// declaration of one of these names: the same name component for component
+/// ([`is_foundational_axiom`], never the printed form — `«Quot.sound»` is one
+/// component and prints exactly like the two-component `Quot.sound`), AND the
+/// exact canonical kind, universe arity and statement
+/// ([`Environment::is_canonical_foundational_axiom`] /
+/// [`is_canonical_foundational_constant`]). Every decision about a live
+/// declaration uses the latter; the name alone is necessary, never
+/// sufficient.
+///
+/// The set is exactly Lean 4's logical foundation (`propext`, `Quot.sound`,
+/// `Classical.choice`) plus the four quotient primitives the kernel installs as
+/// `Axiom`-kind constants (`Quot`, `Quot.mk`, `Quot.lift`, `Quot.ind`) —
+/// precisely the names whose canonical declaration
+/// `canonical_certification_foundation` can state. Any other axiom is a
+/// domain-specific assumption.
+///
+/// Removed 2026-09-28 (the list used to name constants that are NOT kernel
+/// axioms, and a name that is not a kernel axiom is a hole, not a no-op: a user
+/// `axiom proofIrrel : False`, or `axiom «Eq.refl» : False` whose single
+/// component prints as `Eq.refl`, was classified foundational and a proof of
+/// `False` through it passed `clean check`, `clean export-cert` and `clean
+/// kernel cert verify` with nothing disclosed):
+///
+/// - `proofIrrel` — declared nowhere. Proof irrelevance is a definitional rule
+///   of the kernel, and Lean 4 core's `proof_irrel` is a theorem.
+/// - `Eq.refl` — the constructor of `Eq`, never `Axiom`-kind.
+/// - `WellFounded.fix` — a reducible `Definition`
+///   (`algebra_advanced/well_founded.rs`).
+/// - `Char.decEq`, `String.decEq` — kernel-checked `Definition`s
+///   (`algebra_uint_dec_eq_proof.rs`, `algebra_string_dec_eq_proof.rs`).
+///
+/// Earlier removals, for the history the tests still pin: `Eq.symm`,
+/// `Eq.trans`, `Eq.subst` (#3559), `funext` (derived from `Quot.sound`),
+/// `Classical.em` / `Classical.byContradiction` (Diaconescu,
+/// `classical_em_proof.rs`), `instDecidableEqFin`, and every `Rat.*` / `Nat.*`
+/// bitwise / `Fin.*` entry (#3470 and the TCB-shrink tracks) — each is now a
+/// kernel-checked `Definition` or `Theorem`. The trust markers (`sorry`,
+/// `sorryAx`, `trustedArith`, `trustedAy`) are never foundational; they live in
+/// `TRUST_MARKERS` (#3554).
 pub(crate) const FOUNDATIONAL_AXIOMS: &[&str] = &[
-    // Propositional extensionality
+    // Lean 4's logical foundation.
     "propext",
-    // Quotient type axiom
     "Quot.sound",
-    // Classical choice
     "Classical.choice",
-    // Equality. `Eq.refl` is the canonical constructor of the `Eq` inductive
-    // type (`core_eq/recursors.rs` registers it via `Constructor`), so its
-    // `ConstantKind` is `Constructor`, not `Axiom` — whitelisting it here is
-    // harmless but matches historical convention.
-    //
-    // NOTE (#3559): `Eq.symm`, `Eq.trans`, and `Eq.subst` were previously
-    // listed here under the same "Equality axioms" block, but are registered
-    // as `Declaration::Theorem` with genuine kernel-checked proof terms in
-    // `core_eq/basic.rs` (`register_symm`, `register_trans`, `register_subst`
-    // via `decl_emit::theorem`). The BFS in `axiom_deps` short-circuits on
-    // `kind == Axiom`, so the whitelist entries for these names were dead
-    // code that could silently mask a future demotion regression. Removed by
-    // #3559. The disjointness invariant is pinned by
-    // `test_foundational_axioms_disjoint_from_theorems` in
-    // `tests_axiom_audit.rs`.
-    "Eq.refl",
-    // Proof irrelevance
-    "proofIrrel",
-    // NOTE: `funext` was previously listed here as a foundational axiom, but is
-    // now a kernel-checked `Declaration::Theorem` derived from `Quot.sound`
-    // exactly as Lean 4 core derives it (see `Environment::init_funext` /
-    // `funext_proof_value`). Per the #3559 precedent (Eq.symm/Eq.trans/Eq.subst),
-    // a whitelist entry for a `Declaration::Theorem` is dead code — the
-    // `axiom_deps` BFS short-circuits on `kind == Axiom` — and could silently
-    // mask a future demotion regression, so the entry was removed. funext's
-    // transitive axiom closure now reaches `Quot.sound` (still foundational).
-    // The disjointness invariant is pinned by
-    // `test_foundational_axioms_disjoint_from_theorems` and the positive half by
-    // `test_promoted_theorems_are_not_foundational_and_are_theorems`.
-    // Quotient primitives
+    // The kernel's quotient primitives (`crate::quot::init_quot_vals`).
     "Quot",
     "Quot.mk",
-    "Quot.ind",
     "Quot.lift",
-    // Well-founded recursion
-    "WellFounded.fix",
-    // String/char representation axioms.
-    //
-    // `Char.decEq` is NO LONGER an axiom: `Char` is the genuine v4.30 2-field
-    // structure `Char.mk (val : UInt32) (valid : val.isValidChar)` (carrier-
-    // parity P2), so `register_char_dec_eq_proof` (`algebra_uint_dec_eq_proof.rs`)
-    // builds it as an axiom-free, kernel-checked `Definition` — `Char.rec`
-    // destructure both operands, dispatch on `UInt32.decEq` of the `val`s, lift
-    // `isTrue` via `Eq.rec` + proof irrelevance of the `valid` field and discharge
-    // `isFalse` via `congrArg Char.val`. It is absent from the live
-    // `soundness_tcb.json` census. The name is retained in this whitelist only as
-    // a no-op (a constant that is not an axiom is trivially within the
-    // foundational-axiom allowance).
-    "Char.decEq",
-    // `String.decEq` is NO LONGER an axiom: `String.mk : List Char → String` is a
-    // single-field structure wrapping a `List Char`, so the recursive
-    // `(List Char).decEq` decision procedure (`ListChar.decEq`,
-    // `algebra_list_char_dec_eq_proof.rs`: nil/nil → isTrue, nil/cons & cons/nil →
-    // isFalse via `List.noConfusion`, cons/cons → conjoin `Char.decEq` on heads
-    // with the recursive tail decision, lifting through `List.cons` injectivity)
-    // now backs a constructive, kernel-checked `String.decEq` Definition over the
-    // faithful carrier (`algebra_string_dec_eq_proof.rs`): destructure `a`/`b` via
-    // `String.rec`, dispatch on `ListChar.decEq (String.data a)(String.data b)`,
-    // `isTrue` lifts via `congrArg String.mk`, `isFalse` refutes via
-    // `congrArg String.data`. It is absent from the live `soundness_tcb.json`
-    // census. The name is retained in this whitelist only as a no-op (a constant
-    // that is not an axiom is trivially within the foundational-axiom allowance).
-    "String.decEq",
-    // (TCB-shrink: `instDecidableEqFin` ELIMINATED — now a computable, axiom-free
-    // `Declaration::Definition` (`algebra_fin_dec_eq_proof.rs`) deciding
-    // `Eq (Fin n) a b` via `Nat.decEq (Fin.val a)(Fin.val b)` over the faithful
-    // `Fin` carrier: `isTrue` lifts through `Fin.eq_of_val_eq` (struct-eta +
-    // proof-irrelevance of the `isLt` field), `isFalse` refutes via
-    // `congrArg Fin.val`. No longer an axiom, removed from this whitelist.)
-    // Decidable classical.
-    //
-    // DIACONESCU (foundational census −2): `Classical.em` and
-    // `Classical.byContradiction` are NO LONGER axioms. They are now
-    // kernel-CHECKED `Declaration::Theorem`s built in
-    // `classical_em_proof.rs` (Diaconescu's theorem): `em` is proved from
-    // `Classical.choice` + `propext` + `funext`, and `byContradiction` from
-    // `em`. Their transitive axiom closures are `⊆ FOUNDATIONAL_AXIOMS`
-    // (`{propext, funext, Classical.choice}` plus the `Eq`/`Quot`/`Subtype`
-    // recursor primitives), so theorems reaching them stay `Constructive`.
-    // Per the #3559 disjointness rule (whitelist entries for Theorems are
-    // dead code that could silently mask a demotion regression), both names
-    // are removed from this list; `init_classical` registers them via a
-    // guarded swap (theorem-first, axiom-fallback). The
-    // `test_foundational_axioms_disjoint_from_theorems` invariant pins this.
-    // NOTE: `sorry` / `sorryAx` / `trustedArith` / `trustedAy` are NOT
-    // foundational — they live in `TRUST_MARKERS` (see below). A theorem
-    // whose transitive closure reaches a trust marker is NOT
-    // `ProofQuality::Constructive`. Prior to #3554 `sorryAx` was
-    // mis-listed here, which caused the classifier to drop `sorryAx` from
-    // the returned deps set and report sorry-reaching proofs as
-    // constructive. See #3554 + `TRUST_MARKERS` for the fix.
-    // Rat ordering axioms — standard properties of ordered fields.
-    // Lean 4 Mathlib proves these constructively from the field axioms.
-    // Listed as foundational because they are mathematical tautologies
-    // about rational number ordering, not domain-specific assumptions.
-    //
-    // NOTE (#3470 Lane #2/#3): `Rat.le_refl`, `Rat.le_total`,
-    // `Rat.zero_lt_one`, and `Rat.lt_iff_le_not_le` have been GENUINELY
-    // ELIMINATED — they are now kernel-checked `Declaration::Theorem`s
-    // (`algebra_rat_order_proofs.rs::register_rat_order_proofs`) over the
-    // reducible `Rat.le`/`Rat.lt` Int-comparison Definitions:
-    //   - `Rat.le_refl`  := `λ a => @Int.le_refl (cross a a)`  (Constructive)
-    //   - `Rat.le_total` := `λ a b => @Int.le_total (cross a b) (cross b a)`
-    //                       (Constructive)
-    //   - `Rat.zero_lt_one` := `@Int.NonNeg.mk Nat.zero` (Constructive)
-    //   - `Rat.lt_iff_le_not_le` := `λ a b => @Int.lt_iff_le_not_le
-    //       (cross a b) (cross b a)` (AxiomDependent on the still-admitted
-    //       `Int.lt_iff_le_not_le`; no fresh Rat axiom).
-    // Per the #3559 disjointness rule (whitelist entries for Theorems are dead
-    // code that could silently mask a demotion regression), all four entries
-    // have been removed from this whitelist and from `ADMITTED_DOMAIN_AXIOMS`.
-    // The `test_foundational_axioms_disjoint_from_theorems` test in
-    // `tests_axiom_audit.rs` pins this. `Rat.mul_pos` is ALSO genuinely
-    // eliminated (a kernel-checked Theorem reducing to the constructive
-    // `Int.mul_pos` — the denominators drop out because
-    // `Rat.num Rat.zero ≡ Int.zero`), so it is removed too.
-    //
-    // SOUNDNESS FIX: `Rat.le_trans` was previously listed here as an admitted
-    // `Declaration::Axiom`, but it was PROVABLY FALSE under the free-inductive
-    // `Rat.mk : Int -> Nat` carrier (no `denom > 0` invariant — e.g.
-    // `mk 5 1 ≤ mk 0 0 ≤ mk (-5) 1` both hold under naive cross-multiplication
-    // yet `mk 5 1 ≤ mk (-5) 1` is false). `Rat.le` / `Rat.lt` are now defined
-    // over the EFFECTIVE denominator (`Rat.effDenom`, never 0; definitionally
-    // `denom` for well-formed Rats) and `Rat.le_trans` is a GENUINE
-    // kernel-checked `Declaration::Theorem` (see `algebra_rat_le_trans_proof.rs`,
-    // reducing to the constructive `Int.le_cross_trans`). Per the #3559
-    // disjointness rule the entry is removed here AND from
-    // `ADMITTED_DOMAIN_AXIOMS`; `test_foundational_axioms_disjoint_from_theorems`
-    // pins this.
-    //
-    // SOUNDNESS / honesty (Rat.mul_nonneg ELIMINATED): `Rat.mul_nonneg` was
-    // previously admitted here, but it is now a GENUINE kernel-checked
-    // `Declaration::Theorem` (see `algebra_rat_order_proofs.rs::
-    // register_rat_mul_nonneg`) — the exact `Rat.le` analog of the proven
-    // `Rat.mul_pos`. Provable WITHOUT denominator cancellation (and without the
-    // unsound `Rat.mk_eq_mk_of_cross_eq` bridge) because `Rat.num Rat.zero ≡
-    // Int.zero` collapses every `Rat.le Rat.zero _` to an `Int.le Int.zero _`,
-    // which the constructive `Int.mul_nonneg` discharges (with `Int.zero_mul` /
-    // `Int.mul_one` transports). Per the #3559 disjointness rule the entry is
-    // removed here AND from `ADMITTED_DOMAIN_AXIOMS`;
-    // `test_foundational_axioms_disjoint_from_theorems` pins this.
-    //
-    // The remaining three are all PROVABLY FALSE on the zero-denominator free
-    // `Rat.mk : Int → Nat` carrier — they are admitted (unconditional) axioms
-    // that are NOT theorems and CANNOT be proven as stated; they require a
-    // normalized/quotient Rat (denom>0) carrier. OUT OF SCOPE here. Kernel-
-    // confirmed counterexamples are pinned by the regression tests in
-    // `tests_rat_false_add_axioms.rs`:
-    //   - `Rat.le_antisymm`: `le a b ∧ le b a` does not imply syntactic
-    //     `a = b` (e.g. `mk 1 2` vs `mk 2 4` cross-equal but distinct ctors).
-    //   - `Rat.add_le_add_left`: `a=mk 0 2, b=mk 0 1, c=mk 1 0` — `le a b`
-    //     reduces to `Int.le 0 0` (TRUE) but `le (c+a) (c+b)` reduces to
-    //     `Int.le 2 1` (FALSE). `Rat.add`'s denominator `Nat.mul (denom a)
-    //     (denom b)` collapses to 0 for the denom-0 `c`, then `effDenom`
-    //     rescues it to 1 and the bare numerators are compared.
-    //   - `Rat.le_add_of_nonneg_right`: `a=mk 1 1, b=mk 0 0` — `le 0 b`
-    //     reduces to `Int.le 0 0` (TRUE) but `le a (a+b)` reduces to
-    //     `Int.le 1 0` (FALSE), same `Rat.add` denom-collapse mechanism.
-    // Unlike `Rat.le_trans` (false via `Rat.le`, repaired by the effDenom
-    // redefinition of `Rat.le`), these are false via `Rat.add`, and the
-    // analogous effDenom redefinition of `Rat.add` is NOT viable: it would turn
-    // the currently-TRUE theorems `Rat.zero_add` / `Rat.add_zero` FALSE (for a
-    // denom-0 `a`, `0 + a` would become `mk (num a) 1 ≠ mk (num a) 0 = a`).
-    // They stay admitted with this honest FALSE-on-free-carrier classification
-    // until a normalized Rat carrier lands.
-    //
-    // WS-A ATOMIC LIVE SWITCH: `Rat.le_antisymm`, `Rat.add_le_add_left`,
-    // `Rat.le_add_of_nonneg_right` are ELIMINATED — the live `Rat` is now the
-    // quotient carrier `Rat := Quot Rat.Raw.Equiv`, over which they are genuine
-    // kernel-checked `Declaration::Theorem`s (`Constructive`, closure ⊆
-    // FOUNDATIONAL via `Quot.sound`/`propext`). Removed from this list per the
-    // #3559 disjointness rule; theorem-kind is pinned by the payoff tests in
-    // `algebra_rat_quotient.rs` and the flipped `tests_rat_false_add_axioms.rs`.
-    // WS-B: the Rat min/max axioms (`Rat.max` / `Rat.min` / `Rat.max_def` /
-    // `Rat.max_def'` / `Rat.min_def` / `Rat.min_def'`) and the six lattice
-    // characterization lemmas (`Rat.le_max_left` / `Rat.le_max_right` /
-    // `Rat.min_le_left` / `Rat.min_le_right` / `Rat.max_le` / `Rat.le_min`)
-    // were ELIMINATED to kernel-checked constructive Definitions/Theorems over
-    // the quotient carrier (`algebra_rat_minmax_proof.rs`): `Rat.min`/`Rat.max`
-    // are reducible `Declaration::Definition`s (`@Bool.rec _ _ _ (Rat.ble a b)`)
-    // and the ten equations/inequalities are `Constructive`
-    // `Declaration::Theorem`s. Per the #3559 disjointness rule a Theorem name
-    // must NOT appear in this whitelist (pinned by
-    // `test_foundational_axioms_disjoint_from_theorems`), so all 12 have been
-    // removed.
-    // (#3470: `Fin.castSucc` and `Fin.last` were ELIMINATED — they are now
-    // computable `Declaration::Definition`s over `Fin.mk`/`Fin.val`/`Fin.rec`,
-    // not axioms, so they no longer appear in any axiom closure. Removed from
-    // this whitelist. See `nn_verify_fin_sum.rs`.)
-    // Rat commutative-ring axioms (additive monoid). These are the standard
-    // Mathlib abelian-group axioms over `Rat`, structurally identical to the
-    // already-whitelisted `Rat.le_refl` etc.: each is registered with its
-    // canonical Mathlib type signature (e.g. `∀ a b : Rat, a + b = b + a`)
-    // in `crates/clean-kernel/src/env/algebra_field_inst.rs` with no trust
-    // envelope, no `sorry`, and no domain content. Mathlib proves them
-    // constructively from the field axioms; the opaque-axiom form is
-    // exported for ergonomic kernel use. Promoting them unblocks
-    // `Rat.sub_nonneg_of_le`, `Rat.le_of_sub_nonneg`, `Rat.sub_self`,
-    // `NNVerify.add_le_add`, `NNVerify.mul_nonneg_le_left`, and
-    // `NNVerify.mul_nonpos_le_left` (Tier D axiom-reject triage — #3551).
-    // NOTE (#3572 Phase 2): `Rat.add_comm` was previously listed here when
-    // it was a `Declaration::Axiom`. It is now a `Declaration::Theorem`
-    // (see `algebra_rat_add_comm_proof.rs`), with a constructive proof over
-    // `Int.add_comm` + `Nat.mul_comm`. Per the #3559 disjointness rule
-    // (whitelist entries for Theorems are dead code that could silently
-    // mask a demotion regression), the entry has been removed. The
-    // `test_foundational_axioms_disjoint_from_theorems` test in
-    // `tests_axiom_audit.rs` pins this; the theorem-kind is pinned by
-    // `test_rat_add_comm_is_theorem_not_axiom` in the companion test
-    // module `tests_algebra_rat_add_comm.rs`.
-    //
-    // NOTE (#3572 Phase 3): `Rat.add_assoc` was previously listed here when
-    // it was a `Declaration::Axiom`. It is now a `Declaration::Theorem`
-    // (see `algebra_rat_add_assoc_proof.rs`), with a constructive proof
-    // over Int ring-normalization (`Int.right_distrib`, `Int.mul_assoc`,
-    // `Int.mul_comm`, `Int.add_assoc`, `Int.ofNat_mul`) + `Nat.mul_assoc`.
-    // Per the #3559 disjointness rule the whitelist entry has been removed.
-    // The `test_foundational_axioms_disjoint_from_theorems` test in
-    // `tests_axiom_audit.rs` pins this; the theorem-kind is pinned by
-    // `test_rat_add_assoc_is_theorem_not_axiom` in the companion test
-    // module `tests_algebra_rat_add_assoc.rs`.
-    // NOTE (#3581 Phase 2): `Rat.zero_add` and `Rat.add_zero` were previously
-    // listed here as `Declaration::Axiom`. They are now `Declaration::Theorem`
-    // entries (see `algebra_rat_tranche_b_proofs.rs`), with constructive
-    // proofs built from `Int.zero_mul` / `Int.zero_add` / `Int.mul_one` /
-    // `Int.mul_zero` / `Int.add_zero` / `Nat.one_mul` / `Nat.mul_one` +
-    // `congrArg` + `Eq.trans` chains into `Rat.mk`. Per the #3559
-    // disjointness rule, they have been removed from this whitelist. The
-    // `test_foundational_axioms_disjoint_from_theorems` test in
-    // `tests_axiom_audit.rs` pins this.
-    //
-    // WS-A ATOMIC LIVE SWITCH: `Rat.add_left_neg`, `Rat.add_neg_self`,
-    // `Rat.add_right_cancel` are ELIMINATED to genuine quotient
-    // `Declaration::Theorem`s and removed from this list (see the payoff
-    // registration in `algebra_rat_quotient.rs`).
-    // NOTE (#3656 / #3657): `Rat.left_distrib` briefly became a
-    // bridge-backed `Declaration::Theorem`, but #3654 established that the
-    // `Rat.mk_eq_mk_of_cross_eq` bridge is unsound under the current
-    // free-inductive `Rat` carrier. The live initializer now leaves the
-    // bridge unregistered, and `Rat.left_distrib` remains a plain
-    // `Declaration::Axiom` outside `FOUNDATIONAL_AXIOMS` so downstream
-    // theorem closures continue to expose the trust gap directly
-    // (`Rat.mul_sub` should classify as `AxiomDependent` on
-    // `Rat.left_distrib`, not `Constructive`).
-    // NOTE (#3572 Phase 1): `Rat.mul_comm` was previously listed here when
-    // it was a `Declaration::Axiom`. It is now a `Declaration::Theorem`
-    // (see `algebra_rat_mul_comm_proof.rs`), with a constructive proof over
-    // `Int.mul_comm` + `Nat.mul_comm`. Per the #3559 disjointness rule
-    // (whitelist entries for Theorems are dead code that could silently
-    // mask a demotion regression), the entry has been removed. The
-    // `test_foundational_axioms_disjoint_from_theorems` test in
-    // `tests_axiom_audit.rs` pins this.
-    //
-    // NOTE (#3470 Lane #2/#3): `Rat.mul_neg` was previously listed here as a
-    // `Declaration::Axiom`. It is now a `Declaration::Theorem` with a
-    // constructive proof (`congrArg (fun x => Rat.mk x D)` over the symm of
-    // `Int.neg_mul_right`); see
-    // `nn_verify_rat_ordering.rs::register_rat_mul_neg`. Per the #3559
-    // disjointness rule, the entry has been removed.
-    // Rat multiplicative commutative-ring / field axioms. These are the
-    // remaining Rat field axioms registered in
-    // `crates/clean-kernel/src/env/algebra_field_inst.rs` (sites 200-544)
-    // that were NOT already whitelisted under the additive-monoid and
-    // additive-inverse batches above. Each is a standard Mathlib field
-    // axiom (`Rat.one_mul`,
-    // `Rat.mul_one`: multiplicative identity; `Rat.zero_mul`,
-    // `Rat.mul_zero`: zero annihilation; `Rat.right_distrib`:
-    // `(a+b)*c = a*c + b*c`; `Rat.mul_inv_cancel`:
-    // `a ≠ 0 → a * a⁻¹ = 1`; `Rat.inv_zero`: `0⁻¹ = 0` by Mathlib
-    // convention). Registered as plain `Declaration::Axiom` with
-    // canonical type signatures — no trust envelope, no `sorry`, no
-    // domain content. Mathlib proves them constructively from the
-    // Rat quotient carrier `Rat := Int × Nat* / ≈`; the opaque-axiom
-    // form is exported for ergonomic kernel use until the constructive
-    // carrier proofs land (tracker: epic #3470). Promoting them
-    // completes the Rat field axiom tranche (#3555) and unblocks
-    // downstream Tier A Rat algebra lemmas that compose through
-    // multiplication, distributivity, or inversion.
-    // NOTE (Part of #3582, Tranche C Phase 3): `Rat.mul_assoc` was previously
-    // listed here when it was a `Declaration::Axiom`. It is now a
-    // `Declaration::Theorem` (see `algebra_rat_mul_assoc_proof.rs`), with a
-    // constructive proof over `Int.mul_assoc` + `Nat.mul_assoc`. Per the
-    // #3559 disjointness rule, the entry has been removed. The
-    // `test_foundational_axioms_disjoint_from_theorems` test in
-    // `tests_axiom_audit.rs` pins this; the theorem-kind is pinned by
-    // `test_rat_mul_assoc_is_theorem_not_axiom` in the companion test
-    // module `tests_algebra_rat_mul_assoc.rs`.
-    // NOTE (#3581 Phase 2): `Rat.one_mul` and `Rat.mul_one` were previously
-    // listed here as `Declaration::Axiom`. They are now `Declaration::Theorem`
-    // entries (see `algebra_rat_tranche_b_proofs.rs`), with constructive
-    // proofs built from `Int.one_mul` / `Int.mul_one` + `Nat.one_mul` /
-    // `Nat.mul_one` chained via `congrArg` + `Eq.trans` into `Rat.mk`.
-    // Per the #3559 disjointness rule, they have been removed from this
-    // whitelist. #3656 rolls `Rat.zero_mul` and `Rat.mul_zero` back from the
-    // unsound bridge-backed theorem experiment to their prior
-    // `Declaration::Axiom` status, so both names re-enter this whitelist.
-    //
-    // WS-A ATOMIC LIVE SWITCH: `Rat.zero_mul`, `Rat.mul_zero`,
-    // `Rat.right_distrib`, `Rat.mul_inv_cancel` (and `Rat.left_distrib`) are
-    // ELIMINATED to genuine quotient `Declaration::Theorem`s (`Constructive`),
-    // so they are removed from this list. The quotient identifies equivalent
-    // representatives, making the structural-equality claims TRUE.
-    // NOTE (#3581 Phase 1): `Rat.inv_zero` was previously listed here as a
-    // `Declaration::Axiom`. It is now a `Declaration::Theorem` with a
-    // genuine `Eq.refl`-based proof (see `algebra_rat_tranche_b_proofs.rs`).
-    // Per the #3559 disjointness rule, the whitelist entry has been
-    // removed. The `test_foundational_axioms_disjoint_from_theorems` test
-    // in `tests_axiom_audit.rs` pins this.
-    // NOTE (#3559): `Rat.add_le_add` and `Rat.neg_le_neg` were previously
-    // listed here under the same batch, but have since been promoted to
-    // `Declaration::Theorem` with genuine kernel-checked proof terms in
-    // `nn_verify_interval_arith_proofs.rs::register_rat_add_le_add`
-    // (#3537) and `::register_rat_neg_le_neg` (#3538). The BFS in
-    // `axiom_deps` short-circuits on `kind == Axiom`, so the whitelist
-    // entries for these names were dead code that could silently mask a
-    // future demotion regression. Removed by #3559. The disjointness
-    // invariant between FOUNDATIONAL_AXIOMS and registered Theorems is
-    // pinned by `test_foundational_axioms_disjoint_from_theorems` in
-    // `tests_axiom_audit.rs`.
-    //
-    // NOTE (#3599): `Nat.le_refl` was previously listed here as a
-    // `Declaration::Axiom`. It is now registered as a
-    // `Declaration::Theorem` with a constructive proof term
-    // `fun n => @Nat.le.refl n` in
-    // `nat_top_level_ordering_proof.rs::register_nat_le_refl_theorem`.
-    // Per the #3559 disjointness rule, the whitelist entry has been
-    // removed; the disjointness invariant is pinned by
-    // `test_foundational_axioms_disjoint_from_theorems`.
-    // Nat bitwise primitives (Tier D, #3548). Lean 4 itself axiomatizes
-    // these as kernel-level bitwise operations; they cannot be defined
-    // via `Nat.rec` alone because arbitrary-precision bitwise operations
-    // require access to the underlying big-integer representation. Lean 4
-    // / Mathlib compile them to native `UInt`/`BigInt` ops at runtime and
-    // treat them as opaque primitives for kernel reasoning. Registered as
-    // plain `Declaration::Axiom` in
-    // `crates/clean-kernel/src/env/data_types_nat.rs:556-584` with the
-    // canonical Lean 4 signatures:
-    //   `Nat.{land,lor,xor,shiftLeft,shiftRight} : Nat → Nat → Nat`
-    //   `Nat.testBit : Nat → Nat → Bool`
-    // Computation is handled by `init_arith_native_reducers` (see #3396).
-    // No trust envelope, no `sorry`, no mathematical content beyond the
-    // Lean 4 primitive — requiring a kernel proof is a category error.
-    // Per the 2026-04-19 Tier D triage design
-    // (`designs/2026-04-19-foundational-axiom-whitelist-expansion.md` §2,
-    // Category 2), these axioms were foundational-by-definition.
-    // (Track II: `Nat.land`/`Nat.lor`/`Nat.xor` ELIMINATED — discharged to real
-    // reducible Definitions `Nat.bitwise and/or/xor` (a total fuel fold over
-    // `Nat.div2`/`Nat.testBit`), with the bit-extension theorem
-    // `Nat.testBit_bitwise`. See `algebra_nat_bitwise_def.rs`. Removed.)
-    // (#3470: `Nat.shiftLeft` ELIMINATED — now a computable Definition via
-    // `Nat.rec` + `Nat.mul` (= multiply by 2^n), not an axiom. Removed.)
-    // (TCB-shrink Tier-0: `Nat.shiftRight` ELIMINATED — now a computable
-    // Definition `fun m n => Nat.iterDiv2 n m` (= m / 2^n) via
-    // `algebra_nat_bitwise_def.rs::register_nat_shiftright_def`, not an axiom.
-    // Removed.)
-    // (Track FF step 1: `Nat.testBit` ELIMINATED — now a computable Definition
-    // (parity of the i-fold `Nat.div2` of n) via `algebra_nat_testbit_def.rs`,
-    // not an axiom. Removed.)
+    "Quot.ind",
 ];
 
 /// Admitted DOMAIN axioms — mathematically true (provable in Lean 4 Mathlib)
@@ -464,37 +146,56 @@ pub(crate) const ADMITTED_DOMAIN_AXIOMS: &[&str] = &[
     // discharged to a kernel-checked Definition or Theorem.)
 ];
 
-/// Returns true if the given name is a genuine Lean 4 *logical-foundation*
-/// axiom.
+/// Whether `name` is, component for component, the dotted spelling `dotted`:
+/// every component a STRING component equal to the matching `.`-separated
+/// piece, and no more components than pieces.
 ///
-/// Genuine foundations (`propext`, `Quot.sound`, `Classical.choice`,
-/// `Eq.refl`, `funext`, `proofIrrel`, the `Quot` primitives,
-/// `WellFounded.fix`, and the primitive `*.decEq` representation axioms) are
-/// part of the Lean 4 logical foundation and are accepted as "constructive".
-/// (`Classical.em` / `Classical.byContradiction` are no longer in this set:
-/// Diaconescu's theorem demoted them to kernel-checked Theorems whose closures
-/// are `⊆ FOUNDATIONAL_AXIOMS` — see `classical_em_proof.rs`.) Admitted DOMAIN
-/// axioms
-/// (`ADMITTED_DOMAIN_AXIOMS`: the `Rat.*` ordered-field / lattice, `Fin.*`,
-/// and `Nat.*` bitwise facts) are NOT foundational — they are unproved-in-Clean
-/// domain assumptions, so a theorem reaching one classifies as `AxiomDependent`.
-/// Any other axiom is also a domain-specific trust gap.
+/// This is the structural name test every foundational / trust-marker
+/// classification uses. It never renders `name`, so `«Quot.sound»` (one
+/// component, `Str(anon, "Quot.sound")`) is NOT `Quot.sound`
+/// (`Str(Str(anon, "Quot"), "sound")`) even though both print `Quot.sound`,
+/// and a numeric component never equals a digit-spelled string piece.
+#[must_use]
+pub(crate) fn name_has_components(name: &Name, dotted: &str) -> bool {
+    let mut current = name;
+    for piece in dotted.rsplit('.') {
+        match current.inner() {
+            NameInner::Str(parent, component) => {
+                let component: &str = component.as_ref();
+                if component != piece {
+                    return false;
+                }
+                current = parent;
+            }
+            NameInner::Anon | NameInner::Num(..) => return false,
+        }
+    }
+    current.is_anon()
+}
+
+/// Returns true if `name` is STRUCTURALLY one of the kernel's canonical
+/// foundational axiom names (`FOUNDATIONAL_AXIOMS`: `propext`, `Quot.sound`,
+/// `Classical.choice`, `Quot`, `Quot.mk`, `Quot.lift`, `Quot.ind`).
 ///
-/// Public so downstream pipelines (e.g. `mathverse_shard build-native`) can
-/// delegate foundational classification to this single source of truth
-/// instead of re-implementing the whitelist.
+/// **The name alone is necessary, never sufficient.** A declaration under one
+/// of these names is the kernel's foundation only if it is the canonical
+/// declaration — `Axiom` kind, value-less, exact universe arity and exact
+/// statement. Every decision about a LIVE declaration must use
+/// [`Environment::is_canonical_foundational_axiom`] (or
+/// [`is_canonical_foundational_constant`] when only the `ConstantInfo` is at
+/// hand); this name-level test is for inputs that carry no declaration at all
+/// (a name list printed by an external Lean toolchain, say), where it is the
+/// most that can be checked.
 ///
-/// **Soundness guard (#3554):** Trust markers (`sorry`, `sorryAx`,
-/// `trustedArith`, `trustedAy`) are incomplete-proof / decision-procedure
-/// envelopes, NOT foundational axioms. Even if a future edit accidentally
-/// re-adds one of them to `FOUNDATIONAL_AXIOMS`, this function short-
-/// circuits and returns `false` for every trust-marker name. This
-/// belt-and-suspenders guard prevents the pre-#3554 classifier bug (where
-/// `sorryAx` was whitelisted as foundational, so theorems transitively
-/// reaching `sorry` were reported as `ProofQuality::Constructive`) from
-/// ever reappearing via a whitelist regression. The disjointness
-/// invariant is additionally pinned by
-/// `test_trust_markers_are_disjoint_from_foundational` in
+/// Structural, never by printed form (`name_has_components`): the single
+/// component `«Quot.sound»` prints `Quot.sound` and is NOT foundational.
+/// Before 2026-09-28 this compared `name.to_string()` against a list that also
+/// named constants that are not kernel axioms at all (`proofIrrel`, `Eq.refl`,
+/// …), and a user axiom under either shape was classified foundational.
+///
+/// **Soundness guard (#3554):** trust markers (`sorry`, `sorryAx`,
+/// `trustedArith`, `trustedAy`) are never foundational, whatever the list
+/// says; pinned by `test_trust_markers_are_disjoint_from_foundational` in
 /// `tests_axiom_audit.rs`.
 #[must_use]
 pub fn is_foundational_axiom(name: &Name) -> bool {
@@ -504,16 +205,62 @@ pub fn is_foundational_axiom(name: &Name) -> bool {
     if is_trust_marker(name) {
         return false;
     }
-    let s = name.to_string();
-    // Admitted domain axioms (Rat ordered-field/lattice, Fin, Nat bitwise) are
-    // mathematically true but unproved in THIS kernel, so they are NOT
-    // foundational — a theorem reaching one is honestly `AxiomDependent`, not
-    // `Constructive`. (Integrity audit 2026-06; reverses the #3490/#3543
-    // ergonomic-whitelist overstatement.)
-    if ADMITTED_DOMAIN_AXIOMS.iter().any(|&d| s == d) {
+    // Admitted domain axioms are mathematically true but unproved in THIS
+    // kernel, so they are NOT foundational (integrity audit 2026-06).
+    if ADMITTED_DOMAIN_AXIOMS
+        .iter()
+        .any(|d| name_has_components(name, d))
+    {
         return false;
     }
-    FOUNDATIONAL_AXIOMS.iter().any(|&f| s == f)
+    FOUNDATIONAL_AXIOMS
+        .iter()
+        .any(|f| name_has_components(name, f))
+}
+
+/// Whether the stored constant `info` IS the kernel's canonical foundational
+/// axiom of its name: structurally a `FOUNDATIONAL_AXIOMS` name
+/// ([`is_foundational_axiom`]) AND `Axiom` kind, value-less, with the exact
+/// canonical universe arity and statement (universe parameter NAMES may be
+/// alpha-renamed). A user `axiom propext : False` in an environment without
+/// the kernel's own `propext` is structurally named right and is still NOT
+/// foundational.
+///
+/// This checks the declaration's content only. Provenance (how the
+/// declaration entered the environment) is [`Environment::audit_certification`]'s
+/// and [`Environment::validate_canonical_ambient_axiom`]'s concern.
+#[must_use]
+pub fn is_canonical_foundational_constant(info: &ConstantInfo) -> bool {
+    is_foundational_axiom(&info.name) && canonical_foundation_matches(info).is_ok()
+}
+
+/// Whether `name` PRINTS exactly like a foundational axiom or a trust marker
+/// (`name.to_string()` is one of `FOUNDATIONAL_AXIOMS` / `TRUST_MARKERS`),
+/// whatever its components.
+///
+/// The one sanctioned printed-form comparison: it exists to DETECT a
+/// spoof, never to grant anything. A name for which this holds but that is not
+/// the kernel's own structural name (`«Quot.sound»`, `«Classical.choice»`)
+/// is indistinguishable from the foundation in every rendered report, so the
+/// elaborator refuses to declare it, certification audits flag it
+/// (`CertificationIssue::NonCanonicalFoundation`) and bundle verification
+/// fails on it.
+#[must_use]
+pub fn prints_as_ambient_axiom(name: &Name) -> bool {
+    let printed = name.to_string();
+    FOUNDATIONAL_AXIOMS
+        .iter()
+        .chain(TRUST_MARKERS)
+        .any(|reserved| printed == *reserved)
+}
+
+/// Whether `name` collides with a foundational axiom or a trust marker —
+/// structurally ([`is_foundational_axiom`] / [`is_trust_marker`]) or by
+/// printed form ([`prints_as_ambient_axiom`]). No user declaration may take
+/// such a name: the kernel's own declaration is the only thing it may denote.
+#[must_use]
+pub fn is_reserved_ambient_axiom_name(name: &Name) -> bool {
+    is_foundational_axiom(name) || is_trust_marker(name) || prints_as_ambient_axiom(name)
 }
 
 /// Trust markers — names whose transitive presence disqualifies a theorem
@@ -541,6 +288,10 @@ const TRUST_MARKERS: &[&str] = &["sorry", "sorryAx", "trustedArith", "trustedAy"
 /// construction — reaching them in the transitive closure should
 /// disqualify `ProofQuality::Constructive`.
 ///
+/// Structural (`name_has_components`): the markers are single dot-free
+/// components, so this agrees with a printed-form comparison on every name,
+/// but it never renders the name.
+///
 /// Public so downstream pipelines (axiom-audit, mathverse-native shard
 /// builder, gamma-crown reports) can distinguish "reached a trust
 /// envelope" from "depends on a domain-specific axiom" without
@@ -550,8 +301,215 @@ const TRUST_MARKERS: &[&str] = &["sorry", "sorryAx", "trustedArith", "trustedAy"
 /// out of `FOUNDATIONAL_AXIOMS`.
 #[must_use]
 pub fn is_trust_marker(name: &Name) -> bool {
-    let s = name.to_string();
-    TRUST_MARKERS.iter().any(|&m| s == m)
+    TRUST_MARKERS.iter().any(|m| name_has_components(name, m))
+}
+
+/// Memoised assumption closure: for a declaration (or a bare term), every
+/// axiom and every trust marker in its transitive dependency closure — the
+/// assumptions a passing verdict silently rests on — with DOMAIN axioms
+/// (neither foundational nor a trust marker) and TRUST MARKERS (`sorry`,
+/// `sorryAx`, `trustedArith`, `trustedAy`) as the two projections checkers ask
+/// for.
+///
+/// Exists so a checker can DISCLOSE the domain axioms per credited
+/// declaration. Measured in the round-22 verification: `axiom bogus : 1 = 2`
+/// then `theorem bad : 1 = 2 := bogus` passed `clean check` and `clean project
+/// check` (`2 passed`, exit 0) and neither report said the pass rests on an
+/// assumption. [`Environment::axiom_deps`] answers the same question but
+/// re-walks the whole closure on every call; a checker asks it once per
+/// declaration, so this caches each constant's closure for the run.
+///
+/// It is ALSO the one source of a checker's "uses sorry" verdict
+/// ([`DomainAxiomClosure::trust_markers_of_name`]): a declaration uses sorry
+/// iff `sorryAx` (or the legacy `sorry`) is in its constant closure, in ANY
+/// position — any arguments, partially applied, under a binder, behind a
+/// definition alias, in an instance, in a type. A syntactic recognizer that
+/// matched `sorryAx` only with a literal Bool flag let `theorem bad : False :=
+/// @sorryAx False (!true)` through the library check API with `sorry_axioms:
+/// 0` (2026-09-28).
+///
+/// Same edge set as [`Environment::axiom_deps`] (`collect_const_refs`, with
+/// the projection structure-name arm). A constant on a dependency cycle
+/// (which a well-formed environment does not have) is closed over what its
+/// cycle-free part reaches. A trust marker is recognised by NAME wherever it
+/// is reached — declared as an axiom or not, present in the environment or
+/// not — so no environment shape can hide one.
+///
+/// Memo validity: a closure that reached a constant ABSENT from the
+/// environment is never memoised (the absent constant may be declared later,
+/// and its closure would then be stale), so the cache stays exact while the
+/// environment only grows. A caller that removes or REPLACES constants must
+/// start a fresh closure.
+#[derive(Debug, Default)]
+pub struct DomainAxiomClosure {
+    /// Every axiom and trust-marker name in each constant's closure.
+    memo: std::collections::HashMap<Name, std::sync::Arc<BTreeSet<Name>>>,
+    /// The domain-axiom projection of `memo`, derived on demand.
+    domain_memo: std::collections::HashMap<Name, std::sync::Arc<BTreeSet<Name>>>,
+}
+
+impl DomainAxiomClosure {
+    /// An empty cache.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// A DOMAIN axiom: neither a trust marker nor the kernel's canonical
+    /// foundational declaration of its name. The foundational half reads the
+    /// live declaration ([`Environment::is_canonical_foundational_axiom`]), so
+    /// a user axiom that only shares — or only prints like — a foundational
+    /// name is disclosed, never silently classified away.
+    fn is_domain_axiom(env: &Environment, name: &Name) -> bool {
+        !is_trust_marker(name) && !env.is_canonical_foundational_axiom(name)
+    }
+
+    /// Every axiom and trust marker in the closure of `name`, INCLUDING `name`
+    /// itself when it is one. For a name absent from the environment the
+    /// answer is the name itself when it is a trust marker, else empty.
+    pub fn assumptions_of_name(
+        &mut self,
+        env: &Environment,
+        name: &Name,
+    ) -> std::sync::Arc<BTreeSet<Name>> {
+        if let Some(done) = self.memo.get(name) {
+            return done.clone();
+        }
+        // Iterative post-order: a node is closed once all of its references
+        // are. `open` guards against cycles; a closure that reached an absent
+        // constant is `incomplete` and is returned but never memoised.
+        let mut open: HashSet<Name> = HashSet::new();
+        let mut incomplete: HashSet<Name> = HashSet::new();
+        let mut scratch: std::collections::HashMap<Name, std::sync::Arc<BTreeSet<Name>>> =
+            std::collections::HashMap::new();
+        let mut stack: Vec<(Name, bool)> = vec![(name.clone(), false)];
+        while let Some((current, expanded)) = stack.pop() {
+            if self.memo.contains_key(&current) || scratch.contains_key(&current) {
+                continue;
+            }
+            let Some(info) = env.get_const(&current) else {
+                let mut own = BTreeSet::new();
+                if is_trust_marker(&current) {
+                    own.insert(current.clone());
+                }
+                incomplete.insert(current.clone());
+                scratch.insert(current, std::sync::Arc::new(own));
+                continue;
+            };
+            let mut refs = HashSet::new();
+            collect_const_refs(&info.type_, &mut refs);
+            if let Some(value) = &info.value {
+                collect_const_refs(value, &mut refs);
+            }
+            if expanded {
+                let mut closure = BTreeSet::new();
+                if info.kind == ConstantKind::Axiom || is_trust_marker(&current) {
+                    closure.insert(current.clone());
+                }
+                let mut is_incomplete = false;
+                for r in &refs {
+                    if let Some(sub) = self.memo.get(r).or_else(|| scratch.get(r)) {
+                        closure.extend(sub.iter().cloned());
+                    }
+                    // An absent reference, or one still OPEN (a dependency
+                    // cycle, closed over its cycle-free part only), leaves
+                    // this closure possibly partial: answer with it, never
+                    // memoise it.
+                    is_incomplete |= incomplete.contains(r) || (*r != current && open.contains(r));
+                }
+                open.remove(&current);
+                let closure = std::sync::Arc::new(closure);
+                if is_incomplete {
+                    incomplete.insert(current.clone());
+                    scratch.insert(current, closure);
+                } else {
+                    self.memo.insert(current, closure);
+                }
+            } else {
+                if !open.insert(current.clone()) {
+                    continue;
+                }
+                stack.push((current, true));
+                for r in refs {
+                    if !self.memo.contains_key(&r)
+                        && !scratch.contains_key(&r)
+                        && !open.contains(&r)
+                    {
+                        stack.push((r, false));
+                    }
+                }
+            }
+        }
+        self.memo
+            .get(name)
+            .or_else(|| scratch.get(name))
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Domain axioms in the closure of `name`, INCLUDING `name` itself when it
+    /// is one. Empty for an unknown name.
+    pub fn of_name(&mut self, env: &Environment, name: &Name) -> std::sync::Arc<BTreeSet<Name>> {
+        if let Some(done) = self.domain_memo.get(name) {
+            return done.clone();
+        }
+        let memoised_before = self.memo.contains_key(name);
+        let all = self.assumptions_of_name(env, name);
+        let domain: BTreeSet<Name> = all
+            .iter()
+            .filter(|n| Self::is_domain_axiom(env, n))
+            .cloned()
+            .collect();
+        let domain = std::sync::Arc::new(domain);
+        // Only a memoised (complete) closure may seed the projection's memo.
+        if memoised_before || self.memo.contains_key(name) {
+            self.domain_memo.insert(name.clone(), domain.clone());
+        }
+        domain
+    }
+
+    /// Trust markers (`sorry`, `sorryAx`, `trustedArith`, `trustedAy`) in the
+    /// closure of `name`, including `name` itself when it is one.
+    pub fn trust_markers_of_name(&mut self, env: &Environment, name: &Name) -> BTreeSet<Name> {
+        self.assumptions_of_name(env, name)
+            .iter()
+            .filter(|n| is_trust_marker(n))
+            .cloned()
+            .collect()
+    }
+
+    /// Domain axioms in the closure of a bare term (an `example`, which is
+    /// never registered and so has no name).
+    pub fn of_expr(&mut self, env: &Environment, expr: &Expr) -> BTreeSet<Name> {
+        let mut refs = HashSet::new();
+        collect_const_refs(expr, &mut refs);
+        let mut out = BTreeSet::new();
+        for r in refs {
+            out.extend(self.of_name(env, &r).iter().cloned());
+        }
+        out
+    }
+
+    /// Trust markers in the closure of a bare term: every constant the term
+    /// mentions, closed transitively. Any occurrence of a marker counts,
+    /// whatever its arguments.
+    pub fn trust_markers_of_expr(&mut self, env: &Environment, expr: &Expr) -> BTreeSet<Name> {
+        let mut refs = HashSet::new();
+        collect_const_refs(expr, &mut refs);
+        let mut out = BTreeSet::new();
+        for r in refs {
+            out.extend(self.trust_markers_of_name(env, &r));
+        }
+        out
+    }
+}
+
+/// Whether `name` is a SORRY trust marker (`sorry` or `sorryAx`) — the subset
+/// of [`is_trust_marker`] that means "incomplete proof", as opposed to the
+/// solver-bridge markers `trustedArith` / `trustedAy`.
+#[must_use]
+pub fn is_sorry_marker(name: &Name) -> bool {
+    name_has_components(name, "sorry") || name_has_components(name, "sorryAx")
 }
 
 /// Classification of proof quality for a declaration.
@@ -707,11 +665,44 @@ impl CertificationAudit {
     }
 }
 
+/// Charged work for one checked scoped declaration. Values are cumulative
+/// ambient counts, never independently reset fragment allowances.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScopedDeclarationWork {
+    pub id: crate::expr::FVarId,
+    pub before: u64,
+    pub after_type: u64,
+    pub after_value: Option<u64>,
+    pub installed: bool,
+}
+
+/// Observations of a complete scoped replay. A zero ambient limit means the
+/// caller did not enable that meter; zero work is then not a measurement.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ScopedAuditWork {
+    pub ambient_limit: u64,
+    pub reference_visits: usize,
+    pub declarations: Vec<ScopedDeclarationWork>,
+    pub after_declarations: Option<u64>,
+    pub after_external_type: Option<u64>,
+    pub matched_claim_bindings: usize,
+    pub inlined_claim_lets: usize,
+    pub after_parameters: Option<u64>,
+    pub after_claim: Option<u64>,
+    pub after_body: Option<u64>,
+    pub after_dependencies: Option<u64>,
+    pub total: u64,
+}
+
 /// Collect all `Expr::Const` names referenced in an expression tree.
 ///
 /// Walks the expression recursively, collecting every `ExprKind::Const` name.
 /// Uses a visited set to avoid reprocessing shared sub-expressions.
-fn collect_const_refs(expr: &Expr, out: &mut HashSet<Name>) {
+///
+/// `pub(super)` so the closure digest (`closure_digest.rs`, WS6.7) follows the
+/// SAME reference walk as the axiom audit rather than a re-implementation that
+/// could miss an arm.
+pub(super) fn collect_const_refs(expr: &Expr, out: &mut HashSet<Name>) {
     // Use an explicit stack to avoid deep recursion on large expressions.
     let mut stack: Vec<&Expr> = vec![expr];
     // Expressions are immutable DAGs.  Pointer identity is therefore a safe
@@ -916,37 +907,61 @@ pub enum CanonicalAmbientAxiomKind {
 /// `propext`, `Quot.sound`, and `Classical.choice`; the other four returned
 /// objects are Clean's exact quotient kernel primitives, represented as
 /// `Axiom`-kind constants but not additional logical assumptions.
-fn canonical_certification_foundation(name: &Name) -> Option<(Vec<Name>, Expr)> {
-    match name.to_string().as_str() {
-        "propext" => Some((Vec::new(), canonical_propext_type())),
-        "Classical.choice" => {
-            let u = Name::from_string("u");
-            Some((vec![u.clone()], canonical_choice_type(&u)))
-        }
-        _ => crate::quot::init_quot_vals()
+///
+/// Keyed STRUCTURALLY (`name_has_components` / `Name` equality), never by the
+/// printed form: `«Classical.choice»` has no canonical declaration.
+pub(crate) fn canonical_certification_foundation(name: &Name) -> Option<(Vec<Name>, Expr)> {
+    if name_has_components(name, "propext") {
+        Some((Vec::new(), canonical_propext_type()))
+    } else if name_has_components(name, "Classical.choice") {
+        let u = Name::from_string("u");
+        Some((vec![u.clone()], canonical_choice_type(&u)))
+    } else if crate::quot::is_quot_name(name) {
+        crate::quot::init_quot_vals()
             .into_iter()
             .find(|value| value.name == *name)
-            .map(|value| (value.level_params, value.type_)),
+            .map(|value| (value.level_params, value.type_))
+    } else {
+        None
     }
+}
+
+/// The kernel's canonical declaration of a foundational axiom name — `Axiom`
+/// kind, exact universe parameters and statement — or `None` when `name` is
+/// not (structurally) one of `FOUNDATIONAL_AXIOMS`. For fixtures and tools that
+/// must install the foundation itself rather than a stand-in: a stand-in
+/// (`propext : Prop`) is, correctly, not foundational.
+#[must_use]
+pub fn canonical_foundation_declaration(name: &Name) -> Option<Declaration> {
+    let (level_params, type_) = canonical_certification_foundation(name)?;
+    Some(Declaration::Axiom {
+        name: name.clone(),
+        level_params,
+        type_,
+    })
 }
 
 fn canonical_trust_marker(name: &Name) -> Option<(Vec<Name>, Expr)> {
     let u = Name::from_string("u");
     let sort_u = Expr::sort(Level::param(u.clone()));
-    let type_ = match name.to_string().as_str() {
-        "sorry" | "trustedArith" | "trustedAy" => {
-            Expr::pi(crate::expr::BinderInfo::Implicit, sort_u, Expr::bvar(0))
-        }
-        "sorryAx" => Expr::pi(
-            crate::expr::BinderInfo::Implicit,
+    // Structural, as every marker test is (`name_has_components`).
+    let type_ = if ["sorry", "trustedArith", "trustedAy"]
+        .iter()
+        .any(|marker| name_has_components(name, marker))
+    {
+        Expr::pi(crate::expr::BinderInfo::Implicit, sort_u, Expr::bvar(0))
+    } else if name_has_components(name, "sorryAx") {
+        Expr::pi(
+            crate::expr::BinderInfo::Default,
             sort_u,
             Expr::pi(
                 crate::expr::BinderInfo::Default,
                 Expr::const_(Name::from_string("Bool"), vec![]),
                 Expr::bvar(1),
             ),
-        ),
-        _ => return None,
+        )
+    } else {
+        return None;
     };
     Some((vec![u], type_))
 }
@@ -1057,6 +1072,61 @@ fn cycle_candidates(graph: &BTreeMap<Name, BTreeSet<Name>>) -> Vec<Name> {
 }
 
 impl Environment {
+    /// Whether the live declaration of `name` IS the kernel's canonical
+    /// foundational axiom: structurally a foundational name, and the stored
+    /// constant is `Axiom` kind, value-less, with the exact canonical universe
+    /// arity and statement ([`is_canonical_foundational_constant`]).
+    ///
+    /// This — never a name comparison — is what every classifier that drops an
+    /// axiom from a disclosed closure uses ([`Self::axiom_deps`],
+    /// [`DomainAxiomClosure`], [`Self::soundness_report`]). An absent name is
+    /// not foundational.
+    #[must_use]
+    pub fn is_canonical_foundational_axiom(&self, name: &Name) -> bool {
+        is_foundational_axiom(name)
+            && self
+                .get_const(name)
+                .is_some_and(is_canonical_foundational_constant)
+    }
+
+    /// Every declaration in this environment that uses a reserved ambient
+    /// name — a foundational axiom's or a trust marker's, structurally or by
+    /// printed form — WITHOUT being the kernel's canonical declaration of it,
+    /// each with the reason. Sorted by printed name.
+    ///
+    /// A clean environment answers empty: the kernel's own `propext`, `Quot*`,
+    /// `Classical.choice` and trust markers are canonical. A non-empty answer
+    /// means some declaration is indistinguishable from the kernel's in every
+    /// rendered report (`«Quot.sound»`), or holds the kernel's name with other
+    /// content (`axiom propext : False` where the canonical one is absent), and
+    /// nothing verified against this environment may be credited. Content only:
+    /// provenance is [`Self::audit_certification`]'s concern.
+    #[must_use]
+    pub fn non_canonical_ambient_declarations(&self) -> Vec<(Name, String)> {
+        let mut out: Vec<(Name, String)> = self
+            .constants()
+            .filter(|info| is_reserved_ambient_axiom_name(&info.name))
+            .filter_map(|info| {
+                let verdict = match canonical_ambient_axiom_kind(&info.name) {
+                    Some(CanonicalAmbientAxiomKind::CertificationFoundation) => {
+                        canonical_foundation_matches(info)
+                    }
+                    Some(CanonicalAmbientAxiomKind::TrustMarker) => {
+                        canonical_trust_marker_matches(info)
+                    }
+                    None => Err(
+                        "name prints as a kernel-owned axiom but is a different name \
+                         (its components differ)"
+                            .to_string(),
+                    ),
+                };
+                verdict.err().map(|detail| (info.name.clone(), detail))
+            })
+            .collect();
+        out.sort_by_key(|(name, _)| name.to_string());
+        out
+    }
+
     /// Validate one kernel-owned ambient axiom by its complete live payload.
     ///
     /// Acceptance requires all of the following:
@@ -1119,8 +1189,31 @@ impl Environment {
             type_: info.type_.clone(),
         };
         self.check_decl_readonly_strict(&declaration)
-            .map_err(|error| format!("strict declaration recheck failed for {name}: {error}"))?;
+            .map_err(|error| {
+                bounded_diagnostic(format_args!(
+                    "strict declaration recheck failed for {name}: {error:?}"
+                ))
+            })?;
         Ok(kind)
+    }
+
+    /// Build the strict checker for the root judgment using the same immutable
+    /// environment resource options as the dependency declaration rechecks.
+    fn certification_root_type_checker(&self) -> crate::tc::TypeChecker<'_> {
+        let mut tc = crate::tc::TypeChecker::new(self);
+        tc.set_allow_unsafe(false);
+        tc.set_allow_partial(false);
+        if let Some(Some(value)) = self.options.get("maxHeartbeats") {
+            if let Ok(limit) = value.parse::<u32>() {
+                tc.set_heartbeat_limit(limit);
+            }
+        }
+        if let Some(Some(value)) = self.options.get("tcMaxCacheEntries") {
+            if let Ok(max) = value.parse::<usize>() {
+                tc.set_max_cache_entries(max);
+            }
+        }
+        tc
     }
 
     /// Strictly audit one concrete proof judgment for certification authority.
@@ -1134,31 +1227,43 @@ impl Environment {
     ///
     /// The method is read-only and deterministic.  An empty issue list is the
     /// only certification-success state.
+    ///
+    /// The root checker and each dependency recheck honor `maxHeartbeats` and
+    /// `tcMaxCacheEntries` from this environment. These are per-checker limits
+    /// (the latter a cache trimming threshold), not an aggregate audit work or
+    /// memory budget. Absent or invalid values preserve checker defaults;
+    /// parsed zero values retain the setters' existing semantics.
     #[must_use]
     pub fn audit_certification(&self, goal: &Expr, term: &Expr) -> CertificationAudit {
         let mut audit = CertificationAudit::default();
 
-        let mut tc = crate::tc::TypeChecker::new(self);
-        tc.set_allow_unsafe(false);
-        tc.set_allow_partial(false);
+        let tc = self.certification_root_type_checker();
         match tc.infer_sort(goal) {
             Ok(sort) if sort.is_zero() => {}
             Ok(sort) => audit.issues.push(CertificationIssue::GoalNotProposition {
-                error: format!("goal lives in Sort {sort:?}, not Prop"),
+                error: bounded_diagnostic(format_args!("goal lives in Sort {sort:?}, not Prop")),
             }),
             Err(error) => audit.issues.push(CertificationIssue::GoalNotProposition {
-                error: format!("{error:?}"),
+                error: bounded_diagnostic(format_args!("{error:?}")),
             }),
         }
         if let Err(error) = tc.check_type(term, goal) {
             audit.issues.push(CertificationIssue::TermRejected {
-                error: format!("{error:?}"),
+                error: bounded_diagnostic(format_args!("{error:?}")),
             });
         }
 
         let mut root_refs = HashSet::new();
         collect_const_refs(goal, &mut root_refs);
         collect_const_refs(term, &mut root_refs);
+        self.audit_certification_dependencies(audit, root_refs)
+    }
+
+    fn audit_certification_dependencies(
+        &self,
+        mut audit: CertificationAudit,
+        root_refs: HashSet<Name>,
+    ) -> CertificationAudit {
         let mut pending: BTreeSet<Name> = root_refs.into_iter().collect();
         let mut dependencies = BTreeSet::new();
         let mut foundations = BTreeSet::new();
@@ -1251,6 +1356,19 @@ impl Environment {
                                 "foundational name has no exact canonical certification declaration"
                                     .to_string(),
                         });
+                } else if !is_trust_marker(&name) && prints_as_ambient_axiom(&name) {
+                    // A different name that PRINTS as a kernel-owned axiom
+                    // (`«Quot.sound»`, one component): every rendered report
+                    // would show it as the foundation, so it is a spoof, not an
+                    // ordinary disclosed domain axiom. Blocking.
+                    audit
+                        .issues
+                        .push(CertificationIssue::NonCanonicalFoundation {
+                            name: name.clone(),
+                            detail: "name prints as a kernel-owned axiom but is a different \
+                                     name (its components differ)"
+                                .to_string(),
+                        });
                 } else if !is_trust_marker(&name) {
                     audit
                         .issues
@@ -1336,7 +1454,10 @@ impl Environment {
     /// 1. Start from the declaration's proof term (if Theorem) or type (if Axiom/Definition)
     /// 2. Walk the `Expr` tree, collecting all `Expr::Const` references
     /// 3. For each referenced constant that is an `Axiom` in the environment,
-    ///    check if it is foundational; if not, add it to the result
+    ///    check if it is the kernel's canonical foundational declaration
+    ///    ([`Self::is_canonical_foundational_axiom`]: structural name AND exact
+    ///    canonical statement — never the printed name); if not, add it to the
+    ///    result
     /// 4. Recursively walk that axiom's type for more transitive dependencies
     /// 5. Return the set of domain-specific axioms
     ///
@@ -1352,7 +1473,7 @@ impl Environment {
         Some(
             self.axiom_closure_all(name)?
                 .into_iter()
-                .filter(|n| !is_foundational_axiom(n))
+                .filter(|n| !self.is_canonical_foundational_axiom(n))
                 .collect(),
         )
     }
@@ -1381,7 +1502,7 @@ impl Environment {
         Some(
             self.axiom_closure_all(name)?
                 .into_iter()
-                .filter(is_foundational_axiom)
+                .filter(|n| self.is_canonical_foundational_axiom(n))
                 .collect(),
         )
     }
@@ -1553,7 +1674,7 @@ impl Environment {
                 }
                 ConstantKind::Axiom => {
                     report.axioms += 1;
-                    if !is_foundational_axiom(name) {
+                    if !self.is_canonical_foundational_axiom(name) {
                         all_domain_axioms.insert(name.clone());
                     }
                 }
@@ -1591,6 +1712,113 @@ mod certification_tests {
 
     fn true_intro() -> Expr {
         Expr::const_(Name::from_string("True.intro"), vec![])
+    }
+
+    fn constant_free_identity() -> (Expr, Expr) {
+        use crate::expr::BinderInfo::Default;
+
+        // forall (P : Prop), P -> P; fun P h => h. No declaration recheck can
+        // mask whether the root checker itself honors the environment options.
+        let goal = Expr::pi(
+            Default,
+            Expr::prop(),
+            Expr::pi(Default, Expr::bvar(0), Expr::bvar(1)),
+        );
+        let term = Expr::lam(
+            Default,
+            Expr::prop(),
+            Expr::lam(Default, Expr::bvar(0), Expr::bvar(0)),
+        );
+        (goal, term)
+    }
+
+    #[test]
+    fn certification_audit_root_honors_heartbeat_option_without_dependencies() {
+        let mut env = Environment::new();
+        let (goal, term) = constant_free_identity();
+        let unrestricted = env.audit_certification(&goal, &term);
+        assert!(unrestricted.is_certified(), "{unrestricted:#?}");
+        assert!(unrestricted.dependencies.is_empty());
+
+        env.set_option("maxHeartbeats".to_string(), Some("1".to_string()));
+        let audit = env.audit_certification(&goal, &term);
+        assert!(!audit.is_certified(), "root must exhaust its budget");
+        assert!(audit.dependencies.is_empty());
+        assert!(
+            audit.issues.iter().any(|issue| match issue {
+                CertificationIssue::GoalNotProposition { error }
+                | CertificationIssue::TermRejected { error } => error.contains("HeartbeatExceeded"),
+                _ => false,
+            }),
+            "{audit:#?}"
+        );
+    }
+
+    #[test]
+    fn certification_audit_root_honors_cache_threshold_and_preserves_judgment() {
+        let mut env = Environment::new();
+        let (goal, term) = constant_free_identity();
+        for threshold in [0, 1, 17] {
+            env.set_option("tcMaxCacheEntries".to_string(), Some(threshold.to_string()));
+            let tc = env.certification_root_type_checker();
+            assert_eq!(tc.max_cache_entries(), threshold);
+            let audit = env.audit_certification(&goal, &term);
+            assert!(audit.is_certified(), "threshold {threshold}: {audit:#?}");
+            assert!(audit.dependencies.is_empty());
+
+            let rejected = env.audit_certification(&goal, &Expr::prop());
+            assert!(
+                !rejected.is_certified(),
+                "cache size cannot admit a bad term"
+            );
+        }
+    }
+
+    #[test]
+    fn certification_audit_root_resource_option_fallbacks_are_unchanged() {
+        let (goal, term) = constant_free_identity();
+        for value in [
+            None,
+            Some(""),
+            Some("invalid"),
+            Some("-1"),
+            Some("184467440737095516160"),
+        ] {
+            let mut env = Environment::new();
+            if let Some(value) = value {
+                for option in ["maxHeartbeats", "tcMaxCacheEntries"] {
+                    env.set_option(option.to_string(), Some(value.to_string()));
+                }
+            }
+            let defaults = crate::tc::TypeChecker::new(&env);
+            let configured = env.certification_root_type_checker();
+            assert_eq!(configured.heartbeat_limit(), defaults.heartbeat_limit());
+            assert_eq!(configured.max_cache_entries(), defaults.max_cache_entries());
+            let audit = env.audit_certification(&goal, &term);
+            assert!(audit.is_certified(), "option {value:?}: {audit:#?}");
+        }
+
+        let mut env = Environment::new();
+        for option in ["maxHeartbeats", "tcMaxCacheEntries"] {
+            env.set_option(option.to_string(), None);
+        }
+        let defaults = crate::tc::TypeChecker::new(&env);
+        let configured = env.certification_root_type_checker();
+        assert_eq!(configured.heartbeat_limit(), defaults.heartbeat_limit());
+        assert_eq!(configured.max_cache_entries(), defaults.max_cache_entries());
+        let audit = env.audit_certification(&goal, &term);
+        assert!(audit.is_certified(), "valueless options: {audit:#?}");
+
+        drop(configured);
+        drop(defaults);
+        env.set_option("maxHeartbeats".to_string(), Some("0".to_string()));
+        assert_eq!(env.certification_root_type_checker().heartbeat_limit(), 0);
+        let audit = env.audit_certification(&goal, &term);
+        assert!(
+            audit.is_certified(),
+            "zero disables heartbeat checking: {audit:#?}"
+        );
+        assert!(!env.audit_certification(&goal, &Expr::prop()).is_certified());
     }
 
     #[test]
@@ -1761,6 +1989,9 @@ mod certification_tests {
 
     #[test]
     fn certification_rejects_legacy_proof_irrel_name_spoof() {
+        // `proofIrrel` left the foundational whitelist (it is declared nowhere
+        // by the kernel): a user axiom of that name is an ordinary DOMAIN
+        // axiom — blocking certification and disclosed by name.
         let mut env = true_env();
         let fake = Name::from_string("proofIrrel");
         env.add_decl(Declaration::Axiom {
@@ -1771,10 +2002,117 @@ mod certification_tests {
         .expect("well-formed legacy foundation-name fixture");
 
         let audit = env.audit_certification(&true_goal(), &Expr::const_(fake.clone(), vec![]));
+        assert!(!audit.is_certified());
         assert!(audit.issues.iter().any(|issue| matches!(
             issue,
-            CertificationIssue::NonCanonicalFoundation { name, .. } if name == &fake
+            CertificationIssue::NonFoundationalAxiom { name } if name == &fake
         )));
+        assert!(!audit.foundations.contains(&fake));
+    }
+
+    /// A ONE-component name that PRINTS as a kernel-owned axiom is a spoof:
+    /// `NonCanonicalFoundation`, never an ordinary domain axiom (which a
+    /// rendered report would show under the foundation's name) and never a
+    /// foundation — even when its statement is exactly the canonical one.
+    #[test]
+    fn certification_rejects_printed_form_foundation_spoofs() {
+        let env_with = |name: &Name, level_params: Vec<Name>, type_: Expr| {
+            let mut env = Environment::with_prelude();
+            env.add_decl(Declaration::Axiom {
+                name: name.clone(),
+                level_params,
+                type_,
+            })
+            .expect("spoof fixture is well formed");
+            env
+        };
+        // `«Quot.sound» : True`.
+        let spoof = Name::anon().str("Quot.sound");
+        let env = env_with(&spoof, vec![], true_goal());
+        let audit = env.audit_certification(&true_goal(), &Expr::const_(spoof.clone(), vec![]));
+        assert!(audit.issues.iter().any(|issue| matches!(
+            issue,
+            CertificationIssue::NonCanonicalFoundation { name, .. } if name == &spoof
+        )));
+        assert!(!audit.foundations.contains(&spoof));
+        assert_eq!(
+            env.non_canonical_ambient_declarations()
+                .into_iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>(),
+            vec![spoof.clone()]
+        );
+
+        // `«Classical.choice»` with EXACTLY the canonical statement: still a
+        // spoof, because the name is not the kernel's.
+        let spoof = Name::anon().str("Classical.choice");
+        let u = Name::from_string("u");
+        let env = env_with(&spoof, vec![u.clone()], canonical_choice_type(&u));
+        assert!(canonical_certification_foundation(&spoof).is_none());
+        assert!(!env.is_canonical_foundational_axiom(&spoof));
+        assert!(env
+            .non_canonical_ambient_declarations()
+            .iter()
+            .any(|(name, _)| name == &spoof));
+    }
+
+    #[test]
+    fn foundational_and_marker_names_are_structural_never_printed() {
+        // Structural matches.
+        for dotted in [
+            "propext",
+            "Quot.sound",
+            "Classical.choice",
+            "Quot",
+            "Quot.mk",
+            "Quot.lift",
+            "Quot.ind",
+        ] {
+            let name = Name::from_string(dotted);
+            assert!(is_foundational_axiom(&name), "{dotted}");
+            assert!(
+                canonical_certification_foundation(&name).is_some(),
+                "{dotted}"
+            );
+            assert!(is_reserved_ambient_axiom_name(&name), "{dotted}");
+        }
+        // One-component spoofs print alike and are NOT foundational, but ARE
+        // reserved (by printed form).
+        for printed in ["Quot.sound", "Classical.choice", "Quot.lift", "Quot.mk"] {
+            let spoof = Name::anon().str(printed);
+            assert_eq!(spoof.to_string(), printed);
+            assert!(!is_foundational_axiom(&spoof), "«{printed}»");
+            assert!(canonical_certification_foundation(&spoof).is_none());
+            assert!(prints_as_ambient_axiom(&spoof));
+            assert!(is_reserved_ambient_axiom_name(&spoof));
+            assert_eq!(spoof.to_unambiguous_string(), format!("«{printed}»"));
+        }
+        // Names that were on the old whitelist but are not kernel axioms.
+        for legacy in [
+            "proofIrrel",
+            "Eq.refl",
+            "WellFounded.fix",
+            "Char.decEq",
+            "String.decEq",
+        ] {
+            let name = Name::from_string(legacy);
+            assert!(!is_foundational_axiom(&name), "{legacy}");
+            assert!(!is_reserved_ambient_axiom_name(&name), "{legacy}");
+        }
+        // Trust markers: structural, with the printed spoof reserved too.
+        for marker in ["sorry", "sorryAx", "trustedArith", "trustedAy"] {
+            assert!(is_trust_marker(&Name::from_string(marker)));
+            assert!(is_reserved_ambient_axiom_name(&Name::from_string(marker)));
+        }
+        assert!(is_sorry_marker(&Name::from_string("sorryAx")));
+        assert!(!is_sorry_marker(&Name::from_string("trustedAy")));
+        assert!(!is_trust_marker(&Name::from_string("Foo.sorryAx")));
+        assert!(!is_reserved_ambient_axiom_name(
+            &Name::anon().str("sorryAx.")
+        ));
+        // A numeric component never matches a digit-spelled piece.
+        assert!(!name_has_components(&Name::anon().num(0), "0"));
+        assert!(name_has_components(&Name::anon().str("0"), "0"));
     }
 
     #[test]
@@ -1790,7 +2128,10 @@ mod certification_tests {
 
     #[test]
     fn canonical_ambient_validator_accepts_every_live_kernel_owned_axiom() {
-        let env = Environment::with_prelude();
+        // The markers live in the explicit admission fragment since bcacce6e0.
+        let mut env = Environment::with_prelude();
+        env.init_admission_stub_theory()
+            .expect("explicit admission theory");
         for name in [
             "propext",
             "Classical.choice",
@@ -1815,6 +2156,30 @@ mod certification_tests {
                 "{name} must validate as an exact trust marker"
             );
         }
+    }
+
+    #[test]
+    fn canonical_sorry_ax_rejects_a_counterfeit_implicit_carrier() {
+        let mut env = Environment::with_prelude();
+        env.init_admission_stub_theory()
+            .expect("explicit admission theory");
+        let mut info = env
+            .get_const(&Name::from_string("sorryAx"))
+            .expect("live marker")
+            .clone();
+        canonical_trust_marker_matches(&info).expect("explicit Lean carrier is canonical");
+        info.type_ = Expr::pi(
+            crate::expr::BinderInfo::Implicit,
+            Expr::sort(Level::param(Name::from_string("u"))),
+            Expr::pi(
+                crate::expr::BinderInfo::Default,
+                Expr::const_(Name::from_string("Bool"), vec![]),
+                Expr::bvar(1),
+            ),
+        );
+        assert!(canonical_trust_marker_matches(&info)
+            .expect_err("implicit counterfeit must not validate")
+            .contains("statement differs"));
     }
 
     #[test]
@@ -2085,3 +2450,10 @@ mod certification_tests {
         ));
     }
 }
+
+#[path = "audit_diagnostics.rs"]
+mod diagnostics;
+use diagnostics::bounded_diagnostic;
+
+#[path = "scoped_audit.rs"]
+mod scoped_audit;

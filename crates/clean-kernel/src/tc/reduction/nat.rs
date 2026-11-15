@@ -93,6 +93,11 @@ impl<'env> TypeChecker<'env> {
         {
             return Some(a == b);
         }
+        // A successor peel equates a literal with `Nat.succ` of its
+        // predecessor, which is the canonical `Nat`'s literal extension.
+        if !self.nat_literal_admitted() {
+            return None;
+        }
         let mut pred_t = Self::is_nat_succ_expr(t);
         let mut pred_s = Self::is_nat_succ_expr(s);
         // Lean-parity single-step succ-peel across a grind-STUCK `Nat.add`.
@@ -172,6 +177,11 @@ impl<'env> TypeChecker<'env> {
         if !levels.is_empty() || *name != *names::NAT_ADD {
             return None;
         }
+        // AUTHORITY: the view below is `Nat.add`'s own defining equation, so it
+        // holds only for the canonical `Nat.add` (`env/native_fold_authority.rs`).
+        if !self.fold_admitted(name) {
+            return None;
+        }
         // `c` must reduce to a closed literal >= 1 (its predecessor exists).
         let pred_c = self.get_nat_bignat_whnf(c)?.pred()?;
         // Reuse the `Nat.add a` prefix (`f_a`) with the decremented count.
@@ -179,6 +189,33 @@ impl<'env> TypeChecker<'env> {
             f_a.as_ref().clone(),
             Expr::from_kind(ExprKind::Lit(Literal::Nat(pred_c))),
         ))
+    }
+
+    /// The fourteen binary heads `reduce_nat` folds (Lean's `reduce_nat` set).
+    fn is_guarded_nat_fold_name(name: &Name) -> bool {
+        static HEADS: std::sync::LazyLock<std::collections::HashSet<Name>> =
+            std::sync::LazyLock::new(|| {
+                [
+                    &names::NAT_ADD,
+                    &names::NAT_SUB,
+                    &names::NAT_MUL,
+                    &names::NAT_DIV,
+                    &names::NAT_MOD,
+                    &names::NAT_GCD,
+                    &names::NAT_POW,
+                    &names::NAT_BEQ,
+                    &names::NAT_BLE,
+                    &names::NAT_LAND,
+                    &names::NAT_LOR,
+                    &names::NAT_XOR,
+                    &names::NAT_SHIFT_LEFT,
+                    &names::NAT_SHIFT_RIGHT,
+                ]
+                .into_iter()
+                .map(|n| (**n).clone())
+                .collect()
+            });
+        HEADS.contains(name)
     }
 
     /// Reduce closed Nat arithmetic to a literal.
@@ -212,7 +249,11 @@ impl<'env> TypeChecker<'env> {
             // succ(2^128) = 2^128 + 1), via the multi-limb BigNat add path.
             if let ExprKind::App(f, arg) = &e.kind {
                 if let ExprKind::Const(name, levels) = &f.kind {
-                    if levels.is_empty() && *name == *names::NAT_SUCC {
+                    // AUTHORITY (`env/native_fold_authority.rs`): the successor
+                    // fold is the literal extension itself, justified only when
+                    // `Nat` is the canonical zero/succ inductive.
+                    if levels.is_empty() && *name == *names::NAT_SUCC && self.nat_literal_admitted()
+                    {
                         if let Some(v) = self.get_nat_bignat_whnf(arg) {
                             return Some(Expr::bignat_lit(v.checked_add_big(&BigNat::Small(1))));
                         }
@@ -232,7 +273,15 @@ impl<'env> TypeChecker<'env> {
                     // (and any large-denominator `Rat.le`) reduces in bounded,
                     // O(1)-on-the-literal time. Parity with `Nat.succ` above; the
                     // pre-check in whnf fires this BEFORE the def is ever unfolded.
-                    if levels.is_empty() && *name == *names::NAT_PRED {
+                    // AUTHORITY: `Nat.pred` folds only over its canonical
+                    // definition — a user's `Nat.pred`, or an axiom, never.
+                    // THEORY (`tc/fold_admission.rs`): `Nat.pred` is not one
+                    // of the heads Lean's `reduce_nat` has, so the reference
+                    // theory declines and δ unfolds the definition.
+                    if levels.is_empty()
+                        && *name == *names::NAT_PRED
+                        && self.hardwired_fold_admitted(name)
+                    {
                         if let Some(v) = self.get_nat_bignat_whnf(arg) {
                             return Some(Expr::bignat_lit(v.pred().unwrap_or(BigNat::Small(0))));
                         }
@@ -245,6 +294,17 @@ impl<'env> TypeChecker<'env> {
                 if let ExprKind::App(f, a1) = &f_a1.kind {
                     if let ExprKind::Const(name, levels) = &f.kind {
                         if !levels.is_empty() {
+                            return None;
+                        }
+                        // AUTHORITY (`env/native_fold_authority.rs`): every arm
+                        // below computes what the canonical definition of its
+                        // head computes, so it fires only when THIS environment
+                        // holds that definition. By name alone, a user's
+                        // `Nat.gcd := fun _ _ => 0` folded `Nat.gcd 4 6` to `2`
+                        // while δ gave `0` — `2 = 0`, then `False` — and the
+                        // AXIOM `Nat.shiftRight` computed. Lean's kernel keys on
+                        // the name (`type_checker::reduce_nat`); this does not.
+                        if !Self::is_guarded_nat_fold_name(name) || !self.fold_admitted(name) {
                             return None;
                         }
                         // Arbitrary-precision Nat reduction via the multi-limb BigNat
@@ -375,7 +435,8 @@ impl<'env> TypeChecker<'env> {
             || *name == *names::NAT_POW
     }
 
-    /// SOUNDNESS / Lean-parity: a native Nat op whose `reduce_nat` fast path has
+    /// SOUNDNESS (and a STRICTER stuckness than Lean's -- not a parity, measured
+    /// 2026-09-08, see below): a native Nat op whose `reduce_nat` fast path has
     /// just DECLINED (an operand is non-literal) but whose STRUCTURAL RECURSION
     /// COUNT — the 2nd operand, which the `Nat.add`/`Nat.sub`/`Nat.mul`/`Nat.pow`
     /// seeds recurse on — is a LARGE closed `Nat` literal would, if delta-unfolded,
@@ -385,17 +446,25 @@ impl<'env> TypeChecker<'env> {
     /// delta-unfolds to `Nat.rec m (λ _ ih => Nat.pred ih) 2^31` and grinds ~2^31
     /// `Nat.pred` steps, exhausting the deterministic heartbeat.
     ///
-    /// Lean's kernel never performs this reduction on these proofs: its `is_def_eq`
-    /// stays structural / lazy-delta and never forces the huge unary unfolding
-    /// (a synthetic `rfl` that forces it hits Lean's `maxRecDepth` and bails). We
-    /// match that by leaving the op **stuck** here. This is:
+    /// Lean's kernel does not perform this reduction when the two sides compare
+    /// structurally (its `is_def_eq` stays lazy-delta) — but it DOES force it
+    /// whenever such a term is the major premise of a recursor it has to reduce.
+    /// MEASURED 2026-09-08 (`tests/nat-operand-shape-probe`, `sub_lit_second` and
+    /// the `cmp_*` probes): `Nat.sub m k` with a closed `k >= 512` and a symbolic
+    /// `m` as a `Bool.rec`/`Nat.rec` major walks `k` steps in Lean's elaborator and
+    /// kernel alike, and seven clean-verify declarations kernel-checked HERE only
+    /// because of this guard until the spec's comparisons stopped forming that
+    /// term (`eval_ir_state.rs`, 2026-09-08). So this is a Clean-side STRICTER
+    /// stuckness, not a Lean parity: what Clean accepts through it, Lean may
+    /// refuse on depth. We leave the op **stuck** here. This is:
     ///
     /// - **Sound** (never a wrong ACCEPT): the stuck `Nat.sub m n` IS definitionally
     ///   equal to its unfolded form, so declining to unfold can only make a
     ///   comparison *fail to converge* (a stuck-vs-stuck structural match still
     ///   succeeds); it can never equate two non-def-eq terms. It strictly *narrows*
     ///   the reduction relation, never widens def-eq.
-    /// - **Completeness-preserving for every real proof**: no proof `rfl`-reduces
+    /// - **Completeness-preserving for every real proof in this tree** (measured on
+    ///   the 8,020-definition spec export, not a theorem): no proof `rfl`-reduces
     ///   `Nat.sub m k` for a large *closed* `k` (that unary normal form is not
     ///   feasibly checkable in Lean either). SMALL closed counts (`< THRESHOLD`)
     ///   and SYMBOLIC counts (`Nat.succ m`, as needed by `Nat.succ_sub_succ` and
@@ -446,7 +515,8 @@ impl<'env> TypeChecker<'env> {
         fired
     }
 
-    /// SOUNDNESS / Lean-parity companion to `native_nat_binop_grind_stuck`: the
+    /// SOUNDNESS companion to `native_nat_binop_grind_stuck` (same stuckness, same
+    /// non-parity caveat): the
     /// SAME large-closed-recursion-count grind, but recognized at the recursor
     /// AFTER a native `Nat.add`/`Nat.sub`/… definition has already been
     /// delta-unfolded to its `Nat.rec` seed.
@@ -478,9 +548,31 @@ impl<'env> TypeChecker<'env> {
     /// SOUNDNESS: identical to `native_nat_binop_grind_stuck`. The stuck
     /// `Nat.rec … major` IS definitionally equal to its ι-normal form, so
     /// declining to expand it strictly NARROWS reduction — a comparison can only
-    /// fail to converge (never a wrong ACCEPT). It matches Lean, whose
-    /// `@[extern]` `Nat.add`/`Nat.sub` stay stuck on a symbolic operand and never
-    /// materialize this unary tower. The `z`-symbolic + large-closed-`major`
+    /// fail to converge (never a wrong ACCEPT).
+    ///
+    /// IT DOES NOT MATCH LEAN, and the earlier claim here that it did — "Lean,
+    /// whose `@[extern]` `Nat.add`/`Nat.sub` stay stuck on a symbolic operand and
+    /// never materialize this unary tower" — is HALF FALSE, measured 2026-08-31.
+    /// True for `Nat.add`, `Nat.mul` and `Nat.pow`: Lean leaves all three stuck
+    /// on a symbolic operand. FALSE for `Nat.sub`, which recurses structurally on
+    /// its SECOND argument and grinds Θ(literal) times. That is not academic: the
+    /// spec routed every comparison through `Nat.sub`, so this guard was the ONLY
+    /// reason seven exported declarations type-checked here, and the foreign-kernel
+    /// cross-check could not check them at all — Lean ran out of recursion where
+    /// this guard simply declined.
+    ///
+    /// AND THE OBVIOUS REPAIR DOES NOT WORK — measured 2026-08-31, do not retry
+    /// it. Moving the comparisons onto `Nat.ble`/`Nat.beq`, which recurse on the
+    /// FIRST argument, was tried: the spec kernel-checked, and the export went
+    /// from 9-10 Lean errors to 101. The call sites pass the LITERAL FIRST
+    /// (`ir_nat_ltb ir_f64_inf_mag (ir_f64_mag x)`), so `ble` grinds on the
+    /// literal exactly as `sub` ground on it — the operand roles swap and nothing
+    /// is gained. A probe on two CLOSED literals looks fine and proves nothing;
+    /// the shape that matters is one literal and one symbolic operand.
+    ///
+    /// The guard itself is unchanged and still wanted — it is what keeps a
+    /// `Nat.sub` grind from reappearing anywhere else — but it is a place where
+    /// this kernel is STRICTLY MORE PERMISSIVE than Lean, not a parity feature. The `z`-symbolic + large-closed-`major`
     /// condition is exactly the pair the head guard already leaves stuck on the
     /// raw-`Nat.add` path; this closes the projection-spine bypass with the same
     /// verdict-neutral effect.
@@ -729,13 +821,23 @@ impl<'env> TypeChecker<'env> {
     /// Reduce Nat.pow over arbitrary-precision BigNats.
     ///
     /// Both base and exponent are extracted as full BigNats. `checked_pow_big`
-    /// bounds the result at 1024 bits (16 limbs) and the exponent at 1023, so a
-    /// BigNat base raised past that bound stays unreduced rather than blowing up —
-    /// a documented allocation guard, replacing the old u128/2^24-exp cap.
-    /// Lean 4 uses mpz (unbounded) here; the bound is the only divergence and is
-    /// the same one the env-level native `Nat.pow` reducer already uses.
+    /// declines an exponent above `2^24` for every base, as Lean's `reduce_pow`
+    /// does (`ReducePowMaxExp`), and bounds the result at 1024 bits (16 limbs),
+    /// so a base above 1 raised past that bound stays unreduced rather than
+    /// blowing up — a documented allocation guard. Lean 4 uses mpz (unbounded)
+    /// below its exponent cap; the 1024-bit bound is the divergence (a refusal,
+    /// never an acceptance), and is the same one the env-level native
+    /// `Nat.pow` reducer uses. A declined `Nat.pow` over a literal exponent at
+    /// or above `2^9` stays stuck (`native_nat_binop_grind_stuck`), where Lean
+    /// δ-unfolds it and fails with deep recursion. So an equation whose two
+    /// sides need the over-cap power itself is refused by both. One whose
+    /// outer `Nat.mul`/`add`/`sub`/`pow` δ-reduces without inspecting the
+    /// stuck operand (`Nat.mul (1^(2^24+1)) 0 = 0`) is NOT: Lean whnfs that
+    /// operand first and recurses, Clean admits it (`docs/DECISIONS.md` R140,
+    /// a known gap pinned by `tests2/nat_pow_exponent_cap.rs` and
+    /// `replay_forged/ReplayForgedPowCapOuter`).
     ///
-    /// Reference: Lean 4 type_checker.cpp:588-599
+    /// Reference: Lean 4 type_checker.cpp:586-596
     fn reduce_nat_pow(&self, a1: &Expr, a2: &Expr) -> Option<Expr> {
         let base = self.get_nat_bignat_whnf(a1)?;
         let exp = self.get_nat_bignat_whnf(a2)?;
@@ -787,9 +889,13 @@ pub(super) fn nat_lit_to_constructor(n: &BigNat) -> Expr {
 ///
 /// Transforms a string into `String.ofList (List.cons c1 (List.cons c2 ... List.nil))`.
 /// Per Lean 4's `string_lit_to_constructor` in `kernel/inductive.cpp`.
+#[cfg(test)]
 pub(crate) fn string_lit_to_constructor(s: &str) -> Expr {
-    // Lean 4 uses String.ofList, not String.mk (see kernel/inductive.cpp line 1226)
-    let string_of_list = Expr::const_(names::STRING_OF_LIST.clone(), vec![]);
+    string_lit_to_constructor_with_head(s, names::STRING_OF_LIST.clone())
+}
+
+pub(crate) fn string_lit_to_constructor_with_head(s: &str, head: Name) -> Expr {
+    let string_of_list = Expr::const_(head, vec![]);
     // List.nil : {a : Type u} -> List a
     // For Char (which is Type 0), use universe level 0
     let list_nil = Expr::const_(names::LIST_NIL.clone(), vec![Level::zero()]);

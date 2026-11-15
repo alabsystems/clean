@@ -54,7 +54,7 @@ pub(crate) struct ConstFoldStats {
 
 impl ConstFoldStats {
     /// Total number of expressions folded.
-    pub fn total_folded(&self) -> usize {
+    pub(crate) fn total_folded(&self) -> usize {
         self.folded_arithmetic + self.folded_boolean + self.folded_string + self.folded_conditionals
     }
 }

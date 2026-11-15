@@ -13,7 +13,7 @@
 //! Reference: Lean 4 `src/Init/System/IO.lean`, `src/Init/Control/`.
 
 use crate::error::ElabError;
-use clean_parser::SurfaceExpr;
+use clean_parser::{SurfaceExpr, SurfaceName};
 
 // ---------------------------------------------------------------------------
 // Effect classification
@@ -64,8 +64,11 @@ impl std::fmt::Display for EffectKind {
 
 /// Classify an IO operation name into its effect kind.
 #[must_use]
-pub(crate) fn classify_effect(op_name: &str) -> Option<EffectKind> {
-    match op_name {
+pub(crate) fn classify_effect(op_name: &SurfaceName) -> Option<EffectKind> {
+    // These labels originate only from exact typed builtin lookup, not Display.
+    let operation = crate::io_monad::name_to_io_op(op_name.name())
+        .or_else(|| crate::io_monad_ext::name_to_ext_io_op(op_name.name()))?;
+    match operation {
         "IO.getLine" => Some(EffectKind::Read),
 
         "IO.println" | "IO.print" | "IO.eprintln" => Some(EffectKind::Write),
@@ -242,7 +245,7 @@ impl IoStats {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct EffectBoundary {
     /// Name of the IO operation at the boundary (if identified).
-    pub(crate) operation: String,
+    pub(crate) operation: SurfaceName,
     /// The effect entering at this boundary.
     pub(crate) entering_effect: EffectKind,
     /// Whether this boundary transitions from pure to effectful.
@@ -337,7 +340,7 @@ fn collect_stats_inner(
             Ok(())
         }
         SurfaceExpr::Lambda(_, _, body) => collect_stats_inner(body, stats, depth + 1),
-        SurfaceExpr::Let(_, _, val, body) => {
+        SurfaceExpr::Let(_, _, val, body) | SurfaceExpr::Have(_, _, val, body) => {
             collect_stats_inner(val, stats, depth + 1)?;
             collect_stats_inner(body, stats, depth + 1)
         }
@@ -381,7 +384,7 @@ fn is_pure_inner(expr: &SurfaceExpr, depth: usize) -> bool {
             is_pure_inner(func, depth + 1) && args.iter().all(|a| is_pure_inner(&a.expr, depth + 1))
         }
         SurfaceExpr::Lambda(_, _, body) => is_pure_inner(body, depth + 1),
-        SurfaceExpr::Let(_, _, val, body) => {
+        SurfaceExpr::Let(_, _, val, body) | SurfaceExpr::Have(_, _, val, body) => {
             is_pure_inner(val, depth + 1) && is_pure_inner(body, depth + 1)
         }
         SurfaceExpr::If(_, cond, then_br, else_br) => {
@@ -449,7 +452,7 @@ fn detect_boundaries_inner(
         SurfaceExpr::Lambda(_, _, body) => {
             detect_boundaries_inner(body, in_pure_context, out, depth + 1);
         }
-        SurfaceExpr::Let(_, _, val, body) => {
+        SurfaceExpr::Let(_, _, val, body) | SurfaceExpr::Have(_, _, val, body) => {
             detect_boundaries_inner(val, in_pure_context, out, depth + 1);
             detect_boundaries_inner(body, in_pure_context, out, depth + 1);
         }
@@ -466,8 +469,8 @@ fn detect_boundaries_inner(
 ///
 /// Returns pairs of indices that can safely run in parallel.
 #[must_use]
-pub(crate) fn find_parallelizable_pairs(ops: &[&str]) -> Vec<(usize, usize)> {
-    let classified: Vec<Option<EffectKind>> = ops.iter().map(|op| classify_effect(op)).collect();
+pub(crate) fn find_parallelizable_pairs(ops: &[SurfaceName]) -> Vec<(usize, usize)> {
+    let classified: Vec<Option<EffectKind>> = ops.iter().map(classify_effect).collect();
     let mut pairs = Vec::new();
     for i in 0..classified.len() {
         for j in (i + 1)..classified.len() {

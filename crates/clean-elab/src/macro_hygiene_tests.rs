@@ -24,17 +24,17 @@ fn test_macro_introduced_var_does_not_capture_outer() {
     let def = MacroDef::new(
         "introMacro",
         kind.clone(),
-        Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("body")]),
+        Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("body")]),
         SyntaxQuote::term(Syntax::mk_let(
-            Syntax::ident("_x"),
+            Syntax::generated_ident("_x"),
             None,
             Syntax::mk_num(1),
-            Syntax::mk_antiquot("body"),
+            Syntax::generated_antiquot("body"),
         )),
     );
     registry.register(def);
 
-    let input = Syntax::node(kind, vec![Syntax::ident("_x")]);
+    let input = Syntax::node(kind, vec![Syntax::generated_ident("_x")]);
     let mut expander = HygienicExpander::new(&registry);
     let result = expander.expand(input).unwrap();
 
@@ -42,9 +42,13 @@ fn test_macro_introduced_var_does_not_capture_outer() {
     assert!(let_node.is_some(), "should contain a let node");
     let binder_name = let_node.unwrap().child(0).unwrap().as_ident().unwrap();
     // Hygienic expansion mangles underscore-prefixed names.
-    assert_ne!(binder_name, "_x", "macro-introduced _x should be mangled");
+    assert_ne!(
+        binder_name.name(),
+        clean_parser::SurfaceName::generated_path("_x").name(),
+        "macro-introduced _x should be mangled"
+    );
     assert!(
-        binder_name.starts_with("_x"),
+        binder_name.to_string().starts_with("_x"),
         "mangled name should preserve _x prefix"
     );
 }
@@ -54,14 +58,16 @@ fn test_user_binding_unaffected_by_macro_scope() {
     let s1 = MacroScope::fresh();
     let s2 = MacroScope::fresh();
 
-    let user_x = ScopedName::new("x");
-    let macro_x = ScopedName::with_scope("x", s1);
-    let macro_x2 = ScopedName::with_scope("x", s2);
+    let user_x = ScopedName::new(&clean_parser::SurfaceName::generated_path("x"));
+    let macro_x = ScopedName::with_scope(&clean_parser::SurfaceName::generated_path("x"), s1);
+    let macro_x2 = ScopedName::with_scope(&clean_parser::SurfaceName::generated_path("x"), s2);
 
     assert!(!user_x.binds_same_as(&macro_x), "user vs macro scope");
     assert!(!macro_x.binds_same_as(&macro_x2), "different expansions");
     assert!(
-        user_x.binds_same_as(&ScopedName::new("x")),
+        user_x.binds_same_as(&ScopedName::new(
+            &clean_parser::SurfaceName::generated_path("x")
+        )),
         "identical unscoped names"
     );
 }
@@ -74,12 +80,15 @@ fn test_non_fresh_names_pass_through_unhygiened() {
         "passThrough",
         kind.clone(),
         Syntax::node(kind.clone(), vec![]),
-        SyntaxQuote::term(Syntax::ident("regularName")),
+        SyntaxQuote::term(Syntax::generated_ident("regularName")),
     );
     registry.register(def);
 
     let result = expand_hygienic(&registry, Syntax::node(kind, vec![])).unwrap();
-    assert_eq!(result.as_ident(), Some("regularName"));
+    assert_eq!(
+        result.as_ident(),
+        Some(&clean_parser::SurfaceName::generated_path("regularName"))
+    );
 }
 // 2. Nested macro expansion
 
@@ -91,7 +100,7 @@ fn test_nested_expansions_get_distinct_scopes() {
         "genFresh",
         kind.clone(),
         Syntax::node(kind.clone(), vec![]),
-        SyntaxQuote::term(Syntax::ident("_tmp")),
+        SyntaxQuote::term(Syntax::generated_ident("_tmp")),
     );
     registry.register(def);
 
@@ -102,8 +111,8 @@ fn test_nested_expansions_get_distinct_scopes() {
     let n1 = r1.as_ident().unwrap();
     let n2 = r2.as_ident().unwrap();
     assert_ne!(n1, n2, "consecutive expansions must yield distinct names");
-    assert!(n1.starts_with("_tmp"));
-    assert!(n2.starts_with("_tmp"));
+    assert!(n1.to_string().starts_with("_tmp"));
+    assert!(n2.to_string().starts_with("_tmp"));
 }
 
 #[test]
@@ -115,7 +124,7 @@ fn test_nested_macro_in_macro_body() {
         "inner",
         kind_inner.clone(),
         Syntax::node(kind_inner.clone(), vec![]),
-        SyntaxQuote::term(Syntax::ident("_y")),
+        SyntaxQuote::term(Syntax::generated_ident("_y")),
     );
     registry.register(def_inner);
 
@@ -125,10 +134,10 @@ fn test_nested_macro_in_macro_body() {
         kind_outer.clone(),
         Syntax::node(kind_outer.clone(), vec![]),
         SyntaxQuote::term(Syntax::mk_let(
-            Syntax::ident("_x"),
+            Syntax::generated_ident("_x"),
             None,
             Syntax::node(kind_inner, vec![]),
-            Syntax::ident("_x"),
+            Syntax::generated_ident("_x"),
         )),
     );
     registry.register(def_outer);
@@ -181,7 +190,7 @@ fn test_gensym_produces_unique_names() {
 
     let mut seen = HashSet::new();
     for _ in 0..100 {
-        let name = state.gensym("_v");
+        let name = state.gensym(&clean_parser::SurfaceName::generated_path("_v"));
         assert!(seen.insert(name.mangled()), "gensym must be unique");
     }
 }
@@ -191,11 +200,11 @@ fn test_fresh_ident_across_scopes() {
     let mut state = HygieneState::new();
 
     let s1 = state.push_scope();
-    let n1 = state.fresh_ident("_temp");
+    let n1 = state.fresh_ident(&clean_parser::SurfaceName::generated_path("_temp"));
     state.pop_scope();
 
     let _s2 = state.push_scope();
-    let n2 = state.fresh_ident("_temp");
+    let n2 = state.fresh_ident(&clean_parser::SurfaceName::generated_path("_temp"));
     state.pop_scope();
 
     assert!(!n1.binds_same_as(&n2));
@@ -206,7 +215,9 @@ fn test_fresh_ident_across_scopes() {
 #[test]
 fn test_hygiene_context_fresh_counter() {
     let mut ctx = HygieneContext::new();
-    let generated: Vec<_> = (0..50).map(|_| ctx.fresh("_var")).collect();
+    let generated: Vec<_> = (0..50)
+        .map(|_| ctx.fresh(&clean_parser::SurfaceName::generated_path("_var")))
+        .collect();
     let unique: HashSet<_> = generated.iter().collect();
     assert_eq!(unique.len(), 50, "all 50 generated names should be unique");
 }
@@ -219,7 +230,7 @@ fn test_hygienic_expander_fresh_ident_uniqueness() {
     let mut idents = HashSet::new();
     for _ in 0..20 {
         assert!(
-            idents.insert(expander.fresh_ident("_f")),
+            idents.insert(expander.fresh_ident(&clean_parser::SurfaceName::generated_path("_f"))),
             "fresh_ident must be unique"
         );
     }
@@ -234,12 +245,12 @@ fn test_antiquot_spliced_names_preserve_identity() {
     let def = MacroDef::new(
         "wrapMacro",
         kind.clone(),
-        Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("x")]),
-        SyntaxQuote::term(Syntax::mk_paren(Syntax::mk_antiquot("x"))),
+        Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("x")]),
+        SyntaxQuote::term(Syntax::mk_paren(Syntax::generated_antiquot("x"))),
     );
     registry.register(def);
 
-    let input = Syntax::node(kind, vec![Syntax::ident("myVar")]);
+    let input = Syntax::node(kind, vec![Syntax::generated_ident("myVar")]);
     let result = expand_hygienic(&registry, input).unwrap();
     assert!(
         result.pretty().contains("myVar"),
@@ -254,15 +265,15 @@ fn test_quoted_template_fresh_names_are_scoped() {
     let def = MacroDef::new(
         "quoteMacro",
         kind.clone(),
-        Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("body")]),
+        Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("body")]),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::ident("_fresh"),
-            vec![Syntax::mk_antiquot("body")],
+            Syntax::generated_ident("_fresh"),
+            vec![Syntax::generated_antiquot("body")],
         )),
     );
     registry.register(def);
 
-    let input = Syntax::node(kind, vec![Syntax::ident("arg")]);
+    let input = Syntax::node(kind, vec![Syntax::generated_ident("arg")]);
     let result = expand_hygienic(&registry, input).unwrap();
 
     let names = collect_ident_names(&result);
@@ -286,16 +297,25 @@ fn test_multiple_antiquots_preserve_all_spliced_names() {
         kind.clone(),
         Syntax::node(
             kind.clone(),
-            vec![Syntax::mk_antiquot("a"), Syntax::mk_antiquot("b")],
+            vec![
+                Syntax::generated_antiquot("a"),
+                Syntax::generated_antiquot("b"),
+            ],
         ),
         SyntaxQuote::term(Syntax::mk_app(
-            Syntax::mk_antiquot("a"),
-            vec![Syntax::mk_antiquot("b")],
+            Syntax::generated_antiquot("a"),
+            vec![Syntax::generated_antiquot("b")],
         )),
     );
     registry.register(def);
 
-    let input = Syntax::node(kind, vec![Syntax::ident("foo"), Syntax::ident("bar")]);
+    let input = Syntax::node(
+        kind,
+        vec![
+            Syntax::generated_ident("foo"),
+            Syntax::generated_ident("bar"),
+        ],
+    );
     let result = expand_hygienic(&registry, input).unwrap();
     let names = collect_ident_names(&result);
     assert!(names.contains(&"foo".to_string()));
@@ -313,12 +333,12 @@ fn test_recursive_expansion_no_collision() {
     let def_a = MacroDef::new(
         "chainA",
         kind_a.clone(),
-        Syntax::node(kind_a.clone(), vec![Syntax::mk_antiquot("x")]),
+        Syntax::node(kind_a.clone(), vec![Syntax::generated_antiquot("x")]),
         SyntaxQuote::term(Syntax::mk_let(
-            Syntax::ident("_step"),
+            Syntax::generated_ident("_step"),
             None,
-            Syntax::mk_antiquot("x"),
-            Syntax::node(kind_b.clone(), vec![Syntax::ident("_step")]),
+            Syntax::generated_antiquot("x"),
+            Syntax::node(kind_b.clone(), vec![Syntax::generated_ident("_step")]),
         )),
     );
     registry.register(def_a);
@@ -326,12 +346,12 @@ fn test_recursive_expansion_no_collision() {
     let def_b = MacroDef::new(
         "chainB",
         kind_b.clone(),
-        Syntax::node(kind_b, vec![Syntax::mk_antiquot("y")]),
+        Syntax::node(kind_b, vec![Syntax::generated_antiquot("y")]),
         SyntaxQuote::term(Syntax::mk_let(
-            Syntax::ident("_step"),
+            Syntax::generated_ident("_step"),
             None,
-            Syntax::mk_antiquot("y"),
-            Syntax::ident("_step"),
+            Syntax::generated_antiquot("y"),
+            Syntax::generated_ident("_step"),
         )),
     );
     registry.register(def_b);
@@ -358,7 +378,7 @@ fn test_expansion_depth_tracked() {
         "depthTest",
         kind.clone(),
         Syntax::node(kind.clone(), vec![]),
-        SyntaxQuote::term(Syntax::ident("done")),
+        SyntaxQuote::term(Syntax::generated_ident("done")),
     );
     registry.register(def);
 
@@ -378,20 +398,23 @@ fn test_tactic_macro_hygiene() {
     let def = MacroDef::new(
         "tacticIntroFresh",
         kind.clone(),
-        Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("goal")]),
+        Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("goal")]),
         SyntaxQuote::tactic(Syntax::mk_app(
-            Syntax::ident("_h"),
-            vec![Syntax::mk_antiquot("goal")],
+            Syntax::generated_ident("_h"),
+            vec![Syntax::generated_antiquot("goal")],
         )),
     );
     registry.register(def);
 
     let mut expander = HygienicExpander::new(&registry);
     let r1 = expander
-        .expand(Syntax::node(kind.clone(), vec![Syntax::ident("target")]))
+        .expand(Syntax::node(
+            kind.clone(),
+            vec![Syntax::generated_ident("target")],
+        ))
         .unwrap();
     let r2 = expander
-        .expand(Syntax::node(kind, vec![Syntax::ident("target2")]))
+        .expand(Syntax::node(kind, vec![Syntax::generated_ident("target2")]))
         .unwrap();
 
     let h1: Vec<_> = collect_ident_names(&r1)
@@ -410,7 +433,7 @@ fn test_tactic_macro_hygiene() {
 
 #[test]
 fn test_tactic_block_quote_category() {
-    let quote = SyntaxQuote::tactic(Syntax::ident("skip"));
+    let quote = SyntaxQuote::tactic(Syntax::generated_ident("skip"));
     assert_eq!(quote.category, SyntaxKind::tactic());
 }
 
@@ -421,9 +444,9 @@ fn test_macro_ctx_hygienic_mode_toggle() {
     let syntax = Syntax::node(
         kind,
         vec![
-            Syntax::ident("cond"),
-            Syntax::ident("thenBr"),
-            Syntax::ident("elseBr"),
+            Syntax::generated_ident("cond"),
+            Syntax::generated_ident("thenBr"),
+            Syntax::generated_ident("elseBr"),
         ],
     );
 
@@ -440,7 +463,11 @@ fn test_macro_ctx_expansion_records_stats() {
     let mut ctx = MacroCtx::new();
     let syntax = Syntax::node(
         SyntaxKind::if_then_else(),
-        vec![Syntax::ident("c"), Syntax::ident("t"), Syntax::ident("e")],
+        vec![
+            Syntax::generated_ident("c"),
+            Syntax::generated_ident("t"),
+            Syntax::generated_ident("e"),
+        ],
     );
     let _ = ctx.expand(syntax).unwrap();
     assert!(ctx.last_stats().unwrap().expansions >= 1);
@@ -461,8 +488,8 @@ fn test_scope_guard_auto_pops() {
 fn test_scoped_name_mangling_deterministic() {
     let s = MacroScope::fresh();
     assert_eq!(
-        ScopedName::with_scope("_v", s).mangled(),
-        ScopedName::with_scope("_v", s).mangled(),
+        ScopedName::with_scope(&clean_parser::SurfaceName::generated_path("_v"), s).mangled(),
+        ScopedName::with_scope(&clean_parser::SurfaceName::generated_path("_v"), s).mangled(),
     );
 }
 
@@ -471,18 +498,22 @@ fn test_scoped_name_multiple_scopes_mangling() {
     let mut scopes = BTreeSet::new();
     scopes.insert(MacroScope::fresh());
     scopes.insert(MacroScope::fresh());
-    let mangled = ScopedName::with_scopes("_v", scopes).mangled();
-    assert!(mangled.starts_with("_v"));
-    assert!(mangled.len() > "_v".len(), "should have scope suffix");
+    let mangled =
+        ScopedName::with_scopes(&clean_parser::SurfaceName::generated_path("_v"), scopes).mangled();
+    assert!(mangled.to_string().starts_with("_v"));
+    assert!(
+        mangled.component_syntax().len() > 1,
+        "should have scope components"
+    );
 }
 
 #[test]
 fn test_introduced_names_tracking() {
     let mut state = HygieneState::new();
     let _ = state.push_scope();
-    let _ = state.fresh_ident("_a");
-    let _ = state.fresh_ident("_b");
-    let _ = state.fresh_ident("_c");
+    let _ = state.fresh_ident(&clean_parser::SurfaceName::generated_path("_a"));
+    let _ = state.fresh_ident(&clean_parser::SurfaceName::generated_path("_b"));
+    let _ = state.fresh_ident(&clean_parser::SurfaceName::generated_path("_c"));
     assert_eq!(state.introduced_names().len(), 3);
     state.clear_introduced();
     assert_eq!(state.introduced_names().len(), 0);

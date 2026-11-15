@@ -4,13 +4,24 @@
 
 //! Unification algorithm for constraint solving.
 
+mod app_heads;
+mod assignment;
+mod constructors;
+mod head_meta;
 mod pattern;
+mod postponed_args;
+mod proof_irrel;
 mod unify_expr;
+
+#[cfg(test)]
+mod assignment_tests;
+#[cfg(test)]
+mod congruence_tests;
 
 use clean_kernel::expr::Literal;
 use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr, ExprKind, Level, LocalContext, TypeChecker};
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
@@ -69,6 +80,9 @@ pub struct Unifier<'a> {
     /// Performance: Avoids creating a fresh TypeChecker (and cache) per try_whnf call.
     /// None means no WHNF capability (legacy mode for tests).
     tc_cache: RefCell<Option<TypeChecker<'a>>>,
+    /// The checker's environment, for questions WHNF does not answer (a
+    /// constant's reducibility hint, `app_heads.rs`). `None` without WHNF.
+    env: Option<&'a Environment>,
     /// When `true`, an argument whose head is one of the protected bitwise
     /// constants (`Nat.land`/`lor`/`xor`) is NOT δ-unfolded while being assigned
     /// to a bare metavariable — preserving its surface head for a later
@@ -78,66 +92,93 @@ pub struct Unifier<'a> {
     /// `Nat.land m n = Nat.land n m`), leaving every other unification path
     /// (notably the `cases` motive/constructor matching) at its normal behavior.
     protect_heads: bool,
+    /// Local declarations are immutable once pushed. Only the original prefix
+    /// is eligible; temporarily extended binder contexts decline the shortcut.
+    initial_context_len: usize,
+    /// Inspect that exact original context only after admitting a real rigid
+    /// candidate, then reuse the result without retaining/cloning the context.
+    rigid_congruence_context: Cell<Option<bool>>,
+    /// Nesting depth of [`Unifier::check_types_before_assign`] (see
+    /// `assignment.rs`); bounds a cycle through ill-formed metavariable types.
+    check_types_depth: Cell<u32>,
+    /// Failed unreduced-first attempts of the App/App arm (see
+    /// `app_heads.rs`); a budget that returns to the historical reduced
+    /// comparison once spent.
+    unreduced_failures: Cell<u32>,
 }
 
 impl<'a> Unifier<'a> {
-    /// Create a unifier without WHNF support (legacy)
-    ///
-    /// This constructor is kept for backwards compatibility with tests.
-    /// For production use, prefer `with_env` which enables WHNF reduction.
-    pub fn new(metas: &'a mut MetaState) -> Self {
-        Self {
-            metas,
-            tc_cache: RefCell::new(None),
-            protect_heads: false,
+    fn rigid_context_len(ctx: &LocalContext, metas: &MetaState) -> Option<usize> {
+        if ctx.len() > 128 {
+            return None;
         }
+        let mut remaining = 256;
+        ctx.iter()
+            .all(|decl| {
+                MetaState::from_fvar(decl.id)
+                    .is_none_or(|id| metas.get(id).is_some_and(|meta| meta.assignment.is_some()))
+                    && Self::rigid_expr(&decl.type_, &mut remaining)
+                    && decl
+                        .value
+                        .as_ref()
+                        .is_none_or(|value| Self::rigid_expr(value, &mut remaining))
+            })
+            .then_some(ctx.len())
     }
 
-    /// Create a unifier with environment for WHNF reduction
-    ///
-    /// This enables proper WHNF reduction during unification, which is
-    /// required for correctly handling beta/delta/iota/zeta reductions.
-    pub fn with_env(metas: &'a mut MetaState, env: &'a Environment, ctx: LocalContext) -> Self {
-        // Pre-create the TypeChecker so the WHNF cache persists across calls
-        let tc = TypeChecker::with_context(env, ctx);
-        // B14: unification-time WHNF/def-eq honors reducibility hints, so an
-        // `@[irreducible]` definition stays folded when the unifier reduces
-        // rigid heads (e.g. matching `rfl`'s `f =?= v`). Matches MetaM
-        // `canUnfold` at `.default`; the kernel's final check stays blind.
-        tc.set_honor_reducibility(true);
-        let _ = env;
-        Self {
-            metas,
-            tc_cache: RefCell::new(Some(tc)),
-            protect_heads: false,
+    /// Bounded, mutation-free eligibility check, including unknown tagged meta
+    /// FVars. Cached flags prune ground subtrees. Unsupported expression forms
+    /// and work-budget exhaustion decline the optimization, never unification.
+    fn rigid_expr(expr: &Expr, remaining: &mut usize) -> bool {
+        if expr.has_level_param_quick() {
+            return false;
         }
-    }
-
-    /// Create a unifier that reduces at `withReducible` transparency (B15).
-    ///
-    /// Like [`Unifier::with_env`], but the WHNF/def-eq path unfolds ONLY
-    /// `@[reducible]` (abbreviation) constants — `Regular` (semireducible),
-    /// `@[irreducible]`, and theorem heads stay folded, matching MetaM
-    /// `withReducible` / `canUnfold` at `.reducible`. `simp` uses this when
-    /// matching lemma LHSs against a target so that a bare `def f := e`
-    /// (semireducible) is opaque to lemma matching, exactly as in Lean 4's
-    /// `simp` (`Lean/Meta/Tactic/Simp` runs at reducible transparency).
-    ///
-    /// Strictly narrowing relative to [`Unifier::with_env`]: it can only turn a
-    /// former (semireducible-unfolding) match into a non-match.
-    pub fn with_env_reducible(
-        metas: &'a mut MetaState,
-        env: &'a Environment,
-        ctx: LocalContext,
-    ) -> Self {
-        let mut tc = TypeChecker::with_context(env, ctx);
-        tc.set_transparency(clean_kernel::TransparencyMode::Reducible);
-        tc.set_honor_reducibility(true);
-        Self {
-            metas,
-            tc_cache: RefCell::new(Some(tc)),
-            protect_heads: false,
+        if !expr.has_fvar_quick() {
+            return true;
         }
+        // Fixed scratch avoids allocating for the common short symbolic spine.
+        // Excess pending depth declines the optimization rather than recursing.
+        let mut pending = [None; 32];
+        pending[0] = Some(expr);
+        let mut len = 1;
+        while len != 0 {
+            len -= 1;
+            let Some(expr) = pending[len].take() else {
+                return false;
+            };
+            if *remaining == 0 {
+                return false;
+            }
+            *remaining -= 1;
+            if !expr.has_fvar_quick() {
+                continue;
+            }
+            let children: [Option<&Expr>; 3] = match expr.kind() {
+                ExprKind::FVar(id) => {
+                    if MetaState::from_fvar(*id).is_some() {
+                        return false;
+                    }
+                    continue;
+                }
+                ExprKind::App(f, a) => [Some(f), Some(a), None],
+                ExprKind::Pi(_, ty, body) | ExprKind::Lam(_, ty, body) => {
+                    [Some(ty), Some(body), None]
+                }
+                ExprKind::Let(_, ty, value, body, _) => [Some(ty), Some(value), Some(body)],
+                ExprKind::MData(_, inner) | ExprKind::Proj(_, _, inner) => {
+                    [Some(inner), None, None]
+                }
+                _ => return false,
+            };
+            for child in children.into_iter().flatten() {
+                if len == pending.len() {
+                    return false;
+                }
+                pending[len] = Some(child);
+                len += 1;
+            }
+        }
+        true
     }
 
     fn allowed_locals_for_meta(&self, meta_id: MetaId) -> Option<HashSet<clean_kernel::FVarId>> {
@@ -149,7 +190,7 @@ impl<'a> Unifier<'a> {
     /// Used by `apply` so its conclusion unification keeps `Nat.land`/`lor`/`xor`
     /// surface heads for the subsequent `rw [Nat.testBit_and]`.
     #[must_use]
-    pub fn with_protected_heads(mut self) -> Self {
+    pub(crate) fn with_protected_heads(mut self) -> Self {
         self.protect_heads = true;
         self
     }
@@ -266,6 +307,12 @@ impl<'a> Unifier<'a> {
     /// Pop the binder local pushed by [`Unifier::push_binder_local`].
     pub(super) fn pop_binder_local(&self) {
         if let Some(tc) = self.tc_cache.borrow().as_ref() {
+            // Normal callers pair temporary pushes/pops. If that private
+            // discipline is violated, never reuse admission for a replacement
+            // prefix merely because it later has the original length again.
+            if tc.local_context_len() <= self.initial_context_len {
+                self.rigid_congruence_context.set(Some(false));
+            }
             tc.pop_binder_local();
         }
     }
@@ -273,13 +320,106 @@ impl<'a> Unifier<'a> {
     /// Reduce expression to WHNF if environment is available
     ///
     /// Uses cached TypeChecker to preserve WHNF cache across calls.
+    ///
+    /// An assigned metavariable at the head is read first, as Lean's
+    /// `whnfCore` does (`head_meta.rs`).
     pub(super) fn try_whnf(&self, e: &Expr) -> Expr {
+        let instantiated = self.instantiate_assigned_head(e);
+        let e = instantiated.as_ref().unwrap_or(e);
         let tc_cache = self.tc_cache.borrow();
         if let Some(tc) = tc_cache.as_ref() {
             tc.whnf(e)
         } else {
             e.clone()
         }
+    }
+
+    /// Reuse the kernel's same-head argument congruence before eager delta
+    /// reduction. This is only an affirmative fast path: declining, a failed
+    /// comparison, or an exhausted checker leaves the historical solver next.
+    ///
+    /// No metavariable is solved here. Requiring all existing expression metas
+    /// to be assigned also covers metas hidden in local-let values, not merely
+    /// those visible in these two expressions. Parameterized levels stay with
+    /// the existing level solver. The small eligibility budgets only abandon
+    /// this optimization; they impose no new limit on accepted input.
+    fn try_rigid_congruence(&self, left: &Expr, right: &Expr) -> bool {
+        const MAX_SPINE: usize = 64;
+        const MAX_META_ENTRIES: usize = 128;
+
+        let (mut left_head, mut right_head) = (left, right);
+        let mut arity = 0;
+        while let (ExprKind::App(lf, la), ExprKind::App(rf, ra)) =
+            (left_head.kind(), right_head.kind())
+        {
+            if arity == MAX_SPINE {
+                return false;
+            }
+            // Argument congruence cannot establish unequal literals. Decline
+            // before scanning meta/context closures or probing the defeq cache;
+            // the ordinary head reduction may legitimately ignore this slot.
+            if matches!((la.kind(), ra.kind()), (ExprKind::Lit(_), ExprKind::Lit(_))) && la != ra {
+                return false;
+            }
+            arity += 1;
+            left_head = lf;
+            right_head = rf;
+        }
+        if arity == 0 || !matches!(left_head.kind(), ExprKind::Const(..)) || left_head != right_head
+        {
+            return false;
+        }
+        let tc_cache = self.tc_cache.borrow();
+        let Some(tc) = tc_cache.as_ref() else {
+            return false;
+        };
+        if tc.heartbeat_spent()
+            || self.initial_context_len != tc.local_context_len()
+            || left.has_level_param_quick()
+            || right.has_level_param_quick()
+        {
+            return false;
+        }
+        for (index, (_, meta)) in self.metas.iter().enumerate() {
+            if index == MAX_META_ENTRIES || meta.assignment.is_none() {
+                return false;
+            }
+        }
+        let mut remaining = 256;
+        if !Self::rigid_expr(left, &mut remaining) || !Self::rigid_expr(right, &mut remaining) {
+            return false;
+        }
+        let context_eligible = match self.rigid_congruence_context.get() {
+            Some(eligible) => eligible,
+            None => {
+                // Drop the immutable borrow before any checker operation that
+                // might temporarily push locals. No extra context owner/copy.
+                let eligible = {
+                    let context = tc.local_context();
+                    Self::rigid_context_len(&context, self.metas) == Some(self.initial_context_len)
+                };
+                self.rigid_congruence_context.set(Some(eligible));
+                eligible
+            }
+        };
+        if !context_eligible {
+            return false;
+        }
+
+        // Use the already configured checker: transparency, the ambient
+        // declaration budget, heartbeat accounting, and caches are retained.
+        // In particular, do not use the elaborator's lenient Bool/Prop fallback
+        // as evidence for this shortcut and do not reset any checker budget.
+        // Check corresponding arguments only. If one differs, leave unfolding
+        // of this head (which may ignore that argument) to the old path rather
+        // than asking whole-app defeq to do that work speculatively too.
+        for (left_arg, right_arg) in left.get_app_args_iter().zip(right.get_app_args_iter()) {
+            if left_arg != right_arg && (!tc.is_def_eq(left_arg, right_arg) || tc.heartbeat_spent())
+            {
+                return false;
+            }
+        }
+        true
     }
 
     /// Check if expression is an unsolved metavariable
@@ -381,7 +521,7 @@ impl<'a> Unifier<'a> {
         // Use occurs_in directly on the already-instantiated expression to avoid
         // the redundant O(n) re-instantiation inside occurs(). Part of #1921 F1.
         if MetaState::occurs_in(&other, meta_id) {
-            return UnifyResult::Failure(format!("occurs check failed for {meta_id:?}"));
+            return UnifyResult::Failure(format!("occurs check failed for ?m{}", meta_id.0));
         }
 
         if let Some(existing) = self.metas.get_assignment(meta_id).cloned() {
@@ -404,10 +544,18 @@ impl<'a> Unifier<'a> {
         if let Some(allowed) = self.allowed_locals_for_meta(meta_id) {
             if let Some(escaped) = pattern::find_escaping_fvar(&other, &allowed) {
                 return UnifyResult::Failure(format!(
-                    "metavariable {meta_id:?} cannot capture out-of-scope local {escaped:?}"
+                    "metavariable ?m{} cannot capture out-of-scope local {}",
+                    meta_id.0,
+                    crate::error_render::fvar(escaped, None)
                 ));
             }
-            if pattern::find_scope_widening_meta(&other, &allowed, self.metas).is_some() {
+            // A metavariable of `other` minted in a WIDER context than
+            // `?m`'s: Lean's `ctxApprox` narrows it to `?m`'s context and
+            // proceeds (`assignment.rs`); where Lean would refuse, so do we,
+            // and the constraint stays `Stuck` for a later retry.
+            if pattern::find_scope_widening_meta(&other, &allowed, self.metas).is_some()
+                && !self.approximate_context(meta_id, &allowed, &other)
+            {
                 return UnifyResult::Stuck;
             }
         }
@@ -478,7 +626,9 @@ impl<'a> Unifier<'a> {
                         if !inferred_level.has_params() && !expected_level.has_params() {
                             if !Level::leq(&inferred_level, expected_level) {
                                 return UnifyResult::Failure(format!(
-                                    "universe level conflict: {expected_level:?} vs {inferred_level:?}"
+                                    "universe level conflict: {} vs {}",
+                                    crate::error_render::level(expected_level),
+                                    crate::error_render::level(&inferred_level)
                                 ));
                             }
                         } else {
@@ -569,6 +719,16 @@ impl<'a> Unifier<'a> {
             }
         }
 
+        // Lean's `checkTypesAndAssign`: `?m`'s type against `other`'s, so a
+        // type implicit reachable only through `?m`'s type is solved
+        // (`assignment.rs`). Unifying the types cannot normally solve `?m`
+        // itself, but a nested assignment's own type check could; honour an
+        // assignment made that way instead of failing to overwrite it.
+        self.check_types_before_assign(meta_id, &other);
+        if let Some(existing) = self.metas.get_assignment(meta_id).cloned() {
+            return self.unify_core(&existing, &other);
+        }
+
         if std::env::var_os("CLEAN_UNIFY_TRACE").is_some() {
             let t: String = format!("{other:?}").chars().take(2000).collect();
             eprintln!("meta-assign: {meta_id:?} := {t}");
@@ -580,24 +740,8 @@ impl<'a> Unifier<'a> {
         if self.metas.assign(meta_id, other) {
             UnifyResult::Success
         } else {
-            UnifyResult::Failure(format!("failed to assign metavariable {meta_id:?}"))
+            UnifyResult::Failure(format!("failed to assign metavariable ?m{}", meta_id.0))
         }
-    }
-
-    /// Whether `e` mentions any elaborator metavariable (encoded as high-bit
-    /// FVars). Iterative DAG walk via [`crate::unify::meta_state::push_expr_children`];
-    /// used by the type-guarded head-projection check in [`Self::unify_meta`].
-    fn expr_mentions_meta(e: &Expr) -> bool {
-        let mut stack: Vec<&Expr> = vec![e];
-        while let Some(cur) = stack.pop() {
-            if let ExprKind::FVar(id) = cur.kind() {
-                if MetaState::from_fvar(*id).is_some() {
-                    return true;
-                }
-            }
-            crate::unify::meta_state::push_expr_children(cur, &mut stack);
-        }
-        false
     }
 
     /// Propagate universe-level constraints from a metavariable's *type* to the
@@ -732,6 +876,42 @@ impl<'a> Unifier<'a> {
             return UnifyResult::Success;
         }
 
+        // A harmless projected argument (e.g. layout.align = 8) must not force
+        // expansion of the surrounding symbolic Nat.rec alignment predicate.
+        // The checked 64-step regression previously remained in App WHNF
+        // recursion beyond the bounded baseline observation. The kernel already
+        // has same-head args-first conversion; reuse it without solving metas.
+        if self.try_rigid_congruence(&left, &right) {
+            return UnifyResult::Success;
+        }
+        // Two proofs are compared by their propositions before the WHNF below
+        // can unfold either one (WS6.11 / F-106; `proof_irrel.rs`). The rigid
+        // congruence above declines a pair whose literal arguments differ, so
+        // the F-106 pair (`Nat.mod_lt` at the wrapped product against the
+        // reduced literal) reaches this point. An additional success path only.
+        if let Some(result) = self.try_unify_proof_args(&left, &right) {
+            return result;
+        }
+
+        // A BARE unassigned metavariable on exactly one side is solved with the
+        // other side AS WRITTEN — Lean's `isDefEq` assigns `?α := VM`, it does
+        // not whnf `VM` first. The eager whnf below would unfold a `def` alias
+        // (`VM := Nat → Option Nat`, `Set α := α → Prop`) INTO the
+        // assignment, after which field notation on a value of that type finds
+        // no namespace (G28: `acc.set` with `acc : ?α`, `?α := VM`) and
+        // instance search at `.instances` transparency no longer sees the
+        // alias its instances are declared on (G47). Speculative: if the
+        // folded assignment is refused (scope / occurs / type check), nothing
+        // is kept and the historical whnf path runs unchanged.
+        if Self::is_bare_meta(&left) != Self::is_bare_meta(&right) {
+            self.metas.push_scope();
+            if matches!(self.unify_core(&left, &right), UnifyResult::Success) {
+                self.metas.commit();
+                return UnifyResult::Success;
+            }
+            self.metas.pop_scope();
+        }
+
         // Reduce to WHNF before structural comparison (#325)
         // This handles beta/delta/iota/zeta reductions that may expose
         // structurally equal expressions. For example:
@@ -741,6 +921,11 @@ impl<'a> Unifier<'a> {
         let right_whnf = self.try_whnf(&right);
 
         self.unify_core(&left_whnf, &right_whnf)
+    }
+
+    /// Is `e` (already instantiated) a bare elaborator metavariable?
+    fn is_bare_meta(e: &Expr) -> bool {
+        matches!(e.kind(), ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some())
     }
 
     /// Unify `left` and `right` WITHOUT the eager leading WHNF that [`unify`]
@@ -762,7 +947,7 @@ impl<'a> Unifier<'a> {
     /// genuine def-eq is lost. Soundness is unchanged: the kernel re-checks the
     /// instantiated term, so this can only solve metavars the constraint already
     /// determines.
-    pub fn unify_no_initial_whnf(&mut self, left: &Expr, right: &Expr) -> UnifyResult {
+    pub(crate) fn unify_no_initial_whnf(&mut self, left: &Expr, right: &Expr) -> UnifyResult {
         let left = self.metas.instantiate(left);
         let right = self.metas.instantiate(right);
         self.unify_core(&left, &right)

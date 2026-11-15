@@ -81,7 +81,7 @@ pub struct ExpensiveConstResult {
 /// binding at function entry. Original VDecls that held expensive expressions
 /// are removed and all references substituted to the hoisted variable.
 #[must_use]
-pub fn box_expensive_constants(
+pub(crate) fn box_expensive_constants(
     decl: &IRDecl,
     config: &ExpensiveConstConfig,
 ) -> ExpensiveConstResult {

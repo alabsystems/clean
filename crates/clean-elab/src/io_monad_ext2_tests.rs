@@ -5,7 +5,34 @@
 //! Tests for extended IO monad analysis (ext2).
 
 use crate::io_monad_ext2::*;
-use clean_parser::SurfaceExpr;
+use clean_parser::{SurfaceExpr, SurfaceName};
+
+fn surface(path: &'static str) -> SurfaceName {
+    SurfaceName::generated_path(path)
+}
+
+#[test]
+fn typed_effect_classification_and_boundary_rows_keep_exact_heads() {
+    for operation in ["IO.println", "IO.FS.readFile", "IO.Ref.get", "Task.spawn"] {
+        assert!(classify_effect(&surface(operation)).is_some());
+        assert_eq!(
+            classify_effect(&SurfaceName::component(operation, true)),
+            None
+        );
+    }
+    // Escaping an individual component keeps the builtin identity, but the
+    // recorded syntax remains the exact source spelling. This is only the
+    // existing local analysis, not a complete effect or purity proof.
+    let written = clean_parser::parse_name("«IO».println").unwrap();
+    let expr = SurfaceExpr::app(
+        SurfaceExpr::Ident(clean_parser::Span::dummy(), written.clone()),
+        vec![SurfaceExpr::ident("message")],
+    );
+    let boundaries = detect_effect_boundaries(&expr);
+    assert_eq!(boundaries.len(), 1);
+    assert!(boundaries[0].operation.same_syntax(&written));
+    assert_eq!(boundaries[0].entering_effect, EffectKind::Write);
+}
 
 // ============================================================================
 // Effect classification tests
@@ -13,25 +40,40 @@ use clean_parser::SurfaceExpr;
 
 #[test]
 fn test_classify_effect_read() {
-    assert_eq!(classify_effect("IO.getLine"), Some(EffectKind::Read));
+    assert_eq!(
+        classify_effect(&surface("IO.getLine")),
+        Some(EffectKind::Read)
+    );
 }
 
 #[test]
 fn test_classify_effect_write() {
-    assert_eq!(classify_effect("IO.println"), Some(EffectKind::Write));
-    assert_eq!(classify_effect("IO.print"), Some(EffectKind::Write));
-    assert_eq!(classify_effect("IO.eprintln"), Some(EffectKind::Write));
+    assert_eq!(
+        classify_effect(&surface("IO.println")),
+        Some(EffectKind::Write)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.print")),
+        Some(EffectKind::Write)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.eprintln")),
+        Some(EffectKind::Write)
+    );
 }
 
 #[test]
 fn test_classify_effect_process() {
-    assert_eq!(classify_effect("IO.Process.run"), Some(EffectKind::Process));
     assert_eq!(
-        classify_effect("IO.Process.spawn"),
+        classify_effect(&surface("IO.Process.run")),
         Some(EffectKind::Process)
     );
     assert_eq!(
-        classify_effect("IO.Process.exit"),
+        classify_effect(&surface("IO.Process.spawn")),
+        Some(EffectKind::Process)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.Process.exit")),
         Some(EffectKind::Process)
     );
 }
@@ -39,82 +81,118 @@ fn test_classify_effect_process() {
 #[test]
 fn test_classify_effect_filesystem() {
     assert_eq!(
-        classify_effect("IO.FS.readFile"),
+        classify_effect(&surface("IO.FS.readFile")),
         Some(EffectKind::Filesystem)
     );
     assert_eq!(
-        classify_effect("IO.FS.writeFile"),
+        classify_effect(&surface("IO.FS.writeFile")),
         Some(EffectKind::Filesystem)
     );
     assert_eq!(
-        classify_effect("IO.FS.removeFile"),
+        classify_effect(&surface("IO.FS.removeFile")),
         Some(EffectKind::Filesystem)
     );
     assert_eq!(
-        classify_effect("IO.FS.readDir"),
+        classify_effect(&surface("IO.FS.readDir")),
         Some(EffectKind::Filesystem)
     );
 }
 
 #[test]
 fn test_classify_effect_mutable_ref() {
-    assert_eq!(classify_effect("IO.Ref.new"), Some(EffectKind::MutableRef));
-    assert_eq!(classify_effect("IORef.get"), Some(EffectKind::MutableRef));
-    assert_eq!(classify_effect("IORef.set"), Some(EffectKind::MutableRef));
     assert_eq!(
-        classify_effect("IORef.modify"),
+        classify_effect(&surface("IO.Ref.new")),
         Some(EffectKind::MutableRef)
     );
-    assert_eq!(classify_effect("IORef.swap"), Some(EffectKind::MutableRef));
+    assert_eq!(
+        classify_effect(&surface("IORef.get")),
+        Some(EffectKind::MutableRef)
+    );
+    assert_eq!(
+        classify_effect(&surface("IORef.set")),
+        Some(EffectKind::MutableRef)
+    );
+    assert_eq!(
+        classify_effect(&surface("IORef.modify")),
+        Some(EffectKind::MutableRef)
+    );
+    assert_eq!(
+        classify_effect(&surface("IORef.swap")),
+        Some(EffectKind::MutableRef)
+    );
 }
 
 #[test]
 fn test_classify_effect_environment() {
-    assert_eq!(classify_effect("IO.getEnv"), Some(EffectKind::Environment));
-    assert_eq!(classify_effect("IO.getCwd"), Some(EffectKind::Environment));
     assert_eq!(
-        classify_effect("IO.currentDir"),
+        classify_effect(&surface("IO.getEnv")),
+        Some(EffectKind::Environment)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.getCwd")),
+        Some(EffectKind::Environment)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.currentDir")),
         Some(EffectKind::Environment)
     );
 }
 
 #[test]
 fn test_classify_effect_concurrency() {
-    assert_eq!(classify_effect("Task.spawn"), Some(EffectKind::Concurrency));
-    assert_eq!(classify_effect("Task.get"), Some(EffectKind::Concurrency));
+    assert_eq!(
+        classify_effect(&surface("Task.spawn")),
+        Some(EffectKind::Concurrency)
+    );
+    assert_eq!(
+        classify_effect(&surface("Task.get")),
+        Some(EffectKind::Concurrency)
+    );
 }
 
 #[test]
 fn test_classify_effect_error_handling() {
-    assert_eq!(classify_effect("IO.throw"), Some(EffectKind::ErrorHandling));
-    assert_eq!(classify_effect("IO.catch"), Some(EffectKind::ErrorHandling));
     assert_eq!(
-        classify_effect("IO.tryCatch"),
+        classify_effect(&surface("IO.throw")),
         Some(EffectKind::ErrorHandling)
     );
     assert_eq!(
-        classify_effect("IO.tryFinally"),
+        classify_effect(&surface("IO.catch")),
+        Some(EffectKind::ErrorHandling)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.tryCatch")),
+        Some(EffectKind::ErrorHandling)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.tryFinally")),
         Some(EffectKind::ErrorHandling)
     );
 }
 
 #[test]
 fn test_classify_effect_pure() {
-    assert_eq!(classify_effect("IO.pure"), Some(EffectKind::Pure));
-    assert_eq!(classify_effect("IO.map"), Some(EffectKind::Pure));
-    assert_eq!(classify_effect("IO.bind"), Some(EffectKind::Pure));
+    assert_eq!(classify_effect(&surface("IO.pure")), Some(EffectKind::Pure));
+    assert_eq!(classify_effect(&surface("IO.map")), Some(EffectKind::Pure));
+    assert_eq!(classify_effect(&surface("IO.bind")), Some(EffectKind::Pure));
 }
 
 #[test]
 fn test_classify_effect_unknown() {
-    assert_eq!(classify_effect("Nat.add"), None);
-    assert_eq!(classify_effect("unknownOp"), None);
+    assert_eq!(classify_effect(&surface("Nat.add")), None);
+    assert_eq!(classify_effect(&surface("unknownOp")), None);
 }
 
 #[test]
 fn test_classify_effect_panic_and_mono() {
-    assert_eq!(classify_effect("IO.panic"), Some(EffectKind::Process));
-    assert_eq!(classify_effect("IO.monoMsNow"), Some(EffectKind::Process));
+    assert_eq!(
+        classify_effect(&surface("IO.panic")),
+        Some(EffectKind::Process)
+    );
+    assert_eq!(
+        classify_effect(&surface("IO.monoMsNow")),
+        Some(EffectKind::Process)
+    );
 }
 
 // ============================================================================
@@ -405,7 +483,7 @@ fn test_detect_boundaries_single_impure_op() {
     );
     let boundaries = detect_effect_boundaries(&expr);
     assert_eq!(boundaries.len(), 1);
-    assert_eq!(boundaries[0].operation, "IO.println");
+    assert_eq!(boundaries[0].operation, surface("IO.println"));
     assert_eq!(boundaries[0].entering_effect, EffectKind::Write);
     assert!(boundaries[0].pure_to_effectful);
 }
@@ -503,19 +581,23 @@ fn test_find_parallelizable_pairs_empty() {
 
 #[test]
 fn test_find_parallelizable_pairs_pure_and_write() {
-    let pairs = find_parallelizable_pairs(&["IO.pure", "IO.println"]);
+    let pairs = find_parallelizable_pairs(&[surface("IO.pure"), surface("IO.println")]);
     assert_eq!(pairs, vec![(0, 1)]);
 }
 
 #[test]
 fn test_find_parallelizable_pairs_two_writes_not_parallel() {
-    let pairs = find_parallelizable_pairs(&["IO.println", "IO.print"]);
+    let pairs = find_parallelizable_pairs(&[surface("IO.println"), surface("IO.print")]);
     assert!(pairs.is_empty());
 }
 
 #[test]
 fn test_find_parallelizable_pairs_multiple() {
-    let pairs = find_parallelizable_pairs(&["IO.pure", "IO.getLine", "IO.getEnv"]);
+    let pairs = find_parallelizable_pairs(&[
+        surface("IO.pure"),
+        surface("IO.getLine"),
+        surface("IO.getEnv"),
+    ]);
     // pure||getLine, pure||getEnv, getLine||getEnv (read+env)
     assert!(pairs.contains(&(0, 1)));
     assert!(pairs.contains(&(0, 2)));

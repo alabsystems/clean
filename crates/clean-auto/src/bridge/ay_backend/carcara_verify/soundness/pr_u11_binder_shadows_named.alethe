@@ -1,0 +1,5 @@
+(assume a0 (exists ((k Int)) (not (= k 5))))
+(step t1 (cl (= (exists ((k Int)) (not (= k 5))) (not (= k 5)))) :rule qnt_rm_unused)
+(step t2 (cl (not (= (exists ((k Int)) (not (= k 5))) (not (= k 5)))) (not (exists ((k Int)) (not (= k 5)))) (not (= k 5))) :rule equiv_pos2)
+(step t3 (cl (= k 5)) :rule eq_reflexive)
+(step t4 (cl) :rule resolution :premises (a0 t1 t2 t3))

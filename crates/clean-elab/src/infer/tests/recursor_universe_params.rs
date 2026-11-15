@@ -107,26 +107,29 @@ fn test_match_poly_inductive_supplies_all_universe_levels() {
 
     let mut ctx = ElabCtx::new(&env);
     // Push x : MyOpt Nat
-    let _x_fvar = ctx.push_local("x".to_string(), myopt_nat);
+    let _x_fvar = ctx.push_local(SurfaceName::generated_path("x"), myopt_nat);
 
     // match x with | MyOpt.none => 0 | MyOpt.some n => n
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("MyOpt.none".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("MyOpt.none"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "MyOpt.some".to_string(),
-                    vec![SurfacePattern::Var("n".to_string())],
+                    SurfaceName::generated_path("MyOpt.some"),
+                    vec![SurfacePattern::Var(SurfaceName::generated_path("n"))],
                 ),
-                body: SurfaceExpr::Ident(Span::dummy(), "n".to_string()),
+                body: SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n")),
             },
         ],
     );
@@ -194,16 +197,19 @@ fn test_match_bool_caseson_levels() {
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "b".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("b"),
+        )),
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Bool.true".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Bool.true"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(1)),
             },
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Bool.false".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Bool.false"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
         ],
@@ -261,7 +267,7 @@ fn metadata_fail_closed_recursor_constant_disagreement_is_atomic() {
         Expr::const_(Name::from_string("MyOpt"), vec![Level::succ(Level::zero())]),
         nat.clone(),
     );
-    let sentinel = ctx.push_local("sentinel".to_string(), nat.clone());
+    let sentinel = ctx.push_local(SurfaceName::generated_path("sentinel"), nat.clone());
     let locals_before = ctx.locals.clone();
     let universes_before = ctx.universe_params.clone();
     let pending_before = ctx.pending_level_assigns.borrow().clone();
@@ -281,7 +287,7 @@ fn metadata_fail_closed_recursor_constant_disagreement_is_atomic() {
     assert_eq!(
         ctx.elaborate(&SurfaceExpr::Ident(
             clean_parser::Span::dummy(),
-            "sentinel".to_string(),
+            SurfaceName::generated_path("sentinel"),
         ))
         .expect("same context remains usable"),
         Expr::fvar(sentinel)
@@ -346,7 +352,11 @@ fn metadata_fail_closed_wrong_recursor_rhs_reaches_match_boundary() {
     env.register_recursor(malformed);
 
     let ctx = ElabCtx::new(&env);
-    let error = match ctx.match_eliminator_metadata("MyOpt", &cases_name, true) {
+    let error = match ctx.match_eliminator_metadata(
+        &SurfaceName::generated_path("MyOpt"),
+        &cases_name,
+        true,
+    ) {
         Ok(_) => panic!("wrong recursor RHS unexpectedly authenticated"),
         Err(error) => error,
     };
@@ -374,7 +384,11 @@ fn metadata_fail_closed_member_recursor_is_bound_to_requested_family() {
     env.register_recursor(misplaced);
 
     let cases_name = Name::from_string("MyOpt.casesOn");
-    let error = match ElabCtx::new(&env).match_eliminator_metadata("MyOpt", &cases_name, true) {
+    let error = match ElabCtx::new(&env).match_eliminator_metadata(
+        &SurfaceName::generated_path("MyOpt"),
+        &cases_name,
+        true,
+    ) {
         Ok(_) => panic!("misidentified family recursor unexpectedly authenticated"),
         Err(error) => error,
     };
@@ -530,11 +544,15 @@ fn imported_cases_on_requires_the_canonical_checked_wrapper() {
 
     let canonical = import_shaped_bool_env(false);
     ElabCtx::new(&canonical)
-        .match_eliminator_metadata("Bool", &cases_name, true)
+        .match_eliminator_metadata(&SurfaceName::generated_path("Bool"), &cases_name, true)
         .expect("the canonical imported Bool.casesOn wrapper must authenticate");
 
     let corrupt = import_shaped_bool_env(true);
-    let error = match ElabCtx::new(&corrupt).match_eliminator_metadata("Bool", &cases_name, true) {
+    let error = match ElabCtx::new(&corrupt).match_eliminator_metadata(
+        &SurfaceName::generated_path("Bool"),
+        &cases_name,
+        true,
+    ) {
         Ok(_) => panic!("same-typed noncanonical casesOn unexpectedly authenticated"),
         Err(error) => error,
     };

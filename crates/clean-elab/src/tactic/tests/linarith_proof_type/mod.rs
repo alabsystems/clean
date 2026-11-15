@@ -14,5 +14,6 @@ mod support;
 
 mod chain_closeout;
 mod scaling;
+mod strict_reading;
 mod term_soundness;
 mod verify_proof;

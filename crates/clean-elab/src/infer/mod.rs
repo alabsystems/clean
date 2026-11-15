@@ -11,19 +11,31 @@
 //! - Implicit argument insertion
 
 mod auto_implicit;
+mod auto_implicit_section;
+#[cfg(test)]
+mod auto_implicit_section_tests;
 mod certification;
 mod coercion;
 mod course_of_values;
+mod decl_site_namespace;
 mod derive;
+mod elab_alias;
 mod elab_app;
+mod elab_app_named_head;
+mod elab_app_postpone_lambda;
+mod elab_app_propagate;
 mod elab_app_support;
+mod elab_arrow;
 mod elab_attributes;
+mod elab_beta_redex;
+mod elab_binop_leaf;
 mod elab_calc;
 mod elab_canonicalize;
 mod elab_core;
 mod elab_ctx;
 mod elab_do;
 mod elab_do_actions;
+mod elab_do_actions_seq;
 mod elab_do_bind;
 mod elab_do_compat;
 mod elab_do_control;
@@ -34,46 +46,101 @@ mod elab_do_handlers;
 mod elab_do_monad;
 mod elab_do_mut;
 mod elab_do_prod;
+mod elab_do_shadow;
 mod elab_do_stack;
 mod elab_getelem;
-mod elab_monad_materialize;
+mod elab_guard;
 mod elab_pattern_lambda;
+mod elab_pattern_lambda_dep;
 mod elab_subst;
 mod elab_universe_inst;
+mod recursion_site;
+mod recursive_call;
+mod recursive_dot_call;
+mod term_info;
 use elab_do::DoMonadInfo;
+mod auto_param;
 mod demand_local_ctx;
+mod deriving_log;
+mod elab_ascription_no_type;
 mod elab_decl_value;
 mod elab_def_body;
 mod elab_do_if;
 mod elab_do_match;
 mod elab_do_match_ctor_order;
 mod elab_do_match_q_pattern;
+mod elab_do_match_term;
 mod elab_do_try;
 mod elab_expected;
+mod elab_implicit_lambda;
 mod elab_inductive;
 mod elab_init;
 mod elab_instance;
+mod elab_let_postpone;
+use elab_let_postpone::LetValueOrder;
 mod elab_match;
+#[cfg(any(test, debug_assertions))]
+pub use elab_match::take_join_outcomes;
+pub use elab_match::JoinOutcome;
+/// Binder name of a match's catch-all join point
+/// (`elab_match::join_point`). A normalizer that substitutes `let` values
+/// keeps a `let` of this name: the join point is applied once per
+/// constructor its arm covers, so substituting it materializes the
+/// per-constructor expansion the join point exists to avoid, nested once
+/// per level.
+pub(crate) const MATCH_JOIN_BINDER: &str = "_match_join✝";
+
+/// Is `name` the binder of a match join point ([`MATCH_JOIN_BINDER`])?
+pub(crate) fn is_match_join_binder(name: &Name) -> bool {
+    *name == Name::from_string(MATCH_JOIN_BINDER)
+}
+mod elab_dot_elim;
 mod elab_mutual;
+mod elab_mutual_measures;
 mod elab_proj;
+mod elab_proj_lval;
+mod elab_proj_waiting;
+mod elab_single_theorem;
+mod elab_struct_default;
 mod elab_struct_lit;
+mod elab_struct_lit_inherit;
+mod elab_struct_lit_source;
 mod elab_structure;
 mod elab_tactic;
+// Declaration binders a tactic consumed are hidden from later tactic terms (G82).
+mod elab_tactic_consumed;
+
+mod elab_folded_type;
 mod elab_tactic_compound;
+mod elab_type_position;
 mod elab_types;
 mod elab_variable;
 pub(crate) mod elaborate_decl;
+mod equation_dep_columns;
 mod equation_dep_family;
+mod imported_private_access;
+mod imported_tactic_macro;
 mod instance;
+mod instance_binder;
+mod lean_init_inhabited;
+mod let_rec_lift;
 mod local_bindings;
 mod local_ctx_cache;
 mod meta_builtin;
 mod meta_control_flow;
 mod meta_query;
+pub(crate) mod mutual_lift;
+mod opaque_inhabitant;
 mod q_pattern;
 mod quotation;
 mod structural;
 mod synth_order;
+mod tactic_scope_instance;
+mod tactic_trace;
+#[cfg(test)]
+mod term_let_cleanup_tests;
+#[cfg(test)]
+mod typed_local_identity_tests;
 // `pub(crate)` so the macro-expansion path (`macro_integration::computed_body`)
 // can reuse the shared `throwError`/`s!"…"` recognition + interpolation
 // rendering (`as_throw_error_message_in`, `is_throw_error_call`) when surfacing a
@@ -85,13 +152,22 @@ pub(crate) mod user_term;
 // substitute-and-delegate bridge into the conv tactic substrate.
 mod user_conv;
 mod wf_recursion;
+// `pub(crate)`: `FileContext` carries a `SectionPruneRequest` from
+// `preprocess` to the elaboration of the declaration it was made for.
+pub(crate) mod section_prune;
+pub(in crate::infer) use elab_app::ArgsFollow;
 pub(in crate::infer) use elab_types::{is_out_param_type, is_semi_out_param_type};
 // `pub(crate)`: `register::register_param_names` (B01) converts surface binder
 // kinds when recording named-argument parameter info.
+pub(crate) use deriving_log::split_logged_deriving_failures;
+pub(crate) use elab_core::nearest_theorem_names;
+#[cfg(test)]
+pub(crate) use elab_core::{deferred_ident_error_count, nearest_theorem_scan_count};
 pub(crate) use elab_types::collect_level_params;
 pub(crate) use elab_types::convert_binder_info;
 pub use elab_types::{ClassRegistration, CommandOutput, DerivedInstance, ElabResult, HoleContext};
-use elab_types::{RecursiveDefContext, RecursiveExtraParam};
+use elab_types::{RecursiveDefContext, RecursiveParam};
+pub(crate) use tactic_scope_instance::{class_goal, InstanceVisibility, TacticInstanceScope};
 
 use crate::instances::InstanceTable;
 use crate::macro_integration::{expand_surface_macros, syntax_to_surface, MacroCtx};
@@ -113,15 +189,28 @@ use clean_kernel::{
 use clean_macro::quotation::parse_quotation;
 use clean_parser::{
     AesopAttr, DoCatchClause, DoElem, DoMatchArm, LevelExpr, Projection, SurfaceArg, SurfaceBinder,
-    SurfaceBinderInfo, SurfaceExpr, SurfaceLit, SurfacePattern, UniverseExpr,
+    SurfaceBinderInfo, SurfaceExpr, SurfaceLit, SurfaceName, SurfacePattern, UniverseExpr,
 };
 use std::cell::RefCell;
 use std::collections::HashMap;
 
 /// Elaboration context
+/// The kind of a non-global `instance` attribute (see
+/// `ElabCtx::collected_scoped_instance_attrs`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ScopedInstanceAttr {
+    /// `local instance`: the current section / namespace scope only.
+    Local,
+    /// `scoped instance` in the namespace named: wherever it is active.
+    Scoped(Name),
+}
+
 pub struct ElabCtx<'a> {
     /// The kernel environment
     env: &'a Environment,
+    /// Explicit source selection, independent of whether this file imports a module.
+    /// None lets tactic clients use the environment's world, then the oracle.
+    source_world: Option<clean_kernel::LeanWorld>,
     /// Local bindings: name -> (fvar_id, type), plus the let-value side table
     /// for `let x : T := v` locals (the ProofState → ElabCtx bridge
     /// `eval_tactic` records `LocalDecl.value` there so a subsequent term
@@ -131,11 +220,62 @@ pub struct ElabCtx<'a> {
     /// a `LocalBindings` method that re-mints the generation, which is what
     /// keeps `local_ctx_cache` exact.
     locals: local_bindings::LocalBindings,
+    /// Scoped alternate source names for existing locals, never new telescope
+    /// entries or kernel declarations. Lookup still requires the owning FVar
+    /// to be present in the current local stack.
+    local_name_aliases: Vec<(SurfaceName, FVarId)>,
+    /// A single theorem's forward reference captures its prepended section
+    /// variables, as Lean's local recursive declaration does.
+    single_theorem_capture: Option<elab_single_theorem::SingleTheoremCapture>,
     /// Active synthetic names used to thread helper-generated `if let`
     /// scrutinees through recursive elaboration without macro expansion.
-    shared_if_let_scrutinees: Vec<String>,
+    shared_if_let_scrutinees: Vec<SurfaceName>,
+    /// Every `.rec` application the structural-recursion lowering emitted
+    /// while the current definition body elaborates. `elab_def_body` checks,
+    /// once the body is elaborated, that each is the value of the whole body
+    /// (`recursion_site`), and forgets them.
+    structural_rec_sites: Vec<recursion_site::StructuralRecSite>,
+    /// Recursive parameters some structural recursive call passed a value
+    /// other than the parameter itself (`try_elab_recursive_call`). Parameter
+    /// locals are unique to one elaboration, so the set only grows.
+    recursive_changed_params: std::collections::HashSet<FVarId>,
+    /// Why the last self-call `try_elab_recursive_call` recognized could not
+    /// be resolved to an induction hypothesis — the form named by the
+    /// recursion-aware refusal (`ElabError::RecursionOutsideFragment`).
+    recursive_call_miss: Option<String>,
+    /// `termination_by` / `decreasing_by` hints of the `where` helpers of the
+    /// declaration being elaborated, keyed by the helper's span and name
+    /// (the `LetRec` binder `where_desugar_ext::build_let_rec` emits carries
+    /// both). Read by the `let rec` lift (`try_elab_let_rec_lifted`).
+    where_termination: Vec<(
+        clean_parser::Span,
+        Name,
+        clean_parser::TerminationHints,
+        usize,
+    )>,
+    /// The locals bound by a `where` clause or a `let rec` — Lean's AUXILIARY
+    /// declarations (`LocalDecl.isAuxDecl`). Clean lowers a non-recursive one
+    /// to a plain `let`, but Lean resolves a dotted identifier on such a name
+    /// differently from one on an ordinary local: `Foo.x` with a `where`-bound
+    /// `Foo` names the GLOBAL `Foo.x` when one exists, and is a field of `Foo`
+    /// only otherwise (`resolveLocalName`'s `skipAuxDecl`,
+    /// `Lean/Elab/Term.lean`). See [`ElabCtx::resolve_dotted_ident`].
+    aux_decl_locals: std::collections::HashSet<FVarId>,
+    /// Lifting of `where` / `let rec` helpers to top-level auxiliary
+    /// declarations (`parent.go`), as Lean does. See [`let_rec_lift`].
+    let_rec_lift: let_rec_lift::LetRecLiftState,
+    /// Registry entries of the `mutual` members lifted onto a shared recursor
+    /// (see [`mutual_lift`]), registered after the members themselves.
+    mutual_lift_entries: Vec<mutual_lift::MutualLiftEntry>,
+    /// Named equation lemmas `f.eq_N` of lifted members, registered (kernel-
+    /// checked) after the members themselves. See `mutual_lift/arms.rs`.
+    mutual_eq_lemmas: Vec<mutual_lift::PendingEqLemma>,
+    /// `deriving` classes that failed for the type being declared, recorded
+    /// instead of aborting the declaration and attached to its result as
+    /// failed leaves by the declaration dispatcher. See [`deriving_log`].
+    logged_deriving_failures: Vec<deriving_log::LoggedDerivingFailure>,
     /// Universe parameter names
-    universe_params: Vec<String>,
+    universe_params: Vec<SurfaceName>,
     /// Universe names in scope from file-level `universe` commands, as
     /// [`crate::FileContext`] held them when this context was built.
     ///
@@ -150,7 +290,7 @@ pub struct ElabCtx<'a> {
     /// Empty when a declaration is elaborated with no `FileContext` — which
     /// is correct, because without one no `universe` command could have been
     /// merged in.
-    file_universe_params: Vec<String>,
+    file_universe_params: Vec<SurfaceName>,
     /// Whether [`ElabCtx::set_file_universe_params`] was called for this
     /// declaration — i.e. whether `file_universe_params` is a real subtrahend
     /// or just the constructor default. The two are DIFFERENT states: an
@@ -165,16 +305,18 @@ pub struct ElabCtx<'a> {
     /// The universe list the declaration WROTE (`def f.{u, v}`), or `None`
     /// when it wrote none.
     ///
-    /// `Some` makes the list CLOSED for [`ElabCtx::finalize_level_params`]:
-    /// a leftover undetermined level is refused
-    /// ([`ElabError::ExplicitUniverseListClosed`]) instead of appended, which
-    /// is Lean's `sortDeclLevelParams` rule. `None` keeps auto-generalization
-    /// exactly as it was.
+    /// `Some` makes [`ElabCtx::finalize_level_params`] apply Lean's rule for
+    /// a written list: a leftover undetermined level the TYPE mentions is
+    /// generalized and appended after the written names
+    /// (`levelMVarToParamTypesPreDecls` + `sortDeclLevelParams`), and one
+    /// only the VALUE mentions is refused
+    /// ([`ElabError::ExplicitUniverseListClosed`]). `None` keeps
+    /// auto-generalization of every leftover exactly as it was.
     ///
     /// Deliberately NOT part of `LocalScopeSnapshot`: it is written once per
     /// declaration, at `set_decl_universe_params`, and never mutated while a
     /// term elaborates, so a rolled-back term cannot disturb it.
-    decl_explicit_universes: Option<Vec<String>>,
+    decl_explicit_universes: Option<Vec<SurfaceName>>,
     /// Metavariable state (for unification)
     pub(crate) metas: MetaState,
     /// Next fresh free variable id
@@ -207,6 +349,153 @@ pub struct ElabCtx<'a> {
     /// checked at resolution time so `open Foo in def …` activates it.
     /// Injected per declaration from `FileContext` (B99).
     scoped_instances: HashMap<Name, Name>,
+    /// The module's current instance state (`FileContext::instance_view`):
+    /// when set, it alone decides which instances resolution may pick.
+    /// `None` without a `FileContext`, where `hidden_instances` and the
+    /// `scoped_instances` gating apply.
+    instance_view: Option<crate::instance_store::InstanceView>,
+    /// `private` declarations of OTHER modules (`FileContext::
+    /// foreign_private_decls`): never resolvable from this declaration, as
+    /// Lean's private names are module-local. Empty without a `FileContext`.
+    foreign_private_decls: std::sync::Arc<std::collections::HashSet<Name>>,
+    /// Whether [`Self::foreign_private_decls`] was supplied by a
+    /// `FileContext`: then a `private` declaration outside it was declared in
+    /// this module, which Lean makes accessible everywhere in the module.
+    private_module_known: bool,
+    /// Depth of `classical` tactic scopes the current tactic block is inside.
+    /// Lean's `classical` (`Lean.Elab.Tactic.classical`) adds
+    /// `Classical.propDecidable` as a low-priority local instance for the rest
+    /// of its block; while this is non-zero the `Classical`-scoped instances
+    /// are visible (`instance_visible`). Saved and restored by every tactic
+    /// sequence, so it never outlives the block that opened it.
+    classical_tactic_scope: u32,
+    /// Candidate attempts charged so far by the CURRENT top-level instance
+    /// query (reset at every `resolve_instance` entry). A failing search over
+    /// recursive combinator instances (`Decidable (p ∧ q)` needs `Decidable p`
+    /// and `Decidable q`, each of which the same instances match again)
+    /// otherwise explores the whole tree to `MAX_DEPTH`, exponentially —
+    /// measured 2026-09-11 on `Mathlib/Logic/Basic.lean` the moment
+    /// `Classical.propDecidable` stopped being a global instance: one theorem
+    /// spent 54 minutes at 100% CPU inside `resolve_instance_with_depth`,
+    /// rendering cache keys. Lean bounds the same search with
+    /// `synthInstance.maxSize`/heartbeats; this is Clean's bound.
+    instance_search_steps: usize,
+    /// Ground `[inst]` sub-goals of local instances that failed in the
+    /// CURRENT top-level query (reset with `instance_search_steps`): a local
+    /// whose telescope carries `[DecidableEq α]` is otherwise searched again
+    /// for the same sub-goal at every level that reaches it, 2^n or 3^n deep
+    /// (`instance/locals_first.rs`). Lean's tabled resolution makes one
+    /// generator per goal and fails it once.
+    failed_local_subgoals: std::collections::HashSet<String>,
+    /// Set by the CURRENT top-level instance query when it refused a match
+    /// because the answer would have been a CHOICE rather than evidence —
+    /// Lean's "typeclass instance problem is stuck" (`SynthInstance` under
+    /// `withNewMCtxDepth` with `isDefEqStuckEx := true`, which makes
+    /// `trySynthInstance` return `.undef` and the instance metavariable
+    /// POSTPONED, `Lean/Elab/Term/TermElabM.lean:1195-1237`).
+    ///
+    /// Cleared at every `resolve_instance` entry and read by the caller
+    /// immediately after: a STUCK goal may be queued for
+    /// `retry_postponed_open_carrier_instances`, where an ABSENT instance may
+    /// not — the two are different answers and conflating them is how a
+    /// postponement becomes a silent wrong carrier.
+    instance_search_stuck: bool,
+    /// How many instance answers a user `@[default_instance]` gave for a
+    /// goal with an open input (B99's `default_order`). Lean applies a
+    /// default instance only once nothing else can progress
+    /// (`synthesizeUsingDefault`), so an elaboration order that asks such a
+    /// goal earlier than Lean does can take the default where Lean's term
+    /// pins the carrier first. The Lean-order alternatives
+    /// (`lean_order_attempt`) watch this count and stand down if it moved.
+    user_default_instance_answers: u64,
+    /// The binder types of the numeral `let`s whose value currently waits
+    /// for its body (`elab_let_binding`'s postponed order), innermost last.
+    open_numeral_let_types: Vec<Expr>,
+    /// How many `let rec` headers were elaborated while one of
+    /// `open_numeral_let_types` was still an unassigned metavariable. Lean's
+    /// `let rec` header elaboration runs `synthesizeSyntheticMVarsNoPostponing`,
+    /// which applies default instances to every pending numeral, so such a
+    /// `let`'s type is settled (`Nat`) there, whatever the rest of the body
+    /// says. The Lean-order alternatives watch this count and stand down if
+    /// it moved.
+    let_rec_settled_open_numerals: u64,
+    /// Positive while the value of a `let` that postpones its numerals is
+    /// being elaborated (`elab_let_value_postponing_numerals`): a numeral whose
+    /// carrier is open there becomes a metavariable recorded in
+    /// `MetaState::postponed_numerals` instead of defaulting to `Nat` at once.
+    numeral_postpone_depth: u32,
+    /// How many `let`s that postpone their numerals are open (value or body).
+    /// Only the outermost one drains the postponed numerals, after its body,
+    /// so a nested one leaves its numerals to the rest of the enclosing body.
+    postponing_let_depth: u32,
+    /// `MetaState::postponed_numeral_count` when the outermost postponing
+    /// `let` scope opened.
+    postponing_scope_start: usize,
+    /// Positive inside a Lean-order alternative (`lean_order_attempt`): an
+    /// open goal of a class with a user `@[default_instance]` is then reported
+    /// stuck (and queued) instead of answered by B99 at once, because Lean
+    /// applies default instances only once nothing else progresses
+    /// (`synthesizeUsingDefault`). The outermost postponing `let` scope applies
+    /// them before it defaults its numerals (`apply_deferred_user_defaults`).
+    defer_user_defaults: u32,
+    /// How many goals were deferred that way (see `defer_user_defaults`).
+    deferred_user_default_goals: u64,
+    /// Set during that default pass to `instOfNatNat`'s priority (100): a user
+    /// default at or below it applies only after the numerals have defaulted
+    /// (Lean's `synthesizeUsingDefault` takes the highest priority first).
+    user_default_priority_floor: Option<u32>,
+    /// The refusal of the outermost postponing scope's drain when a queued
+    /// instance goal its defaulted numerals made ground has no instance
+    /// (`resolve_ground_instance_args`): Lean's typing needs an
+    /// instance that does not exist, so the declaration is refused rather
+    /// than typed in the eager order (`lean_order_let_attempt`).
+    lean_order_ground_refusal: Option<ElabError>,
+    /// How many times Lean's result-is-`outParam` support would have run
+    /// `synthesizeSyntheticMVarsUsingDefault` (`settle_at_open_out_param_result`
+    /// found the application stuck). Only its movement is read, by an
+    /// operator tree's leaf probe (`elab_binop_leaf.rs`).
+    lean_default_points: u64,
+    /// The operator trees being elaborated, innermost last
+    /// (`elab_binop_leaf.rs`, `BinopTreePlan`).
+    binop_tree_plans: Vec<elab_binop_leaf::BinopTreePlan>,
+    /// The binder types of the β-redex whose Lean-order attempt ran last, by
+    /// its head's span (`elab_beta_redex.rs`).
+    redex_binder_domains: Option<(clean_parser::Span, Vec<Expr>)>,
+    /// That attempt failed because an instance answer escaped a binder.
+    redex_binder_escaped: bool,
+    /// The binder types the retry of the β-redex headed at the span types
+    /// its binders with (`elab_beta_redex.rs`).
+    pinned_redex_binder_types: Option<(clean_parser::Span, Vec<Expr>)>,
+    /// Types for the next lambda's untyped binders, in order, consumed by
+    /// `elab_lambda` (set only around a β-redex head's elaboration).
+    pinned_lambda_binder_types: Vec<Expr>,
+    /// `MetaState::postponed_numeral_count` where the innermost `binrel%`
+    /// relation (`a = b`, `a < b`, `a == b`, …) being elaborated began. Lean
+    /// elaborates such a relation under `withSynthesizeLight`, which hides the
+    /// pending metavariables created before it, so a result-is-`outParam`
+    /// application inside it (`xs[0]! = 1`) defaults only the numerals
+    /// written inside the relation (`settle_postponed_numerals_now`).
+    settle_floor: Option<usize>,
+    /// The span of the `BEq.beq` head of an `a != b` being elaborated: the
+    /// parser desugars `!=` (Lean's plain `bne` notation, no `binrel%`) to
+    /// `Bool.not (BEq.beq a b)` with both heads at the operator's span, so
+    /// that `BEq.beq` is not a relation barrier (`settle_floor`).
+    bne_beq_head: Option<clean_parser::Span>,
+    /// Per alias-filed instance `(bucket, index)`: the rigid head constant of
+    /// each argument of the FINAL-class application its type unfolds to, at
+    /// instance transparency (`None` = anything). Computed on first use by
+    /// `ElabCtx::alias_instance_heads` and kept for the declaration — the
+    /// instance table it indexes is rebuilt per `ElabCtx`.
+    alias_instance_heads: HashMap<(Name, usize), Vec<instance::alias_search::HeadKey>>,
+    /// Structure literals in flight, as Lean `Struct` trees: the outermost
+    /// literal and the parent-subobject literals nested in it share one field
+    /// namespace and one default-value fixpoint (`elab_struct_default`).
+    struct_lit_trees: Vec<elab_struct_default::StructLitTree>,
+    /// Armed by the structure-literal field loop right before it elaborates a
+    /// parent subobject's own literal (`toParent := { … }`, or the `{ }` it
+    /// mints for an omitted parent), consumed by that literal on entry so it
+    /// JOINS the enclosing tree instead of starting one.
+    struct_lit_join_parent: bool,
     /// `@[default_instance]` table: class → (instance, priority) in
     /// declaration order. Drives open-metavariable defaulting in
     /// `resolve_instance_candidates` (Lean's default-instance mechanism).
@@ -257,16 +546,21 @@ pub struct ElabCtx<'a> {
     /// `elab_ident` so a later reference to the bound name splices the stored
     /// `Expr` directly (no surface round-trip). Cleared per body, so a binding
     /// never leaks into an unrelated elaboration. See [`meta_query`].
-    meta_value_bindings: HashMap<String, Expr>,
+    meta_value_bindings: HashMap<SurfaceName, Expr>,
     /// Collected aesop attributes during elaboration
     /// Callers should retrieve these via `take_aesop_attrs()` and register them
     collected_aesop_attrs: Vec<(Name, AesopAttr)>,
     /// Collected simp lemma attributes (name, priority)
     collected_simp_attrs: Vec<(Name, KernelSimpPriority)>,
+    /// Simp lemmas registered by `local simp`, to be retired when the
+    /// enclosing section or namespace ends.
+    collected_local_simp: Vec<Name>,
+    collected_local_csimp: Vec<Name>,
+    collected_scoped_csimp: Vec<(Name, Name)>,
     /// Collected reducibility attributes (name, level)
     collected_reducibility: Vec<(Name, Reducibility)>,
-    /// Collected extern bindings (decl_name, extern_name)
-    collected_extern: Vec<(Name, String)>,
+    /// Collected extern bindings (decl_name, extern_name, where written)
+    collected_extern: Vec<(Name, String, crate::declared_here::AttributeSite)>,
     /// Collected export bindings (decl_name, export_name)
     collected_export: Vec<(Name, String)>,
     /// Collected deprecations (name, message)
@@ -281,10 +575,13 @@ pub struct ElabCtx<'a> {
     collected_specialize: Vec<Name>,
     /// Collected csimp lemmas
     collected_csimp: Vec<Name>,
+    collected_definition_attrs: Vec<crate::definition_attrs::NamedAttribute>,
     /// Collected congr lemmas
     collected_congr: Vec<Name>,
     /// Collected ext lemmas
     collected_ext: Vec<Name>,
+    /// Collected `@[grind]` registrations, with the kind each carried.
+    collected_grind: Vec<(Name, clean_kernel::env::GrindAttrKind)>,
     /// Collected refl lemmas
     collected_refl: Vec<Name>,
     /// Collected symm lemmas
@@ -295,8 +592,8 @@ pub struct ElabCtx<'a> {
     collected_inline_if_reduce: Vec<Name>,
     /// Collected nospecialize hints
     collected_nospecialize: Vec<Name>,
-    /// Collected @[implemented_by] bindings (decl_name, impl_name)
-    collected_implemented_by: Vec<(Name, String)>,
+    /// Collected @[implemented_by] uses, resolved when applied.
+    collected_implemented_by: Vec<crate::implemented_by::ImplementedByUse>,
     /// Collected @[coe] coercion registrations
     collected_coe: Vec<Name>,
     /// Collected @[match_pattern] registrations
@@ -309,6 +606,11 @@ pub struct ElabCtx<'a> {
     /// (name, priority): turn an existing definition into a type class
     /// instance (B06; Lean `src/Lean/Meta/Instances.lean`, `addInstance`).
     collected_instance_attrs: Vec<(Name, u32)>,
+    /// Collected `attribute [local instance]` / `attribute [scoped
+    /// instance]` registrations (name, priority, kind): an instance in the
+    /// current scope's state only, or in every state where the current
+    /// namespace is active.
+    collected_scoped_instance_attrs: Vec<(Name, u32, ScopedInstanceAttr)>,
     /// `attribute [class] X` targets collected for register-time class
     /// registration (the ctx holds `&Environment`, so it cannot register
     /// directly; mirrors every other collected_* attribute).
@@ -319,10 +621,10 @@ pub struct ElabCtx<'a> {
     collected_attribute_removals: Vec<(Name, String)>,
     /// Auto-implicit type parameters discovered during elaboration (#164)
     /// Each entry is (name, fvar_id, type) where type is typically a fresh Sort metavar
-    auto_implicits: Vec<(String, FVarId, Expr)>,
+    auto_implicits: Vec<(SurfaceName, FVarId, Expr)>,
     /// O(1) lookup for active auto-implicit binders by source name.
     /// `auto_implicits` remains the canonical ordered packet representation.
-    auto_implicit_lookup: HashMap<String, FVarId>,
+    auto_implicit_lookup: HashMap<SurfaceName, FVarId>,
     /// Whether we're in a declaration context where auto-implicits are allowed (#164)
     /// When false, unknown identifiers error rather than becoming auto-implicits
     in_decl_context: bool,
@@ -349,11 +651,16 @@ pub struct ElabCtx<'a> {
     ///
     /// Parallel to `section_binder_stack` and truncated on the same exits, so
     /// an `include` dies with the block that issued it.
-    included_var_stack: Vec<String>,
+    included_var_stack: Vec<SurfaceName>,
     /// Expected type for bidirectional type checking (#172)
     /// Used by anonymous constructor syntax `⟨...⟩` to determine which structure to construct.
     /// Set when elaborating definition bodies with type annotations.
     current_expected_type: Option<Expr>,
+    /// Field notation on an explicit-motive eliminator: which bare `x.f`
+    /// site was handed an expected type directly, which is an application
+    /// head, and the frame of the projection being elaborated
+    /// (`elab_dot_elim.rs`).
+    dot_elim: elab_dot_elim::DotElimState,
     /// Recursive definition context (#378)
     /// When set, we're elaborating a recursive definition and recursive calls
     /// should be replaced with the inductive hypothesis.
@@ -363,6 +670,21 @@ pub struct ElabCtx<'a> {
     /// When true, implicit arguments are not automatically inserted.
     /// Set when elaborating expressions under the @ marker.
     explicit_mode: bool,
+    /// The VALUE now being reconciled with an expected type was written as an
+    /// `@`-application, so its remaining binders are the user's to fill.
+    ///
+    /// `explicit_mode` covers only the inside of `elab_app` — `elab_app`
+    /// restores it before returning, and the expected-type reconciliation that
+    /// follows (`apply_implicit_to_expected_type`) then had no record of the
+    /// `@` and filled every remaining leading implicit / instance-implicit
+    /// binder. Lean carries `explicit` in the `ElabAppArgs` state and
+    /// `finalize` ends the application with the remaining binders INTACT, so
+    /// `@f a` is a genuine partial application whatever expected type it meets
+    /// (`Function.Injective (@PartialOrder.toPreorder α)`,
+    /// `Mathlib/Order/Basic.lean`). Set from the SURFACE shape at the single
+    /// expected-type chokepoint, so it survives
+    /// `apply_implicit_to_expected_type`'s recursion into itself.
+    value_is_explicit_app: bool,
     /// One-shot binop% heterogeneous-fallback flag (B104). Set by
     /// `elab_app_binop_hetero_fallback` immediately before its retry call and
     /// CONSUMED (reset to false) at `elab_app_inner` entry, so exactly the
@@ -372,13 +694,32 @@ pub struct ElabCtx<'a> {
     /// paths where elaboration already FAILED, so homogeneous elaborations are
     /// byte-identical.
     suppress_binop_homogenize: bool,
+    /// Postponement of an un-annotated lambda argument stuck on its own open
+    /// binder type (G28; `elab_app_postpone_lambda.rs`).
+    lambda_postpone: elab_app_postpone_lambda::LambdaPostponeState,
+    /// Heterogeneous-operator instance goals (`[inst : HAdd ?a ?b ?g]`) that
+    /// `resolve_instance` POSTPONED because every type argument was still an
+    /// open metavariable — Lean's own refusal, measured on v4.30.0-rc2 (see
+    /// `instance::is_hetero_binop_default_instance_class`). Each entry is
+    /// `(instance metavariable, goal type)`.
+    ///
+    /// `retry_postponed_open_carrier_instances` drains it after every explicit
+    /// argument of an enclosing application — which is exactly where a sibling
+    /// argument grounds the carrier (`List.foldl (· + ·) 0 [1, 2, 3]` grounds
+    /// it at the `0`). An entry that is never grounded stays here, its
+    /// metavariable stays unassigned, and the fail-closed residual guard in
+    /// `elab_decl_value` reports it — which is what Lean's "typeclass instance
+    /// problem is stuck" is.
+    postponed_open_carrier_instances: Vec<(Expr, Expr)>,
+    /// Required do-Pure goals owned by the declaration being elaborated.
+    do_pure_obligations: Vec<Expr>,
     /// Cached monad info for do-block elaboration (#1814).
     /// Set once at the start of `elab_do` and reused by all `mk_bind_app` /
     /// `mk_pure_app` calls within the same do-block, matching Lean 4's
     /// `MonadInfo { m, u, v }` pattern from `Do/Basic.lean:26-38`.
     do_monad_info: Option<DoMonadInfo>,
     /// Control flow effects detected by the pre-pass (#1818 Phase 3).
-    /// Set at the start of `elab_do` after `expand_all_nested_actions`.
+    /// Set at the start of `elab_do` after `expand_seq_nested_actions`.
     /// Used by Phase 4 (ControlStack) to wrap the base monad in transformers.
     do_control_info: Option<elab_do_control::ControlInfo>,
     /// Control stack built from ControlInfo (#1818 Phase 4B).
@@ -399,7 +740,9 @@ pub struct ElabCtx<'a> {
     /// Names declared `let mut` in the current do-block (B08).
     /// Populated at the start of `elab_do`; a `Reassign` of a name NOT in this
     /// set is a hard "cannot reassign immutable variable" error (Lean parity).
-    do_mut_vars: Vec<String>,
+    do_mut_vars: Vec<SurfaceName>,
+    /// Mutable declarations active at the current source position, before lowering.
+    do_active_mut_vars: Vec<SurfaceName>,
     /// True when the current do-block is being elaborated via the pure
     /// functional state-threading lane (B08 — `docs/plans/GAP_SWEEP_2026-07-09.md`).
     /// In this lane `mut` reassignment desugars to `let`-shadowing and
@@ -416,7 +759,15 @@ pub struct ElabCtx<'a> {
     pending_level_assigns: RefCell<Vec<(Name, Level)>>,
     namespace_state: crate::namespace::NamespaceState,
     /// Current namespace prefix for qualifying declaration names.
-    namespace_prefix: String,
+    namespace_prefix: SurfaceName,
+    /// The namespace pinned Lean opens around the declaration being
+    /// elaborated (`expandDeclNamespace?`, `expandMutualNamespace`), as a
+    /// full name: `current ++ pre` for a declaration written `pre.d`, `None`
+    /// for one written `_root_.pre.d` or with one component, and for a
+    /// `mutual` block the common prefix of its members' namespaces. An
+    /// `@[implemented_by]` argument written on the declaration resolves
+    /// inside it. Set and restored by `elab_decl_inner`.
+    decl_site_namespace: Option<Name>,
     /// Local option overrides for section-scoped `set_option` commands.
     ///
     /// When `set_option` appears inside a section or namespace block,
@@ -484,7 +835,27 @@ pub struct ElabCtx<'a> {
     /// refine goal from an anonymous hole stays untagged (`tag: None`).
     /// Informational only: it never affects elaboration outside the refine
     /// bridge's goal-tag lookup.
-    hole_names: HashMap<MetaId, String>,
+    hole_names: HashMap<MetaId, SurfaceName>,
+    /// Binder names of a LOCAL whose type was written in place as a `∀`
+    /// (`(h : ∀ {n m : Nat}, n = m → m = n)`), keyed by the local, with the
+    /// kernel type the names were read against. Kernel terms keep no binder
+    /// names, so without this a named argument on such a head
+    /// (`h (n := 1) …`) had nothing to bind by. Filled by
+    /// [`Self::note_local_forall_binder_names`] where a surface binder becomes
+    /// a local; read only by `named_arg_slots_from_head_type`, which re-checks
+    /// the recorded type against the local's current one, so a stale entry
+    /// (a popped local's id) can never name another local's binders.
+    local_forall_binder_names: HashMap<FVarId, (Expr, Vec<Name>)>,
+    /// Binder names of every `∀` this declaration's elaboration read from
+    /// surface syntax, beside the kernel `∀` it elaborated to. The fallback
+    /// for a head whose `∀` no binder of its own spelled — `intro h` on a
+    /// goal `(∀ {n m : Nat}, …) → …`, `fun h => …` typed by the expected
+    /// type — where the hypothesis's type IS a `∀` the statement wrote. Read
+    /// by structural equality of the instantiated types, and refused when two
+    /// recorded spellings of the same kernel `∀` disagree on the names (the
+    /// kernel cannot tell `∀ {n m}, …` from `∀ {m n}, …`).
+    /// The same checked metadata supplies IDE names for implicit-lambda locals.
+    surface_forall_binder_names: Vec<(Expr, Vec<Name>)>,
     /// The declaration currently being elaborated, for the recursion-aware
     /// unknown-identifier refusal ([`ElabError::RecursionOutsideFragment`]).
     ///
@@ -503,6 +874,33 @@ pub struct ElabCtx<'a> {
     /// which is the only place the question exists. Read on the same
     /// already-failed path as `self_reference`.
     unstaged_siblings: Vec<UnstagedSibling>,
+    /// Which tactic is currently being dispatched, and which one raised the
+    /// most recent failure.
+    ///
+    /// Purely diagnostic: read only when a `by` block is about to return an
+    /// `Err`, to name the tactic responsible (see
+    /// [`tactic_trace`](self::tactic_trace) and `ElabError::InTactic`). It
+    /// closes no goal, accepts no term and changes no verdict.
+    tactic_trace: tactic_trace::TacticTrace,
+    /// Optional observation of this actual declaration's ProofStates.
+    tactic_goal_capture: Option<crate::tactic::TacticGoalCapture>,
+    term_info_capture: Option<crate::term_info::TermInfoCapture>,
+    term_contexts: Vec<term_info::PendingInfo>,
+    term_info_stack: Vec<u64>,
+    /// Presentation names from checked surface telescope metadata. These never
+    /// participate in source-name resolution or proof construction.
+    term_local_display_names: HashMap<FVarId, SurfaceName>,
+    tactic_goal_block: Option<crate::tactic::TacticGoalBlock>,
+    /// Armed by the file-level driver when the declaration being elaborated
+    /// received EVERY section variable because its surface scan was
+    /// incomplete: the first telescope whose surface binders start with the
+    /// requested section binders has the unused ones dropped from its
+    /// elaborated type and value (Lean's `removeUnusedVars` /
+    /// `withHeaderSecVars`; see [`section_prune`]).
+    section_prune: Option<section_prune::SectionPruneRequest>,
+    /// What the armed pruning did, read back by the driver so the
+    /// declaration's recorded parameter names match its pruned telescope.
+    section_prune_outcome: Option<section_prune::SectionPruneOutcome>,
 }
 
 /// The declaration whose own name a failed identifier resolution might be.
@@ -511,7 +909,7 @@ pub struct ElabCtx<'a> {
 #[derive(Debug, Clone)]
 pub(super) struct SelfReferenceSubject {
     /// The declaration's name as WRITTEN (`gcd`, or `Ty.bitWidth`).
-    pub(super) written: String,
+    pub(super) written: SurfaceName,
     /// Its explicit parameter count. Seeded from the surface binders and
     /// refined after equation-form normalization lifts binders out of the
     /// arrow type, so `def f : A → B → C | …` reports 2, not 0.
@@ -524,7 +922,7 @@ pub(super) struct SelfReferenceSubject {
 #[derive(Debug, Clone)]
 pub(crate) struct UnstagedSibling {
     /// Its canonical, namespace-qualified name.
-    pub name: String,
+    pub name: Name,
     /// Why it staged no header, as a phrase that completes "… because …".
     pub reason: &'static str,
 }
@@ -532,16 +930,18 @@ pub(crate) struct UnstagedSibling {
 /// The auxiliary-arm source for a fused nested-mutual fold (Track AA).
 ///
 /// See [`ElabCtx::nested_mutual_aux_arms`]. The arms are matched against the
-/// auxiliary mirror type's constructors by *short name* — `nil` ↔ a `[]` /
+/// auxiliary mirror type's constructors through the full container identity
+/// and authenticated primary-family membership — `nil` ↔ a `[]` /
 /// `List.nil` pattern, `cons` ↔ a `_ :: _` / `List.cons` pattern — so the real
 /// `T.g` body (e.g. `Tree.size t + Tree.sizeList rest`) fills the `T._List.cons`
 /// minor, with each field's induction hypothesis wired exactly as the primary
 /// minors are.
 #[derive(Clone, Debug)]
 pub(super) struct NestedMutualAuxArms {
-    /// Short name of the auxiliary container, e.g. `List` (the `C` in `C T`).
-    /// The mirror aux inductive is `<Parent>._<container>` (e.g. `Tree._List`).
-    pub container_short: String,
+    /// Full structural identity of the auxiliary container (the `C` in `C T`).
+    /// A legacy mirror such as `Tree._List` additionally requires membership
+    /// in the selected primary inductive family; a matching suffix is not enough.
+    pub container_name: SurfaceName,
     /// The sibling function's arms (e.g. `Tree.sizeList`'s `[] => 0` /
     /// `t :: rest => …`).
     pub arms: Vec<clean_parser::SurfaceMatchArm>,
@@ -549,7 +949,7 @@ pub(super) struct NestedMutualAuxArms {
     /// `["Tree.sizeList"]`). Copied into the fused def's `RecursiveDefContext`
     /// by `setup_recursion` so a sibling self-call inside a minor body
     /// (`Tree.sizeList rest`) is recognized as recursive and rewritten to its IH.
-    pub sibling_func_names: Vec<String>,
+    pub sibling_signatures: Vec<(SurfaceName, SurfaceExpr)>,
 }
 
 /// Context for elaborating the body of a for/while/repeat loop (#1818 Phase 4C).
@@ -575,7 +975,7 @@ pub(crate) struct DoLoopContext {
     /// Each entry is (name, fvar_id, type) where fvar_id refers to the
     /// destructured projection from the accumulator (set at iteration start).
     /// Empty when accumulator is just PUnit (no mutable vars in loop body).
-    pub(crate) mut_vars: Vec<(String, FVarId, Expr)>,
+    pub(crate) mut_vars: Vec<(SurfaceName, FVarId, Expr)>,
     /// Return type ρ when early return is tunneled through the accumulator.
     /// When Some(ρ), the accumulator includes an `Option ρ` component:
     /// - `return e` → `ForInStep.done (Some e, mutVars)`
@@ -597,7 +997,7 @@ impl<'a> ElabCtx<'a> {
     /// universe parameters. This is what a value must do to share universe
     /// parameters with its declared type (a bare `elaborate` freshens the
     /// term's universes independently, so the two can diverge in name).
-    pub fn elaborate_with_type(
+    pub(crate) fn elaborate_with_type(
         &mut self,
         surface: &SurfaceExpr,
         expected_ty: Expr,
@@ -616,6 +1016,16 @@ impl<'a> ElabCtx<'a> {
     /// - Macros are expanded before elaboration
     /// - Type inference inserts implicit arguments
     pub fn elaborate(&mut self, surface: &SurfaceExpr) -> Result<Expr, ElabError> {
+        if self.term_info_capture.is_some() {
+            self.elaborate_capturing_term(surface, self.current_expected_type.clone(), |ctx| {
+                ctx.elaborate_core(surface)
+            })
+        } else {
+            self.elaborate_core(surface)
+        }
+    }
+
+    fn elaborate_core(&mut self, surface: &SurfaceExpr) -> Result<Expr, ElabError> {
         // Commit any pending level assignments from previous kernel callbacks
         // before starting a new elaboration step.
         self.commit_pending_level_assigns();
@@ -682,6 +1092,7 @@ impl<'a> ElabCtx<'a> {
                     // `elab_let`/`elab_let_rec`/`elaborate_let_q_pattern` keeps the
                     // value/body intact, exactly like the bare-`Let` bypass.
                     | SurfaceExpr::Let(..)
+                    | SurfaceExpr::Have(..)
                     | SurfaceExpr::LetRec(..)
                     | SurfaceExpr::LetPattern(..)
                     | SurfaceExpr::Do(..)
@@ -729,8 +1140,8 @@ impl<'a> ElabCtx<'a> {
         // steps) into empty opaque nodes. While syntax_to_surface now preserves
         // the variant type (Part of #2060), the content is irrecoverably lost.
         // Fix for #2211.
-        if let SurfaceExpr::ByTactic(_, tactics) = surface {
-            return self.elab_by_tactic(tactics);
+        if let SurfaceExpr::ByTactic(span, tactics) = surface {
+            return self.elab_by_tactic_at(Some(*span), tactics);
         }
         if let SurfaceExpr::CalcBlock(_, steps) = surface {
             return self.elab_calc(steps);
@@ -750,7 +1161,7 @@ impl<'a> ElabCtx<'a> {
             return self.elab_pattern_lambda(binders, body);
         }
         if let SurfaceExpr::Match(_, hyp, scrutinee, arms) = surface {
-            return self.elab_match(hyp.as_deref(), scrutinee, arms);
+            return self.elab_match(hyp.as_ref(), scrutinee, arms);
         }
         // Holes carry their source span, which the macro syntax roundtrip
         // (`surface → syntax → surface`) discards (resetting it to a dummy
@@ -797,10 +1208,37 @@ impl<'a> ElabCtx<'a> {
         // collapsed as one blob. Mirrors the existing `PatternMatchLambda`
         // bypass, which already routes binder+body straight to its elaborator.
         if let SurfaceExpr::Lambda(_, binders, body) = surface {
+            // A definition body arms `current_expected_type` and calls
+            // `elaborate` directly, bypassing the expected-type chokepoint, so
+            // `def f : {α : Type} → α → α := fun x => x` needs the
+            // implicit-lambda decision taken here. It is taken ONCE for the
+            // term: `elab_lambda` no longer re-tests at every surface binder,
+            // which is what let an explicit binder facing an implicit expected
+            // binder strand the body with no expected type.
+            if let Some(expected) = self.current_expected_type.clone() {
+                if self.use_implicit_lambda(surface, &expected) {
+                    return self.elab_lambda_with_implicit_wrap(binders, body, &expected);
+                }
+            }
             return self.elab_lambda(binders, body);
         }
+        // `@fun … => …`: the same bypass behind the `@`. A single-equation
+        // definition's value is written `@fun x₁ … xₙ => match …` (Lean's
+        // `expandMatchAltsIntoMatch`), and the roundtrip turned the nested
+        // match's constructor patterns into `ctorPattern` identifiers
+        // ("Unknown identifier: ctorPattern").
+        if let SurfaceExpr::Explicit(_, inner) = surface {
+            if matches!(
+                inner.as_ref(),
+                SurfaceExpr::Lambda(..) | SurfaceExpr::PatternMatchLambda(..)
+            ) {
+                return self.elab_explicit(inner);
+            }
+        }
         if let SurfaceExpr::Pi(_, binders, body) = surface {
-            return self.elab_pi(binders, body);
+            let pi = self.elab_pi(binders, body)?;
+            self.note_surface_forall_binder_names(surface, &pi);
+            return Ok(pi);
         }
         // Bypass whole-expression macro expansion for `let`/`let rec`/`let pattern`,
         // for the same reason as `If`/`Match`/`Lambda`/`Pi` above. The `surface →
@@ -819,6 +1257,9 @@ impl<'a> ElabCtx<'a> {
         // blob. Mirrors the `Lambda`/`Pi` bypass exactly. (Track KL)
         if let SurfaceExpr::Let(_, binder, val, body) = surface {
             return self.elab_let(binder, val, body);
+        }
+        if let SurfaceExpr::Have(_, binder, val, body) = surface {
+            return self.elab_have(binder, val, body);
         }
         if let SurfaceExpr::LetRec(_, binder, val, body) = surface {
             return self.elab_let_rec(binder, val, body);
@@ -902,19 +1343,136 @@ impl<'a> ElabCtx<'a> {
             // re-checks the result). Only the fully-applied, all-untyped-binder
             // form; a typed binder (`fun (a : T) => …`) already pins its own type
             // and is left as an ordinary β-redex.
+            //
+            // Every argument of a β-redex is OUTSIDE every binder of its
+            // lambda, so each is first bound to a temporary no identifier can
+            // spell, OUTSIDE the chain, and the binders are then bound to the
+            // temporaries. Binding `a := x` and then `b := y` UNDER `a` let an
+            // argument that names `a` read the binder instead of what `a`
+            // means at the application: with a global `kz`, `(fun kz b => kz +
+            // b * 10) a kz` computed `a + a * 10`, and `b1 1 = 11` was accepted
+            // by `rfl` (measured 2026-09-26; Lean 4.8.0: `10001`). An infix
+            // notation whose head is such a lambda (`infixl " +++ " => fun kz b
+            // => …`) expands to exactly this application.
+            //
+            // The let-chain decides WHETHER the β-redex elaborates; Lean's
+            // order decides WHAT it means whenever it elaborates too. Lean
+            // elaborates the head first (`elabAppArgs`): the binder's type is a
+            // metavariable the body may pin, and the argument is then
+            // elaborated against it, with a coercion where it differs. The
+            // let-chain types the binder from the argument instead, so a body
+            // that pins it otherwise changed meaning: with `Tag Nat`/`Tag Int`
+            // instances, `(fun k => Tag.tag (k : Int) + Tag.tag k) n` with
+            // `n : Nat` typed `k : Nat` and coerced at the ascription, and
+            // `m 5 = 110` was accepted by `rfl` (Lean 4.8.0: `k : Int`, 210).
+            // So once the let-chain is known to elaborate (a probe that is
+            // rolled back), the β-redex is elaborated in Lean's order, in a
+            // transaction, and that term is kept. Clean's Lean-order path
+            // still lacks some of Lean's postponement (a binder used as a
+            // function head, above; a `match` or projection on a binder whose
+            // type is still a metavariable), so where it fails the let-chain's
+            // term stands, as before; and nothing the let-chain refuses is
+            // accepted. One refusal is added: a failed synthesis of a GROUND
+            // instance goal in Lean's order means the body's types were all
+            // determined and do not fit, so the let-chain's typing would
+            // accept a term Lean refuses (`(fun k => Int.toNat ((k : Int) - 7)
+            // + (k - 7)) 5`, `HSub Int Nat Nat`).
             if let SurfaceExpr::Lambda(_, binders, body) = Self::unwrap_surface_parens(func) {
                 if !binders.is_empty()
                     && args.len() == binders.len()
                     && binders.iter().all(|b| b.ty.is_none())
                 {
+                    let span = func.span();
+                    let temporaries: Vec<SurfaceName> = (0..args.len())
+                        .map(|index| SurfaceName::unspellable("_beta_arg", index as u64))
+                        .collect();
                     let mut rewritten = (**body).clone();
-                    for (binder, arg) in binders.iter().zip(args.iter()).rev() {
+                    for (binder, temporary) in binders.iter().zip(&temporaries).rev() {
                         rewritten = SurfaceExpr::Let(
-                            func.span(),
+                            span,
                             binder.clone(),
+                            Box::new(SurfaceExpr::Ident(span, temporary.clone())),
+                            Box::new(rewritten),
+                        );
+                    }
+                    for (arg, temporary) in args.iter().zip(&temporaries).rev() {
+                        rewritten = SurfaceExpr::Let(
+                            span,
+                            SurfaceBinder::new_typed(
+                                temporary.clone(),
+                                None,
+                                SurfaceBinderInfo::Explicit,
+                            ),
                             Box::new(arg.expr.clone()),
                             Box::new(rewritten),
                         );
+                    }
+                    // A proof's binder types change no statement, so a
+                    // Prop-valued redex keeps the let-chain's term outright.
+                    let mut let_chain_elaborates = false;
+                    let mut let_chain_is_proof = false;
+                    let _ = self.with_local_scope_rollback(|this| {
+                        if let Ok(term) = this.elaborate(&rewritten) {
+                            let_chain_elaborates = true;
+                            let_chain_is_proof = this
+                                .infer_type(&term)
+                                .and_then(|ty| this.infer_type(&ty))
+                                .is_ok_and(|sort| {
+                                    matches!(this.whnf(&sort).kind(), ExprKind::Sort(l) if l.is_zero())
+                                });
+                        }
+                        Err::<(), _>(ElabError::CannotInfer)
+                    });
+                    let explicit_binders = binders
+                        .iter()
+                        .all(|b| b.info == SurfaceBinderInfo::Explicit)
+                        && args.iter().all(|a| a.name.is_none());
+                    if let_chain_elaborates && !let_chain_is_proof && explicit_binders {
+                        // Lean's order leaves the numerals of the head's body and
+                        // of the arguments pending as a `let`'s are
+                        // (`with_postponing_let_scope`): in `(fun k => Tag.tag
+                        // (k - 7) + Tag.tag (k : Int)) 5`, `k - 7` is at `Int`.
+                        self.lean_order_ground_refusal = None;
+                        let mut settled_binders = None;
+                        let mut attempt = self.lean_order_attempt(|this| {
+                            this.redex_binder_domains = None;
+                            this.redex_binder_escaped = false;
+                            let result = this.with_postponing_let_scope(|this| {
+                                this.elab_beta_redex_lean_order(func, args)
+                            });
+                            if result.is_err() {
+                                settled_binders = this.settled_redex_binder_types(func);
+                            }
+                            result
+                        });
+                        // An instance answer escaped a binder (Clean closes a
+                        // lambda before its queued goals are answered): the
+                        // same order again, each binder typed as the attempt
+                        // settled it, so its goals are answered in place.
+                        if let (Err(_), Some(types)) = (&attempt, settled_binders) {
+                            self.lean_order_ground_refusal = None;
+                            self.pinned_redex_binder_types = Some((func.span(), types));
+                            attempt = self.lean_order_attempt(|this| {
+                                this.with_postponing_let_scope(|this| {
+                                    this.elab_beta_redex_lean_order(func, args)
+                                })
+                            });
+                            self.pinned_redex_binder_types = None;
+                            self.redex_binder_escaped = false;
+                        }
+                        match attempt {
+                            Ok(applied) => return Ok(applied),
+                            Err(refusal @ ElabError::FailedToSynthesizeInstance { .. }) => {
+                                return Err(refusal)
+                            }
+                            // A value checked against its annotation while a
+                            // numeral waits (`check_annotated_value_in_scope`).
+                            Err(_) => {
+                                if let Some(refusal) = self.lean_order_ground_refusal.take() {
+                                    return Err(refusal);
+                                }
+                            }
+                        }
                     }
                     return self.elaborate(&rewritten);
                 }
@@ -945,37 +1503,49 @@ impl<'a> ElabCtx<'a> {
                             SurfaceExpr::App(sp, Box::new(head), rest.to_vec())
                         }
                     };
-                    let reduced: Option<SurfaceExpr> =
-                        match Self::func_qualified_name(inner_func).as_deref() {
-                            Some("Function.comp") if inner_args.len() == 2 => {
-                                let g_x = SurfaceExpr::App(
-                                    sp,
-                                    Box::new(inner_args[1].expr.clone()),
-                                    vec![SurfaceArg::positional(args[0].expr.clone())],
-                                );
-                                let f_g_x = SurfaceExpr::App(
-                                    sp,
-                                    Box::new(inner_args[0].expr.clone()),
-                                    vec![SurfaceArg::positional(g_x)],
-                                );
-                                Some(apply_rest(f_g_x, &args[1..]))
-                            }
-                            Some("flip") if inner_args.len() == 1 && args.len() >= 2 => {
-                                let g_b_a = SurfaceExpr::App(
-                                    sp,
-                                    Box::new(inner_args[0].expr.clone()),
-                                    vec![
-                                        SurfaceArg::positional(args[1].expr.clone()),
-                                        SurfaceArg::positional(args[0].expr.clone()),
-                                    ],
-                                );
-                                Some(apply_rest(g_b_a, &args[2..]))
-                            }
-                            Some("Function.const") if inner_args.len() == 2 => {
-                                Some(apply_rest(inner_args[1].expr.clone(), &args[1..]))
-                            }
-                            _ => None,
-                        };
+                    // Each arm fires only on a head that RESOLVES to the
+                    // global combinator (`func_denotes_global`): `flip` bound
+                    // as a parameter, or `Function.comp` read as a field of a
+                    // local `Function`, is the user's own function, and
+                    // rewriting it proved `def r (flip : …) := (flip Nat.sub) 5
+                    // 3` equal to `0` (Lean 4.8.0: `2`).
+                    let reduced: Option<SurfaceExpr> = match () {
+                        () if self.func_denotes_global(inner_func, "Function.comp")
+                            && inner_args.len() == 2 =>
+                        {
+                            let g_x = SurfaceExpr::App(
+                                sp,
+                                Box::new(inner_args[1].expr.clone()),
+                                vec![SurfaceArg::positional(args[0].expr.clone())],
+                            );
+                            let f_g_x = SurfaceExpr::App(
+                                sp,
+                                Box::new(inner_args[0].expr.clone()),
+                                vec![SurfaceArg::positional(g_x)],
+                            );
+                            Some(apply_rest(f_g_x, &args[1..]))
+                        }
+                        () if self.func_denotes_global(inner_func, "flip")
+                            && inner_args.len() == 1
+                            && args.len() >= 2 =>
+                        {
+                            let g_b_a = SurfaceExpr::App(
+                                sp,
+                                Box::new(inner_args[0].expr.clone()),
+                                vec![
+                                    SurfaceArg::positional(args[1].expr.clone()),
+                                    SurfaceArg::positional(args[0].expr.clone()),
+                                ],
+                            );
+                            Some(apply_rest(g_b_a, &args[2..]))
+                        }
+                        () if self.func_denotes_global(inner_func, "Function.const")
+                            && inner_args.len() == 2 =>
+                        {
+                            Some(apply_rest(inner_args[1].expr.clone(), &args[1..]))
+                        }
+                        _ => None,
+                    };
                     if let Some(applied) = reduced {
                         return self.elaborate(&applied);
                     }
@@ -1010,7 +1580,16 @@ impl<'a> ElabCtx<'a> {
                     }
                 }
             }
-            if matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "anonymousCtor") {
+            if matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if clean_parser::is_anonymous_constructor_head(n))
+            {
+                return self.elab_app(func, args);
+            }
+            // `(e :)`: the same bypass, so `e` reaches its own elaboration
+            // intact (a nested `by` block keeps its tactics).
+            if matches!(
+                func.as_ref(),
+                SurfaceExpr::Ident(_, n) if clean_parser::is_type_ascription_without_type(n)
+            ) {
                 return self.elab_app(func, args);
             }
             // Bypass whole-application macro expansion when a positional argument
@@ -1026,14 +1605,34 @@ impl<'a> ElabCtx<'a> {
             // `elaborate_with_expected_type`, so the retry-sensitive argument hits
             // the `Ascription`/`ByTactic` bypasses above (macro-expanded
             // individually), just not collapsed as one blob. Mirrors the
-            // `anonymousCtor` bypass. Restricted to a plain `Ident`/`Proj` head
-            // (the desugared-operator and ordinary-call shapes) so a genuinely
-            // macro-headed application keeps its existing whole-expression
-            // expansion; and only fires when an argument is actually
-            // retry-sensitive, so ordinary applications are unaffected.
+            // `anonymousCtor` bypass. The head set is every shape that denotes
+            // a FUNCTION VALUE rather than a macro invocation: `Ident`/`Proj`
+            // (the desugared-operator and ordinary-call shapes), `Explicit`
+            // (`@f x` parses as `App(Explicit(Ident f), args)`), `Paren`
+            // (`(f a) b`), `App` (`f a <| by …` desugars to `App(App(f, [a]),
+            // [by …])`) and `UniverseInst` (`f.{u} x`). Restricting it to
+            // `Ident`/`Proj` was the whole of CLAUDE.md's dropped-`by`-block
+            // class: `@Unique.mk' _ _ (… ‹_›)`, `(Function.hfunext rfl) fun i
+            // _ _ ↦ by …` and `le_antisymm (assoc _ _ _) <| by …` all fell
+            // through to the roundtrip and ran ZERO tactics, reported as
+            // `unsolved goals` on a correctly-instantiated goal. A macro head
+            // is written as a bare identifier, so an `Ident` head is the only
+            // one that could keep whole-expression expansion — and it already
+            // bypasses under this same rule. `elab_app` elaborates the head
+            // through `elaborate`, so a `Paren(Lambda)`/`Paren(Match)` head
+            // reaches its own bypass with the block intact, and the `Explicit`
+            // head keeps `@`-semantics because `func` is passed through
+            // unchanged (`elab_app` unwraps it and sets explicit mode).
+            // Only fires when an argument is actually retry-sensitive, so
+            // ordinary applications are unaffected.
             if matches!(
                 func.as_ref(),
-                SurfaceExpr::Ident(..) | SurfaceExpr::Proj(..)
+                SurfaceExpr::Ident(..)
+                    | SurfaceExpr::Proj(..)
+                    | SurfaceExpr::Explicit(..)
+                    | SurfaceExpr::Paren(..)
+                    | SurfaceExpr::App(..)
+                    | SurfaceExpr::UniverseInst(..)
             ) && args
                 .iter()
                 .any(|arg| Self::contains_retry_sensitive_surface(&arg.expr))
@@ -1210,11 +1809,11 @@ impl<'a> ElabCtx<'a> {
     /// (`Function.const` ⇒ `Proj(Ident("Function"), Named("const"))`). Lets the
     /// prelude-combinator desugars (`∘`/`flip`/`Function.const`) recognize their
     /// head however it was written. `None` for a non-name head.
-    fn func_qualified_name(e: &SurfaceExpr) -> Option<String> {
+    fn func_qualified_name(e: &SurfaceExpr) -> Option<SurfaceName> {
         match e {
             SurfaceExpr::Ident(_, n) => Some(n.clone()),
             SurfaceExpr::Proj(_, base, Projection::Named(field)) => match base.as_ref() {
-                SurfaceExpr::Ident(_, ns) => Some(format!("{ns}.{field}")),
+                SurfaceExpr::Ident(_, ns) => Some(ns.append(field)),
                 _ => None,
             },
             _ => None,
@@ -1223,9 +1822,19 @@ impl<'a> ElabCtx<'a> {
 
     fn elaborate_surface_inner(&mut self, expanded: &SurfaceExpr) -> Result<Expr, ElabError> {
         match expanded {
-            SurfaceExpr::Ident(_, name) if name == "sorry" => self.elab_explicit_sorry(),
+            SurfaceExpr::Ident(_, name) if name.is_unescaped_component("sorry") => {
+                self.elab_explicit_sorry()
+            }
 
-            SurfaceExpr::Ident(_, name) if name == "inferInstance" => self.elab_infer_instance(),
+            // Only the global `inferInstance`: a local of that name is the
+            // user's value (`def b (inferInstance : Inhabited Nat) :=
+            // inferInstance` returned the synthesized instance instead).
+            SurfaceExpr::Ident(_, name)
+                if name.is_unescaped_component("inferInstance")
+                    && self.head_denotes_global(name, "inferInstance") =>
+            {
+                self.elab_infer_instance()
+            }
 
             SurfaceExpr::Ident(_, name) => self.elab_ident(name),
 
@@ -1241,9 +1850,11 @@ impl<'a> ElabCtx<'a> {
             // to a single bare `Nat`-literal argument with no expected type, so
             // `(-5 : Float)`, `-x`, and type-pinned contexts are untouched.
             SurfaceExpr::App(_, func, args)
-                if self.current_expected_type.is_none()
+                if self.current_expected_type.as_ref().is_none_or(|ty| {
+                    matches!(self.metas.instantiate(ty).kind(), ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some())
+                })
                     && args.len() == 1
-                    && matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "Neg.neg")
+                    && self.func_denotes_global(func, "Neg.neg")
                     && matches!(
                         args[0].expr,
                         SurfaceExpr::Lit(_, SurfaceLit::Nat(_) | SurfaceLit::BigNat(_))
@@ -1259,11 +1870,14 @@ impl<'a> ElabCtx<'a> {
             // correct, kernel-checkable composed function; the expected type (if
             // any) flows into the lambda so an unannotated binder is inferred.
             SurfaceExpr::App(sp, func, args)
-                if args.len() == 2
-                    && Self::func_qualified_name(func).as_deref() == Some("Function.comp") =>
+                if args.len() == 2 && self.func_denotes_global(func, "Function.comp") =>
             {
                 let sp = *sp;
-                let x = SurfaceExpr::Ident(sp, "_comp_x".to_string());
+                // The binder encloses the user's `f` and `g`, so it must be
+                // unspellable (`SurfaceName::unspellable`): as `_comp_x` it
+                // captured their references to a global of that spelling. The
+                // same holds for every combinator desugaring below.
+                let x = SurfaceExpr::Ident(sp, SurfaceName::unspellable("_comp_x", 0));
                 let g_x = SurfaceExpr::App(
                     sp,
                     Box::new(args[1].expr.clone()),
@@ -1276,8 +1890,8 @@ impl<'a> ElabCtx<'a> {
                 );
                 let lam = SurfaceExpr::Lambda(
                     sp,
-                    vec![SurfaceBinder::new(
-                        "_comp_x".to_string(),
+                    vec![SurfaceBinder::new_typed(
+                        SurfaceName::unspellable("_comp_x", 0),
                         None,
                         SurfaceBinderInfo::Explicit,
                     )],
@@ -1291,12 +1905,11 @@ impl<'a> ElabCtx<'a> {
             // form (the combinator itself); further application composes via the
             // resulting lambda.
             SurfaceExpr::App(sp, func, args)
-                if args.len() == 1
-                    && Self::func_qualified_name(func).as_deref() == Some("flip") =>
+                if args.len() == 1 && self.func_denotes_global(func, "flip") =>
             {
                 let sp = *sp;
-                let a = SurfaceExpr::Ident(sp, "_flip_a".to_string());
-                let b = SurfaceExpr::Ident(sp, "_flip_b".to_string());
+                let a = SurfaceExpr::Ident(sp, SurfaceName::unspellable("_flip_a", 0));
+                let b = SurfaceExpr::Ident(sp, SurfaceName::unspellable("_flip_b", 0));
                 let body = SurfaceExpr::App(
                     sp,
                     Box::new(args[0].expr.clone()),
@@ -1305,13 +1918,13 @@ impl<'a> ElabCtx<'a> {
                 let lam = SurfaceExpr::Lambda(
                     sp,
                     vec![
-                        SurfaceBinder::new(
-                            "_flip_a".to_string(),
+                        SurfaceBinder::new_typed(
+                            SurfaceName::unspellable("_flip_a", 0),
                             None,
                             SurfaceBinderInfo::Explicit,
                         ),
-                        SurfaceBinder::new(
-                            "_flip_b".to_string(),
+                        SurfaceBinder::new_typed(
+                            SurfaceName::unspellable("_flip_b", 0),
                             None,
                             SurfaceBinderInfo::Explicit,
                         ),
@@ -1326,7 +1939,7 @@ impl<'a> ElabCtx<'a> {
             // partial `Function.const β` becomes `fun a (_ : β) => a`.
             SurfaceExpr::App(sp, func, args)
                 if (args.len() == 1 || args.len() == 2)
-                    && Self::func_qualified_name(func).as_deref() == Some("Function.const") =>
+                    && self.func_denotes_global(func, "Function.const") =>
             {
                 let sp = *sp;
                 let beta = args[0].expr.clone();
@@ -1346,8 +1959,8 @@ impl<'a> ElabCtx<'a> {
                     SurfaceExpr::Lambda(
                         sp,
                         vec![
-                            SurfaceBinder::new(
-                                "_const_a".to_string(),
+                            SurfaceBinder::new_typed(
+                                SurfaceName::unspellable("_const_a", 0),
                                 None,
                                 SurfaceBinderInfo::Explicit,
                             ),
@@ -1357,7 +1970,10 @@ impl<'a> ElabCtx<'a> {
                                 SurfaceBinderInfo::Explicit,
                             ),
                         ],
-                        Box::new(SurfaceExpr::Ident(sp, "_const_a".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            sp,
+                            SurfaceName::unspellable("_const_a", 0),
+                        )),
                     )
                 };
                 self.elaborate_with_expected_type(&lam, self.current_expected_type.clone())
@@ -1371,19 +1987,21 @@ impl<'a> ElabCtx<'a> {
             // unannotated-binder inference, as for the comp/flip/const applied
             // forms). Bare `Function.uncurry g` keeps the lambda.
             SurfaceExpr::App(sp, func, args)
-                if !args.is_empty()
-                    && Self::func_qualified_name(func).as_deref() == Some("Function.uncurry") =>
+                if !args.is_empty() && self.func_denotes_global(func, "Function.uncurry") =>
             {
                 let sp = *sp;
                 if args.len() == 1 {
-                    let p = SurfaceExpr::Ident(sp, "_uncurry_p".to_string());
+                    let p = SurfaceExpr::Ident(sp, SurfaceName::unspellable("_uncurry_p", 0));
                     let fst = SurfaceExpr::Proj(
                         sp,
                         Box::new(p.clone()),
-                        Projection::Named("fst".to_string()),
+                        Projection::Named(SurfaceName::generated_path("fst")),
                     );
-                    let snd =
-                        SurfaceExpr::Proj(sp, Box::new(p), Projection::Named("snd".to_string()));
+                    let snd = SurfaceExpr::Proj(
+                        sp,
+                        Box::new(p),
+                        Projection::Named(SurfaceName::generated_path("snd")),
+                    );
                     let body = SurfaceExpr::App(
                         sp,
                         Box::new(args[0].expr.clone()),
@@ -1391,8 +2009,8 @@ impl<'a> ElabCtx<'a> {
                     );
                     let lam = SurfaceExpr::Lambda(
                         sp,
-                        vec![SurfaceBinder::new(
-                            "_uncurry_p".to_string(),
+                        vec![SurfaceBinder::new_typed(
+                            SurfaceName::unspellable("_uncurry_p", 0),
                             None,
                             SurfaceBinderInfo::Explicit,
                         )],
@@ -1405,10 +2023,13 @@ impl<'a> ElabCtx<'a> {
                     let fst = SurfaceExpr::Proj(
                         sp,
                         Box::new(p.clone()),
-                        Projection::Named("fst".to_string()),
+                        Projection::Named(SurfaceName::generated_path("fst")),
                     );
-                    let snd =
-                        SurfaceExpr::Proj(sp, Box::new(p), Projection::Named("snd".to_string()));
+                    let snd = SurfaceExpr::Proj(
+                        sp,
+                        Box::new(p),
+                        Projection::Named(SurfaceName::generated_path("snd")),
+                    );
                     let g_app = SurfaceExpr::App(
                         sp,
                         Box::new(args[0].expr.clone()),
@@ -1428,14 +2049,16 @@ impl<'a> ElabCtx<'a> {
             // `Function.curry g a b rest…` ⇝ `g ⟨a, b⟩ rest…` (fully applied,
             // built directly); `Function.curry g a` ⇝ `fun b => g ⟨a, b⟩` (partial).
             SurfaceExpr::App(sp, func, args)
-                if !args.is_empty()
-                    && Self::func_qualified_name(func).as_deref() == Some("Function.curry") =>
+                if !args.is_empty() && self.func_denotes_global(func, "Function.curry") =>
             {
                 let sp = *sp;
                 let mk_pair = |x: SurfaceExpr, y: SurfaceExpr| {
                     SurfaceExpr::App(
                         sp,
-                        Box::new(SurfaceExpr::Ident(sp, "anonymousCtor".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            sp,
+                            clean_parser::anonymous_constructor_head(),
+                        )),
                         vec![SurfaceArg::positional(x), SurfaceArg::positional(y)],
                     )
                 };
@@ -1455,7 +2078,7 @@ impl<'a> ElabCtx<'a> {
                     self.elaborate_with_expected_type(&applied, self.current_expected_type.clone())
                 } else if args.len() == 2 {
                     // partial: `fun b => g ⟨a, b⟩`
-                    let b_id = SurfaceExpr::Ident(sp, "_curry_b".to_string());
+                    let b_id = SurfaceExpr::Ident(sp, SurfaceName::unspellable("_curry_b", 0));
                     let pair = mk_pair(args[1].expr.clone(), b_id);
                     let body = SurfaceExpr::App(
                         sp,
@@ -1464,8 +2087,8 @@ impl<'a> ElabCtx<'a> {
                     );
                     let lam = SurfaceExpr::Lambda(
                         sp,
-                        vec![SurfaceBinder::new(
-                            "_curry_b".to_string(),
+                        vec![SurfaceBinder::new_typed(
+                            SurfaceName::unspellable("_curry_b", 0),
                             None,
                             SurfaceBinderInfo::Explicit,
                         )],
@@ -1474,8 +2097,8 @@ impl<'a> ElabCtx<'a> {
                     self.elaborate_with_expected_type(&lam, self.current_expected_type.clone())
                 } else {
                     // `fun a b => g ⟨a, b⟩`
-                    let a = SurfaceExpr::Ident(sp, "_curry_a".to_string());
-                    let b = SurfaceExpr::Ident(sp, "_curry_b".to_string());
+                    let a = SurfaceExpr::Ident(sp, SurfaceName::unspellable("_curry_a", 0));
+                    let b = SurfaceExpr::Ident(sp, SurfaceName::unspellable("_curry_b", 0));
                     let pair = mk_pair(a, b);
                     let body = SurfaceExpr::App(
                         sp,
@@ -1485,13 +2108,13 @@ impl<'a> ElabCtx<'a> {
                     let lam = SurfaceExpr::Lambda(
                         sp,
                         vec![
-                            SurfaceBinder::new(
-                                "_curry_a".to_string(),
+                            SurfaceBinder::new_typed(
+                                SurfaceName::unspellable("_curry_a", 0),
                                 None,
                                 SurfaceBinderInfo::Explicit,
                             ),
-                            SurfaceBinder::new(
-                                "_curry_b".to_string(),
+                            SurfaceBinder::new_typed(
+                                SurfaceName::unspellable("_curry_b", 0),
                                 None,
                                 SurfaceBinderInfo::Explicit,
                             ),
@@ -1510,18 +2133,20 @@ impl<'a> ElabCtx<'a> {
             // projections are registered (`And.left`/`And.right`) and reduce, so
             // the kernel re-checks a closed term; no new constant or trust.
             SurfaceExpr::App(sp, func, args)
-                if args.len() >= 2
-                    && Self::func_qualified_name(func).as_deref() == Some("And.elim") =>
+                if args.len() >= 2 && self.func_denotes_global(func, "And.elim") =>
             {
                 let sp = *sp;
                 let h = args[1].expr.clone();
                 let h_left = SurfaceExpr::Proj(
                     sp,
                     Box::new(h.clone()),
-                    Projection::Named("left".to_string()),
+                    Projection::Named(SurfaceName::generated_path("left")),
                 );
-                let h_right =
-                    SurfaceExpr::Proj(sp, Box::new(h), Projection::Named("right".to_string()));
+                let h_right = SurfaceExpr::Proj(
+                    sp,
+                    Box::new(h),
+                    Projection::Named(SurfaceName::generated_path("right")),
+                );
                 let f_app = SurfaceExpr::App(
                     sp,
                     Box::new(args[0].expr.clone()),
@@ -1545,15 +2170,20 @@ impl<'a> ElabCtx<'a> {
             // registered, so desugar the applied form to `f h.mp h.mpr` (mirrors
             // `And.elim`); the kernel re-checks the closed term.
             SurfaceExpr::App(sp, func, args)
-                if args.len() >= 2
-                    && Self::func_qualified_name(func).as_deref() == Some("Iff.elim") =>
+                if args.len() >= 2 && self.func_denotes_global(func, "Iff.elim") =>
             {
                 let sp = *sp;
                 let h = args[1].expr.clone();
-                let h_mp =
-                    SurfaceExpr::Proj(sp, Box::new(h.clone()), Projection::Named("mp".to_string()));
-                let h_mpr =
-                    SurfaceExpr::Proj(sp, Box::new(h), Projection::Named("mpr".to_string()));
+                let h_mp = SurfaceExpr::Proj(
+                    sp,
+                    Box::new(h.clone()),
+                    Projection::Named(SurfaceName::generated_path("mp")),
+                );
+                let h_mpr = SurfaceExpr::Proj(
+                    sp,
+                    Box::new(h),
+                    Projection::Named(SurfaceName::generated_path("mpr")),
+                );
                 let f_app = SurfaceExpr::App(
                     sp,
                     Box::new(args[0].expr.clone()),
@@ -1574,11 +2204,10 @@ impl<'a> ElabCtx<'a> {
             // for an `Or` (Prop) scrutinee; the kernel re-checks the assembled
             // recursor term. No new constant or trust.
             SurfaceExpr::App(sp, func, args)
-                if args.len() >= 3
-                    && Self::func_qualified_name(func).as_deref() == Some("Or.elim") =>
+                if args.len() >= 3 && self.func_denotes_global(func, "Or.elim") =>
             {
                 let sp = *sp;
-                let x = SurfaceExpr::Ident(sp, "__or_elim_x".to_string());
+                let x = SurfaceExpr::Ident(sp, SurfaceName::unspellable("__or_elim_x", 0));
                 let inl_body = SurfaceExpr::App(
                     sp,
                     Box::new(args[1].expr.clone()),
@@ -1593,16 +2222,22 @@ impl<'a> ElabCtx<'a> {
                     clean_parser::SurfaceMatchArm {
                         span: clean_parser::Span::dummy(),
                         pattern: SurfacePattern::Ctor(
-                            "Or.inl".to_string(),
-                            vec![SurfacePattern::Var("__or_elim_x".to_string())],
+                            SurfaceName::generated_path("Or.inl"),
+                            vec![SurfacePattern::Var(SurfaceName::unspellable(
+                                "__or_elim_x",
+                                0,
+                            ))],
                         ),
                         body: inl_body,
                     },
                     clean_parser::SurfaceMatchArm {
                         span: clean_parser::Span::dummy(),
                         pattern: SurfacePattern::Ctor(
-                            "Or.inr".to_string(),
-                            vec![SurfacePattern::Var("__or_elim_x".to_string())],
+                            SurfaceName::generated_path("Or.inr"),
+                            vec![SurfacePattern::Var(SurfaceName::unspellable(
+                                "__or_elim_x",
+                                0,
+                            ))],
                         ),
                         body: inr_body,
                     },
@@ -1621,13 +2256,15 @@ impl<'a> ElabCtx<'a> {
             // `absurd` is registered, so desugar the applied form to `absurd ha
             // h` (note the swapped order: `absurd : a → ¬a → C`).
             SurfaceExpr::App(sp, func, args)
-                if args.len() >= 2
-                    && Self::func_qualified_name(func).as_deref() == Some("Not.elim") =>
+                if args.len() >= 2 && self.func_denotes_global(func, "Not.elim") =>
             {
                 let sp = *sp;
                 let absurd_app = SurfaceExpr::App(
                     sp,
-                    Box::new(SurfaceExpr::Ident(sp, "absurd".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        sp,
+                        SurfaceName::generated_path("absurd"),
+                    )),
                     vec![
                         SurfaceArg::positional(args[1].expr.clone()),
                         SurfaceArg::positional(args[0].expr.clone()),
@@ -1647,11 +2284,10 @@ impl<'a> ElabCtx<'a> {
             // `match s with | Sum.inl a => f a | Sum.inr b => g b` — the match
             // elaborator discharges the `Sum` recursor; the kernel re-checks.
             SurfaceExpr::App(sp, func, args)
-                if args.len() >= 3
-                    && Self::func_qualified_name(func).as_deref() == Some("Sum.elim") =>
+                if args.len() >= 3 && self.func_denotes_global(func, "Sum.elim") =>
             {
                 let sp = *sp;
-                let x = SurfaceExpr::Ident(sp, "__sum_elim_x".to_string());
+                let x = SurfaceExpr::Ident(sp, SurfaceName::unspellable("__sum_elim_x", 0));
                 let inl_body = SurfaceExpr::App(
                     sp,
                     Box::new(args[0].expr.clone()),
@@ -1666,16 +2302,22 @@ impl<'a> ElabCtx<'a> {
                     clean_parser::SurfaceMatchArm {
                         span: clean_parser::Span::dummy(),
                         pattern: SurfacePattern::Ctor(
-                            "Sum.inl".to_string(),
-                            vec![SurfacePattern::Var("__sum_elim_x".to_string())],
+                            SurfaceName::generated_path("Sum.inl"),
+                            vec![SurfacePattern::Var(SurfaceName::unspellable(
+                                "__sum_elim_x",
+                                0,
+                            ))],
                         ),
                         body: inl_body,
                     },
                     clean_parser::SurfaceMatchArm {
                         span: clean_parser::Span::dummy(),
                         pattern: SurfacePattern::Ctor(
-                            "Sum.inr".to_string(),
-                            vec![SurfacePattern::Var("__sum_elim_x".to_string())],
+                            SurfaceName::generated_path("Sum.inr"),
+                            vec![SurfacePattern::Var(SurfaceName::unspellable(
+                                "__sum_elim_x",
+                                0,
+                            ))],
                         ),
                         body: inr_body,
                     },
@@ -1691,15 +2333,22 @@ impl<'a> ElabCtx<'a> {
 
             // `nomatch e` — Lean's sugar for an arm-less match on an
             // uninhabited scrutinee. The parser produces `App(Ident("nomatch"),
-            // [e])` (there is no `nomatch` in scope, so it never collides with a
-            // real function). Desugar to an empty `Match`, which the empty-match
-            // eliminator ([`Self::elab_empty_match`]) discharges via the
-            // scrutinee type's zero-minor recursor. Multi-discriminant
-            // `nomatch e₁ e₂` is not this shape — it falls through to `elab_app`
-            // and fails loud on the unknown `nomatch` head.
+            // [e])` with the head marked as the Lean KEYWORD it is
+            // (`SurfaceName::is_lean_keyword`: an unescaped `nomatch` token,
+            // which no binder or declaration can spell). Desugar to an empty
+            // `Match`, which the empty-match eliminator
+            // ([`Self::elab_empty_match`]) discharges via the scrutinee type's
+            // zero-minor recursor. Only the keyword is this sugar: an escaped
+            // `«nomatch»` is an identifier in Lean and names the file's own
+            // `def «nomatch»` or binder (it used to be read as the sugar, and
+            // `«nomatch» 3 = 4` over `def «nomatch» (n : Nat) := n + 1` was
+            // refused; Lean 4.8.0 accepts it, measured 2026-09-27).
+            // Multi-discriminant `nomatch e₁ e₂` is not this shape — it falls
+            // through to `elab_app` and fails loud on the keyword head.
             SurfaceExpr::App(sp, func, args)
                 if args.len() == 1
-                    && Self::func_qualified_name(func).as_deref() == Some("nomatch") =>
+                    && matches!(func.as_ref(), SurfaceExpr::Ident(_, name)
+                        if name.is_lean_keyword() && name.is_unescaped_component("nomatch")) =>
             {
                 let empty_match =
                     SurfaceExpr::Match(*sp, None, Box::new(args[0].expr.clone()), Vec::new());
@@ -1714,7 +2363,7 @@ impl<'a> ElabCtx<'a> {
             // wrong coercion still fails loud in the kernel re-check.
             SurfaceExpr::App(_, func, args)
                 if args.len() == 1
-                    && matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "↑") =>
+                    && matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.is_unescaped_component("↑")) =>
             {
                 let inner = self.elaborate_with_expected_type(&args[0].expr, None)?;
                 if let Some(expected) = self.current_expected_type.clone() {
@@ -1732,28 +2381,57 @@ impl<'a> ElabCtx<'a> {
             SurfaceExpr::App(_, func, args) => self.elab_app(func, args),
 
             // Pattern-matching lambda is elaborated the same way as regular lambda
-            SurfaceExpr::Lambda(_, binders, body) => self.elab_lambda(binders, body),
+            SurfaceExpr::Lambda(_, binders, body) => {
+                // A lambda that a MACRO produced: the bypass above returned
+                // early for every lambda written in the source, so this arm is
+                // reached only after expansion — and the expected type is still
+                // armed, so the same once-per-term implicit-lambda decision is
+                // owed here. Cannot double-wrap: the bypass strips the leading
+                // non-explicit binders before re-entering, so a second test
+                // sees an explicit leading binder.
+                if let Some(expected) = self.current_expected_type.clone() {
+                    if self.use_implicit_lambda(expanded, &expected) {
+                        return self.elab_lambda_with_implicit_wrap(binders, body, &expected);
+                    }
+                }
+                self.elab_lambda(binders, body)
+            }
             SurfaceExpr::PatternMatchLambda(_, binders, body) => {
                 self.elab_pattern_lambda(binders, body)
             }
 
-            SurfaceExpr::Pi(_, binders, body) => self.elab_pi(binders, body),
+            SurfaceExpr::Pi(_, binders, body) => {
+                let pi = self.elab_pi(binders, body)?;
+                self.note_surface_forall_binder_names(expanded, &pi);
+                Ok(pi)
+            }
 
             SurfaceExpr::Arrow(_, from, to) => {
-                let from_expr = self.elaborate(from)?;
-                let to_expr = self.elaborate(to)?;
-                let _ = self.ensure_type_expr(&from_expr)?;
-                let _ = self.ensure_type_expr(&to_expr)?;
-                Ok(Expr::arrow(from_expr, to_expr))
+                // Both sides are type positions (`elabType`): a `Bool` side is
+                // coerced to `b = true` (G34, `elab_type_position`).
+                self.elab_arrow(from, to)
             }
 
             SurfaceExpr::Let(_, binder, val, body) => self.elab_let(binder, val, body),
+            SurfaceExpr::Have(_, binder, val, body) => self.elab_have(binder, val, body),
 
             SurfaceExpr::Lit(_, lit) => match lit {
                 SurfaceLit::Nat(n) => {
                     let n = BigNat::from_u64(*n);
                     if let Some(expected_ty) = self.current_expected_type.clone() {
                         Ok(self.elab_nat_literal_with_expected(&n, &expected_ty))
+                    } else if self.numeral_postpone_depth > 0 {
+                        // No expected type inside a `let` value that postpones
+                        // its numerals: the carrier is a fresh `?α`.
+                        let carrier = self.fresh_meta(Expr::type_());
+                        Ok(self.postpone_open_numeral(&n, &carrier))
+                    } else if self.has_user_ofnat_default_at_nat_tier() {
+                        // B99 with no expected type: the file's own `OfNat`
+                        // default outranks `instOfNatNat`, so the carrier is
+                        // open and that default decides it (`let k := 5;
+                        // Tag.tag k` with a default `OfNat W n` is a `W`).
+                        let carrier = self.fresh_meta(Expr::type_());
+                        Ok(self.elab_nat_literal_with_expected(&n, &carrier))
                     } else {
                         self.elab_nat_literal(&n)
                     }
@@ -1764,6 +2442,18 @@ impl<'a> ElabCtx<'a> {
                 SurfaceLit::BigNat(n) => {
                     if let Some(expected_ty) = self.current_expected_type.clone() {
                         Ok(self.elab_nat_literal_with_expected(n, &expected_ty))
+                    } else if self.numeral_postpone_depth > 0 {
+                        // No expected type inside a `let` value that postpones
+                        // its numerals: the carrier is a fresh `?α`.
+                        let carrier = self.fresh_meta(Expr::type_());
+                        Ok(self.postpone_open_numeral(n, &carrier))
+                    } else if self.has_user_ofnat_default_at_nat_tier() {
+                        // B99 with no expected type: the file's own `OfNat`
+                        // default outranks `instOfNatNat`, so the carrier is
+                        // open and that default decides it (`let k := 5;
+                        // Tag.tag k` with a default `OfNat W n` is a `W`).
+                        let carrier = self.fresh_meta(Expr::type_());
+                        Ok(self.elab_nat_literal_with_expected(n, &carrier))
                     } else {
                         self.elab_nat_literal(n)
                     }
@@ -1807,19 +2497,20 @@ impl<'a> ElabCtx<'a> {
             SurfaceExpr::If(_, cond, then_br, else_br) => self.elab_if(cond, then_br, else_br),
 
             SurfaceExpr::Match(_, hyp, scrutinee, arms) => {
-                self.elab_match(hyp.as_deref(), scrutinee, arms)
+                self.elab_match(hyp.as_ref(), scrutinee, arms)
             }
 
-            SurfaceExpr::OutParam(_, inner) => {
-                // outParam is just a marker for type class parameters
-                // During normal elaboration, we just elaborate the inner type
-                self.elaborate(inner)
-            }
+            // `outParam e` / `semiOutParam e` mark a type-class parameter and
+            // elaborate to `e` (Lean: `@[reducible] def outParam (α) := α`).
+            // The parser builds the wrapper by SPELLING, so the marker holds
+            // only where the head RESOLVES to that global: a user's local (or
+            // namespace member) named `outParam` is an ordinary function, and
+            // dropping the head proved `∀ (outParam : Nat → Nat), outParam 0 =
+            // 0` (measured 2026-09-26; Lean 4.8.0 calls the local).
+            SurfaceExpr::OutParam(sp, inner) => self.elab_out_param_marker(*sp, "outParam", inner),
 
-            SurfaceExpr::SemiOutParam(_, inner) => {
-                // semiOutParam is also just a marker for type class parameters
-                // During normal elaboration, we just elaborate the inner type
-                self.elaborate(inner)
+            SurfaceExpr::SemiOutParam(sp, inner) => {
+                self.elab_out_param_marker(*sp, "semiOutParam", inner)
             }
 
             SurfaceExpr::Proj(_, expr, proj) => self.elab_proj(expr, proj),
@@ -1861,8 +2552,8 @@ impl<'a> ElabCtx<'a> {
             } => self.elaborate_q_quotation(*kind, inner, type_annot.as_ref().map(|t| t.as_ref())),
 
             SurfaceExpr::QAntiquot { span, .. } => Err(ElabError::NotImplemented(format!(
-                "antiquotation outside q(...) context at {:?}",
-                span
+                "antiquotation outside q(...) context at bytes {}..{}",
+                span.start, span.end
             ))),
 
             SurfaceExpr::StructLit {
@@ -1874,7 +2565,7 @@ impl<'a> ElabCtx<'a> {
 
             SurfaceExpr::Do(_, elems) => self.elab_do(elems),
 
-            SurfaceExpr::ByTactic(_, tactics) => self.elab_by_tactic(tactics),
+            SurfaceExpr::ByTactic(span, tactics) => self.elab_by_tactic_at(Some(*span), tactics),
 
             SurfaceExpr::CalcBlock(_, steps) => self.elab_calc(steps),
 
@@ -1911,9 +2602,9 @@ impl<'a> ElabCtx<'a> {
     /// `open_expr_body` desugared to `App(Ident("open"), …)`, discarding the
     /// namespace and leaving `open` to fail as an unknown identifier.
     ///
-    /// For `scoped` we also `process_open`: Mathlib's
-    /// `open scoped Classical in Decidable.…` relies on the namespace being
-    /// available for name/instance resolution of the sub-term.
+    /// `scoped` activates the namespace's scoped instances (Mathlib's
+    /// `open scoped Classical in Decidable.…` needs `Classical.propDecidable`)
+    /// without opening its names, as Lean does.
     fn elab_open_in(
         &mut self,
         paths: &[clean_parser::OpenPath],
@@ -1921,16 +2612,23 @@ impl<'a> ElabCtx<'a> {
         body: &SurfaceExpr,
     ) -> Result<Expr, ElabError> {
         self.namespace_state.push_scope();
-        let open_result =
+        let before = self.namespace_state.activated_scopes().to_vec();
+        // `open scoped X in e` activates X's scoped entries (notations,
+        // instances) and brings NO name into scope (Lean `elabOpenScoped`;
+        // measured on Lean 4.8.0: with a root `x := 2` and `N.x := 7`,
+        // `(open scoped N in x) = 2` holds). It used to open the names too.
+        let open_result = if scoped {
+            crate::namespace::process_open_scoped(self.env, paths, &mut self.namespace_state);
+            Ok(())
+        } else {
             crate::namespace::process_open(self.env, paths, &mut self.namespace_state).map_err(
                 |e| ElabError::Unsupported {
                     feature: e.to_string(),
                 },
-            );
-        // `scoped` currently opens the namespace identically (name / instance
-        // resolution); the flag is retained for fidelity and future
-        // scoped-only (notation / scoped-instance) handling.
-        let _ = scoped;
+            )
+        };
+        let activated = self.namespace_state.newly_activated(&before);
+        let saved = self.activate_scoped_instances_here(&activated);
         // Elaborate the body in CHECKING mode against the expected type currently
         // in scope, not plain synthesis. Lean elaborates `open X in e` against the
         // same expected type the `open … in` expression is checked against, and it
@@ -1944,6 +2642,7 @@ impl<'a> ElabCtx<'a> {
         // type pins `a`/`b` before instance synthesis runs.
         let expected = self.current_expected_type.clone();
         let result = open_result.and_then(|()| self.elaborate_with_expected_type(body, expected));
+        self.restore_instance_state(saved);
         self.namespace_state.pop_scope();
         result
     }
@@ -1964,6 +2663,7 @@ pub(crate) fn surface_expr_kind_name(expr: &SurfaceExpr) -> &'static str {
         SurfaceExpr::Pi(..) => "pi",
         SurfaceExpr::Arrow(..) => "arrow",
         SurfaceExpr::Let(..) => "let",
+        SurfaceExpr::Have(..) => "have",
         SurfaceExpr::LetRec(..) => "letRec",
         SurfaceExpr::LetPattern(..) => "letPattern",
         SurfaceExpr::Lit(..) => "lit",

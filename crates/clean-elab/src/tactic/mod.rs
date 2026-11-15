@@ -38,6 +38,7 @@ pub(crate) mod arith_linarith;
 pub(crate) mod arith_linarith_chain;
 pub(crate) mod arith_linarith_close;
 pub(crate) mod arith_linarith_farkas_goal;
+pub(crate) mod arith_linarith_farkas_nat;
 pub(crate) mod arith_linarith_int_eq;
 pub(crate) mod arith_linarith_kernel;
 pub(crate) mod arith_linarith_nat_direct;
@@ -53,6 +54,7 @@ pub(crate) mod arith_mathverse_proof_builders;
 pub(crate) mod arith_nlinarith;
 pub(crate) mod arith_norm_cast;
 pub(crate) mod arith_push_neg;
+pub(crate) mod arith_uint_order;
 pub(crate) mod arithmetic;
 pub(crate) mod auto_cascade;
 pub(crate) mod blast;
@@ -66,6 +68,9 @@ pub(crate) mod builtins_phase3d_intro;
 pub(crate) mod builtins_phase3d_loc;
 pub(crate) mod builtins_phase3d_match;
 pub(crate) mod builtins_phase3d_rewrite;
+pub(crate) mod builtins_rcases_target;
+pub(crate) mod builtins_rcases_typed;
+pub(crate) mod builtins_replace;
 pub(crate) mod builtins_wave3;
 pub(crate) mod bvar_ops;
 pub(crate) mod calc;
@@ -75,9 +80,16 @@ pub(crate) mod calc_trans;
 pub(crate) mod calc_trans_match;
 #[cfg(test)]
 mod case_binder_rename_cache_tests;
+pub(crate) mod case_field_names;
 pub(crate) mod cases;
+pub(crate) mod cases_on_spine;
 #[cfg(test)]
 mod cases_tests;
+// `cases h` on an equation: Lean's `unifyEqs?` (G82)
+mod cases_index_constraints;
+pub(crate) mod cases_unify_eqs;
+#[cfg(test)]
+mod cases_unify_eqs_tests;
 pub(crate) mod cast;
 pub(crate) mod cc;
 pub(crate) mod cert_simp;
@@ -94,6 +106,7 @@ pub(crate) mod combinators_ext;
 mod combinators_ext_tests;
 #[cfg(test)]
 mod combinators_tests;
+pub(crate) mod congr_n;
 pub(crate) mod congr_obtain;
 pub(crate) mod connective;
 #[cfg(test)]
@@ -105,6 +118,7 @@ pub(crate) mod contradiction;
 mod contradiction_tests;
 pub(crate) mod conv;
 pub(crate) mod conv_congr_recombine;
+pub(crate) mod inhabit;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -115,10 +129,14 @@ pub(crate) mod conv_ext;
 pub(crate) mod conv_proof;
 pub(crate) mod convert;
 mod core;
+pub(crate) mod custom_eliminator;
+#[cfg(test)]
+mod custom_eliminator_tests;
 pub(crate) mod debug;
 pub(crate) mod decide;
 pub(crate) mod decide_eq;
 pub(crate) mod decide_eq_noconfusion;
+pub(crate) mod decide_lean;
 // Staged Lean4-parity scaffold: kept alive by its cfg(test) companion, awaiting
 // production wiring — see docs/AUDIT_LEAN4_REPLACEMENT_2026-07-22.md (dated 2026-07-30).
 #[cfg_attr(not(test), allow(dead_code))]
@@ -136,6 +154,7 @@ pub mod drat;
 pub(crate) mod elim_info;
 #[cfg(test)]
 mod elim_info_tests;
+mod elim_targets;
 pub(crate) mod eq_goal_solver;
 pub(crate) mod equality;
 pub(crate) mod existential;
@@ -162,17 +181,33 @@ pub(crate) mod gcongr;
 #[cfg(test)]
 mod gcongr_discharge_tests;
 pub(crate) mod generalize;
+pub(crate) mod generalize_many;
 pub(crate) mod goal;
+mod goal_observation;
+#[cfg(test)]
+mod goal_observation_tests;
 pub(crate) mod grind;
+pub(crate) mod grind_bridges;
 pub(crate) mod grind_config;
+pub(crate) mod grind_split;
 pub(crate) mod groebner_basis;
 pub(crate) mod have_let;
 pub(crate) mod hypothesis;
+// indexed_family: motive construction + eliminator index layout for indexed
+// inductive families (RC-S).
+pub(crate) mod indexed_family;
+#[cfg(test)]
+mod indexed_family_tests;
 pub(crate) mod induction;
+pub(crate) mod induction_alt_check;
+#[cfg(test)]
+mod induction_alt_check_tests;
 pub(crate) mod induction_elim;
 #[cfg(test)]
 mod induction_elim_tests;
 pub(crate) mod inductive_reasoning;
+// `T.noConfusion` applications and `injectionCore`, shared by `injection` and `cases`
+pub(crate) mod noconfusion_app;
 // injection: TacticCtx wrappers + classify_constructor_equality helper (#3082)
 pub(crate) mod injection;
 pub(crate) mod instance;
@@ -185,6 +220,9 @@ pub(crate) mod library_search_ext;
 #[cfg(test)]
 mod library_search_ext_tests;
 pub(crate) mod llm_oracle;
+pub(crate) mod major_dependents;
+#[cfg(test)]
+mod major_dependents_tests;
 pub(crate) mod mathverse_env;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
 // pipeline owns it. Mirrors pattern_match_ext / error_recovery* precedent.
@@ -197,6 +235,7 @@ pub(crate) mod mathverse_use;
 mod mathverse_use_tests;
 pub(crate) mod monad_pres;
 pub(crate) mod nat_expr_eval;
+pub(crate) mod nat_le_bridge;
 pub(crate) mod native_decide_eval;
 pub(crate) mod nn_verify;
 pub(crate) mod norm;
@@ -283,6 +322,11 @@ pub(crate) mod tactic_doc_ext;
 #[path = "tactic_doc_ext_tests.rs"]
 mod tactic_doc_ext_tests;
 pub(crate) mod tactic_interp;
+pub(crate) use goal_observation::TacticGoalBlock;
+pub use goal_observation::{
+    ObservedTacticGoals, TacticGoalBlockId, TacticGoalCapture, TacticGoalCaptureError,
+    TacticGoalObservation, TacticGoalObservationKind, TacticGoalObservationUnavailable,
+};
 pub use tactic_interp::{
     proof_state_for_tactic_target, run_tactic_script_with_snapshots, TacticGoalSnapshot,
     TacticPostSnapshotRange, TacticScriptSnapshotRun,
@@ -296,6 +340,7 @@ pub(crate) mod tactic_interp_ext;
 mod tactic_interp_ext_tests;
 pub mod tactic_registry;
 pub mod tacticm;
+pub(crate) mod target_equation;
 pub(crate) mod tauto;
 pub(crate) mod tc_app;
 // Unwired roadmap prototype (2026-08-10): compiled only with its unit tests until the live
@@ -314,6 +359,7 @@ pub(crate) mod unification_hint;
 pub(crate) mod wlog;
 
 // Re-exports
+pub(crate) use core::{have_value, local_value_for_reduction};
 pub use core::{
     Goal, LocalDecl, ProofState, ProofTrustLedger, RewriteCandidate, SmtRecoveryLedger,
     TacticError, TacticResult, TrustedArithProvenanceLedger, TrustedAyProvenanceLedger,
@@ -335,6 +381,10 @@ pub use arith_push_neg::{
     contrapose, contrapose_hyp, is_false, match_and, match_eq, match_ge, match_gt, match_iff,
     match_le, match_lt, match_not, match_or, push_neg,
 };
+// `match_le_any` / `match_lt_any` are crate-internal: nothing outside clean-elab
+// calls them, so they stay `pub(crate)` per rust_excellence.md's "pub(crate) by
+// default" and are re-exported only within the crate.
+pub(crate) use arith_push_neg::{match_le_any, match_lt_any};
 pub use omega_tactic::{
     omega, CertifiedMathverseConstraint, MathverseCertificate, MathverseCertifiedResult,
     MathverseContradictionType, OmegaConstraint,
@@ -472,6 +522,8 @@ pub use norm_num_kernel::{
 };
 
 // Re-export mathverse_use / mathverse_suggest public API (feature-gated)
+// The pure checked context-key projection has no corpus dependency.
+pub use mathverse_use::mathverse_context_names;
 #[cfg(feature = "mathverse-library")]
 pub use mathverse_use::{clear_mathverse_library, run_strict_mathverse_use, set_mathverse_library};
 

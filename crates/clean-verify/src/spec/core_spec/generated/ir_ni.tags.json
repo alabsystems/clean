@@ -14,7 +14,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
-  "functy": 97,
+  "functy": 85,
   "functy_note": "Pinned VERBATIM and re-pinned under review; read ir_h2.tags.json's notes. The committed fixture says 97 and reader A's 2026-08-21 laneREG dump ALSO says 97 — the first chain in the tranche whose signature index has not been observed to move. The pin stays fixture-era by policy; reader A's value is RECORDED in ir_ni.mint.json either way.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",
@@ -24,7 +24,7 @@
     "index": 0,
     "ssa": 0,
     "ty": "struct#0",
-    "observed_ty": "struct.323",
+    "observed_ty": "struct.210",
     "rust_type": "cert::builder::state::NodeId",
     "note": "`self`, BY VALUE — a Copy newtype over u32. The extractfield reads its one field; nothing else is read."
    }
@@ -42,7 +42,7 @@
  "structs": [
   {
    "canonical": 0,
-   "crate_id": 323,
+   "crate_id": 210,
    "alias": "ir_ni_tself",
    "rust_type": "cert::builder::state::NodeId",
    "observed_crate_id_by_producer": {

@@ -8,23 +8,21 @@
 # default would break every checkout that has not run `cargo vendor` first —
 # including all the parallel build sessions. Keep it strictly opt-in.
 #
-# HISTORICAL / CURRENTLY BLOCKED: this source map does not yet provision AY as
-# a separate first-party subrepo. Do not invoke it directly. The only supported
-# entry point is scripts/build_offline.sh, whose provenance preflight currently
-# rejects the historical artifact against the AY-Git lockfile.
+# The only supported entry point is scripts/build_offline.sh, whose provenance
+# preflight re-mints the manifest from vendor/ and refuses a tree that differs
+# from data/vendor_manifest.json or holds a first-party repository. This source
+# map does not provision AY/ty/trust-ir/trust-cg: they are first-party subrepos,
+# never vendor data, and an --offline build resolves them from cargo's Git cache.
 #
-# PREREQUISITE: the vendor/ tree must exist and pass the third-party-only
-# provenance preflight in scripts/build_offline.sh. Do not run raw `cargo
-# vendor` after AY's Git migration: internal AY/NY repositories are subrepos,
-# never vendor data. Fetch + extract a compatible released
-# vendor-sources-v*.tar.zst artifact
+# PREREQUISITE: the vendor/ tree must exist. Stage it third-party-only (raw
+# `cargo vendor` copies first-party Git sources and refuses this lock outright):
+#   python3 scripts/gen_vendor_manifest.py --stage-third-party vendor
+# or fetch + extract a released vendor-sources-v*.tar.zst artifact
 #   (see scripts/package_vendor.sh and docs/SUPPLY_CHAIN_VENDORING.md).
 #
 # The `directory` path below is relative to the workspace root (cargo's config
 # discovery walks up from the invocation cwd), so invoke cargo from the repo
-# root. The current historical artifact predates AY's Git migration; a current
-# artifact requires a third-party-only staging flow and separate first-party
-# subrepo provisioning.
+# root.
 
 [source.crates-io]
 replace-with = "vendored-sources"

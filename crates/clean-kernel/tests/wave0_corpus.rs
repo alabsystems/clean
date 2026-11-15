@@ -190,16 +190,6 @@ fn test_wave0_corpus_through_verify_batch() {
     assert_eq!(stats.failed(), 0);
     assert!(stats.errors().is_empty());
     assert!((stats.pass_rate() - 1.0).abs() < f64::EPSILON);
-
-    // Micro coverage accounting: confirmed + skipped = passed
-    assert_eq!(
-        stats.micro_confirmed() + stats.micro_skipped(),
-        stats.passed()
-    );
-    assert!(
-        stats.micro_confirmed() > 0,
-        "Some entries must be micro-confirmed"
-    );
 }
 
 #[test]

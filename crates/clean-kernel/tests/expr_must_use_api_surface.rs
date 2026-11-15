@@ -5,54 +5,13 @@
 #[path = "support/rustc.rs"]
 mod rustc_support;
 
+#[path = "support/artifacts.rs"]
+mod artifacts;
+
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::time::{SystemTime, UNIX_EPOCH};
-
-fn clean_kernel_metadata_artifact() -> PathBuf {
-    let deps_dir = std::env::current_exe()
-        .expect("integration test should know its executable path")
-        .parent()
-        .expect("integration test executable should live under target deps")
-        .to_path_buf();
-    let mut rlibs = Vec::new();
-    let mut rmetas = Vec::new();
-
-    for path in fs::read_dir(&deps_dir)
-        .expect("deps directory should be readable")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-    {
-        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if !file_name.starts_with("libclean_kernel-") {
-            continue;
-        }
-
-        match path.extension().and_then(|ext| ext.to_str()) {
-            Some("rlib") => rlibs.push(path),
-            Some("rmeta") => rmetas.push(path),
-            _ => {}
-        }
-    }
-
-    let sort_by_mtime = |artifacts: &mut Vec<PathBuf>| {
-        artifacts.sort_by_key(|path| {
-            fs::metadata(path)
-                .and_then(|metadata| metadata.modified())
-                .unwrap_or(UNIX_EPOCH)
-        });
-    };
-    sort_by_mtime(&mut rlibs);
-    sort_by_mtime(&mut rmetas);
-
-    rlibs
-        .pop()
-        .or_else(|| rmetas.pop())
-        .expect("clean_kernel metadata artifact should exist in deps dir")
-}
 
 fn temp_compile_dir(test_name: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -67,10 +26,9 @@ fn temp_compile_dir(test_name: &str) -> PathBuf {
 }
 
 fn compile_external_snippet(test_name: &str, source: &str) -> Output {
-    let artifact = clean_kernel_metadata_artifact();
-    let deps_dir = artifact
-        .parent()
-        .expect("clean_kernel artifact should live in deps directory");
+    let executable = std::env::current_exe().expect("test executable path");
+    let library = artifacts::clean_kernel(&executable, "expr_must_use_api_surface")
+        .expect("resolve this test's clean_kernel dependency");
     let compile_dir = temp_compile_dir(test_name);
     fs::create_dir_all(&compile_dir).expect("compile directory should be creatable");
 
@@ -80,13 +38,12 @@ fn compile_external_snippet(test_name: &str, source: &str) -> Output {
     // TRUST OPT-OUT -- use Cargo's selected `RUSTC` so this snippet and the
     // linked crate metadata always share a compiler ABI. When that compiler is
     // Trust, disable obligation checking: the snippet proves only that the
-    // `must_use` lint fires. Fall back when the selected compiler does not
-    // understand Trust's opt-out flag.
-    let run_rustc = |trust_opt_out: bool| {
+    // `must_use` lint fires.
+    // The compiler is Trust (owner directive 2026-09-28); there is no retry
+    // without the opt-out.
+    let run_rustc = || {
         let mut cmd = Command::new(rustc_support::cargo_rustc());
-        if trust_opt_out {
-            cmd.arg("-Ztrust-verify=off");
-        }
+        cmd.arg("-Ztrust-verify=off");
         cmd.arg("--crate-type")
             .arg("lib")
             .arg("--edition")
@@ -97,21 +54,14 @@ fn compile_external_snippet(test_name: &str, source: &str) -> Output {
             .arg(&compile_dir)
             .arg(&source_path)
             .arg("--extern")
-            .arg(format!("clean_kernel={}", artifact.display()))
-            .arg("-L")
-            .arg(format!("dependency={}", deps_dir.display()))
-            .output()
+            .arg(format!("clean_kernel={}", library.artifact.display()));
+        for directory in &library.search_dirs {
+            cmd.arg("-L")
+                .arg(format!("dependency={}", directory.display()));
+        }
+        cmd.output()
     };
-    let flag_was_rejected = |stderr: &str| {
-        stderr.contains("only accepted on the nightly compiler")
-            || stderr.contains("unknown unstable option")
-            || stderr.contains("unknown debugging option")
-            || stderr.contains("incorrect value")
-    };
-    let mut output = run_rustc(true).expect("rustc should be runnable from integration tests");
-    if !output.status.success() && flag_was_rejected(&String::from_utf8_lossy(&output.stderr)) {
-        output = run_rustc(false).expect("rustc should be runnable from integration tests");
-    }
+    let output = run_rustc().expect("trustc should be runnable from integration tests");
 
     let _ = fs::remove_dir_all(&compile_dir);
     output
@@ -279,5 +229,26 @@ fn dropped_inductive_results() {
             "the Result indicates whether the constructor satisfies strict positivity",
             "the Result indicates whether the inductive declaration is well-formed",
         ],
+    );
+}
+
+#[test]
+fn used_api_results_compile_from_external_crate() {
+    let output = compile_external_snippet(
+        "used_results",
+        r#"
+#![deny(unused_must_use)]
+use clean_kernel::{Expr, Level, Name};
+pub fn kept() {
+    let _ = Expr::bvar(0);
+    let _ = Level::zero();
+    let _ = Name::anon();
+}
+"#,
+    );
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
 }

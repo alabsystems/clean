@@ -48,7 +48,7 @@ pub(crate) struct JpExtStats {
 }
 impl JpExtStats {
     #[must_use]
-    pub fn total(&self) -> usize {
+    pub(crate) fn total(&self) -> usize {
         self.join_points_inlined
             + self.join_points_fused
             + self.join_points_eliminated

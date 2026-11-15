@@ -8,6 +8,7 @@
 //! `build_prop_proof_inner` ↔ `try_or_elim` ↔ `try_prove_under_assumption`.
 //!
 //! Run with: `cargo kani -p clean-auto --harness verify_`
+//! STOCK EXCEPTION (Trust lacks kani; measured `targo kani` -> `error: no such command`; kani drives its own pinned nightly).
 //!
 //! ## Properties verified
 //!

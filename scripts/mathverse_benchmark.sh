@@ -170,7 +170,7 @@ for arg in "$@"; do
   esac
 done
 
-command -v cargo >/dev/null 2>&1 || die "cargo not found"
+command -v targo >/dev/null 2>&1 || die "targo not found"
 command -v python3 >/dev/null 2>&1 || die "python3 not found"
 command -v git >/dev/null 2>&1 || die "git not found"
 
@@ -298,7 +298,7 @@ log "  JSON report:   $JSON_PATH"
 log
 
 run_step "Build mathverse_shard (release)" "$BUILD_BINARY_LOG" \
-  cargo build --locked -p clean-mathverse --bin mathverse_shard --release --message-format=short -j "$CARGO_BUILD_JOBS"
+  targo --unverified build --locked -p clean-mathverse --bin mathverse_shard --release --message-format=short -j "$CARGO_BUILD_JOBS"
 BUILD_BINARY_SECS="$STEP_ELAPSED"
 
 [ -x "$MATHVERSE_SHARD" ] || die "mathverse_shard binary not found after build: $MATHVERSE_SHARD"
@@ -920,7 +920,7 @@ fn rate(num: u64, den: u64) -> f64 {
 EOF
   run_step "Corpus accounting" "$ACCOUNTING_LOG" \
     env CARGO_TARGET_DIR="$REPO_ROOT/target/mathverse-benchmark-helper" \
-    cargo run --quiet --manifest-path "$ACCOUNTING_TMP_DIR/Cargo.toml" --message-format=short -j "$CARGO_BUILD_JOBS" -- \
+    targo --unverified run --quiet --manifest-path "$ACCOUNTING_TMP_DIR/Cargo.toml" --message-format=short -j "$CARGO_BUILD_JOBS" -- \
       "--lean-lib=$LEAN_LIB_DIR" \
       "--output-dir=$OUTPUT_DIR" \
       "--modules=$MODULES" \

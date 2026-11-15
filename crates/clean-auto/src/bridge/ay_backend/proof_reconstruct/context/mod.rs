@@ -58,7 +58,7 @@ impl<'a> ReconstructionContext<'a> {
     /// Used by tests that need a context without a full proof object.
     /// Production callers should use [`with_proof`](Self::with_proof).
     #[cfg(test)]
-    pub fn new(
+    pub(crate) fn new(
         terms: &'a TermStore,
         var_map: &'a VariableMapping,
         proof_step_count: usize,
@@ -144,7 +144,11 @@ impl<'a> ReconstructionContext<'a> {
     }
 
     /// Attempt to reconstruct a complete proof from the ay proof object.
-    pub fn reconstruct(&mut self, proof: &'a Proof, negated_goal: &Expr) -> ReconstructionResult {
+    pub(crate) fn reconstruct(
+        &mut self,
+        proof: &'a Proof,
+        negated_goal: &Expr,
+    ) -> ReconstructionResult {
         self.trace
             .as_mut()
             .expect("invariant: trace seeded by new()")

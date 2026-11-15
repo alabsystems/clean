@@ -78,9 +78,9 @@ impl LayerNormJacobian {
     pub fn off_diagonal_nonzero_count(&self, tolerance: f64) -> usize {
         let dim = self.dim();
         let mut count = 0;
-        for i in 0..dim {
-            for j in 0..dim {
-                if i != j && self.matrix[i][j].abs() > tolerance {
+        for (i, row) in self.matrix.iter().enumerate() {
+            for (j, value) in row[..dim].iter().enumerate() {
+                if i != j && value.abs() > tolerance {
                     count += 1;
                 }
             }
@@ -92,10 +92,10 @@ impl LayerNormJacobian {
     pub fn off_diagonal_l1_norm(&self) -> f64 {
         let dim = self.dim();
         let mut total = 0.0;
-        for i in 0..dim {
-            for j in 0..dim {
+        for (i, row) in self.matrix.iter().enumerate() {
+            for (j, value) in row[..dim].iter().enumerate() {
                 if i != j {
-                    total += self.matrix[i][j].abs();
+                    total += value.abs();
                 }
             }
         }
@@ -489,6 +489,21 @@ pub(crate) fn c004_theorem_entry() -> super::TheoremEntry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn strict_lint_off_diagonal_entries_keep_their_full_dimension() {
+        let mut jacobian = LayerNormJacobian::compute(&[-1.0, 0.0, 1.0], &[1.0; 3], 1e-5);
+        jacobian.matrix = vec![
+            vec![1.0, 2.0, 3.0],
+            vec![4.0, 5.0, 6.0],
+            vec![7.0, 8.0, 9.0],
+        ];
+        assert_eq!(jacobian.off_diagonal_nonzero_count(0.0), 6);
+        assert_eq!(jacobian.off_diagonal_l1_norm(), 30.0);
+        jacobian.matrix[0].truncate(1);
+        assert!(std::panic::catch_unwind(|| jacobian.off_diagonal_nonzero_count(0.0)).is_err());
+        assert!(std::panic::catch_unwind(|| jacobian.off_diagonal_l1_norm()).is_err());
+    }
 
     #[test]
     fn test_crown_layernorm_degeneration_spec_status_is_pending() {

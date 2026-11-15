@@ -13,7 +13,10 @@ use std::collections::HashSet;
 
 use super::cache::collect_simp_lemmas_cached;
 use super::types::SimpConfig;
-use super::{is_trivial_equality, is_true_const, simp_at, simp_at_with_lemmas, simp_default};
+use super::{
+    is_trivial_equality, is_true_const, simp, simp_at_closed_goal, simp_at_fvar_with_config,
+    simp_at_fvar_with_lemmas,
+};
 use crate::tactic::display::no_progress_with_goal;
 use clean_kernel::Expr;
 
@@ -57,7 +60,7 @@ pub fn simp_all(state: &mut ProofState) -> TacticResult {
 ///
 /// This is the config-aware entrypoint that preserves caller-supplied fields
 /// (`aesop_simp_lemmas`, `exclude`, `max_steps`, `only_simplify`) while
-/// extending the config with local equality hypotheses as rewrite lemmas.
+/// extending the config with local propositional hypotheses as rewrite lemmas.
 /// Part of #1867.
 pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfig) -> TacticResult {
     if state.goals.is_empty() {
@@ -75,18 +78,40 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
     // Build config with hypotheses as extra lemmas, extending the caller's
     // config rather than replacing it.
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-    let (config, rewrite_hyp_names, other_hyp_names) = partition_simp_all_hypotheses(&goal, config);
+    let (rewrite_hyps, other_hyps) = partition_simp_all_hypotheses(&goal);
+    let erased: HashSet<clean_kernel::FVarId> = config
+        .exclude
+        .iter()
+        .filter_map(|name| {
+            goal.local_ctx
+                .iter()
+                .rev()
+                .find(|decl| crate::tactic::pattern::names::hypothesis_named(&decl.name, name))
+                .map(|decl| decl.fvar)
+        })
+        .collect();
 
-    // Keep equality hypotheses stable while they are still needed as rewrite
-    // lemmas for the rest of the context and the target.
-    let rewrite_simp_lemmas = collect_simp_lemmas_cached(state, &config);
-
+    // Context rules carry exact local proofs, including older hidden locals.
+    // Keep these locals stable until the other hypotheses and target consume
+    // them; rebuilding later reads any replacements by their current identity.
     // Simplify non-equality hypotheses via simp_at_with_lemmas, which uses
     // proper proof terms (fresh fvar + let-binding + Eq.subst/identity cast).
     // This replaces the old in-place mutation which reused fvar IDs.
-    for hyp_name in &other_hyp_names {
-        if simp_at_with_lemmas(state, hyp_name, &config, &rewrite_simp_lemmas).is_ok() {
+    // A hypothesis simplified to `False` closes the goal (`hyp_false`, Lean's
+    // `applySimpResult`); nothing is left to simplify then, and the next name
+    // would be looked up in an unrelated goal.
+    let open_goals = state.goals.len();
+    for &hyp in other_hyps.iter().filter(|hyp| !erased.contains(*hyp)) {
+        // Rebuild from current local identities after each replacement. A
+        // proposition must not discharge itself and erase its own evidence.
+        let mut hyp_config = simp_all_rewrite_config(state, &config, Some(hyp), &erased);
+        hyp_config.use_hypotheses = false;
+        let rewrite_simp_lemmas = collect_simp_lemmas_cached(state, &hyp_config);
+        if simp_at_fvar_with_lemmas(state, hyp, &hyp_config, &rewrite_simp_lemmas).is_ok() {
             made_progress = true;
+            if simp_at_closed_goal(state, open_goals) {
+                return Ok(());
+            }
         }
     }
 
@@ -95,19 +120,28 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
     // (e.g. `a = c` with lemmas `a = b` and `b = c`). Set `only_simplify` to
     // skip closers here — simp_all has its own closer phase below.
     {
-        let mut target_config = config.clone();
+        let mut target_config = simp_all_rewrite_config(state, &config, None, &erased);
         target_config.only_simplify = true;
-        if super::simp(state, target_config).is_ok() {
+        if simp(state, target_config).is_ok() {
             made_progress = true;
         }
     }
 
     // After the rest of the context has consumed the original equality proofs,
     // simplify the equality hypotheses themselves with a fresh local-lemma set.
-    for hyp_name in &rewrite_hyp_names {
-        let simp_lemmas = collect_simp_lemmas_cached(state, &config);
-        if simp_at_with_lemmas(state, hyp_name, &config, &simp_lemmas).is_ok() {
+    for &hyp in rewrite_hyps.iter().filter(|hyp| !erased.contains(*hyp)) {
+        // An equality cannot simplify its own proposition to True using its
+        // own proof. That would discard a contradictory hypothesis before
+        // `reduceCtorEq` can derive False from it. Exclude by identity, so a
+        // different local with the same displayed name remains usable.
+        let mut hyp_config = simp_all_rewrite_config(state, &config, Some(hyp), &erased);
+        hyp_config.use_hypotheses = false;
+        let simp_lemmas = collect_simp_lemmas_cached(state, &hyp_config);
+        if simp_at_fvar_with_lemmas(state, hyp, &hyp_config, &simp_lemmas).is_ok() {
             made_progress = true;
+            if simp_at_closed_goal(state, open_goals) {
+                return Ok(());
+            }
         }
     }
 
@@ -123,11 +157,15 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
             return Ok(());
         }
 
-        if try_tactic_preserving_state(state, assumption) {
+        if erased.is_empty() && try_tactic_preserving_state(state, assumption) {
             return Ok(());
         }
 
-        if try_tactic_preserving_state(state, trivial) {
+        let may_use_trivial = erased.is_empty()
+            || state
+                .current_goal()
+                .is_some_and(|goal| is_true_const(&goal.target));
+        if may_use_trivial && try_tactic_preserving_state(state, trivial) {
             return Ok(());
         }
     }
@@ -139,26 +177,41 @@ pub(crate) fn simp_all_with_config(state: &mut ProofState, mut config: SimpConfi
     }
 }
 
-/// Split hypotheses into local rewrite lemmas and everything else.
-///
-/// Extends the caller's config with local equality hypothesis names rather
-/// than constructing a fresh `SimpConfig::new()`. This preserves
-/// `aesop_simp_lemmas` and other caller-supplied fields. Part of #1867.
+/// Keep automatic context traversal independent of user-facing spellings.
 fn partition_simp_all_hypotheses(
     goal: &Goal,
-    mut config: SimpConfig,
-) -> (SimpConfig, Vec<String>, Vec<String>) {
-    let mut rewrite_hyp_names = Vec::new();
-    let mut other_hyp_names = Vec::new();
+) -> (Vec<clean_kernel::FVarId>, Vec<clean_kernel::FVarId>) {
+    let mut rewrite_hyps = Vec::new();
+    let mut other_hyps = Vec::new();
     for decl in &goal.local_ctx {
         if match_equality(&decl.ty).is_ok() {
-            config.extra_lemmas.push(decl.name.clone());
-            rewrite_hyp_names.push(decl.name.clone());
+            rewrite_hyps.push(decl.fvar);
         } else {
-            other_hyp_names.push(decl.name.clone());
+            other_hyps.push(decl.fvar);
         }
     }
-    (config, rewrite_hyp_names, other_hyp_names)
+    (rewrite_hyps, other_hyps)
+}
+
+fn simp_all_rewrite_config(
+    state: &ProofState,
+    config: &SimpConfig,
+    excluded: Option<clean_kernel::FVarId>,
+    erased: &HashSet<clean_kernel::FVarId>,
+) -> SimpConfig {
+    let mut config = config.clone();
+    if let Some(goal) = state.current_goal() {
+        for decl in &goal.local_ctx {
+            if Some(decl.fvar) != excluded && !erased.contains(&decl.fvar) {
+                config
+                    .aesop_simp_lemmas
+                    .extend(super::lemmas::collect_local_extra_lemma_for_decl(
+                        state, goal, decl,
+                    ));
+            }
+        }
+    }
+    config
 }
 
 /// Remove trivial hypotheses (`True`, `a = a`) from the current goal context.
@@ -170,19 +223,19 @@ fn remove_trivial_hypotheses(state: &mut ProofState) -> bool {
     let Some(current_goal) = state.current_goal() else {
         return false;
     };
-    let trivial_names: Vec<String> = current_goal
+    let trivial_fvars: Vec<clean_kernel::FVarId> = current_goal
         .local_ctx
         .iter()
         .filter(|d| is_true_const(&d.ty) || is_trivial_equality(&d.ty))
-        .map(|d| d.name.clone())
+        .map(|d| d.fvar)
         .collect();
-    if trivial_names.is_empty() {
+    if trivial_fvars.is_empty() {
         return false;
     }
     if let Some(goal_mut) = state.goals.front_mut() {
         goal_mut
             .local_ctx
-            .retain(|d| !trivial_names.contains(&d.name));
+            .retain(|d| !trivial_fvars.contains(&d.fvar));
         state.invalidate_tc_cache();
     }
     true
@@ -203,6 +256,28 @@ fn remove_trivial_hypotheses(state: &mut ProofState) -> bool {
 /// ENSURES: On Ok, hypotheses are simplified independently (no cross-rewriting)
 /// ENSURES: On Ok, trivial hypotheses are NOT removed (unlike `simp_all`)
 pub fn simp_at_all(state: &mut ProofState) -> TacticResult {
+    simp_at_all_with_config(state, SimpConfig::new())
+}
+
+/// [`simp_at_all`] with the caller's lemma list — `simp [foo, *] at *`.
+///
+/// The `Wildcard` arm of the `simp` handler used to call [`simp_at_all`] and
+/// therefore DROPPED the whole lemma list: `simp only [h] at *` ran the full
+/// default simp set at every location and never saw `h`, silently. Lean
+/// builds ONE `Simp.Context` in `mkSimpContext` and `simpLocation` hands it to
+/// every location, wildcard included.
+///
+/// `SimpConfig::new()` is exactly what the two call sites used before
+/// (`simp_at` is `simp_at_with_config(.., SimpConfig::new())` and
+/// `simp_default` is `simp(.., SimpConfig::new())`), so the no-list spelling
+/// is unchanged.
+///
+/// REQUIRES: `state.goals` is non-empty
+/// ENSURES: On Ok, hypotheses are simplified independently (no cross-rewriting)
+/// ENSURES: a hypothesis is never rewritten by its OWN `[*]` rule
+///   (`exclude_hypothesis`, Lean's `simpGoal`) — the same discipline
+///   `simp [*] at h` carries
+pub(crate) fn simp_at_all_with_config(state: &mut ProofState, config: SimpConfig) -> TacticResult {
     if state.goals.is_empty() {
         return Err(TacticError::NoGoals);
     }
@@ -212,17 +287,22 @@ pub fn simp_at_all(state: &mut ProofState) -> TacticResult {
 
     // Match Lean 4 `simpLocation Location.wildcard`: only simplify
     // nondependent propositional hypotheses and skip let-bindings entirely.
-    let hyp_names = collect_simp_at_all_hypotheses(state, &goal)?;
+    let hypotheses = collect_simp_at_all_hypotheses(state, &goal)?;
 
     // Simp each hypothesis independently — no cross-rewriting
-    for name in &hyp_names {
-        if simp_at(state, name).is_ok() {
+    let open_goals = state.goals.len();
+    for hyp in hypotheses {
+        if simp_at_fvar_with_config(state, hyp, config.clone()).is_ok() {
             made_progress = true;
+            // `h : False` closed the goal (`hyp_false`): `simp at *` is done.
+            if simp_at_closed_goal(state, open_goals) {
+                return Ok(());
+            }
         }
     }
 
     // Simp the goal (includes rfl/assumption closers)
-    if simp_default(state).is_ok() {
+    if simp(state, config).is_ok() {
         return Ok(());
     }
 
@@ -236,7 +316,7 @@ pub fn simp_at_all(state: &mut ProofState) -> TacticResult {
 fn collect_simp_at_all_hypotheses(
     state: &ProofState,
     goal: &Goal,
-) -> Result<Vec<String>, TacticError> {
+) -> Result<Vec<clean_kernel::FVarId>, TacticError> {
     let mut candidates = HashSet::new();
 
     for decl in &goal.local_ctx {
@@ -256,7 +336,7 @@ fn collect_simp_at_all_hypotheses(
         .local_ctx
         .iter()
         .filter(|decl| candidates.contains(&decl.fvar))
-        .map(|decl| decl.name.clone())
+        .map(|decl| decl.fvar)
         .collect())
 }
 
@@ -267,4 +347,40 @@ fn remove_candidate_dependencies(candidates: &mut HashSet<clean_kernel::FVarId>,
 
     let deps = crate::tactic::hypothesis::collect_fvars(expr);
     candidates.retain(|fvar| !deps.contains(fvar));
+}
+
+#[cfg(test)]
+mod shadow_tests {
+    use super::*;
+    use crate::tactic::LocalDecl;
+    use clean_kernel::{env::Environment, FVarId, Name};
+
+    #[test]
+    fn removing_trivial_hypothesis_preserves_nontrivial_namesake() {
+        let name = clean_parser::SurfaceName::generated_path("h");
+        let mut state = ProofState::with_context(
+            Environment::new(),
+            Expr::const_(Name::from_string("True"), vec![]),
+            vec![
+                LocalDecl {
+                    binder_info: Default::default(),
+                    fvar: FVarId::new(0),
+                    name: name.clone(),
+                    ty: Expr::const_(Name::from_string("True"), vec![]),
+                    value: None,
+                },
+                LocalDecl {
+                    binder_info: Default::default(),
+                    fvar: FVarId::new(1),
+                    name,
+                    ty: Expr::const_(Name::from_string("P"), vec![]),
+                    value: None,
+                },
+            ],
+        );
+        assert!(remove_trivial_hypotheses(&mut state));
+        let ctx = &state.current_goal().expect("goal").local_ctx;
+        assert_eq!(ctx.len(), 1);
+        assert_eq!(ctx[0].fvar, FVarId::new(1));
+    }
 }

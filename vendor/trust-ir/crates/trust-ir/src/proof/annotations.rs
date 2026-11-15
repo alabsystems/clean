@@ -110,6 +110,8 @@ pub enum ProofAnnotation {
     /// This instruction is a privileged sink (spawn / exec / clipboard / fs /
     /// network) that must never consume a [`Tainted`](ProofAnnotation::Tainted)
     /// value. The non-interference obligation enforced by `trust-ir-build`.
+    /// Must-refuse corpus row `refuse/tainted_value_reaches_sink`: a
+    /// consumer lane that skips `validate_module` compiles it.
     TrustedSink,
 
     // Memory role attributes (first-class GPU address-space hints)
@@ -174,8 +176,48 @@ pub enum ProofAnnotation {
     /// select an already-audited havoc interpretation that is an over-approximation
     /// of the producer operation. In particular, a consumer must independently
     /// reject or authenticate any `Assume`, pointer metadata, or other operation
-    /// that could narrow the fresh value.
+    /// that could narrow the fresh value. Must-refuse corpus row
+    /// `refuse/undef_fresh_havoc_feeds_assume` (a marked `Undef` narrowed by
+    /// an `Assume`): well-formed here, and a proof-grade consumer must refuse
+    /// or authenticate the narrowing itself.
+    ///
+    /// PLACEMENT (WS2.11, `docs/SPEC_RATIFICATIONS.md` "Harness inputs"): legal
+    /// ONLY on an `Inst::Undef` node. On any other node, or in
+    /// `Function.proofs`, `validate_module` refuses it as
+    /// `HavocMarkerMisplaced` — the same check the trust-mc consumer applies
+    /// at admission. It is NOT a harness input: a harness's nondeterministic
+    /// inputs are its entry parameters (and a `(ptr, len)` tape they address),
+    /// and the marked `undef` stays outside the lowering-target subset.
     FreshSymbolicHavoc,
+
+    /// Marks an [`Inst::Store`](crate::Inst::Store) whose intent is a
+    /// REGION HAVOC: the producer could not bound the set of locations a bulk
+    /// write (e.g. `copy_nonoverlapping` with a non-literal element count)
+    /// touches, so it asks the memory model to treat EVERYTHING the store's
+    /// pointer may target as freshly unconstrained.
+    ///
+    /// CONSUMER CONTRACT, load-bearing for soundness: a backend may translate
+    /// a store carrying this marker ONLY with an interpretation that havocs AT
+    /// LEAST the full region its pointer may reach (e.g. a CHC-style
+    /// whole-tracked-cell invalidation). A backend whose memory model would
+    /// treat the store as constraining a SINGLE location (e.g. one SMT-array
+    /// index at a symbolic offset — every other index would keep its pre-write
+    /// value, the stale-read false-proof shape) MUST FAIL CLOSED on it
+    /// instead. Ignoring the marker and translating the store as ordinary is
+    /// never sound; the annotation exists precisely because the plain store
+    /// under-approximates the write set. Must-refuse corpus row
+    /// `refuse/region_havoc_store`: a legally placed marker, well-formed
+    /// here, that a single-location backend must refuse.
+    ///
+    /// Like [`ProofAnnotation::FreshSymbolicHavoc`], this marker proves no
+    /// proposition and grants no authority — it only selects between
+    /// already-audited over-approximations, or refusal.
+    ///
+    /// PLACEMENT (WS2.11): legal ONLY on a NON-volatile `Inst::Store` node (a
+    /// volatile store is a single observable access, never a region havoc).
+    /// Anywhere else, including `Function.proofs`, `validate_module` refuses
+    /// it as `HavocMarkerMisplaced`.
+    RegionHavocStore,
 
     // Extensible
     Custom(ProofTag),
@@ -316,6 +358,7 @@ impl ProofAnnotation {
             ProofAnnotation::Tainted => "Tainted",
             ProofAnnotation::TrustedSink => "TrustedSink",
             ProofAnnotation::FreshSymbolicHavoc => "FreshSymbolicHavoc",
+            ProofAnnotation::RegionHavocStore => "RegionHavocStore",
             #[cfg(feature = "clean-expr")]
             ProofAnnotation::Goal(_) => "Goal",
         }
@@ -344,6 +387,16 @@ impl ProofAnnotation {
     /// * `NoPanic` → [`ObligationKind::PanicFreedom`](crate::proof::ObligationKind::PanicFreedom)
     /// * `Terminates` → [`ObligationKind::Liveness`](crate::proof::ObligationKind::Liveness)
     /// * `DataRaceFree` → [`ObligationKind::TemporalSafety`](crate::proof::ObligationKind::TemporalSafety)
+    ///
+    /// The last two are the pre-v41 routes. Since WS1.9 the v41 kinds
+    /// [`ObligationKind::Termination`](crate::proof::ObligationKind::Termination)
+    /// and [`ObligationKind::Ownership`](crate::proof::ObligationKind::Ownership)
+    /// ALSO back those claims through a `ProofRef`; the routing flip here
+    /// (`Terminates` → `Termination`, `DataRaceFree` → `Ownership`) is
+    /// deferred until the text format carries a v41 kind (WS4.4), because a
+    /// synthesized row of a v41 kind would move the `proof_annotations`
+    /// conformance golden onto a text loss the corpus ratchet forbids growing.
+    /// The flip changes this map and `proof_ref_kind_can_back` in one commit.
     ///
     /// Everything else is `None`: semantic markers (`Wrapping`,
     /// `AtomicOrdering`), claim-style codegen/GPU/NN hints (`ValueRange`,
@@ -581,6 +634,7 @@ impl core::fmt::Display for ProofAnnotation {
             ProofAnnotation::Tainted => f.write_str("tainted"),
             ProofAnnotation::TrustedSink => f.write_str("trusted_sink"),
             ProofAnnotation::FreshSymbolicHavoc => f.write_str("fresh_symbolic_havoc"),
+            ProofAnnotation::RegionHavocStore => f.write_str("region_havoc_store"),
             ProofAnnotation::ReadonlyTable => f.write_str("readonly_table"),
             ProofAnnotation::AppendOnlyBuffer => f.write_str("append_only_buffer"),
             ProofAnnotation::AtomicSetInsert => f.write_str("atomic_set_insert"),

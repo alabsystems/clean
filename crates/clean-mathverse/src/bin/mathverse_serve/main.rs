@@ -25,20 +25,57 @@
 //!   - `$MATHVERSE_VERDICTS_DIR`   optional: signed verdicts for /verdict + /audit
 //!   - `$MATHVERSE_SUBMIT_QUEUE`   optional: enables POST /submit + GET /submit/{id}
 
+#[cfg(not(target_arch = "wasm32"))]
 mod config;
+#[cfg(not(target_arch = "wasm32"))]
 mod http;
+#[cfg(not(target_arch = "wasm32"))]
 mod routes;
 
+#[cfg(not(target_arch = "wasm32"))]
 use std::rc::Rc;
 
+#[cfg(not(target_arch = "wasm32"))]
 use anyhow::{Context, Result};
+#[cfg(not(target_arch = "wasm32"))]
 use clean_mathverse::serve_api::CoreHandle;
+#[cfg(not(target_arch = "wasm32"))]
 use clean_mathverse::trust_sign::{SubmissionQueue, VerdictStore};
 
+#[cfg(not(target_arch = "wasm32"))]
 use config::ServeConfig;
+#[cfg(not(target_arch = "wasm32"))]
 use routes::AppState;
 
+/// What `-h`/`--help` prints. The service takes no arguments; every knob is an
+/// environment variable `ServeConfig::from_env` reads.
+#[cfg(not(target_arch = "wasm32"))]
+const USAGE: &str = "\
+usage: mathverse_serve   (no arguments; configured entirely by environment)
+  PORT                     TCP port to bind (default 8080)
+  MATHVERSE_CORE_DIR       the verified Core directory (manifest.json + base/ shards); required
+  MATHVERSE_DOWNLOAD_BASE  optional: /download/{shard} 302-redirects to <base>/<shard path>
+                           instead of streaming the local bytes
+  MATHVERSE_VERDICTS_DIR   optional: signed verdicts served by /verdict and /audit
+  MATHVERSE_SUBMIT_QUEUE   optional: enables POST /submit and GET /submit/{id}
+";
+
+// wasm32 has no sockets and no tokio runtime; the service is native-only.
+#[cfg(target_arch = "wasm32")]
+fn main() {
+    eprintln!("mathverse_serve is unavailable on wasm");
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn main() -> Result<()> {
+    if let Some(arg) = std::env::args().nth(1) {
+        if arg == "-h" || arg == "--help" {
+            print!("{USAGE}");
+            return Ok(());
+        }
+        eprint!("mathverse_serve: unexpected argument {arg:?}\n{USAGE}");
+        std::process::exit(2);
+    }
     let config = ServeConfig::from_env()?;
 
     eprintln!(

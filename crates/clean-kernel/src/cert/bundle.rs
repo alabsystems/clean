@@ -38,6 +38,9 @@ use serde::{Deserialize, Serialize};
 use crate::env::{CertificationAudit, CertificationIssue, ConstantKind, Environment};
 use crate::name::Name;
 
+use super::bundle_recheck::{
+    rebuild_from_canonical_base, BundleEnvironmentRecheck, RebuiltEnvironment,
+};
 use super::compression::limits::{
     decode_bincode_limited, decode_certificate_bincode_limited, read_unknown_bounded,
     MAX_COMPRESSED_ARCHIVE_BYTES, MAX_STREAM_CERT_BYTES, MAX_UNCOMPRESSED_ARCHIVE_BYTES,
@@ -258,6 +261,164 @@ pub struct BundleVerifyResult {
     pub failures: Vec<(String, String)>,
     /// Overall trust level from the manifest.
     pub trust_level: TrustLevel,
+    /// The `Axiom`-kind declarations of the bundle's environment, each
+    /// theorem's axioms, and the declarations each theorem rests on that the
+    /// kernel did not re-derive — disclosed whatever the verdict
+    /// ([`BundleAxiomDisclosure`]).
+    pub axioms: BundleAxiomDisclosure,
+    /// What re-deriving the bundle's environment from the canonical base found
+    /// ([`super::bundle_recheck`]). Every replay counted above ran in the
+    /// rebuilt environment, never in the bundle's own.
+    pub environment: BundleEnvironmentRecheck,
+}
+
+/// What a bundle's replay verdicts assume: the `Axiom`-kind declarations its
+/// embedded environment holds (partitioned), the axioms each manifest
+/// theorem's constant closure reaches, and every declaration a theorem's
+/// closure reaches that the kernel did NOT re-derive from the canonical base.
+///
+/// A replay verdict is relative to the environment it replays in, and a bundle
+/// author chooses that environment: `axiom proofIrrel : False` then a theorem
+/// citing it replays perfectly. So every verify and stats report discloses
+/// the environment's axioms, and verification FAILS when a declaration uses a
+/// reserved ambient name (a foundational axiom's or a trust marker's,
+/// structurally or by printed form) without being the kernel's canonical
+/// declaration of it ([`Environment::non_canonical_ambient_declarations`]).
+///
+/// **What "axiom" means here, exactly.** Only `Axiom`-kind declarations are
+/// listed as axioms. That is not every assumption a bundle can smuggle in: a
+/// `Theorem`-kind `fakeFalse : False := True.intro` inserted without a kernel
+/// check is an assumption in all but kind, and before 2026-09-28 this type
+/// claimed to list "every axiom" while a theorem resting on such a declaration
+/// verified with nothing listed. The axiom lists are the complete account of
+/// what a PASSING theorem assumes beyond the canonical foundations only
+/// because verification re-derives every other declaration of the bundle
+/// environment from the canonical base ([`super::bundle_recheck`]) and fails
+/// a theorem whose closure reaches one it could not re-derive; those are
+/// listed in [`Self::theorem_unchecked_dependencies`], which is therefore
+/// empty for every theorem that passes. The canonical foundations (the
+/// quotient primitives among them, which are `Axiom`-kind) are listed but
+/// never counted as a theorem's assumptions. A closure is the set of constants
+/// reachable through declaration types and values.
+///
+/// Names are rendered with [`Name::to_unambiguous_string`], so a one-component
+/// `«Quot.sound»` never reads as the kernel's `Quot.sound`, and an invisible
+/// or non-ASCII character is shown as an escape.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct BundleAxiomDisclosure {
+    /// The kernel's canonical foundational axioms present (structural name AND
+    /// exact canonical statement).
+    pub canonical_foundations: Vec<String>,
+    /// Trust markers (`sorry`, `sorryAx`, `trustedArith`, `trustedAy`) present
+    /// as axioms.
+    pub trust_markers: Vec<String>,
+    /// Every other axiom: an assumption the kernel does not own.
+    pub other_axioms: Vec<String>,
+    /// Declarations of any kind under a reserved ambient name that are NOT the
+    /// kernel's canonical declaration, each with the reason. Non-empty fails
+    /// verification.
+    pub non_canonical_ambient: Vec<(String, String)>,
+    /// Per manifest theorem (manifest order): every `Axiom`-kind declaration
+    /// in its constant closure that is not a canonical foundation — domain
+    /// axioms and trust markers alike.
+    pub theorem_assumptions: Vec<(String, Vec<String>)>,
+    /// Per manifest theorem (manifest order): every declaration in its
+    /// constant closure (itself included) that the kernel did not re-derive
+    /// from the canonical base — refused, or resting on one that was. Any
+    /// entry fails the theorem. Empty for a theorem that passes.
+    pub theorem_unchecked_dependencies: Vec<(String, Vec<String>)>,
+}
+
+impl BundleAxiomDisclosure {
+    /// Compute the disclosure for the bundle environment `env`, the manifest
+    /// theorem names, and the outcome of re-deriving `env` from the canonical
+    /// base (`Err` when the base itself could not be built: then nothing was
+    /// re-derived, and every theorem says so).
+    #[must_use]
+    pub(crate) fn of_bundle(
+        env: &Environment,
+        theorems: &[String],
+        rebuilt: Result<&RebuiltEnvironment, &str>,
+    ) -> Self {
+        let mut out = Self::default();
+        for info in env.constants() {
+            if info.kind != ConstantKind::Axiom {
+                continue;
+            }
+            let rendered = info.name.to_unambiguous_string();
+            if crate::env::is_canonical_foundational_constant(info) {
+                out.canonical_foundations.push(rendered);
+            } else if crate::env::is_trust_marker(&info.name) {
+                out.trust_markers.push(rendered);
+            } else {
+                out.other_axioms.push(rendered);
+            }
+        }
+        out.canonical_foundations.sort();
+        out.trust_markers.sort();
+        out.other_axioms.sort();
+        out.non_canonical_ambient = env
+            .non_canonical_ambient_declarations()
+            .into_iter()
+            .map(|(name, detail)| (name.to_unambiguous_string(), detail))
+            .collect();
+        let mut closure = crate::env::DomainAxiomClosure::new();
+        out.theorem_assumptions = theorems
+            .iter()
+            .map(|theorem| {
+                let name = Name::from_string(theorem);
+                let mut assumed: Vec<String> = closure
+                    .assumptions_of_name(env, &name)
+                    .iter()
+                    .filter(|axiom| !env.is_canonical_foundational_axiom(axiom))
+                    .map(Name::to_unambiguous_string)
+                    .collect();
+                assumed.sort();
+                (theorem.clone(), assumed)
+            })
+            .collect();
+        out.theorem_unchecked_dependencies = theorems
+            .iter()
+            .map(|theorem| {
+                let unchecked = match rebuilt {
+                    Ok(rebuilt) => rebuilt
+                        .unchecked_in_closure(env, &Name::from_string(theorem))
+                        .into_iter()
+                        .map(|(name, _)| name.to_unambiguous_string())
+                        .collect(),
+                    Err(reason) => vec![format!("[nothing re-derived: {reason}]")],
+                };
+                (theorem.clone(), unchecked)
+            })
+            .collect();
+        out
+    }
+
+    /// Every axiom in the environment that is not a canonical foundation.
+    #[must_use]
+    pub fn assumption_count(&self) -> usize {
+        self.trust_markers.len() + self.other_axioms.len()
+    }
+
+    /// The verification failure a non-canonical ambient declaration forces,
+    /// or `None` for an environment whose reserved names are all the kernel's.
+    #[must_use]
+    pub fn ambient_failure(&self) -> Option<String> {
+        if self.non_canonical_ambient.is_empty() {
+            return None;
+        }
+        let listed: Vec<String> = self
+            .non_canonical_ambient
+            .iter()
+            .map(|(name, detail)| format!("`{name}`: {detail}"))
+            .collect();
+        Some(format!(
+            "the bundle environment declares a reserved kernel name without the kernel's \
+             canonical declaration: {}",
+            listed.join("; ")
+        ))
+    }
 }
 
 impl BundleVerifyResult {
@@ -297,6 +458,10 @@ pub struct CertBundle {
     certs: HashMap<Name, ProofCert>,
     xproj_certs: HashMap<Name, CrossProjectCert>,
     trust_chain: Option<ProofArchiveMetadata>,
+    /// `env` re-derived from the canonical base, computed on first use.
+    /// `env` is never mutated after construction, so one rebuild serves every
+    /// verification of this bundle.
+    rebuilt: std::sync::OnceLock<Result<RebuiltEnvironment, String>>,
 }
 
 impl std::fmt::Debug for CertBundle {
@@ -380,6 +545,7 @@ impl CertBundle {
             certs,
             xproj_certs,
             trust_chain,
+            rebuilt: std::sync::OnceLock::new(),
         };
         validate_bundle_contents(
             &bundle.manifest,
@@ -387,6 +553,11 @@ impl CertBundle {
             &bundle.certs,
             &bundle.xproj_certs,
         )?;
+        // The trust constructor never packages an environment in which a
+        // reserved kernel name denotes anything but the kernel's declaration.
+        if let Some(reason) = bundle.axiom_disclosure().ambient_failure() {
+            return Err(CertBundleError::InvalidManifest(reason));
+        }
         bundle.ensure_all_replay_valid()?;
         Ok(bundle)
     }
@@ -456,6 +627,7 @@ impl CertBundle {
             certs,
             xproj_certs,
             trust_chain: None,
+            rebuilt: std::sync::OnceLock::new(),
         })
     }
 
@@ -470,6 +642,15 @@ impl CertBundle {
     pub fn save(&self, path: impl AsRef<Path>) -> Result<(), CertBundleError> {
         validate_bundle_contents(&self.manifest, &self.env, &self.certs, &self.xproj_certs)?;
         self.ensure_all_replay_valid()?;
+        self.write_archive(path)
+    }
+
+    /// Serialize and write the archive, validating nothing. [`Self::save`] is
+    /// the only production caller, after its validation; tests use it to write
+    /// the hand-made files an attacker would.
+    // Trust: file I/O + `bincode` serialization, as `save`.
+    #[cfg_attr(trust_verify, trust::skip)]
+    fn write_archive(&self, path: impl AsRef<Path>) -> Result<(), CertBundleError> {
         let env_bytes = bincode::serde::encode_to_vec(&self.env, bincode::config::standard())
             .map_err(|e| CertBundleError::Serialization(e.to_string()))?;
 
@@ -637,6 +818,7 @@ impl CertBundle {
             certs,
             xproj_certs,
             trust_chain: archive.trust_chain,
+            rebuilt: std::sync::OnceLock::new(),
         })
     }
 
@@ -725,10 +907,22 @@ impl CertBundle {
         let mut failed = 0usize;
         let mut failures = Vec::new();
         let mut verified_trust = Vec::with_capacity(self.manifest.theorems.len());
+        let axioms = self.axiom_disclosure();
+        let ambient_failure = axioms.ambient_failure();
 
         for entry in &self.manifest.theorems {
             let name = Name::from_string(&entry.name);
-            match self.verify_single(&name) {
+            // A reserved kernel name held by anything but the kernel's own
+            // declaration poisons every verdict replayed in this environment:
+            // each theorem fails, whatever its own replay says.
+            let outcome = match &ambient_failure {
+                Some(reason) => Err(CertBundleError::VerificationFailed {
+                    name: entry.name.clone(),
+                    reason: reason.clone(),
+                }),
+                None => self.verify_single(&name),
+            };
+            match outcome {
                 Ok(trust) => {
                     passed += 1;
                     verified_trust.push(trust);
@@ -749,12 +943,53 @@ impl CertBundle {
                 .into_iter()
                 .reduce(trust_min)
                 .unwrap_or(TrustLevel::Unverified),
+            axioms,
+            environment: self.environment_recheck(),
         }
     }
 
     /// Verify a single named theorem.
+    ///
+    /// Fails, like [`Self::verify_all`], when the environment holds a
+    /// non-canonical declaration under a reserved kernel name.
     pub fn verify_theorem(&self, name: &Name) -> Result<(), CertBundleError> {
+        if let Some(reason) = self.axiom_disclosure().ambient_failure() {
+            return Err(CertBundleError::VerificationFailed {
+                name: name.to_string(),
+                reason,
+            });
+        }
         self.verify_single(name).map(|_| ())
+    }
+
+    /// The embedded environment's axioms, each manifest theorem's axioms, and
+    /// the declarations each theorem rests on that the kernel did not
+    /// re-derive ([`BundleAxiomDisclosure`]).
+    #[must_use]
+    pub fn axiom_disclosure(&self) -> BundleAxiomDisclosure {
+        BundleAxiomDisclosure::of_bundle(
+            &self.env,
+            &self.theorem_names(),
+            self.rebuilt().map_err(String::as_str),
+        )
+    }
+
+    /// What re-deriving the embedded environment from the canonical base
+    /// found ([`super::bundle_recheck`]).
+    #[must_use]
+    pub fn environment_recheck(&self) -> BundleEnvironmentRecheck {
+        match self.rebuilt() {
+            Ok(rebuilt) => rebuilt.report.clone(),
+            Err(reason) => BundleEnvironmentRecheck::unavailable(reason),
+        }
+    }
+
+    /// The embedded environment re-derived from the canonical base, built on
+    /// first use.
+    fn rebuilt(&self) -> Result<&RebuiltEnvironment, &String> {
+        self.rebuilt
+            .get_or_init(|| rebuild_from_canonical_base(&self.env))
+            .as_ref()
     }
 
     /// Inspect every theorem listed in the manifest and report bundle readiness.
@@ -866,9 +1101,55 @@ impl CertBundle {
             });
         }
 
-        // Look up the declaration in the environment.
-        let decl = self
-            .env
+        // Nothing below consults the bundle's own environment. It is
+        // re-derived from the canonical base first (`bundle_recheck`): a
+        // declaration the author inserted without a kernel check — a
+        // `Theorem`-kind `fakeFalse : False := True.intro`, a prelude family
+        // with other content — is refused there, and so is every theorem
+        // whose closure reaches it. Replay then runs in the REBUILT
+        // environment, which holds nothing the kernel did not re-derive.
+        let rebuilt = self
+            .rebuilt()
+            .map_err(|reason| CertBundleError::VerificationFailed {
+                name: name.to_string(),
+                reason: reason.clone(),
+            })?;
+        if !rebuilt.report.redefined_base.is_empty() {
+            return Err(CertBundleError::VerificationFailed {
+                name: name.to_string(),
+                reason: format!(
+                    "the bundle environment redefines canonical prelude declaration(s) {}; \
+                     nothing replayed against it is credited",
+                    rebuilt.report.redefined_base.join(", ")
+                ),
+            });
+        }
+        let unchecked = rebuilt.unchecked_in_closure(&self.env, name);
+        if !unchecked.is_empty() {
+            let listed: Vec<String> = unchecked
+                .iter()
+                .map(|(dep, why)| {
+                    format!(
+                        "`{}`: {}",
+                        dep.to_unambiguous_string(),
+                        super::bundle_recheck::first_line(why)
+                    )
+                })
+                .collect();
+            return Err(CertBundleError::VerificationFailed {
+                name: name.to_string(),
+                reason: format!(
+                    "rests on declaration(s) the kernel did not re-derive from the canonical \
+                     base: {}",
+                    listed.join("; ")
+                ),
+            });
+        }
+        let env = &rebuilt.env;
+
+        // Look up the declaration in the rebuilt environment (the same
+        // declaration the bundle holds: the rebuild compared them).
+        let decl = env
             .get_const(name)
             .ok_or_else(|| CertBundleError::VerificationFailed {
                 name: name.to_string(),
@@ -884,7 +1165,7 @@ impl CertBundle {
             })?;
 
         // Use the CertVerifier to replay the certificate against the proof term.
-        let mut verifier = CertVerifier::new(&self.env);
+        let mut verifier = CertVerifier::new(env);
         let verified_type =
             verifier
                 .verify(cert, value)
@@ -903,7 +1184,7 @@ impl CertBundle {
         // subset of kernel def-eq, so this accepts nothing `add_decl` would
         // not have (first exercised by the clean-mtype Sigma statements,
         // 2026-08-06).
-        let tc = crate::tc::TypeChecker::with_mode(&self.env, self.env.mode());
+        let tc = crate::tc::TypeChecker::with_mode(env, env.mode());
         if !tc.is_def_eq(&verified_type, &decl.type_) {
             return Err(CertBundleError::VerificationFailed {
                 name: name.to_string(),
@@ -917,7 +1198,7 @@ impl CertBundle {
         // Verify cross-project cert if present.
         if let Some(xproj) = xproj {
             xproj
-                .verify(&self.env)
+                .verify(env)
                 .map_err(|e| CertBundleError::VerificationFailed {
                     name: name.to_string(),
                     reason: format!("cross-project cert mismatch: {e}"),
@@ -934,7 +1215,7 @@ impl CertBundle {
         // dependency closure.  This rejects forged or structurally admitted
         // dependencies and prevents deserialization from minting transient
         // kernel provenance for value-less kernel objects.
-        let audit = self.env.audit_certification(&decl.type_, value);
+        let audit = env.audit_certification(&decl.type_, value);
         Ok(trust_from_certification_audit(&audit))
     }
 
@@ -1135,8 +1416,20 @@ fn declaration_metadata(
     Ok((
         sha256_hex(&type_bytes),
         sha256_hex(&proof_bytes),
-        !proof.has_sorry(),
+        closure_sorry_free(env, name, proof),
     ))
+}
+
+/// Whether a theorem is `sorry`-free as a bundle manifest must claim it: no
+/// sorry occurrence in its own proof AND none in its constant closure (a
+/// theorem proved from a sorry'd lemma, or through `def s := @sorryAx`, is
+/// not sorry-free).
+fn closure_sorry_free(env: &Environment, name: &Name, proof: &crate::Expr) -> bool {
+    !proof.has_sorry()
+        && !crate::env::DomainAxiomClosure::new()
+            .trust_markers_of_name(env, name)
+            .iter()
+            .any(crate::env::is_sorry_marker)
 }
 
 /// Best-effort manifest metadata for a diagnostics view.
@@ -1163,7 +1456,11 @@ fn diagnostic_declaration_metadata(
     };
     let proof_bytes = bincode::serde::encode_to_vec(proof, bincode::config::standard())
         .map_err(|error| CertBundleError::Serialization(error.to_string()))?;
-    Ok((type_hash, sha256_hex(&proof_bytes), !proof.has_sorry()))
+    Ok((
+        type_hash,
+        sha256_hex(&proof_bytes),
+        closure_sorry_free(env, name, proof),
+    ))
 }
 
 fn validate_cross_project_metadata(
@@ -1421,6 +1718,16 @@ mod tests {
         assert!(result.all_passed(), "failures: {:?}", result.failures);
         assert_eq!(result.passed, 1);
         assert_eq!(result.failed, 0);
+        // Every declaration was re-derived: the prelude's pinned to the
+        // canonical base, the theorem re-admitted by the kernel.
+        assert!(result.environment.passed(), "{:?}", result.environment);
+        assert_eq!(result.environment.constants_readmitted, 1);
+        assert_eq!(result.environment.families_readmitted, 0);
+        assert!(result.environment.pinned_to_base > 100);
+        assert_eq!(
+            result.axioms.theorem_unchecked_dependencies,
+            vec![("Test.trivial".to_string(), Vec::<String>::new())]
+        );
     }
 
     #[test]
@@ -1527,13 +1834,25 @@ mod tests {
         bundle.save(&path).expect("save");
         let loaded = CertBundle::load(&path).expect("load");
 
-        let result = loaded.verify_all().expect("verify_all after load");
-        assert!(result.all_passed(), "failures: {:?}", result.failures);
+        // Deserialization mints no provenance: the loaded environment carries
+        // no kernel-check claim for anything in it.
         assert_eq!(
-            result.trust_level,
-            TrustLevel::Unverified,
+            loaded
+                .env()
+                .declaration_verification(&Name::from_string("Test.trivial")),
+            None,
             "deserialization must not mint transient kernel-object provenance"
         );
+        // Authority is re-EARNED instead: verification re-derives the whole
+        // environment from the canonical base (`bundle_recheck`) and replays
+        // and audits in the rebuilt environment, which the kernel checked.
+        // Until 2026-09-28 the replay ran in the deserialized environment and
+        // a loaded bundle could only ever report `Unverified`.
+        let result = loaded.verify_all().expect("verify_all after load");
+        assert!(result.all_passed(), "failures: {:?}", result.failures);
+        assert!(result.environment.passed(), "{:?}", result.environment);
+        assert_eq!(result.environment.constants_readmitted, 1);
+        assert_eq!(result.trust_level, TrustLevel::KernelVerified);
     }
 
     #[test]
@@ -1945,15 +2264,29 @@ mod tests {
 
         let error = CertBundle::build("test", "0.1.0", env, certs, xproj, None)
             .expect_err("transport metadata must not hide a replayed type mismatch");
-        assert!(matches!(
-            error,
-            CertBundleError::VerificationFailed { ref reason, .. }
-                if reason.contains("does not match declaration type")
-        ));
+        // Refused before any replay: the kernel does not re-admit
+        // `Test.falseClaim : False := True.intro` into the rebuilt
+        // environment, so there is nothing to replay it against.
+        assert!(
+            matches!(
+                error,
+                CertBundleError::VerificationFailed { ref reason, .. }
+                    if reason.contains("`Test.falseClaim`")
+                        && reason.contains("the kernel refused it")
+            ),
+            "{error}"
+        );
     }
 
-    #[test]
-    fn forged_dependency_cannot_earn_kernel_verified_bundle_trust() {
+    /// `Test.bad : False := Test.fakeFalse`, where `Test.fakeFalse : False :=
+    /// True.intro` is a `Theorem`-kind declaration inserted WITHOUT a kernel
+    /// check (`add_decl_structural`), with its certificate and transport
+    /// record. Returns `(env, certs, xproj)`.
+    fn forged_false_parts() -> (
+        Environment,
+        HashMap<Name, ProofCert>,
+        HashMap<Name, CrossProjectCert>,
+    ) {
         let mut env = Environment::with_prelude();
         let fake = Name::from_string("Test.fakeFalse");
         let target = Name::from_string("Test.bad");
@@ -1989,16 +2322,536 @@ mod tests {
             CrossProjectCert::from_environment(&env, "Test.bad", prover(), vec![])
                 .expect("transport record"),
         );
+        (env, certs, xproj)
+    }
 
-        let bundle =
-            CertBundle::build("test", "0.1.0", env, certs, xproj, None).expect("replay succeeds");
-        let result = bundle.verify_all().expect("verification result");
-        assert!(result.all_passed(), "certificate replay should still pass");
-        assert_eq!(
-            result.trust_level,
-            TrustLevel::Unverified,
-            "the rooted audit must expose the forged dependency"
+    /// The certificate of `theorem` replays against `env` itself — what
+    /// verification checked before 2026-09-28.
+    fn replays_in_the_authors_environment(
+        env: &Environment,
+        certs: &HashMap<Name, ProofCert>,
+        theorem: &str,
+    ) {
+        let name = Name::from_string(theorem);
+        let decl = env.get_const(&name).expect("declared");
+        let value = decl.value.clone().expect("proof term");
+        let replayed = CertVerifier::new(env)
+            .verify(&certs[&name], &value)
+            .expect("the author's environment replays the certificate");
+        assert!(
+            crate::tc::TypeChecker::new(env).is_def_eq(&replayed, &decl.type_),
+            "the replayed type is the declared statement"
         );
+    }
+
+    /// A declaration the bundle author inserted without a kernel check fails
+    /// every theorem resting on it — at `build`, at `load`, and in the trust
+    /// verb over a hand-made file that skipped both — and is disclosed.
+    ///
+    /// Measured on ad89a748b, where this test asserted the OPPOSITE
+    /// (`all_passed() == true`, since f88cde40d): `build` packaged the bundle,
+    /// `save` wrote it, `verify_all` passed `Test.bad : False` with
+    /// `theorem_assumptions` `Test.bad: []` (the forgery is `Theorem`-kind, so
+    /// no axiom list names it), and `clean kernel cert verify` on the file
+    /// exited 0, "ALL PASSED".
+    #[test]
+    fn forged_dependency_cannot_earn_kernel_verified_bundle_trust() {
+        let (env, certs, xproj) = forged_false_parts();
+        replays_in_the_authors_environment(&env, &certs, "Test.bad");
+
+        let error = CertBundle::build(
+            "test",
+            "0.1.0",
+            env.clone(),
+            certs.clone(),
+            xproj.clone(),
+            None,
+        )
+        .expect_err("a forged dependency must not be packaged");
+        assert!(
+            error
+                .to_string()
+                .contains("`Test.fakeFalse`: the kernel refused it"),
+            "{error}"
+        );
+
+        // A hand-made file that skipped `build`.
+        let view = CertBundle::for_inspection("test", "0.1.0", env, certs, xproj).expect("view");
+        let dir = tempfile::tempdir().expect("temp dir");
+        let path = dir.path().join("fakefalse.cleancert");
+        view.write_archive(&path).expect("write the hand-made file");
+        let error = CertBundle::load(&path).expect_err("the trust loader must refuse it");
+        assert!(error.to_string().contains("`Test.fakeFalse`"), "{error}");
+
+        // The trust verb fails it, naming the forged dependency.
+        let result = view.verify_all().expect("structurally valid bundle");
+        assert!(!result.all_passed());
+        assert_eq!((result.passed, result.failed), (0, 1));
+        assert_eq!(result.trust_level, TrustLevel::Unverified);
+        let reason = &result.failures[0].1;
+        assert!(
+            reason.contains("did not re-derive from the canonical base")
+                && reason.contains("`Test.fakeFalse`: the kernel refused it"),
+            "{reason}"
+        );
+        let refusals = &result.environment.refusals;
+        assert!(
+            refusals.iter().any(
+                |(name, why)| name == "Test.fakeFalse" && why.contains("the kernel refused it")
+            ),
+            "{refusals:?}"
+        );
+        assert!(
+            refusals
+                .iter()
+                .any(|(name, why)| name == "Test.bad" && why.contains("depends on Test.fakeFalse")),
+            "{refusals:?}"
+        );
+        assert!(result.environment.redefined_base.is_empty());
+        // Disclosed: no axiom list names a `Theorem`-kind forgery, the
+        // unchecked-dependency list does.
+        assert_eq!(
+            result.axioms.theorem_assumptions,
+            vec![("Test.bad".to_string(), Vec::<String>::new())]
+        );
+        assert_eq!(
+            result.axioms.theorem_unchecked_dependencies,
+            vec![(
+                "Test.bad".to_string(),
+                vec!["Test.bad".to_string(), "Test.fakeFalse".to_string()]
+            )]
+        );
+
+        // The quarantined read describes the file and still fails it.
+        let quarantined = CertBundle::load_for_inspection(&path).expect("quarantined read");
+        let diagnostics = quarantined.verify_all_for_inspection();
+        assert_eq!((diagnostics.passed, diagnostics.failed), (0, 1));
+    }
+
+    /// A refusal fails exactly the theorems whose closure reaches it: an
+    /// honest theorem beside the forgery verifies, in the rebuilt
+    /// environment, where the forgery does not exist.
+    #[test]
+    fn a_refused_declaration_fails_only_the_theorems_resting_on_it() {
+        let (mut env, mut certs, mut xproj) = forged_false_parts();
+        let honest = Name::from_string("Test.trivial");
+        let true_ty = Expr::const_(Name::from_string("True"), vec![]);
+        env.add_decl(Declaration::Theorem {
+            name: honest.clone(),
+            level_params: vec![],
+            type_: true_ty.clone(),
+            value: Expr::const_(Name::from_string("True.intro"), vec![]),
+        })
+        .expect("honest theorem");
+        certs.insert(
+            honest.clone(),
+            ProofCert::Const {
+                name: Name::from_string("True.intro"),
+                levels: vec![],
+                type_: Box::new(true_ty),
+            },
+        );
+        xproj.insert(
+            honest,
+            CrossProjectCert::from_environment(&env, "Test.trivial", prover(), vec![])
+                .expect("transport record"),
+        );
+        let view = CertBundle::for_inspection("test", "0.1.0", env, certs, xproj).expect("view");
+        let result = view.verify_all().expect("structurally valid bundle");
+        assert_eq!(
+            (result.passed, result.failed),
+            (1, 1),
+            "{:?}",
+            result.failures
+        );
+        assert_eq!(result.failures[0].0, "Test.bad");
+        assert!(!result.environment.passed());
+        assert_eq!(
+            result.axioms.theorem_unchecked_dependencies,
+            vec![
+                (
+                    "Test.bad".to_string(),
+                    vec!["Test.bad".to_string(), "Test.fakeFalse".to_string()]
+                ),
+                ("Test.trivial".to_string(), Vec::<String>::new()),
+            ]
+        );
+    }
+
+    /// The names the canonical-statement check reads BY NAME (`Iff` and `Eq`
+    /// in `propext`'s statement, `Nonempty` in `Classical.choice`'s, `Eq` in
+    /// the quotient's, `Bool` in `sorryAx`'s) and `True` / `False` are pinned
+    /// to the canonical prelude's declarations: a bundle holding any of them
+    /// with other content fails EVERY theorem, even one that never mentions
+    /// it.
+    #[test]
+    fn a_bundle_cannot_redefine_the_prelude_vocabulary() {
+        for vocabulary in ["Iff", "Eq", "Nonempty", "True", "False", "Bool"] {
+            let (mut env, certs, xproj) = test_env_and_certs();
+            let name = Name::from_string(vocabulary);
+            let mut forged = env
+                .get_const(&name)
+                .expect("the prelude declares it")
+                .clone();
+            forged.type_ = Expr::sort(crate::Level::succ(crate::Level::succ(crate::Level::zero())));
+            env.add_constant_for_test(forged);
+            let view =
+                CertBundle::for_inspection("test", "0.1.0", env, certs, xproj).expect("view");
+            let result = view.verify_all().expect("structurally valid bundle");
+            assert_eq!(
+                (result.passed, result.failed),
+                (0, 1),
+                "{vocabulary}: {:?}",
+                result.failures
+            );
+            assert_eq!(
+                result.environment.redefined_base,
+                vec![format!("family {vocabulary}")],
+                "{vocabulary}"
+            );
+            assert!(
+                result.failures[0]
+                    .1
+                    .contains("redefines canonical prelude declaration(s) family"),
+                "{vocabulary}: {:?}",
+                result.failures
+            );
+        }
+    }
+
+    /// The attack the vocabulary pin stops, on `False`: an environment whose
+    /// `False` has a constructor proves `False`, and the certificate replays
+    /// in the author's environment.
+    #[test]
+    fn an_inhabited_false_in_the_bundle_environment_is_refused() {
+        let mut env = Environment::with_prelude();
+        let false_name = Name::from_string("False");
+        let intro = Name::from_string("False.intro");
+        let false_ty = Expr::const_(false_name.clone(), vec![]);
+        let mut family = env.get_inductive(&false_name).expect("False").clone();
+        family.constructor_names = vec![intro.clone()];
+        env.forge_family_records_for_test(
+            vec![family],
+            vec![crate::inductive::ConstructorVal {
+                name: intro.clone(),
+                inductive_name: false_name,
+                level_params: vec![],
+                type_: false_ty.clone(),
+                num_params: 0,
+                num_fields: 0,
+                constructor_idx: 0,
+            }],
+            vec![],
+        );
+        env.add_constant_for_test(crate::env::ConstantInfo::new(
+            intro.clone(),
+            vec![],
+            false_ty.clone(),
+            None,
+            false,
+        ));
+        let target = Name::from_string("Test.bad");
+        env.add_decl(Declaration::Theorem {
+            name: target.clone(),
+            level_params: vec![],
+            type_: false_ty.clone(),
+            value: Expr::const_(intro.clone(), vec![]),
+        })
+        .expect("checks in the forged environment");
+        let mut certs = HashMap::new();
+        certs.insert(
+            target,
+            ProofCert::Const {
+                name: intro,
+                levels: vec![],
+                type_: Box::new(false_ty),
+            },
+        );
+        replays_in_the_authors_environment(&env, &certs, "Test.bad");
+
+        let view =
+            CertBundle::for_inspection("test", "0.1.0", env, certs, HashMap::new()).expect("view");
+        let result = view.verify_all().expect("structurally valid bundle");
+        assert_eq!((result.passed, result.failed), (0, 1));
+        assert_eq!(
+            result.environment.redefined_base,
+            vec!["family False".to_string()]
+        );
+    }
+
+    /// The attack the vocabulary pin stops, on `Iff`: with a field-less
+    /// `Iff.intro`, `propext` — still the kernel's canonical declaration BY
+    /// ITS STATEMENT, which names `Iff` — proves `True = False`.
+    #[test]
+    fn a_trivialized_iff_does_not_let_propext_prove_true_eq_false() {
+        use crate::expr::BinderInfo;
+        let mut env = Environment::with_prelude();
+        let iff = Name::from_string("Iff");
+        let intro = Name::from_string("Iff.intro");
+        let prop = Expr::prop();
+        let forged_ty = Expr::pi(
+            BinderInfo::Implicit,
+            prop.clone(),
+            Expr::pi(
+                BinderInfo::Implicit,
+                prop.clone(),
+                Expr::apps(Expr::const_(iff, vec![]), [Expr::bvar(1), Expr::bvar(0)]),
+            ),
+        );
+        let mut ctor = env.get_constructor(&intro).expect("Iff.intro").clone();
+        ctor.type_ = forged_ty.clone();
+        ctor.num_fields = 0;
+        env.forge_family_records_for_test(vec![], vec![ctor], vec![]);
+        let mut info = env.get_const(&intro).expect("Iff.intro").clone();
+        info.type_ = forged_ty;
+        env.add_constant_for_test(info);
+
+        let t = Expr::const_(Name::from_string("True"), vec![]);
+        let f = Expr::const_(Name::from_string("False"), vec![]);
+        let true_eq_false = Expr::apps(
+            Expr::const_(
+                Name::from_string("Eq"),
+                vec![crate::Level::succ(crate::Level::zero())],
+            ),
+            [prop, t.clone(), f.clone()],
+        );
+        let helper = Name::from_string("Test.helper");
+        env.add_decl(Declaration::Theorem {
+            name: helper.clone(),
+            level_params: vec![],
+            type_: true_eq_false.clone(),
+            value: Expr::apps(
+                Expr::const_(Name::from_string("propext"), vec![]),
+                [
+                    t.clone(),
+                    f.clone(),
+                    Expr::apps(Expr::const_(intro, vec![]), [t, f]),
+                ],
+            ),
+        })
+        .expect("propext's statement reads the forged Iff");
+        let target = Name::from_string("Test.bad");
+        env.add_decl(Declaration::Theorem {
+            name: target.clone(),
+            level_params: vec![],
+            type_: true_eq_false.clone(),
+            value: Expr::const_(helper.clone(), vec![]),
+        })
+        .expect("target");
+        // The name-level canonical checks cannot see it: `propext` is
+        // untouched and its statement still names `Iff`.
+        assert!(env.is_canonical_foundational_axiom(&Name::from_string("propext")));
+        assert!(env.non_canonical_ambient_declarations().is_empty());
+        let mut certs = HashMap::new();
+        certs.insert(
+            target,
+            ProofCert::Const {
+                name: helper,
+                levels: vec![],
+                type_: Box::new(true_eq_false),
+            },
+        );
+        replays_in_the_authors_environment(&env, &certs, "Test.bad");
+
+        let view =
+            CertBundle::for_inspection("test", "0.1.0", env, certs, HashMap::new()).expect("view");
+        let result = view.verify_all().expect("structurally valid bundle");
+        assert_eq!((result.passed, result.failed), (0, 1));
+        assert_eq!(
+            result.environment.redefined_base,
+            vec!["family Iff".to_string()]
+        );
+    }
+
+    /// A bundle declaring an inductive family: honest, it is re-admitted with
+    /// its recursors regenerated; with the ι-rules of its recursor swapped
+    /// (`Two.rec` computing the wrong branch), the regenerated rule refuses
+    /// it and everything resting on the family.
+    #[test]
+    fn a_bundle_family_is_readmitted_with_its_recursor_regenerated() {
+        use crate::inductive::{Constructor, InductiveDecl, InductiveType};
+        for tamper in [false, true] {
+            let mut env = Environment::with_prelude();
+            let two = Name::from_string("Test.Two");
+            let a = Name::from_string("Test.Two.a");
+            let ty = Expr::const_(two.clone(), vec![]);
+            env.add_inductive(InductiveDecl {
+                level_params: vec![],
+                num_params: 0,
+                types: vec![InductiveType {
+                    name: two.clone(),
+                    type_: Expr::sort(crate::Level::succ(crate::Level::zero())),
+                    constructors: vec![
+                        Constructor {
+                            name: a.clone(),
+                            type_: ty.clone(),
+                        },
+                        Constructor {
+                            name: Name::from_string("Test.Two.b"),
+                            type_: ty.clone(),
+                        },
+                    ],
+                }],
+            })
+            .expect("family");
+            if tamper {
+                let rec_name = Name::from_string("Test.Two.rec");
+                let mut rec = env.get_recursor(&rec_name).expect("Two.rec").clone();
+                let first = rec.rules[0].rhs.clone();
+                rec.rules[0].rhs = rec.rules[1].rhs.clone();
+                rec.rules[1].rhs = first;
+                env.forge_family_records_for_test(vec![], vec![], vec![rec]);
+            }
+            let a_eq_a = Expr::apps(
+                Expr::const_(
+                    Name::from_string("Eq"),
+                    vec![crate::Level::succ(crate::Level::zero())],
+                ),
+                [
+                    ty.clone(),
+                    Expr::const_(a.clone(), vec![]),
+                    Expr::const_(a.clone(), vec![]),
+                ],
+            );
+            let helper = Name::from_string("Test.helper");
+            env.add_decl(Declaration::Theorem {
+                name: helper.clone(),
+                level_params: vec![],
+                type_: a_eq_a.clone(),
+                value: Expr::apps(
+                    Expr::const_(
+                        Name::from_string("Eq.refl"),
+                        vec![crate::Level::succ(crate::Level::zero())],
+                    ),
+                    [ty.clone(), Expr::const_(a.clone(), vec![])],
+                ),
+            })
+            .expect("helper");
+            let target = Name::from_string("Test.refl");
+            env.add_decl(Declaration::Theorem {
+                name: target.clone(),
+                level_params: vec![],
+                type_: a_eq_a.clone(),
+                value: Expr::const_(helper.clone(), vec![]),
+            })
+            .expect("target");
+            let mut certs = HashMap::new();
+            certs.insert(
+                target,
+                ProofCert::Const {
+                    name: helper,
+                    levels: vec![],
+                    type_: Box::new(a_eq_a),
+                },
+            );
+            let view = CertBundle::for_inspection("test", "0.1.0", env, certs, HashMap::new())
+                .expect("view");
+            let result = view.verify_all().expect("structurally valid bundle");
+            if tamper {
+                assert_eq!((result.passed, result.failed), (0, 1));
+                assert!(
+                    result.environment.refusals.iter().any(|(name, why)| {
+                        name == "family Test.Two"
+                            && why.contains("Test.Two.rec")
+                            && why.contains("ι-rule right-hand side")
+                    }),
+                    "{:?}",
+                    result.environment
+                );
+            } else {
+                assert!(result.all_passed(), "{:?}", result.failures);
+                assert!(result.environment.passed(), "{:?}", result.environment);
+                assert_eq!(result.environment.families_readmitted, 1);
+            }
+        }
+    }
+
+    /// Every name the kernel reduces or builds by name that the canonical
+    /// base does NOT hold is refused outside the base: the declared meaning
+    /// and the built-in one would both be live. (One the base holds is pinned
+    /// to the base's declaration instead, as every base name is.)
+    #[test]
+    fn a_kernel_by_name_constant_outside_the_base_is_refused() {
+        let base = Environment::with_prelude();
+        let absent: Vec<&str> = crate::cert::KERNEL_BY_NAME_CONSTANTS
+            .iter()
+            .copied()
+            .filter(|n| base.get_const(&Name::from_string(n)).is_none())
+            .collect();
+        // Measured 2026-09-28: Nat.gcd, Lean.reduceBool, Lean.reduceNat,
+        // optParam, autoParam, semiOutParam. Never vacuous.
+        assert!(
+            !absent.is_empty(),
+            "every by-name constant is in the base; this test would test nothing"
+        );
+        for key in absent {
+            let (mut env, mut certs, _) = test_env_and_certs();
+            let name = Name::from_string(key);
+            let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+            env.add_decl(Declaration::Axiom {
+                name: name.clone(),
+                level_params: vec![],
+                type_: nat.clone(),
+            })
+            .expect("the author's environment accepts it");
+            let target = Name::from_string("Test.usesKey");
+            let nat_eq = Expr::apps(
+                Expr::const_(
+                    Name::from_string("Eq"),
+                    vec![crate::Level::succ(crate::Level::zero())],
+                ),
+                [
+                    nat.clone(),
+                    Expr::const_(name.clone(), vec![]),
+                    Expr::const_(name.clone(), vec![]),
+                ],
+            );
+            let helper = Name::from_string("Test.keyHelper");
+            env.add_decl(Declaration::Theorem {
+                name: helper.clone(),
+                level_params: vec![],
+                type_: nat_eq.clone(),
+                value: Expr::apps(
+                    Expr::const_(
+                        Name::from_string("Eq.refl"),
+                        vec![crate::Level::succ(crate::Level::zero())],
+                    ),
+                    [nat, Expr::const_(name.clone(), vec![])],
+                ),
+            })
+            .expect("helper");
+            env.add_decl(Declaration::Theorem {
+                name: target.clone(),
+                level_params: vec![],
+                type_: nat_eq.clone(),
+                value: Expr::const_(helper.clone(), vec![]),
+            })
+            .expect("target");
+            certs.insert(
+                target,
+                ProofCert::Const {
+                    name: helper,
+                    levels: vec![],
+                    type_: Box::new(nat_eq),
+                },
+            );
+            let view = CertBundle::for_inspection("test", "0.1.0", env, certs, HashMap::new())
+                .expect("view");
+            let result = view.verify_all().expect("structurally valid bundle");
+            assert!(
+                result.failures.iter().any(|(t, _)| t == "Test.usesKey"),
+                "{key}: {:?}",
+                result.failures
+            );
+            assert!(
+                result.environment.refusals.iter().any(|(n, why)| {
+                    *n == name.to_unambiguous_string()
+                        && why.contains("the kernel reduces or builds by name")
+                }),
+                "{key}: {:?}",
+                result.environment
+            );
+        }
     }
 
     #[test]
@@ -2041,6 +2894,122 @@ mod tests {
         let result = bundle.verify_all().expect("verification result");
         assert!(result.all_passed());
         assert_eq!(result.trust_level, TrustLevel::Axiom);
+    }
+
+    /// A theorem proved from `axiom <spoof> : True` in a prelude env, with its
+    /// certificate. Returns `(env, certs, theorem)`.
+    fn env_with_axiom_backed_theorem(
+        axiom: &Name,
+    ) -> (Environment, HashMap<Name, ProofCert>, Name) {
+        let mut env = Environment::with_prelude();
+        let target = Name::from_string("Test.bad");
+        let true_ty = Expr::const_(Name::from_string("True"), vec![]);
+        env.add_decl(Declaration::Axiom {
+            name: axiom.clone(),
+            level_params: vec![],
+            type_: true_ty.clone(),
+        })
+        .expect("axiom fixture");
+        env.add_decl(Declaration::Theorem {
+            name: target.clone(),
+            level_params: vec![],
+            type_: true_ty.clone(),
+            value: Expr::const_(axiom.clone(), vec![]),
+        })
+        .expect("axiom-backed theorem");
+        let mut certs = HashMap::new();
+        certs.insert(
+            target.clone(),
+            ProofCert::Const {
+                name: axiom.clone(),
+                levels: vec![],
+                type_: Box::new(true_ty),
+            },
+        );
+        (env, certs, target)
+    }
+
+    /// `kernel cert verify` discloses every axiom of the bundle environment
+    /// and each theorem's assumptions: a replay that passes relative to a user
+    /// axiom (here the fictional `proofIrrel`, once whitelisted by name) says
+    /// so, instead of reading as a clean pass.
+    #[test]
+    fn verify_all_discloses_every_environment_axiom_and_theorem_assumption() {
+        let axiom = Name::from_string("proofIrrel");
+        let (env, certs, target) = env_with_axiom_backed_theorem(&axiom);
+        let bundle =
+            CertBundle::build("test", "0.1.0", env, certs, HashMap::new(), None).expect("bundle");
+        let result = bundle.verify_all().expect("verification result");
+        assert!(result.all_passed());
+        assert!(result.axioms.non_canonical_ambient.is_empty());
+        assert_eq!(
+            result
+                .axioms
+                .other_axioms
+                .iter()
+                .filter(|a| *a == "proofIrrel")
+                .count(),
+            1
+        );
+        assert!(!result
+            .axioms
+            .canonical_foundations
+            .contains(&"proofIrrel".to_string()));
+        for foundation in ["propext", "Quot.sound", "Classical.choice"] {
+            assert!(
+                result
+                    .axioms
+                    .canonical_foundations
+                    .contains(&foundation.to_string()),
+                "{foundation} is disclosed as a canonical foundation"
+            );
+        }
+        assert_eq!(
+            result.axioms.theorem_assumptions,
+            vec![(target.to_string(), vec!["proofIrrel".to_string()])]
+        );
+        assert_eq!(bundle.axiom_disclosure(), result.axioms);
+    }
+
+    /// A declaration whose ONE component prints as a kernel-owned axiom
+    /// (`«Quot.sound»`) poisons every verdict replayed in its environment: the
+    /// trust constructor refuses to package it, and a view of it fails every
+    /// theorem, naming the spoof unambiguously.
+    #[test]
+    fn bundle_with_printed_form_foundation_spoof_is_refused_and_fails_verification() {
+        let spoof = Name::anon().str("Quot.sound");
+        let (env, certs, target) = env_with_axiom_backed_theorem(&spoof);
+        let error = CertBundle::build(
+            "test",
+            "0.1.0",
+            env.clone(),
+            certs.clone(),
+            HashMap::new(),
+            None,
+        )
+        .expect_err("a spoofed reserved name must not be packaged");
+        assert!(error.to_string().contains("«Quot.sound»"), "{error}");
+
+        let view = CertBundle::for_inspection("test", "0.1.0", env, certs, HashMap::new())
+            .expect("diagnostics view");
+        let result = view.verify_all_for_inspection();
+        assert_eq!(result.passed, 0);
+        assert_eq!(result.failed, 1);
+        assert!(result.failures[0].1.contains("«Quot.sound»"));
+        assert_eq!(
+            result
+                .axioms
+                .non_canonical_ambient
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["«Quot.sound»"]
+        );
+        assert!(result
+            .axioms
+            .other_axioms
+            .contains(&"«Quot.sound»".to_string()));
+        assert!(view.verify_theorem(&target).is_err());
     }
 
     #[test]

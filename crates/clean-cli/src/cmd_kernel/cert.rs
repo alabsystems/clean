@@ -16,7 +16,9 @@ use std::time::Instant;
 
 use anyhow::{anyhow, bail};
 use clean_kernel::cert::bundle::CertBundle;
-use clean_kernel::cert::{BundleInspectEntry, TrustLevel};
+use clean_kernel::cert::{
+    BundleAxiomDisclosure, BundleEnvironmentRecheck, BundleInspectEntry, TrustLevel,
+};
 use clean_kernel::cli::KernelCertCommands;
 use clean_kernel::Name;
 
@@ -118,11 +120,132 @@ fn emit_verify_json(
         "ready_count": inspect.ready_count,
         "incomplete_count": inspect.incomplete_count,
         "failures": failures,
+        "axioms": axiom_disclosure_json(&result.axioms),
+        "environment_recheck": environment_recheck_json(&result.environment),
         "load_time_ms": load_time.as_millis(),
         "verify_time_ms": verify_time.as_millis(),
     });
     println!("{}", serde_json::to_string_pretty(&output)?);
     Ok(())
+}
+
+/// The bundle environment's axioms and each theorem's assumptions, as the
+/// `axioms` object of `kernel cert verify --json` and the `environment_axioms`
+/// object of `kernel cert stats --json`.
+fn axiom_disclosure_json(axioms: &BundleAxiomDisclosure) -> serde_json::Value {
+    let theorem_assumptions: serde_json::Map<String, serde_json::Value> = axioms
+        .theorem_assumptions
+        .iter()
+        .map(|(theorem, assumed)| (theorem.clone(), serde_json::json!(assumed)))
+        .collect();
+    let non_canonical: Vec<serde_json::Value> = axioms
+        .non_canonical_ambient
+        .iter()
+        .map(|(name, detail)| serde_json::json!({ "name": name, "reason": detail }))
+        .collect();
+    let theorem_unchecked: serde_json::Map<String, serde_json::Value> = axioms
+        .theorem_unchecked_dependencies
+        .iter()
+        .map(|(theorem, unchecked)| (theorem.clone(), serde_json::json!(unchecked)))
+        .collect();
+    serde_json::json!({
+        "canonical_foundations": axioms.canonical_foundations,
+        "trust_markers": axioms.trust_markers,
+        "other_axioms": axioms.other_axioms,
+        "non_canonical_ambient": non_canonical,
+        "theorem_assumptions": theorem_assumptions,
+        "theorem_unchecked_dependencies": theorem_unchecked,
+    })
+}
+
+/// What re-deriving the bundle environment from the canonical base found, as
+/// the `environment_recheck` object of `kernel cert verify --json`.
+fn environment_recheck_json(recheck: &BundleEnvironmentRecheck) -> serde_json::Value {
+    let refusals: Vec<serde_json::Value> = recheck
+        .refusals
+        .iter()
+        .map(|(name, reason)| serde_json::json!({ "name": name, "reason": reason }))
+        .collect();
+    serde_json::json!({
+        "passed": recheck.passed(),
+        "pinned_to_base": recheck.pinned_to_base,
+        "constants_readmitted": recheck.constants_readmitted,
+        "families_readmitted": recheck.families_readmitted,
+        "redefined_base": recheck.redefined_base,
+        "refusals": refusals,
+    })
+}
+
+/// Human rendering of [`BundleEnvironmentRecheck`].
+fn render_environment_recheck_human(recheck: &BundleEnvironmentRecheck) -> String {
+    let mut out = String::new();
+    writeln!(
+        &mut out,
+        "Environment re-check: {} declaration(s) pinned to the canonical base, {} constant(s) \
+         and {} famil(ies) re-admitted by the kernel, {} refused",
+        recheck.pinned_to_base,
+        recheck.constants_readmitted,
+        recheck.families_readmitted,
+        recheck.refusals.len()
+    )
+    .expect("write to string");
+    for (name, reason) in &recheck.refusals {
+        writeln!(&mut out, "  REFUSED:            {name} ({reason})").expect("write to string");
+    }
+    out
+}
+
+/// Human rendering of [`BundleAxiomDisclosure`]: every non-foundational axiom
+/// in the environment, every theorem that rests on one, and every
+/// non-canonical declaration of a reserved kernel name.
+fn render_axiom_disclosure_human(axioms: &BundleAxiomDisclosure) -> String {
+    let mut out = String::new();
+    let list = |names: &[String]| {
+        if names.is_empty() {
+            "(none)".to_string()
+        } else {
+            names.join(", ")
+        }
+    };
+    writeln!(
+        &mut out,
+        "Environment axioms: {} canonical foundation(s): {}",
+        axioms.canonical_foundations.len(),
+        list(&axioms.canonical_foundations)
+    )
+    .expect("write to string");
+    writeln!(
+        &mut out,
+        "  trust markers:      {}",
+        list(&axioms.trust_markers)
+    )
+    .expect("write to string");
+    writeln!(
+        &mut out,
+        "  other axioms:       {}",
+        list(&axioms.other_axioms)
+    )
+    .expect("write to string");
+    for (name, detail) in &axioms.non_canonical_ambient {
+        writeln!(&mut out, "  NON-CANONICAL:      {name} ({detail})").expect("write to string");
+    }
+    for (theorem, assumed) in &axioms.theorem_assumptions {
+        if !assumed.is_empty() {
+            writeln!(&mut out, "  {theorem} rests on: {}", assumed.join(", "))
+                .expect("write to string");
+        }
+    }
+    for (theorem, unchecked) in &axioms.theorem_unchecked_dependencies {
+        if !unchecked.is_empty() {
+            writeln!(
+                &mut out,
+                "  {theorem} rests on declaration(s) the kernel did not re-derive: {}",
+                unchecked.join(", ")
+            )
+            .expect("write to string");
+        }
+    }
+    out
 }
 
 fn emit_verify_human(
@@ -169,6 +292,8 @@ fn emit_verify_human(
         }
     );
     println!("Trust level: {}", trust_level_str(result.trust_level));
+    print!("{}", render_environment_recheck_human(&result.environment));
+    print!("{}", render_axiom_disclosure_human(&result.axioms));
     println!(
         "Timing: load {:.1}ms, verify {:.1}ms",
         load_time.as_secs_f64() * 1000.0,
@@ -191,7 +316,7 @@ fn inspect(path: &Path, json: bool) -> anyhow::Result<()> {
             if json {
                 emit_inspect_json(path, &bundle, &report)?;
             } else {
-                emit_inspect_human(path, &bundle, &report);
+                emit_inspect_human(path, &bundle, &report)?;
             }
             return Ok(());
         }
@@ -216,7 +341,7 @@ fn inspect(path: &Path, json: bool) -> anyhow::Result<()> {
         println!("REJECTED by the trust loader: {strict_error}");
         println!("Quarantined readiness diagnostics follow; nothing in this bundle is verified.");
         println!();
-        emit_inspect_human(path, &bundle, &report);
+        emit_inspect_human(path, &bundle, &report)?;
     }
     bail!("loading bundle {}: {strict_error}", path.display())
 }
@@ -292,34 +417,33 @@ fn emit_inspect_human(
     path: &Path,
     bundle: &CertBundle,
     report: &clean_kernel::cert::BundleInspectReport,
-) {
-    print!("{}", render_inspect_human(path, bundle, report));
+) -> anyhow::Result<()> {
+    print!("{}", render_inspect_human(path, bundle, report)?);
+    Ok(())
 }
 
 fn render_inspect_human(
     path: &Path,
     bundle: &CertBundle,
     report: &clean_kernel::cert::BundleInspectReport,
-) -> String {
+) -> Result<String, std::fmt::Error> {
     let manifest = bundle.manifest();
     let mut out = String::new();
-    writeln!(&mut out, "Bundle: {}", path.display()).expect("write to string");
-    writeln!(&mut out, "Project: {}", manifest.project).expect("write to string");
-    writeln!(&mut out, "clean version: {}", manifest.clean_version).expect("write to string");
+    writeln!(&mut out, "Bundle: {}", path.display())?;
+    writeln!(&mut out, "Project: {}", manifest.project)?;
+    writeln!(&mut out, "clean version: {}", manifest.clean_version)?;
     writeln!(
         &mut out,
         "Trust level: {}",
         trust_level_str(manifest.trust_level)
-    )
-    .expect("write to string");
-    writeln!(&mut out, "Theorems: {}", manifest.theorems.len()).expect("write to string");
+    )?;
+    writeln!(&mut out, "Theorems: {}", manifest.theorems.len())?;
     writeln!(
         &mut out,
         "Readiness: {} ready, {} incomplete",
         report.ready_count, report.incomplete_count
-    )
-    .expect("write to string");
-    writeln!(&mut out).expect("write to string");
+    )?;
+    writeln!(&mut out)?;
     for entry in &report.entries {
         let trust = trust_level_str(entry.trust_level);
         let sorry = if entry.sorry_free { "" } else { " [SORRY]" };
@@ -330,21 +454,20 @@ fn render_inspect_human(
             trust,
             sorry,
             inspect_issue_summary(entry)
-        )
-        .expect("write to string");
+        )?;
         if let Some(theorem_type) = &entry.theorem_type {
-            writeln!(&mut out, "    type:       {theorem_type}").expect("write to string");
+            writeln!(&mut out, "    type:       {theorem_type}")?;
         }
         if let Some(kind) = entry.declaration_kind {
-            writeln!(&mut out, "    decl_kind:  {kind}").expect("write to string");
+            writeln!(&mut out, "    decl_kind:  {kind}")?;
         }
         if let Some(type_hash) = &entry.type_hash {
             let preview = &type_hash[..16.min(type_hash.len())];
-            writeln!(&mut out, "    type_hash:  {preview}...").expect("write to string");
+            writeln!(&mut out, "    type_hash:  {preview}...")?;
         }
         if let Some(proof_hash) = &entry.proof_hash {
             let preview = &proof_hash[..16.min(proof_hash.len())];
-            writeln!(&mut out, "    proof_hash: {preview}...").expect("write to string");
+            writeln!(&mut out, "    proof_hash: {preview}...")?;
         }
         writeln!(
             &mut out,
@@ -364,10 +487,9 @@ fn render_inspect_human(
             } else {
                 "missing"
             }
-        )
-        .expect("write to string");
+        )?;
     }
-    out
+    Ok(out)
 }
 
 // ─── stats ──────────────────────────────────────────────────────────────────
@@ -376,6 +498,8 @@ struct StatsSummary {
     trust_counts: HashMap<&'static str, usize>,
     sorry_count: usize,
     axiom_names: Vec<String>,
+    /// Every axiom in the bundle's environment and each theorem's assumptions.
+    environment_axioms: BundleAxiomDisclosure,
     file_size: u64,
 }
 
@@ -402,6 +526,7 @@ fn collect_stats(path: &Path, bundle: &CertBundle) -> StatsSummary {
         trust_counts,
         sorry_count,
         axiom_names,
+        environment_axioms: bundle.axiom_disclosure(),
         file_size,
     }
 }
@@ -427,6 +552,8 @@ fn emit_stats_json(path: &Path, bundle: &CertBundle, s: &StatsSummary) -> anyhow
         "bundle_version": manifest.version,
         "theorem_count": manifest.theorems.len(),
         "axiom_count": s.axiom_names.len(),
+        "environment_axioms": axiom_disclosure_json(&s.environment_axioms),
+        "environment_assumption_count": s.environment_axioms.assumption_count(),
         "sorry_count": s.sorry_count,
         "trust_level": trust_level_str(manifest.trust_level),
         "trust_breakdown": s.trust_counts,
@@ -448,6 +575,7 @@ fn emit_stats_human(path: &Path, bundle: &CertBundle, s: &StatsSummary) {
     println!("Summary:");
     println!("  Theorems:      {}", manifest.theorems.len());
     println!("  Axioms:        {}", s.axiom_names.len());
+    print!("{}", render_axiom_disclosure_human(&s.environment_axioms));
     if s.sorry_count > 0 {
         println!("  Sorry:         {}", s.sorry_count);
     }
@@ -533,7 +661,8 @@ mod tests {
             trust_level_str(TrustLevel::Unverified)
         );
 
-        let human = render_inspect_human(Path::new("fixture.cleancert"), &bundle, &report);
+        let human = render_inspect_human(Path::new("fixture.cleancert"), &bundle, &report)
+            .expect("render the inspect report");
         assert!(human.contains("Readiness: 0 ready, 1 incomplete"));
         assert!(human.contains("Test.assumed [unverified] (missing-proof-term)"));
         assert!(human.contains("type:       True"));
@@ -557,7 +686,8 @@ mod tests {
         // No proof term exists, so no proof hash may be published for it.
         assert!(json["theorems"][0].get("proof_hash").is_none());
 
-        let human = render_inspect_human(Path::new("fixture.cleancert"), &bundle, &report);
+        let human = render_inspect_human(Path::new("fixture.cleancert"), &bundle, &report)
+            .expect("render the inspect report");
         for forbidden in ["kernel-verified", "smt-backed", "proof: present"] {
             assert!(
                 !human.contains(forbidden),
@@ -570,6 +700,144 @@ mod tests {
         assert!(
             bundle.verify_all().is_err(),
             "an assumed theorem must never reach a verification verdict"
+        );
+    }
+
+    /// `kernel cert verify` / `stats` disclose every axiom of the bundle
+    /// environment and each theorem's assumptions. Measured on origin/main
+    /// 4bacc8770: a bundle proving `False` from `axiom proofIrrel : False`
+    /// verified `all_passed: true` and neither verb named the axiom.
+    #[test]
+    fn verify_and_stats_disclose_the_environment_axioms() {
+        let mut env = Environment::with_prelude();
+        let axiom = Name::from_string("proofIrrel");
+        let theorem = Name::from_string("Test.bad");
+        let true_ty = Expr::const_(Name::from_string("True"), vec![]);
+        env.add_decl(Declaration::Axiom {
+            name: axiom.clone(),
+            level_params: vec![],
+            type_: true_ty.clone(),
+        })
+        .expect("axiom");
+        env.add_decl(Declaration::Theorem {
+            name: theorem.clone(),
+            level_params: vec![],
+            type_: true_ty.clone(),
+            value: Expr::const_(axiom.clone(), vec![]),
+        })
+        .expect("theorem");
+        let mut certs = HashMap::new();
+        certs.insert(
+            theorem,
+            ProofCert::Const {
+                name: axiom,
+                levels: vec![],
+                type_: Box::new(true_ty),
+            },
+        );
+        let bundle =
+            CertBundle::build("test", "0.1.0", env, certs, HashMap::new(), None).expect("bundle");
+        let result = bundle.verify_all().expect("verify");
+        assert!(result.all_passed());
+
+        let json = axiom_disclosure_json(&result.axioms);
+        assert_eq!(
+            json["theorem_assumptions"]["Test.bad"],
+            serde_json::json!(["proofIrrel"])
+        );
+        assert!(json["other_axioms"]
+            .as_array()
+            .expect("array")
+            .contains(&serde_json::json!("proofIrrel")));
+        assert!(json["canonical_foundations"]
+            .as_array()
+            .expect("array")
+            .contains(&serde_json::json!("propext")));
+        assert_eq!(json["non_canonical_ambient"], serde_json::json!([]));
+
+        let human = render_axiom_disclosure_human(&result.axioms);
+        assert!(human.contains("Test.bad rests on: proofIrrel"), "{human}");
+
+        let stats = collect_stats(Path::new("fixture.cleancert"), &bundle);
+        assert_eq!(stats.environment_axioms, result.axioms);
+
+        // Every declaration was re-derived from the canonical base.
+        let recheck = environment_recheck_json(&result.environment);
+        assert_eq!(recheck["passed"], true);
+        assert_eq!(recheck["constants_readmitted"], 2);
+        assert_eq!(recheck["refusals"], serde_json::json!([]));
+        assert_eq!(
+            json["theorem_unchecked_dependencies"]["Test.bad"],
+            serde_json::json!([])
+        );
+    }
+
+    /// `kernel cert verify` re-derives the bundle environment from the
+    /// canonical base, and reports what it refused. Measured on ad89a748b: a
+    /// file proving `False` through a `Theorem`-kind `Test.fakeFalse : False
+    /// := True.intro` inserted without a kernel check verified "ALL PASSED",
+    /// exit 0, with `theorem_assumptions` `Test.bad: []`.
+    #[test]
+    fn verify_reports_a_declaration_the_kernel_did_not_rederive() {
+        let mut env = Environment::with_prelude();
+        let fake = Name::from_string("Test.fakeFalse");
+        let theorem = Name::from_string("Test.bad");
+        let false_ty = Expr::const_(Name::from_string("False"), vec![]);
+        env.add_decl_structural(Declaration::Theorem {
+            name: fake.clone(),
+            level_params: vec![],
+            type_: false_ty.clone(),
+            value: Expr::const_(Name::from_string("True.intro"), vec![]),
+        })
+        .expect("structural forgery");
+        env.add_decl(Declaration::Theorem {
+            name: theorem.clone(),
+            level_params: vec![],
+            type_: false_ty.clone(),
+            value: Expr::const_(fake.clone(), vec![]),
+        })
+        .expect("theorem");
+        let mut certs = HashMap::new();
+        certs.insert(
+            theorem,
+            ProofCert::Const {
+                name: fake,
+                levels: vec![],
+                type_: Box::new(false_ty),
+            },
+        );
+        // `build` refuses it; the view stands for a hand-made file.
+        let bundle =
+            CertBundle::for_inspection("test", "0.1.0", env, certs, HashMap::new()).expect("view");
+        let result = bundle.verify_all().expect("structurally valid");
+        assert!(!result.all_passed());
+
+        let recheck = environment_recheck_json(&result.environment);
+        assert_eq!(recheck["passed"], false);
+        assert!(
+            recheck["refusals"]
+                .as_array()
+                .expect("array")
+                .iter()
+                .any(|r| r["name"] == "Test.fakeFalse"),
+            "{recheck}"
+        );
+        assert_eq!(
+            axiom_disclosure_json(&result.axioms)["theorem_unchecked_dependencies"]["Test.bad"],
+            serde_json::json!(["Test.bad", "Test.fakeFalse"])
+        );
+        let human = render_environment_recheck_human(&result.environment);
+        assert!(
+            human.contains("REFUSED:            Test.fakeFalse"),
+            "{human}"
+        );
+        let human = render_axiom_disclosure_human(&result.axioms);
+        assert!(
+            human.contains(
+                "Test.bad rests on declaration(s) the kernel did not re-derive: Test.bad, \
+                 Test.fakeFalse"
+            ),
+            "{human}"
         );
     }
 }

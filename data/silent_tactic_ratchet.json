@@ -1,79 +1,20 @@
 {
-  "_comment": "Fail-closed ratchet for the SILENT tactic-failure class (RC-Q / brick T0 of docs/plans/TACTICS_TO_100_2026-07-29.md). `silent` = the probe declaration failed with NO diagnostic anywhere naming the construct, so the user sees only `declaration uses synthetic sorry`. That class is unactionable AND unmeasurable: every UnknownTactic-keyed coverage script in the repo under-reports by exactly this much. baseline_silent is 0 and MUST STAY 0 - do not raise it to land a tactic. Regenerate the census with CLEAN_SILENT_CENSUS_UPDATE=1 cargo test --offline --release -p clean-elab --test silent_tactic_census, then ratchet down with scripts/check_silent_tactic_ratchet.py --update.",
+  "_comment": "Fail-closed ratchet for two neighbouring tactic-diagnostic defect classes (RC-Q / brick T0 of docs/plans/TACTICS_TO_100_2026-07-29.md). `silent` = the probe declaration failed with NO diagnostic anywhere naming the construct, so the user sees only `declaration uses synthetic sorry`; that class is unactionable AND unmeasurable, and baseline_silent is 0 and MUST STAY 0 - do not raise it to land a tactic. `unnamed` = the ATTRIBUTION class: the declaration fails loudly, but nothing in the diagnostic says which tactic gave up, so a reader cannot tell whether `omega` ran and gave up or was never reached - the tactic is effectively hidden. It is ratcheted twice: on the aggregate count (baseline_unnamed) and, because a count alone cannot see a one-for-one swap, on the exact set of (token, label) rows allowed to be unattributed (known_unnamed_rows). Regenerate the census with CLEAN_SILENT_CENSUS_UPDATE=1 cargo test --offline --release -p clean-elab --test silent_tactic_census, then ratchet down with scripts/check_silent_tactic_ratchet.py --update.",
   "measured_on_origin_main_2026_08_07": {
     "silent": 27,
     "note": "27 of 374 probes over 288 tactic tokens produced zero diagnostics. Silent tokens were: cases (| _ =>), clear, conv (in / tactic =>), conv_lhs, conv_rhs, guard_target, let', letI, module, on_goal, rcases (- pattern), rename_i, revert, rw, set, set!, specialize, subst, conv-mode tactic, conv-mode tactic', unfold, and the ELIMINATOR notation. sorry/admit are intentional and excluded."
   },
   "baseline_silent": 0,
-  "baseline_unnamed": 88,
+  "baseline_unnamed": 7,
   "known_silent": [],
   "known_unnamed": [
-    "all_goals",
-    "and_intros",
-    "apply",
-    "arg",
-    "by_cases",
-    "by_contra",
-    "case",
-    "cases",
-    "cc",
-    "change",
-    "choose",
-    "clear",
-    "congr",
-    "constructor",
-    "conv",
     "delta",
-    "done",
     "dsimp",
-    "enter",
-    "exact",
-    "exfalso",
-    "first",
-    "generalize",
-    "have",
-    "if",
-    "induction",
-    "infer_instance",
-    "intro",
     "intros",
-    "let",
-    "lhs",
-    "linarith",
     "next",
-    "norm_cast",
-    "norm_num",
-    "obtain",
     "open",
-    "push_cast",
-    "push_neg",
-    "rcases",
-    "refine",
-    "rename_i",
-    "repeat",
-    "revert",
-    "rfl",
-    "rhs",
-    "ring_nf",
-    "rintro",
-    "rotate_left",
-    "rotate_right",
-    "rw",
-    "rw?",
     "rwa",
-    "show",
-    "simp",
-    "simp_all",
-    "simp_rw",
-    "skip",
-    "subst",
-    "subst_eqs",
-    "suffices",
-    "symm",
-    "trans",
-    "try",
-    "unfold",
-    "wlog"
+    "unfold"
   ],
   "teeth": {
     "requirement": "docs/plans/TACTICS_TO_100_2026-07-29.md \u00a77.3 \u2014 a gate with no recorded perturbation-failure is not a gate.",
@@ -95,7 +36,69 @@
         "command": "cargo test --offline -p clean-parser --lib tests_tactic_silence",
         "observed": "test_tactic_recovery_names_the_failing_tactic, test_recovery_attributes_to_tactic_not_punctuation and test_recovery_reports_the_nesting_chain FAIL with tactic == None",
         "date": "2026-08-08"
+      },
+      {
+        "mutation": "flip one `loud` census row to `unnamed` (totals.unnamed 7 -> 8)",
+        "command": "python3 scripts/check_silent_tactic_ratchet.py",
+        "observed": "FAIL: tactic failures with NO diagnostic naming the tactic rose 7 -> 8, AND the row pin names the exact regressed probe [(exact, bare)] (exit 1); restoring the census returns exit 0",
+        "date": "2026-08-10"
+      },
+      {
+        "mutation": "SWAP: mark one pinned unnamed row `loud` and one attributed row `unnamed`, keeping totals.unnamed FLAT at 7 - the perturbation a count-only ratchet cannot see",
+        "command": "python3 scripts/check_silent_tactic_ratchet.py",
+        "observed": "FAIL on the row pin: these probes USED to name the tactic that failed and no longer do: [(exact, bare)] (exit 1)",
+        "date": "2026-08-10"
+      },
+      {
+        "mutation": "delete the 7 unnamed rows from the census (shrink the denominator to 366)",
+        "command": "python3 scripts/check_silent_tactic_ratchet.py",
+        "observed": "FAIL: census has 366 rows but the probe corpus declares 373; the denominator may not shrink (exit 1)",
+        "date": "2026-08-10"
+      },
+      {
+        "mutation": "make ElabCtx::attribute_tactic_failure return its argument unchanged (no attribution)",
+        "command": "cargo test --offline -p clean-elab --lib infer::tests::tactic_attribution",
+        "observed": "4 of the 6 infer::tests::tactic_attribution tests FAIL (test_unsolved_goals_names_the_last_tactic_that_ran, test_nested_conv_body_names_the_inner_tactic_and_the_chain, test_attribution_carries_the_source_span, test_a_recovered_failure_is_not_blamed_for_a_later_diagnostic); the two DECOYS stay green in both directions (test_an_error_that_already_names_its_tactic_is_not_rewrapped guards against blanket-wrapping, test_attribution_does_not_change_combinator_backtracking guards the verdicts). Restored: 6 passed; 0 failed.",
+        "date": "2026-08-10"
       }
     ]
+  },
+  "known_unnamed_rows": [
+    [
+      "delta",
+      "one"
+    ],
+    [
+      "dsimp",
+      "only"
+    ],
+    [
+      "intros",
+      "names"
+    ],
+    [
+      "next",
+      "conv-mode"
+    ],
+    [
+      "open",
+      "blk"
+    ],
+    [
+      "rwa",
+      "lst"
+    ],
+    [
+      "unfold",
+      "many"
+    ]
+  ],
+  "measured_on_origin_main_2026_08_09": {
+    "unnamed": 88,
+    "unnamed_tokens": 66,
+    "note": "88 of 373 probes over 66 tactic tokens failed with a diagnostic that named no tactic. ~62 were the block-level `unsolved goals`, which is raised after every tactic already returned Ok and therefore never carried one; the rest were term-level diagnostics (TypeMismatch, UnknownIdentWithSuggestions, TooManyArguments, ProofTypeMismatch) escaping through a tactic's argument elaboration. Reproduced 1:1 under real `import Init`: of 195 declarations in one file, 63 pass / 45 named / 87 UNATTRIBUTED before, 63 pass / 125 named / 7 UNATTRIBUTED after - the pass set is byte-identical, so attribution changed no verdict."
+  },
+  "residual_unattributed": {
+    "note": "The rows still allowed to be unattributed are NOT attribution defects and must not be 'fixed' by inventing a tactic name. Two honest causes: (1) argument-grammar leakage (RC-I) - `unfold a b`, `delta a`, `dsimp only [..]`, `intros h` parse the extra token as the NEXT tactic, so `UnknownTactic(\"b\")` names the tactic that really failed; blaming `unfold` would be false. (2) desugaring drops the source spelling - `rwa [h]` runs as `(rw [h]; assumption)` and `next => t` parses as `case _ => t`, so the chain correctly names `assumption` / `case`. Closing (2) needs the parser to carry the written spelling through desugaring; closing (1) is brick T13."
   }
 }

@@ -41,7 +41,7 @@
 //! Lean 4: `src/Lean/Elab/LetRec.lean`
 
 use clean_kernel::{Expr, ExprFolder, FVarId};
-use clean_parser::{SurfaceBinder, SurfaceExpr};
+use clean_parser::{SurfaceBinder, SurfaceExpr, SurfaceName};
 
 use crate::stack_safe;
 
@@ -67,7 +67,7 @@ pub(crate) enum RecursionStrategy {
 #[allow(dead_code)]
 pub(crate) struct LetRecEntry {
     /// Binding name (e.g., "f").
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     /// Elaborated type.
     pub(crate) ty: Expr,
     /// FVarId used for forward references during elaboration.
@@ -80,7 +80,7 @@ pub(crate) struct LetRecEntry {
 
 /// Detect whether a surface expression contains references to a given name,
 /// indicating recursion.
-pub(crate) fn contains_self_reference(expr: &SurfaceExpr, name: &str) -> bool {
+pub(crate) fn contains_self_reference(expr: &SurfaceExpr, name: &SurfaceName) -> bool {
     stack_safe(|| match expr {
         SurfaceExpr::Ident(_, ident) => ident == name,
         SurfaceExpr::App(_, func, args) => {
@@ -88,7 +88,7 @@ pub(crate) fn contains_self_reference(expr: &SurfaceExpr, name: &str) -> bool {
                 || args.iter().any(|a| contains_self_reference(&a.expr, name))
         }
         SurfaceExpr::Lambda(_, binders, body) => {
-            if binders.iter().any(|b| b.name == name) {
+            if binders.iter().any(|b| &b.name == name) {
                 return false; // shadowed
             }
             binders
@@ -98,7 +98,7 @@ pub(crate) fn contains_self_reference(expr: &SurfaceExpr, name: &str) -> bool {
                 || contains_self_reference(body, name)
         }
         SurfaceExpr::Pi(_, binders, body) => {
-            if binders.iter().any(|b| b.name == name) {
+            if binders.iter().any(|b| &b.name == name) {
                 return false;
             }
             binders
@@ -107,13 +107,15 @@ pub(crate) fn contains_self_reference(expr: &SurfaceExpr, name: &str) -> bool {
                 .any(|ty| contains_self_reference(ty, name))
                 || contains_self_reference(body, name)
         }
-        SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::LetRec(_, binder, val, body) => {
+        SurfaceExpr::Let(_, binder, val, body)
+        | SurfaceExpr::Have(_, binder, val, body)
+        | SurfaceExpr::LetRec(_, binder, val, body) => {
             let in_val = contains_self_reference(val, name);
             let in_ty = binder
                 .ty
                 .as_deref()
                 .is_some_and(|ty| contains_self_reference(ty, name));
-            let shadowed = binder.name == name;
+            let shadowed = &binder.name == name;
             in_val || in_ty || (!shadowed && contains_self_reference(body, name))
         }
         SurfaceExpr::If(_, cond, t, f) => {
@@ -149,10 +151,12 @@ pub(crate) fn contains_self_reference(expr: &SurfaceExpr, name: &str) -> bool {
 }
 
 /// Check do-notation elements for self-references.
-fn contains_self_reference_do_elem(elem: &clean_parser::DoElem, name: &str) -> bool {
+fn contains_self_reference_do_elem(elem: &clean_parser::DoElem, name: &SurfaceName) -> bool {
     match elem {
         clean_parser::DoElem::Expr(_, e) => contains_self_reference(e, name),
-        clean_parser::DoElem::Let(_, _, val) => contains_self_reference(val, name),
+        clean_parser::DoElem::Let(_, _, val) | clean_parser::DoElem::Have(_, _, val) => {
+            contains_self_reference(val, name)
+        }
         clean_parser::DoElem::LetMut(_, _, val) => contains_self_reference(val, name),
         clean_parser::DoElem::Bind(_, _, e) => contains_self_reference(e, name),
         clean_parser::DoElem::Return(_, e) => contains_self_reference(e, name),
@@ -170,7 +174,7 @@ fn contains_self_reference_do_elem(elem: &clean_parser::DoElem, name: &str) -> b
 ///    returns `Structural`.
 /// 3. Otherwise returns `WellFounded`.
 pub(crate) fn classify_recursion(
-    name: &str,
+    name: &SurfaceName,
     binder: &SurfaceBinder,
     val: &SurfaceExpr,
 ) -> RecursionStrategy {
@@ -199,8 +203,8 @@ pub(crate) fn classify_recursion(
 
 /// Try to detect a structurally decreasing parameter by examining the
 /// value's lambda binders and match expressions.
-fn detect_structural_param(func_name: &str, val: &SurfaceExpr) -> Option<usize> {
-    let mut params: Vec<&str> = Vec::new();
+fn detect_structural_param(func_name: &SurfaceName, val: &SurfaceExpr) -> Option<usize> {
+    let mut params: Vec<&SurfaceName> = Vec::new();
     let mut body = val;
     while let SurfaceExpr::Lambda(_, binders, inner) = body {
         for b in binders {
@@ -218,11 +222,15 @@ fn detect_structural_param(func_name: &str, val: &SurfaceExpr) -> Option<usize> 
 
 /// Search for a `match` expression that scrutinizes one of the parameters
 /// and contains recursive calls with sub-patterns.
-fn find_match_on_param(body: &SurfaceExpr, params: &[&str], func_name: &str) -> Option<usize> {
+fn find_match_on_param(
+    body: &SurfaceExpr,
+    params: &[&SurfaceName],
+    func_name: &SurfaceName,
+) -> Option<usize> {
     stack_safe(|| match body {
         SurfaceExpr::Match(_, _, scrutinee, arms) => {
             if let SurfaceExpr::Ident(_, scrut_name) = scrutinee.as_ref() {
-                if let Some(pos) = params.iter().position(|p| p == scrut_name) {
+                if let Some(pos) = params.iter().position(|p| *p == scrut_name) {
                     let has_rec = arms
                         .iter()
                         .any(|arm| contains_self_reference(&arm.body, func_name));
@@ -238,9 +246,9 @@ fn find_match_on_param(body: &SurfaceExpr, params: &[&str], func_name: &str) -> 
                 .or_else(|| find_match_on_param(else_br, params, func_name))
                 .or_else(|| find_match_on_param(cond, params, func_name))
         }
-        SurfaceExpr::Paren(_, inner) | SurfaceExpr::Let(_, _, _, inner) => {
-            find_match_on_param(inner, params, func_name)
-        }
+        SurfaceExpr::Paren(_, inner)
+        | SurfaceExpr::Let(_, _, _, inner)
+        | SurfaceExpr::Have(_, _, _, inner) => find_match_on_param(inner, params, func_name),
         _ => None,
     })
 }
@@ -278,10 +286,9 @@ fn detect_structural_from_type(ty: &SurfaceExpr) -> Option<usize> {
 /// Check if a surface expression refers to a known inductive type.
 fn is_known_inductive_type(expr: &SurfaceExpr) -> bool {
     match expr {
-        SurfaceExpr::Ident(_, name) => matches!(
-            name.as_str(),
-            "Nat" | "Bool" | "List" | "Option" | "Fin" | "Vector" | "Array"
-        ),
+        SurfaceExpr::Ident(_, name) => ["Nat", "Bool", "List", "Option", "Fin", "Vector", "Array"]
+            .iter()
+            .any(|builtin| name == &SurfaceName::generated_path(builtin)),
         SurfaceExpr::App(_, func, _) => is_known_inductive_type(func),
         SurfaceExpr::Paren(_, inner) => is_known_inductive_type(inner),
         _ => false,
@@ -334,7 +341,7 @@ pub(crate) fn count_fvar_occurrences(expr: &Expr, target: FVarId) -> usize {
 }
 
 /// Extract the parameter name at `position` from a lambda-wrapped surface expr.
-pub(crate) fn extract_param_name(val: &SurfaceExpr, position: usize) -> Option<String> {
+pub(crate) fn extract_param_name(val: &SurfaceExpr, position: usize) -> Option<SurfaceName> {
     let mut current = val;
     let mut idx = 0;
     loop {
@@ -369,7 +376,7 @@ pub(crate) fn count_lambda_params(val: &SurfaceExpr) -> usize {
 }
 
 /// Collect all names in a mutual let-rec block that reference each other.
-pub(crate) fn find_mutual_references(bindings: &[(String, &SurfaceExpr)]) -> Vec<Vec<usize>> {
+pub(crate) fn find_mutual_references(bindings: &[(SurfaceName, &SurfaceExpr)]) -> Vec<Vec<usize>> {
     let n = bindings.len();
     let mut deps: Vec<Vec<usize>> = vec![Vec::new(); n];
     for (i, (_, val)) in bindings.iter().enumerate() {

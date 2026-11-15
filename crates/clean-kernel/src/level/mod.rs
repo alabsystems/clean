@@ -937,6 +937,15 @@ impl Level {
         // `imax (succ u) (imax (succ u) u_2)`, dominated by `max(succ u, u_2)`
         // (the join of two siblings) but by no single sibling.
         //
+        // This rule is CLEAN'S, not Lean's. Pinned Lean v4.30.0-rc2's kernel
+        // refuses the `List.reverseRecOn._unary`-shaped pair this rule was added
+        // for (`71446b04f`: its message's "Lean's kernel accepts it" is refuted,
+        // t2 REJECT, `reports/level-normalizer-probe-2026-10-17/`). Lean admits
+        // the honest WF declarations because it reads the stored level verbatim,
+        // where Clean's decoder used to collapse it with `Level::max`. Under
+        // `KernelTheory::Lean` the checker uses `lean_kernel.rs`, which has no
+        // join rule; only `Extended` reaches this one (DECISIONS R150).
+        //
         // SOUNDNESS: `is_geq_core` is a conservative under-approximation, so a
         // drop fires only when `max(others) >= x` at EVERY assignment; then
         // `max(others, x) = max(others)` and removing `x` preserves the
@@ -1582,11 +1591,20 @@ impl Level {
     }
 }
 
+mod lean_kernel;
+pub use lean_kernel::LeanLevelProfile;
+pub(crate) use lean_kernel::{
+    LevelConstruction, LevelParamLookup, SharingChoices, SliceLookup, ZeroReading,
+};
+
 #[cfg(test)]
 mod tests;
 
 #[cfg(test)]
 mod soundness_harness;
+
+#[cfg(test)]
+mod lean_kernel_soundness;
 
 #[cfg(kani)]
 mod kani_proofs;

@@ -228,17 +228,30 @@ fn test_eval_int_expr_mod_by_zero_is_dividend() {
 }
 
 #[test]
-fn test_eval_int_expr_emod_returns_none() {
-    // SOUNDNESS: Euclidean `Int.emod` has NO native kernel reducer, so a `rfl`
-    // close after evaluating it would fail to type-check. It must stay
-    // unrecognized here (mirrors why `Nat.lcm` is excluded from the evaluator).
-    assert_eq!(norm_num::eval_int_expr(&int_binop_neg7_3("Int.emod")), None);
+fn test_eval_int_expr_emod_uses_checked_euclidean_definition() {
+    assert_eq!(
+        norm_num::eval_int_expr(&int_binop_neg7_3("Int.emod")),
+        Some(2)
+    );
 }
 
 #[test]
-fn test_eval_int_expr_ediv_returns_none() {
-    // SOUNDNESS: Euclidean `Int.ediv` has no native kernel reducer either.
-    assert_eq!(norm_num::eval_int_expr(&int_binop_neg7_3("Int.ediv")), None);
+fn test_eval_int_expr_ediv_uses_checked_euclidean_definition() {
+    assert_eq!(
+        norm_num::eval_int_expr(&int_binop_neg7_3("Int.ediv")),
+        Some(-3)
+    );
+}
+
+#[test]
+fn test_eval_int_expr_does_not_guess_division_dictionary() {
+    for head in ["HDiv.hDiv", "Div.div", "HMod.hMod", "Mod.mod"] {
+        assert_eq!(
+            norm_num::eval_int_expr(&int_binop_neg7_3(head)),
+            None,
+            "{head}"
+        );
+    }
 }
 
 // =========================================================================
@@ -519,10 +532,14 @@ fn nat_gcd(a: Expr, b: Expr) -> Expr {
 }
 
 #[test]
-fn test_eval_norm_num_nat_gcd_equality_closes() {
-    // Goal: Nat.gcd 12 18 = 6. Lean's norm_num closes it; the close reduces
-    // through the kernel `reduce_eq` path, an `Eq.refl` whose def-eq check
-    // drives the native gcd reducer. Kept as a soundness pin.
+fn test_eval_norm_num_nat_gcd_without_a_definition_stays_open() {
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // this closed `Nat.gcd 12 18 = 6` in an environment that DECLARES NO
+    // `Nat.gcd` — the kernel's gcd fold fired on the name alone, which is the
+    // shape that let a user `Nat.gcd := fun _ _ => 0` prove `False`. A native
+    // fold now needs a canonical definition, so the goal stays open here; the
+    // canonical fold is pinned over Lean's `Init` in
+    // `crates/clean-olean/tests/native_fold_canon_lean.rs`.
     let mut env = Environment::new();
     env.init_nat().unwrap();
     env.init_eq().unwrap();
@@ -531,8 +548,11 @@ fn test_eval_norm_num_nat_gcd_equality_closes() {
         Expr::nat_lit(6),
     );
     let mut state = ProofState::new(env, goal);
-    eval_norm_num(&mut state).expect("norm_num should close gcd 12 18 = 6");
-    assert!(state.is_complete(), "gcd equality goal should be closed");
+    assert!(
+        eval_norm_num(&mut state).is_err(),
+        "an undeclared Nat.gcd must not be computed"
+    );
+    assert!(!state.is_complete(), "the goal must stay open");
 }
 
 #[test]
@@ -552,24 +572,22 @@ fn test_eval_norm_num_nat_gcd_wrong_value_rejected() {
 }
 
 #[test]
-fn test_eval_decide_nat_gcd_le_comparison_closes() {
-    // Goal: Nat.gcd 12 18 <= 6 (true; gcd = 6). Lean's `decide` closes it.
-    // Without the gcd arm in `eval_nat_expr`, `try_eval_comparison` returned
-    // None and the constructive `Nat.le` witness builder had no value to work
-    // with, so the goal fell through to SMT and stayed open.
+fn test_eval_decide_nat_gcd_le_without_a_definition_stays_open() {
+    // RE-DECIDED 2026-09-26: `with_prelude` declares no `Nat.gcd`, so the
+    // kernel no longer folds it by name (see
+    // `test_eval_norm_num_nat_gcd_without_a_definition_stays_open`); `decide`
+    // cannot close `Nat.gcd 12 18 <= 6` here.
     let env = Environment::with_prelude();
     let goal = nat_le_goal(
         nat_gcd(Expr::nat_lit(12), Expr::nat_lit(18)),
         Expr::nat_lit(6),
     );
     let mut state = ProofState::new(env, goal);
-    eval_decide(&mut state).expect("decide should close gcd 12 18 <= 6");
-    assert!(state.is_complete(), "gcd comparison goal should be closed");
-    assert_eq!(
-        state.trusted_axiom_count(),
-        0,
-        "gcd comparison proof must not introduce trusted axioms",
+    assert!(
+        eval_decide(&mut state).is_err(),
+        "an undeclared Nat.gcd must not be computed"
     );
+    assert!(!state.is_complete(), "the goal must stay open");
 }
 
 #[test]
@@ -621,7 +639,12 @@ fn int_eq_goal(lhs: Expr, rhs: Expr) -> Expr {
 
 #[test]
 fn test_eval_decide_int_div_negative_closes() {
-    // Goal: (-7 : Int) / 3 = -2 (T-division). Lean's `decide` closes it. Without
+    // RESTORED (Int.div/Int.mod are Lean 4.8.0's T-rounding DEFINITIONS in the
+    // prelude, their closures pinned in native_fold_canon.tsv): the fold is
+    // justified by the definition, so this closes again. The 2026-09-26
+    // refusal pin guarded the opaque `fun _ _ => 0` placeholder, which is gone.
+    // Goal: `Int.div (-7) 3 = -2` (T-division). Lean 4.8.0's `decide` closes it
+    // (the goal names the head: Lean's `/` on `Int` is `Int.ediv`). Without
     // the `Int.div` arm in `eval_int_expr`, `eval_decide`'s Int-equality fast
     // path declined and the goal was left open (SMT fallback).
     let env = Environment::with_prelude();
@@ -641,7 +664,7 @@ fn test_eval_decide_int_div_negative_closes() {
 
 #[test]
 fn test_eval_decide_int_div_wrong_value_rejected() {
-    // Goal: (-7 : Int) / 3 = -3 is FALSE (the real T-division value is -2).
+    // Goal: `Int.div (-7) 3 = -3` is FALSE (the real T-division value is -2).
     let env = Environment::with_prelude();
     let lhs = int_binop_neg7_3("Int.div");
     let rhs = Expr::app(
@@ -663,7 +686,12 @@ fn test_eval_decide_int_div_wrong_value_rejected() {
 
 #[test]
 fn test_eval_norm_num_int_div_negative_closes() {
-    // Goal: (-7 : Int) / 3 = -2 (T-division). Lean's `norm_num` closes it. The
+    // RESTORED (Int.div/Int.mod are Lean 4.8.0's T-rounding DEFINITIONS in the
+    // prelude, their closures pinned in native_fold_canon.tsv): the fold is
+    // justified by the definition, so this closes again. The 2026-09-26
+    // refusal pin guarded the opaque `fun _ _ => 0` placeholder, which is gone.
+    // Goal: `Int.div (-7) 3 = -2` (T-division; Lean's `/` on `Int` is
+    // `Int.ediv`, so the goal names the head). Lean's `norm_num` closes it. The
     // close reduces through the kernel `reduce_eq` path (an `Eq.refl` whose
     // def-eq check drives the native `reduce_int_div` reducer); kept here as a
     // tactic-level parity pin alongside the `decide` divergence above.
@@ -684,7 +712,11 @@ fn test_eval_norm_num_int_div_negative_closes() {
 
 #[test]
 fn test_eval_norm_num_int_mod_negative_closes() {
-    // Goal: (-7 : Int) % 3 = -1 (T-remainder, sign follows dividend).
+    // RESTORED (Int.div/Int.mod are Lean 4.8.0's T-rounding DEFINITIONS in the
+    // prelude, their closures pinned in native_fold_canon.tsv): the fold is
+    // justified by the definition, so this closes again. The 2026-09-26
+    // refusal pin guarded the opaque `fun _ _ => 0` placeholder, which is gone.
+    // Goal: `Int.mod (-7) 3 = -1` (T-remainder, sign follows dividend).
     let env = Environment::with_prelude();
     let lhs = int_binop_neg7_3("Int.mod");
     let rhs = Expr::app(
@@ -702,7 +734,11 @@ fn test_eval_norm_num_int_mod_negative_closes() {
 
 #[test]
 fn test_eval_norm_num_int_div_proof_is_sorry_free_and_kernel_checks() {
-    // SOUNDNESS guard: closing `(-7 : Int) / 3 = -2` must produce a proof that
+    // RESTORED (Int.div/Int.mod are Lean 4.8.0's T-rounding DEFINITIONS in the
+    // prelude, their closures pinned in native_fold_canon.tsv): the fold is
+    // justified by the definition, so this closes again. The 2026-09-26
+    // refusal pin guarded the opaque `fun _ _ => 0` placeholder, which is gone.
+    // SOUNDNESS guard: closing `Int.div (-7) 3 = -2` must produce a proof that
     // is `sorryAx`-free, carries no trusted/domain axioms, and kernel-rechecks
     // against the goal type (the def-eq check unfolds via the native
     // `reduce_int_div` reducer).

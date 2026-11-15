@@ -101,7 +101,7 @@ pub fn library_search_with_config(
     let mut results: Vec<LibrarySearchResult> = Vec::new();
 
     // Extract goal head for similarity matching
-    let goal_head = extract_head_name(&target);
+    let goal_head = extract_typed_head_name(&target);
 
     // 1. Search local hypotheses (higher priority)
     if config.prefer_local {
@@ -113,7 +113,7 @@ pub fn library_search_with_config(
             // (#2229: use goal's local context so FVars resolve)
             if state.is_def_eq(goal, &decl.ty, &target) {
                 results.push(LibrarySearchResult {
-                    name: Name::from_string(&decl.name),
+                    name: decl.name.name().clone(),
                     expr: Expr::fvar(decl.fvar),
                     type_: decl.ty.clone(),
                     relevance: 1.0,
@@ -132,7 +132,7 @@ pub fn library_search_with_config(
                     let relevance = 0.9 - (arg_count as f64 * 0.05);
                     if relevance >= config.min_relevance {
                         results.push(LibrarySearchResult {
-                            name: Name::from_string(&decl.name),
+                            name: decl.name.name().clone(),
                             expr: Expr::fvar(decl.fvar),
                             type_: decl.ty.clone(),
                             relevance,
@@ -151,14 +151,14 @@ pub fn library_search_with_config(
 
             // Head match
             if let Some(ref gh) = goal_head {
-                if let Some(hyp_head) = extract_head_name(&decl.ty) {
+                if let Some(hyp_head) = extract_typed_head_name(&decl.ty) {
                     if gh == &hyp_head {
                         let relevance = 0.5;
                         if relevance >= config.min_relevance
-                            && !results.iter().any(|r| r.name.to_string() == decl.name)
+                            && !results.iter().any(|r| &r.name == decl.name.name())
                         {
                             results.push(LibrarySearchResult {
-                                name: Name::from_string(&decl.name),
+                                name: decl.name.name().clone(),
                                 expr: Expr::fvar(decl.fvar),
                                 type_: decl.ty.clone(),
                                 relevance,
@@ -182,8 +182,7 @@ pub fn library_search_with_config(
         }
 
         // Skip internal names
-        let name_str = constant.name.to_string();
-        if name_str.starts_with('_') || name_str.contains("._") {
+        if is_internal_search_name(&constant.name) {
             continue;
         }
 
@@ -192,7 +191,7 @@ pub fn library_search_with_config(
             .level_params
             .iter()
             .enumerate()
-            .map(|(i, _)| Level::param(Name::from_string(&format!("_u{i}"))))
+            .map(|(i, _)| Level::param(Name::anon().str(format!("_u{i}"))))
             .collect();
 
         let const_type = if levels.is_empty() {
@@ -249,7 +248,7 @@ pub fn library_search_with_config(
 
         // Head match for type similarity
         if let Some(ref gh) = goal_head {
-            if let Some(const_head) = extract_head_name(&const_type) {
+            if let Some(const_head) = extract_typed_head_name(&const_type) {
                 if gh == &const_head {
                     let relevance = calculate_type_similarity(&const_type, &target);
                     if relevance >= config.min_relevance {
@@ -270,7 +269,9 @@ pub fn library_search_with_config(
 
         // Instance search
         if config.search_instances
-            && (name_str.contains("inst") || name_str.contains("Instance"))
+            && name_has_text_component(&constant.name, |text| {
+                text.contains("inst") || text.contains("Instance")
+            })
             && can_apply_to_produce(state, goal, &const_type, &target, 5).is_some()
         {
             results.push(LibrarySearchResult {
@@ -300,17 +301,45 @@ pub fn library_search_with_config(
 }
 
 /// Extract the head constant name from an expression by peeling App/Pi/MData/Squash.
-pub(crate) fn extract_head_name(expr: &Expr) -> Option<String> {
+pub(crate) fn extract_typed_head_name(expr: &Expr) -> Option<Name> {
     stack_safe(|| match expr.kind() {
-        ExprKind::Const(name, _) => Some(name.to_string()),
-        ExprKind::App(f, _) => extract_head_name(f),
+        ExprKind::Const(name, _) => Some(name.clone()),
+        ExprKind::App(f, _) => extract_typed_head_name(f),
         ExprKind::Pi(_, _, body) => {
             // For ∀ types, look at the conclusion
-            extract_head_name(body)
+            extract_typed_head_name(body)
         }
-        ExprKind::MData(_, inner) | ExprKind::Squash(inner) => extract_head_name(inner),
+        ExprKind::MData(_, inner) | ExprKind::Squash(inner) => extract_typed_head_name(inner),
         _ => None,
     })
+}
+
+/// Legacy diagnostic projection; search dispatch uses `extract_typed_head_name`.
+#[cfg(test)]
+pub(crate) fn extract_head_name(expr: &Expr) -> Option<String> {
+    extract_typed_head_name(expr).map(|name| name.to_string())
+}
+
+/// Name-spelling search heuristics inspect actual Str components, not display dots.
+pub(crate) fn name_has_text_component(name: &Name, predicate: impl Fn(&str) -> bool) -> bool {
+    use clean_kernel::name::NameInner;
+    let mut current = name;
+    loop {
+        match current.inner() {
+            NameInner::Anon => return false,
+            NameInner::Str(parent, text) => {
+                if predicate(text) {
+                    return true;
+                }
+                current = parent;
+            }
+            NameInner::Num(parent, _) => current = parent,
+        }
+    }
+}
+
+pub(crate) fn is_internal_search_name(name: &Name) -> bool {
+    name_has_text_component(name, |text| text.starts_with('_'))
 }
 
 /// Calculate a structural similarity score in `[0.2, 1.0]` between two types.
@@ -319,8 +348,8 @@ pub(crate) fn calculate_type_similarity(t1: &Expr, t2: &Expr) -> f64 {
     let depth1 = expr_depth(t1);
     let depth2 = expr_depth(t2);
 
-    let head1 = extract_head_name(t1);
-    let head2 = extract_head_name(t2);
+    let head1 = extract_typed_head_name(t1);
+    let head2 = extract_typed_head_name(t2);
 
     let mut score: f64 = 0.2;
 
@@ -453,8 +482,9 @@ pub fn library_search_and_apply(state: &mut ProofState) -> TacticResult {
             Err(TacticError::SearchExhausted {
                 tactic: "library_search".into(),
                 detail: format!(
-                    "found {} but cannot auto-apply ({:?})",
-                    best.name, best.match_kind
+                    "found {} but cannot auto-apply ({})",
+                    best.name,
+                    crate::error_render::opaque(&best.match_kind)
                 ),
             })
         }
@@ -476,12 +506,13 @@ pub fn library_search_show(state: &mut ProofState) -> Result<String, TacticError
     }
 
     use std::fmt::Write;
+    // `output` is a `String`, whose `fmt::Write` impl never fails, so each
+    // `writeln!` result is discarded rather than unwrapped.
     let mut output = String::new();
-    writeln!(output, "Found {} potential matches:", results.len())
-        .expect("invariant: writeln! into String never fails");
+    let _ = writeln!(output, "Found {} potential matches:", results.len());
 
     for (i, result) in results.iter().enumerate() {
-        writeln!(
+        let _ = writeln!(
             output,
             "{}. {} (relevance: {:.2}, {:?})\n   {}",
             i + 1,
@@ -489,8 +520,7 @@ pub fn library_search_show(state: &mut ProofState) -> Result<String, TacticError
             result.relevance,
             result.match_kind,
             result.suggestion
-        )
-        .expect("invariant: writeln! into String never fails");
+        );
     }
 
     Ok(output)

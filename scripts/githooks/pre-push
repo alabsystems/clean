@@ -73,26 +73,68 @@
 # a refused push until somebody classifies it. That is the part a hand-curated
 # subset otherwise loses in a month.
 #
-# NEVER MUTATES -- WITH ONE MEASURED EXCEPTION, corrected here 2026-08-25 rather
-# than left as a sentence that was true once. No leg takes a lock and no leg
-# builds. But `extend-constants-ratchet` and `add-decl-ratchet` each run a
-# `--selftest` whose LAST arms write to the tracked file
-# `crates/clean-kernel/src/env/snapshot.rs` and restore it in a `finally`;
-# observed dirty within ~0.5 s of launch, restored on exit. One of the two
-# writes -- `pub fn smuggle(env: &mut E, d: D) { ... }` -- does not compile, so a
-# cargo build running in the same worktree during a push sees a broken kernel.
-# That is not theory: a `scripts/local_gate.sh --fast` run in a lane worktree
-# died with `error[E0425]: cannot find type `E` ... snapshot.rs:317` and printed
-# `LOCAL GATE: FAIL - soundness certificate` while a push was gating. The arms
-# are worth keeping (they are the falsification that justified the lexing
-# rewrite) and their meaning depends on the real file's CONTENT, not its PATH,
-# so the fix is to seed a temp tree with those bytes. Ledgered in
-# data/gate_registry.json on both rows until then.
+# The bypass-ratchet selftests mutate isolated copies, never tracked kernel
+# inputs. Historically their standing plants wrote snapshot.rs in this checkout,
+# causing concurrent builds to see a non-compiling kernel and invalidating its
+# build fingerprint even after restoration. The extend-constants arm now copies
+# ALL scanner source inputs plus the real ledger, keeping the actual classifier
+# and ratchet authoritative. Its atomic-directory lock and dirty-target refusal
+# remain; isolation does not turn a skipped demonstration into a pass.
+#
+# THE LEGS RUN OVER THE PUSHED COMMIT, NOT THIS WORKING TREE (verifier r8b,
+# 2026-09-25). Until then every leg ran here, in `$REPO_ROOT`, and read the
+# working tree: a pushed commit carrying a failing projector test passed the
+# `lint-coverage` leg whenever the tree held an uncommitted fix, or when the
+# pushed ref was not HEAD (R10 re-read the registry out of the commit; no other
+# leg did). So this file now runs in two roles:
+#
+#   * OUTER (what git starts): for each distinct commit the push puts on the
+#     remote, make a CLEAN checkout of exactly that commit -- one persistent
+#     linked worktree per repository, `.<repo>.pre-push` beside the main
+#     worktree, so its ancestors (cargo configuration, the sibling repos
+#     check_doc_claims reads) are the repository's own, reset with
+#     `checkout --force` + `clean -ffdx` before each use -- then
+#       1. run THIS copy's `scripts/check_gate_registry.py --pushed-in` over it
+#          (R10: every pinned gate script in the commit matches its pin), and
+#       2. run THIS FILE -- the one git started, never the commit's own
+#          `scripts/githooks/pre-push` -- in the INNER role inside it, fed only
+#          that commit's refs.
+#     With no refs on stdin (run by hand) it gates the commit HEAD names.
+#   * INNER (`CLEAN_PUSH_CHECKOUT=<sha>`): refuse unless this is a pristine
+#     checkout of that sha -- HEAD is it, and `git status --ignored` is empty --
+#     then run every leg below, here: the commit's own scripts, over its tree.
+#
+# WHY NOT THE COMMIT'S OWN HOOK (verifier r9 recheck, 2026-09-25). For one
+# revision the outer role handed the checkout to the pushed commit's hook. A
+# commit adding `exit 0` to that file (after the inner pristine check) and an
+# unpinned edit to scripts/check_fmt_changed.py pushed from a working tree at
+# the tip with NO leg run -- R10 included, which exists to judge the shipped
+# object, and which this hook's gate-registry leg had run before. The commit
+# being judged does not choose its judge: its hook is not run, its gate
+# scripts run only as the legs of this file, and a gate script it edits without
+# re-pinning -- check_gate_registry.py included -- is refused by step 1, which
+# is the pusher's code, not the commit's.
+#
+# So an uncommitted fix cannot mask a failing pushed commit, a pushed commit
+# cannot skip its own legs, and the variable cannot skip anything: set by hand
+# in any tree but a pristine checkout of the named commit, it is a refusal.
+#
+# ONE PUSH AT A TIME PER REPOSITORY, held by the kernel. The checkout is shared
+# by every worktree of the repository, so pushes are serialized on an flock(2)
+# of `<git-common-dir>/clean-pre-push.flock`. It replaced a `mkdir` lock whose
+# stale-holder path (`kill -0` on a recorded pid, then `rm -rf`, then `mkdir`)
+# let two pushes racing on a dead holder both proceed in one checkout; a
+# flock dies with its holder, so there is no stale state to take over.
 #
 # The escape hatch is git's own: `git push --no-verify`, which shows up in the
 # reflog rather than in a habit. There is no environment variable that skips a
 # leg, and `CLEAN_GATE_PYTHON` only chooses WHICH interpreter runs them.
 set -uo pipefail
+
+# The file git started, by absolute path, before anything changes directory:
+# the outer role runs THIS file in the checkout, and THIS copy's registry R10.
+HOOK_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)/$(basename "${BASH_SOURCE[0]}")"
+HOOK_ROOT="$(cd "$(dirname "$HOOK_SELF")/../.." && pwd -P)"
 
 # pre-push is fed "<local-ref> <local-sha> <remote-ref> <remote-sha>" lines on
 # stdin. Drain every one so git never sees EPIPE. A push that only DELETES refs
@@ -113,28 +155,6 @@ for git_local_var in $(git rev-parse --local-env-vars); do
   unset "$git_local_var"
 done
 cd "$REPO_ROOT" || exit 1
-
-if [ -n "$PUSHED_REFS" ]; then
-  any_create_or_update=0
-  # "<remote-sha> <local-sha>" per updated ref, for legs that must judge exactly
-  # what is being pushed. Deletions carry an all-zero local sha and are dropped
-  # by the consumer.
-  CLEAN_PUSH_RANGES=""
-  while IFS=' ' read -r _lref lsha _rref _rsha; do
-    [ -z "${lsha:-}" ] && continue
-    case "$lsha" in
-      0000000000000000000000000000000000000000) ;;
-      *) any_create_or_update=1
-         CLEAN_PUSH_RANGES="${CLEAN_PUSH_RANGES}${_rsha:-0000000000000000000000000000000000000000} ${lsha}
-" ;;
-    esac
-  done <<<"$PUSHED_REFS"
-  export CLEAN_PUSH_RANGES
-  if [ "$any_create_or_update" -eq 0 ]; then
-    echo "clean pre-push: deletion-only push, nothing to gate."
-    exit 0
-  fi
-fi
 
 # ---------------------------------------------------------------- interpreter
 # `dep-boundary` parses Cargo.toml with `tomllib`, which is 3.11+. This machine's
@@ -161,6 +181,130 @@ PY="$(pick_python)" || {
   exit 1
 }
 
+# The legs call bare `targo` (the Trust migration drives every script through
+# it), and targo authenticates its own executable: it refuses to run as the
+# rustup symlink `~/.cargo/bin/targo`, which is what PATH names first in an
+# ordinary shell. Measured 2026-09-29: dep-boundary and lint-coverage went RED
+# on "protected Targo frontends cannot be symlinks" for a pusher with that
+# PATH, and the same commit gated GREEN with the canonical sysroot first. Put
+# the pinned toolchain's own bin first -- the same resolution CLAUDE.md gives
+# for hand-run targo -- and change nothing when it cannot be resolved.
+if trust_sysroot="$(rustc +trust --print sysroot 2>/dev/null)" \
+   && [ -x "$trust_sysroot/bin/targo" ] && [ ! -L "$trust_sysroot/bin/targo" ]; then
+  PATH="$trust_sysroot/bin:$PATH"
+  export PATH
+fi
+
+# ------------------------------------------------ OUTER: gate the pushed commit
+if [ -z "${CLEAN_PUSH_CHECKOUT:-}" ]; then
+  ZERO=0000000000000000000000000000000000000000
+  shas=""
+  if [ -n "$PUSHED_REFS" ]; then
+    while IFS=' ' read -r _lref lsha _rref _rsha; do
+      [ -z "${lsha:-}" ] || [ "$lsha" = "$ZERO" ] && continue
+      case " $shas " in *" $lsha "*) ;; *) shas="$shas $lsha" ;; esac
+    done <<<"$PUSHED_REFS"
+    if [ -z "$shas" ]; then
+      echo "clean pre-push: deletion-only push, nothing to gate."
+      exit 0
+    fi
+  else
+    shas="$(git rev-parse HEAD)" || exit 1
+  fi
+  common="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)" || exit 1
+  # Beside the MAIN worktree, never inside any worktree: cargo merges every
+  # `.cargo/config.toml` from the directory it runs in up to `/`, so a checkout
+  # nested in a working tree would read that tree's uncommitted configuration.
+  if [ "$(basename "$common")" = ".git" ]; then
+    main_root="$(dirname "$common")"
+    checkout="$(cd "$(dirname "$main_root")" && pwd -P)/.$(basename "$main_root").pre-push"
+  else
+    checkout="$common/clean-pre-push-checkout"
+  fi
+  exec 9>>"$common/clean-pre-push.flock" || {
+    echo "clean pre-push: cannot open $common/clean-pre-push.flock" >&2; exit 1; }
+  # flock(2) on descriptor 9: the lock belongs to the open file, which this
+  # shell keeps until it exits; the python that took it may exit first.
+  "$PY" - <<'PYLOCK' || exit 1
+import fcntl, sys, time
+deadline = time.monotonic() + 1800
+while True:
+    try:
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        break
+    except BlockingIOError:
+        if time.monotonic() > deadline:
+            print("clean pre-push: another push has held the pre-push checkout for 30 min; "
+                  "refusing.", file=sys.stderr)
+            sys.exit(1)
+        time.sleep(2)
+PYLOCK
+  # Nothing started below inherits the lock's descriptor: a daemon a leg or git
+  # leaves behind must not hold the next push off.
+  (
+    if [ -e "$checkout" ] && ! git worktree list --porcelain | grep -qxF "worktree $checkout"; then
+      echo "clean pre-push: $checkout exists and is not this repository's pre-push" >&2
+      echo "  checkout; it is not touched. Move it aside and push again." >&2
+      exit 1
+    fi
+    rc=0
+    for sha in $shas; do
+      echo "=== clean pre-push: gating ${sha:0:12} in a clean checkout of it ($checkout) ==="
+      if [ -e "$checkout" ]; then
+        git -C "$checkout" checkout -q --detach --force "$sha" \
+          && git -C "$checkout" clean -q -ffdx
+      else
+        git worktree prune && git worktree add -q --detach --force "$checkout" "$sha"
+      fi || { echo "clean pre-push: could not check out ${sha:0:12} at $checkout" >&2; exit 1; }
+      # 1. R10 by the PUSHER's copy of the registry check (see the header).
+      CLEAN_PUSH_RANGES="$ZERO $sha" "$PY" "$HOOK_ROOT/scripts/check_gate_registry.py" \
+        --pushed-in "$checkout" || rc=1
+      # 2. THIS file's legs over the commit's tree.
+      refs=""
+      if [ -n "$PUSHED_REFS" ]; then
+        refs="$(awk -v s="$sha" '$2 == s' <<<"$PUSHED_REFS")"
+      fi
+      ( cd "$checkout" && CLEAN_PUSH_CHECKOUT="$sha" \
+          CARGO_TARGET_DIR="$common/clean-pre-push-target" \
+          bash "$HOOK_SELF" "$@" <<<"$refs" ) || rc=1
+    done
+    exit "$rc"
+  ) 9>&-
+  exit $?
+fi
+
+# ---------------------------------------- INNER: a pristine checkout of the sha
+if [ "$(git rev-parse HEAD 2>/dev/null)" != "$CLEAN_PUSH_CHECKOUT" ] \
+   || [ -n "$(git status --porcelain --ignored --untracked-files=all 2>&1)" ]; then
+  echo "clean pre-push: CLEAN_PUSH_CHECKOUT=$CLEAN_PUSH_CHECKOUT, but $REPO_ROOT is not a" >&2
+  echo "  pristine checkout of that commit (HEAD $(git rev-parse --short HEAD 2>/dev/null)," >&2
+  echo "  or files git does not track are present). The legs judge the pushed commit" >&2
+  echo "  only in a checkout of it; this variable is set by the outer hook, not by hand." >&2
+  exit 1
+fi
+
+if [ -n "$PUSHED_REFS" ]; then
+  any_create_or_update=0
+  # "<remote-sha> <local-sha>" per updated ref, for legs that must judge exactly
+  # what is being pushed. Deletions carry an all-zero local sha and are dropped
+  # by the consumer.
+  CLEAN_PUSH_RANGES=""
+  while IFS=' ' read -r _lref lsha _rref _rsha; do
+    [ -z "${lsha:-}" ] && continue
+    case "$lsha" in
+      0000000000000000000000000000000000000000) ;;
+      *) any_create_or_update=1
+         CLEAN_PUSH_RANGES="${CLEAN_PUSH_RANGES}${_rsha:-0000000000000000000000000000000000000000} ${lsha}
+" ;;
+    esac
+  done <<<"$PUSHED_REFS"
+  export CLEAN_PUSH_RANGES
+  if [ "$any_create_or_update" -eq 0 ]; then
+    echo "clean pre-push: deletion-only push, nothing to gate."
+    exit 0
+  fi
+fi
+
 # ----------------------------------------------------------------------- legs
 # One function per leg. The id is the function name with '-' for '_'; ids are
 # the join key between this file, gate-legs.txt and local_gate.sh's
@@ -186,8 +330,16 @@ leg_doc_claims() {
   # GATES are honest; nothing checked that CLAUDE.md still describes this tree,
   # and four of its claims were proved false by measurement in a single day.
   # Re-derives every `<!-- claim: figure -->` from its JSON artifact and refuses
-  # a governed doc citing a repo path that is not there. Markdown and JSON only
-  # -- no cargo, no git. Selftest first, same contract as the two above. ~0.06 s.
+  # a governed doc citing a repo path that is not there. Markdown and JSON plus
+  # the git INDEX (`rev-parse --show-toplevel` and `ls-files` on the root, one
+  # batched `ls-tree` per sibling, GIT_DIR/GIT_WORK_TREE/GIT_INDEX_FILE scrubbed)
+  # -- no cargo, no source. It NEEDS a checkout: a `git archive` snapshot is a
+  # D0 TREE refusal by design. Selftest first, same contract as the two above.
+  # Cost history, three measured points: 0.06 s with 19 arms (2026-08-26);
+  # 0.93 s with 35 arms (2026-09-14 -- coverage, 7 -> 16 governed docs);
+  # ~1.9 s + ~2.1 s with 52 arms (2026-09-15 -- the fixture became a git
+  # repository copied per arm, plus the index query; 55 arms after the same-day
+  # D5 LINK merge). Read the live arm count off the DOC_CLAIMS_SELFTEST line.
   "$PY" scripts/check_doc_claims.py --selftest || return 1
   "$PY" scripts/check_doc_claims.py
 }
@@ -204,6 +356,8 @@ leg_suite_journal() {
 }
 leg_dep_boundary()            { "$PY" scripts/check_workspace_dependency_boundary.py; }
 leg_lint_coverage()           { "$PY" scripts/check_lint_coverage.py; }
+leg_test_target_coverage()    { "$PY" scripts/check_test_target_coverage.py; }
+leg_help_surfaces()           { "$PY" scripts/check_help_surfaces.py --selftest >/dev/null && "$PY" scripts/check_help_surfaces.py; }
 leg_fmt_changed() {
   # Selftest first, same contract as add-decl-ratchet and env-bypass-census.
   # CLEAN_PUSH_RANGES is exported above from the refs git handed this hook, so
@@ -264,12 +418,136 @@ leg_env_bypass_census() {
 # leaves the baseline alone, and a missing/unreadable baseline fails closed
 # (only `--refresh` writes) — so the save/restore wrapper this leg once
 # carried is gone and the hook's NEVER-MUTATES rule holds with a plain call.
+leg_one_trust_status_check() {
+  # docs/STATUS_ONE_TRUST.md is a generated page; --check masks the producers'
+  # timestamps so it reddens on a moved NUMBER, not on a clock tick. ~0.1 s.
+  "$PY" scripts/one_trust_status.py --self-test || return 1
+  "$PY" scripts/one_trust_status.py --check
+}
+leg_parity_tiers_check() {
+  # R3's fidelity tiers. The wired scoreboard publishes 20 rows out of this
+  # artifact, so a stale one ratchets numbers that are not true of the tree.
+  # ~1.3 s: pure python over committed artifacts, no cargo.
+  "$PY" scripts/parity_tiers.py --self-test || return 1
+  "$PY" scripts/parity_tiers.py --check
+}
+leg_model_islands() {
+  # The model embedded as `clean { }` islands in crates/clean-kernel. Renderer
+  # selftest, then drift, then the kernel-check under Trust (which SKIPS, printed,
+  # on a host with no Trust toolchain). ~2 s together, of which ~1.9 s is one
+  # rustc +trust invocation over the island text alone -- no cargo, no crate build.
+  "$PY" scripts/model_islands.py --self-test || return 1
+  "$PY" scripts/model_islands.py --check || return 1
+  "$PY" scripts/model_islands.py --verify
+}
+leg_verdict_set_check() {
+  # The member set every lane-(b) claim is stated over. Selftest (25 mutation
+  # arms, both directions of the bare-child-module edge rule among them), then
+  # derive and compare. ~3.4 s together. Runs BEFORE the IO-contract leg, which
+  # re-derives over the members THIS artifact names and so cannot see a member
+  # set that is too small.
+  "$PY" scripts/verdict_set.py --self-test || return 1
+  "$PY" scripts/verdict_set.py --check
+}
+leg_vendor_manifest_check() {
+  # Vendored-dependency provenance. ~0.2 s. Fail-closed since 2026-10-07, when
+  # the manifest became mintable again from a third-party-only staged tree
+  # (`--stage-third-party`); a Cargo.lock change reds it until that is re-run.
+  "$PY" scripts/gen_vendor_manifest.py --self-test || return 1
+  "$PY" scripts/gen_vendor_manifest.py --check
+}
+leg_vendored_carcara_ledger() {
+  # third-party/carcara/UPSTREAM.json against the staged vendored files: every
+  # digest recomputed, no file without a row. Toolchain-free, about 1.4 s
+  # (1.2 s of it the self-test's synthetic repos). Registered 2026-09-30.
+  "$PY" scripts/check_vendored_carcara_ledger.py --self-test || return 1
+  "$PY" scripts/check_vendored_carcara_ledger.py --check
+}
+leg_upstream_soundness_intake() {
+  # data/upstream_soundness_intake.json: every upstream Lean 4 kernel soundness
+  # report has a disposition, a resolving evidence path:line, and (when its
+  # fixture exists) a replay_forged ORDER entry; an oracle-ACCEPTS or live-hole
+  # row names a DECISIONS heading and a live hole is P0. Toolchain-free,
+  # sub-second. Registered 2026-10-18.
+  "$PY" scripts/check_upstream_soundness_intake.py --self-test || return 1
+  "$PY" scripts/check_upstream_soundness_intake.py --check
+}
+leg_source_inventory_check() {
+  # docs/SOURCE_INVENTORY.md, the generated Rust LOC / #[test] diagnostic.
+  # Counts the INDEX, not the working tree, so a lane mid-edit never reds it.
+  # Registered and wired 2026-09-14, forty-six days after the committed page
+  # stopped being true.
+  "$PY" scripts/sync_readme_metrics.py --self-test || return 1
+  "$PY" scripts/sync_readme_metrics.py --check
+}
+leg_frontend_classification_check() {
+  # The corpus-level frontend evidence artifact. Guarded only by a cargo
+  # integration test until 2026-09-14, and stale for twenty days -- and that
+  # test's placeholder-rejection half had never executed an assertion, so the
+  # self-test carries it now, on a temp copy with nothing to clobber.
+  "$PY" scripts/lean4_compat/generate_frontend_classification.py --self-test || return 1
+  "$PY" scripts/lean4_compat/generate_frontend_classification.py --check
+}
+leg_evalir_coverage_check() {
+  # A G-SCORE producer, derived from clean-verify's eval_ir_* sources. ~0.1 s.
+  "$PY" scripts/evalir_coverage.py --self-test || return 1
+  "$PY" scripts/evalir_coverage.py --check
+}
+leg_evalir_adequacy_grid_check() {
+  # The other G-SCORE EvalIR producer: one row per syntax field, each classified
+  # from the IRInst telescopes and the ir_exec dispatch. ~0.1 s. It was STALE at
+  # HEAD on 2026-09-14, red on its own --check, seen by no gate.
+  "$PY" scripts/evalir_adequacy_grid.py --self-test || return 1
+  "$PY" scripts/evalir_adequacy_grid.py --check
+}
+leg_environment_dag_wire_check() {
+  # The kernel's fixed Environment DAG wire decoders, generated from
+  # data/environment_dag_wire/schema_v2.json; --check had no runner until
+  # 2026-11-11. ~0.07 s.
+  "$PY" scripts/environment_dag_wire/generate.py --check
+}
+leg_nanoda_runner_selftest() {
+  # Q3's runner against a local stub binary: timeout, crash and reason
+  # distinction, count and Ax0 statement checks, pins, manifest and subject.
+  # No external checker is built or run. ~3 s.
+  "$PY" scripts/nanoda_recheck.py --selftest
+}
+leg_cic_l_rule_inventory() {
+  # Every rule family of pinned Lean's kernel sources (vendored under
+  # tests/fixtures/lean_kernel/) has a row naming the CIC_L item that states
+  # it, and the families not yet specified are exactly the ratchet. Self-test,
+  # then the check. ~0.23 s.
+  "$PY" scripts/check_cic_l_rule_inventory.py
+}
+leg_verdict_io_contracts_check() {
+  # Lane (b)'s IO contract model. Selftest (its own mutation arms), then derive
+  # and compare against the committed artifact. ~0.5 s together. Wireable only
+  # since the mint-day stamp became a sticky per-row date; before that --check
+  # was red on any day but the mint's.
+  "$PY" scripts/verdict_io_contracts.py --self-test || return 1
+  "$PY" scripts/verdict_io_contracts.py --check
+}
+leg_spine_assumption_ledger_check() {
+  # The ledger the scoreboard leg reads its count from. Selftest first (the
+  # generator's own mutation arms), then derive-and-compare against the
+  # committed file. ~0.12 s together.
+  "$PY" scripts/spine_assumption_ledger.py --self-test || return 1
+  "$PY" scripts/spine_assumption_ledger.py --check
+}
 leg_spine_scoreboard_ratchet()          { "$PY" scripts/spine_scoreboard.py --ratchet; }
 leg_trust_verdict_emitters()            { "$PY" scripts/check_trust_verdict_emitters.py; }
 leg_tcb_target_ratchet()                { "$PY" scripts/tcb_target_ratchet.py; }
 leg_prelude_collision_ratchet()         { "$PY" scripts/check_prelude_collision_ratchet.py; }
 leg_prelude_instance_priority_ratchet() { "$PY" scripts/check_prelude_instance_priority_ratchet.py; }
 leg_source_elab_ratchet_artifact()      { scripts/source_elab_gate.sh --check-artifact; }
+leg_lean_suite_conformance_ledger() {
+  # The Lean test-suite two-way ledger, ARTIFACT ONLY (~1 s): self-test, then
+  # refuse a ledger whose outcomes do not follow from its verdicts. The
+  # measurement against it needs a release binary and a lean4 checkout, so it
+  # is the full-only `lean-suite-conformance` leg of local_gate.sh.
+  "$PY" scripts/lean_suite_conformance.py --selftest >/dev/null || return 1
+  "$PY" scripts/lean_suite_conformance.py --check-artifact
+}
 leg_silent_tactic_ratchet()             { "$PY" scripts/check_silent_tactic_ratchet.py; }
 leg_g_auto_static()                     { "$PY" scripts/tactic_parity/family_gate.py --family g_auto --static; }
 leg_g_simp_static()                     { "$PY" scripts/tactic_parity/family_gate.py --family g_simp --static; }
@@ -278,10 +556,31 @@ leg_crystal_revalidation_scope()        { "$PY" scripts/crystal_freshness_scope.
 leg_crystal_enum_tag_pin()              { "$PY" scripts/check_enum_tag_pin.py; }
 leg_a0a6_probe_transcription()          { "$PY" scripts/check_a0a6_probe_transcription.py; }
 leg_crystal_fixture_pins()              { "$PY" scripts/check_crystal_fixture_pins.py; }
+leg_lzb_activation_mint()               { "$PY" scripts/gen_lzb_activation.py --self-test && "$PY" scripts/gen_lzb_activation.py --check; }
+leg_slot_lemma_mint()                   { "$PY" scripts/gen_slot_lemmas.py --self-test && "$PY" scripts/gen_slot_lemmas.py --check; }
+leg_lzd_activation_mint()               { "$PY" scripts/gen_lzd_activation.py --self-test && "$PY" scripts/gen_lzd_activation.py --check; }
+leg_lzd_sctr_mint()                     { "$PY" scripts/gen_lzd_sctr.py --self-test && "$PY" scripts/gen_lzd_sctr.py --check; }
+leg_stack_lemmas_mint()                 { "$PY" scripts/gen_stack_lemmas.py --self-test && "$PY" scripts/gen_stack_lemmas.py --check; }
+leg_stack_axes_mint()                   { "$PY" scripts/gen_stack_axes.py --self-test && "$PY" scripts/gen_stack_axes.py --check; }
+leg_it_sctr_mint()                      { "$PY" scripts/gen_it_sctr.py --self-test && "$PY" scripts/gen_it_sctr.py --check; }
+leg_lzd_layout_facts()                  { "$PY" scripts/check_lzd_layout_facts.py --self-test && "$PY" scripts/check_lzd_layout_facts.py; }
+leg_lzd_readiness()                     { "$PY" scripts/crystal_lzd_readiness.py --self-test && "$PY" scripts/crystal_lzd_readiness.py --check; }
 leg_paragon_ratchet()                   { scripts/paragon_ratchet.sh; }
 leg_isabelle_ops_portability()          { "$PY" scripts/test_isabelle_ops_portability.py; }
 leg_aristotle_corpus_static()           { "$PY" scripts/aristotle_corpus_gate.py --fast; }
 leg_trust_ir_axes_selftest()            { "$PY" scripts/trust_ir_axes.py selftest; }
+leg_upstream_lean_dropin() {
+  # The upstream-Lean drop-in LEDGER (tests/upstream-lean/). Self-test arms
+  # first, same contract as gate-registry; then `--ledger-only`: the exceptions
+  # rows, their expiries, the baseline<->MANIFEST pin and the ramp. It executes
+  # NO probe and says so. The probes need a release build of `clean
+  # --features trust-ir-backend` from this tree and ~20 min of runs (measured
+  # 2026-10-07), so they are the full-mode leg `upstream-lean-probes`. Until that
+  # date this function ran the probe path against whatever `clean` PATH named
+  # -- aterm's installed binary, built from no tree under test.
+  "$PY" tests/upstream-lean/run_upstream_lean.py --self-test || return 1
+  "$PY" tests/upstream-lean/run_upstream_lean.py --ledger-only
+}
 
 # Declared leg order. check_hook_coverage.py reads this block by its markers,
 # so keep the two `# HOOK-LEGS` lines exactly as they are.
@@ -293,18 +592,37 @@ doc-claims
 suite-journal
 dep-boundary
 lint-coverage
+test-target-coverage
+help-surfaces
 fmt-changed
 no-ignored-tests
 ratchet-surfaces
 extend-constants-ratchet
 add-decl-ratchet
 env-bypass-census
+one-trust-status-check
+parity-tiers-check
+model-islands
+verdict-set-check
+verdict-io-contracts-check
+spine-assumption-ledger-check
+vendor-manifest-check
+vendored-carcara-ledger
+upstream-soundness-intake
+source-inventory-check
+frontend-classification-check
+evalir-coverage-check
+evalir-adequacy-grid-check
+environment-dag-wire-check
+nanoda-runner-selftest
+cic-l-rule-inventory
 spine-scoreboard-ratchet
 trust-verdict-emitters
 tcb-target-ratchet
 prelude-collision-ratchet
 prelude-instance-priority-ratchet
 source-elab-ratchet-artifact
+lean-suite-conformance-ledger
 silent-tactic-ratchet
 g-auto-static
 g-simp-static
@@ -312,11 +630,21 @@ trustcore-evidence-staleness
 crystal-revalidation-scope
 crystal-enum-tag-pin
 crystal-fixture-pins
+lzb-activation-mint
+lzd-activation-mint
+lzd-sctr-mint
+stack-lemmas-mint
+stack-axes-mint
+it-sctr-mint
+lzd-layout-facts
+slot-lemma-mint
+lzd-readiness
 a0a6-probe-transcription
 paragon-ratchet
 isabelle-ops-portability
 aristotle-corpus-static
 trust-ir-axes-selftest
+upstream-lean-dropin
 "
 # HOOK-LEGS END
 
@@ -326,7 +654,7 @@ trust-ir-axes-selftest
 # state in which the subset could silently shrink to nothing, so it is a refusal
 # and not a shrug.
 COVERAGE_CHECKER="scripts/check_hook_coverage.py"
-echo "=== clean pre-push (narrow gate; no cargo, no build) ==="
+echo "=== clean pre-push (narrow gate; one cargo leg, lint-coverage) ==="
 if [ -f "$COVERAGE_CHECKER" ]; then
   cov_out="$("$PY" "$COVERAGE_CHECKER" 2>&1)"; cov_rc=$?
 else

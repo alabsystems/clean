@@ -218,10 +218,10 @@ RERUN_COMMANDS = """\
 
 ```bash
 clean_TRUST_BOUNDARY_AUDIT_PATH=/tmp/clean-2875-auto.tsv \\
-  cargo test --locked --message-format=short -j 1 -p clean-auto --lib
+  targo --unverified test --locked --message-format=short -j 1 -p clean-auto --lib
 
 clean_TRUST_BOUNDARY_AUDIT_PATH=/tmp/clean-2875-elab.tsv \\
-  cargo test --locked --message-format=short -j 1 -p clean-elab --lib --features ay-smt
+  targo --unverified test --locked --message-format=short -j 1 -p clean-elab --lib --features ay-smt
 
 python3 scripts/trust_boundary_audit.py \\
   --input /tmp/clean-2875-auto.tsv \\

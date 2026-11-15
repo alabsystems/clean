@@ -59,7 +59,11 @@ pub fn ac_rfl(state: &mut ProofState) -> TacticResult {
     } else {
         Err(TacticError::ArithmeticFailed {
             tactic: "ac_rfl".to_string(),
-            reason: format!("sides not AC-equal:\n  LHS: {lhs_norm:?}\n  RHS: {rhs_norm:?}"),
+            reason: format!(
+                "sides not AC-equal:\n  LHS: {}\n  RHS: {}",
+                crate::error_render::opaque(&lhs_norm),
+                crate::error_render::opaque(&rhs_norm)
+            ),
         })
     }
 }

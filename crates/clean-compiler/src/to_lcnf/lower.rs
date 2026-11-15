@@ -5,12 +5,15 @@
 //! LCNF lowering: erasure analysis, expression conversion, and recursion detection.
 
 use super::mentions::{code_called_constant_names, expr_called_constant_names};
+use super::scoped_application_type::infer_scoped_const_application;
 use super::sink_ih::sink_ih_bindings;
 use super::LcnfContext;
 use crate::error::CompilerError;
+use crate::implemented_by::CodeMeaning;
 use crate::lcnf::{Alt, Arg, Cases, Code, Decl, FunDecl, LetDecl, LetValue, Param};
 use clean_kernel::{
-    env::ConstantKind, tc::TypeChecker, ConstantInfo, Environment, Expr, ExprKind, Level, Name,
+    env::ConstantKind, tc::TypeChecker, ConstantInfo, Environment, Expr, ExprKind, FVarId, Level,
+    Name,
 };
 use std::collections::HashSet;
 
@@ -290,13 +293,13 @@ fn expr_to_local_fun(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<FunDecl, 
     let outer_pending = ctx.take_pending();
 
     while let ExprKind::Lam(_, ty, body) = curr.kind() {
-        let param_fvar = ctx.push_binder();
+        let param_fvar = ctx.push_typed_binder(ty);
         params.push(Param::new(param_fvar, Name::anon(), ty.as_ref().clone()));
         curr = body.as_ref();
     }
 
     let result_ty = infer_type_or_placeholder(ctx.env, curr);
-    let body_result = expr_to_code(ctx, curr);
+    let body_result = lower_code(ctx, curr);
 
     for _ in &params {
         ctx.pop_binder();
@@ -336,14 +339,60 @@ fn is_type_placeholder(ty: &Expr) -> bool {
     matches!(ty.kind(), ExprKind::Const(name, _) if name.to_string() == "_")
 }
 
-/// Convert a kernel expression to an L5CNF let-value.
-///
-/// Returns the let-value and its type.
+/// Preserve a local reference's declared type without guessing a placeholder.
+fn local_to_let_value(
+    ctx: &LcnfContext<'_>,
+    fvar: FVarId,
+) -> Result<(LetValue, Expr), CompilerError> {
+    let ty = ctx
+        .local_type(fvar)
+        .cloned()
+        .ok_or_else(|| CompilerError::InvalidExpr(format!("Missing local type for {fvar:?}")))?;
+    Ok((
+        LetValue::FVar {
+            fvar,
+            args: Vec::new(),
+        },
+        ty,
+    ))
+}
+
+/// Convert a kernel expression to an L5CNF let-value and its type.
 pub(super) fn expr_to_let_value(
     ctx: &mut LcnfContext<'_>,
     expr: &Expr,
 ) -> Result<(LetValue, Expr), CompilerError> {
     match expr.kind() {
+        // A BARE local in value position, and these two arms are where it is
+        // handled. Two of this file's own paths hand the funnel one: the `Let`
+        // arm below recurses into the let's BODY, which for
+        // `let outer := (let inner := 7; inner); outer` is `BVar(0)` naming
+        // `inner`; and the beta-redex reduction in the `App` arm substitutes
+        // the let-bound ATOM `FVar(f)` for the binder, so `(fun x => x) a`
+        // reduces to the bare `FVar(f)`. Both once died in the catch-all at the
+        // bottom -- `Unsupported("Expression form: BVar(0)")` /
+        // `Unsupported("Expression form: FVar(FVarId(0))")` -- which is what
+        // `test_let_in_value_position_flattens_in_scope_order` and
+        // `test_let_in_value_position_beta_identity_yields_bare_fvar` pin.
+        // Index resolution was never the defect: the `Let` arm pushes its
+        // `fvar` onto `bvar_stack` before recursing, so `BVar(0)` in the body
+        // already resolves to the inner binding, exactly as in `expr_to_code`.
+        //
+        // A SECOND `FVar`/`BVar` pair sat at the bottom of this match from
+        // 2026-09-15 (744fc27eb) until it was removed as dead: `match` takes
+        // the FIRST matching arm, so those two never executed and the arms here
+        // -- added a day earlier by b9c353460 -- are what makes both pins pass.
+        // That commit's message reads "the RED pin was a missing arm"; the arm
+        // it added was unreachable, and the pin was already green without it.
+        // `rustc`'s `unreachable_patterns` had been saying so ever since.
+        ExprKind::BVar(idx) => {
+            let fvar = ctx.lookup_bvar(*idx).ok_or_else(|| {
+                CompilerError::InvalidExpr(format!("Unbound variable: BVar({idx})"))
+            })?;
+            local_to_let_value(ctx, fvar)
+        }
+        ExprKind::FVar(id) => local_to_let_value(ctx, *id),
+
         // Literals
         ExprKind::Lit(lit) => {
             let ty = match lit {
@@ -355,6 +404,8 @@ pub(super) fn expr_to_let_value(
 
         // Constant application - collect arguments
         ExprKind::Const(name, levels) => {
+            // `@[implemented_by]`: reference the implementation.
+            let name = &crate::csimp::runtime_name(ctx.env, &ctx.csimp_rules, name, ctx.meaning)?;
             let levels_vec: Vec<Level> = levels.iter().cloned().collect();
             // Look up type from environment, falling back to placeholder if not found
             let ty = ctx
@@ -457,12 +508,22 @@ pub(super) fn expr_to_let_value(
                 .map(|a| expr_to_arg(ctx, a))
                 .collect::<Result<Vec<_>, _>>()?;
 
-            // Infer the result type of the full application expression.
-            // Falls back to placeholder if inference fails (e.g., unbound variables).
-            let app_ty = infer_type_or_placeholder(ctx.env, expr);
+            // Open constant spines need their real local typing telescope.
+            // Never let infer-only release inference turn a missing/mismatched
+            // local or a partial application into a scalar result guess.
+            let app_ty = if matches!(head.kind(), ExprKind::Const(..))
+                && (expr.has_loose_bvars() || expr.has_fvar_quick())
+            {
+                infer_scoped_const_application(ctx, expr).unwrap_or_else(|| Expr::const_str("_"))
+            } else {
+                infer_type_or_placeholder(ctx.env, expr)
+            };
 
             match head.kind() {
                 ExprKind::Const(name, levels) => {
+                    // `@[implemented_by]`: call the implementation.
+                    let name =
+                        &crate::csimp::runtime_name(ctx.env, &ctx.csimp_rules, name, ctx.meaning)?;
                     let levels_vec: Vec<Level> = levels.iter().cloned().collect();
                     // Constructors (e.g. `Option.some 5`, `List.cons 7 []`) stay
                     // spelled as `Const`; `to_ir::lower_const_application` lowers
@@ -613,7 +674,24 @@ pub(super) fn collect_app_args(expr: &Expr) -> (&Expr, Vec<&Expr>) {
 /// Convert a definition body to L5CNF Code.
 ///
 /// Handles lambda abstraction by converting to function parameters.
+///
+/// # Errors
+///
+/// [`CompilerError::ImplementedByOrder`], before anything is lowered, while
+/// the environment's order record is not empty
+/// (`crate::implemented_by::refuse_order`), as [`constant_to_decl`] refuses;
+/// otherwise whatever the lowering refuses.
 pub fn expr_to_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerError> {
+    crate::implemented_by::refuse_order_for(ctx.env, ctx.meaning)?;
+    if ctx.meaning != CodeMeaning::KernelValue {
+        crate::csimp::validate_metadata(ctx.env)?;
+    }
+    lower_code(ctx, expr)
+}
+
+/// [`expr_to_code`] without its entry check: the recursion of a lowering an
+/// entry ([`expr_to_code`], [`constant_to_decl`]) already admitted.
+fn lower_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerError> {
     // Normalize a valueless-recursor spine the casesOn-shaped recognizers below
     // cannot peel as-spelled (rung 1: eta-reduced bare-variable minors —
     // `<Ind>.recOn`'s `@Char.rec motive mk t`; rung 3: subsingleton transport —
@@ -633,10 +711,10 @@ pub fn expr_to_code(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, Comp
 
             // Push the let-bound variable for the body
             ctx.bvar_stack.push(fvar);
-            let result = expr_to_code(ctx, body)?;
+            let result = lower_code(ctx, body);
             ctx.bvar_stack.pop();
 
-            Ok(result)
+            result
         }
 
         // Two-way Bool conditionals (`cond` / `Bool.casesOn`) lower to a real
@@ -897,7 +975,7 @@ fn beta_reduce_spine(head: &Expr, args: &[Expr]) -> Expr {
 /// surrounding `Cases`.
 fn lower_branch(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerError> {
     let outer_pending = ctx.take_pending();
-    match expr_to_code(ctx, expr) {
+    match lower_code(ctx, expr) {
         Ok(code) => {
             ctx.restore_pending(outer_pending);
             Ok(code)
@@ -987,27 +1065,27 @@ enum DiteKind {
 }
 
 /// Recognize a fully-applied `ite` / `dite` application and return its
-/// `(kind, decidable_instance, then_branch, else_branch)` parts.
+/// `(kind, original_proposition, decidable_instance, then_branch, else_branch)` parts.
 ///
 /// Only the exact 5-argument spelling is matched, and `dite` only when both
 /// branches are lambdas (so the proof binder can be peeled and bound
 /// erased); anything else declines to the generic constant-application path,
 /// fail-closed.
-fn dite_ite_parts(expr: &Expr) -> Option<(DiteKind, &Expr, &Expr, &Expr)> {
+fn dite_ite_parts(expr: &Expr) -> Option<(DiteKind, &Expr, &Expr, &Expr, &Expr)> {
     let (head, args) = collect_app_args(expr);
     let ExprKind::Const(name, _) = head.kind() else {
         return None;
     };
     match name.to_string().as_str() {
-        // ite α c inst t e -> (inst, then = t, else = e)
-        "ite" if args.len() == 5 => Some((DiteKind::Ite, args[2], args[3], args[4])),
-        // dite α c inst t e -> (inst, then = t·h, else = e·h), h erased
+        // ite α c inst t e -> (kind, c, inst, then = t, else = e)
+        "ite" if args.len() == 5 => Some((DiteKind::Ite, args[1], args[2], args[3], args[4])),
+        // dite α c inst t e -> (kind, c, inst, then = t·h, else = e·h), h erased
         "dite"
             if args.len() == 5
                 && matches!(args[3].kind(), ExprKind::Lam(_, _, _))
                 && matches!(args[4].kind(), ExprKind::Lam(_, _, _)) =>
         {
-            Some((DiteKind::Dite, args[2], args[3], args[4]))
+            Some((DiteKind::Dite, args[1], args[2], args[3], args[4]))
         }
         _ => None,
     }
@@ -1020,7 +1098,7 @@ fn dite_ite_parts(expr: &Expr) -> Option<(DiteKind, &Expr, &Expr, &Expr)> {
 /// proof by `dite`'s own signature, so no field projection is ever read from
 /// the scrutinee.
 fn lower_dite_ite(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, CompilerError> {
-    let (kind, inst, then_expr, else_expr) = match dite_ite_parts(expr) {
+    let (kind, proposition, inst, then_expr, else_expr) = match dite_ite_parts(expr) {
         Some(parts) => parts,
         None => {
             return Err(CompilerError::Unsupported(
@@ -1029,7 +1107,15 @@ fn lower_dite_ite(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, Compil
         }
     };
     // Clone out of the borrow on `expr` before mutating `ctx`.
-    let (inst, then_expr, else_expr) = (inst.clone(), then_expr.clone(), else_expr.clone());
+    // A checked value equality may recover a scalar UInt decision even when
+    // instance search selected an unfolded Nat decision. No source declaration
+    // or instance-search priority changes; refusal keeps the original value.
+    let normalized = super::uint_decision::normalize(ctx, proposition, inst);
+    let (inst, then_expr, else_expr) = (
+        normalized.unwrap_or_else(|| inst.clone()),
+        then_expr.clone(),
+        else_expr.clone(),
+    );
 
     // Bind the scrutinee; any lets it introduces must wrap the whole `Cases`.
     let scrut_fvar = match expr_to_arg(ctx, &inst)? {
@@ -1089,7 +1175,7 @@ fn lower_proof_binder_branch(
     let outer_pending = ctx.take_pending();
     let dummy = ctx.add_let(Name::anon(), Expr::const_str("_"), LetValue::Erased);
     ctx.bvar_stack.push(dummy);
-    let result = expr_to_code(ctx, &body);
+    let result = lower_code(ctx, &body);
     ctx.bvar_stack.pop();
     match result {
         Ok(code) => {
@@ -1200,7 +1286,7 @@ fn lower_nat_cases(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, Compi
 /// scope, binding the `succ` lambda's predecessor parameter to `n - 1`.
 fn lower_succ_branch(
     ctx: &mut LcnfContext<'_>,
-    scrut_fvar: clean_kernel::FVarId,
+    scrut_fvar: FVarId,
     succ_body: &Expr,
 ) -> Result<Code, CompilerError> {
     let outer_pending = ctx.take_pending();
@@ -1220,7 +1306,7 @@ fn lower_succ_branch(
 
     // The successor lambda's parameter (BVar 0 in `succ_body`) is the predecessor.
     ctx.bvar_stack.push(pred_fvar);
-    let result = expr_to_code(ctx, succ_body);
+    let result = lower_code(ctx, succ_body);
     ctx.bvar_stack.pop();
 
     let body = match result {
@@ -1927,7 +2013,7 @@ fn lower_generic_cases(ctx: &mut LcnfContext<'_>, expr: &Expr) -> Result<Code, C
 /// the bvar stack in field order, and lowers the peeled body.
 fn lower_ctor_branch(
     ctx: &mut LcnfContext<'_>,
-    scrut_fvar: clean_kernel::FVarId,
+    scrut_fvar: FVarId,
     ctor_name: &Name,
     minor: &Expr,
 ) -> Result<Code, CompilerError> {
@@ -1990,7 +2076,7 @@ fn lower_ctor_branch(
         }
     }
 
-    let result = expr_to_code(ctx, &curr);
+    let result = lower_code(ctx, &curr);
 
     for _ in &projections {
         ctx.bvar_stack.pop();
@@ -2482,7 +2568,7 @@ pub(super) fn lower_rec_apply(
     // here is a genuine lowering failure of the sub-expression itself (the
     // same failure the generic constant-application path would hit on the
     // same argument).
-    let mut apply_minor_fvars: Vec<clean_kernel::FVarId> = Vec::new();
+    let mut apply_minor_fvars: Vec<FVarId> = Vec::new();
     let mut apply_param_of_tag: Vec<Option<usize>> = Vec::with_capacity(parts.arms.len());
     for (tag, arm) in parts.arms.iter().enumerate() {
         match arm.strategy {
@@ -2555,8 +2641,7 @@ pub(super) fn lower_rec_apply(
         infer_type_or_placeholder(ctx.env, expr)
     };
 
-    let minor_param_fvars: Vec<clean_kernel::FVarId> =
-        minor_params.iter().map(|p| p.fvar_id).collect();
+    let minor_param_fvars: Vec<FVarId> = minor_params.iter().map(|p| p.fvar_id).collect();
     let alts = build_rec_apply_alts(
         ctx,
         &parts,
@@ -2871,10 +2956,10 @@ pub(super) fn lower_wf_rec_apply(
 fn build_rec_apply_alts(
     ctx: &mut LcnfContext<'_>,
     parts: &RecApplyParts,
-    go_fvar: clean_kernel::FVarId,
-    minor_params: &[clean_kernel::FVarId],
+    go_fvar: FVarId,
+    minor_params: &[FVarId],
     apply_param_of_tag: &[Option<usize>],
-    scrut: clean_kernel::FVarId,
+    scrut: FVarId,
 ) -> Result<Vec<Alt>, CompilerError> {
     let mut alts = Vec::with_capacity(parts.arms.len());
     for (tag, arm) in parts.arms.iter().enumerate() {
@@ -2918,19 +3003,18 @@ fn build_rec_apply_alts(
 /// the minor parameter (`Apply`).
 fn build_rec_arm_body(
     ctx: &mut LcnfContext<'_>,
-    go_fvar: clean_kernel::FVarId,
-    minor_params: &[clean_kernel::FVarId],
+    go_fvar: FVarId,
+    minor_params: &[FVarId],
     arm: &RecArmSpec,
-    apply_param: Option<clean_kernel::FVarId>,
-    proj_source: &[(clean_kernel::FVarId, &Name)],
+    apply_param: Option<FVarId>,
+    proj_source: &[(FVarId, &Name)],
 ) -> Result<Code, CompilerError> {
     let outer_pending = ctx.take_pending();
     let mut pushed = 0usize;
 
     // Fields: projections for non-erased fields, erased dummies otherwise
     // (De Bruijn alignment for Inline; `Arg::Erased` slots for Apply).
-    let mut field_slots: Vec<(Option<clean_kernel::FVarId>, bool)> =
-        Vec::with_capacity(arm.fields.len());
+    let mut field_slots: Vec<(Option<FVarId>, bool)> = Vec::with_capacity(arm.fields.len());
     for (field_idx, field) in arm.fields.iter().enumerate() {
         if field.erased {
             let dummy = ctx.add_let(Name::anon(), Expr::const_str("_"), LetValue::Erased);
@@ -2963,7 +3047,7 @@ fn build_rec_arm_body(
 
     // IHs: `ih := go(apply_minors.., field)` per recursive field, in field
     // order (the recursor minor telescope lists fields first, then IHs).
-    let mut ih_fvars: Vec<clean_kernel::FVarId> = Vec::new();
+    let mut ih_fvars: Vec<FVarId> = Vec::new();
     for (field_fvar, recursive) in &field_slots {
         if !*recursive {
             continue;
@@ -2991,7 +3075,7 @@ fn build_rec_arm_body(
         // IHs) resolve to the fvars pushed above.
         (RecMinorStrategy::Inline { body }, _) => {
             let body = body.clone();
-            expr_to_code(ctx, &body)
+            lower_code(ctx, &body)
         }
         // Apply: closure-apply the minor parameter to fields then IHs
         // (erased fields as boxed units); 0-binder arms return the minor
@@ -3050,11 +3134,11 @@ fn build_rec_arm_body(
 /// boxed-integer discipline of [`lower_nat_cases`].
 fn build_nat_succ_arm_body(
     ctx: &mut LcnfContext<'_>,
-    go_fvar: clean_kernel::FVarId,
-    minor_params: &[clean_kernel::FVarId],
+    go_fvar: FVarId,
+    minor_params: &[FVarId],
     arm: &RecArmSpec,
-    apply_param: Option<clean_kernel::FVarId>,
-    scrut: clean_kernel::FVarId,
+    apply_param: Option<FVarId>,
+    scrut: FVarId,
 ) -> Result<Code, CompilerError> {
     let outer_pending = ctx.take_pending();
 
@@ -3089,7 +3173,7 @@ fn build_nat_succ_arm_body(
             // De Bruijn order in the peeled body: BVar 1 = pred, BVar 0 = ih.
             ctx.bvar_stack.push(pred_fvar);
             ctx.bvar_stack.push(ih_fvar);
-            let result = expr_to_code(ctx, &body);
+            let result = lower_code(ctx, &body);
             ctx.bvar_stack.pop();
             ctx.bvar_stack.pop();
             result
@@ -3219,33 +3303,155 @@ fn telescope_codomain(ty: &Expr) -> &Expr {
 
 /// Convert a constant definition to an L5CNF declaration.
 ///
-/// Returns `Some(Decl)` for definitions with values, `None` for axioms/opaque
-/// or noncomputable definitions (which are excluded from code generation),
-/// and for type-level machinery whose body does not lower (see
-/// [`is_type_level_machinery`]).
+/// Returns `Some(Decl)` for definitions with values, `None` for axioms and for
+/// noncomputable definitions (which are excluded from code generation), `None`
+/// for THEOREMS (a proof term is not code — see the `ConstantKind::Theorem`
+/// gate below), and `None` for type-level machinery whose body does not lower
+/// (see [`is_type_level_machinery`]).
+///
+/// OPAQUE IS NOT IN THAT LIST, and this doc used to claim it was. A
+/// `ConstantKind::Opaque` constant is dropped only when it has NO value; a
+/// value-bearing one lowers exactly like a `Definition`. That is deliberate,
+/// and it is the opposite of the theorem case:
+///
+/// * `Declaration::Opaque` carries a non-optional `value`, so every opaque the
+///   kernel stamps through `add_decl` reaches here with `value: Some(..)` and
+///   clears the "no value" drop below. `opaque secretImpl : Nat := Nat.zero`
+///   is REAL RUNTIME CONTENT that is merely δ-irreducible for the type checker
+///   — dropping it would turn every caller's reference into a dangling extern,
+///   i.e. a link error, not a safe refusal.
+/// * The only value-LESS `Opaque` is the trusted-import TYPE STUB
+///   (`clean_olean::convert_parsed_constant_to_type_stub`, registered for a
+///   proof body the types-only loader skipped). It has nothing to lower, so it
+///   takes the "no value" drop and behaves as an axiom does.
+/// * A Prop-typed opaque needs no special case: it is runtime-irrelevant for
+///   the same reason a Prop-typed *definition* is, and takes the same
+///   `prop_valued_const` erased-stub path below. The theorem gate keys on the
+///   KIND precisely so this stays separable.
+///
+/// # Errors
+///
+/// [`CompilerError::ImplementedByOrder`] for EVERY constant while the
+/// environment's order record is not empty: an `attribute [implemented_by]`
+/// command came after code that reaches the declaration it rebinds
+/// (`crate::implemented_by::refuse_order`). Checked first, here, because
+/// this is the entry every lane lowers through: Trust's general lane calls it
+/// for each declaration of an island batch
+/// (`compiler/rustc_mir_transform/src/clean_origin_ir.rs`,
+/// `collect_general_clean_ir`), and the native lanes and the Rust ABI, which
+/// refuse such an environment earlier with their own tags, reach it after.
+///
+/// [`CompilerError::ExternWithBody`] for a value-bearing `@[extern]`
+/// constant: compiled Lean calls its symbol and never its body
+/// (`crate::implemented_by::refuse_extern_body`). A value-less one is
+/// `Ok(None)`, an extern boundary, as an axiom is.
+///
+/// Otherwise whatever the lowering refuses.
 pub fn constant_to_decl(
     env: &Environment,
     info: &ConstantInfo,
 ) -> Result<Option<Decl>, CompilerError> {
+    constant_to_decl_with_meaning(env, info, CodeMeaning::LeanCompiled)
+}
+
+/// [`constant_to_decl`] for code that means `meaning`. Under
+/// [`CodeMeaning::KernelValue`] (`clean extract`) no reference is
+/// substituted by an `@[implemented_by]` implementation, so the declaration
+/// computes the kernel value of `info`, and the order refusal does not apply
+/// (`docs/DECISIONS.md` R149).
+///
+/// # Errors
+///
+/// As [`constant_to_decl`], less the order refusal and the
+/// `@[implemented_by]` substitution refusals under
+/// [`CodeMeaning::KernelValue`].
+pub fn constant_to_decl_with_meaning(
+    env: &Environment,
+    info: &ConstantInfo,
+    meaning: CodeMeaning,
+) -> Result<Option<Decl>, CompilerError> {
+    constant_to_decl_ordered(env, info, meaning, None)
+}
+
+/// Lower under an explicit checked runtime binding closure. The legacy
+/// entry above retains its whole-environment refusal. This contract grants
+/// no source/binary authority and is rechecked against the actual context.
+pub fn constant_to_decl_in_runtime_closure(
+    env: &Environment,
+    info: &ConstantInfo,
+    closure: &crate::RuntimeBindingClosure,
+) -> Result<Option<Decl>, CompilerError> {
+    constant_to_decl_ordered(env, info, CodeMeaning::LeanCompiled, Some(closure))
+}
+
+fn constant_to_decl_ordered(
+    env: &Environment,
+    info: &ConstantInfo,
+    meaning: CodeMeaning,
+    closure: Option<&crate::RuntimeBindingClosure>,
+) -> Result<Option<Decl>, CompilerError> {
+    if meaning != CodeMeaning::KernelValue {
+        crate::csimp::validate_metadata(env)?;
+    }
+    match closure {
+        Some(closure) => closure.constant(env, info)?,
+        None => crate::implemented_by::refuse_order_for(env, meaning)?,
+    }
+
     // Skip noncomputable definitions — they have no runtime representation.
     if env.is_noncomputable(&info.name) {
         return Ok(None);
     }
 
-    // Only process definitions with values
+    // A THEOREM IS NOT CODE. Its `value` is a PROOF TERM, so it reaches the
+    // Prop-valued arm below and would be emitted as a real declaration with an
+    // erased-return stub body — a callable function whose erased result the
+    // backend materializes as a boxed zero / NullPtr. That is proof-to-exec
+    // laundering: the joint two-language module would gain items with no
+    // computational meaning that the FORMAT presents as executable, and any
+    // module-level quantified statement would silently range over them. Drop it
+    // exactly as an axiom is dropped (`Ok(None)`, i.e. "extern boundary"), reading
+    // the kernel's own `ConstantKind` rather than guessing from the type: Lean 4
+    // keeps `TheoremVal` distinct from `DefinitionVal` for precisely this reason,
+    // and `reducibility` alone cannot tell Theorem from Opaque.
+    //
+    // DELIBERATELY NARROW — this is *not* the erasure below and must not be
+    // widened into it. The erased-stub path exists to keep TYPE-LEVEL MACHINERY
+    // (`is_type_level_machinery`: a *definition* whose declared telescope-codomain
+    // is a `Sort`/`SProp`, e.g. `Bool.noConfusionType`, the `LE.le`/`LT.lt`/
+    // `Membership.mem` class heads) LINKABLE, and Prop-valued *definitions*
+    // likewise. Those are `ConstantKind::Definition`s that other code legitimately
+    // references by symbol; only `Theorem` is refused here. `Opaque` is NOT
+    // refused, and that question IS decided (see this function's doc): a
+    // `Declaration::Opaque`'s `value` is non-optional and can carry real runtime
+    // content, so a value-bearing opaque lowers exactly like a definition —
+    // dropping it would make every caller's reference a dangling extern. Only
+    // the value-LESS opaque (the trusted-import type stub) takes the drop below.
+    if matches!(info.kind, ConstantKind::Theorem) {
+        return Ok(None);
+    }
+
+    // Only process constants that carry a value. Axioms have none; so do the
+    // value-less `Opaque` TYPE STUBS the trusted-import path registers for a
+    // proof body the types-only loader skipped. A kernel-stamped `opaque` WITH
+    // a body does not land here — `Declaration::Opaque.value` is not an
+    // `Option` — and goes on to lower like any definition.
     let value = match &info.value {
         Some(v) => v,
-        None => return Ok(None), // Axioms and opaque definitions
+        None => return Ok(None),
     };
+    // Compiled Lean never runs an `@[extern]` declaration's body.
+    crate::implemented_by::refuse_extern_body(env, &info.name, meaning)?;
 
-    let mut ctx = LcnfContext::new(env);
+    let mut ctx = LcnfContext::with_meaning(env, meaning);
+    ctx.csimp_rules = clean_kernel::env::csimp::rules_for(env, Some(&info.name));
 
     // Collect lambda parameters
     let mut params = Vec::new();
     let mut curr_expr = value;
 
     while let ExprKind::Lam(_, ty, body) = curr_expr.kind() {
-        let fvar = ctx.push_binder();
+        let fvar = ctx.push_typed_binder(ty);
         params.push(Param::new(fvar, Name::anon(), ty.as_ref().clone()));
         curr_expr = body.as_ref();
     }
@@ -3291,7 +3497,7 @@ pub fn constant_to_decl(
             Code::Return(r),
         )
     } else {
-        match expr_to_code(&mut ctx, curr_expr) {
+        match lower_code(&mut ctx, curr_expr) {
             Ok(body) => body,
             // Type-level machinery (a definition that RETURNS a type) whose body
             // does not lower. Rather than dropping it to an extern boundary

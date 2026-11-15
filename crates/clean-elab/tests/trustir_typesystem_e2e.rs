@@ -2463,7 +2463,10 @@ theorem stepOK_exact (w : Nat) (s : (Nat -> Nat)) (i : PInst)
     i
     (fun dst src1 src2 op =>
       fun h =>
-        congrArg (writeReg s dst)
+        @congrArg.{1,1} Nat (Nat -> Nat)
+          (wrapPBinOp op w (s src1) (s src2))
+          (exactBinOp op (s src1) (s src2))
+          (writeReg s dst)
           (Eq.trans
             (wrapPBinOp_eq_mod op w (s src1) (s src2))
             (mod_eq_of_lt (exactBinOp op (s src1) (s src2)) (Nat.pow 2 w) h)))

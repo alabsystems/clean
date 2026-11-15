@@ -27,7 +27,7 @@ impl<'a> ElabCtx<'a> {
         ctors: &[SurfaceCtor],
         ctor_names: &[Name],
     ) -> Result<DerivedInstance, ElabError> {
-        let instance_name = Name::from_string(&format!("inst{ind_name}Ord"));
+        let instance_name = crate::derive::builtin_instance_name(ind_name, "Ord");
         let class_name = Name::from_string("Ord");
         let num_params = binders.len();
 
@@ -166,7 +166,7 @@ impl<'a> ElabCtx<'a> {
         b_ref: &Expr,
     ) -> Expr {
         let motive_u = Level::succ(Level::zero());
-        let cases_on_name = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on_name = ind_name.clone().str("casesOn");
         let ordering = || Expr::const_(Name::from_string("Ordering"), vec![]);
         // Motive `λ _ : Ind => Ordering` (shared by outer and inner casesOn).
         let motive = Expr::lam(BinderInfo::Default, ind_type.clone(), ordering());
@@ -302,48 +302,6 @@ impl<'a> ElabCtx<'a> {
         true
     }
 
-    /// Derive Nonempty for an inductive type
-    ///
-    /// Uses the first constructor as a witness. Returns None if there
-    /// are no constructors (the type would be empty).
-    pub(super) fn derive_nonempty_inductive(
-        &mut self,
-        ind_name: &Name,
-        binders: &[SurfaceBinder],
-        _ctors: &[SurfaceCtor],
-        ctor_names: &[Name],
-    ) -> Option<DerivedInstance> {
-        if ctor_names.is_empty() {
-            return None;
-        }
-
-        let instance_name = Name::from_string(&format!("inst{ind_name}Nonempty"));
-        let class_name = Name::from_string("Nonempty");
-        let num_params = binders.len();
-
-        let (instance_ty, _num_constraints) =
-            self.build_parametric_instance_type(ind_name, binders, &class_name);
-
-        // Use the first constructor as a witness (works for nullary constructors)
-        let first_ctor_name = &ctor_names[0];
-        let witness = self.mk_const(first_ctor_name);
-
-        // Nonempty.intro witness
-        let core_instance_val = Expr::app(self.mk_const_str("Nonempty.intro"), witness);
-
-        let instance_val =
-            self.wrap_parametric_instance_value(core_instance_val, num_params, &class_name);
-
-        Some(DerivedInstance {
-            name: instance_name,
-            class_name,
-            ty: instance_ty,
-            val: instance_val,
-            priority: 100,
-            level_params: vec![],
-        })
-    }
-
     /// Derive ToString for an inductive type
     ///
     /// Delegates to Repr via reprStr, same pattern as the structure version.
@@ -354,7 +312,7 @@ impl<'a> ElabCtx<'a> {
         _ctors: &[SurfaceCtor],
         _ctor_names: &[Name],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{ind_name}ToString"));
+        let instance_name = crate::derive::builtin_instance_name(ind_name, "ToString");
         let class_name = Name::from_string("ToString");
         let num_params = binders.len();
 
@@ -396,7 +354,7 @@ impl<'a> ElabCtx<'a> {
         ind_name: &Name,
         binders: &[SurfaceBinder],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{ind_name}Functor"));
+        let instance_name = crate::derive::builtin_instance_name(ind_name, "Functor");
         let class_name = Name::from_string("Functor");
         let num_params = binders.len();
 
@@ -430,7 +388,7 @@ impl<'a> ElabCtx<'a> {
         ind_name: &Name,
         binders: &[SurfaceBinder],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{ind_name}Foldable"));
+        let instance_name = crate::derive::builtin_instance_name(ind_name, "Foldable");
         let class_name = Name::from_string("Foldable");
         let num_params = binders.len();
 
@@ -464,7 +422,7 @@ impl<'a> ElabCtx<'a> {
         ind_name: &Name,
         binders: &[SurfaceBinder],
     ) -> DerivedInstance {
-        let instance_name = Name::from_string(&format!("inst{ind_name}Traversable"));
+        let instance_name = crate::derive::builtin_instance_name(ind_name, "Traversable");
         let class_name = Name::from_string("Traversable");
         let num_params = binders.len();
 

@@ -59,7 +59,7 @@ pub enum AnalysisError {
 /// **Distinct from `FeedbackCategory`** (a kernel-rejection taxonomy). This
 /// classifies why a *solving attempt* failed, derived from the attempt result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum SolverFailureCategory {
+pub(crate) enum SolverFailureCategory {
     /// The attempt hit its resource budget.
     Timeout,
     /// The solver could not decide (incomplete / theory gap).

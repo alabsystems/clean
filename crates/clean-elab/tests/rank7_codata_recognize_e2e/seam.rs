@@ -13,60 +13,39 @@
 use super::*;
 
 /// Compile and run an emitted program, returning stdout lines.
-fn compile_and_run(src: &str, stem: &str) -> Option<Vec<String>> {
+///
+/// The compiler is this toolchain's Trust `trustc`, admitted exactly as
+/// Clean admits its oracle compiler (`clean_elab::oracle_compiler`): the one
+/// beside `$CARGO` (Targo exports it to tests), else beside the Targo that
+/// built this test -- never `$RUSTC` or PATH. Without one the test fails; it
+/// never skips. `OracleCompiler::compile` carries the TRUST OPT-OUT and its
+/// rationale: Trust's obligation checker failed this EMITTED program on
+/// `[overflow:add]` obligations it could not discharge statically, and the
+/// program is an extraction ARTIFACT executed for a differential check, not a
+/// verification target.
+fn compile_and_run(src: &str, stem: &str) -> Vec<String> {
     use std::process::Command;
     let dir = tempfile::tempdir().expect("tempdir");
     let src_path = dir.path().join(format!("{stem}.rs"));
     let bin_path = dir.path().join(stem);
     std::fs::write(&src_path, src).expect("write");
-    // TRUST OPT-OUT — see `clean-elab/src/tactic/native_decide_eval.rs`, which
-    // hit the identical problem and carries the full rationale.
-    //
-    // `rustc` resolves through rustup from this repo's `rust-toolchain.toml`,
-    // pinned to `channel = "trust"` since 2026-08-18. It therefore ran Trust's
-    // obligation checker over this EMITTED program and failed the build on
-    // `[overflow:add]` obligations it could not discharge statically. The
-    // emitted program is an extraction ARTIFACT being executed for a
-    // differential check, not a verification target.
-    //
-    // Probe rather than assume: the flag is trust-only and its spelling has
-    // already moved once, so fall back to a plain invocation when the compiler
-    // does not understand it.
-    let run_rustc = |trust_opt_out: bool| {
-        let mut cmd = Command::new("rustc");
-        cmd.args(["--edition=2021", "-O"]);
-        if trust_opt_out {
-            cmd.arg("-Ztrust-verify=off");
-        }
-        cmd.arg("-o").arg(&bin_path).arg(&src_path).output()
-    };
-    let flag_was_rejected = |stderr: &str| {
-        stderr.contains("only accepted on the nightly compiler")
-            || stderr.contains("unknown unstable option")
-            || stderr.contains("unknown debugging option")
-            || stderr.contains("incorrect value")
-    };
-    let mut out = run_rustc(true).ok()?;
-    if !out.status.success() && flag_was_rejected(&String::from_utf8_lossy(&out.stderr)) {
-        out = run_rustc(false).ok()?;
+    let cargo = std::env::var_os("CARGO")
+        .map_or_else(|| std::path::PathBuf::from(env!("CARGO")), Into::into);
+    let compiler = clean_elab::oracle_compiler::admit_beside(&cargo)
+        .unwrap_or_else(|err| panic!("no admitted trustc beside {cargo:?}: {err}"));
+    if let Err(err) = compiler.compile(&src_path, &bin_path) {
+        panic!("emitted program must compile: {err}\n--- src ---\n{src}");
     }
-    assert!(
-        out.status.success(),
-        "emitted program must compile:\n{}\n--- src ---\n{src}",
-        String::from_utf8_lossy(&out.stderr)
-    );
     let run = Command::new(&bin_path).output().expect("run");
     assert!(
         run.status.success(),
         "emitted program must run cleanly:\n{}",
         String::from_utf8_lossy(&run.stderr)
     );
-    Some(
-        String::from_utf8_lossy(&run.stdout)
-            .lines()
-            .map(str::to_string)
-            .collect(),
-    )
+    String::from_utf8_lossy(&run.stdout)
+        .lines()
+        .map(str::to_string)
+        .collect()
 }
 
 /// THE SEAM: the IR the LOWERING produced is the IR the EMITTER compiles.
@@ -114,10 +93,7 @@ theorem k2 : St.head (St.tail (St.tail (count 5))) = 7 := rfl
     // The emitted source is generated FROM the lowered IR -- not from a
     // hand-written copy of it.
     let src = clean_compiler::extraction_ir::emit_rust::emit_program(&ir, &[5], 8);
-    let Some(lines) = compile_and_run(&src, "seam_count") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let lines = compile_and_run(&src, "seam_count");
 
     // Kernel-proved prefix (k0/k1/k2 above), then the continuation.
     assert_eq!(&lines[0..3], &["5", "6", "7"]);
@@ -144,10 +120,7 @@ fn the_lowered_indexed_ir_is_what_the_emitter_compiles() {
 
     // Observation: the kernel-proved doubling, from lowered IR.
     let src = clean_compiler::extraction_ir::emit_rust::emit_program(&ir, &[0, 1], 8);
-    let Some(lines) = compile_and_run(&src, "seam_doubler") else {
-        eprintln!("rustc unavailable — skipping execution check");
-        return;
-    };
+    let lines = compile_and_run(&src, "seam_doubler");
     assert_eq!(&lines[0..4], &["1", "2", "4", "8"]);
 
     // Index: re-point the observation at the index slot, so a dropped or
@@ -155,8 +128,6 @@ fn the_lowered_indexed_ir_is_what_the_emitter_compiles() {
     let mut idx_ir = ir;
     idx_ir.observe = clean_compiler::extraction_ir::Op::State(0);
     let src = clean_compiler::extraction_ir::emit_rust::emit_program(&idx_ir, &[7, 1], 6);
-    let Some(lines) = compile_and_run(&src, "seam_index") else {
-        return;
-    };
+    let lines = compile_and_run(&src, "seam_index");
     assert_eq!(lines, vec!["7", "8", "9", "10", "11", "12"]);
 }

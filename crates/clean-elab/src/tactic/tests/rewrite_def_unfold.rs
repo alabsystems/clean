@@ -130,6 +130,7 @@ fn assert_root_proof_checks(state: &ProofState, root: MetaId, original_target: &
         target: original_target.clone(),
         local_ctx: Vec::new(),
         tag: None,
+        case_binders: Vec::new(),
     });
     let inferred = state
         .infer_type(&probe_goal, &proof)
@@ -157,7 +158,11 @@ fn test_rewrite_definition_name_unfolds_goal_occurrence() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "PXor").expect("rw [PXor] should delta-unfold the Definition");
+    rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("PXor"),
+    )
+    .expect("rw [PXor] should delta-unfold the Definition");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -221,8 +226,11 @@ fn test_rewrite_definition_name_universe_polymorphic() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "dupDef")
-        .expect("rw [dupDef] should unfold the universe-polymorphic definition");
+    rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("dupDef"),
+    )
+    .expect("rw [dupDef] should unfold the universe-polymorphic definition");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -246,21 +254,27 @@ fn test_rewrite_definition_name_at_hypothesis() {
         env,
         unfolded.clone(), // target: the unfolded form, closable by `exact h` after the rw
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: pxor_pq(),
             value: None,
         }],
     );
 
-    rewrite_at(&mut state, "PXor", "h", false)
-        .expect("rw [PXor] at h should unfold the Definition in the hypothesis type");
+    rewrite_at(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("PXor"),
+        &clean_parser::SurfaceName::generated_path("h"),
+        false,
+    )
+    .expect("rw [PXor] at h should unfold the Definition in the hypothesis type");
 
     let goal = state.current_goal().expect("goal remains after rw at h");
     let h_ty = &goal
         .local_ctx
         .iter()
-        .find(|d| d.name == "h")
+        .find(|d| d.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("hypothesis h survives the rewrite")
         .ty;
     assert_eq!(
@@ -281,8 +295,11 @@ fn test_rewrite_definition_name_absent_from_goal_reports_no_match() {
 
     let mut state = ProofState::new(env, already_unfolded);
 
-    let err = rewrite_ltr(&mut state, "PXor")
-        .expect_err("rw [PXor] with no PXor occurrence must fail, not silently succeed");
+    let err = rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("PXor"),
+    )
+    .expect_err("rw [PXor] with no PXor occurrence must fail, not silently succeed");
     match err {
         TacticError::RewriteNoMatch { rule, tactic, .. } => {
             assert_eq!(rule, "PXor");
@@ -308,8 +325,11 @@ fn test_rewrite_definition_name_backward_is_still_rejected() {
 
     let mut state = ProofState::new(env, make_eq_prop(unfolded, pxor_pq()));
 
-    let err = rewrite_rtl(&mut state, "PXor")
-        .expect_err("rw [← PXor] is out of scope for the delta path and must stay rejected");
+    let err = rewrite_rtl(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("PXor"),
+    )
+    .expect_err("rw [← PXor] is out of scope for the delta path and must stay rejected");
     match err {
         TacticError::GoalMismatch(msg) => assert!(
             msg.contains("is not an equation"),
@@ -346,7 +366,11 @@ fn test_rewrite_theorem_name_with_equation_type_still_works() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "xy_thm").expect("rw [xy_thm] should use the theorem's equation");
+    rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("xy_thm"),
+    )
+    .expect("rw [xy_thm] should use the theorem's equation");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -383,8 +407,11 @@ fn test_rewrite_equation_typed_definition_takes_the_equation_path() {
     let mut state = ProofState::new(env, target.clone());
     let root = state.current_goal().unwrap().meta_id;
 
-    rewrite_ltr(&mut state, "xy_def")
-        .expect("an equation-typed Definition must still rewrite via the equation path");
+    rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("xy_def"),
+    )
+    .expect("an equation-typed Definition must still rewrite via the equation path");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -411,8 +438,11 @@ fn test_rewrite_axiom_name_without_equation_type_still_errors() {
     let f_x = Expr::app(Expr::const_(Name::from_string("f_ax"), vec![]), x);
     let mut state = ProofState::new(env, make_p(f_x));
 
-    let err = rewrite_ltr(&mut state, "f_ax")
-        .expect_err("rw by a non-equation AXIOM name must stay rejected");
+    let err = rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("f_ax"),
+    )
+    .expect_err("rw by a non-equation AXIOM name must stay rejected");
     match err {
         TacticError::GoalMismatch(msg) => assert!(
             msg.contains("is not an equation"),
@@ -445,8 +475,11 @@ fn test_rewrite_theorem_name_without_equation_type_still_errors() {
 
     let mut state = ProofState::new(env, make_p(x));
 
-    let err = rewrite_ltr(&mut state, "px_thm")
-        .expect_err("rw by a non-equation THEOREM name must stay rejected");
+    let err = rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("px_thm"),
+    )
+    .expect_err("rw by a non-equation THEOREM name must stay rejected");
     match err {
         TacticError::GoalMismatch(msg) => assert!(
             msg.contains("is not an equation"),
@@ -474,8 +507,11 @@ fn test_rewrite_opaque_constant_is_not_an_unfold_source() {
     let opaque_x = Expr::const_(Name::from_string("opaqueX"), vec![]);
     let mut state = ProofState::new(env, make_p(opaque_x));
 
-    let err = rewrite_ltr(&mut state, "opaqueX")
-        .expect_err("rw by an OPAQUE constant name must stay rejected");
+    let err = rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("opaqueX"),
+    )
+    .expect_err("rw by an OPAQUE constant name must stay rejected");
     match err {
         TacticError::GoalMismatch(msg) => assert!(
             msg.contains("is not an equation"),
@@ -498,14 +534,18 @@ fn test_local_hypothesis_shadows_the_definition_name() {
         env,
         make_eq_prop(pxor_pq(), or_and_body(p, q)),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "PXor".to_string(),
+            name: clean_parser::SurfaceName::generated_path("PXor"),
             ty: Expr::const_(Name::from_string("p"), vec![]),
             value: None,
         }],
     );
 
-    let result = rewrite_ltr(&mut state, "PXor");
+    let result = rewrite_ltr(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("PXor"),
+    );
     assert!(
         result.is_err(),
         "a local hypothesis of the same name shadows the definition; a non-equation \

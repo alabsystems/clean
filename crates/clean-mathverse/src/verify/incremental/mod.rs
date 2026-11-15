@@ -49,6 +49,7 @@ use crate::types::{DeclKind, ImportConfidence, MathverseConstantHeader, NO_VALUE
 /// Axiom-discharge substitution: replace a named imported `Axiom` with a
 /// hand-built kernel proof of its stated type (BRICK 1.0, route-to-100).
 pub(crate) mod axiom_discharge;
+mod not_admitted;
 
 #[cfg(test)]
 mod tests;
@@ -3232,7 +3233,9 @@ fn try_add_decl(
 ///    the genuine value landing in the trust lane (the full-`add_decl` sibling
 ///    of the olean loader's `upgrade_axiom_stubs_checked` healing — since
 ///    R1-STUB, 2026-08-24, that loader lane is kernel-checked too), and it is
-///    the only branch here that installs anything: `KernelVerified`.
+///    the only branch here that installs anything: `KernelVerified`. An
+///    AXIOM is never such a stub for a definition or opaque: that value is a
+///    redeclaration, refused below as already declared.
 /// 2. **Twin acceptance.** The olean copy denotes the SAME declaration the env
 ///    already holds: level-param arity matches and the type matches after
 ///    positional level renaming (structural-then-def-eq,
@@ -3274,7 +3277,36 @@ fn try_accept_seeded_duplicate(
     // copy. On success the genuine value LANDS (kernel-checked). On failure,
     // keep the typed error for the divergence message below.
     let mut upgrade_failed: Option<String> = None;
-    if existing.value.is_none() {
+    if existing.value.is_none() && !completes_value_free_resident(existing.kind, decl_kind) {
+        // A value of another kind for a name the environment holds value-free
+        // is a redeclaration, never the completion of a stub: Lean's import
+        // merges a theorem over an axiom of its statement and nothing else
+        // (`finalizeImport`'s `subsumesInfo`), and its `addDecl` refuses the
+        // name as already declared, checking the module's other declarations
+        // against the resident one. Filling it let the module's `def
+        // bool_ax_b := true` replace an imported `axiom bool_ax_b : Bool`, and
+        // `ReplayForgedBoolDef`'s `forged_bool_false : False` was stamped
+        // (measured 2026-09-29, default and `--single-pass`); and, since
+        // `--single-pass` roll-elides each verified target's opaque values
+        // (`--closure-elide opaque`, the default), `ReplayForgedOpaqueDef`'s
+        // `def op_b := true` replaced an earlier target's `opaque op_b`, and
+        // `ReplayForgedOpaqueUse`'s `forged_op_use : False` was stamped over
+        // it (measured the same day, after the axiom-only refusal). A theorem
+        // over an axiom, and a value of the resident's own kind (an elided
+        // theorem or opaque value), are still completed below, kernel-checked.
+        let held_by = match env.get_constant_origin(name) {
+            Some(clean_kernel::env::ConstantOrigin::Olean {
+                module: Some(module),
+                ..
+            }) => format!("the import `{module}`"),
+            _ => "an earlier declaration".to_owned(),
+        };
+        upgrade_failed = Some(format!(
+            "`{name}` is already declared as {} by {held_by}; Lean's replay refuses its \
+             redeclaration (already declared)",
+            resident_kind_label(existing.kind)
+        ));
+    } else if existing.value.is_none() {
         if let Some(val) = value {
             let decl = build_value_bearing_decl(name, decl_kind, level_params, type_, val);
             match env.upgrade_axiom_to_checked_decl(decl) {
@@ -3356,6 +3388,36 @@ fn try_accept_seeded_duplicate(
         // row without the collision would have minted AxiomFallback(None) —
         // mint exactly that, never a proof-check verdict.
         (None, None) => AddConstResult::AxiomFallback(None),
+    }
+}
+
+/// Whether a `decl_kind` value may complete a VALUE-FREE resident of kind
+/// `resident` (the checked stub upgrade of [`try_accept_seeded_duplicate`]):
+/// a theorem over an axiom, which Lean's import merges (`finalizeImport`'s
+/// `subsumesInfo`), or a value of the resident's own kind, whose value an
+/// elided load dropped. Anything else would change what the name MEANS (a
+/// definition makes an axiom or an opaque unfold), which Lean refuses as
+/// already declared.
+fn completes_value_free_resident(
+    resident: clean_kernel::ConstantKind,
+    decl_kind: DeclKind,
+) -> bool {
+    use clean_kernel::ConstantKind as K;
+    match (resident, decl_kind) {
+        (K::Axiom | K::Theorem, DeclKind::Theorem)
+        | (K::Opaque, DeclKind::Opaque)
+        | (K::Definition, DeclKind::Definition) => true,
+        (K::Axiom | K::Theorem | K::Opaque | K::Definition, _) => false,
+    }
+}
+
+/// How a refusal names a resident constant's kind.
+fn resident_kind_label(kind: clean_kernel::ConstantKind) -> &'static str {
+    match kind {
+        clean_kernel::ConstantKind::Axiom => "an axiom",
+        clean_kernel::ConstantKind::Theorem => "a theorem",
+        clean_kernel::ConstantKind::Opaque => "an opaque",
+        clean_kernel::ConstantKind::Definition => "a definition",
     }
 }
 
@@ -3445,7 +3507,18 @@ fn accept_unsafe_definition_type_only(
         level_params,
         type_: type_expr,
     };
-    match env.add_decl(axiom) {
+    // Lean checks an unsafe declaration in its UNSAFE context
+    // (`environment.cpp` `add_definition`: `type_checker(.., unsafe)`), where
+    // it may use other unsafe constants. Under `KernelTheory::Lean` the
+    // environment's checks run in the SAFE context, so this one type check runs
+    // in Clean's permissive extended theory instead. That cannot leak: the
+    // result is a type-only axiom marked unsafe, never KernelVerified, and no
+    // safe declaration checked under the Lean profile may use it.
+    let theory = env.kernel_theory();
+    env.set_kernel_theory(clean_kernel::env::KernelTheory::Extended);
+    let added = env.add_decl(axiom);
+    env.set_kernel_theory(theory);
+    match added {
         Ok(()) => {
             env.mark_unsafe(decl_name);
             AddConstResult::UnsafeAccepted
@@ -3640,6 +3713,10 @@ fn run_incremental_over_reader_bounded(
     // single direct-dependency check computes the full transitive taint; the
     // check is skipped entirely when nothing is tainted (the common case).
     let mut masked_tainted: HashSet<String> = HashSet::new();
+    // Targets not admitted whose name still resolves, and their users (R142,
+    // `not_admitted.rs`): every use of one is refused, never checked against
+    // the declaration the environment holds instead.
+    let mut not_admitted = not_admitted::NotAdmitted::default();
 
     // VALUE-LESS STAND-INS present in the env (see
     // `standin_blocked_evidence`): declarations whose source system
@@ -3688,7 +3765,11 @@ fn run_incremental_over_reader_bounded(
         if force_type_only {
             log_forced_type_only_capture(name, dep_graph.get(name), &masked_tainted);
         }
-        match try_add_constant(&mut env, name, reader, constant, policy, force_type_only) {
+        let added = match not_admitted.refuse_user(name, &dep_graph) {
+            Some(refusal) => AddConstResult::KernelRejected(refusal),
+            None => try_add_constant(&mut env, name, reader, constant, policy, force_type_only),
+        };
+        match added {
             AddConstResult::KernelVerified => {
                 if !masked_tainted.is_empty()
                     && dep_graph
@@ -3873,10 +3954,12 @@ fn run_incremental_over_reader_bounded(
             }
             AddConstResult::ReconstructFailed(msg) => {
                 reconstruct_failed += 1;
+                not_admitted.note_unadmitted(&env, name);
                 failures.push((name.clone(), msg));
             }
             AddConstResult::KernelRejected(msg) => {
                 failed += 1;
+                not_admitted.note_unadmitted(&env, name);
                 failures.push((name.clone(), msg));
             }
         }
@@ -4097,6 +4180,10 @@ where
     // prerequisites and in the recheck loop, so we seed the taint set from both.
     let dep_graph = build_dependency_graph(reader);
     let mut masked_tainted: HashSet<String> = HashSet::new();
+    // Targets not admitted whose name still resolves, and their users (R142,
+    // `not_admitted.rs`): every use of one is refused, never checked against
+    // the declaration the environment holds instead.
+    let mut not_admitted = not_admitted::NotAdmitted::default();
     // Mirror of the topo-order loop's stand-in set (see
     // `run_incremental_over_reader` / `standin_blocked_evidence`); a
     // stand-in can appear both while SEEDING prerequisites and in the recheck
@@ -4217,7 +4304,11 @@ where
         if force_type_only {
             log_forced_type_only_capture(name, dep_graph.get(name), &masked_tainted);
         }
-        match try_add_constant(&mut env, name, reader, constant, policy, force_type_only) {
+        let added = match not_admitted.refuse_user(name, &dep_graph) {
+            Some(refusal) => AddConstResult::KernelRejected(refusal),
+            None => try_add_constant(&mut env, name, reader, constant, policy, force_type_only),
+        };
+        match added {
             AddConstResult::KernelVerified => {
                 if !masked_tainted.is_empty()
                     && dep_graph
@@ -4350,10 +4441,12 @@ where
             }
             AddConstResult::ReconstructFailed(msg) => {
                 reconstruct_failed += 1;
+                not_admitted.note_unadmitted(&env, name);
                 failures.push((name.clone(), msg));
             }
             AddConstResult::KernelRejected(msg) => {
                 failed += 1;
+                not_admitted.note_unadmitted(&env, name);
                 failures.push((name.clone(), msg));
             }
         }

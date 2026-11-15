@@ -1,6 +1,6 @@
 [package]
 name = "clean-macro"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 description = "Macro system for Clean - syntax quotations, macros, and syntax extensions"
 readme.workspace = true
@@ -12,6 +12,7 @@ workspace = true
 
 [dependencies]
 clean-kernel = { path = "../clean-kernel" }
+clean-parser.workspace = true
 thiserror.workspace = true
 
 [dev-dependencies]

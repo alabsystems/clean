@@ -1,0 +1,8 @@
+(assume h1 (P a))
+(assume h2 (not (forall ((x U)) (=> (= x a) (P x)))))
+(anchor :step s :args ((:= (x U) a)))
+(step s.t1 (cl (= (=> (= x a) (P x)) (=> (= a a) (P a)))) :rule refl)
+(step s (cl (= (forall ((x U)) (=> (= x a) (P x))) (=> (= a a) (P a)))) :rule onepoint)
+(step t2 (cl (not (= (forall ((x U)) (=> (= x a) (P x))) (=> (= a a) (P a)))) (forall ((x U)) (=> (= x a) (P x))) (not (=> (= a a) (P a)))) :rule equiv_pos1)
+(step t3 (cl (=> (= a a) (P a)) (not (P a))) :rule implies_neg2)
+(step t4 (cl) :rule resolution :premises (s t2 t3 h1 h2))

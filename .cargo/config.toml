@@ -1,13 +1,15 @@
 # The PUBLIC snapshot's .cargo/config.toml. Copied over the export's
-# .cargo/config.toml by transforms.sh; the private repo's copy additionally
-# carries the Trust verifier opt-out (`-Ztrust-verify=off`), which a stock
-# compiler rejects as an unknown nightly-only flag on every unit.
+# .cargo/config.toml by transforms.sh. The private repo's copy carried the
+# Trust verifier opt-out (`-Ztrust-verify=off`) in its host target stanzas until
+# 2026-10-07; it no longer does, and a public tree carries no verification
+# off-switch either way. The public
+# snapshot builds on the same Trust pin as the private repo (a public user
+# installs aterm, and atpkg installs Trust); `targo --unverified <verb>` and
+# `targo trust <verb>` scope verification per unit themselves.
 #
-# Apart from this header, this file is identical to the config Clean shipped
-# publicly BEFORE the trust flip (jobs cap, CPU tuning, RUST_MIN_STACK,
-# aliases) — the flip is private-only. .cargo/audit.toml and
-# .cargo/config.offline.toml are exported unchanged; only config.toml needs
-# the swap.
+# Apart from this header and the host target stanzas, this file is the private config (jobs
+# cap, CPU tuning, RUST_MIN_STACK, aliases). .cargo/audit.toml and
+# .cargo/config.offline.toml are exported unchanged.
 
 [build]
 # Limit parallel jobs to prevent OOM during compilation

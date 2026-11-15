@@ -9,7 +9,7 @@
 //! Pipeline:
 //!
 //! 1. Verify (and optionally install) external prerequisites
-//!    (`git`, `cargo`, `b3sum`, `zstd`).
+//!    (`git`, `targo`, `b3sum`, `zstd`).
 //! 2. Clone the upstream proof system sources configured in
 //!    `data/mathverse_sources.toml` via `scripts/download_all_libraries.sh`
 //!    (includes Lean 3 mathlib3).
@@ -37,7 +37,7 @@ use crate::cli::{BuildLibraryArgs, MathverseCliError};
 /// Each entry: (program name on PATH, suggested install hint for the user).
 const REQUIRED_TOOLS: &[(&str, &str)] = &[
     ("git", "brew install git  /  apt install git"),
-    ("cargo", "https://rustup.rs"),
+    ("targo", "the Trust toolchain (targo/trustc on PATH)"),
     ("b3sum", "brew install b3sum  /  cargo install b3sum"),
     ("zstd", "brew install zstd  /  apt install zstd"),
 ];
@@ -208,8 +208,11 @@ fn run_convert(data_dir: &Path) -> Result<(), MathverseCliError> {
     let bin = repo_root()?.join("target/release/mathverse_convert");
     if !bin.exists() {
         eprintln!("[build-library] building `mathverse_convert` (release profile)…");
-        let build = Command::new("cargo")
+        // The driver is targo (`$CARGO` when this runs under targo); owner
+        // directive 2026-09-28.
+        let build = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "targo".into()))
             .args([
+                "--unverified",
                 "build",
                 "--locked",
                 "--release",
@@ -223,12 +226,12 @@ fn run_convert(data_dir: &Path) -> Result<(), MathverseCliError> {
             .status()
             .map_err(|e| MathverseCliError::BuildLibraryStage {
                 stage: "convert",
-                message: format!("failed to spawn cargo build: {e}"),
+                message: format!("failed to spawn targo --unverified build: {e}"),
             })?;
         if !build.success() {
             return Err(MathverseCliError::BuildLibraryStage {
                 stage: "convert",
-                message: format!("`cargo build` exited with {build}"),
+                message: format!("`targo --unverified build` exited with {build}"),
             });
         }
     }
@@ -541,11 +544,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn which_finds_cargo() {
-        // cargo is required for the build that's running this test.
+    fn which_finds_targo() {
+        // targo is required for the build that's running this test.
         assert!(
-            which("cargo").is_some(),
-            "cargo should be on PATH for tests"
+            which("targo").is_some(),
+            "targo should be on PATH for tests"
         );
     }
 

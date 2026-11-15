@@ -129,7 +129,7 @@ BINARY="$SCRIPT_DIR/target/release/mathverse_convert"
 
 if [ ! -f "$BINARY" ]; then
     echo "Building mathverse_convert..."
-    cargo build --locked -p clean-mathverse --bin mathverse_convert --release --message-format=short -j "$CARGO_BUILD_JOBS"
+    targo --unverified build --locked -p clean-mathverse --bin mathverse_convert --release --message-format=short -j "$CARGO_BUILD_JOBS"
 fi
 
 "$BINARY" all "$DATA_DIR"

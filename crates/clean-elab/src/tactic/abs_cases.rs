@@ -20,16 +20,16 @@ use crate::unify::MetaState;
 #[non_exhaustive]
 pub struct AbsCasesConfig {
     /// Name for the non-negative case hypothesis
-    pub nonneg_name: String,
+    pub nonneg_name: clean_parser::SurfaceName,
     /// Name for the negative case hypothesis
-    pub neg_name: String,
+    pub neg_name: clean_parser::SurfaceName,
 }
 
 impl Default for AbsCasesConfig {
     fn default() -> Self {
         AbsCasesConfig {
-            nonneg_name: "h_nonneg".to_string(),
-            neg_name: "h_neg".to_string(),
+            nonneg_name: clean_parser::SurfaceName::generated_path("h_nonneg"),
+            neg_name: clean_parser::SurfaceName::generated_path("h_neg"),
         }
     }
 }
@@ -39,10 +39,10 @@ impl AbsCasesConfig {
         Self::default()
     }
 
-    pub fn with_names(nonneg: &str, neg: &str) -> Self {
+    pub fn with_names(nonneg: &clean_parser::SurfaceName, neg: &clean_parser::SurfaceName) -> Self {
         AbsCasesConfig {
-            nonneg_name: nonneg.to_string(),
-            neg_name: neg.to_string(),
+            nonneg_name: nonneg.clone(),
+            neg_name: neg.clone(),
         }
     }
 }
@@ -70,7 +70,7 @@ impl AbsCasesConfig {
 /// ENSURES: On `Ok(())`, the current goal is replaced by two sub-goals: one with
 ///   `h_nonneg : var ≥ 0` and one with `h_neg : ¬(var ≥ 0)` in their local contexts.
 /// ENSURES: The proof term uses `Or.rec` over `Classical.em (var ≥ 0)`.
-pub fn abs_cases(state: &mut ProofState, var_name: &str) -> TacticResult {
+pub fn abs_cases(state: &mut ProofState, var_name: &clean_parser::SurfaceName) -> TacticResult {
     abs_cases_with_config(state, var_name, AbsCasesConfig::new())
 }
 
@@ -82,7 +82,7 @@ pub fn abs_cases(state: &mut ProofState, var_name: &str) -> TacticResult {
 ///   if the variable is missing.
 pub fn abs_cases_with_config(
     state: &mut ProofState,
-    var_name: &str,
+    var_name: &clean_parser::SurfaceName,
     config: AbsCasesConfig,
 ) -> TacticResult {
     if state.goals.is_empty() {
@@ -95,7 +95,8 @@ pub fn abs_cases_with_config(
     let var_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == var_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, var_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(var_name.to_string()))?;
 
     // Check if the type is numeric (Int, Real, Rat, etc.)
@@ -104,8 +105,8 @@ pub fn abs_cases_with_config(
         return Err(TacticError::InvalidTarget {
             tactic: "abs_cases".into(),
             detail: format!(
-                "{var_name} has type {:?}, expected numeric type",
-                var_decl.ty
+                "{var_name} has type {}, expected numeric type",
+                crate::error_render::term(&var_decl.ty)
             ),
         });
     }
@@ -145,24 +146,26 @@ pub fn abs_cases_with_config(
     // Case 1: x ≥ 0
     let mut case1_ctx = local_ctx.clone();
     case1_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: nonneg_fvar,
         name: config.nonneg_name,
         ty: ge_zero.clone(),
         value: None,
     });
 
-    // Case 2: ¬(x ≥ 0) — constructed as Pi(ge_zero, False) to match
-    // Classical.em's structural output: Or P (P → False), NOT Or P (Not P).
-    // Part of #2154: the App(Not, P) form caused a structural mismatch with
-    // Classical.em, making the Or.rec proof ill-typed for close_goal.
-    let false_const = Expr::const_(clean_kernel::name::Name::from_string("False"), vec![]);
-    let not_ge_zero_ty = Expr::pi(
-        clean_kernel::BinderInfo::Default,
+    // Case 2: `¬(x ≥ 0)`, with the `Not` head. Lean states this hypothesis with the `Not` head; simp reads a
+    // negation off that head only, so a `c → False` here would not rewrite
+    // `c` to `False` (`tests_simp_lemma_sources`).
+    // `Not P` unfolds to `P → False`, so the `Or.rec` over `Classical.em`
+    // still typechecks (#2154 was the arrow and `Not` forms MIXED within one
+    // proof; every occurrence here uses this one term).
+    let not_ge_zero_ty = Expr::app(
+        Expr::const_(clean_kernel::name::Name::from_string("Not"), vec![]),
         ge_zero.clone(),
-        false_const,
     );
     let mut case2_ctx = local_ctx;
     case2_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: neg_fvar,
         name: config.neg_name,
         ty: not_ge_zero_ty.clone(),
@@ -178,6 +181,7 @@ pub fn abs_cases_with_config(
         meta_id: case1_meta,
         target: original_target.clone(),
         local_ctx: case1_ctx,
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
 
@@ -185,6 +189,7 @@ pub fn abs_cases_with_config(
         meta_id: case2_meta,
         target: original_target.clone(),
         local_ctx: case2_ctx,
+        case_binders: goal.case_binders.clone(),
         tag: None,
     };
 

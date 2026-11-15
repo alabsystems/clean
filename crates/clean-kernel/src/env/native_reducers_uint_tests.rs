@@ -5,6 +5,7 @@
 //! Tests for UInt native reducer functions (native_reducers_uint.rs).
 
 use super::*;
+use crate::level::Level;
 use crate::tc::TypeChecker;
 
 fn assert_nat_result(result: Option<Expr>, expected: u64) {
@@ -312,11 +313,21 @@ fn test_uint_native_reducer_registration() {
 
 #[test]
 fn test_reduce_native_fires_for_uint8_add() {
-    let mut env = Environment::new();
+    // RE-DECIDED 2026-09-28 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`,
+    // "every world pins only reviewed folds"): `UInt8.add`'s reducer fires only
+    // on raw `Nat` payloads, which no well-typed `UInt8` argument is, so the
+    // review never saw it fire over the prelude's definition and its row is
+    // not `fold`. Through the kernel it no longer fires (the term δ-unfolds);
+    // the reducer's arithmetic stays pinned by calling it directly.
+    let mut env = Environment::with_prelude();
     env.init_uint_native_reducers();
     let tc = TypeChecker::new(&env);
     let expr = mk_binary_app(&names::UINT8_ADD, u8::MAX as u64, 1);
-    assert_nat_result(tc.reduce_native_for_test(&expr), 0);
+    assert!(tc.reduce_native_for_test(&expr).is_none());
+    assert_nat_result(
+        reduce_uint8_add(&[&Expr::nat_lit(u64::from(u8::MAX)), &Expr::nat_lit(1)]),
+        0,
+    );
 }
 
 #[test]

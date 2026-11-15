@@ -1,0 +1,50 @@
+# VF5 over SemR (docs/DECISIONS.md R169, R170): the VF4 theory `theories/chk_lia`
+# first, then trust-ir's SemR — the `semr` family's `SemR.lean`, Clean's one copy
+# of trust-ir `lean/semr/SemR.lean` (`from semr SemR`; `vf5_f1_reference.rs` pins
+# its digest) — then the F1
+# calculus and its proofs and the mutants, then the modules
+# `scripts/vf5_f1_producer.py` GENERATES (`VF5Rows`, `VF5MutantRows`, `VF7Rows`,
+# `VF5AtermRows`, `VF5D2bRows1` … `VF5D2bRows10`, `VF5PM1Rows1` … `VF5PM1Rows6`), then the
+# statement pins (`VF5Spec`, which imports every other module).
+theory chk_lia
+from semr SemR
+VF5Sem
+VF5Calc
+VF5Lemmas
+VF5Ops
+VF7Bits
+VF5Bin
+VF5Cmp
+VF5Ovf
+VF5Env
+VF5Step
+VF5Call
+VF5Frame
+VF5Sound
+VF5Compose
+VF5Check
+VF5Mutants
+VF5Enum
+VF5Rows
+VF5MutantRows
+VF7Rows
+VF5AtermRows
+VF5D2bRows1
+VF5D2bRows2
+VF5D2bRows3
+VF5D2bRows4
+VF5D2bRows5
+VF5D2bRows6
+VF5D2bRows7
+VF5D2bRows8
+VF5D2bRows9
+VF5D2bRows10
+VF5PM1Rows1
+VF5PM1Rows2
+VF5PM1Rows3
+VF5PM1Rows4
+VF5PM1Rows5
+VF5PM1Rows6
+VF5Spec
+run GenVF5Forged.lean VF5Forged.olean forged
+run GenVF5Forged.lean VF5Honest.olean honest

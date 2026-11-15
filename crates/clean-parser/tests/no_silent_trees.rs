@@ -41,9 +41,10 @@ fn tree_has_synthetic_placeholder(e: &SurfaceExpr) -> bool {
 }
 
 fn has_named_def(decls: &[SurfaceDecl], expected: &str) -> bool {
+    let expected = clean_parser::SurfaceName::generated_path(expected);
     decls
         .iter()
-        .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name == expected))
+        .any(|decl| matches!(decl, SurfaceDecl::Def { name, .. } if name == &expected))
 }
 
 /// Exercise both contracts for a recoverable file error:
@@ -132,10 +133,25 @@ fn brick3_separator_set_builder_is_real_not_fabricated() {
     let rendered = format!("{expr:?}");
     for expected in ["setOf", "Membership.mem", "And"] {
         assert!(
-            rendered.contains(expected),
+            debug_mentions_name(&rendered, expected),
             "separator set-builder must retain `{expected}` in its lowering: {expr:?}"
         );
     }
+}
+
+/// Does a `Debug` rendering name the dotted constant `dotted`?
+///
+/// Names are TYPED: a `SurfaceName` renders its components as
+/// `suffix: ["Membership", "mem"]`, never as the dotted string, so a bare
+/// `contains("Membership.mem")` can never match a multi-component name. That
+/// is how this check went red while the lowering was right — the tree carried
+/// `Membership.mem` all along, split into its two components. Matching the
+/// component list keeps the Debug-based check's immunity to new `SurfaceExpr`
+/// variants (see `debug_has_synthetic_placeholder`) while reading names the
+/// way they are actually stored.
+fn debug_mentions_name(rendered: &str, dotted: &str) -> bool {
+    let components: Vec<String> = dotted.split('.').map(|c| format!("{c:?}")).collect();
+    rendered.contains(&format!("suffix: [{}]", components.join(", ")))
 }
 
 /// Brick-3 landing check for the former P0-4 residual `a ×ˢ b` (set product).
@@ -152,7 +168,7 @@ fn brick3_set_product_superscript_is_real_not_fabricated() {
         matches!(
             &expr,
             SurfaceExpr::App(_, func, args)
-                if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "SProd.sprod")
+                if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name.name() == clean_parser::SurfaceName::generated_path("SProd.sprod").name())
                     && args.len() == 2
         ),
         "`a ×ˢ b` must lower to the binary SProd.sprod application: {expr:?}"
@@ -336,7 +352,9 @@ fn malformed_termination_hints_are_structured_recoveries_without_holes() {
             .find_map(|decl| match decl {
                 SurfaceDecl::Def {
                     name, termination, ..
-                } if name == "bad" => Some(termination),
+                } if name.name() == clean_parser::SurfaceName::generated_path("bad").name() => {
+                    Some(termination)
+                }
                 _ => None,
             })
             .expect("bad definition must survive");
@@ -382,7 +400,9 @@ fn duplicate_termination_hints_recover_with_progress_and_keep_the_first_hint() {
             .find_map(|decl| match decl {
                 SurfaceDecl::Def {
                     name, termination, ..
-                } if name == "bad" => Some(termination),
+                } if name.name() == clean_parser::SurfaceName::generated_path("bad").name() => {
+                    Some(termination)
+                }
                 _ => None,
             })
             .expect("definition with first valid hint must survive");

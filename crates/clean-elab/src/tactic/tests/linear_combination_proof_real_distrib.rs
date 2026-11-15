@@ -75,8 +75,9 @@ fn setup_real_scaled_replay_goal(goal_lhs: Expr, goal_rhs: Expr) -> ProofState {
         make_eq(real.clone(), goal_lhs, goal_rhs),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h1".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_eq(
                     real.clone(),
                     real_mul(2, real_var("a")),
@@ -85,8 +86,9 @@ fn setup_real_scaled_replay_goal(goal_lhs: Expr, goal_rhs: Expr) -> ProofState {
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h2".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_eq(real, real_var("c"), real_var("d")),
                 value: None,
             },
@@ -142,7 +144,10 @@ fn test_proof_builder_real_left_commuted_distrib_bridge_closes_without_trust() {
     let proof = build_linear_combination_eq_proof(
         &state,
         &goal,
-        &[LinearCoeff::one("h1"), LinearCoeff::int("h2", 2)],
+        &[
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::int(&clean_parser::SurfaceName::generated_path("h2"), 2),
+        ],
     )
     .expect("left commuted Real distributivity bridge should reconstruct a proof");
     assert!(
@@ -171,7 +176,10 @@ fn test_proof_builder_real_right_commuted_distrib_bridge_closes_without_trust() 
     let proof = build_linear_combination_eq_proof(
         &state,
         &goal,
-        &[LinearCoeff::one("h1"), LinearCoeff::int("h2", 2)],
+        &[
+            LinearCoeff::one(&clean_parser::SurfaceName::generated_path("h1")),
+            LinearCoeff::int(&clean_parser::SurfaceName::generated_path("h2"), 2),
+        ],
     )
     .expect("right commuted Real distributivity bridge should reconstruct a proof");
     assert!(

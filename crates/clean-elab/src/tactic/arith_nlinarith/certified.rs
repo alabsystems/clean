@@ -150,8 +150,11 @@ fn build_negated_goal_row_decl(
 
     let fvar = state.fresh_fvar();
     let decl = crate::tactic::LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: format!("nlinarith_goal_row_{}", fvar.as_u64()),
+        name: clean_parser::SurfaceName::from_name(
+            Name::anon().str("nlinarith_goal_row").num(fvar.as_u64()),
+        ),
         ty: rewritten_ty,
         value: Some(proof_value.clone()),
     };
@@ -169,7 +172,12 @@ fn build_replay_context(
     let mut wrapper = ReplayWrapper::Direct;
 
     let mut contradiction_state = state.clone();
-    if by_contra(&mut contradiction_state, "nlinarith_not_goal").is_ok() {
+    if by_contra(
+        &mut contradiction_state,
+        &clean_parser::SurfaceName::generated_path("nlinarith_not_goal"),
+    )
+    .is_ok()
+    {
         if let Some(mut contradiction_goal) = contradiction_state.current_goal().cloned() {
             if let Some(negated_goal_decl) = contradiction_goal.local_ctx.last().cloned() {
                 if let Some(goal_row_decl) = build_negated_goal_row_decl(

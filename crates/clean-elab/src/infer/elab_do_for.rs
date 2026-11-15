@@ -4,7 +4,10 @@
 
 //! ForIn loop elaboration for do-notation (#1818 Phase 4C).
 //!
-//! Handles `for x in xs do body` by building `ForIn.forIn` applications.
+//! Handles `for x in xs do body` by building the INLINED `List.forIn`
+//! recursion (`List.rec` + `ForInStep.rec`) — see the lowering comment at the
+//! bottom of `elab_do_for_core` for why the `ForIn.forIn` PROJECTION cannot be
+//! applied in Clean's prelude.
 //! When the body contains break/continue, sets up a `DoLoopContext` so
 //! that break -> ForInStep.done and continue -> ForInStep.yield directly,
 //! matching Lean 4 BuiltinDo/For.lean.
@@ -85,7 +88,7 @@ impl<'a> ElabCtx<'a> {
         binder: &SurfaceBinder,
         collection: &SurfaceExpr,
         body: &[DoElem],
-    ) -> Result<(Expr, Vec<(String, FVarId, Expr)>, Option<Expr>, Expr), ElabError> {
+    ) -> Result<(Expr, Vec<(SurfaceName, FVarId, Expr)>, Option<Expr>, Expr), ElabError> {
         // Collection and instance elaboration are nested judgments and may
         // temporarily install their own expected type. Capture the enclosing
         // do-result type before entering either judgment.
@@ -118,11 +121,6 @@ impl<'a> ElabCtx<'a> {
         // be unified) would block resolution. (Track EE.)
         let u_rho = do_u.clone();
         let u_alpha = do_u.clone();
-
-        let for_in_const = Expr::const_(
-            Name::from_string("ForIn.forIn"),
-            vec![do_u.clone(), do_v.clone(), u_rho.clone(), u_alpha.clone()],
-        );
 
         // ρ : Type u_rho and α : Type u_alpha, i.e. their *types* are
         // `Sort (succ u_rho)` / `Sort (succ u_alpha)`. (The pre-existing code
@@ -159,7 +157,7 @@ impl<'a> ElabCtx<'a> {
             self.resolve_instance(&goal_ty)
                 .ok_or_else(|| ElabError::FailedToSynthesize {
                     class_name: Name::from_string("ForIn"),
-                    goal: format!("{goal_ty:?}"),
+                    goal: crate::error_render::term(&goal_ty),
                 })?;
         self.enforce_expr_type(&inst, &goal_ty)?;
 
@@ -235,7 +233,7 @@ impl<'a> ElabCtx<'a> {
 
         // Push loop variable (x : alpha) and accumulator (acc : beta)
         let fvar_x = self.push_local(binder.name.clone(), loop_var_ty.clone());
-        let fvar_acc = self.push_local("__do_acc".to_string(), beta.clone());
+        let fvar_acc = self.push_local(SurfaceName::unspellable("__do_acc", 0), beta.clone());
 
         // Destructure accumulator at iteration start.
         // When returns_early AND has_reassigns, the accumulator is
@@ -327,13 +325,12 @@ impl<'a> ElabCtx<'a> {
             );
 
             // pure (ForInStep.yield acc) : m (ForInStep β)
-            let pure_const = Expr::const_(
-                Name::from_string("Pure.pure"),
-                vec![do_u.clone(), do_v.clone()],
-            );
-            let yield_pure = Expr::apps(
-                pure_const,
-                [m.clone(), for_in_step_beta.clone(), yield_expr],
+            let yield_pure = self.mk_pure_term(
+                do_u.clone(),
+                do_v.clone(),
+                m.clone(),
+                for_in_step_beta.clone(),
+                yield_expr,
             );
 
             // The discarded result binder is typed at the bind's `α` (the inner
@@ -347,28 +344,24 @@ impl<'a> ElabCtx<'a> {
                     expected: "for-loop body action of type `m α`".into(),
                     actual: self
                         .infer_type(&body_expr)
-                        .map(|ty| format!("{:?}", self.metas.instantiate(&ty)))
+                        .map(|ty| crate::error_render::term(&self.metas.instantiate(&ty)))
                         .unwrap_or_else(|err| format!("untypable body ({err})")),
                 })?;
-            let fvar_discard = self.push_local("_".to_string(), bind_alpha.clone());
+            let fvar_discard =
+                self.push_local(SurfaceName::generated_path("_"), bind_alpha.clone());
             let yield_abs = yield_pure.abstract_fvar(fvar_discard);
             self.pop_local();
             let yield_cont = Expr::lam(BinderInfo::Default, bind_alpha.clone(), yield_abs);
 
             // body_expr >>= yield_cont : m (ForInStep β)
-            let bind_const = Expr::const_(
-                Name::from_string("Bind.bind"),
-                vec![do_u.clone(), do_v.clone()],
-            );
-            Expr::apps(
-                bind_const,
-                [
-                    m.clone(),
-                    bind_alpha,
-                    for_in_step_beta,
-                    body_expr,
-                    yield_cont,
-                ],
+            self.mk_bind_term(
+                do_u.clone(),
+                do_v.clone(),
+                m.clone(),
+                bind_alpha,
+                for_in_step_beta,
+                body_expr,
+                yield_cont,
             )
         };
 
@@ -382,7 +375,7 @@ impl<'a> ElabCtx<'a> {
         for (shadow_name, shadow_fvar, shadow_ty, proj_expr) in shadow_vars.iter().rev() {
             let abs = sequenced_body.abstract_fvar(*shadow_fvar);
             sequenced_body = Expr::let_named(
-                Name::from_string(shadow_name),
+                shadow_name.name().clone(),
                 shadow_ty.clone(),
                 proj_expr.clone(),
                 abs,
@@ -408,15 +401,87 @@ impl<'a> ElabCtx<'a> {
         let inner_lam = Expr::lam(BinderInfo::Default, beta.clone(), body_abs);
         let outer_lam = Expr::lam(BinderInfo::Default, loop_var_ty, inner_lam);
 
-        // Build: @ForIn.forIn.{u1,u2,u,v} m rho alpha inst beta xs init body
-        let e = Expr::app(for_in_const, m);
-        let e = Expr::app(e, rho);
-        let e = Expr::app(e, alpha);
-        let e = Expr::app(e, inst);
-        let e = Expr::app(e, beta.clone());
-        let e = Expr::app(e, collection_expr);
-        let e = Expr::app(e, init);
-        let for_in_expr = Expr::app(e, outer_lam);
+        // Lower to the INLINED `List.forIn` recursion, NOT to an application of
+        // the `ForIn.forIn` projection.
+        //
+        // `ForIn.forIn`'s registered telescope is NINE binders
+        // (`clean-kernel` `env/data_for_in.rs::init_for_in`):
+        //   {m} {ρ} {α} [self : ForIn m ρ α] {β} [Monad m]
+        //     (x : ρ) (b : β) (f : α → β → m (ForInStep β)) : m β
+        // The `[Monad m]` binder sits between `{β}` and `(x : ρ)`; it was added
+        // by `1d18d151c` (2026-06-28) for `.olean` fidelity with real Lean.
+        // Measured 2026-09-16 on `target/debug/clean check`:
+        // `@List.forIn Id Nat Nat xs 0 f` reports `Type mismatch: expected
+        // Monad Id, got rigid head/arity mismatch: List vs Monad`, so that slot
+        // really is the fourth explicit argument.
+        //
+        // The code that stood here applied EIGHT arguments to that telescope, so
+        // `collection` landed in the `[Monad m]` slot, `init` in `(x : ρ)`, the
+        // step lambda in `(b : β)`, and the step argument was never supplied.
+        // `ElabCtx::infer_type` runs the kernel with `infer_only = true`, so the
+        // misplaced arguments were never checked: the application's type came
+        // back as the LEFTOVER Pi `(α → β → m (ForInStep β)) → m β`. That is not
+        // an `m α`, so `try_extract_bind_inner_type` returned `None` and
+        // `mk_bind_app` substituted a fresh metavariable for the bind's `α` that
+        // nothing ever assigned. Measured before this change, `clean check` of
+        // `def f (xs : List String) : IO Unit := do / for x in xs do / IO.println x`
+        // failed with
+        // `def f: elaboration left unresolved variables (unsolved metavariables ?[4])`.
+        //
+        // Supplying the missing argument was not available when this was
+        // written: `Monad` was an INSTANCE-LESS opaque axiom carrier, so no
+        // term of type `Monad m` existed for any `m`. Since 2026-09-28
+        // `Monad` is Lean's class with real instances
+        // (`env/data_monad_classes.rs`), so applying `ForIn.forIn` is now
+        // possible; the inlined fold is kept because it is the term the
+        // mutable-state lane already emits and the kernel already accepts.
+        //
+        // `build_list_forin_fold` emits `List.forIn`'s own kernel-registered
+        // body (`List.rec` + `ForInStep.rec` + `Bind.bind`/`Pure.pure`)
+        // specialised to this block's monad — the very term the mutable-state
+        // lane (`elab_do_pure_for`) already emits and the kernel already
+        // accepts — and it needs no `Monad` instance at all.
+        //
+        // `ρ` was pinned to the collection's type by `enforce_expr_type` above
+        // and then unified by `instForInList` against
+        // `ForIn m (List.{do_u} α) α`, so a RESOLVED `ForIn` instance leaves `ρ`
+        // as `List.{do_u} α` — exactly the shape and universe
+        // `build_list_forin_fold` reconstructs.
+        let rho_inst = self.whnf(&self.metas.instantiate(&rho));
+        let list_name = Name::from_string("List");
+        let elem_ty = match rho_inst.kind() {
+            ExprKind::App(head, elem) if matches!(head.kind(), ExprKind::Const(n, _) if *n == list_name) => {
+                elem.as_ref().clone()
+            }
+            // Unreachable with today's instance table — `instForInList` is the
+            // only registered `ForIn` instance, so the `resolve_instance` above
+            // already refuses every non-`List` collection with
+            // `FailedToSynthesize`. Kept so that ADDING a `ForIn` instance for a
+            // collection this fold cannot walk fails LOUD here instead of
+            // silently emitting a term the kernel will reject.
+            _ => {
+                return Err(ElabError::Unsupported {
+                    feature: format!(
+                        "`for x in xs do …` lowers to the inlined `List.forIn` \
+                         recursion, so only `List` collections are supported in a \
+                         non-mutating `do` block; this one iterates `{}` (only \
+                         `List` has a `ForIn` instance in Clean's prelude)",
+                        crate::error_render::term(&rho_inst)
+                    ),
+                })
+            }
+        };
+
+        let for_in_expr = self.build_list_forin_fold(
+            &elem_ty,
+            &beta,
+            &m,
+            &do_u,
+            &do_v,
+            &collection_expr,
+            &init,
+            &outer_lam,
+        );
 
         Ok((beta, mut_var_info, return_type, for_in_expr))
     }
@@ -430,8 +495,8 @@ impl<'a> ElabCtx<'a> {
     fn compute_mut_var_accumulator(
         &mut self,
         control_info: &elab_do_control::ControlInfo,
-    ) -> Result<(Expr, Expr, Vec<(String, FVarId, Expr)>), ElabError> {
-        let mut mut_var_info: Vec<(String, FVarId, Expr)> = Vec::new();
+    ) -> Result<(Expr, Expr, Vec<(SurfaceName, FVarId, Expr)>), ElabError> {
+        let mut mut_var_info: Vec<(SurfaceName, FVarId, Expr)> = Vec::new();
         for name in &control_info.reassigns {
             let found = self
                 .locals
@@ -455,13 +520,13 @@ impl<'a> ElabCtx<'a> {
             ));
         }
 
-        let sigma_types: Vec<(String, Expr)> = mut_var_info
+        let sigma_types: Vec<(SurfaceName, Expr)> = mut_var_info
             .iter()
             .map(|(name, _, ty)| (name.clone(), ty.clone()))
             .collect();
         let beta = elab_do_prod::build_sigma_type(self, &sigma_types)?;
 
-        let sigma_vals: Vec<(String, Expr, Expr)> = mut_var_info
+        let sigma_vals: Vec<(SurfaceName, Expr, Expr)> = mut_var_info
             .iter()
             .map(|(name, fvar, ty)| (name.clone(), Expr::fvar(*fvar), ty.clone()))
             .collect();
@@ -480,13 +545,13 @@ impl<'a> ElabCtx<'a> {
     pub(super) fn destructure_acc_from_expr(
         &mut self,
         acc_expr: Expr,
-        mut_var_info: &[(String, FVarId, Expr)],
-    ) -> Result<Vec<(String, FVarId, Expr, Expr)>, ElabError> {
+        mut_var_info: &[(SurfaceName, FVarId, Expr)],
+    ) -> Result<Vec<(SurfaceName, FVarId, Expr, Expr)>, ElabError> {
         if mut_var_info.is_empty() {
             return Ok(vec![]);
         }
 
-        let sigma_types: Vec<(String, Expr)> = mut_var_info
+        let sigma_types: Vec<(SurfaceName, Expr)> = mut_var_info
             .iter()
             .map(|(n, _, ty)| (n.clone(), ty.clone()))
             .collect();
@@ -507,13 +572,13 @@ impl<'a> ElabCtx<'a> {
     fn build_yield_acc_value(
         &self,
         fvar_acc: FVarId,
-        shadow_vars: &[(String, FVarId, Expr, Expr)],
+        shadow_vars: &[(SurfaceName, FVarId, Expr, Expr)],
     ) -> Result<Expr, ElabError> {
         if shadow_vars.is_empty() {
             return Ok(Expr::fvar(fvar_acc));
         }
 
-        let vars: Vec<(String, Expr, Expr)> = shadow_vars
+        let vars: Vec<(SurfaceName, Expr, Expr)> = shadow_vars
             .iter()
             .map(|(name, fvar, ty, _)| (name.clone(), Expr::fvar(*fvar), ty.clone()))
             .collect();

@@ -19,7 +19,7 @@ fn test_match_ctor_arity_mismatch_excess_subpatterns() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -28,10 +28,10 @@ fn test_match_ctor_arity_mismatch_excess_subpatterns() {
             SurfaceMatchArm {
                 span: Span::dummy(),
                 pattern: SurfacePattern::Ctor(
-                    "Nat.succ".to_string(),
+                    SurfaceName::generated_path("Nat.succ"),
                     vec![
-                        SurfacePattern::Var("x".to_string()),
-                        SurfacePattern::Var("y".to_string()),
+                        SurfacePattern::Var(SurfaceName::generated_path("x")),
+                        SurfacePattern::Var(SurfaceName::generated_path("y")),
                     ],
                 ),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
@@ -72,7 +72,7 @@ fn test_match_ctor_arity_mismatch_missing_subpatterns() {
     })
     .unwrap();
 
-    let scrutinee = SurfaceExpr::Ident(Span::dummy(), "n".to_string());
+    let scrutinee = SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path("n"));
     let match_expr = SurfaceExpr::Match(
         Span::dummy(),
         None,
@@ -80,7 +80,7 @@ fn test_match_ctor_arity_mismatch_missing_subpatterns() {
         vec![
             SurfaceMatchArm {
                 span: Span::dummy(),
-                pattern: SurfacePattern::Ctor("Nat.succ".to_string(), vec![]),
+                pattern: SurfacePattern::Ctor(SurfaceName::generated_path("Nat.succ"), vec![]),
                 body: SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0)),
             },
             SurfaceMatchArm {
@@ -122,11 +122,17 @@ fn test_if_let_ctor_arity_mismatch_returns_error() {
     let surface = SurfaceExpr::IfLet(
         Span::dummy(),
         SurfacePattern::Ctor(
-            "Bool.true".to_string(),
-            vec![SurfacePattern::Var("x".to_string())],
+            SurfaceName::generated_path("Bool.true"),
+            vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
         ),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "b".to_string())),
-        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("b"),
+        )),
+        Box::new(SurfaceExpr::Ident(
+            Span::dummy(),
+            SurfaceName::generated_path("x"),
+        )),
         Box::new(SurfaceExpr::Lit(Span::dummy(), SurfaceLit::Nat(0))),
     );
 
@@ -162,17 +168,23 @@ fn test_do_match_ctor_arity_mismatch_returns_error() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "b".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("b"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::Ctor(
-                        "Bool.true".to_string(),
-                        vec![SurfacePattern::Var("x".to_string())],
+                        SurfaceName::generated_path("Bool.true"),
+                        vec![SurfacePattern::Var(SurfaceName::generated_path("x"))],
                     )],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "x".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("x"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -180,7 +192,10 @@ fn test_do_match_ctor_arity_mismatch_returns_error() {
                     patterns: vec![SurfacePattern::Wildcard],
                     body: vec![DoElem::Expr(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "b".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("b"),
+                        )),
                     )],
                 },
             ],

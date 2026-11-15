@@ -12,7 +12,7 @@
 //! enum id is the ORIGINAL SPECIMEN of the whole-crate drift class the tag
 //! table exists for: observed at 181/181/176 over the producer A/B record's
 //! three dumps, 182 on the 2026-08-21 laneREG dump, and pinned at the
-//! fixture-era 184 that readers B and C are compared against.
+//! fixture-era 225 (184 before the 2026-10-07 rebaseline) that readers B and C are compared against.
 //!
 //! **The migration diff, printed before adoption** (the rule the flagship's
 //! wrong exhaustive flag made mandatory: a divergence is a FINDING): TWELVE
@@ -20,22 +20,21 @@
 //! equal — `ir_ep_b0` inlines `(IRTy.uint_ ir_d8)` where the hand line named
 //! `ir_tU8`, and `ir_ep_b1`..`b11` spell each arm constant as the raw
 //! `(IRConst.aggv (IRConst.vcons (IRConst.int_ ir_dK) IRConst.vnil))` spine
-//! where the hand lines named `ir_cvar ir_dK`. `ir_ep_tstep` (the 184 pin now
+//! where the hand lines named `ir_cvar ir_dK`. `ir_ep_tstep` (the 184 pin, 225 since the 2026-10-07 rebaseline, now
 //! owned by the tag table), `ir_ep_b12`, `ir_ep_func` and `ir_ep_module`
 //! minted byte-identical. NO semantic divergence; every downstream `ir_ep_*`
 //! theorem kept proving unchanged, all eleven executed arm witnesses and the
 //! junk-payload witness included.
 //!
 //! **What is new here relative to the fourteen earlier minted chains:** the
-//! first minted chain whose JOIN binds an AGGREGATE (`bb12(%1: enum.184)`),
+//! first minted chain whose JOIN binds an AGGREGATE (`bb12(%1: enum.225)`),
 //! whose canonical pin `enum#0` is what `Tags::canon_ty`'s own doc cites; and
 //! the widest minted module yet (13 blocks, 16 lines, an 11-arm dispatch).
 
 use clean_verify::ir_mint::{self, Sx};
 
 #[allow(dead_code)]
-#[path = "crystal_a1_lineage/emitted_cfg.rs"]
-mod emitted_cfg;
+use crate::emitted_cfg;
 
 use emitted_cfg::{assert_lanes, parse_clean, parse_emitted};
 
@@ -148,7 +147,7 @@ fn m3_mint_reproduces_the_registered_script() {
 }
 
 /// **`mint::interning_id`'s LITERAL arm, on the drift class's original
-/// specimen.** 184 is outside `ir_d0..ir_d16`, so the alias spells the
+/// specimen.** 225 (184 before the 2026-10-07 rebaseline) is outside `ir_d0..ir_d16`, so the alias spells the
 /// literal — and the literal is the FIXTURE-ERA id, which none of the four
 /// recorded artifact dumps carries (181/181/176/182): the tag table, not the
 /// module and not the freshest dump, owns the pin.
@@ -159,8 +158,8 @@ fn m3_the_alias_renders_the_fixture_era_literal() {
         .lines;
     assert_eq!(
         lines.first().map(String::as_str),
-        Some("def ir_ep_tstep : IRTy := IRTy.enum_ 184"),
-        "crate id 184 is outside ir_d0..ir_d16 and must render as the literal"
+        Some("def ir_ep_tstep : IRTy := IRTy.enum_ 225"),
+        "crate id 225 is outside ir_d0..ir_d16 and must render as the literal"
     );
     assert!(
         !ir_mint::IR_EP_DEFS.contains("IRTy.enum_ 182")
@@ -195,17 +194,17 @@ fn m5_the_a1_comparator_agrees_over_the_minted_script() {
 #[test]
 fn m7_the_tag_table_still_matches_the_artifact() {
     assert!(
-        FIXTURE.contains("load enum.184, ptr %0"),
-        "the emitted body must still name enum.184; if it does not, the artifact was \
+        FIXTURE.contains("load enum.225, ptr %0"),
+        "the emitted body must still name enum.225; if it does not, the artifact was \
          re-interned and this table needs a one-line REVIEWED re-pin — which, on THIS chain, \
          has already been warranted four times by four dumps (181/181/176/182)"
     );
     assert!(
-        ir_mint::IR_EP_TAGS.contains("\"crate_id\": 184"),
+        ir_mint::IR_EP_TAGS.contains("\"crate_id\": 225"),
         "and the committed table must record it"
     );
     assert!(
-        FIXTURE.contains("(functy.859)") && ir_mint::IR_EP_TAGS.contains("\"functy\": 859"),
+        FIXTURE.contains("(functy.903)") && ir_mint::IR_EP_TAGS.contains("\"functy\": 903"),
         "same for the signature index"
     );
 }
@@ -256,12 +255,12 @@ fn m10_the_interface_pins_bite() {
     for (from, to, slot) in [
         ("bb0(%0: ptr):", "bb0(%0: u64):", "parameter"),
         (
-            "bb12(%1: enum.184):",
+            "bb12(%1: enum.225):",
             "bb12(%1: enum.181):",
             "block parameter",
         ),
         ("rustcc fn @", "ccc fn @", "calling convention"),
-        ("(functy.859)", "(functy.860)", "signature index"),
+        ("(functy.903)", "(functy.904)", "signature index"),
     ] {
         let mutated = FIXTURE.replace(from, to);
         assert_ne!(mutated, FIXTURE, "the mutation must bite: {from}");
@@ -322,7 +321,7 @@ fn m4_the_registered_kernel_term_decodes_to_the_committed_core() {
         "the ELABORATED term registered under `{MODULE_CONST}` does not decode to the committed \
          core module. This is the check that keeps `mint` out of the trusted base: reader C \
          never sees the minter's output — and on this chain it is also what pins that the \
-         registered `IRTy.enum_ 184` maps back through the tag table to the canonical enum#0 \
+         registered `IRTy.enum_ 225` maps back through the tag table to the canonical enum#0 \
          the core module carries."
     );
 }

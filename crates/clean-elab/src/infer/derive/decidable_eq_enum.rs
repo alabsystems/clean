@@ -80,8 +80,8 @@ fn ctor_is_nullary(ty: &SurfaceExpr) -> bool {
 pub(super) fn build_body(ind_name: &Name, ctor_names: &[Name], ind_type: &Expr) -> Expr {
     // Level 1 = Succ(Zero); used for casesOn motive universe, Eq.{u}, Eq.refl.{u}.
     let level_one = Level::succ(Level::zero());
-    let cases_on_name = Name::from_string(&format!("{ind_name}.casesOn"));
-    let no_confusion_name = Name::from_string(&format!("{ind_name}.noConfusion"));
+    let cases_on_name = ind_name.clone().str("casesOn");
+    let no_confusion_name = ind_name.clone().str("noConfusion");
 
     // Fully explicit Eq / Eq.refl constants at the enum's universe level
     // (X : Type 0 means u = 1 in `Eq.{u}` / `Eq.refl.{u}`).

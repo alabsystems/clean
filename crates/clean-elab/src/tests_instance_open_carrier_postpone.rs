@@ -129,7 +129,7 @@ fn laundering_env() -> Environment {
     elab_ok(
         &mut env,
         "def bridgeInhabited {a : Type} [inst : MyU a] : Inhabited a := \
-         Inhabited.mk (MyU.uniq a)\n",
+         Inhabited.mk (@MyU.uniq a inst)\n",
         "bridgeInhabited",
     );
     register_instance(&mut env, "bridgeInhabited", "Inhabited", 1000);
@@ -289,4 +289,194 @@ fn test_arithmetic_and_decidable_goals_are_unaffected() {
         "def decidableGuard (n : Nat) : Nat := if n = 0 then 1 else 2",
         "decidableGuard",
     );
+}
+
+// ---------------------------------------------------------------------------
+// The SAME grab, in the heterogeneous-operator family.
+// ---------------------------------------------------------------------------
+
+/// The registered type of `name`, rendered.
+fn const_type(env: &Environment, name: &str) -> String {
+    let c = env
+        .get_const(&Name::from_string(name))
+        .unwrap_or_else(|| panic!("`{name}` must have registered"));
+    format!("{}", c.type_)
+}
+
+#[test]
+fn test_prefix_foldl_result_is_nat_not_uint64() {
+    let mut env = Environment::with_prelude();
+    elab_ok(
+        &mut env,
+        "def foldPrefix := List.foldl (· + ·) 0 [1, 2, 3]",
+        "prefix foldl",
+    );
+    assert_eq!(const_type(&env, "foldPrefix"), "Nat");
+}
+
+#[test]
+fn test_prefix_foldl_takes_its_carrier_from_the_init_argument() {
+    let mut env = Environment::with_prelude();
+    elab_ok(
+        &mut env,
+        "def foldInt := List.foldl (· + ·) (0 : Int) [1, 2, 3]",
+        "prefix foldl at Int",
+    );
+    assert_eq!(const_type(&env, "foldInt"), "Int");
+    elab_ok(
+        &mut env,
+        "def foldU64 := List.foldl (· + ·) (0 : UInt64) [1, 2, 3]",
+        "prefix foldl at UInt64",
+    );
+    assert_eq!(const_type(&env, "foldU64"), "UInt64");
+}
+
+#[test]
+fn test_dot_notation_and_ascribed_folds_stay_nat() {
+    let mut env = Environment::with_prelude();
+    elab_ok(
+        &mut env,
+        "def foldDot := [1, 2, 3].foldl (· + ·) 0",
+        "dot foldl",
+    );
+    assert_eq!(const_type(&env, "foldDot"), "Nat");
+    elab_ok(
+        &mut env,
+        "def foldAscribed (xs : List Nat) : Nat := xs.foldl (· + ·) 0",
+        "ascribed foldl",
+    );
+    assert_eq!(const_type(&env, "foldAscribed"), "List Nat -> Nat");
+}
+
+#[test]
+fn test_ungrounded_arithmetic_lambda_is_refused_not_defaulted() {
+    let mut env = Environment::with_prelude();
+    let err = elab(&mut env, "def ungrounded := fun a b => a + b")
+        .expect("an arithmetic lambda with no carrier anywhere must not elaborate");
+    assert!(
+        !err.contains("UInt64"),
+        "the search invented a carrier instead of postponing: {err}"
+    );
+}
+
+#[test]
+fn test_grounded_arithmetic_is_unchanged() {
+    let mut env = Environment::with_prelude();
+    elab_ok(&mut env, "def litAdd : Nat := 2 + 3", "literal add");
+    elab_ok(
+        &mut env,
+        "def u64Add (a b : UInt64) : UInt64 := a + b",
+        "UInt64 add",
+    );
+    elab_ok(&mut env, "def intMul (a b : Int) : Int := a * b", "Int mul");
+    elab_ok(
+        &mut env,
+        "def p : Nat × Nat := (3, 4)
+def applied : Nat := (· + ·) p.1 p.2",
+        "applied section",
+    );
+    elab_ok(
+        &mut env,
+        "def powNat (a : Nat) : Nat := a ^ 3",
+        "heterogeneous power",
+    );
+    elab_ok(
+        &mut env,
+        "def appendList (xs ys : List Nat) : List Nat := xs ++ ys",
+        "append",
+    );
+}
+
+#[test]
+fn test_corpus_fold_and_section_shapes_are_unchanged() {
+    let mut env = Environment::with_prelude();
+    for (src, label) in [
+        (
+            "def rS2 : Nat := Array.foldl (· + ·) 0 #[1, 2, 3]",
+            "Array.foldl prefix",
+        ),
+        (
+            "theorem rC2 : Array.foldl (· + ·) 0 #[1, 2, 3] = 6 := rfl",
+            "Array.foldl computes",
+        ),
+        (
+            "def rEd2d : List Nat := [1, 2, 3].map (· * 2)",
+            "map section",
+        ),
+        (
+            "def rEd2t : Nat := rEd2d.foldl (· + ·) 0",
+            "dot foldl on a def",
+        ),
+        ("theorem rEd2te : rEd2t = 12 := rfl", "dot foldl computes"),
+        (
+            "def rSubR : Nat := [10, 4, 3].foldr (· - ·) 20",
+            "foldr section",
+        ),
+        (
+            "def rSubL : Nat := [10, 4, 3].foldl (· - ·) 20",
+            "foldl section",
+        ),
+        ("theorem rSubRv : rSubR = 6 := rfl", "foldr computes"),
+        ("theorem rSubLv : rSubL = 3 := rfl", "foldl computes"),
+        (
+            "def rRangeSum : Nat := (List.range 6).foldl (· + ·) 0",
+            "range foldl",
+        ),
+        ("def rP : Nat × Nat := (3, 4)", "pair"),
+        (
+            "theorem rAdd : ((· + ·) rP.1 rP.2) = 7 := rfl",
+            "applied section",
+        ),
+        (
+            "theorem rFlip : flip (fun a b => a - b) 1 5 = 4 := rfl",
+            "flip over an untyped lambda",
+        ),
+        (
+            "def rProdMap (p : Nat × Nat) : Nat × Nat := p.map (fun a => a + 10) (fun b => b + 20)",
+            "Prod.map over untyped lambdas",
+        ),
+        (
+            "def rAdd2 : Nat → Nat → Nat := fun a b => a + b",
+            "ascribed lambda",
+        ),
+    ] {
+        elab_ok(&mut env, src, label);
+    }
+}
+
+/// `@[default_instance]` on a HETEROGENEOUS operator class answers the
+/// all-open goal with the default instance, as Lean does.
+///
+/// Measured 2026-09-16 at HEAD with `clean check`. With
+/// `@[default_instance] instance instHAddSec : HAdd Sec Sec Sec` followed by a
+/// PLAIN `instance instHAddSec2 : HAdd Sec2 Sec2 Sec2`,
+/// `def usesDefault := fun a b => a + b` elaborated at `Sec2 -> Sec2 -> Sec2`
+/// — the MOST-RECENTLY-REGISTERED instance, not the default one; later the
+/// goal was refused instead. The cause was the parser: an `instance`
+/// declaration dropped every attribute but its priority, `@[default_instance]`
+/// included, so B99's table never saw the default (R157). Two user instances
+/// are needed to see this; with only one, the grab and the default coincide.
+/// Lean v4.30.0-rc2 answers `Sec`.
+#[test]
+fn test_default_instance_on_a_hetero_class_answers_the_open_goal() {
+    use crate::{elaborate_decl_and_register_with_context, preprocess_decl_with_context};
+    let mut env = Environment::with_prelude();
+    let mut file_ctx = crate::FileContext::new();
+    let src = "inductive Sec where\n  | mk\n\
+               \ninductive Sec2 where\n  | mk\n\
+               \ndef secAdd : Sec → Sec → Sec := fun _ _ => Sec.mk\n\
+               \ndef sec2Add : Sec2 → Sec2 → Sec2 := fun _ _ => Sec2.mk\n\
+               \n@[default_instance] instance instHAddSec : HAdd Sec Sec Sec := ⟨secAdd⟩\n\
+               \ninstance instHAddSec2 : HAdd Sec2 Sec2 Sec2 := ⟨sec2Add⟩\n\
+               \ndef usesDefault := fun a b => a + b\n";
+    let decls = parse_file(src).unwrap_or_else(|e| panic!("fixture must parse: {e:?}"));
+    for d in &decls {
+        let processed = preprocess_decl_with_context(d, &mut file_ctx);
+        if let Err(e) =
+            elaborate_decl_and_register_with_context(&mut env, &processed, &mut file_ctx)
+        {
+            panic!("every declaration must elaborate: {e:?}");
+        }
+    }
+    assert_eq!(const_type(&env, "usesDefault"), "Sec -> Sec -> Sec");
 }

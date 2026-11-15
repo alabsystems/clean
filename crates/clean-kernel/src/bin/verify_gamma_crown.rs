@@ -24,8 +24,30 @@ use clean_kernel::env::gamma_crown_verify::{
     format_csv_report, format_human_report, format_latex_report, verify_all_conjectures,
 };
 
+/// What `-h`/`--help` prints: the flags `main` reads, nothing more.
+const USAGE: &str = "\
+usage: verify_gamma_crown [--json | --csv | --latex]
+  Verifies every gamma-crown conjecture in the kernel and prints the report on stdout
+  (human-readable by default); per-conjecture progress goes to stderr. Given several
+  formats, --json wins over --csv over --latex. Exit 0 only if every conjecture passes,
+  1 when one fails, 2 on an unknown argument or a JSON serialization error.
+";
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    for arg in &args {
+        match arg.as_str() {
+            "--json" | "--csv" | "--latex" => {}
+            "-h" | "--help" => {
+                print!("{USAGE}");
+                return;
+            }
+            other => {
+                eprint!("verify_gamma_crown: unknown argument {other:?}\n{USAGE}");
+                std::process::exit(2);
+            }
+        }
+    }
     let json_mode = args.iter().any(|a| a == "--json");
     let csv_mode = args.iter().any(|a| a == "--csv");
     let latex_mode = args.iter().any(|a| a == "--latex");

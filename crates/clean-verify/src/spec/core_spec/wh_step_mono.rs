@@ -305,7 +305,7 @@ impl Specification {
             ),
             refl(
                 "(cn : Name) (us : ListType Level)",
-                "(defval_for (red_def the_red_env) cn)",
+                "(kdef_value_at (red_def the_red_env) cn us)",
                 "(KExpr.const cn us)",
             ),
             refl(

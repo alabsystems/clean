@@ -134,13 +134,13 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "bootstrap_infer_sound".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (e : KExpr) (T : KExpr), ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) (T : KExpr), ",
                 "KernelInfers tenv G e T -> TypingCtxConv tenv G e T",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) (e : KExpr) (T : KExpr) ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) (e : KExpr) (T : KExpr) ",
                     "(h : KernelInfers tenv G e T) => ",
                     "KernelInfers.rec tenv ",
                     // motive: fun G0 e0 T0 (_ : KernelInfers tenv G0 e0 T0) => TypingCtxConv tenv G0 e0 T0
@@ -192,7 +192,7 @@ impl Specification {
                     "ihb) ",
                     // const arm
                     "(fun (G0 : ListType KExpr) (nm : Name) (us : ListType Level) (A : KExpr) ",
-                    "(ht : Eq (OptionType KExpr) (tenv nm) (OptionType.some KExpr A)) => ",
+                    "(ht : Eq (OptionType KExpr) (kdecl_type_at tenv nm us) (OptionType.some KExpr A)) => ",
                     "TypingCtxConv.const tenv G0 nm us A ht) ",
                     // app arm (fields hf hwF ha hAA, then IHs ihf iha) — the load-bearing conv step
                     "(fun (G0 : ListType KExpr) (ff : KExpr) (aa : KExpr) (F : KExpr) (A : KExpr) (B : KExpr) (Ap : KExpr) ",
@@ -225,6 +225,11 @@ impl Specification {
                     "(whnf_to_preserves_def_eq Ty (KExpr.sort u) hwTy)) ",
                     "(TypingCtxConv.conv tenv G0 lv Tv lty ihv hTv) ",
                     "ihb) ",
+                    // The literal branches apply to both payload kinds. Their
+                    // representations and result types are shared with the
+                    // implementation bridge, rather than excluded by a guard.
+                    "(fun (G0 : ListType KExpr) (n : Nat) => TypingCtxConv.lit_nat tenv G0 n) ",
+                    "(fun (G0 : ListType KExpr) (n : Nat) => TypingCtxConv.lit_string tenv G0 n) ",
                     // indices + major
                     "G e T h",
                 )
@@ -261,6 +266,8 @@ impl Specification {
                 "TypingCtxConv.const".to_string(),
                 "TypingCtxConv.app".to_string(),
                 "TypingCtxConv.let_".to_string(),
+                "TypingCtxConv.lit_nat".to_string(),
+                "TypingCtxConv.lit_string".to_string(),
                 "TypingCtxConv.conv".to_string(),
                 "whnf_to_preserves_def_eq".to_string(),
                 "ctx_lookup".to_string(),

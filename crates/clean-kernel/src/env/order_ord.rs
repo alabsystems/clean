@@ -12,7 +12,7 @@
 use super::decl_builder::EnvDeclBuilder;
 use crate::env::{
     Constructor, Declaration, EnvError, Environment, InductiveDecl, InductiveType, KernelClassInfo,
-    KernelInstanceInfo, DEFAULT_INSTANCE_PRIORITY,
+    KernelInstanceInfo,
 };
 use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
@@ -192,7 +192,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (alpha_id, _alpha) = b.fresh_local(type_u.clone());
             let e = type_u.clone();
-            let e = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), e);
+            let e = b.mk_pi(alpha_id, BinderInfo::Default, type_u.clone(), e);
             b.finish(e)
         };
 
@@ -414,10 +414,14 @@ impl Environment {
             value: max_inst_value,
             is_reducible: true,
         })?;
+        // Lean 4.8.0's `Max Nat` instance (`Nat.instMax`,
+        // `Init/Data/Nat/Basic.lean:721`) has no `(priority := …)`: Lean's
+        // default, as `instMinNat`. The census never saw this row (the names
+        // differ), and at 100 `Int.instMax` (1000) outranked it.
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instMaxNat"),
             class_name: Name::from_string("Max"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
+            priority: crate::env::LEAN_DEFAULT_INSTANCE_PRIORITY,
             type_: None,
             value: None,
         });
@@ -462,7 +466,7 @@ impl Environment {
             let mut b = EnvDeclBuilder::new();
             let (a_id, _a) = b.fresh_local(type_u.clone());
             let r = Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone())));
-            let r = b.mk_pi(a_id, BinderInfo::Implicit, type_u.clone(), r);
+            let r = b.mk_pi(a_id, BinderInfo::Default, type_u.clone(), r);
             b.finish(r)
         };
 

@@ -38,7 +38,7 @@ impl<'a> ElabCtx<'a> {
         let mut_value = if loop_ctx.mut_vars.is_empty() {
             None
         } else {
-            let vars: Vec<(String, Expr, Expr)> = loop_ctx
+            let vars: Vec<(SurfaceName, Expr, Expr)> = loop_ctx
                 .mut_vars
                 .iter()
                 .map(|(name, fvar, ty)| (name.clone(), Expr::fvar(*fvar), ty.clone()))
@@ -95,10 +95,10 @@ impl<'a> ElabCtx<'a> {
                     expected: "for-loop body action of type `m α`".into(),
                     actual: self
                         .infer_type(&expr)
-                        .map(|ty| format!("{:?}", self.metas.instantiate(&ty)))
+                        .map(|ty| crate::error_render::term(&self.metas.instantiate(&ty)))
                         .unwrap_or_else(|err| format!("untypable body ({err})")),
                 })?;
-        let fvar_discard = self.push_local("_".to_string(), discard_ty.clone());
+        let fvar_discard = self.push_local(SurfaceName::generated_path("_"), discard_ty.clone());
         let yield_abs = yield_pure.abstract_fvar(fvar_discard);
         self.pop_local();
         let yield_cont = Expr::lam(BinderInfo::Default, discard_ty, yield_abs);
@@ -135,7 +135,7 @@ impl<'a> ElabCtx<'a> {
     /// uses local rebinding, NOT StateT.set.
     pub(super) fn elab_do_reassign_in_loop(
         &mut self,
-        name: &str,
+        name: &SurfaceName,
         val: &SurfaceExpr,
         rest: &[DoElem],
     ) -> Result<Expr, ElabError> {
@@ -154,7 +154,7 @@ impl<'a> ElabCtx<'a> {
         self.enforce_expr_type(&new_val, &var_ty)?;
 
         // Push a shadow local: let name := new_val
-        let shadow_fvar = self.push_local(name.to_string(), var_ty.clone());
+        let shadow_fvar = self.push_local(name.clone(), var_ty.clone());
 
         // Save old fvar and update the DoLoopContext so that subsequent
         // break/continue/yield uses the new value.
@@ -209,7 +209,7 @@ impl<'a> ElabCtx<'a> {
         self.pop_local();
 
         Ok(Expr::let_named(
-            Name::from_string(name),
+            name.name().clone(),
             var_ty,
             new_val,
             abs,
@@ -218,7 +218,7 @@ impl<'a> ElabCtx<'a> {
     }
 
     /// Check if a variable name is in the current DoLoopContext's mutable variables.
-    pub(super) fn is_loop_mut_var(&self, name: &str) -> bool {
+    pub(super) fn is_loop_mut_var(&self, name: &SurfaceName) -> bool {
         self.do_loop_ctx
             .as_ref()
             .map(|ctx| ctx.mut_vars.iter().any(|(n, _, _)| n == name))
@@ -236,7 +236,7 @@ impl<'a> ElabCtx<'a> {
         &self,
         return_component: Expr,
         rho: &Expr,
-        mut_vars: &[(String, FVarId, Expr)],
+        mut_vars: &[(SurfaceName, FVarId, Expr)],
     ) -> Result<Expr, ElabError> {
         if mut_vars.is_empty() {
             // No mut vars: accumulator IS the Option ρ value.
@@ -244,14 +244,14 @@ impl<'a> ElabCtx<'a> {
         }
 
         // Build the mutable variable product value.
-        let mut_var_vals: Vec<(String, Expr, Expr)> = mut_vars
+        let mut_var_vals: Vec<(SurfaceName, Expr, Expr)> = mut_vars
             .iter()
             .map(|(name, fvar, ty)| (name.clone(), Expr::fvar(*fvar), ty.clone()))
             .collect();
         let mut_value = elab_do_prod::build_sigma_value(self, &mut_var_vals)?;
 
         // Build the mutable variable product type.
-        let mut_var_types: Vec<(String, Expr)> = mut_vars
+        let mut_var_types: Vec<(SurfaceName, Expr)> = mut_vars
             .iter()
             .map(|(name, _, ty)| (name.clone(), ty.clone()))
             .collect();

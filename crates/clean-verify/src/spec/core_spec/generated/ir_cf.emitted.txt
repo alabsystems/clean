@@ -1,0 +1,7 @@
+fn @<core::ops::control_flow::ControlFlow<()> as core::ops::try_trait::Try>::from_output::<__trust_args@83dfc187726eb79a09d1f39794048721>(functy.350) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: ()):
+    %1 = const enum.56 { 0, phantomdata }
+    ret %1
+}

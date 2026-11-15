@@ -2,7 +2,20 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Full `add_decl`-equivalent validation for .olean constants.
+//! Full local type/value consistency checks for .olean declarations.
+//!
+//! Everything in the supplied environment that is NOT a checked declaration is
+//! assumed (the trusted starting environment, as the imports are for Lean's
+//! `replayFromImports`). The checked declarations themselves are REPLAYED in
+//! Lean's order (`verify_batch_replay.rs`, porting `Lean/Replay.lean`): each
+//! is admitted only after every checked declaration it uses, a declaration
+//! that mentions itself or sits on a dependency cycle is refused, and so is
+//! every dependent of a refused one. Every check runs in Lean's kernel theory
+//! (`KernelTheory::Lean`). A checked inductive block is replayed as Lean's
+//! replay does (`crate::replay_families`): rebuilt from its stored types by the
+//! kernel, with every stored constructor and recursor required to equal the
+//! regenerated one. This is still NOT import authority: declarations outside
+//! the checked set are assumed as registered.
 //!
 //! Unlike the fast path in `verify_batch` (which only runs `infer_type` with
 //! `infer_only=true`), this module provides `typecheck_constants_full` which:
@@ -15,16 +28,36 @@
 //! Part of #3232
 
 use clean_kernel::env::{Environment, ProofElisionStats, ProofValueElision};
+#[cfg(test)]
 use clean_kernel::expr::Expr;
-use clean_kernel::name::Name;
-use clean_kernel::tc::TypeChecker;
 #[cfg(test)]
 use clean_kernel::tc::DEFAULT_HEARTBEAT_LIMIT;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
+#[path = "local_check_roster.rs"]
+pub(crate) mod local_roster;
+#[path = "verify_batch_replay.rs"]
+pub(crate) mod replay_check;
+
+pub use replay_check::ReplayScope;
+
+/// [`typecheck_constants_full`] with a caller-built [`ReplayScope`], keeping
+/// every scheduled declaration's verdict in Lean's replay order: the engine of
+/// `clean olean replay` (`crate::replay_module`), which reports the first
+/// refusal as `leanchecker` does, and of the NDJSON front door
+/// (`crate::ndjson`).
+pub(crate) fn typecheck_constants_full_ordered(
+    env: &Environment,
+    target_names: &BTreeSet<String>,
+    scope: &ReplayScope<'_>,
+    max_heartbeats: u32,
+) -> replay_check::OrderedReplay {
+    replay_check::full_ordered(env, target_names, scope, max_heartbeats)
+}
+
 /// DEFAULT number of value-checks performed before the long-lived
-/// [`TypeChecker`] is dropped so the just-passed elidable proof VALUES can be
+/// `TypeChecker` is dropped so the just-passed elidable proof VALUES can be
 /// freed via `&mut Environment`, then rebuilt for the next chunk. Small enough
 /// to keep peak resident memory bounded (only a chunk's worth of un-freed
 /// values plus the already-elided history are ever live), large enough to
@@ -43,7 +76,7 @@ const STREAM_ELIDE_CHUNK: usize = 2048;
 /// Validation mode for type-checking .olean constants.
 ///
 /// `InferOnly` uses `infer_type` with `infer_only=true` (fast path, skips App
-/// argument and Let value checking). `Full` matches `add_decl`: `infer_sort` on
+/// argument and Let value checking). `Full` locally checks `infer_sort` on
 /// types + `check_type` on values with `infer_only=false`.
 ///
 /// Part of #3232
@@ -51,52 +84,88 @@ const STREAM_ELIDE_CHUNK: usize = 2048;
 pub enum ValidationMode {
     /// Fast path: `infer_type` with `infer_only=true` (default).
     InferOnly,
-    /// Full `add_decl`-equivalent: `infer_sort` on types + `check_type` on values.
+    /// Local `infer_sort` on types + `check_type` on values in an assumed env.
     Full,
 }
 
 impl ValidationMode {
     /// Honest, self-describing label for what a pass count under this mode
-    /// actually means. This is the audit-mandated guard against confusing a
-    /// type-only count with a genuine kernel-verified count: the two are NOT
-    /// interchangeable, so any report that emits pass/fail numbers MUST also
-    /// emit this label.
+    /// actually means. Any report that emits pass/fail numbers MUST also emit
+    /// this label.
     ///
     /// * `InferOnly` => `"type-only-infer"`: only the constant's TYPE was shown
     ///   to inhabit a Sort via `infer_type`; the proof VALUE was NOT re-checked
     ///   (App arguments and Let values are skipped under `infer_only=true`).
-    ///   This is NOT equivalent to Clean-kernel verification.
-    /// * `Full` => `"kernel-verified-full"`: `add_decl`-equivalent — every type
-    ///   passed `infer_sort` and every value passed `check_type` against its
-    ///   stated type with `infer_only=false`. A pass here is genuinely
-    ///   Clean-kernel-verified (the kernel accepted the proof value).
+    /// * `Full` => `"local-assumed-env"`: every represented type and value
+    ///   passed local checking with `infer_only=false`, IN THE ENVIRONMENT THAT
+    ///   ALREADY HOLDS EVERY OTHER IMPORTED DECLARATION.
+    ///
+    /// # The label this used to emit
+    ///
+    /// Until 2026-09-17 `Full` emitted `"kernel-verified-full"`, and reports
+    /// read that as "`add_decl`-equivalent". It is not: this function's own
+    /// module doc says the check is "NOT fresh `add_decl`, dependency-closed
+    /// replay, inductive-rule validation, or import authority". The label now
+    /// matches [`crate::recheck_closed::RecheckLevel::LocalAssumedEnv`], whose
+    /// [`proves`](crate::recheck_closed::RecheckLevel::proves) /
+    /// [`does_not_prove`](crate::recheck_closed::RecheckLevel::does_not_prove)
+    /// text is the sanctioned wording for a pass at this level, and the
+    /// dependency-closed level has its own token.
     #[must_use]
     pub(crate) fn honest_label(self) -> &'static str {
         match self {
             ValidationMode::InferOnly => "type-only-infer",
-            ValidationMode::Full => "kernel-verified-full",
+            ValidationMode::Full => crate::recheck_closed::RecheckLevel::LocalAssumedEnv.token(),
         }
     }
 
-    /// Whether a `tc_pass` produced under this mode means the proof VALUE was
-    /// genuinely re-checked by the kernel (`true` only for `Full`).
+    /// The re-check level this mode actually reaches.
+    ///
+    /// Neither mode is dependency-closed, so neither may ground a
+    /// `Certified`-class claim: see
+    /// [`RecheckLevel::may_ground_certified_class`](crate::recheck_closed::RecheckLevel::may_ground_certified_class)
+    /// and [`crate::recheck_closed::recheck_closed`], which is the level that
+    /// can.
     #[must_use]
-    pub fn is_kernel_verified(self) -> bool {
+    pub(crate) fn recheck_level(self) -> crate::recheck_closed::RecheckLevel {
+        // `InferOnly` is strictly weaker than `Full`, and both are local: they
+        // differ in how much of ONE declaration they re-derive, not in how much
+        // of the cone they visit (neither visits any of it).
+        crate::recheck_closed::RecheckLevel::LocalAssumedEnv
+    }
+
+    /// Whether a `tc_pass` produced under this mode means the proof VALUE was
+    /// re-derived at all (`true` only for `Full`).
+    ///
+    /// This says "the value was re-derived **against the assumed
+    /// environment**" and nothing more — in particular NOT that the
+    /// declaration was freshly admitted, that its dependencies were checked, or
+    /// that any inductive computation rule was validated. A caller that wants
+    /// those must run [`crate::recheck_closed::recheck_closed`].
+    #[must_use]
+    pub(crate) fn rederives_values_locally(self) -> bool {
         matches!(self, ValidationMode::Full)
     }
 }
 
-/// Full `add_decl`-equivalent validation: `infer_sort` on types + `check_type`
-/// on values with `infer_only=false`.
+/// Full LOCAL validation: `infer_sort` on types + `check_type` on values,
+/// with `infer_only=false`, against the already-populated environment.
 ///
-/// This matches what `Environment::add_decl` does during normal declaration
-/// addition. Unlike `typecheck_constants` (which only runs `infer_type` with
-/// `infer_only=true`), this function:
+/// Returns one verdict per exact typed declaration identity, plus an explicit
+/// failure per missing requested display label. Ambiguous display labels and
+/// incoherent registry mirrors fail, without skipping represented type checks.
+/// Unlike `typecheck_constants`' legacy type-projection count, this function:
 ///
 /// 1. Calls `tc.infer_sort(type_)` on every constant's type to verify it
 ///    inhabits a Sort (with full App/Let checking via `infer_only=false`).
 /// 2. For constants with values: calls `tc.check_type(value, type_)` to verify
 ///    the value has the declared type (also with `infer_only=false`).
+///
+/// The targets are checked in REPLAY ORDER (`Lean.Environment.replay`, see
+/// `verify_batch_replay.rs`): a target is admitted only after every target it
+/// uses; one that mentions itself, sits on a dependency cycle, is `unsafe`, or
+/// uses a refused target fails with a `replay order:` error, even though the
+/// supplied environment already holds it. Checks run in `KernelTheory::Lean`.
 ///
 /// WS1 re-validation reuse: instead of allocating a fresh `TypeChecker` per
 /// declaration (which discards every cross-declaration `whnf`/`def_eq`/`infer`
@@ -124,117 +193,14 @@ pub fn typecheck_constants_full(
     target_names: &BTreeSet<String>,
     max_heartbeats: u32,
 ) -> (usize, usize, BTreeMap<String, String>) {
-    let mut pass = 0usize;
-    let mut fail = 0usize;
-    let mut errors = BTreeMap::new();
-
-    // One long-lived checker for the whole batch, type cache ENABLED so shared
-    // library subterms are reduced once and reused across declarations.
-    let mut tc = TypeChecker::new(env);
-    tc.enable_type_cache_pub();
-    // SOUNDNESS: the heartbeat is a resource budget only. On exhaustion the
-    // kernel conservatively REJECTS (whnf returns a less-reduced but def-eq
-    // term; is_def_eq returns false), so raising/disabling it (0 = unlimited)
-    // cannot make an ill-typed constant pass — it only lets compute-heavy VALID
-    // constants finish their check instead of aborting with HeartbeatExceeded.
-    tc.set_heartbeat_limit(max_heartbeats);
-
-    // Phase 1: infer_sort on all types (constants, inductives, constructors, recursors)
-    let check_type_sort = |tc: &TypeChecker<'_>,
-                           name: &str,
-                           type_: &Expr,
-                           pass: &mut usize,
-                           fail: &mut usize,
-                           errors: &mut BTreeMap<String, String>| {
-        if !target_names.contains(name) {
-            return;
-        }
-        // Start each declaration from a clean context so an earlier erroring
-        // check (which may have returned before its ctx_pop) cannot leak binders.
-        tc.reset_local_context();
-        // Refill the per-constant heartbeat budget on the long-lived checker so
-        // the resource limit applies per-constant (matching add_decl), not as a
-        // pool drained across the batch. Pure resource reset — no soundness effect.
-        tc.reset_heartbeat();
-        match tc.infer_sort(type_) {
-            Ok(_) => *pass += 1,
-            Err(e) => {
-                *fail += 1;
-                errors.insert(name.to_string(), format!("infer_sort: {e:?}"));
-            }
-        }
+    let none = BTreeSet::new();
+    let no_redeclarations = BTreeMap::new();
+    let scope = ReplayScope {
+        prerequisites: &none,
+        not_admitted: &none,
+        already_declared: &no_redeclarations,
     };
-
-    for ci in env.constants() {
-        check_type_sort(
-            &tc,
-            &ci.name.to_string(),
-            &ci.type_,
-            &mut pass,
-            &mut fail,
-            &mut errors,
-        );
-    }
-    for ind in env.inductives() {
-        check_type_sort(
-            &tc,
-            &ind.name.to_string(),
-            &ind.type_,
-            &mut pass,
-            &mut fail,
-            &mut errors,
-        );
-    }
-    for ctor in env.constructors() {
-        check_type_sort(
-            &tc,
-            &ctor.name.to_string(),
-            &ctor.type_,
-            &mut pass,
-            &mut fail,
-            &mut errors,
-        );
-    }
-    for rec in env.recursors() {
-        check_type_sort(
-            &tc,
-            &rec.name.to_string(),
-            &rec.type_,
-            &mut pass,
-            &mut fail,
-            &mut errors,
-        );
-    }
-
-    // Phase 2: check_type on values (only for constants that have values)
-    for ci in env.constants() {
-        let name = ci.name.to_string();
-        if !target_names.contains(&name) {
-            continue;
-        }
-        // Skip constants that already failed infer_sort
-        if errors.contains_key(&name) {
-            continue;
-        }
-        if let Some(val) = &ci.value {
-            // Clean context per declaration; same long-lived cache-enabled checker.
-            tc.reset_local_context();
-            // Per-constant heartbeat refill (see infer_sort path above) so each
-            // value check gets the full budget independently. No soundness effect.
-            tc.reset_heartbeat();
-            match tc.check_type(val, &ci.type_) {
-                Ok(()) => {} // Already counted as pass in phase 1
-                Err(e) => {
-                    // Demote from pass to fail
-                    pass = pass.saturating_sub(1);
-                    fail += 1;
-                    errors.insert(name, format!("check_type: {e:?}"));
-                }
-            }
-        }
-    }
-
-    (pass, fail, errors)
+    replay_check::full(env, target_names, &scope, max_heartbeats)
 }
 
 /// Streaming, bounded-memory variant of [`typecheck_constants_full`].
@@ -288,125 +254,103 @@ pub fn typecheck_constants_full_streaming(
     elide: ProofValueElision,
     chunk_size: Option<usize>,
 ) -> (usize, usize, BTreeMap<String, String>, ProofElisionStats) {
-    // None policy: defer to the eager path verbatim (no &mut needed, no chunk
-    // rebuild cost) so the default flag value is provably verdict-identical.
+    typecheck_constants_full_streaming_with_prerequisites(
+        env,
+        target_names,
+        &BTreeSet::new(),
+        max_heartbeats,
+        elide,
+        chunk_size,
+    )
+}
+
+/// [`typecheck_constants_full_streaming`] with PREREQUISITES: declarations of
+/// the same module that are checked and admitted in replay order before any
+/// target that uses them, but are never counted in the result.
+///
+/// `Lean.Environment.Replay.replayConstant` replays every constant a
+/// declaration uses before the declaration itself, so checking one target of a
+/// module means checking the module-mates it reaches. A caller that re-checks a
+/// SUBSET of a module (`clean mathverse per-constant-verify --constant`) passes
+/// the module's other resident declarations here; otherwise a trusted
+/// module-mate could vouch for a target it depends on (measured: `--constant
+/// forged3_cycA` passed with `forged3_cycB := forged3_cycA` resident).
+/// A target whose prerequisite is refused is refused, naming it.
+pub(crate) fn typecheck_constants_full_streaming_with_prerequisites(
+    env: &mut Environment,
+    target_names: &BTreeSet<String>,
+    prerequisites: &BTreeSet<String>,
+    max_heartbeats: u32,
+    elide: ProofValueElision,
+    chunk_size: Option<usize>,
+) -> (usize, usize, BTreeMap<String, String>, ProofElisionStats) {
+    let scope = ReplayScope {
+        prerequisites,
+        not_admitted: &BTreeSet::new(),
+        already_declared: &BTreeMap::new(),
+    };
+    streaming_in_scope(env, target_names, scope, max_heartbeats, elide, chunk_size)
+}
+
+/// [`typecheck_constants_full_streaming`] with a caller-built [`ReplayScope`]:
+/// prerequisites, an earlier module's refusals, and the module's declarations
+/// Lean's `addDecl` would refuse as already declared (the name was held before
+/// the module was added: `clean mathverse per-constant-verify` finds them in
+/// the target's import closure).
+pub fn typecheck_constants_full_streaming_scoped(
+    env: &mut Environment,
+    target_names: &BTreeSet<String>,
+    scope: ReplayScope<'_>,
+    max_heartbeats: u32,
+    elide: ProofValueElision,
+    chunk_size: Option<usize>,
+) -> (usize, usize, BTreeMap<String, String>, ProofElisionStats) {
+    streaming_in_scope(env, target_names, scope, max_heartbeats, elide, chunk_size)
+}
+
+/// [`typecheck_constants_full_streaming`] for one module of a MULTI-module run
+/// (`clean olean verify-batch --full-validation`, which loads module after
+/// module into one environment). `not_admitted` holds the display spellings of
+/// every declaration an earlier module of the run refused. Those stay resident
+/// (the loader registered them), but in Lean's replay of the whole run they
+/// were never added. So a target that mentions one is refused, where before it
+/// type-checked against the refused declaration's type. Measured 2026-09-24:
+/// `ReplayCrossB.cross_uses_forged : False := cross_forged` passed after
+/// `ReplayCrossA.cross_forged` was refused in the same run;
+/// `leanchecker --fresh` refuses it.
+pub(crate) fn typecheck_constants_full_streaming_in_run(
+    env: &mut Environment,
+    target_names: &BTreeSet<String>,
+    not_admitted: &BTreeSet<String>,
+    already_declared: &BTreeMap<String, String>,
+    max_heartbeats: u32,
+    elide: ProofValueElision,
+    chunk_size: Option<usize>,
+) -> (usize, usize, BTreeMap<String, String>, ProofElisionStats) {
+    let scope = ReplayScope {
+        prerequisites: &BTreeSet::new(),
+        not_admitted,
+        already_declared,
+    };
+    streaming_in_scope(env, target_names, scope, max_heartbeats, elide, chunk_size)
+}
+
+fn streaming_in_scope(
+    env: &mut Environment,
+    target_names: &BTreeSet<String>,
+    scope: ReplayScope<'_>,
+    max_heartbeats: u32,
+    elide: ProofValueElision,
+    chunk_size: Option<usize>,
+) -> (usize, usize, BTreeMap<String, String>, ProofElisionStats) {
+    // None policy: the eager path verbatim (no chunk rebuild cost) so the
+    // default flag value is provably verdict-identical.
     if elide == ProofValueElision::None {
-        let (pass, fail, errors) = typecheck_constants_full(env, target_names, max_heartbeats);
+        let (pass, fail, errors) = replay_check::full(env, target_names, &scope, max_heartbeats);
         return (pass, fail, errors, ProofElisionStats::default());
     }
     let chunk_len = chunk_size.unwrap_or(STREAM_ELIDE_CHUNK).max(1);
-
-    let mut pass = 0usize;
-    let mut fail = 0usize;
-    let mut errors: BTreeMap<String, String> = BTreeMap::new();
-
-    // -- Phase 1: infer_sort on every target type (no value reads / no elision).
-    // Done under a throwaway immutable borrow; identical to the eager path.
-    {
-        let mut tc = TypeChecker::new(&*env);
-        tc.enable_type_cache_pub();
-        tc.set_heartbeat_limit(max_heartbeats);
-        let mut check_type_sort = |tc: &mut TypeChecker<'_>, name: &str, type_: &Expr| {
-            if !target_names.contains(name) {
-                return;
-            }
-            tc.reset_local_context();
-            tc.reset_heartbeat();
-            match tc.infer_sort(type_) {
-                Ok(_) => pass += 1,
-                Err(e) => {
-                    fail += 1;
-                    errors.insert(name.to_string(), format!("infer_sort: {e:?}"));
-                }
-            }
-        };
-        for ci in env.constants() {
-            check_type_sort(&mut tc, &ci.name.to_string(), &ci.type_);
-        }
-        for ind in env.inductives() {
-            check_type_sort(&mut tc, &ind.name.to_string(), &ind.type_);
-        }
-        for ctor in env.constructors() {
-            check_type_sort(&mut tc, &ctor.name.to_string(), &ctor.type_);
-        }
-        for rec in env.recursors() {
-            check_type_sort(&mut tc, &rec.name.to_string(), &rec.type_);
-        }
-    }
-
-    // Snapshot the value-bearing target constant names in the env's stable
-    // iteration order (we only ever null `value`/force `Opaque`, never insert
-    // or remove keys, so this order is invariant across chunk boundaries).
-    let value_targets: Vec<Name> = env
-        .constants()
-        .filter(|ci| {
-            ci.value.is_some()
-                && target_names.contains(&ci.name.to_string())
-                && !errors.contains_key(&ci.name.to_string())
-        })
-        .map(|ci| ci.name.clone())
-        .collect();
-
-    // -- Phase 2 (streaming): check_type on values in chunks. After each chunk
-    // we drop the checker (releasing its immutable borrow) and free the
-    // just-passed elidable values via &mut env, then rebuild for the next chunk.
-    let mut stats = ProofElisionStats::default();
-    for chunk in value_targets.chunks(chunk_len) {
-        // Names whose OWN check_type passed this chunk AND whose kind the policy
-        // elides — these get their value freed after the borrow is released.
-        let mut to_free: Vec<Name> = Vec::new();
-        {
-            let mut tc = TypeChecker::new(&*env);
-            tc.enable_type_cache_pub();
-            tc.set_heartbeat_limit(max_heartbeats);
-            for name in chunk {
-                let Some(ci) = env.get_const(name) else {
-                    continue;
-                };
-                let Some(val) = &ci.value else { continue };
-                let kind = ci.kind;
-                let name_str = name.to_string();
-                tc.reset_local_context();
-                tc.reset_heartbeat();
-                match tc.check_type(val, &ci.type_) {
-                    Ok(()) => {
-                        // Verdict already recorded as a Phase-1 pass. SOUNDNESS:
-                        // record the elision intent only AFTER success; on Err
-                        // below we never free. See `proof_elision.rs` and
-                        // `Environment::forget_proof_values_for`.
-                        if elide.elides(kind) {
-                            to_free.push(name.clone());
-                        }
-                    }
-                    Err(e) => {
-                        pass = pass.saturating_sub(1);
-                        fail += 1;
-                        errors.insert(name_str, format!("check_type: {e:?}"));
-                    }
-                }
-            }
-            // `tc` (and its immutable borrow of env) dropped here.
-        }
-        // SOUNDNESS: only NEVER-read (OpaqueOnly) or refusal-only
-        // (OpaqueAndTheorem) values are freed, strictly after their own passing
-        // check_type. See `typecheck_constants_full_streaming` doc + the kernel
-        // `forget_proof_values_for`/`unfold_definition` contracts. No unsafe.
-        let chunk_stats = env.forget_proof_values_for(to_free.iter(), elide);
-        stats.opaque_elided += chunk_stats.opaque_elided;
-        stats.theorem_elided += chunk_stats.theorem_elided;
-        stats.retained += chunk_stats.retained;
-        // MEMORY (chunk boundary, same rationale as the value elision above):
-        // release the lazy source's materialization memo so resident lazily-
-        // served constants are bounded by one chunk's working set instead of
-        // accumulating across the whole batch. No-op without a lazy source.
-        // Soundness-neutral by the `ConstantSource::fresh` contract (a fresh
-        // view materializes byte-identical constants); the checker for the
-        // next chunk is rebuilt anyway, so no cached type information spans
-        // the swap.
-        env.refresh_constant_source_cache();
-    }
-
-    (pass, fail, errors, stats)
+    replay_check::streaming(env, target_names, scope, max_heartbeats, elide, chunk_len)
 }
 
 #[cfg(test)]
@@ -416,17 +360,32 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn honest_labels_distinguish_type_only_from_kernel_verified() {
+    fn honest_labels_distinguish_type_only_from_locally_rederived() {
         // AUDIT-CRITICAL: the two modes must carry DIFFERENT honest labels, and
-        // only Full may claim the proof VALUE was kernel-verified.
+        // only Full may claim the proof VALUE was re-derived at all.
         assert_eq!(ValidationMode::InferOnly.honest_label(), "type-only-infer");
-        assert_eq!(ValidationMode::Full.honest_label(), "kernel-verified-full");
-        assert!(!ValidationMode::InferOnly.is_kernel_verified());
-        assert!(ValidationMode::Full.is_kernel_verified());
+        assert_eq!(ValidationMode::Full.honest_label(), "local-assumed-env");
+        assert!(!ValidationMode::InferOnly.rederives_values_locally());
+        assert!(ValidationMode::Full.rederives_values_locally());
         assert_ne!(
             ValidationMode::InferOnly.honest_label(),
             ValidationMode::Full.honest_label()
         );
+    }
+
+    /// The label this module emits must never claim a level it did not reach.
+    ///
+    /// `Full` reported `"kernel-verified-full"` until 2026-09-17, and reports
+    /// read that as `add_decl`-equivalent. Neither mode is dependency-closed,
+    /// so neither may ground a `Certified`-class claim.
+    #[test]
+    fn neither_mode_may_ground_a_certified_class_claim() {
+        for mode in [ValidationMode::InferOnly, ValidationMode::Full] {
+            assert!(!mode.recheck_level().may_ground_certified_class());
+            assert!(!mode.honest_label().contains("kernel-verified"));
+            assert!(!mode.honest_label().contains("full"));
+        }
+        assert!(crate::recheck_closed::RecheckLevel::ClosedReplay.may_ground_certified_class());
     }
 
     /// Resolve a committed fixture path relative to the workspace root.
@@ -494,16 +453,29 @@ mod tests {
              label would be safe to call kernel-verified, which it is not"
         );
 
-        // Each demotion is a genuine `check_type` failure on a proof VALUE
-        // (the audit's exact concern: the value was never re-checked by the
-        // type-only path).
-        let check_type_failures = full_errs
+        // Each demotion is a genuine refusal of a proof VALUE the type-only path
+        // never re-checked: the kernel's own `check_type` failure, or, since
+        // P0_SOUND, a replay-order refusal that runs BEFORE the kernel. This
+        // fixture loads into an empty environment, so `myNot.match_1` fails
+        // `infer_sort` (no `Unit`), and Lean's replay never admits `myNot`,
+        // which uses it. `myNot` used to be demoted by its own value's
+        // `check_type` (UnknownConst `Unit`); it is now refused one step
+        // earlier, naming the dependency. That is the stricter reason, pinned
+        // here exactly.
+        let value_refusals = full_errs
             .values()
-            .filter(|m| m.starts_with("check_type:"))
+            .filter(|m| m.starts_with("check_type:") || m.starts_with("replay order:"))
             .count();
         assert!(
-            check_type_failures >= 1,
-            "expected >=1 check_type (proof-value) failure among full errors"
+            value_refusals >= 1,
+            "expected >=1 proof-value refusal among full errors: {full_errs:?}"
+        );
+        assert!(
+            full_errs["myNot"].starts_with(
+                "replay order: `myNot` depends on `myNot.match_1`, which was not admitted"
+            ),
+            "{:?}",
+            full_errs.get("myNot")
         );
     }
 
@@ -890,5 +862,170 @@ mod tests {
             "unlimited budget ({unlimited_pass}) must pass >= the 1-step budget \
              ({tight_pass})"
         );
+    }
+    #[test]
+    fn not_admitted_resident_targets_and_prerequisites_refuse_transitive_users() {
+        let (mut env, _) = seeded_real_env();
+        let type_ = env
+            .get_const(&KName::from_string("T"))
+            .expect("real theorem")
+            .type_
+            .clone();
+        let base = KName::anon().str("T.literal");
+        assert_ne!(
+            base,
+            KName::from_string(&base.to_string()),
+            "display text does not preserve exact Name components"
+        );
+        env.add_decl(Declaration::Theorem {
+            name: base.clone(),
+            level_params: vec![],
+            type_: type_.clone(),
+            value: Expr::const_(KName::from_string("T"), vec![]),
+        })
+        .expect("actual checked dotted-component base");
+        for (name, dependency) in [
+            ("DIRECT", base.clone()),
+            ("TRANSITIVE", KName::from_string("DIRECT")),
+        ] {
+            env.add_decl(Declaration::Theorem {
+                name: KName::from_string(name),
+                level_params: vec![],
+                type_: type_.clone(),
+                value: Expr::const_(dependency, vec![]),
+            })
+            .expect("actual kernel-checked theorem chain");
+        }
+        let all: BTreeSet<String> = [
+            base.to_string(),
+            "DIRECT".to_owned(),
+            "TRANSITIVE".to_owned(),
+        ]
+        .into_iter()
+        .collect();
+        let none = BTreeSet::new();
+        let already_declared = BTreeMap::new();
+        let baseline = typecheck_constants_full_ordered(
+            &env,
+            &all,
+            &ReplayScope {
+                prerequisites: &none,
+                not_admitted: &none,
+                already_declared: &already_declared,
+            },
+            DEFAULT_HEARTBEAT_LIMIT,
+        );
+        assert_eq!(
+            (baseline.pass, baseline.fail),
+            (3, 0),
+            "genuine chain must admit without the refusal"
+        );
+        let not_admitted = BTreeSet::from([base.to_string()]);
+        for targets in [&all, &BTreeSet::from(["TRANSITIVE".to_owned()])] {
+            // Includes target/prerequisite overlap; the same declaration has
+            // one node, and the pre-existing refusal is binding in either role.
+            let replay = typecheck_constants_full_ordered(
+                &env,
+                targets,
+                &ReplayScope {
+                    prerequisites: &all,
+                    not_admitted: &not_admitted,
+                    already_declared: &already_declared,
+                },
+                DEFAULT_HEARTBEAT_LIMIT,
+            );
+            assert_eq!((replay.pass, replay.fail), (0, targets.len()));
+            let verdicts: BTreeMap<_, _> = replay
+                .verdicts
+                .into_iter()
+                .map(|(n, v)| (n.to_string(), v))
+                .collect();
+            assert!(
+                matches!(&verdicts[&base.to_string()], Err(crate::replay_order::ReplayRefusal::NotAdmitted { name }) if *name == base)
+            );
+            for name in ["DIRECT", "TRANSITIVE"] {
+                assert!(matches!(
+                    verdicts[name],
+                    Err(crate::replay_order::ReplayRefusal::DependsOnRefused { .. })
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn missing_value_targets_and_prerequisites_refuse_proof_chain_users() {
+        let (mut env, _) = seeded_real_env();
+        let base = KName::from_string("T");
+        let type_ = env.get_const(&base).unwrap().type_.clone();
+        for (label, dependency) in [
+            ("DIRECT", base.clone()),
+            ("TRANSITIVE", KName::from_string("DIRECT")),
+        ] {
+            env.add_decl(Declaration::Theorem {
+                name: KName::from_string(label),
+                level_params: vec![],
+                type_: type_.clone(),
+                value: Expr::const_(dependency, vec![]),
+            })
+            .expect("genuine checked proof chain before body removal");
+        }
+        let all = BTreeSet::from(["T".to_owned(), "DIRECT".to_owned(), "TRANSITIVE".to_owned()]);
+        let none = BTreeSet::new();
+        let already_declared = BTreeMap::new();
+        let scope = ReplayScope {
+            prerequisites: &all,
+            not_admitted: &none,
+            already_declared: &already_declared,
+        };
+        let baseline =
+            typecheck_constants_full_ordered(&env, &all, &scope, DEFAULT_HEARTBEAT_LIMIT);
+        assert_eq!(
+            (baseline.pass, baseline.fail),
+            (3, 0),
+            "{:?}",
+            baseline.verdicts
+        );
+        for kind in [
+            clean_kernel::env::ConstantKind::Theorem,
+            clean_kernel::env::ConstantKind::Definition,
+            clean_kernel::env::ConstantKind::Opaque,
+        ] {
+            let mut changed = env.clone();
+            let mut row = changed.get_const(&base).unwrap().clone();
+            row.kind = kind;
+            row.value = None;
+            changed.add_constant_unchecked_for_test(row);
+            for targets in [&all, &BTreeSet::from(["TRANSITIVE".to_owned()])] {
+                let replay = typecheck_constants_full_ordered(
+                    &changed,
+                    targets,
+                    &scope,
+                    DEFAULT_HEARTBEAT_LIMIT,
+                );
+                assert_eq!(
+                    (replay.pass, replay.fail),
+                    (0, targets.len()),
+                    "{:?}",
+                    replay.verdicts
+                );
+                let verdicts: BTreeMap<_, _> = replay
+                    .verdicts
+                    .into_iter()
+                    .map(|(name, verdict)| (name.to_string(), verdict))
+                    .collect();
+                assert!(
+                    matches!(&verdicts["T"], Err(crate::replay_order::ReplayRefusal::MissingValue { name }) if *name == base)
+                );
+                for label in ["DIRECT", "TRANSITIVE"] {
+                    assert!(
+                        matches!(
+                            &verdicts[label],
+                            Err(crate::replay_order::ReplayRefusal::DependsOnRefused { .. })
+                        ),
+                        "{verdicts:?}"
+                    );
+                }
+            }
+        }
     }
 }

@@ -33,12 +33,12 @@ fn mk_lra_raw_gt_normalization_case() -> ArithmeticE2eCase {
     map.register_var("const5", five.clone(), int_ty);
 
     let gt_3_3 = terms.mk_app(
-        Symbol::Named(">".to_string()),
+        Symbol::Named(">".into()),
         vec![ay_three, ay_three_b],
         Sort::Bool,
     );
     let gt_4_5 = terms.mk_app(
-        Symbol::Named(">".to_string()),
+        Symbol::Named(">".into()),
         vec![ay_four, ay_five],
         Sort::Bool,
     );
@@ -107,12 +107,12 @@ fn mk_lra_raw_ge_normalization_case() -> ArithmeticE2eCase {
 
     // Raw >= terms: mk_app bypasses normalization, matching ay preprocessing.
     let ge_2_5 = terms.mk_app(
-        Symbol::Named(">=".to_string()),
+        Symbol::Named(">=".into()),
         vec![ay_two, ay_five],
         Sort::Bool,
     );
     let ge_1_4 = terms.mk_app(
-        Symbol::Named(">=".to_string()),
+        Symbol::Named(">=".into()),
         vec![ay_one, ay_four],
         Sort::Bool,
     );

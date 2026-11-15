@@ -1,0 +1,47 @@
+/-! Application-spine recognizers over KExpr (PART 4, spine substrate for iota_step).
+
+Model unit `expr_model_spine` — moved out of `crates/clean-verify/src/spec/core_spec/expr_model.rs`
+(embed memo W1). Registered by `Specification::register_model_unit(ModelUnit::ExprModelSpine)`
+through the same `add_inductive` / `add_recursive_def` path the literals used; the
+fidelity oracle in `spec/model_units/tests.rs` pins this file against the retained
+literal. EVERY declaration must carry a `/-- ... -/` doc comment: its text is the
+registered description, byte for byte. -/
+
+/-- Head of an application spine: kapp_fn (app .. (app head a1) .. an) = head. Spine recognizer for the computational iota_step substrate. Part of #2859 (Increment A). -/
+def kapp_fn (e : KExpr) : KExpr := match e with
+| KExpr.sort n => KExpr.sort n
+| KExpr.bvar i => KExpr.bvar i
+| KExpr.app f a => kapp_fn f
+| KExpr.lam ty b => KExpr.lam ty b
+| KExpr.pi ty b => KExpr.pi ty b
+| KExpr.const n us => KExpr.const n us
+| KExpr.let_ ty v b => KExpr.let_ ty v b
+| KExpr.proj s i sub => KExpr.proj s i sub
+| KExpr.lit n => KExpr.lit n
+
+-- kapp_arg_count: the number of arguments in an application spine.
+/-- Argument count of an application spine: kapp_arg_count (app .. (app head a1) .. an) = n. Part of #2859 (Increment A). -/
+def kapp_arg_count (e : KExpr) : Nat := match e with
+| KExpr.sort n => Nat.zero
+| KExpr.bvar i => Nat.zero
+| KExpr.app f a => Nat.succ (kapp_arg_count f)
+| KExpr.lam ty b => Nat.zero
+| KExpr.pi ty b => Nat.zero
+| KExpr.const n us => Nat.zero
+| KExpr.let_ ty v b => Nat.zero
+| KExpr.proj s i sub => Nat.zero
+| KExpr.lit n => Nat.zero
+
+-- is_const_app: whether the spine head is a `const` (a candidate
+-- recursor/constructor head).
+/-- Whether an application spine is headed by a const (recursor/constructor candidate). Part of #2859 (Increment A). -/
+def is_const_app (e : KExpr) : Bool := match e with
+| KExpr.sort n => Bool.false
+| KExpr.bvar i => Bool.false
+| KExpr.app f a => is_const_app f
+| KExpr.lam ty b => Bool.false
+| KExpr.pi ty b => Bool.false
+| KExpr.const n us => Bool.true
+| KExpr.let_ ty v b => Bool.false
+| KExpr.proj s i sub => Bool.false
+| KExpr.lit n => Bool.false

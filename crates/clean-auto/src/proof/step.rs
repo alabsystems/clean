@@ -5,7 +5,7 @@
 //! Proof step types and error definitions for SMT proof reconstruction.
 
 use crate::smt::TermId;
-use clean_kernel::{Expr, FVarId, Level};
+use clean_kernel::{Expr, FVarId};
 
 /// Error type for proof reconstruction failures
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
@@ -54,7 +54,7 @@ pub(crate) enum ProofReconstructionError {
 
 /// A proof step in the SMT proof trace
 #[derive(Debug, Clone, PartialEq)]
-pub enum ProofStep {
+pub(crate) enum ProofStep {
     /// Reflexivity: a = a
     Refl(TermId),
     /// Symmetry: if we have proof of a = b, get b = a
@@ -66,11 +66,6 @@ pub enum ProofStep {
     Congr(Expr, Vec<ProofStep>),
     /// Direct hypothesis assertion (hypothesis FVar ID)
     Hypothesis(FVarId),
-    /// Unverified axiom - MUST be registered in the environment.
-    /// This variant should only be used for axioms that are explicitly declared.
-    /// Using this for arbitrary unverified assertions undermines soundness.
-    /// Carries the axiom name and its universe level parameters.
-    Axiom(String, Vec<Level>),
     /// Propositional proof reconstruction (#2442 Phase 1).
     /// Records the strategy used (e.g., "True.intro", "And.intro", "hypothesis_match").
     Propositional(String),

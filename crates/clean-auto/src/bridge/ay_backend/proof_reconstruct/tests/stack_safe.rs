@@ -74,7 +74,7 @@ fn test_translate_term_handles_deep_uninterpreted_chain() {
     let mut nested = atom;
     for _ in 0..depth {
         nested = terms.mk_app(
-            ay_core::Symbol::Named("deep_f".to_string()),
+            ay_core::Symbol::Named("deep_f".into()),
             vec![nested],
             Sort::Bool,
         );

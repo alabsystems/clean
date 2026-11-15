@@ -21,7 +21,11 @@ use clean_features::{Category, Example, FeatureDescriptor, RefKind, Reference, S
 pub struct VerifyCArgs {
     /// C file to verify
     pub file: PathBuf,
-    /// Treat unknown obligations as failures
+    /// Also fail the run on UNVERIFIED obligations (SMT-UNSAT with no
+    /// reconstructed proof term). Failed and unknown obligations fail with or
+    /// without this flag, unconditionally, since the hole-11 soundness fix, so
+    /// despite its name this flag changes nothing about `unknown`. It prints
+    /// nothing extra — per-obligation diagnostics are `--verbose`
     #[arg(long)]
     pub fail_unknown: bool,
     /// Show detailed per-VC output
@@ -47,13 +51,14 @@ pub const FEATURES: &[FeatureDescriptor] = &[FeatureDescriptor {
     summary: "Verify a C source file against its ACSL specification",
     description: "Parses the supplied C file, generates verification \
 conditions for the ACSL-style specification, and discharges them via the \
-kernel + auto pipeline. `--fail-unknown` treats unresolved obligations as \
-hard failures; `--verbose` prints the per-VC outcome.",
+kernel + auto pipeline. A failed or unknown obligation fails the run on its \
+own; `--fail-unknown` additionally rejects UNVERIFIED obligations, the \
+SMT-UNSAT-without-a-proof-term case. `--verbose` prints the per-VC outcome.",
     category: Category::Verification,
     stability: Stability::V1,
     examples: &[Example {
         cmd: "clean verify-c examples/safe_add.c --fail-unknown",
-        what: "verify a C file and fail on any unresolved obligation",
+        what: "verify a C file, rejecting proof-term-free SMT results too",
     }],
     see_also: &["cert verify", "check"],
     references: &[DESIGN_REF, CRATE_REF],

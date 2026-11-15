@@ -35,6 +35,17 @@ fn make_env(body: u64, param_count: usize, captures: &[(u64, &str, CaptureMode)]
 /// Build a minimal ClosureConvertResult with a single fun decl and
 /// continuation returning that fun.
 fn make_result_with_fun(env: &ClosureEnv, body_code: Code) -> ClosureConvertResult {
+    make_result_with_continuation(env, body_code, Code::ret(env.body_fvar))
+}
+
+/// Build a ClosureConvertResult with a single fun decl, in closure-converted
+/// shape (capture params first, then `param_count` declared params), followed
+/// by `continuation`.
+fn make_result_with_continuation(
+    env: &ClosureEnv,
+    body_code: Code,
+    continuation: Code,
+) -> ClosureConvertResult {
     let capture_params: Vec<Param> = env
         .captures
         .iter()
@@ -50,9 +61,23 @@ fn make_result_with_fun(env: &ClosureEnv, body_code: Code) -> ClosureConvertResu
     }
     let fun_decl = FunDecl::new(env.body_fvar, name("f"), all_params, nat_type(), body_code);
     ClosureConvertResult {
-        code: Code::Fun(fun_decl, Box::new(Code::ret(env.body_fvar))),
+        code: Code::Fun(fun_decl, Box::new(continuation)),
         closures: vec![env.clone()],
     }
+}
+
+/// `let <id> := head args`: an alias when `args` is empty, otherwise an
+/// application of `head`.
+fn let_apply(id: u64, n: &str, head: FVarId, args: &[u64]) -> LetDecl {
+    LetDecl::new(
+        fvar(id),
+        name(n),
+        nat_type(),
+        LetValue::FVar {
+            fvar: head,
+            args: args.iter().map(|arg| Arg::FVar(fvar(*arg))).collect(),
+        },
+    )
 }
 
 // ────────────────────────────────────────────────────────────────────────
@@ -344,6 +369,114 @@ fn test_escape_not_returned() {
     };
     let status = detect_escape_status(&env, &result);
     assert_eq!(status, EscapeStatus::Local);
+}
+
+#[test]
+fn test_escape_alias_of_the_closure_escapes() {
+    // fun f(cap_x, p0) := return cap_x
+    // continuation: let a := f; return some_other
+    // `let a := f` is what `to_lcnf` emits for a bare local in value
+    // position. `a` is a second name for `f` that the scan does not follow,
+    // so the alias itself is the escape: a zero-argument head is not a call.
+    let env = make_env(100, 1, &[(10, "x", CaptureMode::ByValue)]);
+    let continuation = Code::let_bind(
+        let_apply(200, "a", env.body_fvar, &[]),
+        Code::ret(fvar(999)),
+    );
+    let result = make_result_with_continuation(&env, Code::ret(fvar(10)), continuation);
+    assert_eq!(detect_escape_status(&env, &result), EscapeStatus::Escaping);
+    // The consumer that acts on `Local`: an aliased closure is never offered
+    // for inlining, although it is small and has one live capture.
+    let hints = compute_optimization_hints(&env, &result, &ClosureAnalysisConfig::default());
+    assert!(
+        !hints.contains(&ClosureOptHint::InlineCandidate),
+        "an aliased closure must not be an inline candidate: {hints:?}"
+    );
+}
+
+#[test]
+fn test_escape_alias_of_the_closure_with_no_declared_params_escapes() {
+    // An empty spine is an alias whatever the arity, including a closure
+    // that declares no parameters beyond its captures.
+    let env = make_env(100, 0, &[(10, "x", CaptureMode::ByValue)]);
+    let continuation = Code::let_bind(
+        let_apply(200, "a", env.body_fvar, &[]),
+        Code::ret(fvar(999)),
+    );
+    let result = make_result_with_continuation(&env, Code::ret(fvar(10)), continuation);
+    assert_eq!(detect_escape_status(&env, &result), EscapeStatus::Escaping);
+}
+
+#[test]
+fn test_escape_alias_chain_returned_escapes() {
+    // let a := f; let b := a; return b
+    // The closure leaves the scope under its second alias's name. Counting
+    // the first link as the escape covers the chain; an analysis that
+    // followed aliases instead would have to follow `b := a` as well.
+    let env = make_env(100, 1, &[(10, "x", CaptureMode::ByValue)]);
+    let continuation = Code::let_bind(
+        let_apply(200, "a", env.body_fvar, &[]),
+        Code::let_bind(let_apply(201, "b", fvar(200), &[]), Code::ret(fvar(201))),
+    );
+    let result = make_result_with_continuation(&env, Code::ret(fvar(10)), continuation);
+    assert_eq!(detect_escape_status(&env, &result), EscapeStatus::Escaping);
+}
+
+#[test]
+fn test_escape_partial_application_escapes() {
+    // fun f(cap_x, p0, p1) := return cap_x
+    // continuation: let g := f y; return some_other
+    // `f y` is short of f's two declared params, so `g` is a partial
+    // application whose value holds f: the empty-spine alias generalised.
+    let env = make_env(100, 2, &[(10, "x", CaptureMode::ByValue)]);
+    let continuation = Code::let_bind(
+        let_apply(200, "g", env.body_fvar, &[300]),
+        Code::ret(fvar(999)),
+    );
+    let result = make_result_with_continuation(&env, Code::ret(fvar(10)), continuation);
+    assert_eq!(detect_escape_status(&env, &result), EscapeStatus::Escaping);
+}
+
+#[test]
+fn test_escape_saturated_and_over_applied_calls_stay_local() {
+    // Negative control: the head of a call that reaches f's arity is a call,
+    // and its result does not hold f.
+    let env = make_env(100, 1, &[(10, "x", CaptureMode::ByValue)]);
+    for args in [&[300][..], &[300, 301][..]] {
+        let continuation = Code::let_bind(
+            let_apply(200, "r", env.body_fvar, args),
+            Code::ret(fvar(200)),
+        );
+        let result = make_result_with_continuation(&env, Code::ret(fvar(10)), continuation);
+        assert_eq!(
+            detect_escape_status(&env, &result),
+            EscapeStatus::Local,
+            "a call of f with {} args against arity 1",
+            args.len()
+        );
+    }
+}
+
+#[test]
+fn test_escape_captured_by_another_closure_escapes() {
+    // fun f(cap_x, p0) := return cap_x
+    // continuation: fun g(cap_f, y) := let r := f y; return r
+    //               return g
+    // g only calls f, but g's environment holds f and g is returned. Closure
+    // conversion gives g a capture param carrying f's own id.
+    let env = make_env(100, 1, &[(10, "x", CaptureMode::ByValue)]);
+    let g_params = vec![
+        Param::new(env.body_fvar, Name::anon(), Expr::prop()),
+        Param::new(fvar(301), name("y"), nat_type()),
+    ];
+    let g_body = Code::let_bind(
+        let_apply(302, "r", env.body_fvar, &[301]),
+        Code::ret(fvar(302)),
+    );
+    let g = FunDecl::new(fvar(300), name("g"), g_params, nat_type(), g_body);
+    let continuation = Code::Fun(g, Box::new(Code::ret(fvar(300))));
+    let result = make_result_with_continuation(&env, Code::ret(fvar(10)), continuation);
+    assert_eq!(detect_escape_status(&env, &result), EscapeStatus::Escaping);
 }
 
 // ────────────────────────────────────────────────────────────────────────

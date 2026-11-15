@@ -11,6 +11,7 @@ mod bignat_ops;
 mod constructors;
 mod display;
 mod drop;
+mod fvar_bound;
 mod kind;
 // Serde adapter for `LevelVec`, standing in for `smallvec`'s optional `serde`
 // feature. Named in `kind.rs` by path (`#[serde(with = ...)]`), so it must stay
@@ -21,6 +22,7 @@ mod sorry;
 mod subst;
 mod trust;
 mod types;
+mod used_constants;
 pub mod visitor;
 
 pub use drop::iterative_drop;
@@ -29,7 +31,9 @@ pub use kind::{ExprKind, ZFCSetExpr};
 #[cfg(kani)]
 pub(crate) use meta::KaniHasher;
 pub(crate) use meta::{hash_to_u64, level_has_mvar, mix_hash, ExprMeta};
+pub(crate) use subst::FVarAbstraction;
 pub use types::*;
+pub use used_constants::UsedConstants;
 pub use visitor::{ExprFolder, ExprFolderOpt, ExprVisitor};
 
 use serde::{Deserialize, Serialize};
@@ -222,12 +226,28 @@ pub struct Expr {
     pub(crate) kind: ExprKind,
     /// Cached metadata (hash, depth, flags, loose bvar range).
     meta: ExprMeta,
+    /// Conservative maximum free-variable ID; meaningful only with has_fvar.
+    /// Recomputed from kind on every construction/deserialization, never read
+    /// from a carrier. Scalar copies preserve it when cloning immutable nodes.
+    fvar_upper_bound: u64,
 }
 
 impl From<ExprKind> for Expr {
     #[inline]
     fn from(kind: ExprKind) -> Self {
         Expr::from_kind(kind)
+    }
+}
+
+impl Expr {
+    /// Frozen DAG data uses exact syntax, recomputing both cache projections.
+    pub(crate) fn dag_wire_kind(&self) -> &ExprKind {
+        let Self {
+            kind,
+            meta: _,
+            fvar_upper_bound: _,
+        } = self;
+        kind
     }
 }
 
@@ -252,7 +272,12 @@ impl Expr {
     #[inline]
     pub fn from_kind(kind: ExprKind) -> Self {
         let meta = kind.compute_meta();
-        Expr { kind, meta }
+        let fvar_upper_bound = kind.fvar_upper_bound();
+        Expr {
+            kind,
+            meta,
+            fvar_upper_bound,
+        }
     }
 
     /// Create an Expr with pre-computed metadata.
@@ -260,7 +285,12 @@ impl Expr {
     #[inline]
     #[allow(dead_code)]
     pub(crate) fn with_meta(kind: ExprKind, meta: ExprMeta) -> Self {
-        Expr { kind, meta }
+        let fvar_upper_bound = kind.fvar_upper_bound();
+        Expr {
+            kind,
+            meta,
+            fvar_upper_bound,
+        }
     }
 
     /// Read-only access to the structural kind of this expression.
@@ -351,6 +381,7 @@ impl Clone for Expr {
         Expr {
             kind: self.kind.clone(),
             meta: self.meta,
+            fvar_upper_bound: self.fvar_upper_bound,
         }
     }
 }
@@ -373,19 +404,23 @@ impl std::hash::Hash for Expr {
 }
 
 impl PartialEq for Expr {
+    #[cfg(not(kani))]
+    fn eq(&self, other: &Self) -> bool {
+        // One walk per top-level comparison: the metadata pre-filter, the
+        // `Arc::ptr_eq` fast path and the proven-pair memo all live in
+        // `ExprEqWalk` (see its doc for why the memo is load-bearing).
+        // Structural equality is still required for correctness since hash
+        // collisions are possible with a 32-bit hash.
+        kind::ExprEqWalk::exprs(self, other)
+    }
+
+    #[cfg(kani)]
     fn eq(&self, other: &Self) -> bool {
         // Metadata pre-filter: reject mismatches in O(1) using the full cached
         // metadata word (hash/depth/flags/loose_bvar_range).
         if self.meta != other.meta {
             return false;
         }
-        // Fall back to structural equality (required for correctness since
-        // hash collisions are possible with 32-bit hash). Every child
-        // comparison re-enters `Expr::eq`, so put the recursive descent behind
-        // the same segmented-stack guard used by the other kernel walks.
-        // Without this boundary, two independently allocated but structurally
-        // equal deep terms can exhaust a normal test-thread stack in
-        // `ExprKind::arc_eq`.
         stack_safe(|| self.kind == other.kind)
     }
 }

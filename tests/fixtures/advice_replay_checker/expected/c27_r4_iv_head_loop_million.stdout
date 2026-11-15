@@ -1,0 +1,3 @@
+ACCEPT lit 1000000 cursor=1000000
+REFUSE depth
+ACCEPT lit 6 cursor=3

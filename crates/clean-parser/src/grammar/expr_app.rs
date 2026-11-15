@@ -5,6 +5,7 @@
 //! Application and atom expression parsing.
 //! Extracted from expr.rs as part of #307.
 
+use super::expr_match::fold_right_nonempty;
 use super::Parser;
 use crate::lexer::TokenKind;
 use crate::surface::*;
@@ -25,7 +26,7 @@ use crate::ParseError;
 /// (`Lambda`, `Pi`, `let`, `match`, `if`, nested `Paren`, `do`, `by`, …) — an
 /// inner `(· …)` has already been desugared to a `Lambda` by the time an outer
 /// paren is processed, so its placeholders are invisible here. (Track EF)
-mod cdot {
+pub(super) mod cdot {
     use crate::surface::*;
 
     /// Replace each `·` placeholder in `e` (in place, left to right) with a
@@ -33,15 +34,19 @@ mod cdot {
     /// Returns nothing; the placeholder count is `binders.len()` afterwards.
     fn rewrite(e: &mut SurfaceExpr, binders: &mut Vec<SurfaceBinder>) {
         match e {
-            SurfaceExpr::Ident(span, name) if name == "·" => {
-                let fresh = format!("__cdot_{}", binders.len());
-                binders.push(SurfaceBinder::new(
-                    fresh.clone(),
-                    None,
-                    SurfaceBinderInfo::Explicit,
-                ));
+            SurfaceExpr::Ident(span, name) if name.is_unescaped_component("·") => {
+                // Unspellable: the binder encloses the user's own expression,
+                // so a spellable `__cdot_0` captured a reference to a global
+                // of that spelling — `(· + __cdot_0) 1` computed `2` (measured
+                // 2026-09-25; Lean 4.8.0 reads the global).
+                let fresh = SurfaceName::unspellable("__cdot", binders.len() as u64);
+                let mut binder =
+                    SurfaceBinder::new_typed(fresh.clone(), None, SurfaceBinderInfo::Explicit);
+                // The `·` token's position orders this binder among the
+                // section's parameters (`desugar`).
+                binder.span = *span;
+                binders.push(binder);
                 *name = fresh;
-                let _ = span;
             }
             // Application spine: rewrite the head and every positional/named arg.
             SurfaceExpr::App(_, head, args) => {
@@ -72,27 +77,197 @@ mod cdot {
         }
     }
 
+    /// The placeholder a `·` operand of a notation template stands for
+    /// until the enclosing parentheses bind it: an unspellable name keyed by
+    /// the `·` token's source position, so the copies a template makes of one
+    /// operand are one placeholder (and one binder).
+    fn operand_placeholder(position: usize) -> SurfaceName {
+        SurfaceName::unspellable("__cdot_operand", position as u64)
+    }
+
+    /// The source position an operand placeholder stands for, if `name` is
+    /// one ([`operand_placeholder`]).
+    fn operand_placeholder_position(name: &SurfaceName) -> Option<usize> {
+        let clean_kernel::name::NameInner::Num(parent, position) = name.name().inner() else {
+            return None;
+        };
+        let position = usize::try_from(*position).ok()?;
+        name.same_syntax(&operand_placeholder(position))
+            .then_some(())
+            .filter(|()| **parent == clean_kernel::Name::anon().str("__cdot_operand"))
+            .map(|()| position)
+    }
+
+    /// Replace each `·` on `operand`'s section spine (the positions [`desugar`]
+    /// binds) with its operand placeholder. A notation template is expanded
+    /// where it is parsed, so the `·` of `(N ·)` would otherwise end up inside
+    /// the template, out of the reach of the enclosing parentheses — which
+    /// Lean binds it to, as it expands the section before the notation.
+    /// Returns the source positions of the replaced `·`s.
+    pub(in crate::grammar) fn hoist_operand(operand: &mut SurfaceExpr) -> Vec<usize> {
+        let mut positions = Vec::new();
+        collect_spine_placeholders(operand, &mut positions);
+        positions
+    }
+
+    fn collect_spine_placeholders(e: &mut SurfaceExpr, positions: &mut Vec<usize>) {
+        match e {
+            SurfaceExpr::Ident(span, name) if name.is_unescaped_component("·") => {
+                positions.push(span.start);
+                *name = operand_placeholder(span.start);
+            }
+            SurfaceExpr::App(_, head, args) => {
+                collect_spine_placeholders(head, positions);
+                for arg in args.iter_mut() {
+                    collect_spine_placeholders(&mut arg.expr, positions);
+                }
+            }
+            SurfaceExpr::Proj(_, base, _) => collect_spine_placeholders(base, positions),
+            SurfaceExpr::Ascription(_, inner, _)
+            | SurfaceExpr::Explicit(_, inner)
+            | SurfaceExpr::OutParam(_, inner)
+            | SurfaceExpr::SemiOutParam(_, inner)
+            | SurfaceExpr::UniverseInst(_, inner, _)
+            | SurfaceExpr::LiftMethod(_, inner)
+            | SurfaceExpr::NamedArg(_, _, inner) => collect_spine_placeholders(inner, positions),
+            SurfaceExpr::Arrow(_, lhs, rhs) => {
+                collect_spine_placeholders(lhs, positions);
+                collect_spine_placeholders(rhs, positions);
+            }
+            _ => {}
+        }
+    }
+
     /// If `e` contains `·` section placeholders, desugar it into an anonymous
     /// `fun __cdot_0 … => e'` lambda. Otherwise return `e` unchanged. `span` is
     /// the span of the enclosing parenthesized form.
-    pub(super) fn desugar(span: Span, mut e: SurfaceExpr) -> SurfaceExpr {
+    ///
+    /// The placeholders of `·` operands of notation templates expanded
+    /// inside `e` ([`hoist_operand`], their positions in `hoisted`) are bound
+    /// here too, wherever the template put them — and when it put one only
+    /// where no reference can stand (a structure field, a named argument) or
+    /// nowhere at all, it is bound all the same: Lean expands `(N ·)` to `fun
+    /// x✝ => N x✝` before `N`. Every binder is ordered by the source position
+    /// of its `·`, as Lean orders a section's parameters; the positions bound
+    /// here leave `hoisted`.
+    pub(in crate::grammar) fn desugar(
+        span: Span,
+        mut e: SurfaceExpr,
+        hoisted: &mut Vec<usize>,
+    ) -> SurfaceExpr {
         let mut binders = Vec::new();
         rewrite(&mut e, &mut binders);
-        if binders.is_empty() {
-            e
-        } else {
-            SurfaceExpr::Lambda(span, binders, Box::new(e))
+        let mut positioned: Vec<(usize, SurfaceBinder)> = Vec::new();
+        if !hoisted.is_empty() {
+            // The template walk lists every name `e` leaves unbound; those
+            // that are operand placeholders are this section's. (A form the
+            // walk refuses leaves them unbound: an unknown identifier, never
+            // another binding.)
+            if let Ok(free) =
+                template_free_reference_spellings(&e, &[], &clean_kernel::Name::anon())
+            {
+                for name in free {
+                    if let Some(position) = operand_placeholder_position(&name) {
+                        positioned.push((
+                            position,
+                            SurfaceBinder::new_typed(
+                                operand_placeholder(position),
+                                None,
+                                SurfaceBinderInfo::Explicit,
+                            ),
+                        ));
+                    }
+                }
+            }
+            let inside = |position: &usize| (span.start..span.end).contains(position);
+            for position in hoisted.iter().copied().filter(inside) {
+                if !positioned.iter().any(|(bound, _)| *bound == position) {
+                    positioned.push((
+                        position,
+                        SurfaceBinder::new_typed(
+                            operand_placeholder(position),
+                            None,
+                            SurfaceBinderInfo::Explicit,
+                        ),
+                    ));
+                }
+            }
+            hoisted.retain(|position| !inside(position));
         }
+        if binders.is_empty() && positioned.is_empty() {
+            return e;
+        }
+        if !positioned.is_empty() {
+            let mut spine: Vec<(usize, SurfaceBinder)> =
+                binders.into_iter().map(|b| (b.span.start, b)).collect();
+            spine.append(&mut positioned);
+            spine.sort_by_key(|(position, _)| *position);
+            binders = spine.into_iter().map(|(_, b)| b).collect();
+        }
+        SurfaceExpr::Lambda(span, binders, Box::new(e))
     }
 }
+
+/// Lean's `maxPrec` (`eval_prec max`): the level of an application argument
+/// and of an application's function. A `postfix:max` operator's result sits
+/// here, so it can head an application and be one of its arguments.
+const MAX_PREC: u32 = 1024;
 
 impl Parser {
     /// Application: f x y z
     pub(super) fn app_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let mut expr = self.atom_expr()?;
+        let head = self.atom_expr()?;
+        self.app_expr_with_head(head)
+    }
+
+    /// [`Self::app_expr`] over a head that is already parsed.
+    ///
+    /// The `prefix:max` arm of `custom_notation.rs` builds its notation term
+    /// and then continues into this loop, because at `max` the result is
+    /// itself a max-precedence term and can head an application — the mirror
+    /// of the `postfix:max` head rule below.
+    pub(super) fn app_expr_with_head(
+        &mut self,
+        head: SurfaceExpr,
+    ) -> Result<SurfaceExpr, ParseError> {
+        let mut expr = head;
         let mut pending_args: Vec<SurfaceArg> = Vec::new();
+        // Set once a `postfix:max` operator has been applied to the head.
+        let mut head_is_notation = false;
 
         loop {
+            // A `postfix:max` operator right after the HEAD, before any
+            // argument: `postfix:max op => f` is `notation:max arg:max op`
+            // (`Lean/Elab/Mixfix.lean:30-31`), a max-precedence term, which is
+            // exactly what `app := trailing_parser:leadPrec:maxPrec many1
+            // argument` (`Lean/Parser/Term.lean:853`) takes as its FUNCTION.
+            // So `xᶜ i` is `(xᶜ) i`. Without this the head refused the
+            // operator (`is_atom_start` rejects it), the application closed
+            // with no argument, the postfix was applied by `custom_op_expr`
+            // afterwards, and `i` had no consumer: `Pi.compl_apply`
+            // (`Mathlib/Order/Basic.lean:513`) died "expected :=, | or where,
+            // got Ident(i)". A postfix after an ARGUMENT is bound to that
+            // argument below; postfixes below max keep their outer position.
+            //
+            // The notation term is the application's head SYNTAX, which Lean's
+            // `elabAppFn` elaborates on its own (`| _ => elabTerm f none`,
+            // `Lean/Elab/App.lean`) before applying the arguments; the `Paren`
+            // node keeps it that separate unit here instead of a nested `App`
+            // spine the elaborator would read as one flat application.
+            if pending_args.is_empty() && self.has_custom_operators() {
+                if let Some(op) = self.match_custom_operator(NotationKind::Postfix) {
+                    if op.precedence >= MAX_PREC {
+                        self.consume_custom_operator(&op);
+                        let span = expr.span();
+                        let head = std::mem::replace(&mut expr, SurfaceExpr::Hole(span));
+                        let applied = self.expand_notation(&op.expansion, head.span(), &[head])?;
+                        expr = SurfaceExpr::Paren(applied.span(), Box::new(applied));
+                        head_is_notation = true;
+                        continue;
+                    }
+                }
+            }
+
             // Check for Dot FIRST - if followed by ident/number, it's a projection
             // If followed by {, it's universe instantiation (Foo.{u v})
             // Otherwise, let is_atom_start() handle it as anonymous constructor
@@ -182,6 +357,7 @@ impl Parser {
 
                     let (projection, end_span) = match self.current_kind().clone() {
                         TokenKind::Ident(field) => {
+                            let field = SurfaceName::component(field, self.current().ident_escaped);
                             let end_span = self.current_span();
                             self.advance();
                             (Projection::Named(field), end_span)
@@ -204,7 +380,10 @@ impl Parser {
                             if let Some(kw_str) = other.as_keyword_str() {
                                 let end_span = self.current_span();
                                 self.advance();
-                                (Projection::Named(kw_str.to_string()), end_span)
+                                (
+                                    Projection::Named(SurfaceName::component(kw_str, false)),
+                                    end_span,
+                                )
                             } else {
                                 unreachable!("peek_kind already checked");
                             }
@@ -235,8 +414,13 @@ impl Parser {
                 break;
             }
 
+            // Lean's `argument := checkWsBefore >> checkColGt …`
+            // (`Lean/Parser/Term.lean:845-853`): a token at or left of the
+            // saved position cannot be an argument. Inside a bracketed group
+            // no position is saved (`withoutPosition`), so the check passes.
             if self.stop_app_at_newline_outer_indent
                 && self.current().preceded_by_newline
+                && !self.position_suppressed()
                 && self
                     .indent_stack
                     .last()
@@ -279,7 +463,10 @@ impl Parser {
                     let result_span = target.span().merge(bang_span);
                     let bang_expr = SurfaceExpr::App(
                         result_span,
-                        Box::new(SurfaceExpr::Ident(bang_span, "postfixBang".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            bang_span,
+                            SurfaceName::global_path("postfixBang"),
+                        )),
                         vec![SurfaceArg::positional(target)],
                     );
                     if matches!(&expr, SurfaceExpr::Hole(_)) {
@@ -316,7 +503,10 @@ impl Parser {
                 let result_span = target.span().merge(inv_span);
                 let inv_expr = SurfaceExpr::App(
                     result_span,
-                    Box::new(SurfaceExpr::Ident(inv_span, "Inv.inv".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        inv_span,
+                        SurfaceName::global_path("Inv.inv"),
+                    )),
                     vec![SurfaceArg::positional(target)],
                 );
                 if matches!(&expr, SurfaceExpr::Hole(_)) {
@@ -440,7 +630,10 @@ impl Parser {
                     }
                     let getelem = SurfaceExpr::App(
                         full,
-                        Box::new(SurfaceExpr::Ident(target_span, head.to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            target_span,
+                            SurfaceName::global_path(head),
+                        )),
                         args,
                     );
                     if target_from_arg {
@@ -452,11 +645,71 @@ impl Parser {
                 }
             }
 
+            // Lean `Term.ellipsis` (`Lean/Parser/Term.lean`): a trailing `..`
+            // in ARGUMENT position means "fill every remaining explicit
+            // parameter of the head with `_`" — `Subsingleton.elim ..`,
+            // `inferInstanceAs (Decidable (Or ..))`, `elim_le_elim_iff ..`.
+            // The parser cannot know the arity, so it records the marker and
+            // `Elaborator::expand_app_ellipsis` expands it against the
+            // inferred function type.
+            //
+            // `..` is overloaded three ways in this grammar, so the guards
+            // below are load-bearing, not defensive:
+            //
+            //   * the RANGE operator `a..b` (`Set.Icc`, handled in
+            //     expr_operators.rs) — excluded by requiring the NEXT token
+            //     not to start an atom, so `a .. b` and `a..b` still reach the
+            //     operator chain untouched;
+            //   * `structInst`'s `optEllipsis` `{ x := y, .. }` and the
+            //     structure-PATTERN ellipsis `{ le := A_le, .. }` — excluded
+            //     by refusing a `..` that sits immediately before `}`, which
+            //     is where both of those always appear. Lean resolves that
+            //     position as the structure ellipsis too.
+            //
+            // Requiring whitespace before `..` mirrors Lean's own
+            // `checkWsBefore` on `argument`, and keeps `f..g` (never an
+            // ellipsis) out of this branch.
+            if self.check(&TokenKind::DotDot) {
+                let dot_span = self.current_span();
+                let prev_end = pending_args
+                    .last()
+                    .map_or_else(|| expr.span().end, |last| last.expr.span().end);
+                let ws_before = dot_span.start > prev_end;
+                let next_starts_atom = self.is_atom_start_at(1);
+                let next_is_rbrace = matches!(self.peek_kind(1), Some(TokenKind::RBrace));
+                if ws_before && !next_starts_atom && !next_is_rbrace {
+                    self.advance();
+                    pending_args.push(SurfaceArg::ellipsis(dot_span));
+                    // Lean's `..` is always the LAST argument.
+                    break;
+                }
+                // Not an application ellipsis — leave the token for the range
+                // operator / structInst / pattern parsers exactly as before.
+                break;
+            }
+
             if self.is_atom_start() {
                 // Argument position is max precedence: `Type` is atomic here.
                 self.type_atomic_in_arg = true;
-                let arg = self.atom_expr()?;
+                let mut arg = self.atom_expr()?;
                 self.type_atomic_in_arg = false;
+                // A user/imported `postfix:max` operator binds to the argument
+                // ATOM, as in Lean: `Std.Irrefl rᶜ` is `Std.Irrefl (rᶜ)`. The
+                // loosest-position postfix handling in `custom_notation.rs`
+                // applied it to the whole application instead
+                // (`Compl.compl (Std.Irrefl r)`, three instance rows in
+                // `Mathlib/Order/Basic.lean`, measured 2026-09-11). Only
+                // max-precedence postfixes bind here; lower ones keep their
+                // outer position.
+                if self.has_custom_operators() {
+                    while let Some(op) = self.match_custom_operator(NotationKind::Postfix) {
+                        if op.precedence < MAX_PREC {
+                            break;
+                        }
+                        self.consume_custom_operator(&op);
+                        arg = self.expand_notation(&op.expansion, arg.span(), &[arg])?;
+                    }
+                }
 
                 // If the argument is a pattern-matching lambda, stop application parsing
                 // Pattern-matching lambdas use layout-sensitive syntax and we can't
@@ -483,10 +736,22 @@ impl Parser {
         }
 
         if pending_args.is_empty() {
+            // A notation head with nothing applied to it needs no grouping:
+            // hand back the bare notation term, exactly the shape the
+            // loosest-position postfix loop produced before.
+            if head_is_notation {
+                if let SurfaceExpr::Paren(_, inner) = expr {
+                    return Ok(*inner);
+                }
+            }
             Ok(expr)
         } else {
             let span = expr.span();
-            Ok(SurfaceExpr::App(span, Box::new(expr), pending_args))
+            let app = SurfaceExpr::App(span, Box::new(expr), pending_args);
+            if let Some(origins) = &mut self.origins {
+                origins.application(&app);
+            }
+            Ok(app)
         }
     }
 
@@ -563,7 +828,7 @@ impl Parser {
         Self::is_plain_atom_start(current_kind)
     }
 
-    fn is_atom_start_at(&self, offset: usize) -> bool {
+    pub(super) fn is_atom_start_at(&self, offset: usize) -> bool {
         let Some(current_kind) = self.kind_at(offset) else {
             return false;
         };
@@ -577,6 +842,19 @@ impl Parser {
             current_kind,
             TokenKind::Ident(name) if Self::is_termination_hint_name(name)
         ) {
+            return false;
+        }
+
+        // Special case: a term Lean parses at `leadPrec` never starts an
+        // ARGUMENT. An application argument parses at `argPrec`
+        // (`Lean/Parser/Term.lean`, `argument`), above `leadPrec`, so a
+        // leading parser declared at `leadPrec` — or a non-atom-like
+        // `syntax`/`macro` with no precedence, which defaults to it
+        // (`Lean/Elab/Syntax.lean`, `precDefault`) — cannot be one. See
+        // [`Self::starts_lead_prec_term_at`] for the tokens and the pinned
+        // Lean refusals. `atom_expr_inner` serves both positions, so the
+        // argument loops, which all ask here first, must stop at them.
+        if self.starts_lead_prec_term_at(offset) {
             return false;
         }
 
@@ -603,6 +881,23 @@ impl Parser {
             .get(self.pos + offset)
             .is_some_and(|t| t.preceded_by_newline)
         {
+            return false;
+        }
+
+        // Special case: `local` is a soft keyword lexed as `Ident`. At the
+        // start of a line it starts the NEXT command: `local instance i3 : C
+        // := ⟨3⟩` followed by `local instance i4 : C := ⟨4⟩` used to parse the
+        // first value as the application `⟨3⟩ local …` ("Too many
+        // arguments"), refusing a file Lean 4.8.0 accepts (round-25 random
+        // battery). See [`Self::starts_local_command_at`].
+        if self.starts_local_command_at(offset) {
+            return false;
+        }
+
+        // Special case: a line-start `meta` starts the NEXT command (plan item
+        // `formats-module-spelling-refusals`). See
+        // [`Self::starts_meta_command_at`].
+        if self.starts_meta_command_at(offset) {
             return false;
         }
 
@@ -771,15 +1066,74 @@ impl Parser {
         matches!(name, "termination_by" | "termination_by?" | "decreasing_by")
     }
 
+    /// Whether the token at `offset` is an unescaped `local` that begins a
+    /// line: Lean's `attrKind` keyword, which starts the next command (`local
+    /// instance`, `local notation`, …), never an argument of the term before
+    /// it.
+    ///
+    /// Every world Clean reads reserves it: v4.8.0, v4.30.0-rc2 and v4.33.1
+    /// refuse `def local : Nat := 1` ("unexpected token 'local'; expected
+    /// identifier"), and read `def y : Nat := f 1` followed by a `local
+    /// instance …` line as two commands (measured 2026-10-25). This used to
+    /// require a command keyword Clean lexes as a token after `local`, so the
+    /// term before a `local notation3` or `local grind_pattern` line (Mathlib),
+    /// or before the refused `local import` / `local section` / `local
+    /// variable` (`tests/fixtures/module_spellings/modifier_matrix.tsv`), took
+    /// `local` as an argument. The command after it is the dispatcher's
+    /// (`decl::mod`'s `local` arm).
+    pub(in crate::grammar) fn starts_local_command_at(&self, offset: usize) -> bool {
+        self.tokens.get(self.pos + offset).is_some_and(|token| {
+            matches!(&token.kind, TokenKind::Ident(name) if name == "local")
+                && token.preceded_by_newline
+                && !token.ident_escaped
+        })
+    }
+
+    /// Whether the token at `offset` is an unescaped `meta` that begins a
+    /// line: the module system's phase modifier, which starts the next
+    /// command, never an argument of the term before it.
+    ///
+    /// The module system made `meta` a token. Pinned v4.30.0-rc2, v4.28.0,
+    /// v4.32.1 and v4.33.1 refuse `def meta : Nat := 1` ("unexpected token
+    /// 'meta'; expected identifier"). They read `def y : Nat := 1` followed
+    /// by a `meta def z : Nat := 2` line as two declarations; Clean read the
+    /// application `1 meta`, so `y` failed and the matrix rows that start with
+    /// `meta` (`tests/fixtures/module_spellings/modifier_matrix.tsv`) were
+    /// never at a command (measured 2026-10-25). Lean 4.8.0 still takes `meta`
+    /// as an identifier, and every parse is at the Oracle
+    /// (`crate::parse_world`). An escaped `«meta»` stays an identifier, as it
+    /// does in Lean. Only a line-start `meta` is covered, like the soft command
+    /// keywords: a same-line `1 meta def z` is still an application here,
+    /// where Lean ends the term.
+    pub(in crate::grammar) fn starts_meta_command_at(&self, offset: usize) -> bool {
+        self.tokens.get(self.pos + offset).is_some_and(|token| {
+            matches!(&token.kind, TokenKind::Ident(name) if name == "meta")
+                && token.preceded_by_newline
+                && !token.ident_escaped
+        })
+    }
+
     /// Contextual top-level command keywords that are lexed as `Ident` (soft
     /// keywords) and, at a line boundary, terminate a preceding declaration
     /// value expression. Kept in sync with the `Ident(name) if name == …`
-    /// command dispatches in `decl/mod.rs` (`local` is intentionally excluded:
-    /// it is a declaration MODIFIER prefix, not a standalone command head).
-    fn is_boundary_command_keyword(name: &str) -> bool {
+    /// command dispatches in `decl/mod.rs`. The modifiers `local` and `meta`
+    /// end a term the same way, in [`Self::starts_local_command_at`] and
+    /// [`Self::starts_meta_command_at`].
+    pub(in crate::grammar) fn is_boundary_command_keyword(name: &str) -> bool {
+        // `include` / `omit` are reserved tokens in pinned Lean v4.30.0-rc2
+        // (`def include : Nat := 1` is "unexpected token 'include'", and even
+        // an indented `omit` ends the term before it). Clean lexes them as
+        // identifiers, so without them here `theorem u : True := t 5`
+        // followed by an `omit n` line parsed as the application `t 5 omit
+        // n`: the `omit` never ran, and `u` failed with "2 argument(s)
+        // remain".
         matches!(
             name,
-            "alias"
+            "include"
+                | "omit"
+                | "alias"
+                | "grind_pattern"
+                | "init_grind_norm"
                 | "library_note"
                 | "declare_aesop_rule_sets"
                 | "declare_syntax_cat"
@@ -854,6 +1208,44 @@ impl Parser {
                 | TokenKind::Namespace
                 | TokenKind::Section
         )
+    }
+
+    /// Whether the token at `offset` begins a term Lean 4.8 parses at
+    /// `leadPrec`, which no application argument (`argPrec`) can be.
+    ///
+    /// Every one is refused in argument position by pinned Lean 4.8.0 (`id ∃ x
+    /// : Nat, x = x`, `id ∀ …`, `id exists …`, `id Σ x : Nat, Fin x`, `id Σ'
+    /// …`, `id if True then 1 else 2`, `id match 1 with | _ => 2`, `id show
+    /// Nat from 1`, `id by trivial`: "type mismatch `id`" then "unexpected
+    /// token"), and each is taken parenthesized or after `<|`. `∃!` is
+    /// Mathlib's `macro "∃!" xs:explicitBinders ", " b:term : term`, the same
+    /// shape as `exists`. `let`/`have`/`suffices` never reach the argument
+    /// test (not in [`Self::is_plain_atom_start`]); `fun`/`λ` (`maxPrec`),
+    /// `do` (`argPrec`) and `¬` (`notation:max`) are arguments in Lean too.
+    /// Not covered: Mathlib's big operators (`∑`, `∏`, `⨆`, `⨅`, `∫`, `⨍`,
+    /// `⋃`, `⋂`) and `Π`, whose precedences the pinned core toolchain cannot
+    /// state; they stay arguments here.
+    fn starts_lead_prec_term_at(&self, offset: usize) -> bool {
+        let Some(token) = self.tokens.get(self.pos + offset) else {
+            return false;
+        };
+        match &token.kind {
+            TokenKind::Exists
+            | TokenKind::ExistsUnique
+            | TokenKind::Forall
+            | TokenKind::Sigma
+            | TokenKind::PSigma
+            | TokenKind::If
+            | TokenKind::Match
+            | TokenKind::Show
+            | TokenKind::By => true,
+            // The ASCII `exists` binder (`expr_exists_kw.rs`): a keyword only
+            // when not escaped.
+            TokenKind::Ident(name) => {
+                token.lean_keyword && !token.ident_escaped && name == "exists"
+            }
+            _ => false,
+        }
     }
 
     fn is_plain_atom_start(current_kind: &TokenKind) -> bool {
@@ -1035,6 +1427,9 @@ impl Parser {
             self.current_kind(),
             TokenKind::Ident(_)
                 | TokenKind::LParen
+                // An explicit application may follow a local declaration on
+                // the next line, including the body of `let rec` equations.
+                | TokenKind::At
                 // `{ …` opens a struct-update / structure literal / set literal
                 // (`{ mem with bytes := … }`), all valid expressions. Without it,
                 // a `let f := … \n { mem with bytes := … }` body — trust-ir's
@@ -1078,7 +1473,16 @@ impl Parser {
                 | TokenKind::NatLit(_)
                 | TokenKind::FloatLit(_)
                 | TokenKind::CharLit(_)
-        )
+                // String and interpolated-string literals and list literals
+                // are terms like the literals above: `let digits := … ⏎
+                // "ok:f32:0x" ++ …` and `let m := … ⏎ s!"{sign}{m}p{e - 53}"`
+                // (trust-ir `FloatFixtures.lean` / `ExecutableFixtures.lean`)
+                // bailed to decl recovery here.
+                | TokenKind::StringLit(_)
+                | TokenKind::InterpolatedString(..)
+                | TokenKind::LBracket
+        ) || (matches!(self.current_kind(), TokenKind::Hash)
+            && matches!(self.peek_kind(1), Some(TokenKind::LBracket)))
     }
 
     /// Parse an expression for implicit let body
@@ -1106,6 +1510,16 @@ impl Parser {
             return self.let_body(let_span);
         }
 
+        if matches!(self.current_kind(), TokenKind::Have) && self.current().preceded_by_newline {
+            // A layout-separated have is the body of this let, just as a
+            // following let is. Retain its opaque binding origin instead of
+            // falling through to declaration recovery. Without the explicit
+            // separator handled above, Lean's optSemicolon requires a newline.
+            let have_span = self.current_span();
+            self.advance();
+            return self.have_body(have_span);
+        }
+
         if self.is_implicit_body_start() {
             return self.implicit_let_body_expr();
         }
@@ -1121,7 +1535,26 @@ impl Parser {
     }
 
     /// Atomic expressions
+    /// Every level of nesting — a parenthesized or bracketed group, a
+    /// `fun`/`∀` binder type, a notation operand — reaches the next through
+    /// an atom, and not every such path re-enters through the guarded
+    /// [`Self::expr`] (`binders_barriered` parses a binder type with
+    /// `iff_expr`, custom operands use `expr_at_custom_level`). So the atom
+    /// grows the stack on demand, as `expr_in_slot` does: one nesting level
+    /// of the debug-build operator chain is ~60 frames, and two of them on
+    /// the unguarded paths overflowed a 1 MB thread on the codata seed
+    /// library (regression pin
+    /// `codata_cmd_tests::test_codata_stream_encoding_survives_small_thread_stack`).
     pub(super) fn atom_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        stacker::maybe_grow(
+            Self::EXPR_STACK_RED_ZONE,
+            Self::EXPR_STACK_GROW_SIZE,
+            || self.atom_expr_guarded(),
+        )
+    }
+
+    fn atom_expr_guarded(&mut self) -> Result<SurfaceExpr, ParseError> {
+        let origin_start = self.origins.as_ref().map(|_| self.pos);
         // Track delimiter depth within a structure-field TYPE: while this atom
         // is a delimited group, the same-line next-field boundary in
         // `can_start_arg` must not fire — `(f x : T)` / `(x y : T)` inside a
@@ -1134,9 +1567,41 @@ impl Parser {
         if field_delim {
             self.field_delim_depth += 1;
         }
+        // Lean's `withoutPosition`: every bracketed term group parses its
+        // contents with NO saved position (`Lean/Parser/Term.lean:183,187,201`
+        // for `(…)`, `:210` for `⟨…⟩`, `:345` for `{…}`; list and array
+        // literals and `‹…›` likewise), so a continuation line inside the
+        // group is never cut at an enclosing block's column. Measured before
+        // this rule: `exact (id⏎  h)` with `h` at the `by` column failed
+        // "expected RParen, got Ident(h)" where Lean accepts it, and giving a
+        // `·` bullet its own column frame would have spread that failure to
+        // every bracketed continuation at a bullet's content column.
+        let opens_group = matches!(
+            self.current_kind(),
+            TokenKind::LParen
+                | TokenKind::LAngle
+                | TokenKind::LBrace
+                | TokenKind::LBracket
+                | TokenKind::LFrench
+        ) || (matches!(self.current_kind(), TokenKind::Hash)
+            && matches!(self.peek_kind(1), Some(TokenKind::LBracket)));
+        let saved_position = self.position_suppressed_at;
+        if opens_group {
+            self.position_suppressed_at = Some(self.indent_stack.len());
+        }
         let result = self.atom_expr_inner();
+        self.position_suppressed_at = saved_position;
         if field_delim {
             self.field_delim_depth -= 1;
+        }
+        if let (Some(start), Ok(expr)) = (origin_start, &result) {
+            if let Some(origins) = &mut self.origins {
+                if let Some(tokens) = self.tokens.get(start..self.pos) {
+                    origins.atom(expr, tokens);
+                } else {
+                    origins.invalidate("atom observation crossed a parser rewind");
+                }
+            }
         }
         result
     }
@@ -1150,13 +1615,22 @@ impl Parser {
 
         match self.current_kind().clone() {
             TokenKind::Ident(name) => {
+                let name = self.reference_token(&name);
                 // `bif c then t else e` — Lean 4's Bool conditional
                 // (`Init/Prelude`), sugar for `cond c t e`. It is a reserved
                 // keyword in Lean (no `Decidable` needed), so intercept it here
                 // before ordinary identifier resolution, mirroring `outParam`.
-                if name == "bif" {
+                if name.is_lean_keyword() && name.is_unescaped_component("bif") {
                     self.advance();
                     return self.bif_body(span);
+                }
+                // `exists x, p` — Lean's ASCII `∃` (`Init/NotationExtra.lean`
+                // `macro "exists" xs:explicitBinders ", " b:term`). `exists`
+                // is a keyword there, so in term position it can only begin
+                // this binder; see `expr_exists_kw.rs`.
+                if name.is_lean_keyword() && name.is_unescaped_component("exists") {
+                    self.advance();
+                    return self.exists_keyword_body(span);
                 }
                 // `↑e` / `⇑e` — Lean's prefix coercion operators (both lexed to
                 // Ident("↑")) bind at max precedence to the immediately
@@ -1167,7 +1641,7 @@ impl Parser {
                 // elaborator's coercion arm already handles, uniformly in both
                 // head and argument positions. A trailing bare `↑` (no operand)
                 // still parses as a plain identifier and stays a loud unknown.
-                if name == "↑" {
+                if name.is_unescaped_component("↑") {
                     self.advance();
                     if self.is_atom_start() {
                         let inner = self.atom_expr()?;
@@ -1181,7 +1655,7 @@ impl Parser {
                     return Ok(SurfaceExpr::Ident(span, name));
                 }
                 // Handle special identifiers that act as type-level operators
-                if name == "outParam" {
+                if name.is_unescaped_component("outParam") {
                     self.advance();
                     // outParam requires an argument
                     if self.is_atom_start() {
@@ -1193,7 +1667,7 @@ impl Parser {
                     return Ok(SurfaceExpr::Ident(span, name));
                 }
 
-                if name == "semiOutParam" {
+                if name.is_unescaped_component("semiOutParam") {
                     self.advance();
                     // semiOutParam requires an argument
                     if self.is_atom_start() {
@@ -1212,7 +1686,7 @@ impl Parser {
                 // Denotes expressions of type α
                 // Uses parse_q_body to support antiquotations (e.g., Q(Sort $u))
                 // Part of #23: Qq Phase 4 - consistent antiquotation handling
-                if name == "Q" {
+                if name.is_unescaped_component("Q") {
                     self.advance();
                     // FIX: the Qq TYPE quotation `Q(α)` is CONTIGUOUS — the `(`
                     // must immediately follow `Q` with no intervening whitespace,
@@ -1248,7 +1722,7 @@ impl Parser {
 
                 // q(expr) - value quotation for Qq metaprogramming
                 // Constructs expression values with potential antiquotations
-                if name == "q" {
+                if name.is_unescaped_component("q") {
                     self.advance();
                     // FIX: the Qq VALUE quotation `q(e)` is CONTIGUOUS — the `(`
                     // must immediately follow `q` with no intervening whitespace
@@ -1280,7 +1754,7 @@ impl Parser {
                 }
 
                 // calc block: `calc step1 _ = b := pf ...`
-                if name == "calc" {
+                if name.is_lean_keyword() && name.is_unescaped_component("calc") {
                     self.advance();
                     let steps = self.calc_steps()?;
                     let end = steps.last().map_or(span, |s| s.span);
@@ -1291,11 +1765,11 @@ impl Parser {
                 // Parse identically to let/have; the `I` suffix tells the
                 // elaborator to register an instance, which we don't need
                 // to model at the surface syntax level.
-                if name == "letI" {
+                if name.is_lean_keyword() && name.is_unescaped_component("letI") {
                     self.advance();
                     return self.let_body(span);
                 }
-                if name == "haveI" {
+                if name.is_lean_keyword() && name.is_unescaped_component("haveI") {
                     self.advance();
                     return self.have_body(span);
                 }
@@ -1368,9 +1842,9 @@ impl Parser {
                         if let Some(TokenKind::Ident(next)) = self.peek_kind(1).cloned() {
                             self.advance(); // dot
                             final_span = self.current_span();
+                            let next = SurfaceName::component(next, self.current().ident_escaped);
                             self.advance(); // ident
-                            full_name.push('.');
-                            full_name.push_str(&next);
+                            full_name = full_name.append(&next);
                         } else {
                             break;
                         }
@@ -1410,6 +1884,25 @@ impl Parser {
             }
 
             TokenKind::Prop => {
+                // `Prop.le` is a NAME, not dot notation on the sort. Lean's
+                // tokenizer is maximal-munch on identifiers, so only a bare
+                // `Prop` is the keyword — measured on the pinned v4.30.0-rc2,
+                // which accepts `def Prop.le : Nat := 3; def f : Nat :=
+                // Prop.le`. Clean read the head as the sort and then reported
+                // "Unknown identifier: le (dot notation on type-valued
+                // expression)": `Mathlib/Order/Basic.lean`'s `instance
+                // Prop.le : LE Prop` (declared at top level — its enclosing
+                // `section «Prop»` is a SECTION, not a namespace) and every
+                // use of it, `Prop.partialOrder` among them.
+                //
+                // `keyword_name_head` is the single definition of the rule and
+                // is byte-adjacency-checked there, so `Prop .foo` and a bare
+                // `Prop` are untouched.
+                if self.keyword_name_head().is_some() {
+                    let name = self.qualified_ident()?;
+                    let end = self.prev_span();
+                    return Ok(SurfaceExpr::Ident(span.merge(end), name));
+                }
                 self.advance();
                 Ok(SurfaceExpr::Universe(span, UniverseExpr::Prop))
             }
@@ -1443,13 +1936,19 @@ impl Parser {
             // ⊤ lattice top - desugars to Top.top (Mathlib convention)
             TokenKind::Top => {
                 self.advance();
-                Ok(SurfaceExpr::Ident(span, "Top.top".to_string()))
+                Ok(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("Top.top"),
+                ))
             }
 
             // ⊥ lattice bottom - desugars to Bot.bot (Mathlib convention)
             TokenKind::Bot => {
                 self.advance();
-                Ok(SurfaceExpr::Ident(span, "Bot.bot".to_string()))
+                Ok(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("Bot.bot"),
+                ))
             }
 
             // ∅ empty collection - desugars to EmptyCollection.emptyCollection
@@ -1457,7 +1956,7 @@ impl Parser {
                 self.advance();
                 Ok(SurfaceExpr::Ident(
                     span,
-                    "EmptyCollection.emptyCollection".to_string(),
+                    SurfaceName::global_path("EmptyCollection.emptyCollection"),
                 ))
             }
 
@@ -1490,6 +1989,7 @@ impl Parser {
                 // can select it. `?_` and a bare `?` stay anonymous holes.
                 if adjacent {
                     if let TokenKind::Ident(name) = self.current_kind().clone() {
+                        let name = self.name_token(&name)?;
                         let name_span = self.current_span();
                         self.advance();
                         return Ok(SurfaceExpr::NamedHole(span.merge(name_span), name));
@@ -1513,14 +2013,26 @@ impl Parser {
                     self.advance();
                     return Ok(SurfaceExpr::Ident(
                         span.merge(end_span),
-                        "Unit.unit".to_string(),
+                        SurfaceName::global_path("Unit.unit"),
                     ));
                 }
 
                 // Check for named argument syntax: (ident := expr)
                 // This is used in contexts like `f (α := o)` where α is a parameter name
+                //
+                // `haveI` / `letI` lex as identifiers but are Lean keywords, so
+                // `(haveI := A; x ≤ y)` — the anonymous instance-`have` form
+                // Mathlib's `Preorder.ext` family writes inside parentheses —
+                // is a `have` body, never a named argument. Reading it as one
+                // parsed `(haveI := A` and then died on the `;` with `expected
+                // RParen, got Semicolon` (six raw-declaration rows in
+                // `Mathlib/Order/Basic.lean`, measured 2026-09-11).
                 if let TokenKind::Ident(name) = self.current_kind().clone() {
-                    if matches!(self.peek_kind(1), Some(TokenKind::ColonEq)) {
+                    if matches!(self.peek_kind(1), Some(TokenKind::ColonEq))
+                        && name != "haveI"
+                        && name != "letI"
+                    {
+                        let name = self.name_token(&name)?;
                         self.advance(); // consume ident
                         self.advance(); // consume :=
                         let value = self.expr()?;
@@ -1539,6 +2051,27 @@ impl Parser {
                 let expr = self.expr()?;
 
                 if self.eat(&TokenKind::Colon) {
+                    // Type-less ascription `(e :)`: Lean's `typeAscription :=
+                    // "(" term " :" optional term ")"` (`Lean/Parser/Term.lean:
+                    // 182-183`). It elaborates `e` with no expected type
+                    // (`Lean/Elab/BuiltinNotation.lean:433-435`), so it is its
+                    // own node, not `(e : _)`. Measured before: `hf.left b <|
+                    // (congr_fun h b :)` (`Function.Injective2.left'`, Mathlib
+                    // `Logic/Function/Basic.lean:983`) died "unexpected token:
+                    // RParen" and left an empty raw declaration.
+                    if self.check(&TokenKind::RParen) {
+                        let end_span = self.expect(&TokenKind::RParen)?.span;
+                        let full_span = span.merge(end_span);
+                        let expr = cdot::desugar(full_span, expr, &mut self.hoisted_operand_cdots);
+                        return Ok(SurfaceExpr::App(
+                            full_span,
+                            Box::new(SurfaceExpr::Ident(
+                                full_span,
+                                type_ascription_without_type_head(),
+                            )),
+                            vec![SurfaceArg::positional(expr)],
+                        ));
+                    }
                     // Type ascription: (e : T)
                     let ty = self.expr()?;
                     // Use the RParen's span (not current_span() which is the NEXT token).
@@ -1555,7 +2088,7 @@ impl Parser {
                     // writes `swap (· < · : α → α → _)`, `Injective (g ∘ · : …)`).
                     // A no-op when `expr` has no `·`, so ordinary `(e : T)` is
                     // unchanged. (Track EF — ascription case)
-                    let expr = cdot::desugar(full_span, expr);
+                    let expr = cdot::desugar(full_span, expr, &mut self.hoisted_operand_cdots);
                     Ok(SurfaceExpr::Ascription(
                         full_span,
                         Box::new(expr),
@@ -1563,33 +2096,29 @@ impl Parser {
                     ))
                 } else if self.eat(&TokenKind::Comma) {
                     // Tuple: (e1, e2, ...)
-                    let mut elems = vec![expr];
+                    let mut rest = Vec::new();
                     // Allow trailing comma before RParen
                     if !self.check(&TokenKind::RParen) {
-                        elems.push(self.expr()?);
+                        rest.push(self.expr()?);
                         while self.eat(&TokenKind::Comma) {
                             if self.check(&TokenKind::RParen) {
                                 break; // trailing comma
                             }
-                            elems.push(self.expr()?);
+                            rest.push(self.expr()?);
                         }
                     }
                     let rparen = self.expect(&TokenKind::RParen)?;
                     let end_span = rparen.span;
 
                     // Build nested Prod.mk: (a, b, c) -> Prod.mk a (Prod.mk b c)
-                    let result = elems
-                        .into_iter()
-                        .rev()
-                        .reduce(|acc, elem| {
-                            let s = span.merge(end_span);
-                            SurfaceExpr::App(
-                                s,
-                                Box::new(SurfaceExpr::Ident(s, "Prod.mk".to_string())),
-                                vec![SurfaceArg::positional(elem), SurfaceArg::positional(acc)],
-                            )
-                        })
-                        .expect("tuple must have elements");
+                    let result = fold_right_nonempty(expr, rest, |elem, acc| {
+                        let s = span.merge(end_span);
+                        SurfaceExpr::App(
+                            s,
+                            Box::new(SurfaceExpr::Ident(s, SurfaceName::global_path("Prod.mk"))),
+                            vec![SurfaceArg::positional(elem), SurfaceArg::positional(acc)],
+                        )
+                    });
 
                     Ok(SurfaceExpr::Paren(span.merge(end_span), Box::new(result)))
                 } else {
@@ -1599,7 +2128,7 @@ impl Parser {
                     // Cdot section: `(· + 1)` / `(·.snd)` / `(f ·)` desugar to an
                     // anonymous lambda. `desugar` is a no-op when `expr` has no
                     // `·` placeholders, so ordinary `(e)` is unchanged. (Track EF)
-                    let expr = cdot::desugar(full_span, expr);
+                    let expr = cdot::desugar(full_span, expr, &mut self.hoisted_operand_cdots);
                     Ok(SurfaceExpr::Paren(full_span, Box::new(expr)))
                 }
             }
@@ -1631,16 +2160,29 @@ impl Parser {
 
             TokenKind::Sorry => {
                 self.advance();
-                Ok(SurfaceExpr::Ident(span, "sorry".to_string()))
+                Ok(SurfaceExpr::Ident(span, SurfaceName::global_path("sorry")))
             }
 
             TokenKind::Rfl => {
                 self.advance();
-                Ok(SurfaceExpr::Ident(span, "rfl".to_string()))
+                Ok(SurfaceExpr::Ident(span, SurfaceName::global_path("rfl")))
             }
 
             TokenKind::Not => {
                 // ¬ as prefix operator (Lean `prefix:40 "¬"`, `Init/Prelude.lean`).
+                //
+                // The lexer hands `¬` and ASCII `!` over as one token kind, but
+                // Lean gives them different heads (`Init/Notation.lean`):
+                // `notation:max "¬" p:40 => Not p` and `notation:max "!" b:40 =>
+                // not b` (`Bool.not`, exported as `not`). `¬` is two bytes in
+                // UTF-8 and `!` one, so the token's width tells them apart;
+                // folding both into `Not` made `¬(a == b)` the BOOLEAN negation
+                // (`not_beq_of_ne`, measured 2026-09-12).
+                let head = if span.end.saturating_sub(span.start) == 1 {
+                    "not"
+                } else {
+                    "Not"
+                };
                 self.advance();
                 // The operand parses at precedence 40, so it captures the
                 // comparison operators (`=`, `<`, `≤`, … at prec 50) and
@@ -1666,7 +2208,7 @@ impl Parser {
                         let not_span = span.merge(domain.span());
                         let negated = SurfaceExpr::App(
                             not_span,
-                            Box::new(SurfaceExpr::Ident(span, "Not".to_string())),
+                            Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
                             vec![SurfaceArg::positional(*domain)],
                         );
                         Ok(SurfaceExpr::Arrow(
@@ -1677,7 +2219,7 @@ impl Parser {
                     }
                     other => Ok(SurfaceExpr::App(
                         span.merge(end_span),
-                        Box::new(SurfaceExpr::Ident(span, "Not".to_string())),
+                        Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
                         vec![SurfaceArg::positional(other)],
                     )),
                 }
@@ -1724,7 +2266,7 @@ impl Parser {
                 self.expect(&TokenKind::RDAngle)?;
                 Ok(SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "inner".to_string())),
+                    Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("inner"))),
                     vec![
                         SurfaceArg::positional(first),
                         SurfaceArg::positional(second),
@@ -1867,10 +2409,11 @@ impl Parser {
                 match self.current_kind().clone() {
                     TokenKind::Ident(name) => {
                         let end_span = self.current_span();
+                        let name = SurfaceName::component(name, self.current().ident_escaped);
                         self.advance();
                         // Build a dotted identifier like ".foo"
                         // The elaborator will resolve this to the appropriate constructor
-                        let mut full_name = format!(".{name}");
+                        let mut full_name = name.with_relative_constructor();
                         let mut final_span = end_span;
                         // Handle nested dotted access like .foo.bar
                         // Only consume the dot when it is adjacent to the previous
@@ -1888,9 +2431,10 @@ impl Parser {
                             if let Some(TokenKind::Ident(next)) = self.peek_kind(1).cloned() {
                                 self.advance(); // dot
                                 final_span = self.current_span();
+                                let next =
+                                    SurfaceName::component(next, self.current().ident_escaped);
                                 self.advance(); // ident
-                                full_name.push('.');
-                                full_name.push_str(&next);
+                                full_name = full_name.append(&next);
                             } else {
                                 break;
                             }
@@ -1929,7 +2473,10 @@ impl Parser {
                         if let Some(kw) = other.as_keyword_str() {
                             let end_span = self.current_span();
                             self.advance();
-                            Ok(SurfaceExpr::Ident(span.merge(end_span), format!(".{kw}")))
+                            Ok(SurfaceExpr::Ident(
+                                span.merge(end_span),
+                                SurfaceName::component(kw, false).with_relative_constructor(),
+                            ))
                         } else {
                             Err(ParseError::UnexpectedToken {
                                 line: self.current_line(),
@@ -1946,7 +2493,7 @@ impl Parser {
                 // Used in section notation: (· + ·) creates fun x y => x + y
                 // We represent it as a special hole marker that the elaborator will resolve
                 self.advance();
-                Ok(SurfaceExpr::Ident(span, "·".to_string()))
+                Ok(SurfaceExpr::Ident(span, SurfaceName::generated_path("·")))
             }
 
             // |expr| absolute value notation - desugars to `abs expr`
@@ -1958,7 +2505,7 @@ impl Parser {
                 self.expect(&TokenKind::Pipe)?;
                 Ok(SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "abs".to_string())),
+                    Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("abs"))),
                     vec![SurfaceArg::positional(inner)],
                 ))
             }

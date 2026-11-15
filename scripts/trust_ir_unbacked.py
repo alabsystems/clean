@@ -12,6 +12,13 @@ prove that a parameter would be refused by the current differential.
 
 Use --check when the result will be cited.  It re-runs trust_ir_axes.measure,
 requires exact event/backing parity, and refuses every fatal axis invariant.
+
+The dump's `rustcc fn` header names are read by the shared reader
+`scripts/crystal_trust_ir_symbols.py` (M2, 2026-09-27): trust-ir WS4.3 prints a
+non-bare name QUOTED, the reader decodes it, refuses what the printer cannot
+write (`DumpRefused`), and holds the dump to one grammar -- so a body joins its
+coverage `def_path` by NAME whichever printer wrote the dump.
+`--pinned-inputs` prints the first-party modules this script runs besides itself.
 """
 
 from __future__ import annotations
@@ -20,12 +27,24 @@ import argparse
 import collections
 import json
 import os
+from pathlib import Path
 import re
 import sys
 from typing import Any
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import trust_ir_axes  # noqa: E402  (the sibling import is intentional)
+import crystal_trust_ir_symbols as tir_symbols  # noqa: E402
+
+# Read by check_gate_registry.py (PINNED_INPUTS_MARKER): `--pinned-inputs` prints the first-party
+# modules this script executes besides itself (derived from its imports).
+ANSWERS_PINNED_INPUTS = True
+# The headers this census reads: crate-module (`rustcc`) functions, as it always did.
+_FN_PREFIX = re.compile(r"rustcc ")
+
+
+class DumpRefused(ValueError):
+    """A trust-ir text dump whose symbols no trust-ir printer wrote."""
 
 
 SCHEMA = "clean.trust_ir_unbacked.census.v2"
@@ -93,18 +112,27 @@ def _read_dump(dump_path: str) -> tuple[dict[str, str], dict[str, str]]:
 
     functy = dict(re.findall(r"^functy\.(\d+) = (.*)$", text, re.M))
     signatures: dict[str, str] = {}
-    for name, type_id in re.findall(
-        r"^rustcc fn @([^\n]+)\(functy\.(\d+)\) \{$", text, re.M
-    ):
-        signatures.setdefault(name, functy.get(type_id, "<unresolved functy>"))
-
     bodies: dict[str, str] = {}
-    for match in re.finditer(
-        r"^rustcc fn @([^\n]+)\(functy\.\d+\) \{\n(.*?)^\}",
-        text,
-        re.M | re.S,
-    ):
-        bodies.setdefault(match.group(1), match.group(2))
+    syms = tir_symbols.ModuleSymbols(_FN_PREFIX)
+    name: str | None = None
+    body: list[str] = []
+    for number, line in enumerate(text.split("\n"), 1):
+        if name is not None:
+            if line.startswith("}"):
+                # The first `}` at a line start closes the body, as the regex
+                # this reader replaced read it.
+                bodies.setdefault(name, "".join(f"{kept}\n" for kept in body))
+                name = None
+            else:
+                body.append(line)
+            continue
+        try:
+            header = syms.fn_header(line, f"line {number}")
+        except tir_symbols.SymbolRefusal as exc:
+            raise DumpRefused(f"trust-ir text {dump_path} line {number}: {exc}") from exc
+        if header is not None:
+            signatures.setdefault(header[0], functy.get(str(header[1]), "<unresolved functy>"))
+            name, body = header[0], []
     return signatures, bodies
 
 
@@ -165,7 +193,7 @@ def _coverage_index(
     by_index: dict[int, dict[str, Any]] = {}
     counts: collections.Counter[int] = collections.Counter()
     for row in coverage["bodies"]:
-        index = int(row["def_index"])
+        index = trust_ir_axes._counter(row["def_index"], "body def_index")
         counts[index] += 1
         by_index[index] = row
     collisions = sorted(index for index, count in counts.items() if count != 1)
@@ -179,8 +207,7 @@ def census(
     *,
     ctfe: bool = False,
 ) -> dict[str, Any]:
-    with open(coverage_path, encoding="utf-8") as handle:
-        coverage = json.load(handle)
+    coverage = trust_ir_axes._strict_json(coverage_path)
 
     by_index, index_collisions = _coverage_index(coverage)
     parsed = _read_flip_events(log_path)
@@ -291,7 +318,7 @@ def check(
     data: dict[str, Any], coverage_path: str, log_path: str, dump_path: str | None
 ) -> list[str]:
     """Return every reproducibility failure; an empty result is a checked census."""
-    errors, axis = _axis_parity(data, coverage_path, log_path)
+    errors = []
     if data["crate"] != SUBJECT_CRATE:
         errors.append(
             f"coverage crate is {data['crate']!r}, expected {SUBJECT_CRATE!r}"
@@ -306,6 +333,12 @@ def check(
             "unbacked rows absent or unparsable in IR dump: "
             + ", ".join(data["ir_dump_unjoinable"][:20])
         )
+    try:
+        parity_errors, axis = _axis_parity(data, coverage_path, log_path)
+    except trust_ir_axes.Refused as exc:
+        errors.append(f"trust_ir_axes refused the coverage: {exc}")
+        return errors
+    errors.extend(parity_errors)
     for key, _why in trust_ir_axes.FATAL_INVARIANTS:
         value = axis["invariants"][key]
         if value:
@@ -380,6 +413,20 @@ def report(data: dict[str, Any]) -> None:
             print(f"  {count:3d}  {observation}")
 
 
+def _json_destination(output: str, inputs: dict[str, str | None]) -> Path:
+    """Keep a census receipt separate from every artifact needed to replay it."""
+    destination = Path(output).resolve()
+    for label, value in inputs.items():
+        if value is None:
+            continue
+        source = Path(value).resolve()
+        if destination == source or (
+            destination.exists() and destination.samefile(source)
+        ):
+            raise trust_ir_axes.Refused(f"JSON output aliases {label} input")
+    return destination
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--coverage", required=True)
@@ -396,9 +443,20 @@ def main() -> int:
         action="store_true",
         help="require exact trust_ir_axes parity and all fatal invariants to be zero",
     )
+    if sys.argv[1:] == ["--pinned-inputs"]:
+        # Answered before argparse, which would demand --coverage/--log.
+        print("\n".join(tir_symbols.first_party_imports(Path(__file__))))
+        return 0
     args = parser.parse_args()
 
-    data = census(args.coverage, args.log, args.ir_dump, ctfe=args.ctfe)
+    inputs = {"coverage": args.coverage, "log": args.log, "IR dump": args.ir_dump}
+    try:
+        if args.json:
+            _json_destination(args.json, inputs)
+        data = census(args.coverage, args.log, args.ir_dump, ctfe=args.ctfe)
+    except (trust_ir_axes.Refused, OSError, ValueError, KeyError, TypeError) as exc:
+        print(f"REFUSED: {exc}", file=sys.stderr)
+        return 2
     report(data)
 
     if args.check:
@@ -407,15 +465,22 @@ def main() -> int:
             for error in errors:
                 print(f"CHECK FAIL: {error}", file=sys.stderr)
             return 1
-        print("CHECK PASS: exact trust_ir_axes parity; all fatal invariants are zero")
 
     # In checked mode, never publish a JSON artifact before the parity and
     # invariant checks succeed.  A failed command may report diagnostics to the
     # terminal, but it must not mint a file that looks authoritative.
     if args.json:
-        with open(args.json, "w", encoding="utf-8") as handle:
-            handle.write(json.dumps(data, indent=1) + "\n")
+        try:
+            destination = _json_destination(args.json, inputs)
+            trust_ir_axes._write_artifacts(
+                {destination: json.dumps(data, indent=1, allow_nan=False) + "\n"}
+            )
+        except (trust_ir_axes.Refused, OSError, ValueError) as exc:
+            print(f"REFUSED: {exc}", file=sys.stderr)
+            return 2
         print(f"wrote {args.json}")
+    if args.check:
+        print("CHECK PASS: exact trust_ir_axes parity; all fatal invariants are zero")
     return 0
 
 

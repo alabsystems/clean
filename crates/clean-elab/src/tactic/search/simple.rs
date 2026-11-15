@@ -92,7 +92,7 @@ pub fn exact_search(
         // (#2229: use goal's local context so FVars resolve)
         if state.is_def_eq(goal, &decl.ty, &target) {
             results.push(SearchResult {
-                name: Name::from_string(&decl.name),
+                name: decl.name.name().clone(),
                 expr: Expr::fvar(decl.fvar),
                 suggestion: format!("exact {}", decl.name),
             });
@@ -134,7 +134,7 @@ pub fn exact_search(
             .level_params
             .iter()
             .enumerate()
-            .map(|(i, _)| Level::param(Name::from_string(&format!("_u{i}"))))
+            .map(|(i, _)| Level::param(Name::anon().str(format!("_u{i}"))))
             .collect();
 
         let const_type = if levels.is_empty() {
@@ -250,7 +250,7 @@ pub fn apply_search(
         if let Some(args) = can_apply_to_produce(state, goal, &decl.ty, &target, 10) {
             let arg_count = args.len();
             results.push(SearchResult {
-                name: Name::from_string(&decl.name),
+                name: decl.name.name().clone(),
                 expr: Expr::fvar(decl.fvar),
                 suggestion: if arg_count == 0 {
                     format!("exact {}", decl.name)
@@ -292,7 +292,7 @@ pub fn apply_search(
             .level_params
             .iter()
             .enumerate()
-            .map(|(i, _)| Level::param(Name::from_string(&format!("_u{i}"))))
+            .map(|(i, _)| Level::param(Name::anon().str(format!("_u{i}"))))
             .collect();
 
         let const_type = if levels.is_empty() {
@@ -337,7 +337,7 @@ pub fn apply_search(
 /// `Iff` lemmas are therefore reported as suggestions (so the user can convert
 /// them) but never silently applied through a path `rewrite` cannot verify.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RewriteHead {
+pub(super) enum RewriteHead {
     /// `@Eq α lhs rhs` — directly rewritable via `rewrite`.
     Eq,
     /// `Iff p q` — suggested only, not auto-applied (see [`RewriteHead`]).
@@ -352,7 +352,7 @@ enum RewriteHead {
 /// This is only a cheap structural pre-filter that selects which constants/
 /// hypotheses are worth a trial rewrite — the actual matching and proof term
 /// are re-derived through [`rewrite`].
-fn classify_rewrite_head(ty: &Expr) -> Option<RewriteHead> {
+pub(super) fn classify_rewrite_head(ty: &Expr) -> Option<RewriteHead> {
     let mut codomain = ty;
     while let ExprKind::Pi(_, _, body) = codomain.kind() {
         codomain = body;
@@ -416,7 +416,7 @@ fn contains_meta_fvar(expr: &Expr) -> bool {
 ///    to a *fresh metavariable*, producing an under-determined goal that is not
 ///    a useful suggestion (and which an explicit `rw [name]` would leave with
 ///    open metavariable goals).
-fn trial_rewrite_changes_goal(state: &mut ProofState, name: &str) -> bool {
+fn trial_rewrite_changes_goal(state: &mut ProofState, name: &clean_parser::SurfaceName) -> bool {
     let saved_goals = state.goals.clone();
     let original_target = state.current_goal().map(|g| g.target.clone());
     let original_target = original_target.map(|t| state.metas.instantiate(&t));
@@ -481,7 +481,7 @@ pub fn rewrite_search(
             RewriteHead::Eq => {
                 if trial_rewrite_changes_goal(state, &decl.name) {
                     results.push(SearchResult {
-                        name: Name::from_string(&decl.name),
+                        name: decl.name.name().clone(),
                         expr: Expr::fvar(decl.fvar),
                         suggestion: format!("rw [{}]", decl.name),
                     });
@@ -492,7 +492,7 @@ pub fn rewrite_search(
             }
             RewriteHead::Iff => {
                 results.push(SearchResult {
-                    name: Name::from_string(&decl.name),
+                    name: decl.name.name().clone(),
                     expr: Expr::fvar(decl.fvar),
                     suggestion: format!("-- iff: rw [{}]", decl.name),
                 });
@@ -506,16 +506,16 @@ pub fn rewrite_search(
     // 2. Environment constants, pre-filtered to equality/iff conclusions.
     // Snapshot names of local hypotheses so an env constant shadowed by a local
     // of the same name is not double-reported (and resolves to the local in `rw`).
-    let local_names: Vec<String> = local_ctx.iter().map(|d| d.name.clone()).collect();
+    let local_names: Vec<Name> = local_ctx.iter().map(|d| d.name.name().clone()).collect();
 
     let constants: Vec<_> = state.env().constants().cloned().collect();
     for constant in &constants {
-        let name_str = constant.name.to_string();
-        // Skip internal/auto-generated names, matching library_search's filter.
-        if name_str.starts_with('_') || name_str.contains("._") {
+        let name = clean_parser::SurfaceName::from_name(constant.name.clone());
+        // Skip actual internal components, matching library_search\'s heuristic.
+        if super::super::library_search::is_internal_search_name(&constant.name) {
             continue;
         }
-        if local_names.iter().any(|n| n == &name_str) {
+        if local_names.iter().any(|n| n == &constant.name) {
             continue;
         }
         let Some(head) = classify_rewrite_head(&constant.type_) else {
@@ -525,11 +525,11 @@ pub fn rewrite_search(
             .level_params
             .iter()
             .enumerate()
-            .map(|(i, _)| Level::param(Name::from_string(&format!("_u{i}"))))
+            .map(|(i, _)| Level::param(Name::anon().str(format!("_u{i}"))))
             .collect();
         match head {
             RewriteHead::Eq => {
-                if trial_rewrite_changes_goal(state, &name_str) {
+                if trial_rewrite_changes_goal(state, &name) {
                     results.push(SearchResult {
                         name: constant.name.clone(),
                         expr: Expr::const_(constant.name.clone(), levels),

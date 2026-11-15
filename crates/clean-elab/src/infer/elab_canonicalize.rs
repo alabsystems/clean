@@ -69,6 +69,13 @@ impl<'a> ElabCtx<'a> {
         };
 
         match result {
+            ElabResult::Diagnosed {
+                result,
+                diagnostics,
+            } => ElabResult::Diagnosed {
+                result: Box::new(self.canonicalize_levels_in_elab_result(*result)),
+                diagnostics,
+            },
             ElabResult::Definition {
                 name,
                 universe_params,
@@ -116,7 +123,7 @@ impl<'a> ElabCtx<'a> {
                 name,
                 universe_params,
                 ty: canonicalize(ty),
-                val: val.map(&canonicalize),
+                val: val.map(canonicalize),
                 modifiers,
             },
             ElabResult::Inductive {

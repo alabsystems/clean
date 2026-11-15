@@ -33,7 +33,7 @@ use std::collections::HashSet;
 /// Errors discovered by the LCNF validation pass.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum ValidationError {
+pub(crate) enum ValidationError {
     /// An FVar reference is not in scope.
     UnboundFVar { fvar: FVarId, context: &'static str },
     /// A `Jmp` targets an FVar that is not a join point.

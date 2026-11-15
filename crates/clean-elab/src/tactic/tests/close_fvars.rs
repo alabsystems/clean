@@ -62,8 +62,9 @@ fn test_close_goal_rejects_goal_context_widening() {
     let mut state = ProofState::new(env, target.clone());
     let escaped = state.fresh_fvar();
     state.current_goal_mut().unwrap().local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: escaped,
-        name: "forged".into(),
+        name: clean_parser::SurfaceName::generated_path("forged"),
         ty: target,
         value: None,
     });
@@ -86,8 +87,9 @@ fn test_close_goal_rejects_retyped_creation_local() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
     let b = Expr::const_(Name::from_string("B"), vec![]);
     let local = LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(100),
-        name: "h".into(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: a.clone(),
         value: None,
     };
@@ -107,9 +109,14 @@ fn test_close_goal_rejects_wider_nested_metavariable() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target.clone());
     let escaped = FVarId::new(100);
-    let nested = state
-        .metas
-        .fresh_with_locals(target.clone(), vec![("escaped".into(), escaped, target)]);
+    let nested = state.metas.fresh_with_locals(
+        target.clone(),
+        vec![(
+            clean_parser::SurfaceName::generated_path("escaped"),
+            escaped,
+            target,
+        )],
+    );
 
     let result = state.close_goal_unchecked(Expr::fvar(MetaState::to_fvar(nested)));
     assert!(
@@ -140,7 +147,7 @@ fn test_closed_proof_closes_intro_assumption_fvar() {
     let target = Expr::arrow(a.clone(), a);
     let mut state = ProofState::new(env, target);
 
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     assumption(&mut state).unwrap();
     assert!(
         state.is_complete(),
@@ -392,7 +399,7 @@ fn test_posthoc_typecheck_intro_assumption_valid() {
     let mut state = ProofState::new(env.clone(), target.clone());
 
     // intro x; assumption — intro uses checked close_goal (#2197 fix)
-    intro(&mut state, "x").unwrap();
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x")).unwrap();
     assumption(&mut state).unwrap();
     assert!(state.is_complete());
 
@@ -462,7 +469,8 @@ fn test_intro_uses_checked_close_goal_single_binder() {
     let mut state = ProofState::new(env, target);
 
     // intro calls close_goal (checked) — would fail without fix_pi_leaked_fvars
-    intro(&mut state, "x").expect("intro should succeed with checked close_goal (#2197 fix)");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("intro should succeed with checked close_goal (#2197 fix)");
 
     // The new goal should be provable by assumption
     assumption(&mut state).expect("assumption should close the goal");
@@ -484,8 +492,10 @@ fn test_intro_uses_checked_close_goal_nested_binders() {
     let mut state = ProofState::new(env, target);
 
     // Two intros → two Lambda constructions, each going through checked close_goal
-    intro(&mut state, "x").expect("first intro should succeed (#2197 fix)");
-    intro(&mut state, "y").expect("second intro should succeed (#2197 nested fix)");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("x"))
+        .expect("first intro should succeed (#2197 fix)");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("y"))
+        .expect("second intro should succeed (#2197 nested fix)");
     assumption(&mut state).expect("assumption should close the goal");
     assert!(state.is_complete());
 }
@@ -514,7 +524,7 @@ fn test_intro_dependent_pi_identity_type() {
     let mut state = ProofState::new(env, target);
 
     // intro A — this triggers fix_pi_leaked_fvars on the resulting Pi
-    intro(&mut state, "A").expect(
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("A")).expect(
         "intro on (A : Type) → A → A should succeed — \
          fix_pi_leaked_fvars must produce Pi(BVar(0), BVar(1)) not Pi(BVar(0), BVar(0))",
     );
@@ -527,7 +537,8 @@ fn test_intro_dependent_pi_identity_type() {
     );
 
     // intro a — introduces the `a : A` hypothesis
-    intro(&mut state, "a").expect("intro a on A → A should succeed");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("a"))
+        .expect("intro a on A → A should succeed");
 
     // assumption — closes with hypothesis `a : A`
     assumption(&mut state).expect("assumption should close the goal");
@@ -568,10 +579,10 @@ fn test_intro_dependent_pi_multi_binder() {
     let mut state = ProofState::new(env, target);
 
     // Four intros: A, B, f, a
-    intro(&mut state, "A").expect("intro A");
-    intro(&mut state, "B").expect("intro B");
-    intro(&mut state, "f").expect("intro f");
-    intro(&mut state, "a").expect("intro a");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("A")).expect("intro A");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("B")).expect("intro B");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("f")).expect("intro f");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("a")).expect("intro a");
 
     // Goal should be B, provable by `f a` (apply f then exact a)
     // We can test with just assumption if goal is a hypothesis type
@@ -633,12 +644,12 @@ fn test_intro_after_clear_does_not_reuse_the_cleared_binder_id() {
     );
     let mut state = ProofState::new(env, goal_ty);
 
-    intro(&mut state, "a").expect("intro a");
-    intro(&mut state, "b").expect("intro b");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("a")).expect("intro a");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("b")).expect("intro b");
     let b_id = state.current_goal().unwrap().local_ctx[1].fvar;
     let meta_before = state.current_goal().unwrap().meta_id;
 
-    clear(&mut state, "b").expect("clear b");
+    clear(&mut state, &clean_parser::SurfaceName::generated_path("b")).expect("clear b");
 
     let goal = state.current_goal().unwrap().clone();
     assert_eq!(

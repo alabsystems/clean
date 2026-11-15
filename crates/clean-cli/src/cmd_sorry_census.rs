@@ -12,7 +12,8 @@
 //! `docs/cli/`).
 //!
 //! Forwarded flags:
-//! - `--update` — write a new baseline JSON if the count decreased.
+//! - `--update` — rewrite the baseline after a passing census (lower count
+//!   ratchets down, equal count refreshes the date, missing file is created).
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};

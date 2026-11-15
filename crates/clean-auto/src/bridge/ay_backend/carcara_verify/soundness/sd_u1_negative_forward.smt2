@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const s String)
+(assert (>= (str.len s) (- 1)))
+(assert (not (and (= s (str.++ (str.substr s 0 (- 1)) (str.substr s (- 1) (- (str.len s) (- 1))))) (= (str.len (str.substr s 0 (- 1))) (- 1)))))
+(check-sat)

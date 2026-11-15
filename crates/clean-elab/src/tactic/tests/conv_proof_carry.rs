@@ -51,21 +51,24 @@ fn expr_contains_const(expr: &Expr, needle: &str) -> bool {
     }
 }
 
-fn rw_rule(name: &str) -> SurfaceRwRule {
+fn rw_rule(name: &'static str) -> SurfaceRwRule {
     SurfaceRwRule {
         span: Span::dummy(),
         reverse: false,
-        term: SurfaceExpr::Ident(Span::dummy(), name.to_string()),
+        term: SurfaceExpr::Ident(
+            Span::dummy(),
+            clean_parser::SurfaceName::generated_path(name),
+        ),
     }
 }
 
-fn local_fvar_by_name(state: &ProofState, name: &str) -> FVarId {
+fn local_fvar_by_name(state: &ProofState, name: &'static str) -> FVarId {
     state
         .current_goal()
         .expect("test state should have a current goal")
         .local_ctx
         .iter()
-        .find(|decl| decl.name == name)
+        .find(|decl| decl.name.name() == &Name::from_string(name))
         .map(|decl| decl.fvar)
         .expect("named local should exist")
 }
@@ -87,11 +90,20 @@ fn test_conv_rw_direct_path_uses_checked_rewrite() {
         make_eq_n(x.clone(), y.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
-    conv_rw(&mut state, vec![ConvPosition::EqLhs], "hxy", false)
-        .expect("conv_rw should rewrite the focused equality side");
+    conv_rw(
+        &mut state,
+        vec![ConvPosition::EqLhs],
+        &clean_parser::SurfaceName::generated_path("hxy"),
+        false,
+    )
+    .expect("conv_rw should rewrite the focused equality side");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -124,11 +136,20 @@ fn test_conv_rw_reverse_path_uses_eq_symm_without_trust() {
         make_eq_n(y.clone(), x.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
-    conv_rw(&mut state, vec![ConvPosition::EqLhs], "hxy", true)
-        .expect("reverse conv_rw should orient the local equality with Eq.symm");
+    conv_rw(
+        &mut state,
+        vec![ConvPosition::EqLhs],
+        &clean_parser::SurfaceName::generated_path("hxy"),
+        true,
+    )
+    .expect("reverse conv_rw should orient the local equality with Eq.symm");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -161,10 +182,19 @@ fn test_conv_rw_lhs_wrapper_preserves_proof_chain_without_trust() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
-    conv_lhs(&mut state, "hxy", false).expect("conv_lhs should rewrite inside the lhs focus");
+    conv_lhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+        false,
+    )
+    .expect("conv_lhs should rewrite inside the lhs focus");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -197,10 +227,19 @@ fn test_conv_rw_rhs_wrapper_preserves_proof_chain_without_trust() {
         make_eq(Expr::prop(), make_p(x.clone()), make_p(y.clone())),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hyx").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
-    conv_rhs(&mut state, "hyx", false).expect("conv_rhs should rewrite inside the rhs focus");
+    conv_rhs(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hyx"),
+        false,
+    )
+    .expect("conv_rhs should rewrite inside the rhs focus");
 
     assert_eq!(
         state.current_goal().unwrap().target,
@@ -247,13 +286,17 @@ fn test_conv_rw_deep_path_preserves_proof_chain_without_trust() {
         make_eq_n(qx, qy.clone()),
     );
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let axiom_before = axiom_snapshot();
 
     conv_rw(
         &mut state,
         vec![ConvPosition::EqLhs, ConvPosition::AppArg],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("deep-path conv_rw should rewrite inside the focused application");
@@ -286,13 +329,17 @@ fn test_conv_rw_duplicate_occurrence_rewrites_only_focused_path() {
     let target = make_eq(Expr::prop(), make_p(x.clone()), make_p(x.clone()));
     let goal = Expr::pi(BinderInfo::Default, make_eq_n(x.clone(), y.clone()), target);
     let mut state = ProofState::new(env, goal);
-    intro(&mut state, "hxy").expect("intro should create the local equality proof");
+    intro(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("hxy"),
+    )
+    .expect("intro should create the local equality proof");
     let first_axiom_before = axiom_snapshot();
 
     conv_rw(
         &mut state,
         vec![ConvPosition::EqLhs, ConvPosition::AppArg],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("conv_rw should rewrite only the selected duplicate occurrence");
@@ -308,7 +355,7 @@ fn test_conv_rw_duplicate_occurrence_rewrites_only_focused_path() {
     conv_rw(
         &mut state,
         vec![ConvPosition::EqRhs, ConvPosition::AppArg],
-        "hxy",
+        &clean_parser::SurfaceName::generated_path("hxy"),
         false,
     )
     .expect("second focused rewrite should finish the duplicate-occurrence goal");

@@ -14,8 +14,9 @@ fn nat_false_contradiction_state(env: Environment) -> (ProofState, FVarId) {
         env,
         Expr::const_(Name::from_string("False"), vec![]),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_nat_le_tc(Expr::nat_lit(3), Expr::nat_lit(2)),
             value: None,
         }],
@@ -220,8 +221,9 @@ fn test_close_goal_accepts_well_typed_proof() {
         env,
         nat.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: nat,
             value: None,
         }],

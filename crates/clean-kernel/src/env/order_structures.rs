@@ -62,8 +62,15 @@ impl Environment {
     /// `init_*` that needs the wrapper. The declaration is byte-for-byte Lean's,
     /// so the `.olean` import collides on a type-EQUAL name (no new row in
     /// `data/prelude_collision_census.json`).
-    fn init_out_param(&mut self) -> Result<(), EnvError> {
-        let name = Name::from_string("outParam");
+    pub(crate) fn init_out_param(&mut self) -> Result<(), EnvError> {
+        self.init_parameter_marker("outParam")?;
+        self.init_parameter_marker("semiOutParam")
+    }
+
+    // Both markers are checked reducible identities in Lean's Init.Prelude.
+    // Retaining their distinct heads lets elaboration export class metadata.
+    fn init_parameter_marker(&mut self, marker: &str) -> Result<(), EnvError> {
+        let name = Name::from_string(marker);
         if self.get_const(&name).is_some() {
             return Ok(());
         }

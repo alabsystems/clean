@@ -86,6 +86,14 @@ pub(crate) use emitted_cfg_parse::parse_emitted;
 pub(crate) use emitted_cfg_parse_clean::parse_clean;
 use emitted_cfg_types::numerals_in;
 
+// Live in the `crystal_a1_lineage` target, unused in `spec_suite`: this file is
+// ONE helper cluster shared by two test targets that use different subsets of
+// it, so an item can be dead in one and load-bearing in the other. Verified by
+// call site before annotating, not assumed -- `crystal_a1_lineage`'s chain submodules read fixtures through it; every
+//   `crystal_a2_mint_*` chain defines its own local `fixture()`. Narrow on purpose: if a
+// FOURTH item goes unused, clippy says so and somebody decides, which a
+// file-level `#![allow(dead_code)]` would hide.
+#[allow(dead_code)]
 pub(crate) fn fixture(name: &str) -> String {
     let p = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures")
@@ -590,6 +598,14 @@ pub(crate) fn header_param_ids(line: &str) -> Vec<u32> {
 /// module whose function declares the wrong parameter ids reads its inputs from
 /// bindings that do not exist. Two chains asserted their `IRFunc` by hand, in
 /// two different ad-hoc shapes; the other seven asserted nothing.
+// Live in the `crystal_a1_lineage` target, unused in `spec_suite`: this file is
+// ONE helper cluster shared by two test targets that use different subsets of
+// it, so an item can be dead in one and load-bearing in the other. Verified by
+// call site before annotating, not assumed -- called from `float_sub.rs`, `float_mul.rs`, `level_kind_ord.rs`,
+//   `has_cubical_layer.rs` and their siblings. Narrow on purpose: if a
+// FOURTH item goes unused, clippy says so and somebody decides, which a
+// file-level `#![allow(dead_code)]` would hide.
+#[allow(dead_code)]
 pub(crate) fn assert_entry_params(text: &str, func_src: &str, who: &str) {
     let header = text
         .lines()
@@ -647,6 +663,13 @@ pub(crate) fn spec_source(file: &str) -> String {
 ///
 /// `file` is the `core_spec` module and `const_prefix` the shared name of its
 /// block constants (`const SRC_IR_H2_B…`, `def ir_lz_b…`).
+// Live in the `crystal_a1_lineage` target, unused in `spec_suite`: this file is
+// ONE helper cluster shared by two test targets that use different subsets of
+// it, so an item can be dead in one and load-bearing in the other. Verified by
+// call site before annotating, not assumed -- called from `float_sub.rs` and `lane_matrix_shape.rs`. Narrow on purpose: if a
+// FOURTH item goes unused, clippy says so and somebody decides, which a
+// file-level `#![allow(dead_code)]` would hide.
+#[allow(dead_code)]
 pub(crate) fn clean_block_sources(file: &str, const_prefix: &str) -> String {
     let src = spec_source(file);
     src.lines()

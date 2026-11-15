@@ -1,3 +1,8 @@
+-- Updated 2026-11-06: aliases are explicitly reducible, and the proof
+-- parameter y occurs in the dependent conclusion MyD (y = y). The generic
+-- reflexive instance ranges over Sort, so proof-valued arguments are valid.
+-- Historical measurements below refer to the preserved original bytes in
+-- reports/source-frontier-header-2026-11-06/, not this corrected program.
 -- p24 — CLASS I, FRONTIER STAGE I-2: the GOAL side, with the built-in
 -- `decEq` bridge removed from the picture.
 --
@@ -38,11 +43,11 @@
 class MyD (p : Prop) where
   ev : Nat
 
-def MyDEq (α : Type) : Type := (x : α) → (y : α) → MyD (x = y)
+@[reducible] def MyDEq (α : Type) : Type := (x : α) → (y : α) → MyD (x = y)
 
 instance natMyD (a b : Nat) : MyD (a = b) := ⟨0⟩
 
-instance reflMyD (α : Type) (a : α) : MyD (a = a) := ⟨1⟩
+instance reflMyD (α : Sort _) (a : α) : MyD (a = a) := ⟨1⟩
 
 def callee {α : Type} [MyDEq α] (a : α) : Nat := 0
 
@@ -50,7 +55,7 @@ def bodyIsSolvable (a b : Nat) : Nat := (inferInstance : MyD (a = b)).ev
 
 def useNat (a : Nat) : Nat := callee a
 
-def DepAlias (α : Type) : Type := (x : α) → (y : x = x) → MyD (x = x)
+@[reducible] def DepAlias (α : Type) : Type := (x : α) → (y : x = x) → MyD (y = y)
 
 def depCallee (α : Type) [DepAlias α] (z : α) : Nat := 0
 

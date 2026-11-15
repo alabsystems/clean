@@ -199,7 +199,14 @@ fn visit_body_case(
         })
         .collect();
     let default = default.as_ref().map(|d| Box::new(visit_body(d, ctx)));
-    let expected = BoxingContext::expected_case_scrutinee_type(&alts, default.is_some());
+    // Bool has its own scalar representation and a checked two-constructor
+    // branch. Do not box/unbox it into a USize tag merely because its cases
+    // have no fields; the emitter must retain an actual Boolean CondBr.
+    let expected = if ctx.get_var_type(scrutinee) == IRType::Bool {
+        IRType::Bool
+    } else {
+        BoxingContext::expected_case_scrutinee_type(&alts, default.is_some())
+    };
     cast_var_if_needed(scrutinee, &expected, ctx, |s| IRBody::Case {
         scrutinee: s,
         alts,
@@ -216,8 +223,16 @@ fn visit_vdecl_apply(
     rest: IRBody,
     ctx: &mut BoxingContext<'_>,
 ) -> IRBody {
-    let (cast_args_vec, prefix) = if let Some(decl) = ctx.get_decl(fn_id) {
-        let param_tys: Vec<_> = decl.params.iter().map(|(_, t)| t.clone()).collect();
+    let param_tys = ctx
+        .get_decl(fn_id)
+        .map(|decl| {
+            decl.params
+                .iter()
+                .map(|(_, t)| t.clone())
+                .collect::<Vec<_>>()
+        })
+        .or_else(|| ctx.native_apply_param_types(fn_id, args, ty));
+    let (cast_args_vec, prefix) = if let Some(param_tys) = param_tys {
         cast_args(args, &param_tys, ctx)
     } else {
         box_args(args, ctx)

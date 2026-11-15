@@ -119,10 +119,11 @@ const SRC_ENCODESCLEANMODE: &str = "inductive EncodesCleanMode (mem : IRList IRM
 /// the load type was. What moved is that `ir_h2_correct` is now a theorem about
 /// a module the compiler emits.
 ///
-/// ## Why `ir_d13` is still here, and how the gate avoids alarming on it
+/// ## Why `ir_d13` was here, and how the gate avoids alarming on it
 ///
-/// `enum.13` is a CRATE-LEVEL interning id. Measured across three producer
-/// dumps of the shipped kernel, this one did not move — but
+/// `enum.13` was a CRATE-LEVEL interning id (`enum.17`, a literal alias, since the
+/// 2026-10-07 rebaseline). Measured across three producer
+/// dumps of the shipped kernel, it did not move then — but
 /// `expr_path_step_clone`'s moved 181 → 176 with no instruction changed, which
 /// is exactly the false-alarm class a gate over emitted IR dies of. So the mint
 /// splits the two facts apart: the CORE module the digest is taken over carries
@@ -136,7 +137,7 @@ const SRC_ENCODESCLEANMODE: &str = "inductive EncodesCleanMode (mem : IRList IRM
 const MINTED_IR_H2: &str = include_str!("generated/ir_h2.defs.txt");
 
 // The type the entry block LOADS. It is `CleanMode`, enum id 13, and the
-// emitted body names it: `%2 = load enum.13, ptr %0`
+// emitted body names it: `%2 = load enum.17, ptr %0`
 // (tests/fixtures/has_cubical_layer.trust-ir.txt).
 //
 // CORRECTED 2026-08-19. This slot read `ir_tLevel` -- `IRTy.enum_ ir_d0`, the
@@ -159,7 +160,7 @@ const MINTED_IR_H2: &str = include_str!("generated/ir_h2.defs.txt");
 // That second point is the finding, not the reassurance. Clean's model is
 // COARSER here than the artifact's own semantics, where the loaded type decides
 // the read size, the alignment fault and the decode
-// (trust-ir/src/interpret.rs::eval_load). A theorem that cannot tell `enum.13`
+// (trust-ir/src/interpret.rs::eval_load). A theorem that cannot tell `enum.17`
 // from `enum.0` is not evidence that the difference does not matter; it is the
 // statement that this model cannot see it. What can see it is the gate, and now
 // does.
@@ -172,7 +173,7 @@ const MINTED_IR_H2: &str = include_str!("generated/ir_h2.defs.txt");
 /// One row per `def` line; the count is asserted below, so a regenerated script
 /// with a different shape fails rather than silently reusing the wrong doc.
 const MINTED_IR_H2_DOCS: &[&str] = &[
-    "ir_h2_tmode: the CleanMode enum type, enum id 13 -- the id the emitted body names in `%2 = load enum.13, ptr %0`, and the same id `ir_fs_tmode` carries for the same Rust type in the from_source_system chain. CORRECTED 2026-08-19 from `ir_tLevel` (IRTy.enum_ 0), which was a copy-paste from the Level module and named a type this body does not touch; MINTED since 2026-08-20, so the corrected value is now derived from the artifact rather than repaired by hand -- the mint reproduced `ir_d13` independently, out of the committed tag table `generated/ir_h2.tags.json` that `m7` checks against the artifact. The load lane of the A1 gate compares this slot; the machine still does not read it, which is a fact about the model, not a licence. DerivedProved, zero axiom_deps.",
+    "ir_h2_tmode: the CleanMode enum type, enum id 17 (13 before the 2026-10-07 rebaseline) -- the id the emitted body names in `%2 = load enum.17, ptr %0`, and the same id `ir_fs_tmode` carries for the same Rust type in the from_source_system chain. CORRECTED 2026-08-19 from `ir_tLevel` (IRTy.enum_ 0), which was a copy-paste from the Level module and named a type this body does not touch; MINTED since 2026-08-20, so the corrected value is now derived from the artifact rather than repaired by hand -- the mint reproduced `ir_d13` independently, out of the committed tag table `generated/ir_h2.tags.json` that `m7` checks against the artifact. The load lane of the A1 gate compares this slot; the machine still does not read it, which is a fact about the model, not a licence. DerivedProved, zero axiom_deps.",
     "ir_h2_b0: entry block, MINTED FROM THE EMITTED ARTIFACT. Two switch cases (2 -> b1, 3 -> b2) and a default -- not a six-way table. The compiler emits only the true tags explicitly and routes everything else through the default edge. The exhaustive-enum flag is the MEASURED false, not the transcribed true. DerivedProved, zero axiom_deps.",
     "ir_h2_b1: Cubical => true, then br to the join. A SEPARATE block from Directed's, as emitted. DerivedProved, zero axiom_deps.",
     "ir_h2_b2: Directed => true. The emitted code does NOT share a block with Cubical, so neither does this. DerivedProved, zero axiom_deps.",

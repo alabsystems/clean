@@ -495,10 +495,13 @@ mod do_notation {
                 assert_eq!(elems.len(), 2, "expected 2 do elements");
                 match &elems[0] {
                     DoElem::Bind(_, binder, action) => {
-                        assert_eq!(binder.name, "x");
+                        assert_eq!(
+                            (binder.name).name(),
+                            crate::SurfaceName::generated_path("x").name()
+                        );
                         assert!(binder.ty.is_none(), "bind should have no type annotation");
                         assert!(
-                            matches!(action.as_ref(), SurfaceExpr::Ident(_, ref n) if n == "f"),
+                            matches!(action.as_ref(), SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("f").name()),
                             "expected ident 'f', got {:?}",
                             action
                         );
@@ -521,7 +524,9 @@ mod do_notation {
         match expr {
             SurfaceExpr::Do(_, elems) => {
                 assert_eq!(elems.len(), 2);
-                assert!(matches!(&elems[0], DoElem::Bind(_, binder, _) if binder.name == "x"));
+                assert!(
+                    matches!(&elems[0], DoElem::Bind(_, binder, _) if (binder.name).name() == crate::SurfaceName::generated_path("x").name())
+                );
             }
             other => panic!("expected Do, got {other:?}"),
         }
@@ -534,14 +539,17 @@ mod do_notation {
             SurfaceExpr::Do(_, elems) => {
                 assert_eq!(elems.len(), 2);
                 match &elems[0] {
-                    DoElem::Let(_, binder, val) => {
-                        assert_eq!(binder.name, "x");
+                    DoElem::Let(_, binder, val) | DoElem::Have(_, binder, val) => {
+                        assert_eq!(
+                            (binder.name).name(),
+                            crate::SurfaceName::generated_path("x").name()
+                        );
                         assert!(matches!(
                             val.as_ref(),
                             SurfaceExpr::Lit(_, SurfaceLit::Nat(1))
                         ));
                     }
-                    other => panic!("expected Let, got {other:?}"),
+                    other => panic!("expected Have, got {other:?}"),
                 }
             }
             other => panic!("expected Do, got {other:?}"),
@@ -555,7 +563,7 @@ mod do_notation {
             SurfaceExpr::Do(_, elems) => {
                 assert_eq!(elems.len(), 2);
                 assert!(
-                    matches!(&elems[0], DoElem::LetMut(_, binder, _) if binder.name == "x"),
+                    matches!(&elems[0], DoElem::LetMut(_, binder, _) if (binder.name).name() == crate::SurfaceName::generated_path("x").name()),
                     "expected LetMut, got {:?}",
                     elems[0]
                 );
@@ -575,10 +583,10 @@ mod do_notation {
                 SurfaceExpr::Do(_, elems) => {
                     assert_eq!(elems.len(), 3, "expected let, for, return do elements");
                     assert!(
-                        matches!(&elems[0], DoElem::LetMut(_, binder, _) if binder.name == "acc")
+                        matches!(&elems[0], DoElem::LetMut(_, binder, _) if (binder.name).name() == crate::SurfaceName::generated_path("acc").name())
                     );
                     assert!(
-                        matches!(&elems[1], DoElem::For(_, binder, _, _) if binder.name == "i")
+                        matches!(&elems[1], DoElem::For(_, binder, _, _) if (binder.name).name() == crate::SurfaceName::generated_path("i").name())
                     );
                     assert!(matches!(&elems[2], DoElem::Return(_, _)));
                 }
@@ -599,9 +607,11 @@ mod do_notation {
                 SurfaceExpr::Do(_, elems) => {
                     assert_eq!(elems.len(), 3, "expected let, reassign, return do elements");
                     assert!(
-                        matches!(&elems[0], DoElem::LetMut(_, binder, _) if binder.name == "f")
+                        matches!(&elems[0], DoElem::LetMut(_, binder, _) if (binder.name).name() == crate::SurfaceName::generated_path("f").name())
                     );
-                    assert!(matches!(&elems[1], DoElem::Reassign(_, name, _) if name == "f"));
+                    assert!(
+                        matches!(&elems[1], DoElem::Reassign(_, name, _) if (name).name() == crate::SurfaceName::generated_path("f").name())
+                    );
                     assert!(matches!(&elems[2], DoElem::Return(_, _)));
                 }
                 other => panic!("expected Do body, got {other:?}"),
@@ -619,16 +629,16 @@ mod do_notation {
                 match &elems[0] {
                     DoElem::LetElse(_, pat, action, fallback) => {
                         assert!(
-                            matches!(pat, crate::surface::SurfacePattern::Var(name) if name == "true")
+                            matches!(pat, crate::surface::SurfacePattern::Var(name) if (name).name() == crate::SurfaceName::generated_path("true").name())
                                 || matches!(
                                     pat,
                                     crate::surface::SurfacePattern::Ctor(name, _)
-                                        if name == "true"
+                                        if (name).name() == crate::SurfaceName::generated_path("true").name()
                                 ),
                             "expected `.true` to parse as a let-else pattern, got {pat:?}"
                         );
                         assert!(
-                            matches!(action.as_ref(), SurfaceExpr::Ident(_, ref name) if name == "x"),
+                            matches!(action.as_ref(), SurfaceExpr::Ident(_, ref name) if (name).name() == crate::SurfaceName::generated_path("x").name()),
                             "expected pure scrutinee `x`, got {action:?}"
                         );
                         assert_eq!(fallback.len(), 1, "fallback should contain one do element");
@@ -667,9 +677,12 @@ mod do_notation {
                 assert_eq!(elems.len(), 2);
                 match &elems[0] {
                     DoElem::Bind(_, binder, action) => {
-                        assert_eq!(binder.name, "x");
+                        assert_eq!(
+                            (binder.name).name(),
+                            crate::SurfaceName::generated_path("x").name()
+                        );
                         assert!(
-                            matches!(action.as_ref(), SurfaceExpr::Ident(_, ref n) if n == "f")
+                            matches!(action.as_ref(), SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("f").name())
                         );
                     }
                     other => panic!("expected bare Bind, got {other:?}"),
@@ -713,7 +726,10 @@ mod do_notation {
                 assert_eq!(elems.len(), 2);
                 match &elems[0] {
                     DoElem::Bind(_, binder, _) => {
-                        assert_eq!(binder.name, "x");
+                        assert_eq!(
+                            (binder.name).name(),
+                            crate::SurfaceName::generated_path("x").name()
+                        );
                         assert!(binder.ty.is_some(), "expected type annotation on bind");
                     }
                     other => panic!("expected Bind, got {other:?}"),
@@ -746,8 +762,12 @@ mod do_notation {
         match expr {
             SurfaceExpr::Do(_, elems) => {
                 assert_eq!(elems.len(), 3);
-                assert!(matches!(&elems[0], DoElem::Bind(_, binder, _) if binder.name == "a"));
-                assert!(matches!(&elems[1], DoElem::Bind(_, binder, _) if binder.name == "b"));
+                assert!(
+                    matches!(&elems[0], DoElem::Bind(_, binder, _) if (binder.name).name() == crate::SurfaceName::generated_path("a").name())
+                );
+                assert!(
+                    matches!(&elems[1], DoElem::Bind(_, binder, _) if (binder.name).name() == crate::SurfaceName::generated_path("b").name())
+                );
                 assert!(matches!(&elems[2], DoElem::Return(_, _)));
             }
             other => panic!("expected Do, got {other:?}"),
@@ -770,7 +790,10 @@ mod do_notation {
                 assert_eq!(elems.len(), 2);
                 match &elems[0] {
                     DoElem::Bind(_, binder, _) => {
-                        assert_eq!(binder.name, "_");
+                        assert_eq!(
+                            (binder.name).name(),
+                            crate::SurfaceName::generated_path("_").name()
+                        );
                     }
                     other => panic!("expected Bind with _, got {other:?}"),
                 }
@@ -785,7 +808,10 @@ mod do_notation {
         let decl = parse_decl("def main : IO Unit := do\n  let x ← pure 1\n  return ()").unwrap();
         match decl {
             crate::SurfaceDecl::Def { name, val, .. } => {
-                assert_eq!(name, "main");
+                assert_eq!(
+                    (name).name(),
+                    crate::SurfaceName::generated_path("main").name()
+                );
                 match val.as_ref() {
                     SurfaceExpr::Do(_, elems) => {
                         assert_eq!(elems.len(), 2, "expected 2 do elements in def body");
@@ -856,7 +882,11 @@ mod do_notation {
                 assert_eq!(elems.len(), 1, "expected 1 do element");
                 match &elems[0] {
                     DoElem::For(_, binder, _collection, body) => {
-                        assert_eq!(binder.name, "x", "loop variable should be x");
+                        assert_eq!(
+                            (binder.name).name(),
+                            crate::SurfaceName::generated_path("x").name(),
+                            "loop variable should be x"
+                        );
                         assert_eq!(body.len(), 1, "for body should have 1 elem");
                         assert!(
                             matches!(&body[0], DoElem::Return(_, _)),
@@ -880,17 +910,21 @@ mod do_notation {
                 assert_eq!(elems.len(), 1, "expected 1 do element");
                 match &elems[0] {
                     DoElem::For(_, binder, collection, body) => {
-                        assert_eq!(binder.name, "x", "loop variable should be x");
+                        assert_eq!(
+                            (binder.name).name(),
+                            crate::SurfaceName::generated_path("x").name(),
+                            "loop variable should be x"
+                        );
                         // Collection should be `f y` (application), NOT `f y (do return x)`
                         match collection.as_ref() {
                             SurfaceExpr::App(_, func, args) => {
                                 assert!(
-                                    matches!(func.as_ref(), SurfaceExpr::Ident(_, ref n) if n == "f"),
+                                    matches!(func.as_ref(), SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("f").name()),
                                     "collection func should be 'f', got {func:?}"
                                 );
                                 assert_eq!(args.len(), 1, "collection should have 1 arg (y)");
                                 assert!(
-                                    matches!(&args[0].expr, SurfaceExpr::Ident(_, ref n) if n == "y"),
+                                    matches!(&args[0].expr, SurfaceExpr::Ident(_, ref n) if (n).name() == crate::SurfaceName::generated_path("y").name()),
                                     "collection arg should be 'y', got {:?}",
                                     args[0].expr
                                 );
@@ -1076,15 +1110,27 @@ mod notation {
         // a bare `LeadsTo` ident) — either way it names the leads-to constant.
         fn head_names_leadsto(expr: &SurfaceExpr) -> bool {
             match expr {
-                SurfaceExpr::Ident(_, name) => name.ends_with("LeadsTo"),
-                SurfaceExpr::Proj(_, _, Projection::Named(field)) => field == "LeadsTo",
+                SurfaceExpr::Ident(_, name) => [
+                    "LeadsTo",
+                    "Trust.Temporal.LeadsTo",
+                    "_root_.Trust.Temporal.LeadsTo",
+                ]
+                .iter()
+                .any(|expected| name.name() == crate::SurfaceName::generated_path(expected).name()),
+                SurfaceExpr::Proj(_, _, Projection::Named(field)) => {
+                    (field).name() == crate::SurfaceName::generated_path("LeadsTo").name()
+                }
                 _ => false,
             }
         }
         let leads_val = flat
             .iter()
             .find_map(|decl| match decl {
-                SurfaceDecl::Def { name, val, .. } if name == "leads" => Some(val.as_ref()),
+                SurfaceDecl::Def { name, val, .. }
+                    if (name).name() == crate::SurfaceName::generated_path("leads").name() =>
+                {
+                    Some(val.as_ref())
+                }
                 _ => None,
             })
             .expect("`def leads` must parse as a real Def");
@@ -1100,18 +1146,18 @@ mod notation {
         }
 
         // The `□`/`◇` prefix notations still parse (no regression).
-        let names: Vec<&str> = flat
+        let names: Vec<crate::SurfaceName> = flat
             .iter()
             .filter_map(|decl| match decl {
-                SurfaceDecl::Def { name, .. } => Some(name.as_str()),
-                SurfaceDecl::Theorem { name, .. } => Some(name.as_str()),
+                SurfaceDecl::Def { name, .. } => Some(name.clone()),
+                SurfaceDecl::Theorem { name, .. } => Some(name.clone()),
                 _ => None,
             })
             .collect();
         assert!(
-            names.contains(&"boxed")
-                && names.contains(&"diamonded")
-                && names.contains(&"leadsto_unfolds"),
+            names.contains(&crate::SurfaceName::generated_path("boxed"))
+                && names.contains(&crate::SurfaceName::generated_path("diamonded"))
+                && names.contains(&crate::SurfaceName::generated_path("leadsto_unfolds")),
             "box/diamond/leadsto declarations must all parse, got {names:?}"
         );
     }
@@ -1381,10 +1427,14 @@ mod term_have_let_show {
     #[test]
     fn suffices_by_produces_tactic_node() {
         let expr = parse_expr("suffices h : P by exact h; proof").unwrap();
-        // suffices h : P by tac; body → Let(_, binder, body, ByTactic(...))
+        // suffices h : P by tac; body → Have(_, binder, body, ByTactic(...))
         match expr {
-            SurfaceExpr::Let(_, binder, _body, tac) => {
-                assert_eq!(binder.name, "h", "binder name should be 'h'");
+            SurfaceExpr::Have(_, binder, _body, tac) => {
+                assert_eq!(
+                    (binder.name).name(),
+                    crate::SurfaceName::generated_path("h").name(),
+                    "binder name should be 'h'"
+                );
                 match *tac {
                     SurfaceExpr::ByTactic(_, ref tactics) => {
                         assert_eq!(tactics.len(), 1, "should have exactly 1 tactic");
@@ -1397,7 +1447,7 @@ mod term_have_let_show {
                     other => panic!("expected ByTactic, got {other:?}"),
                 }
             }
-            other => panic!("expected Let, got {other:?}"),
+            other => panic!("expected Have, got {other:?}"),
         }
     }
 
@@ -1405,14 +1455,18 @@ mod term_have_let_show {
     fn suffices_bad_tactic_recovers_to_synthetic_sorry() {
         let expr = parse_expr("suffices h : P by have : P :=; proof").unwrap();
         match expr {
-            SurfaceExpr::Let(_, binder, _body, tac) => {
-                assert_eq!(binder.name, "h", "binder name should be 'h'");
+            SurfaceExpr::Have(_, binder, _body, tac) => {
+                assert_eq!(
+                    (binder.name).name(),
+                    crate::SurfaceName::generated_path("h").name(),
+                    "binder name should be 'h'"
+                );
                 assert!(
                     matches!(&*tac, SurfaceExpr::SyntheticSorry(_)),
                     "bad suffices tactic should recover to synthetic sorry, got {tac:?}"
                 );
             }
-            other => panic!("expected Let, got {other:?}"),
+            other => panic!("expected Have, got {other:?}"),
         }
     }
 
@@ -1434,24 +1488,28 @@ mod term_have_let_show {
     fn test_suffices_term_from_desugars_to_let_with_term_body() {
         let expr = parse_expr("suffices h : P from e; proof").unwrap();
         match expr {
-            SurfaceExpr::Let(_, binder, body, justification) => {
-                assert_eq!(binder.name, "h", "binder name should be 'h'");
+            SurfaceExpr::Have(_, binder, body, justification) => {
+                assert_eq!(
+                    (binder.name).name(),
+                    crate::SurfaceName::generated_path("h").name(),
+                    "binder name should be 'h'"
+                );
                 assert!(
                     binder.ty.is_some(),
                     "suffices type annotation should be preserved"
                 );
                 // The continuation (proof of P) becomes the let value.
                 assert!(
-                    matches!(&*body, SurfaceExpr::Ident(_, name) if name == "proof"),
+                    matches!(&*body, SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("proof").name()),
                     "let value should be the continuation proof, got {body:?}"
                 );
                 // The `from` term becomes the let body (no ByTactic node).
                 assert!(
-                    matches!(&*justification, SurfaceExpr::Ident(_, name) if name == "e"),
+                    matches!(&*justification, SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("e").name()),
                     "from justification should be the plain term `e`, got {justification:?}"
                 );
             }
-            other => panic!("expected Let, got {other:?}"),
+            other => panic!("expected Have, got {other:?}"),
         }
     }
 
@@ -1461,13 +1519,13 @@ mod term_have_let_show {
     fn test_suffices_term_from_compound_term_parses() {
         let expr = parse_expr("suffices h : P from g h; proof").unwrap();
         match expr {
-            SurfaceExpr::Let(_, _, _, justification) => {
+            SurfaceExpr::Have(_, _, _, justification) => {
                 assert!(
                     matches!(&*justification, SurfaceExpr::App(..)),
                     "from justification `g h` should be an application, got {justification:?}"
                 );
             }
-            other => panic!("expected Let, got {other:?}"),
+            other => panic!("expected Have, got {other:?}"),
         }
     }
 
@@ -1893,6 +1951,37 @@ mod import_cmd {
             "import multiple",
             parse_file("import Lean\nimport Std")
         ));
+    }
+
+    /// ONE module per `import` (Lean 4.8.0: `import Q P` imports `Q` and
+    /// reports "unexpected identifier; expected command" at `P`). Clean used
+    /// to import both, crediting a file Lean rejects with a value Lean never
+    /// computes (round-25 `oneline_3`).
+    #[test]
+    fn import_takes_one_module_per_command() {
+        use crate::SurfaceDecl;
+        let decls = parse_file("import Q P\ntheorem t : True := trivial\n").expect("recovers");
+        let SurfaceDecl::Import { paths, .. } = &decls[0] else {
+            panic!("first command is the import: {decls:?}");
+        };
+        assert_eq!(paths.len(), 1, "{decls:?}");
+        assert_eq!(paths[0].to_string(), "Q", "{decls:?}");
+        assert!(
+            decls
+                .iter()
+                .any(|d| matches!(d, SurfaceDecl::RawDecl { .. })),
+            "`P` is not part of the import: {decls:?}"
+        );
+        // Two `import` commands on one line are two imports.
+        let decls = parse_file("import Q import P\n").expect("parses");
+        assert_eq!(
+            decls
+                .iter()
+                .filter(|d| matches!(d, SurfaceDecl::Import { .. }))
+                .count(),
+            2,
+            "{decls:?}"
+        );
     }
 }
 

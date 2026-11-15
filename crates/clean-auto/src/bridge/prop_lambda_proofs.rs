@@ -42,8 +42,17 @@ impl<'env> SmtBridge<'env> {
             return Ok((ProofStep::Propositional("Implies.lam".into()), proof));
         }
 
-        // Strategy 2: P = Q (identity function)
-        let p_key = ExprKey::from_expr(p);
+        // Strategy 2: P = Q (identity function).
+        //
+        // `q` is the arrow's CODOMAIN, one binder deeper than `p`: its loose
+        // bound variables are numbered from inside the new lambda, `p`'s from
+        // outside it. Compare `p` lifted under that binder, never `p` itself.
+        // Comparing the raw terms matched `b = true` (outside: `b` = #1)
+        // against `c = true` (inside: `c` = #1) in the open body of
+        // `∀ b c : Bool, b = true → c = true` and "proved" that FALSE goal
+        // with `fun h => h : b = true → b = true`; only the kernel check
+        // rejected it (decide review probe a07, 2026-09-28).
+        let p_key = ExprKey::from_expr(&p.lift(1));
         let q_key = ExprKey::from_expr(q);
         if p_key.is_some() && p_key == q_key {
             let proof = Expr::lam(BinderInfo::Default, p.clone(), Expr::bvar(0));

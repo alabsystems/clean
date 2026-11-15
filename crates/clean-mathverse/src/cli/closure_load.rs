@@ -33,8 +33,8 @@ use clean_kernel::env::{ConstantSource, ProofElisionStats, ProofValueElision};
 use clean_kernel::{Environment, Name};
 use clean_olean::verify_batch::module_name_from_path;
 use clean_olean::{
-    default_search_paths, load_module_with_deps_bounded_shared_with_policy, parse_imports_only,
-    ImportError, ImportKinds, OleanImportPolicy,
+    default_search_paths, load_module_with_deps_bounded_shared_with_policy, ArtifactDepth,
+    ImportError, ImportKinds, LeanWorldScope, OleanImportPolicy,
 };
 use hashbrown::HashSet;
 
@@ -140,7 +140,11 @@ pub(crate) fn load_targets_closure(
     elision: ProofValueElision,
 ) -> Result<ClosureEnv, MathverseCliError> {
     // Eager (legacy) closure: every declaration kind is registered into the env.
-    let import_policy = OleanImportPolicy::default().with_proof_elision(elision);
+    // A re-check lane over Lean's world: a refused completion of an artifact's
+    // own stub refuses the import (R131), never a trusted axiom.
+    let import_policy = OleanImportPolicy::default()
+        .with_proof_elision(elision)
+        .refusing_refused_completions();
     load_targets_closure_with_policy(targets, root, elision, import_policy)
 }
 
@@ -184,14 +188,19 @@ fn load_targets_closure_with_policy(
     //   3. the discovered stdlib/toolchain paths (so Init/Std deps resolve).
     let search_paths = build_closure_search_paths(root);
 
-    // WS17: import-verification prelude — suppresses the kernel's lossy
-    // hand-rolled `extends`-structure stubs (`Preorder`/`Semigroup`/…).
-    // Otherwise those field-dropping stubs shadow the real Mathlib structures
-    // on `.olean` import (the loader dedups by name), and every instance that
-    // applies a genuine trailing field is kernel-rejected and masked to an
-    // axiom. See `Environment::try_with_prelude_for_import`.
-    let mut env = Environment::try_with_prelude_for_import()
-        .map_err(|e| MathverseCliError::StampPrelude(e.to_string()))?;
+    // Lean's replay environment: the `.olean` closure loaded below and nothing
+    // else (`Environment::for_lean_replay`), as `leanchecker` replays a module
+    // into the environment of its imports. Clean's import prelude used to be
+    // seeded here, and since the loader keeps the first declaration of a name,
+    // its `sorry`/`trustedArith`/`trustedAy` and its hand-written declarations
+    // that shadow same-named Lean constants were what the targets were
+    // checked against.
+    let mut env = Environment::for_lean_replay();
+    // The targets' Lean world (docs/DECISIONS.md R81). Their own declarations
+    // are re-minted from their shards, never loaded here, so the module
+    // loaders' world gate never sees a target: each is admitted here, and the
+    // environment reads its world, so an import of another is refused.
+    let mut world = LeanWorldScope::new();
 
     // Every target module's name (relative path -> module name). Pre-seeding all
     // of them into the shared `visited` set guarantees that no target module is
@@ -226,10 +235,16 @@ fn load_targets_closure_with_policy(
             module: target_module.clone(),
             reason: format!("read {}: {e}", target.display()),
         })?;
-        let imports = parse_imports_only(&bytes).map_err(|e| MathverseCliError::StampClosure {
-            module: target_module.clone(),
-            reason: format!("parse imports: {e}"),
-        })?;
+        // The imports of the part `lean` reads, through the one artifact
+        // reader (R113): an artifact whose parts disagree is refused by name.
+        let imports = clean_olean::read_artifact(target_module, target, ArtifactDepth::Names)
+            .map_err(|e| closure_load_error(target_module, &e, e.to_string()))?
+            .imports;
+        world
+            .admit_part(target_module, &bytes)
+            .and_then(|()| world.admit_companions(target_module, target))
+            .and_then(|()| world.bind_environment(&mut env))
+            .map_err(|e| closure_load_error(target_module, &e, e.to_string()))?;
 
         for import in &imports {
             let import_name = import.module_name.trim();
@@ -246,9 +261,8 @@ fn load_targets_closure_with_policy(
                 &mut visited,
                 import_policy,
             )
-            .map_err(|e| MathverseCliError::StampClosure {
-                module: target_module.clone(),
-                reason: closure_load_reason(import_name, &e),
+            .map_err(|e| {
+                closure_load_error(target_module, &e, closure_load_reason(import_name, &e))
             })?;
             for summary in summaries {
                 let loaded_name = summary
@@ -349,7 +363,18 @@ pub(crate) fn load_targets_closure_mmap(
     // return None => coverage miss => HARD EAGER FALLBACK. The version diagnostic
     // (Step 9) reports a v2/unbound closure dir so an all-eager downgrade is
     // observable rather than misattributed.
-    let (any_v3_bound, verified_shards) = verify_closure_shards_against_oleans(&mut source, root);
+    //
+    // A shard is servable only when its source `.olean` is of the targets'
+    // Lean world (docs/DECISIONS.md R81), which the scope is seeded with.
+    let mut world = LeanWorldScope::new();
+    for target in targets {
+        let module = module_name_from_path(target, root);
+        world
+            .admit_artifact(&module, target)
+            .map_err(|e| closure_load_error(&module, &e, e.to_string()))?;
+    }
+    let (any_v3_bound, verified_shards) =
+        verify_closure_shards_against_oleans(&mut source, root, &mut world);
     if !any_v3_bound {
         eprintln!(
             "stamp-verified: closure shard dir `{}` has NO v3 fail-closed-bound shards \
@@ -388,6 +413,11 @@ pub(crate) fn load_targets_closure_mmap(
         .with_proof_elision(elision)
         .with_import_kinds(ImportKinds::InductiveFamiliesOnly);
     let mut closure = load_targets_closure_with_policy(targets, root, elision, import_policy)?;
+    // The eager leg bound the environment to the closure's world; the shards
+    // the scope admitted are of it, or the run stops here.
+    world
+        .bind_environment(&mut closure.env)
+        .map_err(|e| closure_load_error(&closure.target_module, &e, e.to_string()))?;
 
     // PRELUDE-STUB OVERRIDE (verdict parity): the import-verification prelude
     // registers AXIOM STUBS for some library names (e.g. `Membership.mem`:
@@ -446,7 +476,9 @@ pub(crate) fn load_targets_closure_mmap(
 /// digest. On a full match the shard is marked verified (its `get()`s become
 /// servable). Returns `(any_v3_bound, verified)`: `any_v3_bound` is `false` only
 /// when NO reader is even a fail-closed-bound v3 shard (a v2 / unbound closure
-/// dir), which the caller reports distinctly.
+/// dir), which the caller reports distinctly. A shard whose source `.olean`
+/// is not of `world` (docs/DECISIONS.md R81) is left unverified; the first
+/// Lean part admitted binds an unbound `world`.
 ///
 /// SOUNDNESS: synthetic readers (`from_merged_parts`, source hash all-zero) and
 /// any reader missing the fail-closed marker / module name are SKIPPED — they
@@ -461,13 +493,14 @@ pub(crate) fn load_targets_closure_mmap(
 pub(crate) fn verify_closure_shards_against_oleans(
     source: &mut ShardConstantSource,
     root: &Path,
+    world: &mut LeanWorldScope,
 ) -> (bool, usize) {
     let search_paths = build_closure_search_paths(root);
     let mut any_v3_bound = false;
     let mut verified = 0usize;
 
     for shard in 0..source.shard_count() {
-        match verify_one_closure_shard(source, shard, &search_paths) {
+        match verify_one_closure_shard(source, shard, &search_paths, world) {
             None => {}
             Some(true) => {
                 any_v3_bound = true;
@@ -505,6 +538,7 @@ pub(crate) fn verify_one_closure_shard(
     source: &mut ShardConstantSource,
     shard: usize,
     search_paths: &[PathBuf],
+    world: &mut LeanWorldScope,
 ) -> Option<bool> {
     // Collect every owned datum we need, then DROP the immutable reader
     // borrow before any `mark_shard_verified` (mutable) call.
@@ -676,10 +710,20 @@ pub(crate) fn verify_one_closure_shard(
         return Some(false);
     }
 
+    // LEAN WORLD (docs/DECISIONS.md R81): the source `.olean` and its
+    // companions must be of `world`, the world the caller reads, so a shard
+    // of a refused or second world is never servable, whatever its digests
+    // say. Checked last, so that each gate above meets its own failure first.
+    if let Err(e) = world.admit_artifact(&module, &olean) {
+        eprintln!("kv lazy-closure: shard for `{module}`: {e} — UNVERIFIED (=> eager).");
+        return Some(false);
+    }
+
     // Full match: this shard's content is byte-bound to the on-disk olean
-    // eager would import, only serves names that olean declares, AND every
-    // served constant's arena reconstructs to the build-time-verified content
-    // (recon_digest match). Mark it.
+    // eager would import, only serves names that olean declares, every served
+    // constant's arena reconstructs to the build-time-verified content
+    // (recon_digest match), AND the olean is of the caller's Lean world. Mark
+    // it.
     source.mark_shard_verified(shard);
     Some(true)
 }
@@ -824,6 +868,35 @@ pub(crate) fn lazy_closure_missing_names(
     missing.sort();
     missing.dedup();
     missing
+}
+
+/// A closure-load failure as `stamp-verified` reports it: a module-trust
+/// refusal of an artifact (`ImportError::is_inconsistent_artifact`) that names
+/// declarations is [`MathverseCliError::StampImportRefused`], naming them;
+/// anything else is [`MathverseCliError::StampClosure`]. `reason` is the
+/// caller's rendering of `err`.
+pub(crate) fn closure_load_error(
+    module: &str,
+    err: &ImportError,
+    reason: String,
+) -> MathverseCliError {
+    let names: Vec<String> = err
+        .declaration_names()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    if err.is_inconsistent_artifact() && !names.is_empty() {
+        MathverseCliError::StampImportRefused {
+            module: module.to_owned(),
+            names,
+            reason,
+        }
+    } else {
+        MathverseCliError::StampClosure {
+            module: module.to_owned(),
+            reason,
+        }
+    }
 }
 
 /// Format the closure-load failure reason, annotating the bounded-loader cap so
@@ -1074,17 +1147,17 @@ pub(crate) fn build_closure_shards_for_targets_with_search_paths(
             queue.push_back(module_name_from_path(target, root));
         }
     }
+    // One Lean world across the targets and their closure (docs/DECISIONS.md
+    // R81): no shard is built from a part the module loaders would refuse.
+    let mut world = LeanWorldScope::new();
     for target in targets {
         let target_module = module_name_from_path(target, root);
-        let target_bytes = std::fs::read(target).map_err(|e| MathverseCliError::StampClosure {
-            module: target_module.clone(),
-            reason: format!("read {}: {e}", target.display()),
-        })?;
-        for import in
-            parse_imports_only(&target_bytes).map_err(|e| MathverseCliError::StampClosure {
-                module: target_module.clone(),
-                reason: format!("parse imports: {e}"),
-            })?
+        world
+            .admit_artifact(&target_module, target)
+            .map_err(|e| closure_load_error(&target_module, &e, e.to_string()))?;
+        for import in clean_olean::read_artifact(&target_module, target, ArtifactDepth::Names)
+            .map_err(|e| closure_load_error(&target_module, &e, e.to_string()))?
+            .imports
         {
             let nm = import.module_name.trim().to_string();
             if !nm.is_empty() {
@@ -1106,15 +1179,23 @@ pub(crate) fn build_closure_shards_for_targets_with_search_paths(
             skipped_modules.push(module);
             continue;
         };
+        if let Err(e) = world.admit_artifact(&module, &olean) {
+            if e.is_world_refusal() {
+                return Err(closure_load_error(&module, &e, e.to_string()));
+            }
+            eprintln!("build-closure-shards: skip `{module}` ({e})");
+            skipped_modules.push(module);
+            continue;
+        }
         // Enqueue this module's own imports BEFORE converting, so the walk is
         // complete even if conversion fails.
-        if let Ok(bytes) = std::fs::read(&olean) {
-            if let Ok(imports) = parse_imports_only(&bytes) {
-                for import in imports {
-                    let nm = import.module_name.trim().to_string();
-                    if !nm.is_empty() && !visited.contains(&nm) {
-                        queue.push_back(nm);
-                    }
+        // The imports of the part `lean` reads (R113); a refused artifact
+        // enqueues nothing, and its conversion below refuses it by name.
+        if let Ok(read) = clean_olean::read_artifact(&module, &olean, ArtifactDepth::Names) {
+            for import in read.imports {
+                let nm = import.module_name.trim().to_string();
+                if !nm.is_empty() && !visited.contains(&nm) {
+                    queue.push_back(nm);
                 }
             }
         }

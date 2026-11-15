@@ -249,7 +249,12 @@ pub fn ir_br_module_defs() -> &'static [&'static str] {
     &MINTED_IR_BR_LINES
 }
 
-const SRC_IR_CFG_MACH: &str = "def ir_cfg_mach (c : IRConfig) (dflt : IRMachine) : IRMachine := IRConfig.rec (fun (_ : IRConfig) => IRMachine) (fun (m : IRMachine) => m) (fun (_ : IROutcome) => dflt) c";
+// `ir_cfg_mach` MOVED 2026-09-11 to `add_eval_ir_lzd_fresh`. It is registered
+// there, not here, because the EvalIr bundle needs it and does not include this
+// stage — the Phase-B deref activation names every intermediate machine as a
+// reduction of the run that reaches it, which is the same idiom `ir_br_m1` /
+// `ir_br_m2` below use. One definition, registered earlier; nothing here
+// changed but the place.
 
 const SRC_IR_BR_MACH0: &str = "def ir_br_mach0 (i : Nat) (s : Nat) (e : Nat) (mem : IRList IRMemSlot) (na : Nat) : IRMachine := IRMachine.mk (IRList.cons IRFrame (IRFrame.mk ir_d0 ir_d0 Nat.zero (ir_bind_params (ir_nl3 ir_d0 ir_d1 ir_d2) (ir_vl3 (IRScalar.int_ i) (IRScalar.int_ s) (IRScalar.int_ e)) (IRList.nil IRBinding)) (IRList.nil Nat)) (IRList.nil IRFrame)) mem na";
 
@@ -376,7 +381,6 @@ The SENTINEL IS THE LITERAL 4294967295 AND MUST STAY THE LITERAL. This is the wh
         for (line, doc) in minted.iter().zip(MINTED_IR_BR_DOCS) {
             self.add_recursive_def(line, doc)?;
         }
-        self.add_recursive_def(SRC_IR_CFG_MACH, "ir_cfg_mach: the machine inside a running configuration, with an explicit default for the halted case. A total projection rather than a partial one, so no premise is needed to use it; the default is never reached in this chain because the two steps it is applied to both bind a value. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_BR_MACH0, "ir_br_mach0: the machine ir_init produces for this module -- definitionally equal to it, since the module declares no globals so ir_mem_concat is the identity on the caller heap. Binds THREE parameters positionally. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_BR_M1, "ir_br_m1: the machine after ONE step, with the materialized u32::MAX bound at %5. DerivedProved, zero axiom_deps.")?;
         self.add_recursive_def(SRC_IR_BR_M2, "ir_br_m2: the machine after TWO steps, with the first comparison's result ABSTRACTED to a Bool parameter. \n\nThis is the device the whole proof turns on. ir_condbr_exec dispatches with Bool.rec on the scrutinee, and this body's scrutinee is a computed Bool over symbolic u32 residues, so the machine is stuck there and no amount of fuel unsticks it. Abstracting the bound value makes the scrutinee a VARIABLE that Bool.rec can eliminate. It is not a different program: at b := ir_br_c1 e this term is DEFINITIONALLY ir_step applied twice to ir_br_mach0, which is exactly what ir_br_exact relies on. DerivedProved, zero axiom_deps.")?;

@@ -58,15 +58,42 @@ pub struct CompileArgs {
     /// Output format — one of `l5ir`, `l5cnf`, `c`, `rust`.
     #[arg(long, value_enum, default_value_t = EmitFormat::L5ir)]
     pub emit: EmitFormat,
-    /// Optimization level hint (`0` disables optimization, `2` is most
-    /// aggressive). Currently advisory; the MVP does not implement
-    /// per-level pass scheduling.
+    /// Optimization level: `0` disables optimization, `1` is the default
+    /// pipeline, `2` and above are most aggressive.
+    ///
+    /// This is NOT advisory. `pipeline_config_from_opt_level` schedules passes
+    /// per level — 0 turns off optimization, reference counting and boxing
+    /// elision — and `clean run` forwards through the same path. The doc said
+    /// "advisory; the MVP does not implement per-level pass scheduling" until
+    /// 2026-08-31, which is anti-disclosure: it stops a reader trying a flag
+    /// that works.
     #[arg(long, default_value_t = 0, value_name = "N")]
     pub opt_level: u8,
     /// Write output to this path instead of stdout. Required for `--emit obj`
     /// (a binary object cannot go to stdout); optional for the text formats.
     #[arg(long, short = 'o', value_name = "PATH")]
     pub output: Option<PathBuf>,
+    /// A trust-ir module this compile LINKS AGAINST instead of re-embedding
+    /// (repeatable; `--emit trustir-bin` only, trust-ir-backend feature).
+    ///
+    /// Each path must hold plain module bytes as `--emit trustir-bin` writes
+    /// them; a `.tmbc` container is refused, because the import digest is
+    /// taken over the module. A dependency whose link symbol exactly one
+    /// supplied artifact defines (a body and externally visible linkage) is
+    /// not compiled: the client declares it at the artifact's signature (with
+    /// the backend functions generated from it, such as its boxed entry) and
+    /// records one `Module.imports` row per artifact it uses, with the digest
+    /// measured over the decoded module. A dependency two artifacts define is
+    /// refused, and so is a compile root an artifact already defines. So is a
+    /// call whose lowered shape differs from the artifact's signature; it is
+    /// never re-boxed. A proof row is inherited only when the
+    /// artifact's certificate was minted against the same source definition
+    /// this compile elaborates, and the output is refused unless
+    /// `validate_linked_module` accepts it against the supplied artifacts.
+    /// Without this flag the whole dependency closure is compiled into one
+    /// module.
+    #[arg(long = "link-artifact", value_name = "PATH")]
+    pub link_artifact: Vec<PathBuf>,
 }
 
 /// Emission format chooser for `clean compile --emit`.
@@ -91,6 +118,21 @@ pub enum EmitFormat {
     /// when compiled with the `trust-ir-backend` feature.
     #[cfg(feature = "trust-ir-backend")]
     Trustir,
+    /// Emit a BINARY `trust_ir` module — plain `trust_ir::binary::serialize_module`
+    /// bytes, NOT the `.tmbc` container.
+    ///
+    /// This is the linkable artifact: a `.tmbc` carries `b"tMBC"` + a
+    /// little-endian `u32` ahead of the module, which
+    /// `trust_ir::binary::deserialize_module` refuses, and a digest taken over
+    /// a container is not a digest of the module. `Module::stable_digest` is
+    /// computed over the MODULE, so the file a consumer reads and the bytes the
+    /// identity is taken over have to be the same thing. `--emit obj` keeps the
+    /// container, because that is what the `trust-cg` CLI consumes.
+    ///
+    /// Requires `-o <path>`. trust-ir-backend feature.
+    #[cfg(feature = "trust-ir-backend")]
+    #[clap(name = "trustir-bin")]
+    TrustirBin,
     /// Compile to a native object file (`.o`) by lowering to trust-ir and
     /// invoking the `trust-cg` backend. Requires `-o <path>` and a `trust-cg`
     /// binary (via `CLEAN_TRUST_CG_BIN` or `PATH`). trust-ir-backend feature.
@@ -209,7 +251,9 @@ Compile a single declaration from a `.lean` file through the clean-compiler \
 pipeline. The MVP accepts a `<FILE>` positional and a `--decl <NAME>` \
 selector plus `--emit <FORMAT>` (one of `l5ir`, `l5cnf`, `c`, `rust`) and \
 an `--opt-level <N>` hint.\n\n\
-Marked `Stability::Experimental` because THIS command emits source text only: \
+Marked `Stability::Experimental` because THIS command stops at IR or source text \
+(the `trust-ir-backend` cargo feature adds `--emit obj`, a native object via \
+trust-cg): \
 it does not itself link or run, and it is not a full Lean4 compiler/runtime \
 replacement. The top-level `clean-cli` bridge owns parsing and elaboration, \
 then lowers the selected declaration through the public `clean-compiler` \
@@ -365,6 +409,7 @@ mod tests {
             emit: EmitFormat::L5ir,
             opt_level: 0,
             output: None,
+            link_artifact: Vec::new(),
         };
         let err = run(args).expect_err("missing file must error");
         assert!(matches!(err, CompilerCliError::MissingInput));
@@ -378,6 +423,7 @@ mod tests {
             emit: EmitFormat::L5ir,
             opt_level: 0,
             output: None,
+            link_artifact: Vec::new(),
         };
         let err = run(args).expect_err("missing decl must error");
         assert!(matches!(err, CompilerCliError::MissingInput));
@@ -391,6 +437,7 @@ mod tests {
             emit: EmitFormat::L5ir,
             opt_level: 0,
             output: None,
+            link_artifact: Vec::new(),
         };
         let err = run(args).expect_err("MVP must surface NotYetImplemented");
         assert!(matches!(err, CompilerCliError::NotYetImplemented));

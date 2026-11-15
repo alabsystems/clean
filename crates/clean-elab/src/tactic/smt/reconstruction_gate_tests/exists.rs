@@ -4,6 +4,11 @@
 
 //! Exists-placeholder closure and solver-backed witness integration coverage.
 
+// Gated like every other import here. `clippy --fix -p clean-elab` resolves
+// with `ay-smt` OFF, sees this glob unused (all its consumers are gated) and
+// removes it -- then the WORKSPACE build, where another member turns `ay-smt`
+// on through feature unification, fails with E0425/E0433. Carrying the gate
+// keeps both resolutions correct.
 #[cfg(feature = "ay-smt")]
 use super::super::*;
 #[cfg(feature = "ay-smt")]
@@ -16,6 +21,8 @@ use crate::tactic::{LocalDecl, ProofState};
 use clean_kernel::name::Name;
 #[cfg(feature = "ay-smt")]
 use clean_kernel::{Environment, Expr, Level, TypeChecker};
+#[cfg(feature = "ay-smt")]
+use clean_parser::SurfaceName;
 #[cfg(feature = "ay-smt")]
 use serial_test::serial;
 
@@ -74,8 +81,9 @@ fn register_exists_hypothesis_in_solver(
     let mut solver = create_smt_backend(&config, AyLogic::QfUf);
     let hyp_fvar = FVarId::new(41);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "hex".to_string(),
+        name: SurfaceName::component("hex", false),
         ty: exists_expr.clone(),
         value: None,
     }];
@@ -106,8 +114,9 @@ fn assert_proof_typechecks_with_hyp(
         .front_mut()
         .expect("main goal should exist")
         .local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: hyp_fvar,
-        name: "hex".to_string(),
+        name: SurfaceName::component("hex", false),
         ty: hyp_ty,
         value: None,
     }];
@@ -168,8 +177,9 @@ fn test_finalize_kernel_reconstruction_candidate_closes_exists_placeholders_befo
         .front_mut()
         .expect("main goal should exist")
         .local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: source_hyp_fvar,
-        name: "hex".to_string(),
+        name: SurfaceName::component("hex", false),
         ty: exists_prop,
         value: None,
     }];

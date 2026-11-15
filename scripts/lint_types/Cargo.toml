@@ -1,0 +1,28 @@
+# The TYPED scan of scripts/check_lint_coverage.py: rustc itself (rustc_driver,
+# from the pinned toolchain's rustc-dev), run by cargo as the
+# RUSTC_WORKSPACE_WRAPPER of a STANDALONE_GATED crate, plus two rules read off
+# the THIR the compiler lowers every body to -- where no catch-all may stand for
+# variants of a trust-ir enum (or of the crate's own) that another alternative
+# names, and no comparison or discriminant cast may tell one apart by value.
+# See src/main.rs.
+#
+# Not a workspace member, for the same reason as scripts/lint_scan: a tool of
+# one gate, built by that gate. It has no dependencies but the compiler's own
+# crates (`#![feature(rustc_private)]`), so its lock names only itself. It is
+# itself STANDALONE_GATED -- the check runs its tests, lints it, scans it with
+# scripts/lint_scan and with itself -- and every tracked file here is a pinned
+# input of the check's registry row (`--pinned-inputs`).
+
+[workspace]
+
+[package]
+name = "clean-lint-types"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+
+[[bin]]
+name = "lint-types"
+path = "src/main.rs"

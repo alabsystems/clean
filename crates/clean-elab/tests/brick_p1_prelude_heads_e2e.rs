@@ -214,14 +214,23 @@ def kleisliL : Nat -> Option Nat := (fun m => some m) <=< (fun n => some (Nat.su
 ",
     )
     .expect("=<< / >=> / <=< should elaborate (audit rows a09-a11)");
-    // Documented deviation: the combinators are spelled against the
-    // pre-existing Bind.bind stub axiom (no [Bind m] binder yet). Their
-    // closure must be exactly that one PRE-EXISTING axiom — nothing new.
-    for c in ["Bind.bindLeft", "Bind.kleisliRight", "Bind.kleisliLeft"] {
-        assert_eq!(
-            axiom_closure(&env, c),
-            vec!["Bind.bind".to_string()],
-            "{c} must rest on exactly the pre-existing Bind.bind stub axiom"
+    // The combinators take Lean's `[Bind m]` binder and use its `Bind.bind`
+    // projection (2026-09-28). Until then they were spelled against an
+    // instance-less `Bind.bind` AXIOM, which proved `False`
+    // (`docs/issues/2026-09-28-prelude-pure-proves-false.md`); now their
+    // closure is empty, and so is every user definition's that uses them.
+    for c in [
+        "Bind.bindLeft",
+        "Bind.kleisliRight",
+        "Bind.kleisliLeft",
+        "bindLeftOpt",
+        "kleisliR",
+        "kleisliL",
+    ] {
+        assert!(
+            axiom_closure(&env, c).is_empty(),
+            "{c} must have an empty axiom closure, got {:?}",
+            axiom_closure(&env, c)
         );
     }
 }

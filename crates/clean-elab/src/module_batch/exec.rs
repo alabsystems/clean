@@ -13,10 +13,11 @@
 //! values.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use clean_kernel::{Environment, Name};
 
-use super::plan::{LexicalDirective, Node};
+use super::plan::{LexicalDirective, Node, TemplateDeclaration};
 use crate::decl_attributes::CtxAttributes;
 use crate::infer::{ElabResult, UnstagedSibling};
 use crate::namespace::NamespaceState;
@@ -112,25 +113,25 @@ pub(super) fn elab_ctx_for<'a>(
     ctx.set_unstaged_siblings(
         siblings
             .iter()
-            .filter(|sibling| {
-                node.name
-                    .as_ref()
-                    .is_none_or(|own| own.to_string() != sibling.name)
-            })
+            .filter(|sibling| node.name.as_ref().is_none_or(|own| own != &sibling.name))
             .cloned()
             .collect(),
     );
     let lex = &node.lex;
+    ctx.set_term_info_capture(lex.term_info_capture());
     ctx.set_namespace_state(replay_directives(
         env,
         lex.namespace_state(),
         &node.directives,
     ));
+    let instance_view = lex.instance_view(env);
     ctx.set_instance_scope_state(
-        lex.dead_local_instances().clone(),
+        instance_view.hidden(),
         lex.scoped_instance_map().clone(),
         lex.default_instance_entries(),
     );
+    ctx.set_instance_view(instance_view);
+    ctx.set_foreign_private_decls(lex.foreign_private_decls());
     // U2 rung-4 explicitness channel: the file-scope `universe` names FROZEN
     // with this node. `plan.rs` preprocessed the node against the same
     // context, and preprocessing merges those names into the declaration's
@@ -150,7 +151,51 @@ pub(super) fn elab_ctx_for<'a>(
         ctx.set_tactic_registry(registry.clone());
     }
     ctx.set_user_term_elabs(lex.user_term_elabs().clone());
+    // The batch's templates pre-resolved their free names while the plan
+    // walked past them, against an environment without the batch and under
+    // none of its `open`s; resolve them again against this one.
+    replay_templates(env, &mut ctx, &node.templates);
     ctx
+}
+
+/// Make again, against `env`, the pre-resolution of each of `templates` that
+/// `ctx`'s namespace state records, from where the template was declared:
+/// its namespace state there, with the directives in force there replayed
+/// against `env` exactly as a declaration's own are ([`replay_directives`]).
+///
+/// So a template's free name means what an ordinary name written at the
+/// template's declaration means under header-first checking: it sees every
+/// declaration of the batch, the batch's `open`s as written around the
+/// template, and nothing of the use's.
+fn replay_templates(
+    env: &Environment,
+    ctx: &mut ElabCtx<'_>,
+    templates: &[Arc<TemplateDeclaration>],
+) {
+    for template in templates {
+        let declared_under =
+            replay_directives(env, &template.namespace_state, &template.directives);
+        ctx.re_resolve_template_site(template.site, declared_under);
+    }
+}
+
+/// [`replay_templates`] into the caller's own namespace state, against the
+/// published environment, once the batch has published: a later batch then
+/// reads what each of this batch's templates names, not what the plan saw.
+pub(super) fn replay_trailing_templates(
+    env: &Environment,
+    file_ctx: &crate::FileContext,
+    base: NamespaceState,
+    templates: &[Arc<TemplateDeclaration>],
+) -> NamespaceState {
+    if templates.is_empty() {
+        return base;
+    }
+    let mut ctx = ElabCtx::new(env);
+    ctx.set_foreign_private_decls(file_ctx.foreign_private_decls());
+    ctx.set_namespace_state(base);
+    replay_templates(env, &mut ctx, templates);
+    ctx.take_namespace_state()
 }
 
 /// Replay every `open` / `export` in force at a node's source position against
@@ -195,11 +240,11 @@ fn replay_directives(
                 issued_in,
             } => {
                 set_current_namespace(&mut state, issued_in);
-                let current = issued_in.to_string();
+                let current = clean_parser::SurfaceName::from_name(issued_in.clone());
                 let current = if issued_in.is_anon() {
                     None
                 } else {
-                    Some(current.as_str())
+                    Some(&current)
                 };
                 let _ =
                     crate::namespace::process_export(env, namespace, names, current, &mut state);
@@ -231,9 +276,7 @@ fn set_current_namespace(state: &mut NamespaceState, target: &Name) {
     if target.is_anon() {
         return;
     }
-    for component in target.to_string().split('.') {
-        state.enter_namespace(Name::from_string(component));
-    }
+    state.enter_resolved_namespace(target.clone());
 }
 
 /// Elaborate `node` against `env`. Registers nothing.
@@ -247,6 +290,7 @@ pub(super) fn elaborate_node(
 ) -> NodeElaboration {
     let mut ctx = elab_ctx_for(env, node, siblings);
     let result = ctx.elab_decl(&node.decl);
+    ctx.finish_term_info();
     let hole_contexts = ctx.collect_hole_contexts();
     let attributes = CtxAttributes::collect(&mut ctx);
     NodeElaboration {
@@ -261,23 +305,66 @@ pub(super) fn elaborate_node(
 /// `env` here is never the staging environment: a header is never registered,
 /// and a real declaration is never registered into staging by this path (the
 /// body phase mirrors it separately, after discharging the header).
-pub(super) fn register_node(
+pub(super) fn register_node<'a>(
     env: &mut Environment,
     node: &mut Node,
-    result: &ElabResult,
+    result: &'a ElabResult,
     attributes: CtxAttributes,
-) -> Result<(), ElabError> {
-    register::register_elab_result(env, result)?;
+) -> Result<crate::source_family_authority::PublishedSourceResult<'a>, ElabError> {
+    let publication = crate::source_family_authority::register_source(env, result)?;
+    // The batch is one elaboration run: every node's lexical snapshot keeps
+    // the caller's run, so an `attribute [..]` command of the batch may name
+    // a declaration of the batch (`crate::declared_here`).
+    crate::declared_here::record_declared(
+        env,
+        node.lex.elab_unit(),
+        register::leaf_own_names(result),
+    );
     node.warning = register::registration_warning_for_result(env, result);
-    register::register_param_names(env, &node.decl);
+    register::register_param_names(env, &node.decl, result);
     attributes.apply(env, Some(&mut node.lex))?;
-    crate::record_instance_scopes(&mut node.lex, result);
-    Ok(())
+    crate::record_instance_scopes(&mut node.lex, env, result);
+    Ok(publication)
+}
+
+/// Split a node's elaboration result into what registers and the `deriving`
+/// classes that failed beside its type, and retain source diagnostics as
+/// rejections of the node. A source error does not discard a registered value.
+///
+/// A failed class is an error beside its type, never instead of it
+/// (`crate::infer::deriving_log`): the type registers without it, as in the
+/// one-declaration-at-a-time driver, and each failure is reported. Callers
+/// report the rejections only once the type has registered.
+pub(super) fn split_logged_source_rejections(
+    node: &Node,
+    result: ElabResult,
+) -> (ElabResult, Vec<super::BatchRejection>) {
+    let (registrable, logged) = crate::infer::split_logged_deriving_failures(result);
+    let mut rejections: Vec<_> = logged
+        .into_iter()
+        .filter_map(|leaf| match leaf {
+            ElabResult::Failed { error, .. } => Some(super::BatchRejection::Elaboration {
+                name: node.name.clone(),
+                site: node.site(),
+                error,
+            }),
+            _ => None,
+        })
+        .collect();
+    if let Some(message) = registrable.source_error_message() {
+        rejections.push(super::BatchRejection::Elaboration {
+            name: node.name.clone(),
+            site: node.site(),
+            error: Box::new(ElabError::CommandFailed { message }),
+        });
+    }
+    (registrable, rejections)
 }
 
 /// Every constant name an elaboration result introduces.
 pub(super) fn introduced_names(result: &ElabResult, out: &mut std::collections::BTreeSet<Name>) {
     match result {
+        ElabResult::Diagnosed { result, .. } => introduced_names(result, out),
         ElabResult::Definition { name, .. }
         | ElabResult::Theorem { name, .. }
         | ElabResult::Axiom { name, .. }
@@ -293,8 +380,8 @@ pub(super) fn introduced_names(result: &ElabResult, out: &mut std::collections::
         } => {
             out.insert(name.clone());
             out.extend(constructors.iter().map(|(n, _)| n.clone()));
-            out.insert(Name::from_string(&format!("{name}.rec")));
-            out.insert(Name::from_string(&format!("{name}.casesOn")));
+            out.insert(name.clone().str("rec"));
+            out.insert(name.clone().str("casesOn"));
             for derived in derived_instances {
                 out.insert(derived.name.clone());
             }
@@ -307,8 +394,8 @@ pub(super) fn introduced_names(result: &ElabResult, out: &mut std::collections::
             for ty in &decl.types {
                 out.insert(ty.name.clone());
                 out.extend(ty.constructors.iter().map(|c| c.name.clone()));
-                out.insert(Name::from_string(&format!("{}.rec", ty.name)));
-                out.insert(Name::from_string(&format!("{}.casesOn", ty.name)));
+                out.insert(ty.name.clone().str("rec"));
+                out.insert(ty.name.clone().str("casesOn"));
             }
             for derived in derived_instances {
                 out.insert(derived.name.clone());
@@ -324,8 +411,8 @@ pub(super) fn introduced_names(result: &ElabResult, out: &mut std::collections::
             out.insert(name.clone());
             out.insert(ctor_name.clone());
             out.extend(projections.iter().map(|(n, _, _)| n.clone()));
-            out.insert(Name::from_string(&format!("{name}.rec")));
-            out.insert(Name::from_string(&format!("{name}.casesOn")));
+            out.insert(name.clone().str("rec"));
+            out.insert(name.clone().str("casesOn"));
             for derived in derived_instances {
                 out.insert(derived.name.clone());
             }
@@ -346,6 +433,7 @@ pub(super) fn introduced_names(result: &ElabResult, out: &mut std::collections::
 /// scan of the surface declaration could not see.
 pub(super) fn referenced_names(result: &ElabResult, out: &mut std::collections::HashSet<Name>) {
     match result {
+        ElabResult::Diagnosed { result, .. } => referenced_names(result, out),
         ElabResult::Definition { ty, val, .. } | ElabResult::Instance { ty, val, .. } => {
             ty.collect_constants_into(out);
             val.collect_constants_into(out);

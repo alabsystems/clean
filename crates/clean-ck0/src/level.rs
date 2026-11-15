@@ -17,8 +17,17 @@
 //! `normalize` pass is needed at use sites. This mirrors Lean's
 //! `level.cpp` normalization, restricted to the positional-`Param` lattice.
 
-use std::cmp::Ordering;
 use std::sync::Arc;
+
+mod geq;
+mod limit;
+mod normalize;
+
+use geq::{is_geq_core, Geq};
+pub(crate) use limit::LevelTooDeep;
+use limit::{total, Bounded, Limit, Unbounded};
+pub use limit::{MAX_LEVEL_GEQ_WORK, MAX_LEVEL_SIZE};
+use normalize::*;
 
 /// Errors constructing a level (M0 surface is small; positional params can't be
 /// out of range at construction — that is a *validation* concern checked in
@@ -42,7 +51,20 @@ pub enum LevelError {
 /// smart constructors, all of which canonicalize. Two canonical levels are
 /// definitionally equal iff they are structurally `==`.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct Level(Repr);
+pub struct Level {
+    repr: Repr,
+    /// `Succ`, `Max` and `IMax` nodes on the longest path from the root (`Zero`
+    /// and a `Param` are 0), computed in O(1) by [`Level::mk`], the only
+    /// constructor. A level counts toward the depth of the term it sits in
+    /// (R166), so the bounds `validate` and `whnf_core` hold terms to hold the
+    /// natively recursive level operations too. A function of `repr`, so the
+    /// derived equality and hash mean what they meant without it.
+    depth: u32,
+    /// Nodes in the level's tree, a shared subterm counted at each occurrence,
+    /// saturating: the work a walk over it does (R166). Also a function of
+    /// `repr`.
+    size: u32,
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum Repr {
@@ -54,18 +76,39 @@ enum Repr {
 }
 
 impl Level {
+    /// The one place a `Level` value is made: caches its depth and size
+    /// (R166).
+    fn mk(repr: Repr) -> Self {
+        let (depth, size) = match &repr {
+            Repr::Zero | Repr::Param(_) => (0, 1),
+            Repr::Succ(l) => (l.depth.saturating_add(1), l.size.saturating_add(1)),
+            Repr::Max(a, b) | Repr::IMax(a, b) => (
+                a.depth.max(b.depth).saturating_add(1),
+                a.size.saturating_add(b.size).saturating_add(1),
+            ),
+        };
+        Level { repr, depth, size }
+    }
+
+    /// `Succ`, `Max` and `IMax` nodes on the longest path from the root: `0`
+    /// for `Zero` and a `Param` (R166).
+    #[must_use]
+    pub(crate) fn depth(&self) -> u32 {
+        self.depth
+    }
+
     // --- smart constructors (all canonicalizing) ---
 
     /// The zero level (`Prop`'s level).
     #[must_use]
     pub fn zero() -> Self {
-        Level(Repr::Zero)
+        Level::mk(Repr::Zero)
     }
 
     /// A positional universe parameter (index into the declaration's telescope).
     #[must_use]
     pub fn param(index: u32) -> Self {
-        Level(Repr::Param(index))
+        Level::mk(Repr::Param(index))
     }
 
     /// `succ(l)`, canonicalized. `Succ` distributes over `Max`
@@ -74,10 +117,26 @@ impl Level {
     /// a non-`Max` base is already canonical, so this is cheap in the common case.
     #[must_use]
     pub fn succ(l: Level) -> Self {
-        if matches!(l.0, Repr::Max(_, _) | Repr::IMax(_, _)) {
-            Level(Repr::Succ(Arc::new(l))).normalize()
+        total(Level::succ_in::<Unbounded>(l))
+    }
+
+    /// [`Level::succ`], refused past the depth bound (R166).
+    ///
+    /// # Errors
+    /// [`LevelTooDeep`] when a level it builds is deeper than
+    /// [`crate::MAX_VALIDATE_DEPTH`] or has more nodes than [`MAX_LEVEL_SIZE`].
+    pub(crate) fn try_succ(l: Level) -> Result<Self, LevelTooDeep> {
+        Level::succ_in::<Bounded>(l)
+    }
+
+    fn succ_in<L: Limit>(l: Level) -> Result<Self, L::Error> {
+        let distributes = matches!(l.repr, Repr::Max(_, _) | Repr::IMax(_, _));
+        let raw = Level::mk(Repr::Succ(Arc::new(l)));
+        if distributes {
+            raw.normalize_in::<L>()
         } else {
-            Level(Repr::Succ(Arc::new(l)))
+            L::admit(&raw)?;
+            Ok(raw)
         }
     }
 
@@ -85,7 +144,7 @@ impl Level {
     /// normalizer's own offset re-application where the base is already a
     /// canonical non-`Max` leaf.
     fn raw_succ(l: Level) -> Self {
-        Level(Repr::Succ(Arc::new(l)))
+        Level::mk(Repr::Succ(Arc::new(l)))
     }
 
     /// `n` as a level: `succ^n(zero)`.
@@ -101,10 +160,23 @@ impl Level {
     /// `max(l1, l2)`, canonicalized.
     #[must_use]
     pub fn max(l1: Level, l2: Level) -> Self {
+        total(Level::max_in::<Unbounded>(l1, l2))
+    }
+
+    /// [`Level::max`], refused past the depth bound (R166).
+    ///
+    /// # Errors
+    /// [`LevelTooDeep`] when a level it builds is deeper than
+    /// [`crate::MAX_VALIDATE_DEPTH`] or has more nodes than [`MAX_LEVEL_SIZE`].
+    pub(crate) fn try_max(l1: Level, l2: Level) -> Result<Self, LevelTooDeep> {
+        Level::max_in::<Bounded>(l1, l2)
+    }
+
+    fn max_in<L: Limit>(l1: Level, l2: Level) -> Result<Self, L::Error> {
         // Build a raw Max then renormalize the whole thing so flatten/sort/dedup
         // run. Both inputs are already canonical, so this is a single pass.
-        let raw = Level(Repr::Max(Arc::new(l1), Arc::new(l2)));
-        raw.normalize()
+        let raw = Level::mk(Repr::Max(Arc::new(l1), Arc::new(l2)));
+        raw.normalize_in::<L>()
     }
 
     /// `imax(l1, l2)`, canonicalized.
@@ -113,8 +185,21 @@ impl Level {
     /// `imax(0,l)=l`; `imax(1,l)=l`; `imax(l,l)=l`; else `IMax(l,l')`.
     #[must_use]
     pub fn imax(l1: Level, l2: Level) -> Self {
-        let raw = Level(Repr::IMax(Arc::new(l1), Arc::new(l2)));
-        raw.normalize()
+        total(Level::imax_in::<Unbounded>(l1, l2))
+    }
+
+    /// [`Level::imax`], refused past the depth bound (R166).
+    ///
+    /// # Errors
+    /// [`LevelTooDeep`] when a level it builds is deeper than
+    /// [`crate::MAX_VALIDATE_DEPTH`] or has more nodes than [`MAX_LEVEL_SIZE`].
+    pub(crate) fn try_imax(l1: Level, l2: Level) -> Result<Self, LevelTooDeep> {
+        Level::imax_in::<Bounded>(l1, l2)
+    }
+
+    fn imax_in<L: Limit>(l1: Level, l2: Level) -> Result<Self, L::Error> {
+        let raw = Level::mk(Repr::IMax(Arc::new(l1), Arc::new(l2)));
+        raw.normalize_in::<L>()
     }
 
     // --- queries ---
@@ -123,7 +208,7 @@ impl Level {
     /// closed levels).
     #[must_use]
     pub fn is_zero(&self) -> bool {
-        match &self.0 {
+        match &self.repr {
             Repr::Zero => true,
             Repr::Succ(_) | Repr::Param(_) => false,
             Repr::Max(a, b) => a.is_zero() && b.is_zero(),
@@ -131,10 +216,16 @@ impl Level {
         }
     }
 
+    /// True iff the canonical form is a `max` of two or more levels (R177).
+    #[must_use]
+    pub(crate) fn is_max(&self) -> bool {
+        matches!(self.repr, Repr::Max(_, _))
+    }
+
     /// True iff *provably* non-zero.
     #[must_use]
     pub fn is_nonzero(&self) -> bool {
-        match &self.0 {
+        match &self.repr {
             Repr::Zero | Repr::Param(_) => false,
             Repr::Succ(_) => true,
             Repr::Max(a, b) => a.is_nonzero() || b.is_nonzero(),
@@ -147,7 +238,7 @@ impl Level {
     /// param appears. Used by [`crate::validate`] to check level-arity.
     #[must_use]
     pub fn max_param_plus_one(&self) -> u32 {
-        match &self.0 {
+        match &self.repr {
             Repr::Zero => 0,
             Repr::Param(i) => i.saturating_add(1),
             Repr::Succ(l) => l.max_param_plus_one(),
@@ -161,7 +252,7 @@ impl Level {
     fn get_offset(&self) -> (Level, u32) {
         let mut cur = self.clone();
         let mut off: u32 = 0;
-        while let Repr::Succ(inner) = &cur.0 {
+        while let Repr::Succ(inner) = &cur.repr {
             // Index *count*, not a numeric value; saturating is the right
             // overflow behaviour and policy-clean (no value arithmetic).
             off = off.saturating_add(1);
@@ -171,20 +262,22 @@ impl Level {
         (cur, off)
     }
 
-    /// Re-apply an offset: `add_offset(l, n) = succ^n(l)`. Used by the
-    /// normalizer on already-leaf bases (non-`Max`), so it uses `raw_succ` to
-    /// avoid re-triggering normalization.
-    fn add_offset(&self, n: u32) -> Level {
+    /// Re-apply an offset: `succ^n(self)`, admitting each node it builds. Used
+    /// by the normalizer on already-leaf bases (non-`Max`), so it uses
+    /// `raw_succ` to avoid re-triggering normalization.
+    fn add_offset_in<L: Limit>(&self, n: u32) -> Result<Level, L::Error> {
         let mut l = self.clone();
+        L::admit(&l)?;
         for _ in 0..n {
             l = Level::raw_succ(l);
+            L::admit(&l)?;
         }
-        l
+        Ok(l)
     }
 
     /// True iff `succ^n(Zero)` (a literal universe with no params).
     fn is_explicit(&self) -> bool {
-        matches!(self.get_offset().0 .0, Repr::Zero)
+        matches!(self.get_offset().0.repr, Repr::Zero)
     }
 
     // --- canonicalization (idempotent normal form) ---
@@ -193,34 +286,85 @@ impl Level {
     /// every `Level` a caller can hold is already canonical; exposed for tests.
     #[must_use]
     pub fn normalize(&self) -> Level {
-        let (base, off) = self.get_offset();
-        match &base.0 {
-            Repr::Zero | Repr::Param(_) => base.add_offset(off),
-            Repr::Succ(_) => unreachable!("get_offset strips all Succ"),
-            Repr::IMax(l1, l2) => {
-                let n1 = l1.normalize();
-                let n2 = l2.normalize();
-                let reduced = reduce_imax(n1, n2);
-                if matches!(reduced.0, Repr::Max(_, _)) {
-                    // Distribute the outer offset into the Max and renormalize so
-                    // succ(max(a,b)) = max(succ a, succ b). Keeps idempotence.
-                    reduced.add_offset(off).normalize()
-                } else {
-                    reduced.add_offset(off)
+        total(self.normalize_in::<Unbounded>())
+    }
+
+    /// [`Level::normalize`] under a limit: every node it builds is admitted by
+    /// `L` (R166). Each return builds its result and admits its depth; the
+    /// `Max` chain, the one construction that can be far deeper than the
+    /// input, admits each node as it builds it.
+    fn normalize_in<L: Limit>(&self) -> Result<Level, L::Error> {
+        // Canonicalising walks the input as a tree, so its size bounds the walk.
+        L::admit_walk(self)?;
+        // Strip the `Succ` spine (as `get_offset` does) and dispatch on the base
+        // in one match, so the base is never re-inspected for a `Succ` it
+        // cannot have.
+        let mut base = self;
+        let mut off: u32 = 0;
+        loop {
+            match &base.repr {
+                Repr::Succ(inner) => {
+                    // An index count, saturating like `get_offset`.
+                    off = off.saturating_add(1);
+                    base = inner.as_ref();
                 }
+                Repr::Zero | Repr::Param(_) => return base.add_offset_in::<L>(off),
+                Repr::IMax(l1, l2) => {
+                    let n1 = l1.normalize_in::<L>()?;
+                    let n2 = l2.normalize_in::<L>()?;
+                    let reduced = reduce_imax::<L>(n1, n2)?;
+                    let shifted = reduced.add_offset_in::<L>(off)?;
+                    return if matches!(reduced.repr, Repr::Max(_, _)) {
+                        // Distribute the outer offset into the Max and renormalize so
+                        // succ(max(a,b)) = max(succ a, succ b). Keeps idempotence.
+                        shifted.normalize_in::<L>()
+                    } else {
+                        Ok(shifted)
+                    };
+                }
+                Repr::Max(_, _) => return normalize_max::<L>(base, off),
             }
-            Repr::Max(_, _) => normalize_max(&base, off),
         }
     }
 
     // --- ordering / def-eq ---
 
-    /// `l1 >= l2` on canonical levels (the lattice partial order). Conservative
-    /// over-approximation that is exact on canonical forms for the cases the
-    /// kernel needs (Lean `level.cpp:is_geq`).
+    /// `l1 >= l2` on canonical levels, by the rules of Lean's
+    /// `level.cpp:is_geq_core` in their order (R174). Like Lean's, it is sound
+    /// and incomplete for the lattice order: a `true` holds at every
+    /// assignment, and some orders that hold, such as
+    /// `succ (imax u v) >= imax u v`, answer `false`. The operands are ck0's
+    /// canonical forms, not Lean's normal forms, which order a `max`'s
+    /// operands differently. Where that changes an answer is a level written
+    /// in one of three forms, where it could differ from Lean's kernel either
+    /// way, and validation refuses those (R177, `tests/level_as_written.rs`).
+    /// An answer can also differ on a level that instantiating a parameter
+    /// builds, which validation never sees: Lean's kernel refuses
+    /// `succ (max u v) >= succ (imax w (max v u))` at `w := max u v`, and ck0
+    /// answers `true` (R177's residue, pinned there).
     #[must_use]
     pub fn is_geq(l1: &Level, l2: &Level) -> bool {
-        is_geq_core(&l1.normalize(), &l2.normalize())
+        total(is_geq_core::<Unbounded>(
+            &l1.normalize(),
+            &l2.normalize(),
+            &mut Geq::new(),
+        ))
+    }
+
+    /// [`Level::is_geq`] for the checker (R172): the same comparison, with
+    /// its operands canonicalised and its work bounded.
+    ///
+    /// # Errors
+    ///
+    /// [`LevelTooDeep`] when canonicalising an operand passes the depth or
+    /// size bound, or the comparison passes [`MAX_LEVEL_GEQ_WORK`]. That is
+    /// a refusal, never an answer.
+    pub(crate) fn try_is_geq(l1: &Level, l2: &Level) -> Result<bool, LevelTooDeep> {
+        is_geq_core::<Bounded>(
+            &l1.normalize_in::<Bounded>()?,
+            &l2.normalize_in::<Bounded>()?,
+            &mut Geq::new(),
+        )
     }
 
     /// `l1 <= l2`.
@@ -236,246 +380,49 @@ impl Level {
     /// the clamp is defensive, never relied on for soundness.
     #[must_use]
     pub fn instantiate_params(&self, subst: &[Level]) -> Level {
-        self.subst_raw(subst).normalize()
+        total(self.subst_raw(subst).normalize_in::<Unbounded>())
+    }
+
+    /// [`Level::instantiate_params`], refused past the depth bound (R166).
+    /// The substitution itself follows `self`'s structure, so it builds a
+    /// tree no deeper than `self` plus the deepest of `subst`; canonicalising
+    /// it is where a chain can grow, and that is bounded.
+    ///
+    /// # Errors
+    /// [`LevelTooDeep`] when a level it builds is deeper than
+    /// [`crate::MAX_VALIDATE_DEPTH`] or has more nodes than [`MAX_LEVEL_SIZE`].
+    pub(crate) fn try_instantiate_params(&self, subst: &[Level]) -> Result<Level, LevelTooDeep> {
+        self.subst_raw(subst).normalize_in::<Bounded>()
     }
 
     fn subst_raw(&self, subst: &[Level]) -> Level {
-        match &self.0 {
+        match &self.repr {
             Repr::Zero => Level::zero(),
             Repr::Param(i) => match usize::try_from(*i).ok().and_then(|i| subst.get(i)) {
                 Some(l) => l.clone(),
                 None => self.clone(),
             },
-            Repr::Succ(l) => Level(Repr::Succ(Arc::new(l.subst_raw(subst)))),
-            Repr::Max(a, b) => Level(Repr::Max(
+            Repr::Succ(l) => Level::mk(Repr::Succ(Arc::new(l.subst_raw(subst)))),
+            Repr::Max(a, b) => Level::mk(Repr::Max(
                 Arc::new(a.subst_raw(subst)),
                 Arc::new(b.subst_raw(subst)),
             )),
-            Repr::IMax(a, b) => Level(Repr::IMax(
+            Repr::IMax(a, b) => Level::mk(Repr::IMax(
                 Arc::new(a.subst_raw(subst)),
                 Arc::new(b.subst_raw(subst)),
             )),
         }
     }
-}
-
-/// `imax` reduction given already-normalized children.
-fn reduce_imax(l1: Level, l2: Level) -> Level {
-    if l2.is_zero() {
-        return Level::zero();
-    }
-    if l2.is_nonzero() {
-        return Level::max(l1, l2);
-    }
-    if l1.is_zero() {
-        return l2;
-    }
-    if l1 == Level::succ(Level::zero()) {
-        return l2;
-    }
-    if l1 == l2 {
-        return l1;
-    }
-    Level(Repr::IMax(Arc::new(l1), Arc::new(l2)))
-}
-
-/// Flatten a (possibly nested) `Max` tree into its leaf args.
-fn push_max_args(l: &Level, out: &mut Vec<Level>) {
-    match &l.0 {
-        Repr::Max(a, b) => {
-            push_max_args(a, out);
-            push_max_args(b, out);
-        }
-        _ => out.push(l.clone()),
-    }
-}
-
-/// Canonicalize a `Max`-rooted level (flatten, normalize children, sort, dedup,
-/// subsume, reapply offset). Mirrors Lean `level.cpp` normalize for Max.
-fn normalize_max(base: &Level, outer_offset: u32) -> Level {
-    let mut todo = Vec::new();
-    push_max_args(base, &mut todo);
-
-    let mut args = Vec::new();
-    for a in &todo {
-        let normed = a.normalize();
-        push_max_args(&normed, &mut args);
-    }
-
-    args.sort_by(|a, b| {
-        if is_norm_lt(a, b) {
-            Ordering::Less
-        } else if is_norm_lt(b, a) {
-            Ordering::Greater
-        } else {
-            Ordering::Equal
-        }
-    });
-
-    let mut rargs = dedup_max_args(&args);
-
-    if outer_offset > 0 {
-        for a in &mut rargs {
-            *a = a.add_offset(outer_offset);
-        }
-    }
-
-    if rargs.is_empty() {
-        Level::zero()
-    } else {
-        mk_max_from_args(&rargs)
-    }
-}
-
-/// Rebuild a right-associated `Max` from sorted args (len >= 1).
-fn mk_max_from_args(args: &[Level]) -> Level {
-    debug_assert!(!args.is_empty());
-    if args.len() == 1 {
-        return args[0].clone();
-    }
-    let last = args.len().saturating_sub(1);
-    let prev = args.len().saturating_sub(2);
-    let mut r = Level(Repr::Max(
-        Arc::new(args[prev].clone()),
-        Arc::new(args[last].clone()),
-    ));
-    for i in (0..prev).rev() {
-        r = Level(Repr::Max(Arc::new(args[i].clone()), Arc::new(r)));
-    }
-    r
-}
-
-/// Dedup sorted `Max` args: drop explicit levels subsumed by a parametric one
-/// with >= offset, and merge same-base args keeping the largest offset.
-fn dedup_max_args(args: &[Level]) -> Vec<Level> {
-    let mut rargs: Vec<Level> = Vec::new();
-    let mut i = 0usize;
-
-    if !args.is_empty() && args[i].is_explicit() {
-        while i.saturating_add(1) < args.len() && args[i.saturating_add(1)].is_explicit() {
-            i = i.saturating_add(1);
-        }
-        let k = args[i].get_offset().1;
-        let mut j = i.saturating_add(1);
-        while j < args.len() {
-            if args[j].get_offset().1 >= k {
-                break;
-            }
-            j = j.saturating_add(1);
-        }
-        if j < args.len() {
-            i = i.saturating_add(1);
-        }
-    }
-
-    if i < args.len() {
-        rargs.push(args[i].clone());
-        let mut prev = args[i].get_offset();
-        i = i.saturating_add(1);
-        while i < args.len() {
-            let cur = args[i].get_offset();
-            if prev.0 == cur.0 {
-                if prev.1 < cur.1 {
-                    prev = cur;
-                    rargs.pop();
-                    rargs.push(args[i].clone());
-                }
-            } else {
-                prev = cur;
-                rargs.push(args[i].clone());
-            }
-            i = i.saturating_add(1);
-        }
-    }
-
-    rargs
-}
-
-/// Total order used to sort `Max` args during normalization (Lean `is_norm_lt`):
-/// order by base, then offset.
-fn is_norm_lt(a: &Level, b: &Level) -> bool {
-    let (ba, oa) = a.get_offset();
-    let (bb, ob) = b.get_offset();
-    let bc = base_cmp(&ba, &bb);
-    match bc {
-        Ordering::Less => true,
-        Ordering::Greater => false,
-        Ordering::Equal => oa < ob,
-    }
-}
-
-/// A deterministic total order over level *bases* (post-offset-strip): order by
-/// kind tag, then by structural contents.
-fn base_cmp(a: &Level, b: &Level) -> Ordering {
-    fn tag(l: &Level) -> u8 {
-        match &l.0 {
-            Repr::Zero => 0,
-            Repr::Param(_) => 1,
-            Repr::Max(_, _) => 2,
-            Repr::IMax(_, _) => 3,
-            Repr::Succ(_) => 4,
-        }
-    }
-    let ta = tag(a);
-    let tb = tag(b);
-    if ta != tb {
-        return ta.cmp(&tb);
-    }
-    match (&a.0, &b.0) {
-        (Repr::Zero, Repr::Zero) => Ordering::Equal,
-        (Repr::Param(x), Repr::Param(y)) => x.cmp(y),
-        (Repr::Max(a1, a2), Repr::Max(b1, b2)) | (Repr::IMax(a1, a2), Repr::IMax(b1, b2)) => {
-            base_cmp(a1, b1).then_with(|| base_cmp(a2, b2))
-        }
-        (Repr::Succ(x), Repr::Succ(y)) => base_cmp(x, y),
-        _ => Ordering::Equal,
-    }
-}
-
-/// `is_geq` on normalized inputs, recursive with the Lean rule order.
-fn is_geq_core(l1: &Level, l2: &Level) -> bool {
-    if l1 == l2 || l2.is_zero() {
-        return true;
-    }
-    {
-        let (base1, off1) = l1.get_offset();
-        if off1 > 0 && base1 == *l2 {
-            return true;
-        }
-    }
-    if let Repr::Max(a, b) = &l2.0 {
-        return is_geq_core(l1, a) && is_geq_core(l1, b);
-    }
-    if let Repr::Max(a, b) = &l1.0 {
-        if is_geq_core(a, l2) || is_geq_core(b, l2) {
-            return true;
-        }
-    }
-    if let Repr::IMax(a, b) = &l2.0 {
-        return is_geq_core(l1, a) && is_geq_core(l1, b);
-    }
-    if let Repr::IMax(_, b) = &l1.0 {
-        return is_geq_core(b, l2);
-    }
-    let (base1, off1) = l1.get_offset();
-    let (base2, off2) = l2.get_offset();
-    if base1 == base2 || base2.is_zero() {
-        return off1 >= off2;
-    }
-    if off1 == off2 && off1 > 0 {
-        return is_geq_core(&base1, &base2);
-    }
-    false
 }
 
 impl std::fmt::Display for Level {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.0 {
+        match &self.repr {
             Repr::Zero => write!(f, "0"),
             Repr::Param(i) => write!(f, "u{i}"),
             Repr::Succ(_) => {
                 let (base, off) = self.get_offset();
-                if matches!(base.0, Repr::Zero) {
+                if matches!(base.repr, Repr::Zero) {
                     write!(f, "{off}")
                 } else {
                     write!(f, "{base}+{off}")
@@ -486,3 +433,6 @@ impl std::fmt::Display for Level {
         }
     }
 }
+
+#[cfg(test)]
+mod tests;

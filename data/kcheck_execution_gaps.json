@@ -1,0 +1,1415 @@
+{
+  "schema_version": "clean-kcheck-execution-gaps-v1",
+  "unit": "X1 and the measuring half of X3 of docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md",
+  "claim": "measurement only. A BYTE_EQUAL row says one program printed pinned Lean's bytes through that lane. It is not a codegen license, covers no other program, and makes no item of the plan's section 2.1 hold.",
+  "test": "crates/clean/tests/advice_replay_checker.rs",
+  "fixture": "tests/fixtures/advice_replay_checker",
+  "expected_minted_by": "scripts/native_exec_battery_expected.py --fixture tests/fixtures/advice_replay_checker",
+  "lean": "Lean (version 4.30.0-rc2, arm64-apple-darwin24.6.0, commit 3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc, Release)",
+  "how_to_read": "`programs` pins what each lane does with each fixture program, and for the R4 probes what `clean check` (Clean's elaborator and kernel, no backend) does; the test fails when a live outcome differs. A lane outcome is BYTE_EQUAL, a refusal by name (REFUSED_BUILD, REFUSED_RUNTIME, EMIT_TRUSTIR_REFUSED, TRUSTCG_REFUSED, LINK_FAILED) or CRASHED (the process died on a signal after printing a prefix of Lean's bytes; a crash is not a refusal and is pinned only so its gap is listed). `gaps` is the burn-down list: one row per construct a lane refuses or crashes on, with the refusing source site. `lane_shortfalls` lists what the trust-cg lane does not give even where it prints the right bytes. `r4_items` maps the ten items of risk R4 of designs/2026-11-12-kcheck-model-first.md to their probes. `rejected_by_lean` pins `clean check` on programs pinned Lean rejects (the negative controls), and `false_acceptances` owns each of those Clean accepts. `closed_in_this_unit` records what was refused when the unit began and is not any more. A refusal that closes fails the test; retire its gap and re-pin the row in the same change.",
+  "lanes": {
+    "c": {
+      "command": "clean run <program> --decl main",
+      "path": "Clean's elaborator, clean-compiler (LCNF, L5IR), emitted C, the host C compiler, the embedded C runtime"
+    },
+    "trust_cg": {
+      "command": "CLEAN_TRUST_CG_BIN=<trust-cg> clean run <program> --decl main --backend trust-cg --receipt <file>",
+      "feature": "trust-ir-backend (crates/clean/Cargo.toml; off by default)",
+      "authority": "clean-compiler-unvalidated, recognized for the one invocation with `trust-cg --recognize-authority clean-compiler-unvalidated --refuse-unlicensed`",
+      "path": "the same elaborator and core, L5IR lowered to trust-ir, the external trust-cg, then the C runtime, the prelude shims and the entry driver compiled and linked by the host C compiler"
+    }
+  },
+  "measured_with": {
+    "date": "2026-11-14 X1 re-check fixes; final affected tests and six detailed controls over the recorded source context",
+    "host": "aarch64-macos (Darwin 27.2.0)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "trust_cg": {
+      "version": "trust-cg 0.7.0",
+      "source": "atpkg store build 10290 (the trust-cg `aterm pkg which trust-cg` names on the measuring box)",
+      "sha256": "01bb9a7d515af822cd1e40702dc349f1db82ceff104bb3daa5c0b7d2aed93230"
+    },
+    "note": "All 40 native fixtures and every recovery-aware R4 elaborator pin passed in the latest full 61-test suite (race4-tests.log), rebuilt after the C4 compiled-tracing change. Fresh six-control/compiled-stack captures share that exact source and binary identity. Five structural parity forms and five Lean-rejected hint controls pass; the pre-existing bare-constructor false acceptance remains owned below. The original c36 acceptance was invalid because three clauses were recovered away; current c36 has nine declarations and zero recovery. Both Clean compiled lanes still overflow as recorded against pinned Lean compiled binaries. Earlier snapshots and explicitly scoped unchanged-input reuse are retained in commands.json. The audit owns compiler repair. No full workspace, formal proof, semantic soundness, quorum or release claim.",
+    "clean": "debug binary built with trust-ir-backend, both backends measured with that binary; the default-feature dispatch regression is a separate test",
+    "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+    "production_source_context": {
+      "scope": "crates/**/*.{rs,c,h,toml,lock}; root Cargo.toml, Cargo.lock, .cargo/config.toml, rust-toolchain.toml",
+      "files": 9393,
+      "sha256": "6d8d3fc4d9bea13475200efe55d6102c920367253284f0d9e6444a7c22ce493a"
+    },
+    "raw_capture_scope": [
+      "c27_r4_iv_head_loop_million",
+      "c34_r4_i_call_cycle_shared_counter",
+      "c35_r4_ix_walk_call_cycle",
+      "c36_r4_x_report_call_cycle",
+      "c37_head_loop_10000",
+      "c37_head_loop_100000"
+    ],
+    "native_rows_live_test_log": "reports/x1-recheck/race4-tests.log",
+    "full_40_program_detail_snapshot": "reports/x1-fixup/execution-full-f9.json",
+    "native_suite_source_context": {
+      "scope": "crates/**/*.{rs,c,h,toml,lock}; root Cargo.toml, Cargo.lock, .cargo/config.toml, rust-toolchain.toml",
+      "files": 9393,
+      "sha256": "6d8d3fc4d9bea13475200efe55d6102c920367253284f0d9e6444a7c22ce493a"
+    }
+  },
+  "summary": {
+    "programs": 40,
+    "checker": "advice_replay: BYTE_EQUAL on both lanes. Its mutant advice_replay_no_compare: BYTE_EQUAL on both lanes, which is Lean's bytes for the mutant, accepting three corrupted cases.",
+    "probes": 38,
+    "probes_byte_equal_on_both_lanes": 26,
+    "probes_not_byte_equal_on_either_lane": 12,
+    "open_gaps": 8,
+    "r4_items": "The current primary probes include true call cycles c34/c35/c36 for (i)/(ix)/(x); pinned Lean accepts all ten and every cycle member uses every _f auxiliary with Nat.brecOn. The original capture had only eight recovery-free acceptances because c36 dropped three structural clauses. After the 2026-11-14 parser and explicit-major fixes, all ten are rechecked recovery-aware: nine accepted, vii refused for absent ByteArray. See reports/x1-recheck/README.md; the original nine-pass claim was invalid. Both backends: i, ii, iii, vi, ix byte-equal; iv and x SIGSEGV; v and viii refused at lowering; vii refused at elaboration. The old c24/c32/c33 remain acyclic controls. The fenced ReferenceKernel re-check for vi remains unmeasured."
+  },
+  "programs": [
+    {
+      "name": "advice_replay",
+      "construct": "the whole checker: an advice-replaying normal-form checker over de Bruijn terms, using every construct probed below except the refused ones",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "advice_replay_no_compare",
+      "construct": "negative control: the checker with its structural comparison removed; it accepts three corrupted cases",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c01_binary_structural_beq",
+      "construct": "structural recursion over two inductive arguments at once, with a catch-all row",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c02_shift_under_binder",
+      "construct": "recursion under a binder with a changing non-recursive argument (de Bruijn shift)",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c03_nested_overlapping_patterns",
+      "construct": "nested and overlapping constructor patterns, first match wins",
+      "c_lane": {
+        "outcome": "REFUSED_BUILD",
+        "refusal": "Error: cannot compile source dependency `Tm.isNormal` of `main`: RC linearity violation in _lifted.Tm.isNormal._rec.0",
+        "gaps": [
+          "rc-linearity-nested-pattern-under-unary-ctor"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "EMIT_TRUSTIR_REFUSED",
+        "refusal": "front-end: cannot compile source dependency `Tm.isNormal` of `main`: RC linearity violation in _lifted.Tm.isNormal._rec.0",
+        "gaps": [
+          "rc-linearity-nested-pattern-under-unary-ctor"
+        ]
+      }
+    },
+    {
+      "name": "c04_option_two_discriminants",
+      "construct": "two discriminants of different inductives, nested patterns, an Option result",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c05_except_recursion_over_list",
+      "construct": "Except with do-notation, recursion over a List and a term together",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c06_fuel_four_discriminants",
+      "construct": "a fuel parameter: four discriminants, recursion on fuel + 1",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c07_do_if_throw_without_else",
+      "construct": "do-notation `if … then throw …` with no else branch",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c08_structure_instance_fields",
+      "construct": "structures with List fields, structure-instance and anonymous-constructor notation, field projection",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c09_list_form_io",
+      "construct": "`List.forM` in IO",
+      "c_lane": {
+        "outcome": "REFUSED_BUILD",
+        "refusal": "Unknown identifier: List.forM",
+        "gaps": [
+          "list-form-absent-from-builtin-prelude"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "EMIT_TRUSTIR_REFUSED",
+        "refusal": "Unknown identifier: List.forM",
+        "gaps": [
+          "list-form-absent-from-builtin-prelude"
+        ]
+      }
+    },
+    {
+      "name": "c10_bignat_literals_arith",
+      "construct": "Nat literals and arithmetic between 2^64 and 2^128",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c11_list_take_length",
+      "construct": "List.take and List.length",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c12_subst_if_chain",
+      "construct": "an if / else-if chain over Nat comparisons with truncated subtraction (de Bruijn substitution)",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c13_refusal_payload_ctor",
+      "construct": "an inductive with mixed constructor payloads rendered to String",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c14_namespace_bare_ctor_patterns",
+      "construct": "bare constructor patterns inside the type's namespace",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c15_bare_succ_two_discriminants",
+      "construct": "a bare constructor head that shares its short name with another inductive's constructor (`succ`), in a two-discriminant recursive definition",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c16_nat_mul_reaching_128_bits",
+      "construct": "Nat multiplication whose result reaches 2^128",
+      "c_lane": {
+        "outcome": "REFUSED_RUNTIME",
+        "refusal": "clean panic: clean_nat_mul: Nat result >= 2^128 (fail-closed)",
+        "gaps": [
+          "runtime-nat-stops-at-128-bits"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "REFUSED_RUNTIME",
+        "refusal": "clean panic: clean_nat_mul: Nat result >= 2^128 (fail-closed)",
+        "gaps": [
+          "runtime-nat-stops-at-128-bits"
+        ]
+      }
+    },
+    {
+      "name": "c17_nat_add_reaching_128_bits",
+      "construct": "Nat addition whose result reaches 2^128",
+      "c_lane": {
+        "outcome": "REFUSED_RUNTIME",
+        "refusal": "clean panic: clean_nat_add: Nat result >= 2^128 (fail-closed)",
+        "gaps": [
+          "runtime-nat-stops-at-128-bits"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "REFUSED_RUNTIME",
+        "refusal": "clean panic: clean_nat_add: Nat result >= 2^128 (fail-closed)",
+        "gaps": [
+          "runtime-nat-stops-at-128-bits"
+        ]
+      }
+    },
+    {
+      "name": "c18_deriving_beq",
+      "construct": "`deriving BEq` on a recursive inductive",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c19_tostring_instance_interpolation",
+      "construct": "a ToString instance and string interpolation",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c20_context_lookup_option",
+      "construct": "context lookup by index (`xs[i]?`) into Except",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c21_where_helper",
+      "construct": "a `where` helper with an accumulator",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c22_mutual_infer_check",
+      "construct": "mutual recursion over an inductive",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c23_nat_literal_of_129_bits",
+      "construct": "a Nat literal of 129 bits",
+      "c_lane": {
+        "outcome": "REFUSED_BUILD",
+        "refusal": "Error: cannot compile source dependency `two128` of `main`: unsupported literal lowering for Nat",
+        "gaps": [
+          "nat-literal-wider-than-128-bits"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "EMIT_TRUSTIR_REFUSED",
+        "refusal": "front-end: cannot compile source dependency `two128` of `main`: unsupported literal lowering for Nat",
+        "gaps": [
+          "nat-literal-wider-than-128-bits"
+        ]
+      }
+    },
+    {
+      "name": "c24_r4_i_mutual_block_shared_counter",
+      "construct": "Historical acyclic control, split by Lean (not a mutual group): R4 (i): a mutual block of three functions structurally recursive on one shared `Nat` counter; two read a token before recursing, one descends its term at an unchanged cursor",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c25_r4_ii_cursor_through_except",
+      "construct": "R4 (ii): the advice cursor threaded through `Except` results, three sequential reads in `do` with the pair destructured",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c26_r4_iii_three_field_ctor",
+      "construct": "R4 (iii): a tree type with a three-field constructor (a labelled application) and recursion over it",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c27_r4_iv_head_loop_million",
+      "construct": "R4 (iv): a head loop of 10^6 self tail calls, structurally recursive on the counter",
+      "c_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c28_r4_v_one_function_over_requests",
+      "construct": "R4 (v): the item (i) block as one function over a request sum type, structurally recursive on the counter",
+      "c_lane": {
+        "outcome": "REFUSED_BUILD",
+        "refusal": "Error: cannot lower source dependency `run` of `main`: unsupported expression: Expression form: Lam(",
+        "gaps": [
+          "match-join-point-lambda-in-value-position"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "EMIT_TRUSTIR_REFUSED",
+        "refusal": "front-end: cannot lower source dependency `run` of `main`: unsupported expression: Expression form: Lam(",
+        "gaps": [
+          "match-join-point-lambda-in-value-position"
+        ]
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c29_r4_vi_ground_acceptance_theorem",
+      "construct": "R4 (vi): a ground acceptance of the item (i) block stated as a theorem and closed by `rfl` and by `decide`, and a refusal stated by `decide`; the negative controls are rejected/vi_false_acceptance_by_{decide,rfl}",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c30_r4_vii_tokens_from_bytearray",
+      "construct": "R4 (vii): advice tokens decoded from a `ByteArray` by index, structurally recursive on a counter",
+      "c_lane": {
+        "outcome": "REFUSED_BUILD",
+        "refusal": "Unknown identifier: size; dot notation `.size`",
+        "gaps": [
+          "bytearray-absent-from-builtin-prelude"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "EMIT_TRUSTIR_REFUSED",
+        "refusal": "Unknown identifier: size; dot notation `.size`",
+        "gaps": [
+          "bytearray-absent-from-builtin-prelude"
+        ]
+      },
+      "elaborator": {
+        "outcome": "REFUSED",
+        "refusal": "✗ decode: elaboration error at line 28: Unknown identifier: size",
+        "gaps": [
+          "bytearray-absent-from-builtin-prelude"
+        ]
+      }
+    },
+    {
+      "name": "c31_r4_viii_advice_tree_with_certificates",
+      "construct": "R4 (viii), formulation (B): mutually inductive advice types in which a head step carries a list of certificates, three functions mutually and structurally recursive on them, bytes decoded to that tree first, and item (vi) repeated for it",
+      "c_lane": {
+        "outcome": "REFUSED_BUILD",
+        "refusal": "Error: cannot compile source dependency `conv` of `main`: unsupported expression: declaration `conv` references kernel recursor `Cert.rec`, which has no runtime value and no runtime shim (nothing can ever provide its symbol); the declaration must stay an extern boundary",
+        "gaps": [
+          "nested-mutual-recursor-has-no-runtime-value",
+          "match-join-point-lambda-in-value-position"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "EMIT_TRUSTIR_REFUSED",
+        "refusal": "front-end: cannot compile source dependency `conv` of `main`: unsupported expression: declaration `conv` references kernel recursor `Cert.rec`, which has no runtime value and no runtime shim (nothing can ever provide its symbol); the declaration must stay an extern boundary",
+        "gaps": [
+          "nested-mutual-recursor-has-no-runtime-value",
+          "match-join-point-lambda-in-value-position"
+        ]
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c32_r4_ix_walk_member_of_block",
+      "construct": "Historical acyclic control, split by Lean (not a mutual group): R4 (ix): a list-iterating member of the block that handles one pair per call, calls `conv` at the counter's predecessor and itself there on the rest",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c33_r4_x_report_accumulator",
+      "construct": "Historical acyclic control, split by Lean (not a mutual group): R4 (x): a report accumulator threaded through every member's `Except` result, with the head loop carrying it through 10^6 self tail calls",
+      "c_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c34_r4_i_call_cycle_shared_counter",
+      "construct": "a mutual block of at least three functions, each structurally recursive on one shared `Nat` counter, two reading a token before recursing and one descending a term at an unchanged cursor",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c35_r4_ix_walk_call_cycle",
+      "construct": "a list-iterating member of the block that handles one element per call, calls another member at the counter's predecessor, and calls itself there on the rest",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c36_r4_x_report_call_cycle",
+      "construct": "a report accumulator threaded through every member's `Except` result, with (iv)'s head loop carrying it and still compiled as a loop",
+      "c_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": [],
+        "qualification": "2026-11-14: accepted after structural clause parsing and explicit-major enforcement, with empty parser_recovery; the original acceptance pin was unsupported."
+      }
+    },
+    {
+      "name": "c37_head_loop_10000",
+      "construct": "head-loop sample at 10000 steps (c27 with only the counter changed)",
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "name": "c37_head_loop_100000",
+      "construct": "head-loop sample at 100000 steps (c27 with only the counter changed)",
+      "c_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "elaborator": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "gaps": []
+      }
+    }
+  ],
+  "gaps": [
+    {
+      "id": "rc-linearity-nested-pattern-under-unary-ctor",
+      "construct": "in a structurally recursive definition, a nested constructor pattern under a ONE-field recursive constructor followed by an overlapping row on that constructor: `| .succ (.lit _) => false | .succ a => Tm.isNormal a`",
+      "needed_for": "a checker's redex and normal-form tests are first-match nested patterns over terms. The checker here states the `succ` row of `isNormal` through a helper predicate (`isLit`) because of this gap.",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "clean-compiler, the RC linearity verification of the final L5IR (shared by both lanes)",
+      "refusal": "RC linearity violation in _lifted.Tm.isNormal._rec.0: object %12 is consumed 0 times with 0 incs on path entry/alt4/alt3: 1 reference(s) never released at return (a leak: the object is never consumed or dec'd)",
+      "refusal_seen_with": "clean compile <program> --decl Tm.isNormal --emit c (`clean run` now preserves this original cause at the source dependency closure)",
+      "site": {
+        "file": "crates/clean-compiler/src/rc_repair_linearity.rs",
+        "line": 909,
+        "needle": "reference(s) never released {when} (a leak: the object is never consumed or dec'd)"
+      },
+      "measured_shape": "refused: `.succ (.lit _)`, `.succ (.lam _)`, `.succ (.var _)` before `.succ a => Tm.isNormal a`. Byte-equal: the same nested row under a two-field constructor (`.app (.lam _) _`, `.app (.lit _) _`, `.add (.lit _) (.lit _)`); the one-field shape in a definition that does not recurse; the test moved into a helper predicate or an inner `match`.",
+      "regression": "the same program was byte-equal through `clean run` of the installed clean 0.9.0+g6c8fda90f (2026-11-07); the commit that moved it is not identified",
+      "fix_scope": "not local: RC insertion for the equation compiler's nested-match lowering. The verifier is right to refuse a leak; the fix is in what it is given."
+    },
+    {
+      "id": "list-form-absent-from-builtin-prelude",
+      "construct": "`List.forM` (the checker's `main` uses `for … in`, which both lanes run)",
+      "needed_for": "convenience only; a driver can use `for … in`",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "front end: the builtin prelude has `List.mapM` and no `List.forM`",
+      "refusal": "Unknown identifier: List.forM",
+      "site": {
+        "file": "crates/clean-elab/src/infer/elab_core.rs",
+        "line": 3041,
+        "needle": "pub(super) fn unknown_ident_error(&self, name: &SurfaceName) -> ElabError {"
+      },
+      "more_sites": [
+        {
+          "file": "crates/clean-kernel/src/env/data_types_collections.rs",
+          "line": 2435,
+          "needle": "name: Name::from_string(\"List.mapM\"),"
+        }
+      ],
+      "fix_scope": "not local: builtin-prelude definitions are hand-built kernel terms. Whether to grow that prelude or to compile against real Init is a choice for the units that compile the real checker (X2, X4), not for this probe."
+    },
+    {
+      "id": "runtime-nat-stops-at-128-bits",
+      "construct": "`Nat` addition or multiplication whose result reaches 2^128",
+      "needed_for": "Lean's `Nat` is unbounded and a kernel checker computes on `Nat` literals; a checker compiled on this runtime stops itself on a larger result. It stops by name and never wraps.",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "the embedded C runtime (both lanes link it): `Nat` is an unsigned __int128",
+      "refusal": "clean panic: clean_nat_add: Nat result >= 2^128 (fail-closed)",
+      "site": {
+        "file": "crates/clean-runtime/src/clean_runtime.c",
+        "line": 289,
+        "needle": "clean_panic(\"clean_nat_add: Nat result >= 2^128 (fail-closed)\");"
+      },
+      "more_sites": [
+        {
+          "file": "crates/clean-runtime/src/clean_runtime.c",
+          "line": 310,
+          "needle": "clean_panic(\"clean_nat_mul: Nat result >= 2^128 (fail-closed)\");"
+        }
+      ],
+      "fix_scope": "not local: an arbitrary-precision `Nat` in the runtime (and, by the plan, a runtime that is not C)"
+    },
+    {
+      "id": "nat-literal-wider-than-128-bits",
+      "construct": "a `Nat` literal of more than 128 bits in a compiled definition",
+      "needed_for": "a checker holds `Nat` literals of any size",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "clean-compiler, literal lowering to L5IR (shared by both lanes)",
+      "refusal": "unsupported literal lowering for Nat",
+      "refusal_seen_with": "clean compile <program> --decl two128 --emit c (`clean run` now preserves this original cause at the source dependency closure)",
+      "site": {
+        "file": "crates/clean-compiler/src/to_ir/lower.rs",
+        "line": 38,
+        "needle": "Err(CompilerError::UnsupportedLiteral { kind: \"Nat\" })"
+      },
+      "fix_scope": "not local: follows runtime-nat-stops-at-128-bits"
+    },
+    {
+      "id": "head-loop-is-not-a-loop",
+      "construct": "a self tail call on Nat compiled as recursive closure applications rather than a loop, overflowing the compiled program stack",
+      "needed_for": "Design 3.2 and R4 (iv), (x): a self tail call must compile to a loop on both lanes for kcheck depth-counter recursion. At 8 MiB, both Clean lanes print Lean bytes at 10,000 steps and SIGSEGV at 100,000 and 1,000,000. Both lanes print the full expected 100,000-step bytes at 65,520 KiB; the million-step c27 and c36 still overflow there. Pinned Lean compiled binaries of all three exit 0 at 8 MiB, byte-equal to lean --run, with self tail calls emitted as goto _start. This identifies a compiled-program stack overflow in Clean, not an upstream Lean overflow or an exact crash threshold.",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "clean-compiler, the lowering of `Nat.rec` (structural recursion) to a synthesized local recursive function: it returns a closure per step (`_rec_0(pred)`) that the caller applies with `clean_apply_n` and then releases its arguments, so the recursive call is neither a direct call nor in tail position",
+      "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+      "refusal_seen_with": "clean run <program> --decl main (both lanes; the program prints nothing before the crash). The emitted C is `clean compile <program> --decl headLoop --emit c -o <file>`.",
+      "site": {
+        "file": "crates/clean-compiler/src/to_lcnf/lower.rs",
+        "line": 2560,
+        "needle": "pub(super) fn lower_rec_apply("
+      },
+      "more_sites": [
+        {
+          "file": "crates/clean-compiler/src/to_lcnf/lower.rs",
+          "line": 2272,
+          "needle": "pub(super) fn rec_apply_parts(env: &Environment, expr: &Expr) -> Option<RecApplyParts> {"
+        },
+        {
+          "file": "crates/clean-cli/src/cmd_run.rs",
+          "line": 112,
+          "needle": "\"clean run: program terminated by signal {signal} ({})\","
+        }
+      ],
+      "fix_scope": "not local: structural recursion whose motive is a function type compiled as a direct self-recursive function (Lean's compiler does this from the equation compiler's output, not from the recursor), with RC that leaves the self call in tail position, and a C or trust-cg emission of that tail call as a jump. Falsifies R4 (iv) on both backends today.",
+      "stack_comparison": "reports/x1-recheck/stack-comparison.json"
+    },
+    {
+      "id": "match-join-point-lambda-in-value-position",
+      "construct": "a match whose overlapping nested rows elaborate to a join point (`_match_join_w`) and whose lambda then sits in a value position: `| .ok (.term a, p) => … | .ok _ => … | .error e => …` over `Except ε (Resp × Nat)`, and the decoder rows `| n + 1, 0 :: bs => … | n + 1, 1 :: k :: bs => … | _ + 1, _ => none`",
+      "needed_for": "R4 (v) and (viii): the request-sum form dispatches on nested responses with a catch-all, and every byte decoder has a catch-all row after nested list patterns",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "clean-compiler, LCNF lowering of a let value (`expr_to_let_value`): a `Lam` is not a let value it lowers",
+      "refusal": "unsupported expression: Expression form: Lam(",
+      "refusal_seen_with": "clean compile <program> --decl run --emit c -o <file> (`clean run` now preserves this original cause at the source dependency closure)",
+      "site": {
+        "file": "crates/clean-compiler/src/to_lcnf/lower.rs",
+        "line": 657,
+        "needle": "\"Expression form: {expr:?}\""
+      },
+      "more_sites": [
+        {
+          "file": "crates/clean-native/src/compile.rs",
+          "line": 364,
+          "needle": ".with_context(|| format!(\"failed to lower `{decl_name}` to L5CNF\"))?"
+        }
+      ],
+      "fix_scope": "not measured: the join point's lambda in a value position must be lowered as a local function (LCNF `fun` declaration) or inlined; which, and whether the elaborator should not emit it there, is open"
+    },
+    {
+      "id": "nested-mutual-recursor-has-no-runtime-value",
+      "construct": "structural recursion over a nested, mutually inductive type (`Head`/`Cert` with `List Cert` inside `Head`): the three functions compile to the kernel recursors `Head.rec`, `Cert.rec` and `Head.rec_1`",
+      "needed_for": "R4 (viii), formulation (B) of design 3.2: the advice tree is exactly such a type, and (B) is the first fallback for the checker's recursion",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "clean-compiler, the pipeline's recursor-reference check: a valueless kernel recursor reached from a body keeps the declaration an extern",
+      "refusal": "references kernel recursor `Head.rec`, which has no runtime value and no runtime shim",
+      "refusal_seen_with": "clean compile <program> --decl whnf --emit c -o <file> (also `conv`: `Cert.rec`, `certs`: `Head.rec_1`)",
+      "site": {
+        "file": "crates/clean-compiler/src/pass_manager/pipeline.rs",
+        "line": 472,
+        "needle": "\"declaration `{}` references kernel recursor `{name}`, \\"
+      },
+      "fix_scope": "not local: a lowering of structural recursion over nested mutual inductives to direct recursive functions, as for the non-nested case"
+    },
+    {
+      "id": "bytearray-absent-from-builtin-prelude",
+      "construct": "`ByteArray` (`ByteArray.mk`, `.size`, `.get!`): advice tokens read from bytes by index",
+      "needed_for": "R4 (vii): the advice is bytes and a position (design 3.2), read by the checker one byte per token",
+      "lanes": [
+        "c",
+        "trust_cg"
+      ],
+      "stage": "front end: the builtin prelude has no `ByteArray` type, so the binder's type is auto-bound as a type variable and `.size` on it is unknown (the runtime has `String.toByteArray` shims, the elaborator no type)",
+      "refusal": "Unknown identifier: size; dot notation `.size` on a receiver of type `fvar#0`, whose head does not name a type after reduction (opaque type variable)",
+      "site": {
+        "file": "crates/clean-elab/src/infer/elab_core.rs",
+        "line": 3041,
+        "needle": "pub(super) fn unknown_ident_error(&self, name: &SurfaceName) -> ElabError {"
+      },
+      "more_sites": [
+        {
+          "file": "crates/clean-kernel/src/env/data_types_collections.rs",
+          "line": 2096,
+          "needle": "// String wraps a validated ByteArray (`String.ofByteArray`;"
+        }
+      ],
+      "fix_scope": "not local: builtin-prelude definitions are hand-built kernel terms; the same choice as gap list-form-absent-from-builtin-prelude (grow that prelude, or compile against real Init)"
+    }
+  ],
+  "lane_shortfalls": [
+    {
+      "id": "no-body-is-licensed",
+      "lane": "trust_cg",
+      "what": "every body of every program is stamped `clean-compiler-unvalidated`; none carries a kernel-TV certificate. trust-cg emits them only because the invocation recognizes that authority. The plan's section 2.1 asks that every body be licensed.",
+      "measured": {
+        "program": "advice_replay",
+        "bodies_unvalidated": 127,
+        "kernel_tv_certified": 0
+      },
+      "pinned_by": "the trust-cg test asserts kernel_tv_certified == 0 for every built program",
+      "site": {
+        "file": "crates/clean-compiler/src/emit_trust_ir_lane.rs",
+        "line": 51,
+        "needle": "pub const CLEAN_COMPILER_UNVALIDATED_AUTHORITY: &str = \"clean-compiler-unvalidated\";"
+      }
+    },
+    {
+      "id": "runtime-shims-and-driver-are-c",
+      "lane": "trust_cg",
+      "what": "the runtime, the prelude shims and the entry driver are C, compiled and linked by the host `cc`. Only the program's own bodies go through trust-ir and trust-cg. The plan's section 2.1 asks for no C path.",
+      "pinned_by": "the trust-cg test asserts the receipt's `runtime` is \"C via cc\"",
+      "site": {
+        "file": "crates/clean-native/src/native_trustcg.rs",
+        "line": 78,
+        "needle": "pub const RUNTIME: &str = \"C via cc\";"
+      }
+    },
+    {
+      "id": "same-front-end-and-core-as-the-c-lane",
+      "lane": "trust_cg",
+      "what": "both lanes share Clean's elaborator and clean-compiler down to L5IR, so byte-equality between them is not an independent check of anything above the emitter, and every gap above the emitter refuses both.",
+      "pinned_by": "the `programs` rows: each gap in `gaps` is cited on both lanes",
+      "site": {
+        "file": "crates/clean-native/src/native_trustcg_checks.rs",
+        "line": 190,
+        "needle": "native build cannot satisfy prelude extern `{}`: no prelude shim defines"
+      }
+    }
+  ],
+  "closed_in_this_unit": [
+    {
+      "id": "bare-ctor-head-owned-by-several-inductives",
+      "construct": "inside the type's namespace, a bare constructor head that shares its short name with another inductive's constructor (`succ`: `Tm.succ` beside `Nat.succ`), alone in a column of a recursive multi-discriminant definition",
+      "was": "both lanes refused the checker, its mutant and probe c15 at the front end: \"`beq` is the name being defined: a self-reference in a def body is a recursive definition …\"",
+      "fix": "frontend class (197) in docs/FRONTEND_CLASS_LEDGER.md: `canonicalize_column_heads` (crates/clean-elab/src/infer/elab_decl_value.rs) takes such a column's inductive from ordinary name resolution of its heads",
+      "tests": "crates/clean-elab/tests/multiarg_equation_pattern_semantics.rs: a_head_several_inductives_own_resolves_through_the_namespace, and the negative control the_namespace_reading_of_a_shared_head_is_refused_over_another_type",
+      "probe": "c15_bare_succ_two_discriminants, BYTE_EQUAL on both lanes since"
+    },
+    {
+      "id": "run-and-compile-on-the-shells-main-stack",
+      "construct": "the checker itself on the trust-cg lane, in a debug build of `clean`",
+      "was": "with the front-end fix in, `clean run --backend trust-cg` of the checker and of its mutant aborted with \"thread 'main' has overflowed its stack\" and wrote no receipt; the crash report's stack is clean_compiler::emit_trust_ir::emit_body, eight frames deep, under handle_run_trustcg on the main thread. The same command printed pinned Lean's bytes with the shell's stack limit raised from 8 MB to 12 MB. The C lane was byte-equal throughout.",
+      "fix": "`clean run` and `clean compile` do their work on a 1 GiB worker thread, as `clean check` does (crates/clean-cli/src/large_stack.rs, called from dispatch_sync in crates/clean-cli/src/lib.rs)",
+      "tests": "crates/clean/tests/large_stack_cli.rs::run_and_compile_dispatch_get_a_large_stack_by_default (default-feature test reached by just ci/test-fast, real CLI with a named-thread stack observer), large_stack.rs helper tests, and the explicit trust-cg execution sweep",
+      "left_open": "the emitter's recursion is unchanged: a caller that links clean-compiler and is not one of these two verbs gets the stack it runs on"
+    },
+    {
+      "id": "closure-probe-hides-the-refusing-cause",
+      "construct": "source-file dependencies whose LCNF lowering or isolated IR probe fails",
+      "was": "any dependency whose lowering fails: the native closure drops it to an extern and the build then refuses the extern, so `clean run` names a missing prelude shim and not the cause",
+      "fix": "collect source declaration leaves at elaboration; preserve their original lowering/probe error at select_lcnf_decl_routed rather than dropping them to an unsatisfied prelude extern. Prelude shim fallback is retained.",
+      "tests": "crates/clean/tests/large_stack_cli.rs::source_dependency_refusal_keeps_the_lowering_cause (direct-root and main-closure callers, LCNF Lam and RC linearity failures)",
+      "scope": "source declaration errors; this makes no universal diagnostic claim for prelude or imported-artifact fallback"
+    }
+  ],
+  "r4_items": [
+    {
+      "item": "i",
+      "program": "c34_r4_i_call_cycle_shared_counter",
+      "what": "a mutual block of at least three functions, each structurally recursive on one shared `Nat` counter, two reading a token before recursing and one descending a term at an unchanged cursor"
+    },
+    {
+      "item": "ii",
+      "program": "c25_r4_ii_cursor_through_except",
+      "what": "the cursor threaded through `Except` results"
+    },
+    {
+      "item": "iii",
+      "program": "c26_r4_iii_three_field_ctor",
+      "what": "a tree type with a three-field constructor"
+    },
+    {
+      "item": "iv",
+      "program": "c27_r4_iv_head_loop_million",
+      "what": "a head loop of 10^6 self tail calls"
+    },
+    {
+      "item": "v",
+      "program": "c28_r4_v_one_function_over_requests",
+      "what": "the same block as one function over a request sum type"
+    },
+    {
+      "item": "vi",
+      "program": "c29_r4_vi_ground_acceptance_theorem",
+      "what": "one ground acceptance stated as a theorem and closed by `rfl` or `decide`, re-checked by Lean's kernel and Clean's (the kernel `clean check` runs; the fenced ReferenceKernel entry is not measured here)"
+    },
+    {
+      "item": "vii",
+      "program": "c30_r4_vii_tokens_from_bytearray",
+      "what": "tokens decoded from a `ByteArray`"
+    },
+    {
+      "item": "viii",
+      "program": "c31_r4_viii_advice_tree_with_certificates",
+      "what": "formulation (B): mutually inductive advice types in which a head step carries a list of conversion certificates, three functions mutually and structurally recursive on them, bytes decoded to that tree first, and (vi) repeated for it"
+    },
+    {
+      "item": "ix",
+      "program": "c35_r4_ix_walk_call_cycle",
+      "what": "a list-iterating member of the block that handles one element per call, calls another member at the counter's predecessor, and calls itself there on the rest"
+    },
+    {
+      "item": "x",
+      "program": "c36_r4_x_report_call_cycle",
+      "what": "a report accumulator threaded through every member's `Except` result, with (iv)'s head loop carrying it and still compiled as a loop"
+    }
+  ],
+  "rejected_by_lean": [
+    {
+      "name": "bare_head_outside_namespace",
+      "what": "a bare `succ` application head outside `namespace Tm`, over a `Tm` column",
+      "lean_error": "Invalid pattern: Expected a constructor or constant marked with `[match_pattern]`",
+      "clean_check": {
+        "outcome": "ACCEPTED",
+        "refusal": "",
+        "false_acceptance": "bare-ctor-head-read-by-column-type"
+      }
+    },
+    {
+      "name": "namespace_head_over_nat",
+      "what": "NEGATIVE CONTROL for frontend class (197): inside `namespace Tm` a bare `succ` head is `Tm.succ`, so over a `Nat` column it is a type error",
+      "lean_error": "Type mismatch",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "Type mismatch: expected constructor of Nat, got constructor Tm.succ of Tm",
+        "false_acceptance": ""
+      }
+    },
+    {
+      "name": "vi_false_acceptance_by_decide",
+      "what": "NEGATIVE CONTROL for R4 (vi): a FALSE ground acceptance of the item (i) block closed by `decide`",
+      "lean_error": "Tactic `decide` proved that the proposition",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "✗ corrupt_accepted_by_decide: elaboration error at line 103: Tactic failed: decide",
+        "false_acceptance": ""
+      }
+    },
+    {
+      "name": "vi_false_acceptance_by_rfl",
+      "what": "NEGATIVE CONTROL for R4 (vi): the same false acceptance closed by `rfl`",
+      "lean_error": "Not a definitional equality",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "✗ corrupt_accepted_by_rfl: elaboration error at line 103: Type mismatch",
+        "false_acceptance": ""
+      }
+    },
+    {
+      "name": "structural_clause_selects_non_decreasing",
+      "lean_error": "failed to infer structural recursion",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "the major premise itself, not a strict subterm of it",
+        "false_acceptance": ""
+      }
+    },
+    {
+      "name": "structural_clause_constant_is_not_a_parameter",
+      "lean_error": "must be one of the parameters",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "must select a parameter",
+        "false_acceptance": ""
+      }
+    },
+    {
+      "name": "structural_clause_wildcard_is_not_a_name",
+      "lean_error": "Unknown identifier",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "unknown parameter",
+        "false_acceptance": ""
+      }
+    },
+    {
+      "name": "structural_theorem_constant_is_not_a_parameter",
+      "lean_error": "must be one of the parameters",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "must select a parameter",
+        "false_acceptance": ""
+      }
+    },
+    {
+      "name": "structural_where_constant_is_not_a_parameter",
+      "lean_error": "must be one of the parameters",
+      "clean_check": {
+        "outcome": "REFUSED",
+        "refusal": "must select a parameter",
+        "false_acceptance": ""
+      }
+    }
+  ],
+  "false_acceptances": [
+    {
+      "id": "bare-ctor-head-read-by-column-type",
+      "construct": "outside the type's namespace, an unqualified constructor-application head that ordinary name resolution does not find (`succ _` over a `Tm` column, with `Tm.succ` and `Nat.succ` declared): Clean reads it against the column's type as `Tm.succ`; pinned Lean rejects the pattern",
+      "found": "beside frontend class (197), 2026-11-12; predates that class and is not changed by it",
+      "site": {
+        "file": "crates/clean-elab/src/infer/elab_match/name_classification.rs",
+        "line": 208,
+        "needle": "if !bare_identifier {"
+      },
+      "site_found_by": "reading: the expected-family shorthand of `classify_match_pattern_name` keeps a constructor-application head that resolution did not find; not confirmed by a trace",
+      "fix_scope": "small but widening in reverse: refusing the shorthand for application heads would make Clean reject what it accepts today, so its callers need measuring first"
+    }
+  ],
+  "acyclic_controls": [
+    "c24_r4_i_mutual_block_shared_counter",
+    "c32_r4_ix_walk_member_of_block",
+    "c33_r4_x_report_accumulator"
+  ],
+  "head_loop_samples": [
+    {
+      "steps": 10000,
+      "program": "c37_head_loop_10000",
+      "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+      "source_sha256": "8606e59b5d96dcfdd8473b6419bcc81fb353055151f7654b9c23f92717d33cf5",
+      "measurement": {
+        "c_lane": {
+          "command": [
+            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "run",
+            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000.lean",
+            "--decl",
+            "main"
+          ],
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 10000 cursor=10000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
+          "pin": {
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
+          }
+        },
+        "trust_cg_lane": {
+          "command": [
+            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "run",
+            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_10000.lean",
+            "--decl",
+            "main",
+            "--backend",
+            "trust-cg",
+            "--receipt",
+            "/var/folders/xg/p7rmcgnn72n3s8dnc_wcxln40000gn/T/x1-run-tc4dlf3j/receipt.json"
+          ],
+          "exit_code": 0,
+          "stdout": "ACCEPT lit 10000 cursor=10000\nREFUSE depth\nACCEPT lit 6 cursor=3\n",
+          "stderr": "",
+          "receipt": {
+            "schema": "clean-run-trustcg-receipt/v1",
+            "lowered": "clean-compiler-unvalidated",
+            "runtime": "C via cc",
+            "claim": "measurement only; no binary claim; lane = clean-compiler-unvalidated",
+            "decl": "main",
+            "trust_cg": "$HOME/Library/Application Support/aterm/pkg/bin/trust-cg (trust-cg 0.7.0)",
+            "stage": "built",
+            "step": null,
+            "cause": null,
+            "module_digest": "sha256:560bc121d44e322cad43abfb746291c3a5eeaf7833cc4ef1a82bd697d0469b13",
+            "kernel_tv_certified": 0,
+            "bodies_unvalidated": 38,
+            "bodies_kept": {},
+            "entry_symbol": "main",
+            "driver_entry": "clean_lx0_driver_main (-e)"
+          },
+          "pin": {
+            "outcome": "BYTE_EQUAL",
+            "refusal": ""
+          }
+        }
+      },
+      "c_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      },
+      "trust_cg_lane": {
+        "outcome": "BYTE_EQUAL",
+        "refusal": "",
+        "gaps": []
+      }
+    },
+    {
+      "steps": 100000,
+      "program": "c37_head_loop_100000",
+      "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+      "source_sha256": "86ee7bc51ecbe555c43ebd240616a4e8bcd39f371a6d5bf0ce90607d4764030e",
+      "measurement": {
+        "c_lane": {
+          "command": [
+            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "run",
+            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_100000.lean",
+            "--decl",
+            "main"
+          ],
+          "exit_code": 139,
+          "stdout": "",
+          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "pin": {
+            "outcome": "CRASHED",
+            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+          }
+        },
+        "trust_cg_lane": {
+          "command": [
+            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "run",
+            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c37_head_loop_100000.lean",
+            "--decl",
+            "main",
+            "--backend",
+            "trust-cg",
+            "--receipt",
+            "/var/folders/xg/p7rmcgnn72n3s8dnc_wcxln40000gn/T/x1-run-w0r1i7mi/receipt.json"
+          ],
+          "exit_code": 139,
+          "stdout": "",
+          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "receipt": {
+            "schema": "clean-run-trustcg-receipt/v1",
+            "lowered": "clean-compiler-unvalidated",
+            "runtime": "C via cc",
+            "claim": "measurement only; no binary claim; lane = clean-compiler-unvalidated",
+            "decl": "main",
+            "trust_cg": "$HOME/Library/Application Support/aterm/pkg/bin/trust-cg (trust-cg 0.7.0)",
+            "stage": "built",
+            "step": null,
+            "cause": null,
+            "module_digest": "sha256:ff65b5800c505e79be39bc6647644b8cadf5956e263075aa950a6081e6be8269",
+            "kernel_tv_certified": 0,
+            "bodies_unvalidated": 38,
+            "bodies_kept": {},
+            "entry_symbol": "main",
+            "driver_entry": "clean_lx0_driver_main (-e)"
+          },
+          "pin": {
+            "outcome": "CRASHED",
+            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+          }
+        }
+      },
+      "c_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      }
+    },
+    {
+      "steps": 1000000,
+      "program": "c27_r4_iv_head_loop_million",
+      "clean_sha256": "ee390afe4e3376ad74f3c312fc4f4af1fcad04a583e56423740b8da4c15ecc32",
+      "source_sha256": "d473c49b5b42da7cfa267d721db2295fb35ea1cb1c7944c5de9a137ed76ad6e3",
+      "measurement": {
+        "c_lane": {
+          "command": [
+            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "run",
+            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c27_r4_iv_head_loop_million.lean",
+            "--decl",
+            "main"
+          ],
+          "exit_code": 139,
+          "stdout": "",
+          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "pin": {
+            "outcome": "CRASHED",
+            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+          }
+        },
+        "trust_cg_lane": {
+          "command": [
+            "$HOME/clean-wt/x1-recheck-fixes/target-tests/debug/clean",
+            "run",
+            "$HOME/clean-wt/x1-recheck-fixes/tests/fixtures/advice_replay_checker/programs/c27_r4_iv_head_loop_million.lean",
+            "--decl",
+            "main",
+            "--backend",
+            "trust-cg",
+            "--receipt",
+            "/var/folders/xg/p7rmcgnn72n3s8dnc_wcxln40000gn/T/x1-run-rer_2j3w/receipt.json"
+          ],
+          "exit_code": 139,
+          "stdout": "",
+          "stderr": "clean run: program terminated by signal 11 (SIGSEGV)\n",
+          "receipt": {
+            "schema": "clean-run-trustcg-receipt/v1",
+            "lowered": "clean-compiler-unvalidated",
+            "runtime": "C via cc",
+            "claim": "measurement only; no binary claim; lane = clean-compiler-unvalidated",
+            "decl": "main",
+            "trust_cg": "$HOME/Library/Application Support/aterm/pkg/bin/trust-cg (trust-cg 0.7.0)",
+            "stage": "built",
+            "step": null,
+            "cause": null,
+            "module_digest": "sha256:e1ecdba55aa95a395682a140b904caf2ee621278da63e54da10681be8c0550bc",
+            "kernel_tv_certified": 0,
+            "bodies_unvalidated": 38,
+            "bodies_kept": {},
+            "entry_symbol": "main",
+            "driver_entry": "clean_lx0_driver_main (-e)"
+          },
+          "pin": {
+            "outcome": "CRASHED",
+            "refusal": "clean run: program terminated by signal 11 (SIGSEGV)"
+          }
+        }
+      },
+      "c_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      },
+      "trust_cg_lane": {
+        "outcome": "CRASHED",
+        "refusal": "clean run: program terminated by signal 11 (SIGSEGV)",
+        "gaps": [
+          "head-loop-is-not-a-loop"
+        ]
+      }
+    }
+  ],
+  "measured_before_recheck": {
+    "date": "2026-11-13 latest native-table/R4-check live tests and six detailed controls at 3ebcb2f6db523c04839ddc3f566b2d46bcca4ffb",
+    "host": "aarch64-macos (Darwin 27.2.0)",
+    "cc": "Apple clang version 21.0.0 (clang-2100.4.1.1)",
+    "trust_cg": {
+      "version": "trust-cg 0.7.0",
+      "source": "atpkg store build 10290 (the trust-cg `aterm pkg which trust-cg` names on the measuring box)",
+      "sha256": "01bb9a7d515af822cd1e40702dc349f1db82ceff104bb3daa5c0b7d2aed93230"
+    },
+    "note": "All native rows and the R4 elaborator pins were live-tested at the named commit. Detailed execution.json covers the three real call cycles and three head-depth programs; the separate full 40-program raw capture remains bound to f9e9fb0b4. The default-feature dispatch/mutation controls have their own recorded scope. No freshness beyond the recorded inputs, semantic soundness or codegen license is claimed.",
+    "clean": "debug binary built with trust-ir-backend, both backends measured with that binary; the default-feature dispatch regression is a separate test",
+    "clean_sha256": "8dbf9e85e28cf1577e777f9c6057489fc09938056d2551c8bb3170dc68727d1d",
+    "production_source_context": {
+      "scope": "crates/**/*.{rs,c,h,toml,lock}; root Cargo.toml, Cargo.lock, .cargo/config.toml, rust-toolchain.toml",
+      "files": 9369,
+      "sha256": "5d52c2a782ad8b173e301c919653676351db24c4dd7c1908d3e2b88b3f961896"
+    },
+    "raw_capture_scope": [
+      "c27_r4_iv_head_loop_million",
+      "c34_r4_i_call_cycle_shared_counter",
+      "c35_r4_ix_walk_call_cycle",
+      "c36_r4_x_report_call_cycle",
+      "c37_head_loop_10000",
+      "c37_head_loop_100000"
+    ],
+    "native_rows_live_test_log": "reports/x1-fixup/latest-consumers.log",
+    "full_40_program_detail_snapshot": "reports/x1-fixup/execution-full-f9.json"
+  }
+}

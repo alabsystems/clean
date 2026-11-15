@@ -44,8 +44,8 @@
 //! of translation correctness, and the manifest says so.
 
 use std::process::Command;
-use std::sync::OnceLock;
 
+use clean_elab::oracle_compiler::OracleCompiler;
 use clean_kernel::{Environment, Expr, ExprKind, Literal, Name};
 
 use crate::cmd_extract::{GateSig, ScalarTy};
@@ -677,44 +677,11 @@ pub(crate) fn render_rust_battery_driver(
     m
 }
 
-/// Does this `rustc` understand `-Ztrust-verify=off`?
-static TRUST_OPT_OUT: OnceLock<bool> = OnceLock::new();
-
-fn flag_was_rejected(stderr: &str) -> bool {
-    stderr.contains("only accepted on the nightly compiler")
-        || stderr.contains("unknown unstable option")
-        || stderr.contains("unknown debugging option")
-        || stderr.contains("incorrect value")
-}
-
-fn run_rustc(
-    source_path: &std::path::Path,
-    binary_path: &std::path::Path,
-    trust_opt_out: bool,
-) -> std::io::Result<std::process::Output> {
-    let mut cmd = Command::new("rustc");
-    cmd.arg("--edition=2021").arg("-O");
-    if trust_opt_out {
-        cmd.arg("-Ztrust-verify=off");
-    }
-    cmd.arg(source_path).arg("-o").arg(binary_path).output()
-}
-
-/// Compile `source` (module + appended driver) with `rustc`.
-///
-/// TRUST OPT-OUT — copied from
-/// `crates/clean-elab/src/tactic/native_decide_eval.rs::compile_rust_program`,
-/// for the same reason. `rustc` here resolves through rustup from this repo's
-/// `rust-toolchain.toml`, which pins `channel = "trust"` — a VERIFYING compiler.
-/// It therefore runs Trust's obligation checker over this GENERATED program and,
-/// under the strict policy, fails the build. That is a category error: this
-/// program is a differential ORACLE, not a verification target.
-///
-/// PROBE, don't assume: the flag is trust-only (stock rustc rejects any `-Z` off
-/// nightly) and its spelling has moved before, so try it and fall back to a
-/// plain invocation when the compiler does not understand it. The decision is
-/// cached, so the double compile happens at most once per process.
+/// Compile `source` (module + appended driver) with the admitted Trust oracle
+/// compiler -- the same one, and the same rule, as `native_decide`'s
+/// (`clean_elab::oracle_compiler`): one compile, no retry, no other compiler.
 fn compile_rust_program(
+    compiler: &OracleCompiler,
     source: &str,
     dir: &std::path::Path,
 ) -> Result<std::path::PathBuf, RustEmitError> {
@@ -726,35 +693,9 @@ fn compile_rust_program(
     });
     std::fs::write(&source_path, source)
         .map_err(|e| RustEmitError::Toolchain(format!("failed to write emitted Rust: {e}")))?;
-
-    let launch_failed =
-        |e: std::io::Error| RustEmitError::Toolchain(format!("failed to launch rustc: {e}"));
-
-    let mut output = match TRUST_OPT_OUT.get() {
-        Some(&opt_out) => run_rustc(&source_path, &binary_path, opt_out).map_err(launch_failed)?,
-        None => {
-            let attempt = run_rustc(&source_path, &binary_path, true).map_err(launch_failed)?;
-            let stderr = String::from_utf8_lossy(&attempt.stderr);
-            if !attempt.status.success() && flag_was_rejected(&stderr) {
-                let _ = TRUST_OPT_OUT.set(false);
-                run_rustc(&source_path, &binary_path, false).map_err(launch_failed)?
-            } else {
-                let _ = TRUST_OPT_OUT.set(true);
-                attempt
-            }
-        }
-    };
-    // A cached `true` can still go stale if the toolchain changes mid-process.
-    if !output.status.success() && flag_was_rejected(&String::from_utf8_lossy(&output.stderr)) {
-        output = run_rustc(&source_path, &binary_path, false).map_err(launch_failed)?;
-    }
-    if !output.status.success() {
-        return Err(RustEmitError::Toolchain(format!(
-            "rustc exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        )));
-    }
+    compiler
+        .compile(&source_path, &binary_path)
+        .map_err(|e| RustEmitError::Toolchain(e.to_string()))?;
     Ok(binary_path)
 }
 
@@ -766,12 +707,13 @@ fn compile_rust_program(
 /// falsifiability probe (see
 /// `test_rust_backend_differential_rejects_a_tampered_emission`).
 pub(crate) fn run_rust_battery(
+    compiler: &OracleCompiler,
     module: &str,
     driver: &str,
     dir: &std::path::Path,
 ) -> Result<Vec<String>, RustEmitError> {
     let program = format!("{module}{driver}");
-    let exe = compile_rust_program(&program, dir)?;
+    let exe = compile_rust_program(compiler, &program, dir)?;
     let out = Command::new(&exe)
         .output()
         .map_err(|e| RustEmitError::Toolchain(format!("failed to run battery binary: {e}")))?;

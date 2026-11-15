@@ -125,7 +125,9 @@ pub(crate) fn detect_escape_status(
     if find_matching_fun_decl(result, env).is_none() {
         return EscapeStatus::Unknown;
     }
-    let scan = scan_escapes(&result.code, env.body_fvar);
+    // `find_matching_fun_decl` has just checked that the closure declares
+    // exactly `env.param_count` parameters after its captures.
+    let scan = scan_escapes(&result.code, env.body_fvar, env.param_count);
     if scan.escapes {
         EscapeStatus::Escaping
     } else if scan.ambiguous {
@@ -516,16 +518,33 @@ fn expr_refs_fvar(expr: &Expr, target: FVarId) -> bool {
     }
 }
 
+/// Scan `code` for an escape of the closure `target`, whose declared arity
+/// (parameters after its captures) is `arity`.
 #[must_use]
-fn scan_escapes(code: &Code, target: FVarId) -> EscapeScan {
+fn scan_escapes(code: &Code, target: FVarId, arity: usize) -> EscapeScan {
     match code {
         Code::Let(decl, body) => merge_scans(
-            scan_value_escapes(&decl.value, target),
-            scan_escapes(body, target),
+            scan_value_escapes(&decl.value, target, arity),
+            scan_escapes(body, target, arity),
         ),
-        Code::Fun(fun_decl, body) | Code::JoinPoint(fun_decl, body) => merge_scans(
-            scan_escapes(&fun_decl.body, target),
-            scan_escapes(body, target),
+        // A closure declared here that captures the target holds it in its
+        // environment: a second handle this scan does not follow, the same as
+        // storing it in a constructor. Closure conversion gives every capture
+        // a parameter carrying the captured variable's own id. A join point
+        // captures nothing.
+        Code::Fun(fun_decl, body) => merge_scans(
+            EscapeScan {
+                escapes: fun_decl.params.iter().any(|param| param.fvar_id == target),
+                ambiguous: false,
+            },
+            merge_scans(
+                scan_escapes(&fun_decl.body, target, arity),
+                scan_escapes(body, target, arity),
+            ),
+        ),
+        Code::JoinPoint(fun_decl, body) => merge_scans(
+            scan_escapes(&fun_decl.body, target, arity),
+            scan_escapes(body, target, arity),
         ),
         Code::Cases(cases) => cases.alts.iter().fold(
             EscapeScan {
@@ -536,7 +555,9 @@ fn scan_escapes(code: &Code, target: FVarId) -> EscapeScan {
                 merge_scans(
                     scan,
                     match alt {
-                        Alt::Ctor { body, .. } | Alt::Default(body) => scan_escapes(body, target),
+                        Alt::Ctor { body, .. } | Alt::Default(body) => {
+                            scan_escapes(body, target, arity)
+                        }
                     },
                 )
             },
@@ -556,13 +577,23 @@ fn scan_escapes(code: &Code, target: FVarId) -> EscapeScan {
 }
 
 #[must_use]
-fn scan_value_escapes(value: &LetValue, target: FVarId) -> EscapeScan {
+fn scan_value_escapes(value: &LetValue, target: FVarId, arity: usize) -> EscapeScan {
     match value {
         LetValue::Lit(_) | LetValue::Erased => EscapeScan::default(),
-        LetValue::FVar { args, .. } => EscapeScan {
-            escapes: args
-                .iter()
-                .any(|arg| matches!(arg, Arg::FVar(id) if *id == target)),
+        // The closure in head position is a CALL of it, which does not let it
+        // escape, only when the spine is non-empty and reaches its arity. An
+        // empty spine (`let a := f`, which `to_lcnf` emits for a bare local in
+        // value position) is an ALIAS, and a shorter one (`let g := f x`) is a
+        // partial application whose value holds the closure. Either way the
+        // new name is a second handle on the closure that this scan does not
+        // follow, so the binding itself is the escape. That covers every chain
+        // of aliases too: `let b := a` can only follow a first link that
+        // already counted.
+        LetValue::FVar { fvar, args } => EscapeScan {
+            escapes: (*fvar == target && (args.is_empty() || args.len() < arity))
+                || args
+                    .iter()
+                    .any(|arg| matches!(arg, Arg::FVar(id) if *id == target)),
             ambiguous: false,
         },
         LetValue::Proj { structure, .. } => EscapeScan {

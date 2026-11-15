@@ -11,9 +11,12 @@ Run: python3 scripts/test_verify_runner.py
 
 from __future__ import annotations
 
+import atexit
 import json
+import math
 import os
 import re
+import shlex
 import sys
 import tempfile
 import subprocess
@@ -30,9 +33,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 # them once at import. Without this, an end-to-end test would deposit synthetic
 # records into the real data/suite_state/, where nothing downstream could tell
 # them from measured ones.
-_SANDBOX = tempfile.mkdtemp(prefix="verify_runner_test_")
+_SANDBOX_OWNER = tempfile.TemporaryDirectory(prefix="verify_runner_test_")
+atexit.register(_SANDBOX_OWNER.cleanup)
+_SANDBOX = _SANDBOX_OWNER.name
 os.environ["VERIFY_RUNNER_STATE_DIR"] = os.path.join(_SANDBOX, "state")
 os.environ["VERIFY_RUNNER_TARGET_DIR"] = os.path.join(_SANDBOX, "target")
+# Metadata queries invoke Cargo directly, outside run_one's environment setup.
+os.environ["CARGO_TARGET_DIR"] = os.environ["VERIFY_RUNNER_TARGET_DIR"]
 # THREE writable locations, not two. The journal is the third, and it was
 # missed on the first pass: every `write_record` in this file appended to the
 # real ~/.local/state/clean/suite-journal/ until this line existed, which is the
@@ -41,6 +48,7 @@ os.environ["VERIFY_RUNNER_TARGET_DIR"] = os.path.join(_SANDBOX, "target")
 os.environ["VERIFY_RUNNER_JOURNAL_DIR"] = os.path.join(_SANDBOX, "journal")
 
 import verify_runner as vr  # noqa: E402
+from resource_transport import resource_fds  # noqa: E402
 
 # NO UNIT TEST MAY TOUCH THE MACHINE-WIDE ADMISSION GATE.
 #
@@ -83,7 +91,7 @@ def tearDownModule() -> None:
     _GATE_PATCHES.clear()
 
 
-ENTRY = {"id": "pkg::test::t", "package": "pkg", "kind": "test", "argv": ["cargo", "test"]}
+ENTRY = {"id": "pkg::test::t", "package": "pkg", "kind": "test", "argv": ["targo", "--unverified", "test"]}
 DIGEST = "sha256:aaaa"
 OTHER = "sha256:bbbb"
 
@@ -101,6 +109,74 @@ def record(**overrides):
     return base
 
 
+class _FakePath(str):
+    """A str that also answers `.exists()`, so it can stand in for the
+    `pathlib.Path` HEAVY_GATE without importing pathlib into this module."""
+
+    def exists(self) -> bool:
+        return os.path.exists(str(self))
+
+
+class SandboxLifetime(unittest.TestCase):
+    def test_real_cargo_metadata_uses_the_owned_sandbox(self):
+        script = """
+from pathlib import Path
+import json, os, sys
+sys.path.insert(0, sys.argv[1])
+import test_verify_runner as subject
+meta = subject.vr.cargo_metadata()
+print(json.dumps({"sandbox": subject._SANDBOX,
+                  "configured_target": os.environ["CARGO_TARGET_DIR"],
+                  "metadata_target": meta["target_directory"]}))
+"""
+        with tempfile.TemporaryDirectory(prefix="cargo_cache_probe_") as holder:
+            caller = Path(holder) / "caller-cache"
+            caller.mkdir()
+            (caller / "keep").write_text("caller fixture")
+            env = {**os.environ, "TMPDIR": holder, "CARGO_TARGET_DIR": str(caller)}
+            proc = subprocess.run(
+                [sys.executable, "-c", script, str(Path(__file__).resolve().parent)],
+                env=env, pass_fds=resource_fds(env), capture_output=True, text=True, timeout=60)
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            observed = json.loads(proc.stdout)
+            sandbox = Path(observed["sandbox"])
+            self.assertEqual(sandbox.parent.resolve(), Path(holder).resolve())
+            wanted = sandbox / "target"
+            self.assertEqual(Path(observed["configured_target"]), wanted, observed)
+            self.assertEqual(Path(observed["metadata_target"]), wanted, observed)
+            self.assertFalse(sandbox.exists(), "metadata output outlived its sandbox owner")
+            self.assertEqual(sorted(p.name for p in caller.iterdir()), ["keep"])
+            self.assertEqual((caller / "keep").read_text(), "caller fixture")
+
+    def test_process_exit_removes_only_its_owned_sandbox(self):
+        script = """
+from pathlib import Path
+import sys
+sys.path.insert(0, sys.argv[1])
+import test_verify_runner as subject
+root = Path(subject._SANDBOX)
+(root / "fixture-data").write_text("owned fixture")
+print(root, flush=True)
+if sys.argv[2] == "exception":
+    raise RuntimeError("intentional sandbox cleanup control")
+raise SystemExit(int(sys.argv[2]))
+"""
+        for mode, expected in (("0", 0), ("7", 7), ("exception", 1)):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory(prefix="runner_cleanup_probe_") as holder:
+                env = {**os.environ, "TMPDIR": holder}
+                proc = subprocess.run(
+                    [sys.executable, "-c", script, str(Path(__file__).resolve().parent), mode],
+                    env=env, pass_fds=resource_fds(env), capture_output=True, text=True, timeout=30)
+                self.assertEqual(proc.returncode, expected, proc.stderr)
+                root = Path(proc.stdout.strip())
+                # Only this child can create paths under the parent's private
+                # container; failed controls are cleaned by its context owner.
+                self.assertTrue(root.is_absolute())
+                self.assertEqual(root.parent.resolve(), Path(holder).resolve())
+                self.assertTrue(root.name.startswith("verify_runner_test_"))
+                self.assertFalse(root.exists(), "the exited test process left fixture data behind")
+
+
 class TestDeriveBucket(unittest.TestCase):
     def test_derive_no_record_returns_unknown(self):
         row = vr.derive(ENTRY, None, DIGEST)
@@ -115,6 +191,24 @@ class TestDeriveBucket(unittest.TestCase):
         row = vr.derive(ENTRY, record(), OTHER)
         self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
         self.assertIn("stale", row["reason"])
+
+    def test_mixed_input_record_cannot_revive_when_tree_returns_to_start(self):
+        stable = record(input_digest_at_finish=DIGEST, inputs_moved_during_run=False)
+        self.assertEqual(vr.derive(ENTRY, stable, DIGEST)["bucket"], vr.BUCKET_GREEN)
+        evidence = [
+            {"inputs_moved_during_run": True},
+            {"input_digest_at_finish": OTHER},
+            {"inputs_moved_during_run": False, "input_digest_at_finish": OTHER},
+            {"inputs_moved_during_run": True, "input_digest_at_finish": DIGEST},
+        ]
+        for status in (vr.STATUS_GREEN, vr.STATUS_RED):
+            for fields in evidence:
+                with self.subTest(status=status, fields=fields):
+                    rec = record(status=status, **fields)
+                    row = vr.derive(ENTRY, rec, DIGEST)
+                    self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+                    self.assertIn("during", row["reason"])
+                    self.assertIn(status, row["last_known"])
 
     def test_derive_red_at_matching_digest_returns_red(self):
         row = vr.derive(ENTRY, record(status=vr.STATUS_RED), DIGEST)
@@ -153,7 +247,7 @@ class TestDeriveBucket(unittest.TestCase):
         self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
 
     def test_derive_green_that_ran_zero_tests_is_unknown_not_green(self):
-        """THE VACUOUS GREEN. `cargo test -p clean-kernel axiom_refutation_gate`
+        """THE VACUOUS GREEN. `targo --unverified test -p clean-kernel axiom_refutation_gate`
         exits 0 with "0 passed; ...; 10412 filtered out" because that gate lives
         in clean-verify. libtest calls that ok; the runner must not."""
         row = vr.derive(
@@ -166,6 +260,20 @@ class TestDeriveBucket(unittest.TestCase):
         )
         self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
         self.assertIn("ZERO tests", row["reason"])
+
+    def test_ignored_tests_are_not_executed_tests(self):
+        counts = {"passed": 0, "failed": 0, "ignored": 3, "result_lines": 1}
+        row = vr.derive(ENTRY, record(counts=counts), DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        counts["passed"] = 1
+        self.assertEqual(vr.derive(ENTRY, record(counts=counts), DIGEST)["bucket"], vr.BUCKET_GREEN)
+
+    def test_recorded_green_with_failed_tests_is_unknown(self):
+        counts = {"passed": 3, "failed": 1, "ignored": 0, "result_lines": 2}
+        rec = record(counts=counts, final_line="test result: ok. 3 passed; 0 failed")
+        self.assertEqual(vr.derive(ENTRY, rec, DIGEST)["bucket"], vr.BUCKET_UNKNOWN)
+        counts["failed"] = 0
+        self.assertEqual(vr.derive(ENTRY, rec, DIGEST)["bucket"], vr.BUCKET_GREEN)
 
     def test_derive_green_that_ran_tests_stays_green(self):
         """The anti-correlation arm: same shape, one test ran, still GREEN.
@@ -231,8 +339,30 @@ class TestInputDigest(unittest.TestCase):
     def test_digest_changes_when_argv_changes(self):
         """argv is part of the key: a green for one command is not a green for another."""
         a = dict(ENTRY, _dirs=[vr.REPO_ROOT / "scripts"])
-        b = dict(ENTRY, _dirs=[vr.REPO_ROOT / "scripts"], argv=["cargo", "test", "--release"])
+        b = dict(ENTRY, _dirs=[vr.REPO_ROOT / "scripts"], argv=["targo", "--unverified", "test", "--release"])
         self.assertNotEqual(vr.input_digest(a), vr.input_digest(b))
+
+    def test_argument_boundaries_cannot_reuse_a_green(self):
+        pairs = [
+            (["tool", "a b"], ["tool", "a", "b"]),
+            (["tool", "", "x"], ["tool", " x"]),
+            (["tool", "x\n y"], ["tool", "x\n", "y"]),
+            (["tool", "x; y"], ["tool", "x;", "y"]),
+        ]
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(vr, "REPO_ROOT", Path(tmp)), \
+             mock.patch.object(vr, "_dir_content_digest", return_value="unchanged-source"), \
+             mock.patch.object(vr, "toolchain_id", return_value="same-compiler"):
+            for left, right in pairs:
+                with self.subTest(left=left, right=right):
+                    self.assertEqual(" ".join(left), " ".join(right))
+                    first = dict(ENTRY, argv=left, _dirs=[])
+                    second = dict(ENTRY, argv=right, _dirs=[])
+                    measured = vr.input_digest(first, fresh=True)
+                    current = vr.input_digest(second, fresh=True)
+                    self.assertNotEqual(measured, current)
+                    self.assertEqual(vr.derive(second, record(input_digest=measured), current)["bucket"],
+                                     vr.BUCKET_UNKNOWN)
 
     def test_digest_is_stable_for_identical_inputs(self):
         a = dict(ENTRY, _dirs=[vr.REPO_ROOT / "scripts"])
@@ -241,6 +371,437 @@ class TestInputDigest(unittest.TestCase):
     def test_digest_scope_excludes_the_state_directory(self):
         """Writing a record must never invalidate other records."""
         self.assertFalse(str(vr.STATE_DIR).startswith(str(vr.REPO_ROOT / "crates")))
+
+
+class TestLiteralPathDigests(unittest.TestCase):
+    def _init(self, root, names, tracked=True):
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        for name in names:
+            (root / name).write_text("initial:" + name)
+        if tracked:
+            subprocess.run(["git", "-C", str(root), "add", "--", "."], check=True)
+
+    def test_quoted_source_cannot_hash_its_unquoted_neighbor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init(root, ["ordinary", '"ordinary"'])
+            entry = dict(ENTRY, _dirs=[root])
+            with mock.patch.object(vr, "REPO_ROOT", root), \
+                    mock.patch.object(vr, "toolchain_id", return_value="fixed"):
+                before = vr.input_digest(entry, fresh=True)
+                (root / '"ordinary"').write_text("changed quoted source")
+                after = vr.input_digest(entry, fresh=True)
+                self.assertNotEqual(before, after)
+                self.assertEqual(vr.derive(entry, record(input_digest=before), after)["bucket"],
+                                 vr.BUCKET_UNKNOWN)
+
+    def test_unusual_tracked_and_untracked_names_hash_their_own_bytes(self):
+        names = ['"quoted"', "line\nname", "tab\tname", "back\\name", "λ", "control\x01"]
+        for tracked in (True, False):
+            for name in names:
+                with self.subTest(tracked=tracked, name=name), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    self._init(root, ["quoted", name], tracked)
+                    with mock.patch.object(vr, "REPO_ROOT", root):
+                        before = vr._dir_content_digest([root], fresh=True)
+                        (root / name).write_text("changed:" + name)
+                        after = vr._dir_content_digest([root], fresh=True)
+                        self.assertNotEqual(before, after)
+
+    def test_ordinary_paths_keep_the_existing_digest(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            self._init(root, ["a", "b"])
+            # Freeze the existing on-disk digest format using Git's argv path
+            # boundary as an independent oracle for the content hashes.
+            import hashlib
+            h = hashlib.sha256()
+            for name in ("a", "b"):
+                blob = subprocess.check_output(["git", "hash-object", "--", name], cwd=root).strip()
+                h.update(name.encode() + b"\0" + blob + b"\n")
+            with mock.patch.object(vr, "REPO_ROOT", root):
+                self.assertEqual(vr._dir_content_digest([root], fresh=True), h.hexdigest())
+
+
+class TestCompilerEnvironmentRoutes(unittest.TestCase):
+    SELECTORS = ("RUSTC", "RUSTDOC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
+                 "CARGO_BUILD_RUSTC", "CARGO_BUILD_RUSTDOC", "CARGO_BUILD_RUSTC_WRAPPER",
+                 "CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER")
+
+    def test_explicit_routes_cannot_claim_the_path_trustc_identity(self):
+        for key in self.SELECTORS:
+            with self.subTest(key=key), mock.patch.dict(os.environ, {key: "/unexecuted/fixture"}, clear=True), \
+                    mock.patch.object(vr, "_TOOLCHAIN_CACHE", None), \
+                    mock.patch.object(vr, "_dir_content_digest", return_value="source"), \
+                    mock.patch.object(vr, "run_capture", return_value=(0, "rustc canonical\n")) as probe:
+                entry = dict(ENTRY, _dirs=[])
+                self.assertIsNone(vr.input_digest(entry, fresh=True))
+                self.assertIsNone(vr.build_warm_key(entry))
+                probe.assert_not_called()
+
+    def test_explicit_route_precedes_the_status_identity_cache(self):
+        with mock.patch.dict(os.environ, {"RUSTC": "/unexecuted/fixture"}, clear=True), \
+                mock.patch.object(vr, "_TOOLCHAIN_CACHE", "known canonical compiler"):
+            self.assertEqual(vr.toolchain_id(), "rustc-unavailable")
+            self.assertEqual(vr._TOOLCHAIN_CACHE, "known canonical compiler")
+
+    def test_explicit_route_cannot_reuse_cached_cfg_facts(self):
+        with mock.patch.dict(os.environ, {"RUSTC_WRAPPER": "/unexecuted/fixture"}, clear=True), \
+                mock.patch.object(vr, "_LANE_CFG_CACHE", {vr.PROFILE_DEV: {"known": True}}):
+            self.assertIsNone(vr.lane_cfg_facts(vr.PROFILE_DEV))
+
+    def test_route_refusal_names_the_variable_without_executing_it(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "target-ran"
+            entry = dict(ENTRY, _dirs=[], argv=["/bin/sh", "-c", "touch " + shlex.quote(str(marker))])
+            with mock.patch.dict(os.environ, {"RUSTC": "/unexecuted/fixture"}, clear=True), \
+                    mock.patch.object(vr, "_dir_content_digest", return_value="source"), \
+                    mock.patch.object(vr, "run_capture", return_value=(0, "rustc canonical\n")), \
+                    mock.patch.object(vr, "_gate_acquire", return_value=("token", True, False)) as gate:
+                result = vr.run_one(entry, 10)
+            self.assertFalse(marker.exists())
+            gate.assert_not_called()
+            self.assertEqual(result["status"], vr.STATUS_ERROR)
+            self.assertIn("RUSTC", result["notes"])
+            self.assertNotIn("/unexecuted/fixture", result["notes"])
+
+    def test_empty_wrapper_reset_keeps_the_normal_identity(self):
+        with mock.patch.object(vr, "_TOOLCHAIN_CACHE", None), \
+                mock.patch.object(vr, "run_capture", return_value=(0, "rustc canonical\n")):
+            with mock.patch.dict(os.environ, {}, clear=True):
+                expected = vr.toolchain_id(fresh=True)
+            with mock.patch.dict(os.environ, {"RUSTC_WRAPPER": "", "RUSTC_WORKSPACE_WRAPPER": ""}, clear=True):
+                self.assertEqual(vr.toolchain_id(fresh=True), expected)
+
+
+class TestBuildEnvironmentInputs(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.entry = dict(ENTRY, _dirs=[])
+        for name, value in (("REPO_ROOT", Path(tmp.name)), ("_WARM_BUILDS", set())):
+            patcher = mock.patch.object(vr, name, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for name, value in (("toolchain_id", "fixed compiler"),
+                            ("_dir_content_digest", "fixed source")):
+            patcher = mock.patch.object(vr, name, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def keys(self, env):
+        # No compiler runs under these fixture-only flags.
+        with mock.patch.dict(os.environ, env, clear=True):
+            return (vr.input_digest(self.entry, fresh=True), vr.build_warm_key(self.entry))
+
+    def test_compile_settings_invalidate_evidence_and_warm_reuse(self):
+        cases = {
+            "RUSTFLAGS": ("-C opt-level=1", "-C opt-level=2"),
+            "CARGO_ENCODED_RUSTFLAGS": ("-C\x1fopt-level=1", "-C\x1fopt-level=2"),
+            "RUSTDOCFLAGS": ("--cfg doc_a", "--cfg doc_b"),
+            "CARGO_ENCODED_RUSTDOCFLAGS": ("--cfg\x1fdoc_a", "--cfg\x1fdoc_b"),
+            "CARGO_BUILD_RUSTFLAGS": ("-C opt-level=1", "-C opt-level=2"),
+            "CARGO_BUILD_RUSTDOCFLAGS": ("--cfg doc_a", "--cfg doc_b"),
+            "CARGO_INCREMENTAL": ("0", "1"),
+            "CARGO_BUILD_INCREMENTAL": ("false", "true"),
+            "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": ("true", "false"),
+            "CARGO_PROFILE_RELEASE_OVERFLOW_CHECKS": ("true", "false"),
+            "CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_OPT_LEVEL": ("0", "1"),
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS": ("-C opt-level=1", "-C opt-level=2"),
+            "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUSTDOCFLAGS": ("--cfg doc_a", "--cfg doc_b"),
+        }
+        before, warm = self.keys({})
+        vr.mark_build_warm(warm)
+        for key, (first, second) in cases.items():
+            with self.subTest(key=key):
+                after, changed_warm = self.keys({key: first})
+                self.assertNotEqual(before, after)
+                self.assertFalse(vr.build_is_warm(changed_warm))
+                self.assertEqual(vr.derive(self.entry, record(input_digest=before), after)["bucket"],
+                                 vr.BUCKET_UNKNOWN)
+                self.assertNotEqual((after, changed_warm), self.keys({key: second}))
+
+    def test_empty_encoded_override_is_not_an_absent_override(self):
+        for key in ("CARGO_ENCODED_RUSTFLAGS", "CARGO_ENCODED_RUSTDOCFLAGS"):
+            with self.subTest(key=key):
+                self.assertNotEqual(self.keys({"RUSTFLAGS": "-C opt-level=1"}),
+                                    self.keys({"RUSTFLAGS": "-C opt-level=1", key: ""}))
+
+    def test_target_tools_invalidate_evidence_and_warm_reuse(self):
+        cases = {
+            "CARGO_BUILD_TARGET": ("target-a.json", "target-b.json"),
+            "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER": ("/unexecuted/linker a", "/unexecuted/linker b"),
+            "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER": ("runner --mode a", "runner --mode b"),
+            "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER": ("link-a.exe", "link-b.exe"),
+        }
+        before, warm = self.keys({})
+        vr.mark_build_warm(warm)
+        for key, (first, second) in cases.items():
+            with self.subTest(key=key):
+                after, changed_warm = self.keys({key: first})
+                self.assertNotEqual(before, after)
+                self.assertFalse(vr.build_is_warm(changed_warm))
+                self.assertEqual(vr.derive(self.entry, record(input_digest=before), after)["bucket"],
+                                 vr.BUCKET_UNKNOWN)
+                self.assertNotEqual((after, changed_warm), self.keys({key: second}))
+
+    def test_empty_target_tool_value_is_not_an_absent_override(self):
+        for key in ("CARGO_BUILD_TARGET", "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER",
+                    "CARGO_TARGET_AARCH64_APPLE_DARWIN_RUNNER"):
+            with self.subTest(key=key):
+                self.assertNotEqual(self.keys({}), self.keys({key: ""}))
+
+    def test_output_paths_and_job_limits_do_not_change_keys(self):
+        self.assertEqual(self.keys({}), self.keys({
+            "CARGO_TARGET_DIR": "/different/output",
+            "CARGO_BUILD_TARGET_DIR": "/different/default-output",
+            "CARGO_BUILD_JOBS": "3",
+        }))
+
+    def test_order_and_unrelated_environment_do_not_change_keys(self):
+        env = {"RUSTFLAGS": "-C opt-level=1", "CARGO_PROFILE_DEV_DEBUG_ASSERTIONS": "false"}
+        self.assertEqual(self.keys(env), self.keys(dict(reversed(list(env.items())))))
+        self.assertEqual(self.keys(env), self.keys(dict(env, TERM="different-terminal")))
+
+
+class TestUnavailableCompilerEvidence(unittest.TestCase):
+    def test_missing_identity_is_not_a_digest(self):
+        for identity in ("", "rustc-unavailable"):
+            with self.subTest(identity=identity), \
+                    mock.patch.object(vr, "toolchain_id", return_value=identity), \
+                    mock.patch.object(vr, "_dir_content_digest", return_value="source"):
+                self.assertIsNone(vr.input_digest(dict(ENTRY, _dirs=[]), fresh=True))
+
+    def test_matching_unknown_identity_cannot_reuse_a_green(self):
+        with mock.patch.object(vr, "toolchain_id", return_value="rustc-unavailable"), \
+                mock.patch.object(vr, "_dir_content_digest", return_value="source"):
+            digest = vr.input_digest(dict(ENTRY, _dirs=[]), fresh=True)
+            row = vr.derive(ENTRY, record(input_digest=digest), digest)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        self.assertIn("compiler", row["reason"])
+
+    def test_unknown_identity_stops_before_admission_or_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            marker = Path(tmp) / "ran"
+            entry = dict(ENTRY, _dirs=[], argv=["/bin/sh", "-c", "touch " + shlex.quote(str(marker))])
+            with mock.patch.object(vr, "input_digest", return_value=None), \
+                    mock.patch.object(vr, "_gate_acquire", return_value=("token", True, False)) as gate:
+                result = vr.run_one(entry, 10)
+            self.assertFalse(marker.exists())
+            gate.assert_not_called()
+            self.assertEqual(result["status"], vr.STATUS_ERROR)
+            self.assertIsNone(result["exit_code"])
+            self.assertIsNone(result["log"])
+
+    def test_identity_lost_at_finish_is_not_a_green(self):
+        entry = dict(ENTRY, _dirs=[], argv=["/bin/sh", "-c",
+                         "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'"])
+        with mock.patch.object(vr, "input_digest", side_effect=[DIGEST, None]):
+            result = vr.run_one(entry, 10)
+        self.assertEqual(result["status"], vr.STATUS_ERROR)
+        self.assertIn("compiler", result["notes"])
+        self.assertEqual(vr.derive(entry, result, DIGEST)["bucket"], vr.BUCKET_UNKNOWN)
+
+    def test_rollup_cannot_hide_an_unavailable_current_digest(self):
+        entry = dict(ENTRY, kind=vr.KIND_ROLLUP)
+        with mock.patch.object(vr, "rollup", return_value={"bucket": vr.BUCKET_GREEN}) as rollup:
+            row = vr.derive(entry, None, None)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        rollup.assert_not_called()
+
+    def test_shard_planning_stops_before_the_build(self):
+        args = types.SimpleNamespace(parent="pkg::lib", action="plan")
+        entry = dict(ENTRY, id=args.parent, kind="lib", _dirs=[])
+        with mock.patch.object(vr, "build_inventory", return_value=[entry]), \
+                mock.patch.object(vr, "input_digest", return_value=None), \
+                mock.patch.object(vr, "test_binary_for", side_effect=AssertionError("build launched")):
+            self.assertEqual(vr.cmd_shards(args), 2)
+
+
+class TestCompilerIdentityDigest(unittest.TestCase):
+    def test_fresh_digests_detect_compiler_replacement_without_poisoning_status(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(vr, "REPO_ROOT", Path(tmp)), \
+             mock.patch.object(vr, "_dir_content_digest", return_value="unchanged-source"), \
+             mock.patch.object(vr, "_TOOLCHAIN_CACHE", "rustc old|commit-hash: old"), \
+             mock.patch.object(vr, "run_capture", side_effect=[
+                 (0, "rustc old\ncommit-hash: old\n"),
+                 (0, "rustc new\ncommit-hash: new\n"),
+             ]) as capture:
+            entry = dict(ENTRY, _dirs=[])
+            start = vr.input_digest(entry, fresh=True)
+            finish = vr.input_digest(entry, fresh=True)
+            self.assertNotEqual(start, finish)
+            self.assertEqual(vr.derive(entry, record(input_digest=start), finish)["bucket"],
+                             vr.BUCKET_UNKNOWN)
+            # A run's fresh samples must not change the memo used by an
+            # already-running status table.
+            self.assertEqual(vr.toolchain_id(), "rustc old|commit-hash: old")
+            self.assertEqual(capture.call_count, 2)
+
+    def test_status_compiler_identity_is_memoized(self):
+        with mock.patch.object(vr, "_TOOLCHAIN_CACHE", None), \
+             mock.patch.object(vr, "run_capture", return_value=(0, "rustc fixed\n")) as capture:
+            self.assertEqual(vr.toolchain_id(), "rustc fixed")
+            self.assertEqual(vr.toolchain_id(), "rustc fixed")
+            capture.assert_called_once_with(["trustc", "-vV"])
+
+
+class TestRootBuildInputDigest(unittest.TestCase):
+    def test_config_and_toolchain_add_edit_remove_invalidate_green(self):
+        for relative in (".cargo/config", ".cargo/config.toml",
+                         "rust-toolchain", "rust-toolchain.toml"):
+            with self.subTest(path=relative), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                entry = dict(ENTRY, _dirs=[])
+                with mock.patch.object(vr, "REPO_ROOT", root), \
+                     mock.patch.object(vr, "_dir_content_digest", return_value="unchanged-source"), \
+                     mock.patch.object(vr, "toolchain_id", return_value="unchanged-compiler"):
+                    digest = vr.input_digest(entry, fresh=True)
+                    measured = record(input_digest=digest)
+                    self.assertEqual(vr.derive(entry, measured, digest)["bucket"], vr.BUCKET_GREEN)
+                    path = root / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    for content in (b"first build policy\n", b"changed build policy\n", None):
+                        if content is None:
+                            path.unlink()
+                        else:
+                            path.write_bytes(content)
+                        changed = vr.input_digest(entry, fresh=True)
+                        self.assertNotEqual(digest, changed)
+                        self.assertEqual(vr.derive(entry, measured, changed)["bucket"], vr.BUCKET_UNKNOWN)
+                        digest = changed
+                        measured = record(input_digest=digest)
+
+    def test_unrelated_root_document_does_not_invalidate_green(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            entry = dict(ENTRY, _dirs=[])
+            with mock.patch.object(vr, "REPO_ROOT", root), \
+                 mock.patch.object(vr, "_dir_content_digest", return_value="unchanged-source"), \
+                 mock.patch.object(vr, "toolchain_id", return_value="unchanged-compiler"):
+                before = vr.input_digest(entry, fresh=True)
+                (root / "README.md").write_text("unrelated documentation edit\n")
+                after = vr.input_digest(entry, fresh=True)
+                self.assertEqual(before, after)
+                self.assertEqual(vr.derive(entry, record(input_digest=before), after)["bucket"],
+                                 vr.BUCKET_GREEN)
+
+
+class TestNonExecutingCommands(unittest.TestCase):
+    def test_build_list_and_help_commands_cannot_be_test_rows(self):
+        commands = [
+            ["targo", "--unverified", "test", "--no-run"],
+            ["cargo", "test", "--no-run"],
+            ["targo", "trust", "test", "--", "--list"],
+            ["targo", "--unverified", "test", "--help"],
+            ["targo", "--unverified", "test", "--", "-h"],
+        ]
+        for argv in commands:
+            with self.subTest(argv=argv):
+                problems = vr.check_profiles([dict(ENTRY, argv=argv)])
+                self.assertTrue(any("does not execute tests" in p for p in problems), problems)
+
+    def test_executing_ignored_tests_and_shell_gates_still_work(self):
+        commands = [
+            ["targo", "--unverified", "test", "--", "--ignored"],
+            ["targo", "--unverified", "test", "--test", "list"],
+            ["scripts/probe.sh", "--list"],
+        ]
+        for argv in commands:
+            with self.subTest(argv=argv):
+                self.assertEqual(vr.check_profiles([dict(ENTRY, argv=argv)]), [])
+
+
+class TestTargetFileNames(unittest.TestCase):
+    def _inventory(self, ids):
+        rows = {}
+        for target in ids:
+            package = target.split("::")[0]
+            rows.setdefault(package, []).append({"id": target, "package": package,
+                "kind": "test", "argv": ["true"]})
+        meta = {"packages": [{"name": p, "targets": [{"kind": ["test"]}],
+                "manifest_path": str(vr.REPO_ROOT / p / "Cargo.toml")} for p in rows]}
+        with mock.patch.multiple(vr,
+                WORKSPACE_GATES=[], RELEASE_PROFILE_TARGETS=[],
+                check_crystal_extra_paths=mock.Mock(return_value=[]),
+                cargo_metadata=mock.Mock(return_value=meta),
+                package_targets=mock.Mock(side_effect=lambda _m, p: [dict(r) for r in rows[p]]),
+                check_profiles=mock.Mock(return_value=[]),
+                lib_test_coverage_problems=mock.Mock(return_value=[]),
+                compiled_out_problems=mock.Mock(return_value=[]),
+                path_dep_closure=mock.Mock(return_value=[]),
+                closure_library_reads=mock.Mock(return_value=()),
+                row_target_reads=mock.Mock(return_value=())):
+            return vr.build_inventory([ids[0].split("::")[0]], with_gates=False)
+
+    def test_a_collision_in_an_unselected_package_is_refused(self):
+        pairs = [
+            ["a::test::b__test__c", "a__test__b::test::c"],
+            ["pkg::test::Thing", "PKG::test::thing"],
+        ]
+        for ids in pairs:
+            with self.subTest(ids=ids):
+                with self.assertRaisesRegex(SystemExit, "filename collision"):
+                    self._inventory(ids)
+
+    def test_distinct_names_keep_the_selected_inventory_unchanged(self):
+        ids = ["a::test::one", "b::test::two"]
+        self.assertEqual([r["id"] for r in self._inventory(ids)], ids[:1])
+
+
+class TestRecordLoading(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        patcher = mock.patch.object(vr, "STATE_DIR", Path(tmp.name))
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_valid_record_round_trip_and_absent_record(self):
+        self.assertIsNone(vr.load_record(ENTRY["id"]))
+        expected = record()
+        vr.record_path(ENTRY["id"]).write_text(json.dumps(expected))
+        self.assertEqual(vr.load_record(ENTRY["id"]), expected)
+        self.assertEqual(vr.derive(ENTRY, vr.load_record(ENTRY["id"]), DIGEST)["bucket"],
+                         vr.BUCKET_GREEN)
+
+    def test_foreign_or_missing_target_cannot_supply_a_green(self):
+        cases = [record(target="other::test::target"), record(target=None), record()]
+        del cases[-1]["target"]
+        for value in cases:
+            with self.subTest(target=value.get("target")):
+                vr.record_path(ENTRY["id"]).write_text(json.dumps(value))
+                loaded = vr.load_record(ENTRY["id"])
+                row = vr.derive(ENTRY, loaded, DIGEST)
+                self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+                self.assertIn("invalid record", row["reason"])
+                self.assertIn("target", row["reason"])
+
+    def test_invalid_core_fields_are_diagnostic_not_status_crashes(self):
+        cases = [
+            {"commit": 7}, {"started_at": []}, {"finished_at": 9},
+            {"counts": []}, {"counts": {"passed": "one"}},
+            {"counts": {"passed": -1}}, {"counts": {"passed": True}},
+            {"counts": {"result_lines": 1.5}},
+            {"status": vr.STATUS_RUNNING, "pid": "not-a-pid"},
+        ]
+        for fields in cases:
+            with self.subTest(fields=fields):
+                value = record(**fields)
+                vr.record_path(ENTRY["id"]).write_text(json.dumps(value))
+                row = vr.derive(ENTRY, vr.load_record(ENTRY["id"]), DIGEST)
+                self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+                self.assertIn("invalid record", row["reason"])
+
+    def test_malformed_record_is_unknown_with_a_diagnostic(self):
+        for payload in (b"[]", b"null", b"true", b"5", b'"text"', b"{", b"\xff"):
+            with self.subTest(payload=payload):
+                vr.record_path(ENTRY["id"]).write_bytes(payload)
+                loaded = vr.load_record(ENTRY["id"])
+                row = vr.derive(ENTRY, loaded, DIGEST)
+                self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+                self.assertIn("invalid record", row["reason"])
 
 
 class TestRunOneClassification(unittest.TestCase):
@@ -258,6 +819,18 @@ class TestRunOneClassification(unittest.TestCase):
         self.assertEqual(rec["exit_code"], 0)
         self.assertEqual(rec["final_line"], "test result: ok. 1 passed; 0 failed")
         self.assertEqual(rec["counts"]["passed"], 1)
+
+    def test_pipeline_zero_exit_does_not_hide_reported_test_failure(self):
+        command = ("(echo 'test result: FAILED. 0 passed; 1 failed'; exit 1) | cat; "
+                   "echo 'test result: ok. 1 passed; 0 failed'")
+        entry = self._entry("synthetic::masked_failure", ["/bin/sh", "-c", command])
+        rec = vr.run_one(entry, timeout=60)
+        self.assertEqual(rec["exit_code"], 0)
+        self.assertEqual(rec["counts"]["failed"], 1)
+        self.assertEqual(rec["counts"]["passed"], 1)
+        self.assertEqual(rec["status"], vr.STATUS_ERROR)
+        self.assertIn("failed tests", rec["notes"])
+        self.assertEqual(vr.derive(entry, rec, rec["input_digest"])["bucket"], vr.BUCKET_UNKNOWN)
 
     def test_run_one_nonzero_exit_records_red_with_verbatim_line(self):
         entry = self._entry(
@@ -277,6 +850,15 @@ class TestRunOneClassification(unittest.TestCase):
         self.assertNotIn(rec["status"], (vr.STATUS_GREEN, vr.STATUS_RED))
         self.assertIn("NOT a pass", rec["notes"])
 
+    def test_run_one_changed_inputs_never_become_green_after_revert(self):
+        entry = self._entry("pkg::test::t", ["/bin/sh", "-c", "echo 'test result: ok. 1 passed; 0 failed'"])
+        with mock.patch.object(vr, "input_digest", side_effect=[DIGEST, OTHER]):
+            rec = vr.run_one(entry, timeout=60)
+        self.assertEqual(rec["status"], vr.STATUS_GREEN)  # raw successful exit
+        self.assertEqual(rec["input_digest_at_finish"], OTHER)
+        self.assertTrue(rec["inputs_moved_during_run"])
+        self.assertEqual(vr.derive(entry, rec, DIGEST)["bucket"], vr.BUCKET_UNKNOWN)
+
     def test_run_one_records_command_and_digest_provenance(self):
         entry = self._entry("synthetic::prov", ["/bin/sh", "-c", "true"])
         rec = vr.run_one(entry, timeout=60)
@@ -285,6 +867,155 @@ class TestRunOneClassification(unittest.TestCase):
         self.assertEqual(rec["source"], "measured")
         self.assertIsNotNone(rec["commit"])
         self.assertIn("inputs_moved_during_run", rec)
+
+
+class TestPhaseWeightHistory(unittest.TestCase):
+    def _run(self, floor, interrupted=False, changed=False):
+        target = f"synthetic::phase_history_{floor}_{interrupted}_{changed}"
+        prior = record(target=target, package="synthetic", counts={"passed": 1, "result_lines": 1},
+                       build_peak_rss_gb=8, build_rss_samples=10,
+                       run_peak_rss_gb=2, rss_samples=10,
+                       peak_rss_gb=8, inputs_moved_during_run=False, timed_out=interrupted,
+                       input_digest_at_finish=OTHER if changed else DIGEST)
+        vr.write_record(prior)
+        asked = []
+        def acquire(gb, label):
+            asked.append((gb, label))
+            return "unit-token", True, False
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "targo"
+            fake.write_text("#!/bin/sh\n"
+                            'for a in "$@"; do [ "$a" = --no-run ] && exit 0; done\n'
+                            "echo 'test result: ok. 1 passed; 0 failed'\n")
+            fake.chmod(0o755)
+            entry = {"id": target, "package": "synthetic", "kind": "test",
+                     "argv": [str(fake), "--unverified", "test"],
+                     "_dirs": [vr.REPO_ROOT / "scripts" / "verify_runner.py"]}
+            with mock.patch.object(vr, "_gate_acquire", side_effect=acquire), \
+                 mock.patch.object(vr, "_gate_weight_gb", return_value=20), \
+                 mock.patch.object(vr, "build_is_warm", return_value=False), \
+                 mock.patch.object(vr, "package_cold_build_floor_gb", return_value=(floor, "test floor")):
+                result = vr.run_one(entry, timeout=60)
+        self.assertEqual(result["status"], vr.STATUS_GREEN)
+        self.assertEqual(result["gate_weight_gb"], asked[-1][0])
+        return asked, target
+
+    def test_prior_phase_peaks_survive_the_running_record(self):
+        asked, target = self._run(0)
+        self.assertEqual(asked, [(12, target + " [build]"), (3, target)])
+
+    def test_package_cold_floor_still_raises_the_build_reservation(self):
+        asked, target = self._run(18)
+        self.assertEqual(asked, [(18, target + " [build]"), (3, target)])
+
+
+    def test_incomplete_run_cannot_lower_phase_reservations(self):
+        asked, target = self._run(0, interrupted=True)
+        self.assertEqual(asked, [(20, target + " [build]"), (20, target)])
+
+
+    def test_changed_input_hashes_cannot_lower_phase_reservations(self):
+        asked, target = self._run(0, changed=True)
+        self.assertEqual(asked, [(20, target + " [build]"), (20, target)])
+
+
+class TestPhaseLogs(unittest.TestCase):
+    def _run(self, build_exit):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "targo"
+            fake.write_text(
+                "#!/bin/sh\n"
+                "for a in \"$@\"; do\n"
+                f"  if [ \"$a\" = --no-run ]; then echo BUILD_ONLY_DIAGNOSTIC; exit {build_exit}; fi\n"
+                "done\n"
+                "echo RUN_ONLY_DIAGNOSTIC\n"
+                + ("echo 'test result: ok. 1 passed; 0 failed; 0 ignored'\n" if build_exit == 0
+                   else "echo 'test result: FAILED. 0 passed; 1 failed; 0 ignored'\nexit 1\n"))
+            fake.chmod(0o755)
+            entry = {"id": f"synthetic::phase_logs_{build_exit}", "package": "synthetic",
+                     "kind": "test", "argv": [str(fake), "--unverified", "test"],
+                     "_dirs": [vr.REPO_ROOT / "scripts" / "verify_runner.py"]}
+            return vr.run_one(entry, timeout=60)
+
+    def _check_logs(self, rec):
+        self.assertIsNotNone(rec.get("build_log"), "the build transcript was discarded")
+        build = vr.REPO_ROOT / rec["build_log"]
+        run = vr.REPO_ROOT / rec["log"]
+        self.assertNotEqual(build, run)
+        self.assertEqual(build.read_text(), "BUILD_ONLY_DIAGNOSTIC\n")
+        self.assertIn("RUN_ONLY_DIAGNOSTIC", run.read_text())
+        self.assertNotIn("BUILD_ONLY_DIAGNOSTIC", run.read_text())
+
+    def test_successful_build_log_survives_the_test_phase(self):
+        rec = self._run(0)
+        self.assertEqual(rec["status"], vr.STATUS_GREEN)
+        self._check_logs(rec)
+
+    def test_failed_build_diagnostic_is_the_terminal_measurement(self):
+        rec = self._run(1)
+        self.assertEqual(rec["build_exit_code"], 1)
+        self.assertEqual(rec["status"], vr.STATUS_RED)
+        self.assertEqual(rec["log"], rec["build_log"])
+        self.assertEqual((vr.REPO_ROOT / rec["log"]).read_text(), "BUILD_ONLY_DIAGNOSTIC\n")
+
+
+class TestFailedBuildAdmission(unittest.TestCase):
+    def _run(self, mode):
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = Path(tmp) / "targo"
+            marker = Path(tmp) / "run-launched"
+            if mode != "missing":
+                build = {"failed": "echo BUILD_FAILED; exit 7",
+                         "timeout": "echo BUILD_STARTED; sleep 2; exit 0",
+                         "refusal": "echo 'protected Trust toolchain directory'; exit 2",
+                         "ok": "echo BUILD_OK; exit 0"}.get(mode, "exit 0")
+                fake.write_text("#!/bin/sh\nfor a in \"$@\"; do\n"
+                                "if [ \"$a\" = --no-run ]; then " + build + "; fi\ndone\n"
+                                + "touch " + shlex.quote(str(marker)) + "\n"
+                                "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'\n")
+                fake.chmod(0o755)
+            entry = {"id": "synthetic::build_" + mode, "package": "synthetic", "kind": "test",
+                     "argv": [str(fake), "--unverified", "test"], "_dirs": []}
+            asked = []
+            def acquire(gb, label):
+                asked.append((gb, label))
+                return (None, False, True) if mode == "gate" else ("token", True, False)
+            with mock.patch.object(vr, "input_digest", return_value=DIGEST), \
+                    mock.patch.object(vr, "_gate_acquire", side_effect=acquire), \
+                    mock.patch.object(vr, "_split_weights_gb", return_value=(19, 1)), \
+                    mock.patch.object(vr, "package_cold_build_floor_gb", return_value=(19, "fixture")), \
+                    mock.patch.object(vr, "_rss_profile", return_value=vr.RssProfile(2, 2, 2, 3)):
+                rec = vr.run_one(entry, timeout=0.05 if mode == "timeout" else 10)
+            return rec, asked, marker.exists(), entry
+
+    def test_failed_build_cannot_retry_under_the_run_reservation(self):
+        rec, asked, ran, entry = self._run("failed")
+        self.assertFalse(ran)
+        self.assertEqual(asked, [(19, entry["id"] + " [build]")])
+        self.assertEqual(rec["status"], vr.STATUS_RED)
+        self.assertEqual(rec["exit_code"], 7)
+        self.assertIn("BUILD_FAILED", (vr.REPO_ROOT / rec["log"]).read_text())
+
+    def test_timed_out_build_is_unknown_without_a_test_launch(self):
+        rec, asked, ran, entry = self._run("timeout")
+        self.assertFalse(ran)
+        self.assertEqual(len(asked), 1)
+        self.assertTrue(rec["timed_out"])
+        self.assertEqual(vr.derive(entry, rec, DIGEST)["bucket"], vr.BUCKET_UNKNOWN)
+
+    def test_refused_build_never_reaches_test_admission(self):
+        for mode in ("gate", "missing", "refusal"):
+            with self.subTest(mode):
+                rec, asked, ran, entry = self._run(mode)
+                self.assertFalse(ran)
+                self.assertEqual(len(asked), 1)
+                self.assertEqual(vr.derive(entry, rec, DIGEST)["bucket"], vr.BUCKET_UNKNOWN)
+
+    def test_success_still_releases_build_then_uses_run_reservation(self):
+        rec, asked, ran, entry = self._run("ok")
+        self.assertTrue(ran)
+        self.assertEqual(asked, [(19, entry["id"] + " [build]"), (1, entry["id"])])
+        self.assertEqual(vr.derive(entry, rec, DIGEST)["bucket"], vr.BUCKET_GREEN)
 
 
 class TestTimeoutPolicy(unittest.TestCase):
@@ -625,7 +1356,7 @@ class TestRollup(unittest.TestCase):
             "schema": vr.PLAN_SCHEMA,
             "parent": self.PARENT,
             "package": "pkg",
-            "base_argv": ["cargo", "test"],
+            "base_argv": ["targo", "--unverified", "test"],
             "commit": "0" * 40,
             "generated_at": "2026-08-13T00:00:00Z",
             "input_digest": digest,
@@ -972,7 +1703,7 @@ class TestPackedShardBudgets(unittest.TestCase):
     def test_shard_entries_carry_the_kind_the_plan_assigned(self):
         plan = {
             "parent": "pkg::lib", "package": "pkg",
-            "base_argv": ["cargo", "test"],
+            "base_argv": ["targo", "--unverified", "test"],
             "shards": [
                 {"id": "pkg::lib::shard::spec_paying", "key": "spec_paying",
                  "kind": vr.KIND_SHARD_SPEC, "mode": "prefix", "filters": ["spec::"],
@@ -989,11 +1720,16 @@ class TestPackedShardBudgets(unittest.TestCase):
 
 class TestCommandRendering(unittest.TestCase):
     def test_a_short_command_is_stored_verbatim(self):
-        argv = ["cargo", "test", "--lib"]
-        self.assertEqual(vr.render_command(argv), "cargo test --lib")
+        argv = ["targo", "--unverified", "test", "--lib"]
+        self.assertEqual(vr.render_command(argv), "targo --unverified test --lib")
+
+    def test_rendered_command_round_trips_argument_boundaries(self):
+        argv = ["/path with spaces/tool", "", "a b", "line\nbreak", "$(touch nope)",
+                "semi;colon", "single'quote", 'double"quote', "back\\slash", "λ"]
+        self.assertEqual(shlex.split(vr.render_command(argv)), argv)
 
     def test_a_huge_exact_argv_is_marked_not_silently_cut(self):
-        argv = ["cargo", "test", "--"] + [f"name_{i:06d}" * 4 for i in range(2000)]
+        argv = ["targo", "--unverified", "test", "--"] + [f"name_{i:06d}" * 4 for i in range(2000)]
         rendered = vr.render_command(argv)
         self.assertIn("<<TRUNCATED:", rendered)
         self.assertIn("NOT runnable", rendered)
@@ -1047,6 +1783,25 @@ class TestInventory(unittest.TestCase):
                 (vr.REPO_ROOT / rel).exists(),
                 f"{rel} is declared as a digest input but is not in the tree",
             )
+
+    def test_adopted_checker_edit_invalidates_source_census_digest(self):
+        gate = next(g for g in vr.WORKSPACE_GATES if g["id"] == "gate::self-proof-elab")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            source = root / "theories/kcheck_labelled/KCheck/Token.lean"
+            source.parent.mkdir(parents=True)
+            source.write_text("def token := 1\n")
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            subprocess.run(["git", "-C", str(root), "add", "."], check=True)
+            wide = dict(gate, _dirs=[root / p for p in gate["_extra_paths"]])
+            narrow = dict(wide, _dirs=[p for p in wide["_dirs"] if p != root / "theories/kcheck_labelled"])
+            with mock.patch.object(vr, "REPO_ROOT", root), \
+                    mock.patch.object(vr, "toolchain_id", return_value="fixture-compiler"):
+                before = vr.input_digest(wide, fresh=True)
+                old_before = vr.input_digest(narrow, fresh=True)
+                source.write_text("def token := 2\n")
+                self.assertEqual(old_before, vr.input_digest(narrow, fresh=True))
+                self.assertNotEqual(before, vr.input_digest(wide, fresh=True))
 
     def test_a_declared_file_path_really_widens_the_digest(self):
         """`_dirs` holding a FILE must be hashed, not silently ignored.
@@ -1119,11 +1874,98 @@ class MemoryAdmissionTests(unittest.TestCase):
             self.assertFalse(refused)
             _REAL_GATE_RELEASE(token)       # must not raise
 
-    def test_peak_rss_measures_a_real_process_group(self):
-        proc = subprocess.Popen(
-            [sys.executable, "-c", "x=bytearray(300*1024*1024); import time; time.sleep(2)"],
-            start_new_session=True,
+    def test_small_box_refusal_exit_75_is_a_refusal_not_a_fall_through(self):
+        # REGRESSION, 2026-09-17. `heavy_gate.sh` refuses an over-budget request
+        # with `exit 75` (heavy_gate.sh:541, asserted by its own selftest at
+        # :686). This function used to accept only returncode 2 -- a code
+        # heavy_gate.sh NEVER emits (its exits are 0, 1, 3, 7, 64, 75) -- so
+        # every refusal fell through the retry loop to (None, False, False),
+        # which run_one reads as "gate absent" and runs the target UNGATED.
+        # On an 8 GB box that is the majority of the suite, and it is precisely
+        # the fail-open the 2026-08-24 kernel-panic postmortem forbids.
+        import stat as _stat
+
+        with tempfile.TemporaryDirectory() as td:
+            fake = os.path.join(td, "heavy_gate.sh")
+            calls = os.path.join(td, "calls")
+            # Every invocation that actually RUNS appends one line, so the
+            # count is the number of answers the gate gave, not a timing proxy.
+            with open(fake, "w", encoding="utf-8") as fh:
+                fh.write(f"#!/bin/sh\necho \"$1\" >> '{calls}'\nexit 75\n")
+            os.chmod(fake, os.stat(fake).st_mode | _stat.S_IEXEC)
+
+            def answers() -> int:
+                try:
+                    with open(calls, encoding="utf-8") as fh:
+                        return len(fh.read().splitlines())
+                except FileNotFoundError:
+                    return 0
+
+            # The backoff, observed instead of waited for: each sleep records
+            # how many gate answers had arrived when it was taken.
+            backoffs: list[int] = []
+            with mock.patch.object(vr, "HEAVY_GATE", _FakePath(fake)), \
+                    mock.patch.object(vr.time, "sleep",
+                                      side_effect=lambda _s: backoffs.append(answers())):
+                token, enforced, refused = _REAL_GATE_ACQUIRE(24, "t")
+            self.assertIsNone(token)
+            self.assertFalse(enforced)
+            # The whole point: REFUSED, so run_one records STATUS_ERROR and
+            # skips the target instead of running it with no reservation.
+            self.assertTrue(
+                refused,
+                "exit 75 fell through as 'gate unavailable' -- the runner would "
+                "run this target UNGATED",
+            )
+            # A refusal must not be retried: retrying a denial wastes the
+            # backoff and muddies the record. Stated exactly, not as a
+            # wall-clock bound (WS6.13 land, 2026-09-30: 5.88 s > 5.0 s on a
+            # box at load 32 -- a bound on elapsed time measures the box, and
+            # it also misses a retry that is merely fast): the gate answered
+            # exactly once, with `acquire`, and no backoff was taken after
+            # that answer. A backoff BEFORE it can only follow a spawn that
+            # raised, which the malfunction path retries by design.
+            self.assertEqual(
+                answers(), 1,
+                "a refusal was retried instead of being taken at face value",
+            )
+            with open(calls, encoding="utf-8") as fh:
+                self.assertEqual(fh.read().splitlines(), ["acquire"])
+            self.assertTrue(
+                all(seen == 0 for seen in backoffs),
+                f"a backoff was taken after the gate refused: {backoffs}",
+            )
+
+    def test_gate_refusal_codes_match_what_heavy_gate_actually_emits(self):
+        # Pin the coupling rather than the number: if heavy_gate.sh changes its
+        # refusal code, this fails instead of silently reopening the fail-open.
+        gate = os.path.join(str(vr.REPO_ROOT), "scripts", "heavy_gate.sh")
+        if not os.path.exists(gate):
+            self.skipTest("heavy_gate.sh absent")
+        with open(gate, "r", encoding="utf-8") as fh:
+            body = fh.read()
+        self.assertIn(
+            "exit 75",
+            body,
+            "heavy_gate.sh no longer refuses with 75; GATE_REFUSAL_CODES is stale",
         )
+        self.assertIn(75, vr.GATE_REFUSAL_CODES)
+
+    def test_peak_rss_measures_a_real_process_group(self):
+        # The child ANNOUNCES that it has allocated, and sampling starts only
+        # then. Measured 2026-09-17: with the sampler started first against a
+        # child that lived exactly 2.0s -- the sampler's own poll interval --
+        # this failed roughly 1 run in 5 under load, because the t=0 sample
+        # could land before the allocation and the next one after the child had
+        # already exited. A memory gate that reds on a busy machine teaches
+        # people to re-run it, so the handshake is load-bearing, not tidiness.
+        proc = subprocess.Popen(
+            [sys.executable, "-c",
+             "import sys,time; x=bytearray(300*1024*1024); x[::4096]=b'\\1'*len(x[::4096]);"
+             " sys.stdout.write('ready\\n'); sys.stdout.flush(); time.sleep(6)"],
+            stdout=subprocess.PIPE, text=True, start_new_session=True,
+        )
+        self.assertEqual(proc.stdout.readline().strip(), "ready")
         stop = threading.Event()
         out: list[vr.RssProfile] = []
         t = threading.Thread(target=lambda: out.append(vr._rss_profile(proc.pid, stop)))
@@ -1131,6 +1973,7 @@ class MemoryAdmissionTests(unittest.TestCase):
         proc.wait()
         stop.set()
         t.join(timeout=10)
+        self.assertGreaterEqual(out[0].samples, 2, "child outlived fewer than two poll intervals")
         self.assertGreater(out[0].peak_gb, 0.2)      # saw the ~300 MB allocation
         self.assertLess(out[0].peak_gb, 4.0)         # and did not invent a number
         self.assertGreater(out[0].samples, 0)        # and says how many samples it is
@@ -1224,6 +2067,94 @@ class MemoryAdmissionTests(unittest.TestCase):
 
 
 
+class ReservationReportsUseFinalizedOutcomes(unittest.TestCase):
+    """Synthetic commands and sampled profiles; isolated records, no native claim."""
+
+    def _run(self, name, script, *, finish=DIGEST, kind="test", extra=None,
+             peak=9.11, timeout=60):
+        entry = {"id": "synthetic::reservation::" + name, "package": "synthetic",
+                 "kind": kind, "argv": ["/bin/sh", "-c", script],
+                 "_dirs": [vr.REPO_ROOT / "scripts"], **(extra or {})}
+        profile = vr.RssProfile(peak, peak, peak / 2, 900)
+        with mock.patch.object(vr, "_gate_weight_gb", return_value=44), \
+             mock.patch.object(vr, "_rss_profile", return_value=profile), \
+             mock.patch.object(vr, "input_digest", side_effect=[DIGEST, finish]), \
+             mock.patch.object(vr, "_compiler_identity_problem", return_value="test identity unavailable"):
+            rec = vr.run_one(entry, timeout=timeout)
+        # The record actually contains the observation; absence of a sampler
+        # would otherwise make every negative arm pass vacuously.
+        self.assertEqual(rec["rss_samples"], 900)
+        self.assertEqual(rec["run_peak_rss_gb"], round(peak, 2))
+        self.assertEqual(vr.load_record(entry["id"])["reservation_verdict"],
+                         rec["reservation_verdict"])
+        return entry, rec
+
+    def test_completed_stable_success_still_recommends_a_lower_weight(self):
+        entry, rec = self._run("success", "echo 'test result: ok. 1 passed; 0 failed'")
+        self.assertEqual(vr.derive(entry, rec, DIGEST)["bucket"], vr.BUCKET_GREEN)
+        self.assertIn("OVER-RESERVED", rec["reservation_verdict"])
+
+    def test_failed_and_unknown_runs_never_recommend_downsizing(self):
+        ok = "echo 'test result: ok. 1 passed; 0 failed'"
+        cases = (
+            ("failed", "echo 'test result: FAILED. 0 passed; 1 failed'; exit 101", {}),
+            ("timeout", "sleep 5", {"timeout": 1}),
+            ("moved", ok, {"finish": OTHER}),
+            ("identity", ok, {"finish": None}),
+            ("skipped", "echo SRCELAB_GATE=skipped:no-binary", {"kind": "gate"}),
+            ("empty", "echo 'test result: ok. 0 passed; 0 failed'", {}),
+            ("must_pass", ok, {"extra": {"_must_pass": ["required::test"]}}),
+            ("shard", ok, {"kind": vr.KIND_SHARD,
+                           "extra": {"_parent": "synthetic::parent",
+                                     "_shard": {"key": "one", "test_count": 2}}}),
+        )
+        for name, command, kwargs in cases:
+            with self.subTest(name=name):
+                entry, rec = self._run(name, command, **kwargs)
+                self.assertNotEqual(vr.derive(entry, rec, kwargs.get("finish", DIGEST))["bucket"],
+                                    vr.BUCKET_GREEN)
+                self.assertIsNone(rec["reservation_verdict"],
+                                  "a failed or UNKNOWN prefix cannot size its complete retry")
+
+    def test_partial_observation_still_warns_when_reservation_was_too_small(self):
+        _, rec = self._run("under", "exit 1", peak=50.1)
+        self.assertEqual(rec["status"], vr.STATUS_RED)
+        self.assertIn("UNDER-RESERVED", rec["reservation_verdict"])
+
+    def test_weights_json_filters_legacy_bad_advice_without_rewriting_history(self):
+        import io
+        over = "OVER-RESERVED: legacy advice to lower this weight"
+        under = "UNDER-RESERVED: legacy warning"
+        cases = (
+            ("success", {}, {}, over),
+            ("failed", {"status": vr.STATUS_RED}, {}, None),
+            ("changed", {"input_digest_at_finish": OTHER}, {}, None),
+            ("empty", {"counts": {"passed": 0, "failed": 0, "result_lines": 1}}, {}, None),
+            ("must_pass", {}, {"_must_pass": ["required::test"]}, None),
+            ("under", {"status": vr.STATUS_RED, "reservation_verdict": under}, {}, under),
+        )
+        for name, updates, entry_updates, expected in cases:
+            with self.subTest(name=name):
+                rec = record(**{"kind": "test", "counts": {"passed": 1, "failed": 0, "result_lines": 1},
+                                "reservation_verdict": over, **updates})
+                before = json.dumps(rec, sort_keys=True)
+                output = io.StringIO()
+                with mock.patch.object(vr, "build_inventory", return_value=[{**ENTRY, **entry_updates}]), \
+                     mock.patch.object(vr, "load_record", return_value=rec), \
+                     mock.patch.object(vr, "_gate_weight_gb", return_value=44), \
+                     mock.patch.object(vr, "cold_build_floor_gb", return_value=0), \
+                     mock.patch.object(vr, "package_cold_build_floor_gb", return_value=(0, None)), \
+                     mock.patch("sys.stdout", output):
+                    self.assertEqual(vr.cmd_weights(types.SimpleNamespace(packages=[], only=None, json=True)), 0)
+                self.assertEqual(json.loads(output.getvalue())["targets"][0]["verdict"], expected)
+                self.assertEqual(json.dumps(rec, sort_keys=True), before)
+
+    def test_report_uses_full_profile_precision_until_formatting(self):
+        _, rec = self._run("precision", "echo 'test result: ok. 1 passed; 0 failed'", peak=9.3334)
+        self.assertEqual(rec["run_peak_rss_gb"], 9.33)
+        self.assertIn("15 GB", rec["reservation_verdict"])
+
+
 class ASkippedGateIsNotAPass(unittest.TestCase):
     """A gate that exits 0 without measuring anything must not read GREEN.
 
@@ -1298,6 +2229,128 @@ class AnInterruptedRunKeepsItsWeight(unittest.TestCase):
                     {"prior_peak_rss_gb": "big"}, {"prior_peak_rss_gb": True}):
             with mock.patch.object(vr, "load_record", return_value=bad):
                 self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+
+    def test_a_killed_run_may_raise_a_weight_but_never_cut_it(self):
+        # THE SHAPE THAT WAS LIVE (2026-08-30, both rows in data/suite_state/):
+        # a target measured at 28.87 GB, killed on its next run after 12799 s
+        # with 9.11 GB observed, and the weight duly "learned" 44 -> 14 GB.
+        # `vacuity_firewall` was worse: 28.68 -> 1.13 GB, i.e. 44 -> 2 GB, on a
+        # run whose cargo leg was a 3.39 s no-op build. Under-reserving a
+        # 28 GB target by 26 GB is the direction that panicked this box twice,
+        # and nothing in the artifact called it anything but learning.
+        for cut_short in ({"timed_out": True},
+                          {"status": vr.STATUS_ERROR},
+                          {"status": vr.STATUS_RUNNING}):
+            killed = {"peak_rss_gb": 9.11, "prior_peak_rss_gb": 28.87}
+            killed.update(cut_short)
+            with mock.patch.object(vr, "load_record", return_value=killed):
+                self.assertEqual(
+                    vr._gate_weight_gb("t"), 44,      # ceil(28.87 * 1.5)
+                    f"a run cut short by {cut_short} must not cut the weight",
+                )
+        # ... and the same partial observation may still RAISE it: the memory
+        # was really used, whether or not the job reached its own end.
+        risen = {"peak_rss_gb": 40.0, "prior_peak_rss_gb": 28.87,
+                 "timed_out": True}
+        with mock.patch.object(vr, "load_record", return_value=risen):
+            self.assertEqual(vr._gate_weight_gb("t"), 60)   # ceil(40.0 * 1.5)
+
+    def test_changed_inputs_may_raise_a_weight_but_never_lower_it(self):
+        base = {"status": vr.STATUS_GREEN, "timed_out": False,
+                "counts": {"passed": 1, "failed": 0, "result_lines": 1},
+                "peak_rss_gb": 1.0, "prior_peak_rss_gb": 10.0,
+                "input_digest": DIGEST, "input_digest_at_finish": DIGEST,
+                "inputs_moved_during_run": False}
+        for moved in ({"inputs_moved_during_run": True},
+                      {"input_digest_at_finish": OTHER},
+                      {"inputs_moved_during_run": True, "input_digest_at_finish": None}):
+            with self.subTest(moved=moved):
+                rec = dict(base, **moved)
+                with mock.patch.object(vr, "load_record", return_value=rec):
+                    self.assertEqual(vr._gate_weight_gb("t"), 15)
+                rec["peak_rss_gb"] = 20.0
+                with mock.patch.object(vr, "load_record", return_value=rec):
+                    self.assertEqual(vr._gate_weight_gb("t"), 30)
+        with mock.patch.object(vr, "load_record", return_value=base):
+            self.assertEqual(vr._gate_weight_gb("t"), 2)
+
+    def test_incomplete_runs_cannot_undercut_the_unmeasured_default(self):
+        unfinished = [
+            {"timed_out": True}, {"status": vr.STATUS_ERROR},
+            {"status": vr.STATUS_RUNNING}, {"inputs_moved_during_run": True},
+            {"input_digest": DIGEST, "input_digest_at_finish": OTHER},
+            {"counts": {"passed": 0, "failed": 0, "result_lines": 1}},
+        ]
+        for fields in unfinished:
+            for carried in (None, 1.0):
+                with self.subTest(fields=fields, carried=carried):
+                    rec = {"status": vr.STATUS_GREEN, "peak_rss_gb": 1.0,
+                           "prior_peak_rss_gb": carried,
+                           "counts": {"passed": 1, "result_lines": 1}, **fields}
+                    with mock.patch.object(vr, "load_record", return_value=rec):
+                        self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+                    rec["peak_rss_gb"] = 20.0
+                    with mock.patch.object(vr, "load_record", return_value=rec):
+                        self.assertEqual(vr._gate_weight_gb("t"), 30)
+        complete = {"status": vr.STATUS_GREEN, "peak_rss_gb": 1.0,
+                    "counts": {"passed": 1, "result_lines": 1}}
+        with mock.patch.object(vr, "load_record", return_value=complete):
+            self.assertEqual(vr._gate_weight_gb("t"), 2)
+
+    def test_completed_shell_gate_keeps_its_measured_small_weight(self):
+        rec = {"status": vr.STATUS_GREEN, "kind": "gate",
+               "command": "targo fmt --all -- --check", "peak_rss_gb": 1.0,
+               "counts": {"passed": 0, "failed": 0, "result_lines": 0}}
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("gate::fmt"), 2)
+        rec["command"] = "targo --unverified test --lib"
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("gate::test"), vr.DEFAULT_TARGET_GB)
+
+    def test_a_completed_run_still_replaces_the_carried_peak(self):
+        # The learning loop is the point of the measurement and must survive
+        # the fix above: a run that REACHED ITS OWN END replaces the carried
+        # peak outright, downwards included. Without this arm the fix could be
+        # written as a plain `max` and nothing would notice.
+        done = {"status": vr.STATUS_GREEN, "timed_out": False,
+                "peak_rss_gb": 8.8, "prior_peak_rss_gb": 56.3}
+        with mock.patch.object(vr, "load_record", return_value=done):
+            self.assertEqual(vr._gate_weight_gb("t"), 14)   # ceil(8.8 * 1.5)
+
+    def test_failed_measurements_keep_the_larger_history_and_default(self):
+        # Recorded spec_paying_01 shape: the failed run observed less than
+        # its predecessor despite reporting many tests, not a zero-test run.
+        rec = {"status": vr.STATUS_RED, "exit_code": 101,
+               "peak_rss_gb": 4.39, "prior_peak_rss_gb": 6.46,
+               "counts": {"passed": 1487, "failed": 12, "result_lines": 1}}
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._prior_peak_rss_gb("t"), 6.46)
+            self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+        rec["prior_peak_rss_gb"] = 40.0
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), 60)
+        rec["peak_rss_gb"] = 50.0
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), 75)
+        # A successful retry can still learn a lower weight.
+        rec.update(status=vr.STATUS_GREEN, exit_code=0, peak_rss_gb=4.39,
+                   counts={"passed": 1499, "failed": 0, "result_lines": 1})
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), 7)
+
+    def test_failed_phase_peaks_cannot_lower_either_reservation(self):
+        rec = {"status": vr.STATUS_RED, "exit_code": 101,
+               "peak_rss_gb": 4.39, "prior_peak_rss_gb": 6.46,
+               "counts": {"passed": 1487, "failed": 12, "result_lines": 1},
+               "build_peak_rss_gb": 2.0, "build_rss_samples": 10,
+               "run_peak_rss_gb": 0.5, "rss_samples": 10}
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._split_weights_gb("t"),
+                             (vr.DEFAULT_TARGET_GB, vr.DEFAULT_TARGET_GB))
+            self.assertEqual(vr._split_weights_gb("t", build_floor_gb=18),
+                             (18, vr.DEFAULT_TARGET_GB))
+        self.assertEqual(vr.derive(ENTRY, record(status=vr.STATUS_RED), DIGEST)["bucket"],
+                         vr.BUCKET_RED)
 
     def test_the_running_template_carries_the_peak_forward(self):
         # Ordering matters as much as the field: the carried value must be read
@@ -1532,6 +2585,48 @@ class TheCheckoutAccident(unittest.TestCase):
             vr.write_record(record)          # the shipped write-through path
         return sweep
 
+    def test_mismatched_journal_target_cannot_overwrite_another_record(self):
+        target = "pkg::test::a"
+        other = "pkg::test::b"
+        good = self._record(target, "GREEN", "2026-11-13T01:00:00Z", DIGEST)
+        retained = self._record(other, "GREEN", "2026-11-13T01:00:00Z", DIGEST)
+        vr.journal_append(good)
+        vr._project_record(retained)
+        bad = self._record(other, "RED", "2026-11-13T02:00:00Z", OTHER)
+        envelope = {"schema": vr.JOURNAL_SCHEMA, "target": target,
+                    "record": bad, "origin": "measured"}
+        with vr.journal_path().open("a") as stream:
+            stream.write(json.dumps(envelope) + "\n")
+        report = vr.reconcile_projection(apply=True)
+        self.assertEqual(vr.load_record(other), retained)
+        self.assertEqual(vr.load_record(target), good)
+        self.assertTrue(report["problems"])
+
+    def test_invalid_journal_record_does_not_replace_prior_valid_entry(self):
+        target = "pkg::test::a"
+        good = self._record(target, "GREEN", "2026-11-13T01:00:00Z", DIGEST)
+        vr.journal_append(good)
+        vr.journal_append(dict(good, commit=7, finished_at=9))
+        latest, problems = vr.journal_read()
+        self.assertTrue(problems)
+        self.assertEqual(latest[target]["record"], good)
+        report = vr.reconcile_projection(apply=True)
+        self.assertTrue(report["problems"])
+        self.assertEqual(vr.load_record(target), good)
+
+    def test_journal_record_must_repeat_its_envelope_target(self):
+        target = "pkg::test::a"
+        for nested in ({}, {"target": None}, {"target": 7}):
+            with self.subTest(nested=nested):
+                envelope = {"schema": vr.JOURNAL_SCHEMA, "target": target,
+                            "record": nested, "origin": "measured"}
+                path = vr.journal_path()
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(envelope) + "\n")
+                latest, problems = vr.journal_read()
+                self.assertEqual(latest, {})
+                self.assertTrue(problems)
+
     def test_form_a_revert_to_stale_content_is_fully_recovered(self):
         sweep = self._sweep()
         self._git("checkout", "--", "data/suite_state")
@@ -1597,6 +2692,114 @@ class TheCheckoutAccident(unittest.TestCase):
         verdicts = {a["target"]: a["verdict"] for a in report["actions"]}
         self.assertEqual(verdicts["clean-verify::test::eval_ir"], "foreign")
         self.assertEqual(vr.load_record("clean-verify::test::eval_ir"), foreign)
+
+    @staticmethod
+    def _derived_rollup(host: str, declared: int) -> dict:
+        # The actual cross-host discrepancy: neither parent has a run timestamp.
+        # The carried timeout is historical evidence, not the rollup's verdict.
+        return {
+            "schema": vr.SCHEMA, "target": "clean-verify::lib",
+            "package": "clean-verify", "kind": "lib-rollup",
+            "source": "derived", "status": "SUPERSEDED",
+            "command": "targo --unverified test --locked -p clean-verify --lib",
+            "declared_tests": declared, "shard_count": 7,
+            "shard_plan": f"/Users/{host}/clean/data/suite_plans/clean-verify__lib.json",
+            "superseded_run": {
+                "source": "measured", "kind": "lib", "status": "ERROR",
+                "started_at": "2026-08-13T03:49:38Z",
+                "finished_at": "2026-08-13T15:49:39Z",
+                "duration_s": 43201.6, "exit_code": -1,
+                "commit": "2241f47da49fab4d5ae9027d04dcb97af8ce3347",
+                "counts": {"passed": 0, "failed": 0, "ignored": 0, "result_lines": 0},
+                "runner_host": "m8Macbo128GB8TB.localdomain",
+            },
+        }
+
+    def test_unordered_derived_rollups_do_not_ping_pong_between_hosts(self):
+        old = self._derived_rollup("ayates", 7149)
+        imported = self._derived_rollup("wintergreen", 7528)
+        for local, projected in ((old, imported), (imported, old)):
+            with self.subTest(local=local["declared_tests"]):
+                vr.write_record(local)
+                vr._project_record(projected)
+                journal_before = vr.journal_path().read_bytes()
+                projection_before = vr.record_path("clean-verify::lib").read_bytes()
+                for apply in (False, True):
+                    report = vr.reconcile_projection(apply=apply)
+                    self.assertEqual(report["counts"]["held"], 1)
+                    self.assertEqual(report["counts"]["restore"], 0)
+                    self.assertEqual(report["counts"]["foreign"], 0)
+                    self.assertIn("unordered plan metadata", report["actions"][0]["reason"])
+                    self.assertEqual(vr.load_record("clean-verify::lib"), projected)
+                    self.assertEqual(vr.record_path("clean-verify::lib").read_bytes(),
+                                     projection_before)
+                    self.assertEqual(vr.journal_path().read_bytes(), journal_before)
+
+    def test_derived_rollup_missing_from_projection_still_restores(self):
+        record = self._derived_rollup("ayates", 7149)
+        vr.write_record(record)
+        vr.record_path(record["target"]).unlink()
+        report = vr.reconcile_projection()
+        self.assertEqual(report["counts"]["restore"], 1)
+        self.assertIsNone(vr.load_record(record["target"]))
+        vr.reconcile_projection(apply=True)
+        self.assertEqual(vr.load_record(record["target"]), record)
+
+    def test_derived_rollup_changed_historical_evidence_still_restores(self):
+        original = self._derived_rollup("ayates", 7149)
+        vr.write_record(original)
+        for corruption in ("status", "counts", "removed"):
+            with self.subTest(corruption=corruption):
+                changed = self._derived_rollup("wintergreen", 7528)
+                if corruption == "removed":
+                    del changed["superseded_run"]
+                elif corruption == "counts":
+                    changed["superseded_run"]["counts"]["passed"] = 7149
+                else:
+                    changed["superseded_run"]["status"] = "GREEN"
+                vr._project_record(changed)
+                report = vr.reconcile_projection()
+                self.assertEqual(report["counts"]["restore"], 1)
+                vr.reconcile_projection(apply=True)
+                self.assertEqual(vr.load_record(original["target"]), original)
+
+    def test_rollup_exception_does_not_cover_measured_or_stamped_rows(self):
+        for field, value in (("source", "measured"), ("kind", "lib"),
+                             ("status", "GREEN"), ("schema", "unexpected"),
+                             ("finished_at", "2026-08-25T00:00:00Z"),
+                             ("started_at", "2026-08-25T00:00:00Z")):
+            with self.subTest(field=field):
+                local = self._derived_rollup("ayates", 7149)
+                projected = self._derived_rollup("wintergreen", 7528)
+                local[field] = projected[field] = value
+                vr.write_record(local)
+                vr._project_record(projected)
+                report = vr.reconcile_projection(apply=True)
+                self.assertEqual(report["counts"]["restore"], 1)
+                self.assertEqual(vr.load_record(local["target"]), local)
+
+    def test_derived_rollup_non_plan_metadata_changes_still_restore(self):
+        local = self._derived_rollup("ayates", 7149)
+        vr.write_record(local)
+        for key, value in (("command", "true"), ("status", "GREEN"),
+                           ("source", "measured"), ("input_digest", "sha256:FORGED")):
+            with self.subTest(key=key):
+                changed = self._derived_rollup("wintergreen", 7528)
+                changed[key] = value
+                vr._project_record(changed)
+                report = vr.reconcile_projection(apply=True)
+                self.assertEqual(report["counts"]["restore"], 1)
+                self.assertEqual(vr.load_record(local["target"]), local)
+
+    def test_torn_journal_remains_reported_with_held_derived_rollup(self):
+        vr.write_record(self._derived_rollup("ayates", 7149))
+        vr._project_record(self._derived_rollup("wintergreen", 7528))
+        journal = vr.journal_path()
+        journal.write_text(journal.read_text() + '{"schema":"clean.suite_journal/v1","tar\n')
+        report = vr.reconcile_projection()
+        self.assertEqual(report["counts"]["held"], 1)
+        self.assertTrue(report["problems"])
+        self.assertIn("not valid JSON", report["problems"][0])
 
     def test_without_the_journal_call_the_same_accident_is_unrecoverable(self):
         """The protection IS `journal_append` inside `write_record`.
@@ -1715,6 +2918,1692 @@ class TheJournalIsWiredIntoTheWritePath(unittest.TestCase):
             second = vr.journal_path()
         self.assertNotEqual(first, second)
         self.assertEqual(first, vr.journal_path())
+
+
+class TestPerPackageFloors(unittest.TestCase):
+    """A per-(package, kind) floor must move ONE population and say which.
+
+    Added 2026-09-16 with the clean-elab floor. The arms are written so the
+    measurement can move without the test rotting into a tautology: the floor is
+    bound to its DERIVATION, and the blast radius is asserted as "clean-verify
+    does not move", not as a literal budget.
+    """
+
+    def test_the_elab_test_floor_covers_the_fattest_target_at_the_worst_rate(self):
+        derived = vr._ELAB_TEST_FLOOR_DERIVED_S
+        floor = vr.TIMEOUT_FLOOR_BY_PACKAGE_KIND[("clean-elab", "test")]
+        # Same no-slack shape the packed-shard floors use: cover the derivation
+        # and do not hand out an extra 15% nobody measured.
+        self.assertGreaterEqual(floor, derived)
+        self.assertLess(floor, derived * 1.15)
+
+    def test_the_derivation_is_fattest_times_worst_plus_build(self):
+        self.assertAlmostEqual(
+            vr._ELAB_TEST_FLOOR_DERIVED_S,
+            vr._ELAB_MAX_TESTS_IN_TARGET * vr._ELAB_WORST_PER_TEST_S
+            + vr._WORST_INTEGRATION_BUILD_LEG_S,
+            places=6,
+        )
+
+    def test_a_clean_elab_test_target_takes_the_package_floor(self):
+        entry = {"id": "clean-elab::test::x", "package": "clean-elab", "kind": "test"}
+        budget, basis = vr.timeout_for(entry, None)
+        self.assertEqual(budget, 2_100)
+        self.assertIn("clean-elab test floor", basis)
+
+    def test_a_clean_verify_test_target_keeps_the_kind_floor(self):
+        entry = {"id": "clean-verify::test::x", "package": "clean-verify", "kind": "test"}
+        budget, basis = vr.timeout_for(entry, None)
+        self.assertEqual(budget, vr.TIMEOUT_FLOOR_BY_KIND["test"])
+        self.assertIn("test floor", basis)
+        # The whole point of a per-package row: the other population is untouched.
+        self.assertNotIn("clean-elab", basis)
+
+    def test_an_entry_with_no_package_falls_back_to_the_kind_floor(self):
+        # `cmd_shards` builds a synthetic entry carrying only a kind. A lookup
+        # that assumed a package would KeyError there.
+        budget, basis = vr.timeout_for({"kind": "test"}, None)
+        self.assertEqual(budget, vr.TIMEOUT_FLOOR_BY_KIND["test"])
+        self.assertIn("test floor", basis)
+
+    def test_a_killed_clean_elab_target_escalates_from_the_package_floor(self):
+        # A floor that is too tight must self-heal rather than wedge: doubling
+        # from 2100 reaches the old 7200 in two kills.
+        entry = {"id": "clean-elab::test::x", "package": "clean-elab", "kind": "test"}
+        killed = {"source": "measured", "status": vr.STATUS_ERROR,
+                  "timed_out": True, "timeout_s": 2_100}
+        budget, basis = vr.timeout_for(entry, killed)
+        self.assertEqual(budget, 4_200)
+        self.assertIn("KILLED", basis)
+
+
+class TestBuildRunSplitApplicability(unittest.TestCase):
+    """The split keys on the ARGV SHAPE, never on the row's `kind`.
+
+    Written because the docstring of `_build_phase_argv` said "a gate row runs a
+    script" as if `kind == "gate"` decided it. It does not, and the row where
+    that matters is `gate::masquerade`: a `targo --unverified test` row that reserved 18 GB --
+    above this box's budget, so it held the machine EXCLUSIVELY -- while its own
+    last run here peaked at 10.91 GB against a 3.5 GB median. If the split is
+    ever keyed on `kind`, that row silently stops splitting and nothing else
+    here would notice.
+    """
+
+    def test_cargo_test_splits_whatever_the_kind_says(self):
+        argv = ["targo", "--unverified", "test", "--locked", "-p", "clean-kernel", "--lib",
+                "--", "masquerade"]
+        self.assertIsNotNone(vr._build_phase_argv(argv))
+
+    def test_a_script_row_does_not_split(self):
+        self.assertIsNone(vr._build_phase_argv(["scripts/leancross.sh", "run"]))
+
+    def test_a_cargo_subcommand_that_is_not_test_does_not_split(self):
+        # `cargo clippy` compiles too, but it has no run phase to separate --
+        # the whole invocation IS the compile, so splitting would invent a
+        # boundary rather than find one.
+        self.assertIsNone(vr._build_phase_argv(["targo", "tippy", "--workspace"]))
+
+    def test_no_run_lands_before_the_separator(self):
+        # Everything after `--` is the test binary's own argv. cargo would hand
+        # `--no-run` straight to libtest, which does not know it.
+        out = vr._build_phase_argv(["targo", "--unverified", "test", "-p", "x", "--", "filter"])
+        self.assertEqual(out.index("--no-run"), out.index("--") - 1)
+        self.assertEqual(out[-1], "filter")
+
+    def test_the_documented_example_is_still_a_splitting_row(self):
+        # Binds the docstring's worked example to the live registry.
+        rows = {e["id"]: e for e in vr.WORKSPACE_GATES}
+        self.assertIn("gate::masquerade", rows)
+        self.assertIsNotNone(
+            vr._build_phase_argv(rows["gate::masquerade"]["argv"]),
+            "gate::masquerade no longer splits; the _build_phase_argv docstring "
+            "cites it as the gate row that does -- update both together",
+        )
+        script_rows = [i for i, e in rows.items()
+                       if e.get("kind", "").startswith("gate")
+                       and vr._build_phase_argv(e["argv"]) is None]
+        self.assertTrue(script_rows, "no non-splitting gate row left to contrast")
+
+
+
+class TestPhasePeakAttribution(unittest.TestCase):
+    """What may size a phase reservation, and what may not.
+
+    The split had no unit coverage of its own weight derivation when it landed;
+    these arms are that coverage, and they pin the two ways a phase figure can
+    be present but meaningless.
+    """
+
+    CLEAN = {"build_peak_rss_gb": 2.0, "build_rss_samples": 40,
+             "run_peak_rss_gb": 0.5, "rss_samples": 900,
+             "inputs_moved_during_run": False}
+
+    def _peak(self, rec, field="run_peak_rss_gb"):
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            return vr._phase_peak_gb("t", field)
+
+    def test_a_clean_record_sizes_the_phase(self):
+        self.assertEqual(self._peak(dict(self.CLEAN)), 0.5)
+
+    def test_a_thin_sample_is_not_a_measurement(self):
+        rec = dict(self.CLEAN, run_peak_rss_gb=0.0, rss_samples=1)
+        self.assertIsNone(self._peak(rec))
+
+    def test_a_run_whose_inputs_moved_has_no_phase_attribution(self):
+        # A run leg that recompiled puts build memory into the run phase's
+        # figure, and nothing can separate them after the fact.
+        #
+        # These numbers are shaped like `lean4_corpus_tests`, which this guard
+        # originally cited as a measured instance. It is NOT one: that shard's
+        # 14.83 GB was later reproduced from the PREBUILT binary with nothing
+        # compiling, so its peak is real test memory. The arm keeps the shape
+        # because the shape is what the guard keys on; the attribution claim is
+        # withdrawn in `_phase_peak_gb`.
+        rec = dict(self.CLEAN, run_peak_rss_gb=14.83, rss_samples=1820,
+                   inputs_moved_during_run=True)
+        self.assertIsNone(self._peak(rec))
+
+    def test_the_moved_guard_covers_the_build_phase_too(self):
+        rec = dict(self.CLEAN, inputs_moved_during_run=True)
+        self.assertIsNone(self._peak(rec, "build_peak_rss_gb"))
+
+    def test_an_unattributable_phase_falls_back_to_the_combined_weight(self):
+        # The safe direction: over-reserve rather than run a compile inside a
+        # test-sized reservation.
+        rec = dict(self.CLEAN, inputs_moved_during_run=True)
+        with mock.patch.object(vr, "load_record", return_value=rec), \
+             mock.patch.object(vr, "_gate_weight_gb", return_value=9):
+            self.assertEqual(vr._split_weights_gb("t"), (9, 9))
+
+    def test_a_clean_record_actually_moves_the_two_weights_apart(self):
+        # Both directions: the guard must not simply refuse everything.
+        with mock.patch.object(vr, "load_record", return_value=dict(self.CLEAN)), \
+             mock.patch.object(vr, "_gate_weight_gb", return_value=9):
+            build_gb, run_gb = vr._split_weights_gb("t")
+        self.assertGreater(build_gb, run_gb)
+        self.assertEqual(run_gb, max(vr.MIN_TARGET_GB, 1))
+
+
+
+class FiniteMemoryHistory(unittest.TestCase):
+    INVALID = [float("nan"), float("inf"), -float("inf"), True, False,
+               0, -1, "4", 10 ** 400, sys.float_info.max]
+
+    def test_invalid_combined_peaks_keep_valid_history_or_default(self):
+        for value in self.INVALID:
+            with self.subTest(value=value):
+                rec = {"status": vr.STATUS_RUNNING, "peak_rss_gb": value,
+                       "prior_peak_rss_gb": 40.0}
+                with mock.patch.object(vr, "load_record", return_value=rec):
+                    self.assertEqual(vr._gate_weight_gb("t"), 60)
+                rec["prior_peak_rss_gb"] = value
+                with mock.patch.object(vr, "load_record", return_value=rec):
+                    self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+
+    def test_invalid_phase_peak_uses_combined_reservation(self):
+        for field in ("build_peak_rss_gb", "run_peak_rss_gb"):
+            for value in self.INVALID:
+                with self.subTest(field=field, value=value):
+                    rec = dict(TestPhasePeakAttribution.CLEAN, **{field: value})
+                    with mock.patch.object(vr, "load_record", return_value=rec), \
+                         mock.patch.object(vr, "_gate_weight_gb", return_value=60):
+                        weights = vr._split_weights_gb("t")
+                    self.assertEqual(weights[0 if field == "build_peak_rss_gb" else 1], 60)
+
+    def test_invalid_build_peaks_do_not_hide_valid_carried_floor(self):
+        for value in self.INVALID:
+            with self.subTest(value=value):
+                rec = {"build_peak_rss_gb": value, "max_build_peak_rss_gb": 40.0}
+                self.assertEqual(vr.recorded_build_peak_gb(rec), 40.0)
+                rec["max_build_peak_rss_gb"] = value
+                self.assertIsNone(vr.recorded_build_peak_gb(rec))
+                self.assertEqual(vr.cold_build_floor_gb({"_cold_build_peak_gb": value}), 0)
+
+    def test_nonstandard_json_numbers_do_not_break_record_admission(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+             mock.patch.object(vr, "STATE_DIR", Path(tmp)):
+            for value in (float("nan"), float("inf"), -float("inf")):
+                with self.subTest(value=value):
+                    record = {"target": "t", "status": vr.STATUS_RUNNING,
+                              "peak_rss_gb": value, "prior_peak_rss_gb": 40.0,
+                              "build_peak_rss_gb": value,
+                              "max_build_peak_rss_gb": 40.0}
+                    vr.record_path("t").write_text(json.dumps(record))
+                    self.assertEqual(vr._gate_weight_gb("t"), 60)
+                    self.assertEqual(vr.recorded_build_peak_gb(vr.load_record("t")), 40.0)
+
+    def test_finite_numeric_history_keeps_fractional_headroom(self):
+        for value in (4, 4.5):
+            with self.subTest(value=value):
+                with mock.patch.object(vr, "load_record", return_value={"peak_rss_gb": value}):
+                    self.assertEqual(vr._gate_weight_gb("t"), 6 if value == 4 else 7)
+                self.assertEqual(vr.recorded_build_peak_gb({"build_peak_rss_gb": value}), value)
+
+
+class TestHostProvenance(unittest.TestCase):
+    """`data/suite_state/` is shared between machines and the weight path never
+    reads `runner_host`, so the weights table marks rows measured elsewhere.
+
+    The marker has to be right in BOTH directions. macOS stamps this box as
+    `m1AirM224GB1TB2.localdomain` and `m1-Air-M2-24GB-1TB-2.local` depending on
+    whether mDNS answered, and both spellings are already committed -- comparing
+    raw strings marked 6 of this box's own records foreign.
+    """
+
+    def test_the_two_spellings_of_this_box_are_the_same_box(self):
+        self.assertEqual(vr._host_key("m1AirM224GB1TB2.localdomain"),
+                         vr._host_key("m1-Air-M2-24GB-1TB-2.local"))
+
+    def test_a_genuinely_different_machine_stays_different(self):
+        self.assertNotEqual(vr._host_key("m1AirM224GB1TB2.localdomain"),
+                            vr._host_key("m8Macbo128GB8TB.localdomain"))
+
+    def test_a_foreign_record_is_marked(self):
+        with mock.patch.object(vr, "_this_host", return_value="m1AirM224GB1TB2.localdomain"):
+            self.assertTrue(vr._is_foreign_record("m8Macbo128GB8TB.localdomain"))
+
+    def test_this_box_under_either_spelling_is_not_marked(self):
+        with mock.patch.object(vr, "_this_host", return_value="m1AirM224GB1TB2.localdomain"):
+            self.assertFalse(vr._is_foreign_record("m1-Air-M2-24GB-1TB-2.local"))
+            self.assertFalse(vr._is_foreign_record("m1AirM224GB1TB2.localdomain"))
+
+    def test_unknown_provenance_is_not_asserted_to_be_foreign(self):
+        # A record predating the field says nothing either way; marking it would
+        # put a claim on a row nobody can check.
+        with mock.patch.object(vr, "_this_host", return_value="somebox"):
+            self.assertFalse(vr._is_foreign_record(None))
+            self.assertFalse(vr._is_foreign_record(""))
+
+
+
+class SkippedRunsKeepReservationHistory(unittest.TestCase):
+    def _record(self, **updates):
+        return record(**{"status": vr.STATUS_SKIPPED, "kind": "gate",
+                         "command": "/bin/sh -c partial-gate", "peak_rss_gb": 0.1,
+                         "prior_peak_rss_gb": 20.0, "build_peak_rss_gb": 0.1,
+                         "run_peak_rss_gb": 0.1, "build_rss_samples": 40, "rss_samples": 40,
+                         "counts": {"passed": 1, "failed": 0, "result_lines": 1}, **updates})
+
+    def test_skipped_positive_count_cannot_lower_prior_history(self):
+        rec = self._record()
+        entry = {**ENTRY, "kind": "gate"}
+        self.assertEqual(vr.derive(entry, rec, DIGEST)["bucket"], vr.BUCKET_UNKNOWN)
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), 30)
+            self.assertEqual(vr._prior_peak_rss_gb("t"), 20.0)
+
+    def test_skipped_without_prior_cannot_lower_the_default(self):
+        rec = self._record(prior_peak_rss_gb=None)
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._gate_weight_gb("t"), vr.DEFAULT_TARGET_GB)
+
+    def test_skipped_phase_peaks_cannot_replace_combined_history(self):
+        with mock.patch.object(vr, "load_record", return_value=self._record()):
+            self.assertEqual(vr._split_weights_gb("t"), (30, 30))
+            self.assertIsNone(vr._phase_peak_gb("t", "build_peak_rss_gb"))
+            self.assertIsNone(vr._phase_peak_gb("t", "run_peak_rss_gb"))
+
+    def test_a_larger_skipped_observation_still_raises_the_weight(self):
+        with mock.patch.object(vr, "load_record", return_value=self._record(peak_rss_gb=24.0)):
+            self.assertEqual(vr._gate_weight_gb("t"), 36)
+
+    def test_completed_success_still_learns_the_smaller_peak(self):
+        with mock.patch.object(vr, "load_record", return_value=self._record(status=vr.STATUS_GREEN)):
+            self.assertEqual(vr._gate_weight_gb("t"), vr.MIN_TARGET_GB)
+            self.assertEqual(vr._split_weights_gb("t"), (vr.MIN_TARGET_GB, vr.MIN_TARGET_GB))
+
+
+class TestZeroTestRunCannotLowerAWeight(unittest.TestCase):
+    """A run that executed no test measured no test.
+
+    Measured 2026-09-18 on `clean-elab::lib::shard::lean4_corpus_tests`: an
+    external dependency's Cargo manifest stopped cargo before a single test ran.
+    The row recorded RED, `result_lines: 0`, 51 s and a 1.53 GB peak over ONE
+    sample -- the cost of a cargo invocation dying -- and that cut the weight
+    from 23 GB to 3 GB against a carried 14.83 GB peak. `status` alone did not
+    catch it: the run was not timed out, not ERROR and not RUNNING.
+    """
+
+    BASE = {"peak_rss_gb": 1.53, "prior_peak_rss_gb": 14.83, "timed_out": False}
+
+    def test_a_red_run_that_printed_no_result_line_is_cut_short(self):
+        rec = dict(self.BASE, status=vr.STATUS_RED,
+                   counts={"passed": 0, "failed": 0, "result_lines": 0})
+        self.assertTrue(vr._run_was_cut_short(rec))
+
+    def test_a_run_that_selected_zero_tests_is_cut_short(self):
+        # A filter that matched nothing still prints a result line.
+        rec = dict(self.BASE, status=vr.STATUS_GREEN,
+                   counts={"passed": 0, "failed": 0, "result_lines": 1})
+        self.assertTrue(vr._run_was_cut_short(rec))
+
+    def test_a_real_run_is_not_cut_short(self):
+        rec = dict(self.BASE, status=vr.STATUS_GREEN,
+                   counts={"passed": 596, "failed": 0, "result_lines": 1})
+        self.assertFalse(vr._run_was_cut_short(rec))
+
+    def test_a_red_run_with_results_still_preserves_the_prior_peak(self):
+        # Failure observes real memory but does not establish the cost of
+        # the successful path. Results alone cannot license a lower estimate.
+        rec = dict(self.BASE, status=vr.STATUS_RED,
+                   counts={"passed": 100, "failed": 3, "result_lines": 1})
+        self.assertTrue(vr._run_was_cut_short(rec))
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._prior_peak_rss_gb("t"), 14.83)
+        rec["peak_rss_gb"] = 40.0
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._prior_peak_rss_gb("t"), 40.0)
+
+    def test_the_zero_test_peak_may_raise_but_never_lower(self):
+        rec = dict(self.BASE, status=vr.STATUS_RED,
+                   counts={"passed": 0, "failed": 0, "result_lines": 0})
+        with mock.patch.object(vr, "load_record", return_value=rec):
+            self.assertEqual(vr._prior_peak_rss_gb("t"), 14.83)
+        # and it still RAISES when it is the larger number
+        rec_big = dict(rec, peak_rss_gb=40.0)
+        with mock.patch.object(vr, "load_record", return_value=rec_big):
+            self.assertEqual(vr._prior_peak_rss_gb("t"), 40.0)
+
+    def test_a_record_without_counts_is_unaffected(self):
+        # Records predating the field must keep their old classification.
+        rec = dict(self.BASE, status=vr.STATUS_GREEN)
+        self.assertFalse(vr._run_was_cut_short(rec))
+
+
+class ARunnerRowMeasuresOneBuildProfile(unittest.TestCase):
+    """The release-profile rows (docs/DECISIONS.md R148).
+
+    The `replay_forged` lane tests for leanprover/lean4#14807 compile only in a
+    release build (`cfg(not(debug_assertions))`), and every package row is a
+    debug build, so before these rows the debug `clean-olean` rows went GREEN
+    without running them. Each arm here pins one way a debug result, or a run
+    that never reached those tests, could stand for a release row.
+    """
+
+    RELEASE = {
+        "id": "pkg::release::test::t",
+        "package": "pkg",
+        "kind": "test",
+        "profile": "release",
+        "argv": ["targo", "--unverified", "test", "--locked", "--release", "-p", "pkg",
+                 "--lib", "--", "mod_a"],
+        "_must_pass": ["mod_a::release_only"],
+        "_cold_build_peak_gb": 8.97,
+    }
+
+    def _release_record(self, **overrides):
+        base = record(
+            target=self.RELEASE["id"],
+            profile="release",
+            counts={"passed": 2, "failed": 0, "ignored": 0, "result_lines": 1},
+            passed_tests=["mod_a::debug_too", "mod_a::release_only"],
+        )
+        base.update(overrides)
+        return base
+
+    def test_a_debug_record_never_stands_for_a_release_row(self):
+        # No `profile` field: every record written before this change, and
+        # every debug row's record, is a debug measurement.
+        rec = self._release_record()
+        del rec["profile"]
+        row = vr.derive(self.RELEASE, rec, DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        self.assertIn("dev profile", row["reason"])
+
+    def test_a_release_record_never_stands_for_a_debug_row(self):
+        row = vr.derive(ENTRY, record(profile="release"), DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        self.assertIn("release profile", row["reason"])
+
+    def test_a_release_record_that_ran_its_must_pass_tests_is_green(self):
+        # The anti-correlation arm: without it the arms below would pass
+        # against a rule that demoted every release row.
+        row = vr.derive(self.RELEASE, self._release_record(), DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_GREEN)
+
+    def test_exit_zero_without_the_must_pass_tests_is_unknown(self):
+        # The debug-build shape: the release-only test compiled out, the rest
+        # ran and passed, libtest exits 0.
+        rec = self._release_record(passed_tests=["mod_a::debug_too"],
+                                   counts={"passed": 1, "failed": 0, "ignored": 0,
+                                           "result_lines": 1})
+        row = vr.derive(self.RELEASE, rec, DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+        self.assertIn("mod_a::release_only", row["reason"])
+
+    def test_a_record_with_no_passed_list_is_unknown(self):
+        rec = self._release_record()
+        del rec["passed_tests"]
+        row = vr.derive(self.RELEASE, rec, DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_UNKNOWN)
+
+    def test_a_red_release_record_stays_red(self):
+        rec = self._release_record(status=vr.STATUS_RED, passed_tests=["mod_a::debug_too"])
+        row = vr.derive(self.RELEASE, rec, DIGEST)
+        self.assertEqual(row["bucket"], vr.BUCKET_RED)
+
+    def test_the_profile_is_hashed_and_a_debug_digest_does_not_move(self):
+        dev = {"id": "probe", "package": "pkg", "kind": "test",
+               "argv": ["targo", "--unverified", "test"],
+               "_dirs": [vr.REPO_ROOT / "scripts" / "verify_runner.sh"]}
+        explicit_dev = dict(dev, profile="dev")
+        release = dict(dev, profile="release")
+        d = vr.input_digest(dev, fresh=True)
+        self.assertEqual(d, vr.input_digest(explicit_dev, fresh=True))
+        self.assertNotEqual(d, vr.input_digest(release, fresh=True))
+
+    def test_the_real_rows_pass_their_own_consistency_check(self):
+        self.assertEqual(vr.check_profiles(vr.RELEASE_PROFILE_TARGETS), [])
+        for entry in vr.RELEASE_PROFILE_TARGETS:
+            self.assertIn("::release::", entry["id"])
+            self.assertEqual(entry["profile"], vr.PROFILE_RELEASE)
+
+    def test_check_profiles_refuses_each_drift(self):
+        cases = {
+            "no --release": dict(self.RELEASE, argv=[a for a in self.RELEASE["argv"]
+                                                     if a != "--release"]),
+            "--release after --": dict(self.RELEASE, argv=[a for a in self.RELEASE["argv"]
+                                                           if a != "--release"] + ["--release"]),
+            "no must-pass": {k: v for k, v in self.RELEASE.items() if k != "_must_pass"},
+            "must-pass the filter cannot select": dict(self.RELEASE, _must_pass=["mod_b::x"]),
+            "must-pass the skip removes": dict(
+                self.RELEASE, argv=self.RELEASE["argv"] + ["--skip", "release_only"]),
+            "unknown profile": dict(self.RELEASE, profile="bench"),
+            "not a cargo test": dict(self.RELEASE, argv=["scripts/x.sh", "--release"]),
+            "dev that builds release": dict(self.RELEASE, profile="dev"),
+            # The `--skip=X` spelling skips exactly as `--skip X` does.
+            "must-pass the skip= removes": dict(
+                self.RELEASE, argv=self.RELEASE["argv"] + ["--skip=release_only"]),
+            # Flags that stop libtest printing `test <name> ... ok`, so the
+            # must-pass parser would see nothing and the row would read UNKNOWN
+            # for good -- found only after a release build of up to 24 min.
+            "cargo -q": self._with_cargo_flag("-q"),
+            "cargo --quiet": self._with_cargo_flag("--quiet"),
+            "libtest -q": dict(self.RELEASE, argv=self.RELEASE["argv"] + ["-q"]),
+            "libtest --quiet": dict(self.RELEASE, argv=self.RELEASE["argv"] + ["--quiet"]),
+            "libtest --format terse": dict(
+                self.RELEASE, argv=self.RELEASE["argv"] + ["--format", "terse"]),
+            "libtest --format=json": dict(
+                self.RELEASE, argv=self.RELEASE["argv"] + ["-Z", "unstable-options",
+                                                           "--format=json"]),
+            "libtest --nocapture": dict(self.RELEASE, argv=self.RELEASE["argv"] + ["--nocapture"]),
+            "libtest --no-capture": dict(self.RELEASE, argv=self.RELEASE["argv"] + ["--no-capture"]),
+            # A release row's learned build weight comes from whichever build
+            # ran first in a shared target dir, so it must carry its highest
+            # measured build peak.
+            "no cold build peak": {k: v for k, v in self.RELEASE.items()
+                                   if k != "_cold_build_peak_gb"},
+            "cold build peak zero": dict(self.RELEASE, _cold_build_peak_gb=0),
+            "cold build peak not a number": dict(self.RELEASE, _cold_build_peak_gb="9"),
+            "cold build peak a bool": dict(self.RELEASE, _cold_build_peak_gb=True),
+            # A row with no `profile` key is recorded as a debug one, so it may
+            # not build another profile either.
+            "unlabelled row with --release": dict(
+                ENTRY, argv=ENTRY["argv"] + ["--release"]),
+            "unlabelled row with -r": dict(ENTRY, argv=ENTRY["argv"] + ["-r"]),
+            "unlabelled row with --profile": dict(
+                ENTRY, argv=ENTRY["argv"] + ["--profile", "bench"]),
+            "dev row with -r": dict(ENTRY, profile="dev", argv=ENTRY["argv"] + ["-r"]),
+        }
+        for label, entry in cases.items():
+            with self.subTest(label):
+                self.assertTrue(vr.check_profiles([entry]), f"{label} was accepted")
+        self.assertEqual(vr.check_profiles([self.RELEASE]), [])
+        # The anti-correlation arms: the pretty format spelled out, a skip that
+        # misses the must-pass names, and an unlabelled debug row are accepted.
+        for label, entry in {
+            "--format pretty": dict(self.RELEASE, argv=self.RELEASE["argv"] + ["--format", "pretty"]),
+            "--format=pretty": dict(self.RELEASE, argv=self.RELEASE["argv"] + ["--format=pretty"]),
+            "--skip= another test": dict(self.RELEASE, argv=self.RELEASE["argv"] + ["--skip=debug_too"]),
+            "an unlabelled debug row": ENTRY,
+            "a non-cargo row with --release": dict(ENTRY, argv=["scripts/x.sh", "--release"]),
+        }.items():
+            with self.subTest(label):
+                self.assertEqual(vr.check_profiles([entry]), [], label)
+
+    def _with_cargo_flag(self, flag):
+        argv = list(self.RELEASE["argv"])
+        argv.insert(argv.index("--"), flag)
+        return dict(self.RELEASE, argv=argv)
+
+    def test_the_rows_are_on_the_board_with_no_flags(self):
+        with mock.patch.object(vr, "cargo_metadata", return_value={"packages": []}), \
+                mock.patch.object(vr, "path_dep_closure", return_value=[]), \
+                mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]):
+            ids = {e["id"] for e in vr.build_inventory([])}
+            refused = dict(vr.RELEASE_PROFILE_TARGETS[0])
+            refused["argv"] = [a for a in refused["argv"] if a != "--release"]
+            with mock.patch.object(vr, "RELEASE_PROFILE_TARGETS", [refused]):
+                with self.assertRaises(SystemExit):
+                    vr.build_inventory([])
+        for entry in vr.RELEASE_PROFILE_TARGETS:
+            self.assertIn(entry["id"], ids)
+
+    def test_passed_test_names_reads_only_ok_lines(self):
+        text = "\n".join([
+            "running 4 tests",
+            "test a::slow has been running for over 60 seconds",
+            "test a::ok_one ... ok",
+            "test a::bad ... FAILED",
+            "test a::skipped ... ignored",
+            "test a::ok_two ... ok",
+            "test result: FAILED. 2 passed; 1 failed; 1 ignored",
+        ])
+        self.assertEqual(vr.passed_test_names(text), ["a::ok_one", "a::ok_two"])
+
+    def test_run_one_records_the_profile_and_what_passed(self):
+        entry = dict(self.RELEASE, id="synthetic::release",
+                     argv=["/bin/sh", "-c",
+                           "echo 'test mod_a::release_only ... ok'; "
+                           "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'"],
+                     _dirs=[vr.REPO_ROOT / "scripts"])
+        rec = vr.run_one(entry, timeout=60)
+        self.assertEqual(rec["profile"], "release")
+        self.assertEqual(rec["passed_tests"], ["mod_a::release_only"])
+        self.assertEqual(rec["must_pass"], ["mod_a::release_only"])
+        self.assertIn("profile", rec["digest_scope"])
+        self.assertEqual(vr.derive(entry, rec, rec["input_digest"])["bucket"], vr.BUCKET_GREEN)
+
+    def test_run_one_says_why_a_run_without_its_must_pass_is_not_green(self):
+        entry = dict(self.RELEASE, id="synthetic::release_missing",
+                     argv=["/bin/sh", "-c",
+                           "echo 'test mod_a::debug_too ... ok'; "
+                           "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'"],
+                     _dirs=[vr.REPO_ROOT / "scripts"])
+        rec = vr.run_one(entry, timeout=60)
+        self.assertIn("mod_a::release_only", rec["notes"])
+        self.assertEqual(vr.derive(entry, rec, rec["input_digest"])["bucket"], vr.BUCKET_UNKNOWN)
+
+    def _worker_output(self, rec):
+        import contextlib
+        import io
+        with tempfile.TemporaryDirectory() as tmp:
+            queue = Path(tmp) / "queue.json"
+            queue.write_text(json.dumps({"packages": [], "targets": [self.RELEASE["id"]], "jobs": 1}))
+            out = io.StringIO()
+            with mock.patch.object(vr, "build_inventory", return_value=[self.RELEASE]), \
+                    mock.patch.object(vr, "input_digest", return_value=DIGEST), \
+                    mock.patch.object(vr, "load_record", return_value=None), \
+                    mock.patch.object(vr, "timeout_for", return_value=(60, "test floor")), \
+                    mock.patch.object(vr, "run_one", return_value=rec), \
+                    contextlib.redirect_stdout(out):
+                vr._worker_loop(types.SimpleNamespace(queue=str(queue)))
+            return out.getvalue()
+
+    def test_the_worker_says_when_a_recorded_green_reads_unknown(self):
+        # Measured 2026-10-20 on the cfg demonstration: the worker printed
+        # `DONE (1/1) clean-olean::release::test::replay_forged_lanes -> GREEN`
+        # for a run that `status` reads UNKNOWN, because the DONE line prints
+        # the RECORDED status. A person watching the worker must see both.
+        rec = self._release_record(passed_tests=["mod_a::debug_too"], duration_s=1.0)
+        out = self._worker_output(rec)
+        self.assertIn("-> GREEN", out)
+        self.assertRegex(out, r"reads UNKNOWN, not GREEN: .*mod_a::release_only")
+
+    def test_the_worker_adds_nothing_when_the_record_reads_as_recorded(self):
+        # The anti-correlation arm: a run that ran its must-pass tests prints
+        # no second verdict.
+        out = self._worker_output(self._release_record(duration_s=1.0))
+        self.assertIn("-> GREEN", out)
+        self.assertNotIn("reads ", out)
+
+    def test_every_must_pass_name_is_a_test_in_its_package(self):
+        """A must-pass name that names no `#[test] fn` would leave its row
+        UNKNOWN forever; catch the rename here, without a build. Since
+        2026-11-13 (E3 fix-up) the names are those scripts/rust_modules.py
+        derives the row's own build SURELY compiles -- its target's module tree,
+        under the release lane's cfg facts and the features cargo resolves for
+        the row -- not a file guessed from the name's module path, which missed
+        a test in an inline `mod` and could not see a cfg."""
+        meta = vr.cargo_metadata()
+        rm = vr._rust_modules()
+        for entry in vr.RELEASE_PROFILE_TARGETS:
+            pkg = next(p for p in meta["packages"] if p["name"] == entry["package"])
+            name = vr._test_target_name(entry["argv"])
+            root = (vr.package_lib_root(meta, entry["package"]) if name is None else
+                    Path(next(t["src_path"] for t in pkg["targets"]
+                              if t["name"] == name and "test" in t["kind"])))
+            facts = vr.row_cfg_facts(meta, pkg, entry)
+            # A package with a build script may emit a cfg, so its facts are
+            # undecided (`row_cfg_facts`): there the names must be tests the
+            # build MAY compile under the lane's facts, every feature open.
+            compiled = set(vr._crate_tests(root, rm.Reach.CERTAIN, facts) if facts is not None
+                           else vr._crate_tests(root, rm.Reach.MAYBE,
+                                                vr.lane_cfg_facts(vr.PROFILE_RELEASE)))
+            with self.subTest(entry["id"]):
+                self.assertEqual(sorted(set(entry["_must_pass"]) - compiled), [])
+
+
+class AReleaseRowBuildReservesItsColdPeak(unittest.TestCase):
+    """A warm build's peak may not size a release row's build reservation.
+
+    The release rows share one target dir. Measured 2026-10-19/20: run after the
+    lib row had built its dependencies, the build of
+    `clean-olean::release::test::replay_forged_lanes` peaked at 4.81 GB, which
+    `_split_weights_gb` turns into 8 GB; three cold builds of it peaked at 8.84,
+    8.94 and 8.97 GB. `--only` one row, a fresh or pruned `release/` dir, or
+    another order would run that cold build under a reservation below its own
+    peak.
+    """
+
+    ROW = dict(ARunnerRowMeasuresOneBuildProfile.RELEASE, id="synthetic::release::floor")
+    # Shaped like the committed clean-olean::release::test::replay_forged_lanes
+    # record: a warm build, a clean split.
+    WARM = {"build_peak_rss_gb": 4.81, "build_rss_samples": 117,
+            "run_peak_rss_gb": 3.5, "rss_samples": 22,
+            "inputs_moved_during_run": False}
+
+    def _weights(self, entry, rec):
+        with mock.patch.object(vr, "load_record", return_value=rec), \
+                mock.patch.object(vr, "_gate_weight_gb", return_value=12):
+            return vr._split_weights_gb(entry["id"], vr.cold_build_floor_gb(entry))
+
+    def test_a_warm_build_record_cannot_lower_the_build_below_the_cold_floor(self):
+        self.assertEqual(vr.cold_build_floor_gb(self.ROW), 14)  # ceil(1.5 x 8.97)
+        self.assertEqual(self._weights(self.ROW, dict(self.WARM)), (14, 6))
+
+    def test_without_a_floor_the_warm_record_still_sizes_the_build(self):
+        # The anti-correlation arm: the floor is what raises it, nothing else.
+        row = {k: v for k, v in self.ROW.items() if k != "_cold_build_peak_gb"}
+        self.assertEqual(vr.cold_build_floor_gb(row), 0)
+        self.assertEqual(self._weights(row, dict(self.WARM)), (8, 6))
+
+    def test_the_floor_never_lowers_a_learned_build_weight(self):
+        rec = dict(self.WARM, build_peak_rss_gb=11.77, build_rss_samples=716)
+        self.assertEqual(self._weights(self.ROW, rec), (18, 6))
+
+    def test_an_unmeasured_row_reserves_the_larger_of_default_and_floor(self):
+        self.assertEqual(self._weights(self.ROW, None), (14, 12))
+
+    def test_every_real_release_row_floors_its_build_at_or_above_its_record(self):
+        # Each real row's floor is at least its committed record's build peak:
+        # the floor holds the highest build peak measured for the row, so a
+        # record above it is a measurement the floor has not taken in. Until
+        # 2026-10-28 this read "the cold peak a floor comes from is never
+        # smaller than a warm one"; the lib row's warm builds (7.74 to 7.99 GB)
+        # against its cold one (5.97 GB) refuted that, and this test went red.
+        # The committed records are read from the real data/suite_state/, not
+        # the sandbox this module points the runner at.
+        committed = vr.REPO_ROOT / "data" / "suite_state"
+        for entry in vr.RELEASE_PROFILE_TARGETS:
+            with self.subTest(entry["id"]):
+                self.assertGreater(vr.cold_build_floor_gb(entry), 0)
+                path = committed / f"{vr.safe_name(entry['id'])}.json"
+                self.assertTrue(path.is_file(), f"no committed record at {path}")
+                rec = json.loads(path.read_text())
+                self.assertGreaterEqual(entry["_cold_build_peak_gb"], rec["build_peak_rss_gb"])
+
+    def _fake_targo(self, tmp):
+        fake = Path(tmp) / "targo"
+        fake.write_text(
+            "#!/bin/sh\n"
+            "for a in \"$@\"; do [ \"$a\" = --no-run ] && { sleep 0.2; exit 0; }; done\n"
+            "echo 'test mod_a::release_only ... ok'\n"
+            "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'\n")
+        fake.chmod(0o755)
+        return fake
+
+    def test_run_one_reserves_the_floor_and_records_the_build_phase(self):
+        asked = []
+
+        def acquire(gb, label):
+            asked.append((gb, label))
+            return ("unit-test-token", True, False)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = self._fake_targo(tmp)
+            entry = dict(self.ROW, argv=[str(fake), "--unverified", "test", "--release",
+                                         "--", "mod_a"],
+                         _dirs=[vr.REPO_ROOT / "scripts"])
+            with mock.patch.object(vr, "_gate_acquire", acquire), \
+                    mock.patch.object(vr, "load_record", return_value=dict(self.WARM)):
+                rec = vr.run_one(entry, timeout=60)
+        self.assertEqual(asked[0], (14, "synthetic::release::floor [build]"))
+        self.assertEqual(rec["gate_weight_build_gb"], 14)
+        self.assertEqual(rec["gate_weight_build_floor_gb"], 14)
+        # The build phase's own clock, which the record did not carry: the
+        # durations R148 first quoted could not be re-derived from any artifact.
+        self.assertIsInstance(rec.get("build_exec_duration_s"), float)
+        self.assertGreaterEqual(rec["build_exec_duration_s"], 0.2)
+        self.assertIsInstance(rec.get("build_gate_wait_s"), float)
+        self.assertEqual(rec["passed_tests"], ["mod_a::release_only"])
+
+    def test_the_weights_table_names_the_cold_floor(self):
+        import contextlib
+        import io
+        out = io.StringIO()
+        with mock.patch.object(vr, "build_inventory", return_value=[self.ROW]), \
+                mock.patch.object(vr, "load_record", return_value=dict(self.WARM)), \
+                contextlib.redirect_stdout(out):
+            vr.cmd_weights(types.SimpleNamespace(packages=[], only=None, json=False))
+        self.assertRegex(out.getvalue(),
+                         r"synthetic::release::floor: its build reserves at least 14 GB")
+
+
+class TheKernelPackagesJoinTheBoard(unittest.TestCase):
+    """Self-proof unit E3 (2026-11-13): clean-kernel and clean-ck0 on the board.
+
+    Three things had to change with them, and each arm below fails on the
+    runner as it stood before: a test target's `required-features` reach its
+    argv, a relative literal is RESOLVED (file- or crate-relative) before a
+    digest is said to cover it, and a lib shard is digested over its parent's
+    outside reads.
+    """
+
+    def test_both_packages_are_default(self):
+        for package in ("clean-kernel", "clean-ck0"):
+            self.assertIn(package, vr.DEFAULT_PACKAGES)
+
+    def test_required_features_reach_the_argv_sorted(self):
+        meta = {"packages": [{"name": "clean-ck0", "targets": [
+            {"name": "clean_ck0", "kind": ["lib"], "test": True},
+            {"name": "export_reader", "kind": ["test"], "test": True,
+             "required-features": ["serde-z", "export"]},
+            {"name": "plain", "kind": ["test"], "test": True},
+        ]}]}
+        with mock.patch.object(vr, "load_plan", return_value=None):
+            argv = {t["id"]: t["argv"] for t in vr.package_targets(meta, "clean-ck0")}
+        self.assertEqual(argv["clean-ck0::test::export_reader"][-2:],
+                         ["--features", "export,serde-z"])
+        self.assertNotIn("--features", argv["clean-ck0::test::plain"])
+        self.assertNotIn("--features", argv["clean-ck0::lib"])
+
+    def _tree(self) -> Path:
+        base = Path(tempfile.mkdtemp(prefix="resolve_", dir=_SANDBOX))
+        subprocess.run(["git", "init", "-q", str(base)], check=True)
+        (base / ".gitignore").write_text("out/\n")
+        for rel, text in {
+            "data/file_rel.json": "{}",
+            "data/crate_rel.json": "{}",
+            "out/ignored.txt": "x",
+            "crates/pk/tests/fixtures/inside.txt": "x",
+            "crates/other/fixtures/table.tsv": "x",
+            # The library reaches env/a.rs, so its include_str! is a derived
+            # library read (`library_external_reads`); the bare literals are not.
+            "crates/pk/src/lib.rs": "mod env;\n",
+            "crates/pk/src/env.rs": "mod a;\n",
+            # file-relative from src/env/: four levels reach the repository root
+            "crates/pk/src/env/a.rs":
+                'const A: &str = include_str!("../../../../data/file_rel.json");\n'
+                # file-relative, and inside the crate: never owed
+                'const B: &str = include_str!("../../tests/fixtures/inside.txt");\n'
+                # crate-relative (CARGO_MANIFEST_DIR join): owed
+                'fn c() -> &\'static str { "../../data/crate_rel.json" }\n'
+                # gitignored output: never owed, whichever box holds it
+                'fn d() -> &\'static str { "../../out/ignored.txt" }\n'
+                '// "../../../../data/comment_only.json" is prose, never owed\n',
+            "crates/pk/tests/t.rs":
+                'const T: &str = include_str!("../../other/fixtures/table.tsv");\n',
+        }.items():
+            path = base / rel
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text)
+        subprocess.run(["git", "-C", str(base), "add", "-A"], check=True)
+        return base
+
+    def test_relative_literals_are_resolved_not_matched(self):
+        base = self._tree()
+        with mock.patch.object(vr, "RESOLVED_SCAN_PACKAGES", ("pk",)), \
+                mock.patch.object(vr, "_EXTRA_PATH_SOURCES", ()):
+            owed = vr._crystal_extra_paths_owed(base)
+        self.assertEqual(owed["pk::lib"], {"data/file_rel.json", "data/crate_rel.json"})
+        self.assertEqual(owed["pk::test::t"], {"crates/other/fixtures/table.tsv"})
+
+    def _problems(self, base):
+        # The crystal row stays: the checker's own selftest re-derives it.
+        with mock.patch.object(vr, "RESOLVED_SCAN_PACKAGES", ("pk",)), \
+                mock.patch.object(vr, "_EXTRA_PATH_SOURCES", vr._EXTRA_PATH_SOURCES[:1]), \
+                mock.patch.object(vr, "TARGET_EXTRA_PATHS",
+                                  {"pk::test::t": ["crates/other/fixtures/table.tsv"]}), \
+                mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {}), \
+                mock.patch.object(vr, "_check_olean_world_inputs", return_value=[]):
+            return vr.check_crystal_extra_paths(base)
+
+    def test_an_unlisted_resolved_read_is_refused(self):
+        # data/file_rel.json is the library's include_str!, derived (no table
+        # names it); the bare crate-relative literal is no include, so nothing
+        # derives it.
+        problems = self._problems(self._tree())
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("pk::lib reads data/crate_rel.json", problems[0])
+
+    def test_the_include_is_covered_by_derivation_not_by_a_table(self):
+        # The anti-arm: cut env/a.rs out of the module tree and its include is
+        # no library read, so the check refuses it too. Until 2026-11-13 a hand
+        # table (PACKAGE_EXTRA_PATHS) covered it, and deleting its row left the
+        # suite green.
+        base = self._tree()
+        (base / "crates/pk/src/lib.rs").write_text("")
+        problems = self._problems(base)
+        self.assertEqual(len(problems), 2, problems)
+        self.assertTrue(any("pk::lib reads data/file_rel.json" in m for m in problems), problems)
+
+    def test_the_real_tree_owes_nothing_unlisted(self):
+        self.assertEqual(vr.check_crystal_extra_paths(), [])
+
+    def test_a_shard_is_digested_over_its_parents_reads(self):
+        plan = {"parent": "pk::lib", "package": "pk", "base_argv": ["targo", "test"],
+                "shards": [{"id": "pk::lib::shard::a", "key": "a", "filters": ["a::"],
+                            "skip": [], "test_count": 1}]}
+        meta = {"packages": [{"name": "pk", "manifest_path": str(vr.REPO_ROOT / "Cargo.toml"),
+                              "targets": [{"name": "pk", "kind": ["lib"], "test": True}]}]}
+        with mock.patch.object(vr, "cargo_metadata", return_value=meta), \
+                mock.patch.object(vr, "path_dep_closure", return_value=[]), \
+                mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]), \
+                mock.patch.object(vr, "load_plan", return_value=plan), \
+                mock.patch.object(vr, "TARGET_EXTRA_PATHS", {"pk::lib": ["data/x.json"]}), \
+                mock.patch.object(vr, "closure_library_reads", return_value=("data/y.json",)):
+            dirs = {e["id"]: e["_dirs"] for e in vr.build_inventory(["pk"], with_gates=False)}
+        want = {vr.REPO_ROOT / "data/x.json", vr.REPO_ROOT / "data/y.json"}
+        self.assertEqual(set(dirs["pk::lib::shard::a"]), want)
+        self.assertEqual(set(dirs["pk::lib"]), want)
+
+
+
+class ACompileTimeReadReachesEveryRowThatCompilesIt(unittest.TestCase):
+    """E3 fix-up (2026-11-13): out-of-crate `include_str!`/`include_bytes!`
+    reads are derived from the module tree, not listed by hand."""
+
+    def test_the_kernel_golden_reaches_a_dependents_row(self):
+        # Deleting the hand entry for data/soundness_tcb.json left the suite
+        # green; now no entry exists, and a package that compiles clean-kernel
+        # (clean-parser) digests it through the derivation alone.
+        meta = vr.cargo_metadata()
+        self.assertIn("data/soundness_tcb.json", vr.library_external_reads(
+            vr.package_lib_root(meta, "clean-kernel"), False))
+        reads = vr.closure_library_reads(
+            meta, vr.path_dep_closure(meta, "clean-parser"), "clean-parser", False)
+        self.assertIn("data/soundness_tcb.json", reads)
+        self.assertNotIn("data/soundness_tcb.json", vr.TARGET_EXTRA_PATHS["clean-kernel::lib"])
+
+    def test_an_integration_targets_own_include_is_in_its_digest(self):
+        rows = {e["id"]: e for e in vr.build_inventory(["clean-ck0"], with_gates=False)}
+        dirs = {str(d) for d in rows["clean-ck0::test::level_as_written"]["_dirs"]}
+        self.assertIn(str(vr.REPO_ROOT / "crates/clean-kernel/src/level/fixtures/"
+                          "lean_kernel_verdicts_v4.30.0-rc2.tsv"), dirs)
+
+    def test_comments_and_strings_are_not_includes(self):
+        with tempfile.TemporaryDirectory(prefix="incl_", dir=_SANDBOX) as tmp:
+            root = Path(tmp)
+            base = root / "crates" / "zz"
+            (base / "src").mkdir(parents=True)
+            (root / "data").mkdir()
+            for name in ("soundness_tcb.json", "axiom_audit.json", "prelude_axiom_ratchet.json"):
+                (root / "data" / name).write_text("{}\n")
+            subprocess.run(["git", "init", "-q", str(root)], check=True)
+            (base / "Cargo.toml").write_text("[package]\nname = \"zz\"\n")
+            (base / "src" / "lib.rs").write_text(
+                '// include_str!("../../../data/soundness_tcb.json")\n'
+                'const S: &str = "include_str!(\\"../../../data/axiom_audit.json\\")";\n'
+                'const T: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), '
+                '"/../../data/prelude_axiom_ratchet.json"));\n')
+            lib = base / "src" / "lib.rs"
+            original = lib.read_text()
+            got = vr.library_external_reads(lib, False, base=root)
+            self.assertEqual(got, ("data/prelude_axiom_ratchet.json",))
+            # Both excluded names are real, visible inputs when used by actual
+            # macros; the synthetic repository must not make negatives vacuous.
+            lib.write_text(original +
+                           'const U: &str = include_str!("../../../data/soundness_tcb.json");\n'
+                           'const V: &str = include_str!("../../../data/axiom_audit.json");\n')
+            self.assertEqual(vr.library_external_reads(lib, False, base=root),
+                             ("data/axiom_audit.json", "data/prelude_axiom_ratchet.json", "data/soundness_tcb.json"))
+            lib.write_text(original)
+            self.assertEqual(vr.library_external_reads(lib, False, base=root), got)
+
+
+class TestWarmBuildInputIdentity(unittest.TestCase):
+    def test_every_root_build_input_invalidates_a_warm_key(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(vr, "REPO_ROOT", Path(tmp)), \
+                mock.patch.object(vr, "toolchain_id", return_value="fixed"), \
+                mock.patch.object(vr, "_WARM_BUILDS", set()):
+            entry = dict(ENTRY, _dirs=[])
+            initial = vr.build_warm_key(entry)
+            vr.mark_build_warm(initial)
+            for name in vr.ROOT_BUILD_INPUTS:
+                with self.subTest(name=name):
+                    path = Path(tmp) / name
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text("first")
+                    first = vr.build_warm_key(entry)
+                    self.assertFalse(vr.build_is_warm(first))
+                    vr.mark_build_warm(first)
+                    path.write_text("second")
+                    self.assertFalse(vr.build_is_warm(vr.build_warm_key(entry)))
+                    path.unlink()
+                    self.assertEqual(vr.build_warm_key(entry), initial)
+
+    def test_compiler_replacement_does_not_use_the_status_cache(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(vr, "REPO_ROOT", Path(tmp)), \
+                mock.patch.object(vr, "_TOOLCHAIN_CACHE", "status snapshot"), \
+                mock.patch.object(vr, "_WARM_BUILDS", set()), \
+                mock.patch.object(vr, "run_capture", side_effect=[
+                    (0, "rustc old\ncommit-hash: old\n"),
+                    (0, "rustc new\ncommit-hash: new\n"),
+                ]) as capture:
+            entry = dict(ENTRY, _dirs=[])
+            vr.mark_build_warm(vr.build_warm_key(entry))
+            self.assertFalse(vr.build_is_warm(vr.build_warm_key(entry)))
+            self.assertEqual(capture.call_count, 2)
+            self.assertEqual(vr._TOOLCHAIN_CACHE, "status snapshot")
+
+    def test_changed_config_restores_the_cold_build_reservation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake = root / "targo"
+            fake.write_text("#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = --no-run ] && exit 0; done\n"
+                            "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'\n")
+            fake.chmod(0o755)
+            entry = dict(ENTRY, argv=[str(fake), "--unverified", "test"], _dirs=[])
+            asked = []
+            with mock.patch.object(vr, "REPO_ROOT", root), \
+                    mock.patch.object(vr, "_WARM_BUILDS", set()), \
+                    mock.patch.object(vr, "input_digest", return_value=DIGEST), \
+                    mock.patch.object(vr, "toolchain_id", return_value="fixed"), \
+                    mock.patch.object(vr, "_split_weights_gb", return_value=(1, 1)), \
+                    mock.patch.object(vr, "package_cold_build_floor_gb", return_value=(19, "fixture")), \
+                    mock.patch.object(vr, "_gate_acquire", side_effect=lambda gb, label:
+                                      (asked.append(gb) or "token", True, False)):
+                self.assertEqual(vr.run_one(entry, 10)["status"], vr.STATUS_GREEN)
+                (root / ".cargo").mkdir()
+                (root / ".cargo/config.toml").write_text("[build]\njobs = 2\n")
+                self.assertEqual(vr.run_one(entry, 10)["status"], vr.STATUS_GREEN)
+                self.assertEqual(vr.run_one(entry, 10)["status"], vr.STATUS_GREEN)
+            self.assertEqual(asked, [19, 1, 19, 1, 1, 1])
+
+
+class TestUnknownCompilerStaysCold(unittest.TestCase):
+    def test_failed_or_empty_compiler_probes_produce_no_warm_key(self):
+        for reply in ((1, "probe failed"), (0, "unrecognized output")):
+            with self.subTest(reply=reply), tempfile.TemporaryDirectory() as tmp, \
+                    mock.patch.object(vr, "REPO_ROOT", Path(tmp)), \
+                    mock.patch.object(vr, "run_capture", return_value=reply), \
+                    mock.patch.object(vr, "_WARM_BUILDS", set()):
+                key = vr.build_warm_key(dict(ENTRY, _dirs=[]))
+                self.assertIsNone(key)
+                vr.mark_build_warm(key)
+                self.assertFalse(vr.build_is_warm(key))
+
+    def test_unknown_compiler_cannot_lower_the_second_build_reservation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake = root / "targo"
+            fake.write_text("#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = --no-run ] && exit 0; done\n"
+                            "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'\n")
+            fake.chmod(0o755)
+            entry = dict(ENTRY, argv=[str(fake), "--unverified", "test"], _dirs=[])
+            asked = []
+            with mock.patch.object(vr, "REPO_ROOT", root), \
+                    mock.patch.object(vr, "_WARM_BUILDS", set()), \
+                    mock.patch.object(vr, "input_digest", return_value=DIGEST), \
+                    mock.patch.object(vr, "toolchain_id", return_value="rustc-unavailable"), \
+                    mock.patch.object(vr, "_split_weights_gb", return_value=(1, 1)), \
+                    mock.patch.object(vr, "package_cold_build_floor_gb", return_value=(19, "fixture")), \
+                    mock.patch.object(vr, "_gate_acquire", side_effect=lambda gb, label:
+                                      (asked.append(gb) or "token", True, False)):
+                for _ in range(2):
+                    self.assertEqual(vr.run_one(entry, 10)["status"], vr.STATUS_GREEN)
+            self.assertEqual(asked, [19, 1, 19, 1])
+
+
+class APossiblyColdBuildReservesItsPackagesPeak(unittest.TestCase):
+    """E3 fix-up (2026-11-13): a warm build's learned weight may not size a
+    cold rebuild. The 101 clean-kernel rows learned 1 GB from warm builds; a
+    cold rebuild of their targets peaks at 10.48 to 12.57 GB."""
+
+    LEARNED = {"build_peak_rss_gb": 0.4, "build_rss_samples": 40,
+               "run_peak_rss_gb": 0.3, "rss_samples": 10, "inputs_moved_during_run": False}
+    COLD = {"target": "gate::fence", "status": vr.STATUS_GREEN,
+            "command": "targo --unverified test --locked -p pkx --test reference_a",
+            "build_peak_rss_gb": 12.57, "finished_at": "2026-11-13T00:00:00Z"}
+
+    def setUp(self):
+        vr._WARM_BUILDS.clear()
+
+    def _fake_targo(self, tmp):
+        fake = Path(tmp) / "targo"
+        fake.write_text(
+            "#!/bin/sh\n"
+            "for a in \"$@\"; do [ \"$a\" = --no-run ] && exit 0; done\n"
+            "echo 'test a::b ... ok'\n"
+            "echo 'test result: ok. 1 passed; 0 failed; 0 ignored'\n")
+        fake.chmod(0o755)
+        return fake
+
+    def _run(self, fake, target, asked, records, learned):
+        def acquire(gb, label):
+            asked.append((gb, label))
+            return ("unit-test-token", True, False)
+
+        entry = {"id": f"pkx::test::{target}", "package": "pkx", "kind": "test",
+                 "argv": [str(fake), "--unverified", "test", "--locked", "-p", "pkx",
+                          "--test", target],
+                 "_dirs": [vr.REPO_ROOT / "scripts"]}
+        with mock.patch.object(vr, "_gate_acquire", acquire), \
+                mock.patch.object(vr, "_all_records", return_value=records), \
+                mock.patch.object(vr, "load_record", return_value=dict(learned)):
+            return vr.run_one(entry, timeout=60)
+
+    def test_the_first_build_of_a_shape_reserves_the_packages_cold_floor(self):
+        asked: list = []
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = self._fake_targo(tmp)
+            rec = self._run(fake, "t1", asked, [self.COLD], self.LEARNED)
+            # A second target of the same shape, same process, same sources:
+            # what it still compiles is its own test binary.
+            rec2 = self._run(fake, "t2", asked, [self.COLD], self.LEARNED)
+        self.assertEqual(asked[0], (19, "pkx::test::t1 [build]"))  # ceil(1.5 x 12.57)
+        self.assertIn("possibly cold", rec["build_floor_basis"])
+        self.assertIn("gate::fence", rec["build_floor_basis"])
+        self.assertLess(asked[2][0], 19)
+        self.assertEqual(asked[2][1], "pkx::test::t2 [build]")
+        self.assertIn("warm", rec2["build_floor_basis"])
+
+    def test_without_the_floor_the_learned_weight_sizes_the_cold_build(self):
+        # The anti-arm: the floor, and nothing else, raises the first build.
+        asked: list = []
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(vr, "package_cold_build_floor_gb", return_value=(0, "")):
+            self._run(self._fake_targo(tmp), "t1", asked, [self.COLD], self.LEARNED)
+        self.assertLess(asked[0][0], 19)
+
+    def test_an_unmeasured_package_reserves_the_default(self):
+        asked: list = []
+        with tempfile.TemporaryDirectory() as tmp:
+            self._run(self._fake_targo(tmp), "t1", asked, [], self.LEARNED)
+        self.assertEqual(asked[0][0], vr.DEFAULT_TARGET_GB)
+
+    def test_another_shape_is_cold_again(self):
+        entry = {"id": "pkx::test::t", "package": "pkx", "kind": "test",
+                 "argv": ["targo", "--unverified", "test", "-p", "pkx", "--test", "t"],
+                 "_dirs": [vr.REPO_ROOT / "scripts"]}
+        featured = dict(entry, argv=entry["argv"] + ["--features", "x"])
+        vr.mark_build_warm(vr.build_warm_key(entry))
+        self.assertTrue(vr.build_is_warm(vr.build_warm_key(
+            dict(entry, argv=entry["argv"][:-1] + ["u"]))))
+        self.assertFalse(vr.build_is_warm(vr.build_warm_key(featured)))
+
+    def test_a_cold_peak_is_carried_through_warm_runs(self):
+        asked: list = []
+        learned = dict(self.LEARNED, max_build_peak_rss_gb=12.57)
+        with tempfile.TemporaryDirectory() as tmp:
+            rec = self._run(self._fake_targo(tmp), "t1", asked, [], learned)
+        self.assertEqual(rec["max_build_peak_rss_gb"], 12.57)
+        self.assertEqual(vr.recorded_build_peak_gb(rec), 12.57)
+
+    def test_records_raise_the_seed_and_never_lower_it(self):
+        seed = {("pkx", vr.PROFILE_DEV): (10.48, "measured")}
+        low = dict(self.COLD, build_peak_rss_gb=5.0)
+        with mock.patch.object(vr, "PACKAGE_COLD_BUILD_SEED_GB", seed):
+            with mock.patch.object(vr, "_all_records", return_value=[low]):
+                self.assertEqual(vr.package_cold_build_peak_gb("pkx", vr.PROFILE_DEV)[0], 10.48)
+            with mock.patch.object(vr, "_all_records", return_value=[self.COLD]):
+                self.assertEqual(vr.package_cold_build_peak_gb("pkx", vr.PROFILE_DEV)[0], 12.57)
+            # A release record is no dev peak.
+            rel = dict(self.COLD, profile=vr.PROFILE_RELEASE, build_peak_rss_gb=30.0)
+            with mock.patch.object(vr, "_all_records", return_value=[rel]):
+                self.assertEqual(vr.package_cold_build_peak_gb("pkx", vr.PROFILE_DEV)[0], 10.48)
+
+    def test_a_release_rows_peak_floors_every_release_build_of_its_package(self):
+        # A row's `_cold_build_peak_gb` holds a peak no record need carry
+        # (main's parity row: 31.11 GB, kept only in its report); without it
+        # the kernel's release lib row reserved 23 GB on 2026-11-14.
+        row = {"id": "pkx::release::test::t", "package": "pkx", "kind": "test",
+               "profile": vr.PROFILE_RELEASE, "_cold_build_peak_gb": 31.11,
+               "argv": ["targo", "--unverified", "test", "--release", "-p", "pkx", "--test", "t"]}
+        lib = {"argv": ["targo", "--unverified", "test", "--release", "-p", "pkx", "--lib"],
+               "profile": vr.PROFILE_RELEASE}
+        with mock.patch.object(vr, "PACKAGE_COLD_BUILD_SEED_GB", {}), \
+                mock.patch.object(vr, "_all_records", return_value=[]):
+            with mock.patch.object(vr, "RELEASE_PROFILE_TARGETS", [row]):
+                self.assertEqual(vr.package_cold_build_peak_gb("pkx", vr.PROFILE_RELEASE)[0], 31.11)
+                self.assertEqual(vr.package_cold_build_floor_gb(lib)[0], 47)
+                self.assertIsNone(vr.package_cold_build_peak_gb("pkx", vr.PROFILE_DEV)[0])
+            with mock.patch.object(vr, "RELEASE_PROFILE_TARGETS", []):
+                self.assertEqual(vr.package_cold_build_floor_gb(lib)[0], vr.DEFAULT_TARGET_GB)
+
+    def test_the_real_kernel_rows_reserve_at_least_the_measured_cold_peak(self):
+        # Read the committed records, not this module's sandbox.
+        with mock.patch.object(vr, "STATE_DIR", vr.REPO_ROOT / "data" / "suite_state"):
+            for package, peak in (("clean-kernel", 10.48), ("clean-ck0", 0.76)):
+                entry = {"argv": ["targo", "--unverified", "test", "--locked", "-p", package,
+                                  "--test", "any"]}
+                floor, _basis = vr.package_cold_build_floor_gb(entry)
+                self.assertGreaterEqual(floor, math.ceil(1.5 * peak), package)
+            # Every release build of the kernel: the highest peak any release
+            # row of it states, whichever row's build measured it.
+            entry = {"argv": ["targo", "--unverified", "test", "--locked", "--release", "-p",
+                              "clean-kernel", "--lib"], "profile": vr.PROFILE_RELEASE}
+            peak = max(r["_cold_build_peak_gb"] for r in vr.RELEASE_PROFILE_TARGETS
+                       if r["package"] == "clean-kernel")
+            self.assertGreaterEqual(vr.package_cold_build_floor_gb(entry)[0],
+                                    math.ceil(1.5 * peak))
+
+    def test_built_packages_and_shape(self):
+        argv = ["targo", "--unverified", "test", "-p", "a", "--package=b", "-pc",
+                "--test", "x", "--test=y", "--no-run", "--", "-p", "z"]
+        self.assertEqual(vr.built_packages(argv), ("a", "b", "c"))
+        self.assertEqual(vr.build_shape(argv),
+                         ("targo", "--unverified", "test", "-p", "a", "--package=b", "-pc"))
+        self.assertEqual(vr.built_packages(["scripts/x.sh", "-p", "a"]), ())
+
+
+class EveryLibTestCompilesInARow(unittest.TestCase):
+    """E3 fix-up (2026-11-13): a lib row builds the default features, so a
+    `#[test]` behind a feature or the release profile ran in no row (22 of
+    clean-ck0's, 84 of clean-kernel's, and 26 release-only kernel tests)."""
+
+    DEV = dict({n: False for n in vr.TOOL_SET_CFG_NAMES}, debug_assertions=True, unix=True)
+    REL = dict({n: False for n in vr.TOOL_SET_CFG_NAMES}, unix=True)
+    LIB = ("#[cfg(test)]\nmod tests {\n"
+           "    #[test]\n    fn plain() {}\n"
+           "    #[cfg(feature = \"x\")]\n    #[test]\n    fn gated() {}\n"
+           "}\n"
+           "#[cfg(all(test, not(debug_assertions)))]\nmod rel {\n"
+           "    #[test]\n    fn only_release() {}\n}\n")
+
+    def _meta(self, lib_text, test_text=None):
+        base = Path(tempfile.mkdtemp(prefix="feat_", dir=_SANDBOX))
+        (base / "src").mkdir()
+        (base / "src" / "lib.rs").write_text(lib_text)
+        targets = [{"name": "pq", "kind": ["lib"], "test": True,
+                    "src_path": str(base / "src" / "lib.rs")}]
+        if test_text is not None:
+            (base / "tests").mkdir()
+            (base / "tests" / "t.rs").write_text(test_text)
+            targets.append({"name": "t", "kind": ["test"], "test": True,
+                            "src_path": str(base / "tests" / "t.rs")})
+        (base / "Cargo.toml").write_text("[package]\nname = \"pq\"\n")
+        return {"packages": [{"name": "pq", "manifest_path": str(base / "Cargo.toml"),
+                              "features": {"default": [], "x": [], "y": ["x"]},
+                              "targets": targets}]}
+
+    @staticmethod
+    def _resolved(meta, package, entry):
+        # The synthetic package has no dev-dependencies: cargo would resolve
+        # the row's flags through the feature table, as this does.
+        table = meta["packages"][0]["features"]
+        feats, defaults, _every = vr.argv_features(entry.get("argv") or [])
+        todo, out = feats + (["default"] if defaults else []), set()
+        while todo:
+            feat = todo.pop()
+            if feat not in out:
+                out.add(feat)
+                todo.extend(table.get(feat, []))
+        return frozenset(out)
+
+    def _facts(self):
+        import contextlib
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(vr, "lane_cfg_facts", lambda profile: dict(
+            self.DEV if profile == vr.PROFILE_DEV else self.REL)))
+        stack.enter_context(mock.patch.object(vr, "resolved_features", self._resolved))
+        return stack
+
+    def _problems(self, meta, rows):
+        with self._facts(), mock.patch.object(vr, "FEATURE_SCAN_PACKAGES", ("pq",)), \
+                mock.patch.object(vr, "LIB_TESTS_NO_ROW_RUNS", {}):
+            return vr.lib_test_coverage_problems(meta, rows)
+
+    LIB_ROW = {"id": "pq::lib", "package": "pq", "kind": "lib",
+               "argv": ["targo", "--unverified", "test", "--locked", "-p", "pq", "--lib"]}
+
+    def test_a_feature_gated_and_a_release_only_test_are_refused(self):
+        problems = self._problems(self._meta(self.LIB), [self.LIB_ROW])
+        self.assertEqual(len(problems), 2, problems)
+        self.assertIn("lib test rel::only_release is release-only", problems[0])
+        self.assertIn("lib test tests::gated compiles only with a feature", problems[1])
+
+    def test_rows_that_compile_and_select_them_cover_them(self):
+        feat = {"id": "pq::lib::features::y", "package": "pq", "kind": "test",
+                "argv": self.LIB_ROW["argv"] + ["--features", "y", "--", "tests::"]}
+        rel = {"id": "pq::release::lib", "package": "pq", "kind": "test", "profile": "release",
+               "argv": ["targo", "--unverified", "test", "--locked", "--release", "-p", "pq",
+                        "--lib", "--", "rel::"]}
+        self.assertEqual(self._problems(self._meta(self.LIB), [self.LIB_ROW, feat, rel]), [])
+        # A row that enables the feature but does not select the test, or
+        # selects it without the feature, covers nothing.
+        for row in (dict(feat, argv=self.LIB_ROW["argv"] + ["--features", "y", "--", "other::"]),
+                    dict(feat, argv=self.LIB_ROW["argv"] + ["--", "tests::"])):
+            with self.subTest(row["argv"][-3:]):
+                problems = self._problems(self._meta(self.LIB), [self.LIB_ROW, row, rel])
+                self.assertEqual(len(problems), 1, problems)
+
+    def test_an_unrun_test_must_be_accounted_exactly(self):
+        meta = self._meta(self.LIB)
+        feat = {"id": "f", "package": "pq", "kind": "test",
+                "argv": self.LIB_ROW["argv"] + ["--features", "x"]}
+        with self._facts(), mock.patch.object(vr, "FEATURE_SCAN_PACKAGES", ("pq",)):
+            with mock.patch.object(vr, "LIB_TESTS_NO_ROW_RUNS",
+                                   {"pq": {"rel::only_release": "why"}}):
+                self.assertEqual(vr.lib_test_coverage_problems(meta, [self.LIB_ROW, feat]), [])
+            with mock.patch.object(vr, "LIB_TESTS_NO_ROW_RUNS",
+                                   {"pq": {"rel::only_release": "why", "rel::gone": "why"}}):
+                problems = vr.lib_test_coverage_problems(meta, [self.LIB_ROW, feat])
+        self.assertEqual(len(problems), 1, problems)
+        self.assertIn("rel::gone", problems[0])
+
+    def test_the_kernel_test_build_unifies_math_overlays(self):
+        # The fact the plain rows rest on, from cargo's own resolver: a target
+        # behind `#![cfg(feature = "math-overlays")]` with no required-features
+        # (topology_overlay_type_regressions) runs in the plain row, and the
+        # one lib test behind its negation runs in none.
+        meta = vr.cargo_metadata()
+        entry = {"argv": ["targo", "--unverified", "test", "-p", "clean-kernel", "--lib"]}
+        self.assertIn("math-overlays", vr.resolved_features(meta, "clean-kernel", entry))
+        self.assertNotIn("geometry-tools", vr.resolved_features(meta, "clean-kernel", entry))
+        self.assertIn("geometry-tools", vr.resolved_features(
+            meta, "clean-kernel", {"argv": entry["argv"] + ["--features", "geometry-tools"]}))
+
+    def test_a_root_compiled_out_by_its_cfg_is_refused_unless_replaced(self):
+        meta = self._meta("", "#![cfg(not(debug_assertions))]\n#[test]\nfn t() {}\n")
+        debug = {"id": "pq::test::t", "package": "pq", "kind": "test",
+                 "argv": ["targo", "--unverified", "test", "--locked", "-p", "pq", "--test", "t"]}
+        rel = {"id": "pq::release::test::t", "package": "pq", "kind": "test",
+               "profile": "release", "_replaces_debug_target": "t",
+               "argv": ["targo", "--unverified", "test", "--locked", "--release", "-p", "pq",
+                        "--test", "t"]}
+        with self._facts():
+            self.assertEqual(vr.compiled_out_rows(meta, [debug, rel]),
+                             {"pq::test::t": "#![cfg(not(debug_assertions))]"})
+            self.assertEqual(vr.debug_test_row("pq", meta["packages"][0]["targets"][-1])["argv"],
+                             debug["argv"])
+            problems = vr.compiled_out_problems(meta, [debug])
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("_replaces_debug_target", problems[0])
+            # Replaced, the debug row is never derived (`package_targets`).
+            self.assertEqual(vr.compiled_out_problems(meta, [rel]), [])
+            # The cfg gone, the replacement is stale and refused.
+            live = self._meta("", "#[test]\nfn t() {}\n")
+            problems = vr.compiled_out_problems(live, [rel])
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("drop the field", problems[0])
+            # A replacement naming no test target is refused.
+            problems = vr.compiled_out_problems(meta, [dict(rel, _replaces_debug_target="u")])
+            self.assertEqual(len(problems), 1, problems)
+            self.assertIn("no test target", problems[0])
+
+    def test_an_inventory_without_gates_still_sees_the_replacing_row(self):
+        # `shards plan` builds the inventory with `with_gates=False`, which
+        # leaves the release rows out; measured 2026-11-14, the check then
+        # refused the kernel's release-only tests as unrun and stopped the plan.
+        meta = self._meta("", "#![cfg(not(debug_assertions))]\n#[test]\nfn t() {}\n")
+        rel = {"id": "pq::release::test::t", "package": "pq", "kind": "test",
+               "profile": "release", "_replaces_debug_target": "t",
+               "_must_pass": ["t"], "_cold_build_peak_gb": 1.0,
+               "argv": ["targo", "--unverified", "test", "--locked", "--release", "-p", "pq",
+                        "--test", "t"]}
+        with self._facts(), mock.patch.object(vr, "cargo_metadata", return_value=meta), \
+                mock.patch.object(vr, "path_dep_closure", return_value=[]), \
+                mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]), \
+                mock.patch.object(vr, "closure_library_reads", return_value=()), \
+                mock.patch.object(vr, "row_target_reads", return_value=()), \
+                mock.patch.object(vr, "load_plan", return_value=None):
+            with mock.patch.object(vr, "RELEASE_PROFILE_TARGETS", [rel]):
+                ids = {e["id"] for e in vr.build_inventory(["pq"], with_gates=False)}
+            self.assertNotIn("pq::test::t", ids)
+            with mock.patch.object(vr, "RELEASE_PROFILE_TARGETS", []), \
+                    self.assertRaises(SystemExit):
+                vr.build_inventory(["pq"], with_gates=False)
+
+    def test_a_feature_root_is_live_only_with_its_feature(self):
+        meta = self._meta("", "#![cfg(feature = \"x\")]\n#[test]\nfn t() {}\n")
+        row = {"id": "pq::test::t", "package": "pq", "kind": "test",
+               "argv": ["targo", "--unverified", "test", "--locked", "-p", "pq", "--test", "t"]}
+        with self._facts():
+            self.assertIn("pq::test::t", vr.compiled_out_rows(meta, [row]))
+            self.assertEqual(vr.compiled_out_rows(
+                meta, [dict(row, argv=row["argv"] + ["--features", "y"])]), {})
+
+    def test_the_real_ck0_feature_row_runs_every_export_test(self):
+        meta = vr.cargo_metadata()
+        rows = vr.package_targets(meta, "clean-ck0")
+        self.assertIn("clean-ck0::lib::features::export", {r["id"] for r in rows})
+        self.assertEqual(vr.lib_test_coverage_problems(meta, rows), [])
+        cut = [r for r in rows if r["id"] != "clean-ck0::lib::features::export"]
+        problems = vr.lib_test_coverage_problems(meta, cut)
+        self.assertGreaterEqual(len(problems), 22, problems)
+        self.assertTrue(all("clean-ck0: lib test export::" in m
+                            or "minimal_env::overlay::tests" in m for m in problems), problems)
+
+    def test_the_real_release_infer_parity_debug_row_is_replaced(self):
+        meta = vr.cargo_metadata()
+        rows = vr.package_targets(meta, "clean-kernel")
+        self.assertNotIn("clean-kernel::test::release_infer_parity", {r["id"] for r in rows})
+        self.assertEqual(vr.compiled_out_rows(meta, rows), {})
+        pkg = next(p for p in meta["packages"] if p["name"] == "clean-kernel")
+        tgt = next(t for t in pkg["targets"] if t["name"] == "release_infer_parity")
+        self.assertEqual(vr.compiled_out_rows(meta, [vr.debug_test_row("clean-kernel", tgt)]),
+                         {"clean-kernel::test::release_infer_parity":
+                          "#![cfg(not(debug_assertions))]"})
+        self.assertEqual(vr.compiled_out_problems(meta, rows + vr.RELEASE_PROFILE_TARGETS), [])
+
+    def test_the_test_attribute_shape_is_the_selectors_gates(self):
+        sys.path.insert(0, str(vr.REPO_ROOT / "scripts"))
+        import check_cargo_test_selectors as sel
+        self.assertEqual(vr.TEST_ATTR_BODY_RE.pattern, sel.TEST_BODY_RE.pattern)
+
+    def test_a_rows_feature_flags_are_read_before_the_separator(self):
+        self.assertEqual(vr.argv_features(["targo", "test", "--features", "a,b", "-F", "c",
+                                           "--no-default-features", "--", "--features", "x"]),
+                         (["a", "b", "c"], False, False))
+
+
+class InheritedLibraryInputs(unittest.TestCase):
+    """A dependency's embedded input must invalidate its consumers' records."""
+
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix="embedded_", dir=_SANDBOX))
+        subprocess.run(["git", "init", "-q", str(self.base)], check=True)
+        edges = {
+            "consumer": [("direct", None), ("own_dev", "dev")],
+            "direct": [("leaf", None), ("dep_dev", "dev"), ("build_support", "build")],
+            "leaf": [], "own_dev": [], "dep_dev": [], "build_support": [],
+            "unrelated": [],
+        }
+        packages = []
+        self.extra = {}
+        for name, deps in edges.items():
+            directory = self.base / "crates" / name
+            directory.mkdir(parents=True)
+            (directory / "Cargo.toml").write_text("# fixture\n")
+            (directory / "lib.rs").write_text("// fixture\n")
+            extra = self.base / "data" / f"{name}.json"
+            extra.parent.mkdir(exist_ok=True)
+            extra.write_text("{}\n")
+            self.extra[name] = [str(extra.relative_to(self.base))]
+            packages.append({
+                "name": name, "manifest_path": str(directory / "Cargo.toml"),
+                "dependencies": [{"name": dep, "kind": kind} for dep, kind in deps],
+                "targets": [{"name": name, "kind": ["lib"], "test": True}],
+            })
+        self.meta = {"packages": packages}
+        subprocess.run(["git", "-C", str(self.base), "add", "."], check=True)
+        for attr, value in {
+            "REPO_ROOT": self.base, "PACKAGE_EXTRA_PATHS": self.extra,
+            "TARGET_EXTRA_PATHS": {},
+            "WORKSPACE_GATES": [{"id": "gate::fixture", "package": "__workspace__",
+                                  "kind": "gate", "argv": ["fixture"]}],
+            "RELEASE_PROFILE_TARGETS": [],
+        }.items():
+            patcher = mock.patch.object(vr, attr, value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+        for attr, value in {"cargo_metadata": self.meta, "load_plan": None,
+                            "check_crystal_extra_paths": [], "toolchain_id": "fixture"}.items():
+            patcher = mock.patch.object(vr, attr, return_value=value)
+            patcher.start()
+            self.addCleanup(patcher.stop)
+
+    def inventory(self, with_gates=False):
+        return {e["id"]: e for e in vr.build_inventory(
+            ["consumer", "unrelated"], with_gates=with_gates)}
+
+    def test_inherits_exact_library_closure_including_root_dev_and_build(self):
+        entries = self.inventory()
+        consumer = set(entries["consumer::lib"]["_dirs"])
+        expected = {"consumer", "direct", "leaf", "own_dev", "build_support"}
+        for name, paths in self.extra.items():
+            self.assertEqual(self.base / paths[0] in consumer, name in expected, name)
+        unrelated = set(entries["unrelated::lib"]["_dirs"])
+        for name, paths in self.extra.items():
+            self.assertEqual(self.base / paths[0] in unrelated, name == "unrelated", name)
+
+    def test_mutating_embedded_input_invalidates_only_consuming_record(self):
+        entries = self.inventory()
+        consumer, unrelated = entries["consumer::lib"], entries["unrelated::lib"]
+        before = vr.input_digest(consumer, fresh=True)
+        untouched = vr.input_digest(unrelated, fresh=True)
+        self.assertEqual(vr.derive(consumer, record(input_digest=before), before)["bucket"],
+                         vr.BUCKET_GREEN)
+        (self.base / self.extra["leaf"][0]).write_text('{"changed":true}\n')
+        after = vr.input_digest(consumer, fresh=True)
+        self.assertNotEqual(before, after)
+        self.assertEqual(vr.derive(consumer, record(input_digest=before), after)["bucket"],
+                         vr.BUCKET_UNKNOWN)
+        self.assertEqual(untouched, vr.input_digest(unrelated, fresh=True))
+
+    def test_workspace_gate_inherits_all_workspace_library_inputs(self):
+        gate = self.inventory(with_gates=True)["gate::fixture"]
+        for paths in self.extra.values():
+            self.assertIn(self.base / paths[0], gate["_dirs"])
+
+
+
+class ParserInputCoverage(unittest.TestCase):
+    def test_parser_is_in_the_resolved_read_census(self):
+        self.assertIn("clean-parser", vr.RESOLVED_SCAN_PACKAGES)
+
+    def test_parser_inputs_are_attached_to_their_test_targets(self):
+        expected = {
+            "clean-parser::lib": {
+                "crates/clean-olean/lean_worlds.tsv", "lean-toolchain",
+                "reports/local-function-headers-2026-11-06/sources/let_rec_equation_class.lean",
+                "tests/lean4_compat/lean4_tests", "tests/matp_bench",
+            },
+            "clean-parser::test::module_system_b_e2e": {
+                "lean-toolchain", "tests/fixtures/module_spellings/modifier_matrix.tsv",
+                "tests/fixtures/module_spellings/verdicts.tsv",
+            },
+            "clean-parser::test::parse_parity": {
+                "tests/fixtures/parser_parity/README.md",
+                "tests/fixtures/parser_parity/ground_truth.tsv",
+            },
+        }
+        found = vr._crystal_extra_paths_owed()
+        for target, paths in expected.items():
+            self.assertEqual(found.get(target), paths, target)
+            self.assertTrue(paths <= set(vr.TARGET_EXTRA_PATHS.get(target, ())), target)
+        self.assertNotIn("clean-parser", vr.PACKAGE_EXTRA_PATHS,
+                         "these cfg(test) inputs must not propagate to library consumers")
+
+    def test_dropping_a_parser_input_is_refused(self):
+        # `tests/matp_bench` is read through a path join, which only this hand
+        # list covers. (Until the E3 fix-up this arm dropped `lean-toolchain`;
+        # that read is an `include_str!` in `cfg(test)` code, which the
+        # derivation now digests whatever the list says -- asserted below.)
+        target = "clean-parser::lib"
+        paths = dict(vr.TARGET_EXTRA_PATHS)
+        paths[target] = [p for p in paths.get(target, ())
+                         if p not in ("tests/matp_bench", "lean-toolchain")]
+        with mock.patch.object(vr, "TARGET_EXTRA_PATHS", paths):
+            problems = vr.check_crystal_extra_paths()
+        self.assertTrue(any("clean-parser::lib reads tests/matp_bench" in p for p in problems),
+                        problems)
+        self.assertFalse(any("clean-parser::lib reads lean-toolchain" in p for p in problems),
+                         problems)
+        meta = vr.cargo_metadata()
+        self.assertIn("lean-toolchain", vr.library_external_reads(
+            vr.package_lib_root(meta, "clean-parser"), True))
+
+
+
+class CheckerQualificationInputs(unittest.TestCase):
+    CORE = "clean-olean::test::kcheck_core"
+    SPEC = "clean-olean::test::kcheck_spec"
+
+    def test_compiled_package_closures_are_declared(self):
+        core = set(vr.TARGET_EXTRA_PATHS.get(self.CORE, ()))
+        spec = set(vr.TARGET_EXTRA_PATHS.get(self.SPEC, ()))
+        self.assertTrue({"lean-toolchain", "theories/cic_l", "theories/kcheck"} <= core)
+        self.assertTrue({"lean-toolchain", "theories/cic_l", "theories/cic_l_model",
+                         "theories/kcheck_spec"} <= spec)
+
+    def test_fixture_order_theory_packages_are_covered(self):
+        pin = (vr.REPO_ROOT / "lean-toolchain").read_text().strip().split(":")[-1]
+        fixtures = vr.REPO_ROOT / "crates/clean-olean/tests/fixtures/lean" / pin
+        for target, family in [(self.CORE, "kcheck_core"), (self.SPEC, "kcheck_spec")]:
+            lines = (fixtures / family / "ORDER").read_text().splitlines()
+            theories = [parts[1] for line in lines
+                        if (parts := line.partition("#")[0].split()) and parts[0] == "theory"]
+            self.assertTrue(theories, family)
+            declared = set(vr.TARGET_EXTRA_PATHS.get(target, ()))
+            for theory in theories:
+                self.assertIn(f"theories/{theory}", declared, (family, theory))
+
+    def test_direct_statement_and_closure_pins_are_scanned(self):
+        found = vr._crystal_extra_paths_owed()
+        for target, package in [(self.CORE, "kcheck"), (self.SPEC, "kcheck_spec")]:
+            pins = {f"theories/{package}/{p}" for p in
+                    ("ORDER", "statement_pins.json", "axiom_closures.json")}
+            self.assertTrue(pins <= found.get(target, set()), target)
+            self.assertTrue(pins <= set(vr.TARGET_EXTRA_PATHS.get(target, ())), target)
+
+    def test_theory_mutation_invalidates_exact_qualification_closure(self):
+        base = Path(tempfile.mkdtemp(prefix="checker_inputs_", dir=_SANDBOX))
+        subprocess.run(["git", "init", "-q", str(base)], check=True)
+        crate = base / "crates/clean-olean"
+        crate.mkdir(parents=True)
+        (crate / "Cargo.toml").write_text("# fixture\n")
+        packages = ["cic_l", "cic_l_model", "kcheck", "kcheck_spec"]
+        for package in packages:
+            path = base / "theories" / package / "Root.lean"
+            path.parent.mkdir(parents=True)
+            path.write_text("-- before\n")
+        subprocess.run(["git", "-C", str(base), "add", "."], check=True)
+        meta = {"packages": [{"name": "clean-olean", "manifest_path": str(crate / "Cargo.toml"),
+                              "targets": [{"name": name, "kind": ["test"], "test": True}
+                                          for name in ("kcheck_core", "kcheck_spec")]}]}
+        with mock.patch.object(vr, "REPO_ROOT", base), \
+                mock.patch.object(vr, "cargo_metadata", return_value=meta), \
+                mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]), \
+                mock.patch.object(vr, "load_plan", return_value=None), \
+                mock.patch.object(vr, "toolchain_id", return_value="fixture"):
+            entries = {e["id"]: e for e in vr.build_inventory(["clean-olean"], with_gates=False)}
+            expected = {"cic_l": {self.CORE, self.SPEC}, "cic_l_model": {self.SPEC},
+                        "kcheck": {self.CORE}, "kcheck_spec": {self.SPEC}}
+            for package, affected in expected.items():
+                before = {key: vr.input_digest(entry, fresh=True) for key, entry in entries.items()}
+                path = base / "theories" / package / "Root.lean"
+                path.write_text("-- after\n")
+                for key, entry in entries.items():
+                    after = vr.input_digest(entry, fresh=True)
+                    self.assertEqual(before[key] != after, key in affected, (package, key))
+                    bucket = vr.derive(entry, record(target=key, input_digest=before[key]), after)["bucket"]
+                    self.assertEqual(bucket, vr.BUCKET_UNKNOWN if key in affected else vr.BUCKET_GREEN)
+                path.write_text("-- before\n")
+
+
+
+class OleanBuildPinInput(unittest.TestCase):
+    def test_workspace_pin_is_a_declared_library_input(self):
+        self.assertIn("lean-toolchain", vr.PACKAGE_EXTRA_PATHS.get("clean-olean", ()))
+
+    def test_pin_mutation_invalidates_library_and_consumer_but_not_unrelated(self):
+        base = Path(tempfile.mkdtemp(prefix="olean_pin_", dir=_SANDBOX))
+        subprocess.run(["git", "init", "-q", str(base)], check=True)
+        packages = []
+        for name in ("consumer", "clean-olean", "unrelated"):
+            crate = base / "crates" / name
+            crate.mkdir(parents=True)
+            (crate / "Cargo.toml").write_text("# fixture\n")
+            packages.append({
+                "name": name, "manifest_path": str(crate / "Cargo.toml"),
+                "dependencies": [{"name": "clean-olean", "kind": None}] if name == "consumer" else [],
+                "targets": [{"name": name, "kind": ["lib"], "test": True}],
+            })
+        pin = base / "lean-toolchain"
+        pin.write_text("leanprover/lean4:before\n")
+        subprocess.run(["git", "-C", str(base), "add", "."], check=True)
+        with mock.patch.object(vr, "REPO_ROOT", base), \
+                mock.patch.object(vr, "cargo_metadata", return_value={"packages": packages}), \
+                mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]), \
+                mock.patch.object(vr, "load_plan", return_value=None), \
+                mock.patch.object(vr, "toolchain_id", return_value="fixture"):
+            entries = vr.build_inventory(["consumer", "clean-olean", "unrelated"], with_gates=False)
+            before = {e["id"]: vr.input_digest(e, fresh=True) for e in entries}
+            pin.write_text("leanprover/lean4:after\n")
+            for entry in entries:
+                affected = entry["package"] != "unrelated"
+                after = vr.input_digest(entry, fresh=True)
+                self.assertEqual(before[entry["id"]] != after, affected, entry["id"])
+                status = vr.derive(entry, record(target=entry["id"], input_digest=before[entry["id"]]),
+                                   after)["bucket"]
+                self.assertEqual(status, vr.BUCKET_UNKNOWN if affected else vr.BUCKET_GREEN)
+
+
+
+class OleanWorldFixtureInputs(unittest.TestCase):
+    def fixture_tree(self):
+        root = Path(tempfile.mkdtemp(prefix="world_inputs_", dir=_SANDBOX))
+        table = root / "crates/clean-olean/lean_worlds.tsv"
+        table.parent.mkdir(parents=True)
+        first = "tests/fixtures/olean/first.olean"
+        second = "tests/fixtures/olean/second.olean"
+        for name in (first, second):
+            path = root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"fixture")
+        table.write_text(f"v1\toracle\tlean:v1\t{first}\n")
+        return root, table, first, second
+
+    def test_actual_world_fixtures_are_declared_library_inputs(self):
+        table = vr.REPO_ROOT / "crates/clean-olean/lean_worlds.tsv"
+        fixtures = {name for line in table.read_text().splitlines()
+                    if line and not line.startswith("#")
+                    for name in line.split("\t")[3].split()}
+        self.assertTrue(fixtures)
+        self.assertTrue(fixtures <= set(vr.PACKAGE_EXTRA_PATHS.get("clean-olean", ())))
+
+    def test_new_table_fixture_requires_a_matching_input_declaration(self):
+        root, table, first, second = self.fixture_tree()
+        with mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {"clean-olean": [first]}):
+            self.assertEqual(vr._check_olean_world_inputs(root), [])
+            table.write_text(f"v1\toracle\tlean:v1\t{first} {second}\n")
+            errors = vr._check_olean_world_inputs(root)
+            self.assertTrue(any(second in error and "PACKAGE_EXTRA_PATHS" in error for error in errors), errors)
+        with mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {"clean-olean": [first, second]}):
+            self.assertEqual(vr._check_olean_world_inputs(root), [])
+            (root / second).unlink()
+            self.assertTrue(any(second in e and "missing" in e for e in vr._check_olean_world_inputs(root)))
+
+    def test_bad_or_external_table_paths_are_refused(self):
+        root, table, _, _ = self.fixture_tree()
+        for content in ("invalid\n", "v1\toracle\tlean:v1\t../outside.olean\n",
+                        "v1\toracle\tlean:v1\t/outside.olean\n",
+                        "v1\toracle\tlean:v1\t\n"):
+            table.write_text(content)
+            self.assertTrue(vr._check_olean_world_inputs(root), content)
+
+    def test_ignored_fixture_cannot_be_counted_as_a_digest_input(self):
+        root, table, first, second = self.fixture_tree()
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        (root / ".gitignore").write_text(second + "\n")
+        table.write_text(f"v1\toracle\tlean:v1\t{first} {second}\n")
+        with mock.patch.object(vr, "PACKAGE_EXTRA_PATHS", {"clean-olean": [first, second]}):
+            errors = vr._check_olean_world_inputs(root)
+        self.assertTrue(any(second in e and "git-visible" in e for e in errors), errors)
+
+    def test_world_input_failure_reaches_the_inventory_gate(self):
+        with mock.patch.object(vr, "_check_olean_world_inputs", return_value=["missing world fixture"]):
+            with self.assertRaisesRegex(SystemExit, "missing world fixture"):
+                vr.build_inventory([], with_gates=False)
+
+
+
+class ReleaseInferenceRow(unittest.TestCase):
+    ID = "clean-kernel::release::test::release_infer_parity"
+
+    def row(self):
+        rows = [row for row in vr.RELEASE_PROFILE_TARGETS if row["id"] == self.ID]
+        self.assertEqual(len(rows), 1, "the release-only parity target needs a release suite row")
+        return rows[0]
+
+    def test_release_row_requires_every_parity_test_in_the_source(self):
+        import rust_modules
+        row = self.row()
+        source = vr.REPO_ROOT / "crates/clean-kernel/tests/release_infer_parity.rs"
+        tests = {name for name, attrs in rust_modules.fn_items(
+            source, "", reach=rust_modules.Reach.POSSIBLE) if "test" in attrs}
+        self.assertTrue(tests)
+        self.assertEqual(set(row["_must_pass"]), tests)
+        self.assertEqual(row["profile"], vr.PROFILE_RELEASE)
+        self.assertEqual(vr.check_profiles([row]), [])
+        self.assertEqual(row["argv"][row["argv"].index("--test") + 1], "release_infer_parity")
+
+    def test_replacement_removes_only_the_empty_debug_row_and_keeps_its_inputs(self):
+        row = self.row()
+        self.assertEqual(row["_replaces_debug_target"], "release_infer_parity")
+        meta = {"packages": [{"name": "clean-kernel", "manifest_path": str(vr.REPO_ROOT / "crates/clean-kernel/Cargo.toml"),
+                              "targets": [{"name": name, "kind": ["test"], "test": True}
+                                          for name in ("release_infer_parity", "ordinary")]}]}
+        # The synthetic targets have no sources, so the two coverage checks,
+        # which read them (EveryLibTestCompilesInARow), have nothing to judge.
+        with mock.patch.object(vr, "cargo_metadata", return_value=meta), \
+                mock.patch.object(vr, "check_crystal_extra_paths", return_value=[]), \
+                mock.patch.object(vr, "lib_test_coverage_problems", return_value=[]), \
+                mock.patch.object(vr, "compiled_out_problems", return_value=[]), \
+                mock.patch.object(vr, "RELEASE_PROFILE_TARGETS", [row]), \
+                mock.patch.object(vr, "WORKSPACE_GATES", []), \
+                mock.patch.object(vr, "TARGET_EXTRA_PATHS", {
+                    "clean-kernel::test::release_infer_parity": ["data/probe.json"],
+                    "clean-kernel::test::None": ["data/unrelated.json"]}):
+            entries = {entry["id"]: entry for entry in vr.build_inventory(["clean-kernel"])}
+        self.assertNotIn("clean-kernel::test::release_infer_parity", entries)
+        self.assertIn("clean-kernel::test::ordinary", entries)
+        self.assertIn(vr.REPO_ROOT / "data/probe.json", entries[self.ID]["_dirs"])
+        self.assertNotIn(vr.REPO_ROOT / "data/unrelated.json", entries["clean-kernel::test::ordinary"]["_dirs"])
+        for argv in (row["argv"] + ["--", "a_filter"], row["argv"] + ["--", "--skip", "a_test"]):
+            self.assertTrue(vr.check_profiles([dict(row, argv=argv)]))
+        self.assertTrue(vr.check_profiles([dict(row, _replaces_debug_target="another_target")]))
+        no_profile = {key: value for key, value in row.items() if key != "profile"}
+        no_profile["argv"] = [arg for arg in row["argv"] if arg != "--release"]
+        self.assertTrue(vr.check_profiles([no_profile]))
+
+    def test_a_partial_parity_run_cannot_be_green(self):
+        row = self.row()
+        tests = row["_must_pass"]
+        complete = record(target=self.ID, input_digest="fixture", profile="release",
+                          passed_tests=tests,
+                          counts={"passed": len(tests), "failed": 0, "ignored": 0, "result_lines": 1})
+        self.assertEqual(vr.derive(row, complete, "fixture")["bucket"], vr.BUCKET_GREEN)
+        partial = dict(complete, passed_tests=tests[:-1],
+                       counts={"passed": len(tests) - 1, "failed": 0, "ignored": 0, "result_lines": 1})
+        self.assertEqual(vr.derive(row, partial, "fixture")["bucket"], vr.BUCKET_UNKNOWN)
+        self.assertEqual(vr.derive(row, dict(complete, profile="dev"), "fixture")["bucket"],
+                         vr.BUCKET_UNKNOWN)
 
 
 if __name__ == "__main__":

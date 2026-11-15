@@ -16,27 +16,35 @@
 
 mod admin;
 mod cert;
-mod check_decl_validation;
 mod core;
 mod env_merge;
 mod external_cert;
 mod external_cert_alethe;
 mod helpers;
+mod off_runtime;
 mod premise;
 pub(crate) mod prove_response;
+mod save_file;
 mod search_proof;
+mod shared_env;
 mod state;
 mod swarm;
 mod tactic;
 pub(crate) mod types;
 mod verify;
 mod widget;
+mod work;
 
-pub use check_decl_validation::validate_decl_read_only;
+// The read-only validator lives with the elaborator's module driver, so
+// `clean check`, `clean lake build` and the LSP re-check with the same code
+// this server's check RPC does.
+pub use clean_elab::module_driver::validate_decl_read_only;
+pub(crate) use off_runtime::{free_off_runtime, Shared};
 #[cfg(test)]
 pub(crate) use prove_response::build_verified_prove_result;
 pub(crate) use prove_response::prove_result_from_automation_outcome;
 pub(crate) use prove_response::prove_result_from_smt_verification;
+pub(crate) use shared_env::SharedEnv;
 pub use state::{CacheMetrics, ServerMetrics, ServerState};
 
 // Re-export shared types
@@ -133,9 +141,11 @@ pub(crate) use crate::rpc::RequestId;
 #[cfg(test)]
 pub(crate) use std::time::Duration;
 
-// Re-export parse_lean_file for tests
+// Re-export the file parser for tests
 #[cfg(test)]
-pub(crate) use verify::parse_lean_file;
+pub(crate) use verify::{
+    explicit_hole_token_at, explicit_holes, first_declaration, parse_lean_file,
+};
 
 #[cfg(test)]
 mod tests;

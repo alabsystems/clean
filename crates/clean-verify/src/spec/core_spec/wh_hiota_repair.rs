@@ -83,7 +83,108 @@ NOW: if the pre-pass is itself DefEq-sound, then acceptance implies DefEq. Still
 \\
 Note it takes the PAR side condition, not the DefEq one, despite the _wh name: both its legs route through the par loop rather than the DefEq loop. A reader who assumed the name determined the family would give it the wrong side condition and it would fail to apply. DerivedProved, zero axiom_deps.",
         )?;
+
+        // THE REFUTATION, LAST. Registration is sequential and aborts at the
+        // first failure, so anything ordered ahead of a refutation can stop the
+        // refutation from ever being checked — `defeq_fuel.rs` records that
+        // exact mistake costing a validation cycle. Nothing above consumes
+        // these, so last is both safe and cheaper to iterate on.
+        for (name, src) in blanket_hiota_refutation_candidates() {
+            self.add_recursive_def(src, blanket_ingredient_description(name))?;
+        }
+        self.add_recursive_def(
+            WHB_REFUTATION,
+            "wh_blanket_hiota_defeq_is_false: THE REFUTATION. This module's own doc has said \
+             since it was written that the blanket iota premise is false and everything carrying \
+             it is vacuous; wh3_defeq_soundness.rs and slot_dispatch_at.rs repeat it; and \
+             SELF_VERIFICATION_CERTIFICATE.md went one step further and printed 'proved FALSE', \
+             naming an object a reader could grep for and fail to find. Worse, the two constants \
+             that ARE called hiota / hiota_generic (iota_closedness_bundle.rs) are an unrelated \
+             PROVED iota-closedness lemma, so the grep came back green and wrong. This is the \
+             object. \
+             \
+             HOW IT WORKS, and it needs no reduction reasoning about the left-hand side. \
+             iota_reduct_whc is six opt_bind levels and the pre-pass w controls exactly one of \
+             them; levels 5-7 then read the head, the rule and the fields of W'S OUTPUT, never of \
+             what the major actually reduces to. So two different lying pre-passes at the SAME \
+             term fire the SAME recursor on two DIFFERENT rules. Bool.rec is the instrument \
+             because both its constructors are NULLARY -- iota_fields_ok is nat_eqb (Nat.sub 0 0) \
+             0, true for either rule -- so one spine fires two ways with no field obligation. The \
+             blanket premise then makes the term DefEq to both contracta; those are honest \
+             beta-redexes reducing to Sort 0 and Sort (succ 0) by def_eq_fuel_sound, which \
+             carries no hiota of its own; and sort_injectivity (under the_red_env_faithful, a \
+             CLOSED hypothesis) equates the two levels. \
+             \
+             WHAT IT DOES NOT SAY: not that def_eq_fuel_wh is unsound, and not that the faithful \
+             loop is wrong. The BLANKET premise is refuted; the repaired one, \
+             def_eq_fuel_wh_sound_hw's, constrains the pre-pass to be DefEq-sound and is \
+             satisfied at the development's only instance. What the refutation costs is \
+             def_eq_fuel_wh_sound itself, which carries the blanket form and is therefore \
+             VACUOUS -- soundness of the faithful two-way loop is not established, and that is \
+             the finding. DerivedProved, zero axiom_deps.",
+        )?;
+        self.add_recursive_def(
+            WHB_PAR_REFUTATION,
+            "wh_blanket_hiota_par_is_false: THE PAR TWIN, by IMPLICATION rather than by a second \
+             construction. The par family's blanket premise is the same unconstrained pre-pass \
+             concluding par_reduces_cd_star instead of DefEq. The obvious route to refuting it is \
+             CONFLUENCE -- par_reduces_cd_star being a reduction and not an equivalence, the two \
+             contracta cannot be joined by symm/trans -- and that route is genuinely BLOCKED: the \
+             hypothesis-free diamonds are over par_reduces_c_star / par_reduces_p_star at \
+             faithful_red_env, the wrong relation at the wrong environment, and the cd-star \
+             diamonds at an arbitrary env each carry four RecEnv interfaces plus a commutation \
+             premise nothing discharges at the_red_env. \
+             \
+             None of it is needed. cd_star_join_to_def_eq (wall_a_completeness.rs) is \
+             unconditional and zero-axiom_deps, so instantiating both legs at r -- the second by \
+             refl -- turns ANY par_reduces_cd_star the_red_env e r into DefEq e r. The blanket par \
+             premise therefore implies the blanket DefEq premise POINTWISE, and that one is \
+             already refuted. The par form is the STRONGER hypothesis, so refuting the weaker one \
+             refuted it too; this constant makes that visible to a grep rather than leaving it as \
+             a reader's inference. DerivedProved, zero axiom_deps.",
+        )?;
         Ok(())
+    }
+}
+
+/// One line per ingredient, so the census tooling sees each with its own
+/// meaning rather than seventeen copies of one sentence.
+fn blanket_ingredient_description(name: &str) -> &'static str {
+    match name {
+        "whb_us" | "whb_args" | "whb_g" | "whb_x" => {
+            "Blanket-hiota refutation, the SPINE: Bool.rec at one universe argument, applied to a \
+             motive, two minors and the major Bool.false. Params 0, motives 1, minors 2, indices \
+             0, so MAJOR_IDX is 3 and this spine has exactly the four arguments the chain's third \
+             level needs."
+        }
+        "whb_wfalse" | "whb_wtrue" => {
+            "Blanket-hiota refutation, a LYING PRE-PASS: a constant function returning a \
+             constructor unrelated to what the major reduces to. The blanket premise admits it \
+             because it constrains w not at all -- that is the whole defect."
+        }
+        "whb_rhs_false" | "whb_rhs_true" | "whb_rfalse" | "whb_rtrue" => {
+            "Blanket-hiota refutation, a CONTRACTUM: the rule's rhs instantiated at the spine's \
+             universe arguments and applied to the spine, spelled the way kcre_witness_nat_zero_reduct \
+             is. The two differ only in which minor the rhs selects."
+        }
+        "whb_fires_false" | "whb_fires_true" => {
+            "Blanket-hiota refutation, a FIRING: Eq.refl over the reflected environment, so the \
+             six-level chain is settled by the kernel rather than argued. This is one of the two \
+             steps that were scratch-tested before registration."
+        }
+        "whb_fuel" => "Blanket-hiota refutation: the fuel literal for the two def_eq_fuel_sound legs.",
+        "whb_false_is_sort0" | "whb_true_is_sort1" => {
+            "Blanket-hiota refutation: each contractum is an honest beta-redex reducing to a SORT, \
+             discharged by def_eq_fuel_sound -- which carries no hiota of its own, so the \
+             refutation does not assume what it refutes."
+        }
+        "whb_levels_differ" => {
+            "Blanket-hiota refutation, the JOIN: the blanket premise makes one term DefEq to both \
+             contracta, so DefEq.trans and DefEq.symm equate Sort 0 with Sort (succ 0), and \
+             sort_injectivity -- under the_red_env_faithful, a CLOSED hypothesis -- turns that \
+             into an equation between two syntactically different levels."
+        }
+        _ => "Blanket-hiota refutation ingredient.",
     }
 }
 
@@ -102,3 +203,91 @@ const SRC_WHNF_FUEL_RED_WH_DEFEQ_HW: &str = "def whnf_fuel_red_wh_defeq_hw (hiot
 const SRC_DEF_EQ_FUEL_WH_SOUND_HW: &str = "def def_eq_fuel_wh_sound_hw (hiota : forall (w : KExpr -> OptionType KExpr), (forall (e : KExpr) (rr : KExpr), Eq (OptionType KExpr) (w e) (OptionType.some KExpr rr) -> DefEq e rr) -> forall (g : KExpr) (x : KExpr) (r : KExpr), Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) w (KExpr.app g x)) (OptionType.some KExpr r) -> DefEq (KExpr.app g x) r) : forall (n : Nat) (a : KExpr) (b : KExpr), Eq Bool (def_eq_fuel_wh the_red_env n a b) Bool.true -> DefEq a b := Nat.rec (fun (z : Nat) => forall (a : KExpr) (b : KExpr), Eq Bool (def_eq_fuel_wh the_red_env z a b) Bool.true -> DefEq a b) (fun (a : KExpr) (b : KExpr) (h : Eq Bool (def_eq_fuel_wh the_red_env Nat.zero a b) Bool.true) => bool_false_ne_true_t (DefEq a b) (Eq.trans Bool Bool.false (def_eq_fuel_wh the_red_env Nat.zero a b) Bool.true (Eq.symm Bool (def_eq_fuel_wh the_red_env Nat.zero a b) Bool.false (def_eq_fuel_wh_zero the_red_env a b)) h)) (fun (k : Nat) (ih : forall (a : KExpr) (b : KExpr), Eq Bool (def_eq_fuel_wh the_red_env k a b) Bool.true -> DefEq a b) (a : KExpr) (b : KExpr) (h : Eq Bool (def_eq_fuel_wh the_red_env (Nat.succ k) a b) Bool.true) => opt_rec_bool_true_inv (whnf_fuel_red_wh the_red_env k a) (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh the_red_env k) na nb) (whnf_fuel_red_wh the_red_env k b)) (DefEq a b) (fun (na : KExpr) (hna : Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env k a) (OptionType.some KExpr na)) (hin : Eq Bool (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh the_red_env k) na nb) (whnf_fuel_red_wh the_red_env k b)) Bool.true) => opt_rec_bool_true_inv (whnf_fuel_red_wh the_red_env k b) (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh the_red_env k) na nb) (DefEq a b) (fun (nb : KExpr) (hnb : Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env k b) (OptionType.some KExpr nb)) (hgrid : Eq Bool (def_eq_struct (def_eq_fuel_wh the_red_env k) na nb) Bool.true) => DefEq.trans a na b (whnf_fuel_red_wh_defeq_hw hiota k a na hna) (DefEq.trans na nb b (def_eq_struct_sound (def_eq_fuel_wh the_red_env k) ih na nb hgrid) (DefEq.symm b nb (whnf_fuel_red_wh_defeq_hw hiota k b nb hnb)))) hin) (Eq.substType Bool (fun (x : Bool) => Eq Bool x Bool.true) (def_eq_fuel_wh the_red_env (Nat.succ k) a b) (OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false (fun (na : KExpr) => OptionType.rec KExpr (fun (_ : OptionType KExpr) => Bool) Bool.false (fun (nb : KExpr) => def_eq_struct (def_eq_fuel_wh the_red_env k) na nb) (whnf_fuel_red_wh the_red_env k b)) (whnf_fuel_red_wh the_red_env k a)) (def_eq_fuel_wh_succ the_red_env k a b) h))";
 
 const SRC_DEF_EQ_WHNF_JOIN_WH_HW: &str = "def def_eq_whnf_join_wh_hw (hiotap : forall (w2 : KExpr -> OptionType KExpr), (forall (e : KExpr) (rr : KExpr), Eq (OptionType KExpr) (w2 e) (OptionType.some KExpr rr) -> par_reduces_cd_star the_red_env e rr) -> forall (g : KExpr) (x : KExpr) (r : KExpr), Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) w2 (KExpr.app g x)) (OptionType.some KExpr r) -> par_reduces_cd_star the_red_env (KExpr.app g x) r) (i1 : RecEnvReductNotRedex (red_rec the_red_env)) (i2 : RecEnvCtorNoRecMeta (red_rec the_red_env)) (i3 : RecEnvClosed (red_rec the_red_env)) (i4 : RecEnvLiftClosed (red_rec the_red_env)) (i5 : DefEnvClosed (red_def the_red_env)) (i6 : DefEnvLiftClosed (red_def the_red_env)) (i7 : RecEnvDefEnvDisjoint the_red_env) (i8 : RecEnvCtorNoDefVal the_red_env) (n : Nat) (a : KExpr) (b : KExpr) (na : KExpr) (nb : KExpr) (hde : DefEq a b) (ha : Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env n a) (OptionType.some KExpr na)) (hb : Eq (OptionType KExpr) (whnf_fuel_red_wh the_red_env n b) (OptionType.some KExpr nb)) : par_strips_witness_cd_star the_red_env na nb := @par_strips_witness_cd_star.rec the_red_env a b (fun (_w0 : par_strips_witness_cd_star the_red_env a b) => par_strips_witness_cd_star the_red_env na nb) (fun (m : KExpr) (ham : par_reduces_cd_star the_red_env a m) (hbm : par_reduces_cd_star the_red_env b m) => @par_strips_witness_cd_star.rec the_red_env na m (fun (_w1 : par_strips_witness_cd_star the_red_env na m) => par_strips_witness_cd_star the_red_env na nb) (fun (p1 : KExpr) (hnap1 : par_reduces_cd_star the_red_env na p1) (hmp1 : par_reduces_cd_star the_red_env m p1) => @par_strips_witness_cd_star.rec the_red_env nb m (fun (_w2 : par_strips_witness_cd_star the_red_env nb m) => par_strips_witness_cd_star the_red_env na nb) (fun (p2 : KExpr) (hnbp2 : par_reduces_cd_star the_red_env nb p2) (hmp2 : par_reduces_cd_star the_red_env m p2) => @par_strips_witness_cd_star.rec the_red_env p1 p2 (fun (_w3 : par_strips_witness_cd_star the_red_env p1 p2) => par_strips_witness_cd_star the_red_env na nb) (fun (w : KExpr) (hp1w : par_reduces_cd_star the_red_env p1 w) (hp2w : par_reduces_cd_star the_red_env p2 w) => par_strips_witness_cd_star.intro the_red_env na nb w (par_reduces_cd_star_trans the_red_env na p1 w hnap1 hp1w) (par_reduces_cd_star_trans the_red_env nb p2 w hnbp2 hp2w)) (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 m p1 p2 hmp1 hmp2)) (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 b nb m (whnf_fuel_red_wh_par_hw hiotap n b nb hb) hbm)) (par_reduces_cd_star_diamond the_red_env i1 i2 i3 i4 i5 i6 i7 i8 a na m (whnf_fuel_red_wh_par_hw hiotap n a na ha) ham)) (def_eq_joinable i1 i2 i3 i4 i5 i6 i7 i8 a b hde)";
+
+/// THE REFUTATION THE PROSE ABOVE HAS BEEN ASSERTING — under scratch test
+/// first, deliberately not registered yet.
+///
+/// This module's own doc says "The premise is false, and everything carrying it
+/// is vacuous", and `wh3_defeq_soundness.rs` and `slot_dispatch_at.rs` repeat
+/// it. Nothing checks it. The certificate went one step further and printed
+/// "proved FALSE", naming an object a reader can grep for and fail to find —
+/// and the two constants that ARE called `hiota` / `hiota_generic`
+/// (`iota_closedness_bundle.rs`) are an unrelated PROVED lemma, so the grep
+/// comes back green and wrong. The certificate is corrected; this is the other
+/// half.
+///
+/// # The shape of the refutation, and why it needs no reduction reasoning
+///
+/// `iota_reduct_whc` is six `opt_bind` levels and `w` controls exactly one of
+/// them — the pre-pass. Levels 5-7 then read the head, the rule and the fields
+/// of **`w`'s output**, never of what the major actually reduces to. So two
+/// different lying pre-passes at the SAME term fire the SAME recursor on two
+/// DIFFERENT rules and yield two different contracta. The blanket premise makes
+/// the term `DefEq` to both; the two contracta are honest β-redexes reducing to
+/// two different sorts; `sort_injectivity` then equates `0` with `succ 0`.
+///
+/// `Bool.rec` is the right instrument because both its constructors are
+/// NULLARY: `iota_fields_ok` is `nat_eqb (Nat.sub 0 0) 0`, true for either
+/// rule, so the same spine fires two ways with no field obligation.
+///
+/// # It was scratch-tested first, and that is why it is registered now
+///
+/// Two of its steps are `Eq.refl` COMPUTATIONS over the reflected environment —
+/// the six-level chain at a concrete `Bool.rec` spine, and the β legs through
+/// `def_eq_fuel_sound` at a guessed fuel of eight. Registration is sequential
+/// and aborts the whole spec build at the first failure, so both were first
+/// appended to an ALREADY-BUILT spec by
+/// `blanket_hiota_refutation_elaborates`, which reports every failure at once
+/// instead of one. **Measured 2026-09-17: all seventeen constants elaborate,
+/// including both computations, and the guessed fuel was enough.** Only then
+/// were they registered.
+pub(super) fn blanket_hiota_refutation_candidates() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("whb_us", "def whb_us : ListType Level := ListType.cons Level Level.zero (ListType.nil Level)"),
+        ("whb_args", "def whb_args : ListType KExpr := ListType.cons KExpr (KExpr.sort Level.zero) (ListType.cons KExpr (KExpr.sort Level.zero) (ListType.cons KExpr (KExpr.sort (Level.succ Level.zero)) (ListType.nil KExpr)))"),
+        ("whb_g", "def whb_g : KExpr := KExpr.app (KExpr.app (KExpr.app (KExpr.const kcre_name_39 whb_us) (KExpr.sort Level.zero)) (KExpr.sort Level.zero)) (KExpr.sort (Level.succ Level.zero))"),
+        ("whb_x", "def whb_x : KExpr := KExpr.const kcre_name_34 (ListType.nil Level)"),
+        ("whb_wfalse", "def whb_wfalse : KExpr -> OptionType KExpr := fun (_e : KExpr) => OptionType.some KExpr (KExpr.const kcre_name_34 (ListType.nil Level))"),
+        ("whb_wtrue", "def whb_wtrue : KExpr -> OptionType KExpr := fun (_e : KExpr) => OptionType.some KExpr (KExpr.const kcre_name_33 (ListType.nil Level))"),
+        ("whb_rhs_false", "def whb_rhs_false : KExpr := KExpr.lam (KExpr.pi (KExpr.const kcre_name_7 (ListType.nil Level)) (KExpr.sort (Level.param kcre_name_5))) (KExpr.lam (KExpr.app (KExpr.bvar kcre_nat_0) (KExpr.const kcre_name_34 (ListType.nil Level))) (KExpr.lam (KExpr.app (KExpr.bvar kcre_nat_1) (KExpr.const kcre_name_33 (ListType.nil Level))) (KExpr.bvar kcre_nat_1)))"),
+        ("whb_rhs_true", "def whb_rhs_true : KExpr := KExpr.lam (KExpr.pi (KExpr.const kcre_name_7 (ListType.nil Level)) (KExpr.sort (Level.param kcre_name_5))) (KExpr.lam (KExpr.app (KExpr.bvar kcre_nat_0) (KExpr.const kcre_name_34 (ListType.nil Level))) (KExpr.lam (KExpr.app (KExpr.bvar kcre_nat_1) (KExpr.const kcre_name_33 (ListType.nil Level))) (KExpr.bvar kcre_nat_0)))"),
+        ("whb_rfalse", "def whb_rfalse : KExpr := apply_spine whb_args (recursor_rhs_instance (recmeta_signature kcre_rec_meta_39) whb_rhs_false whb_us)"),
+        ("whb_rtrue", "def whb_rtrue : KExpr := apply_spine whb_args (recursor_rhs_instance (recmeta_signature kcre_rec_meta_39) whb_rhs_true whb_us)"),
+        ("whb_fires_false", "def whb_fires_false : Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) whb_wfalse (KExpr.app whb_g whb_x)) (OptionType.some KExpr whb_rfalse) := Eq.refl (OptionType KExpr) (OptionType.some KExpr whb_rfalse)"),
+        ("whb_fires_true", "def whb_fires_true : Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) whb_wtrue (KExpr.app whb_g whb_x)) (OptionType.some KExpr whb_rtrue) := Eq.refl (OptionType KExpr) (OptionType.some KExpr whb_rtrue)"),
+        ("whb_fuel", "def whb_fuel : Nat := Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ (Nat.succ Nat.zero)))))))"),
+        ("whb_false_is_sort0", "def whb_false_is_sort0 : DefEq whb_rfalse (KExpr.sort Level.zero) := def_eq_fuel_sound whb_fuel whb_rfalse (KExpr.sort Level.zero) (Eq.refl Bool Bool.true)"),
+        ("whb_true_is_sort1", "def whb_true_is_sort1 : DefEq whb_rtrue (KExpr.sort (Level.succ Level.zero)) := def_eq_fuel_sound whb_fuel whb_rtrue (KExpr.sort (Level.succ Level.zero)) (Eq.refl Bool Bool.true)"),
+        ("whb_levels_differ", "def whb_levels_differ (whb_hiota : forall (w : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) (r : KExpr), Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) w (KExpr.app g x)) (OptionType.some KExpr r) -> DefEq (KExpr.app g x) r) : Eq Level Level.zero (Level.succ Level.zero) := sort_injectivity the_red_env_faithful Level.zero (Level.succ Level.zero) (DefEq.trans (KExpr.sort Level.zero) (KExpr.app whb_g whb_x) (KExpr.sort (Level.succ Level.zero)) (DefEq.trans (KExpr.sort Level.zero) whb_rfalse (KExpr.app whb_g whb_x) (DefEq.symm whb_rfalse (KExpr.sort Level.zero) whb_false_is_sort0) (DefEq.symm (KExpr.app whb_g whb_x) whb_rfalse (whb_hiota whb_wfalse whb_g whb_x whb_rfalse whb_fires_false))) (DefEq.trans (KExpr.app whb_g whb_x) whb_rtrue (KExpr.sort (Level.succ Level.zero)) (whb_hiota whb_wtrue whb_g whb_x whb_rtrue whb_fires_true) whb_true_is_sort1))"),
+    ]
+}
+
+/// The refutation proper. Kept apart from the ingredients above because it is
+/// the only one that binds the blanket premise, and because the ingredient list
+/// is what a failure message should be able to bisect.
+pub(super) const WHB_REFUTATION: &str = "def wh_blanket_hiota_defeq_is_false (whb_hiota : forall (w : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) (r : KExpr), Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) w (KExpr.app g x)) (OptionType.some KExpr r) -> DefEq (KExpr.app g x) r) : Empty := bool_true_ne_false Empty (Eq.cong Level Bool (fun (l : Level) => level_eqb Level.zero l) Level.zero (Level.succ Level.zero) (whb_levels_differ whb_hiota))";
+
+/// **THE PAR TWIN, and it is an implication rather than a construction.**
+///
+/// The `par` family carries a DIFFERENT blanket premise: the same unconstrained
+/// pre-pass, but concluding `par_reduces_cd_star` instead of `DefEq`. That
+/// looked like it needed its own refutation, and the obvious route — CONFLUENCE,
+/// since `par_reduces_cd_star` is a reduction and not an equivalence, so the two
+/// contracta cannot be joined by `symm`/`trans` — is genuinely BLOCKED. The
+/// hypothesis-free diamonds are over `par_reduces_c_star`/`par_reduces_p_star`
+/// at `faithful_red_env`, the wrong relation at the wrong environment, and the
+/// `cd`-star diamonds at an arbitrary env each carry four `RecEnv*` interfaces
+/// plus a commutation premise nothing discharges at `the_red_env`.
+///
+/// **None of it is needed.** `cd_star_join_to_def_eq`
+/// (`wall_a_completeness.rs`) is unconditional and zero-`axiom_deps`, so
+/// instantiating both of its legs at `r` — the second by `refl` — turns ANY
+/// `par_reduces_cd_star the_red_env e r` into `DefEq e r`. The blanket par
+/// premise therefore implies the blanket DefEq premise POINTWISE, and that one
+/// is already refuted. The par form is the STRONGER hypothesis, so refuting the
+/// weaker one refuted it too; this constant only makes that visible to a grep.
+pub(super) const WHB_PAR_REFUTATION: &str = "def wh_blanket_hiota_par_is_false (whb_hiota_par : forall (w : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) (r : KExpr), Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) w (KExpr.app g x)) (OptionType.some KExpr r) -> par_reduces_cd_star the_red_env (KExpr.app g x) r) : Empty := wh_blanket_hiota_defeq_is_false (fun (w : KExpr -> OptionType KExpr) (g : KExpr) (x : KExpr) (r : KExpr) (h : Eq (OptionType KExpr) (iota_reduct_whc (red_rec the_red_env) w (KExpr.app g x)) (OptionType.some KExpr r)) => cd_star_join_to_def_eq (KExpr.app g x) r r (whb_hiota_par w g x r h) (par_reduces_cd_star.refl the_red_env r))";
+
+#[cfg(test)]
+#[path = "wh_hiota_repair_tests.rs"]
+mod tests;

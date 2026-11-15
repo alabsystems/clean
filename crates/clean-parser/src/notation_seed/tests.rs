@@ -25,10 +25,13 @@ fn assert_unapplied_top_top(expansion: &SurfaceExpr) {
         panic!("expected the dotted name `Top.top`, got {expansion:?}");
     };
     assert!(
-        matches!(&**base, SurfaceExpr::Ident(_, n) if n == "Top"),
+        matches!(&**base, SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Top").name()),
         "projection base should be `Top`, got {base:?}"
     );
-    assert_eq!(field, "top");
+    assert_eq!(
+        (field).name(),
+        crate::SurfaceName::generated_path("top").name()
+    );
 }
 
 /// Harvest a module source and return the seed.
@@ -83,7 +86,10 @@ fn test_harvest_scoped_notation_records_its_namespace() {
     let source = "namespace Cat\n\nscoped infixr:10 \" ⟶ \" => Quiver.Hom\n\nend Cat\n";
     let seed = harvest(source);
     assert_eq!(seed.len(), 1);
-    assert_eq!(seed.entries()[0].scope_ns.as_deref(), Some("Cat"));
+    assert_eq!(
+        seed.entries()[0].scope_ns.as_ref(),
+        Some(&crate::SurfaceName::generated_path("Cat"))
+    );
 }
 
 #[test]
@@ -92,7 +98,10 @@ fn test_harvest_nested_namespace_records_the_full_path() {
         "namespace Outer\nnamespace Inner\nscoped postfix:max \"ᵒᵖ\" => Opposite\nend Inner\nend Outer\n";
     let seed = harvest(source);
     assert_eq!(seed.len(), 1);
-    assert_eq!(seed.entries()[0].scope_ns.as_deref(), Some("Outer.Inner"));
+    assert_eq!(
+        seed.entries()[0].scope_ns.as_ref(),
+        Some(&crate::SurfaceName::generated_path("Outer.Inner"))
+    );
 }
 
 #[test]
@@ -101,8 +110,8 @@ fn test_harvest_section_does_not_extend_the_namespace_path() {
     let seed = harvest(source);
     assert_eq!(seed.len(), 1);
     assert_eq!(
-        seed.entries()[0].scope_ns.as_deref(),
-        Some("N"),
+        seed.entries()[0].scope_ns.as_ref(),
+        Some(&crate::SurfaceName::generated_path("N")),
         "a `section` inside a namespace must not become part of the path"
     );
 }
@@ -170,7 +179,12 @@ fn test_harvest_does_not_swallow_an_indented_line_after_a_complete_command() {
     let source = "notation \"⊤\" => Top.top\n  Bot.bot\n";
     let seed = harvest(source);
     assert_eq!(seed.len(), 1);
-    assert_unapplied_top_top(&seed.entries()[0].expansion);
+    assert_unapplied_top_top(
+        seed.entries()[0]
+            .expansion
+            .as_ref()
+            .expect("the template is walked"),
+    );
 }
 
 #[test]
@@ -180,7 +194,12 @@ fn test_harvest_does_not_swallow_the_next_top_level_declaration() {
     assert_eq!(seed.len(), 1);
     // The expansion must be `Top.top` alone — not `Top.top` applied to
     // whatever followed on the next line.
-    assert_unapplied_top_top(&seed.entries()[0].expansion);
+    assert_unapplied_top_top(
+        seed.entries()[0]
+            .expansion
+            .as_ref()
+            .expect("the template is walked"),
+    );
 }
 
 #[test]
@@ -246,7 +265,10 @@ fn test_scan_imports_skips_the_copyright_block_and_stops_at_the_first_command() 
     );
     assert_eq!(
         super::scan_imports(source),
-        vec!["Mathlib.Init".to_owned(), "Mathlib.Order.Defs".to_owned()],
+        vec![
+            crate::SurfaceName::generated_path("Mathlib.Init"),
+            crate::SurfaceName::generated_path("Mathlib.Order.Defs")
+        ],
     );
 }
 
@@ -254,7 +276,7 @@ fn test_scan_imports_skips_the_copyright_block_and_stops_at_the_first_command() 
 fn test_scan_imports_accepts_prelude_and_rejects_junk() {
     assert_eq!(
         super::scan_imports("prelude\nimport Init.Core\ndef d := 1\n"),
-        vec!["Init.Core".to_owned()]
+        vec![crate::SurfaceName::generated_path("Init.Core")]
     );
     assert!(super::scan_imports("import \n").is_empty());
 }
@@ -277,9 +299,9 @@ fn test_scan_imports_reads_the_module_system_header() {
     assert_eq!(
         super::scan_imports(source),
         vec![
-            "Mathlib.Analysis.Normed.Group.Defs".to_owned(),
-            "Mathlib.Tactic.Positivity".to_owned(),
-            "Mathlib.Data.NNReal.Basic".to_owned(),
+            crate::SurfaceName::generated_path("Mathlib.Analysis.Normed.Group.Defs"),
+            crate::SurfaceName::generated_path("Mathlib.Tactic.Positivity"),
+            crate::SurfaceName::generated_path("Mathlib.Data.NNReal.Basic"),
         ],
     );
 }
@@ -300,5 +322,143 @@ fn test_harvest_multiple_commands_in_one_module() {
         "two exportable commands; the `local` one is dropped"
     );
     assert!(seed.entries()[0].scope_ns.is_none());
-    assert_eq!(seed.entries()[1].scope_ns.as_deref(), Some("Norm"));
+    assert_eq!(
+        seed.entries()[1].scope_ns.as_ref(),
+        Some(&crate::SurfaceName::generated_path("Norm"))
+    );
+}
+
+// ── Mathlib's `scoped[NS]` (`Mathlib/Tactic/ScopedNS.lean`) ──────────────
+// `scoped[NS] <cmd>` is `with_weak_namespace _root_.NS scoped <cmd>`: the
+// notation is scoped to the ABSOLUTE namespace it names. Mathlib declares
+// `⥤` and `⋙` this way (`scoped[CategoryTheory] infixr:26 " ⥤ " => Functor`),
+// and the prescan's `scoped` match needed whitespace after the word, so every
+// such line was skipped -- breadth class (69).
+
+#[test]
+fn test_harvest_scoped_in_namespace_records_the_named_namespace() {
+    let seed = harvest("scoped[CategoryTheory] infixr:26 \" ⥤ \" => Functor\n");
+    assert_eq!(seed.len(), 1, "a `scoped[NS]` notation must be harvested");
+    assert_eq!(
+        seed.entries()[0].scope_ns.as_ref(),
+        Some(&crate::SurfaceName::generated_path("CategoryTheory"))
+    );
+}
+
+#[test]
+fn test_harvest_scoped_in_namespace_is_absolute_not_nested() {
+    let seed = harvest(
+        "namespace Other\nscoped[CategoryTheory] infixr:80 \" ⋙ \" => Functor.comp\nend Other\n",
+    );
+    assert_eq!(seed.len(), 1);
+    assert_eq!(
+        seed.entries()[0].scope_ns.as_ref(),
+        Some(&crate::SurfaceName::generated_path("CategoryTheory")),
+        "`scoped[NS]` names `_root_.NS`; it must not nest under the enclosing namespace"
+    );
+}
+
+#[test]
+fn test_seeded_scoped_in_namespace_notation_is_inert_until_opened() {
+    let seed = harvest("scoped[CategoryTheory] infixr:26 \" ⥤ \" => Functor\n");
+    let closed = "def f (C D : Type) : Type := C ⥤ D\n";
+    let opened = "open CategoryTheory\ndef f (C D : Type) : Type := C ⥤ D\n";
+    assert_eq!(
+        seeded_rawdecls(&seed, closed),
+        1,
+        "the notation is scoped: it must stay inert until its namespace opens"
+    );
+    assert_eq!(
+        seeded_rawdecls(&seed, opened),
+        0,
+        "`open CategoryTheory` must activate the imported `scoped[CategoryTheory]` notation"
+    );
+}
+
+#[test]
+fn test_in_file_scoped_in_namespace_notation_parses_at_root_and_is_scoped() {
+    let decl = "scoped[CategoryTheory] infixr:26 \" ⥤ \" => Functor\n";
+    let closed = format!("{decl}def f (C D : Type) : Type := C ⥤ D\n");
+    let opened = format!("{decl}open CategoryTheory\ndef f (C D : Type) : Type := C ⥤ D\n");
+    assert_eq!(
+        seeded_rawdecls(&NotationSeed::new(), &closed),
+        1,
+        "the declaration itself parses; only the out-of-scope use is refused"
+    );
+    assert_eq!(seeded_rawdecls(&NotationSeed::new(), &opened), 0);
+}
+
+#[test]
+fn test_scoped_in_namespace_on_a_non_notation_command_is_refused() {
+    // Mathlib accepts `scoped[NS]` before any command; only notation is
+    // modelled here, so anything else must stay a refusal rather than be
+    // accepted against the wrong (current) namespace.
+    let source = "scoped[Foo] def x : Nat := 1\n";
+    let patterns = TacticPatterns::default();
+    let report =
+        Parser::parse_file_seeded(source, &patterns, &NotationSeed::new()).expect("file parses");
+    assert!(
+        report
+            .decls
+            .iter()
+            .all(|d| matches!(d, SurfaceDecl::RawDecl { .. })),
+        "`scoped[NS]` before a non-notation command must be refused whole -- \
+         no declaration may survive recovery at the wrong namespace, got {:?}",
+        report.decls
+    );
+}
+
+#[test]
+fn test_in_file_scoped_in_namespace_inside_that_namespace_is_plain_scoped() {
+    let source = concat!(
+        "namespace CategoryTheory\n",
+        "scoped[CategoryTheory] infixr:26 \" ⥤ \" => Functor\n",
+        "def f (C D : Type) : Type := C ⥤ D\n",
+        "end CategoryTheory\n",
+    );
+    assert_eq!(seeded_rawdecls(&NotationSeed::new(), source), 0);
+}
+
+#[test]
+fn test_in_file_scoped_in_namespace_inside_another_namespace_is_scoped_to_the_named_one() {
+    // Mathlib's own shape (`Mathlib/CategoryTheory/Functor/Basic.lean:122`):
+    // `⋙` is declared inside `CategoryTheory.Functor` as `scoped[CategoryTheory]`,
+    // so it belongs to `_root_.CategoryTheory`, not the enclosing namespace.
+    let decl = "scoped[CategoryTheory] infixr:80 \" ⋙ \" => Functor.comp\n";
+    let inside = format!(
+        "namespace CategoryTheory\nnamespace Functor\n{decl}def f (F G : Type) : Type := F ⋙ G\nend Functor\nend CategoryTheory\n"
+    );
+    assert_eq!(
+        seeded_rawdecls(&NotationSeed::new(), &inside),
+        0,
+        "active below its namespace `CategoryTheory` (the current `CategoryTheory.Functor`)"
+    );
+    let elsewhere =
+        format!("namespace Other\n{decl}def f (F G : Type) : Type := F ⋙ G\nend Other\n");
+    let patterns = TacticPatterns::default();
+    let report = Parser::parse_file_seeded(&elsewhere, &patterns, &NotationSeed::new())
+        .expect("file parses");
+    let SurfaceDecl::Namespace { decls, .. } = &report.decls[0] else {
+        panic!(
+            "expected the `Other` namespace block, got {:?}",
+            report.decls
+        );
+    };
+    assert!(
+        matches!(
+            decls.first(),
+            Some(SurfaceDecl::Notation { scope_ns: Some(ns), .. })
+                if ns.name() == crate::SurfaceName::generated_path("CategoryTheory").name()
+        ),
+        "the declaration must carry its absolute namespace, got {decls:?}"
+    );
+    assert!(
+        decls
+            .iter()
+            .any(|d| matches!(d, SurfaceDecl::RawDecl { .. })),
+        "inside `Other` the notation is not active: `CategoryTheory` is neither \
+         current nor an ancestor nor opened, got {decls:?}"
+    );
+    let opened = format!("namespace Other\n{decl}open CategoryTheory\ndef f (F G : Type) : Type := F ⋙ G\nend Other\n");
+    assert_eq!(seeded_rawdecls(&NotationSeed::new(), &opened), 0);
 }

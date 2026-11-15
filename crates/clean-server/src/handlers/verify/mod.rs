@@ -9,8 +9,22 @@
 //! Design deltas: designs/2026-03-14-2703-server-sorry-provenance-surface.md,
 //! designs/2026-03-15-2731-trusted-arith-provenance-surface.md
 //! Historical origin: #79
+//!
+//! Every handler here replays its proof on the server's work pool
+//! (`handlers/work.rs`) under the request's deadline. A replay still reports
+//! "timeout exceeded" in its result when it reaches a step past its timeout;
+//! one the deadline interrupted inside a step answers the timeout error, and
+//! nothing it computed past the deadline (goals, cached proof states) is
+//! reported or kept.
+//!
+//! `verifyFile`, `fillSorries` and `composeProof` parse the file they are sent
+//! on the pool too, under the same deadline ([`parse_on_pool`]), before they
+//! set the environment up: the parse grows with the file (`parse_lean.rs`).
 
 use crate::handlers::state::ServerState;
+use crate::handlers::work::{within, WorkError};
+use crate::rpc::{RequestId, Response, RpcError};
+use std::time::{Duration, Instant};
 
 mod compose_proof;
 mod fill_sorries;
@@ -30,7 +44,9 @@ pub use compose_proof::{
 };
 pub use fill_sorries::handle_fill_sorries;
 #[cfg(test)]
-pub(crate) use parse_lean::parse_lean_file;
+pub(crate) use parse_lean::{
+    explicit_hole_token_at, explicit_holes, first_declaration, parse_lean_file,
+};
 pub use types::*;
 pub use verify_batch::handle_verify_proof_batch;
 pub use verify_c::handle_verify_c;
@@ -41,14 +57,41 @@ pub use verify_proof::handle_verify_proof;
 // Trust summary helpers
 // ============================================================================
 
-fn sorry_provenance_from_closed_proof(closed_proof: Option<&Expr>) -> Option<SorryProvenance> {
-    closed_proof.map(|proof_term| {
-        let summary = SorrySummary::from_expr(proof_term);
-        SorryProvenance {
-            has_explicit_sorry: summary.has_explicit_sorry,
-            has_synthetic_sorry: summary.has_synthetic_sorry,
-        }
-    })
+/// The trust debt a CLOSED proof term carries, read off the term itself and
+/// off its constant closure in `env`.
+///
+/// The tactic ledger counts only the sorries and trusted steps the tactic
+/// engine created. A closed proof can carry debt the ledger never saw: `exact
+/// @sorryAx _ (!true)` (a sorry the user wrote as a term), or `exact lemma1`
+/// where `lemma1` rests on `sorry` or `trustedAy`. Both were reported
+/// `fully_verified: true` before 2026-09-28.
+struct ClosedProofDebt {
+    provenance: SorryProvenance,
+    /// Sorry occurrences in the term itself, or 1 when only its closure
+    /// reaches `sorryAx` / `sorry`.
+    sorry_count: u64,
+    trusted_ay: bool,
+    trusted_arith: bool,
+}
+
+fn closed_proof_debt(env: &Environment, proof_term: &Expr) -> ClosedProofDebt {
+    let own = SorrySummary::from_expr(proof_term);
+    let markers =
+        clean_kernel::env::DomainAxiomClosure::new().trust_markers_of_expr(env, proof_term);
+    let closure_sorry = markers.iter().any(clean_kernel::is_sorry_marker);
+    let own_occurrences = u64::try_from(proof_term.count_sorry_occurrences()).unwrap_or(u64::MAX);
+    ClosedProofDebt {
+        provenance: SorryProvenance {
+            // A sorry reached only through a cited constant is non-synthetic
+            // by construction: the elaborator mints its synthetic sorries in
+            // place.
+            has_explicit_sorry: own.has_explicit_sorry || (closure_sorry && !own.has_sorry),
+            has_synthetic_sorry: own.has_synthetic_sorry,
+        },
+        sorry_count: own_occurrences.max(u64::from(closure_sorry)),
+        trusted_ay: markers.iter().any(|m| m.to_string() == "trustedAy"),
+        trusted_arith: markers.iter().any(|m| m.to_string() == "trustedArith"),
+    }
 }
 
 pub(crate) fn trust_summary_from_ledger(
@@ -56,12 +99,26 @@ pub(crate) fn trust_summary_from_ledger(
     verified: bool,
     kernel_check_failures: u64,
 ) -> TrustSummary {
-    trust_summary_from_ledger_with_closed_proof(ledger, None, verified, kernel_check_failures)
+    trust_summary_core(ledger, None, verified, kernel_check_failures)
 }
 
+/// The trust summary of a finished proof: the ledger's counters, raised to
+/// whatever the closed proof term's own occurrences and its constant closure
+/// in `env` show (see [`closed_proof_debt`]).
 pub(crate) fn trust_summary_from_ledger_with_closed_proof(
+    env: &Environment,
     ledger: ProofTrustLedger,
     closed_proof: Option<&Expr>,
+    verified: bool,
+    kernel_check_failures: u64,
+) -> TrustSummary {
+    let debt = closed_proof.map(|proof_term| closed_proof_debt(env, proof_term));
+    trust_summary_core(ledger, debt, verified, kernel_check_failures)
+}
+
+fn trust_summary_core(
+    ledger: ProofTrustLedger,
+    closed_proof_debt: Option<ClosedProofDebt>,
     verified: bool,
     kernel_check_failures: u64,
 ) -> TrustSummary {
@@ -97,9 +154,19 @@ pub(crate) fn trust_summary_from_ledger_with_closed_proof(
             unclassified_steps: ledger.trusted_arith_provenance.unclassified_steps.into(),
         })
     };
-    let sorry_count = ledger.sorry_count.into();
-    let ay_count = ledger.trusted_ay_count.into();
-    let arith_count = ledger.trusted_arith_count.into();
+    let mut sorry_count: u64 = ledger.sorry_count.into();
+    let mut ay_count: u64 = ledger.trusted_ay_count.into();
+    let mut arith_count: u64 = ledger.trusted_arith_count.into();
+    let sorry_provenance = closed_proof_debt.map(|debt| {
+        sorry_count = sorry_count.max(debt.sorry_count);
+        if debt.trusted_ay {
+            ay_count = ay_count.max(1);
+        }
+        if debt.trusted_arith {
+            arith_count = arith_count.max(1);
+        }
+        debt.provenance
+    });
 
     let smt_recovery = if ledger.smt_recovery.has_events() {
         Some(SmtRecoverySummary {
@@ -116,7 +183,7 @@ pub(crate) fn trust_summary_from_ledger_with_closed_proof(
 
     TrustSummary {
         sorry_count,
-        sorry_provenance: sorry_provenance_from_closed_proof(closed_proof),
+        sorry_provenance,
         ay_count,
         ay_provenance,
         arith_count,
@@ -150,9 +217,9 @@ pub(crate) fn trust_summary_from_proof_state(
             (Some(proof), Some(target)) => verify_closed_proof(env, target, Some(proof)),
             _ => false,
         };
-        trust_summary_from_ledger_with_closed_proof(ledger, closed_proof.as_ref(), verified, 0)
+        trust_summary_from_ledger_with_closed_proof(env, ledger, closed_proof.as_ref(), verified, 0)
     } else {
-        trust_summary_from_ledger_with_closed_proof(ledger, None, false, 0)
+        trust_summary_from_ledger(ledger, false, 0)
     }
 }
 
@@ -178,6 +245,7 @@ pub(crate) fn verify_closed_proof_with_trust_summary(
 ) -> (bool, TrustSummary) {
     let verified = verify_closed_proof(env, target, closed_proof);
     let trust_summary = trust_summary_from_ledger_with_closed_proof(
+        env,
         ledger,
         closed_proof,
         verified,
@@ -186,10 +254,33 @@ pub(crate) fn verify_closed_proof_with_trust_summary(
     (verified, trust_summary)
 }
 
-pub(crate) async fn initialize_verify_file_env(
-    state: &ServerState,
-) -> Result<(), clean_kernel::EnvError> {
-    let mut env = state.env.write().await;
+/// Set the shared environment up for a file's replay: seed the logical
+/// prelude it needs ([`seed_verify_file_env`]) where it is missing, on the
+/// work pool (`SharedEnv::seed`: the kernel copies the whole environment for
+/// each inductive it adds). Counted as a change only when it added something:
+/// an environment that has the prelude already leaves a writer's copy current
+/// (`shared_env.rs`). Not charged to the request's timeout, and its waits for
+/// a slot and for the environment are not either (`docs/JSON_RPC_API.md`).
+pub(crate) async fn initialize_verify_file_env(state: &ServerState) -> Result<(), String> {
+    match state.env.seed(&state.work, seed_verify_file_env).await {
+        Ok(seeded) => seeded.map_err(|error| error.to_string()),
+        Err(WorkError::Unavailable(detail)) => Err(detail),
+        // It runs with no deadline.
+        Err(WorkError::Interrupted) => Err("the set-up was interrupted".to_string()),
+    }
+}
+
+/// The logical prelude a file's replay needs, each piece added only when it
+/// is missing.
+fn seed_verify_file_env(env: &mut Environment) -> Result<(), clean_kernel::EnvError> {
+    // Each inductive it adds copies the whole environment: work for the pool,
+    // never for a runtime worker. Tests build with debug assertions, so a
+    // request path that brings it back to the runtime fails every test that
+    // takes it.
+    debug_assert!(
+        tokio::runtime::Handle::try_current().is_err(),
+        "the verify family's environment was seeded on an async runtime's thread"
+    );
     // File-level verification and sorry-filling replay Lean sketches directly,
     // so the logical prelude must exist even when no imported module has
     // forced these declarations in transitively yet.
@@ -226,4 +317,42 @@ pub(crate) async fn initialize_verify_file_env(
         env.init_associated()?;
     }
     Ok(())
+}
+
+/// Parse a request's file on the work pool, under the request's deadline
+/// (`start` + `timeout`) and inside its timeout: the timeout error when it
+/// fires first. The parse takes a slot of its own, holding no lock, and gives
+/// it back before the request sets the environment up. A file is up to the
+/// transport's 10 MiB, and parsing it is not linear (`parse_lean.rs`): until
+/// R87 (2026-10-17) it ran on the runtime, with no deadline.
+pub(crate) async fn parse_on_pool<T: Send + 'static>(
+    state: &ServerState,
+    start: Instant,
+    timeout: Duration,
+    parse: impl FnOnce() -> T + Send + 'static,
+) -> Result<T, WorkError> {
+    within(
+        timeout.saturating_sub(start.elapsed()),
+        state.work.run(start.checked_add(timeout), parse),
+    )
+    .await
+}
+
+/// The response to a replay that ran on the work pool: its result, or the
+/// timeout error when the request's deadline interrupted it.
+pub(crate) fn replay_response<T: serde::Serialize>(
+    id: RequestId,
+    timeout: Duration,
+    outcome: Result<T, WorkError>,
+) -> Response {
+    match outcome {
+        Ok(result) => Response::success_typed(id.clone(), &result)
+            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string()))),
+        Err(WorkError::Interrupted) => {
+            Response::error(id, RpcError::timeout(timeout.as_millis() as u64))
+        }
+        Err(WorkError::Unavailable(detail)) => {
+            Response::error(id, RpcError::internal_error(detail))
+        }
+    }
 }

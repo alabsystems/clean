@@ -546,7 +546,7 @@ fn try_extensionality(
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -638,7 +638,7 @@ mod tests {
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "read-over-write same index should be valid: {:?}",
             verdict.detail
         );
@@ -659,7 +659,7 @@ mod tests {
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "swapped read-over-write same index should be valid: {:?}",
             verdict.detail
         );
@@ -686,7 +686,7 @@ mod tests {
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "ROW with index premise should be valid: {:?}",
             verdict.detail
         );
@@ -706,11 +706,11 @@ mod tests {
         let eq = make_eq(&mut dag, sel, val7);
 
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &[eq]);
-        // Should NOT be KernelVerified since 7 != 5.
+        // Should NOT be StepChecked since 7 != 5.
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
-            "value mismatch should not be kernel-verified"
+            StepTrustLevel::StepChecked,
+            "value mismatch should not be step-checked"
         );
     }
 
@@ -738,7 +738,7 @@ mod tests {
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "ROW-other should be valid: {:?}",
             verdict.detail
         );
@@ -764,7 +764,7 @@ mod tests {
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "ROW-other with swapped index eq should be valid: {:?}",
             verdict.detail
         );
@@ -789,10 +789,10 @@ mod tests {
 
         let clause = vec![eq_ii, eq_sels];
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &clause);
-        // Should NOT be kernel-verified as row-other because store_idx == sel_idx.
+        // Should NOT be step-checked as row-other because store_idx == sel_idx.
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "same-index should not pass row-other check"
         );
     }
@@ -821,7 +821,7 @@ mod tests {
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "extensionality should be valid: {:?}",
             verdict.detail
         );
@@ -846,7 +846,7 @@ mod tests {
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "extensionality with swapped order should be valid: {:?}",
             verdict.detail
         );
@@ -870,11 +870,11 @@ mod tests {
 
         let clause = vec![eq_ab, neq_sels];
         let verdict = check_arrays_lemma(&dag, SmtStepId(0), &clause);
-        // Should not be kernel-verified: witness indices don't match.
+        // Should not be step-checked: witness indices don't match.
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
-            "different witness indices should not be kernel-verified"
+            StepTrustLevel::StepChecked,
+            "different witness indices should not be step-checked"
         );
     }
 
@@ -894,7 +894,7 @@ mod tests {
         let verdict = check_read_over_write_pos(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "ROW pos single literal: {:?}",
             verdict.detail
         );
@@ -919,7 +919,7 @@ mod tests {
         let verdict = check_read_over_write_neg(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "ROW neg two literals: {:?}",
             verdict.detail
         );
@@ -943,7 +943,7 @@ mod tests {
         let verdict = check_extensionality(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "extensionality rule: {:?}",
             verdict.detail
         );

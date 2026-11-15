@@ -123,7 +123,7 @@ impl Specification {
     /// Proof: invert the gate `iota_step env (app f a) r0` (= `iota_reduct env (app f a) =
     /// some r0`) via `iota_reduct_app_minimal_boundary_idx_type` (Type continuation,
     /// admissible since the boundary guard `iota_reduct env f = none` is in hand),
-    /// recovering recname/meta/major/cname/rule + the five lookups + `major = a` +
+    /// recovering recname/meta/major/cname/rule + the five lookups + actual field/arity guards + `major = a` +
     /// `major_idx = len(kapp_args f)`; bridge the two par0-steps to `par_reduces_p`
     /// (`par_reduces_p0_subsumes_par_p`); feed `par_reduces_p_app_redex` to reconstruct
     /// `iota_reduct env (app f' a') = some reduct_m`.
@@ -173,6 +173,14 @@ impl Specification {
                 "recmeta_num_motives".to_string(),
                 "recmeta_num_minors".to_string(),
                 "recmeta_num_indices".to_string(),
+                "recmeta_signature".to_string(),
+                "recursor_rhs_instance".to_string(),
+                "iota_fields_ok".to_string(),
+                "kexpr_const_levels".to_string(),
+                "kconst_params".to_string(),
+                "name_list_len".to_string(),
+                "level_list_len".to_string(),
+                "nat_eqb".to_string(),
                 "Eq.refl".to_string(),
             ])),
             axiom_deps: HashSet::new(),
@@ -2018,7 +2026,8 @@ fn p0_redex_reduct_m() -> String {
     let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) \
          (recmeta_num_minors meta))";
     let nf = "(recrule_num_fields rule)";
-    let p_rhs = "(recrule_rhs rule)";
+    let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) \
+        (kexpr_const_levels (kapp_fn (KExpr.app f' a'))))";
     let kargs_fap = "(kapp_args (KExpr.app f' a'))";
     format!(
         "(apply_spine (list_drop (Nat.succ {major_idx}) {kargs_fap}) \
@@ -2034,7 +2043,8 @@ fn boundary_reduct_app() -> String {
     let prefix_n = "(Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) \
          (recmeta_num_minors meta))";
     let nf = "(recrule_num_fields rule)";
-    let p_rhs = "(recrule_rhs rule)";
+    let p_rhs = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) \
+        (kexpr_const_levels (kapp_fn (KExpr.app f a))))";
     let kargs_app = "(kapp_args (KExpr.app f a))";
     format!(
         "(apply_spine (list_drop (Nat.succ {major_idx}) {kargs_app}) \
@@ -2064,7 +2074,7 @@ fn par_reduces_p0_redex_preserved_boundary_type() -> String {
 /// `iota_step env (app f a) r0` is DEFINITIONALLY `iota_reduct env (app f a) = some r0`,
 /// so the gate feeds `iota_reduct_app_minimal_boundary_idx_type` directly as its `hsome`.
 /// The boundary inverter (Type-continuation, admissible under `hnone : iota_reduct env f
-/// = none`) recovers recname/meta/major/cname/rule + h1/h2/h3/h4/h5/h5r + `major = a` +
+/// = none`) recovers recname/meta/major/cname/rule + h1/h2/h3/h4/h5 + field/arity guards + h5r + `major = a` +
 /// `major_idx = len(kapp_args f)`. We bridge the two par0-steps to `par_reduces_p`
 /// (`par_reduces_p0_subsumes_par_p`) and feed `par_reduces_p_app_redex`, which rebuilds
 /// `iota_reduct env (app f' a') = some reduct_m`. The continuation `k` is then called
@@ -2082,7 +2092,7 @@ fn par_reduces_p0_redex_preserved_boundary_proof() -> String {
     // par_reduces_p_app_redex reconstruction: iota_reduct env (app f' a') = some reduct_m.
     let recon = format!(
         "(par_reduces_p_app_redex env f f' a a' recname meta major cname rule \
-         disjoint h1 h2 h4 h5 hbnd hidx {hf_p} {ha_p})"
+         disjoint h1 h2 h4 h5 fields arity hbnd hidx {hf_p} {ha_p})"
     );
 
     // The boundary inverter's continuation: recover the witnesses, build recon, call k.
@@ -2093,6 +2103,9 @@ fn par_reduces_p0_redex_preserved_boundary_proof() -> String {
          (h3 : Eq (OptionType KExpr) (list_head (list_drop {major_idx} {kargs_app})) (OptionType.some KExpr major)) \
          (h4 : Eq (OptionType Name) (kexpr_const_name (kapp_fn major)) (OptionType.some Name cname)) \
          (h5 : Eq (OptionType RecRule) (recrule_for env recname cname) (OptionType.some RecRule rule)) \
+         (fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true) \
+         (arity : Eq Bool (nat_eqb (name_list_len (kconst_params (recmeta_signature meta))) \
+          (level_list_len (kexpr_const_levels (kapp_fn (KExpr.app f a))))) Bool.true) \
          (h5r : Eq (OptionType KExpr) (OptionType.some KExpr {reduct_app}) (OptionType.some KExpr r0)) \
          (hbnd : Eq KExpr major a) \
          (hidx : Eq Nat {major_idx} {len_f}) => \
@@ -2112,4 +2125,32 @@ fn par_reduces_p0_redex_preserved_boundary_proof() -> String {
          iota_reduct_app_minimal_boundary_idx_type env f a r0 hgate hfn C {kont}",
         kont = kont,
     )
+}
+
+#[cfg(test)]
+mod guarded_boundary_tests {
+    use super::*;
+
+    #[test]
+    fn guarded_p0_boundary_source_parses() {
+        let source = format!(
+            "def p0_guarded_boundary_parse : {} := {}",
+            par_reduces_p0_redex_preserved_boundary_type(),
+            par_reduces_p0_redex_preserved_boundary_proof()
+        );
+        assert!(Specification::balanced(&source));
+        crate::test_utils::parse_check(&source).expect("actual guarded p0 boundary parses");
+    }
+
+    #[test]
+    fn p0_boundary_keeps_actual_source_and_output_universes() {
+        let source = par_reduces_p0_redex_preserved_boundary_proof();
+        assert!(source.contains("h4 h5 fields arity hbnd hidx"));
+        assert!(
+            source.contains("(fields : Eq Bool (iota_fields_ok rule (kapp_args major)) Bool.true)")
+        );
+        assert!(boundary_reduct_app().contains("kexpr_const_levels (kapp_fn (KExpr.app f a))"));
+        assert!(p0_redex_reduct_m().contains("kexpr_const_levels (kapp_fn (KExpr.app f' a'))"));
+        assert!(p0_redex_reduct_m().contains("recursor_rhs_instance"));
+    }
 }

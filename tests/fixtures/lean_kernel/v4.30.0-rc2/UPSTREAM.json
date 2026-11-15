@@ -1,0 +1,53 @@
+{
+  "repository": "https://github.com/leanprover/lean4",
+  "tag": "v4.30.0-rc2",
+  "revision": "3dc1a088b6d2d8eafe25a7cd7ec7b58d731bd7cc",
+  "license": "Apache-2.0 (LICENSE, upstream's file at the same revision)",
+  "scope": "Six files of src/kernel, byte for byte, as the pinned input of scripts/check_cic_l_rule_inventory.py. They are read by that script and compiled by nothing.",
+  "modifications": "none",
+  "obtained": "agh cat leanprover/lean4@<revision>:<path>; each git_blob equals the blob id in the upstream tree at that revision",
+  "files": [
+    {
+      "path": "src/kernel/type_checker.cpp",
+      "bytes": 47347,
+      "sha256": "ba68131f435bb85655da31c10d2cfec8cf9b6b1d7a2009bf9f8255af2a91040d",
+      "git_blob": "dd3741a339e1a3d6ea2cc0ebf9ecff2ad472f335"
+    },
+    {
+      "path": "src/kernel/inductive.cpp",
+      "bytes": 58268,
+      "sha256": "483fd791504ada6cdf94e9eb63f13c62f5a3a0196367a83ce8cd896ad0408db5",
+      "git_blob": "7a09077a769a0a21a6a8820bc6277b20cc753d65"
+    },
+    {
+      "path": "src/kernel/inductive.h",
+      "bytes": 6936,
+      "sha256": "0c800b0377e7aa74a8a53a9f98ce61ab9df02ea62f917fc8e59db07189fddc98",
+      "git_blob": "ace7545869e6667fcae873d9eb33d8f4358080ff"
+    },
+    {
+      "path": "src/kernel/quot.cpp",
+      "bytes": 5996,
+      "sha256": "16916b73a6297e8f680e758684390fb2df8e7ff99253ffca8f97cb01af16925f",
+      "git_blob": "a76bc056287015a60122489f43ce0f617e034fda"
+    },
+    {
+      "path": "src/kernel/quot.h",
+      "bytes": 3132,
+      "sha256": "17105c835e79ccb397194e9663dba71b5515edbc89c9698b0d58a95dc30a8243",
+      "git_blob": "ddfd269ff97b40095c270260a5aeeb3d6b35cb17"
+    },
+    {
+      "path": "src/kernel/level.cpp",
+      "bytes": 17826,
+      "sha256": "ca17818de4a7f7c2ceaea3b4c6596fb7dfad0db6305c8100548964bc6459c7f9",
+      "git_blob": "7d0374ece04afddff3c5e534ad4bfd1945dfd82e"
+    },
+    {
+      "path": "LICENSE",
+      "bytes": 9160,
+      "sha256": "8b28515ffffc5c0fe2807d8ae3735b00b324d9b7ce807dd63ff6ac8922fbce7e",
+      "git_blob": "813da297567374691eaae7a88739dbbefd2afdfd"
+    }
+  ]
+}

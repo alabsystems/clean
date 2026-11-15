@@ -9,7 +9,9 @@ use clean_kernel::{Expr, FVarId};
 
 use super::arith_linarith::LinarithCertificate;
 use super::arith_linarith_chain;
+use super::arith_linarith_chain::{ArithSort, CmpOp};
 use super::arith_linarith_close::{try_close_contradictory_le_generic, wrap_false_elim};
+use super::arith_linarith_farkas_goal::close_nat_le_by_farkas_gap;
 use super::arith_linarith_scale::{choose_real_accumulation_mode, SortLeAcc};
 use super::arithmetic::big_nat_to_i64;
 use super::Goal;
@@ -26,44 +28,17 @@ pub(crate) fn find_hyp_type(goal: &Goal, fvar: FVarId) -> Option<Expr> {
         .map(|d| d.ty.clone())
 }
 
-/// Extract `(α, a, b)` from a comparison expression.
+/// Extract `(α, a, b)` from a comparison expression, oriented and without the
+/// operator: [`arith_linarith_chain::extract_le_args_full`] with `op` dropped.
 ///
 /// REQUIRES: `ty` is a well-formed kernel expression
-/// ENSURES: On `Some((α, a, b))`, `ty` is `@{LE.le|LT.lt|GE.ge|GT.gt} α inst a b`
-///   or a direct `{Nat|Int|Rat|Real}.{le|lt} a b` comparison.
+/// ENSURES: On `Some((α, a, b))`, `ty` is `a ≤ b` or `a < b` over `α`, spelled
+///   `@{LE.le|LT.lt} α inst a b`, `@{GE.ge|GT.gt} α inst b a`, or a direct
+///   `{Nat|Int|Rat|Real}.{le|lt} a b`.
 /// ENSURES: On `None`, `ty` does not match a supported comparison expression
 pub(crate) fn extract_le_args(ty: &Expr) -> Option<(Expr, Expr, Expr)> {
-    let args = ty.get_app_args();
-    // LE.le / LT.lt: 4 args = [α, inst, a, b]
-    if args.len() == 4 {
-        let fn_expr = ty.get_app_fn();
-        if let ExprKind::Const(name, _) = fn_expr.kind() {
-            let s = name.to_string();
-            if s == "LE.le" || s == "LT.lt" || s == "GE.ge" || s == "GT.gt" {
-                return Some((args[0].clone(), args[2].clone(), args[3].clone()));
-            }
-        }
-    }
-    if args.len() == 2 {
-        let fn_expr = ty.get_app_fn();
-        if let ExprKind::Const(name, _) = fn_expr.kind() {
-            if let Some(alpha) = direct_comparison_sort(&name.to_string()) {
-                return Some((alpha, args[0].clone(), args[1].clone()));
-            }
-        }
-    }
-    None
-}
-
-fn direct_comparison_sort(name: &str) -> Option<Expr> {
-    let sort = match name {
-        "Nat.le" | "Nat.lt" => "Nat",
-        "Int.le" | "Int.lt" => "Int",
-        "Rat.le" | "Rat.lt" => "Rat",
-        "Real.le" | "Real.lt" => "Real",
-        _ => return None,
-    };
-    Some(Expr::const_(clean_kernel::Name::from_string(sort), vec![]))
+    let (alpha, _op, a, b) = arith_linarith_chain::extract_le_args_full(ty)?;
+    Some((alpha, a, b))
 }
 
 /// Prove a strict Int goal `Int.lt a (b + 1)` (surface `a < b + 1`) from a
@@ -267,33 +242,40 @@ pub(crate) fn build_linarith_proof(
             let h_fvar = hypothesis_fvars[hyp_idx];
             let proof = Expr::fvar(h_fvar);
             if let Some(h_ty) = find_hyp_type(goal, h_fvar) {
-                if let Some((alpha, lhs, rhs)) = extract_le_args(&h_ty) {
+                if let Some((alpha, op, lhs, rhs)) =
+                    arith_linarith_chain::extract_le_args_full(&h_ty)
+                {
+                    // A strict `h : a < b` is closed as the `succ a ≤ b` it is,
+                    // so `h : c < c` refutes (`not_validChar_above_max`).
                     if let Some(sort) = arith_linarith_chain::detect_sort(&alpha) {
-                        if let Some(closed) = try_close_contradictory_le_generic(
-                            sort,
-                            &proof,
-                            &lhs,
-                            &rhs,
-                            goal_target,
-                        ) {
+                        if let Some(closed) =
+                            close_contradictory_cmp(goal, sort, op, &proof, &lhs, &rhs)
+                        {
                             return Some(closed);
                         }
                     }
+                    // Both Int weakenings take `h : Int.le a b`; a strict `h`
+                    // is left to the B7 lane below, which reads strictness.
+                    //
                     // Int weakening: prove a strict goal `Int.lt a (b + 1)` from a
                     // single consistent hypothesis `h : Int.le a b` (the shape the
                     // contradiction-closer above cannot reach — it needs the
                     // negated goal, which the certificate excludes). See
                     // `try_int_lt_succ_weakening`. `close_goal` re-checks the
                     // candidate, so a wrong-shape goal is rejected (fail closed).
-                    if let Some(w) = try_int_lt_succ_weakening(goal_target, &proof, &lhs, &rhs) {
-                        return Some(w);
-                    }
-                    // B111: non-strict Int weakening `a ≤ b + 1` from `h : a ≤ b`
-                    // (via Int.le_trans + Int.le_self_add_one). Fires only when the
-                    // goal RHS is structurally `b + 1`, so the identity `a ≤ b`
-                    // still falls through to the raw-hypothesis closer below.
-                    if let Some(w) = try_int_le_succ_weakening(goal_target, &proof, &lhs, &rhs) {
-                        return Some(w);
+                    if op == CmpOp::Le {
+                        if let Some(w) = try_int_lt_succ_weakening(goal_target, &proof, &lhs, &rhs)
+                        {
+                            return Some(w);
+                        }
+                        // B111: non-strict Int weakening `a ≤ b + 1` from `h : a ≤ b`
+                        // (via Int.le_trans + Int.le_self_add_one). Fires only when
+                        // the goal RHS is structurally `b + 1`, so the identity
+                        // `a ≤ b` still falls through to the raw-hypothesis closer.
+                        if let Some(w) = try_int_le_succ_weakening(goal_target, &proof, &lhs, &rhs)
+                        {
+                            return Some(w);
+                        }
                     }
                 }
                 // B7 `arith-int-bound`: general ground-shifted Int weakening —
@@ -319,18 +301,17 @@ pub(crate) fn build_linarith_proof(
         if let Some((proof, sort, chain_op, chain_lhs, chain_rhs)) =
             arith_linarith_chain::build_chain_proof(&active, hypothesis_fvars, goal)
         {
-            if chain_op == arith_linarith_chain::CmpOp::Lt && chain_lhs == chain_rhs {
+            if chain_op == CmpOp::Lt && chain_lhs == chain_rhs {
                 let false_proof =
                     arith_linarith_chain::mk_lt_irrefl_false(sort, &chain_lhs, &proof);
                 return Some(wrap_false_elim(false_proof, goal_target));
             }
-            if let Some(closed) = try_close_contradictory_le_generic(
-                sort,
-                &proof,
-                &chain_lhs,
-                &chain_rhs,
-                goal_target,
-            ) {
+            // `proof` proves `chain_lhs <chain_op> chain_rhs`: a strict chain
+            // (`0xD800 ≤ v`, `v < 256`) is closed as the `succ chain_lhs ≤
+            // chain_rhs` it is (`validChar_of_lt_256`).
+            if let Some(closed) =
+                close_contradictory_cmp(goal, sort, chain_op, &proof, &chain_lhs, &chain_rhs)
+            {
                 return Some(closed);
             }
             return Some(proof);
@@ -381,12 +362,7 @@ pub(crate) fn build_add_le_add_proof(
         let next = SortLeAcc::from_hypothesis(h_fvar, goal, real_mode)?;
         acc = acc.combine(next)?;
     }
-    if let Some(closed) =
-        try_close_contradictory_le_generic(acc.sort, &acc.proof, &acc.lhs, &acc.rhs, &goal.target)
-    {
-        return Some(closed);
-    }
-    Some(acc.proof)
+    Some(close_summed_or_return(goal, acc))
 }
 
 /// Build a proof with scaling for coefficients > 1.
@@ -413,27 +389,43 @@ pub(crate) fn build_scaled_proof(
             return None;
         }
     }
-    if accs.len() == 1 {
-        let acc = accs.remove(0);
-        if let Some(closed) = try_close_contradictory_le_generic(
-            acc.sort,
-            &acc.proof,
-            &acc.lhs,
-            &acc.rhs,
-            &goal.target,
-        ) {
-            return Some(closed);
-        }
-        return Some(acc.proof);
-    }
     let mut acc = accs.remove(0);
     for next in accs {
         acc = acc.combine(next)?;
     }
+    Some(close_summed_or_return(goal, acc))
+}
+
+/// Close `goal` from `proof : lhs <op> rhs`: the sort's contradiction closer
+/// over the `≤` the proof is by definition, then, over Nat, the Farkas
+/// residual closer, which cancels atoms the endpoints do not share with
+/// `0 ≤ v` (`a + b < 3`, `5 ≤ a` sums to `succ (a + b) + 5 ≤ 3 + a`, refuted
+/// with `0 ≤ b`).
+fn close_contradictory_cmp(
+    goal: &Goal,
+    sort: ArithSort,
+    op: CmpOp,
+    proof: &Expr,
+    lhs: &Expr,
+    rhs: &Expr,
+) -> Option<Expr> {
+    let (le_lhs, le_rhs) = arith_linarith_chain::definitional_le_endpoints(sort, op, lhs, rhs)?;
     if let Some(closed) =
-        try_close_contradictory_le_generic(acc.sort, &acc.proof, &acc.lhs, &acc.rhs, &goal.target)
+        try_close_contradictory_le_generic(sort, proof, &le_lhs, &le_rhs, &goal.target)
     {
         return Some(closed);
     }
-    Some(acc.proof)
+    if sort != ArithSort::Nat {
+        return None;
+    }
+    let acc = SortLeAcc::nat_from_parts(le_lhs, le_rhs, proof.clone())?;
+    close_nat_le_by_farkas_gap(goal, acc, &goal.target)
+}
+
+/// [`close_contradictory_cmp`] on a summed `acc : lhs ≤ rhs`; when nothing
+/// refutes it, `acc`'s own proof (which `close_goal` then refuses unless it
+/// IS the goal).
+fn close_summed_or_return(goal: &Goal, acc: SortLeAcc) -> Expr {
+    close_contradictory_cmp(goal, acc.sort, CmpOp::Le, &acc.proof, &acc.lhs, &acc.rhs)
+        .unwrap_or(acc.proof)
 }

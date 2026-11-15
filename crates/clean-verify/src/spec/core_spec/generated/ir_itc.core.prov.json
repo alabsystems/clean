@@ -1,0 +1,30 @@
+{
+ "reader": "A (trust-ir binary -> core), a2project",
+ "dump": "$HOME/clean/target/crystal-lane/dump-infertype-O3-part/callees/clean_kernel.callees.trust-ir.bin",
+ "dump_sha256": "9b02ce7cdfd4a00087e7d19574ad7a72ae1c973286734c9c0abc465e72a846ad",
+ "module_name": "clean_kernel::callees",
+ "function_name": "clean_kernel::tc::infer::<impl clean_kernel::tc::TypeChecker<'_>>::infer_type::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>",
+ "artifact_func_index": 0,
+ "artifact_func_id": 0,
+ "artifact_functy_id": 0,
+ "artifact_linkage": "external",
+ "artifact_calling_conv": "ccc",
+ "artifact_producer": "trust-ir",
+ "usize_bits": 64,
+ "usize_sites_resolved": 0,
+ "isize_sites_resolved": 12,
+ "core_digest": "266699d0c01bce186204e7f6b4119ede789fee2f1b7cebfb0326997ed7f22ff5",
+ "chain_functions": [
+  { "module_index": 0, "canonical": 0, "name": "clean_kernel::tc::infer::<impl clean_kernel::tc::TypeChecker<'_>>::infer_type::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>", "artifact_func_id": 0, "artifact_functy_id": 0, "linkage": "external", "calling_conv": "ccc" },
+  { "module_index": 1, "canonical": 1, "name": "clean_kernel::tc::heartbeat::<impl clean_kernel::tc::TypeChecker<'_>>::tick_heartbeat::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>", "artifact_func_id": 19, "artifact_functy_id": 23, "linkage": "external", "calling_conv": "ccc" }
+ ],
+ "crate_enum_ids_seen": [7, 14, 9],
+ "encodings_derived": [{"canonical": 2, "crate_id": 9, "kind": "nicheptr", "none_variant": 0, "some_variant": 1, "payload": "(ptr)", "first_named_by": 19, "table": "module", "decl": "core::option::Option"}, {"canonical": 7, "crate_id": 49, "kind": "ptrwrap", "slot": 0, "fields": 1, "payload": "(uint 32)", "first_named_by": 19, "table": "module", "decl": "core::cell::UnsafeCell"}, {"canonical": 8, "crate_id": 23, "kind": "ptrwrap", "slot": 0, "fields": 1, "payload": "(struct 9)", "first_named_by": 19, "table": "module", "decl": "core::cell::Cell"}, {"canonical": 9, "crate_id": 22, "kind": "ptrwrap", "slot": 0, "fields": 1, "payload": "(int 64)", "first_named_by": 19, "table": "module", "decl": "core::cell::UnsafeCell"}, {"canonical": 10, "crate_id": 70, "kind": "ptrwrap", "slot": 0, "fields": 1, "payload": "(ptr)", "first_named_by": 19, "table": "module", "decl": "core::cell::BorrowRef"}, {"canonical": 11, "crate_id": 5, "kind": "ptrwrap", "slot": 0, "fields": 1, "payload": "(ptr)", "first_named_by": 19, "table": "module", "decl": "core::ptr::non_null::NonNull"}],
+ "encodings_refused": ["struct.2: 3 non-ZST field(s), not 1 — not a pointer wrapper", "struct.16: 34 non-ZST field(s), not 1 — not a pointer wrapper", "struct.18: 3 non-ZST field(s), not 1 — not a pointer wrapper", "struct.19: 3 non-ZST field(s), not 1 — not a pointer wrapper", "struct.91: 3 non-ZST field(s), not 1 — not a pointer wrapper", "struct.68: 33 non-ZST field(s), not 1 — not a pointer wrapper", "struct.71: 2 non-ZST field(s), not 1 — not a pointer wrapper"],
+ "crate_struct_ids_seen": [2, 1, 16, 18, 19, 91, 68, 49, 23, 22, 70, 5, 71],
+ "crate_func_ids_seen": [0, 19, 2, 67, 68, 69, 70],
+ "crate_func_names_seen": ["clean_kernel::tc::infer::<impl clean_kernel::tc::TypeChecker<'_>>::infer_type::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>", "clean_kernel::tc::heartbeat::<impl clean_kernel::tc::TypeChecker<'_>>::tick_heartbeat::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>", "clean_kernel::tc::infer::<impl clean_kernel::tc::TypeChecker<'_>>::infer_type_fast::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>", "std::thread::local::LocalKey::<clean_kernel::tc::decl_budget::DeclBudget>::with::<{closure@crates/clean-kernel/src/tc/decl_budget.rs:193:17: 193:20}, bool>::<__trust_args@a6222ff262563431abaa6dcbdbf98a87>", "clean_kernel::tc::decl_budget::declaration_budget_limit", "clean_kernel::tc::heartbeat::<impl clean_kernel::tc::TypeChecker<'_>>::heartbeat_exceeded_error::<__trust_args@bb64d9ba9587f04825b45b0aa63558a5>", "clean_kernel::tc::heartbeat_profiler::profiler::HeartbeatProfiler::tick"],
+ "aligns_erased": ["alloca:None", "load:None", "store:None", "store:None", "alloca:None", "store:None", "load:None", "store:None", "load:None", "store:None", "store:None", "load:None", "load:None", "store:None", "load:None", "store:None"],
+ "param_tys_erased": ["Ptr", "Ptr", "Ptr"],
+ "block_param_tys_erased": []
+}

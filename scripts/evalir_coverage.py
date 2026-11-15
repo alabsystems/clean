@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Yates
 # SPDX-License-Identifier: Apache-2.0
 
-"""Derive "EvalIR semdiff coverage N/28" as a machine-read artifact.
+"""Derive "EvalIR semdiff coverage N/<census>" as a machine-read artifact.
 
 The B-SEM program (docs/analysis/evalir-completion-plan-2026-08-24.md) steers by
-one fraction: how many of the 28 constructed `IRInst` constructors have
+one fraction: how many of the constructed-and-modelled `IRInst` constructors have
 MEASURED three-executor agreement rows in the semdiff battery. Until now that
 fraction lived in prose (CLAUDE.md, GAP2 §8, the anchors) and had to be
 re-derived by eye from `data/crystal_gap2_semdiff_*.json`. This script makes it
@@ -26,7 +26,7 @@ Derivation rule — measured rows only, never authored ones:
              fraction ... is the wave's headline number, quoted from the
              artifact only".
 
-  total    = the pinned constructed-`Inst` census, derived TWICE and required
+  total    = the pinned constructed-and-modelled `Inst` census, derived TWICE and required
              to agree: `EMITTED_INSTS` in
              `crates/clean-verify/tests/eval_ir/census.rs` and the `IRInst`
              inductive in
@@ -148,19 +148,45 @@ def validate_artifact(doc: dict, path: str, census: set[str]) -> list[str]:
         raise CoverageError(f"{path}: coverage.exercised has non-string entries (schema drift)")
     if len(exercised) != len(set(exercised)):
         raise CoverageError(f"{path}: coverage.exercised contains duplicates")
-    if cov["irinst_constructors_total"] != len(census):
+    # The artifact's total is the census AT ITS OWN DATE, and the two facts a
+    # mismatch can mean are NOT the same fact. Until 2026-09-10 both were one
+    # error, which made adding a constructor to `IRInst` indistinguishable from
+    # corrupting a dated record — and the only ways out of it were rewriting a
+    # measurement's own denominator (falsifying history) or re-running a
+    # battery that has an unbounded test in it.
+    #
+    #   artifact total  >  census   HARD ERROR. Either the census SHRANK under
+    #                               a measurement, or the record is corrupt.
+    #                               Both are inconsistencies, and neither has
+    #                               an honest reading.
+    #   artifact total  <  census   ALLOWED, and RECORDED. The census grew
+    #                               after this artifact was minted. The
+    #                               constructors added since are, by
+    #                               construction, not in `exercised`, so they
+    #                               land in `unmeasured` and the published
+    #                               fraction goes DOWN. That is the correct
+    #                               direction: a new constructor is unmeasured
+    #                               until it is measured.
+    #
+    # The membership check below still runs against the CURRENT census, so a
+    # name that has since been REMOVED is still a hard error.
+    if cov["irinst_constructors_total"] > len(census):
         raise CoverageError(
-            f"{path}: artifact total {cov['irinst_constructors_total']} != census {len(census)}"
+            f"{path}: artifact total {cov['irinst_constructors_total']} EXCEEDS census "
+            f"{len(census)} — a measurement cannot have covered more constructors than "
+            f"exist; the census shrank under a dated record, or the record is corrupt"
         )
     if cov["irinst_constructors_exercised"] != len(exercised):
         raise CoverageError(
             f"{path}: exercised count field {cov['irinst_constructors_exercised']} "
             f"!= len(exercised) {len(exercised)}"
         )
-    if cov["unmeasured"] != len(census) - len(exercised):
+    # Against the artifact's OWN total: this is the arithmetic the artifact
+    # asserted about itself when it was minted, and it stays checkable forever.
+    if cov["unmeasured"] != cov["irinst_constructors_total"] - len(exercised):
         raise CoverageError(
-            f"{path}: unmeasured {cov['unmeasured']} != total - exercised "
-            f"{len(census) - len(exercised)}"
+            f"{path}: unmeasured {cov['unmeasured']} != its own total - exercised "
+            f"{cov['irinst_constructors_total'] - len(exercised)}"
         )
     alien = sorted(set(exercised) - census)
     if alien:
@@ -197,6 +223,7 @@ def derive(root: str) -> dict:
 
     covered: set[str] = set()
     artifacts_prov = []
+    behind: list[str] = []
     for path in artifact_paths:
         rel = os.path.relpath(path, root)
         try:
@@ -208,22 +235,33 @@ def derive(root: str) -> dict:
             raise CoverageError(f"{rel}: top level is not an object (schema drift)")
         exercised = validate_artifact(doc, rel, set(census))
         covered.update(exercised)
-        artifacts_prov.append(
-            {"path": rel, "sha256": sha256_file(path), "exercised": sorted(exercised)}
-        )
+        artifact_total = doc["coverage"]["irinst_constructors_total"]
+        entry = {"path": rel, "sha256": sha256_file(path), "exercised": sorted(exercised)}
+        if artifact_total < len(census):
+            entry["census_at_mint"] = artifact_total
+            entry["behind_current_census_by"] = len(census) - artifact_total
+            behind.append(entry["path"])
+        artifacts_prov.append(entry)
 
     return {
         "schema": SCHEMA,
         "covered": sorted(covered),
         "count": len(covered),
         "total": len(census),
+        "unmeasured": sorted(set(census) - covered),
+        "artifacts_behind_the_current_census": behind,
         "provenance": {
             "derived_by": "scripts/evalir_coverage.py",
             "rule": (
                 "covered = union of coverage.exercised over the artifacts below; "
                 "measured rows only — authored-but-unminted battery rows never count. "
                 "total = pinned constructed-Inst census, derived independently from "
-                "both denominator sources, which must agree."
+                "both denominator sources, which must agree. An artifact minted "
+                "against a SMALLER census is honoured at its own date and named in "
+                "`artifacts_behind_the_current_census`: the constructors added since "
+                "cannot appear in its `exercised` list, so they land in `unmeasured` "
+                "and the fraction falls. An artifact claiming a LARGER census than "
+                "exists is a hard error."
             ),
             "artifacts": artifacts_prov,
             "denominator_sources": {
@@ -283,12 +321,48 @@ def self_test(root: str) -> int:
 
     arm("planted extra constructor in exercised", lambda: validate_artifact(mutated(extra), "<mut>", set(census)))
 
-    # 2. Planted MISSING constructor in the census: artifact total no longer matches.
-    victim = census[0]
+    # 2. The census SHRANK under a dated record: the artifact now claims more
+    #    constructors than exist. This is the half of the old equality check
+    #    that stays a hard error, and the arm has to shrink the census BELOW
+    #    the artifact's own total to reach it — removing one name from a census
+    #    that is already ahead of the artifact proves nothing.
+    real_total = real_doc["coverage"]["irinst_constructors_total"]
+    shrunk = set(census[: max(0, real_total - 1)])
     arm(
-        f"planted missing census constructor ({victim})",
-        lambda: validate_artifact(real_doc, "<mut>", set(census) - {victim}),
+        f"census shrank below a dated artifact's total ({len(shrunk)} < {real_total})",
+        lambda: validate_artifact(real_doc, "<mut>", shrunk),
     )
+
+    # 2b. Same fact reached from the other side: an artifact that claims a
+    #     LARGER census than exists.
+    def inflate(doc):
+        doc["coverage"]["irinst_constructors_total"] = len(census) + 1
+        doc["coverage"]["unmeasured"] = (
+            len(census) + 1 - doc["coverage"]["irinst_constructors_exercised"]
+        )
+
+    arm(
+        "artifact total exceeds the current census",
+        lambda: validate_artifact(mutated(inflate), "<mut>", set(census)),
+    )
+
+    # 2c. The direction that must NOT fail, asserted rather than assumed: a
+    #     census that GREW since the artifact was minted is honoured at the
+    #     artifact's own date. Without this arm the fix above could be
+    #     "corrected" back into an equality check and every mutation arm would
+    #     stay green.
+    grown = set(census) | {"planted_new_constructor_since_the_mint"}
+    try:
+        got = validate_artifact(real_doc, "<mut>", grown)
+        if sorted(got) != sorted(real_doc["coverage"]["exercised"]):
+            print("  self-test ARM FAILED: grown census -> exercised list changed")
+            failures += 1
+        else:
+            print("  self-test ARM ok: census grown since the mint -> honoured, "
+                  f"exercised unchanged ({len(got)} names)")
+    except CoverageError as e:
+        print(f"  self-test ARM FAILED: census grown since the mint -> refused ({e})")
+        failures += 1
 
     # 3. Denominator sources disagreeing (one census name deleted from census.rs only).
     arm(
@@ -302,7 +376,8 @@ def self_test(root: str) -> int:
 
     arm("exercised count field != len(exercised)", lambda: validate_artifact(mutated(count_drift), "<mut>", set(census)))
 
-    # 5. Unmeasured arithmetic broken.
+    # 5. Unmeasured arithmetic broken — now checked against the artifact's OWN
+    #    total, so this stays a defect at any census.
     def unmeasured_drift(doc):
         doc["coverage"]["unmeasured"] -= 1
 

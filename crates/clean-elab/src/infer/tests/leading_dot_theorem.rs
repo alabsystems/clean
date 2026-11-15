@@ -45,7 +45,10 @@ fn test_leading_dot_symm_widens_past_constructor_list() {
     let mut ctx = ElabCtx::new(&env);
     let expected = eq_nat_one_one();
     let resolved = ctx
-        .elab_leading_dot_ctor_with_expected_type(".symm", &expected)
+        .elab_leading_dot_ctor_with_expected_type(
+            &SurfaceName::component("symm", false).with_relative_constructor(),
+            &expected,
+        )
         .expect("`.symm` should widen past Eq's constructor list to Eq.symm");
     assert!(
         matches!(
@@ -66,7 +69,12 @@ fn test_leading_dot_rfl_stays_unknown_because_lean_has_no_eq_rfl() {
     let env = Environment::with_prelude();
     let mut ctx = ElabCtx::new(&env);
     let expected = eq_nat_one_one();
-    let resolved = ctx.elab_leading_dot_ctor_with_expected_type(".rfl", &expected);
+    let resolved = ctx
+        .elab_leading_dot_ctor_with_expected_type(
+            &SurfaceName::component("rfl", false).with_relative_constructor(),
+            &expected,
+        )
+        .map_err(|error| error.with_ident_suggestions(&env));
     assert!(
         matches!(resolved, Err(ElabError::UnknownIdent(_))),
         "`.rfl` under an expected `Eq` type must stay UnknownIdent (Lean has no \
@@ -79,7 +87,12 @@ fn test_leading_dot_unknown_member_stays_fail_closed() {
     let env = Environment::with_prelude();
     let mut ctx = ElabCtx::new(&env);
     let expected = eq_nat_one_one();
-    let resolved = ctx.elab_leading_dot_ctor_with_expected_type(".zzzNoSuchMember", &expected);
+    let resolved = ctx
+        .elab_leading_dot_ctor_with_expected_type(
+            &SurfaceName::component("zzzNoSuchMember", false).with_relative_constructor(),
+            &expected,
+        )
+        .map_err(|error| error.with_ident_suggestions(&env));
     assert!(
         matches!(resolved, Err(ElabError::UnknownIdent(_))),
         "a suffix that is neither constructor nor namespace constant must stay UnknownIdent, got {resolved:?}"

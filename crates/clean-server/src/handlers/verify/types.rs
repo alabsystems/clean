@@ -53,7 +53,7 @@ pub struct VerifyCFunctionResult {
 pub struct VerifyCVCDetail {
     /// Description of the VC
     pub description: String,
-    /// Status: "proved", "failed", "unknown"
+    /// Status: "proved" (SMT bridge), "structural_matched", "unverified", "failed", "unknown"
     pub status: String,
     /// Reason for failure (if failed)
     #[serde(skip_serializing_if = "Option::is_none")]

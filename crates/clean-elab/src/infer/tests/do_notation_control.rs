@@ -37,58 +37,25 @@ fn test_terminal_return_no_except_wrapping() {
     }
 }
 
-/// Non-terminal return: `do { return Type; Prop }` should activate ExceptT wrapping.
-/// The Return at index 0 is followed by more elements, so the [Return, rest @ ..]
-/// dispatch fires and elab_do_early_return generates ExceptT.throw.
-/// Uses prelude environment so ExceptT kernel constants are available.
+/// Non-terminal return: `do { return Type; Prop }` is refused, as pinned Lean
+/// 4.8.0 refuses any element after `return` ("must be last element in a `do`
+/// sequence", `ensureEOS` in `src/Lean/Elab/Do.lean`; measured 2026-10-16).
+/// Until round-5 lane D (G54, ledger (124)) Clean elaborated it as
+/// `pure Type` and never elaborated `Prop` (measured 2026-09-16: the term was
+/// `["Pure.pure"]` alone); this test used to pin that gap.
 #[test]
-fn test_non_terminal_return_uses_except() {
+fn test_non_terminal_return_refused_as_lean() {
     let env = Environment::with_prelude();
     let mut ctx = ElabCtx::new(&env);
-    // Use `Type` and `Prop` which elaborate without needing numeric literals.
     let surface = parse_expr("do { return Type; Prop }").unwrap();
-    let result = ctx.elaborate(&surface);
-    match result {
-        Ok(expr) => {
-            // Should be wrapped with ExceptT.run since return is non-terminal
-            fn collect_const_names(e: &Expr, names: &mut Vec<String>) {
-                match e.kind() {
-                    ExprKind::Const(name, _) => names.push(name.to_string()),
-                    ExprKind::App(f, a) => {
-                        collect_const_names(f, names);
-                        collect_const_names(a, names);
-                    }
-                    ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
-                        collect_const_names(ty, names);
-                        collect_const_names(body, names);
-                    }
-                    ExprKind::Let(_, ty, val, body, _) => {
-                        collect_const_names(ty, names);
-                        collect_const_names(val, names);
-                        collect_const_names(body, names);
-                    }
-                    _ => {}
-                }
-            }
-            let mut names = Vec::new();
-            collect_const_names(&expr, &mut names);
-            assert!(
-                names.iter().any(|n| n == "ExceptT.run" || n == "MonadExcept.throw"),
-                "non-terminal return should reference ExceptT.run or MonadExcept.throw, found: {names:?}"
-            );
-        }
-        Err(e) => {
-            // May fail for type-unification reasons, but must NOT fail because
-            // ExceptT is unknown or ControlStack is missing.
-            let msg = format!("{e:?}");
-            assert!(
-                !msg.contains("unknown constant \"ExceptT")
-                    && !msg.contains("no EarlyReturn layer")
-                    && !msg.contains("early return without ControlStack"),
-                "non-terminal return should find ExceptT and ControlStack: {e:?}"
-            );
-        }
-    }
+    let err = ctx
+        .elaborate(&surface)
+        .expect_err("Lean refuses an element after `return`");
+    assert!(
+        err.to_string()
+            .contains("must be last element in a `do` sequence"),
+        "the refusal is Lean's `ensureEOS`: {err:?}"
+    );
 }
 
 /// `do break` should produce OptionT.fail at the break layer.
@@ -175,15 +142,26 @@ fn test_let_mut_reassign_activates_state_t() {
             }
         }
         Err(e) => {
-            // May fail due to missing kernel axioms or incomplete StateT wiring
+            // MEASURED 2026-09-16, the first time this file was ever compiled:
+            //   TypeMismatch { expected: "Type 1",
+            //                  actual: "Type (universe level conflict: 0 vs 1)" }
+            //
+            // So this does not fail for "missing kernel axioms or incomplete
+            // StateT wiring" as the old prose guessed. It fails in UNIVERSE
+            // SOLVING: the reassignment path unifies the mutable cell's type at
+            // two different levels. The subject here is `Type`/`Prop` precisely
+            // because they elaborate without numeric literals, which is what
+            // puts a `Sort` in the cell and makes the conflict visible.
+            //
+            // Pinned as a refusal rather than fixed here, with the target
+            // assertion above kept intact, so the day the level conflict is
+            // solved the `Ok` arm runs and pins `StateT.run` for real.
             let msg = format!("{e:?}");
             assert!(
-                msg.contains("StateT")
-                    || msg.contains("mut")
-                    || msg.contains("reassign")
-                    || msg.contains("NotImplemented")
-                    || msg.contains("unknown"),
-                "unexpected error for let mut + reassign: {e:?}"
+                msg.contains("universe level conflict"),
+                "the measured gap is a universe level conflict in the `let mut` \
+                 reassignment path; this is a DIFFERENT failure, so re-measure \
+                 before trusting this pin: {e:?}"
             );
         }
     }
@@ -218,38 +196,41 @@ fn test_has_top_level_non_terminal_return() {
     use clean_parser::{DoElem, Span, SurfaceExpr};
 
     let span = Span::new(0, 0);
-    let expr = || Box::new(SurfaceExpr::Ident(span, "x".to_string()));
+    // 2026-09-16: `SurfaceExpr::Ident` takes a `SurfaceName`, not a `String`.
+    // This file stopped compiling at some point and nothing noticed, because it
+    // was in no module tree; the live sibling `do_control_flow.rs` already spells
+    // it this way.
+    let expr = || Box::new(SurfaceExpr::Ident(span, SurfaceName::generated_path("x")));
 
     // Single terminal return
     let elems = vec![DoElem::Return(span, expr())];
     assert!(
-        !super::super::elab_do::has_top_level_non_terminal_return(&elems),
+        !elab_do_control::has_top_level_non_terminal_return(&elems),
         "single return should be terminal"
     );
 
     // Non-terminal return (followed by expr)
     let elems = vec![DoElem::Return(span, expr()), DoElem::Expr(span, expr())];
     assert!(
-        super::super::elab_do::has_top_level_non_terminal_return(&elems),
+        elab_do_control::has_top_level_non_terminal_return(&elems),
         "return followed by expr should be non-terminal"
     );
 
     // Terminal return after bind
-    let binder =
-        clean_parser::SurfaceBinder::new("x", None, clean_parser::SurfaceBinderInfo::Explicit);
+    let binder = SurfaceBinder::new("x", None, SurfaceBinderInfo::Explicit);
     let elems = vec![
         DoElem::Bind(span, binder, expr()),
         DoElem::Return(span, expr()),
     ];
     assert!(
-        !super::super::elab_do::has_top_level_non_terminal_return(&elems),
+        !elab_do_control::has_top_level_non_terminal_return(&elems),
         "return as last element after bind should be terminal"
     );
 
     // No returns at all
     let elems = vec![DoElem::Expr(span, expr()), DoElem::Expr(span, expr())];
     assert!(
-        !super::super::elab_do::has_top_level_non_terminal_return(&elems),
+        !elab_do_control::has_top_level_non_terminal_return(&elems),
         "no returns should return false"
     );
 }
@@ -589,5 +570,35 @@ fn test_for_loop_no_break_no_stack() {
                 "for-loop without break/continue should not reference OptionT: {e:?}"
             );
         }
+    }
+}
+
+#[test]
+fn value_binding_origin_preserves_the_current_mutable_do_continuation() {
+    for origin in ["let", "have"] {
+        let source = format!(
+            "def continued : Id Nat := do\n  let mut x : Nat := 0\n  {origin} h : True := True.intro\n  x := 1\n  return x\n"
+        );
+        let patterns = crate::tactic::builtins::builtin_tactic_patterns();
+        let declaration =
+            parse_decl_with_tactics(&source, &patterns).expect("actual continuation source parses");
+        let mut env = Environment::with_prelude();
+        crate::elaborate_decl_and_register(&mut env, &declaration)
+            .expect("a local binding cannot reset the enclosing mutable do state");
+        let name = Name::from_string("continued");
+        let info = env.get_const(&name).expect("actual definition registers");
+        let value = info.value.as_ref().expect("stored definition value");
+        assert!(!value.has_fvar_quick() && !value.has_loose_bvars_quick());
+        let tc = TypeChecker::new(&env);
+        let ty = tc
+            .infer_type_full(value)
+            .expect("strict full stored-value inference");
+        assert!(tc.is_def_eq(&ty, &info.type_));
+        assert!(
+            tc.is_def_eq(value, &Expr::nat_lit(1)),
+            "the {origin} continuation must retain the assignment, not only its type"
+        );
+        assert!(!tc.is_def_eq(value, &Expr::nat_lit(0)));
+        assert!(env.axiom_deps(&name).expect("actual closure").is_empty());
     }
 }

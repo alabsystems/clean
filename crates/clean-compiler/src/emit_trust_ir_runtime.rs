@@ -47,7 +47,6 @@ pub(crate) struct RuntimeAbi {
     /// `clean_nat_big(lo: u64, hi: u64) -> clean_obj*`: a big `Nat` literal
     /// `>= 2^64` (`lo + hi*2^64`) as a heap Nat cell (RUNG B).
     pub(crate) clean_nat_big: FuncId,
-    pub(crate) clean_unbox: FuncId,
     pub(crate) clean_unbox_uint32: FuncId,
     pub(crate) clean_unbox_uint64: FuncId,
     pub(crate) clean_unbox_float: FuncId,
@@ -65,13 +64,16 @@ pub(crate) struct RuntimeAbi {
     // Closures.
     pub(crate) clean_alloc_closure: FuncId, // vararg; fn param typed Ty::Func(clean_fn_ty)
     pub(crate) apply: [FuncId; 33],         // clean_apply_0..=32
-    /// `clean_mk_string(const char*) -> clean_obj*`: builds a managed string
-    /// from a NUL-terminated byte global (see the data-global pre-pass).
-    pub(crate) clean_mk_string: FuncId,
-    /// Canonical function type used for closure function pointers. Sharing one
-    /// `Ty::Func` between `clean_alloc_closure`'s `fn` parameter and the
-    /// `fn_addr` value lets the call type-check WITHOUT a `Ty::Func`->`Ty::Ptr`
-    /// bitcast (which trust-cg lowers into a non-callable address).
+    /// `clean_mk_string_from_bytes(const char*, size_t) -> clean_obj*` copies
+    /// the literal's exact byte length, including embedded NULs.
+    pub(crate) clean_mk_string_from_bytes: FuncId,
+    /// Canonical function type of `clean_alloc_closure`'s `fn` parameter: the
+    /// ONE type every closure function pointer is handed to the runtime at.
+    /// Since trust-ir v41 a `FnDef` constant must carry its callee's own
+    /// signature, so the backend mints `fn_addr` at that signature and
+    /// `PtrToPtr`-casts it to this type (`FnCtx::closure_fn_ptr`); a
+    /// `Ty::Func`->`Ty::Ptr` bitcast is still avoided (trust-cg lowers that
+    /// into a non-callable address).
     pub(crate) clean_fn_ty: FuncTyId,
     /// Number of extern functions declared (= the FuncId of the first user fn).
     pub(crate) n_externs: u32,
@@ -149,11 +151,18 @@ impl RuntimeAbi {
             vec![p.clone()],
         );
         let clean_box_float = ext(mb, c, "clean_box_float", vec![Ty::F64], vec![p.clone()]);
-        let clean_unbox = ext(mb, c, "clean_unbox", vec![p.clone()], vec![Ty::U64]);
+        // Declared (so the module's runtime import table is unchanged) but
+        // never CALLED since WS6.1: the tagged-only `clean_unbox` (`ptr >> 1`)
+        // reads pointer bits off a heap-boxed Nat, so every integer/Bool unbox
+        // goes through the dispatching `clean_unbox_uint{32,64}` instead
+        // (`emit_trust_ir::emit_unbox_extern`). Hence no cached id.
+        let _clean_unbox = ext(mb, c, "clean_unbox", vec![p.clone()], vec![Ty::U64]);
         let clean_unbox_uint32 = ext(mb, c, "clean_unbox_uint32", vec![p.clone()], vec![Ty::U32]);
         let clean_unbox_uint64 = ext(mb, c, "clean_unbox_uint64", vec![p.clone()], vec![Ty::U64]);
         let clean_unbox_float = ext(mb, c, "clean_unbox_float", vec![p.clone()], vec![Ty::F64]);
-        let clean_obj_tag = ext(mb, c, "clean_obj_tag", vec![p.clone()], vec![Ty::U8]);
+        // The whole 32-bit tag: `runtime_extern.c` forwards the header's
+        // `unsigned` read, so a boxed tag above 255 is not truncated.
+        let clean_obj_tag = ext(mb, c, "clean_obj_tag", vec![p.clone()], vec![Ty::U32]);
         let clean_ctor_get = ext(
             mb,
             c,
@@ -243,8 +252,14 @@ impl RuntimeAbi {
             vec![p.clone(), Ty::U32, p.clone()],
             vec![p.clone()],
         );
-        // String construction from a NUL-terminated C-string global.
-        let clean_mk_string = ext(mb, c, "clean_mk_string", vec![p.clone()], vec![p.clone()]);
+        // USize lowers to U64 on the supported 64-bit native targets.
+        let clean_mk_string_from_bytes = ext(
+            mb,
+            c,
+            "clean_mk_string_from_bytes",
+            vec![p.clone(), Ty::U64],
+            vec![p.clone()],
+        );
         Self {
             clean_alloc_ctor,
             clean_box,
@@ -253,7 +268,6 @@ impl RuntimeAbi {
             clean_nat_of_u64,
             clean_nat_big,
             clean_box_float,
-            clean_unbox,
             clean_unbox_uint32,
             clean_unbox_uint64,
             clean_unbox_float,
@@ -269,7 +283,7 @@ impl RuntimeAbi {
             scalar_set,
             clean_alloc_closure,
             apply,
-            clean_mk_string,
+            clean_mk_string_from_bytes,
             clean_fn_ty,
             n_externs: count,
         }

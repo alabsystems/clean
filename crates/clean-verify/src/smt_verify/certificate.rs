@@ -4,7 +4,7 @@
 
 //! SMT proof certificate export with blake3 hashing.
 //!
-//! Produces kernel-verifiable certificates from verified SMT proofs — the
+//! Produces step-checker certificates from verified SMT proofs — the
 //! final link in the trust chain. A certificate contains:
 //!
 //! - Input formula hash (blake3)
@@ -33,7 +33,9 @@ use super::trust::{SmtVerifyResult, SmtVerifyStats};
 use super::{verify_smt_proof, VerifyMode};
 
 /// Certificate format version. Bump on breaking changes to the binary format.
-const CERTIFICATE_VERSION: u32 = 1;
+// Version 2 names Rust semantic checks honestly. Binary field layout is unchanged;
+// version 1 remains readable as step-checker evidence, never as a kernel token.
+const CERTIFICATE_VERSION: u32 = 2;
 
 /// Magic bytes for the compact binary format: "SMT\x00".
 const BINARY_MAGIC: [u8; 4] = [b'S', b'M', b'T', 0x00];
@@ -75,7 +77,7 @@ pub enum CertificateError {
 #[non_exhaustive]
 #[serde(rename_all = "snake_case")]
 pub enum CertificateVerdict {
-    /// Proof is a *fully kernel-verified* refutation (UNSAT): the terminal empty
+    /// Proof is a *fully step-checked* refutation (UNSAT): the terminal empty
     /// clause's support contains no structurally-accepted or trusted steps.
     Valid,
     /// The proof structurally derives the empty clause, but at least one step in
@@ -94,7 +96,8 @@ pub enum CertificateVerdict {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrustSummary {
     /// Steps verified by clean's semantic checkers.
-    pub kernel_verified: u32,
+    #[serde(alias = "kernel_verified")]
+    pub step_checked: u32,
     /// Steps structurally accepted (correct shape, not semantically checked).
     pub structurally_accepted: u32,
     /// Axiomatic steps (input assumptions).
@@ -112,7 +115,7 @@ impl TrustSummary {
         if self.total == 0 {
             return 1.0;
         }
-        f64::from(self.kernel_verified + self.structurally_accepted + self.axiomatic)
+        f64::from(self.step_checked + self.structurally_accepted + self.axiomatic)
             / f64::from(self.total)
     }
 
@@ -208,7 +211,7 @@ impl SmtCertificate {
     /// - 32 bytes: formula hash (raw)
     /// - 32 bytes: proof hash (raw)
     /// - 1 byte: verdict (0=Valid, 1=Invalid, 2=Error)
-    /// - 4 bytes: kernel_verified (u32 LE)
+    /// - 4 bytes: step_checked (u32 LE)
     /// - 4 bytes: structurally_accepted (u32 LE)
     /// - 4 bytes: axiomatic (u32 LE)
     /// - 4 bytes: trusted (u32 LE)
@@ -235,7 +238,7 @@ impl SmtCertificate {
 
         buf.push(verdict_to_byte(self.verdict));
 
-        buf.extend_from_slice(&self.trust_summary.kernel_verified.to_le_bytes());
+        buf.extend_from_slice(&self.trust_summary.step_checked.to_le_bytes());
         buf.extend_from_slice(&self.trust_summary.structurally_accepted.to_le_bytes());
         buf.extend_from_slice(&self.trust_summary.axiomatic.to_le_bytes());
         buf.extend_from_slice(&self.trust_summary.trusted.to_le_bytes());
@@ -296,7 +299,7 @@ impl SmtCertificate {
         let verdict_byte = read_bytes(&mut pos, 1)?[0];
         let verdict = byte_to_verdict(verdict_byte)?;
 
-        let kernel_verified = read_u32_le(&mut pos, data)?;
+        let step_checked = read_u32_le(&mut pos, data)?;
         let structurally_accepted = read_u32_le(&mut pos, data)?;
         let axiomatic = read_u32_le(&mut pos, data)?;
         let trusted = read_u32_le(&mut pos, data)?;
@@ -323,7 +326,7 @@ impl SmtCertificate {
             proof_hash,
             proof_format: String::new(),
             trust_summary: TrustSummary {
-                kernel_verified,
+                step_checked,
                 structurally_accepted,
                 axiomatic,
                 trusted,
@@ -454,11 +457,11 @@ pub fn verify_certificate(
         return Err(CertificateError::TrustMismatch {
             reason: format!(
                 "certificate: kv={} sa={} ax={} tr={}, re-verify: kv={} sa={} ax={} tr={}",
-                cert.trust_summary.kernel_verified,
+                cert.trust_summary.step_checked,
                 cert.trust_summary.structurally_accepted,
                 cert.trust_summary.axiomatic,
                 cert.trust_summary.trusted,
-                re_trust.kernel_verified,
+                re_trust.step_checked,
                 re_trust.structurally_accepted,
                 re_trust.axiomatic,
                 re_trust.trusted,
@@ -512,7 +515,7 @@ pub fn certify_alethe_proof(
 /// Derive a certificate verdict from a verification result.
 ///
 /// - `Valid` iff the proof structurally derives the empty clause **and** every
-///   step in the derivation was semantically verified (fully kernel-verified).
+///   step in the derivation was semantically verified (fully step-checked).
 /// - `Holey` if the proof derives the empty clause but rests on one or more
 ///   structurally-accepted steps (no blindly-trusted steps).
 /// - `Error` if strict mode rejected a trusted step (the proof was
@@ -549,7 +552,7 @@ fn result_to_verdict(result: &SmtVerifyResult) -> CertificateVerdict {
 
 fn stats_to_trust_summary(stats: &SmtVerifyStats) -> TrustSummary {
     TrustSummary {
-        kernel_verified: stats.kernel_verified,
+        step_checked: stats.step_checked,
         structurally_accepted: stats.structurally_accepted,
         axiomatic: stats.axiomatic,
         trusted: stats.trusted,
@@ -709,6 +712,38 @@ mod tests {
     }
 
     #[test]
+    fn legacy_counts_are_read_as_step_checks_and_written_honestly() {
+        let old = r#"{"kernel_verified":2,"structurally_accepted":0,"axiomatic":1,"trusted":0,"total":3}"#;
+        let summary: TrustSummary = serde_json::from_str(old).unwrap();
+        assert_eq!(summary.step_checked, 2);
+        let current = serde_json::to_string(&summary).unwrap();
+        assert!(current.contains("step_checked"));
+        assert!(!current.contains("kernel_verified"));
+    }
+
+    #[test]
+    fn version_one_binary_remains_step_checker_evidence() {
+        let dag = build_simple_proof();
+        let result = verify_smt_proof(&dag, VerifyMode::Permissive);
+        let mut cert = generate_certificate(
+            &dag,
+            &result,
+            b"formula",
+            b"proof",
+            "smt_dag",
+            VerifyMode::Permissive,
+        );
+        assert_eq!(cert.version, 2);
+        cert.version = 1;
+        let restored = SmtCertificate::from_binary(&cert.to_binary().unwrap()).unwrap();
+        assert_eq!(restored.version, 1);
+        assert_eq!(
+            restored.trust_summary.step_checked,
+            cert.trust_summary.step_checked
+        );
+    }
+
+    #[test]
     fn test_generate_certificate_simple_proof() {
         let dag = build_simple_proof();
         let result = verify_smt_proof(&dag, VerifyMode::Permissive);
@@ -731,7 +766,7 @@ mod tests {
         assert_eq!(cert.num_steps, 3);
         assert_eq!(cert.trust_summary.total, 3);
         assert_eq!(cert.trust_summary.axiomatic, 2);
-        assert_eq!(cert.trust_summary.kernel_verified, 1);
+        assert_eq!(cert.trust_summary.step_checked, 1);
         assert_eq!(cert.trust_summary.trusted, 0);
         assert!(cert.trust_summary.is_fully_verified());
         assert!((cert.trust_summary.coverage() - 1.0).abs() < f64::EPSILON);
@@ -950,7 +985,7 @@ mod tests {
         );
 
         // Tamper with trust counts.
-        cert.trust_summary.kernel_verified += 5;
+        cert.trust_summary.step_checked += 5;
 
         let err = verify_certificate(&cert, &dag, formula, proof)
             .expect_err("should fail with tampered trust");
@@ -1020,7 +1055,7 @@ mod tests {
     #[test]
     fn test_trust_summary_coverage_empty() {
         let summary = TrustSummary {
-            kernel_verified: 0,
+            step_checked: 0,
             structurally_accepted: 0,
             axiomatic: 0,
             trusted: 0,
@@ -1033,7 +1068,7 @@ mod tests {
     #[test]
     fn test_trust_summary_coverage_mixed() {
         let summary = TrustSummary {
-            kernel_verified: 6,
+            step_checked: 6,
             structurally_accepted: 2,
             axiomatic: 1,
             trusted: 1,
@@ -1049,7 +1084,7 @@ mod tests {
     #[test]
     fn test_trust_summary_structurally_accepted_is_not_fully_verified() {
         let summary = TrustSummary {
-            kernel_verified: 5,
+            step_checked: 5,
             structurally_accepted: 1,
             axiomatic: 2,
             trusted: 0,

@@ -226,7 +226,8 @@ fn build_level_results(reader: &ShardReader) -> Vec<LevelBuild> {
                     get_level_result(&built, left_idx, reader.levels.len()),
                     get_level_result(&built, right_idx, reader.levels.len()),
                 ) {
-                    (Ok(left), Ok(right)) => Ok(Level::max(left, right)),
+                    // Verbatim, as Lean's kernel reads it (DECISIONS R150).
+                    (Ok(left), Ok(right)) => Ok(Level::Max(left.into(), right.into())),
                     (Err(err), _) | (_, Err(err)) => Err(err),
                 }
             }
@@ -237,7 +238,7 @@ fn build_level_results(reader: &ShardReader) -> Vec<LevelBuild> {
                     get_level_result(&built, left_idx, reader.levels.len()),
                     get_level_result(&built, right_idx, reader.levels.len()),
                 ) {
-                    (Ok(left), Ok(right)) => Ok(Level::imax(left, right)),
+                    (Ok(left), Ok(right)) => Ok(Level::IMax(left.into(), right.into())),
                     (Err(err), _) | (_, Err(err)) => Err(err),
                 }
             }

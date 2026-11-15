@@ -279,7 +279,7 @@ fn test_fin_cases_no_goals() {
     close_current_goal_checked(&mut state, proof);
 
     // Now fin_cases should fail with NoGoals
-    let result = fin_cases(&mut state, "h");
+    let result = fin_cases(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -289,7 +289,10 @@ fn test_fin_cases_hypothesis_not_found() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
 
     let mut state = ProofState::new(env, a);
-    let result = fin_cases(&mut state, "nonexistent");
+    let result = fin_cases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -370,14 +373,15 @@ fn test_fin_cases_bool_creates_two_subgoals() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: bool_ty,
             value: None,
         }],
     );
 
-    let result = fin_cases(&mut state, "h");
+    let result = fin_cases(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         result.is_ok(),
         "fin_cases on Bool should succeed, got: {result:?}"
@@ -423,14 +427,15 @@ fn test_fin_cases_unit_creates_one_subgoal() {
         env,
         target,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: unit_ty,
             value: None,
         }],
     );
 
-    let result = fin_cases(&mut state, "h");
+    let result = fin_cases(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         result.is_ok(),
         "fin_cases on PUnit should succeed, got: {result:?}"
@@ -451,13 +456,14 @@ fn test_fin_cases_empty_type_fails() {
     let mut state = ProofState::new(env, Expr::const_(Name::from_string("A"), vec![]));
     let fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: empty_ty,
         value: None,
     });
 
-    let result = fin_cases(&mut state, "h");
+    let result = fin_cases(&mut state, &clean_parser::SurfaceName::generated_path("h"));
     assert!(
         result.is_err(),
         "fin_cases on Empty should fail (no inhabitants)"
@@ -479,7 +485,7 @@ fn test_interval_cases_no_goals() {
     close_current_goal_checked(&mut state, proof);
 
     // Now interval_cases should fail with NoGoals
-    let result = interval_cases(&mut state, "n");
+    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -489,7 +495,10 @@ fn test_interval_cases_hypothesis_not_found() {
     let a = Expr::const_(Name::from_string("A"), vec![]);
 
     let mut state = ProofState::new(env, a);
-    let result = interval_cases(&mut state, "nonexistent");
+    let result = interval_cases(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -504,13 +513,14 @@ fn test_interval_cases_no_bounds_returns_error() {
     let mut state = ProofState::new(env, Expr::const_(Name::from_string("P"), vec![]));
     let fvar = state.fresh_fvar();
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar,
-        name: "n".to_string(),
+        name: clean_parser::SurfaceName::generated_path("n"),
         ty: nat_ty,
         value: None,
     });
 
-    let result = interval_cases(&mut state, "n");
+    let result = interval_cases(&mut state, &clean_parser::SurfaceName::generated_path("n"));
     assert!(result.is_err(), "interval_cases without bounds must fail");
     let err_msg = format!("{:?}", result.unwrap_err());
     assert!(
@@ -570,6 +580,7 @@ fn test_swap_swaps_first_two_goals() {
         target: b.clone(),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
 
     assert_eq!(state.goals.len(), 2);
@@ -606,6 +617,7 @@ fn test_rotate_moves_first_to_end() {
         target: b.clone(),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
 
     // Before: [A, B]
@@ -633,6 +645,7 @@ fn test_rotate_back_moves_last_to_front() {
         target: b.clone(),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
 
     // Before: [A, B]
@@ -656,6 +669,7 @@ fn test_pick_goal_selects_by_index() {
         target: b.clone(),
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
 
     // Pick goal at index 1 (B)
@@ -691,6 +705,7 @@ fn test_goal_count() {
         target: b,
         local_ctx: vec![],
         tag: None,
+        case_binders: Vec::new(),
     });
     assert_eq!(goal_count(&state), 2);
 }
@@ -714,12 +729,15 @@ fn test_sorry_closes_goal() {
 
 #[test]
 fn test_sorry_closes_goal_with_elab_local_type_target() {
-    let env = Environment::with_prelude();
+    let mut env = Environment::with_prelude();
+    env.init_admission_stub_theory()
+        .expect("explicit admission theory for this low-level sorry fixture");
     let alpha_fvar = FVarId::new(10);
     let alpha = Expr::fvar(alpha_fvar);
     let elab_locals = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: alpha_fvar,
-        name: "alpha".to_string(),
+        name: clean_parser::SurfaceName::generated_path("alpha"),
         ty: Expr::type_(),
         value: None,
     }];
@@ -848,7 +866,7 @@ fn test_unfold_fails_on_axiom() {
     let goal = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, goal);
 
-    let result = unfold(&mut state, "A");
+    let result = unfold(&mut state, &clean_parser::SurfaceName::generated_path("A"));
     assert!(
         matches!(result, Err(TacticError::UnfoldFailed { ref reason, .. }) if reason.contains("no definition"))
     );

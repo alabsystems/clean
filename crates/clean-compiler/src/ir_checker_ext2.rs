@@ -85,7 +85,6 @@ struct JoinPointInfo {
 }
 type Vars = HashMap<VarId, IRType>;
 type Jps = HashMap<JoinPointId, JoinPointInfo>;
-type RcMap = HashMap<VarId, i64>;
 
 struct Ext2Checker {
     diagnostics: Vec<Ext2Error>,
@@ -154,7 +153,7 @@ impl Ext2Checker {
                 "function body may fail to terminate on some paths",
             );
         }
-        self.check_rc_paths(&decl.name, &decl.body, &RcMap::new(), "entry");
+        self.check_rc_paths(decl);
     }
 
     fn check_body(&mut self, function: &Name, body: &IRBody, vars: &Vars, jps: &Jps) {
@@ -705,53 +704,21 @@ impl Ext2Checker {
         }
     }
 
-    fn check_rc_paths(&mut self, function: &Name, body: &IRBody, rc: &RcMap, path: &str) {
-        match body {
-            IRBody::Inc { var, n, rest } => {
-                self.record(Ext2CheckCategory::RcPath);
-                let mut next = rc.clone();
-                *next.entry(*var).or_insert(0) += i64::from(*n);
-                self.check_rc_paths(function, rest, &next, path);
-            }
-            IRBody::Dec { var, rest } => {
-                self.record(Ext2CheckCategory::RcPath);
-                let mut next = rc.clone();
-                *next.entry(*var).or_insert(0) -= 1;
-                self.check_rc_paths(function, rest, &next, path);
-            }
-            IRBody::VDecl { rest, .. }
-            | IRBody::Set { rest, .. }
-            | IRBody::SetTag { rest, .. }
-            | IRBody::USet { rest, .. }
-            | IRBody::SSet { rest, .. } => self.check_rc_paths(function, rest, rc, path),
-            IRBody::JDecl { jp, body, rest, .. } => {
-                self.check_rc_paths(function, body, rc, &format!("{path}/jp{}", jp.0));
-                self.check_rc_paths(function, rest, rc, &format!("{path}/after_jp{}", jp.0));
-            }
-            IRBody::Case { alts, default, .. } => {
-                for alt in alts {
-                    self.check_rc_paths(
-                        function,
-                        &alt.body,
-                        rc,
-                        &format!("{path}/tag{}", alt.ctor.tag),
-                    );
-                }
-                if let Some(default) = default.as_deref() {
-                    self.check_rc_paths(function, default, rc, &format!("{path}/default"));
-                }
-            }
-            IRBody::Jmp { .. } | IRBody::Ret(_) | IRBody::Unreachable => {
-                self.record(Ext2CheckCategory::RcPath);
-                for (var, bal) in rc.iter().filter(|(_, bal)| **bal < -1) {
-                    self.emit(
-                        Ext2CheckCategory::RcPath,
-                        function,
-                        path,
-                        format!("path ends with RC balance {} for x{}", bal, var.0),
-                    );
-                }
-            }
+    /// RC path check: the WS6.2 linearity engine
+    /// ([`crate::rc_repair::linearity`]), under the pipeline's all-owned ABI.
+    /// It counts owned CONSUMPTIONS as well as `Inc`/`Dec` — the balance-only
+    /// check this replaced never saw a value consumed twice with no `inc`.
+    fn check_rc_paths(&mut self, decl: &IRDecl) {
+        self.record(Ext2CheckCategory::RcPath);
+        if let Err(violation) =
+            crate::rc_repair::linearity::check_decl(decl, &crate::rc::borrow::BorrowMap::new())
+        {
+            self.emit(
+                Ext2CheckCategory::RcPath,
+                &decl.name,
+                violation.path.clone(),
+                violation.to_string(),
+            );
         }
     }
 }

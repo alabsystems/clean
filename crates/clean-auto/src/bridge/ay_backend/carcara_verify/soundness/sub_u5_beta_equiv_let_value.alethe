@@ -1,0 +1,3 @@
+(assume nc (not (= ((lambda ((x Bool)) (and (forall ((w Bool)) (or w (not w))) (let ((y x)) y))) true) (and (forall ((w Bool)) (or w (not w))) (let ((y x)) y)))))
+(step s (cl (= ((lambda ((x Bool)) (and (forall ((w Bool)) (or w (not w))) (let ((y x)) y))) true) (and (forall ((w Bool)) (or w (not w))) (let ((y x)) y)))) :rule beta_equiv)
+(step done (cl) :rule resolution :premises (nc s))

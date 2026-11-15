@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-fun x () Int)
+(define-fun f ((x Int)) Int (+ x 1))
+(assert (not (= (f 5) (+ 5 1))))
+(check-sat)

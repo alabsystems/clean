@@ -1,0 +1,61 @@
+{
+  "sources": [
+    {
+      "module": "SemR",
+      "path": "../semr/SemR.lean"
+    },
+    {
+      "module": "MiniRust",
+      "path": "../semr/MiniRust.lean"
+    },
+    {
+      "module": "SemRMiniRust",
+      "path": "../semr/SemRMiniRust.lean"
+    },
+    {
+      "module": "TrustSem",
+      "path": "TrustSem.lean"
+    },
+    {
+      "module": "TrustSemAllocationCapacity",
+      "path": "TrustSemAllocationCapacity.lean"
+    },
+    {
+      "module": "TrustSemAllocationCapacityRejected",
+      "path": "TrustSemAllocationCapacityRejected.lean"
+    },
+    {
+      "module": "TrustSemAllocationIntrinsic",
+      "path": "TrustSemAllocationIntrinsic.lean"
+    }
+  ],
+  "module": "TrustSemAllocationIntrinsic",
+  "roots": [
+    "TrustSem.AllocationCapacity.Intrinsic.memory_wrapper_rejected",
+    "TrustSem.AllocationCapacity.Intrinsic.concurrent_wrapper_rejected",
+    "TrustSem.AllocationCapacity.Intrinsic.allocate_intrinsic_rejected",
+    "TrustSem.AllocationCapacity.Intrinsic.allocate_intrinsic_every_oracle_rejected",
+    "TrustSem.AllocationCapacity.Intrinsic.carrier_has_full_memory",
+    "TrustSem.AllocationCapacity.Intrinsic.intrinsic_abort_goal_false",
+    "TrustSem.AllocationCapacity.Intrinsic.intrinsic_fuel_goal_false",
+    "TrustSem.AllocationCapacity.Intrinsic.intrinsic_zero_fuel_still_fuel",
+    "MRf.Machine.eval_intrinsic",
+    "MRf.ConcurrentMemory.allocate"
+  ],
+  "positive": [
+    {
+      "proof": "TrustSem.AllocationCapacity.Intrinsic.allocate_intrinsic_every_oracle_rejected",
+      "goal": "TrustSem.AllocationCapacity.Intrinsic.IntrinsicRejectGoal"
+    }
+  ],
+  "negative": [
+    {
+      "proof": "TrustSem.AllocationCapacity.Intrinsic.allocate_intrinsic_every_oracle_rejected",
+      "goal": "TrustSem.AllocationCapacity.Intrinsic.IntrinsicAbortGoal"
+    },
+    {
+      "proof": "TrustSem.AllocationCapacity.Intrinsic.allocate_intrinsic_every_oracle_rejected",
+      "goal": "TrustSem.AllocationCapacity.Intrinsic.IntrinsicFuelGoal"
+    }
+  ]
+}

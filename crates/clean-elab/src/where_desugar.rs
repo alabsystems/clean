@@ -35,7 +35,7 @@
 //! `src/Lean/Elab/Binders.lean:472-476` (`expandWhereDecls` — `where` becomes
 //! a leading `let rec` group), `src/Lean/Elab/MutualDef.lean:332-397`.
 
-use clean_parser::{Span, SurfaceBinder, SurfaceExpr, WhereLocalDef};
+use clean_parser::{Span, SurfaceBinder, SurfaceExpr, SurfaceName, WhereLocalDef};
 
 /// A single local definition from a `where` clause.
 ///
@@ -46,7 +46,7 @@ use clean_parser::{Span, SurfaceBinder, SurfaceExpr, WhereLocalDef};
 #[derive(Debug, Clone)]
 pub(crate) struct WhereClause {
     /// Name of the local definition
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     /// Parameters (binders) of the local definition
     pub(crate) params: Vec<SurfaceBinder>,
     /// Optional return type annotation

@@ -28,8 +28,9 @@
 //!    `ctx_conv`.
 //!  - generation (inversion) lemmas `ctx_app_gen` / `ctx_lam_gen` /
 //!    `ctx_pi_gen` / `ctx_let_gen` in the in-tree CPS style (`typing_app_gen`).
-//!  - preservation: `delta_preserves_typing_ctx` (PROVED from the labeled
-//!    `defval_typed` field + the computational delta_reduct decomposition),
+//!  - preservation: `delta_preserves_typing_ctx` (derived from one schematic
+//!    body-typing derivation, universe substitution, closed weakening, and
+//!    the guarded computational delta_reduct decomposition),
 //!    `beta_reduces_preserves_typing_ctx` (the full 14-arm subject reduction
 //!    over `beta_reduces`), and the WHNF-step dispatcher
 //!    `subject_reduction_ctx`.
@@ -48,6 +49,11 @@
 //! `conv`; NO pi-injectivity, NO new `TypingEnvCoherent` field. Every
 //! `TypingCtxConv.rec` tower below gains exactly one trailing `let_` minor;
 //! `def_eq_psubst`'s `DefEq.rec` gains the `zeta` + `let_cong` minors.
+//!
+//! LITERAL INCREMENT: the two trailing `lit_nat` / `lit_string` typing rules
+//! have no premises. Each typing-recursion proof below handles both cases;
+//! literal subjects and their constant types are closed under substitution
+//! and lifting, and cannot be mistaken for compound constructor heads.
 //!
 //! REUSE (map, don't re-port): the ENTIRE psubst calculus of the mirror's §8
 //! already exists in `dependent_sn_richmodel.rs` (`scons`/`up`/`upn`/`psubst`,
@@ -72,58 +78,82 @@ use crate::spec::error::SpecError;
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
 
-/// The six labeled env-coherence fields (the mirror's `EnvAssumptions`), with
-/// their in-tree mapping:
-///
-/// 1. `tenv_psubst_closed` — declared constant TYPES are psubst-invariant.
-///    NO in-tree analogue (tenv is a bare judgment parameter); carried fresh.
-/// 2. `tenv_lift_closed` — declared constant TYPES are lift-invariant.
-///    NO in-tree analogue; carried fresh (same reason).
-/// 3. `delta_psubst` — δ steps are DefEq-stable under PARALLEL substitution.
-///    The instantiate_at INSTANCE is in-tree (`delta_subst_preserves_def_eq_at`
-///    via `DefEnvWellformed`'s DEF_WF_SUBST / i5 `DefEnvClosed`); the psubst
-///    generalization has no in-tree analogue, so it is carried fresh. (The
-///    mirror PROVES it from psubst-closedness of δ values; deriving it in-tree
-///    from `DefEnvClosed` is a follow-up — see the module docs.)
-/// 4. `iota_psubst` — ι steps are DefEq-stable under parallel substitution.
-///    psubst generalization of the in-tree WF_SUBST /
-///    `iota_subst_preserves_def_eq_at`; carried fresh (same status).
-/// 5. `defval_typed` — δ values are well-typed at their declared tenv types,
-///    in any context. The context-indexed generalization of
-///    `DefEnvWellformed`'s DEF_WF_FWD; carried fresh.
-/// 6. `iota_typed` — ι steps preserve `TypingCtxConv` typing. The
-///    context-indexed generalization of `RecEnvWellformed`'s WF_FWD; carried
-///    fresh.
-const TEC_FIELDS: [&str; 6] = [
-    // 1 tenv_psubst_closed
-    "forall (n : Name) (A : KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> \
-     forall (s : Nat -> KExpr), Eq KExpr (psubst s A) A",
-    // 2 tenv_lift_closed
-    "forall (n : Name) (A : KExpr), Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> \
-     forall (c : Nat) (k : Nat), Eq KExpr (lift_at A c k) A",
-    // 3 delta_psubst
-    "forall (e : KExpr) (e' : KExpr), delta_reduces e e' -> \
-     forall (s : Nat -> KExpr), DefEq (psubst s e) (psubst s e')",
-    // 4 iota_psubst
-    "forall (e : KExpr) (e' : KExpr), iota_reduces e e' -> \
-     forall (s : Nat -> KExpr), DefEq (psubst s e) (psubst s e')",
-    // 5 defval_typed
-    "forall (n : Name) (v : KExpr) (A : KExpr), \
-     Eq (OptionType KExpr) (defval_for (red_def the_red_env) n) (OptionType.some KExpr v) -> \
-     Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A) -> \
-     forall (G : ListType KExpr), TypingCtxConv tenv G v A",
-    // 6 iota_typed
-    "forall (e : KExpr) (e' : KExpr), iota_reduces e e' -> \
-     forall (G : ListType KExpr) (T : KExpr), \
-     TypingCtxConv tenv G e T -> TypingCtxConv tenv G e' T",
+/// Constructor discrimination for the literal cases of typing inversion.
+/// This uses syntactic equality only, not an assumption about conversion.
+const SRB_KEXPR_IS_LIT: &str = concat!(
+    "(KExpr.rec (fun (_ : KExpr) => Type) ",
+    "(fun (_ : Level) => Empty) ",
+    "(fun (_ : Nat) => Empty) ",
+    "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
+    "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
+    "(fun (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) => Empty) ",
+    "(fun (_ : Name) (_ : ListType Level) => Empty) ",
+    "(fun (_ : KExpr) (_ : KExpr) (_ : KExpr) (_ : Type) (_ : Type) (_ : Type) => Empty) ",
+    "(fun (_ : Name) (_ : Nat) (_ : KExpr) (_ : Type) => Empty) ",
+    "(fun (_ : Nat) => Nat))"
+);
+
+/// The two trailing literal minors, in the declaration's constructor order.
+fn literal_typing_arms(arm: impl Fn(&str, &str, &str) -> String) -> String {
+    [
+        ("literal_nat", "literal_nat_type", "lit_nat"),
+        ("literal_string", "literal_string_type", "lit_string"),
+    ]
+    .into_iter()
+    .map(|(literal, ty, rule)| arm(literal, ty, rule))
+    .collect::<Vec<_>>()
+    .join(" ")
+}
+
+/// In a generation proof, the subject's literal constructor cannot equal
+/// the requested compound constructor. Both literal kinds are handled.
+fn literal_generation_arms(binders: &str, subject: &str, kont: impl Fn(&str) -> String) -> String {
+    literal_typing_arms(|literal, ty, _| {
+        let k = kont(ty);
+        format!(
+            "(fun (G : ListType KExpr) (n : Nat) {binders} \
+             (heq : Eq KExpr ({literal} n) {subject}) \
+             (R : Type) (_k : {k}) => Empty.rec (fun (_ : Empty) => R) \
+             (Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
+             ({literal} n) {subject} heq Nat.zero))"
+        )
+    })
+}
+
+/// Schematic environment invariants. Instantiated type closedness and body
+/// typing are DERIVED from these fields; neither is a per-instance premise.
+/// Delta universe closure is also derived from stored body parameter support.
+/// Remaining operational iota/substitution fields are explicit obligations,
+/// not axioms or claims of a production admission witness.
+const TEC_FIELDS: [&str; 10] = [
+    // Stored constant types are closed and use their declared universe names.
+    "forall (n : Name) (sig : KConstSig), Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) -> is_closed_at (kconst_type sig) Nat.zero",
+    "forall (n : Name) (sig : KConstSig), Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig sig) -> KExprParamSupport (kconst_params sig) (kconst_type sig)",
+    // Existing operational parallel-substitution obligations.
+    "forall (e : KExpr) (e' : KExpr), delta_reduces e e' -> forall (s : Nat -> KExpr), DefEq (psubst s e) (psubst s e')",
+    "forall (e : KExpr) (e' : KExpr), iota_reduces e e' -> forall (s : Nat -> KExpr), DefEq (psubst s e) (psubst s e')",
+    // One source-matched definition signature and one schematic body judgment.
+    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> Eq (OptionType KConstSig) (tenv n) (OptionType.some KConstSig (kdef_signature defn))",
+    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> is_closed_at (kdef_value defn) Nat.zero",
+    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> TypingCtxConv tenv (ListType.nil KExpr) (kdef_value defn) (kconst_type (kdef_signature defn))",
+    // Body support derives operational delta universe closure by fusion.
+    "forall (n : Name) (defn : KDefSig), Eq (OptionType KDefSig) (kdef_for (red_def the_red_env) n) (OptionType.some KDefSig defn) -> KExprParamSupport (kconst_params (kdef_signature defn)) (kdef_value defn)",
+    // Iota universe closure is still a separate operational obligation.
+    "forall (s : Name -> Level) (e : KExpr) (e' : KExpr), iota_reduces e e' -> iota_reduces (instL s e) (instL s e')",
+    // Iota typing remains an explicit, separately justified invariant.
+    "forall (e : KExpr) (e' : KExpr), iota_reduces e e' -> forall (G : ListType KExpr) (T : KExpr), TypingCtxConv tenv G e T -> TypingCtxConv tenv G e' T",
 ];
 
-const TEC_PROJ_NAMES: [&str; 6] = [
-    "tec_tenv_psubst_closed",
-    "tec_tenv_lift_closed",
+const TEC_PROJ_NAMES: [&str; 10] = [
+    "tec_tenv_closed",
+    "tec_tenv_supported",
     "tec_delta_psubst",
     "tec_iota_psubst",
-    "tec_defval_typed",
+    "tec_def_signature",
+    "tec_def_body_closed",
+    "tec_def_body_typed",
+    "tec_def_body_supported",
+    "tec_iota_universe_closed",
     "tec_iota_typed",
 ];
 
@@ -167,6 +197,8 @@ impl Specification {
         self.add_srb_interface()?;
         self.add_srb_lift_helpers()?;
         self.add_srb_weakening()?;
+        self.add_typing_closed_weakening()?;
+        self.add_srb_schematic_delta_typing()?;
         self.add_srb_substitution()?;
         self.add_srb_ctx_conv()?;
         self.add_srb_generation()?;
@@ -174,7 +206,7 @@ impl Specification {
         Ok(())
     }
 
-    /// `TypingEnvCoherent` interface inductive + its six projectors.
+    /// Schematic `TypingEnvCoherent`, projections, and derived closure views.
     fn add_srb_interface(&mut self) -> Result<(), SpecError> {
         let mk_args = TEC_FIELDS
             .iter()
@@ -184,15 +216,16 @@ impl Specification {
             .join(" ");
         self.add_inductive(
             &format!(
-                "inductive TypingEnvCoherent (tenv : Name -> OptionType KExpr) : Type\n\
+                "inductive TypingEnvCoherent (tenv : KDeclEnv) : Type\n\
                  | mk : forall {mk_args}, TypingEnvCoherent tenv"
             ),
             "LABELED env-coherence hypothesis bundle for the context-indexed subject-reduction \
-             tower (the SubjRed.lean mirror's EnvAssumptions). Six fields: tenv psubst/lift \
-             closure, delta/iota DefEq-stability under parallel substitution (psubst \
-             generalizations of DEF_WF_SUBST/WF_SUBST), defval_typed (ctx-indexed DEF_WF_FWD), \
-             iota_typed (ctx-indexed WF_FWD). A carried HYPOTHESIS interface in the \
-             RecEnvWellformed/RedEnvFaithful discipline — never an axiom.",
+             tower. Stored signature closedness/support, shared definition-signature \
+             agreement, closed supported schematic body and one empty-context body typing judgment, \
+             operational delta/iota parallel substitution, iota universe closure, and iota typing. \
+             Instantiated type closure, body typing, and delta universe closure are derived, not fields. Every \
+             remaining operational/admission premise is explicit; no production witness \
+             is asserted by registering this hypothesis interface.",
         )?;
 
         let binders = TEC_FIELDS
@@ -205,11 +238,9 @@ impl Specification {
             let n = k + 1;
             self.add_definition(SpecDefinition {
                 name: TEC_PROJ_NAMES[k].to_string(),
-                type_src: format!(
-                    "forall (tenv : Name -> OptionType KExpr), TypingEnvCoherent tenv -> {field}"
-                ),
+                type_src: format!("forall (tenv : KDeclEnv), TypingEnvCoherent tenv -> {field}"),
                 value_src: Some(format!(
-                    "fun (tenv : Name -> OptionType KExpr) (w : TypingEnvCoherent tenv) => \
+                    "fun (tenv : KDeclEnv) (w : TypingEnvCoherent tenv) => \
                      TypingEnvCoherent.rec tenv \
                      (fun (_ : TypingEnvCoherent tenv) => {field}) \
                      (fun {binders} => a{n}) w"
@@ -230,6 +261,14 @@ impl Specification {
                 axiom_deps: HashSet::new(),
             })?;
         }
+        self.add_recursive_def(
+            "def tec_tenv_psubst_closed (tenv : KDeclEnv) (W : TypingEnvCoherent tenv) (n : Name) (us : ListType Level) (A : KExpr) (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) (s : Nat -> KExpr) : Eq KExpr (psubst s A) A := kdecl_type_at_psubst_closed tenv n us A (tec_tenv_closed tenv W n) h s",
+            "Derive parallel-substitution invariance of an actual instantiated lookup result from schematic stored-type closedness.",
+        )?;
+        self.add_recursive_def(
+            "def tec_tenv_lift_closed (tenv : KDeclEnv) (W : TypingEnvCoherent tenv) (n : Name) (us : ListType Level) (A : KExpr) (h : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) (c : Nat) (k : Nat) : Eq KExpr (lift_at A c k) A := kdecl_type_at_lift_closed tenv n us A (tec_tenv_closed tenv W n) h c k",
+            "Derive lifting invariance of an actual instantiated lookup result from schematic stored-type closedness.",
+        )?;
         Ok(())
     }
 
@@ -606,7 +645,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "weaken_gen".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "forall (C : KExpr) (G : ListType KExpr) (e : KExpr) (T : KExpr), ",
@@ -647,7 +686,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "weaken1".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), ",
@@ -660,7 +699,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) ",
+                    "fun (tenv : KDeclEnv) ",
                     "(hf : RedEnvFaithful the_red_env) ",
                     "(W : TypingEnvCoherent tenv) ",
                     "(G : ListType KExpr) (e : KExpr) (T : KExpr) ",
@@ -747,7 +786,7 @@ impl Specification {
         // into target context G2 (mirror SubstTyping — the psubst-general
         // device that makes the substitution induction go through).
         self.add_recursive_def(
-            "def SubstTyping (tenv : Name -> OptionType KExpr) (G2 : ListType KExpr) \
+            "def SubstTyping (tenv : KDeclEnv) (G2 : ListType KExpr) \
              (s : Nat -> KExpr) (G : ListType KExpr) : Type := \
              forall (i : Nat) (A : KExpr), \
              Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A) -> \
@@ -761,13 +800,13 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "subst_typing_id".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (G : ListType KExpr), ",
+                "forall (tenv : KDeclEnv) (G : ListType KExpr), ",
                 "SubstTyping tenv G idsubst G",
             )
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) (G : ListType KExpr) ",
+                    "fun (tenv : KDeclEnv) (G : ListType KExpr) ",
                     "(i : Nat) (A : KExpr) ",
                     "(hA : Eq (OptionType KExpr) (ctx_lookup G i) (OptionType.some KExpr A)) => ",
                     "Eq.substType KExpr ",
@@ -804,7 +843,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "subst_typing_up".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "forall (G : ListType KExpr) (G2 : ListType KExpr) (s : Nat -> KExpr), ",
@@ -840,7 +879,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "subst_typing_scons".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) ",
+                "forall (tenv : KDeclEnv) ",
                 "(G : ListType KExpr) (G2 : ListType KExpr) (s : Nat -> KExpr) ",
                 "(a : KExpr) (A : KExpr), ",
                 "SubstTyping tenv G2 s G -> ",
@@ -873,7 +912,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "substitution_general".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "forall (G : ListType KExpr) (b : KExpr) (B : KExpr), ",
@@ -914,7 +953,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "substitution_typing_ctx".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "forall (G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (a : KExpr), ",
@@ -925,7 +964,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) ",
+                    "fun (tenv : KDeclEnv) ",
                     "(hf : RedEnvFaithful the_red_env) ",
                     "(W : TypingEnvCoherent tenv) ",
                     "(G : ListType KExpr) (A : KExpr) (b : KExpr) (B : KExpr) (a : KExpr) ",
@@ -1058,7 +1097,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "ctx_conv".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "forall (G : ListType KExpr) (G2 : ListType KExpr) (e : KExpr) (T : KExpr), ",
                 "TypingCtxConv tenv G e T -> CtxDefEq G G2 -> ",
@@ -1183,7 +1222,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "ctx_app_gen".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) ",
+                "forall (tenv : KDeclEnv) ",
                 "(G : ListType KExpr) (f : KExpr) (a : KExpr) (T : KExpr), ",
                 "TypingCtxConv tenv G (KExpr.app f a) T -> ",
                 "forall (R : Type), ",
@@ -1225,7 +1264,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "ctx_lam_gen".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) ",
+                "forall (tenv : KDeclEnv) ",
                 "(G : ListType KExpr) (A : KExpr) (b : KExpr) (T : KExpr), ",
                 "TypingCtxConv tenv G (KExpr.lam A b) T -> ",
                 "forall (R : Type), ",
@@ -1265,7 +1304,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "ctx_pi_gen".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) ",
+                "forall (tenv : KDeclEnv) ",
                 "(G : ListType KExpr) (A : KExpr) (B : KExpr) (T : KExpr), ",
                 "TypingCtxConv tenv G (KExpr.pi A B) T -> ",
                 "forall (R : Type), ",
@@ -1359,7 +1398,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "ctx_let_gen".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) ",
+                "forall (tenv : KDeclEnv) ",
                 "(G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (T : KExpr), ",
                 "TypingCtxConv tenv G (KExpr.let_ ty v b) T -> ",
                 "forall (R : Type), ",
@@ -1450,12 +1489,13 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
 
-        // delta_preserves_typing_ctx: the delta arm, PROVED from the carried
-        // defval_typed field + the computational delta_reduct decomposition.
+        // Delta body typing is DERIVED from the stored schematic judgment,
+        // universe-substitution preservation, and closed weakening.
         self.add_definition(SpecDefinition {
             name: "delta_preserves_typing_ctx".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
+                "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "forall (G : ListType KExpr) (e : KExpr) (T : KExpr), ",
                 "TypingCtxConv tenv G e T -> ",
@@ -1466,7 +1506,7 @@ impl Specification {
             value_src: Some(delta_preserves_typing_ctx_value()),
             is_axiom: false,
             description: "Delta preservation over TypingCtxConv (mirror delta_preserves_typing), \
-                          PROVED from the carried defval_typed field: by TypingCtxConv.rec with \
+                          derived from schematic body typing: by TypingCtxConv.rec with \
                           motive over the delta_step graph; var/sort/pi/lam/let_ heads are absurd \
                           (delta_reduct computes to none — a let is its own spine head, never a \
                           const head), app decomposes via \
@@ -1498,7 +1538,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "srb_beta_redex_preserves".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "DefEnvWellformed the_red_env -> ",
@@ -1544,7 +1584,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "ctx_proj_absurd".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr) (s : Name) (i : Nat) (sub : KExpr) ",
+                "forall (tenv : KDeclEnv) (s : Name) (i : Nat) (sub : KExpr) ",
                 "(G : ListType KExpr) (T : KExpr) (C : Type), ",
                 "TypingCtxConv tenv G (KExpr.proj s i sub) T -> C"
             )
@@ -1580,7 +1620,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "beta_reduces_preserves_typing_ctx".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "DefEnvWellformed the_red_env -> ",
@@ -1645,7 +1685,7 @@ impl Specification {
             value_src: Some(
                 concat!(
                     "fun (e : KExpr) (e' : KExpr) (_h : whnf_step e e') => ",
-                    "forall (tenv : Name -> OptionType KExpr), ",
+                    "forall (tenv : KDeclEnv), ",
                     "RedEnvFaithful the_red_env -> ",
                     "TypingEnvCoherent tenv -> ",
                     "DefEnvWellformed the_red_env -> ",
@@ -1677,7 +1717,7 @@ impl Specification {
         self.add_definition(SpecDefinition {
             name: "subject_reduction_ctx".to_string(),
             type_src: concat!(
-                "forall (tenv : Name -> OptionType KExpr), ",
+                "forall (tenv : KDeclEnv), ",
                 "RedEnvFaithful the_red_env -> ",
                 "TypingEnvCoherent tenv -> ",
                 "DefEnvWellformed the_red_env -> ",
@@ -1690,7 +1730,7 @@ impl Specification {
             .to_string(),
             value_src: Some(
                 concat!(
-                    "fun (tenv : Name -> OptionType KExpr) ",
+                    "fun (tenv : KDeclEnv) ",
                     "(hf : RedEnvFaithful the_red_env) ",
                     "(W : TypingEnvCoherent tenv) ",
                     "(wd : DefEnvWellformed the_red_env) ",
@@ -1700,7 +1740,7 @@ impl Specification {
                     "whnf_step.rec e e' ",
                     "(subject_reduction_ctx_motive e e') ",
                     "(fun (hb : beta_reduces e e') => ",
-                    "fun (tenv2 : Name -> OptionType KExpr) ",
+                    "fun (tenv2 : KDeclEnv) ",
                     "(hf2 : RedEnvFaithful the_red_env) ",
                     "(W2 : TypingEnvCoherent tenv2) ",
                     "(wd2 : DefEnvWellformed the_red_env) ",
@@ -1709,14 +1749,14 @@ impl Specification {
                     "(h2 : TypingCtxConv tenv2 G2 e T2) => ",
                     "beta_reduces_preserves_typing_ctx tenv2 hf2 W2 wd2 wr2 e e' hb G2 T2 h2) ",
                     "(fun (hd : delta_reduces e e') => ",
-                    "fun (tenv2 : Name -> OptionType KExpr) ",
-                    "(_hf2 : RedEnvFaithful the_red_env) ",
+                    "fun (tenv2 : KDeclEnv) ",
+                    "(hf2 : RedEnvFaithful the_red_env) ",
                     "(W2 : TypingEnvCoherent tenv2) ",
                     "(_wd2 : DefEnvWellformed the_red_env) ",
                     "(_wr2 : RecEnvWellformed (red_rec the_red_env)) ",
                     "(G2 : ListType KExpr) (T2 : KExpr) ",
                     "(h2 : TypingCtxConv tenv2 G2 e T2) => ",
-                    "delta_preserves_typing_ctx tenv2 W2 G2 e T2 h2 e' hd) ",
+                    "delta_preserves_typing_ctx tenv2 hf2 W2 G2 e T2 h2 e' hd) ",
                     "hs tenv hf W wd wr G T h",
                 )
                 .to_string(),
@@ -1819,6 +1859,13 @@ fn ctx_def_eq_lookup_value() -> String {
 /// The `ctx_conv` proof term: TypingCtxConv.rec generalizing the target
 /// context over CtxDefEq.
 fn ctx_conv_value() -> String {
+    let literal_arms = literal_typing_arms(|_, _, rule| {
+        format!(
+            "(fun (G : ListType KExpr) (n : Nat) \
+             (G2 : ListType KExpr) (_hctx : CtxDefEq G G2) => \
+             TypingCtxConv.{rule} tenv G2 n)"
+        )
+    });
     let motive = "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
          forall (G2 : ListType KExpr), CtxDefEq G G2 -> TypingCtxConv tenv G2 e T)";
@@ -1868,7 +1915,7 @@ fn ctx_conv_value() -> String {
          (G2 : ListType KExpr) (hctx : CtxDefEq G G2) => \
          TypingCtxConv.app tenv G2 f a A B (ihf G2 hctx) (iha G2 hctx))";
     let const_arm = "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (G2 : ListType KExpr) (_hctx : CtxDefEq G G2) => \
          TypingCtxConv.const tenv G2 n us A hA)";
     let conv_arm = "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
@@ -1893,14 +1940,14 @@ fn ctx_conv_value() -> String {
          (ihb (ListType.cons KExpr ty G2) \
          (CtxDefEq.cons ty ty G G2 (DefEq.refl ty) hctx)))";
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (hf : RedEnvFaithful the_red_env) \
          (G0 : ListType KExpr) (G20 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) \
          (h0 : TypingCtxConv tenv G0 e0 T0) (hctx0 : CtxDefEq G0 G20) => \
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G0 e0 T0 h0 G20 hctx0"
+         {literal_arms} G0 e0 T0 h0 G20 hctx0"
     )
 }
 
@@ -1918,6 +1965,10 @@ fn ctx_app_gen_value() -> String {
              DefEq (instantiate Bg {a0}) {t} -> R)"
         )
     };
+    let literal_arms =
+        literal_generation_arms("(f0 : KExpr) (a0 : KExpr)", "(KExpr.app f0 a0)", |ty| {
+            kont("f0", "a0", ty)
+        });
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
@@ -2001,7 +2052,7 @@ fn ctx_app_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (f0 : KExpr) (a0 : KExpr) \
          (heq : Eq KExpr (KExpr.const n us) (KExpr.app f0 a0)) \
          (R : Type) (_k : {kt}) => const_ne_app n us f0 a0 R heq)",
@@ -2044,13 +2095,13 @@ fn ctx_app_gen_value() -> String {
         kt = kont("f0", "a0", "(instantiate B v)")
     );
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (f : KExpr) (a : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.app f a) T) => \
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G (KExpr.app f a) T h f a (Eq.refl KExpr (KExpr.app f a))"
+         {literal_arms} G (KExpr.app f a) T h f a (Eq.refl KExpr (KExpr.app f a))"
     )
 }
 
@@ -2077,6 +2128,10 @@ fn ctx_lam_gen_value() -> String {
              DefEq (KExpr.pi {a0} Bg) {t} -> R)"
         )
     };
+    let literal_arms =
+        literal_generation_arms("(A0 : KExpr) (b0 : KExpr)", "(KExpr.lam A0 b0)", |ty| {
+            kont("A0", "b0", ty, "G")
+        });
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
@@ -2164,7 +2219,7 @@ fn ctx_lam_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (A0 : KExpr) (b0 : KExpr) \
          (heq : Eq KExpr (KExpr.const n us) (KExpr.lam A0 b0)) \
          (R : Type) (_k : {kt}) => const_ne_lam n us A0 b0 R heq)",
@@ -2207,13 +2262,13 @@ fn ctx_lam_gen_value() -> String {
         kt = kont("A0", "b0", "(instantiate B v)", "G")
     );
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (A : KExpr) (b : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.lam A b) T) => \
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G (KExpr.lam A b) T h A b (Eq.refl KExpr (KExpr.lam A b))"
+         {literal_arms} G (KExpr.lam A b) T h A b (Eq.refl KExpr (KExpr.lam A b))"
     )
 }
 
@@ -2228,6 +2283,10 @@ fn ctx_pi_gen_value() -> String {
              DefEq (KExpr.sort (Level.imax ng mg)) {t} -> R)"
         )
     };
+    let literal_arms =
+        literal_generation_arms("(A0 : KExpr) (B0 : KExpr)", "(KExpr.pi A0 B0)", |ty| {
+            kont("A0", "B0", ty, "G")
+        });
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
@@ -2313,7 +2372,7 @@ fn ctx_pi_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (A0 : KExpr) (B0 : KExpr) \
          (heq : Eq KExpr (KExpr.const n us) (KExpr.pi A0 B0)) \
          (R : Type) (_k : {kt}) => const_ne_pi n us A0 B0 R heq)",
@@ -2356,13 +2415,13 @@ fn ctx_pi_gen_value() -> String {
         kt = kont("A0", "B0", "(instantiate Bl v)", "G")
     );
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (A : KExpr) (B : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.pi A B) T) => \
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G (KExpr.pi A B) T h A B (Eq.refl KExpr (KExpr.pi A B))"
+         {literal_arms} G (KExpr.pi A B) T h A B (Eq.refl KExpr (KExpr.pi A B))"
     )
 }
 
@@ -2381,6 +2440,11 @@ fn ctx_let_gen_value() -> String {
              DefEq (instantiate Bg {v0}) {t} -> R)"
         )
     };
+    let literal_arms = literal_generation_arms(
+        "(ty0 : KExpr) (v0 : KExpr) (b0 : KExpr)",
+        "(KExpr.let_ ty0 v0 b0)",
+        |ty| kont("ty0", "v0", "b0", ty, "G"),
+    );
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
@@ -2457,7 +2521,7 @@ fn ctx_let_gen_value() -> String {
     );
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (_hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (ty0 : KExpr) (v0 : KExpr) (b0 : KExpr) \
          (heq : Eq KExpr (KExpr.const n us) (KExpr.let_ ty0 v0 b0)) \
          (R : Type) (_k : {kt}) => srb_const_ne_let n us ty0 v0 b0 R heq)",
@@ -2522,13 +2586,13 @@ fn ctx_let_gen_value() -> String {
         kt = kont("ty0", "v0", "b0", "(instantiate B v)", "G")
     );
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (ty : KExpr) (v : KExpr) (b : KExpr) (T : KExpr) \
          (h : TypingCtxConv tenv G (KExpr.let_ ty v b) T) => \
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G (KExpr.let_ ty v b) T h ty v b (Eq.refl KExpr (KExpr.let_ ty v b))"
+         {literal_arms} G (KExpr.let_ ty v b) T h ty v b (Eq.refl KExpr (KExpr.let_ ty v b))"
     )
 }
 
@@ -2536,6 +2600,14 @@ fn ctx_let_gen_value() -> String {
 /// graph internally (converting the incoming delta_reduces once).
 fn delta_preserves_typing_ctx_value() -> String {
     let env = "(red_def the_red_env)";
+    let literal_arms = literal_typing_arms(|literal, ty, _| {
+        format!(
+            "(fun (G : ListType KExpr) (n : Nat) \
+             (e2 : KExpr) (hs : delta_step {env} ({literal} n) e2) => \
+             option_none_ne_some_type KExpr e2 \
+             (TypingCtxConv tenv G e2 {ty}) hs)"
+        )
+    });
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
@@ -2599,32 +2671,32 @@ fn delta_preserves_typing_ctx_value() -> String {
          (TypingCtxConv.app tenv G f0 a A B (ihf f0 hsf) ha)))"
     );
     // const head: resolve the lookup with opt_case_type; the some-case feeds
-    // the carried defval_typed field.
+    // derived instantiated body typing from the stored schematic derivation.
     let bind_body = "(fun (val : KExpr) => OptionType.some KExpr \
          (apply_spine (kapp_args (KExpr.const n us)) val))"
         .to_string();
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (e2 : KExpr) (hs : delta_step {env} (KExpr.const n us) e2) => \
-         opt_case_type KExpr (defval_for {env} n) (TypingCtxConv tenv G e2 A) \
-         (fun (hnone : Eq (OptionType KExpr) (defval_for {env} n) (OptionType.none KExpr)) => \
+         opt_case_type KExpr (kdef_value_at {env} n us) (TypingCtxConv tenv G e2 A) \
+         (fun (hnone : Eq (OptionType KExpr) (kdef_value_at {env} n us) (OptionType.none KExpr)) => \
          option_none_ne_some_type KExpr e2 (TypingCtxConv tenv G e2 A) \
          (Eq.subst (OptionType KExpr) \
          (fun (o : OptionType KExpr) => Eq (OptionType KExpr) \
          (opt_bind KExpr KExpr o {bind_body}) \
          (OptionType.some KExpr e2)) \
-         (defval_for {env} n) (OptionType.none KExpr) hnone hs)) \
+         (kdef_value_at {env} n us) (OptionType.none KExpr) hnone hs)) \
          (fun (v : KExpr) \
-         (hsome : Eq (OptionType KExpr) (defval_for {env} n) (OptionType.some KExpr v)) => \
+         (hsome : Eq (OptionType KExpr) (kdef_value_at {env} n us) (OptionType.some KExpr v)) => \
          Eq.substType KExpr (fun (z : KExpr) => TypingCtxConv tenv G z A) v e2 \
          (option_some_inj KExpr v e2 \
          (Eq.subst (OptionType KExpr) \
          (fun (o : OptionType KExpr) => Eq (OptionType KExpr) \
          (opt_bind KExpr KExpr o {bind_body}) \
          (OptionType.some KExpr e2)) \
-         (defval_for {env} n) (OptionType.some KExpr v) hsome hs)) \
-         (tec_defval_typed tenv W n v A hsome hA G)))"
+         (kdef_value_at {env} n us) (OptionType.some KExpr v) hsome hs)) \
+         (tec_defval_typed tenv hf W n us v A hsome hA G)))"
     );
     let conv_arm = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
@@ -2653,7 +2725,8 @@ fn delta_preserves_typing_ctx_value() -> String {
          (TypingCtxConv tenv G e2 (instantiate B v)) hs)"
     );
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
+         (hf : RedEnvFaithful the_red_env) \
          (W : TypingEnvCoherent tenv) \
          (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) \
          (h0 : TypingCtxConv tenv G0 e0 T0) \
@@ -2661,13 +2734,13 @@ fn delta_preserves_typing_ctx_value() -> String {
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G0 e0 T0 h0 e02 (delta_reduces_to_step e0 e02 hr)"
+         {literal_arms} G0 e0 T0 h0 e02 (delta_reduces_to_step e0 e02 hr)"
     )
 }
 
 /// The `srb_beta_redex_preserves` proof term (the beta arm's content).
 fn srb_beta_redex_preserves_value() -> String {
-    "fun (tenv : Name -> OptionType KExpr) \
+    "fun (tenv : KDeclEnv) \
      (hf : RedEnvFaithful the_red_env) \
      (W : TypingEnvCoherent tenv) \
      (wd : DefEnvWellformed the_red_env) \
@@ -2944,7 +3017,7 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
         g = goal("(KExpr.proj s i sub2)")
     );
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (hf : RedEnvFaithful the_red_env) \
          (W : TypingEnvCoherent tenv) \
          (wd : DefEnvWellformed the_red_env) \
@@ -2964,8 +3037,17 @@ fn beta_reduces_preserves_typing_ctx_value() -> String {
 /// seven rigid-head arms (var/sort/pi/lam/app/const/let_) refute via the
 /// NOT_PROJ discriminator + Empty.rec; the conv arm forwards the IH.
 fn ctx_proj_absurd_value() -> String {
+    let literal_arms = literal_typing_arms(|literal, _, _| {
+        format!(
+            "(fun (G0 : ListType KExpr) (n : Nat) \
+             (eq : Eq KExpr ({literal} n) (KExpr.proj s i sub)) => \
+             Empty.rec (fun (_ : Empty) => C) \
+             (Eq.substType KExpr {SRB_KEXPR_IS_LIT} \
+             ({literal} n) (KExpr.proj s i sub) eq Nat.zero))"
+        )
+    });
     format!(
-        "fun (tenv : Name -> OptionType KExpr) (s : Name) (i : Nat) (sub : KExpr) \
+        "fun (tenv : KDeclEnv) (s : Name) (i : Nat) (sub : KExpr) \
          (G : ListType KExpr) (T : KExpr) (C : Type) \
          (h : TypingCtxConv tenv G (KExpr.proj s i sub) T) => \
          TypingCtxConv.rec tenv \
@@ -3005,7 +3087,7 @@ fn ctx_proj_absurd_value() -> String {
          Empty.rec (fun (_ : Empty) => C) \
          (Eq.substType KExpr {discr} (KExpr.app f a) (KExpr.proj s i sub) eq Nat.zero)) \
          (fun (G0 : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (_hc : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (_hc : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (eq : Eq KExpr (KExpr.const n us) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
          (Eq.substType KExpr {discr} (KExpr.const n us) (KExpr.proj s i sub) eq Nat.zero)) \
@@ -3023,7 +3105,7 @@ fn ctx_proj_absurd_value() -> String {
          (eq : Eq KExpr (KExpr.let_ ty v b) (KExpr.proj s i sub)) => \
          Empty.rec (fun (_ : Empty) => C) \
          (Eq.substType KExpr {discr} (KExpr.let_ ty v b) (KExpr.proj s i sub) eq Nat.zero)) \
-         G (KExpr.proj s i sub) T h (Eq.refl KExpr (KExpr.proj s i sub))",
+         {literal_arms} G (KExpr.proj s i sub) T h (Eq.refl KExpr (KExpr.proj s i sub))",
         discr = SRB_KEXPR_NOT_PROJ
     )
 }
@@ -3132,7 +3214,7 @@ fn def_eq_psubst_value() -> String {
 fn subst_typing_up_value() -> String {
     let s0 = "(Nat.succ Nat.zero)";
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (hf : RedEnvFaithful the_red_env) \
          (W : TypingEnvCoherent tenv) \
          (G : ListType KExpr) (G2 : ListType KExpr) (s : Nat -> KExpr) \
@@ -3200,7 +3282,7 @@ fn subst_typing_up_value() -> String {
 fn subst_typing_scons_value() -> String {
     let s0 = "(Nat.succ Nat.zero)";
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (G : ListType KExpr) (G2 : ListType KExpr) (s : Nat -> KExpr) \
          (a : KExpr) (A : KExpr) \
          (hs : SubstTyping tenv G2 s G) \
@@ -3260,6 +3342,13 @@ fn subst_typing_scons_value() -> String {
 /// The `substitution_general` proof term: TypingCtxConv.rec generalizing the
 /// target context and substitution. See the mirror for the arm strategy.
 fn substitution_general_value() -> String {
+    let literal_arms = literal_typing_arms(|_, _, rule| {
+        format!(
+            "(fun (G : ListType KExpr) (n : Nat) \
+             (G2 : ListType KExpr) (s : Nat -> KExpr) \
+             (_hs : SubstTyping tenv G2 s G) => TypingCtxConv.{rule} tenv G2 n)"
+        )
+    });
     let motive = "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
          (_ : TypingCtxConv tenv G e T) => \
          forall (G2 : ListType KExpr) (s : Nat -> KExpr), SubstTyping tenv G2 s G -> \
@@ -3322,12 +3411,12 @@ fn substitution_general_value() -> String {
          (psubst (up s) B) (ihf G2 s hs) (iha G2 s hs)))";
 
     let const_arm = "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (G2 : ListType KExpr) (s : Nat -> KExpr) (_hs : SubstTyping tenv G2 s G) => \
          Eq.substType KExpr \
          (fun (z : KExpr) => TypingCtxConv tenv G2 (KExpr.const n us) z) \
          A (psubst s A) \
-         (Eq.symm KExpr (psubst s A) A (tec_tenv_psubst_closed tenv W n A hA s)) \
+         (Eq.symm KExpr (psubst s A) A (tec_tenv_psubst_closed tenv W n us A hA s)) \
          (TypingCtxConv.const tenv G2 n us A hA))";
 
     let conv_arm = "(fun (G : ListType KExpr) (e : KExpr) (A : KExpr) (B : KExpr) \
@@ -3370,7 +3459,7 @@ fn substitution_general_value() -> String {
          (subst_typing_up tenv hf W G G2 s hs ty))))";
 
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (hf : RedEnvFaithful the_red_env) \
          (W : TypingEnvCoherent tenv) \
          (G0 : ListType KExpr) (b0 : KExpr) (B0 : KExpr) \
@@ -3378,7 +3467,7 @@ fn substitution_general_value() -> String {
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G0 b0 B0 h0"
+         {literal_arms} G0 b0 B0 h0"
     )
 }
 
@@ -3562,6 +3651,13 @@ fn ctx_wk_lookup_value() -> String {
 /// The `weaken_gen` proof term: TypingCtxConv.rec with a cutoff-generalized,
 /// CtxWk-carrying motive. See the mirror's weaken_gen for the strategy.
 fn weaken_gen_value() -> String {
+    let literal_arms = literal_typing_arms(|_, _, rule| {
+        format!(
+            "(fun (G : ListType KExpr) (n : Nat) (c : Nat) \
+             (G2 : ListType KExpr) (_hwk : CtxWk C c G G2) => \
+             TypingCtxConv.{rule} tenv G2 n)"
+        )
+    });
     let s0 = "(Nat.succ Nat.zero)";
     let motive = format!(
         "(fun (G : ListType KExpr) (e : KExpr) (T : KExpr) \
@@ -3660,13 +3756,13 @@ fn weaken_gen_value() -> String {
 
     let const_arm = format!(
         "(fun (G : ListType KExpr) (n : Name) (us : ListType Level) (A : KExpr) \
-         (hA : Eq (OptionType KExpr) (tenv n) (OptionType.some KExpr A)) \
+         (hA : Eq (OptionType KExpr) (kdecl_type_at tenv n us) (OptionType.some KExpr A)) \
          (c : Nat) (G2 : ListType KExpr) (_hwk : CtxWk C c G G2) => \
          Eq.substType KExpr \
          (fun (T : KExpr) => TypingCtxConv tenv G2 (KExpr.const n us) T) \
          A (lift_at A c {s0}) \
          (Eq.symm KExpr (lift_at A c {s0}) A \
-         (tec_tenv_lift_closed tenv W n A hA c {s0})) \
+         (tec_tenv_lift_closed tenv W n us A hA c {s0})) \
          (TypingCtxConv.const tenv G2 n us A hA))"
     );
 
@@ -3717,7 +3813,7 @@ fn weaken_gen_value() -> String {
     );
 
     format!(
-        "fun (tenv : Name -> OptionType KExpr) \
+        "fun (tenv : KDeclEnv) \
          (hf : RedEnvFaithful the_red_env) \
          (W : TypingEnvCoherent tenv) \
          (C : KExpr) (G0 : ListType KExpr) (e0 : KExpr) (T0 : KExpr) \
@@ -3725,7 +3821,7 @@ fn weaken_gen_value() -> String {
          TypingCtxConv.rec tenv {motive} \
          {var_arm} {sort_arm} {pi_arm} {lam_arm} {app_arm} {const_arm} {conv_arm} \
          {let_arm} \
-         G0 e0 T0 h0"
+         {literal_arms} G0 e0 T0 h0"
     )
 }
 

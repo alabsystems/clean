@@ -13,7 +13,7 @@
 //! native executable, then runs it and reports the captured stdout and exit
 //! code.
 //!
-//! The emit + render + cc-link logic lives in [`crate::native_build`], shared
+//! The emit + render + cc-link logic lives in [`clean_native::native_build`], shared
 //! with `clean lake run` (which builds the same native binary to a stable
 //! `build_dir/bin/<name>` path then executes it). This module is the thin
 //! run-in-place wrapper: build to a scratch dir, run, capture stdout/exit.
@@ -31,7 +31,7 @@
 //!    synthesized `main` marshals `argv[1..]` into a `List String` when the
 //!    entry takes one, calls `l_<decl>(…)` to drive the eager IO action to
 //!    completion, and returns the entry's `UInt32` as the process exit status
-//!    (`0` for an `IO Unit` entry). See [`crate::native_build`] for the IO
+//!    (`0` for an `IO Unit` entry). See [`clean_native::native_build`] for the IO
 //!    lowering, the entry contract, and the shim model.
 //!
 //! ## argv
@@ -45,111 +45,195 @@
 //! never hand it a non-empty argv — `args.length` printed `0` with no flag
 //! able to change it.
 
-use std::io::Write;
-use std::path::PathBuf;
-use std::process::Command;
+use std::path::Path;
+use std::process::{Command, ExitStatus, Stdio};
 
 use anyhow::Context;
-use clean_kernel::Expr;
 
 use crate::cli::RunArgs;
-use crate::native_build::{
-    build_native_binary_in_scratch, emit_entry_c_with_type, keep_scratch, BuiltBinary,
-};
-
-pub(crate) use crate::native_build::is_primitive_denylisted;
+use clean_native::native_build::{emit_native_c_artifact, keep_scratch};
 
 /// Dispatch entry point for `clean run`, wired from `dispatch_sync`.
 ///
+/// The program runs as Lean's `lean --run` runs it: it INHERITS this
+/// process's stdin, stdout and stderr, so its bytes reach the caller exactly
+/// as it wrote them, when it wrote them, and its diagnostics are never hidden.
+/// Measured 2026-09-24 before this change, against pinned Lean v4.30.0-rc2:
+/// the child ran under `Command::output()`, so `IO.print "abc"` came out as
+/// the four bytes `abc\n` (this wrapper appended a newline to any output not
+/// ending in one), `IO.eprintln` output and the runtime's own
+/// `clean panic: …` diagnostics were discarded, stdin was `/dev/null`, stdout
+/// arrived only after the program exited, and a program killed by a signal
+/// was reported as status 255 with no message.
+///
 /// A nonzero status is PROPAGATED, not reported: `def main : IO UInt32 := …
-/// pure 3` must make `clean run` itself exit 3, the same way `lake exe` does.
-/// Reporting it as an error would collapse every status onto the CLI's own
-/// exit 1 and lose the value the program returned.
+/// pure 3` makes `clean run` itself exit 3, the same way `lake exe` does. A
+/// program killed by signal `N` is reported on stderr — the one byte sequence
+/// this wrapper adds, and only on that abnormal path — and `clean run` exits
+/// with `128 + N`, the status a POSIX shell reports for it.
 pub(crate) fn handle_run_command(args: RunArgs) -> anyhow::Result<()> {
-    let (emitted_c, decl_type) = emit_entry_c_with_type(&args.file, &args.decl, args.opt_level)?;
-    let program_args: Vec<&str> = args.args.iter().map(String::as_str).collect();
-    let outcome = build_and_run_entry(
-        &args.decl,
-        &emitted_c,
-        decl_type.as_ref(),
-        &program_args,
-        args.keep_temp,
-    )?;
-
-    print!("{}", outcome.stdout);
-    if !outcome.stdout.ends_with('\n') {
-        println!();
+    // The experimental trust-cg lane (LX0) is its own build; the default C
+    // lane below is untouched by it.
+    #[cfg(feature = "trust-ir-backend")]
+    {
+        use crate::cli::RunBackend;
+        if args.backend == RunBackend::TrustCg {
+            return crate::cmd_run_trustcg::handle_run_trustcg(&args);
+        }
+        if args.receipt.is_some() {
+            anyhow::bail!(
+                "`--receipt` records the `--backend trust-cg` build; the C lane writes no receipt"
+            );
+        }
     }
-    if let Some(dir) = &outcome.kept_dir {
+    let artifact = emit_native_c_artifact(&args.file, &args.decl, args.opt_level)?;
+    let built = artifact.build_in_scratch(true)?;
+    let status = run_inheriting_stdio(built.binary(), &args.args)?;
+    // Release (or deliberately keep) the scratch directory BEFORE exiting:
+    // `std::process::exit` skips destructors.
+    if args.keep_temp {
+        let dir = keep_scratch(built);
         eprintln!("clean run: kept build directory at {}", dir.display());
-    }
-    if outcome.exit_code != 0 {
-        // `std::process::exit` skips destructors, so flush what we just wrote.
-        // The scratch dir is already released: `run_built_binary` drops the
-        // `BuiltBinary` (or leaks it deliberately under `--keep-temp`) before
-        // returning.
-        let _ = std::io::stdout().flush();
-        let _ = std::io::stderr().flush();
-        std::process::exit(outcome.exit_code);
-    }
-    Ok(())
-}
-
-/// The result of compiling, linking, and running the native entry binary.
-struct RunOutcome {
-    stdout: String,
-    exit_code: i32,
-    /// Set when `--keep-temp` is requested; the scratch dir is leaked so the
-    /// caller can inspect it.
-    kept_dir: Option<PathBuf>,
-}
-
-/// Build the native binary in a scratch dir (via the shared engine) and run it
-/// in place, capturing stdout and the exit code. The shared engine derives the
-/// entry contract (`Nat` vs `IO`, argv shape, exit shape), selects the needed
-/// shims, and cc-links; this wrapper just executes the produced binary.
-fn build_and_run_entry(
-    decl: &str,
-    emitted_c: &str,
-    decl_type: Option<&Expr>,
-    run_args: &[&str],
-    keep_temp: bool,
-) -> anyhow::Result<RunOutcome> {
-    let built = build_native_binary_in_scratch(decl, emitted_c, decl_type, true)?;
-    run_built_binary(built, run_args, keep_temp)
-}
-
-/// Execute a freshly-built scratch binary, capturing stdout and exit code.
-fn run_built_binary(
-    built: BuiltBinary,
-    run_args: &[&str],
-    keep_temp: bool,
-) -> anyhow::Result<RunOutcome> {
-    let binary: PathBuf = built.binary.clone();
-    let output = Command::new(&binary)
-        .args(run_args)
-        .output()
-        .with_context(|| format!("failed to run native binary {}", binary.display()))?;
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let exit_code = output.status.code().unwrap_or(-1);
-
-    let kept_dir = if keep_temp {
-        Some(keep_scratch(built))
     } else {
-        None
-    };
-    Ok(RunOutcome {
-        stdout,
-        exit_code,
-        kept_dir,
-    })
+        drop(built);
+    }
+    exit_like_program(status)
+}
+
+/// End `clean run` the way the program ended: success, its own nonzero
+/// status, or `128 + N` after reporting signal `N` on stderr. Shared by the C
+/// lane and the experimental trust-cg lane.
+pub(crate) fn exit_like_program(status: ExitStatus) -> anyhow::Result<()> {
+    match exit_disposition(status) {
+        ExitDisposition::Success => Ok(()),
+        ExitDisposition::Code(code) => std::process::exit(code),
+        ExitDisposition::Signal(signal) => {
+            eprintln!(
+                "clean run: program terminated by signal {signal} ({})",
+                signal_name(signal)
+            );
+            std::process::exit(128 + signal)
+        }
+    }
+}
+
+/// Run the built program with this process's own stdin, stdout and stderr,
+/// and wait for it.
+pub(crate) fn run_inheriting_stdio(
+    binary: &Path,
+    run_args: &[String],
+) -> anyhow::Result<ExitStatus> {
+    Command::new(binary)
+        .args(run_args)
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .status()
+        .with_context(|| format!("failed to run native binary {}", binary.display()))
+}
+
+/// How `clean run` itself ends, given how the program ended.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExitDisposition {
+    /// The program exited with status 0.
+    Success,
+    /// The program exited with this nonzero status; `clean run` exits with it.
+    Code(i32),
+    /// The program was killed by this signal.
+    Signal(i32),
+}
+
+/// Classify a finished program's status.
+pub(crate) fn exit_disposition(status: ExitStatus) -> ExitDisposition {
+    if let Some(code) = status.code() {
+        return if code == 0 {
+            ExitDisposition::Success
+        } else {
+            ExitDisposition::Code(code)
+        };
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        if let Some(signal) = status.signal() {
+            return ExitDisposition::Signal(signal);
+        }
+    }
+    // Neither a code nor a signal: report a generic failure rather than a
+    // success nobody observed.
+    ExitDisposition::Code(1)
+}
+
+/// The conventional name of a POSIX signal number, for the report line.
+pub(crate) fn signal_name(signal: i32) -> &'static str {
+    match signal {
+        1 => "SIGHUP",
+        2 => "SIGINT",
+        3 => "SIGQUIT",
+        4 => "SIGILL",
+        5 => "SIGTRAP",
+        6 => "SIGABRT",
+        8 => "SIGFPE",
+        9 => "SIGKILL",
+        10 if cfg!(target_os = "macos") => "SIGBUS",
+        7 if cfg!(target_os = "linux") => "SIGBUS",
+        11 => "SIGSEGV",
+        13 => "SIGPIPE",
+        14 => "SIGALRM",
+        15 => "SIGTERM",
+        _ => "unknown signal",
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::native_build::{classify_entry, entry_arity_in_c, EntryKind};
-    use std::path::Path;
+    use clean_native::native_build::emit_entry_c_with_type;
+    use clean_native::native_build::{classify_entry, entry_arity_in_c, EntryKind};
+    use std::path::PathBuf;
+
+    /// What a test reads back from a built program: its stdout and status.
+    /// The production wrapper hands the program this process's own stdio
+    /// instead ([`run_inheriting_stdio`]); these tests are about the BUILT
+    /// program's bytes, so they capture them.
+    struct RunOutcome {
+        stdout: String,
+        exit_code: i32,
+    }
+
+    /// The wrapper's status mapping, on real processes: a nonzero exit is
+    /// propagated as itself, and a signal is reported as a signal — never as
+    /// the `255` / `-1` the captured-output wrapper used to print.
+    #[test]
+    fn test_exit_disposition_code_and_signal_are_distinguished() {
+        let run = |script: &str| {
+            Command::new("sh")
+                .args(["-c", script])
+                .status()
+                .expect("run sh")
+        };
+        assert_eq!(exit_disposition(run("exit 0")), ExitDisposition::Success);
+        assert_eq!(exit_disposition(run("exit 7")), ExitDisposition::Code(7));
+        // SIGKILL and SIGTERM: a crash signal (SEGV, ABRT) would make macOS
+        // write a crash report for the shell on every run of this test.
+        assert_eq!(
+            exit_disposition(run("kill -KILL $$")),
+            ExitDisposition::Signal(9)
+        );
+        assert_eq!(
+            exit_disposition(run("kill -TERM $$")),
+            ExitDisposition::Signal(15)
+        );
+        assert_eq!(signal_name(11), "SIGSEGV");
+        assert_eq!(signal_name(6), "SIGABRT");
+        // The production runner hands the status back unchanged.
+        let status = run_inheriting_stdio(
+            Path::new("/bin/sh"),
+            &["-c".to_string(), "exit 5".to_string()],
+        )
+        .expect("run /bin/sh");
+        assert_eq!(exit_disposition(status), ExitDisposition::Code(5));
+    }
 
     fn write_temp_lean(source: &str) -> (tempfile::TempDir, PathBuf) {
         let dir = tempfile::tempdir().expect("tempdir");
@@ -170,8 +254,13 @@ mod tests {
         decl: &str,
         run_args: &[&str],
     ) -> anyhow::Result<RunOutcome> {
-        let (emitted_c, decl_type) = emit_entry_c_with_type(file, decl, 0)?;
-        build_and_run_entry(decl, &emitted_c, decl_type.as_ref(), run_args, false)
+        let artifact = emit_native_c_artifact(file, decl, 0)?;
+        let built = artifact.build_in_scratch(true)?;
+        let output = Command::new(built.binary()).args(run_args).output()?;
+        Ok(RunOutcome {
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            exit_code: output.status.code().unwrap_or(-1),
+        })
     }
 
     fn build_and_run_nat_entry(file: &Path, decl: &str) -> anyhow::Result<RunOutcome> {
@@ -543,7 +632,7 @@ mod tests {
     /// list-printing Lean program. The recursor lowering materialized the arm's
     /// induction hypothesis (`dump rest`) as a `let` at the HEAD of the arm,
     /// ahead of `IO.println s`; under the eager-effect `IO` model of
-    /// [`crate::native_build`] a hoisted self-call is a hoisted EFFECT, so the
+    /// [`clean_native::native_build`] a hoisted self-call is a hoisted EFFECT, so the
     /// whole tail printed before the head. Fixed in `to_lcnf::sink_ih`, which
     /// puts the IH back inside the bind continuation that consumes it.
     ///

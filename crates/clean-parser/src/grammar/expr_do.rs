@@ -262,6 +262,35 @@ impl Parser {
 
         let binder = self.parse_do_let_binder()?;
 
+        // Function parameters belong to the local declaration header. Keep
+        // their origin through lambda lowering, with the result annotation in
+        // the parameters' scope. Monadic `<-` bindings have no such parameters.
+        let params = if binder.ty.is_none() {
+            self.optional_binders()?
+        } else {
+            Vec::new()
+        };
+        if !params.is_empty() {
+            let ret_ty = if self.eat(&TokenKind::Colon) {
+                Some(self.expr()?)
+            } else {
+                None
+            };
+            self.expect(&TokenKind::ColonEq)?;
+            let mut val = self.parse_do_elem_expr()?;
+            if let Some(ret_ty) = ret_ty {
+                let span = val.span().merge(ret_ty.span());
+                val = SurfaceExpr::Ascription(span, Box::new(val), Box::new(ret_ty));
+            }
+            let span = start_span.merge(val.span());
+            let val = Box::new(SurfaceExpr::Lambda(span, params, Box::new(val)));
+            return Ok(if is_mut {
+                DoElem::LetMut(span, binder, val)
+            } else {
+                DoElem::Let(span, binder, val)
+            });
+        }
+
         // Check for `<-` / `←` (monadic bind) vs `:=` (pure let)
         if self.eat(&TokenKind::LeftArrow) {
             let val = self.parse_do_elem_expr()?;
@@ -339,10 +368,7 @@ impl Parser {
         let is_irrefutable_destructuring = matches!(
             &pat,
             SurfacePattern::Ctor(head, _)
-                if matches!(
-                    head.as_str(),
-                    "Prod.mk" | "PProd.mk" | "MProd.mk" | "Unit.unit"
-                )
+                if ["Prod.mk", "PProd.mk", "MProd.mk", "Unit.unit"].iter().any(|path| head.name() == SurfaceName::generated_path(path).name())
         );
         if !is_irrefutable_destructuring {
             self.pos = saved_pos;
@@ -394,7 +420,7 @@ impl Parser {
             // desugaring handles the monad plumbing unchanged.
             let fresh = format!("__do_pat_{}", span.start);
             let fresh_binder = SurfaceBinder::new(fresh.clone(), None, SurfaceBinderInfo::Explicit);
-            let scrut = SurfaceExpr::Ident(span, fresh);
+            let scrut = SurfaceExpr::Ident(span, SurfaceName::component(fresh, false));
             let bind_elem = DoElem::Bind(span, fresh_binder, Box::new(value));
             let match_elem = DoElem::Match(span, vec![scrut], vec![arm]);
             return Ok(Some(DoElem::Expr(
@@ -447,7 +473,7 @@ impl Parser {
         // Check for `ident :` (not `:=`) pattern
         if let TokenKind::Ident(name) = self.current_kind() {
             if matches!(self.peek_kind(1), Some(TokenKind::Colon)) {
-                let name = name.clone();
+                let name = self.name_token(name)?;
                 self.advance(); // consume ident
                 self.advance(); // consume :
                 let prop = self.expr()?;
@@ -519,8 +545,16 @@ impl Parser {
     }
 
     /// Parse the else branch of a do-if, handling `else if` chaining.
+    ///
+    /// Lean 4.8's `doIf` chains with `elseIf := atomic ("else" >>
+    /// checkLineEq >> " if ")` (`Lean/Parser/Do.lean`): `else if` only when
+    /// the `if` is on the `else`'s line. An `if` that starts the NEXT line is
+    /// the first statement of the `else` block's `doSeq`, and the statements
+    /// after it belong to that block too — reading it as a chain kept only
+    /// the `if` and dropped the rest of the block (trust-ir `Memory.lean`
+    /// `semStore`: `else ⏎ if … then … ⏎ let encoded ← … ⏎ if … ⏎ let …`).
     fn parse_do_if_else_branch(&mut self) -> Result<Vec<DoElem>, ParseError> {
-        if matches!(self.current_kind(), TokenKind::If) {
+        if matches!(self.current_kind(), TokenKind::If) && !self.current().preceded_by_newline {
             let if_span = self.current_span();
             self.advance();
             let nested_if = self.parse_do_if(if_span)?;
@@ -555,7 +589,7 @@ impl Parser {
             TokenKind::Ident(_) => self.ident()?,
             TokenKind::Underscore => {
                 self.advance();
-                "_".to_string()
+                SurfaceName::generated_path("_")
             }
             _ => {
                 return Err(ParseError::UnexpectedToken {
@@ -603,7 +637,7 @@ impl Parser {
         }
 
         let body = self.parse_do_seq()?;
-        let binder = SurfaceBinder::new(name, None, SurfaceBinderInfo::Explicit);
+        let binder = SurfaceBinder::new_typed(name, None, SurfaceBinderInfo::Explicit);
         let end_span = body.last().map_or(start_span, |e| e.span());
         Ok(DoElem::For(
             start_span.merge(end_span),

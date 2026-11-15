@@ -12,6 +12,19 @@ use super::*;
 use crate::stack_safe;
 
 impl<'a> ElabCtx<'a> {
+    /// Elaborate the head `func` of an application with `args`, announcing
+    /// the arguments to a field-notation head (`elab_dot_elim.rs`).
+    pub(in crate::infer) fn elaborate_app_head(
+        &mut self,
+        func: &SurfaceExpr,
+        args: &[SurfaceArg],
+    ) -> Result<Expr, ElabError> {
+        let saved = self.dot_elim.arm_app_head(func, args);
+        let result = self.elaborate(func);
+        self.dot_elim.restore_app_head(saved);
+        result
+    }
+
     /// Check if a binder info requires implicit argument insertion
     pub(in crate::infer) fn is_implicit_binder(bi: impl Into<BinderData>) -> bool {
         let info = bi.into().info;
@@ -19,6 +32,30 @@ impl<'a> ElabCtx<'a> {
             info,
             BinderInfo::Implicit | BinderInfo::StrictImplicit | BinderInfo::InstImplicit
         )
+    }
+
+    /// Does a run of implicit-argument insertion END at this binder? True
+    /// exactly for a strict-implicit `⦃x⦄` binder with no explicit argument
+    /// left to elaborate — Lean's `processStrictImplicitArg`
+    /// (`Lean/Elab/App.lean:767-774`) `finalize`s there. See [`ArgsFollow`].
+    pub(in crate::infer) fn stops_at_strict_implicit(
+        bi: impl Into<BinderData>,
+        follow: ArgsFollow,
+    ) -> bool {
+        bi.into().info == BinderInfo::StrictImplicit && follow == ArgsFollow::No
+    }
+
+    /// Would a run of implicit-argument insertion fill this binder? `{x}` and
+    /// `[x]` always; `⦃x⦄` only while an explicit argument follows.
+    pub(in crate::infer) fn fills_implicit_binder(
+        bi: impl Into<BinderData>,
+        follow: ArgsFollow,
+    ) -> bool {
+        match bi.into().info {
+            BinderInfo::Implicit | BinderInfo::InstImplicit => true,
+            BinderInfo::StrictImplicit => follow == ArgsFollow::Yes,
+            _ => false,
+        }
     }
 
     /// Count the number of explicit (non-implicit) binders in a function type.
@@ -33,6 +70,61 @@ impl<'a> ElabCtx<'a> {
             current = body.as_ref().clone();
         }
         count
+    }
+
+    /// Expand Lean's trailing application ellipsis `f ..`
+    /// (`Term.ellipsis`, `Lean/Parser/Term.lean`) into the explicit `_` holes
+    /// it abbreviates.
+    ///
+    /// `f ..` means "fill every REMAINING explicit parameter of `f` with `_`":
+    /// `Or ..` is `Or _ _`, `Subsingleton.elim ..` is `Subsingleton.elim _ _`,
+    /// `update_self ..` is `update_self _ _ _`. The arity is a property of the
+    /// elaborated head, not of the syntax, so the parser only records a marker
+    /// argument ([`SurfaceArg::ellipsis`]) and this expands it against
+    /// `func_expr`'s inferred type.
+    ///
+    /// The returned vector is the argument list with the marker REPLACED by
+    /// `total_explicit - supplied` holes (zero of them when the head is
+    /// already saturated, which is exactly Lean's behaviour — `..` is allowed
+    /// but adds nothing).
+    ///
+    /// SOUNDNESS: purely an ELAB-level abbreviation. Every hole becomes an
+    /// ordinary metavariable that the normal application loop solves and the
+    /// kernel re-checks on registration; an ellipsis that expands to the wrong
+    /// arity produces a loud type error, never a false `proved`. No
+    /// `add_decl_unchecked`, no new axioms.
+    pub(in crate::infer) fn expand_app_ellipsis(
+        &mut self,
+        func_expr: &Expr,
+        args: &[SurfaceArg],
+    ) -> Result<Vec<SurfaceArg>, ElabError> {
+        let mut expanded: Vec<SurfaceArg> = Vec::with_capacity(args.len());
+        let mut supplied = 0usize;
+        let mut ellipsis_span = None;
+        for arg in args {
+            if arg.is_ellipsis() {
+                // Lean allows at most one `..`, and the parser only ever emits
+                // it last; keep the FIRST span for the synthesized holes.
+                ellipsis_span.get_or_insert(arg.span);
+                continue;
+            }
+            supplied += 1;
+            expanded.push(arg.clone());
+        }
+        let Some(span) = ellipsis_span else {
+            return Ok(expanded);
+        };
+
+        // If the head's type cannot be inferred there is no arity to expand
+        // against. Fail LOUD rather than silently dropping the `..` — dropping
+        // it would elaborate an under-applied term whose real defect (a
+        // missing argument) would surface far from the ellipsis that caused it.
+        let func_type = self.infer_type(func_expr)?;
+        let total_explicit = Self::count_explicit_binders(&func_type);
+        for _ in supplied..total_explicit {
+            expanded.push(SurfaceArg::positional(SurfaceExpr::Hole(span)));
+        }
+        Ok(expanded)
     }
 
     /// If `ty` is an explicit `optParam α default` parameter type, return its
@@ -100,6 +192,53 @@ impl<'a> ElabCtx<'a> {
             ty = self.whnf(&self.metas.instantiate(&body_ty.instantiate(&default)));
         }
         (result, ty)
+    }
+
+    /// Unify `carrier` with the expected type. A bare metavariable carrier (the
+    /// result type `?α` of `@Inhabited.default ?α ?inst`) is unified with the
+    /// expected type AS WRITTEN when its head is a definition this source
+    /// declared, as Lean's `isDefEq` assigns it (review r6, X2): its weak-head
+    /// normal form would pin `?α` to the reduct, and the deferred instance would
+    /// be resolved at the wrong carrier (`def T := Nat` with the user's
+    /// `Inhabited T`). A prelude or imported head keeps the normal form: Clean's
+    /// prelude lacks instances Lean files under such heads (`ExceptT`'s), and
+    /// the written carrier would reach a generic one Lean does not pick
+    /// (`instInhabitedOfMonad`'s `pure default` for `ExceptT`; Lean's is
+    /// `throw default`). Any other carrier, and a written form that does not
+    /// unify, uses the normal forms, as before.
+    fn unify_carrier_with_expected(
+        &mut self,
+        carrier: (&Expr, &Expr),
+        expected: (&Expr, &Expr),
+    ) -> bool {
+        let ctx = self.build_local_ctx();
+        let bare_meta = matches!(
+            carrier.0.kind(),
+            ExprKind::FVar(id) if MetaState::from_fvar(*id).is_some()
+        );
+        // A reducible head (`abbrev`) is one Lean's instance search sees
+        // through anyway, so its reduct is the carrier the search would use.
+        let written_head = match expected.0.get_app_fn().kind() {
+            ExprKind::Const(head, _) => {
+                !crate::instance_alias::is_reducible_definition(self.env, head)
+                    && crate::declared_here::declared_in_source(self.env, head)
+            }
+            _ => false,
+        };
+        if bare_meta && written_head {
+            self.metas.push_scope();
+            let as_written = {
+                let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx.clone());
+                matches!(unifier.unify(carrier.0, expected.0), UnifyResult::Success)
+            };
+            if as_written {
+                self.metas.commit();
+                return true;
+            }
+            self.metas.pop_scope();
+        }
+        let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
+        matches!(unifier.unify(carrier.1, expected.1), UnifyResult::Success)
     }
 
     /// Apply a value to implicit arguments to match an expected type.
@@ -173,6 +312,29 @@ impl<'a> ElabCtx<'a> {
         unifier.unify(ty1, ty2)
     }
 
+    /// [`Self::apply_implicit_to_expected_type`] with the `@`-ness of the
+    /// SURFACE term the value came from in scope.
+    ///
+    /// `explicit_mode` is restored by `elab_app` before its value is
+    /// reconciled with an expected type, so the reconciliation used to fill
+    /// every remaining leading implicit / instance-implicit binder of an `@`
+    /// application — `Function.Injective (@PartialOrder.toPreorder α)` then
+    /// received `Preorder α` instead of `PartialOrder α → Preorder α`. Lean
+    /// carries `explicit` in `ElabAppArgs` and `finalize` ends the application
+    /// with the remaining binders INTACT.
+    pub(in crate::infer) fn apply_implicit_to_expected_type_for_surface(
+        &mut self,
+        surface: &SurfaceExpr,
+        val: &Expr,
+        expected_ty: &Expr,
+    ) -> Result<Expr, ElabError> {
+        let prev = self.value_is_explicit_app;
+        self.value_is_explicit_app = Self::surface_is_explicit_app(surface);
+        let result = self.apply_implicit_to_expected_type(val, expected_ty);
+        self.value_is_explicit_app = prev;
+        result
+    }
+
     pub(in crate::infer) fn apply_implicit_to_expected_type(
         &mut self,
         val: &Expr,
@@ -182,6 +344,30 @@ impl<'a> ElabCtx<'a> {
             // Infer type of the value; failures must propagate so callers do not accept
             // ill-typed terms as if elaboration succeeded.
             let val_ty = self.infer_type(val)?;
+
+            // A `fun` value is never applied to implicit arguments: Lean
+            // elaborates it with `elabFunBinders` and only checks the result
+            // against the expected type (`ensureHasType`), and `isDefEq`
+            // ignores binder annotations. So `fun {_a a'} h ↦ …` checks
+            // against `Function.Injective f := ∀ ⦃a₁ a₂⦄, …` as written —
+            // `Function.bijective_iff_existsUnique`, measured 2026-09-12 — where
+            // inserting its OWN `{_a a'}` produced `f ?a = f ?a' → ?a = ?a'`.
+            // Implicit lambdas the EXPECTED type asks for are built by
+            // `elab_lambda` itself, before this point.
+            let val_is_fun = matches!(self.metas.instantiate(val).kind(), ExprKind::Lam(..));
+
+            // An `@`-application is a genuine PARTIAL application: Lean's
+            // `finalize` (Lean/Elab/App.lean) ends it with every unsupplied
+            // binder intact and `ensureHasType` then does a plain `isDefEq`.
+            // `explicit_mode` is already restored by the time this runs, so the
+            // fact is carried in `value_is_explicit_app`, set from the surface
+            // term by `apply_implicit_to_expected_type_for_surface`. It gates
+            // exactly the implicit / instance-implicit INSERTION arms (and, via
+            // the field, the ones this function reaches through its own
+            // recursion), leaving the `optParam` default arm and the closing
+            // unification against the expected type — which is what keeps the
+            // expected type solving metavariables — running unchanged.
+            let suppress_implicit_insertion = val_is_fun || self.value_is_explicit_app;
 
             // Nested-aux → container pre-coercion (Track U). When the value's
             // type is a bare nested-inductive aux mirror (`Value._List`) and the
@@ -233,7 +419,9 @@ impl<'a> ElabCtx<'a> {
             // any failure the scope is popped and the legacy direct-match
             // behavior is preserved verbatim (and the kernel re-checks
             // whatever term is produced, so this can never accept more).
-            if !self.explicit_mode {
+            // Nothing follows the value here, so a strict-implicit `⦃x⦄`
+            // binder ends the insertion (`ArgsFollow::No`).
+            if !self.explicit_mode && !suppress_implicit_insertion {
                 let expected_inst = self.metas.instantiate(expected_ty);
                 let expected_is_open_meta = matches!(
                     expected_inst.kind(),
@@ -242,22 +430,32 @@ impl<'a> ElabCtx<'a> {
                 let val_ty_whnf = self.whnf(&val_ty);
                 let leads_with_implicit = matches!(
                     val_ty_whnf.kind(),
-                    ExprKind::Pi(bi, _, _) if Self::is_implicit_binder(*bi)
+                    ExprKind::Pi(bi, _, _) if Self::fills_implicit_binder(*bi, ArgsFollow::No)
                 );
                 if expected_is_open_meta && leads_with_implicit {
                     self.metas.push_scope();
-                    let (inserted, inserted_ty, pending) =
-                        self.insert_implicit_args_deferring_instances(val.clone(), &val_ty_whnf);
+                    let (inserted, inserted_ty, pending) = self
+                        .insert_implicit_args_deferring_instances(
+                            val.clone(),
+                            &val_ty,
+                            ArgsFollow::No,
+                        );
                     let unified = {
-                        let inserted_ty_whnf = self.whnf(&self.metas.instantiate(&inserted_ty));
+                        // The helper returns the remaining type in weak-head
+                        // normal form, except when it stopped at a `⦃x⦄`
+                        // binder: then it is the FOLDED type (`Injective f`),
+                        // which is what the open metavariable should become.
+                        // `unify_no_initial_whnf`: the ordinary entry would
+                        // unfold it again before assigning.
+                        let inserted_ty = self.metas.instantiate(&inserted_ty);
                         let ctx = self.build_local_ctx();
                         let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
                         matches!(
-                            unifier.unify(&inserted_ty_whnf, &expected_inst),
+                            unifier.unify_no_initial_whnf(&inserted_ty, &expected_inst),
                             UnifyResult::Success
                         )
                     };
-                    if unified && self.resolve_deferred_instances(&pending) {
+                    if unified && self.resolve_deferred_instances_postponing_stuck(&pending) {
                         self.metas.commit();
                         let result = self.metas.instantiate(&inserted);
                         return Ok(self.metas.instantiate_levels(&result));
@@ -293,7 +491,15 @@ impl<'a> ElabCtx<'a> {
                         if !Self::is_implicit_binder(*bi)
                             && Self::opt_param_default(&self.metas.instantiate(arg_ty)).is_some()
                 );
-                if leads_with_opt_param {
+                // `@f a` leaves an `optParam` binder INTACT exactly as it
+                // leaves an implicit one: `#check @withOpt 1` prints
+                // `optParam Nat 5 → Nat` and `def t : Nat := @withOpt 1` is a
+                // type mismatch on the pinned v4.30.0-rc2 binary (the
+                // `autoParam` twin behaves identically). Lean never reaches
+                // `processOptParam`'s default while `ElabAppArgs.explicit` is
+                // set, so the same flag that stops implicit insertion stops
+                // this one.
+                if leads_with_opt_param && !suppress_implicit_insertion {
                     self.metas.push_scope();
                     let (defaulted, defaulted_ty) =
                         self.insert_opt_param_defaults(val.clone(), &val_ty_whnf);
@@ -325,10 +531,14 @@ impl<'a> ElabCtx<'a> {
                 }
             }
 
-            // Check if value type is a function with implicit arguments
+            // Check if value type is a function with implicit arguments. No
+            // explicit argument follows the value, so `⦃x⦄` is not filled.
             let val_ty_whnf = self.whnf(&val_ty);
             match val_ty_whnf.kind() {
-                ExprKind::Pi(bi, arg_ty, body_ty) if Self::is_implicit_binder(*bi) => {
+                ExprKind::Pi(bi, arg_ty, body_ty)
+                    if !suppress_implicit_insertion
+                        && Self::fills_implicit_binder(*bi, ArgsFollow::No) =>
+                {
                     // Check if the argument type is a Sort (type parameter)
                     // This catches `sorry : {α : Sort u} → α` pattern
                     let arg_ty_whnf = self.whnf(&self.metas.instantiate(arg_ty));
@@ -384,7 +594,7 @@ impl<'a> ElabCtx<'a> {
                                     // (consistent with the #252 fix in the else branch)
                                     let result_ty = self.metas.instantiate(&result_ty);
                                     let result_ty_whnf = self.whnf(&result_ty);
-                                    if matches!(result_ty_whnf.kind(), ExprKind::Pi(bi, _, _) if Self::is_implicit_binder(*bi))
+                                    if matches!(result_ty_whnf.kind(), ExprKind::Pi(bi, _, _) if Self::fills_implicit_binder(*bi, ArgsFollow::No))
                                     {
                                         // More implicits - recurse
                                         self.apply_implicit_to_expected_type(&result, expected_ty)
@@ -422,7 +632,7 @@ impl<'a> ElabCtx<'a> {
                                     // Check if there are more implicit args to handle
                                     let result_ty = self.metas.instantiate(&result_ty);
                                     let result_ty_whnf = self.whnf(&result_ty);
-                                    if matches!(result_ty_whnf.kind(), ExprKind::Pi(bi, _, _) if Self::is_implicit_binder(*bi))
+                                    if matches!(result_ty_whnf.kind(), ExprKind::Pi(bi, _, _) if Self::fills_implicit_binder(*bi, ArgsFollow::No))
                                     {
                                         // More implicits - recurse
                                         self.apply_implicit_to_expected_type(&result, expected_ty)
@@ -464,23 +674,34 @@ impl<'a> ElabCtx<'a> {
                         // result type `?α` with the expected type first solves
                         // `?α := <carrier>` so the correct instance is selected. This
                         // matches Lean 4's postponement of typeclass resolution.
-                        let expected_whnf = self.whnf(&self.metas.instantiate(expected_ty));
+                        // The expected type AS WRITTEN is unified first, and its
+                        // weak-head normal form only when that fails: unifying a bare
+                        // `?α` against the reduct pins the carrier to it, so `(default :
+                        // T)` for `def T := Nat` resolved `Inhabited Nat`, bypassing an
+                        // `Inhabited T` instance (and G57's `instInhabitedOfMonad` for a
+                        // `StateT` expected type). Lean's `isDefEq` assigns `?α := T`
+                        // as written (review r6, X2; the unifier's own G28/G47 rule,
+                        // `unify/unifier/mod.rs`), and still reduces both sides when
+                        // the written forms disagree.
+                        let expected_inst = self.metas.instantiate(expected_ty);
+                        let expected_whnf = self.whnf(&expected_inst);
 
                         // Try the deferred path in a speculative scope so a failure to
                         // resolve every instance this way leaves no partial metavariable
                         // assignments behind for the eager fallback.
                         self.metas.push_scope();
                         let (deferred_result, deferred_ty, pending) = self
-                            .insert_implicit_args_deferring_instances(val.clone(), &val_ty_whnf);
-                        let deferred_ty_whnf = self.whnf(&self.metas.instantiate(&deferred_ty));
-                        let expected_pinned = {
-                            let ctx = self.build_local_ctx();
-                            let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
-                            matches!(
-                                unifier.unify(&deferred_ty_whnf, &expected_whnf),
-                                UnifyResult::Success
-                            )
-                        };
+                            .insert_implicit_args_deferring_instances(
+                                val.clone(),
+                                &val_ty_whnf,
+                                ArgsFollow::No,
+                            );
+                        let deferred_ty_inst = self.metas.instantiate(&deferred_ty);
+                        let deferred_ty_whnf = self.whnf(&deferred_ty_inst);
+                        let expected_pinned = self.unify_carrier_with_expected(
+                            (&deferred_ty_inst, &deferred_ty_whnf),
+                            (&expected_inst, &expected_whnf),
+                        );
                         if self.resolve_deferred_instances(&pending) {
                             self.metas.commit();
                             let result = self.metas.instantiate(&deferred_result);
@@ -526,7 +747,7 @@ impl<'a> ElabCtx<'a> {
                                 let (class_name, _) = crate::instances::extract_class_app(&goal)?;
                                 Some(ElabError::FailedToSynthesize {
                                     class_name,
-                                    goal: format!("{goal:?}"),
+                                    goal: crate::error_render::term(&goal),
                                 })
                             })
                             .flatten();
@@ -538,14 +759,13 @@ impl<'a> ElabCtx<'a> {
                         // Fall back to eager insertion so behavior is never worse than
                         // before this refinement (the original #3396 path).
                         let (result, result_ty) =
-                            self.insert_implicit_args(val.clone(), &val_ty_whnf);
+                            self.insert_implicit_args(val.clone(), &val_ty_whnf, ArgsFollow::No);
                         let result_ty_inst = self.metas.instantiate(&result_ty);
                         let result_ty_whnf = self.whnf(&result_ty_inst);
-                        {
-                            let ctx = self.build_local_ctx();
-                            let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
-                            let _ = unifier.unify(&result_ty_whnf, &expected_whnf);
-                        }
+                        let _ = self.unify_carrier_with_expected(
+                            (&result_ty_inst, &result_ty_whnf),
+                            (&expected_inst, &expected_whnf),
+                        );
                         let result = self.metas.instantiate(&result);
                         Ok(self.metas.instantiate_levels(&result))
                     }
@@ -595,82 +815,6 @@ impl<'a> ElabCtx<'a> {
         })
     }
 
-    /// When an expected type is present, allow user-provided arguments to fill
-    /// leading implicit binders if they elaborate cleanly at those binder types.
-    ///
-    /// This covers recursor-style applications like `PEmpty.rec (fun _ => Nat)`,
-    /// where the surface argument targets an implicit motive binder.
-    /// For recursor constants, also try this without an expected type because
-    /// motives are commonly supplied explicitly despite being implicit (#796).
-    pub(in crate::infer) fn try_consume_leading_implicit_args(
-        &mut self,
-        func_expr: Expr,
-        func_type: Expr,
-        args: &[SurfaceArg],
-    ) -> Result<(Expr, Expr, usize), ElabError> {
-        if self.explicit_mode {
-            return Ok((func_expr, func_type, 0));
-        }
-
-        // With an expected type, always try consumption. Without one, only try
-        // for recursor constants whose leading implicit is the motive.
-        if self.current_expected_type.is_none() {
-            let is_recursor = match func_expr.kind() {
-                ExprKind::Const(name, _) => self.env.get_recursor(name).is_some(),
-                _ => false,
-            };
-            if !is_recursor {
-                return Ok((func_expr, func_type, 0));
-            }
-        }
-
-        let mut result = func_expr;
-        let mut current_type = self.whnf(&func_type);
-        let mut consumed = 0;
-
-        while let Some(arg) = args.get(consumed) {
-            let (arg_ty, body_ty) = match current_type.kind() {
-                ExprKind::Pi(bi, arg_ty, body_ty) if Self::is_implicit_binder(*bi) => {
-                    (arg_ty.as_ref().clone(), body_ty.as_ref().clone())
-                }
-                _ => break,
-            };
-
-            let expected_arg_ty = self.metas.instantiate(&arg_ty);
-            // Ordinary sort-valued type parameters such as `{α : Type u}` in
-            // `List.cons` should stay in the implicit-insertion lane.
-            let expected_arg_ty_whnf = self.whnf(&expected_arg_ty);
-            if matches!(expected_arg_ty_whnf.kind(), ExprKind::Sort(_)) {
-                break;
-            }
-            self.metas.push_scope();
-            let attempt: Result<Expr, ElabError> = (|| {
-                let arg_expr =
-                    self.elaborate_with_expected_type(&arg.expr, Some(expected_arg_ty.clone()))?;
-                self.enforce_expr_type(&arg_expr, &expected_arg_ty)?;
-                Ok(arg_expr)
-            })();
-
-            match attempt {
-                Ok(arg_expr) => {
-                    self.metas.commit();
-                    let arg_expr = self.metas.instantiate(&arg_expr);
-                    let arg_expr = self.metas.instantiate_levels(&arg_expr);
-                    result = Expr::app(result, arg_expr.clone());
-                    current_type =
-                        self.whnf(&self.metas.instantiate(&body_ty.instantiate(&arg_expr)));
-                    consumed += 1;
-                }
-                Err(_) => {
-                    self.metas.pop_scope();
-                    break;
-                }
-            }
-        }
-
-        Ok((result, current_type, consumed))
-    }
-
     /// Resolve named arguments by reordering them to match parameter positions
     /// (#1230, rebuilt for B01 — GAP_SWEEP_2026-07-09).
     ///
@@ -682,7 +826,9 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Binder names come from, in order:
     /// 1. the environment's parameter-name registry (surface `def`/`theorem`/
-    ///    `axiom`/`opaque` declarations, registered with binder kinds), or
+    ///    `axiom`/`opaque` declarations, registered with binder kinds),
+    /// 1b. for an olean-imported constant, its type's binder names read off
+    ///    the raw `.olean` (`clean_olean::type_binder_names`), or
     /// 2. for a constructor, the parent inductive's structure-field table
     ///    (`num_params` unnamed parameter slots followed by the named fields),
     ///    with binder kinds read off the constructor's declared Pi telescope.
@@ -701,8 +847,8 @@ impl<'a> ElabCtx<'a> {
         &self,
         func_expr: &Expr,
         args: &[SurfaceArg],
-    ) -> Result<Vec<SurfaceArg>, ElabError> {
-        let named_arg_err = |name: &str, reason: String| ElabError::NamedArgBindingFailed {
+    ) -> Result<(Vec<SurfaceArg>, usize), ElabError> {
+        let named_arg_err = |name: &SurfaceName, reason: String| ElabError::NamedArgBindingFailed {
             func: match func_expr.kind() {
                 ExprKind::Const(n, _) => n.to_string(),
                 _ => "<non-constant function head>".to_string(),
@@ -711,30 +857,38 @@ impl<'a> ElabCtx<'a> {
             reason,
         };
         // The caller only routes here when at least one arg is named.
+        let unnamed = SurfaceName::generated_path("<unnamed>");
         let first_named = args
             .iter()
-            .find_map(|a| a.name.as_deref())
-            .unwrap_or("<unnamed>");
-
-        // Extract the function name to look up parameter names.
-        let func_name = match func_expr.kind() {
-            ExprKind::Const(name, _) => name.clone(),
-            _ => {
-                // Named args on a non-constant head (fvar/lambda/projection):
-                // binder names are not recorded for these. LOUD descope —
-                // never bind a named argument positionally.
-                return Err(named_arg_err(
-                    first_named,
-                    "named arguments require a function head whose binder names \
-                     are known (a declared constant or a constructor)"
-                        .to_string(),
-                ));
-            }
-        };
+            .find_map(|a| a.name.as_ref())
+            .unwrap_or(&unnamed);
 
         // Binder slots in declaration order: (name if known, kind if known).
-        let slots: Vec<(Option<String>, Option<BinderInfo>)> =
-            if let Some(param_names) = self.env.get_param_names(&func_name) {
+        let slots: Vec<(Option<SurfaceName>, Option<BinderInfo>)> = 'slots: {
+            // Extract the function name to look up parameter names.
+            let ExprKind::Const(func_name, _) = func_expr.kind() else {
+                // A non-constant head (a local, a projection, a lambda): Lean
+                // reads the binder names off the head's TYPE after `whnf`
+                // (`ElabAppArgs`, App.lean:803-815). The kernel keeps none, so
+                // they are known only when that type unfolds to a definition's
+                // `∀` value (`h (a₁ := x)` with `h : Injective f`); see
+                // `named_arg_slots_from_head_type`. Otherwise LOUD descope —
+                // never bind a named argument positionally.
+                match self.named_arg_slots_from_head_type(func_expr) {
+                    Some(slots) => break 'slots slots,
+                    None => {
+                        return Err(named_arg_err(
+                            first_named,
+                            "named arguments require a function head whose binder names \
+                             are known (a declared constant, a constructor, or a head \
+                             whose type unfolds to a definition's `∀`)"
+                                .to_string(),
+                        ))
+                    }
+                }
+            };
+            let func_name = func_name.clone();
+            if let Some(param_names) = self.env.get_typed_param_names(&func_name) {
                 // Kinds are recorded by `set_param_infos` (surface decls). A
                 // names-only legacy registration has no kinds row; treat every
                 // slot as explicit — exactly the pre-B01 positional-fill behavior.
@@ -744,10 +898,32 @@ impl<'a> ElabCtx<'a> {
                     .enumerate()
                     .map(|(i, n)| {
                         (
-                            Some(n.clone()),
+                            Some(SurfaceName::from_name(n.clone())),
                             kinds
                                 .and_then(|k| k.get(i).copied())
                                 .or(Some(BinderInfo::Default)),
+                        )
+                    })
+                    .collect()
+            } else if let (Some(names), Some(ci)) = (
+                clean_olean::type_binder_names(self.env, &func_name),
+                self.env.get_const(&func_name),
+            ) {
+                // An olean-IMPORTED constant: Lean binds a named argument by
+                // the binder names of the function's TYPE (`ElabAppArgs`), read
+                // off the raw `.olean` at import (`clean_olean::type_binder_names`)
+                // because the kernel keeps none. `LT.lt (self := i)` in
+                // `compare_of_injective_eq_compareOfLessAndEq` was "no binder
+                // names are recorded" (measured 2026-09-12). Kinds come from
+                // the kernel type itself.
+                let kinds = Self::pi_telescope_binder_infos(&ci.type_, names.len());
+                names
+                    .iter()
+                    .enumerate()
+                    .map(|(i, n)| {
+                        (
+                            Some(SurfaceName::from_name(n.clone())),
+                            kinds.get(i).copied(),
                         )
                     })
                     .collect()
@@ -778,7 +954,7 @@ impl<'a> ElabCtx<'a> {
                     .map(|i| {
                         let name = i
                             .checked_sub(num_params)
-                            .map(|fi| field_names[fi].to_string());
+                            .map(|fi| SurfaceName::from_name(field_names[fi].clone()));
                         (name, kinds.get(i).copied())
                     })
                     .collect()
@@ -805,29 +981,32 @@ impl<'a> ElabCtx<'a> {
                 let nidx = rec.num_indices as usize;
                 let total = np + nm + nmin + nidx + 1;
 
-                let mut names: Vec<Option<String>> = Vec::with_capacity(total);
+                let mut names: Vec<Option<SurfaceName>> = Vec::with_capacity(total);
                 names.extend(std::iter::repeat_with(|| None).take(np));
                 if nm == 1 {
-                    names.push(Some("motive".to_string()));
+                    names.push(Some(SurfaceName::generated_path("motive")));
                 } else {
-                    names.extend((1..=nm).map(|i| Some(format!("motive_{i}"))));
+                    names.extend((1..=nm).map(|i| {
+                        Some(SurfaceName::from_name(
+                            Name::anon().str(format!("motive_{i}")),
+                        ))
+                    }));
                 }
                 let minor_names = (0..nmin).map(|i| {
                     rec.rules.get(i).map(|r| {
-                        let full = r.constructor_name.to_string();
-                        full.rsplit('.').next().unwrap_or(&full).to_string()
+                        SurfaceName::from_name(r.constructor_name.clone()).last_component()
                     })
                 });
                 match rec.arg_order {
                     clean_kernel::RecursorArgOrder::MajorAfterMotive => {
                         names.extend(std::iter::repeat_with(|| None).take(nidx));
-                        names.push(Some("t".to_string()));
+                        names.push(Some(SurfaceName::generated_path("t")));
                         names.extend(minor_names);
                     }
                     clean_kernel::RecursorArgOrder::MajorAfterMinors => {
                         names.extend(minor_names);
                         names.extend(std::iter::repeat_with(|| None).take(nidx));
-                        names.push(Some("t".to_string()));
+                        names.push(Some(SurfaceName::generated_path("t")));
                     }
                 }
                 let kinds = Self::pi_telescope_binder_infos(&rec.type_, total);
@@ -836,6 +1015,10 @@ impl<'a> ElabCtx<'a> {
                     .enumerate()
                     .map(|(i, n)| (n, kinds.get(i).copied()))
                     .collect()
+            } else if let Some(slots) = self.named_arg_slots_from_head_type(func_expr) {
+                // A constant with no binders of its own whose type unfolds to
+                // a definition's `∀` (`theorem inj : Injective f`).
+                slots
             } else {
                 return Err(named_arg_err(
                     first_named,
@@ -844,7 +1027,8 @@ impl<'a> ElabCtx<'a> {
                      (LOUD descope; pass the arguments positionally)"
                     ),
                 ));
-            };
+            }
+        };
 
         // Place named args into the binder slot with that exact name (first
         // unfilled match, explicit or implicit); queue positional args.
@@ -856,23 +1040,22 @@ impl<'a> ElabCtx<'a> {
                 let pos = slots
                     .iter()
                     .enumerate()
-                    .position(|(i, (n, _))| n.as_deref() == Some(name) && positioned[i].is_none());
+                    .position(|(i, (n, _))| n.as_ref() == Some(name) && positioned[i].is_none());
                 match pos {
                     Some(pos) => {
                         positioned[pos] = Some(SurfaceArg::positional(arg.expr.clone()));
                     }
-                    None if slots
-                        .iter()
-                        .any(|(n, _)| n.as_deref() == Some(name.as_str())) =>
-                    {
+                    None if slots.iter().any(|(n, _)| n.as_ref() == Some(name)) => {
                         return Err(named_arg_err(
                             name,
                             "binder already bound by an earlier named argument".to_string(),
                         ));
                     }
                     None => {
-                        let known: Vec<&str> =
-                            slots.iter().filter_map(|(n, _)| n.as_deref()).collect();
+                        let known: Vec<String> = slots
+                            .iter()
+                            .filter_map(|(n, _)| n.as_ref().map(ToString::to_string))
+                            .collect();
                         return Err(named_arg_err(
                             name,
                             format!("unknown named argument; known: {}", known.join(", ")),
@@ -903,6 +1086,7 @@ impl<'a> ElabCtx<'a> {
         // Trailing None slots (unprovided params) are omitted.
         let mut result = Vec::new();
         let last_filled = positioned.iter().rposition(|s| s.is_some());
+        let positioned_prefix = last_filled.map_or(0, |last| last + 1);
         if let Some(last) = last_filled {
             for slot in positioned.into_iter().take(last + 1) {
                 result.push(slot.unwrap_or_else(|| {
@@ -917,7 +1101,7 @@ impl<'a> ElabCtx<'a> {
             result.push(arg.clone());
         }
 
-        Ok(result)
+        Ok((result, positioned_prefix))
     }
 
     /// Binder kinds of the leading `limit` Pi binders of a declared type.
@@ -926,7 +1110,7 @@ impl<'a> ElabCtx<'a> {
     /// stored as explicit Pi telescopes of params-then-fields, so the walk is
     /// exact for the B01 constructor lane. Returns fewer entries when the
     /// telescope is shorter than `limit`.
-    fn pi_telescope_binder_infos(ty: &Expr, limit: usize) -> Vec<BinderInfo> {
+    pub(in crate::infer) fn pi_telescope_binder_infos(ty: &Expr, limit: usize) -> Vec<BinderInfo> {
         let mut infos = Vec::with_capacity(limit);
         let mut current = ty;
         while infos.len() < limit {
@@ -956,11 +1140,15 @@ impl<'a> ElabCtx<'a> {
         args: &[SurfaceArg],
     ) -> Result<Expr, ElabError> {
         // Elaborate the function
-        let func_expr = self.elaborate(func)?;
+        let func_expr = self.elaborate_app_head(func, args)?;
         let func_type = self.infer_type(&func_expr)?;
 
         // Insert leading implicit arguments
-        let (mut result, mut current_type) = self.insert_implicit_args(func_expr, &func_type);
+        let (mut result, mut current_type) = self.insert_implicit_args(
+            func_expr,
+            &func_type,
+            ArgsFollow::from_remaining(args.len()),
+        );
 
         // Process each explicit argument, coercing Nat literals to Real
         for (idx, arg) in args.iter().enumerate() {
@@ -1042,7 +1230,11 @@ impl<'a> ElabCtx<'a> {
                 // Build the application (consuming final_arg)
                 result = Expr::app(result, final_arg);
 
-                let (new_result, new_type) = self.insert_implicit_args(result, &current_type);
+                let (new_result, new_type) = self.insert_implicit_args(
+                    result,
+                    &current_type,
+                    ArgsFollow::from_remaining(args.len() - idx - 1),
+                );
                 result = new_result;
                 current_type = new_type;
             } else {
@@ -1070,15 +1262,19 @@ impl<'a> ElabCtx<'a> {
         func: &SurfaceExpr,
         args: &[SurfaceArg],
     ) -> Result<Expr, ElabError> {
-        let func_expr = self.elaborate(func)?;
+        let func_expr = self.elaborate_app_head(func, args)?;
         let func_type = self.infer_type(&func_expr)?;
         // DEFER class-instance args: a homogeneous class-binop (`LE.le`/`LT.lt`)
         // inserts `[LE ?α]` BEFORE the operands; resolving it eagerly against the
         // unconstrained `?α` picks `instLENat` and pins `?α := Nat`, defeating the
         // literal→`Int.ofNat` coercion below. Collect the instance metavars and
         // resolve them only AFTER the operand loop pins `?α := Int`.
-        let (mut result, mut current_type, mut pending) =
-            self.insert_implicit_args_deferring_instances(func_expr, &func_type);
+        let (mut result, mut current_type, mut pending) = self
+            .insert_implicit_args_deferring_instances(
+                func_expr,
+                &func_type,
+                ArgsFollow::from_remaining(args.len()),
+            );
 
         for (idx, arg) in args.iter().enumerate() {
             current_type = self.whnf(&current_type);
@@ -1153,8 +1349,12 @@ impl<'a> ElabCtx<'a> {
                     current_type.clone()
                 };
                 result = Expr::app(result, final_arg);
-                let (new_result, new_type, mut new_pending) =
-                    self.insert_implicit_args_deferring_instances(result, &current_type);
+                let (new_result, new_type, mut new_pending) = self
+                    .insert_implicit_args_deferring_instances(
+                        result,
+                        &current_type,
+                        ArgsFollow::from_remaining(args.len() - idx - 1),
+                    );
                 result = new_result;
                 current_type = new_type;
                 pending.append(&mut new_pending);

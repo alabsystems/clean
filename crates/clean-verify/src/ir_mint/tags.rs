@@ -31,6 +31,8 @@ use std::collections::BTreeMap;
 
 use super::error::CoreError;
 use super::interface::{Interface, ParamSlot};
+use super::tags_encodings::encodings_lane;
+pub(crate) use super::tags_encodings::{EncKind, EncPin};
 
 /// One aggregate namespace's canonical-index → crate-id map, plus the Clean
 /// alias minted for each entry.
@@ -89,6 +91,56 @@ pub struct Tags {
     /// interface of its own, and both are pinned here rather than written by
     /// hand into the specification.
     pub extra_bodies: BTreeMap<u32, (String, Interface)>,
+    /// The chain's MODULE-TABLE GLOBALS: canonical global index → the identity
+    /// the core module cannot hold.
+    ///
+    /// EMPTY for every chain before `ir_lzc`, and the emptiness is what keeps
+    /// their committed tables parsing unchanged under this lane's arrival: a
+    /// table that omits the lane reads as "this module's global list is
+    /// empty", which is what all eighteen chains and `ir_lzb` measured.
+    ///
+    /// `IRGlobal.mk : Nat -> IRConst` carries the global's id and its
+    /// initializer and NOTHING else — no type slot, no linkage slot. So the
+    /// array TYPE (`[u8 x 34]`) and the linkage (`internal`) are the
+    /// `param-type` pattern over again: erased from the module, pinned here,
+    /// and COMPARED by `project` (a `compared` ledger row, never an `erased`
+    /// one). The NAME is the stable half, exactly as it is for `funcs`: the
+    /// `@global.N` id moves under a producer re-interning and the name does
+    /// not, and reader B resolves the module-table row by that name.
+    pub(crate) globals: BTreeMap<u32, GlobalPin>,
+    /// The chain's ENCODINGS lane: how an aggregate's byte image decodes.
+    ///
+    /// Empty for every chain minted before Phase B, and the minter emits
+    /// `IRModule.mk` when it is empty — so those chains keep their exact terms
+    /// and `ir_mod_encs` sends them to the empty table, where the
+    /// encoding-aware load iota-reduces to the identity. A chain WITH rows is
+    /// minted as `IRModule.mkv`.
+    ///
+    /// Rows are DERIVED from the artifact's `EnumLayoutDescriptor`s by reader
+    /// A and refused clause by clause; `IREnc`'s own rule is that a hand-typed
+    /// row is never a pin, so a row here that reader A did not derive is a
+    /// fabrication and `crystal_a2_mint`'s M7 lane compares the two.
+    pub(crate) encodings: Vec<EncPin>,
+}
+
+/// One pinned module-table global — see [`Tags::globals`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct GlobalPin {
+    /// The crate-level `@global.N` id the artifact names — the MOVING half.
+    pub crate_id: u32,
+    /// The global's name as the module table spells it, without the `@`
+    /// (`__trust_promoted_4557`) — the STABLE half a reviewer checks.
+    pub name: String,
+    /// The RESOLVED array type, `[u8 x 34]`: the element resolved through the
+    /// dump's `type ty.N = …` table, never the raw `[ty.N x LEN]` token, which
+    /// is a whole-crate type-table index and renumbers like every other one.
+    /// A row may also carry `observed_ty` with that raw token; it is recorded
+    /// for review and never compared, like a param row's `observed_ty`.
+    pub ty: String,
+    /// The linkage keyword, one of [`LINKAGES`](super::LINKAGES). Pinned
+    /// rather than defaulted for the reason `interface.linkage` is: the
+    /// printer emits it only when it is not the default.
+    pub linkage: String,
 }
 
 /// The pinned resolution of `usize` for one chain — a TARGET fact.
@@ -98,6 +150,11 @@ pub struct UsizePin {
     pub bits: u32,
     /// Exactly how many `usize` tokens the chain's emitted body contains.
     pub sites: u32,
+    /// Exactly how many `isize` tokens it contains. Same width by Rust's own
+    /// definition, so the same `bits`; a SEPARATE count, so one token's pin
+    /// cannot be satisfied by the other's occurrences. Absent means zero,
+    /// which is what every chain before the Phase-B callee bodies measured.
+    pub isize_sites: u32,
 }
 
 impl Tags {
@@ -197,6 +254,49 @@ impl Tags {
             })
     }
 
+    /// The pinned identity — crate id, name, resolved type, linkage — of a
+    /// canonical global index.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NoImage`] when the table does not list the index —
+    /// fail-closed, exactly as [`Tags::func_pin`] is, and for the same reason:
+    /// a `(global k …)` or `(globaladdr k)` with no recorded name, type and
+    /// linkage is a numeral standing for nothing.
+    pub(crate) fn global_pin(&self, canonical: u32) -> Result<&GlobalPin, CoreError> {
+        self.globals.get(&canonical).ok_or_else(|| {
+            CoreError::NoImage(format!(
+                "global canonical index {canonical} is not in the chain's tag table; the \
+                 crate-level id, the name, the array type and the linkage it carries in the \
+                 artifact's module table are not recorded, so nothing pins WHICH global this \
+                 index denotes"
+            ))
+        })
+    }
+
+    /// The canonical index a crate-level `@global.N` id maps back to.
+    ///
+    /// # Errors
+    /// Returns [`CoreError::NoImage`] when no entry carries that crate id.
+    // Test-only, like its structural sibling `func_canonical` above: the mint
+    // pipeline pins canonical -> crate id and never needs the inverse; the
+    // inverse exists so the tag lane's invertibility is CHECKED rather than
+    // assumed (`ir_mint::tests`). Without the gate the narrowed `pub(crate)`
+    // form is dead in the non-test lib build and `-D warnings` refuses it.
+    #[cfg(test)]
+    pub(crate) fn global_canonical(&self, crate_id: u32) -> Result<u32, CoreError> {
+        self.globals
+            .iter()
+            .find(|(_, pin)| pin.crate_id == crate_id)
+            .map(|(c, _)| *c)
+            .ok_or_else(|| {
+                CoreError::NoImage(format!(
+                    "the artifact names global id {crate_id}, which the chain's tag table does \
+                     not list. Either the artifact was re-interned and the table needs a reviewed \
+                     update, or the module table row is about a different global."
+                ))
+            })
+    }
+
     /// The body's OWN crate-level function id, as
     /// [`SelfFunc`](super::SelfFunc).
     ///
@@ -264,6 +364,25 @@ impl Tags {
         }
         out.push_str(&ident);
         out
+    }
+
+    /// The chain's `enums` lane as a crate id -> canonical index namespace.
+    ///
+    /// The same shape `project` builds for `funcs` and `globals`, and for the
+    /// same purpose: a body of a multi-body module resolves an aggregate id
+    /// through the CHAIN's numbering rather than through its own first-seen
+    /// order, so two bodies that name different types cannot both claim
+    /// canonical 0.
+    #[must_use]
+    pub(crate) fn enum_namespace(&self) -> BTreeMap<u32, u32> {
+        self.enums.iter().map(|(k, (id, _))| (*id, *k)).collect()
+    }
+
+    /// The chain's `structs` lane as a crate id -> canonical index namespace.
+    /// See [`Tags::enum_namespace`].
+    #[must_use]
+    pub(crate) fn struct_namespace(&self) -> BTreeMap<u32, u32> {
+        self.structs.iter().map(|(k, (id, _))| (*id, *k)).collect()
     }
 
     /// The canonical function indices of the bodies the MODULE contains, in
@@ -403,6 +522,7 @@ pub fn parse(json: &str) -> Result<Tags, CoreError> {
             )));
         }
     }
+    encodings_lane(&v, &mut tags)?;
     if let Some(u) = v.get("usize") {
         let bits = u32::try_from(
             u.get("bits")
@@ -418,12 +538,113 @@ pub fn parse(json: &str) -> Result<Tags, CoreError> {
         .map_err(|_| CoreError::Shape("`usize.sites` does not fit u32".into()))?;
         // A pin for a body with no site would be a stale target assumption
         // riding along unexercised; a chain without the type omits the lane.
-        if bits == 0 || sites == 0 {
+        let isize_sites =
+            match u.get("isize_sites") {
+                None => 0,
+                Some(x) => u32::try_from(x.as_u64().ok_or_else(|| {
+                    CoreError::Shape("`usize.isize_sites` is not a number".into())
+                })?)
+                .map_err(|_| CoreError::Shape("`usize.isize_sites` does not fit u32".into()))?,
+            };
+        // A pin for a body with no site of EITHER token would be a stale
+        // target assumption riding along unexercised; a chain that names
+        // neither omits the lane. The two counts are summed here and compared
+        // separately later, so a chain carrying only `isize` still pins the
+        // width through this lane rather than needing one of its own.
+        if bits == 0 || sites.saturating_add(isize_sites) == 0 {
             return Err(CoreError::Shape(
-                "`usize` lane must pin a non-zero width and at least one site".into(),
+                "`usize` lane must pin a non-zero width and at least one `usize` or `isize` site"
+                    .into(),
             ));
         }
-        tags.usize_pin = Some(UsizePin { bits, sites });
+        tags.usize_pin = Some(UsizePin {
+            bits,
+            sites,
+            isize_sites,
+        });
+    }
+    // `globals` is OPTIONAL, and its absence means "this module's global list
+    // is empty". That default is the honest one — it is what every chain
+    // before `ir_lzc` measured — and it is the reason their committed tables
+    // parse unchanged under this lane's arrival. A core module that names a
+    // global the lane does not list is refused by `global_pin`, never
+    // defaulted.
+    if let Some(rows) = v.get("globals") {
+        let rows = rows
+            .as_array()
+            .ok_or_else(|| CoreError::Shape("`globals` must be an array of global rows".into()))?;
+        for row in rows {
+            let n = |field: &str| -> Result<u32, CoreError> {
+                u32::try_from(
+                    row.get(field)
+                        .and_then(serde_json::Value::as_u64)
+                        .ok_or_else(|| CoreError::Shape(format!("globals row has no `{field}`")))?,
+                )
+                .map_err(|_| CoreError::Shape(format!("globals row's `{field}` does not fit u32")))
+            };
+            let s = |field: &str| -> Result<String, CoreError> {
+                row.get(field)
+                    .and_then(serde_json::Value::as_str)
+                    .map(ToString::to_string)
+                    .ok_or_else(|| CoreError::Shape(format!("globals row has no `{field}` string")))
+            };
+            let canonical = n("canonical")?;
+            let pin = GlobalPin {
+                crate_id: n("crate_id")?,
+                name: s("name")?,
+                ty: s("ty")?,
+                linkage: s("linkage")?,
+            };
+            // The same keyword discipline as `interface.linkage`: a value the
+            // producer cannot print is a typo, not a pin.
+            if !super::LINKAGES.contains(&pin.linkage.as_str()) {
+                return Err(CoreError::Shape(format!(
+                    "globals row {canonical} (`{}`) has linkage `{}`, which is not one of {:?}",
+                    pin.name,
+                    pin.linkage,
+                    super::LINKAGES
+                )));
+            }
+            if tags.globals.insert(canonical, pin).is_some() {
+                return Err(CoreError::Shape(format!(
+                    "globals canonical index {canonical} appears twice"
+                )));
+            }
+        }
+        // Invertible on the crate id, like every other lane: `global_canonical`
+        // maps an `@global.N` back to ONE canonical index.
+        let mut ids: Vec<u32> = tags.globals.values().map(|g| g.crate_id).collect();
+        ids.sort_unstable();
+        ids.dedup();
+        if ids.len() != tags.globals.len() {
+            return Err(CoreError::Shape(
+                "two canonical global indices claim the same crate id, so the map is not \
+                 invertible"
+                    .into(),
+            ));
+        }
+        // And invertible on the NAME, which is what reader B resolves the
+        // module-table row by: two rows sharing a name would make that
+        // resolution first-match-wins rather than a function.
+        let mut names: Vec<&str> = tags.globals.values().map(|g| g.name.as_str()).collect();
+        names.sort_unstable();
+        names.dedup();
+        if names.len() != tags.globals.len() {
+            return Err(CoreError::Shape(
+                "two canonical global indices claim the same name".into(),
+            ));
+        }
+        // Dense from 0: the lane indexes the ONE namespace `(global k …)` and
+        // `(globaladdr k)` share, and a hole in it would be a global index no
+        // row accounts for.
+        let expected: Vec<u32> =
+            (0..u32::try_from(tags.globals.len()).unwrap_or(u32::MAX)).collect();
+        let got: Vec<u32> = tags.globals.keys().copied().collect();
+        if got != expected {
+            return Err(CoreError::Shape(format!(
+                "the `globals` lane must be dense from 0: found canonical indices {got:?}"
+            )));
+        }
     }
     // The `funcs` lane is dense from 0: it indexes the ONE namespace the core
     // module's `(func N …)` and `(call M …)` share, and a hole in it would mean

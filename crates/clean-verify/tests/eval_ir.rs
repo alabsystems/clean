@@ -21,17 +21,28 @@
 //!    kernel ran the machine. [`eval_ir_witnesses_are_registered_and_axiom_free`]
 //!    then checks they are present and rest on nothing.
 //!
-//! The measured census the coverage list comes from (re-runnable in
-//! the sibling trust checkout's `crates/trust-thir-lower/src`):
+//! **The census recipe this doc used to give was measurably wrong, and is
+//! replaced rather than repeated.** It read: `grep -roh "Inst::[A-Za-z0-9_]*"`
+//! over `crates/trust-thir-lower/src`, "34 variants are referenced; six of them
+//! occur only in pattern position". Run it: the recipe yields **61** distinct
+//! tokens, not 34; `Inst::InsertElement` is CONSTRUCTED at eight production
+//! sites in that crate's `lib.rs` while `insertelement` sat in `NOT_EMITTED`
+//! under a comment promising this test would notice; and it scanned only ONE of
+//! the two producers of the executed bundle.
 //!
-//! ```text
-//! grep -roh "Inst::[A-Za-z0-9_]*" . | sort | uniq -c | sort -rn
-//! ```
-//!
-//! 34 variants are referenced; six of them — `Assume`, `Copy`, `HeapAlloc`,
-//! `InsertElement`, `Invoke`, `NullPtr` — occur only in pattern position and are
-//! never constructed, leaving **28 constructed**. That is the denominator, and
-//! it is 28 of the 57 variants of the full `Inst` enum.
+//! The denominator is now DERIVED, from two in-tree sources that must agree —
+//! the `IRInst` inductive in `eval_ir_syntax.rs` and `EMITTED_INSTS` in
+//! `eval_ir/census.rs` (`scripts/evalir_coverage.py::derive_denominator`) — and
+//! it is **33**: the former 30 plus ByteV1's distinct U64 and Usize sequential
+//! atomic fetch-adds and retained Release. Release is explicitly unmodelled in
+//! each execution layer; syntax growth is not measured agreement coverage.
+//! Which names are genuinely constructed by the two production producers,
+//! and which constructed names are NOT modelled, is what
+//! B2C will publish, by minting `data/irinst_producer_census.json` from a
+//! parse-based two-producer scan (`scripts/irinst_producer_census.py`). Neither
+//! exists yet: until they are minted, quote no fraction of the full `Inst` enum
+//! from here, and read the denominator as exactly what `derive_denominator`
+//! derives — the modelled set — and not as a claim about the constructed set.
 //!
 //! Clause 4 lives in [`prelude_composition`]: the same stage must also build in
 //! Clean's Lean-4 production prelude, which is a *different* environment with a
@@ -52,6 +63,12 @@ mod census;
 #[path = "eval_ir/prelude_composition.rs"]
 mod prelude_composition;
 
+// Phase B's return-slot stage — registration and axiom-closure gate. Split out
+// rather than inlined for the reason recorded above: this file sits at the
+// 500-line convention and the slot lemmas are their own clause.
+#[path = "eval_ir/slot_lemmas.rs"]
+mod slot_lemmas;
+
 // GATE CLAUSE 5 (plan W5, 2026-08-25) — the adequacy grid: every field of
 // every IRInst constructor classified (read / proved-dropped / erased /
 // declared-delta), re-derived from the registered syntax and dispatch and
@@ -59,11 +76,32 @@ mod prelude_composition;
 #[path = "eval_ir/adequacy_grid.rs"]
 mod adequacy_grid;
 
+// The ir_lzc chain's declaration census (Phase A: both functions minted, the
+// programme's first global). Split out for the same reason the census lists
+// above were: with it inline this file stood at 513 lines against the 500-line
+// convention. It asserts the ir_lzb census too, so the two sit in one test.
+#[path = "eval_ir/lzc_census.rs"]
+mod lzc_census;
+
+// The ir_lzd chain's EvalIr-half census, split out for the same reason.
+#[path = "eval_ir/lzd_census.rs"]
+mod lzd_census;
+
+// Every coverage claim the EvalIR syntax registers against a trust_ir enum,
+// and every constructor count of the six operator alphabets, held against the
+// enum through exhaustive matches; so is every variant count these sources
+// restate in prose.
+#[path = "eval_ir/trust_ir_parity.rs"]
+mod trust_ir_parity;
+
+// Crystal E5 (decision memo §23): the wide-pointer kinds, typed metadata, the vtable image and
+// the refused wide `icmp`, held to trust-ir's reference interpreter on real m0off slices.
+#[path = "eval_ir/e5_fat_images.rs"]
+mod e5_fat_images;
+
 use std::collections::BTreeSet;
 
-use census::{
-    ctor_names, EMITTED_INSTS, EVAL_IR_FAMILIES, NOT_EMITTED, OPERATOR_ALPHABETS, WITNESSES,
-};
+use census::{ctor_names, EMITTED_INSTS, EVAL_IR_FAMILIES, NOT_EMITTED, WITNESSES};
 use clean_kernel::Name;
 use clean_verify::test_utils::build_eval_ir_spec_with_stack;
 use clean_verify::vacuity_firewall::{audit_relation, env_knows};
@@ -73,7 +111,7 @@ use clean_verify::vacuity_firewall::{audit_relation, env_knows};
 /// The seven `is_zero` executions are `Eq.refl` definitions registered by the
 /// stage, so the stage building at all means the kernel *ran the machine* on
 /// each input and found the stated outcome. Nothing here is asserted by hand:
-/// if any arm of the 28-way dispatch were wrong for those inputs, or the
+/// if any arm of the `IRInst` dispatch were wrong for those inputs, or the
 /// recursion, or the null check, the definition would fail to typecheck and this
 /// test would fail with the elaborator's message.
 #[test]
@@ -85,7 +123,7 @@ fn eval_ir_spec_builds() {
     );
 }
 
-/// GATE CLAUSE 1: coverage, stated as a fraction and checked by name.
+/// Exact representable syntax, not successful-execution coverage.
 #[test]
 fn eval_ir_covers_exactly_the_emitted_inst_set() {
     let spec = build_eval_ir_spec_with_stack();
@@ -99,8 +137,10 @@ fn eval_ir_covers_exactly_the_emitted_inst_set() {
     );
     assert_eq!(
         found.len(),
-        28,
-        "IRInst must have exactly 28 constructors (the measured constructed-Inst census); found {}: {:?}",
+        EMITTED_INSTS.len(),
+        "IRInst must have exactly one constructor per EMITTED_INSTS row (the derived \
+         representable syntax census, {} names); found {}: {:?}",
+        EMITTED_INSTS.len(),
         found.len(),
         found
     );
@@ -112,13 +152,17 @@ fn eval_ir_covers_exactly_the_emitted_inst_set() {
         "IRInst does not match the emitted census.\n  missing arms: {missing:?}\n  unexpected arms: {extra:?}"
     );
 
-    // The six pattern-position-only variants stay out. If the lowerer starts
-    // constructing one, the census above changes and this is where it shows.
+    // These variants have NO syntactic image in IRInst. This is a syntax
+    // boundary, not a claim that nobody constructs them — two of them are
+    // constructed in production today, which is why the honest account will be
+    // data/irinst_producer_census.json's `unmodelled_constructed` list (B2C
+    // mints it; it does not exist yet) rather than a comment here.
     for name in NOT_EMITTED {
         assert!(
             !found.contains(*name),
-            "{name} is referenced but never CONSTRUCTED by the lowerer, so it must not be in \
-             IRInst. If that changed, re-run the census and update both lists together."
+            "{name} has NO syntax image in this profile, so it must not be in IRInst. Adding a \
+             constructor for it means moving it out of NOT_EMITTED, into EMITTED_INSTS, and re-deriving \
+             every artifact that restates the census."
         );
     }
 }
@@ -141,33 +185,32 @@ fn eval_ir_const_census_is_pinned() {
     let spec = build_eval_ir_spec_with_stack();
     let found = ctor_names(&spec, "IRConst");
     let expected: BTreeSet<String> = [
-        "int_", "bool_", "unit_", "null_", "undef_", "float_", "func_", "aggv", "vnil", "vcons",
+        "int_",
+        "bool_",
+        "unit_",
+        "null_",
+        "undef_",
+        "float_",
+        "func_",
+        "aggv",
+        "vnil",
+        "vcons",
+        // phantomdata (2026-09-16): trust_ir::Constant::PhantomData, the
+        // zero-sized marker. Added because `tick_heartbeat` emits
+        // `const () phantomdata` and reader A refuses a body it has no image
+        // for; kept SEPARATE from `unit_` because the producer keeps it
+        // separate and the emitted text prints it by its own name.
+        "phantomdata",
     ]
     .iter()
     .map(|s| (*s).to_string())
     .collect();
     assert_eq!(
         found, expected,
-        "IRConst must be exactly the seven scalar constants plus the three inline-spine \
-         constructors that model trust_ir::Constant::Aggregate; found {found:?}"
+        "IRConst must be exactly the seven scalar constants, the three inline-spine \
+         constructors that model trust_ir::Constant::Aggregate, and the zero-sized \
+         `phantomdata` marker; found {found:?}"
     );
-}
-
-/// The operator alphabets are complete against their Rust enums — the sub-
-/// dispatches inside the `binop` / `unop` / `icmp` / `fcmp` / `cast` arms.
-#[test]
-fn eval_ir_operator_alphabets_are_complete() {
-    let spec = build_eval_ir_spec_with_stack();
-    for (name, want) in OPERATOR_ALPHABETS {
-        let found = ctor_names(&spec, name);
-        assert_eq!(
-            found.len(),
-            *want,
-            "{name} must have {want} constructors to cover its Rust counterpart; found {}: {:?}",
-            found.len(),
-            found
-        );
-    }
 }
 
 /// GATE CLAUSE 2: the C2 vacuity firewall clears every `EvalIR` family.
@@ -273,6 +316,10 @@ fn eval_ir_wrap_folds_a_literal_residue_without_walking_it() {
         "ir_nat_ltb_walk",
         "ir_nat_eqb_walk",
         "ir_nat_leb_walk",
+        "ir_nat_sub_ltb",
+        "ir_nat_sub_eqb",
+        "ir_nat_sub_ltb_walk_eq",
+        "ir_nat_sub_eqb_walk_eq",
         "ir_nat_ltb_walk_eq",
         "ir_nat_eqb_walk_eq",
         "ir_nat_leb_walk_eq",
@@ -289,10 +336,26 @@ fn eval_ir_wrap_folds_a_literal_residue_without_walking_it() {
             "{name} must be registered — without it the folded comparison is an assertion \
              rather than a theorem"
         );
+        // `axiom_deps` deliberately FILTERS OUT the foundational axioms
+        // (clean-kernel/src/env/axiom_audit.rs), so on its own it would let a
+        // new dependency on Classical.choice through this assertion unnoticed.
+        // The claim here is a literally EMPTY closure -- both halves.
         let deps = spec
             .env()
             .axiom_deps(&Name::from_string(name))
             .unwrap_or_default();
+        let foundational = spec
+            .env()
+            .foundational_axiom_deps(&Name::from_string(name))
+            .unwrap_or_default();
+        assert!(
+            foundational.is_empty(),
+            "{name} must reach NO foundational axiom either; found {:?}",
+            foundational
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+        );
         assert!(
             deps.is_empty(),
             "{name} must have an EMPTY transitive axiom closure; found {:?}",
@@ -365,6 +428,60 @@ fn eval_ir_crystal_module_is_width_one() {
         assert!(
             env_knows(spec.env(), name),
             "{name} must be registered — it is part of the crystal's worked example"
+        );
+    }
+}
+
+/// **The `ir_lzb` declaration count, MINTED rather than typed.**
+///
+/// `docs/CRYSTAL_STATUS.md` and the decision memo have said since 2026-08-26
+/// that link 4 for the designated target closed over "59 declarations,
+/// kernel-checked through the registered stages". The 2026-09-07 crystal audit
+/// found that figure is prose-only and matches no static count of the three
+/// `eval_ir_lzb*.rs` files — the standing rule it violates is *no claim-bearing
+/// value is typed where a producer exists*.
+///
+/// This is the producer for the EvalIr-bundle half: the module, its witnesses,
+/// the ten frame lemmas and the three segment lemmas. Every name registered by
+/// those stages begins `ir_lzb`, so the count is exact and a lemma added or
+/// deleted moves it. The Full-only half — `EncodesLevelArcF`,
+/// `EncodesLiveLevelRefF`, `ir_lzb_cost` and A4/A5 — is not in this bundle and
+/// is not counted here; the two are stated separately rather than added into
+/// one number nobody can check.
+///
+/// The number is not a target. It is here so the docs can quote something a
+/// command re-derives.
+#[test]
+fn eval_ir_lzb_declaration_census_is_pinned() {
+    let spec = build_eval_ir_spec_with_stack();
+    let names: BTreeSet<&str> = spec
+        .definitions()
+        .keys()
+        .map(String::as_str)
+        .filter(|n| n.starts_with("ir_lzb"))
+        .collect();
+    assert_eq!(
+        names.len(),
+        30,
+        "the EvalIr bundle's `ir_lzb` declarations moved. This count is what \
+         docs/CRYSTAL_STATUS.md and designs/2026-08-22-is-zero-model-vs-minted-decision.md \
+         quote for the module + steps + activation stages; update both with the new \
+         number rather than the assertion. Registered: {names:?}"
+    );
+    for required in [
+        "ir_lzb_module",
+        "ir_lzb_deref",
+        "ir_lzb_func0_is_minted",
+        "ir_lzb_deref_activation",
+        "ir_lzb_max_true_seg",
+        "ir_lzb_max_false_seg",
+        "ir_lzb_imax_seg",
+        "ir_lzb_cost_halts_max",
+        "ir_lzb_cost_halts_imax",
+    ] {
+        assert!(
+            names.contains(required),
+            "{required} must be registered by the EvalIr bundle"
         );
     }
 }

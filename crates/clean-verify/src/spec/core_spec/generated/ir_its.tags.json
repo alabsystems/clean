@@ -1,0 +1,39 @@
+{
+ "chain": "ir_its",
+ "body": "<[clean_kernel::level::Level; 2] as smallvec::Array>::size",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types and FUNCTIONS carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Every aggregate lane is EMPTY and that is a MEASUREMENT, not an omission: reader A's crate_enum_ids_seen and crate_struct_ids_seen are both [] on the dump-infertype-O3-part callee bundle (dump_sha256 9b02ce7cdfd4a000...). This is the SECOND degenerate-interface chain after ir_mt -- no parameters, no block parameters, no memory instruction -- and the first minted from a body of `TypeChecker::infer_type`'s derived closure rather than from the crate module. Pinning the emptiness is the row's content: a twin that took the array length as a parameter instead of a constant would differ from this body ONLY here and in no instruction count.",
+ "how_it_is_used": "`ir_mint::mint` reads the (empty) aggregate lanes -- no alias line is minted -- and the empty `funcs` lane, which `check_func_namespace` accepts ONLY for a module with no `call`. `ir_mint::project` reads the `interface` block in the other direction and REFUSES a fixture whose header or parameter types are not the pinned ones.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. Read `ir_h2.tags.json`'s `interface_what`. On this chain every parameter lane is EMPTY and the pin is the emptiness itself, plus the clause KINDS.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. Both lanes are empty here. Reader A's own record on this dump: `param_tys_erased: []`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "usize_what": "This body contains TWO `usize` tokens -- the constant and the copy -- and the `usize` lane below pins the width they resolve at. It is NOT the first chained body to need one: ir_ni carries `sites: 1` and ir_lzd carries `isize_sites: 2`. An earlier draft of this table and of eval_ir_its.rs claimed the first, and the A2 gate is how that was found: reader B REFUSED the fixture outright until this lane existed, so the 'first usize' claim was made about a body reader B had never read.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "ccc",
+  "header_note": "Absence of a linkage keyword IS `external`. This body's header prints `fn @...` with NO calling-convention keyword, which is the DEFAULT convention -- unlike every earlier chain, whose bodies print `rustcc`. Reader A records `artifact_calling_conv: ccc`. That difference is the sidecar lane showing through: these bodies are derived from monomorphized upstream MIR, not lowered from this crate's THIR.",
+  "functy": 110,
+  "functy_note": "Pinned VERBATIM from the emitted header `(functy.110)`, and reader A independently records `artifact_functy_id: 110` in ir_its.core.prov.json. The two agree on this dump; the pin compares reader B's header.",
+  "producer": "trust-ir",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared. `trust-ir` here, where the crate-module chains carry `trust` -- the sidecar bundle's own producer stamp.",
+  "params": [],
+  "params_note": "EMPTY, and that is the pin: `Array::size` is an associated constant accessor and takes nothing.",
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and that is a measurement: this body contains no memory instruction of any kind.",
+  "clauses": [
+   "producer",
+   "proof"
+  ],
+  "clauses_note": "Two kinds, and the absence of `loc` and `names` is part of the pin. The `proof` clause's CONTENT (`pure`) is a producer claim about the body and is deliberately not compared, exactly like `loc` content."
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and that is a measurement rather than an omission. This body calls NOTHING: reader A's `crate_func_ids_seen` is the single entry [102] -- the body's own id -- and the emitted body contains no `call` instruction. An empty lane means `SelfFunc::Unpinned`; `mint::check_func_namespace` accepts an empty lane ONLY for a module with no `call`.",
+ "usize": {
+  "bits": 64,
+  "sites": 2,
+  "target_fact": "A TARGET fact, not an assumption: the recorded producer is trustc on aarch64-apple-darwin, a 64-bit target, where core::mem::size_of::<usize>() is 8. On a 32-bit target `<[Level; 2] as Array>::size` would emit a different constant width and this table would be WRONG -- which is exactly why the width lives here, in a reviewed pin, rather than as a constant inside a reader. Reader A resolved this chain with --usize-bits 64 and recorded {\"usize_bits\": 64, \"usize_sites_resolved\": 2} in ir_its.core.prov.json; reader B resolves through THIS row, and refuses the body entirely without it.",
+  "erasure_note": "What the resolution ERASES, said out loud: the resolved core spells both sites as the plain (uint 64), so a body differing from this one only by writing `u64` where this one writes `usize` projects to the SAME core module. That swap is caught by the `sites` count above -- the u64 spelling drops the observed count to 0 -- not by the core text. A body with an EQUAL count but swapped positions between a usize and a real u64 would not be caught, which this body cannot exhibit: both its sites are the same value flowing const -> copy -> ret."
+ }
+}

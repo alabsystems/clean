@@ -470,7 +470,7 @@ fn test_classify_effect_ffi() {
     );
     assert_eq!(
         classify_effect(&AttrMacroResult::RegisterImplementedBy {
-            impl_name: "baz".to_owned()
+            impl_name: Name::from_string("baz")
         }),
         EffectKind::FfiBinding
     );

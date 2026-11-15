@@ -7,7 +7,7 @@
 //! All 7 program verification tool importers (Dafny, Why3, PVS, ACL2, Nuprl,
 //! LiquidHaskell, KeY/Frama-C/SPARK) share this common infrastructure for:
 //! - Representing external proof certificates in various formats
-//! - Replaying certificates to obtain clean trust-level judgments
+//! - Dispatching certificate replay requests (Alethe and DRAT/LRAT are unavailable)
 //! - Tracking axiom profiles through the replay pipeline
 
 use hashbrown::HashMap;
@@ -30,6 +30,10 @@ pub enum CertReplayError {
     /// The certificate format is not supported by this replay strategy.
     #[error("unsupported certificate format: {format}")]
     UnsupportedFormat { format: String },
+
+    /// No statement-bound checker is implemented for this format.
+    #[error("certificate replay unavailable for {format}: no statement-bound proof checker")]
+    ReplayUnavailable { format: String },
 
     /// The certificate replay failed verification.
     #[error("certificate verification failed: {reason}")]
@@ -242,65 +246,22 @@ impl CertReplayStrategy for NullReplayStrategy {
 }
 
 // ---------------------------------------------------------------------------
-// Alethe/LF replay strategy
+// Unavailable replay backends
 // ---------------------------------------------------------------------------
 
-/// Replay strategy for Alethe-LF proof certificates.
+/// Alethe-LF replay entry, currently unavailable.
 ///
-/// Alethe is a proof format used by SMT solvers (cvc5, veriT) that encodes
-/// proof steps in an LF (Logical Framework) type theory. Each step is a
-/// typed derivation that can be independently checked.
-///
-/// This strategy validates the structural integrity of Alethe-LF certificates
-/// and assigns `CertificateReplayed` trust level upon successful replay.
+/// This API receives certificate bytes but no problem statement and has no
+/// proof-step checker. It therefore advertises no supported formats and refuses
+/// every replay request. A marker or an assumption is not checked evidence.
 #[derive(Clone, Debug, Default)]
 pub struct AletheLfReplayStrategy;
 
 impl AletheLfReplayStrategy {
-    /// Create a new Alethe-LF replay strategy.
+    /// Create an entry that reports Alethe-LF replay as unavailable.
     #[must_use]
     pub fn new() -> Self {
         Self
-    }
-
-    /// Validate that the raw certificate bytes contain well-formed Alethe-LF
-    /// proof steps.
-    ///
-    /// A minimal check: the certificate must be non-empty UTF-8 containing
-    /// at least one `(step ...)` or `(assume ...)` form.
-    fn validate_structure(raw: &[u8]) -> Result<(), CertReplayError> {
-        let text = std::str::from_utf8(raw).map_err(|_| CertReplayError::InvalidCert {
-            reason: "certificate is not valid UTF-8".to_string(),
-        })?;
-
-        if text.trim().is_empty() {
-            return Err(CertReplayError::InvalidCert {
-                reason: "empty certificate body".to_string(),
-            });
-        }
-
-        let has_step = text.contains("(step ") || text.contains("(step\n");
-        let has_assume = text.contains("(assume ") || text.contains("(assume\n");
-
-        if !has_step && !has_assume {
-            return Err(CertReplayError::InvalidCert {
-                reason: "no (step ...) or (assume ...) forms found in Alethe-LF certificate"
-                    .to_string(),
-            });
-        }
-
-        Ok(())
-    }
-
-    /// Count the number of proof steps in the certificate.
-    fn count_steps(raw: &[u8]) -> usize {
-        let text = match std::str::from_utf8(raw) {
-            Ok(t) => t,
-            Err(_) => return 0,
-        };
-        let step_count = text.matches("(step ").count() + text.matches("(step\n").count();
-        let assume_count = text.matches("(assume ").count() + text.matches("(assume\n").count();
-        step_count + assume_count
     }
 }
 
@@ -310,162 +271,35 @@ impl CertReplayStrategy for AletheLfReplayStrategy {
     }
 
     fn supported_formats(&self) -> &[CertificateFormat] {
-        &[CertificateFormat::AletheLF]
+        &[]
     }
 
     fn replay(&self, cert: &Certificate) -> Result<CertReplayResult, CertReplayError> {
-        // Check format compatibility.
         if cert.format != CertificateFormat::AletheLF {
             return Err(CertReplayError::UnsupportedFormat {
                 format: cert.format.name().to_string(),
             });
         }
-
-        // Validate certificate structure.
-        Self::validate_structure(&cert.raw_bytes)?;
-
-        let step_count = Self::count_steps(&cert.raw_bytes);
-
-        // In a production system, each step would be type-checked in the LF
-        // framework. Here we validate structure and assign certificate trust.
-        let mut result = CertReplayResult::verified(
-            AxiomProfile::SAT_CERT,
-            TrustLevel::CertificateReplayed,
-            0, // Replay time would be measured in production.
-        );
-        result
-            .diagnostics
-            .push(format!("alethe-lf: {step_count} proof steps validated"));
-
-        Ok(result)
-    }
-}
-
-// ---------------------------------------------------------------------------
-// DRAT/LRAT replay strategy
-// ---------------------------------------------------------------------------
-
-/// Replay strategy for DRAT/LRAT SAT proof certificates.
-///
-/// DRAT (Deletion Resolution Asymmetric Tautology) and LRAT (Linear RAT) are
-/// standard proof formats for SAT solver certificates. DRAT certificates are
-/// produced by solvers like CaDiCaL and MiniSat; LRAT is a more compact
-/// variant that includes clause indices for efficient checking.
-///
-/// DRAT/LRAT certificates can be checked by independent verifiers (drat-trim,
-/// cake_lpr) providing high-confidence trust.
-#[derive(Clone, Debug, Default)]
-pub struct DratReplayStrategy {
-    /// Minimum certificate size in bytes to accept (guards against trivial certs).
-    min_cert_size: usize,
-}
-
-impl DratReplayStrategy {
-    /// Create a new DRAT/LRAT replay strategy.
-    #[must_use]
-    pub fn new() -> Self {
-        Self { min_cert_size: 0 }
-    }
-
-    /// Set a minimum certificate size threshold.
-    ///
-    /// Certificates smaller than this are rejected as likely trivial or corrupt.
-    #[must_use]
-    pub fn with_min_cert_size(mut self, min_size: usize) -> Self {
-        self.min_cert_size = min_size;
-        self
-    }
-
-    /// Validate DRAT/LRAT certificate structure.
-    ///
-    /// For binary DRAT: checks for the binary format marker.
-    /// For text DRAT/LRAT: checks for clause lines.
-    fn validate_structure(
-        raw: &[u8],
-        format: &CertificateFormat,
-    ) -> Result<CertStats, CertReplayError> {
-        if raw.is_empty() {
-            return Err(CertReplayError::InvalidCert {
-                reason: "empty certificate body".to_string(),
-            });
-        }
-
-        match format {
-            CertificateFormat::Drat => Self::validate_drat(raw),
-            CertificateFormat::Lrat => Self::validate_lrat(raw),
-            other => Err(CertReplayError::UnsupportedFormat {
-                format: other.name().to_string(),
-            }),
-        }
-    }
-
-    /// Validate a DRAT certificate.
-    fn validate_drat(raw: &[u8]) -> Result<CertStats, CertReplayError> {
-        // Binary DRAT starts with 'a' (0x61) for addition clauses.
-        // Text DRAT contains lines of space-separated integers ending with 0.
-        let is_binary = !raw.is_empty() && (raw[0] == b'a' || raw[0] == b'd');
-
-        if is_binary {
-            // Count binary clause entries (simplified: count 'a' and 'd' markers).
-            let additions = raw.iter().filter(|&&b| b == b'a').count();
-            let deletions = raw.iter().filter(|&&b| b == b'd').count();
-            Ok(CertStats {
-                clause_additions: additions,
-                clause_deletions: deletions,
-                is_binary: true,
-            })
-        } else {
-            // Text format: lines of integers.
-            let text = std::str::from_utf8(raw).map_err(|_| CertReplayError::InvalidCert {
-                reason: "text DRAT certificate is not valid UTF-8".to_string(),
-            })?;
-            let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-            if lines.is_empty() {
-                return Err(CertReplayError::InvalidCert {
-                    reason: "no clause lines in text DRAT certificate".to_string(),
-                });
-            }
-            let deletions = lines.iter().filter(|l| l.trim().starts_with('d')).count();
-            let additions = lines.len() - deletions;
-            Ok(CertStats {
-                clause_additions: additions,
-                clause_deletions: deletions,
-                is_binary: false,
-            })
-        }
-    }
-
-    /// Validate an LRAT certificate.
-    fn validate_lrat(raw: &[u8]) -> Result<CertStats, CertReplayError> {
-        // LRAT text format: lines starting with clause index.
-        let text = std::str::from_utf8(raw).map_err(|_| CertReplayError::InvalidCert {
-            reason: "LRAT certificate is not valid UTF-8".to_string(),
-        })?;
-        let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
-        if lines.is_empty() {
-            return Err(CertReplayError::InvalidCert {
-                reason: "no clause lines in LRAT certificate".to_string(),
-            });
-        }
-        let deletions = lines.iter().filter(|l| l.trim().starts_with('d')).count();
-        let additions = lines.len() - deletions;
-        Ok(CertStats {
-            clause_additions: additions,
-            clause_deletions: deletions,
-            is_binary: false,
+        Err(CertReplayError::ReplayUnavailable {
+            format: cert.format.name().to_string(),
         })
     }
 }
 
-/// Statistics from parsing a DRAT/LRAT certificate.
-#[derive(Debug, Clone)]
-struct CertStats {
-    /// Number of clause addition steps.
-    clause_additions: usize,
-    /// Number of clause deletion steps.
-    clause_deletions: usize,
-    /// Whether the certificate was in binary format.
-    is_binary: bool,
+/// DRAT/LRAT replay entry, currently unavailable.
+///
+/// Certificate bytes alone do not bind a SAT problem, and this backend has no
+/// proof-step checker. It advertises no supported formats and refuses every
+/// replay request; clause counts and byte thresholds establish no proof.
+#[derive(Clone, Debug, Default)]
+pub struct DratReplayStrategy;
+
+impl DratReplayStrategy {
+    /// Create an entry that reports DRAT/LRAT replay as unavailable.
+    #[must_use]
+    pub fn new() -> Self {
+        Self
+    }
 }
 
 impl CertReplayStrategy for DratReplayStrategy {
@@ -474,48 +308,24 @@ impl CertReplayStrategy for DratReplayStrategy {
     }
 
     fn supported_formats(&self) -> &[CertificateFormat] {
-        &[CertificateFormat::Drat, CertificateFormat::Lrat]
+        &[]
     }
 
     fn replay(&self, cert: &Certificate) -> Result<CertReplayResult, CertReplayError> {
-        // Check format compatibility.
         if cert.format != CertificateFormat::Drat && cert.format != CertificateFormat::Lrat {
             return Err(CertReplayError::UnsupportedFormat {
                 format: cert.format.name().to_string(),
             });
         }
-
-        // Check minimum size.
-        if cert.byte_len() < self.min_cert_size {
-            return Err(CertReplayError::InvalidCert {
-                reason: format!(
-                    "certificate size {} bytes is below minimum {}",
-                    cert.byte_len(),
-                    self.min_cert_size
-                ),
-            });
-        }
-
-        // Validate structure.
-        let stats = Self::validate_structure(&cert.raw_bytes, &cert.format)?;
-
-        // In production, this would invoke an external DRAT/LRAT checker
-        // (e.g., drat-trim, cake_lpr) and verify each step.
-        let mut result =
-            CertReplayResult::verified(AxiomProfile::SAT_CERT, TrustLevel::CertificateReplayed, 0);
-
-        let format_str = if stats.is_binary { "binary" } else { "text" };
-        result.diagnostics.push(format!(
-            "{}: {} additions, {} deletions ({} format)",
-            cert.format.name(),
-            stats.clause_additions,
-            stats.clause_deletions,
-            format_str
-        ));
-
-        Ok(result)
+        Err(CertReplayError::ReplayUnavailable {
+            format: cert.format.name().to_string(),
+        })
     }
 }
+
+#[cfg(test)]
+#[path = "cert_replay_refusal_tests.rs"]
+mod refusal_tests;
 
 #[cfg(test)]
 mod tests {
@@ -616,168 +426,5 @@ mod tests {
             restored.metadata.get("logic").map(String::as_str),
             Some("QF_LIA")
         );
-    }
-
-    // -----------------------------------------------------------------------
-    // AletheLfReplayStrategy tests
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_alethe_lf_strategy_name_and_formats() {
-        let strategy = AletheLfReplayStrategy::new();
-        assert_eq!(strategy.name(), "alethe-lf");
-        assert_eq!(strategy.supported_formats(), &[CertificateFormat::AletheLF]);
-    }
-
-    #[test]
-    fn test_alethe_lf_replay_valid_certificate() {
-        let strategy = AletheLfReplayStrategy::new();
-        let cert = Certificate::new(
-            CertificateFormat::AletheLF,
-            b"(assume h1 (not P))\n(step t1 (cl P Q) :rule resolution)\n(step t2 (cl Q) :rule unit_resolution)".to_vec(),
-            "cvc5",
-        );
-        let result = strategy.replay(&cert).expect("valid Alethe-LF certificate");
-        assert!(result.verified);
-        assert_eq!(result.trust_level, TrustLevel::CertificateReplayed);
-        assert!(result.axiom_profile.contains(AxiomProfile::SAT_CERT));
-        assert!(result
-            .diagnostics
-            .iter()
-            .any(|d| d.contains("3 proof steps")));
-    }
-
-    #[test]
-    fn test_alethe_lf_replay_wrong_format_errors() {
-        let strategy = AletheLfReplayStrategy::new();
-        let cert = Certificate::new(CertificateFormat::Drat, b"data".to_vec(), "cadical");
-        let err = strategy.replay(&cert).unwrap_err();
-        assert!(matches!(err, CertReplayError::UnsupportedFormat { .. }));
-    }
-
-    #[test]
-    fn test_alethe_lf_replay_empty_cert_errors() {
-        let strategy = AletheLfReplayStrategy::new();
-        let cert = Certificate::new(CertificateFormat::AletheLF, vec![], "cvc5");
-        let err = strategy.replay(&cert).unwrap_err();
-        assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-    }
-
-    #[test]
-    fn test_alethe_lf_replay_no_steps_errors() {
-        let strategy = AletheLfReplayStrategy::new();
-        let cert = Certificate::new(
-            CertificateFormat::AletheLF,
-            b"(define-fun f () Bool true)".to_vec(),
-            "cvc5",
-        );
-        let err = strategy.replay(&cert).unwrap_err();
-        assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-    }
-
-    #[test]
-    fn test_alethe_lf_replay_invalid_utf8_errors() {
-        let strategy = AletheLfReplayStrategy::new();
-        let cert = Certificate::new(CertificateFormat::AletheLF, vec![0xFF, 0xFE, 0x00], "cvc5");
-        let err = strategy.replay(&cert).unwrap_err();
-        assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-    }
-
-    #[test]
-    fn test_alethe_lf_as_trait_object() {
-        let strategy: Box<dyn CertReplayStrategy> = Box::new(AletheLfReplayStrategy::new());
-        let cert = Certificate::new(
-            CertificateFormat::AletheLF,
-            b"(assume a1 P)\n(step t1 (cl P) :rule assumption)".to_vec(),
-            "cvc5",
-        );
-        let result = strategy.replay(&cert).expect("trait object replay");
-        assert!(result.verified);
-    }
-
-    // -----------------------------------------------------------------------
-    // DratReplayStrategy tests
-    // -----------------------------------------------------------------------
-
-    #[test]
-    fn test_drat_strategy_name_and_formats() {
-        let strategy = DratReplayStrategy::new();
-        assert_eq!(strategy.name(), "drat-lrat");
-        assert_eq!(
-            strategy.supported_formats(),
-            &[CertificateFormat::Drat, CertificateFormat::Lrat]
-        );
-    }
-
-    #[test]
-    fn test_drat_replay_text_certificate() {
-        let strategy = DratReplayStrategy::new();
-        let drat_text = b"1 2 0\n-1 3 0\nd 1 2 0\n4 0\n";
-        let cert = Certificate::new(CertificateFormat::Drat, drat_text.to_vec(), "cadical");
-        let result = strategy.replay(&cert).expect("valid text DRAT certificate");
-        assert!(result.verified);
-        assert_eq!(result.trust_level, TrustLevel::CertificateReplayed);
-        assert!(result.axiom_profile.contains(AxiomProfile::SAT_CERT));
-        assert!(result.diagnostics.iter().any(|d| d.contains("3 additions")));
-        assert!(result.diagnostics.iter().any(|d| d.contains("1 deletions")));
-    }
-
-    #[test]
-    fn test_drat_replay_binary_certificate() {
-        let strategy = DratReplayStrategy::new();
-        // Binary DRAT: 'a' markers for additions, 'd' for deletions.
-        let binary_cert = vec![b'a', 0x02, 0x04, 0x00, b'd', 0x02, 0x00, b'a', 0x06, 0x00];
-        let cert = Certificate::new(CertificateFormat::Drat, binary_cert, "cadical");
-        let result = strategy
-            .replay(&cert)
-            .expect("valid binary DRAT certificate");
-        assert!(result.verified);
-        assert!(result.diagnostics.iter().any(|d| d.contains("binary")));
-    }
-
-    #[test]
-    fn test_lrat_replay_text_certificate() {
-        let strategy = DratReplayStrategy::new();
-        let lrat_text = b"5 1 2 0 1 2 0\n6 -1 3 0 3 4 0\nd 1 2 0\n7 0 5 6 0\n";
-        let cert = Certificate::new(CertificateFormat::Lrat, lrat_text.to_vec(), "cake_lpr");
-        let result = strategy.replay(&cert).expect("valid text LRAT certificate");
-        assert!(result.verified);
-        assert!(result.diagnostics.iter().any(|d| d.contains("LRAT")));
-    }
-
-    #[test]
-    fn test_drat_replay_wrong_format_errors() {
-        let strategy = DratReplayStrategy::new();
-        let cert = Certificate::new(
-            CertificateFormat::AletheLF,
-            b"(step t1 ...)".to_vec(),
-            "cvc5",
-        );
-        let err = strategy.replay(&cert).unwrap_err();
-        assert!(matches!(err, CertReplayError::UnsupportedFormat { .. }));
-    }
-
-    #[test]
-    fn test_drat_replay_empty_cert_errors() {
-        let strategy = DratReplayStrategy::new();
-        let cert = Certificate::new(CertificateFormat::Drat, vec![], "cadical");
-        let err = strategy.replay(&cert).unwrap_err();
-        assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-    }
-
-    #[test]
-    fn test_drat_replay_min_size_threshold() {
-        let strategy = DratReplayStrategy::new().with_min_cert_size(100);
-        let cert = Certificate::new(CertificateFormat::Drat, b"1 0\n".to_vec(), "cadical");
-        let err = strategy.replay(&cert).unwrap_err();
-        assert!(matches!(err, CertReplayError::InvalidCert { .. }));
-    }
-
-    #[test]
-    fn test_drat_as_trait_object() {
-        let strategy: Box<dyn CertReplayStrategy> = Box::new(DratReplayStrategy::new());
-        let cert = Certificate::new(CertificateFormat::Drat, b"1 2 0\n".to_vec(), "cadical");
-        let result = strategy.replay(&cert).expect("trait object replay");
-        assert!(result.verified);
     }
 }

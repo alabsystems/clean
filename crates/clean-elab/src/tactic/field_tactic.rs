@@ -84,7 +84,7 @@ fn collect_denominator_exprs(expr: &Expr, denoms: &mut Vec<Expr>) {
 
 fn best_effort_zero_expr(state: &mut ProofState, goal: &Goal, ty: &Expr) -> Option<Expr> {
     for decl in &goal.local_ctx {
-        if decl.name != "zero" {
+        if decl.name != clean_parser::SurfaceName::generated_path("zero") {
             continue;
         }
         let decl_ty = state.metas().instantiate(&decl.ty);
@@ -137,7 +137,10 @@ fn make_nonzero_goal(state: &mut ProofState, goal: &Goal, ty: &Expr, denom: Expr
         meta_id,
         target: ne_target,
         local_ctx: goal.local_ctx.clone(),
-        tag: Some("field_simp:ne_zero".to_string()),
+        case_binders: goal.case_binders.clone(),
+        tag: Some(clean_parser::SurfaceName::generated_path(
+            "field_simp:ne_zero",
+        )),
     })
 }
 
@@ -163,7 +166,11 @@ fn push_best_effort_nonzero_goals(state: &mut ProofState, goal: &Goal, ty: &Expr
 
 fn try_discharge_field_side_goals(state: &mut ProofState) {
     while let Some(goal) = state.current_goal() {
-        if goal.tag.as_deref() != Some("field_simp:ne_zero") {
+        if !goal.tag.as_ref().is_some_and(|tag| {
+            tag.same_syntax(&clean_parser::SurfaceName::generated_path(
+                "field_simp:ne_zero",
+            ))
+        }) {
             break;
         }
         if assumption(state).is_err() {
@@ -224,7 +231,9 @@ pub(crate) fn field_normalize_tactic(state: &mut ProofState) -> TacticResult {
             tactic: "field".to_string(),
             reason: format!(
                 "symbolic field normalization matched, but no proof-producing rewrite is \
-                 available for this goal shape\n  LHS: {lhs_norm:?}\n  RHS: {rhs_norm:?}"
+                 available for this goal shape\n  LHS: {}\n  RHS: {}",
+                crate::error_render::opaque(&lhs_norm),
+                crate::error_render::opaque(&rhs_norm)
             ),
         });
     }
@@ -233,8 +242,12 @@ pub(crate) fn field_normalize_tactic(state: &mut ProofState) -> TacticResult {
     Err(TacticError::ArithmeticFailed {
         tactic: "field".to_string(),
         reason: format!(
-            "normalized forms differ after clearing denominators\n  LHS: {lhs_norm:?}\n  RHS: \
-             {rhs_norm:?}\n  Cleared LHS: {lhs_cleared:?}\n  Cleared RHS: {rhs_cleared:?}"
+            "normalized forms differ after clearing denominators\n  LHS: {}\n  RHS: \
+             {}\n  Cleared LHS: {}\n  Cleared RHS: {}",
+            crate::error_render::opaque(&lhs_norm),
+            crate::error_render::opaque(&rhs_norm),
+            crate::error_render::opaque(&lhs_cleared),
+            crate::error_render::opaque(&rhs_cleared)
         ),
     })
 }

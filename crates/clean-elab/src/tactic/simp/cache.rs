@@ -15,12 +15,11 @@
 //! # Correctness / soundness
 //!
 //! - **Staleness**: the cache key contains the environment's
-//!   `Environment::simp_registry_revision` counter (bumped ONLY by
-//!   `register_simp_lemma` / `unregister_simp_lemma`, never by `add_decl`),
-//!   the simp-registry count, and an order-independent fingerprint of every
-//!   registered simp lemma name + priority. Any registry mutation — including
-//!   a count-and-content-neutral remove/re-add cycle — bumps the revision and
-//!   rebuilds; append-only declaration growth does NOT invalidate, which is
+//!   environment origin and simp-registry snapshot tokens. Independent fresh
+//!   environments cannot alias merely because their lemma names, priorities
+//!   and revision counters agree. Clones share a snapshot until either one
+//!   changes its registry, including a count-and-content-neutral remove/re-add
+//!   cycle; append-only declaration growth does NOT invalidate, which is
 //!   the cross-declaration reuse the cache exists for (sound because later
 //!   declarations are new names that cannot occur in older lemma statements).
 //! - **Config**: only configs whose collected set is provably
@@ -48,11 +47,12 @@
 //! on the cached expressions.
 
 use std::cell::RefCell;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
-use super::lemmas::collect_simp_lemmas;
+use clean_kernel::env::SimpCacheIdentity;
+
+use super::index_path_memo::PathMemo;
+use super::lemmas::{collect_simp_lemmas, collect_simp_lemmas_with_memo};
 use super::types::{SimpConfig, SimpLemmaSet};
 use crate::tactic::core::ProofState;
 
@@ -69,24 +69,30 @@ const CACHE_CAPACITY: usize = 2;
 /// simp registry: registered constants are immutable, and declarations added
 /// later are NEW names that cannot occur in older lemma statements — so no
 /// later `add_decl` can change what this set would rebuild to.
-/// `simp_registry_revision` bumps on every register/unregister (including
-/// count-and-content-neutral remove/re-add churn), and the count/fingerprint
-/// stay as belt-and-suspenders against revision aliasing across distinct
-/// environments (two separately-built envs can share a revision number).
+/// Registry mutations replace a process-local snapshot token. Independently
+/// constructed environments and diverging clones cannot share a key through
+/// coincidentally equal names/priorities/counters with different declarations.
+/// Tokens are held alive by the cache, so allocator address reuse cannot alias.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct SimpSetCacheKey {
+    identity: SimpCacheIdentity,
+    // Preserve the registry's explicit mutation guards as well as its token.
     simp_registry_revision: u64,
     simp_lemma_count: usize,
-    /// Order-independent fingerprint (wrapping sum of per-entry hashes) of
-    /// every registered simp lemma's name and priority.
-    simp_registry_fingerprint: u64,
     /// Sorted exclusion list from the config.
-    exclude: Vec<String>,
+    exclude: Vec<clean_parser::SurfaceName>,
+}
+
+/// One cached set, and the key paths its build computed or reused
+/// (`index_path_memo.rs`), which seed the next rebuild.
+struct CacheEntry {
+    key: SimpSetCacheKey,
+    set: Arc<SimpLemmaSet>,
+    paths: Arc<PathMemo>,
 }
 
 thread_local! {
-    static SIMP_SET_CACHE: RefCell<Vec<(SimpSetCacheKey, Arc<SimpLemmaSet>)>> =
-        const { RefCell::new(Vec::new()) };
+    static SIMP_SET_CACHE: RefCell<Vec<CacheEntry>> = const { RefCell::new(Vec::new()) };
 }
 
 #[cfg(test)]
@@ -110,6 +116,17 @@ pub(crate) fn cacheable_rebuild_count() -> usize {
 /// fingerprint. A state without a current goal builds an index-free set today
 /// (`SimpLemmaSet::without_index`), so it must not be served an indexed one —
 /// nor seed the cache with an index-free one.
+///
+/// `exclude_hypothesis` is deliberately NOT a disqualifier. It is read in
+/// exactly two places — `collect_extra_lemmas`, which walks `extra_lemmas`,
+/// and `collect_hypothesis_lemmas`, which runs only under `use_hypotheses` —
+/// and both are already required empty/off by the clauses above, so in an
+/// admitted config the flag cannot change the set and need not enter the key.
+/// Listing it here instead cost the fast path for the commonest spelling of
+/// all: `simp at h` sets it per hypothesis, so every such call fell to the
+/// composable arm, whose `SimpLemmaSet::base_with_overlay` DEEP-CLONES the
+/// base (~10k lemmas and the discrimination tree under real imports) to add
+/// an empty overlay.
 fn is_cacheable(state: &ProofState, config: &SimpConfig) -> bool {
     !config.only
         && config.extra_lemmas.is_empty()
@@ -119,62 +136,12 @@ fn is_cacheable(state: &ProofState, config: &SimpConfig) -> bool {
 }
 
 fn cache_key(state: &ProofState, config: &SimpConfig) -> SimpSetCacheKey {
-    let env = state.env();
-    let revision = env.simp_registry_revision();
-    let count = env.simp_lemma_count();
-    let generation = env.generation();
-
-    // The fingerprint walk is O(L) (~10k entries under real imports) and used
-    // to run on EVERY cacheable call — including hits — dominating bare-simp
-    // probe time at import scale. The registry is immutable while
-    // (generation, revision) stand still, so memoize per thread on that pair
-    // (+ count as a cheap divergence tripwire). A cross-env collision on the
-    // full triple would at worst produce a mismatched fingerprint and a cache
-    // MISS-and-rebuild or a wrong-set hit whose rewrites remain kernel-checked
-    // — the same completeness-only exposure the fingerprint itself guards
-    // (see the module doc's soundness note).
-    // First-iterated-entry hash as an O(1) content probe: two environments
-    // with identical counters but different registries (fresh test envs,
-    // clone divergence) differ here, so the memo invalidates. A collision
-    // requires equal counters AND an equal first entry — and since the
-    // fingerprint is a pure content function, identical-content collisions
-    // are exactly the harmless case.
-    let probe = env
-        .get_simp_lemmas()
-        .next()
-        .map(|info| {
-            let mut hasher = DefaultHasher::new();
-            info.name.hash(&mut hasher);
-            info.priority.value().hash(&mut hasher);
-            hasher.finish()
-        })
-        .unwrap_or(0);
-    thread_local! {
-        static FINGERPRINT_MEMO: std::cell::Cell<(u64, u64, usize, u64, u64)> =
-            const { std::cell::Cell::new((u64::MAX, u64::MAX, usize::MAX, 0, 0)) };
-    }
-    let simp_registry_fingerprint = FINGERPRINT_MEMO.with(|memo| {
-        let (m_gen, m_rev, m_count, m_probe, m_fp) = memo.get();
-        if m_gen == generation && m_rev == revision && m_count == count && m_probe == probe {
-            return m_fp;
-        }
-        let mut fp = 0u64;
-        for info in env.get_simp_lemmas() {
-            let mut hasher = DefaultHasher::new();
-            info.name.hash(&mut hasher);
-            info.priority.value().hash(&mut hasher);
-            fp = fp.wrapping_add(hasher.finish());
-        }
-        memo.set((generation, revision, count, probe, fp));
-        fp
-    });
-
-    let mut exclude: Vec<String> = config.exclude.iter().cloned().collect();
+    let mut exclude: Vec<clean_parser::SurfaceName> = config.exclude.iter().cloned().collect();
     exclude.sort_unstable();
     SimpSetCacheKey {
-        simp_registry_revision: revision,
-        simp_lemma_count: count,
-        simp_registry_fingerprint,
+        identity: state.env().simp_cache_identity(),
+        simp_registry_revision: state.env().simp_registry_revision(),
+        simp_lemma_count: state.env().simp_lemma_count(),
         exclude,
     }
 }
@@ -211,6 +178,13 @@ pub(crate) fn collect_simp_lemmas_cached(
             base_config.extra_lemmas = Vec::new();
             base_config.use_hypotheses = false;
             base_config.aesop_simp_lemmas = Vec::new();
+            // `exclude_hypothesis` only ever filters the two channels just
+            // cleared, so the BASE set is the same with or without it. Kept
+            // explicit: while `is_cacheable` still listed it, leaving it set
+            // made this recursion non-terminating (a stack overflow in `simp
+            // at h ⊢`, measured), because the stripped config failed
+            // `is_cacheable` and still satisfied `base_composable`.
+            base_config.exclude_hypothesis = None;
             // The stripped config satisfies `is_cacheable`, so this recursion
             // lands in the cached arm below (building the base at most once
             // per (registry revision, exclusions) per thread).
@@ -221,7 +195,7 @@ pub(crate) fn collect_simp_lemmas_cached(
             // as the historical global sort did.
             let mut overlay = super::lemmas::collect_extra_lemmas(state, config);
             if config.use_hypotheses {
-                overlay.extend(super::lemmas::collect_hypothesis_lemmas(state));
+                overlay.extend(super::lemmas::collect_hypothesis_lemmas(state, config));
             }
             overlay.extend(config.aesop_simp_lemmas.iter().cloned());
             return Arc::new(SimpLemmaSet::base_with_overlay(&base, overlay));
@@ -233,12 +207,10 @@ pub(crate) fn collect_simp_lemmas_cached(
 
     let hit = SIMP_SET_CACHE.with(|cell| {
         let mut cache = cell.borrow_mut();
-        let position = cache
-            .iter()
-            .position(|(cached_key, _)| *cached_key == key)?;
+        let position = cache.iter().position(|entry| entry.key == key)?;
         // LRU: move the hit to the front.
         let entry = cache.remove(position);
-        let set = Arc::clone(&entry.1);
+        let set = Arc::clone(&entry.set);
         cache.insert(0, entry);
         Some(set)
     });
@@ -249,10 +221,34 @@ pub(crate) fn collect_simp_lemmas_cached(
     #[cfg(test)]
     CACHEABLE_REBUILDS.with(|count| count.set(count.get() + 1));
 
-    let set = Arc::new(collect_simp_lemmas(state, config));
+    // A registry change (every `@[simp]` declaration of the file under check,
+    // every `attribute [simp]`) is a MISS and rebuilds the set — the new lemma
+    // must be seen. The rebuild takes the key paths of the lemmas it already
+    // indexed from the most recent build (`index_path_memo.rs`), so it pays
+    // path computation for the NEW patterns only; the set it builds is the one
+    // a from-scratch build would.
+    let mut paths = SIMP_SET_CACHE.with(|cell| {
+        cell.borrow()
+            .iter()
+            .find(|entry| entry.key.identity.shares_origin(&key.identity))
+            .map(|entry| PathMemo::clone(&entry.paths))
+            .unwrap_or_default()
+    });
+    let set = Arc::new(collect_simp_lemmas_with_memo(
+        state,
+        config,
+        Some(&mut paths),
+    ));
     SIMP_SET_CACHE.with(|cell| {
         let mut cache = cell.borrow_mut();
-        cache.insert(0, (key, Arc::clone(&set)));
+        cache.insert(
+            0,
+            CacheEntry {
+                key,
+                set: Arc::clone(&set),
+                paths: Arc::new(paths),
+            },
+        );
         cache.truncate(CACHE_CAPACITY);
     });
     set

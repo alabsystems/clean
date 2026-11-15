@@ -1,0 +1,8 @@
+# The VF4 theory `theories/chk_lia` first, then the corpus module the producer
+# (`scripts/vf4_chk_lia_corpus.py`) generated from the VF3 census's F1 rows, then
+# the quorum's two generated modules over it (`GenChkLIAForged.lean`): a forged
+# `= false` twin of `f1_025` Lean's kernel never admitted, and its checked `= true`.
+theory chk_lia
+ChkLIAF1
+run GenChkLIAForged.lean ChkLIAForged.olean forged
+run GenChkLIAForged.lean ChkLIAHonest.olean honest

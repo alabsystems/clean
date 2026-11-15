@@ -166,15 +166,20 @@ use std::sync::Arc;
 /// (x : β) : β := x` kept `u_1` at `2ce2cf2c1` and keeps `u_1` here.
 ///
 /// What that argument covers is the `finalize_level_params` path (definitions,
-/// theorems, axioms, opaques). Inductive and structure elaboration collects
-/// `level_params` straight off the finished expressions with no rename step, so
-/// a reserved name COULD in principle reach one of those interfaces. Measured
-/// rather than assumed: checking all 127 `.lean` files under `tests/fixtures/`
-/// and `demos/` with `--prelude builtin` surfaced a reserved spelling in
-/// seven — six diagnostics quoting an UNSOLVED metavariable, plus p51 itself,
-/// which writes one on purpose — and in ZERO registered declarations. An
-/// unsolved metavariable is exactly the case where the old `u_N` spelling was
-/// a lie, since it read as a parameter the author could have named.
+/// theorems, axioms, opaques — and, since 2026-09-19, instances). Inductive and
+/// structure elaboration collects `level_params` straight off the finished
+/// expressions with no rename step, so a reserved name COULD in principle reach
+/// one of those interfaces. Measured rather than assumed: checking all 127
+/// `.lean` files under `tests/fixtures/` and `demos/` with `--prelude builtin`
+/// surfaced a reserved spelling in seven — six diagnostics quoting an UNSOLVED
+/// metavariable, plus p51 itself, which writes one on purpose — and in ZERO
+/// registered declarations. That sweep did not cover the INSTANCE path, which
+/// until 2026-09-19 returned the raw mint vector as the instance's declared
+/// level params (`instMagNat.{?u_0,?u_1,?u_2}` on a monomorphic instance —
+/// three reserved names the kernel accepts because it never checks that a
+/// declared level is used; `tests/instance_value_levels_e2e.rs`). An unsolved
+/// metavariable is exactly the case where the old `u_N` spelling was a lie,
+/// since it read as a parameter the author could have named.
 pub(crate) const MINT_PREFIX: &str = "?u_";
 
 /// Whether `name` inhabits the reserved metavariable namespace, i.e. whether a

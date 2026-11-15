@@ -10,7 +10,7 @@
 //! cumulative / isolated) are dispatched by [`run_verify_batch`] based on
 //! the resolved [`ResolvedArgs`].
 
-use std::collections::{BTreeMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
@@ -23,17 +23,15 @@ use crate::verify_batch::{
     build_dependency_order, build_summary, build_summary_with_mode, collect_new_env_names,
     discover_olean_files, emit_summary, module_name_from_path, preload_init_with_snapshot,
     relative_display, verify_one_isolated, verify_one_module_load_shared,
-    verify_one_module_with_mode_shared, ModuleResult, ValidationMode,
+    verify_one_module_with_mode_in_run, ModuleResult, ValidationMode,
 };
-use crate::verify_cache::{
-    file_content_hash, is_module_cached, load_cache, save_cache, update_cache_entry,
-};
+use crate::verify_cache::{is_module_cached, load_cache, save_cache, update_cache_entry};
 use crate::verify_parallel::{
-    build_extended_summary_with_mode, typecheck_constants_full_parallel,
+    build_extended_summary_with_mode, typecheck_constants_full_parallel_in_run,
     typecheck_constants_parallel,
 };
 use crate::verify_report::{build_verification_report, write_report_to_file};
-use crate::{default_search_paths, load_module_with_deps, LoadSummary};
+use crate::{default_search_paths, load_module_with_deps_with_import_policy, LoadSummary};
 
 use super::{OleanCliError, VerifyBatchArgs};
 
@@ -240,15 +238,27 @@ fn process_cached_module(
     visited: &mut hashbrown::HashSet<String>,
     cache: &mut Option<crate::verify_cache::VerificationCache>,
     cache_hits: &mut usize,
+    not_admitted: &mut BTreeSet<String>,
 ) -> ModuleResult {
+    // Every part the loader reads (R113): a cached verdict replays only over
+    // the same `.olean`, `.olean.server` and `.olean.private`.
     let file_hash = if cache.is_some() {
-        std::fs::read(desc_path).ok().map(|b| file_content_hash(&b))
+        crate::verify_cache::artifact_content_hash(desc_path)
     } else {
         None
     };
 
+    // A cached entry records how many constants failed but not WHICH, and the
+    // run needs their names to refuse what later modules build on them (Lean's
+    // replay never admits them). So only a module that verified completely is
+    // served from the cache; any other is re-checked.
     let skip_tc = match (&*cache, &file_hash) {
-        (Some(c), Some(hash)) => is_module_cached(c, module_name, hash),
+        (Some(c), Some(hash)) => {
+            is_module_cached(c, module_name, hash)
+                && c.entries
+                    .get(module_name)
+                    .is_some_and(|entry| entry.failed_count == 0)
+        }
         _ => false,
     };
     if skip_tc && !args.load_only {
@@ -257,7 +267,7 @@ fn process_cached_module(
 
     let effective_load_only = args.load_only || skip_tc;
     let mode = run_mode(args);
-    let mut result = verify_one_module_with_mode_shared(
+    let mut result = verify_one_module_with_mode_in_run(
         env,
         module_name,
         rel_path,
@@ -268,6 +278,7 @@ fn process_cached_module(
         args.max_heartbeats,
         args.elide_proof_values,
         visited,
+        not_admitted,
     );
 
     if skip_tc && result.load_ok {
@@ -328,6 +339,9 @@ fn run_cumulative_verification(args: &ResolvedArgs) {
     // any `.olean` re-read, turning O(modules × closure) re-parsing into O(union)
     // (~4x faster on the v4.30 stdlib). See `load_module_with_deps_shared`.
     let mut shared_visited: hashbrown::HashSet<String> = hashbrown::HashSet::new();
+    // Declarations an earlier module of this run refused (full validation):
+    // a later module's declaration that mentions one is refused too.
+    let mut not_admitted: BTreeSet<String> = BTreeSet::new();
 
     for (idx, desc) in ordered_modules.iter().take(process_count).enumerate() {
         let rel_path = relative_display(&desc.path, &args.root);
@@ -350,6 +364,7 @@ fn run_cumulative_verification(args: &ResolvedArgs) {
                 &mut shared_visited,
                 &mut cache,
                 &mut cache_hits,
+                &mut not_admitted,
             )
         };
         log_module_result(idx, process_count, &result, args.json_output);
@@ -411,8 +426,10 @@ fn run_cumulative_verification(args: &ResolvedArgs) {
     );
 }
 
-/// The honest [`ValidationMode`] this run executed: `Full` (add_decl-equivalent
-/// `check_type` on proof values) iff `--full-validation` was passed, else the
+/// The honest [`ValidationMode`] this run executed: `Full` (the local
+/// assumed-environment `check_type` on proof values — dependencies assumed,
+/// not `add_decl` and not a dependency-closed replay) iff `--full-validation`
+/// was passed, else the
 /// type-only `InferOnly` fast path.
 fn run_mode(args: &ResolvedArgs) -> ValidationMode {
     if args.full_validation {
@@ -434,10 +451,15 @@ fn load_and_tc_parallel(
     num_threads: usize,
     mode: ValidationMode,
     max_heartbeats: u32,
+    not_admitted: &mut BTreeSet<String>,
 ) -> ModuleResult {
     let start = Instant::now();
-    let load_result: Result<Vec<LoadSummary>, _> =
-        load_module_with_deps(env, module_name, search_paths);
+    let load_result: Result<Vec<LoadSummary>, _> = load_module_with_deps_with_import_policy(
+        env,
+        module_name,
+        search_paths,
+        crate::verify_batch::recheck_policy(),
+    );
     let load_elapsed = start.elapsed();
 
     match load_result {
@@ -452,12 +474,35 @@ fn load_and_tc_parallel(
                     ValidationMode::InferOnly => {
                         typecheck_constants_parallel(env, &new_names, num_threads)
                     }
-                    ValidationMode::Full => typecheck_constants_full_parallel(
-                        env,
-                        &new_names,
-                        num_threads,
-                        max_heartbeats,
-                    ),
+                    ValidationMode::Full => {
+                        // As in the serial lane (`verify_one_module_with_mode_in_run`):
+                        // a declaration the loader dropped because another
+                        // module's constant held the name is refused as already
+                        // declared, and counted.
+                        let already_declared: BTreeMap<String, String> = summaries
+                            .iter()
+                            .flat_map(|s| s.shadowed_declarations.iter())
+                            .map(|(name, held_by)| (name.to_string(), held_by.clone()))
+                            .collect();
+                        let mut targets = new_names.clone();
+                        targets.extend(already_declared.keys().cloned());
+                        let outcome = typecheck_constants_full_parallel_in_run(
+                            env,
+                            &targets,
+                            not_admitted,
+                            &already_declared,
+                            num_threads,
+                            max_heartbeats,
+                        );
+                        not_admitted.extend(
+                            outcome
+                                .2
+                                .keys()
+                                .filter(|k| !already_declared.contains_key(*k))
+                                .cloned(),
+                        );
+                        outcome
+                    }
                 }
             };
             ModuleResult {
@@ -515,6 +560,7 @@ fn run_cumulative_parallel(args: &ResolvedArgs) {
     let mut last_progress = Instant::now();
     let mut known_names: HashSet<String> = HashSet::new();
     collect_new_env_names(&env, &mut known_names);
+    let mut not_admitted: BTreeSet<String> = BTreeSet::new();
 
     for (idx, desc) in ordered_modules.iter().take(process_count).enumerate() {
         let rel_path = relative_display(&desc.path, &args.root);
@@ -529,6 +575,7 @@ fn run_cumulative_parallel(args: &ResolvedArgs) {
             args.parallel,
             mode,
             args.max_heartbeats,
+            &mut not_admitted,
         );
         log_module_result(idx, process_count, &result, args.json_output);
         report_progress(idx, process_count, &overall_start, &mut last_progress);

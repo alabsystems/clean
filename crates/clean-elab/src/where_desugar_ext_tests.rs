@@ -22,7 +22,7 @@ fn mk_ident(name: &str) -> SurfaceExpr {
 
 fn mk_clause(name: &str, params: Vec<SurfaceBinder>, body: SurfaceExpr) -> WhereClause {
     WhereClause {
-        name: name.to_string(),
+        name: SurfaceName::component(name, false),
         params,
         return_type: None,
         body,
@@ -37,7 +37,7 @@ fn mk_clause_with_ret(
     body: SurfaceExpr,
 ) -> WhereClause {
     WhereClause {
-        name: name.to_string(),
+        name: SurfaceName::component(name, false),
         params,
         return_type: Some(ret),
         body,
@@ -57,7 +57,7 @@ fn mk_typed_clause(name: &str, body: SurfaceExpr) -> WhereClause {
 fn test_collect_free_idents_simple_ident() {
     let expr = mk_ident("foo");
     let free = collect_free_idents(&expr);
-    assert_eq!(free, HashSet::from(["foo".to_string()]));
+    assert_eq!(free, HashSet::from([SurfaceName::component("foo", false)]));
 }
 
 #[test]
@@ -83,8 +83,14 @@ fn test_collect_free_idents_lambda_binds_param() {
         Box::new(mk_ident("x")),
     );
     let free = collect_free_idents(&expr);
-    assert!(free.contains("Nat"), "Nat should be free");
-    assert!(!free.contains("x"), "x should be bound by lambda");
+    assert!(
+        free.contains(&SurfaceName::generated_path("Nat")),
+        "Nat should be free"
+    );
+    assert!(
+        !free.contains(&SurfaceName::generated_path("x")),
+        "x should be bound by lambda"
+    );
 }
 
 #[test]
@@ -96,8 +102,14 @@ fn test_collect_free_idents_lambda_body_free_var() {
         Box::new(mk_ident("y")),
     );
     let free = collect_free_idents(&expr);
-    assert!(free.contains("y"), "y should be free in lambda body");
-    assert!(free.contains("Nat"), "Nat should be free in binder type");
+    assert!(
+        free.contains(&SurfaceName::generated_path("y")),
+        "y should be free in lambda body"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("Nat")),
+        "Nat should be free in binder type"
+    );
 }
 
 #[test]
@@ -110,9 +122,18 @@ fn test_collect_free_idents_let_binds_name() {
         Box::new(mk_ident("z")),
     );
     let free = collect_free_idents(&expr);
-    assert!(free.contains("x"), "x should be free in let value");
-    assert!(free.contains("Nat"), "Nat should be free in let type");
-    assert!(!free.contains("z"), "z should be bound in let body");
+    assert!(
+        free.contains(&SurfaceName::generated_path("x")),
+        "x should be free in let value"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("Nat")),
+        "Nat should be free in let type"
+    );
+    assert!(
+        !free.contains(&SurfaceName::generated_path("z")),
+        "z should be bound in let body"
+    );
 }
 
 #[test]
@@ -125,8 +146,14 @@ fn test_collect_free_idents_let_rec_binds_in_val() {
         Box::new(mk_ident("f")),
     );
     let free = collect_free_idents(&expr);
-    assert!(!free.contains("f"), "f should be bound in let rec");
-    assert!(free.contains("Nat"), "Nat should be free in let rec type");
+    assert!(
+        !free.contains(&SurfaceName::generated_path("f")),
+        "f should be bound in let rec"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("Nat")),
+        "Nat should be free in let rec type"
+    );
 }
 
 #[test]
@@ -134,9 +161,9 @@ fn test_collect_free_idents_app_collects_all() {
     // f x y — all three are free
     let expr = SurfaceExpr::app(mk_ident("f"), vec![mk_ident("x"), mk_ident("y")]);
     let free = collect_free_idents(&expr);
-    assert!(free.contains("f"));
-    assert!(free.contains("x"));
-    assert!(free.contains("y"));
+    assert!(free.contains(&SurfaceName::generated_path("f")));
+    assert!(free.contains(&SurfaceName::generated_path("x")));
+    assert!(free.contains(&SurfaceName::generated_path("y")));
 }
 
 #[test]
@@ -144,8 +171,8 @@ fn test_collect_free_idents_arrow_both_sides() {
     // A -> B — both free
     let expr = SurfaceExpr::Arrow(span(), Box::new(mk_ident("A")), Box::new(mk_ident("B")));
     let free = collect_free_idents(&expr);
-    assert!(free.contains("A"));
-    assert!(free.contains("B"));
+    assert!(free.contains(&SurfaceName::generated_path("A")));
+    assert!(free.contains(&SurfaceName::generated_path("B")));
 }
 
 #[test]
@@ -157,9 +184,18 @@ fn test_collect_free_idents_pi_binds_in_body() {
         Box::new(SurfaceExpr::app(mk_ident("B"), vec![mk_ident("x")])),
     );
     let free = collect_free_idents(&expr);
-    assert!(free.contains("A"), "A should be free");
-    assert!(free.contains("B"), "B should be free");
-    assert!(!free.contains("x"), "x should be bound by pi");
+    assert!(
+        free.contains(&SurfaceName::generated_path("A")),
+        "A should be free"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("B")),
+        "B should be free"
+    );
+    assert!(
+        !free.contains(&SurfaceName::generated_path("x")),
+        "x should be bound by pi"
+    );
 }
 
 #[test]
@@ -177,10 +213,22 @@ fn test_collect_free_idents_nested_scopes() {
         Box::new(inner_let),
     );
     let free = collect_free_idents(&expr);
-    assert!(free.contains("f"), "f should be free");
-    assert!(free.contains("T"), "T should be free");
-    assert!(!free.contains("x"), "x should be bound by lambda");
-    assert!(!free.contains("y"), "y should be bound by let");
+    assert!(
+        free.contains(&SurfaceName::generated_path("f")),
+        "f should be free"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("T")),
+        "T should be free"
+    );
+    assert!(
+        !free.contains(&SurfaceName::generated_path("x")),
+        "x should be bound by lambda"
+    );
+    assert!(
+        !free.contains(&SurfaceName::generated_path("y")),
+        "y should be bound by let"
+    );
 }
 
 #[test]
@@ -192,7 +240,44 @@ fn test_collect_free_idents_anonymous_binder_not_bound() {
         Box::new(mk_ident("x")),
     );
     let free = collect_free_idents(&expr);
-    assert!(free.contains("x"));
+    assert!(free.contains(&SurfaceName::generated_path("x")));
+}
+
+/// `if h : c then t else e` is `dite c (fun h => t) (fun h => e)`: the scan
+/// sees all of it, `c` and both branches' identifiers are free, and `h` is
+/// bound in both branches.
+#[test]
+fn test_collect_free_idents_dependent_if_binds_hypothesis_in_both_branches() {
+    // if h : a = b then k h else j h
+    let cond = SurfaceExpr::App(
+        span(),
+        Box::new(mk_ident("Eq")),
+        vec![
+            clean_parser::SurfaceArg::positional(mk_ident("a")),
+            clean_parser::SurfaceArg::positional(mk_ident("b")),
+        ],
+    );
+    let branch = |f: &str| {
+        SurfaceExpr::App(
+            span(),
+            Box::new(mk_ident(f)),
+            vec![clean_parser::SurfaceArg::positional(mk_ident("h"))],
+        )
+    };
+    let expr = SurfaceExpr::IfDecidable(
+        span(),
+        SurfaceName::component("h", false),
+        Box::new(cond),
+        Box::new(branch("k")),
+        Box::new(branch("j")),
+    );
+    let (free, complete) = collect_free_idents_checked(&expr);
+    assert!(complete, "a dependent `if` is modelled, not a fallback");
+    assert_eq!(
+        free,
+        HashSet::from(["Eq", "a", "b", "k", "j"].map(|n| SurfaceName::component(n, false))),
+        "`h` is bound in both branches; everything else is free"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -328,7 +413,7 @@ fn test_analyze_where_deps_duplicate_name_error() {
     let err = analyze_where_deps(&clauses).expect_err("should fail on duplicate");
     match err {
         WhereDesugarError::DuplicateName { name, .. } => {
-            assert_eq!(name, "a");
+            assert_eq!(name, SurfaceName::generated_path("a"));
         }
         other => panic!("expected DuplicateName, got {:?}", other),
     }
@@ -337,7 +422,7 @@ fn test_analyze_where_deps_duplicate_name_error() {
 #[test]
 fn test_where_desugar_error_display_duplicate() {
     let err = WhereDesugarError::DuplicateName {
-        name: "foo".to_string(),
+        name: SurfaceName::generated_path("foo"),
         span: span(),
     };
     let msg = err.to_string();
@@ -351,7 +436,11 @@ fn test_where_desugar_error_display_duplicate() {
 #[test]
 fn test_where_desugar_error_display_cycle() {
     let err = WhereDesugarError::CyclicDependency {
-        names: vec!["a".into(), "b".into(), "a".into()],
+        names: vec![
+            SurfaceName::generated_path("a"),
+            SurfaceName::generated_path("b"),
+            SurfaceName::generated_path("a"),
+        ],
         span: span(),
     };
     let msg = err.to_string();
@@ -366,7 +455,9 @@ fn test_where_desugar_error_display_cycle() {
 fn test_desugar_where_ordered_empty() {
     let body = mk_ident("x");
     let result = desugar_where_ordered(body, &[]).expect("should succeed");
-    assert!(matches!(result, SurfaceExpr::Ident(_, ref n) if n == "x"));
+    assert!(
+        matches!(result, SurfaceExpr::Ident(_, ref n) if n.name() == &clean_kernel::Name::from_string("x"))
+    );
 }
 
 #[test]
@@ -377,7 +468,7 @@ fn test_desugar_where_ordered_single() {
 
     match result {
         SurfaceExpr::LetRec(_, binder, _, _) => {
-            assert_eq!(binder.name, "a");
+            assert_eq!(binder.name, SurfaceName::generated_path("a"));
         }
         other => panic!("expected LetRec, got {:?}", other),
     }
@@ -396,10 +487,18 @@ fn test_desugar_where_ordered_reorders_deps() {
     // After reordering, a should be outermost (first in nesting)
     match result {
         SurfaceExpr::LetRec(_, outer, _, inner_expr) => {
-            assert_eq!(outer.name, "a", "a should be outermost (it has no deps)");
+            assert_eq!(
+                outer.name,
+                SurfaceName::generated_path("a"),
+                "a should be outermost (it has no deps)"
+            );
             match *inner_expr {
                 SurfaceExpr::LetRec(_, inner, _, _) => {
-                    assert_eq!(inner.name, "b", "b should be inner (depends on a)");
+                    assert_eq!(
+                        inner.name,
+                        SurfaceName::generated_path("b"),
+                        "b should be inner (depends on a)"
+                    );
                 }
                 other => panic!("expected inner LetRec, got {:?}", other),
             }
@@ -424,7 +523,13 @@ fn test_desugar_where_ordered_preserves_order_when_no_deps() {
         names.push(b.name.clone());
         current = inner;
     }
-    assert_eq!(names, vec!["a", "b"]);
+    assert_eq!(
+        names,
+        vec![
+            SurfaceName::generated_path("a"),
+            SurfaceName::generated_path("b")
+        ]
+    );
 }
 
 #[test]
@@ -451,13 +556,15 @@ fn test_desugar_where_ordered_with_type_annotation() {
 
     match result {
         SurfaceExpr::LetRec(_, binder, val, _) => {
-            assert_eq!(binder.name, "f");
+            assert_eq!(binder.name, SurfaceName::generated_path("f"));
             // Value should be Lambda
             assert!(matches!(*val, SurfaceExpr::Lambda(..)));
             // Type should be Pi with Nat codomain
             match binder.ty.as_deref() {
                 Some(SurfaceExpr::Pi(_, _, codomain)) => {
-                    assert!(matches!(**codomain, SurfaceExpr::Ident(_, ref n) if n == "Nat"));
+                    assert!(
+                        matches!(**codomain, SurfaceExpr::Ident(_, ref n) if n.name() == &clean_kernel::Name::from_string("Nat"))
+                    );
                 }
                 other => panic!("expected Pi type, got {:?}", other),
             }
@@ -485,7 +592,15 @@ fn test_desugar_where_ordered_complex_chain() {
         names.push(b.name.clone());
         current = inner;
     }
-    assert_eq!(names, vec!["a", "b", "c", "d"]);
+    assert_eq!(
+        names,
+        vec![
+            SurfaceName::generated_path("a"),
+            SurfaceName::generated_path("b"),
+            SurfaceName::generated_path("c"),
+            SurfaceName::generated_path("d")
+        ]
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -501,10 +616,22 @@ fn test_clause_free_idents_excludes_own_params() {
         SurfaceExpr::app(mk_ident("add"), vec![mk_ident("x"), mk_ident("y")]),
     );
     let free = clause_free_idents(&clause);
-    assert!(!free.contains("x"), "parameter x should be excluded");
-    assert!(free.contains("y"), "y should be free");
-    assert!(free.contains("add"), "add should be free");
-    assert!(free.contains("Nat"), "Nat (in param type) should be free");
+    assert!(
+        !free.contains(&SurfaceName::generated_path("x")),
+        "parameter x should be excluded"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("y")),
+        "y should be free"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("add")),
+        "add should be free"
+    );
+    assert!(
+        free.contains(&SurfaceName::generated_path("Nat")),
+        "Nat (in param type) should be free"
+    );
 }
 
 #[test]
@@ -517,7 +644,10 @@ fn test_clause_free_idents_return_type_references() {
         mk_ident("x"),
     );
     let free = clause_free_idents(&clause);
-    assert!(free.contains("Vec"), "Vec in return type should be free");
+    assert!(
+        free.contains(&SurfaceName::generated_path("Vec")),
+        "Vec in return type should be free"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -528,7 +658,9 @@ fn test_clause_free_idents_return_type_references() {
 fn test_desugar_where_from_parsed_ordered_empty() {
     let body = mk_ident("x");
     let result = desugar_where_from_parsed_ordered(&body, &[]).expect("should succeed");
-    assert!(matches!(result, SurfaceExpr::Ident(_, ref n) if n == "x"));
+    assert!(
+        matches!(result, SurfaceExpr::Ident(_, ref n) if n.name() == &clean_kernel::Name::from_string("x"))
+    );
 }
 
 #[test]
@@ -539,17 +671,19 @@ fn test_desugar_where_from_parsed_ordered_reorders() {
     let defs = vec![
         WhereLocalDef {
             span: span(),
-            name: "b".to_string(),
+            name: SurfaceName::generated_path("b"),
             binders: vec![],
             ret_ty: None,
             body: mk_ident("a"),
+            termination: Default::default(),
         },
         WhereLocalDef {
             span: span(),
-            name: "a".to_string(),
+            name: SurfaceName::generated_path("a"),
             binders: vec![],
             ret_ty: None,
             body: SurfaceExpr::nat(1),
+            termination: Default::default(),
         },
     ];
 
@@ -558,10 +692,10 @@ fn test_desugar_where_from_parsed_ordered_reorders() {
     // a should be outermost
     match result {
         SurfaceExpr::LetRec(_, outer, _, inner_expr) => {
-            assert_eq!(outer.name, "a");
+            assert_eq!(outer.name, SurfaceName::generated_path("a"));
             match *inner_expr {
                 SurfaceExpr::LetRec(_, inner, _, _) => {
-                    assert_eq!(inner.name, "b");
+                    assert_eq!(inner.name, SurfaceName::generated_path("b"));
                 }
                 other => panic!("expected inner LetRec, got {:?}", other),
             }

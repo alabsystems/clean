@@ -18,7 +18,12 @@ use crate::types::{MathverseConstantHeader, SourceSystem};
 /// a corrupt length prefix cannot trigger a giant pre-allocation / abort; turns
 /// it into a recoverable decode error. 4 GiB comfortably exceeds the largest
 /// shipped sidecar (`lean4_mathlib4` ~71.6 MiB decompressed).
+#[cfg(not(target_arch = "wasm32"))]
 const DECODE_BUDGET_BYTES: usize = 4 * 1024 * 1024 * 1024;
+/// wasm32: usize is 32-bit, so the native budget does not fit; the whole
+/// address space is the effective cap.
+#[cfg(target_arch = "wasm32")]
+const DECODE_BUDGET_BYTES: usize = usize::MAX;
 
 /// Detailed provenance record for an imported constant.
 /// Stored in the provenance sidecar (cold path), linked from

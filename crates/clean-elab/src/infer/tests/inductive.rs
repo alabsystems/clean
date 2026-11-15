@@ -189,7 +189,7 @@ fn test_issue796_inductive_scopes_header_and_ctor_auto_implicits() {
 }
 
 #[test]
-fn test_issue796_file_1616_inductives_register() {
+fn test_file_1616_rejects_unresolved_constructor_parameter_types() {
     let mut env = Environment::with_prelude();
 
     let cover = parse_decl_for_elab(
@@ -210,8 +210,14 @@ fn test_issue796_file_1616_inductives_register() {
 | right : Linear c -> Linear (.right c)",
     )
     .unwrap();
-    crate::elaborate_decl_and_register(&mut env, &linear)
-        .expect("Linear should elaborate and register after Cover");
+    let err = crate::elaborate_decl_and_register(&mut env, &linear)
+        .expect_err("Lean rejects unresolved implicits in auto-bound c's type");
+    assert!(
+        err.to_string()
+            .contains("cannot synthesize implicit arguments"),
+        "unexpected error: {err}"
+    );
+    assert!(env.get_const(&Name::from_string("Linear")).is_none());
 }
 
 // ===========================================
@@ -406,18 +412,25 @@ deriving BEq",
 
 #[test]
 fn test_elab_inductive_with_deriving_multiple() {
-    // Repr and Hashable are absent from the bare environment; the
-    // elaborator now errors hard rather than silently skipping.
-    let result = elab_decl(
+    // Repr and Hashable are absent from the bare environment: each is a hard
+    // error, never a silent skip — reported beside `Color`, which Lean
+    // declares before running any handler. Both handlers log rather than
+    // throw in Lean, so the clause runs to its end.
+    let (result, errors) = type_with_failed_deriving(elab_decl(
         r"inductive Color : Type
 | red : Color
 | green : Color
 | blue : Color
 deriving BEq, Repr, Hashable",
-    );
-    let Ok(result) = result else {
-        return;
-    };
+    ));
+    assert_eq!(errors.len(), 2, "{errors:?}");
+    for (error, class) in errors.iter().zip(["Repr", "Hashable"]) {
+        assert!(
+            matches!(error, ElabError::Unsupported { feature }
+                if feature.contains(class) && feature.contains("never silently skipped")),
+            "{error:?}"
+        );
+    }
 
     match result {
         ElabResult::Inductive {
@@ -440,10 +453,13 @@ deriving BEq, Repr, Hashable",
 
 #[test]
 fn test_elab_inductive_deriving_inhabited() {
-    let result = elab_decl(
-        r"inductive Bool : Type
-| false : Bool
-| true : Bool
+    // Over the prelude: the handler synthesizes field instances and
+    // kernel-checks the instance against `Inhabited`, which a bare
+    // environment does not declare (Lean's handler needs it too).
+    let result = elab_decl_with_prelude(
+        r"inductive MyBool : Type
+| false : MyBool
+| true : MyBool
 deriving Inhabited",
     )
     .unwrap();
@@ -454,24 +470,24 @@ deriving Inhabited",
             derived_instances,
             ..
         } => {
-            assert_eq!(name, Name::from_string("Bool"));
+            assert_eq!(name, Name::from_string("MyBool"));
             assert_eq!(derived_instances.len(), 1);
             assert_eq!(
                 derived_instances[0].name,
-                Name::from_string("instBoolInhabited")
+                Name::from_string("instMyBoolInhabited")
             );
             assert_eq!(
                 derived_instances[0].class_name,
                 Name::from_string("Inhabited")
             );
 
-            // Check that the instance uses the first constructor (Bool.false)
+            // Check that the instance uses the first constructor (MyBool.false)
             match derived_instances[0].val.kind() {
                 ExprKind::App(_, arg) => {
-                    // arg should be Bool.false
+                    // arg should be MyBool.false
                     match arg.kind() {
                         ExprKind::Const(ctor_name, _) => {
-                            assert_eq!(*ctor_name, Name::from_string("Bool.false"));
+                            assert_eq!(*ctor_name, Name::from_string("MyBool.false"));
                         }
                         _ => panic!("Expected Const for default value"),
                     }
@@ -535,10 +551,11 @@ fn test_elab_inductive_without_deriving() {
 
 #[test]
 fn test_elab_inductive_single_ctor_deriving() {
-    // Single constructor inductive always has equal elements
-    let result = elab_decl(
-        r"inductive Unit : Type
-| unit : Unit
+    // Single constructor inductive always has equal elements. Over the
+    // prelude, which declares the classes the handlers build instances of.
+    let result = elab_decl_with_prelude(
+        r"inductive MyUnit : Type
+| unit : MyUnit
 deriving BEq, Inhabited",
     )
     .unwrap();
@@ -550,7 +567,7 @@ deriving BEq, Inhabited",
             constructors,
             ..
         } => {
-            assert_eq!(name, Name::from_string("Unit"));
+            assert_eq!(name, Name::from_string("MyUnit"));
             assert_eq!(constructors.len(), 1);
             assert_eq!(derived_instances.len(), 2);
         }
@@ -1282,8 +1299,13 @@ fn test_recursive_repr_is_materialized_from_registered_constructor_metadata() {
         mentions_const(value, "ReprTree.casesOn") || mentions_const(value, "ReprTree.rec"),
         "final Repr value must dispatch on the registered constructor metadata: {value:?}"
     );
+    // The nullary constructor renders as its name; the one with a field
+    // renders through the opaque `Clean.Repr.render` — its bare name dropped
+    // the argument, so `repr (next leaf) = repr (next (next leaf))` checked
+    // where Lean refuses it (ledger class (90)).
     assert!(mentions_string(value, "ReprTree.leaf"));
-    assert!(mentions_string(value, "ReprTree.next"));
+    assert!(!mentions_string(value, "ReprTree.next"));
+    assert!(mentions_const(value, "Clean.Repr.render"));
     assert!(!value.has_sorry(), "derived Repr must not contain sorry");
     let deps = env
         .axiom_deps(&inst_name)
@@ -1415,8 +1437,8 @@ fn test_elab_coinductive_fails_closed() {
     let out_of_envelope: &[(&str, &str)] = &[
         // Type-valued: that is the `codata` command's job, not a gfp predicate.
         (
-            r"coinductive Stream : Type
-| cons : Nat → Stream → Stream",
+            r"coinductive Strm : Type
+| cons : Nat → Strm → Strm",
             "result sort must be `Prop`",
         ),
         // ZERO constructors: an empty disjunction would mint the
@@ -1635,8 +1657,8 @@ deriving Repr",
         // mentions the predicate — refused by naming the negative position
         // (formerly the generic FULLY-APPLIED message).
         (
-            r"coinductive Neg : Str → Str → Prop
-| step : (Neg s t → False) → Neg s t",
+            r"coinductive NegP : Str → Str → Prop
+| step : (NegP s t → False) → NegP s t",
             "LEFT of an arrow, a negative/non-strictly-positive occurrence",
         ),
         // A partially-applied recursive occurrence names the arity failure.
@@ -2447,10 +2469,10 @@ fn coind_lts_env() -> Environment {
 }
 
 /// BRICK 2 (3a) FLAGSHIP: a constructor with a LEADING explicitly-typed
-/// binder — `| step (q : St) : Step p q → Div q → Div p` — lowers to the
-/// `∃ q` functor disjunct. `Div loop` is THE gfp discriminator (every
+/// binder — `| step (q : St) : Step p q → Divg q → Divg p` — lowers to the
+/// `∃ q` functor disjunct. `Divg loop` is THE gfp discriminator (every
 /// least-fixpoint derivation would need an infinite `Step` chain), and
-/// `Div stuck → False` consumes the ∃-witness in the `cases` arm.
+/// `Divg stuck → False` consumes the ∃-witness in the `cases` arm.
 #[test]
 fn test_elab_coinductive_exists_binder_flagship() {
     use clean_kernel::{BinderInfo, Expr, ExprKind};
@@ -2458,30 +2480,30 @@ fn test_elab_coinductive_exists_binder_flagship() {
     let mut env = coind_lts_env();
     elab_in(
         &mut env,
-        r"coinductive Div : St → Prop
-| step (q : St) : Step p q → Div q → Div p",
+        r"coinductive Divg : St → Prop
+| step (q : St) : Step p q → Divg q → Divg p",
     )
     .expect("a leading-binder constructor must elaborate through the ∃ lowering (Brick 2)");
 
     for name in [
-        "Div",
-        "Div.F",
-        "Div.coind",
-        "Div.F_mono",
-        "Div.unfold",
-        "Div.fold",
-        "Div.step",
-        "Div.cases",
-        "Div.acc",
-        "Div.coind_upto",
-        "Div.paco",
-        "Div.paco_coind",
-        "Div.paco_unfold",
-        "Div.paco_fold",
-        "Div.paco_mon",
-        "Div.paco_bot",
-        "Div.le_paco",
-        "Div.paco_acc",
+        "Divg",
+        "Divg.F",
+        "Divg.coind",
+        "Divg.F_mono",
+        "Divg.unfold",
+        "Divg.fold",
+        "Divg.step",
+        "Divg.cases",
+        "Divg.acc",
+        "Divg.coind_upto",
+        "Divg.paco",
+        "Divg.paco_coind",
+        "Divg.paco_unfold",
+        "Divg.paco_fold",
+        "Divg.paco_mon",
+        "Divg.paco_bot",
+        "Divg.le_paco",
+        "Divg.paco_acc",
     ] {
         let n = Name::from_string(name);
         let info = env
@@ -2497,7 +2519,7 @@ fn test_elab_coinductive_exists_binder_flagship() {
         assert!(deps.is_empty(), "`{name}` must be axiom-free, got {deps:?}");
     }
     assert!(
-        env.get_const(&Name::from_string("Div.rec")).is_none(),
+        env.get_const(&Name::from_string("Divg.rec")).is_none(),
         "a coinductive predicate must not acquire an induction principle"
     );
 
@@ -2514,44 +2536,44 @@ fn test_elab_coinductive_exists_binder_flagship() {
         out
     }
     let step_ty = &env
-        .get_const(&Name::from_string("Div.step"))
-        .expect("Div.step must be registered")
+        .get_const(&Name::from_string("Divg.step"))
+        .expect("Divg.step must be registered")
         .type_;
     use BinderInfo::{Default as E, Implicit as I};
     assert_eq!(
         pi_spine(step_ty),
         vec![I, E, E, E],
-        "`Div.step` must keep the index implicit and lead with the \
+        "`Divg.step` must keep the index implicit and lead with the \
          explicit declared binder: {step_ty}"
     );
 
     // THE discriminator: Park coinduction with the candidate
     // `R s := s = loop` — the witness `q := loop` discharges the ∃. The
     // ascription spells the post-fixpoint target in its unfolded ∃-form:
-    // checking a bare `Exists.intro` against the still-folded `Div.F R s`
+    // checking a bare `Exists.intro` against the still-folded `Divg.F R s`
     // trips the elaborator's higher-order `?p witness` handling (the meta
     // gets committed before the functor is unfolded) — a pre-existing
     // unifier limitation this brick surfaces, not a lowering defect; the
     // ascribed form is defeq and elaborates first-order.
     elab_in(
         &mut env,
-        r"theorem div_loop : Div St.loop :=
-  Div.coind (fun s => s = St.loop)
+        r"theorem div_loop : Divg St.loop :=
+  Divg.coind (fun s => s = St.loop)
     (fun s h => (Exists.intro St.loop (And.intro (And.intro h rfl) rfl)
       : ∃ q : St, Step s q ∧ q = St.loop))
     St.loop rfl",
     )
-    .expect("Park coinduction through `Div.coind` must prove `Div St.loop`");
+    .expect("Park coinduction through `Divg.coind` must prove `Divg St.loop`");
 
     // The declared constructor is usable at its declared type, the binder
-    // supplied first. `@`-explicit on purpose: the bare `Div.step q h1 h2`
+    // supplied first. `@`-explicit on purpose: the bare `Divg.step q h1 h2`
     // trips a pre-existing elaborator quirk (an explicit argument whose
     // type matches the implicit index domain is greedily consumed by the
     // implicit slot) — measured, reported, not this brick's lane.
     elab_in(
         &mut env,
-        r"theorem div_step_use : ∀ p : St, ∀ q : St, Step p q → Div q → Div p :=
-  fun p q h1 h2 => @Div.step p q h1 h2",
+        r"theorem div_step_use : ∀ p : St, ∀ q : St, Step p q → Divg q → Divg p :=
+  fun p q h1 h2 => @Divg.step p q h1 h2",
     )
     .expect("the generated constructor must take the declared binder as its leading argument");
 
@@ -2559,10 +2581,10 @@ fn test_elab_coinductive_exists_binder_flagship() {
     // step out of `stuck`, which contradicts by computation.
     elab_in(
         &mut env,
-        r"theorem div_stuck_false : Div St.stuck → False :=
-  fun h => Div.cases h False (fun q hs hd => St.noConfusion (And.left hs))",
+        r"theorem div_stuck_false : Divg St.stuck → False :=
+  fun h => Divg.cases h False (fun q hs hd => St.noConfusion (And.left hs))",
     )
-    .expect("`Div.cases` must hand the arm the ∃-witness and refute `Div St.stuck`");
+    .expect("`Divg.cases` must hand the arm the ∃-witness and refute `Divg St.stuck`");
 }
 
 /// BRICK 2: a TWO-binder constructor pins the ∃ nest ORDER end to end
@@ -3626,4 +3648,21 @@ fn test_elab_coinductive_decl_param_reject_registers_nothing() {
             "`{name}` must not survive a rejected parameterized coinductive"
         );
     }
+}
+
+#[test]
+fn interleaved_header_auto_implicits_leave_no_parameter_locals() {
+    let env = Environment::with_prelude();
+    let mut ctx = ElabCtx::new(&env);
+    let before = ctx.locals.len();
+    let decl = parse_decl_for_elab(
+        "inductive Both (p : α → Prop) (q : β → Prop) : α → β → Prop where | intro {x y} : p x → q y → Both p q x y"
+    ).expect("declaration parses");
+    ctx.elab_decl(&decl).expect("header elaborates");
+    assert_eq!(
+        ctx.locals.len(),
+        before,
+        "explicit parameters must be removed by identity"
+    );
+    assert_eq!(ctx.auto_implicit_count(), 0);
 }

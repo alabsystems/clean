@@ -7,13 +7,6 @@ description = "Clean elaborator - type inference and tactics"
 readme.workspace = true
 repository.workspace = true
 
-[package.metadata.cargo-machete]
-# clean-compiler is referenced only via a rustdoc intra-doc link
-# (`[FfiBridge](clean_compiler)` in src/ffi_extern.rs). cargo-machete
-# does not see doc links, but cargo doc needs the dep to resolve the
-# link. Removing would silently break the rendered FfiBridge reference.
-ignored = ["clean-compiler"]
-
 [lints]
 workspace = true
 

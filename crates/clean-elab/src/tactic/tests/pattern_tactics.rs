@@ -92,13 +92,13 @@ fn exists_pr() -> Expr {
 }
 
 /// Find the fvar of a hypothesis by name in the current goal.
-fn hyp_fvar(state: &ProofState, name: &str) -> FVarId {
+fn hyp_fvar(state: &ProofState, name: &clean_parser::SurfaceName) -> FVarId {
     state
         .current_goal()
         .expect("goal exists")
         .local_ctx
         .iter()
-        .find(|d| d.name == name)
+        .find(|d| &d.name == name)
         .unwrap_or_else(|| panic!("hypothesis '{name}' not found in context"))
         .fvar
 }
@@ -112,7 +112,7 @@ fn test_rintro_and_destruct_exact_left_kernel_accepts() {
     let mut state = ProofState::new(env.clone(), target.clone());
     rintro(&mut state, vec!["<hp, hq>".to_string()]).expect("rintro ⟨hp, hq⟩ should succeed");
 
-    let hp = hyp_fvar(&state, "hp");
+    let hp = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("hp"));
     exact(&mut state, Expr::fvar(hp)).expect("exact hp should close the goal");
 
     assert!(state.is_complete(), "proof should be complete");
@@ -133,7 +133,7 @@ fn test_rintro_and_destruct_exact_right_kernel_accepts() {
     let mut state = ProofState::new(env.clone(), target.clone());
     rintro(&mut state, vec!["<hp, hq>".to_string()]).expect("rintro ⟨hp, hq⟩ should succeed");
 
-    let hq = hyp_fvar(&state, "hq");
+    let hq = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("hq"));
     exact(&mut state, Expr::fvar(hq)).expect("exact hq should close the goal");
 
     assert!(state.is_complete(), "proof should be complete");
@@ -154,7 +154,7 @@ fn test_rintro_and_wildcard_kernel_accepts() {
     let mut state = ProofState::new(env.clone(), target.clone());
     rintro(&mut state, vec!["<hp, _>".to_string()]).expect("rintro ⟨hp, _⟩ should succeed");
 
-    let hp = hyp_fvar(&state, "hp");
+    let hp = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("hp"));
     exact(&mut state, Expr::fvar(hp)).expect("exact hp should close the goal");
 
     assert!(state.is_complete(), "proof should be complete");
@@ -177,7 +177,7 @@ fn test_rintro_nested_and_kernel_accepts() {
     rintro(&mut state, vec!["<a, <b, c>>".to_string()])
         .expect("nested rintro ⟨a, ⟨b, c⟩⟩ should succeed");
 
-    let c = hyp_fvar(&state, "c");
+    let c = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("c"));
     exact(&mut state, Expr::fvar(c)).expect("exact c should close the goal");
 
     assert!(state.is_complete(), "proof should be complete");
@@ -199,8 +199,8 @@ fn test_rintro_exists_destruct_kernel_accepts() {
     rintro(&mut state, vec!["<w, hw>".to_string()]).expect("rintro ⟨w, hw⟩ on ∃ should succeed");
 
     // Reconstruct the existential from the destructured witness + proof.
-    let w = hyp_fvar(&state, "w");
-    let hw = hyp_fvar(&state, "hw");
+    let w = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("w"));
+    let hw = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("hw"));
     let a = prop_const("A");
     let pred = Expr::lam(
         BinderInfo::Default,
@@ -245,7 +245,7 @@ fn test_rintro_and_destruct_type_mismatch_errors_not_panics() {
     let mut state = ProofState::new(env, target);
     rintro(&mut state, vec!["<hp, hq>".to_string()]).expect("rintro ⟨hp, hq⟩ should succeed");
 
-    let hq = hyp_fvar(&state, "hq");
+    let hq = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("hq"));
     let err = exact(&mut state, Expr::fvar(hq)).expect_err("exact hq must fail for goal P");
     assert!(
         matches!(
@@ -264,11 +264,18 @@ fn test_obtain_exists_destruct_kernel_accepts() {
     let target = Expr::arrow(exists_pr(), exists_pr());
 
     let mut state = ProofState::new(env.clone(), target.clone());
-    intro(&mut state, "h").expect("intro the existential hypothesis");
-    obtain(&mut state, "h", "w", "hw").expect("obtain ⟨w, hw⟩ on ∃ should succeed");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h"))
+        .expect("intro the existential hypothesis");
+    obtain(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &clean_parser::SurfaceName::generated_path("w"),
+        &clean_parser::SurfaceName::generated_path("hw"),
+    )
+    .expect("obtain ⟨w, hw⟩ on ∃ should succeed");
 
-    let w = hyp_fvar(&state, "w");
-    let hw = hyp_fvar(&state, "hw");
+    let w = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("w"));
+    let hw = hyp_fvar(&state, &clean_parser::SurfaceName::generated_path("hw"));
     let a = prop_const("A");
     let pred = Expr::lam(
         BinderInfo::Default,
@@ -309,8 +316,14 @@ fn test_obtain_on_non_existential_errors_not_panics() {
     let target = Expr::arrow(prop_const("P"), prop_const("P"));
 
     let mut state = ProofState::new(env, target);
-    intro(&mut state, "h").expect("intro P");
-    let err = obtain(&mut state, "h", "w", "hw").expect_err("obtain on P : Prop must fail");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("h")).expect("intro P");
+    let err = obtain(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &clean_parser::SurfaceName::generated_path("w"),
+        &clean_parser::SurfaceName::generated_path("hw"),
+    )
+    .expect_err("obtain on P : Prop must fail");
     assert!(
         matches!(err, TacticError::GoalMismatch(_)),
         "obtain on non-existential should be a GoalMismatch, got: {err:?}"
@@ -322,7 +335,9 @@ fn test_obtain_on_non_existential_errors_not_panics() {
 #[test]
 fn test_rintro_pattern_parse_name() {
     let pattern = RIntroPattern::parse("x").unwrap();
-    assert!(matches!(pattern, RIntroPattern::Name(s) if s == "x"));
+    assert!(
+        matches!(pattern, RIntroPattern::Name(s) if s == clean_parser::SurfaceName::generated_path("x"))
+    );
 }
 
 #[test]
@@ -342,8 +357,12 @@ fn test_rintro_pattern_parse_tuple() {
     let pattern = RIntroPattern::parse("<a, b>").unwrap();
     if let RIntroPattern::Tuple(parts) = pattern {
         assert_eq!(parts.len(), 2);
-        assert!(matches!(&parts[0], RIntroPattern::Name(s) if s == "a"));
-        assert!(matches!(&parts[1], RIntroPattern::Name(s) if s == "b"));
+        assert!(
+            matches!(&parts[0], RIntroPattern::Name(s) if s == &clean_parser::SurfaceName::generated_path("a"))
+        );
+        assert!(
+            matches!(&parts[1], RIntroPattern::Name(s) if s == &clean_parser::SurfaceName::generated_path("b"))
+        );
     } else {
         panic!("Expected Tuple pattern");
     }
@@ -354,8 +373,12 @@ fn test_rintro_pattern_parse_or() {
     let pattern = RIntroPattern::parse("h1 | h2").unwrap();
     if let RIntroPattern::Or(parts) = pattern {
         assert_eq!(parts.len(), 2);
-        assert!(matches!(&parts[0], RIntroPattern::Name(s) if s == "h1"));
-        assert!(matches!(&parts[1], RIntroPattern::Name(s) if s == "h2"));
+        assert!(
+            matches!(&parts[0], RIntroPattern::Name(s) if s == &clean_parser::SurfaceName::generated_path("h1"))
+        );
+        assert!(
+            matches!(&parts[1], RIntroPattern::Name(s) if s == &clean_parser::SurfaceName::generated_path("h2"))
+        );
     } else {
         panic!("Expected Or pattern");
     }
@@ -420,9 +443,15 @@ fn test_rintro_pattern_parse_three_way_or() {
         panic!("expected Or, got: {pattern:?}");
     };
     assert_eq!(alts.len(), 3);
-    assert!(matches!(&alts[0], RIntroPattern::Name(s) if s == "a"));
-    assert!(matches!(&alts[1], RIntroPattern::Name(s) if s == "b"));
-    assert!(matches!(&alts[2], RIntroPattern::Name(s) if s == "c"));
+    assert!(
+        matches!(&alts[0], RIntroPattern::Name(s) if s == &clean_parser::SurfaceName::generated_path("a"))
+    );
+    assert!(
+        matches!(&alts[1], RIntroPattern::Name(s) if s == &clean_parser::SurfaceName::generated_path("b"))
+    );
+    assert!(
+        matches!(&alts[2], RIntroPattern::Name(s) if s == &clean_parser::SurfaceName::generated_path("c"))
+    );
 }
 
 #[test]
@@ -459,7 +488,10 @@ fn test_rintro_simple_name() {
 
     let goal = state.current_goal().unwrap();
     assert_eq!(goal.local_ctx.len(), 1);
-    assert_eq!(goal.local_ctx[0].name, "h");
+    assert_eq!(
+        goal.local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("h")
+    );
 }
 
 #[test]
@@ -469,15 +501,23 @@ fn test_rename_hypothesis() {
     let mut state = ProofState::new(env, target);
 
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(100),
-        name: "old_name".to_string(),
+        name: clean_parser::SurfaceName::generated_path("old_name"),
         ty: Expr::const_(Name::from_string("A"), vec![]),
         value: None,
     });
 
-    rename_hypothesis(&mut state, "old_name", "new_name")
-        .expect("renaming existing hypothesis should succeed");
-    assert_eq!(state.goals[0].local_ctx[0].name, "new_name");
+    rename_hypothesis(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("old_name"),
+        &clean_parser::SurfaceName::generated_path("new_name"),
+    )
+    .expect("renaming existing hypothesis should succeed");
+    assert_eq!(
+        state.goals[0].local_ctx[0].name,
+        clean_parser::SurfaceName::generated_path("new_name")
+    );
 }
 
 #[test]
@@ -486,7 +526,12 @@ fn test_rename_hypothesis_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let err = rename_hypothesis(&mut state, "nonexistent", "new_name").unwrap_err();
+    let err = rename_hypothesis(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        &clean_parser::SurfaceName::generated_path("new_name"),
+    )
+    .unwrap_err();
     assert!(
         matches!(err, TacticError::HypothesisNotFound(ref msg) if msg.contains("not found")),
         "renaming nonexistent hypothesis should produce 'not found' error, got: {err:?}"
@@ -502,7 +547,7 @@ fn test_peel_no_goals() {
     let mut state = ProofState::new(env, target);
     state.goals.clear();
 
-    let err = peel(&mut state, "h").unwrap_err();
+    let err = peel(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap_err();
     assert!(
         matches!(err, TacticError::NoGoals),
         "peel on empty goals should produce NoGoals, got: {err:?}"
@@ -515,7 +560,11 @@ fn test_peel_hyp_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let err = peel(&mut state, "nonexistent").unwrap_err();
+    let err = peel(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+    )
+    .unwrap_err();
     assert!(
         matches!(err, TacticError::HypothesisNotFound(_)),
         "peel with missing hypothesis should produce HypothesisNotFound error, got: {err:?}"
@@ -529,13 +578,14 @@ fn test_peel_not_quantified() {
     let mut state = ProofState::new(env, target);
 
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(100),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: Expr::const_(Name::from_string("A"), vec![]),
         value: None,
     });
 
-    let err = peel(&mut state, "h").unwrap_err();
+    let err = peel(&mut state, &clean_parser::SurfaceName::generated_path("h")).unwrap_err();
     assert!(
         matches!(err, TacticError::InvalidTarget { .. }),
         "peel on non-quantified hypothesis should produce InvalidTarget error, got: {err:?}"
@@ -608,7 +658,10 @@ fn test_split_ifs_config_new() {
 fn test_split_ifs_config_builder() {
     let config = SplitIfsConfig::new()
         .with_max_depth(5)
-        .with_hyp_names(vec!["h1".to_string(), "h2".to_string()])
+        .with_hyp_names(vec![
+            clean_parser::SurfaceName::generated_path("h1"),
+            clean_parser::SurfaceName::generated_path("h2"),
+        ])
         .split_hyps(true);
 
     assert_eq!(config.max_depth, 5);
@@ -640,35 +693,47 @@ fn test_is_dite_const() {
 #[test]
 fn test_generate_fresh_hyp_name_unused() {
     let ctx: Vec<LocalDecl> = vec![];
-    assert_eq!(generate_fresh_hyp_name(&ctx, "h"), "h");
+    assert_eq!(
+        generate_fresh_hyp_name(&ctx, &clean_parser::SurfaceName::generated_path("h")),
+        clean_parser::SurfaceName::generated_path("h")
+    );
 }
 
 #[test]
 fn test_generate_fresh_hyp_name_used() {
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(1),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: Expr::prop(),
         value: None,
     }];
-    assert_eq!(generate_fresh_hyp_name(&ctx, "h"), "h1");
+    assert_eq!(
+        generate_fresh_hyp_name(&ctx, &clean_parser::SurfaceName::generated_path("h")),
+        clean_parser::SurfaceName::generated_path("h1")
+    );
 }
 
 #[test]
 fn test_generate_fresh_hyp_name_multiple_used() {
     let ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: Expr::prop(),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(2),
-            name: "h1".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h1"),
             ty: Expr::prop(),
             value: None,
         },
     ];
-    assert_eq!(generate_fresh_hyp_name(&ctx, "h"), "h2");
+    assert_eq!(
+        generate_fresh_hyp_name(&ctx, &clean_parser::SurfaceName::generated_path("h")),
+        clean_parser::SurfaceName::generated_path("h2")
+    );
 }

@@ -52,8 +52,8 @@ fn test_jacobian_row_sum_near_zero() {
     let gamma = vec![1.0, 1.0, 1.0];
     let jac = LayerNormJacobian::compute(&x, &gamma, EPS);
 
-    for i in 0..3 {
-        let row_sum: f64 = jac.matrix[i].iter().sum();
+    for (i, row) in jac.matrix[..3].iter().enumerate() {
+        let row_sum: f64 = row.iter().sum();
         assert!(
             row_sum.abs() < 1e-6,
             "row {} sum = {} (expected ~0)",
@@ -118,14 +118,14 @@ fn test_jacobian_equal_inputs() {
     let inv_sqrt_eps = 1.0 / EPS.sqrt();
     let inv_n = 1.0 / 3.0;
 
-    for i in 0..3 {
-        for j in 0..3 {
+    for (i, row) in jac.matrix[..3].iter().enumerate() {
+        for (j, &value) in row[..3].iter().enumerate() {
             let delta_ij = if i == j { 1.0 } else { 0.0 };
             let expected = inv_sqrt_eps * (delta_ij - inv_n);
             assert!(
-                (jac.matrix[i][j] - expected).abs() < 1e-2,
+                (value - expected).abs() < 1e-2,
                 "equal inputs: J[{i}][{j}] = {}, expected {expected}",
-                jac.matrix[i][j],
+                value,
             );
         }
     }

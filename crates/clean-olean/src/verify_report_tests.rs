@@ -87,7 +87,9 @@ fn make_summary(modules: Vec<ModuleResult>) -> BatchSummary {
 fn test_build_report_empty_modules() {
     let summary = make_summary(vec![]);
     let report = build_verification_report(&summary, None);
-    assert_eq!(report.version, "1.0");
+    // Schema 2.0: `kernel_verified_values` became `values_rederived_locally`
+    // and the report now names the re-check level that produced its numbers.
+    assert_eq!(report.version, "2.0");
     assert_eq!(report.constants_total, 0);
     assert_eq!(report.types_ok, 0);
     assert_eq!(report.types_fail, 0);
@@ -213,7 +215,7 @@ fn test_report_serializes_to_json() {
     let summary = make_summary(modules);
     let report = build_verification_report(&summary, None);
     let json = serde_json::to_string_pretty(&report).expect("report should serialize");
-    assert!(json.contains("\"version\": \"1.0\""));
+    assert!(json.contains("\"version\": \"2.0\""));
     assert!(json.contains("\"types_ok\": 50"));
     assert!(json.contains("\"HeartbeatExceeded\""));
     // AUDIT-CRITICAL: the honest validation-mode label must be present in the
@@ -224,8 +226,22 @@ fn test_report_serializes_to_json() {
         "report JSON must carry the honest type-only label"
     );
     assert!(
-        json.contains("\"kernel_verified_values\": false"),
-        "type-only report must not claim kernel-verified values"
+        json.contains("\"values_rederived_locally\": false"),
+        "type-only report must not claim the proof values were re-derived"
+    );
+    // No report from this lane is dependency-closed, whatever its mode, and the
+    // report must SAY so rather than leaving the reader to assume.
+    assert!(
+        json.contains("\"dependency_closed\": false"),
+        "a local-assumed-env report must declare itself not dependency-closed"
+    );
+    assert!(
+        json.contains("\"recheck_level\": \"local-assumed-env\""),
+        "the report must name the level that produced its numbers"
+    );
+    assert!(
+        !json.contains("kernel-verified-full"),
+        "the retired label must not reappear in a serialized report"
     );
 }
 
@@ -241,7 +257,7 @@ fn test_write_report_to_file() {
 
     let contents = std::fs::read_to_string(&path).expect("should read file");
     let parsed: serde_json::Value = serde_json::from_str(&contents).expect("should parse JSON");
-    assert_eq!(parsed["version"], "1.0");
+    assert_eq!(parsed["version"], "2.0");
     assert_eq!(parsed["types_ok"], 10);
 }
 

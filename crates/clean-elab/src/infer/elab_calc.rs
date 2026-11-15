@@ -13,25 +13,31 @@
 //!   _ < c := proof2
 //! ```
 //!
-//! desugars to `lt_of_le_of_lt proof1 proof2 : a < c`.
+//! Adjacent steps are composed by [`ElabCtx::mk_calc_trans`], whose FIRST and
+//! general route is Lean's `Lean.Elab.Term.mkCalcTrans`: read `(r, a, b)` and
+//! `(s, _, c)` off the two step types with `getCalcRelation?`, synthesize a
+//! `Trans r s ?t` instance — whose `outParam` third argument DETERMINES the
+//! composed relation — and apply `Trans.trans`. Any relation with a registered
+//! instance therefore chains, including relations Clean has no `CalcRel` variant
+//! for (`List.Sublist`, `List.Perm`, `Dvd.dvd`, a user's own inductive relation).
 //!
-//! Supports all combinations in the transitivity rule table (20 rules):
-//! - Pure equality: `Eq.trans`
-//! - Pure ordering: `le_trans`, `lt_trans`, `ge_trans`, `gt_trans`
-//! - Mixed LE/LT: `lt_of_le_of_lt`, `lt_of_lt_of_le`
-//! - Mixed GE/GT: `gt_of_ge_of_gt`, `gt_of_gt_of_ge`
-//! - Eq mixed with any ordering: `le_of_eq_of_le`, `lt_of_eq_of_lt`, etc.
-//! - Iff: `Iff.trans`
-//! - Ne with Eq: `ne_of_eq_of_ne`, `ne_of_ne_of_eq`
+//! Only when no `Trans` instance applies do the Clean-specific FALLBACKS run, in
+//! order: `Eq`-transport via `Eq.rec`, the closed seven-relation lemma table
+//! (`Eq.trans`, `le_trans`, `lt_of_le_of_lt`, `Iff.trans`, `ne_of_eq_of_ne`, …),
+//! and the relation-native `<R>.trans`. Those exist for environments that
+//! register no `Trans` instance at all — Clean's bare kernel prelude, i.e. a file
+//! checked with no `import`. They are consulted AFTER the class route precisely
+//! so that they can never shadow it with a different answer.
 //!
-//! Falls back to `Trans.trans` for unrecognized relation types.
-//!
-//! Reference: ~/lean4-ref/src/Lean/Elab/Calc.lean
+//! Reference: `~/lean4-ref/src/Lean/Elab/Calc.lean`
 
 use super::*;
 use crate::tactic::calc::CalcRel;
 use crate::tactic::calc_trans::lookup_trans_rule;
-use crate::tactic::calc_trans_match::{calc_endpoints, calc_relation_head, match_goal_rel};
+use crate::tactic::calc_trans_match::{
+    calc_endpoints, calc_relation_head, get_calc_relation, match_goal_rel,
+};
+use crate::tactic::op_projection::head_beta;
 use clean_parser::{SurfaceCalcJustification, SurfaceCalcStep};
 
 impl<'a> ElabCtx<'a> {
@@ -44,6 +50,10 @@ impl<'a> ElabCtx<'a> {
     ///
     /// If only one step, return its proof directly.
     pub(crate) fn elab_calc(&mut self, steps: &[SurfaceCalcStep]) -> Result<Expr, ElabError> {
+        self.with_eager_numerals(|this| this.elab_calc_inner(steps))
+    }
+
+    fn elab_calc_inner(&mut self, steps: &[SurfaceCalcStep]) -> Result<Expr, ElabError> {
         if steps.is_empty() {
             return Err(ElabError::NotImplemented("empty calc block".into()));
         }
@@ -102,7 +112,10 @@ impl<'a> ElabCtx<'a> {
         // `List.Perm`, a user's own inductive relation — with "relation
         // expected", before any transitivity lemma was ever consulted.
         let (lhs, fallback_rhs) = calc_endpoints(&rel_type).ok_or_else(|| {
-            ElabError::NotImplemented(format!("calc step: relation expected, got {rel_type:?}"))
+            ElabError::NotImplemented(format!(
+                "calc step: relation expected, got {}",
+                crate::error_render::term(&rel_type)
+            ))
         })?;
 
         if let Some(prev) = prev_rhs {
@@ -190,20 +203,21 @@ impl<'a> ElabCtx<'a> {
         Ok((proof, rel_type, rhs))
     }
 
-    /// Chain two calc steps via the appropriate transitivity lemma.
+    /// Chain two calc steps.
     ///
     /// Given:
     ///   result: proof₁ : a R₁ b
     ///   step:   proof₂ : b R₂ c
-    /// Produces:
-    ///   @lemma ty a b c proof₁ proof₂ : a R c
+    /// produces `@Trans.trans α β γ R₁ R₂ t inst a b c proof₁ proof₂ : t a c`,
+    /// where `t` — the composed relation — is DETERMINED by the synthesized
+    /// `Trans R₁ R₂ t` instance because `Trans`'s third argument is an
+    /// `outParam`. This is Lean's `mkCalcTrans`, and it is the general route.
     ///
-    /// where `lemma` is looked up from the transitivity rule table based on
-    /// the detected relations R₁ and R₂. Supports mixed chains like
-    /// LE + LT = LT, EQ + LE = LE, etc.
-    ///
-    /// Falls back to `Trans.trans proof₁ proof₂` when the relation types
-    /// cannot be detected (e.g., user-defined relations).
+    /// Only when no `Trans` instance applies does it fall back to the
+    /// Clean-specific dedicated routes: `Eq`-transport, then the closed
+    /// seven-relation lemma table (`le_trans`, `lt_of_le_of_lt`, …), then the
+    /// relation-native `<R>.trans`. Those cover Clean's bare kernel prelude,
+    /// which registers no `Trans` instances at all.
     #[cfg_attr(test, allow(dead_code))]
     pub(crate) fn mk_calc_trans(
         &mut self,
@@ -214,6 +228,37 @@ impl<'a> ElabCtx<'a> {
     ) -> Result<(Expr, Expr), ElabError> {
         let result_type = self.metas.instantiate(&result_type);
         let step_type = self.metas.instantiate(&step_type);
+
+        // ── Lean's `Lean.Elab.Term.mkCalcTrans` — the GENERAL path, tried FIRST.
+        //
+        // Lean composes two adjacent calc steps by SYNTHESIZING a `Trans r s ?t`
+        // instance for their relations and applying `Trans.trans`; the class's
+        // third argument is an `outParam`, so the instance DETERMINES the
+        // composed relation rather than the caller having to know it in advance.
+        //
+        // The dedicated routes below are a closed enum of seven relations and a
+        // hardcoded 20-entry lemma-name table. Consulting them FIRST made them a
+        // fast path that decides a pair Lean would have decided by instance
+        // search — and it does not always decide it the same way (e.g. the
+        // `lt`+`le` rung falls back to `le_trans`, whose result is the
+        // definitionally-equal but syntactically different `a+1 ≤ c` rather than
+        // Lean's `a < c`). A fast path that can disagree with the general path is
+        // exactly the hazard this ordering removes: whenever a `Trans` instance
+        // exists, Clean now composes with it, character for character as Lean
+        // does. The dedicated routes survive only as a FALLBACK for environments
+        // that register no `Trans` instance for the pair at all — Clean's bare
+        // kernel prelude, i.e. a file checked with no `import`.
+        //
+        // Speculative and rolled back on failure (`try_calc_trans_class` runs
+        // inside a metavariable scope), so a partial unification here can never
+        // leak into the fallbacks. Fail-closed: the composed term is
+        // `infer_type`-checked here and kernel-re-checked by `close_goal` /
+        // `add_decl`, so a wrong instance can only fail loudly.
+        let trans_class_err =
+            match self.try_calc_trans_class(&result, &result_type, &step, &step_type) {
+                Ok(composed) => return Ok(composed),
+                Err(err) => err,
+            };
 
         // Try to detect the relations from the elaborated types and pick the
         // dedicated transitivity lemma (`le_trans`, `lt_of_le_of_lt`, …).
@@ -352,24 +397,275 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
-        // Fallback: compose via the `Trans` typeclass, mirroring Lean's
-        // `mkCalcTrans`. Insert the implicit `{α β γ r s t}` + instance
-        // `[Trans r s t]` arguments BEFORE applying the two proofs so that no
-        // free metavariable leaks into the result term.
-        let trans = self.mk_const_str("Trans.trans");
-        let (proof, ty) = self.apply_lemma_to_proofs(trans, &result, &step)?;
+        // Every route is exhausted. Report the `Trans`-class failure, which is
+        // the one Lean would have reported: the dedicated routes are Clean-only
+        // fallbacks and their failures are not diagnostic of the chain.
+        Err(trans_class_err)
+    }
 
-        // The composed result must itself be a relation, otherwise the chain is
-        // ill-formed (Lean errors with "step result is not a relation"). Uses
-        // the same generic decomposition Lean applies here (`getCalcRelation?`),
-        // so a `Trans` instance producing a non-enum output relation is accepted.
-        if calc_endpoints(&ty).is_none() {
+    /// Compose two calc steps through the `Trans` typeclass — the port of Lean's
+    /// `Lean.Elab.Term.mkCalcTrans`.
+    ///
+    /// Reads `(r, a, b)` and `(s, _, c)` off the two step types with Lean's
+    /// `getCalcRelation?`, then hands them to [`Self::build_trans_trans_app`],
+    /// which supplies them positionally and synthesizes `[Trans r s ?t]` only
+    /// after `r` and `s` are pinned (Lean's postponement of typeclass
+    /// resolution). Because `t` is declared `outParam`, the resolved instance is
+    /// what determines the composed relation — the caller never names it.
+    ///
+    /// SPECULATIVE: the whole attempt runs inside a `MetaState` scope which is
+    /// rolled back on any failure, so a partially-unified attempt cannot leak
+    /// metavariable assignments into the caller's fallback routes.
+    ///
+    /// REQUIRES: `left : left_type` and `right : right_type` are elaborated
+    /// proofs of the two adjacent calc-step relations.
+    /// ENSURES: on `Ok((proof, ty))`, `proof : ty` (checked by `infer_type`) and
+    /// `ty` decomposes as a relation via `calc_endpoints`; on `Err` the
+    /// metavariable state is exactly as it was on entry.
+    fn try_calc_trans_class(
+        &mut self,
+        left: &Expr,
+        left_type: &Expr,
+        right: &Expr,
+        right_type: &Expr,
+    ) -> Result<(Expr, Expr), ElabError> {
+        if self
+            .env
+            .get_const(&Name::from_string("Trans.trans"))
+            .is_none()
+        {
+            return Err(ElabError::NotImplemented(
+                "calc: `Trans.trans` is not in the environment, so no relation pair \
+                 can be composed through the `Trans` class"
+                    .into(),
+            ));
+        }
+        // Lean's `getCalcRelation?` on both step types: `(r, a, b)` and
+        // `(s, _, c)`. `mkCalcTrans` then supplies these POSITIONALLY.
+        let (r, a, b) = get_calc_relation(left_type).ok_or_else(|| {
+            ElabError::NotImplemented(format!(
+                "calc: left step is not a relation: {}",
+                crate::error_render::term(left_type)
+            ))
+        })?;
+        let (s, _, c) = get_calc_relation(right_type).ok_or_else(|| {
+            ElabError::NotImplemented(format!(
+                "calc: right step is not a relation: {}",
+                crate::error_render::term(right_type)
+            ))
+        })?;
+
+        let trans = self.mk_const_str("Trans.trans");
+        let trans_type = self.infer_type(&trans)?;
+        self.metas.push_scope();
+        let composed =
+            self.build_trans_trans_app(trans, &trans_type, [&r, &a, &b], [&s, &c], [left, right]);
+        match composed {
+            Ok((proof, ty)) => {
+                // The composed result must itself be a relation, otherwise the
+                // chain is ill-formed (Lean errors with "step result is not a
+                // relation"). Uses the same generic decomposition Lean applies
+                // here (`getCalcRelation?`), so a `Trans` instance producing a
+                // relation outside the closed seven is accepted.
+                if calc_endpoints(&ty).is_none() {
+                    self.metas.pop_scope();
+                    return Err(ElabError::NotImplemented(format!(
+                        "calc: composed step result is not a relation: {}",
+                        crate::error_render::term(&ty)
+                    )));
+                }
+                self.metas.commit();
+                Ok((proof, ty))
+            }
+            Err(err) => {
+                self.metas.pop_scope();
+                Err(err)
+            }
+        }
+    }
+
+    /// Build `@Trans.trans α β γ r s ?t inst a b c left right` with the relation
+    /// and endpoint arguments supplied POSITIONALLY, then synthesize `[Trans r s
+    /// ?t]`.
+    ///
+    /// # Why positional, and not by unifying the proof types
+    ///
+    /// `Trans.trans`'s two explicit binders have types `r a b` and `s b c`,
+    /// which after implicit-argument insertion are the flex applications
+    /// `?r ?a ?b` and `?s ?b ?c`. Handing those to the unifier against a step's
+    /// actual relation type is a higher-order problem outside the Miller
+    /// fragment (the arguments are metavariables, not distinct locals), so the
+    /// unifier falls back to structural dispatch — and structural dispatch
+    /// whnf-reduces, which UNFOLDS a `def`-shaped relation. Measured under real
+    /// `import Init`: `?r ?a ?b =?= @List.Subset.{0} Nat l₁ l₂` fails, because
+    /// `List.Subset` is a `def` that whnf turns into `∀ ⦃a⦄, a ∈ l₁ → a ∈ l₂`,
+    /// while the same constraint over the INDUCTIVE `List.Sublist` succeeds.
+    ///
+    /// Lean never poses that constraint: `mkCalcTrans` reads `(r, a, b)` and
+    /// `(s, _, c)` straight off the two step types with `getCalcRelation?` and
+    /// passes them as arguments. This does the same — the flex applications are
+    /// pinned by FIRST-ORDER decomposition against the known components, so no
+    /// whnf ever runs on the relation head.
+    ///
+    /// The instance argument is deferred and resolved only after `r` and `s` are
+    /// pinned (Lean's postponement of typeclass resolution), which is what lets
+    /// the `outParam` `t` be DETERMINED by the instance rather than supplied.
+    ///
+    /// REQUIRES: `trans_type` is `Trans.trans`'s type; `rel_left = [r, a, b]`
+    /// and `rel_right = [s, c]` come from `getCalcRelation?` of the two step
+    /// types; `proofs = [left, right]` prove those two relations.
+    /// ENSURES: on `Ok((term, ty))`, `term : ty` per `infer_type` and `ty` is
+    /// head-beta-reduced (Lean's `.headBeta`).
+    fn build_trans_trans_app(
+        &mut self,
+        trans: Expr,
+        trans_type: &Expr,
+        rel_left: [&Expr; 3],
+        rel_right: [&Expr; 2],
+        proofs: [&Expr; 2],
+    ) -> Result<(Expr, Expr), ElabError> {
+        let [r, a, b] = rel_left;
+        let [s, c] = rel_right;
+
+        // Insert `{α β γ r s t}` and record the `[Trans r s t]` binder, leaving
+        // `ty = ?r ?a ?b → ?s ?b ?c → ?t ?a ?c`. The two proofs follow.
+        let (mut term, ty, pending) =
+            self.insert_implicit_args_deferring_instances(trans, trans_type, ArgsFollow::Yes);
+
+        // Pin `?r ?a ?b` and `?s ?b ?c` from the decomposed step relations.
+        let ExprKind::Pi(_, left_dom, left_body) = ty.kind() else {
             return Err(ElabError::NotImplemented(format!(
-                "calc: composed step result is not a relation: {ty:?}"
+                "calc: `Trans.trans` does not expect two relation proofs: {}",
+                crate::error_render::term(&ty)
             )));
+        };
+        let left_dom = left_dom.as_ref().clone();
+        let left_body = left_body.as_ref().clone();
+        let ExprKind::Pi(_, right_dom, _) = left_body.kind() else {
+            return Err(ElabError::NotImplemented(format!(
+                "calc: `Trans.trans` does not expect a second relation proof: {}",
+                crate::error_render::term(&left_body)
+            )));
+        };
+        let right_dom = right_dom.as_ref().clone();
+        if !self.pin_flex_relation(&left_dom, r, a, b) {
+            return Err(ElabError::TypeMismatch {
+                expected: crate::error_render::term(&left_dom),
+                actual: format!(
+                    "{} applied to {} and {}",
+                    crate::error_render::term(r),
+                    crate::error_render::term(a),
+                    crate::error_render::term(b)
+                ),
+            });
+        }
+        if !self.pin_flex_relation(&right_dom, s, b, c) {
+            return Err(ElabError::TypeMismatch {
+                expected: crate::error_render::term(&right_dom),
+                actual: format!(
+                    "{} applied to {} and {}",
+                    crate::error_render::term(s),
+                    crate::error_render::term(b),
+                    crate::error_render::term(c)
+                ),
+            });
         }
 
-        Ok((proof, ty))
+        // Apply the two proofs. Their types are now the pinned domains, so this
+        // is a first-order check, not a higher-order guess.
+        let mut ty = self.metas.instantiate(&ty);
+        for proof in proofs {
+            let (dom, body) = match ty.kind() {
+                ExprKind::Pi(_, dom, body) => (dom.as_ref().clone(), body.as_ref().clone()),
+                _ => {
+                    return Err(ElabError::NotImplemented(format!(
+                        "calc: `Trans.trans` is not a function expecting proofs: {}",
+                        crate::error_render::term(&ty)
+                    )));
+                }
+            };
+            let expected = self.metas.instantiate(&dom);
+            let proof_ty = self.metas.instantiate(&self.infer_type(proof)?);
+            let unified = {
+                let ctx = self.build_local_ctx();
+                let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
+                matches!(unifier.unify(&proof_ty, &expected), UnifyResult::Success)
+            };
+            if !unified {
+                return Err(ElabError::TypeMismatch {
+                    expected: crate::error_render::term(&expected),
+                    actual: crate::error_render::term(&proof_ty),
+                });
+            }
+            term = Expr::app(term, proof.clone());
+            ty = self.metas.instantiate(&body.instantiate(proof));
+        }
+
+        // Now that `r` and `s` are pinned, synthesize `[Trans r s ?t]`. The
+        // out-param `t` is DETERMINED here — this is the whole point of the
+        // class route.
+        if !pending.is_empty() && !self.resolve_deferred_instances(&pending) {
+            return Err(ElabError::NotImplemented(
+                "calc: failed to synthesize transitivity instance".into(),
+            ));
+        }
+
+        let term = self.metas.instantiate(&term);
+        let term = self.metas.instantiate_levels(&term);
+        // Lean's `(← instantiateMVars (← inferType result)).headBeta`: a `Trans`
+        // instance's output relation is usually a lambda (Lean core spells the
+        // `Nat` instances `Trans (· ≤ ·) (· ≤ ·) (· ≤ ·)`), so the conclusion
+        // `t a c` comes back as a beta-redex. Reducing it restores the surface
+        // relation for the next calc step and for the final goal check.
+        let raw_ty = self.metas.instantiate(&self.infer_type(&term)?);
+        let beta_ty = head_beta(&raw_ty);
+        // …but beta reduction can DESTROY the relation application when the
+        // instance's output relation is a lambda whose body is not itself an
+        // application. Measured under real `import Init`: composing
+        // `List.Sublist` with `List.Subset` resolves
+        // `Trans (@Sublist α) Subset Subset`, whose out-param `t` arrives as
+        // `fun l₁ l₂ => ∀ ⦃n⦄, n ∈ l₁ → n ∈ l₂` (`List.Subset` is a `def` with a
+        // Pi body). Head-beta then yields a `Pi`, `getCalcRelation?` sees no
+        // application, and the chain is rejected — even though the composed
+        // proof is exactly right and its unreduced type `t l₁ l₃` decomposes
+        // perfectly. `⊆` is the single most frequent relation outside Clean's
+        // closed seven across Mathlib's `calc` blocks, so this is not an edge
+        // case.
+        //
+        // Keep the reduced type when it still reads as a relation (the common
+        // case, and the nicer type), otherwise keep the redex. The two are the
+        // SAME type up to beta, and `raw_ty` is literally `infer_type(term)`, so
+        // `term : ty` holds either way. Fail-closed: when NEITHER form
+        // decomposes the caller rejects the step.
+        let ty = if calc_endpoints(&beta_ty).is_some() {
+            beta_ty
+        } else {
+            raw_ty
+        };
+        Ok((term, ty))
+    }
+
+    /// Pin a flex relation application `?rel ?lhs ?rhs` to the known components
+    /// `(rel, lhs, rhs)` by FIRST-ORDER decomposition.
+    ///
+    /// Unifies the three components separately rather than the two applications
+    /// as a whole, so the unifier is never asked to solve a non-Miller
+    /// higher-order constraint and never whnf-unfolds a `def`-shaped relation
+    /// head. Returns `false` when `flex` is not a two-argument application or
+    /// any component fails to unify — the caller then abandons the whole
+    /// attempt (the metavariable scope is rolled back).
+    fn pin_flex_relation(&mut self, flex: &Expr, rel: &Expr, lhs: &Expr, rhs: &Expr) -> bool {
+        let Some((flex_rel, flex_lhs, flex_rhs)) = get_calc_relation(flex) else {
+            return false;
+        };
+        let ctx = self.build_local_ctx();
+        let mut unifier = Unifier::with_env(&mut self.metas, self.env, ctx);
+        for (l, r) in [(&flex_rel, rel), (&flex_lhs, lhs), (&flex_rhs, rhs)] {
+            if !matches!(unifier.unify(l, r), UnifyResult::Success) {
+                return false;
+            }
+        }
+        true
     }
 
     /// Apply a carrier-qualified transitivity lemma whose endpoint binders are
@@ -485,15 +781,17 @@ impl<'a> ElabCtx<'a> {
         // first, then resolve the recorded instance metavariables — Lean's
         // postponement of typeclass resolution (`mkCalcTrans`).
         let (mut term, mut ty, mut pending) =
-            self.insert_implicit_args_deferring_instances(lemma, &lemma_type);
+            self.insert_implicit_args_deferring_instances(lemma, &lemma_type, ArgsFollow::Yes);
 
-        for proof in [left_proof, right_proof] {
+        let proofs = [left_proof, right_proof];
+        for (idx, proof) in proofs.into_iter().enumerate() {
             ty = self.whnf(&self.metas.instantiate(&ty));
             let (binder_dom, body) = match ty.kind() {
                 ExprKind::Pi(_, dom, body) => (dom.as_ref().clone(), body.as_ref().clone()),
                 _ => {
                     return Err(ElabError::NotImplemented(format!(
-                        "calc: transitivity lemma is not a function expecting proofs: {ty:?}"
+                        "calc: transitivity lemma is not a function expecting proofs: {}",
+                        crate::error_render::term(&ty)
                     )));
                 }
             };
@@ -519,8 +817,11 @@ impl<'a> ElabCtx<'a> {
             ty = self.metas.instantiate(&body.instantiate(proof));
             // Insert any implicit/instance binders that follow this explicit arg,
             // again deferring instance resolution until carriers are pinned.
+            // After the second proof nothing follows, so a relation that
+            // unfolds to a `⦃x⦄` Pi (`s ⊆ t`) keeps its binder.
+            let follow = ArgsFollow::from_remaining(proofs.len() - idx - 1);
             let (next_term, next_ty, mut next_pending) =
-                self.insert_implicit_args_deferring_instances(term, &ty);
+                self.insert_implicit_args_deferring_instances(term, &ty, follow);
             term = next_term;
             ty = next_ty;
             pending.append(&mut next_pending);

@@ -2,14 +2,49 @@
   "generated_by": "CLEAN_PRIORITY_CENSUS_UPDATE=1 cargo test --offline --release -p clean-olean --test prelude_instance_priority_census",
   "import_root": "Init",
   "totals": {
-    "prelude_instances": 152,
+    "prelude_instances": 226,
     "lean_instance_entries": 3040,
-    "colliding": 60,
+    "colliding": 98,
     "mismatched": 0,
     "modules_walked": 590,
     "undecoded_instance_entries": 0
   },
   "rows": [
+    {
+      "name": "Applicative.toFunctor",
+      "class": "Functor",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Applicative.toPure",
+      "class": "Pure",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Applicative.toSeq",
+      "class": "Seq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Applicative.toSeqLeft",
+      "class": "SeqLeft",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Applicative.toSeqRight",
+      "class": "SeqRight",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
     {
       "name": "Array.instGetElem?NatLtSize",
       "class": "GetElem?",
@@ -20,6 +55,62 @@
     {
       "name": "Array.instGetElemNatLtSize",
       "class": "GetElem",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Except.instMonad",
+      "class": "Monad",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "ExceptT.instMonad",
+      "class": "Monad",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Fin.instAdd",
+      "class": "Add",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Fin.instMul",
+      "class": "Mul",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Fin.instSub",
+      "class": "Sub",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Id.instMonad",
+      "class": "Monad",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Int.instMax",
+      "class": "Max",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Int.instMin",
+      "class": "Min",
       "clean_priority": 1000,
       "lean_priority": 1000,
       "mismatch": false
@@ -46,6 +137,41 @@
       "mismatch": false
     },
     {
+      "name": "Monad.toApplicative",
+      "class": "Applicative",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "Monad.toBind",
+      "class": "Bind",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "OptionT.instMonad",
+      "class": "Monad",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "StateT.instMonad",
+      "class": "Monad",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "String.instInhabited",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
       "name": "instAddNat",
       "class": "Add",
       "clean_priority": 1000,
@@ -67,6 +193,13 @@
       "mismatch": false
     },
     {
+      "name": "instBEqProd",
+      "class": "BEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
       "name": "instDecidableAnd",
       "class": "Decidable",
       "clean_priority": 1000,
@@ -82,6 +215,20 @@
     },
     {
       "name": "instDecidableEqChar",
+      "class": "DecidableEq",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqFin",
+      "class": "Decidable",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instDecidableEqList",
       "class": "DecidableEq",
       "clean_priority": 1000,
       "lean_priority": 1000,
@@ -200,6 +347,13 @@
       "mismatch": false
     },
     {
+      "name": "instInhabitedExcept",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
       "name": "instInhabitedList",
       "class": "Inhabited",
       "clean_priority": 1000,
@@ -208,6 +362,13 @@
     },
     {
       "name": "instInhabitedNat",
+      "class": "Inhabited",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instInhabitedOfMonad",
       "class": "Inhabited",
       "clean_priority": 1000,
       "lean_priority": 1000,
@@ -333,6 +494,13 @@
       "mismatch": false
     },
     {
+      "name": "instMonadOption",
+      "class": "Monad",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
       "name": "instMulNat",
       "class": "Mul",
       "clean_priority": 1000,
@@ -342,6 +510,13 @@
     {
       "name": "instNegFloat",
       "class": "Neg",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instNonemptyOfInhabited",
+      "class": "Nonempty",
       "clean_priority": 1000,
       "lean_priority": 1000,
       "mismatch": false
@@ -396,6 +571,13 @@
       "mismatch": false
     },
     {
+      "name": "instReprOption",
+      "class": "Repr",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
       "name": "instReprString",
       "class": "Repr",
       "clean_priority": 1000,
@@ -410,7 +592,42 @@
       "mismatch": false
     },
     {
+      "name": "instSubsingletonDecidable",
+      "class": "Subsingleton",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
       "name": "instToStringBool",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringChar",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringFloat",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringInt",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringList",
       "class": "ToString",
       "clean_priority": 1000,
       "lean_priority": 1000,
@@ -424,7 +641,56 @@
       "mismatch": false
     },
     {
+      "name": "instToStringOption",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringProd",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
       "name": "instToStringString",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringUInt16",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringUInt32",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringUInt64",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringUInt8",
+      "class": "ToString",
+      "clean_priority": 1000,
+      "lean_priority": 1000,
+      "mismatch": false
+    },
+    {
+      "name": "instToStringUSize",
       "class": "ToString",
       "clean_priority": 1000,
       "lean_priority": 1000,

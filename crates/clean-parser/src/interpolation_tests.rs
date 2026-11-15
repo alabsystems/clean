@@ -62,7 +62,7 @@ fn desugar_interpolation_uses_string_append_and_to_string() {
     match expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "String.append")
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("String.append").name())
             );
             assert_eq!(args.len(), 2);
             assert!(
@@ -71,11 +71,11 @@ fn desugar_interpolation_uses_string_append_and_to_string() {
             match &args[1].expr {
                 SurfaceExpr::App(_, inner_func, inner_args) => {
                     assert!(
-                        matches!(inner_func.as_ref(), SurfaceExpr::Ident(_, name) if name == "String.append")
+                        matches!(inner_func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("String.append").name())
                     );
                     assert!(
                         matches!(&inner_args[0].expr, SurfaceExpr::App(_, to_string, _)
-                        if matches!(to_string.as_ref(), SurfaceExpr::Ident(_, name) if name == "toString"))
+                        if matches!(to_string.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("toString").name()))
                     );
                     assert!(
                         matches!(&inner_args[1].expr, SurfaceExpr::Lit(_, SurfaceLit::String(s)) if s == "!")
@@ -93,12 +93,41 @@ fn desugar_prefixed_interpolation_wraps_format_and_message_data() {
     let format_expr =
         desugar_prefixed_interpolation(InterpolatedStringKind::Format, "x = {x}").unwrap();
     assert!(matches!(format_expr, SurfaceExpr::App(_, ref func, _)
-        if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "Format.append")));
+        if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("Format.append").name())));
 
+    // `m!` is Lean's own expansion: `((toMessageData "a " ++ toMessageData x
+    // ++ …) : MessageData)`, left-associative, empty literals skipped, names
+    // hygienic in namespace `Lean` (`Lean/Message.lean`, the `m!` macro).
     let message_expr =
-        desugar_prefixed_interpolation(InterpolatedStringKind::MessageData, "{x}").unwrap();
-    assert!(matches!(message_expr, SurfaceExpr::App(_, ref func, _)
-        if matches!(func.as_ref(), SurfaceExpr::Ident(_, name) if name == "MessageData.ofFormat")));
+        desugar_prefixed_interpolation(InterpolatedStringKind::MessageData, "a {x}{y}").unwrap();
+    let SurfaceExpr::Ascription(_, body, ty) = &message_expr else {
+        panic!("m! must be ascribed `Lean.MessageData`: {message_expr:?}");
+    };
+    assert!(matches!(ty.as_ref(), SurfaceExpr::Ident(_, name)
+        if name.name() == crate::SurfaceName::generated_path("Lean.MessageData").name()));
+    let head_is = |e: &SurfaceExpr, want: &str| {
+        matches!(e, SurfaceExpr::App(_, func, _)
+        if matches!(func.as_ref(), SurfaceExpr::Ident(_, name)
+            if name.name() == crate::SurfaceName::generated_path(want).name()))
+    };
+    // ((toMessageData "a " ++ toMessageData x) ++ toMessageData y)
+    let SurfaceExpr::App(_, _, outer) = body.as_ref() else {
+        panic!("m! body must be an application: {body:?}");
+    };
+    assert!(head_is(body, "HAppend.hAppend"), "joined with ++: {body:?}");
+    assert!(
+        head_is(&outer[0].expr, "HAppend.hAppend"),
+        "LEFT-associative: {body:?}"
+    );
+    assert!(
+        head_is(&outer[1].expr, "Lean.ToMessageData.toMessageData"),
+        "{body:?}"
+    );
+    // An empty m! is `toMessageData ""`.
+    let empty = desugar_prefixed_interpolation(InterpolatedStringKind::MessageData, "").unwrap();
+    assert!(
+        matches!(&empty, SurfaceExpr::Ascription(_, b, _) if head_is(b, "Lean.ToMessageData.toMessageData"))
+    );
 }
 
 #[test]
@@ -131,7 +160,7 @@ fn desugar_interpolation_single_expr_wraps_in_to_string() {
     match &expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "toString"),
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("toString").name()),
                 "expected toString, got {func:?}"
             );
             assert_eq!(args.len(), 1);
@@ -170,7 +199,7 @@ fn desugar_prefixed_interpolation_f_plain_text() {
     match &expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "Format.text"),
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Format.text").name()),
                 "expected Format.text, got {func:?}"
             );
             assert_eq!(args.len(), 1);

@@ -108,7 +108,10 @@ fn test_polyrith_config_default() {
 #[test]
 fn test_polyrith_certificate_fields() {
     let cert = PolyrithCertificate {
-        coefficients: vec![("h".to_string(), Polynomial::constant(1, 1))],
+        coefficients: vec![(
+            clean_parser::SurfaceName::generated_path("h"),
+            Polynomial::constant(1, 1),
+        )],
         verified: true,
         explanation: "test".to_string(),
     };
@@ -265,7 +268,12 @@ fn test_choose_no_goals() {
     let mut state = ProofState::new(env, target);
     state.goals.clear();
 
-    let result = choose(&mut state, "h", "x", "hx");
+    let result = choose(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &clean_parser::SurfaceName::generated_path("x"),
+        &clean_parser::SurfaceName::generated_path("hx"),
+    );
     assert!(matches!(result, Err(TacticError::NoGoals)));
 }
 
@@ -275,7 +283,12 @@ fn test_choose_hyp_not_found() {
     let target = Expr::const_(Name::from_string("A"), vec![]);
     let mut state = ProofState::new(env, target);
 
-    let result = choose(&mut state, "nonexistent", "x", "hx");
+    let result = choose(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("nonexistent"),
+        &clean_parser::SurfaceName::generated_path("x"),
+        &clean_parser::SurfaceName::generated_path("hx"),
+    );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));
 }
 
@@ -287,13 +300,19 @@ fn test_choose_not_existential() {
 
     // Add a hypothesis that is not an existential
     state.goals[0].local_ctx.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(100),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: Expr::const_(Name::from_string("A"), vec![]),
         value: None,
     });
 
-    let result = choose(&mut state, "h", "x", "hx");
+    let result = choose(
+        &mut state,
+        &clean_parser::SurfaceName::generated_path("h"),
+        &clean_parser::SurfaceName::generated_path("x"),
+        &clean_parser::SurfaceName::generated_path("hx"),
+    );
     assert!(matches!(result, Err(TacticError::GoalMismatch(ref s)) if s.contains("existential")));
 }
 
@@ -307,11 +326,17 @@ fn test_choose_config_new() {
 #[test]
 fn test_choose_config_builder() {
     let config = ChooseConfig::new()
-        .with_witness_name("x")
-        .with_proof_name("hx");
+        .with_witness_name(&clean_parser::SurfaceName::generated_path("x"))
+        .with_proof_name(&clean_parser::SurfaceName::generated_path("hx"));
 
-    assert_eq!(config.witness_name, Some("x".to_string()));
-    assert_eq!(config.proof_name, Some("hx".to_string()));
+    assert_eq!(
+        config.witness_name,
+        Some(clean_parser::SurfaceName::generated_path("x"))
+    );
+    assert_eq!(
+        config.proof_name,
+        Some(clean_parser::SurfaceName::generated_path("hx"))
+    );
 }
 
 #[test]
@@ -477,7 +502,7 @@ fn test_infer_instance_decidable_false_constructs_two_arg_term() {
 #[test]
 fn test_extract_class_name_const() {
     let c = Expr::const_(Name::from_string("Decidable"), vec![]);
-    assert_eq!(extract_class_name(&c), Some("Decidable".to_string()));
+    assert_eq!(extract_class_name(&c), Some(Name::from_string("Decidable")));
 }
 
 #[test]
@@ -485,7 +510,10 @@ fn test_extract_class_name_app() {
     let decidable = Expr::const_(Name::from_string("Decidable"), vec![]);
     let p = Expr::const_(Name::from_string("P"), vec![]);
     let app = Expr::app(decidable, p);
-    assert_eq!(extract_class_name(&app), Some("Decidable".to_string()));
+    assert_eq!(
+        extract_class_name(&app),
+        Some(Name::from_string("Decidable"))
+    );
 }
 
 #[test]
@@ -665,14 +693,16 @@ fn test_blast_solves_simple_chain() {
 
     let ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: prop_p.clone(),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1),
-            name: "hpq".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hpq"),
             ty: Expr::arrow(prop_p.clone(), prop_q.clone()),
             value: None,
         },
@@ -699,8 +729,9 @@ fn test_dec_trivial_assumption() {
     let env = setup_env();
     let ty = Expr::const_(Name::from_string("A"), vec![]);
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "h".to_string(),
+        name: clean_parser::SurfaceName::generated_path("h"),
         ty: ty.clone(),
         value: None,
     }];

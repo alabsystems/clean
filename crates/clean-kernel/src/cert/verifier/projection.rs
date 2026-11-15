@@ -59,8 +59,13 @@ impl<'env> CertVerifier<'env> {
         // SOUNDNESS FIX (#2064): Independently derive field_type from
         // the environment's structure definition instead of trusting the
         // certificate's claimed field_type.
-        let derived_field_type =
-            self.derive_proj_field_type(struct_name, idx, proj_expr, &inferred_expr_type)?;
+        let derived_field_type = self.derive_proj_field_type(
+            &mut self.context.clone(),
+            struct_name,
+            idx,
+            proj_expr,
+            &inferred_expr_type,
+        )?;
 
         // Verify the cert's claimed field_type matches our derivation
         // (catches bugs in the generator)
@@ -89,6 +94,7 @@ impl<'env> CertVerifier<'env> {
     /// (cert/def_eq.rs) to type `Proj` subterms for the type-directed rules.
     pub(in crate::cert) fn derive_proj_field_type(
         &self,
+        ctx: &mut Vec<Expr>,
         struct_name: &Name,
         idx: u32,
         inner_expr: &Expr,
@@ -152,6 +158,14 @@ impl<'env> CertVerifier<'env> {
         //    before walking the Pi telescope. Without this, field types with
         //    Level::Param(...) remain unsubstituted (#2172).
         let num_params = ctor_val.num_params as usize;
+        let expected_args = num_params + ind_val.num_indices as usize;
+        if type_args.len() != expected_args {
+            return Err(CertError::InvalidCert(format!(
+                "Proj: expected {} type arguments, got {}",
+                expected_args,
+                type_args.len()
+            )));
+        }
         if ind_val.level_params.len() != type_levels.len() {
             return Err(CertError::InvalidCert(format!(
                 "Proj: level_params ({}) != type_levels ({}) for {}",
@@ -190,20 +204,35 @@ impl<'env> CertVerifier<'env> {
             }
         }
 
+        // The inner certificate establishes a type, not permission to eliminate
+        // a proof into data. Determine the structure's sort independently; an
+        // unknown sort must not silently become permission to project.
+        let is_prop = self
+            .infer_sort_for_projection(ctx, &expr_type_whnf)
+            .ok_or_else(|| CertError::InvalidCert("Proj: cannot infer structure sort".into()))?
+            .is_zero();
+
         // 6. Walk the telescope to the target field, substituting projections
         //    for earlier dependent fields (per Lean 4 type_checker.cpp:252-258).
         for field_idx in 0..idx {
             let current_whnf = self.whnf_impl(&current);
             match &current_whnf.kind {
-                ExprKind::Pi(_, _, body) => {
-                    if body.has_loose_bvars() {
+                ExprKind::Pi(_, domain, body) => {
+                    if body.has_loose_bvar(0) {
+                        if is_prop {
+                            self.require_prop_projection_field(ctx, domain, field_idx)?;
+                        }
                         // Dependent field: substitute projection of inner_expr at this field
                         let proj_field =
                             Expr::proj(struct_name.clone(), field_idx, inner_expr.clone());
                         current = body.instantiate(&proj_field);
                     } else {
                         // Non-dependent: body doesn't reference this binder
-                        current = (**body).clone();
+                        // Outer equality binders may still occur in the body.
+                        // Removing this unused binder must lower their indices.
+                        current = body.lower_loose_bvars(1).ok_or_else(|| {
+                            CertError::InvalidCert("Proj: cannot remove unused field binder".into())
+                        })?;
                     }
                 }
                 _ => {
@@ -218,9 +247,29 @@ impl<'env> CertVerifier<'env> {
         // 7. Extract the target field's domain
         let current_whnf = self.whnf_impl(&current);
         match &current_whnf.kind {
-            ExprKind::Pi(_, domain, _) => Ok((**domain).clone()),
+            ExprKind::Pi(_, domain, _) => {
+                if is_prop {
+                    self.require_prop_projection_field(ctx, domain, idx)?;
+                }
+                Ok((**domain).clone())
+            }
             _ => Err(CertError::InvalidCert(format!(
                 "Proj: constructor type missing Pi at target field index {}",
+                idx
+            ))),
+        }
+    }
+
+    fn require_prop_projection_field(
+        &self,
+        ctx: &mut Vec<Expr>,
+        domain: &Expr,
+        idx: u32,
+    ) -> Result<(), CertError> {
+        match self.infer_sort_for_projection(ctx, domain) {
+            Some(level) if level.is_zero() => Ok(()),
+            _ => Err(CertError::InvalidCert(format!(
+                "Proj: field {} of a Prop structure must itself be in Prop",
                 idx
             ))),
         }

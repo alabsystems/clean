@@ -147,7 +147,7 @@ if [ -z "$CLEAN_BIN" ]; then
   done
 fi
 if [ -z "$CLEAN_BIN" ] || [ ! -x "$CLEAN_BIN" ]; then
-  skip no-clean-binary "clean binary not found (build: cargo build --locked --release -p clean, or set CLEAN_BIN)"
+  skip no-clean-binary "clean binary not found (build: targo --unverified build --locked --release -p clean, or set CLEAN_BIN)"
 fi
 if ! "$CLEAN_BIN" check --help 2>/dev/null | grep -q -- "--parse-only"; then
   skip stale-clean-binary "$CLEAN_BIN does not support 'check --parse-only' (rebuild at HEAD)"

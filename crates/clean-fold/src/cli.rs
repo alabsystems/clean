@@ -31,35 +31,36 @@ pub enum FoldCommands {
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Extend an IVC proof with another certificate.
+    /// Fold a certificate into a fresh IVC proof, written to the `--ivc` path.
     Extend {
-        /// Existing IVC proof file
+        /// Write the resulting IVC proof here. NOT read: this verb folds
+        /// `--cert` into a FRESH proof, replacing any chain already at this path
         #[arg(short, long)]
         ivc: PathBuf,
         /// Certificate to fold in
         #[arg(short, long)]
         cert: PathBuf,
-        /// Output IVC proof file (defaults to updating in place)
+        /// Output IVC proof file (defaults to overwriting `--ivc`)
         #[arg(short, long)]
         output: Option<PathBuf>,
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Verify an IVC proof.
+    /// Check a serialized IVC proof's structure (NOT the folding relation).
     Verify {
-        /// IVC proof file to verify
+        /// IVC proof file to check
         ivc: PathBuf,
         /// Show verbose output
         #[arg(short, long)]
         verbose: bool,
     },
-    /// Compress an IVC proof.
+    /// Rewrite an IVC proof as a smaller summary (the result is NOT a proof).
     Compress {
-        /// IVC proof file to compress
+        /// IVC proof file to summarize
         #[arg(short, long)]
         ivc: PathBuf,
-        /// Output compressed proof file
+        /// Output summary file (`fold verify` cannot read this back)
         #[arg(short, long)]
         output: PathBuf,
         /// Show verbose output
@@ -91,8 +92,9 @@ pub const FEATURES: &[FeatureDescriptor] = &[
         path: &["fold", "start"],
         summary: "Start a new IVC proof from a proof certificate",
         description: "Initializes a Nova-style IVC proof by encoding the input \
-certificate as a Relaxed R1CS instance. The output file holds the running \
-instance that subsequent `fold extend` calls accumulate into.",
+certificate as a Relaxed R1CS instance. The output file records the running \
+instance's metadata; it does not carry the shape or matrices, which is why no \
+later verb can resume from it.",
         category: Category::Proof,
         stability: Stability::V1,
         examples: &[Example {
@@ -107,16 +109,18 @@ instance that subsequent `fold extend` calls accumulate into.",
     },
     FeatureDescriptor {
         path: &["fold", "extend"],
-        summary: "Fold a new certificate into an existing IVC proof",
-        description: "Runs one Nova fold step: the running IVC instance is \
-combined with the fresh certificate instance to produce a new running \
-instance whose verifier cost stays constant regardless of the number of \
-folded steps.",
+        summary: "Fold a certificate into a fresh IVC proof",
+        description: "Runs one Nova fold step and writes the result to --ivc \
+(or --output). It does NOT load the IVC at --ivc: the running instance is \
+started fresh from --cert and that same certificate is folded in, so a chain \
+already at that path is replaced, not extended. Carrying a chain forward \
+needs the full IVC state to round-trip through the serialized form, which it \
+does not yet.",
         category: Category::Proof,
         stability: Stability::V1,
         examples: &[Example {
             cmd: "clean fold extend --ivc proof.ivc.json --cert step2.cert.json",
-            what: "fold a second certificate into an existing IVC proof",
+            what: "fold a certificate in, overwriting proof.ivc.json",
         }],
         see_also: &["fold start", "fold compress", "fold verify"],
         references: &[DESIGN_REF, CRATE_REF],
@@ -126,15 +130,17 @@ folded steps.",
     },
     FeatureDescriptor {
         path: &["fold", "verify"],
-        summary: "Verify the running instance of an IVC proof",
-        description: "Checks that the accumulated Relaxed R1CS instance and \
-witness pair satisfies the folding invariant. A single verification call \
-discharges every folded step at once.",
+        summary: "Check the structure of a serialized IVC proof",
+        description: "Checks that the artifact parses and records a nonzero \
+step count, a nonzero constraint count and a non-empty witness vector. It \
+does NOT check the Relaxed R1CS relation (Az o Bz = u*Cz + E) — the shape and \
+matrices are never deserialized — so a pass is a statement about the file's \
+structure, not a verification of the folded steps.",
         category: Category::Proof,
         stability: Stability::V1,
         examples: &[Example {
             cmd: "clean fold verify proof.ivc.json",
-            what: "verify an accumulated IVC proof",
+            what: "check an accumulated IVC proof's structure",
         }],
         see_also: &["fold info", "cert verify"],
         references: &[DESIGN_REF, CRATE_REF],
@@ -144,15 +150,16 @@ discharges every folded step at once.",
     },
     FeatureDescriptor {
         path: &["fold", "compress"],
-        summary: "Compress an IVC proof into a smaller artifact",
-        description: "Applies the SNARK-style final compression step on an \
-IVC proof so the on-disk artifact shrinks without losing soundness. Use \
-this before archiving or transmitting long proof chains.",
+        summary: "Rewrite an IVC proof as a smaller summary artifact",
+        description: "Keeps the step count, constraint count and instance \
+fields verbatim and REPLACES the witness and error vectors with a 64-bit \
+digest. This is not SNARK compression: the witness cannot be recovered, the \
+result is not a proof, and `fold verify` cannot read it back.",
         category: Category::Proof,
         stability: Stability::V1,
         examples: &[Example {
             cmd: "clean fold compress --ivc proof.ivc.json --output proof.ivc.z",
-            what: "compress an IVC proof artifact",
+            what: "write a digest-only summary of an IVC proof",
         }],
         see_also: &["fold verify", "commit kzg"],
         references: &[DESIGN_REF, CRATE_REF],

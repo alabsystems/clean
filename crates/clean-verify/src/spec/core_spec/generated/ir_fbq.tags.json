@@ -1,0 +1,60 @@
+{
+ "chain": "ir_fbq",
+ "body": "env::native_reducers_float::reduce_float_beq::{closure#0}",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry in the emitted artifact, keyed by the canonical FIRST-USE index the core module uses.",
+ "why": "Read ir_fa.tags.json's `why` first: this is its COMPARISON twin. Same three parameters, same empty aggregate lanes, same two-node shape -- and a different instruction (`fcmp oeq` where ir_fa has `binop fadd`) and a different RESULT TYPE. It is the first chained body whose emitted instruction is an `fcmp`, which until now had battery rows only from the W4 SYNTHETIC lane (`w4_chains.rs`, authored micro-modules). This chain does not close a coverage gap -- W4 already covers every FCmpOp -- it moves ONE predicate, `oeq` at binary64, from authored-module evidence to emitted-artifact evidence.",
+ "how_it_is_used": "`ir_mint::mint` reads this table to check the callee namespace (empty lane = a module with no `call`); `ir_mint::project` reads the `interface` block in the other direction and REFUSES a fixture whose header or parameter types are not the pinned ones.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print. On this chain the sharp slot is the same OPERAND WIDTH as ir_fa's -- `bb0(%0: ptr, %1: f64, %2: f64)` -- plus one this body has and ir_fa does not: the result of an `fcmp` is a BOOL, so the core module's `(fcmp oeq (float 64) 1 2)` carries the operand width but says nothing about the result width. The `ret` type is not in the core module either; the parameter rows and the functy pin are what tie the emitted signature down.",
+ "interface_producer_invariance": "`ty` is the CANONICAL form; `observed_ty` is the verbatim token and is RECORDED, NEVER COMPARED. Both read from reader A's own record on the dump this chain was cut from: `param_tys_erased: [\"Ptr\", \"F64\", \"F64\"]`, `block_param_tys_erased: []`, `aligns_erased: []`.",
+ "producer_pin": "TWO reader-A dumps from DIFFERENT producers, stated with its limit. A = aterm store 9192, trustc 321aaeda7 (2026-09-17), dump sha256 9b7eec05029284aa4ffd4e685f10831c00699a445b6be3a51e15570d16cd5da7. B = aterm store 9178, trustc d75f13f97 (2026-09-15), dump sha256 4a1364d91e57a92c... The crate binaries DIFFER and the projected core module is BYTE-IDENTICAL (core_digest 1b23427cad8d71ad56763471587c6c92baa12c19f686fe67b10fce6111845de7 under both). THE LIMIT, stated because it is the thing a reader would otherwise assume: the function's indices did NOT move -- @func.1362 functy.319 under both producers, and across the whole crate 0 of 3968 common entries moved with 100% of instruction text identical. So unlike ir_hlb's pair, which earns its claim by exhibiting movement (\"ALL FOUR indices moved and the projected core module is BYTE-IDENTICAL\"), THIS pair does not test invariance under index drift. An invariance claim is only tested when something moves. What it does establish is that these two revisions are interchangeable as producers for clean-kernel, and that the projection is stable across the difference that does exist between the two binaries.",
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "rustcc",
+  "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Read the notes in ir_h2.tags.json.",
+  "functy": 319,
+  "functy_note": "Pinned VERBATIM from the emitted header `(functy.319)`; reader A independently records `artifact_functy_id: 319` on BOTH producer dumps. CORRECTED 2026-09-20: an earlier note here contrasted this with ir_fa's 381 as though the two were comparable. They are NOT -- 381 is the FIXTURE ERA, and in the dump this chain was cut from the four f64->f64 closures carry functy.317, not 381. Within ONE era the three signatures do get three ids -- 317 for `(ptr, f64, f64) -> f64`, 318 for `(ptr, f64) -> f64`, 319 for this body's `(ptr, f64, f64) -> bool` -- and that is the real statement. A cross-era comparison of interning ids says nothing.",
+  "producer": "trust",
+  "producer_note": "The one annotation-clause kind whose CONTENT is compared.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&{closure environment}",
+    "note": "The closure environment pointer, BOUND AND NEVER READ -- the closure captures nothing, exactly as in ir_fa."
+   },
+   {
+    "block": 0,
+    "index": 1,
+    "ssa": 1,
+    "ty": "f64",
+    "observed_ty": "f64",
+    "rust_type": "f64",
+    "note": "The left operand `a`. The width is semantic payload: the comparison is decided at binary64, and an f32 here would be a different program the core module alone cannot separate."
+   },
+   {
+    "block": 0,
+    "index": 2,
+    "ssa": 2,
+    "ty": "f64",
+    "observed_ty": "f64",
+    "rust_type": "f64",
+    "note": "The right operand `b`."
+   }
+  ],
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and a measurement rather than an omission: the body contains no memory instruction. Reader A's `aligns_erased` is [] on both producer dumps.",
+  "clauses": [
+   "loc",
+   "names",
+   "producer"
+  ]
+ },
+ "enums": [],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, and a measurement: the closure calls NOTHING. Reader A's `crate_func_ids_seen` is the single entry [1362] -- the body's own id -- and the emitted body contains no `call`. An empty lane means `SelfFunc::Unpinned`; `mint::check_func_namespace` accepts it ONLY for a module with no `call`."
+}

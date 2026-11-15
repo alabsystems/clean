@@ -20,7 +20,8 @@
 //!   rules re-keyed to the real container constructors, registered in BOTH
 //!   `constants` and `recursors` ([R4] — the mathverse replay acceptor
 //!   probes `get_const` first);
-//! - every aux registration removed — no `_nested.*` name survives.
+//! - every generated aux registration removed by exact typed identity;
+//!   unrelated user names may legitimately display as `_nested.*`.
 //!
 //! Discipline: COMPUTE-THEN-COMMIT. Every fallible step (expression
 //! restoration, round-trip assertion, residual scan, duplicate-name check)
@@ -28,7 +29,7 @@
 //! A restore error therefore leaves the environment exactly as Pass 1 built
 //! it, and the caller's error path unregisters the whole family as before.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::expr::{Expr, ExprKind};
 use crate::inductive::{InductiveDecl, InductiveError, InductiveType, InductiveVal, RecursorVal};
@@ -174,12 +175,29 @@ impl RestoreCtx<'_> {
     }
 }
 
-/// Scan for surviving `_nested.*` constants (the residual tripwire).
-fn scan_residuals(e: &Expr, context: &str) -> Result<(), InductiveError> {
+/// The actual temporary declarations emitted by this elimination, not a
+/// display-string namespace. Generation skips auxiliary convenience members;
+/// the type, its constructors, and its recursor are the full temporary roster.
+fn generated_auxiliary_names(entries: &[NestedAuxEntry]) -> HashSet<Name> {
+    let mut names = HashSet::new();
+    for entry in entries {
+        names.insert(entry.aux_name.clone());
+        names.insert(entry.aux_name.clone().str("rec"));
+        names.extend(entry.ctor_map.iter().map(|(aux, _)| aux.clone()));
+    }
+    names
+}
+
+/// Scan for surviving generated constants (the exact-identity tripwire).
+fn scan_residuals(
+    e: &Expr,
+    context: &str,
+    generated: &HashSet<Name>,
+) -> Result<(), InductiveError> {
     let residual = e
         .collect_constants()
         .into_iter()
-        .find(|name| name.to_string().starts_with("_nested."));
+        .find(|name| generated.contains(name));
     match residual {
         Some(name) => Err(InductiveError::NestedRestoreInvariant(format!(
             "restored {context} still references {name}"
@@ -206,6 +224,7 @@ impl Environment {
         has_generated_eliminators: bool,
     ) -> Result<Vec<InductiveType>, EnvError> {
         let n_orig = decl.types.len() - entries.len();
+        let generated = generated_auxiliary_names(entries);
         let first_name = &decl.types[0].name;
         let originals: Vec<Name> = decl.types[..n_orig]
             .iter()
@@ -216,8 +235,8 @@ impl Environment {
         let mut rec_map = HashMap::new();
         for (j, entry) in entries.iter().enumerate() {
             rec_map.insert(
-                Name::from_string(&format!("{}.rec", entry.aux_name)),
-                Name::from_string(&format!("{first_name}.rec_{}", j + 1)),
+                entry.aux_name.clone().str("rec"),
+                first_name.clone().str(format!("rec_{}", j + 1)),
             );
         }
         let mut aux_types = HashMap::new();
@@ -245,7 +264,7 @@ impl Environment {
             let mut restored_ctors = Vec::with_capacity(member.constructors.len());
             for ctor in &member.constructors {
                 let restored = ctx.restore(&ctor.type_, 0).map_err(restore_err)?;
-                scan_residuals(&restored, &format!("constructor {}", ctor.name))
+                scan_residuals(&restored, &format!("constructor {}", ctor.name), &generated)
                     .map_err(restore_err)?;
                 let original = pre_elim.get(&ctor.name).ok_or_else(|| {
                     restore_err(InductiveError::NestedRestoreInvariant(format!(
@@ -319,22 +338,25 @@ impl Environment {
         };
         for member in &decl.types[..n_orig] {
             for suffix in elim_suffixes {
-                let name = Name::from_string(&format!("{}.{suffix}", member.name));
+                let name = member.name.clone().str(suffix);
                 let Some(val) = self.recursors.get(&name) else {
                     // HIT members legitimately skip casesOn/recOn.
                     continue;
                 };
                 let mut val = val.clone();
                 val.type_ = ctx.restore(&val.type_, 0).map_err(restore_err)?;
-                scan_residuals(&val.type_, &format!("{name} type")).map_err(restore_err)?;
+                scan_residuals(&val.type_, &format!("{name} type"), &generated)
+                    .map_err(restore_err)?;
                 for rule in &mut val.rules {
                     rule.rhs = ctx.restore(&rule.rhs, 0).map_err(restore_err)?;
-                    scan_residuals(&rule.rhs, &format!("{name} rule rhs")).map_err(restore_err)?;
+                    scan_residuals(&rule.rhs, &format!("{name} rule rhs"), &generated)
+                        .map_err(restore_err)?;
                 }
                 let restored_value = match self.constants.get(&name).and_then(|c| c.value.clone()) {
                     Some(value) => {
                         let restored = ctx.restore(&value, 0).map_err(restore_err)?;
-                        scan_residuals(&restored, &format!("{name} value")).map_err(restore_err)?;
+                        scan_residuals(&restored, &format!("{name} value"), &generated)
+                            .map_err(restore_err)?;
                         Some(restored)
                     }
                     None => None,
@@ -347,8 +369,8 @@ impl Environment {
         //    order, design §4.3; field recipe per the B3 surgical map).
         let mut renamed = Vec::new();
         for (j, entry) in entries.iter().enumerate() {
-            let old_name = Name::from_string(&format!("{}.rec", entry.aux_name));
-            let new_name = Name::from_string(&format!("{first_name}.rec_{}", j + 1));
+            let old_name = entry.aux_name.clone().str("rec");
+            let new_name = first_name.clone().str(format!("rec_{}", j + 1));
             if self.constants.contains_key(&new_name) || self.recursors.contains_key(&new_name) {
                 return Err(EnvError::DuplicateName(new_name));
             }
@@ -361,7 +383,8 @@ impl Environment {
             val.name = new_name.clone();
             val.inductive_name = first_name.clone();
             val.type_ = ctx.restore(&val.type_, 0).map_err(restore_err)?;
-            scan_residuals(&val.type_, &format!("{new_name} type")).map_err(restore_err)?;
+            scan_residuals(&val.type_, &format!("{new_name} type"), &generated)
+                .map_err(restore_err)?;
             let ctor_rekey: HashMap<&Name, &Name> =
                 entry.ctor_map.iter().map(|(a, c)| (a, c)).collect();
             for rule in &mut val.rules {
@@ -373,7 +396,8 @@ impl Environment {
                 })?;
                 rule.constructor_name = (*new_key).clone();
                 rule.rhs = ctx.restore(&rule.rhs, 0).map_err(restore_err)?;
-                scan_residuals(&rule.rhs, &format!("{new_name} rule rhs")).map_err(restore_err)?;
+                scan_residuals(&rule.rhs, &format!("{new_name} rule rhs"), &generated)
+                    .map_err(restore_err)?;
                 // `num_fields` and `recursive_fields` copied verbatim: aux
                 // nfields == container nfields (design §1.3), positions 1:1.
             }
@@ -467,7 +491,7 @@ impl Environment {
                 self.declaration_verification.remove(aux_ctor);
                 self.constructors.remove(aux_ctor);
             }
-            let aux_rec = Name::from_string(&format!("{aux}.rec"));
+            let aux_rec = aux.clone().str("rec");
             self.constants.remove(&aux_rec);
             self.declaration_verification.remove(&aux_rec);
             self.recursors.remove(&aux_rec);
@@ -487,11 +511,99 @@ impl Environment {
                     .chain(self.inductives.keys())
                     .chain(self.constructors.keys())
                     .chain(self.recursors.keys())
-                    .any(|n| n.to_string().starts_with("_nested.")),
-                "restore left a _nested.* registration behind"
+                    .any(|n| generated.contains(n)),
+                "restore left a generated auxiliary registration behind"
             );
         }
 
         Ok(plan.restored_types)
+    }
+}
+
+#[cfg(test)]
+mod prefix_tripwire_tests {
+    use super::*;
+    use crate::inductive::Constructor;
+    use crate::Level;
+
+    fn actual_entries() -> Vec<NestedAuxEntry> {
+        let env = Environment::with_prelude();
+        let name = Name::from_string("TripwireTree");
+        let tree = Expr::const_(name.clone(), vec![]);
+        let list = Name::from_string("List");
+        let decl = InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: name.clone(),
+                type_: Expr::type_(),
+                constructors: vec![Constructor {
+                    name: name.str("children"),
+                    type_: Expr::arrow(
+                        Expr::app(
+                            Expr::const_(list.clone(), vec![Level::zero()]),
+                            tree.clone(),
+                        ),
+                        tree,
+                    ),
+                }],
+            }],
+        };
+        let (_, entries) = env
+            .eliminate_nested_inductives(&decl, &HashSet::from([list]))
+            .unwrap()
+            .expect("actual nested List mirror");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].ctor_map.len(), 2);
+        entries
+    }
+
+    #[test]
+    fn actual_generated_type_constructor_and_recursor_leaks_remain_refused() {
+        let entries = actual_entries();
+        let generated = generated_auxiliary_names(&entries);
+        assert_eq!(generated.len(), 4);
+        for name in &generated {
+            let leaked = Expr::const_(name.clone(), vec![]);
+            for expr in [leaked.clone(), Expr::arrow(Expr::type_(), leaked)] {
+                assert!(matches!(
+                    scan_residuals(&expr, "injected actual auxiliary", &generated),
+                    Err(InductiveError::NestedRestoreInvariant(_))
+                ));
+            }
+            // Same display is not the same generated declaration.
+            let quoted = Name::anon().str(name.to_string());
+            assert_ne!(&quoted, name);
+            assert!(scan_residuals(
+                &Expr::const_(quoted, vec![]),
+                "legitimate display alias",
+                &generated
+            )
+            .is_ok());
+        }
+    }
+
+    #[test]
+    fn actual_generated_leak_in_unrestored_trailing_argument_is_refused() {
+        let entries = actual_entries();
+        let entry = &entries[0];
+        let generated = generated_auxiliary_names(&entries);
+        let ctx = RestoreCtx {
+            aux_types: entries.iter().map(|e| (&e.aux_name, e)).collect(),
+            aux_ctors: HashMap::new(),
+            rec_map: HashMap::new(),
+            p: 0,
+        };
+        for leaked in &generated {
+            // Rebuild intentionally transplants trailing arguments unchanged;
+            // the independent scan must still reject an actual hidden residue.
+            let input = Expr::app(
+                Expr::const_(entry.aux_name.clone(), entry.container_levels.clone()),
+                Expr::const_(leaked.clone(), vec![]),
+            );
+            let restored = ctx.restore(&input, 0).unwrap();
+            assert!(restored.collect_constants().contains(leaked));
+            assert!(scan_residuals(&restored, "restored trailing argument", &generated).is_err());
+        }
     }
 }

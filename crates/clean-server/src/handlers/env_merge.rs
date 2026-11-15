@@ -93,9 +93,11 @@ fn declaration_of(ci: &ConstantInfo) -> Result<Declaration, String> {
     })
 }
 
-/// Merge `loaded` into a clone of `target`, re-earning every declaration
-/// through the checked kernel paths. Returns the merged environment on
-/// success; the caller commits it. On `Err`, nothing was committed anywhere.
+/// Merge `loaded` into `target` (the caller's copy of the live environment),
+/// re-earning every declaration through the checked kernel paths. Returns the
+/// merged environment on success; the caller commits it. On `Err`, nothing was
+/// committed anywhere. The kernel's checks read the ambient deadline, so a
+/// merge run under one (`loadEnvironment` runs it on the work pool) stops there.
 ///
 /// Admission order is data-dependent (a constructor type may reference a
 /// loaded definition and vice versa) and the loaded maps iterate unordered, so
@@ -103,10 +105,10 @@ fn declaration_of(ci: &ConstantInfo) -> Result<Declaration, String> {
 /// family and constant, and the merge is refused only when a full pass admits
 /// nothing — with each stuck item's own kernel error named.
 pub(super) fn checked_merge_loaded_env(
-    target: &Environment,
+    target: Environment,
     loaded: &Environment,
 ) -> Result<Environment, String> {
-    let mut merged = target.clone();
+    let mut merged = target;
 
     // ---- Families: reassemble each loaded family once (mutual blocks dedupe
     // via `all_names`), in sorted order for deterministic errors. ----

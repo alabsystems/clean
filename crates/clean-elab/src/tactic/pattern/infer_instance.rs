@@ -105,37 +105,40 @@ pub fn infer_instance_with_config(
 /// Try to synthesize a type class instance
 fn try_synthesize_instance(
     state: &ProofState,
-    class_name: &str,
+    class_name: &Name,
     target: &Expr,
     max_depth: usize,
 ) -> Result<Expr, TacticError> {
     // Handle common decidable instances
-    if class_name == "Decidable" || class_name.ends_with(".Decidable") {
+    if class_name == &Name::anon().str("Decidable") {
         return synthesize_decidable_instance(state, target, max_depth);
     }
 
     // Handle Inhabited
-    if class_name == "Inhabited" || class_name.ends_with(".Inhabited") {
+    if class_name == &Name::anon().str("Inhabited") {
         return synthesize_inhabited_instance(state, target);
     }
 
     // Handle Nonempty
-    if class_name == "Nonempty" || class_name.ends_with(".Nonempty") {
+    if class_name == &Name::anon().str("Nonempty") {
         return synthesize_nonempty_instance(state, target);
     }
 
     // Handle BEq (Boolean equality)
-    if class_name == "BEq" || class_name.ends_with(".BEq") {
+    if class_name == &Name::anon().str("BEq") {
         return synthesize_beq_instance(state, target);
     }
 
     // Handle Hashable
-    if class_name == "Hashable" || class_name.ends_with(".Hashable") {
+    if class_name == &Name::anon().str("Hashable") {
         return synthesize_hashable_instance(state, target);
     }
 
     // Handle ToString/Repr
-    if class_name == "ToString" || class_name == "Repr" {
+    if matches!(
+        super::util::builtin_component(class_name),
+        Some("ToString" | "Repr")
+    ) {
         return synthesize_repr_instance(state, target, class_name);
     }
 
@@ -196,7 +199,7 @@ fn synthesize_decidable_instance(
     // `decEq` bridge) recursively (#decide-instance).
     //
     // Try to look up instance in environment
-    try_find_instance_in_env(state, "Decidable", target)
+    try_find_instance_in_env(state, &Name::from_string("Decidable"), target)
 }
 
 /// Synthesize an Inhabited instance
@@ -212,10 +215,9 @@ fn synthesize_inhabited_instance(_state: &ProofState, target: &Expr) -> Result<E
 
     // Common inhabited types
     if let ExprKind::Const(name, _) = ty.kind() {
-        let s = name.to_string();
-        match s.as_str() {
+        match super::util::builtin_component(name) {
             // Universe succ(zero) correct: Inhabited.mk.{u} with Nat/UInt/Bool/String/Unit : Type 0 = Sort 1, so u = 1
-            "Nat" | "UInt8" | "UInt16" | "UInt32" | "UInt64" => {
+            Some("Nat" | "UInt8" | "UInt16" | "UInt32" | "UInt64") => {
                 return Ok(Expr::app(
                     Expr::const_(
                         Name::from_string("Inhabited.mk"),
@@ -224,7 +226,7 @@ fn synthesize_inhabited_instance(_state: &ProofState, target: &Expr) -> Result<E
                     Expr::nat_lit(0),
                 ));
             }
-            "Bool" => {
+            Some("Bool") => {
                 return Ok(Expr::app(
                     Expr::const_(
                         Name::from_string("Inhabited.mk"),
@@ -233,7 +235,7 @@ fn synthesize_inhabited_instance(_state: &ProofState, target: &Expr) -> Result<E
                     Expr::const_(Name::from_string("false"), vec![]),
                 ));
             }
-            "String" => {
+            Some("String") => {
                 return Ok(Expr::app(
                     Expr::const_(
                         Name::from_string("Inhabited.mk"),
@@ -242,7 +244,7 @@ fn synthesize_inhabited_instance(_state: &ProofState, target: &Expr) -> Result<E
                     Expr::str_lit(""),
                 ));
             }
-            "Unit" => {
+            Some("Unit") => {
                 return Ok(Expr::app(
                     Expr::const_(
                         Name::from_string("Inhabited.mk"),
@@ -257,7 +259,7 @@ fn synthesize_inhabited_instance(_state: &ProofState, target: &Expr) -> Result<E
 
     Err(TacticError::InstanceSynthesisFailed {
         class: "Inhabited".into(),
-        ty: format!("{ty:?}"),
+        ty: crate::error_render::term(&ty),
     })
 }
 
@@ -290,7 +292,7 @@ fn synthesize_nonempty_instance(state: &ProofState, target: &Expr) -> Result<Exp
 
     Err(TacticError::InstanceSynthesisFailed {
         class: "Nonempty".into(),
-        ty: format!("{ty:?}"),
+        ty: crate::error_render::term(&ty),
     })
 }
 
@@ -307,18 +309,17 @@ fn synthesize_beq_instance(_state: &ProofState, target: &Expr) -> Result<Expr, T
 
     // Common types with BEq
     if let ExprKind::Const(name, _) = ty.kind() {
-        let s = name.to_string();
-        match s.as_str() {
-            "Nat" => {
+        match super::util::builtin_component(name) {
+            Some("Nat") => {
                 return Ok(Expr::const_(Name::from_string("instBEqNat"), vec![]));
             }
-            "Bool" => {
+            Some("Bool") => {
                 return Ok(Expr::const_(Name::from_string("instBEqBool"), vec![]));
             }
-            "String" => {
+            Some("String") => {
                 return Ok(Expr::const_(Name::from_string("instBEqString"), vec![]));
             }
-            "Int" => {
+            Some("Int") => {
                 return Ok(Expr::const_(Name::from_string("instBEqInt"), vec![]));
             }
             _ => {}
@@ -327,7 +328,7 @@ fn synthesize_beq_instance(_state: &ProofState, target: &Expr) -> Result<Expr, T
 
     Err(TacticError::InstanceSynthesisFailed {
         class: "BEq".into(),
-        ty: format!("{ty:?}"),
+        ty: crate::error_render::term(&ty),
     })
 }
 
@@ -343,18 +344,17 @@ fn synthesize_hashable_instance(_state: &ProofState, target: &Expr) -> Result<Ex
     };
 
     if let ExprKind::Const(name, _) = ty.kind() {
-        let s = name.to_string();
-        match s.as_str() {
-            "Nat" => {
+        match super::util::builtin_component(name) {
+            Some("Nat") => {
                 return Ok(Expr::const_(Name::from_string("instHashableNat"), vec![]));
             }
-            "String" => {
+            Some("String") => {
                 return Ok(Expr::const_(
                     Name::from_string("instHashableString"),
                     vec![],
                 ));
             }
-            "Bool" => {
+            Some("Bool") => {
                 return Ok(Expr::const_(Name::from_string("instHashableBool"), vec![]));
             }
             _ => {}
@@ -363,7 +363,7 @@ fn synthesize_hashable_instance(_state: &ProofState, target: &Expr) -> Result<Ex
 
     Err(TacticError::InstanceSynthesisFailed {
         class: "Hashable".into(),
-        ty: format!("{ty:?}"),
+        ty: crate::error_render::term(&ty),
     })
 }
 
@@ -371,7 +371,7 @@ fn synthesize_hashable_instance(_state: &ProofState, target: &Expr) -> Result<Ex
 fn synthesize_repr_instance(
     _state: &ProofState,
     target: &Expr,
-    class: &str,
+    class: &Name,
 ) -> Result<Expr, TacticError> {
     let ty = match target.kind() {
         ExprKind::App(_, t) => t.as_ref().clone(),
@@ -383,32 +383,31 @@ fn synthesize_repr_instance(
     };
 
     if let ExprKind::Const(name, _) = ty.kind() {
-        let s = name.to_string();
-        let prefix = if class == "ToString" {
+        let prefix = if class == &Name::anon().str("ToString") {
             "instToString"
         } else {
             "instRepr"
         };
-        match s.as_str() {
-            "Nat" => {
+        match super::util::builtin_component(name) {
+            Some("Nat") => {
                 return Ok(Expr::const_(
                     Name::from_string(&format!("{prefix}Nat")),
                     vec![],
                 ));
             }
-            "Bool" => {
+            Some("Bool") => {
                 return Ok(Expr::const_(
                     Name::from_string(&format!("{prefix}Bool")),
                     vec![],
                 ));
             }
-            "String" => {
+            Some("String") => {
                 return Ok(Expr::const_(
                     Name::from_string(&format!("{prefix}String")),
                     vec![],
                 ));
             }
-            "Int" => {
+            Some("Int") => {
                 return Ok(Expr::const_(
                     Name::from_string(&format!("{prefix}Int")),
                     vec![],
@@ -419,15 +418,15 @@ fn synthesize_repr_instance(
     }
 
     Err(TacticError::InstanceSynthesisFailed {
-        class: class.into(),
-        ty: format!("{ty:?}"),
+        class: class.to_string(),
+        ty: crate::error_render::term(&ty),
     })
 }
 
 /// Try to find an instance in the environment
 fn try_find_instance_in_env(
     state: &ProofState,
-    class_name: &str,
+    class_name: &Name,
     target: &Expr,
 ) -> Result<Expr, TacticError> {
     // First, try proper instance resolution using the instance table
@@ -437,7 +436,7 @@ fn try_find_instance_in_env(
         if let Some(goal) = state.goals.front() {
             // Try to find a matching instance with type checking
             if let Some((_name, goal_args)) = extract_class_app(target) {
-                let registered = instances.get_instances(&Name::from_string(class_name));
+                let registered = instances.get_instances(class_name);
                 for inst in registered {
                     // Extract instance type args
                     if let Some((_, inst_args)) = extract_class_app(&inst.type_) {
@@ -461,23 +460,16 @@ fn try_find_instance_in_env(
         }
     }
 
-    // Fall back to name pattern matching
-    // Instance names typically follow patterns like:
-    // instClassName, inst_class_name, ClassName.instName
-    let patterns = [
-        format!("inst{class_name}"),
-        format!("inst_{}", class_name.to_lowercase()),
-        format!("{class_name}.inst"),
-    ];
-
-    for pattern in &patterns {
-        if state.env.get_const(&Name::from_string(pattern)).is_some() {
-            return Ok(Expr::const_(Name::from_string(pattern), vec![]));
-        }
-    }
-
+    // No name-guessing fallback. It used to return `inst{Class}` (or
+    // `inst_class` / `Class.inst`) whenever a constant of that name existed —
+    // bare, with no universe levels and no arguments, whatever its type — so
+    // `Classical.dec := by infer_instance` in `Mathlib/Logic/Basic.lean` died
+    // on `Level count mismatch for instDecidable` instead of reporting the
+    // search it had not done. Lean's `infer_instance` is `exact inferInstance`
+    // (`Init/Tactics.lean`), which the elaborator's dispatch now runs first
+    // (`ElabCtx::infer_instance_via_resolver`); this handler is its fallback.
     Err(TacticError::InstanceSynthesisFailed {
-        class: class_name.into(),
-        ty: format!("{target:?}"),
+        class: class_name.to_string(),
+        ty: crate::error_render::term(target),
     })
 }

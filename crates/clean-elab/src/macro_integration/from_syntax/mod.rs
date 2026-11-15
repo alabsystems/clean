@@ -50,11 +50,16 @@ pub(super) fn parse_nat_atom(s: &str) -> Option<clean_kernel::BigNat> {
 /// Returns None if the syntax cannot be converted.
 pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
     stack_safe(|| match syntax {
-        Syntax::Ident(_, name) => match name.as_str() {
-            "Type" => Some(SurfaceExpr::Universe(Span::dummy(), UniverseExpr::Type)),
-            "Prop" => Some(SurfaceExpr::Universe(Span::dummy(), UniverseExpr::Prop)),
-            _ => Some(SurfaceExpr::Ident(Span::dummy(), name.clone())),
-        },
+        Syntax::Ident(info, name) => {
+            let span = Span::new(info.start, info.end);
+            if name.is_unescaped_component("Type") {
+                Some(SurfaceExpr::Universe(span, UniverseExpr::Type))
+            } else if name.is_unescaped_component("Prop") {
+                Some(SurfaceExpr::Universe(span, UniverseExpr::Prop))
+            } else {
+                Some(SurfaceExpr::Ident(span, name.clone()))
+            }
+        }
 
         Syntax::Atom(_, value) => {
             // Try to parse as number
@@ -136,7 +141,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     if node.children.len() < 3 {
                         return None;
                     }
-                    let name = node.children[0].as_ident()?.to_string();
+                    let name = node.children[0].as_ident()?.clone();
                     let (ty, val_idx) = if node.children.len() == 4 {
                         (Some(Box::new(syntax_to_surface(&node.children[1])?)), 2)
                     } else {
@@ -158,11 +163,23 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     ))
                 }
 
+                "have" if node.children.len() == 3 => {
+                    let binder = syntax_to_binder(&node.children[0])?;
+                    let value = syntax_to_surface(&node.children[1])?;
+                    let body = syntax_to_surface(&node.children[2])?;
+                    Some(SurfaceExpr::Have(
+                        Span::dummy(),
+                        binder,
+                        Box::new(value),
+                        Box::new(body),
+                    ))
+                }
+
                 "letRec" => {
                     if node.children.len() < 3 {
                         return None;
                     }
-                    let name = node.children[0].as_ident()?.to_string();
+                    let name = node.children[0].as_ident()?.clone();
                     let (ty, val_idx) = if node.children.len() == 4 {
                         (Some(Box::new(syntax_to_surface(&node.children[1])?)), 2)
                     } else {
@@ -233,7 +250,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                 "syntheticSorry" => Some(SurfaceExpr::SyntheticSorry(Span::dummy())),
 
                 "universe" => {
-                    let tag = node.children.first()?.as_ident()?;
+                    let tag = node.children.first()?.as_ident_tag()?;
                     let univ = match tag {
                         "Prop" => UniverseExpr::Prop,
                         "Type" => UniverseExpr::Type,
@@ -248,7 +265,10 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                         "SortStar" => UniverseExpr::SortStar,
                         _ => return None,
                     };
-                    Some(SurfaceExpr::Universe(Span::dummy(), univ))
+                    Some(SurfaceExpr::Universe(
+                        Span::new(node.info.start, node.info.end),
+                        univ,
+                    ))
                 }
 
                 "ifThenElse" => {
@@ -288,7 +308,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     if node.children.len() != 2 {
                         return None;
                     }
-                    let name = node.children[0].as_ident()?.to_string();
+                    let name = node.children[0].as_ident()?.clone();
                     let expr = syntax_to_surface(&node.children[1])?;
                     Some(SurfaceExpr::NamedArg(Span::dummy(), name, Box::new(expr)))
                 }
@@ -302,6 +322,15 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     let inner = syntax_to_surface(node.children.first()?)?;
                     Some(SurfaceExpr::SemiOutParam(Span::dummy(), Box::new(inner)))
                 }
+
+                // `surface_to_syntax`'s name quote: the literal comes back as
+                // the quote it was, never as the identifier it spells.
+                "nameQuote" => match node.children.as_slice() {
+                    [Syntax::Atom(_, content)] => {
+                        Some(SurfaceExpr::SyntaxQuote(Span::dummy(), content.clone()))
+                    }
+                    _ => None,
+                },
 
                 "universeInst" => {
                     // Universe instantiation: first child is expression, rest are levels
@@ -342,7 +371,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     }
                     let expr = syntax_to_surface(&node.children[0])?;
                     let proj = if let Some(name) = node.children[1].as_ident() {
-                        Projection::Named(name.to_string())
+                        Projection::Named(name.clone())
                     } else {
                         let idx_str = node.children[1].as_atom()?;
                         Projection::Index(idx_str.parse().ok()?)
@@ -402,7 +431,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     if node.children.len() != 4 {
                         return None;
                     }
-                    let witness_name = node.children[0].as_ident()?.to_string();
+                    let witness_name = node.children[0].as_ident()?.clone();
                     let prop = syntax_to_surface(&node.children[1])?;
                     let then_br = syntax_to_surface(&node.children[2])?;
                     let else_br = syntax_to_surface(&node.children[3])?;
@@ -441,7 +470,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     if node.children.is_empty() {
                         return None;
                     }
-                    let kind_tag = node.children[0].as_ident()?;
+                    let kind_tag = node.children[0].as_ident_tag()?;
                     let kind = match kind_tag {
                         "Q" => QQuotationKind::Type,
                         "q" => QQuotationKind::Value,
@@ -464,7 +493,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                 // Antiquotations - Part of #16
                 "antiquot" => {
                     // Simple antiquotation: $x
-                    let name = node.children.first()?.as_ident()?.to_string();
+                    let name = node.children.first()?.as_ident()?.clone();
                     Some(SurfaceExpr::QAntiquot {
                         span: Span::dummy(),
                         content: QAntiquotContent::Simple(name),
@@ -485,7 +514,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     if node.children.len() < 2 {
                         return None;
                     }
-                    let name = node.children[0].as_ident()?.to_string();
+                    let name = node.children[0].as_ident()?.clone();
                     let ty = syntax_to_surface(&node.children[1])?;
                     Some(SurfaceExpr::QAntiquot {
                         span: Span::dummy(),
@@ -502,11 +531,11 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     if node.children.len() < 3 {
                         return None;
                     }
-                    let name = node.children[0].as_ident()?.to_string();
+                    let name = node.children[0].as_ident()?.clone();
 
                     // Parse separator: either "none" ident or "some" node with string child
                     let separator = match &node.children[1] {
-                        Syntax::Ident(_, s) if s == "none" => None,
+                        Syntax::Ident(_, s) if s.is_unescaped_component("none") => None,
                         Syntax::Node(sep_node)
                             if sep_node.kind.name_str() == "some"
                                 && !sep_node.children.is_empty() =>
@@ -518,7 +547,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
 
                     // Parse at_least_one flag
                     let at_least_one = match &node.children[2] {
-                        Syntax::Ident(_, s) => s == "true",
+                        Syntax::Ident(_, s) => s.is_unescaped_component("true"),
                         _ => false,
                     };
 
@@ -582,7 +611,7 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                                 if field_node.children.len() < 2 {
                                     return None; // Malformed field - signal error
                                 }
-                                let name = field_node.children[0].as_ident()?.to_string();
+                                let name = field_node.children[0].as_ident()?.clone();
                                 let val = syntax_to_surface(&field_node.children[1])?;
                                 fields.push(SurfaceFieldAssign {
                                     span: Span::dummy(),
@@ -601,6 +630,8 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                     })
                 }
 
+                super::to_syntax::OPEN_IN_KIND => open_in_from_syntax(&node.children),
+
                 "liftMethod" => {
                     // Nested action lift: <- expr
                     let inner = syntax_to_surface(node.children.first()?)?;
@@ -610,9 +641,14 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                 _ => {
                     // Unknown node type - try to convert as application if it has children
                     if node.children.is_empty() {
-                        Some(SurfaceExpr::Ident(Span::dummy(), kind_name.to_string()))
+                        Some(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            clean_parser::SurfaceName::from_name(node.kind.name().clone()),
+                        ))
                     } else {
-                        let func = Syntax::ident(kind_name);
+                        let func = Syntax::ident(&clean_parser::SurfaceName::from_name(
+                            node.kind.name().clone(),
+                        ));
                         let func_expr = syntax_to_surface(&func)?;
                         let args: Option<Vec<_>> =
                             node.children.iter().map(syntax_to_arg).collect();
@@ -621,5 +657,67 @@ pub fn syntax_to_surface(syntax: &Syntax) -> Option<SurfaceExpr> {
                 }
             }
         }
+    })
+}
+
+/// Rebuild the `OpenIn` that `to_syntax` carried: `[scoped-atom,
+/// list[path…], body]`, each path `list[list(path), list(names),
+/// list(hiding), list(from to …)]`.
+fn open_in_from_syntax(children: &[Syntax]) -> Option<SurfaceExpr> {
+    use super::to_syntax::OPEN_IN_LIST_KIND;
+    let [scoped, paths, body] = children else {
+        return None;
+    };
+    let scoped = match scoped {
+        Syntax::Atom(_, v) if v == "scoped" => true,
+        Syntax::Atom(_, v) if v == "unscoped" => false,
+        _ => return None,
+    };
+    let list = |s: &Syntax| -> Option<Vec<Syntax>> {
+        match s {
+            Syntax::Node(n) if n.kind.name_str() == OPEN_IN_LIST_KIND => Some(n.children.clone()),
+            _ => None,
+        }
+    };
+    let idents = |s: &Syntax| -> Option<Vec<clean_parser::SurfaceName>> {
+        list(s)?
+            .iter()
+            .map(|x| match x {
+                Syntax::Ident(_, name) => Some(name.clone()),
+                _ => None,
+            })
+            .collect()
+    };
+    let paths = list(paths)?
+        .iter()
+        .map(|p| {
+            let parts = list(p)?;
+            let [path, names, hiding, renames] = parts.as_slice() else {
+                return None;
+            };
+            let renames = idents(renames)?;
+            if renames.len() % 2 != 0 {
+                return None;
+            }
+            let [path] = <[clean_parser::SurfaceName; 1]>::try_from(idents(path)?).ok()?;
+            Some(clean_parser::OpenPath {
+                path,
+                names: idents(names)?,
+                hiding: idents(hiding)?,
+                renaming: renames
+                    .chunks(2)
+                    .map(|pair| clean_parser::OpenRename {
+                        from: pair[0].clone(),
+                        to: pair[1].clone(),
+                    })
+                    .collect(),
+            })
+        })
+        .collect::<Option<Vec<_>>>()?;
+    Some(SurfaceExpr::OpenIn {
+        span: Span::dummy(),
+        paths,
+        scoped,
+        body: Box::new(syntax_to_surface(body)?),
     })
 }

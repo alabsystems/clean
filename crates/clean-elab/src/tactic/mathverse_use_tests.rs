@@ -450,7 +450,14 @@ mod trust_gate_tests {
         lib.load_shard(&shard).unwrap();
         lib.add_dependency(0, 1);
 
-        let env = Environment::new();
+        // Since e20128880 the foundational half of RelaxedFoundational admits a
+        // name only as the kernel's CANONICAL declaration in the live
+        // environment, so the environment must hold `propext` itself (the
+        // prelude does); a bare Environment::new() has none and is refused.
+        let env = Environment::with_prelude();
+        assert!(
+            env.is_canonical_foundational_axiom(&clean_kernel::name::Name::from_string("propext"))
+        );
         let candidate = premise_candidate(&lib, 0);
 
         // Strict: rejects on the foundational dep (it is not KernelVerified),

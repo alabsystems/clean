@@ -296,7 +296,8 @@ mod tests {
             b.body.push(node);
         }
         f.blocks.push(b);
-        m.add_function(f);
+        m.try_add_function(f)
+            .expect("Module::try_add_function: test fixture");
         m
     }
 

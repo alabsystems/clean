@@ -308,6 +308,16 @@ fn test_simp_candidates_preserve_order_for_multiple_index_hits() {
 
 /// Performance proof for #1931: irrelevant simp lemmas should not make a
 /// specific indexed lookup scale linearly with total lemma count.
+///
+/// Each size's cost is the MINIMUM over several timed samples, not one mean.
+/// Interference from other processes only ever adds time, so the minimum is
+/// the estimator of the lookup's own cost; one sample was not. Measured on a
+/// box at load average 84 (2026-10-07, the frontend merge suite run): one
+/// sample per size read `[13.9 µs, 276 µs, 209 µs]` -- the 4,096-lemma set
+/// slower than the 32,768 one -- and the test failed 1 of 3 isolated reruns
+/// (`40.7x`), as it did once under the 2026-09-26 kernel lane. A lookup that
+/// really scaled with the lemma count (64x between these sizes) still fails
+/// the unchanged 12x bound, because then every sample is slow.
 #[test]
 fn test_simp_candidates_ignore_irrelevant_lemma_count_scaling() {
     use std::hint::black_box;
@@ -347,11 +357,16 @@ fn test_simp_candidates_ignore_irrelevant_lemma_count_scaling() {
         }
 
         let iters = 128;
-        let start = Instant::now();
-        for _ in 0..iters {
-            black_box(lemma_set.candidates(&state, &goal, &query).len());
+        let samples = 7;
+        let mut best = f64::INFINITY;
+        for _ in 0..samples {
+            let start = Instant::now();
+            for _ in 0..iters {
+                black_box(lemma_set.candidates(&state, &goal, &query).len());
+            }
+            best = best.min(start.elapsed().as_nanos() as f64 / iters as f64);
         }
-        times.push(start.elapsed().as_nanos() as f64 / iters as f64);
+        times.push(best);
     }
 
     if times[0] > 0.0 {

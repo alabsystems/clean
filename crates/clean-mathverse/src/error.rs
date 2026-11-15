@@ -51,6 +51,14 @@ pub enum MathverseError {
     #[error("import failed for {system}: {reason}")]
     ImportFailed { system: String, reason: String },
 
+    /// The `.olean` artifact at `path` breaks R113's artifact rule
+    /// (`clean_olean::read_artifact`): its parts state different headers,
+    /// state one declaration differently, or declare a name the part an
+    /// importer reads does not. Pinned Lean reads one part of an artifact, so
+    /// such an artifact is refused rather than read through another part.
+    #[error("{path}: {reason}")]
+    ArtifactRefused { path: String, reason: String },
+
     #[error("provenance conflict for `{name}`: existing source `{existing_source}` vs new `{new_source}`")]
     ProvenanceConflict {
         name: String,

@@ -29,8 +29,11 @@ fn host_c_compiler() -> Option<PathBuf> {
     }
 
     let path = std::env::var_os("PATH")?;
-    for dir in std::env::split_paths(&path) {
-        for name in ["cc", "gcc", "clang"] {
+    // Match clean-native's compiler-name priority. Searching directories first
+    // picks an unrelated bundled clang ahead of the host cc (Lean's clang,
+    // for example, needs its own resource-header setup).
+    for name in ["cc", "gcc", "clang"] {
+        for dir in std::env::split_paths(&path) {
             let candidate = dir.join(name);
             if candidate.is_file() && compiler_responds(&candidate) {
                 return Some(candidate);

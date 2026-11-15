@@ -127,8 +127,22 @@ fn the_hand_transcription_and_the_mint_are_the_same_program() {
         .filter(|l| !l.is_empty())
         .collect();
     assert_eq!(minted.len(), HAND.len(), "six definitions either way");
+    // HAND is verbatim, so its one crate-level id is the 2026-08-23 FIXTURE-ERA
+    // struct id (29). The 2026-10-07 source-bound rebaseline re-pinned that
+    // build fact to 765 (data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json,
+    // has_loose_bvars type-table-index struct.29 -> struct.765) with zero
+    // instructions moved, so the comparison is taken against the hand line at
+    // the CURRENT pin -- the ledger's mapping, applied once and named here.
+    let hand_at_current_pin: Vec<String> = HAND
+        .iter()
+        .map(|h| h.replace("IRTy.struct_ 29", "IRTy.struct_ 765"))
+        .collect();
+    assert_ne!(
+        hand_at_current_pin[0], HAND[0],
+        "the re-pin must bite on the alias line, or this comparison is against nothing new"
+    );
     let mut identical = 0;
-    for (h, m) in HAND.iter().zip(&minted) {
+    for (h, m) in hand_at_current_pin.iter().zip(&minted) {
         let name = h.split(' ').nth(1).unwrap_or("?");
         if h == m {
             identical += 1;
@@ -222,8 +236,8 @@ fn the_mint_record_states_two_dumps_and_not_three() {
     // The fixture era is a THIRD set of ids, and the tag table pins THOSE —
     // reader A's are recorded, never compared.
     assert!(
-        ir_mint::IR_HLB_TAGS.contains("\"functy\": 435")
-            && ir_mint::IR_HLB_TAGS.contains("\"functy\": 433"),
+        ir_mint::IR_HLB_TAGS.contains("\"functy\": 410")
+            && ir_mint::IR_HLB_TAGS.contains("\"functy\": 408"),
         "the interface pins are the FIXTURE-era signature indices"
     );
     assert!(

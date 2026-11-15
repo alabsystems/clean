@@ -57,6 +57,8 @@ fn test_nat_add_zero_right_elaborates_in_isolation() {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: crate::spec::ModelUnitSource::default(),
         };
 
         spec.add_inductive(
@@ -111,6 +113,8 @@ fn test_nat_sub_zero_left_elaborates_in_isolation() {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: crate::spec::ModelUnitSource::default(),
         };
 
         spec.add_inductive(
@@ -211,6 +215,8 @@ fn test_nat_sub_succ_succ_elaborates_in_isolation() {
             env: Environment::new(),
             definitions: HashMap::new(),
             red_env_script_override: None,
+            red_env_interning_override: None,
+            model_unit_source: crate::spec::ModelUnitSource::default(),
         };
 
         spec.add_inductive(

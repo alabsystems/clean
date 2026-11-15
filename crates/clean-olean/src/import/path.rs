@@ -5,8 +5,8 @@
 //! Path resolution for .olean module names.
 //!
 //! Converts dot-separated Lean module names to filesystem paths and
-//! discovers search paths from environment variables, elan toolchains,
-//! and lake package build outputs.
+//! discovers search paths from environment variables, the repository-pinned
+//! Lean toolchain, and lake package build outputs.
 //!
 //! # External Package Support
 //!
@@ -15,6 +15,7 @@
 //! specifying additional package roots for external libraries like TorchLean.
 
 use super::ImportError;
+use clean_kernel::name::{Name, NameInner};
 use hashbrown::HashSet;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -36,13 +37,125 @@ pub(super) fn module_name_to_rel_path(module: &str) -> Option<PathBuf> {
     Some(path)
 }
 
+/// Structural counterpart of Lean's `modToFilePath`: each Name.str is one
+/// path append, and `.olean` is appended, never substituted for a quoted dot.
+/// Numeric Name constructors are ill-formed module imports in upstream Lean.
+pub fn typed_module_rel_path(module: &Name) -> Result<PathBuf, ImportError> {
+    let mut components = Vec::new();
+    let mut current = module;
+    loop {
+        match current.inner() {
+            NameInner::Anon => break,
+            NameInner::Str(parent, value) => {
+                components.push(value.as_ref());
+                current = parent;
+            }
+            NameInner::Num(_, _) => {
+                return Err(ImportError::UnsupportedModule {
+                    module: format!("{module:?}"),
+                    reason: "numeric Name constructors are not Lean module path components".into(),
+                })
+            }
+        }
+    }
+    if components.is_empty() {
+        return Err(ImportError::UnsupportedModule {
+            module: format!("{module:?}"),
+            reason: "anonymous module has no import path".into(),
+        });
+    }
+    let mut path = PathBuf::new();
+    for component in components.into_iter().rev() {
+        path.push(component);
+    }
+    path.as_mut_os_string().push(".olean");
+    Ok(path)
+}
+
+/// Resolve an exact typed module identity in caller-supplied search order.
+pub fn resolve_typed_module_path(
+    module: &Name,
+    search_paths: &[PathBuf],
+) -> Result<PathBuf, ImportError> {
+    resolve_typed_module_file(module, search_paths).map(|(_, path)| path)
+}
+
+/// [`resolve_typed_module_path`], with the index in `search_paths` of the
+/// directory the file was found in.
+pub(crate) fn resolve_typed_module_file(
+    module: &Name,
+    search_paths: &[PathBuf],
+) -> Result<(usize, PathBuf), ImportError> {
+    let relative = typed_module_rel_path(module)?;
+    let mut searched = Vec::new();
+    for (index, root) in search_paths.iter().enumerate() {
+        let candidate = root.join(&relative);
+        searched.push(candidate.clone());
+        if candidate.exists() {
+            return Ok((index, candidate));
+        }
+    }
+    Err(ImportError::ModuleNotFound {
+        module: format!("{module:?}"),
+        searched,
+    })
+}
+
+/// Compatibility spelling used by existing String-root APIs. Components are
+/// literal strings, including digit-only components; this is not Name display
+/// reconstruction, nor a parser for Lean's quoted-identifier syntax.
+pub(crate) fn legacy_module_name(module: &str) -> Result<Name, ImportError> {
+    module_name_to_rel_path(module).ok_or_else(|| ImportError::UnsupportedModule {
+        module: module.to_owned(),
+        reason: "module name is empty or contains empty dot-separated components; use a typed Name for quoted components".into(),
+    })?;
+    Ok(module
+        .trim_matches('.')
+        .split('.')
+        .fold(Name::anon(), |parent, component| parent.str(component)))
+}
+
+/// Injective storage key for the legacy caller-owned `HashSet<String>`.
+/// Ordinary dotted string names retain their historical keys. Other structural
+/// names use a reserved NUL prefix and UTF-8 byte-length framing; keys are never
+/// reparsed as module names or paths. No filesystem module can use that prefix.
+pub(super) fn module_visit_key(module: &Name) -> Result<String, ImportError> {
+    // Validate the structural root before a caller-supplied completed key can
+    // suppress path resolution (in particular, Num/anonymous are not paths).
+    typed_module_rel_path(module)?;
+    let mut parts = Vec::new();
+    let mut current = module;
+    while let NameInner::Str(parent, part) = current.inner() {
+        parts.push(part.as_ref());
+        current = parent;
+    }
+    parts.reverse();
+    if parts
+        .iter()
+        .all(|part| !part.is_empty() && !part.contains(['.', '\0']))
+    {
+        return Ok(parts.join("."));
+    }
+    let mut key = String::from("\0clean.module.str/v1:");
+    for part in parts {
+        key.push_str(&part.len().to_string());
+        key.push(':');
+        key.push_str(part);
+    }
+    Ok(key)
+}
+
+#[cfg(test)]
+mod typed_visit_key_tests;
+
 /// Discover lake package build output directories under a project root.
 ///
 /// Scans `<project_root>/.lake/packages/*/…` for directories that contain
 /// `.olean` files, plus the project's own build output.
 ///
-/// Recognizes BOTH Lake output layouts:
+/// Recognizes three output layouts:
 /// - **legacy (Lake v3):** `build/lib/`
+/// - **`clean lake`:** `.lake/build/lib/` (see [`clean_lake_lib_dir`])
 /// - **modern (Lake v4, e.g. toolchain `v4.30.0-rc2`):** `.lake/build/lib/lean/`
 ///   — the project's own oleans live at `<root>/.lake/build/lib/lean/`, and each
 ///   dependency's at `<root>/.lake/packages/<pkg>/.lake/build/lib/lean/`.
@@ -67,15 +180,18 @@ where
     const LIB_RELS: [&str; 2] = ["build/lib", ".lake/build/lib/lean"];
     let mut paths = Vec::new();
 
-    // Check the project's own build output (both layouts).
+    // Check the project's own build output (every layout).
     for rel in LIB_RELS {
         let own_build = project_root.join(rel);
         if own_build.exists() {
             paths.push(own_build);
         }
     }
+    if let Some(clean_lake_lib) = clean_lake_lib_dir(project_root) {
+        paths.push(clean_lake_lib);
+    }
 
-    // Check lake packages directory (both layouts per package).
+    // Check lake packages directory (every layout per package).
     let packages_dir = project_root.join(".lake/packages");
     if let Ok(entries) = read_dir(&packages_dir) {
         for entry in entries.flatten() {
@@ -85,10 +201,28 @@ where
                     paths.push(lib_path);
                 }
             }
+            if let Some(clean_lake_lib) = clean_lake_lib_dir(&entry.path()) {
+                paths.push(clean_lake_lib);
+            }
         }
     }
 
     paths
+}
+
+/// `<root>/.lake/build/lib` when it is `clean lake`'s own output, which writes
+/// module `.olean`s there directly (`clean_lake::Workspace::lib_dir`), the
+/// project's modules and its PATH dependencies' alike.
+///
+/// Lake v4 writes under `lib/lean/` instead, so a `lib` that holds a `lean/`
+/// directory is Lake's layout and is not searched a second time. Until
+/// 2026-09-29 this layout was searched by nothing but `clean lake`'s own
+/// module build: the native step of `clean lake build <exe>` then resolved an
+/// import of a path dependency to no artifact and, once imports became
+/// fail-closed, refused it (`lake_path_stripped`'s dependency workflow).
+fn clean_lake_lib_dir(root: &Path) -> Option<PathBuf> {
+    let lib = root.join(".lake/build/lib");
+    (lib.is_dir() && !lib.join("lean").exists()).then_some(lib)
 }
 
 pub(crate) fn collect_default_search_paths_with_pinned<F, R>(
@@ -137,34 +271,14 @@ where
     }
 
     // The checkout's exact `lean-toolchain` pin is the only implicit stdlib
-    // path with version authority. Keep explicit caller paths above it, but
-    // place it before the deterministic, compatibility-only fallback scan.
+    // path, below the explicit caller paths. No other installed toolchain is
+    // searched (R38, R81): until 2026-10-17 every `~/.elan/toolchains/*lean4*`
+    // library followed it, first match winning, so 290 module paths of a
+    // v4.30.0-rc2 closure resolved into v4.28.0, v4.32.1 or v4.33.1, among
+    // them `Init.Data.Float.Model`, which pinned `lean` says does not exist.
     if let Some(lib_path) = pinned_lean_lib {
         if lib_path.exists() && seen.insert(lib_path.clone()) {
             paths.push(lib_path);
-        }
-    }
-
-    for var in ["HOME", "USERPROFILE"] {
-        let Some(home) = var_lookup(var) else {
-            continue;
-        };
-
-        let elan_path = PathBuf::from(home).join(".elan/toolchains");
-        let Ok(entries) = read_dir(&elan_path) else {
-            continue;
-        };
-
-        let mut entries: Vec<_> = entries.flatten().collect();
-        entries.sort_by_key(std::fs::DirEntry::file_name);
-        for entry in entries {
-            let name = entry.file_name();
-            if name.to_string_lossy().contains("lean4") {
-                let lib_path = entry.path().join("lib/lean");
-                if lib_path.exists() && seen.insert(lib_path.clone()) {
-                    paths.push(lib_path);
-                }
-            }
         }
     }
 
@@ -228,9 +342,8 @@ pub fn alias_resolvable_toolchain_versions(paths: &[PathBuf]) -> Option<Vec<Stri
 /// 2. `LEAN_PATH` environment variable entries (first match wins)
 /// 3. `LEAN_PACKAGES_PATH` lake project roots (discovers `build/lib` and
 ///    `.lake/packages/*/build/lib` under each root)
-/// 4. The exact Lean stdlib named by this checkout's `lean-toolchain`
-/// 5. Other Lean4 toolchains under `.elan/toolchains/*/lib/lean`, sorted by
-///    directory name, as compatibility-only fallbacks
+/// 4. The exact Lean stdlib named by this checkout's `lean-toolchain`, and
+///    no other installed toolchain (R38, R81)
 ///
 /// # REQUIRES
 /// - Environment variables may be unset; function must handle missing vars.
@@ -238,7 +351,7 @@ pub fn alias_resolvable_toolchain_versions(paths: &[PathBuf]) -> Option<Vec<Stri
 /// # ENSURES
 /// - Returns a de-duplicated list of existing paths.
 /// - Order preserves priority: `MATHLIB_PATH`, then `LEAN_PATH`, then packages,
-///   then the repository pin, then deterministic fallback toolchains.
+///   then the repository pin.
 pub fn default_search_paths() -> Vec<PathBuf> {
     collect_default_search_paths_with_pinned(
         |key: &str| env::var_os(key),

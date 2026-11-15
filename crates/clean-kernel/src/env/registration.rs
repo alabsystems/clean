@@ -16,6 +16,7 @@ use crate::tc::{LocalContext, TypeChecker};
 use std::collections::HashSet;
 use std::sync::Arc;
 
+use super::stub_upgrade_parallel::{SpeculativeVerdict, StubVerdict};
 use super::types::{ConstantInfo, EnvError};
 use super::Environment;
 
@@ -98,7 +99,13 @@ impl Environment {
             .instance_names
             .retain(|name| !shadowed_names.contains(name));
         overlay
+            .instance_seqs
+            .retain(|name, _| !shadowed_names.contains(name));
+        overlay
             .param_names
+            .retain(|name, _| !shadowed_names.contains(name));
+        overlay
+            .typed_param_names
             .retain(|name, _| !shadowed_names.contains(name));
         overlay
             .param_binder_infos
@@ -475,9 +482,16 @@ impl Environment {
         // restored nested companions, whose family parameters and container
         // parameters are different telescopes.
         let mut ctor_application = Expr::const_(ctor.name.clone(), major_levels.clone());
-        let mut ctor_cursor = ctor
-            .type_
-            .instantiate_level_params_direct(&ctor.level_params, &major_levels);
+        // In this environment's theory (`tc/level_profile.rs`, DECISIONS R150):
+        // the checker below instantiates `ctor` at `major_levels` the same way.
+        let mut ctor_cursor = self
+            .instantiate_levels_in_theory(
+                &ctor.name,
+                &ctor.type_,
+                &ctor.level_params,
+                &major_levels,
+            )
+            .map_err(|error| format!("{}: rule {rule_idx}: {error:?}", rec.name))?;
         for (index, param) in major_params.iter().enumerate() {
             let _ = instantiate_recursor_arg(
                 &mut ctor_cursor,
@@ -657,6 +671,10 @@ impl Environment {
         rhs_args.extend(motives);
         rhs_args.extend(minors);
         rhs_args.extend(fields);
+        // `rec_levels` is the identity, under which Clean's substitution keeps
+        // every node (`Level::substitute_slice`), Lean's answer for shared
+        // objects; Lean's construction would only add a sharing refusal to this
+        // Clean-only check (DECISIONS R150).
         let rhs = rule
             .rhs
             .instantiate_level_params_direct(&rec.level_params, &rec_levels);
@@ -1308,6 +1326,146 @@ impl Environment {
         &mut self,
         constants: impl Iterator<Item = ConstantInfo>,
     ) -> (usize, Vec<(Name, EnvError)>) {
+        let (upgraded, refused, _) = self.upgrade_axiom_stubs_checked_with_work(constants, true);
+        (upgraded, refused)
+    }
+
+    pub(super) fn upgrade_axiom_stubs_checked_with_work(
+        &mut self,
+        constants: impl Iterator<Item = ConstantInfo>,
+        reuse_refusals: bool,
+    ) -> (
+        usize,
+        Vec<(Name, EnvError)>,
+        super::stub_upgrade_parallel::StubUpgradeWork,
+    ) {
+        let constants: Vec<ConstantInfo> = constants.collect();
+        // Every verdict below is `stub_upgrade_verdict` — the checks of steps
+        // 1-4 — taken against the environment as it stands when the record
+        // is installed or refused, or (for a batch large enough to fan out)
+        // a speculative ACCEPT taken against the environment as it stood
+        // before the batch. See `stub_upgrade_parallel` for why such an
+        // accept is the same kernel check against a δ-sub-environment of the
+        // one the record is installed into.
+        let speculative =
+            super::stub_upgrade_parallel::speculative_checks(self, &constants, reuse_refusals);
+        let mut work = super::stub_upgrade_parallel::StubUpgradeWork {
+            speculative_checks: speculative.checks,
+            ..Default::default()
+        };
+        let mut speculative = speculative.verdicts.into_iter();
+        let mut upgraded = 0usize;
+        let mut rejected: Vec<(Name, EnvError)> = Vec::new();
+        for ci in constants {
+            let checked = speculative.next();
+            let verdict = match self.stub_upgrade_precheck(&ci) {
+                Some(early) => early,
+                None => match checked {
+                    Some(SpeculativeVerdict::Install) => StubVerdict::Install,
+                    // No earlier swap: the complete worker check saw this
+                    // exact environment, including every indirect dependency.
+                    // After ANY swap, preserve the original in-order recheck.
+                    Some(SpeculativeVerdict::Refuse(error)) if upgraded == 0 => {
+                        work.reused_refusals += 1;
+                        StubVerdict::Refuse(*error)
+                    }
+                    _ => {
+                        work.sequential_checks += 1;
+                        self.stub_upgrade_verdict(&ci)
+                    }
+                },
+            };
+            match verdict {
+                StubVerdict::Skip => {}
+                StubVerdict::Refuse(e) => rejected.push((ci.name.clone(), e)),
+                StubVerdict::Install => {
+                    // The swap: install the checked record; stamp per the G4 lane.
+                    let name = ci.name.clone();
+                    self.constants.insert(name.clone(), ci);
+                    self.declaration_verification
+                        .insert(name, super::DeclarationVerification::Unchecked);
+                    upgraded += 1;
+                }
+            }
+        }
+        if upgraded > 0 {
+            self.generation += 1;
+        }
+        (upgraded, rejected, work)
+    }
+
+    /// Steps 1 and the silent no-op lane of
+    /// [`upgrade_axiom_stubs_checked`](Self::upgrade_axiom_stubs_checked):
+    /// `Some` when the record is decided without a kernel check — refused for
+    /// a missing stub, skipped when the resident already carries a value or
+    /// the record carries none — and `None` when it needs steps 2-4.
+    pub(super) fn stub_upgrade_precheck(&self, ci: &ConstantInfo) -> Option<StubVerdict> {
+        // 1. The stub must exist.
+        let Some(existing) = self.constants.get(&ci.name) else {
+            return Some(StubVerdict::Refuse(EnvError::UpgradeTargetMissing {
+                name: ci.name.clone(),
+            }));
+        };
+        // Silent no-op lane (the original #3134 contract): never overwrite
+        // a value-bearing resident; nothing to install without a value.
+        if existing.value.is_some() || ci.value.is_none() {
+            return Some(StubVerdict::Skip);
+        }
+        None
+    }
+
+    /// The whole per-record decision of
+    /// [`upgrade_axiom_stubs_checked`](Self::upgrade_axiom_stubs_checked),
+    /// read-only: steps 1-4 against `self` as it stands.
+    pub(super) fn stub_upgrade_verdict(&self, ci: &ConstantInfo) -> StubVerdict {
+        self.stub_upgrade_check(ci, false).0
+    }
+
+    /// Alongside the original verdict, report whether a refusal completed
+    /// without a resource cutoff. This never changes the verdict itself.
+    pub(super) fn stub_upgrade_check(
+        &self,
+        ci: &ConstantInfo,
+        track_completion: bool,
+    ) -> (StubVerdict, bool) {
+        // Optional import diagnosis only: every checked verdict still follows
+        // the same path, in the same order, with the same resource controls.
+        static TRACE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+            std::env::var("CLEAN_TRACE_STUB_UPGRADES").is_ok_and(|value| value == "1")
+        });
+        let started = if *TRACE {
+            eprintln!(
+                "checked-stub begin thread={:?} name={} completion_tracking={track_completion}",
+                std::thread::current().id(),
+                ci.name,
+            );
+            Some(std::time::Instant::now())
+        } else {
+            None
+        };
+        let complete = std::cell::Cell::new(track_completion);
+        let verdict = self.stub_upgrade_verdict_inner(ci, &complete);
+        if let Some(started) = started {
+            let outcome = match &verdict {
+                StubVerdict::Skip => "skip",
+                StubVerdict::Install => "install",
+                StubVerdict::Refuse(_) => "refuse",
+            };
+            eprintln!(
+                "checked-stub end thread={:?} name={} outcome={outcome} elapsed_us={}",
+                std::thread::current().id(),
+                ci.name,
+                started.elapsed().as_micros(),
+            );
+        }
+        (verdict, complete.get())
+    }
+
+    fn stub_upgrade_verdict_inner(
+        &self,
+        ci: &ConstantInfo,
+        complete: &std::cell::Cell<bool>,
+    ) -> StubVerdict {
         use crate::tc::TypeError;
 
         // A kernel type error is FATAL unless it is a bare `UnknownConst` (an
@@ -1317,107 +1475,86 @@ impl Environment {
             matches!(e, TypeError::UnknownConst(_))
         }
 
-        let mut upgraded = 0usize;
-        let mut rejected: Vec<(Name, EnvError)> = Vec::new();
-        for ci in constants {
-            let name = ci.name.clone();
+        if let Some(early) = self.stub_upgrade_precheck(ci) {
+            return early;
+        }
+        let name = ci.name.clone();
+        let Some(existing) = self.constants.get(&name) else {
+            return StubVerdict::Refuse(EnvError::UpgradeTargetMissing { name });
+        };
 
-            // 1. The stub must exist.
-            let Some(existing) = self.constants.get(&name) else {
-                rejected.push((name.clone(), EnvError::UpgradeTargetMissing { name }));
-                continue;
-            };
-            // Silent no-op lane (the original #3134 contract): never overwrite
-            // a value-bearing resident; nothing to install without a value.
-            if existing.value.is_some() || ci.value.is_none() {
-                continue;
+        // 3. Type anchor (arity first).
+        if existing.level_params.len() != ci.level_params.len() {
+            let detail = format!(
+                "level-param arity {} differs from existing arity {}",
+                ci.level_params.len(),
+                existing.level_params.len()
+            );
+            return StubVerdict::Refuse(EnvError::UpgradeTypeMismatch { name, detail });
+        }
+
+        // 2. Structural tier.
+        if let Err(e) = self.validate_constant_info_structural(ci) {
+            return StubVerdict::Refuse(e);
+        }
+
+        // 3. (continued) Positional alpha-insensitive type identity.
+        let incoming_type = if existing.level_params == ci.level_params {
+            ci.type_.clone()
+        } else {
+            let renaming: Vec<Level> = existing
+                .level_params
+                .iter()
+                .map(|n| Level::param(n.clone()))
+                .collect();
+            ci.type_
+                .instantiate_level_params_direct(&ci.level_params, &renaming)
+        };
+        if existing.type_ != incoming_type {
+            let tc = TypeChecker::with_mode(self, self.mode());
+            if !tc.is_def_eq(&existing.type_, &incoming_type) {
+                // This bool does not distinguish a completed inequality
+                // from every conservative reduction cutoff. Keep the
+                // original in-order recheck for type-anchor refusals.
+                complete.set(false);
+                return StubVerdict::Refuse(EnvError::UpgradeTypeMismatch {
+                    name,
+                    detail: "declared type is not definitionally equal to the \
+                             existing value-free constant's type"
+                        .to_string(),
+                });
             }
+        }
 
-            // 3. Type anchor (arity first; borrow of `existing` ends at the
-            // clones below, freeing `self` for the TypeChecker).
-            if existing.level_params.len() != ci.level_params.len() {
-                let detail = format!(
-                    "level-param arity {} differs from existing arity {}",
-                    ci.level_params.len(),
-                    existing.level_params.len()
-                );
-                rejected.push((name.clone(), EnvError::UpgradeTypeMismatch { name, detail }));
-                continue;
-            }
-            let existing_type = existing.type_.clone();
-            let existing_level_params = existing.level_params.clone();
-
-            // 2. Structural tier.
-            if let Err(e) = self.validate_constant_info_structural(&ci) {
-                rejected.push((name, e));
-                continue;
-            }
-
-            // 3. (continued) Positional alpha-insensitive type identity.
-            let incoming_type = if existing_level_params == ci.level_params {
-                ci.type_.clone()
-            } else {
-                let renaming: Vec<Level> = existing_level_params
-                    .iter()
-                    .map(|n| Level::param(n.clone()))
-                    .collect();
-                ci.type_
-                    .instantiate_level_params_direct(&ci.level_params, &renaming)
-            };
-            if existing_type != incoming_type {
-                let tc = TypeChecker::with_mode(self, self.mode());
-                if !tc.is_def_eq(&existing_type, &incoming_type) {
-                    rejected.push((
-                        name.clone(),
-                        EnvError::UpgradeTypeMismatch {
-                            name,
-                            detail: "declared type is not definitionally equal to the \
-                                     existing value-free constant's type"
-                                .to_string(),
-                        },
+        // 4. Kernel type-check, `UnknownConst`-tolerant (G4). The stub
+        // stays resident during the check — the same posture as G4's
+        // insert-first batch re-check; a self-referencing value resolves
+        // to the stub's (identical) type, so the check stays consistent,
+        // and the conservative stamp claims nothing stronger.
+        let tc = TypeChecker::with_mode(self, self.mode());
+        if let Err(e) = tc.infer_sort(&ci.type_) {
+            if !is_tolerable(&e) {
+                if complete.get() {
+                    complete.set(super::stub_upgrade_parallel::completed_type_refusal(
+                        &tc, &e,
                     ));
-                    continue;
+                }
+                return StubVerdict::Refuse(EnvError::TypeCheckFailed { name, source: e });
+            }
+        }
+        if let Some(value) = ci.value.as_ref() {
+            if let Err(e) = tc.check_type(value, &ci.type_) {
+                if !is_tolerable(&e) {
+                    if complete.get() {
+                        complete.set(super::stub_upgrade_parallel::completed_type_refusal(
+                            &tc, &e,
+                        ));
+                    }
+                    return StubVerdict::Refuse(EnvError::TypeCheckFailed { name, source: e });
                 }
             }
-
-            // 4. Kernel type-check, `UnknownConst`-tolerant (G4). The stub
-            // stays resident during the check — the same posture as G4's
-            // insert-first batch re-check; a self-referencing value resolves
-            // to the stub's (identical) type, so the check stays consistent,
-            // and the conservative stamp below claims nothing stronger.
-            {
-                let tc = TypeChecker::with_mode(self, self.mode());
-                if let Err(e) = tc.infer_sort(&ci.type_) {
-                    if !is_tolerable(&e) {
-                        rejected
-                            .push((name.clone(), EnvError::TypeCheckFailed { name, source: e }));
-                        continue;
-                    }
-                }
-                let mut value_error: Option<TypeError> = None;
-                if let Some(value) = ci.value.as_ref() {
-                    if let Err(e) = tc.check_type(value, &ci.type_) {
-                        if !is_tolerable(&e) {
-                            value_error = Some(e);
-                        }
-                    }
-                }
-                if let Some(e) = value_error {
-                    rejected.push((name.clone(), EnvError::TypeCheckFailed { name, source: e }));
-                    continue;
-                }
-            }
-
-            // The swap: install the checked record; stamp per the G4 lane.
-            self.constants.insert(name.clone(), ci);
-            self.declaration_verification
-                .insert(name, super::DeclarationVerification::Unchecked);
-            upgraded += 1;
         }
-        if upgraded > 0 {
-            self.generation += 1;
-        }
-        (upgraded, rejected)
+        StubVerdict::Install
     }
 
     /// O(1) structural validation shared by the inductive-family structural
@@ -1667,7 +1804,9 @@ impl Environment {
     /// error). Inserted records are stamped `StructuralOnly`.
     ///
     /// Duplicate name checking is NOT performed here — callers pre-filter
-    /// duplicates (as the import path already does).
+    /// duplicates (as the import path already does). `num_indices` must be the
+    /// type's arity minus `num_params` (`env/imported_family.rs`); the family
+    /// itself (positivity, universes, constructor typing) is NOT re-checked.
     pub(crate) fn extend_inductives_structural(
         &mut self,
         inductives: impl Iterator<Item = InductiveVal>,
@@ -1675,11 +1814,15 @@ impl Environment {
         let mut valid = Vec::new();
         let mut rejected = Vec::new();
         for ind in inductives {
+            // Derived arity metadata must be what the type determines
+            // (env/imported_family.rs).
             match Self::validate_family_record_structural(
                 &ind.name,
                 &ind.level_params,
                 &[&ind.type_],
-            ) {
+            )
+            .and_then(|()| self.check_imported_inductive(&ind))
+            {
                 Ok(()) => valid.push(ind),
                 Err(e) => rejected.push((ind.name.clone(), e)),
             }
@@ -1714,6 +1857,9 @@ impl Environment {
 
     /// Bulk register constructors with structural validation (R1-IND) — see
     /// [`extend_inductives_structural`](Self::extend_inductives_structural).
+    /// The owning inductive must already be resident, and the record's
+    /// position, `num_params`, `num_fields` and universes must be the ones it
+    /// and the constructor's type determine (`env/imported_family.rs`).
     pub(crate) fn extend_constructors_structural(
         &mut self,
         constructors: impl Iterator<Item = ConstructorVal>,
@@ -1721,11 +1867,16 @@ impl Environment {
         let mut valid = Vec::new();
         let mut rejected = Vec::new();
         for ctor in constructors {
+            // Owner, position, num_params, num_fields and universes must be
+            // what the resident inductive and the constructor's own type
+            // determine (env/imported_family.rs).
             match Self::validate_family_record_structural(
                 &ctor.name,
                 &ctor.level_params,
                 &[&ctor.type_],
-            ) {
+            )
+            .and_then(|()| self.check_imported_constructor(&ctor))
+            {
                 Ok(()) => valid.push(ctor),
                 Err(e) => rejected.push((ctor.name.clone(), e)),
             }
@@ -1765,25 +1916,33 @@ impl Environment {
     /// recursor type: rule right-hand sides participate in ι-reduction, so a
     /// leaked fvar/mvar or out-of-scope level there is exactly the smuggle
     /// class the structural tier closes.
+    ///
+    /// Beyond scope checks, each record must EQUAL the recursor-table entry
+    /// this kernel generates from the family already resident (its inductive
+    /// and every constructor): type, universe arity, counts, `is_k`, argument
+    /// order and every iota rule. A file's recursor is never reduction
+    /// authority on its own — Lean's replay regenerates and compares the same
+    /// way (`env/imported_family.rs`).
     pub(crate) fn extend_recursors_structural(
         &mut self,
         recursors: impl Iterator<Item = RecursorVal>,
     ) -> Vec<(Name, EnvError)> {
         let mut valid = Vec::new();
         let mut rejected = Vec::new();
+        // A recursor must EQUAL the entry the kernel generates from its
+        // resident family, as Lean's replay requires (env/imported_family.rs).
+        let mut generated = super::imported_family::GeneratedRecursorCache::new();
         for rec in recursors {
             let mut exprs: Vec<&Expr> = Vec::with_capacity(1 + rec.rules.len());
             exprs.push(&rec.type_);
             exprs.extend(rec.rules.iter().map(|rule| &rule.rhs));
-            match Self::validate_family_record_structural(&rec.name, &rec.level_params, &exprs) {
-                Ok(()) => {
-                    drop(exprs);
-                    valid.push(rec);
-                }
-                Err(e) => {
-                    drop(exprs);
-                    rejected.push((rec.name.clone(), e));
-                }
+            let verdict =
+                Self::validate_family_record_structural(&rec.name, &rec.level_params, &exprs);
+            drop(exprs);
+            let name = rec.name.clone();
+            match verdict.and_then(|()| self.admit_imported_recursor(rec, &mut generated)) {
+                Ok(admitted) => valid.push(admitted),
+                Err(e) => rejected.push((name, e)),
             }
         }
         self.insert_recursors_raw(

@@ -12,8 +12,9 @@
 
 #![cfg(feature = "round-trip-compile")]
 
+mod runtime_fixture;
+
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clean_compiler::emit_c::{emit_c_with_config, CEmitConfig};
@@ -21,14 +22,7 @@ use clean_compiler::pass_manager::{compile_lcnf_decls, PipelineConfig};
 use clean_compiler::to_lcnf::constant_to_decl;
 use clean_compiler::Decl;
 use clean_kernel::{Environment, Expr, ExprVisitor, LevelVec, Name};
-
-fn runtime_include_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/include")
-}
-
-fn runtime_c_source() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/src/clean_runtime.c")
-}
+use runtime_fixture::MaterializedRuntime;
 
 fn find_c_compiler() -> Option<String> {
     for compiler in ["cc", "gcc", "clang"] {
@@ -183,13 +177,15 @@ int main(void) {
     )
     .expect("write source");
 
+    // Embedded runtime, not a compile-time path (see runtime_fixture.rs).
+    let runtime = MaterializedRuntime::materialize();
     let compile = Command::new(&cc)
         .arg("-o")
         .arg(&binary)
         .arg(&source)
-        .arg(runtime_c_source())
+        .arg(runtime.c_source())
         .arg("-I")
-        .arg(runtime_include_dir())
+        .arg(runtime.include_dir())
         .output()
         .expect("spawn cc");
     assert!(

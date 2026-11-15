@@ -540,7 +540,13 @@ fn test_all_bitvec_reducers_registered() {
 
 #[test]
 fn test_reduce_native_fires_for_bitvec_of_nat() {
-    let mut env = Environment::new();
+    // RE-DECIDED 2026-09-28 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`,
+    // "every world pins only reviewed folds"): `BitVec.ofNat`'s reducer returns
+    // a raw `Nat` payload where the prelude's definition returns a `BitVec`
+    // constructor, so the review refuses it (leg T) and its row is `refused`:
+    // the reducer no longer fires through the kernel, and the term δ-unfolds
+    // to the definition. The reducer function itself is still pinned above.
+    let mut env = Environment::with_prelude();
     env.init_bitvec_native_reducers();
     let tc = crate::tc::TypeChecker::new(&env);
     let expr = Expr::app(
@@ -550,34 +556,47 @@ fn test_reduce_native_fires_for_bitvec_of_nat() {
         ),
         Expr::nat_lit(300),
     );
-    let result = tc.reduce_native_for_test(&expr);
-    assert_nat_result(result, 44); // 300 % 256 = 44
+    assert!(
+        tc.reduce_native_for_test(&expr).is_none(),
+        "BitVec.ofNat's payload reducer must not fire over the prelude's definition"
+    );
+    assert!(!env.native_fold_authorized(&names::BITVEC_OF_NAT));
+    assert!(env.native_fold_definition_admitted(&names::BITVEC_OF_NAT));
 }
 
 #[test]
 fn test_reduce_native_fires_for_uint8_to_bitvec() {
-    let mut env = Environment::new();
+    // RE-DECIDED 2026-09-28 (same section): `UInt8.toBitVec`'s reducer reads a
+    // raw payload, which no typed input is, so the review never saw it fire and
+    // the prelude's row is not `fold`; through the kernel it no longer fires.
+    let mut env = Environment::with_prelude();
     env.init_bitvec_native_reducers();
     let tc = crate::tc::TypeChecker::new(&env);
     let expr = Expr::app(
         Expr::const_(names::UINT8_TO_BITVEC.clone(), vec![]),
         Expr::nat_lit(42),
     );
-    let result = tc.reduce_native_for_test(&expr);
-    assert_nat_result(result, 42);
+    assert!(tc.reduce_native_for_test(&expr).is_none());
+    assert_nat_result(reduce_uint8_to_bitvec(&[&Expr::nat_lit(42)]), 42);
 }
 
 #[test]
 fn test_reduce_native_fires_for_uint32_of_bitvec() {
-    let mut env = Environment::new();
-    env.init_bitvec_native_reducers();
+    // RE-DECIDED 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-by-name.md`):
+    // `UInt32.ofBitVec` is a CONSTRUCTOR. A constructor application is already
+    // a value, and no definition justifies rewriting it; a native reducer
+    // registered under a constructor's name no longer fires
+    // (`env/native_fold_authority.rs`), in the prelude or anywhere else.
+    let env = Environment::with_prelude();
     let tc = crate::tc::TypeChecker::new(&env);
     let expr = Expr::app(
         Expr::const_(names::UINT32_OF_BITVEC.clone(), vec![]),
         Expr::nat_lit(1000000),
     );
-    let result = tc.reduce_native_for_test(&expr);
-    assert_nat_result(result, 1000000);
+    assert!(
+        tc.reduce_native_for_test(&expr).is_none(),
+        "a reducer keyed on a constructor must not fire"
+    );
 }
 
 // --- BitVec.toNat OfNat-instance peel (b125_c5 shape) ---

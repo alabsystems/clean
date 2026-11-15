@@ -1,0 +1,4 @@
+(assume a1 (= (h 5) x))
+(assume a2 (not (= x 5)))
+(step t1 (cl (= x 5)) :rule symm :premises (a1))
+(step t2 (cl) :rule resolution :premises (a2 t1))

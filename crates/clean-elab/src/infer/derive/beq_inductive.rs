@@ -71,49 +71,47 @@ impl<'a> ElabCtx<'a> {
         // Push a temporary local so the inductive name resolves while
         // elaborating constructor field types. `Type 0` is the right kind for
         // the monomorphic inductives this path targets.
-        let local_name = ind_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or("")
-            .to_string();
+        let local_name = clean_parser::SurfaceName::from_name(ind_name.clone()).last_component();
         let ind_sort = Expr::sort(Level::succ(Level::zero()));
         let ind_fvar = self.push_local(local_name, ind_sort);
 
-        let mut out = Vec::with_capacity(ctors.len());
-        let mut ok = true;
-        for ctor in ctors {
-            let Ok(ctor_ty) = self.elaborate(&ctor.ty) else {
-                ok = false;
-                break;
-            };
-            let mut field_types = Vec::new();
-            let mut has_recursive_field = false;
-            let mut curr = ctor_ty;
-            // Peel the field telescope; each Pi domain is a field type.
-            while let ExprKind::Pi(_, domain, body) = curr.kind() {
-                let dom = domain.as_ref().clone();
-                if expr_mentions_fvar(&dom, ind_fvar) {
-                    has_recursive_field = true;
+        // This is a second elaboration of the original constructor syntax.
+        // Its qualified self reference must name the SAME temporary local as
+        // the short spelling, just as in the first-pass constructor builder.
+        // The alias adds no binder and is restored on success or refusal.
+        let result = self.with_local_name_alias(
+            clean_parser::SurfaceName::from_name(ind_name.clone()),
+            ind_fvar,
+            |ctx| {
+                let mut out = Vec::with_capacity(ctors.len());
+                for ctor in ctors {
+                    let ctor_ty = ctx.elaborate(&ctor.ty)?;
+                    let mut field_types = Vec::new();
+                    let mut has_recursive_field = false;
+                    let mut curr = ctor_ty;
+                    // Peel the field telescope; each Pi domain is a field type.
+                    while let ExprKind::Pi(_, domain, body) = curr.kind() {
+                        let dom = domain.as_ref().clone();
+                        if expr_mentions_fvar(&dom, ind_fvar) {
+                            has_recursive_field = true;
+                        }
+                        field_types.push(dom);
+                        // Field telescopes for non-dependent ctors don't bind the domain
+                        // in the body in a way we use; instantiate with the fvar to keep
+                        // the body closed for the next peel.
+                        curr = body.as_ref().instantiate(&Expr::fvar(ind_fvar));
+                    }
+                    out.push(CtorFields {
+                        field_types,
+                        has_recursive_field,
+                    });
                 }
-                field_types.push(dom);
-                // Field telescopes for non-dependent ctors don't bind the domain
-                // in the body in a way we use; instantiate with the fvar to keep
-                // the body closed for the next peel.
-                curr = body.as_ref().instantiate(&Expr::fvar(ind_fvar));
-            }
-            out.push(CtorFields {
-                field_types,
-                has_recursive_field,
-            });
-        }
+                Ok(out)
+            },
+        );
 
         self.pop_local(); // ind_fvar
-        if ok {
-            Some(out)
-        } else {
-            None
-        }
+        result.ok()
     }
 
     /// Build the field-binding `BEq` comparison body for a monomorphic,
@@ -138,7 +136,7 @@ impl<'a> ElabCtx<'a> {
         b_ref: &Expr,
     ) -> Result<Expr, ElabError> {
         let motive_u = Level::succ(Level::zero());
-        let cases_on_name = Name::from_string(&format!("{ind_name}.casesOn"));
+        let cases_on_name = ind_name.clone().str("casesOn");
         let bool_type = Expr::const_(Name::from_string("Bool"), vec![]);
         let bool_false = Expr::const_(Name::from_string("Bool.false"), vec![]);
         // Motive `λ _ : Ind => Bool` (shared by outer and inner casesOn).
@@ -251,7 +249,8 @@ impl<'a> ElabCtx<'a> {
             self.resolve_instance(&beq_field_ty)
                 .ok_or_else(|| ElabError::Unsupported {
                     feature: format!(
-                        "deriving BEq cannot synthesize a closed field instance for `{field_ty:?}`"
+                        "deriving BEq cannot synthesize a closed field instance for `{}`",
+                        crate::error_render::term(field_ty)
                     ),
                 })?;
         let beq_beq = self.mk_const_str("BEq.beq");

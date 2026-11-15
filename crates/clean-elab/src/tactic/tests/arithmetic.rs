@@ -224,8 +224,9 @@ fn make_linarith_goal(hyps: &[(FVarId, Expr, Expr)]) -> Goal {
         .iter()
         .enumerate()
         .map(|(i, (fvar, a, b))| LocalDecl {
+            binder_info: Default::default(),
             fvar: *fvar,
-            name: format!("h{i}"),
+            name: clean_parser::SurfaceName::from_name(Name::anon().str(format!("h{i}"))),
             ty: make_nat_le(a.clone(), b.clone()),
             value: None,
         })
@@ -235,6 +236,7 @@ fn make_linarith_goal(hyps: &[(FVarId, Expr, Expr)]) -> Goal {
         target: Expr::prop(),
         local_ctx,
         tag: None,
+        case_binders: Vec::new(),
     }
 }
 
@@ -370,8 +372,9 @@ fn make_int_linarith_goal(hyps: &[(FVarId, Expr, Expr)]) -> Goal {
         .iter()
         .enumerate()
         .map(|(i, (fvar, a, b))| LocalDecl {
+            binder_info: Default::default(),
             fvar: *fvar,
-            name: format!("h{i}"),
+            name: clean_parser::SurfaceName::from_name(Name::anon().str(format!("h{i}"))),
             ty: make_int_le(a.clone(), b.clone()),
             value: None,
         })
@@ -381,6 +384,7 @@ fn make_int_linarith_goal(hyps: &[(FVarId, Expr, Expr)]) -> Goal {
         target: Expr::prop(),
         local_ctx,
         tag: None,
+        case_binders: Vec::new(),
     }
 }
 
@@ -464,14 +468,16 @@ fn test_build_add_le_add_proof_mixed_sort_returns_none() {
     // h0: Nat LE, h1: Int LE — mixed sorts
     let local_ctx = vec![
         LocalDecl {
+            binder_info: Default::default(),
             fvar: fvar1,
-            name: "h0".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h0"),
             ty: make_nat_le(a, b),
             value: None,
         },
         LocalDecl {
+            binder_info: Default::default(),
             fvar: fvar2,
-            name: "h1".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h1"),
             ty: make_int_le(c, d),
             value: None,
         },
@@ -481,6 +487,7 @@ fn test_build_add_le_add_proof_mixed_sort_returns_none() {
         target: Expr::prop(),
         local_ctx,
         tag: None,
+        case_binders: Vec::new(),
     };
 
     let result = build_add_le_add_proof(&active, &hypothesis_fvars, &goal);
@@ -1144,20 +1151,23 @@ fn test_mathverse_with_even_odd_hypotheses() {
         Expr::const_(Name::from_string("False"), vec![]),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: Expr::const_(Name::from_string("Nat"), vec![]),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_even".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_even"),
                 ty: even_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h_odd".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_odd"),
                 ty: odd_ty,
                 value: None,
             },
@@ -1198,14 +1208,16 @@ fn test_mathverse_with_dvd_constraint() {
         false_ty.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: n_fvar,
-                name: "n".to_string(),
+                name: clean_parser::SurfaceName::generated_path("n"),
                 ty: Expr::const_(Name::from_string("Nat"), vec![]),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(1),
-                name: "h_dvd".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_dvd"),
                 ty: dvd_ty,
                 value: None,
             },

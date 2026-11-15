@@ -101,7 +101,7 @@ run_benchmarks() {
         # Run criterion benchmarks and parse bencher format output.
         # Keep the full benchmark name intact so names with spaces do not collide.
         local bench_output
-        bench_output="$(cargo bench --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p "$pkg" -- --output-format=bencher 2>/dev/null)"
+        bench_output="$(targo --unverified bench --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p "$pkg" -- --output-format=bencher 2>/dev/null)"
         while IFS= read -r line; do
             # Parse: "test <name> ... bench: <ns> ns/iter (+/- <variance>)"
             if [[ "$line" =~ ^test\ (.+)\ \.\.\.\ bench:\ +([0-9,]+)\ ns/iter ]]; then
@@ -122,7 +122,7 @@ run_benchmarks() {
     # Wrap results with metadata using jq
     jq -n --arg commit "$git_commit" --arg ts "$timestamp" \
         --arg jobs "$CARGO_BUILD_JOBS" \
-        --arg command 'cargo bench --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p "$pkg" -- --output-format=bencher' \
+        --arg command 'targo --unverified bench --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p "$pkg" -- --output-format=bencher' \
         --argjson threshold "$REGRESSION_THRESHOLD" --argjson benchmarks "$results" \
         '{git_commit: $commit, timestamp: $ts, cargo_build_jobs: $jobs, cargo_command: $command, threshold_pct: $threshold, benchmarks: $benchmarks}' \
         >"$output_file"

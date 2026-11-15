@@ -143,7 +143,7 @@ EOF
 
 # Host driver (only rebuild when missing: the shared cargo lock is contended).
 if [[ ! -x "${DUMP_BIN}" ]]; then
-  cargo build --locked --release -p clean-mathverse --bin mathverse_coq_dump \
+  targo --unverified build --locked --release -p clean-mathverse --bin mathverse_coq_dump \
     --manifest-path "${REPO_ROOT}/Cargo.toml"
 fi
 

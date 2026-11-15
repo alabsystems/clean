@@ -539,6 +539,44 @@ impl Environment {
                 type_,
                 value,
             })?;
+            // PARK THIS PROOF INSTEAD OF UNWINDING IT.
+            //
+            // `Nat.le_of_ble_eq_true a b h` is `(Nat.rec C base step b) a h`
+            // (built directly above) whose step returns
+            // `Nat.succ_le_succ … (ih …)`, so reducing it to a `Nat.le`
+            // CONSTRUCTOR unwinds min(a, b) nested recursor layers. Nothing
+            // needs that: it is a PROOF, its value is irrelevant, and the only
+            // thing that ever demanded the constructor was another recursor
+            // eliminating it.
+            //
+            // Measured 2026-09-19. `Char.ofNatAux` derives its width bound
+            // `n < 2^32` from the validity hypothesis by `Or.rec`, whose `inl`
+            // minor is `Nat.le_trans (succ n) 55296 (2^32) h
+            // (Nat.le_of_ble_eq_true 55296 (2^32) rfl)` — and `Nat.le_trans` is
+            // `Nat.le.rec` on exactly that second hypothesis. So every `Char`
+            // whose code point sits below the surrogate block paid min(55296,
+            // 2^32) = 55,296 layers, which is why the cost was FLAT in the code
+            // point: `theorem : (Char.ofNat 65).val = 65 := rfl` cost 4.93 GB
+            // and 21 s, and so did the same theorem at 1 and at 300. An IOTA
+            // trace over that run is `Nat.rec` / `Nat.le.rec` /
+            // `Nat.succ_le_succ`. With the lemma parked: 0.05 GB, under a
+            // second. One line of one corpus test held a suite shard's peak.
+            //
+            // DIRECTION OF RISK. Reducibility is a reduction STRATEGY, not part
+            // of the theory: this removes a δ-step the kernel MAY take, so it
+            // can only make def-eq more conservative. Nothing becomes provable
+            // that was not; the hazard is a false REJECTION — a proof that used
+            // to close by unfolding this lemma and now does not — never a false
+            // acceptance. That is what the suite tests, and it is why the whole
+            // of `clean-kernel --lib` is the gate on this line: 10,574 passed,
+            // 0 failed. What settles the comparisons this used to grind through
+            // is proof irrelevance, which needs no constructor.
+            //
+            // Trying proof irrelevance EARLIER instead does NOT work and was
+            // measured: irrelevance settles a comparison of two proofs, and
+            // what drove the unwind was `Nat.le.rec` demanding its major in
+            // constructor form, which no amount of irrelevance prevents.
+            self.restrict_checked_unfolding(&Name::from_string("Nat.le_of_ble_eq_true"))?;
         }
 
         Ok(())

@@ -51,9 +51,13 @@ fn print_graph_usage() {
     eprintln!("  --limit <N>      Max results (default: 20)");
     eprintln!("  --format <fmt>   Output format: table (default), json");
     eprintln!();
-    eprintln!("Overlap/stats options:");
+    eprintln!("Overlap options:");
     eprintln!("  --format <fmt>   Output format: table (default), json");
     eprintln!("  --min <N>        Minimum shared names to show (default: 1)");
+    eprintln!("Stats options:");
+    eprintln!("  --format <fmt>   Output format: table (default), json, csv, tsv");
+    eprintln!("                   (stats always shows overlaps with at least 1 shared name;");
+    eprintln!("                   --min applies to `overlap` only)");
 }
 
 // ---------------------------------------------------------------------------

@@ -95,7 +95,7 @@ impl LlmProofResponse {
         })
     }
 
-    pub fn tactic_steps(&self) -> Result<Vec<String>, LlmOracleError> {
+    pub(crate) fn tactic_steps(&self) -> Result<Vec<String>, LlmOracleError> {
         let source = self
             .tactic_script
             .as_deref()

@@ -17,7 +17,8 @@
 //! - **T2**: Projection index must be valid
 //! - **F1**: Full application arity must match
 //! - **F2**: Partial application must have fewer args than arity
-//! - **C1**: Constructor tag and field limits
+//! - **C1**: Constructor tag and field limits — Lean's (`Checker.lean`
+//!   @v4.30.0-rc2:137-141) intersected with Clean's 8-bit header bytes
 //! - **C2**: Constructor field_types length consistency
 //! - **C3**: Constructor arg count matches declared fields
 //! - **T3**: Reset/Reuse slot must be object type
@@ -30,6 +31,9 @@
 //! Part of #996
 
 mod checker;
+mod layout;
+#[cfg(test)]
+mod layout_limit_tests;
 #[cfg(test)]
 mod tests;
 
@@ -44,6 +48,26 @@ use checker::IRChecker;
 /// Runtime limits from Lean 4 object system.
 pub(crate) const MAX_CTOR_TAG: u32 = 65535;
 pub(crate) const MAX_CTOR_FIELDS: u32 = 256;
+
+/// The largest tag a heap (reference) constructor may carry: Lean's
+/// `LeanMaxCtorTag` (`lean.h`@v4.30.0-rc2:83), which pinned Lean's IR checker
+/// enforces (`Checker.lean`:137, "tag for constructor ... is too big"). Clean's
+/// header byte could hold 255, but Clean never compiles what Lean refuses
+/// (`docs/DECISIONS.md` R2).
+pub(crate) const MAX_REF_CTOR_TAG: u32 = 243;
+
+/// The largest object-field count the runtime header's 8-bit `num_objs` holds
+/// (`clean_runtime.h`, `clean_obj_header`). Lean allows 256
+/// (`LEAN_MAX_CTOR_FIELDS`), which its own 8-bit `m_other` stores as 0
+/// (leanprover/lean4#15527, a leak); a 256th field here would allocate 0
+/// slots and then write 256 pointers.
+pub(crate) const MAX_CTOR_OBJECT_FIELDS: u32 = 255;
+
+/// The largest scalar area, in bytes, the header's 8-bit `scalar_sz` holds.
+/// Lean's bound is 1024 (`LEAN_MAX_CTOR_SCALARS_SIZE`); widening Clean's
+/// header to it is the separate header-widening item. 32 `UInt64` fields are
+/// 256 bytes, which the byte truncates to 0.
+pub(crate) const MAX_CTOR_SCALAR_BYTES: u32 = 255;
 
 /// IR validation error.
 #[derive(Debug, Clone, Error)]
@@ -90,6 +114,27 @@ pub enum IRError {
 
     #[error("constructor {name} has {count} fields, max is {max}")]
     CtorTooManyFields { name: Name, count: u32, max: u32 },
+
+    #[error(
+        "tag {tag} of heap constructor {name} exceeds {max}, the largest tag a heap \
+         constructor may carry (Lean's LeanMaxCtorTag)"
+    )]
+    RefCtorTagTooLarge { name: Name, tag: u32, max: u32 },
+
+    #[error(
+        "constructor {name} has {count} object fields; the runtime object header holds at \
+         most {max}"
+    )]
+    CtorTooManyObjectFields { name: Name, count: u32, max: u32 },
+
+    #[error(
+        "constructor {name} has {bytes} bytes of scalar fields; the runtime object header \
+         holds at most {max}"
+    )]
+    CtorScalarSizeTooLarge { name: Name, bytes: u32, max: u32 },
+
+    #[error("setTag to {tag} exceeds {max}, the largest tag a heap constructor may carry")]
+    SetTagTooLarge { tag: u32, max: u32 },
 
     #[error("unknown function: {0}")]
     UnknownFunction(Name),
@@ -172,27 +217,27 @@ pub(crate) struct LocalContext {
 
 impl LocalContext {
     /// Add a parameter to the context.
-    pub fn add_param(&mut self, var: VarId, ty: IRType) {
+    pub(crate) fn add_param(&mut self, var: VarId, ty: IRType) {
         self.var_entries.insert(var.0, LocalEntry::Param(ty));
     }
 
     /// Add a local variable to the context.
-    pub fn add_local(&mut self, var: VarId, ty: IRType) {
+    pub(crate) fn add_local(&mut self, var: VarId, ty: IRType) {
         self.var_entries.insert(var.0, LocalEntry::Local(ty));
     }
 
     /// Add a join point to the context.
-    pub fn add_jp(&mut self, jp: JoinPointId, params: Vec<(VarId, IRType)>) {
+    pub(crate) fn add_jp(&mut self, jp: JoinPointId, params: Vec<(VarId, IRType)>) {
         self.jp_entries.insert(jp.0, params);
     }
 
     /// Check if a join point is defined.
-    pub fn is_jp(&self, jp: JoinPointId) -> bool {
+    pub(crate) fn is_jp(&self, jp: JoinPointId) -> bool {
         self.jp_entries.contains_key(&jp.0)
     }
 
     /// Get the type of a variable (param or local).
-    pub fn get_type(&self, var: VarId) -> Option<&IRType> {
+    pub(crate) fn get_type(&self, var: VarId) -> Option<&IRType> {
         match self.var_entries.get(&var.0) {
             Some(LocalEntry::Param(ty)) | Some(LocalEntry::Local(ty)) => Some(ty),
             _ => None,
@@ -200,12 +245,12 @@ impl LocalContext {
     }
 
     /// Get the parameters of a join point.
-    pub fn get_jp_params(&self, jp: JoinPointId) -> Option<&[(VarId, IRType)]> {
+    pub(crate) fn get_jp_params(&self, jp: JoinPointId) -> Option<&[(VarId, IRType)]> {
         self.jp_entries.get(&jp.0).map(|v| v.as_slice())
     }
 
     /// Check if a variable is in scope (param or local).
-    pub fn is_in_scope(&self, var: VarId) -> bool {
+    pub(crate) fn is_in_scope(&self, var: VarId) -> bool {
         matches!(
             self.var_entries.get(&var.0),
             Some(LocalEntry::Param(_)) | Some(LocalEntry::Local(_))

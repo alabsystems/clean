@@ -12,6 +12,15 @@
 //! Both are consulted by build, register and verify alike in [`super`], so the
 //! tables live together, apart from the code that walks them.
 
+/// NOT PUBLISHED since 2026-09-26 (`docs/issues/2026-09-26-kernel-native-fold-
+/// by-name.md`): the per-constant "discharges" — `float_to_rat_exact_discharge_01`,
+/// the four `round_discharge_*` / `rounding_error_bound_discharge_*` pairs and
+/// `fl_op_rel_error_discharge_f32`/`_f64`. Each was proved by the kernel
+/// computing `Float.toRatExact` or `Rat.roundToNearestEven` through a native
+/// reducer, and both are OPAQUE placeholders (`fun _ => Rat.zero`) no
+/// definition backs; native folds now fire only over a canonical definition,
+/// so the kernel no longer registers them.
+///
 /// The IEEE-754 float-theory declarations packaged into the shard, in a fixed
 /// **dependency-safe order**: every name appears after the constants it
 /// references (the `with_prelude` baseline supplies Rat / Float / Nat / Int /
@@ -39,22 +48,11 @@ pub const NNVERIFY_IEEE754_DECLS: &[&str] = &[
     "NNVerify.FloatRational.matmul_error_bound",
     "NNVerify.FloatRational.ibp_float_sound",
     "NNVerify.FloatRational.error_propagation_linear",
-    // --- the per-float exactness discharge (Theorem, Eq.refl, empty closure) ---
-    "NNVerify.FloatRational.float_to_rat_exact_discharge_01",
     // --- the native ties-to-even round (Opaque, reducer-backed) ---
     "Rat.roundToNearestEven",
     // --- the universal + denormal half-ulp soundness theorems (empty closure) ---
     "NNVerify.FloatRational.rounding_error_le_half_ulp",
     "NNVerify.FloatRational.rounding_error_le_half_ulp_denormal",
-    // --- the four rounding_error_bound discharges (Theorem, empty closure) ---
-    "NNVerify.FloatRational.round_discharge_normal",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_normal",
-    "NNVerify.FloatRational.round_discharge_subnormal",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_subnormal",
-    "NNVerify.FloatRational.round_discharge_tie",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_tie",
-    "NNVerify.FloatRational.round_discharge_exact",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_exact",
     // --- Higham dot-product accumulated-error development (empty closure) ---
     // `init_nn_verify_float_rational` pulls `init_nn_verify_dot_product_error`
     // in, so these are part of the registered float theory and must be
@@ -64,8 +62,6 @@ pub const NNVERIFY_IEEE754_DECLS: &[&str] = &[
     "NNVerify.FloatRational.error_accum_step",
     "NNVerify.FloatRational.error_accum_step3",
     "NNVerify.FloatRational.error_accum_step4",
-    "NNVerify.FloatRational.fl_op_rel_error_discharge_f32",
-    "NNVerify.FloatRational.fl_op_rel_error_discharge_f64",
     "NNVerify.FloatRational.gamma_n_reduces_u8_n2",
     "NNVerify.FloatRational.gamma_n_reduces_u8_n3",
     "NNVerify.FloatRational.gamma_n_reduces_u12_n2",
@@ -84,17 +80,8 @@ pub const NNVERIFY_IEEE754_DECLS: &[&str] = &[
 /// six IEEE-754 domain axioms deliberately do NOT (they are the postulated
 /// surface the theorems discharge).
 pub const NNVERIFY_IEEE754_EMPTY_CLOSURE_THEOREMS: &[&str] = &[
-    "NNVerify.FloatRational.float_to_rat_exact_discharge_01",
     "NNVerify.FloatRational.rounding_error_le_half_ulp",
     "NNVerify.FloatRational.rounding_error_le_half_ulp_denormal",
-    "NNVerify.FloatRational.round_discharge_normal",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_normal",
-    "NNVerify.FloatRational.round_discharge_subnormal",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_subnormal",
-    "NNVerify.FloatRational.round_discharge_tie",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_tie",
-    "NNVerify.FloatRational.round_discharge_exact",
-    "NNVerify.FloatRational.rounding_error_bound_discharge_exact",
     // The dot-product accumulation development: `init_nn_verify_dot_product_error`
     // ENSURES every declaration it registers is a `Theorem` with an empty
     // non-foundational closure (the kernel-side `tests_nn_verify_dot_product_error`
@@ -102,8 +89,6 @@ pub const NNVERIFY_IEEE754_EMPTY_CLOSURE_THEOREMS: &[&str] = &[
     "NNVerify.FloatRational.error_accum_step",
     "NNVerify.FloatRational.error_accum_step3",
     "NNVerify.FloatRational.error_accum_step4",
-    "NNVerify.FloatRational.fl_op_rel_error_discharge_f32",
-    "NNVerify.FloatRational.fl_op_rel_error_discharge_f64",
     "NNVerify.FloatRational.gamma_n_reduces_u8_n2",
     "NNVerify.FloatRational.gamma_n_reduces_u8_n3",
     "NNVerify.FloatRational.gamma_n_reduces_u12_n2",

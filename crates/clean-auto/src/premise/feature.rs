@@ -29,19 +29,19 @@ pub(crate) struct FeatureSet {
 
 impl FeatureSet {
     /// Create a new empty feature set
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             features: HashSet::new(),
         }
     }
 
     /// Add a feature
-    pub fn add(&mut self, f: Feature) {
+    pub(crate) fn add(&mut self, f: Feature) {
         self.features.insert(f);
     }
 
     /// Get all features
-    pub fn features(&self) -> &HashSet<Feature> {
+    pub(crate) fn features(&self) -> &HashSet<Feature> {
         &self.features
     }
 
@@ -52,23 +52,23 @@ impl FeatureSet {
     /// awaiting production wiring — 2026-07-31.
     #[cfg(test)]
     #[allow(dead_code)]
-    pub fn is_empty(&self) -> bool {
+    pub(crate) fn is_empty(&self) -> bool {
         self.features.is_empty()
     }
 
     /// Number of features
     #[cfg(test)]
-    pub fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         self.features.len()
     }
 
     /// Compute overlap (intersection size) with another feature set
-    pub fn overlap(&self, other: &FeatureSet) -> usize {
+    pub(crate) fn overlap(&self, other: &FeatureSet) -> usize {
         self.features.intersection(&other.features).count()
     }
 
     /// Compute Jaccard similarity with another feature set
-    pub fn jaccard(&self, other: &FeatureSet) -> f64 {
+    pub(crate) fn jaccard(&self, other: &FeatureSet) -> f64 {
         let intersection = self.overlap(other);
         let union = self.features.union(&other.features).count();
         if union == 0 {
@@ -101,14 +101,14 @@ impl Default for FeatureExtractor {
 
 impl FeatureExtractor {
     /// Create a new feature extractor with default settings
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Set maximum extraction depth
     #[cfg(test)]
     #[must_use]
-    pub fn with_depth(mut self, depth: usize) -> Self {
+    pub(crate) fn with_depth(mut self, depth: usize) -> Self {
         self.max_depth = depth;
         self
     }
@@ -116,7 +116,7 @@ impl FeatureExtractor {
     /// Enable/disable type features
     #[cfg(test)]
     #[must_use]
-    pub fn with_types(mut self, include: bool) -> Self {
+    pub(crate) fn with_types(mut self, include: bool) -> Self {
         self.include_types = include;
         self
     }
@@ -124,7 +124,7 @@ impl FeatureExtractor {
     /// Enable/disable pattern features
     #[cfg(test)]
     #[must_use]
-    pub fn with_patterns(mut self, include: bool) -> Self {
+    pub(crate) fn with_patterns(mut self, include: bool) -> Self {
         self.include_patterns = include;
         self
     }
@@ -137,7 +137,7 @@ impl FeatureExtractor {
     /// ENSURES: Traverses type positions (in Lam/Pi) only if include_types is true
     /// ENSURES: For Let, traverses type position only if include_types is true, but val/body always
     /// ENSURES: Feature extraction is deterministic (same input → same output)
-    pub fn extract(&self, expr: &Expr) -> FeatureSet {
+    pub(crate) fn extract(&self, expr: &Expr) -> FeatureSet {
         let mut features = FeatureSet::new();
         self.extract_recursive(expr, 0, &mut features);
         features
@@ -245,7 +245,7 @@ impl FeatureExtractor {
     }
 
     /// Extract all constants from an expression (for MePo)
-    pub fn extract_constants(&self, expr: &Expr) -> HashSet<Name> {
+    pub(crate) fn extract_constants(&self, expr: &Expr) -> HashSet<Name> {
         let mut constants = HashSet::new();
         self.extract_constants_recursive(expr, &mut constants);
         constants

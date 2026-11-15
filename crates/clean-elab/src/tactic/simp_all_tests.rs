@@ -87,7 +87,11 @@ fn test_simp_all_config_to_simp_config() {
     assert!(simp_config.use_hypotheses);
     assert_eq!(
         simp_config.extra_lemmas,
-        lemmas.iter().map(ToString::to_string).collect::<Vec<_>>()
+        lemmas
+            .iter()
+            .cloned()
+            .map(clean_parser::SurfaceName::from_name)
+            .collect::<Vec<_>>()
     );
     assert!(simp_config.beta);
     assert!(simp_config.eta);

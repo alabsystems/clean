@@ -742,8 +742,26 @@ fn pi_domains(e: &Expr) -> Vec<Expr> {
     out
 }
 
-/// Every constructor type in `decl` is beta-normal (proof the redex was
-/// contracted at its source, not left for a head-reading pass to trip over).
+/// Some auxiliary constructor of `decl` keeps the β-redex `(fun _ => V) k`
+/// that instantiating the dependent container leaves, exactly as Lean's
+/// elimination does (`instantiate_rev`, no β step; R139 superseded the
+/// 2026-07-05 β-normalization), and that redex reads, through β, as `V`.
+fn assert_aux_keeps_leans_redex(decl: &InductiveDecl, reduced: impl Fn(&Expr) -> bool) {
+    let redexes: Vec<Expr> = decl
+        .types
+        .iter()
+        .flat_map(|ty| &ty.constructors)
+        .flat_map(|c| pi_domains(&c.type_))
+        .filter(|d| matches!(&d.kind, ExprKind::App(f, _) if matches!(f.kind, ExprKind::Lam(..))))
+        .collect();
+    assert!(
+        redexes.iter().any(|d| reduced(&crate::inductive::head_beta(d))),
+        "an auxiliary constructor keeps Lean's redex, reading as the map's value; redex domains = {redexes:?}"
+    );
+}
+
+/// Every constructor type in `decl` is beta-normal: true of a family with no
+/// dependent container, whose transform has no redex to keep.
 fn assert_all_ctors_beta_normal(decl: &InductiveDecl) {
     for ty in &decl.types {
         for c in &ty.constructors {
@@ -759,9 +777,9 @@ fn assert_all_ctors_beta_normal(decl: &InductiveDecl) {
 
 /// POSITIVE CONTROL (the Json / PrefixTreeNode shape): a block nested through
 /// a dependent container with a well-behaved const map `fun _ => J` is
-/// ACCEPTED, and the mirror's `β k` field is the bare block const `J` — NOT
-/// the redex `(fun _ => J) k` (which the pre-fix gate rejected as a
-/// non-`Const` head).
+/// ACCEPTED, and the mirror's `β k` field is the redex `(fun _ => J) k`, as
+/// Lean stores it (the pre-2026-07-05 gate rejected it as a non-`Const` head;
+/// the strict gate now reads it through β, as Lean's `whnf` does).
 #[test]
 fn test_dep_container_positive_const_map_accepts() {
     let mut env = Environment::new();
@@ -798,7 +816,7 @@ fn test_dep_container_positive_const_map_accepts() {
 
     validate_inductive_strict(&transformed)
         .expect("dependent-param container with a positive const map must be accepted");
-    assert_all_ctors_beta_normal(&transformed);
+    assert_aux_keeps_leans_redex(&transformed, |e| *e == j_ref);
 
     let aux = transformed
         .types
@@ -812,8 +830,11 @@ fn test_dep_container_positive_const_map_accepts() {
         .expect("aux node ctor expected");
     let doms = pi_domains(&node.type_);
     assert!(
-        doms.contains(&j_ref),
-        "the reduced `β k` field must be the bare block const `J`; domains = {doms:?}"
+        !doms.contains(&j_ref)
+            && doms
+                .iter()
+                .any(|d| *d != j_ref && crate::inductive::head_beta(d) == j_ref),
+        "the `β k` field is Lean's redex `(fun _ => J) k`, which reads as `J`; domains = {doms:?}"
     );
 }
 
@@ -858,7 +879,7 @@ fn test_dep_container_negative_const_map_rejected() {
         .eliminate_nested_inductives(&decl, &nested_set(&["Bad"]))
         .expect("elimination should succeed")
         .expect("nesting should be detected");
-    assert_all_ctors_beta_normal(&transformed);
+    assert_aux_keeps_leans_redex(&transformed, |e| matches!(e.kind, ExprKind::Pi(..)));
     let err = validate_inductive_strict(&transformed)
         .expect_err("a const map hiding a NEGATIVE occurrence must still be rejected");
     assert!(
@@ -904,7 +925,7 @@ fn test_dep_container_wrong_arity_const_map_rejected() {
         .eliminate_nested_inductives(&decl, &nested_set(&["Bad"]))
         .expect("elimination should succeed")
         .expect("nesting should be detected");
-    assert_all_ctors_beta_normal(&transformed);
+    assert_aux_keeps_leans_redex(&transformed, |e| e.get_app_num_args() == 1);
     let err = validate_inductive_strict(&transformed)
         .expect_err("a const map hiding a WRONG-ARITY occurrence must still be rejected");
     assert!(
@@ -958,7 +979,7 @@ fn test_dep_container_non_uniform_const_map_rejected() {
         .eliminate_nested_inductives(&decl, &nested_set(&["Bad"]))
         .expect("elimination should succeed")
         .expect("nesting should be detected");
-    assert_all_ctors_beta_normal(&transformed);
+    assert_aux_keeps_leans_redex(&transformed, |e| e.get_app_num_args() == 1);
     let err = validate_inductive_strict(&transformed)
         .expect_err("a const map hiding a NON-UNIFORM occurrence must still be rejected");
     assert!(

@@ -77,8 +77,10 @@ impl<'a> ElabCtx<'a> {
                 self.fresh_meta(binder_sort)
             };
 
-            // Verify the type is well-formed (inhabits some Sort)
-            let _ = self.ensure_type_expr(&binder_ty)?;
+            // Lean elaborates the type before its separate bracket annotation
+            // check. This also preserves Bool coercion when that check is off.
+            let binder_ty = self.ensure_type_coerced(binder_ty)?.0;
+            self.check_instance_binder_annotation(binder.info, &binder_ty)?;
 
             // Push into scope so subsequent binders can reference this one
             let _fvar = self.push_local(binder.name.clone(), binder_ty);

@@ -30,19 +30,19 @@ pub(crate) struct RappId(pub(super) u64);
 /// explored first. This enables finding proofs faster by prioritizing
 /// more promising branches.
 #[derive(Debug, Clone, Copy)]
-pub struct Percent(f64);
+pub(crate) struct Percent(f64);
 
 impl Percent {
     /// 100% success probability
     /// ENSURES: Returns a probability value equal to `1.0`.
-    pub fn hundred() -> Self {
+    pub(crate) fn hundred() -> Self {
         Percent(1.0)
     }
 
     /// Create from a value (clamped to 0.0-1.0)
     /// ENSURES: Returned value is in the closed interval `[0.0, 1.0]`.
     /// ENSURES: Values below `0.0` clamp to `0.0`; values above `1.0` clamp to `1.0`.
-    pub fn from_f64(v: f64) -> Self {
+    pub(crate) fn from_f64(v: f64) -> Self {
         Percent(v.clamp(0.0, 1.0))
     }
 }
@@ -79,7 +79,7 @@ impl Ord for Percent {
 
 /// State of a goal in the search tree
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GoalState {
+pub(crate) enum GoalState {
     /// Goal hasn't been proven or shown unprovable yet
     Unknown,
     /// Goal was proven during normalization phase
@@ -93,7 +93,7 @@ pub enum GoalState {
 impl GoalState {
     /// Check if the goal has been proven
     /// ENSURES: Returns `true` for normalization- or rapp-proven goals, and `false` otherwise.
-    pub fn is_proven(&self) -> bool {
+    pub(crate) fn is_proven(&self) -> bool {
         matches!(
             self,
             Self::ProvenByNormalization | Self::ProvenByRuleApplication(_)
@@ -102,14 +102,14 @@ impl GoalState {
 
     /// Check if the goal is still active (not yet proven or shown unprovable)
     /// ENSURES: Returns `true` exactly when the state is `Unknown`.
-    pub fn is_active(&self) -> bool {
+    pub(crate) fn is_active(&self) -> bool {
         matches!(self, Self::Unknown)
     }
 }
 
 /// State of a rule application node
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NodeState {
+pub(crate) enum NodeState {
     /// Rapp hasn't been fully evaluated yet
     Unknown,
     /// All subgoals were proven
@@ -223,7 +223,7 @@ impl SearchTree {
 
     /// Increment iteration
     /// ENSURES: Increments `iteration()` by exactly one.
-    pub fn next_iteration(&mut self) {
+    pub(crate) fn next_iteration(&mut self) {
         self.iteration += 1;
     }
 

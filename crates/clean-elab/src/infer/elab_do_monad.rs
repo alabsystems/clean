@@ -5,7 +5,7 @@
 //! Cached monad info helpers for do-block elaboration.
 
 use super::*;
-use clean_kernel::{Expr, Level};
+use clean_kernel::{Expr, ExprKind, Level};
 use clean_parser::SurfaceArg;
 
 impl<'a> ElabCtx<'a> {
@@ -67,12 +67,12 @@ impl<'a> ElabCtx<'a> {
             return Ok(None);
         }
         let name = match Self::unwrap_surface_parens(func) {
-            SurfaceExpr::Ident(_, n) if n == "pure" => n,
+            SurfaceExpr::Ident(_, n) if n == &SurfaceName::generated_path("pure") => n,
             _ => return Ok(None),
         };
-        if self.lookup_local(name).is_some()
-            || self.env.get_const(&Name::from_string(name)).is_some()
-        {
+        // Only the prelude `pure` (a local, metaprogram value or namespace
+        // member spelled `pure` is the user's own function).
+        if !self.head_denotes_global(name, "pure") || self.env.get_const(name.name()).is_some() {
             return Ok(None);
         }
         // Elaborate the payload against the monad's inner result type `α` (from
@@ -88,6 +88,134 @@ impl<'a> ElabCtx<'a> {
         Ok(Some(self.mk_pure_app(val_expr)))
     }
 
+    /// The instance argument of a do-lowered monad operation:
+    /// `?inst : <class>.{levels} args`, resolved NOW when the goal is
+    /// determined, otherwise queued for the declaration-boundary drain
+    /// (`retry_postponed_open_carrier_instances`).
+    ///
+    /// Until 2026-09-28 the do lowering emitted `Pure.pure` / `Bind.bind` /
+    /// `StateT.get` / `MonadExcept.throw` / `OptionT.fail` with NO instance
+    /// argument, against instance-less prelude AXIOMS that proved `False`
+    /// (`docs/issues/2026-09-28-prelude-pure-proves-false.md`). They are
+    /// Lean's class projections / `[Monad m]` definitions now, so every
+    /// lowered application carries the instance Lean's elaborator would
+    /// synthesize. A goal whose monad is still an unassigned metavariable is
+    /// NOT searched (that would grab whichever instance comes first); it is
+    /// queued, and one that never grounds is reported by the fail-closed
+    /// residual guard as an unsynthesized instance goal — Lean's "typeclass
+    /// instance problem is stuck".
+    pub(super) fn do_instance_arg(
+        &mut self,
+        class: &str,
+        levels: Vec<Level>,
+        args: &[Expr],
+    ) -> Expr {
+        let goal = Expr::apps(
+            Expr::const_(Name::from_string(class), levels),
+            args.iter().cloned(),
+        );
+        let meta = self.fresh_meta(goal.clone());
+        let goal_now = self.metas.instantiate(&goal);
+        let open = args.iter().any(|a| {
+            instance::bare_unassigned_meta(&self.metas, &self.metas.instantiate(a)).is_some()
+        });
+        if !open {
+            if let Some(inst) = self.resolve_instance(&goal_now) {
+                if let ExprKind::FVar(fvar) = meta.kind() {
+                    if let Some(id) = MetaState::from_fvar(*fvar) {
+                        if self.metas.assign(id, inst) {
+                            return self.metas.instantiate(&meta);
+                        }
+                    }
+                }
+            }
+        }
+        self.postponed_open_carrier_instances
+            .push((meta.clone(), goal));
+        meta
+    }
+
+    /// Complete the required do goals before a convenience expression API
+    /// discards its elaboration context.
+    pub(crate) fn finish_required_do_obligations(&mut self) -> Result<(), ElabError> {
+        self.retry_postponed_open_carrier_instances();
+        self.ensure_do_pure_obligations()
+    }
+
+    /// Required Pure goals remain obligations even when lowering erased all
+    /// uses of their instance. Declaration finalization is the last chance to
+    /// resolve them; they must not disappear merely because a term is closed.
+    pub(super) fn ensure_do_pure_obligations(&self) -> Result<(), ElabError> {
+        for meta in &self.do_pure_obligations {
+            let Some(id) =
+                instance::bare_unassigned_meta(&self.metas, &self.metas.instantiate(meta))
+            else {
+                continue;
+            };
+            let Some(var) = self.metas.get(id) else {
+                return Err(ElabError::InternalInvariant(
+                    "do Pure obligation lost its metavariable".into(),
+                ));
+            };
+            let goal = self.metas.instantiate(&var.ty);
+            if !matches!(goal.get_app_fn().kind(), ExprKind::Const(name, _)
+                if name == &Name::from_string("Pure"))
+            {
+                return Err(ElabError::InternalInvariant(
+                    "do obligation is not a Pure goal".into(),
+                ));
+            }
+            return Err(ElabError::FailedToSynthesizeInstance {
+                goal: crate::error_render::term(&goal),
+                detail: self.instance_failure_detail(&goal),
+            });
+        }
+        Ok(())
+    }
+
+    /// `@Pure.pure.{u,v} m ?inst α val` — the do lowering's `pure`.
+    pub(super) fn mk_pure_term(
+        &mut self,
+        u: Level,
+        v: Level,
+        m: Expr,
+        alpha: Expr,
+        val: Expr,
+    ) -> Expr {
+        let inst =
+            self.do_instance_arg("Pure", vec![u.clone(), v.clone()], std::slice::from_ref(&m));
+        Expr::apps(
+            Expr::const_(Name::from_string("Pure.pure"), vec![u, v]),
+            [m, inst, alpha, val],
+        )
+    }
+
+    /// `@Bind.bind.{u,v} m ?inst α β x f` — the do lowering's `bind`.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn mk_bind_term(
+        &mut self,
+        u: Level,
+        v: Level,
+        m: Expr,
+        alpha: Expr,
+        beta: Expr,
+        x: Expr,
+        f: Expr,
+    ) -> Expr {
+        let inst =
+            self.do_instance_arg("Bind", vec![u.clone(), v.clone()], std::slice::from_ref(&m));
+        Expr::apps(
+            Expr::const_(Name::from_string("Bind.bind"), vec![u, v]),
+            [m, inst, alpha, beta, x, f],
+        )
+    }
+
+    /// `?inst : Monad.{u,v} m` — for the `[Monad m]` slot of `StateT.get`,
+    /// `OptionT.fail`, `ExceptT.pure`, … in the do lowering.
+    pub(super) fn do_monad_instance(&mut self, u: Level, v: Level, m: &Expr) -> Expr {
+        self.do_instance_arg("Monad", vec![u, v], std::slice::from_ref(m))
+    }
+
     /// Get cached `(PUnit.{u}, PUnit.unit.{u})` from `do_monad_info`, or create fresh.
     ///
     /// Matches Lean 4's `cachedPUnit`/`cachedPUnitUnit` in `MonadInfo`. Avoids
@@ -101,5 +229,53 @@ impl<'a> ElabCtx<'a> {
             let punit_unit = Expr::const_(Name::from_string("PUnit.unit"), vec![punit_level]);
             (punit, punit_unit)
         }
+    }
+}
+
+#[cfg(test)]
+mod required_pure_tests {
+    use super::*;
+    use clean_parser::{parse_decl, parse_expr};
+
+    #[test]
+    fn failed_do_declaration_does_not_poison_next_declaration() {
+        let env = Environment::with_prelude();
+        let mut ctx = ElabCtx::new(&env);
+        let bad = parse_decl("def bad : (fun (_ : Type) => Nat) Nat := do { 1 }").expect("parse");
+        let err = ctx.elab_decl(&bad).expect_err("Pure is unavailable");
+        assert!(err.to_string().contains("Pure"), "{err}");
+        assert!(ctx.do_pure_obligations.is_empty());
+        assert!(ctx.postponed_open_carrier_instances.is_empty());
+        let good = parse_decl("def good : Nat := 1").expect("parse");
+        ctx.elab_decl(&good)
+            .expect("failed obligation is declaration-local");
+    }
+
+    #[test]
+    fn nested_declaration_preserves_ambient_do_obligation() {
+        let env = Environment::with_prelude();
+        let mut ctx = ElabCtx::new(&env);
+        let m = ctx.fresh_meta(Expr::arrow(Expr::type_(), Expr::type_()));
+        let obligation = ctx.do_instance_arg("Pure", vec![Level::zero(), Level::zero()], &[m]);
+        ctx.do_pure_obligations.push(obligation.clone());
+        let good = parse_decl("def good : Nat := 1").expect("parse");
+        ctx.elab_decl(&good)
+            .expect("ambient constraint is not this declaration's");
+        assert_eq!(ctx.do_pure_obligations, vec![obligation]);
+        assert!(ctx.ensure_do_pure_obligations().is_err());
+    }
+
+    #[test]
+    fn expression_api_checks_required_pure_before_discarding_context() {
+        let env = Environment::with_prelude();
+        let bad = parse_expr("(do { 1 } : (fun (_ : Type) => Nat) Nat)").expect("parse");
+        let err = crate::elaborate(&env, &bad).expect_err("unused Pure is still required");
+        assert!(err.to_string().contains("Pure"), "{err}");
+        let good = parse_expr("(do { return 1 } : Id Nat)").expect("parse");
+        let term = crate::elaborate(&env, &good).expect("valid expression");
+        let ty = TypeChecker::new(&env)
+            .infer_type(&term)
+            .expect("closed expression checks");
+        assert!(!ty.has_fvar_quick());
     }
 }

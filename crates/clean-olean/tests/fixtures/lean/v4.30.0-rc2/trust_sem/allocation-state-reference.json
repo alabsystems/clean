@@ -1,0 +1,32 @@
+{
+  "sources": [
+    { "module": "MiniRust", "path": "../semr/MiniRust.lean" },
+    { "module": "TrustSemAllocationSearch", "path": "TrustSemAllocationSearch.lean" },
+    { "module": "TrustSemAllocationState", "path": "TrustSemAllocationState.lean" }
+  ],
+  "module": "TrustSemAllocationState",
+  "roots": [
+    "TrustSem.AllocationState.empty_memory_layout",
+    "TrustSem.AllocationState.original_memory_new",
+    "TrustSem.AllocationState.append_preserves_memory_layout",
+    "TrustSem.AllocationState.original_any_no_overlap",
+    "TrustSem.AllocationState.original_allocation_exact_state",
+    "TrustSem.AllocationState.original_fresh_data_length",
+    "TrustSem.AllocationState.fitting_append_preserves_layout",
+    "TrustSem.AllocationState.original_allocation_preserves_layout",
+    "TrustSem.AllocationState.original_append_state",
+    "TrustSem.AllocationState.erased_prior_allocation_goal_false"
+  ],
+  "positive": [
+    {
+      "proof": "TrustSem.AllocationState.original_append_state",
+      "goal": "TrustSem.AllocationState.OriginalAppendGoal"
+    }
+  ],
+  "negative": [
+    {
+      "proof": "TrustSem.AllocationState.original_append_state",
+      "goal": "TrustSem.AllocationState.ErasedPriorAllocationGoal"
+    }
+  ]
+}

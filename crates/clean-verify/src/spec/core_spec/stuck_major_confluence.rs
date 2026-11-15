@@ -94,9 +94,96 @@
 use crate::spec::error::SpecError;
 use crate::spec::Specification;
 
+// The actual diamond supplies BOTH outgoing legs. No nf_head premise or
+// caller-supplied equality of constructor-spine lengths is assumed.
+const COMPETING_CTOR_PROOFS: &[(&str, &str)] = &[
+    (r"def competing_ctor_spine_views (env : RedEnv) (faithful : RedEnvFaithful env)
+ (nm : Name) (cnameA : Name) (ruleA : RecRule) (cnameB : Name) (ruleB : RecRule)
+ (major : KExpr) (wmajor : KExpr) (m2 : KExpr)
+ (hA : par_reduces_cd_star env major wmajor) (hB : par_reduces_cd_star env major m2)
+ (headA : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) (OptionType.some Name cnameA)) (lookupA : Eq (OptionType RecRule) (recrule_for (red_rec env) nm cnameA) (OptionType.some RecRule ruleA))
+ (headB : Eq (OptionType Name) (kexpr_const_name (kapp_fn m2)) (OptionType.some Name cnameB)) (lookupB : Eq (OptionType RecRule) (recrule_for (red_rec env) nm cnameB) (OptionType.some RecRule ruleB))
+ (C : Type)
+ (kont : Eq Name cnameA cnameB -> Eq RecRule ruleA ruleB ->
+   Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2)) -> C) : C :=
+ @par_strips_witness_cd_star.rec env wmajor m2
+  (fun (_ : par_strips_witness_cd_star env wmajor m2) => C)
+  (fun (v : KExpr) (hwv : par_reduces_cd_star env wmajor v)
+    (hmv : par_reduces_cd_star env m2 v) =>
+    (fun (sameName : Eq Name cnameA cnameB) => kont sameName (option_some_inj RecRule ruleA ruleB
+ (Eq.trans (OptionType RecRule) (OptionType.some RecRule ruleA)
+  (recrule_for (red_rec env) nm cnameA) (OptionType.some RecRule ruleB)
+  (Eq.symm (OptionType RecRule) (recrule_for (red_rec env) nm cnameA) (OptionType.some RecRule ruleA) lookupA)
+  (Eq.trans (OptionType RecRule) (recrule_for (red_rec env) nm cnameA)
+   (recrule_for (red_rec env) nm cnameB) (OptionType.some RecRule ruleB)
+   (Eq.cong Name (OptionType RecRule) (fun (cname : Name) => recrule_for (red_rec env) nm cname) cnameA cnameB sameName)
+   lookupB))) (Eq.trans Nat (list_length (kapp_args wmajor)) (list_length (kapp_args v)) (list_length (kapp_args m2))
+ (ctor_spine_length_preserved_star env faithful nm cnameA ruleA wmajor v hwv headA lookupA)
+ (Eq.symm Nat (list_length (kapp_args m2)) (list_length (kapp_args v))
+  (ctor_spine_length_preserved_star env faithful nm cnameB ruleB m2 v hmv headB lookupB)))) (option_some_inj Name cnameA cnameB
+ (Eq.trans (OptionType Name) (OptionType.some Name cnameA) (kexpr_const_name (kapp_fn v)) (OptionType.some Name cnameB)
+  (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn v)) (OptionType.some Name cnameA) (const_head_star_preserved env cnameA
+ (recenv_ctor_no_defval_cname env nm cnameA ruleA wmajor (redenv_faithful_i8 env faithful) headA lookupA)
+ (recenv_ctor_no_recmeta_cname (red_rec env) nm cnameA ruleA wmajor (redenv_faithful_i2 env faithful) headA lookupA)
+ wmajor v hwv headA))
+  (const_head_star_preserved env cnameB
+ (recenv_ctor_no_defval_cname env nm cnameB ruleB m2 (redenv_faithful_i8 env faithful) headB lookupB)
+ (recenv_ctor_no_recmeta_cname (red_rec env) nm cnameB ruleB m2 (redenv_faithful_i2 env faithful) headB lookupB)
+ m2 v hmv headB))))
+  (par_reduces_cd_star_diamond env (redenv_faithful_i1 env faithful) (redenv_faithful_i2 env faithful) (redenv_faithful_i3 env faithful) (redenv_faithful_i4 env faithful) (redenv_faithful_i5 env faithful) (redenv_faithful_i6 env faithful) (redenv_faithful_i7 env faithful) (redenv_faithful_i8 env faithful) major wmajor m2 hA hB)", "Retain both actual diamond legs; faithful constructor heads and functional rule lookup align names/rules, while proved constructor-spine preservation aligns lengths."),
+    (r"def competing_ctor_spine_length (env : RedEnv) (faithful : RedEnvFaithful env)
+ (nm : Name) (cnameA : Name) (ruleA : RecRule) (cnameB : Name) (ruleB : RecRule)
+ (major : KExpr) (wmajor : KExpr) (m2 : KExpr)
+ (hA : par_reduces_cd_star env major wmajor) (hB : par_reduces_cd_star env major m2)
+ (headA : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) (OptionType.some Name cnameA)) (lookupA : Eq (OptionType RecRule) (recrule_for (red_rec env) nm cnameA) (OptionType.some RecRule ruleA))
+ (headB : Eq (OptionType Name) (kexpr_const_name (kapp_fn m2)) (OptionType.some Name cnameB)) (lookupB : Eq (OptionType RecRule) (recrule_for (red_rec env) nm cnameB) (OptionType.some RecRule ruleB)) : Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2)) :=
+ LiftP.rec (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2)))
+  (fun (_ : LiftP (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2)))) => (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2))))
+  (fun (sameLength : (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2)))) => sameLength)
+  (competing_ctor_spine_views env faithful nm cnameA ruleA cnameB ruleB major wmajor m2
+    hA hB headA lookupA headB lookupB (LiftP (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2))))
+    (fun (_sameName : Eq Name cnameA cnameB) (_sameRule : Eq RecRule ruleA ruleB)
+      (sameLength : (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2)))) => LiftP.up (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2))) sameLength))", "Prop-valued corollary of the actual competing constructor-spine view, with no assumed length equality."),
+    (r"def stuck_major_fields_short_no_firing
+ (nm : Name) (cnameA : Name) (ruleA : RecRule) (major : KExpr) (wmajor : KExpr)
+ (hA : par_reduces_cd_star the_red_env major wmajor)
+ (headA : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) (OptionType.some Name cnameA))
+ (lookupA : Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cnameA) (OptionType.some RecRule ruleA))
+ (short : Eq Bool (iota_fields_ok ruleA (kapp_args wmajor)) Bool.false)
+ (cnameB : Name) (ruleB : RecRule) (m2 : KExpr)
+ (hB : par_reduces_cd_star the_red_env major m2)
+ (headB : Eq (OptionType Name) (kexpr_const_name (kapp_fn m2)) (OptionType.some Name cnameB))
+ (lookupB : Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cnameB) (OptionType.some RecRule ruleB))
+ (fields : Eq Bool (iota_fields_ok ruleB (kapp_args m2)) Bool.true) : Empty :=
+ competing_ctor_spine_views the_red_env the_red_env_faithful nm cnameA ruleA cnameB ruleB major wmajor m2
+  hA hB headA lookupA headB lookupB Empty
+  (fun (_sameName : Eq Name cnameA cnameB) (sameRule : Eq RecRule ruleA ruleB)
+    (sameLength : (Eq Nat (list_length (kapp_args wmajor)) (list_length (kapp_args m2)))) =>
+   bool_false_ne_true_t Empty
+    (Eq.trans Bool Bool.false (iota_fields_ok ruleA (kapp_args wmajor)) Bool.true
+      (Eq.symm Bool (iota_fields_ok ruleA (kapp_args wmajor)) Bool.false short)
+      (Eq.trans Bool (iota_fields_ok ruleA (kapp_args wmajor)) (iota_fields_ok ruleB (kapp_args m2)) Bool.true (Eq.trans Bool (iota_fields_ok ruleA (kapp_args wmajor)) (iota_fields_ok ruleA (kapp_args m2)) (iota_fields_ok ruleB (kapp_args m2))
+ (Eq.cong Nat Bool (fun (count : Nat) => nat_eqb (Nat.sub (recrule_num_fields ruleA) count) Nat.zero) (list_length (kapp_args wmajor)) (list_length (kapp_args m2)) sameLength)
+ (Eq.cong RecRule Bool (fun (rule : RecRule) => iota_fields_ok rule (kapp_args m2)) ruleA ruleB sameRule)) fields)))", "At the actual faithful environment, a short-field constructor major rules out sufficient fields at any competing constructor/rule reduct; no nf_head premise."),
+    (r"def competing_ctor_spine_actual_trace :
+ Eq Nat (list_length (kapp_args ctor_spine_test_middle))
+  (list_length (kapp_args ctor_spine_test_target)) :=
+ competing_ctor_spine_length faithful_red_env faithful_red_env_faithful
+  (Name.str Name.anonymous Nat.zero) (Name.str Name.anonymous (Nat.succ Nat.zero)) ctor_spine_test_rule (Name.str Name.anonymous (Nat.succ Nat.zero)) ctor_spine_test_rule
+  ctor_spine_test_source ctor_spine_test_middle ctor_spine_test_target
+  (par_reduces_cd_star.step faithful_red_env ctor_spine_test_source ctor_spine_test_middle ctor_spine_test_middle
+    ctor_spine_test_first (par_reduces_cd_star.refl faithful_red_env ctor_spine_test_middle))
+  ctor_spine_test_trace
+  (Eq.refl (OptionType Name) (OptionType.some Name (Name.str Name.anonymous (Nat.succ Nat.zero)))) ctor_spine_test_lookup
+  (Eq.refl (OptionType Name) (OptionType.some Name (Name.str Name.anonymous (Nat.succ Nat.zero)))) ctor_spine_test_lookup", "Concrete competing nonidentity traces in the existing faithful fixture; the length corollary consumes actual constructor membership, not a postulated count."),
+];
+
 impl Specification {
     /// The confluence core, the classification, and the visible gap.
     pub(super) fn add_stuck_major_confluence(&mut self) -> Result<(), SpecError> {
+        for (source, description) in COMPETING_CTOR_PROOFS {
+            self.add_recursive_def(source, description)?;
+        }
         self.add_recursive_def(
             SRC_STUCK_MAJOR_JOIN_CTOR_HEAD,
             "stuck_major_join_ctor_head: THE CONFLUENCE CORE. If the major reduces to wmajor and also to a constructor-headed m2, the common reduct is headed by that same constructor. \\
@@ -140,3 +227,44 @@ const SRC_STUCK_MAJOR_LAM_NO_CTOR_REDUCT: &str = "def stuck_major_lam_no_ctor_re
 const SRC_STUCK_MAJOR_DEAD_CONST_NO_CTOR_REDUCT: &str = "def stuck_major_dead_const_no_ctor_reduct (nm : Name) (cname : Name) (cn2 : Name) (rule : RecRule) (major : KExpr) (wmajor : KExpr) (m2 : KExpr) (hwh : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) (OptionType.some Name cn2)) (hwdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) cn2) (OptionType.none KExpr)) (hwrec : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) cn2) (OptionType.none RecMeta)) (hnorule : Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cn2) (OptionType.none RecRule)) (hA : par_reduces_cd_star the_red_env major wmajor) (hB : par_reduces_cd_star the_red_env major m2) (hm2 : Eq (OptionType Name) (kexpr_const_name (kapp_fn m2)) (OptionType.some Name cname)) (hrule : Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cname) (OptionType.some RecRule rule)) : Empty := stuck_major_join_ctor_head_at_the_red_env Empty nm cname rule major wmajor m2 hA hB hm2 hrule (fun (v : KExpr) (hwv : par_reduces_cd_star the_red_env wmajor v) (hcv : Eq (OptionType Name) (kexpr_const_name (kapp_fn v)) (OptionType.some Name cname)) => option_none_ne_some_type RecRule rule Empty (Eq.trans (OptionType RecRule) (OptionType.none RecRule) (recrule_for (red_rec the_red_env) nm cname) (OptionType.some RecRule rule) (Eq.symm (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cname) (OptionType.none RecRule) (Eq.substType Name (fun (zz : Name) => Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm zz) (OptionType.none RecRule)) cn2 cname (Eq.symm Name cname cn2 (option_some_inj Name cname cn2 (Eq.trans (OptionType Name) (OptionType.some Name cname) (kexpr_const_name (kapp_fn v)) (OptionType.some Name cn2) (Eq.symm (OptionType Name) (kexpr_const_name (kapp_fn v)) (OptionType.some Name cname) hcv) (const_head_star_preserved the_red_env cn2 hwdef hwrec wmajor v hwv hwh)))) hnorule)) hrule))";
 
 const SRC_STUCK_MAJOR_NO_CTOR_REDUCT_OF_DEAD_HEAD: &str = "def stuck_major_no_ctor_reduct_of_dead_head (nm : Name) (cname : Name) (rule : RecRule) (major : KExpr) (wmajor : KExpr) (m2 : KExpr) (hdead : (forall (D : Type), (rigid_app_head wmajor -> D) -> ((forall (lty : KExpr) (lb : KExpr), Eq KExpr wmajor (KExpr.lam lty lb) -> D)) -> ((forall (cn2 : Name), Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) (OptionType.some Name cn2) -> Eq (OptionType KExpr) (defval_for (red_def the_red_env) cn2) (OptionType.none KExpr) -> Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) cn2) (OptionType.none RecMeta) -> Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cn2) (OptionType.none RecRule) -> D)) -> D)) (hA : par_reduces_cd_star the_red_env major wmajor) (hB : par_reduces_cd_star the_red_env major m2) (hm2 : Eq (OptionType Name) (kexpr_const_name (kapp_fn m2)) (OptionType.some Name cname)) (hrule : Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cname) (OptionType.some RecRule rule)) : Empty := hdead Empty (fun (hrig : rigid_app_head wmajor) => stuck_major_rigid_no_ctor_reduct nm cname rule major wmajor m2 hrig hA hB hm2 hrule) (fun (lty : KExpr) (lb : KExpr) (heq : Eq KExpr wmajor (KExpr.lam lty lb)) => stuck_major_lam_no_ctor_reduct nm cname rule major lty lb m2 (Eq.substType KExpr (fun (zz : KExpr) => par_reduces_cd_star the_red_env major zz) wmajor (KExpr.lam lty lb) heq hA) hB hm2 hrule) (fun (cn2 : Name) (hwh : Eq (OptionType Name) (kexpr_const_name (kapp_fn wmajor)) (OptionType.some Name cn2)) (hwdef : Eq (OptionType KExpr) (defval_for (red_def the_red_env) cn2) (OptionType.none KExpr)) (hwrec : Eq (OptionType RecMeta) (recmeta_for (red_rec the_red_env) cn2) (OptionType.none RecMeta)) (hnorule : Eq (OptionType RecRule) (recrule_for (red_rec the_red_env) nm cn2) (OptionType.none RecRule)) => stuck_major_dead_const_no_ctor_reduct nm cname cn2 rule major wmajor m2 hwh hwdef hwrec hnorule hA hB hm2 hrule)";
+
+#[cfg(test)]
+mod competing_ctor_tests {
+    use super::*;
+
+    #[test]
+    fn competing_ctor_sources_parse_and_retain_both_legs() {
+        for (source, _) in COMPETING_CTOR_PROOFS {
+            assert!(Specification::balanced(source));
+            crate::test_utils::parse_check(source)
+                .expect("actual competing-constructor proof parses");
+        }
+        let views = COMPETING_CTOR_PROOFS[0].0;
+        assert!(views.contains("par_reduces_cd_star_diamond env"));
+        assert!(views.contains("wmajor v hwv headA lookupA"));
+        assert!(views.contains("m2 v hmv headB lookupB"));
+        assert!(views.contains("option_some_inj RecRule ruleA ruleB"));
+        assert!(!views.contains("nf_head"));
+        assert!(COMPETING_CTOR_PROOFS[2]
+            .0
+            .contains("the_red_env the_red_env_faithful"));
+    }
+
+    #[test]
+    fn competing_ctor_roots_have_checked_empty_closures() {
+        let spec = crate::test_utils::build_spec_with_stack();
+        for (source, _) in COMPETING_CTOR_PROOFS {
+            let name = source.split_whitespace().nth(1).expect("definition name");
+            let definition = spec
+                .definitions()
+                .get(name)
+                .expect("registered competing-constructor proof");
+            assert!(!definition.is_axiom, "{name}");
+            assert!(definition.elaborated_value.is_some(), "{name}");
+            assert!(
+                crate::spec_axiom_closure::computed_axiom_closure(&spec, name).is_empty(),
+                "{name}"
+            );
+        }
+    }
+}

@@ -90,14 +90,14 @@ impl LinearExpr {
 #[cfg(test)]
 impl LinearExpr {
     /// Create expression with single variable coefficient (test-only, #2386).
-    pub fn var(v: ArithVar) -> Self {
+    pub(crate) fn var(v: ArithVar) -> Self {
         let mut expr = LinearExpr::new();
         expr.coeffs.insert(v, Rational::ONE);
         expr
     }
 
     /// Multiply the entire expression by a scalar (test-only, #2386).
-    pub fn scale(&mut self, scalar: &Rational) -> Option<()> {
+    pub(crate) fn scale(&mut self, scalar: &Rational) -> Option<()> {
         for coeff in self.coeffs.values_mut() {
             *coeff = coeff.mul(scalar)?;
         }
@@ -105,7 +105,7 @@ impl LinearExpr {
     }
 
     /// Add another expression: self += other (test-only, #2386).
-    pub fn add_expr(&mut self, other: &LinearExpr) -> Option<()> {
+    pub(crate) fn add_expr(&mut self, other: &LinearExpr) -> Option<()> {
         for (&var, coeff) in &other.coeffs {
             self.add_term(var, *coeff)?;
         }
@@ -113,7 +113,7 @@ impl LinearExpr {
     }
 
     /// Evaluate expression given variable assignments (test-only, #2386).
-    pub fn evaluate(&self, assignment: &HashMap<ArithVar, Rational>) -> Option<Rational> {
+    pub(crate) fn evaluate(&self, assignment: &HashMap<ArithVar, Rational>) -> Option<Rational> {
         let mut sum = Rational::ZERO;
         for (&var, coeff) in &self.coeffs {
             if let Some(val) = assignment.get(&var) {

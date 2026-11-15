@@ -162,6 +162,55 @@ class DeclBudgetWiringTests(unittest.TestCase):
         self.assertIn('f"--decl-budget={DECL_BUDGET}"', source)
 
 
+class RecordBlockersTests(unittest.TestCase):
+    """The `--update-baseline` escape hatch waives one failure and no other.
+
+    bba5da779 made CLEAN_FAMILY_BASELINE_ALLOW_REGRESSION reachable; before it
+    the regression it names was itself a gate failure that refused the record.
+    A later edit that widened the waiver (to every failure, or to any failure
+    that reads like a regression) would turn the hatch into a way to record a
+    baseline from a broken run; each arm below goes red on such an edit.
+    """
+
+    REGRESSION = "baseline regression — rows recorded passing now fail: ['p_ok']"
+    CANARY = "probe.lean: canary failed"
+    TIMEOUT = "probe.lean: timed out after 1800s"
+
+    def failures(self):
+        regression = "".join(["baseline regression — rows recorded passing now fail: ", "['p_ok']"])
+        return regression, [self.CANARY, regression, self.TIMEOUT]
+
+    def test_without_the_hatch_the_regression_refuses_the_record(self) -> None:
+        regression, gate_failures = self.failures()
+        self.assertEqual(
+            family_gate.record_blockers(gate_failures, regression, False), gate_failures
+        )
+
+    def test_the_hatch_waives_only_the_regression(self) -> None:
+        regression, gate_failures = self.failures()
+        self.assertEqual(
+            family_gate.record_blockers(gate_failures, regression, True),
+            [self.CANARY, self.TIMEOUT],
+        )
+
+    def test_a_regression_alone_is_recordable_through_the_hatch(self) -> None:
+        regression, _ = self.failures()
+        self.assertEqual(family_gate.record_blockers([regression], regression, True), [])
+
+    def test_a_failure_that_reads_like_a_regression_is_not_waived(self) -> None:
+        """Identity, not text: an equal string recorded as another failure stays."""
+        regression, _ = self.failures()
+        lookalike = "".join([regression[:10], regression[10:]])
+        self.assertIsNot(lookalike, regression)
+        self.assertEqual(
+            family_gate.record_blockers([lookalike, regression], regression, True), [lookalike]
+        )
+
+    def test_no_recorded_regression_waives_nothing(self) -> None:
+        _, gate_failures = self.failures()
+        self.assertEqual(family_gate.record_blockers(gate_failures, None, True), gate_failures)
+
+
 def classify(rep):
     return family_gate.classify_file_verdicts(rep, NAMES, FIXTURE_TEXT, "probe.lean")
 

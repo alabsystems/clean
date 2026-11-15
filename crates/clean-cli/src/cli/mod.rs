@@ -11,9 +11,10 @@
 //! - [`ReplArgs`] / [`FEATURES`] — the `clean repl` entry point. The REPL
 //!   event loop runs in the binary itself, so its clap args + descriptor
 //!   stay here.
-//! - [`bench`] — geometry benchmarks under `crates/clean-cli/src/benchmarks/`;
-//!   kernel benches can migrate into a dedicated `clean_kernel::cli::bench`
-//!   later.
+//! - [`bench`] — the geometry benchmark runner from
+//!   `clean_kernel::cert::benchmark` (inputs under the repo's
+//!   `benchmarks/geometry/` data dir); kernel benches can migrate into a
+//!   dedicated `clean_kernel::cli::bench` later.
 //! - [`promote`] — `DerivedPending -> DerivedProved` pipeline whose handler
 //!   already lives in `crate::cmd_promote` and links against `clean-verify`.
 //!
@@ -35,7 +36,7 @@ use clean_features::{Category, Example, FeatureDescriptor, RefKind, Reference, S
 /// replace direct `python3` invocations in tooling and agent scripts without
 /// re-learning flags. Part of #3423 follow-up.
 #[derive(Debug, Clone, Default, Args)]
-pub struct SorryTraceArgs {
+pub(crate) struct SorryTraceArgs {
     /// Emit JSON instead of the human-readable table.
     #[arg(long)]
     pub json: bool,
@@ -57,8 +58,12 @@ pub struct SorryTraceArgs {
 /// replace direct `bash scripts/sorry_census.sh` invocations in tooling
 /// and CI without re-learning flags.
 #[derive(Debug, Clone, Default, Args)]
-pub struct SorryCensusArgs {
-    /// Update the baseline JSON if the current sorry count is lower.
+pub(crate) struct SorryCensusArgs {
+    /// Rewrite the baseline JSON after a passing census: a LOWER count
+    /// ratchets it down, an EQUAL count refreshes its date, and a missing
+    /// baseline file is created. (A higher count fails the census before the
+    /// rewrite, so the ratchet still cannot go up — but "only if lower" was
+    /// not what the script does.)
     #[arg(long)]
     pub update: bool,
 }
@@ -70,7 +75,7 @@ pub struct SorryCensusArgs {
 /// migrated subcommands and reserves a place for future options without
 /// breaking the top-level clap tree.
 #[derive(Debug, Clone, Default, Args)]
-pub struct ReplArgs {}
+pub(crate) struct ReplArgs {}
 
 /// Arguments accepted by `clean export-cert`.
 ///
@@ -80,7 +85,7 @@ pub struct ReplArgs {}
 /// soundness-grounded artifact `clean kernel cert verify` consumes — this
 /// command closes the in-tree gap (source → bundle → verify chain).
 #[derive(Debug, Clone, Args)]
-pub struct ExportCertArgs {
+pub(crate) struct ExportCertArgs {
     /// The `.lean` source file to elaborate.
     pub file: PathBuf,
     /// Destination path for the `.cleancert` bundle.
@@ -89,9 +94,11 @@ pub struct ExportCertArgs {
     /// Optional path for a JSON export report (counts, per-decl status).
     #[arg(long = "json-report", value_name = "PATH")]
     pub json_report: Option<PathBuf>,
-    /// Also include axioms in the bundle's environment snapshot.
-    /// Axioms have no proof term so they cannot be replayed as theorems;
-    /// they are recorded in the report only.
+    /// List axioms in the export REPORT's exported_theorems (as `(axiom)`
+    /// rows). The bundle's environment snapshot is unaffected either way:
+    /// axioms are registered during elaboration and the WHOLE environment is
+    /// snapshotted, flag or no flag. Axioms have no proof term so they cannot
+    /// be replayed as theorems.
     #[arg(long = "include-axioms")]
     pub include_axioms: bool,
     /// Exit 0 even when no theorems were exported.
@@ -108,16 +115,17 @@ pub struct ExportCertArgs {
 /// embedded Clean C runtime and execute the resulting native binary. Phase 5
 /// link step of Epic #3436 — proves the emit closure links and runs.
 ///
-/// Two entry contracts are supported: a nullary `Nat`-returning declaration
-/// (e.g. `def answer : Nat := Nat.succ (Nat.succ 0)`), where the synthesized
-/// `main` unboxes the small-`Nat` result and prints it; and an `IO Unit`
-/// program (e.g. `def main : IO Unit := IO.println "hello"`), where the
-/// synthesized `main` drives the lowered IO action to completion (printing its
-/// effects) and exits `0`. Entries that need prelude externs the embedded shim
+/// Entry contracts: a nullary `Nat`-returning declaration (e.g. `def answer :
+/// Nat := Nat.succ (Nat.succ 0)`), where the synthesized `main` unboxes the
+/// small-`Nat` result and prints it; an `IO Unit` program (`def main : IO Unit
+/// := IO.println "hello"`), where the synthesized `main` drives the lowered IO
+/// action and exits `0`; and Lean's real entry shapes — `def main : IO UInt32`
+/// EXITS WITH ITS RESULT (not always 0), and `main (args : List String)`
+/// receives its argv. Entries that need prelude externs the embedded shim
 /// tables do not cover are rejected with an explicit message rather than
 /// mis-linked.
 #[derive(Debug, Clone, Args)]
-pub struct RunArgs {
+pub(crate) struct RunArgs {
     /// Path to the `.lean` source file containing the entry declaration.
     #[arg(value_name = "FILE")]
     pub file: PathBuf,
@@ -129,9 +137,27 @@ pub struct RunArgs {
     #[arg(long, default_value_t = 0, value_name = "N")]
     pub opt_level: u8,
     /// Keep the scratch build directory (emitted C, runtime, executable) and
-    /// print its path instead of deleting it on exit.
+    /// print its path instead of deleting it on exit. With `--backend trust-cg`,
+    /// also keep the input IR, diagnostics and receipt when codegen or linking fails.
     #[arg(long)]
     pub keep_temp: bool,
+    /// EXPERIMENTAL code generator. `c` (the default) is the C lane above.
+    /// `trust-cg` lowers the same core output to trust-ir, stamps each body
+    /// that passed every core self-check `clean-compiler-unvalidated`, compiles
+    /// it with the external `trust-cg` (`CLEAN_TRUST_CG_BIN`, else `PATH`), and
+    /// links the object with the C runtime, the prelude shims and the entry
+    /// driver. Its receipt reads `lowered: clean-compiler-unvalidated` and
+    /// `runtime: C via cc`; it is a measurement lane that claims nothing about
+    /// the binary (designs/2026-09-30-clean-trust-unified-vision.md, LX0).
+    #[cfg(feature = "trust-ir-backend")]
+    #[arg(long, value_enum, default_value_t = RunBackend::C, value_name = "BACKEND")]
+    pub backend: RunBackend,
+    /// With `--backend trust-cg`: write the build receipt to this JSON file
+    /// instead of printing its line on stderr, so the program's own stdout
+    /// and stderr are exactly what it wrote.
+    #[cfg(feature = "trust-ir-backend")]
+    #[arg(long, value_name = "PATH")]
+    pub receipt: Option<PathBuf>,
     /// Arguments handed to the built program as its `argv`, i.e. what a
     /// `def main (args : List String)` entry receives.
     ///
@@ -154,26 +180,51 @@ pub struct RunArgs {
     pub args: Vec<String>,
 }
 
+/// Code generator for `clean run` (experimental `--backend`, `trust-ir-backend`
+/// feature only).
+#[cfg(feature = "trust-ir-backend")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
+pub enum RunBackend {
+    /// Emit C and compile it with the host C compiler (the default lane).
+    #[default]
+    C,
+    /// Emit trust-ir and compile it with the external trust-cg (LX0 lane).
+    #[value(name = "trust-cg")]
+    TrustCg,
+}
+
 /// Target language for `clean extract`.
 ///
-/// Both backends run the SAME extraction gate, the SAME battery and the SAME
-/// differential against kernel-side evaluation; they differ only in the emitted
-/// artifact. `c` links against the embedded `clean-runtime`; `rust` emits a
-/// self-contained, `unsafe`-free module with plain scalar signatures.
+/// All three backends run the SAME extraction gate, the SAME battery and the
+/// SAME differential against kernel-side evaluation. `c` links against the
+/// embedded `clean-runtime`; `rust` emits a self-contained, `unsafe`-free
+/// module with plain scalar signatures and compiles its battery only with an
+/// admitted Trust compiler — the `trustc` beside the running `clean`, or the
+/// absolute path in `CLEAN_NATIVE_DECIDE_TRUSTC` — refusing with
+/// `E_RUST_TOOLCHAIN` without one (never a compiler from PATH or `$RUSTC`);
+/// `wasm` emits `.wat` + `.wasm` and adds two refusals of its own — a `Nat` or
+/// `Bool` in the signature (`E_WASM_SCALAR`) and no usable Wasm host on PATH
+/// (`E_WASM_NO_HOST`).
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, ValueEnum)]
-pub enum ExtractBackend {
+pub(crate) enum ExtractBackend {
     /// Emit C through the `clean compile --emit c` closure (default).
     #[default]
     C,
     /// Emit readable, safe Rust with plain `u8`/`u16`/`u32`/`u64`/`bool` types.
+    ///
+    /// The battery is compiled by an admitted Trust `trustc` (the one beside
+    /// this `clean`, or `CLEAN_NATIVE_DECIDE_TRUSTC`); without one the lane
+    /// refuses with `E_RUST_TOOLCHAIN`.
     Rust,
     /// Emit WebAssembly (`.wat` text plus the matching `.wasm` module).
     ///
     /// Fixed-width integer declarations only: Wasm `i32`/`i64` arithmetic is
     /// modular, which matches Lean's `UIntW`, whereas Lean `Nat` is unbounded
-    /// and has no faithful Wasm scalar. Running the battery needs a Wasm host
-    /// on PATH; without one the extraction REFUSES rather than shipping an
-    /// artifact whose differential never ran.
+    /// and has no faithful Wasm scalar. Running the battery needs `node` on
+    /// PATH — specifically node: wasmtime/wasmer are probed but have no wired
+    /// driver, so a machine with only those is refused too — and without a
+    /// usable host the extraction REFUSES rather than shipping an artifact
+    /// whose differential never ran.
     Wasm,
 }
 
@@ -181,7 +232,7 @@ pub enum ExtractBackend {
 /// extraction (`designs/2026-08-06-clean-extract-width1.md`). The battery
 /// always runs; a refusal or differential mismatch writes no artifacts.
 #[derive(Debug, Clone, Args)]
-pub struct ExtractArgs {
+pub(crate) struct ExtractArgs {
     /// Path to the `.lean` source file containing the declaration.
     #[arg(value_name = "FILE")]
     pub file: PathBuf,
@@ -194,13 +245,17 @@ pub struct ExtractArgs {
     /// Target language of the emitted artifact.
     #[arg(long, value_enum, default_value_t = ExtractBackend::C)]
     pub backend: ExtractBackend,
-    /// Keep the scratch build directory and print its path.
+    /// Print the scratch build directory's path as it is used. The directory
+    /// itself is a `TempDir` and is DELETED on exit regardless — no backend
+    /// keeps it; copy what you need while the run prints, or read the emitted
+    /// artifact paths instead. (The flag's name predates the deletion.)
     #[arg(long)]
     pub keep_temp: bool,
 }
 
-/// Feature descriptors surfaced by `clean-cli` itself
-/// (`repl`, `sorry-trace`, `sorry-census`).
+/// Feature descriptors surfaced by `clean-cli` itself (`repl`,
+/// `sorry-trace`, `export-cert`, `sorry-census`, `run`, `extract` — six, as
+/// the sibling test pins).
 pub const FEATURES: &[FeatureDescriptor] = &[
     FeatureDescriptor {
         path: &["repl"],
@@ -362,8 +417,10 @@ machine-readable export status alongside the bundle.",
 Runs the tactic test suite with sorry-tracking enabled, extracts the \
 cumulative sorry count from the output, and compares it against \
 `scripts/sorry_baseline.json`. Fails closed if the count increased \
-(proof reconstruction regressed). Pass `--update` to write a new \
-baseline when the count decreased.\n\n\
+(proof reconstruction regressed). Pass `--update` to rewrite the \
+baseline after a passing census: a LOWER count ratchets it down, an \
+EQUAL count refreshes its date, and a missing baseline file is \
+created.\n\n\
 Delegates execution to `scripts/sorry_census.sh` so the single source \
 of truth for the cargo invocation + jq comparison stays under \
 `scripts/`. The Rust entry point exists so `clean sorry-census` \
@@ -378,7 +435,7 @@ script consolidation (see `docs/SCRIPTS_MIGRATION.md`).",
             },
             Example {
                 cmd: "clean sorry-census --update",
-                what: "update the baseline if the count decreased",
+                what: "rewrite the baseline after a census that did not regress",
             },
         ],
         see_also: &["sorry-trace", "kernel verify-constructive-claims"],
@@ -500,7 +557,70 @@ nothing.",
         alternative_forms: &[],
         feature_gate: None,
     },
+    FeatureDescriptor {
+        path: &["native-runtime"],
+        summary: "Write the linkable Clean runtime archive for this host (Experimental)",
+        description: "\
+Materialize the Clean C runtime an emitted object links against, as sources \
+plus a host archive: `clean_runtime.h`, `clean_runtime.c` (the runtime \
+proper), `runtime_extern.c` (one exported forwarder per header `static \
+inline` primitive — `clean_inc`, `clean_box`, `clean_ctor_get`, … — which a \
+trust-cg object binds at link time) and `clean_prelude_shims.c` (every `l_*` \
+prelude shim `clean run` links, e.g. `l_Nat_add`, `l_Nat_land`), compiled \
+with the host C compiler and archived as `libclean_runtime.a` in \
+`--out-dir`. An object from `clean compile --emit obj` links as \
+`cc <emitted>.o libclean_runtime.a -lm`.\n\n\
+The archive ships INSIDE the `clean` binary and is written out on demand: \
+the runtime sources are embedded in the `clean-runtime` crate and the \
+prelude shims are Rust tables in `clean-native`, so there is no C file a \
+package could copy (two-language roadmap WS6.13, F-119). Fail-closed: a \
+missing C compiler (`$CLEAN_CC`, `$CC`, then `cc`/`gcc`/`clang`) or archiver \
+(`$CLEAN_AR`, `$AR`, then `ar`) is an error, never a partial archive; \
+every run first removes any `libclean_runtime.a` or member `.o` an earlier \
+run left in `--out-dir` (reported as `removed stale: <path>`), so the \
+directory never holds a product this run did not make; `--sources-only` \
+writes the header and the three `.c` files without compiling, for a packer \
+that builds with its own toolchain. There is no option to drop a member: \
+the archive is the whole runtime or nothing.",
+        category: Category::Build,
+        stability: Stability::Experimental,
+        examples: &[
+            Example {
+                cmd: "clean native-runtime --out-dir out/runtime",
+                what: "write the sources and build `out/runtime/libclean_runtime.a` with the host cc",
+            },
+            Example {
+                cmd: "clean native-runtime --out-dir out/runtime --sources-only",
+                what: "write only the header and the three C sources",
+            },
+        ],
+        see_also: &["compile", "run"],
+        references: &[Reference {
+            kind: RefKind::Crate,
+            label: "clean-runtime",
+            target: "clean-runtime",
+        }],
+        domain_root: Some("native-runtime"),
+        alternative_forms: &[],
+        feature_gate: None,
+    },
 ];
+
+/// Arguments accepted by `clean native-runtime`.
+///
+/// See the `native-runtime` descriptor in [`FEATURES`] and
+/// [`clean_native::native_runtime`] for what is written and why the archive
+/// lives inside the binary.
+#[derive(Debug, Clone, Args)]
+pub(crate) struct NativeRuntimeArgs {
+    /// Directory to write the header, the three C sources and
+    /// `libclean_runtime.a` into (created if absent).
+    #[arg(long, value_name = "DIR")]
+    pub out_dir: PathBuf,
+    /// Write the header and sources only; do not compile or archive them.
+    #[arg(long)]
+    pub sources_only: bool,
+}
 
 #[cfg(test)]
 mod tests {
@@ -518,12 +638,16 @@ mod tests {
 
     #[test]
     fn repl_has_expected_path() {
-        assert_eq!(FEATURES.len(), 6);
+        assert_eq!(FEATURES.len(), 7);
         assert_eq!(FEATURES[0].path, &["repl"]);
         assert_eq!(FEATURES[1].path, &["sorry-trace"]);
         assert_eq!(FEATURES[2].path, &["export-cert"]);
         assert_eq!(FEATURES[3].path, &["sorry-census"]);
         assert_eq!(FEATURES[4].path, &["run"]);
         assert_eq!(FEATURES[5].path, &["extract"]);
+        // WS6.13: the packaging requirement's own subcommand. Named here, not
+        // just counted, so adding a feature without declaring its path still
+        // fails this test.
+        assert_eq!(FEATURES[6].path, &["native-runtime"]);
     }
 }

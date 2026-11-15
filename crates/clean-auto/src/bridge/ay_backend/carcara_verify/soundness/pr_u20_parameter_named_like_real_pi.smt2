@@ -1,0 +1,5 @@
+(set-logic ALL)
+(define-fun h ((real.pi Real)) Bool (> real.pi 0.0))
+(assert (h 1.0))
+(assert (not (h (- 1.0))))
+(check-sat)

@@ -16,7 +16,10 @@ impl PassManager {
     ///
     /// The default pipeline includes:
     /// - **Base phase**: lambda_lifting, then to_mono (transitions to Mono)
-    /// - **Mono phase**: optimize (DCE, CSE, constant fold, simp, inline, join points)
+    /// - **Mono phase**: optimize (DCE, CSE, constant fold, simp, inline, join points),
+    ///   then, when value simplification is enabled, known-instance class-method
+    ///   resolution (`resolve_instances`, WS6.4); with the Trust IR backend,
+    ///   UInt comparison alias representation lowering at every optimization level
     /// - **Impure phase**: RC transformation (borrow inference, reset/reuse, RC insertion, expand)
     ///
     /// Lambda lifting runs first to convert local `Code::Fun` nodes into
@@ -68,6 +71,33 @@ impl PassManager {
             Ok(vec![crate::opt::optimize(decl, &opt_cfg)])
         }));
 
+        // Mono phase: known-instance class-method resolution (WS6.4). Runs
+        // AFTER `optimize` (CSE must never see the typed `UIntW` literals the
+        // companion `UIntW.ofNat` fold produces) and only with value
+        // simplification on, so `-O0` keeps the dynamic path visible.
+        if opt_config.enable_simp_value {
+            manager.register(Pass::new(
+                "resolve_instances",
+                Phase::Mono,
+                resolve_instances_pass,
+            ));
+        }
+
+        // Checked UInt comparison aliases must reach the native comparison
+        // representation before RC, even at O0. This is only the alias-to-Cmp
+        // subset: unrelated dynamic class dispatch keeps its existing policy.
+        // The carrier table/resolver is available with the Trust IR backend.
+        #[cfg(feature = "trust-ir-backend")]
+        manager.register(Pass::new(
+            "uint_comparison_aliases",
+            Phase::Mono,
+            |decl, env| {
+                Ok(vec![
+                    crate::opt::resolve_carrier_prims::resolve_uint_comparison_aliases(decl, env),
+                ])
+            },
+        ));
+
         // Mono->Impure phase: RC transformation (borrow -> reset/reuse -> RC insert -> expand)
         let rc_cfg = rc_config.clone();
         manager.register(Pass::with_transition(
@@ -77,6 +107,56 @@ impl PassManager {
             move |decl, _env| Ok(vec![crate::rc::transform_decl(decl, &rc_cfg)]),
         ));
 
+        manager
+    }
+
+    #[cfg(feature = "trust-ir-backend")]
+    /// The Rust-ABI pipeline (Trust plan step 3.2): the default pipeline,
+    /// with known-instance resolution registered at EVERY optimization level
+    /// and followed by carrier-primitive resolution
+    /// ([`crate::opt::resolve_carrier_prims`]).
+    ///
+    /// At the Rust ABI the instance dictionaries over carrier types are not an
+    /// optimization opportunity but a representation change: a dynamic
+    /// `HAdd.hAdd` call boxes its `UInt64` operands, which is exactly the
+    /// conversion the carrier boundary exists to rule out. `-O0` therefore
+    /// still resolves them here, while the ordinary `-O0` pipeline keeps
+    /// unrelated dynamic class dispatch visible and lowers only UInt
+    /// comparison aliases before RC.
+    pub(crate) fn rust_abi_pipeline(
+        opt_config: &crate::opt::OptConfig,
+        rc_config: &crate::rc::RCConfig,
+        nat_handles: bool,
+    ) -> Self {
+        let mut manager = Self::new();
+        manager.register(Pass::new("lambda_lifting", Phase::Base, lambda_lift_pass));
+        manager.register(Pass::with_transition(
+            "to_mono",
+            Phase::Base,
+            Phase::Mono,
+            to_mono_pass,
+        ));
+        let opt_cfg = opt_config.clone();
+        manager.register(Pass::new("optimize", Phase::Mono, move |decl, _env| {
+            Ok(vec![crate::opt::optimize(decl, &opt_cfg)])
+        }));
+        manager.register(Pass::new(
+            "resolve_instances",
+            Phase::Mono,
+            resolve_instances_pass,
+        ));
+        manager.register(Pass::new("carrier_prims", Phase::Mono, move |decl, env| {
+            Ok(vec![
+                crate::opt::resolve_carrier_prims::resolve_carrier_prims(decl, env, nat_handles),
+            ])
+        }));
+        let rc_cfg = rc_config.clone();
+        manager.register(Pass::with_transition(
+            "rc",
+            Phase::Mono,
+            Phase::Impure,
+            move |decl, _env| Ok(vec![crate::rc::transform_decl(decl, &rc_cfg)]),
+        ));
         manager
     }
 
@@ -148,6 +228,14 @@ fn lambda_lift_pass(decl: &Decl, _env: &Environment) -> Result<Vec<Decl>, PassEr
     out.push(result.decl);
     out.extend(result.lifted);
     Ok(out)
+}
+
+/// Pass wrapper for known-instance class-method resolution
+/// ([`crate::opt::resolve_instances::resolve_known_instances`]).
+fn resolve_instances_pass(decl: &Decl, env: &Environment) -> Result<Vec<Decl>, PassError> {
+    Ok(vec![
+        crate::opt::resolve_instances::resolve_known_instances(decl, env),
+    ])
 }
 
 /// Pass wrapper for `to_mono` function.

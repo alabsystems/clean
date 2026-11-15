@@ -1,0 +1,59 @@
+{
+ "chain": "ir_sh",
+ "body": "<expr::types::AppArgsIter<'_> as Iterator>::size_hint",
+ "what": "The CRATE-LEVEL interning ids this body's aggregate types carry, keyed by canonical FIRST-USE index.",
+ "why": "THE CALLER for the 2026-09-16 tuple image. `IRTy.tuple_` existed in the object language but `a2project` had no image for `trust_ir::Ty::Tuple`, so no chain could carry one; this body spells `(usize, enum.33)` in three instructions and cannot be projected without it. It is also the body that makes the aggregate-construction gap CONCRETE: it is six instructions from a body of TypeChecker::infer_type's derived closure, and the machine halts inside it.",
+ "how_it_is_used": "`ir_mint::mint` reads the enums lane to mint the type alias; `project` reads the interface block and refuses a fixture whose header or parameters are not the pinned ones.",
+ "interface_what": "The artifact facts the CORE MODULE cannot hold and the emitted text does print.",
+ "interface_producer_invariance": "`ty` is CANONICAL; `observed_ty` is verbatim, RECORDED and NEVER COMPARED.",
+ "tuple_what": "ONE tuple type, `(usize, enum.33)` -- the `Iterator::size_hint` return pair. `IRTy.tuple_` takes a Nat and the reflected module has no tuple table to index, so the image is ARITY-ONLY: `(tuple 2)`, with the element types ERASED. A body differing only by `(ptr, enum.33)` would project to the SAME core. `tuple_sites` below is what makes that visible, exactly as ir_ni's `usize.sites` catches a u64-for-usize swap the resolved core cannot. Arity-only is enough for the machine: insertfield and extractfield ignore the declared type and work structurally over the value's spine.",
+ "tuple_sites": 3,
+ "usize": {
+  "bits": 64,
+  "sites": 1,
+  "isize_sites": 0,
+  "target_fact": "aarch64-apple-darwin, a 64-bit target. Reader A resolved with --usize-bits 64 and recorded usize_sites_resolved: 1 -- the `const usize 0` that becomes the lower bound of the size hint.",
+  "erasure_note": "The resolved core spells the site as the plain (uint 64), so a u64-for-usize swap is caught by the count above and not by the core text."
+ },
+ "interface": {
+  "linkage": "external",
+  "calling_conv": "ccc",
+  "header_note": "No calling-convention keyword, like every sidecar-lane body.",
+  "functy": 494,
+  "functy_note": "Pinned VERBATIM from the emitted header `(functy.494)`; reader A independently records artifact_functy_id: 494.",
+  "producer": "trust-ir",
+  "producer_note": "The sidecar bundle's own stamp.",
+  "params": [
+   {
+    "block": 0,
+    "index": 0,
+    "ssa": 0,
+    "ty": "ptr",
+    "observed_ty": "ptr",
+    "rust_type": "&AppArgsIter<'_>",
+    "note": "The iterator. Taken and NEVER dereferenced: this size_hint answers (0, None) unconditionally, which is why the body is six instructions and reads no memory."
+   }
+  ],
+  "params_note": "ONE thin pointer, unused.",
+  "block_params": [],
+  "aligns": [],
+  "aligns_note": "EMPTY, and a measurement: no memory instruction in this body.",
+  "clauses": [
+   "producer",
+   "proof"
+  ],
+  "clauses_note": "Two kinds; the absence of `loc` and `names` is part of the pin."
+ },
+ "enums": [
+  {
+   "canonical": 0,
+   "crate_id": 33,
+   "alias": "ir_sh_topt",
+   "rust_type": "core::option::Option<usize>",
+   "note": "The upper bound of the size hint -- `None`, built by `undef` and never filled, which is exactly what `(0, None)` means."
+  }
+ ],
+ "structs": [],
+ "funcs": [],
+ "funcs_note": "EMPTY, a measurement: this body calls nothing; reader A's crate_func_ids_seen is [468], its own id."
+}

@@ -20,13 +20,16 @@
 //!     — the shard has one shared placeholder type
 //!   - `Empty`            no constants
 //!
-//! Output: one JSON line per shard plus a summary. Non-zero exit when
-//! ANY shard claims `>1000` constants but is classified `SurfaceNamesOnly`.
+//! Output: a fixed-width text table, one row per shard, then an
+//! `=== summary ===` block (no JSON). The exit code is 0 unless `--strict` is
+//! given AND some shard classified `SurfaceNamesOnly` claims `>= 1000`
+//! constants; a name-only shard below that volume never fails the run, and
+//! without `--strict` nothing does.
 //!
 //! Usage:
 //!   mathverse_fidelity_check <shard-dir>
 //!   mathverse_fidelity_check <shard-dir> --strict
-//!     # exit non-zero if any shard is SurfaceNamesOnly
+//!     # exit 1 if any SurfaceNamesOnly shard claims >= 1000 constants
 
 use std::env;
 use std::fs;

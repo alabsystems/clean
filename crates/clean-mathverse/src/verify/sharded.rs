@@ -37,7 +37,14 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clean_kernel::env::Environment;
-use clean_olean::{load_module_with_deps, parse_module_file};
+use clean_kernel::Name;
+use clean_olean::replay_order::{
+    resident_refs, ReplayGraph, ReplayRefusal, ReplaySchedule, ReplayVerdicts,
+};
+use clean_olean::{
+    load_module_with_deps_replaying_module, parse_module_file, ImportError, LoadSummary,
+    OleanImportPolicy,
+};
 use thiserror::Error;
 
 use crate::verify::classify::{classify_const, ConstKind};
@@ -66,6 +73,26 @@ pub enum ShardedVerifyError {
     /// Loading the module + its transitive dependency closure failed.
     #[error("failed to load module `{module}` with deps: {reason}")]
     LoadDeps { module: String, reason: String },
+    /// The loader's module-trust rules refused an artifact of the module's
+    /// closure (`clean_olean::ImportError::is_inconsistent_artifact`), naming
+    /// the declarations in `names`: an IMPORT whose declaration depends on
+    /// itself, refers forward or redeclares another import's name (the worker
+    /// only trusts its imports, it never replays them), or an inconsistency of
+    /// the module's own artifact the replay cannot take over. Nothing of the
+    /// module is verified.
+    #[error(
+        "the import of module `{module}` is refused, naming {}: {reason}",
+        names.join(", ")
+    )]
+    ImportRefused {
+        /// The module whose closure was being loaded.
+        module: String,
+        /// The declarations the refusal is about
+        /// (`clean_olean::ImportError::declaration_names`).
+        names: Vec<String>,
+        /// The loader's refusal.
+        reason: String,
+    },
 }
 
 /// Per-constant verdict bucket for a single module's OWN constants.
@@ -265,23 +292,27 @@ fn module_name_from_rel(root: &Path, path: &Path) -> Option<String> {
 ///
 /// Steps (each cheap; the whole point is per-process memory is one module's
 /// closure, never the whole corpus):
-/// 1. fresh `Environment::try_with_prelude_for_import` (suppresses the lossy
-///    `extends`-structure stubs so the genuine olean structures register with
-///    their full field telescope — see the call site for the rationale);
+/// 1. fresh `Environment::for_lean_replay` (no declaration beyond the closure
+///    loaded next, as `leanchecker` replays into the module's imports — see the
+///    call site for the rationale);
 /// 2. `parse_module_file` the module's `.olean` to read its OWN `const_names`
-///    (the constants this module DECLARES — not the whole closure);
-/// 3. `load_module_with_deps` to register the module + transitive deps (types
-///    AND values) into the env;
-/// 4. `kernel_verify_const` each OWN name; bucket the verdict.
+///    (the constants this module DECLARES — not the whole closure), joined
+///    after the load by every name its `.olean.server`/`.olean.private` parts
+///    registered (a `module`'s private declarations live there alone);
+/// 3. `load_module_with_deps_replaying_module` to register the module +
+///    transitive deps (types AND values) into the env (see the call site);
+/// 4. `kernel_verify_const` each OWN name in Lean's replay order; bucket the
+///    verdict.
 ///
 /// `max_failures` caps how many `(name, reason)` pairs are retained for the
 /// report (counts are always exact).
 ///
 /// # Errors
 /// Returns [`ShardedVerifyError`] if the prelude cannot be built, the module's
-/// `.olean` cannot be located/parsed, or the dependency-closure load fails. A
-/// per-constant kernel rejection is NOT an error — it is bucketed into
-/// `failed`.
+/// `.olean` cannot be located/parsed, or the dependency-closure load fails
+/// ([`ShardedVerifyError::ImportRefused`] when the loader's module-trust rules
+/// refuse an artifact, naming the declarations). A per-constant kernel
+/// rejection is NOT an error — it is bucketed into `failed`.
 pub fn verify_module(
     module: &str,
     search_paths: &[PathBuf],
@@ -296,42 +327,108 @@ pub fn verify_module(
         }
     })?;
 
-    // The module's OWN declared constants (NOT the whole transitive closure).
+    // The module's OWN declared constants (NOT the whole transitive closure):
+    // what its `.olean` states here, and what its other parts add after the
+    // load (below).
     let parsed = parse_module_file(&olean_path).map_err(|e| ShardedVerifyError::ParseModule {
         module: module.to_string(),
         path: olean_path.display().to_string(),
         reason: format!("{e}"),
     })?;
-    let own_names: Vec<String> = {
-        let mut set: BTreeSet<String> = BTreeSet::new();
-        set.extend(parsed.const_names.iter().cloned());
-        set.extend(parsed.extra_const_names.iter().cloned());
-        set.into_iter().collect()
-    };
+    let mut own_set: BTreeSet<String> = BTreeSet::new();
+    own_set.extend(parsed.const_names.iter().cloned());
+    own_set.extend(parsed.extra_const_names.iter().cloned());
 
-    // Use the IMPORT prelude, which suppresses the kernel's hand-rolled,
-    // non-Lean-faithful `extends`-structure stubs (`Semigroup`/`Monoid`/`Group`/
-    // `Preorder`/…). Those stubs carry a FLATTENED, trailing-field-dropping
-    // constructor (e.g. the stub `Monoid.mk` has 5 fields `[mul, assoc, one,
-    // one_mul, mul_one]` versus Lean's genuine 7 `[toSemigroup, toOne, one_mul,
-    // mul_one, npow, npow_zero, npow_succ]`). Because `load_module_with_deps`
-    // dedups inductives by name, a stub shadows the real Mathlib structure on
-    // import, so every parent projection `Monoid.toSemigroup = self.0` lands on
-    // the WRONG flattened field and fails `check_type` with a spurious
-    // TypeMismatch. Suppressing the stubs lets the genuine structures register
-    // through the checked import path with their FULL field telescope, so the
-    // typeclass-inheritance projections kernel-verify. This is strictly more
-    // faithful (no kernel/TCB change): we stop seeding a wrong structure rather
-    // than accepting any new term.
-    let mut env = Environment::try_with_prelude_for_import()
-        .map_err(|e| ShardedVerifyError::Prelude(format!("{e}")))?;
+    // The IMPORT prelude used to be seeded here: it suppressed the kernel's
+    // hand-rolled, non-Lean-faithful `extends`-structure stubs (`Semigroup`/
+    // `Monoid`/`Group`/`Preorder`/…) that shadowed the real Mathlib structures
+    // on import, because `load_module_with_deps` dedups by name.
+    //
+    // Lean's replay environment replaces it (`Environment::for_lean_replay`):
+    // the module and its `.olean` closure, and nothing else. The import prelude
+    // also seeded `sorry`/`trustedArith`/`trustedAy` and hand-written
+    // declarations that shadowed same-named Lean constants, and a reference to
+    // one type-checked here where `leanchecker` reports an unknown constant.
+    let mut env = Environment::for_lean_replay();
 
-    load_module_with_deps(&mut env, module, search_paths).map_err(|e| {
-        ShardedVerifyError::LoadDeps {
-            module: module.to_string(),
-            reason: format!("{e}"),
-        }
-    })?;
+    // `leanchecker <module>` replays the module's own declarations and refuses
+    // a self-dependent declaration, a use of one, or a redeclaration of an
+    // import's name PER DECLARATION, never at load. So does `ModuleReplay`
+    // below (the replay order, and `already_declared`), so the module's OWN
+    // parts load with the loader's module-trust rules 1 and 3 left to it
+    // (`load_module_with_deps_replaying_module`): under the default load such a
+    // module was refused whole, as a load error. Whatever an IMPORT gets wrong
+    // still refuses the import: this worker only trusts its imports, and its
+    // verdicts are merged over a corpus with no cross-module pass
+    // (`mathverse_shard sharded --corpus-sharded`), so an import whose
+    // declaration depends on itself is refused at load rather than trusted as
+    // `leanchecker` trusts it (`ShardedVerifyError::ImportRefused`).
+    let summaries = load_module_with_deps_replaying_module(
+        &mut env,
+        module,
+        search_paths,
+        // Its imports refuse a refused completion of their own stubs (R131),
+        // as they refuse every other inconsistency; the module's own parts,
+        // loaded with their rules left to the replay below, record it.
+        OleanImportPolicy::default().refusing_refused_completions(),
+    )
+    .map_err(|e| load_error(module, &e))?;
+    // This module's declarations the loader dropped because an import already
+    // held the name: Lean's `addDecl` refuses them as already declared.
+    let already_declared: std::collections::BTreeMap<Name, String> = summaries
+        .iter()
+        .filter(|s| is_own_part(s, module))
+        .flat_map(|s| s.shadowed_declarations.iter().cloned())
+        .collect();
+    // This module's family records the loader REFUSED (a recursor, constructor
+    // or inductive record the kernel does not derive from the stored family,
+    // clean-kernel `env/imported_family.rs`): never resident, so they are
+    // failures with the loader's reason, not `not_found`.
+    let refused_at_load: std::collections::BTreeMap<String, String> = summaries
+        .iter()
+        .filter(|s| is_own_part(s, module))
+        .flat_map(|s| s.skipped_constants.iter())
+        .filter(|sk| sk.reason.contains("imported family record"))
+        .map(|sk| (sk.name.clone(), sk.reason.clone()))
+        .collect();
+    // Every declaration the module's parts registered, or dropped as another
+    // module's name, is the module's own and is replayed. A `module`-system
+    // artifact's private declarations live in its `.olean.private` alone, and
+    // `leanchecker` (a consumer that is not itself a `module`) reads the
+    // artifact through that part and replays them with the rest (`clean olean
+    // replay` takes its targets from the same summaries). Measured 2026-09-29:
+    // with the replay set the `.olean`'s names alone, a private declaration was
+    // never replayed, and the relaxed load above registered
+    // `ReplayForgedPriv`'s private `priv_self : False := priv_self` as stored,
+    // so `priv_user : False := priv_self` was verified.
+    for summary in summaries.iter().filter(|s| is_own_part(s, module)) {
+        own_set.extend(summary.added_names.iter().map(ToString::to_string));
+        own_set.extend(
+            summary
+                .shadowed_declarations
+                .iter()
+                .map(|(name, _)| name.to_string()),
+        );
+    }
+    own_set.extend(refused_at_load.keys().cloned());
+    // This module's declarations its authoritative part states with a value
+    // the load did not make resident with it (R131's kernel-refused
+    // completions, and R142's invariant: a value that did not convert, a name
+    // an import holds, `LoadSummary::refused_completions`). Lean reads the
+    // declaration with the value: each is a failure with the loader's reason,
+    // never an accepted axiom, and every use of one is refused by the replay's
+    // admission gate. Before R131 and R142 the stub was checked as the axiom it
+    // was left as (`axiom_accepted`) and its user verified.
+    let refused_completions: std::collections::BTreeMap<Name, String> = summaries
+        .iter()
+        .filter(|s| is_own_part(s, module))
+        .flat_map(|s| s.refused_completions.iter().cloned())
+        .collect();
+    let own_names: Vec<String> = own_set.into_iter().collect();
+    // The trusted closure is loaded; every check from here re-checks a Lean
+    // `.olean` module, so it runs in Lean's kernel theory (reducers Lean's
+    // kernel has, Lean's safe context), `clean_kernel::env::kernel_theory`.
+    env.set_kernel_theory(clean_kernel::env::KernelTheory::Lean);
 
     let closure_constants = env.num_constants();
 
@@ -356,7 +453,15 @@ pub fn verify_module(
     let mut math_sample = Vec::new();
     let mut generated_sample = Vec::new();
 
-    for name in &own_names {
+    // Lean's replay order (`clean_olean::replay_order`, porting
+    // `Lean/Replay.lean`): the module's own constants are all resident, so
+    // without it a value could lean on itself or on a module-mate that leans
+    // back on it. Each constant is checked only after every module-local
+    // constant it uses was admitted; unsafe/partial ones are never admitted.
+    let replay = ModuleReplay::new(&env, &own_names, &already_declared);
+    let mut verdicts = ReplayVerdicts::new();
+
+    for name in &replay.order {
         let kind = classify_const(name);
         let class = match kind {
             ConstKind::Math => &mut math,
@@ -372,8 +477,74 @@ pub fn verify_module(
             _ => {}
         }
 
-        match crate::lean4::kernel_verify::kernel_verify_const_with_heartbeat(&env, name, heartbeat)
-        {
+        let key = Name::from_string(name);
+        if let Some(reason) = refused_completions.get(&key) {
+            counts.failed += 1;
+            class.resolved += 1;
+            class.failed += 1;
+            let reason = format!(
+                "the module's authoritative part states it with a value the load did not make \
+                 resident: {reason}"
+            );
+            if failures.len() < max_failures {
+                failures.push((name.clone(), reason.clone()));
+            }
+            if kind == ConstKind::Math && math_failures.len() < max_failures {
+                math_failures.push((name.clone(), reason.clone()));
+            }
+            verdicts.insert(
+                key.clone(),
+                Err(ReplayRefusal::KernelRejected {
+                    name: key,
+                    message: reason,
+                }),
+            );
+            continue;
+        }
+        let admitted = if replay.scheduled.contains(&key) {
+            replay
+                .schedule
+                .admission_gate(&key, &verdicts)
+                .and_then(|()| replay.families.get(&key).cloned().map_or(Ok(()), Err))
+        } else {
+            Ok(())
+        };
+        if let Err(refusal) = admitted {
+            // The constant itself unsafe/partial: never admitted, never a
+            // failure (Lean's replay skips it) — accepted as context, as the
+            // sequential lane's `UnsafeAccepted` is.
+            if matches!(refusal, ReplayRefusal::NotReplayable { name: ref n, .. } if *n == key) {
+                counts.axiom_accepted += 1;
+                class.resolved += 1;
+                class.axiom_accepted += 1;
+            } else {
+                counts.failed += 1;
+                class.resolved += 1;
+                class.failed += 1;
+                let reason = refusal.to_string();
+                if failures.len() < max_failures {
+                    failures.push((name.clone(), reason.clone()));
+                }
+                if kind == ConstKind::Math && math_failures.len() < max_failures {
+                    math_failures.push((name.clone(), reason));
+                }
+            }
+            verdicts.insert(key, Err(refusal));
+            continue;
+        }
+        let verdict =
+            crate::lean4::kernel_verify::kernel_verify_const_with_heartbeat(&env, name, heartbeat);
+        verdicts.insert(
+            key.clone(),
+            match &verdict {
+                Ok(_) => Ok(()),
+                Err(e) => Err(ReplayRefusal::KernelRejected {
+                    name: key,
+                    message: e.to_string(),
+                }),
+            },
+        );
+        match verdict {
             Ok(ok) => {
                 class.resolved += 1;
                 if ok.confidence == crate::types::ImportConfidence::KernelVerified {
@@ -386,9 +557,23 @@ pub fn verify_module(
                     class.axiom_accepted += 1;
                 }
             }
-            Err(crate::lean4::kernel_verify::KernelVerifyError::NotFound(_)) => {
+            Err(crate::lean4::kernel_verify::KernelVerifyError::NotFound(_))
+                if !refused_at_load.contains_key(name) =>
+            {
                 counts.not_found += 1;
                 class.not_found += 1;
+            }
+            Err(crate::lean4::kernel_verify::KernelVerifyError::NotFound(_)) => {
+                counts.failed += 1;
+                class.resolved += 1;
+                class.failed += 1;
+                let reason = refused_at_load.get(name).cloned().unwrap_or_default();
+                if failures.len() < max_failures {
+                    failures.push((name.clone(), reason.clone()));
+                }
+                if kind == ConstKind::Math && math_failures.len() < max_failures {
+                    math_failures.push((name.clone(), reason));
+                }
             }
             Err(e) => {
                 counts.failed += 1;
@@ -418,6 +603,129 @@ pub fn verify_module(
         generated_sample,
         elapsed_secs: start.elapsed().as_secs_f64(),
     })
+}
+
+/// A closure load that failed, as the worker reports it: a module-trust
+/// refusal that names declarations is [`ShardedVerifyError::ImportRefused`],
+/// anything else [`ShardedVerifyError::LoadDeps`].
+fn load_error(module: &str, error: &ImportError) -> ShardedVerifyError {
+    let names: Vec<String> = error
+        .declaration_names()
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    if error.is_inconsistent_artifact() && !names.is_empty() {
+        ShardedVerifyError::ImportRefused {
+            module: module.to_owned(),
+            names,
+            reason: error.to_string(),
+        }
+    } else {
+        ShardedVerifyError::LoadDeps {
+            module: module.to_owned(),
+            reason: error.to_string(),
+        }
+    }
+}
+
+/// Whether `summary` is one of `module`'s own parts (its `.olean`,
+/// `.olean.server` or `.olean.private`), not an import's.
+fn is_own_part(summary: &LoadSummary, module: &str) -> bool {
+    summary.module_name.as_deref().is_some_and(|label| {
+        label
+            .strip_suffix("._server")
+            .or_else(|| label.strip_suffix("._private"))
+            .unwrap_or(label)
+            == module
+    })
+}
+
+/// One module's own constants scheduled in Lean's replay order.
+struct ModuleReplay {
+    schedule: ReplaySchedule,
+    /// The own names the environment holds (the schedule's nodes).
+    scheduled: BTreeSet<Name>,
+    /// Every own name: the scheduled ones in replay order, then the ones the
+    /// environment does not hold (they report `not_found`, as before).
+    order: Vec<String>,
+    /// Inductive-family members Lean's replay would not admit
+    /// (`clean_olean::replay_families`): every stored constructor and recursor
+    /// must be what the kernel generates from the block's stored types.
+    families: std::collections::BTreeMap<Name, ReplayRefusal>,
+}
+
+impl ModuleReplay {
+    fn new(
+        env: &Environment,
+        own_names: &[String],
+        already_declared: &std::collections::BTreeMap<Name, String>,
+    ) -> Self {
+        let resident = |n: &Name| {
+            env.get_const(n).is_some()
+                || env.get_inductive(n).is_some()
+                || env.get_constructor(n).is_some()
+                || env.get_recursor(n).is_some()
+        };
+        let mut graph = ReplayGraph::new();
+        let mut spelled: std::collections::BTreeMap<Name, String> = Default::default();
+        let mut absent = Vec::new();
+        for name in own_names {
+            let key = Name::from_string(name);
+            if !resident(&key) {
+                absent.push(name.clone());
+                continue;
+            }
+            graph.insert(key.clone(), resident_refs(env, &key));
+            let safety = if env.is_unsafe(&key) {
+                Some("unsafe")
+            } else if env.is_partial(&key) {
+                Some("partial")
+            } else {
+                None
+            };
+            if let Some(safety) = safety {
+                graph.refuse(
+                    key.clone(),
+                    ReplayRefusal::NotReplayable {
+                        name: key.clone(),
+                        safety,
+                    },
+                );
+            }
+            if let Some(held_by) = already_declared.get(&key) {
+                graph.refuse(
+                    key.clone(),
+                    ReplayRefusal::AlreadyDeclared {
+                        name: key.clone(),
+                        reason: held_by.clone(),
+                    },
+                );
+            }
+            spelled.insert(key, name.clone());
+        }
+        let schedule = graph.schedule();
+        // Absent own names too: a family record the loader refused still names
+        // a member of its block, which the replay then refuses whole.
+        let local: BTreeSet<Name> = spelled
+            .keys()
+            .cloned()
+            .chain(absent.iter().map(|name| Name::from_string(name)))
+            .collect();
+        let families = clean_olean::replay_families::inductive_block_refusals(env, &local, &local);
+        let mut order: Vec<String> = schedule
+            .order()
+            .iter()
+            .filter_map(|k| spelled.get(k).cloned())
+            .collect();
+        order.extend(absent);
+        let scheduled = spelled.into_keys().collect();
+        Self {
+            schedule,
+            scheduled,
+            order,
+            families,
+        }
+    }
 }
 
 #[cfg(test)]

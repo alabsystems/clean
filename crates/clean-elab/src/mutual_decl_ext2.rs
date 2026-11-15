@@ -17,6 +17,7 @@ use crate::mutual_decl::MutualBlock;
 use crate::mutual_decl_ext::{MutualSccGroup, TerminationStrategy};
 use clean_kernel::expr::ExprKind;
 use clean_kernel::{Expr, Level};
+use clean_parser::SurfaceName;
 use std::collections::{HashMap, HashSet};
 
 /// Configuration for phase-2 mutual declaration elaboration.
@@ -52,7 +53,7 @@ pub(crate) enum RecursionKind {
 #[must_use]
 pub(crate) fn detect_structural_recursion(
     body: &Expr,
-    self_name: &str,
+    self_name: &SurfaceName,
     config: &MutualDeclExt2Config,
 ) -> RecursionKind {
     let (num_params, inner) = peel_lambdas(body, config.max_structural_depth);
@@ -78,12 +79,9 @@ fn peel_lambdas(expr: &Expr, max: usize) -> (usize, &Expr) {
     (count, cur)
 }
 
-fn contains_self_ref(expr: &Expr, name: &str) -> bool {
+fn contains_self_ref(expr: &Expr, name: &SurfaceName) -> bool {
     match expr.kind() {
-        ExprKind::Const(n, _) => {
-            let s = n.to_string();
-            s == name || s.ends_with(&format!(".{name}"))
-        }
+        ExprKind::Const(n, _) => n == name.name(),
         ExprKind::App(f, a) => contains_self_ref(f, name) || contains_self_ref(a, name),
         ExprKind::Lam(_, ty, body) | ExprKind::Pi(_, ty, body) => {
             contains_self_ref(ty, name) || contains_self_ref(body, name)
@@ -121,7 +119,7 @@ fn find_decreasing_param(expr: &Expr, num_params: usize) -> Option<usize> {
 /// Marker for a definition requiring well-founded recursion encoding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct WfRecursionMarker {
-    pub(crate) def_name: String,
+    pub(crate) def_name: SurfaceName,
     pub(crate) def_index: usize,
     pub(crate) measure: Option<String>,
 }
@@ -217,7 +215,7 @@ pub(crate) fn stratify_definitions(block: &MutualBlock) -> Vec<DefinitionStratum
 /// Forward reference entry tracking resolution state and placeholder type.
 #[derive(Debug, Clone)]
 pub(crate) struct ForwardRefEntry {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     #[allow(dead_code)]
     // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) index: usize,
@@ -230,8 +228,8 @@ pub(crate) struct ForwardRefEntry {
 /// Resolver for forward references within a mutual block.
 #[derive(Debug, Clone)]
 pub(crate) struct ForwardRefResolver {
-    entries: HashMap<String, ForwardRefEntry>,
-    resolution_order: Vec<String>,
+    entries: HashMap<SurfaceName, ForwardRefEntry>,
+    resolution_order: Vec<SurfaceName>,
 }
 
 impl ForwardRefResolver {
@@ -256,15 +254,15 @@ impl ForwardRefResolver {
     }
 
     #[must_use]
-    pub(crate) fn lookup(&self, name: &str) -> Option<&ForwardRefEntry> {
+    pub(crate) fn lookup(&self, name: &SurfaceName) -> Option<&ForwardRefEntry> {
         self.entries.get(name)
     }
 
-    pub(crate) fn resolve(&mut self, name: &str) -> bool {
+    pub(crate) fn resolve(&mut self, name: &SurfaceName) -> bool {
         if let Some(entry) = self.entries.get_mut(name) {
             if !entry.resolved {
                 entry.resolved = true;
-                self.resolution_order.push(name.to_string());
+                self.resolution_order.push(name.clone());
                 return true;
             }
         }
@@ -272,11 +270,11 @@ impl ForwardRefResolver {
     }
 
     #[must_use]
-    pub(crate) fn unresolved(&self) -> Vec<&str> {
+    pub(crate) fn unresolved(&self) -> Vec<&SurfaceName> {
         self.entries
             .values()
             .filter(|e| !e.resolved)
-            .map(|e| e.name.as_str())
+            .map(|e| &e.name)
             .collect()
     }
 
@@ -291,7 +289,7 @@ impl ForwardRefResolver {
     }
 
     #[must_use]
-    pub(crate) fn resolution_order(&self) -> &[String] {
+    pub(crate) fn resolution_order(&self) -> &[SurfaceName] {
         &self.resolution_order
     }
 }
@@ -299,7 +297,7 @@ impl ForwardRefResolver {
 /// Inferred type for a mutual definition.
 #[derive(Debug, Clone)]
 pub(crate) struct InferredMutualType {
-    pub(crate) name: String,
+    pub(crate) name: SurfaceName,
     pub(crate) index: usize,
     #[allow(dead_code)]
     // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
@@ -372,10 +370,10 @@ fn validate_computability_consistency(block: &MutualBlock) -> Result<(), ElabErr
             .iter()
             .any(|&i| i < n && block.declarations[i].is_noncomputable);
         if has_comp && has_noncomp {
-            let names: Vec<&str> = scc
+            let names: Vec<String> = scc
                 .iter()
                 .filter(|&&i| i < n)
-                .map(|&i| block.declarations[i].name.as_str())
+                .map(|&i| block.declarations[i].name.to_string())
                 .collect();
             return Err(ElabError::Unsupported {
                 feature: format!(
@@ -443,7 +441,7 @@ pub(crate) enum UnfoldHint {
 pub(crate) fn assign_unfold_hints(
     block: &MutualBlock,
     recursion_kinds: &[RecursionKind],
-) -> Vec<(String, UnfoldHint)> {
+) -> Vec<(SurfaceName, UnfoldHint)> {
     block
         .declarations
         .iter()
@@ -465,19 +463,19 @@ pub(crate) fn assign_unfold_hints(
 /// Shared universe parameters for a mutual block.
 #[derive(Debug, Clone)]
 pub(crate) struct MutualUniverseParams {
-    pub(crate) params: Vec<String>,
+    pub(crate) params: Vec<SurfaceName>,
 }
 
 /// Collect and unify universe parameters across definitions.
 pub(crate) fn collect_universe_params(
-    universe_lists: &[Vec<String>],
+    universe_lists: &[Vec<SurfaceName>],
     config: &MutualDeclExt2Config,
 ) -> Result<MutualUniverseParams, ElabError> {
     if universe_lists.is_empty() {
         return Ok(MutualUniverseParams { params: Vec::new() });
     }
-    let mut merged: Vec<String> = universe_lists[0].clone();
-    let mut seen: HashSet<String> = merged.iter().cloned().collect();
+    let mut merged: Vec<SurfaceName> = universe_lists[0].clone();
+    let mut seen: HashSet<SurfaceName> = merged.iter().cloned().collect();
     for list in &universe_lists[1..] {
         for param in list {
             if seen.insert(param.clone()) {
@@ -499,13 +497,13 @@ pub(crate) fn collect_universe_params(
 
 /// Validate definitions use a compatible subset of shared universe parameters.
 pub(crate) fn validate_universe_compatibility(
-    universe_lists: &[Vec<String>],
+    universe_lists: &[Vec<SurfaceName>],
     shared: &MutualUniverseParams,
 ) -> Result<(), ElabError> {
-    let shared_set: HashSet<&str> = shared.params.iter().map(|s| s.as_str()).collect();
+    let shared_set: HashSet<&SurfaceName> = shared.params.iter().collect();
     for (idx, list) in universe_lists.iter().enumerate() {
         for param in list {
-            if !shared_set.contains(param.as_str()) {
+            if !shared_set.contains(param) {
                 return Err(ElabError::Unsupported {
                     feature: format!("def {} uses universe '{}' not in shared set", idx, param),
                 });
@@ -525,7 +523,7 @@ pub(crate) struct MutualDeclExt2Result {
     #[allow(dead_code)]
     // 2026-08-04: no caller in either build; staged prototype kept per keep-and-annotate doctrine.
     pub(crate) wf_markers: Vec<WfRecursionMarker>,
-    pub(crate) unfold_hints: Vec<(String, UnfoldHint)>,
+    pub(crate) unfold_hints: Vec<(SurfaceName, UnfoldHint)>,
     pub(crate) universe_params: MutualUniverseParams,
 }
 
@@ -533,7 +531,7 @@ pub(crate) struct MutualDeclExt2Result {
 pub(crate) fn analyze_mutual_block_ext2(
     block: &MutualBlock,
     groups: &[MutualSccGroup],
-    universe_lists: &[Vec<String>],
+    universe_lists: &[Vec<SurfaceName>],
     config: &MutualDeclExt2Config,
 ) -> Result<MutualDeclExt2Result, ElabError> {
     validate_mutual_block(block, config)?;

@@ -7,6 +7,8 @@
 //! Split from `builtins.rs` (#307). Contains handler functions used by
 //! `register_complex_arg_tactics` and `register_ay_tactics`.
 
+use clean_parser::SurfaceName;
+
 use std::sync::Arc;
 
 use clean_kernel::Expr;
@@ -127,11 +129,25 @@ fn rcases_handler(ps: &mut ProofState, args: &[Expr]) -> Result<(), TacticError>
 }
 
 fn rintro_handler(ps: &mut ProofState, args: &[Expr]) -> Result<(), TacticError> {
-    let patterns: Vec<String> = args
+    let patterns: Vec<SurfaceName> = args
         .iter()
         .map(|a| expr_to_hyp_name(ps, a))
         .collect::<Result<Vec<_>, _>>()?;
-    super::rintro(ps, patterns)
+    super::rintro_patterns(
+        ps,
+        patterns
+            .into_iter()
+            .map(|name| {
+                if name.is_unescaped_component("_") {
+                    super::RIntroPattern::Wildcard
+                } else if name.is_unescaped_component("rfl") {
+                    super::RIntroPattern::Rfl
+                } else {
+                    super::RIntroPattern::Name(name)
+                }
+            })
+            .collect(),
+    )
 }
 
 fn obtain_handler(ps: &mut ProofState, args: &[Expr]) -> Result<(), TacticError> {
@@ -180,7 +196,7 @@ fn lift_handler(ps: &mut ProofState, args: &[Expr]) -> Result<(), TacticError> {
             expected: "a variable name".into(),
         })?;
     let using_hyp = args.get(1).map(|a| expr_to_hyp_name(ps, a)).transpose()?;
-    super::lift(ps, &var_name, using_hyp.as_deref())
+    super::lift(ps, &var_name, using_hyp.as_ref())
 }
 
 fn choose_handler(ps: &mut ProofState, args: &[Expr]) -> Result<(), TacticError> {

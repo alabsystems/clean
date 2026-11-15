@@ -12,7 +12,9 @@
 //!
 //! Part of #2902 Wave A.
 
-use super::super::proof_translation_contract::{classify_for_proof_translation, SmtLogicalForm};
+use super::super::proof_translation_contract::{
+    classify_for_proof_translation, IntDivisionRounding, SmtLogicalForm,
+};
 use super::*;
 use clean_kernel::Level;
 
@@ -22,6 +24,26 @@ fn mk_const(name: &str) -> Expr {
 
 fn mk_const_u(name: &str) -> Expr {
     Expr::const_(Name::from_string(name), vec![Level::zero()])
+}
+
+#[test]
+fn test_integer_division_contract_retains_the_explicit_rounding_mode() {
+    for (head, expected) in [
+        ("Int.div", IntDivisionRounding::Truncating),
+        ("Int.mod", IntDivisionRounding::Truncating),
+        ("Int.ediv", IntDivisionRounding::Euclidean),
+        ("Int.emod", IntDivisionRounding::Euclidean),
+    ] {
+        let expr = Expr::apps(mk_const(head), [Expr::nat_lit(7), Expr::nat_lit(2)]);
+        let form = classify_for_proof_translation(&expr);
+        let rounding = match form {
+            SmtLogicalForm::Div { int_rounding, .. } | SmtLogicalForm::Mod { int_rounding, .. } => {
+                int_rounding
+            }
+            other => panic!("{head}: expected arithmetic, got {other:?}"),
+        };
+        assert_eq!(rounding, Some(expected), "{head}");
+    }
 }
 
 fn mk_and(a: Expr, b: Expr) -> Expr {

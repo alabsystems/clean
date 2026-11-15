@@ -669,12 +669,9 @@ impl LocalLiftCtx<'_> {
             let aux_ctor_ty = wrap_index_telescope(captured_tys, ctor_instantiated);
 
             // Suffix transplant: Container.c ↦ Aux.c.
-            let ctor_str = ctor_name.to_string();
-            let suffix = ctor_str
-                .rsplit_once('.')
-                .map(|(_, s)| s)
-                .unwrap_or(&ctor_str);
-            let aux_ctor_name = Name::from_string(&format!("{aux_name}.{suffix}"));
+            let aux_ctor_name = ctor_name.with_parent(aux_name.clone()).ok_or_else(|| {
+                LocalLiftError::Invariant(format!("anonymous constructor in {container}"))
+            })?;
             ctor_map.push((aux_ctor_name.clone(), ctor_name.clone()));
             aux_ctors.push(Constructor {
                 name: aux_ctor_name,

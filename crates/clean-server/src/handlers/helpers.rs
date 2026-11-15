@@ -11,19 +11,21 @@ use clean_kernel::Expr;
 use clean_parser::ParseError;
 
 /// Format an expression for display using the Lean-style pretty printer.
-pub fn format_expr(expr: &Expr) -> String {
+pub(crate) fn format_expr(expr: &Expr) -> String {
     expr.to_string()
 }
 
 /// Format a parse error for API response.
-pub fn format_parse_error(e: &ParseError) -> String {
+pub(crate) fn format_parse_error(e: &ParseError) -> String {
     e.to_string()
 }
 
 /// Extract line number from parse error.
 pub(crate) fn parse_error_line(e: &ParseError) -> Option<usize> {
     match e {
-        ParseError::UnexpectedToken { line, .. } => Some(*line),
+        ParseError::UnexpectedToken { line, .. } | ParseError::ModuleSyntaxRefused { line, .. } => {
+            Some(*line)
+        }
         ParseError::UnexpectedEof | ParseError::NumericOverflow { .. } => None,
         _ => None, // Handle future variants
     }
@@ -32,7 +34,9 @@ pub(crate) fn parse_error_line(e: &ParseError) -> Option<usize> {
 /// Extract column number from parse error.
 pub(crate) fn parse_error_col(e: &ParseError) -> Option<usize> {
     match e {
-        ParseError::UnexpectedToken { col, .. } => Some(*col),
+        ParseError::UnexpectedToken { col, .. } | ParseError::ModuleSyntaxRefused { col, .. } => {
+            Some(*col)
+        }
         ParseError::UnexpectedEof | ParseError::NumericOverflow { .. } => None,
         _ => None, // Handle future variants
     }
@@ -41,7 +45,7 @@ pub(crate) fn parse_error_col(e: &ParseError) -> Option<usize> {
 /// Parse a tactic script into individual tactics.
 ///
 /// Splits by semicolons or newlines, handling both styles.
-pub fn parse_tactic_script(script: &str) -> Vec<String> {
+pub(crate) fn parse_tactic_script(script: &str) -> Vec<String> {
     clean_elab::tactic::parse_tactic_script(script)
 }
 

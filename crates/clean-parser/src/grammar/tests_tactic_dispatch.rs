@@ -15,6 +15,44 @@ fn by_tactics(input: &str) -> Vec<SurfaceTactic> {
 }
 
 #[test]
+fn test_have_underscore_preserves_proof_and_following_tactic() {
+    for input in [
+        "by\n  have _ := h.symm\n  exact h",
+        "by\n  have _ : b = a := h.symm\n  exact h",
+        "by\n  have _ : b = a := by\n    exact h.symm\n  exact h",
+        "by\n  have _ := by\n    exact h.symm\n  exact h",
+        "by\n  have _ : Nat → True\n    | _ => True.intro\n  exact h",
+    ] {
+        let tactics = by_tactics(input);
+        assert_eq!(tactics.len(), 2, "{input}");
+        let SurfaceTactic::Have(_, Some(name), _, proof) = &tactics[0] else {
+            panic!("expected inaccessible have: {tactics:?}");
+        };
+        assert_eq!(name, &tactic::inaccessible_hypothesis());
+        assert!(matches!(
+            proof.as_ref(),
+            SurfaceTactic::Term(..) | SurfaceTactic::Named { .. }
+        ));
+        assert!(matches!(&tactics[1], SurfaceTactic::Named { name, .. } if name == "exact"));
+    }
+}
+
+#[test]
+fn test_have_equations_leave_the_enclosing_case_pipe() {
+    for continuation in ["    trivial\n", ""] {
+        // The empty continuation tests a pipe immediately after the local
+        // equation, without another tactic masking the arm-list boundary.
+        let tactics = by_tactics(&format!(
+            "by\n  cases b with\n  | false =>\n    have _ : Nat → True\n      | _ => True.intro\n{continuation}  | true =>\n    trivial",
+        ));
+        let SurfaceTactic::Cases(_, _, _, alts) = &tactics[0] else {
+            panic!("expected cases: {tactics:?}");
+        };
+        assert_eq!(alts.len(), 2, "local equations must not consume a case");
+    }
+}
+
+#[test]
 fn test_parse_symm_tactic() {
     let t = by_tactics("by symm");
     assert!(matches!(&t[0], SurfaceTactic::Named { ref name, .. } if name == "symm"));
@@ -160,12 +198,12 @@ fn test_named_tactic_with_pattern_two_terms_idents() {
     );
     if let SurfaceTactic::Named { args, .. } = &t[0] {
         assert!(
-            matches!(&args[0], SurfaceExpr::Ident(_, n) if n == "h"),
+            matches!(&args[0], SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("h").name()),
             "first arg should be bare ident `h`, got {:?}",
             args[0]
         );
         assert!(
-            matches!(&args[1], SurfaceExpr::Ident(_, n) if n == "hn"),
+            matches!(&args[1], SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("hn").name()),
             "second arg should be bare ident `hn`, got {:?}",
             args[1]
         );
@@ -265,11 +303,11 @@ fn test_ident_list_stops_at_registered_tactic() {
         t[0]
     );
     // `rcases` now has a dedicated parse arm producing `RCases`. With no
-    // `with`-clause the pattern defaults to a single wildcard `_`.
+    // `with`-clause the pattern is Lean's empty tuple `⟨⟩`.
     assert!(
-        matches!(&t[1], SurfaceTactic::RCases { term, pattern, .. }
-            if matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h") && pattern == "_"),
-        "second tactic should be `rcases h` (RCases, pattern `_`), got {:?}",
+        matches!(&t[1], SurfaceTactic::RCases { targets, pattern, .. }
+            if matches!(&targets[0].term, SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("h").name()) && pattern == "⟨⟩"),
+        "second tactic should be `rcases h` (RCases, pattern `⟨⟩`), got {:?}",
         t[1]
     );
 }
@@ -305,7 +343,7 @@ fn test_obtain_tuple_pattern_parses_to_obtain_variant() {
             assert_eq!(pattern, "⟨hp, hq⟩", "pattern text round-trips");
             assert!(ty.is_none(), "no type ascription expected");
             assert!(
-                matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"),
+                matches!(term.as_deref(), Some(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("h").name()),
                 "RHS term should be the hypothesis `h`, got {:?}",
                 term
             );
@@ -331,7 +369,9 @@ fn test_obtain_single_name_pattern_parses() {
     match &t[0] {
         SurfaceTactic::Obtain { pattern, term, .. } => {
             assert_eq!(pattern, "h2");
-            assert!(matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"));
+            assert!(
+                matches!(term.as_deref(), Some(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("h").name())
+            );
         }
         other => unreachable!("expected SurfaceTactic::Obtain, got {:?}", other),
     }
@@ -358,7 +398,7 @@ fn test_tactic_let_tuple_pattern_desugars_to_obtain() {
             assert_eq!(pattern, "⟨a, b⟩", "pattern text round-trips");
             assert!(ty.is_none(), "no type ascription expected");
             assert!(
-                matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "p"),
+                matches!(term.as_deref(), Some(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("p").name()),
                 "RHS term should be `p`, got {:?}",
                 term
             );
@@ -391,14 +431,20 @@ fn test_tactic_let_nested_pattern_and_ascription_desugar_to_obtain() {
 fn test_named_tactic_let_still_parses_to_let() {
     match &by_tactics("by let x := p")[0] {
         SurfaceTactic::Let(_, name, ty, _) => {
-            assert_eq!(name, "x");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(ty.is_none());
         }
         other => unreachable!("expected SurfaceTactic::Let, got {:?}", other),
     }
     match &by_tactics("by let x : Nat := p")[0] {
         SurfaceTactic::Let(_, name, ty, _) => {
-            assert_eq!(name, "x");
+            assert_eq!(
+                (name).name(),
+                crate::SurfaceName::generated_path("x").name()
+            );
             assert!(ty.is_some(), "`: Nat` should be captured");
         }
         other => unreachable!("expected SurfaceTactic::Let, got {:?}", other),
@@ -414,7 +460,9 @@ fn test_obtain_with_type_ascription_parses() {
         } => {
             assert_eq!(pattern, "⟨x, hx⟩");
             assert!(ty.is_some(), "type ascription `: Foo` should be captured");
-            assert!(matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"));
+            assert!(
+                matches!(term.as_deref(), Some(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("h").name())
+            );
         }
         other => unreachable!("expected SurfaceTactic::Obtain, got {:?}", other),
     }
@@ -428,7 +476,7 @@ fn test_obtain_compound_rhs_term_parses() {
         SurfaceTactic::Obtain { pattern, term, .. } => {
             assert_eq!(pattern, "⟨a, b⟩");
             assert!(
-                matches!(term.as_ref(), SurfaceExpr::App(..)),
+                matches!(term.as_deref(), Some(SurfaceExpr::App(..))),
                 "RHS should parse as an application `And.intro hp hq`, got {:?}",
                 term
             );
@@ -452,12 +500,14 @@ fn test_rcases_with_tuple_pattern_parses_to_rcases_variant() {
     let t = by_tactics("by rcases h with ⟨hp, hq⟩");
     assert_eq!(t.len(), 1, "expected a single tactic, got {:?}", t);
     match &t[0] {
-        SurfaceTactic::RCases { term, pattern, .. } => {
+        SurfaceTactic::RCases {
+            targets, pattern, ..
+        } => {
             assert_eq!(pattern, "⟨hp, hq⟩", "pattern text round-trips");
             assert!(
-                matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"),
+                matches!(&targets[0].term, SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("h").name()),
                 "scrutinee should be the hypothesis `h`, got {:?}",
-                term
+                targets
             );
         }
         other => unreachable!("expected SurfaceTactic::RCases, got {:?}", other),
@@ -479,22 +529,31 @@ fn test_rcases_nested_pattern_parses() {
 fn test_rcases_single_name_pattern_parses() {
     let t = by_tactics("by rcases h with h2");
     match &t[0] {
-        SurfaceTactic::RCases { pattern, term, .. } => {
+        SurfaceTactic::RCases {
+            pattern, targets, ..
+        } => {
             assert_eq!(pattern, "h2");
-            assert!(matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"));
+            assert!(
+                matches!(&targets[0].term, SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("h").name())
+            );
         }
         other => unreachable!("expected SurfaceTactic::RCases, got {:?}", other),
     }
 }
 
 #[test]
-fn test_rcases_no_with_defaults_to_wildcard() {
-    // `rcases h` with no `with`-clause defaults the pattern to a wildcard.
+fn test_rcases_no_with_defaults_to_empty_tuple() {
+    // `rcases h` with no `with`-clause takes Lean's `RCasesPatt.tuple tk []`
+    // (`evalRCases`), which splits one level.
     let t = by_tactics("by rcases h");
     match &t[0] {
-        SurfaceTactic::RCases { pattern, term, .. } => {
-            assert_eq!(pattern, "_");
-            assert!(matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"));
+        SurfaceTactic::RCases {
+            pattern, targets, ..
+        } => {
+            assert_eq!(pattern, "⟨⟩");
+            assert!(
+                matches!(&targets[0].term, SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("h").name())
+            );
         }
         other => unreachable!("expected SurfaceTactic::RCases, got {:?}", other),
     }
@@ -551,9 +610,13 @@ fn test_rcases_or_alternation_pattern_parses_to_pipe_text() {
         t
     );
     match &t[0] {
-        SurfaceTactic::RCases { pattern, term, .. } => {
+        SurfaceTactic::RCases {
+            pattern, targets, ..
+        } => {
             assert_eq!(pattern, "hp | hq", "top-level `|` alternation round-trips");
-            assert!(matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"));
+            assert!(
+                matches!(&targets[0].term, SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("h").name())
+            );
         }
         other => unreachable!("expected SurfaceTactic::RCases, got {:?}", other),
     }
@@ -586,7 +649,9 @@ fn test_obtain_or_alternation_pattern_parses() {
                 pattern, "hp | hq",
                 "obtain top-level alternation round-trips"
             );
-            assert!(matches!(term.as_ref(), SurfaceExpr::Ident(_, n) if n == "h"));
+            assert!(
+                matches!(term.as_deref(), Some(SurfaceExpr::Ident(_, n)) if (n).name() == crate::SurfaceName::generated_path("h").name())
+            );
         }
         other => unreachable!("expected SurfaceTactic::Obtain, got {:?}", other),
     }

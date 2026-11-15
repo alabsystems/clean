@@ -8,7 +8,7 @@ use crate::instances::{extract_class_app, DEFAULT_PRIORITY};
 use crate::ElabError;
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId, Level};
-use clean_parser::{DeclModifiers, SurfaceBinder, SurfaceExpr, SurfaceFieldAssign};
+use clean_parser::{DeclModifiers, SurfaceBinder, SurfaceExpr, SurfaceFieldAssign, SurfaceName};
 
 use super::{convert_binder_info, ElabCtx, ElabResult};
 
@@ -26,8 +26,8 @@ impl<'a> ElabCtx<'a> {
     /// applied to the field values, and registers the instance in the instance table.
     pub(super) fn elab_instance(
         &mut self,
-        name: Option<&str>,
-        _universe_params: &[String],
+        name: Option<&SurfaceName>,
+        _universe_params: &[SurfaceName],
         binders: &[SurfaceBinder],
         class_type: &SurfaceExpr,
         fields: &[SurfaceFieldAssign],
@@ -38,7 +38,9 @@ impl<'a> ElabCtx<'a> {
         // Lean rejects it at the root ("scoped attributes must be used inside
         // namespaces"). Loud here so it can never silently register as a
         // global instance (B99).
-        if modifiers.scope == clean_parser::DeclScope::Scoped && self.namespace_prefix.is_empty() {
+        if modifiers.scope == clean_parser::DeclScope::Scoped
+            && self.namespace_prefix.is_anonymous()
+        {
             return Err(ElabError::Unsupported {
                 feature: "`scoped instance` outside of a namespace (scoped attributes must be \
                           used inside namespaces)"
@@ -61,8 +63,10 @@ impl<'a> ElabCtx<'a> {
                 let binder_sort = Expr::sort(self.fresh_universe_param());
                 self.fresh_meta(binder_sort)
             };
+            self.check_instance_binder_annotation(binder.info, &binder_ty)?;
             let bi = convert_binder_info(binder.info);
             let fvar = self.push_local(binder.name.clone(), binder_ty.clone());
+            self.note_local_forall_binder_names(fvar, binder.ty.as_deref(), &binder_ty);
 
             // Register instance-implicit binders for nested resolution
             if bi == BinderInfo::InstImplicit {
@@ -86,17 +90,27 @@ impl<'a> ElabCtx<'a> {
         // (a = b)` — unconditional whnf therefore destroyed the class head and
         // every `instance : DecidableEq T` died with "instance class type must
         // be a class application" (the 2026-08-17 instance-head class).
-        let class_ty_whnf =
-            if extract_class_app(&class_ty).is_some_and(|(n, _)| self.instances.is_class(&n)) {
-                class_ty.clone()
-            } else {
-                self.whnf(&class_ty)
-            };
+        //
+        // A reducible ALIAS of a class that is not registered yet
+        // (`instance : DecidableLT T`) is kept at the alias too: Lean's
+        // `addInstance` reads the class through a reducible telescope, and
+        // Clean files the instance under the alias exactly as `clean-olean`
+        // files imported ones (`crate::instance_alias`; `register.rs`
+        // registers the alias as a class when it persists the instance).
+        let class_ty_whnf = if extract_class_app(&class_ty).is_some_and(|(n, _)| {
+            self.instances.is_class(&n)
+                || crate::instance_alias::alias_class_arity(self.env, &n).is_some()
+        }) {
+            class_ty.clone()
+        } else {
+            self.whnf(&class_ty)
+        };
 
         // Extract the class name and arguments from the type
         let (class_name, class_args) = extract_class_app(&class_ty_whnf).ok_or_else(|| {
             ElabError::NotImplemented(format!(
-                "instance class type must be a class application, got: {class_ty:?}"
+                "instance class type must be a class application, got: {}",
+                crate::error_render::term(&class_ty)
             ))
         })?;
 
@@ -116,7 +130,10 @@ impl<'a> ElabCtx<'a> {
         // and carry their class info on the environment. Requiring only the
         // former would break exactly the built-in classes the short-form path
         // below exists to support.
-        if !self.instances.is_class(&class_name) && self.env.get_class_info(&class_name).is_none() {
+        if !self.instances.is_class(&class_name)
+            && self.env.get_class_info(&class_name).is_none()
+            && crate::instance_alias::alias_class_arity(self.env, &class_name).is_none()
+        {
             return Err(ElabError::Unsupported {
                 feature: format!(
                     "instance: `{class_name}` is not a class (an `instance` \
@@ -134,7 +151,10 @@ impl<'a> ElabCtx<'a> {
         // to have been registered via `register_structure_fields`, so it works
         // for built-in classes like `Inhabited` that are registered only via
         // `add_inductive` during kernel prelude initialization (#3534).
-        let is_short_form = fields.len() == 1 && fields[0].name == "_value";
+        let is_short_form = fields.len() == 1
+            && fields[0]
+                .name
+                .same_syntax(&SurfaceName::generated_path("_value"));
         if is_short_form {
             return self.elab_instance_short_form(
                 name,
@@ -189,7 +209,7 @@ impl<'a> ElabCtx<'a> {
         })?;
 
         // The constructor name is ClassName.mk
-        let ctor_name = Name::from_string(&format!("{class_name}.mk"));
+        let ctor_name = class_name.clone().str("mk");
         let ctor_info = self
             .env
             .get_const(&ctor_name)
@@ -219,7 +239,7 @@ impl<'a> ElabCtx<'a> {
         //
         // was accepted, while the same `sorry` alone is correctly refused.
         {
-            let mut seen: Vec<&String> = Vec::new();
+            let mut seen: Vec<&SurfaceName> = Vec::new();
             for f in fields {
                 if seen.contains(&&f.name) {
                     return Err(ElabError::Unsupported {
@@ -234,11 +254,13 @@ impl<'a> ElabCtx<'a> {
         }
 
         let provided_fields: std::collections::HashSet<_> =
-            fields.iter().map(|f| &f.name).collect();
-        if field_names
-            .iter()
-            .any(|f| !provided_fields.contains(&f.to_string()))
+            fields.iter().map(|f| f.name.name()).collect();
+        if field_names.iter().any(|f| !provided_fields.contains(f))
+            || fields.iter().any(|f| !field_names.contains(f.name.name()))
         {
+            // An extra assignment may denote an inherited field or be invalid.
+            // Send it through the structure-literal validator; never omit its
+            // value merely because every direct field was also supplied.
             return self.elab_instance_via_struct_lit(
                 name,
                 &binder_fvars,
@@ -323,7 +345,14 @@ impl<'a> ElabCtx<'a> {
             result_ty = self.metas.instantiate(&body_ty);
         }
 
-        let (mut instance_val, mut result_ty) = self.insert_implicit_args(instance_val, &result_ty);
+        // NO implicit-argument insertion past the parameters: every remaining
+        // binder is a FIELD, and an olean-imported class stores each parent
+        // slot as an instance-implicit one (`Preorder.mk {α} [toLE : LE α]
+        // [toLT : LT α] …`). The `insert_implicit_args` call that stood here
+        // until 2026-09-10 walked exactly those binders — synthesizing (or
+        // minting a metavariable for) a parent the `where` block was about to
+        // supply, and leaving the field loop below one binder short per
+        // parent. Same repair as `elab_struct_lit`; see its comment.
 
         // Then apply the field values in order
         for field_name in &field_names {
@@ -335,7 +364,7 @@ impl<'a> ElabCtx<'a> {
             let field_name_str = field_name.to_string();
             let field_assign = fields
                 .iter()
-                .find(|f| f.name == field_name_str)
+                .find(|f| f.name.name() == field_name)
                 .ok_or_else(|| {
                     ElabError::NotImplemented(format!(
                         "missing field {field_name_str} in instance for {class_name}"
@@ -360,7 +389,7 @@ impl<'a> ElabCtx<'a> {
 
         // Generate instance name if not provided (freshened; see
         // `instance_decl_name`).
-        let instance_name = self.instance_decl_name(name, &class_name, &class_args);
+        let instance_name = self.instance_decl_name(name, &class_name, &class_args, modifiers)?;
 
         let priority = priority.unwrap_or(DEFAULT_PRIORITY);
 
@@ -378,44 +407,30 @@ impl<'a> ElabCtx<'a> {
         // `{a}`/`[C a]` binders AND the auto-bound implicits (`a` in `[C a]`).
         // See `close_instance_telescope`.
         let (final_ty, final_val) = self.close_instance_telescope(
+            &instance_name,
             &class_ty,
             &instance_val,
             &binder_fvars,
             &binder_types,
             &binder_infos,
             &inst_implicit_indices,
-        );
+        )?;
 
         self.ensure_no_residual_fvars(
             "instance",
-            &instance_name.to_string(),
+            &SurfaceName::from_name(instance_name.clone()),
             &final_ty,
             Some(&final_val),
         )?;
 
-        // Register the instance
-        self.instances.add_instance(
-            instance_name.clone(),
-            class_name.clone(),
-            final_val.clone(),
-            final_ty.clone(),
-            priority,
-        );
-
-        // Use self.universe_params which includes auto-bound params (#1324)
-        Ok(ElabResult::Instance {
-            name: instance_name,
-            universe_params: self
-                .universe_params
-                .iter()
-                .map(|s| Name::from_string(s))
-                .collect(),
+        self.finish_instance(
+            instance_name,
             class_name,
-            ty: final_ty,
-            val: final_val,
+            final_ty,
+            final_val,
             priority,
-            modifiers: *modifiers,
-        })
+            *modifiers,
+        )
     }
 
     /// Elaborate a long-form `instance : Class T where …` declaration for a
@@ -439,7 +454,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn elab_instance_via_struct_lit(
         &mut self,
-        name: Option<&str>,
+        name: Option<&SurfaceName>,
         binder_fvars: &[FVarId],
         binder_types: &[Expr],
         binder_infos: &[BinderInfo],
@@ -467,49 +482,37 @@ impl<'a> ElabCtx<'a> {
 
         // Generate instance name if not provided (freshened; see
         // `instance_decl_name`).
-        let instance_name = self.instance_decl_name(name, class_name, class_args);
+        let instance_name = self.instance_decl_name(name, class_name, class_args, modifiers)?;
 
         let priority = priority.unwrap_or(DEFAULT_PRIORITY);
 
         // Close over the binder telescope + auto-bound implicits (mirrors the
         // native long-form and short-form paths). See `close_instance_telescope`.
         let (final_ty, final_val) = self.close_instance_telescope(
+            &instance_name,
             class_ty,
             &instance_val,
             binder_fvars,
             binder_types,
             binder_infos,
             inst_implicit_indices,
-        );
+        )?;
 
         self.ensure_no_residual_fvars(
             "instance",
-            &instance_name.to_string(),
+            &SurfaceName::from_name(instance_name.clone()),
             &final_ty,
             Some(&final_val),
         )?;
 
-        self.instances.add_instance(
-            instance_name.clone(),
+        self.finish_instance(
+            instance_name,
             class_name.clone(),
-            final_val.clone(),
-            final_ty.clone(),
+            final_ty,
+            final_val,
             priority,
-        );
-
-        Ok(ElabResult::Instance {
-            name: instance_name,
-            universe_params: self
-                .universe_params
-                .iter()
-                .map(|s| Name::from_string(s))
-                .collect(),
-            class_name: class_name.clone(),
-            ty: final_ty,
-            val: final_val,
-            priority,
-            modifiers: *modifiers,
-        })
+            *modifiers,
+        )
     }
 
     /// Elaborate the short-form instance syntax: `instance : Class := expr`.
@@ -527,7 +530,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn elab_instance_short_form(
         &mut self,
-        name: Option<&str>,
+        name: Option<&SurfaceName>,
         binder_fvars: &[FVarId],
         binder_types: &[Expr],
         binder_infos: &[BinderInfo],
@@ -555,29 +558,104 @@ impl<'a> ElabCtx<'a> {
 
         // Generate instance name if not provided (freshened; see
         // `instance_decl_name`).
-        let instance_name = self.instance_decl_name(name, class_name, class_args);
+        let instance_name = self.instance_decl_name(name, class_name, class_args, modifiers)?;
 
         let priority = priority.unwrap_or(DEFAULT_PRIORITY);
 
         // Close over the binder telescope + auto-bound implicits. See
         // `close_instance_telescope`.
         let (final_ty, final_val) = self.close_instance_telescope(
+            &instance_name,
             class_ty,
             &instance_val,
             binder_fvars,
             binder_types,
             binder_infos,
             inst_implicit_indices,
-        );
+        )?;
 
         self.ensure_no_residual_fvars(
             "instance",
-            &instance_name.to_string(),
+            &SurfaceName::from_name(instance_name.clone()),
             &final_ty,
             Some(&final_val),
         )?;
 
-        // Register the instance.
+        self.finish_instance(
+            instance_name,
+            class_name.clone(),
+            final_ty,
+            final_val,
+            priority,
+            *modifiers,
+        )
+    }
+
+    /// The common tail of all three instance forms (long `where`, structure
+    /// literal, short `:=`): generalize the universe levels at declaration
+    /// close, register the instance in the local table, and build the result.
+    ///
+    /// WS6.10 (F-107, proof-program row `STANDALONE.p11_typeclass_instance`).
+    /// This used to return `self.universe_params` VERBATIM as the instance's
+    /// level parameters. That vector is every level name the declaration
+    /// minted, solved or not, so the monomorphic
+    ///
+    /// ```lean
+    /// instance instScaleU64 : Scale UInt64 where
+    ///   scale := fun (x : UInt64) => x * 3
+    /// ```
+    ///
+    /// was registered as `instScaleU64.{?u_0, ?u_1, ?u_2}` — three levels
+    /// minted while elaborating the declaration, none of which occurs in the
+    /// finished type or value — in the RESERVED metavariable spelling (`level_mint::MINT_PREFIX`), which is
+    /// a spelling no user can write and that must never reach a registered
+    /// interface. The header-first batch staged the same instance as `{}` and
+    /// refused the whole module with `HeaderTypeDivergence`, so the module
+    /// could not be checked through targo's embedded Clean at all.
+    ///
+    /// The instance now closes through [`Self::finalize_level_params`], the
+    /// same `levelMVarToParam` boundary every `def`/`theorem` uses: it drains
+    /// postponed level equations (fail closed), canonicalizes, keeps only the
+    /// levels that OCCUR in the finished type or value, renames genuinely
+    /// undetermined ones into the writable `u_N` space, and refuses levels that
+    /// escape an explicit `.{…}` list. The table entry and the result carry the
+    /// finalized type and value, so both agree with what the kernel registers.
+    ///
+    /// What leaked was the DECLARED list, not the stored expression: the body's
+    /// `HAdd.hAdd.{?u_0,?u_1,?u_2}` levels ARE solved by the time the value
+    /// type-checks (the carrier metas unify with the concrete carrier and
+    /// `unify_meta`'s Sort arm solves `succ ?u_i =?= 1`), so the kernel accepted
+    /// the registration — it checks duplicates, metavariables and undefined
+    /// params, never that a declared level is USED. `elab_init` then rebuilt the
+    /// instance term as `Const(inst, [?u_0, ?u_1, ?u_2])` from that declared
+    /// list, `instance.rs` freshened all three per resolution, and the USING
+    /// declaration's own close generalized them, so `def five : Nat` registered
+    /// as `five.{u_3,u_4,u_5}`. Nothing here is defaulted and no name the kernel
+    /// constant declares is dropped: the declared list shrinks BEFORE
+    /// registration, so kernel, registry and resolver agree by construction. The
+    /// auto-bound params `#1324` relies on are rigid and are kept.
+    ///
+    /// Pinned from both directions: `tests/instance_value_levels_e2e.rs` drives
+    /// the island batch (`BatchOptions::islands()`) over the polymorphic-user,
+    /// monomorphic-twin, value-parameter, universe-polymorphic and
+    /// named-instance shapes, and
+    /// `tests/instance_level_params_e2e.rs` pins the WS6.10 rows
+    /// (`standalone_p11_typeclass_instance_commits_through_the_header_first_batch`
+    /// and its monomorphic / polymorphic / ill-typed companions). The
+    /// `level_mint.rs` reservation doc records that its original "ZERO
+    /// registered declarations" sweep never covered this path.
+    fn finish_instance(
+        &mut self,
+        instance_name: Name,
+        class_name: Name,
+        final_ty: Expr,
+        final_val: Expr,
+        priority: u32,
+        modifiers: DeclModifiers,
+    ) -> Result<ElabResult, ElabError> {
+        let (universe_params, final_ty, final_val) =
+            self.finalize_level_params(final_ty, final_val)?;
+
         self.instances.add_instance(
             instance_name.clone(),
             class_name.clone(),
@@ -588,16 +666,12 @@ impl<'a> ElabCtx<'a> {
 
         Ok(ElabResult::Instance {
             name: instance_name,
-            universe_params: self
-                .universe_params
-                .iter()
-                .map(|s| Name::from_string(s))
-                .collect(),
-            class_name: class_name.clone(),
+            universe_params,
+            class_name,
             ty: final_ty,
             val: final_val,
             priority,
-            modifiers: *modifiers,
+            modifiers,
         })
     }
 
@@ -624,13 +698,14 @@ impl<'a> ElabCtx<'a> {
     /// level constraints collected during unification.
     fn close_instance_telescope(
         &mut self,
+        instance_name: &Name,
         class_ty: &Expr,
         instance_val: &Expr,
         binder_fvars: &[FVarId],
         binder_types: &[Expr],
         binder_infos: &[BinderInfo],
         inst_implicit_indices: &[usize],
-    ) -> (Expr, Expr) {
+    ) -> Result<(Expr, Expr), ElabError> {
         let mut final_ty = self.metas.instantiate(class_ty);
         let mut final_val = self.metas.instantiate(instance_val);
 
@@ -644,6 +719,20 @@ impl<'a> ElabCtx<'a> {
             final_val = Expr::lam(binder_infos[i], binder_types[i].clone(), final_val);
         }
 
+        // The binders' surface names, read before their locals are popped:
+        // the section-variable pruning below matches its request on them.
+        let binder_names: Vec<SurfaceName> = binder_fvars
+            .iter()
+            .map(|fvar| {
+                self.locals
+                    .iter()
+                    .rev()
+                    .find(|(_, local, _)| local == fvar)
+                    .map(|(name, _, _)| name.clone())
+                    .unwrap_or_default()
+            })
+            .collect();
+
         // Pop local instances (reverse of push order) and the explicit binder
         // locals. Auto-implicit locals are removed by `take_auto_implicits`.
         for _ in inst_implicit_indices {
@@ -653,18 +742,40 @@ impl<'a> ElabCtx<'a> {
             self.pop_local();
         }
 
-        // Layer 2: auto-bound implicits, closed OUTSIDE the explicit binders.
-        // `wrap_with_auto_implicits` abstracts each auto-implicit fvar over the
-        // whole telescope (including the embedded explicit-binder types that
-        // reference it), then wraps the outermost implicit `{a}` Pi/Lam.
+        // Section-owned autos precede captured section binders. The
+        // instance's own autos close inside that prefix, as for a definition.
         let auto_implicits = self.take_auto_implicits();
-        let (final_ty, final_val) =
-            Self::wrap_with_auto_implicits(final_ty, final_val, &auto_implicits);
+        let sections = binder_names
+            .iter()
+            .take_while(|name| name.is_section_variable())
+            .count();
+        let (final_ty, final_val, section_auto_count) = self.wrap_decl_auto_implicits(
+            sections,
+            final_ty,
+            final_val,
+            &auto_implicits,
+            Some(&binder_fvars[..sections]),
+        )?;
+
+        // An instance is a definition to Lean: when `preprocess` could not
+        // scan its fields (a `by` proof field, …) it prepended EVERY section
+        // variable, and the unused ones go now — `removeUnusedVars`
+        // (`Lean/Elab/MutualDef.lean:593-609`). A universe parameter only a
+        // dropped binder mentioned is left out of the registered level list by
+        // the caller's `finalize_level_params`, which keeps only the
+        // parameters that occur. No-op unless armed.
+        let (final_ty, final_val) = self.prune_armed_section_binders(
+            instance_name,
+            binder_names.iter(),
+            section_auto_count,
+            final_ty,
+            final_val,
+        );
 
         // Substitute level constraints collected during unification.
         let final_ty = self.metas.instantiate_levels(&final_ty);
         let final_val = self.metas.instantiate_levels(&final_val);
-        (final_ty, final_val)
+        Ok((final_ty, final_val))
     }
 
     /// The declaration name for an `instance`: a user-supplied name verbatim,
@@ -680,33 +791,73 @@ impl<'a> ElabCtx<'a> {
     /// (`classes_instances/p05,p06,p16`).
     fn instance_decl_name(
         &self,
-        name: Option<&str>,
+        name: Option<&SurfaceName>,
         class_name: &Name,
         class_args: &[Expr],
-    ) -> Name {
+        modifiers: &DeclModifiers,
+    ) -> Result<Name, ElabError> {
+        let private_kind = super::elaborate_decl::private_kind_of(
+            modifiers,
+            super::elaborate_decl::PrivateNameKind::Definition,
+        );
         if let Some(n) = name {
-            return Name::from_string(n);
+            // Already namespace-qualified by the caller; its already-declared
+            // rules ran on the declaration (`check_private_not_already_declared`).
+            return Ok(self.kernel_name_of_qualified(n.name().clone(), private_kind));
         }
-        let mut base = format!("inst{class_name}");
+        // A private class or argument type contributes its user-facing name,
+        // never its `_private.<module>.0` kernel prefix (G21 B3): Lean
+        // 4.8.0's `instance : Repr D` on a private `D` is `instReprD`.
+        let shown = crate::private_names::user_facing_name;
+        let mut base = format!("inst{}", shown(class_name));
         for arg in class_args {
             if let ExprKind::Const(n, _) = arg.kind() {
-                base.push_str(&n.to_string());
+                base.push_str(&shown(n).to_string());
             }
         }
-        self.fresh_global_name(&base)
+        // Lean freshens the PUBLIC `<ns>.inst…` (`mkUnusedBaseName` tests
+        // `currNamespace ++ base`), and only then applies the visibility
+        // (`mkDeclName`). So a second anonymous private instance of the same
+        // class is NOT `inst…_1`: Lean 4.8.0 refuses it with "private
+        // declaration 'instKNat' has already been declared", and a public one
+        // after it with "a private declaration 'instKNat' …" (measured
+        // 2026-10-08, G21 B2) — the checks below.
+        let user = self.fresh_global_name(&base);
+        let decl_name = self.kernel_name_of_qualified(user.clone(), private_kind);
+        self.check_private_name_free(&user, &decl_name)?;
+        Ok(decl_name)
     }
 
-    /// `base` if free in the environment, else the first `base_1`, `base_2`, …
-    /// no constant already claims (Lean `mkUnusedBaseName`).
+    /// `base` if free, else the first `base_1`, `base_2`, … no constant
+    /// already claims (Lean `mkUnusedBaseName`). A name is claimed when the
+    /// environment holds it OR, in an environment holding Clean's model of
+    /// Lean core (`Environment::models_lean_init`), Lean 4.8.0 core does
+    /// (`crate::lean_core_names`): Lean's environment then holds every `Init`
+    /// constant, while Clean's prelude models only part of them, so
+    /// freshening against the environment alone let an anonymous instance
+    /// take the name of a core instance Clean does not model
+    /// (`instHashableString`), and a statement naming that core instance then
+    /// meant the user's (measured 2026-09-27).
     fn fresh_global_name(&self, base: &str) -> Name {
-        let base_name = Name::from_string(base);
-        if self.env.get_const(&base_name).is_none() {
+        let claimed = |name: &Name| {
+            self.env.get_const(name).is_some()
+                || (self.env.models_lean_init()
+                    && crate::lean_core_names::is_lean_init_constant(name))
+        };
+        // This is a generated label, not identifier syntax. In particular, a
+        // dot printed inside a class name must not create a namespace component.
+        let base_name = self.namespace_prefix.name().clone().str(base);
+        if !claimed(&base_name) {
             return base_name;
         }
         let mut i = 1u32;
         loop {
-            let candidate = Name::from_string(&format!("{base}_{i}"));
-            if self.env.get_const(&candidate).is_none() {
+            let candidate = self
+                .namespace_prefix
+                .name()
+                .clone()
+                .str(format!("{base}_{i}"));
+            if !claimed(&candidate) {
                 return candidate;
             }
             i = i.saturating_add(1);

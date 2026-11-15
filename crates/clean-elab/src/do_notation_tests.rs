@@ -17,18 +17,18 @@ fn expect_ok(result: Result<SurfaceExpr, crate::ElabError>) -> SurfaceExpr {
 }
 
 /// Check if a `SurfaceExpr` is an `App` whose function is an `Ident` with the given name.
-fn is_app_of(expr: &SurfaceExpr, name: &str) -> bool {
+fn is_app_of(expr: &SurfaceExpr, name: &'static str) -> bool {
     if let SurfaceExpr::App(_, func, _) = expr {
         if let SurfaceExpr::Ident(_, ident_name) = func.as_ref() {
-            return ident_name == name;
+            return ident_name.name() == &clean_kernel::Name::from_string(name);
         }
     }
     false
 }
 
 /// Check if a `SurfaceExpr` is an `Ident` with the given name.
-fn is_ident(expr: &SurfaceExpr, name: &str) -> bool {
-    matches!(expr, SurfaceExpr::Ident(_, n) if n == name)
+fn is_ident(expr: &SurfaceExpr, name: &'static str) -> bool {
+    matches!(expr, SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string(name))
 }
 
 /// Extract the args from an App node.
@@ -49,7 +49,7 @@ fn test_simple_bind_desugars_to_bind_app() {
     // do let x <- action1; pure (x)
     let elements = vec![
         DoElement::Bind {
-            name: Some("x".into()),
+            name: Some(clean_parser::SurfaceName::generated_path("x")),
             action: Box::new(SurfaceExpr::ident("action1")),
         },
         DoElement::Return(Box::new(SurfaceExpr::ident("x"))),
@@ -71,7 +71,7 @@ fn test_simple_bind_desugars_to_bind_app() {
 
     // Second arg should be a Lambda
     assert!(
-        matches!(&args[1].expr, SurfaceExpr::Lambda(_, binders, _) if binders[0].name == "x"),
+        matches!(&args[1].expr, SurfaceExpr::Lambda(_, binders, _) if binders[0].name == clean_parser::SurfaceName::generated_path("x")),
         "second arg should be fun x => ..."
     );
 }
@@ -81,11 +81,11 @@ fn test_chain_binds_produces_nested_bind() {
     // do let x <- a; let y <- b; pure (y)
     let elements = vec![
         DoElement::Bind {
-            name: Some("x".into()),
+            name: Some(clean_parser::SurfaceName::generated_path("x")),
             action: Box::new(SurfaceExpr::ident("a")),
         },
         DoElement::Bind {
-            name: Some("y".into()),
+            name: Some(clean_parser::SurfaceName::generated_path("y")),
             action: Box::new(SurfaceExpr::ident("b")),
         },
         DoElement::Return(Box::new(SurfaceExpr::ident("y"))),
@@ -124,7 +124,11 @@ fn test_bare_action_binds_with_wildcard() {
     assert!(is_ident(&args[0].expr, "action1"));
 
     if let SurfaceExpr::Lambda(_, binders, body) = &args[1].expr {
-        assert_eq!(binders[0].name, "_", "binder should be wildcard");
+        assert_eq!(
+            binders[0].name,
+            clean_parser::SurfaceName::generated_path("_"),
+            "binder should be wildcard"
+        );
         assert!(is_ident(body, "action2"), "body should be action2");
     } else {
         panic!("expected Lambda continuation");
@@ -136,7 +140,7 @@ fn test_let_in_do_desugars_to_let_expr() {
     // do let x := 42; pure x
     let elements = vec![
         DoElement::Let {
-            name: "x".into(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             value: Box::new(SurfaceExpr::nat(42)),
         },
         DoElement::Return(Box::new(SurfaceExpr::ident("x"))),
@@ -147,7 +151,7 @@ fn test_let_in_do_desugars_to_let_expr() {
     // Should be let x := 42 in Pure.pure x
     assert!(
         matches!(&result, SurfaceExpr::Let(_, binder, val, body)
-            if binder.name == "x"
+            if binder.name == clean_parser::SurfaceName::generated_path("x")
             && matches!(val.as_ref(), SurfaceExpr::Lit(_, clean_parser::SurfaceLit::Nat(42)))
             && is_app_of(body, "Pure.pure")
         ),
@@ -204,7 +208,11 @@ fn test_for_in_desugars_to_for_in_app() {
     // for x in xs do action
     let body = vec![DoElement::Action(Box::new(SurfaceExpr::ident("action")))];
 
-    let result = expect_ok(desugar_for_in("x", &SurfaceExpr::ident("xs"), &body));
+    let result = expect_ok(desugar_for_in(
+        &clean_parser::SurfaceName::generated_path("x"),
+        &SurfaceExpr::ident("xs"),
+        &body,
+    ));
 
     // Should be ForIn.forIn xs PUnit.unit (fun x _ => ...)
     assert!(
@@ -224,8 +232,8 @@ fn test_for_in_desugars_to_for_in_app() {
     assert!(
         matches!(&args[2].expr, SurfaceExpr::Lambda(_, binders, _)
             if binders.len() == 2
-            && binders[0].name == "x"
-            && binders[1].name == "_"
+            && binders[0].name == clean_parser::SurfaceName::generated_path("x")
+            && binders[1].name == clean_parser::SurfaceName::generated_path("_")
         ),
         "third arg should be fun x _ => ..."
     );
@@ -238,11 +246,11 @@ fn test_nested_do_blocks() {
     // For our desugaring, we can represent this as nested bind chains
     let elements = vec![
         DoElement::Bind {
-            name: Some("x".into()),
+            name: Some(clean_parser::SurfaceName::generated_path("x")),
             action: Box::new(SurfaceExpr::ident("outer")),
         },
         DoElement::Bind {
-            name: Some("y".into()),
+            name: Some(clean_parser::SurfaceName::generated_path("y")),
             action: Box::new(SurfaceExpr::ident("inner")),
         },
         DoElement::Return(Box::new(SurfaceExpr::ident("y"))),
@@ -279,7 +287,7 @@ fn test_empty_do_fails() {
 fn test_do_element_variants_construction() {
     // Just verify all DoElement variants can be constructed
     let _bind = DoElement::Bind {
-        name: Some("x".into()),
+        name: Some(clean_parser::SurfaceName::generated_path("x")),
         action: Box::new(SurfaceExpr::ident("a")),
     };
     let _bind_anon = DoElement::Bind {
@@ -287,11 +295,11 @@ fn test_do_element_variants_construction() {
         action: Box::new(SurfaceExpr::ident("a")),
     };
     let _let = DoElement::Let {
-        name: "x".into(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         value: Box::new(SurfaceExpr::nat(1)),
     };
     let _let_mut = DoElement::LetMut {
-        name: "x".into(),
+        name: clean_parser::SurfaceName::generated_path("x"),
         value: Box::new(SurfaceExpr::nat(1)),
     };
     let _action = DoElement::Action(Box::new(SurfaceExpr::ident("a")));
@@ -302,7 +310,7 @@ fn test_do_element_variants_construction() {
         else_branch: vec![],
     };
     let _for_in = DoElement::ForIn {
-        var: "x".into(),
+        var: clean_parser::SurfaceName::generated_path("x"),
         collection: Box::new(SurfaceExpr::ident("xs")),
         body: vec![],
     };
@@ -313,7 +321,7 @@ fn test_let_mut_in_do_treated_as_let() {
     // do let mut x := 0; pure x
     let elements = vec![
         DoElement::LetMut {
-            name: "x".into(),
+            name: clean_parser::SurfaceName::generated_path("x"),
             value: Box::new(SurfaceExpr::nat(0)),
         },
         DoElement::Return(Box::new(SurfaceExpr::ident("x"))),
@@ -323,7 +331,7 @@ fn test_let_mut_in_do_treated_as_let() {
 
     // At surface level, LetMut desugars the same as Let
     assert!(
-        matches!(&result, SurfaceExpr::Let(_, binder, _, _) if binder.name == "x"),
+        matches!(&result, SurfaceExpr::Let(_, binder, _, _) if binder.name == clean_parser::SurfaceName::generated_path("x")),
         "LetMut should desugar like Let at surface level, got {result:?}"
     );
 }
@@ -390,7 +398,11 @@ fn test_if_with_empty_else_uses_pure_unit() {
 fn test_for_in_body_produces_yield_step() {
     // for x in xs do action
     let body = vec![DoElement::Action(Box::new(SurfaceExpr::ident("process")))];
-    let result = expect_ok(desugar_for_in("x", &SurfaceExpr::ident("xs"), &body));
+    let result = expect_ok(desugar_for_in(
+        &clean_parser::SurfaceName::generated_path("x"),
+        &SurfaceExpr::ident("xs"),
+        &body,
+    ));
 
     // The step function body should end with Pure.pure (ForInStep.yield ())
     let args = app_args(&result).expect("ForIn.forIn should have args");
@@ -407,7 +419,11 @@ fn test_for_in_body_produces_yield_step() {
 
 #[test]
 fn test_empty_for_body_fails() {
-    let result = desugar_for_in("x", &SurfaceExpr::ident("xs"), &[]);
+    let result = desugar_for_in(
+        &clean_parser::SurfaceName::generated_path("x"),
+        &SurfaceExpr::ident("xs"),
+        &[],
+    );
     assert!(result.is_err(), "empty for-in body should fail");
 }
 
@@ -452,7 +468,7 @@ fn test_from_parser_bind_converts() {
     let converted = from_parser_do_elems(&parser_elems);
     assert_eq!(converted.len(), 1);
     assert!(
-        matches!(&converted[0], DoElement::Bind { name: Some(n), .. } if n == "x"),
+        matches!(&converted[0], DoElement::Bind { name: Some(n), .. } if n.name() == &clean_kernel::Name::from_string("x")),
         "should convert to Bind with name x"
     );
 }

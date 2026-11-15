@@ -38,7 +38,7 @@ impl DratVerifier {
     }
 
     /// Initialize with a CNF formula
-    pub fn init_formula(&mut self, formula: &CnfFormula) {
+    pub(crate) fn init_formula(&mut self, formula: &CnfFormula) {
         self.num_vars = formula.num_vars;
         self.clauses.clear();
         self.content_index.clear();

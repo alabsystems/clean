@@ -1,0 +1,3 @@
+(assume nc (not (= (let ((a true) (b x)) (and a b)) (let ((c true) (b x)) (and c b)))))
+(step s (cl (= (let ((a true) (b x)) (and a b)) (let ((c true) (b x)) (and c b)))) :rule refl)
+(step done (cl) :rule resolution :premises (nc s))

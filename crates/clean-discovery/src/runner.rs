@@ -33,7 +33,8 @@ pub struct DiscoveryConfig {
     pub complexity_config: VerificationComplexityConfig,
     /// Configuration for NewAbstractDomain search (if that family is active).
     pub abstract_domain_config: AbstractDomainConfig,
-    /// Number of threads for parallel verification (None = rayon default).
+    /// Carried from `--threads` and NOT read by [`DiscoveryRunner::run`],
+    /// which verifies candidates sequentially through `ExhaustiveSearch::run`.
     pub num_threads: Option<usize>,
 }
 

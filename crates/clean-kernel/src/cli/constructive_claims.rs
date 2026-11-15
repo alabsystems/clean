@@ -102,7 +102,7 @@ pub fn run_verify_constructive_claims(conjecture: &str, allow_empty: bool) -> an
 pub fn run_verify_constructive_claims(_conjecture: &str, _allow_empty: bool) -> anyhow::Result<()> {
     bail!(
         "clean kernel verify-constructive-claims requires the `math-overlays` feature. \
-         Rebuild with `cargo build -p clean-cli --features math-overlays` \
+         Rebuild with `cargo build -p clean --features math-overlays` \
          (or the equivalent feature on the `clean` package)."
     );
 }

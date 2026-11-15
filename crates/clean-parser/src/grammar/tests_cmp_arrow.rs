@@ -20,10 +20,10 @@
 use super::*;
 
 /// Head constant of an application, or `None` for any other shape.
-fn head(e: &SurfaceExpr) -> Option<&str> {
+fn head(e: &SurfaceExpr) -> Option<&crate::SurfaceName> {
     match e {
         SurfaceExpr::App(_, h, _) => match h.as_ref() {
-            SurfaceExpr::Ident(_, n) => Some(n.as_str()),
+            SurfaceExpr::Ident(_, n) => Some(n),
             _ => None,
         },
         _ => None,
@@ -32,20 +32,20 @@ fn head(e: &SurfaceExpr) -> Option<&str> {
 
 /// Parse `src` and return the head constant of an `Arrow`'s DOMAIN, asserting
 /// the top-level node is an arrow.
-fn arrow_domain_head(src: &str) -> Option<String> {
+fn arrow_domain_head(src: &str) -> Option<crate::SurfaceName> {
     let e = Parser::parse_expr(src).unwrap_or_else(|err| panic!("{src} parses: {err:?}"));
     let SurfaceExpr::Arrow(_, domain, _) = &e else {
         panic!("`{src}` must group as an arrow at the top, got {e:?}");
     };
-    head(domain.as_ref()).map(str::to_string)
+    head(domain.as_ref()).cloned()
 }
 
 #[test]
 fn test_approx_binds_tighter_than_arrow() {
     // The `Quotient.lift` hypothesis shape: `a ≈ b → f a = f b`.
     assert_eq!(
-        arrow_domain_head("a ≈ b → c").as_deref(),
-        Some("HasEquiv.Equiv"),
+        arrow_domain_head("a ≈ b → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("HasEquiv.Equiv")),
         "`a ≈ b → c` is `(a ≈ b) → c`"
     );
 }
@@ -53,8 +53,8 @@ fn test_approx_binds_tighter_than_arrow() {
 #[test]
 fn test_heq_binds_tighter_than_arrow() {
     assert_eq!(
-        arrow_domain_head("u ≍ v → c").as_deref(),
-        Some("HEq"),
+        arrow_domain_head("u ≍ v → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("HEq")),
         "`u ≍ v → c` is `(u ≍ v) → c`"
     );
 }
@@ -63,8 +63,8 @@ fn test_heq_binds_tighter_than_arrow() {
 fn test_equiv_binds_tighter_than_arrow() {
     // `Equiv.trans` / `Cardinal.map` shape: `α ≃ β → f α ≃ f β`.
     assert_eq!(
-        arrow_domain_head("a ≃ b → c").as_deref(),
-        Some("Equiv"),
+        arrow_domain_head("a ≃ b → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("Equiv")),
         "`a ≃ b → c` is `(a ≃ b) → c`"
     );
 }
@@ -73,8 +73,8 @@ fn test_equiv_binds_tighter_than_arrow() {
 fn test_bne_binds_tighter_than_arrow() {
     // `!=` desugars to `Bool.not (BEq.beq a b)`; the arrow must sit OUTSIDE it.
     assert_eq!(
-        arrow_domain_head("x != y → c").as_deref(),
-        Some("Bool.not"),
+        arrow_domain_head("x != y → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("Bool.not")),
         "`x != y → c` is `(x != y) → c`"
     );
 }
@@ -82,8 +82,8 @@ fn test_bne_binds_tighter_than_arrow() {
 #[test]
 fn test_typed_equiv_binds_tighter_than_arrow() {
     assert_eq!(
-        arrow_domain_head("a ≃ₐ[r] b → c").as_deref(),
-        Some("AlgEquiv"),
+        arrow_domain_head("a ≃ₐ[r] b → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("AlgEquiv")),
         "`a ≃ₐ[r] b → c` is `(a ≃ₐ[r] b) → c`"
     );
 }
@@ -97,22 +97,39 @@ fn test_approx_chain_across_two_arrows() {
     let SurfaceExpr::Arrow(_, domain, codomain) = &e else {
         panic!("top level is the first arrow");
     };
-    assert_eq!(head(domain.as_ref()), Some("HasEquiv.Equiv"), "`a1 ≈ a2`");
+    assert_eq!(
+        head(domain.as_ref()),
+        Some(&crate::SurfaceName::generated_path("HasEquiv.Equiv")),
+        "`a1 ≈ a2`"
+    );
     let SurfaceExpr::Arrow(_, domain2, _) = codomain.as_ref() else {
         panic!("codomain is the second arrow");
     };
-    assert_eq!(head(domain2.as_ref()), Some("HasEquiv.Equiv"), "`b1 ≈ b2`");
+    assert_eq!(
+        head(domain2.as_ref()),
+        Some(&crate::SurfaceName::generated_path("HasEquiv.Equiv")),
+        "`b1 ≈ b2`"
+    );
 }
 
 #[test]
 fn test_comparison_arrow_controls_unchanged() {
     // Arms that ALREADY split (`∣`, `==`, `=`, `∈`) must keep their grouping.
-    assert_eq!(arrow_domain_head("m ∣ n → c").as_deref(), Some("Dvd.dvd"));
-    assert_eq!(arrow_domain_head("x == y → c").as_deref(), Some("BEq.beq"));
-    assert_eq!(arrow_domain_head("x = y → c").as_deref(), Some("Eq"));
     assert_eq!(
-        arrow_domain_head("x ∈ s → c").as_deref(),
-        Some("Membership.mem")
+        arrow_domain_head("m ∣ n → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("Dvd.dvd"))
+    );
+    assert_eq!(
+        arrow_domain_head("x == y → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("BEq.beq"))
+    );
+    assert_eq!(
+        arrow_domain_head("x = y → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("Eq"))
+    );
+    assert_eq!(
+        arrow_domain_head("x ∈ s → c").as_ref(),
+        Some(&crate::SurfaceName::generated_path("Membership.mem"))
     );
 }
 
@@ -121,12 +138,21 @@ fn test_comparisons_without_an_arrow_are_unchanged() {
     // No arrow in the RHS: the split is a no-op and the plain application
     // survives, including the tighter connectives that never reached it.
     let approx = Parser::parse_expr("a ≈ b").expect("≈ parses");
-    assert_eq!(head(&approx), Some("HasEquiv.Equiv"));
+    assert_eq!(
+        head(&approx),
+        Some(&crate::SurfaceName::generated_path("HasEquiv.Equiv"))
+    );
     let heq = Parser::parse_expr("u ≍ v").expect("≍ parses");
-    assert_eq!(head(&heq), Some("HEq"));
+    assert_eq!(head(&heq), Some(&crate::SurfaceName::generated_path("HEq")));
     let equiv = Parser::parse_expr("a ≃ b").expect("≃ parses");
-    assert_eq!(head(&equiv), Some("Equiv"));
+    assert_eq!(
+        head(&equiv),
+        Some(&crate::SurfaceName::generated_path("Equiv"))
+    );
     // `∧` (35) binds tighter than `→` but LOOSER than `≈` (50): unchanged.
     let conj = Parser::parse_expr("a ≈ b ∧ c").expect("≈ with ∧ parses");
-    assert_eq!(head(&conj), Some("And"));
+    assert_eq!(
+        head(&conj),
+        Some(&crate::SurfaceName::generated_path("And"))
+    );
 }

@@ -6,12 +6,16 @@
 //!
 //! The `induction` tactic has been split to `induction.rs` (#307).
 
+use super::pattern::names::local_name_matches;
+use clean_parser::SurfaceName;
+
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, ExprKind, Level};
 
 use super::core::{Goal, LocalDecl, ProofState, TacticError, TacticResult};
-use super::tauto::fresh_hyp_name;
+use super::indexed_family::{applied_index_args, beta_apply, build_family_motive, FamilyMotive};
+use super::pattern::util::generate_fresh_hyp_name as fresh_hyp_name;
 
 /// Compute universe levels for a recursor/casesOn constant.
 ///
@@ -56,18 +60,45 @@ pub(crate) fn recursor_levels(
 /// ENSURES: On Ok, the current goal is replaced by one goal per constructor
 /// ENSURES: On Ok, each new goal has constructor arguments added to the local context
 /// ENSURES: On Err(UnknownIdent), `hyp_name` is not in the local context
-pub fn cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn cases(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "cases")?;
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
+    let hyp_decl = goal
+        .local_ctx
+        .iter()
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
+        .ok_or_else(|| TacticError::UnknownIdent(hyp_name.to_string()))?;
+    let hyp_fvar = hyp_decl.fvar;
+    cases_fvar(state, hyp_fvar)
+}
+
+/// `cases` on the local bound to `hyp_fvar`, selected by identity rather than
+/// by name.
+///
+/// [`cases`] resolves a NAME to the innermost local carrying it, so a
+/// hypothesis whose name is shadowed or inaccessible (`h✝`, a generated case
+/// field) cannot be reached through it. Internal callers that already hold the
+/// exact local — omega's hypothesis splitter — use this instead; the
+/// elimination first retains compound-index equations, then uses `cases_core`,
+/// including its `Eq` → `unifyEqs?`
+/// routing and its removal of the eliminated local from every branch.
+///
+/// ENSURES: On Err(HypothesisNotFound), no local of the current goal is bound
+///   to `hyp_fvar`; otherwise exactly what [`cases`] ensures.
+pub(crate) fn cases_fvar(state: &mut ProofState, hyp_fvar: clean_kernel::FVarId) -> TacticResult {
+    if let Some(result) = super::cases_index_constraints::try_cases(state, hyp_fvar) {
+        return result;
+    }
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let (hyp_idx, hyp_decl) = goal
         .local_ctx
         .iter()
         .enumerate()
-        .find(|(_, d)| d.name == hyp_name)
-        .ok_or_else(|| TacticError::UnknownIdent(hyp_name.to_string()))?;
-    let hyp_fvar = hyp_decl.fvar;
+        .find(|(_, d)| d.fvar == hyp_fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(format!("{hyp_fvar:?}")))?;
     let hyp_ty = state.metas.instantiate(&hyp_decl.ty);
-
     cases_core(
         state,
         goal,
@@ -84,9 +115,23 @@ pub fn cases(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 /// scrutinee is not already bound as a local hypothesis. The target does not
 /// depend on a named scrutinee local, so branch targets are preserved while
 /// constructor fields (for example `h : m = n`) are added to each branch.
-pub fn cases_expr(state: &mut ProofState, scrutinee: Expr) -> TacticResult {
+/// Equality expressions first become checked local proofs so equation
+/// elimination rewrites dependent hypotheses as well as the target.
+pub(crate) fn cases_expr(state: &mut ProofState, scrutinee: Expr) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let hyp_ty = state.infer_type(&goal, &scrutinee)?;
+    let hyp_ty_whnf = state.whnf(&goal, &hyp_ty);
+    if matches!(hyp_ty_whnf.get_app_fn().kind(), ExprKind::Const(name, _) if name == &Name::from_string("Eq"))
+    {
+        let name = fresh_hyp_name(&goal.local_ctx, &SurfaceName::generated_path("cases_eq"));
+        super::forward::have_(state, &name, hyp_ty, Some(scrutinee))?;
+        let local = state
+            .current_goal()
+            .and_then(|g| g.local_ctx.last())
+            .map(|d| d.fvar)
+            .ok_or(TacticError::NoGoals)?;
+        return super::cases_unify_eqs::cases_eq(state, local);
+    }
     cases_core(state, goal, None, None, scrutinee, hyp_ty)
 }
 
@@ -98,6 +143,8 @@ fn cases_core(
     scrutinee: Expr,
     hyp_ty: Expr,
 ) -> TacticResult {
+    let mut goal = goal;
+    let mut hyp_idx = hyp_idx;
     let hyp_ty_whnf = state.whnf(&goal, &hyp_ty);
 
     let head = hyp_ty_whnf.get_app_fn().clone();
@@ -107,42 +154,40 @@ fn cases_core(
         ExprKind::Const(name, _) => name.clone(),
         _ => {
             return Err(TacticError::GoalMismatch(format!(
-                "cases: scrutinee has type '{hyp_ty_whnf:?}' which is not an inductive type"
+                "cases: scrutinee has type '{}' which is not an inductive type",
+                crate::error_render::term(&hyp_ty_whnf)
             )));
         }
     };
 
-    // `cases h` on an equality hypothesis IS `subst` in Lean 4: `Eq` is a
-    // special inductive whose single constructor `Eq.refl` moves an index, so
-    // the generic N-constructor `casesOn`-motive construction below builds a
-    // wrong motive/eliminator application (it leaks an unbound sentinel FVar
-    // and leaves an unapplied Pi where a proof of the goal is required). Route
-    // to the kernel-checked `subst` tactic instead — the exact machinery the
-    // `subst` tactic and the `rcases … with rfl` pattern already use. This only
-    // applies when `cases` was given a genuine local hypothesis (`cases h`),
-    // not the `cases_expr` scrutinee form, and only when one side of the
-    // equation is a local variable `subst` can eliminate. If it is not (e.g.
-    // `h : 5 = 3`), `subst`'s error is surfaced verbatim — fail-closed, never a
-    // panic and never a silent over-accept.
+    // `cases h` on an equality hypothesis runs Lean's equation unification
+    // (`unifyEqs?`): substitute a local side, clear a definitionally trivial
+    // equation, split two constructor applications by `noConfusion` and
+    // recurse on the field equations (G82). It rewrites the whole context, not
+    // only the target, so it is not the generic eliminator path below. This
+    // only applies when `cases` was given a genuine local hypothesis (`cases
+    // h`), not the `cases_expr` scrutinee form. An equation it cannot solve is
+    // refused with Lean's "dependent elimination failed" (or by name, for the
+    // steps not implemented) — fail-closed, never a silent over-accept.
     if ind_name == Name::from_string("Eq") {
         if let (Some(hyp_idx), Some(hyp_fvar)) = (hyp_idx, hyp_fvar) {
-            if let Some(hyp_name) = goal
+            if goal
                 .local_ctx
                 .get(hyp_idx)
-                .filter(|d| d.fvar == hyp_fvar)
-                .map(|d| d.name.clone())
+                .is_some_and(|d| d.fvar == hyp_fvar)
             {
-                return super::equality::subst(state, &hyp_name);
+                return super::cases_unify_eqs::cases_eq(state, hyp_fvar);
             }
         }
     }
 
     // HEq mirrors the `Eq` route above (and for the same reason): its casesOn
-    // is an INDEXED eliminator whose motive has arity num_indices+1, a shape
-    // the generic assembly below cannot build — and since `Eq` shortcuts to
-    // `subst`, that generic path has never had a working indexed example.
-    // Route `cases h` on `h : HEq x y` through `HEq.ndrec` directly, exactly
-    // as `subst` uses `Eq.ndrec`:
+    // is an INDEXED eliminator whose motive has arity num_indices+1. The
+    // generic path below can build that motive since RC-S (`indexed_family`),
+    // but this shortcut keeps `subst`'s capabilities — a context-wide
+    // rewrite and a non-fvar left side — and is kept for them. Route
+    // `cases h` on `h : HEq x y` through `HEq.ndrec` directly, exactly as
+    // `subst` uses `Eq.ndrec`:
     //
     //   HEq.ndrec.{v,u} {α} {a} {motive : {β : Sort u} → β → Sort v}
     //                   (minor : motive a) {β} {b} (h : HEq a b) : motive b
@@ -150,11 +195,12 @@ fn cases_core(
     // with `motive := fun {β} (z : β) => target[y := z]` and the surviving
     // goal `target[y := x]` (the `HEq.refl` branch). Requires the RIGHT side
     // to be an eliminable local fvar; otherwise fall through to the generic
-    // path, which fails closed. The assembled term is kernel-rechecked at
+    // (index-aware) path. The assembled term is kernel-rechecked at
     // `close_goal`, so a mis-built motive cannot over-accept.
     // heqToEq (Lean's `heqToEq`): when a heterogeneous equality's two TYPES
     // are definitionally equal, `HEq a b` IS `a = b` — convert with
-    // `eq_of_heq` and route to `subst`, exactly as the `Eq` arm above does.
+    // `eq_of_heq` and unify that equation exactly as the `Eq` arm above does
+    // (substitution, or `noConfusion` on two constructor applications).
     // Strictly more capable than the `HEq.ndrec` route below for that shape:
     // `subst` rewrites the hypothesis through the whole context, so dependent
     // hypotheses need no generalization, and it also handles a NON-fvar type
@@ -188,10 +234,15 @@ fn cases_core(
                     .local_ctx
                     .iter()
                     .find(|d| d.fvar == hyp_fvar)
-                    .map_or_else(|| "heq".to_string(), |d| d.name.clone());
-                let eq_hyp_name = format!("{base}_eq");
+                    .map_or_else(|| SurfaceName::generated_path("heq"), |d| d.name.clone());
+                let eq_hyp_name = super::pattern::names::generated_suffix(&base, "_eq");
                 super::forward::have_(state, &eq_hyp_name, eq_ty, Some(eq_proof))?;
-                return super::equality::subst(state, &eq_hyp_name);
+                let eq_fvar = state
+                    .current_goal()
+                    .and_then(|g| g.local_ctx.last())
+                    .map(|d| d.fvar)
+                    .ok_or(TacticError::NoGoals)?;
+                return super::cases_unify_eqs::cases_eq(state, eq_fvar);
             }
         }
     }
@@ -226,7 +277,7 @@ fn cases_core(
                     // check then all derive from the same target. This is the
                     // revert/eliminate/re-intro pair `induction … generalizing`
                     // already ships (builtins_phase3d_intro.rs).
-                    let dep_names: Vec<String> = goal
+                    let dep_fvars: Vec<_> = goal
                         .local_ctx
                         .iter()
                         .filter(|d| d.fvar != hyp_fvar && d.fvar != *b_fvar && d.fvar != *beta_fvar)
@@ -234,19 +285,22 @@ fn cases_core(
                             let fvars = crate::tactic::hypothesis::collect_fvars(&d.ty);
                             fvars.contains(b_fvar) || fvars.contains(beta_fvar)
                         })
-                        .map(|d| d.name.clone())
+                        .map(|d| d.fvar)
                         .collect();
-                    let mut reverted: Vec<String> = Vec::new();
-                    for name in &dep_names {
+                    let mut reverted = Vec::new();
+                    for fvar in &dep_fvars {
                         // Already pulled in as a transitive dependent of an
                         // earlier revert.
-                        if reverted.iter().any(|r| r == name) {
+                        if reverted.iter().any(|(old, _)| old == fvar) {
                             continue;
                         }
-                        reverted.extend(crate::tactic::specialize_generalize::revert_with_deps(
-                            state, name,
-                        )?);
+                        reverted.extend(
+                            crate::tactic::specialize_generalize::revert_fvar_with_deps(
+                                state, *fvar,
+                            )?,
+                        );
                     }
+                    let reverted: Vec<_> = reverted.into_iter().map(|(_, name)| name).collect();
                     // Re-read: `revert` replaced the goal.
                     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
                     // `HEq.{u}` carries α's universe on its own head; the
@@ -319,10 +373,11 @@ fn cases_core(
 
                     state.close_goal_assembled(&goal, proof)?;
                     state.goals.push_back(Goal {
+                        case_binders: vec![],
                         meta_id: branch_meta,
                         target: branch_target,
                         local_ctx: branch_ctx,
-                        tag: Some("refl".to_string()),
+                        tag: Some(SurfaceName::generated_path("refl")),
                     });
                     // …and the `intro` half: re-introduce in reverse revert
                     // order, which is the Pi-binder order of the reverted
@@ -332,7 +387,7 @@ fn cases_core(
                     // `close_fvars` leaves the binders vacuous and
                     // `build_local_ctx` discards the branch decls).
                     for name in reverted.iter().rev() {
-                        super::proof_term::intro(state, name)?;
+                        super::target_equation::intro_shadowing(state, name)?;
                     }
                     return Ok(());
                 }
@@ -351,6 +406,22 @@ fn cases_core(
     let levels = match head.kind() {
         ExprKind::Const(_, lvls) => lvls.to_vec(),
         _ => vec![],
+    };
+
+    // Class (80): a hypothesis that mentions the major premise is reverted
+    // before the elimination and re-introduced after each case's fields, as
+    // Lean's `cases` does (`super::major_dependents`).
+    let reverted = match hyp_fvar {
+        Some(major) => {
+            let dependents = super::major_dependents::dependents_of(state, &goal, &[major]);
+            let reverted = super::major_dependents::revert_fvars(state, &dependents)?;
+            if !reverted.is_empty() {
+                goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
+                hyp_idx = goal.local_ctx.iter().position(|d| d.fvar == major);
+            }
+            reverted
+        }
+        None => Vec::new(),
     };
 
     // Part of #2232: use casesOn instead of rec. The cases tactic only wraps
@@ -372,7 +443,7 @@ fn cases_core(
     // proof is still kernel-rechecked (`close_goal` / `verify_tactic_proof` →
     // `add_decl`), so a mis-assembled application fails closed downstream —
     // this fallback cannot over-accept.
-    let rec_name = Name::from_string(&format!("{ind_name}.casesOn"));
+    let rec_name = ind_name.clone().str("casesOn");
     let rec_level_count = match state.env.get_recursor(&rec_name) {
         Some(rec_info) => rec_info.level_params.len(),
         None => state
@@ -385,28 +456,39 @@ fn cases_core(
             .len(),
     };
 
-    let motive_body = goal.target.clone();
-    let motive = Expr::lam(
-        BinderInfo::Default,
-        hyp_ty.clone(),
-        if let Some(hyp_fvar) = hyp_fvar {
-            motive_body.abstract_fvar(hyp_fvar)
-        } else {
-            motive_body
-        },
-    );
-
     let num_ctors = ind_info.constructor_names.len();
     if num_ctors == 0 {
+        // An empty family can still be indexed (`Fin 0`-shaped absurdities), so
+        // the motive and the eliminator spine go through the same index-aware
+        // path as the general case below. With a bare-term scrutinee there is no
+        // hypothesis fvar to abstract and the motive is simply constant in its
+        // last binder — exactly what this branch built before.
+        let FamilyMotive { motive, index_args } = build_family_motive(
+            state,
+            &head,
+            &ind_info,
+            &args,
+            &hyp_ty,
+            hyp_fvar,
+            &goal.target,
+        )?;
         let rec_levels = recursor_levels(state, &goal, &levels, rec_level_count);
-        let rec = Expr::const_(rec_name.clone(), rec_levels);
-
-        let mut proof = rec;
-        for arg in args.iter().take(ind_info.num_params as usize) {
-            proof = Expr::app(proof, arg.clone());
-        }
-        proof = Expr::app(proof, motive.clone());
-        proof = Expr::app(proof, scrutinee);
+        let params = &args[..args.len().min(ind_info.num_params as usize)];
+        // `casesOn` layout: indices, then the major premise, then the minors
+        // (here only those of the other members of a mutual or nested block).
+        let proof = super::cases_on_spine::assemble_cases_on(
+            state,
+            &ind_info,
+            super::cases_on_spine::CasesOnArgs {
+                rec_name: &rec_name,
+                rec_levels,
+                params,
+                motive,
+                index_args: &index_args,
+                major: scrutinee,
+                minors: Vec::new(),
+            },
+        )?;
 
         // Part of #2154 Tier 2 Wave 1: 0-ctor case, no metas — migrated to checked close_goal.
         state.close_goal(&goal, proof)?;
@@ -442,17 +524,27 @@ fn cases_core(
     } else {
         goal.target.clone()
     };
-    let motive = Expr::lam(
-        BinderInfo::Default,
-        hyp_ty.clone(),
-        if let Some(hyp_fvar) = hyp_fvar {
-            motive_body.abstract_fvar(hyp_fvar)
-        } else if let Some(motive_fvar) = motive_fvar {
-            motive_body.abstract_fvar(motive_fvar)
-        } else {
-            motive_body
-        },
-    );
+    // The free variable that stands for the major premise inside the motive
+    // body: the real hypothesis for `cases h`, the sentinel above for
+    // `cases <term>`. One of the two is always present — `motive_fvar` is
+    // allocated exactly when `hyp_fvar` is `None`.
+    let major_fvar = match (hyp_fvar, motive_fvar) {
+        (Some(f), _) | (None, Some(f)) => f,
+        (None, None) => {
+            return Err(TacticError::GoalMismatch(
+                "cases: no free variable available to abstract the major premise".to_string(),
+            ))
+        }
+    };
+    let FamilyMotive { motive, index_args } = build_family_motive(
+        state,
+        &head,
+        &ind_info,
+        &args,
+        &hyp_ty,
+        Some(major_fvar),
+        &motive_body,
+    )?;
 
     let mut case_metas = Vec::with_capacity(num_ctors);
 
@@ -546,15 +638,17 @@ fn cases_core(
 
         let mut field_idx = 0;
         while let ExprKind::Pi(bi, domain, codomain) = ctor_ty.clone().kind() {
-            let ctor_short_name = ctor_name.to_string();
-            let ctor_short = ctor_short_name
-                .rsplit('.')
-                .next()
-                .unwrap_or(&ctor_short_name);
-            let field_name = fresh_hyp_name(&new_ctx, &format!("{ctor_short}_{field_idx}"));
+            let ctor_short = SurfaceName::from_name(ctor_name.clone()).last_component();
+            let field_base = super::case_field_names::generated_case_field_name(
+                &ctor_short,
+                field_idx as u64,
+                super::case_field_names::CaseFieldKind::Field,
+            );
+            let field_name = fresh_hyp_name(&new_ctx, &field_base);
             let field_fvar = state.fresh_fvar();
 
             let field_decl = LocalDecl {
+                binder_info: *bi,
                 fvar: field_fvar,
                 name: field_name,
                 ty: domain.as_ref().clone(),
@@ -567,13 +661,6 @@ fn cases_core(
             field_idx += 1;
 
             if field_idx >= ctor_info.num_fields as usize {
-                break;
-            }
-
-            if !matches!(
-                bi.info,
-                BinderInfo::Default | BinderInfo::Implicit | BinderInfo::InstImplicit
-            ) {
                 break;
             }
         }
@@ -591,27 +678,51 @@ fn cases_core(
             ctor_app = Expr::app(ctor_app, Expr::fvar(*fvar));
         }
 
-        let new_target = if let Some(hyp_fvar) = hyp_fvar {
-            goal.target.subst_fvar(hyp_fvar, &ctor_app)
+        let new_target = if index_args.is_empty() {
+            // Non-indexed family: unchanged from before indices were handled.
+            if let Some(hyp_fvar) = hyp_fvar {
+                goal.target.subst_fvar(hyp_fvar, &ctor_app)
+            } else {
+                replace_cases_scrutinee_occurrences(
+                    state,
+                    &goal,
+                    &goal.target,
+                    &scrutinee,
+                    &hyp_ty,
+                    &ctor_app,
+                )
+            }
         } else {
-            replace_cases_scrutinee_occurrences(
-                state,
-                &goal,
-                &goal.target,
-                &scrutinee,
-                &hyp_ty,
-                &ctor_app,
-            )
+            // Indexed family: this branch's goal is the eliminator's own minor
+            // premise, `motive ctor_indices… (C params… fields…)`. Computing it
+            // by beta-applying the SAME motive that goes into the proof term is
+            // what makes `Nat.le.refl` specialise the goal at `m := n` and
+            // `Nat.le.step` at `m := m' + 1` — substituting into the goal
+            // directly would leave the old index in place.
+            let ctor_indices = applied_index_args(&ind_info, &ctor_ty).ok_or_else(|| {
+                TacticError::GoalMismatch(format!(
+                    "cases: constructor '{ctor_name}' of indexed family '{ind_name}' does not \
+                     conclude in an applied '{ind_name}' after its fields"
+                ))
+            })?;
+            let mut applied = ctor_indices;
+            applied.push(ctor_app);
+            beta_apply(&motive, &applied)
         };
         let new_target = state.metas.instantiate(&new_target);
 
-        let ctor_short_tag = ctor_name
-            .to_string()
-            .rsplit('.')
-            .next()
-            .unwrap_or(&ctor_name.to_string())
-            .to_string();
-        let case_meta = state.fresh_meta_in_context(new_target.clone(), &new_ctx);
+        // Lean names each case goal `tag ++ ctorName` after the goal it splits
+        // (`Lean/Meta/Tactic/Induction.lean`, `mkFreshExprSyntheticOpaqueMVar d
+        // (tag ++ n)`), so `cases a <;> cases b` yields `some.cons`, which
+        // `case some.cons =>` selects. A goal with no tag contributes nothing.
+        let ctor_short = SurfaceName::from_name(ctor_name.clone()).last_component();
+        let ctor_short_tag = match &goal.tag {
+            Some(parent) if !parent.is_anonymous() => parent.append(&ctor_short),
+            _ => ctor_short,
+        };
+        // The case's scope keeps the eliminated major (`fresh_case_meta`): its
+        // proof is still under that binder.
+        let case_meta = state.fresh_case_meta(new_target.clone(), &goal, &new_ctx);
         case_metas.push((case_meta, new_ctx, new_target, field_fvars, ctor_short_tag));
     }
 
@@ -621,17 +732,12 @@ fn cases_core(
     state.next_fvar = branch_fvar_max;
 
     let rec_levels = recursor_levels(state, &goal, &levels, rec_level_count);
-    let rec = Expr::const_(rec_name, rec_levels);
 
-    let mut proof = rec;
-    for arg in args.iter().take(ind_info.num_params as usize) {
-        proof = Expr::app(proof, arg.clone());
-    }
-    proof = Expr::app(proof, motive);
-    // Lean-faithful casesOn order: the major premise (scrutinee) comes right
-    // after the motive, before the minor premises.
-    proof = Expr::app(proof, scrutinee);
-
+    // Lean-faithful casesOn order: the family's INDICES come first, then the
+    // major premise (scrutinee), then the minor premises. Omitting the indices
+    // — as this did before RC-S — slid the major premise into the first index
+    // slot and every later argument one position left.
+    let mut minors = Vec::with_capacity(case_metas.len());
     for (case_meta, new_ctx, _target, field_fvars, _) in &case_metas {
         let case_body = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(*case_meta)));
 
@@ -648,8 +754,24 @@ fn cases_core(
             );
         }
 
-        proof = Expr::app(proof, case_proof);
+        minors.push(case_proof);
     }
+    let params = &args[..args.len().min(ind_info.num_params as usize)];
+    // A mutual or nested family's kernel `casesOn` also takes the other
+    // members' motives and minors (`super::cases_on_spine`, class (92) B5).
+    let proof = super::cases_on_spine::assemble_cases_on(
+        state,
+        &ind_info,
+        super::cases_on_spine::CasesOnArgs {
+            rec_name: &rec_name,
+            rec_levels,
+            params,
+            motive,
+            index_args: &index_args,
+            major: scrutinee,
+            minors,
+        },
+    )?;
 
     // The minor-premise arguments are open subgoal metavariables whose stored
     // targets are the *constructor-specialized* goals (e.g. `Eq (succ k) (succ k)`),
@@ -676,8 +798,10 @@ fn cases_core(
     // Part of #2154 Tier 2 Wave 2: structural match with meta case branches.
     state.close_goal_assembled(&goal, proof)?;
 
-    for (case_meta, new_ctx, new_target, _, ctor_tag) in case_metas {
+    let case_meta_ids: Vec<_> = case_metas.iter().map(|case| case.0).collect();
+    for (case_meta, new_ctx, new_target, field_fvars, ctor_tag) in case_metas {
         let new_goal = Goal {
+            case_binders: field_fvars,
             meta_id: case_meta,
             target: new_target,
             local_ctx: new_ctx,
@@ -686,7 +810,7 @@ fn cases_core(
         state.goals.push_back(new_goal);
     }
 
-    Ok(())
+    super::major_dependents::reintroduce(state, &case_meta_ids, &reverted)
 }
 
 fn replace_cases_scrutinee_occurrences(

@@ -2,9 +2,16 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // Licensed under the Apache License, Version 2.0
 
+mod observed_display;
+mod observed_uniform;
+mod observed_utf8;
+pub use observed_utf8::utf8_is_valid_observed;
+
+use core::ops::ControlFlow;
+
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
-pub enum Constant {
+pub enum ConstantG<X> {
     Int(#[cfg_attr(feature = "serde", serde(with = "crate::wide_int_serde::wide_i128"))] i128),
     /// Unsigned 128-bit integer constant ABOVE `i128::MAX` (v24, RFC
     /// TRUST_IR_V2 B1 breaking-batch member: the 128-bit-faithful carrier).
@@ -69,7 +76,39 @@ pub enum Constant {
     /// that the value shape matches its `Ty` classification.
     Aggregate(Vec<Constant>),
     /// Homogeneous fixed-length array literal (mirrors `Ty::Array`).
+    ///
+    /// ONE SPELLING (`docs/SPEC_RATIFICATIONS.md` §3.1): an
+    /// array literal of two or more elements that are ALL equal is spelled
+    /// [`Constant::Splat`], never as a list — `validate_module` refuses the
+    /// list spelling (`NonCanonicalUniformArray`).
     Array(Vec<Constant>),
+    /// `len` copies of `elem`: the constant-size spelling of a UNIFORM array
+    /// (`[elem; len]`, mirrors `Ty::Array(_, len)`), wire v50, Constant tag
+    /// 16.
+    ///
+    /// Its size is one element plus one word whatever `len` is, and every
+    /// consumer in this crate keeps it that way: validation checks `elem`
+    /// ONCE against the element type and compares `len` with the declared
+    /// length; the codecs write one element and one length; the reference
+    /// interpreter builds a lazy array value (`ArrayValue::splat`, O(1)); the
+    /// Lean model denotes it as `List.replicate len elem`. Nothing iterates
+    /// `len`.
+    ///
+    /// ONE SPELLING (`docs/SPEC_RATIFICATIONS.md` §3.1): a
+    /// `Splat` is canonical iff `len >= 2` — for zero or one element the
+    /// uniform array is spelled `Constant::Array` (`[]`, `[elem]`), which
+    /// has no element to repeat. Conversely a `Constant::Array` /
+    /// `Constant::Aggregate` at an array type, or a `Constant::Bytes {
+    /// utf8: false }`, whose two or more elements are all equal must be a
+    /// `Splat`. [`Constant::array`] is the sanctioned constructor that picks
+    /// the canonical spelling; the validator refuses the other one.
+    Splat {
+        elem: Box<Constant>,
+        /// JSON / MessagePack refuse `len < 2` on read, as the binary
+        /// decoder and the text parser do.
+        #[cfg_attr(feature = "serde", serde(deserialize_with = "canonical_splat_len"))]
+        len: u64,
+    },
     /// Homogeneous fixed-width vector literal (mirrors `Ty::Vector`).
     ///
     /// Vector constants are distinct from aggregate and array constants so
@@ -125,9 +164,20 @@ pub enum Constant {
     /// `SymbolAddr` occupies exactly one native pointer (8 bytes on the
     /// supported 64-bit targets) inside its enclosing aggregate.
     ///
-    /// This variant has no run-time value the interpreter can model (addresses
-    /// are only assigned at link time), so it is exercised by link+run
-    /// differential testing rather than the interpreter.
+    /// At `Ty::Ptr` / `Ty::Func` this variant has no run-time value the
+    /// interpreter can model (it may name an external symbol the linker
+    /// resolves), so it is exercised by link+run differential testing rather
+    /// than the interpreter.
+    ///
+    /// WS3.8 (F-049): it is also the data word of a NON-NULL typed pointer
+    /// constant — `SymbolAddr { symbol, addend: 0 }` at `Ref(T)` /
+    /// `PtrConst(T)` / `PtrMut(T)`, and `Aggregate[SymbolAddr { symbol, addend:
+    /// k }, Int(n)]` at `FatPtr(Str)` / `FatPtr(Slice(t))` — admitted by the
+    /// validator only when `symbol` names one module-DEFINED, non-thread-local,
+    /// non-interposable global of the right type and mutability (and, for a
+    /// fat pointer, when the window fits it; UTF-8 on char boundaries for
+    /// `str`). There the reference interpreter resolves it to that global's own
+    /// allocation.
     SymbolAddr {
         /// Unmangled name of the target symbol (function or data global).
         symbol: String,
@@ -136,6 +186,120 @@ pub enum Constant {
     },
     /// Zero-sized `PhantomData` marker.
     PhantomData,
+    /// An UNWRITTEN aggregate lane (binary v49; the crystal lane's E3b, v42 on its fork): the lane of
+    /// a struct or tuple that the program has not written. It is MIR's uninitialised place, and
+    /// LLVM's `poison` element inside an aggregate constant. It is NOT a value: it is the absence
+    /// of one, and nothing can read it.
+    ///
+    /// TYPED BY POSITION. It carries no type of its own. It is admissible ONLY as a DIRECT element
+    /// of a `Constant::Aggregate` that an `Inst::Const` declares at a `Ty::Struct` or `Ty::Tuple`,
+    /// and there the declared type names the lane's type. trust-ir-build's validator refuses it
+    /// everywhere else: as a whole constant, nested one aggregate deeper, inside an array,
+    /// vector, sequence, set, record, enum or closure constant, in a global initializer and in a
+    /// switch case.
+    ///
+    /// SEMANTICS (the reference interpreter's `InterpretValueKind::Uninit`, and the Lean model's
+    /// `Value.uninit`). `InsertField` over the lane REPLACES it. `ExtractField` of it is undefined
+    /// behaviour, exactly MIR's typed read of an uninitialised place. The enclosing aggregate moves
+    /// whole with the lane still unwritten: copy, select arms, block arguments, call arguments
+    /// and returns. A store writes the lane's bytes UNINITIALISED; a whole-aggregate load of those
+    /// bytes gives the lane back unwritten. No instruction yields it outside an aggregate.
+    ///
+    /// WHY IT EXISTS. A construction that writes only SOME lanes (a flat enum's inactive variant
+    /// payload, a `None`) could before be seeded only with `undef T`. That is also the spelling of
+    /// a HAVOC, an unknown VALUE. An unwritten lane is not an unknown value, and a zero
+    /// placeholder would be a value the program never wrote.
+    Uninit,
+    /// The level-S extension point (amendment S): at level R `X` is
+    /// [`crate::level::NoExt`], so this variant is uninhabited. In a template
+    /// it names a const parameter or a const hole, and only at the ROOT of an
+    /// `Inst::Const` value: every child of a constant is a level-R
+    /// [`Constant`], so a parameter nested in an aggregate is unrepresentable.
+    /// Appended last so every earlier serde discriminant is preserved.
+    Ext(X),
+}
+
+/// The level-R constant: [`ConstantG`] with no extension.
+pub type Constant = ConstantG<crate::level::NoExt>;
+pub use observed_uniform::ObservedUniformElementLists;
+
+/// Borrowed immediate constant children in their stored order.
+///
+/// Record names and function identities are not constant children. Closures
+/// expose their captures; function references do not follow the module graph.
+#[derive(Clone, Debug)]
+pub struct ConstantChildren<'a> {
+    inner: ConstantChildSlice<'a>,
+}
+
+#[derive(Clone, Debug)]
+enum ConstantChildSlice<'a> {
+    Values(core::slice::Iter<'a, Constant>),
+    Fields(core::slice::Iter<'a, (String, Constant)>),
+}
+
+impl<'a> Iterator for ConstantChildren<'a> {
+    type Item = &'a Constant;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match &mut self.inner {
+            ConstantChildSlice::Values(values) => values.next(),
+            ConstantChildSlice::Fields(fields) => fields.next().map(|(_, value)| value),
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let remaining = self.len();
+        (remaining, Some(remaining))
+    }
+}
+
+impl ExactSizeIterator for ConstantChildren<'_> {
+    fn len(&self) -> usize {
+        match &self.inner {
+            ConstantChildSlice::Values(values) => values.len(),
+            ConstantChildSlice::Fields(fields) => fields.len(),
+        }
+    }
+}
+
+impl core::iter::FusedIterator for ConstantChildren<'_> {}
+
+/// The answer of [`Constant::uniform_element_lists`]: which list nodes of one
+/// constant tree hold two or more equal children under the uniform-array
+/// spelling rule. Nodes are
+/// identified by address, so the set is only meaningful for the tree it was
+/// computed from while that tree is borrowed.
+#[derive(Debug, Clone, Default)]
+pub struct UniformElementLists {
+    nodes: std::collections::HashSet<usize>,
+}
+
+impl UniformElementLists {
+    /// Whether `node` (a node of the tree this set was computed from) is an
+    /// `Array` / `Aggregate` whose two or more children are all equal.
+    pub fn contains(&self, node: &Constant) -> bool {
+        self.nodes.contains(&(node as *const Constant as usize))
+    }
+}
+
+/// Serde read of `Constant::Splat::len`: a splat of zero or one element is
+/// the non-canonical spelling of a list (`docs/SPEC_RATIFICATIONS.md` §3.1),
+/// refused on read by every decoder, as a non-canonical `U128` is by the
+/// binary one.
+#[cfg(feature = "serde")]
+fn canonical_splat_len<'de, D>(de: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let len = <u64 as serde::Deserialize>::deserialize(de)?;
+    if len < 2 {
+        return Err(serde::de::Error::custom(format!(
+            "non-canonical Constant::Splat of {len} element(s): zero or one copy is spelled \
+             as the list `array[ .. ]` (SPEC_RATIFICATIONS §3.1)"
+        )));
+    }
+    Ok(len)
 }
 
 // `Constant` equality is **bit-exact** for floats, deliberately rejecting
@@ -159,9 +323,9 @@ pub enum Constant {
 // (`a == b` implies `hash(a) == hash(b)`), letting `Constant` be used as a
 // `HashMap`/`HashSet` key. All non-float variants compare/hash structurally.
 
-impl PartialEq for Constant {
+impl<X: PartialEq> PartialEq for ConstantG<X> {
     fn eq(&self, other: &Self) -> bool {
-        use Constant::*;
+        use ConstantG::*;
         match (self, other) {
             (Int(a), Int(b)) => a == b,
             // Canonicality (see the variant doc) means a well-formed `U128`
@@ -174,6 +338,11 @@ impl PartialEq for Constant {
             (Bool(a), Bool(b)) => a == b,
             (Aggregate(a), Aggregate(b)) => a == b,
             (Array(a), Array(b)) => a == b,
+            // Structural, like every other arm: a `Splat` and an `Array` that
+            // denote the same elements are different SPELLINGS, and the §3
+            // canonicality rule (validated) is what makes a well-formed module
+            // carry only one of them.
+            (Splat { elem: ea, len: la }, Splat { elem: eb, len: lb }) => la == lb && ea == eb,
             (Vector(a), Vector(b)) => a == b,
             (Sequence(a), Sequence(b)) => a == b,
             (Set(a), Set(b)) => a == b,
@@ -200,17 +369,19 @@ impl PartialEq for Constant {
                 },
             ) => sa == sb && aa == ab,
             (PhantomData, PhantomData) => true,
+            (Uninit, Uninit) => true,
+            (Ext(a), Ext(b)) => a == b,
             // Different variants are never equal.
             _ => false,
         }
     }
 }
 
-impl Eq for Constant {}
+impl<X: Eq> Eq for ConstantG<X> {}
 
-impl core::hash::Hash for Constant {
+impl<X: core::hash::Hash> core::hash::Hash for ConstantG<X> {
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        use Constant::*;
+        use ConstantG::*;
         // Hash the discriminant first so distinct variants with structurally
         // similar payloads (e.g. `Aggregate` vs `Sequence` vs `Set` over the
         // same element list) do not collide their hashes by construction.
@@ -226,6 +397,10 @@ impl core::hash::Hash for Constant {
             Float(v) => v.to_bits().hash(state),
             Bool(v) => v.hash(state),
             Aggregate(v) | Array(v) | Vector(v) | Sequence(v) | Set(v) => v.hash(state),
+            Splat { elem, len } => {
+                elem.hash(state);
+                len.hash(state);
+            }
             Record(fields) => fields.hash(state),
             Closure { func, captures } => {
                 func.hash(state);
@@ -236,7 +411,8 @@ impl core::hash::Hash for Constant {
                 symbol.hash(state);
                 addend.hash(state);
             }
-            PhantomData => {}
+            PhantomData | Uninit => {}
+            Ext(x) => x.hash(state),
         }
     }
 }
@@ -274,6 +450,88 @@ mod float_bits {
 }
 
 impl Constant {
+    /// Borrow each immediate child exactly once, without allocating or cloning.
+    pub fn children(&self) -> ConstantChildren<'_> {
+        let inner = match self {
+            Self::Aggregate(values)
+            | Self::Array(values)
+            | Self::Vector(values)
+            | Self::Sequence(values)
+            | Self::Set(values)
+            | Self::Closure {
+                captures: values, ..
+            } => ConstantChildSlice::Values(values.iter()),
+            // One child, stored once: a splat's element is visited ONCE, not
+            // `len` times (every walk over constants is therefore O(text)).
+            Self::Splat { elem, .. } => {
+                ConstantChildSlice::Values(core::slice::from_ref(&**elem).iter())
+            }
+            Self::Record(fields) => ConstantChildSlice::Fields(fields.iter()),
+            Self::Int(_)
+            | Self::U128(_)
+            | Self::Bytes { .. }
+            | Self::Float(_)
+            | Self::Bool(_)
+            | Self::FnDef(_)
+            | Self::SymbolAddr { .. }
+            | Self::PhantomData
+            | Self::Uninit => ConstantChildSlice::Values([].iter()),
+            Self::Ext(e) => e.unreachable(),
+        };
+        ConstantChildren { inner }
+    }
+
+    /// Visit this constant and its descendants in stored preorder, stopping
+    /// immediately at the first [`ControlFlow::Break`].
+    ///
+    /// The traversal is stack-safe and retains only borrowed sibling iterators,
+    /// using O(depth) auxiliary memory rather than queuing O(width) children.
+    /// Scalars and chains of single-child constants need no heap allocation for
+    /// traversal. The callback may retain references for this explicit borrow
+    /// lifetime. This does not make other operations such as Clone/Drop iterative.
+    pub fn try_visit_constants<'a, B>(
+        &'a self,
+        mut visit: impl FnMut(&'a Constant) -> ControlFlow<B>,
+    ) -> ControlFlow<B> {
+        let mut pending: Vec<ConstantChildren<'a>> = Vec::new();
+        let mut current = self;
+        loop {
+            visit(current)?;
+            let mut children = current.children();
+            if let Some(first) = children.next() {
+                // Unary chains need no suspended parent frame. A wide parent
+                // retains one borrowed iterator, never one entry per sibling.
+                if children.len() != 0 {
+                    pending.push(children);
+                }
+                current = first;
+                continue;
+            }
+            let Some(siblings) = pending.last_mut() else {
+                return ControlFlow::Continue(());
+            };
+            current = siblings
+                .next()
+                .expect("only nonempty siblings are suspended");
+            if siblings.len() == 0 {
+                pending.pop();
+            }
+        }
+    }
+
+    /// Visit every constant in stored preorder, using the same stack-safe walk
+    /// as [`Self::try_visit_constants`].
+    pub fn visit_constants<'a>(&'a self, mut visit: impl FnMut(&'a Constant)) {
+        let completed = self.try_visit_constants(|constant| {
+            visit(constant);
+            ControlFlow::<core::convert::Infallible>::Continue(())
+        });
+        match completed {
+            ControlFlow::Continue(()) => {}
+            ControlFlow::Break(impossible) => match impossible {},
+        }
+    }
+
     pub fn i8(v: i8) -> Self {
         Constant::Int(v as i128)
     }
@@ -322,22 +580,222 @@ impl Constant {
     }
     /// Canonical-form check for the v24 one-spelling rule: `true` for every
     /// variant except a `U128` whose value `i128` could carry (which must be
-    /// spelled `Int`). Composite constants are checked recursively — a
-    /// non-canonical leaf poisons its enclosing aggregate.
+    /// spelled `Int`). All descendants are checked in a stack-safe preorder —
+    /// a non-canonical leaf poisons its enclosing aggregate.
     pub fn is_canonical_int_spelling(&self) -> bool {
-        match self {
-            Constant::U128(v) => *v > i128::MAX as u128,
-            Constant::Aggregate(elems)
-            | Constant::Array(elems)
-            | Constant::Vector(elems)
-            | Constant::Sequence(elems)
-            | Constant::Set(elems) => elems.iter().all(Self::is_canonical_int_spelling),
-            Constant::Record(fields) => fields.iter().all(|(_, c)| c.is_canonical_int_spelling()),
-            Constant::Closure { captures, .. } => {
-                captures.iter().all(Self::is_canonical_int_spelling)
-            }
-            _ => true,
+        self.try_visit_constants(|constant| match constant {
+            Self::U128(value) if *value <= i128::MAX as u128 => ControlFlow::Break(()),
+            _ => ControlFlow::Continue(()),
+        })
+        .is_continue()
+    }
+    /// `len` copies of `elem` in its ONE canonical spelling
+    /// (`docs/SPEC_RATIFICATIONS.md` §3.1): [`Constant::Splat`] when `len >= 2`,
+    /// otherwise the list spelling `Constant::Array` (`[]` / `[elem]`). O(1)
+    /// in `len`. The sanctioned constructor, in the role [`Constant::u128`]
+    /// plays for the integer pair.
+    pub fn splat(elem: Constant, len: u64) -> Self {
+        match len {
+            0 => Constant::Array(Vec::new()),
+            1 => Constant::Array(vec![elem]),
+            len => Constant::Splat {
+                elem: Box::new(elem),
+                len,
+            },
         }
+    }
+    /// An array literal in its ONE canonical spelling: a list of two or more
+    /// elements that are all equal under [`Self::uniform_element_lists`]
+    /// becomes [`Constant::Splat`], any other list stays `Constant::Array`.
+    /// The check costs time proportional to the stored constant tree, never
+    /// to a nested splat's logical length. It selects the outer spelling;
+    /// children must still be well-formed and canonical at their own types.
+    pub fn array(elems: Vec<Constant>) -> Self {
+        if elems.len() < 2 {
+            return Self::Array(elems);
+        }
+        let array = Self::Array(elems);
+        let uniform = match &array {
+            // These identity leaves have no alternate array spelling, so
+            // ordinary equality is exact and cannot recurse. In particular,
+            // do NOT use children().is_empty(): empty Array/Aggregate/Bytes
+            // values can be the same array despite different variants.
+            Self::Array(elems)
+                if elems.iter().all(|elem| {
+                    matches!(
+                        elem,
+                        Self::Int(_)
+                            | Self::U128(_)
+                            | Self::Float(_)
+                            | Self::Bool(_)
+                            | Self::FnDef(_)
+                            | Self::SymbolAddr { .. }
+                            | Self::PhantomData
+                            | Self::Uninit
+                    )
+                }) =>
+            {
+                Self::is_uniform_list(elems)
+            }
+            _ => array.uniform_element_lists().contains(&array),
+        };
+        match array {
+            Self::Array(elems) if uniform => {
+                let len = elems.len() as u64;
+                let elem = elems
+                    .into_iter()
+                    .next()
+                    .expect("a uniform list is nonempty");
+                Self::Splat {
+                    elem: Box::new(elem),
+                    len,
+                }
+            }
+            array => array,
+        }
+    }
+    /// Whether `elems` has two or more structurally equal elements (bit-exact
+    /// [`Constant`] equality). Unlike [`Self::uniform_element_lists`], this
+    /// does not identify alternate array spellings; use [`Self::array`] to
+    /// construct the canonical outer array spelling.
+    pub fn is_uniform_list(elems: &[Constant]) -> bool {
+        match elems.split_first() {
+            Some((first, rest)) if !rest.is_empty() => rest.iter().all(|elem| elem == first),
+            _ => false,
+        }
+    }
+    /// Whether a byte payload is one the §3 uniform-array rule claims: a
+    /// `Constant::Bytes { utf8: false }` of two or more equal bytes is spelled
+    /// `Splat { elem: Int(b), len }`. A `utf8: true` payload carries a checked
+    /// string claim that is part of its identity, so it is NOT a spelling of
+    /// the uniform array and stays `Bytes` (a `str` window needs it).
+    pub fn is_uniform_bytes(data: &[u8], utf8: bool) -> bool {
+        !utf8 && data.len() >= 2 && data.iter().all(|byte| *byte == data[0])
+    }
+    /// Every `Constant::Array` / `Constant::Aggregate` node of this tree
+    /// whose two or more children are all equal, found in ONE bottom-up pass.
+    ///
+    /// Comparing each element with its first sibling would re-read a subtree
+    /// once per enclosing array level (time `O(size × array depth)`). This
+    /// pass instead assigns every node an exact class by hash-consing — a
+    /// leaf by its own value, a composite by its variant, its non-constant
+    /// payload (closure target, splat length, record labels) and the classes
+    /// of its children — so "all children equal" is a comparison of child
+    /// classes. Time and space are proportional to the size of the constant
+    /// as written (a raw byte payload costs its bytes); a `Splat`'s element is
+    /// one child, so its `len` costs nothing. Stack-safe (explicit stack). A
+    /// constant with no children allocates nothing.
+    ///
+    /// Equal means bit-exact [`Constant`] equality ([`Constant::Float`] by its
+    /// bits) with the spellings of ONE array value identified, because
+    /// siblings in an array share its element type: `Constant::Array` and an
+    /// `Aggregate` of the same children are one class, and a raw
+    /// `Bytes { utf8: false }` is the list of its bytes as `Int`s. (A
+    /// `utf8: true` payload carries a string claim that is part of its
+    /// identity and stays its own class.)
+    ///
+    /// Whether an `Aggregate` node sits at an ARRAY type (where the rule
+    /// applies) is the typed walk's question; this pass answers only the
+    /// structural one.
+    pub fn uniform_element_lists(&self) -> UniformElementLists {
+        #[derive(PartialEq, Eq, Hash)]
+        enum ClassKey<'a> {
+            Int(i128),
+            Leaf(&'a Constant),
+            Composite {
+                /// `None` for the list spellings of an array (`Array`,
+                /// `Aggregate`, raw `Bytes`), which are one class.
+                variant: Option<core::mem::Discriminant<Constant>>,
+                payload: u64,
+                labels: Vec<&'a str>,
+                children: Vec<usize>,
+            },
+        }
+        struct Frame<'a> {
+            node: &'a Constant,
+            children: ConstantChildren<'a>,
+            first_result: usize,
+        }
+        if self.children().len() == 0 {
+            return UniformElementLists::default();
+        }
+        let mut classes: std::collections::HashMap<ClassKey<'_>, usize> =
+            std::collections::HashMap::new();
+        let mut uniform = std::collections::HashSet::new();
+        let mut results: Vec<usize> = Vec::new();
+        let mut stack = vec![Frame {
+            node: self,
+            children: self.children(),
+            first_result: 0,
+        }];
+        while let Some(frame) = stack.last_mut() {
+            if let Some(child) = frame.children.next() {
+                let first_result = results.len();
+                stack.push(Frame {
+                    node: child,
+                    children: child.children(),
+                    first_result,
+                });
+                continue;
+            }
+            let frame = stack.pop().expect("the loop saw a frame");
+            let node = frame.node;
+            let key = match node {
+                Constant::Int(value) => ClassKey::Int(*value),
+                // Raw bytes are the list of their bytes (their length is the
+                // text's).
+                Constant::Bytes { data, utf8: false } => ClassKey::Composite {
+                    variant: None,
+                    payload: 0,
+                    labels: Vec::new(),
+                    children: data
+                        .iter()
+                        .map(|byte| {
+                            let next = classes.len();
+                            *classes
+                                .entry(ClassKey::Int(i128::from(*byte)))
+                                .or_insert(next)
+                        })
+                        .collect(),
+                },
+                Constant::U128(_)
+                | Constant::Bytes { .. }
+                | Constant::Float(_)
+                | Constant::Bool(_)
+                | Constant::FnDef(_)
+                | Constant::SymbolAddr { .. }
+                | Constant::PhantomData => ClassKey::Leaf(node),
+                _ => {
+                    let children: Vec<usize> = results.drain(frame.first_result..).collect();
+                    let list = matches!(node, Constant::Array(_) | Constant::Aggregate(_));
+                    if list
+                        && children.len() >= 2
+                        && children.iter().all(|class| *class == children[0])
+                    {
+                        uniform.insert(node as *const Constant as usize);
+                    }
+                    ClassKey::Composite {
+                        variant: (!list).then(|| core::mem::discriminant(node)),
+                        payload: match node {
+                            Constant::Closure { func, .. } => u64::from(func.index()),
+                            Constant::Splat { len, .. } => *len,
+                            _ => 0,
+                        },
+                        labels: match node {
+                            Constant::Record(fields) => {
+                                fields.iter().map(|(label, _)| label.as_str()).collect()
+                            }
+                            _ => Vec::new(),
+                        },
+                        children,
+                    }
+                }
+            };
+            let next = classes.len();
+            let class = *classes.entry(key).or_insert(next);
+            results.push(class);
+        }
+        UniformElementLists { nodes: uniform }
     }
     pub fn f32(v: f32) -> Self {
         Constant::Float(v as f64)
@@ -427,6 +885,172 @@ impl Constant {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn constant_children_are_exact_borrowed_slices_for_every_variant() {
+        let composites = [
+            Constant::Aggregate(vec![Constant::Int(1), Constant::Int(2)]),
+            Constant::Array(vec![Constant::Int(1), Constant::Int(2)]),
+            Constant::Vector(vec![Constant::Int(1), Constant::Int(2)]),
+            Constant::Sequence(vec![Constant::Int(1), Constant::Int(2)]),
+            Constant::Set(vec![Constant::Int(1), Constant::Int(2)]),
+            Constant::Record(vec![
+                ("z".into(), Constant::Int(1)),
+                ("a".into(), Constant::Int(2)),
+            ]),
+            Constant::Closure {
+                func: crate::FuncId(7),
+                captures: vec![Constant::Int(1), Constant::Int(2)],
+            },
+        ];
+        for parent in &composites {
+            let mut children = parent.children();
+            assert_eq!(children.len(), 2);
+            assert_eq!(children.size_hint(), (2, Some(2)));
+            assert!(matches!(children.next(), Some(Constant::Int(1))));
+            assert_eq!(children.len(), 1);
+            assert!(matches!(children.next(), Some(Constant::Int(2))));
+            assert_eq!(children.size_hint(), (0, Some(0)));
+            assert!(children.next().is_none());
+            assert!(children.next().is_none(), "the iterator is fused");
+        }
+        let leaves = [
+            Constant::Int(0),
+            Constant::U128(u128::MAX),
+            Constant::Float(1.0),
+            Constant::Bool(true),
+            Constant::Bytes {
+                data: vec![1, 2],
+                utf8: false,
+            },
+            Constant::FnDef(crate::FuncId(7)),
+            Constant::SymbolAddr {
+                symbol: "target".into(),
+                addend: 0,
+            },
+            Constant::PhantomData,
+            Constant::Uninit,
+        ];
+        for leaf in leaves {
+            assert_eq!(leaf.children().len(), 0);
+            assert_eq!(leaf.children().count(), 0);
+        }
+    }
+
+    #[test]
+    fn constant_preorder_keeps_exact_pointers_and_can_return_a_borrowed_break() {
+        let value = Constant::Record(vec![
+            (
+                "later-name".into(),
+                Constant::Closure {
+                    func: crate::FuncId(9),
+                    captures: vec![Constant::Array(vec![
+                        Constant::Int(1),
+                        Constant::FnDef(crate::FuncId(3)),
+                    ])],
+                },
+            ),
+            ("earlier-name".into(), Constant::Bool(false)),
+        ]);
+        let Constant::Record(fields) = &value else {
+            unreachable!()
+        };
+        let Constant::Closure { captures, .. } = &fields[0].1 else {
+            unreachable!()
+        };
+        let Constant::Array(elements) = &captures[0] else {
+            unreachable!()
+        };
+        let expected = [
+            &value,
+            &fields[0].1,
+            &captures[0],
+            &elements[0],
+            &elements[1],
+            &fields[1].1,
+        ];
+        let mut actual = Vec::new();
+        value.visit_constants(|constant| actual.push(constant));
+        assert_eq!(actual.len(), expected.len());
+        for (actual, expected) in actual.into_iter().zip(expected) {
+            assert!(core::ptr::eq(actual, expected));
+        }
+        let mut visits = 0;
+        let result = value.try_visit_constants(|constant| {
+            visits += 1;
+            if matches!(constant, Constant::FnDef(_)) {
+                ControlFlow::Break(constant)
+            } else {
+                ControlFlow::Continue(())
+            }
+        });
+        let ControlFlow::Break(found) = result else {
+            panic!("function reference")
+        };
+        assert!(core::ptr::eq(found, &elements[1]));
+        assert_eq!(
+            visits, 5,
+            "neither later siblings nor a function body are visited"
+        );
+    }
+
+    #[test]
+    fn constant_walk_is_stack_safe_for_deep_unary_and_branching_values() {
+        let mut unary = Constant::U128(0);
+        for level in 0..100_000 {
+            unary = match level % 7 {
+                0 => Constant::Aggregate(vec![unary]),
+                1 => Constant::Array(vec![unary]),
+                2 => Constant::Vector(vec![unary]),
+                3 => Constant::Sequence(vec![unary]),
+                4 => Constant::Set(vec![unary]),
+                5 => Constant::Record(vec![("field".into(), unary)]),
+                _ => Constant::Closure {
+                    func: crate::FuncId(0),
+                    captures: vec![unary],
+                },
+            };
+        }
+        // Derived Drop is deliberately outside this traversal change. Leak the
+        // hostile-depth fixtures so the test exercises traversal, not Drop.
+        let unary = Box::leak(Box::new(unary));
+        let mut count = 0;
+        unary.visit_constants(|_| count += 1);
+        assert_eq!(count, 100_001);
+        assert!(
+            !unary.is_canonical_int_spelling(),
+            "a deep malformed integer leaf remains visible"
+        );
+
+        let mut branching = Constant::Int(0);
+        for level in 0..20_000 {
+            branching = Constant::Aggregate(vec![branching, Constant::Int(level)]);
+        }
+        let branching = Box::leak(Box::new(branching));
+        let mut count = 0;
+        branching.visit_constants(|_| count += 1);
+        assert_eq!(count, 40_001);
+        assert!(branching.is_canonical_int_spelling());
+    }
+
+    #[test]
+    fn constant_walk_streams_wide_children_in_stored_order() {
+        let value = Constant::Aggregate((0..100_000).map(Constant::Int).collect());
+        let Constant::Aggregate(elements) = &value else {
+            unreachable!()
+        };
+        let mut count = 0;
+        value.visit_constants(|constant| {
+            let expected = if count == 0 {
+                &value
+            } else {
+                &elements[count - 1]
+            };
+            assert!(core::ptr::eq(constant, expected));
+            count += 1;
+        });
+        assert_eq!(count, elements.len() + 1);
+    }
 
     #[test]
     fn i32_constructor() {

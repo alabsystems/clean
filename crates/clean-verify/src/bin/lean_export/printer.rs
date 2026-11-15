@@ -17,10 +17,12 @@
 //! - Kernel projections `Proj(S, i, e)` print as Lean structure field access
 //!   `(e).pf<i>` — valid only for inductives the emitter declared as Lean
 //!   `structure`s (the `structs` set), whose auto-generated accessors are the
-//!   same primitive projections. Nat literals print in constructor normal
-//!   form (`Nat.succ^n Nat.zero` over the mirror `Nat`), the form Clean's
-//!   kernel treats the literal as definitionally equal to; capped so a huge
-//!   literal is SKIPPED rather than emitted as a megabyte tower.
+//!   same primitive projections. Nat literals print as NUMERALS over the
+//!   bridged carrier (`CleanVerify.Nat` is a reducible alias of Lean's `Nat`;
+//!   see `emit.rs::emit_nat_carrier`), which is what Clean's kernel actually
+//!   does with them — its Nat reduction is native on `BigNat` and name-keyed,
+//!   so a succ-tower over a MIRROR Nat demanded a computation Clean never
+//!   performs. See the `Lit(Nat(_))` arm for the measurement that settles it.
 //! - Remaining unprintable forms (string literals, free variables, mode
 //!   extensions) return an error so the caller can SKIP honestly.
 
@@ -30,10 +32,6 @@ use std::fmt::Write as _;
 use clean_kernel::{Expr, ExprKind, Level, Literal, Name};
 
 pub const NAMESPACE: &str = "CleanVerify";
-
-/// Largest Nat literal printed in constructor normal form. Above this, the
-/// succ-tower is unreasonably large and the item is skipped honestly.
-const MAX_NAT_LITERAL: u64 = 4096;
 
 pub struct Printer<'a> {
     /// Clean-name -> Lean-name remaps (reserved-name collisions).
@@ -124,22 +122,42 @@ impl<'a> Printer<'a> {
                 Ok(format!("(let {v} : {t} := {vv}; {})", b?))
             }
             ExprKind::MData(_, inner) => self.expr(inner, ctx),
-            ExprKind::Lit(Literal::Nat(n)) => match n.to_u64() {
-                Some(v) if v <= MAX_NAT_LITERAL => {
-                    // Constructor normal form over the mirror Nat — the form
-                    // Clean's kernel holds the literal definitionally equal to.
-                    let zero = format!("@{}", self.const_ref(&Name::from_string("Nat.zero")));
-                    let succ = format!("@{}", self.const_ref(&Name::from_string("Nat.succ")));
-                    let mut s = zero;
-                    for _ in 0..v {
-                        s = format!("({succ} {s})");
-                    }
-                    Ok(s)
-                }
-                _ => Err(format!(
-                    "literal Nat({n:?}) exceeds ctor-normal-form cap {MAX_NAT_LITERAL}"
-                )),
-            },
+            // A Nat literal prints as a NUMERAL, over the bridged carrier
+            // (`CleanVerify.Nat` is a reducible alias of Lean's `Nat`, see
+            // emit.rs `emit_nat_carrier`). It used to print as a succ-tower
+            // over a MIRROR Nat, capped at 4096, and that was wrong in a way
+            // the cap concealed rather than caused.
+            //
+            // Clean's kernel never walks these unary. Its Nat acceleration is
+            // NAME-KEYED — `names::NAT_ADD`/`NAT_SUB`/`NAT_PRED` in
+            // `clean-kernel/src/tc/reduction/mod.rs`, dispatched from `nat.rs`,
+            // and `whnf` runs `reduce_nat` BEFORE delta — so a closed literal
+            // folds natively on BigNat. The spec says so about itself:
+            // `core_spec/eval_ir_float.rs:174-177` writes 2^63 as a literal
+            // "so the kernel folds it natively on BigNat; a unary numeral of
+            // this magnitude does not exist."
+            //
+            // Prefixing `CleanVerify.` switched that acceleration off, so the
+            // export was not replaying what Clean's kernel did — it was
+            // demanding something strictly harder. MEASURED on the mirror with
+            // the best possible encoding (so it is a floor no encoding beats):
+            // 2.75e-5 s and ~6.3 KB RSS per unit of VALUE, exactly 2x per
+            // doubling over 4096..65536. Extrapolated, 4294967295 costs 33 h
+            // and 27 TB; 2^63 costs 7.9 million years. Raising the cap, a
+            // logarithmic encoding and an `OfNat` instance are all dead on that
+            // measurement, and a half-bridge (Lean's carrier, the spec's unary
+            // bodies) blows `maxRecDepth` on every blocked obligation: the axis
+            // is the OPERATION NAME, not the numeral.
+            //
+            // `BigNat`'s own `Display` (`clean-kernel/src/expr/types.rs:421`)
+            // is already a valid Lean numeral in both arms — decimal for
+            // `Small`, `0x`-prefixed big-endian limbs for `Big`. Verified
+            // against Lean rather than assumed, including that the limb order
+            // and the leading zeros are right: 2^64, [1,0,1] and 2^128-1 all
+            // check by `rfl` against independently computed decimals. This also
+            // reaches values `to_u64()` cannot (`expr/types.rs` returns `None`
+            // for `Big`), which no cap could ever have admitted.
+            ExprKind::Lit(Literal::Nat(n)) => Ok(n.to_string()),
             ExprKind::Lit(l) => Err(format!("literal {l:?} not exportable")),
             ExprKind::Proj(n, i, inner) => {
                 if self.structs.contains(&n.to_string()) {

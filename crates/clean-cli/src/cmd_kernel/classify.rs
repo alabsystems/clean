@@ -262,7 +262,7 @@ pub(super) fn run(
 ) -> anyhow::Result<()> {
     bail!(
         "clean kernel classify requires the `math-overlays` feature. \
-         Rebuild with `cargo build -p clean-cli --features math-overlays` \
+         Rebuild with `cargo build -p clean --features math-overlays` \
          (or the equivalent feature on the `clean` package)."
     );
 }

@@ -1,0 +1,7 @@
+(set-logic ALL)
+(declare-const x Int)
+(declare-fun g (Int) (Array Int Int))
+(declare-const d (Array Int Int))
+(assert (not (= (g x) d)))
+(assert (not (not (= (select (g x) (choice ((x Int)) (or (= (g x) d) (not (= (select (g x) x) (select d x)))))) (select d (choice ((x Int)) (or (= (g x) d) (not (= (select (g x) x) (select d x))))))))))
+(check-sat)

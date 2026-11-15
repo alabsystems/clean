@@ -27,7 +27,7 @@
 //!
 //! This body was measured as **not chainable** on 2026-08-12
 //! (`data/crystal_width_candidates_2026-08-12.json`, rank 2) because every arm
-//! emits `const enum.13 { k }` — a `trust_ir::Constant::Aggregate` — and
+//! emits `const enum.17 { k }` — a `trust_ir::Constant::Aggregate` — and
 //! Clean's `IRConst` had seven constructors and no aggregate form. The gap was
 //! closed by BUILDING the missing form, per the standing rule; the third
 //! constant lane in [`super::Cfg`] (`agg_consts`) exists so that the aggregate
@@ -110,7 +110,7 @@ fn from_source_system_proved_module_matches_the_emitted_artifact() {
     // spelling (`trust-ir/src/display.rs:1280`), and it is the whole reason
     // this body needed a build item before it could be chained.
     assert!(
-        text.contains("= const enum.13 { 0 }"),
+        text.contains("= const enum.17 { 0 }"),
         "the emitted arms must be AGGREGATE constants — that construct is what IRConst was \
          extended for, and a fixture without it would make this chain's premise false"
     );
@@ -207,7 +207,7 @@ fn from_source_system_proved_module_matches_the_emitted_artifact() {
     assert_eq!(
         emitted.param_blocks, clean.param_blocks,
         "the JOIN blocks differ: emitted {:?} vs Clean {:?}. The emitted body funnels all twelve \
-         arms into a block taking an enum.13 parameter and returns it; returning directly from \
+         arms into a block taking an enum.17 parameter and returns it; returning directly from \
          each arm is a different body.",
         emitted.param_blocks, clean.param_blocks
     );

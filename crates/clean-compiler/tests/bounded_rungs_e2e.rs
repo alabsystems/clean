@@ -27,7 +27,6 @@
 #![cfg(feature = "round-trip-compile")]
 
 use std::collections::{HashMap, HashSet};
-use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use clean_compiler::emit_c::{emit_c_with_config, CEmitConfig};
@@ -36,6 +35,9 @@ use clean_compiler::pass_manager::{compile_lcnf_decls, PipelineConfig};
 use clean_compiler::to_lcnf::constant_to_decl;
 use clean_compiler::Decl;
 use clean_kernel::{Environment, Expr, ExprVisitor, LevelVec, Name};
+
+mod runtime_fixture;
+use runtime_fixture::MaterializedRuntime;
 
 /// Primitive symbols the real `clean` native build provides as runtime shims
 /// rather than compiling from source (so their proof-carrying source closures —
@@ -74,14 +76,6 @@ const DENYLIST: &[&str] = &[
     "l_Bind_bind",
     "l_IO_bind",
 ];
-
-fn runtime_include_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/include")
-}
-
-fn runtime_c_source() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../clean-runtime/src/clean_runtime.c")
-}
 
 fn find_c_compiler() -> Option<String> {
     for compiler in ["cc", "gcc", "clang"] {
@@ -178,9 +172,10 @@ fn emit(decls: &[clean_compiler::ir::IRDecl]) -> String {
 /// A driver prologue that intercepts the runtime's `malloc`/`free` with a
 /// net-block counter, then pulls the whole runtime in as one TU (so the
 /// `static inline` allocators are counted too) and defines the denylist shims
-/// + heap/ctor/minor helpers the drivers need.
-fn prologue() -> String {
-    let runtime = runtime_c_source();
+/// + heap/ctor/minor helpers the drivers need. The runtime is the embedded
+/// copy materialized by `runtime_fixture.rs`, never a compile-time path.
+fn prologue(runtime: &MaterializedRuntime) -> String {
+    let runtime = runtime.c_source();
     let mut s = format!(
         r#"#include <stdio.h>
 #include <stdint.h>
@@ -244,11 +239,13 @@ static clean_obj* box_heap(size_t v){{ return clean_alloc_ctor(0, 1, 0, clean_bo
 /// runtime is `#include`d by the prologue) and run it; returns stdout lines.
 fn compile_and_run(cc: &str, emitted: &str, main_body: &str) -> Vec<String> {
     let dir = tempfile::tempdir().expect("tempdir");
+    // Embedded runtime, not a compile-time path (see runtime_fixture.rs).
+    let runtime = MaterializedRuntime::materialize();
     let source = dir.path().join("driver.c");
     let binary = dir.path().join("driver");
     std::fs::write(
         &source,
-        format!("{}\n{}\n{}", prologue(), emitted, main_body),
+        format!("{}\n{}\n{}", prologue(&runtime), emitted, main_body),
     )
     .expect("write source");
     let compile = Command::new(cc)
@@ -257,7 +254,7 @@ fn compile_and_run(cc: &str, emitted: &str, main_body: &str) -> Vec<String> {
         .arg(&binary)
         .arg(&source)
         .arg("-I")
-        .arg(runtime_include_dir())
+        .arg(runtime.include_dir())
         .output()
         .expect("spawn cc");
     assert!(

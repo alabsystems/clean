@@ -265,3 +265,44 @@ fn test_impl_infer_skeleton_meets_c1_acceptance_gate() {
          enumerate exactly that many"
     );
 }
+
+/// AUDIT r16 M16-3: the side lemma's PREMISE, pinned instead of asserted.
+///
+/// `impl_infer_mode_gate_constructive` is stated at `CleanModeM.constructive`,
+/// and three prose sites called that "the mode every declaration is admitted
+/// under unless explicitly changed". Measured on a release build, it is not:
+/// `Environment::with_prelude().mode()` is `Classical`, because
+/// `init_classical()` (`env/logic_decidable.rs:519-523`) upgrades
+/// Constructive -> Classical and nothing sets it back, and `env/decl_add.rs:846`
+/// carries the environment's mode into admission. `Environment::new().mode()` is
+/// Constructive, so the flip is the PRELUDE — and `clean check`
+/// (`cmd_core.rs:111,121`) goes through the prelude.
+///
+/// `grep -rn "with_prelude().mode()"` returned NOTHING before this test: no test
+/// asserted it in either direction while three prose sites asserted its
+/// negation. The consequence for the published fraction is stated in
+/// `designs/2026-07-29-unified-implinfer-relation.md`: at the deployed mode
+/// `sprop` and `squash` are NOT gated (they return `Ok(..)`, and `squash`
+/// recurses), so the deployed accounting is 21 of 24, not 23.
+#[test]
+fn deployed_admission_mode_is_what_the_side_lemma_assumes() {
+    use clean_kernel::mode::CleanMode;
+    use clean_kernel::Environment;
+    assert_eq!(
+        Environment::new().mode(),
+        CleanMode::Constructive,
+        "a bare Environment is Constructive -- if this moves, the #[default] the \
+         side lemma names has changed"
+    );
+    assert_eq!(
+        Environment::with_prelude().mode(),
+        CleanMode::Classical,
+        "THE DEPLOYED ADMISSION MODE. The mode-gate side lemma is stated at \
+         Constructive; `clean check` admits at whatever this is. If this ever \
+         became Constructive -- e.g. because `init_classical()` stopped mutating \
+         `Environment::mode` -- the side lemma's premise would become TRUE of the \
+         deployed path and the published fraction would rise from 21/24 to 23/24. \
+         Either way the two must be changed together, which is what this test is \
+         for."
+    );
+}

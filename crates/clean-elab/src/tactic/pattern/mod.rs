@@ -24,11 +24,16 @@ mod linear_combination;
 pub(crate) mod linear_combination_proof;
 mod measurability;
 mod mono;
+pub(crate) mod names;
 mod nontriviality;
 mod peel;
+mod rcases_empty;
+mod rcases_fields;
 mod rintro;
 mod simpa;
 mod split_ifs;
+#[cfg(test)]
+mod typed_name_tests;
 pub(crate) mod util;
 
 // === Public re-exports (used by tactic/mod.rs pub use pattern::...) ===
@@ -47,7 +52,10 @@ pub use measurability::{measurability, measurability_with_config, MeasurabilityC
 
 // rintro + peel
 pub use peel::peel;
-pub use rintro::{destruct_named_hypothesis, rintro, rintro_patterns, RIntroPattern};
+pub use rintro::{
+    destruct_named_hypothesis, destruct_named_hypothesis_pattern, rintro, rintro_patterns,
+    RIntroPattern,
+};
 
 // split_ifs
 pub use split_ifs::{split_ifs, split_ifs_with_config, split_ifs_with_names, SplitIfsConfig};
@@ -74,6 +82,7 @@ pub use dsimp::{dsimp, dsimp_all, dsimp_at, dsimp_with_config, DsimpConfig};
 
 // === pub(crate) re-exports (used by tactic/mod.rs pub(crate) use pattern::...) ===
 
+pub(crate) use rcases_fields::finish_rcases_clears;
 pub(crate) use rintro::contains_unassigned_meta;
 pub(crate) use util::exprs_equal;
 

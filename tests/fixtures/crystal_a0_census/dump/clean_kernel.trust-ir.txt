@@ -1,0 +1,29 @@
+rustcc fn @clean::good(functy.0) {
+  %0 = call @func.1()
+  %1 = const 1
+}
+rustcc fn @clean::helper(functy.1) {
+  %0 = const 2
+}
+rustcc fn @clean::escapes(functy.2) {
+  %0 = call @func.6()
+  %1 = call @func.7()
+  %2 = const 3
+}
+rustcc fn @clean::indirectly(functy.3) {
+  %0 = fndef<func.1>
+  %1 = call_indirect %0
+}
+rustcc fn @clean::not_lowered(functy.4) {
+  %0 = call @func.1()
+  %1 = const 4
+}
+rustcc fn @clean::partial(functy.5) {
+  %0 = call @func.6()
+  %1 = call @func.7()
+  %2 = const 5
+}
+rustcc fn @clean::decl_a(functy.6) {
+}
+rustcc fn @clean::decl_b(functy.7) {
+}

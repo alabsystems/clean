@@ -25,7 +25,7 @@ use clean_mathverse::coq::alpha::Sexp;
 
 /// A candidate declaration discovered by enumeration.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Candidate {
+pub(crate) struct Candidate {
     /// Fully-qualified name (module path + identifier).
     pub qualified: String,
     /// The keyword `Print Module` used (hint only, not a classification).
@@ -51,7 +51,7 @@ pub struct Candidate {
 
 /// Result of parsing one `Print Module` listing.
 #[derive(Debug, Default)]
-pub struct Listing {
+pub(crate) struct Listing {
     pub candidates: Vec<Candidate>,
     /// Qualified paths of bodyless nested modules that need their own
     /// `Print Module` pass.
@@ -92,7 +92,7 @@ pub struct Listing {
 /// tail token glued onto the dot-less `Module rat := Struct Record rat ...`
 /// sentence, so `process_statement` bailed on the unknown token and the `rat`
 /// inductive was dropped with no skip entry.
-pub fn extract_message_str(feedback: &[String]) -> Option<String> {
+pub(crate) fn extract_message_str(feedback: &[String]) -> Option<String> {
     let mut acc = String::new();
     for line in feedback {
         // Cheap pre-filter: only Message feedback carries a (str ...) field.
@@ -189,7 +189,7 @@ const MODIFIERS: &[&str] = &[
 /// Tracks inline `Module X := Struct ... End` prefixes; skips the bodies of
 /// `Module Type`/`Sig` regions (their fields are specification parameters,
 /// not global declarations).
-pub fn parse_module_listing(text: &str, module: &str) -> Listing {
+pub(crate) fn parse_module_listing(text: &str, module: &str) -> Listing {
     let mut listing = Listing::default();
     // (prefix, is_sig) stack; the outermost Struct is the module itself.
     let mut stack: Vec<(String, bool)> = Vec::new();

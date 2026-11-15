@@ -12,19 +12,19 @@ use anyhow::{bail, Context, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Toolchain {
+pub(crate) struct Toolchain {
     pub coq: String,
     pub serapi: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SkipEntry {
+pub(crate) struct SkipEntry {
     pub name: String,
     pub reason: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
-pub struct Counts {
+pub(crate) struct Counts {
     pub constants: u32,
     pub with_value: u32,
     pub axioms: u32,
@@ -49,7 +49,7 @@ pub struct Counts {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ValidateStats {
+pub(crate) struct ValidateStats {
     pub total: u32,
     pub translated: u32,
     pub axiomatized: u32,
@@ -57,7 +57,7 @@ pub struct ValidateStats {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ModuleMeta {
+pub(crate) struct ModuleMeta {
     pub module: String,
     pub toolchain: Toolchain,
     pub counts: Counts,
@@ -70,13 +70,13 @@ pub struct ModuleMeta {
 }
 
 #[derive(Serialize)]
-pub struct FailedModule {
+pub(crate) struct FailedModule {
     pub module: String,
     pub error: String,
 }
 
 #[derive(Default, Serialize)]
-pub struct Totals {
+pub(crate) struct Totals {
     pub constants: u32,
     pub with_value: u32,
     pub axioms: u32,
@@ -90,7 +90,7 @@ pub struct Totals {
 }
 
 #[derive(Serialize)]
-pub struct Manifest {
+pub(crate) struct Manifest {
     pub generated_unix_ts: u64,
     pub toolchain: Toolchain,
     pub modules_requested: usize,
@@ -102,14 +102,14 @@ pub struct Manifest {
 }
 
 /// Per-module pipeline outcome.
-pub enum Outcome {
+pub(crate) enum Outcome {
     Written(ModuleMeta),
     /// Existing dump kept (`--force` absent); meta reloaded when parseable.
     Fresh(Option<ModuleMeta>),
     Failed(String),
 }
 
-pub fn unix_ts() -> u64 {
+pub(crate) fn unix_ts() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
@@ -118,7 +118,7 @@ pub fn unix_ts() -> u64 {
 
 /// Aggregate per-module outcomes into `<out>/manifest.json`. Fails (after
 /// writing the manifest) when any module failed outright.
-pub fn write_manifest(
+pub(crate) fn write_manifest(
     out_dir: &std::path::Path,
     toolchain: &Toolchain,
     requested: usize,

@@ -49,26 +49,30 @@ fn term_size_depth(e: &Expr) -> (usize, usize) {
     let mut max = 0usize;
     let mut stack: Vec<(&Expr, usize)> = vec![(e, 1)];
     while let Some((cur, d)) = stack.pop() {
-        n += 1;
+        // Saturating: a node count or depth at `usize::MAX` is a heuristic that
+        // has already lost all meaning, but it must not panic or wrap to a
+        // small (falsely "simple") score.
+        n = n.saturating_add(1);
         if d > max {
             max = d;
         }
+        let child = d.saturating_add(1);
         match cur.kind() {
             ExprKind::App(f, a) => {
-                stack.push((f, d + 1));
-                stack.push((a, d + 1));
+                stack.push((f, child));
+                stack.push((a, child));
             }
             ExprKind::Lam(_, ty, b) | ExprKind::Pi(_, ty, b) => {
-                stack.push((ty, d + 1));
-                stack.push((b, d + 1));
+                stack.push((ty, child));
+                stack.push((b, child));
             }
             ExprKind::Let(_, ty, v, b, _) => {
-                stack.push((ty, d + 1));
-                stack.push((v, d + 1));
-                stack.push((b, d + 1));
+                stack.push((ty, child));
+                stack.push((v, child));
+                stack.push((b, child));
             }
-            ExprKind::Proj(_, _, s) => stack.push((s, d + 1)),
-            ExprKind::MData(_, inner) => stack.push((inner, d + 1)),
+            ExprKind::Proj(_, _, s) => stack.push((s, child)),
+            ExprKind::MData(_, inner) => stack.push((inner, child)),
             _ => {}
         }
     }

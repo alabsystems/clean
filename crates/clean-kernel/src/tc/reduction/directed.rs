@@ -630,6 +630,10 @@ impl<'env> TypeChecker<'env> {
         head: &Name,
         mode: WhnfMode,
     ) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         if *head == *dir_names::DIR_LE {
             return self.try_dir_le_reduction(e, mode);
         }
@@ -652,6 +656,10 @@ impl<'env> TypeChecker<'env> {
     /// `1₂ ≤ 0₂ ↝ Empty` (uninhabited; `¬(1₂ ≤ 0₂)` provable). Type-preserving:
     /// `Dir.le a b : Type` and `Unit`/`Empty : Type`.
     fn try_dir_le_reduction(&self, e: &Expr, mode: WhnfMode) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let args = e.get_app_args();
         if args.len() != 2 {
             return None;
@@ -701,6 +709,10 @@ impl<'env> TypeChecker<'env> {
     /// well-typed `homApp A x y (homLam A' f) 0₂`, β gives `f 0₂` and the boundary
     /// gives `x`, but typing forces `x ≡ f 0₂` (since `homLam f : Dir.Hom A (f 0₂)(f 1₂)`).
     fn try_dir_hom_app_reduction(&self, e: &Expr, mode: WhnfMode) -> Option<Expr> {
+        // Reserved cubical heads: kernel-declared only (`tc/cubical_authority.rs`).
+        if !self.cubical_layer_admitted() {
+            return None;
+        }
         let args = e.get_app_args();
         // Dir.homApp A x y p i — the five explicit arguments.
         if args.len() != 5 {

@@ -294,7 +294,10 @@ mod g1_serde {
     use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-    pub fn serialize<S: Serializer>(point: &G1Affine, serializer: S) -> Result<S::Ok, S::Error> {
+    pub(crate) fn serialize<S: Serializer>(
+        point: &G1Affine,
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
         let mut bytes = Vec::new();
         point
             .serialize_compressed(&mut bytes)
@@ -302,7 +305,9 @@ mod g1_serde {
         bytes.serialize(serializer)
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<G1Affine, D::Error> {
+    pub(crate) fn deserialize<'de, D: Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<G1Affine, D::Error> {
         let bytes = Vec::<u8>::deserialize(deserializer)?;
         G1Affine::deserialize_compressed(&bytes[..]).map_err(serde::de::Error::custom)
     }

@@ -1,0 +1,6 @@
+(set-logic ALL)
+(declare-const r Real)
+(declare-const q Real)
+(assert (not (not (> r 0.0))))
+(assert (not (not (< r 1.0))))
+(check-sat)

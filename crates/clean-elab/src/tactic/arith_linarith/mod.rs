@@ -221,6 +221,18 @@ pub fn linarith(state: &mut ProofState) -> TacticResult {
         }
     }
 
+    // Goal-driven PURE-ORDER reconstruction for fixed-width unsigned-integer
+    // carriers. `UInt64.le`/`.lt` unfold definitionally to `Nat.le`/`.lt` on the
+    // order-preserving `.toNat` embedding, so a pure-order `UInt` order goal
+    // reduces to the `Nat` problem over opaque atoms; arithmetic atoms are
+    // refused (the wrap makes the linear model unsound), and `close_goal`
+    // re-checks the term in the kernel. See `arith_uint_order`.
+    if let Some(proof) = super::arith_uint_order::try_prove_uint_order(&goal) {
+        if state.close_goal(&goal, proof).is_ok() {
+            return Ok(());
+        }
+    }
+
     // Certified FM first
     if let Some(result) = try_certified_fm(state, &goal) {
         return result;
@@ -262,8 +274,11 @@ pub fn linarith_prove(
     let mut local_ctx = Vec::with_capacity(hypotheses.len());
     for (i, hyp_ty) in hypotheses.iter().enumerate() {
         local_ctx.push(LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(1000 + i as u64),
-            name: format!("h{}", i + 1),
+            name: clean_parser::SurfaceName::from_name(
+                clean_kernel::Name::anon().str(format!("h{}", i + 1)),
+            ),
             ty: hyp_ty.clone(),
             value: None,
         });

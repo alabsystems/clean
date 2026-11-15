@@ -1,0 +1,17 @@
+beta-root: ACCEPT steps=1 nf=5
+add-small: ACCEPT steps=1 nf=5
+add-bignat: ACCEPT steps=2 nf=36893488147419103239
+succ-bignat: ACCEPT steps=1 nf=18446744073709551616
+twice-succ: ACCEPT steps=6 nf=42
+under-binder: ACCEPT steps=1 nf=(fun (#0 #0))
+capture-shift: ACCEPT steps=1 nf=(fun (fun #1))
+open-stuck: ACCEPT steps=1 nf=(#3 2)
+empty-advice: ACCEPT steps=0 nf=9
+corrupt-wrong-rule: REFUSE step 0: beta does not apply
+corrupt-bad-path: REFUSE step 0 leaves the term
+corrupt-swapped-steps: REFUSE step 0: beta does not apply
+corrupt-truncated: ACCEPT steps=5 nf=(succ 41)
+corrupt-claim-off-by-one: ACCEPT steps=1 nf=36893488147419103232
+corrupt-claim-not-normal: REFUSE claim is not a normal form
+corrupt-fuel-short: REFUSE out of fuel at step 3
+corrupt-capture: ACCEPT steps=1 nf=(fun (fun #1))

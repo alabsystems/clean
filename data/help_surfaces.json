@@ -1,0 +1,775 @@
+{
+  "schema": 1,
+  "what_this_is": "Every CLI help surface in this repo (a source file carrying user-facing usage/help text \u2014 discovered by scripts/check_help_surfaces.py, see its header) with the sha256 of its PROSE (string literals + doc comments) at the date it was last READ against the code that implements it. A row is an assertion that a person or agent read that text and found no claim the code contradicts; the gate refuses a surface with no row, a row whose prose has changed, or a row older than max_age_days, and `--dump` mints the rows a fresh read should add. Files discovery over-finds are classified under not_help with a reason.",
+  "max_age_days": 180,
+  "scan_roots": [
+    "crates"
+  ],
+  "program_roots": [
+    "crates"
+  ],
+  "extra_surfaces": [],
+  "surfaces": [
+    {
+      "path": "crates/clean-auto/src/bin/solver_serve/main.rs",
+      "prose_sha256": "36e41188308c38c537217839e76132afc97da527838ca6b746006ae4bcc7468d",
+      "verified": "2026-09-13",
+      "method": "usage text written 2026-09-10 exact to its parser/env reads in the program-entry pass, then read against main() (7 env vars per config.rs); re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane auto, 21 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-auto/src/cli.rs",
+      "prose_sha256": "9f8f93980534b3d1a8e11fa57a87f9f9681b7b03eb0f0e932d932599ac1eb03e",
+      "verified": "2026-11-14",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane auto, 21 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it; re-read 2026-11-14 against the fallible demo builder and run_prove handler: Demo.build returns Result and setup refusals propagate through DemoSetup; list, selected demo, unknown demo and missing action retain their existing dispatch. Actual pinned Trust CLI list/prove/unknown/no-action cases are retained in reports/auto-demo-fallible-2026-11-14. No new proof claim follows from this help read."
+    },
+    {
+      "path": "crates/clean-auto/src/cli_premise.rs",
+      "prose_sha256": "b1efde0296a363c8d285293966f299ebec971de0a83cfdccf387bc083723a03b",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-args-factory, 80 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-c-sem/src/cli.rs",
+      "prose_sha256": "12be6c5d3d04efbc000d0b09019010dee2218f1e745ccc9a1605025d3d6253b4",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group lang-sem-cli, 54 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-cli/src/cmd_core.rs"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/bin/gen_cli_docs.rs",
+      "prose_sha256": "ff03a59c15f5a0d09e439eec1823e4731abe7802c28f600c23cc20fee06d9c63",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane cli, 96 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-cli/src/cli/bench.rs",
+      "prose_sha256": "4de74656b1fb8f2202110f41acf14064eb923fd5106292621cf0120560d65594",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-cli/src/cli/mod.rs",
+      "prose_sha256": "ab76d455a4f97279939045eb21ec94f5c47a4fc47c9c5a4f16b7f15ae17ffcae",
+      "verified": "2026-11-01",
+      "method": "2026-10-08: the `ExtractBackend` doc and its `Rust` variant doc (the rust lane compiles its battery only with an admitted Trust compiler -- the `trustc` beside the running `clean`, or the absolute path in CLEAN_NATIVE_DECIDE_TRUSTC -- and refuses with E_RUST_TOOLCHAIN without one, never a compiler from PATH or $RUSTC) re-read against crates/clean-cli/src/cmd_extract.rs handle_extract_command (oracle_compiler::oracle_compiler(), its refusal mapped to RustEmitError::Toolchain, whose Display is `E_RUST_TOOLCHAIN: ...`) and crates/clean-elab/src/oracle_compiler.rs resolve/admit (a relative CLEAN_NATIVE_DECIDE_TRUSTC is refused; a refused setting is final; no PATH or $RUSTC lookup), and measured through the real binary by crates/clean/tests/extract_rust_oracle_compiler.rs. 2026-10-05: the LX0 `--backend` / `--receipt` doc comments and `RunBackend` re-read against crates/clean-native/src/native_trustcg.rs (resolve_trust_cg: CLEAN_TRUST_CG_BIN, a refusal when it names no file, else PATH; write_receipt: the JSON file, else one stderr line; receipt fields lowered/runtime) and the cmd_run.rs dispatch (default C lane untouched; `--receipt` without `--backend trust-cg` refused). The rest of the file is unchanged since the 2026-09-13 clap-surface sweep (group cli-core, 83 claims, adversarially verified). 2026-10-14 (WS6.13 stacked onto origin/main 46d887ef9 in the clean batch): the `native-runtime` descriptor (its shim-table sentence now names `clean-native`, where LX0(b) moved native_build), NativeRuntimeArgs and the repl_has_expected_path literal (FEATURES[6] = native-runtime) re-read against the moved step: clean-cli's cmd_native_runtime::handle_native_runtime_command is `clean_native::native_runtime::materialize(&args.out_dir, args.sources_only, stdout)`; materialize writes the header and three sources (write_runtime_sources creates --out-dir), runs remove_stale_products before the mode branch in both modes and prints `removed stale: <path>`, returns before compiling under --sources-only, else build_runtime_archive_with: cc via CLEAN_CC/CC then cc/gcc/clang (clean_native::native_build::find_c_compiler), ar via CLEAN_AR/AR then ar (find_archiver), a missing tool is an error, a tool failing mid-write leaves no partial product (fail_discarding), and the printed link line is `<cc> <emitted>.o <archive> -lm`; the shims are ALL_PRELUDE_SHIM_TABLES in crates/clean-native/src/native_build.rs; no member-dropping option exists (NativeRuntimeArgs has out_dir and sources_only only). 2026-11-01 (main's e90b36bb6 changed only RunArgs::keep_temp's doc): its new sentence (with `--backend trust-cg`, --keep-temp also keeps the input IR, diagnostics and receipt when codegen or linking fails) re-read against crates/clean-cli/src/cmd_run_trustcg.rs handle_run_trustcg (keep_temp -> ScratchRetention::Keep; the kept directory is printed whatever the outcome) and crates/clean-native/src/native_trustcg.rs build: under Keep the scratch directory is kept (BuildScratch::Retained) and module.tmbc with module.tmbc.sha256 are written (native_trustcg_retention.rs record_input) before trust-cg runs; native_trustcg_cli.rs retains trust-cg-command.json before the call and trust-cg.stdout, trust-cg.stderr and trust-cg-status.json after it, failure included; build_with_backend_retaining writes build-receipt.json after record_outcome, so a refused codegen or link leaves the receipt with its stage, step and cause (link_program's cause is the C compiler's stderr head or its undefined symbols). A failure before step 4 (front-end, self-checks, license) keeps no directory, which the sentence does not claim."
+    },
+    {
+      "path": "crates/clean-cli/src/cli_args.rs",
+      "prose_sha256": "1aeef5324db201c046e3f454dd9057477921e5d3327c14888cec3a6f36989a61",
+      "verified": "2026-10-17",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); re-dated 2026-09-13 for a one-line edit \u2014 the `clean audit soundness` usage line now names C4' \u2014 read against SoundnessCertificate::is_sound, which conjoins six claims, not five; re-read 2026-09-19 for WS6.13: the `--version` comment and the NativeRuntime variant doc read against build.rs (CLEAN_BUILD_VERSION = `<CARGO_PKG_VERSION>+g<sha>` or the spelled-out no-provenance form) and the dispatch to cmd_native_runtime; re-read 2026-10-17 at the round-6 integration for round-5 lane L's `Lean` variant, read against cmd_lean::run: it prints the module driver's messages in `lean FILE`'s format (`<file>:<line>:<col>: error|warning: ...`) and returns 1 exactly when an error was logged (R77's outcomes with no Lean counterpart are logged as errors); the lane's 'exactly as `lean FILE` does' was narrowed to 'in `lean FILE`'s format', since byte identity is what scripts/lean_front_door_diff.py measures (164/2122 files of 4.30.0-rc2's tests/elab), not a property of the handler",
+      "describes": [
+        "crates/clean-kernel",
+        "crates/clean-elab",
+        "crates/clean-verify",
+        "crates/clean-mathverse"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_artifacts/args.rs",
+      "prose_sha256": "ed7a4d14865a69d642a9c9069af5b13c2057dd01805f16f0de2ac1c8b4ecb28c",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-args-factory, 80 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_attempts.rs",
+      "prose_sha256": "2ba1c254ac7394eb87148f9bb6092c138de273d3fb9eee743fca6cd1097c3e2b",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-core, 83 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_audit.rs",
+      "prose_sha256": "e38b8be0170e87244d14141c805609d3964dc657ed177336c33579cfdccfe024",
+      "verified": "2026-09-28",
+      "method": "Re-read the merged source against run_lake_audit, the typed workspace/source-order and artifact-path helpers, run_trust_ledger, and soundness dispatch on 2026-09-14. Typed module identities and invalid-index errors preserve the documented reconstruction requirement; project-olean evidence remains diagnostic; report-only and output branches remain explicit. Source review, not a runtime or proof result. Re-read 2026-09-28 when 5018d3076 (one module per import) moved the prose: the only string that changed is a #[cfg(test)] fixture in mod tests (`import \u00abA.B\u00bb A.B` split into two import lines, matching the parser rule that `import Q P` imports Q only). No help text, flag or handler moved.",
+      "describes": [
+        "crates/clean-kernel/src/env/soundness_certificate.rs",
+        "crates/clean-mathverse"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_cake.rs",
+      "prose_sha256": "fd87a0f4adbb815a6c9af0a8c6cab5317a2527d1db2f80e15284b7cc4f755538",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-project, 52 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-mathverse",
+        "crates/clean-cake"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_drift.rs",
+      "prose_sha256": "6a5eee3ccd1747d8ed78199fa3c02ac436c16427a1cf78d9fdc13cb8d308f2ce",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-core, 83 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_factory.rs",
+      "prose_sha256": "2e263261757fa6fa85eec02a68eb13ece35e4ff0ebd6ba6a2a6312b9bd3c8c9b",
+      "verified": "2026-09-28",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane cli, 96 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it; re-read 2026-09-28 (Trust migration, owner directive 2026-09-28) against check_local_toolchain: the only moved prose is the new doc comment and the three failure/empty-output strings, and each holds -- it runs `trustc --version` and `targo --unverified --version` (the flag upstream cargo rejects), reports `<program> <args> returned no output` / `exited with` from the actual invocation, and fails the check naming `trustc --version failed` / `targo --unverified --version failed`; lib tests cmd_factory::tests::local_toolchain 2/2. No clap flag, default or handler moved"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_false_controls.rs",
+      "prose_sha256": "cf83398118a49b33b5216c00646ea6a29fdcea1ee03f2b12ec70aeeeb5b45723",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-proof, 108 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_help.rs",
+      "prose_sha256": "d2cb1d947bffad855a8c25cc7fd5291ab240059d355652bc9a153e6678d9e17c",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_lean/mod.rs",
+      "prose_sha256": "3f320f1067b9cad0e66844be8180a1ef543398c2b748f4249a21f72fee1df3f7",
+      "verified": "2026-10-17",
+      "method": "read 2026-10-17 at the round-6 integration (integ/r6) against its handler: `LeanArgs` is clap's surface only (the registry and `clean help lean`); `front_door_args` reads the words raw from argv (`clean lean ...`, or the binary invoked as `lean`), and `disable_help_flag` hands `--help` to `act_on_immediate`, which prints `help_text` (Clean's version line, the dialect's `lean` option list, the refusal note) -- so the arg doc's `clean lean --help` lists `lean`'s flags holds; the `help_text` / `usage_error` comments match their bodies (4.8.0: help body on stdout, the rest on stderr; 4.30.0-rc2: all on stderr; exit 1); re-read the same day after the +2 decision renumbering, which changed only the module doc's decision number (R71 -> R73 -> R74, as main took R38/R39 and then R56)"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_math/args.rs",
+      "prose_sha256": "f780cba5e6e78316f2d3bdccf1a21c32821f374005c4d433ad5a1c0ce06d611f",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_math_map.rs",
+      "prose_sha256": "ec8da61908eea8cfc9f922bff91b670e055d1e64ba5d98c243d8193b614ab0c7",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row",
+      "describes": [
+        "crates/clean-mathverse"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_native_library.rs",
+      "prose_sha256": "0f0e0f106b87d4f786407693c78bbcea2dbdc08596af77205d65742992254624",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-proof, 108 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-mathverse"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_project.rs",
+      "prose_sha256": "fca8f1a2f896bcd56a1e599d9e32353af55a6e450168308fa0eb2503b7e298e5",
+      "verified": "2026-09-29",
+      "method": "Re-read 2026-09-28 after 29de4ae8b/af6ae8e4a/2bcef9307/ff6c33c2c/0d26054a2/c2c94ab3f (report v5), 01189665c (sorry census) and the paragon split that moved the source scan and module graph into cmd_project/sources.rs, against build_project_check_report, vacuous_run_blocker, check_project_modules_in_order, lean_import_order, module_status, summarize_project, render_project_check_human and cmd_project/declarations.rs record_project_leaf/would_credit: each module is checked in the prelude plus exactly its transitive project-local imports in Lean's import order; a re-elaboration that differs from the import's own check refuses the importer unchecked (import_environment_divergence); an unloaded import makes the module import_failed (fail if it carries its own blocker), unchecked (import_not_loaded); credit goes through ImportedConeGate::new(&prelude), the clean check rule (sorry waived only under --allow-sorry, as that flag's help says); the vacuity blocker fires whenever declarations_checked == 0, with a distinct message when nothing was parsed; declarations_checked = passed + failed + not_credited by construction; the five statuses partition modules_found; the human report strings match the renderer (at most 20 assumption rows, all of them in --json). CheckTrustSummary: sorry_axioms counts checked leaves whose registration warning is ExplicitSorry/SyntheticSorry (the closure census, record_project_leaf) and sorry_terms_minted is the elaborator's counter delta, as their docs say. The failed_imports field doc said 'set exactly when this module's status is import_failed or fail', false for a module that fails on its own blocker with loaded imports (module_status returns FAIL on authority_blockers regardless); corrected in the commit that re-minted this row to 'non-empty only when ... (always, for import_failed)'. No other user-facing claim contradicted the code. Re-read 2026-09-29: the only prose that moved since the 2026-09-28 read is the FeatureDescriptor's crediting sentence, which said a declaration is credited only when its cited closure 'reaches no `sorry` or trust marker'. That was false under --allow-sorry: gate_declaration passes allow_sorry to ImportedConeVerdict::passed (crates/clean-olean/src/recheck_closed/imported.rs:128), which waives a trust marker whose head is `sorry`/`sorryAx` (and only those; never an imported axiom, a refusal, or trustedArith/trustedAy), and would_credit/record_project_decl waive only an ExplicitSorry/SyntheticSorry warning, after the kernel-failure check. The sentence now reads 'reaches no trust marker (a `sorry` only under `--allow-sorry`)'; project_check_cli's project_check_descriptor_states_the_sorry_waiver_its_crediting_rule_applies pins it and the C4 row 'descriptor project check (description)' records the claim."
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_promote.rs",
+      "prose_sha256": "ca97ca8c1d5e0bd2b0282c681101e61febe9961cf705fd24e67129a386a7810e",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-project, 52 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-kernel"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_prove.rs",
+      "prose_sha256": "ef2aeb5b530691e686997d76e2a9c9a23b35e5845c06b0a4690c6f1ee71eaadd",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-proof, 108 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_release.rs",
+      "prose_sha256": "c7b6115d3bf47d0c67a671ca2d1ffeec9643037f98881bba9fc4af771e8d9126",
+      "verified": "2026-09-28",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to; re-read 2026-09-28 (Trust migration, owner directive 2026-09-28) against ReleaseReadinessSmokeRunner: the only moved prose is the step label `targo metadata --locked --no-deps --format-version 1`, and it names exactly what the step runs ($CARGO, else targo, with those four arguments; `metadata` takes no lane). No clap flag, default or handler moved",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_repl.rs",
+      "prose_sha256": "326930350ef3d81ee39dafa5134803236c891fdc3d4ece41ea05ce7536ab4fb5",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row",
+      "describes": [
+        "crates/clean-elab"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_replacement/cli.rs",
+      "prose_sha256": "15beaa244795c6d2bf1cc0b7d8c5134c8d475e42158ed426f6190dca7987dd1d",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_research.rs",
+      "prose_sha256": "0a40f199cd8aeea298cdf89d6580180bdabfe2d0ef9b02a4f3f9308ef5260ae4",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-proof, 108 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_solver.rs",
+      "prose_sha256": "a5c3edc97017cb1b0820014ba1f65ed8e7087356d2a8a59f136adac2c5f0a713",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-A-cli-core); findings fixed in the commit that added this row",
+      "describes": [
+        "crates/clean-auto"
+      ]
+    },
+    {
+      "path": "crates/clean-cli/src/cmd_vendor.rs",
+      "prose_sha256": "1fb50fb1e12f7cb94d42d9c721d29ab88ccdfd695680449e07275c5c18870206",
+      "verified": "2026-09-28",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-project, 52 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit; re-read 2026-09-28 (Trust migration, owner directive 2026-09-28) against vendor_package: the only moved prose is the three `targo vendor` strings (staging banner, spawn-failure context, exit-status bail), and each names what the handler runs -- $CARGO (targo under targo), else targo, `vendor --versioned-dirs <staging>`; `vendor` takes no lane. No clap flag, default or handler moved"
+    },
+    {
+      "path": "crates/clean-cli/src/factory/mod.rs",
+      "prose_sha256": "248890f510ac30d39e62d6686f2f252b4f14b1736214f395a2962dd9ea23f952",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group cli-args-factory, 80 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-compiler/src/cli.rs",
+      "prose_sha256": "041c62a106b997c6cf5c5411957584711a9812f3b91a18c64665757960c3b93a",
+      "verified": "2026-10-01",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); re-read 2026-09-13 by the drift sweep; RE-READ 2026-09-18 against 75f82dab1, which added the `--emit trustir-bin` variant and its doc. All seven of that doc's claims were checked against the handler and hold: `serialize_module_bytes` (emit_trust_ir.rs) IS `trust_ir::binary::serialize_module(module)`, so the artifact is plain module bytes with no container; the `.tmbc` prefix, `deserialize_module` refusing it, `stable_digest` being taken over the MODULE, and `--emit obj` keeping the container are all restated by the handler's own doc; and `requires -o <PATH>` is enforced by an `ok_or_else` in cmd_compile.rs with a dedicated test (`compile_emit_trustir_bin_without_output_errors`). Nothing contradicted the surface. RE-READ 2026-10-01 for WS6.8, which added `--link-artifact <PATH>` (repeatable) and its doc. Each claim was checked against `handle_compile_command` / `compile_to_trustir_bin` (clean-cli cmd_compile.rs) and `emit_trust_ir_link.rs`: a non-`trustir-bin` format (or a build without trust-ir-backend) bails naming the flag; `LinkedArtifact::decode` refuses a `b\"tMBC\"` container by name and otherwise goes through `trust_ir::binary::deserialize_module`; `importable_symbols` (through `DepRoute` in `select_lcnf_decl_routed`) routes a symbol exactly one artifact defines (body, externally visible linkage) to a declaration at the far `FuncTy`, boxed-entry and other generated functions included; the import row's digest is `stable_digest` of the decoded module, and only an artifact some imported symbol resolves to gets a row (re-checked 2026-10-07 by the WS6.8 review, `a_supplied_artifact_nothing_is_imported_from_is_checked_but_not_recorded`); two definers refuse (`SymbolAmbiguous`) as does a root an artifact defines; `declare_imported_callee` refuses a lowered shape unequal to the far signature (`CallShapeDisagreesWithFarSignature`), never re-boxing; `earn_claim` step 6 writes a proof row only when the far certificate's `context` equals `source_comparand_bytes` of the client's own definition; `link_imported_modules` ends with `validate_linked_module` and an `Err` aborts the write; without the flag the route is always `Compile`. Each is pinned by a test in `cmd_compile_link_artifact_tests.rs` or `emit_trust_ir_link_tests.rs`. Nothing contradicted the surface."
+    },
+    {
+      "path": "crates/clean-discovery/src/cli.rs",
+      "prose_sha256": "5cd98b4b2ba0cdef8f06588c64f735d2f1613f5e36fa1b5e45cd2f7c0c7347a3",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group misc-cli, 105 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-cli/src/cmd_discover.rs"
+      ]
+    },
+    {
+      "path": "crates/clean-elab/src/bin/lrat_oracle_conformance.rs",
+      "prose_sha256": "d283f7aafe8c414fa5ec9cbe294791703fdf747ce3ccfb76a0062e9e4702f158",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-elab/src/cli.rs",
+      "prose_sha256": "78be5b99feb5e868faf67b281c23f5a83ffd45398bd7f708629799d9de4d3e75",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group kernel-verify-cli, 78 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-fold/src/cli.rs",
+      "prose_sha256": "a3b1dc81dca7c92673a316be23db023a618c15ab588b369a2d9d2f73d3c6640b",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group misc-cli, 105 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-cli/src/cmd_fold.rs"
+      ]
+    },
+    {
+      "path": "crates/clean-fold/src/commit/cli.rs",
+      "prose_sha256": "a0fb01c772def73b5af41cb06784f5e714db29718a0e5e81b6f082922eebafce",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group misc-cli, 105 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-cli/src/cmd_commit.rs"
+      ]
+    },
+    {
+      "path": "crates/clean-kernel/src/bin/clean_cert.rs",
+      "prose_sha256": "fb439e3cfc1aef20c2384bd341710ee8912e8679425ed12eaa4f8837fa15afd9",
+      "verified": "2026-09-29",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to Re-read 2026-09-29 (r11b landing; R2 CHANGED at origin/main ec77918dd): 1559c5878 added the environment re-check to `clean_cert verify`'s reports -- the JSON environment_recheck object (passed, pinned_to_base, constants_readmitted, families_readmitted, redefined_base, refusals as name/reason) and the human `Environment re-check: ...` line with one `REFUSED:` line per refusal -- each read against BundleEnvironmentRecheck's fields and passed(). No usage text moved.",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-kernel/src/bin/verify_gamma_crown.rs",
+      "prose_sha256": "5d407dc1688a680cb6bbc5148b8837c2999406716317a5931faa756384212f7d",
+      "verified": "2026-09-13",
+      "method": "usage text written 2026-09-10 exact to its parser/env reads in the program-entry pass, then read against main() (--json/--csv/--latex precedence, exit 0/1/2); re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane kernel, 30 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-kernel/src/cli/kernel_verbs.rs",
+      "prose_sha256": "c7c5d50386af785a72a17993fa1c800a71a943ebcf85f802750b2486dcd46f14",
+      "verified": "2026-09-29",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to Re-read 2026-09-29 (r11b landing; R2 CHANGED at origin/main ec77918dd): 1559c5878 rewrote the `kernel cert verify` description, read against clean-cli's cmd_kernel/cert.rs (json and human reports) and clean-kernel's cert/bundle.rs verify_single and cert/bundle_recheck.rs rebuild_from_canonical_base: the bundle environment is rebuilt from Environment::try_with_prelude before any replay, a prelude name is kept only when it is the prelude's very declaration (else redefined_base, which fails every theorem in verify_single), everything else is re-admitted through add_decl / add_inductive(_core) with recursors regenerated, a theorem whose closure reaches a declaration not re-derived fails naming each (unchecked_in_closure), replay and the audit run in the rebuilt environment, and the report carries per-theorem status, trust_level, environment_recheck and the axiom disclosure. No flag or other text moved.",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-kernel/src/cli/mod.rs",
+      "prose_sha256": "1664d01fa8095406919642009fbe46f67923f5f81c276194478a080b3af9805f",
+      "verified": "2026-11-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group kernel-verify-cli, 78 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit; re-read 2026-09-30 when dcbcdc934 (Phase 1's declaration-scoped automation budget) added `--automation-budget` and DEFAULT_AUTOMATION_BUDGET and extended the `--parse-only` inert list; a lexed prose diff from 454bfdd10 (the version this row was read at) shows nothing else moved. READ AGAINST clean-cli lib.rs run_check_on_large_stack (parse-only calls parse_only_check(file, json) and never reads automation_budget: the inert-list claim holds) -> cmd_core.rs collect_check_outcome's AutomationBudgetScope (clean_auto::set_automation_budget, disarmed on drop) -> clean-auto work_budget.rs (limit 0 = unlimited AND uncounted; a refused charge latches exhausted_at) -> the charge sites: superposition/prover.rs prove_until (processed.len()+1 units per given-clause step), clean-elab tactic/simp/budget.rs (tick per traversal frame, charge_attempt per lemma attempt) and tactic/grind.rs (per core step and per closer) -> decl_work_budget.rs LeafWorkScope (refilled at the outermost non-container declaration, so a section/namespace member is its own pot; finish wraps a failure as ElabError::AutomationBudgetExhausted, whose text begins `(deterministic) automation budget exhausted`). `--decl-budget does not bound this work` holds: superposition/* makes no TypeChecker, whnf or is_def_eq call. The re-derivation recipe is right to arm u64::MAX: check_timing's per_declaration[].automation_work reads work_budget::used(), which is 0 whenever the budget is 0. DEFAULT_AUTOMATION_BUDGET's figures come from a dated run no artifact carries; cross-checked against the dated slice reports instead: srcelab-2026-09-26-g07774b87b (unbudgeted; 764 declarations over five files; Function.Injective.dite 1,420.9 s and Function.Injective.linearOrder 189.5 s, both failing; Ne.instIsEquiv_compl passing) and srcelab-2026-09-29-g0536c6d58 (default budget; 600/764; dite fails `exhausted in superposition` at 99.1 s and linearOrder `exhausted in simp` at 23.3 s); arithmetic 10,000,000/328,138 = 30.5x, 150,371,835/10,000,000 = 15.0, 62,340,969/10,000,000 = 6.2. THREE sentences were false and are fixed in the commit that re-minted this row: (1) `Once it is spent every automation call of the declaration gives up`: only the charged sites give up; a tactic that reaches none of them is not bounded (grind's closer_step comment names solve_by_elim and tauto as uncharged), now said; (2) `Deterministic, like --decl-budget: the same input spends the same units on any machine at any load`: grind.rs try_automation_engine (GrindConfig use_automation true, automation_timeout_ms 100 by default) runs AutomationEngine::auto_prove -> engine_detailed run_pipeline, which drives superposition with deadline start+timeout, and prove_until tests `Instant::now() >= deadline` BEFORE each charge, so a slower or busier machine can end that search sooner having charged fewer units: now said; (3) the unmoved `--decl-budget` sentence `the same input spends the same fuel on any machine at any load`, MEASURED false: identical `clean check --json` runs of one three-declaration file whose proofs call grind (the binary built from this branch, builtin prelude) reported peak_decl_ticks 60511, 60512, 60511, 60499 sequentially and 60473..60513 over six concurrent runs, while a grind-free file reported 2577 every time; now says the count is not exactly reproducible. MEASURED, the rest holds: automation_work was identical across those runs (3252 / 206 / 1181 per declaration; 1835 for a group-axiom grind probe over five runs), `--automation-budget 1` failed all three declarations each with `(deterministic) automation budget exhausted ... (exhausted in simp)` (one pot per declaration), `--automation-budget 0` reported automation_work 0 everywhere (unlimited, uncounted), `--automation-budget 18446744073709551615` is accepted, and `--parse-only --automation-budget 1` exits 0 with every declaration parsed.; re-read 2026-09-30 by the adversarial review of that re-mint (same branch): the unmoved `--automation-budget` sentence `--decl-budget does not bound this work: it counts KERNEL operations, which the superposition loop never performs` was FALSE for simp and grind, which the implementer's read had passed on the superposition half alone: their searches make kernel checks (ProofState::is_def_eq -> with_tc -> TypeChecker, tc/core/type_check.rs), and every TypeChecker on the thread ticks the ambient budget at infer_type/whnf_impl/is_def_eq_impl (tc/decl_budget.rs, tc/heartbeat.rs). MEASURED with the built binary: a theorem closed by `exact fProbe_eq (a + 0) (b + 0)` spent peak_decl_ticks 1703; the same theorem with a FAILING `(try simp only [Nat.zero_add])` before the same `exact` spent 2169 (automation_work 20), with a failing `(try grind)` 31314 (automation_work 1186), and `--decl-budget 2000` passed the first and reported the other two `diverged`. Now says --decl-budget counts only the kernel operations in this work: the superposition loop performs none, so no other per-declaration budget bounds it, while a simp or grind search draws on both. Pinned through collect_check_outcome by clean-cli cmd_core_automation_budget_tests.rs decl_budget_counts_the_kernel_operations_of_a_failed_simp_or_grind_search. Re-measured in the same read: the implementer's three-declaration grind probe gave peak_decl_ticks 60529, 60490, 60495 over three runs with automation_work 3252/206/1181 each time, so the rewritten --decl-budget reproducibility sentence holds. The module docs those two help sentences paraphrase carried the same false claims and are corrected with them: clean-auto work_budget.rs (`the superposition loop, simp and grind never tick it`; `the same input spends the same units on any machine at any load`), clean-kernel tc/decl_budget.rs (`the same input spends the same ticks on any machine at any load`), clean-elab decl_work_budget.rs (`every automation call of the declaration give up`).; re-read 2026-10-14 when the carcara review fix-forward added `--timeout-ms` to `cert verify-external` and `cert verify-external-batch` and one sentence on it to each of their descriptors: READ AGAINST clean-cli cmd_cert.rs check_limit (0 -> no limit, otherwise that many milliseconds) -> verify_external_certificate (an Alethe certificate's deadline is Instant::now() plus the limit, taken when its own check starts, so `each` Alethe check of a batch gets the whole limit) -> clean-elab verify_alethe_certificate_until (clean-auto VerifyError::CarcaraDeadline -> error code `timeout`, printed by verify_external_certificate as `timeout: ...`) -> clean-auto verify_alethe_proof_until -> the vendored checker's Config::deadline; Farkas and entailment certificates take no deadline, which both sentences say by naming an Alethe check; 600000 is clap's default_value on both fields; nothing else in the file's prose moved; re-read 2026-10-14 again when the same fix-forward's next commit added one sentence to `verify-external-batch`'s `--threads` help: READ AGAINST cmd_cert.rs cert_verify_external_batch (0 -> sequential, N -> an N-worker rayon pool, unchanged) -> verify_alethe_certificate_until -> clean-auto verify_alethe_proof_until, which takes a CheckerSlots place (one per std::thread::available_parallelism core; the rest wait, until their deadline) before spawning the check's thread with CHECKER_STACK_BYTES = 1 << 30 of stack: `at most one per core at once, each on its own thread with a 1 GiB stack reservation` holds; re-read 2026-10-08 by the G50 lane (r3/lake-options) when it added `-D` (CheckArgs.define), its descriptor example, and `-D` to the `--parse-only` inert list. READ AGAINST clean-cli lib.rs check_command_line_options (validates every -D through clean_elab::command_line_options::parse_command_line_options before the check thread is spawned, so a bad one fails before anything is elaborated; returns no options under --parse-only, which never reads them: the inert-list claim holds) -> cmd_core.rs collect_check_outcome_with_options (ImportCheckState.command_line_options, copied into the nested faithful-import state) -> check_file_recursive (apply_command_line_options right after each file's FileContext::new, so the entry file and every source-elaborated import start from them) -> clean-elab command_line_options.rs apply_command_line_options (env.set_option + FileContext::set_option, the two setters lib.rs's file-scope set_option handler uses, so an in-file set_option overrides and a section restores). Argument rules MEASURED against pinned Lean 4.8.0 bin/lean: -DautoImplicit=false and -D autoImplicit=false both refuse `theorem t (x : Foo) : x = x := rfl`; a later -D wins; -DautoImplicit (no =) is `invalid -D parameter, argument must contain '='`; -Dbogus=1 is `invalid -D parameter, unknown configuration option 'bogus'`; -DautoImplicit=0 and =False are `... invalid configuration option 'autoImplicit' value, it must be true/false`; -DmaxRecDepth=abc is accepted as 0 (atoi). The registry caveat is stated (Lean core declares options Clean refuses, e.g. warningAsError).; re-read 2026-10-08 by the G50 repair (same branch) after review found the registry was the wrong authority: `-D` now validates names against crates/clean-elab/src/lean_v4_8_0_options.tsv, every option pinned bin/lean -D accepts (342 names, each measured), so Clean-only registry names (clean.inductive.liftNestedLocals and six others) are refused with Lean's unknown-option message; a pinned name Clean does not implement is accepted with a stderr warning when cannot_change_acceptance names it (pp./trace./linter./format./profiler/diagnostics/...) or the value is Lean's default, else refused (CommandLineOptionError::NotImplemented). READ AGAINST command_line_options.rs CommandLineOption::new and clean-cli lib.rs check_command_line_options (the warning loop); the rewritten help sentence says exactly this.; re-read 2026-10-16 at the round-3/4 integration merge (integ/r5): the merged prose is the 2026-10-14 version above plus the G50 lane's `-D` field doc, `-D` in the `--parse-only` inert list and its descriptor example, each read above; a lexed prose diff against each parent shows nothing else moved; re-read 2026-10-23 at the round-6 integration's merge of KR1 slice 1 (1da954169, R132), which moved the `SetTheory.*` symbols and the `Fact` stubs out of `--prelude builtin` into the opt-in stub theory: the `PreludeMode::Builtin` doc now says so, matching `init_stub_theory`; re-read 2026-10-24 at the round-6 integration's merge of origin/main 38d73fa36 (KR1 increment 3, R143): the `PreludeMode::Builtin` doc now counts twenty non-foundational value-less axioms, the `IO` operations, `tryCatchThe`, `tryFinally` and the four trust markers, which is data/prelude_axiom_ratchet.json's census (debt_signature 16: IO, its 13 operations, tryCatchThe, tryFinally; trust_markers 4; baseline_non_foundational 20), re-measured over the merged tree's prelude by env::tests_prelude_axiom_ratchet in clean-kernel's lib (10945 passed, 0 failed at 29a045040); the placeholders and Set operations it says moved did move (R143's init_stub_theory and set_theory.rs); re-read 2026-11-13 by the hook-legs lane after a9717d779 (explicit source-world selection) added the `--lean-world` field doc and named source-world selection among what `--parse-only` reads. READ AGAINST clean-kernel lean_world.rs (LeanWorld::from_str matches a `lean-toolchain` tag exactly; any other is UnknownLeanWorld, so clap refuses it, pinned by clean-cli cmd_core_world_tests.rs cli_source_world_defaults_and_unknown_world_refusals_are_explicit) -> clean-cli lib.rs run_check_on_large_stack (both arms pass args.lean_world; parse-only reads the file, `--json` and the world, and nothing else) -> clean-olean import/project_world.rs source_world_for (explicit: the registry row, a canary refused, installed_library demanding the exact identity; implicit: import_world_for over the nearest lean-toolchain, a measured or canary world refused under R38, no toolchain meaning the oracle) and source_world_of (a refused project world reads source in the oracle's language and carries the refusal, so every Lean import refuses, pinned by check_source_closure_inherits_the_explicit_entry_world). ONE sentence was imprecise and is rewritten in the commit that minted this read: `Unknown releases refuse` reads as a refusal of the file, but a project toolchain naming an unknown release refuses only its Lean imports and the file is read in the oracle's language; the field doc now says both and names the tag form."
+    },
+    {
+      "path": "crates/clean-lake/src/cli/clap_args.rs",
+      "prose_sha256": "3eb51ab22467a5c59a6fb4559b8eaa32225ceae5faf3da1f2622b52b8fe2df1b",
+      "verified": "2026-10-25",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); findings fixed in the commit that added this row; re-read 2026-09-28 when 620e4e990 (module-trust K1) rewrote the VerifyFresh prose, against crates/clean-cli/src/cmd_lake/verify_fresh.rs lake_verify_fresh: check 1 is clean_cake::signature_from_search_paths (import signature); check 2 is compare_with_fresh_build over BuildContext::build_fresh_artifacts (a ScratchBuildDir; the project build dir is neither read nor written), requiring .olean/.olean.server/.olean.private byte-identical; it bails on a stale signature and on every non-DigestMatch verdict (DigestMismatch = rewritten, NotCleanBuilt = non-reproducible, MissingArtifact, FreshBuildFailed); the default search path is [<source_root>/.lake/build/lib/lean, <source_root>/.lake/build/lib] in that order. No claim contradicted the code; re-read 2026-10-25 when plan item devsurface-lake-env-no-silent-lean rewrote the Env `command` prose, against crates/clean-cli/src/cmd_lake/deps.rs lake_env_command: it calls env_guard::refuse_lean_toolchain_program (crates/clean-cli/src/cmd_lake/env_guard.rs) before anything is spawned, the eight names the prose lists are exactly LEAN_TOOLCHAIN_PROGRAMS, matched on the basename (ASCII case-insensitive, `.exe` ignored), and every refusal sentence names a `clean ...` verb. No claim contradicted the code; re-read the same day when a review added `leanir` to the Env `command` prose: the nine names it lists are exactly LEAN_TOOLCHAIN_PROGRAMS's nine rows, and the `leanir` refusal names `clean compile <FILE> --decl <NAME> --emit c` and `clean lake build`. No claim contradicted the code."
+    },
+    {
+      "path": "crates/clean-lsp/src/cli/mod.rs",
+      "prose_sha256": "021214cb0bdd088a69d2a987ec92abeacd248c15e2f2a163c5e64a89e80b4561",
+      "verified": "2026-11-14",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group misc-cli, 105 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit; re-read 2026-11-13 by the hook-legs lane after e5ad4ac3f (native transport shutdown and exit handling) changed three sentences. READ AGAINST clean-lsp lib.rs run_server and run_server_tcp -> transport.rs serve -> transport/dispatch.rs serve (stdio: Ok on `exit` after a successful `shutdown` or on end of input after it; an error on input closed before shutdown, `exit` before shutdown, a read or write failure, or a malformed or unsupported message; TCP: a bind or accept error propagates, a connection's serve error is logged at debug and ends that connection only). `until the client sends exit or closes stdin` holds, and so does the `LSP transport failed: {0}` display. ONE sentence was incomplete and is rewritten in the commit that minted this read: the LspCliError::Tcp doc said `Transport setup failed or the client exited without successful shutdown`, but a read or write failure and a malformed message mid-session surface through the same variant, and over TCP a connection's failure never does; it now says so. Re-read 2026-11-14 during m79 main5195 integration: retain that complete stdio/TCP error description and the earlier independent passthrough correction. The standalone main.rs starts argv with lsp and extends it with env::args().skip(1), including explicit --stdio/--tcp; the transport Args flags and parser are unchanged. No transport/exit behavior changed. This review updates only the merged LSP prose row."
+    },
+    {
+      "path": "crates/clean-mathverse-server/src/bin/mathverse_api.rs",
+      "prose_sha256": "1e4c5f30f63bdb11f4f46359bf758d766f4f4527d420d0461204f06ac95cad62",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); findings fixed in the commit that added this row"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/clean_depgraph.rs",
+      "prose_sha256": "ca7a9ae676205bdaa63386ac86f9e673a714c0baf545a796864011420644d55f",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse/cli.rs",
+      "prose_sha256": "76d4e31c120f16e1728caeb4be0f77aa26c57a6e14d2d8bd0dbc6bce48629a09",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_bucket_probe.rs",
+      "prose_sha256": "d71462b9596481702da0b9c3f260e83b0fddd0363f2c0768cf445cc96374faf9",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_convert.rs",
+      "prose_sha256": "9b69f57f56e1a94aa779b7f7d5f122357e525301ee16d899a40fcaf242749f5b",
+      "verified": "2026-09-12",
+      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_coq_dump/main.rs",
+      "prose_sha256": "33f35a7c77a4e539b12dc9c3c49823337223a5850573c5001be561447363e209",
+      "verified": "2026-09-13",
+      "method": "usage text written 2026-09-10 exact to its parser/env reads in the program-entry pass, then read against main() (module-doc flag list confirmed against the parser; exit contract from report::write_manifest); re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse, 31 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_fidelity_check.rs",
+      "prose_sha256": "a365db6dc1408e6a0a43974dc75155d58df657391db079f52ab675bd630e4b16",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_fstar_import.rs",
+      "prose_sha256": "0659f870b190d9970a89824b77dcb345304792a6d6daa04e71f2b64fc14c67ce",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_fstar_reprove_export.rs",
+      "prose_sha256": "931c8e49abb8b9d4905d2d4e1af56e4fa6eb23476f25881f033fb76cbd295921",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_lineage.rs",
+      "prose_sha256": "23f7d1642415e70276823db7052d04c9039c8827816b4e6e40c270d5c7d3b09c",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_publisher.rs",
+      "prose_sha256": "b9dd2fc7dfc6cf694189a679380f27f16e248b168cc65b77e879ad9fbc1767f6",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_reauditor.rs",
+      "prose_sha256": "86be087ab5c3a238e6fc23f3190ab45ff5f06e7b3f717dc95cf37b9bfd9a1227",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_serve/main.rs",
+      "prose_sha256": "58301c5188d451be6ddf8c573bba710132fda40252bfac830224b466c1fad7b5",
+      "verified": "2026-09-13",
+      "method": "usage text written 2026-09-10 exact to its parser/env reads in the program-entry pass, then read against main() (5 env vars per config.rs); re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse, 31 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_shard/coq_import_command.rs",
+      "prose_sha256": "f438a234d7ff20cf5ad4a271dd49e11bac20405821fd0f8e20cb892d8e5d0178",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-D-mathverse-shard); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_shard/main.rs",
+      "prose_sha256": "a4b73e05bb48683e8cdbedd499f11af0588071bb1715f61c75374a257aca15da",
+      "verified": "2026-09-13",
+      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_shard/native_build.rs",
+      "prose_sha256": "030841d6f53781ce25baf1ed6c9c423994d6144751ca1f904f877b7b0f1ab48f",
+      "verified": "2026-09-12",
+      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_shard/stamp_command.rs",
+      "prose_sha256": "d7a46f6de10c765615e418a857ae9a95dcef3acb408b8efc7090541ce1fdeeaf",
+      "verified": "2026-09-12",
+      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_shard/verify_commands.rs",
+      "prose_sha256": "ce7e9b98ffadd85521970576976af0449b1532489c6f1997f9048d96797b270a",
+      "verified": "2026-09-12",
+      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_structured_import.rs",
+      "prose_sha256": "410a68461332d3873eef7d39cee7d47b6def732f0b558e075b4156b7c0ddbfcb",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_swarm_worker/main.rs",
+      "prose_sha256": "35ec7e9b8960c952b4c8890b81d117c2b9ae9bba40259958bce90d3543bc3b64",
+      "verified": "2026-09-12",
+      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-mathverse); no claim contradicted the moved code; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_try/run.rs",
+      "prose_sha256": "f01df08dd6c45a7d456e30e85d92db02451bb276277e6f078ad3af4bd7d2917f",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mm_export_shard.rs",
+      "prose_sha256": "eee9d360303a39d0d93925a2a3f5d03ee420bf74cbfd3381a3d9accda95bd4d5",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mm_export_verified.rs",
+      "prose_sha256": "fee3af5243800e382c87ad06901f47c0f47f572b0d28e6547c323dd3d84549e3",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/cli/graduate_dispatch.rs",
+      "prose_sha256": "8419995f1bb703c5d3f12955664008ca619b91bd777aee7479905291c7ae4a0a",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group misc-cli, 105 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit"
+    },
+    {
+      "path": "crates/clean-mathverse/src/cli/mod.rs",
+      "prose_sha256": "814e3e714e25c161feeabc00048d3db144907757411c99f7864bbb138bc6831f",
+      "verified": "2026-09-30",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it; re-read 2026-09-30 when 9e61c1f67 (the mathverse forged-lanes fix) added MathverseCliError::StampImportRefused, the only prose that moved: read against closure_load.rs closure_load_error (the variant is built only when ImportError::is_inconsistent_artifact() and declaration_names() is non-empty, else StampClosure) and its three callers -- closure_load.rs's load_targets_closure_with_policy, which loads every target's closure before stamp_verified_dispatch verifies anything, and parallel_verify.rs's base and lazy-base loads, which precede every check -- so 'nothing of the run was checked or stamped' holds; no stamp lane loads under OleanImportPolicy::with_replay_refusals (grep: only the sharded worker uses the module-replay variant), the --parallel base holds every target, and the sequential lanes pre-seed the targets into `visited` so their base is trusted imports only. No claim contradicted the code."
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/deps.rs",
+      "prose_sha256": "236e70f4c110956579cc0bae3efdc23c60a7f485f7246eacdc5599f4916bf8ad",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/diff.rs",
+      "prose_sha256": "8ecb89d9def1a2f42490f52c80dc56a111d3829f7c3759c1ad526eb4c5f181d4",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/download.rs",
+      "prose_sha256": "20e0d4cf5192ee57b5e4ef90e395885737b037472c886537d57b7fbfe1eef39d",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/export.rs",
+      "prose_sha256": "7a5b31458d3c25d76d73202d8958d548e97b2221f9a38fe5eddc8c292c01e770",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/find.rs",
+      "prose_sha256": "7c99d23be23cf9d217117046ea081888570e2e1e7c05311130af7f351e25b415",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/graph.rs",
+      "prose_sha256": "9af025a5cb91c9ea7ccd90d08cc19ae496aa98866312f328ef42053eaaa4d0a9",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/inspect.rs",
+      "prose_sha256": "36be77e9b3f00969e6c02a94f5d803acd2376b3bcdd822cca29e023c664b6a32",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/release.rs",
+      "prose_sha256": "cb721e0cace7d09646cd561bd3046a5396d1903cb9ce693a8fdaee05d492ae72",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/search.rs",
+      "prose_sha256": "0421eca5afc5d54f1c1de75a535caa8371a3c5d70f2d862ccc1e7c79d934979c",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/serve.rs",
+      "prose_sha256": "349cfe38d6ceb4cc2ff10300b48b530df0053d4f0a1b077224c6255d5e1adb7e",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group); this surface's claims DO reach the change \u2014 the two bins that grew a USAGE const and -h handling, and graduate_dispatch's doc fixes \u2014 and none contradicted it"
+    },
+    {
+      "path": "crates/clean-mathverse/src/mathverse_bin_cmds/commands/upload.rs",
+      "prose_sha256": "69027301a5b33a2da0d3144fbcc1d1cbd363bff94ca055047039038db642c70e",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-C-mathverse-cli); findings fixed in the commit that added this row; the 2026-09-13 drift sweep (lane mathverse-rest, ~95 claims checked over the group) READ this surface against the five files that moved in crates/clean-mathverse and found the change reaches none of its claims \u2014 two of the five are #[cfg(test)]-only edits, and the other three are binaries and docs this surface never names \u2014 so `verified` stands and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-olean/src/bin/generate_namespace_overlay.rs",
+      "prose_sha256": "82ef36e36dcd75d5a9d5f45adf1fda3d3d746cec9eae3e554141b7935e043d8a",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane olean, 32 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-olean/src/bin/mm_gate.rs",
+      "prose_sha256": "261953b305e5021ffb05c5284b78cded244dc74559f6472f2755cff61dd11f94",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-olean/src/bin/mm_kverify.rs",
+      "prose_sha256": "e1cbe3f2c247601377cc3f4f7dcb0941746c5697fe0f62c5baca92c6f26465e8",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f",
+      "describes": [
+        "crates/clean-olean/src/cli"
+      ]
+    },
+    {
+      "path": "crates/clean-olean/src/bin/mm_verify_range.rs",
+      "prose_sha256": "0e55ed1379421265db001894cd0234b8cbe70dbae01ccfbff9555acbd823b592",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-olean/src/bin/ny_bridge.rs",
+      "prose_sha256": "eb9dd4eebde5f0b8de8010f283df73af7e2a4de85745e9681d6298bb611b92fc",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane olean, 32 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-olean/src/cli/ir_census.rs",
+      "prose_sha256": "06be84d159bf4bb3f598b9fff6d3ab0c76ae090b7b7a081eb2c2c30a064f5678",
+      "verified": "2026-09-30",
+      "method": "first read 2026-09-30 (the file arrived with d71a8befb and was never rostered). READ AGAINST dispatch_ir_census and what it calls, flag by flag: lean_ir/census.rs (run_census, census_one, import_closure, resolve_modules, attr_lines, total_line), lean_ir/module_ir.rs (find_module_ir_olean, load_module_ir_at, decode_part), lean_ir/profile.rs (IrProfile::render). MODULE is `required = true` and each name goes through import::legacy_module_name; `--closure` is import_closure's BFS over read_module_imports, ordered by Name.toString; `--print-decl NAME` renders every Decl of BOTH levels whose name_to_string is NAME, `--print-module` every Decl of a census module whose Name.toString it names or of every module for `*`; `--print-attrs` adds ATTR (extern, implemented_by, regular_init, regular_init_ir, builtin_init), DECLEXT per extern Decl of both levels and DECLSORRY per DeclInfo.sorry_dep; `--profile` eprints `PROFILE <key>=<count>` (stderr, never the diffed stdout); `--jobs` sizes the rayon pool, default 4. The full-decode claim holds: decode_part propagates every IrDecoder::decl error as LeanIrError::InDecl (the one `.ok()` is decl_name, which only names the declaration in that error), a failed module lands in CensusReport::failures, run_census then withholds TOTAL, and the dispatch returns IrCensusFailed, a non-zero exit through cmd_olean.rs. The module-doc format block matches to_line/total_line/attr_lines, and the format itself is pinned byte-for-byte against the pinned-Lean oracle by lean_ir/tests.rs test_run_census_fixture_closure_equals_pinned_lean_oracle (IR_CENSUS_ATTRS=1, IR_CENSUS_PRINT_MODULES). FOUR claims were false or imprecise and are fixed in the commit that added this row: (1) `--jobs 0` was refused as OleanCliError::InvalidParallel, whose text `--parallel must be >= 1` names a flag ir-census does not have: now InvalidJobs, `--jobs must be >= 1`, and the arg says `(at least 1)`; (2) a malformed module name went through `?` into OleanCliError::Import and printed `loading import-reverify lane: ...`, a verb the user never ran: now mapped to OleanCliError::IrCensus (cli/tests.rs test_ir_census_malformed_module_is_an_ir_census_error); (3) `--search-path` said `first hit wins`, but find_module_ir_olean takes the first entry holding the module's ROOT PACKAGE and refuses a module missing there (LeanIrError::MissingFile, Lean's findOLean rule), never looking further; (4) the dispatch doc said only TOTAL is withheld on a failure, and every DECL/ATTR line is withheld with it. MEASURED with the binary built from this branch (LEAN_PATH unset): `ir-census Init.Prelude` prints one MOD row, TOTAL, and the summary on stderr, exit 0; `--print-decl Nat.add._boxed --print-attrs --profile` gives the olean and ir DECL blocks (the rendering lean_ir/tests.rs pins against pinned Lean), 76 ATTR, 896 DECLEXT, 2 DECLSORRY lines on stdout and 37 PROFILE lines on stderr only; `--jobs 0` exits 1 `--jobs must be >= 1`; `Init..Prelude` exits 1 `ir-census: unsupported module ...`; with `--search-path <dir holding an empty Init/> --search-path <pinned lib/lean>` it exits 1 `object file does not exist in the first search-path entry holding the module's root package`, while a first root with no Init/ falls through to the pinned lib and succeeds."
+    },
+    {
+      "path": "crates/clean-olean/src/cli/mod.rs",
+      "prose_sha256": "fb40ba63622d2bb3333b29d43fdb7ace793a20975500d0fbc17a083e33abcc58",
+      "verified": "2026-10-23",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); findings fixed in the commit that added this row; re-read 2026-09-13 when 99ddfe452 arrived on main and moved the `import-reverify-metric` prose \u2014 the OWNER's own truth-up, weakening a claim rather than a drift, and its four new claims check out: the measurement is local type/value checks against the loaded, ASSUMED environment (bootstrap_verify.rs verify_bootstrap_lane_in_env loads the closure into one env and re-checks only the names this load added, with the origin-label promotion explicitly not a fresh replay); a fraction is written ONLY for valid nonempty accounting (refresh_accounting mints Some(..) solely at MetricState::ValidLocalCheckCounts, so an empty denominator or an inconsistent pass+fail count leaves it None); and write_ratcheting refuses BOTH an invalid metric (checked_fraction()?) and a same-lane regression (RatchetRegressed). No claim contradicted the code; nothing else in the file moved since the 2026-09-10 read; re-read 2026-09-21 when the `simp-set` verb landed (package W3C). READ AGAINST `dispatch_simp_set` and the `SimpSetArgs` derive, flag by flag: `--module` is repeatable and falls back to `bootstrap_verify::INIT_BOOTSTRAP_MODULES`; `--search-path` is repeatable and falls back to `default_search_paths()`; `--require` is repeatable, is checked with `Environment::is_simp_lemma`, and its claim to be THE FAIL-CLOSED FORM holds \u2014 a missing name returns `OleanCliError::SimpLemmasMissing` rather than printing and exiting 0; `--list` prints `<priority> <name>` per decoded entry and fills the JSON `entries` array; `--json` replaces the human lines. The variant's own claim that it reads `is_simp_lemma`/`get_simp_lemmas` AND NOTHING ELSE holds: those are the only environment queries in the handler. Nothing else in the file moved; re-read 2026-09-25 when the `SimpSetArgs` doc comment was rewritten on restoring the struct to bare `pub`: the only prose that moved is that comment, and its claim holds as measured the same day \u2014 the `OleanCommands::SimpSet` variant is reachable at `pub`, a `pub(crate)` payload trips `private_interfaces`, and `clippy --all-targets -- -D warnings` refused the narrowing while a plain `targo --unverified check` reported nothing. No flag, default or handler moved.; re-read 2026-09-28 when 403ed338c merged d18a4657c/e481d276e: the metric/cache-dir/stream-elide/Metric-error prose names the LocalAssumedEnv level (verify_batch_full::typecheck_constants_full -> verify_batch_replay::full); the snapshot is written only at fail==0 and any header Mismatch/ReceiptRefused falls back to the cold load (verify_batch.rs preload_init_with_snapshot). The `--full-validation` help those commits wrote said `no inductive rule is re-derived`, which e9e1346f8 had made FALSE (the understating direction): the serial lane (verify_batch.rs -> typecheck_constants_full_streaming_in_run) and the parallel lane (cli/runner.rs -> typecheck_constants_full_parallel_in_run -> replay_check::parallel) both build ReplayPlan::new, which schedules the new constants in Lean's order behind ReplaySchedule::admission_gate (self-reference, cycles, a dependent of a refused constant) and calls replay_families::inductive_block_refusals -> Environment::lean_replay_inductive_block, and every check runs in lean_checker's KernelTheory::Lean. Corrected in the commit that re-minted this row to say exactly that, with constants outside the new set still believed at their declared types; the same stale clause was corrected in the unrostered IMPORT_REVERIFY_METRIC_DESC (cli/descriptors.rs, and its generated docs/cli page) and in the SnapshotAttestation scope string (verify_batch.rs), whose path runs the same typecheck_constants_full.; re-read 2026-09-30 when Phase 1 added the `ir-census` verb (d71a8befb: the IrCensus variant and the IrCensus/IrCensusFailed errors) and the `replay` verb (84e118392, landed by the P1_REPLAY merge 10e9a73a4: the Replay struct variant and the ReplayTargets/ReplayRefused/ReplayReport errors); a lexed prose diff from f67f4dd74 (the version this row was read at) shows nothing else moved. READ AGAINST cli/replay.rs run_replay/replay_all/print_record and what they call: replay_module/targets.rs (replay_search_path: explicit roots, then LEAN_PATH, then pinned_lean_lib_path(), NoToolchain without it; select_modules: component-wise prefix via the directory walk, exactly the target under --exact or --fresh, FreshNeedsOneModule unless --fresh selects one), replay_module/mod.rs replay_module (Environment::for_lean_replay, KernelTheory::Lean, the kernel-only replay load policy, typecheck_constants_full_ordered -> verify_batch_replay::full_ordered: ReplayPlan in Lean's order behind admission_gate, replay_families::inductive_block_refusals, lean_checker's heartbeat limit), load_refusals.rs; and the IrCensus variant against the same handler as cli/ir_census.rs's row. Holding: MODULE is required and prefix-selects as `leanchecker <Module>` does (LeanChecker.lean main: `!fresh && target.isPrefixOf m || target == m`); --fresh is exactly one module; --exact is Clean's own (leanchecker parses only -v/--verbose and --fresh); --search-path precedes LEAN_PATH and the pinned lib/lean, the only toolchain searched; `0` heartbeats is unlimited (tc/heartbeat.rs; Lean/Replay.lean calls addDeclCore 0) and an exhausted check is a refusal; --keep-going only suppresses replay_all's break, and the Err still reports every refusal; the default mode trusts the imports and replays the module's own parts in Lean's order with inductive blocks rebuilt and compared. SEVEN claims were false or imprecise and are fixed in the commit that re-minted this row (the same two in the unrostered REPLAY_DESC, cli/descriptors.rs, and its generated docs/cli page): (1) `Lean's canonical quotient`: for_lean_replay's init_quot seeds init_quot_vals(), FIVE constants, Lean's four quotDecl primitives plus Quot.sound, which Lean declares in Init.Core (replay_module's own restatement() handles that difference); (2) --fresh `into an environment that starts empty`: it starts with that quotient; (3) --max-heartbeats `Per-declaration`: lean_checker's budget is reset per kernel check (check_sorts per stored type, header_problem, check_value), so a declaration gets a fresh N for each; (4) --json `refusals in replay order`: import-merge, accounting and not-loaded refusals come first, then the replay's in order, and peak_rss_bytes is the process's peak so far, not the module's; (5) `Exits non-zero ... naming the first refused declaration`: a closure that does not load is reported by its load error; (6) ReplayRefused `Lean's replay would reject it`: a refusal is Clean's, and CLAUDE.md records blocks Clean refuses that Lean admits (the inductive whnf gap); (7) ReplayTargets also carries NoToolchain, which is not about the modules asked for. Two more, found by reading the variants against their callers: the IrCensus variant said `Lean's own IR.Decl formatter`, and lean_ir/format.rs is a port of Lean.IR.formatDecl; and OleanCliError::Import's `loading import-reverify lane` text was also what simp-set's load failure (load_modules_with_deps?) and, until this commit, ir-census's name parse printed: now `loading the .olean closure`, with the doc naming both callers. InvalidJobs is new (see cli/ir_census.rs's row), and IrCensusFailed's doc no longer says `some modules but not all` of a refusal that also covers every module failing. MEASURED with the built binary (LEAN_PATH unset): `replay Init.Prelude --exact --json` exit 0 with a record carrying module, mode imports-trusted, ok, constants_checked 2263, admitted 2263, not_replayable 54, restated, first_refusal, refusals, load_error, load_ms, replay_ms and peak_rss_bytes equal to /usr/bin/time's maximum RSS; `--fresh` gives mode fresh; `--max-heartbeats 50` exit 1 naming `List.get.match_1` with its reason on stderr and in the error (606 of 2263 refused); `--fresh Init.Prelude Init.Core` refused `--fresh flag is only valid when specifying a single module`; `Init.Prelud` and `Nope.Module` refused `Could not find any oleans for` with the pinned lib/lean as the whole search path.; re-read 2026-09-30 by the adversarial review of that re-mint (same branch): the rewritten --max-heartbeats help, `Kernel heartbeat budget of each kernel check the replay makes`, was FALSE for two kernel checks the command makes outside N: the inductive-block rebuild (verify_batch_replay ReplayPlan::new -> replay_families::inductive_block_refusals -> Environment::lean_replay_inductive_block -> lean_replay_admit_block -> add_inductive_core, whose checkers are TypeChecker::with_mode at DEFAULT_HEARTBEAT_LIMIT) and the loader's `.olean.private` value check (registration.rs upgrade_axiom_stubs_checked, the same with_mode), so neither is unlimited at N=0 either; and a finite N's refusal names whatever the check failed with after whnf (tc/whnf.rs) and is_def_eq (tc/def_eq/mod.rs) bailed silently on the spent budget. MEASURED with the built binary: `replay Init.Prelude --exact --max-heartbeats 50` refuses 5 declarations directly, 3 of them (List.get.match_1, the first refusal the implementer's measurement named, Nat.succ_le_succ, Nat.succ_sub_succ_eq_sub) as `check_type: TypeMismatch` though N=0 admits all 2263; `replay ReplayHonestInd --max-heartbeats 1` over the replay_forged fixture refuses 105 of 141, none as an inductive-block refusal, HEv.succ as `TypeMismatch`. Both now said, and pinned by replay_module/tests.rs test_replay_module_max_heartbeats_bounds_declaration_checks_not_block_rebuilds. --json's `load-time ones first` also covered accounting refusals made after the load (replay_module unaccounted() and the roster's accounting errors): now `the ones found before the replay (load, import merge, accounting)`. The unrostered REPLAY_DESC (cli/descriptors.rs, docs/cli/olean-replay.md) still said `The first refusal is printed with the declaration and the reason`, which correction (5) above had shown incomplete for a closure that does not load (print_record prints the load error): now says so.; re-read 2026-09-30 when review of the commit that introduced the `budget exhausted` outcome found its --max-heartbeats help false: it said a check that failed with budget to spare is the kernel's verdict while the replay's one long-lived checker kept a starved check's memoised whnf/is_def_eq answers (whnf_cache, def_eq_cache; reset_heartbeat and reset_local_context clear neither), so `ReplayHonestInd`, admitted in full unbudgeted, had 60 of 105 refusals at N=2 reading as findings. The help now also says the kernel checker is replaced after a starved check. READ AGAINST local_check_roster.rs ReplayChecker::check (resets the context and the budget per check, reads heartbeat_spent when the check ends, and after any check that spent its budget, passed or failed, replaces the checker with a fresh lean_checker; such a failure is a starved CheckProblem whose report starts `budget exhausted`), verify_batch_replay.rs (check_sorts, header_problem and check_value all run through it; verdict_of gives ReplayRefusal::BudgetExhausted only when every failed check starved and the accounting is valid, KernelRejected otherwise), replay_order.rs admission_gate (a dependent is DependsOnRefused with `undecided` only when every refused dependency is ReplayRefusal::undecided; a finding dependency is named first) and replay_module/mod.rs (outcome budget-exhausted exactly when ReplayRefusal::undecided; budget_exhausted counts them). Holding: every sentence of the --max-heartbeats help, the JSON names `outcome`, `budget-exhausted` and `budget_exhausted`, and the unchanged block-rebuild and .olean.private clauses. MEASURED by replay_module/tests.rs test_replay_module_small_budgets_never_report_a_finding_on_an_honest_module: no refusal of ReplayHonestInd reads as a finding at N = 2, 3, 5, 8, 13, 21, 34 or 55.; re-read 2026-10-21 when the lane-N branch fix/ndjson-arena added `replay --from-export` (plan item checkers-ndjson-front-door): the Replay variant's exit-code paragraph, the `from_export` field, the `--json` addition and the ReplayRefused `undecided` / ExportRejected / ExportDeclined errors with `OleanCliError::exit_code`. READ AGAINST cli/replay.rs run_from_export and run_replay, ndjson/replay.rs decide, and clean-cli's forwarded_exit_code -> cmd_olean::olean_exit_code. Holding: `--from-export` conflicts with MODULE, --fresh, --exact, --search-path and --keep-going (clap conflicts_with_all) and MODULE is required unless it is present; the export is replayed from an empty environment with the quotient entering only through add_quot after Eq (ndjson/load.rs, ndjson/quot.rs); exit 0 accepts, 1 rejects (a reader refusal or a refused declaration; ExportRejected), 2 declines (ExportDeclined: a format or Lean version outside the reviewed table, a resource budget, the heartbeat budget with nothing refused, an unrepresentable name, a `partial` definition left out); `--json` prints serde's ExportReport (exit, header meta, per-declaration records, each with its structural axiom closure, since axiom_closures follows --json); the module form exits 2 exactly when ReplayRefused.undecided (every refusal budget-only), 1 otherwise. One clause was incomplete and is fixed in the commit that re-minted this row: the decline list omitted the unrepresentable-name decline (NdjsonError::UnrepresentableName). MEASURED by cli/tests.rs test_replay_from_export_exit_codes_are_zero_one_two, test_replay_from_export_parses_and_excludes_module_flags and test_replay_budget_exhaustion_exits_two_in_the_olean_form.; re-read 2026-10-22 when the 2026-10-22 review of fix/ndjson-arena changed `--from-export`'s exit classes. READ AGAINST ndjson/records.rs (check_block_shape, check_block_flags: NdjsonError::InductiveBlockShape and InductiveFlagMismatch, both ExitClass::Reject in ndjson/error.rs exit_class), ndjson/world.rs read_meta (format 3.1, any patch, else FormatVersionUnsupported, a decline), ndjson/fields.rs and ndjson/tables.rs (RepresentationLimit, LevelBudget, LevelRewrittenInRecursor: declines), ndjson/json.rs (TooManyValues: a decline) and cli/replay.rs run_from_export (a panicked replay thread is OleanCliError::ExportDeclined, exit 2 through exit_code). Every clause of the rewritten Replay paragraph and the `from_export` field doc holds; MEASURED by tests/ndjson_front_door.rs (test_front_door_inductive_all_must_name_its_own_block, test_front_door_inductive_flags_must_be_the_kernels, test_front_door_every_r_n4_rule_has_its_arm, test_front_door_level_tree_budget_declines_a_level_dag, test_front_door_recursor_over_a_rewritten_level_is_not_accepted).; re-read 2026-10-22 when the re-review of fix/ndjson-arena (findings N1-N10) changed `--from-export`'s exit classes again. READ AGAINST ndjson/error.rs exit_class (LevelArgsBudget and NameCollision: ExitClass::Decline; InductiveFlagMismatch still ExitClass::Reject), ndjson/tables.rs bind_level and bind_name (the level budgets and the name collision decline while reading; a level built as zero or rewritten through imax is recorded as a LevelProblem), ndjson/records.rs (check_block_flags refuses a stored isRec/isReflexive its constructors contradict, and over a nested block only isReflexive = false beside a function-typed domain; a declaration over a LevelProblem, or a block over any rewritten level, is marked with a LevelTaint) and ndjson/replay.rs decide (with nothing refused, a would-be accept is declined when the export declares a reduce_nat head, String.ofList, Char.ofNat or Nat without native-fold authority, R128, or when a declaration is marked, R125). Every clause of the rewritten paragraph holds: 1 rejects a malformed export, a record that is not one block or stores flags its constructors contradict, or a refused declaration (a nested block's other flag disagreements are refused by the replay, as refused declarations); 2 declines the budgets (level-tree-budget, level-max-args-budget among them), representation limits, a level built otherwise than Lean reads it (to zero, through imax), an inductive block over a rewritten level, two names stored alike, an unadmitted fold head, a panicked replay and a left-out partial definition. MEASURED by tests/ndjson_front_door_fidelity.rs (one test per class) and tests/ndjson_front_door.rs test_front_door_every_r_n4_rule_has_its_arm.; re-read 2026-10-23 when review round 3 added two declines: ndjson/replay.rs decide declines a would-be accept that declares Lean.reduceBool or Lean.reduceNat (NATIVE_EVALUATION_HEADS, whatever Clean's authority, R128) beside the unadmitted fold heads, and ndjson/tables.rs bind_level declines on the per-export level-work budget (NdjsonError::LevelWorkBudget, ExitClass::Decline, under \"a resource budget\"). The rewritten clause, \"a declared name Lean's kernel computes by name that Clean does not compute as Lean does (an unadmitted fold head, Lean.reduceBool, Lean.reduceNat)\", holds against name_keyed_rule_unadmitted; nothing else moved. MEASURED by tests/ndjson_front_door_fidelity.rs test_fidelity_native_evaluation_heads_are_declined and test_fidelity_level_work_is_bounded_per_export."
+    },
+    {
+      "path": "crates/clean-rust-sem/src/cli.rs",
+      "prose_sha256": "7b7294d3cde767fd441f3704f7da2e4fb58d701c52088f9bfd8f199524a85c0b",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group lang-sem-cli, 54 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-cli/src/cmd_rust_sem.rs"
+      ]
+    },
+    {
+      "path": "crates/clean-server/src/cli.rs",
+      "prose_sha256": "0793724c1cee8bdecd2b78c72071f9f198d09670d466a3df005dfd7a866c3cdd",
+      "verified": "2026-10-26",
+      "method": "re-read at the round-5/6 landing against its handlers after R152 added --workspace-root, --token-file and --allow-origin and the trust-boundary paragraph: the default root is the start directory (ServerState::new, current_dir) and a path outside it answers -32007 (trust_boundary::confine, rpc OUTSIDE_WORKSPACE); the token file is created 0600 at server-<port>.token under $XDG_RUNTIME_DIR/clean, else $HOME/.clean/run (trust_boundary::runtime_dir, write_token_file), and its banner goes to standard error (lib.rs announce_token); an Origin not on the empty-by-default allow-list is refused 403 (websocket.rs check_origin); every connection's first message must be authenticate (dispatch.rs, trust_boundary_tests)"
+    },
+    {
+      "path": "crates/clean-tla/src/bench/cli.rs",
+      "prose_sha256": "c3fdf3921b91db6c9163941d37061cd4bf8796c3ca971bc33eb01b5b11971c45",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow (clean-B-crate-clis); findings fixed in the commit that added this row; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-tla/src/cli.rs",
+      "prose_sha256": "4c82f8e2bf6ec7fd1d726c349a2272f961f6f7945f28943ff1de2b1d534caca8",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group lang-sem-cli, 54 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit",
+      "describes": [
+        "crates/clean-cli/src/cmd_tla_sem.rs"
+      ]
+    },
+    {
+      "path": "crates/clean-verify/src/bin/eval_ir_reuse_measure.rs",
+      "prose_sha256": "cc5cf4214c34d12f93c0c5e8beecfbdf8bdd08d5be7bef8aedfeb146b943fc0d",
+      "verified": "2026-09-13",
+      "method": "usage text written 2026-09-10 exact to its parser/env reads in the program-entry pass, then read against main() (three modes); re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane verify, 30 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-verify/src/bin/ir_mint_gen.rs",
+      "prose_sha256": "38dbe64ea96ab60115b163e5f27c95599001b42866ff8732dd7baeb804bc039b",
+      "verified": "2026-09-10",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; findings fixed in e27a91b5f; the 2026-09-13 drift sweep READ this surface against its crate's diff and found the moved code reaches none of its claims \u2014 so `verified` stands (a drift pass is narrower than a read against the handler) and `drift_swept` records the commit the drift question was answered up to",
+      "drift_swept": "7b41ae718c12934fa303cc6b62e66ec3fe1f4ccb"
+    },
+    {
+      "path": "crates/clean-verify/src/bin/lean_export/main.rs",
+      "prose_sha256": "9e3a16169e8420cf70329b305c9a1d89faeb37f960e11e01f999af9d0f397b61",
+      "verified": "2026-09-25",
+      "method": "Read the complete CLI help and changed module documentation against profile.rs parsing/root selection and main.rs constructor dispatch, closure checks, output and exit paths on 2026-09-25. Executed the rebuilt --help, both conflicting profile-selector orders (exit 2), all 11 profile tests, the joint ByteV1/literal all-spec export and independent Lean replay; re-exported both legacy profiles byte-identically. Full remains the default; both byte profiles refuse skips and missing required roots, and explicit roots survive --all-spec. Export success is not proof replay. The joint constructor preserves Full's foundations and does not prove the Rust heap projection or source execution; existing Nat/comparison transport disclosures match the emitter."
+    },
+    {
+      "path": "crates/clean-verify/src/bin/proof_check.rs",
+      "prose_sha256": "ce86536bd4b6fcb69eae2bd6f20e321c05e24307b67d5b5564766808838d0203",
+      "verified": "2026-09-13",
+      "method": "read against its parser/dispatch by the 2026-09-10 sweep agent-workflow; re-read 2026-09-13 with the clean-verify CLI group when its --format, --trim, --certificate and exit-code claims were corrected at the site"
+    },
+    {
+      "path": "crates/clean-verify/src/bin/red_env_reflect.rs",
+      "prose_sha256": "5ae51a077a832547b194ab4c5e8d2f09e14a9fb537b725b880756c6c29e78543",
+      "verified": "2026-09-13",
+      "method": "re-read on 2026-09-12 against the code that moved under it since the roster was minted, by drift sweep agent-workflow (clean:clean-verify); no claim contradicted the moved code; re-read 2026-09-13 against the code that moved under it since this row's anchor commit, by the 2026-09-13 drift sweep (lane verify, 30 claims checked over the group); this surface's claims DO reach the change, and none of them contradicted it"
+    },
+    {
+      "path": "crates/clean-verify/src/cli/mod.rs",
+      "prose_sha256": "8df63fd07447937e657c9724093c7d8f8cdf14412fc41363a26d0bdde66411ca",
+      "verified": "2026-11-13",
+      "method": "read against its parser/dispatch by the 2026-09-13 clap-surface sweep (group kernel-verify-cli, 78 claims checked over the group; every candidate went to an adversarial verifier prompted to refute it and only confirmed ones were acted on); findings fixed in this commit; re-read 2026-11-13 by the hook-legs lane after f25e75aa9 renamed the checker verdict TrustLevel::KernelVerified to CertificateChecked and moved two help sentences to `certificate-checked`. READ AGAINST cli/pipeline.rs run_pipeline: `--strict` turns a valid proof whose trust level is not CertificateChecked into `s INVALID` (`c strict mode: N trusted steps rejected` or `holey proof rejected`), exit 10; the default mode prints `s VERIFIED` only for CertificateChecked, `s HOLEY` (exit 10) for a valid proof with no trusted step that is not, and `s INVALID` otherwise. TWO sentences were false and are fixed in the commit that minted this read: (1) the descriptor's `--strict demands full kernel verification`, which the rename left behind: the check is the checker's CertificateChecked level, not Clean-kernel acceptance (the rename's own reason), and it now says `a fully certificate-checked proof`; (2) `s HOLEY (structurally valid but not fully certificate-checked)` also described a valid proof carrying trusted steps, which prints `s INVALID`; it now says a HOLEY proof has no trusted step and names that case."
+    },
+    {
+      "path": "crates/clean-olean/src/bin/clean_export_check.rs",
+      "prose_sha256": "f601f7964d498cf1b8a6baf7c5d8ef2b0a66254631a667eb69f2e3009e68b624",
+      "verified": "2026-11-13",
+      "method": "read 2026-10-21 by its author (lane N, branch fix/ndjson-arena) against its own `parse` and `main`: `--json` and `--max-heartbeats N` are the only flags (any other `--` argument is `unknown flag`, exit 2), exactly one non-flag argument is the export (a second is refused, none is refused), and a usage error prints the USAGE line and exits 2; the verdict is ExportReport.exit_code from clean_olean::ndjson::check_export_path run on a 1 GiB-stack thread (a panic exits 2 where panics unwind; the release profile is `panic = \"abort\"`, so a release panic aborts the process with no exit code, which the module doc now says, review of 2026-10-22); `--json` sets axiom_closures and prints the report as one line on stdout; `0` heartbeats is unlimited (ExportCheckOptions::default) and a budget-only outcome declines unless another declaration is refused (ndjson/replay.rs decide). The module doc first said the export path is `the last argument`, but the parser takes it in any position: corrected before this row was minted. MEASURED by tests/kernel_arena_battery.rs, which runs it once per archived test and reads its exit status.; re-read 2026-11-13 by the hook-legs lane after 2bf26d8dc (the Q1 reference export command) added the `--reference` paragraph and the `#[path]` module clean_export_check/reference.rs (its own row). READ AGAINST main (any argument equal to `--reference` routes to reference::run before the front door's parse) -> reference.rs check (`--json`, repeatable `--permit <axiom>`, one export path; any other `--` option, `--max-heartbeats` included, is `unknown reference option`, exit 2) -> clean-olean ndjson/reference.rs reference_check_export_reader (accepted only with no refusal and no unpermitted axiom; the entry admits nothing outside Ax0, so a permit can only narrow). ONE clause was false and is rewritten in the commit that minted this read: `2 for usage/I/O`. Only a usage error, an export that cannot be opened, a reference thread that cannot start or panics, or a report that cannot be rendered exits 2; a read failure inside the export, like every reader refusal or decline (NdjsonError::Io included, which the front door declines with 2), sets reader_error and exits 1 (`u8::from(!report.accepted)`). The exit-2 cases are pinned by tests/ndjson_export_writer/cases.rs test_reference_command_refuses_front_door_options_and_missing_files."
+    },
+    {
+      "path": "crates/clean-olean/src/bin/clean_export_write.rs",
+      "prose_sha256": "ecb7977913e117b9e2a27ebafd3439d1a0e2c92c48a3e5f18af7f5a99b5e45f6",
+      "verified": "2026-11-12",
+      "method": "read 2026-11-12 by its author (self-proof unit Q1) against its own `parse`, `run` and `main`: the flags are --module, --lean-path, --target, --targets-containing (each repeatable), --lean-version, --lean-githash, --out and --force, every flag but --force takes a value (`<flag> needs a value`), any other argument is `unknown flag`, and a missing --module, --lean-path, selector, --lean-version, --lean-githash or --out is a usage error that prints USAGE and exits 2; `run` refuses an existing <out> without --force, loads each module's closure into Environment::for_lean_replay with load_module_with_deps_shared, refuses a selector that selects nothing, writes <out>.partial with write_export, reads it back with check_export_round_trip and renames it to <out> only then, removing the partial on a refusal (exit 1); stdout is one JSON line with `written` (the ExportWriteSummary), `modules` and `targets`; the work runs on a 1 GiB-stack thread and a panic exits 1 where panics unwind (the release profile aborts, which the module doc says). MEASURED by tests/ndjson_export_writer.rs, which runs it over the theories/cic_l closure and reads its exit status, its stdout line and the file it published."
+    },
+    {
+      "path": "crates/clean-ck0/src/bin/ck0-replay.rs",
+      "prose_sha256": "30f01205a637ce5fcc308fc0d546a297a0f45072107d4f8a763d50c6493770d5",
+      "verified": "2026-11-13",
+      "method": "read 2026-11-13 by the hook-legs lane against its own run() and main(): EXPORT is the first argument (none: the usage line as a Malformed refusal, exit 2); with nothing after it the whole export is replayed in Dialect::Lean4Export31 and the exit is 0 only when it has a declaration and every one was accepted, 1 otherwise; `--inspect-target-json NAME` (NAME as JSON name components, export::parse_name_json) takes nothing after it and exits 0 after a successful inspection, its target line saying matched:false; `--target-json NAME --statement-sha256 SHA256` demands the pin (64 lowercase hex digits, export/target.rs), refuses a mismatch and exits 0 when the statement-bound replay returns. Every refusal prints one `export-refused` JSON line on stderr and exits 2. An unknown mode is refused after NAME is parsed, so a bad NAME is named first; the usage line claims nothing about that order. The module doc's `structured named and statement-bound replay` names these three modes."
+    },
+    {
+      "path": "crates/clean-olean/src/bin/clean_export_check/reference.rs",
+      "prose_sha256": "48aead6e171b4c45925d70d8157236d06f430be6d21338e395703c833d2e60f8",
+      "verified": "2026-11-13",
+      "method": "read 2026-11-13 by the hook-legs lane against its own check() and run(): USAGE `clean_export_check --reference [--json] [--permit <axiom>]... <export.ndjson>` matches the parser (`--reference` ignored once routed, `--json`, a repeatable `--permit` that needs a value, exactly one non-flag path, any other `--` option refused as `unknown reference option`); a usage problem, an export that cannot be opened, a thread that cannot start or panics, or a report that cannot be rendered prints the problem and USAGE and exits 2; otherwise the report goes to stdout as one JSON line with `--json`, each reader error, refusal and unpermitted axiom to stderr, and the exit is 0 exactly when report.accepted, else 1. The module doc's `reads export bytes through the fence` holds: reference_check_export_reader decides through reference_base_closed, the fenced clean_kernel::ReferenceKernel entry."
+    },
+    {
+      "path": "crates/clean-olean/src/bin/kcheck_trace_experiment.rs",
+      "prose_sha256": "923b7342a23f1817c6d04a48e3610f40d12f6880118b7cc762ddff5fe2694da4",
+      "verified": "2026-11-14",
+      "method": "read 2026-11-14 during Crystal repair intake against current main(): OUT is required; MODULE defaults to Init; OPERATIONS parses as u64, defaults to 100000, and reaches reference_base_core_tracing and operation_budget_per_declaration; a fourth argument refuses as unexpected. The pinned Lean library is required. Ordinary replay precedes ordinary.json; observations stream to observations.jsonl and the final pilot.json follows. A changed reference verdict returns an error after reporting. The module doc and report agree that this is an incomplete core pilot: status is incomplete_core_pilot_not_R2_R3_evidence, R2/R3/advice_lengths are null, no advice bytes are emitted, loader refusals and unobserved names are retained, and token distributions count only reference-accepted complete units. This is a source/help consistency read, not a fresh C4 experiment or completion claim."
+    }
+  ],
+  "not_help": [
+    {
+      "path": "benchmarks/tla/trivial_true.json",
+      "reason": "a TLA+ obligation FIXTURE, not prose: the seven JSON fields are parsed into TlaObligation and verified by `clean verify tla --sample trivial_true`. It carries no sentence a reader reads as documentation, and the help text ABOUT it lives in crates/clean-tla/src/cli.rs (rostered). Nothing here reaches a help page: `--list` prints only the catalog NAME."
+    },
+    {
+      "path": "crates/clean-auto/src/bin/ay_linked_provenance.rs",
+      "reason": "takes no arguments and reads no env; prints one JSON line {revision_kind, revision} (a one-line refusal on wasm)"
+    },
+    {
+      "path": "crates/clean-cli/src/bin/clean_cli_compat.rs",
+      "reason": "a deprecation shim forwarding argv verbatim to `clean`; its help is the clap tree in crates/clean-cli/src/cli_args.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-discovery/src/bin/discover.rs",
+      "reason": "a shim over `clean discover`; help in crates/clean-cli/src/cli_args.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-elab/src/bin/soundness_gate/main.rs",
+      "reason": "takes no arguments and reads no env; runs the gate lanes and prints tracing lines plus `soundness_gate: PASS`"
+    },
+    {
+      "path": "crates/clean-kernel/src/bin/generate_lean4_baseline.rs",
+      "reason": "a shim over `clean kernel generate-lean4-baseline`; help in crates/clean-kernel/src/cli/kernel_verbs.rs (rostered); its documented CLEAN_BIN override matches"
+    },
+    {
+      "path": "crates/clean-kernel/src/bin/verify_cbrt.rs",
+      "reason": "takes no arguments and reads no env; prints [OK \u2026] per declaration and `ALL CBRT RUNGS VERIFIED.`"
+    },
+    {
+      "path": "crates/clean-kernel/src/bin/verify_constructive_claims.rs",
+      "reason": "a shim over `clean kernel verify-constructive-claims`; help in crates/clean-kernel/src/cli/kernel_verbs.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-kernel/src/bin/verify_kkl_recovered.rs",
+      "reason": "takes no arguments and reads no env; prints per-theorem verdicts, exit 1 on any failure"
+    },
+    {
+      "path": "crates/clean-lsp/src/main.rs",
+      "reason": "a deliberately silent shim over `clean lsp` (its silence contract forbids a banner); help in crates/clean-cli/src/cli_args.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse/main.rs",
+      "reason": "a bin shim; its clap help is crates/clean-mathverse/src/bin/mathverse/cli.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_fstar_reprove.rs",
+      "reason": "takes no arguments and reads no env (its module-doc `Usage:` line is exact); prints the re-proof tally, exit 1 if no bedrock fact"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_search.rs",
+      "reason": "a legacy-verb translator over `clean mathverse \u2026` (help in crates/clean-mathverse/src/cli/mod.rs, rostered); its own translation table and legacy-verb list match its match arms (read 2026-09-10)"
+    },
+    {
+      "path": "crates/clean-mathverse/src/bin/mathverse_try/main.rs",
+      "reason": "a bin shim; its clap Args live in crates/clean-mathverse/src/bin/mathverse_try/run.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-olean/src/bin/verify_olean_batch.rs",
+      "reason": "a shim over `clean olean verify-batch`; help in crates/clean-olean/src/cli/mod.rs (rostered)"
+    },
+    {
+      "path": "crates/clean-tla/src/bin/tlaps_bench.rs",
+      "reason": "a shim over `clean tlaps <verb>` (run\u2192bench, validate, show; bare \u2192 bench \u2014 matches); help in crates/clean-tla/src/bench/cli.rs (rostered)"
+    },
+    {
+      "path": "crates/clean/src/bin/clean.rs",
+      "reason": "the `clean` binary: clean_cli::run(); its help is the clap tree in crates/clean-cli/src/cli_args.rs and the descriptor registry (rostered)"
+    },
+    {
+      "path": "lean-toolchain",
+      "reason": "the repository's elan toolchain pin (one line, `leanprover/lean4:v4.30.0-rc2`), not prose: crates/clean-olean/src/bin/kcheck_trace_experiment.rs embeds it with include_str! only to record it, trimmed, as the `pinned_lean` field of its ordinary.json/report data, beside the library path it loaded. Nothing in it is read as documentation, and that program's help is its own usage line (rostered). Read 2026-11-13 by the hook-legs lane."
+    }
+  ]
+}

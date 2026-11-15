@@ -21,6 +21,15 @@
 //!    is the CLOSURE — every fixture in the directory appears in one table or
 //!    the other — so a thirteenth cannot arrive uncompared.
 //!
+//!    The same test carries a SECOND closure of the same shape over the
+//!    MODULE-TABLE fixtures, `*.trust-ir-rows.txt` (2026-09-09): a verbatim
+//!    copy of module rows that are not a function body — a `type ty.N` alias
+//!    and the `global … @<name> …` row it types — compared by the script's
+//!    `EXTRA_ROWS` loop. The suffix is different ON PURPOSE: it keeps those
+//!    rows out of `check_crystal_fixture_pins.py`'s `*.trust-ir.txt` glob and
+//!    out of the 21-row rebaseline record that gate reads, which means this
+//!    closure is the ONLY thing that notices a rows fixture nothing compares.
+//!
 //! 2. **Every revalidation record is held to the same standard, including ones
 //!    added after this file.** `RECORDS` is append-only and each entry keeps its
 //!    own account of its own build; nothing here rewrites an earlier one.
@@ -80,10 +89,14 @@ fn every_committed_trust_ir_fixture_is_compared_against_a_live_dump() {
 
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let mut committed: BTreeSet<String> = BTreeSet::new();
+    let mut rows_committed: BTreeSet<String> = BTreeSet::new();
     for entry in std::fs::read_dir(&dir).expect("the fixtures directory must exist") {
         let name = entry.expect("readable dir entry").file_name();
-        if let Some(stem) = name.to_string_lossy().strip_suffix(".trust-ir.txt") {
+        let name = name.to_string_lossy();
+        if let Some(stem) = name.strip_suffix(".trust-ir.txt") {
             committed.insert(stem.to_string());
+        } else if let Some(stem) = name.strip_suffix(".trust-ir-rows.txt") {
+            rows_committed.insert(stem.to_string());
         }
     }
     assert!(
@@ -132,6 +145,25 @@ fn every_committed_trust_ir_fixture_is_compared_against_a_live_dump() {
     assert!(
         phantom.is_empty(),
         "{SCRIPT} names fixtures that do not exist: {phantom:?}"
+    );
+
+    // SECOND CLOSURE — the module-table fixtures. `*.trust-ir-rows.txt` is
+    // outside every other gate's glob (see the module doc), so a rows fixture
+    // that the script's `EXTRA_ROWS` table does not name is compared against
+    // NO live dump by anything at all.
+    let rows_covered = script_table_keys(&src, "EXTRA_ROWS: dict[str, str] = {");
+    let rows_uncovered: Vec<&String> = rows_committed.difference(&rows_covered).collect();
+    assert!(
+        rows_uncovered.is_empty(),
+        "these committed trust-ir-rows fixtures are compared against NO live dump: \
+         {rows_uncovered:?}. Add each to EXTRA_ROWS (a module-table row, not a body) in \
+         {SCRIPT}. A fixture nothing re-derives is a gate asserting against IR the producer \
+         may no longer emit."
+    );
+    let rows_phantom: Vec<&String> = rows_covered.difference(&rows_committed).collect();
+    assert!(
+        rows_phantom.is_empty(),
+        "{SCRIPT} EXTRA_ROWS names rows fixtures that do not exist: {rows_phantom:?}"
     );
 }
 

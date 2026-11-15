@@ -1,0 +1,6 @@
+million-steps: ACCEPT cursor=1000000 steps=1000000 max=1000000
+walk: REFUSE sides differ
+differ: REFUSE sides differ
+depth: REFUSE depth
+cycle: ACCEPT cursor=1 steps=1 max=0
+cycle-depth: REFUSE depth

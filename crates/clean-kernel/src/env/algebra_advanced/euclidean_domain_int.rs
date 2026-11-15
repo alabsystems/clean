@@ -136,8 +136,10 @@ impl Environment {
         })?;
 
         // Add Int.natAbs for the well-founded relation
-        // Int.natAbs : Int → Nat
-        self.add_decl(Declaration::Axiom {
+        // Int.natAbs : Int → Nat. `init_int_arith` declares Lean's DEFINITION
+        // when it ran first (the default prelude); the stub is only for an
+        // environment without it, as `Int.div`/`Int.mod` above.
+        self.add_decl_if_absent(Declaration::Axiom {
             name: Name::from_string("Int.natAbs"),
             level_params: vec![],
             type_: Expr::pi(

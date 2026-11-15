@@ -5,23 +5,20 @@
 //! Document lifecycle operations: parsing, elaboration, diagnostics generation,
 //! and shared declaration-classification / content-hash helpers.
 
-use super::warnings::{
-    collect_deprecated_names, detect_deprecated_usage, detect_duplicate_binders,
-    detect_sorry_warnings, detect_unused_variables, merge_registration_sorry_warning,
-};
-use super::{
-    byte_offset_to_position, CleanBackend, DefinitionInfo, TacticGoalSnapshot,
-    TacticSnapshotBridgeGap,
-};
+#[cfg(test)]
+use super::TacticSnapshotBridgeGap;
+use super::{CleanBackend, DefinitionInfo, TacticGoalSnapshot};
 use crate::document::{
-    CommandKind, ElaboratedDecl, ElaboratedDocument, IncrementalState, IncrementalStats,
-    ParseError, ParsedCommand, ParsedDocument, TypeError,
+    CommandKind, ElaboratedDocument, IncrementalState, ParseError, ParsedCommand, ParsedDocument,
 };
 use crate::file_progress::{
     LeanFileProgress, LeanFileProgressParams, LeanFileProgressProcessingInfo,
 };
-use clean_parser::{SurfaceBinder, SurfaceDecl, SurfaceExpr, SurfaceTactic};
-use std::collections::HashMap;
+use clean_parser::SurfaceDecl;
+#[cfg(test)]
+use clean_parser::{SurfaceBinder, SurfaceExpr, SurfaceTactic};
+use std::cmp::Reverse;
+use std::collections::{BTreeMap, HashMap};
 use tower_lsp::lsp_types::*;
 
 impl CleanBackend {
@@ -193,12 +190,21 @@ impl CleanBackend {
         match decl {
             SurfaceDecl::Def { span, name, .. } => (
                 CommandKind::Definition,
-                Some(name.clone()),
+                name.source_spelling(),
+                (span.start, span.end),
+            ),
+            SurfaceDecl::Alias { span, names, .. } => (
+                if names.iter().any(|(_, direction)| direction.is_some()) {
+                    CommandKind::Theorem
+                } else {
+                    CommandKind::Definition
+                },
+                names.first().and_then(|(name, _)| name.source_spelling()),
                 (span.start, span.end),
             ),
             SurfaceDecl::Theorem { span, name, .. } => (
                 CommandKind::Theorem,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Example { span, .. } => {
@@ -206,49 +212,51 @@ impl CleanBackend {
             }
             SurfaceDecl::Inductive { span, name, .. } => (
                 CommandKind::Inductive,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Coinductive { span, name, .. } => (
                 CommandKind::Coinductive,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Codata { span, name, .. } => (
                 CommandKind::Coinductive,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Codef { span, name, .. } => (
                 CommandKind::Definition,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Structure { span, name, .. } => (
                 CommandKind::Structure,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Class { span, name, .. } => (
                 CommandKind::Class,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
-            SurfaceDecl::Instance { span, name, .. } => {
-                (CommandKind::Instance, name.clone(), (span.start, span.end))
-            }
+            SurfaceDecl::Instance { span, name, .. } => (
+                CommandKind::Instance,
+                name.as_ref().and_then(|n| n.source_spelling()),
+                (span.start, span.end),
+            ),
             SurfaceDecl::Axiom { span, name, .. } => (
                 CommandKind::Axiom,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Opaque { span, name, .. } => (
                 CommandKind::Other("opaque".to_string()),
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
             SurfaceDecl::Variable { span, binders, .. } => {
-                let name = binders.first().map(|b| b.name.clone());
+                let name = binders.first().and_then(|b| b.name.source_spelling());
                 (CommandKind::Variable, name, (span.start, span.end))
             }
             // `include x` / `omit x` steer which section `variable`s the
@@ -256,17 +264,17 @@ impl CleanBackend {
             // the variable-scope commands they are.
             SurfaceDecl::IncludeVars { span, names } => (
                 CommandKind::Other("include".to_string()),
-                names.first().cloned(),
+                names.first().and_then(|n| n.source_spelling()),
                 (span.start, span.end),
             ),
             SurfaceDecl::OmitVars { span, names } => (
                 CommandKind::Other("omit".to_string()),
-                names.first().cloned(),
+                names.first().and_then(|n| n.source_spelling()),
                 (span.start, span.end),
             ),
             SurfaceDecl::UniverseDecl { span, names, .. } => (
                 CommandKind::Universe,
-                names.first().cloned(),
+                names.first().and_then(|n| n.source_spelling()),
                 (span.start, span.end),
             ),
             SurfaceDecl::Import { span, .. } => (CommandKind::Import, None, (span.start, span.end)),
@@ -283,12 +291,14 @@ impl CleanBackend {
             ),
             SurfaceDecl::Namespace { span, name, .. } => (
                 CommandKind::Namespace,
-                Some(name.clone()),
+                name.source_spelling(),
                 (span.start, span.end),
             ),
-            SurfaceDecl::Section { span, name, .. } => {
-                (CommandKind::Section, name.clone(), (span.start, span.end))
-            }
+            SurfaceDecl::Section { span, name, .. } => (
+                CommandKind::Section,
+                name.as_ref().and_then(|n| n.source_spelling()),
+                (span.start, span.end),
+            ),
             SurfaceDecl::Check { span, .. } => (
                 CommandKind::Other("check".to_string()),
                 None,
@@ -299,8 +309,28 @@ impl CleanBackend {
                 None,
                 (span.start, span.end),
             ),
+            SurfaceDecl::Reduce { span, .. } => (
+                CommandKind::Other("reduce".to_string()),
+                None,
+                (span.start, span.end),
+            ),
             SurfaceDecl::Print { span, .. } => (
                 CommandKind::Other("print".to_string()),
+                None,
+                (span.start, span.end),
+            ),
+            SurfaceDecl::PrintAxioms { span, .. } => (
+                CommandKind::Other("print axioms".to_string()),
+                None,
+                (span.start, span.end),
+            ),
+            SurfaceDecl::Guard { span, .. } => (
+                CommandKind::Other("guard".to_string()),
+                None,
+                (span.start, span.end),
+            ),
+            SurfaceDecl::GuardMsgs { span, .. } => (
+                CommandKind::Other("guard_msgs".to_string()),
                 None,
                 (span.start, span.end),
             ),
@@ -341,6 +371,11 @@ impl CleanBackend {
             ),
             SurfaceDecl::Elab { span, .. } => (
                 CommandKind::Other("elab".to_string()),
+                None,
+                (span.start, span.end),
+            ),
+            SurfaceDecl::Prelude { span } => (
+                CommandKind::Other("prelude".to_owned()),
                 None,
                 (span.start, span.end),
             ),
@@ -392,6 +427,7 @@ impl CleanBackend {
                         errors: vec![],
                         warnings: vec![],
                         declarations: vec![],
+                        term_infos: Vec::new(),
                         holes: vec![],
                         widget_modules: vec![],
                     });
@@ -446,28 +482,17 @@ impl CleanBackend {
         }
         // A panicked/aborted compute task has no result to commit; the
         // document keeps its pre-elaboration state.
-        let Ok((elaborated, new_state, import_env)) = outcome else {
+        let Ok((elaborated, new_state, import_env, tactic_observations)) = outcome else {
             return;
         };
 
-        // Tactic snapshots run against the same base the declarations
-        // elaborated against: the shared import closure when the file has
-        // an import header, the (near-empty) server environment otherwise.
-        let shared_env;
-        let env: &clean_kernel::Environment = match &import_env {
-            Some(imported) => imported,
-            None => {
-                shared_env = self.env.read().await.clone();
-                &shared_env
-            }
-        };
         self.commit_elaboration(
             uri,
             version,
             &text,
             elaborated,
             new_state,
-            env,
+            tactic_observations,
             import_env.clone(),
         );
     }
@@ -490,7 +515,7 @@ impl CleanBackend {
         text: &str,
         elaborated: ElaboratedDocument,
         new_state: IncrementalState,
-        env: &clean_kernel::Environment,
+        tactic_observations: Vec<clean_elab::tactic::TacticGoalObservation>,
         imports_env: Option<std::sync::Arc<clean_kernel::Environment>>,
     ) -> bool {
         let Some(mut doc) = self.documents.get_mut(uri) else {
@@ -499,7 +524,8 @@ impl CleanBackend {
         if doc.version != elaborated_version {
             return false;
         }
-        let snapshots = Self::tactic_goal_snapshots_from_text(&doc, text, env);
+        let snapshots =
+            Self::tactic_goal_snapshots_from_observations(&doc, text, tactic_observations);
         doc.elaborated = Some(elaborated);
         doc.incremental_state = new_state;
         doc.imports_env = imports_env;
@@ -512,209 +538,154 @@ impl CleanBackend {
         true
     }
 
-    fn tactic_goal_snapshots_from_text(
-        doc: &crate::document::Document,
-        text: &str,
-        env: &clean_kernel::Environment,
-    ) -> Vec<TacticGoalSnapshot> {
-        let Ok(decls) =
-            clean_parser::parse_file_with_tactics(text, &Self::builtin_tactic_patterns())
-        else {
-            return Vec::new();
-        };
-
-        decls
-            .iter()
-            .filter_map(|decl| Self::tactic_goal_snapshot_from_decl(doc, text, env, decl))
-            .collect()
-    }
-
+    #[cfg(test)]
     pub(crate) fn builtin_tactic_patterns() -> clean_parser::TacticPatterns {
         clean_elab::tactic::builtins::builtin_tactic_patterns()
     }
 
-    fn tactic_goal_snapshot_from_decl(
+    /// Select views of actual normal elaboration states. Source text is used
+    /// only for cursor coverage; it never supplies local types or identities.
+    fn tactic_goal_snapshots_from_observations(
         doc: &crate::document::Document,
         text: &str,
-        env: &clean_kernel::Environment,
-        decl: &SurfaceDecl,
-    ) -> Option<TacticGoalSnapshot> {
-        match decl {
-            SurfaceDecl::Theorem {
-                binders, ty, proof, ..
-            } => Self::tactic_goal_snapshot_from_theorem(doc, text, env, binders, ty, proof),
-            SurfaceDecl::Example {
-                ty: Some(ty), val, ..
-            } => Self::tactic_goal_snapshot_from_type_and_proof(doc, text, env, ty, val),
-            _ => None,
-        }
-    }
-
-    /// Tactic snapshot for a theorem declaration. Binder-free theorems use the
-    /// shared type-and-proof path (typed post-tactic snapshot when the target
-    /// elaborates, source-rendered initial goal otherwise). Bound theorems get
-    /// the source-rendered initial goal only: `proof_state_for_tactic_target`
-    /// still elaborates the bare target with no binder telescope, so the
-    /// recorded bridge gap keeps the typed post-tactic path fail-closed.
-    pub(crate) fn tactic_goal_snapshot_from_theorem(
-        doc: &crate::document::Document,
-        text: &str,
-        env: &clean_kernel::Environment,
-        binders: &[SurfaceBinder],
-        ty: &SurfaceExpr,
-        proof: &SurfaceExpr,
-    ) -> Option<TacticGoalSnapshot> {
-        if binders.is_empty() {
-            return Self::tactic_goal_snapshot_from_type_and_proof(doc, text, env, ty, proof);
-        }
-        Self::post_tactic_snapshot_bridge_gap_from_theorem(doc, text, binders, ty, proof)?;
-        Self::initial_goal_snapshot_from_bound_theorem(doc, text, binders, ty, proof)
-    }
-
-    /// Initial (pre-tactic) goal for a bound theorem: one `name : ty`
-    /// hypothesis line per binder above `⊢ target`, all rendered from source
-    /// spans — no typed-ProofState claim is made.
-    ///
-    /// Fail-closed: a binder without a source-renderable type annotation
-    /// suppresses the snapshot rather than showing a wrong local context.
-    fn initial_goal_snapshot_from_bound_theorem(
-        doc: &crate::document::Document,
-        text: &str,
-        binders: &[SurfaceBinder],
-        ty: &SurfaceExpr,
-        proof: &SurfaceExpr,
-    ) -> Option<TacticGoalSnapshot> {
-        let proof_span = match proof {
-            SurfaceExpr::ByTactic(span, tactics) if !tactics.is_empty() => *span,
-            _ => return None,
-        };
-        let ty_span = ty.span();
-        let target = text.get(ty_span.start..ty_span.end)?.trim();
-        if target.is_empty() {
-            return None;
-        }
-
-        // A surface expression's own span can stop at its HEAD — an instance
-        // binder `[Decidable p]` parses as an App whose span covers only
-        // `Decidable`, so slicing by `.span()` rendered `inst : Decidable`
-        // and dropped the argument. Take the maximum end across the
-        // expression's sub-spans instead.
-        fn span_extent(e: &SurfaceExpr) -> usize {
-            match e {
-                SurfaceExpr::App(span, f, args) => args
-                    .iter()
-                    .map(|a| span_extent(&a.expr))
-                    .chain([span.end, span_extent(f)])
-                    .max()
-                    .unwrap_or(span.end),
-                SurfaceExpr::Arrow(span, dom, cod) => {
-                    span.end.max(span_extent(dom)).max(span_extent(cod))
+        mut observations: Vec<clean_elab::tactic::TacticGoalObservation>,
+    ) -> Vec<TacticGoalSnapshot> {
+        use clean_elab::tactic::TacticGoalObservationKind;
+        super::goal_spans::complete_observation_spans(text, &mut observations);
+        let after_starts = Self::tactic_after_cursor_starts(text, &observations);
+        let mut snapshots = Vec::new();
+        for observation in observations {
+            let span = observation.tactic_range;
+            if span.start >= span.end || text.get(span.start..span.end).is_none() {
+                continue;
+            }
+            let before = observation.before.ok().map(|goals| goals.rendered_targets);
+            if observation.kind == TacticGoalObservationKind::ByPrefix {
+                if let Some(goals) = before {
+                    snapshots.push(TacticGoalSnapshot {
+                        range: Range::new(
+                            doc.offset_to_position(span.start),
+                            doc.offset_to_position(span.end),
+                        ),
+                        goals,
+                    });
                 }
-                SurfaceExpr::Paren(span, inner) => span.end.max(span_extent(inner)),
-                other => other.span().end,
+                continue;
+            }
+            let after_start = after_starts
+                .get(&(observation.block_id, span.start, span.end))
+                .copied()
+                .unwrap_or(span.end);
+            let after = observation
+                .after
+                .and_then(Result::ok)
+                .map(|goals| goals.rendered_targets)
+                .or_else(|| before.clone());
+            let line_start = text[..span.start].rfind('\n').map_or(0, |i| i + 1);
+            let start = if text[line_start..span.start]
+                .chars()
+                .all(char::is_whitespace)
+            {
+                line_start
+            } else {
+                span.start
+            };
+            if let Some(goals) = before {
+                snapshots.push(TacticGoalSnapshot {
+                    range: Range::new(
+                        doc.offset_to_position(start),
+                        doc.offset_to_position(after_start),
+                    ),
+                    goals,
+                });
+            }
+            if let Some(goals) = after {
+                let whitespace = text[span.end..]
+                    .chars()
+                    .take_while(|c| c.is_whitespace())
+                    .map(char::len_utf8)
+                    .sum::<usize>();
+                let end = span.end + whitespace;
+                // A tactic with no trailing whitespace remains visible at
+                // its tail (e.g. just before `)`). EOF also includes its final
+                // point. A following declaration's start stays excluded.
+                if whitespace == 0 || end == text.len() {
+                    let point = doc.offset_to_position(end);
+                    snapshots.push(TacticGoalSnapshot {
+                        range: Range::new(point, point),
+                        goals: goals.clone(),
+                    });
+                }
+                snapshots.push(TacticGoalSnapshot {
+                    range: Range::new(
+                        doc.offset_to_position(after_start),
+                        doc.offset_to_position(end),
+                    ),
+                    goals,
+                });
             }
         }
+        snapshots
+    }
 
-        let mut lines = Vec::with_capacity(binders.len() + 1);
-        for binder in binders {
-            let binder_ty = binder.ty.as_deref()?;
-            let start = binder_ty.span().start;
-            let end = span_extent(binder_ty);
-            let rendered_ty = text.get(start..end)?.trim();
-            if binder.name.is_empty() || rendered_ty.is_empty() {
-                return None;
+    /// Lean's flat-tactic rule uses the after state strictly after its start,
+    /// including inside the keyword. Future nested tactic info delays that
+    /// transition; term-nested `by` proofs belong to a different actual block.
+    /// Group equal expansion spans and visit ordered intervals once per block.
+    fn tactic_after_cursor_starts(
+        text: &str,
+        observations: &[clean_elab::tactic::TacticGoalObservation],
+    ) -> HashMap<(clean_elab::tactic::TacticGoalBlockId, usize, usize), usize> {
+        use clean_elab::tactic::TacticGoalObservationKind;
+        let mut blocks: HashMap<_, BTreeMap<_, bool>> = HashMap::new();
+        for observation in observations {
+            let span = observation.tactic_range;
+            if observation.kind == TacticGoalObservationKind::Tactic
+                && span.start < span.end
+                && text.get(span.start..span.end).is_some()
+            {
+                blocks
+                    .entry(observation.block_id)
+                    .or_default()
+                    .entry((span.start, Reverse(span.end)))
+                    .and_modify(|tail| *tail |= observation.after_at_tail)
+                    .or_insert(observation.after_at_tail);
             }
-            lines.push(format!("{} : {rendered_ty}", binder.name));
         }
-        lines.push(format!("⊢ {target}"));
-
-        Some(TacticGoalSnapshot {
-            range: Range::new(
-                doc.offset_to_position(proof_span.start),
-                doc.offset_to_position(proof_span.end),
-            ),
-            goals: vec![lines.join("\n")],
-        })
+        let mut after_starts = HashMap::new();
+        for (block, ranges) in blocks {
+            let mut parents: Vec<(usize, usize)> = Vec::new();
+            for ((start, Reverse(end)), after_at_tail) in ranges {
+                let Some(first) = text[start..end].chars().next() else {
+                    continue;
+                };
+                after_starts.insert(
+                    (block, start, end),
+                    if after_at_tail {
+                        end
+                    } else {
+                        start + first.len_utf8()
+                    },
+                );
+                while parents.last().is_some_and(|&(parent_start, parent_end)| {
+                    start < parent_start || end > parent_end || start >= parent_end
+                }) {
+                    parents.pop();
+                }
+                if let Some(&(parent_start, parent_end)) = parents.last() {
+                    if let Some(after) = after_starts.get_mut(&(block, parent_start, parent_end)) {
+                        *after = (*after).max(end);
+                    }
+                }
+                parents.push((start, end));
+            }
+        }
+        after_starts
     }
 
-    fn tactic_goal_snapshot_from_type_and_proof(
-        doc: &crate::document::Document,
-        text: &str,
-        env: &clean_kernel::Environment,
-        ty: &SurfaceExpr,
-        proof: &SurfaceExpr,
-    ) -> Option<TacticGoalSnapshot> {
-        if let Some(snapshot) =
-            Self::post_tactic_goal_snapshot_from_type_and_proof(doc, text, env, ty, proof)
-        {
-            return Some(snapshot);
-        }
-
-        let proof_span = match proof {
-            SurfaceExpr::ByTactic(span, tactics) if !tactics.is_empty() => *span,
-            _ => return None,
-        };
-        let ty_span = ty.span();
-        let target = text.get(ty_span.start..ty_span.end)?.trim();
-        if target.is_empty() {
-            return None;
-        }
-
-        Some(TacticGoalSnapshot {
-            range: Range::new(
-                doc.offset_to_position(proof_span.start),
-                doc.offset_to_position(proof_span.end),
-            ),
-            goals: vec![format!("⊢ {target}")],
-        })
-    }
-
-    fn post_tactic_goal_snapshot_from_type_and_proof(
-        doc: &crate::document::Document,
-        text: &str,
-        env: &clean_kernel::Environment,
-        ty: &SurfaceExpr,
-        proof: &SurfaceExpr,
-    ) -> Option<TacticGoalSnapshot> {
-        let bridge =
-            Self::post_tactic_snapshot_bridge_gap_from_type_and_proof(doc, text, ty, proof)?;
-        let byte_range = Self::post_tactic_snapshot_byte_range_from_type_and_proof(proof)?;
-        let mut proof_state = clean_elab::tactic::proof_state_for_tactic_target(env, ty).ok()?;
-        let snapshot_run = clean_elab::tactic::run_tactic_script_with_snapshots(
-            &bridge.tactic_script,
-            clean_elab::tactic::TacticPostSnapshotRange {
-                start: byte_range.0,
-                end: byte_range.1,
-            },
-            &mut proof_state,
-            env,
-        )
-        .ok()?;
-        // A run that admitted goals via `sorry` has no authoritative
-        // post-tactic state: rendering its "no goals" at the tactic span
-        // would display an admitted proof as solved. Return None so the
-        // caller falls back to the pre-tactic target snapshot — Lean's
-        // infoview shows the admitted goal at a `sorry`, not "No goals".
-        if proof_state.trust_ledger().sorry_count > 0 {
-            return None;
-        }
-        Some(TacticGoalSnapshot {
-            range: bridge.post_tactic_range,
-            goals: snapshot_run.snapshot.rendered_targets,
-        })
-    }
-
-    fn post_tactic_snapshot_byte_range_from_type_and_proof(
-        proof: &SurfaceExpr,
-    ) -> Option<(usize, usize)> {
-        let tactics = match proof {
-            SurfaceExpr::ByTactic(_, tactics) if !tactics.is_empty() => tactics,
-            _ => return None,
-        };
-        let post_tactic_span = tactics.last().map(SurfaceTactic::span)?;
-        Some((post_tactic_span.start, post_tactic_span.end))
-    }
-
+    // Historical parser-only bridge guards retained for the dated pending
+    // evidence slice. Live snapshots above come from the normal producer.
+    #[cfg(test)]
     pub(crate) fn post_tactic_snapshot_bridge_gap_from_type_and_proof(
         doc: &crate::document::Document,
         text: &str,
@@ -748,6 +719,7 @@ impl CleanBackend {
         })
     }
 
+    #[cfg(test)]
     pub(crate) fn post_tactic_snapshot_bridge_gap_from_theorem(
         doc: &crate::document::Document,
         text: &str,
@@ -761,381 +733,6 @@ impl CleanBackend {
             gap.missing_input = "theorem-local binder context for proof_state_for_tactic_target";
         }
         Some(gap)
-    }
-
-    /// Elaborate text into an ElaboratedDocument using scratch registration.
-    ///
-    /// Uses `elaborate_decl_and_register_with_warning` on a per-document scratch
-    /// environment clone so that:
-    /// 1. later declarations in the same file see earlier registrations
-    /// 2. registration-derived sorry warnings reach LSP diagnostics
-    /// 3. failed per-declaration registration does not leak partial state
-    ///
-    /// The incremental cache is intentionally bypassed in this path because the
-    /// cache cannot replay registration side effects. A later issue can add
-    /// replayable caching if profiling shows this path is hot.
-    ///
-    /// When the file has an `import` header, the header is resolved as a unit
-    /// through the process-wide import-closure cache (see
-    /// [`super::imports::shared_import_closure`]) and the returned
-    /// `Option<Arc<Environment>>` carries the loaded base environment so the
-    /// caller can reuse it (e.g. for tactic snapshots). `file_path` is the
-    /// document's on-disk location, used to derive project-local `.olean`
-    /// search paths; `None` for non-`file:` documents.
-    ///
-    /// Runs synchronously on the blocking pool ([`Self::elaborate_document`]
-    /// wraps it in `spawn_blocking`): the `.olean` import-closure load is
-    /// synchronous and must not pin an executor thread, so nothing here may
-    /// touch the async runtime. Per-declaration `$/lean/fileProgress` shrink
-    /// events — before each declaration after the first, the still-processing
-    /// range is reduced to start at that declaration — are pushed through
-    /// `progress` for the async caller to forward (the leading whole-file
-    /// notification comes from [`CleanBackend::check_document_parse_phase`]).
-    /// `fallback_env` is the base environment for the rare case where the
-    /// shared prelude closure fails to initialize.
-    fn elaborate_text_blocking(
-        text: &str,
-        _prev_state: IncrementalState,
-        file_path: Option<&std::path::Path>,
-        tactic_patterns: &clean_parser::TacticPatterns,
-        fallback_env: clean_kernel::Environment,
-        progress: &tokio::sync::mpsc::UnboundedSender<Vec<LeanFileProgressProcessingInfo>>,
-    ) -> (
-        ElaboratedDocument,
-        IncrementalState,
-        Option<std::sync::Arc<clean_kernel::Environment>>,
-    ) {
-        let Ok(decls) = clean_parser::parse_file_with_tactics(text, tactic_patterns) else {
-            return (
-                ElaboratedDocument {
-                    errors: vec![],
-                    warnings: vec![],
-                    declarations: vec![],
-                    holes: vec![],
-                    widget_modules: vec![],
-                },
-                IncrementalState::default(),
-                None,
-            );
-        };
-
-        let mut errors = Vec::new();
-        let mut warnings = Vec::new();
-        let mut declarations = Vec::new();
-        let mut holes = Vec::new();
-        let mut widget_modules = Vec::new();
-        let new_cache = HashMap::new();
-        let stats = IncrementalStats {
-            total_commands: decls.len(),
-            elaborated_count: decls.len(),
-            // Intentionally 0: cache is bypassed during scratch registration
-            // because the cache cannot replay registration side effects (#2643).
-            cached_count: 0,
-        };
-        let deprecated_names = collect_deprecated_names(&decls);
-
-        // Resolve the file's import header ONCE through the process-wide
-        // closure cache (prelude base + shared `.olean` loader) so every
-        // document sharing a header shares one loaded environment and a
-        // keystroke never re-reads the `.olean` graph. On load failure a
-        // single "imports unavailable" diagnostic replaces the flood of
-        // per-declaration unknown-constant errors that elaborating against a
-        // bare environment would produce.
-        let import_paths = super::imports::import_paths_of_decls(&decls);
-        let mut import_env: Option<std::sync::Arc<clean_kernel::Environment>> = None;
-        if !import_paths.is_empty() {
-            match super::imports::shared_import_closure(&import_paths, file_path) {
-                Ok(env) => import_env = Some(env),
-                Err(reason) => {
-                    let (start, end) = decls
-                        .iter()
-                        .find(|decl| matches!(decl, SurfaceDecl::Import { .. }))
-                        .map(Self::get_decl_span)
-                        .unwrap_or((0, 0));
-                    errors.push(TypeError {
-                        start,
-                        end,
-                        message: format!("imports unavailable: {reason}"),
-                        related: Vec::new(),
-                    });
-                }
-            }
-        } else {
-            // Import-free documents still get the PRELUDE floor (an empty
-            // import set through the same process-wide cache), matching how a
-            // real Lean editor session always sees the prelude — `def f : Nat
-            // → Nat` in a scratch file must resolve `Nat`. Init-and-beyond
-            // names correctly stay unknown until imported. If prelude
-            // initialization itself fails we fall back to the bare server
-            // env rather than erroring the document.
-            if let Ok(env) = super::imports::shared_import_closure(&[], None) {
-                import_env = Some(env);
-            }
-        }
-
-        // Clone the base environment into a per-document scratch copy so we
-        // can mutate it for registration without affecting the global server
-        // state (or the shared import closure).
-        let mut scratch_env = match &import_env {
-            Some(env) => (**env).clone(),
-            None => fallback_env,
-        };
-
-        let end_of_file = byte_offset_to_position(text, text.len());
-
-        for (decl_index, decl) in decls.iter().enumerate() {
-            // Import declarations were handled above as one header unit (or
-            // reported once as unavailable); skip them here so the
-            // per-declaration path neither re-loads the closure on every
-            // keystroke nor duplicates failure noise.
-            if matches!(decl, SurfaceDecl::Import { .. }) {
-                continue;
-            }
-            let (_kind, name, span) = Self::classify_decl(decl);
-            let decl_name = name.as_deref().unwrap_or("<anonymous>");
-
-            // fileProgress shrink: everything before this declaration is done;
-            // the remainder of the file (this declaration onward) is still
-            // being processed. The first declaration needs no extra event —
-            // the parse phase already announced the whole file as processing.
-            // Progress is advisory: a send failure only means the async
-            // caller stopped listening, so the error is dropped.
-            if decl_index > 0 {
-                let processing_start = byte_offset_to_position(text, span.0);
-                let _ = progress.send(vec![LeanFileProgressProcessingInfo::processing(
-                    Range::new(processing_start, end_of_file),
-                )]);
-            }
-
-            // Surface-level warnings (unused vars, literal sorry, deprecation)
-            let mut cmd_warnings = Vec::new();
-            cmd_warnings.extend(detect_unused_variables(decl));
-            cmd_warnings.extend(detect_duplicate_binders(decl));
-            cmd_warnings.extend(detect_sorry_warnings(decl));
-            cmd_warnings.extend(detect_deprecated_usage(decl, &deprecated_names));
-
-            // Use a tentative per-declaration clone so failed registration does
-            // not leak partial state into later declarations.
-            let mut decl_env = scratch_env.clone();
-
-            match clean_elab::elaborate_decl_and_register_with_warning(&mut decl_env, decl) {
-                Ok(registered) => {
-                    // Record hole-local expected types for every user-written
-                    // `_` hole the elaborator tagged with a source span. This
-                    // covers nested / sub-term holes (e.g. `Nat.succ (_ : Nat)`)
-                    // with the precise type the elaborator demanded at that hole,
-                    // instantiated as far as it is solved.
-                    Self::push_hole_contexts(&mut holes, &registered.hole_contexts);
-
-                    if let Some(info) = Self::extract_elab_info(&registered.result, decl) {
-                        // Record a hole-local expected type when the body is a
-                        // bare `sorry`: the elaborator demands the declaration's
-                        // own type there, so the hole-local goal is the
-                        // declaration type at the hole's narrower span. Body `_`
-                        // holes are already covered by `registered.hole_contexts`
-                        // above, so this fallback handles only `sorry`, which the
-                        // elaborator does not span-tag.
-                        if let Some(hole_span) = Self::body_sorry_span(decl) {
-                            holes.push(crate::document::HoleContext {
-                                start: hole_span.start,
-                                end: hole_span.end,
-                                expected_type: info.type_str.clone(),
-                                local_bindings: Vec::new(),
-                            });
-                        }
-                        // Record a user-defined widget module when the
-                        // declaration carries the `@[widget_module]` attribute.
-                        if Self::is_widget_module_decl(decl) {
-                            widget_modules.push(crate::document::WidgetModule {
-                                name: info.name.clone(),
-                                start: info.start,
-                                end: info.end,
-                            });
-                        }
-                        declarations.push(info);
-                    }
-
-                    // Merge surface warnings with the registration report
-                    cmd_warnings = merge_registration_sorry_warning(
-                        cmd_warnings,
-                        registered.warning.as_ref(),
-                        decl_name,
-                        span,
-                    );
-
-                    // Commit the tentative environment on success
-                    scratch_env = decl_env;
-                }
-                Err(e) => {
-                    let (start, end) = Self::get_decl_span(decl);
-                    errors.push(TypeError {
-                        start,
-                        end,
-                        message: format!("{e}"),
-                        related: Vec::new(),
-                    });
-                    // Even when registration fails (commonly because the
-                    // declaration contains an unfilled `_` hole whose unsolved
-                    // metavariable is a free variable the kernel rejects),
-                    // recover the hole contexts by re-elaborating without
-                    // registration. This is exactly the case an IDE needs: the
-                    // user is hovering a hole they have not yet filled in.
-                    let (_recovered, recovered_holes) =
-                        clean_elab::elaborate_decl_capturing_holes(&scratch_env, decl);
-                    Self::push_hole_contexts(&mut holes, &recovered_holes);
-                    // decl_env is dropped — scratch_env stays unchanged
-                }
-            }
-
-            warnings.extend(cmd_warnings);
-        }
-
-        let new_state = IncrementalState {
-            cache: new_cache,
-            stats,
-        };
-
-        (
-            ElaboratedDocument {
-                errors,
-                warnings,
-                declarations,
-                holes,
-                widget_modules,
-            },
-            new_state,
-            import_env,
-        )
-    }
-
-    /// Render a hole's elaborator-provided expected type to the same
-    /// pretty-printed form used for declaration types (`extract_elab_info`),
-    /// keeping `plainTermGoal` output consistent across hole-local and
-    /// whole-declaration goals.
-    fn render_hole_type(hole: &clean_elab::HoleContext) -> String {
-        let ty = &hole.expected_type;
-        format!("{ty}")
-    }
-
-    /// Render a hole's captured local hypotheses to pretty-printed
-    /// `(name, type)` pairs, using the same renderer as the expected type so
-    /// the local context displays consistently with the goal.
-    fn render_hole_bindings(hole: &clean_elab::HoleContext) -> Vec<(String, String)> {
-        hole.local_bindings
-            .iter()
-            .map(|(name, ty)| (name.clone(), format!("{ty}")))
-            .collect()
-    }
-
-    /// Append document-level hole contexts for the elaborator-reported holes,
-    /// skipping any with a dummy `(0, 0)` span.
-    ///
-    /// A dummy span means the elaborator could not recover the `_` source
-    /// position (e.g. a hole synthesized through a macro roundtrip that did not
-    /// preserve it). Surfacing such a hole would attach a spurious goal at
-    /// document offset 0, so it is dropped rather than mislocated.
-    fn push_hole_contexts(
-        holes: &mut Vec<crate::document::HoleContext>,
-        elaborated: &[clean_elab::HoleContext],
-    ) {
-        for hole in elaborated {
-            if hole.span.start == 0 && hole.span.end == 0 {
-                continue;
-            }
-            holes.push(crate::document::HoleContext {
-                start: hole.span.start,
-                end: hole.span.end,
-                expected_type: Self::render_hole_type(hole),
-                local_bindings: Self::render_hole_bindings(hole),
-            });
-        }
-    }
-
-    /// If the declaration's body is a bare `sorry`, return its source span.
-    ///
-    /// Body `_` holes are reported by the elaborator directly (via
-    /// `RegisteredElabResult::hole_contexts`), so only `sorry` — which the
-    /// elaborator does not span-tag — is handled here. The hole-local expected
-    /// type for a body `sorry` is the declaration's own elaborated type.
-    fn body_sorry_span(decl: &SurfaceDecl) -> Option<clean_parser::Span> {
-        use clean_parser::SurfaceDecl;
-        let body = match decl {
-            SurfaceDecl::Def { val, .. } | SurfaceDecl::Example { val, .. } => val.as_ref(),
-            SurfaceDecl::Theorem { proof, .. } => proof.as_ref(),
-            SurfaceDecl::Opaque { val: Some(val), .. } => val.as_ref(),
-            _ => return None,
-        };
-        Self::expr_sorry_span(body)
-    }
-
-    /// Whether `decl` carries the `@[widget_module]` attribute that marks a
-    /// declaration as a user-defined infoview panel widget in Lean 4.
-    ///
-    /// `@[widget_module]` is not a builtin attribute the parser models, so it
-    /// arrives as `Attribute::Unknown("widget_module")` on the declaration's
-    /// attribute list. Only the declaration forms that carry an `attrs` list
-    /// (`def`, `theorem`, `axiom`, `opaque`) can bear the attribute; the
-    /// canonical Lean form is `@[widget_module] def myWidget : Widget.Module`.
-    pub(crate) fn is_widget_module_decl(decl: &SurfaceDecl) -> bool {
-        use clean_parser::{Attribute, SurfaceDecl};
-        let attrs = match decl {
-            SurfaceDecl::Def { attrs, .. }
-            | SurfaceDecl::Theorem { attrs, .. }
-            | SurfaceDecl::Axiom { attrs, .. }
-            | SurfaceDecl::Opaque { attrs, .. } => attrs,
-            _ => return false,
-        };
-        attrs
-            .iter()
-            .any(|attr| matches!(attr, Attribute::Unknown(name) if name == "widget_module"))
-    }
-
-    /// The source span of `expr` when it is a literal `sorry`
-    /// (`SurfaceExpr::Ident(_, "sorry")`). A parenthesized `sorry` unwraps to
-    /// the inner expression. Synthetic, parser-generated sorry is excluded: it
-    /// has no user-visible source token to navigate to. Explicit `_` holes are
-    /// handled by the elaborator and intentionally not matched here.
-    fn expr_sorry_span(expr: &SurfaceExpr) -> Option<clean_parser::Span> {
-        use clean_parser::SurfaceExpr;
-        match expr {
-            SurfaceExpr::Ident(span, name) if name == "sorry" => Some(*span),
-            SurfaceExpr::Paren(_, inner) => Self::expr_sorry_span(inner),
-            _ => None,
-        }
-    }
-
-    /// Extract elaboration info from an ElabResult.
-    ///
-    /// `type_str` is rendered with the kernel pretty-printer (`Display for
-    /// Expr`), the same form used for hole goals, so every editor surface fed
-    /// from it (hover, completion detail, signature help, code lenses,
-    /// `plainTermGoal`) shows Lean syntax (`Nat -> Nat`), never Rust `Debug`
-    /// structure (`Pi(.., Const(..), ..)`). Signature help extracts parameter
-    /// domains from this form via `signature_arrow_parameter_domains`; the
-    /// `Pi(`-shaped Debug parser remains only as a fallback.
-    fn extract_elab_info(
-        result: &clean_elab::ElabResult,
-        decl: &SurfaceDecl,
-    ) -> Option<ElaboratedDecl> {
-        use clean_elab::ElabResult;
-
-        let (start, end) = Self::get_decl_span(decl);
-
-        match result {
-            ElabResult::Definition { name, ty, .. }
-            | ElabResult::Theorem { name, ty, .. }
-            | ElabResult::Axiom { name, ty, .. }
-            | ElabResult::Opaque { name, ty, .. }
-            | ElabResult::Inductive { name, ty, .. }
-            | ElabResult::Structure { name, ty, .. }
-            | ElabResult::Instance { name, ty, .. } => Some(ElaboratedDecl {
-                name: name.to_string(),
-                type_str: format!("{ty}"),
-                start,
-                end,
-            }),
-            _ => None,
-        }
     }
 
     /// Generate LSP diagnostics from a document.

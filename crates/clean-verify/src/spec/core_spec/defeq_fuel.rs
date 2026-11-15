@@ -626,6 +626,25 @@ impl Specification {
         // run at it. Registered last because the witness applies the capstone.
         self.add_wh3_norm_acc_witness()?;
 
+        // Items 2-8 of the deployed-faithful completeness route: the step,
+        // loop, algorithm and witness transfers, and the capstone
+        // def_eq_fuel_complete_wh.
+        //
+        // AFTER add_wh3_norm_acc_witness, not before it, and this was MEASURED
+        // rather than reasoned: placed before, the spec build aborts at
+        // def_eq_fuel_complete_wh_witness with `Unknown identifier:
+        // def_eq_fuel_complete_wh3_final_witness`, which that stage mints. The
+        // scratch harness beside the module cannot catch an ordering fault of
+        // this kind -- it appends to an ALREADY-BUILT spec, where every
+        // constant exists regardless of stage order -- so wiring is its own
+        // verification step and not a formality.
+        //
+        // Every arm lemma carries the continuation-transport hypothesis `hw` as
+        // a PARAMETER. The only thing that ever supplies it is the Nat.rec
+        // induction hypothesis in item 4; see §6 of
+        // designs/2026-09-18-completeness-at-the-deployed-faithful-loop.md.
+        self.add_wh3_to_wh_transfer()?;
+
         // TRULY LAST: the two directions as one object. Must follow
         // add_slot_dispatch_at, which is what mints def_eq_fuel_complete_wh3_final
         // — registering it beside the soundness chain is a forward reference and

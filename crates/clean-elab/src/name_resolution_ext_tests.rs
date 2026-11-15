@@ -14,7 +14,7 @@ use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr};
 
 /// Helper: add an axiom constant with `Type` as its type.
-fn add_const(env: &mut Environment, name: &str) {
+fn add_const(env: &mut Environment, name: &'static str) {
     let n = Name::from_string(name);
     let decl = Declaration::Axiom {
         name: n,
@@ -26,7 +26,7 @@ fn add_const(env: &mut Environment, name: &str) {
 }
 
 /// Helper: add an axiom constant with a specific type expression.
-fn add_const_typed(env: &mut Environment, name: &str, type_: Expr) {
+fn add_const_typed(env: &mut Environment, name: &'static str, type_: Expr) {
     let n = Name::from_string(name);
     let decl = Declaration::Axiom {
         name: n,
@@ -38,15 +38,19 @@ fn add_const_typed(env: &mut Environment, name: &str, type_: Expr) {
 }
 
 /// Helper: assert that resolution yields a unique match with the given name.
-fn assert_resolved(result: &ResolutionResult, expected_name: &str) {
+fn assert_resolved(result: &ResolutionResult, expected_name: &'static str) {
     match result {
         ResolutionResult::Resolved(c) => {
-            assert_eq!(c.name.to_string(), expected_name, "resolved name mismatch");
+            assert_eq!(
+                c.name,
+                Name::from_string(expected_name),
+                "resolved name mismatch"
+            );
         }
         ResolutionResult::Ambiguous(cs) => {
             panic!(
                 "expected resolved '{expected_name}', got ambiguous: {:?}",
-                cs.iter().map(|c| c.name.to_string()).collect::<Vec<_>>()
+                cs.iter().map(|c| c.name.clone()).collect::<Vec<_>>()
             );
         }
         ResolutionResult::Unresolved => {
@@ -152,7 +156,10 @@ fn test_alias_basic() {
     add_const(&mut env, "MyModule.helper");
 
     let mut resolver = NameResolutionExt::new();
-    resolver.register_alias("h", Name::from_string("MyModule.helper"));
+    resolver.register_alias(
+        &Name::from_string("h"),
+        Name::from_string("MyModule.helper"),
+    );
     let state = NamespaceState::new();
 
     let result = resolver.resolve(&Name::from_string("h"), &state, &env);
@@ -169,7 +176,10 @@ fn test_alias_overridden_by_open() {
     add_const(&mut env, "OldModule.add");
 
     let mut resolver = NameResolutionExt::new();
-    resolver.register_alias("add", Name::from_string("OldModule.add"));
+    resolver.register_alias(
+        &Name::from_string("add"),
+        Name::from_string("OldModule.add"),
+    );
     let mut state = NamespaceState::new();
     state.open_namespace(Name::from_string("Nat"));
 
@@ -182,7 +192,10 @@ fn test_alias_overridden_by_open() {
 fn test_alias_to_nonexistent_constant() {
     let env = Environment::new();
     let mut resolver = NameResolutionExt::new();
-    resolver.register_alias("missing", Name::from_string("Gone.missing"));
+    resolver.register_alias(
+        &Name::from_string("missing"),
+        Name::from_string("Gone.missing"),
+    );
     let state = NamespaceState::new();
 
     // Alias target doesn't exist in env — should not resolve
@@ -219,7 +232,7 @@ fn test_overload_disambiguate_by_type() {
     // `Prop`.
     let result = resolver.disambiguate_by_type(&candidates, &Expr::prop(), &env);
     match &result {
-        ResolutionResult::Resolved(c) if c.name.to_string() == "Int.add" => {}
+        ResolutionResult::Resolved(c) if c.name == Name::from_string("Int.add") => {}
         _ => panic!("disambiguate_by_type must resolve to Int.add: {result:?}"),
     }
 }
@@ -259,7 +272,7 @@ fn test_overload_disambiguate_by_type_prunes_const_head_mismatch() {
     let expected = Expr::const_(Name::from_string("Int"), vec![]);
     let result = resolver.disambiguate_by_type(&candidates, &expected, &env);
     match &result {
-        ResolutionResult::Resolved(c) if c.name.to_string() == "Bar.zero" => {}
+        ResolutionResult::Resolved(c) if c.name == Name::from_string("Bar.zero") => {}
         _ => panic!("disambiguate_by_type must resolve uniquely to Bar.zero: {result:?}"),
     }
 
@@ -267,7 +280,7 @@ fn test_overload_disambiguate_by_type_prunes_const_head_mismatch() {
     let expected_nat = Expr::const_(Name::from_string("Nat"), vec![]);
     let result_nat = resolver.disambiguate_by_type(&candidates, &expected_nat, &env);
     match &result_nat {
-        ResolutionResult::Resolved(c) if c.name.to_string() == "Foo.zero" => {}
+        ResolutionResult::Resolved(c) if c.name == Name::from_string("Foo.zero") => {}
         _ => panic!("disambiguate_by_type must resolve uniquely to Foo.zero: {result_nat:?}"),
     }
 }
@@ -454,7 +467,10 @@ fn test_local_beats_alias() {
 
     let mut resolver = NameResolutionExt::new();
     resolver.register_local(Name::from_string("myvar"));
-    resolver.register_alias("myvar", Name::from_string("Other.myvar"));
+    resolver.register_alias(
+        &Name::from_string("myvar"),
+        Name::from_string("Other.myvar"),
+    );
 
     let state = NamespaceState::new();
     let result = resolver.resolve(&Name::from_string("myvar"), &state, &env);
@@ -471,7 +487,7 @@ fn test_open_beats_alias() {
     add_const(&mut env, "Other.f");
 
     let mut resolver = NameResolutionExt::new();
-    resolver.register_alias("f", Name::from_string("Other.f"));
+    resolver.register_alias(&Name::from_string("f"), Name::from_string("Other.f"));
 
     let mut state = NamespaceState::new();
     state.open_namespace(Name::from_string("Nat"));
@@ -487,7 +503,7 @@ fn test_alias_beats_global() {
     add_const(&mut env, "Better.g");
 
     let mut resolver = NameResolutionExt::new();
-    resolver.register_alias("g", Name::from_string("Better.g"));
+    resolver.register_alias(&Name::from_string("g"), Name::from_string("Better.g"));
 
     let state = NamespaceState::new();
     let result = resolver.resolve(&Name::from_string("g"), &state, &env);
@@ -531,9 +547,9 @@ fn test_ambiguity_two_opens() {
     match &result {
         ResolutionResult::Ambiguous(cs) => {
             assert!(cs.len() >= 2, "expected at least 2 candidates");
-            let names: Vec<String> = cs.iter().map(|c| c.name.to_string()).collect();
-            assert!(names.contains(&"Nat.zero".to_string()));
-            assert!(names.contains(&"Int.zero".to_string()));
+            let names: Vec<Name> = cs.iter().map(|c| c.name.clone()).collect();
+            assert!(names.contains(&Name::from_string("Nat.zero")));
+            assert!(names.contains(&Name::from_string("Int.zero")));
         }
         other => panic!("expected ambiguous, got {other:?}"),
     }
@@ -577,8 +593,8 @@ fn test_candidate_names_extraction() {
     ];
     let names = NameResolutionExt::candidate_names(&candidates);
     assert_eq!(names.len(), 2);
-    assert_eq!(names[0].to_string(), "X.a");
-    assert_eq!(names[1].to_string(), "Y.b");
+    assert_eq!(names[0].clone(), Name::from_string("X.a"));
+    assert_eq!(names[1].clone(), Name::from_string("Y.b"));
 }
 
 // =========================================================================
@@ -624,7 +640,7 @@ fn test_cache_invalidated_on_mutation() {
     let _ = resolver.resolve(&Name::from_string("Foo.bar"), &state, &env);
     assert_eq!(resolver.cache_size(), 1);
 
-    resolver.register_alias("x", Name::from_string("Foo.bar"));
+    resolver.register_alias(&Name::from_string("x"), Name::from_string("Foo.bar"));
     assert_eq!(
         resolver.cache_size(),
         0,
@@ -738,8 +754,8 @@ fn test_circular_alias_does_not_infinite_loop() {
     // Should resolve to Unresolved without hanging.
     let env = Environment::new();
     let mut resolver = NameResolutionExt::new();
-    resolver.register_alias("a", Name::from_string("b"));
-    resolver.register_alias("b", Name::from_string("a"));
+    resolver.register_alias(&Name::from_string("a"), Name::from_string("b"));
+    resolver.register_alias(&Name::from_string("b"), Name::from_string("a"));
     let state = NamespaceState::new();
 
     let r1 = resolver.resolve(&Name::from_string("a"), &state, &env);
@@ -779,7 +795,7 @@ fn test_resolve_uncached_bypasses_cache() {
     let state = NamespaceState::new();
 
     let name = Name::from_string("Foo.bar");
-    let result = resolver.resolve_uncached(&name, "Foo.bar", &state, &env);
+    let result = resolver.resolve_uncached(&name, &state, &env);
     assert_resolved(&result, "Foo.bar");
     assert_eq!(
         resolver.cache_size(),

@@ -189,7 +189,7 @@ impl Specification {
 
         // i7 fold (RecEnv lookup context carried).
         self.add_recursive_def(
-            r"def def_env_no_recmeta_b (renv : RecEnv) (denv : DefEnv) : Bool := DefEnv.rec (fun (_ : DefEnv) => Bool) Bool.true (fun (tail : DefEnv) (dname : Name) (val : KExpr) (ih : Bool) => Bool.and (opt_isnone RecMeta (recmeta_for renv dname)) ih) denv",
+            r"def def_env_no_recmeta_b (renv : RecEnv) (denv : DefEnv) : Bool := DefEnv.rec (fun (_ : DefEnv) => Bool) Bool.true (fun (tail : DefEnv) (dname : Name) (defn : KDefSig) (ih : Bool) => Bool.and (opt_isnone RecMeta (recmeta_for renv dname)) ih) denv",
             "i7 checker (def-env leg, RecEnv lookup context carried): every defined name carries \
              no recursor metadata. Front #1 Stage 3/4 (faithful checkers).",
         )?;
@@ -391,23 +391,29 @@ impl Specification {
         let extras_e = format!("(list_drop (Nat.succ {major_idx}) (kapp_args e))");
         let fields_e = "(list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major))";
         let prefix_e = format!("(list_take {prefix_n} (kapp_args e))");
-        let inner3 = format!("(apply_spine {prefix_e} (recrule_rhs rule))");
+        let rhs_instance = "(recursor_rhs_instance (recmeta_signature meta) (recrule_rhs rule) (kexpr_const_levels (kapp_fn e)))";
+        let rhs_subst = "(paramSubstN (kconst_params (recmeta_signature meta)) (kexpr_const_levels (kapp_fn e)))";
+        let inner3 = format!("(apply_spine {prefix_e} {rhs_instance})");
         let inner2 = format!("(apply_spine {fields_e} {inner3})");
         let reduct_e = format!("(apply_spine {extras_e} {inner2})");
-        // kapp_fn REDUCT = kapp_fn (recrule_rhs rule) (strip the three apply_spine layers).
+        // Strip the three apply_spine layers to the instantiated RHS head.
+        // Universe instantiation preserves its name view, not its full level list.
         let kfreduct_eq = format!(
-            "(Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn (recrule_rhs rule)) \
+            "(Eq.trans KExpr (kapp_fn {reduct_e}) (kapp_fn {inner2}) (kapp_fn {rhs_instance}) \
              (kapp_fn_apply_spine {extras_e} {inner2}) \
-             (Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn (recrule_rhs rule)) \
+             (Eq.trans KExpr (kapp_fn {inner2}) (kapp_fn {inner3}) (kapp_fn {rhs_instance}) \
              (kapp_fn_apply_spine {fields_e} {inner3}) \
-             (kapp_fn_apply_spine {prefix_e} (recrule_rhs rule))))"
+             (kapp_fn_apply_spine {prefix_e} {rhs_instance})))"
         );
         // kexpr_const_name (kapp_fn REDUCT) = none, via the checker chain.
         let head_none = format!(
             "(Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {reduct_e})) \
-             (kexpr_const_name (kapp_fn (recrule_rhs rule))) (OptionType.none Name) \
-             (Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn (recrule_rhs rule)) {kfreduct_eq}) \
-             (recrule_for_rnr env recname cname rule h5 hb))"
+             (kexpr_const_name (kapp_fn {rhs_instance})) (OptionType.none Name) \
+             (Eq.cong KExpr (OptionType Name) kexpr_const_name (kapp_fn {reduct_e}) (kapp_fn {rhs_instance}) {kfreduct_eq}) \
+             (Eq.trans (OptionType Name) (kexpr_const_name (kapp_fn {rhs_instance})) \
+              (kexpr_const_name (kapp_fn (recrule_rhs rule))) (OptionType.none Name) \
+              (delta_head_name_instL {rhs_subst} (recrule_rhs rule)) \
+              (recrule_for_rnr env recname cname rule h5 hb)))"
         );
         let i1_value = format!(
             "fun (env : RecEnv) (hb : Eq Bool (rec_env_rnr_b env) Bool.true) => \
@@ -434,8 +440,9 @@ impl Specification {
             &i1_value,
             "GENERIC i1 discharge: rec_env_rnr_b env = true -> RecEnvReductNotRedex env, for ANY \
              env. Invert the fired redex (iota_reduct_some_inv) to expose REDUCT = apply_spine .. \
-             (recrule_rhs rule); the checker chain (recrule_for_rnr) pins the rhs head to \
-             non-const; the apply_spine layers leave the head fixed (kapp_fn_apply_spine x3), so \
+             (recursor_rhs_instance ...); the checker chain (recrule_for_rnr) pins the stored rhs \
+             head to non-const, and delta_head_name_instL preserves that name view under actual \
+             universe instantiation. The apply_spine layers leave the head fixed (kapp_fn_apply_spine x3), so \
              iota_reduct REDUCT short-circuits to none (iota_reduct_head_none); transport \
              REDUCT = r (option_some_inj). The env-generic form of \
              faithful_red_env_reduct_not_redex. A concrete env now discharges \
@@ -446,6 +453,8 @@ impl Specification {
                 "RecEnvReductNotRedex.mk",
                 "rec_env_rnr_b",
                 "recrule_for_rnr",
+                "delta_head_name_instL",
+                "recursor_rhs_instance",
                 "iota_reduct_some_inv",
                 "iota_reduct_head_none",
                 "kapp_fn_apply_spine",
@@ -646,15 +655,15 @@ impl Specification {
                  (fun (hlk : Eq (OptionType KExpr) (defval_for DefEnv.empty dname) (OptionType.some KExpr val)) \
                  (_hb : Eq Bool (def_env_no_recmeta_b renv DefEnv.empty) Bool.true) => \
                  option_none_ne_some KExpr val ({NOMETA_D}) hlk) \
-                 (fun (tail : DefEnv) (dn : Name) (dv : KExpr) \
+                 (fun (tail : DefEnv) (dn : Name) (defn : KDefSig) \
                  (ih : Eq (OptionType KExpr) (defval_for tail dname) (OptionType.some KExpr val) -> \
                  Eq Bool (def_env_no_recmeta_b renv tail) Bool.true -> {NOMETA_D}) \
-                 (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn dv) dname) (OptionType.some KExpr val)) \
-                 (hb : Eq Bool (def_env_no_recmeta_b renv (DefEnv.addDef tail dn dv)) Bool.true) => \
-                 opt_pick_some_inv KExpr (name_eqb dn dname) dv \
+                 (hlk : Eq (OptionType KExpr) (defval_for (DefEnv.addDef tail dn defn) dname) (OptionType.some KExpr val)) \
+                 (hb : Eq Bool (def_env_no_recmeta_b renv (DefEnv.addDef tail dn defn)) Bool.true) => \
+                 opt_pick_some_inv KExpr (name_eqb dn dname) (kdef_value defn) \
                  (defval_for tail dname) val ({NOMETA_D}) hlk \
                  (fun (ht : Eq Bool (name_eqb dn dname) Bool.true) \
-                 (_hval : Eq KExpr dv val) => \
+                 (_hval : Eq KExpr (kdef_value defn) val) => \
                  Eq.subst Name \
                  (fun (z : Name) => Eq (OptionType RecMeta) (recmeta_for renv z) (OptionType.none RecMeta)) \
                  dn dname (name_eqb_eq dn dname ht) \

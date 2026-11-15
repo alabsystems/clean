@@ -65,7 +65,14 @@ def is_test_path(rel: Path) -> bool:
     if re.search(r"(^test_|_tests?\.rs$|^tests?\.rs$|^tests_)", name):
         return True
     # kani proof harnesses are #[cfg(kani)] formal-verification, not verdicts.
-    return name.endswith("kani.rs") or "kani" in name or "test" in name
+    # AUDIT r13 M13-2: audit r11 M11-3 removed the unanchored `"test" in name`
+    # substring from four scanners; there were FIVE. Measured here: five live
+    # production modules under crates/clean-kernel/src -- the
+    # env/algebra_nat_*testbit* family, exactly the files r11's own repair note
+    # names -- were excluded by the substring alone. The `kani` clause is
+    # deliberate and stays.
+    return (name.endswith("kani.rs") or "kani" in name
+            or bool(re.search(r"(^test_|_tests?\.rs$|^tests?\.rs$|^tests_)", name)))
 
 
 # Rust non-code spans — same construction and rationale as
@@ -93,6 +100,10 @@ def strip_noncode(text: str) -> str:
     return NONCODE_RE.sub(_blank, text)
 
 
+# Only a `mod` declaration may open a blanked region (audit r13 M13-1).
+MOD_DECL_RE = re.compile(r"^\s*(?:pub(?:\([^)]*\))?\s+)?mod\s+[A-Za-z0-9_]+\s*$")
+
+
 def strip_cfg_test_blocks(text: str) -> str:
     """Blank out top-level `#[cfg(test)] mod ... { ... }` bodies so inline test
     fixtures inside otherwise-production files do not trip the scanner. Brace-
@@ -107,11 +118,25 @@ def strip_cfg_test_blocks(text: str) -> str:
             out.append(text[i:])
             break
         out.append(text[i:j])
-        # find the opening brace of the following `mod ... {`
-        brace = text.find("{", j)
-        if brace == -1:
-            out.append(text[j:])
-            break
+        # AUDIT r13 M13-1: this took `text.find("{", j)` and brace-matched from
+        # there, WITHOUT ever checking that a `mod` declaration sat between --
+        # so a `#[cfg(test)]` on a struct field grabbed an unrelated production
+        # item's brace, and a block-less `#[cfg(test)] mod tests_x;` swallowed
+        # everything to the next `{`. Measured over this gate's own scope:
+        # 137,244 of 556,074 code lines blanked, 24.7% of the kernel, worst
+        # file 2,839 of 7,328. An unclassified KernelVerified construction in a
+        # swallowed region was invisible with no plant at all, in the only live
+        # gate over that minting surface. The three bypass scanners already use
+        # exactly this guard.
+        seg_end = text.find("{", j)
+        between = text[j + len(cfg):seg_end] if seg_end != -1 else ""
+        if seg_end == -1 or not MOD_DECL_RE.search(between):
+            # not a `#[cfg(test)] mod ... {` block: emit the attribute and move
+            # on rather than swallowing to an unrelated brace
+            out.append(text[j:j + len(cfg)])
+            i = j + len(cfg)
+            continue
+        brace = seg_end
         depth = 0
         k = brace
         while k < n:

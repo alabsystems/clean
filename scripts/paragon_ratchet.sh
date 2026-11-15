@@ -14,6 +14,17 @@
 #   scripts/paragon_ratchet.sh            # recompute, FAIL if any total grew
 #   scripts/paragon_ratchet.sh --update   # rewrite baseline (intentional ratchet-down)
 #
+# A DEBT (the baseline's "debt" key) is growth someone else caused, owned and
+# expiring, CAPPED at what was measured: {"owner", "expires" (YYYY-MM-DD, at
+# most 180 days out), "measured" (the reason), "ceilings" {total: ceiling}}.
+# While it runs, a total may reach its ceiling and no further; past its expiry
+# it caps nothing; once every total is back at its baseline it FAILS until
+# deleted, so it cannot outlive the growth it names. It replaces the pre-push
+# hook's WAIVED row for this leg, which passed whatever the leg measured
+# (verifier land-clean-r1: a new unwrap in clean-elab landed under it), and
+# scripts/check_hook_coverage.py refuses that row. The decision is self-tested
+# on every run (PARAGON_RATCHET_SELFTEST).
+#
 # Heuristics are documented in the generated JSON ("heuristics" key) and in
 # the python core below. Exclusions: */target/*, crates/clean-kernel/src/env/
 # (another lane owns its content; excluded so this ratchet never pressures
@@ -30,7 +41,7 @@ import os
 import re
 import sys
 from functools import lru_cache
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 DATA_FILE = Path("data/paragon_ratchet.json")
@@ -351,44 +362,143 @@ if MODE == "update":
         print(f"  {k}: {v}")
     sys.exit(0)
 
+ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def debt_problems(debt, base_totals, today):
+    """Why a baseline's debt is malformed, or []: an owned, expiring, capped
+    account, each ceiling above its baseline (at it, it caps nothing)."""
+    if not isinstance(debt, dict):
+        return ["the debt is not an object"]
+    problems = []
+    owner = debt.get("owner")
+    if not isinstance(owner, str) or owner.strip() in ("", "-"):
+        problems.append("the debt names no owner -- an unowned debt is how growth becomes permanent")
+    expires = debt.get("expires")
+    if not isinstance(expires, str) or not ISO_DATE.match(expires):
+        problems.append(f"the debt's expiry {expires!r} is not YYYY-MM-DD")
+    else:
+        horizon = (date.fromisoformat(today) + timedelta(days=180)).isoformat()
+        if expires > horizon:
+            problems.append(f"the debt expires {expires}, beyond the 180-day horizon ({horizon})")
+    if not isinstance(debt.get("measured"), str) or not debt["measured"].strip():
+        problems.append("the debt records no measurement")
+    ceilings = debt.get("ceilings")
+    if not isinstance(ceilings, dict) or not ceilings:
+        problems.append("the debt caps no total")
+    else:
+        for k, ceiling in ceilings.items():
+            base = base_totals.get(k)
+            if base is None:
+                problems.append(f"the debt caps {k!r}, which the baseline has no total for")
+            elif not isinstance(ceiling, int) or ceiling <= base:
+                problems.append(f"the debt's ceiling {ceiling!r} for {k} is not above its baseline {base}")
+    return problems
+
+
+def decide(totals, base_totals, debt, today):
+    """(failed, lines, grew): each total against its baseline, or, while an
+    owned debt runs, against the ceiling it caps that total at."""
+    lines, grew, failed = [], [], False
+    ceilings = {}
+    if debt is not None:
+        problems = debt_problems(debt, base_totals, today)
+        if problems:
+            return True, [f"FAIL — {p}" for p in problems], grew
+        if debt["expires"] < today:
+            lines.append(f"debt EXPIRED on {debt['expires']} (owner {debt['owner']}): it caps nothing")
+        else:
+            ceilings = debt["ceilings"]
+    for k, cur in totals.items():
+        base = base_totals.get(k)
+        if base is None:
+            lines.append(f"FAIL — baseline missing total '{k}'; run --update")
+            failed = True
+            continue
+        delta = cur - base
+        if delta <= 0:
+            lines.append(f"  OK  {k}: baseline={base} current={cur} ({delta:+d})")
+        elif k in ceilings and cur <= ceilings[k]:
+            lines.append(
+                f"  DEBT {k}: baseline={base} current={cur} ({delta:+d}), within the ceiling "
+                f"{ceilings[k]} owned by {debt['owner']} until {debt['expires']}"
+            )
+        else:
+            cap = f", past the debt's ceiling {ceilings[k]}" if k in ceilings else ""
+            lines.append(f"  GREW {k}: baseline={base} current={cur} ({delta:+d}){cap}")
+            grew.append(k)
+            failed = True
+    if debt is not None and all(totals[k] <= base_totals.get(k, 0) for k in totals):
+        lines.append(
+            "FAIL — the debt is paid (every total is at or below its baseline): delete the "
+            f"\"debt\" key from {DATA_FILE}"
+        )
+        failed = True
+    return failed, lines, grew
+
+
+def selftest():
+    """The decision, over made-up totals: every way a debt must fail fails."""
+    base = {"a": 10, "b": 5}
+    today = "2026-09-29"
+    debt = {"owner": "lane-x", "expires": "2026-10-06", "measured": "m", "ceilings": {"a": 12}}
+    arms = [
+        ("no debt, no growth", {"a": 10, "b": 5}, None, today, False),
+        ("no debt, growth", {"a": 11, "b": 5}, None, today, True),
+        ("a debt, growth within its ceiling", {"a": 12, "b": 5}, debt, today, False),
+        ("a debt, growth past its ceiling", {"a": 13, "b": 5}, debt, today, True),
+        ("a debt, growth in a total it does not cap", {"a": 11, "b": 6}, debt, today, True),
+        ("a debt past its expiry", {"a": 11, "b": 5}, debt, "2026-10-07", True),
+        ("a debt on its expiry day", {"a": 11, "b": 5}, debt, "2026-10-06", False),
+        ("a paid debt", {"a": 10, "b": 4}, debt, today, True),
+        ("a debt with no owner", {"a": 11, "b": 5}, {**debt, "owner": "-"}, today, True),
+        ("a debt with no expiry", {"a": 11, "b": 5}, {**debt, "expires": "soon"}, today, True),
+        ("a debt past the horizon", {"a": 11, "b": 5}, {**debt, "expires": "2027-09-29"}, today, True),
+        ("a debt with no measurement", {"a": 11, "b": 5}, {**debt, "measured": ""}, today, True),
+        ("a ceiling at its baseline", {"a": 10, "b": 5}, {**debt, "ceilings": {"a": 10}}, today, True),
+        ("a ceiling over no total", {"a": 11, "b": 5}, {**debt, "ceilings": {"a": 12, "c": 1}}, today, True),
+    ]
+    failed = [name for name, cur, d, day, want in arms if decide(cur, base, d, day)[0] != want]
+    print(f"PARAGON_RATCHET_SELFTEST arms={len(arms)} failed={len(failed)}", flush=True)
+    for name in failed:
+        print(f"  x self-test arm decided wrong: {name}", file=sys.stderr, flush=True)
+    return not failed
+
+
+if not selftest():
+    sys.exit(1)
+
 if not DATA_FILE.exists():
     print(f"paragon ratchet: FAIL — {DATA_FILE} missing; run scripts/paragon_ratchet.sh --update", file=sys.stderr)
     sys.exit(1)
 
 baseline = json.loads(DATA_FILE.read_text(encoding="utf-8"))
 base_totals = baseline.get("totals", {})
-failed = False
-for k, cur in totals.items():
-    base = base_totals.get(k)
-    if base is None:
-        print(f"paragon ratchet: FAIL — baseline missing total '{k}'; run --update", file=sys.stderr)
-        failed = True
-        continue
-    delta = cur - base
-    marker = "OK " if delta <= 0 else "GREW"
-    print(f"  {marker} {k}: baseline={base} current={cur} ({delta:+d})")
-    if delta > 0:
-        failed = True
-        base_crates = baseline.get("crates", {})
-        # Interleave correctly with the stdout lines above. A caller that merges
-        # both streams into one log (the suite runner does) otherwise sees every
-        # stderr line FIRST -- stderr is unbuffered, stdout block-buffers into a
-        # file -- so the per-crate attribution floats away from the metric it
-        # attributes.
-        sys.stdout.flush()
+failed, lines, grew = decide(totals, base_totals, baseline.get("debt"), date.today().isoformat())
+for line in lines:
+    print(line, flush=True)
+if grew:
+    # Interleave correctly with the stdout lines above. A caller that merges
+    # both streams into one log (the suite runner does) otherwise sees every
+    # stderr line FIRST -- stderr is unbuffered, stdout block-buffers into a
+    # file -- so the per-crate attribution floats away from the metric it
+    # attributes.
+    base_crates = baseline.get("crates", {})
+    for k in grew:
+        print(f"      {k}:", file=sys.stderr)
         for crate in sorted(set(crates) | set(base_crates)):
             b = base_crates.get(crate, {}).get(k, 0)
             c = crates.get(crate, {}).get(k, 0)
             if c > b:
                 print(f"        {crate}: {b} -> {c}", file=sys.stderr)
-        sys.stderr.flush()
+    sys.stderr.flush()
 
 if failed:
     sys.stdout.flush()
     print(
-        "paragon ratchet: FAIL — quality debt increased (shrink-only). "
-        "Fix the regression; if a total legitimately went DOWN elsewhere, "
-        "refresh with scripts/paragon_ratchet.sh --update.",
+        "paragon ratchet: FAIL — quality debt increased (shrink-only), or its owned debt is "
+        "malformed, expired or paid. Fix the regression; if a total legitimately went DOWN "
+        "elsewhere, refresh with scripts/paragon_ratchet.sh --update.",
         file=sys.stderr,
     )
     sys.stderr.flush()

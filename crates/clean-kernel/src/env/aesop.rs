@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use super::TransparencyMode;
 
 /// Set of Aesop rules organized by phase
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct AesopRuleSet {
     /// Safe rules - always tried, won't cause divergence
     pub safe_rules: Vec<AesopRule>,
@@ -28,7 +28,7 @@ pub struct AesopRuleSet {
 }
 
 /// A registered aesop rule
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AesopRule {
     /// Declaration name this rule refers to
     pub name: Name,

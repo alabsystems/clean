@@ -213,11 +213,7 @@ fn test_translate_uninterpreted_function() {
     let mut terms = TermStore::new();
     let x = terms.mk_var("fvar_1", Sort::Int);
     // Create an uninterpreted function application: g(x)
-    let g_of_x = terms.mk_app(
-        ay_core::Symbol::Named("g_func".to_string()),
-        vec![x],
-        Sort::Int,
-    );
+    let g_of_x = terms.mk_app(ay_core::Symbol::Named("g_func".into()), vec![x], Sort::Int);
 
     let mut map = VariableMapping::new();
     let int_ty = Expr::const_(Name::from_string("Int"), vec![]);

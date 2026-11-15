@@ -16,6 +16,8 @@
 
 mod coerce;
 pub(crate) mod proof_carry;
+#[cfg(test)]
+mod typed_name_tests;
 
 pub use coerce::{qify, zify};
 pub(crate) use proof_carry::{
@@ -28,9 +30,11 @@ pub(crate) use coerce::{qify_expr, zify_expr};
 #[cfg(test)]
 use std::sync::Arc;
 
+use super::pattern::names::{local_name_matches, require_binding_name};
 #[cfg(test)]
 use clean_kernel::expr::ExprKind;
 use clean_kernel::Expr;
+use clean_parser::SurfaceName;
 
 #[cfg(test)]
 use crate::stack_safe;
@@ -307,9 +311,9 @@ pub fn assumption_mod_cast(state: &mut ProofState) -> TacticResult {
 #[derive(Debug, Clone)]
 pub struct LiftConfig {
     /// Name for the lifted variable
-    pub new_name: Option<String>,
+    pub new_name: Option<SurfaceName>,
     /// Name for the proof that the value satisfies the predicate
-    pub proof_name: Option<String>,
+    pub proof_name: Option<SurfaceName>,
 }
 
 impl Default for LiftConfig {
@@ -329,15 +333,15 @@ impl LiftConfig {
 
     /// Set the name for the lifted variable
     #[must_use]
-    pub fn with_name(mut self, name: &str) -> Self {
-        self.new_name = Some(name.to_string());
+    pub fn with_name(mut self, name: &SurfaceName) -> Self {
+        self.new_name = Some(name.clone());
         self
     }
 
     /// Set the name for the proof
     #[must_use]
-    pub fn with_proof(mut self, name: &str) -> Self {
-        self.proof_name = Some(name.to_string());
+    pub fn with_proof(mut self, name: &SurfaceName) -> Self {
+        self.proof_name = Some(name.clone());
         self
     }
 }
@@ -360,7 +364,11 @@ impl LiftConfig {
 ///   well-formed request returns `Err(InvalidTarget)` without changing state.
 /// ENSURES: Never introduces an unproved placeholder hypothesis.
 /// ENSURES: Returns `Err(HypothesisNotFound)` if `var_name` or `using_hyp` is missing.
-pub fn lift(state: &mut ProofState, var_name: &str, using_hyp: Option<&str>) -> TacticResult {
+pub fn lift(
+    state: &mut ProofState,
+    var_name: &SurfaceName,
+    using_hyp: Option<&SurfaceName>,
+) -> TacticResult {
     lift_with_config(state, var_name, using_hyp, LiftConfig::new())
 }
 
@@ -373,8 +381,8 @@ pub fn lift(state: &mut ProofState, var_name: &str, using_hyp: Option<&str>) -> 
 /// ENSURES: Never introduces an unproved placeholder hypothesis.
 pub fn lift_with_config(
     state: &mut ProofState,
-    var_name: &str,
-    using_hyp: Option<&str>,
+    var_name: &SurfaceName,
+    using_hyp: Option<&SurfaceName>,
     config: LiftConfig,
 ) -> TacticResult {
     if state.goals.is_empty() {
@@ -383,11 +391,19 @@ pub fn lift_with_config(
 
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
+    if let Some(name) = &config.new_name {
+        require_binding_name(name, "lift")?;
+    }
+    if let Some(name) = &config.proof_name {
+        require_binding_name(name, "lift")?;
+    }
+
     // Find the variable to lift
     let _var_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == var_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, var_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(format!("variable '{var_name}' not found")))?
         .clone();
 
@@ -396,7 +412,8 @@ pub fn lift_with_config(
         let _hyp = goal
             .local_ctx
             .iter()
-            .find(|d| d.name == hyp_name)
+            .rev()
+            .find(|d| local_name_matches(&d.name, hyp_name))
             .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     }
 

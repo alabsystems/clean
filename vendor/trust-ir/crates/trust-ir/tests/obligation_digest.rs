@@ -22,7 +22,7 @@
 //    verification-progress label) never shifts the digest, or the cache
 //    would self-invalidate on discharge.
 // 5. **Contract and entry are identity** (introduced in digest domain v2 and
-//    preserved by v3/v4 framing): the owning function's `summary`
+//    preserved by v3/v4/v5 framing): the owning function's `summary`
 //    (`requires`/`ensures`/`params`) and `entry` block are hashed even though
 //    the canonical text carries neither — a cached certificate may have
 //    assumed the contract, and entry decides execution order, so editing either
@@ -34,7 +34,7 @@
 use trust_ir::inst::{BinOp, Inst};
 use trust_ir::node::InstrNode;
 use trust_ir::proof::{
-    ObligationKind, ProofFormula, ProofObligation, ProofObligationSourceIdentity,
+    ObligationKind, ObligationSite, ProofFormula, ProofObligation, ProofObligationSourceIdentity,
     ProofObligationSourceRange, ProofStatus, PublicObligationIdentity,
 };
 use trust_ir::ty::{FuncTy, Ty};
@@ -108,24 +108,34 @@ fn other_function(ft: trust_ir::value::FuncTyId) -> Function {
 /// obligation scoped to each, one module-scoped obligation.
 fn base_module(value_base: u32, blocks_reversed: bool, functions_swapped: bool) -> Module {
     let mut m = Module::new("obligation_digest");
-    let ft_bin = m.add_func_type(FuncTy {
-        params: vec![Ty::I64, Ty::I64],
-        returns: vec![Ty::I64],
-        is_vararg: false,
-    });
-    let ft_unit = m.add_func_type(FuncTy {
-        params: vec![],
-        returns: vec![],
-        is_vararg: false,
-    });
+    let ft_bin = m
+        .add_func_type(FuncTy {
+            params: vec![Ty::I64, Ty::I64],
+            returns: vec![Ty::I64],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
+    let ft_unit = m
+        .add_func_type(FuncTy {
+            params: vec![],
+            returns: vec![],
+            abi: None,
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
     let target = target_function(ft_bin, value_base, blocks_reversed);
     let other = other_function(ft_unit);
     if functions_swapped {
-        m.add_function(other);
-        m.add_function(target);
+        m.try_add_function(other)
+            .expect("Module::try_add_function: test fixture");
+        m.try_add_function(target)
+            .expect("Module::try_add_function: test fixture");
     } else {
-        m.add_function(target);
-        m.add_function(other);
+        m.try_add_function(target)
+            .expect("Module::try_add_function: test fixture");
+        m.try_add_function(other)
+            .expect("Module::try_add_function: test fixture");
     }
 
     m.proof_obligations.push(
@@ -165,22 +175,31 @@ fn digest_hex(m: &Module, id: u32) -> String {
 /// (1) Known-answer stability: the pinned SHA-256 of the fixed
 /// (module, obligation) pairs. A change here is a cache-invalidation event
 /// for every consumer — never rewrite the pin casually; bump the digest
-/// domain (`trust_ir.obligation.digest.v4`) on a deliberate layout change.
+/// domain (`trust_ir.obligation.digest.v8`) on a deliberate layout change.
 /// (v1 → v2: `entry` + `summary` joined the layout — the soundness fix for
 /// contract-weakening cache replays. v2 → v3: canonical domain framing and
 /// checked 64-bit lengths replaced the ad hoc preimage encoding. v3 → v4:
-/// embedded source/public proof-unit identity joined the claim.)
+/// embedded source/public proof-unit identity joined the claim. v4 → v5: the
+/// exact optional IR site joined the claim. v5 → v6: `FunctionSummary.decreases`,
+/// each clause's typed `ProofFormula.bindings`, and `ObligationKind::Custom`'s
+/// namespace/name joined it too — all three change what a contract MEANS.
+/// v6 → v7: the obligation's `spec` temporal backref joined it (wire v46),
+/// with the same argument: which temporal property a row discharges is part
+/// of what it means. v7 → v8: the owning summary's `effects` frame joined it
+/// (wire v59, WS1.14) — which memory a call may touch is part of the
+/// contract. `Function::body_gate` and `display_path` were deliberately
+/// EXCLUDED: a codegen license grants nothing to a proof.)
 #[test]
 fn obligation_digest_sha256_known_answer() {
     let m = base_module(0, false, false);
     assert_eq!(
         digest_hex(&m, 0),
-        "sha256:88ca7654f11c4084a1cea1c396c1b29aec5782390d89e2915d7b11c80b5d0a4b",
+        "sha256:9fc2d4a01e53c7b398a1bd561247ba5aeddf245499e231307df4c67c01530165",
         "function-scoped obligation digest drifted"
     );
     assert_eq!(
         digest_hex(&m, 1),
-        "sha256:9e7a8a41f7d816edfbdaaf0bc657936156f1997d8a291b0c72093867954902dd",
+        "sha256:e08ef9824d229553ca610f5ce2978b483ed61ab38757c710a5bd9b6e47a2d9a6",
         "module-scoped obligation digest drifted"
     );
 }
@@ -196,6 +215,136 @@ fn obligation_digest_is_none_for_unknown_or_dangling() {
         m.obligation_digest(ProofId::new(0)).is_none(),
         "a dangling function scope has no addressable content"
     );
+
+    let mut m = base_module(0, false, false);
+    m.proof_obligations[0].site = Some(ObligationSite::new(FuncId::new(1), BlockId::new(0), 0));
+    assert!(
+        m.obligation_digest(ProofId::new(0)).is_none(),
+        "a site/function-scope mismatch has no addressable content"
+    );
+
+    let mut m = base_module(0, false, false);
+    m.proof_obligations[0].function = None;
+    m.proof_obligations[0].site = Some(ObligationSite::new(FuncId::new(0), BlockId::new(42), 0));
+    assert!(
+        m.obligation_digest(ProofId::new(0)).is_none(),
+        "a dangling site block has no addressable content"
+    );
+
+    let mut m = base_module(0, false, false);
+    m.proof_obligations[0].function = None;
+    m.proof_obligations[0].site = Some(ObligationSite::new(FuncId::new(0), BlockId::new(0), 99));
+    assert!(
+        m.obligation_digest(ProofId::new(0)).is_none(),
+        "a dangling site instruction has no addressable content"
+    );
+}
+
+#[test]
+fn obligation_digest_index_is_complete_order_independent_and_matches_per_id() {
+    let mut module = base_module(0, false, false);
+    module.proof_obligations[0].site =
+        Some(ObligationSite::new(FuncId::new(0), BlockId::new(0), 0));
+    module.proof_obligations.push(
+        ProofObligation::new(
+            ProofId::new(3),
+            ObligationKind::PanicFreedom,
+            ProofStatus::Pending,
+            "the target add cannot panic",
+        )
+        .with_function(FuncId::new(0)),
+    );
+    let declaration_order = module
+        .obligation_digest_index()
+        .expect("valid module has a complete obligation index");
+    module.proof_obligations.reverse();
+
+    let index = module
+        .obligation_digest_index()
+        .expect("valid module has a complete obligation index");
+    assert_eq!(index.len(), 4);
+    assert_eq!(
+        index, declaration_order,
+        "proof declaration order is not part of keyed index identity"
+    );
+    for obligation in &module.proof_obligations {
+        assert_eq!(
+            index.get(obligation.id),
+            module.obligation_digest(obligation.id),
+            "batch and per-ID identity must remain byte-identical for {}",
+            obligation.id,
+        );
+    }
+
+    let empty = Module::new("empty_obligation_digest_index");
+    assert!(
+        empty
+            .obligation_digest_index()
+            .expect("an empty proof table is unambiguous")
+            .is_empty()
+    );
+}
+
+#[test]
+fn obligation_digest_index_rejects_duplicate_identity_keys() {
+    let mut duplicate_proof = base_module(0, false, false);
+    let mut conflicting = duplicate_proof.proof_obligations[0].clone();
+    conflicting.description = "different claim under the same ProofId".into();
+    duplicate_proof.proof_obligations.push(conflicting);
+    assert!(
+        duplicate_proof.obligation_digest_index().is_none(),
+        "a duplicate ProofId must not overwrite or select either claim"
+    );
+
+    let mut duplicate_function = base_module(0, false, false);
+    let mut conflicting = duplicate_function.functions[0].clone();
+    conflicting.name = "different_target_under_same_FuncId".into();
+    duplicate_function.functions.push(conflicting);
+    assert!(
+        duplicate_function.obligation_digest_index().is_none(),
+        "a duplicate FuncId must not select either owning function"
+    );
+
+    let mut duplicate_block = base_module(0, false, false);
+    let target = duplicate_block
+        .functions
+        .iter_mut()
+        .find(|function| function.id == FuncId::new(0))
+        .unwrap();
+    let mut conflicting = target.blocks[0].clone();
+    conflicting.body.clear();
+    target.blocks.push(conflicting);
+    assert!(
+        duplicate_block.obligation_digest_index().is_none(),
+        "a duplicate BlockId must not select either site block"
+    );
+}
+
+#[test]
+fn obligation_digest_index_rejects_any_unresolved_obligation() {
+    let mut dangling_function = base_module(0, false, false);
+    dangling_function.proof_obligations[0].function = Some(FuncId::new(42));
+    assert!(dangling_function.obligation_digest_index().is_none());
+
+    let mut mismatched_site = base_module(0, false, false);
+    mismatched_site.proof_obligations[0].site =
+        Some(ObligationSite::new(FuncId::new(1), BlockId::new(0), 0));
+    assert!(mismatched_site.obligation_digest_index().is_none());
+
+    let mut dangling_block = base_module(0, false, false);
+    dangling_block.proof_obligations[0].function = None;
+    dangling_block.proof_obligations[0].site =
+        Some(ObligationSite::new(FuncId::new(0), BlockId::new(42), 0));
+    assert!(dangling_block.obligation_digest_index().is_none());
+
+    let mut dangling_instruction = base_module(0, false, false);
+    dangling_instruction.proof_obligations[0].function = None;
+    dangling_instruction.proof_obligations[0].site = Some(ObligationSite::new(
+        FuncId::new(0),
+        BlockId::new(0),
+        u32::MAX,
+    ));
+    assert!(dangling_instruction.obligation_digest_index().is_none());
 }
 
 #[test]
@@ -232,6 +381,86 @@ fn obligation_digest_binds_every_embedded_source_identity_field() {
         mutate(changed.proof_obligations[0].source.as_mut().unwrap());
         assert_ne!(changed.obligation_digest(ProofId::new(0)).unwrap(), digest);
     }
+}
+
+#[test]
+fn obligation_digest_binds_exact_site_but_not_status() {
+    let mut module = base_module(0, false, false);
+    module.proof_obligations[0].function = None;
+    module.proof_obligations[0].site =
+        Some(ObligationSite::new(FuncId::new(0), BlockId::new(0), 0));
+    let digest = module.obligation_digest(ProofId::new(0)).unwrap();
+
+    let mutations: &[fn(&mut ObligationSite)] = &[
+        |site| site.function = FuncId::new(site.function.index() + 1),
+        |site| site.block = BlockId::new(site.block.index() + 1),
+        |site| site.inst_index += 1,
+    ];
+    for mutate in mutations {
+        let mut changed = module.clone();
+        mutate(changed.proof_obligations[0].site.as_mut().unwrap());
+        assert_ne!(
+            changed.obligation_digest(ProofId::new(0)).unwrap(),
+            digest,
+            "every site coordinate must participate in cache identity"
+        );
+    }
+
+    let mut without_site = module.clone();
+    without_site.proof_obligations[0].site = None;
+    assert_ne!(
+        without_site.obligation_digest(ProofId::new(0)).unwrap(),
+        digest,
+        "site presence is part of cache identity"
+    );
+
+    let mut discharged = module;
+    discharged.proof_obligations[0].status = ProofStatus::Discharged;
+    assert_eq!(
+        discharged.obligation_digest(ProofId::new(0)).unwrap(),
+        digest,
+        "verification progress remains excluded from cache identity"
+    );
+}
+
+#[test]
+fn site_only_obligation_digest_binds_its_resolved_function_body() {
+    let mut before = base_module(0, false, false);
+    before.proof_obligations[0].function = None;
+    before.proof_obligations[0].site =
+        Some(ObligationSite::new(FuncId::new(0), BlockId::new(0), 0));
+
+    let mut body_changed = before.clone();
+    let target = body_changed
+        .functions
+        .iter_mut()
+        .find(|function| function.id == FuncId::new(0))
+        .unwrap();
+    if let Inst::BinOp { op, .. } = &mut target.blocks[0].body[0].inst {
+        *op = BinOp::Mul;
+    } else {
+        panic!("expected the add node at the bound site");
+    }
+    assert_ne!(
+        before.obligation_digest(ProofId::new(0)).unwrap(),
+        body_changed.obligation_digest(ProofId::new(0)).unwrap(),
+        "editing a site-only obligation's owning body must invalidate its cache key"
+    );
+
+    let mut other_changed = before.clone();
+    let other = other_changed
+        .functions
+        .iter_mut()
+        .find(|function| function.id == FuncId::new(1))
+        .unwrap();
+    other.blocks[0]
+        .body
+        .insert(0, InstrNode::new(Inst::Unreachable));
+    assert_eq!(
+        before.obligation_digest(ProofId::new(0)).unwrap(),
+        other_changed.obligation_digest(ProofId::new(0)).unwrap(),
+        "editing an unrelated function must not invalidate a site-only cache key"
+    );
 }
 
 /// (2) WS4-M2 falsifier: a body edit invalidates exactly its digest — the
@@ -455,5 +684,134 @@ fn entry_change_invalidates_digest() {
         digest_hex(&before, 2),
         digest_hex(&after, 2),
         "an obligation scoped to a DIFFERENT function keeps its digest"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// (6) Roadmap WS4.4 review — NEW-1 in the cache key. A `ClausePlace::Value`
+// binding names an SSA value of the owning function; the function content is
+// hashed as CANONICAL text (dense renumbering), so the binding must be hashed
+// through the same renumbering. Hashed raw, it sat beside a canonical body:
+// two functions with one canonical text whose raw `%9` named DIFFERENT values
+// shared a slot (a stale hit), and renumbering a function WITH its binding
+// moved the slot (a spurious miss).
+// ---------------------------------------------------------------------------
+
+/// `fn f(%p: u64) -> u64 { %r = const u64 1; ret %r }` with a `Postcondition`
+/// scoped to it whose formula binds `r` to `value(%bound)`, and a summary
+/// whose `ensures` clause binds the same value.
+fn value_bound_module(p: u32, r: u32, bound: u32) -> Module {
+    use trust_ir::proof::{ClauseBinding, ClausePlace, ClauseSort};
+    let mut m = Module::new("value_bound");
+    let ft = m
+        .add_func_type(FuncTy {
+            abi: None,
+            params: vec![Ty::U64],
+            returns: vec![Ty::U64],
+            is_vararg: false,
+        })
+        .expect("Module::add_func_type: test fixture");
+    let mut block = Block::new(b(0));
+    block.params.push((v(p), Ty::U64));
+    block.body.push(
+        InstrNode::new(Inst::Const {
+            ty: Ty::U64,
+            value: trust_ir::Constant::Int(1),
+        })
+        .with_result(v(r)),
+    );
+    block
+        .body
+        .push(InstrNode::new(Inst::Return { values: vec![v(r)] }));
+    let mut f = Function::new(FuncId::new(0), "f", ft, b(0));
+    f.blocks.push(block);
+    let mut formula = ProofFormula::smtlib2("(= r #x0000000000000001)", "Bool");
+    formula.bindings = vec![(
+        "r".to_string(),
+        ClauseBinding {
+            sort: ClauseSort::BitVec(64),
+            place: ClausePlace::Value(v(bound)),
+        },
+    )];
+    f.summary = Some(
+        trust_ir::FunctionSummary::new()
+            .with_params(vec!["p".into()])
+            .ensuring(formula.clone()),
+    );
+    m.try_add_function(f)
+        .expect("Module::try_add_function: test fixture");
+    m.proof_obligations.push(
+        ProofObligation::new(
+            ProofId::new(0),
+            ObligationKind::Postcondition,
+            ProofStatus::Pending,
+            "the result is one",
+        )
+        .with_function(FuncId::new(0))
+        .with_formula(formula),
+    );
+    m
+}
+
+/// The stale hit: `%9` is the `const` RESULT in one module and the PARAMETER
+/// in the other. Both functions print the same canonical text and both rows
+/// carry the same raw `value(%9)`, yet the claim `(= r 1)` is true of the
+/// first and not of the second — they must never share a cache slot. (Hashed
+/// raw, the two digests were EQUAL.)
+#[test]
+fn value_binding_naming_a_different_value_does_not_share_a_slot() {
+    let result_bound = value_bound_module(5, 9, 9);
+    let param_bound = value_bound_module(9, 5, 9);
+    // The control: stripped of the two bindings (summary and obligation), the
+    // modules print ONE canonical text — the bodies the digest hashes as
+    // function content are identical, so only the binding can tell them apart.
+    let body_only = |m: &Module| {
+        let mut m = m.clone();
+        m.functions[0].summary = None;
+        m.proof_obligations.clear();
+        trust_ir::format::canonical(&m)
+    };
+    assert_eq!(body_only(&result_bound), body_only(&param_bound));
+    // And the binding itself is spelled identically before canonicalization:
+    // the raw rows are equal, so a raw-id preimage could not separate them.
+    assert_eq!(
+        result_bound.proof_obligations[0],
+        param_bound.proof_obligations[0]
+    );
+    assert_ne!(
+        digest_hex(&result_bound, 0),
+        digest_hex(&param_bound, 0),
+        "`value(%9)` names a different value in each module"
+    );
+}
+
+/// The spurious miss, and the property the canonical form exists for:
+/// renumbering a function TOGETHER with its binding (sparse ids, or
+/// `format::canonicalize` itself) leaves the digest unchanged, exactly like
+/// every other SSA id (property 3).
+#[test]
+fn value_binding_renumbered_with_its_function_keeps_the_slot() {
+    let sparse = value_bound_module(5, 9, 9);
+    let pin = digest_hex(&sparse, 0);
+    assert_eq!(digest_hex(&value_bound_module(0, 1, 1), 0), pin);
+    assert_eq!(digest_hex(&value_bound_module(40, 17, 17), 0), pin);
+    let canon = trust_ir::format::canonicalize(&sparse);
+    assert_ne!(canon, sparse, "the control: canonicalization moved `%9`");
+    assert_eq!(digest_hex(&canon, 0), pin, "canonicalize keeps the slot");
+    // Mutation control: binding the OTHER value is a different claim.
+    assert_ne!(digest_hex(&value_bound_module(5, 9, 5), 0), pin);
+}
+
+/// A binding naming a value the function does NOT define (refused by the
+/// validator) is kept out of the renumbered range: it never collides with the
+/// digest of a row whose binding names a real value.
+#[test]
+fn dangling_value_binding_never_shares_a_slot_with_a_defined_one() {
+    let defined = value_bound_module(0, 1, 1);
+    let dangling_in_range = value_bound_module(5, 9, 1);
+    assert_ne!(digest_hex(&dangling_in_range, 0), digest_hex(&defined, 0));
+    assert_ne!(
+        digest_hex(&dangling_in_range, 0),
+        digest_hex(&value_bound_module(0, 1, 0), 0)
     );
 }

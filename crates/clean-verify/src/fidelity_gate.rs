@@ -35,14 +35,39 @@
 //!
 //! ## Honest framing (empirical corroboration, not a kernel proof)
 //!
-//! The model ↔ Rust-implementation bridge **cannot become a kernel `Theorem`**:
-//! by Gödelian / level constraints the kernel cannot internally prove that the
-//! Rust source equals the reflected model. (This is exactly why the total-
-//! equality `bootstrap_model_fidelity` axiom was the wrong shape and was retired
-//! in favor of the relational `KernelInfers` / `bootstrap_infer_sound`
-//! restatement, whose soundness *is* an in-kernel obligation.) What this gate
-//! buys is purely the strongest *honest* empirical corroboration available for
-//! the claim that the reflection is faithful to the deployed kernel:
+//! **This gate's** model ↔ Rust bridge cannot become a kernel `Theorem`, and
+//! the reason is real but narrower than the sentence that used to stand here.
+//! The Gödelian / level obstacle is to the kernel proving INTERNALLY that a
+//! Rust SOURCE TEXT denotes the reflected model. That obstacle is genuine, and
+//! it is exactly why the total-equality `bootstrap_model_fidelity` axiom was
+//! the wrong shape and was retired in favor of the relational `KernelInfers` /
+//! `bootstrap_infer_sound` restatement, whose soundness *is* an in-kernel
+//! obligation.
+//!
+//! **It does NOT follow that the bridge cannot be a kernel theorem at all, and
+//! this repository's adopted programme is built on its not following.** Crystal
+//! (`docs/CRYSTAL_STATUS.md`) never asks the kernel to prove anything about
+//! source text: it DERIVES the implementation model from the source through the
+//! Trust compiler's THIR→trust-ir lowering (link 1), proves a refinement
+//! theorem about that derived model IN THE KERNEL (link 4), and binds the
+//! shipped artifact to the same IR by a differential-gated codegen flip plus a
+//! lineage digest (links 2b/2c). For the bodies listed in that page's §0.3 all
+//! five links hold. So the honest general statement is that a kernel-checked
+//! bridge requires DERIVATION rather than internal self-reference — not that it
+//! is impossible.
+//!
+//! What remains true, and is this file's actual scope: this gate is not on that
+//! route at all. It is a differential test, and `tests/fidelity_gate_lane.rs`
+//! is blunter still about what its own comparand is. Separately, and this is
+//! the fact that matters for the spine: the kernel spine (`infer_type`,
+//! `is_def_eq`, `whnf`) has ZERO flips, so for `infer_type` specifically the
+//! bridge is empirical TODAY as a measured fact about coverage, not as a
+//! consequence of Gödel. Read the flip counts from `docs/CRYSTAL_STATUS.md`,
+//! never from this comment.
+//!
+//! What this gate buys is purely the strongest *honest* empirical corroboration
+//! available for the claim that the reflection is faithful to the deployed
+//! kernel:
 //!
 //! - "5-term test" → "large-corpus, fail-closed, continuously-checked gate";
 //! - "bare `known_drift_max = 15` ceiling" → an **enumerated, justified
@@ -874,6 +899,283 @@ pub fn audit_whnf_delta_fidelity() -> Result<usize, String> {
 }
 
 // ────────────────────────────────────────────────────────────────────────────
+// DELTA INFERENCE fidelity — the (F) brick for INFERENCE beyond the const-free
+// fragment.
+//
+// `in_supported_fragment` refuses `Const`, so the large fuzzed corpus that
+// cross-checks INFERENCE runs entirely on terms referencing no declaration.
+// `audit_whnf_delta_fidelity` above closed that gap for the REDUCTION STEP;
+// this closes it for inference, on the same bounded, hand-built basis.
+//
+// It follows that brick's precedent rather than env-ifying `BootstrapChecker`:
+// the auditable micro-checker is env-less BY DESIGN (its `Const` arm is an
+// explicit `UnsupportedExpr`), and it is constructed in ten places. So the
+// comparator below is self-contained, reads an explicit `name -> declared type`
+// table, and reuses `micro_whnf_delta` — already audited against the kernel by
+// the brick above — wherever it must expose a `Pi` under a `Const`. The two
+// bricks therefore compose: inference fidelity here rests on reduction fidelity
+// there, and neither borrows the kernel's own reducer to check the kernel.
+//
+// Comparison is STRUCTURAL, for the reason the step brick gives: a `def_eq`
+// comparison would let the very machinery under test paper over a divergence.
+//
+// "Isn't there already a const-capable model?" — yes, and it does not help
+// here, which is worth one paragraph because the question comes up on sight.
+// `bootstrap/kernel_model.rs` has `model_infer_type` over its own `KernelExpr`
+// / `KernelEnv`, and that model DOES handle `Const`. But nothing bridges
+// `KernelExpr` to `clean_kernel::Expr`, so it is never compared against the
+// real kernel — it is the model whose total-equality axiom
+// `bootstrap_model_fidelity` was RETIRED (see this file's header for why a
+// total equality between two total functions was the wrong shape). Its tests
+// assert the model's own behaviour. It therefore contributes nothing to the
+// empirical model↔kernel link, and a const-bearing differential still has to
+// be built against `clean_kernel::Expr`, which is what this is.
+// ────────────────────────────────────────────────────────────────────────────
+
+/// Const-aware micro inference over `{Sort, BVar, Const, App, Lam, Pi}`.
+///
+/// `types` maps a constant's name to its DECLARED type; `defs` is the same
+/// table [`micro_whnf_delta`] takes, used only to expose a `Pi` when an
+/// application's function type is itself const-headed.
+#[cfg(test)]
+fn micro_infer_const(
+    types: &BTreeMap<String, Expr>,
+    defs: &BTreeMap<String, (Expr, bool)>,
+    ctx: &[Expr],
+    expr: &Expr,
+) -> Result<Expr, String> {
+    use clean_kernel::Level;
+    match expr.strip_mdata().kind() {
+        ExprKind::Sort(l) => Ok(Expr::sort(Level::succ(l.clone()))),
+        ExprKind::BVar(idx) => {
+            let i = *idx as usize;
+            if i >= ctx.len() {
+                return Err(format!("bvar {i} escapes a context of depth {}", ctx.len()));
+            }
+            // `ctx` is innermost-last; a bvar's type is lifted past every
+            // binder crossed since it was pushed.
+            Ok(ctx[ctx.len() - 1 - i].lift(*idx + 1))
+        }
+        ExprKind::Const(name, _) => types
+            .get(&name.to_string())
+            .cloned()
+            .ok_or_else(|| format!("no declared type for {name}")),
+        ExprKind::App(f, a) => {
+            let fty = micro_infer_const(types, defs, ctx, f.as_ref())?;
+            // The only place reduction is needed, and it goes through the
+            // reducer the brick above already checked against the kernel.
+            let fty = micro_whnf_delta(defs, &fty);
+            match fty.strip_mdata().kind() {
+                ExprKind::Pi(_, dom, body) => {
+                    // CHECK the argument. The kernel entry point this is
+                    // compared against is `infer_type_full`, which enforces
+                    // this; the default `infer_type` is the infer-only fast
+                    // path and does NOT. Omitting it here would compare a full
+                    // checker against a permissive one and call the gap a
+                    // divergence -- the mistake this file documents at length
+                    // for the fuzzed corpus.
+                    let aty = micro_infer_const(types, defs, ctx, a.as_ref())?;
+                    let want = micro_whnf_delta(defs, dom.as_ref());
+                    let got = micro_whnf_delta(defs, &aty);
+                    if want != got {
+                        return Err(format!(
+                            "argument type mismatch: want {want:?}, got {got:?}"
+                        ));
+                    }
+                    Ok(body.as_ref().instantiate(a.as_ref()))
+                }
+                other => Err(format!("application of a non-Pi: {other:?}")),
+            }
+        }
+        ExprKind::Lam(bi, ty, body) => {
+            // CHECK the domain is a type, as `infer_type_full` does. The LEVEL
+            // is deliberately discarded: a lambda's type does not record its
+            // domain's universe, so what this call buys is the check, not the
+            // value.
+            let _ = sort_level(types, defs, ctx, ty.as_ref())?;
+            let mut inner = ctx.to_vec();
+            inner.push(ty.as_ref().clone());
+            let bty = micro_infer_const(types, defs, &inner, body.as_ref())?;
+            Ok(Expr::pi(*bi, ty.as_ref().clone(), bty))
+        }
+        ExprKind::Pi(_, dom, cod) => {
+            let u = sort_level(types, defs, ctx, dom.as_ref())?;
+            let mut inner = ctx.to_vec();
+            inner.push(dom.as_ref().clone());
+            let v = sort_level(types, defs, &inner, cod.as_ref())?;
+            Ok(Expr::sort(Level::imax(u, v)))
+        }
+        other => Err(format!("outside the const-inference fragment: {other:?}")),
+    }
+}
+
+/// The level of a term that must be a sort, with `micro_whnf_delta` allowed to
+/// expose it through a constant.
+#[cfg(test)]
+fn sort_level(
+    types: &BTreeMap<String, Expr>,
+    defs: &BTreeMap<String, (Expr, bool)>,
+    ctx: &[Expr],
+    expr: &Expr,
+) -> Result<clean_kernel::Level, String> {
+    let ty = micro_infer_const(types, defs, ctx, expr)?;
+    match micro_whnf_delta(defs, &ty).strip_mdata().kind() {
+        ExprKind::Sort(l) => Ok(l.clone()),
+        other => Err(format!("expected a sort, got {other:?}")),
+    }
+}
+
+/// INFERENCE fidelity over const-bearing terms: the real kernel's
+/// `infer_type` against [`micro_infer_const`], on a hand-built corpus that the
+/// fuzzed differential cannot reach because `in_supported_fragment` refuses
+/// `Const`.
+///
+/// Returns the number of terms on which the two agreed structurally.
+///
+/// Test-only: its sole caller is this file's `tests` module (unlike its
+/// siblings, it has no integration-test caller in `tests/fidelity_gate_lane.rs`),
+/// so it and the helpers above it are compiled only under `cfg(test)`.
+#[cfg(test)]
+pub(crate) fn audit_infer_const_fidelity() -> Result<usize, String> {
+    audit_infer_const_fidelity_inner(false)
+}
+
+/// The NEGATIVE CONTROL, and the reason it exists: a differential that has
+/// never been seen to fail is `exit 0` wearing a green badge. This runs the
+/// same audit with ONE entry of the micro side's type table deliberately
+/// wrong — `InferTy` declared at `Sort 2` where the kernel has `Sort 1` — and
+/// the audit must REFUSE it.
+///
+/// It perturbs the micro side rather than the environment on purpose: mutating
+/// the `Environment` would move both sides together and still agree, which
+/// would demonstrate nothing.
+#[cfg(test)]
+fn audit_infer_const_fidelity_divergence_control() -> Result<usize, String> {
+    audit_infer_const_fidelity_inner(true)
+}
+
+#[cfg(test)]
+fn audit_infer_const_fidelity_inner(perturb_micro: bool) -> Result<usize, String> {
+    use clean_kernel::{BinderInfo, Level};
+
+    let prop = Expr::sort(Level::zero());
+    let sort1 = Expr::sort(Level::succ(Level::zero()));
+    let sort2 = Expr::sort(Level::succ(Level::succ(Level::zero())));
+    // A function ON TYPES, not on proofs. The step brick next door applies a
+    // `prop -> prop` constant to `prop`, which is fine for whnf because whnf
+    // does not typecheck — but INFERENCE does, and `Sort 0` has type `Sort 1`,
+    // so that same shape is ill-typed here and the kernel rightly refuses it.
+    let ty_to_ty = Expr::pi(BinderInfo::Default, sort1.clone(), sort1.clone());
+    let id_ty = Expr::lam(BinderInfo::Default, sort1.clone(), Expr::bvar(0));
+
+    // (name, declared type, value). `InferTy` is a type-valued constant;
+    // `InferFn` a function whose type is ALREADY a Pi; `InferFnAlias` a
+    // function whose type is a CONSTANT that must be unfolded to expose the Pi
+    // — the case that makes this brick about delta and not just lookup.
+    let definitions: Vec<(&str, Expr, Expr)> = vec![
+        ("FidelityGate.InferTy", sort1.clone(), prop.clone()),
+        ("FidelityGate.InferArrow", sort2, ty_to_ty.clone()),
+        ("FidelityGate.InferFn", ty_to_ty, id_ty.clone()),
+        (
+            "FidelityGate.InferFnAlias",
+            Expr::const_str("FidelityGate.InferArrow"),
+            id_ty,
+        ),
+    ];
+    let opaques: Vec<(&str, Expr, Expr)> =
+        vec![("FidelityGate.InferOpaqueTy", sort1.clone(), prop.clone())];
+
+    let mut env = Environment::new();
+    let mut types: BTreeMap<String, Expr> = BTreeMap::new();
+    let mut defs: BTreeMap<String, (Expr, bool)> = BTreeMap::new();
+    for (name, ty, value) in &definitions {
+        env.add_decl(Declaration::Definition {
+            name: Name::from_string(name),
+            level_params: vec![],
+            type_: ty.clone(),
+            value: value.clone(),
+            is_reducible: true,
+        })
+        .map_err(|e| format!("register {name}: {e}"))?;
+        types.insert((*name).to_string(), ty.clone());
+        defs.insert((*name).to_string(), (value.clone(), true));
+    }
+    for (name, ty, value) in &opaques {
+        env.add_decl(Declaration::Opaque {
+            name: Name::from_string(name),
+            level_params: vec![],
+            type_: ty.clone(),
+            value: value.clone(),
+        })
+        .map_err(|e| format!("register opaque {name}: {e}"))?;
+        types.insert((*name).to_string(), ty.clone());
+        defs.insert((*name).to_string(), (value.clone(), false));
+    }
+
+    let corpus = vec![
+        // A bare constant, and a bare opaque one.
+        Expr::const_str("FidelityGate.InferTy"),
+        Expr::const_str("FidelityGate.InferOpaqueTy"),
+        // A constant applied, its type already a Pi.
+        Expr::app(Expr::const_str("FidelityGate.InferFn"), prop.clone()),
+        // A constant applied whose type is a CONSTANT: inference must unfold to
+        // find the Pi. This is the case the const-free corpus cannot express.
+        Expr::app(Expr::const_str("FidelityGate.InferFnAlias"), prop.clone()),
+        // A constant under a binder, so the result type is a Pi built around it.
+        Expr::lam(
+            BinderInfo::Default,
+            prop.clone(),
+            Expr::const_str("FidelityGate.InferTy"),
+        ),
+        // A constant AS a binder's domain, so the bvar's type is const-headed.
+        Expr::lam(
+            BinderInfo::Default,
+            Expr::const_str("FidelityGate.InferTy"),
+            Expr::bvar(0),
+        ),
+        // A lambda applied to a constant: the argument's type comes from the
+        // table, and the redex is NOT contracted by inference on either side.
+        Expr::app(
+            Expr::lam(BinderInfo::Default, sort1.clone(), Expr::bvar(0)),
+            Expr::const_str("FidelityGate.InferTy"),
+        ),
+    ];
+
+    if perturb_micro {
+        // One wrong entry, micro side only. Every corpus term that mentions
+        // `InferTy` must now disagree with the kernel.
+        types.insert(
+            "FidelityGate.InferTy".to_string(),
+            Expr::sort(Level::succ(Level::succ(Level::zero()))),
+        );
+    }
+
+    // CHECK MODE, not the default. `TypeChecker::infer_type` is the Lean-4
+    // `infer_only = true` fast path and skips App-argument and Lam-domain
+    // checks; `infer_type_full` is the path `Environment::add_decl` uses to
+    // admit declarations, and is this file's stated soundness-relevant
+    // contract. Measured while building this brick: under the default entry
+    // point an ILL-TYPED corpus agreed perfectly, because neither side was
+    // asked the question.
+    let tc = TypeChecker::with_mode(&env, env.mode());
+    let mut agreed = 0usize;
+    for term in &corpus {
+        let kernel = tc
+            .infer_type_full(term)
+            .map_err(|e| format!("kernel refused {term:?}: {e}"))?;
+        let micro = micro_infer_const(&types, &defs, &[], term)?;
+        if kernel != micro {
+            return Err(format!(
+                "const-inference fidelity divergence on {term:?}: \
+                 kernel {kernel:?} vs micro {micro:?}"
+            ));
+        }
+        agreed += 1;
+    }
+    Ok(agreed)
+}
+
+// ────────────────────────────────────────────────────────────────────────────
 // IOTA step fidelity — the (F) brick for recursor-on-constructor reduction.
 // ────────────────────────────────────────────────────────────────────────────
 
@@ -1172,17 +1474,13 @@ fn micro_whnf_nat(expr: &Expr) -> Expr {
     e.clone()
 }
 
-/// NAT-ACCELERATOR STEP-FIDELITY gate: the REAL kernel's `whnf` on literal
-/// `Nat` arithmetic spines must agree STRUCTURALLY with [`micro_whnf_nat`] —
-/// each accelerated op, Lean's truncated-`sub` and `n/0 = 0` edge semantics,
-/// a NESTED spine (inner acceleration feeding an outer one), and a STUCK
-/// partial application. Fail-closed on the first divergence.
-pub fn audit_whnf_nat_fidelity() -> Result<usize, String> {
-    let env = Environment::new();
+/// The accelerated half of the nat corpus: spines `reduce_nat` folds to a
+/// literal — each op, Lean's truncated-`sub` / `n / 0 = 0` / floored-`pred`
+/// edges, and a NESTED spine whose inner acceleration feeds the outer one.
+fn nat_accelerated_corpus() -> Vec<Expr> {
     let nat_c = |s: &str| Expr::const_(Name::from_string(s), clean_kernel::LevelVec::new());
     let lit = Expr::nat_lit;
-
-    let corpus = vec![
+    vec![
         Expr::apps(nat_c("Nat.add"), [lit(2), lit(3)]), // 5
         Expr::apps(nat_c("Nat.mul"), [lit(4), lit(6)]), // 24
         Expr::apps(nat_c("Nat.sub"), [lit(3), lit(5)]), // 0 (truncated)
@@ -1194,15 +1492,51 @@ pub fn audit_whnf_nat_fidelity() -> Result<usize, String> {
             nat_c("Nat.add"),
             [lit(2), Expr::apps(nat_c("Nat.sub"), [lit(1), lit(2)])],
         ),
-        // STUCK: a partial application (one argument to a binary op).
-        Expr::app(nat_c("Nat.add"), lit(2)),
-        // A bare literal is already WHNF.
-        lit(42),
-    ];
+    ]
+}
 
+/// NAT-ACCELERATOR STEP-FIDELITY gate: the REAL kernel's `whnf` on literal
+/// `Nat` arithmetic spines must agree STRUCTURALLY with [`micro_whnf_nat`] —
+/// each accelerated op, Lean's truncated-`sub` and `n/0 = 0` edge semantics,
+/// a NESTED spine (inner acceleration feeding an outer one), and a bare
+/// literal — and the accelerator must not fire on a one-argument (partial)
+/// spine. Fail-closed on the first divergence.
+///
+/// THE WORLD IS `clean-bare-nat` (`Environment::new()` + `init_nat()`), not
+/// the empty environment. Since 3809edf31 (2026-09-27,
+/// `clean_kernel::env::native_fold_authority`) every `reduce_nat` arm fires
+/// only when the environment holds the head's canonical definition — a
+/// `fold` row of the kernel's `env/native_fold_canon.tsv` — and the
+/// successor fold only when `Nat` is the canonical two-constructor
+/// inductive: by name alone a user `Nat.gcd := fun _ _ => 0` chained to
+/// `False` (docs/issues/2026-09-26-kernel-native-fold-by-name.md). An empty
+/// environment declares neither `Nat` nor any head, so a corpus there
+/// measured a by-name fold the kernel no longer performs (and must not:
+/// `tests::test_whnf_nat_accelerator_refuses_an_undeclared_head` pins it
+/// stuck). `clean-bare-nat` is the smallest world the table pins as `fold`
+/// for `Nat.add`/`sub`/`mul`/`div`/`pred`.
+///
+/// LEAN PARITY, measured 2026-10-07 with `Lean.Kernel.whnf` on v4.30.0-rc2
+/// and v4.31.0. Over `importModules #[Init]` every accelerated term below
+/// reduces to the same literal as here, and `Nat.add 2` δ-unfolds to a `fun`
+/// (`fun x => Nat.brecOn … Nat.add._f 2`) — the accelerator has no arm for a
+/// one-argument binary spine, so `unfold_definition` runs, as it does here.
+/// Over `mkEmptyEnvironment` Lean folds by NAME (`type_checker::reduce_nat`
+/// compares `f == *g_nat_add` and nothing else): `Nat.add 2 3` gives `5`,
+/// yet `Kernel.check` of that term throws `unknownConstant Nat.add`, so no
+/// declaration Lean admits can observe the difference; `Nat.pred 0` stays
+/// stuck there (Lean's `reduce_nat` has no `pred` arm).
+pub fn audit_whnf_nat_fidelity() -> Result<usize, String> {
+    let mut env = Environment::new();
+    env.init_nat()
+        .map_err(|e| format!("the clean-bare-nat world must build: {e:?}"))?;
     let tc = TypeChecker::with_mode(&env, env.mode());
     let mut agreed = 0usize;
-    for term in &corpus {
+
+    let mut structural = nat_accelerated_corpus();
+    // A bare literal is already WHNF.
+    structural.push(Expr::nat_lit(42));
+    for term in &structural {
         let kernel = tc.whnf(term);
         let micro = micro_whnf_nat(term);
         if kernel != micro {
@@ -1212,6 +1546,31 @@ pub fn audit_whnf_nat_fidelity() -> Result<usize, String> {
         }
         agreed += 1;
     }
+
+    // A PARTIAL application (one argument to a binary op). The mirror has no
+    // arm for it, so it leaves the spine unchanged; the kernel must not
+    // accelerate it either. In a world that holds `Nat.add`'s definition the
+    // kernel's whnf then δ-unfolds it to a λ — Lean's kernel does the same
+    // over `Init` (measured above) — so the kernel side is pinned as that λ,
+    // never a literal and never the untouched spine of the empty world.
+    let partial = Expr::app(
+        Expr::const_(Name::from_string("Nat.add"), clean_kernel::LevelVec::new()),
+        Expr::nat_lit(2),
+    );
+    let micro = micro_whnf_nat(&partial);
+    if micro != partial {
+        return Err(format!(
+            "the micro nat mirror must leave a one-argument binary spine unchanged, got {micro:?}"
+        ));
+    }
+    let kernel = tc.whnf(&partial);
+    if !matches!(kernel.kind(), ExprKind::Lam(..)) {
+        return Err(format!(
+            "a one-argument `Nat.add` spine must not be accelerated; over its canonical \
+             definition whnf δ-unfolds it to a λ (Lean: `fun x => Nat.brecOn …`), got {kernel:?}"
+        ));
+    }
+    agreed += 1;
     Ok(agreed)
 }
 
@@ -1302,6 +1661,45 @@ mod tests {
         assert_eq!(agreed, 8, "all eight const-headed corpus terms must agree");
     }
 
+    /// DELTA INFERENCE-FIDELITY: the real kernel's `infer_type` agrees
+    /// structurally with the const-aware micro inference over a const-bearing
+    /// corpus — the region the fuzzed differential cannot reach at all, because
+    /// `in_supported_fragment` refuses `Const`.
+    ///
+    /// The fourth corpus term is the one that makes this about delta rather
+    /// than lookup: `InferFnAlias`'s DECLARED TYPE is itself a constant, so
+    /// exposing the `Pi` to type the application requires unfolding it. Both
+    /// sides must do that, and the micro side does it through
+    /// `micro_whnf_delta` — the reducer the step brick already checked against
+    /// the kernel — so the two bricks compose rather than each trusting the
+    /// kernel separately.
+    #[test]
+    fn test_infer_const_fidelity() {
+        let agreed = audit_infer_const_fidelity().expect("const inference fidelity must hold");
+        assert_eq!(
+            agreed, 7,
+            "all seven const-bearing corpus terms must agree structurally"
+        );
+    }
+
+    /// The const-inference differential must be FALSIFIABLE. One entry of the
+    /// micro side's type table is made wrong and the audit must refuse; without
+    /// this, `test_infer_const_fidelity` passing would be consistent with a
+    /// comparator that agrees with everything.
+    ///
+    /// This control is why the brick is compared in CHECK mode at all. Built
+    /// against the default `infer_type` — the Lean-4 `infer_only` fast path —
+    /// an ill-typed corpus agreed perfectly, because neither side validated an
+    /// application's argument.
+    #[test]
+    fn test_infer_const_fidelity_control_diverges() {
+        let outcome = audit_infer_const_fidelity_divergence_control();
+        assert!(
+            outcome.is_err(),
+            "a wrong micro type table must be caught, got {outcome:?}"
+        );
+    }
+
     /// IOTA STEP-FIDELITY ((F) for recursor-on-constructor): the real kernel's whnf
     /// agrees structurally with the micro iota reducer over the recursor corpus —
     /// enum arms, the recursive succ arm (weak-head: the IH stays unreduced under
@@ -1320,6 +1718,30 @@ mod tests {
     fn test_whnf_nat_accelerator_step_fidelity() {
         let agreed = audit_whnf_nat_fidelity().expect("nat-accelerator fidelity must hold");
         assert_eq!(agreed, 9, "all nine nat corpus terms must agree");
+    }
+
+    /// The other side of [`audit_whnf_nat_fidelity`]'s world: in an
+    /// environment that declares neither `Nat` nor any accelerated head, the
+    /// kernel must NOT fold — every accelerated spine is STUCK (whnf is the
+    /// identity). This is the authority rule of 3809edf31 seen from the
+    /// fidelity side; the day a by-name fold returns, this fails.
+    ///
+    /// Lean's kernel differs here, deliberately not followed: over
+    /// `mkEmptyEnvironment` its `Kernel.whnf` gives `Nat.add 2 3 ⇒ 5` by name
+    /// (v4.30.0-rc2 and v4.31.0, measured 2026-10-07), while its own
+    /// `Kernel.check` of that term throws `unknownConstant Nat.add` — the
+    /// term is ill-scoped, so no accepted declaration sees the difference.
+    #[test]
+    fn test_whnf_nat_accelerator_refuses_an_undeclared_head() {
+        let env = Environment::new();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        for term in nat_accelerated_corpus() {
+            assert_eq!(
+                tc.whnf(&term),
+                term,
+                "an accelerated spine over an UNDECLARED head must stay stuck"
+            );
+        }
     }
 
     /// (F)-COVERAGE SCOPING, machine-checked (not prose): two scope pins for the

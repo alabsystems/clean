@@ -1,14 +1,14 @@
+; synthetic: SYNTHETIC MODULE -- authored for the W4 fcmp semdiff lane
+; synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W4).
+; synthetic: No compiler emitted this body; its registered Clean twin is
+; synthetic: ir_w4_fc_module (eval_ir_w4_synth.rs). All TWELVE FCmpOps run
+; synthetic: on the same two f64 operands, in declaration order, and every
+; synthetic: bound Bool is returned through the twelve-value ret, so a row
+; synthetic: observes the whole ordered/unordered split at once. Operands
+; synthetic: cross the boundary as binary64 bit patterns; the battery's
+; synthetic: input set covers the four NaN quadrants, the signed zeros and
+; synthetic: the infinities. Do not add it to any emitted-fixture census.
 fn @synth::fcmp_probe(functy.924) {
-    ; #synthetic: SYNTHETIC MODULE -- authored for the W4 fcmp semdiff lane
-    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W4).
-    ; #synthetic: No compiler emitted this body; its registered Clean twin is
-    ; #synthetic: ir_w4_fc_module (eval_ir_w4_synth.rs). All TWELVE FCmpOps run
-    ; #synthetic: on the same two f64 operands, in declaration order, and every
-    ; #synthetic: bound Bool is returned through the twelve-value ret, so a row
-    ; #synthetic: observes the whole ordered/unordered split at once. Operands
-    ; #synthetic: cross the boundary as binary64 bit patterns; the battery's
-    ; #synthetic: input set covers the four NaN quadrants, the signed zeros and
-    ; #synthetic: the infinities. Do not add it to any emitted-fixture census.
 bb0(%0: f64, %1: f64):
     %2 = fcmp oeq f64 %0, %1
     %3 = fcmp one f64 %0, %1

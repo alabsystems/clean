@@ -47,7 +47,7 @@ Usage: ./scripts/reproduce_gamma_crown.sh [OPTIONS]
 Options:
   --output-dir DIR   Write all report formats (human, JSON, CSV, LaTeX) to DIR
   --json-only        Print only JSON report to stdout (for piping)
-  --skip-build       Skip cargo build step (reuse previous build)
+  --skip-build       Skip targo --unverified build step (reuse previous build)
   --debug            Build in debug mode (faster compile, slower execution)
   --help             Show this help message
 
@@ -173,20 +173,19 @@ log "  Clean kernel — kernel type-checked verification"
 log "=================================================================="
 log ""
 
-# Check Rust toolchain
-if ! command -v rustc &>/dev/null; then
-    log_err "ERROR: rustc not found. Install Rust: https://rustup.rs/"
+# Check the Trust toolchain (owner directive 2026-09-28: ALab builds with Trust)
+if ! command -v trustc &>/dev/null; then
+    log_err "ERROR: trustc not found. Put the Trust toolchain (trustc/targo) on PATH."
     exit 2
 fi
-if ! command -v cargo &>/dev/null; then
-    log_err "ERROR: cargo not found. Install Rust: https://rustup.rs/"
+if ! targo --unverified --version &>/dev/null; then
+    log_err "ERROR: targo not found (or \`targo --unverified --version\` refused: not targo)."
     exit 2
 fi
 
-RUSTC_VERSION="$(rustc --version | sed 's/rustc \([0-9.]*\).*/\1/')"
+RUSTC_VERSION="$(trustc --version | sed 's/rustc \([0-9.]*\).*/\1/')"
 if ! version_ge "$RUSTC_VERSION" "$MIN_RUST_VERSION"; then
-    log_err "ERROR: Rust >= $MIN_RUST_VERSION required, found $RUSTC_VERSION"
-    log_err "       Run: rustup update stable"
+    log_err "ERROR: trustc >= $MIN_RUST_VERSION required, found $RUSTC_VERSION"
     exit 2
 fi
 
@@ -213,8 +212,8 @@ log "-- Environment ---------------------------------------------------"
 log "  Timestamp:      $TIMESTAMP"
 log "  Git commit:     ${GIT_HASH}${GIT_DIRTY}"
 log "  Commit subject: $GIT_SUBJECT"
-log "  Rust version:   $(rustc --version)"
-log "  Cargo version:  $(cargo --version)"
+log "  Rust version:   $(trustc --version)"
+log "  Cargo version:  $(targo --unverified --version)"
 log "  OS:             $OS_INFO"
 log "  Repo root:      $REPO_ROOT"
 log ""
@@ -228,11 +227,11 @@ fi
 
 if [ "$SKIP_BUILD" = false ]; then
     log "-- Building verify_gamma_crown binary ----------------------------"
-    log "  cargo build ${BUILD_FLAGS[*]}"
+    log "  targo --unverified build ${BUILD_FLAGS[*]}"
     log ""
 
     BUILD_START="$(date +%s)"
-    if ! cargo build "${BUILD_FLAGS[@]}"; then
+    if ! targo --unverified build "${BUILD_FLAGS[@]}"; then
         log_err "ERROR: Build failed. See output above."
         exit 2
     fi
@@ -259,7 +258,7 @@ fi
 # Always capture JSON for cross-checking, regardless of output mode.
 # Temporarily allow non-zero exit (set -e would abort before we can report).
 VERIFY_EXIT=0
-JSON_OUTPUT="$(cargo run "${RUN_FLAGS[@]}" -- --json 2>/dev/null)" || VERIFY_EXIT=$?
+JSON_OUTPUT="$(targo --unverified run "${RUN_FLAGS[@]}" -- --json 2>/dev/null)" || VERIFY_EXIT=$?
 
 # If verification binary returned nonzero, report and exit
 if [ $VERIFY_EXIT -ne 0 ]; then
@@ -386,13 +385,13 @@ elif [ -n "$OUTPUT_DIR" ]; then
     echo "$JSON_OUTPUT" >"${OUTPUT_DIR}/verification_report.json"
     log "  Wrote ${OUTPUT_DIR}/verification_report.json"
 
-    cargo run "${RUN_FLAGS[@]}" -- 2>/dev/null >"${OUTPUT_DIR}/verification_report.txt"
+    targo --unverified run "${RUN_FLAGS[@]}" -- 2>/dev/null >"${OUTPUT_DIR}/verification_report.txt"
     log "  Wrote ${OUTPUT_DIR}/verification_report.txt"
 
-    cargo run "${RUN_FLAGS[@]}" -- --csv 2>/dev/null >"${OUTPUT_DIR}/verification_report.csv"
+    targo --unverified run "${RUN_FLAGS[@]}" -- --csv 2>/dev/null >"${OUTPUT_DIR}/verification_report.csv"
     log "  Wrote ${OUTPUT_DIR}/verification_report.csv"
 
-    cargo run "${RUN_FLAGS[@]}" -- --latex 2>/dev/null >"${OUTPUT_DIR}/verification_report.tex"
+    targo --unverified run "${RUN_FLAGS[@]}" -- --latex 2>/dev/null >"${OUTPUT_DIR}/verification_report.tex"
     log "  Wrote ${OUTPUT_DIR}/verification_report.tex"
 
     # Write environment metadata
@@ -401,8 +400,8 @@ elif [ -n "$OUTPUT_DIR" ]; then
   "timestamp": "$TIMESTAMP",
   "git_commit": "${GIT_HASH}${GIT_DIRTY}",
   "git_subject": "$GIT_SUBJECT",
-  "rustc_version": "$(rustc --version)",
-  "cargo_version": "$(cargo --version)",
+  "rustc_version": "$(trustc --version)",
+  "cargo_version": "$(targo --unverified --version)",
   "os": "$OS_INFO",
   "release_mode": $RELEASE_MODE
 }
@@ -427,7 +426,7 @@ ENVJSON
     log "All artifacts written to: $OUTPUT_DIR"
 else
     # Default: print human-readable report to stdout
-    cargo run "${RUN_FLAGS[@]}" -- 2>/dev/null
+    targo --unverified run "${RUN_FLAGS[@]}" -- 2>/dev/null
 fi
 
 # --- Step 7: Final status ----------------------------------------------------

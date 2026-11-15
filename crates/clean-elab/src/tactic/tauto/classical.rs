@@ -107,7 +107,7 @@ pub(super) fn try_by_cases_for_disjunction(state: &mut ProofState) -> Result<boo
                     if a_matches && b_matches {
                         // Found matching hypothesis ¬(A ∧ B)
                         // Proof: by_cases on A
-                        let hyp_name_for_cases = decl.name.clone();
+                        let not_and_fvar = decl.fvar;
                         let goals_backup = state.goals.clone();
                         // Positional fvar discipline (see try_classical_atom_split): a
                         // rolled-back `by_cases`/`cases` leaves `next_fvar` advanced, and
@@ -142,15 +142,8 @@ pub(super) fn try_by_cases_for_disjunction(state: &mut ProofState) -> Result<boo
                                         .iter()
                                         .find(|d| d.name == h_b_name)
                                         .map(|d| d.fvar);
-                                    let not_and_fvar = goal2
-                                        .local_ctx
-                                        .iter()
-                                        .find(|d| d.name == hyp_name_for_cases)
-                                        .map(|d| d.fvar);
 
-                                    if let (Some(h_a), Some(h_b), Some(h_not_and)) =
-                                        (h_case_fvar, h_b_fvar, not_and_fvar)
-                                    {
+                                    if let (Some(h_a), Some(h_b)) = (h_case_fvar, h_b_fvar) {
                                         // Build And.intro h_a h_b
                                         let and_intro =
                                             Expr::const_(Name::from_string("And.intro"), vec![]);
@@ -160,7 +153,7 @@ pub(super) fn try_by_cases_for_disjunction(state: &mut ProofState) -> Result<boo
                                         let and_proof = Expr::app(and_intro_ha, Expr::fvar(h_b));
 
                                         // Apply h_not_and to and_proof
-                                        let proof = Expr::app(Expr::fvar(h_not_and), and_proof);
+                                        let proof = Expr::app(Expr::fvar(not_and_fvar), and_proof);
                                         if exact(state, proof).is_ok() {
                                             // Case 1 complete, now handle Case 2
                                             // Case 2: ¬A holds, goal is ¬A ∨ ¬B

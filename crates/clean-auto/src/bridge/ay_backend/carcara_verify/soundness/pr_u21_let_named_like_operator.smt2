@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-const s String)
+(assert (str.in_re s re.all))
+(assert (not (let ((re.all re.none)) (str.in_re s re.all))))
+(check-sat)

@@ -24,7 +24,12 @@
 #[cfg(feature = "cli")]
 pub mod cli;
 
+#[cfg(test)]
+#[path = "emit_trust_ir_tv_gate_source_tests.rs"]
+mod tv_gate_source_tests;
+
 pub mod back_translate;
+// Trust plan step 3.2: the native carrier primitives of the Rust ABI.
 #[cfg(test)]
 pub(crate) mod back_translate_ext;
 #[cfg(test)]
@@ -54,6 +59,8 @@ pub(crate) mod boxing_ext;
 #[cfg(test)]
 #[path = "boxing_ext_tests.rs"]
 mod boxing_ext_tests;
+#[cfg(feature = "trust-ir-backend")]
+pub(crate) mod carrier_prims;
 #[cfg(test)]
 pub(crate) mod closure;
 #[cfg(test)]
@@ -80,6 +87,7 @@ pub(crate) mod closure_ext;
 #[path = "closure_ext_tests.rs"]
 mod closure_ext_tests;
 pub mod code_visitor;
+pub mod string_layout;
 pub use code_visitor::{CodeFolder, CodeVisitor};
 #[cfg(test)]
 pub(crate) mod code_visitor_ext;
@@ -152,10 +160,20 @@ mod emit_rust_ext_tests;
 pub mod emit_trust_ir;
 #[cfg(feature = "trust-ir-backend")]
 pub(crate) mod emit_trust_ir_runtime;
+// The `clean-compiler-unvalidated` codegen license (design 2026-09-30 §2.3,
+// LX0) and the read-only link views an object lane needs. Its one caller is
+// the experimental `clean run --backend trust-cg` path in clean-cli.
+#[cfg(feature = "trust-ir-backend")]
+pub mod emit_trust_ir_lane;
 // Backend translation-validation minter (P2): kernel-decided semantics-
 // preservation certificates for in-fragment decls, attached post-finalize.
 #[cfg(feature = "trust-ir-backend")]
 pub mod emit_trust_ir_tv;
+// Cross-module import producer: the first writer of `trust_ir::Module::imports`.
+// Public since WS6.8, the change that wired its caller: `clean compile --emit
+// trustir-bin --link-artifact <PATH>` (clean-cli `cmd_compile`).
+#[cfg(feature = "trust-ir-backend")]
+pub mod emit_trust_ir_link;
 // WebAssembly backend for the straight-line first-order fragment: `.wat` text
 // plus the matching binary encoding, both from one lowering.
 pub mod emit_wasm;
@@ -173,6 +191,10 @@ pub(crate) mod ffi_verify_ext;
 #[cfg(test)]
 #[path = "ffi_verify_ext_tests.rs"]
 mod ffi_verify_ext_tests;
+// `@[implemented_by]` in compiled code: the chain each reference runs.
+pub(crate) mod csimp;
+pub use csimp::{resolve_csimp_reference, resolve_dependencies as resolve_csimp_dependencies};
+pub(crate) mod implemented_by;
 pub(crate) mod inline_pass;
 #[cfg(test)]
 pub(crate) mod inline_pass_ext;
@@ -323,6 +345,10 @@ pub(crate) mod rc_ext;
 #[cfg(test)]
 #[path = "rc_ext_tests.rs"]
 mod rc_ext_tests;
+pub(crate) mod rc_repair;
+// Trust plan step 3.2: a Lean function at the Rust ABI (carrier signatures,
+// Rust callees, `Nat` at the pinned handle, determinism digests). The
+// producer is the trust-ir backend's, so it is gated with it.
 #[cfg(test)]
 pub(crate) mod reg_alloc;
 #[cfg(test)]
@@ -337,6 +363,10 @@ pub(crate) mod reset_reuse_ext;
 #[cfg(test)]
 #[path = "reset_reuse_ext_tests.rs"]
 mod reset_reuse_ext_tests;
+#[cfg(feature = "runtime-lcnf")]
+pub mod runtime_lcnf;
+#[cfg(feature = "trust-ir-backend")]
+pub mod rust_abi;
 #[cfg(test)]
 pub(crate) mod specialize;
 #[cfg(test)]
@@ -391,4 +421,39 @@ pub use lcnf::Decl;
 pub use opt::{optimize, optimize_all, OptConfig};
 pub use rc::RCConfig;
 pub use to_ir::CtorMeta;
-pub use to_lcnf::{constant_to_decl, expr_to_code, is_erasable};
+pub use to_lcnf::{
+    constant_to_decl, constant_to_decl_in_runtime_closure, constant_to_decl_with_meaning,
+    expr_to_code, is_erasable,
+};
+
+pub use implemented_by::{CodeMeaning, CompiledBefore};
+mod runtime_binding;
+pub use runtime_binding::RuntimeBindingClosure;
+
+/// One recorded constant of the ORDER record ([`implemented_by_order`]) as
+/// the order refusals print it: "`r` names `d`", "`r` reaches `d` through
+/// `v`", or, for a declaration recorded for itself, "`d` itself was compiled
+/// before the binding".
+#[must_use]
+pub fn render_implemented_by_reach(referrer: &clean_kernel::Name, why: &CompiledBefore) -> String {
+    implemented_by::render_reach(referrer, &why.rebound, &why.via)
+}
+
+/// `env`'s ORDER record ([`clean_kernel::Environment::compiled_before_record`],
+/// written by source elaboration for a late `attribute [implemented_by]`
+/// command and by `.olean` import for an imported module's own late
+/// bindings), keyed by the constant compiled too early; `None` when it is
+/// empty. Pinned Lean compiled that code before the binding, and which
+/// body it runs then is its inliner's choice, which Clean does not model, so
+/// a lane that compiles from `env` refuses every root while this is `Some`
+/// (`clean_native`'s `native-implemented-by-order`, the Rust ABI's
+/// `implemented-by-order`), and so does every public lowering entry of this
+/// crate ([`constant_to_decl`], [`expr_to_code`] and
+/// [`pass_manager::compile_lcnf_decls`] under every `compile_lcnf_*`:
+/// [`CompilerError::ImplementedByOrder`]).
+#[must_use]
+pub fn implemented_by_order(
+    env: &clean_kernel::Environment,
+) -> Option<&std::collections::HashMap<clean_kernel::Name, CompiledBefore>> {
+    implemented_by::order(env)
+}

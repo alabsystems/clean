@@ -53,16 +53,18 @@ fn test_out_of_range_level_param_rejected() {
 
 #[test]
 fn test_validation_produces_canonical_levels() {
-    // A non-canonical RawLevel (imax(_, 0)) must come out canonicalized to Zero.
+    // A non-canonical RawLevel (imax(0, u)) must come out canonicalized to u.
+    // (imax(_, 0), which Lean's kernel reads as a level that is not Prop's,
+    // is refused as written: tests/level_as_written.rs, R177.)
     let env = MinimalEnv::new();
     let raw = RawExpr::Sort(RawLevel::IMax(
-        Box::new(RawLevel::Param(0)),
         Box::new(RawLevel::Zero),
+        Box::new(RawLevel::Param(0)),
     ));
     let t = Term::validate(&env, &raw, 0, 1).expect("validates");
     match t.kind() {
         clean_ck0::term::TermKind::Sort(l) => {
-            assert_eq!(*l, Level::zero(), "imax(_, 0) canonicalizes to 0");
+            assert_eq!(*l, Level::param(0), "imax(0, u) canonicalizes to u");
         }
         other => panic!("expected Sort, got {other:?}"),
     }

@@ -1,0 +1,105 @@
+{
+  "schema": "clean.changed-main-kernel-qualification.v1",
+  "source_execution_commit": "3a7ab04614532b96d545e6b8ad59238226bfc1f0",
+  "kernel_tree": "62ad982b21e3fdecc2911d9aa128417e7517866c",
+  "qualified_coherent_Trust_cut": "3805c23cf0c9050d239b543daf6ef8e1e7c9cd6c",
+  "scope": "Separate replay/kernel delta qualification after lossless incoming-main merge; not a TrustL3/IR-CG kernel cohort or SDK qualification for tree62ad. The coherent cut retains its tree69b/16controls identity.",
+  "actual_selected_tests": 3,
+  "failed": 0,
+  "ignored": 0,
+  "source_and_Lean_world_bookends_unchanged": true,
+  "result_sha256": "7602ed0963cdbcccdc039906e7590c2f7483f53e8a80f7119bc06154639f52fc",
+  "records": [
+    {
+      "name": "scalar-reference",
+      "argv": [
+        "$HOME/trust-retained-proof-publication-20261105-ql7r/source/scripts/build-slot",
+        "--cpus",
+        "4",
+        "--mem-gb",
+        "24",
+        "--",
+        "$HOME/trust-clean-frame-cohort-20261107-root-2gnnmejj/source/scripts/heavy_gate.sh",
+        "run",
+        "24",
+        "cohort-scalar-reference",
+        "--",
+        "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+        "--unverified",
+        "test",
+        "--locked",
+        "--offline",
+        "--release",
+        "-p",
+        "clean-olean",
+        "--test",
+        "semr_u64_addition",
+        "canonical_scalar_",
+        "--",
+        "--nocapture",
+        "--test-threads=2"
+      ],
+      "exit": 0,
+      "expected_tests": 2,
+      "counts": [
+        [
+          "2",
+          "0",
+          "0"
+        ]
+      ],
+      "qualified": true,
+      "changed_inputs": [],
+      "seconds": 348.9208788871765,
+      "log_sha256": "b37a8743c8327b27d2a75d3b59596e13fc6546f4751303a98107ae4103739fe0"
+    },
+    {
+      "name": "completion-owner",
+      "argv": [
+        "$HOME/trust-retained-proof-publication-20261105-ql7r/source/scripts/build-slot",
+        "--cpus",
+        "4",
+        "--mem-gb",
+        "9",
+        "--",
+        "$HOME/trust-clean-frame-cohort-20261107-root-2gnnmejj/source/scripts/heavy_gate.sh",
+        "run",
+        "9",
+        "cohort-completion-owner",
+        "--",
+        "$HOME/Library/Application Support/aterm/pkg/store/trust/16387.noindex/bin/targo",
+        "--unverified",
+        "test",
+        "--locked",
+        "--offline",
+        "--release",
+        "-p",
+        "clean-olean",
+        "--test",
+        "reference_completion_authority",
+        "edited_replay_diagnostics_cannot_grant_completion",
+        "--",
+        "--nocapture",
+        "--test-threads=2"
+      ],
+      "exit": 0,
+      "expected_tests": 1,
+      "counts": [
+        [
+          "1",
+          "0",
+          "0"
+        ]
+      ],
+      "qualified": true,
+      "changed_inputs": [],
+      "seconds": 5.315935134887695,
+      "log_sha256": "4ab9a514f3665d09a212406fcc807ba47321dce8656d31cb7af14092aabc375d"
+    }
+  ],
+  "not_run": [
+    "broad workspace/just-ci diagnostic",
+    "full191train",
+    "SDK/release/G1-G8"
+  ]
+}

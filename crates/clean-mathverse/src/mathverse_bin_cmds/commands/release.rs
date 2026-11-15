@@ -301,14 +301,19 @@ fn print_release_usage() {
     eprintln!("mathverse release — manage mathverse library releases");
     eprintln!();
     eprintln!("Subcommands:");
-    eprintln!("  build              Build all shards from sources");
+    eprintln!("  build              Print the shard-build recipe (the build runs through");
+    eprintln!(
+        "                     scripts/release_mathverse_shards.sh or `mathverse_shard build`)"
+    );
     eprintln!("  package            Package shards into tar.zst with manifest");
     eprintln!("  verify [DIR]       Verify shard integrity (blake3 checksums)");
     eprintln!("  download           Download release from GitHub");
     eprintln!("  info               Show current release version and stats");
     eprintln!();
     eprintln!("build options:");
-    eprintln!("  --output <DIR>     Output directory (default: data/mathverse-shards)");
+    eprintln!(
+        "  --output <DIR>     Output directory named in the printed recipe (default: data/mathverse-shards)"
+    );
     eprintln!();
     eprintln!("package options:");
     eprintln!("  --version <V>      Release version (required, e.g. 1.1.0)");

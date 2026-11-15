@@ -1,0 +1,4 @@
+million-steps: ACCEPT cursor=1000000 steps=1000000 max=1000000
+walk: ACCEPT cursor=3 steps=3 max=8
+differ: REFUSE sides differ
+depth: REFUSE depth

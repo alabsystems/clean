@@ -55,6 +55,11 @@
 use crate::spec::{SpecError, Specification};
 use std::sync::OnceLock;
 
+#[cfg(test)]
+mod rejection;
+#[cfg(test)]
+pub(crate) use rejection::assert_type_mismatch_rejection;
+
 /// Stack size for tests requiring deep recursion (64MB).
 ///
 /// Specification construction + cross-validation elaborates complex proof terms
@@ -225,6 +230,27 @@ pub fn build_substitution_spec_with_stack() -> Specification {
                 .expect("substitution test spec should build")
         })
     }
+}
+
+/// Flatten a Rust source file's `//!` module doc into one whitespace-normalised
+/// line, for drift guards that pin a PHRASE from a neighbouring rung's doc.
+///
+/// Why this exists: the candidate-model ladder's rungs each pin the sentence in
+/// which the PREVIOUS rung named them, so the reading order cannot silently
+/// break. Spelled as a raw `contains` on the file, such a guard fires whenever
+/// rustfmt reflows the doc comment — measured twice on 2026-09-17, once when
+/// R20's closure was recorded in R19 and once when R21's was recorded in R20.
+/// Both times the guard was right that the file changed and wrong about why. A
+/// guard that cries on reformatting is a guard the next person deletes, so the
+/// phrase is matched against the doc with `//!` markers and line breaks removed.
+#[cfg(test)]
+#[must_use]
+pub(crate) fn flatten_module_doc(source: &str) -> String {
+    source
+        .lines()
+        .map(|l| l.trim_start().trim_start_matches("//!").trim())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Parse-check a specification declaration WITHOUT elaborating it.

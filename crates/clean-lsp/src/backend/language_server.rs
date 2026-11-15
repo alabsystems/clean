@@ -103,12 +103,12 @@ impl LanguageServer for CleanBackend {
                         resolve_provider: Some(true),
                     },
                 ))),
-                document_formatting_provider: Some(OneOf::Left(true)),
-                document_on_type_formatting_provider: Some(DocumentOnTypeFormattingOptions {
-                    first_trigger_character: "\n".to_string(),
-                    more_trigger_character: None,
-                }),
-                document_range_formatting_provider: Some(OneOf::Left(true)),
+                // No formatting capability is advertised: not document, not
+                // range, not on-type. The formatter this server had trimmed
+                // trailing whitespace inside string literals, which changes
+                // the value of a string that spans lines, and pinned Lean
+                // (v4.30.0-rc2) advertises none of the three. The handlers
+                // below still answer, with no edits.
                 folding_range_provider: Some(FoldingRangeProviderCapability::Simple(true)),
                 selection_range_provider: Some(SelectionRangeProviderCapability::Simple(true)),
                 linked_editing_range_provider: Some(LinkedEditingRangeServerCapabilities::Simple(
@@ -649,116 +649,37 @@ impl LanguageServer for CleanBackend {
         Ok(self.resolve_inlay_hint(hint))
     }
 
-    async fn formatting(&self, params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
-        let uri = &params.text_document.uri;
-        let _options = &params.options;
-
-        let Some(doc) = self.documents.get(uri) else {
-            return Ok(None);
-        };
-
-        let text = doc.text();
-
-        // Document-level formatting: normalize whitespace per line, cap blank
-        // runs at 2, and guarantee exactly one trailing newline.
-        let mut formatted = normalize_whitespace_lines(&text);
-        formatted.push('\n');
-
-        if formatted == text {
-            return Ok(Some(vec![]));
-        }
-
-        let line_count = text.lines().count();
-        let last_line_len = text.lines().last().map_or(0, str::len);
-
-        Ok(Some(vec![TextEdit {
-            range: Range {
-                start: Position::new(0, 0),
-                end: Position::new(line_count as u32, last_line_len as u32),
-            },
-            new_text: formatted,
-        }]))
+    // The three formatting handlers answer with no edits.
+    //
+    // `initialize` advertises none of their capabilities, so a conforming
+    // client does not send these requests. One that sends them anyway gets
+    // `null`. The LSP result type is `TextEdit[] | null`: `null` says there is
+    // no result, where `[]` would claim the text was formatted and needed no
+    // change. Leaving the methods to tower-lsp's defaults would answer
+    // `-32601 MethodNotFound` instead, an error a client may show the user.
+    //
+    // The formatter that was here trimmed trailing whitespace from every line,
+    // string literals included, and that changes a string's value: for
+    // `def s := "a  ` followed by a line break and `b"`, pinned Lean evaluates
+    // `s.length` to 5, and to 3 once the two spaces are trimmed. Formatting
+    // comes back only the way upstream lean4#15218 does it, with its re-parse
+    // guard (plan item `devsurface-lsp-formatter-withdraw`).
+    async fn formatting(&self, _params: DocumentFormattingParams) -> Result<Option<Vec<TextEdit>>> {
+        Ok(None)
     }
 
     async fn range_formatting(
         &self,
-        params: DocumentRangeFormattingParams,
+        _params: DocumentRangeFormattingParams,
     ) -> Result<Option<Vec<TextEdit>>> {
-        let uri = &params.text_document.uri;
-        let range = params.range;
-
-        let Some(doc) = self.documents.get(uri) else {
-            return Ok(None);
-        };
-        let text = doc.text();
-
-        let start_off = doc.position_to_offset(range.start);
-        let end_off = doc.position_to_offset(range.end);
-        if start_off >= end_off || end_off > text.len() {
-            return Ok(Some(vec![]));
-        }
-
-        // Slice on UTF-8 boundaries; the LSP position math should already land
-        // on char boundaries, but be defensive against malformed input.
-        if !text.is_char_boundary(start_off) || !text.is_char_boundary(end_off) {
-            return Ok(Some(vec![]));
-        }
-        let slice = &text[start_off..end_off];
-
-        let formatted = normalize_whitespace_lines(slice);
-        if formatted == slice {
-            return Ok(Some(vec![]));
-        }
-
-        Ok(Some(vec![TextEdit {
-            range,
-            new_text: formatted,
-        }]))
+        Ok(None)
     }
 
     async fn on_type_formatting(
         &self,
-        params: DocumentOnTypeFormattingParams,
+        _params: DocumentOnTypeFormattingParams,
     ) -> Result<Option<Vec<TextEdit>>> {
-        // Trigger is `\n` — the user just hit Return. Trim any trailing
-        // whitespace from the line that was just terminated (the line
-        // *above* the cursor). Conservative scope: only that one line,
-        // no auto-indent (Lean's whitespace-sensitive blocks make a
-        // generic indenter more harmful than helpful, and a no-op
-        // handler is worse than absence for editors that expect a
-        // response).
-        let uri = &params.text_document_position.text_document.uri;
-        let position = params.text_document_position.position;
-        if position.line == 0 {
-            return Ok(Some(vec![]));
-        }
-
-        let Some(doc) = self.documents.get(uri) else {
-            return Ok(None);
-        };
-        let text = doc.text();
-
-        let target_line = position.line - 1;
-        let line_text: String = text
-            .lines()
-            .nth(target_line as usize)
-            .unwrap_or("")
-            .to_string();
-        let trimmed = line_text.trim_end();
-        if trimmed.len() == line_text.len() {
-            return Ok(Some(vec![]));
-        }
-
-        let trim_start_col = u32::try_from(trimmed.chars().count()).unwrap_or(u32::MAX);
-        let original_end_col = u32::try_from(line_text.chars().count()).unwrap_or(u32::MAX);
-
-        Ok(Some(vec![TextEdit {
-            range: Range {
-                start: Position::new(target_line, trim_start_col),
-                end: Position::new(target_line, original_end_col),
-            },
-            new_text: String::new(),
-        }]))
+        Ok(None)
     }
 
     async fn linked_editing_range(
@@ -1181,32 +1102,4 @@ fn code_action_kind_includes(requested: &CodeActionKind, actual: &CodeActionKind
             .as_str()
             .strip_prefix(requested.as_str())
             .is_some_and(|suffix| suffix.starts_with('.'))
-}
-
-/// Normalize whitespace across the supplied text: trim trailing whitespace
-/// from every line and collapse runs of blank lines to at most two. Returns
-/// the normalized lines joined by `\n`, with no leading or trailing newline.
-///
-/// Shared by [`LanguageServer::formatting`] (document-wide) and
-/// [`LanguageServer::range_formatting`] (selection-scoped). The trailing-
-/// newline guarantee is applied by `formatting` only — appending one to a
-/// partial range would inject spurious blank lines into the document.
-fn normalize_whitespace_lines(text: &str) -> String {
-    let mut formatted: Vec<String> = Vec::new();
-    let mut blank_count = 0usize;
-
-    for line in text.lines() {
-        let trimmed = line.trim_end();
-        if trimmed.is_empty() {
-            blank_count += 1;
-            if blank_count <= 2 {
-                formatted.push(String::new());
-            }
-        } else {
-            blank_count = 0;
-            formatted.push(trimmed.to_string());
-        }
-    }
-
-    formatted.join("\n")
 }

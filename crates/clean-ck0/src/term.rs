@@ -27,7 +27,7 @@
 //! cache is correct, so `Term` equality can fast-reject on the hash.
 
 use crate::bignat::BigNat;
-use crate::level::Level;
+use crate::level::{Level, LevelTooDeep};
 use crate::name::Name;
 use crate::rawexpr::BinderInfo;
 use std::sync::Arc;
@@ -155,6 +155,14 @@ impl ConstRef {
         }
     }
 
+    /// [`ConstRef::mk_unchecked_levels`] over an already-shared level vector, so
+    /// many references to one constant (the nested auxiliary's self-references)
+    /// share a single allocation. Same invariant: the caller supplies exactly
+    /// the declaration's level params.
+    pub(crate) fn mk_unchecked_shared_levels(name: Name, levels: Arc<[Level]>) -> Self {
+        ConstRef { name, levels }
+    }
+
     /// The referenced constant's name.
     #[must_use]
     pub fn name(&self) -> &Name {
@@ -171,15 +179,15 @@ impl ConstRef {
     /// (substitution maps a level to a level), so the invariant established by
     /// [`ConstRef::mk`] is maintained without re-consulting the env. Crate-
     /// internal: used by δ-unfold / const-type instantiation.
-    pub(crate) fn instantiate_levels(&self, subst: &[Level]) -> ConstRef {
-        ConstRef {
+    pub(crate) fn instantiate_levels(&self, subst: &[Level]) -> Result<ConstRef, LevelTooDeep> {
+        Ok(ConstRef {
             name: self.name.clone(),
             levels: self
                 .levels
                 .iter()
-                .map(|l| l.instantiate_params(subst))
-                .collect(),
-        }
+                .map(|l| l.try_instantiate_params(subst))
+                .collect::<Result<_, _>>()?,
+        })
     }
 }
 
@@ -243,12 +251,14 @@ impl ElimRef {
             });
         }
         // The derived vector length is now provably `expected_usize + large_elim`.
-        let mut derived: Vec<Level> =
-            Vec::with_capacity(expected_usize.saturating_add(usize::from(large_elim)));
+        // It is built in `ind_levels`' own allocation (the motive level, if any,
+        // goes in front), not in a fresh `Vec::with_capacity` sized from the
+        // env-reported arity: that count is a `usize` the allocation lane cannot
+        // bound, while the caller's vector is memory already held.
+        let mut derived = ind_levels;
         if large_elim {
-            derived.push(motive_level);
+            derived.insert(0, motive_level);
         }
-        derived.extend(ind_levels);
         Ok(ElimRef {
             inductive,
             derived_levels: derived.into(),
@@ -270,15 +280,15 @@ impl ElimRef {
     /// Rebuild with each derived level `subst`-instantiated. Length is preserved.
     /// Crate-internal: used by level instantiation of a `Term` containing an
     /// `Elim`.
-    pub(crate) fn instantiate_levels(&self, subst: &[Level]) -> ElimRef {
-        ElimRef {
+    pub(crate) fn instantiate_levels(&self, subst: &[Level]) -> Result<ElimRef, LevelTooDeep> {
+        Ok(ElimRef {
             inductive: self.inductive.clone(),
             derived_levels: self
                 .derived_levels
                 .iter()
-                .map(|l| l.instantiate_params(subst))
-                .collect(),
-        }
+                .map(|l| l.try_instantiate_params(subst))
+                .collect::<Result<_, _>>()?,
+        })
     }
 }
 
@@ -293,9 +303,20 @@ pub struct Term {
     /// cached structural hash; the chokepoint guarantees it equals
     /// [`TermKind`]'s structural hash so equality can fast-reject on it.
     pub(crate) hash: u64,
-    /// `true` iff the subtree contains a loose (free) de Bruijn variable.
-    /// Cached so `validate` can check closedness in O(1) per node.
-    pub(crate) has_loose: bool,
+    /// One past the largest loose (free) de Bruijn index of the subtree (`0`
+    /// when it is closed), computed from the children's in O(1) per node (R162:
+    /// it was a whole-subtree walk per node built, quadratic in a term's size).
+    /// Cached so `validate` checks closedness in O(1), and so `lift`/`instantiate`
+    /// skip a subtree with no index at or above their cutoff.
+    pub(crate) loose: u32,
+    /// Height of the subtree (a leaf is 1, plus its levels' depth), computed
+    /// from the children's and the levels' in O(1) per child. `validate` admits
+    /// no input higher than [`crate::MAX_VALIDATE_DEPTH`], and `whnf_core`
+    /// refuses a reduct higher than it (R166), so every term the checker reduces
+    /// stays within the depth its natively recursive consumers (`Drop`,
+    /// `PartialEq`, `instantiate`, `lift`, `infer`, and the level operations
+    /// they call) are sized for.
+    pub(crate) depth: u32,
 }
 
 /// The shape of a [`Term`]. Note: no `Const` variant with a free level vector
@@ -330,12 +351,16 @@ impl Term {
     // --- builders (crate-internal; the chokepoint calls these) ---
 
     pub(crate) fn mk(kind: TermKind) -> Term {
+        #[cfg(test)]
+        NODES_BUILT.with(|n| n.set(n.get().saturating_add(1)));
         let hash = crate::term_ops::structural_hash(&kind);
-        let has_loose = crate::term_ops::compute_has_loose(&kind);
+        let loose = crate::term_ops::compute_loose_range(&kind);
+        let depth = crate::term_ops::compute_depth(&kind);
         Term {
-            kind: Arc::new(kind),
+            kind: crate::term_dag::intern(kind, hash),
             hash,
-            has_loose,
+            loose,
+            depth,
         }
     }
 
@@ -379,6 +404,8 @@ impl Term {
     /// The node shape.
     #[must_use]
     pub fn kind(&self) -> &TermKind {
+        #[cfg(test)]
+        KIND_READS.with(|n| n.set(n.get().saturating_add(1)));
         &self.kind
     }
 
@@ -391,7 +418,7 @@ impl Term {
     /// True iff this subtree has a loose (free) bound variable.
     #[must_use]
     pub fn has_loose_bvars(&self) -> bool {
-        self.has_loose
+        self.loose > 0
     }
 
     /// Decompose an application spine `f a1 a2 ... an` into `(f, [a1..an])`.
@@ -402,6 +429,8 @@ impl Term {
         let mut args = Vec::new();
         let mut cur = self.clone();
         while let TermKind::App(f, a) = &*cur.kind.clone() {
+            #[cfg(test)]
+            walk_step();
             args.push(a.clone());
             cur = f.clone();
         }
@@ -425,55 +454,40 @@ impl Term {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::minimal_env::MinimalEnv;
-    use crate::validate::Env;
-
-    #[test]
-    fn test_structural_equality_with_matching_hash() {
-        // Two independently built identical terms are == (and share a hash).
-        let a = Term::app(Term::bvar(0), Term::sort(Level::zero()));
-        let b = Term::app(Term::bvar(0), Term::sort(Level::zero()));
-        assert_eq!(a, b);
-        assert_eq!(a.cached_hash(), b.cached_hash());
-    }
-
-    #[test]
-    fn test_different_terms_differ() {
-        let a = Term::bvar(0);
-        let b = Term::bvar(1);
-        assert_ne!(a, b);
-    }
-
-    #[test]
-    fn test_cached_hash_equals_recompute() {
-        let t = Term::lam(
-            BinderInfo::Default,
-            Term::sort(Level::zero()),
-            Term::app(Term::bvar(0), Term::bvar(0)),
-        );
-        assert_eq!(t.cached_hash(), t.recompute_hash());
-    }
-
-    #[test]
-    fn test_has_loose_tracks_binders() {
-        // lambda over BVar(0) is closed; BVar(0) alone is loose.
-        let closed = Term::lam(
-            BinderInfo::Default,
-            Term::sort(Level::zero()),
-            Term::bvar(0),
-        );
-        assert!(!closed.has_loose_bvars());
-        let loose = Term::bvar(0);
-        assert!(loose.has_loose_bvars());
-    }
-
-    #[test]
-    fn test_constref_levels_match_env_arity() {
-        let env: MinimalEnv = MinimalEnv::new().with_const(Name::from_dotted("Id"), 1);
-        assert_eq!(env.num_level_params(&Name::from_dotted("Id")), Some(1));
-        let c = ConstRef::mk(&env, Name::from_dotted("Id"), vec![Level::param(0)]).expect("ok");
-        assert_eq!(c.levels().len(), 1);
-    }
+thread_local! {
+    /// The nodes [`Term::mk`] has built on this thread, for the tests that
+    /// bound what a rewrite builds (R176). A test reads it before and after.
+    pub(crate) static NODES_BUILT: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The steps walks over terms have taken on this thread, for the tests
+    /// that bound what the nested rewrites look at (R176): one per call of
+    /// `Term`'s equality, argument `unfold_apps` takes off, call of the
+    /// parameter lowering, and step of the nested rewrites' own walks.
+    pub(crate) static WALK_STEPS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+    /// The node shapes read through [`Term::kind`] on this thread, for the
+    /// tests that bound what a walk reads (R176). A test reads it before and
+    /// after.
+    pub(crate) static KIND_READS: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
 }
+
+/// Count one step of a walk over a term on this thread (R176).
+#[cfg(test)]
+pub(crate) fn walk_step() {
+    WALK_STEPS.with(|n| n.set(n.get().saturating_add(1)));
+}
+
+/// What `f` returns, and the walk steps it took on this thread (R176).
+#[cfg(test)]
+pub(crate) fn walk_steps<R>(f: impl FnOnce() -> R) -> (R, u64) {
+    let before = WALK_STEPS.with(std::cell::Cell::get);
+    let out = f();
+    (
+        out,
+        WALK_STEPS.with(std::cell::Cell::get).saturating_sub(before),
+    )
+}
+
+#[cfg(test)]
+mod tests;
+
+#[cfg(test)]
+mod dag_tests;

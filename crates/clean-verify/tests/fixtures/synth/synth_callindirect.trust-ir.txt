@@ -1,12 +1,12 @@
+; synthetic: SYNTHETIC MODULE -- authored for the W2c semdiff lane
+; synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2c).
+; synthetic: No compiler emitted this body; its registered Clean twin is
+; synthetic: ir_w2c_ci_module (eval_ir_w2c_synth.rs). The callee arrives as a
+; synthetic: function-pointer ARGUMENT, so this one body dispatches to either
+; synthetic: companion callee (synth_callindirect_c11 / synth_callindirect_id)
+; synthetic: purely through the value -- the property under measure. Do not
+; synthetic: add it to any emitted-fixture census.
 fn @synth::callindirect_probe(functy.919) {
-    ; #synthetic: SYNTHETIC MODULE -- authored for the W2c semdiff lane
-    ; #synthetic: (docs/analysis/evalir-completion-plan-2026-08-24.md section 5 W2c).
-    ; #synthetic: No compiler emitted this body; its registered Clean twin is
-    ; #synthetic: ir_w2c_ci_module (eval_ir_w2c_synth.rs). The callee arrives as a
-    ; #synthetic: function-pointer ARGUMENT, so this one body dispatches to either
-    ; #synthetic: companion callee (synth_callindirect_c11 / synth_callindirect_id)
-    ; #synthetic: purely through the value -- the property under measure. Do not
-    ; #synthetic: add it to any emitted-fixture census.
 bb0(%0: functy.920, %1: u32):
     %2 = call_indirect %0(functy.920)(%1)
     ret %2

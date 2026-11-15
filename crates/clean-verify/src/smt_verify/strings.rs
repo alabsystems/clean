@@ -753,7 +753,7 @@ fn as_negation(dag: &SmtProofDag, id: SmtTermId) -> Option<SmtTermId> {
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -850,7 +850,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.len(\"abc\") = 3 should be valid: {:?}",
             verdict.detail
         );
@@ -867,7 +867,7 @@ mod tests {
         //
         // Actually: a single-literal clause (not (= (str.len "abc") 3)) is
         // NOT valid because str.len("abc") = 3 is true, making the negation false.
-        // The clause should NOT be kernel-verified.
+        // The clause should NOT be step-checked.
         let mut dag = SmtProofDag::new();
         let abc = make_str(&mut dag, "abc");
         let len_abc = make_strlen(&mut dag, abc);
@@ -878,7 +878,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[neq]);
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "not(str.len(\"abc\") = 3) should NOT be valid"
         );
     }
@@ -896,7 +896,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[neq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "not(str.len(\"abc\") = 5) should be valid: {:?}",
             verdict.detail
         );
@@ -914,7 +914,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.len(\"\") = 0 should be valid: {:?}",
             verdict.detail
         );
@@ -934,7 +934,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.++(\"\", a) = a should be valid: {:?}",
             verdict.detail
         );
@@ -952,7 +952,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.++(a, \"\") = a should be valid: {:?}",
             verdict.detail
         );
@@ -970,7 +970,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "a = str.++(\"\", a) should be valid: {:?}",
             verdict.detail
         );
@@ -994,7 +994,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.len(str.++(a, b)) = str.len(a) + str.len(b) should be valid: {:?}",
             verdict.detail
         );
@@ -1016,7 +1016,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "swapped length concat should be valid: {:?}",
             verdict.detail
         );
@@ -1037,7 +1037,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.contains(\"hello\", \"ell\") = true should be valid: {:?}",
             verdict.detail
         );
@@ -1056,7 +1056,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.contains(\"hello\", \"xyz\") = false should be valid: {:?}",
             verdict.detail
         );
@@ -1078,7 +1078,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[neq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "not(str.contains(\"hello\", \"ell\") = false) should be valid: {:?}",
             verdict.detail
         );
@@ -1102,7 +1102,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "concat associativity should be valid: {:?}",
             verdict.detail
         );
@@ -1125,7 +1125,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "prefix implies contains should be valid: {:?}",
             verdict.detail
         );
@@ -1145,7 +1145,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "suffix implies contains should be valid: {:?}",
             verdict.detail
         );
@@ -1166,7 +1166,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[eq]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.++(\"ab\", \"cd\") = \"abcd\" should be valid: {:?}",
             verdict.detail
         );
@@ -1183,7 +1183,7 @@ mod tests {
         let verdict = check_strings_lemma(&dag, SmtStepId(0), &[prefix]);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "str.prefixof(\"hel\", \"hello\") should be valid: {:?}",
             verdict.detail
         );

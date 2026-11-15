@@ -55,6 +55,7 @@ fn overflow_fixture_module(operands: (u64, u64)) -> Module {
     module.func_types.push(FuncTy {
         params: vec![Ty::U8],
         returns: vec![Ty::U8],
+        abi: None,
         is_vararg: false,
     });
     let mut func = Function::new(FuncId::new(0), "add_u8", FuncTyId::new(0), BlockId::new(0));
@@ -71,7 +72,9 @@ fn overflow_fixture_module(operands: (u64, u64)) -> Module {
         values: vec![ValueId::new(2)],
     }));
     func.blocks.push(block);
-    module.add_function(func);
+    module
+        .try_add_function(func)
+        .expect("Module::try_add_function: test fixture");
     module
 }
 

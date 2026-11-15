@@ -31,16 +31,37 @@
 //!    become resident.
 //!
 //!    Trusted-dependency modules are parsed **TYPES-ONLY**
-//!    ([`crate::lean4::olean::olean_bridge::parse_dep_module_types_only`]): the
-//!    kernel never δ-unfolds a `Theorem`/`Opaque` value, so a dependency's proof
-//!    body is never reconstructed. This eliminates the peak-RSS cost — hundreds of
+//!    ([`crate::lean4::olean::olean_bridge::parse_dep_module_types_only`]), so
+//!    a dependency's proof body is not reconstructed. The kernel does δ-unfold
+//!    theorems (never an `Opaque`), so this costs refusals where a check needs a
+//!    proof's value, never an acceptance; the one class loaded with values is
+//!    an import's `Acc`/`WellFounded` proofs, which iota reduction of
+//!    well-founded recursion unfolds (`per_constant_wf_proofs.rs`, decision
+//!    R147). This eliminates the peak-RSS cost — hundreds of
 //!    analysis-module proof `Expr`s — that OOMs the full-value path (MVT, Taylor),
 //!    and prunes the walk itself: with theorem values elided the walk never
 //!    descends into proof bodies, so the closure shrinks to the statement-level
 //!    dependencies the kernel actually consults. Only the TARGET module is parsed
 //!    with proofs, since only its target constant is `check_type`'d.
-//! 3. **verify.** Feed the target name(s) to
-//!    [`clean_olean::verify_batch_full::typecheck_constants_full`] UNCHANGED.
+//! 3. **verify.** Feed the target name(s), with the target module's other
+//!    declarations as prerequisites and its redeclarations of an import's names
+//!    as already declared, to
+//!    [`clean_olean::verify_batch_full::typecheck_constants_full_streaming_scoped`],
+//!    which replays them in Lean's order (`Lean/Replay.lean`): a target that
+//!    mentions itself, sits on a dependency cycle, is unsafe or partial, uses a
+//!    module-mate that is not admitted first, redeclares a name the environment
+//!    holds, or belongs to (or uses) an inductive block whose stored members
+//!    differ from the kernel's regeneration is refused, and every check runs in
+//!    Lean's kernel theory (`KernelTheory::Lean`, which the whole environment
+//!    carries). The environment starts from `Environment::for_lean_replay`: the
+//!    `.olean` closure and the kernel's canonical quotient, nothing else.
+//!
+//! ONE LEAN WORLD (docs/DECISIONS.md R38, R81). This loader never registers a
+//! part through `clean_olean`'s module loaders, whose world gate it would
+//! otherwise pass, so it holds a [`LeanWorldScope`] itself: the target `.olean`
+//! and every module of its import closure, each with its companions, are
+//! admitted while the index is built, and a part of an unsupported or a second
+//! world fails the run by name before anything is verified.
 //!
 //! SOUNDNESS is IDENTICAL to the module-closure path: the closure constants are
 //! TRUSTED IMPORTS (registered through the same `extend_constants_structural` /
@@ -58,8 +79,8 @@ use std::time::Instant;
 use serde::Serialize;
 
 use clean_kernel::env::{
-    is_foundational_axiom, ConstantInfo, ConstantKind, Declaration, Environment, ProofElisionStats,
-    ProofValueElision, TrustedEnvExt,
+    is_foundational_axiom, ConstantInfo, ConstantKind, Declaration, Environment, KernelTheory,
+    ProofElisionStats, ProofValueElision, TrustedEnvExt,
 };
 use clean_kernel::expr::Expr;
 use clean_kernel::Name;
@@ -68,12 +89,12 @@ use crate::verify::fingerprint::decl_content_fingerprint;
 use clean_olean::verify_batch::module_name_from_path;
 use clean_olean::ConstantKind as OleanKind;
 use clean_olean::{
-    load_parsed_module_with_import_policy, parse_imports_and_const_names_only, ImportKinds,
-    OleanImportPolicy, ParsedConstant, ParsedExpr, ParsedModule,
+    load_parsed_module_with_import_policy, ArtifactDepth, DefinitionSafety, ImportKinds,
+    LeanWorldScope, OleanImportPolicy, ParsedConstant, ParsedExpr, ParsedModule,
 };
 
 use crate::cli::closure_load::{
-    build_closure_search_paths, resolve_module_olean, verify_one_closure_shard,
+    build_closure_search_paths, closure_load_error, resolve_module_olean, verify_one_closure_shard,
 };
 use crate::cli::kv_cache::{self, FingerprintMode, KvCache};
 use crate::cli::{MathverseCliError, PerConstantVerifyArgs};
@@ -81,6 +102,11 @@ use crate::closure_source::{walk_refs_from_reader, ShardConstantSource};
 use crate::lean4::olean::olean_bridge::{
     parse_dep_module_types_only, parse_target_module_with_proofs,
 };
+
+#[path = "per_constant_family_deps.rs"]
+mod family_deps;
+#[path = "per_constant_wf_proofs.rs"]
+mod wf_proofs;
 
 /// Content-addressed verdict-cache report for the JSON/human summary.
 #[derive(Debug, Serialize)]
@@ -124,6 +150,10 @@ struct PerConstantSummary {
     /// Targets carrying a proof VALUE (so `check_type` ran on a real proof term).
     /// If this is < `targets.len()`, the KV count for those is `infer_sort`-only.
     target_values_present: usize,
+    /// Value-bearing `unsafe`/`partial` declarations `--all-declared` skipped:
+    /// `Lean.Environment.replay` leaves both out of `remaining`, so they are
+    /// neither verified nor failed (and a target that uses one is refused).
+    not_replayable: usize,
     /// The demand-walked transitive constant closure size (distinct names).
     closure_names: usize,
     /// Constants resident in the trusted env (closure + prelude) — the memory
@@ -235,6 +265,7 @@ pub(crate) fn cmd_per_constant_verify(
         kernel_verified: result.kernel_verified,
         failed: result.failed,
         target_values_present: result.target_values_present,
+        not_replayable: result.not_replayable,
         closure_names: result.closure_names,
         constants_resident: result.constants_resident,
         modules_indexed: result.modules_indexed,
@@ -347,6 +378,9 @@ pub(crate) struct PerConstantResult {
     /// a proof term, not just `infer_sort` on its type). An honesty guard: a
     /// value-less target would be counted a "pass" by `infer_sort` alone.
     pub(crate) target_values_present: usize,
+    /// Value-bearing `unsafe`/`partial` declarations `--all-declared` skipped,
+    /// as Lean's replay skips them (never verified, never failed).
+    pub(crate) not_replayable: usize,
     /// Distinct modules whose HEADERS were scanned to build the name index.
     pub(crate) modules_indexed: usize,
     /// Distinct modules actually PARSED (with proofs) to materialize a used
@@ -412,8 +446,16 @@ pub(crate) struct PerConstantResult {
 struct NameOleanIndex {
     /// Distinct `.olean` paths, de-duplicated; `by_name` stores indices into it.
     oleans: Vec<PathBuf>,
-    /// name -> index into `oleans`. First declarer wins (import-order stable).
+    /// name -> index into `oleans`. First declarer wins (import-order stable),
+    /// except that an IMPORT's declaration wins over the target module's own
+    /// (see `redeclared`).
     by_name: HashMap<Name, u32>,
+    /// Names the target module declares that a module of its import closure
+    /// ALSO declares, each with that module. In Lean's replay the import is in
+    /// the environment first and `addDecl` refuses the module's redeclaration;
+    /// so the import's declaration is the resident one, and the module's is
+    /// refused as already declared.
+    redeclared: BTreeMap<Name, String>,
 }
 
 impl NameOleanIndex {
@@ -429,20 +471,33 @@ impl NameOleanIndex {
 /// IMPORT closure and reading each module's `constNames`/`extraConstNames`
 /// header array ONLY — never a constant's `Expr`. Returns the index plus the
 /// module count scanned.
+///
+/// Every part the walk will parse is admitted into `world` here (R81): the
+/// target `.olean` and each module read, with their companions. A part of a
+/// refused or second Lean world fails the run; a module whose writer cannot be
+/// read is left out of the index, as one whose names do not parse is.
 fn build_name_index(
     target_olean: &Path,
     root: &Path,
     search_paths: &[PathBuf],
+    world: &mut LeanWorldScope,
 ) -> Result<NameOleanIndex, MathverseCliError> {
     let mut oleans: Vec<PathBuf> = Vec::new();
     let mut by_name: HashMap<Name, u32> = HashMap::new();
+    let mut redeclared: BTreeMap<Name, String> = BTreeMap::new();
+    let mut target_names: HashSet<Name> = HashSet::new();
     let mut visited: HashSet<String> = HashSet::new();
     let mut queue: VecDeque<String> = VecDeque::new();
 
     // Seed with the target module itself so sibling constants (same module) are
     // resolvable, then fan out over its imports.
     let target_module = module_name_from_path(target_olean, root);
-    queue.push_back(target_module);
+    // The target first: the walk parses `target_olean` and its companions
+    // with proofs, whatever file the search paths resolve its name to.
+    world
+        .admit_artifact(&target_module, target_olean)
+        .map_err(|e| closure_load_error(&target_module, &e, e.to_string()))?;
+    queue.push_back(target_module.clone());
 
     while let Some(module) = queue.pop_front() {
         if !visited.insert(module.clone()) {
@@ -456,18 +511,47 @@ fn build_name_index(
         let Ok(bytes) = std::fs::read(&olean) else {
             continue;
         };
-        let (imports, names) = match parse_imports_and_const_names_only(&bytes) {
-            Ok(v) => v,
+        if let Err(e) = world
+            .admit_part(&module, &bytes)
+            .and_then(|()| world.admit_companions(&module, &olean))
+        {
+            if e.is_world_refusal() {
+                return Err(closure_load_error(&target_module, &e, e.to_string()));
+            }
+            continue;
+        }
+        // R113: a module's names and imports are its AUTHORITATIVE part's
+        // (`clean_olean::read_artifact`), and an artifact whose parts disagree
+        // fails the run by name. Before, the index took both from the `.olean`
+        // (review finding P3: a module-system dependency whose `.olean` imports
+        // a different module than its `.olean.private`, which `lean` follows).
+        let read = match clean_olean::read_artifact(&module, &olean, ArtifactDepth::Names) {
+            Ok(read) => read,
+            Err(e) if is_artifact_refusal(&e) => {
+                return Err(closure_load_error(&target_module, &e, e.to_string()));
+            }
             Err(_) => continue,
         };
+        let (imports, names) = (read.imports, read.names);
         let olean_idx = oleans.len() as u32;
         let mut used_this_olean = false;
-        for n in names {
-            if n.is_empty() {
+        let is_target = module == target_module;
+        for name in names {
+            if name.is_anon() {
+                continue;
+            }
+            if is_target {
+                target_names.insert(name.clone());
+            } else if target_names.contains(&name) && !redeclared.contains_key(&name) {
+                // An import declares a name the target module declares too:
+                // the import's declaration is the one Lean's environment holds.
+                redeclared.insert(name.clone(), module.clone());
+                by_name.insert(name, olean_idx);
+                used_this_olean = true;
                 continue;
             }
             // First declarer wins (matches the eager loader's insert-only model).
-            by_name.entry(Name::from_string(&n)).or_insert_with(|| {
+            by_name.entry(name).or_insert_with(|| {
                 used_this_olean = true;
                 olean_idx
             });
@@ -483,7 +567,22 @@ fn build_name_index(
         }
     }
 
-    Ok(NameOleanIndex { oleans, by_name })
+    Ok(NameOleanIndex {
+        oleans,
+        by_name,
+        redeclared,
+    })
+}
+
+/// Whether `e` is a refusal of R113's artifact rule (parts that disagree, a
+/// misplaced name, a foreign trailer), as opposed to a file the index cannot
+/// read at all, which contributes no names (as before).
+fn is_artifact_refusal(e: &clean_olean::ImportError) -> bool {
+    e.is_inconsistent_artifact()
+        || matches!(
+            e,
+            clean_olean::ImportError::Parse(clean_olean::OleanError::PayloadOnLeanPart(_))
+        )
 }
 
 /// The per-constant LAZY CLOSURE LANE (design:
@@ -573,9 +672,15 @@ impl LazyLane {
     }
 
     /// Whether `name` WILL be lazily served: indexed by a shard that passes
-    /// on-first-touch verification. Fail-closed: `false` sends the caller down
-    /// the eager olean path for this name.
-    fn try_serve(&mut self, name: &Name, search_paths: &[PathBuf]) -> bool {
+    /// on-first-touch verification, its source `.olean` of `world`.
+    /// Fail-closed: `false` sends the caller down the eager olean path for
+    /// this name.
+    fn try_serve(
+        &mut self,
+        name: &Name,
+        search_paths: &[PathBuf],
+        world: &mut LeanWorldScope,
+    ) -> bool {
         let Some(shard) = self.source.shard_of(name) else {
             return false;
         };
@@ -583,7 +688,7 @@ impl LazyLane {
         match self.touched.get(idx).copied().flatten() {
             Some(verdict) => verdict,
             None => {
-                let verdict = self.stamped_or_verify(idx, search_paths);
+                let verdict = self.stamped_or_verify(idx, search_paths, world);
                 if let Some(slot) = self.touched.get_mut(idx) {
                     *slot = Some(verdict);
                 }
@@ -618,7 +723,27 @@ impl LazyLane {
     /// fully-malicious-bytes carve-out already places out of scope (no signing
     /// key). Stamp writes are atomic (tmp+rename) and idempotent, so
     /// concurrent sweep processes race benignly.
-    fn stamped_or_verify(&mut self, shard: usize, search_paths: &[PathBuf]) -> bool {
+    fn stamped_or_verify(
+        &mut self,
+        shard: usize,
+        search_paths: &[PathBuf],
+        world: &mut LeanWorldScope,
+    ) -> bool {
+        // The shard's source `.olean` is held to the closure's Lean world
+        // before the stamp and the structural gates (R81): a stamp records
+        // digests, never a world, and a shard of another world stays
+        // unverified, so its names go to the eager walk.
+        if let Some(module) = self.source.shard_module(shard).map(str::to_owned) {
+            if let Some(olean) = resolve_module_olean(&module, search_paths) {
+                if let Err(e) = world.admit_artifact(&module, &olean) {
+                    eprintln!(
+                        "per-constant-verify --closure-shards: shard `{module}`: {e} — \
+                         UNVERIFIED (=> eager)."
+                    );
+                    return false;
+                }
+            }
+        }
         // Resolve the shard file + its olean's identities. Any resolution
         // failure just means "no stamp lane" — run the full gates.
         let identities = self
@@ -649,7 +774,7 @@ impl LazyLane {
                 }
                 // No/stale stamp: run the full gates; stamp on success.
                 let verdict = matches!(
-                    verify_one_closure_shard(&mut self.source, shard, search_paths),
+                    verify_one_closure_shard(&mut self.source, shard, search_paths, world),
                     Some(true)
                 );
                 if verdict {
@@ -667,7 +792,7 @@ impl LazyLane {
             }
         }
         matches!(
-            verify_one_closure_shard(&mut self.source, shard, search_paths),
+            verify_one_closure_shard(&mut self.source, shard, search_paths, world),
             Some(true)
         )
     }
@@ -712,6 +837,12 @@ struct Walker<'a> {
     located: HashMap<Name, (PathBuf, usize)>,
     /// oleans whose inductive families we have already registered.
     inductive_loaded: HashSet<PathBuf>,
+    /// olean -> the constants its family types name, outside the families
+    /// (`per_constant_family_deps.rs`), computed once per module.
+    family_deps: HashMap<PathBuf, Vec<Name>>,
+    /// olean -> its theorems that conclude in `Acc` or `WellFounded`, parsed
+    /// with their values (`per_constant_wf_proofs.rs`), computed once per module.
+    wf_proofs: HashMap<PathBuf, HashMap<String, ParsedConstant>>,
     modules_parsed: usize,
     inductive_modules_loaded: usize,
     /// Resident parsed-module cap (`CLEAN_MAX_PARSED_MODULES`; `None` =
@@ -733,9 +864,35 @@ struct Walker<'a> {
     /// count and cap-induced re-parses are surfaced separately.
     ever_parsed: HashSet<PathBuf>,
     modules_reparsed: usize,
+    /// The first module the artifact rule refused while the walk parsed it
+    /// (`MathverseError::ArtifactRefused`, R113): the run fails with it, by
+    /// name, rather than treat the module's names as merely missing.
+    refused: Option<String>,
 }
 
 impl<'a> Walker<'a> {
+    /// A walker over `index` that has parsed nothing yet.
+    fn new(root: &'a Path, index: &'a NameOleanIndex, max_resident: Option<usize>) -> Self {
+        Self {
+            root,
+            index,
+            parsed: HashMap::new(),
+            located: HashMap::new(),
+            inductive_loaded: HashSet::new(),
+            family_deps: HashMap::new(),
+            wf_proofs: HashMap::new(),
+            modules_parsed: 0,
+            inductive_modules_loaded: 0,
+            max_resident,
+            tick: 0,
+            last_used: HashMap::new(),
+            full_parsed: HashSet::new(),
+            ever_parsed: HashSet::new(),
+            modules_reparsed: 0,
+            refused: None,
+        }
+    }
+
     /// Ensure `olean` is parsed and its constants located. `types_only` selects
     /// the TRUSTED-dependency loader ([`parse_dep_module_types_only`], which skips
     /// every `Theorem`/`Opaque` proof body); `false` selects the full
@@ -746,9 +903,15 @@ impl<'a> Walker<'a> {
     /// re-parsed type-only — the cache short-circuits — so the target keeps its
     /// value even if a later dependency walk touches its module.
     fn ensure_parsed(&mut self, olean: &Path, types_only: bool) -> bool {
+        self.try_ensure_parsed(olean, types_only).is_ok()
+    }
+
+    /// [`Self::ensure_parsed`], keeping the parse error: the target module's
+    /// refusal names its cause.
+    fn try_ensure_parsed(&mut self, olean: &Path, types_only: bool) -> Result<(), String> {
         if self.parsed.contains_key(olean) {
             self.touch(olean);
-            return true;
+            return Ok(());
         }
         let parsed = if types_only {
             parse_dep_module_types_only(olean)
@@ -757,7 +920,12 @@ impl<'a> Walker<'a> {
         };
         let module = match parsed {
             Ok(m) => m,
-            Err(_) => return false,
+            Err(e) => {
+                if matches!(e, crate::error::MathverseError::ArtifactRefused { .. }) {
+                    self.refused.get_or_insert_with(|| e.to_string());
+                }
+                return Err(e.to_string());
+            }
         };
         for (i, c) in module.constants.iter().enumerate() {
             self.located
@@ -775,7 +943,7 @@ impl<'a> Walker<'a> {
         }
         self.touch(olean);
         self.evict_over_cap(olean);
-        true
+        Ok(())
     }
 
     /// LRU bookkeeping: stamp `olean` as most-recently-used.
@@ -812,6 +980,26 @@ impl<'a> Walker<'a> {
     /// (private-aware, TYPES-ONLY — a demand-loaded dependency is trusted) on
     /// demand. Returns `(olean, constant index)`.
     fn locate(&mut self, name: &Name) -> Option<(PathBuf, usize)> {
+        // A name the target module redeclares resolves to the IMPORT's
+        // declaration (`NameOleanIndex::redeclared`): Lean's environment holds
+        // the import's, and `addDecl` refuses the module's. `located` maps the
+        // name to the target, parsed first, whose declaration must never
+        // become resident: measured 2026-09-29, the target's `def bool_ax_b :=
+        // true` replaced the imported `axiom bool_ax_b`, and
+        // `ReplayForgedBoolDef`'s `forged_bool_false : False` was verified.
+        if self.index.redeclared.contains_key(name) {
+            let olean = self.index.olean_for(name)?.to_path_buf();
+            if !self.ensure_parsed(&olean, true) {
+                return None;
+            }
+            let idx = self
+                .parsed
+                .get(&olean)?
+                .constants
+                .iter()
+                .position(|c| Name::from_string(&c.name) == *name)?;
+            return Some((olean, idx));
+        }
         if let Some(loc) = self.located.get(name) {
             return Some(loc.clone());
         }
@@ -850,7 +1038,68 @@ impl<'a> Walker<'a> {
             self.inductive_loaded.insert(olean.to_path_buf());
             return;
         }
-        let module = self.parsed.get(olean).expect("just ensured parsed");
+        // Marked before its dependencies load, so an import cycle stops here.
+        self.inductive_loaded.insert(olean.to_path_buf());
+        // A family nested through a container another module declares is
+        // checked at registration by re-admitting it through the kernel's
+        // nested elimination (`imported_family.rs`), which needs the
+        // container's family resident. Lean's import has loaded that module
+        // first; the demand walk can reach this one first (measured
+        // 2026-10-23: `inductive PcvA | node : List PcvA → PcvA` alone in a
+        // module was refused, its `PcvA.rec` "not the recursor the kernel
+        // generates", because the walk reached `PcvA` before anything of
+        // `Init.Prelude`). So every other module whose family this module's
+        // inductive and constructor types name registers its families first.
+        for dep in self.family_dependencies(olean) {
+            self.load_inductive_families(env, &dep);
+        }
+        // The parse cap may have evicted it while its dependencies loaded.
+        if self.ensure_parsed(olean, true) {
+            self.register_inductive_families(env, olean);
+        }
+    }
+
+    /// The other modules whose inductive families `olean`'s inductive and
+    /// constructor types name, in name order.
+    fn family_dependencies(&mut self, olean: &Path) -> Vec<PathBuf> {
+        let mut refs: HashSet<Name> = HashSet::new();
+        if let Some(module) = self.parsed.get(olean) {
+            for c in &module.constants {
+                if matches!(c.kind, OleanKind::Inductive | OleanKind::Constructor) {
+                    if let Some(ty) = &c.type_ {
+                        collect_parsed_consts(ty, &mut refs);
+                    }
+                }
+            }
+        }
+        let mut names: Vec<Name> = refs.into_iter().collect();
+        names.sort_unstable();
+        let mut deps: Vec<PathBuf> = Vec::new();
+        for name in names {
+            let Some((dep, idx)) = self.locate(&name) else {
+                continue;
+            };
+            if dep.as_path() == olean || deps.contains(&dep) {
+                continue;
+            }
+            let is_family = self.parsed_constant(&dep, idx).is_some_and(|pc| {
+                matches!(
+                    pc.kind,
+                    OleanKind::Inductive | OleanKind::Constructor | OleanKind::Recursor
+                )
+            });
+            if is_family {
+                deps.push(dep);
+            }
+        }
+        deps
+    }
+
+    /// Register `olean`'s (parsed) inductive families into `env`, trusted.
+    fn register_inductive_families(&mut self, env: &mut Environment, olean: &Path) {
+        let Some(module) = self.parsed.get(olean) else {
+            return;
+        };
         let module_name = Some(module_name_from_path(olean, self.root));
         let policy =
             OleanImportPolicy::default().with_import_kinds(ImportKinds::InductiveFamiliesOnly);
@@ -924,16 +1173,27 @@ pub(crate) fn per_constant_verify(
         },
     };
 
-    // (1) name -> .olean header index (no Expr reconstruction).
+    // (1) name -> .olean header index (no Expr reconstruction), every part it
+    // reads held to one Lean world (R81).
     let idx_start = Instant::now();
-    let index = build_name_index(target_olean, root, &search_paths)?;
+    let mut world = LeanWorldScope::new();
+    let index = build_name_index(target_olean, root, &search_paths, &mut world)?;
     let index_millis = idx_start.elapsed().as_millis();
     let modules_indexed = index.oleans.len();
 
-    // (2) Prelude-seeded shared env (same import-verification prelude the module
-    // path uses) + demand walk.
-    let mut env = Environment::try_with_prelude_for_import()
-        .map_err(|e| MathverseCliError::StampPrelude(e.to_string()))?;
+    // (2) Lean's replay environment: NO declaration beyond the `.olean` closure
+    // the demand walk loads (and the kernel's canonical quotient), as
+    // `leanchecker` replays into the environment of the module's imports and
+    // nothing else (`Environment::for_lean_replay`). Clean's import prelude
+    // used to seed `sorry`/`trustedArith`/`trustedAy` and hundreds of
+    // hand-written declarations here, and a reference no `.olean` of the
+    // closure declares resolved to one of them.
+    let mut env = Environment::for_lean_replay();
+    // The environment reads the closure's world, as one the module loaders
+    // filled would (`clean_olean::environment_world`).
+    world
+        .bind_environment(&mut env)
+        .map_err(|e| closure_load_error(&target_olean.display().to_string(), &e, e.to_string()))?;
 
     let walk_start = Instant::now();
     // CLEAN_MAX_PARSED_MODULES bounds the resident parsed-module cache (LRU,
@@ -944,21 +1204,7 @@ pub(crate) fn per_constant_verify(
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .filter(|&n| n > 0);
-    let mut walker = Walker {
-        root,
-        index: &index,
-        parsed: HashMap::new(),
-        located: HashMap::new(),
-        inductive_loaded: HashSet::new(),
-        modules_parsed: 0,
-        inductive_modules_loaded: 0,
-        max_resident: max_parsed_resident,
-        tick: 0,
-        last_used: HashMap::new(),
-        full_parsed: HashSet::new(),
-        ever_parsed: HashSet::new(),
-        modules_reparsed: 0,
-    };
+    let mut walker = Walker::new(root, &index, max_parsed_resident);
     // ONE intern cache for the whole demand walk (#2383 cross-constant
     // hash-consing): every converted closure constant shares structurally
     // equal subterms instead of duplicating Mathlib's repeated type/instance
@@ -973,16 +1219,53 @@ pub(crate) fn per_constant_verify(
     let mut work: Vec<Name> = Vec::new();
     let mut scratch: HashSet<Name> = HashSet::new();
     let mut resolved_targets: Vec<String> = Vec::new();
+    // Every declaration the target module declares (all kinds): the replay
+    // admits the ones a target reaches before the target, and refuses a target
+    // that mentions one it cannot admit (`verify_batch_replay.rs`).
+    let mut module_declared: BTreeSet<String> = BTreeSet::new();
+    // Names the target's Clean payload TRAILER declares that its Lean constant
+    // table does not. `lean` never reads the trailer, so for `leanchecker`
+    // these do not exist; a target that uses one must be refused
+    // `DependsOnUnreplayed`, not checked against a resident trailer record
+    // (R113, finding B3). The `.olean` loader already refuses a trailer on a
+    // Lean part (`ImportError::PayloadOnLeanPart`); this is the per-constant
+    // lane's second line of defence, over a Clean-layout target. Payload names
+    // that SHADOW a Lean-table name are left to `module_declared` (replayed and
+    // rebuilt), as they are the module's own declarations.
+    let mut payload_not_admitted: BTreeSet<String> = BTreeSet::new();
+    // Declarations of the target module an import also declares, each with
+    // the import (see `NameOleanIndex::redeclared`).
+    let mut already_declared: BTreeMap<String, String> = index
+        .redeclared
+        .iter()
+        .map(|(name, module)| {
+            (
+                name.to_string(),
+                format!("the import `{module}` declares it"),
+            )
+        })
+        .collect();
     let mut target_values_present = 0usize;
+    let mut not_replayable = 0usize;
+    // Redeclared theorems of the target module, with their stored statement.
+    let mut restated: Vec<(String, ConstantInfo)> = Vec::new();
     {
         // The TARGET module is parsed FULL (with proofs): its target constant is
         // fed to `check_type` and so needs its real proof value. Every OTHER
         // module reached by the demand walk is a trusted dependency and comes in
         // TYPES-ONLY (see `Walker::ensure_parsed`).
-        if !walker.ensure_parsed(target_olean, false) {
+        if let Err(cause) = walker.try_ensure_parsed(target_olean, false) {
+            // An artifact refusal is kept by the walker and reported as the
+            // rule worded it (R113, finding B3: a foreign payload trailer on a
+            // Lean-written part must be named); any other parse failure names
+            // the decoder's own cause (R147: a projection index's MPZ header).
+            let reason = match walker.refused.take() {
+                Some(refusal) => refusal,
+                None => format!("failed to parse target module (with proofs): {cause}"),
+            };
             return Err(MathverseCliError::StampClosure {
                 module: target_olean.display().to_string(),
-                reason: "failed to parse target module (with proofs)".to_string(),
+                reason,
             });
         }
 
@@ -991,6 +1274,25 @@ pub(crate) fn per_constant_verify(
         // a whole-module receipt — UNIONed with any explicit `--constant`s.
         // Explicit names error if absent/non-checkable; `--all-declared` names are
         // SKIPPED (a module legitimately declares inductive families/axioms).
+        if let Some(module) = walker.parsed.get(target_olean) {
+            module_declared.extend(module.constants.iter().map(|c| c.name.clone()));
+            if let Some(payload) = module.clean_payload.as_ref() {
+                let table: HashSet<&str> =
+                    module.constants.iter().map(|c| c.name.as_str()).collect();
+                let payload_names = payload
+                    .constants
+                    .iter()
+                    .map(|c| c.name.to_string())
+                    .chain(payload.inductives.iter().map(|i| i.name.to_string()))
+                    .chain(payload.constructors.iter().map(|c| c.name.to_string()))
+                    .chain(payload.recursors.iter().map(|r| r.name.to_string()));
+                for name in payload_names {
+                    if !table.contains(name.as_str()) {
+                        payload_not_admitted.insert(name);
+                    }
+                }
+            }
+        }
         let mut effective: Vec<(String, bool)> =
             target_names_in.iter().map(|t| (t.clone(), true)).collect();
         if all_declared {
@@ -1002,6 +1304,17 @@ pub(crate) fn per_constant_verify(
                         OleanKind::Definition | OleanKind::Theorem | OleanKind::Opaque
                     ) && seen.insert(c.name.clone())
                     {
+                        // Lean's replay never admits an unsafe or partial
+                        // constant (`!ci.isUnsafe && !ci.isPartial`), so it is
+                        // not a replay target. An explicit `--constant` naming
+                        // one is still refused, with the reason.
+                        if matches!(
+                            c.definition_safety,
+                            Some(DefinitionSafety::Unsafe | DefinitionSafety::Partial)
+                        ) {
+                            not_replayable += 1;
+                            continue;
+                        }
                         effective.push((c.name.clone(), false));
                     }
                 }
@@ -1010,6 +1323,29 @@ pub(crate) fn per_constant_verify(
 
         for (tname, explicit) in &effective {
             let name = Name::from_string(tname);
+            // A redeclaration of an import's name: the import's declaration is
+            // the resident one (the demand walk loads it), and the module's is
+            // refused as already declared by the replay.
+            if let Some(module) = index.redeclared.get(&name) {
+                already_declared
+                    .insert(tname.clone(), format!("the import `{module}` declares it"));
+                // A restated THEOREM is no redeclaration when its statement is
+                // the import's (Lean realizes `.eq_1`/`.congr_simp` theorems in
+                // whichever module first needs one): keep its type to compare
+                // once the import's is resident.
+                if let Some((olean, i)) = walker.located.get(&name).cloned() {
+                    if let Some(pc) = walker.parsed_constant(&olean, i) {
+                        if matches!(pc.kind, OleanKind::Theorem | OleanKind::Axiom) {
+                            if let Ok(Some(stub)) = convert_session.type_stub(pc) {
+                                restated.push((tname.clone(), stub));
+                            }
+                        }
+                    }
+                }
+                work.push(name);
+                resolved_targets.push(tname.clone());
+                continue;
+            }
             let Some((olean, i)) = walker.located.get(&name).cloned() else {
                 if *explicit {
                     return Err(MathverseCliError::StampClosure {
@@ -1028,6 +1364,7 @@ pub(crate) fn per_constant_verify(
                         target_values_present += 1;
                     }
                     push_refs(&ci.type_, ci.value.as_ref(), &mut scratch, &mut work);
+                    mark_declaration_safety(&mut env, &ci.name, pc);
                     // Insert as trusted; it is ALSO in target_names, so it earns a
                     // verdict via check_type below (only the target does).
                     insert_or_upgrade(&mut env, ci);
@@ -1081,14 +1418,16 @@ pub(crate) fn per_constant_verify(
         );
     }
     if resolved_targets.is_empty() {
-        return Err(MathverseCliError::StampNoInput(
-            "no checkable target constants".to_string(),
-        ));
+        return Err(MathverseCliError::StampNoInput(format!(
+            "no checkable target constants ({not_replayable} unsafe/partial declaration(s) \
+             skipped: Lean's replay does not admit them)"
+        )));
     }
 
     // Demand-walk the transitive constant closure.
     let mut visited: HashSet<Name> = HashSet::new();
     let mut missing: BTreeSet<Name> = BTreeSet::new();
+    let mut wf_values_loaded = 0usize;
     while let Some(name) = work.pop() {
         if !visited.insert(name.clone()) {
             continue;
@@ -1110,7 +1449,7 @@ pub(crate) fn per_constant_verify(
         // name-binding refusal, materialization failure) falls through to the
         // eager olean path below — per NAME, exactly as the design specifies.
         if let Some(lz) = lazy.as_mut() {
-            if lz.try_serve(&name, &search_paths) {
+            if lz.try_serve(&name, &search_paths, &mut world) {
                 if let Some((ty, val)) = lz.refs_of(&name) {
                     push_refs(&ty, val.as_ref(), &mut scratch, &mut work);
                     lz.served += 1;
@@ -1140,6 +1479,23 @@ pub(crate) fn per_constant_verify(
 
         match kind {
             OleanKind::Inductive | OleanKind::Constructor | OleanKind::Recursor => {
+                // Walk the constants the module's family types name before the
+                // family is registered (its recursor regeneration reduces through
+                // them), then come back to `name`: each deferral pushes at least
+                // one unvisited name above it, so the walk terminates.
+                if !walker.families_loaded(&olean) {
+                    let pending: Vec<Name> = walker
+                        .family_type_deps(&olean)
+                        .into_iter()
+                        .filter(|dep| !visited.contains(dep))
+                        .collect();
+                    if !pending.is_empty() {
+                        visited.remove(&name);
+                        work.push(name);
+                        work.extend(pending);
+                        continue;
+                    }
+                }
                 walker.load_inductive_families(&mut env, &olean);
                 if let Some(t) = inductive_family_type(&env, &name) {
                     push_refs(&t, None, &mut scratch, &mut work);
@@ -1152,6 +1508,18 @@ pub(crate) fn per_constant_verify(
                 }
             }
             _ => {
+                // An imported `Acc`/`WellFounded` proof: load it WITH its value,
+                // which well-founded recursion's iota reduction unfolds.
+                if let Some(full) = walker.wf_proof(&olean, i, &mut world) {
+                    if let Ok(Some(ci)) = convert_session.const_info(&full) {
+                        let (ty, val) = (ci.type_.clone(), ci.value.clone());
+                        mark_declaration_safety(&mut env, &ci.name, &full);
+                        insert_or_upgrade(&mut env, ci);
+                        push_refs(&ty, val.as_ref(), &mut scratch, &mut work);
+                        wf_values_loaded += 1;
+                        continue;
+                    }
+                }
                 // Definitional / quotient kind: convert JUST this constant.
                 // (Under CLEAN_MAX_PARSED_MODULES the module may have been
                 // evicted and its re-parse can fail — fail closed to missing,
@@ -1163,6 +1531,7 @@ pub(crate) fn per_constant_verify(
                 match convert_session.const_info(pc) {
                     Ok(Some(ci)) => {
                         let (ty, val) = (ci.type_.clone(), ci.value.clone());
+                        mark_declaration_safety(&mut env, &ci.name, pc);
                         insert_or_upgrade(&mut env, ci);
                         push_refs(&ty, val.as_ref(), &mut scratch, &mut work);
                     }
@@ -1175,15 +1544,16 @@ pub(crate) fn per_constant_verify(
                         } else if let Ok(Some(stub)) = convert_session.type_stub(pc) {
                             // A value-less `Theorem`/`Opaque` (types-only skipped its
                             // proof body) that the full converter rejects with
-                            // `MissingValue`. These are Lean's compiler-generated
-                            // private proof helpers (`_private.…._proof_N`, `._simp_N`,
-                            // …), referenced only by other trusted values — the kernel
-                            // never δ-unfolds them checking the target. Register a
-                            // value-less stub from the TYPE so the closure is complete
+                            // `MissingValue`: Lean's compiler-generated proof helpers
+                            // (`_private.…._proof_N`, `._simp_N`, …) and any other
+                            // imported theorem the arm above does not load with its
+                            // value. A check that would δ-unfold one fails (closed).
+                            // Register a value-less stub from the TYPE so the closure is complete
                             // rather than spuriously reporting them missing. SOUND: a
                             // value-less trusted stub adds only a type; it cannot make
                             // an ill-typed target pass (see the fn's soundness note).
                             let ty = stub.type_.clone();
+                            mark_declaration_safety(&mut env, &stub.name, pc);
                             insert_or_upgrade(&mut env, stub);
                             push_refs(&ty, None, &mut scratch, &mut work);
                         } else {
@@ -1194,10 +1564,50 @@ pub(crate) fn per_constant_verify(
             }
         }
     }
+    // Declarations of the target module that redeclare an import's name as
+    // something no Lean import merge can be (a definition, an opaque, or an
+    // inductive-family member: `finalizeImport`'s `subsumesInfo` merges
+    // theorems and axioms only). Lean refuses each as already declared and
+    // checks the rest of the module against the import's declaration, but the
+    // demand walk cannot hold the environment to that: the target module's
+    // inductive families load as a whole, so a redeclared block becomes
+    // resident beside the import's axiom (measured 2026-09-29:
+    // `ReplayForgedIndOverAx`'s `forged_ind_false : False := ind_ax_not
+    // ind_ax_t.mk` was verified). Fail closed: such a module has no target
+    // verified.
+    let unmergeable_redeclarations: BTreeSet<String> = walker
+        .parsed
+        .get(target_olean)
+        .map(|m| {
+            m.constants
+                .iter()
+                .filter(|c| !matches!(c.kind, OleanKind::Theorem | OleanKind::Axiom))
+                .filter(|c| index.redeclared.contains_key(&Name::from_string(&c.name)))
+                .map(|c| c.name.clone())
+                .collect()
+        })
+        .unwrap_or_default();
+    if std::env::var("CLEAN_DIAG_WF").is_ok() {
+        // DIAGNOSTIC (verdict-neutral, stderr): how many imported Acc/WellFounded
+        // proofs the walk loaded with their values (`per_constant_wf_proofs.rs`).
+        eprintln!(
+            "CLEAN_DIAG_WF: {wf_values_loaded} imported Acc/WellFounded proof(s) loaded with values, {} module(s) parsed with proofs for them",
+            walker.wf_proofs.len()
+        );
+    }
     let closure_names = visited.len();
     let modules_parsed = walker.modules_parsed;
     let modules_reparsed = walker.modules_reparsed;
     let inductive_modules_loaded = walker.inductive_modules_loaded;
+    // A module the demand walk read was refused by the artifact rule (R113):
+    // the closure is not the one `leanchecker` reads, so nothing is verified
+    // over it. The refusal names the module and what its parts disagree on.
+    if let Some(refusal) = walker.refused.take() {
+        return Err(MathverseCliError::StampClosure {
+            module: target_olean.display().to_string(),
+            reason: refusal,
+        });
+    }
     // Release the parsed-module cache (the heavy transient) before verifying.
     drop(walker);
     // The intern cache holds only Arc clones shared with env constants —
@@ -1237,11 +1647,28 @@ pub(crate) fn per_constant_verify(
                     env.forget_decl(&name);
                 }
             }
+            // A lazily served constant carries no safety mark of its own; the
+            // Lean-profile checker needs one to refuse a safe target that uses
+            // an unsafe or partial dependency.
+            lz.source.mark_non_safe_in(&mut env);
             env.set_constant_source(std::sync::Arc::new(lz.source));
+        }
+    }
+    // A restated theorem whose statement and universe parameters are the
+    // import's is what Lean's import and replay accept (`subsumesInfo`, and
+    // `replayConstant`'s duplicate-theorem skip): not a redeclaration.
+    for (label, stub) in &restated {
+        if clean_olean::lean_accepts_restatement(&env, &stub.name, &stub.level_params, &stub.type_)
+        {
+            already_declared.remove(label);
         }
     }
     let walk_millis = walk_start.elapsed().as_millis();
     let constants_resident = env.constants().count();
+    // The trusted closure is resident; every check from here is the re-check,
+    // and it runs in Lean's kernel theory (`clean_kernel::env::kernel_theory`):
+    // the reducers Lean's kernel has, and Lean's safe context.
+    env.set_kernel_theory(KernelTheory::Lean);
 
     // (3) Kernel re-check the target(s) against the trusted closure env — but
     // consult the content-addressed verdict cache first, if enabled. The cache
@@ -1300,6 +1727,12 @@ pub(crate) fn per_constant_verify(
             to_verify = resolved_targets.iter().cloned().collect();
         }
     }
+    // A module with an unmergeable redeclaration has no verified target, a
+    // cached verdict included (see `unmergeable_redeclarations`).
+    if !unmergeable_redeclarations.is_empty() {
+        cache_hits = 0;
+        to_verify = resolved_targets.iter().cloned().collect();
+    }
 
     // Kernel-check only the misses (the hits are already-earned verdicts).
     //
@@ -1351,7 +1784,7 @@ pub(crate) fn per_constant_verify(
     } else {
         stream_elide
     };
-    let (pass, fail, errors, elision_stats) = if to_verify.is_empty() {
+    let (mut pass, mut fail, mut errors, elision_stats) = if to_verify.is_empty() {
         (
             0usize,
             0usize,
@@ -1359,14 +1792,46 @@ pub(crate) fn per_constant_verify(
             ProofElisionStats::default(),
         )
     } else {
-        clean_olean::verify_batch_full::typecheck_constants_full_streaming(
+        // The target module's other declarations are PREREQUISITES: replayed
+        // (checked and admitted) before any target that reaches them, never
+        // counted. Without them a module-mate resident as trusted context
+        // could vouch for a target it depends on (measured 2026-09-24:
+        // `--constant forged3_cycA` passed with `forged3_cycB := forged3_cycA`
+        // resident).
+        let prerequisites: BTreeSet<String> =
+            module_declared.difference(&to_verify).cloned().collect();
+        let not_admitted = payload_not_admitted.clone();
+        clean_olean::verify_batch_full::typecheck_constants_full_streaming_scoped(
             &mut env,
             &to_verify,
+            clean_olean::verify_batch_full::ReplayScope {
+                prerequisites: &prerequisites,
+                not_admitted: &not_admitted,
+                already_declared: &already_declared,
+            },
             max_heartbeats,
             effective_elide,
             Some(stream_elide_chunk),
         )
     };
+    if !unmergeable_redeclarations.is_empty() {
+        let names = unmergeable_redeclarations
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>()
+            .join("`, `");
+        for t in &to_verify {
+            errors.entry(t.clone()).or_insert_with(|| {
+                format!(
+                    "the module redeclares `{names}`, which an import declares, as no Lean \
+                     import merge admits (Lean's replay: constant has already been declared); \
+                     no declaration of such a module is verified"
+                )
+            });
+        }
+        fail = to_verify.iter().filter(|t| errors.contains_key(*t)).count();
+        pass = to_verify.len() - fail;
+    }
     if let Some(top) = reduction_stats_top {
         eprintln!("{}", clean_kernel::reduction_stats_report(top));
     }
@@ -1413,7 +1878,7 @@ pub(crate) fn per_constant_verify(
     // `sorry`/`sorryAx`/`trusted*` trust marker) the proof terms transitively
     // reach. Empty ⇒ the verified set rests only on the 3-axiom TCB.
     let (axiom_closure, axiom_basis_complete) = if compute_axioms && !verified_targets.is_empty() {
-        compute_axiom_closure(&verified_targets, &index, &search_paths, &env)
+        compute_axiom_closure(&verified_targets, &index, &search_paths, &env, &mut world)
     } else {
         (Vec::new(), false)
     };
@@ -1431,6 +1896,7 @@ pub(crate) fn per_constant_verify(
         failed: fail,
         errors,
         target_values_present,
+        not_replayable,
         modules_indexed,
         modules_parsed,
         inductive_modules_loaded,
@@ -1518,12 +1984,14 @@ struct ConstFacts {
 ///
 /// Returns `(sorted_non_foundational_axioms, complete)`. `complete` is `false`
 /// if any referenced constant could not be resolved (then the caller must not
-/// publish a within-TCB claim — an unresolved dep could hide an axiom).
+/// publish a within-TCB claim — an unresolved dep could hide an axiom). A
+/// module outside `world` (R81) counts as unresolved.
 fn compute_axiom_closure(
     verified_targets: &[String],
     index: &NameOleanIndex,
     search_paths: &[PathBuf],
     prelude_env: &Environment,
+    world: &mut LeanWorldScope,
 ) -> (Vec<String>, bool) {
     let mut facts: HashMap<Name, ConstFacts> = HashMap::new();
     let mut parsed_oleans: HashSet<PathBuf> = HashSet::new();
@@ -1554,6 +2022,13 @@ fn compute_axiom_closure(
         if parsed_oleans.contains(&olean) {
             // Module already parsed but this name wasn't among its constants.
             return facts.contains_key(name);
+        }
+        // A module of a refused or second world vouches for nothing: its
+        // names stay unresolved, so the basis is incomplete.
+        if let Err(e) = world.admit_artifact(&olean.display().to_string(), &olean) {
+            eprintln!("per-constant-verify: axiom closure: {e}");
+            parsed_oleans.insert(olean);
+            return false;
         }
         let Ok(module) = parse_target_module_with_proofs(&olean) else {
             return false;
@@ -1675,7 +2150,7 @@ fn private_prefix_module(s: &str) -> Option<String> {
 /// Collect every `Const` name referenced in a raw [`ParsedExpr`] tree into `out`.
 /// Walks the whole term (types AND proof values) so no reference is missed. No
 /// kernel `Expr` reconstruction — cheap, and uniform across every constant kind.
-fn collect_parsed_consts(e: &ParsedExpr, out: &mut HashSet<Name>) {
+pub(super) fn collect_parsed_consts(e: &ParsedExpr, out: &mut HashSet<Name>) {
     match e {
         ParsedExpr::Const(name, _) => {
             out.insert(Name::from_string(name));
@@ -1693,7 +2168,7 @@ fn collect_parsed_consts(e: &ParsedExpr, out: &mut HashSet<Name>) {
             collect_parsed_consts(val, out);
             collect_parsed_consts(body, out);
         }
-        ParsedExpr::MData(inner) | ParsedExpr::Proj(_, _, inner) => {
+        ParsedExpr::MData(_, inner) | ParsedExpr::Proj(_, _, inner) => {
             collect_parsed_consts(inner, out);
         }
         ParsedExpr::BVar(_)
@@ -1722,10 +2197,33 @@ fn inductive_family_type(env: &Environment, name: &Name) -> Option<Expr> {
     None
 }
 
+/// Carry Lean's declaration safety onto a demand-loaded constant, as the eager
+/// loader does (`clean_olean` `apply_declaration_safety_marks`): the replay
+/// refuses an unsafe or partial declaration outright, and the Lean-profile
+/// checker refuses a safe declaration that uses one (measured 2026-09-24:
+/// without the mark, `forged5_unsafe : False := unsafeCast True.intro` passed).
+fn mark_declaration_safety(env: &mut Environment, name: &Name, pc: &ParsedConstant) {
+    match pc.definition_safety {
+        Some(DefinitionSafety::Safe) | None => {}
+        Some(DefinitionSafety::Partial) if pc.kind == OleanKind::Definition => {
+            env.mark_partial(name.clone());
+        }
+        // `unsafe`; `partial` on anything but a definition; any safety this
+        // build does not know: fail closed.
+        Some(_) => env.mark_unsafe(name.clone()),
+    }
+}
+
 /// Insert a trusted constant, upgrading a value-less prelude axiom stub of the
 /// same name in place when the loaded constant carries a real value (mirrors the
 /// eager loader's `.olean` definition overwriting the import-prelude stub).
-fn insert_or_upgrade(env: &mut Environment, ci: ConstantInfo) {
+pub(super) fn insert_or_upgrade(env: &mut Environment, ci: ConstantInfo) {
+    // The kernel's canonical quotient is authoritative: Lean replays a stored
+    // `quotInfo` as the kernel's own `quotDecl`, whatever type the `.olean`
+    // stores for it, so a stored quotient primitive never replaces it.
+    if env.get_quot(&ci.name).is_some() {
+        return;
+    }
     match env.get_const(&ci.name) {
         // A real (value-bearing) constant is already resident: keep it.
         Some(existing) if existing.value.is_some() => {}
@@ -1827,6 +2325,12 @@ fn emit_trust_receipt(
     }
     Ok(())
 }
+
+// The import world gate on this lane and the closure-shard builder and
+// verifier (docs/DECISIONS.md R81).
+#[cfg(test)]
+#[path = "per_constant_world_gate_tests.rs"]
+mod world_gate_tests;
 
 #[cfg(test)]
 mod tests {

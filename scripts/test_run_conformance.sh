@@ -21,6 +21,12 @@
 
 set -euo pipefail
 
+# The `-j 1` these tests pin is what a caller who sets nothing gets. A
+# CARGO_BUILD_JOBS the caller exported (build-slot exports one for every job
+# it admits) is not that default, and inheriting it turned ten of these checks
+# red under `build-slot -- scripts/check_script_selftests.sh` (2026-10-16).
+unset CARGO_BUILD_JOBS
+
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUNNER_SCRIPT="${REPO_ROOT}/scripts/run_conformance.sh"
 
@@ -112,17 +118,17 @@ else
     fail "missing CARGO_BUILD_JOBS single-job default"
 fi
 
-if grep -Fq 'cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS"' "$RUNNER_SCRIPT" &&
-    ! grep -Fq "via cargo test" "$RUNNER_SCRIPT"; then
-    pass "usage guidance advertises bounded cargo test"
+if grep -Fq 'targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS"' "$RUNNER_SCRIPT" &&
+    ! grep -Fq "via targo --unverified test" "$RUNNER_SCRIPT"; then
+    pass "usage guidance advertises bounded targo --unverified test"
 else
-    fail "usage guidance should advertise bounded cargo test"
+    fail "usage guidance should advertise bounded targo --unverified test"
 fi
 
 # ---- Test 3: Default scope uses combined filter -------------------------------
 echo "--- Test 3: Default scope runs combined filter ---"
 CARGO_LOG="$TMP_DIR/default-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
 exit 0
 "
@@ -133,7 +139,7 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "test --locked --message-format=short -j 1 -p clean-verify --lib -- conformance" \
+    "--unverified test --locked --message-format=short -j 1 -p clean-verify --lib -- conformance" \
     "default run uses combined conformance filter"
 
 assert_output_contains \
@@ -144,7 +150,7 @@ assert_output_contains \
 # ---- Test 4: --sat narrows to SAT conformance tests ---------------------------
 echo "--- Test 4: --sat narrows internal scope ---"
 CARGO_LOG="$TMP_DIR/sat-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
 exit 0
 "
@@ -155,7 +161,7 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "test --locked --message-format=short -j 1 -p clean-verify --lib -- sat_verify::conformance_tests::" \
+    "--unverified test --locked --message-format=short -j 1 -p clean-verify --lib -- sat_verify::conformance_tests::" \
     "--sat uses SAT module filter"
 
 assert_output_contains \
@@ -166,7 +172,7 @@ assert_output_contains \
 # ---- Test 5: --smt --verbose narrows to SMT filter without nocapture ---------
 echo "--- Test 5: --smt --verbose narrows internal scope ---"
 CARGO_LOG="$TMP_DIR/smt-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
 exit 0
 "
@@ -177,7 +183,7 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests::" \
+    "--unverified test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests::" \
     "--smt --verbose uses SMT filter"
 
 assert_log_not_contains \
@@ -192,13 +198,13 @@ assert_output_contains \
 
 assert_output_contains \
     "$OUTPUT" \
-    "cargo: cargo test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests::" \
+    "cargo: targo --unverified test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests::" \
     "--verbose prints the resolved bounded cargo command"
 
 # ---- Test 5b: --nocapture is explicit for focused debugging ------------------
 echo "--- Test 5b: --nocapture is explicit ---"
 CARGO_LOG="$TMP_DIR/smt-nocapture-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
 exit 0
 "
@@ -209,13 +215,13 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests:: --nocapture" \
+    "--unverified test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests:: --nocapture" \
     "--nocapture explicitly streams SMT test bodies"
 
 # ---- Test 6: conflicting selectors fail cleanly -------------------------------
 echo "--- Test 6: --sat --smt conflicting selectors ---"
 CONFLICT_LOG="$TMP_DIR/conflict-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CONFLICT_LOG\"
 exit 0
 "
@@ -294,9 +300,9 @@ assert_output_contains \
 # ---- Test 9: --sat --external wires ay-lrat-check explicitly -----------------
 echo "--- Test 9: --sat --external uses ay-lrat-check explicitly ---"
 CARGO_LOG="$TMP_DIR/ay-external-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
-if [ \"\$1\" = \"run\" ]; then
+if [ \"\$1 \$2\" = \"--unverified run\" ]; then
   printf '%s\n' '## fake lrat report'
   printf '%s\n' 'Oracle(s): ay-lrat-check'
 fi
@@ -310,12 +316,12 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "test --locked --message-format=short -j 1 -p clean-verify --lib -- sat_verify::conformance_tests::" \
+    "--unverified test --locked --message-format=short -j 1 -p clean-verify --lib -- sat_verify::conformance_tests::" \
     "--sat --external still runs SAT internal coverage"
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "run --locked -q --message-format=short -j 1 -p clean --bin clean -- kernel lrat-conform --ay-lrat-check $MOCK_BIN/ay-lrat-check" \
+    "--unverified run --locked -q --message-format=short -j 1 -p clean --bin clean -- kernel lrat-conform --ay-lrat-check $MOCK_BIN/ay-lrat-check" \
     "--sat --external forwards the discovered ay-lrat-check path"
 
 assert_output_contains \
@@ -327,9 +333,9 @@ assert_output_contains \
 echo "--- Test 10: --sat --external uses cake_lpr explicitly ---"
 CARGO_LOG="$TMP_DIR/cake-external-cargo.log"
 rm -f "$MOCK_BIN/ay-lrat-check"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
-if [ \"\$1\" = \"run\" ]; then
+if [ \"\$1 \$2\" = \"--unverified run\" ]; then
   printf '%s\n' '## fake lrat report'
   printf '%s\n' 'Oracle(s): cake_lpr'
 fi
@@ -343,7 +349,7 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "run --locked -q --message-format=short -j 1 -p clean --bin clean -- kernel lrat-conform --cake-lpr $MOCK_BIN/cake_lpr" \
+    "--unverified run --locked -q --message-format=short -j 1 -p clean --bin clean -- kernel lrat-conform --cake-lpr $MOCK_BIN/cake_lpr" \
     "--sat --external forwards the discovered cake_lpr path"
 
 assert_output_contains \
@@ -354,7 +360,7 @@ assert_output_contains \
 # ---- Test 11: --smt --external skips the unsupported lane honestly -----------
 echo "--- Test 11: --smt --external skips unsupported external lane ---"
 CARGO_LOG="$TMP_DIR/smt-external-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
 exit 0
 "
@@ -365,7 +371,7 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests::" \
+    "--unverified test --locked --message-format=short -j 1 -p clean-verify --lib -- smt_verify::conformance_tests::" \
     "--smt --external still runs SMT internal coverage"
 
 assert_log_not_contains \
@@ -381,9 +387,9 @@ assert_output_contains \
 # ---- Test 12: default --external reports SAT-only support honestly -----------
 echo "--- Test 12: default --external reports SAT-only support honestly ---"
 CARGO_LOG="$TMP_DIR/default-external-cargo.log"
-make_mock_cli "$MOCK_BIN/cargo" "
+make_mock_cli "$MOCK_BIN/targo" "
 printf '%s\n' \"\$*\" >> \"$CARGO_LOG\"
-if [ \"\$1\" = \"run\" ]; then
+if [ \"\$1 \$2\" = \"--unverified run\" ]; then
   printf '%s\n' '## fake lrat report'
   printf '%s\n' 'Oracle(s): cake_lpr'
 fi
@@ -396,7 +402,7 @@ OUTPUT="$(
 
 assert_log_contains \
     "$CARGO_LOG" \
-    "run --locked -q --message-format=short -j 1 -p clean --bin clean -- kernel lrat-conform --cake-lpr $MOCK_BIN/cake_lpr" \
+    "--unverified run --locked -q --message-format=short -j 1 -p clean --bin clean -- kernel lrat-conform --cake-lpr $MOCK_BIN/cake_lpr" \
     "default --external still forwards the discovered SAT oracle"
 
 assert_output_contains \

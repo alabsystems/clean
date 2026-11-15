@@ -145,9 +145,11 @@ fn cargo_provided_clean_binary() -> Option<PathBuf> {
 
 fn build_clean_binary(binary: PathBuf) -> PathBuf {
     let root = workspace_root();
-    let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("cargo"));
+    // `$CARGO` is targo, which refuses a lane-less `build`: select the lane.
+    let cargo = env::var_os("CARGO").unwrap_or_else(|| OsString::from("targo"));
     let mut command = Command::new(cargo);
-    command.args(["build", "--quiet", "-p", "clean", "--bin", "clean"]);
+    command.args(["--unverified", "build", "--quiet"]);
+    command.args(["-p", "clean", "--bin", "clean"]);
     command.current_dir(root).env("CARGO_TERM_COLOR", "never");
 
     let output = run_with_timeout(

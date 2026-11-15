@@ -8,7 +8,7 @@
 //! These are used by [`SurfaceExpr::ByTactic`], [`SurfaceExpr::CalcBlock`],
 //! and [`SurfaceExpr::Do`] variants in the surface syntax.
 
-use crate::surface::{Span, SurfaceExpr};
+use crate::surface::{Span, SurfaceExpr, SurfaceName};
 use crate::surface_tactic_types::{SurfaceCalcStep, TacticMatchArm};
 
 /// A rewrite rule in `rw [rule1, rule2, ...]` syntax
@@ -21,13 +21,48 @@ pub struct SurfaceRwRule {
     pub term: SurfaceExpr,
 }
 
+/// One element of a `simp`/`simp only`/`simpa` lemma list — Lean's `simpArg`.
+///
+/// Lean's grammar is `simpLemma := (simpPre <|> simpPost)? "← "? term` and
+/// `simpErase := "-" ident` (`Lean/Elab/Tactic/Simp.lean`), so a list element
+/// carries up to two modifiers besides its term (a phase and `←`, or `-`
+/// alone). The direction and the erasure used to be eaten and thrown away by
+/// `Parser::parse_simp_lemmas`, which made `simp [← h]` run `h` FORWARD and
+/// `simp [-h]` *add* `h` where Lean removes it — a silent inversion of the
+/// request, not merely a dropped feature.
+#[derive(Debug, Clone)]
+pub struct SurfaceSimpArg {
+    pub span: Span,
+    /// `↓ lemma` / `↑ lemma`: the traversal phase the rule is added to
+    /// (Lean's `simpPre` / `simpPost`); `None` when the element has neither.
+    pub phase: Option<SimpPhase>,
+    /// `← lemma`: use the equation right-to-left (Lean's `inv`).
+    pub reverse: bool,
+    /// `- lemma`: REMOVE the lemma from the simp set (Lean's `simpErase`).
+    pub erase: bool,
+    /// The lemma term. Lean elaborates this as an arbitrary term when it does
+    /// not resolve as an identifier, so it is a [`SurfaceExpr`], not a name.
+    pub term: SurfaceExpr,
+}
+
+/// The traversal phase a simp-list element names: Lean's `simpPre` (`↓`, the
+/// rule fires before simp visits the subterms) or `simpPost` (`↑`, after).
+/// It says WHEN a rule fires, never which rule it is or its direction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SimpPhase {
+    /// `↓` — Lean's `simpPre`.
+    Pre,
+    /// `↑` — Lean's `simpPost`.
+    Post,
+}
+
 /// Location specifier for tactics like `simp at h` or `rw [...] at *`
 #[derive(Debug, Clone)]
 pub enum SurfaceTacticLocation {
     /// Apply at specific hypotheses: `at h1 h2`
-    Hyps(Vec<String>),
+    Hyps(Vec<SurfaceName>),
     /// Apply at specific hypotheses and the goal: `at h1 h2 ⊢` / `at h1 h2 |-`
-    HypsAndGoal(Vec<String>),
+    HypsAndGoal(Vec<SurfaceName>),
     /// Apply at the goal (default, no `at` clause)
     Goal,
     /// Apply everywhere: `at *`
@@ -42,7 +77,7 @@ pub enum ConvEnterArg {
     /// Numeric index: `enter [1, 2]` navigates to arguments
     Index(i64),
     /// Named variable: `enter [x]` introduces x and enters binder
-    Name(String),
+    Name(SurfaceName),
 }
 
 /// A single `case` arm in `cases`/`induction` with-blocks:
@@ -50,12 +85,25 @@ pub enum ConvEnterArg {
 #[derive(Debug, Clone)]
 pub struct SurfaceInductionAlt {
     pub span: Span,
+    /// Whether `@` requests names for implicit constructor fields too.
+    pub explicit: bool,
     /// Constructor/case name
-    pub name: String,
+    pub name: SurfaceName,
     /// Bound variable names for this case
-    pub args: Vec<String>,
+    pub args: Vec<SurfaceName>,
     /// Tactics for this case
     pub tactics: Vec<SurfaceTactic>,
+}
+
+/// One `casesTarget` of `rcases` (`Init/RCases.lean`): `e`, or `h : e`,
+/// which generalizes `e` and records `h : e = <pattern instance>` in every
+/// goal the pattern produces.
+#[derive(Debug, Clone)]
+pub struct SurfaceRCasesTarget {
+    /// The `h` of `h : e`.
+    pub eq_name: Option<SurfaceName>,
+    /// The scrutinee `e`.
+    pub term: SurfaceExpr,
 }
 
 /// Surface syntax for a single tactic
@@ -67,8 +115,18 @@ pub struct SurfaceInductionAlt {
 /// argument types retain dedicated variants for parser fidelity.
 #[derive(Debug, Clone)]
 pub enum SurfaceTactic {
-    /// `cases e with | alt1 => ... | alt2 => ...`
-    Cases(Span, Box<SurfaceExpr>, Vec<SurfaceInductionAlt>),
+    /// `cases (h :)? e with | alt1 => ... | alt2 => ...`
+    ///
+    /// The second field is the optional `h :` of Lean's `casesTarget`
+    /// (`atomic(ident " : ")? term`, `Init/Tactics.lean`): when present the
+    /// target is generalized with the equation `h : e = cᵢ fields` recorded
+    /// in every branch.
+    Cases(
+        Span,
+        Option<SurfaceName>,
+        Box<SurfaceExpr>,
+        Vec<SurfaceInductionAlt>,
+    ),
 
     /// `induction e (using r)? (generalizing x y …)? with | alt1 => … | alt2 => …`
     ///
@@ -84,18 +142,29 @@ pub enum SurfaceTactic {
         span: Span,
         target: Box<SurfaceExpr>,
         using_recursor: Option<Box<SurfaceExpr>>,
-        generalizing: Vec<String>,
+        generalizing: Vec<SurfaceName>,
         alts: Vec<SurfaceInductionAlt>,
     },
 
-    /// `rw [rule1, ← rule2] (at loc)?` - rewrite with given rules
+    /// `rw [rule1, ← rule2] (at loc)?` - rewrite with given rules, then
+    /// Lean's `try (with_reducible rfl)` on the main goal (Lean's `rw` macro
+    /// over `rewrite`, `Init/Tactics.lean`).
     Rw(Span, Vec<SurfaceRwRule>, SurfaceTacticLocation),
 
-    /// `simp` or `simp only [lemma1, lemma2]` with optional location
+    /// `rewrite [rule1, ← rule2] (at loc)?` - the rewrite alone, with no
+    /// closing `rfl` at any location (Lean's `rewriteSeq`).
+    Rewrite(Span, Vec<SurfaceRwRule>, SurfaceTacticLocation),
+
+    /// `rwa [rules] (at h)?` — focus the main goal, rewrite, and close it.
+    Rwa(Span, Vec<SurfaceRwRule>, SurfaceTacticLocation),
+
+    /// `simp` with optional location, or `simp_all`, with ordered arguments.
     Simp {
         span: Span,
+        /// Simplify the whole context using cross-hypothesis rewriting.
+        all: bool,
         only: bool,
-        lemmas: Vec<SurfaceExpr>,
+        lemmas: Vec<SurfaceSimpArg>,
         location: SurfaceTacticLocation,
         /// The lemma list contained Lean's `*` element (`simp [*]`,
         /// `simp only [*]`, `simp [foo, *]`): every local hypothesis is also
@@ -112,16 +181,31 @@ pub enum SurfaceTactic {
     /// it never reaches this variant.
     Have(
         Span,
-        Option<String>,
+        Option<SurfaceName>,
         Option<Box<SurfaceExpr>>,
         Box<SurfaceTactic>,
     ),
 
     /// `let h : T := val` (tactic-mode let)
-    Let(Span, String, Option<Box<SurfaceExpr>>, Box<SurfaceExpr>),
+    Let(
+        Span,
+        SurfaceName,
+        Option<Box<SurfaceExpr>>,
+        Box<SurfaceExpr>,
+    ),
+
+    /// `replace h : T := proof` (Lean's `replace letDecl`): the wrapped
+    /// declaration (a [`Self::Have`]) runs, then the older hypothesis of the
+    /// same name is cleared when nothing depends on it.
+    Replace(Span, Box<SurfaceTactic>),
 
     /// `suffices h : T by tac_seq` or `suffices h : T from proof`
-    Suffices(Span, Option<String>, Box<SurfaceExpr>, Vec<SurfaceTactic>),
+    Suffices(
+        Span,
+        Option<SurfaceName>,
+        Box<SurfaceExpr>,
+        Vec<SurfaceTactic>,
+    ),
 
     /// `case name (binders)* => tacs` - focus on a named case.
     ///
@@ -129,7 +213,7 @@ pub enum SurfaceTactic {
     /// `binderIdent`s that rename the case's most-recently-introduced
     /// inaccessible hypotheses (Lean: `case tag x₁ … xₙ => tac`). An empty
     /// binder list is the plain `case tag => tac` form.
-    Case(Span, String, Vec<String>, Vec<SurfaceTactic>),
+    Case(Span, SurfaceName, Vec<SurfaceName>, Vec<SurfaceTactic>),
 
     /// `all_goals tacs` - apply to all goals
     AllGoals(Span, Vec<SurfaceTactic>),
@@ -180,18 +264,31 @@ pub enum SurfaceTactic {
     /// `calc` block inside tactic mode
     Calc(Span, Vec<SurfaceCalcStep>),
 
-    /// `match discrs with | pat => tac_seq | ...` in tactic mode
+    /// `match (h :)? discrs with | pat => tac_seq | ...` in tactic mode
     ///
     /// Like expression-mode match, but arm bodies are tactic sequences.
-    /// Reference: Lean 4 `Lean.Parser.Tactic.match` in Tactic.lean
-    Match(Span, Vec<SurfaceExpr>, Vec<TacticMatchArm>),
+    /// Reference: Lean 4 `Lean.Parser.Tactic.match` in Tactic.lean. The
+    /// second field is the `h :` of an annotated single discriminant
+    /// (`matchDiscr`), bound as `h : e = pat` in every arm exactly as the
+    /// term-mode [`SurfaceExpr::Match`] binds it.
+    Match(
+        Span,
+        Option<SurfaceName>,
+        Vec<SurfaceExpr>,
+        Vec<TacticMatchArm>,
+    ),
 
     /// `simpa` or `simpa only [lemmas] using h` - simp then close with `h`
     /// (or `assumption` when no `using` term is given).
     Simpa {
         span: Span,
         only: bool,
-        lemmas: Vec<SurfaceExpr>,
+        lemmas: Vec<SurfaceSimpArg>,
+        /// The lemma list contained Lean's `*` element (`simpa [*] using h`).
+        /// `simpa` shares `simp`'s `mkSimpContext`, so `[*]` means the same
+        /// thing there; the parser used to bind this to `_use_hypotheses` and
+        /// throw it away, which made `simpa [*]` a strictly weaker `simpa`.
+        use_hypotheses: bool,
         /// The optional `using <term>` proof term. When present, `simpa`
         /// simplifies both the goal and `term`'s type and closes the goal with
         /// the simplified term; when absent, it falls back to `assumption`.
@@ -204,25 +301,42 @@ pub enum SurfaceTactic {
     /// canonical anonymous-constructor pattern text (e.g. `⟨a, b⟩`, `⟨⟨a, b⟩, c⟩`,
     /// or a single name `h`) consumed by the elaborator's recursive-intro pattern
     /// engine. `ty` is the optional `: T` ascription; `term` is the RHS scrutinee.
+    /// `term` is `None` for `obtain pat : T` (no `:= e`), which leaves `⊢ T`
+    /// as a new first goal and destructures the assumed `T` (Lean's
+    /// `obtainNone`); the parser accepts that form only with a type.
     Obtain {
         span: Span,
         pattern: String,
         ty: Option<Box<SurfaceExpr>>,
-        term: Box<SurfaceExpr>,
+        term: Option<Box<SurfaceExpr>>,
+        /// The types of the typed sub-patterns (`⟨x, hx : p x⟩`), referred to
+        /// in `pattern` as `hx : #k`.
+        pattern_types: Vec<SurfaceExpr>,
+        /// What each identifier of `pattern` binds, as written → as bound,
+        /// when a notation or macro template's expansion renamed it apart
+        /// (`crate::instantiate_notation_template`); empty otherwise, and
+        /// every identifier binds itself.
+        pattern_binders: Vec<(SurfaceName, SurfaceName)>,
     },
 
-    /// `rcases h with ⟨hp, hq⟩` — destructure an EXISTING hypothesis in place.
+    /// `rcases h with ⟨hp, hq⟩` — destructure a hypothesis (or a term).
     ///
-    /// Unlike [`Self::Obtain`], the scrutinee `term` is an already-introduced
-    /// hypothesis (resolved to its binder name in the elaborator); there is no
-    /// `have`/copy step. The `pattern` is the canonical anonymous-constructor
+    /// Lean 4.8: `"rcases" casesTarget,* (" with " rcasesPatLo)?`
+    /// (`Init/RCases.lean`). Each target is `e` or `h : e`
+    /// ([`SurfaceRCasesTarget`]); with several targets the pattern's tuple
+    /// components go to the targets in order. The `pattern` is the canonical
     /// pattern text (e.g. `⟨a, b⟩`, `⟨a, ⟨b, c⟩⟩`, or a single name) consumed by
     /// the same recursive-intro pattern engine that backs `obtain`. The `with`
-    /// keyword separates the scrutinee from the pattern.
+    /// keyword separates the targets from the pattern.
     RCases {
         span: Span,
-        term: Box<SurfaceExpr>,
+        /// At least one target, in source order.
+        targets: Vec<SurfaceRCasesTarget>,
         pattern: String,
+        /// The types of the typed sub-patterns, as for [`Self::Obtain`].
+        pattern_types: Vec<SurfaceExpr>,
+        /// As for [`Self::Obtain`].
+        pattern_binders: Vec<(SurfaceName, SurfaceName)>,
     },
 
     /// `rintro ⟨hp, hq⟩ h _` — recursive intro with destructuring patterns.
@@ -238,7 +352,14 @@ pub enum SurfaceTactic {
     /// dispatcher) is what keeps the introduced hypothesis re-resolved BY NAME in
     /// the current goal before destructuring, avoiding the stale-FVar dangling
     /// reference that the term-elaboration path produced.
-    RIntro { span: Span, patterns: Vec<String> },
+    RIntro {
+        span: Span,
+        patterns: Vec<String>,
+        /// The types of the typed sub-patterns, as for [`Self::Obtain`].
+        pattern_types: Vec<SurfaceExpr>,
+        /// As for [`Self::Obtain`].
+        pattern_binders: Vec<(SurfaceName, SurfaceName)>,
+    },
 
     /// A named tactic not in the hardcoded enum — dispatched via TacticRegistry.
     /// Captures the tactic name and its raw arguments as surface expressions.
@@ -260,12 +381,13 @@ impl SurfaceTactic {
     #[rustfmt::skip]
     pub fn span(&self) -> Span {
         match self {
-            SurfaceTactic::Cases(s, _, _)
-            | SurfaceTactic::Rw(s, _, _)
+            SurfaceTactic::Cases(s, _, _, _)
+            | SurfaceTactic::Rw(s, _, _) | SurfaceTactic::Rewrite(s, _, _)
+            | SurfaceTactic::Rwa(s, _, _)
             | SurfaceTactic::Induction { span: s, .. }
             | SurfaceTactic::Simp { span: s, .. }
             | SurfaceTactic::Have(s, _, _, _) | SurfaceTactic::Let(s, _, _, _)
-            | SurfaceTactic::Suffices(s, _, _, _)
+            | SurfaceTactic::Suffices(s, _, _, _) | SurfaceTactic::Replace(s, _)
             | SurfaceTactic::Case(s, _, _, _) | SurfaceTactic::AllGoals(s, _)
             | SurfaceTactic::AnyGoals(s, _) | SurfaceTactic::Try(s, _)
             | SurfaceTactic::First(s, _) | SurfaceTactic::Repeat(s, _)
@@ -274,7 +396,7 @@ impl SurfaceTactic {
             | SurfaceTactic::Conv(s, _, _) | SurfaceTactic::ConvArg(s, _)
             | SurfaceTactic::ConvEnter(s, _)
             | SurfaceTactic::SimpRw(s, _, _) | SurfaceTactic::Calc(s, _)
-            | SurfaceTactic::Match(s, _, _)
+            | SurfaceTactic::Match(s, _, _, _)
             | SurfaceTactic::Simpa { span: s, .. }
             | SurfaceTactic::Obtain { span: s, .. }
             | SurfaceTactic::RCases { span: s, .. }

@@ -26,7 +26,7 @@ const INDEX_POINTER: &str = "\
 clean help — interactive feature documentation
 
 Usage:
-  clean help <path>        Render the descriptor for <path> (space-joined, e.g. `kernel verify`)
+  clean help <path>        Render the descriptor for <path> (space-joined, e.g. `cert verify`)
   clean features           List every registered feature with filters
   clean features --search  Free-text search across paths, summaries, and descriptions
 ";
@@ -76,8 +76,15 @@ fn render_for_path(out: &mut impl Write, requested: &str) -> Result<(), HelpErro
     // writer only for the rendered-markdown body so colour/formatting escape
     // codes reach the terminal directly. Headers and references for tests use
     // the writer path below.
-    let skin = termimad::MadSkin::default();
-    skin.print_text(&markdown);
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let skin = termimad::MadSkin::default();
+        skin.print_text(&markdown);
+    }
+    // termimad's terminal backend (crossterm) has no wasm32 port; print the
+    // same Markdown body unstyled through the same call site.
+    #[cfg(target_arch = "wasm32")]
+    println!("{markdown}");
 
     writeln!(out)?;
     Ok(())

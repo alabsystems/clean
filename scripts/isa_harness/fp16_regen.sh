@@ -37,7 +37,7 @@ if [[ "$(uname -m)" != "arm64" ]]; then
 fi
 
 echo "[1/4] building on-chip FP16 harness..."
-( cd "$HARNESS_DIR" && cargo build --release --bin fp16_harness )
+( cd "$HARNESS_DIR" && targo --unverified build --release --bin fp16_harness )
 
 echo "[2/4] running real ARMv8.2-FP16 fcvt/fadd/fmul .h on this chip..."
 "$HARNESS_DIR/target/release/fp16_harness" "$GEN"

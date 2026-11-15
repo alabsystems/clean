@@ -237,7 +237,10 @@ fn apply_theorem_collect_goals(
                 .map(|meta| state.metas().instantiate(&meta.ty))
                 .expect("fresh theorem metavariables must exist"),
             local_ctx: goal.local_ctx.clone(),
-            tag: Some("field_simp:ne_zero".to_string()),
+            case_binders: goal.case_binders.clone(),
+            tag: Some(clean_parser::SurfaceName::generated_path(
+                "field_simp:ne_zero",
+            )),
         })
         .collect();
 
@@ -352,7 +355,10 @@ fn verify_helper_metas(
         if !is_ne_target(&target) {
             return Err(TacticError::InvalidTarget {
                 tactic: "field_simp".to_string(),
-                detail: format!("{theorem_name} produced a non-`Ne` premise target: {target:?}"),
+                detail: format!(
+                    "{theorem_name} produced a non-`Ne` premise target: {}",
+                    crate::error_render::term(&target)
+                ),
             });
         }
     }

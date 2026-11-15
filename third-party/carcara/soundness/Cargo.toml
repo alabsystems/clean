@@ -1,0 +1,16 @@
+[package]
+name = "carcara-soundness"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "Apache-2.0"
+authors = ["Andrew Yates <andrewyates.name@gmail.com>"]
+description = "Mechanical rule-soundness battery for the vendored Carcara checker (Trust-authored, not part of upstream Carcara)"
+
+[dependencies]
+carcara = { path = "../carcara" }
+rug = { version = "1.21.0", default-features = false, features = ["integer", "rational"] }
+
+[[bin]]
+name = "carcara-soundness"
+path = "src/main.rs"

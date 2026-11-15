@@ -59,8 +59,9 @@ fn test_forward_basic() {
         env,
         r,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -82,7 +83,10 @@ fn test_forward_basic() {
     let goal = state
         .current_goal()
         .expect("should have a goal after failed search");
-    let has_hp = goal.local_ctx.iter().any(|d| d.name == "hp");
+    let has_hp = goal
+        .local_ctx
+        .iter()
+        .any(|d| d.name == clean_parser::SurfaceName::generated_path("hp"));
     assert!(
         has_hp,
         "hp : P should be preserved after failed aesop search"
@@ -135,8 +139,9 @@ fn test_forward_no_duplicate() {
         env,
         r.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -238,8 +243,9 @@ fn test_forward_chain() {
         env,
         r.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],
@@ -262,7 +268,10 @@ fn test_forward_chain() {
         let goal = state
             .current_goal()
             .expect("should have a goal after failed search");
-        let has_hp = goal.local_ctx.iter().any(|d| d.name == "hp");
+        let has_hp = goal
+            .local_ctx
+            .iter()
+            .any(|d| d.name == clean_parser::SurfaceName::generated_path("hp"));
         assert!(
             has_hp,
             "hp : P should be preserved after failed aesop search"
@@ -339,8 +348,9 @@ fn test_forward_backtrack_isolation() {
         env,
         r.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: p.clone(),
             value: None,
         }],

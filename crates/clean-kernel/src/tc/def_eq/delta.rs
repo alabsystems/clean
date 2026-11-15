@@ -111,28 +111,6 @@ impl<'env> TypeChecker<'env> {
                 return Ok(self.is_def_eq_impl(&t, &s_v));
             }
 
-            // 4. Monadic reduction hook (Track Q). A monad-class head
-            // (`Bind.bind`/`Pure.pure` over a concrete `Except`/`StateT`/`ExceptT`,
-            // or the transformer binds) is an axiom: it cannot delta-unfold, so
-            // `lazy_delta_step` below treats `Pure.pure …` vs `Except.ok …` as two
-            // distinct stuck consts and reports DefUnknown — even though
-            // `Pure.pure (Except ε) α a` IS `Except.ok ε α a` and a do-block's
-            // trailing `pure x` / lane-fold bind must converge. `try_monad_reduce`
-            // performs exactly those instance-unfolding rewrites; firing it here
-            // (symmetrically, like the Nat/native hooks) lets the reduced side
-            // re-enter def-eq. Only fires when the rewrite makes progress
-            // (`reduced != side`); the kernel re-checks the produced term.
-            if let Some(t_v) = self.try_monad_reduce(&t) {
-                if t_v != t {
-                    return Ok(self.is_def_eq_impl(&t_v, &s));
-                }
-            }
-            if let Some(s_v) = self.try_monad_reduce(&s) {
-                if s_v != s {
-                    return Ok(self.is_def_eq_impl(&t, &s_v));
-                }
-            }
-
             // Perform one delta reduction step.
             // Lean 4 type_checker.cpp:993-1008 maps:
             //   Continue   → loop, DefEqual → l_true,
@@ -382,19 +360,22 @@ impl<'env> TypeChecker<'env> {
     ///
     /// Reference: Lean 4 type_checker.cpp:1010-1027 `lazy_delta_proj_reduction`.
     ///
-    /// When comparing `Proj(_, i, a) =?= Proj(_, i, b)`, runs the lazy delta
-    /// reduction loop on the inner struct expressions `a` and `b`. Unlike the
+    /// When comparing `Proj(S, i, a) =?= Proj(S, i, b)` (the caller has
+    /// checked that both name the same structure `S`, leanprover/lean4#14631),
+    /// runs the lazy delta reduction loop on the inner struct expressions `a`
+    /// and `b`. Unlike the
     /// full `lazy_delta_reduction`, this calls `lazy_delta_reduction_step`
     /// directly (no Nat/native hooks), matching Lean 4's structure.
     ///
     /// On `DefUnknown` or `DefDiff` (delta exhausted or proved structurally
     /// different), tries to extract field `idx` from both sides via
-    /// `reduce_proj_core`. Falls back to `is_def_eq_core` on the delta-reduced
-    /// inner expressions.
+    /// `reduce_proj_core`, which extracts it only from a constructor of `S`.
+    /// Falls back to `is_def_eq_core` on the delta-reduced inner expressions.
     pub(in crate::tc) fn lazy_delta_proj_reduction(
         &self,
         t_c: &Expr,
         s_c: &Expr,
+        struct_name: &Name,
         idx: u32,
     ) -> bool {
         /// Safety cap for the projection delta loop (same rationale as
@@ -419,8 +400,8 @@ impl<'env> TypeChecker<'env> {
                     // Try extracting projection fields from the delta-reduced
                     // inner expressions before giving up.
                     // Lean 4 type_checker.cpp:1017-1024
-                    if let Some(t_field) = self.reduce_proj_core(&t, idx) {
-                        if let Some(s_field) = self.reduce_proj_core(&s, idx) {
+                    if let Some(t_field) = self.reduce_proj_core(&t, struct_name, idx) {
+                        if let Some(s_field) = self.reduce_proj_core(&s, struct_name, idx) {
                             return self.is_def_eq_impl(&t_field, &s_field);
                         }
                     }

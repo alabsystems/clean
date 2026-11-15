@@ -538,6 +538,97 @@ fn test_nested_as_pattern_on_imported_myoption() {
     );
 }
 
+#[test]
+fn test_nested_aliases_retain_the_whole_imported_column() {
+    let mut env = imported_myoption_env();
+    for (function, returned_alias) in [("keepOuterAlias", "p"), ("keepInnerAlias", "q")] {
+        elaborate_decls_into(
+            &mut env,
+            &format!(
+                "def {function} (o : MyOption (MyOption Nat)) : MyOption Nat := match o with\n\
+                 | MyOption.some (p@(q@(MyOption.some y))) => {returned_alias}\n\
+                 | MyOption.some MyOption.none => MyOption.none\n\
+                 | MyOption.none => MyOption.some Nat.zero"
+            ),
+        );
+        let nat = const_("Nat");
+        let opt_nat = myoption_of(nat.clone());
+        let inner = some_of(nat.clone(), succ(succ(const_("Nat.zero"))));
+        let call = Expr::app(const_(function), some_of(opt_nat.clone(), inner.clone()));
+        assert!(
+            def_eq(&env, &call, &inner),
+            "{returned_alias} is the whole inner option"
+        );
+        assert!(!def_eq(&env, &call, &none_of(nat.clone())));
+        let inner_none = Expr::app(
+            const_(function),
+            some_of(opt_nat.clone(), none_of(nat.clone())),
+        );
+        assert!(def_eq(&env, &inner_none, &none_of(nat.clone())));
+        let outer_none = Expr::app(const_(function), none_of(opt_nat));
+        assert!(def_eq(&env, &outer_none, &some_of(nat, const_("Nat.zero"))));
+        assert!(env
+            .axiom_deps(&Name::from_string(function))
+            .is_some_and(|deps| deps.is_empty()));
+    }
+    assert!(env
+        .get_recursor(&Name::from_string("MyOption.casesOn"))
+        .is_none());
+}
+
+/// An alias around a wildcard (`some (p@_)`) covers every `some`, so a later
+/// `some (some y)` row is reached by no value. Lean 4.8.0 refuses the match
+/// ("redundant alternative" at that row — pinned binary on the `Option`
+/// spelling, 2026-10-07, `scratchpad/match-compile/v17/oracle/P.lean`). This
+/// used to be pinned ACCEPTED for its first-row value, which silently dropped
+/// the shadowed row (decision D2). The alias's coverage is still pinned by the
+/// refusal below, which names the shadowed row, and by the accepted aliases
+/// above.
+#[test]
+fn test_imported_alias_wildcard_shadowing_a_later_row_is_refused() {
+    let mut env = imported_myoption_env();
+    let source = "def aliasPriority (o : MyOption (MyOption Nat)) : Nat := match o with\n\
+                  | MyOption.some (p@_) => Nat.succ Nat.zero\n\
+                  | MyOption.some (MyOption.some y) => y\n\
+                  | MyOption.none => Nat.zero";
+    let decls = parse_file(source).expect("alias source should parse");
+    assert_eq!(decls.len(), 1);
+    let mut file_ctx = FileContext::new();
+    let processed = preprocess_decl_with_context(&decls[0], &mut file_ctx);
+    let Err(error) = elaborate_decl_and_register(&mut env, &processed) else {
+        panic!("Lean refuses the unreachable `some (some y)` row");
+    };
+    let error = error.to_string();
+    assert!(
+        error.contains("redundant alternative") && error.contains("alternative 2 of"),
+        "{error}"
+    );
+    assert!(env.get_const(&Name::from_string("aliasPriority")).is_none());
+}
+
+#[test]
+fn test_imported_alias_does_not_cover_a_missing_constructor() {
+    let mut env = imported_myoption_env();
+    let source = "def missingInnerNone (o : MyOption (MyOption Nat)) : Nat := match o with\n\
+                  | MyOption.some (p@(MyOption.some y)) => y\n\
+                  | MyOption.none => Nat.zero";
+    let decls = parse_file(source).expect("alias source should parse");
+    assert_eq!(decls.len(), 1);
+    let mut file_ctx = FileContext::new();
+    let processed = preprocess_decl_with_context(&decls[0], &mut file_ctx);
+    let result = elaborate_decl_and_register(&mut env, &processed);
+    let Err(error) = result else {
+        panic!("an alias around some must not cover none");
+    };
+    assert!(error.to_string().contains("non-exhaustive"), "{error}");
+    assert!(env
+        .get_const(&Name::from_string("missingInnerNone"))
+        .is_none());
+    assert!(env
+        .get_recursor(&Name::from_string("MyOption.casesOn"))
+        .is_none());
+}
+
 // ===========================================================================
 // Control: the SAME nested patterns work on the NATIVE path (where
 // MyOption.casesOn IS a registered recursor in the MajorAfterMinors layout).
@@ -553,14 +644,16 @@ fn test_nested_some_some_pattern_on_native_myoption_reduces_correctly() {
     env.add_inductive(myoption_decl())
         .expect("MyOption should declare");
 
-    // Native MyOption.casesOn IS a registered recursor (MajorAfterMinors).
+    // Native MyOption.casesOn IS a registered recursor (MajorAfterMotive).
     let rec = env
         .get_recursor(&Name::from_string("MyOption.casesOn"))
         .expect("native MyOption.casesOn should be a registered recursor");
     assert_eq!(
         rec.arg_order,
-        clean_kernel::RecursorArgOrder::MajorAfterMinors,
-        "native casesOn uses the MajorAfterMinors layout"
+        clean_kernel::RecursorArgOrder::MajorAfterMotive,
+        "native casesOn uses the MajorAfterMotive layout — the Lean-faithful \
+         one. It was MajorAfterMinors until the kernel fixed it; that layout \
+         broke iota reduction (clean-kernel tc/tests2/no_confusion_value_tests.rs)"
     );
 
     elaborate_decls_into(

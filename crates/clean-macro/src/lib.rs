@@ -22,6 +22,8 @@ pub mod quotation;
 pub mod registry;
 pub mod syntax;
 
+pub use clean_parser::SurfaceName;
+
 pub use builtins::{builtin_registry, register_builtins};
 pub use expand::{expand_hygienic, HygienicExpander, MacroExpander, MacroResult};
 pub use hygiene::{HygieneContext, HygieneState, MacroScope, ScopedName};
@@ -33,21 +35,24 @@ pub use registry::{MacroDef, MacroRegistry};
 pub use syntax::{SourceInfo, Syntax, SyntaxKind, SyntaxNode};
 
 #[cfg(test)]
+mod typed_name_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_basic_syntax_construction() {
-        let ident = Syntax::ident("foo");
+        let ident = Syntax::generated_ident("foo");
         assert!(ident.is_ident());
-        assert_eq!(ident.as_ident(), Some("foo"));
+        assert_eq!(ident.as_ident(), Some(&SurfaceName::generated_path("foo")));
     }
 
     #[test]
     fn test_syntax_node_construction() {
         let node = Syntax::node(
             SyntaxKind::app("App"),
-            vec![Syntax::ident("f"), Syntax::ident("x")],
+            vec![Syntax::generated_ident("f"), Syntax::generated_ident("x")],
         );
         assert!(node.is_node());
         assert_eq!(node.children().len(), 2);

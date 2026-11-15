@@ -1002,6 +1002,9 @@ fn test_export_with_payload_populates_constants() {
         constructors: vec![],
         recursors: vec![],
         structure_fields: vec![],
+        protected_decls: vec![],
+        private_decls: vec![],
+        ..CleanPayload::default()
     };
 
     let bytes = OleanExporter::export_with_payload(
@@ -1269,7 +1272,14 @@ fn test_inductive_val_roundtrip_flags_propagate_to_kernel() {
     // End-to-end: the parsed flags must survive the kernel load. Only
     // is_large_elim is recomputed by the loader; is_recursive / is_reflexive /
     // is_nested flow straight through.
-    let ind = inductive_with_flags("Test.IndKernel", 1, 0, true, true, true);
+    let mut ind = inductive_with_flags("Test.IndKernel", 1, 0, true, true, true);
+    // One parameter needs a type of arity one: the import refuses a family
+    // whose num_params/num_indices do not split its type's arity.
+    ind.type_ = Expr::pi(
+        clean_kernel::expr::BinderInfo::Default,
+        Expr::type_(),
+        Expr::type_(),
+    );
     let mut exporter = OleanExporter::new();
     let const_ptr = exporter
         .write_inductive_info(&ind)
@@ -1393,119 +1403,131 @@ fn test_write_recursor_info() {
     );
 }
 
-/// Build a single-rule `RecursorVal` for round-trip exercises.
-fn recursor_for_roundtrip(
-    name: &str,
-    arg_order: clean_kernel::inductive::RecursorArgOrder,
-) -> RecursorVal {
-    let inductive = name
-        .strip_suffix(".rec")
-        .or_else(|| name.strip_suffix(".recOn"))
-        .unwrap_or(name);
-    RecursorVal {
-        name: Name::from_string(name),
-        arg_order,
-        level_params: vec![Name::from_string("u")],
-        type_: Expr::type_(),
-        inductive_name: Name::from_string(inductive),
-        num_params: 1,
-        num_indices: 0,
-        num_motives: 1,
-        num_minors: 1,
-        rules: vec![RecursorRule {
-            constructor_name: Name::from_string(&format!("{inductive}.mk")),
-            num_fields: 0,
-            recursive_fields: vec![],
-            rhs: Expr::bvar(0),
-        }],
-        is_k: false,
+/// The kernel-generated records of `inductive Foo : Type | mk : Foo`
+/// (family, constructor, and the recursor-table entries `Foo.rec`,
+/// `Foo.casesOn`, `Foo.recOn`), for payload round-trips. Records the kernel
+/// did not generate are refused at import, so a fixture must carry these.
+fn foo_family_payload() -> CleanPayload {
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
+    let foo = Name::from_string("Foo");
+    let mut donor = Environment::new();
+    donor
+        .add_inductive(InductiveDecl {
+            level_params: vec![],
+            num_params: 0,
+            types: vec![InductiveType {
+                name: foo.clone(),
+                type_: Expr::type_(),
+                constructors: vec![Constructor {
+                    name: foo.clone().str("mk"),
+                    type_: Expr::const_(foo.clone(), vec![]),
+                }],
+            }],
+        })
+        .expect("Foo passes native admission");
+    CleanPayload {
+        constants: vec![],
+        inductives: vec![donor.get_inductive(&foo).expect("Foo").clone()],
+        constructors: vec![donor
+            .get_constructor(&foo.clone().str("mk"))
+            .expect("Foo.mk")
+            .clone()],
+        recursors: ["rec", "casesOn", "recOn"]
+            .into_iter()
+            .map(|suffix| {
+                donor
+                    .get_recursor(&foo.clone().str(suffix))
+                    .expect("native recursor-table entry")
+                    .clone()
+            })
+            .collect(),
+        structure_fields: vec![],
+        ..CleanPayload::default()
     }
 }
 
-/// A recursor carried in a CleanPayload must round-trip its `arg_order` even
-/// when the name does NOT match the `recOn` heuristic. The bare Lean-4
-/// `.olean` `RecursorVal` layout has no `arg_order` slot, so name-based
-/// inference would corrupt a custom-named `MajorAfterMotive` recursor. The
-/// CleanPayload is the lossless carrier, and the loader must prefer it.
-#[test]
-fn test_recursor_arg_order_custom_name_survives_payload_roundtrip() {
-    use clean_kernel::inductive::RecursorArgOrder;
-
-    let git_hash = "abcdef0000000000000000000000000000000000";
-
-    // A recursor whose name would be inferred as MajorAfterMinors, but whose
-    // actual layout is MajorAfterMotive. Only the payload can preserve this.
-    let rec = recursor_for_roundtrip("Foo.customElim", RecursorArgOrder::MajorAfterMotive);
-    let rec_name = rec.name.clone();
-
-    let payload = CleanPayload {
-        constants: vec![],
-        inductives: vec![],
-        constructors: vec![],
-        recursors: vec![rec],
-        structure_fields: vec![],
-    };
-
-    let bytes =
-        OleanExporter::export_with_payload(&[], &["Foo.customElim"], &[], git_hash, &payload)
-            .expect("export with payload");
-
+fn load_payload(name: &str, payload: &CleanPayload) -> (Environment, crate::LoadSummary) {
+    let git_hash = "fedcba0000000000000000000000000000000000";
+    let names: Vec<String> = payload
+        .inductives
+        .iter()
+        .map(|i| i.name.to_string())
+        .chain(payload.constructors.iter().map(|c| c.name.to_string()))
+        .chain(payload.recursors.iter().map(|r| r.name.to_string()))
+        .collect();
+    let refs: Vec<&str> = names.iter().map(String::as_str).collect();
+    let bytes = OleanExporter::export_with_payload(&[], &refs, &[], git_hash, payload)
+        .expect("export with payload");
     // Write to a temp file and load through the full file-import path, which
     // decodes the CleanPayload and registers its recursors.
     let dir = tempfile::TempDir::new().expect("tempdir");
-    let path = dir.path().join("Foo.olean");
+    let path = dir.path().join(format!("{name}.olean"));
     std::fs::write(&path, &bytes).expect("write olean");
-
     let mut env = Environment::default();
-    crate::load_olean_file(&mut env, &path).expect("load olean file");
-
-    let loaded = env
-        .get_recursor(&rec_name)
-        .expect("custom recursor must be registered from payload");
-    assert_eq!(
-        loaded.arg_order,
-        RecursorArgOrder::MajorAfterMotive,
-        "custom-named recursor's MajorAfterMotive arg_order must survive the \
-         payload round-trip (name-based inference alone would corrupt it)"
-    );
+    let summary = crate::load_olean_file(&mut env, &path).expect("load olean file");
+    (env, summary)
 }
 
-/// The standard `T.rec` recursor round-trips as `MajorAfterMinors` through the
-/// payload path, confirming the lossless contract for the common case too.
+/// A CleanPayload is the lossless carrier of `arg_order`: the bare Lean-4
+/// `RecursorVal` layout has no slot for it. The kernel-generated `T.rec`
+/// (`MajorAfterMinors`) and `T.recOn` / `T.casesOn` (`MajorAfterMotive`) all
+/// round-trip it — and each is admitted only because it equals the entry the
+/// kernel regenerates from the imported family.
 #[test]
 fn test_recursor_arg_order_standard_rec_survives_payload_roundtrip() {
     use clean_kernel::inductive::RecursorArgOrder;
 
-    let git_hash = "fedcba0000000000000000000000000000000000";
+    let (env, summary) = load_payload("Foo", &foo_family_payload());
+    assert!(
+        summary.skipped_constants.is_empty(),
+        "every kernel-generated record must import: {:?}",
+        summary.skipped_constants
+    );
+    for (suffix, order) in [
+        ("rec", RecursorArgOrder::MajorAfterMinors),
+        ("casesOn", RecursorArgOrder::MajorAfterMotive),
+        ("recOn", RecursorArgOrder::MajorAfterMotive),
+    ] {
+        let name = Name::from_string(&format!("Foo.{suffix}"));
+        let loaded = env
+            .get_recursor(&name)
+            .unwrap_or_else(|| panic!("{name} must be registered from payload"));
+        assert_eq!(
+            loaded.arg_order, order,
+            "{name} arg_order must survive the payload round-trip"
+        );
+    }
+}
 
-    let rec = recursor_for_roundtrip("Foo.rec", RecursorArgOrder::MajorAfterMinors);
-    let rec_name = rec.name.clone();
+/// A recursor-table record under a name the kernel never generates
+/// (`Foo.customElim`) is REFUSED, named, even when the payload also carries
+/// its family: executable reduction authority only ever comes from the
+/// kernel's own generation. (This test used to assert such a record was
+/// registered; that was the trusted-file-record contract the imported-family
+/// check retired.)
+#[test]
+fn test_recursor_custom_name_in_payload_is_refused() {
+    let mut payload = foo_family_payload();
+    let mut custom = payload.recursors[2].clone();
+    custom.name = Name::from_string("Foo.customElim");
+    payload.recursors.push(custom);
 
-    let payload = CleanPayload {
-        constants: vec![],
-        inductives: vec![],
-        constructors: vec![],
-        recursors: vec![rec],
-        structure_fields: vec![],
-    };
-
-    let bytes = OleanExporter::export_with_payload(&[], &["Foo.rec"], &[], git_hash, &payload)
-        .expect("export with payload");
-
-    let dir = tempfile::TempDir::new().expect("tempdir");
-    let path = dir.path().join("Foo.olean");
-    std::fs::write(&path, &bytes).expect("write olean");
-
-    let mut env = Environment::default();
-    crate::load_olean_file(&mut env, &path).expect("load olean file");
-
-    let loaded = env
-        .get_recursor(&rec_name)
-        .expect("standard recursor must be registered from payload");
-    assert_eq!(
-        loaded.arg_order,
-        RecursorArgOrder::MajorAfterMinors,
-        "standard T.rec arg_order must survive the payload round-trip"
+    let (env, summary) = load_payload("Foo", &payload);
+    assert!(env
+        .get_recursor(&Name::from_string("Foo.customElim"))
+        .is_none());
+    assert!(
+        summary
+            .skipped_constants
+            .iter()
+            .any(|s| s.name == "Foo.customElim"
+                && s.reason.contains("not a name the kernel generates")),
+        "the custom-named record must be refused by name: {:?}",
+        summary.skipped_constants
+    );
+    assert!(
+        env.get_recursor(&Name::from_string("Foo.recOn")).is_some(),
+        "the kernel-generated entries still import"
     );
 }
 
@@ -1885,111 +1907,68 @@ fn mutual_even_odd() -> (
     Vec<ConstructorVal>,
     Vec<RecursorVal>,
 ) {
-    use clean_kernel::inductive::RecursorArgOrder;
+    use clean_kernel::inductive::{Constructor, InductiveDecl, InductiveType};
 
+    // mutual
+    //   inductive Even : Type | zero : Even | succ_odd : Odd → Even
+    //   inductive Odd  : Type | succ_even : Even → Odd
+    // end
+    // The records are the kernel's own (native admission in a donor): the
+    // import refuses family records the kernel does not derive.
     let even = Name::from_string("Even");
     let odd = Name::from_string("Odd");
-    // Shared, order-stable `all` list for the whole mutual block.
-    let all_names = vec![even.clone(), odd.clone()];
-
-    // Constructor names.
-    let even_zero = even.clone().str("zero");
-    let even_succ_odd = even.clone().str("succ_odd");
-    let odd_succ_even = odd.clone().str("succ_even");
-
-    // Nat → Prop type former (kept simple; exactness is not what we pin here).
-    let nat_to_prop = Expr::type_();
-
-    let even_ind = InductiveVal {
-        name: even.clone(),
-        level_params: vec![],
-        type_: nat_to_prop.clone(),
-        num_params: 0,
-        num_indices: 1,
-        all_names: all_names.clone(),
-        constructor_names: vec![even_zero.clone(), even_succ_odd.clone()],
-        is_recursive: true,
-        is_reflexive: false,
-        is_large_elim: false,
-        is_nested: false,
+    let arrow = |dom: &Name, cod: &Name| {
+        Expr::pi(
+            clean_kernel::expr::BinderInfo::Default,
+            Expr::const_(dom.clone(), vec![]),
+            Expr::const_(cod.clone(), vec![]),
+        )
     };
-    let odd_ind = InductiveVal {
-        name: odd.clone(),
-        level_params: vec![],
-        type_: nat_to_prop,
-        num_params: 0,
-        num_indices: 1,
-        all_names: all_names.clone(),
-        constructor_names: vec![odd_succ_even.clone()],
-        is_recursive: true,
-        is_reflexive: false,
-        is_large_elim: false,
-        is_nested: false,
-    };
-
-    // Constructors cross-reference the sibling inductive: Even.succ_odd takes
-    // an `Odd n`, Odd.succ_even takes an `Even n`.
-    let ctors = vec![
-        ConstructorVal {
-            name: even_zero,
-            inductive_name: even.clone(),
+    let mut donor = Environment::new();
+    donor
+        .add_inductive(InductiveDecl {
             level_params: vec![],
-            type_: Expr::const_(even.clone(), vec![]),
             num_params: 0,
-            num_fields: 0,
-            constructor_idx: 0,
-        },
-        ConstructorVal {
-            name: even_succ_odd,
-            inductive_name: even.clone(),
-            level_params: vec![],
-            // field of type `Odd n` — cross-reference into the sibling.
-            type_: Expr::const_(odd.clone(), vec![]),
-            num_params: 0,
-            num_fields: 1,
-            constructor_idx: 1,
-        },
-        ConstructorVal {
-            name: odd_succ_even,
-            inductive_name: odd.clone(),
-            level_params: vec![],
-            // field of type `Even n` — cross-reference into the sibling.
-            type_: Expr::const_(even.clone(), vec![]),
-            num_params: 0,
-            num_fields: 1,
-            constructor_idx: 0,
-        },
-    ];
-
-    // Mutual recursors: one motive per inductive in the block (2).
-    let even_rec = RecursorVal {
-        name: even.clone().str("rec"),
-        arg_order: RecursorArgOrder::MajorAfterMinors,
-        level_params: vec![Name::from_string("u")],
-        type_: Expr::type_(),
-        inductive_name: even.clone(),
-        num_params: 0,
-        num_indices: 1,
-        num_motives: 2,
-        num_minors: 2,
-        rules: vec![],
-        is_k: false,
-    };
-    let odd_rec = RecursorVal {
-        name: odd.clone().str("rec"),
-        arg_order: RecursorArgOrder::MajorAfterMinors,
-        level_params: vec![Name::from_string("u")],
-        type_: Expr::type_(),
-        inductive_name: odd,
-        num_params: 0,
-        num_indices: 1,
-        num_motives: 2,
-        num_minors: 2,
-        rules: vec![],
-        is_k: false,
-    };
-
-    (even_ind, odd_ind, ctors, vec![even_rec, odd_rec])
+            types: vec![
+                InductiveType {
+                    name: even.clone(),
+                    type_: Expr::type_(),
+                    constructors: vec![
+                        Constructor {
+                            name: even.clone().str("zero"),
+                            type_: Expr::const_(even.clone(), vec![]),
+                        },
+                        Constructor {
+                            name: even.clone().str("succ_odd"),
+                            type_: arrow(&odd, &even),
+                        },
+                    ],
+                },
+                InductiveType {
+                    name: odd.clone(),
+                    type_: Expr::type_(),
+                    constructors: vec![Constructor {
+                        name: odd.clone().str("succ_even"),
+                        type_: arrow(&even, &odd),
+                    }],
+                },
+            ],
+        })
+        .expect("Even/Odd passes native admission");
+    let ind = |n: &Name| donor.get_inductive(n).expect("admitted family").clone();
+    let ctors = [
+        even.clone().str("zero"),
+        even.clone().str("succ_odd"),
+        odd.clone().str("succ_even"),
+    ]
+    .iter()
+    .map(|n| donor.get_constructor(n).expect("admitted ctor").clone())
+    .collect();
+    let recs = [even.clone().str("rec"), odd.clone().str("rec")]
+        .iter()
+        .map(|n| donor.get_recursor(n).expect("admitted rec").clone())
+        .collect();
+    (ind(&even), ind(&odd), ctors, recs)
 }
 
 /// End-to-end: a mutual Even/Odd block must survive
@@ -2021,6 +2000,9 @@ fn test_mutual_inductive_roundtrip_kernel_payload_path() {
         constructors: ctors,
         recursors,
         structure_fields: vec![],
+        protected_decls: vec![],
+        private_decls: vec![],
+        ..CleanPayload::default()
     };
 
     let bytes = OleanExporter::export_with_payload(&[], &const_name_refs, &[], git_hash, &payload)

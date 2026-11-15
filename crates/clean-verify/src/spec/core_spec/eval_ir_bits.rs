@@ -100,12 +100,31 @@
 //!
 //! ## What this does NOT claim
 //!
-//! `ir_nat_divmod` is **not proved equal to** `ir_nat_div` / `ir_nat_rem`, and
-//! `ir_nat_mulb` is **not proved equal to** `ir_nat_mul`. Those agreement
-//! theorems are two different algorithms agreeing, which in this substrate —
+//! `ir_nat_mulb` is **not proved equal to** `ir_nat_mul`. That agreement
+//! theorem is two different algorithms agreeing, which in this substrate —
 //! no automation, explicit recursor terms — goes through a loop invariant plus
-//! uniqueness of quotient, and they are NOT attempted here. What is here
-//! instead is a **kernel-EXECUTED differential ladder**
+//! uniqueness, and it is NOT attempted here.
+//!
+//! **`ir_nat_divmod` IS proved equal to `ir_nat_div` / `ir_nat_rem` as of
+//! 2026-09-20, and the route is exactly the one this paragraph predicted** — a
+//! per-step invariant, a loop invariant over `ir_dm_go`, the same pair of
+//! invariants for `ir_div_go`, and uniqueness of quotient and remainder. Read
+//! the theorems and their SCOPE in
+//! `candmodel_dep_pi_probe.rs`'s `candmodel_ir_wrap_fix_sources`, and
+//! [`designs/2026-09-20-restoring-division-agrees-with-repeated-subtraction.md`]
+//! for what each part cost. Two things travel with any quotation of them:
+//! the divisor must be POSITIVE (spelled `Nat.succ d`, so it is discharged
+//! rather than assumed), and `m < dv * 2^4200` — `ir_dm_go` returns its state
+//! UNCHANGED at fuel exhaustion, so beyond that bound the two really do
+//! disagree. The fixed 4200 wrappers remain in the PROBE. The original 49
+//! arithmetic declarations and their checked Bool prerequisite are also exposed
+//! by the additive positive-division package, with arbitrary explicit fuel:
+//! [`Specification::install_eval_ir_positive_division_laws_v1`]. Default EvalIR
+//! bundles and evaluator definitions are unchanged. Its opt-in full64
+//! shift-by-three consumer proves both actual Lshr/AShr branches, not native
+//! execution or source-translation authority.
+//!
+//! What is here instead is a **kernel-EXECUTED differential ladder**
 //! (`add_eval_ir_bits_witnesses`): every new operation is run against the
 //! reference definition at every argument where the reference is affordable,
 //! by the kernel, as `Eq.refl`. That is the same evidential bar
@@ -133,7 +152,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_dbl (n : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat) Nat.zero ",
+                "@Nat.rec (fun (_ : Nat) => Nat) Nat.zero ",
                 "(fun (p : Nat) (_ : Nat) => Nat.succ (Nat.add p (Nat.succ p))) n",
             ),
             "*** THE STRICT DOUBLING. *** 2n, written so the argument is PEELED before anything \
@@ -148,11 +167,11 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_succ_add (a : Nat) (b : Nat) : ",
-                "Eq Nat (Nat.add (Nat.succ a) b) (Nat.succ (Nat.add a b)) := ",
-                "Nat.rec (fun (k : Nat) => ",
-                "Eq Nat (Nat.add (Nat.succ a) k) (Nat.succ (Nat.add a k))) ",
-                "(Eq.refl Nat (Nat.succ a)) ",
-                "(fun (k : Nat) (ih : Eq Nat (Nat.add (Nat.succ a) k) ",
+                "@Eq Nat (Nat.add (Nat.succ a) b) (Nat.succ (Nat.add a b)) := ",
+                "@Nat.rec (fun (k : Nat) => ",
+                "@Eq Nat (Nat.add (Nat.succ a) k) (Nat.succ (Nat.add a k))) ",
+                "(@Eq.refl Nat (Nat.succ a)) ",
+                "(fun (k : Nat) (ih : @Eq Nat (Nat.add (Nat.succ a) k) ",
                 "(Nat.succ (Nat.add a k))) => ",
                 "ir_eq_cong Nat Nat Nat.succ (Nat.add (Nat.succ a) k) ",
                 "(Nat.succ (Nat.add a k)) ih) b",
@@ -167,11 +186,11 @@ impl Specification {
 
         self.add_recursive_def(
             concat!(
-                "def ir_nat_dbl_eq (n : Nat) : Eq Nat (ir_nat_dbl n) (Nat.add n n) := ",
-                "Nat.rec (fun (k : Nat) => Eq Nat (ir_nat_dbl k) (Nat.add k k)) ",
-                "(Eq.refl Nat Nat.zero) ",
-                "(fun (p : Nat) (_ : Eq Nat (ir_nat_dbl p) (Nat.add p p)) => ",
-                "Eq.symm Nat (Nat.add (Nat.succ p) (Nat.succ p)) ",
+                "def ir_nat_dbl_eq (n : Nat) : @Eq Nat (ir_nat_dbl n) (Nat.add n n) := ",
+                "@Nat.rec (fun (k : Nat) => @Eq Nat (ir_nat_dbl k) (Nat.add k k)) ",
+                "(@Eq.refl Nat Nat.zero) ",
+                "(fun (p : Nat) (_ : @Eq Nat (ir_nat_dbl p) (Nat.add p p)) => ",
+                "@Eq.symm Nat (Nat.add (Nat.succ p) (Nat.succ p)) ",
                 "(ir_nat_dbl (Nat.succ p)) ",
                 "(ir_eq_cong Nat Nat Nat.succ (Nat.add (Nat.succ p) p) ",
                 "(Nat.succ (Nat.add p p)) (ir_nat_succ_add p p))) n",
@@ -200,7 +219,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_dm_rem (x : IRDivMod) : Nat := ",
-                "IRDivMod.rec (fun (_ : IRDivMod) => Nat) ",
+                "@IRDivMod.rec (fun (_ : IRDivMod) => Nat) ",
                 "(fun (r : Nat) (_ : Nat) => r) x",
             ),
             "The remainder field. DerivedProved, zero axiom_deps.",
@@ -209,7 +228,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_dm_quot (x : IRDivMod) : Nat := ",
-                "IRDivMod.rec (fun (_ : IRDivMod) => Nat) ",
+                "@IRDivMod.rec (fun (_ : IRDivMod) => Nat) ",
                 "(fun (_ : Nat) (q : Nat) => q) x",
             ),
             "The quotient field. DerivedProved, zero axiom_deps.",
@@ -218,7 +237,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_shl (m : Nat) (k : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> Nat) (fun (x : Nat) => x) ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Nat) (fun (x : Nat) => x) ",
                 "(fun (_ : Nat) (ih : Nat -> Nat) => fun (x : Nat) => ih (ir_nat_dbl x)) k m",
             ),
             "m * 2^k, as k STRICT doublings of an accumulator. Linear in k where \
@@ -233,10 +252,10 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_nat_bitlen_go (m : Nat) (fuel : Nat) (p : Nat) (c : Nat) : Nat := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> Nat -> Nat) ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> Nat -> Nat) ",
                 "(fun (_ : Nat) (c0 : Nat) => c0) ",
                 "(fun (_ : Nat) (ih : Nat -> Nat -> Nat) => fun (p0 : Nat) (c0 : Nat) => ",
-                "Bool.rec (fun (_ : Bool) => Nat) ",
+                "@Bool.rec (fun (_ : Bool) => Nat) ",
                 "(ih (ir_nat_dbl p0) (Nat.succ c0)) c0 ",
                 "(ir_nat_ltb m p0)) ",
                 "fuel p c",
@@ -258,7 +277,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_dm_step2 (inc : Nat) (w : Nat) (r : Nat) (q : Nat) : IRDivMod := ",
-                "Bool.rec (fun (_ : Bool) => IRDivMod) ",
+                "@Bool.rec (fun (_ : Bool) => IRDivMod) ",
                 "(IRDivMod.mk (Nat.sub r w) (Nat.add (ir_nat_dbl q) inc)) ",
                 "(IRDivMod.mk r (ir_nat_dbl q)) ",
                 "(ir_nat_ltb r w)",
@@ -273,7 +292,7 @@ impl Specification {
         self.add_recursive_def(
             concat!(
                 "def ir_dm_step (inc : Nat) (w : Nat) (st : IRDivMod) : IRDivMod := ",
-                "IRDivMod.rec (fun (_ : IRDivMod) => IRDivMod) ",
+                "@IRDivMod.rec (fun (_ : IRDivMod) => IRDivMod) ",
                 "(fun (r : Nat) (q : Nat) => ir_dm_step2 inc w r q) st",
             ),
             "The step, applied to a state. Split from ir_dm_step2 because this surface syntax has \
@@ -284,11 +303,11 @@ impl Specification {
             concat!(
                 "def ir_dm_go (inc : Nat) (hi : Nat) (fuel : Nat) (p : Nat) ",
                 "(st : IRDivMod) : IRDivMod := ",
-                "Nat.rec (fun (_ : Nat) => Nat -> IRDivMod -> IRDivMod) ",
+                "@Nat.rec (fun (_ : Nat) => Nat -> IRDivMod -> IRDivMod) ",
                 "(fun (_ : Nat) (s0 : IRDivMod) => s0) ",
                 "(fun (_ : Nat) (ih : Nat -> IRDivMod -> IRDivMod) => ",
                 "fun (p0 : Nat) (s0 : IRDivMod) => ",
-                "Bool.rec (fun (_ : Bool) => IRDivMod) ",
+                "@Bool.rec (fun (_ : Bool) => IRDivMod) ",
                 "(ir_dm_step inc p0 (ih (ir_nat_dbl p0) s0)) s0 ",
                 "(ir_nat_ltb hi p0)) ",
                 "fuel p st",
@@ -337,13 +356,13 @@ impl Specification {
         )?;
 
         self.add_recursive_def(
-            "def ir_nat_min (x : Nat) (y : Nat) : Nat := Bool.rec (fun (_ : Bool) => Nat) y x (ir_nat_ltb x y)",
+            "def ir_nat_min (x : Nat) (y : Nat) : Nat := @Bool.rec (fun (_ : Bool) => Nat) y x (ir_nat_ltb x y)",
             "The smaller of two Nats (Bool.rec minor order is false, true). DerivedProved, zero \
              axiom_deps.",
         )?;
 
         self.add_recursive_def(
-            "def ir_nat_max (x : Nat) (y : Nat) : Nat := Bool.rec (fun (_ : Bool) => Nat) x y (ir_nat_ltb x y)",
+            "def ir_nat_max (x : Nat) (y : Nat) : Nat := @Bool.rec (fun (_ : Bool) => Nat) x y (ir_nat_ltb x y)",
             "The larger of two Nats. DerivedProved, zero axiom_deps.",
         )?;
 

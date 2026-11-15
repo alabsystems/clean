@@ -22,9 +22,10 @@
 //! 1. Call `clean_cli::__test_support::render_all_docs(all_features())` to
 //!    build the in-memory `filename -> contents` map.
 //! 2. Ensure the target directory exists.
-//! 3. Write each file, removing any pre-existing file in the target directory
-//!    that is *not* in the generated set so stale paths from renamed
-//!    descriptors do not linger in the repo.
+//! 3. Write each file, removing any pre-existing top-level `*.md` file in the
+//!    target directory that is *not* in the generated set so stale paths from
+//!    renamed descriptors do not linger in the repo (sub-directories and
+//!    non-Markdown files are left alone).
 //!
 //! The on-disk write is the only side effect; rendering itself is pure.
 

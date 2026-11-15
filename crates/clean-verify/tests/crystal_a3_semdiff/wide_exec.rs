@@ -110,6 +110,7 @@ pub fn build_wide_module(
         params: Vec::new(),
         returns: Vec::new(),
         is_vararg: false,
+        abi: None,
     };
     module.func_types = vec![placeholder; max_slot + 1];
     for (idx, params, returns) in sigs {
@@ -117,6 +118,7 @@ pub fn build_wide_module(
             params: params.clone(),
             returns: returns.clone(),
             is_vararg: false,
+            abi: None,
         };
     }
     Ok(module)

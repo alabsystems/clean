@@ -185,28 +185,20 @@ fn test_parse_by_rw() {
 }
 
 #[test]
-fn test_parse_by_rwa_desugars_to_rw_then_assumption() {
-    // Lean 4 core: `rwa [r]` is the macro `(rw [r]; assumption)`. The parser
-    // desugars it into a parenthesized sequence so it reuses the existing,
-    // kernel-checked `rw` and `assumption` handlers.
+fn test_parse_by_rwa_retains_its_focused_closing_mode() {
     let expr = Parser::parse_expr("by rwa [Nat.add_comm]").unwrap();
     match expr {
         SurfaceExpr::ByTactic(_, tactics) => {
             assert_eq!(tactics.len(), 1);
             match &tactics[0] {
-                SurfaceTactic::Paren(_, inner) => {
-                    assert_eq!(inner.len(), 2, "rwa should desugar to two sub-tactics");
-                    match &inner[0] {
-                        SurfaceTactic::Rw(_, rules, _) => assert_eq!(rules.len(), 1),
-                        other => panic!("Expected first sub-tactic to be Rw, got {other:?}"),
-                    }
+                SurfaceTactic::Rwa(_, rules, location) => {
+                    assert_eq!(rules.len(), 1);
                     assert!(
-                        matches!(&inner[1], SurfaceTactic::Named { ref name, .. } if name == "assumption"),
-                        "Expected second sub-tactic to be `assumption`, got {:?}",
-                        inner[1]
+                        matches!(location, SurfaceTacticLocation::Goal),
+                        "Expected goal location, got {location:?}"
                     );
                 }
-                other => panic!("Expected Paren (rw; assumption), got {other:?}"),
+                other => panic!("Expected focused Rwa, got {other:?}"),
             }
         }
         other => panic!("Expected ByTactic, got {other:?}"),
@@ -221,20 +213,51 @@ fn test_parse_by_rwa_reverse_and_location() {
         SurfaceExpr::ByTactic(_, tactics) => {
             assert_eq!(tactics.len(), 1);
             match &tactics[0] {
-                SurfaceTactic::Paren(_, inner) => {
-                    assert_eq!(inner.len(), 2);
-                    match &inner[0] {
-                        SurfaceTactic::Rw(_, rules, _) => {
-                            assert_eq!(rules.len(), 1);
-                            assert!(rules[0].reverse, "`<-` should mark the rule reverse");
-                        }
-                        other => panic!("Expected Rw, got {other:?}"),
-                    }
+                SurfaceTactic::Rwa(_, rules, location) => {
+                    assert_eq!(rules.len(), 1);
+                    assert!(rules[0].reverse, "`<-` should mark the rule reverse");
+                    assert!(matches!(
+                        location,
+                        SurfaceTacticLocation::Hyps(names)
+                            if names.len() == 1 && names[0].is_unescaped_component("k")
+                    ));
                 }
-                other => panic!("Expected Paren, got {other:?}"),
+                other => panic!("Expected Rwa, got {other:?}"),
             }
         }
         other => panic!("Expected ByTactic, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_parse_by_rwa_requires_one_hypothesis_after_at() {
+    for source in [
+        "by rwa [h] at",
+        "by rwa [h] at *",
+        "by rwa [h] at h1 h2",
+        "by rwa [h] at ⊢",
+    ] {
+        let mut parser = Parser::new(source.strip_prefix("by ").unwrap());
+        let error = parser.tactic().expect_err(source);
+        assert!(matches!(
+            error,
+            ParseError::UnexpectedToken { message, .. }
+                if message == "expected one hypothesis after `rwa … at`"
+        ));
+
+        // `by` deliberately recovers a tactic parse error into a synthetic
+        // node. Its public file parser must retain the actual named refusal.
+        let file = crate::parse_file_with_diagnostics(&format!("example : True := {source}"))
+            .expect("file parser must recover the malformed tactic");
+        assert_eq!(file.diagnostics.len(), 1, "{source}");
+        let diagnostic = &file.diagnostics[0];
+        assert_eq!(diagnostic.tactic.as_deref(), Some("rwa"), "{source}");
+        assert!(
+            diagnostic
+                .message
+                .contains("expected one hypothesis after `rwa … at`"),
+            "{source}: {diagnostic:?}"
+        );
     }
 }
 
@@ -259,11 +282,17 @@ fn test_parse_by_cases_with_alts() {
         SurfaceExpr::ByTactic(_, tactics) => {
             assert_eq!(tactics.len(), 1);
             match &tactics[0] {
-                SurfaceTactic::Cases(_, _, alts) => {
+                SurfaceTactic::Cases(_, _, _, alts) => {
                     assert_eq!(alts.len(), 2);
-                    assert_eq!(alts[0].name, "zero");
-                    assert_eq!(alts[1].name, "succ");
-                    assert_eq!(alts[1].args, vec!["m"]);
+                    assert_eq!(
+                        (alts[0].name).name(),
+                        crate::SurfaceName::generated_path("zero").name()
+                    );
+                    assert_eq!(
+                        (alts[1].name).name(),
+                        crate::SurfaceName::generated_path("succ").name()
+                    );
+                    assert_eq!(alts[1].args, vec![crate::SurfaceName::generated_path("m")]);
                 }
                 other => panic!("Expected Cases, got {other:?}"),
             }
@@ -282,8 +311,14 @@ fn test_parse_by_induction() {
             match &tactics[0] {
                 SurfaceTactic::Induction { alts, .. } => {
                     assert_eq!(alts.len(), 2);
-                    assert_eq!(alts[0].name, "zero");
-                    assert_eq!(alts[1].name, "succ");
+                    assert_eq!(
+                        (alts[0].name).name(),
+                        crate::SurfaceName::generated_path("zero").name()
+                    );
+                    assert_eq!(
+                        (alts[1].name).name(),
+                        crate::SurfaceName::generated_path("succ").name()
+                    );
                 }
                 other => panic!("Expected Induction, got {other:?}"),
             }
@@ -314,14 +349,20 @@ fn test_parse_induction_generalizing_parses_into_new_fields() {
                 } => {
                     // Target is the bare major premise `n`, not `n generalizing m`.
                     assert!(
-                        matches!(target.as_ref(), SurfaceExpr::Ident(_, name) if name == "n"),
+                        matches!(target.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("n").name()),
                         "target should be the bare ident `n`, got {target:?}"
                     );
                     assert!(using_recursor.is_none(), "no `using` clause expected");
-                    assert_eq!(generalizing, &vec!["m".to_string()]);
+                    assert_eq!(generalizing, &vec![crate::SurfaceName::generated_path("m")]);
                     assert_eq!(alts.len(), 2);
-                    assert_eq!(alts[0].name, "zero");
-                    assert_eq!(alts[1].name, "succ");
+                    assert_eq!(
+                        (alts[0].name).name(),
+                        crate::SurfaceName::generated_path("zero").name()
+                    );
+                    assert_eq!(
+                        (alts[1].name).name(),
+                        crate::SurfaceName::generated_path("succ").name()
+                    );
                 }
                 other => panic!("Expected Induction, got {other:?}"),
             }
@@ -336,7 +377,13 @@ fn test_parse_induction_generalizing_multiple_idents() {
     match expr {
         SurfaceExpr::ByTactic(_, tactics) => match &tactics[0] {
             SurfaceTactic::Induction { generalizing, .. } => {
-                assert_eq!(generalizing, &vec!["m".to_string(), "p".to_string()]);
+                assert_eq!(
+                    generalizing,
+                    &vec![
+                        crate::SurfaceName::generated_path("m"),
+                        crate::SurfaceName::generated_path("p")
+                    ]
+                );
             }
             other => panic!("Expected Induction, got {other:?}"),
         },
@@ -362,7 +409,7 @@ fn test_parse_induction_using_recursor() {
                 ..
             } => {
                 assert!(
-                    matches!(target.as_ref(), SurfaceExpr::Ident(_, name) if name == "n"),
+                    matches!(target.as_ref(), SurfaceExpr::Ident(_, name) if (name).name() == crate::SurfaceName::generated_path("n").name()),
                     "target should be `n`, got {target:?}"
                 );
                 let rec = using_recursor
@@ -374,13 +421,21 @@ fn test_parse_induction_using_recursor() {
                 match rec.as_ref() {
                     SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
                         assert!(
-                            matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if n == "Nat"),
+                            matches!(base.as_ref(), SurfaceExpr::Ident(_, n) if (n).name() == crate::SurfaceName::generated_path("Nat").name()),
                             "recursor base should be `Nat`, got {base:?}"
                         );
-                        assert_eq!(field, "rec", "recursor field should be `rec`");
+                        assert_eq!(
+                            (field).name(),
+                            crate::SurfaceName::generated_path("rec").name(),
+                            "recursor field should be `rec`"
+                        );
                     }
                     SurfaceExpr::Ident(_, name) => {
-                        assert_eq!(name, "Nat.rec", "recursor ident should be `Nat.rec`");
+                        assert_eq!(
+                            (name).name(),
+                            crate::SurfaceName::generated_path("Nat.rec").name(),
+                            "recursor ident should be `Nat.rec`"
+                        );
                     }
                     other => panic!("recursor term should be `Nat.rec`, got {other:?}"),
                 }
@@ -408,7 +463,7 @@ fn test_parse_induction_using_and_generalizing_combined() {
                 ..
             } => {
                 assert!(using_recursor.is_some(), "`using` clause should be present");
-                assert_eq!(generalizing, &vec!["m".to_string()]);
+                assert_eq!(generalizing, &vec![crate::SurfaceName::generated_path("m")]);
             }
             other => panic!("Expected Induction, got {other:?}"),
         },
@@ -620,317 +675,8 @@ fn test_parse_by_split() {
 
 // ── Indentation-based block boundary tests (#1798) ───────────────────
 
-#[test]
-fn test_nested_by_dedent_terminates_inner_block() {
-    // Inner `by` block should terminate when `exact h` dedents back to
-    // outer block's column. Without indent tracking, inner `by` would
-    // greedily consume `exact h`.
-    let input = "by\n  have h : P := by\n    exact proof\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 tactics (have + exact), got {}: {tactics:?}",
-                tactics.len()
-            );
-            assert!(
-                matches!(&tactics[0], SurfaceTactic::Have(..)),
-                "first tactic should be Have, got {:?}",
-                tactics[0]
-            );
-            assert!(
-                matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
-                "second tactic should be Exact, got {:?}",
-                tactics[1]
-            );
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_have_term_proof_dedent_terminates_outer_tactic() {
-    let input = "by\n  have h : a = c := calc\n    a = b := h1\n    _ = c := h2\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 tactics (have + exact), got {}: {tactics:?}",
-                tactics.len()
-            );
-            match &tactics[0] {
-                SurfaceTactic::Have(_, Some(name), _, proof) => {
-                    assert_eq!(name, "h");
-                    match proof.as_ref() {
-                        SurfaceTactic::Term(_, expr) => {
-                            assert!(matches!(expr.as_ref(), SurfaceExpr::CalcBlock(_, _)));
-                        }
-                        other => panic!("expected term proof, got {other:?}"),
-                    }
-                }
-                other => panic!("Expected Have, got {other:?}"),
-            }
-            assert!(
-                matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
-                "second tactic should be exact, got {:?}",
-                tactics[1]
-            );
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_tactic_let_value_dedent_terminates_outer_tactic() {
-    let input = "by\n  let h : Nat := f x\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 tactics (let + exact), got {}: {tactics:?}",
-                tactics.len()
-            );
-            match &tactics[0] {
-                SurfaceTactic::Let(_, name, _, val) => {
-                    assert_eq!(name, "h");
-                    match val.as_ref() {
-                        SurfaceExpr::App(_, _, args) => {
-                            assert_eq!(args.len(), 1, "let value should stay `f x`, got {val:?}");
-                        }
-                        other => panic!("expected application let value, got {other:?}"),
-                    }
-                }
-                other => panic!("Expected Let, got {other:?}"),
-            }
-            assert!(
-                matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
-                "second tactic should be exact, got {:?}",
-                tactics[1]
-            );
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-/// Regression: the type `T` in `suffices h : T by tac` must stop at the `by`
-/// keyword and NOT swallow the trailing `by` block as an application argument.
-/// Before the `stop_app_at_by` guard in `parse_tactic_suffices`, the type `p`
-/// was parsed as `p (by exact h2)`, consuming the tactic block (and any
-/// dedented continuation) as application arguments.
-#[test]
-fn test_suffices_inline_by_type_not_swallowed() {
-    let input = "by\n  suffices h2 : p by exact h2\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    let SurfaceExpr::ByTactic(_, tactics) = expr else {
-        panic!("Expected ByTactic, got {expr:?}");
-    };
-    assert_eq!(
-        tactics.len(),
-        2,
-        "outer by should have 2 tactics (suffices + exact), got {}: {tactics:?}",
-        tactics.len()
-    );
-    match &tactics[0] {
-        SurfaceTactic::Suffices(_, Some(name), ty, proof_tacs) => {
-            assert_eq!(name, "h2");
-            // The type must be the bare identifier `p`, NOT an application that
-            // swallowed the `by` block.
-            assert!(
-                matches!(ty.as_ref(), SurfaceExpr::Ident(_, n) if n == "p"),
-                "suffices type should be the bare `p`, not an app swallowing `by`; got {ty:?}"
-            );
-            assert_eq!(
-                proof_tacs.len(),
-                1,
-                "expected one proof tactic (`exact h2`)"
-            );
-            assert!(
-                matches!(&proof_tacs[0], SurfaceTactic::Named { name, .. } if name == "exact"),
-                "suffices proof tactic should be `exact`, got {:?}",
-                proof_tacs[0]
-            );
-        }
-        other => panic!("Expected Suffices, got {other:?}"),
-    }
-    assert!(
-        matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
-        "second outer tactic should be `exact`, got {:?}",
-        tactics[1]
-    );
-}
-
-#[test]
-fn test_suffices_from_term_dedent_terminates_outer_tactic() {
-    let input = "by\n  suffices h : a = c from calc\n    a = b := h1\n    _ = c := h2\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 tactics (suffices + exact), got {}: {tactics:?}",
-                tactics.len()
-            );
-            match &tactics[0] {
-                SurfaceTactic::Suffices(_, Some(name), _, proof_tacs) => {
-                    assert_eq!(name, "h");
-                    assert_eq!(proof_tacs.len(), 1, "expected one proof tactic");
-                    match &proof_tacs[0] {
-                        SurfaceTactic::Term(_, expr) => {
-                            assert!(matches!(expr.as_ref(), SurfaceExpr::CalcBlock(_, _)));
-                        }
-                        other => panic!("expected term proof, got {other:?}"),
-                    }
-                }
-                other => panic!("Expected Suffices, got {other:?}"),
-            }
-            assert!(
-                matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
-                "second tactic should be exact, got {:?}",
-                tactics[1]
-            );
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_repeat_dedent_terminates_sub_block() {
-    // `repeat` sub-block should terminate when `exact h` dedents past
-    // the first tactic column of the repeat block.
-    let input = "by\n  repeat\n    simp\n    ring\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 tactics (repeat + exact), got {}: {tactics:?}",
-                tactics.len()
-            );
-            match &tactics[0] {
-                SurfaceTactic::Repeat(_, inner) => {
-                    assert_eq!(
-                        inner.len(),
-                        2,
-                        "repeat should contain 2 tactics (simp + ring), got {}: {inner:?}",
-                        inner.len()
-                    );
-                }
-                other => panic!("Expected Repeat, got {other:?}"),
-            }
-            assert!(
-                matches!(&tactics[1], SurfaceTactic::Named { ref name, .. } if name == "exact"),
-                "second tactic should be Exact, got {:?}",
-                tactics[1]
-            );
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_all_goals_dedent_terminates_sub_block() {
-    let input = "by\n  all_goals\n    simp\n    ring\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 tactics, got {}: {tactics:?}",
-                tactics.len()
-            );
-            match &tactics[0] {
-                SurfaceTactic::AllGoals(_, inner) => {
-                    assert_eq!(inner.len(), 2, "all_goals should contain simp + ring");
-                }
-                other => panic!("Expected AllGoals, got {other:?}"),
-            }
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_case_dedent_terminates_sub_block() {
-    // Each `case` block should terminate at the dedent where the next
-    // `case` starts.
-    let input = "by\n  case zero =>\n    simp\n  case succ =>\n    exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 case tactics, got {}: {tactics:?}",
-                tactics.len()
-            );
-            match &tactics[0] {
-                SurfaceTactic::Case(_, name, _binders, tacs) => {
-                    assert_eq!(name, "zero");
-                    assert_eq!(tacs.len(), 1, "case zero should have 1 tactic (simp)");
-                    assert!(matches!(&tacs[0], SurfaceTactic::Simp { .. }));
-                }
-                other => panic!("Expected Case, got {other:?}"),
-            }
-            match &tactics[1] {
-                SurfaceTactic::Case(_, name, _binders, tacs) => {
-                    assert_eq!(name, "succ");
-                    assert_eq!(tacs.len(), 1, "case succ should have 1 tactic (exact)");
-                }
-                other => panic!("Expected Case, got {other:?}"),
-            }
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_same_line_tactic_not_affected_by_indent() {
-    // Same-line `by exact h` should work regardless of indent tracking.
-    // preceded_by_newline is false, so at_dedent never triggers.
-    let input = "by exact rfl";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(tactics.len(), 1);
-            assert!(
-                matches!(&tactics[0], SurfaceTactic::Named { ref name, .. } if name == "exact")
-            );
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
-
-#[test]
-fn test_try_dedent_terminates_sub_block() {
-    let input = "by\n  try\n    simp\n  exact h";
-    let expr = Parser::parse_expr(input).unwrap();
-    match expr {
-        SurfaceExpr::ByTactic(_, tactics) => {
-            assert_eq!(
-                tactics.len(),
-                2,
-                "outer by should have 2 tactics (try + exact), got {}: {tactics:?}",
-                tactics.len()
-            );
-            match &tactics[0] {
-                SurfaceTactic::Try(_, inner) => {
-                    assert_eq!(inner.len(), 1, "try should contain 1 tactic (simp)");
-                }
-                other => panic!("Expected Try, got {other:?}"),
-            }
-        }
-        other => panic!("Expected ByTactic, got {other:?}"),
-    }
-}
+#[path = "tests_tactic_indentation.rs"]
+mod indentation;
 
 #[test]
 fn test_parse_by_injection_with_clause_then_next_tactic() {
@@ -959,5 +705,208 @@ fn test_parse_by_injection_with_clause_then_next_tactic() {
             );
         }
         other => panic!("Expected ByTactic, got {other:?}"),
+    }
+}
+
+// ====================================================================
+// `prefix:max` heads an application; a sort keyword heads a dotted NAME.
+// ===========================================================================
+
+/// `prefix:$prec $op => $f` expands to `notation:$prec $op arg:$prec => $f arg`
+/// (`Lean/Elab/Mixfix.lean`:28-29), so at `max` the operand is a `term:max` — an
+/// ATOM, since an application sits at leadPrec 1023 — and the result is itself a
+/// max-precedence term, which `app := trailing_parser:leadPrec:maxPrec many1
+/// argument` takes as its FUNCTION.
+///
+/// Clean parsed the operand with a full application, so `↿(f p.1) p.2` became
+/// `↿((f p.1) p.2)` and `f p.1 : β` was applied to `p.2`:
+/// `Function.hasUncurryInduction` (Mathlib/Logic/Function/Basic.lean) died
+/// "function type fvar#1 is not a function type, but 1 argument(s) remain".
+/// Ground-truthed on the pinned v4.30.0-rc2, which accepts the shape.
+#[test]
+fn test_prefix_max_operator_takes_an_atom_and_heads_an_application() {
+    let src = "prefix:max \"@@\" => uncurry2\nexample : Nat := @@(g 1) pair\n";
+    let report = crate::parse_file(src).expect("the prefix declaration and its use parse");
+    let rendered = format!("{report:?}");
+    assert!(
+        !rendered.contains("RawDecl"),
+        "the use must parse, not recover: {rendered}"
+    );
+}
+
+/// A `prefix` BELOW max keeps its declared level, so its operand is still parsed
+/// at that level rather than as an atom — the control for the rule above.
+#[test]
+fn test_prefix_below_max_keeps_its_declared_operand_level() {
+    let src = "prefix:60 \"@@@\" => negate\nexample : Nat := @@@ a * b\n";
+    let report = crate::parse_file(src).expect("the prefix declaration and its use parse");
+    assert!(!format!("{report:?}").contains("RawDecl"));
+}
+
+/// Lean's tokenizer is maximal-munch on identifiers, so only a BARE `Prop` is
+/// the sort keyword: `Prop.le` is an ordinary dotted name. Measured on the
+/// pinned binary, which accepts `def Prop.le : Nat := 3; def f : Nat := Prop.le`.
+/// Clean read the head as the sort and reported "Unknown identifier: le (dot
+/// notation on type-valued expression)" — `Mathlib/Order/Basic.lean`'s
+/// `instance Prop.le : LE Prop` and every use of it.
+#[test]
+fn test_sort_keyword_followed_by_a_dot_is_a_dotted_name() {
+    for src in [
+        "def usesIt : Nat := Prop.le\n",
+        "def usesType : Nat := Type.mk2\n",
+        "def usesSort : Nat := Sort.x\n",
+    ] {
+        let report = crate::parse_file(src).expect("a keyword-headed dotted name parses");
+        assert!(
+            !format!("{report:?}").contains("RawDecl"),
+            "must parse as a name: {src}"
+        );
+    }
+}
+
+/// The control: a BARE sort keyword is still the sort, and a dot after
+/// whitespace is not part of a name (the adjacency rule `keyword_name_head`
+/// owns).
+#[test]
+fn test_bare_sort_keyword_is_still_the_sort() {
+    for src in [
+        "example : Prop := True\n",
+        "example (p : Prop) : Prop := p\n",
+        "example : Type := Nat\n",
+    ] {
+        let report = crate::parse_file(src).expect("a bare sort keyword parses");
+        assert!(!format!("{report:?}").contains("RawDecl"), "{src}");
+    }
+}
+
+// ── simp argument modifiers (Lean's `simpArg`) ──────────────────────────
+//
+// `parse_simp_lemmas` opened every element with
+// `let _ = self.eat(&TokenKind::LeftArrow) || self.eat(&TokenKind::Minus);`
+// — the modifier was consumed and thrown away into a `Vec<SurfaceExpr>` with
+// no field to carry it. Downstream that made `simp [← h]` run `h` FORWARD and
+// `simp [-h]` *add* the lemma Lean removes, a silent inversion of the request.
+
+/// The lemma list of `by simp only [...]`, or a panic naming what was parsed.
+fn simp_args_of(src: &str) -> Vec<crate::surface::SurfaceSimpArg> {
+    match Parser::parse_expr(src).unwrap() {
+        SurfaceExpr::ByTactic(_, tactics) => match tactics.into_iter().next() {
+            Some(SurfaceTactic::Simp { lemmas, .. }) => lemmas,
+            other => panic!("Expected Simp, got {other:?}"),
+        },
+        other => panic!("Expected ByTactic, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_parse_simp_plain_argument_carries_no_modifier() {
+    let args = simp_args_of("by simp only [foo]");
+    assert_eq!(args.len(), 1);
+    assert!(!args[0].reverse, "a plain argument is not reversed");
+    assert!(!args[0].erase, "a plain argument is not erased");
+}
+
+#[test]
+fn test_parse_simp_left_arrow_argument_records_reverse() {
+    let args = simp_args_of("by simp only [← foo]");
+    assert_eq!(args.len(), 1);
+    assert!(args[0].reverse, "`←` must be recorded, not eaten");
+    assert!(!args[0].erase);
+}
+
+#[test]
+fn test_parse_simp_ascii_left_arrow_argument_records_reverse() {
+    let args = simp_args_of("by simp only [<- foo]");
+    assert_eq!(args.len(), 1);
+    assert!(args[0].reverse, "`<-` must be recorded, not eaten");
+}
+
+#[test]
+fn test_parse_simp_minus_argument_records_erase() {
+    let args = simp_args_of("by simp only [-foo]");
+    assert_eq!(args.len(), 1);
+    assert!(args[0].erase, "`-` must be recorded, not eaten");
+    assert!(!args[0].reverse);
+}
+
+#[test]
+fn test_parse_simp_modifiers_are_per_element() {
+    let args = simp_args_of("by simp only [a, ← b, -c, d]");
+    assert_eq!(args.len(), 4);
+    assert_eq!(
+        args.iter()
+            .map(|a| (a.reverse, a.erase))
+            .collect::<Vec<_>>(),
+        vec![(false, false), (true, false), (false, true), (false, false)]
+    );
+}
+
+#[test]
+fn test_parse_simp_star_still_parses_beside_a_modified_argument() {
+    match Parser::parse_expr("by simp [← a, *]").unwrap() {
+        SurfaceExpr::ByTactic(_, tactics) => match tactics.into_iter().next() {
+            Some(SurfaceTactic::Simp {
+                lemmas,
+                use_hypotheses,
+                ..
+            }) => {
+                assert!(use_hypotheses, "`*` must still be recognised");
+                assert_eq!(lemmas.len(), 1);
+                assert!(lemmas[0].reverse);
+            }
+            other => panic!("Expected Simp, got {other:?}"),
+        },
+        other => panic!("Expected ByTactic, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_parse_simpa_argument_modifiers_share_the_simp_list() {
+    match Parser::parse_expr("by simpa only [← a, -b] using h").unwrap() {
+        SurfaceExpr::ByTactic(_, tactics) => match tactics.into_iter().next() {
+            Some(SurfaceTactic::Simpa { lemmas, .. }) => {
+                assert_eq!(lemmas.len(), 2);
+                assert!(lemmas[0].reverse);
+                assert!(lemmas[1].erase);
+            }
+            other => panic!("Expected Simpa, got {other:?}"),
+        },
+        other => panic!("Expected ByTactic, got {other:?}"),
+    }
+}
+
+#[test]
+fn test_simp_all_keeps_only_and_ordered_erasure() {
+    let expr = Parser::parse_expr("by simp_all only [reduceCtorEq, -reduceCtorEq, h]").unwrap();
+    let SurfaceExpr::ByTactic(_, tactics) = expr else {
+        panic!("expected tactic block")
+    };
+    assert_eq!(tactics.len(), 1);
+    let SurfaceTactic::Simp {
+        all,
+        only,
+        lemmas,
+        location,
+        ..
+    } = &tactics[0]
+    else {
+        panic!("expected structured simp_all")
+    };
+    assert!(*all && *only);
+    assert!(matches!(location, SurfaceTacticLocation::Goal));
+    assert_eq!(lemmas.len(), 3);
+    assert!(!lemmas[0].erase && lemmas[1].erase && !lemmas[2].erase);
+    for source in ["by simp_all at h", "by simp_all at ⊢"] {
+        let mut parser = Parser::new(source.strip_prefix("by ").unwrap());
+        let error = parser.tactic().expect_err(source);
+        assert!(matches!(error, ParseError::UnexpectedToken { message, .. }
+            if message == "simp_all does not take a location"));
+        let report = crate::parse_file_with_diagnostics(&format!("example : True := {source}"))
+            .expect("file recovery retains the diagnostic");
+        assert_eq!(report.diagnostics.len(), 1);
+        assert_eq!(report.diagnostics[0].tactic.as_deref(), Some("simp_all"));
+        assert!(report.diagnostics[0]
+            .message
+            .contains("simp_all does not take a location"));
     }
 }

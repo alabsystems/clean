@@ -62,12 +62,12 @@ fn mk_euf_congruent_pred_three_arg_ay_proof(
 
     let pred_name = "fvar_10";
     let p_a_ay = terms.mk_app(
-        ay_core::Symbol::Named(pred_name.to_string()),
+        ay_core::Symbol::Named(pred_name.into()),
         vec![ay_a1, ay_a2, ay_a3],
         Sort::Bool,
     );
     let p_b_ay = terms.mk_app(
-        ay_core::Symbol::Named(pred_name.to_string()),
+        ay_core::Symbol::Named(pred_name.into()),
         vec![ay_b1, ay_b2, ay_b3],
         Sort::Bool,
     );

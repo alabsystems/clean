@@ -165,6 +165,18 @@ impl<'a> MutualStagingEnv<'a> {
 }
 
 impl Env for MutualStagingEnv<'_> {
+    fn inductive_family(&self, name: &Name) -> Option<Vec<Name>> {
+        self.base.inductive_family(name)
+    }
+
+    fn string_literal_view(&self) -> bool {
+        self.base.string_literal_view()
+    }
+
+    fn native_nat_allowed(&self, name: &Name) -> bool {
+        self.base.native_nat_allowed(name)
+    }
+
     fn num_level_params(&self, name: &Name) -> Option<u32> {
         if self.ind_types.contains_key(name) || self.ctor_types.contains_key(name) {
             return Some(self.num_level_params);
@@ -222,6 +234,18 @@ impl Env for MutualStagingEnv<'_> {
 }
 
 impl Env for StagingEnv<'_> {
+    fn inductive_family(&self, name: &Name) -> Option<Vec<Name>> {
+        self.base.inductive_family(name)
+    }
+
+    fn string_literal_view(&self) -> bool {
+        self.base.string_literal_view()
+    }
+
+    fn native_nat_allowed(&self, name: &Name) -> bool {
+        self.base.native_nat_allowed(name)
+    }
+
     fn num_level_params(&self, name: &Name) -> Option<u32> {
         if *name == self.ind_name || self.ctor_types.contains_key(name) {
             return Some(self.num_level_params);

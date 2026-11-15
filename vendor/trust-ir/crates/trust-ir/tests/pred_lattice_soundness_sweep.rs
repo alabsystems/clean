@@ -136,7 +136,11 @@ fn build() -> (Module, Vec<PredId>) {
     ];
     let uids: Vec<_> = universes
         .into_iter()
-        .map(|u| m.intern_universe(u).expect("canonical"))
+        .map(|u| {
+            m.intern_universe(u)
+                .expect("Module::intern_universe: test fixture")
+                .expect("canonical")
+        })
         .collect();
 
     let mut leaves = vec![
@@ -165,7 +169,11 @@ fn build() -> (Module, Vec<PredId>) {
 
     let mut ids: Vec<PredId> = leaves
         .into_iter()
-        .map(|p| m.intern_pred(p).expect("canonical"))
+        .map(|p| {
+            m.intern_pred(p)
+                .expect("Module::intern_pred: test fixture")
+                .expect("canonical")
+        })
         .collect();
 
     // Connectives over an assorted spread of the leaves, so Conj/Disj arms are
@@ -186,7 +194,7 @@ fn build() -> (Module, Vec<PredId>) {
         connectives.push(Pred::Disj(vec![ids[i], ids[i + 1], ids[i + 2]]));
     }
     for p in connectives {
-        if let Some(id) = m.intern_pred(p) {
+        if let Some(id) = m.intern_pred(p).expect("Module::intern_pred: test fixture") {
             ids.push(id);
         }
     }
@@ -397,7 +405,9 @@ fn join_is_a_semantic_upper_bound_over_the_whole_probe_table() {
     let mut uncertified = Vec::new();
     for a in &ids {
         for b in &ids {
-            let j = m.join_preds(Some(*a), Some(*b));
+            let j = m
+                .join_preds(Some(*a), Some(*b))
+                .expect("Module::join_preds: test fixture");
             let table = m.pred_table();
             let (da, _) = denote(&m, *a, 0);
             let (db, _) = denote(&m, *b, 0);
@@ -445,14 +455,29 @@ fn nested_disjunction_incompleteness_is_fixed_and_still_one_sided() {
     // fired first, recursed into a's arms, hit `Top` and answered false. The
     // sufficient rule (one arm on the right suffices) now runs first.
     let mut m = Module::new("nested_disj");
-    let top = m.intern_pred(Pred::Top).expect("leaf");
-    let bottom = m.intern_pred(Pred::Bottom).expect("leaf");
+    let top = m
+        .intern_pred(Pred::Top)
+        .expect("Module::intern_pred: test fixture")
+        .expect("leaf");
+    let bottom = m
+        .intern_pred(Pred::Bottom)
+        .expect("Module::intern_pred: test fixture")
+        .expect("leaf");
     let iv = m
         .intern_pred(Pred::Interval { lo: -2, hi: 1 })
+        .expect("Module::intern_pred: test fixture")
         .expect("leaf");
-    let a = m.intern_pred(Pred::Disj(vec![top, bottom])).expect("ok");
-    let b = m.intern_pred(Pred::Disj(vec![top, iv])).expect("ok");
-    let j = m.join_preds(Some(a), Some(b));
+    let a = m
+        .intern_pred(Pred::Disj(vec![top, bottom]))
+        .expect("Module::intern_pred: test fixture")
+        .expect("ok");
+    let b = m
+        .intern_pred(Pred::Disj(vec![top, iv]))
+        .expect("Module::intern_pred: test fixture")
+        .expect("ok");
+    let j = m
+        .join_preds(Some(a), Some(b))
+        .expect("Module::join_preds: test fixture");
     let table = m.pred_table();
 
     // Semantically an upper bound...
@@ -473,9 +498,11 @@ fn nested_disjunction_incompleteness_is_fixed_and_still_one_sided() {
     // The strictly-stronger direction IS refused where it would be a leak.
     let strong = m
         .intern_pred(Pred::Interval { lo: 0, hi: 0 })
+        .expect("Module::intern_pred: test fixture")
         .expect("leaf");
     let weak = m
         .intern_pred(Pred::Disj(vec![strong, iv]))
+        .expect("Module::intern_pred: test fixture")
         .expect("ok")
         .to_owned();
     let table = m.pred_table();
@@ -539,18 +566,22 @@ fn cross_universe_index_is_extensional() {
     let mut m = Module::new("cross_universe_index");
     let small = m
         .intern_in_universe(Universe::IntRange { lo: 0, hi: 1 }, Space::Index)
+        .expect("Module::intern_in_universe: test fixture")
         .expect("canonical");
     let big = m
         .intern_in_universe(Universe::Members(ints(&[5, 6, 7])), Space::Index)
+        .expect("Module::intern_in_universe: test fixture")
         .expect("canonical");
     // Two spellings of ONE extension: same canonical ordering, so they index
     // the same thing and must still entail each other.
     let spelled_twice = m
         .intern_in_universe(Universe::Members(ints(&[0, 1])), Space::Index)
+        .expect("Module::intern_in_universe: test fixture")
         .expect("canonical");
     // The numeric escape hatch: a site that wants only "a number below 3".
     let numeric = m
         .intern_pred(Pred::Interval { lo: 0, hi: 2 })
+        .expect("Module::intern_pred: test fixture")
         .expect("canonical");
 
     let table = m.pred_table();

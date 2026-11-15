@@ -1,0 +1,7 @@
+(assume a0 (str.in_re s re.all))
+(assume a1 (not (let ((re.all re.none)) (str.in_re s re.all))))
+(anchor :step t3 :args ((:= (re.all RegLan) re.none)))
+(step t3.t1 (cl (= (str.in_re s re.all) (str.in_re s re.all))) :rule refl)
+(step t3 (cl (= (let ((re.all re.none)) (str.in_re s re.all)) (str.in_re s re.all))) :rule let)
+(step t4 (cl (not (= (let ((re.all re.none)) (str.in_re s re.all)) (str.in_re s re.all))) (let ((re.all re.none)) (str.in_re s re.all)) (not (str.in_re s re.all))) :rule equiv_pos1)
+(step t5 (cl) :rule resolution :premises (a0 a1 t3 t4))

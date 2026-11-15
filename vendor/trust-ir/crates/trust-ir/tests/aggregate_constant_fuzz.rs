@@ -29,7 +29,7 @@
 
 #![cfg(all(feature = "parser", feature = "binary"))]
 
-use trust_ir::value::{ClosureTyId, FuncId, RecordId, TyId};
+use trust_ir::value::{FuncId, RecordId};
 use trust_ir::{ClosureTy, Constant, FuncTy, Global, Linkage, Module, SetRepr, Ty};
 
 // ---------------------------------------------------------------------------
@@ -196,7 +196,7 @@ fn gen_constant(r: &mut Rng, depth: u32, scalar: ScalarGen) -> Constant {
     if r.bounded(10) < 4 {
         return scalar(r);
     }
-    let kind = r.bounded(9);
+    let kind = r.bounded(10);
     match kind {
         0 => Constant::Aggregate(gen_elems(r, depth, scalar)),
         1 => Constant::Array(gen_elems(r, depth, scalar)),
@@ -226,6 +226,18 @@ fn gen_constant(r: &mut Rng, depth: u32, scalar: ScalarGen) -> Constant {
             Constant::Closure { func, captures }
         }
         7 => Constant::FnDef(FuncId::new(r.bounded(64))),
+        // v50: the constant-size uniform array. Canonical lengths only
+        // (>= 2), across the whole u64 range — the codecs must carry a
+        // u64-scale length in O(1) (one element, one length).
+        8 => Constant::Splat {
+            elem: Box::new(gen_constant(r, depth - 1, scalar)),
+            len: match r.bounded(4) {
+                0 => 2,
+                1 => 3 + u64::from(r.bounded(1000)),
+                2 => 1 << 40,
+                _ => u64::MAX,
+            },
+        },
         _ => Constant::PhantomData,
     }
 }
@@ -256,7 +268,9 @@ fn decl_ty_for_wrapper(module: &mut Module, c: &Constant) -> Ty {
         Constant::U128(_) => Ty::U128,
         // v25: bytes fit [u8; N].
         Constant::Bytes { data, .. } => {
-            let tid = module.add_type(Ty::U8);
+            let tid = module
+                .add_type(Ty::U8)
+                .expect("Module::add_type: test fixture");
             Ty::Array(tid, data.len() as u64)
         }
         Constant::Float(_) => Ty::F64,
@@ -268,17 +282,29 @@ fn decl_ty_for_wrapper(module: &mut Module, c: &Constant) -> Ty {
             Ty::Tuple(vec![])
         }
         Constant::Array(elems) => {
-            let tid = module.add_type(Ty::I64);
+            let tid = module
+                .add_type(Ty::I64)
+                .expect("Module::add_type: test fixture");
             Ty::Array(tid, elems.len() as u64)
+        }
+        Constant::Splat { len, .. } => {
+            let tid = module
+                .add_type(Ty::I64)
+                .expect("Module::add_type: test fixture");
+            Ty::Array(tid, *len)
         }
         Constant::Vector(elems) => Ty::Vector(Box::new(Ty::I64), elems.len().max(1) as u32),
         Constant::Sequence(_) => {
             // Need a TyId pointing into module.types. Use a dummy element.
-            let tid = module.add_type(Ty::I64);
+            let tid = module
+                .add_type(Ty::I64)
+                .expect("Module::add_type: test fixture");
             Ty::Sequence(tid)
         }
         Constant::Set(_) => {
-            let tid = module.add_type(Ty::I64);
+            let tid = module
+                .add_type(Ty::I64)
+                .expect("Module::add_type: test fixture");
             Ty::Set(tid, SetRepr::Boxed)
         }
         Constant::Record(_) => Ty::Record(RecordId::new(0)),
@@ -286,25 +312,38 @@ fn decl_ty_for_wrapper(module: &mut Module, c: &Constant) -> Ty {
             // Register a closure type with no captures; the constant's
             // declared-captures is not used by serialization (only the
             // constant tree itself is).
-            let ft = module.add_func_type(FuncTy {
-                params: vec![],
-                returns: vec![],
-                is_vararg: false,
-            });
-            let cid = module.add_closure_type(ClosureTy::bare(ft));
+            let ft = module
+                .add_func_type(FuncTy {
+                    params: vec![],
+                    returns: vec![],
+                    abi: None,
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
+            let cid = module
+                .add_closure_type(ClosureTy::bare(ft))
+                .expect("Module::add_closure_type: test fixture");
             Ty::Closure(cid)
         }
         Constant::FnDef(_) => {
-            let ft = module.add_func_type(FuncTy {
-                params: vec![],
-                returns: vec![],
-                is_vararg: false,
-            });
+            let ft = module
+                .add_func_type(FuncTy {
+                    params: vec![],
+                    returns: vec![],
+                    abi: None,
+                    is_vararg: false,
+                })
+                .expect("Module::add_func_type: test fixture");
             Ty::Func(ft)
         }
         // A relocatable symbol address is a native pointer-sized value.
         Constant::SymbolAddr { .. } => Ty::Ptr,
         Constant::PhantomData => Ty::Unit,
+        // Crystal lane (E3b): an unwritten lane has no type of its own (its position types it) and is
+        // never generated here; any stand-in type serves the display/parse wrapper, which runs
+        // no validator.
+        Constant::Uninit => Ty::U64,
+        Constant::Ext(e) => e.unreachable(),
     }
 }
 
@@ -319,6 +358,9 @@ fn wrap_module(name: &str, c: &Constant) -> Module {
         linkage: Linkage::Internal,
         tls: None,
         align: None,
+        section: None,
+        visibility: Default::default(),
+        retained: false,
     });
     m
 }
@@ -349,7 +391,7 @@ fn roundtrip_parse(c: &Constant) {
 
 fn roundtrip_binary(c: &Constant) {
     let m = wrap_module("fuzz_binary", c);
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let decoded = trust_ir::binary::deserialize_module(&bytes)
         .unwrap_or_else(|e| panic!("binary decode failed: {e:?} for {c:?}"));
     assert_eq!(
@@ -398,6 +440,9 @@ fn bit_exact_eq(a: &Constant, b: &Constant) -> bool {
             },
         ) => fa == fb && ca.len() == cb.len() && ca.iter().zip(cb).all(|(x, y)| bit_exact_eq(x, y)),
         (Constant::FnDef(x), Constant::FnDef(y)) => x == y,
+        (Constant::Splat { elem: x, len: lx }, Constant::Splat { elem: y, len: ly }) => {
+            lx == ly && bit_exact_eq(x, y)
+        }
         (Constant::PhantomData, Constant::PhantomData) => true,
         _ => false,
     }
@@ -618,12 +663,4 @@ fn corner_large_magnitude_float_roundtrip() {
         roundtrip_parse(&c);
         roundtrip_binary(&c);
     }
-}
-
-/// Keep a touchstone on TyId so imports are not warned as unused when
-/// feature combinations dim certain helpers.
-#[test]
-fn _tyid_smoke() {
-    let _ = TyId::new(0);
-    let _ = ClosureTyId::new(0);
 }

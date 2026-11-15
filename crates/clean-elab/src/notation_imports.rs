@@ -70,7 +70,7 @@ pub struct HarvestStats {
 #[derive(Clone)]
 struct ModuleScan {
     /// The module names this module itself imports.
-    imports: Vec<String>,
+    imports: Vec<clean_parser::SurfaceName>,
     /// The notation commands this module exports.
     notations: Vec<SeededNotation>,
 }
@@ -128,7 +128,7 @@ impl ImportNotationHarvester {
     /// **dependencies first**: a module's own imports are harvested before it
     /// is, so registration order follows the order Lean builds the environment
     /// in. Registration order is what the registry's overlap resolution sees.
-    fn walk(&mut self, modules: &[String], from: &Path, depth: usize) {
+    fn walk(&mut self, modules: &[clean_parser::SurfaceName], from: &Path, depth: usize) {
         if depth > MAX_DEPTH {
             return;
         }
@@ -136,7 +136,7 @@ impl ImportNotationHarvester {
             if self.stats.modules_read >= MAX_MODULES {
                 return;
             }
-            let Some(resolved) = crate::resolve_intra_project_import(module, from) else {
+            let Some(resolved) = crate::resolve_intra_project_import(module.name(), from) else {
                 self.stats.modules_unresolved += 1;
                 continue;
             };

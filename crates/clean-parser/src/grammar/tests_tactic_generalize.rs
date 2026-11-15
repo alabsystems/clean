@@ -29,9 +29,9 @@ fn tactics_of(src: &str) -> Vec<SurfaceTactic> {
     }
 }
 
-fn ident_name(e: &SurfaceExpr) -> &str {
+fn ident_name(e: &SurfaceExpr) -> &crate::SurfaceName {
     match e {
-        SurfaceExpr::Ident(_, name) => name.as_str(),
+        SurfaceExpr::Ident(_, name) => name,
         other => panic!("expected an Ident, got {other:?}"),
     }
 }
@@ -54,7 +54,7 @@ fn test_parse_generalize_bare_form_two_args() {
     );
     assert_eq!(
         ident_name(&args[1]),
-        "m",
+        &crate::SurfaceName::generated_path("m"),
         "second arg is the fresh variable"
     );
 }
@@ -81,12 +81,12 @@ fn test_parse_generalize_hypothesis_form_three_args() {
     );
     assert_eq!(
         ident_name(&args[1]),
-        "m",
+        &crate::SurfaceName::generated_path("m"),
         "second arg is the fresh variable"
     );
     assert_eq!(
         ident_name(&args[2]),
-        "h",
+        &crate::SurfaceName::generated_path("h"),
         "third arg is the hypothesis name"
     );
 }
@@ -101,8 +101,15 @@ fn test_parse_generalize_simple_var_does_not_swallow_eq() {
     };
     assert_eq!(name, "generalize");
     assert_eq!(args.len(), 2);
-    assert_eq!(ident_name(&args[0]), "n", "term is the bare identifier n");
-    assert_eq!(ident_name(&args[1]), "m");
+    assert_eq!(
+        ident_name(&args[0]),
+        &crate::SurfaceName::generated_path("n"),
+        "term is the bare identifier n"
+    );
+    assert_eq!(
+        ident_name(&args[1]),
+        &crate::SurfaceName::generated_path("m")
+    );
 }
 
 #[test]

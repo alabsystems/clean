@@ -58,10 +58,15 @@ use crate::cmd_replacement::ReplacementCommands;
 Navigating Clean as an agent:\n  \
 clean features            flat index of every registered capability\n  \
 clean replacement status  Lean 4 replacement scorecard + trust gates\n  \
-clean audit soundness     the kernel soundness certificate (C1-C5)\n  \
+clean audit soundness     the kernel soundness certificate (C1-C5 + C4')\n  \
 clean help <path>         Markdown help for any feature path"
 )]
-#[command(version)]
+// `clean --version` prints `clean <crate version>+g<git sha>` — the build
+// identity `build.rs` stamps (two-language roadmap WS6.13, F-118: a bare
+// crate version cannot tell an installed pack, a stage1 tree and a source
+// build apart). A build without git provenance says so in words instead of
+// minting a fake `+g…`.
+#[command(version = env!("CLEAN_BUILD_VERSION"))]
 #[command(disable_help_subcommand = true)]
 pub struct Cli {
     #[command(subcommand)]
@@ -81,7 +86,9 @@ pub(crate) enum Commands {
     ExportCert(crate::cli::ExportCertArgs),
     /// Verify a C source file with ACSL specifications
     VerifyC(VerifyCArgs),
-    /// Verification verbs for multiple languages (Rust, C, …).
+    /// Verification verbs grouped by language — `rust`, `tla`, and the
+    /// `sat-verify`-gated `proof`. C stays at the top-level `verify-c` until it
+    /// migrates here.
     ///
     /// Nested aggregator so sibling migrations can drop in without
     /// reshaping the top-level clap tree. Epic #3436 Phase 3, #3451.
@@ -109,6 +116,10 @@ pub(crate) enum Commands {
     ///
     /// Owned by `clean_cli::cli::ReplArgs` (Epic #3436 Phase 2).
     Repl(crate::cli::ReplArgs),
+    /// Run Clean with `lean`'s command line and Lean's semantics: print a
+    /// file's messages in `lean FILE`'s format and exit 1 iff one is an
+    /// error (`clean lean --help` lists `lean`'s flags).
+    Lean(crate::cmd_lean::LeanArgs),
     /// Lake build system commands
     Lake(LakeArgs),
     /// Nova-style folding operations for proof compression
@@ -129,8 +140,8 @@ pub(crate) enum Commands {
     /// Kernel verification surface — LRAT oracle conformance, soundness gate,
     /// gamma-crown verification, and `.cleancert` bundle inspection.
     ///
-    /// Absorbs four orphan binaries under a single `clean kernel` verb tree
-    /// (Epic #3436 Phase 3; issues #3443, #3444, #3446, #3447).
+    /// Absorbs six orphan binaries (plus the native `classify` verb) under a single
+    /// `clean kernel` verb tree (Epic #3436 Phase 3; issues #3443–#3447, #3510).
     Kernel {
         #[command(subcommand)]
         command: KernelCommands,
@@ -247,7 +258,8 @@ pub(crate) enum Commands {
     /// Part of Epic #3436. The descriptor registry is empty in Phase 1; domain
     /// crates register into it in Phase 2+.
     Features {
-        /// Restrict to a single category (verification, import, build, proof, kernel, meta, dev)
+        /// Restrict to a single category (verification, import, build, proof, kernel, meta,
+        /// dev, operator-tools — an unknown slug's error names the live set)
         #[arg(long)]
         category: Option<String>,
         /// Restrict to a single stability level (v1, usable, building, experimental)
@@ -263,16 +275,23 @@ pub(crate) enum Commands {
     /// Render the Markdown help for a feature path, or point at the index
     ///
     /// `clean help` with no path prints the index pointer. `clean help
-    /// "kernel verify"` (or `kernel.verify`) renders that descriptor's full
+    /// "cert verify"` (or `cert.verify`) renders that descriptor's full
     /// Markdown description via termimad.
+    ///
+    /// Matching is EXACT. The example here read `kernel verify` until
+    /// 2026-08-31 and no descriptor has that path, so the help system's own
+    /// worked example answered `no feature matches 'kernel verify'` — the
+    /// first thing a reader tries, failing.
     Help {
-        /// Feature path, space- or dot-joined (e.g. "kernel verify")
+        /// Feature path, space- or dot-joined (e.g. "cert verify")
         path: Option<String>,
     },
     /// Mathverse Library — cross-system math corpus search and inspection
     ///
     /// Absorbs the deprecated `mathverse_search` standalone binary (see #3440,
-    /// Epic #3436). Verbs: `search`, `info`, `stats`, `systems`.
+    /// Epic #3436). Verbs: every variant of `clean_mathverse::cli::MathverseCommands`
+    /// — `clean mathverse --help` lists them (search, info, stats, systems, list,
+    /// sample, deps, find, graph, diff, verify, stamp-verified, …).
     Mathverse(clean_mathverse::cli::MathverseArgs),
     /// CAKE project lifecycle — `cake build|graduate|verify`.
     ///
@@ -328,8 +347,9 @@ pub(crate) enum Commands {
     /// `-o`. `--emit l5ir`/`l5cnf` dump the IR structurally; `--emit c`/`rust`
     /// emit source.
     ///
-    /// `Stability::Experimental` because this verb emits source text only — it
-    /// does not link or run. That is `clean run`, which takes the same emit-C
+    /// `Stability::Experimental` because this verb stops at IR or source text — it
+    /// does not link or run (the `trust-ir-backend` cargo feature adds `--emit obj`,
+    /// a native object via trust-cg). Running is `clean run`, which takes the same emit-C
     /// closure through `cc` to a native binary and executes it.
     ///
     /// This text used to say the handler "short-circuits with a
@@ -350,6 +370,17 @@ pub(crate) enum Commands {
     /// and its returned `UInt32` becomes this command's exit status.
     /// `Stability::Experimental`.
     Run(crate::cli::RunArgs),
+    /// Write the linkable Clean runtime archive for this host.
+    ///
+    /// Materializes `clean_runtime.h`, `clean_runtime.c`, `runtime_extern.c`
+    /// and `clean_prelude_shims.c` into `--out-dir` and builds them into
+    /// `libclean_runtime.a` with the host C compiler — what an object from
+    /// `clean compile --emit obj` links against (`cc <emitted>.o
+    /// libclean_runtime.a -lm`). The runtime ships inside this binary; this
+    /// verb is how a package writes it out (two-language roadmap WS6.13).
+    /// `Stability::Experimental`.
+    #[command(name = "native-runtime")]
+    NativeRuntime(crate::cli::NativeRuntimeArgs),
     /// Extract a first-order computational declaration to differential-checked
     /// C (`Stability::Experimental`; see the `extract` feature descriptor).
     Extract(crate::cli::ExtractArgs),

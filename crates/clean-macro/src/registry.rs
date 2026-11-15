@@ -9,6 +9,7 @@
 
 use crate::quotation::SyntaxQuote;
 use crate::syntax::{Syntax, SyntaxKind};
+use clean_parser::SurfaceName;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -27,6 +28,11 @@ pub struct MacroDef {
     pub priority: i32,
     /// Documentation string
     pub doc: Option<String>,
+    /// Whether the template's own binders are renamed apart at each
+    /// expansion ([`MacroDef::apply_hygienic`]): `false` for a template
+    /// declared under `set_option hygiene false`, whose binders capture the
+    /// spliced syntax exactly as Lean's unhygienic quotation does.
+    pub hygienic: bool,
 }
 
 impl MacroDef {
@@ -44,7 +50,15 @@ impl MacroDef {
             replacement,
             priority: 0,
             doc: None,
+            hygienic: true,
         }
+    }
+
+    /// Set whether the template is hygienic (see [`MacroDef::hygienic`]).
+    #[must_use]
+    pub fn with_hygiene(mut self, hygienic: bool) -> Self {
+        self.hygienic = hygienic;
+        self
     }
 
     /// Set priority
@@ -56,18 +70,18 @@ impl MacroDef {
 
     /// Set documentation
     #[must_use]
-    pub fn with_doc(mut self, doc: impl Into<String>) -> Self {
+    pub(crate) fn with_doc(mut self, doc: impl Into<String>) -> Self {
         self.doc = Some(doc.into());
         self
     }
 
     /// Try to match this macro against syntax, returning bindings if successful
-    pub fn try_match(&self, syntax: &Syntax) -> Option<HashMap<String, Syntax>> {
+    pub(crate) fn try_match(&self, syntax: &Syntax) -> Option<HashMap<SurfaceName, Syntax>> {
         match_pattern(&self.pattern, syntax)
     }
 
     /// Apply this macro to matched syntax
-    pub fn apply(&self, bindings: &HashMap<String, Syntax>) -> Syntax {
+    pub fn apply(&self, bindings: &HashMap<SurfaceName, Syntax>) -> Syntax {
         self.replacement.substitute(bindings)
     }
 
@@ -82,15 +96,18 @@ impl MacroDef {
     /// **distinct** fresh ids — the per-expansion freshness this enables.
     pub fn apply_hygienic(
         &self,
-        bindings: &HashMap<String, Syntax>,
+        bindings: &HashMap<SurfaceName, Syntax>,
         hygiene: &mut crate::hygiene::HygieneState,
     ) -> Syntax {
+        if !self.hygienic {
+            return self.replacement.substitute(bindings);
+        }
         self.replacement.substitute_hygienic(bindings, hygiene)
     }
 }
 
 /// Match a pattern against syntax, returning captured bindings
-fn match_pattern(pattern: &Syntax, syntax: &Syntax) -> Option<HashMap<String, Syntax>> {
+fn match_pattern(pattern: &Syntax, syntax: &Syntax) -> Option<HashMap<SurfaceName, Syntax>> {
     let mut bindings = HashMap::new();
     if match_pattern_inner(pattern, syntax, &mut bindings) {
         Some(bindings)
@@ -102,7 +119,7 @@ fn match_pattern(pattern: &Syntax, syntax: &Syntax) -> Option<HashMap<String, Sy
 fn match_pattern_inner(
     pattern: &Syntax,
     syntax: &Syntax,
-    bindings: &mut HashMap<String, Syntax>,
+    bindings: &mut HashMap<SurfaceName, Syntax>,
 ) -> bool {
     // Simple antiquotation in pattern captures the corresponding syntax.
     //
@@ -121,7 +138,7 @@ fn match_pattern_inner(
                     _ => return false,
                 }
             }
-            bindings.insert(name.to_string(), syntax.clone());
+            bindings.insert(name.clone(), syntax.clone());
             return true;
         }
         return false;
@@ -139,7 +156,9 @@ fn match_pattern_inner(
     }
 
     match (pattern, syntax) {
-        (Syntax::Ident(_, p_name), Syntax::Ident(_, s_name)) => p_name == s_name,
+        (Syntax::Ident(_, p_name), Syntax::Ident(_, s_name)) => {
+            identifier_pattern_matches(p_name, s_name)
+        }
 
         (Syntax::Atom(_, p_val), Syntax::Atom(_, s_val)) => p_val == s_val,
 
@@ -173,12 +192,61 @@ fn match_pattern_inner(
     }
 }
 
+fn identifier_pattern_matches(pattern: &SurfaceName, source: &SurfaceName) -> bool {
+    if pattern != source || pattern.is_relative_constructor() != source.is_relative_constructor() {
+        return false;
+    }
+    if ![
+        "Type",
+        "Prop",
+        "Sort",
+        "_",
+        "sorry",
+        "admit",
+        "bif",
+        "↑",
+        "outParam",
+        "semiOutParam",
+        "Q",
+        "q",
+        "calc",
+        "letI",
+        "haveI",
+        "·",
+        "max",
+        "imax",
+    ]
+    .iter()
+    .all(|keyword| {
+        pattern.is_unescaped_component(keyword) == source.is_unescaped_component(keyword)
+    }) {
+        return false;
+    }
+    // `_root_.x` is a qualification marker, whereas «_root_».x names an
+    // ordinary namespace. Preserve the first token's lexical distinction.
+    let mut head = pattern.name();
+    loop {
+        match head.inner() {
+            clean_kernel::name::NameInner::Str(prefix, text) if prefix.is_anon() => {
+                return text.as_ref() != "_root_"
+                    || (pattern.component_syntax().first()
+                        == Some(&clean_parser::NameComponentSyntax::Escaped))
+                        == (source.component_syntax().first()
+                            == Some(&clean_parser::NameComponentSyntax::Escaped));
+            }
+            clean_kernel::name::NameInner::Str(prefix, _)
+            | clean_kernel::name::NameInner::Num(prefix, _) => head = prefix,
+            clean_kernel::name::NameInner::Anon => return true,
+        }
+    }
+}
+
 /// Match children with splice antiquotation support
 /// A splice `$[x]*` matches zero or more consecutive children and binds them as a list
 fn match_children_with_splice(
     pattern_children: &[Syntax],
     syntax_children: &[Syntax],
-    bindings: &mut HashMap<String, Syntax>,
+    bindings: &mut HashMap<SurfaceName, Syntax>,
 ) -> bool {
     let mut p_idx = 0;
     let mut s_idx = 0;
@@ -229,7 +297,7 @@ fn match_children_with_splice(
                 // Collect matched children into a list node
                 let matched: Vec<Syntax> = syntax_children[s_idx..end_idx].to_vec();
                 let splice_result = Syntax::node(SyntaxKind::app("splice_list"), matched);
-                bindings.insert(name.to_string(), splice_result);
+                bindings.insert(name.clone(), splice_result);
 
                 s_idx = end_idx;
             }
@@ -261,8 +329,16 @@ fn match_children_with_splice(
 /// category name is treated as "any" so that user-defined categories — which
 /// the macro engine cannot introspect — keep matching as before; the
 /// enforcement here targets the built-in categories that have a concrete shape.
-fn matches_category(category: &str, syntax: &Syntax) -> bool {
-    match category {
+fn matches_category(category: &SurfaceName, syntax: &Syntax) -> bool {
+    // Category names are structural identifiers, not expression keywords:
+    // `ident` and `«ident»` denote the same category and impose the same shape.
+    let Some(text) = category
+        .component_text()
+        .filter(|_| !category.is_relative_constructor())
+    else {
+        return true;
+    };
+    match text {
         // The term category covers essentially every expression-level node, an
         // identifier, or a literal. It explicitly excludes command/tactic nodes.
         "term" => is_term_syntax(syntax),
@@ -373,7 +449,7 @@ impl MacroRegistry {
     /// hygienically so fresh-name markers in a computed-body template are
     /// gensym'd per expansion from `hygiene`. Static templates expand identically
     /// to [`MacroRegistry::try_expand`].
-    pub fn try_expand_hygienic(
+    pub(crate) fn try_expand_hygienic(
         &self,
         syntax: &Syntax,
         hygiene: &mut crate::hygiene::HygieneState,
@@ -482,8 +558,8 @@ mod tests {
         let def = MacroDef::new(
             "test_macro",
             SyntaxKind::term(),
-            Syntax::mk_antiquot("x"),
-            SyntaxQuote::term(Syntax::ident("replaced")),
+            Syntax::generated_antiquot("x"),
+            SyntaxQuote::term(Syntax::generated_ident("replaced")),
         );
         assert_eq!(def.name, "test_macro");
         assert_eq!(def.priority, 0);
@@ -491,13 +567,13 @@ mod tests {
 
     #[test]
     fn test_pattern_matching_ident() {
-        let pattern = Syntax::ident("foo");
-        let syntax = Syntax::ident("foo");
+        let pattern = Syntax::generated_ident("foo");
+        let syntax = Syntax::generated_ident("foo");
         let bindings = match_pattern(&pattern, &syntax);
         let bindings = bindings.expect("ident 'foo' should match pattern 'foo'");
         assert!(bindings.is_empty());
 
-        let syntax2 = Syntax::ident("bar");
+        let syntax2 = Syntax::generated_ident("bar");
         assert!(
             match_pattern(&pattern, &syntax2).is_none(),
             "'bar' should not match pattern 'foo'"
@@ -506,19 +582,25 @@ mod tests {
 
     #[test]
     fn test_pattern_matching_antiquot() {
-        let pattern = Syntax::mk_antiquot("x");
-        let syntax = Syntax::ident("anything");
+        let pattern = Syntax::generated_antiquot("x");
+        let syntax = Syntax::generated_ident("anything");
         let bindings = match_pattern(&pattern, &syntax).unwrap();
         assert_eq!(bindings.len(), 1);
-        assert!(bindings.contains_key("x"));
+        assert!(bindings.contains_key(&SurfaceName::generated_path("x")));
     }
 
     #[test]
     fn test_pattern_matching_node() {
-        let pattern = Syntax::mk_app(Syntax::ident("f"), vec![Syntax::mk_antiquot("arg")]);
-        let syntax = Syntax::mk_app(Syntax::ident("f"), vec![Syntax::ident("x")]);
+        let pattern = Syntax::mk_app(
+            Syntax::generated_ident("f"),
+            vec![Syntax::generated_antiquot("arg")],
+        );
+        let syntax = Syntax::mk_app(
+            Syntax::generated_ident("f"),
+            vec![Syntax::generated_ident("x")],
+        );
         let bindings = match_pattern(&pattern, &syntax).unwrap();
-        assert!(bindings.contains_key("arg"));
+        assert!(bindings.contains_key(&SurfaceName::generated_path("arg")));
     }
 
     #[test]
@@ -528,8 +610,8 @@ mod tests {
         let def = MacroDef::new(
             "my_macro",
             SyntaxKind::term(),
-            Syntax::mk_antiquot("x"),
-            SyntaxQuote::term(Syntax::ident("result")),
+            Syntax::generated_antiquot("x"),
+            SyntaxQuote::term(Syntax::generated_ident("result")),
         );
 
         registry.register(def);
@@ -552,18 +634,30 @@ mod tests {
             kind.clone(),
             Syntax::node(
                 kind.clone(),
-                vec![Syntax::ident("myMacro"), Syntax::mk_antiquot("arg")],
+                vec![
+                    Syntax::generated_ident("myMacro"),
+                    Syntax::generated_antiquot("arg"),
+                ],
             ),
-            SyntaxQuote::term(Syntax::mk_antiquot("arg")),
+            SyntaxQuote::term(Syntax::generated_antiquot("arg")),
         );
 
         registry.register(def);
 
-        let input = Syntax::node(kind, vec![Syntax::ident("myMacro"), Syntax::ident("hello")]);
+        let input = Syntax::node(
+            kind,
+            vec![
+                Syntax::generated_ident("myMacro"),
+                Syntax::generated_ident("hello"),
+            ],
+        );
 
         let result = registry.try_expand(&input);
         let expanded = result.expect("try_expand should match and expand the macro");
-        assert_eq!(expanded.as_ident(), Some("hello"));
+        assert_eq!(
+            expanded.as_ident(),
+            Some(&SurfaceName::generated_path("hello"))
+        );
     }
 
     #[test]
@@ -575,16 +669,16 @@ mod tests {
         let def1 = MacroDef::new(
             "low_priority",
             kind.clone(),
-            Syntax::mk_antiquot("x"),
-            SyntaxQuote::term(Syntax::ident("low")),
+            Syntax::generated_antiquot("x"),
+            SyntaxQuote::term(Syntax::generated_ident("low")),
         )
         .with_priority(0);
 
         let def2 = MacroDef::new(
             "high_priority",
             kind.clone(),
-            Syntax::mk_antiquot("x"),
-            SyntaxQuote::term(Syntax::ident("high")),
+            Syntax::generated_antiquot("x"),
+            SyntaxQuote::term(Syntax::generated_ident("high")),
         )
         .with_priority(100);
 
@@ -623,16 +717,19 @@ mod tests {
         let kind = SyntaxKind::app_kind();
         let pattern = Syntax::node(
             kind.clone(),
-            vec![Syntax::ident("f"), Syntax::mk_antiquot_splice("args")],
+            vec![
+                Syntax::generated_ident("f"),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("args")),
+            ],
         );
-        let syntax = Syntax::node(kind, vec![Syntax::ident("f")]);
+        let syntax = Syntax::node(kind, vec![Syntax::generated_ident("f")]);
 
         let bindings = match_pattern(&pattern, &syntax);
         assert!(bindings.is_some(), "Pattern should match empty args");
         let bindings = bindings.unwrap();
-        assert!(bindings.contains_key("args"));
+        assert!(bindings.contains_key(&SurfaceName::generated_path("args")));
         // args should be a splice_list with 0 children
-        let args = &bindings["args"];
+        let args = &bindings[&SurfaceName::generated_path("args")];
         assert_eq!(args.children().len(), 0);
     }
 
@@ -644,26 +741,38 @@ mod tests {
         let kind = SyntaxKind::app_kind();
         let pattern = Syntax::node(
             kind.clone(),
-            vec![Syntax::ident("f"), Syntax::mk_antiquot_splice("args")],
+            vec![
+                Syntax::generated_ident("f"),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("args")),
+            ],
         );
         let syntax = Syntax::node(
             kind,
             vec![
-                Syntax::ident("f"),
-                Syntax::ident("a"),
-                Syntax::ident("b"),
-                Syntax::ident("c"),
+                Syntax::generated_ident("f"),
+                Syntax::generated_ident("a"),
+                Syntax::generated_ident("b"),
+                Syntax::generated_ident("c"),
             ],
         );
 
         let bindings = match_pattern(&pattern, &syntax);
         assert!(bindings.is_some(), "Pattern should match multiple args");
         let bindings = bindings.unwrap();
-        let args = &bindings["args"];
+        let args = &bindings[&SurfaceName::generated_path("args")];
         assert_eq!(args.children().len(), 3);
-        assert_eq!(args.children()[0].as_ident(), Some("a"));
-        assert_eq!(args.children()[1].as_ident(), Some("b"));
-        assert_eq!(args.children()[2].as_ident(), Some("c"));
+        assert_eq!(
+            args.children()[0].as_ident(),
+            Some(&SurfaceName::generated_path("a"))
+        );
+        assert_eq!(
+            args.children()[1].as_ident(),
+            Some(&SurfaceName::generated_path("b"))
+        );
+        assert_eq!(
+            args.children()[2].as_ident(),
+            Some(&SurfaceName::generated_path("c"))
+        );
     }
 
     #[test]
@@ -675,26 +784,29 @@ mod tests {
         let pattern = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("let"),
-                Syntax::mk_antiquot("name"),
-                Syntax::mk_antiquot_splice("exprs"),
+                Syntax::generated_ident("let"),
+                Syntax::generated_antiquot("name"),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("exprs")),
             ],
         );
         let syntax = Syntax::node(
             kind,
             vec![
-                Syntax::ident("let"),
-                Syntax::ident("x"),
-                Syntax::ident("a"),
-                Syntax::ident("b"),
+                Syntax::generated_ident("let"),
+                Syntax::generated_ident("x"),
+                Syntax::generated_ident("a"),
+                Syntax::generated_ident("b"),
             ],
         );
 
         let bindings = match_pattern(&pattern, &syntax);
         assert!(bindings.is_some(), "Pattern should match with prefix");
         let bindings = bindings.unwrap();
-        assert_eq!(bindings["name"].as_ident(), Some("x"));
-        let exprs = &bindings["exprs"];
+        assert_eq!(
+            bindings[&SurfaceName::generated_path("name")].as_ident(),
+            Some(&SurfaceName::generated_path("x"))
+        );
+        let exprs = &bindings[&SurfaceName::generated_path("exprs")];
         assert_eq!(exprs.children().len(), 2);
     }
 
@@ -707,31 +819,40 @@ mod tests {
         let pattern = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("fn"),
-                Syntax::mk_antiquot_splice("args"),
-                Syntax::ident("=>"),
-                Syntax::mk_antiquot("body"),
+                Syntax::generated_ident("fn"),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("args")),
+                Syntax::generated_ident("=>"),
+                Syntax::generated_antiquot("body"),
             ],
         );
         let syntax = Syntax::node(
             kind,
             vec![
-                Syntax::ident("fn"),
-                Syntax::ident("x"),
-                Syntax::ident("y"),
-                Syntax::ident("=>"),
-                Syntax::ident("z"),
+                Syntax::generated_ident("fn"),
+                Syntax::generated_ident("x"),
+                Syntax::generated_ident("y"),
+                Syntax::generated_ident("=>"),
+                Syntax::generated_ident("z"),
             ],
         );
 
         let bindings = match_pattern(&pattern, &syntax);
         assert!(bindings.is_some(), "Pattern should match with suffix");
         let bindings = bindings.unwrap();
-        let args = &bindings["args"];
+        let args = &bindings[&SurfaceName::generated_path("args")];
         assert_eq!(args.children().len(), 2);
-        assert_eq!(args.children()[0].as_ident(), Some("x"));
-        assert_eq!(args.children()[1].as_ident(), Some("y"));
-        assert_eq!(bindings["body"].as_ident(), Some("z"));
+        assert_eq!(
+            args.children()[0].as_ident(),
+            Some(&SurfaceName::generated_path("x"))
+        );
+        assert_eq!(
+            args.children()[1].as_ident(),
+            Some(&SurfaceName::generated_path("y"))
+        );
+        assert_eq!(
+            bindings[&SurfaceName::generated_path("body")].as_ident(),
+            Some(&SurfaceName::generated_path("z"))
+        );
     }
 
     // ---- Typed-antiquotation category enforcement (B63) ----
@@ -739,42 +860,60 @@ mod tests {
     #[test]
     fn test_typed_antiquot_term_matches_term_node() {
         // `$x:term` should match a term-category node (an application here).
-        let pattern = Syntax::mk_antiquot_typed("x", "term");
-        let syntax = Syntax::mk_app(Syntax::ident("f"), vec![Syntax::ident("a")]);
+        let pattern = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("term"),
+        );
+        let syntax = Syntax::mk_app(
+            Syntax::generated_ident("f"),
+            vec![Syntax::generated_ident("a")],
+        );
 
         let bindings =
             match_pattern(&pattern, &syntax).expect("$x:term should match a term (app) node");
         assert_eq!(bindings.len(), 1);
-        assert!(bindings.contains_key("x"));
+        assert!(bindings.contains_key(&SurfaceName::generated_path("x")));
     }
 
     #[test]
     fn test_typed_antiquot_term_matches_ident() {
         // A bare identifier is a term.
-        let pattern = Syntax::mk_antiquot_typed("x", "term");
-        let syntax = Syntax::ident("foo");
+        let pattern = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("term"),
+        );
+        let syntax = Syntax::generated_ident("foo");
 
         let bindings =
             match_pattern(&pattern, &syntax).expect("$x:term should match an identifier term");
-        assert!(bindings.contains_key("x"));
+        assert!(bindings.contains_key(&SurfaceName::generated_path("x")));
     }
 
     #[test]
     fn test_typed_antiquot_ident_matches_ident_node() {
         // `$x:ident` should match an identifier.
-        let pattern = Syntax::mk_antiquot_typed("x", "ident");
-        let syntax = Syntax::ident("foo");
+        let pattern = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("ident"),
+        );
+        let syntax = Syntax::generated_ident("foo");
 
         let bindings =
             match_pattern(&pattern, &syntax).expect("$x:ident should match an identifier");
-        assert!(bindings.contains_key("x"));
+        assert!(bindings.contains_key(&SurfaceName::generated_path("x")));
     }
 
     #[test]
     fn test_typed_antiquot_mismatched_category_fails() {
         // `$x:ident` against an application node (a term, not an ident) must FAIL.
-        let pattern = Syntax::mk_antiquot_typed("x", "ident");
-        let syntax = Syntax::mk_app(Syntax::ident("f"), vec![Syntax::ident("a")]);
+        let pattern = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("ident"),
+        );
+        let syntax = Syntax::mk_app(
+            Syntax::generated_ident("f"),
+            vec![Syntax::generated_ident("a")],
+        );
 
         assert!(
             match_pattern(&pattern, &syntax).is_none(),
@@ -785,8 +924,11 @@ mod tests {
     #[test]
     fn test_typed_antiquot_term_rejects_command_node() {
         // A command-category node is not a term; `$x:term` must FAIL on it.
-        let pattern = Syntax::mk_antiquot_typed("x", "term");
-        let syntax = Syntax::node(SyntaxKind::command(), vec![Syntax::ident("decl")]);
+        let pattern = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("term"),
+        );
+        let syntax = Syntax::node(SyntaxKind::command(), vec![Syntax::generated_ident("decl")]);
 
         assert!(
             match_pattern(&pattern, &syntax).is_none(),
@@ -797,7 +939,10 @@ mod tests {
     #[test]
     fn test_typed_antiquot_num_matches_numeric_literal() {
         // `$n:num` should match a numeric literal but not a string literal.
-        let pattern = Syntax::mk_antiquot_typed("n", "num");
+        let pattern = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("n"),
+            &SurfaceName::generated_path("num"),
+        );
 
         let num = Syntax::mk_num(42);
         assert!(
@@ -815,15 +960,18 @@ mod tests {
     #[test]
     fn test_untyped_antiquot_matches_anything() {
         // An UNTYPED antiquotation still matches any category (unchanged behavior).
-        let pattern = Syntax::mk_antiquot("x");
+        let pattern = Syntax::generated_antiquot("x");
 
         for syntax in [
-            Syntax::ident("foo"),
-            Syntax::mk_app(Syntax::ident("f"), vec![Syntax::ident("a")]),
+            Syntax::generated_ident("foo"),
+            Syntax::mk_app(
+                Syntax::generated_ident("f"),
+                vec![Syntax::generated_ident("a")],
+            ),
             Syntax::mk_num(7),
             Syntax::mk_str("s"),
-            Syntax::node(SyntaxKind::command(), vec![Syntax::ident("decl")]),
-            Syntax::node(SyntaxKind::tactic(), vec![Syntax::ident("rfl")]),
+            Syntax::node(SyntaxKind::command(), vec![Syntax::generated_ident("decl")]),
+            Syntax::node(SyntaxKind::tactic(), vec![Syntax::generated_ident("rfl")]),
         ] {
             assert!(
                 match_pattern(&pattern, &syntax).is_some(),
@@ -840,21 +988,33 @@ mod tests {
         let pattern = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("f"),
-                Syntax::mk_antiquot_typed("arg", "ident"),
+                Syntax::generated_ident("f"),
+                Syntax::mk_antiquot_typed(
+                    &SurfaceName::generated_path("arg"),
+                    &SurfaceName::generated_path("ident"),
+                ),
             ],
         );
 
-        let good = Syntax::node(kind.clone(), vec![Syntax::ident("f"), Syntax::ident("x")]);
+        let good = Syntax::node(
+            kind.clone(),
+            vec![Syntax::generated_ident("f"), Syntax::generated_ident("x")],
+        );
         let bindings =
             match_pattern(&pattern, &good).expect("$arg:ident should match an ident argument");
-        assert_eq!(bindings["arg"].as_ident(), Some("x"));
+        assert_eq!(
+            bindings[&SurfaceName::generated_path("arg")].as_ident(),
+            Some(&SurfaceName::generated_path("x"))
+        );
 
         let bad = Syntax::node(
             kind,
             vec![
-                Syntax::ident("f"),
-                Syntax::mk_app(Syntax::ident("g"), vec![Syntax::ident("y")]),
+                Syntax::generated_ident("f"),
+                Syntax::mk_app(
+                    Syntax::generated_ident("g"),
+                    vec![Syntax::generated_ident("y")],
+                ),
             ],
         );
         assert!(
@@ -867,8 +1027,14 @@ mod tests {
     fn test_typed_antiquot_unknown_category_matches_anything() {
         // A user-defined / unknown category has no known shape, so it stays
         // permissive (matches anything) to avoid regressing custom categories.
-        let pattern = Syntax::mk_antiquot_typed("x", "myCustomCategory");
-        let syntax = Syntax::mk_app(Syntax::ident("f"), vec![Syntax::ident("a")]);
+        let pattern = Syntax::mk_antiquot_typed(
+            &SurfaceName::generated_path("x"),
+            &SurfaceName::generated_path("myCustomCategory"),
+        );
+        let syntax = Syntax::mk_app(
+            Syntax::generated_ident("f"),
+            vec![Syntax::generated_ident("a")],
+        );
 
         assert!(
             match_pattern(&pattern, &syntax).is_some(),
@@ -888,26 +1054,32 @@ mod tests {
         let pattern = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("f"),
-                Syntax::mk_antiquot_splice("a"),
-                Syntax::mk_antiquot_splice("b"),
+                Syntax::generated_ident("f"),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("a")),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("b")),
             ],
         );
         let syntax = Syntax::node(
             kind,
             vec![
-                Syntax::ident("f"),
-                Syntax::ident("x"),
-                Syntax::ident("y"),
-                Syntax::ident("z"),
+                Syntax::generated_ident("f"),
+                Syntax::generated_ident("x"),
+                Syntax::generated_ident("y"),
+                Syntax::generated_ident("z"),
             ],
         );
 
         let bindings = match_pattern(&pattern, &syntax)
             .expect("two consecutive splices should match greedily");
         // First splice greedily consumes x, y, z; second splice gets nothing.
-        assert_eq!(bindings["a"].children().len(), 3);
-        assert_eq!(bindings["b"].children().len(), 0);
+        assert_eq!(
+            bindings[&SurfaceName::generated_path("a")].children().len(),
+            3
+        );
+        assert_eq!(
+            bindings[&SurfaceName::generated_path("b")].children().len(),
+            0
+        );
     }
 
     #[test]
@@ -919,27 +1091,33 @@ mod tests {
         let pattern = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("f"),
-                Syntax::mk_antiquot_splice("args"),
-                Syntax::ident("end"),
+                Syntax::generated_ident("f"),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("args")),
+                Syntax::generated_ident("end"),
             ],
         );
         let syntax = Syntax::node(
             kind,
             vec![
-                Syntax::ident("f"),
-                Syntax::ident("a"),
-                Syntax::ident("b"),
-                Syntax::ident("end"),
+                Syntax::generated_ident("f"),
+                Syntax::generated_ident("a"),
+                Syntax::generated_ident("b"),
+                Syntax::generated_ident("end"),
             ],
         );
 
         let bindings = match_pattern(&pattern, &syntax)
             .expect("splice-then-delimiter should match greedily up to the delimiter");
-        let args = &bindings["args"];
+        let args = &bindings[&SurfaceName::generated_path("args")];
         assert_eq!(args.children().len(), 2);
-        assert_eq!(args.children()[0].as_ident(), Some("a"));
-        assert_eq!(args.children()[1].as_ident(), Some("b"));
+        assert_eq!(
+            args.children()[0].as_ident(),
+            Some(&SurfaceName::generated_path("a"))
+        );
+        assert_eq!(
+            args.children()[1].as_ident(),
+            Some(&SurfaceName::generated_path("b"))
+        );
     }
 
     // ---- macro_rules pure-template expansion (metaprog phase 4) ----
@@ -955,14 +1133,17 @@ mod tests {
         let kind = SyntaxKind::app_kind();
         let pattern = Syntax::node(
             kind.clone(),
-            vec![Syntax::ident("twice"), Syntax::mk_antiquot("x")],
+            vec![
+                Syntax::generated_ident("twice"),
+                Syntax::generated_antiquot("x"),
+            ],
         );
         let template = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("HAdd.hAdd"),
-                Syntax::mk_antiquot("x"),
-                Syntax::mk_antiquot("x"),
+                Syntax::generated_ident("HAdd.hAdd"),
+                Syntax::generated_antiquot("x"),
+                Syntax::generated_antiquot("x"),
             ],
         );
         registry.register(MacroDef::new(
@@ -972,15 +1153,30 @@ mod tests {
             SyntaxQuote::term(template),
         ));
 
-        let input = Syntax::node(kind, vec![Syntax::ident("twice"), Syntax::ident("foo")]);
+        let input = Syntax::node(
+            kind,
+            vec![
+                Syntax::generated_ident("twice"),
+                Syntax::generated_ident("foo"),
+            ],
+        );
         let expanded = registry
             .try_expand(&input)
             .expect("twice macro should match and expand");
         let children = expanded.children();
         assert_eq!(children.len(), 3, "expected (app HAdd.hAdd foo foo)");
-        assert_eq!(children[0].as_ident(), Some("HAdd.hAdd"));
-        assert_eq!(children[1].as_ident(), Some("foo"));
-        assert_eq!(children[2].as_ident(), Some("foo"));
+        assert_eq!(
+            children[0].as_ident(),
+            Some(&SurfaceName::generated_path("HAdd.hAdd"))
+        );
+        assert_eq!(
+            children[1].as_ident(),
+            Some(&SurfaceName::generated_path("foo"))
+        );
+        assert_eq!(
+            children[2].as_ident(),
+            Some(&SurfaceName::generated_path("foo"))
+        );
     }
 
     #[test]
@@ -996,12 +1192,12 @@ mod tests {
             Syntax::node(
                 kind.clone(),
                 vec![
-                    Syntax::ident("pickA"),
-                    Syntax::mk_antiquot("x"),
-                    Syntax::mk_antiquot("y"),
+                    Syntax::generated_ident("pickA"),
+                    Syntax::generated_antiquot("x"),
+                    Syntax::generated_antiquot("y"),
                 ],
             ),
-            SyntaxQuote::term(Syntax::mk_antiquot("x")),
+            SyntaxQuote::term(Syntax::generated_antiquot("x")),
         ));
         registry.register(MacroDef::new(
             "pickB",
@@ -1009,43 +1205,39 @@ mod tests {
             Syntax::node(
                 kind.clone(),
                 vec![
-                    Syntax::ident("pickB"),
-                    Syntax::mk_antiquot("x"),
-                    Syntax::mk_antiquot("y"),
+                    Syntax::generated_ident("pickB"),
+                    Syntax::generated_antiquot("x"),
+                    Syntax::generated_antiquot("y"),
                 ],
             ),
-            SyntaxQuote::term(Syntax::mk_antiquot("y")),
+            SyntaxQuote::term(Syntax::generated_antiquot("y")),
         ));
 
         let in_a = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("pickA"),
-                Syntax::ident("a"),
-                Syntax::ident("b"),
+                Syntax::generated_ident("pickA"),
+                Syntax::generated_ident("a"),
+                Syntax::generated_ident("b"),
             ],
         );
         assert_eq!(
-            registry
-                .try_expand(&in_a)
-                .map(|s| s.as_ident().map(str::to_owned)),
-            Some(Some("a".to_owned())),
+            registry.try_expand(&in_a).map(|s| s.as_ident().cloned()),
+            Some(Some(SurfaceName::generated_path("a"))),
             "pickA arm should bind $x and expand to a"
         );
 
         let in_b = Syntax::node(
             kind,
             vec![
-                Syntax::ident("pickB"),
-                Syntax::ident("a"),
-                Syntax::ident("b"),
+                Syntax::generated_ident("pickB"),
+                Syntax::generated_ident("a"),
+                Syntax::generated_ident("b"),
             ],
         );
         assert_eq!(
-            registry
-                .try_expand(&in_b)
-                .map(|s| s.as_ident().map(str::to_owned)),
-            Some(Some("b".to_owned())),
+            registry.try_expand(&in_b).map(|s| s.as_ident().cloned()),
+            Some(Some(SurfaceName::generated_path("b"))),
             "pickB arm should bind $y and expand to b"
         );
     }
@@ -1061,12 +1253,21 @@ mod tests {
             kind.clone(),
             Syntax::node(
                 kind.clone(),
-                vec![Syntax::ident("only"), Syntax::mk_antiquot("x")],
+                vec![
+                    Syntax::generated_ident("only"),
+                    Syntax::generated_antiquot("x"),
+                ],
             ),
-            SyntaxQuote::term(Syntax::mk_antiquot("x")),
+            SyntaxQuote::term(Syntax::generated_antiquot("x")),
         ));
 
-        let foreign = Syntax::node(kind, vec![Syntax::ident("other"), Syntax::ident("foo")]);
+        let foreign = Syntax::node(
+            kind,
+            vec![
+                Syntax::generated_ident("other"),
+                Syntax::generated_ident("foo"),
+            ],
+        );
         assert!(
             registry.try_expand(&foreign).is_none(),
             "foreign head must not match the `only` arm"
@@ -1082,18 +1283,18 @@ mod tests {
         let pattern = Syntax::node(
             kind.clone(),
             vec![
-                Syntax::ident("f"),
-                Syntax::mk_antiquot_splice("args"),
-                Syntax::ident("end"),
+                Syntax::generated_ident("f"),
+                Syntax::mk_antiquot_splice(&SurfaceName::generated_path("args")),
+                Syntax::generated_ident("end"),
             ],
         );
         let syntax = Syntax::node(
             kind,
             vec![
-                Syntax::ident("f"),
-                Syntax::ident("a"),
-                Syntax::ident("b"),
-                Syntax::ident("c"),
+                Syntax::generated_ident("f"),
+                Syntax::generated_ident("a"),
+                Syntax::generated_ident("b"),
+                Syntax::generated_ident("c"),
             ],
         );
 

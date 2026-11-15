@@ -12,8 +12,11 @@ use crate::verify_batch::{
     build_summary_with_mode, error_category, BatchSummary, ModuleResult, ValidationMode,
 };
 use clean_kernel::env::Environment;
+#[cfg(feature = "cli")]
 use clean_kernel::expr::Expr;
+#[cfg(feature = "cli")]
 use clean_kernel::tc::{TypeChecker, DEFAULT_HEARTBEAT_LIMIT};
+#[cfg(feature = "cli")]
 use rayon::prelude::*;
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
@@ -27,6 +30,7 @@ use std::time::Duration;
 /// WS1: the type `Expr` is borrowed by reference from the (immutable, longer-lived)
 /// `&Environment` rather than deep-cloned up front. `&Expr` is `Send + Sync`, so
 /// the references can be fanned out across the rayon pool directly.
+#[cfg(feature = "cli")]
 fn collect_checkable_constants<'env>(
     env: &'env Environment,
     target_names: &BTreeSet<String>,
@@ -68,6 +72,7 @@ fn collect_checkable_constants<'env>(
 /// `map_init` builds one of these per rayon worker and reuses it across the
 /// items that worker processes, so `whnf`/`def_eq`/`infer` results for shared
 /// library subterms are computed once and reused.
+#[cfg(feature = "cli")]
 fn new_cached_worker(env: &Environment, max_heartbeats: u32) -> TypeChecker<'_> {
     let mut tc = TypeChecker::new(env);
     tc.enable_type_cache_pub();
@@ -88,7 +93,8 @@ fn new_cached_worker(env: &Environment, max_heartbeats: u32) -> TypeChecker<'_> 
 /// worker owns its checker and `Environment` is `Sync`.
 ///
 /// Returns (pass_count, fail_count, errors) matching `typecheck_constants`.
-pub fn typecheck_constants_parallel(
+#[cfg(feature = "cli")]
+pub(crate) fn typecheck_constants_parallel(
     env: &Environment,
     target_names: &BTreeSet<String>,
     num_threads: usize,
@@ -143,128 +149,79 @@ pub fn typecheck_constants_parallel(
     (pass, fail, errors)
 }
 
-/// Collect `(name, &type, &value)` for constants that have values.
-/// Only `ConstantInfo` has values; inductives/constructors/recursors do not.
-///
-/// WS1: type and value `Expr`s are borrowed from the immutable `&Environment`
-/// rather than deep-cloned up front.
-fn collect_checkable_values<'env>(
-    env: &'env Environment,
-    target_names: &BTreeSet<String>,
-) -> Vec<(String, &'env Expr, &'env Expr)> {
-    let mut items = Vec::new();
-    for ci in env.constants() {
-        let name = ci.name.to_string();
-        if target_names.contains(&name) {
-            if let Some(val) = &ci.value {
-                items.push((name, &ci.type_, val));
-            }
-        }
-    }
-    items
-}
-
-/// Full `add_decl`-equivalent validation in parallel: `infer_sort` on types +
-/// `check_type` on values, with `infer_only=false`.
-///
-/// Phase 1 runs `infer_sort` on all types in parallel.
-/// Phase 2 runs `check_type` on all values in parallel (skipping any that
-/// failed in phase 1).
-///
-/// Part of #3232
-///
-/// `max_heartbeats` is the per-check reduction/inference step budget applied to
-/// every worker's kernel (`0` = unlimited). It is a pure RESOURCE limit, NOT a
-/// soundness gate — see `new_cached_worker` / `typecheck_constants_full`.
+/// Full LOCAL consistency checking in parallel, with one verdict per exact
+/// typed declaration. Every represented registry type is checked, followed by
+/// the constant's value if its types checked, in `KernelTheory::Lean`. The
+/// kernel checks run concurrently; their verdicts are then combined in Lean's
+/// replay order (`verify_batch_full::replay_check::parallel`), so the result
+/// equals [`crate::verify_batch_full::typecheck_constants_full`]'s: a target
+/// that mentions itself, sits on a dependency cycle, is `unsafe`, or uses a
+/// refused target fails. Non-target constants remain assumed.
 pub fn typecheck_constants_full_parallel(
     env: &Environment,
     target_names: &BTreeSet<String>,
     num_threads: usize,
     max_heartbeats: u32,
 ) -> (usize, usize, BTreeMap<String, String>) {
-    let type_items = collect_checkable_constants(env, target_names);
-    if type_items.is_empty() {
-        return (0, 0, BTreeMap::new());
-    }
+    typecheck_constants_full_parallel_in_run(
+        env,
+        target_names,
+        &BTreeSet::new(),
+        &BTreeMap::new(),
+        num_threads,
+        max_heartbeats,
+    )
+}
 
-    let pool = rayon::ThreadPoolBuilder::new()
+/// [`typecheck_constants_full_parallel`] for one module of a multi-module
+/// run: `not_admitted` holds every declaration an earlier module of the run
+/// refused, and a target that mentions one is refused; `already_declared`
+/// holds the module's declarations whose name the environment held before the
+/// module was loaded (see
+/// [`crate::verify_batch_full::typecheck_constants_full_streaming_in_run`]).
+pub(crate) fn typecheck_constants_full_parallel_in_run(
+    env: &Environment,
+    target_names: &BTreeSet<String>,
+    not_admitted: &BTreeSet<String>,
+    already_declared: &BTreeMap<String, String>,
+    num_threads: usize,
+    max_heartbeats: u32,
+) -> (usize, usize, BTreeMap<String, String>) {
+    use crate::verify_batch_full::local_roster;
+    let pool = match rayon::ThreadPoolBuilder::new()
         .num_threads(num_threads.max(1))
         .thread_name(|idx| format!("tc-full-{idx}"))
         .build()
-        .expect("invariant: rayon thread pool creation should succeed");
-
-    // Phase 1: infer_sort on all types (one cache-enabled checker per worker)
-    let sort_results: Vec<(String, Result<(), String>)> = pool.install(|| {
-        type_items
-            .par_iter()
-            .map_init(
-                || new_cached_worker(env, max_heartbeats),
-                |tc, (name, type_expr)| {
-                    tc.reset_local_context();
-                    // Per-constant heartbeat refill (see infer_type path above):
-                    // the shared worker counter must restart for each constant
-                    // or the budget drains across the batch. No soundness effect.
-                    tc.reset_heartbeat();
-                    let result = tc
-                        .infer_sort(type_expr)
-                        .map(|_| ())
-                        .map_err(|e| format!("infer_sort: {e:?}"));
-                    (name.clone(), result)
-                },
-            )
-            .collect()
-    });
-
-    let mut pass = 0usize;
-    let mut fail = 0usize;
-    let mut errors = BTreeMap::new();
-    for (name, result) in sort_results {
-        match result {
-            Ok(()) => pass += 1,
-            Err(e) => {
-                fail += 1;
-                errors.insert(name, e);
-            }
+    {
+        Ok(pool) => pool,
+        Err(error) => {
+            let roster = local_roster::resolve_targets(env, target_names);
+            let checks = roster
+                .declarations
+                .keys()
+                .map(|name| {
+                    (
+                        name.clone(),
+                        vec![format!("local checker worker creation failed: {error}")],
+                    )
+                })
+                .collect();
+            return roster.finish(&checks);
         }
-    }
-
-    // Phase 2: check_type on values (only for constants that passed phase 1)
-    let value_items = collect_checkable_values(env, target_names);
-    if !value_items.is_empty() {
-        let phase1_errors = &errors;
-        let value_results: Vec<(String, Result<(), String>)> = pool.install(|| {
-            value_items
-                .par_iter()
-                .filter(|(name, _, _)| !phase1_errors.contains_key(name))
-                .map_init(
-                    || new_cached_worker(env, max_heartbeats),
-                    |tc, (name, type_expr, val_expr)| {
-                        tc.reset_local_context();
-                        // Per-constant heartbeat refill (see infer_type path):
-                        // restart the shared worker counter for each value check.
-                        // No soundness effect — heartbeat is a resource budget.
-                        tc.reset_heartbeat();
-                        let result = tc
-                            .check_type(val_expr, type_expr)
-                            .map(|_| ())
-                            .map_err(|e| format!("check_type: {e:?}"));
-                        (name.clone(), result)
-                    },
-                )
-                .collect()
-        });
-
-        for (name, result) in value_results {
-            if let Err(e) = result {
-                // Demote from pass to fail
-                pass = pass.saturating_sub(1);
-                fail += 1;
-                errors.insert(name, e);
-            }
-        }
-    }
-
-    (pass, fail, errors)
+    };
+    let prerequisites = BTreeSet::new();
+    let scope = crate::verify_batch_full::ReplayScope {
+        prerequisites: &prerequisites,
+        not_admitted,
+        already_declared,
+    };
+    crate::verify_batch_full::replay_check::parallel(
+        env,
+        target_names,
+        &scope,
+        &pool,
+        max_heartbeats,
+    )
 }
 
 // -- Enhanced error summary ---------------------------------------------------
@@ -288,7 +245,7 @@ pub struct CategoryDetail {
 }
 
 /// Build an `ErrorSummary` from a map of constant_name -> error_message.
-pub fn build_error_summary(tc_errors: &BTreeMap<String, String>) -> ErrorSummary {
+pub(crate) fn build_error_summary(tc_errors: &BTreeMap<String, String>) -> ErrorSummary {
     let mut by_category: BTreeMap<String, (usize, Vec<String>)> = BTreeMap::new();
     for (name, err_msg) in tc_errors {
         let cat = error_category(err_msg);
@@ -346,23 +303,4 @@ pub fn build_extended_summary_with_mode(
         summary,
         error_details,
     }
-}
-
-/// Back-compat shim labelling the summary as TYPE-ONLY (`InferOnly`). Prefer
-/// [`build_extended_summary_with_mode`] when the full re-check may have run.
-pub fn build_extended_summary(
-    root: &Path,
-    total_files: usize,
-    processed_files: usize,
-    results: Vec<ModuleResult>,
-    elapsed: Duration,
-) -> ExtendedBatchSummary {
-    build_extended_summary_with_mode(
-        root,
-        total_files,
-        processed_files,
-        results,
-        elapsed,
-        ValidationMode::InferOnly,
-    )
 }

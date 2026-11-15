@@ -628,9 +628,9 @@ fn env_with_two_param_fn() -> Environment {
     .unwrap();
 
     // Register parameter names so named arguments can be resolved
-    env.set_param_names(
+    env.set_typed_param_names(
         Name::from_string("mk_pair"),
-        vec!["x".to_string(), "y".to_string()],
+        vec![Name::anon().str("x"), Name::anon().str("y")],
     );
 
     env
@@ -749,7 +749,9 @@ fn test_definition_body_instantiates_polymorphic_constant_after_inference() {
         result.is_ok(),
         "definition body should elaborate `id` from its inferred type and then check against `Nat -> Nat`, got {result:?}"
     );
-    assert_eq!(crate::register::kernel_check_failure_count(), 0);
+    // Thread-scoped, not the process-global counter: 1000+ sibling tests share
+    // that counter, and several of them legitimately fail a kernel check.
+    assert_eq!(crate::register::kernel_check_failures_on_this_thread(), 0);
 
     let info = env
         .get_const(&Name::from_string("idNat"))

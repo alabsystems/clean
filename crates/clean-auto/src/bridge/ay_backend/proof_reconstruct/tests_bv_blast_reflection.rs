@@ -12,12 +12,15 @@
 //! constant-size `Eq.refl`. These tests show it kernel-type-checks in well under
 //! a second and a few MB, and that a TAMPERED refutation is rejected.
 
+use super::super::certified_proof::certify_kernel_term;
+use super::super::pcay_bvshift::MAX_REFLECTION_STEPS;
+use super::super::tests_support::assert_refutation_resolves_through;
 use super::{
     certify_by_reflection, certify_unsat3_by_reflection, certify_unsat_by_reflection,
     check_refutes3_sound_name, check_refutes_sound_name, encode_proof_clauses,
     encode_proof_refutation, ReflectionError,
 };
-use ay_proof::bv_blast_export::Lit;
+use ay_proof::bv_blast_export::{BitLemmaKind, Lit};
 use ay_proof::bv_blast_solver::{
     export_bv_blast_proof_expr, export_bv_blast_proof_solved, BvExpr, BvExprExportError,
     SolvedObligation,
@@ -26,7 +29,7 @@ use clean_kernel::name::Name;
 use clean_kernel::resolution_check::{
     check_refutes3_initialtrie_app, check_refutes_app, encode_clauses_lit,
 };
-use clean_kernel::{Environment, Expr, Level, TypeChecker};
+use clean_kernel::{Environment, Expr, Level, LocalContext, TypeChecker};
 use std::time::Instant;
 
 fn reflection_env() -> Environment {
@@ -121,7 +124,7 @@ fn reflection_real_mul_unsat_cert_is_fully_zero_trust() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -201,7 +204,7 @@ fn reflection_real_width4_unsat_cert_is_fully_zero_trust() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -242,7 +245,7 @@ fn reflection_real_width4_unsat3_cert_is_fully_zero_trust() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -646,7 +649,7 @@ fn proved_runtime_gate_raw_add_leaf_kernel_rechecks_to_empty_domain() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -762,7 +765,7 @@ fn proved_gate_live_raw_xor_leaf_kernel_rechecks_to_empty_domain() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -830,7 +833,7 @@ fn proved_gate_live_raw_and_leaf_kernel_rechecks_to_empty_domain() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -843,8 +846,8 @@ fn proved_gate_live_raw_and_leaf_kernel_rechecks_to_empty_domain() {
 }
 
 // ===========================================================================
-// LIVE-GATE CONFIRMATION (trust #ledger): kernel-re-check the EXACT BvExpr the
-// live `trust_cg_bridge::verify_output::verify_output_preserved` gate emits for a
+// LIVE-GATE CONFIRMATION (trust #ledger): kernel-re-check the BvExpr the live
+// `trust_cg_bridge::verify_output::verify_output_preserved` gate emitted for a
 // real `add(i32,i32)`.
 //
 // The earlier `proved_runtime_gate_raw_add_leaf_*` test re-checked a SIMPLIFIED
@@ -852,11 +855,17 @@ fn proved_gate_live_raw_and_leaf_kernel_rechecks_to_empty_domain() {
 // actually nests an `Extract(ZeroExt(Or(Const{0}, Extract(Leaf))))` wrapper
 // around EACH W-register operand (the W->X register read round-trip), so the
 // real emitted obligation is larger. `gate_live_raw_add_leaf_machine_out` mirrors
-// that EXACT shape (dumped from the live gate via `formula_to_bvexpr` on
-// `symbolic_machine_output`), so the proof clean re-checks here is byte-shape-
-// identical to the one the gate attaches as `ProvenEvidence::KernelRecheckable`.
-// The trust-cg-bridge test `gate_emits_proved_for_real_add` pins the matching
-// (clauses, steps) = (1522, 17854) so the two sides cannot silently drift.
+// that shape as it was dumped from the live gate via `formula_to_bvexpr` on
+// `symbolic_machine_output` (2026-06-23, clean 51ed2f8a4).
+//
+// NO TRUST-SIDE CROSS-PIN EXISTS. The trust-cg-bridge test this section used to
+// cite, `gate_emits_proved_for_real_add`, was renamed the next day (Trust
+// 328b40df4c7, 2026-06-24), and no Trust test has pinned this proof's shape
+// since. At Trust b989e8497b1 the gate discharges add through the O(1)
+// `KernelInstantiated` path (`gate_add_is_proved_via_o1_instantiation`), not by
+// attaching this `BvBlastProof`. So nothing in clean can detect this fixture
+// drifting from Trust's emitted shape. What this section does guarantee is that
+// the fixture's proof is RE-CHECKED by the clean kernel on every run.
 // ===========================================================================
 
 /// The W-register operand wrapper the live gate emits for argument `n`:
@@ -879,24 +888,32 @@ fn gate_live_raw_add_leaf_machine_out() -> BvExpr {
     BvExpr::extract(BvExpr::zero_ext(or_wrapped, 32), 31, 0)
 }
 
-/// THE LIVE-GATE [PROVED] FLIP. The proof the live gate ACTUALLY emits for a real
-/// add(i32,i32) (the EXACT shape `verify_output_preserved` attaches as
-/// `ProvenEvidence::KernelRecheckable`) is a genuine zero-trust bit-blast
-/// certificate: it self-validates (the producer-side kernel-data re-derivation),
-/// and its shape is pinned (clauses=1522, steps=17854) to the trust-cg-bridge
-/// gate test `gate_emits_proved_for_real_add`, so the artifact this re-checks is
-/// byte-shape-identical to the one the gate hands out.
+/// THE LIVE-GATE [PROVED] FLIP, KERNEL-RE-CHECKED ON EVERY RUN. The live gate's
+/// recorded raw add(i32,i32) obligation (see the section note above) exports a
+/// genuine zero-trust bit-blast certificate that (1) self-validates (the
+/// producer-side kernel-data re-derivation), (2) is within
+/// [`MAX_REFLECTION_STEPS`], the ceiling the always-on trie-reflection lane
+/// enforces, (3) the clean KERNEL re-checks to `Unsat` via the PROVED
+/// `checkRefutes3_sound` bridge with ZERO domain axioms, and (4)
+/// `certify_kernel_term` certifies with `trust_count == 0`.
 ///
-/// The FULL clean KERNEL reflection of THIS live shape is exercised by the opt-in
-/// `proved_gate_live_raw_add_leaf_kernel_reflection_optin` below: the live
-/// obligation's refutation has 17854 steps, which the O(steps²)
-/// `certify_unsat_by_reflection` OOMs on (>100 GB) and which even the PROVEN
-/// SUB-QUADRATIC `certify_unsat3_by_reflection` kernel-reduces only slowly (many
-/// minutes), so the always-on test pins the artifact and the SMALLER-but-genuine
-/// raw add-leaf obligation `proved_runtime_gate_raw_add_leaf_kernel_rechecks_to_empty_domain`
-/// (762 clauses / 211 steps) is the always-on clean KERNEL re-check of the flip.
+/// WHY THIS IS NO LONGER A SHAPE PIN. Before 2026-09-29 this test only asserted
+/// `(clauses, steps) == (1522, 17854)` (AY 0e35) and left the kernel re-check
+/// opt-in behind `TRUST_LIVE_KERNEL_RECHECK`, because at that size the trie
+/// reduction took minutes and the O(steps²) checker OOMed (>100 GB, as recorded
+/// at 11228 steps in clean 51ed2f8a4). Since ay 8d72a7b97 the exporter folds
+/// `or(const 0, x)` to `x`'s own wires (`bv_blast_solver::constant_bitwise`), so
+/// through the shared gate cache both sides of this identity blast to the SAME
+/// output bits: at AY 0.27.0@f28345ff the proof is 570 clauses / 65 steps
+/// (= 2·32 + 1), the per-bit `XnorEq` derivation plus the disequality, and no
+/// step uses the adder's clauses. That shape is a producer fact, not a soundness
+/// property, so it is not pinned. What the old pin guarded against, a producer
+/// regression back to a huge proof, now fails LOUDLY at the step guard below
+/// instead of silently skipping (or OOMing) the kernel re-check. The positives
+/// whose refutations DO resolve through the adder are in the NON-IDENTITY ADDER
+/// POSITIVES section below.
 #[test]
-fn proved_gate_live_raw_add_leaf_artifact_self_validates_and_shape_matches_gate() {
+fn proved_gate_live_raw_add_leaf_kernel_rechecks_to_empty_domain() {
     let machine_out = gate_live_raw_add_leaf_machine_out();
     let auto_spec = gate_add_leaf_auto_spec(); // bare BvAdd(W0,W1) — the gate's auto-spec
 
@@ -906,41 +923,54 @@ fn proved_gate_live_raw_add_leaf_artifact_self_validates_and_shape_matches_gate(
     // gate runs before attaching the proof; ay is NOT re-invoked).
     proof.validate().expect("producer proof must self-validate");
 
-    // PIN the shape so it matches the trust-cg-bridge gate test exactly: the
-    // artifact this confirms IS the one the live gate emits.
-    assert_eq!(
-        (proof.clauses.len(), proof.refutation.steps.len()),
-        (1522, 17854),
-        "live-gate raw add-leaf proof shape must match the gate's emitted proof \
-         (clauses=1522, steps=17854)"
+    // Budget guard BEFORE the reduction: the same enforced ceiling the always-on
+    // `checkRefutes3_sound` lane applies to a live trace (pcay_bvshift). A
+    // producer regression past it fails here, in milliseconds, rather than
+    // turning this always-on test into a minutes-long or OOMing reduction.
+    let steps = proof.refutation.steps.len();
+    assert!(
+        steps <= MAX_REFLECTION_STEPS,
+        "live-gate raw add-leaf refutation has {steps} resolution steps, over the \
+         always-on trie-reflection cap {MAX_REFLECTION_STEPS}: the producer regressed \
+         to a proof too large to kernel-re-check on every run"
     );
 
-    // Opt-in: the FULL clean KERNEL reflection of the live shape (slow — minutes).
-    if std::env::var("TRUST_LIVE_KERNEL_RECHECK").is_ok() {
-        live_kernel_reflect_and_assert_empty_domain(&proof);
-    }
+    // The FULL clean KERNEL reflection of the live shape (always-on).
+    live_kernel_reflect_and_assert_empty_domain(&proof, "live-gate raw add-leaf");
 }
 
-/// Opt-in heavy confirmation: kernel-re-check the LIVE-gate proof via the PROVEN
-/// sub-quadratic trie checker (`checkRefutes3_sound`, axiom closure ⊆
-/// FOUNDATIONAL), on a big-stack thread (the deep ι-reduction overflows the 2 MiB
-/// default). Asserts the assembled `Unsat` term carries ZERO domain axioms.
-/// Gated behind `TRUST_LIVE_KERNEL_RECHECK` because the 17854-step reduction runs
-/// for many minutes; not suitable for the always-on suite.
-fn live_kernel_reflect_and_assert_empty_domain(proof: &ay_proof::bv_blast_export::BvBlastProof) {
+/// Kernel-re-check a gate-shaped proof via the PROVEN sub-quadratic trie checker
+/// (`checkRefutes3_sound`, axiom closure ⊆ FOUNDATIONAL), on a big-stack thread
+/// (a deep ι-reduction overflows the 2 MiB default), then CERTIFY the resulting
+/// `Unsat` judgment. Asserts that the assembled term applies that bridge, that
+/// the bridge carries ZERO domain axioms, and that `certify_kernel_term` accepts
+/// the judgment with `trust_count == 0`. That last step is the rooted authority
+/// audit every `CertifiedPayload` constructor runs: a full kernel check of the
+/// judgment plus its whole dependency closure, which refuses residual trust, a
+/// non-foundational axiom or an unchecked declaration anywhere in it. The caller
+/// bounds the refutation by [`MAX_REFLECTION_STEPS`] first.
+fn live_kernel_reflect_and_assert_empty_domain(
+    proof: &ay_proof::bv_blast_export::BvBlastProof,
+    label: &str,
+) {
     let proof = proof.clone();
+    let label = label.to_owned();
     std::thread::Builder::new()
         .stack_size(256 * 1024 * 1024)
         .spawn(move || {
             let mut env = Environment::with_prelude();
             env.init_resolution_soundness()
                 .expect("init_resolution_soundness");
-            let (unsat_term, _goal) =
-                certify_unsat3_by_reflection(&env, &proof).unwrap_or_else(|e| {
-                    panic!("live-gate raw add-leaf reflection must kernel-check: {e}")
-                });
+            let (unsat_term, unsat_goal) = certify_unsat3_by_reflection(&env, &proof)
+                .unwrap_or_else(|e| panic!("{label}: reflection must kernel-check: {e}"));
+            let payload = certify_kernel_term(&unsat_term, &unsat_goal, &env, &LocalContext::new())
+                .unwrap_or_else(|e| panic!("{label}: the Unsat judgment must be Certified: {e}"));
+            assert_eq!(
+                payload.trust_count, 0,
+                "{label}: a Certified payload must carry zero trust"
+            );
             eprintln!(
-                "[PROVED] LIVE GATE FLIP: clauses={} steps={} -> kernel-re-checked Unsat3",
+                "[PROVED] {label}: clauses={} steps={} -> kernel-re-checked Unsat3, Certified",
                 proof.clauses.len(),
                 proof.refutation.steps.len()
             );
@@ -949,20 +979,151 @@ fn live_kernel_reflect_and_assert_empty_domain(proof: &ay_proof::bv_blast_export
                 .axiom_deps(&sound)
                 .expect("axiom_deps")
                 .iter()
-                .map(std::string::ToString::to_string)
+                .map(ToString::to_string)
                 .collect();
             assert!(
                 domain.is_empty(),
-                "live-gate Unsat cert must carry ZERO domain axioms (= [PROVED]); got {domain:?}"
+                "{label}: Unsat cert must carry ZERO domain axioms (= [PROVED]); got {domain:?}"
             );
             assert!(
                 format!("{unsat_term:?}").contains("checkRefutes3_sound"),
-                "Unsat cert must apply the PROVED checkRefutes3_sound bridge"
+                "{label}: Unsat cert must apply the PROVED checkRefutes3_sound bridge"
             );
         })
         .expect("spawn big-stack thread")
         .join()
         .expect("kernel re-check thread must not panic");
+}
+
+// ===========================================================================
+// NON-IDENTITY ADDER POSITIVES: refutations that must resolve through the
+// ripple-carry adder's `Xor3` / `FullAdderCarry` clauses.
+//
+// The live add-leaf above is an identity: since ay 8d72a7b97 both of its sides
+// blast to the same output bits, and its 2·32 + 1-step refutation never touches
+// the adder (see its doc comment). So re-checking it no longer re-checks an
+// ADDER refutation. The obligations below are valid but are NOT identities after
+// AY's preprocessing: AY's shared gate cache keys a gate by its ORDERED inputs
+// and folds only constant `and`/`or`/`xor` bits and literal shift amounts, so the
+// two sides blast to DIFFERENT output bits and the only way to refute the
+// disequality is through the adder's gate definitions.
+//
+// Each positive asserts, before any kernel work, that its refutation is within
+// `MAX_REFLECTION_STEPS`, is longer than the `2·w + 1`-step identity shape, and
+// resolves on `Xor3` and `FullAdderCarry` clauses
+// (`tests_support::assert_refutation_resolves_through`); then the clean kernel
+// re-checks it and certifies the `Unsat` judgment
+// (`live_kernel_reflect_and_assert_empty_domain`). Each sits beside a near-miss
+// that is SATISFIABLE and must be refused.
+//
+// Measured at AY 0.27.0@f28345ff (clauses / steps; input clauses the refutation
+// resolves on, of those in the CNF):
+//   add operand swap, width 4    130 / 493   Xor3 56/64, FullAdderCarry 40/48
+//   doubling = shl-by-1, width 8  95 / 352   Xor3 30/32, FullAdderCarry 26/28
+// ===========================================================================
+
+/// The gate's low `width`-bit slice of 64-bit register `n`:
+/// `Extract(Leaf("Xn", 64), width-1, 0)`, the operand shape the width-8 shift
+/// and compare tests in this file use.
+fn gate_low_slice(n: u32, width: u32) -> BvExpr {
+    BvExpr::extract(BvExpr::leaf(&format!("X{n}"), 64), width - 1, 0)
+}
+
+/// The ripple-carry adder's gate kinds: the per-bit sum and carry.
+const RIPPLE_CARRY_ADDER: [BitLemmaKind; 2] = [BitLemmaKind::Xor3, BitLemmaKind::FullAdderCarry];
+
+/// Export `lhs == rhs`, run the pre-kernel shape guard
+/// ([`assert_refutation_resolves_through`] over `circuit`), then kernel-re-check
+/// and certify the proof ([`live_kernel_reflect_and_assert_empty_domain`]).
+fn assert_non_identity_gate_proof_certifies(
+    lhs: &BvExpr,
+    rhs: &BvExpr,
+    width: u32,
+    circuit: &[BitLemmaKind],
+    label: &str,
+) {
+    let proof = export_bv_blast_proof_expr(lhs, rhs)
+        .unwrap_or_else(|e| panic!("{label}: a valid obligation must export: {e}"));
+    proof
+        .validate()
+        .unwrap_or_else(|e| panic!("{label}: producer proof must self-validate: {e}"));
+    let core = assert_refutation_resolves_through(&proof, width, circuit, label);
+    eprintln!(
+        "[SHAPE] {label}: clauses={} steps={} core clauses by gate kind: {core:?}",
+        proof.clauses.len(),
+        proof.refutation.steps.len()
+    );
+    live_kernel_reflect_and_assert_empty_domain(&proof, label);
+}
+
+/// ADDITION COMMUTES, CERTIFIED THROUGH THE ADDER (always-on, width 4).
+/// `W1 + W0 == W0 + W1` is the operand swap a commutative-canonicalizing lowering
+/// (trust-cg's GVN) applies to an add. The two sums are distinct `Xor3` /
+/// `FullAdderCarry` chains (the gate cache does not reorder inputs), so the
+/// refutation must derive, bit by bit, that the sums and carries agree.
+#[test]
+fn proved_gate_add_operand_swap_kernel_certifies_through_the_adder() {
+    const W: u32 = 4;
+    let (a, b) = (gate_low_slice(0, W), gate_low_slice(1, W));
+    assert_non_identity_gate_proof_certifies(
+        &BvExpr::add(b.clone(), a.clone()),
+        &BvExpr::add(a, b),
+        W,
+        &RIPPLE_CARRY_ADDER,
+        "add-operand-swap-w4",
+    );
+}
+
+/// ANTI-VACUITY for the operand swap: the same swap over SUBTRACTION is
+/// SATISFIABLE (`b - a != a - b` unless `2·(a - b) == 0`), so the producer must
+/// refuse it and no term reaches the kernel.
+#[test]
+fn proved_gate_wrong_obligation_sub_operand_swap_is_not_certified() {
+    const W: u32 = 4;
+    let (a, b) = (gate_low_slice(0, W), gate_low_slice(1, W));
+    let err = export_bv_blast_proof_expr(&BvExpr::sub(b.clone(), a.clone()), &BvExpr::sub(a, b))
+        .expect_err("b - a == a - b is SAT, producer must REFUSE");
+    assert_eq!(
+        err,
+        BvExprExportError::NoRefutation,
+        "sub operand swap must be NoRefutation (no bogus proof, no false PROVED)"
+    );
+}
+
+/// DOUBLING IS SHIFT-BY-ONE, CERTIFIED THROUGH THE ADDER (always-on, width 8).
+/// `shl(W0, 1) == W0 + W0` is the strength reduction a lowering applies to
+/// `x * 2`. A literal shift amount blasts to wiring alone (W0's own bits moved up
+/// one place over a constant-false LSB), while `W0 + W0` is a full ripple-carry
+/// chain, so the refutation must resolve through every stage of the adder.
+#[test]
+fn proved_gate_add_doubling_is_shift_by_one_kernel_certifies_through_the_adder() {
+    const W: u32 = 8;
+    let v = gate_low_slice(0, W);
+    assert_non_identity_gate_proof_certifies(
+        &BvExpr::shl(v.clone(), BvExpr::const_val(1, W)),
+        &BvExpr::add(v.clone(), v),
+        W,
+        &RIPPLE_CARRY_ADDER,
+        "add-doubling-is-shl1-w8",
+    );
+}
+
+/// ANTI-VACUITY for doubling: `shl(W0, 2) == W0 + W0` (`4·x` vs `2·x`) is
+/// SATISFIABLE, so the producer must refuse it and no term reaches the kernel.
+#[test]
+fn proved_gate_wrong_obligation_shift_by_two_is_not_doubling_is_not_certified() {
+    const W: u32 = 8;
+    let v = gate_low_slice(0, W);
+    let err = export_bv_blast_proof_expr(
+        &BvExpr::shl(v.clone(), BvExpr::const_val(2, W)),
+        &BvExpr::add(v.clone(), v),
+    )
+    .expect_err("shl(x, 2) == x + x is SAT, producer must REFUSE");
+    assert_eq!(
+        err,
+        BvExprExportError::NoRefutation,
+        "shift-by-two vs doubling must be NoRefutation (no bogus proof, no false PROVED)"
+    );
 }
 
 // ===========================================================================
@@ -1025,7 +1186,7 @@ fn assert_gate_proof_kernel_rechecks_empty_domain(lhs: BvExpr, rhs: BvExpr, labe
                 .axiom_deps(&sound)
                 .expect("axiom_deps")
                 .iter()
-                .map(std::string::ToString::to_string)
+                .map(ToString::to_string)
                 .collect();
             assert!(
                 domain.is_empty(),
@@ -1092,7 +1253,7 @@ fn assert_gate_proof_kernel_rechecks_empty_domain_trie(
                 .axiom_deps(&sound)
                 .expect("axiom_deps")
                 .iter()
-                .map(std::string::ToString::to_string)
+                .map(ToString::to_string)
                 .collect();
             assert!(
                 domain.is_empty(),
@@ -1139,14 +1300,21 @@ fn proved_gate_wrong_obligation_sext_vs_zext_is_not_certified() {
     eprintln!("[PROVED] sext-flip anti-vacuity: producer refused sext-vs-zext with {err}");
 }
 
-// HONEST BUDGET NOTE (shifts): a WIDTH-8 variable barrel shift bit-blasts to
-// ~430 clauses / ~10,700 resolution steps — the SAME scale as the live add-leaf
-// (1522 clauses / 11,228 steps) whose full kernel re-check is OPT-IN
-// (`TRUST_LIVE_KERNEL_RECHECK`, "runs for many minutes" via the sub-quadratic
-// trie checker). So the ALWAYS-ON shift re-check uses a WIDTH-4 barrel shift
-// (172 clauses / 925 steps) — comfortably in-budget like sext — and the width-8
-// shape is exercised opt-in below. Both are genuine gate-emitted obligations of
-// the SAME shift node; the only difference is operand width.
+// HONEST BUDGET NOTE (shifts). When these tests were written (2026-06-24, clean
+// 187313945) a WIDTH-8 variable barrel shift bit-blasted to ~430 clauses /
+// ~10,700 resolution steps and the live add-leaf to 1522 clauses / 11,228 steps,
+// so both of those kernel re-checks were opt-in and only width 4 (172 clauses /
+// 925 steps) ran always-on. At AY 0.27.0@f28345ff the exporter folds the
+// `or(const 0, x)` wrapper to `x`'s own wires, so both sides of these identities
+// blast to the SAME output bits and the refutation is just the per-bit `XnorEq`
+// derivation plus the disequality (2·w + 1 steps; the shifter's and adder's
+// clauses are in the CNF but no step uses them). Measured there: width 4 = 148
+// clauses / 9 steps, width 8 = 382 clauses / 17 steps, live add-leaf = 570
+// clauses / 65 steps. The width-8 shift and live add-leaf re-checks are
+// therefore always-on now too, each behind a `MAX_REFLECTION_STEPS` guard so a
+// producer regression fails loudly instead of running for minutes. The shift
+// positives whose refutations DO resolve through the shifter are the
+// non-identity ones in `tests_pcay_bvshift.rs`.
 
 /// THE [PROVED] FLIP FOR LOGICAL SHIFT-LEFT (always-on, width 4). The RAW shl
 /// obligation (BvOr/Const wrapper) bit-blasts (barrel shifter) to a proof the
@@ -1170,16 +1338,14 @@ fn proved_gate_live_raw_lshr_kernel_rechecks_to_empty_domain() {
     assert_gate_proof_kernel_rechecks_empty_domain_trie(machine_out, lshr, "lshr-leaf-w4");
 }
 
-/// OPT-IN heavy confirmation (`TRUST_LIVE_KERNEL_RECHECK`): the WIDTH-8 variable
+/// THE [PROVED] FLIP FOR WIDTH-8 SHIFTS (always-on): the WIDTH-8 variable
 /// shl/lshr obligation — the same operand width the LIVE gate emits for a
 /// `u32`/`u8` shift's low slice — clean-re-checks to `Unsat` with EMPTY domain
-/// axioms via the sub-quadratic trie checker. Gated because the ~10,700-step
-/// ι-reduction runs for minutes (mirrors the live add-leaf's opt-in gate).
+/// axioms via the sub-quadratic trie checker. Formerly opt-in behind
+/// `TRUST_LIVE_KERNEL_RECHECK` (a ~10,700-step reduction that ran for minutes);
+/// see the budget note above for the current measured shape.
 #[test]
-fn proved_gate_live_raw_shl_w8_kernel_rechecks_opt_in() {
-    if std::env::var("TRUST_LIVE_KERNEL_RECHECK").is_err() {
-        return;
-    }
+fn proved_gate_live_raw_shl_lshr_w8_kernel_rechecks_to_empty_domain() {
     let v = BvExpr::extract(BvExpr::leaf("X0", 64), 7, 0);
     let amt = BvExpr::extract(BvExpr::leaf("X1", 64), 7, 0);
     for (s, label) in [
@@ -1195,15 +1361,23 @@ fn proved_gate_live_raw_shl_w8_kernel_rechecks_opt_in() {
         proof
             .validate()
             .unwrap_or_else(|e| panic!("{label}: self-validate: {e}"));
+        // Budget guard BEFORE the reduction (see the budget note above).
+        let steps = proof.refutation.steps.len();
+        assert!(
+            steps <= MAX_REFLECTION_STEPS,
+            "{label}: {steps} resolution steps is over the always-on trie-reflection \
+             cap {MAX_REFLECTION_STEPS}; the producer regressed"
+        );
         std::thread::Builder::new()
             .stack_size(512 * 1024 * 1024)
             .spawn(move || {
                 let mut env = Environment::with_prelude();
-                env.init_resolution_soundness().expect("init_resolution_soundness");
+                env.init_resolution_soundness()
+                    .expect("init_resolution_soundness");
                 let (unsat_term, _g) = certify_unsat3_by_reflection(&env, &proof)
                     .unwrap_or_else(|e| panic!("{label}: trie reflection must kernel-check: {e}"));
                 eprintln!(
-                    "[PROVED] FLIP ({label}, opt-in): clauses={} steps={} -> kernel-re-checked Unsat3",
+                    "[PROVED] FLIP ({label}): clauses={} steps={} -> kernel-re-checked Unsat3",
                     proof.clauses.len(),
                     proof.refutation.steps.len()
                 );
@@ -1212,9 +1386,12 @@ fn proved_gate_live_raw_shl_w8_kernel_rechecks_opt_in() {
                     .axiom_deps(&sound)
                     .expect("axiom_deps")
                     .iter()
-                    .map(std::string::ToString::to_string)
+                    .map(ToString::to_string)
                     .collect();
-                assert!(domain.is_empty(), "{label}: must carry ZERO domain axioms; got {domain:?}");
+                assert!(
+                    domain.is_empty(),
+                    "{label}: must carry ZERO domain axioms; got {domain:?}"
+                );
                 assert!(
                     format!("{unsat_term:?}").contains("checkRefutes3_sound"),
                     "{label}: must apply the PROVED checkRefutes3_sound bridge"
@@ -1331,7 +1508,7 @@ fn proved_runtime_gate_signed_lt_kernel_rechecks_to_empty_domain() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -1461,7 +1638,7 @@ fn proved_runtime_gate_unsigned_lt_kernel_rechecks_to_empty_domain() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),
@@ -1512,7 +1689,7 @@ fn proved_runtime_gate_unsigned_le_kernel_rechecks_to_empty_domain() {
         .axiom_deps(&sound)
         .expect("axiom_deps")
         .iter()
-        .map(std::string::ToString::to_string)
+        .map(ToString::to_string)
         .collect();
     assert!(
         domain.is_empty(),

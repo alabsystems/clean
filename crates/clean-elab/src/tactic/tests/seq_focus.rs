@@ -63,8 +63,10 @@ fn test_seq_focus_constructor_assumption_closes_each_goal_in_isolation() {
     );
 
     let mut state = ProofState::new(env.clone(), target);
-    intro(&mut state, "hp").expect("intro hp should expose the first hypothesis");
-    intro(&mut state, "hq").expect("intro hq should expose the second hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hp"))
+        .expect("intro hp should expose the first hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hq"))
+        .expect("intro hq should expose the second hypothesis");
 
     let mut ctx = ElabCtx::new(&env);
     ctx.eval(&mut state, &seq_focus_constructor_assumption())
@@ -88,7 +90,8 @@ fn test_seq_focus_constructor_assumption_reports_unsolved_focused_goal() {
     let target = Expr::pi(BinderInfo::Default, p.clone(), and_expr(p.clone(), q));
 
     let mut state = ProofState::new(env.clone(), target);
-    intro(&mut state, "hp").expect("intro hp should expose the only matching hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hp"))
+        .expect("intro hp should expose the only matching hypothesis");
 
     let mut ctx = ElabCtx::new(&env);
     let err = ctx
@@ -97,7 +100,7 @@ fn test_seq_focus_constructor_assumption_reports_unsolved_focused_goal() {
 
     let err_text = format!("{err:?}");
     assert!(
-        err_text.contains("no matching hypothesis found"),
+        err_text.contains("NoMatchingHypothesis"),
         "expected assumption failure for the unmatched focused goal, got: {err_text}"
     );
     assert_eq!(
@@ -123,7 +126,8 @@ fn test_seq_focus_failure_preserves_active_focused_state() {
     );
 
     let mut state = ProofState::new(env.clone(), target);
-    intro(&mut state, "hp").expect("intro hp should expose the matching P hypothesis");
+    intro(&mut state, &clean_parser::SurfaceName::generated_path("hp"))
+        .expect("intro hp should expose the matching P hypothesis");
 
     let mut ctx = ElabCtx::new(&env);
     ctx.eval(&mut state, &seq_focus_constructor_focus_block_assumption())

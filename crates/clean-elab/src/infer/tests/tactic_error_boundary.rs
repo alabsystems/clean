@@ -39,7 +39,10 @@ fn test_elab_by_tactic_first_retries_recoverable_errors_across_boundary() {
             }],
             vec![SurfaceTactic::Term(
                 Span::dummy(),
-                Box::new(SurfaceExpr::Ident(Span::dummy(), "a".into())),
+                Box::new(SurfaceExpr::Ident(
+                    Span::dummy(),
+                    SurfaceName::generated_path("a"),
+                )),
             )],
         ],
     )];
@@ -101,10 +104,10 @@ fn test_reverse_boundary_preserves_upstream_elab_error() {
     // will fail elaboration with `ElabError::UnknownIdent`.
     let tactics = vec![SurfaceTactic::Have(
         Span::dummy(),
-        Some("h".into()),
+        Some(SurfaceName::generated_path("h")),
         Some(Box::new(SurfaceExpr::Ident(
             Span::dummy(),
-            "nonexistent".into(),
+            SurfaceName::generated_path("nonexistent"),
         ))),
         Box::new(SurfaceTactic::Named {
             span: Span::dummy(),
@@ -117,11 +120,18 @@ fn test_reverse_boundary_preserves_upstream_elab_error() {
         .elab_by_tactic(&tactics)
         .expect_err("unknown type annotation should fail");
 
-    // The outer ElabError should wrap TacticError::UpstreamElabError
-    match &err {
+    // `UnknownIdent("nonexistent")` names no tactic, so the `by`-block boundary
+    // wraps it in the attribution variant naming `have`. `innermost()` looks
+    // through that wrapper: the preserved structure is what this test is about,
+    // and it must be exactly what it was before attribution existed.
+    assert!(
+        matches!(&err, ElabError::InTactic { tactic, .. } if tactic == "have"),
+        "the failure should be attributed to `have`, got: {err:?}"
+    );
+    match err.innermost() {
         ElabError::TacticFailed(TacticError::UpstreamElabError { source }) => {
             assert!(
-                matches!(source.as_ref(), ElabError::UnknownIdent(ref name) if name == "nonexistent"),
+                source.unknown_ident_name() == Some("nonexistent"),
                 "upstream source should be UnknownIdent, got: {source:?}"
             );
         }

@@ -12,7 +12,7 @@
 //! - [`convert_modules_to_mathverse`]: Convert multiple parsed modules into one `.mathverse` shard.
 //! - [`convert_olean_dir_to_mathverse`]: Batch-convert a directory of `.olean` files to a shard file.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::path::Path;
 use std::time::SystemTime;
 
@@ -229,14 +229,12 @@ pub fn import_module_with_provenance_verified(
 /// Parses the `.olean` file, imports all constants with provenance tracking,
 /// and serializes the result into a complete `.mathverse` shard.
 ///
-/// Lean stores theorem PROOF TERMS in the `.olean.private` companion, not the
-/// base `.olean` (which keeps types and definition values but strips theorem
-/// proofs). When the sibling companions exist they are parsed and their
-/// constant VALUES are merged by name into the base module so that re-checked
-/// theorems have a proof to feed the kernel (see
-/// [`parse_target_module_with_proofs`]). The companions are not authoritative:
-/// they only fill in value-less base stubs; a decl still earns
-/// `KernelVerified` only when the kernel's `check_type` later accepts it.
+/// A module-system artifact stores theorem PROOF TERMS in its `.olean.private`,
+/// not its `.olean` (which keeps types and strips theorem proofs), so the
+/// module is read from the artifact's authoritative part (see
+/// [`parse_target_module_with_proofs`]), and an artifact whose parts disagree
+/// is refused. A decl still earns `KernelVerified` only when the kernel's
+/// `check_type` later accepts it.
 pub fn convert_olean_to_mathverse(olean_path: &Path) -> MathverseResult<(Vec<u8>, ConvertResult)> {
     let module = parse_target_module_with_proofs(olean_path)?;
 
@@ -272,197 +270,98 @@ pub fn convert_olean_to_mathverse(olean_path: &Path) -> MathverseResult<(Vec<u8>
     Ok((buf, result))
 }
 
-/// Parse a target `.olean` module and fill in theorem proof values from the
-/// sibling `.olean.private` (and `.olean.server`) companions.
+/// Read the module whose `.olean` is `olean_path` the way pinned Lean does
+/// (docs/DECISIONS.md R113): its parts through `clean_olean::read_artifact`,
+/// which refuses an artifact whose parts disagree (a header, a value, or a name
+/// the part an importer reads does not declare), then the AUTHORITATIVE part
+/// alone — `.olean.private` for a module-system artifact, `.olean` otherwise.
+/// Over an artifact the rule admits, that part holds every declaration with
+/// its value, so nothing is merged: another part only restates it, or (in a
+/// module-system artifact) holds a value-free stub of its value, and since
+/// R131 a non-module artifact's companion may only restate its `.olean`.
 ///
-/// The base `.olean` carries every declaration's type and definition values,
-/// but theorem proof terms are stored separately in the `.olean.private`
-/// companion (e.g. `Mathlib/Logic/Basic.olean` is ~439 KB of types while the
-/// matching `.olean.private` is ~1 MB of proofs). Converting only the base
-/// therefore yields value-less theorem stubs that the re-verifier can only
-/// register as axioms (`axiom_accepted`) — never proof-check.
-///
-/// This loads the companions with [`parse_module_incremental`] (whose
-/// `server_bytes` argument is optional, so a module with `.private` but no
-/// `.server` is still handled) and, for any companion constant whose name
-/// matches a VALUE-LESS base entry, replaces that stub in place with the
-/// companion's proof-carrying record (its true kind, type, and value — see
-/// [`merge_companion_values`]). Companion constants with no base entry are
-/// appended so dependents can resolve them.
-///
-/// SOUNDNESS: merging only supplies more candidate values to the downstream
-/// kernel re-check. It never marks anything verified and never overwrites a
-/// value the base already carries. Merge is by NAME into the matching base
-/// entry, so no constant is duplicated or shadowed. If a companion is absent or
-/// fails to parse, the base module is returned unchanged (best-effort fill-in).
-pub fn parse_target_module_with_proofs(olean_path: &Path) -> MathverseResult<ParsedModule> {
-    let mut module = parse_module_file(olean_path).map_err(|e| MathverseError::ImportFailed {
+/// Before R113 the bridge took the `.olean` as the module and merged the
+/// private part into it, keeping the `.olean`'s value where both carried one
+/// and the `.olean`'s names and imports: `per-constant-verify` and the
+/// sequential `stamp-verified` modes then checked a module `leanchecker` never
+/// reads (review findings P1, P2, P7).
+fn read_authoritative_part(olean_path: &Path, types_only: bool) -> MathverseResult<ParsedModule> {
+    let label = olean_path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let read = clean_olean::read_artifact(&label, olean_path, clean_olean::ArtifactDepth::Records)
+        .map_err(|e| MathverseError::ArtifactRefused {
+            path: olean_path.display().to_string(),
+            reason: e.to_string(),
+        })?;
+    let parse_failed = |e: clean_olean::OleanError| MathverseError::ImportFailed {
         system: "Lean4".to_string(),
         reason: format!("{}: {e}", olean_path.display()),
-    })?;
-
-    // The companions reference the base address space, so the base bytes are
-    // required as the anchor for incremental region parsing.
-    let private_path = olean_path.with_extension("olean.private");
-    if !private_path.exists() {
-        return Ok(module);
+    };
+    if !read.is_module {
+        return if types_only {
+            parse_module_types_only_file(olean_path)
+        } else {
+            parse_module_file(olean_path)
+        }
+        .map_err(parse_failed);
     }
-    let Ok(base_bytes) = std::fs::read(olean_path) else {
-        return Ok(module);
+    // A module-system artifact: `read_artifact` proved all three parts present.
+    let part = |ext: &str| {
+        let path = olean_path.with_extension(ext);
+        std::fs::read(&path).map_err(|e| MathverseError::ImportFailed {
+            system: "Lean4".to_string(),
+            reason: format!("{}: {e}", path.display()),
+        })
     };
-    let Ok(private_bytes) = std::fs::read(&private_path) else {
-        return Ok(module);
-    };
-
-    // `.server` is optional: Mathlib modules often ship `.private` without a
-    // `.server`. When present it is passed through because private objects may
-    // reference server-region constants.
-    let server_path = olean_path.with_extension("olean.server");
-    let server_bytes = if server_path.exists() {
-        std::fs::read(&server_path).ok()
+    let (base, server, private) = (
+        part("olean")?,
+        part("olean.server")?,
+        part("olean.private")?,
+    );
+    if types_only {
+        parse_module_incremental_types_only(&base, Some(&server), &private)
     } else {
-        None
-    };
-
-    match parse_module_incremental(&base_bytes, server_bytes.as_deref(), &private_bytes) {
-        Ok(private_module) => {
-            merge_companion_values(&mut module, private_module.constants);
-        }
-        Err(e) => {
-            // Best-effort: a malformed/unsupported companion leaves the base
-            // module untouched rather than aborting the whole conversion.
-            if std::env::var("CLEAN_DIAG_PRIVATE").is_ok() {
-                eprintln!(
-                    "CLEAN_DIAG_PRIVATE: {} .olean.private parse FAILED: {e}",
-                    olean_path.display()
-                );
-            }
-        }
+        parse_module_incremental(&base, Some(&server), &private)
     }
-
-    Ok(module)
+    .map_err(parse_failed)
 }
 
-/// Parse a TRUSTED-dependency `.olean` module TYPES-ONLY: every constant's TYPE
-/// (and every `Definition` value, kept for δ-reduction) is reconstructed, but the
-/// proof-term VALUE of every `Theorem`/`Opaque` is skipped — in the base module
-/// AND in the `.olean.private`/`.olean.server` companions.
+/// Parse a TARGET `.olean` module with every proof value: the authoritative
+/// part of the artifact (see [`read_authoritative_part`]). A module-system
+/// artifact keeps its theorem proofs in the `.olean.private` (e.g.
+/// `Mathlib/Logic/Basic.olean` is ~439 KB of types while its `.olean.private` is
+/// ~1 MB of proofs), which is the part read.
+///
+/// SOUNDNESS: reading supplies candidate values to the downstream kernel
+/// re-check; it marks nothing verified. A refused artifact is an error, never a
+/// best-effort fallback to another part.
+pub fn parse_target_module_with_proofs(olean_path: &Path) -> MathverseResult<ParsedModule> {
+    read_authoritative_part(olean_path, false)
+}
+
+/// Parse a TRUSTED-dependency `.olean` module TYPES-ONLY: the authoritative part
+/// (see [`read_authoritative_part`]) with every constant's TYPE (and every
+/// `Definition` value, kept for δ-reduction) reconstructed, and the proof-term
+/// VALUE of every `Theorem`/`Opaque` skipped.
 ///
 /// This is the per-constant streaming verifier's loader for the trusted-import
 /// closure (everything EXCEPT the target). The kernel NEVER δ-unfolds a
 /// `Theorem`/`Opaque` value during type-checking, so a dependency's proof body is
-/// dead weight; the base `.olean` already carries every theorem's TYPE (as a
-/// value-less stub), so a type-only dependency needs nothing from the proof-heavy
-/// `.olean.private` except the occasional `Definition` body. Reconstructing those
-/// hundreds of analysis-module proof `Expr`s is exactly the peak-RSS cost that
-/// OOMs the full-value path; skipping it is what lets MVT/Taylor verify in ≤16 GB.
+/// dead weight; reconstructing hundreds of analysis-module proof `Expr`s is
+/// exactly the peak-RSS cost that OOMs the full-value path.
 ///
-/// SOUNDNESS: identical to [`parse_target_module_with_proofs`] for the trusted
-/// path — nothing here is verified or stamped. Only the TARGET (loaded WITH its
-/// value via [`parse_target_module_with_proofs`]) flows through the kernel's
-/// `check_type`. A missing/omitted trusted value can only make the target's own
-/// re-check conservatively FAIL, never falsely pass; and a `Theorem`/`Opaque`
-/// value is one the kernel would never consult regardless.
+/// SOUNDNESS: nothing here is verified or stamped; the artifact rule is the
+/// same one the target and the `.olean` loader read through.
 pub fn parse_dep_module_types_only(olean_path: &Path) -> MathverseResult<ParsedModule> {
-    let mut module =
-        parse_module_types_only_file(olean_path).map_err(|e| MathverseError::ImportFailed {
-            system: "Lean4".to_string(),
-            reason: format!("{}: {e}", olean_path.display()),
-        })?;
-
-    let private_path = olean_path.with_extension("olean.private");
-    if !private_path.exists() {
-        return Ok(module);
-    }
-    let Ok(base_bytes) = std::fs::read(olean_path) else {
-        return Ok(module);
-    };
-    let Ok(private_bytes) = std::fs::read(&private_path) else {
-        return Ok(module);
-    };
-
-    let server_path = olean_path.with_extension("olean.server");
-    let server_bytes = if server_path.exists() {
-        std::fs::read(&server_path).ok()
-    } else {
-        None
-    };
-
-    // Types-only companion parse: `Theorem`/`Opaque` proof terms in the private
-    // region are NOT reconstructed (they merge as value-less and thus never
-    // overwrite a base stub in `merge_companion_values`), so only `Definition`
-    // bodies and private-helper TYPES are merged in.
-    if let Ok(private_module) =
-        parse_module_incremental_types_only(&base_bytes, server_bytes.as_deref(), &private_bytes)
-    {
-        merge_companion_values(&mut module, private_module.constants);
-    }
-
-    Ok(module)
+    read_authoritative_part(olean_path, true)
 }
 
 /// `parse_module_types_only` from a path (mirrors `parse_module_file`).
 fn parse_module_types_only_file(olean_path: &Path) -> clean_olean::OleanResult<ParsedModule> {
     let bytes = std::fs::read(olean_path)?;
     parse_module_types_only(&bytes)
-}
-
-/// Merge proof-carrying companion constants into a base module by name.
-///
-/// Lean's base `.olean` stores a stripped, value-less stub for every theorem
-/// (and any definition whose body lives in the private region): the base parser
-/// surfaces such a stub as a value-less entry — for theorems, as a
-/// `ConstantKind::Axiom`-shaped record with a type but no proof. The matching
-/// `.olean.private` constant is the authoritative, proof-carrying version of
-/// the SAME declaration (same name, same type), tagged with its true kind
-/// (`Theorem`/`Definition`) and its value.
-///
-/// For each companion constant:
-/// - If the base has a matching VALUE-LESS entry, that stub is replaced in
-///   place by the companion's proof-carrying record (kind, type, value, and
-///   the rest), so the downstream re-check sees a `Theorem`/`Definition` with a
-///   proof instead of a value-less axiom stub.
-/// - If the base entry already carries a value, it is left untouched (the base
-///   is authoritative for decls it fully exports; the companion never clobbers).
-/// - If there is no base entry at all (e.g. a private match helper), the
-///   companion is appended once so dependents can resolve the name.
-///
-/// SOUNDNESS: this only supplies the kernel with a candidate proof term for a
-/// stub it would otherwise register as a value-less axiom. It performs no
-/// verification and stamps nothing; every replaced decl is still independently
-/// re-checked by `check_type` downstream and earns `KernelVerified` only on a
-/// genuine pass. Replacement is keyed by NAME and gated on the base entry being
-/// value-less, so no value-bearing decl is overwritten and no name is
-/// duplicated or shadowed.
-fn merge_companion_values(base: &mut ParsedModule, companion_constants: Vec<ParsedConstant>) {
-    // Index base entries by name to merge in place without duplicating.
-    let base_index: HashMap<String, usize> = base
-        .constants
-        .iter()
-        .enumerate()
-        .map(|(i, c)| (c.name.clone(), i))
-        .collect();
-
-    let mut appended: HashSet<String> = HashSet::new();
-    for companion in companion_constants {
-        match base_index.get(&companion.name) {
-            Some(&idx) => {
-                let entry = &mut base.constants[idx];
-                // Replace a value-less stub with the companion's proof-carrying
-                // record; never touch a base entry that already has a value.
-                if entry.value.is_none() && companion.value.is_some() {
-                    *entry = companion;
-                }
-            }
-            None => {
-                // Companion-only constant (e.g. private match helper). Append it
-                // once so dependents can resolve the name.
-                if appended.insert(companion.name.clone()) {
-                    base.constants.push(companion);
-                }
-            }
-        }
-    }
 }
 
 /// Convert multiple `ParsedModule`s into one `.mathverse` shard (as bytes).
@@ -596,13 +495,24 @@ fn confidence_for_constant(constant: &ParsedConstant) -> ImportConfidence {
 }
 
 /// Determine whether a constant has a meaningful value.
+///
+/// An `opaque` KEEPS its value. Lean's kernel checks it
+/// (`environment.cpp` `add_opaque`: `check(v.get_value())` against the type),
+/// and `Lean.Environment.replay` re-checks it. A shard that dropped it (as this
+/// function did until 2026-09-24) left the stamp lanes unable to check an
+/// opaque at all. Replayed in Lean's order, that means every constant that uses
+/// one could never be admitted either: each `irreducible_def` wrapper, and
+/// through it, for example, every use of `Real.add`. An opaque never
+/// δ-unfolds, so carrying its value changes no reduction.
 fn has_value_for(constant: &ParsedConstant) -> bool {
     use clean_olean::module::ConstantKind;
     match constant.kind {
-        ConstantKind::Theorem | ConstantKind::Definition => constant.value.is_some(),
+        ConstantKind::Theorem | ConstantKind::Definition | ConstantKind::Opaque => {
+            constant.value.is_some()
+        }
         ConstantKind::Inductive | ConstantKind::Constructor | ConstantKind::Recursor => true,
         ConstantKind::Quot => true,
-        ConstantKind::Axiom | ConstantKind::Opaque => false,
+        ConstantKind::Axiom => false,
         _ => false,
     }
 }
@@ -713,96 +623,13 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_merge_companion_values_fills_value_less_theorem_stub() {
-        // Base: a value-less theorem stub (proof stripped, as in a Mathlib base
-        // .olean) plus a definition that already carries its value.
-        let mut base = mock_module(vec![
-            mock_constant("Logic.thm", ConstantKind::Theorem, false),
-            rich_constant(
-                "Logic.def",
-                ConstantKind::Definition,
-                nat_to_nat(),
-                Some(nat_id()),
-            ),
-        ]);
-        // Companion (.private): supplies the proof value for the theorem and a
-        // (different) value for the definition that must NOT clobber the base.
-        let companion = vec![
-            rich_constant("Logic.thm", ConstantKind::Theorem, type0(), Some(nat_id())),
-            rich_constant(
-                "Logic.def",
-                ConstantKind::Definition,
-                nat_to_nat(),
-                Some(nat_const()),
-            ),
-        ];
-
-        merge_companion_values(&mut base, companion);
-
-        // Theorem stub now has its proof value filled in.
-        assert!(
-            base.constants[0].value.is_some(),
-            "value-less theorem stub must receive its proof from the companion"
-        );
-        // Definition keeps its original value (never overwritten).
-        assert!(matches!(base.constants[1].value, Some(ParsedExpr::Lam(..))));
-        // No duplication: still exactly two constants.
-        assert_eq!(base.constants.len(), 2);
-    }
-
-    #[test]
-    fn test_merge_companion_values_appends_companion_only_constant_once() {
-        let mut base = mock_module(vec![mock_constant(
-            "Logic.thm",
-            ConstantKind::Theorem,
-            false,
-        )]);
-        // Companion has a private helper not present in the base, listed twice.
-        let companion = vec![
-            rich_constant(
-                "Logic.match_1",
-                ConstantKind::Definition,
-                nat_to_nat(),
-                Some(nat_id()),
-            ),
-            rich_constant(
-                "Logic.match_1",
-                ConstantKind::Definition,
-                nat_to_nat(),
-                Some(nat_id()),
-            ),
-        ];
-
-        merge_companion_values(&mut base, companion);
-
-        let names: Vec<&str> = base.constants.iter().map(|c| c.name.as_str()).collect();
-        assert_eq!(names, vec!["Logic.thm", "Logic.match_1"]);
-    }
-
-    #[test]
-    fn test_merge_companion_values_does_not_overwrite_existing_value() {
-        let original_value = Some(nat_id());
-        let mut base = mock_module(vec![rich_constant(
-            "Logic.thm",
-            ConstantKind::Theorem,
-            type0(),
-            original_value,
-        )]);
-        // Companion supplies a different value for the same name.
-        let companion = vec![rich_constant(
-            "Logic.thm",
-            ConstantKind::Theorem,
-            type0(),
-            Some(nat_const()),
-        )];
-
-        merge_companion_values(&mut base, companion);
-
-        // The base's pre-existing value is preserved (companion never clobbers).
-        assert!(matches!(base.constants[0].value, Some(ParsedExpr::Lam(..))));
-        assert_eq!(base.constants.len(), 1);
-    }
+    // The bridge no longer merges parts (docs/DECISIONS.md R113), so the unit
+    // tests of `merge_companion_values` went with it. What they pinned is now
+    // pinned on real artifacts: a module-system target's proofs come from its
+    // `.olean.private` (`batch::tests_module_system`); a name only a companion
+    // declares, and parts that state a declaration differently, are refused
+    // (`cli::replay_forged_lane_tests::parts` and `::misplaced`, and
+    // `clean-olean`'s `olean_parts_tests`).
 
     #[test]
     fn test_import_module_with_provenance_verified_none_preserves_existing_behavior() {

@@ -5,6 +5,9 @@
 #[path = "support/rustc.rs"]
 mod rustc_support;
 
+#[path = "support/metadata.rs"]
+mod metadata_support;
+
 use clean_auto::oracle::{sort_oracle_candidates, OracleCandidate, OracleRequest};
 use clean_auto::premise::{HybridSelector, MePoSelector, PremiseDatabase, PremiseId};
 use clean_auto::{SmtBridge, SmtVerificationResult};
@@ -14,53 +17,6 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
-
-fn clean_auto_metadata_artifact() -> PathBuf {
-    let deps_dir = std::env::current_exe()
-        .expect("integration test should know its executable path")
-        .parent()
-        .expect("integration test executable should live under target deps")
-        .to_path_buf();
-    let mut rlibs = Vec::new();
-    let mut rmetas = Vec::new();
-
-    for path in fs::read_dir(&deps_dir)
-        .expect("deps directory should be readable")
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-    {
-        let Some(file_name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-        if !file_name.starts_with("libclean_auto-") {
-            continue;
-        }
-
-        match path.extension().and_then(|ext| ext.to_str()) {
-            // Prefer linkable rlibs: shared-tree churn leaves many newer check-only
-            // rmeta artifacts behind, and rustc snippet compilation can pick the
-            // wrong one if we sort across both extensions.
-            Some("rlib") => rlibs.push(path),
-            Some("rmeta") => rmetas.push(path),
-            _ => {}
-        }
-    }
-
-    let sort_by_mtime = |artifacts: &mut Vec<PathBuf>| {
-        artifacts.sort_by_key(|path| {
-            fs::metadata(path)
-                .and_then(|metadata| metadata.modified())
-                .unwrap_or(UNIX_EPOCH)
-        });
-    };
-    sort_by_mtime(&mut rlibs);
-    sort_by_mtime(&mut rmetas);
-
-    rlibs
-        .pop()
-        .or_else(|| rmetas.pop())
-        .expect("clean_auto metadata artifact should exist in deps dir")
-}
 
 fn temp_compile_dir(test_name: &str) -> PathBuf {
     let nanos = SystemTime::now()
@@ -75,10 +31,7 @@ fn temp_compile_dir(test_name: &str) -> PathBuf {
 }
 
 fn compile_external_snippet(test_name: &str, source: &str) -> std::process::Output {
-    let artifact = clean_auto_metadata_artifact();
-    let deps_dir = artifact
-        .parent()
-        .expect("clean_auto artifact should live in deps directory");
+    let metadata = metadata_support::clean_auto();
     let compile_dir = temp_compile_dir(test_name);
     fs::create_dir_all(&compile_dir).expect("compile directory should be creatable");
 
@@ -88,13 +41,12 @@ fn compile_external_snippet(test_name: &str, source: &str) -> std::process::Outp
     // TRUST OPT-OUT — use Cargo's selected `RUSTC` so this snippet and the
     // linked crate metadata always share a compiler ABI. When that compiler is
     // Trust, disable obligation checking for this throwaway API-surface probe;
-    // the snippet proves only that a public name is reachable. Fall back when
-    // the selected compiler does not understand Trust's opt-out flag.
-    let run_rustc = |trust_opt_out: bool| {
+    // the snippet proves only that a public name is reachable.
+    // The compiler is Trust (owner directive 2026-09-28); there is no retry
+    // without the opt-out.
+    let run_rustc = || {
         let mut cmd = Command::new(rustc_support::cargo_rustc());
-        if trust_opt_out {
-            cmd.arg("-Ztrust-verify=off");
-        }
+        cmd.arg("-Ztrust-verify=off");
         cmd.arg("--crate-type")
             .arg("lib")
             .arg("--edition")
@@ -105,21 +57,11 @@ fn compile_external_snippet(test_name: &str, source: &str) -> std::process::Outp
             .arg(&compile_dir)
             .arg(&source_path)
             .arg("--extern")
-            .arg(format!("clean_auto={}", artifact.display()))
-            .arg("-L")
-            .arg(format!("dependency={}", deps_dir.display()))
-            .output()
+            .arg(format!("clean_auto={}", metadata.artifact.display()));
+        metadata.configure(&mut cmd);
+        cmd.output()
     };
-    let flag_was_rejected = |stderr: &str| {
-        stderr.contains("only accepted on the nightly compiler")
-            || stderr.contains("unknown unstable option")
-            || stderr.contains("unknown debugging option")
-            || stderr.contains("incorrect value")
-    };
-    let mut output = run_rustc(true).expect("rustc should be runnable from integration tests");
-    if !output.status.success() && flag_was_rejected(&String::from_utf8_lossy(&output.stderr)) {
-        output = run_rustc(false).expect("rustc should be runnable from integration tests");
-    }
+    let output = run_rustc().expect("trustc should be runnable from integration tests");
 
     let _ = fs::remove_dir_all(&compile_dir);
     output
@@ -273,6 +215,67 @@ fn touch() {
     );
 }
 
+/// What Trust names from outside the crate once its Clean pin carries the
+/// effort entry: the entry itself (its certify lanes move onto it), and an
+/// undecided answer built and read with its reason, which is the edit its two
+/// trust-certify tests that build `Unknown` make (docs/DECISIONS.md,
+/// R-AY-PROOF-EFFORT-20261011).
+#[test]
+#[file_serial]
+fn test_effort_entry_and_unknown_reason_are_nameable() {
+    assert_external_compile_succeeds(
+        "effort_entry_and_unknown_reason",
+        r#"
+#![allow(dead_code)]
+use clean_auto::bridge::ay_contract::{AyProofBackend, AyProofResult, AyUnknownReason};
+use std::num::NonZeroU64;
+use std::time::Duration;
+
+fn count_spent(backend: &mut AyProofBackend) -> bool {
+    matches!(
+        backend.check_sat_with_effort(NonZeroU64::MIN, Duration::from_secs(1)),
+        Ok(AyProofResult::Unknown { reason: AyUnknownReason::ResourceLimit, .. })
+    )
+}
+
+fn undecided() -> AyProofResult {
+    AyProofResult::Unknown { reason: AyUnknownReason::Unknown, detail: None }
+}
+"#,
+    );
+}
+
+/// Trust's clean-origin gate turns the counted induction entry into a compile
+/// decision at its next Clean pin (docs/DECISIONS.md,
+/// R-INDUCTION-BACKSTOP-20261014). It names the entry from outside the crate
+/// and matches every answer with no wildcard: `InductionSearch` is
+/// deliberately exhaustive, so a new answer is a compile error there, never a
+/// silent default.
+#[test]
+#[file_serial]
+fn test_counted_induction_entry_is_matched_exhaustively_from_outside() {
+    assert_external_compile_succeeds(
+        "counted_induction_entry",
+        r#"
+#![allow(dead_code)]
+use clean_auto::{AutomationEngine, InductionSearch};
+
+fn gate(answer: InductionSearch) -> Result<bool, &'static str> {
+    match answer {
+        InductionSearch::Proved(proof) => Ok(proof.proof_context().is_none()),
+        InductionSearch::NotProved => Ok(false),
+        InductionSearch::CountLimit(limit) => Err(limit),
+        InductionSearch::BackstopFired => Err("could not run: the backstop fired"),
+    }
+}
+
+fn entry() {
+    let _counted = AutomationEngine::prove_by_induction_counted;
+}
+"#,
+    );
+}
+
 /// Downstream exhaustive matches on `#[non_exhaustive]` enums (through the
 /// curated contract) must include a wildcard arm. Part of #2735, #2774.
 #[test]
@@ -287,7 +290,7 @@ fn touch(r: AyProofResult) -> bool {
     match r {
         AyProofResult::Sat => true,
         AyProofResult::Unsat { .. } => false,
-        AyProofResult::Unknown => false,
+        AyProofResult::Unknown { .. } => false,
     }
 }
 "#,

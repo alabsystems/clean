@@ -48,6 +48,23 @@ while [[ $# -gt 0 ]]; do
 done
 [[ -x "$BIN" ]] || { echo "[streams-green] FAIL: no executable clean binary at $BIN" >&2; exit 1; }
 
+# The Trust compiler: `clean extract --backend rust` compiles its battery only
+# with an ADMITTED Trust compiler (crates/clean-elab/src/oracle_compiler.rs) —
+# the `trustc` beside the running `clean`, else the absolute path in
+# CLEAN_NATIVE_DECIDE_TRUSTC — and refuses with E_RUST_TOOLCHAIN otherwise; a
+# workspace `target/release/clean` has no `trustc` beside it. Name the
+# toolchain's compiler binary itself (a PATH `trustc` may be a shim script,
+# which is never admitted); `clean` refuses anything that is not Trust's. The
+# join below compiles with the same compiler.
+TRUSTC="${CLEAN_NATIVE_DECIDE_TRUSTC:-}"
+if [[ -z "$TRUSTC" ]]; then
+  SYSROOT="$(trustc --print sysroot 2>/dev/null)" \
+    || { echo "[streams-green] FAIL: no trustc to name (set CLEAN_NATIVE_DECIDE_TRUSTC)" >&2; exit 1; }
+  TRUSTC="${SYSROOT}/bin/trustc"
+fi
+[[ -x "$TRUSTC" ]] || { echo "[streams-green] FAIL: no executable Trust compiler at $TRUSTC" >&2; exit 1; }
+export CLEAN_NATIVE_DECIDE_TRUSTC="$TRUSTC"
+
 PROOF_DIR="${REPO_ROOT}/data/graduation/clean-streams/proof"
 SRC="${PROOF_DIR}/Streams.lean"
 OUT_JSON="${REPO_ROOT}/reports/streams-green.json"
@@ -58,13 +75,18 @@ OUT_JSON="${REPO_ROOT}/reports/streams-green.json"
 # rank-1 Brick 1 landing, 2026-08-26, + the `Bisim.acc` / `Bisim.coind_upto`
 # companions of the paco/accumulation rung, 2026-08-26; 64 since the paco
 # parameterized-tower rung grew every coinductive family by the 8-companion
-# `Bisim.paco` tower, 2026-08-26). If the proof lane
+# `Bisim.paco` tower, 2026-08-26; 80 since b452e97c8, 2026-09-25, made every
+# codata/codef command return the declarations it registers instead of
+# `Skipped`, so `clean check` now checks and counts `codata CycleStr`'s 14
+# generated declarations and the two codefs `cycleCase`/`cycleMod`, which it
+# used to kernel-check without reporting -- 64 + 16, re-measured 2026-10-16 at
+# e2fa3dbaf, every one passing). If the proof lane
 # extends the file, re-measure and re-pin:
 #   target/release/clean check data/graduation/clean-streams/proof/Streams.lean \
 #     --prelude builtin --json | python3 -c 'import json,sys; print(json.load(sys.stdin)["success_count"])'
 # (Empty = structural mode: all declarations must pass, none may fail, plus the
 # required-name checks below.)
-EXPECTED_DECLS="64"
+EXPECTED_DECLS="80"
 
 # The proof lane owns Streams.lean and is building it concurrently; this gate
 # exists from day one and simply fails until the file lands.
@@ -241,15 +263,14 @@ fn main() {
     }
 }
 RS
-# The pinned toolchain is the Trust verifying compiler; this program is a
-# differential oracle, not a verification target, so probe the opt-out flag
-# and fall back to a plain invocation (same discipline as extract_rust.rs).
-if ! rustc --edition=2021 -O -Ztrust-verify=off "${JOIN}/join.rs" -o "${JOIN}/join" \
-    > "${WORK}/join_rustc.log" 2>&1; then
-  rustc --edition=2021 -O "${JOIN}/join.rs" -o "${JOIN}/join" >> "${WORK}/join_rustc.log" 2>&1 \
-    || { echo "[streams-green] FAIL: join driver failed to compile:" >&2
-         tail -5 "${WORK}/join_rustc.log" >&2; exit 1; }
-fi
+# Compiled with the Trust compiler resolved above (owner directive
+# 2026-09-28). This program is a differential oracle, not a verification
+# target, so it is compiled with the verifier opt-out; there is no plain-rustc
+# fallback.
+"$TRUSTC" --edition=2021 -O -Ztrust-verify=off "${JOIN}/join.rs" -o "${JOIN}/join" \
+    > "${WORK}/join_rustc.log" 2>&1 \
+  || { echo "[streams-green] FAIL: join driver failed to compile with trustc:" >&2
+       tail -5 "${WORK}/join_rustc.log" >&2; exit 1; }
 "${JOIN}/join" > "${WORK}/join.out" \
   || { echo "[streams-green] FAIL: join check rejected (see values above)" >&2; exit 1; }
 

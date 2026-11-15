@@ -27,17 +27,23 @@ fn test_elab_do_match_ctor_pattern_return_body_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::Ctor(
-                        "Nat.succ".to_string(),
-                        vec![SurfacePattern::Var("k".to_string())],
+                        SurfaceName::generated_path("Nat.succ"),
+                        vec![SurfacePattern::Var(SurfaceName::generated_path("k"))],
                     )],
                     body: vec![DoElem::Return(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("k"),
+                        )),
                     )],
                 },
                 DoMatchArm {
@@ -71,7 +77,10 @@ fn test_elab_do_match_nat_zero_first_arm_return_body_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
@@ -86,7 +95,10 @@ fn test_elab_do_match_nat_zero_first_arm_return_body_supported() {
                     patterns: vec![SurfacePattern::Wildcard],
                     body: vec![DoElem::Return(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "n".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("n"),
+                        )),
                     )],
                 },
             ],
@@ -94,6 +106,10 @@ fn test_elab_do_match_nat_zero_first_arm_return_body_supported() {
     );
 
     let mut ctx = ElabCtx::new(&env);
+    ctx.current_expected_type = Some(Expr::app(
+        Expr::const_(Name::from_string("Id"), vec![Level::zero()]),
+        Expr::const_(Name::from_string("Nat"), vec![]),
+    ));
 
     let result = ctx.elaborate(&surface);
     assert!(
@@ -112,17 +128,23 @@ fn test_elab_do_match_numeral_add_first_arm_return_body_supported() {
         Span::dummy(),
         vec![DoElem::Match(
             Span::dummy(),
-            vec![SurfaceExpr::Ident(Span::dummy(), "n".to_string())],
+            vec![SurfaceExpr::Ident(
+                Span::dummy(),
+                SurfaceName::generated_path("n"),
+            )],
             vec![
                 DoMatchArm {
                     span: Span::dummy(),
                     patterns: vec![SurfacePattern::NumeralAdd(
-                        Box::new(SurfacePattern::Var("k".to_string())),
+                        Box::new(SurfacePattern::Var(SurfaceName::generated_path("k"))),
                         1,
                     )],
                     body: vec![DoElem::Return(
                         Span::dummy(),
-                        Box::new(SurfaceExpr::Ident(Span::dummy(), "k".to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            Span::dummy(),
+                            SurfaceName::generated_path("k"),
+                        )),
                     )],
                 },
                 DoMatchArm {

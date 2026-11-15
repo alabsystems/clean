@@ -15,6 +15,129 @@ use crate::expr::{BinderInfo, Expr, ExprKind};
 use crate::level::Level;
 use crate::name::Name;
 
+/// Names the matching initializer declares, each a `Type u` axiom (a
+/// placeholder: the stub theory, [`PLACEHOLDER_STUB_NAMES`]).
+pub(crate) const SUBGROUP_PLACEHOLDERS: [&str; 26] = [
+    // Core Subgroup structure
+    "Subgroup",
+    "Subgroup.carrier",
+    "Subgroup.one_mem'",
+    "Subgroup.mul_mem'",
+    "Subgroup.inv_mem'",
+    // Subgroup operations
+    "Subgroup.mk",
+    "Subgroup.toSubmonoid",
+    "Subgroup.copy",
+    // Subgroup properties
+    "Subgroup.Normal",
+    "Subgroup.normal",
+    "Subgroup.FiniteIndex",
+    "Subgroup.index",
+    "Subgroup.relindex",
+    // Subgroup lattice operations
+    "Subgroup.sup",
+    "Subgroup.inf",
+    "Subgroup.top",
+    "Subgroup.bot",
+    "Subgroup.closure",
+    "Subgroup.normalClosure",
+    // Complement and cosets
+    "Subgroup.IsComplement",
+    "Subgroup.LeftCoset",
+    "Subgroup.RightCoset",
+    // IsSimpleGroup typeclass
+    "IsSimpleGroup",
+    // Min/Max properties
+    "IsMin",
+    "IsMax",
+    // ncard (cardinality for Set with Nat result)
+    "Set.ncard",
+];
+
+/// Names the matching initializer declares, each a `Type u` axiom (a
+/// placeholder: the stub theory, [`PLACEHOLDER_STUB_NAMES`]).
+pub(crate) const SUBRING_PLACEHOLDERS: [&str; 10] = [
+    "Subring",
+    "Subring.carrier",
+    "Subring.zero_mem'",
+    "Subring.one_mem'",
+    "Subring.add_mem'",
+    "Subring.mul_mem'",
+    "Subring.neg_mem'",
+    "Subring.mk",
+    "Subring.toSubsemiring",
+    "Subring.closure",
+];
+
+/// Names the matching initializer declares, each a `Type u` axiom (a
+/// placeholder: the stub theory, [`PLACEHOLDER_STUB_NAMES`]).
+pub(crate) const SUBFIELD_PLACEHOLDERS: [&str; 11] = [
+    "Subfield",
+    "Subfield.carrier",
+    "Subfield.zero_mem'",
+    "Subfield.one_mem'",
+    "Subfield.add_mem'",
+    "Subfield.mul_mem'",
+    "Subfield.neg_mem'",
+    "Subfield.inv_mem'",
+    "Subfield.mk",
+    "Subfield.toSubring",
+    "Subfield.closure",
+];
+
+/// Names the matching initializer declares, each a `Type u` axiom (a
+/// placeholder: the stub theory, [`PLACEHOLDER_STUB_NAMES`]).
+pub(crate) const SUBMONOID_PLACEHOLDERS: [&str; 6] = [
+    "Submonoid",
+    "Submonoid.carrier",
+    "Submonoid.one_mem'",
+    "Submonoid.mul_mem'",
+    "Submonoid.mk",
+    "Submonoid.closure",
+];
+
+/// Names the matching initializer declares, each a `Type u` axiom (a
+/// placeholder: the stub theory, [`PLACEHOLDER_STUB_NAMES`]).
+pub(crate) const RING_HOM_PLACEHOLDERS: [&str; 11] = [
+    "RingHom",
+    "RingHom.toFun",
+    "RingHom.map_one'",
+    "RingHom.map_mul'",
+    "RingHom.map_add'",
+    "RingHom.map_zero'",
+    "RingHom.mk",
+    "RingHom.id",
+    "RingHom.comp",
+    "RingHom.ker",
+    "RingHom.range",
+];
+
+/// `init_nat_card`'s two axioms (`Nat.card : Type u → Nat`,
+/// `Nat.Primes : Nat → Prop`).
+pub(crate) const NAT_CARD_PLACEHOLDERS: [&str; 2] = ["Nat.card", "Nat.Primes"];
+
+/// `init_finite`'s axioms (`Finite : Type u → Prop`, `.Finite`,
+/// `.FiniteType`, the last two `Type u`).
+pub(crate) const FINITE_PLACEHOLDERS: [&str; 3] = ["Finite", ".Finite", ".FiniteType"];
+
+/// Every Mathlib-placeholder name of the stub theory (KR1 increment 3,
+/// `docs/DECISIONS.md` R143): the value-less stand-ins `init_subgroup`,
+/// `init_subring`, `init_subfield`, `init_submonoid`, `init_ring_hom`,
+/// `init_nat_card` and `init_finite` declare. None is Mathlib's object (a
+/// `Subgroup` here is a bare `Type u` with no group argument); since R143 the
+/// default prelude declares none of them, and an environment that opts in
+/// (`Environment::init_stub_theory`, or a Mathlib prelude provider) has a
+/// theorem that rests on one listed by name (`stub_theory_axioms_of`).
+pub(crate) const PLACEHOLDER_STUB_NAMES: [&[&str]; 7] = [
+    &SUBGROUP_PLACEHOLDERS,
+    &SUBRING_PLACEHOLDERS,
+    &SUBFIELD_PLACEHOLDERS,
+    &SUBMONOID_PLACEHOLDERS,
+    &RING_HOM_PLACEHOLDERS,
+    &NAT_CARD_PLACEHOLDERS,
+    &FINITE_PLACEHOLDERS,
+];
+
 #[allow(dead_code)] // 2026-07-31: no caller in any build (lib or lib-test); kept, not deleted.
 impl Environment {
     /// Initialize Subgroup structure and related declarations
@@ -36,49 +159,13 @@ impl Environment {
         }
 
         self.init_group()?;
-        self.init_set_theory()?;
 
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
         let type_u = Expr::sort(Level::succ(u_level.clone()));
 
         // Add Subgroup axiom stubs
-        for name in &[
-            // Core Subgroup structure
-            "Subgroup",
-            "Subgroup.carrier",
-            "Subgroup.one_mem'",
-            "Subgroup.mul_mem'",
-            "Subgroup.inv_mem'",
-            // Subgroup operations
-            "Subgroup.mk",
-            "Subgroup.toSubmonoid",
-            "Subgroup.copy",
-            // Subgroup properties
-            "Subgroup.Normal",
-            "Subgroup.normal",
-            "Subgroup.FiniteIndex",
-            "Subgroup.index",
-            "Subgroup.relindex",
-            // Subgroup lattice operations
-            "Subgroup.sup",
-            "Subgroup.inf",
-            "Subgroup.top",
-            "Subgroup.bot",
-            "Subgroup.closure",
-            "Subgroup.normalClosure",
-            // Complement and cosets
-            "Subgroup.IsComplement",
-            "Subgroup.LeftCoset",
-            "Subgroup.RightCoset",
-            // IsSimpleGroup typeclass
-            "IsSimpleGroup",
-            // Min/Max properties
-            "IsMin",
-            "IsMax",
-            // ncard (cardinality for Set with Nat result)
-            "Set.ncard",
-        ] {
+        for name in &SUBGROUP_PLACEHOLDERS {
             self.add_decl(Declaration::Axiom {
                 name: Name::from_string(name),
                 level_params: vec![u.clone()],
@@ -114,24 +201,12 @@ impl Environment {
         }
 
         self.init_ring()?;
-        self.init_set_theory()?;
 
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
         let type_u = Expr::sort(Level::succ(u_level.clone()));
 
-        for name in &[
-            "Subring",
-            "Subring.carrier",
-            "Subring.zero_mem'",
-            "Subring.one_mem'",
-            "Subring.add_mem'",
-            "Subring.mul_mem'",
-            "Subring.neg_mem'",
-            "Subring.mk",
-            "Subring.toSubsemiring",
-            "Subring.closure",
-        ] {
+        for name in &SUBRING_PLACEHOLDERS {
             self.add_decl(Declaration::Axiom {
                 name: Name::from_string(name),
                 level_params: vec![u.clone()],
@@ -167,25 +242,12 @@ impl Environment {
         }
 
         self.init_field()?;
-        self.init_set_theory()?;
 
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
         let type_u = Expr::sort(Level::succ(u_level.clone()));
 
-        for name in &[
-            "Subfield",
-            "Subfield.carrier",
-            "Subfield.zero_mem'",
-            "Subfield.one_mem'",
-            "Subfield.add_mem'",
-            "Subfield.mul_mem'",
-            "Subfield.neg_mem'",
-            "Subfield.inv_mem'",
-            "Subfield.mk",
-            "Subfield.toSubring",
-            "Subfield.closure",
-        ] {
+        for name in &SUBFIELD_PLACEHOLDERS {
             self.add_decl(Declaration::Axiom {
                 name: Name::from_string(name),
                 level_params: vec![u.clone()],
@@ -221,20 +283,12 @@ impl Environment {
         }
 
         self.init_monoid()?;
-        self.init_set_theory()?;
 
         let u = Name::from_string("u");
         let u_level = Level::param(u.clone());
         let type_u = Expr::sort(Level::succ(u_level.clone()));
 
-        for name in &[
-            "Submonoid",
-            "Submonoid.carrier",
-            "Submonoid.one_mem'",
-            "Submonoid.mul_mem'",
-            "Submonoid.mk",
-            "Submonoid.closure",
-        ] {
+        for name in &SUBMONOID_PLACEHOLDERS {
             self.add_decl(Declaration::Axiom {
                 name: Name::from_string(name),
                 level_params: vec![u.clone()],
@@ -434,19 +488,7 @@ impl Environment {
         let u_level = Level::param(u.clone());
         let type_u = Expr::sort(Level::succ(u_level.clone()));
 
-        for name in &[
-            "RingHom",
-            "RingHom.toFun",
-            "RingHom.map_one'",
-            "RingHom.map_mul'",
-            "RingHom.map_add'",
-            "RingHom.map_zero'",
-            "RingHom.mk",
-            "RingHom.id",
-            "RingHom.comp",
-            "RingHom.ker",
-            "RingHom.range",
-        ] {
+        for name in &RING_HOM_PLACEHOLDERS {
             self.add_decl(Declaration::Axiom {
                 name: Name::from_string(name),
                 level_params: vec![u.clone(), v.clone()],

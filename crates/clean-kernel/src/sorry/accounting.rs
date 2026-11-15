@@ -50,6 +50,12 @@ pub(crate) static AY_RECONSTRUCTION_SUCCESS_COUNTER: AtomicU64 = AtomicU64::new(
 thread_local! {
     /// Per-thread view of reconstruction successes for stable parallel-test assertions.
     static LOCAL_AY_RECONSTRUCTION_SUCCESS_COUNTER: Cell<u64> = const { Cell::new(0) };
+
+    /// Per-thread view of [`SORRY_COUNTER`]: sorry terms minted on this thread
+    /// since this thread last called [`reset_sorry_counter`]. Another thread's
+    /// mints and resets never touch it, so a test in a parallel suite can
+    /// assert exactly what its own run did to the trust ledger.
+    static LOCAL_SORRY_COUNTER: Cell<u64> = const { Cell::new(0) };
 }
 
 /// Reset the sorry counter to zero.
@@ -63,6 +69,7 @@ pub fn reset_sorry_counter() {
     SORRY_COUNTER.store(0, Ordering::SeqCst);
     EXPLICIT_SORRY_COUNTER.store(0, Ordering::SeqCst);
     SYNTHETIC_SORRY_COUNTER.store(0, Ordering::SeqCst);
+    LOCAL_SORRY_COUNTER.with(|count| count.set(0));
 }
 
 /// Get the current sorry count.
@@ -71,6 +78,16 @@ pub fn reset_sorry_counter() {
 /// (or since program start if never reset).
 pub fn sorry_count() -> u64 {
     SORRY_COUNTER.load(Ordering::SeqCst)
+}
+
+/// Get the calling thread's view of the sorry counter: the sorry terms minted
+/// on this thread since this thread last called [`reset_sorry_counter`].
+///
+/// Process-wide readers keep [`sorry_count`]; this view exists for
+/// deterministic assertions inside parallel test suites, where another test
+/// may mint sorries (and leave them in the global) concurrently.
+pub fn local_sorry_count() -> u64 {
+    LOCAL_SORRY_COUNTER.with(Cell::get)
 }
 
 /// Get the current explicit sorry count.
@@ -94,6 +111,7 @@ pub fn sorry_lifetime_count() -> u64 {
 pub(crate) fn record_sorry_creation(kind: SorryKind) {
     SORRY_COUNTER.fetch_add(1, Ordering::SeqCst);
     SORRY_LIFETIME_COUNTER.fetch_add(1, Ordering::SeqCst);
+    LOCAL_SORRY_COUNTER.with(|count| count.set(count.get().saturating_add(1)));
     match kind {
         SorryKind::Explicit => {
             EXPLICIT_SORRY_COUNTER.fetch_add(1, Ordering::SeqCst);
@@ -204,6 +222,12 @@ pub fn assert_no_sorry() {
 /// Cached DENY_SORRY mode flag (initialized once on first access).
 static DENY_SORRY_CHECKED: Once = Once::new();
 static DENY_SORRY_ENABLED: AtomicBool = AtomicBool::new(false);
+
+/// Observe an already-enabled guard without initializing the first-use latch.
+/// Prelude admission also checks the live environment request separately.
+pub(crate) fn deny_sorry_already_enabled() -> bool {
+    DENY_SORRY_ENABLED.load(Ordering::SeqCst)
+}
 
 /// Check if DENY_SORRY mode is enabled.
 /// When set to "1" or "true", sorry term creation will panic.

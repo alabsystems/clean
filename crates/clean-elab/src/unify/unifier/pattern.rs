@@ -92,6 +92,15 @@ impl<'a> Unifier<'a> {
         self.as_flex_app(expr).is_some()
     }
 
+    /// Whether `expr` is a flex application that is NOT a Miller pattern
+    /// (`?m ?b ?h`, `?m (f x)`, `?m x x`): the structural dispatch can only
+    /// decompose such a constraint first-order, so it is the shape worth
+    /// postponing until other constraints have assigned `?m` or its arguments.
+    pub(super) fn is_stuck_flex_app(&self, expr: &Expr) -> bool {
+        self.as_flex_app(expr)
+            .is_some_and(|flex| self.pattern_args(&flex).is_none())
+    }
+
     /// Attempt Miller-pattern unification for a constraint where at least one
     /// side is a flex application `?m a₁ … aₙ`.
     ///
@@ -134,8 +143,8 @@ impl<'a> Unifier<'a> {
         match self.try_solve_pattern(&flex, rhs) {
             PatternOutcome::Solved => Some(UnifyResult::Success),
             PatternOutcome::OccursCheck => Some(UnifyResult::Failure(format!(
-                "occurs check failed for {:?}",
-                flex.meta
+                "occurs check failed for ?m{}",
+                flex.meta.0
             ))),
             // Not a pattern (repeated args, non-local args, out-of-scope free
             // var in rhs, …). Defer to the structural dispatch.
@@ -175,8 +184,8 @@ impl<'a> Unifier<'a> {
         if left_flex.meta == right_flex.meta {
             if left_flex.args.len() != right_flex.args.len() {
                 return Some(UnifyResult::Failure(format!(
-                    "flex-flex arity mismatch for {:?}",
-                    left_flex.meta
+                    "flex-flex arity mismatch for ?m{}",
+                    left_flex.meta.0
                 )));
             }
             for (a, b) in left_flex.args.iter().zip(right_flex.args.iter()) {
@@ -266,9 +275,17 @@ impl<'a> Unifier<'a> {
         // explicit common-variable scope: marking it as legacy/untracked would
         // inherit every ambient local (including x/z, which are not shared) and
         // make either side's contextual scope check correctly reject `?h`.
-        let h_locals: Vec<(String, FVarId, Expr)> = common
+        let h_locals: Vec<(clean_parser::SurfaceName, FVarId, Expr)> = common
             .iter()
-            .map(|a| (format!("c{}", a.fvar.as_u64()), a.fvar, a.ty.clone()))
+            .map(|a| {
+                (
+                    clean_parser::SurfaceName::from_name(
+                        clean_kernel::Name::anon().str(format!("c{}", a.fvar.as_u64())),
+                    ),
+                    a.fvar,
+                    a.ty.clone(),
+                )
+            })
             .collect();
         let result_ty = self
             .metas
@@ -405,7 +422,7 @@ impl<'a> Unifier<'a> {
 
         // Preserve the pattern's source order. This is load-bearing for
         // dependent telescopes and the application `?h x₁ ... xₙ`.
-        let extras: Vec<(String, FVarId, Expr)> = arg_fvars
+        let extras: Vec<(clean_parser::SurfaceName, FVarId, Expr)> = arg_fvars
             .iter()
             .filter_map(|wanted| {
                 meta.locals
@@ -825,7 +842,7 @@ pub(super) fn find_scope_widening_meta(
     finder.found
 }
 
-fn collect_unassigned_metas(expr: &Expr, metas: &MetaState) -> Vec<MetaId> {
+pub(super) fn collect_unassigned_metas(expr: &Expr, metas: &MetaState) -> Vec<MetaId> {
     struct Collector<'a> {
         metas: &'a MetaState,
         found: Vec<MetaId>,

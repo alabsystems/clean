@@ -217,8 +217,9 @@ fn state_with_hp(env: Environment, target: Expr) -> ProofState {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(100),
-            name: "hp".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hp"),
             ty: target,
             value: None,
         }],

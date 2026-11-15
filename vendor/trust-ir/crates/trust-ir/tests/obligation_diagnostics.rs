@@ -28,7 +28,9 @@ fn module_with_diags() -> Module {
         ProofStatus::Failed,
         "x must be in bounds",
     ));
-    let f = m.intern_file("src/main.rs");
+    let f = m
+        .intern_file("src/main.rs")
+        .expect("Module::intern_file: test fixture");
     m.obligation_diagnostics.push(
         ObligationDiagnostic::error(ProofId::new(0), "could not prove x < len")
             .with_location(SourceSpan {
@@ -57,7 +59,9 @@ fn severity_default_is_error_and_displays() {
 #[test]
 fn resolve_span_resolves_known_files_and_rejects_dangling() {
     let mut m = Module::new("dbg");
-    let f = m.intern_file("src/main.rs");
+    let f = m
+        .intern_file("src/main.rs")
+        .expect("Module::intern_file: test fixture");
     let span = SourceSpan {
         file: f,
         line: 12,
@@ -102,7 +106,7 @@ fn render_diagnostic_is_a_compiler_style_one_liner() {
 #[test]
 fn diagnostics_binary_round_trip() {
     let m = module_with_diags();
-    let bytes = trust_ir::binary::serialize_module(&m);
+    let bytes = trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture");
     let back = trust_ir::binary::deserialize_module(&bytes).expect("binary round trip");
     assert_eq!(back.obligation_diagnostics, m.obligation_diagnostics);
 }
@@ -111,8 +115,10 @@ fn diagnostics_binary_round_trip() {
 #[test]
 fn empty_diagnostics_binary_round_trip() {
     let m = Module::new("none");
-    let back = trust_ir::binary::deserialize_module(&trust_ir::binary::serialize_module(&m))
-        .expect("round trip");
+    let back = trust_ir::binary::deserialize_module(
+        &trust_ir::binary::serialize_module(&m).expect("serialize_module: test fixture"),
+    )
+    .expect("round trip");
     assert!(back.obligation_diagnostics.is_empty());
 }
 

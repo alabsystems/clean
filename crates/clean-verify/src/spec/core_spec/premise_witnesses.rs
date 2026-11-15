@@ -33,6 +33,41 @@
 //! at any budget, so `stuck` applies"); it was simply never written down, which
 //! is exactly the gap this gate is built to surface.
 //!
+//! # The 2026-09-11 arrivals
+//!
+//! Eight predicates arrived unwitnessed with the September lanes (literal
+//! inversion, constant inference and acceptance, the schematic type-environment
+//! representation, the recursor-environment closedness field, the
+//! projection-confluence relation union, and the two universe-comparator
+//! agreement hypotheses). Every one is now CONCLUDED by a real term below:
+//!
+//! * `LiteralReturn` / `ConstantInferReturn` / `AcceptanceConstantReturn` /
+//!   `ImplConstEnvEntryRep` are the Type-valued inversion wrappers; each is
+//!   inhabited at a concrete lookup that COMPUTES — `literal_type_of_code 0`,
+//!   the production singleton `acceptance_example_tenv` (whose guarded lookup
+//!   `acceptance_example_alias_typed` already closes by `Eq.refl`), and a
+//!   one-constructor `ImplConstInfo` whose type is a sort.
+//! * `RecEnvRhsClosed` is the raw field every `RecEnvClosed` /
+//!   `RecEnvLiftClosed` carries; `rec_env_closed.rs` projected everything
+//!   DOWNSTREAM of it (`recenv_closed_raw_rhs`, ...) but never the field itself,
+//!   so nothing concluded it. The projector is registered here, and applied at
+//!   the reflected kernel environment through the checker discharge
+//!   `the_red_env_rec_closed_via_checker_b2`, so the witness is a closed term
+//!   about the real environment, not only a conditional one.
+//! * `RelationUnion` is inhabited on the left at a trivially reflexive
+//!   relation over `Nat`.
+//! * `UGeqBoundedAgree` / `UGeqSmallerAgree` are the pointwise-agreement
+//!   induction hypotheses of the universe-comparator stabilization argument.
+//!   That induction IS closed (`level_geq_core_fuel_stable`,
+//!   `level_geq_cap_fuel_eq`), but it builds each hypothesis instance inside
+//!   its own proof term, so no registered definition concluded either
+//!   predicate. The witnesses below are exactly those instances, lifted out:
+//!   two DIFFERENT fuels agree on strictly smaller pairs whenever the parent
+//!   pair fits both, and the capped comparator agrees with the raw one on
+//!   bounded pairs at every fuel. A reflexive `f = f` instance would also
+//!   satisfy the head-only gate and was deliberately not used — it says
+//!   nothing about the induction these hypotheses exist for.
+//!
 //! ZERO new axioms: every declaration is a valued definition, `DerivedProved`,
 //! with an empty axiom closure.
 
@@ -221,6 +256,27 @@ const SIMPLE: &[(&str, &str, &str, &str)] = &[
         "ExprMetaR IS INHABITED, at `mk 2^44` -- the eighteenth chain's boundary bit pattern, \
          the value both of its machine-sound witnesses run the emitted module on, where \
          has_loose_bvars flips true and loose_bvar_range reads 1.",
+    ),
+    // ── input-indexed declaration admission (declaration_input_admission.rs) ─
+    // `KernelDeclInputAdmission.mk` ASSUMES `dia_admission_at prior input`, and
+    // when it landed (1f653ee20) nothing in the spec concluded the family, so the
+    // gate refused it. One witness per `KernelDeclInput` arm: each is the
+    // extension evidence the family computes to at a fresh request.
+    (
+        "dia_admission_at_inductive_witness",
+        "dia_admission_at KEnv.empty dia_family_request",
+        "env_freshness_first_extension",
+        "dia_admission_at IS INHABITED at its `inductive_` arm: the fresh family request over \
+         the empty environment computes to `InductiveExtension KEnv.empty \
+         env_freshness_first`, which env_freshness_first_extension proves.",
+    ),
+    (
+        "dia_admission_at_const_witness",
+        "dia_admission_at env_freshness_first dia_constant_request",
+        "env_freshness_const_extension",
+        "dia_admission_at IS INHABITED at its `const_` arm: the fresh reducible constant \
+         request over env_freshness_first computes to `ConstantExtension env_freshness_first \
+         env_freshness_const_result`, which env_freshness_const_extension proves.",
     ),
 ];
 
@@ -617,6 +673,294 @@ impl Specification {
             dependencies: Some(HashSet::from([
                 "DefEqFuelAcceptsWh.mk".to_string(),
                 "def_eq_fuel_wh".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_september_2026_witnesses()
+    }
+
+    /// The eight predicates that arrived unwitnessed on 2026-09-11 (module docs).
+    fn add_september_2026_witnesses(&mut self) -> Result<(), SpecError> {
+        // ── the Type-valued inversion wrappers ──────────────────────────────
+        self.add_definition(SpecDefinition {
+            name: "literalreturn_witness".to_string(),
+            type_src: "LiteralReturn Nat.zero (literal_type_of_code Nat.zero)".to_string(),
+            value_src: Some(
+                "LiteralReturn.intro Nat.zero (literal_type_of_code Nat.zero) \
+                 (Eq.refl KExpr (literal_type_of_code Nat.zero))"
+                    .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "LiteralReturn IS INHABITED: the literal-inversion wrapper at payload code 0 ",
+                "and its own decoded type, so the returned-type equation closes by Eq.refl. ",
+                "Without it `literal_return_eq` extracts an equation from a witness nothing ",
+                "supplies. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "LiteralReturn.intro".to_string(),
+                "literal_type_of_code".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // acceptance_example_tenv is the production singleton type environment
+        // (acceptance_in.rs); its guarded lookup at Name.anonymous / [Sort 1]
+        // already computes to `some (Sort 2)` by Eq.refl in
+        // acceptance_example_alias_typed. Both constant wrappers are inhabited
+        // at exactly that lookup.
+        let example_us = "(ListType.cons Level (Level.succ Level.zero) (ListType.nil Level))";
+        let example_ty = "(KExpr.sort (Level.succ (Level.succ Level.zero)))";
+        self.add_definition(SpecDefinition {
+            name: "constantinferreturn_witness".to_string(),
+            type_src: format!(
+                "ConstantInferReturn acceptance_example_tenv Name.anonymous {example_us} {example_ty}"
+            ),
+            value_src: Some(format!(
+                "ConstantInferReturn.intro acceptance_example_tenv Name.anonymous {example_us} \
+                 {example_ty} (Eq.refl (OptionType KExpr) (OptionType.some KExpr {example_ty}))"
+            )),
+            is_axiom: false,
+            description: concat!(
+                "ConstantInferReturn IS INHABITED, at the production singleton type ",
+                "environment acceptance_example_tenv: kdecl_type_at finds Name.anonymous at ",
+                "one universe argument and returns the instantiated Sort 2, so the exact ",
+                "lookup equation the constructor demands closes by Eq.refl. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "ConstantInferReturn.intro".to_string(),
+                "acceptance_example_tenv".to_string(),
+                "kdecl_type_at".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "acceptanceconstantreturn_witness".to_string(),
+            type_src: format!(
+                "AcceptanceConstantReturn acceptance_example_tenv Name.anonymous {example_us} \
+                 {example_ty}"
+            ),
+            value_src: Some(format!(
+                "AcceptanceConstantReturn.intro acceptance_example_tenv Name.anonymous \
+                 {example_us} {example_ty} {example_ty} \
+                 (Eq.refl (OptionType KExpr) (OptionType.some KExpr {example_ty})) \
+                 (kexprUniverseEq_refl {example_ty})"
+            )),
+            is_axiom: false,
+            description: concat!(
+                "AcceptanceConstantReturn IS INHABITED, at the same production lookup as ",
+                "constantinferreturn_witness, with the semantic universe equality discharged ",
+                "reflexively (kexprUniverseEq_refl). Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "AcceptanceConstantReturn.intro".to_string(),
+                "acceptance_example_tenv".to_string(),
+                "kdecl_type_at".to_string(),
+                "kexprUniverseEq_refl".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        let example_ci = "(ImplConstInfo.mk (ListType.nil Name) (ImplExpr.sort Level.zero) \
+                          Bool.false Bool.false)";
+        self.add_definition(SpecDefinition {
+            name: "implconstenventryrep_witness".to_string(),
+            type_src: format!(
+                "ImplConstEnvEntryRep {example_ci} \
+                 (OptionType.some KConstSig (impl_schematic_signature {example_ci}))"
+            ),
+            value_src: Some(format!(
+                "ImplConstEnvEntryRep.mk {example_ci} (ImplNoFVar.sort Level.zero)"
+            )),
+            is_axiom: false,
+            description: concat!(
+                "ImplConstEnvEntryRep IS INHABITED: a constant record with no universe ",
+                "parameters whose implementation-model type is a sort — the smallest type ",
+                "that structurally carries no FVar — represented by its own schematic ",
+                "signature. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "ImplConstEnvEntryRep.mk".to_string(),
+                "ImplNoFVar.sort".to_string(),
+                "impl_schematic_signature".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // ── the recursor-environment closedness field ───────────────────────
+        self.add_definition(SpecDefinition {
+            name: "recenvrhsclosed_witness".to_string(),
+            type_src: "forall (env : RecEnv), RecEnvClosed env -> RecEnvRhsClosed env".to_string(),
+            value_src: Some(
+                "fun (env : RecEnv) (w : RecEnvClosed env) => \
+                 RecEnvClosed.rec env (fun (_ : RecEnvClosed env) => RecEnvRhsClosed env) \
+                 (fun (hc : RecEnvRhsClosed env) => hc) w"
+                    .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "RecEnvRhsClosed is CONCLUDED: the raw schematic-closedness field is what ",
+                "RecEnvClosed.mk carries, and rec_env_closed.rs projected every consequence ",
+                "of it (recenv_closed_raw_rhs, ...) without ever projecting the field itself, ",
+                "so nothing in the tree concluded the predicate its own constructor assumes. ",
+                "This is that projector. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "RecEnvClosed.rec".to_string(),
+                "RecEnvRhsClosed".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "recenvrhsclosed_the_red_env_witness".to_string(),
+            type_src: "RecEnvRhsClosed (red_rec the_red_env)".to_string(),
+            value_src: Some(
+                "recenvrhsclosed_witness (red_rec the_red_env) \
+                 the_red_env_rec_closed_via_checker_b2"
+                    .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "RecEnvRhsClosed IS INHABITED at the reflected kernel environment: the ",
+                "projector above applied to the checker discharge ",
+                "the_red_env_rec_closed_via_checker_b2, so the field is a closed term about ",
+                "the real recursor environment and not only a conditional one. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "recenvrhsclosed_witness".to_string(),
+                "the_red_env_rec_closed_via_checker_b2".to_string(),
+                "the_red_env".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // ── projection confluence ───────────────────────────────────────────
+        let nat_rel = "(fun (x : Nat) (y : Nat) => Nat)";
+        self.add_definition(SpecDefinition {
+            name: "relationunion_witness".to_string(),
+            type_src: format!("RelationUnion Nat {nat_rel} {nat_rel} Nat.zero Nat.zero"),
+            value_src: Some(format!(
+                "RelationUnion.left Nat {nat_rel} {nat_rel} Nat.zero Nat.zero Nat.zero"
+            )),
+            is_axiom: false,
+            description: concat!(
+                "RelationUnion IS INHABITED, on the left, at the relation over Nat that holds ",
+                "everywhere; the union is the shape relation_union_diamond and ",
+                "cd_projection_union_to_cdp case-split on. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from(["RelationUnion.left".to_string()])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        // ── the universe-comparator agreement hypotheses ────────────────────
+        self.add_definition(SpecDefinition {
+            name: "ugeqboundedagree_witness".to_string(),
+            type_src: "forall (cap : Nat) (fuel : Nat), \
+                       UGeqBoundedAgree cap (level_geq_cap_fuel cap fuel) (level_geq_core_fuel fuel)"
+                .to_string(),
+            value_src: Some(
+                "fun (cap : Nat) (fuel : Nat) => level_geq_cap_fuel_eq cap fuel".to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "UGeqBoundedAgree IS CONCLUDED, at the instance the capped-comparator induction ",
+                "actually produces: at every cap and every fuel the capped comparator agrees ",
+                "with the raw one on every bounded pair. This is level_geq_cap_fuel_eq's own ",
+                "conclusion, read back as the hypothesis ugeq_core_step_bounded_congr consumes ",
+                "in the successor case — the two comparators are different functions, not a ",
+                "comparator against itself. Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "UGeqBoundedAgree".to_string(),
+                "level_geq_cap_fuel_eq".to_string(),
+                "level_geq_cap_fuel".to_string(),
+                "level_geq_core_fuel".to_string(),
+            ])),
+            axiom_deps: HashSet::new(),
+        })?;
+
+        self.add_definition(SpecDefinition {
+            name: "ugeqsmalleragree_witness".to_string(),
+            type_src: "forall (a : Level) (b : Level) (f : Nat) (g : Nat), \
+                       Le (level_geq_bound a b) (Nat.succ f) -> \
+                       Le (level_geq_bound a b) (Nat.succ g) -> \
+                       UGeqSmallerAgree a b (level_geq_core_fuel f) (level_geq_core_fuel g)"
+                .to_string(),
+            value_src: Some(
+                "fun (a : Level) (b : Level) (f : Nat) (g : Nat) \
+                 (hf : Le (level_geq_bound a b) (Nat.succ f)) \
+                 (hg : Le (level_geq_bound a b) (Nat.succ g)) \
+                 (x : Level) (y : Level) \
+                 (small : Le (Nat.succ (level_geq_bound x y)) (level_geq_bound a b)) => \
+                 level_geq_core_fuel_stable f g x y \
+                 (ugeq_subfuel_bound a b x y f small hf) \
+                 (ugeq_subfuel_bound a b x y g small hg)"
+                    .to_string(),
+            ),
+            is_axiom: false,
+            description: concat!(
+                "UGeqSmallerAgree IS CONCLUDED, at the instance the raw-comparator fuel ",
+                "induction actually produces: two DIFFERENT fuels f and g agree on every ",
+                "strictly smaller pair whenever the parent pair fits in succ f and succ g. ",
+                "It is the hypothesis level_geq_core_fuel_stable hands to ugeq_core_step_congr ",
+                "in its successor/successor case, lifted out of that proof term and closed by ",
+                "the proved stabilization itself; not a comparator against itself. ",
+                "Zero axiom_deps."
+            )
+            .to_string(),
+            category: AxiomCategory::DerivedLemma,
+            proof_status: ProofStatus::DerivedProved,
+            elaborated_type: None,
+            elaborated_value: None,
+            dependencies: Some(HashSet::from([
+                "UGeqSmallerAgree".to_string(),
+                "level_geq_core_fuel_stable".to_string(),
+                "ugeq_subfuel_bound".to_string(),
+                "level_geq_core_fuel".to_string(),
+                "level_geq_bound".to_string(),
             ])),
             axiom_deps: HashSet::new(),
         })?;

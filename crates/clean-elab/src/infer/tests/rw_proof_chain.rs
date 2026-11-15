@@ -106,8 +106,8 @@ fn test_elab_by_tactic_rw_theorem_param_hypothesis() {
     let nat = Expr::const_(Name::from_string("Nat"), vec![]);
 
     let mut ctx = ElabCtx::new(&env);
-    let x_fvar = ctx.push_local("x".to_string(), nat.clone());
-    let y_fvar = ctx.push_local("y".to_string(), nat.clone());
+    let x_fvar = ctx.push_local(SurfaceName::generated_path("x"), nat.clone());
+    let y_fvar = ctx.push_local(SurfaceName::generated_path("y"), nat.clone());
     let x_expr = Expr::fvar(x_fvar);
     let y_expr = Expr::fvar(y_fvar);
 
@@ -117,7 +117,7 @@ fn test_elab_by_tactic_rw_theorem_param_hypothesis() {
         Expr::app(Expr::app(eq_const.clone(), nat.clone()), x_expr.clone()),
         y_expr.clone(),
     );
-    ctx.push_local("h".to_string(), eq_xy);
+    ctx.push_local(SurfaceName::generated_path("h"), eq_xy);
 
     // Target: Eq Nat (Nat.add x 0) (Nat.add y 0)
     let zero = Expr::const_(Name::from_string("Nat.zero"), vec![]);
@@ -214,15 +214,21 @@ fn setup_env_add_zero_lemma() -> (Environment, Expr) {
     (env, target)
 }
 
-/// Regression for #2624: `rw [Nat.add_zero] at h` must resolve the GLOBAL
-/// lemma `Nat.add_zero` (not look it up as a local hypothesis) and rewrite the
-/// hypothesis `h : Nat.add x 0 = x` into `x = x`, then `exact h` closes the
-/// `x = x` goal. Mirrors the at-goal env-lemma path.
+/// Regression for #2624: `rewrite [Nat.add_zero] at h` must resolve the
+/// GLOBAL lemma `Nat.add_zero` (not look it up as a local hypothesis) and
+/// rewrite the hypothesis `h : Nat.add x 0 = x` into `x = x`, then `exact h`
+/// closes the `x = x` goal. Mirrors the at-goal env-lemma path.
+///
+/// `rewrite`, not `rw`: Lean's `rw` is `rewrite …; try (with_reducible rfl)`,
+/// whose `rfl` closes the reflexive main goal `x = x`, so pinned Lean 4.8.0
+/// refuses `rw [Nat.add_zero] at h; exact h` with "no goals to be solved"
+/// (integ/r5 fix 2026-10-16; `rewrite_rw_clear_lean48.rs` n1) and accepts
+/// this script. The rule resolution under test is the same for both.
 #[test]
 fn test_elab_by_tactic_rw_global_lemma_at_hyp() {
     let (env, target) = setup_env_add_zero_lemma();
 
-    let surface = parse_expr("by intro h; rw [Nat.add_zero] at h; exact h")
+    let surface = parse_expr("by intro h; rewrite [Nat.add_zero] at h; exact h")
         .expect("by-tactic expression should parse");
     let SurfaceExpr::ByTactic(_, tactics) = surface else {
         panic!("expected a ByTactic surface expression");

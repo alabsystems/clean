@@ -1,0 +1,3 @@
+(assume t0 (and (bvult bridge_dom_bce_idx (_ bv64 64)) (not (= (= (bvult bridge_dom_bce_idx (_ bv1024 64)) true) true))))
+(step t1 (cl (not (and (bvult bridge_dom_bce_idx (_ bv64 64)) (not (= (= (bvult bridge_dom_bce_idx (_ bv1024 64)) true) true))))) :rule hole)
+(step t2 (cl) :rule th_resolution :premises (t1 t0))

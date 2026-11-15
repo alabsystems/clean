@@ -147,6 +147,7 @@ Usage:
     scripts/crystal_freshness_scope.py --strict        # AMBER fails too
     scripts/crystal_freshness_scope.py --explain       # per-body detail
     scripts/crystal_freshness_scope.py --emit          # (re)write the scope file
+    scripts/crystal_freshness_scope.py --emit --check  # is the committed file derivable?
     scripts/crystal_freshness_scope.py --json OUT
 
 Exit codes: 0 fresh or amber, 1 CONTENT-SCOPE drift (or amber under --strict),
@@ -173,7 +174,25 @@ SCHEMA = "clean.crystal.freshness_scope/v2"
 
 # The record whose scope this file binds. Dated records are never rewritten;
 # this is a separate, derivable statement ABOUT the newest one.
-RECORD = "data/crystal_chain_revalidation_2026-08-21_lane18.json"
+#
+# 2026-09-20 to 2026-10-07 it was an AT-HEAD record (`chain_revalidation_at_head/v1`,
+# `--at-head`: NUMBERING-ONLY bodies against fixtures cut earlier, producer proved
+# by a byte-for-byte control) -- the record kind that clears a CONTENT-SCOPE red
+# without a rebaseline, which `crystal_a1_lineage/freshness_scope.rs` still admits.
+# Since 2026-10-07 it is a STRICT v3 record again: `strict_monads` went STRUCTURAL
+# (field 81 -> 83, two new `Environment` fields), was re-derived in 047ebd051, and
+# the source-bound rebaseline at that rev re-cut all 21 fixtures from a live dump
+# (trustc 321aaeda7), so the record covers the very rev it was measured at.
+# Since 2026-10-18 it is an AT-HEAD record again, measured at bba5da779 (kernel
+# source byte-identical to origin/main's): the committed measurement driver moved
+# in 44b8ecded, the day after the strict record, and the newest dump must be taken
+# by the driver committed now. Its control reproduced the 047ebd051 rebaseline's
+# three artifacts byte for byte with that driver; the fixtures stay cut at 047ebd051.
+# Since 2026-10-28 it is the at-head record measured at 1633a8e20: c1365ee61 added
+# `cumulative_ever` to `pub struct Environment`, which strict_monads pins, so the
+# 10-18 record's digest no longer matched; a fresh dump with the same compiler and
+# driver found all 19 chains numbering-only or identical, zero structural.
+RECORD = "data/crystal_chain_revalidation_2026-11-14_athead_6e2c1dab4.json"
 
 # chain stem -> (defining source file, a pattern that must occur in it, the
 # ITEMS pinned for that body, why those items).
@@ -793,8 +812,25 @@ def call_census(record_rel: str) -> tuple[int, list[str]]:
     return zero, called
 
 
+class ScopeUnusable(Exception):
+    """The scope cannot be (re-)derived; the message says why."""
+
+
+def is_commit(rev: str) -> bool:
+    """Is `rev` a commit of this repository?"""
+    probe = subprocess.run(
+        ["git", "-C", str(REPO), "cat-file", "-e", rev + "^{commit}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return probe.returncode == 0
+
+
 def tree_at(rev: str) -> Path:
     """Extract `crates/clean-kernel` at `rev` into a temp dir and return it."""
+    if not is_commit(rev):
+        raise ScopeUnusable("%s is not a commit in this repository" % rev)
     out = Path(tempfile.mkdtemp(prefix="crystal-scope-")) / "t"
     out.mkdir()
     archive = subprocess.run(
@@ -828,15 +864,29 @@ def moved_kernel_files(rev: str) -> list[str] | None:
     return sorted(line for line in done.stdout.splitlines() if line.strip())
 
 
-def emit(rev: str) -> int:
-    root = tree_at(rev)
+def emit(rev: str, read_at: str, expect_digest: str | None, check: bool) -> int:
+    """Write (or, with `check`, compare against) the scope file for `rev`.
+
+    The kernel tree is READ at `read_at`: `rev` itself when it is a commit
+    here, otherwise a pushed witness commit. Either way its kernel digest must
+    be `expect_digest` -- the digest the record says it measured -- or nothing
+    is written: a witness is only as good as that equality.
+    """
+    root = tree_at(read_at)
     try:
         problems = check_mapping(root)
         if problems:
             for p in problems:
-                print("MAPPING UNUSABLE AT %s: %s" % (rev, p), file=sys.stderr)
+                print("MAPPING UNUSABLE AT %s: %s" % (read_at, p), file=sys.stderr)
             return 2
         agg, per = kernel_digest(root)
+        if expect_digest is not None and agg != expect_digest:
+            print(
+                "SCOPE UNUSABLE: the kernel at %s digests to %s, not the record's %s; "
+                "that tree is not the one the record measured." % (read_at, agg, expect_digest),
+                file=sys.stderr,
+            )
+            return 2
         bodies: dict[str, dict[str, object]] = {}
         fell_back: list[str] = []
         for stem, (rel, pattern, selectors, why) in sorted(BODY_SOURCES.items()):
@@ -863,7 +913,10 @@ def emit(rev: str) -> int:
             "the record is its DATED answer; this pins the tree that answer covers, so a "
             "pre-push gate and a suite row can decide -- with no Trust compiler and no "
             "dump -- whether it still covers the tree in front of them. Derivable: "
-            "`scripts/crystal_freshness_scope.py --emit`."
+            "`scripts/crystal_freshness_scope.py --emit`, checked by `--emit --check`. "
+            "When the record's rev is not a commit here, the kernel tree is read at "
+            "`kernel_tree_read_at`, a pushed commit whose kernel source digests to the "
+            "record's clean_kernel_src_sha256 (named once with --witness)."
         ),
         "record": RECORD,
         "covered_clean_rev": rev,
@@ -898,7 +951,21 @@ def emit(rev: str) -> int:
             "record, point `record` at it, then --emit."
         ),
     }
-    SCOPE_FILE.write_text(json.dumps(doc, indent=1) + "\n", encoding="utf-8")
+    if read_at != rev:
+        doc["kernel_tree_read_at"] = read_at
+    text = json.dumps(doc, indent=1) + "\n"
+    if check:
+        committed = SCOPE_FILE.read_text(encoding="utf-8") if SCOPE_FILE.is_file() else ""
+        if committed == text:
+            print("SCOPE_EMIT=reproduced %s (kernel read at %s)" % (SCOPE_FILE.name, read_at))
+            return 0
+        print(
+            "SCOPE_EMIT=differs: re-deriving %s at %s does not reproduce the committed "
+            "file; it is not derivable as committed." % (SCOPE_FILE.name, read_at),
+            file=sys.stderr,
+        )
+        return 1
+    SCOPE_FILE.write_text(text, encoding="utf-8")
     print("wrote %s" % SCOPE_FILE)
     print("  covered_clean_rev        %s" % rev)
     print("  clean_kernel_src_sha256  %s" % agg)
@@ -997,6 +1064,18 @@ def main() -> int:
         help="with --emit, the clean rev to pin (default: the record's clean_worktree_rev)",
     )
     ap.add_argument(
+        "--witness",
+        default=None,
+        help="with --emit, a pushed commit to READ the kernel tree at when the covered "
+        "rev is not a commit here; its kernel digest must equal the record's",
+    )
+    ap.add_argument(
+        "--check",
+        action="store_true",
+        help="with --emit, compare the re-derived scope file with the committed one "
+        "instead of writing it",
+    )
+    ap.add_argument(
         "--strict", action="store_true", help="NUMBERING-SCOPE drift fails too"
     )
     ap.add_argument(
@@ -1036,7 +1115,42 @@ def main() -> int:
                 % (rev, RECORD, pinned, FIXTURE_SCRIPT),
                 file=sys.stderr,
             )
-        return emit(rev)
+        read_at = rev
+        if not is_commit(rev):
+            if rev != pinned:
+                print(
+                    "SCOPE UNUSABLE: --at %s is not a commit in this repository, and only "
+                    "the record's own rev has a measured kernel digest a witness could be "
+                    "checked against." % rev,
+                    file=sys.stderr,
+                )
+                return 2
+            read_at = args.witness
+            if read_at is None and SCOPE_FILE.is_file():
+                committed = json.loads(SCOPE_FILE.read_text(encoding="utf-8"))
+                if committed.get("covered_clean_rev") == rev:
+                    read_at = committed.get("kernel_tree_read_at")
+            if not read_at:
+                print(
+                    "SCOPE UNUSABLE: %s is not a commit in this repository, so its kernel "
+                    "tree cannot be read. Name a pushed commit whose kernel source digests "
+                    "to the record's clean_kernel_src_sha256: --witness <rev>." % rev,
+                    file=sys.stderr,
+                )
+                return 2
+        elif args.witness is not None:
+            print(
+                "SCOPE UNUSABLE: --witness %s given, but %s is a commit here; the tree is "
+                "read at the rev itself." % (args.witness, rev),
+                file=sys.stderr,
+            )
+            return 2
+        expect = provenance.get("clean_kernel_src_sha256") if rev == pinned else None
+        try:
+            return emit(rev, read_at, expect, args.check)
+        except ScopeUnusable as exc:
+            print("SCOPE UNUSABLE: %s" % exc, file=sys.stderr)
+            return 2
 
     if not SCOPE_FILE.is_file():
         print("SCOPE UNUSABLE: %s is missing." % SCOPE_FILE, file=sys.stderr)

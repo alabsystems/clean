@@ -1,0 +1,58 @@
+{
+  "sources": [
+    {
+      "module": "MiniRust",
+      "path": "../semr/MiniRust.lean"
+    },
+    {
+      "module": "TrustSemAllocationSearch",
+      "path": "TrustSemAllocationSearch.lean"
+    }
+  ],
+  "module": "TrustSemAllocationSearch",
+  "roots": [
+    "TrustSem.AllocationSearch.original_overlap_iff",
+    "TrustSem.AllocationSearch.overlapping_address_before_reservation",
+    "TrustSem.AllocationSearch.source_next_is_reservation_end",
+    "TrustSem.AllocationSearch.skipped_addresses_still_overlap",
+    "TrustSem.AllocationSearch.passed_reservation_never_overlaps",
+    "TrustSem.AllocationSearch.alignment_rounding_increases",
+    "TrustSem.AllocationSearch.alignment_rounding_is_aligned",
+    "TrustSem.AllocationSearch.alignment_rounding_le_every_aligned",
+    "TrustSem.AllocationSearch.original_remainder_on_search_domain",
+    "TrustSem.AllocationSearch.original_scalar_rounding",
+    "TrustSem.AllocationSearch.skipped_aligned_addresses_still_overlap",
+    "TrustSem.AllocationSearch.selected_allocation_cleared",
+    "TrustSem.AllocationSearch.original_size_is_data_length",
+    "TrustSem.AllocationSearch.original_data_length_nonnegative",
+    "TrustSem.AllocationSearch.remaining_monotone",
+    "TrustSem.AllocationSearch.remaining_le_length",
+    "TrustSem.AllocationSearch.passing_member_decreases_remaining",
+    "TrustSem.AllocationSearch.actual_selected_skip_decreases_remaining",
+    "TrustSem.AllocationSearch.skip_count_bounded_by_allocation_population",
+    "TrustSem.AllocationSearch.full_population_skips_leave_zero_rank",
+    "TrustSem.AllocationSearch.zero_rank_clears_original_overlaps",
+    "TrustSem.AllocationSearch.initial_alignment_is_lower_bound",
+    "TrustSem.AllocationSearch.skip_preserves_every_fitting_address",
+    "TrustSem.AllocationSearch.skip_step_decreases_rank",
+    "TrustSem.AllocationSearch.trace_preserves_fitting_lower_bound",
+    "TrustSem.AllocationSearch.trace_remains_positive_and_aligned",
+    "TrustSem.AllocationSearch.completed_trace_fits_if_any_address_fits",
+    "TrustSem.AllocationSearch.actual_selected_cleared",
+    "TrustSem.AllocationSearch.zero_reservation_ahead_overlaps",
+    "TrustSem.AllocationSearch.unfixed_skip_lands_on_reserved_base",
+    "TrustSem.AllocationSearch.unfixed_cleared_goal_false"
+  ],
+  "positive": [
+    {
+      "proof": "TrustSem.AllocationSearch.actual_selected_cleared",
+      "goal": "TrustSem.AllocationSearch.ClearedGoal"
+    }
+  ],
+  "negative": [
+    {
+      "proof": "TrustSem.AllocationSearch.actual_selected_cleared",
+      "goal": "TrustSem.AllocationSearch.UnfixedClearedGoal"
+    }
+  ]
+}

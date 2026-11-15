@@ -10,7 +10,7 @@
   "linkage": "external",
   "calling_conv": "rustcc",
   "header_note": "Absence of a linkage keyword IS `external`; the `rustcc` IS the calling convention. Both are printed by `Display for Function` only when they are not the default. Read the notes in ir_h2.tags.json.",
-  "functy": 381,
+  "functy": 363,
   "functy_note": "Pinned VERBATIM and re-pinned under review; read the notes in ir_h2.tags.json. All four float-tranche closures share this index -- one signature `(ptr, f64, f64) -> f64`, one crate table entry -- so a drift here moves four chains at once and a drift in ONE of the four is not a re-interning.",
   "producer": "trust",
   "producer_note": "The one annotation-clause kind whose CONTENT is compared. Read the notes in ir_h2.tags.json.",

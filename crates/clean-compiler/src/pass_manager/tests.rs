@@ -239,8 +239,9 @@ fn test_pass_manager_clear() {
 fn test_default_pipeline() {
     let manager = PassManager::default_pipeline();
 
-    // Should have lambda_lifting + to_mono + optimize + rc passes
-    assert_eq!(manager.pass_count(), 4);
+    // The Trust IR backend also lowers comparison aliases before RC.
+    let comparison_passes = usize::from(cfg!(feature = "trust-ir-backend"));
+    assert_eq!(manager.pass_count(), 5 + comparison_passes);
 
     // Verify base phase passes
     let base_passes = manager.passes_for_phase(Phase::Base);
@@ -254,17 +255,54 @@ fn test_default_pipeline() {
 
     // Verify mono phase passes
     let mono_passes = manager.passes_for_phase(Phase::Mono);
-    assert_eq!(mono_passes.len(), 2);
+    assert_eq!(mono_passes.len(), 3 + comparison_passes);
     assert_eq!(mono_passes[0].name.to_string(), "optimize");
     assert_eq!(mono_passes[0].phase, Phase::Mono);
     assert_eq!(mono_passes[0].phase_out, Phase::Mono);
-    assert_eq!(mono_passes[1].name.to_string(), "rc");
+    // WS6.4: known-instance resolution runs AFTER optimize (CSE must never
+    // see the fold's typed UIntW literals) and before RC.
+    assert_eq!(mono_passes[1].name.to_string(), "resolve_instances");
     assert_eq!(mono_passes[1].phase, Phase::Mono);
-    assert_eq!(mono_passes[1].phase_out, Phase::Impure);
+    assert_eq!(mono_passes[1].phase_out, Phase::Mono);
+    #[cfg(feature = "trust-ir-backend")]
+    {
+        assert_eq!(mono_passes[2].name.to_string(), "uint_comparison_aliases");
+        assert_eq!(mono_passes[2].phase, Phase::Mono);
+        assert_eq!(mono_passes[2].phase_out, Phase::Mono);
+    }
+    let rc_index = 2 + comparison_passes;
+    assert_eq!(mono_passes[rc_index].name.to_string(), "rc");
+    assert_eq!(mono_passes[rc_index].phase, Phase::Mono);
+    assert_eq!(mono_passes[rc_index].phase_out, Phase::Impure);
 
     manager
         .validate()
         .expect("default pipeline should satisfy phase validation");
+}
+
+/// WS6.4: `-O0` (`OptConfig::minimal`, value simplification off) does not
+/// register known-instance resolution, so the dynamic class-method path the
+/// WS6.1/WS6.2 fixtures pin stays visible there.
+#[test]
+fn test_minimal_pipeline_has_no_instance_resolution() {
+    let manager = PassManager::default_pipeline_with_config(
+        &crate::opt::OptConfig::minimal(),
+        &crate::rc::RCConfig::minimal(),
+    );
+    let mono: Vec<String> = manager
+        .passes_for_phase(Phase::Mono)
+        .iter()
+        .map(|p| p.name.to_string())
+        .collect();
+    let mut expected = vec!["optimize"];
+    if cfg!(feature = "trust-ir-backend") {
+        expected.push("uint_comparison_aliases");
+    }
+    expected.push("rc");
+    assert_eq!(mono, expected);
+    manager
+        .validate()
+        .expect("minimal pipeline phases remain valid");
 }
 
 #[test]

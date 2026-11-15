@@ -1,0 +1,133 @@
+TRUST-CALLEE-SIDECAR summary crate=clean_kernel filter=LevelArc as std::ops::Deref roots=2 members=3 terminals=1 escaping=0 closed=true lowering=ok
+  clean rev faef65ed7a080066b5e56655ed83d2472695056c
+  control e95438eb8bc33036 sidecar e95438eb8bc33036 clean_kernel.trust-ir.txt
+  control 5c56a614a54f9838 sidecar b52b6114a3bc7132 clean_kernel.coverage.json
+  flips control=288 sidecar=288
+bodies 13370 vs 13370; changed 104; fields {'differentials': 104}
+     98 interpreter: not-run -> not-run
+      4 seam: not-run -> not-run
+      1 derived_mir: agreed -> agreed
+      1 interpreter: not-run -> agreed
+totals equal: True
+only in control: 0; only in subject: 0
+      call <alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17> -> <alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6> : member
+  member[2] <alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6> kind=Item mir_blocks=1 extracted_blocks=1
+  panic_terminals=['core::option::expect_failed']
+  escaping=[]
+  GEP in @core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>: %7 = gep inbounds i8, ptr %0, %6  [offset=0]
+  GEP in @<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>: %6 = gep inbounds i8, ptr %4, %5  [offset=16]
+  LOAD in @core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>: %2 = load enum.1, ptr %0  ; #proof: valid_borrow
+  LOAD in @core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>: %14 = load enum.0, ptr %1
+  LOAD in @<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>: %1 = load struct.3, ptr %0  ; #proof: valid_borrow
+  SIDECAR TYPE ROWS mentioning Option/Arc/Level/NonNull/str:
+    struct @core::ptr::non_null::NonNull { ptr } size=8 align=8 repr=transparent id=0
+    struct @core::marker::PhantomData {  } size=0 align=1 id=1
+    struct @alloc::alloc::Global {  } size=0 align=1 id=2
+    struct @alloc::sync::Arc { struct.0, struct.1, struct.2 } size=8 align=8 id=3
+    struct @datatype::clean_kernel::level::Level {  } id=4
+    struct @core::sync::atomic::private::Align8 { usize } size=8 align=8 repr=c id=5
+    struct @core::cell::UnsafeCell { struct.5 } size=8 align=8 repr=transparent id=6
+    struct @core::sync::atomic::Atomic { struct.6 } size=8 align=8 repr=c id=7
+    struct @alloc::sync::ArcInner { struct.7, struct.7, struct.4 } size=56 align=8 repr=c id=8
+    functy.0 = (enum.0, fatptr<str>) -> (ptr)
+  CRATE-MODULE TYPE ROWS (level::/Option/Arc), first 12:
+    struct @std::marker::PhantomData<smallvec::alloc::sync::ArcInner<name::Name>> {  } size=0 align=1 id=1
+    struct @std::ptr::NonNull<smallvec::alloc::sync::ArcInner<name::Name>> { ptr } size=8 align=8 repr=transparent id=0
+    struct @std::sync::Arc<name::Name> { struct.0, struct.1, struct.2 } size=8 align=8 id=3
+    struct @std::marker::PhantomData<smallvec::alloc::sync::ArcInner<str>> {  } size=0 align=1 id=5
+    struct @std::ptr::NonNull<smallvec::alloc::sync::ArcInner<str>> { fatptr<container_len> } size=16 align=8 repr=transparent id=4
+    struct @std::sync::Arc<str> { struct.4, struct.5, struct.2 } size=16 align=8 id=6
+    struct @std::marker::PhantomData<smallvec::alloc::sync::ArcInner<level::Level>> {  } size=0 align=1 id=34
+    struct @std::ptr::NonNull<smallvec::alloc::sync::ArcInner<level::Level>> { ptr } size=8 align=8 repr=transparent id=33
+    struct @std::sync::Arc<level::Level> { struct.33, struct.34, struct.2 } size=8 align=8 id=35
+    struct @level::LevelArc { enum.5 } size=8 align=8 id=36
+    struct @std::ptr::NonNull<smallvec::alloc::sync::ArcInner<expr::Expr>> { ptr } size=8 align=8 repr=transparent id=45
+    struct @std::marker::PhantomData<smallvec::alloc::sync::ArcInner<expr::Expr>> {  } size=0 align=1 id=46
+  crate deref calls func.4938 = '!trust_bodyless_instance::std::option::Option::<T>::as_deref'... -> manifest sidecar id 1
+  crate deref calls func.4939 = '!trust_bodyless_instance::std::option::Option::<T>::expect::'... -> manifest sidecar id 0
+  crate-module deref body:
+    rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.22) {
+        ; #producer: trust
+        ; #names: %0="self"
+    bb0(%0: ptr):
+        %1 = call @func.4938(%0)  ; #loc: 204 60 13
+        %2 = global_addr @global.1055  ; #loc: 204 61 20
+        %3 = const u64 34  ; #loc: 204 61 20
+        %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 204 61 20
+        %5 = call @func.4939(%1, %4)  ; #loc: 204 61 13
+        ret %5  ; #loc: 204 62 5
+=== SIDECAR TEXT (members) ===
+fn @core::option::Option::<&clean_kernel::level::Level>::expect::<__trust_args@a8727e115d13c4cf156f1ed67b0f185a>(functy.0) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: enum.0, %1: fatptr<str>):
+    %2 = extractfield u8 %0, 0
+    %3 = zext u8 %2 to isize
+    switch %3 [ 0: bb2 1: bb3 default: bb1 ]
+bb1:
+    unreachable
+bb2:
+    %4 = const bool false
+    assert %4  ; #proof: no_panic
+    unreachable
+bb3:
+    %5 = extractfield ptr %0, 1
+    %6 = copy ptr %5
+    ret %6
+}
+fn @core::option::Option::<alloc::sync::Arc<clean_kernel::level::Level>>::as_deref::<__trust_args@70cdfda50ac8f275dc812a3df6e87a17>(functy.1) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: ptr):
+    %1 = alloca enum.0
+    %2 = load enum.1, ptr %0  ; #proof: valid_borrow
+    %3 = extractfield u8 %2, 0
+    %4 = zext u8 %3 to isize
+    switch %4 [ 0: bb2 1: bb3 default: bb1 ]
+bb1:
+    unreachable
+bb2:
+    %5 = const enum.0 { 0 }
+    store enum.0 %5, ptr %1
+    br bb4
+bb3:
+    %6 = const i64 0
+    %7 = gep inbounds i8, ptr %0, %6
+    %8 = borrow %7  ; #proof: shared_borrow
+    %9 = const enum.0 { 1, 0 }
+    %10 = insertfield enum.0 %9, 1, %8
+    %11 = extractfield ptr %10, 1
+    %12 = copy ptr %11
+    %13 = call @func.2(%12)
+    br bb5
+bb4:
+    %14 = load enum.0, ptr %1
+    ret %14
+bb5:
+    %15 = const enum.0 { 1, 0 }
+    %16 = insertfield enum.0 %15, 1, %13
+    store enum.0 %16, ptr %1
+    br bb4
+}
+fn @<alloc::sync::Arc<clean_kernel::level::Level> as core::ops::deref::Deref>::deref::<__trust_args@ded6b36b6bb6d04d44fb2792b0a95cf6>(functy.2) {
+    ; #producer: trust-ir
+    ; #proof: pure
+bb0(%0: ptr):
+    %1 = load struct.3, ptr %0  ; #proof: valid_borrow
+    %2 = extractfield struct.0 %1, 0
+    %3 = copy struct.0 %2
+    %4 = extractfield ptr %3, 0
+    %5 = const i64 16
+    %6 = gep inbounds i8, ptr %4, %5
+    %7 = borrow %6  ; #proof: shared_borrow
+    ret %7
+}
+=== VERDICTS ===
+GREEN R1 closed        closed=True escaping=0
+GREEN R2 members       3 members; designated present={'as_deref': True, 'Deref>::deref': True, '::expect': True}
+GREEN R3 havoc         undef values in members: 0
+GREEN R4 gep-spelling  2 geps, 0 not byte-form-const: []
+AMBER R5 load-types    load types in bundle: ['enum.0', 'enum.1', 'struct.3'] (crux: ptr vs struct/enum at the Arc field cell)
+AMBER R6 first-class   10 rows, opaque=3
+GREEN R7 name-link     joined via manifest concrete keys: linked=2 unlinked=0
+CYCLE_DONE Wed Sep  9 19:38:18 PDT 2026

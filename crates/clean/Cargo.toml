@@ -43,15 +43,27 @@ rayon.workspace = true
 
 # Thin binary wrapper deps
 clean-cli.workspace = true
-tokio.workspace = true
 
 # Optional global allocator (Track B1). Pulled in only with `--features mimalloc`.
 mimalloc = { workspace = true, optional = true }
 
+# Native-only: tokio's full feature set does not build on wasm; the wasm
+# binary drives the CLI future on a minimal single-threaded executor instead.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { workspace = true, features = ["full"] }
+
 [dev-dependencies]
+serde_json.workspace = true
 tempfile.workspace = true
 criterion.workspace = true
 blake3.workspace = true
+# tests/trust_ir_backend_packaging.rs (two-language roadmap WS6.13): the
+# packaging smoke decodes and validates what the shipped binary's
+# `--emit trustir-bin` wrote, through `clean_compiler::emit_trust_ir`
+# (already in this binary's graph via clean-cli; a dev edge adds no compile).
+# Used only under the trust-ir backend feature above, which reaches
+# clean-compiler through clean-cli's forward.
+clean-compiler.workspace = true
 
 [[bench]]
 name = "pipeline_bench"
@@ -60,3 +72,4 @@ harness = false
 [[bench]]
 name = "e2e_bench"
 harness = false
+

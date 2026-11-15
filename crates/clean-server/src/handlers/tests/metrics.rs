@@ -288,6 +288,7 @@ async fn test_handler_metrics_integration_get_type() {
     // Call get_type handler
     let params = GetTypeParams {
         expr: "Type".to_string(),
+        timeout_ms: None,
     };
     let _response = handle_get_type(&state, RequestId::Number(1), params).await;
 
@@ -397,6 +398,7 @@ async fn test_handler_metrics_visible_in_get_metrics() {
 
     let get_type_params = GetTypeParams {
         expr: "Prop".to_string(),
+        timeout_ms: None,
     };
     let get_type_response = handle_get_type(&state, RequestId::Number(2), get_type_params).await;
     assert!(
@@ -473,6 +475,7 @@ async fn test_get_cache_metrics_records_from_type_checker() {
 
     let params = GetTypeParams {
         expr: "fun (A : Type) (x : A) => x".to_string(),
+        timeout_ms: None,
     };
     let get_type_response = handle_get_type(&state, RequestId::Number(1), params).await;
     assert!(

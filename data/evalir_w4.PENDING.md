@@ -81,7 +81,7 @@ therefore every agreement row — is UNKNOWN until a big machine runs it.** Per
   formula on host f64 and assert the consts match — one transcription slip
   (two missing closing parens) was caught exactly there, on this box.
 * `crates/clean-verify/tests/fixtures/synth/synth_fcmp.trust-ir.txt` — the
-  authored E2 twin, `; #synthetic:` self-declaring (freshness-closure
+  authored E2 twin, `; synthetic:` self-declaring above the `fn` header (freshness-closure
   invariant re-run here: green, 17 passed). `sigs` functy index **924**
   continues the 910-923 convention.
 * `crates/clean-verify/tests/crystal_a3_semdiff/w4_chains.rs` — **1 chain /

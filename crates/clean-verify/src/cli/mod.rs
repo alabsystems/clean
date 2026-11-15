@@ -15,15 +15,20 @@
 //!
 //! | Mode             | Flag             | Output                                         |
 //! |------------------|------------------|------------------------------------------------|
-//! | default pipeline | (none)           | `s VERIFIED` / `s INVALID`                     |
+//! | default pipeline | (none)           | `s VERIFIED` / `s HOLEY` / `s INVALID`         |
 //! | competition      | `--competition`  | LRAT-only; `s VERIFIED` / `s INVALID`          |
 //! | SMT-COMP         | `--smtcomp`      | `valid` / `holey` / `invalid` / `unknown`      |
 //! | SAT-COMP         | `--satcomp`      | `s VERIFIED` / `s NOT VERIFIED`                |
 //!
 //! Exit codes are a competition-judging contract:
-//!   * `0` — verified
-//!   * `10` — invalid (not a refutation)
-//!   * `1` — error (I/O, parse, unknown format)
+//!   * `0` — verified; and under `--smtcomp` a `holey` verdict also exits `0`
+//!   * `10` — invalid (not a refutation); the default mode's `s HOLEY` lands
+//!     here, and so does a proof `--satcomp` could not verify at all
+//!   * `1` — error (I/O, parse, unknown format); `--satcomp` reserves this for
+//!     an unreadable FILE and reports a verification error as `10`
+//!
+//! `--strict`, `--certificate` and `--trim` are read by [`pipeline::run_pipeline`]
+//! alone; the other three runners accept them and act on none.
 //!
 //! # File layout
 //!
@@ -68,10 +73,20 @@ pub struct VerifyProofArgs {
     pub formula: PathBuf,
     /// Path to the proof file.
     pub proof: PathBuf,
-    /// Override format auto-detection (lrat|drat|alethe|smtlib2|veripb|auto).
+    /// State the format you EXPECT (lrat|drat|alethe|smtlib2|veripb|auto).
+    /// This SELECTS NOTHING — detection decides, in every mode.
+    ///
+    /// The sole effect is a stderr warning when a format WAS detected and
+    /// disagrees with your hint, and only in the default mode:
+    /// `--competition`, `--smtcomp` and `--satcomp` never read the hint. A
+    /// proof whose format detection cannot place fails whatever you pass here.
     #[arg(long, value_name = "FMT")]
     pub format: Option<String>,
-    /// Reject proofs containing trusted (unverified) steps.
+    /// Reject any proof that is not fully certificate-checked — one carrying
+    /// trusted steps, and equally a holey one with zero trusted steps.
+    ///
+    /// Default mode only: `--competition`, `--smtcomp` and `--satcomp` accept
+    /// the flag and reject nothing for it.
     #[arg(long)]
     pub strict: bool,
     /// Emit parse / verification timings to stderr.
@@ -87,9 +102,20 @@ pub struct VerifyProofArgs {
     #[arg(long, conflicts_with_all = ["competition", "smtcomp"])]
     pub satcomp: bool,
     /// Emit a JSON verification certificate to the given path.
+    ///
+    /// Default mode only, and only for a proof `--strict` did not reject:
+    /// `--competition`, `--smtcomp` and `--satcomp` accept the flag and write
+    /// no file — including `--smtcomp`, whose Alethe proofs are the case the
+    /// full-trust-summary certificate exists for.
     #[arg(long, value_name = "PATH")]
     pub certificate: Option<PathBuf>,
-    /// Trim the LRAT proof and write the minimized output to PATH.
+    /// Trim the LRAT proof and write the minimized output to PATH. A non-LRAT
+    /// proof is skipped with a message on stderr.
+    ///
+    /// Default mode only, and only for a proof `--strict` did not reject:
+    /// `--competition`, `--smtcomp` and `--satcomp` accept the flag and write
+    /// no file — `--competition` is the LRAT-only mode, so a trim request
+    /// there is silently dropped on exactly the format it supports.
     #[arg(long, value_name = "PATH")]
     pub trim: Option<PathBuf>,
 }
@@ -199,19 +225,35 @@ pub const FEATURES: &[FeatureDescriptor] = &[FeatureDescriptor {
     description: "\
 Competition-grade checker for SAT and SMT refutation proofs. Accepts LRAT \
 (text/binary), DRAT (text/binary), Alethe, SMT-LIB2 proof, and VeriPB \
-formats; auto-detects by default or via `--format <fmt>`. \n\n\
+formats. The format is ALWAYS detected from the proof's own bytes; \
+`--format <fmt>` selects nothing — it states what you expect, and its only \
+effect is a stderr warning in the default mode when detection disagrees.\n\n\
 Four output modes are preserved byte-for-byte from the legacy `proof_check` \
 binary:\n\
-  * default — `s VERIFIED` / `s INVALID` with optional timing;\n\
+  * default — `s VERIFIED` / `s INVALID` / `s HOLEY` (structurally valid with \
+no trusted step, but not fully certificate-checked; exit 10; a valid proof \
+carrying trusted steps prints `s INVALID`) with optional timing;\n\
   * `--competition` — LRAT-only, maximum-performance path;\n\
   * `--smtcomp` — SMT-COMP exhibition track (`valid` / `holey` / `invalid` / \
     `unknown` + hole count);\n\
   * `--satcomp` — SAT-COMP unsat certificate (`s VERIFIED` / `s NOT VERIFIED`).\n\n\
 Exit codes are contractual: `0` verified, `10` invalid (not a refutation), \
-`1` error. `--strict` rejects proofs containing trusted steps; `--certificate \
-<PATH>` emits a JSON certificate (full Alethe trust summary, hash-only for \
-other formats); `--trim <PATH>` minimizes LRAT proofs (other formats are \
-skipped with an explicit message).\n\n\
+`1` error — with two mode-specific departures. Under `--smtcomp` a `holey` \
+verdict exits `0`, because the exhibition track scores a hole-bearing proof as \
+a submission; in the default mode the same proof prints `s HOLEY` and exits \
+`10`. Under `--satcomp` a proof that cannot be verified at all prints \
+`s NOT VERIFIED` and exits `10` rather than `1`; only an unreadable input file \
+exits `1` there.\n\n\
+`--strict`, `--certificate <PATH>` and `--trim <PATH>` are read by the DEFAULT \
+mode ONLY. `--competition`, `--smtcomp` and `--satcomp` accept all three and \
+act on none of them: nothing is rejected, no certificate is written, no proof \
+is trimmed. In the default mode `--strict` demands a fully certificate-checked \
+proof, \
+so it rejects a holey proof as well as one carrying trusted steps; \
+`--certificate <PATH>` emits a JSON certificate (full Alethe trust summary, \
+hash-only for other formats) for a proof `--strict` did not reject; `--trim \
+<PATH>` minimizes LRAT proofs (other formats are skipped with an explicit \
+message).\n\n\
 Absorbs the deprecated `proof_check` standalone binary (#3511). The standalone \
 binary is retained as a compat shim for one release because competition judges \
 hard-code the path.",

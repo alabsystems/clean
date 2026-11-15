@@ -33,14 +33,21 @@
 //! }
 //! ```
 
+// The LSP server proper (backend, transports, document state) is native-only:
+// tower-lsp and the tokio runtime have no wasm32 backend. Only the `cli`
+// argument/descriptor surface and `report_validation` compile on wasm.
+#[cfg(not(target_arch = "wasm32"))]
 pub mod backend;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod diagnostics;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod document;
 /// Wire-level regression guard: no editor surface may ship Rust `Debug`
 /// output. Test-only — it drives the real service over `tokio::io::duplex`
 /// and asserts on the bytes an editor would render.
 #[cfg(test)]
 mod editor_render_wire;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod file_progress;
 /// Wire-level regression guard: `textDocument/hover` must answer where a user
 /// hovers, not only on a declaration's command keyword. Test-only — it
@@ -48,7 +55,10 @@ pub mod file_progress;
 #[cfg(test)]
 mod hover_wire;
 pub mod report_validation;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod rpc;
+#[cfg(not(target_arch = "wasm32"))]
+mod transport;
 
 /// Unified `clean lsp` CLI surface.
 ///
@@ -60,27 +70,35 @@ pub mod rpc;
 #[cfg(feature = "cli")]
 pub mod cli;
 
+#[cfg(not(target_arch = "wasm32"))]
 pub use backend::CleanBackend;
+#[cfg(not(target_arch = "wasm32"))]
 pub use document::Document;
+#[cfg(not(target_arch = "wasm32"))]
 pub use file_progress::{
     LeanFileProgress, LeanFileProgressKind, LeanFileProgressParams, LeanFileProgressProcessingInfo,
 };
+#[cfg(not(target_arch = "wasm32"))]
 pub use rpc::{
     PlainGoalParams, PlainGoalResponse, PlainTermGoalParams, PlainTermGoalResponse, RpcCallParams,
     RpcConnectParams, RpcConnected, RpcKeepAliveParams, RpcReleaseParams, RpcSessionManager,
 };
 
 // Domain-prefixed alias for collision-free imports
+#[cfg(not(target_arch = "wasm32"))]
 pub use document::ParseError as LspParseError;
+#[cfg(not(target_arch = "wasm32"))]
 pub use document::TypeError as LspTypeError;
 
-use tower_lsp::{LspService, Server};
+#[cfg(not(target_arch = "wasm32"))]
+use tower_lsp::LspService;
 
 /// Build the LSP service with Lean4 RPC custom methods.
 ///
 /// Server-to-client Lean notifications (`$/lean/fileProgress`) need no
 /// registration here: they flow outward through the tower-lsp `Client`
 /// (see [`file_progress::LeanFileProgress`]).
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) fn build_service() -> (LspService<CleanBackend>, tower_lsp::ClientSocket) {
     LspService::build(CleanBackend::new)
         // $/lean/rpc/connect - Start RPC session
@@ -94,12 +112,12 @@ pub(crate) fn build_service() -> (LspService<CleanBackend>, tower_lsp::ClientSoc
         // $/lean/rpc/release - Release references (notification)
         .custom_method("$/lean/rpc/release", |backend: &CleanBackend, params| {
             backend.rpc_release(params);
-            std::future::ready(Ok(()))
+            std::future::ready(())
         })
         // $/lean/rpc/keepAlive - Keep session alive (notification)
         .custom_method("$/lean/rpc/keepAlive", |backend: &CleanBackend, params| {
             backend.rpc_keep_alive(params);
-            std::future::ready(Ok(()))
+            std::future::ready(())
         })
         // $/lean/plainGoal - Get tactic goals as plain text
         .custom_method("$/lean/plainGoal", |backend: &CleanBackend, params| {
@@ -107,21 +125,23 @@ pub(crate) fn build_service() -> (LspService<CleanBackend>, tower_lsp::ClientSoc
         })
         // $/lean/plainTermGoal - Get expected type as plain text
         .custom_method("$/lean/plainTermGoal", |backend: &CleanBackend, params| {
-            std::future::ready(Ok(backend.plain_term_goal(params)))
+            std::future::ready(backend.plain_term_goal_request(params))
         })
         .finish()
 }
 
 /// Run the LSP server on stdin/stdout
-pub async fn run_server() {
-    let stdin = tokio::io::stdin();
+#[cfg(not(target_arch = "wasm32"))]
+pub async fn run_server() -> std::io::Result<()> {
+    let stdin = transport::stdin()?;
     let stdout = tokio::io::stdout();
 
     let (service, socket) = build_service();
-    Server::new(stdin, stdout, socket).serve(service).await;
+    transport::serve(stdin, stdout, service, socket).await
 }
 
 /// Run the LSP server on a TCP socket (for testing)
+#[cfg(not(target_arch = "wasm32"))]
 pub async fn run_server_tcp(addr: &str) -> Result<(), std::io::Error> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     tracing::info!("LSP server listening on {}", addr);
@@ -132,7 +152,9 @@ pub async fn run_server_tcp(addr: &str) -> Result<(), std::io::Error> {
 
         let (service, socket) = build_service();
         tokio::spawn(async move {
-            Server::new(read, write, socket).serve(service).await;
+            if let Err(error) = transport::serve(read, write, service, socket).await {
+                tracing::debug!(%error, "LSP connection ended");
+            }
         });
     }
 }

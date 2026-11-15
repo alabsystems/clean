@@ -9,7 +9,9 @@
 //! read both).
 
 use std::collections::BTreeMap;
-use std::fs::{self, File, OpenOptions};
+#[cfg(not(target_arch = "wasm32"))]
+use std::fs::File;
+use std::fs::{self, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -28,6 +30,7 @@ pub(crate) const ATTEMPT_LOG_DIR: &str = ".cake";
 pub(crate) const LEGACY_ATTEMPT_LOG_DIR: &str = ".mathverse";
 const ATTEMPTS_DIR: &str = "attempts";
 const ARTIFACTS_DIR: &str = "artifacts";
+#[cfg(not(target_arch = "wasm32"))]
 const ATTEMPT_LOG_LOCK: &str = ".attempt-log.lock";
 const NS_PER_SECOND: u64 = 1_000_000_000;
 const SECONDS_PER_DAY: u64 = 86_400;
@@ -446,7 +449,7 @@ pub struct AttemptQueryReport {
     /// Deterministic count summary over all matches before any caller limit.
     #[serde(default)]
     pub summary: AttemptQuerySummary,
-    /// Matching attempts in log-file order.
+    /// Matching attempts, newest first (`created_at`, then `attempt_id`).
     pub attempts: Vec<ProofAttempt>,
 }
 
@@ -944,8 +947,13 @@ pub fn append_to(root: impl AsRef<Path>, attempt: &ProofAttempt) -> MathverseRes
     let mut record = serde_json::to_vec(attempt)?;
     record.push(b'\n');
 
+    // fd-lock has no wasip1 backend; wasm32 runs single-process, so the append
+    // proceeds without an inter-process lock there.
+    #[cfg(not(target_arch = "wasm32"))]
     let lock_file = attempt_log_lock_file(attempts_dir)?;
+    #[cfg(not(target_arch = "wasm32"))]
     let mut lock = fd_lock::RwLock::new(lock_file);
+    #[cfg(not(target_arch = "wasm32"))]
     let _guard = lock.write()?;
 
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
@@ -1028,8 +1036,13 @@ pub fn iter_from(
             continue;
         }
 
+        // fd-lock has no wasip1 backend; wasm32 runs single-process, so the
+        // read proceeds without an inter-process lock there.
+        #[cfg(not(target_arch = "wasm32"))]
         let lock_file = attempt_log_lock_file(&dir)?;
+        #[cfg(not(target_arch = "wasm32"))]
         let lock = fd_lock::RwLock::new(lock_file);
+        #[cfg(not(target_arch = "wasm32"))]
         let _guard = lock.read()?;
 
         let mut files = Vec::new();
@@ -1081,6 +1094,22 @@ pub fn query_attempts_limited(
     let mut attempts: Vec<_> = iter_from(root, filter.clone())?.collect();
     let total = attempts.len();
     let summary = AttemptQuerySummary::from_attempts(&attempts);
+    // Order newest-first BEFORE truncating. `iter_from` walks the log
+    // directories in a fixed order and each directory's files in ascending
+    // name order (`files.sort()`), so the collected vector is oldest-first —
+    // and a bare `truncate` therefore kept the OLDEST `limit` attempts while
+    // both the command help and its own worked example promised the newest
+    // ("emit the 20 newest accepted trust-audit attempts"). That is the one
+    // failure mode worse than a bad message: the right answer's shape with the
+    // wrong rows in it, and nothing on screen to say so.
+    //
+    // `attempt_id` breaks ties so the order is total and reproducible; two
+    // attempts can share a `created_at` second.
+    attempts.sort_by(|a, b| {
+        b.created_at
+            .cmp(&a.created_at)
+            .then_with(|| b.attempt_id.cmp(&a.attempt_id))
+    });
     if let Some(limit) = limit {
         attempts.truncate(limit);
     }
@@ -1588,6 +1617,7 @@ fn attempt_log_path(root: &Path, created_at_ns: u64) -> PathBuf {
         .join(log_filename_for_ns(created_at_ns))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn attempt_log_lock_file(attempts_dir: &Path) -> MathverseResult<File> {
     Ok(OpenOptions::new()
         .read(true)

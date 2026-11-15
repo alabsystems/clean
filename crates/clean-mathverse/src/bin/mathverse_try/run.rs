@@ -31,9 +31,11 @@ pub(super) struct Args {
 
     /// Environment seed: `none` (default) or `seed-native`.
     ///
-    /// `seed-native` registers the same Tier A lemmas + CROWN +
-    /// interval-arith / IBP theorems used by `mathverse_shard build-native`,
-    /// so new proof sketches can reference them by name.
+    /// `seed-native` registers a 13-init SUBSET of what `mathverse_shard
+    /// build-native` seeds through `seed_native_environment` (CROWN, the
+    /// interval-arith / IBP core and Tier A rat batches 1–2); a sketch naming a
+    /// lemma from the later batches (e.g. `Rat.min_le_max`, `Nat.le_refl`) fails
+    /// here and passes build-native.
     #[arg(long, default_value = "none")]
     pub env: String,
 
@@ -146,10 +148,11 @@ fn split_deps<I: Iterator<Item = String>>(names: I, report: &mut Report) {
     report.trust_markers = trust;
 }
 
-/// Mirror of `mathverse_shard build-native`'s `seed_environment` (see
-/// `src/bin/mathverse_shard/native_build.rs`). Kept in lockstep so that a
-/// proof passing `mathverse_try --env seed-native` will also land in the
-/// clean-Native shard when copied into a `nn_verify_tier_a_*.rs` file.
+/// Partial mirror of the library's `seed_native_environment` (which
+/// `mathverse_shard build-native` calls, `build_library_native.rs`): 13 of its
+/// init batches, so a proof passing `mathverse_try --env seed-native` lands in
+/// the clean-Native shard, while the converse does not hold — build-native seeds
+/// more (`init_nat_top_level_ordering`, `init_rat_min_le_max`, batches 3–4, …).
 fn seed_native(env: &mut Environment) -> Vec<String> {
     let mut warnings = Vec::new();
     macro_rules! try_init {

@@ -110,7 +110,12 @@ impl Environment {
             type_: io_bind_type,
         })?;
 
+        // `instMonadIO : Monad IO`, built from the two opaque operations above
+        // (`data_monad_classes.rs`). `IO` is opaque, so `IO.pure` / `IO.bind`
+        // are satisfiable (interpret `IO` as the constant `PUnit` family) and
+        // this instance claims nothing about any OTHER monad.
         self.io_init = true;
+        self.init_io_monad_instance()?;
         Ok(())
     }
 
@@ -240,158 +245,10 @@ impl Environment {
             is_reducible: true,
         })?;
 
-        // StateT.pure : {σ : Type u} → {m : Type u → Type v} → {α : Type u} → α → StateT σ m α
         let state_t_const = Expr::const_(
             Name::from_string("StateT"),
             vec![u_level.clone(), v_level.clone()],
         );
-
-        let state_t_pure_type = {
-            let mut b = EnvDeclBuilder::new();
-            let (sigma_id, sigma) = b.fresh_local(type_u.clone());
-            let m_ty = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-            let (m_id, m) = b.fresh_local(m_ty.clone());
-            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-            let (val_id, _val) = b.fresh_local(alpha.clone());
-            let state_t_sigma_m_alpha = Expr::app(
-                Expr::app(Expr::app(state_t_const.clone(), sigma), m),
-                alpha.clone(),
-            );
-            let r = state_t_sigma_m_alpha;
-            let r = b.mk_pi(val_id, BinderInfo::Default, alpha.clone(), r);
-            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-            let r = b.mk_pi(m_id, BinderInfo::Implicit, m_ty, r);
-            let r = b.mk_pi(sigma_id, BinderInfo::Implicit, type_u.clone(), r);
-            b.finish(r)
-        };
-
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("StateT.pure"),
-            level_params: vec![u_name.clone(), v_name.clone()],
-            type_: state_t_pure_type,
-        })?;
-
-        // StateT.set : {σ : Type u} → {m : Type u → Type v} → σ → StateT σ m PUnit
-        // Sets the state to a new value.
-        // Lean 4: `@[inline] def StateT.set [Monad m] (s : σ) : StateT σ m PUnit`
-        let state_t_set_type = {
-            let m_ty = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-            let punit = Expr::const_(
-                Name::from_string("PUnit"),
-                vec![Level::succ(u_level.clone())],
-            ); // PUnit.{succ(u)} : Type u
-            let mut b = EnvDeclBuilder::new();
-            let (sigma_id, sigma) = b.fresh_local(type_u.clone());
-            let (m_id, m) = b.fresh_local(m_ty.clone());
-            let (new_state_id, _new_state) = b.fresh_local(sigma.clone());
-            // Return type: StateT σ m PUnit
-            let st_smp = Expr::app(
-                Expr::app(Expr::app(state_t_const.clone(), sigma.clone()), m),
-                punit,
-            );
-            let r = st_smp;
-            let r = b.mk_pi(new_state_id, BinderInfo::Default, sigma, r);
-            let r = b.mk_pi(m_id, BinderInfo::Implicit, m_ty.clone(), r);
-            let r = b.mk_pi(sigma_id, BinderInfo::Implicit, type_u.clone(), r);
-            b.finish(r)
-        };
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("StateT.set"),
-            level_params: vec![u_name.clone(), v_name.clone()],
-            type_: state_t_set_type,
-        })?;
-
-        // StateT.get : {σ : Type u} → {m : Type u → Type v} → StateT σ m σ
-        // Lean 4: `@[inline] def StateT.get [Monad m] : StateT σ m σ`
-        let state_t_get_type = {
-            let m_ty = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-            let mut b = EnvDeclBuilder::new();
-            let (sigma_id, sigma) = b.fresh_local(type_u.clone());
-            let (m_id, m) = b.fresh_local(m_ty.clone());
-            // Return type: StateT σ m σ
-            let st_sms = Expr::app(
-                Expr::app(Expr::app(state_t_const.clone(), sigma.clone()), m),
-                sigma.clone(),
-            );
-            let r = st_sms;
-            let r = b.mk_pi(m_id, BinderInfo::Implicit, m_ty.clone(), r);
-            let r = b.mk_pi(sigma_id, BinderInfo::Implicit, type_u.clone(), r);
-            b.finish(r)
-        };
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("StateT.get"),
-            level_params: vec![u_name.clone(), v_name.clone()],
-            type_: state_t_get_type,
-        })?;
-
-        // StateT.modify : {σ : Type u} → {m : Type u → Type v} → (σ → σ) → StateT σ m PUnit
-        // Modifies the state by applying a function.
-        // Lean 4: `@[inline] def StateT.modify [Monad m] (f : σ → σ) : StateT σ m PUnit`
-        // Returns PUnit like StateT.set — critical for #3418 Unit/PUnit equivalence.
-        let state_t_modify_type = {
-            let m_ty = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-            let punit = Expr::const_(
-                Name::from_string("PUnit"),
-                vec![Level::succ(u_level.clone())],
-            );
-            let mut b = EnvDeclBuilder::new();
-            let (sigma_id, sigma) = b.fresh_local(type_u.clone());
-            let (m_id, m) = b.fresh_local(m_ty.clone());
-            // f : σ → σ
-            let f_ty = Expr::pi(BinderInfo::Default, sigma.clone(), sigma.clone());
-            let (f_id, _f) = b.fresh_local(f_ty.clone());
-            // Return type: StateT σ m PUnit
-            let st_smp = Expr::app(
-                Expr::app(Expr::app(state_t_const.clone(), sigma.clone()), m),
-                punit,
-            );
-            let r = st_smp;
-            let r = b.mk_pi(f_id, BinderInfo::Default, f_ty, r);
-            let r = b.mk_pi(m_id, BinderInfo::Implicit, m_ty.clone(), r);
-            let r = b.mk_pi(sigma_id, BinderInfo::Implicit, type_u.clone(), r);
-            b.finish(r)
-        };
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("StateT.modify"),
-            level_params: vec![u_name.clone(), v_name.clone()],
-            type_: state_t_modify_type,
-        })?;
-
-        // StateT.modifyGet : {σ : Type u} → {m : Type u → Type v} → {α : Type u}
-        //                  → (σ → α × σ) → StateT σ m α
-        // Modifies the state and returns a value.
-        // Lean 4: `@[inline] def StateT.modifyGet [Monad m] (f : σ → α × σ) : StateT σ m α`
-        let state_t_modify_get_type = {
-            let m_ty = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-            let mut b = EnvDeclBuilder::new();
-            let (sigma_id, sigma) = b.fresh_local(type_u.clone());
-            let (m_id, m) = b.fresh_local(m_ty.clone());
-            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-            // f : σ → α × σ
-            let prod = Expr::const_(
-                Name::from_string("Prod"),
-                vec![u_level.clone(), u_level.clone()],
-            );
-            let prod_a_s = Expr::app(Expr::app(prod, alpha.clone()), sigma.clone());
-            let f_ty = Expr::pi(BinderInfo::Default, sigma.clone(), prod_a_s);
-            let (f_id, _f) = b.fresh_local(f_ty.clone());
-            // Return type: StateT σ m α
-            let st_sma = Expr::app(
-                Expr::app(Expr::app(state_t_const.clone(), sigma.clone()), m),
-                alpha.clone(),
-            );
-            let r = st_sma;
-            let r = b.mk_pi(f_id, BinderInfo::Default, f_ty, r);
-            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-            let r = b.mk_pi(m_id, BinderInfo::Implicit, m_ty.clone(), r);
-            let r = b.mk_pi(sigma_id, BinderInfo::Implicit, type_u.clone(), r);
-            b.finish(r)
-        };
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("StateT.modifyGet"),
-            level_params: vec![u_name.clone(), v_name.clone()],
-            type_: state_t_modify_get_type,
-        })?;
 
         // StateT.run : {σ : Type u} → {m : Type u → Type v} → {α : Type u} → StateT σ m α → σ → m (α × σ)
         let state_t_run_type = {
@@ -457,7 +314,15 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        // `StateT.pure` / `bind` / `get` / `set` / `modify` / `modifyGet` and
+        // `StateT.instMonad`, each taking `[Monad m]` as Lean's do
+        // (`data_monad_transformers.rs`). These were instance-less AXIOMS
+        // until 2026-09-28, and every one of them proved `False`: `StateT σ m
+        // α` unfolds to `σ → m (α × σ)`, so `StateT.get` at `m := fun _ =>
+        // Empty` applied to a state was an `Empty`
+        // (`docs/issues/2026-09-28-prelude-pure-proves-false.md`).
         self.state_t_init = true;
+        self.init_state_t_ops()?;
         Ok(())
     }
 
@@ -502,46 +367,43 @@ impl Environment {
             return Ok(());
         }
 
-        // Lean 4: StateM.{u} (σ : Type u) (α : Type u) : Type u
+        // Lean 4: `@[reducible] def StateM.{u} (σ α : Type u) : Type u :=
+        // StateT σ Id α`. Registered η-short, `fun σ => StateT σ Id` (the same
+        // term up to η), so a PARTIAL application `StateM σ` — the monad a
+        // `do` block over `StateM σ α` runs in — unfolds to `StateT σ Id` and
+        // meets `StateT.instMonad` without an η step. Until 2026-09-28 this
+        // was an opaque axiom plus a phantom `StateM.pure` axiom (absent
+        // upstream); `StateT σ Id`'s own operations replace both.
+        self.init_state_t()?;
+        self.init_id()?;
         let u_name = Name::from_string("u");
         let u_level = Level::param(u_name.clone());
         let type_u = Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone())));
-
         let state_m_type = Expr::pi(
             BinderInfo::Default,
-            type_u.clone(), // σ : Type u
-            Expr::pi(
-                BinderInfo::Default,
-                type_u.clone(), // α : Type u
-                type_u.clone(), // Type u
+            type_u.clone(),
+            Expr::pi(BinderInfo::Default, type_u.clone(), type_u.clone()),
+        );
+        let state_m_val = Expr::lam(
+            BinderInfo::Default,
+            type_u,
+            Expr::apps(
+                Expr::const_(
+                    Name::from_string("StateT"),
+                    vec![u_level.clone(), u_level.clone()],
+                ),
+                [
+                    Expr::bvar(0),
+                    Expr::const_(Name::from_string("Id"), vec![u_level]),
+                ],
             ),
         );
-
-        self.add_decl(Declaration::Axiom {
+        self.add_decl(Declaration::Definition {
             name: Name::from_string("StateM"),
-            level_params: vec![u_name.clone()],
-            type_: state_m_type,
-        })?;
-
-        // StateM.pure : {σ : Type u} → {α : Type u} → α → StateM σ α
-        let state_m_const = Expr::const_(Name::from_string("StateM"), vec![u_level]);
-
-        let state_m_pure_type = {
-            let mut b = EnvDeclBuilder::new();
-            let (sigma_id, sigma) = b.fresh_local(type_u.clone());
-            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-            let (val_id, _val) = b.fresh_local(alpha.clone());
-            let r = Expr::app(Expr::app(state_m_const.clone(), sigma), alpha.clone());
-            let r = b.mk_pi(val_id, BinderInfo::Default, alpha.clone(), r);
-            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-            let r = b.mk_pi(sigma_id, BinderInfo::Implicit, type_u, r);
-            b.finish(r)
-        };
-
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("StateM.pure"),
             level_params: vec![u_name],
-            type_: state_m_pure_type,
+            type_: state_m_type,
+            value: state_m_val,
+            is_reducible: true,
         })?;
 
         self.state_m_init = true;
@@ -710,134 +572,5 @@ impl Environment {
     #[cfg(test)]
     pub(crate) fn has_id(&self) -> bool {
         self.id_init
-    }
-
-    /// Initialize abstract monad type classes: `Bind`, `Pure`, `Bind.bind`, `Pure.pure`.
-    ///
-    /// In Lean 4, these are type classes:
-    /// ```text
-    /// class Pure (f : Type u → Type v) where pure : {α : Type u} → α → f α
-    /// class Bind (m : Type u → Type v) where bind : {α β : Type u} → m α → (α → m β) → m β
-    /// ```
-    ///
-    /// We model them as axioms for the elaborator's do-notation desugaring.
-    /// The elaborator emits `Bind.bind action continuation` and `Pure.pure value`,
-    /// and type class resolution fills in the monad and instance arguments.
-    ///
-    /// # Contract
-    ///
-    /// REQUIRES: `init_id` has been called (for universe parameter conventions)
-    /// ENSURES: On success, `self.monad_classes_init == true`
-    /// ENSURES: Constants `Pure.pure` and `Bind.bind` are defined
-    /// ENSURES: Idempotent
-    pub(crate) fn init_monad_classes(&mut self) -> Result<(), EnvError> {
-        if self.monad_classes_init {
-            return Ok(());
-        }
-
-        let u = Name::from_string("u");
-        let v = Name::from_string("v");
-
-        // Type u and Type v
-        let type_u = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(u.clone()))));
-        let type_v = Expr::from_kind(ExprKind::Sort(Level::succ(Level::param(v.clone()))));
-
-        // m : Type u → Type v (the monad type constructor)
-        let m_type = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-
-        // Pure.pure : {m : Type u → Type v} → [Pure m] → {α : Type u} → α → m α
-        //
-        // For initial do-notation support, we register the "uncurried" form that
-        // the elaborator produces: Pure.pure : {α : Type u} → α → m α
-        // with m implicit. The full type class version requires instance resolution
-        // infrastructure that we build incrementally.
-        //
-        // Simplified type: Pure.pure : {m : Type u → Type v} → {α : Type u} → α → m α
-        let pure_type = {
-            let mut b = EnvDeclBuilder::new();
-            let (m_id, m) = b.fresh_local(m_type.clone());
-            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-            let m_alpha = Expr::app(m.clone(), alpha.clone());
-            let (val_id, _val) = b.fresh_local(alpha.clone());
-            let r = m_alpha;
-            let r = b.mk_pi(val_id, BinderInfo::Default, alpha.clone(), r);
-            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-            let r = b.mk_pi(m_id, BinderInfo::Implicit, m_type.clone(), r);
-            b.finish(r)
-        };
-
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("Pure.pure"),
-            level_params: vec![u.clone(), v.clone()],
-            type_: pure_type,
-        })?;
-
-        // Bind.bind : {m : Type u → Type v} → {α β : Type u} → m α → (α → m β) → m β
-        let bind_type = {
-            let mut b = EnvDeclBuilder::new();
-            let (m_id, m) = b.fresh_local(m_type.clone());
-            let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-            let (beta_id, beta) = b.fresh_local(type_u.clone());
-            let m_alpha = Expr::app(m.clone(), alpha.clone());
-            let m_beta = Expr::app(m.clone(), beta.clone());
-            let (ma_id, _ma) = b.fresh_local(m_alpha.clone());
-            let f_ty = {
-                let mut c = EnvDeclBuilder::child_of(&b);
-                let (x_id, _x) = c.fresh_local(alpha.clone());
-                let r = m_beta.clone();
-                let r = c.mk_pi(x_id, BinderInfo::Default, alpha.clone(), r);
-                c.finish_child(r)
-            };
-            let (f_id, _f) = b.fresh_local(f_ty.clone());
-            let r = m_beta;
-            let r = b.mk_pi(f_id, BinderInfo::Default, f_ty, r);
-            let r = b.mk_pi(ma_id, BinderInfo::Default, m_alpha, r);
-            let r = b.mk_pi(beta_id, BinderInfo::Implicit, type_u.clone(), r);
-            let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-            let r = b.mk_pi(m_id, BinderInfo::Implicit, m_type.clone(), r);
-            b.finish(r)
-        };
-
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("Bind.bind"),
-            level_params: vec![u.clone(), v.clone()],
-            type_: bind_type,
-        })?;
-
-        // `Monad (m : Type u → Type v) : Type (max (u+1) v)` — the carrier head.
-        //
-        // Registered as an opaque `Axiom` CARRIER (the same convention clean uses
-        // for `Membership` / `Set` in `init_set`): clean's prelude resolves monad
-        // instances by metavariable, not synthesis, so the carrier needs only the
-        // right KIND for an `[Monad m]` instance binder to type-check (the `ForIn`
-        // field telescope, A4). On a real `.olean` import the genuine `Monad`
-        // structure of the same name discharges this stub via the
-        // `is_axiom_carrier_stub` import path, so it carries no permanent domain
-        // axiom. Universe matches Lean's `class Monad extends Applicative` (whose
-        // `Functor.map` field over `Type u` forces the `u+1`):
-        //   Monad.{u,v} : (Type u → Type v) → Type (max (u+1) v)
-        //
-        // NOTE: this is NOT registered in `Environment::soundness_certificate_env`
-        // (which seeds only NN-verification overlays), so it does not enter the C2
-        // trusted-axiom golden — exactly like the existing `Bind.bind` / `Pure.pure`
-        // / `Membership` carriers.
-        let monad_result_sort = Expr::from_kind(ExprKind::Sort(Level::succ(Level::max(
-            Level::succ(Level::param(u.clone())),
-            Level::param(v.clone()),
-        ))));
-        let monad_type = Expr::pi(BinderInfo::Default, m_type.clone(), monad_result_sort);
-        self.add_decl(Declaration::Axiom {
-            name: Name::from_string("Monad"),
-            level_params: vec![u.clone(), v.clone()],
-            type_: monad_type,
-        })?;
-
-        self.monad_classes_init = true;
-        Ok(())
-    }
-
-    /// Check if monad type classes have been initialized
-    pub(crate) fn has_monad_classes(&self) -> bool {
-        self.monad_classes_init
     }
 }

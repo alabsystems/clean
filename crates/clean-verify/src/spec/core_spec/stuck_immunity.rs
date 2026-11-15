@@ -102,7 +102,7 @@ impl Specification {
              Eq (OptionType KExpr) (delta_reduct env x) (OptionType.none KExpr) := \
              Eq.cong (OptionType Name) (OptionType KExpr) \
              (fun (o : OptionType Name) => opt_bind Name KExpr o \
-             (fun (dname : Name) => opt_bind KExpr KExpr (defval_for env dname) \
+             (fun (dname : Name) => opt_bind KExpr KExpr (kdef_value_at env dname (kexpr_const_levels (kapp_fn x))) \
              (fun (val : KExpr) => OptionType.some KExpr (apply_spine (kapp_args x) val)))) \
              (kexpr_const_name (kapp_fn x)) (OptionType.none Name) hn",
             "delta_reduct_head_none: if a term's spine head carries no constant name then \

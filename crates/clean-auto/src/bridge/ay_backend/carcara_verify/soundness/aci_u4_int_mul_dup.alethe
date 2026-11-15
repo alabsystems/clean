@@ -1,0 +1,3 @@
+(assume nc (not (= (* x x) x)))
+(step s (cl (= (* x x) x)) :rule aci_simp)
+(step done (cl) :rule resolution :premises (nc s))

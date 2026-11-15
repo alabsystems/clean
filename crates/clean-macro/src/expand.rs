@@ -284,9 +284,15 @@ impl<'a> HygienicExpander<'a> {
     ///
     /// Fresh names typically start with underscore or contain generated suffixes.
     /// In a full implementation, we'd track which names came from antiquotations.
-    fn is_fresh_name(&self, name: &str) -> bool {
-        // Names starting with underscore are typically generated/temporary
-        name.starts_with('_')
+    fn is_fresh_name(&self, name: &clean_parser::SurfaceName) -> bool {
+        // Source-authored underscores (including escaped names) are not a
+        // license to rename caller identifiers.
+        name.component_syntax()
+            .iter()
+            .all(|origin| *origin == clean_parser::NameComponentSyntax::Generated)
+            && name
+                .component_text()
+                .is_some_and(|text| text.starts_with('_'))
     }
 
     /// Expand macros in children of a syntax node
@@ -320,7 +326,7 @@ impl<'a> HygienicExpander<'a> {
     }
 
     /// Generate a fresh identifier that's hygienic (won't capture)
-    pub fn fresh_ident(&mut self, prefix: &str) -> String {
+    pub fn fresh_ident(&mut self, prefix: &clean_parser::SurfaceName) -> clean_parser::SurfaceName {
         let name = self.hygiene.fresh(prefix);
         let scoped = self.hygiene.scoped_name(&name);
         scoped.mangled()
@@ -434,10 +440,13 @@ mod tests {
     #[test]
     fn test_expand_no_macros() {
         let registry = MacroRegistry::new();
-        let syntax = Syntax::ident("foo");
+        let syntax = Syntax::generated_ident("foo");
 
         let result = expand(&registry, syntax).unwrap();
-        assert_eq!(result.as_ident(), Some("foo"));
+        assert_eq!(
+            result.as_ident(),
+            Some(&clean_parser::SurfaceName::generated_path("foo"))
+        );
     }
 
     #[test]
@@ -448,15 +457,15 @@ mod tests {
         let def = MacroDef::new(
             "myMacro",
             kind.clone(),
-            Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("x")]),
+            Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("x")]),
             SyntaxQuote::term(Syntax::mk_app(
-                Syntax::ident("f"),
-                vec![Syntax::mk_antiquot("x")],
+                Syntax::generated_ident("f"),
+                vec![Syntax::generated_antiquot("x")],
             )),
         );
         registry.register(def);
 
-        let input = Syntax::node(kind, vec![Syntax::ident("arg")]);
+        let input = Syntax::node(kind, vec![Syntax::generated_ident("arg")]);
         let result = expand(&registry, input).unwrap();
 
         assert!(result.is_node());
@@ -471,13 +480,13 @@ mod tests {
         let def = MacroDef::new(
             "wrap",
             kind.clone(),
-            Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("x")]),
-            SyntaxQuote::term(Syntax::mk_paren(Syntax::mk_antiquot("x"))),
+            Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("x")]),
+            SyntaxQuote::term(Syntax::mk_paren(Syntax::generated_antiquot("x"))),
         );
         registry.register(def);
 
         // Test that macro is applied to nested occurrences
-        let inner = Syntax::node(kind.clone(), vec![Syntax::ident("inner")]);
+        let inner = Syntax::node(kind.clone(), vec![Syntax::generated_ident("inner")]);
         let outer = Syntax::node(kind, vec![inner]);
 
         let result = expand(&registry, outer).unwrap();
@@ -514,14 +523,17 @@ mod tests {
             "myMacro",
             kind.clone(),
             Syntax::node(kind.clone(), vec![]),
-            SyntaxQuote::term(Syntax::ident("expanded")),
+            SyntaxQuote::term(Syntax::generated_ident("expanded")),
         );
         registry.register(def);
 
         let input = Syntax::node(kind, vec![]);
         let (result, trace) = expand_traced(&registry, input).unwrap();
 
-        assert_eq!(result.as_ident(), Some("expanded"));
+        assert_eq!(
+            result.as_ident(),
+            Some(&clean_parser::SurfaceName::generated_path("expanded"))
+        );
         assert_eq!(trace.steps.len(), 1);
         assert_eq!(trace.steps[0].macro_name, Some("myMacro".to_string()));
     }
@@ -535,12 +547,12 @@ mod tests {
             "myMacro",
             kind.clone(),
             Syntax::node(kind.clone(), vec![]),
-            SyntaxQuote::term(Syntax::ident("result")),
+            SyntaxQuote::term(Syntax::generated_ident("result")),
         );
         registry.register(def);
 
         let matching = Syntax::node(kind, vec![]);
-        let non_matching = Syntax::ident("other");
+        let non_matching = Syntax::generated_ident("other");
 
         assert!(would_expand(&registry, &matching));
         assert!(!would_expand(&registry, &non_matching));
@@ -555,7 +567,7 @@ mod tests {
             "counted",
             kind.clone(),
             Syntax::node(kind.clone(), vec![]),
-            SyntaxQuote::term(Syntax::ident("done")),
+            SyntaxQuote::term(Syntax::generated_ident("done")),
         );
         registry.register(def);
 
@@ -587,15 +599,15 @@ mod tests {
         let def = MacroDef::new(
             "myMacro",
             kind.clone(),
-            Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("x")]),
+            Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("x")]),
             SyntaxQuote::term(Syntax::mk_app(
-                Syntax::ident("f"),
-                vec![Syntax::mk_antiquot("x")],
+                Syntax::generated_ident("f"),
+                vec![Syntax::generated_antiquot("x")],
             )),
         );
         registry.register(def);
 
-        let input = Syntax::node(kind, vec![Syntax::ident("arg")]);
+        let input = Syntax::node(kind, vec![Syntax::generated_ident("arg")]);
         let result = expand_hygienic(&registry, input).unwrap();
 
         assert!(result.is_node());
@@ -607,14 +619,14 @@ mod tests {
         let registry = MacroRegistry::new();
         let mut expander = HygienicExpander::new(&registry);
 
-        let f1 = expander.fresh_ident("_temp");
-        let f2 = expander.fresh_ident("_temp");
+        let f1 = expander.fresh_ident(&clean_parser::SurfaceName::generated_path("_temp"));
+        let f2 = expander.fresh_ident(&clean_parser::SurfaceName::generated_path("_temp"));
 
         // Fresh identifiers should be different
         assert_ne!(f1, f2);
         // Both should start with the prefix
-        assert!(f1.starts_with("_temp"));
-        assert!(f2.starts_with("_temp"));
+        assert!(f1.to_string().starts_with("_temp"));
+        assert!(f2.to_string().starts_with("_temp"));
     }
 
     #[test]
@@ -626,18 +638,18 @@ mod tests {
         let def = MacroDef::new(
             "letMacro",
             kind.clone(),
-            Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("body")]),
+            Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("body")]),
             // Expands to: let _x = 42 in body
             SyntaxQuote::term(Syntax::mk_let(
-                Syntax::ident("_x"), // This should get hygienically renamed
+                Syntax::generated_ident("_x"), // This should get hygienically renamed
                 None,
                 Syntax::mk_num(42),
-                Syntax::mk_antiquot("body"),
+                Syntax::generated_antiquot("body"),
             )),
         );
         registry.register(def);
 
-        let input = Syntax::node(kind, vec![Syntax::ident("result")]);
+        let input = Syntax::node(kind, vec![Syntax::generated_ident("result")]);
         let mut expander = HygienicExpander::new(&registry);
         let result = expander.expand(input).unwrap();
 
@@ -657,7 +669,7 @@ mod tests {
             "scopeTest",
             kind.clone(),
             Syntax::node(kind.clone(), vec![]),
-            SyntaxQuote::term(Syntax::ident("_generated")),
+            SyntaxQuote::term(Syntax::generated_ident("_generated")),
         );
         registry.register(def);
 
@@ -674,8 +686,8 @@ mod tests {
         let name2 = result2.as_ident().unwrap();
 
         // Both start with _generated but have scope suffixes
-        assert!(name1.starts_with("_generated"));
-        assert!(name2.starts_with("_generated"));
+        assert!(name1.to_string().starts_with("_generated"));
+        assert!(name2.to_string().starts_with("_generated"));
         // They should be different due to different expansion scopes
         assert_ne!(name1, name2);
     }
@@ -695,7 +707,10 @@ mod tests {
         // while distinct expansions get distinct names.
         let template = Syntax::node(
             SyntaxKind::fun(),
-            vec![Syntax::mk_fresh_marker("f"), Syntax::mk_fresh_marker("f")],
+            vec![
+                Syntax::mk_fresh_marker(&clean_parser::SurfaceName::generated_path("f")),
+                Syntax::mk_fresh_marker(&clean_parser::SurfaceName::generated_path("f")),
+            ],
         );
         registry.register(MacroDef::new(
             "dup",
@@ -737,10 +752,10 @@ mod tests {
         let def = MacroDef::new(
             "myMacro",
             kind.clone(),
-            Syntax::node(kind.clone(), vec![Syntax::mk_antiquot("x")]),
+            Syntax::node(kind.clone(), vec![Syntax::generated_antiquot("x")]),
             SyntaxQuote::term(Syntax::mk_app(
-                Syntax::ident("f"),
-                vec![Syntax::mk_antiquot("x")],
+                Syntax::generated_ident("f"),
+                vec![Syntax::generated_antiquot("x")],
             )),
         );
         assert!(
@@ -749,7 +764,7 @@ mod tests {
         );
         registry.register(def);
 
-        let input = Syntax::node(kind, vec![Syntax::ident("arg")]);
+        let input = Syntax::node(kind, vec![Syntax::generated_ident("arg")]);
         let mut expander = HygienicExpander::new(&registry);
         let r1 = expander.expand(input.clone()).expect("expand once");
         let r2 = expander.expand(input).expect("expand twice");
@@ -758,7 +773,10 @@ mod tests {
             r2.pretty(),
             "static template must expand identically every time"
         );
-        assert_eq!(r1.child(1).unwrap().as_ident(), Some("arg"));
+        assert_eq!(
+            r1.child(1).unwrap().as_ident(),
+            Some(&clean_parser::SurfaceName::generated_path("arg"))
+        );
     }
 
     #[test]
@@ -770,7 +788,7 @@ mod tests {
             "statsMacro",
             kind.clone(),
             Syntax::node(kind.clone(), vec![]),
-            SyntaxQuote::term(Syntax::ident("done")),
+            SyntaxQuote::term(Syntax::generated_ident("done")),
         );
         registry.register(def);
 

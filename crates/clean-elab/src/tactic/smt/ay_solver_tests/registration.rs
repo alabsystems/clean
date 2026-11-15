@@ -8,6 +8,7 @@ use crate::tactic::LocalDecl;
 use crate::unify::MetaState;
 use clean_auto::bridge::ay_contract::{AyError, AyLogic};
 use clean_kernel::{Expr, FVarId, Name};
+use clean_parser::SurfaceName;
 use serial_test::serial;
 
 // -- Prop registration and synchronization --
@@ -19,8 +20,9 @@ fn test_verifiable_paths_keep_variable_mapping_registration_in_sync() {
     let prop_fvar = FVarId::new(42);
     let prop_expr = Expr::fvar(prop_fvar);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: prop_fvar,
-        name: "p".to_string(),
+        name: SurfaceName::component("p", false),
         ty: Expr::prop(),
         value: None,
     }];
@@ -73,8 +75,9 @@ fn test_register_fvars_from_context_reuses_translator_owned_name_for_prop_fvars(
     let prop_fvar = FVarId::new(17);
     let prop_expr = Expr::fvar(prop_fvar);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: prop_fvar,
-        name: "p".to_string(),
+        name: SurfaceName::component("p", false),
         ty: Expr::prop(),
         value: None,
     }];
@@ -126,8 +129,9 @@ fn test_register_fvars_from_context_skips_sort_valued_locals_without_seeding_map
     let config = AyConfig::default().with_verify_policy(SmtVerifyPolicy::ExtractOnly);
     let sort_fvar = FVarId::new(18);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: sort_fvar,
-        name: "A".to_string(),
+        name: SurfaceName::component("A", false),
         ty: Expr::type_(),
         value: None,
     }];
@@ -155,8 +159,9 @@ fn test_register_fvars_from_context_rejects_uint8_wrapping_goal_locals() {
     let uint8_fvar = FVarId::new(19);
     let uint8_ty = Expr::const_(Name::from_string("UInt8"), vec![]);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: uint8_fvar,
-        name: "x".to_string(),
+        name: SurfaceName::component("x", false),
         ty: uint8_ty.clone(),
         value: None,
     }];
@@ -196,8 +201,9 @@ fn test_register_fvars_from_context_rejects_unsupported_non_sort_local_types() {
     let config = AyConfig::default().with_verify_policy(SmtVerifyPolicy::ExtractOnly);
     let string_fvar = FVarId::new(22);
     let local_ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: string_fvar,
-        name: "s".to_string(),
+        name: SurfaceName::component("s", false),
         ty: Expr::const_(Name::from_string("String"), vec![]),
         value: None,
     }];

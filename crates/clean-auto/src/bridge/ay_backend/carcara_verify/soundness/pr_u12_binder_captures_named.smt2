@@ -1,0 +1,5 @@
+(set-logic ALL)
+(declare-fun x () Int)
+(assert (= (! x :named k) x))
+(assert (exists ((x Int)) (not (= k x))))
+(check-sat)

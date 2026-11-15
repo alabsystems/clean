@@ -970,20 +970,18 @@ fn test_iota_reduction_bool_rec() {
 
     println!("\nBool.rec motive zero one true:");
     let tc = TypeChecker::new(&env);
+    tc.check_type(&rec_app, &nat)
+        .expect("true recursor application has type Nat");
     let whnf_result = tc.whnf(&rec_app);
     println!("WHNF result: {whnf_result:?}");
 
-    // Should reduce to one (Nat.succ Nat.zero) since Bool.true is constructor 1
-    let head = whnf_result.get_app_fn();
-    if let ExprKind::Const(name, _) = head.kind() {
-        assert_eq!(
-            name.to_string(),
-            "Nat.succ",
-            "Bool.rec on true should reduce to the true case (Nat.succ ...)"
-        );
-    } else {
-        panic!("Bool.rec iota reduction did not fire. Got: {whnf_result:?}");
-    }
+    // Nat constructor values can normalize to canonical literals. Require the
+    // exact normal form of one, not a particular unreduced constructor spelling.
+    assert_eq!(
+        whnf_result,
+        tc.whnf(&one),
+        "Bool.rec on true must select one"
+    );
 
     // Also test the false case
     let false_val = Expr::const_(Name::from_string("Bool.false"), vec![]);
@@ -1002,19 +1000,16 @@ fn test_iota_reduction_bool_rec() {
     );
 
     println!("\nBool.rec motive zero one false:");
+    tc.check_type(&rec_app_false, &nat)
+        .expect("false recursor application has type Nat");
     let whnf_false = tc.whnf(&rec_app_false);
     println!("WHNF result: {whnf_false:?}");
 
-    // Should reduce to zero since Bool.false is constructor 0
-    if let ExprKind::Const(name, _) = whnf_false.kind() {
-        assert_eq!(
-            name.to_string(),
-            "Nat.zero",
-            "Bool.rec on false should reduce to the false case (Nat.zero)"
-        );
-    } else {
-        panic!("Bool.rec iota reduction did not fire for false. Got: {whnf_false:?}");
-    }
+    assert_eq!(
+        whnf_false,
+        tc.whnf(&zero),
+        "Bool.rec on false must select zero"
+    );
 }
 
 #[test]
@@ -1887,7 +1882,7 @@ fn test_array_type() {
     // Test Array - dynamically sized arrays (fundamental data structure)
     // structure Array (α : Type u) where
     //   mk ::
-    //   (data : List α)
+    //   (toList : List α)
     use clean_kernel::tc::TypeChecker;
 
     let Some(lib_path) = require_olean_lean() else {
@@ -1924,13 +1919,13 @@ fn test_array_type() {
     println!("\nArray.mk type: {:?}", mk_const.type_);
     assert_type_is_sort(&tc, &mk_const.type_, "Array.mk");
 
-    // Check Array.data accessor (require it — regression if removed)
-    let data_name = Name::from_string("Array.data");
+    // Check the pinned structure's actual Array.toList storage projection.
+    let data_name = Name::from_string("Array.toList");
     let data_const = env
         .get_const(&data_name)
-        .expect("Array.data should exist in Init.Prelude");
-    println!("\nArray.data type: {:?}", data_const.type_);
-    assert_type_is_sort(&tc, &data_const.type_, "Array.data");
+        .expect("Array.toList should exist in Init.Prelude");
+    println!("\nArray.toList type: {:?}", data_const.type_);
+    assert_type_is_sort(&tc, &data_const.type_, "Array.toList");
 
     // Check Array.rec exists (require it — regression if missing)
     let rec_name = Name::from_string("Array.rec");

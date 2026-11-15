@@ -2,7 +2,8 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! `mathverse_shard stamp --shard-dir <dir> --manifest <kernel-verified.json>`.
+//! `mathverse_shard stamp --shard-dir=<dir> --manifest=<kernel-verified.json>` (the
+//! parser takes the `=` form only).
 //!
 //! Applies an EXISTING merged kernel-verified manifest to pre-built shards on
 //! disk, with NO re-verification. This is the missing glue between the sharded

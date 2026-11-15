@@ -1,0 +1,4 @@
+# Both artifacts are minted by the generator (README.md); `run <script> <args...>` is the
+# test-support helper's `lean --run` step, with the copied family directory as cwd.
+run GenP3Planted.lean P3Planted.olean planted
+run GenP3Planted.lean P3Honest.olean honest

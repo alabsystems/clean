@@ -33,8 +33,8 @@ impl Parser {
     const MAX_EXPR_DEPTH: u32 = 128;
     /// Debug builds have large parser frames; grow before the next recursive
     /// expression descent can exhaust small test-worker stacks.
-    const EXPR_STACK_RED_ZONE: usize = 512 * 1024;
-    const EXPR_STACK_GROW_SIZE: usize = 8 * 1024 * 1024;
+    pub(super) const EXPR_STACK_RED_ZONE: usize = 512 * 1024;
+    pub(super) const EXPR_STACK_GROW_SIZE: usize = 8 * 1024 * 1024;
 
     /// Parse an expression at full precedence (Lean `term`, level 0).
     ///
@@ -130,7 +130,10 @@ impl Parser {
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "Quiver.Hom".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("Quiver.Hom"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else {
@@ -210,7 +213,10 @@ impl Parser {
             let span = lspan.merge(right.span());
             return Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(lspan, "HOrElse.hOrElse".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    lspan,
+                    SurfaceName::global_path("HOrElse.hOrElse"),
+                )),
                 vec![
                     SurfaceArg::positional(left),
                     SurfaceArg::positional(Self::unit_thunk(right)),
@@ -230,8 +236,10 @@ impl Parser {
     /// `>>`/`*>`/`<|>` from eager application for effectful monads.
     fn unit_thunk(rhs: SurfaceExpr) -> SurfaceExpr {
         let rspan = rhs.span();
-        let mut binder =
-            SurfaceBinder::explicit("_", SurfaceExpr::Ident(rspan, "Unit".to_string()));
+        let mut binder = SurfaceBinder::explicit(
+            "_",
+            SurfaceExpr::Ident(rspan, SurfaceName::global_path("Unit")),
+        );
         binder.span = rspan;
         SurfaceExpr::Lambda(rspan, vec![binder], Box::new(rhs))
     }
@@ -310,6 +318,7 @@ impl Parser {
     pub(super) fn pipe_proj_field(&mut self) -> Result<(Projection, Span), ParseError> {
         match self.current_kind().clone() {
             TokenKind::Ident(field) => {
+                let field = SurfaceName::component(field, self.current().ident_escaped);
                 let end_span = self.current_span();
                 self.advance();
                 Ok((Projection::Named(field), end_span))
@@ -333,7 +342,10 @@ impl Parser {
                 if let Some(kw_str) = other.as_keyword_str() {
                     let end_span = self.current_span();
                     self.advance();
-                    Ok((Projection::Named(kw_str.to_string()), end_span))
+                    Ok((
+                        Projection::Named(SurfaceName::component(kw_str, false)),
+                        end_span,
+                    ))
                 } else {
                     Err(ParseError::UnexpectedToken {
                         line: self.current_line(),
@@ -380,7 +392,10 @@ impl Parser {
                 let connective_span = op_span.merge(domain.span());
                 let connective = SurfaceExpr::App(
                     connective_span,
-                    Box::new(SurfaceExpr::Ident(op_span, op_name.to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        op_span,
+                        SurfaceName::global_path(op_name),
+                    )),
                     vec![
                         SurfaceArg::positional(left),
                         SurfaceArg::positional(*domain),
@@ -393,7 +408,10 @@ impl Parser {
                 let span = op_span.merge(other.span());
                 SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(op_span, op_name.to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        op_span,
+                        SurfaceName::global_path(op_name),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(other)],
                 )
             }
@@ -429,7 +447,7 @@ impl Parser {
             let op_span = left.span();
             left = SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(op_span, "Iff".to_string())),
+                Box::new(SurfaceExpr::Ident(op_span, SurfaceName::global_path("Iff"))),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             );
         }
@@ -462,7 +480,7 @@ impl Parser {
             let s = span.merge(right.span());
             Ok(SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, "or".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("or"))),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else {
@@ -500,7 +518,7 @@ impl Parser {
             let s = span.merge(right.span());
             Ok(SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, "and".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("and"))),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else {
@@ -559,7 +577,7 @@ impl Parser {
         };
         let cmp = SurfaceExpr::App(
             span.merge(right.span()),
-            Box::new(SurfaceExpr::Ident(span, head.to_string())),
+            Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
             vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
         );
         match arrow_tail {
@@ -619,7 +637,7 @@ impl Parser {
                 };
                 let eq_expr = SurfaceExpr::App(
                     span.merge(right.span()),
-                    Box::new(SurfaceExpr::Ident(span, "Eq".to_string())),
+                    Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("Eq"))),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 left = if let Some(codomain) = arrow_tail {
@@ -641,7 +659,7 @@ impl Parser {
                 };
                 let ne_expr = SurfaceExpr::App(
                     span.merge(right.span()),
-                    Box::new(SurfaceExpr::Ident(span, "Ne".to_string())),
+                    Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("Ne"))),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 left = if let Some(codomain) = arrow_tail {
@@ -666,12 +684,18 @@ impl Parser {
                 let s = span.merge(right.span());
                 let beq = SurfaceExpr::App(
                     s,
-                    Box::new(SurfaceExpr::Ident(span, "BEq.beq".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("BEq.beq"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 let bne = SurfaceExpr::App(
                     s,
-                    Box::new(SurfaceExpr::Ident(span, "Bool.not".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Bool.not"),
+                    )),
                     vec![SurfaceArg::positional(beq)],
                 );
                 left = match arrow_tail {
@@ -740,7 +764,10 @@ impl Parser {
                         // e.g., AlgEquiv R A B for A ≃ₐ[R] B
                         let equiv = SurfaceExpr::App(
                             span.merge(right.span()),
-                            Box::new(SurfaceExpr::Ident(span, constructor.to_string())),
+                            Box::new(SurfaceExpr::Ident(
+                                span,
+                                SurfaceName::global_path(constructor),
+                            )),
                             vec![
                                 SurfaceArg::positional(param),
                                 SurfaceArg::positional(left),
@@ -782,7 +809,10 @@ impl Parser {
                 let (right, arrow_tail) = Self::split_arrow_tail(right);
                 let mem = SurfaceExpr::App(
                     span.merge(right.span()),
-                    Box::new(SurfaceExpr::Ident(span, "Membership.mem".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Membership.mem"),
+                    )),
                     vec![SurfaceArg::positional(right), SurfaceArg::positional(left)],
                 );
                 left = match arrow_tail {
@@ -798,7 +828,10 @@ impl Parser {
                 let (right, arrow_tail) = Self::split_arrow_tail(right);
                 let mem_expr = SurfaceExpr::App(
                     span.merge(right.span()),
-                    Box::new(SurfaceExpr::Ident(span, "Membership.mem".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Membership.mem"),
+                    )),
                     vec![
                         SurfaceArg::positional(right.clone()),
                         SurfaceArg::positional(left),
@@ -806,7 +839,7 @@ impl Parser {
                 );
                 let not_expr = SurfaceExpr::App(
                     span.merge(right.span()),
-                    Box::new(SurfaceExpr::Ident(span, "Not".to_string())),
+                    Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("Not"))),
                     vec![SurfaceArg::positional(mem_expr)],
                 );
                 left = match arrow_tail {
@@ -876,7 +909,10 @@ impl Parser {
                 let s = span.merge(right.span());
                 left = SurfaceExpr::App(
                     s,
-                    Box::new(SurfaceExpr::Ident(span, "Bind.bind".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Bind.bind"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
                 saw_bind = true;
@@ -903,7 +939,7 @@ impl Parser {
                 let s = span.merge(right.span());
                 return Ok(SurfaceExpr::App(
                     s,
-                    Box::new(SurfaceExpr::Ident(span, head.to_string())),
+                    Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 ));
             } else {
@@ -949,7 +985,10 @@ impl Parser {
                 let s = span.merge(right.span());
                 return Ok(SurfaceExpr::App(
                     s,
-                    Box::new(SurfaceExpr::Ident(span, "HAndThen.hAndThen".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HAndThen.hAndThen"),
+                    )),
                     vec![
                         SurfaceArg::positional(left),
                         SurfaceArg::positional(Self::unit_thunk(right)),
@@ -969,7 +1008,7 @@ impl Parser {
             let s = span.merge(right.span());
             left = SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, head.to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
                 vec![
                     SurfaceArg::positional(left),
                     SurfaceArg::positional(Self::unit_thunk(right)),
@@ -1005,7 +1044,7 @@ impl Parser {
         let s = span.merge(right.span());
         Ok(SurfaceExpr::App(
             s,
-            Box::new(SurfaceExpr::Ident(span, head.to_string())),
+            Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
             vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
         ))
     }
@@ -1021,7 +1060,10 @@ impl Parser {
             let s = span.merge(right.span());
             left = SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, "HOr.hOr".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("HOr.hOr"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             );
         }
@@ -1038,7 +1080,10 @@ impl Parser {
             let s = span.merge(right.span());
             left = SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, "HXor.hXor".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("HXor.hXor"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             );
         }
@@ -1056,7 +1101,10 @@ impl Parser {
             let s = span.merge(right.span());
             left = SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, "HAnd.hAnd".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("HAnd.hAnd"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             );
         }
@@ -1141,7 +1189,10 @@ impl Parser {
                     // e.g., LinearMap R P M for P →ₗ[R] M
                     left = SurfaceExpr::App(
                         span,
-                        Box::new(SurfaceExpr::Ident(span, constructor.to_string())),
+                        Box::new(SurfaceExpr::Ident(
+                            span,
+                            SurfaceName::global_path(constructor),
+                        )),
                         vec![
                             SurfaceArg::positional(param),
                             SurfaceArg::positional(left),
@@ -1187,7 +1238,7 @@ impl Parser {
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "Sum".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("Sum"))),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else {
@@ -1198,14 +1249,14 @@ impl Parser {
     /// If `e` is the value side of a typed binder group — a bare ident (`x`) or
     /// an all-ident application spine (`a b c`, how `(a b : T)` parses before
     /// the ascription) — return the `(span, name)` list; else `None`.
-    fn binder_group_names(e: &SurfaceExpr) -> Option<Vec<(Span, String)>> {
+    fn binder_group_names(e: &SurfaceExpr) -> Option<Vec<(Span, SurfaceName)>> {
         match e {
             SurfaceExpr::Ident(span, name) => Some(vec![(*span, name.clone())]),
             // `_` as a binder name in `(_ : T) × B` / `(_ : T) ×' B` — Lean
             // pretty-prints a non-dependent Sigma/PSigma with an anonymous `_`
             // binder, so round-tripping `(_ : Nat) ×' Nat` (⇒ `PSigma (fun _ :
             // Nat => Nat)`) requires recognizing the hole as the binder.
-            SurfaceExpr::Hole(span) => Some(vec![(*span, "_".to_string())]),
+            SurfaceExpr::Hole(span) => Some(vec![(*span, SurfaceName::generated_path("_"))]),
             SurfaceExpr::App(_, f, args) => {
                 let mut names = Self::binder_group_names(f)?;
                 for arg in args {
@@ -1275,7 +1326,7 @@ impl Parser {
                         let lambda = SurfaceExpr::Lambda(span, vec![binder], Box::new(result));
                         result = SurfaceExpr::App(
                             span,
-                            Box::new(SurfaceExpr::Ident(lspan, head.to_string())),
+                            Box::new(SurfaceExpr::Ident(lspan, SurfaceName::global_path(head))),
                             vec![SurfaceArg::positional(lambda)],
                         );
                     }
@@ -1289,7 +1340,7 @@ impl Parser {
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "Prod".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("Prod"))),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else if self.eat(&TokenKind::TimesPrime) {
@@ -1302,7 +1353,7 @@ impl Parser {
             let span = left_span.merge(right.span());
             let binder = SurfaceBinder {
                 span: left_span,
-                name: "_".to_string(),
+                name: SurfaceName::generated_path("_"),
                 ty: Some(Box::new(left)),
                 default: None,
                 info: SurfaceBinderInfo::Explicit,
@@ -1310,7 +1361,7 @@ impl Parser {
             let lambda = SurfaceExpr::Lambda(span, vec![binder], Box::new(right));
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "PSigma".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("PSigma"))),
                 vec![SurfaceArg::positional(lambda)],
             ))
         } else {
@@ -1332,7 +1383,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HAdd.hAdd".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HAdd.hAdd"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else if self.eat(&TokenKind::Minus) {
@@ -1340,7 +1394,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HSub.hSub".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HSub.hSub"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else if self.eat(&TokenKind::PlusPlus) {
@@ -1355,16 +1412,34 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "HAppend.hAppend".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("HAppend.hAppend"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
-            } else if self.eat(&TokenKind::DotDot) {
+            } else if self.check(&TokenKind::DotDot) && self.is_atom_start_at(1) {
                 // Range: a..b → Set.Icc a b (Lean 4 infixl:68, used in ∫ x in a..b)
+                //
+                // A range NEEDS a right operand, and `is_atom_start_at(1)` is
+                // what says one is there. Without that test this branch ate
+                // every `..` it met and then demanded a term: the structInst
+                // ellipsis `{ x := y .. }` (Lean's `optEllipsis`, valid — the
+                // pinned lean4 v4.30.0-rc2 accepts `{ a := 5 .. }` exactly as
+                // it accepts `{ a := 5, .. }`) died as
+                // "unexpected token: RBrace" because the field value `y`
+                // swallowed the `..` that belonged to the literal. Leaving the
+                // token here hands it back to `parse_struct_literal_fields`,
+                // whose `eat(DotDot)` is its rightful owner.
+                self.advance();
                 let right = self.with_custom_min_prec(66, Self::cons_expr)?;
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "Set.Icc".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Set.Icc"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else if self.eat(&TokenKind::Union) {
@@ -1373,7 +1448,10 @@ impl Parser {
                 let end_span = right.span();
                 left = SurfaceExpr::App(
                     span.merge(end_span),
-                    Box::new(SurfaceExpr::Ident(span, "Union.union".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Union.union"),
+                    )),
                     vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
                 );
             } else {
@@ -1394,7 +1472,10 @@ impl Parser {
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "List.cons".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("List.cons"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else {
@@ -1415,7 +1496,10 @@ impl Parser {
             let end_span = right.span();
             left = SurfaceExpr::App(
                 span.merge(end_span),
-                Box::new(SurfaceExpr::Ident(span, "Max.max".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("Max.max"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             );
         }
@@ -1434,32 +1518,14 @@ impl Parser {
             let end_span = right.span();
             left = SurfaceExpr::App(
                 span.merge(end_span),
-                Box::new(SurfaceExpr::Ident(span, "Min.min".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("Min.min"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             );
         }
         Ok(left)
-    }
-
-    /// Category-morphism composition `f ≫ g` → `CategoryStruct.comp f g` (Lean
-    /// `CategoryTheory/Category/Basic`: `scoped infixr:80 " ≫ "`,
-    /// right-associative). Sits between pow/shift (75) and `×ˢ` (82): binds
-    /// tighter than `^`/`*`, looser than `×ˢ`. (Category composition rarely
-    /// mixes with arithmetic, but the precedence is placed faithfully.)
-    pub(super) fn comp_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let left = self.setprod_expr()?;
-        if self.eat(&TokenKind::CatComp) {
-            // infixr:80 — right operand at level 80 (right-associative).
-            let right = self.with_custom_min_prec(80, Self::comp_expr)?;
-            let span = left.span().merge(right.span());
-            Ok(SurfaceExpr::App(
-                span,
-                Box::new(SurfaceExpr::Ident(span, "CategoryStruct.comp".to_string())),
-                vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-            ))
-        } else {
-            Ok(left)
-        }
     }
 
     /// Set/Finset product `a ×ˢ b` → `SProd.sprod a b` (Lean `Data/Set/Prod`:
@@ -1473,7 +1539,10 @@ impl Parser {
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "SProd.sprod".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("SProd.sprod"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else {
@@ -1481,50 +1550,68 @@ impl Parser {
         }
     }
 
-    /// Exponentiation `A ^ B` (right-assoc) and the bit-shift operators
-    /// `A <<< B` / `A >>> B` (HShiftLeft/HShiftRight, infixl:75). All three share
-    /// precedence 75 — higher than `* /` — but the shifts are left-associative.
+    /// The bit-shift operators `A <<< B` / `A >>> B` (HShiftLeft/HShiftRight,
+    /// Lean `infixl:75`, `Init/Notation.lean:280-281`): left-associative, each
+    /// operand at level 76, which in this chain is [`Self::caret_expr`] (`^`,
+    /// `infixr:80`) and everything tighter. So `^` binds TIGHTER than a shift on
+    /// either side: `9 ^ 2 <<< 2` = `(9 ^ 2) <<< 2` = 324 and `2 <<< 1 ^ 2` =
+    /// `2 <<< (1 ^ 2)` = 4, as pinned Lean 4.8.0 evaluates them. Both used to
+    /// share level 75 here with `^`'s right operand at 75, so `9 ^ 2 <<< 2`
+    /// parsed as `9 ^ (2 <<< 2)` and `6 &&& 9 ^ 2 <<< 2 ≠ 4 := by decide` was
+    /// accepted, a statement Lean 4.8.0 refutes (it is 4).
     pub(super) fn pow_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
-        let mut left = self.comp_expr()?;
+        let mut left = self.caret_expr()?;
         loop {
             let span = left.span();
-            if self.eat(&TokenKind::Caret) {
-                // infixr:75 — right operand at level 75 (right-associative).
-                let right = self.with_custom_min_prec(75, Self::pow_expr)?;
-                let s = span.merge(right.span());
-                return Ok(SurfaceExpr::App(
-                    s,
-                    Box::new(SurfaceExpr::Ident(span, "HPow.hPow".to_string())),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                ));
-            } else if self.eat(&TokenKind::ShiftL) {
-                // infixl:75 shift — right operand at level 76 (left-associative).
-                let right = self.with_custom_min_prec(76, Self::comp_expr)?;
-                let s = span.merge(right.span());
-                left = SurfaceExpr::App(
-                    s,
-                    Box::new(SurfaceExpr::Ident(
-                        span,
-                        "HShiftLeft.hShiftLeft".to_string(),
-                    )),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+            let head = if self.eat(&TokenKind::ShiftL) {
+                "HShiftLeft.hShiftLeft"
             } else if self.eat(&TokenKind::ShiftR) {
-                // infixl:75 shift — right operand at level 76 (left-associative).
-                let right = self.with_custom_min_prec(76, Self::comp_expr)?;
-                let s = span.merge(right.span());
-                left = SurfaceExpr::App(
-                    s,
-                    Box::new(SurfaceExpr::Ident(
-                        span,
-                        "HShiftRight.hShiftRight".to_string(),
-                    )),
-                    vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
-                );
+                "HShiftRight.hShiftRight"
             } else {
                 return Ok(left);
-            }
+            };
+            // infixl:75 shift — right operand at level 76 (left-associative).
+            let right = self.with_custom_min_prec(76, Self::caret_expr)?;
+            let s = span.merge(right.span());
+            left = SurfaceExpr::App(
+                s,
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path(head))),
+                vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
+            );
         }
+    }
+
+    /// Lean's level 80, two `infixr:80` operators that associate with each
+    /// other to the right: exponentiation `A ^ B` (`HPow.hPow`,
+    /// `Init/Notation.lean:282`) and category-morphism composition `f ≫ g`
+    /// (`CategoryStruct.comp`, Mathlib `CategoryTheory/Category/Basic`:
+    /// `scoped infixr:80 " ≫ "`). Each right operand is at level 80, so it is
+    /// another level-80 chain: `a ≫ b ^ c` = `a ≫ (b ^ c)` and `a ^ b ≫ c` =
+    /// `a ^ (b ≫ c)`, as Lean's Pratt parser reads them (`≫` used to sit
+    /// below `^` here, so `a ≫ b ^ c` was `(a ≫ b) ^ c`). Never a shift or a
+    /// prefix `-` on the right: `2 ^ -3` stays a loud error, as in Lean.
+    pub(super) fn caret_expr(&mut self) -> Result<SurfaceExpr, ParseError> {
+        let left = self.setprod_expr()?;
+        let head = if self.eat(&TokenKind::Caret) {
+            "HPow.hPow"
+        } else if self.eat(&TokenKind::CatComp) {
+            "CategoryStruct.comp"
+        } else {
+            return Ok(left);
+        };
+        // infixr:80 — right operand at level 80 (right-associative).
+        let right = self.with_custom_min_prec(80, Self::caret_expr)?;
+        let span = left.span();
+        let s = span.merge(right.span());
+        let head_span = if head == "HPow.hPow" { span } else { s };
+        Ok(SurfaceExpr::App(
+            s,
+            Box::new(SurfaceExpr::Ident(
+                head_span,
+                SurfaceName::global_path(head),
+            )),
+            vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
+        ))
     }
 
     /// Function composition: f ∘ g (right associative, Lean 4 infixr:90). Its
@@ -1538,7 +1625,10 @@ impl Parser {
             let span = left.span().merge(right.span());
             Ok(SurfaceExpr::App(
                 span,
-                Box::new(SurfaceExpr::Ident(span, "Function.comp".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("Function.comp"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ))
         } else {
@@ -1564,7 +1654,10 @@ impl Parser {
             let s = span.merge(right.span());
             return Ok(SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, "HSMul.hSMul".to_string())),
+                Box::new(SurfaceExpr::Ident(
+                    span,
+                    SurfaceName::global_path("HSMul.hSMul"),
+                )),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ));
         }
@@ -1592,7 +1685,7 @@ impl Parser {
             let s = span.merge(right.span());
             return Ok(SurfaceExpr::App(
                 s,
-                Box::new(SurfaceExpr::Ident(span, "Eq.rec".to_string())),
+                Box::new(SurfaceExpr::Ident(span, SurfaceName::global_path("Eq.rec"))),
                 vec![SurfaceArg::positional(left), SurfaceArg::positional(right)],
             ));
         }
@@ -1650,7 +1743,10 @@ impl Parser {
                 let span = start_span.merge(inner.span());
                 Ok(SurfaceExpr::App(
                     span,
-                    Box::new(SurfaceExpr::Ident(span, "Neg.neg".to_string())),
+                    Box::new(SurfaceExpr::Ident(
+                        span,
+                        SurfaceName::global_path("Neg.neg"),
+                    )),
                     vec![SurfaceArg::positional(inner)],
                 ))
             }

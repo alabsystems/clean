@@ -1,0 +1,16 @@
+[package]
+name = "source-ir-identity-qualification"
+version = "0.0.0"
+edition = "2021"
+[workspace]
+[dependencies]
+clean-kernel = { path = "@CLEAN_SOURCE@/crates/clean-kernel" }
+clean-verify = { path = "@CLEAN_SOURCE@/crates/clean-verify", features = ["source-ir-identity"] }
+clean-rust-sem = { path = "@CLEAN_SOURCE@/crates/clean-rust-sem" }
+trust-ir = { path = "@IR_SOURCE@/crates/trust-ir", default-features = false, features = ["serde", "parser", "fmt"] }
+trust-ir-build = { path = "@IR_SOURCE@/crates/trust-ir-build", default-features = false, features = ["source-identity-data"] }
+serde_json = "1.0"
+[patch."https://github.com/alabsystems/clean.git"]
+clean-kernel = { path = "@CLEAN_SOURCE@/crates/clean-kernel" }
+clean-mathverse = { path = "@CLEAN_SOURCE@/crates/clean-mathverse" }
+clean-olean = { path = "@CLEAN_SOURCE@/crates/clean-olean" }

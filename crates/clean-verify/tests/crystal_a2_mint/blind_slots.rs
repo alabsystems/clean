@@ -49,6 +49,7 @@
 //! readers, so a field can only be erased by a line someone wrote to erase it,
 //! and those lines are what the anchors point at.
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use clean_verify::ir_mint::{self, InterfaceError, SelfFunc, Tags};
@@ -160,17 +161,120 @@ fn m9_every_blind_slot_is_anchored_in_live_source() {
     assert_eq!(ids.len(), n, "duplicate slot id in the blind-slot list");
 }
 
+/// The header's own census of the list must be the census of the list.
+///
+/// This exists because it was WRONG. The `what` field carried "As of 2026-08-20
+/// there are SEVEN `compared`, TWO `refused` and TWO `unwitnessed`" while the
+/// file held eight `compared` and twelve rows, and nothing noticed, because a
+/// count typed into prose beside the thing it counts is checked by nobody. The
+/// standing rule is *no claim-bearing value is typed where a producer exists*;
+/// here the producer is one `fold` over `slots`.
+#[test]
+fn m9_the_header_census_matches_the_rows() {
+    let doc: serde_json::Value =
+        serde_json::from_str(BLIND_SLOTS).expect("the blind-slot list must be valid JSON");
+    let what = doc["what"].as_str().expect("`what` is prose");
+
+    let mut counted: BTreeMap<&str, usize> = BTreeMap::new();
+    for row in slots() {
+        let k = match row["kind"].as_str().expect("`kind`") {
+            "compared" => "compared",
+            "refused" => "refused",
+            "unwitnessed" => "unwitnessed",
+            "erased" => "erased",
+            other => panic!("unknown kind {other}"),
+        };
+        *counted.entry(k).or_default() += 1;
+    }
+
+    const WORDS: [(&str, usize); 21] = [
+        ("ZERO", 0),
+        ("ONE", 1),
+        ("TWO", 2),
+        ("THREE", 3),
+        ("FOUR", 4),
+        ("FIVE", 5),
+        ("SIX", 6),
+        ("SEVEN", 7),
+        ("EIGHT", 8),
+        ("NINE", 9),
+        ("TEN", 10),
+        ("ELEVEN", 11),
+        ("TWELVE", 12),
+        ("THIRTEEN", 13),
+        ("FOURTEEN", 14),
+        ("FIFTEEN", 15),
+        ("SIXTEEN", 16),
+        ("SEVENTEEN", 17),
+        ("EIGHTEEN", 18),
+        ("NINETEEN", 19),
+        ("TWENTY", 20),
+    ];
+    // The one spelling the header is allowed to use, so the check cannot be
+    // satisfied by rewording: `<WORD> `<kind>`` for each kind it names.
+    //
+    // EVERY occurrence is scanned, not the first. `what` also DEFINES each
+    // kind ("`kind` is `compared` when …"), and those occurrences carry a
+    // lowercase word in front — so a search that stopped at the first match
+    // found no census and said so, which is how this loop was found wrong the
+    // first time it ran.
+    let mut claimed: BTreeMap<&str, usize> = BTreeMap::new();
+    for kind in ["compared", "refused", "unwitnessed", "erased"] {
+        let needle = format!("`{kind}`");
+        for (at, _) in what.match_indices(&needle) {
+            let before = what[..at].trim_end();
+            let Some(word) = before.rsplit(|c: char| !c.is_ascii_uppercase()).next() else {
+                continue;
+            };
+            if let Some((_, n)) = WORDS.iter().find(|(w, _)| *w == word) {
+                assert!(
+                    claimed.insert(kind, *n).is_none_or(|prev| prev == *n),
+                    "the header states `{kind}` twice with different counts"
+                );
+            }
+        }
+    }
+    assert!(
+        !claimed.is_empty(),
+        "the header states no census at all; it must state one, in the form \
+         `NINE `compared``, so that this test can refute it"
+    );
+    for (kind, n) in &claimed {
+        assert_eq!(
+            counted.get(*kind).copied().unwrap_or(0),
+            *n,
+            "the header claims {n} `{kind}` row(s); the list holds {}. Re-derive the sentence \
+             from the rows, never the other way round.",
+            counted.get(*kind).copied().unwrap_or(0)
+        );
+    }
+    // Every kind that HAS rows must be claimed, so a census cannot go green by
+    // omitting the row class that moved.
+    for kind in counted.keys() {
+        assert!(
+            claimed.contains_key(*kind),
+            "the list holds `{kind}` rows and the header's census does not mention them"
+        );
+    }
+    assert!(
+        what.contains("no row is `erased`") == (counted.get("erased").copied().unwrap_or(0) == 0),
+        "the header's `erased` claim disagrees with the rows"
+    );
+}
+
 /// Every row that claims a constructed witness must name a test that exists in
 /// this module. A `witness` pointing at nothing is the same failure mode as a
 /// `cost_is_uniform` that is only ever printed.
 #[test]
 fn m9_every_claimed_witness_names_a_test_in_this_file() {
     let root = repo_root().join("crates/clean-verify/tests/crystal_a2_mint");
-    let this = ["blind_slots.rs", "blind_slots_annotations.rs"]
-        .map(|file| {
-            std::fs::read_to_string(root.join(file)).expect("witness source must be readable")
-        })
-        .join("\n");
+    let this = [
+        "blind_slots.rs",
+        "blind_slots_annotations.rs",
+        "blind_slots_aggregate.rs",
+    ]
+    .map(|file| std::fs::read_to_string(root.join(file)).expect("witness source must be readable"))
+    .join("\n");
     let mut found = 0usize;
     for row in slots() {
         let Some(w) = row["witness"].as_str() else {
@@ -426,12 +530,17 @@ fn foreign_callee_identity_is_now_pinned_and_a_swap_is_refused() {
     );
 }
 
-/// **`global-index`, CLOSED by refusal.** The row claimed the slot was latent
-/// on all eleven chained bodies. It still is — measured, not believed — and a
-/// body that does address a global is now refused instead of read into a module
-/// whose global list is empty.
+/// **`global-index`, refused BARE and compared under a tag table.** The
+/// 2026-08-20 close said in its own last sentence that the refusal would have
+/// to be lifted, deliberately, the moment a chain genuinely carried a global.
+/// `ir_lzc` is that chain and 2026-09-09 is that day, so this witness carries
+/// three faces rather than one: the slot is still latent on all eleven chained
+/// bodies (measured, not believed); a BARE read still refuses, because a bare
+/// read still emits an empty list; and under a tag table with a `globals` lane
+/// the same body is READ, with the name, the type and the linkage — the three
+/// things `IRGlobal.mk` has no slot for — COMPARED rather than erased.
 #[test]
-fn the_global_slot_is_now_a_refusal_on_every_chained_fixture() {
+fn the_global_slot_is_refused_bare_and_compared_under_a_tag_table() {
     let root = repo_root().join("crates/clean-verify/tests/fixtures");
     let mut checked = 0usize;
     for chain in [
@@ -467,9 +576,9 @@ fn the_global_slot_is_now_a_refusal_on_every_chained_fixture() {
     // index denoting an entry the module does not declare.
     //
     // Constructed rather than taken from `level_is_zero_deref_callee`, which
-    // does address a global but is refused as a whole for a DIFFERENT reason
-    // (it uses `ptr_from_parts`, outside the fragment) — and a refusal for the
-    // wrong reason is not a measurement.
+    // does address a global: that body is the SUBJECT of the lifted path and
+    // reads cleanly under its own tag table, so it can no longer witness the
+    // bare refusal at all. A constructed body keeps the two paths separable.
     const WITH_GLOBAL: &str = r"rustcc fn @m::f(functy.0) {
 bb0(%0: ptr):
     %1 = global_addr @global.4527
@@ -492,6 +601,51 @@ bb0(%0: ptr):
         SelfFunc::Unpinned,
     )
     .expect("the same body without the global must still read");
+
+    // THE LIFT, and the indistinguishable pair that says the comparison bites.
+    //
+    // The same preamble and the same body project cleanly under a table that
+    // pins the global — the canonical index now denotes a declared entry, so
+    // `(globaladdr 0)` is coherent where before it could only have been a
+    // numeral standing for nothing. That is the erasure being CLOSED on this
+    // path, not merely bounded.
+    let p = ir_mint::project(
+        &super::globals::text(super::globals::PREAMBLE, super::globals::BODY),
+        &super::globals::table("[u8 x 2]", "internal"),
+    )
+    .expect("under a tag table with a globals lane the same body is READ");
+    let canonical = ir_mint::print(&p.core).expect("print");
+    assert!(
+        canonical.contains("(globals (global 0 (agg (int 1) (int 2))))")
+            && canonical.contains("(globaladdr 0)"),
+        "the list is declared and the instruction names a position in it:\n{canonical}"
+    );
+
+    // …and the pin is not decoration. Two tables that differ in NOTHING but
+    // the linkage they pin, over one identical preamble and one identical
+    // body: one projects, the other is refused AT ITS SLOT. The same holds for
+    // the type. Without this pair the `globals` lane could carry any string.
+    for (pin_ty, pin_linkage, want) in [
+        ("[u8 x 2]", "external", "global linkage"),
+        ("[i8 x 2]", "internal", "global type"),
+    ] {
+        let e = ir_mint::project(
+            &super::globals::text(super::globals::PREAMBLE, super::globals::BODY),
+            &super::globals::table(pin_ty, pin_linkage),
+        )
+        .map(|_| ())
+        .expect_err("a pin that disagrees with the module table must be refused");
+        // The slot carries its own identification after the name — the live
+        // spelling is "global linkage (global 0 `@g`)" — so this asserts the
+        // name AND that the refusal says WHICH global, rather than trimming
+        // the assertion down to whatever the message happens to be.
+        let got = super::globals::slot(&e);
+        assert!(
+            got.starts_with(want) && got.contains("`@g`"),
+            "the refusal must name the slot that disagreed and the global it is \
+             about; wanted `{want} …@g…`, got `{got}`"
+        );
+    }
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -650,8 +804,8 @@ fn the_producer_clause_content_is_compared_and_the_other_four_are_measured_inert
     //     refusing. `#loc` content is a lineage fact and it has a lane —
     //     `scripts/crystal_fixture_freshness.py`'s AMBER `loc-file-index`.
     let relocated = super::FIXTURE
-        .replace("; #loc: 401 337 8", "; #loc: 12 1000 3")
-        .replace("; #loc: 401 338 5", "; #loc: 12 1001 7")
+        .replace("; #loc: 214 337 8", "; #loc: 12 1000 3")
+        .replace("; #loc: 214 338 5", "; #loc: 12 1001 7")
         .replace("%0=\"self\"", "%0=\"receiver\"");
     assert_ne!(relocated, super::FIXTURE, "the substitution must bite");
     let moved = ir_mint::project(&relocated, &t)
@@ -794,3 +948,10 @@ fn usize_is_refused_unpinned_and_the_site_count_separates_the_u64_twin() {
 
 #[path = "blind_slots_annotations.rs"]
 mod annotations;
+
+/// The aggregate-id slot and its constructed pair. A sibling FILE for the
+/// reason `tests_corpus` and `tests_globals` are siblings of `tests`: this one
+/// crossed the repository's length cap the moment the witness landed in it,
+/// and a witness is worth more than a tidy single file.
+#[path = "blind_slots_aggregate.rs"]
+mod aggregate;

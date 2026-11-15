@@ -157,7 +157,7 @@ pub fn mangle_name(name: &Name) -> String {
 /// Mangle name for boxed version of function (interpreter support).
 ///
 /// Appends `___boxed` (or `_00__boxed` if mangled ends with `__`).
-pub fn mangle_boxed_name(mangled: &str) -> String {
+pub(crate) fn mangle_boxed_name(mangled: &str) -> String {
     if mangled.ends_with("__") {
         format!("{}_00__boxed", mangled)
     } else {

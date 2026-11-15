@@ -1,0 +1,4 @@
+size=8
+ACCEPT both core core stop core stop stop same
+REFUSE byte at 2 names no token
+ACCEPT both core core

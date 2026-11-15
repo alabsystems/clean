@@ -10700,6 +10700,7 @@ fn parse_serapi_inductive(
 /// `prod.{0,0} P Q : Prop` (`eqmx`) and `Type`-motive projections (`fst`/`snd`)
 /// both re-verify.
 fn emit_template_poly_prod(writer: &mut ShardWriter) -> u32 {
+    // This is untrusted family metadata; only later checked replay earns trust.
     // Level params `u`, `v` occupy a contiguous string block so the header's
     // `[level_params_start .. +count)` window reconstructs them; the inductive
     // and its constructor point at the SAME block (`Name` equality is by
@@ -10722,7 +10723,7 @@ fn emit_template_poly_prod(writer: &mut ShardWriter) -> u32 {
         type_idx: arity,
         value_idx: NO_VALUE,
         source_system: SourceSystem::Coq as u8,
-        import_confidence: ImportConfidence::KernelVerified as u8,
+        import_confidence: ImportConfidence::Unverified as u8,
         content_domain: ContentDomain::PureMath as u8,
         decl_kind: DeclKind::Inductive as u8,
         axiom_profile: AxiomProfile::NONE,
@@ -10757,7 +10758,7 @@ fn emit_template_poly_prod(writer: &mut ShardWriter) -> u32 {
         type_idx: ctor_ty,
         value_idx: NO_VALUE,
         source_system: SourceSystem::Coq as u8,
-        import_confidence: ImportConfidence::KernelVerified as u8,
+        import_confidence: ImportConfidence::Unverified as u8,
         content_domain: ContentDomain::PureMath as u8,
         decl_kind: DeclKind::Constructor as u8,
         axiom_profile: AxiomProfile::NONE,
@@ -10793,7 +10794,7 @@ fn import_serapi_inductive(
 
     // The inductive type itself: NO_VALUE, but tagged Inductive with explicit
     // num_params so the checked add_inductive replay path engages. Pure axiom
-    // profile + KernelVerified confidence keep the fail-closed trust gate honest.
+    // profile is not a proof claim: confidence stays Unverified until replay.
     let arity_idx = cic_to_flat_expr(&parsed.arity_cic, writer);
     let ind_name_idx = writer.add_string(&ind_const_name);
     let mut ind_header = MathverseConstantHeader {
@@ -10801,7 +10802,7 @@ fn import_serapi_inductive(
         type_idx: arity_idx,
         value_idx: NO_VALUE,
         source_system: SourceSystem::Coq as u8,
-        import_confidence: ImportConfidence::KernelVerified as u8,
+        import_confidence: ImportConfidence::Unverified as u8,
         content_domain: ContentDomain::PureMath as u8,
         decl_kind: DeclKind::Inductive as u8,
         axiom_profile: AxiomProfile::NONE,
@@ -10822,7 +10823,7 @@ fn import_serapi_inductive(
             type_idx: ctor_type_idx,
             value_idx: NO_VALUE,
             source_system: SourceSystem::Coq as u8,
-            import_confidence: ImportConfidence::KernelVerified as u8,
+            import_confidence: ImportConfidence::Unverified as u8,
             content_domain: ContentDomain::PureMath as u8,
             decl_kind: DeclKind::Constructor as u8,
             axiom_profile: AxiomProfile::NONE,
@@ -11556,6 +11557,10 @@ fn parse_fix_bodies(
     }
     Ok((bodies, get_u32(items, start + 1)?))
 }
+
+#[cfg(test)]
+#[path = "alpha_import_confidence_tests.rs"]
+mod import_confidence_tests;
 
 #[cfg(test)]
 mod tests {
@@ -13626,15 +13631,12 @@ mod tests {
             .collect();
 
         // Inductive constant: named `mynat.0` (matches `(Ind mynat 0)` lowering),
-        // DeclKind::Inductive, NO_VALUE, pure, KernelVerified, num_params=0.
+        // DeclKind::Inductive, NO_VALUE, pure, Unverified, num_params=0.
         let ind = by_name["mynat.0"];
         assert_eq!(ind.decl_kind, DeclKind::Inductive as u8);
         assert!(!ind.has_value());
         assert!(ind.profile().is_kernel_verified());
-        assert_eq!(
-            ind.import_confidence,
-            ImportConfidence::KernelVerified as u8
-        );
+        assert_eq!(ind.import_confidence, ImportConfidence::Unverified as u8);
         assert_eq!(ind.inductive_decl_num_params(), Some(0));
 
         // Constructors: named `mynat.0.0` (O) and `mynat.0.1` (S), matching how

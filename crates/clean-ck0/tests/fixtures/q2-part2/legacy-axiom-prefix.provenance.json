@@ -1,0 +1,24 @@
+{
+  "archive": "crates/clean-olean/tests/fixtures/kernel_arena/round-2026-09/lean-arena-round-2026-09-tests.tar.gz",
+  "archive_sha256": "98a69742b538296c5f413d0527dfeef8c4d1815fe64b12c8623cd33de63bee0d",
+  "member": "good/perf/fueled-chain.ndjson",
+  "member_sha256": "b4bcef85caa20a9f80c390f2415fae9ddb28966c8da64a2e03fc6ec72c1d041d",
+  "extraction": "Unchanged byte prefix ending immediately after the propext axiom declaration. No record is edited or reordered.",
+  "prefix_bytes": 289971,
+  "prefix_sha256": "2698b50f2256f992b8eb338fa308972b502463a5bfe3ea7f65bd6c24c9d3f340",
+  "meta": {
+    "meta": {
+      "exporter": {
+        "name": "lean4export",
+        "version": "3.1.0"
+      },
+      "format": {
+        "version": "3.1.0"
+      },
+      "lean": {
+        "githash": "f72c35b3f637c8c6571d353742168ab66cc22c00",
+        "version": "4.29.1"
+      }
+    }
+  }
+}

@@ -8,9 +8,11 @@
 //! in dependency order and type-checking their constants. Used by the
 //! `verify_olean_batch` binary.
 
+#[cfg(feature = "cli")]
+use crate::load_module_with_deps_shared_with_policy;
 use crate::{
-    load_module_with_deps, load_module_with_deps_bounded_shared, load_module_with_deps_shared,
-    load_module_with_deps_with_import_policy, parse_imports_only, LoadSummary, OleanImportPolicy,
+    load_module_with_deps_bounded_shared_with_policy, load_module_with_deps_with_import_policy,
+    LoadSummary, OleanImportPolicy,
 };
 use clean_kernel::env::Environment;
 use clean_kernel::env::ProofValueElision;
@@ -21,6 +23,13 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
+
+/// The load policy of verify-batch, a re-check lane over Lean's world: a
+/// refused completion of an artifact's own stub refuses the import (R131),
+/// never left as a trusted axiom that the full re-check then passes.
+pub(crate) fn recheck_policy() -> OleanImportPolicy {
+    OleanImportPolicy::default().refusing_refused_completions()
+}
 
 // -- Data types ---------------------------------------------------------------
 
@@ -61,13 +70,14 @@ pub struct BatchSummary {
     /// Which validation mode produced `tc_pass`/`tc_fail`/`pass_rate_pct`.
     ///
     /// AUDIT-CRITICAL HONEST LABEL. `InferOnly` means the numbers are TYPE-ONLY
-    /// (the proof value was NOT re-checked), `Full` means they are genuinely
-    /// Clean-kernel-verified (`add_decl`-equivalent `check_type` on each value).
-    /// Without this field a consumer cannot tell a type-only pass count from a
-    /// genuinely-verified one — they are NOT interchangeable.
+    /// (the proof value was NOT re-derived); `Full` means each value was
+    /// re-derived with `check_type` IN THE ASSUMED ENVIRONMENT. Neither is
+    /// `add_decl`-equivalent and neither visits the dependency cone — see
+    /// [`crate::recheck_closed::RecheckLevel`], and
+    /// [`crate::recheck_closed::recheck_closed`] for the level that is.
     pub validation_mode: ValidationMode,
     /// Human-readable honest label for `validation_mode`
-    /// (`"type-only-infer"` vs `"kernel-verified-full"`). Emitted so JSON
+    /// (`"type-only-infer"` vs `"local-assumed-env"`). Emitted so JSON
     /// consumers see the meaning without decoding the enum.
     pub validation_label: String,
     pub error_categories: BTreeMap<String, usize>,
@@ -304,17 +314,21 @@ fn expand_import_graph(
             else {
                 continue;
             };
-            let import_names = match std::fs::read(&path) {
-                Ok(bytes) => match parse_imports_only(&bytes) {
-                    Ok(imports) => imports.iter().map(|i| i.module_name.clone()).collect(),
-                    Err(_) => Vec::new(),
-                },
-                Err(_) => Vec::new(),
-            };
+            let import_names = artifact_import_names(&imp, &path).unwrap_or_default();
             modules.insert(imp.clone(), (path, import_names));
             queue.push_back(imp);
         }
     }
+}
+
+/// The import list of the artifact at `path` as every reader reads it (R113):
+/// its authoritative part's (`crate::read_artifact`); an artifact whose parts
+/// disagree is an error. Before, the closure walks took the `.olean`'s list,
+/// which `lean` does not follow for a module-system artifact (review finding
+/// P3: the `--incremental` cache key and verify-batch's order).
+fn artifact_import_names(module: &str, path: &Path) -> Result<Vec<String>, crate::ImportError> {
+    crate::read_artifact(module, path, crate::ArtifactDepth::Names)
+        .map(|read| read.imports.into_iter().map(|i| i.module_name).collect())
 }
 
 fn parse_all_imports(
@@ -329,16 +343,11 @@ fn parse_all_imports(
 
     for path in olean_files {
         let module_name = module_name_from_path(path, root);
-        match std::fs::read(path) {
-            Ok(bytes) => match parse_imports_only(&bytes) {
-                Ok(imports) => {
-                    let import_names: Vec<String> =
-                        imports.iter().map(|i| i.module_name.clone()).collect();
-                    modules.insert(module_name, (path.clone(), import_names));
-                }
-                Err(e) => parse_failures.push((path.clone(), format!("import parse: {e}"))),
-            },
-            Err(e) => parse_failures.push((path.clone(), format!("read: {e}"))),
+        match artifact_import_names(&module_name, path) {
+            Ok(import_names) => {
+                modules.insert(module_name, (path.clone(), import_names));
+            }
+            Err(e) => parse_failures.push((path.clone(), format!("import parse: {e}"))),
         }
     }
     (modules, parse_failures)
@@ -645,7 +654,8 @@ pub fn verify_one_module(
 /// constants; see `import::tests::diag_shared_vs_perloop_constant_loss`). Used
 /// only when `--load-only` is set; the type-checking paths keep the per-module
 /// reload behavior unchanged.
-pub fn verify_one_module_load_shared(
+#[cfg(feature = "cli")]
+pub(crate) fn verify_one_module_load_shared(
     env: &mut Environment,
     module_name: &str,
     rel_path: &str,
@@ -653,7 +663,13 @@ pub fn verify_one_module_load_shared(
     visited: &mut hashbrown::HashSet<String>,
 ) -> ModuleResult {
     let start = Instant::now();
-    let load_result = load_module_with_deps_shared(env, module_name, search_paths, visited);
+    let load_result = load_module_with_deps_shared_with_policy(
+        env,
+        module_name,
+        search_paths,
+        visited,
+        recheck_policy(),
+    );
     let elapsed = start.elapsed();
     match load_result {
         Ok(summaries) => {
@@ -700,7 +716,7 @@ pub fn verify_one_module_load_shared(
 /// already-loaded imports are not re-parsed per module (O(union), not
 /// O(modules × closure)).
 #[allow(clippy::too_many_arguments)]
-pub fn verify_one_module_with_mode(
+pub(crate) fn verify_one_module_with_mode(
     env: &mut Environment,
     module_name: &str,
     rel_path: &str,
@@ -734,7 +750,7 @@ pub fn verify_one_module_with_mode(
 /// `diag_full_shared_vs_perloop` qualification example compares their complete
 /// name inventories), so type-check results are unchanged.
 #[allow(clippy::too_many_arguments)]
-pub fn verify_one_module_with_mode_shared(
+pub(crate) fn verify_one_module_with_mode_shared(
     env: &mut Environment,
     module_name: &str,
     rel_path: &str,
@@ -746,9 +762,50 @@ pub fn verify_one_module_with_mode_shared(
     elide_proof_values: ProofValueElision,
     visited: &mut hashbrown::HashSet<String>,
 ) -> ModuleResult {
+    verify_one_module_with_mode_in_run(
+        env,
+        module_name,
+        rel_path,
+        search_paths,
+        known_names,
+        load_only,
+        mode,
+        max_heartbeats,
+        elide_proof_values,
+        visited,
+        &mut BTreeSet::new(),
+    )
+}
+
+/// `verify_one_module_with_mode_shared` as one module of a multi-module run
+/// in one cumulative environment. `not_admitted` carries the display spellings
+/// of every declaration an EARLIER module of the run refused under
+/// `ValidationMode::Full`, and gains this module's refusals. A declaration that
+/// mentions one is refused, as Lean's replay of the whole run would refuse it
+/// (`crate::verify_batch_full::typecheck_constants_full_streaming_in_run`).
+#[allow(clippy::too_many_arguments)]
+pub fn verify_one_module_with_mode_in_run(
+    env: &mut Environment,
+    module_name: &str,
+    rel_path: &str,
+    search_paths: &[PathBuf],
+    known_names: &mut HashSet<String>,
+    load_only: bool,
+    mode: ValidationMode,
+    max_heartbeats: u32,
+    elide_proof_values: ProofValueElision,
+    visited: &mut hashbrown::HashSet<String>,
+    not_admitted: &mut BTreeSet<String>,
+) -> ModuleResult {
     let start = Instant::now();
-    let load_result: Result<Vec<LoadSummary>, _> =
-        load_module_with_deps_bounded_shared(env, module_name, search_paths, usize::MAX, visited);
+    let load_result: Result<Vec<LoadSummary>, _> = load_module_with_deps_bounded_shared_with_policy(
+        env,
+        module_name,
+        search_paths,
+        usize::MAX,
+        visited,
+        recheck_policy(),
+    );
     let elapsed = start.elapsed();
 
     match load_result {
@@ -785,20 +842,40 @@ pub fn verify_one_module_with_mode_shared(
             }
             let added = new_names.len();
             let skipped: usize = summaries.iter().map(|s| s.skipped_constants.len()).sum();
+            // Declarations of this module the loader dropped because another
+            // module's constant (or a kernel seed) already held the name: the
+            // module's other declarations resolve to that constant instead, so
+            // the full re-check refuses each as already declared, and counts it.
+            let already_declared: BTreeMap<String, String> = summaries
+                .iter()
+                .flat_map(|s| s.shadowed_declarations.iter())
+                .map(|(name, held_by)| (name.to_string(), held_by.clone()))
+                .collect();
             let (tc_pass, tc_fail, tc_errors) = if load_only {
                 (0, 0, BTreeMap::new())
             } else {
                 match mode {
                     ValidationMode::InferOnly => typecheck_constants(env, &new_names),
                     ValidationMode::Full => {
+                        let mut targets = new_names.clone();
+                        targets.extend(already_declared.keys().cloned());
                         let (pass, fail, errs, _stats) =
-                            crate::verify_batch_full::typecheck_constants_full_streaming(
+                            crate::verify_batch_full::typecheck_constants_full_streaming_in_run(
                                 env,
-                                &new_names,
+                                &targets,
+                                not_admitted,
+                                &already_declared,
                                 max_heartbeats,
                                 elide_proof_values,
                                 None,
                             );
+                        // A shadowed name's resident constant is another
+                        // module's: its refusal here says nothing about that one.
+                        not_admitted.extend(
+                            errs.keys()
+                                .filter(|k| !already_declared.contains_key(*k))
+                                .cloned(),
+                        );
                         (pass, fail, errs)
                     }
                 }
@@ -816,22 +893,33 @@ pub fn verify_one_module_with_mode_shared(
                 tc_errors,
             }
         }
-        Err(e) => ModuleResult {
-            path: rel_path.to_string(),
-            module_name: module_name.to_string(),
-            load_ok: false,
-            constants_added: 0,
-            constants_skipped: 0,
-            tc_pass: 0,
-            tc_fail: 0,
-            elapsed_ms: elapsed.as_millis() as u64,
-            load_error: Some(format!("{e}")),
-            tc_errors: BTreeMap::new(),
-        },
+        Err(e) => {
+            // A refused import can leave declarations resident: an
+            // inconsistent-artifact check (a self-dependent declaration, a name
+            // declared twice differently) runs once the artifact's records are
+            // registered. Lean's replay of the run never added them, so every
+            // name the failed load left behind is not admitted, and a later
+            // module's use of one is refused as the run refuses the use of any
+            // declaration it did not admit.
+            not_admitted.extend(collect_new_env_names(env, known_names));
+            ModuleResult {
+                path: rel_path.to_string(),
+                module_name: module_name.to_string(),
+                load_ok: false,
+                constants_added: 0,
+                constants_skipped: 0,
+                tc_pass: 0,
+                tc_fail: 0,
+                elapsed_ms: elapsed.as_millis() as u64,
+                load_error: Some(format!("{e}")),
+                tc_errors: BTreeMap::new(),
+            }
+        }
     }
 }
 
-pub fn emit_summary(summary: &BatchSummary, json_output: bool) {
+#[cfg(feature = "cli")]
+pub(crate) fn emit_summary(summary: &BatchSummary, json_output: bool) {
     if json_output {
         let out = serde_json::to_string_pretty(summary)
             .expect("invariant: BatchSummary is always serializable");
@@ -911,10 +999,7 @@ fn init_preload_needed(root: &Path, search_paths: &[PathBuf]) -> bool {
         info!("root contains Init — skipping separate Init pre-load");
         return false;
     }
-    if search_paths.is_empty() {
-        return false;
-    }
-    true
+    !search_paths.is_empty()
 }
 
 /// Resolve a module name (e.g. `Init.Core`) to its `.olean` path on the given
@@ -938,7 +1023,7 @@ fn resolve_olean_on_paths(module: &str, search_paths: &[PathBuf]) -> Option<Path
 /// in the Init closure changes on disk (a different toolchain, a rebuilt
 /// stdlib, etc.), so a stale snapshot built from different inputs is rejected.
 /// On any resolution/parse error the hash still completes over whatever was
-/// reachable — the worst case is a spurious cache miss (full re-verify), never
+/// reachable — the worst case is a spurious cache miss (cold load), never
 /// a false hit, because the missing input simply isn't mixed in and the next
 /// run that *can* resolve it will produce a different hash and discard.
 fn init_closure_hash(search_paths: &[PathBuf]) -> String {
@@ -954,17 +1039,17 @@ fn init_closure_hash(search_paths: &[PathBuf]) -> String {
         let Some(path) = resolve_olean_on_paths(&module, search_paths) else {
             continue;
         };
-        let Ok(bytes) = std::fs::read(&path) else {
-            continue;
-        };
+        // Every part the loader reads, and the imports of the part `lean`
+        // reads (R113); an unreadable part is mixed in as such, never skipped.
         file_hashes.insert(
             module.clone(),
-            crate::verify_cache::file_content_hash(&bytes),
+            crate::verify_cache::artifact_content_hash(&path)
+                .unwrap_or_else(|| "<unreadable>".to_string()),
         );
-        if let Ok(imports) = parse_imports_only(&bytes) {
+        if let Ok(imports) = artifact_import_names(&module, &path) {
             for imp in imports {
-                if !visited.contains(&imp.module_name) {
-                    queue.push_back(imp.module_name);
+                if !visited.contains(&imp) {
+                    queue.push_back(imp);
                 }
             }
         }
@@ -996,15 +1081,17 @@ fn snapshot_path(cache_dir: &Path) -> PathBuf {
 ///   path: seconds instead of minutes). The restored env REPLACES `env`'s Init
 ///   contents by merging the snapshot env in.
 /// - Otherwise do the full `load_module_with_deps(Init)`. If `full_validation`
-///   is set, run the `add_decl`-equivalent re-verification (`infer_sort` +
-///   `check_type`) over the newly-added Init constants, and ONLY if that
-///   re-verify reports zero failures, write the snapshot to `cache_dir`.
+///   is set, run the local assumed-environment check (`infer_sort` +
+///   `check_type`, `typecheck_constants_full`) over the newly-added Init
+///   constants, and ONLY if that check reports zero failures, write the
+///   snapshot to `cache_dir`.
 ///
 /// SOUNDNESS:
-/// - The snapshot is WRITTEN only after a full re-verify of the Init constants
-///   succeeded in THIS run (never from a load-only / infer-only env), so it is
-///   a cache of a prior re-verification, not a trust claim. Since R1-SNAP the
-///   write carries a `SnapshotAttestation` of that re-verify, which the kernel
+/// - The snapshot is WRITTEN only after the local assumed-environment check of
+///   the Init constants succeeded in THIS run (never from a load-only /
+///   infer-only env), so it is
+///   a cache of a prior local check, not a trust claim. Since R1-SNAP the
+///   write carries a `SnapshotAttestation` of that local check, which the kernel
 ///   seals into a content-bound `SnapshotReceipt` inside the snapshot header.
 /// - The snapshot is REUSED only on an exact header match AND a present,
 ///   content-bound verification receipt (`SnapshotReceiptPolicy::RequireReceipt`
@@ -1019,7 +1106,7 @@ fn snapshot_path(cache_dir: &Path) -> PathBuf {
 /// warm-path RESTORE and the snapshot WRITE are both disabled, because a
 /// snapshot is a full-resident image: restoring one would re-inflate the very
 /// values we are eliding, and writing one from an elided env would persist a
-/// value-stripped image as if it were a complete re-verified Init. With
+/// value-stripped image as if it were a complete locally-checked Init. With
 /// `ProofValueElision::None` (the default) this is byte-identical to the prior
 /// behavior.
 pub fn preload_init_with_snapshot(
@@ -1047,39 +1134,53 @@ pub fn preload_init_with_snapshot(
     // path below), so restoring it would re-inflate exactly the Init values we
     // are eliding — defeating the memory bound. Fall through to the elided cold
     // load instead.
-    if let (Some(dir), true, true) = (cache_dir, env_is_empty, elide == ProofValueElision::None) {
+    // A snapshot carries no Lean-world binding (R81): the warm path is taken
+    // only over an Init a fresh environment reads, and binds that world after
+    // the restore. Any other Init falls through to the cold load, whose
+    // import gate refuses it by name.
+    let init_world = resolve_olean_on_paths("Init", search_paths)
+        .and_then(|init| std::fs::read(init).ok())
+        .and_then(|bytes| crate::import::part_world("Init", &bytes).ok().flatten());
+    if let (Some(dir), true, true, Some(init_world)) = (
+        cache_dir,
+        env_is_empty,
+        elide == ProofValueElision::None,
+        init_world,
+    ) {
         let path = snapshot_path(dir);
         if path.exists() {
             let hash = init_closure_hash(search_paths);
             let expected = clean_kernel::env::SnapshotHeader::current(hash);
             // R1-SNAP: production reuse REQUIRES the verification receipt — a
             // snapshot nothing attested (or whose receipt no longer binds to
-            // the stored env bytes) is refused and the cold full re-verify
+            // the stored env bytes) is refused and the cold load
             // runs instead. The AcceptUnreceipted opt-out is never used here.
             match Environment::load_snapshot(
                 &path,
                 &expected,
                 clean_kernel::env::SnapshotReceiptPolicy::RequireReceipt,
             ) {
-                Ok(clean_kernel::env::SnapshotLoadOutcome::Loaded(snap_env)) => {
+                Ok(clean_kernel::env::SnapshotLoadOutcome::Loaded(mut snap_env)) => {
                     let warm_start = Instant::now();
                     let added = snap_env.constants().count();
-                    // `env` is empty (checked above): the snapshot env, with all
-                    // `*_init` flags + inductives/constructors/recursors restored
-                    // by bincode, becomes the environment verbatim.
-                    *env = *snap_env;
-                    info!(
-                        constants = added,
-                        elapsed_ms = warm_start.elapsed().as_millis(),
-                        path = %path.display(),
-                        "Init restored from .clean-cache snapshot (warm path)"
-                    );
-                    return;
+                    // Restore the world only if the content-bound profile
+                    // already matches it; never rewrite a verified snapshot's
+                    // semantic input after its receipt was accepted.
+                    match crate::import::bind_restored_world(&mut snap_env, init_world, "Init") {
+                        Ok(()) => {
+                            *env = *snap_env;
+                            info!(constants=added,elapsed_ms=warm_start.elapsed().as_millis(),path=%path.display(),"Init restored from .clean-cache snapshot (warm path)");
+                            return;
+                        }
+                        Err(error) => {
+                            warn!(%error,"Init snapshot universe profile mismatch; cold load")
+                        }
+                    }
                 }
                 Ok(clean_kernel::env::SnapshotLoadOutcome::Mismatch(h)) => {
                     info!(
                         stale_version = h.snapshot_version,
-                        "Init snapshot header mismatch — discarding, full re-verify"
+                        "Init snapshot header mismatch — discarding, cold load"
                     );
                 }
                 Ok(clean_kernel::env::SnapshotLoadOutcome::ReceiptRefused {
@@ -1089,7 +1190,7 @@ pub fn preload_init_with_snapshot(
                         violation = %violation,
                         path = %path.display(),
                         "Init snapshot REFUSED: verification receipt absent or \
-                         not content-bound — discarding, full re-verify"
+                         not content-bound — discarding, cold load"
                     );
                 }
                 Ok(clean_kernel::env::SnapshotLoadOutcome::LoadedUnreceipted {
@@ -1100,17 +1201,17 @@ pub fn preload_init_with_snapshot(
                     warn!(
                         violation = %violation,
                         "Init snapshot returned LoadedUnreceipted under \
-                         RequireReceipt — NOT reusing it, full re-verify"
+                         RequireReceipt — NOT reusing it, cold load"
                     );
                 }
                 Err(e) => {
-                    warn!(err = %e, "Init snapshot unreadable/corrupt — full re-verify");
+                    warn!(err = %e, "Init snapshot unreadable/corrupt — cold load");
                 }
             }
         }
     }
 
-    // -- Cold path: full load (+ optional full re-verify + snapshot write). ---
+    // -- Cold path: full load (+ optional local check + snapshot write). ---
     info!("pre-loading Init module (external dependency)...");
     let init_start = Instant::now();
     // Carry the proof-value elision into the load so Init's never-unfolded
@@ -1124,7 +1225,7 @@ pub fn preload_init_with_snapshot(
         // Defer the O(env) heuristic instance backfill to a single end-of-closure
         // pass: the Init closure is ~320 modules, so the per-module schedule is an
         // O(modules × env) quadratic that dominated this pre-load.
-        OleanImportPolicy::default()
+        recheck_policy()
             .with_proof_elision(elide)
             .with_deferred_global_instance_backfill(),
     ) {
@@ -1149,7 +1250,8 @@ pub fn preload_init_with_snapshot(
         return;
     }
 
-    // Snapshot WRITE is gated on a successful full re-verify of THIS run.
+    // Snapshot WRITE is gated on a successful local assumed-environment check
+    // of THIS run.
     let Some(dir) = cache_dir else {
         return;
     };
@@ -1165,12 +1267,13 @@ pub fn preload_init_with_snapshot(
         pass,
         fail,
         elapsed_ms = reverify_start.elapsed().as_millis(),
-        "Init full re-verify (add_decl-equivalent)"
+        "Init local assumed-environment check (typecheck_constants_full; \
+         dependencies assumed, not a dependency-closed replay)"
     );
     if fail != 0 {
         warn!(
             fail,
-            "Init re-verify reported failures — NOT writing snapshot"
+            "Init local assumed-environment check reported failures — NOT writing snapshot"
         );
         return;
     }
@@ -1178,14 +1281,18 @@ pub fn preload_init_with_snapshot(
     let hash = init_closure_hash(search_paths);
     let header = clean_kernel::env::SnapshotHeader::current(hash);
     let path = snapshot_path(dir);
-    // R1-SNAP: attest the re-verification that just succeeded (the fail==0
+    // R1-SNAP: attest the local check that just succeeded (the fail==0
     // gate above). save_snapshot seals this claim into a receipt whose digest
     // it computes over the exact env bytes written; load_snapshot refuses any
     // snapshot without it. `verified_at` is diagnostic only — the binding is
     // content-derived and carries no timestamp.
     let attestation = clean_kernel::env::SnapshotAttestation {
-        scope: "typecheck_constants_full: add_decl-equivalent re-verify of the \
-                Init closure (preload_init_with_snapshot cold path, fail==0)"
+        scope: "typecheck_constants_full (local-assumed-env): each Init declaration's \
+                type inhabits a Sort and its value has that type, replayed in Lean's \
+                order with each Init inductive block rebuilt by the kernel and compared \
+                with its stored members, ASSUMING every declaration outside Init; not \
+                add_decl, not a dependency-closed replay (preload_init_with_snapshot \
+                cold path, fail==0)"
             .to_string(),
         decls_verified: pass as u64,
         verified_at: std::time::SystemTime::now()
@@ -1229,7 +1336,12 @@ pub fn verify_one_isolated(
     let start = Instant::now();
     let mut env = Environment::default();
     if !search_paths.is_empty() {
-        let _ = load_module_with_deps(&mut env, "Init", search_paths);
+        let _ = load_module_with_deps_with_import_policy(
+            &mut env,
+            "Init",
+            search_paths,
+            recheck_policy(),
+        );
     }
     let summary: Result<LoadSummary, _> = crate::import::load_olean_file(&mut env, olean_path);
     let elapsed = start.elapsed();
@@ -1430,10 +1542,13 @@ mod option_b_tests {
         let init = root.join("Init.olean");
         let char_m = root.join("Init/Char.olean");
         let option_m = root.join("Init/Option.olean");
-        if !char_m.exists() || !option_m.exists() {
-            // Fixtures are committed; skip rather than fail if a checkout omits them.
-            return;
-        }
+        // Fixtures are committed: a checkout without them is broken, so fail
+        // rather than report `ok` for a test that measured nothing.
+        assert!(
+            char_m.exists() && option_m.exists(),
+            "committed stdlib fixtures missing under {}",
+            root.display()
+        );
 
         let closures =
             build_import_closures(&[init.clone(), char_m.clone(), option_m.clone()], &root);
@@ -1479,10 +1594,13 @@ mod option_b_tests {
         let fixture = stdlib_fixture_root();
         let src_char = fixture.join("Init/Char.olean");
         let src_init = fixture.join("Init.olean");
-        if !src_char.exists() || !src_init.exists() {
-            // Fixtures are committed; skip rather than fail if a checkout omits them.
-            return;
-        }
+        // Fixtures are committed: a checkout without them is broken, so fail
+        // rather than report `ok` for a test that measured nothing.
+        assert!(
+            src_char.exists() && src_init.exists(),
+            "committed stdlib fixtures missing under {}",
+            fixture.display()
+        );
 
         let tmp = tempfile::tempdir().expect("tempdir");
         let root = tmp.path().join("root");
@@ -1534,15 +1652,20 @@ mod snapshot_tests {
 
     /// A search-path list pointing at the Init fixture, with a non-Init `root`
     /// so `preload_init_with_snapshot` actually performs the Init pre-load.
-    fn fixture_setup() -> Option<(PathBuf, Vec<PathBuf>)> {
+    ///
+    /// The Init fixture is committed, so its absence fails the caller instead of
+    /// letting it return `ok` having measured nothing.
+    fn fixture_setup() -> (PathBuf, Vec<PathBuf>) {
         let stdlib = fixture_init_root();
-        if !stdlib.join("Init.olean").exists() {
-            return None; // fixture not present in this checkout
-        }
+        assert!(
+            stdlib.join("Init.olean").exists(),
+            "committed Init fixture missing under {}",
+            stdlib.display()
+        );
         // root: a sibling temp dir that does NOT contain Init.
         let root = std::env::temp_dir().join(format!("clean-snap-root-{}", std::process::id()));
-        std::fs::create_dir_all(&root).ok()?;
-        Some((root, vec![stdlib]))
+        std::fs::create_dir_all(&root).expect("create the snapshot root temp dir");
+        (root, vec![stdlib])
     }
 
     fn temp_cache_dir(tag: &str) -> PathBuf {
@@ -1556,20 +1679,27 @@ mod snapshot_tests {
     /// env and assert the WARM restore + GATE behaviour, which is exactly the
     /// load-time half under test. The full cold load+re-verify path is exercised
     /// against a real toolchain in the network "PROVE IT" run.
-    fn synthetic_init_env() -> Environment {
-        use clean_kernel::env::TrustedEnvExt;
+    fn synthetic_init_env(paths: &[PathBuf]) -> Environment {
         use clean_kernel::expr::Expr;
         use clean_kernel::name::Name;
         use clean_kernel::Declaration;
         let mut env = Environment::default();
+        let init = resolve_olean_on_paths("Init", paths).expect("fixture Init must resolve");
+        let bytes = std::fs::read(init).expect("fixture Init must be readable");
+        let world = crate::import::part_world("Init", &bytes)
+            .expect("fixture Init must have a supported world")
+            .expect("fixture Init must have a Lean world");
+        crate::declare_environment_world(&mut env, world)
+            .expect("seed must use the fixture's universe algebra before checking declarations");
         for i in 0..50u32 {
-            env.add_decl_unchecked(Declaration::Definition {
+            env.add_decl(Declaration::Definition {
                 name: Name::from_string(&format!("Init.Synthetic.d{i}")),
                 level_params: vec![],
                 type_: Expr::type_(),
                 value: Expr::prop(),
                 is_reducible: true,
-            });
+            })
+            .expect("synthetic snapshot declaration must pass the kernel checker");
         }
         env
     }
@@ -1606,9 +1736,7 @@ mod snapshot_tests {
 
     #[test]
     fn test_closure_hash_is_deterministic_and_path_sensitive() {
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let h1 = init_closure_hash(&paths);
         let h2 = init_closure_hash(&paths);
         assert_eq!(h1, h2, "closure hash must be deterministic");
@@ -1621,15 +1749,13 @@ mod snapshot_tests {
 
     #[test]
     fn test_warm_path_restores_identical_env_from_matching_snapshot() {
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let cache = temp_cache_dir("roundtrip");
         let _ = std::fs::remove_dir_all(&cache);
         std::fs::create_dir_all(&cache).expect("mkdir cache");
 
         // Seed a snapshot whose header matches the current run.
-        let fresh = synthetic_init_env();
+        let fresh = synthetic_init_env(&paths);
         seed_snapshot(&cache, &paths, &fresh, |_| {});
 
         // Warm run: env empty + matching snapshot => restore from snapshot.
@@ -1652,12 +1778,76 @@ mod snapshot_tests {
             "warm snapshot env constant count must equal the seeded env"
         );
         assert!(fresh.constants().next().is_some(), "seed must be non-empty");
+        assert_eq!(warm.lean_level_profile(), fresh.lean_level_profile());
+        assert_eq!(
+            crate::environment_world(&warm),
+            crate::environment_world(&fresh)
+        );
         for ci in fresh.constants() {
             let got = warm
                 .get_const(&ci.name)
                 .expect("warm env must contain every seeded constant");
             assert_eq!(got.type_, ci.type_, "constant type must round-trip");
         }
+
+        let _ = std::fs::remove_dir_all(&cache);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn test_warm_path_refuses_a_receipted_snapshot_with_another_universe_algebra() {
+        let (root, paths) = fixture_setup();
+        let cache = temp_cache_dir("wrong-algebra");
+        let _ = std::fs::remove_dir_all(&cache);
+        std::fs::create_dir_all(&cache).expect("mkdir cache");
+
+        let mut seeded = synthetic_init_env(&paths);
+        let fixture_profile = seeded.lean_level_profile();
+        let wrong_profile = Environment::default().lean_level_profile();
+        assert_ne!(
+            fixture_profile, wrong_profile,
+            "control must change the algebra"
+        );
+        seeded.set_lean_level_profile(wrong_profile);
+        seed_snapshot(&cache, &paths, &seeded, |_| {});
+
+        // Header and receipt are valid: only the source-world algebra is wrong.
+        let path = cache.join("init.snapshot");
+        let before = std::fs::read(&path).expect("seed snapshot must be readable");
+        let expected = clean_kernel::env::SnapshotHeader::current(init_closure_hash(&paths));
+        match Environment::load_snapshot(
+            &path,
+            &expected,
+            clean_kernel::env::SnapshotReceiptPolicy::RequireReceipt,
+        )
+        .expect("snapshot must decode")
+        {
+            clean_kernel::env::SnapshotLoadOutcome::Loaded(env) => {
+                assert_eq!(env.constants().count(), 50);
+                assert_eq!(env.lean_level_profile(), wrong_profile);
+            }
+            other => panic!("control: header and receipt must be accepted: {other:?}"),
+        }
+
+        let mut warm = Environment::default();
+        preload_init_with_snapshot(
+            &mut warm,
+            &root,
+            &paths,
+            Some(&cache),
+            true,
+            0,
+            ProofValueElision::None,
+        );
+        assert_eq!(
+            warm.constants().count(),
+            0,
+            "wrong-algebra snapshot must be refused"
+        );
+        assert_eq!(
+            std::fs::read(path).expect("snapshot must remain readable"),
+            before
+        );
 
         let _ = std::fs::remove_dir_all(&cache);
         let _ = std::fs::remove_dir_all(&root);
@@ -1672,14 +1862,12 @@ mod snapshot_tests {
         // the preload with `OpaqueOnly`. The warm restore must NOT fire; the
         // cold path runs against the partial fixture Init (which cannot load
         // fully), so the env ends up EMPTY — proving the snapshot was bypassed.
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let cache = temp_cache_dir("elide-warm");
         let _ = std::fs::remove_dir_all(&cache);
         std::fs::create_dir_all(&cache).expect("mkdir cache");
 
-        let seeded = synthetic_init_env();
+        let seeded = synthetic_init_env(&paths);
         seed_snapshot(&cache, &paths, &seeded, |_| {});
 
         // Control: with `None`, the matching snapshot IS restored (50 consts).
@@ -1727,9 +1915,7 @@ mod snapshot_tests {
         // snapshot: the resident env is missing the elided values, so writing it
         // would let a later `none` run restore a value-stripped image as if it
         // were a complete, fully-resident Init.
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let cache = temp_cache_dir("elide-nowrite");
         let _ = std::fs::remove_dir_all(&cache);
         std::fs::create_dir_all(&cache).expect("mkdir cache");
@@ -1755,14 +1941,13 @@ mod snapshot_tests {
 
     #[test]
     fn test_load_only_run_does_not_write_snapshot() {
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let cache = temp_cache_dir("noload");
         let _ = std::fs::remove_dir_all(&cache);
 
         // full_validation = false => snapshot MUST NOT be written (write is
-        // gated on a successful full re-verify this run). No snapshot seeded, so
+        // gated on a successful local assumed-environment check this run). No
+        // snapshot seeded, so
         // the warm path is a miss and the cold path runs with the write gated.
         let mut env = Environment::default();
         preload_init_with_snapshot(
@@ -1785,15 +1970,13 @@ mod snapshot_tests {
 
     #[test]
     fn test_tampered_snapshot_version_is_discarded_not_reused() {
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let cache = temp_cache_dir("tamper");
         let _ = std::fs::remove_dir_all(&cache);
         std::fs::create_dir_all(&cache).expect("mkdir cache");
 
         // Seed a snapshot with a BUMPED (future) snapshot_version header.
-        let seeded = synthetic_init_env();
+        let seeded = synthetic_init_env(&paths);
         seed_snapshot(&cache, &paths, &seeded, |h| {
             h.snapshot_version = clean_kernel::env::SNAPSHOT_VERSION + 1;
         });
@@ -1824,15 +2007,13 @@ mod snapshot_tests {
 
     #[test]
     fn test_closure_hash_mismatch_is_discarded_not_reused() {
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let cache = temp_cache_dir("hashmm");
         let _ = std::fs::remove_dir_all(&cache);
         std::fs::create_dir_all(&cache).expect("mkdir cache");
 
         // Seed a snapshot whose closure hash is WRONG for `paths`.
-        let seeded = synthetic_init_env();
+        let seeded = synthetic_init_env(&paths);
         seed_snapshot(&cache, &paths, &seeded, |h| {
             h.init_closure_blake3 = "deadbeef-wrong-closure".to_string();
         });
@@ -1864,14 +2045,12 @@ mod snapshot_tests {
         // be refused by the warm path. The fixture Init cannot load fully, so
         // the env ends up EMPTY — proving the unreceipted snapshot's 50
         // constants were NOT reused.
-        let Some((root, paths)) = fixture_setup() else {
-            return;
-        };
+        let (root, paths) = fixture_setup();
         let cache = temp_cache_dir("norcpt");
         let _ = std::fs::remove_dir_all(&cache);
         std::fs::create_dir_all(&cache).expect("mkdir cache");
 
-        let seeded = synthetic_init_env();
+        let seeded = synthetic_init_env(&paths);
         seed_snapshot_unreceipted(&cache, &paths, &seeded);
 
         // Control: the same env seeded WITH a receipt IS restored — so the

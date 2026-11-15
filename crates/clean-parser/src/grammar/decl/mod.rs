@@ -5,18 +5,32 @@
 //! Declaration parsing for Lean 4 syntax.
 //!
 //! Split into focused submodules:
-//! - `def_theorem`: def, theorem, axiom, opaque, termination hints
+//! - `def_theorem`: def, theorem, axiom, opaque
+//! - `termination_hints`: termination clauses and recovery
 //! - `inductive`: inductive, coinductive, constructor types
 //! - `structure`: structure, deriving, field parsing, universe params, binders
 //! - `class_instance`: class, instance, instance field parsing
 //! - `commands`: example, import, namespace, section, universe, variable,
 //!   open, export, mutual, hash commands, abbrev, attribute, set_option
+//! - `header`: the file header (`module`, header imports)
+//! - `doc_before`: whether a doc comment ends right before a token (the
+//!   header ends at one, and a declaration doc comment opens a modifier prefix)
+//! - `module_spelling`: pinned Lean's verdict on the modifiers in front of
+//!   `import`, `section` and `variable`
 
 mod class_instance;
 mod commands;
+mod commands_misc;
 mod def_theorem;
+mod doc_before;
+mod header;
 mod inductive;
+mod module_spelling;
 mod structure;
+mod termination_hints;
+mod test_commands;
+
+use module_spelling::GuardedCommand;
 
 pub(in crate::grammar) use def_theorem::EquationArmBoundary;
 
@@ -36,6 +50,11 @@ impl Parser {
     pub(super) fn file(&mut self) -> Result<Vec<SurfaceDecl>, ParseError> {
         let mut decls = Vec::new();
 
+        // The header (`module`? and the header imports, `header.rs`) is read
+        // and recorded first, as Lean's `parseHeader` reads it before any
+        // command; its imports enter the stream as `SurfaceDecl::Import`.
+        self.file_header = self.file_header(&mut decls)?;
+
         while !matches!(self.current_kind(), TokenKind::Eof) {
             let span = self.current_span();
             match self.decl() {
@@ -48,8 +67,13 @@ impl Parser {
                     // downstream garbage ("error-recovery 9999 Nat 0") — and
                     // propagate the typed error verbatim so the real
                     // `checkUniverseOffset` message (offset + max) reaches the
-                    // user, matching Lean's loud rejection.
-                    if matches!(err, ParseError::UniverseOffsetTooLarge { .. }) {
+                    // user, matching Lean's loud rejection. A module-system
+                    // refusal is the same: Lean's message, the file refused.
+                    // After a recovered header import it is neither: Lean's
+                    // first message is the header's, and pinned Lean reads no
+                    // command after a header error (`header.rs`), so it is
+                    // recovered like any other error.
+                    if err.refuses_file() && !self.header_recovered {
                         return Err(err);
                     }
                     // Recovery: skip to the next declaration keyword and
@@ -57,14 +81,57 @@ impl Parser {
                     decls.push(self.skip_to_next_decl_with_recovery("error-recovery", span, &err));
                 }
             }
+            // A refusal raised inside a `namespace`/`section` body.
+            if let Some(err) = self.file_refusal.take() {
+                return Err(err);
+            }
         }
 
+        // A doc comment is a Lean token even though our lexer stores it in
+        // the side table. Preserve a recovered header's earlier diagnostic.
+        if let (false, Some(err)) = (self.header_recovered, self.eof_declaration_doc_refusal()) {
+            return Err(err);
+        }
         Ok(decls)
     }
 
-    /// Parse a declaration
+    /// Parse a declaration.
+    ///
+    /// Every declaration starts with the parser's full red zone
+    /// (`Parser::EXPR_STACK_RED_ZONE`): the frames between here and the first
+    /// guarded expression entry (`expr_in_slot`) are unguarded, and a caller
+    /// can arrive with little stack left — the elaborator, whose own red zone
+    /// is smaller, parses the codata seed library in the middle of
+    /// elaborating a `codata` command, and a 1 MB thread overflowed there
+    /// (regression pin
+    /// `codata_cmd_tests::test_codata_stream_encoding_survives_small_thread_stack`).
     pub(super) fn decl(&mut self) -> Result<SurfaceDecl, ParseError> {
-        self.decl_with_modifiers(DeclModifiers::default())
+        // A command nested in this one (`variable … in <command>`) has its
+        // own modifier prefix; this one's is restored after it.
+        let outer_command_start = std::mem::replace(&mut self.command_start, self.pos);
+        let origin_checkpoint = self.origins.as_ref().map(|origins| origins.checkpoint());
+        let decl = stacker::maybe_grow(
+            Self::EXPR_STACK_RED_ZONE,
+            Self::EXPR_STACK_GROW_SIZE,
+            || {
+                self.decl_with_modifiers(DeclModifiers {
+                    visibility: self.default_visibility,
+                    ..DeclModifiers::default()
+                })
+            },
+        );
+        self.command_start = outer_command_start;
+        if let Some(origins) = &mut self.origins {
+            match &decl {
+                Ok(decl) => origins.declaration_root(decl),
+                Err(_) => {
+                    if let Some(checkpoint) = origin_checkpoint {
+                        origins.rollback(checkpoint);
+                    }
+                }
+            }
+        }
+        decl
     }
 
     /// Parse a declaration with accumulated modifiers.
@@ -73,9 +140,43 @@ impl Parser {
     /// are accumulated before the declaration keyword and threaded into the resulting
     /// `SurfaceDecl` node.
     fn decl_with_modifiers(&mut self, modifiers: DeclModifiers) -> Result<SurfaceDecl, ParseError> {
-        // Parse leading attributes
-        let attrs = self.attributes()?;
+        self.decl_with_modifiers_and_attrs(modifiers, Vec::new())
+    }
 
+    /// [`Self::decl_with_modifiers`] carrying the attributes already parsed
+    /// before a modifier. Lean's `declModifiers` puts `@[…]` BEFORE the
+    /// visibility and `noncomputable`/`unsafe`/`partial` words, so
+    /// `@[simp] private theorem` is the ordinary order; every modifier arm used
+    /// to recurse through a fresh `attributes()` read and DROP what it had
+    /// parsed — `@[simp] private theorem myf_eq` registered no simp lemma
+    /// (measured 2026-09-12; Lean accepts the file).
+    fn decl_with_modifiers_and_attrs(
+        &mut self,
+        modifiers: DeclModifiers,
+        prior_attrs: Vec<Attribute>,
+    ) -> Result<SurfaceDecl, ParseError> {
+        if self.pos == self.command_start {
+            if let Some(err) = self.leading_stacked_doc_refusal() {
+                return Err(err);
+            }
+        }
+        // Parse leading attributes (after any already carried in).
+        let mut attrs = prior_attrs;
+        attrs.extend(self.attributes()?);
+
+        if matches!(
+            self.current_kind(),
+            TokenKind::Def | TokenKind::Abbrev | TokenKind::Instance
+        ) && !attrs
+            .iter()
+            .any(|a| matches!(a, Attribute::Unknown(n) if n == "expose" || n == "no_expose"))
+        {
+            if let Some(exposed) = self.default_exposure {
+                attrs.push(Attribute::Unknown(
+                    if exposed { "expose" } else { "no_expose" }.into(),
+                ));
+            }
+        }
         let span = self.current_span();
         // Column of the command keyword, for the binder-run line barrier.
         let keyword_col = self.current().col;
@@ -140,7 +241,19 @@ impl Parser {
                 self.advance();
                 self.example_decl(span)
             }
+            // `import`, `section` and `variable` used to drop whatever
+            // modifiers stood in front of them (`private import X`, `private
+            // section`, `public variable` parsed as the bare command). Pinned
+            // Lean takes only the prefixes `module_spelling` models, and no
+            // prefix at all in front of an `import` past the header (plan item
+            // `formats-module-spelling-refusals`). A declaration doc comment
+            // is a prefix word too.
             TokenKind::Import => {
+                if self.has_modifier_prefix() {
+                    if let Some(err) = self.modifier_prefix_refusal(GuardedCommand::Import) {
+                        return Err(err);
+                    }
+                }
                 self.advance();
                 self.import_decl(span)
             }
@@ -149,16 +262,46 @@ impl Parser {
                 self.namespace_decl(span)
             }
             TokenKind::Section => {
+                if self.has_modifier_prefix() {
+                    if let Some(err) = self.modifier_prefix_refusal(GuardedCommand::Section) {
+                        return Err(err);
+                    }
+                }
                 self.advance();
-                self.section_decl(span)
+                let previous_visibility =
+                    std::mem::replace(&mut self.default_visibility, modifiers.visibility);
+                let exposure = attrs
+                    .iter()
+                    .rev()
+                    .find_map(|a| match a {
+                        Attribute::Unknown(n) if n == "expose" => Some(true),
+                        Attribute::Unknown(n) if n == "no_expose" => Some(false),
+                        _ => None,
+                    })
+                    .or(self.default_exposure);
+                let previous_exposure = std::mem::replace(&mut self.default_exposure, exposure);
+                let section = self.section_decl(span);
+                self.default_exposure = previous_exposure;
+                self.default_visibility = previous_visibility;
+                let mut section = section?;
+                if let SurfaceDecl::Section { noncomputable, .. } = &mut section {
+                    *noncomputable = modifiers.is_noncomputable;
+                }
+                Ok(section)
             }
             TokenKind::Universe => {
                 self.advance();
                 self.universe_decl(span, keyword_col)
             }
             TokenKind::Variable => {
+                if self.has_modifier_prefix() {
+                    if let Some(err) = self.modifier_prefix_refusal(GuardedCommand::Variable) {
+                        return Err(err);
+                    }
+                }
+                let visibility = self.has_modifier_prefix().then_some(modifiers.visibility);
                 self.advance();
-                self.variable_decl(span, keyword_col)
+                self.variable_decl(span, keyword_col, visibility)
             }
             TokenKind::Open => {
                 self.advance();
@@ -186,55 +329,49 @@ impl Parser {
                 self.advance();
                 let mut mods = modifiers;
                 mods.visibility = Visibility::Private;
-                self.decl_with_modifiers(mods)
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
             TokenKind::Protected => {
                 self.advance();
                 let mut mods = modifiers;
                 mods.visibility = Visibility::Protected;
-                self.decl_with_modifiers(mods)
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
             // Lean 4 module-system visibility modifier. `public` may precede a
-            // declaration (`public def`), an import (`public import X`), or a
-            // section (`public section`). Visibility is transparent to
-            // type-checking (it governs export/module semantics only), so we
-            // record it and parse the following construct exactly as normal.
+            // declaration (`public def`) or a section (`public section`);
+            // `public import X` in the header is read by `header.rs`, and one
+            // past the header (after a command or a doc comment, where the
+            // header ends) is refused at the `Import` arm. Visibility is
+            // transparent to type-checking (it governs export/module
+            // semantics only), so it is recorded and the following
+            // construct parsed exactly as normal.
             TokenKind::Public => {
                 self.advance();
                 let mut mods = modifiers;
                 mods.visibility = Visibility::Public;
-                self.decl_with_modifiers(mods)
-            }
-            // Lean 4 module-system `module` header command. It declares the file
-            // a module (Lean module system) and is a no-op for checking. It only
-            // ever appears leading, before the first real declaration, so we
-            // consume it and parse the following declaration in its place —
-            // `module` itself contributes no node to the declaration stream.
-            TokenKind::Module => {
-                self.advance();
-                self.decl_with_modifiers(modifiers)
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
             TokenKind::Partial => {
                 self.advance();
                 let mut mods = modifiers;
                 mods.is_partial = true;
-                self.decl_with_modifiers(mods)
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
             TokenKind::Unsafe => {
                 self.advance();
                 let mut mods = modifiers;
                 mods.is_unsafe = true;
-                self.decl_with_modifiers(mods)
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
             TokenKind::Noncomputable => {
                 self.advance();
                 let mut mods = modifiers;
                 mods.is_noncomputable = true;
-                self.decl_with_modifiers(mods)
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
             TokenKind::Abbrev => {
                 self.advance();
-                self.abbrev_decl(span, attrs)
+                self.abbrev_decl(span, attrs, modifiers)
             }
             TokenKind::Attribute => {
                 self.advance();
@@ -290,13 +427,17 @@ impl Parser {
                 self.advance();
                 let mut mods = modifiers;
                 mods.scope = DeclScope::Scoped;
-                self.decl_with_modifiers(mods)
+                if self.check(&TokenKind::LBracket) {
+                    return self.scoped_in_namespace_notation(mods, attrs);
+                }
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
             // Lean 4 `include x y` / `omit x y` — section-variable inclusion
-            // control. Neither word is a reserved keyword in Lean (`include` is
-            // a perfectly good identifier), so these fire only when the word is
-            // followed by an identifier, which is the only shape the commands
-            // have.
+            // control. Pinned Lean v4.30.0-rc2 reserves both words (`def
+            // include` is "unexpected token"), but Clean lexes them as
+            // identifiers, so these fire only when the word is followed by an
+            // identifier, which is the only name shape modelled; a line-start
+            // one also ends a preceding term (`is_boundary_command_keyword`).
             //
             // Before this existed, `include h` was not a command to this
             // parser at all: the PRECEDING `variable` line's bare-name binder
@@ -314,11 +455,25 @@ impl Parser {
                 self.advance();
                 let names =
                     self.include_omit_names(if include { "include" } else { "omit" }, keyword_col)?;
-                Ok(if include {
+                let command = if include {
                     SurfaceDecl::IncludeVars { span, names }
                 } else {
                     SurfaceDecl::OmitVars { span, names }
-                })
+                };
+                // `include … in <command>` / `omit … in <command>`: Lean's
+                // `cmd₁ in cmd₂` is `section cmd₁ cmd₂ end`, exactly as for
+                // `variable … in` (`variable_decl`), and a section already
+                // restores the included set at its end.
+                if self.eat(&TokenKind::In) {
+                    let body = self.decl()?;
+                    return Ok(SurfaceDecl::Section {
+                        span,
+                        name: None,
+                        decls: vec![command, body],
+                        noncomputable: false,
+                    });
+                }
+                Ok(command)
             }
             // Handle declare_syntax_cat as a proper command
             TokenKind::Ident(name) if name == "declare_syntax_cat" => {
@@ -330,9 +485,8 @@ impl Parser {
                 self.advance();
                 self.declare_aesop_rule_sets_decl(span)
             }
-            // Batteries/Mathlib `alias newName := target` (and the `⟨fwd, bwd⟩`
-            // iff-destructuring and `←` reverse forms) — desugared to real
-            // `def`s so the alias resolves like any other definition.
+            // Batteries/Mathlib `alias newName := target` and the `⟨fwd, bwd⟩`
+            // iff-destructuring form, kept as a dedicated `SurfaceDecl::Alias`.
             TokenKind::Ident(name) if name == "alias" => {
                 self.advance();
                 self.alias_decl(span, attrs, modifiers)
@@ -399,17 +553,69 @@ impl Parser {
                 self.advance();
                 let mut mods = modifiers;
                 mods.scope = DeclScope::Local;
-                self.decl_with_modifiers(mods)
+                self.decl_with_modifiers_and_attrs(mods, attrs)
             }
-            // Lean 4 module-system `meta import X` — a compile-time-only import.
-            // `meta` is not a reserved keyword (it is a valid identifier
-            // elsewhere), so this fires only when it directly precedes `import`.
-            // The `meta` marker is transparent to checking: resolve X as usual.
+            // `meta import X` past the header (the header's own is read by
+            // `header.rs`): `meta` is not a reserved keyword (it is a valid
+            // identifier elsewhere), so this fires only when it directly
+            // precedes `import`, which the `Import` arm then refuses as Lean
+            // does.
             TokenKind::Ident(name)
                 if name == "meta" && matches!(self.peek_kind(1), Some(TokenKind::Import)) =>
             {
                 self.advance();
-                self.decl_with_modifiers(modifiers)
+                self.decl_with_modifiers_and_attrs(modifiers, attrs)
+            }
+            // `meta def` / `meta theorem` … — the module system's compile-time
+            // phase marker (Lean's `declModifiers` `meta`), transparent to
+            // checking like `meta import`. Only before a declaration keyword
+            // or another modifier, so a term named `meta` is untouched
+            // (`Mathlib/Order/Basic.lean`'s `meta def` in
+            // `Mathlib.Tactic.GCongr`, measured 2026-09-12: "unknown command
+            // `meta`").
+            TokenKind::Ident(name)
+                if name == "meta"
+                    && matches!(
+                        self.peek_kind(1),
+                        Some(
+                            TokenKind::Def
+                                | TokenKind::Theorem
+                                | TokenKind::Lemma
+                                | TokenKind::Instance
+                                | TokenKind::Abbrev
+                                | TokenKind::Structure
+                                | TokenKind::Class
+                                | TokenKind::Inductive
+                                | TokenKind::Opaque
+                                | TokenKind::Axiom
+                                | TokenKind::Partial
+                                | TokenKind::Unsafe
+                                | TokenKind::Noncomputable
+                                | TokenKind::Private
+                                | TokenKind::Protected
+                                | TokenKind::Public
+                        )
+                    ) =>
+            {
+                self.advance();
+                self.decl_with_modifiers_and_attrs(modifiers, attrs)
+            }
+            // Mathlib/Lean `grind_pattern [ident]? ident => term,+ (where …)?`
+            // registers an E-matching pattern for `grind`. A no-op for
+            // checking (skipping it only weakens `grind`, it never accepts
+            // more); consumed to the next command so the preceding term does
+            // not absorb it (`Logic/Basic.lean:722`, measured 2026-09-12).
+            TokenKind::Ident(name) if name == "grind_pattern" || name == "init_grind_norm" => {
+                self.advance();
+                while !matches!(self.current_kind(), TokenKind::Eof)
+                    && !(self.current().preceded_by_newline && self.current().col == 0)
+                {
+                    self.advance();
+                }
+                Ok(SurfaceDecl::LibraryNote {
+                    span,
+                    title: "grind_pattern".to_string(),
+                })
             }
             // A stray `end` at the top level (no enclosing
             // `namespace`/`section`) is invalid Lean, but historically caused
@@ -458,6 +664,91 @@ impl Parser {
                 let raw = format!("{:?}", self.current_kind());
                 Ok(self.skip_to_next_decl(&raw, span))
             }
+        }
+    }
+}
+
+impl Parser {
+    /// Mathlib's `scoped[NS] <command>` (`Mathlib/Tactic/ScopedNS.lean`):
+    /// `with_weak_namespace _root_.NS scoped <command>` -- the command runs as
+    /// `scoped` with `NS`, an ABSOLUTE namespace, as the current one, wherever
+    /// it is written. Only the notation commands are modelled: `NS` stands on
+    /// the notation-namespace stack while the declaration is parsed (so the
+    /// parser registers, gates and hygienically resolves it under `NS`), and
+    /// the declaration carries `NS` as its `scope_ns` so the elaborator does
+    /// the same. Any other command after `scoped[NS]` stays a parse error
+    /// rather than being accepted against the wrong namespace.
+    fn scoped_in_namespace_notation(
+        &mut self,
+        modifiers: DeclModifiers,
+        attrs: Vec<Attribute>,
+    ) -> Result<SurfaceDecl, ParseError> {
+        // The caller dispatched here on the `[`.
+        self.advance();
+        let namespace = self.qualified_ident()?;
+        if !self.eat(&TokenKind::RBracket) {
+            return Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current().col as usize,
+                message: format!(
+                    "expected `]` closing `scoped[{namespace}`, got {:?}",
+                    self.current_kind()
+                ),
+            });
+        }
+        if !matches!(
+            self.current_kind(),
+            TokenKind::Notation
+                | TokenKind::Infixl
+                | TokenKind::Infixr
+                | TokenKind::Infix
+                | TokenKind::Prefix
+                | TokenKind::Postfix
+        ) {
+            let err = ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current().col as usize,
+                message: format!(
+                    "`scoped[{namespace}]` is modelled for notation commands only, got {:?}",
+                    self.current_kind()
+                ),
+            };
+            // Consume the refused command's keyword: recovery forces no
+            // progress once `scoped[NS]` is consumed, so it would otherwise
+            // re-dispatch the command as a fresh, unscoped declaration.
+            self.advance();
+            return Err(err);
+        }
+        let open_mark = self.open_scoped_notation_ns.len();
+        self.notation_ns_stack.push(namespace.clone());
+        let decl = self.decl_with_modifiers_and_attrs(modifiers, attrs);
+        self.notation_ns_stack.pop();
+        self.open_scoped_notation_ns.truncate(open_mark);
+        match decl? {
+            SurfaceDecl::Notation {
+                span,
+                kind,
+                precedence,
+                pattern,
+                expansion,
+                scope,
+                ..
+            } => Ok(SurfaceDecl::Notation {
+                span,
+                kind,
+                precedence,
+                pattern,
+                expansion,
+                scope,
+                scope_ns: Some(namespace),
+            }),
+            other => Err(ParseError::UnexpectedToken {
+                line: self.current_line(),
+                col: self.current().col as usize,
+                message: format!(
+                    "`scoped[{namespace}]` produced a non-notation declaration {other:?}"
+                ),
+            }),
         }
     }
 }

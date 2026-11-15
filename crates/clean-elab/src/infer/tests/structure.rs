@@ -106,10 +106,10 @@ fn test_elab_structure_dependent_field_debug() {
     let mut ctx = ElabCtx::new(&env);
 
     // First, manually test that a local can be looked up
-    let fvar_id = ctx.push_local("test_local".to_string(), Expr::type_());
+    let fvar_id = ctx.push_local(SurfaceName::generated_path("test_local"), Expr::type_());
 
     // Verify lookup works
-    let lookup_result = ctx.lookup_local("test_local");
+    let lookup_result = ctx.lookup_local(&SurfaceName::generated_path("test_local"));
     assert!(
         lookup_result.is_some(),
         "Local 'test_local' should be found"
@@ -119,14 +119,26 @@ fn test_elab_structure_dependent_field_debug() {
     ctx.pop_local();
 
     // Now test elaboration of an identifier when a local is in scope
-    ctx.push_local("fst".to_string(), Expr::type_());
+    ctx.push_local(SurfaceName::generated_path("fst"), Expr::type_());
 
-    // Elaborate just the identifier "fst"
-    let surface_ident = SurfaceExpr::ident("fst");
+    // Elaborate just the identifier "fst" (a source-like reference, which
+    // local binders serve).
+    let surface_ident = SurfaceExpr::Ident(
+        clean_parser::Span::dummy(),
+        SurfaceName::generated_path("fst"),
+    );
     let result = ctx.elaborate(&surface_ident);
     assert!(
         result.is_ok(),
         "Elaborating 'fst' should succeed when local is in scope: {result:?}"
+    );
+
+    // `SurfaceExpr::ident` is a compiler-authored GLOBAL reference: the local
+    // `fst` must not capture it (the environment here has no `fst`).
+    let global_ref = SurfaceExpr::ident("fst");
+    assert!(
+        ctx.elaborate(&global_ref).is_err(),
+        "a global reference must never resolve to the local `fst`"
     );
 
     ctx.pop_local();
@@ -169,10 +181,10 @@ fn test_elab_structure_dependent_field_realistic() {
     );
 
     // Step 3: Push field 0 as local
-    let _fst_fvar = ctx.push_local("fst".to_string(), field0_ty.clone());
+    let _fst_fvar = ctx.push_local(SurfaceName::generated_path("fst"), field0_ty.clone());
 
     // Step 4: Verify 'fst' is in scope
-    let lookup = ctx.lookup_local("fst");
+    let lookup = ctx.lookup_local(&SurfaceName::generated_path("fst"));
     assert!(lookup.is_some(), "fst should be in locals");
 
     // Step 5: Elaborate field 1's type (B fst)
@@ -319,6 +331,9 @@ fn test_elab_structure_deriving_unknown_class() {
         deriving UnknownClass",
     );
 
+    // Lean resolves every class before it elaborates the structure, so an
+    // unknown class fails the whole declaration and `Point` is never added
+    // (pinned v4.8.0: `unknown constant 'UnknownClass'`).
     match result {
         Err(ElabError::Unsupported { feature }) => {
             assert!(
@@ -437,7 +452,7 @@ fn test_derived_inhabited_instance_structure() {
 #[test]
 fn test_derived_inhabited_empty_struct() {
     let result = elab_decl_with_prelude(
-        r"structure Empty where
+        r"structure MyEmpty where
         deriving Inhabited",
     )
     .unwrap();
@@ -448,9 +463,9 @@ fn test_derived_inhabited_empty_struct() {
         } => {
             assert_eq!(derived_instances.len(), 1);
             let inst = &derived_instances[0];
-            // Instance value is `Inhabited.mk {Empty} Empty.mk` — the implicit
-            // `{α := Empty}` type argument is now supplied explicitly, so the
-            // spine is `App(App(Inhabited.mk, Empty), Empty.mk)`.
+            // Instance value is `Inhabited.mk {MyEmpty} MyEmpty.mk` — the implicit
+            // `{α := MyEmpty}` type argument is now supplied explicitly, so the
+            // spine is `App(App(Inhabited.mk, MyEmpty), MyEmpty.mk)`.
             fn contains_const(expr: &Expr, target: &str) -> bool {
                 match expr.kind() {
                     ExprKind::Const(name, _) => name.to_string() == target,
@@ -472,8 +487,8 @@ fn test_derived_inhabited_empty_struct() {
                 "Instance value should call Inhabited.mk"
             );
             assert!(
-                contains_const(&inst.val, "Empty.mk"),
-                "Default value should be Empty.mk"
+                contains_const(&inst.val, "MyEmpty.mk"),
+                "Default value should be MyEmpty.mk"
             );
         }
         _ => panic!("expected Structure"),
@@ -489,16 +504,22 @@ fn test_derived_decidable_eq_instance_structure() {
         deriving DecidableEq",
     )
     .expect("fixture should parse");
-    let error = crate::elaborate_decl_and_register(&mut env, &decl)
-        .expect_err("an unresolved Prop field must fail instead of generating sorryAx");
-    match error {
+    // An unresolved Prop field must fail instead of generating sorryAx — as
+    // a failed class beside `Foo`, which Lean declares regardless.
+    let (_, mut errors) =
+        type_with_failed_deriving(crate::elaborate_decl_and_register(&mut env, &decl));
+    match errors.remove(0) {
         ElabError::Unsupported { feature } => {
             assert!(feature.contains("deriving DecidableEq for `Foo`"));
             assert!(feature.contains("refuses `sorryAx`"));
         }
         other => panic!("expected typed Unsupported derive error, got {other:?}"),
     }
-    assert!(env.get_const(&Name::from_string("Foo")).is_none());
+    // Lean 4.8.0 declares the structure before it runs the handler, so `Foo`
+    // stays declared and only the clause fails (`failed to synthesize instance
+    // Decidable (a✝ = b✝)`; `Foo.mk True` then checks — pinned toolchain as
+    // oracle, `infer::deriving_log`).
+    assert!(env.get_const(&Name::from_string("Foo")).is_some());
     assert!(
         env.get_const(&Name::from_string("instFooDecidableEq"))
             .is_none(),
@@ -510,7 +531,7 @@ fn test_derived_decidable_eq_instance_structure() {
 fn test_derived_decidable_eq_empty_struct() {
     // Empty struct: @Decidable.isTrue (@Eq T a b) (@Eq.refl T a) (#2461 F4)
     let result = elab_decl_with_prelude(
-        r"structure Empty where
+        r"structure MyEmpty where
         deriving DecidableEq",
     )
     .unwrap();
@@ -582,16 +603,20 @@ fn test_derived_decidable_eq_multi_field() {
         deriving DecidableEq",
     )
     .expect("fixture should parse");
-    let error = crate::elaborate_decl_and_register(&mut env, &decl)
-        .expect_err("unresolved Prop fields must fail instead of generating sorryAx");
-    match error {
+    // Unresolved Prop fields must fail instead of generating sorryAx — as a
+    // failed class beside `Point`, which Lean declares regardless.
+    let (_, mut errors) =
+        type_with_failed_deriving(crate::elaborate_decl_and_register(&mut env, &decl));
+    match errors.remove(0) {
         ElabError::Unsupported { feature } => {
             assert!(feature.contains("deriving DecidableEq for `Point`"));
             assert!(feature.contains("refuses `sorryAx`"));
         }
         other => panic!("expected typed Unsupported derive error, got {other:?}"),
     }
-    assert!(env.get_const(&Name::from_string("Point")).is_none());
+    // As for `Foo` above: Lean 4.8.0 keeps `Point` declared (two `failed to
+    // synthesize instance` errors at the clause; `Point.mk` then checks).
+    assert!(env.get_const(&Name::from_string("Point")).is_some());
     assert!(
         env.get_const(&Name::from_string("instPointDecidableEq"))
             .is_none(),
@@ -709,7 +734,7 @@ fn test_derived_beq_instance_structure() {
 fn test_derived_beq_instance_empty_struct() {
     // Verify that derived BEq instance for empty struct returns Bool.true
     let result = elab_decl_with_prelude(
-        r"structure Empty where
+        r"structure MyEmpty where
         deriving BEq",
     )
     .unwrap();
@@ -759,14 +784,15 @@ fn test_derived_beq_instance_empty_struct() {
 fn test_derived_repr_instance_structure() {
     // An explicit unavailable class is an error, never a silently omitted
     // requested instance.
-    let error = elab_decl(
+    // An explicit unavailable derive fails, as a failed class beside the
+    // declared structure.
+    let (_, mut errors) = type_with_failed_deriving(elab_decl(
         r"structure Point where
           x : Prop
           y : Prop
         deriving Repr",
-    )
-    .expect_err("an explicit unavailable Repr derive must fail");
-    match error {
+    ));
+    match errors.remove(0) {
         ElabError::Unsupported { feature } => {
             assert!(feature.contains("Repr"));
             assert!(feature.contains("never silently skipped"));
@@ -777,14 +803,15 @@ fn test_derived_repr_instance_structure() {
 
 #[test]
 fn test_derived_hashable_instance_structure() {
-    let error = elab_decl(
+    // An explicit unavailable derive fails, as a failed class beside the
+    // declared structure.
+    let (_, mut errors) = type_with_failed_deriving(elab_decl(
         r"structure Point where
           x : Prop
           y : Prop
         deriving Hashable",
-    )
-    .expect_err("an explicit unavailable Hashable derive must fail");
-    match error {
+    ));
+    match errors.remove(0) {
         ElabError::Unsupported { feature } => {
             assert!(feature.contains("Hashable"));
             assert!(feature.contains("never silently skipped"));
@@ -795,12 +822,13 @@ fn test_derived_hashable_instance_structure() {
 
 #[test]
 fn test_derived_hashable_empty_struct() {
-    let error = elab_decl(
+    // An explicit unavailable derive fails, as a failed class beside the
+    // declared structure.
+    let (_, mut errors) = type_with_failed_deriving(elab_decl(
         r"structure Empty where
         deriving Hashable",
-    )
-    .expect_err("an explicit unavailable Hashable derive must fail");
-    match error {
+    ));
+    match errors.remove(0) {
         ElabError::Unsupported { feature } => {
             assert!(feature.contains("Hashable"));
             assert!(feature.contains("never silently skipped"));
@@ -915,13 +943,14 @@ fn test_derived_parametric_beq_instance() {
 
 #[test]
 fn test_derived_parametric_instance_type_structure() {
-    let error = elab_decl(
+    // An explicit unavailable derive fails, as a failed class beside the
+    // declared structure.
+    let (_, mut errors) = type_with_failed_deriving(elab_decl(
         r"structure Box (T : Type) where
           val : T
         deriving Hashable",
-    )
-    .expect_err("an explicit unavailable Hashable derive must fail");
-    match error {
+    ));
+    match errors.remove(0) {
         ElabError::Unsupported { feature } => {
             assert!(feature.contains("Hashable"));
             assert!(feature.contains("never silently skipped"));

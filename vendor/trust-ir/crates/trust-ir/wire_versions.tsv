@@ -1,0 +1,107 @@
+# TrustIr binary wire-version reservation ledger (roadmap WS8.5, DG-14).
+#
+# One row per version number, contiguous and ascending. Columns are TAB
+# separated:
+#
+#   version  status  feature  reserving-commit  owner-increment
+#
+# status:
+#   retired   below MIN_READ_VERSION (the v24 read-floor move); never read.
+#   shipped   read by this build; VERSION is the highest shipped row.
+#   refused   inside the reader's range but refused on read (v26..=v28,
+#             ambiguous lineage). The refused rows must be exactly
+#             binary.rs `AMBIGUOUS_LINEAGE_VERSIONS`, the range the reader
+#             refuses and `BUILD_IDENTITY` reports.
+#   reserved  claimed for a feature group that has not shipped; strictly
+#             above VERSION, so no reader accepts it yet.
+#
+# A version needs a row before any read gate (`version >= N`), writer
+# selection or golden spells it; add it in the same commit as that code, one
+# number per feature group (groups ready together may share one). Shipping
+# flips the row to `shipped` in the commit that raises VERSION.
+#
+# reserving-commit: `pre-ledger` for rows at or below v43 (they predate this
+# file and were never reserved), otherwise `self` (the commit that adds the
+# row; `git log -S` on this file recovers it) or an abbreviated commit hash.
+# owner-increment: `-` for pre-ledger rows, otherwise the roadmap increment
+# or lane that owns the group (for example WS1.12), or that lane pinned to the
+# commit that landed its claim on main, `<lane>@<commit>` (wire-allocations.toml).
+#
+# feature: must NAME, as a whole identifier, every `*_FORMAT_VERSION` constant
+# in binary.rs whose value is that version; every shipped row above
+# BASE_FORMAT_VERSION must be carried by at least one such (writer-selection)
+# constant. A literal comparison against a version in binary.rs code
+# (`r.version >= N`) may only spell a number that already has a row here. The
+# `wire_version_ledger` unit test in crates/trust-ir/src/binary.rs enforces
+# every rule above (CI gate wire-version-ledger).
+#
+# This file is bound to the `wire_version` table of `wire-allocations.toml`
+# (repo root): gate 0 and gate 10 refuse any number the two tell differently.
+#     python3 scripts/wire_alloc.py reserve version --feature <f> --constant <C> --owner <increment>
+# writes BOTH files; a row added here by hand is copied across by
+#     python3 scripts/wire_alloc.py sync
+2	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+3	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+4	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+5	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+6	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+7	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+8	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+9	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+10	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+11	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+12	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+13	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+14	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+15	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+16	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+17	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+18	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+19	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+20	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+21	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+22	retired	pre-v24 wire (read floor moved 2 -> 23 by v24; see the binary.rs version ledger)	pre-ledger	-
+23	shipped	Function.producer provenance (lowest readable version: MIN_READ_VERSION)	pre-ledger	-
+24	shipped	Constant::U128 and the read-floor move (the one breaking batch)	pre-ledger	-
+25	shipped	Constant::Bytes plus the B1 scalars Ty::Isize/Usize/Char/Error	pre-ledger	-
+26	refused	ambiguous lineage: Global.align (line A) vs SpecAnchor.function (line B)	pre-ledger	-
+27	refused	ambiguous lineage: SpecModule.enforcement + SpecAnchor.projection_target (line B)	pre-ledger	-
+28	refused	ambiguous lineage: ProofObligation.source (line B)	pre-ledger	-
+29	shipped	merged superset of the v26..=v28 lines	pre-ledger	-
+30	shipped	typed value model: Ty::Refine, Module.universes, Module.predicates	pre-ledger	-
+31	shipped	enum layout descriptors: EnumDef.layout, per-variant field_names	pre-ledger	-
+32	shipped	Function.value_names debug names	pre-ledger	-
+33	shipped	lexical scopes: Function.scopes, InstrNode.scope	pre-ledger	-
+34	shipped	ProofObligation.site backref	pre-ledger	-
+35	shipped	Function.source_provenance	pre-ledger	-
+36	shipped	StructPassingPolicy::Unclassified	pre-ledger	-
+37	shipped	EnumTagEncoding::Untagged	pre-ledger	-
+38	shipped	FatPtrKind::ContainerLen; writer baseline BASE_FORMAT_VERSION	pre-ledger	-
+39	shipped	nominal dialect types Ty::Dialect: DIALECT_TYPE_FORMAT_VERSION	pre-ledger	-
+40	shipped	FatPtrKind::ContainerVtable: CONTAINER_VTABLE_FORMAT_VERSION	pre-ledger	-
+41	shipped	two-language contract surface: CONTRACT_SURFACE_FORMAT_VERSION	pre-ledger	-
+42	shipped	declared tuple layouts Module.tuple_layouts: TUPLE_LAYOUT_FORMAT_VERSION	pre-ledger	-
+43	shipped	nominal opaque runtime handles Ty::Handle: HANDLE_TYPE_FORMAT_VERSION	pre-ledger	-
+44	shipped	import-identity-scheme: IMPORT_SCHEME_FORMAT_VERSION	6caf775d	WS4.10
+45	shipped	abi-surface: ABI_SURFACE_FORMAT_VERSION	79783f80	WS3.10
+46	shipped	spec-carrier: SPEC_CARRIER_FORMAT_VERSION	6d3f5303	WS4.14
+47	shipped	inst-drop: DROP_INST_FORMAT_VERSION	c654a054	crystal/lane-on-main
+48	shipped	weak-cmpxchg: WEAK_CMPXCHG_FORMAT_VERSION	c654a054	crystal/lane-on-main
+49	shipped	uninit-lane: UNINIT_LANE_FORMAT_VERSION	c654a054	crystal/lane-on-main
+50	shipped	array-splat: ARRAY_SPLAT_FORMAT_VERSION	4a143d18	splat/array-splat
+51	shipped	inst-wire-batch: INST_WIRE_BATCH_FORMAT_VERSION	dbd8c262	mem/inst-wire-batch@dbd8c262e636
+52	shipped	assert-kind: ASSERT_KIND_FORMAT_VERSION	f4008b5b	wave6/assert-kind
+53	shipped	call-unwind-boundary: CALL_UNWIND_BOUNDARY_FORMAT_VERSION	self	main
+54	shipped	panic-site: PANIC_SITE_FORMAT_VERSION	self	amend/p-panic-sites
+55	shipped	drop-glue: DROP_GLUE_FORMAT_VERSION	self	amend/d-executable-drop
+56	shipped	unwind-twins: UNWIND_TWINS_FORMAT_VERSION	self	amend/d2-unwind-exit
+57	shipped	generic-templates: TEMPLATE_FORMAT_VERSION	self	amend/s-generic-templates
+58	shipped	nominal-identity: NOMINAL_IDENTITY_FORMAT_VERSION	self	agents/rm-WS3.9@6860278331bf
+59	shipped	effect-summaries: EFFECT_SUMMARY_FORMAT_VERSION	self	agents/rm-WS1.14@6f202fa43544
+60	shipped	typed-signature-placement: SIGNATURE_ABI_FORMAT_VERSION	self	work/abi-live-integration-20261008
+61	shipped	certificate-binding: CERTIFICATE_BINDING_FORMAT_VERSION	self	agents/rm-WS6.7-wire@07fb55154f79
+62	shipped	param-pointee-place: PARAM_POINTEE_PLACE_FORMAT_VERSION	self	agents/rm-WS5.5-pointee@98c73c9994e6
+63	shipped	make-closure: MAKE_CLOSURE_FORMAT_VERSION	self	main
+64	shipped	storage-only-layout: STORAGE_LAYOUT_FORMAT_VERSION	self	addressable-uninit-storage
+65	shipped	single-inhabited-enum: SINGLE_INHABITED_ENUM_FORMAT_VERSION	self	agents/enum-single-inhabited
+66	shipped	closure-frame-origin: CLOSURE_ORIGIN_FORMAT_VERSION	self	closure-storage

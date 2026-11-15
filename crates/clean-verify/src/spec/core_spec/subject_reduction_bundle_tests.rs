@@ -32,6 +32,7 @@ fn test_subject_reduction_bundle_terms_paren_balanced() {
         ("ctx_lam_gen", super::ctx_lam_gen_value()),
         ("ctx_pi_gen", super::ctx_pi_gen_value()),
         ("ctx_let_gen", super::ctx_let_gen_value()),
+        ("ctx_proj_absurd", super::ctx_proj_absurd_value()),
         (
             "delta_preserves_typing_ctx",
             super::delta_preserves_typing_ctx_value(),
@@ -111,10 +112,19 @@ fn test_subject_reduction_bundle_reverifies() {
     let spec = build_spec();
     for name in [
         // interface projectors
+        "tec_tenv_closed",
+        "tec_tenv_supported",
         "tec_tenv_psubst_closed",
         "tec_tenv_lift_closed",
         "tec_delta_psubst",
         "tec_iota_psubst",
+        "tec_def_signature",
+        "tec_def_body_closed",
+        "tec_def_body_typed",
+        "tec_def_body_supported",
+        "tec_delta_universe_closed",
+        "tec_iota_universe_closed",
+        "tec_defn_inst_typed",
         "tec_defval_typed",
         "tec_iota_typed",
         // wkpos + lift helpers

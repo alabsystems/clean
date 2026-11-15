@@ -1,0 +1,140 @@
+{
+  "artifact_sha256": {
+    "built_mir": "fa7ff8f4904d714f08b336ad45b3966cbc88ba6767438b2ce2ffaf7f3e15c5cc",
+    "coverage": "ab08e760362e93acb639b01d9ba84e2f367ebbd5d24f01faaa2f5990ecf51749",
+    "trust_ir_binary": "ad2d3a7a1215a7a0ae68a3ba91fd0b444aaae2ddc377f310c0e3fe26049790be"
+  },
+  "note": "Raw MIR anchors, producer coverage and regression samples are not a universal theorem.",
+  "observed_mir_anchors": [
+    "// MIR for `tc::infer::infer_literal_type` after built",
+    "fn infer_literal_type(_1: &expr::types::Literal) -> expr::Expr",
+    "discriminant((*_1))",
+    "<LazyLock<name::Name> as Deref>::deref",
+    "<name::Name as Clone>::clone",
+    "Vec::<level::Level>::new()",
+    "constructors::<impl expr::Expr>::const_::<Vec<level::Level>>",
+    "static: infer::NAME_NAT",
+    "static: infer::NAME_STRING"
+  ],
+  "open_obligations": [
+    "Universal refinement of the actual compiler-extracted production body.",
+    "Authenticated source-to-extraction binding (snapshot hashes alone are not this).",
+    "Literal payload and canonical builtin Name representation correspondence.",
+    "LazyLock initialization/read, Name clone, empty Vec, and Expr constructor contracts.",
+    "Composition with both real TypeChecker callsites and the environment contract."
+  ],
+  "producer_capability": "structural-parity-only-v1",
+  "producer_record": {
+    "calls": {
+      "extern_decls": 0,
+      "resolved": 0,
+      "unresolved": 0
+    },
+    "collect_cascade": [],
+    "collect_primary": [
+      [
+        "Borrow(non-local place)",
+        4
+      ],
+      [
+        "Call(unsupported arg)",
+        6
+      ],
+      [
+        "EnumMatch(case arm no value)",
+        1
+      ],
+      [
+        "EnumMatch(default arm no value)",
+        1
+      ],
+      [
+        "StaticRef(interior mutable)",
+        2
+      ]
+    ],
+    "def_index": 19873,
+    "def_path": "tc::infer::infer_literal_type",
+    "differentials": {
+      "deferred_to_seam": false,
+      "derived_mir": {
+        "detail": "producer: 14 unsupported THIR shape(s)",
+        "markers_detail": "",
+        "markers_exact": false,
+        "verdict": "unsupported"
+      },
+      "interpreter": {
+        "detail": "14 unsupported THIR shape(s); differential not run (coverage gap)",
+        "samples": 0,
+        "verdict": "unsupported"
+      },
+      "seam": {
+        "state": "not-applicable"
+      }
+    },
+    "func_id": null,
+    "instr_count": 5,
+    "kind": "fn",
+    "lineage": "sha256:93c8bf6c3b5de22e2552189f6c6e05cec0df747d4858df2406243ce7f9f6aade",
+    "lowered": false,
+    "spliced": false,
+    "symbolic": false,
+    "unsupported": [
+      [
+        "Borrow(non-local place)",
+        4
+      ],
+      [
+        "Call(unsupported arg)",
+        6
+      ],
+      [
+        "EnumMatch(case arm no value)",
+        1
+      ],
+      [
+        "EnumMatch(default arm no value)",
+        1
+      ],
+      [
+        "StaticRef(interior mutable)",
+        2
+      ]
+    ],
+    "unsupported_details": {
+      "Borrow(non-local place)": [
+        "crates/clean-kernel/src/tc/infer.rs:48:54: 48:62 (#0)",
+        "crates/clean-kernel/src/tc/infer.rs:49:57: 49:68 (#0)"
+      ],
+      "Call(unsupported arg)": [
+        "crates/clean-kernel/src/tc/infer.rs:48:54: 48:70 (#0)",
+        "crates/clean-kernel/src/tc/infer.rs:48:41: 48:79 (#0)",
+        "crates/clean-kernel/src/tc/infer.rs:49:57: 49:76 (#0)"
+      ],
+      "EnumMatch(case arm no value)": [
+        "crates/clean-kernel/src/tc/infer.rs:47:5: 50:6 (#0)"
+      ],
+      "EnumMatch(default arm no value)": [
+        "crates/clean-kernel/src/tc/infer.rs:47:5: 50:6 (#0)"
+      ],
+      "StaticRef(interior mutable)": [
+        "crates/clean-kernel/src/tc/infer.rs:48:54: 48:62 (#0)",
+        "crates/clean-kernel/src/tc/infer.rs:49:57: 49:68 (#0)"
+      ]
+    }
+  },
+  "proof_authority": false,
+  "schema_version": "clean.literal-source-attachment-probe.v1",
+  "scope": "Exact production literal helper; no whole-kernel or compiler claim.",
+  "source_attachment_verified": false,
+  "source_binding": "Snapshot only; hashes are not compiler-to-source attestation.",
+  "source_sha256": {
+    "crates/clean-kernel/src/expr/constructors.rs": "abe1b10161c9dbf606d4a2ec1730ca53ab1fbf59090bebe7fdfef1e161da38ab",
+    "crates/clean-kernel/src/expr/mod.rs": "2605cdf1982d515ea845114af0906ad2b153528aa874c92efad3a1781d5ce85d",
+    "crates/clean-kernel/src/expr/types.rs": "f609ebefa1c97ad76cff4dc2243e271e1c8772d148213b04d80af1fe8fc72212",
+    "crates/clean-kernel/src/name.rs": "558241da1ad339fd0774059c888f13e3d90f73e925cb774b701248b8d7f62049",
+    "crates/clean-kernel/src/tc/cert/infer_core.rs": "925d21a838892b8a398b2016d12cdce18680fadb96badc572137132cf40b64d1",
+    "crates/clean-kernel/src/tc/infer.rs": "9c40ad76b83c90624067b820af65e23326825ba686256df1cff1c661111341ec"
+  },
+  "status": "blocked"
+}

@@ -10,7 +10,8 @@
 //! This module owns: corpus definition, temporary DIMACS/LRAT materialization,
 //! external-process invocation, result normalization, and report rendering.
 //!
-//! Design: `designs/2026-03-14-936-lrat-oracle-conformance-gate.md`
+//! CLI surface: `clean kernel lrat-conform` (`docs/cli/kernel-lrat-conform.md`, #3443).
+//! The design note this line used to cite never existed in the tree.
 
 mod corpus;
 mod report;

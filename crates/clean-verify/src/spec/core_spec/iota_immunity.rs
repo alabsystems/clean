@@ -87,6 +87,7 @@ impl Specification {
     pub(super) fn add_iota_immunity(&mut self) -> Result<(), SpecError> {
         self.add_const_head_preserved()?;
         self.add_const_head_star_preserved()?;
+        self.add_ctor_spine_lengths()?;
         self.add_iota_immune_of_dead_head()?;
         self.add_iota_immune_app_witness()?;
         self.add_iota_neutral_of_dead_const()?;

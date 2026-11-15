@@ -28,14 +28,25 @@
 //! weak recursor. The strict-positivity of the *unfolded* block is additionally
 //! re-checked by `add_inductive_mutual`.
 
-use crate::inductive::{AdmitError, Constructor, InductiveDecl};
+use std::sync::Arc;
+
+use crate::inductive::{AdmitError, InductiveDecl};
 use crate::level::Level;
 use crate::mutual::{add_inductive_mutual, MutableMutualEnv, MutualBlock};
 use crate::name::Name;
-use crate::positivity::term_mentions;
-use crate::rawexpr::BinderInfo;
+use crate::nested_replace::{args_key, OccIndex};
+use crate::recursor::MAX_DERIVED_ARITY;
 use crate::term::{Term, TermKind};
 use crate::validate::Env;
+
+mod auxiliary;
+mod closure;
+mod collect;
+mod names;
+mod size;
+use auxiliary::build_auxiliary;
+pub use size::MAX_AUX_SIZE;
+use size::{rewrite_growth, At, Room};
 
 /// Errors specific to nested-inductive admission. Every variant is a *reject*.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -101,7 +112,7 @@ pub enum NestedError {
 #[derive(Clone, Debug)]
 pub(crate) struct Occurrence {
     pub(crate) container: Name,
-    /// the full argument list applied to the container in the occurrence,
+    /// The container parameter arguments, excluding its indices,
     /// **canonicalized into the parent-parameter frame** (design §5.2): every
     /// reference to a parent parameter is expressed in a context whose only
     /// binders are the `num_params` parent parameters (`below = 0`), so the same
@@ -125,345 +136,213 @@ pub fn add_inductive_nested(
     env: &mut dyn MutableMutualEnv,
     decl: InductiveDecl,
 ) -> Result<(), NestedError> {
-    // Phase 1: collect distinct nested occurrences across the decl's ctors.
+    derive_nested_for_export(env, decl).map(|_| ())
+}
+
+/// The same checked derivation, retaining its independently collected recipe.
+/// Export comparison must not obtain auxiliary names or substitutions from input.
+pub(crate) fn derive_nested_for_export(
+    env: &mut dyn MutableMutualEnv,
+    decl: InductiveDecl,
+) -> Result<Vec<Occurrence>, NestedError> {
+    derive_nested_block_for_export(env, std::slice::from_ref(&decl))
+}
+
+pub(crate) struct Family<'a> {
+    main: &'a InductiveDecl,
+    originals: &'a [InductiveDecl],
+    names: Vec<Name>,
+}
+impl<'a> Family<'a> {
+    fn new(originals: &'a [InductiveDecl]) -> Self {
+        Self {
+            main: &originals[0],
+            originals,
+            names: originals.iter().map(|d| d.name.clone()).collect(),
+        }
+    }
+}
+
+pub(crate) fn derive_nested_block_for_export(
+    env: &mut dyn MutableMutualEnv,
+    originals: &[InductiveDecl],
+) -> Result<Vec<Occurrence>, NestedError> {
+    if originals.is_empty() {
+        return Err(NestedError::NotNested {
+            name: Name::anonymous(),
+        });
+    }
+    let family = Family::new(originals);
+    let decl = family.main;
+    // Phase 1: collect distinct nested occurrences across the decl's ctors,
+    // each new one compared only with those of its key (R176). The index
+    // names occurrences by their place in the list, which nothing after
+    // phase 1 reorders (`disambiguate` renames in place).
     let mut occurrences: Vec<Occurrence> = Vec::new();
-    for ctor in &decl.constructors {
-        collect_in_ctor(env, &decl, &ctor.type_, &mut occurrences)?;
+    let mut index = OccIndex::default();
+    for original in originals {
+        for ctor in &original.constructors {
+            collect::collect_in_ctor(env, &family, &ctor.type_, &mut occurrences, &mut index)?;
+        }
     }
     if occurrences.is_empty() {
-        return Err(NestedError::NotNested { name: decl.name });
-    }
-
-    // Phase 1b: disambiguate aux names (distinct instantiations of the same
-    // container under one parent get a numeric suffix).
-    disambiguate(&mut occurrences);
-
-    // Phase 2: build auxiliary inductive types.
-    let mut aux_decls: Vec<InductiveDecl> = Vec::with_capacity(occurrences.len());
-    for occ in &occurrences {
-        aux_decls.push(build_auxiliary(env, &decl, occ)?);
-    }
-
-    // Phase 3: rewrite the original ctors to reference the aux types.
-    let rewritten_ctors: Vec<Constructor> = decl
-        .constructors
-        .iter()
-        .map(|c| Constructor {
-            name: c.name.clone(),
-            type_: crate::nested_replace::replace_nested(
-                env,
-                &c.type_,
-                &decl.name,
-                &occurrences,
-                decl.num_level_params,
-                decl.num_params,
-            ),
-        })
-        .collect();
-    let original = InductiveDecl {
-        name: decl.name.clone(),
-        num_level_params: decl.num_level_params,
-        num_params: decl.num_params,
-        type_: decl.type_.clone(),
-        constructors: rewritten_ctors,
-    };
-
-    // Phase 4: form the mutual block [original, aux…] and admit it. The aux
-    // types share the original's params/level params (the auxiliary construction
-    // substituted the container's params with the occurrence args, so the aux
-    // types carry NO extra params — they live in the block's level telescope).
-    let mut decls = vec![original];
-    decls.extend(aux_decls);
-    let block = MutualBlock { decls };
-    add_inductive_mutual(env, block).map_err(|source| NestedError::Aux {
-        ind: decl.name,
-        source,
-    })
-}
-
-/// Collect nested occurrences in one constructor type. A field domain whose head
-/// is a known env inductive `C` (not the type being defined) and some argument
-/// mentions the type being defined is a nested occurrence.
-fn collect_in_ctor(
-    env: &dyn Env,
-    decl: &InductiveDecl,
-    ctor_ty: &Term,
-    out: &mut Vec<Occurrence>,
-) -> Result<(), NestedError> {
-    // Walk the ctor telescope; for each field domain (after params), inspect.
-    // `depth` counts binders descended; the parent params are the first
-    // `num_params` of them, so a field domain at `depth` sits `depth - num_params`
-    // binders inside the parameter block.
-    let mut cur = ctor_ty.clone();
-    let mut depth: u32 = 0;
-    while let TermKind::Pi(_, dom, codom) = cur.kind() {
-        if depth >= decl.num_params {
-            collect_in_domain(env, decl, dom, depth, out)?;
-        }
-        depth = depth.saturating_add(1);
-        cur = codom.clone();
-    }
-    Ok(())
-}
-
-/// Inspect a field-domain expression for a nested container application. `depth`
-/// is the number of binders enclosing `expr` (counted from the constructor top),
-/// used to canonicalize occurrence args into the parent-parameter frame.
-fn collect_in_domain(
-    env: &dyn Env,
-    decl: &InductiveDecl,
-    expr: &Term,
-    depth: u32,
-    out: &mut Vec<Occurrence>,
-) -> Result<(), NestedError> {
-    let (head, args) = expr.unfold_apps();
-    if let TermKind::Const(cref) = head.kind() {
-        let cname = cref.name();
-        // Skip the type being defined (a direct recursive field, not nesting).
-        if cname != &decl.name {
-            let mentions = args.iter().any(|a| term_mentions(a, &decl.name));
-            if mentions {
-                // It is a container nesting. It must be a known inductive.
-                let _ = env.inductive_num_params(cname).ok_or_else(|| {
-                    NestedError::UnknownContainer {
-                        ind: decl.name.clone(),
-                        container: cname.clone(),
-                    }
-                })?;
-                // Nested positivity: the nesting argument(s) must occur
-                // strictly-positively in the container's constructors. We reject
-                // the obvious negative shape (the nesting arg is a function type
-                // mentioning `decl` in its domain) eagerly; the unfolded-block
-                // positivity re-check in add_inductive_mutual is the authoritative
-                // gate and catches container-internal negativity too.
-                check_nested_positivity(env, decl, cname, &args)?;
-                // Canonicalize the args into the parent-parameter frame so the
-                // occurrence is recognized uniformly wherever it appears in the
-                // telescope. `below = depth - num_params` (occurrences only sit in
-                // field domains, where `depth >= num_params`). A `None` here means
-                // an argument depends on a constructor field/index binder — a
-                // non-uniform nesting a parametric aux cannot represent: reject.
-                let below = depth.checked_sub(decl.num_params).ok_or_else(|| {
-                    NestedError::NonUniformNesting {
-                        ind: decl.name.clone(),
-                        container: cname.clone(),
-                    }
-                })?;
-                let canon_args: Vec<Term> = args
-                    .iter()
-                    .map(|a| crate::nested_replace::lower_params(a, below, decl.num_params))
-                    .collect::<Option<Vec<Term>>>()
-                    .ok_or_else(|| NestedError::NonUniformNesting {
-                        ind: decl.name.clone(),
-                        container: cname.clone(),
-                    })?;
-                let levels: Vec<Level> = cref.levels().to_vec();
-                if !out
-                    .iter()
-                    .any(|o| o.container == *cname && o.args == canon_args)
-                {
-                    let aux_name = Name::from_dotted(&format!(
-                        "{}._{}",
-                        decl.name,
-                        crate::nested_replace::last_component(cname)
-                    ));
-                    out.push(Occurrence {
-                        container: cname.clone(),
-                        args: canon_args,
-                        levels,
-                        aux_name,
-                    });
-                }
-            }
-        }
-    }
-    // Recurse into Pi structure (nested containers can appear in inner domains).
-    if let TermKind::Pi(_, dom, codom) = expr.kind() {
-        collect_in_domain(env, decl, dom, depth, out)?;
-        collect_in_domain(env, decl, codom, depth.saturating_add(1), out)?;
-    }
-    Ok(())
-}
-
-/// Reject a non-strictly-positive nesting. The nesting `decl` appears as an arg
-/// of container `C`; we require that, in each of `C`'s constructors, the
-/// corresponding container parameter is used only strictly-positively (never to
-/// the left of an arrow). We approximate the authoritative check by unfolding
-/// `C`'s constructors with the occurrence args and verifying `decl` never lands
-/// in a NoOccur (left-of-arrow) position — which the subsequent mutual-block
-/// positivity check enforces precisely. Here we catch the direct case where the
-/// nesting argument itself is a function type mentioning `decl` in its domain.
-fn check_nested_positivity(
-    env: &dyn Env,
-    decl: &InductiveDecl,
-    container: &Name,
-    args: &[Term],
-) -> Result<(), NestedError> {
-    // If any container argument that mentions `decl` does so under an arrow's
-    // domain, that is a negative nesting — reject up front. (The unfolded block
-    // positivity is the full gate; this is the eager, clear rejection.)
-    for a in args {
-        if mentions_in_negative_position(a, &decl.name) {
-            return Err(NestedError::NonStrictlyPositiveNesting {
-                ind: decl.name.clone(),
-                container: container.clone(),
-            });
-        }
-    }
-    let _ = env;
-    Ok(())
-}
-
-/// True iff `name` occurs to the LEFT of any arrow inside `t` (a negative /
-/// non-strictly-positive position).
-fn mentions_in_negative_position(t: &Term, name: &Name) -> bool {
-    match t.kind() {
-        TermKind::Pi(_, dom, codom) => {
-            term_mentions(dom, name)
-                || mentions_in_negative_position(dom, name)
-                || mentions_in_negative_position(codom, name)
-        }
-        TermKind::App(f, a) => {
-            mentions_in_negative_position(f, name) || mentions_in_negative_position(a, name)
-        }
-        TermKind::Lam(_, ty, b) => {
-            mentions_in_negative_position(ty, name) || mentions_in_negative_position(b, name)
-        }
-        TermKind::Let(ty, v, b) => {
-            mentions_in_negative_position(ty, name)
-                || mentions_in_negative_position(v, name)
-                || mentions_in_negative_position(b, name)
-        }
-        TermKind::Proj(_, _, e) => mentions_in_negative_position(e, name),
-        _ => false,
-    }
-}
-
-/// Disambiguate aux names: the first occurrence of a base name keeps it,
-/// subsequent distinct occurrences get a `_<n>` suffix.
-fn disambiguate(occurrences: &mut [Occurrence]) {
-    let mut counts: std::collections::HashMap<Name, usize> = std::collections::HashMap::new();
-    for occ in occurrences.iter_mut() {
-        let c = counts.entry(occ.aux_name.clone()).or_insert(0);
-        if *c > 0 {
-            occ.aux_name = Name::from_dotted(&format!("{}_{}", occ.aux_name, *c));
-        }
-        *c = c.saturating_add(1);
-    }
-}
-
-/// Build the auxiliary inductive mirroring `container`'s structure with the
-/// container's params substituted by the occurrence's args and its level params
-/// by the occurrence's levels, and `Container args` self-refs replaced by the
-/// aux type.
-fn build_auxiliary(
-    env: &dyn Env,
-    decl: &InductiveDecl,
-    occ: &Occurrence,
-) -> Result<InductiveDecl, NestedError> {
-    let n_container_params =
-        env.inductive_num_params(&occ.container)
-            .ok_or_else(|| NestedError::UnknownContainer {
-                ind: decl.name.clone(),
-                container: occ.container.clone(),
-            })?;
-    let ctors = env.inductive_constructors(&occ.container).ok_or_else(|| {
-        NestedError::UnknownContainer {
-            ind: decl.name.clone(),
-            container: occ.container.clone(),
-        }
-    })?;
-
-    // The aux is itself PARAMETRIC over the parent's parameters (design §5.2):
-    // for `Tree (A)`, the aux is `Tree._List (A : Type)`, not a parameterless
-    // `Tree._List` with `A` substituted away. The parent's parameter binders
-    // (taken from the parent type former, over the shared level params) are
-    // prepended to the aux type former and to every aux constructor; the
-    // container's own params are substituted by the (canonical) occurrence args,
-    // which reference exactly those prepended binders. For a parameterless parent
-    // (`num_params == 0`) this degenerates to the original parameterless path.
-    let np = decl.num_params;
-    let param_binders: Vec<(BinderInfo, Term)> =
-        crate::inductive::pi_domains_with_info(&decl.type_, np);
-
-    // Aux type former: container type, strip its params (substituted by the
-    // canonical occurrence args), level-instantiate, then prepend the parent
-    // parameter binders. Result: `(params...) -> (container indices...) -> Sort u`.
-    let container_ty =
-        env.const_type(&occ.container)
-            .ok_or_else(|| NestedError::UnknownContainer {
-                ind: decl.name.clone(),
-                container: occ.container.clone(),
-            })?;
-    let mut aux_type = container_ty;
-    for arg in occ
-        .args
-        .iter()
-        .take(usize::try_from(n_container_params).unwrap_or(usize::MAX))
-    {
-        if let TermKind::Pi(_, _, codom) = aux_type.kind() {
-            aux_type = codom.instantiate(arg);
-        } else {
-            break;
-        }
-    }
-    aux_type = aux_type.instantiate_levels(&occ.levels);
-    aux_type = prepend_param_binders(&param_binders, aux_type);
-
-    // Aux constructors: each container ctor, container params substituted by the
-    // canonical occurrence args (which reference the canonical parameter frame),
-    // level-instantiated, self-refs replaced by the aux applied to the parent
-    // parameters, then the parent parameter binders prepended.
-    let mut aux_ctors = Vec::with_capacity(ctors.len());
-    for (ctor_name, ctor_ty) in &ctors {
-        let mut ct = ctor_ty.clone();
-        for arg in occ
-            .args
-            .iter()
-            .take(usize::try_from(n_container_params).unwrap_or(usize::MAX))
-        {
-            if let TermKind::Pi(_, _, codom) = ct.kind() {
-                ct = codom.instantiate(arg);
-            } else {
-                break;
-            }
-        }
-        ct = ct.instantiate_levels(&occ.levels);
-        ct = crate::nested_replace::replace_container_self_ref(
-            &ct,
-            &occ.container,
-            n_container_params,
-            &occ.args,
-            &occ.aux_name,
-            decl.num_level_params,
-            np,
-        );
-        ct = prepend_param_binders(&param_binders, ct);
-        let suffix = crate::nested_replace::last_component(ctor_name);
-        let aux_ctor_name = Name::from_dotted(&format!("{}.{}", occ.aux_name, suffix));
-        aux_ctors.push(Constructor {
-            name: aux_ctor_name,
-            type_: ct,
+        return Err(NestedError::NotNested {
+            name: decl.name.clone(),
         });
     }
 
-    Ok(InductiveDecl {
-        name: occ.aux_name.clone(),
-        num_level_params: decl.num_level_params,
-        num_params: decl.num_params,
-        type_: aux_type,
-        constructors: aux_ctors,
+    // The block's level-param vector `Param 0 .. Param (nlp-1)`, which every
+    // auxiliary self-reference carries. `num_level_params` is a `u32` header
+    // field, not the length of anything in memory: a forged `u32::MAX` used to
+    // size a level vector at EVERY rewritten occurrence site (tens of GB each)
+    // before the mutual admission below refused the input (about 100 GB per
+    // site for a count of `u32::MAX`). Refuse it here with the reject recursor derivation gives the same
+    // count (`Derivation`, wrapped in `Aux`), and build the vector once.
+    let num_level_params = decl.num_level_params;
+    if num_level_params > MAX_DERIVED_ARITY {
+        return Err(NestedError::Aux {
+            ind: decl.name.clone(),
+            source: AdmitError::Derivation {
+                ind: decl.name.clone(),
+                detail: format!(
+                    "too many universe level params ({num_level_params} > {MAX_DERIVED_ARITY})"
+                ),
+            },
+        });
+    }
+    let aux_levels: Arc<[Level]> = (0..num_level_params).map(Level::param).collect();
+
+    let mut room = Room::new();
+    let needs_cross_rewrite = closure::expand_occurrences(
+        env,
+        &family,
+        &mut occurrences,
+        &mut index,
+        &aux_levels,
+        &mut room,
+    )?;
+
+    // Phase 1b: disambiguate aux names (distinct instantiations of the same
+    // container under one parent get a numeric suffix).
+    closure::disambiguate(&mut occurrences);
+
+    // The block's widest ι rule binds its params, a motive per type and every
+    // minor premise: the parent's constructors and each auxiliary's, which
+    // copies its container's. All are known now, so a block that cannot fit
+    // is refused before any auxiliary is built (R172), with the check
+    // admission makes later.
+    check_block_width(env, &family, &occurrences)?;
+    names::freshen(env, &family, &mut occurrences)?;
+
+    // Phase 2: build auxiliary inductive types. Every type the rewrite builds,
+    // and admission then walks, is charged to one budget before it is built
+    // (R172): the parent's constructors here, rewritten in phase 3, and each
+    // auxiliary's types in `build_auxiliary`.
+    let growth = rewrite_growth(decl.num_params);
+    for original in originals {
+        for ctor in &original.constructors {
+            let nodes = room.measure(&ctor.type_).saturating_mul(growth);
+            room.take(nodes, decl, &original.name, At::ParentCtor(&ctor.name))?;
+        }
+    }
+    let mut aux_decls: Vec<InductiveDecl> = Vec::with_capacity(occurrences.len());
+    for occ in &occurrences {
+        aux_decls.push(build_auxiliary(env, decl, occ, &aux_levels, &mut room)?);
+    }
+
+    if needs_cross_rewrite {
+        closure::rewrite_auxiliaries(
+            env,
+            &family,
+            &occurrences,
+            &index,
+            &aux_levels,
+            &mut aux_decls,
+            &mut room,
+        )?;
+    }
+
+    // Phase 3: rewrite the original ctors to reference the aux types. Each
+    // node built and each pair of nodes compared to match a site is charged
+    // to the same budget before it is built or compared (R174, R176).
+    let mut decls = Vec::with_capacity(originals.len().saturating_add(aux_decls.len()));
+    for original in originals {
+        let mut rewritten = original.clone();
+        for c in &mut rewritten.constructors {
+            let mut charge =
+                |nodes: u64| room.take(nodes, decl, &original.name, At::Matching(&c.name));
+            c.type_ = crate::nested_replace::replace_nested_block(
+                env,
+                &c.type_,
+                &family.names,
+                &occurrences,
+                &index,
+                &aux_levels,
+                decl.num_params,
+                &mut charge,
+            )?;
+        }
+        decls.push(rewritten);
+    }
+    decls.extend(aux_decls);
+    let block = MutualBlock { decls };
+    add_inductive_mutual(env, block).map_err(|source| NestedError::Aux {
+        ind: decl.name.clone(),
+        source,
+    })?;
+    Ok(occurrences)
+}
+
+/// The refusal of a nested block too wide for the depth bound, before its
+/// auxiliaries are built (R172).
+fn block_too_wide(decl: &InductiveDecl, detail: String) -> NestedError {
+    NestedError::Aux {
+        ind: decl.name.clone(),
+        source: AdmitError::Derivation {
+            ind: decl.name.clone(),
+            detail,
+        },
+    }
+}
+
+/// Refuse a nested block whose ι rules cannot fit the depth bound, from its
+/// counts alone: params, one motive per type, and the minor premises of the
+/// parent and of every auxiliary (R172). Fields only widen a rule, so this is
+/// the refusal `check_rule_width` makes after the block is built.
+fn check_block_width(
+    env: &dyn Env,
+    family: &Family<'_>,
+    occurrences: &[Occurrence],
+) -> Result<(), NestedError> {
+    let decl = family.main;
+    let count = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
+    let mut minors = family
+        .originals
+        .iter()
+        .fold(0u32, |n, d| n.saturating_add(count(d.constructors.len())));
+    for occ in occurrences {
+        let ctors = env
+            .inductive_constructors(&occ.container)
+            .map_or(0, |c| c.len());
+        minors = minors.saturating_add(count(ctors));
+    }
+    let motives = count(occurrences.len()).saturating_add(count(family.originals.len()));
+    crate::recursor::check_rule_width(decl.num_params, motives, minors, 0).map_err(|detail| {
+        block_too_wide(decl, format!("before its auxiliaries are built, {detail}"))
     })
 }
 
-/// Prepend the parent's parameter binders around `body` (which is already in the
-/// canonical parameter frame: its free references to parameter `p` sit at
-/// `BVar(num_params-1-p)`). Wraps innermost-parameter-first so parameter `p`
-/// (0 = outermost) becomes the binder at de Bruijn distance `num_params-1-p`.
-fn prepend_param_binders(param_binders: &[(BinderInfo, Term)], body: Term) -> Term {
-    let mut result = body;
-    for (bi, ty) in param_binders.iter().rev() {
-        result = Term::pi(*bi, ty.clone(), result);
-    }
-    result
+#[cfg(test)]
+fn collect_in_ctor(
+    env: &dyn Env,
+    decl: &InductiveDecl,
+    ty: &Term,
+    out: &mut Vec<Occurrence>,
+    index: &mut OccIndex,
+) -> Result<(), NestedError> {
+    let family = Family::new(std::slice::from_ref(decl));
+    collect::collect_in_ctor(env, &family, ty, out, index)
 }
+
+#[cfg(test)]
+mod tests;

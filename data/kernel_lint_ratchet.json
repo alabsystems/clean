@@ -1,5 +1,5 @@
 {
-  "note": "Trusted-kernel (clean-kernel --lib) count of dead_code/unused_* warnings that the workspace [lints] allow hides. Flat-or-down ratchet (audit #6); enforced by scripts/kernel_lint_ratchet.sh, wired into scripts/local_gate.sh full mode. Lower it by removing dead imports / unused vars / redundant `mut` in clean-kernel.",
+  "note": "Trusted-kernel (clean-kernel --lib) count of dead_code/unused_* warnings hidden by source-level #[allow] attributes in clean-kernel itself (the workspace [lints] set these five to warn; --force-warn pierces the attributes \u2014 audit r5 M1). Flat-or-down ratchet (audit #6); enforced by scripts/kernel_lint_ratchet.sh, wired into scripts/local_gate.sh full mode. Lower it by removing dead imports / unused vars / redundant `mut` in clean-kernel. RE-BASELINED 70 -> 65 on 2026-09-23 by `scripts/kernel_lint_ratchet.sh --update` under trustc 1.99.0-dev 321aaeda7 (2026-09-17; a sealed atpkg toolchain build id that resolves to no commit in trust's origin, checked 2026-09-24), the toolchain the `channel = \"trust\"` pin resolved to, all five lints forced in one combined pass and again one lint at a time, both passes totalling 65. The whole drop is unused_qualifications 5 -> 0, and those 5 were never real debt: every remaining site (expr/meta.rs:31, expr/types.rs:495, memory_model.rs:18, sem_memory_model.rs:22, sem_memory_model.rs:51) is a serde-derive-expanded `u64`/`u8` path whose suggested removal span is EMPTY (stock rustc 1.97.1 reports all of them with byte_start == byte_end) -- false warnings produced by the compiler defect Trust 263fe47fd4 fixed (lint_unused_qualifications no longer suggests removing an empty span; regression test tests/ui/lint/unused-qualifications-empty-removal-span.rs). On compilers with debug assertions that defect ICEd (trustc 10f221fbe), which is what the script's pinned-toolchain carve-out skipped; without them (trustc c4e667ca5, stock 1.97.1) it emitted the false warnings the previous baseline counted. The carve-out is retired in the same commit, so every run forces all five lints. A compiler that predates 263fe47fd4 will now read 70 against this baseline and FAIL: update the toolchain, never the baseline.",
   "lints_forced": [
     "dead_code",
     "unused_imports",
@@ -7,6 +7,20 @@
     "unused_mut",
     "unused_qualifications"
   ],
-  "kernel_warnings": 70,
-  "generated_by": "scripts/kernel_lint_ratchet.sh --update"
+  "kernel_warnings": 65,
+  "kernel_warnings_by_lint": {
+    "dead_code": 65,
+    "unused_imports": 0,
+    "unused_variables": 0,
+    "unused_mut": 0,
+    "unused_qualifications": 0
+  },
+  "generated_by": "scripts/kernel_lint_ratchet.sh --update (2026-09-23, trustc 1.99.0-dev 321aaeda7 (2026-09-17)); the note's RE-BASELINED sentences and kernel_warnings_by_lint_provenance were added by hand in the same commit, because --update writes neither",
+  "kernel_warnings_by_lint_provenance": {
+    "dead_code": "65 -- measured 2026-09-23 under trustc 321aaeda7 by --update's per-lint isolation pass (exit 0), equal to the combined five-lint pass; unchanged from the 65 measured 2026-08-30 under 10f221fbe and 2026-09-15 under c4e667ca5.",
+    "unused_imports": "0 -- measured 2026-09-23 under trustc 321aaeda7 by --update's per-lint isolation pass (exit 0).",
+    "unused_variables": "0 -- measured 2026-09-23 under trustc 321aaeda7 by --update's per-lint isolation pass (exit 0).",
+    "unused_mut": "0 -- measured 2026-09-23 under trustc 321aaeda7 by --update's per-lint isolation pass (exit 0).",
+    "unused_qualifications": "0 -- MEASURED DIRECTLY 2026-09-23 under trustc 321aaeda7 by --update's per-lint isolation pass (exit 0), which contains Trust 263fe47fd4. The previous value, 5 (measured 2026-09-15 under trustc c4e667ca5, which lacks 263fe47fd4), counted expr/meta.rs:31, expr/types.rs:495, memory_model.rs:18, sem_memory_model.rs:22 and sem_memory_model.rs:51: all derive-expanded paths whose suggested removal span is empty, i.e. false warnings from the defect 263fe47fd4 fixed, never debt in clean-kernel's source. The sixth site found that day (expr/kind.rs:147, the serde `with =` path) had the same empty span; it was respelled at the time and the respelling was not needed for a fixed compiler."
+  }
 }

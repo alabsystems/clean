@@ -301,6 +301,7 @@ pub(crate) fn verify_completed_proof(
             .unwrap_or(crate::unify::MetaId(0)),
         target: goal_type.clone(),
         local_ctx: Vec::new(),
+        case_binders: Vec::new(),
         tag: None,
     };
 

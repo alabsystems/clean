@@ -12,12 +12,13 @@
 #   designs/2026-07-29-execution-plan-crystal.md §5
 #   designs/2026-07-29-crystal-deployed-kernel-bridge.md §6.0
 #
-# WHAT THIS IS NOT. It does not make trustc the standard build.
-# `rust-toolchain.toml` stays `channel = "stable"` and that is correct: as of
-# 2026-08-11 only 1.28 % of clean-kernel's `fn` bodies actually flip (185 of
-# 13,767 bodies; 153 codegen + 32 CTFE), and the toolchain lives outside the
-# repo. This is an opt-in measurement driver plus a monotonic ratchet on its
-# numbers.
+# `rust-toolchain.toml` selects `channel = "trust"` for ordinary repo builds.
+# This script is an opt-in CODEGEN FLIP measurement, separate from ordinary
+# unverified builds and the verification lane. Historical measurement:
+# 2026-08-11 only 1.28 % of clean-kernel's `fn` bodies flipped (185 of
+# 13,767 bodies; 153 codegen + 32 CTFE). Those dated counts do not describe
+# the current compiler. This driver ratchets measurements under its pinned
+# compiler identity.
 #
 # THE AXIS INVENTORY (added 2026-08-15 — read this before adding a measurement).
 #
@@ -49,15 +50,32 @@
 #   scripts/trust_ir_build.sh --negative-control   # -Ztrust-ir-flip=no; must be 0 flips
 #   scripts/trust_ir_build.sh --tighten            # seed new axes / raise improving ones
 #   scripts/trust_ir_build.sh --print-only         # measure, report, never fail on counts
+#   scripts/trust_ir_build.sh --rebaseline         # NEW compiler only: every axis from this run
 #
 # `--tighten` (the old spelling `--update` still works) can only ever make the
 # baseline STRICTER: it seeds an axis that has no baseline and raises one whose
 # measurement is strictly better. It never lowers a baseline, so it is
-# arithmetically incapable of turning a red axis green. That property is what
-# makes the new axes usable RIGHT NOW, while `lowered`/`spliced` sit red at HEAD
-# by established COMPILER DRIFT (`reports/trust-ir-ratchet-verdict-2026-08-13.md`)
-# with the re-baseline deliberately left as the owner's decision: the standing
-# red keeps its old baseline and stays red, and every other axis is still gated.
+# arithmetically incapable of turning a red axis green.
+#
+# THE COMPILER PIN (2026-10-08; docs/DECISIONS.md R25). The counts are a
+# property of the compiler as much as of clean-kernel: the baseline recorded
+# `lowered` 9068 over clean-kernel 71e1ce8be under an August trustc (stamp
+# 94147b34f), and the same source measures 7329 under the sealed 321aaeda7.
+# Until this date the baseline MIXED compilers (`--tighten` raised what a newer
+# compiler improved and kept the older one's values for what it lowered), so
+# the ratchet sat red on a comparison between two compilers --
+# `reports/trust-ir-ratchet-verdict-2026-08-13.md` was the same class -- and
+# could be demonstrated by nothing. The baseline now pins ONE
+# compiler (`compiler`: sha256 of `trustc` and of the `librustc_driver` it
+# loads), checked BEFORE the build:
+#   * the ratchet and `--tighten` refuse any other compiler (COMPILER MISMATCH),
+#     so a count is compared only with one the same compiler produced, and a
+#     regression under the pinned compiler stays red;
+#   * `--rebaseline` takes EVERY gated axis from one run, and only under a
+#     compiler that is NOT the pinned one -- under the pinned compiler it refuses
+#     before building (a lower count there is a regression). It also refuses a
+#     run with a fatal invariant or a moved REBASELINE_FIXED pin (no proof
+#     authority, no native verification request, subject clean_kernel).
 #
 # Environment:
 #   TRUST_STAGE1_BIN / TRUSTC / TRUST_REPO_ROOT   toolchain discovery (shared
@@ -109,8 +127,28 @@ BODIES_FILE="$REPO/data/trust_ir_build_agreed_bodies.json"
 RATCHET_SCRIPT="$REPO/scripts/trust_verify_ratchet.sh"
 AXES="$REPO/scripts/trust_ir_axes.py"
 
+# R7 PINNED INPUTS (docs/GATE_REGISTRY.md R7; 2026-11-13). Every verdict here
+# comes from two other files this script runs: the comparator ($AXES) and the
+# toolchain discovery ($RATCHET_SCRIPT --locate-stage1). Declared, so
+# check_gate_registry.py pins their bytes beside this script's and an edit to
+# either reds this row until its arms replay (E6's finding, e09dbb255: the
+# comparator changed after the 2026-10-08 demonstration and nothing saw it).
+ANSWERS_PINNED_INPUTS=True
+
 fail() { echo "TRUST-IR BUILD FAIL: $*" >&2; exit 1; }
 note() { echo "  $*"; }
+
+# A successful native compile can still withhold the TrustIR publication.
+# Surface its actual semantic refusal before suggesting a missing dump sink.
+require_coverage() {
+  local coverage="$1" log="$2"
+  [[ -f "$coverage" ]] && return 0
+  if grep -Fq 'trust-ir-lower semantic finalization failed:' "$log"; then
+    grep -F 'trust-ir-lower semantic finalization failed:' "$log" >&2
+    fail "compiler refused TrustIR semantic publication; no coverage json at $coverage (log: $log)"
+  fi
+  fail "no coverage json at $coverage — the dump sink did not attach (log: $log)"
+}
 
 MODE="ratchet"; FLIP="yes"
 for arg in "$@"; do
@@ -118,7 +156,9 @@ for arg in "$@"; do
     --negative-control) FLIP="no"; MODE="negative" ;;
     --tighten|--update) MODE="tighten" ;;
     --print-only)       MODE="print" ;;
-    -h|--help)          sed -n '2,75p' "$0"; exit 0 ;;
+    --rebaseline)       MODE="rebaseline" ;;
+    --pinned-inputs)    printf '%s\n' "${AXES#"$REPO"/}" "${RATCHET_SCRIPT#"$REPO"/}"; exit 0 ;;
+    -h|--help)          sed -n '2,92p' "$0"; exit 0 ;;
     *)                  fail "unknown argument: $arg" ;;
   esac
 done
@@ -135,7 +175,9 @@ python3 "$AXES" selftest >/dev/null 2>&1 \
 # Reuse the ratchet's discovery verbatim rather than re-deriving it: explicit
 # configuration is authoritative and invalid explicit paths fail closed; a
 # machine with no Trust checkout exits 2 and the caller decides what that means.
-if ! STAGE1="$(bash "$RATCHET_SCRIPT" --locate-stage1)"; then
+if STAGE1="$(bash "$RATCHET_SCRIPT" --locate-stage1)"; then
+  :
+else
   rc=$?
   [[ "$rc" -eq 2 ]] && { echo "TRUST-IR BUILD SKIP: no local Trust stage1 toolchain"; exit 2; }
   fail "Trust stage1 discovery is invalid or ambiguous; set TRUST_STAGE1_BIN explicitly"
@@ -151,10 +193,50 @@ TRUSTC_VERSION="$("$TRUSTC_BIN" -vV 2>/dev/null | tr '\n' ' ')"
 TRUSTC_SHA="$(shasum -a 256 "$TRUSTC_BIN" 2>/dev/null | awk '{print $1}')"
 
 SCRATCH="$(mktemp -d)"; trap 'rm -rf "$SCRATCH"' EXIT
+
+# ── the compiler's identity, and the pin, BEFORE anything is built ─────────
+# The digests are the identity (the stamp is not, see above): the `trustc`
+# binary and the ONE `librustc_driver` of its sysroot, which is where the
+# lowering actually lives -- two Trust builds can ship a byte-identical driver
+# shim. Exactly one driver library is required; zero or several is a sysroot
+# this script cannot name, and it fails closed.
+SYSROOT="$("$TRUSTC_BIN" --print sysroot 2>/dev/null)" \
+  || fail "\`$TRUSTC_BIN --print sysroot\` failed -- the compiler's identity cannot be read"
+DRIVERS=()
+for lib in "$SYSROOT"/lib/librustc_driver-*.dylib "$SYSROOT"/lib/librustc_driver-*.so; do
+  [[ -f "$lib" ]] && DRIVERS+=("$lib")
+done
+[[ "${#DRIVERS[@]}" -eq 1 ]] \
+  || fail "expected exactly one librustc_driver in $SYSROOT/lib, found ${#DRIVERS[@]} -- the compiler's identity is ambiguous"
+DRIVER_SHA="$(shasum -a 256 "${DRIVERS[0]}" 2>/dev/null | awk '{print $1}')"
+COMPILER_JSON="$SCRATCH/compiler.json"
+python3 - "$COMPILER_JSON" "$TRUSTC_VERSION" "$TRUSTC_SHA" "$DRIVER_SHA" <<'PY' \
+  || fail "could not record the compiler's identity"
+import json, sys
+out, stamp, trustc_sha, driver_sha = sys.argv[1:5]
+json.dump({"version_stamp": stamp.strip(), "trustc_sha256": trustc_sha,
+           "driver_sha256": driver_sha}, open(out, "w"), indent=1)
+PY
+if [[ "$MODE" == "ratchet" || "$MODE" == "tighten" || "$MODE" == "rebaseline" ]]; then
+  [[ -f "$BASELINE" ]] || fail "no baseline at $BASELINE -- seed it with --rebaseline"
+  CC_RC=0
+  CC_MSG="$(python3 "$AXES" compiler-check --baseline "$BASELINE" --compiler "$COMPILER_JSON")" || CC_RC=$?
+  if [[ "$MODE" == "rebaseline" && "$CC_RC" -eq 0 ]]; then
+    fail "REBASELINE REFUSED: this run's compiler IS the one the baseline pins
+       ($CC_MSG). Under one compiler an axis moves only by --tighten, which never
+       loosens: a lower count under the pinned compiler is a regression, not a re-baseline."
+  fi
+  if [[ "$MODE" != "rebaseline" && "$CC_RC" -ne 0 ]]; then
+    echo "TRUST_IR_BUILD=refused:compiler-mismatch"
+    fail "$CC_MSG"
+  fi
+fi
 DUMP="${TRUST_IR_BUILD_DUMP:-$SCRATCH/dump}"
 TDIR="${TRUST_IR_BUILD_TARGET_DIR:-$SCRATCH/target}"
-LOG="$SCRATCH/build.log"
 rm -rf "$DUMP" && mkdir -p "$DUMP" "$TDIR"
+# Retain producer diagnostics even when no coverage commit marker is published.
+# A valid native build can still refuse crate-level TrustIR finalization.
+LOG="$DUMP/clean_kernel.build.log"
 
 # ── the rustc wrapper ───────────────────────────────────────────────────────
 # Two things plain RUSTFLAGS cannot do: apply the lowering configuration
@@ -210,7 +292,7 @@ note "stamp:  $TRUSTC_VERSION"
 # emitting any dump at all.  The missing-coverage check caught that state, but
 # only after the script had falsely claimed it had forced a subject rebuild.
 if ! RUSTC="$TRUSTC_BIN" CARGO_TARGET_DIR="$TDIR" \
-    cargo clean --locked --release -p clean-kernel >/dev/null 2>&1; then
+    targo clean --locked --release -p clean-kernel >/dev/null 2>&1; then
   fail "could not remove the clean-kernel subject artifacts with the measured compiler"
 fi
 
@@ -218,23 +300,36 @@ env -u CARGO_ENCODED_RUSTFLAGS -u CARGO_BUILD_RUSTFLAGS \
     -u TRUST_VERIFY_PRIMARY_ONLY -u SOURCE_DATE_EPOCH -u TRUST_ENUM_DECLINE_CENSUS \
   RUSTC="$WRAP" TRUSTC="$TRUSTC_BIN" TIB_DUMP="$DUMP" TIB_FLIP="$FLIP" \
   CARGO_TARGET_DIR="$TDIR" CARGO_INCREMENTAL=0 \
-  cargo build --locked --release -p clean-kernel > "$LOG" 2>&1
+  targo --unverified build --locked --release -p clean-kernel --lib > "$LOG" 2>&1
 RC=$?
 if [[ "$RC" -ne 0 ]]; then
   tail -40 "$LOG" >&2
   fail "trustc build of clean-kernel exited $RC (log: $LOG)"
 fi
 
+# `--lib` (2026-09-20): the subject is the crate's LIBRARY -- the trust-ir
+# module, the coverage report and every flip event this script measures come
+# from the lib unit, and `clean_kernel.argv` records that unit's argv. The three
+# BINARY targets of clean-kernel fail to link under every v13 sysroot on this box
+# (`the crate panic_abort does not have the panic strategy abort` -- a sysroot
+# property, identical in control and subject, recorded in CLAUDE.md's crystal
+# section), and until today that failure arrived AFTER the lib's IR was
+# published and aborted this script right here: exit 101, no axes.json, no
+# retained build log, on the 2026-09-09 subject dump (its log, line 54) and on
+# every 2026-09-20 attempt. A measurement driver that cannot reach its own
+# measure step on the only box that runs it is not a driver; the bins were never
+# the subject.
+
 # ── measure ─────────────────────────────────────────────────────────────────
 COVERAGE="$DUMP/clean_kernel.coverage.json"
-[[ -f "$COVERAGE" ]] || fail "no coverage json at $COVERAGE — the dump sink did not attach"
+require_coverage "$COVERAGE" "$LOG"
 
 # The build log is an INPUT to the measurement (flip events live only there), so
 # it is kept next to the dump rather than in the vanishing scratch dir. Without
 # it the flip-to-coverage join — and therefore the "semantically backed" axes —
 # cannot be recomputed after the fact, which is precisely the position the
 # 2026-08-13 loss left every earlier lane in.
-cp "$LOG" "$DUMP/clean_kernel.build.log" 2>/dev/null || true
+# The build wrote LOG here from the start, including failed publication attempts.
 MEASURED="$DUMP/clean_kernel.axes.json"
 python3 "$AXES" measure --coverage "$COVERAGE" --log "$LOG" --out "$MEASURED" \
   || fail "axis extraction failed over $COVERAGE + $LOG"
@@ -320,21 +415,34 @@ fi
 
 if [[ "$MODE" == "print" ]]; then
   echo ""
-  python3 "$AXES" check --measured "$MEASURED" --baseline "$BASELINE" --bodies "$BODIES_FILE" || true
+  python3 "$AXES" check --measured "$MEASURED" --baseline "$BASELINE" --bodies "$BODIES_FILE" \
+    --compiler "$COMPILER_JSON" || true
   echo "PRINT-ONLY: no ratchet applied (axis table above is informational)"
+  exit 0
+fi
+
+if [[ "$MODE" == "rebaseline" ]]; then
+  # Every gated axis from THIS run, the compiler pinned, the body sets
+  # rewritten. The comparator refuses again here on its own terms (pinned
+  # compiler, fatal invariant, missing axis, a REBASELINE_FIXED pin moved).
+  python3 "$AXES" rebaseline --measured "$MEASURED" --baseline "$BASELINE" \
+    --bodies "$BODIES_FILE" --compiler "$COMPILER_JSON" --write \
+    || fail "the comparator refused the re-baseline -- see its reason above"
+  python3 "$AXES" check --measured "$MEASURED" --baseline "$BASELINE" --bodies "$BODIES_FILE" \
+    --compiler "$COMPILER_JSON" >/dev/null \
+    || fail "the re-baselined file does not pass its own measurement -- not written correctly"
+  echo "BASELINE RE-MINTED under $TRUSTC_VERSION: $BASELINE (+ body sets: $BODIES_FILE)"
   exit 0
 fi
 
 # ── ratchet ─────────────────────────────────────────────────────────────────
 # Every axis in `scripts/trust_ir_axes.py::AXES` is evaluated, ALL of them are
 # printed, and the failures are reported together. It deliberately does not stop
-# at the first red: `lowered`/`spliced` are red at HEAD by established compiler
-# drift, and a first-failure exit would have made every axis behind them
+# at the first red: a first-failure exit would make every axis behind it
 # invisible — the same shape of blindness this gate exists to remove.
-[[ -f "$BASELINE" ]] || fail "no baseline at $BASELINE — seed it with --tighten"
-
 echo ""
-if python3 "$AXES" check --measured "$MEASURED" --baseline "$BASELINE" --bodies "$BODIES_FILE"; then
+if python3 "$AXES" check --measured "$MEASURED" --baseline "$BASELINE" --bodies "$BODIES_FILE" \
+    --compiler "$COMPILER_JSON"; then
   RATCHET_RC=0
 else
   RATCHET_RC=1
@@ -345,30 +453,12 @@ if [[ "$MODE" == "tighten" ]]; then
   # when the check is red, because that is the whole point: an axis that
   # regressed keeps its old baseline and stays red, while the axes that have no
   # baseline at all stop being blind spots.
+  # Under the pinned compiler only (checked before the build, and again by the
+  # comparator): the pin IS the provenance of every value, so nothing else is
+  # recorded per run; `axis_updated` says which axes each run moved.
   python3 "$AXES" tighten --measured "$MEASURED" --baseline "$BASELINE" \
-                          --bodies "$BODIES_FILE" --write || fail "tighten failed"
-  # `trustc` is NOT clobbered. It is the provenance of whatever axis values are
-  # still standing from an earlier run — `lowered`/`spliced` today — and
-  # overwriting it would make a value measured by one compiler look as if it had
-  # been measured by another. The current run is recorded alongside instead, and
-  # `axis_updated` says which axes this run actually moved.
-  python3 - "$BASELINE" <<PY
-import json, sys
-path = sys.argv[1]
-doc = json.load(open(path))
-doc["profile"] = "release, -Ztrust-ir-lower=on -Ztrust-ir-flip=yes -Cdebuginfo=0 -Cdebug-assertions=off"
-doc["trustc_last_tighten"] = {
-    "version_stamp": """$TRUSTC_VERSION""".strip(), "sha256": "$TRUSTC_SHA",
-    "stamp_is_not_source_identity": "CFG_VER_HASH is trust git HEAD at BUILD time",
-    # NOTE, do not add backticks here: this heredoc is UNQUOTED (<<PY) so that
-    # $TRUSTC_VERSION interpolates, which means bash also runs backtick command
-    # substitution inside it. A backticked word here becomes "command not found"
-    # and silently vanishes from the string.
-    "note": "the compiler of the MOST RECENT tighten; per-axis provenance is axis_updated",
-}
-json.dump(doc, open(path, "w"), indent=1)
-open(path, "a").write("\n")
-PY
+                          --bodies "$BODIES_FILE" --compiler "$COMPILER_JSON" --write \
+    || fail "tighten failed"
   echo "BASELINE TIGHTENED: $BASELINE  (+ body sets: $BODIES_FILE)"
   echo "  A tighten never lowers a baseline, so a red axis stays red — re-run without"
   echo "  --tighten to see the gate's verdict."

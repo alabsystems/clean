@@ -65,20 +65,23 @@ fn test_linarith_three_hyp_non_chain_contradiction_closes_false() {
         false_const,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h3_id,
-                name: "h3".into(),
+                name: clean_parser::SurfaceName::generated_path("h3"),
                 ty: h3_ty,
                 value: None,
             },
@@ -130,14 +133,16 @@ fn test_linarith_mixed_scaled_nat_contradiction_closes_false() {
         false_const,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -196,14 +201,16 @@ fn test_linarith_concrete_nat_no_trusted_arith() {
         false_const,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1_ty,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2_ty,
                 value: None,
             },
@@ -245,8 +252,9 @@ fn test_linarith_large_nat_coefficients_avoid_trusted_arith() {
         env,
         false_const,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_id,
-            name: "h".into(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],

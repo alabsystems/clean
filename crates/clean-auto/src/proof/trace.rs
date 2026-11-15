@@ -78,7 +78,7 @@ impl ProofTrace {
 
     /// Get the reason for a specific proof step
     #[cfg(test)]
-    pub fn get_reason(&self, idx: usize) -> Option<&UnionReason> {
+    pub(crate) fn get_reason(&self, idx: usize) -> Option<&UnionReason> {
         self.steps.get(idx).map(|(_, _, r)| r)
     }
 

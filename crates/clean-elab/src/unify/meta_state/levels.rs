@@ -8,7 +8,7 @@ use crate::stack_safe;
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprFolderOpt, Level, LevelVec};
 
-use super::super::meta_id::UndoRecord;
+use super::super::meta_id::{MetaId, UndoRecord};
 use super::MetaState;
 
 impl MetaState {
@@ -19,7 +19,11 @@ impl MetaState {
     ///
     /// Returns `Err` when this would merge two universe classes with conflicting concrete
     /// assignments or would overwrite an existing concrete assignment with a different level.
-    pub fn add_level_constraint(&mut self, param_name: Name, level: Level) -> Result<(), String> {
+    pub(crate) fn add_level_constraint(
+        &mut self,
+        param_name: Name,
+        level: Level,
+    ) -> Result<(), String> {
         // A param constrained to a member of its OWN equivalence class — most
         // importantly the literal reflexive `u := Param(u)` — is a vacuous,
         // already-satisfied constraint (`u = u`). The union-find already records
@@ -56,6 +60,30 @@ impl MetaState {
         if self.is_rigid_level_param(&param_name) {
             return Err(format!(
                 "cannot assign rigid universe parameter {param_name} := {level}"
+            ));
+        }
+
+        // OCCURS CHECK at the funnel. A level metavariable is never assigned a
+        // level that mentions its own class: Lean's `isLevelDefEqAux`
+        // (`Lean/Meta/LevelDefEq.lean`, `solve`) assigns `?u := v` only when
+        // `!u.occurs v`, and otherwise postpones (or, for `?u =?= max ?u v`,
+        // runs `solveSelfMax`). `solve_level_eq` checks this before it calls
+        // in, but callers reach this funnel directly — `solve_head_const_levels`
+        // (a head constant's `Sort p` binder read against its argument's sort)
+        // and the kernel callback's `commit_pending_level_assigns` — and those
+        // did not. Measured: `theorem q {β : Sort _} {F G : β → β} (h : F = G)
+        // : ∀ x, F x = G x := congrFun h` solved `Eq.{?b} =?= Eq.{imax ?u ?v}`
+        // as `?b := imax ?u ?v`, and `solve_head_const_levels` then read `β :
+        // Sort ?b` against `congrFun`'s `{α : Sort ?u}` and stored
+        // `?u := imax ?u ?v`. `instantiate_level`'s cycle guard cuts such a
+        // loop one layer down, so every later equation re-expanded it: the
+        // level solver recursed without end and the process passed 4 GB in
+        // under two seconds. Refusing is fail-closed: the constraint is simply
+        // not recorded (the direct callers already ignore a refusal), and the
+        // kernel re-checks every declaration.
+        if self.level_assignment_would_cycle(&param_name, &level) {
+            return Err(format!(
+                "occurs check failed for level param {param_name} in {level}"
             ));
         }
 
@@ -122,6 +150,38 @@ impl MetaState {
             }
         }
         Ok(())
+    }
+
+    /// Would recording `param_name := level` make a level mention its own
+    /// class? Read on the level as written AND as resolved through the
+    /// current assignments (a written parameter whose class is bound can
+    /// lead back to `param_name`). For a parameter-to-parameter union the
+    /// two classes' bounds merge, so it is checked in both directions.
+    fn level_assignment_would_cycle(&self, param_name: &Name, level: &Level) -> bool {
+        let mentions_class = |l: &Level, class_root: &Name| {
+            let mut params = Vec::new();
+            l.collect_params(&mut params);
+            self.instantiate_level(l).collect_params(&mut params);
+            params
+                .iter()
+                .any(|p| &self.level_find_immut(p) == class_root)
+        };
+        let root = self.level_find_immut(param_name);
+        match level {
+            Level::Param(other) => {
+                let other_root = self.level_find_immut(other);
+                other_root != root
+                    && (self
+                        .level_bound
+                        .get(&other_root)
+                        .is_some_and(|bound| mentions_class(bound, &root))
+                        || self
+                            .level_bound
+                            .get(&root)
+                            .is_some_and(|bound| mentions_class(bound, &other_root)))
+            }
+            _ => level.has_params() && mentions_class(level, &root),
+        }
     }
 
     /// Find the canonical representative for a level param (union-find with path compression)
@@ -366,7 +426,7 @@ impl MetaState {
     ///
     /// Walks the full `Expr` tree and rewrites all universe levels using
     /// `instantiate_level`, ensuring unified params use the same representative.
-    pub fn canonicalize_levels_in_expr(&self, expr: &Expr) -> Expr {
+    pub(crate) fn canonicalize_levels_in_expr(&self, expr: &Expr) -> Expr {
         stack_safe(|| self.canonicalize_levels_in_expr_inner(expr))
     }
 
@@ -463,10 +523,41 @@ impl MetaState {
         self.postponed_levels.push((l1, l2));
     }
 
+    /// Record a numeral whose carrier is still open (see
+    /// `MetaState::postponed_numerals`).
+    pub(crate) fn postpone_numeral(&mut self, value: MetaId, n: clean_kernel::BigNat) {
+        self.record_undo(UndoRecord::NumeralPostpone);
+        self.postponed_numerals.push((value, n));
+    }
+
+    /// How many numerals were ever postponed (drained ones included).
+    #[must_use]
+    pub(crate) fn postponed_numeral_count(&self) -> usize {
+        self.postponed_numerals.len()
+    }
+
+    /// The postponed numerals recorded at or after `start`.
+    #[must_use]
+    pub(crate) fn postponed_numerals_since(
+        &self,
+        start: usize,
+    ) -> Vec<(MetaId, clean_kernel::BigNat)> {
+        self.postponed_numerals
+            .get(start..)
+            .map(<[_]>::to_vec)
+            .unwrap_or_default()
+    }
+
     /// How many level equations are currently deferred.
     #[must_use]
     pub fn postponed_level_count(&self) -> usize {
         self.postponed_levels.len()
+    }
+
+    /// The postponed level equations, as recorded (not instantiated).
+    #[must_use]
+    pub(crate) fn postponed_level_equations(&self) -> Vec<(Level, Level)> {
+        self.postponed_levels.clone()
     }
 
     /// Re-solve every deferred level equation. FAIL-CLOSED.
@@ -600,6 +691,148 @@ mod postponement_tests {
     /// under test never ran, and it passed via a plain param assignment. Two
     /// distinct params on each side is the smallest form that survives
     /// normalization.
+    /// `?u+1 =?= max(max(a+1, b+1), c+1)` — the sort of `α₁ ⊕ α₂ → β` over
+    /// three `Type*` variables — solves as `?u := max (max a b) c`: succ
+    /// distributes over a NESTED max, not only over a flat one (measured
+    /// 2026-09-11 on `Mathlib/Order/Basic.lean`'s `Sum.elim_le_elim_iff`).
+    #[test]
+    fn test_succ_distributes_over_nested_max() {
+        use crate::unify::level_solve::solve_level_eq;
+        use crate::unify::unifier::UnifyResult;
+        let mut metas = MetaState::new();
+        let lhs = Level::succ(p("u"));
+        let rhs = Level::max(
+            Level::max(Level::succ(p("a")), Level::succ(p("b"))),
+            Level::succ(p("c")),
+        );
+        assert!(
+            matches!(solve_level_eq(&mut metas, &lhs, &rhs), UnifyResult::Success),
+            "succ must distribute over the nested max"
+        );
+        assert_eq!(
+            metas.instantiate_level(&p("u")),
+            Level::max(Level::max(p("a"), p("b")), p("c"))
+        );
+        // A branch that is not a successor keeps the conservative refusal.
+        let mut metas = MetaState::new();
+        let rhs = Level::max(Level::succ(p("a")), p("b"));
+        assert!(
+            !matches!(
+                solve_level_eq(&mut metas, &Level::succ(p("v")), &rhs),
+                UnifyResult::Success
+            ),
+            "max(a+1, b) is not a successor for every b"
+        );
+    }
+
+    /// `max u 0 = u`, `max 0 u = u`, `imax (u+1) 1 = u+1` — normalizations
+    /// Lean's `Level.normalize` performs and the instance search meets when a
+    /// `Type u` carrier is combined with a `Prop`-valued one (`Compl (α → Prop)`
+    /// through `Pi.instCompl`: `max u 0 =?= u` with `u` RIGID).
+    #[test]
+    fn test_max_with_zero_and_imax_with_succ_normalize_against_a_rigid_param() {
+        use crate::unify::level_solve::solve_level_eq;
+        use crate::unify::unifier::UnifyResult;
+        let mut metas = MetaState::new();
+        metas.set_rigid_level_params([Name::from_string("u")]);
+        for (lhs, rhs) in [
+            (Level::max(p("u"), Level::zero()), p("u")),
+            (Level::max(Level::zero(), p("u")), p("u")),
+            (p("u"), Level::max(p("u"), Level::zero())),
+            (
+                Level::imax(Level::succ(p("u")), Level::succ(Level::zero())),
+                Level::succ(p("u")),
+            ),
+            (Level::max(p("u"), p("u")), p("u")),
+        ] {
+            assert!(
+                matches!(solve_level_eq(&mut metas, &lhs, &rhs), UnifyResult::Success),
+                "{lhs} =?= {rhs} must succeed by normalization"
+            );
+        }
+    }
+
+    /// `u =?= max ?a ?b` with `u` RIGID: no greedy `?a := ?b := u` while the
+    /// operands are unassigned — the equation is postponed, the operands are
+    /// pinned by the rest of the problem (`?a := u`, `?b := 0`, the
+    /// `Compl (α → Prop)` shape through `Pi.instCompl`), and the drain closes
+    /// it by `max u 0 = u`. The no-postpone solver keeps the greedy rule.
+    #[test]
+    fn test_rigid_param_vs_max_of_metas_postpones_until_the_operands_are_known() {
+        use crate::unify::level_solve::{solve_level_eq, solve_level_eq_no_postpone};
+        use crate::unify::unifier::UnifyResult;
+        let mut metas = MetaState::new();
+        metas.set_rigid_level_params([Name::from_string("u")]);
+        let (a, b) = (p("a"), p("b"));
+        let rhs = Level::max(a.clone(), b.clone());
+        assert!(
+            matches!(
+                solve_level_eq(&mut metas, &p("u"), &rhs),
+                UnifyResult::Success
+            ),
+            "the equation is accepted (postponed), not refused"
+        );
+        assert_eq!(metas.instantiate_level(&a), a, "no greedy commitment of ?a");
+        assert_eq!(metas.instantiate_level(&b), b, "no greedy commitment of ?b");
+        assert_eq!(metas.postponed_level_count(), 1);
+        assert!(matches!(
+            solve_level_eq(&mut metas, &a, &p("u")),
+            UnifyResult::Success
+        ));
+        assert!(matches!(
+            solve_level_eq(&mut metas, &b, &Level::zero()),
+            UnifyResult::Success
+        ));
+        metas
+            .drain_postponed_levels()
+            .expect("max u 0 = u closes the postponed equation");
+
+        let mut metas = MetaState::new();
+        metas.set_rigid_level_params([Name::from_string("u")]);
+        assert!(matches!(
+            solve_level_eq_no_postpone(&mut metas, &p("u"), &Level::max(p("a"), p("b"))),
+            UnifyResult::Success
+        ));
+        assert_eq!(
+            metas.instantiate_level(&p("a")),
+            p("u"),
+            "the drain keeps the greedy rule"
+        );
+    }
+
+    /// `?x =?= max ?x ?y` is satisfiable (`?y ≤ ?x`): postponed, not an
+    /// occurs failure, and closed by the drain once `?y := 0` — the
+    /// `Compl (α → Prop)` search through `Pi.instCompl`. Without postponement
+    /// it still refuses, so the drain never guesses.
+    #[test]
+    fn test_param_equals_max_of_itself_postpones_instead_of_failing_the_occurs_check() {
+        use crate::unify::level_solve::{solve_level_eq, solve_level_eq_no_postpone};
+        use crate::unify::unifier::UnifyResult;
+        let mut metas = MetaState::new();
+        let (x, y) = (p("x"), p("y"));
+        let rhs = Level::max(x.clone(), y.clone());
+        assert!(matches!(
+            solve_level_eq(&mut metas, &x, &rhs),
+            UnifyResult::Success
+        ));
+        assert_eq!(metas.postponed_level_count(), 1);
+        assert!(matches!(
+            solve_level_eq(&mut metas, &y, &Level::zero()),
+            UnifyResult::Success
+        ));
+        metas
+            .drain_postponed_levels()
+            .expect("max x 0 = x closes the postponed equation");
+        let mut metas = MetaState::new();
+        assert!(
+            !matches!(
+                solve_level_eq_no_postpone(&mut metas, &p("x"), &Level::max(p("x"), p("y"))),
+                UnifyResult::Success
+            ),
+            "with postponement off the equation is still refused"
+        );
+    }
+
     #[test]
     fn test_max_congruence_splits_componentwise() {
         use crate::unify::level_solve::solve_level_eq;

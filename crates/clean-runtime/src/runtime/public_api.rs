@@ -81,9 +81,10 @@ pub fn clean_inc(o: LeanObjPtr) {
     lean_inc(o)
 }
 
-/// Increment the reference count by `n`. No-op for scalars.
+/// Increment the reference count by `n`. No-op for scalars and frozen
+/// counts; an `n` that would pass the sticky band leaves the count frozen.
 #[inline]
-pub fn clean_inc_n(o: LeanObjPtr, n: u32) {
+pub fn clean_inc_n(o: LeanObjPtr, n: usize) {
     lean_inc_n(o, n)
 }
 
@@ -107,9 +108,10 @@ pub fn clean_ctor_set(o: LeanObjPtr, idx: usize, v: LeanObjPtr) {
     ctor_set(o, idx, v)
 }
 
-/// Get the constructor tag of an object.
+/// Get the constructor tag of an object, 32 bits wide (a boxed tag is read
+/// whole, as the C header's `clean_obj_tag` reads it).
 #[inline]
-pub fn clean_obj_tag(o: LeanObjPtr) -> u8 {
+pub fn clean_obj_tag(o: LeanObjPtr) -> u32 {
     obj_tag(o)
 }
 
@@ -293,7 +295,7 @@ pub fn clean_mk_string(s: &str) -> LeanObjPtr {
     mk_string(s)
 }
 
-/// Abort with an error message.
+/// Stop the process with an error message (exit status 1).
 #[cold]
 pub fn clean_panic(msg: &str) -> ! {
     lean_panic(msg)

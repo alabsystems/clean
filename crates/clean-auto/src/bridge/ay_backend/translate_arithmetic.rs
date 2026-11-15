@@ -14,6 +14,7 @@
 use super::concrete_real::is_concrete_real_divisor;
 use super::translator::LeanExprTranslator;
 use super::{reject_unsound_domain_ty, AyError, AyResult};
+use crate::bridge::division_semantics::{integer_quotient, integer_remainder, IntegerDivisionOps};
 use crate::bridge::expr_classifier::LogicalForm;
 use crate::bridge::rat_smt::is_rat_or_real_type;
 use ay::Term;
@@ -69,7 +70,13 @@ impl LeanExprTranslator {
                 let r = TermTranslator::translate(self, ctx, &rhs)?;
                 Ok(ops::arith::mul(ctx, l, r))
             }
-            LogicalForm::Div { ty, lhs, rhs, .. } => {
+            LogicalForm::Div {
+                ty,
+                lhs,
+                rhs,
+                int_rounding,
+                ..
+            } => {
                 reject_unsound_domain_ty(&ty)?;
                 if is_nat_type(&ty) {
                     let l = TermTranslator::translate(self, ctx, &lhs)?;
@@ -95,10 +102,21 @@ impl LeanExprTranslator {
                 } else {
                     let l = TermTranslator::translate(self, ctx, &lhs)?;
                     let r = TermTranslator::translate(self, ctx, &rhs)?;
-                    Ok(ops::arith::int_div(ctx, l, r))
+                    let rounding = int_rounding.ok_or_else(|| {
+                        AyError::UnsupportedExpr(
+                            "integer division requires a resolved rounding convention".to_string(),
+                        )
+                    })?;
+                    Ok(integer_quotient(&mut AyIntegerOps(ctx), l, r, rounding))
                 }
             }
-            LogicalForm::Mod { ty, lhs, rhs, .. } => {
+            LogicalForm::Mod {
+                ty,
+                lhs,
+                rhs,
+                int_rounding,
+                ..
+            } => {
                 reject_unsound_domain_ty(&ty)?;
                 let l = TermTranslator::translate(self, ctx, &lhs)?;
                 let r = TermTranslator::translate(self, ctx, &rhs)?;
@@ -108,7 +126,12 @@ impl LeanExprTranslator {
                     let mod_result = ops::arith::modulo(ctx, l, r);
                     Ok(ops::ite(ctx, rhs_positive, mod_result, l))
                 } else {
-                    Ok(ops::arith::modulo(ctx, l, r))
+                    let rounding = int_rounding.ok_or_else(|| {
+                        AyError::UnsupportedExpr(
+                            "integer modulus requires a resolved rounding convention".to_string(),
+                        )
+                    })?;
+                    Ok(integer_remainder(&mut AyIntegerOps(ctx), l, r, rounding))
                 }
             }
             LogicalForm::Neg { inner, .. } => {
@@ -117,6 +140,39 @@ impl LeanExprTranslator {
             }
             _ => unreachable!("only arithmetic forms passed to translate_arithmetic_form"),
         }
+    }
+}
+
+struct AyIntegerOps<'a, H>(&'a mut H);
+
+impl<H: TranslationTermHost<FVarId>> IntegerDivisionOps for AyIntegerOps<'_, H> {
+    type Term = Term;
+    fn zero(&mut self) -> Term {
+        self.0.solver().int_const(0)
+    }
+    fn eq(&mut self, lhs: Term, rhs: Term) -> Term {
+        ops::compare(self.0, ops::Comparison::Eq, lhs, rhs)
+    }
+    fn lt(&mut self, lhs: Term, rhs: Term) -> Term {
+        ops::compare(self.0, ops::Comparison::Lt, lhs, rhs)
+    }
+    fn neg(&mut self, value: Term) -> Term {
+        ops::arith::neg(self.0, value)
+    }
+    fn mul(&mut self, lhs: Term, rhs: Term) -> Term {
+        ops::arith::mul(self.0, lhs, rhs)
+    }
+    fn sub(&mut self, lhs: Term, rhs: Term) -> Term {
+        ops::arith::sub(self.0, lhs, rhs)
+    }
+    fn div(&mut self, lhs: Term, rhs: Term) -> Term {
+        ops::arith::int_div(self.0, lhs, rhs)
+    }
+    fn modulo(&mut self, lhs: Term, rhs: Term) -> Term {
+        ops::arith::modulo(self.0, lhs, rhs)
+    }
+    fn ite(&mut self, condition: Term, yes: Term, no: Term) -> Term {
+        ops::ite(self.0, condition, yes, no)
     }
 }
 

@@ -46,7 +46,7 @@ impl Environment {
 
         // Hashable : Type u → Type u
         let hashable_type = Expr::pi(
-            BinderInfo::Implicit,
+            BinderInfo::Default,
             type_u.clone(),
             Expr::from_kind(ExprKind::Sort(Level::succ(u_level.clone()))),
         );

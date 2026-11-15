@@ -1036,12 +1036,12 @@ fn default_suite_dir() -> PathBuf {
 
     // Try project root (for when running from subdirectory)
     let mut dir = cwd.clone();
-    while dir.parent().is_some() {
+    while let Some(parent) = dir.parent() {
         let candidate = dir.join("benchmarks/geometry/alphageometry");
         if candidate.exists() {
             return candidate;
         }
-        dir = dir.parent().unwrap().to_path_buf();
+        dir = parent.to_path_buf();
     }
 
     // Fallback to relative path (will error if not found)

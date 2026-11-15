@@ -508,43 +508,58 @@ fn test_lazy_delta_asymmetric_chain_depths_converge() {
 }
 
 // ============================================================================
-// Monadic def-eq hook (Track Q)
+// `pure` over `Except` by ordinary delta (the Track Q hook is retired)
 // ============================================================================
 
-/// `is_def_eq` recognizes `Pure.pure (Except ε) α a` as definitionally equal
-/// to `Except.ok ε α a`. The monad-class heads are axioms (no delta value), so
-/// without the `try_monad_reduce` hook in the lazy-delta loop the two stuck
-/// consts `Pure.pure` and `Except.ok` would report DefUnknown and the
-/// comparison would fail — exactly the do-block `pure x` / vector lane-fold
-/// `rfl` regression this fix targets.
+/// `is_def_eq` recognizes `@Pure.pure (Except ε) inst α a` as definitionally
+/// equal to `Except.ok ε α a`. Until 2026-09-28 the monad-class heads were
+/// instance-less AXIOMS and only the kernel's by-name `try_monad_reduce` hook
+/// made this hold (those axioms proved `False`); `Pure.pure` is now Lean's
+/// projection applied to `Except.instMonad`, and ordinary δ / projection /
+/// β reduce it — the do-block `pure x` / vector lane-fold `rfl` this pin was
+/// written for still holds, with no by-name rule.
 #[test]
 fn test_def_eq_pure_over_except_equals_except_ok() {
-    let mut env = Environment::new();
-    env.init_id().expect("init_id");
-    env.init_state_t().expect("init_state_t");
-    env.init_except_t().expect("init_except_t");
-    env.init_monad_classes().expect("init_monad_classes");
+    let env = Environment::with_prelude();
     let tc = TypeChecker::new(&env);
 
-    let eps = Expr::prop();
-    let except_eps = Expr::apps(
-        Expr::const_(Name::from_string("Except"), vec![Level::zero()]),
-        vec![eps.clone()],
-    );
-    let alpha = Expr::type_();
-    let value = Expr::prop();
-    let pure = Expr::apps(
+    let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+    let mi = crate::env::monad_term::MonadInst {
+        u: Level::zero(),
+        v: Level::zero(),
+        m: Expr::app(
+            Expr::const_(
+                Name::from_string("Except"),
+                vec![Level::zero(), Level::zero()],
+            ),
+            nat.clone(),
+        ),
+        inst: Expr::app(
+            Expr::const_(
+                Name::from_string("Except.instMonad"),
+                vec![Level::zero(), Level::zero()],
+            ),
+            nat.clone(),
+        ),
+    };
+    let value = Expr::nat_lit(3);
+    let pure = mi.pure(nat.clone(), value.clone());
+    let except_ok = Expr::apps(
         Expr::const_(
-            Name::from_string("Pure.pure"),
+            Name::from_string("Except.ok"),
             vec![Level::zero(), Level::zero()],
         ),
-        vec![except_eps, alpha.clone(), value.clone()],
-    );
-    let except_ok = Expr::apps(
-        Expr::const_(Name::from_string("Except.ok"), vec![Level::zero()]),
-        vec![eps, alpha, value],
+        vec![nat.clone(), nat.clone(), value],
     );
 
     assert!(tc.is_def_eq(&pure, &except_ok));
     assert!(tc.is_def_eq(&except_ok, &pure));
+    let wrong = Expr::apps(
+        Expr::const_(
+            Name::from_string("Except.ok"),
+            vec![Level::zero(), Level::zero()],
+        ),
+        vec![nat.clone(), nat, Expr::nat_lit(4)],
+    );
+    assert!(!tc.is_def_eq(&pure, &wrong));
 }

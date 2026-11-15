@@ -39,7 +39,7 @@ impl Parser {
 
         // Expect `: category`
         self.expect(&TokenKind::Colon)?;
-        let category = self.ident()?;
+        let category = self.syntax_category_label()?;
 
         Ok(SurfaceDecl::Syntax {
             span: start_span,
@@ -73,7 +73,7 @@ impl Parser {
 
         // Expect `: category`
         self.expect(&TokenKind::Colon)?;
-        let category = self.ident()?;
+        let category = self.syntax_category_label()?;
 
         // Expect `=>`
         self.expect(&TokenKind::FatArrow)?;
@@ -143,7 +143,7 @@ impl Parser {
 
         // Expect `: category`
         self.expect(&TokenKind::Colon)?;
-        let category = self.ident()?;
+        let category = self.syntax_category_label()?;
 
         // Expect `=>`
         let arrow_span = self.current_span();
@@ -191,7 +191,7 @@ impl Parser {
         let precedence = self.parse_precedence_suffix();
 
         // Parse the notation pattern
-        let pattern = self.parse_notation_pattern();
+        let pattern = self.parse_notation_pattern()?;
 
         // Expect `=>`
         self.expect(&TokenKind::FatArrow)?;
@@ -204,7 +204,14 @@ impl Parser {
         // general `notation` mixfix form is not registered here. `scoped`
         // notation is tagged with its declaring namespace and consulted only
         // while that namespace is active (current / ancestor / opened).
-        self.register_custom_operator(kind, precedence, &pattern, &expansion, scope);
+        self.register_custom_operator(
+            kind,
+            precedence,
+            &pattern,
+            &expansion,
+            scope,
+            TemplateSiteId::of_span(start_span),
+        );
 
         Ok(SurfaceDecl::Notation {
             span: start_span,
@@ -213,7 +220,24 @@ impl Parser {
             pattern,
             expansion: Box::new(expansion),
             scope,
+            scope_ns: None,
         })
+    }
+
+    /// Retain the exact single-component syntax-category protocol label.
+    fn syntax_category_label(&mut self) -> Result<String, ParseError> {
+        let span = self.current_span();
+        let line = self.current_line();
+        let name = self.ident()?;
+        // Categories remain a textual, single-component protocol. Copy that
+        // exact component, never a qualified Name's diagnostic rendering.
+        name.component_text()
+            .map(str::to_owned)
+            .ok_or_else(|| ParseError::UnexpectedToken {
+                line,
+                col: span.start,
+                message: "syntax category must be one string component".into(),
+            })
     }
 
     /// Parse optional precedence suffix `:N` or `:max`
@@ -228,19 +252,19 @@ impl Parser {
                             .unwrap_or(u32::MAX),
                     )
                 }
-                TokenKind::Ident(s) if s == "max" => {
+                TokenKind::Ident(s) if s == "max" && !self.current().ident_escaped => {
                     self.advance();
                     Some(1024) // max precedence
                 }
-                TokenKind::Ident(s) if s == "min" => {
+                TokenKind::Ident(s) if s == "min" && !self.current().ident_escaped => {
                     self.advance();
                     Some(0)
                 }
-                TokenKind::Ident(s) if s == "arg" => {
+                TokenKind::Ident(s) if s == "arg" && !self.current().ident_escaped => {
                     self.advance();
                     Some(1023) // arg precedence
                 }
-                TokenKind::Ident(s) if s == "lead" => {
+                TokenKind::Ident(s) if s == "lead" && !self.current().ident_escaped => {
                     self.advance();
                     Some(1024) // lead = max
                 }
@@ -257,7 +281,7 @@ impl Parser {
             let pos = self.pos;
             self.advance();
             if let TokenKind::Ident(s) = self.current_kind().clone() {
-                if s == "priority" {
+                if s == "priority" && !self.current().ident_escaped {
                     self.advance();
                     if self.eat(&TokenKind::ColonEq) {
                         if let TokenKind::NatLit(n) = self.current_kind().clone() {
@@ -332,6 +356,7 @@ impl Parser {
 
             // Identifier with optional category: `cond:term` or just `term`
             TokenKind::Ident(name) => {
+                let name = self.name_token(&name)?;
                 self.advance();
 
                 // Check for `:category` suffix (variable binding like `x:term`)
@@ -434,7 +459,7 @@ impl Parser {
 
                 // Check for `?` suffix (optional)
                 if let TokenKind::Ident(s) = self.current_kind() {
-                    if s == "?" {
+                    if s == "?" && !self.current().ident_escaped {
                         self.advance();
                         return Ok(SyntaxPatternItem::Optional(vec![]));
                     }
@@ -455,7 +480,7 @@ impl Parser {
             TokenKind::Underscore => {
                 self.advance();
                 Ok(SyntaxPatternItem::Variable {
-                    name: "_".to_string(),
+                    name: SurfaceName::component("_", false),
                     category: None,
                 })
             }
@@ -489,7 +514,7 @@ impl Parser {
                         self.advance();
                     }
                     if let TokenKind::Ident(s) = self.current_kind() {
-                        if s == "?" {
+                        if s == "?" && !self.current().ident_escaped {
                             self.advance();
                         }
                     }
@@ -507,8 +532,10 @@ impl Parser {
         }
     }
 
-    /// Parse a notation pattern (alternating literals and variables)
-    pub(super) fn parse_notation_pattern(&mut self) -> Vec<NotationItem> {
+    /// Parse a notation pattern (alternating literals and variables). A
+    /// variable is a NAME (`crate::lexer::Token::lean_keyword` refuses a Lean
+    /// keyword there, as Lean's `ident` does).
+    pub(super) fn parse_notation_pattern(&mut self) -> Result<Vec<NotationItem>, ParseError> {
         let mut items = Vec::new();
 
         while !self.check(&TokenKind::FatArrow) && !matches!(self.current_kind(), TokenKind::Eof) {
@@ -518,8 +545,20 @@ impl Parser {
                     items.push(NotationItem::Literal(s));
                 }
                 TokenKind::Ident(name) => {
+                    let name = self.name_token(&name)?;
                     self.advance();
                     items.push(NotationItem::Variable(name));
+                }
+                // A token Clean lexes as its own keyword is a variable NAME
+                // here too, and Lean refuses the ones that are Lean keywords
+                // (`notation "NN" by => …`: "expected identifier").
+                ref kind
+                    if matches!(kind, TokenKind::Underscore)
+                        || kind
+                            .as_keyword_str()
+                            .is_some_and(crate::lean_keywords::is_lean_keyword) =>
+                {
+                    return Err(self.keyword_as_name_error(kind.as_keyword_str().unwrap_or("_")));
                 }
                 _ => {
                     // Skip unknown tokens in notation patterns
@@ -528,7 +567,7 @@ impl Parser {
             }
         }
 
-        items
+        Ok(items)
     }
 
     /// Skip to next declaration (for unrecognized syntax)
@@ -582,12 +621,13 @@ impl Parser {
                     content.push_str(&s);
                 }
                 TokenKind::NatLit(n) => {
-                    use std::fmt::Write;
-                    write!(content, " {n}").unwrap();
+                    content.push(' ');
+                    content.push_str(&n.to_string());
                 }
                 TokenKind::StringLit(s) => {
-                    use std::fmt::Write;
-                    write!(content, " \"{s}\"").unwrap();
+                    content.push_str(" \"");
+                    content.push_str(&s);
+                    content.push('"');
                 }
                 _ => content.push(' '),
             }
@@ -601,12 +641,13 @@ impl Parser {
                     content.push_str(&s);
                 }
                 TokenKind::NatLit(n) => {
-                    use std::fmt::Write;
-                    write!(content, " {n}").unwrap();
+                    content.push(' ');
+                    content.push_str(&n.to_string());
                 }
                 TokenKind::StringLit(s) => {
-                    use std::fmt::Write;
-                    write!(content, " \"{s}\"").unwrap();
+                    content.push_str(" \"");
+                    content.push_str(&s);
+                    content.push('"');
                 }
                 _ => content.push(' '),
             }
@@ -774,7 +815,6 @@ impl Parser {
                 | TokenKind::Private
                 | TokenKind::Protected
                 | TokenKind::Public
-                | TokenKind::Module
                 | TokenKind::Partial
                 | TokenKind::Unsafe
                 | TokenKind::Noncomputable
@@ -802,11 +842,58 @@ impl Parser {
         }
         Self::is_decl_keyword(self.current_kind())
     }
+}
 
-    /// Skip to next recognizable declaration token
-    pub(super) fn skip_to_next_decl_token(&mut self) {
-        while !self.is_decl_start() && !matches!(self.current_kind(), TokenKind::Eof) {
-            self.advance();
+#[cfg(test)]
+mod typed_macro_name_tests {
+    use super::*;
+
+    #[test]
+    fn macro_pattern_names_keep_escaped_components_and_distinct_precedence_tokens() {
+        let mut parser = Parser::new("«x.y»:term \"end\"");
+        let SyntaxPatternItem::Variable { name, category } =
+            parser.parse_syntax_pattern_item().expect("typed variable")
+        else {
+            panic!("expected variable");
+        };
+        assert!(name.same_syntax(&SurfaceName::component("x.y", true)));
+        assert_ne!(name.name(), SurfaceName::generated_path("x.y").name());
+        assert_eq!(category.as_deref(), Some("term"));
+
+        for (word, expected) in [("max", 1024), ("min", 0), ("arg", 1023), ("lead", 1024)] {
+            assert_eq!(
+                Parser::new(&format!(":{word}")).parse_precedence_suffix(),
+                Some(expected)
+            );
+            let mut escaped = Parser::new(&format!(":«{word}»"));
+            assert_eq!(escaped.parse_precedence_suffix(), None);
+            assert!(escaped.current().ident_escaped);
         }
+        assert_eq!(
+            Parser::new("(priority := 7)").parse_priority_attr(),
+            Some(7)
+        );
+        let mut escaped = Parser::new("(«priority» := 7)");
+        assert_eq!(escaped.parse_priority_attr(), None);
+        assert!(
+            escaped.check(&TokenKind::LParen),
+            "failed attribute lookahead must rewind"
+        );
+    }
+
+    #[test]
+    fn macro_category_labels_copy_one_component_without_display_reparsing() {
+        assert_eq!(
+            Parser::new("«term.part»").syntax_category_label().unwrap(),
+            "term.part"
+        );
+        let mut parser = Parser::new("«a.b»");
+        let SurfaceDecl::DeclareSyntaxCat { name, .. } =
+            parser.declare_syntax_cat_decl(Span::dummy()).unwrap()
+        else {
+            panic!("expected category declaration");
+        };
+        assert!(name.same_syntax(&SurfaceName::component("a.b", true)));
+        assert_ne!(name.name(), SurfaceName::generated_path("a.b").name());
     }
 }

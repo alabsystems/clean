@@ -41,7 +41,7 @@ impl CompressionAlgorithm {
     }
 
     /// Get the zstd compression level for this algorithm, if applicable.
-    pub fn zstd_level(&self) -> Option<i32> {
+    pub(crate) fn zstd_level(&self) -> Option<i32> {
         match self {
             CompressionAlgorithm::Lz4 => None,
             CompressionAlgorithm::ZstdDefault => Some(ZstdCertArchive::DEFAULT_LEVEL),
@@ -51,7 +51,7 @@ impl CompressionAlgorithm {
     }
 
     /// Derive a CompressionAlgorithm from a zstd level.
-    pub fn from_zstd_level(level: i32) -> CompressionAlgorithm {
+    pub(crate) fn from_zstd_level(level: i32) -> CompressionAlgorithm {
         if level >= ZstdCertArchive::MAX_LEVEL {
             CompressionAlgorithm::ZstdMax
         } else if level >= ZstdCertArchive::HIGH_LEVEL {
@@ -138,7 +138,7 @@ impl StreamingArchiveHeader {
     }
 
     /// Create a new header for Zstd streaming
-    pub fn new_zstd(level: i32) -> Self {
+    pub(crate) fn new_zstd(level: i32) -> Self {
         StreamingArchiveHeader {
             magic: Self::MAGIC,
             version: Self::VERSION,
@@ -212,7 +212,7 @@ pub struct StreamingCertWriter<W: std::io::Write> {
 
 impl<W: std::io::Write> StreamingCertWriter<W> {
     /// Create a new streaming writer with Zstd compression.
-    pub fn new_zstd(mut writer: W, level: i32) -> Result<Self, StreamingError> {
+    pub(crate) fn new_zstd(mut writer: W, level: i32) -> Result<Self, StreamingError> {
         let header = StreamingArchiveHeader::new_zstd(level);
 
         let header_bytes = bincode::serde::encode_to_vec(&header, bincode::config::standard())
@@ -530,19 +530,6 @@ fn validate_next_certificate_count(
     Ok(())
 }
 
-#[cfg(test)]
-mod resource_limit_tests {
-    use super::*;
-
-    #[test]
-    fn unknown_declared_count_still_obeys_actual_count_limit() {
-        validate_next_certificate_count(2, 0, 3).expect("one remaining slot");
-        let error = validate_next_certificate_count(3, 0, 3)
-            .expect_err("unknown count must not disable the hard cap");
-        assert!(error.to_string().contains("maximum 3 certificates"));
-    }
-}
-
 /// Streaming archive statistics.
 #[derive(Debug, Clone)]
 pub struct StreamingStats {
@@ -629,4 +616,17 @@ pub fn stream_certs_from_file(
             algorithm,
         },
     ))
+}
+
+#[cfg(test)]
+mod resource_limit_tests {
+    use super::*;
+
+    #[test]
+    fn unknown_declared_count_still_obeys_actual_count_limit() {
+        validate_next_certificate_count(2, 0, 3).expect("one remaining slot");
+        let error = validate_next_certificate_count(3, 0, 3)
+            .expect_err("unknown count must not disable the hard cap");
+        assert!(error.to_string().contains("maximum 3 certificates"));
+    }
 }

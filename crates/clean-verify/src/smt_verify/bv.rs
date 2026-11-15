@@ -288,7 +288,7 @@ pub(crate) enum BvPredOp {
 /// forms the conflict. We check whether the conflict is indeed unsatisfiable
 /// by evaluating concrete bitvector operations.
 ///
-/// Returns `KernelVerified` if a concrete contradiction is found,
+/// Returns `StepChecked` if a concrete contradiction is found,
 /// `StructurallyAccepted` if the clause contains non-concrete terms that
 /// cannot be fully evaluated, or `Trusted` on error.
 pub(crate) fn check_bv_lemma(
@@ -711,7 +711,7 @@ fn eval_bv_indexed_op(
 fn ok(step_id: SmtStepId) -> StepVerdict {
     StepVerdict {
         step_id,
-        trust_level: StepTrustLevel::KernelVerified,
+        trust_level: StepTrustLevel::StepChecked,
         checker: CHECKER_NAME,
         detail: None,
     }
@@ -1016,7 +1016,7 @@ mod tests {
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect x=5 AND x=3 contradiction; detail: {:?}",
             verdict.detail
         );
@@ -1048,7 +1048,7 @@ mod tests {
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect bvand contradiction; detail: {:?}",
             verdict.detail
         );
@@ -1072,7 +1072,7 @@ mod tests {
         // Hmm, but the task says "valid". I think they mean the computation
         // is valid (wraps to 0), confirming that this set of constraints is
         // satisfiable (no contradiction). So check_bv_lemma should NOT return
-        // KernelVerified for this.
+        // StepChecked for this.
         //
         // Let me test the opposite: x[8] + y[8] = 1 (should be a contradiction
         // with x=1, y=255 since 1+255=0, not 1).
@@ -1096,7 +1096,7 @@ mod tests {
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect bvadd contradiction (1+255=0, not 1); detail: {:?}",
             verdict.detail
         );
@@ -1105,7 +1105,7 @@ mod tests {
     #[test]
     fn test_bv_lemma_satisfiable_not_contradiction() {
         // x[8] + y[8] = 0, x = 1, y = 255 => satisfiable (wraps).
-        // The blocking clause for this conflict should NOT be KernelVerified
+        // The blocking clause for this conflict should NOT be StepChecked
         // because the conflict is satisfiable.
         let mut dag = SmtProofDag::new();
         let x = add_bv_var(&mut dag, "x", 8);
@@ -1124,10 +1124,10 @@ mod tests {
 
         let clause = vec![not_eq_x, not_eq_y, not_eq_sum];
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
-        // Should NOT be KernelVerified because the conflict IS satisfiable.
+        // Should NOT be StepChecked because the conflict IS satisfiable.
         assert_ne!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "satisfiable conflict should not be verified; detail: {:?}",
             verdict.detail
         );
@@ -1166,7 +1166,7 @@ mod tests {
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect extract contradiction; detail: {:?}",
             verdict.detail
         );
@@ -1210,7 +1210,7 @@ mod tests {
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect shift contradiction; detail: {:?}",
             verdict.detail
         );
@@ -1239,7 +1239,7 @@ mod tests {
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect bvult contradiction; detail: {:?}",
             verdict.detail
         );
@@ -1281,11 +1281,11 @@ mod tests {
         // Either way, the process must not abort.
         let result = crate::smt_verify::verify_alethe_proof(proof_text);
         if let Ok(res) = result {
-            // If it does verify the step, it must not be kernel-verified from
+            // If it does verify the step, it must not be step-checked from
             // unmodeled-width constants.
             assert_eq!(
-                res.stats.kernel_verified, 0,
-                "unmodeled-width lemma must not be kernel-verified; verdicts: {:?}",
+                res.stats.step_checked, 0,
+                "unmodeled-width lemma must not be step-checked; verdicts: {:?}",
                 res.verdicts
             );
         }
@@ -1325,7 +1325,7 @@ mod tests {
         let verdict = check_bv_lemma(&dag, SmtStepId(0), &clause);
         assert_eq!(
             verdict.trust_level,
-            StepTrustLevel::KernelVerified,
+            StepTrustLevel::StepChecked,
             "should detect signed comparison contradiction; detail: {:?}",
             verdict.detail
         );

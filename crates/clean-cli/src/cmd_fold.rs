@@ -132,7 +132,11 @@ pub(crate) fn fold_start(
     Ok(())
 }
 
-/// Extend an IVC proof with another certificate
+/// Fold a certificate into a FRESH IVC proof written to `ivc_path`.
+///
+/// `ivc_path` is a write target, not an input: this function never reads it.
+/// Carrying a chain forward needs the full IVC state (shape and matrices) to
+/// round-trip through `SerializableIvcProof`, which it does not.
 pub(crate) fn fold_extend(
     ivc_path: &PathBuf,
     cert_path: &PathBuf,
@@ -176,16 +180,25 @@ pub(crate) fn fold_extend(
 
     let elapsed = start.elapsed();
     println!(
-        "Extended IVC proof in {:.3}s (step {})",
+        "Folded certificate into a fresh IVC proof in {:.3}s (step {})",
         elapsed.as_secs_f64(),
         ivc.step
     );
     println!("  Output: {output:?}");
+    println!(
+        "  NOTE: any IVC proof already at that path was REPLACED, not extended \
+— this verb starts from --cert and does not read an existing chain."
+    );
 
     Ok(())
 }
 
-/// Verify an IVC proof
+/// Check the STRUCTURE of a serialized IVC proof.
+///
+/// This is not a verification of the folded steps: the R1CS shape and matrices
+/// are not carried by `SerializableIvcProof`, so the Relaxed R1CS relation
+/// (Az o Bz = u*Cz + E) is never evaluated. Keep the printed wording and the
+/// `fold verify` descriptor in `clean-fold`'s CLI in step with what is checked.
 pub(crate) fn fold_verify(ivc_path: &PathBuf, verbose: bool) -> anyhow::Result<()> {
     let start = Instant::now();
 
@@ -214,14 +227,18 @@ pub(crate) fn fold_verify(ivc_path: &PathBuf, verbose: bool) -> anyhow::Result<(
     let elapsed = start.elapsed();
 
     if valid {
-        println!("IVC proof verification: PASSED");
+        println!("IVC proof structure: OK");
         println!(
-            "  Verified {} folding step(s) in {:.3}s",
+            "  Read {} recorded folding step(s) in {:.3}s",
             proof_info.step,
             elapsed.as_secs_f64()
         );
+        println!(
+            "  STRUCTURE ONLY: the Relaxed R1CS relation (Az o Bz = u*Cz + E) \
+is NOT checked — the shape and matrices are not in this artifact."
+        );
     } else {
-        println!("IVC proof verification: FAILED");
+        println!("IVC proof structure: BAD");
         println!("  Invalid proof structure");
         std::process::exit(1);
     }
@@ -229,7 +246,11 @@ pub(crate) fn fold_verify(ivc_path: &PathBuf, verbose: bool) -> anyhow::Result<(
     Ok(())
 }
 
-/// Compress an IVC proof
+/// Rewrite an IVC proof as a smaller SUMMARY artifact.
+///
+/// Not SNARK compression: the witness and error vectors are replaced by a
+/// 64-bit `DefaultHasher` digest, so the witness cannot be recovered and the
+/// result is not a proof. `fold verify` cannot read the output back.
 pub(crate) fn fold_compress(
     ivc_path: &PathBuf,
     output_path: &PathBuf,
@@ -247,8 +268,9 @@ pub(crate) fn fold_compress(
         println!("  Original size: {} bytes", ivc_content.len());
     }
 
-    // Compress by keeping only essential verification data
-    // In a full implementation, this would use SNARK compression
+    // Keep the metadata and instance fields, replace the witness and error
+    // vectors with a digest. A full implementation would use SNARK compression;
+    // this is a size summary, and the printed output says so.
     #[derive(Serialize)]
     struct CompressedProof {
         step: u64,
@@ -281,11 +303,15 @@ pub(crate) fn fold_compress(
     let elapsed = start.elapsed();
     let compression_ratio = ivc_content.len() as f64 / json.len() as f64;
 
-    println!("Compressed IVC proof in {:.3}s", elapsed.as_secs_f64());
+    println!("Summarized IVC proof in {:.3}s", elapsed.as_secs_f64());
     println!("  Input: {} bytes", ivc_content.len());
     println!("  Output: {} bytes", json.len());
-    println!("  Compression ratio: {compression_ratio:.2}x");
+    println!("  Size ratio: {compression_ratio:.2}x");
     println!("  Output: {}", output_path.display());
+    println!(
+        "  NOT a proof: the witness and error vectors were replaced by a \
+64-bit digest, and `clean fold verify` cannot read this artifact back."
+    );
 
     Ok(())
 }

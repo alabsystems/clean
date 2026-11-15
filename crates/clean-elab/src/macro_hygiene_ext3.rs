@@ -229,7 +229,9 @@ impl HygieneExt3Ctx {
         if self.color_stack.len() <= 1 {
             return Err(HygieneExt3Error::ScopeUnderflow);
         }
-        Ok(self.color_stack.pop().expect("invariant: len > 1"))
+        self.color_stack
+            .pop()
+            .ok_or(HygieneExt3Error::ScopeUnderflow)
     }
 
     #[must_use]

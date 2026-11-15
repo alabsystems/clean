@@ -13,6 +13,23 @@
 
 use super::*;
 
+fn parameter_marker_environment() -> Environment {
+    let mut env = Environment::new();
+    let u = Name::from_string("u");
+    let sort = Expr::sort(Level::param(u.clone()));
+    for marker in ["outParam", "semiOutParam"] {
+        env.add_decl(Declaration::Definition {
+            name: Name::from_string(marker),
+            level_params: vec![u.clone()],
+            type_: Expr::pi(BinderInfo::Default, sort.clone(), sort.clone()),
+            value: Expr::lam(BinderInfo::Default, sort.clone(), Expr::bvar(0)),
+            is_reducible: true,
+        })
+        .expect("checked parameter-marker identity");
+    }
+    env
+}
+
 // ==========================================================================
 // Instance resolution tests
 // ==========================================================================
@@ -1273,7 +1290,7 @@ fn test_instance_missing_field_error() {
 fn test_class_with_outparam_detected() {
     use clean_parser::Parser;
 
-    let env = Environment::new();
+    let env = parameter_marker_environment();
     let mut ctx = ElabCtx::new(&env);
 
     // Parse a class with an out-parameter
@@ -1300,7 +1317,7 @@ fn test_class_with_outparam_detected() {
 fn test_class_multiple_outparams() {
     use clean_parser::Parser;
 
-    let env = Environment::new();
+    let env = parameter_marker_environment();
     let mut ctx = ElabCtx::new(&env);
 
     // Parse a class with multiple out-parameters
@@ -1474,7 +1491,7 @@ fn test_outparam_no_match_wrong_input() {
 fn test_class_with_semioutparam_detected() {
     use clean_parser::Parser;
 
-    let env = Environment::new();
+    let env = parameter_marker_environment();
     let mut ctx = ElabCtx::new(&env);
 
     // Parse a class with a semi-out-parameter (like Coe)
@@ -1502,7 +1519,7 @@ fn test_class_with_semioutparam_detected() {
 fn test_class_with_both_outparam_and_semioutparam() {
     use clean_parser::Parser;
 
-    let env = Environment::new();
+    let env = parameter_marker_environment();
     let mut ctx = ElabCtx::new(&env);
 
     // Parse a class with both outParam and semiOutParam
@@ -1852,7 +1869,7 @@ fn test_successful_temporary_scope_invalidates_local_typechecker_cache_entries()
         .with_temporary_local_scope(|this| {
             let scoped_fn = this.fresh_fvar();
             this.push_local_let_with_fvar(
-                "scopedSucc".to_string(),
+                SurfaceName::generated_path("scopedSucc"),
                 scoped_fn,
                 Expr::pi(BinderInfo::Default, nat.clone(), nat.clone()),
                 succ.clone(),
@@ -1884,7 +1901,7 @@ fn test_successful_transaction_pop_invalidates_local_typechecker_cache_entries()
     let succ = Expr::const_(Name::from_string("Nat.succ"), vec![]);
     let scoped_fn = ctx.fresh_fvar();
     ctx.push_local_let_with_fvar(
-        "transactionSucc".to_string(),
+        SurfaceName::generated_path("transactionSucc"),
         scoped_fn,
         Expr::pi(BinderInfo::Default, nat.clone(), nat),
         succ,
@@ -1912,7 +1929,7 @@ fn test_consumed_transaction_markers_return_typed_errors_and_restore_locals() {
     let mut temporary_ctx = ElabCtx::new(&env);
     let mut popped_meta = None;
     let temporary_result = temporary_ctx.with_temporary_local_scope(|this| {
-        this.push_local("temporaryLeak".to_string(), Expr::type_());
+        this.push_local(SurfaceName::generated_path("temporaryLeak"), Expr::type_());
         let meta = this.metas.fresh(Expr::type_());
         assert!(this.metas.assign(meta, Expr::prop()));
         popped_meta = Some(meta);
@@ -1938,14 +1955,19 @@ fn test_consumed_transaction_markers_return_typed_errors_and_restore_locals() {
         "pop-attempt invariant recovery leaked a created/assigned meta"
     );
     assert!(
-        temporary_ctx.lookup_local("temporaryLeak").is_none(),
+        temporary_ctx
+            .lookup_local(&SurfaceName::generated_path("temporaryLeak"))
+            .is_none(),
         "typed invariant failure must still restore temporary locals"
     );
 
     let mut rollback_ctx = ElabCtx::new(&env);
     let stable_meta = rollback_ctx.metas.fresh(Expr::type_());
     let rollback_result = rollback_ctx.with_local_scope_rollback(|this| {
-        this.push_local("transactionLeak".to_string(), Expr::type_());
+        this.push_local(
+            SurfaceName::generated_path("transactionLeak"),
+            Expr::type_(),
+        );
         assert!(this.metas.assign(stable_meta, Expr::prop()));
         let depth_before_attempt = this.metas.scope_depth();
         let trail_before_attempt = this.metas.undo_trail_len_for_tests();
@@ -1966,7 +1988,9 @@ fn test_consumed_transaction_markers_return_typed_errors_and_restore_locals() {
         "commit-attempt invariant recovery leaked a meta assignment"
     );
     assert!(
-        rollback_ctx.lookup_local("transactionLeak").is_none(),
+        rollback_ctx
+            .lookup_local(&SurfaceName::generated_path("transactionLeak"))
+            .is_none(),
         "typed invariant failure must restore transactional locals"
     );
 
@@ -2010,7 +2034,7 @@ fn test_instance_cache_global_result_does_not_mask_pushed_local() {
         .expect("global instance should populate the ground-goal cache");
     assert!(matches!(global.kind(), ExprKind::Const(name, _) if name.to_string() == "instShowNat"));
 
-    let local = ctx.push_local("localShowNat".to_string(), goal.clone());
+    let local = ctx.push_local(SurfaceName::generated_path("localShowNat"), goal.clone());
     ctx.push_local_instance(local, goal.clone());
     let resolved = ctx
         .resolve_instance(&goal)
@@ -2043,7 +2067,7 @@ fn test_instance_cache_popped_local_fvar_is_never_reused() {
         crate::instances::DEFAULT_PRIORITY,
     );
 
-    let local = ctx.push_local("localShowNat".to_string(), goal.clone());
+    let local = ctx.push_local(SurfaceName::generated_path("localShowNat"), goal.clone());
     ctx.push_local_instance(local, goal.clone());
     let cached_local = ctx
         .resolve_instance(&goal)
@@ -2357,43 +2381,154 @@ fn test_goal_side_refuses_an_instance_implicit_goal_binder() {
     );
 }
 
-/// THE BOUNDARY, and the reason stage I-1's "only after the primary search
-/// returned None" argument was not sufficient here. The same
-/// `(x : Nat) → C Nat` goal:
-///   * as the ELABORATOR's goal (depth 0) it is answered — first test above;
-///   * as a candidate's own `[inst]` sub-goal it is NOT, so `D Nat` stays
-///     unresolved.
-/// Without the `depth == 0` restriction this test's `D Nat` would resolve —
-/// and so would the `decEq` bridge's `DecidableEq α` delegation, which would
-/// silently change the TERM of goals that already resolve today.
+/// An IMPORTED `scoped instance` is invisible until its namespace is opened,
+/// exactly like a source-declared one (`instance_visible`). The olean loader
+/// records the declaring namespace in `clean_olean::ScopedInstanceState`;
+/// `ElabCtx` seeds `scoped_instances` from it at construction and keeps it
+/// when the file's own scope state is set. Until 2026-09-10 the map was seeded
+/// empty, so Mathlib's `Classical.Order.instOrd` (a `scoped instance`) fired
+/// everywhere and `example (α : Type) [LE α] : LT α := inferInstance` passed
+/// where Lean fails.
 #[test]
-fn test_goal_side_is_not_applied_to_an_internal_subgoal() {
+fn test_imported_scoped_instance_is_gated_on_open() {
+    let mut env = goal_side_env();
+    // The loader's record: `instCNat` was declared `scoped` in `Foo`.
+    let idx = clean_olean::scoped_instance_idx();
+    env.get_ext_state_mut::<clean_olean::ScopedInstanceState>(idx)
+        .scope_of
+        .insert(Name::from_string("instCNat"), Name::from_string("Foo"));
+
+    // Closed: the only candidate is scoped to an unopened namespace.
+    let mut ctx = goal_side_ctx(&env);
+    assert!(
+        ctx.resolve_instance(&c_nat_goal()).is_none(),
+        "a scoped instance must not resolve while its namespace is closed"
+    );
+
+    // `open Foo`: visible.
+    let mut ns = crate::namespace::NamespaceState::new();
+    ns.open_namespace(Name::from_string("Foo"));
+    ctx.set_namespace_state(ns);
+    assert!(
+        ctx.resolve_instance(&c_nat_goal()).is_some(),
+        "the same instance must resolve once its namespace is open"
+    );
+
+    // The file's own scope state layered on top must not forget the import.
+    let mut ctx2 = goal_side_ctx(&env);
+    ctx2.set_instance_scope_state(std::collections::HashSet::new(), HashMap::new(), &[]);
+    assert!(
+        ctx2.resolve_instance(&c_nat_goal()).is_none(),
+        "setting the file's scope state must keep the imported scope"
+    );
+}
+
+/// THE BOUNDARY, RE-DECIDED 2026-09-16. This test asserted the opposite until
+/// that day, and the change is deliberate rather than a repair.
+///
+/// It used to pin `depth == 0`: the goal-side telescope answered the
+/// ELABORATOR's own goal and never a candidate's `[inst]` sub-goal, so `D Nat`
+/// below stayed unresolved. The stated reason was that the `decEq` bridge's
+/// `DecidableEq α` delegation would otherwise silently change the TERM of goals
+/// that already resolve.
+///
+/// What that restriction also refused was `Pi.hasLe`'s premise. A candidate's
+/// `[inst]` premise is precisely where `∀ i, LE (π i)` appears, so the guard
+/// closed the telescope to the one shape Mathlib needs, and
+/// `Mathlib/Order/Basic.lean` lost five declarations to it (three directly,
+/// two as `alias` cascades). Lifting it recovers all five by name, 65/206 ->
+/// 70/206, with zero residual errors of that class.
+///
+/// The hazard does not follow, and `test_goal_side_abstraction_only_adds_never_replaces`
+/// below is the pin rather than the argument: the abstraction is still reached
+/// only after the primary search AND the candidate-side telescope both return
+/// `None`, so it can only ADD a resolution, never replace a term that already
+/// resolves.
+#[test]
+fn test_goal_side_is_applied_to_an_internal_subgoal() {
     let env = goal_side_env();
     let mut ctx = goal_side_ctx(&env);
 
     let pi_goal = Expr::pi(BinderInfo::Default, nat_const(), c_nat_goal());
     let d_nat = Expr::app(Expr::const_(Name::from_string("D"), vec![]), nat_const());
-    // instD : [(x : Nat) → C Nat] → D Nat
+    // instD : [(x : Nat) → C Nat] → D Nat. The VALUE is the bare constant (a
+    // lambda value would beta-reduce the premise away and leave `instD` with
+    // no argument to inspect).
     ctx.instances_mut().add_instance(
         Name::from_string("instD"),
         Name::from_string("D"),
-        Expr::lam(
-            BinderInfo::InstImplicit,
-            pi_goal.clone(),
-            Expr::const_(Name::from_string("instD"), vec![]),
-        ),
+        Expr::const_(Name::from_string("instD"), vec![]),
         Expr::pi(BinderInfo::InstImplicit, pi_goal.clone(), d_nat.clone()),
         crate::instances::DEFAULT_PRIORITY,
     );
 
-    assert!(
-        ctx.resolve_instance(&d_nat).is_none(),
-        "the goal-side telescope must not answer a candidate's sub-goal"
+    let resolved = ctx
+        .resolve_instance(&d_nat)
+        .expect("a candidate's Pi-shaped [inst] premise is answered by the telescope, as in Lean");
+    // The premise really is the built abstraction, not a metavariable left
+    // behind: `instD (fun (x : Nat) => instCNat)`.
+    let (head, args) = (resolved.get_app_fn(), resolved.get_app_args());
+    match head.kind() {
+        ExprKind::Const(name, _) => assert_eq!(name, &Name::from_string("instD")),
+        other => panic!("expected `instD` at the head, got {other:?}"),
+    }
+    assert_eq!(
+        args.len(),
+        1,
+        "instD takes exactly its [inst] premise: {resolved:?}"
     );
-    // ... and the SAME goal, asked by the elaborator, still is answered:
-    // the boundary is the depth, not the goal.
+    match args[0].kind() {
+        ExprKind::Lam(_, ty, body) => {
+            assert_eq!(
+                ty.as_ref(),
+                &nat_const(),
+                "the premise's binder is the goal's own"
+            );
+            match body.kind() {
+                ExprKind::Const(name, _) => assert_eq!(name, &Name::from_string("instCNat")),
+                other => panic!("expected instCNat under the premise's lambda, got {other:?}"),
+            }
+        }
+        other => panic!("expected the built abstraction as instD's premise, got {other:?}"),
+    }
+    // ... and the SAME goal, asked by the elaborator, is still answered.
     assert!(
         ctx.resolve_instance(&pi_goal).is_some(),
         "the same goal at depth 0 must still be answered"
+    );
+}
+
+/// THE HAZARD THE LIFTED GUARD NAMED, pinned instead of argued.
+///
+/// The worry recorded on `depth == 0` was that answering a candidate's sub-goal
+/// could "silently change the TERM of goals that already resolve". The reason it
+/// does not is structural and this test holds it: `resolve_pi_goal_by_abstraction`
+/// is consulted only after the primary search AND `resolve_local_instance_telescoped`
+/// have both returned `None`, so it can only ADD a resolution where there was
+/// none — it can never rewrite one that already succeeded.
+///
+/// A goal answered by an ordinary registered instance must therefore come back
+/// with that instance's own term, byte for byte, whether or not the goal-side
+/// telescope is reachable at its depth.
+#[test]
+fn test_goal_side_abstraction_only_adds_never_replaces() {
+    let env = goal_side_env();
+    let mut ctx = goal_side_ctx(&env);
+
+    // `C Nat` is answered by the fixture's OWN directly-registered instance —
+    // no Pi anywhere, so the goal-side abstraction has nothing to contribute.
+    // Using the fixture's instance rather than injecting one is deliberate: an
+    // injected competitor would be testing priority selection, not term
+    // stability. (Measured while writing this: an added `instC` loses to the
+    // registered `instCNat`, which is the selection path and not this property.)
+    let c_nat = c_nat_goal();
+    let resolved = ctx
+        .resolve_instance(&c_nat)
+        .expect("the directly-registered instance must resolve");
+    assert_eq!(
+        resolved,
+        Expr::const_(Name::from_string("instCNat"), vec![]),
+        "a goal that already resolves keeps its exact term: the goal-side \
+         abstraction adds resolutions, it never replaces one"
     );
 }

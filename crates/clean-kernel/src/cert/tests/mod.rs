@@ -30,6 +30,7 @@ mod cubical;
 mod dict;
 mod equality;
 mod metadata;
+mod quotient;
 mod replay;
 mod serialization;
 mod source_hygiene;

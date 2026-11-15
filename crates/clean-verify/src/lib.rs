@@ -4,11 +4,56 @@
 
 //! clean Self-Verification Infrastructure
 //!
-//! This crate houses the active self-verification boundary for clean:
-//! specification, proof-witness tracking, cross-validation, and
-//! certificate-replay validation for the paused constructive proof lane.
+//! This crate holds two bodies of work with different standing.
 //!
-//! ## Current Status
+//! ## Role (2026-11-12)
+//!
+//! **Legacy kernel metatheory, off the route.** The reflected model of the
+//! Rust kernel (`KExpr`, its typing relations, the `CandModel`-conditional
+//! normalization results, the infer spine) and the Crystal chains on
+//! `clean-kernel`'s spine are not the route to the kernel's trust root. Two
+//! sources say so, each for its own part:
+//!
+//! - **Decision R29** in `docs/DECISIONS.md` (2026-10-15) says the proof
+//!   authority *becomes* `kcheck`, a checker "defined in Clean", once
+//!   `kcheck_sound` is kernel-checked and re-checked by the other checkers it
+//!   names; until then the authority stays with `clean-kernel` under the
+//!   fenced theory. R29 is not a completed transfer. It stops the items its
+//!   text lists (of those that touch this crate: new Crystal chains and
+//!   link-5 widening on `clean-kernel`'s spine, and new `CandModel` fields or
+//!   `CandModel`-conditional theorems for fragments with proof irrelevance)
+//!   and caps other Crystal and `CandModel` work on `clean-kernel` at one in
+//!   four non-merge commits to main over any trailing seven days (R4's
+//!   unit of work; red-gate and soundness fixes are exempt). It keeps this
+//!   crate's axiom census and the vacuity firewall in force.
+//! - **The route of record**,
+//!   `docs/plans/SELF_PROOF_EXECUTION_PLAN_2026-11-12.md` (adopted 2026-11-12,
+//!   amending R29), is what takes this reflected-model stack off the route and
+//!   what says trusted checkers are to be written in Lean. It stops the
+//!   Crystal work R29 only capped; nothing in `docs/CRYSTAL_BACKLOG.md` is
+//!   picked up. By design the kernel's soundness theorem is to live in Lean
+//!   packages under `theories/`,
+//!   not in this crate: the partial specification in `theories/cic_l`,
+//!   set-model groundwork in `theories/cic_l_model`, and an advice-replaying
+//!   `kcheck` in `theories/kcheck`. Whether the checker or the theorem exists
+//!   is read from the plan's unit rows and from `theories/` itself, never from
+//!   this comment.
+//!
+//! What this crate's metatheory does and does not establish is stated per
+//! object in `docs/SELF_VERIFICATION_CERTIFICATE.md`. On 2026-11-12 the git
+//! history of this crate showed no new kernel-metatheory theorem since R29
+//! (2026-10-15): two `CandModel` construction files were touched once each,
+//! by commits titled as a refactor and a helper-scoping fix. Read the log
+//! again before relying on that.
+//!
+//! **Active work.** The EvalIR semantics (`eval_ir`, the `eval_ir_*` modules
+//! here and under `spec::core_spec`) and the feature-gated source-IR
+//! connections (`source-ir-identity`, `source-ir-word64-addition`) are where
+//! most of this crate's source commits have gone since R29. The manifest marks
+//! the source-IR features a mathematical source/IR connection only, with no
+//! runtime or proof-grade admission.
+//!
+//! ## Legacy lane status (written before R29, not re-verified)
 //!
 //! Constructive proof execution is **paused**. The specification layer remains
 //! active, reduction witnesses are complete, `#2872` (typed DefEq lane) is
@@ -16,7 +61,7 @@
 //! TypePreservation (`#464`) with `#2859` as the remaining structural
 //! dependency.
 //!
-//! The active verification boundary is:
+//! What that lane left in this crate:
 //!
 //! - **Specification**: 17K+ lines of core spec infrastructure defining kernel
 //!   correctness in clean's own type theory (Expr, Level, Environment as
@@ -59,6 +104,9 @@ pub mod cli;
 /// transition systems against the same `ir_step` semantics exercised by the
 /// crystal witnesses.
 pub mod eval_ir;
+pub mod eval_ir_tagged_u32_helper;
+/// Explicit tagged prefix model, separate from default ByteV1 execution.
+pub mod eval_ir_tagged_u32_prefix;
 pub mod external_checker;
 pub mod ffi;
 /// Differential model↔kernel fidelity gate: a large-corpus, fail-closed check
@@ -157,6 +205,172 @@ pub use smt_verify::nra_psatz_cert::{
     MonomialRepr, PolyRepr, PsError, PsatzCert, RationalRepr, SosCert,
 };
 
+impl Specification {
+    /// Atomically install checked positive-divisor agreement laws. The exact
+    /// fuel bound, evaluator definitions and default vocabularies are unchanged.
+    /// A collision or failed rooted check leaves the complete owner unchanged.
+    /// Lazy import materialization caches may warm outside that transaction.
+    ///
+    /// # Errors
+    /// Collision, missing substrate, declaration or strict rooted audit refusal.
+    pub fn install_eval_ir_positive_division_laws_v1(&mut self) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_positive_division_laws_v1_checked()
+    }
+
+    /// Atomically add a total restoring division/remainder facade and checked
+    /// all-Nat agreement to an owner with the positive-division package. Both
+    /// zero-divisor projections preserve the raw evaluator's dividend result;
+    /// positive divisors use a sufficient guarded depth, not a fixed bit cap.
+    /// Original arithmetic, default profiles, caches and admission stay fixed.
+    ///
+    /// # Errors
+    /// Collision, missing/uncertified substrate, declaration or rooted refusal.
+    pub fn install_eval_ir_total_restoring_division_laws_v1(
+        &mut self,
+    ) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_total_restoring_division_laws_v1_checked()
+    }
+
+    /// Atomically add all-Nat product/remainder and width-indexed wrap
+    /// equalities to ByteV1 carrying the checked positive and total-restoring
+    /// division packages. The product theorem has no output-answer premise;
+    /// zero divisors retain the original evaluator's dividend result.
+    /// Original definitions, native-fold authority and checker limits stay fixed.
+    ///
+    /// # Errors
+    /// Collision, missing/uncertified prerequisite or rooted checking refusal.
+    pub fn install_eval_ir_integer_mul_residue_laws_v1(&mut self) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_integer_mul_residue_laws_v1_checked()
+    }
+
+    /// Atomically extend an owner with ByteV1 and positive-division laws by
+    /// actual full64 logical/arithmetic shift-by-three laws. Both sign branches
+    /// are retained; no desired operation answer is an input premise.
+    ///
+    /// # Errors
+    /// Collision, missing prerequisites, declaration or rooted audit refusal.
+    pub fn install_eval_ir_u64_shift_by_three_laws_v1(&mut self) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_u64_shift_by_three_laws_v1_checked()
+    }
+
+    /// Atomically derive canonical output ranges for the checked shift-by-three
+    /// package. Callers supply only canonical inputs, not an operation answer or
+    /// output-fit proof. Default vocabularies and evaluator definitions stay fixed.
+    ///
+    /// # Errors
+    /// Collision, missing prerequisites, declaration or rooted check refusal.
+    pub fn install_eval_ir_u64_shift_by_three_output_bound_laws_v1(
+        &mut self,
+    ) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_u64_shift_by_three_output_bound_laws_v1_checked()
+    }
+
+    /// Atomically add actual full64 Lshr/AShr and derived output bounds for all
+    /// amounts below64. Requires the existing checked output-bounded shift
+    /// vocabulary. Word fuel64 and signed-fill fuel65 remain explicit.
+    /// No supplied result, model admission or native authority is accepted.
+    ///
+    /// # Errors
+    /// Collision, missing prerequisites, declaration or rooted audit refusal.
+    pub fn install_eval_ir_u64_in_range_shift_laws_v1(&mut self) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_u64_in_range_shift_laws_v1_checked()
+    }
+
+    /// Atomically add actual signed/unsigned wrapping Add and derived result
+    /// bounds at arbitrary bit widths, including full64 negative encodings.
+    /// Requires ordinary ByteV1 only. Consumers supply canonical operand
+    /// bounds, never a sum/output bound or desired answer. Defaults, cached
+    /// profiles, evaluator definitions and native/model authority are unchanged.
+    ///
+    /// # Errors
+    /// Collision, missing substrate, declaration or strict rooted audit refusal.
+    pub fn install_eval_ir_bounded_add_laws_v1(&mut self) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_bounded_add_laws_v1_checked()
+    }
+
+    /// Atomically add actual unsigned integer comparisons from canonical
+    /// input bounds alone, preserving signed/unsigned nominal carriers.
+    /// Requires ordinary ByteV1 only; results retain the exact Nat observer,
+    /// never an assumed answer or branch truth. Defaults and evaluators stay
+    /// fixed; this establishes no program, caller or native admission.
+    ///
+    /// # Errors
+    /// Collision, missing substrate, declaration or strict rooted audit refusal.
+    pub fn install_eval_ir_unsigned_compare_laws_v1(&mut self) -> Result<(), spec::SpecError> {
+        self.install_eval_ir_unsigned_compare_laws_v1_checked()
+    }
+
+    /// Extend the completed Full specification with ByteV1 and its literal adapter.
+    ///
+    /// Existing foundations, driver declarations and reflection-owned builtin
+    /// aliases are retained. Every added value has a checked empty axiom and
+    /// trust-marker closure. Rust heap projection and source execution remain
+    /// separate obligations; this constructor establishes model coexistence.
+    ///
+    /// # Errors
+    /// Fails on registration, kernel checking, or nonempty added-root closures.
+    pub fn new_eval_ir_byte_literal_spec_v1() -> Result<Self, spec::SpecError> {
+        let mut spec = Self::new()?;
+        spec.add_eval_ir_byte_literal_model_v1()?;
+        Ok(spec)
+    }
+}
+
+/// Build owned ByteV1 with checked, bounded-fuel positive-divisor laws on the
+/// maintained construction stack. Default cached vocabularies and evaluators
+/// are unchanged. A failing disposable owner is never returned.
+/// Complete successful fixed-package initialization is reused within a process;
+/// each caller receives an independent owned clone. Live construction overrides
+/// take the original fresh path before a warm hit; program replay is separate.
+/// This is neither model/native admission nor a Rust verification claim.
+///
+/// # Errors
+/// ByteV1 construction, package declaration or strict rooted check refusal.
+pub fn build_positive_division_byte_prelude_spec_v1_with_stack(
+) -> Result<Specification, spec::SpecError> {
+    eval_ir::build_positive_division_byte_prelude_spec_v1_owned()
+}
+
+/// Build the additive checked full64 shift-by-three consumer of the positive-
+/// divisor package on the maintained stack. This connects actual Lshr/AShr
+/// endpoints, not a replacement evaluator or native admission certificate.
+/// Default profiles remain unchanged; both arithmetic sign branches are kept.
+/// Only complete checked fixed libraries are cached, not program verdicts.
+/// Returned owners are independent clones; live overrides still construct fresh.
+///
+/// # Errors
+/// Vocabulary, fixed-package declaration or strict rooted certification refusal.
+pub fn build_u64_shift_by_three_byte_prelude_spec_v1_with_stack(
+) -> Result<Specification, spec::SpecError> {
+    eval_ir::build_u64_shift_by_three_byte_prelude_spec_v1_owned()
+}
+
+/// Build the explicit checked shift-by-three vocabulary with derived output
+/// bounds on the maintained stack. Both sign branches and actual operations
+/// remain unchanged. No model/native admission or Rust proof claim follows.
+///
+/// # Errors
+/// Vocabulary, package declaration or strict rooted certification refusal.
+pub fn build_u64_shift_by_three_output_bounds_byte_prelude_spec_v1_with_stack(
+) -> Result<Specification, spec::SpecError> {
+    eval_ir::build_u64_shift_by_three_output_bounds_byte_prelude_spec_v1_owned()
+}
+
+/// Build the explicit checked canonical arithmetic profile on the maintained
+/// construction stack. Original division, full64 by-three shift/output bounds,
+/// wrapping Add/output bounds and unsigned-comparison laws share one checked
+/// owner. Legacy/default profiles and evaluator meanings are unchanged.
+/// Only complete fixed-library construction is retained; callers receive
+/// independent owned clones, and live overrides still execute fresh before a
+/// warm hit. This is neither program/native admission nor verified Rust.
+///
+/// # Errors
+/// Vocabulary, fixed-package declaration or strict rooted certification refusal.
+pub fn build_canonical_arithmetic_byte_prelude_spec_v1_with_stack(
+) -> Result<Specification, spec::SpecError> {
+    eval_ir::build_canonical_arithmetic_byte_prelude_spec_v1_owned()
+}
+
 /// Result of self-verification
 #[derive(Debug, Clone)]
 pub struct VerificationResult {
@@ -221,7 +435,7 @@ pub fn verify_kernel() -> VerificationResult {
                     location: None,
                 }],
                 cross_validation: None,
-            }
+            };
         }
     };
     let proofs = ProofLibrary::new();
@@ -643,3 +857,11 @@ mod tests {
         }
     }
 }
+
+/// Closed original-source/IR mathematical replay; grants no compiler admission.
+#[cfg(feature = "source-ir-identity")]
+pub mod source_ir_identity;
+
+/// Original word64 addition/source-model to supplied logical IR mathematics only.
+#[cfg(feature = "source-ir-word64-addition")]
+pub mod source_ir_word64_addition;

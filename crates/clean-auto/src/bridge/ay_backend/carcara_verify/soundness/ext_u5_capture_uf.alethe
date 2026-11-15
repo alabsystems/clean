@@ -1,0 +1,4 @@
+(assume h (not (= (g x) d)))
+(assume nc (not (not (= (select (g x) (choice ((x Int)) (or (= (g x) d) (not (= (select (g x) x) (select d x)))))) (select d (choice ((x Int)) (or (= (g x) d) (not (= (select (g x) x) (select d x))))))))))
+(step s (cl (not (= (select (g x) (choice ((x Int)) (or (= (g x) d) (not (= (select (g x) x) (select d x)))))) (select d (choice ((x Int)) (or (= (g x) d) (not (= (select (g x) x) (select d x))))))))) :rule arrays_ext :premises (h))
+(step done (cl) :rule resolution :premises (nc s))

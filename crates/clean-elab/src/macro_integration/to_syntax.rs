@@ -9,7 +9,7 @@
 
 use crate::stack_safe;
 use clean_macro::quotation::parse_quotation;
-use clean_macro::{Syntax, SyntaxKind};
+use clean_macro::{Syntax, SyntaxKind, SyntaxNode};
 use clean_parser::{
     Projection, QAntiquotContent, QQuotationKind, SurfaceExpr, SurfaceLit, UniverseExpr,
 };
@@ -23,13 +23,15 @@ use super::to_syntax_helpers::{
 /// Convert a surface expression to macro syntax
 pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
     stack_safe(|| match expr {
-        SurfaceExpr::Ident(_, name) => Syntax::ident(name),
+        SurfaceExpr::Ident(span, name) => {
+            Syntax::ident_with_info(clean_macro::SourceInfo::new(span.start, span.end), name)
+        }
 
         SurfaceExpr::SyntheticSorry(_) => {
             Syntax::node(SyntaxKind::app("syntheticSorry"), Vec::new())
         }
 
-        SurfaceExpr::Universe(_, univ) => {
+        SurfaceExpr::Universe(span, univ) => {
             let mut children = Vec::new();
             let tag = match univ {
                 UniverseExpr::Prop => "Prop",
@@ -47,9 +49,13 @@ pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
                 UniverseExpr::SortStar => "SortStar",
             };
             let mut all_children = Vec::with_capacity(1 + children.len());
-            all_children.push(Syntax::ident(tag));
+            all_children.push(Syntax::generated_ident(tag));
             all_children.extend(children);
-            Syntax::node(SyntaxKind::app("universe"), all_children)
+            Syntax::Node(Box::new(SyntaxNode {
+                info: clean_macro::SourceInfo::new(span.start, span.end),
+                kind: SyntaxKind::app("universe"),
+                children: all_children,
+            }))
         }
 
         SurfaceExpr::App(_, func, args) => {
@@ -90,6 +96,15 @@ pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
             let body_syn = surface_to_syntax(body);
             Syntax::mk_let(name_syn, ty_syn, val_syn, body_syn)
         }
+
+        SurfaceExpr::Have(_, binder, val, body) => Syntax::node(
+            SyntaxKind::app("have"),
+            vec![
+                surface_binder_to_syntax(binder),
+                surface_to_syntax(val),
+                surface_to_syntax(body),
+            ],
+        ),
 
         SurfaceExpr::Lit(_, lit) => match lit {
             SurfaceLit::Nat(n) => Syntax::mk_num(*n),
@@ -192,6 +207,16 @@ pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
             Syntax::node(SyntaxKind::app("namedArg"), vec![name_syn, expr_syn])
         }
 
+        // A NAME quote (`` `foo ``, ``` ``foo ```) is a literal, not quoted
+        // syntax: it survives the round trip as one `nameQuote` node so
+        // `syntax_to_surface` can rebuild the quote. Through
+        // `parse_quotation` it came back as the IDENTIFIER `foo`, and
+        // `` `foo `` elaborated to the declaration `foo` itself.
+        SurfaceExpr::SyntaxQuote(_, content)
+            if !content.is_empty() && !content.starts_with(['(', '[', '{']) =>
+        {
+            Syntax::node(SyntaxKind::app("nameQuote"), vec![Syntax::atom(content)])
+        }
         SurfaceExpr::SyntaxQuote(_, content) => {
             parse_quotation(&format!("`{content}")).map_or_else(|_| Syntax::missing(), |q| q.syntax)
         }
@@ -254,7 +279,7 @@ pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
                 QQuotationKind::Value => "q",
             };
             let inner_syn = surface_to_syntax(inner);
-            let mut children = vec![Syntax::ident(kind_tag), inner_syn];
+            let mut children = vec![Syntax::generated_ident(kind_tag), inner_syn];
             if let Some(annot) = type_annot {
                 children.push(surface_to_syntax(annot));
             }
@@ -285,13 +310,13 @@ pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
                 } => {
                     // Splice antiquotation: $[xs]* or $[xs]+
                     let sep_node = separator.as_ref().map_or_else(
-                        || Syntax::ident("none"),
+                        || Syntax::generated_ident("none"),
                         |s| Syntax::node(SyntaxKind::app("some"), vec![Syntax::atom(s)]),
                     );
                     let one_node = if *at_least_one {
-                        Syntax::ident("true")
+                        Syntax::generated_ident("true")
                     } else {
-                        Syntax::ident("false")
+                        Syntax::generated_ident("false")
                     };
                     Syntax::node(
                         SyntaxKind::app("antiquotSplice"),
@@ -382,13 +407,57 @@ pub fn surface_to_syntax(expr: &SurfaceExpr) -> Syntax {
             surface_to_syntax(&desugared)
         }
 
-        SurfaceExpr::OpenIn { body, .. } => {
-            // `open X in <term>`: preserve as an opaque wrapper around the
-            // sub-term's syntax. The opened namespaces affect elaboration-time
-            // name resolution only and carry no meaning for macro-pattern
-            // matching, so the body syntax is what the macro system sees.
-            let body_syn = surface_to_syntax(body);
-            Syntax::node(SyntaxKind::app("openIn"), vec![body_syn])
+        SurfaceExpr::OpenIn {
+            paths,
+            scoped,
+            body,
+            ..
+        } => {
+            // `open X in <term>`: carried FAITHFULLY — the scoped flag, every
+            // opened path and the body — so `from_syntax` rebuilds the same
+            // `OpenIn`. The old opaque `openIn` wrapper kept only the body, and
+            // the roundtrip handed it back as the identifier `openIn`
+            // (`Function.extend_const`'s `funext fun _ ↦ open scoped Classical
+            // in ite_id _`, measured 2026-09-12).
+            let paths_syn = paths.iter().map(open_path_to_syntax).collect();
+            Syntax::node(
+                SyntaxKind::app(OPEN_IN_KIND),
+                vec![
+                    Syntax::atom(if *scoped { "scoped" } else { "unscoped" }),
+                    Syntax::node(SyntaxKind::app(OPEN_IN_LIST_KIND), paths_syn),
+                    surface_to_syntax(body),
+                ],
+            )
         }
     })
+}
+
+/// Syntax kind of a faithfully carried `open … in` (see `from_syntax`).
+pub(super) const OPEN_IN_KIND: &str = "Clean.openIn";
+/// Syntax kind of a list inside an `open … in` node.
+pub(super) const OPEN_IN_LIST_KIND: &str = "Clean.openIn.list";
+
+/// `OpenPath` → `list[list(path), list(names), list(hiding), list(from to …)]`.
+/// Every name travels as a typed `Syntax::Ident`, so no spelling is reparsed.
+fn open_path_to_syntax(p: &clean_parser::OpenPath) -> Syntax {
+    let idents = |xs: &[clean_parser::SurfaceName]| {
+        Syntax::node(
+            SyntaxKind::app(OPEN_IN_LIST_KIND),
+            xs.iter().map(Syntax::ident).collect(),
+        )
+    };
+    let renames: Vec<clean_parser::SurfaceName> = p
+        .renaming
+        .iter()
+        .flat_map(|r| [r.from.clone(), r.to.clone()])
+        .collect();
+    Syntax::node(
+        SyntaxKind::app(OPEN_IN_LIST_KIND),
+        vec![
+            idents(std::slice::from_ref(&p.path)),
+            idents(&p.names),
+            idents(&p.hiding),
+            idents(&renames),
+        ],
+    )
 }

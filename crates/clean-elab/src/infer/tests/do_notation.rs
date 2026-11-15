@@ -33,7 +33,8 @@ fn test_elab_do_return_literal() {
     // Outermost App: arg should be the literal 42
     match expr.kind() {
         ExprKind::App(func, arg) => {
-            match arg.kind() {
+            let payload = TypeChecker::new(&env).whnf(arg);
+            match payload.kind() {
                 ExprKind::Lit(Literal::Nat(ref n)) => {
                     assert_eq!(n.to_u64(), Some(42), "expected literal 42");
                 }
@@ -124,7 +125,7 @@ fn test_elab_do_sequence() {
     let env = Environment::with_prelude();
     let expr =
         elab_with_env(&env, "do Type; Type").expect("do Type; Type should elaborate with prelude");
-    // Kernel-matching arity (#1799): @Bind.bind.{u,v} m α β Type (fun _ => Type)
+    // Kernel-matching arity (#1799): @Bind.bind.{u,v} m inst α β Type (fun _ => Type)
     let head = expr.get_app_fn();
     match head.kind() {
         ExprKind::Const(name, levels) => {
@@ -136,8 +137,8 @@ fn test_elab_do_sequence() {
     let args = expr.get_app_args();
     assert_eq!(
         args.len(),
-        5,
-        "Bind.bind should have 5 arguments, got {}",
+        6,
+        "Bind.bind should have 6 arguments (m, inst, α, β, action, cont), got {}",
         args.len()
     );
 }
@@ -418,12 +419,13 @@ fn test_elab_do_let_kernel_typecheck() {
     );
 }
 
-/// `do return Type` desugars to `@Pure.pure.{u,v} ?m ?α Type`.
+/// `do return Type` desugars to `@Pure.pure.{u,v} ?m ?inst ?α Type`.
 /// With a prelude environment, Pure.pure is declared. The elaborated expression
 /// should have structurally valid application arity matching the kernel declaration.
 ///
 /// This validates #1799: universe levels are not empty and arg count matches
-/// the kernel declaration of Pure.pure (3 args: m, α, val).
+/// the kernel declaration of Pure.pure (4 args: m, [Pure m], α, val — Lean's
+/// projection; the instance-less 3-argument axiom proved `False`, 2026-09-28).
 #[test]
 fn test_elab_do_return_arity_matches_kernel_decl() {
     let env = Environment::with_prelude();
@@ -433,7 +435,7 @@ fn test_elab_do_return_arity_matches_kernel_decl() {
         .elaborate(&surface)
         .expect("do return Type should elaborate with prelude env");
 
-    // Verify application structure: @Pure.pure.{u,v} m α Type
+    // Verify application structure: @Pure.pure.{u,v} m inst α Type
     let head = expr.get_app_fn();
     let args = expr.get_app_args();
 
@@ -450,11 +452,11 @@ fn test_elab_do_return_arity_matches_kernel_decl() {
         _ => panic!("expected Const(Pure.pure, _), got {head:?}"),
     }
 
-    // 3 args matching kernel declaration: {m} {α} val
+    // 4 args matching kernel declaration: {m} [self : Pure m] {α} val
     assert_eq!(
         args.len(),
-        3,
-        "Pure.pure application should have 3 args (m, α, val) matching kernel decl"
+        4,
+        "Pure.pure application should have 4 args (m, inst, α, val) matching kernel decl"
     );
 
     // Cross-check against kernel declaration
@@ -495,18 +497,18 @@ fn test_elab_do_bind_arity_matches_kernel_decl() {
         _ => panic!("expected Const(Bind.bind, _), got {head:?}"),
     }
 
-    // 5 args matching kernel declaration: {m} {α} {β} action continuation
+    // 6 args matching kernel declaration: {m} [self : Bind m] {α} {β} action continuation
     assert_eq!(
         args.len(),
-        5,
-        "Bind.bind application should have 5 args (m, α, β, action, cont) matching kernel decl"
+        6,
+        "Bind.bind application should have 6 args (m, inst, α, β, action, cont) matching kernel decl"
     );
 
     // Last arg should be a lambda (the continuation)
     assert!(
-        matches!(args[4].kind(), ExprKind::Lam(_, _, _)),
-        "arg[4] (continuation) should be Lam, got {:?}",
-        args[4].kind()
+        matches!(args[5].kind(), ExprKind::Lam(_, _, _)),
+        "arg[5] (continuation) should be Lam, got {:?}",
+        args[5].kind()
     );
 
     // Cross-check against kernel declaration
@@ -644,11 +646,13 @@ fn elaborate_do_definition_and_verify(env: &Environment, decl_src: &str) -> (Exp
 /// `do return Bool.true` should kernel typecheck when elaborated as the body of
 /// an `Id Bool` definition.
 ///
-/// B22 (Id-monad reduction): with `Pure Id`/`Bind Id` instances registered,
-/// the monad-materialization pass rewrites the terminal `Pure.pure Id …` stub
-/// into instance-projected form `(Proj Pure 0 instPureId) …` — exactly the
-/// shape B07 produces for `Option`. The kernel then reduces it (`pure v ↦ v`),
-/// which is what makes `Id.run (pure v)` value-certifiable.
+/// B22 (Id-monad reduction), re-stated 2026-09-28: `Pure.pure` is Lean's
+/// projection, so the terminal `return` elaborates to `@Pure.pure Id inst …`
+/// with a SYNTHESIZED, closed `Pure Id` instance — the shape Lean's
+/// elaborator produces — and the kernel reduces it (`pure v ↦ v`) by
+/// ordinary δ / projection / β, which is what makes `Id.run (pure v)`
+/// value-certifiable. (Until then the instance-less `Pure.pure` axiom was
+/// rewritten to a primitive `Proj` by a materialization pass.)
 #[test]
 fn test_elab_do_return_id_kernel_typecheck() {
     let env = Environment::with_prelude();
@@ -657,17 +661,17 @@ fn test_elab_do_return_id_kernel_typecheck() {
         "def test_do_return_bool : Id Bool := do return Bool.true",
     );
     let head = expr.get_app_fn();
+    let args = expr.get_app_args();
     match head.kind() {
-        ExprKind::Proj(struct_name, idx, inner) => {
-            assert_eq!(struct_name.to_string(), "Pure");
-            assert_eq!(*idx, 0, "Pure.pure is field 0 of the Pure class");
-            assert!(
-                matches!(inner.kind(), ExprKind::Const(n, _) if n.to_string() == "instPureId"),
-                "projection must be over instPureId, got {inner:?}"
-            );
-        }
-        _ => panic!("expected Proj(Pure, 0, instPureId), got {head:?}"),
+        ExprKind::Const(name, _) => assert_eq!(name.to_string(), "Pure.pure"),
+        _ => panic!("expected Const(Pure.pure, _), got {head:?}"),
     }
+    assert_eq!(args.len(), 4, "@Pure.pure m inst α v, got {args:?}");
+    assert!(
+        !args[1].has_fvar_quick(),
+        "the `Pure Id` instance must be synthesized and closed, got {:?}",
+        args[1]
+    );
     let ty_head = ty.get_app_fn();
     match ty_head.kind() {
         ExprKind::Const(name, levels) => {
@@ -681,8 +685,8 @@ fn test_elab_do_return_id_kernel_typecheck() {
 /// `do let x <- Id.mk Bool.true; return x` exercises a real monadic bind path
 /// and should kernel typecheck as the body of an `Id Bool` definition.
 ///
-/// B22: the `Bind.bind Id …` stub materializes into `(Proj Bind 0 instBindId)
-/// α β action cont`, the instance-projected identity-monad bind.
+/// B22, re-stated 2026-09-28: the bind elaborates to `@Bind.bind Id inst α β
+/// action cont` with a synthesized, closed `Bind Id` instance.
 #[test]
 fn test_elab_do_bind_id_kernel_typecheck() {
     let env = Environment::with_prelude();
@@ -693,25 +697,23 @@ fn test_elab_do_bind_id_kernel_typecheck() {
     let head = expr.get_app_fn();
     let args = expr.get_app_args();
     match head.kind() {
-        ExprKind::Proj(struct_name, idx, inner) => {
-            assert_eq!(struct_name.to_string(), "Bind");
-            assert_eq!(*idx, 0, "Bind.bind is field 0 of the Bind class");
-            assert!(
-                matches!(inner.kind(), ExprKind::Const(n, _) if n.to_string() == "instBindId"),
-                "projection must be over instBindId, got {inner:?}"
-            );
-        }
-        _ => panic!("expected Proj(Bind, 0, instBindId), got {head:?}"),
+        ExprKind::Const(name, _) => assert_eq!(name.to_string(), "Bind.bind"),
+        _ => panic!("expected Const(Bind.bind, _), got {head:?}"),
     }
     assert_eq!(
         args.len(),
-        4,
-        "materialized bind projection should have 4 args (α, β, action, cont)"
+        6,
+        "@Bind.bind m inst α β action cont should have 6 args"
     );
     assert!(
-        matches!(args[3].kind(), ExprKind::Lam(_, _, _)),
-        "arg[3] (continuation) should be Lam, got {:?}",
-        args[3].kind()
+        !args[1].has_fvar_quick(),
+        "the `Bind Id` instance must be synthesized and closed, got {:?}",
+        args[1]
+    );
+    assert!(
+        matches!(args[5].kind(), ExprKind::Lam(_, _, _)),
+        "arg[5] (continuation) should be Lam, got {:?}",
+        args[5].kind()
     );
     let ty_head = ty.get_app_fn();
     match ty_head.kind() {

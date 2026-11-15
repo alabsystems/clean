@@ -1,0 +1,3 @@
+(assume nc (not (= (bvxor x (bvxor y x)) (bvxor x x y))))
+(step s (cl (= (bvxor x (bvxor y x)) (bvxor x x y))) :rule aci_simp)
+(step done (cl) :rule resolution :premises (nc s))

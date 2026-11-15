@@ -1,0 +1,8 @@
+(set-logic ALL)
+(declare-const s String)
+(declare-const y String)
+(declare-const L Int)
+(declare-const b RegLan)
+(assert (not (str.in_re (str.substr y 0 L) (re.* (str.to_re "a")))))
+(assert (not (and (not (= (str.substr y 0 L) "")) (forall ((L Int)) (or (<= L 0) (< (str.len (str.substr y 0 L)) L) (not (str.in_re (str.substr (str.substr y 0 L) 0 L) (str.to_re "a"))) (not (str.in_re (str.substr (str.substr y 0 L) L (- (str.len (str.substr y 0 L)) L)) (re.* (str.to_re "a")))))))))
+(check-sat)

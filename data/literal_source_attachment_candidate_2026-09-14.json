@@ -1,0 +1,161 @@
+{
+  "artifact_publication": {
+    "artifacts": [
+      {
+        "bytes": 3807986,
+        "digest": "sha256:3a3ce89a10ff545faad49279e0c6d88c8a8efe23bd3e10a57bf74c26f290cc70",
+        "name": "clean_kernel.trust-ir.bin"
+      },
+      {
+        "bytes": 5542096,
+        "digest": "sha256:fb2a1be80c108b8f012e4ebac6d68a918f5cf73a51610a3ba3fab9d597e421cf",
+        "name": "clean_kernel.trust-ir.txt"
+      }
+    ],
+    "commit_marker": true,
+    "digest_algorithm": "sha256-domain-v1",
+    "digest_domain": "trust.thir-lower.artifact.v1",
+    "schema": "trust.thir-lower.artifact-set.v1"
+  },
+  "artifact_set_consistency": "checked against producer publication marker; not source attestation or proof",
+  "artifact_sha256": {
+    "built_mir": "7da69a275d28b89b3919818cf0e37ce50ababa261f2497b5449e7678bc6d2766",
+    "coverage": "fea0f19d0c42b3e13009c6951d87b15b5604f7af4f73c5de95eba3ffea05b83a",
+    "trust_ir_binary": "d2b567a268c7c38909522c36eb52000c8a3379303c283de597903c5714086bb6",
+    "trust_ir_text": "db32b61529c24f1533b51ccd1fba91aa0fa48f4c6b866d613d9e63d97d57423a"
+  },
+  "note": "Raw MIR anchors, producer coverage and regression samples are not a universal theorem.",
+  "observed_mir_anchors": [
+    "// MIR for `tc::infer::infer_literal_type` after built",
+    "fn infer_literal_type(_1: &expr::types::Literal) -> expr::Expr",
+    "discriminant((*_1))",
+    "<LazyLock<name::Name> as Deref>::deref",
+    "<name::Name as Clone>::clone",
+    "Vec::<level::Level>::new()",
+    "constructors::<impl expr::Expr>::const_::<Vec<level::Level>>",
+    "static: infer::NAME_NAT",
+    "static: infer::NAME_STRING"
+  ],
+  "open_obligations": [
+    "Universal refinement of the actual compiler-extracted production body.",
+    "Authenticated source-to-extraction binding (snapshot hashes alone are not this).",
+    "Literal payload and canonical builtin Name representation correspondence.",
+    "LazyLock initialization/read, Name clone, empty Vec, and Expr constructor contracts.",
+    "Composition with both real TypeChecker callsites and the environment contract."
+  ],
+  "producer_capability": "structural-parity-only-v1",
+  "producer_record": {
+    "calls": {
+      "extern_decls": 0,
+      "resolved": 0,
+      "unresolved": 0
+    },
+    "collect_cascade": [
+      [
+        "Borrow(inner unlowered)",
+        4
+      ]
+    ],
+    "collect_primary": [
+      [
+        "Call(unsupported arg)",
+        6
+      ],
+      [
+        "EnumMatch(case arm no value)",
+        1
+      ],
+      [
+        "EnumMatch(default arm no value)",
+        1
+      ],
+      [
+        "StaticRef(local static: CTFE deferral not implemented)",
+        2
+      ]
+    ],
+    "def_index": 19933,
+    "def_path": "tc::infer::infer_literal_type",
+    "differentials": {
+      "deferred_to_seam": false,
+      "derived_mir": {
+        "detail": "producer: 14 unsupported THIR shape(s)",
+        "markers_detail": "",
+        "markers_exact": false,
+        "verdict": "unsupported"
+      },
+      "interpreter": {
+        "detail": "14 unsupported THIR shape(s); differential not run (coverage gap)",
+        "samples": 0,
+        "verdict": "unsupported"
+      },
+      "seam": {
+        "state": "not-applicable"
+      }
+    },
+    "func_id": null,
+    "instr_count": 5,
+    "kind": "fn",
+    "lineage": "sha256:a1e20345dfcee85e41700214b09461ab67e4e3a82a326e9969a7d51b25e255ba",
+    "lowered": false,
+    "spliced": false,
+    "symbolic": false,
+    "unsupported": [
+      [
+        "Borrow(inner unlowered)",
+        4
+      ],
+      [
+        "Call(unsupported arg)",
+        6
+      ],
+      [
+        "EnumMatch(case arm no value)",
+        1
+      ],
+      [
+        "EnumMatch(default arm no value)",
+        1
+      ],
+      [
+        "StaticRef(local static: CTFE deferral not implemented)",
+        2
+      ]
+    ],
+    "unsupported_details": {
+      "Borrow(inner unlowered)": [
+        "crates/clean-kernel/src/tc/infer.rs:46:54: 46:62 (#0)",
+        "crates/clean-kernel/src/tc/infer.rs:47:57: 47:68 (#0)"
+      ],
+      "Call(unsupported arg)": [
+        "crates/clean-kernel/src/tc/infer.rs:46:54: 46:70 (#0) [masking: StaticRef(local static: CTFE deferral not implemented)]",
+        "crates/clean-kernel/src/tc/infer.rs:46:41: 46:79 (#0) [masking: StaticRef(local static: CTFE deferral not implemented)]",
+        "crates/clean-kernel/src/tc/infer.rs:47:57: 47:76 (#0) [masking: StaticRef(local static: CTFE deferral not implemented)]"
+      ],
+      "EnumMatch(case arm no value)": [
+        "crates/clean-kernel/src/tc/infer.rs:45:5: 48:6 (#0)"
+      ],
+      "EnumMatch(default arm no value)": [
+        "crates/clean-kernel/src/tc/infer.rs:45:5: 48:6 (#0)"
+      ],
+      "StaticRef(local static: CTFE deferral not implemented)": [
+        "crates/clean-kernel/src/tc/infer.rs:46:54: 46:62 (#0)",
+        "crates/clean-kernel/src/tc/infer.rs:47:57: 47:68 (#0)"
+      ]
+    }
+  },
+  "proof_authority": false,
+  "schema_version": "clean.literal-source-attachment-probe.v2",
+  "scope": "Exact production literal helper; no whole-kernel or compiler claim.",
+  "source_attachment_verified": false,
+  "source_binding": "Snapshot only; hashes are not compiler-to-source attestation.",
+  "source_sha256": {
+    "crates/clean-kernel/src/expr/constructors.rs": "abe1b10161c9dbf606d4a2ec1730ca53ab1fbf59090bebe7fdfef1e161da38ab",
+    "crates/clean-kernel/src/expr/mod.rs": "2605cdf1982d515ea845114af0906ad2b153528aa874c92efad3a1781d5ce85d",
+    "crates/clean-kernel/src/expr/types.rs": "f609ebefa1c97ad76cff4dc2243e271e1c8772d148213b04d80af1fe8fc72212",
+    "crates/clean-kernel/src/name.rs": "e772b87c123caf29e675a41254cdec7a0c4bdc6447b3a4027ab286d9c352b2be",
+    "crates/clean-kernel/src/tc/cert/infer_core.rs": "925d21a838892b8a398b2016d12cdce18680fadb96badc572137132cf40b64d1",
+    "crates/clean-kernel/src/tc/infer.rs": "b363cfc3f214267366abd978ead825a9d3d8fc90b3f38d32dfc781d2c2ae046c"
+  },
+  "status": "blocked"
+}

@@ -153,17 +153,35 @@ const IS_GOOD: &str = "class IsGood (n : Nat) : Prop where\n  good : n = n\n\n";
 /// field that mentions the value parameter, declares and its constructor
 /// kernel-checks (was `add_inductive Structure … Expected sort, got Nat`).
 /// The instance value `⟨rfl⟩ : IsGood 3` constructs, and the class field
-/// projects both by dot notation and positionally, pinning by `rfl` — the
-/// class projection carries B06's implicit-param / inst-implicit-`self` binder
-/// infos, so `IsGood.good mk3` inserts `{n}` and unifies `[self]`.
+/// projects both by dot notation and positionally, pinning by `rfl`. The class
+/// projection carries B06's binder infos, `@IsGood.good : {n : Nat} → [self :
+/// IsGood n] → n = n`, so the positional spelling Lean accepts supplies both
+/// arguments under `@`.
 #[test]
 fn b11_value_parameterized_prop_class() {
     let src = format!(
         "{IS_GOOD}def mk3 : IsGood 3 := ⟨rfl⟩\n\
          theorem access_dot : mk3.good = rfl := rfl\n\
-         theorem access_pos : IsGood.good mk3 = rfl := rfl"
+         theorem access_pos : @IsGood.good 3 mk3 = rfl := rfl"
     );
     expect_pass(&src);
+}
+
+/// Without `@`, an explicit argument cannot fill the inst-implicit `[self]`
+/// binder: `IsGood.good mk3` applies the proof of `n = n` to `mk3`. Lean
+/// v4.8.0, v4.30.0-rc2 and v4.36.0-rc2 all refuse it ("function expected"), so
+/// Clean must refuse it too.
+#[test]
+fn b11_positional_class_projection_without_at_is_refused() {
+    let src = format!(
+        "{IS_GOOD}def mk3 : IsGood 3 := ⟨rfl⟩\n\
+         theorem access_pos : IsGood.good mk3 = rfl := rfl"
+    );
+    let err = expect_fail(&src);
+    assert!(
+        err.contains("Too many arguments") && err.contains("not a function type"),
+        "an explicit argument must not fill the inst-implicit `self`, got: {err}"
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

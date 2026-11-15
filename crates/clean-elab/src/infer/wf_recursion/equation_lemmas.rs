@@ -34,6 +34,8 @@
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, Level};
 
+use clean_parser::SurfaceName;
+
 use super::ElabCtx;
 use crate::ElabError;
 
@@ -58,11 +60,16 @@ pub(crate) struct EquationLemma {
 pub(crate) struct EquationCase {
     /// Pattern parameters (universally quantified variables in the lemma).
     /// E.g., for `| n + 1 => ...`, this would contain the binder for `n`.
-    pub(crate) params: Vec<(String, Expr)>,
+    pub(crate) params: Vec<(SurfaceName, Expr)>,
     /// The LHS argument expression (e.g., `0` or `Nat.succ n`).
     pub(crate) lhs_arg: Expr,
     /// The RHS expression (the branch body).
     pub(crate) rhs: Expr,
+}
+
+/// Append one generated component without reparsing the owner display.
+fn equation_lemma_name(owner: &Name, index: usize) -> Name {
+    owner.clone().str(format!("eq_{index}"))
 }
 
 impl<'a> ElabCtx<'a> {
@@ -90,7 +97,7 @@ impl<'a> ElabCtx<'a> {
         let mut lemmas = Vec::with_capacity(cases.len());
 
         for (i, case) in cases.iter().enumerate() {
-            let lemma_name = Name::from_string(&format!("{}.eq_{}", func_name, i + 1,));
+            let lemma_name = equation_lemma_name(func_name, i + 1);
 
             let (lemma_ty, lemma_proof) =
                 self.build_equation_lemma(func_name, func_type, func_val, universe_params, case)?;
@@ -249,7 +256,25 @@ mod tests {
     #[test]
     fn test_equation_lemma_name_format() {
         let func_name = Name::from_string("myFunc");
-        let lemma_name = Name::from_string(&format!("{}.eq_1", func_name));
+        let lemma_name = equation_lemma_name(&func_name, 1);
         assert_eq!(lemma_name, Name::from_string("myFunc.eq_1"));
+    }
+
+    #[test]
+    fn typed_equation_lemma_owner_twins_remain_distinct() {
+        let owners = [
+            Name::anon().str("f.dot"),
+            Name::anon().str("f").str("dot"),
+            Name::anon().str("7"),
+            Name::anon().num(7),
+        ];
+        let generated: std::collections::HashSet<_> = owners
+            .iter()
+            .map(|owner| equation_lemma_name(owner, 1))
+            .collect();
+        assert_eq!(generated.len(), owners.len());
+        for owner in owners {
+            assert!(generated.contains(&owner.str("eq_1")));
+        }
     }
 }

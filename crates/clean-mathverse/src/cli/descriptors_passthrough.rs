@@ -51,8 +51,9 @@ const FIND_DESC: FeatureDescriptor = FeatureDescriptor {
          tag filtering (`--tag`), similarity lookup (`--similar <name>`), \
          cross-system matching (`--cross-system <name>`), domain/system \
          filters, and opt-in BM25 semantic search (`--semantic`). The default \
-         mode is full-text over names; add `--tags` to list every known \
-         keyword tag with counts. For a leaner single-mode search, use \
+         mode is full-text over names; add `--tags` to list known keyword tags \
+         with counts (the first `--limit`, 20 by default; the footer gives the \
+         total). For a leaner single-mode search, use \
          `mathverse search`.",
     category: Category::Import,
     stability: Stability::Usable,
@@ -213,8 +214,10 @@ const RELEASE_DESC: FeatureDescriptor = FeatureDescriptor {
     path: &["mathverse", "release"],
     summary: "Release management (`build`/`package`/`verify`/`download`/`info`)",
     description: "Drives the end-to-end release lifecycle for `.mathverse` shard \
-         archives. Sub-verbs: `release build` produces every shard from \
-         upstream proof systems; `release package` assembles the tar.zst \
+         archives. Sub-verbs: `release build` prints the recipe that produces \
+         every shard from upstream proof systems (the build itself runs through \
+         `scripts/release_mathverse_shards.sh` or `mathverse_shard build`); \
+         `release package` assembles the tar.zst \
          archive and manifest; `release verify` checks blake3 digests; \
          `release download` is a thin wrapper over `mathverse download`; \
          `release info` prints the current release metadata.",

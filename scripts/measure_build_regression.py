@@ -52,7 +52,7 @@ def extract_cargo_args(cmd: str) -> list[str]:
     if not parts:
         return []
     for idx, part in enumerate(parts):
-        if part.endswith("cargo") or part == "cargo":
+        if part.endswith(("cargo", "targo")):
             return parts[idx + 1 :]
     return parts
 

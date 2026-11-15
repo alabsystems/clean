@@ -102,17 +102,17 @@ impl AyBackend {
     }
 
     /// Register a typed free variable for booleans
-    pub fn register_fvar_bool(&mut self, fvar_id: FVarId) -> AyTerm {
+    pub(crate) fn register_fvar_bool(&mut self, fvar_id: FVarId) -> AyTerm {
         self.register_fvar(fvar_id, Sort::Bool)
     }
 
     /// Register a typed free variable for reals
-    pub fn register_fvar_real(&mut self, fvar_id: FVarId) -> AyTerm {
+    pub(crate) fn register_fvar_real(&mut self, fvar_id: FVarId) -> AyTerm {
         self.register_fvar(fvar_id, Sort::Real)
     }
 
     /// Register a typed free variable for bitvectors
-    pub fn register_fvar_bv(&mut self, fvar_id: FVarId, width: u32) -> AyTerm {
+    pub(crate) fn register_fvar_bv(&mut self, fvar_id: FVarId, width: u32) -> AyTerm {
         self.register_fvar(fvar_id, Sort::bitvec(width))
     }
 }

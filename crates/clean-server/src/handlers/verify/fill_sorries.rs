@@ -9,13 +9,16 @@ use super::fill_sorries_support::{
 };
 use super::parse_lean::{is_explicit_hole_tactic, parse_lean_file};
 use super::types::*;
+use crate::handlers::core::{run_with_env, WorkEnv};
 use crate::handlers::helpers::{format_expr, generate_tactic_suggestions, parse_tactic_script};
 use crate::handlers::state::ServerState;
 use crate::handlers::tactic::execute_simple_tactic;
+use crate::handlers::work::WorkError;
 use crate::proof_state::convert_goals;
 use crate::rpc::{RequestId, Response, RpcError};
 use clean_elab::elaborate;
 use clean_elab::tactic::ProofState as InternalProofState;
+use clean_kernel::Environment;
 use clean_parser::parse_expr_with_tactics_exact;
 use std::time::{Duration, Instant};
 use tracing::instrument;
@@ -79,7 +82,7 @@ fn build_error_result(
 
 /// Replay a theorem proof and replace each `sorry` with the first tactic that
 /// strictly reduces the active goal count.
-#[instrument(skip(state))]
+#[instrument(skip(state, params), fields(content_bytes = params.content.len()))]
 pub async fn handle_fill_sorries(
     state: &ServerState,
     id: RequestId,
@@ -88,9 +91,37 @@ pub async fn handle_fill_sorries(
     let start = Instant::now();
     let timeout = Duration::from_millis(params.timeout_ms.unwrap_or(state.default_timeout_ms));
 
-    let parse_start = Instant::now();
-    let theorem = match parse_lean_file(&params.content) {
-        Ok((theorem, _)) => theorem,
+    // Parsing the file and its proof's script is request work: on the pool,
+    // under the request's deadline (`super::parse_on_pool`).
+    let content = params.content;
+    let parsed = super::parse_on_pool(state, start, timeout, move || {
+        let parse_start = Instant::now();
+        let parsed = parse_lean_file(&content).map(|(theorem, _)| theorem);
+        let parse_ns = parse_start.elapsed().as_nanos() as u64;
+        let script = parsed
+            .as_ref()
+            .ok()
+            .and_then(Option::as_ref)
+            .map(|theorem| {
+                let original_tactics = parse_tactic_script(&theorem.original_proof);
+                let normalized_original_proof = original_tactics.join("\n");
+                let original_sorries =
+                    collect_explicit_sorry_positions(theorem, &normalized_original_proof);
+                (
+                    original_tactics,
+                    normalized_original_proof,
+                    original_sorries,
+                )
+            });
+        (parsed, parse_ns, script)
+    })
+    .await;
+    let (parsed, parse_ns, script) = match parsed {
+        Ok(parsed) => parsed,
+        Err(error) => return super::replay_response::<()>(id, timeout, Err(error)),
+    };
+    let theorem = match parsed {
+        Ok(theorem) => theorem,
         Err(error) => {
             let elapsed_ns = start.elapsed().as_nanos() as u64;
             let result = FillSorriesResult {
@@ -122,9 +153,10 @@ pub async fn handle_fill_sorries(
                 .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
         }
     };
-    let parse_ns = parse_start.elapsed().as_nanos() as u64;
 
-    let Some(theorem) = theorem else {
+    let (Some(theorem), Some((original_tactics, normalized_original_proof, original_sorries))) =
+        (theorem, script)
+    else {
         let elapsed_ns = start.elapsed().as_nanos() as u64;
         let result = FillSorriesResult {
             verified: false,
@@ -154,10 +186,6 @@ pub async fn handle_fill_sorries(
         return Response::success_typed(id.clone(), &result)
             .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
     };
-
-    let original_tactics = parse_tactic_script(&theorem.original_proof);
-    let normalized_original_proof = original_tactics.join("\n");
-    let original_sorries = collect_explicit_sorry_positions(&theorem, &normalized_original_proof);
 
     let initialize_start = Instant::now();
     if let Err(error) = super::initialize_verify_file_env(state).await {
@@ -192,8 +220,95 @@ pub async fn handle_fill_sorries(
     // parsing/elaboration/replay budget.
     let effective_timeout = timeout.saturating_add(initialize_start.elapsed());
 
+    // The replay runs on the work pool, under the deadline the timeout sets
+    // (environment setup above excluded, as before). It caches no proof
+    // state itself: the unsolved sorries' states come back with the result and
+    // are cached here, so a replay the deadline interrupted caches nothing.
+    let deadline = start.checked_add(effective_timeout);
+    let remaining = effective_timeout.saturating_sub(start.elapsed());
+    let tactic_sequence = params.tactic_sequence;
+    let outcome = tokio::time::timeout(
+        remaining,
+        run_with_env(state, deadline, move |held| {
+            let mut unsolved = Vec::new();
+            let result = fill_sorries_on_pool(
+                held,
+                FillSorriesReplay {
+                    theorem,
+                    normalized_original_proof,
+                    original_sorries,
+                    original_tactics,
+                    tactic_sequence,
+                    parse_ns,
+                    start,
+                    effective_timeout,
+                },
+                &mut unsolved,
+            );
+            (result, unsolved)
+        }),
+    )
+    .await
+    .unwrap_or(Err(WorkError::Interrupted))
+    .map(|(mut result, unsolved)| {
+        for UnsolvedSorry {
+            goal_position,
+            state: proof_state,
+            sorry_index,
+        } in unsolved
+        {
+            let cached_id = state
+                .proof_cache
+                .insert(proof_state, None, None, sorry_index);
+            if let Some(goal) = result.sorry_goals.get_mut(goal_position) {
+                goal.state_id = Some(cached_id);
+            }
+        }
+        result
+    });
+    super::replay_response(id, timeout, outcome)
+}
+
+/// What the replay of a `fillSorries` request needs from the request.
+struct FillSorriesReplay {
+    theorem: ExtractedTheorem,
+    normalized_original_proof: String,
+    original_sorries: Vec<SorryLocation>,
+    original_tactics: Vec<String>,
+    tactic_sequence: Vec<String>,
+    parse_ns: u64,
+    start: Instant,
+    effective_timeout: Duration,
+}
+
+/// The proof state at an unsolved sorry, cached for `applyTactic` once the
+/// replay has answered: it fills `sorry_goals[goal_position].state_id`.
+struct UnsolvedSorry {
+    goal_position: usize,
+    state: InternalProofState,
+    sorry_index: u32,
+}
+
+/// Elaborate the goal and replay the proof, filling sorries, against the held
+/// environment. Runs on the work pool.
+fn fill_sorries_on_pool(
+    held: &WorkEnv,
+    replay: FillSorriesReplay,
+    unsolved: &mut Vec<UnsolvedSorry>,
+) -> FillSorriesResult {
+    let FillSorriesReplay {
+        theorem,
+        normalized_original_proof,
+        original_sorries,
+        original_tactics,
+        tactic_sequence,
+        parse_ns,
+        start,
+        effective_timeout,
+    } = replay;
+
     let elaborate_start = Instant::now();
-    let surface_expr = match parse_expr_with_tactics_exact(&theorem.goal, &state.tactic_patterns) {
+    let surface_expr = match parse_expr_with_tactics_exact(&theorem.goal, &held.patterns) {
         Ok(expr) => expr,
         Err(error) => {
             let elaborate_ns = elaborate_start.elapsed().as_nanos() as u64;
@@ -221,13 +336,12 @@ pub async fn handle_fill_sorries(
                 None,
                 vec![],
             );
-            return Response::success_typed(id.clone(), &result)
-                .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+            return result;
         }
     };
 
-    let env = state.env.read().await;
-    let target = match elaborate(&env, &surface_expr) {
+    let env: &Environment = &held.env;
+    let target = match elaborate(env, &surface_expr) {
         Ok(expr) => expr,
         Err(error) => {
             let elaborate_ns = elaborate_start.elapsed().as_nanos() as u64;
@@ -255,14 +369,13 @@ pub async fn handle_fill_sorries(
                 None,
                 vec![],
             );
-            return Response::success_typed(id.clone(), &result)
-                .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+            return result;
         }
     };
     let elaborate_ns = elaborate_start.elapsed().as_nanos() as u64;
 
     let verify_start = Instant::now();
-    let tactic_sequence = normalized_tactic_sequence(&params.tactic_sequence);
+    let tactic_sequence = normalized_tactic_sequence(&tactic_sequence);
     let mut proof_state = InternalProofState::new(env.clone(), target.clone());
     let mut rewritten_tactics = Vec::with_capacity(original_tactics.len());
     let mut solved_sorries = 0usize;
@@ -295,7 +408,7 @@ pub async fn handle_fill_sorries(
                         col: 1,
                     }),
                     expected_type: None,
-                    actual_goals: convert_goals(&proof_state, &env)
+                    actual_goals: convert_goals(&proof_state, env)
                         .into_iter()
                         .map(|goal| goal.target_pp)
                         .collect(),
@@ -308,13 +421,12 @@ pub async fn handle_fill_sorries(
                 )),
                 sorry_goals,
             );
-            return Response::success_typed(id.clone(), &result)
-                .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+            return result;
         }
 
         if is_explicit_hole_tactic(tactic) {
-            let goals_at_sorry = snapshot_sorry_goals(&proof_state, &env);
-            let llm_guidance = snapshot_sorry_guidance(&proof_state, &env);
+            let goals_at_sorry = snapshot_sorry_goals(&proof_state, env);
+            let llm_guidance = snapshot_sorry_guidance(&proof_state, env);
             let before_goal_count = proof_state.goals().len();
             let before_sorry_count = proof_state.trust_ledger().sorry_count;
             let mut chosen_state = None;
@@ -326,7 +438,7 @@ pub async fn handle_fill_sorries(
                 }
 
                 let mut candidate_state = proof_state.clone();
-                if execute_simple_tactic(&mut candidate_state, candidate, &env).is_ok()
+                if execute_simple_tactic(&mut candidate_state, candidate, env).is_ok()
                     && candidate_state.goals().len() < before_goal_count
                     && candidate_state.trust_ledger().sorry_count == before_sorry_count
                 {
@@ -352,24 +464,26 @@ pub async fn handle_fill_sorries(
                 rewritten_tactics.push(replacement);
                 solved_sorries += 1;
             } else {
-                // Cache the proof state at this unsolved sorry so callers can
-                // resume interactive tactic application via `applyTactic`.
-                let cached_id =
-                    state
-                        .proof_cache
-                        .insert(proof_state.clone(), None, None, sorry_index as u32);
+                // The proof state at this unsolved sorry is cached, once the
+                // replay has answered, so callers can resume interactive
+                // tactic application via `applyTactic`.
+                unsolved.push(UnsolvedSorry {
+                    goal_position: sorry_goals.len(),
+                    state: proof_state.clone(),
+                    sorry_index: sorry_index as u32,
+                });
                 sorry_goals.push(SorryGoalInfo {
                     sorry_index,
                     solved: false,
                     replacement_tactic: None,
-                    state_id: Some(cached_id),
+                    state_id: None,
                     search_hints: llm_guidance.search_hints,
                     suggested_tactics: llm_guidance.suggested_tactics,
                     relevant_lemmas: llm_guidance.relevant_lemmas,
                     mathverse_candidates: llm_guidance.mathverse_candidates,
                     goals: goals_at_sorry,
                 });
-                if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, &env) {
+                if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, env) {
                     let filled_proof =
                         render_rewritten_proof(&rewritten_tactics, &original_tactics[index..]);
                     let remaining_sorries =
@@ -395,7 +509,7 @@ pub async fn handle_fill_sorries(
                                 col: 1,
                             }),
                             expected_type: None,
-                            actual_goals: convert_goals(&proof_state, &env)
+                            actual_goals: convert_goals(&proof_state, env)
                                 .into_iter()
                                 .map(|goal| goal.target_pp)
                                 .collect(),
@@ -408,9 +522,7 @@ pub async fn handle_fill_sorries(
                         )),
                         sorry_goals,
                     );
-                    return Response::success_typed(id.clone(), &result).unwrap_or_else(|e| {
-                        Response::error(id, RpcError::internal_error(e.to_string()))
-                    });
+                    return result;
                 }
                 rewritten_tactics.push(tactic.clone());
             }
@@ -419,13 +531,13 @@ pub async fn handle_fill_sorries(
             continue;
         }
 
-        if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, &env) {
+        if let Err(error) = execute_simple_tactic(&mut proof_state, tactic, env) {
             let filled_proof =
                 render_rewritten_proof(&rewritten_tactics, &original_tactics[index..]);
             let remaining_sorries = collect_explicit_sorry_positions(&theorem, &filled_proof);
             let verify_ns = verify_start.elapsed().as_nanos() as u64;
             let elapsed_ns = start.elapsed().as_nanos() as u64;
-            let goals = convert_goals(&proof_state, &env);
+            let goals = convert_goals(&proof_state, env);
             let result = build_error_result(
                 Some(theorem),
                 Some(filled_proof),
@@ -455,8 +567,7 @@ pub async fn handle_fill_sorries(
                 )),
                 sorry_goals,
             );
-            return Response::success_typed(id.clone(), &result)
-                .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+            return result;
         }
 
         rewritten_tactics.push(tactic.clone());
@@ -476,11 +587,12 @@ pub async fn handle_fill_sorries(
     if proof_state.is_complete() {
         let closed_proof = proof_state.closed_proof();
         let verified = if remaining_sorries.is_empty() {
-            super::verify_closed_proof(&env, &target, closed_proof.as_ref())
+            super::verify_closed_proof(env, &target, closed_proof.as_ref())
         } else {
             false
         };
         let trust_summary = super::trust_summary_from_ledger_with_closed_proof(
+            env,
             proof_state.trust_ledger(),
             closed_proof.as_ref(),
             verified,
@@ -505,11 +617,10 @@ pub async fn handle_fill_sorries(
             },
             sorry_goals,
         };
-        return Response::success_typed(id.clone(), &result)
-            .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())));
+        return result;
     }
 
-    let goals = convert_goals(&proof_state, &env);
+    let goals = convert_goals(&proof_state, env);
     let result = FillSorriesResult {
         verified: false,
         theorem: Some(theorem),
@@ -535,6 +646,5 @@ pub async fn handle_fill_sorries(
         sorry_goals,
     };
 
-    Response::success_typed(id.clone(), &result)
-        .unwrap_or_else(|e| Response::error(id, RpcError::internal_error(e.to_string())))
+    result
 }

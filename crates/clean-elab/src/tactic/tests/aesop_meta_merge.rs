@@ -30,8 +30,9 @@ fn setup_simple_proof_env() -> (Environment, Expr, Vec<LocalDecl>) {
     .unwrap();
 
     let ctx = vec![LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(0),
-        name: "hA".to_string(),
+        name: clean_parser::SurfaceName::generated_path("hA"),
         ty: a.clone(),
         value: None,
     }];
@@ -129,8 +130,9 @@ fn test_aesop_meta_merge_after_backtracking() {
         env,
         goal,
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "hB".to_string(),
+            name: clean_parser::SurfaceName::generated_path("hB"),
             ty: Expr::const_(Name::from_string("B"), vec![]),
             value: None,
         }],

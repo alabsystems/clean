@@ -4,6 +4,12 @@
 
 //! Recursive intro patterns (rintro) tactic.
 
+use super::names::local_name_matches;
+use super::rcases_fields::{
+    as_tuple, clear_marker, field_explicitness, finish_rcases_clears, process_constructor, CtorArgs,
+};
+use clean_parser::SurfaceName;
+
 use clean_kernel::{Expr, ExprKind, FVarId};
 
 use crate::unify::MetaState;
@@ -49,7 +55,7 @@ pub(crate) fn contains_unassigned_meta(expr: &Expr) -> bool {
 #[derive(Debug, Clone)]
 pub enum RIntroPattern {
     /// Simple name: `x`
-    Name(String),
+    Name(SurfaceName),
     /// Wildcard: `_`
     Wildcard,
     /// Anonymous: `<...>` for And/Exists
@@ -60,9 +66,76 @@ pub enum RIntroPattern {
     Tuple(Vec<RIntroPattern>),
     /// Equality rewrite: `rfl`
     Rfl,
+    /// Typed pattern `p : t` (Lean's `rcasesPatLo`), `t` being the `k`-th of
+    /// the tactic's `pattern_types`. Applied by `builtins_rcases_typed`, which
+    /// needs the elaborator; the destructuring engine below refuses it.
+    Typed(Box<RIntroPattern>, usize),
+    /// Clear: `-` (`rcasesPat.clear`). The component is introduced, then
+    /// cleared with its dependents once the whole tactic has run
+    /// (`rcases_fields::finish_rcases_clears`).
+    Clear,
+    /// Explicit: `@p` (`rcasesPat.explicit`). Matched against a constructor,
+    /// `p`'s components bind every argument, implicit ones included
+    /// (`rcases_fields::process_constructor`).
+    Explicit(Box<RIntroPattern>),
 }
 
 impl RIntroPattern {
+    /// The pattern with each identifier bound as a notation or macro
+    /// template's expansion renamed it (`SurfaceTactic::Obtain::
+    /// pattern_binders`, written → bound). An identifier absent from
+    /// `binders` binds itself.
+    #[must_use]
+    pub(crate) fn with_binders(self, binders: &[(SurfaceName, SurfaceName)]) -> Self {
+        if binders.is_empty() {
+            return self;
+        }
+        match self {
+            Self::Name(name) => Self::Name(
+                binders
+                    .iter()
+                    .find(|(written, _)| *written == name)
+                    .map_or(name, |(_, bound)| bound.clone()),
+            ),
+            Self::Anonymous(children) => Self::Anonymous(
+                children
+                    .into_iter()
+                    .map(|child| child.with_binders(binders))
+                    .collect(),
+            ),
+            Self::Or(children) => Self::Or(
+                children
+                    .into_iter()
+                    .map(|child| child.with_binders(binders))
+                    .collect(),
+            ),
+            Self::Tuple(children) => Self::Tuple(
+                children
+                    .into_iter()
+                    .map(|child| child.with_binders(binders))
+                    .collect(),
+            ),
+            Self::Typed(inner, index) => Self::Typed(Box::new(inner.with_binders(binders)), index),
+            Self::Explicit(inner) => Self::Explicit(Box::new(inner.with_binders(binders))),
+            Self::Wildcard => Self::Wildcard,
+            Self::Rfl => Self::Rfl,
+            Self::Clear => Self::Clear,
+        }
+    }
+
+    fn validate_names(&self) -> TacticResult {
+        match self {
+            Self::Name(name) => super::names::require_binding_name(name, "rintro"),
+            Self::Anonymous(children) | Self::Or(children) | Self::Tuple(children) => {
+                for child in children {
+                    child.validate_names()?;
+                }
+                Ok(())
+            }
+            Self::Typed(inner, _) | Self::Explicit(inner) => inner.validate_names(),
+            Self::Wildcard | Self::Rfl | Self::Clear => Ok(()),
+        }
+    }
     /// Parse a pattern string into RIntroPattern
     ///
     /// # Contract
@@ -72,6 +145,12 @@ impl RIntroPattern {
     /// ENSURES: On Err(MissingArgument), `s` was empty or whitespace-only
     pub fn parse(s: &str) -> Result<Self, TacticError> {
         let s = s.trim();
+        let structural = pattern_structural_chars(s)?;
+        let tokens = clean_parser::lexer::Lexer::tokenize(s);
+        let significant: Vec<_> = tokens
+            .iter()
+            .filter(|t| !matches!(t.kind, clean_parser::lexer::TokenKind::Eof))
+            .collect();
 
         if s.is_empty() {
             return Err(TacticError::MissingArgument {
@@ -80,12 +159,35 @@ impl RIntroPattern {
             });
         }
 
-        if s == "_" {
+        // `p : #k` — a typed pattern (the parser's spelling of `p : t`). It
+        // wraps the whole alternation (`rcasesPatLo := rcasesPatMed (" : "
+        // term)?`), so it is split off before the `|` split below.
+        if let Some((inner, index)) = split_typed_suffix(s) {
+            return Ok(RIntroPattern::Typed(
+                Box::new(RIntroPattern::parse(inner)?),
+                index,
+            ));
+        }
+
+        if significant.len() == 1
+            && matches!(
+                significant[0].kind,
+                clean_parser::lexer::TokenKind::Underscore
+            )
+        {
             return Ok(RIntroPattern::Wildcard);
         }
 
-        if s == "rfl" {
+        if significant.len() == 1
+            && matches!(significant[0].kind, clean_parser::lexer::TokenKind::Rfl)
+        {
             return Ok(RIntroPattern::Rfl);
+        }
+
+        if significant.len() == 1
+            && matches!(significant[0].kind, clean_parser::lexer::TokenKind::Minus)
+        {
+            return Ok(RIntroPattern::Clear);
         }
 
         // Or-alternation `|` binds looser than the `⟨⟩`/`<>` grouping, so it
@@ -105,6 +207,16 @@ impl RIntroPattern {
             return Ok(RIntroPattern::Or(patterns?));
         }
 
+        // `@p` binds tighter than `|` and `: t`, both split off above.
+        if let Some(at) = significant
+            .first()
+            .filter(|token| matches!(token.kind, clean_parser::lexer::TokenKind::At))
+        {
+            return Ok(RIntroPattern::Explicit(Box::new(RIntroPattern::parse(
+                &s[at.span.end..],
+            )?)));
+        }
+
         // Tuple pattern `⟨a, b, c⟩` or `<a, b, c>`: only when a single bracket
         // group spans the entire string. `strip_tuple_brackets` is char-aware
         // so Unicode brackets (3 bytes each) do not panic on slicing.
@@ -117,9 +229,98 @@ impl RIntroPattern {
             return Ok(RIntroPattern::Tuple(patterns?));
         }
 
-        // Simple name
-        Ok(RIntroPattern::Name(s.to_string()))
+        // Parentheses group a pattern; escaped parentheses remain inside Ident.
+        if structural.first() == Some(&(0, '(')) && structural.last() == Some(&(s.len() - 1, ')')) {
+            let mut depth = 0;
+            let spans_whole = structural.iter().all(|(index, ch)| {
+                match ch {
+                    '(' | '<' | '[' | '⟨' => depth += 1,
+                    ')' | '>' | ']' | '⟩' => depth -= 1,
+                    _ => {}
+                }
+                depth != 0 || *index == s.len() - 1
+            });
+            if spans_whole {
+                return Self::parse(&s[1..s.len() - 1]);
+            }
+        }
+        Ok(RIntroPattern::Name(super::names::parse_binding_name(
+            s, "rintro",
+        )?))
     }
+}
+
+/// Split off a top-level typed-pattern suffix ` : #k`; `None` when the
+/// last marker sits inside brackets or there is none. Depth is counted on
+/// [`pattern_structural_chars`], so a bracket inside an escaped identifier
+/// is never read as structure.
+fn split_typed_suffix(s: &str) -> Option<(&str, usize)> {
+    let at = s.rfind(" : #")?;
+    let digits = s.get(at + " : #".len()..)?;
+    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let depth = pattern_structural_chars(s)
+        .ok()?
+        .into_iter()
+        .filter(|(index, _)| *index < at)
+        .fold(0_i32, |depth, (_, c)| match c {
+            '\u{27E8}' | '<' | '(' | '[' => depth + 1,
+            '\u{27E9}' | '>' | ')' | ']' => depth - 1,
+            _ => depth,
+        });
+    if depth != 0 {
+        return None;
+    }
+    Some((s[..at].trim(), digits.parse().ok()?))
+}
+
+/// Use actual token spans so separators inside escaped identifiers or comments
+/// are never reinterpreted. Split multi-character operator tokens char-wise to
+/// retain the legacy ASCII nested-tuple syntax (`<a,<b,c>>`).
+fn pattern_structural_chars(s: &str) -> Result<Vec<(usize, char)>, TacticError> {
+    use clean_parser::lexer::{Lexer, TokenKind};
+    let mut result = Vec::new();
+    let mut stack = Vec::new();
+    for token in Lexer::tokenize(s) {
+        if let TokenKind::Error(error) = token.kind {
+            return Err(TacticError::InvalidTarget {
+                tactic: "rintro".into(),
+                detail: format!("invalid pattern token: {error}"),
+            });
+        }
+        if matches!(token.kind, TokenKind::Ident(_) | TokenKind::Eof) {
+            continue;
+        }
+        for (relative, ch) in s[token.span.start..token.span.end].char_indices() {
+            let index = token.span.start + relative;
+            let expected = match ch {
+                '(' => Some(')'),
+                '[' => Some(']'),
+                '<' => Some('>'),
+                '⟨' => Some('⟩'),
+                _ => None,
+            };
+            if let Some(close) = expected {
+                stack.push(close);
+            } else if matches!(ch, ')' | ']' | '>' | '⟩') && stack.pop() != Some(ch) {
+                return Err(TacticError::InvalidTarget {
+                    tactic: "rintro".into(),
+                    detail: "mismatched pattern delimiters".into(),
+                });
+            }
+            if expected.is_some() || matches!(ch, ')' | ']' | '>' | '⟩' | '|' | ',') {
+                result.push((index, ch));
+            }
+        }
+    }
+    if !stack.is_empty() {
+        return Err(TacticError::InvalidTarget {
+            tactic: "rintro".into(),
+            detail: "unclosed pattern delimiters".into(),
+        });
+    }
+    Ok(result)
 }
 
 /// Split a pattern string at top-level (bracket depth 0) `|` alternation marks.
@@ -136,7 +337,7 @@ fn split_top_level_or(s: &str) -> Vec<&str> {
     let mut depth: i32 = 0;
     let mut start = 0usize;
 
-    for (idx, c) in s.char_indices() {
+    for (idx, c) in pattern_structural_chars(s).unwrap_or_default() {
         match c {
             '\u{27E8}' | '<' | '(' | '[' => depth += 1,
             '\u{27E9}' | '>' | ')' | ']' => depth -= 1,
@@ -173,7 +374,7 @@ fn strip_tuple_brackets(s: &str) -> Option<&str> {
 
     let mut depth: i32 = 0;
     let mut closes_at_end = false;
-    for (idx, c) in s.char_indices() {
+    for (idx, c) in pattern_structural_chars(s).ok()? {
         match c {
             '\u{27E8}' | '<' | '(' | '[' => depth += 1,
             '\u{27E9}' | '>' | ')' | ']' => {
@@ -211,31 +412,34 @@ fn strip_tuple_brackets(s: &str) -> Option<&str> {
 /// ENSURES: Returns a `Vec` of trimmed argument strings, split at top-level commas only
 /// ENSURES: Nested brackets (`<>`, `()`, `[]`, `⟨⟩`) are respected — commas inside them do not split
 pub(crate) fn split_pattern_args(s: &str) -> Vec<String> {
+    if s.trim().is_empty() {
+        return vec![];
+    }
+    let Ok(structural) = pattern_structural_chars(s) else {
+        // Preserve the complete invalid fragment for the strict pattern parser.
+        return vec![s.to_owned()];
+    };
     let mut result = Vec::new();
-    let mut current = String::new();
+    let mut start = 0;
     let mut depth = 0;
 
-    for c in s.chars() {
+    for (index, c) in structural {
         match c {
             '\u{27E8}' | '<' | '(' | '[' => {
                 depth += 1;
-                current.push(c);
             }
             '\u{27E9}' | '>' | ')' | ']' => {
                 depth -= 1;
-                current.push(c);
             }
             ',' if depth == 0 => {
-                result.push(current.trim().to_string());
-                current = String::new();
+                result.push(s[start..index].trim().to_string());
+                start = index + c.len_utf8();
             }
-            _ => current.push(c),
+            _ => {}
         }
     }
 
-    if !current.is_empty() {
-        result.push(current.trim().to_string());
-    }
+    result.push(s[start..].trim().to_string());
 
     result
 }
@@ -285,9 +489,13 @@ pub fn rintro(state: &mut ProofState, patterns: Vec<String>) -> TacticResult {
 /// ENSURES: On Ok, each pattern in `patterns` has been applied sequentially via `apply_rintro_pattern`
 /// ENSURES: On Err, patterns applied before the failing one remain in effect (partial mutation)
 pub fn rintro_patterns(state: &mut ProofState, patterns: Vec<RIntroPattern>) -> TacticResult {
+    for pattern in &patterns {
+        pattern.validate_names()?;
+    }
     for pattern in patterns {
         apply_rintro_pattern(state, pattern)?;
     }
+    finish_rcases_clears(state);
     Ok(())
 }
 
@@ -322,10 +530,26 @@ pub fn rintro_patterns(state: &mut ProofState, patterns: Vec<RIntroPattern>) -> 
 ///          the kernel-checked `cases`/`subst` path
 pub fn destruct_named_hypothesis(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     pattern: &str,
 ) -> TacticResult {
-    match RIntroPattern::parse(pattern)? {
+    destruct_named_hypothesis_pattern(state, hyp_name, RIntroPattern::parse(pattern)?)?;
+    finish_rcases_clears(state);
+    Ok(())
+}
+
+/// [`destruct_named_hypothesis`] on a parsed pattern, WITHOUT clearing the
+/// components its `-` patterns marked: a caller that destructures further
+/// (the typed-pattern path) clears once at the end, as Lean's
+/// `RCases.finish` does, by calling `rcases_fields::finish_rcases_clears`.
+pub fn destruct_named_hypothesis_pattern(
+    state: &mut ProofState,
+    hyp_name: &SurfaceName,
+    pattern: RIntroPattern,
+) -> TacticResult {
+    super::names::require_binding_name(hyp_name, "rintro")?;
+    pattern.validate_names()?;
+    match pattern {
         RIntroPattern::Name(name) => rename_hypothesis(state, hyp_name, &name),
         RIntroPattern::Wildcard => Ok(()),
         // A TOP-LEVEL `rfl` pattern (`rcases h with rfl` / `obtain rfl := h`)
@@ -344,8 +568,13 @@ pub fn destruct_named_hypothesis(
         // context is a distinct construct handled in `apply_rintro_pattern`.)
         RIntroPattern::Rfl => subst(state, hyp_name),
         RIntroPattern::Tuple(sub) | RIntroPattern::Anonymous(sub) => {
-            destruct_hypothesis(state, hyp_name, &sub)
+            destruct_hypothesis(state, hyp_name, &sub, CtorArgs::ExplicitOnly)
         }
+        RIntroPattern::Explicit(inner) => {
+            destruct_hypothesis(state, hyp_name, &as_tuple(&inner).1, CtorArgs::All)
+        }
+        // `rcases h with -` / `obtain - := h`: `h` itself is cleared.
+        RIntroPattern::Clear => mark_hypothesis_for_clear(state, hyp_name),
         RIntroPattern::Or(sub) => {
             // Top-level alternation in `obtain`/`rcases` (e.g. `rcases h with hp |
             // hq` on an `Or`): case-split the hypothesis into one goal per
@@ -353,6 +582,34 @@ pub fn destruct_named_hypothesis(
             // branch's field. This is the canonical disjunction-splitting idiom.
             split_or_hypothesis(state, hyp_name, &sub)
         }
+        RIntroPattern::Typed(..) => Err(typed_pattern_needs_elaboration()),
+    }
+}
+
+/// Mark the current goal's hypothesis `hyp_name` for clearing at the end of
+/// the tactic (the `-` pattern).
+fn mark_hypothesis_for_clear(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
+    let fvar = state
+        .current_goal()
+        .and_then(|goal| {
+            goal.local_ctx
+                .iter()
+                .rev()
+                .find(|decl| local_name_matches(&decl.name, hyp_name))
+        })
+        .map(|decl| decl.fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(format!("rcases: '{hyp_name}'")))?;
+    rename_field_by_fvar(state, fvar, &clear_marker(fvar))
+}
+
+/// A typed pattern reached the engine, which cannot elaborate its type; the
+/// tactic handlers route typed patterns through `builtins_rcases_typed`.
+fn typed_pattern_needs_elaboration() -> TacticError {
+    TacticError::InvalidTarget {
+        tactic: "rcases".into(),
+        detail: "a typed pattern `(p : t)` must have its type elaborated before \
+                 destructuring"
+            .into(),
     }
 }
 
@@ -385,9 +642,9 @@ pub fn destruct_named_hypothesis(
 ///           the constructor count, or `hyp_name`'s type is not a splittable
 ///           inductive — surfaced as a `TacticError`, never a panic or
 ///           silent over-accept
-fn split_or_hypothesis(
+pub(super) fn split_or_hypothesis(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     alternatives: &[RIntroPattern],
 ) -> TacticResult {
     // Determine the constructor count up front so an `|` pattern on a
@@ -399,7 +656,8 @@ fn split_or_hypothesis(
     let hyp_ty = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .map(|d| d.ty.clone())
         .ok_or_else(|| {
             TacticError::HypothesisNotFound(
@@ -413,13 +671,14 @@ fn split_or_hypothesis(
     let hyp_ty = state.metas.instantiate(&hyp_ty);
     let hyp_ty = state.whnf(goal, &hyp_ty);
     let head = get_app_head(&hyp_ty);
-    let num_ctors = match head.kind() {
-        ExprKind::Const(name, _) => state
-            .env
-            .get_inductive(name)
-            .map(|i| i.constructor_names.len()),
+    let inductive = match head.kind() {
+        ExprKind::Const(name, _) => Some(name.clone()),
         _ => None,
     };
+    let num_ctors = inductive
+        .as_ref()
+        .and_then(|name| state.env.get_inductive(name))
+        .map(|i| i.constructor_names.len());
     let Some(num_ctors) = num_ctors else {
         return Err(TacticError::InvalidTarget {
             tactic: "rcases".into(),
@@ -524,7 +783,7 @@ fn split_or_hypothesis(
             // (and, above all, rather than renaming an unrelated outer
             // hypothesis, which is what the `.last()` read did).
             match pattern {
-                RIntroPattern::Wildcard | RIntroPattern::Name(_) => continue,
+                RIntroPattern::Wildcard | RIntroPattern::Name(_) | RIntroPattern::Clear => continue,
                 RIntroPattern::Tuple(sub) | RIntroPattern::Anonymous(sub) if sub.is_empty() => {
                     continue;
                 }
@@ -540,10 +799,14 @@ fn split_or_hypothesis(
             }
         }
         let field_start = branch_ctx_len - num_fields;
-        // One pattern per field, Lean-style (see `expand_branch_pattern`).
-        let per_field = expand_branch_pattern(pattern, num_fields);
+        // One pattern per field, Lean-style (`processConstructors`): the
+        // alternative's tuple components go to this constructor's explicit
+        // fields (every field under `@`).
+        let (args, components) = as_tuple(pattern);
+        let explicit_fields =
+            field_explicitness(&state.env, inductive.as_ref(), alt_idx, num_fields);
+        let per_field = process_constructor(&explicit_fields, args, &components);
         let mut branch_deferred: Vec<(FVarId, RIntroPattern)> = Vec::new();
-        let mut locate_name: Option<String> = None;
         state.invalidate_tc_cache();
         for (offset, field_pattern) in per_field.iter().enumerate() {
             let field_idx = field_start + offset;
@@ -554,35 +817,31 @@ fn split_or_hypothesis(
                 RIntroPattern::Name(new_name) => {
                     state.goals[branch_pos].local_ctx[field_idx].name = new_name.clone();
                 }
+                RIntroPattern::Clear => {
+                    let fvar = state.goals[branch_pos].local_ctx[field_idx].fvar;
+                    state.goals[branch_pos].local_ctx[field_idx].name = clear_marker(fvar);
+                }
                 // Anything that further destructs the field (nested tuple, nested
                 // alternation, or a `rfl` substitution) is deferred so it can run with
                 // the branch goal focused as the front goal.
                 other => {
                     let decl = &state.goals()[branch_pos].local_ctx[field_idx];
-                    // The branch is LOCATED by a deferred field's generated name
-                    // (a NAME, not the FVar id: sibling `Or` branches reset
-                    // `next_fvar` to the same base in `cases`, so `Or.inl`'s and
-                    // `Or.inr`'s field FVars share an id — only their
-                    // auto-generated names, `inl_0` vs `inr_0`, distinguish the
-                    // branches). Within the extracted branch the FVar id is then
-                    // the right handle, exactly as `destruct_hypothesis` uses it.
-                    if locate_name.is_none() {
-                        locate_name = Some(decl.name.clone());
-                    }
+                    // FVars may be shared across sibling branches. They select
+                    // fields only after the exact branch goal has been isolated.
                     branch_deferred.push((decl.fvar, other.clone()));
                 }
             }
         }
-        if let Some(locate_name) = locate_name {
+        if !branch_deferred.is_empty() {
             deferred.push(BranchWork {
-                locate_name,
+                branch_meta: state.goals()[branch_pos].meta_id,
                 fields: branch_deferred,
             });
         }
     }
 
     // Second pass: run the deferred destructuring sub-patterns. Each branch's
-    // field is located by its (unique) generated name, EXTRACTED into an ISOLATED
+    // goal is located by its exact still-pending MetaId, EXTRACTED into an ISOLATED
     // single-goal sub-state, destructured there, and merged back in place.
     //
     // The isolation is essential for correctness, not just tidiness. The field
@@ -610,15 +869,7 @@ fn split_or_hypothesis(
     let branch_fvar_base = state.next_fvar;
     let mut branch_fvar_max = branch_fvar_base;
     for work in deferred {
-        let branch_pos = state
-            .goals()
-            .iter()
-            .position(|g| g.local_ctx.iter().any(|d| d.name == work.locate_name))
-            .ok_or_else(|| {
-                TacticError::HypothesisNotFound(
-                    "rcases: deferred alternation branch goal not found".into(),
-                )
-            })?;
+        let branch_pos = pending_branch_position(state, work.branch_meta)?;
         // Pull the single target branch out of the queue and run the sub-pattern
         // on it in isolation, so the field engine's `cases` never observes a
         // sibling branch as the front goal.
@@ -650,56 +901,33 @@ fn split_or_hypothesis(
 
 /// The deferred (goal-splitting) work for ONE alternation branch.
 ///
-/// `locate_name` is the generated name of the branch's first deferred field; it
-/// identifies the branch goal in the shared queue after the in-place renames.
+/// `branch_meta` identifies the still-pending goal after the in-place renames.
+/// It is consumed before that branch is transformed; unlike case_binders, this
+/// is not persistent case-origin metadata across successor goals.
 /// `fields` pairs each deferred field's FVar with the sub-pattern to apply once
 /// the branch has been extracted into its own single-goal sub-state.
 struct BranchWork {
-    locate_name: String,
+    branch_meta: crate::unify::MetaId,
     fields: Vec<(FVarId, RIntroPattern)>,
 }
 
-/// Expand ONE alternation branch's pattern into exactly one pattern per field of
-/// that branch's constructor (`num_fields ≥ 1`).
-///
-/// Lean's rcases (`Init/RCases.lean`): "A pattern like `⟨a, b, c⟩ | ⟨d, e⟩` will
-/// do a split over the inductive datatype, naming the first three parameters of
-/// the first constructor as `a,b,c` … If the list is not as long as the number of
-/// arguments to the constructor … the remaining variables will be automatically
-/// named. If there are too many arguments … then it will be treated as
-/// `⟨a, ⟨b, c⟩⟩`, splitting the last parameter as necessary."
-///
-/// So:
-/// * A tuple pattern on a MULTI-field constructor (`⟨x, xs⟩` on `List.cons`)
-///   distributes over the fields, padding with `_` and grouping an over-long
-///   tail into the last field.
-/// * Every other pattern — and any pattern on a SINGLE-field constructor —
-///   applies to the FIRST field, with the remaining fields keeping their
-///   generated names. This is what keeps `rcases h with ⟨hp, hq⟩ | hr` on
-///   `(p ∧ q) ∨ r` recursing INTO `Or.inl`'s single field rather than trying to
-///   spread `hp`/`hq` across fields that do not exist.
-fn expand_branch_pattern(pattern: &RIntroPattern, num_fields: usize) -> Vec<RIntroPattern> {
-    let mut expanded = match pattern {
-        RIntroPattern::Tuple(sub) | RIntroPattern::Anonymous(sub)
-            if num_fields > 1 && !sub.is_empty() =>
-        {
-            if sub.len() > num_fields {
-                sub[..num_fields - 1]
-                    .iter()
-                    .cloned()
-                    .chain(std::iter::once(RIntroPattern::Tuple(
-                        sub[num_fields - 1..].to_vec(),
-                    )))
-                    .collect()
-            } else {
-                sub.clone()
-            }
-        }
-        other => vec![other.clone()],
-    };
-    // Fields the pattern does not mention keep their generated names.
-    expanded.resize(num_fields, RIntroPattern::Wildcard);
-    expanded
+pub(super) fn pending_branch_position(
+    state: &ProofState,
+    meta: crate::unify::MetaId,
+) -> Result<usize, TacticError> {
+    let mut positions = state
+        .goals()
+        .iter()
+        .enumerate()
+        .filter(|(_, goal)| goal.meta_id == meta)
+        .map(|(index, _)| index);
+    match (positions.next(), positions.next()) {
+        (Some(position), None) => Ok(position),
+        _ => Err(TacticError::InvalidTarget {
+            tactic: "rcases".into(),
+            detail: "pending branch goal identity is missing or duplicated".into(),
+        }),
+    }
 }
 
 /// Apply a single rintro pattern
@@ -717,22 +945,35 @@ fn apply_rintro_pattern(state: &mut ProofState, pattern: RIntroPattern) -> Tacti
         RIntroPattern::Name(name) => intro(state, &name),
         RIntroPattern::Wildcard => {
             // Generate a fresh anonymous name
-            let name = format!("_h{}", state.next_fvar);
+            let name = SurfaceName::from_name(
+                clean_kernel::Name::anon().str(format!("_h{}", state.next_fvar)),
+            );
             intro(state, &name)
         }
         RIntroPattern::Tuple(sub_patterns) => {
             // First intro to get the hypothesis
-            let temp_name = format!("_temp{}", state.next_fvar);
+            let temp_name = SurfaceName::from_name(
+                clean_kernel::Name::anon().str(format!("_temp{}", state.next_fvar)),
+            );
             intro(state, &temp_name)?;
 
             // Now destruct the just-introduced hypothesis by name.
-            destruct_hypothesis(state, &temp_name, &sub_patterns)
+            let introduced = state
+                .current_goal()
+                .and_then(|g| g.local_ctx.last())
+                .map(|d| d.name.clone())
+                .ok_or_else(|| {
+                    TacticError::HypothesisNotFound("rintro: introduced binder disappeared".into())
+                })?;
+            destruct_hypothesis(state, &introduced, &sub_patterns, CtorArgs::ExplicitOnly)
         }
         RIntroPattern::Or(sub_patterns) => {
             // `rintro hp | hq` desugars to `intro h; rcases h with hp | hq`:
             // intro the hypothesis, then case-split it on its constructors,
             // applying each alternative's sub-pattern to that branch's field.
-            let temp_name = format!("_temp{}", state.next_fvar);
+            let temp_name = SurfaceName::from_name(
+                clean_kernel::Name::anon().str(format!("_temp{}", state.next_fvar)),
+            );
             intro(state, &temp_name)?;
             // Re-resolve the actual binder name from the current goal (intro may
             // collision-rename) before feeding it to the case-split engine.
@@ -740,12 +981,16 @@ fn apply_rintro_pattern(state: &mut ProofState, pattern: RIntroPattern) -> Tacti
                 .current_goal()
                 .and_then(|g| g.local_ctx.last())
                 .map(|d| d.name.clone())
-                .unwrap_or(temp_name);
+                .ok_or_else(|| {
+                    TacticError::HypothesisNotFound("rintro: introduced binder disappeared".into())
+                })?;
             split_or_hypothesis(state, &introduced, &sub_patterns)
         }
         RIntroPattern::Rfl => {
             // Intro and then try to apply reflexivity
-            let temp_name = format!("_temp{}", state.next_fvar);
+            let temp_name = SurfaceName::from_name(
+                clean_kernel::Name::anon().str(format!("_temp{}", state.next_fvar)),
+            );
             intro(state, &temp_name)?;
             // Try to close goal with rfl
             rfl(state).or(Ok(()))
@@ -754,6 +999,27 @@ fn apply_rintro_pattern(state: &mut ProofState, pattern: RIntroPattern) -> Tacti
             // Same as Tuple
             apply_rintro_pattern(state, RIntroPattern::Tuple(sub_patterns))
         }
+        // `rintro -`: introduce under the clear marker; the tactic clears it
+        // at the end (`finish_rcases_clears`).
+        RIntroPattern::Clear => {
+            let marker = clear_marker(FVarId::new(state.next_fvar));
+            intro(state, &marker)
+        }
+        RIntroPattern::Explicit(inner) => {
+            let temp_name = SurfaceName::from_name(
+                clean_kernel::Name::anon().str(format!("_temp{}", state.next_fvar)),
+            );
+            intro(state, &temp_name)?;
+            let introduced = state
+                .current_goal()
+                .and_then(|g| g.local_ctx.last())
+                .map(|d| d.name.clone())
+                .ok_or_else(|| {
+                    TacticError::HypothesisNotFound("rintro: introduced binder disappeared".into())
+                })?;
+            destruct_hypothesis(state, &introduced, &as_tuple(&inner).1, CtorArgs::All)
+        }
+        RIntroPattern::Typed(..) => Err(typed_pattern_needs_elaboration()),
     }
 }
 
@@ -788,8 +1054,9 @@ fn apply_rintro_pattern(state: &mut ProofState, pattern: RIntroPattern) -> Tacti
 ///          a destructible one-constructor inductive (mirrors `cases`)
 fn destruct_hypothesis(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     sub_patterns: &[RIntroPattern],
+    args: CtorArgs,
 ) -> TacticResult {
     // Snapshot the hypothesis type head BEFORE running cases so we can decide
     // whether to delegate. If it is not a destructible inductive, fall back to
@@ -805,13 +1072,18 @@ fn destruct_hypothesis(
     let hyp_ty = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .map(|d| d.ty.clone())
         .ok_or_else(|| {
             TacticError::HypothesisNotFound("rintro: could not find introduced hypothesis".into())
         })?;
     let hyp_ty = state.whnf(goal, &hyp_ty);
     let head = get_app_head(&hyp_ty);
+    let inductive = match head.kind() {
+        ExprKind::Const(name, _) => Some(name.clone()),
+        _ => None,
+    };
     let destructible = matches!(head.kind(), ExprKind::Const(name, _) if {
         // Match by the short (final) name component so namespaced or
         // `_root_`-qualified forms of the connective still classify correctly.
@@ -830,6 +1102,17 @@ fn destruct_hypothesis(
             // have no field table, so they keep the explicit name check; `Eq` and
             // other non-structure specials remain non-destructible as before.
             || state.env.get_structure_field_names(name).is_some()
+            // …and any other index-free single-constructor inductive
+            // (`Nonempty`): Lean's `rcasesCore` destructs a tuple pattern
+            // through `cases` for EVERY inductive (`processConstructors`,
+            // `Lean/Elab/Tactic/RCases.lean`), so `⟨x⟩` on `h : Nonempty α`
+            // binds `x : α`. This arm used to RENAME `h` to `x` instead, which
+            // left `x : Nonempty α` where Lean has `x : α` (measured:
+            // `rintro ⟨x⟩` and `obtain ⟨x⟩ := h` on `Nonempty`). Indexed
+            // families (`Eq`, `HEq`, `Acc`) keep their special handling.
+            || state.env.get_inductive(name).is_some_and(|ind| {
+                ind.constructor_names.len() == 1 && ind.num_indices == 0
+            })
     });
 
     if !destructible {
@@ -843,8 +1126,10 @@ fn destruct_hypothesis(
         // `TacticError`, never a silent success (which would let a wrong /
         // over-long pattern close the goal with a false `proved`).
         return match sub_patterns {
-            [] => Ok(()),
+            // `⟨⟩`: Lean splits one level, every field `_`.
+            [] => super::rcases_empty::split_one_level(state, hyp_name, inductive.as_ref()),
             [RIntroPattern::Name(new_name)] => rename_hypothesis(state, hyp_name, new_name),
+            [RIntroPattern::Clear] => mark_hypothesis_for_clear(state, hyp_name),
             [RIntroPattern::Wildcard | RIntroPattern::Rfl | RIntroPattern::Or(_)] => Ok(()),
             _ => Err(TacticError::InvalidTarget {
                 tactic: "rcases".into(),
@@ -918,30 +1203,16 @@ fn destruct_hypothesis(
         .map(|d| d.fvar)
         .collect();
 
-    // Lean's `rcases` flattening rule: when there are MORE flat patterns than
-    // the constructor has fields (N > M), the first M-1 patterns map to the
-    // first M-1 fields and the REMAINING patterns (indices M-1..N) group into a
-    // single `Tuple` applied recursively to the LAST field. So `⟨a, b, c⟩` on
-    // `a ∧ (b ∧ c)` (And has 2 fields) becomes `⟨a, ⟨b, c⟩⟩`: `a` binds the
-    // left field, `⟨b, c⟩` recursively destructs the right field. If that last
-    // field is itself a one-constructor inductive the recursion succeeds; if it
-    // is atomic (e.g. `⟨a, b, c⟩` on `p ∧ q` with `q : Prop`) the grouped tuple
-    // of >1 patterns hits the non-destructible arm above and ERRORS — a wrong /
-    // over-long pattern can never silently succeed.
-    let grouped_last: Vec<RIntroPattern>;
-    let effective: &[RIntroPattern] = if num_fields >= 1 && sub_patterns.len() > num_fields {
-        // Build [p_0, .., p_{M-2}, Tuple(p_{M-1}, .., p_{N-1})].
-        grouped_last = sub_patterns[..num_fields - 1]
-            .iter()
-            .cloned()
-            .chain(std::iter::once(RIntroPattern::Tuple(
-                sub_patterns[num_fields - 1..].to_vec(),
-            )))
-            .collect();
-        &grouped_last
-    } else {
-        sub_patterns
-    };
+    // Lean's `processConstructor`: without `@`, the patterns go to the
+    // constructor's EXPLICIT fields (an implicit field is left unnamed); and
+    // when there are MORE patterns than fields, the last field takes the rest
+    // as one tuple, so `⟨a, b, c⟩` on `a ∧ (b ∧ c)` (And has 2 fields) reads
+    // `⟨a, ⟨b, c⟩⟩`. If that last field is atomic (e.g. `⟨a, b, c⟩` on `p ∧ q`
+    // with `q : Prop`) the grouped tuple of >1 patterns hits the
+    // non-destructible arm above and ERRORS — a wrong / over-long pattern can
+    // never silently succeed.
+    let explicit_fields = field_explicitness(&state.env, inductive.as_ref(), 0, num_fields);
+    let effective = process_constructor(&explicit_fields, args, sub_patterns);
 
     // Apply each (possibly re-grouped) sub-pattern to the corresponding field in
     // TWO passes, so that a field whose pattern CASE-SPLITS the goal (`Or`, or a
@@ -974,6 +1245,9 @@ fn destruct_hypothesis(
             RIntroPattern::Name(new_name) => {
                 rename_field_in_all_goals(state, *fvar, new_name);
             }
+            RIntroPattern::Clear => {
+                rename_field_in_all_goals(state, *fvar, &clear_marker(*fvar));
+            }
             RIntroPattern::Wildcard => {
                 // Keep the generated field name in every branch; nothing to do.
             }
@@ -997,12 +1271,12 @@ fn destruct_hypothesis(
 /// branches, a later field's FVar is present (under its generated name) in each
 /// branch. Renaming it in only the front goal strands it in the others. This
 /// renames it wherever it appears so all branches agree.
-fn rename_field_in_all_goals(state: &mut ProofState, field_fvar: FVarId, new_name: &str) {
+fn rename_field_in_all_goals(state: &mut ProofState, field_fvar: FVarId, new_name: &SurfaceName) {
     state.invalidate_tc_cache();
     for goal in &mut state.goals {
         for decl in &mut goal.local_ctx {
             if decl.fvar == field_fvar {
-                decl.name = new_name.to_string();
+                decl.name = new_name.clone();
             }
         }
     }
@@ -1111,14 +1385,17 @@ fn apply_subpattern_to_field(
             })?;
             split_or_hypothesis(state, &field_name, alternatives)
         }
-        RIntroPattern::Tuple(sub) | RIntroPattern::Anonymous(sub) => {
+        RIntroPattern::Tuple(_) | RIntroPattern::Anonymous(_) | RIntroPattern::Explicit(_) => {
             // Recurse: destruct this field by its current generated name so the
             // nested casesOn composes with the outer one.
             let field_name = current_field_name(state, field_fvar).ok_or_else(|| {
                 TacticError::HypothesisNotFound("rintro: nested field hypothesis not found".into())
             })?;
-            destruct_hypothesis(state, &field_name, sub)
+            let (args, sub) = as_tuple(pattern);
+            destruct_hypothesis(state, &field_name, &sub, args)
         }
+        RIntroPattern::Clear => rename_field_by_fvar(state, field_fvar, &clear_marker(field_fvar)),
+        RIntroPattern::Typed(..) => Err(typed_pattern_needs_elaboration()),
     }
 }
 
@@ -1149,7 +1426,7 @@ fn substitute_field(state: &mut ProofState, field_fvar: FVarId) -> TacticResult 
 }
 
 /// Look up a field hypothesis's current name by its FVar in the front goal.
-fn current_field_name(state: &ProofState, field_fvar: FVarId) -> Option<String> {
+fn current_field_name(state: &ProofState, field_fvar: FVarId) -> Option<SurfaceName> {
     state
         .current_goal()?
         .local_ctx
@@ -1162,13 +1439,13 @@ fn current_field_name(state: &ProofState, field_fvar: FVarId) -> Option<String> 
 fn rename_field_by_fvar(
     state: &mut ProofState,
     field_fvar: FVarId,
-    new_name: &str,
+    new_name: &SurfaceName,
 ) -> TacticResult {
     state.invalidate_tc_cache();
     let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
     for decl in &mut goal.local_ctx {
         if decl.fvar == field_fvar {
-            decl.name = new_name.to_string();
+            decl.name = new_name.clone();
             return Ok(());
         }
     }
@@ -1187,14 +1464,16 @@ fn rename_field_by_fvar(
 /// ENSURES: On Err(HypothesisNotFound), no hypothesis with `old_name` exists in the current goal
 pub(crate) fn rename_hypothesis(
     state: &mut ProofState,
-    old_name: &str,
-    new_name: &str,
+    old_name: &SurfaceName,
+    new_name: &SurfaceName,
 ) -> TacticResult {
+    super::names::require_binding_name(old_name, "rintro")?;
+    super::names::require_binding_name(new_name, "rintro")?;
     state.invalidate_tc_cache();
-    let goal = &mut state.goals[0];
-    for decl in &mut goal.local_ctx {
-        if decl.name == old_name {
-            decl.name = new_name.to_string();
+    let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
+    for decl in goal.local_ctx.iter_mut().rev() {
+        if local_name_matches(&decl.name, old_name) {
+            decl.name = new_name.clone();
             return Ok(());
         }
     }

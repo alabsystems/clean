@@ -1,0 +1,5 @@
+(assume a0 (str.in_re "a" re.all))
+(assume a1 (not (forall ((re.all RegLan)) (str.in_re "a" re.all))))
+(step t1 (cl (= (forall ((re.all RegLan)) (str.in_re "a" re.all)) (str.in_re "a" re.all))) :rule qnt_rm_unused)
+(step t2 (cl (not (= (forall ((re.all RegLan)) (str.in_re "a" re.all)) (str.in_re "a" re.all))) (forall ((re.all RegLan)) (str.in_re "a" re.all)) (not (str.in_re "a" re.all))) :rule equiv_pos1)
+(step t3 (cl) :rule resolution :premises (a0 a1 t1 t2))

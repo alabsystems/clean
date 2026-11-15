@@ -1,0 +1,49 @@
+{
+  "sources": [
+    {
+      "module": "SemR",
+      "path": "../semr/SemR.lean"
+    },
+    {
+      "module": "MiniRust",
+      "path": "../semr/MiniRust.lean"
+    },
+    {
+      "module": "SemRMiniRust",
+      "path": "../semr/SemRMiniRust.lean"
+    },
+    {
+      "module": "TrustSemAllocationCapacity",
+      "path": "TrustSemAllocationCapacity.lean"
+    }
+  ],
+  "module": "TrustSemAllocationCapacity",
+  "roots": [
+    "TrustSem.AllocationCapacity.block_data_length",
+    "TrustSem.AllocationCapacity.block_size_valid",
+    "TrustSem.AllocationCapacity.requested_size_valid",
+    "TrustSem.AllocationCapacity.first_allocation_reachable",
+    "TrustSem.AllocationCapacity.second_allocation_reachable",
+    "TrustSem.AllocationCapacity.first_second_disjoint",
+    "TrustSem.AllocationCapacity.first_end_in_bounds",
+    "TrustSem.AllocationCapacity.second_end_in_bounds",
+    "TrustSem.AllocationCapacity.every_positive_in_bounds_address_overlaps",
+    "TrustSem.AllocationCapacity.wrong_first_address_false"
+  ],
+  "positive": [
+    {
+      "proof": "TrustSem.AllocationCapacity.first_allocation_reachable",
+      "goal": "TrustSem.AllocationCapacity.FirstAllocationGoal"
+    },
+    {
+      "proof": "TrustSem.AllocationCapacity.second_allocation_reachable",
+      "goal": "TrustSem.AllocationCapacity.SecondAllocationGoal"
+    }
+  ],
+  "negative": [
+    {
+      "proof": "TrustSem.AllocationCapacity.first_allocation_reachable",
+      "goal": "TrustSem.AllocationCapacity.WrongFirstAddressGoal"
+    }
+  ]
+}

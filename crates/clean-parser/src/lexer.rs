@@ -76,7 +76,6 @@ pub enum TokenKind {
     Private,
     Protected,
     Public, // Lean 4 module system: `public import`, `public section`, `public def`
-    Module, // Lean 4 module system: leading `module` header command
     Partial,
     Unsafe,
     Noncomputable,
@@ -118,7 +117,12 @@ pub enum TokenKind {
     /// Character literal: `'a'`, `'\n'`, `'\u{1F600}'`. Lean 4 `Char`.
     CharLit(char),
     StringLit(String),
-    /// Raw syntax quotation: `(foo $bar)` captured after a backtick
+    /// Raw syntax quotation: `(foo $bar)` captured after a backtick.
+    ///
+    /// A DOUBLE-backtick name literal ``` ``foo.bar ``` (Lean's
+    /// `doubleQuotedName`, the name RESOLVED to a declaration) is one token
+    /// whose content keeps the second backtick: `` `foo.bar ``. The elaborator
+    /// resolves it ([`DOUBLE_QUOTED_NAME_PREFIX`]).
     SyntaxQuote(String),
     /// Interpolated string: `s!"hello {name}"`, `m!"..."`, `f!"..."`
     /// Contains the prefix kind and the raw string body (content between quotes).
@@ -265,6 +269,14 @@ pub enum LexError {
     /// String literal missing its closing `"`.
     #[error("unterminated string")]
     UnterminatedString,
+    /// Block comment (`/- ... `) missing its closing `-/`. Lean reports
+    /// `unterminated comment` here; Clean used to run the skip loop to
+    /// end-of-input and silently return EOF, so a file whose whole body sat
+    /// inside an unterminated comment produced ZERO declarations and `clean
+    /// check` exited 0 — a malformed file reported as a clean pass
+    /// (`tests/lean4_compat/lean4_tests/2006.lean`).
+    #[error("unterminated comment")]
+    UnterminatedComment,
     /// Syntax quotation (backtick) missing its closing delimiter.
     #[error("unterminated syntax quote")]
     UnterminatedSyntaxQuote,
@@ -357,7 +369,6 @@ impl TokenKind {
             TokenKind::Private => Some("private"),
             TokenKind::Protected => Some("protected"),
             TokenKind::Public => Some("public"),
-            TokenKind::Module => Some("module"),
             TokenKind::Partial => Some("partial"),
             TokenKind::Unsafe => Some("unsafe"),
             TokenKind::Noncomputable => Some("noncomputable"),
@@ -383,6 +394,31 @@ impl TokenKind {
             _ => None,
         }
     }
+
+    /// Is this a token Clean lexes specially whose text core Lean treats as an
+    /// ORDINARY identifier?
+    ///
+    /// Clean mints dedicated tokens for some words that are not keywords in
+    /// Lean. Measured against pinned lean v4.30.0-rc2 by declaring each of
+    /// [`Self::as_keyword_str`]'s spellings as `def <word> : Nat := 0` inside a
+    /// namespace: exactly these five are accepted as plain identifiers (`lemma`
+    /// is a command only once Mathlib is imported). Every other spelling in
+    /// that table is a Lean keyword. A name printer must therefore write
+    /// `Eq.rec` and `rfl`, not `Eq.«rec»` and `«rfl»`. (`module`, the sixth
+    /// such word measured, is no longer a token at all: it lexes as an
+    /// identifier and only the file header reads it as a keyword —
+    /// `Parser::file`.)
+    #[must_use]
+    pub(crate) fn is_core_lean_identifier_word(&self) -> bool {
+        matches!(
+            self,
+            TokenKind::Rfl
+                | TokenKind::Rec
+                | TokenKind::Lemma
+                | TokenKind::Codata
+                | TokenKind::Codef
+        )
+    }
 }
 
 /// A token with its span
@@ -390,12 +426,29 @@ impl TokenKind {
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
+    /// This identifier token contained guillemet-escaped text. The text is
+    /// still one string component; this flag prevents keyword reinterpretation.
+    pub ident_escaped: bool,
+    /// This `Ident` token is a Lean 4.8.0 KEYWORD (`crate::lean_keywords`):
+    /// its unescaped text is an identifier-shaped token of Lean's token
+    /// table, and it is a whole identifier in Lean's scan — not glued by a
+    /// `.` to a preceding token (`x.nomatch`, `.nomatch`, `Foo.nomatch`) nor
+    /// to a following identifier part (`nomatch.foo`). Lean reads it as that
+    /// keyword, never as a name, so the parser refuses it wherever a name is
+    /// bound or declared, and a reference spelled so resolves to nothing.
+    pub lean_keyword: bool,
     /// Whether this token is preceded by a newline in the original source.
     ///
     /// Used for limited layout-sensitive parsing (e.g., disambiguating `let` bodies).
     pub preceded_by_newline: bool,
-    /// Column at token start: 0-based byte offset from the last newline (or start of input).
-    /// Matches Lean 4's byte-offset column model.
+    /// Column at token start: 0-based count of CODEPOINTS from the last
+    /// newline (or start of input), which is Lean 4's column model —
+    /// `FileMap.toPosition` counts one per `String.Pos.next`
+    /// (`Lean/Data/Position.lean`, `toColumn`), and `checkColGe` /
+    /// `checkColGt` compare those columns. It used to be a byte offset, so
+    /// every token after a multi-byte character on its line (`·` is two bytes)
+    /// sat one column right of where Lean puts it: a bullet's content column
+    /// disagreed with the lines aligned under it.
     pub col: u32,
     /// 1-based line number at token start.
     pub line: u32,
@@ -417,6 +470,8 @@ impl Token {
         Self {
             kind,
             span,
+            ident_escaped: false,
+            lean_keyword: false,
             preceded_by_newline,
             col,
             line,
@@ -429,10 +484,12 @@ impl Token {
     /// - Returns Token with `kind == TokenKind::Eof`
     /// - `span.start == span.end == pos` (zero-width span)
     #[must_use]
-    pub fn eof(pos: usize, preceded_by_newline: bool, col: u32, line: u32) -> Self {
+    pub(crate) fn eof(pos: usize, preceded_by_newline: bool, col: u32, line: u32) -> Self {
         Self {
             kind: TokenKind::Eof,
             span: Span::new(pos, pos),
+            ident_escaped: false,
+            lean_keyword: false,
             preceded_by_newline,
             col,
             line,
@@ -446,9 +503,10 @@ impl Token {
 /// Handles Unicode operators, nested block comments, and line comments.
 pub struct Lexer<'a> {
     chars: Peekable<CharIndices<'a>>,
+    ident_escaped: bool,
     pos: usize,
     /// Byte offset of the start of the current line (after the last `\n`).
-    /// Used to compute column as `pos - line_start`.
+    /// Columns are counted in codepoints from here (`codepoint_column`).
     line_start: usize,
     /// 1-based line number, incremented on each `\n`.
     line: u32,
@@ -465,6 +523,23 @@ pub struct Lexer<'a> {
     /// (`/-! ... -/`) and ordinary block comments (`/- ... -/`) are not
     /// recorded.
     doc_comments: Vec<DocComment>,
+    /// The spans of module docs (`/-! ... -/`) skipped as trivia, in source
+    /// order. Pinned Lean lexes a module doc, like a declaration doc, as a
+    /// token rather than whitespace (`Lean.Parser.whitespace`), so the file
+    /// header ends at one; the parser reads these to end it there.
+    module_docs: Vec<Span>,
+    /// Set when a block comment ran to end-of-input without its closing `-/`.
+    /// `skip_whitespace` cannot return an error (it yields `bool`), so the flag
+    /// is raised there and drained by `next_token`, which emits a single
+    /// `Error(UnterminatedComment)` token in place of the EOF that would
+    /// otherwise silently end the file.
+    unterminated_comment: bool,
+    /// The whole input, for computing codepoint columns.
+    input: &'a str,
+    /// `(line_start, byte, column)` of the last column computed, so a line's
+    /// columns are counted incrementally: token starts only move forward, so
+    /// each byte of a line is counted once however many tokens it holds.
+    column_cache: (usize, usize, usize),
 }
 
 impl<'a> Lexer<'a> {
@@ -477,12 +552,33 @@ impl<'a> Lexer<'a> {
     pub fn new(input: &'a str) -> Self {
         Self {
             chars: input.char_indices().peekable(),
+            ident_escaped: false,
             pos: 0,
             line_start: 0,
             line: 1,
             prev_char: None,
             doc_comments: Vec::new(),
+            module_docs: Vec::new(),
+            unterminated_comment: false,
+            input,
+            column_cache: (0, 0, 0),
         }
+    }
+
+    /// Lean's column of the byte position `start` on the current line: the
+    /// number of codepoints between the line start and `start`
+    /// (`Lean/Data/Position.lean`, `FileMap.toPosition`/`toColumn`).
+    fn codepoint_column(&mut self, start: usize) -> u32 {
+        let (cached_line, cached_byte, cached_col) = self.column_cache;
+        let (from, base) =
+            if cached_line == self.line_start && (self.line_start..=start).contains(&cached_byte) {
+                (cached_byte, cached_col)
+            } else {
+                (self.line_start, 0)
+            };
+        let col = base + self.input.get(from..start).map_or(0, |s| s.chars().count());
+        self.column_cache = (self.line_start, start, col);
+        u32::try_from(col).unwrap_or(u32::MAX)
     }
 
     /// Tokenize all input into a vector of tokens.
@@ -509,7 +605,15 @@ impl<'a> Lexer<'a> {
     /// - Token vector matches `tokenize(input)` exactly
     /// - Doc comments are in source order with spans within `0..input.len()`
     #[must_use]
-    pub fn tokenize_with_docs(input: &str) -> (Vec<Token>, Vec<DocComment>) {
+    pub(crate) fn tokenize_with_docs(input: &str) -> (Vec<Token>, Vec<DocComment>) {
+        let (tokens, docs, _module_docs) = Self::tokenize_with_all_docs(input);
+        (tokens, docs)
+    }
+
+    /// [`Lexer::tokenize_with_docs`], also returning the spans of the module
+    /// docs (`/-! ... -/`) skipped, in source order.
+    #[must_use]
+    pub(crate) fn tokenize_with_all_docs(input: &str) -> (Vec<Token>, Vec<DocComment>, Vec<Span>) {
         let mut lexer = Lexer::new(input);
         let mut tokens = Vec::new();
         loop {
@@ -520,7 +624,7 @@ impl<'a> Lexer<'a> {
                 break;
             }
         }
-        (tokens, lexer.doc_comments)
+        (tokens, lexer.doc_comments, lexer.module_docs)
     }
 
     fn peek_char(&mut self) -> Option<char> {
@@ -628,7 +732,10 @@ impl<'a> Lexer<'a> {
                                     }
                                 }
                                 Some((_, ch)) => text.push(ch),
-                                None => break,
+                                None => {
+                                    self.unterminated_comment = true;
+                                    break;
+                                }
                             }
                         }
                         self.doc_comments.push(DocComment::new(
@@ -636,7 +743,9 @@ impl<'a> Lexer<'a> {
                             text.trim().to_string(),
                         ));
                     } else {
-                        // Block comment, skip to -/
+                        // Block comment, skip to -/. A `!` after the `/-`
+                        // makes it a module doc, whose span is recorded.
+                        let is_module_doc = self.peek_char() == Some('!');
                         let mut depth = 1;
                         while depth > 0 {
                             match self.next_char() {
@@ -653,9 +762,15 @@ impl<'a> Lexer<'a> {
                                     self.next_char();
                                     depth -= 1;
                                 }
-                                None => break,
+                                None => {
+                                    self.unterminated_comment = true;
+                                    break;
+                                }
                                 _ => {}
                             }
+                        }
+                        if is_module_doc {
+                            self.module_docs.push(Span::new(start, self.pos));
                         }
                     }
                 } else {
@@ -676,9 +791,10 @@ impl<'a> Lexer<'a> {
 
     pub fn next_token(&mut self) -> Token {
         let preceded_by_newline = self.skip_whitespace();
+        self.ident_escaped = false;
 
         let start = self.pos;
-        let col = (start - self.line_start) as u32;
+        let col = self.codepoint_column(start);
         let line = self.line;
 
         // The character immediately preceding this token (after any whitespace
@@ -688,6 +804,18 @@ impl<'a> Lexer<'a> {
         // (`.5`, at a token boundary) from a projection dot (`x.5`).
         let preceding_char = self.prev_char;
 
+        if self.unterminated_comment {
+            // Drain once, so the error is reported exactly one time and the
+            // stream then ends normally.
+            self.unterminated_comment = false;
+            return Token::new(
+                TokenKind::Error(LexError::UnterminatedComment),
+                Span::new(start, start),
+                preceded_by_newline,
+                col,
+                line,
+            );
+        }
         let Some((_, c)) = self.next_char() else {
             return Token::eof(start, preceded_by_newline, col, line);
         };
@@ -726,7 +854,7 @@ impl<'a> Lexer<'a> {
                 // Could be underscore or start of identifier
                 // Use is_ident_continue to properly handle _' _? _! etc.
                 if self.peek_char().is_some_and(is_ident_continue) {
-                    self.lex_ident(start, c)
+                    self.lex_ident(start, c, preceding_char)
                 } else {
                     TokenKind::Underscore
                 }
@@ -1318,18 +1446,34 @@ impl<'a> Lexer<'a> {
             'r' if self.peek_is_raw_string() => self.lex_raw_string(),
 
             // Identifiers and keywords
-            c if is_ident_start(c) => self.lex_ident(start, c),
+            c if is_ident_start(c) => self.lex_ident(start, c, preceding_char),
 
             _ => TokenKind::Error(LexError::UnexpectedChar(c)),
         };
 
-        Token::new(
+        let mut token = Token::new(
             kind,
             Span::new(start, self.pos),
             preceded_by_newline,
             col,
             line,
-        )
+        );
+        token.ident_escaped = self.ident_escaped;
+        token.lean_keyword = matches!(&token.kind, TokenKind::Ident(text)
+            if !self.ident_escaped
+                && preceding_char != Some('.')
+                && !self.dotted_identifier_part_follows()
+                && crate::lean_keywords::is_lean_keyword(text));
+        token
+    }
+
+    /// Whether the next characters continue the identifier just lexed with
+    /// another dotted part (`.` then an identifier start or `«`), which makes
+    /// the whole a single, longer identifier in Lean's scan (`identFnAux`).
+    fn dotted_identifier_part_follows(&self) -> bool {
+        let mut ahead = self.chars.clone();
+        matches!(ahead.next(), Some((_, '.')))
+            && matches!(ahead.next(), Some((_, c)) if c == '«' || is_ident_start(c))
     }
 
     /// Lex a syntax quote starting with a backtick.
@@ -1340,6 +1484,43 @@ impl<'a> Lexer<'a> {
         let Some(next) = self.peek_char() else {
             return TokenKind::SyntaxQuote(content);
         };
+
+        // ``` ``foo.bar ```: Lean's `doubleQuotedName` is ONE token. It used to
+        // lex as an empty quote followed by `` `foo.bar ``, so the parser saw an
+        // application of the empty quote to the name and the elaborator
+        // reported "Too many arguments" (upstream tests/elab/2077.lean,
+        // ``` .contains <| ``foo ```). Only a double backtick followed by an
+        // identifier start (or `«`) is taken; anything else keeps the old
+        // reading.
+        if next == '`' {
+            let mut ahead = self.chars.clone();
+            ahead.next();
+            if matches!(ahead.next(), Some((_, c)) if c == '«' || is_ident_start(c)) {
+                self.next_char(); // the second backtick
+                content.push(DOUBLE_QUOTED_NAME_PREFIX);
+                while let Some(c) = self.peek_char() {
+                    if is_ident_continue(c) || c == '.' {
+                        self.next_char();
+                        content.push(c);
+                        continue;
+                    }
+                    if c == '«' {
+                        self.next_char();
+                        if let Err(err) = self.lex_guillemet_segment(&mut content) {
+                            return match err {
+                                TokenKind::Error(LexError::UnterminatedQuotedIdent) => {
+                                    TokenKind::Error(LexError::UnterminatedSyntaxQuote)
+                                }
+                                _ => err,
+                            };
+                        }
+                        continue;
+                    }
+                    break;
+                }
+                return TokenKind::SyntaxQuote(content);
+            }
+        }
 
         if let Some(close) = matching_delim(next) {
             // Quoted block like `(…)`, `[…]`, `{…}`
@@ -1368,8 +1549,9 @@ impl<'a> Lexer<'a> {
             // Quoted identifier or dotted name: `foo, `Foo.bar
             while let Some(c) = self.peek_char() {
                 if is_ident_continue(c) || c == '.' {
-                    let (_, ch) = self.next_char().expect("peek_char guaranteed a character");
-                    content.push(ch);
+                    // `next_char` consumes exactly the character `peek_char` saw.
+                    self.next_char();
+                    content.push(c);
                     continue;
                 }
                 if c == '«' {
@@ -1734,6 +1916,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_guillemet_ident(&mut self) -> TokenKind {
+        self.ident_escaped = true;
         let mut s = String::new();
         let mut escaped = true;
         if let Err(err) = self.lex_guillemet_segment(&mut s) {
@@ -1962,7 +2145,7 @@ impl<'a> Lexer<'a> {
         }
     }
 
-    fn lex_ident(&mut self, _start: usize, first: char) -> TokenKind {
+    fn lex_ident(&mut self, _start: usize, first: char, preceding_char: Option<char>) -> TokenKind {
         let mut s = String::new();
         let mut escaped = false;
         s.push(first);
@@ -1971,6 +2154,22 @@ impl<'a> Lexer<'a> {
         }
 
         if escaped {
+            self.ident_escaped = true;
+            return TokenKind::Ident(s);
+        }
+
+        // A word glued to a preceding `.` is never a keyword. Lean 4.8 scans
+        // `Value.partial` / `x.open` as ONE identifier (`identFnAux` checks the
+        // token table against the whole dotted name, which no keyword is), and
+        // reads the leading-dot form `.partial` with `dotIdent := "."
+        // checkNoWsBefore rawIdent` — `rawIdent` takes any identifier-shaped
+        // word, keywords included (`Lean/Parser/Term.lean`). Clean lexes the
+        // dotted parts separately, so the keyword table must not claim the
+        // part after the dot: trust-ir's `Value` has a constructor `«partial»`
+        // and every `| .partial _ =>` arm used to die as "expected pattern,
+        // got Partial" (G01). A keyword BEFORE a dot (`Prop.foo`) is
+        // unaffected; the parser handles that head itself.
+        if preceding_char == Some('.') {
             return TokenKind::Ident(s);
         }
 
@@ -2037,7 +2236,6 @@ impl<'a> Lexer<'a> {
             "private" => TokenKind::Private,
             "protected" => TokenKind::Protected,
             "public" => TokenKind::Public,
-            "module" => TokenKind::Module,
             "partial" => TokenKind::Partial,
             "unsafe" => TokenKind::Unsafe,
             "noncomputable" => TokenKind::Noncomputable,
@@ -2112,9 +2310,34 @@ impl<'a> Lexer<'a> {
 /// `Prod a (ˢ b)` instead of erroring, and swallows a stray `ˢ` into a preceding
 /// name. Excluding them makes clean reject them loudly, matching Lean's
 /// "expected token".
+///
+/// The same holds for the modifier and superscript letters of the "Phonetic
+/// Extensions" blocks (U+1D2C..=U+1D61 and U+1D6B..=U+1DBF — `ᵀ`, `ᶜ`, `ᵃ`,
+/// …): Lean's `isIdRest` admits of that range only the SUBSCRIPT letters
+/// U+1D62..=U+1D6A (`isSubScriptAlnum`), so `xᶜ` (`Compl.compl x`, Mathlib's
+/// `Pi.compl_apply`) is the identifier `x` followed by the postfix token `ᶜ`.
+/// Treating `ᶜ` as an identifier character lexed `xᶜ` as ONE unknown name
+/// while `(x i)ᶜ` worked, measured 2026-09-11.
 fn is_modifier_letter(c: char) -> bool {
     ('\u{02B0}'..='\u{02FF}').contains(&c)
 }
+
+/// The modifier/superscript letters of the Phonetic Extensions blocks that
+/// end an identifier but may START a token of their own: a lone `ᶜ` / `ᵀ` is
+/// the operator token the imported `postfix:1024 "ᶜ" => compl` (Mathlib
+/// `Order/Notation.lean`) is matched against, and it is matched as the
+/// identifier-shaped token it always lexed to after `)`. Excluding the range
+/// from `is_ident_start` as well turned `(x i)ᶜ` into "unknown operator or
+/// character" — measured 2026-09-11, the day the exclusion was added — so
+/// only `is_ident_continue` refuses it.
+fn is_superscript_modifier_letter(c: char) -> bool {
+    ('\u{1D2C}'..='\u{1D61}').contains(&c) || ('\u{1D6B}'..='\u{1DBF}').contains(&c)
+}
+
+/// The first character of a [`TokenKind::SyntaxQuote`] content that came from a
+/// double-backtick name literal ``` ``foo ```: the content is `` `foo ``, and the
+/// elaborator resolves `foo` to the declaration it names before quoting it.
+pub const DOUBLE_QUOTED_NAME_PREFIX: char = '`';
 
 fn is_ident_start(c: char) -> bool {
     !is_modifier_letter(c)
@@ -2150,7 +2373,9 @@ fn to_radix_digits(mut n: u64, radix: u32) -> String {
 }
 
 fn is_ident_continue(c: char) -> bool {
-    !is_modifier_letter(c) && (c.is_alphanumeric() || c == '_' || c == '\'' || c == '?' || c == '!')
+    !is_modifier_letter(c)
+        && !is_superscript_modifier_letter(c)
+        && (c.is_alphanumeric() || c == '_' || c == '\'' || c == '?' || c == '!')
 }
 
 /// Whether a `'` byte-adjacent to `prev` continues a notation SYMBOL rather
@@ -2243,6 +2468,84 @@ mod tests {
             .map(|t| t.kind)
             .filter(|k| *k != TokenKind::Eof)
             .collect()
+    }
+
+    /// `ᶜ` (U+1D9C, `Compl.compl` postfix) is not an identifier character in
+    /// Lean: `xᶜ` is the identifier `x` followed by the postfix token, exactly
+    /// as `(x i)ᶜ` always lexed. Subscript letters (U+1D62..=U+1D6A) and
+    /// numeric subscripts stay identifier characters (`xᵢ`, `x₁`).
+    #[test]
+    fn test_superscript_modifier_letter_ends_an_identifier() {
+        let toks = lex("xᶜ");
+        assert_eq!(
+            toks,
+            vec![
+                TokenKind::Ident("x".to_string()),
+                TokenKind::Ident("ᶜ".to_string())
+            ],
+            "`xᶜ` must lex as `x` + the operator token `ᶜ`, got {toks:?}"
+        );
+        assert_eq!(
+            lex("(x i)ᶜ").last(),
+            Some(&TokenKind::Ident("ᶜ".to_string())),
+            "a lone `ᶜ` after `)` keeps lexing to the token the postfix notation matches"
+        );
+        let transpose = lex("Mᵀ");
+        assert_eq!(transpose.first(), Some(&TokenKind::Ident("M".to_string())));
+        assert_eq!(lex("xᵢ"), vec![TokenKind::Ident("xᵢ".to_string())]);
+        assert_eq!(lex("x₁"), vec![TokenKind::Ident("x₁".to_string())]);
+    }
+
+    /// A block comment that never closes must be REPORTED, not skipped to
+    /// end-of-input in silence.
+    ///
+    /// Both comment loops used to `break` on EOF with `depth > 0`, so a file
+    /// whose entire body sat inside an unterminated `/-` lexed to nothing,
+    /// parsed to zero declarations, and `clean check` exited **0** — a
+    /// malformed file reported as a clean pass. Measured on
+    /// `tests/lean4_compat/lean4_tests/2006.lean`, which is a lone `/-`; real
+    /// Lean v4.30.0-rc2 answers `error: unterminated comment` on it.
+    #[test]
+    fn test_unterminated_block_comment_is_an_error_not_silent_eof() {
+        assert_eq!(
+            lex("/-"),
+            vec![TokenKind::Error(LexError::UnterminatedComment)],
+            "a bare unterminated block comment must lex to an error token"
+        );
+        assert!(
+            lex("/- swallowed\ndef f : Nat := 1\n")
+                .contains(&TokenKind::Error(LexError::UnterminatedComment)),
+            "an unterminated comment that swallows real declarations must report"
+        );
+        // The doc-comment loop has the same EOF break and the same fix.
+        assert!(
+            lex("/-- unterminated doc").contains(&TokenKind::Error(LexError::UnterminatedComment)),
+            "an unterminated DOC comment must report too"
+        );
+        // Nesting is tracked, so an inner pair does not satisfy the outer one.
+        assert!(
+            lex("/- outer /- inner -/").contains(&TokenKind::Error(LexError::UnterminatedComment)),
+            "a closed INNER comment must not be read as closing the outer one"
+        );
+    }
+
+    /// The negative half: well-formed comments keep lexing to nothing at all,
+    /// so the guard above cannot be satisfied by simply erroring on every `/-`.
+    #[test]
+    fn test_terminated_comments_remain_silent_trivia() {
+        for src in [
+            "/- plain -/",
+            "/-- doc -/",
+            "/- outer /- inner -/ still outer -/",
+            "-- line comment",
+        ] {
+            assert_eq!(lex(src), vec![], "`{src}` must lex to no tokens");
+        }
+        assert_eq!(
+            lex("/- c -/ def"),
+            vec![TokenKind::Def],
+            "a closed comment must not disturb the token after it"
+        );
     }
 
     #[test]
@@ -2373,6 +2676,18 @@ mod tests {
     #[test]
     fn test_syntax_quote_identifiers() {
         assert_eq!(lex("`foo"), vec![TokenKind::SyntaxQuote("foo".to_string())]);
+        // ``` ``foo ``` is ONE token, not an empty quote applied to `` `foo ``.
+        assert_eq!(
+            lex("``foo"),
+            vec![TokenKind::SyntaxQuote("`foo".to_string())]
+        );
+        assert_eq!(
+            lex("``Foo.bar baz"),
+            vec![
+                TokenKind::SyntaxQuote("`Foo.bar".to_string()),
+                TokenKind::Ident("baz".to_string())
+            ]
+        );
         assert_eq!(
             lex("`Foo.bar"),
             vec![TokenKind::SyntaxQuote("Foo.bar".to_string())]

@@ -1,7 +1,7 @@
 {
   "schema": "evalir-adequacy-grid/v1",
-  "what": "Per-constructor, per-field adequacy account of EvalIR's encoding of the 28 constructed trust_ir::Inst variants — the B-SEM §4(c) grid. Every syntax field of every IRInst constructor is classified; the erased align slots and the measured W1-W4 and float-residue executor divergences have their permanent rows here.",
-  "constructors": 28,
+  "what": "Per-constructor, per-field adequacy account of EvalIR's encoding of the constructed-and-modelled trust_ir::Inst variants — the B-SEM §4(c) grid. The count is DERIVED (evalir_coverage.derive_denominator over EMITTED_INSTS and the IRInst inductive), never typed here. Every syntax field of every IRInst constructor is classified; the erased align slots and the measured W1-W4, float-residue and Phase-B executor divergences have their permanent rows here.",
+  "constructors": 33,
   "rows": [
     {
       "kind": "field",
@@ -193,10 +193,7 @@
       "index": 0,
       "var": "t",
       "ty": "IRTy",
-      "state": "irrelevance-proved-await-mint",
-      "theorem": "ir_exec_load_ty_irrelevant",
-      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
-      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+      "state": "relevant-by-design"
     },
     {
       "kind": "field",
@@ -348,10 +345,7 @@
       "index": 1,
       "var": "mt",
       "ty": "IRTy",
-      "state": "irrelevance-proved-await-mint",
-      "theorem": "ir_exec_ptrmeta_mt_irrelevant",
-      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
-      "since": "W5 2026-08-25 (authored; first kernel run is the big-box obligation)"
+      "state": "relevant-by-design"
     },
     {
       "kind": "field",
@@ -728,6 +722,96 @@
       "state": "relevant-by-design"
     },
     {
+      "kind": "field",
+      "constructor": "borrow",
+      "index": 0,
+      "var": "p",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "copy",
+      "index": 0,
+      "var": "t",
+      "ty": "IRTy",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "copy",
+      "index": 1,
+      "var": "a",
+      "ty": "Nat",
+      "state": "relevant-by-design"
+    },
+    {
+      "kind": "field",
+      "constructor": "atomic_fetch_add_relaxed_u64_seq",
+      "index": 0,
+      "var": "pointer",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_atomic_fetch_add_relaxed_u64_seq_pointer_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "2026-09-24 legacy refusal only; ByteV1 operand semantics are separate"
+    },
+    {
+      "kind": "field",
+      "constructor": "atomic_fetch_add_relaxed_u64_seq",
+      "index": 1,
+      "var": "value",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_atomic_fetch_add_relaxed_u64_seq_value_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "2026-09-24 legacy refusal only; ByteV1 operand semantics are separate"
+    },
+    {
+      "kind": "field",
+      "constructor": "atomic_fetch_add_relaxed_usize_seq",
+      "index": 0,
+      "var": "bits",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_atomic_fetch_add_relaxed_usize_seq_bits_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "2026-09-24 legacy refusal only; target-indexed ByteV1 semantics are separate"
+    },
+    {
+      "kind": "field",
+      "constructor": "atomic_fetch_add_relaxed_usize_seq",
+      "index": 1,
+      "var": "pointer",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_atomic_fetch_add_relaxed_usize_seq_pointer_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "2026-09-24 legacy refusal only; target-indexed ByteV1 semantics are separate"
+    },
+    {
+      "kind": "field",
+      "constructor": "atomic_fetch_add_relaxed_usize_seq",
+      "index": 2,
+      "var": "value",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_atomic_fetch_add_relaxed_usize_seq_value_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "2026-09-24 legacy refusal only; target-indexed ByteV1 semantics are separate"
+    },
+    {
+      "kind": "field",
+      "constructor": "release",
+      "index": 0,
+      "var": "pointer",
+      "ty": "Nat",
+      "state": "irrelevance-proved-await-mint",
+      "theorem": "ir_exec_release_pointer_irrelevant",
+      "theorem_source": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+      "since": "2026-11-08 syntax retention only; explicit legacy unmodelled result, not Rust Release irrelevance"
+    },
+    {
       "kind": "erased",
       "constructor": "load",
       "name": "align",
@@ -787,7 +871,7 @@
       "anchors": [
         {
           "file": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
-          "text": "CoreError::NoImage(format!(\"printed instruction"
+          "text": "is not an operand this reader knows on an `alloca`"
         },
         {
           "file": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
@@ -1015,6 +1099,158 @@
           "text": "interpret.rs:4005-4143"
         }
       ]
+    },
+    {
+      "kind": "delta",
+      "id": "copy-type-check-coarse",
+      "constructor": "copy",
+      "state": "declared-delta",
+      "clean": "ir_copy_eval checks the operand's SHAPE class against the declared type (bool / integer / float / thin pointer / fat pointer / unit / aggregate / function pointer / never) and faults type_error across classes — kernel witness ir_copy_ty_slot_is_read — but ACCEPTS within a class: two integer widths, the two signednesses, two aggregate ids, and the WHOLE thin-pointer family are indistinguishable to it. The enumeration is exhaustive as written: tuple/array/struct/enum share the aggregate class, and ptr_/ref_/refmut_/rawconst_/rawmut_/rc_ share the thin-pointer class WITH nullptr_, so `ir_copy_eval (IRTy.ref_ p) IRScalar.nullptr_` accepts where expect_ty faults",
+      "e2": "the reference's Inst::Copy arm calls expect_ty(operand, ty), a dynamic type EQUALITY on the value's own carried Ty, and faults type_error on any disagreement — width and aggregate id included",
+      "measured": "2026-09-10 at trust 0dd9d3e2d7, against `Inst::Copy` (interpret.rs:691-696 — `expect_ty(operand, ty)?` then a rebind of the same value) and `fn expect_ty` (interpret.rs:5548-5557 — `if &value.ty == ty { Ok(()) } else { type_error }`). The residual is TWO-WAY and both directions are declared here. ACCEPT-MORE: a width, signedness or aggregate-id disagreement passes the shape check and would fail expect_ty. REJECT-MORE, fail-closed: the Copy arm never calls reject_partial (interpret.rs:6506-6515; its message at interpret.rs:6500-6501 states that poison may only be copied or stored, never inspected), so the reference transports poison VERBATIM where ir_copy_eval faults type_error at ir_scalar_shape's class 0 — unreachable on the executed fragment, because the model's only producer of a bound undef_ is IRInst.undef, itself the declared delta `undef-execution`. This row exists rather than an irrelevance theorem for copy.t because copy.t is READ: IRScalar carries no type tag (an int_ does not say its width, an aggv does not say its id), which is the same design choice that lets a cell hold a value instead of a byte image, so expect_ty is not statable in this model and the finest decidable partition is the shape class. The chain's own three copies (`copy ptr`, `copy ptr`, `copy struct.0`) are all cross-class-correct, so neither direction bears on them",
+      "recorded_in": "this grid row is the permanent home; the reference arm and the model arm are read side by side in eval_ir_machine.rs's COPY comment block",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_copy_eval "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "ir_copy_ty_slot_is_read"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "enum-load-shape-directed",
+      "constructor": "load",
+      "state": "declared-delta",
+      "clean": "the encoding-aware load view decodes a matched aggregate type only when the cell holds a WORD-shaped scalar (ptr_ / nullptr_ / int_); at the same type an inline aggregate value passes through unchanged — kernel witness ir_view_agg_is_identity",
+      "e2": "the reference always decodes the BYTE IMAGE the store wrote, at the load's type, whatever produced it",
+      "measured": "2026-09-10 at trust 0dd9d3e2d7, against decode_value's Niche arm (interpret.rs:3766-3796) and the store-side niche check (interpret.rs:3538-3567). NEITHER SIDE FAULTS in this row: it is a VALUE divergence, not a fault-direction one. The two agree exactly when the model's store/load round-trip and the reference's encode/decode round-trip are both the identity on a valid value, which is the case on this chain: `as_deref` writes an aggregate into its own alloca and reads it back (sidecar text: `store enum.0 %5, ptr %1` then `%14 = load enum.0, ptr %1`), while `%2 = load enum.1, ptr %0` reads a real heap word at the SAME kind of type. The decision is SHAPE-directed inside a type-directed dispatch, and the identity arm is not an accident — it is what keeps the chain alive on both the None and the Some path, and what makes the whole extension conservative on the eighteen chains that predate it. The carrier-constructor half of the row is the same class read the other way: the reference turns any 8-byte word at a pointer-payload type into a pointer VALUE KIND through resolve_pointer_kind, so an integer carrier becomes NullPtr / Ptr / DanglingPtr there and stays an int_ here",
+      "recorded_in": "this grid row is the permanent home; the shape-tolerance rule is stated in ir_niche_image's doc and pinned by ir_view_agg_is_identity",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_load_view "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "ir_view_agg_is_identity"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "zero-address-is-not-null",
+      "constructor": "borrow",
+      "state": "declared-delta",
+      "clean": "the machine's null is the scalar IRScalar.nullptr_; `ptr_ Nat.zero` is an ORDINARY address in its own address space, so a live cell at address 0 is loaded, stored and borrowed like any other — kernel witness ir_borrow_no_provenance_is_ub covers the missing-cell case, not this one",
+      "e2": "the reference's resolve_pointer_kind maps address 0 to NullPtr before it looks for an allocation, so every dereference of it — Load, Store and Borrow alike — is UB 'null pointer dereference'",
+      "measured": "2026-09-10 at trust 0dd9d3e2d7, against `fn resolve_pointer_kind` (interpret.rs:5415-5423 — `if address == 0 { NullPtr } else if let Some(ptr) = self.try_pointer_from_address(address) { Ptr } else { DanglingPtr }`) and `fn expect_pointer` (interpret.rs:5648-5670). The direction is ACCEPT-MORE: the model continues where the reference is UB. This is the machine's PRE-EXISTING address-space convention, shared verbatim by ir_load_at and ir_store_at since the memory stage was written; it is recorded under `borrow` because Phase B is where it was measured, and it is reachable rather than theoretical — ir_alloca_k allocates at the machine's allocation counter, and every return-slot lemma is stated at an ABSTRACT counter, which includes zero. A zero test in the arms would close it and would also make each of them stuck at that abstract counter, so it is declared rather than taken",
+      "recorded_in": "this grid row is the permanent home; the reasoning is in eval_ir_machine.rs's BORROW comment block, which is also where the load/store sharing is stated",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_borrow_eval "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "ir_borrow_no_provenance_is_ub"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "borrow-one-past-the-end",
+      "constructor": "borrow",
+      "state": "declared-delta",
+      "clean": "ir_borrow_slot resolves the address through ir_mem_lookup and faults `ub bad_addr` when no LIVE cell answers; ir_alloc_cells materialises cells only at base .. base+k-1, so a one-past-the-end address has no cell and the borrow faults — kernel witness ir_borrow_no_provenance_is_ub, which is exactly this no-cell minor read at an empty memory",
+      "e2": "the reference's try_pointer_from_address has a SECOND loop that accepts `address == allocation.base + allocation.size`, so a one-past-the-end address resolves to Ptr rather than DanglingPtr and expect_pointer admits the borrow",
+      "measured": "2026-09-10 at trust 0dd9d3e2d7, against the second loop of `fn try_pointer_from_address` (interpret.rs:5396-5406) reached through `fn resolve_pointer_kind` (interpret.rs:5415-5423) and `fn expect_pointer` (interpret.rs:5648-5670). The direction is REJECT-MORE and therefore FAIL-CLOSED: the model refuses a borrow the reference performs, which can leave a chain stuck but cannot admit a false theorem. It is REACHABLE rather than theoretical — ir_gep_eval (the ir_gep_base off the ir_sum_idx sum) adds an unbounded offset with no bound check, so `ptr_ (base+k)` is constructible in the model exactly as it is in the reference — and it is SHARED verbatim with ir_load_at and ir_store_at, which resolve through the same ir_mem_lookup; it is recorded under `borrow` because Phase B's borrow arm is where it was measured. Closing it would mean giving the model an allocation table with bases and sizes rather than a flat cell list, which is a memory-model change and not a borrow-arm change, so it is declared rather than taken. The executed fragment does not exhibit it: the sidecar chain's geps are in-bounds field projections",
+      "recorded_in": "this grid row is the permanent home; the two-way residue is stated in eval_ir_machine.rs's BORROW comment block beside the address-zero one",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_borrow_slot "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_gep_eval "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_alloc_cells "
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "fat-null-lanes",
+      "constructor": "ptrfromparts",
+      "state": "declared-delta",
+      "clean": "a wide value is IRScalar.fat_ d md -- an ADDRESS and a WORD, with no null lane -- so ptr_from_parts over a null data pointer is `ub null_deref` (ir_ptrparts_eval) and over a null metadata pointer `type_error not_int` (ir_ptrparts_at)",
+      "e2": "eval_ptr_from_parts builds FatPtr { NullPtr, .. } -- validate_fat_pointer_value admits a Ptr, NullPtr or DanglingPtr data lane -- and, at a vtable kind, FatPtr { .., NullPtr }; the null fat pointer CONSTANT `{ 0, 0 }` is its const_value arm",
+      "measured": "2026-09-27 at trust-ir dcc5b9a3, read off eval_ptr_from_parts, validate_fat_pointer_value and const_value's null fat pointer arm. REJECT-MORE, FAIL-CLOSED: the model halts where the reference builds a value, which can leave a chain stuck but cannot admit a false theorem. The projector refuses a CONSTANT at container_len, container_vtable and dyn.N by name (the null pair is the only one the reference admits there), and none of the four E5 slices of real m0off bodies carries a null lane",
+      "recorded_in": "this grid row is the permanent home; the design is decision memo §23, and the projector's refusal is its `Inst::Const` arm",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_ptrparts_at "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_ptrparts_eval "
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "ptrmeta-kind-pair",
+      "constructor": "ptrmetadata",
+      "state": "declared-delta",
+      "clean": "the fat arm reads its word at the DECLARED metadata type alone (ir_ptrmeta_lane: a length at uint_ w, a vtable address at ptr_) and does not check that type against the POINTER type's canonical kind -- `pt` stays dropped (ir_exec_ptrmeta_pt_irrelevant) -- so a vtable word read at uint_ w binds an integer",
+      "e2": "eval_ptr_metadata refuses a declared metadata type that is not FatPtrKind::metadata_ty of the pointer type (type_error), a length for Slice/Str/ContainerLen and a thin Ptr for TraitObject/ContainerVtable",
+      "measured": "2026-09-27 at trust-ir dcc5b9a3, read off eval_ptr_metadata. ACCEPT-MORE, on ILL-TYPED input only: trust-ir's validator refuses the pair statically (PointerMetadataTypeMismatch), and the projector refuses it by name (check_metadata_ty), so no validated module and no projected module carries one; on a canonical pair the two answer alike, which the E5 slices measure (ir_e5_ptrmeta_mt_is_read, ir_e5_ptrmeta_len_word)",
+      "recorded_in": "this grid row is the permanent home; ir_ptrmeta_lane's comment block in eval_ir_machine.rs states the arm",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
+          "text": "def ir_ptrmeta_lane "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
+          "text": "def ir_exec_ptrmeta_pt_irrelevant "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_e5.rs",
+          "text": "ir_e5_ptrmeta_mt_is_read"
+        }
+      ]
+    },
+    {
+      "kind": "delta",
+      "id": "icmp-pointer-answers",
+      "constructor": "icmp",
+      "state": "declared-delta",
+      "clean": "ir_icmp_eq / ir_icmp_ne ANSWER on pointer-shaped operands (ir_eqb over the comparable ptr_ / nullptr_ / fnptr_ constructors); on a WIDE pointer they halt type_error not_int (ir_e5_icmp_eq_containerlen_refused and its five siblings), which is exact",
+      "e2": "eval_icmp refuses EVERY non-integer operand, thin pointer or wide: expect_int_value raises type_error ('expected integer value, got ptr'); trust-ir's Lean semantics (semICmpInst, 'ICmp: non-integer operands') refuses the same",
+      "measured": "2026-09-27 at trust-ir dcc5b9a3, by RUNNING the reference interpreter on tests/fixtures/e5/e5_m0off_slices.trust-ir.txt: e5::drive_control_thin_icmp (`icmp eq ptr %0, %0`) and e5::drive_ptr_eq (the `Arc::ptr_eq` fast path of <Name as PartialEq>::eq, `icmp eq fatptr<container_len>`) both end TypeError. ACCEPT-MORE on the THIN half: the model answers where the reference refuses, and the m0off callee sidecar carries 185 `icmp eq ptr` sites, so this is reachable, not theoretical. It is PRE-EXISTING (E5 found it, did not make it) and the wide half agrees. Closing it is a reference question -- the compiled program does compare pointers -- not a model one, so it is declared rather than taken",
+      "recorded_in": "this grid row is the permanent home; the measurement is tests/eval_ir/e5_fat_images.rs's E2 leg and decision memo §23",
+      "anchors": [
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_ops.rs",
+          "text": "def ir_icmp_eq "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_ops.rs",
+          "text": "def ir_scalar_cmpable "
+        },
+        {
+          "file": "crates/clean-verify/src/spec/core_spec/eval_ir_e5.rs",
+          "text": "ir_e5_icmp_eq_containerlen_refused"
+        }
+      ]
     }
   ],
   "dispatch": {
@@ -1077,7 +1313,7 @@
         "p",
         "vol"
       ],
-      "rhs": "ir_bind_result s rs (ir_load_eval s (ir_getd s p))"
+      "rhs": "ir_bind_result s rs (ir_load_view (ir_mod_encs m) t (ir_load_eval s (ir_getd s p)))"
     },
     "store": {
       "vars": [
@@ -1117,7 +1353,7 @@
         "mt",
         "p"
       ],
-      "rhs": "ir_bind_result s rs (ir_ptrmeta_eval (ir_getd s p))"
+      "rhs": "ir_bind_result s rs (ir_ptrmeta_eval mt (ir_getd s p))"
     },
     "ptrfromparts": {
       "vars": [
@@ -1239,15 +1475,49 @@
         "b"
       ],
       "rhs": "ir_bind_result s rs (ir_select_eval (ir_getd s c) (ir_getd s a) (ir_getd s b))"
+    },
+    "borrow": {
+      "vars": [
+        "p"
+      ],
+      "rhs": "ir_bind_result s rs (ir_borrow_eval (ir_mach_mem s) (ir_getd s p))"
+    },
+    "copy": {
+      "vars": [
+        "t",
+        "a"
+      ],
+      "rhs": "ir_bind_result s rs (ir_copy_eval t (ir_getd s a))"
+    },
+    "atomic_fetch_add_relaxed_u64_seq": {
+      "vars": [
+        "pointer",
+        "value"
+      ],
+      "rhs": "IRConfig.halted (IROutcome.unmodelled IRFault.width_bounded)"
+    },
+    "atomic_fetch_add_relaxed_usize_seq": {
+      "vars": [
+        "bits",
+        "pointer",
+        "value"
+      ],
+      "rhs": "IRConfig.halted (IROutcome.unmodelled IRFault.width_bounded)"
+    },
+    "release": {
+      "vars": [
+        "pointer"
+      ],
+      "rhs": "IRConfig.halted (IROutcome.unmodelled IRFault.width_bounded)"
     }
   },
   "totals": {
-    "rows": 97,
-    "field_rows": 83,
-    "relevant-by-design": 63,
-    "irrelevance-proved-await-mint": 20,
+    "rows": 113,
+    "field_rows": 92,
+    "relevant-by-design": 68,
+    "irrelevance-proved-await-mint": 24,
     "audit-pin": 3,
-    "declared-delta": 11
+    "declared-delta": 18
   },
   "provenance": {
     "derived_by": "scripts/evalir_adequacy_grid.py",
@@ -1255,15 +1525,19 @@
     "inputs": [
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_syntax.rs",
-        "sha256": "7bda24690daaa3cbc95bfff894f22b03567f43b9a81b5932092eb2eda2c3afd6"
+        "sha256": "1b3aecdf6306b9592bbfd861ae062d690ff39ef57e9dd5de0510389be82a7c42"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_machine.rs",
-        "sha256": "0576fbcf4ce542da4aa433e951777791f9fe8fca6020cbf75e6b94c943cb8b12"
+        "sha256": "479356908cffb5a9126203cd715ca2d47ca461a988c81d68f42de7a3429bd63f"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_adequacy.rs",
-        "sha256": "733dfdaf09f9b66ba70aba5fe440700c9684374a07308f9d372ab2bcab6b499f"
+        "sha256": "e48c7c27b8999b8805f3ef92481ff39db3449a86cc698c142306b3cac992cbf8"
+      },
+      {
+        "path": "crates/clean-verify/tests/eval_ir/census.rs",
+        "sha256": "2d785520100aacd746da40082cd733947ebe4890ef1f4feabbf21e5b647da602"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2a_synth.rs",
@@ -1271,7 +1545,7 @@
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2b_synth.rs",
-        "sha256": "79cf713e0ba0985ce21e6cc715138b314add1b7a95076581f9f7a5ff43d9395b"
+        "sha256": "b03a1734bba9e9e721f588aeb90059a6353d9f7c4aa1c726101f8060fbb03142"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_w2c_synth.rs",
@@ -1279,27 +1553,35 @@
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_fcmp.rs",
-        "sha256": "a960f4d34b29613c2080172da9eb67b09c05772ef5ee799b467c8e34cbac85d8"
+        "sha256": "4e7669737be7eb97cfa311b8bd0aea9f91ec5184ced37742e5398294d010e356"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res.rs",
-        "sha256": "6f19ccca893278bb0d2308da4d157bbb6d11c7cf8c46d935a263c1837e2f61f2"
+        "sha256": "692e773b92c92970dc77beff574ea67cbe8beca288600a7131656acf4c2e58f7"
       },
       {
         "path": "crates/clean-verify/src/spec/core_spec/eval_ir_float_res_witnesses.rs",
-        "sha256": "56d3b0127be853faeb05bdbff34fcc000024cf87d5b95b9df54d847024e8ce62"
+        "sha256": "fa07a70d809118d421264e4fb7f2d1a05a84172d2871e67d77363b755676fc99"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_ops.rs",
+        "sha256": "07ee6c6f7a51920047eb645bb5ce9c13a98c833e0d10cee6d50b254d3b10a93b"
+      },
+      {
+        "path": "crates/clean-verify/src/spec/core_spec/eval_ir_e5.rs",
+        "sha256": "ec9c1a53f54be2a22c2991fd6beccf08ee73b67521358178aa805b498d7e7dd6"
       },
       {
         "path": "crates/clean-verify/src/ir_mint/emitted_inst.rs",
-        "sha256": "539d5c990f8399dc5c9222576e1578ed70468bf35f2e5a773fbb60ae60bbb184"
+        "sha256": "fbf407943c39a2a92de569308129c02f7f47df51f0d72229a94006dc40a8e9f2"
       },
       {
         "path": "data/crystal_mint_blind_slots.json",
-        "sha256": "c590e140e5c7803f5b3019c84e46d8cd31c62a8166411fb06ff7c2c38184e27d"
+        "sha256": "c2fd4659a8697f10297f99c5b8c602d43d6a07022c69c86586897db4fcc97331"
       },
       {
         "path": "crates/clean-verify/tests/crystal_a1_lineage/operand_audit.rs",
-        "sha256": "ebf79f73d374537276327401ad70b385477aab510e4e5089ddcfeb811bc9e912"
+        "sha256": "445d1f2814e48d98af7f5312244c70b103ce3b67b33a5ad8d8c430f0edb146dc"
       },
       {
         "path": "crates/clean-verify/tests/crystal_a3_semdiff/synth_chains.rs",

@@ -1,0 +1,21 @@
+(module
+  (funcs
+    (func 0
+      (params 0)
+      (entry 0)
+      (blocks
+        (block 0
+          (params)
+          (nodes
+            (node (results 1) (copy (struct 0) 0))
+            (node (results 2) (extractfield (containerlen) 1 0))
+            (node (results 3) (ptrdata (containerlen) 2))
+            (node (results 4) (const (int 64) (int 0)))
+            (node (results 5) (gep (struct 1) 3 (idx 4) false))
+            (node (results 6) (copy (ptr) 5))
+            (node (results) (ret (vals 6)))
+          ))
+      ))
+  )
+  (globals)
+)

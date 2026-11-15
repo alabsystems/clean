@@ -218,6 +218,7 @@ async fn test_extract_proof_trust_summary_reports_sorry() {
     let extract_params = ExtractProofParams {
         state_id,
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -272,6 +273,7 @@ async fn test_extract_proof_trust_summary_reports_synthetic_sorry() {
     let extract_params = ExtractProofParams {
         state_id,
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -331,6 +333,7 @@ async fn test_extract_proof_trust_summary_preserves_trusted_arith_ledger() {
     let extract_params = ExtractProofParams {
         state_id,
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -391,6 +394,7 @@ async fn test_extract_proof_trust_summary_reports_fully_verified() {
     let extract_params = ExtractProofParams {
         state_id,
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(100), extract_params).await;
@@ -441,6 +445,7 @@ async fn test_interactive_trust_summary_matches_extract_proof_for_clean_solved_s
     let get_params = GetProofStateParams {
         state_id: state_id.clone(),
         format: crate::proof_state::OutputFormat::Full,
+        timeout_ms: None,
     };
     let get_response = handle_get_proof_state(&state, RequestId::Number(10), get_params).await;
     assert!(
@@ -467,6 +472,7 @@ async fn test_interactive_trust_summary_matches_extract_proof_for_clean_solved_s
     let extract_params = ExtractProofParams {
         state_id,
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(11), extract_params).await;
@@ -557,6 +563,7 @@ async fn test_extract_proof_trust_summary_reports_ay_provenance() {
     let extract_params = ExtractProofParams {
         state_id,
         format: "term".to_string(),
+        timeout_ms: None,
     };
     let extract_response =
         handle_extract_proof(&state, RequestId::Number(101), extract_params).await;
@@ -680,4 +687,105 @@ fn test_smt_recovery_serializes_as_optional_json_field() {
         json_clean.get("smt_recovery").is_none(),
         "smt_recovery should be omitted from JSON when None"
     );
+}
+
+// ── Closed-proof debt is read off the term AND its constant closure ──────
+//
+// The ledger counts only what the tactic engine minted. Before 2026-09-28 a
+// closed proof `@sorryAx False ((fun b => b) true)`, or one that merely cited
+// a sorry'd lemma or a `trustedAy` alias, was reported `fully_verified: true`
+// with every counter at 0 (the kernel accepts all three terms).
+
+fn opaque_flag() -> Expr {
+    Expr::app(
+        Expr::lam(
+            clean_kernel::BinderInfo::Default,
+            Expr::const_(Name::from_string("Bool"), vec![]),
+            Expr::bvar(0),
+        ),
+        Expr::const_(Name::from_string("Bool.true"), vec![]),
+    )
+}
+
+fn false_ty() -> Expr {
+    Expr::const_(Name::from_string("False"), vec![])
+}
+
+fn marker(name: &str) -> Expr {
+    Expr::const_(Name::from_string(name), vec![clean_kernel::Level::zero()])
+}
+
+#[test]
+fn test_closed_proof_with_a_non_literal_sorry_flag_is_not_fully_verified() {
+    let env = Environment::with_prelude();
+    let proof = Expr::apps(marker("sorryAx"), [false_ty(), opaque_flag()]);
+    let (verified, summary) = verify_closed_proof_with_trust_summary(
+        &env,
+        &false_ty(),
+        Some(&proof),
+        ProofTrustLedger::default(),
+        0,
+    );
+    assert!(verified, "setup: the kernel accepts @sorryAx False _");
+    assert_eq!(summary.sorry_count, 1, "{summary:?}");
+    assert_sorry_provenance(&summary, true, false, "non-literal flag");
+    assert!(!summary.fully_verified, "{summary:?}");
+}
+
+#[test]
+fn test_closed_proof_citing_a_sorried_lemma_is_not_fully_verified() {
+    let mut env = Environment::with_prelude();
+    env.add_decl(clean_kernel::Declaration::Theorem {
+        name: Name::from_string("lemma1"),
+        level_params: vec![],
+        type_: false_ty(),
+        value: Expr::apps(
+            marker("sorryAx"),
+            [
+                false_ty(),
+                Expr::const_(Name::from_string("Bool.false"), vec![]),
+            ],
+        ),
+    })
+    .expect("kernel admits lemma1");
+    let proof = Expr::const_(Name::from_string("lemma1"), vec![]);
+    let (verified, summary) = verify_closed_proof_with_trust_summary(
+        &env,
+        &false_ty(),
+        Some(&proof),
+        ProofTrustLedger::default(),
+        0,
+    );
+    assert!(verified);
+    assert_eq!(
+        summary.sorry_count, 1,
+        "inherited through lemma1: {summary:?}"
+    );
+    assert_sorry_provenance(&summary, true, false, "through lemma1");
+    assert!(!summary.fully_verified, "{summary:?}");
+}
+
+#[test]
+fn test_closed_proof_citing_a_trusted_ay_alias_is_not_fully_verified() {
+    let mut env = Environment::with_prelude();
+    env.add_decl(clean_kernel::Declaration::Definition {
+        name: Name::from_string("oracle"),
+        level_params: vec![],
+        type_: false_ty(),
+        value: Expr::app(marker("trustedAy"), false_ty()),
+        is_reducible: true,
+    })
+    .expect("kernel admits oracle");
+    let proof = Expr::const_(Name::from_string("oracle"), vec![]);
+    let (verified, summary) = verify_closed_proof_with_trust_summary(
+        &env,
+        &false_ty(),
+        Some(&proof),
+        ProofTrustLedger::default(),
+        0,
+    );
+    assert!(verified);
+    assert_eq!(summary.sorry_count, 0);
+    assert_eq!(summary.ay_count, 1, "{summary:?}");
+    assert!(!summary.fully_verified, "{summary:?}");
 }

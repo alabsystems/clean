@@ -80,8 +80,9 @@ fn build_prebuilt_simp_state(only_simplify: bool) -> (ProofState, SimpConfig, Ex
         env,
         goal.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: FVarId::new(0),
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: h_ty,
             value: None,
         }],
@@ -117,8 +118,8 @@ fn aesop_simp_integration_documentation() {
         .collect();
     assert_eq!(simp_rules.len(), 1, "should have one simp rule");
     assert_eq!(
-        simp_rules[0].name.to_string(),
-        "bar_eq_baz",
+        simp_rules[0].name,
+        Name::from_string("bar_eq_baz"),
         "simp rule should be bar_eq_baz"
     );
 }
@@ -155,7 +156,7 @@ fn test_simp_all_with_config_only_simplify_skips_closers() {
     let h_decl = current_goal
         .local_ctx
         .iter()
-        .find(|decl| decl.name == "h")
+        .find(|decl| decl.name == clean_parser::SurfaceName::generated_path("h"))
         .expect("hypothesis h should still be present");
     assert_eq!(
         h_decl.ty, goal,

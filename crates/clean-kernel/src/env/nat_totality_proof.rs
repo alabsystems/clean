@@ -17,6 +17,16 @@
 //! - `Nat.lt_asymm`        (legacy stub in `order.rs::init_nat_lt_asymm`)
 //! - `Nat.lt_of_le_of_ne`  (legacy stub in `order_lemmas.rs::init_nat_lt_of_le_of_ne`)
 //!
+//! It also registers the two DIRECTIONAL forms of `Nat.not_lt` that Lean 4
+//! ships beside the `Iff` and Clean did not have at all — neither as a stub nor
+//! as an axiom:
+//!
+//! - `Nat.ge_of_not_lt`   (`src/Init/Data/Nat/Basic.lean:437`, v4.30.0-rc2)
+//! - `Nat.le_of_not_lt`   (`src/Init/Data/Nat/Basic.lean:439`, v4.30.0-rc2)
+//!
+//! Both are constructive Theorems on the same backbone; see their doc comments
+//! for the transcribed Lean declarations.
+//!
 //! # Proof backbone (all reused, all constructive Theorems with empty closures)
 //!
 //! - `Nat.le_or_lt : ∀ a b, Or (Nat.le a b) (Nat.lt b a)` — proven by double
@@ -43,6 +53,7 @@
 //! Tracking: Nat totality/trichotomy demotion (part of #3551).
 
 use crate::env::decl_builder::EnvDeclBuilder;
+use crate::env::lean_nat_spelling::LeanNat;
 use crate::env::order::{nat_le_tc, nat_lt_tc};
 use crate::env::{Declaration, EnvError, Environment};
 use crate::expr::{BinderInfo, Expr};
@@ -189,8 +200,9 @@ impl Environment {
     ///
     /// Registers (in dependency order, each idempotent on `get_const`):
     /// `Nat.lt_or_eq_of_le`, `Nat.lt_trichotomy`, `Nat.not_lt`, `Nat.not_le`,
-    /// `Nat.lt_asymm`, `Nat.lt_of_le_of_ne`. `Nat.le_total` is reused from the
-    /// existing `register_nat_le_total_proof` (#3599).
+    /// `Nat.lt_asymm`, `Nat.lt_of_le_of_ne`, `Nat.ge_of_not_lt`,
+    /// `Nat.le_of_not_lt`. `Nat.le_total` is reused from the existing
+    /// `register_nat_le_total_proof` (#3599).
     ///
     /// Called from the legacy `init_nat_*` axiom sites (each `get_const`-guarded)
     /// so the Theorem form wins.
@@ -217,6 +229,9 @@ impl Environment {
         self.init_nat()?;
         self.init_le()?;
         self.init_lt()?;
+        // `Nat.ge` — the reducible `fun n m => Nat.le m n` that
+        // `Nat.ge_of_not_lt` states its conclusion over, as Lean does.
+        self.init_ge()?;
         self.init_eq()?;
         self.init_iff()?;
         self.init_or()?;
@@ -245,8 +260,194 @@ impl Environment {
         self.register_nat_not_le_proof(&c)?;
         self.register_nat_lt_asymm_proof(&c)?;
         self.register_nat_lt_of_le_of_ne_proof(&c)?;
+        // The two DIRECTIONAL forms of `Nat.not_lt` that Lean 4 also ships.
+        self.register_nat_ge_of_not_lt_proof(&c)?;
+        self.register_nat_le_of_not_lt_proof(&c)?;
 
         Ok(())
+    }
+
+    /// `Nat.ge_of_not_lt : ∀ {n m : Nat}, (Nat.lt n m → False) → Nat.ge n m`.
+    ///
+    /// Lean fidelity — transcribed from the pinned toolchain
+    /// (`leanprover/lean4:v4.30.0-rc2`, `lean-toolchain`),
+    /// `src/Init/Data/Nat/Basic.lean:437`:
+    ///
+    /// ```text
+    /// theorem ge_of_not_lt {n m : Nat} (h : ¬ n < m) : n ≥ m :=
+    ///   (Nat.lt_or_ge n m).resolve_left h
+    /// ```
+    ///
+    /// Binders are IMPLICIT, as there. The proof is Lean's: eliminate the
+    /// totality disjunction and discharge the impossible side. Clean spells
+    /// totality `Nat.le_or_lt m n : Or (Nat.le m n) (Nat.lt n m)` — the same
+    /// disjunction as Lean's `Nat.lt_or_ge n m` with the sides swapped, so
+    /// `resolve_left` becomes an `Or.rec` whose `inl` returns the evidence and
+    /// whose `inr` feeds `h`. `Nat.ge n m` is the reducible Definition
+    /// `Nat.le m n` (`order_le_lt.rs`), so the assembled term's inferred type
+    /// `Nat.le m n` is accepted against the declared `Nat.ge n m` by delta.
+    ///
+    /// WHY IT IS ADDED HERE rather than derived from `Nat.not_lt`: Lean proves
+    /// `Nat.not_lt` FROM this lemma, not the other way round. Deriving it from
+    /// the `Iff` would invert Lean's dependency order for no gain — both routes
+    /// bottom out in the same constructive totality lemma.
+    ///
+    /// # Contract
+    ///
+    /// ENSURES: Registers a `Declaration::Theorem` — never an `Axiom`.
+    /// ENSURES: Idempotent; a no-op once the Theorem is present.
+    /// ENSURES: Depends only on the constructive `Nat.le_or_lt` and
+    ///          `False.elim`, so the axiom closure stays inside
+    ///          `FOUNDATIONAL_AXIOMS`.
+    fn register_nat_ge_of_not_lt_proof(&mut self, c: &NatTotalityConsts) -> Result<(), EnvError> {
+        let name = Name::from_string("Nat.ge_of_not_lt");
+        if matches!(
+            self.get_const(&name).map(|i| i.kind),
+            Some(crate::env::types::ConstantKind::Theorem)
+        ) {
+            return Ok(());
+        }
+
+        let mut b = EnvDeclBuilder::new();
+        let (n_id, n) = b.fresh_local(c.nat.clone());
+        let (m_id, m) = b.fresh_local(c.nat.clone());
+
+        // `¬(n < m)`, Lean's spelling (`Not (@LT.lt Nat instLTNat n m)`); it
+        // δ-reduces to the `Nat.lt n m → False` the proof below applies.
+        let not_lt_nm = LeanNat::not(LeanNat::lt(n.clone(), m.clone()));
+        let (h_id, h) = b.fresh_local(not_lt_nm.clone());
+
+        // Type: ∀ {n m : Nat}, ¬(n < m) → n ≥ m — Lean's statement, exactly
+        // (`@GE.ge Nat instLENat n m`, pinned v4.30.0-rc2).
+        let type_ = {
+            let body = LeanNat::ge(n.clone(), m.clone());
+            let e = b.mk_pi(h_id, BinderInfo::Default, not_lt_nm.clone(), body);
+            let e = b.mk_pi(m_id, BinderInfo::Implicit, c.nat.clone(), e);
+            let e = b.mk_pi(n_id, BinderInfo::Implicit, c.nat.clone(), e);
+            b.finish(e)
+        };
+
+        let value = {
+            // `Nat.le_or_lt m n : Or (Nat.le m n) (Nat.lt n m)`.
+            let src_left = c.le_of(m.clone(), n.clone()); // m ≤ n
+            let src_right = c.lt_raw(n.clone(), m.clone()); // n < m
+            let goal = c.le_of(m.clone(), n.clone()); // ≡ Nat.ge n m
+
+            let or_motive = {
+                let mut om = EnvDeclBuilder::child_of(&b);
+                let or_nm = c.or_of(src_left.clone(), src_right.clone());
+                let (hh_id, _hh) = om.fresh_local(or_nm.clone());
+                let lam = om.mk_lam(hh_id, BinderInfo::Default, or_nm, goal.clone());
+                om.finish_child(lam)
+            };
+            let case_inl = {
+                let mut ic = EnvDeclBuilder::child_of(&b);
+                let (hle_id, hle) = ic.fresh_local(src_left.clone());
+                let lam = ic.mk_lam(hle_id, BinderInfo::Default, src_left.clone(), hle);
+                ic.finish_child(lam)
+            };
+            let case_inr = {
+                let mut rc = EnvDeclBuilder::child_of(&b);
+                let (hlt_id, hlt) = rc.fresh_local(src_right.clone());
+                // h hlt : False (hlt : Nat.lt n m, accepted by defeq).
+                let absurd = Expr::app(h.clone(), hlt);
+                let body = c.false_elim(goal.clone(), absurd);
+                let lam = rc.mk_lam(hlt_id, BinderInfo::Default, src_right.clone(), body);
+                rc.finish_child(lam)
+            };
+
+            let major = c.le_or_lt(m.clone(), n.clone());
+            let or_rec_app = Expr::apps(
+                c.or_rec.clone(),
+                [src_left, src_right, or_motive, case_inl, case_inr, major],
+            );
+            let e = b.mk_lam(h_id, BinderInfo::Default, not_lt_nm.clone(), or_rec_app);
+            let e = b.mk_lam(m_id, BinderInfo::Implicit, c.nat.clone(), e);
+            let e = b.mk_lam(n_id, BinderInfo::Implicit, c.nat.clone(), e);
+            b.finish(e)
+        };
+
+        // SOUNDNESS: kernel-checked `Or.rec` term. Depends only on the
+        // constructive `Nat.le_or_lt` and `False.elim` — no `Declaration::Axiom`
+        // and no trust marker, so `axiom_deps` stays empty.
+        self.add_decl(Declaration::Theorem {
+            name,
+            level_params: vec![],
+            type_,
+            value,
+        })
+    }
+
+    /// `Nat.le_of_not_lt : ∀ {a b : Nat}, (Nat.lt a b → False) → Nat.le b a`.
+    ///
+    /// Lean fidelity — `leanprover/lean4:v4.30.0-rc2`,
+    /// `src/Init/Data/Nat/Basic.lean:439`:
+    ///
+    /// ```text
+    /// protected theorem le_of_not_lt : ∀{a b : Nat}, ¬(a < b) → b ≤ a :=
+    ///   Nat.ge_of_not_lt
+    /// ```
+    ///
+    /// Same statement, other spelling of the conclusion (`b ≤ a` rather than
+    /// `a ≥ b`), and in Lean the proof IS `Nat.ge_of_not_lt`. Reproduced:
+    /// the value is the eta-expanded `@Nat.ge_of_not_lt a b h`, whose type
+    /// `Nat.ge a b` is the reducible `Nat.le b a`.
+    ///
+    /// This is the lemma a hand-written Lean island reaches for when a `split`
+    /// leaves it `¬(x < y) ⊢ y ≤ x` — a3d's `kernel_model.lean` had to derive
+    /// it inline from `Nat.le_or_lt` because neither this name nor
+    /// `Nat.ge_of_not_lt` was registered.
+    ///
+    /// # Contract
+    ///
+    /// ENSURES: Registers a `Declaration::Theorem` — never an `Axiom`.
+    /// ENSURES: Idempotent; a no-op once the Theorem is present.
+    /// ENSURES: `Nat.ge_of_not_lt` is registered first by the caller.
+    fn register_nat_le_of_not_lt_proof(&mut self, c: &NatTotalityConsts) -> Result<(), EnvError> {
+        let name = Name::from_string("Nat.le_of_not_lt");
+        if matches!(
+            self.get_const(&name).map(|i| i.kind),
+            Some(crate::env::types::ConstantKind::Theorem)
+        ) {
+            return Ok(());
+        }
+
+        let mut b = EnvDeclBuilder::new();
+        let (a_id, a) = b.fresh_local(c.nat.clone());
+        let (bb_id, bb) = b.fresh_local(c.nat.clone());
+
+        let not_lt_ab = LeanNat::not(LeanNat::lt(a.clone(), bb.clone()));
+        let (h_id, h) = b.fresh_local(not_lt_ab.clone());
+
+        // Type: ∀ {a b : Nat}, ¬(a < b) → b ≤ a — Lean's statement, exactly.
+        let type_ = {
+            let body = LeanNat::le(bb.clone(), a.clone());
+            let e = b.mk_pi(h_id, BinderInfo::Default, not_lt_ab.clone(), body);
+            let e = b.mk_pi(bb_id, BinderInfo::Implicit, c.nat.clone(), e);
+            let e = b.mk_pi(a_id, BinderInfo::Implicit, c.nat.clone(), e);
+            b.finish(e)
+        };
+
+        let value = {
+            // @Nat.ge_of_not_lt a b h : Nat.ge a b ≡ Nat.le b a
+            let body = Expr::apps(
+                Expr::const_(Name::from_string("Nat.ge_of_not_lt"), vec![]),
+                [a.clone(), bb.clone(), h.clone()],
+            );
+            let e = b.mk_lam(h_id, BinderInfo::Default, not_lt_ab.clone(), body);
+            let e = b.mk_lam(bb_id, BinderInfo::Implicit, c.nat.clone(), e);
+            let e = b.mk_lam(a_id, BinderInfo::Implicit, c.nat.clone(), e);
+            b.finish(e)
+        };
+
+        // SOUNDNESS: kernel-checked; depends only on `Nat.ge_of_not_lt`, itself
+        // a constructive Theorem registered immediately above.
+        self.add_decl(Declaration::Theorem {
+            name,
+            level_params: vec![],
+            type_,
+            value,
+        })
     }
 
     /// `Nat.lt_or_eq_of_le : ∀ a b, Nat.le a b → Or (Nat.lt a b) (Eq a b)`
@@ -984,6 +1185,8 @@ mod tests {
             "Nat.not_le",
             "Nat.lt_asymm",
             "Nat.lt_of_le_of_ne",
+            "Nat.ge_of_not_lt",
+            "Nat.le_of_not_lt",
         ] {
             let info = env
                 .get_const(&Name::from_string(target))
@@ -1014,6 +1217,78 @@ mod tests {
                 "{target} must be Constructive"
             );
         }
+    }
+
+    /// `∀ {a b : Nat}, (Nat.lt a b → False) → Nat.le <lhs> <rhs>`, with the two
+    /// conclusion operands chosen by the caller so a test can build the TRUE
+    /// statement and its false twin from one place. `0` is the inner-most
+    /// bound variable under the hypothesis binder (`b`), `1` is `a`.
+    fn not_lt_implies_le(lhs: usize, rhs: usize) -> Expr {
+        let nat = Expr::const_(Name::from_string("Nat"), vec![]);
+        let lt = Expr::const_(Name::from_string("Nat.lt"), vec![]);
+        let le = Expr::const_(Name::from_string("Nat.le"), vec![]);
+        let false_ = Expr::const_(Name::from_string("False"), vec![]);
+        // Under `a`, `b`: a = bvar 1, b = bvar 0.
+        let hyp = Expr::pi(
+            BinderInfo::Default,
+            Expr::apps(lt, [Expr::bvar(1), Expr::bvar(0)]),
+            false_,
+        );
+        // Under `a`, `b`, `h`: a = bvar 2, b = bvar 1.
+        let pick = |i: usize| Expr::bvar(if i == 0 { 1 } else { 2 });
+        let concl = Expr::apps(le, [pick(lhs), pick(rhs)]);
+        let e = Expr::pi(BinderInfo::Default, hyp, concl);
+        let e = Expr::pi(BinderInfo::Implicit, nat.clone(), e);
+        Expr::pi(BinderInfo::Implicit, nat, e)
+    }
+
+    /// `Nat.le_of_not_lt` must state Lean's proposition —
+    /// `∀ {a b : Nat}, ¬(a < b) → b ≤ a` (`Init/Data/Nat/Basic.lean:439`) — and
+    /// NOT its close twin with the conclusion's operands swapped, which is
+    /// false at `a = 1, b = 0`. Registering under the right name with the wrong
+    /// direction is the one way this addition could be silently useless.
+    #[test]
+    fn test_nat_le_of_not_lt_states_lean_proposition() {
+        let env = build_env();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        let info = env
+            .get_const(&Name::from_string("Nat.le_of_not_lt"))
+            .expect("Nat.le_of_not_lt should be registered");
+
+        // TRUE: conclusion `Nat.le b a`.
+        assert!(
+            tc.is_def_eq(&info.type_, &not_lt_implies_le(0, 1)),
+            "Nat.le_of_not_lt must conclude `Nat.le b a`, got {:?}",
+            info.type_
+        );
+        // FALSE TWIN: conclusion `Nat.le a b`.
+        assert!(
+            !tc.is_def_eq(&info.type_, &not_lt_implies_le(1, 0)),
+            "Nat.le_of_not_lt must NOT conclude `Nat.le a b` — that statement is \
+             false at a = 1, b = 0"
+        );
+    }
+
+    /// `Nat.ge_of_not_lt`'s conclusion `Nat.ge n m` is the reducible
+    /// `Nat.le m n` (`order_le_lt.rs`), so it must be def-eq to the SAME
+    /// proposition `Nat.le_of_not_lt` states — that is exactly why Lean 4
+    /// defines the latter as the former (`Basic.lean:439`).
+    #[test]
+    fn test_nat_ge_of_not_lt_is_the_same_proposition() {
+        let env = build_env();
+        let tc = TypeChecker::with_mode(&env, env.mode());
+        let ge = env
+            .get_const(&Name::from_string("Nat.ge_of_not_lt"))
+            .expect("Nat.ge_of_not_lt should be registered");
+        assert!(
+            tc.is_def_eq(&ge.type_, &not_lt_implies_le(0, 1)),
+            "Nat.ge_of_not_lt's `Nat.ge n m` must reduce to `Nat.le m n`, got {:?}",
+            ge.type_
+        );
+        assert!(
+            !tc.is_def_eq(&ge.type_, &not_lt_implies_le(1, 0)),
+            "Nat.ge_of_not_lt must not state the swapped conclusion"
+        );
     }
 
     /// MB milestone-1 (BitVec→CIC, Tier-0): the kernel core of an 8-bit `bvult`

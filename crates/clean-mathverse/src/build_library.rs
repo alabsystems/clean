@@ -40,6 +40,10 @@ pub struct BuildConfig {
     /// Files larger than this are skipped. Useful for avoiding multi-MB
     /// compiler-internal files (Init/Meta.olean ~3.4MB) that dominate build time.
     pub max_file_size: u64,
+    /// Process at most this many discovered `.olean` files (0 = no limit),
+    /// in discovery order. A bounded sample for tests and smoke runs; without
+    /// it a "sample" build converts the whole library it is pointed at.
+    pub file_limit: usize,
     /// Base name for the shards this build writes, e.g. `"lean4"` produces
     /// `base/lean4_0000.mathverse`, `base/lean4_0001.mathverse`, ...
     ///
@@ -67,6 +71,7 @@ impl Default for BuildConfig {
             modules: Vec::new(),
             shard_size_limit: 10_000,
             max_file_size: 0,
+            file_limit: 0,
             shard_prefix: "lean4".to_string(),
             reset_manifest: true,
             verbose: false,
@@ -167,7 +172,12 @@ pub fn build_lean4_library(config: &BuildConfig) -> MathverseResult<BuildResult>
     // `finalize_library_axiom_profiles`.
     let mut sealed: Vec<SealedShard> = Vec::new();
 
-    for (i, path) in files.iter().enumerate() {
+    let file_limit = if config.file_limit == 0 {
+        files.len()
+    } else {
+        config.file_limit
+    };
+    for (i, path) in files.iter().take(file_limit).enumerate() {
         // Skip files exceeding size limit.
         if config.max_file_size > 0 {
             if let Ok(meta) = std::fs::metadata(path) {
@@ -671,6 +681,7 @@ mod tests {
             // (Init/Meta.olean=3.4MB, Init/Prelude.olean=3.2MB).
             // Core types (Bool, Nat) are in Init/Core.olean (1.9MB) — included.
             max_file_size: 2_500_000,
+            file_limit: 0,
             verbose: true,
             ..BuildConfig::default()
         };
@@ -755,6 +766,7 @@ mod tests {
             shard_size_limit: 10_000,
             // Skip files >2.5MB (only Init/Meta, Init/Prelude, and Lemma files)
             max_file_size: 2_500_000,
+            file_limit: 0,
             verbose: true,
             ..BuildConfig::default()
         };

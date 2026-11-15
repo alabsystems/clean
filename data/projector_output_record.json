@@ -1,0 +1,76 @@
+{
+  "schema": "clean.projector-output-record/v1",
+  "what_this_is": "Every committed reader-A provenance file (crates/clean-verify/src/spec/core_spec/generated/*.prov.json) is the output of ONE run of the crystal-A2 projector over the dump(s) it names (its `dump` and `merged_artifacts`, each sha256-pinned inside it), and nothing else may write one. None of those dumps is on this machine (searched 2026-09-25: `inputs_on_this_machine`), so none of these files can be regenerated here: each is pinned to the bytes that run wrote, beside the commit that first held them. A byte change is therefore either a real run -- re-pin the row with that run's commit -- or a hand edit, and scripts/check_crystal_fixture_pins.py refuses it either way until the row says which.",
+  "files": {
+    "crates/clean-verify/src/spec/core_spec/generated/ir_cf.core.prov.json": {
+      "sha256": "2e2c81bd3ea1f24232fbb83e93c9675386ad0a19d1e234c326756baaec6bfe85",
+      "bytes": 1187,
+      "committed_at": "ac37291852c",
+      "inputs_on_this_machine": false
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_h2.core.prov.json": {
+      "sha256": "ffed7721ddfed7a6c43a8b86685b4556c1c4b48642337c6b69d409be7285686a",
+      "bytes": 959,
+      "committed_at": "3bc68ff0c9a",
+      "inputs_on_this_machine": false,
+      "note": "Reader A (the committed scripts/crystal_a2_project) re-run 2026-10-07 over the 047ebd051 source-bound rebaseline's dump (sha256 052660686e21...83b3b, the binary every 2026-10-07 fixture's current_source_bound_pin names). Its core text was byte-identical to the committed one; these are the provenance bytes that run wrote, unedited. The dump was transient scratch, removed after the run, so inputs_on_this_machine is false."
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_it.core.prov.json": {
+      "sha256": "e72c8c1c65493e105f774fb40e302f89a679787856242807e4615d406fc10708",
+      "bytes": 1781,
+      "committed_at": "3995f1f42cd",
+      "inputs_on_this_machine": false
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_itc.core.prov.json": {
+      "sha256": "de8f1a7ca3c34daed4470ca04975f587b655b3a245e912f0e15e62565387eb6d",
+      "bytes": 4332,
+      "committed_at": "9e1d4df2d31",
+      "inputs_on_this_machine": false
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_its.core.prov.json": {
+      "sha256": "e8f37d967123892db95e9b6827f262911a7a7d007926a467100531c660eccc5d",
+      "bytes": 1127,
+      "committed_at": "961f251b6cc",
+      "inputs_on_this_machine": false
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_lz.047e.prov.json": {
+      "sha256": "034866b68bf0b136342b8280536b2e85c2a4883c0e7efe2b94c6f19d5dbe95f3",
+      "bytes": 1376,
+      "committed_at": "3bc68ff0c9a",
+      "inputs_on_this_machine": false,
+      "note": "Reader A (the committed scripts/crystal_a2_project) re-run 2026-10-07 over the 047ebd051 source-bound rebaseline's dump (sha256 052660686e21...83b3b, the binary every 2026-10-07 fixture's current_source_bound_pin names). Its core text was byte-identical to the committed one; these are the provenance bytes that run wrote, unedited. The dump was transient scratch, removed after the run, so inputs_on_this_machine is false."
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_lz.a152.prov.json": {
+      "sha256": "3d04bb7df50f43b2ec2cf9e3d7b360e06f1f760484a46f96ff5c5791162539ca",
+      "bytes": 893,
+      "committed_at": "b03937e7481",
+      "inputs_on_this_machine": false
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_lz.b039.prov.json": {
+      "sha256": "8ac899cec712f53623080bd93a72b0b424e2be3a6884df738086fbb66aeec383",
+      "bytes": 890,
+      "committed_at": "c6da2183da3",
+      "inputs_on_this_machine": false
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.core.prov.json": {
+      "sha256": "38a4fbe94b40cbd1f81da61991aa2d721eae9c5dc1d6fd0955d3d1451d5d428f",
+      "bytes": 3118,
+      "committed_at": "3bc68ff0c9a",
+      "inputs_on_this_machine": false,
+      "note": "Reader A (the committed scripts/crystal_a2_project) re-run 2026-10-07 over the 047ebd051 source-bound rebaseline's dump (sha256 052660686e21...83b3b, the binary every 2026-10-07 fixture's current_source_bound_pin names). Its core text was byte-identical to the committed one; these are the provenance bytes that run wrote, unedited. The dump was transient scratch, removed after the run, so inputs_on_this_machine is false. Supersedes the run committed at 4fe4a116016 (sha256 e89c2882e37301ea..., the dump-control ce4ac168 binary)."
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_lzd.core.prov.json": {
+      "sha256": "12426416934cd3d50ca036765dbab694fc712d84b39a14ed68065ef0fcbc83c9",
+      "bytes": 4545,
+      "committed_at": "5f706a3f834",
+      "inputs_on_this_machine": false,
+      "note": "These are the bytes the projector wrote at 5f706a3f8. 54861cbce (r7) edited one literal by hand to match the projector it had fixed -- the Niche-range refusal's line-wrapped `is not a single` + 18 spaces + `variant` -- and 42fd9dc99 (r7b) restored the emitted bytes. The projector at HEAD would print that refusal as one sentence (a_niche_range_refusal_reads_as_one_sentence), so these bytes are a record of that run, reproducible only by re-running THAT projector over the named dumps, which are not here."
+    },
+    "crates/clean-verify/src/spec/core_spec/generated/ir_sh.core.prov.json": {
+      "sha256": "808c95cfb0a4d2233c6f83f2f4496c59b4f2f6da0d7ebcf0abda1975ff8193d2",
+      "bytes": 1212,
+      "committed_at": "8f84bd96609",
+      "inputs_on_this_machine": false
+    }
+  }
+}

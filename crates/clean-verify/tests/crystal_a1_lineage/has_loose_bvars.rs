@@ -10,7 +10,8 @@
 //!
 //! The obligation no earlier chain had is the call site's TARGET. `@func.N`
 //! renumbers on any producer change — measured on `level_is_zero` and AGAIN
-//! here (fixture `@func.3657`, tip census `func_id: 3650`, same body). So
+//! here (fixture `@func.3657` at the time -- `@func.1729` since the 2026-10-07
+//! rebaseline -- tip census `func_id: 3650`, same body). So
 //! the emitted index is READ AS DATA, and the identity is asserted two other
 //! ways: Clean-side, the registered call's target equals the registered
 //! callee `IRFunc`'s OWN id and differs from the caller's (the
@@ -169,8 +170,8 @@ fn has_loose_bvars_caller_matches_the_emitted_artifact() {
     assert_eq!(sites[0].result, 1);
     assert_eq!(sites[0].args, vec![0], "it passes the receiver %0 only");
     assert!(
-        text.contains("bb0(%0: struct.29):"),
-        "one by-value parameter of type struct.29 — ExprMeta"
+        text.contains("bb0(%0: struct.765):"),
+        "one by-value parameter of type struct.765 — ExprMeta"
     );
     assert_entry_params(&text, &minted("ir_hlb_func"), "has_loose_bvars (caller)");
     assert_lanes(&emitted, &clean, "has_loose_bvars (caller)");
@@ -252,10 +253,10 @@ fn has_loose_bvars_call_targets_the_callee_fixture_function() {
 #[test]
 fn has_loose_bvars_the_lanes_catch_a_drifted_artifact() {
     let caller = parse_emitted(&fixture("has_loose_bvars.trust-ir.txt"));
-    let head = "rustcc fn @x(functy.435) {\nbb0(%0: struct.29):\n";
+    let head = "rustcc fn @x(functy.410) {\nbb0(%0: struct.765):\n";
     let body = |mid: &str| {
         parse_emitted(&format!(
-            "{head}    %1 = call @func.3657(%0)\n{mid}    ret %3\n}}\n"
+            "{head}    %1 = call @func.1729(%0)\n{mid}    ret %3\n}}\n"
         ))
     };
     // ugt -> uge; the icmp at u64; comparing the RECEIVER instead of the
@@ -277,7 +278,7 @@ fn has_loose_bvars_the_lanes_catch_a_drifted_artifact() {
     // the structural reader.
     let base = fixture("has_loose_bvars.trust-ir.txt");
     let wrong_arg = format!(
-        "{head}    %1 = call @func.3657(%1)\n    %2 = const u32 0\n    %3 = icmp ugt u32 %1, %2\n    ret %3\n}}\n"
+        "{head}    %1 = call @func.1729(%1)\n    %2 = const u32 0\n    %3 = icmp ugt u32 %1, %2\n    ret %3\n}}\n"
     );
     let renumbered = format!(
         "{head}    %1 = call @func.9999(%0)\n    %2 = const u32 0\n    %3 = icmp ugt u32 %1, %2\n    ret %3\n}}\n"
@@ -383,7 +384,9 @@ fn emitted_call_target_matches_the_callee_record() {
         .and_then(|t| t.split('(').next())
         .and_then(|t| t.trim().parse().ok())
         .expect("the caller fixture must contain exactly one `call @func.N`");
-    let record = read_json("data/crystal_fixture_freshness_2026-08-21_lane18.json");
+    // The live-dump report the CURRENT fixtures were cut from (the 2026-10-07
+    // rebaseline's strict report; it was the lane18 report until then).
+    let record = read_json("data/crystal_fixture_freshness_2026-10-07_047ebd051_strict.json");
     let callee_fid = record["bodies"]["loose_bvar_range_callee"]["at_head"]["func_id"]
         .as_u64()
         .expect("the record must carry the callee's func_id") as u32;

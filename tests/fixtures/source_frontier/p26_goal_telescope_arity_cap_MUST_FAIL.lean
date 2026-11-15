@@ -1,7 +1,12 @@
+-- Updated 2026-11-06: this is a retained Clean arity-limit parity gap.
+-- Both actual Lean versions accept the whole file. Narrow and Wide mention
+-- every parameter in a tuple-equality conclusion and use reducible aliases,
+-- so no invalid bracket header can masquerade as the intended cap refusal.
+-- Clean's exact7-pass/1-fail pin remains; no cap/default/refusal is changed.
 -- p26 — CLASS I, FRONTIER STAGE I-2: the arity cap is a REFUSAL, never a
 -- truncation.
 --
--- PROVES: `MAX_GOAL_TELESCOPE` (8, `infer/instance.rs`) bounds how deep a
+-- CHECKS: `MAX_GOAL_TELESCOPE` (8, `infer/instance.rs`) bounds how deep a
 -- Pi-shaped goal may be opened, and a goal deeper than that is refused whole.
 -- The alternative failure mode is the dangerous one: an implementation that
 -- opened the first eight binders and then matched the ninth Pi as if it were
@@ -22,11 +27,11 @@ class MyD (p : Prop) where
 
 instance reflMyD (α : Type) (a : α) : MyD (a = a) := ⟨1⟩
 
-def Narrow (α : Type) : Type := (a : α) → (b : α) → MyD (a = a)
+@[reducible] def Narrow (α : Type) : Type := (a : α) → (b : α) → MyD ((a, b) = (a, b))
 
-def Wide (α : Type) : Type :=
+@[reducible] def Wide (α : Type) : Type :=
   (a : α) → (b : α) → (c : α) → (d : α) → (e : α) → (f : α) → (g : α) → (h : α) → (i : α) →
-    MyD (a = a)
+    MyD ((a, b, c, d, e, f, g, h, i) = (a, b, c, d, e, f, g, h, i))
 
 def narrowCallee (α : Type) [Narrow α] (z : α) : Nat := 0
 

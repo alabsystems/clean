@@ -1133,7 +1133,6 @@ pub struct RefutationScan {
 /// an EMPTY refutable set.
 #[must_use]
 pub fn scan_admitted_axioms(env: &Environment) -> RefutationScan {
-    use super::axiom_audit::is_foundational_axiom;
     use super::axiom_audit::is_trust_marker;
 
     let tc = TypeChecker::with_mode(env, env.mode());
@@ -1146,7 +1145,10 @@ pub fn scan_admitted_axioms(env: &Environment) -> RefutationScan {
         if c.kind != ConstantKind::Axiom {
             continue;
         }
-        if is_foundational_axiom(&c.name) || is_trust_marker(&c.name) {
+        // Only the kernel's canonical foundation is exempt — by content,
+        // never by name: an axiom that merely shares (or prints like) a
+        // foundational name is an admitted axiom and is scanned.
+        if env.is_canonical_foundational_axiom(&c.name) || is_trust_marker(&c.name) {
             continue;
         }
         admitted_scanned += 1;
@@ -1223,14 +1225,13 @@ fn type_mentions(ty: &Expr, carrier: &Name) -> bool {
 /// A sound environment yields an EMPTY masked set.
 #[must_use]
 pub fn scan_opacity_masked_axioms(env: &Environment) -> OpacityScan {
-    use super::axiom_audit::is_foundational_axiom;
     use super::axiom_audit::is_trust_marker;
 
     // The admitted axioms (name + type), computed once against the real env.
     let admitted: Vec<(Name, Expr)> = env
         .constants()
         .filter(|c| c.kind == ConstantKind::Axiom)
-        .filter(|c| !is_foundational_axiom(&c.name) && !is_trust_marker(&c.name))
+        .filter(|c| !env.is_canonical_foundational_axiom(&c.name) && !is_trust_marker(&c.name))
         .map(|c| (c.name.clone(), c.type_.clone()))
         .collect();
 

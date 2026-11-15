@@ -4,10 +4,12 @@
 
 //! Surface declaration types: top-level parsed declarations.
 
+use super::name::SurfaceName;
+
 use super::attr::Attribute;
 use super::binder::{OpenPath, SurfaceBinder, TerminationHints};
 use super::expr::SurfaceExpr;
-use super::modifiers::{DeclModifiers, DeclScope};
+use super::modifiers::{DeclModifiers, DeclScope, Visibility};
 use super::span::Span;
 use super::syntax::{MacroArm, NotationItem, NotationKind, SyntaxPatternItem};
 
@@ -34,7 +36,7 @@ pub struct DocComment {
 impl DocComment {
     /// Create a new doc comment from its span and already-stripped text.
     #[must_use]
-    pub fn new(span: Span, text: String) -> Self {
+    pub(crate) fn new(span: Span, text: String) -> Self {
         Self { span, text }
     }
 }
@@ -51,11 +53,13 @@ pub enum AttributeCommandAttr {
 /// A surface-level declaration
 #[derive(Debug, Clone)]
 pub enum SurfaceDecl {
+    /// File-header `prelude`; requires an explicitly bare module environment.
+    Prelude { span: Span },
     /// Definition: `def name : ty := val`
     Def {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         binders: Vec<SurfaceBinder>,
         ty: Option<Box<SurfaceExpr>>,
         val: Box<SurfaceExpr>,
@@ -69,11 +73,22 @@ pub enum SurfaceDecl {
         where_decls: Vec<WhereLocalDef>,
     },
 
+    /// A Batteries alias preserves the target's complete telescope. It is not
+    /// an inferred source `def`, which would insert implicit arguments.
+    Alias {
+        span: Span,
+        /// One plain alias, or the named directions of an iff alias.
+        names: Vec<(SurfaceName, Option<bool>)>,
+        target: SurfaceName,
+        attrs: Vec<Attribute>,
+        modifiers: DeclModifiers,
+    },
+
     /// Theorem: `theorem name : ty := proof`
     Theorem {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         binders: Vec<SurfaceBinder>,
         ty: Box<SurfaceExpr>,
         proof: Box<SurfaceExpr>,
@@ -90,8 +105,8 @@ pub enum SurfaceDecl {
     /// Axiom: `axiom name : ty`
     Axiom {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         binders: Vec<SurfaceBinder>,
         ty: Box<SurfaceExpr>,
         /// Attributes like `@[aesop safe apply]`
@@ -105,8 +120,8 @@ pub enum SurfaceDecl {
     /// Used for FFI bindings, performance-critical code, and abstract interfaces.
     Opaque {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         binders: Vec<SurfaceBinder>,
         ty: Box<SurfaceExpr>,
         /// Optional default value
@@ -127,13 +142,13 @@ pub enum SurfaceDecl {
     /// ```
     Inductive {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         binders: Vec<SurfaceBinder>,
         ty: Box<SurfaceExpr>,
         ctors: Vec<SurfaceCtor>,
         /// Deriving clauses (class names to derive)
-        deriving: Vec<String>,
+        deriving: Vec<SurfaceName>,
         /// Declaration modifiers (private, protected, noncomputable, etc.)
         modifiers: DeclModifiers,
     },
@@ -148,13 +163,13 @@ pub enum SurfaceDecl {
     /// ```
     Coinductive {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         binders: Vec<SurfaceBinder>,
         ty: Box<SurfaceExpr>,
         ctors: Vec<SurfaceCtor>,
         /// Deriving clauses (class names to derive)
-        deriving: Vec<String>,
+        deriving: Vec<SurfaceName>,
         /// Declaration modifiers (private, protected, noncomputable, etc.)
         modifiers: DeclModifiers,
     },
@@ -177,14 +192,14 @@ pub enum SurfaceDecl {
     /// ```
     Codata {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         binders: Vec<SurfaceBinder>,
         /// Optional declared result sort (`: Type`)
         ty: Option<Box<SurfaceExpr>>,
         body: CodataBody,
         /// Deriving clauses (rejected loudly by the elaborator for now)
-        deriving: Vec<String>,
+        deriving: Vec<SurfaceName>,
         /// Declaration modifiers (private, protected, noncomputable, etc.)
         modifiers: DeclModifiers,
     },
@@ -200,10 +215,10 @@ pub enum SurfaceDecl {
     /// ```
     Codef {
         span: Span,
-        name: String,
+        name: SurfaceName,
         binders: Vec<SurfaceBinder>,
         ty: Box<SurfaceExpr>,
-        clauses: Vec<(String, SurfaceExpr)>,
+        clauses: Vec<(SurfaceName, SurfaceExpr)>,
         modifiers: DeclModifiers,
     },
 
@@ -217,8 +232,8 @@ pub enum SurfaceDecl {
     /// ```
     Structure {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         /// Parameters of the structure (before `where`)
         binders: Vec<SurfaceBinder>,
         /// Parent structures (from `extends` clause).
@@ -228,11 +243,11 @@ pub enum SurfaceDecl {
         ty: Option<Box<SurfaceExpr>>,
         /// Optional explicit constructor name (`structure P where make :: …`,
         /// Lean `structCtor`). `None` means the default `mk`.
-        ctor_name: Option<String>,
+        ctor_name: Option<SurfaceName>,
         /// Fields of the structure
         fields: Vec<SurfaceField>,
         /// Deriving clauses (class names to derive)
-        deriving: Vec<String>,
+        deriving: Vec<SurfaceName>,
         /// Declaration modifiers (private, protected, noncomputable, etc.)
         modifiers: DeclModifiers,
     },
@@ -251,8 +266,8 @@ pub enum SurfaceDecl {
     /// ```
     Class {
         span: Span,
-        name: String,
-        universe_params: Vec<String>,
+        name: SurfaceName,
+        universe_params: Vec<SurfaceName>,
         /// Parameters of the class (before `where`)
         binders: Vec<SurfaceBinder>,
         /// Parent classes (from `extends` clause)
@@ -281,8 +296,8 @@ pub enum SurfaceDecl {
     Instance {
         span: Span,
         /// Optional instance name (can be auto-generated)
-        name: Option<String>,
-        universe_params: Vec<String>,
+        name: Option<SurfaceName>,
+        universe_params: Vec<SurfaceName>,
         /// Binders for instance parameters (e.g., `[Ord A]`)
         binders: Vec<SurfaceBinder>,
         /// The class type this instance provides (e.g., `Add Nat`)
@@ -293,6 +308,16 @@ pub enum SurfaceDecl {
         priority: Option<u32>,
         /// Declaration modifiers (private, protected, noncomputable, etc.)
         modifiers: DeclModifiers,
+        /// `@[implemented_by f]` / `@[extern]` written on the instance: Lean
+        /// applies them to the instance constant, and compiled code runs `f`
+        /// (or the symbol) instead of the instance's value. Also
+        /// `@[default_instance]`, which registers the instance for
+        /// open-goal defaulting (B99); dropping it left the most recent
+        /// instance to answer an open goal, so `@[default_instance] instance
+        /// b : C Bool` followed by `instance n : C Nat` answered `C ?α` with
+        /// `n`. Definition exposure and definitional-equality tags are also
+        /// carried here. Other attributes except priority are not carried.
+        compiler_attrs: Vec<Attribute>,
     },
 
     /// Example: `example : ty := proof` (anonymous theorem, not saved to environment)
@@ -304,29 +329,35 @@ pub enum SurfaceDecl {
     },
 
     /// Import: `import Lean.Data.List` (supports multiple module paths)
-    Import { span: Span, paths: Vec<Vec<String>> },
+    Import { span: Span, paths: Vec<SurfaceName> },
 
     /// Namespace: `namespace Foo ... end Foo`
     Namespace {
         span: Span,
-        name: String,
+        name: SurfaceName,
         decls: Vec<SurfaceDecl>,
     },
 
     /// Section: `section Foo ... end Foo`
     Section {
         span: Span,
-        name: Option<String>,
+        name: Option<SurfaceName>,
         decls: Vec<SurfaceDecl>,
+        /// `noncomputable section`: Lean marks a declaration inside it that its
+        /// compiler cannot compile `noncomputable` instead of refusing it.
+        noncomputable: bool,
     },
 
     /// Universe declaration: `universe u v`
-    UniverseDecl { span: Span, names: Vec<String> },
+    UniverseDecl { span: Span, names: Vec<SurfaceName> },
 
     /// Variable declaration: `variable (x : Type)`
     Variable {
         span: Span,
         binders: Vec<SurfaceBinder>,
+        /// Explicit modifier, retained even in v4.36rc2 where upstream gives
+        /// it no semantic effect. `None` is an unmodified variable command.
+        visibility: Option<Visibility>,
     },
 
     /// `include x y …` — force section variables into following signatures.
@@ -340,7 +371,7 @@ pub enum SurfaceDecl {
     ///
     /// Scoped exactly like `variable`: a `section` / `namespace` boundary
     /// restores the enclosing inclusion set. Cancelled by [`Self::OmitVars`].
-    IncludeVars { span: Span, names: Vec<String> },
+    IncludeVars { span: Span, names: Vec<SurfaceName> },
 
     /// `omit x y …` — cancel a preceding [`Self::IncludeVars`], restoring
     /// mention-based inclusion for those names.
@@ -348,7 +379,7 @@ pub enum SurfaceDecl {
     /// Only the NAME form is modelled. Lean also accepts bracketed instance
     /// binders (`omit [Foo α]`), which select by TYPE; that shape is refused
     /// by name rather than guessed at.
-    OmitVars { span: Span, names: Vec<String> },
+    OmitVars { span: Span, names: Vec<SurfaceName> },
 
     /// Open command: `open Nat in ...` or `open Nat (add mul)` (multiple paths allowed)
     /// Also handles `open scoped X` which imports only notations/syntax from namespace X.
@@ -366,9 +397,9 @@ pub enum SurfaceDecl {
     Export {
         span: Span,
         /// The namespace path to export from (e.g., `["Nat", "Arithmetic"]` for `Nat.Arithmetic`)
-        namespace: Vec<String>,
+        namespace: SurfaceName,
         /// The names to export (must have at least one)
-        names: Vec<String>,
+        names: Vec<SurfaceName>,
     },
 
     /// Standalone deriving instance command: `deriving instance Repr, BEq for MyType`
@@ -376,9 +407,9 @@ pub enum SurfaceDecl {
     DerivingInstance {
         span: Span,
         /// Type classes to derive (e.g., ["Repr", "BEq"])
-        classes: Vec<String>,
+        classes: Vec<SurfaceName>,
         /// Types to derive instances for
-        types: Vec<String>,
+        types: Vec<SurfaceName>,
     },
 
     /// #check command: `#check expr`
@@ -387,8 +418,44 @@ pub enum SurfaceDecl {
     /// #eval command: `#eval expr`
     Eval { span: Span, expr: Box<SurfaceExpr> },
 
+    /// `#reduce (proofs := true)? (types := true)? expr` (Lean 4.30.0-rc2
+    /// `Lean.reduceCmd`): `Lean.Meta.reduce` of `expr`, logged. It is not
+    /// `#eval`: nothing is compiled or run. Each flag is `true` when its
+    /// `(… := true)` group is written, i.e. when Lean does NOT skip that class
+    /// of subterm (`skipProofs := false` / `skipTypes := false`).
+    Reduce {
+        span: Span,
+        expr: Box<SurfaceExpr>,
+        reduce_proofs: bool,
+        reduce_types: bool,
+    },
+
     /// #print command: `#print name`
-    Print { span: Span, name: String },
+    Print { span: Span, name: SurfaceName },
+
+    /// `#print axioms c` (Lean 4.8.0 `Lean.Parser.Command.printAxioms`):
+    /// report the axioms `c` depends on, as an information message.
+    PrintAxioms { span: Span, name: SurfaceName },
+
+    /// `#guard e` (Lean 4.8.0 `Lean.Parser.Command.guardCmd`,
+    /// `Init/Guard.lean`): `e` is elaborated at `Bool` and must evaluate to
+    /// `true`.
+    Guard { span: Span, expr: Box<SurfaceExpr> },
+
+    /// `/-- expected -/ #guard_msgs (spec)? in cmd` (Lean 4.8.0
+    /// `Lean.guardMsgsCmd`): run `cmd` and require the messages it produces
+    /// to equal the doc comment written immediately before `#guard_msgs`.
+    GuardMsgs {
+        span: Span,
+        /// The text of that doc comment between `/--` and `-/`, untrimmed
+        /// (Lean's `getDocStringText`); `None` when there is none, which
+        /// Lean reads as the empty expectation.
+        doc: Option<String>,
+        /// The `(…)` configuration clauses, as written.
+        spec: Vec<super::guard_msgs::GuardMsgsSpecElt>,
+        /// The command whose messages are checked.
+        cmd: Box<SurfaceDecl>,
+    },
 
     /// Mutual block: `mutual ... end`
     Mutual { span: Span, decls: Vec<SurfaceDecl> },
@@ -402,7 +469,7 @@ pub enum SurfaceDecl {
     Syntax {
         span: Span,
         /// Optional name for the syntax (e.g., `[name]` attribute)
-        name: Option<String>,
+        name: Option<SurfaceName>,
         /// Optional precedence level
         precedence: Option<u32>,
         /// Optional priority for disambiguation
@@ -421,7 +488,7 @@ pub enum SurfaceDecl {
     DeclareSyntaxCat {
         span: Span,
         /// The name of the new category
-        name: String,
+        name: SurfaceName,
     },
 
     /// Macro declaration: short form for simple macros
@@ -452,7 +519,7 @@ pub enum SurfaceDecl {
     MacroRules {
         span: Span,
         /// Optional name for the macro
-        name: Option<String>,
+        name: Option<SurfaceName>,
         /// Match arms: (pattern, expansion)
         arms: Vec<MacroArm>,
     },
@@ -482,6 +549,11 @@ pub enum SurfaceDecl {
         /// surfacing the unsupported feature (gap sweep B13,
         /// namespaces_scoping/p10). The elaborator now consumes this field.
         scope: DeclScope,
+        /// Mathlib's `scoped[NS]` (`Mathlib/Tactic/ScopedNS.lean`,
+        /// `with_weak_namespace _root_.NS scoped <cmd>`): the ABSOLUTE
+        /// namespace the declaration runs in, in place of the current one.
+        /// `None` for every other notation command.
+        scope_ns: Option<SurfaceName>,
     },
 
     /// Elaborator declaration: `elab <pattern> : <category> => <body>`
@@ -512,7 +584,7 @@ pub enum SurfaceDecl {
     Attribute {
         span: Span,
         attrs: Vec<AttributeCommandAttr>,
-        names: Vec<String>,
+        names: Vec<SurfaceName>,
     },
 
     /// `set_option` command
@@ -522,7 +594,7 @@ pub enum SurfaceDecl {
     /// - Per-declaration: `set_option maxHeartbeats 400000 in def ...` (body is Some)
     SetOption {
         span: Span,
-        name: String,
+        name: SurfaceName,
         value: Option<String>,
         /// When present, the option is scoped to this single declaration only.
         /// Corresponds to the Lean 4 `set_option ... in <command>` syntax.
@@ -536,7 +608,7 @@ pub enum SurfaceDecl {
     DeclareAesopRuleSets {
         span: Span,
         /// Names of the rule sets being declared
-        names: Vec<String>,
+        names: Vec<SurfaceName>,
     },
 
     /// `library_note «title»` / `library_note "title"` (Mathlib/Batteries doc
@@ -559,6 +631,7 @@ impl SurfaceDecl {
     pub fn span(&self) -> Span {
         match self {
             SurfaceDecl::Def { span, .. }
+            | SurfaceDecl::Alias { span, .. }
             | SurfaceDecl::Theorem { span, .. }
             | SurfaceDecl::Axiom { span, .. }
             | SurfaceDecl::Opaque { span, .. }
@@ -582,7 +655,11 @@ impl SurfaceDecl {
             | SurfaceDecl::DerivingInstance { span, .. }
             | SurfaceDecl::Check { span, .. }
             | SurfaceDecl::Eval { span, .. }
+            | SurfaceDecl::Reduce { span, .. }
             | SurfaceDecl::Print { span, .. }
+            | SurfaceDecl::PrintAxioms { span, .. }
+            | SurfaceDecl::Guard { span, .. }
+            | SurfaceDecl::GuardMsgs { span, .. }
             | SurfaceDecl::Mutual { span, .. }
             | SurfaceDecl::Syntax { span, .. }
             | SurfaceDecl::DeclareSyntaxCat { span, .. }
@@ -590,6 +667,7 @@ impl SurfaceDecl {
             | SurfaceDecl::MacroRules { span, .. }
             | SurfaceDecl::Notation { span, .. }
             | SurfaceDecl::Elab { span, .. }
+            | SurfaceDecl::Prelude { span }
             | SurfaceDecl::RawDecl { span, .. }
             | SurfaceDecl::Attribute { span, .. }
             | SurfaceDecl::SetOption { span, .. }
@@ -621,7 +699,7 @@ pub enum CodataBody {
 #[derive(Debug, Clone)]
 pub struct SurfaceCtor {
     pub span: Span,
-    pub name: String,
+    pub name: SurfaceName,
     pub ty: SurfaceExpr,
 }
 
@@ -630,7 +708,7 @@ pub struct SurfaceCtor {
 pub struct SurfaceField {
     pub span: Span,
     /// Field name
-    pub name: String,
+    pub name: SurfaceName,
     /// Field type
     pub ty: SurfaceExpr,
     /// Default value (optional)
@@ -652,7 +730,7 @@ pub struct SurfaceField {
 pub struct SurfaceFieldAssign {
     pub span: Span,
     /// Field name
-    pub name: String,
+    pub name: SurfaceName,
     /// Assigned value
     pub val: SurfaceExpr,
 }
@@ -672,11 +750,15 @@ pub struct WhereLocalDef {
     /// Source span of the entire where definition
     pub span: Span,
     /// Name of the local definition
-    pub name: String,
+    pub name: SurfaceName,
     /// Parameters (binders) of the local definition
     pub binders: Vec<SurfaceBinder>,
     /// Optional return type annotation
     pub ret_ty: Option<Box<SurfaceExpr>>,
     /// Body expression of the local definition
     pub body: SurfaceExpr,
+    /// `termination_by` / `decreasing_by` written after this helper's body.
+    /// Lean attaches a hint that follows a `where` helper to that helper
+    /// (`Lean/Parser/Term.lean` `letRecDecl` carries `Termination.suffix`).
+    pub termination: TerminationHints,
 }

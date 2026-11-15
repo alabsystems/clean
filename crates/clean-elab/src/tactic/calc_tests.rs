@@ -551,7 +551,9 @@ fn test_justification_variants_success() {
         vec![CalcStep {
             rel: CalcRel::Eq,
             rhs: c("b"),
-            justification: CalcJustification::Lemma("my_lemma".into()),
+            justification: CalcJustification::Lemma(clean_parser::SurfaceName::generated_path(
+                "my_lemma",
+            )),
         }],
     )
     .expect("lemma justification should work");
@@ -596,7 +598,9 @@ fn test_justification_error_cases() {
         vec![CalcStep {
             rel: CalcRel::Eq,
             rhs: c("b"),
-            justification: CalcJustification::Hyp("nonexistent".into()),
+            justification: CalcJustification::Hyp(clean_parser::SurfaceName::generated_path(
+                "nonexistent",
+            )),
         }],
     );
     assert!(matches!(result, Err(TacticError::HypothesisNotFound(_))));

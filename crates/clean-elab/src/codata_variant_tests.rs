@@ -20,7 +20,7 @@ use crate::elaborate_decl_and_register;
 use clean_kernel::Environment;
 use clean_parser::{
     parse_file, CodataBody, DeclModifiers, LevelExpr, Projection, SurfaceDecl, SurfaceExpr,
-    UniverseExpr,
+    SurfaceName, UniverseExpr,
 };
 
 const ITREE_SRC: &str = r"
@@ -29,6 +29,106 @@ codata ITr (E : Type) (R : Type) (Ans : E → Type) where
   | Tau : ITr E R Ans → ITr E R Ans
   | Vis : (e : E) → (Ans e → ITr E R Ans) → ITr E R Ans
 ";
+
+#[test]
+fn typed_variant_payload_substitution_preserves_display_twin() {
+    use crate::codata_cmd::walk;
+    let src = "codata T (E : Type) (Ans : E → Type) where\n  | Stop : T E Ans\n  | Vis : («e.dot» : E) → (PProd (Ans «e.dot») (Ans e.dot) → T E Ans) → T E Ans\n";
+    let mut decls = parse_file(src).expect("typed variant source must parse");
+    assert_eq!(decls.len(), 1);
+    // The source parser represents unquoted e.dot here as a projection, not
+    // one hierarchical Ident. Check that actual form before constructing the
+    // generated-AST display twin whose exact identity this consumer tests.
+    let is_projection = |expr: &SurfaceExpr| {
+        matches!(expr, SurfaceExpr::Proj(_, base, Projection::Named(field))
+            if field.is_unescaped_component("dot")
+            && matches!(base.as_ref(), SurfaceExpr::Ident(_, name)
+                if name.is_unescaped_component("e")))
+    };
+    {
+        let parsed = plan_of(&decls);
+        let ArgPlan::Child(child) = &parsed.ctors[1].args[1] else {
+            panic!("parsed function-valued child must be retained");
+        };
+        let family = child.family.as_ref().expect("parsed family");
+        for expr in [family.source, &family.in_shape] {
+            let mut count = 0;
+            walk(expr, &mut |e| count += usize::from(is_projection(e)));
+            assert_eq!(count, 1, "the actual source projection stays intact");
+        }
+    }
+    fn replace_projection(expr: &mut SurfaceExpr) -> usize {
+        match expr {
+            SurfaceExpr::Proj(span, base, Projection::Named(field))
+                if field.is_unescaped_component("dot")
+                    && matches!(base.as_ref(), SurfaceExpr::Ident(_, name)
+                        if name.is_unescaped_component("e")) =>
+            {
+                *expr = SurfaceExpr::Ident(*span, SurfaceName::generated_path("e.dot"));
+                1
+            }
+            SurfaceExpr::Pi(_, binders, body) => {
+                let mut count = replace_projection(body);
+                for binder in binders {
+                    if let Some(ty) = &mut binder.ty {
+                        count += replace_projection(ty);
+                    }
+                }
+                count
+            }
+            SurfaceExpr::App(_, head, args) => {
+                replace_projection(head)
+                    + args
+                        .iter_mut()
+                        .map(|a| replace_projection(&mut a.expr))
+                        .sum::<usize>()
+            }
+            SurfaceExpr::Arrow(_, a, b) => replace_projection(a) + replace_projection(b),
+            SurfaceExpr::Paren(_, inner) => replace_projection(inner),
+            _ => 0,
+        }
+    }
+    let SurfaceDecl::Codata {
+        body: CodataBody::Variant(ctors),
+        ..
+    } = &mut decls[0]
+    else {
+        panic!("retained variant declaration");
+    };
+    assert_eq!(replace_projection(&mut ctors[1].ty), 1);
+    let shape = plan_of(&decls);
+    let vis = &shape.ctors[1];
+    let [ArgPlan::Payload(payload), ArgPlan::Child(child)] = vis.args.as_slice() else {
+        panic!("the complete two-argument telescope must be retained");
+    };
+    let quoted = SurfaceName::component("e.dot", true);
+    let nested = SurfaceName::generated_path("e.dot");
+    assert_eq!(payload.arg_name, quoted);
+    assert_ne!(quoted, nested);
+    let family = child.family.as_ref().expect("function-valued child");
+    let collect = |expr: &SurfaceExpr| {
+        let mut names = Vec::new();
+        walk(expr, &mut |e| {
+            if let SurfaceExpr::Ident(_, n) = e {
+                names.push(n.clone());
+            }
+        });
+        names
+    };
+    let before = collect(family.source);
+    let after = collect(&family.in_shape);
+    assert!(before.contains(&quoted));
+    assert!(before.contains(&nested));
+    assert!(
+        !after.contains(&quoted),
+        "only the exact payload reference is substituted"
+    );
+    assert!(
+        after.contains(&nested),
+        "its display twin must remain a distinct reference"
+    );
+    assert!(after.contains(&vis.shape_var));
+}
 
 /// Elaborate every decl in `code` against `env`, returning the first error.
 /// The env is threaded so a whole refusal table can share one prelude —
@@ -62,8 +162,11 @@ fn test_variant_body_parses_as_variant_with_all_clauses() {
     let CodataBody::Variant(ctors) = body else {
         panic!("expected a VARIANT body, got a record body");
     };
-    let names: Vec<&str> = ctors.iter().map(|c| c.name.as_str()).collect();
-    assert_eq!(names, ["Ret", "Tau", "Vis"]);
+    let names: Vec<SurfaceName> = ctors.iter().map(|c| c.name.clone()).collect();
+    assert_eq!(
+        names,
+        ["Ret", "Tau", "Vis"].map(SurfaceName::generated_path)
+    );
 }
 
 /// `where` is optional before a `|`-led body, matching `inductive`.
@@ -243,8 +346,9 @@ fn test_variant_envelope_refusals() {
             "declaration modifiers",
         ),
         (
-            "codata T.{u} where\n  | Tau : T → T\n",
-            "universe-polymorphic variant codata",
+            // ONE universe parameter is supported; two is not.
+            "codata T.{u, v} where\n  | Tau : T → T\n",
+            "at most ONE universe parameter",
         ),
         (
             "codata T : Nat → Type where\n  | Tau : T → T\n",
@@ -359,7 +463,7 @@ end
 /// silently.
 fn render(e: &SurfaceExpr) -> String {
     match e {
-        SurfaceExpr::Ident(_, id) => id.clone(),
+        SurfaceExpr::Ident(_, id) => id.to_string(),
         SurfaceExpr::Universe(_, UniverseExpr::Type) => "Type".to_string(),
         SurfaceExpr::Paren(_, inner) => render(inner),
         SurfaceExpr::Explicit(_, inner) => format!("@{}", render(inner)),
@@ -369,11 +473,11 @@ fn render(e: &SurfaceExpr) -> String {
         }
         SurfaceExpr::Arrow(_, a, b) => format!("({} -> {})", render(a), render(b)),
         SurfaceExpr::Pi(_, bs, body) => {
-            let names: Vec<String> = bs.iter().map(|b| b.name.clone()).collect();
+            let names: Vec<String> = bs.iter().map(|b| b.name.to_string()).collect();
             format!("(forall {}, {})", names.join(" "), render(body))
         }
         SurfaceExpr::Lambda(_, bs, body) => {
-            let names: Vec<String> = bs.iter().map(|b| b.name.clone()).collect();
+            let names: Vec<String> = bs.iter().map(|b| b.name.to_string()).collect();
             format!("(fun {} => {})", names.join(" "), render(body))
         }
         SurfaceExpr::Proj(_, inner, Projection::Index(i)) => format!("{}.{i}", render(inner)),
@@ -427,7 +531,7 @@ fn test_itree_plan_is_fully_resolved() {
     let decls = parse_file(ITREE_SRC).expect("should parse");
     let shape = plan_of(&decls);
 
-    assert_eq!(shape.name, "ITr");
+    assert_eq!(shape.name, &SurfaceName::generated_path("ITr"));
     assert_eq!(shape.binders.len(), 3);
     assert_eq!(shape.ctors.len(), 3);
     // P₁ = R, P₂ = PUnit.{1} (no payload), P₃ = E.
@@ -448,29 +552,34 @@ fn test_itree_plan_is_fully_resolved() {
     );
 
     let ret = &shape.ctors[0];
-    assert_eq!(ret.name, "Ret");
+    assert_eq!(ret.name, &SurfaceName::generated_path("Ret"));
     assert!(matches!(ret.args.as_slice(), [ArgPlan::Payload(_)]));
     assert_eq!(render(&ret.payload_ty), "R");
     assert_eq!(render(&ret.pos_ty_in_shape), "PEmpty.{1}");
 
     let tau = &shape.ctors[1];
-    assert_eq!(tau.name, "Tau");
+    assert_eq!(tau.name, &SurfaceName::generated_path("Tau"));
     assert!(matches!(tau.args.as_slice(), [ArgPlan::Child(_)]));
     assert_eq!(render(&tau.payload_ty), "PUnit.{1}");
     assert_eq!(render(&tau.pos_ty_in_shape), "PUnit.{1}");
 
     let vis = &shape.ctors[2];
-    assert_eq!(vis.name, "Vis");
+    assert_eq!(vis.name, &SurfaceName::generated_path("Vis"));
     let [ArgPlan::Payload(e), ArgPlan::Child(k)] = vis.args.as_slice() else {
         panic!(
             "Vis must be payload `e : E` then a child FAMILY, got {:?}",
             vis.args
         );
     };
-    assert_eq!(e.arg_name, "e", "a NAMED clause binder keeps its name");
+    assert_eq!(
+        e.arg_name,
+        SurfaceName::generated_path("e"),
+        "a NAMED clause binder keeps its name"
+    );
     assert_eq!(render(e.ty), "E");
     assert_eq!(
-        k.arg_name, "a1",
+        k.arg_name,
+        SurfaceName::generated_path("a1"),
         "an arrow-style (anonymous) argument gets a generated name from its \
          position in the telescope"
     );
@@ -506,7 +615,8 @@ fn test_vis_child_domain_resolves_to_a_projection_not_a_free_variable() {
     // it is the identity ON THE SHAPE VARIABLE, which is what makes the
     // difference between correct and free.
     assert_ne!(
-        vis.shape_var, "e",
+        vis.shape_var,
+        SurfaceName::component("e", false),
         "the shape binder must not coincide with the payload name, or this \
          test could not tell a projection from a free variable"
     );
@@ -519,7 +629,7 @@ fn test_vis_child_domain_resolves_to_a_projection_not_a_free_variable() {
     let [ArgPlan::Payload(e), _] = vis.args.as_slice() else {
         panic!("Vis starts with a payload");
     };
-    assert_eq!(render(&e.projection), vis.shape_var);
+    assert_eq!(render(&e.projection), vis.shape_var.to_string());
 }
 
 /// The mixed shape: a nullary constructor, a TWO-payload constructor whose
@@ -583,8 +693,8 @@ codata Coll (a : Type) (b : Type) (f : Type) (x : Type) (s0 : Type) where
     let decls = parse_file(src).expect("should parse");
     let shape = plan_of(&decls);
     let g = &shape.gen_names;
-    let params = ["a", "b", "f", "x", "s0"];
-    let mut minted: Vec<String> = vec![
+    let params = ["a", "b", "f", "x", "s0"].map(SurfaceName::generated_path);
+    let mut minted: Vec<SurfaceName> = vec![
         g.shape_arg.clone(),
         g.pos_arg.clone(),
         g.child_arg.clone(),
@@ -604,14 +714,14 @@ codata Coll (a : Type) (b : Type) (f : Type) (x : Type) (s0 : Type) where
         shape
             .ctors
             .iter()
-            .flat_map(|c| c.args.iter().map(|a| a.alt_name().to_string())),
+            .flat_map(|c| c.args.iter().map(|a| a.alt_name().clone())),
     );
     for name in minted
         .iter()
         .chain(shape.ctors.iter().map(|c| &c.shape_var))
     {
         assert!(
-            !params.contains(&name.as_str()),
+            !params.contains(name),
             "generated binder `{name}` collides with a parameter"
         );
     }
@@ -700,8 +810,16 @@ fn test_variant_lowering_target_kernel_checks() {
 /// refuses it rather than building an uninhabited carrier.
 #[test]
 fn test_empty_variant_is_refused_at_the_validator() {
-    let err = validate_variant("T", &[], &[], &None, &[], &[], &DeclModifiers::default())
-        .expect_err("an empty variant must be refused");
+    let err = validate_variant(
+        &SurfaceName::component("T", false),
+        &[],
+        &[],
+        &None,
+        &[],
+        &[],
+        &DeclModifiers::default(),
+    )
+    .expect_err("an empty variant must be refused");
     let text = format!("{err:?}");
     assert!(
         text.contains("at least one constructor is required"),

@@ -33,8 +33,9 @@ fn nat_fvar(id: u64) -> Expr {
 
 fn nat_local(id: u64, name: &str) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty: nat_type(),
         value: None,
     }
@@ -70,8 +71,9 @@ fn nat_eq(l: Expr, r: Expr) -> Expr {
 
 fn hyp(id: u64, name: &str, ty: Expr) -> LocalDecl {
     LocalDecl {
+        binder_info: Default::default(),
         fvar: FVarId::new(id),
-        name: name.to_string(),
+        name: clean_parser::SurfaceName::component(name, false),
         ty,
         value: None,
     }
@@ -137,14 +139,16 @@ fn test_farkas_goal_proves_b_le_zero_from_hyp_chain() {
             nat_local(1, "b"),
             nat_local(2, "c"),
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(3),
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(4),
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2,
                 value: None,
             },
@@ -170,14 +174,16 @@ fn test_farkas_goal_proves_b_lt_zero_from_lt_hyp_chain() {
             nat_local(1, "b"),
             nat_local(2, "c"),
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(3),
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(4),
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2,
                 value: None,
             },
@@ -203,14 +209,16 @@ fn test_farkas_goal_rejects_false_c_le_a() {
             nat_local(1, "b"),
             nat_local(2, "c"),
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(3),
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: h1,
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(4),
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: h2,
                 value: None,
             },
@@ -233,8 +241,9 @@ fn test_farkas_goal_rejects_false_b_le_a() {
             nat_local(0, "a"),
             nat_local(1, "b"),
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h".into(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: h,
                 value: None,
             },
@@ -257,8 +266,9 @@ fn test_farkas_goal_rejects_false_a_plus_1_le_b() {
             nat_local(0, "a"),
             nat_local(1, "b"),
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(2),
-                name: "h".into(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: h,
                 value: None,
             },

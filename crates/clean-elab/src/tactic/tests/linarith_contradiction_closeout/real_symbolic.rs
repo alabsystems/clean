@@ -56,14 +56,16 @@ fn symbolic_int_false_state(env: Environment, h_ty: Expr) -> (ProofState, FVarId
         Expr::const_(Name::from_string("False"), vec![]),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: m_id,
-                name: "m".into(),
+                name: clean_parser::SurfaceName::generated_path("m"),
                 ty: Expr::const_(Name::from_string("Int"), vec![]),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_id,
-                name: "h".into(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: h_ty,
                 value: None,
             },
@@ -247,26 +249,30 @@ fn test_linarith_real_additive_mixed_symbolic_keeps_real_path() {
         goal_target,
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: x_id,
-                name: "x".into(),
+                name: clean_parser::SurfaceName::generated_path("x"),
                 ty: Expr::const_(Name::from_string("Real"), vec![]),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: y_id,
-                name: "y".into(),
+                name: clean_parser::SurfaceName::generated_path("y"),
                 ty: Expr::const_(Name::from_string("Real"), vec![]),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h1_id,
-                name: "h1".into(),
+                name: clean_parser::SurfaceName::generated_path("h1"),
                 ty: make_real_le_tc(x, y),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h2_id,
-                name: "h2".into(),
+                name: clean_parser::SurfaceName::generated_path("h2"),
                 ty: make_real_le_tc(concrete_lhs, concrete_rhs),
                 value: None,
             },

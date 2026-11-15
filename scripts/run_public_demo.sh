@@ -156,8 +156,8 @@ fi
 write_contract_manifest
 
 if [[ "$build_mode" == "cargo-build" ]]; then
-    cargo build --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean --bin clean >"$build_log" 2>&1 ||
-        fail "cargo build failed; see target/public-demo/build.log"
+    targo --unverified build --quiet --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean --bin clean >"$build_log" 2>&1 ||
+        fail "targo --unverified build failed; see target/public-demo/build.log"
 else
     printf "build skipped via CLEAN_PUBLIC_DEMO_SKIP_BUILD=1\n" >"$build_log"
 fi

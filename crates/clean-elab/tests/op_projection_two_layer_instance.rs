@@ -35,7 +35,7 @@
 //! ## Why these fixtures need no `.olean`
 //!
 //! `Inhabited` is a single-field structure in Clean's own prelude, so
-//! `fun a b => Inhabited.default T inst a b` reproduces *exactly* the two
+//! `fun a b => @Inhabited.default T inst a b` reproduces *exactly* the two
 //! structural features of a Lean instance stack — lambda field, nested structure
 //! projection — in 0.2 s with the builtin prelude. `two_layer_*` are the RED
 //! fixtures; `fused_*` is the control that was already green and must stay green.
@@ -53,15 +53,21 @@ use clean_kernel::{Name, TypeChecker};
 use clean_elab::{elaborate_decl_and_register, preprocess_decl_with_context, FileContext};
 use clean_parser::parse_file;
 
+/// The fixtures spell every Lean-implicit argument through `@`. Pinned Lean
+/// (v4.30.0-rc2) gives `@Inhabited.mk : {α : Sort u} → α → Inhabited α` and
+/// `@HAppend.mk : {α β γ} → (α → β → γ) → HAppend α β γ`, and refuses the bare
+/// positional spelling `Inhabited.mk T v` with "Function expected"; Clean
+/// refuses it too since surplus arguments stopped filling implicit binders
+/// (`old_positional_spelling_is_refused_as_lean_refuses_it` below).
 /// Clean's prelude has no homogeneous `Append`/`Div`/`Mod` class, so the second
 /// layer is built from `Inhabited`, whose projection has the same shape.
 const TWO_LAYER_PREAMBLE: &str = r"
 def myInh : Inhabited (List Nat → List Nat → List Nat) :=
-  Inhabited.mk (List Nat → List Nat → List Nat) (fun a b => List.append Nat a b)
+  @Inhabited.mk (List Nat → List Nat → List Nat) (fun a b => @List.append Nat a b)
 
 def hAppendTwoLayer : HAppend (List Nat) (List Nat) (List Nat) :=
-  HAppend.mk (List Nat) (List Nat) (List Nat)
-    (fun a b => Inhabited.default (List Nat → List Nat → List Nat) myInh a b)
+  @HAppend.mk (List Nat) (List Nat) (List Nat)
+    (fun a b => @Inhabited.default (List Nat → List Nat → List Nat) myInh a b)
 ";
 
 /// Drive the real file pipeline for a (possibly multi-declaration) source.
@@ -139,7 +145,7 @@ fn rw_through_fused_single_layer_instance_still_matches() {
     assert_tactic_theorem(
         "fused_rw",
         "theorem fused_rw (l : List Nat) : \
-         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (instHAppendListList Nat) l (List.nil Nat) = l := by \
+         @HAppend.hAppend (List Nat) (List Nat) (List Nat) (@instHAppendListList Nat) l (@List.nil Nat) = l := by \
          rw [List.append_nil]",
     );
 }
@@ -151,7 +157,7 @@ fn rw_through_two_layer_instance_matches() {
     assert_tactic_theorem(
         "two_layer_rw",
         "theorem two_layer_rw (l : List Nat) : \
-         @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l (List.nil Nat) = l := by \
+         @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l (@List.nil Nat) = l := by \
          rw [List.append_nil]",
     );
 }
@@ -162,7 +168,7 @@ fn simp_only_through_two_layer_instance_matches() {
     assert_tactic_theorem(
         "two_layer_simp",
         "theorem two_layer_simp (l : List Nat) : \
-         @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l (List.nil Nat) = l := by \
+         @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l (@List.nil Nat) = l := by \
          simp only [List.append_nil]",
     );
 }
@@ -188,5 +194,24 @@ fn simp_only_through_two_layer_instance_rejects_false_goal() {
         "theorem two_layer_false_simp (l m : List Nat) : \
          @HAppend.hAppend (List Nat) (List Nat) (List Nat) hAppendTwoLayer l m = l := by \
          simp only [List.append_nil]",
+    );
+}
+
+/// Lean refuses an explicit argument aimed at `Inhabited.mk`'s implicit `{α}`
+/// ("Function expected at { default := List Nat → List Nat → List Nat }, but
+/// this term has type Inhabited Type", pinned v4.30.0-rc2). Clean must refuse
+/// the same spelling instead of letting argument count fill the implicit slot.
+#[test]
+fn old_positional_spelling_is_refused_as_lean_refuses_it() {
+    let mut env = Environment::with_prelude();
+    let err = try_elaborate_into(
+        &mut env,
+        "def positionalInh : Inhabited (List Nat → List Nat → List Nat) :=
+  Inhabited.mk (List Nat → List Nat → List Nat) (fun a b => @List.append Nat a b)",
+    )
+    .expect_err("an explicit argument must not fill `Inhabited.mk`'s implicit `{α}`");
+    assert!(
+        err.contains("Too many arguments"),
+        "the refusal must be the surplus-argument refusal; got {err}"
     );
 }

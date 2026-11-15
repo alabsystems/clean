@@ -166,7 +166,7 @@ python3 - "$MT_FIX" <<'PY'
 import sys
 p = sys.argv[1]
 s = open(p).read()
-line = "    assert %4  ; #proof: shift_in_range  ; #loc: 437 157 30\n"
+line = "    assert %4  ; #proof: shift_in_range  ; #loc: 254 157 30\n"
 # assert on the EXACT text being removed: asserting a prefix while replacing
 # the full line is how a moved #loc turned this mutation into a silent no-op.
 assert s.count(line) == 1, "expected exactly one assert line, found %d" % s.count(line)
@@ -544,7 +544,7 @@ python3 - "$MT_FIX" <<'PYX'
 import sys
 p = sys.argv[1]
 s = open(p).read()
-line = "    assert %4  ; #proof: shift_in_range  ; #loc: 437 157 30\n"
+line = "    assert %4  ; #proof: shift_in_range  ; #loc: 254 157 30\n"
 # assert on the EXACT text being removed: asserting a prefix while replacing
 # the full line is how a moved #loc turned this mutation into a silent no-op.
 assert s.count(line) == 1, "expected exactly one assert line, found %d" % s.count(line)

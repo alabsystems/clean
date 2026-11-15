@@ -41,15 +41,27 @@ pub(crate) fn beta_reduce(expr: &Expr) -> Expr {
 
         fn fold_let(
             &mut self,
-            _name: &clean_kernel::Name,
-            _ty: &Expr,
+            name: &clean_kernel::Name,
+            ty: &Expr,
             val: &Expr,
             body: &Expr,
-            _non_dep: bool,
+            non_dep: bool,
         ) -> Expr {
-            // Let reduction: substitute value into body
             let val_reduced = self.fold_expr(val);
             let body_reduced = self.fold_expr(body);
+            // A match join point stays a `let` (`crate::infer::MATCH_JOIN_BINDER`):
+            // substituting it copies the catch-all body into every
+            // constructor it covers, at every nesting level.
+            if crate::infer::is_match_join_binder(name) {
+                return Expr::let_named(
+                    name.clone(),
+                    ty.clone(),
+                    val_reduced,
+                    body_reduced,
+                    non_dep,
+                );
+            }
+            // Let reduction: substitute value into body
             substitute_bvar(&body_reduced, 0, &val_reduced)
         }
     }
@@ -87,10 +99,20 @@ pub(crate) fn shift_expr(expr: &Expr, amount: i64) -> Expr {
 
 /// Perform eta reduction: λ x => f x → f (when x not free in f)
 ///
+/// ONE contraction per `Lam` node, NOT a fixpoint. `fold_lam` rebuilds the
+/// node from its already-folded body and never re-examines the node it just
+/// built, so a multi-binder eta expansion loses one binder per call:
+/// `fun a b => f a b` lands on `fun a => f a`, which is still eta-reducible.
+/// The simp TRAVERSAL does not notice, because its outer loop re-simplifies
+/// the rewritten target and gets the fixpoint over successive passes; a caller
+/// that normalizes a term exactly once wants [`eta_reduce_fixpoint`].
+///
 /// # Contract
 ///
 /// REQUIRES: `expr` is a well-formed Lean expression
-/// ENSURES: No eta-reducible lambdas `(λ x => f x)` where `x ∉ FV(f)` remain in the result
+/// ENSURES: Every `Lam` node of the input whose body is `f (bvar 0)` with
+///   `bvar 0 ∉ FV(f)` is contracted — but a contraction that EXPOSES a new
+///   one at the enclosing binder is not re-examined (see above)
 /// ENSURES: The returned expression is definitionally equal to the input
 /// ENSURES: De Bruijn indices are correctly shifted down after eta contraction
 pub(crate) fn eta_reduce(expr: &Expr) -> Expr {
@@ -114,6 +136,35 @@ pub(crate) fn eta_reduce(expr: &Expr) -> Expr {
     EtaReducer.fold_expr(expr)
 }
 
+/// [`eta_reduce`] applied until it stops changing the term.
+///
+/// A round that changes anything removes at least one binder, so the fixpoint
+/// is reached in at most the term's binder depth and the loop exits on the
+/// first no-op round. `ETA_FIXPOINT_ROUNDS` bounds a folder that has stopped
+/// shrinking; it is not the normal exit.
+///
+/// # Contract
+///
+/// REQUIRES: `expr` is a well-formed Lean expression
+/// ENSURES: No eta-reducible lambda remains, at any binder depth, within
+///   `ETA_FIXPOINT_ROUNDS` rounds
+/// ENSURES: The returned expression is definitionally equal to the input
+pub(crate) fn eta_reduce_fixpoint(expr: &Expr) -> Expr {
+    /// Rounds before the loop stops asking. Each round that changes the term
+    /// drops a binder, so this is far above any real term's binder depth.
+    const ETA_FIXPOINT_ROUNDS: usize = 16;
+
+    let mut reduced = eta_reduce(expr);
+    for _ in 1..ETA_FIXPOINT_ROUNDS {
+        let next = eta_reduce(&reduced);
+        if next == reduced {
+            break;
+        }
+        reduced = next;
+    }
+    reduced
+}
+
 /// Check if an expression contains a specific bound variable.
 ///
 /// Uses the shared `tactic::bvar_ops::BVarFolder` traversal.
@@ -124,4 +175,67 @@ pub(crate) fn eta_reduce(expr: &Expr) -> Expr {
 /// ENSURES: Returns `true` iff `bvar(idx)` occurs free (at depth 0) in `expr`
 pub(crate) fn contains_bvar(expr: &Expr, idx: u32) -> bool {
     has_loose_bvar(expr, idx)
+}
+
+#[cfg(test)]
+mod eta_fixpoint_tests {
+    use super::{eta_reduce, eta_reduce_fixpoint};
+    use clean_kernel::{BinderInfo, Expr, Level, Name};
+
+    fn f_const() -> Expr {
+        Expr::const_(Name::from_string("f"), vec![])
+    }
+
+    /// `fun a => f a`.
+    fn one_binder_eta() -> Expr {
+        Expr::lam(
+            BinderInfo::Default,
+            Expr::sort(Level::zero()),
+            Expr::app(f_const(), Expr::bvar(0)),
+        )
+    }
+
+    /// `fun a => fun b => f a b`.
+    fn two_binder_eta() -> Expr {
+        let body = Expr::app(Expr::app(f_const(), Expr::bvar(1)), Expr::bvar(0));
+        Expr::lam(
+            BinderInfo::Default,
+            Expr::sort(Level::zero()),
+            Expr::lam(BinderInfo::Default, Expr::sort(Level::zero()), body),
+        )
+    }
+
+    #[test]
+    fn test_eta_reduce_one_binder_contracts_fully() {
+        assert_eq!(eta_reduce(&one_binder_eta()), f_const());
+    }
+
+    /// The measured shortfall the matcher's fixpoint exists for: a single
+    /// `eta_reduce` call contracts the INNER binder and leaves the outer one,
+    /// because `fold_lam` never re-examines the node it just rebuilt.
+    #[test]
+    fn test_eta_reduce_two_binders_leaves_one_uncontracted() {
+        let once = eta_reduce(&two_binder_eta());
+        assert_ne!(once, f_const(), "one call must not reach the fixpoint");
+        assert_eq!(
+            once,
+            one_binder_eta(),
+            "one call contracts exactly the inner binder"
+        );
+    }
+
+    #[test]
+    fn test_eta_reduce_fixpoint_two_binders_contracts_fully() {
+        assert_eq!(eta_reduce_fixpoint(&two_binder_eta()), f_const());
+    }
+
+    /// The loop must be a no-op on a term with nothing to contract: it exits
+    /// on the first unchanged round rather than rewriting the term.
+    #[test]
+    fn test_eta_reduce_fixpoint_leaves_a_non_eta_lambda_alone() {
+        // `fun a => f a a` — `a` occurs in the function part, so no contraction.
+        let body = Expr::app(Expr::app(f_const(), Expr::bvar(0)), Expr::bvar(0));
+        let lam = Expr::lam(BinderInfo::Default, Expr::sort(Level::zero()), body);
+        assert_eq!(eta_reduce_fixpoint(&lam), lam);
+    }
 }

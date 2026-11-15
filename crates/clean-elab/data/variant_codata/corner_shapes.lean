@@ -71,3 +71,62 @@ theorem Tri.three_eta_used (A : Type) (a : A) (b : A) (t : Tri A) :
     Tri.Three A a b t
       = Tri.Three A a b (Tri.ThreeChild A (Tri.Three A a b t) a b rfl) :=
   Tri.Three_eta A (Tri.Three A a b t) a b rfl
+
+-- ── REGRESSION PINS for the two generator bugs found 2026-08-29 (§12).
+-- Both were pre-existing, both hit ordinary shapes, and neither had
+-- anything to do with the k-fold/indexed-family shape that VC-6 had
+-- (wrongly) refused.
+
+-- Bug 1 — a single constructor whose FIRST argument is recursive. The case
+-- tower's `Exists.intro` had its predicate left implicit; with the goal
+-- behind the `CasesP` definition and the witness a compound extractor
+-- application, `?p` is not a Miller pattern and the unifier poisoned it.
+-- Multi-constructor codata escaped only because `Or.inl` pinned the shape
+-- first. This is the minimal case, and it is an ordinary infinite chain.
+codata Sc (A : Type) where
+  | C : Sc A → Sc A
+deriving Coind
+
+theorem Sc.cases_used (A : Type) (t : Sc A) : Sc.CasesP A t := Sc.cases A t
+
+-- the same bug at k-fold arity, with an INDEXED FAMILY summand: the exact
+-- shape VC-6 used to refuse as "no worked precedent". It works.
+codata Mx (A : Type) where
+  | Mix : Mx A → (A → Mx A) → Mx A
+deriving Coind
+
+theorem Mx.cases_used (A : Type) (t : Mx A) : Mx.CasesP A t := Mx.cases A t
+
+theorem Mx.eta_used (A : Type) (l : Mx A) (k : A → Mx A) :
+    Mx.Mix A l k
+      = Mx.Mix A (Mx.MixChild0 A (Mx.Mix A l k) rfl)
+          (Mx.MixChild1 A (Mx.Mix A l k) rfl) :=
+  Mx.Mix_eta A (Mx.Mix A l k) rfl
+
+-- Bug 2 — a payload AFTER a recursive argument. The existential binder
+-- rebound the payload under its primary name and CAPTURED it inside the
+-- already-built child-extractor witness, so the extractor got the bound
+-- variable where the lemma's binder was meant.
+codata Cp (A : Type) where
+  | C : Cp A → A → Cp A
+deriving Coind
+
+theorem Cp.cases_used (A : Type) (t : Cp A) : Cp.CasesP A t := Cp.cases A t
+
+-- payload BETWEEN two children, so the capture is not merely a tail case
+codata Iv (A : Type) where
+  | C : Iv A → A → Iv A → Iv A
+deriving Coind
+
+theorem Iv.cases_used (A : Type) (t : Iv A) : Iv.CasesP A t := Iv.cases A t
+
+-- a family domain that MENTIONS a payload, with the payload first: the
+-- control for the re-spelling rule (`source` vs `in_alt`) that the capture
+-- fix introduced — get it wrong and this stops elaborating.
+codata Dv (E : Type) (Ans : E → Type) where
+  | V : (e : E) → (Ans e → Dv E Ans) → Dv E Ans → Dv E Ans
+deriving Coind
+
+theorem Dv.cases_used (E : Type) (Ans : E → Type) (t : Dv E Ans) :
+    Dv.CasesP E Ans t :=
+  Dv.cases E Ans t

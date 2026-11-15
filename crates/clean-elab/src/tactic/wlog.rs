@@ -22,15 +22,31 @@ use clean_kernel::expr::ExprKind;
 use clean_kernel::name::Name;
 use clean_kernel::{BinderInfo, Expr, FVarId};
 
+/// Preserve the ordinary source-facing `h_neg_h` name without flattening
+/// qualified or numeric hypothesis identities into that spelling domain.
+fn negative_hypothesis_name(name: &clean_parser::SurfaceName) -> clean_parser::SurfaceName {
+    let identity = if let Some(component) = name.component_text() {
+        Name::anon().str(format!("h_neg_{component}"))
+    } else {
+        crate::namespace::append_names(&Name::anon().num(0).str("_wlog_neg"), name.name())
+    };
+    clean_parser::SurfaceName::from_name(identity)
+}
+
 // ============================================================================
 // Additional utility tactics
 // ============================================================================
 
 /// `suffices_to_show` - alias for suffices with clearer semantics
 /// REQUIRES: `state.goals` is non-empty if `suffices_` is expected to succeed.
-/// ENSURES: Equivalent to `suffices_(state, "this", prop, cont)`.
+/// ENSURES: Equivalent to `suffices_(state, &clean_parser::SurfaceName::generated_path("this"), prop, cont)`.
 pub fn suffices_to_show(state: &mut ProofState, prop: Expr, cont: Option<Expr>) -> TacticResult {
-    suffices_(state, "this", prop, cont)
+    suffices_(
+        state,
+        &clean_parser::SurfaceName::generated_path("this"),
+        prop,
+        cont,
+    )
 }
 
 /// Build `Or.rec {P} {¬P} {motive} (fun h => ?pos) (fun h_neg => ?neg) (Classical.em P)`.
@@ -111,13 +127,21 @@ fn build_em_case_split(
 /// negative cases, with contexts extended by `assumption_name : assumption` and
 /// `h_neg_{assumption_name} : assumption -> False` respectively.
 /// ENSURES: On `Err(NoGoals)`, `state` is unchanged.
-pub fn wlog(state: &mut ProofState, assumption_name: &str, assumption: Expr) -> TacticResult {
+pub fn wlog(
+    state: &mut ProofState,
+    assumption_name: &clean_parser::SurfaceName,
+    assumption: Expr,
+) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let target = goal.target.clone();
 
-    // ¬assumption = assumption → False
-    let false_type = Expr::const_(Name::from_string("False"), vec![]);
-    let neg_assumption = Expr::pi(BinderInfo::Default, assumption.clone(), false_type);
+    // `¬assumption`, with the `Not` head. Lean states this hypothesis with the `Not` head; simp reads a
+    // negation off that head only, so a `c → False` here would not rewrite
+    // `c` to `False` (`tests_simp_lemma_sources`).
+    let neg_assumption = Expr::app(
+        Expr::const_(Name::from_string("Not"), vec![]),
+        assumption.clone(),
+    );
 
     // ONE shared fvar for the hypothesis of BOTH branches (B104; same
     // binder-scope disease B103 fixed in `abs_cases` and `by_cases`/
@@ -144,15 +168,17 @@ pub fn wlog(state: &mut ProofState, assumption_name: &str, assumption: Expr) -> 
     // Contexts with the assumption hypothesis added
     let mut ctx_pos = goal.local_ctx.clone();
     ctx_pos.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: fvar_pos,
-        name: assumption_name.to_string(),
+        name: assumption_name.clone(),
         ty: assumption.clone(),
         value: None,
     });
     let mut ctx_neg = goal.local_ctx.clone();
     ctx_neg.push(LocalDecl {
+        binder_info: Default::default(),
         fvar: fvar_neg,
-        name: format!("h_neg_{assumption_name}"),
+        name: negative_hypothesis_name(assumption_name),
         ty: neg_assumption.clone(),
         value: None,
     });
@@ -177,12 +203,14 @@ pub fn wlog(state: &mut ProofState, assumption_name: &str, assumption: Expr) -> 
         meta_id: meta_neg,
         target: target.clone(),
         local_ctx: ctx_neg,
+        case_binders: goal.case_binders.clone(),
         tag: None,
     });
     state.goals.push_front(Goal {
         meta_id: meta_pos,
         target,
         local_ctx: ctx_pos,
+        case_binders: goal.case_binders.clone(),
         tag: None,
     });
 
@@ -198,13 +226,14 @@ pub fn wlog(state: &mut ProofState, assumption_name: &str, assumption: Expr) -> 
 /// ENSURES: On `Ok(())`, the goal target is unchanged.
 /// ENSURES: On `Err(NoGoals)` or `Err(HypothesisNotFound)`, `state` is
 /// unchanged.
-pub fn push_neg_at(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn push_neg_at(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     let hyp_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?
         .clone();
 
@@ -342,12 +371,13 @@ pub(crate) fn push_negations_in_expr(expr: &Expr) -> Expr {
 /// ENSURES: On `Ok(())`, the goal target is unchanged.
 /// ENSURES: On `Err(NoGoals)` or `Err(HypothesisNotFound)`, `state` is
 /// unchanged.
-pub fn norm_num_at(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn norm_num_at(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let hyp_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     let hyp_fvar = hyp_decl.fvar;
     let hyp_ty = hyp_decl.ty.clone();
@@ -416,4 +446,29 @@ pub(crate) fn normalize_numerals(expr: &Expr) -> Expr {
         }
         _ => expr.clone(),
     })
+}
+
+#[cfg(test)]
+mod typed_negative_name_tests {
+    use super::*;
+    use clean_parser::SurfaceName;
+
+    #[test]
+    fn ordinary_negative_name_and_structural_twins_stay_distinct() {
+        assert_eq!(
+            negative_hypothesis_name(&SurfaceName::generated_path("h")).name(),
+            &Name::anon().str("h_neg_h")
+        );
+        let inputs = [
+            Name::anon().str("A.B"),
+            Name::anon().str("A").str("B"),
+            Name::anon().str("7"),
+            Name::anon().num(7),
+        ];
+        let outputs: std::collections::HashSet<Name> = inputs
+            .into_iter()
+            .map(|name| negative_hypothesis_name(&SurfaceName::from_name(name)).into_name())
+            .collect();
+        assert_eq!(outputs.len(), 4);
+    }
 }

@@ -186,8 +186,8 @@ impl ReleaseReadinessSmokeRunner {
 
         self.run_command(
             Some(&checkout),
-            "cargo metadata --locked --no-deps --format-version 1",
-            Command::new("cargo")
+            "targo metadata --locked --no-deps --format-version 1",
+            Command::new(env::var_os("CARGO").unwrap_or_else(|| "targo".into()))
                 .arg("metadata")
                 .arg("--locked")
                 .arg("--no-deps")

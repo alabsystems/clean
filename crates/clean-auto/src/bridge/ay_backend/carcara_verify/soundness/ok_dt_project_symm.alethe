@@ -1,0 +1,4 @@
+(assume a0 (not (= b (snd (mk a b)))))
+(step t1 (cl (= (snd (mk a b)) b)) :rule dt_project)
+(step t2 (cl (= b (snd (mk a b)))) :rule symm :premises (t1))
+(step t3 (cl) :rule resolution :premises (a0 t2))

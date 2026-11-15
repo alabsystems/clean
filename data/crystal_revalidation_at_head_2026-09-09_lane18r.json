@@ -1,0 +1,82 @@
+{
+  "schema": "clean.crystal.revalidation_at_head/v1",
+  "lane": "lane18r",
+  "measured_utc": "2026-09-09T16:50:00Z",
+  "what_this_is": "The measurement data/crystal_revalidation_at_head_2026-08-27_laneREV.json said was OWED and could not be attributed: compare all 21 committed *.trust-ir.txt fixtures against a LIVE trustc dump of clean-kernel, with the producer the fixtures were cut with. laneREV's blocker was 'THE RECORDED PRODUCER IS NOT ON THIS MACHINE'. It was rebuilt here, and PROVED to be that producer by reproducing its recorded output byte for byte.",
+  "headline": "FRESH. All 21 fixtures are NUMBERING-ONLY at clean HEAD; ZERO structural drift. No chained body's instructions have moved since the 2026-08-21 rebaseline, across 230 new clean-kernel bodies (13,844 -> 14,074).",
+  "producer": {
+    "rebuilt_from_trust_rev": "c4e667ca51a4b6bd0bc3790e540cdabc707c45a1",
+    "seal": "target/crystal-lane/seal-rev18 (lane-local, not committed)",
+    "sysroot_compat": "OK against $HOME/trust/scratchpad/laneREG/sysroot-v13 (driver=13 sysroot=13, std resolves and a core MIR body decodes)",
+    "trustc_sha256": "6a593b8381821d0b3c68dde732af13ed2b726081110d3a381dd25e643e069cb7",
+    "librustc_driver_sha256": "1b096dbe77a392db7db69a49f0fd87c0fd7c1f70139e2881a8b7bdfff4583e54",
+    "version_stamp_is_the_seed_deliberately": "CFG_VERSION was set to '1.99.0-dev (94147b34f 2026-08-11)', the seed stamp every crystal lane builddrv.sh uses, NOT this driver's own worktree rev. Measured first the other way: a driver stamped c4e667ca5 builds in 41m21s and can then read NO sysroot on this box (SYSROOT_COMPAT FAIL, driver=13 sysroot=13, E0514 anyway) because E0514 compares the rustc version STRING embedded in the sysroot's std. docs/CRYSTAL_STATUS.md section 7(a)'s 'the stamp lies' is exactly this: identity is the seal's REV and the flip-path blob list, never --version.",
+    "driver_dylib_digest_does_NOT_match_lane18": "and is not expected to. lane18 recorded 4e2a161f...; this build is a different binary. The claim is behavioural identity on the recorded input, proved below, not bit-identity of the compiler."
+  },
+  "control": {
+    "what": "dump clean at c6388730e -- the rev the lane18 fixtures were cut from -- with the rebuilt driver",
+    "bar": "docs/CRYSTAL_STATUS.md section 7(a3): 'prove the control IS the previous census's compiler by reproducing its recorded coverage.json / trust-ir digests BYTE FOR BYTE'",
+    "clean_kernel.trust-ir.bin": {
+      "got": "ce4ac168087ab6cbd61098dcadd9f67395d1eee828d43637cc05254c9cfc40bd",
+      "lane18_recorded": "ce4ac168087ab6cbd61098dcadd9f67395d1eee828d43637cc05254c9cfc40bd",
+      "verdict": "MATCH"
+    },
+    "clean_kernel.trust-ir.txt": {
+      "got": "17cecbc305122ef58e6ddf5e3ffad6eab759da39d1452cbe1d4d2dcc4f0ab78d",
+      "lane18_recorded": "17cecbc305122ef58e6ddf5e3ffad6eab759da39d1452cbe1d4d2dcc4f0ab78d",
+      "verdict": "MATCH"
+    },
+    "clean_kernel.coverage.json": {
+      "got": "a7d6200b1f7812d3e93a319607087285557240454c715adca5082b69de4c4c9f",
+      "lane18_recorded": "fb60c89a7c590e16493f6ee4b3716f20504c0aa70da519bff3576ed71c15f7db",
+      "verdict": "DIFFER"
+    },
+    "why_the_coverage_differs_and_why_it_does_not_weaken_the_control": "The coverage carries a per-body `lineage` digest; the trust-ir text does not. Section 0.3a already records that the lineage digest moves with the SYSROOT BUILD, not with the compiler delta, and this driver compiles against laneREG/sysroot-v13 rather than whatever std lane18's stage1 carried. The EMITTED IR -- the thing every fixture is compared against -- is byte-identical in both its binary and its text form. A second, independent proof of the same claim is below.",
+    "second_proof": "crystal_fixture_freshness.py on the control dump exits 0 with 'FRESH: no chained body's instructions have moved' -- at the fixtures' OWN rev, which is the rebaseline record's stated postcondition. Its --strict arm fails only on per-build lineage and numbering, as expected for a different sysroot build.",
+    "verdict": "CONTROL PROVED ON THE EMITTED IR; not proved on the coverage digest, for a stated and previously recorded reason."
+  },
+  "subject": {
+    "clean_rev": "a02c828e14cb923889e17d2407244894ffafd187",
+    "clean_rev_note": "the crystal/complete branch tip, i.e. this measurement includes the 2026-09-09 Arc-data-offset strengthening",
+    "clean_kernel.trust-ir.txt": "8690b9f5ecab960c9f8a3cd6f99be72af82e54d634120d5779900992144698ae",
+    "clean_kernel.coverage.json": "d6baaaeff0137753b3d0c658d58249e4373251e05037ec4744a8421a91400d68",
+    "bodies": 14074,
+    "control_bodies": 13844,
+    "fixtures_compared": 21,
+    "numbering_only": 21,
+    "structural": 0,
+    "freshness_report": "data/crystal_fixture_freshness_2026-09-09_lane18r.json",
+    "verdict": "FRESH -- no chained body's instructions have moved"
+  },
+  "both_builds_failed_their_BINARY_targets_identically": "scripts/trust_ir_build.sh runs `cargo build -p clean-kernel`, which builds the package's six bins as well as the lib. Three bins fail `error: the crate panic_abort does not have the panic strategy abort` -- the release profile is panic=abort and laneREG/sysroot-v13's panic_abort was not built for it. This happens AFTER the lib's trust-ir is emitted and published, it happens IDENTICALLY in the control and the subject, and it is a property of the sysroot rather than of either clean rev. Both dumps are complete: 21/21 fixtures resolve, all 19 chained def_paths are present. It is recorded rather than hidden because it means neither dump carries the axes.json trust_ir_build.sh writes only on success; the subject's was regenerated afterwards with the script's own command (scripts/trust_ir_axes.py measure --coverage ... --log ...).",
+  "what_this_DISCHARGES": [
+    "laneREV's stated blocker: the recorded producer IS now reproducible on this machine, and the proof is byte-identical emitted IR rather than an argument about revisions.",
+    "The owed comparison itself: 21 committed fixtures vs a live dump at HEAD, from an attributable producer, with a null result."
+  ],
+  "what_this_does_NOT_do": [
+    "It does not advance `covered_clean_rev` in data/crystal_freshness_scope.json, and the AMBER verdict NUMBERING-SCOPE therefore stands. scripts/crystal_chain_revalidation.py refuses to mint a superseding record against a rebaseline record for a different clean rev (crystal_chain_revalidation.py:293), by design: advancing the covered rev means REBASELINING the 21 fixtures onto this dump, which re-pins what every link-2a lane compares against and requires each binding. That is a review act and is left to the owner. The measurement it would rest on is now done and is a null.",
+    "It does not re-mint the A0 census: that needs an -O0 arm as well, which trust_ir_build.sh does not compile."
+  ],
+  "reproduce": [
+    "build18.sh / dump18.sh / discharge18.sh under target/crystal-lane (lane-local, uncommitted)",
+    "python3 scripts/crystal_fixture_freshness.py <dump> --json <report>"
+  ],
+  "a0_census_at_head": {
+    "record": "data/crystal_a0_census_2026-09-09_lane18r.json",
+    "what": "A fresh A0 census at HEAD against the CORRECTED (two-clause) discharge table, which the 2026-08-27 records could not be: they pin discharge_table sha256 dc4dacc8..., and the table was restated to f896a780... when the Arc-data-offset clause was discharged.",
+    "how_the_-O0_arm_was_obtained": "trust_ir_build.sh compiles ONE arm, so the census's second flip log came from section 7(a2)'s own recipe run directly (cargo rustc --lib -- -Copt-level=0 -Cdebug-assertions=off). The -Cdebug-assertions=off is load-bearing and is spelled explicitly: cargo emits none for the release profile, so -Copt-level=0 alone silently turns them ON and deletes ~30 #[cfg(not(debug_assertions))] bodies including the deployed infer_type.",
+    "the_O3_arm_was_re-run_lib-only_and_is_byte-identical": "clean_kernel.trust-ir.txt, .bin and coverage.json from `cargo rustc --lib` are byte-identical to the `cargo build -p clean-kernel` dump the freshness comparison used. So the three failing BINARY targets provably had no effect on the lib's emitted IR -- measured, not argued.",
+    "bodies": 14074,
+    "a0_complete_6_of_6_syntactic": 196,
+    "a0_complete_semantic": 197,
+    "semantic_only_bodies": [
+      "level::Level::is_zero"
+    ],
+    "a0_complete_with_nonvacuous_markers": 36,
+    "one_short_missing_criterion": {
+      "flip_event_O3": 980,
+      "bodyful_reachable_closure": 15
+    },
+    "verdict": "The R2 semantic completion verdict for the designated target SURVIVES the strengthening: 197 = 196 + level::Level::is_zero, exactly one body discharged semantically, verified by name, zero others -- the same shape the 2026-08-27 record recorded as 190 = 189 + is_zero, now at HEAD and against the two-clause table. The census validates the discharge table fail-closed in both directions, so it also re-proves that the restated table is neither wider nor narrower than the walk."
+  }
+}

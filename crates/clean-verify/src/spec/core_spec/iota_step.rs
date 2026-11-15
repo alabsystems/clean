@@ -103,28 +103,51 @@ impl Specification {
         )?;
 
         // ===============================================================
+        // Shared head universes, previously registered in the delta stage.
+        self.add_recursive_def(
+            r"def kexpr_const_levels (e : KExpr) : ListType Level :=
+KExpr.rec (fun (_e : KExpr) => ListType Level)
+  (fun (_u : Level) => ListType.nil Level)
+  (fun (_i : Nat) => ListType.nil Level)
+  (fun (_f : KExpr) (_a : KExpr) (_ihf : ListType Level) (_iha : ListType Level) => ListType.nil Level)
+  (fun (_A : KExpr) (_b : KExpr) (_ihA : ListType Level) (_ihb : ListType Level) => ListType.nil Level)
+  (fun (_A : KExpr) (_B : KExpr) (_ihA : ListType Level) (_ihB : ListType Level) => ListType.nil Level)
+  (fun (_n : Name) (us : ListType Level) => us)
+  (fun (_A : KExpr) (_v : KExpr) (_b : KExpr) (_ihA : ListType Level) (_ihv : ListType Level) (_ihb : ListType Level) => ListType.nil Level)
+  (fun (_s : Name) (_i : Nat) (_e : KExpr) (_ihe : ListType Level) => ListType.nil Level)
+  (fun (_n : Nat) => ListType.nil Level) e",
+            "Retain the supplied universe arguments of a constant head; return nil on nonconstants. The iota and delta operators require a successful constant-name view before using these head universes.",
+        )?;
+
+        // The actual MajorAfterMinors operator below reuses this guarded tail:
+        // enough fields and exact universe arity precede one RHS instantiation.
+        self.add_iota_contractum()?;
+
         // C.2 — iota_reduct: the computational reduct (MajorAfterMinors path).
         // ===============================================================
         //
-        // Mirrors the kernel try_iota_reduction (tc/reduction/mod.rs:66-345),
-        // MajorAfterMinors only:
+        // Models the selected MajorAfterMinors branch. This is not an extracted
+        // execution proof of the Rust reducer:
         //   args  = kapp_args e  = [params.., motives.., minors.., indices.., major, extras..]
         //   k     = num_params + num_motives + num_minors + num_indices  (major position)
         //   major = args[k];  cname = head const of major;  rule = recrule_for env recname cname
         //   prefix = first (num_params+num_motives+num_minors) args      (rhs binds these)
         //   fields = last `num_fields` args of the major (the ctor's own params dropped)
         //   extras = args after the major
-        //   reduct = apply_spine extras (apply_spine fields (apply_spine prefix rhs))
+        //   instance = instantiate the stored RHS template at actual head universes
+        //   reduct = apply_spine extras (apply_spine fields (apply_spine prefix instance))
         // Returns `none` for any non-redex (not const-headed / not a recursor /
-        // major out of range / not constructor-headed / no rule), via opt_bind.
+        // major out of range / not constructor-headed / no rule), via opt_bind,
+        // and refuses too few constructor fields or wrong universe arity.
         //
-        // Partiality + opaque `rhs` mean this is a TOTAL function (hence
-        // deterministic by construction — the keystone). It is NOT yet
-        // kernel-faithful: level-params instantiation, K, MajorAfterMotive,
-        // literals, and the major-premise WHNF pre-pass are deferred (faithfulness
-        // is a later env-wellformedness obligation, NOT a confluence axiom).
+        // This raw operator is total and deterministic. Its WHNF-major pre-pass
+        // lives in the whc/whc3 operators. K, MajorAfterMotive, native/cubical
+        // paths, and equivalence with Rust's smart universe substitution are
+        // not established by this structural model.
+        // The operator itself does not validate metadata layout, the K flag, or
+        // the immediate-lambda RHS shape required by the selected source branch.
         self.add_recursive_def(
-            r"def iota_reduct (env : RecEnv) (e : KExpr) : OptionType KExpr := opt_bind Name KExpr (kexpr_const_name (kapp_fn e)) (fun (recname : Name) => opt_bind RecMeta KExpr (recmeta_for env recname) (fun (meta : RecMeta) => opt_bind KExpr KExpr (list_head (list_drop (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta)) (kapp_args e))) (fun (major : KExpr) => opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => opt_bind RecRule KExpr (recrule_for env recname cname) (fun (rule : RecRule) => OptionType.some KExpr (apply_spine (list_drop (Nat.succ (Nat.add (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (recmeta_num_indices meta))) (kapp_args e)) (apply_spine (list_drop (Nat.sub (list_length (kapp_args major)) (recrule_num_fields rule)) (kapp_args major)) (apply_spine (list_take (Nat.add (Nat.add (recmeta_num_params meta) (recmeta_num_motives meta)) (recmeta_num_minors meta)) (kapp_args e)) (recrule_rhs rule))))))))))",
+            r"def iota_reduct (env : RecEnv) (e : KExpr) : OptionType KExpr := (opt_bind Name KExpr (kexpr_const_name (kapp_fn e)) (fun (recname : Name) => (opt_bind RecMeta KExpr (recmeta_for env recname) (fun (mta : RecMeta) => (opt_bind KExpr KExpr (list_head (list_drop (iota_major_index mta) (kapp_args e))) (fun (major : KExpr) => (opt_bind Name KExpr (kexpr_const_name (kapp_fn major)) (fun (cname : Name) => (opt_bind RecRule KExpr (recrule_for env recname cname) (fun (rule : RecRule) => (iota_contractum_at mta rule (kexpr_const_levels (kapp_fn e)) (kapp_args e) (kapp_args major))))))))))))",
             "Computational iota reduct (MajorAfterMinors): the directed reduct of a recursor-applied-to-constructor redex, or none. Total function -> deterministic by construction. Part of #2859 (Increment C).",
         )?;
 

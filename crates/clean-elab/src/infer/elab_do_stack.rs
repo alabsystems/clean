@@ -21,9 +21,7 @@ use super::elab_do_control::ControlInfo;
 pub(crate) use super::elab_do_prod::{build_sigma_type, build_sigma_value, destructure_sigma};
 use super::ElabError;
 use clean_kernel::name::Name;
-use clean_kernel::Expr;
-#[cfg(test)]
-use clean_kernel::Level;
+use clean_kernel::{Expr, Level};
 
 /// A single layer in the monad transformer stack.
 ///
@@ -220,71 +218,92 @@ impl ControlStack {
         current
     }
 
+    /// The monad at the layer BELOW `layer_idx` — the monad an operation of
+    /// that layer's transformer (`OptionT.fail`, `MonadExcept.throw`) runs
+    /// over, whose `Monad` instance the caller synthesizes.
+    pub(crate) fn inner_monad_below(&self, layer_idx: usize, monad_info: &DoMonadInfo) -> Expr {
+        if layer_idx > 0 {
+            self.compute_monad_at(layer_idx - 1, monad_info)
+        } else {
+            monad_info.m.clone()
+        }
+    }
+
     /// Generate `OptionT.fail` (break/continue) at a specific layer.
     ///
-    /// The expression targets the monad at the layer BELOW the given index.
-    /// Used to implement `break` and `continue` in do-notation loops.
+    /// The expression targets the monad at the layer BELOW the given index
+    /// ([`Self::inner_monad_below`]); `monad_inst : Monad inner` is its
+    /// `[Monad m]` argument, synthesized by the caller. Used to implement
+    /// `break` and `continue` in do-notation loops.
     pub(crate) fn mk_option_t_fail(
         &self,
         layer_idx: usize,
         alpha: Expr,
         monad_info: &DoMonadInfo,
+        monad_inst: Expr,
     ) -> Expr {
-        let inner_monad = if layer_idx > 0 {
-            self.compute_monad_at(layer_idx - 1, monad_info)
-        } else {
-            monad_info.m.clone()
-        };
-
-        // OptionT.fail : {m} → {α} → OptionT m α
+        let inner_monad = self.inner_monad_below(layer_idx, monad_info);
+        // OptionT.fail : {m} → [Monad m] → {α} → OptionT m α (Lean's signature;
+        // until 2026-09-28 an instance-less axiom that proved `False` together
+        // with `OptionT.run`).
         let fail = Expr::const_(
             Name::from_string("OptionT.fail"),
             vec![monad_info.u.clone(), monad_info.v.clone()],
         );
-        // @OptionT.fail m α
-        Expr::app(Expr::app(fail, inner_monad), alpha)
+        // @OptionT.fail m inst α
+        Expr::apps(fail, [inner_monad, monad_inst, alpha])
     }
 
-    /// Generate `ExceptT.mk (Pure.pure (Except.error e))` (early return).
-    ///
-    /// Early return throws the return value as an exception at the EarlyReturn layer.
-    pub(crate) fn mk_early_return(
-        &self,
-        return_expr: Expr,
-        alpha: Expr,
-        monad_info: &DoMonadInfo,
-    ) -> Option<Expr> {
+    /// The `(ρ, inner monad)` of the EarlyReturn layer, if there is one: the
+    /// early-return payload type and the monad the `ExceptT ρ` layer wraps.
+    pub(crate) fn early_return_parts(&self, monad_info: &DoMonadInfo) -> Option<(Expr, Expr)> {
         let idx = self.return_layer_idx?;
         let return_type = match &self.layers[idx] {
             ControlStackLayer::EarlyReturn { return_type } => return_type.clone(),
             _ => return None,
         };
+        Some((return_type, self.inner_monad_below(idx, monad_info)))
+    }
 
-        let inner_monad = if idx > 0 {
-            self.compute_monad_at(idx - 1, monad_info)
-        } else {
-            monad_info.m.clone()
-        };
-
-        // MonadExcept.throw : {ε} → {m} → {α} → ε → m α
-        let throw = Expr::const_(
-            Name::from_string("MonadExcept.throw"),
-            vec![
-                monad_info.u.clone(),
-                monad_info.v.clone(),
-                monad_info.v.clone(),
-            ],
-        );
-        // @MonadExcept.throw ρ (ExceptT ρ inner_m) α return_expr
+    /// Generate `@MonadExcept.throw ρ (ExceptT ρ inner) inst α e` (early
+    /// return) — the return value thrown as an exception at the EarlyReturn
+    /// layer. `except_inst : MonadExcept ρ (ExceptT ρ inner)` is synthesized
+    /// by the caller (`MonadExcept.throw` is Lean's class projection; until
+    /// 2026-09-28 it was an instance-less axiom `ε → m α` that proved `False`).
+    pub(crate) fn mk_early_return(
+        &self,
+        return_expr: Expr,
+        alpha: Expr,
+        monad_info: &DoMonadInfo,
+        except_inst: Expr,
+    ) -> Option<Expr> {
+        let (return_type, inner_monad) = self.early_return_parts(monad_info)?;
         let except_t = Expr::const_(
             Name::from_string("ExceptT"),
             vec![monad_info.u.clone(), monad_info.v.clone()],
         );
-        let except_t_m = Expr::app(Expr::app(except_t, return_type.clone()), inner_monad);
-        let e = Expr::app(throw, return_type);
-        let e = Expr::app(e, except_t_m);
-        let e = Expr::app(e, alpha);
-        Some(Expr::app(e, return_expr))
+        let except_t_m = Expr::apps(except_t, [return_type.clone(), inner_monad]);
+        // MonadExcept.throw.{u,v,w} : {ε : Type u} → {m : Type v → Type w} →
+        // [MonadExcept ε m] → {α : Type v} → ε → m α, at ε := ρ : Type u and
+        // m := ExceptT ρ inner : Type u → Type v.
+        let throw = Expr::const_(
+            Name::from_string("MonadExcept.throw"),
+            Self::throw_levels(monad_info),
+        );
+        Some(Expr::apps(
+            throw,
+            [return_type, except_t_m, except_inst, alpha, return_expr],
+        ))
+    }
+
+    /// The `MonadExcept.{u,v,w}` levels of the early-return throw:
+    /// `ρ : Type u`, `ExceptT ρ inner : Type u → Type v`.
+    pub(crate) fn throw_levels(monad_info: &DoMonadInfo) -> Vec<Level> {
+        vec![
+            monad_info.u.clone(),
+            monad_info.u.clone(),
+            monad_info.v.clone(),
+        ]
     }
 
     /// Generate the unwrapping chain after the do-block body.

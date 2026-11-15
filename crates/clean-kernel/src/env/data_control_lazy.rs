@@ -425,35 +425,26 @@ impl Environment {
         Ok(())
     }
 
-    /// Register the plain `Bind` combinator defs behind `=<<` / `>=>` / `<=<`
-    /// as fully-checked Definitions over the EXISTING `Bind.bind` constant:
+    /// Register the plain `Bind` combinator defs behind `=<<` / `>=>` / `<=<`,
+    /// in Lean's exact shapes (`Init/Control/Basic.lean`, read off pinned
+    /// v4.30.0-rc2 with `#check`):
     ///
     /// ```text
-    /// Bind.bindLeft     : {m} → {α β : Type u}   → (α → m β) → m α → m β
-    /// Bind.kleisliRight : {m} → {α β γ : Type u} → (α → m β) → (β → m γ) → α → m γ
-    /// Bind.kleisliLeft  : {m} → {α β γ : Type u} → (β → m γ) → (α → m β) → α → m γ
+    /// Bind.bindLeft     : {α : Type u_1} → {m : Type u_1 → Type u_2} → {β : Type u_1}
+    ///                     → [Bind m] → (α → m β) → m α → m β
+    /// Bind.kleisliRight : {α : Type u_1} → {m : Type u_2 → Type u_3} → {β γ : Type u_2}
+    ///                     → [Bind m] → (α → m β) → (β → m γ) → α → m γ
+    /// Bind.kleisliLeft  : {α : Type u_1} → {m : Type u_2 → Type u_3} → {β γ : Type u_2}
+    ///                     → [Bind m] → (β → m γ) → (α → m β) → α → m γ
     /// ```
     ///
-    /// Lean fidelity: `Init/Control/Basic.lean:426/416/421` — same names,
-    /// explicit-argument arity/order, and bodies (`ma >>= f` / `f₁ a >>= f₂`).
-    /// KNOWN DEVIATIONS (both stub-shaped, both to be re-derived when `Bind`
-    /// becomes a real structure — tracked with the `Bind.bind` stub note in
-    /// data_monad.rs):
-    /// 1. upstream carries a `[Bind m]` instance binder; Clean's prelude
-    ///    `Bind.bind` stub (`init_monad_classes`) has no `Bind` class and no
-    ///    such binder, so these defs mirror the stub's implicit telescope
-    ///    (`{m} {α β [γ]}`);
-    /// 2. upstream's kleisli source type `α` lives in its OWN universe
-    ///    (toolchain oracle: `Bind.kleisliLeft : {α : Type u_1} → {m : Type
-    ///    u_2 → Type u_3} → {β γ : Type u_2} → …`); the stub-shaped versions
-    ///    pin `α : Type u` alongside `β γ` (the `Bind.bind` stub's single
-    ///    value universe).
+    /// with bodies `ma >>= f` / `f₁ a >>= f₂` through the `[Bind m]` binder.
+    /// Until 2026-09-28 they had no `[Bind m]` binder and used the
+    /// instance-less `Bind.bind` AXIOM, which proved `False`
+    /// (`data_monad_classes.rs`).
     ///
     /// IMPORT MODE (`suppress_lossy_structure_stubs`): withheld with the whole
-    /// Monad/Bind/Pure cluster (see `init_monad_classes` gating in
-    /// `init_prelude_extended`) — the stub-shaped telescopes would shadow the
-    /// genuine `[Bind m]`-carrying olean twins, and their `Bind.bind`
-    /// dependency is itself suppressed. The default lane is unchanged.
+    /// Monad/Bind/Pure cluster — the genuine olean twins import instead.
     ///
     /// # Contract
     ///
@@ -461,137 +452,79 @@ impl Environment {
     /// ENSURES: On success, `self.bind_combinators_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
     pub(crate) fn init_bind_combinators(&mut self) -> Result<(), EnvError> {
+        use crate::env::monad_term::{cst, lparam, monad_kind, type_at, Tele};
         if self.suppress_lossy_structure_stubs {
             return Ok(());
         }
         if self.bind_combinators_init {
             return Ok(());
         }
-
-        // Bind.bind (the stub these are spelled against).
         self.init_monad_classes()?;
 
-        let u = Name::from_string("u");
-        let v = Name::from_string("v");
-        let u_level = Level::param(u.clone());
-        let v_level = Level::param(v.clone());
-        let type_u = Expr::sort(Level::succ(u_level.clone()));
-        let type_v = Expr::sort(Level::succ(v_level.clone()));
-        let m_type = Expr::pi(BinderInfo::Default, type_u.clone(), type_v.clone());
-        let bind_const = Expr::const_(
-            Name::from_string("Bind.bind"),
-            vec![u_level.clone(), v_level.clone()],
-        );
+        let (u1, u2, u3) = (lparam("u_1"), lparam("u_2"), lparam("u_3"));
+        let lp = |names: &[&str]| {
+            names
+                .iter()
+                .map(|n| Name::from_string(n))
+                .collect::<Vec<_>>()
+        };
 
-        // Bind.bindLeft : {m} → {α β} → (α → m β) → m α → m β := fun f ma => Bind.bind ma f
+        // Bind.bindLeft {α : Type u_1} {m : Type u_1 → Type u_2} {β} [Bind m]
+        //   (f : α → m β) (ma : m α) : m β := bind ma f
         {
-            let build = |as_value: bool| {
-                let mut b = EnvDeclBuilder::new();
-                let (m_id, m) = b.fresh_local(m_type.clone());
-                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-                let (beta_id, beta) = b.fresh_local(type_u.clone());
-                let m_alpha = Expr::app(m.clone(), alpha.clone());
-                let m_beta = Expr::app(m.clone(), beta.clone());
-                let f_ty = Expr::pi(BinderInfo::Default, alpha.clone(), m_beta.clone());
-                let (f_id, f) = b.fresh_local(f_ty.clone());
-                let (ma_id, ma) = b.fresh_local(m_alpha.clone());
-                if as_value {
-                    // Bind.bind m α β ma f
-                    let body = Expr::apps(
-                        bind_const.clone(),
-                        [m.clone(), alpha.clone(), beta.clone(), ma, f],
-                    );
-                    let r = b.mk_lam(ma_id, BinderInfo::Default, m_alpha, body);
-                    let r = b.mk_lam(f_id, BinderInfo::Default, f_ty, r);
-                    let r = b.mk_lam(beta_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_lam(m_id, BinderInfo::Implicit, m_type.clone(), r);
-                    b.finish(r)
-                } else {
-                    let r = m_beta.clone();
-                    let r = b.mk_pi(ma_id, BinderInfo::Default, m_alpha, r);
-                    let r = b.mk_pi(f_id, BinderInfo::Default, f_ty, r);
-                    let r = b.mk_pi(beta_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_pi(m_id, BinderInfo::Implicit, m_type.clone(), r);
-                    b.finish(r)
-                }
-            };
+            let uv = [u1.clone(), u2.clone()];
+            let mut t = Tele::new();
+            let alpha = t.imp(type_at(&u1));
+            let m = t.imp(monad_kind(&u1, &u2));
+            let beta = t.imp(type_at(&u1));
+            let inst = t.inst(Expr::app(cst("Bind", &uv), m.clone()));
+            let f = t.arg(Expr::arrow(
+                alpha.clone(),
+                Expr::app(m.clone(), beta.clone()),
+            ));
+            let ma = t.arg(Expr::app(m.clone(), alpha.clone()));
+            let ty = Expr::app(m.clone(), beta.clone());
+            let body = Expr::apps(cst("Bind.bind", &uv), [m, inst, alpha, beta, ma, f]);
             self.add_decl(Declaration::Definition {
                 name: Name::from_string("Bind.bindLeft"),
-                level_params: vec![u.clone(), v.clone()],
-                type_: build(false),
-                value: build(true),
+                level_params: lp(&["u_1", "u_2"]),
+                type_: t.pi(ty),
+                value: t.lam(body),
                 is_reducible: true,
             })?;
         }
 
-        // Bind.kleisliRight : (f₁ : α → m β) → (f₂ : β → m γ) → α → m γ
-        // Bind.kleisliLeft  : (f₂ : β → m γ) → (f₁ : α → m β) → α → m γ
-        // both := Bind.bind (f₁ a) f₂
+        // Bind.kleisliRight / kleisliLeft {α : Type u_1} {m : Type u_2 → Type u_3}
+        //   {β γ : Type u_2} [Bind m] … : α → m γ := fun a => bind (f₁ a) f₂
         for (name, f1_first) in [("Bind.kleisliRight", true), ("Bind.kleisliLeft", false)] {
-            let build = |as_value: bool| {
-                let mut b = EnvDeclBuilder::new();
-                let (m_id, m) = b.fresh_local(m_type.clone());
-                let (alpha_id, alpha) = b.fresh_local(type_u.clone());
-                let (beta_id, beta) = b.fresh_local(type_u.clone());
-                let (gamma_id, gamma) = b.fresh_local(type_u.clone());
-                let m_beta = Expr::app(m.clone(), beta.clone());
-                let m_gamma = Expr::app(m.clone(), gamma.clone());
-                let f1_ty = Expr::pi(BinderInfo::Default, alpha.clone(), m_beta.clone());
-                let f2_ty = Expr::pi(BinderInfo::Default, beta.clone(), m_gamma.clone());
-                // Bind the two function locals in the declared explicit order.
-                let ((f1_id, f1), (f2_id, f2)) = if f1_first {
-                    let f1 = b.fresh_local(f1_ty.clone());
-                    let f2 = b.fresh_local(f2_ty.clone());
-                    (f1, f2)
-                } else {
-                    let f2 = b.fresh_local(f2_ty.clone());
-                    let f1 = b.fresh_local(f1_ty.clone());
-                    (f1, f2)
-                };
-                let (a_id, a) = b.fresh_local(alpha.clone());
-                if as_value {
-                    // Bind.bind m β γ (f₁ a) f₂
-                    let body = Expr::apps(
-                        bind_const.clone(),
-                        [m.clone(), beta.clone(), gamma.clone(), Expr::app(f1, a), f2],
-                    );
-                    let r = b.mk_lam(a_id, BinderInfo::Default, alpha.clone(), body);
-                    let r = if f1_first {
-                        let r = b.mk_lam(f2_id, BinderInfo::Default, f2_ty, r);
-                        b.mk_lam(f1_id, BinderInfo::Default, f1_ty, r)
-                    } else {
-                        let r = b.mk_lam(f1_id, BinderInfo::Default, f1_ty, r);
-                        b.mk_lam(f2_id, BinderInfo::Default, f2_ty, r)
-                    };
-                    let r = b.mk_lam(gamma_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_lam(beta_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_lam(m_id, BinderInfo::Implicit, m_type.clone(), r);
-                    b.finish(r)
-                } else {
-                    let r = m_gamma.clone();
-                    let r = b.mk_pi(a_id, BinderInfo::Default, alpha.clone(), r);
-                    let r = if f1_first {
-                        let r = b.mk_pi(f2_id, BinderInfo::Default, f2_ty, r);
-                        b.mk_pi(f1_id, BinderInfo::Default, f1_ty, r)
-                    } else {
-                        let r = b.mk_pi(f1_id, BinderInfo::Default, f1_ty, r);
-                        b.mk_pi(f2_id, BinderInfo::Default, f2_ty, r)
-                    };
-                    let r = b.mk_pi(gamma_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_pi(beta_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), r);
-                    let r = b.mk_pi(m_id, BinderInfo::Implicit, m_type.clone(), r);
-                    b.finish(r)
-                }
+            let uv = [u2.clone(), u3.clone()];
+            let mut t = Tele::new();
+            let alpha = t.imp(type_at(&u1));
+            let m = t.imp(monad_kind(&u2, &u3));
+            let beta = t.imp(type_at(&u2));
+            let gamma = t.imp(type_at(&u2));
+            let inst = t.inst(Expr::app(cst("Bind", &uv), m.clone()));
+            let f1_ty = Expr::arrow(alpha.clone(), Expr::app(m.clone(), beta.clone()));
+            let f2_ty = Expr::arrow(beta.clone(), Expr::app(m.clone(), gamma.clone()));
+            let (f1, f2) = if f1_first {
+                let f1 = t.arg(f1_ty);
+                let f2 = t.arg(f2_ty);
+                (f1, f2)
+            } else {
+                let f2 = t.arg(f2_ty);
+                let f1 = t.arg(f1_ty);
+                (f1, f2)
             };
+            let a = t.arg(alpha.clone());
+            let body = Expr::apps(
+                cst("Bind.bind", &uv),
+                [m.clone(), inst, beta, gamma.clone(), Expr::app(f1, a), f2],
+            );
             self.add_decl(Declaration::Definition {
                 name: Name::from_string(name),
-                level_params: vec![u.clone(), v.clone()],
-                type_: build(false),
-                value: build(true),
+                level_params: lp(&["u_1", "u_2", "u_3"]),
+                type_: t.pi(Expr::app(m, gamma)),
+                value: t.lam(body),
                 is_reducible: true,
             })?;
         }

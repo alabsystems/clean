@@ -232,7 +232,13 @@ pub fn verify_kernel_ibp_linear_sound() -> Result<KernelCheckReport, IbpRatVerif
         .ok_or(IbpRatVerifyError::NotATheorem(IBP_LINEAR_SOUND_NAME))?;
 
     let declared_type = info.type_.clone();
-    let sorry_free = !info.sorry_summary().has_sorry;
+    // Sorry-free means: no sorry in the proof's own terms AND none in its
+    // constant closure (a lemma it cites could rest on `sorryAx`).
+    let sorry_free = !info.sorry_summary().has_sorry
+        && !clean_kernel::env::DomainAxiomClosure::new()
+            .trust_markers_of_name(&env, &Name::from_string(IBP_LINEAR_SOUND_NAME))
+            .iter()
+            .any(clean_kernel::is_sorry_marker);
 
     let tc = TypeChecker::with_mode(&env, env.mode());
     let inferred_type = tc

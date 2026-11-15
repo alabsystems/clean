@@ -6,7 +6,6 @@
 
 use super::{ProofReconstructionError, ProofStep};
 use crate::smt::TermId;
-use clean_kernel::name::Name;
 use clean_kernel::{Environment, Expr, ExprKind, FVarId, Level, TypeChecker};
 use std::collections::HashMap;
 
@@ -154,7 +153,7 @@ impl<'a> ProofBuilder<'a> {
                 let (_b2, c) = self.step_span(p2)?;
                 Some((a, c))
             }
-            ProofStep::Congr(..) | ProofStep::Axiom(..) | ProofStep::Propositional(..) => None,
+            ProofStep::Congr(..) | ProofStep::Propositional(..) => None,
         }
     }
 
@@ -179,15 +178,6 @@ impl<'a> ProofBuilder<'a> {
             ProofStep::Hypothesis(fvar) => {
                 // Return the free variable representing the hypothesis
                 Ok(Expr::fvar(*fvar))
-            }
-            ProofStep::Axiom(name, levels) => {
-                // Return an axiom reference - this MUST be a constant that is
-                // actually declared in the environment. Using this for arbitrary
-                // unverified assertions undermines soundness.
-                //
-                // The kernel type checker will verify that this constant exists
-                // and has the correct type, so unsound axioms will be rejected.
-                Ok(Expr::const_(Name::from_string(name), levels.clone()))
             }
             ProofStep::Propositional(strategy) => {
                 // Propositional proof steps carry their proof terms externally

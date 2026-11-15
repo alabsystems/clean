@@ -15,7 +15,7 @@
 /// outside its namespace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum Visibility {
-    /// Default: fully accessible (no modifier or explicit `public`)
+    /// Public: implicit in legacy files or inherited from a public section.
     #[default]
     Public,
     /// `protected`: accessible only via full qualified name outside namespace
@@ -46,7 +46,7 @@ pub enum DeclScope {
 /// this struct and attached to the resulting `SurfaceDecl`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct DeclModifiers {
-    /// Visibility: public (default), protected, or private
+    /// Visibility: public (legacy default), protected, or private
     pub visibility: Visibility,
     /// Whether the definition is `partial` (allowed to be non-terminating)
     pub is_partial: bool,

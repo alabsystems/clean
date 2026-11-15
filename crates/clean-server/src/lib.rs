@@ -11,7 +11,9 @@
 //! ## Core Type Checking
 //! - `check`: Type check an expression or declaration
 //! - `getType`: Get the type of an expression
-//! - `batchCheck`: GPU-accelerated batch checking
+//! - `batchCheck`: batch checking, CPU-parallel via Rayon (this line read
+//!   "GPU-accelerated" until 2026-08-31; there is no GPU path — see the
+//!   `--no-gpu` help for the benchmark that decided it)
 //!
 //! ## Proof & SMT
 //! - `prove`: Attempt automatic proof via SMT
@@ -121,9 +123,21 @@
 //! ```
 
 pub mod cli;
+// The server runtime — dispatch, request handlers, progress streaming, and
+// both transports — sits on tokio, which has no full wasm32 backend. On wasm
+// only the tokio-free surface compiles: the wire types (`rpc`, `rpc_goals`,
+// `rpc_widgets`), `proof_state`, `registry`, `session_env`,
+// `mathverse_provider`, the CLI descriptors, and the read-only declaration
+// validator re-exported through the `handlers` stub below.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) mod dispatch;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod handlers;
+#[cfg(target_arch = "wasm32")]
+#[path = "handlers/wasm_stub.rs"]
 pub mod handlers;
 pub mod mathverse_provider;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod progress;
 pub mod proof_state;
 pub mod registry;
@@ -132,16 +146,31 @@ pub mod rpc_goals;
 pub mod rpc_widgets;
 pub mod session_env;
 pub(crate) mod startup;
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod tcp_lines;
+// The transports and handlers that judge connections and paths are
+// native-only; on wasm only the token's own parsing is reached.
+#[cfg_attr(target_arch = "wasm32", allow(dead_code))]
+pub(crate) mod trust_boundary;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod websocket;
 
+#[cfg(not(target_arch = "wasm32"))]
 use crate::handlers::{ServerMetrics as HandlerServerMetrics, ServerState};
+#[cfg(not(target_arch = "wasm32"))]
 use crate::rpc::{parse_message, BatchItem, BatchResponse, ParsedMessage};
 pub use rpc::{Request, RequestId, Response, RpcError};
 use std::net::SocketAddr;
+use std::path::PathBuf;
+#[cfg(not(target_arch = "wasm32"))]
 use std::sync::Arc;
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+#[cfg(not(target_arch = "wasm32"))]
+use tokio::io::{AsyncWriteExt, BufReader};
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::net::{TcpListener, TcpStream};
+#[cfg(not(target_arch = "wasm32"))]
 use tokio::sync::Semaphore;
+#[cfg(not(target_arch = "wasm32"))]
 use tracing::{debug, error, info, instrument, warn};
 
 /// Default per-connection request limit (0 = unlimited).
@@ -149,6 +178,96 @@ pub const DEFAULT_MAX_REQUESTS_PER_CONNECTION: u64 = 10_000;
 
 /// Default graceful shutdown drain timeout in seconds.
 pub const DEFAULT_DRAIN_TIMEOUT_SECS: u64 = 30;
+
+/// The secret a client presents before the server answers it: 32 bytes from
+/// the operating system's random source, written as 64 lowercase hex digits,
+/// new at every launch (`trust_boundary.rs` says what it guards).
+///
+/// A connection's first message must be
+/// `{"jsonrpc":"2.0","method":"authenticate","params":{"token":"<token>"},"id":0}`,
+/// on either transport, and `loadEnvironment` with `replace_unchecked`, and
+/// `importModule`, carry it again as `params.token`. Its `Debug` form never
+/// shows it.
+#[derive(Clone)]
+pub struct LaunchToken(String);
+
+impl LaunchToken {
+    /// A new token from the operating system's random source. Fails, rather
+    /// than falling back to anything weaker, when that source cannot be read.
+    pub fn generate() -> Result<Self, ServerError> {
+        trust_boundary::random_token().map(Self)
+    }
+
+    /// A token as a server printed or wrote it: 64 hex digits (surrounding
+    /// whitespace ignored, case folded).
+    pub fn parse(text: &str) -> Result<Self, ServerError> {
+        trust_boundary::parse_token(text)
+            .map(Self)
+            .map_err(ServerError::LaunchToken)
+    }
+
+    /// A token `trust_boundary::parse_token` has already read.
+    pub(crate) fn from_parsed(text: String) -> Self {
+        Self(text)
+    }
+
+    /// The token's text, as a client sends it.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
+    /// Whether `presented` is this token, comparing every byte.
+    pub(crate) fn matches(&self, presented: &str) -> bool {
+        trust_boundary::same_secret(&self.0, presented)
+    }
+}
+
+impl std::fmt::Debug for LaunchToken {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("LaunchToken(<redacted>)")
+    }
+}
+
+/// Where a launch writes its token, readable by the server's user only (mode
+/// 0600), and announces it on standard error.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TokenFile {
+    /// `server-<port>.token` in the per-user runtime directory
+    /// (`$XDG_RUNTIME_DIR/clean`, else `$HOME/.clean/run`, created 0700):
+    /// where [`client_launch_token`] looks for the token of the server at
+    /// `127.0.0.1:<port>`, and of no other address. Only a server bound to
+    /// `127.0.0.1` writes it: one bound to any other address, `[::1]` and
+    /// `0.0.0.0` included, fails to launch with [`ServerError::TokenFile`],
+    /// since a client would send its token to whoever listens on `127.0.0.1`
+    /// at its port. Name a file ([`TokenFile::At`]) for such a server.
+    RuntimeDir,
+    /// This file.
+    At(PathBuf),
+}
+
+/// The launch token a client of the server at `server` (`host:port`) sends,
+/// found in this order: the `CLEAN_SERVER_TOKEN` environment variable (the
+/// token itself); the file `CLEAN_SERVER_TOKEN_FILE` names; when `server`'s
+/// host is `127.0.0.1`, the one address `clean server` binds, the default
+/// token file of a server on that port ([`TokenFile::RuntimeDir`]), which is
+/// sent to no other address. Ask with the address
+/// [`client_server_address`] gives, and connect to it.
+pub fn client_launch_token(server: &str) -> Result<LaunchToken, ServerError> {
+    trust_boundary::client_token(server)
+}
+
+/// The address a client of the server at `server` (`host:port`) connects to:
+/// `localhost:<port>` (`localhost` in any ASCII case) is `127.0.0.1:<port>`,
+/// the one address `clean server` binds, and any other spelling is itself. A
+/// resolver asked for `localhost` may answer `::1` first, an address another
+/// user can listen on at the server's port, and the first message carries the
+/// launch token.
+#[must_use]
+pub fn client_server_address(server: &str) -> std::borrow::Cow<'_, str> {
+    trust_boundary::client_address(server)
+}
 
 /// Clean server configuration
 #[derive(Clone)]
@@ -172,6 +291,20 @@ pub struct ServerConfig {
     pub max_requests_per_connection: u64,
     /// Graceful shutdown drain timeout in seconds.
     pub drain_timeout_secs: u64,
+    /// The directory `saveEnvironment`, `loadEnvironment` and `importModule`
+    /// are confined to (`None`: the directory the server starts in). A path
+    /// that does not resolve under it is refused.
+    pub workspace_root: Option<PathBuf>,
+    /// Where the launch writes its token and announces it on standard error
+    /// (`None`: neither; the embedder reads [`ServerHandle::launch_token`]).
+    pub token_file: Option<TokenFile>,
+    /// The token clients must present (`None`: a new one is generated).
+    pub launch_token: Option<LaunchToken>,
+    /// How long a connection has from its opening to present the launch token
+    /// (milliseconds; default 10,000): a first line that has not arrived by
+    /// then is refused and the connection closed, so a peer that sends nothing
+    /// holds a connection slot no longer than this.
+    pub authenticate_timeout_ms: u64,
 }
 
 impl std::fmt::Debug for ServerConfig {
@@ -187,6 +320,10 @@ impl std::fmt::Debug for ServerConfig {
                 &self.max_requests_per_connection,
             )
             .field("drain_timeout_secs", &self.drain_timeout_secs)
+            .field("workspace_root", &self.workspace_root)
+            .field("token_file", &self.token_file)
+            .field("launch_token", &self.launch_token)
+            .field("authenticate_timeout_ms", &self.authenticate_timeout_ms)
             .field(
                 "initial_env",
                 &self.initial_env.as_ref().map(|e| {
@@ -220,6 +357,10 @@ impl Default for ServerConfig {
             project_theorem_index: None,
             max_requests_per_connection: DEFAULT_MAX_REQUESTS_PER_CONNECTION,
             drain_timeout_secs: DEFAULT_DRAIN_TIMEOUT_SECS,
+            workspace_root: None,
+            token_file: None,
+            launch_token: None,
+            authenticate_timeout_ms: trust_boundary::DEFAULT_AUTHENTICATE_TIMEOUT_MS,
         }
     }
 }
@@ -288,21 +429,100 @@ impl ServerConfig {
         self.drain_timeout_secs = secs;
         self
     }
+
+    /// Confine the file methods to `root` (see [`ServerConfig::workspace_root`]).
+    #[must_use]
+    pub fn with_workspace_root(mut self, root: PathBuf) -> Self {
+        self.workspace_root = Some(root);
+        self
+    }
+
+    /// Write the launch token to `file` and announce it on standard error.
+    #[must_use]
+    pub fn with_token_file(mut self, file: TokenFile) -> Self {
+        self.token_file = Some(file);
+        self
+    }
+
+    /// Require `token` rather than a newly generated one.
+    #[must_use]
+    pub fn with_launch_token(mut self, token: LaunchToken) -> Self {
+        self.launch_token = Some(token);
+        self
+    }
+}
+
+/// What the two transports set up the same way before they listen: the
+/// state (rooted at `workspace_root`, or the directory the server starts in)
+/// and the token it requires.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn launch_state(
+    workspace_root: Option<&std::path::Path>,
+    launch_token: Option<LaunchToken>,
+) -> Result<(ServerState, LaunchToken), ServerError> {
+    let mut state = match workspace_root {
+        Some(root) => ServerState::from_root(root),
+        None => ServerState::new(),
+    };
+    if state.workspace_root.is_none() {
+        return Err(ServerError::WorkspaceRoot {
+            path: workspace_root.map_or_else(
+                || "(the directory the server starts in)".to_string(),
+                |root| root.display().to_string(),
+            ),
+            reason: "it does not resolve to a directory".to_string(),
+        });
+    }
+    if let Some(token) = launch_token {
+        state.launch_token = Some(token);
+    }
+    let token = match &state.launch_token {
+        Some(token) => token.clone(),
+        None => LaunchToken::generate()?,
+    };
+    state.launch_token = Some(token.clone());
+    Ok((state, token))
+}
+
+/// Write the launch token where `file` says and announce it on standard error
+/// (`trust_boundary.rs`), once the listener's address is known: the default
+/// file only for a listener on `127.0.0.1`.
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) fn announce_token(
+    file: Option<&TokenFile>,
+    addr: SocketAddr,
+    token: &LaunchToken,
+) -> Result<(), ServerError> {
+    if let Some(file) = file {
+        let path = trust_boundary::write_token_file(file, addr, token)?;
+        eprintln!("{}", trust_boundary::launch_banner(token, &path, addr));
+    }
+    Ok(())
 }
 
 /// Server handle for managing a running server
+#[cfg(not(target_arch = "wasm32"))]
 pub struct ServerHandle {
     /// Local address the server is bound to
     local_addr: SocketAddr,
+    /// The token every connection must present first
+    launch_token: LaunchToken,
     /// Shutdown signal sender
     shutdown_tx: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl ServerHandle {
     /// Get the local address
     #[must_use]
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    /// The token every connection must present first (`authenticate`).
+    #[must_use]
+    pub fn launch_token(&self) -> &LaunchToken {
+        &self.launch_token
     }
 
     /// Shutdown the server
@@ -313,9 +533,19 @@ impl ServerHandle {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
+impl WebSocketHandle {
+    /// The token every connection must present first (`authenticate`).
+    #[must_use]
+    pub fn launch_token(&self) -> &LaunchToken {
+        &self.launch_token
+    }
+}
+
 /// Wait for all in-flight connections to complete, with a timeout.
 ///
 /// Used by both TCP and WebSocket server loops after the accept loop exits.
+#[cfg(not(target_arch = "wasm32"))]
 pub(crate) async fn drain_inflight(
     count: &std::sync::atomic::AtomicU64,
     notify: &tokio::sync::Notify,
@@ -350,6 +580,7 @@ pub(crate) async fn drain_inflight(
 }
 
 /// Start the clean server
+#[cfg(not(target_arch = "wasm32"))]
 #[instrument(skip(config))]
 pub async fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
     let listener = TcpListener::bind(config.addr)
@@ -359,9 +590,11 @@ pub async fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
     let local_addr = listener.local_addr()?;
     info!("Clean server listening on {}", local_addr);
 
+    let (mut state, launch_token) =
+        launch_state(config.workspace_root.as_deref(), config.launch_token)?;
+    announce_token(config.token_file.as_ref(), local_addr, &launch_token)?;
     let initial_env = config.initial_env.unwrap_or_default();
-    let mut state = ServerState::new();
-    state.env = Arc::new(tokio::sync::RwLock::new(initial_env));
+    state.env = handlers::SharedEnv::new(initial_env);
     state.default_timeout_ms = config.default_timeout_ms;
     state.gpu_enabled = config.gpu_enabled;
     state.worker_threads = config.worker_threads;
@@ -372,13 +605,14 @@ pub async fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
     }
     state.cache_metrics = handlers::CacheMetrics::default();
     state.olean_cache = Arc::new(clean_olean::ModuleCache::new());
-    state.tactic_patterns = clean_elab::tactic::builtins::builtin_tactic_patterns();
+    state.tactic_patterns = Arc::new(clean_elab::tactic::builtins::builtin_tactic_patterns());
     let state = Arc::new(state);
 
     let semaphore = Arc::new(Semaphore::new(config.max_concurrent));
     let (shutdown_tx, mut shutdown_rx) = tokio::sync::oneshot::channel::<()>();
     let max_requests = config.max_requests_per_connection;
     let drain_timeout = std::time::Duration::from_secs(config.drain_timeout_secs);
+    let authenticate_timeout = std::time::Duration::from_millis(config.authenticate_timeout_ms);
 
     let inflight_notify = Arc::new(tokio::sync::Notify::new());
     let inflight_count = Arc::new(std::sync::atomic::AtomicU64::new(0));
@@ -399,7 +633,7 @@ pub async fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
                             c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             tokio::spawn(async move {
                                 let _permit = permit;
-                                if let Err(e) = handle_connection(stream, state, max_requests).await {
+                                if let Err(e) = handle_connection(stream, state, max_requests, authenticate_timeout).await {
                                     warn!("Connection error from {}: {}", peer_addr, e);
                                 }
                                 debug!("Connection closed: {}", peer_addr);
@@ -422,58 +656,144 @@ pub async fn serve(config: ServerConfig) -> Result<ServerHandle, ServerError> {
 
     Ok(ServerHandle {
         local_addr,
+        launch_token,
         shutdown_tx: Some(shutdown_tx),
     })
 }
 
-/// Maximum line length for TCP transport (10 MB).
-const MAX_TCP_LINE_LENGTH: usize = 10 * 1024 * 1024;
+/// Write one JSON value as a line and flush it.
+#[cfg(not(target_arch = "wasm32"))]
+async fn write_json_line<W, T>(writer: &mut W, value: &T) -> Result<(), ServerError>
+where
+    W: tokio::io::AsyncWrite + Unpin,
+    T: serde::Serialize,
+{
+    if let Ok(json) = serde_json::to_string(value) {
+        writer.write_all(json.as_bytes()).await?;
+        writer.write_all(b"\n").await?;
+        writer.flush().await?;
+    }
+    Ok(())
+}
+
+/// Maximum line length for TCP transport (10 MB). The WebSocket transport
+/// bounds a message by the same figure (`websocket::MAX_MESSAGE_BYTES`).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) const MAX_TCP_LINE_LENGTH: usize = 10 * 1024 * 1024;
 
 /// Handle a single connection
+#[cfg(not(target_arch = "wasm32"))]
 #[instrument(skip(stream, state))]
 async fn handle_connection(
     stream: TcpStream,
     state: Arc<ServerState>,
     max_requests: u64,
+    authenticate_timeout: std::time::Duration,
 ) -> Result<(), ServerError> {
+    use tcp_lines::LineRead;
+
     let (reader, mut writer) = stream.into_split();
     let mut reader = BufReader::new(reader);
-    let mut line = String::new();
+    let mut buffer: Vec<u8> = Vec::new();
     let mut request_count: u64 = 0;
+    // Nothing a connection sends is dispatched until it has presented the
+    // launch token (`trust_boundary::admit`), in a first line no longer than
+    // an authenticate request needs, before the authenticate deadline.
+    let mut admitted = false;
+    let admit_by = tokio::time::Instant::now() + authenticate_timeout;
 
     loop {
-        line.clear();
-        let bytes_read = reader.read_line(&mut line).await?;
-
-        if bytes_read == 0 {
-            // Connection closed
-            break;
-        }
-
-        if line.len() > MAX_TCP_LINE_LENGTH {
-            warn!(
-                "TCP line exceeds {} byte limit, dropping",
-                MAX_TCP_LINE_LENGTH
+        let read = if admitted {
+            tcp_lines::read_line_within(&mut reader, &mut buffer, MAX_TCP_LINE_LENGTH).await?
+        } else {
+            let first = tcp_lines::read_line_within(
+                &mut reader,
+                &mut buffer,
+                trust_boundary::AUTHENTICATE_LINE_LIMIT,
             );
-            let err_response = Response::error(
-                RequestId::Null,
-                RpcError::invalid_request(format!(
-                    "Line too long: {} bytes exceeds {} limit",
-                    line.len(),
-                    MAX_TCP_LINE_LENGTH
-                )),
-            );
-            if let Ok(json) = serde_json::to_string(&err_response) {
-                writer.write_all(json.as_bytes()).await?;
-                writer.write_all(b"\n").await?;
-                writer.flush().await?;
+            match tokio::time::timeout_at(admit_by, first).await {
+                Ok(read) => read?,
+                Err(_) => {
+                    warn!("closing a TCP connection that presented no launch token in time");
+                    let refusal = Response::error(
+                        RequestId::Null,
+                        trust_boundary::unauthorized_idle(authenticate_timeout),
+                    );
+                    write_json_line(&mut writer, &refusal).await?;
+                    break;
+                }
             }
-            continue;
+        };
+
+        match read {
+            LineRead::Closed => break,
+            LineRead::Line => {}
+            LineRead::TooLong { .. } if !admitted => {
+                // Judged without reading the rest: no token fits in it.
+                warn!(
+                    "refusing a TCP connection whose first line exceeds {} bytes",
+                    trust_boundary::AUTHENTICATE_LINE_LIMIT
+                );
+                let refusal =
+                    Response::error(RequestId::Null, trust_boundary::unauthorized_missing());
+                write_json_line(&mut writer, &refusal).await?;
+                break;
+            }
+            LineRead::TooLong { ended } => {
+                let length = if ended {
+                    buffer.len()
+                } else {
+                    buffer
+                        .len()
+                        .saturating_add(tcp_lines::discard_rest_of_line(&mut reader).await?)
+                };
+                warn!(
+                    "TCP line exceeds {} byte limit, dropping",
+                    MAX_TCP_LINE_LENGTH
+                );
+                let err_response = Response::error(
+                    RequestId::Null,
+                    RpcError::invalid_request(format!(
+                        "Line too long: {length} bytes exceeds {MAX_TCP_LINE_LENGTH} limit"
+                    )),
+                );
+                write_json_line(&mut writer, &err_response).await?;
+                continue;
+            }
         }
 
-        let line = line.trim();
+        let line = match std::str::from_utf8(&buffer) {
+            Ok(text) => text.trim(),
+            Err(_) if !admitted => {
+                warn!("refusing a TCP connection whose first line is not UTF-8");
+                let refusal =
+                    Response::error(RequestId::Null, trust_boundary::unauthorized_missing());
+                write_json_line(&mut writer, &refusal).await?;
+                break;
+            }
+            Err(e) => {
+                return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, e).into());
+            }
+        };
         if line.is_empty() {
             continue;
+        }
+
+        if !admitted {
+            match trust_boundary::admit(line, state.launch_token()) {
+                trust_boundary::Admission::Admitted(answer) => {
+                    admitted = true;
+                    if let Some(answer) = answer {
+                        write_json_line(&mut writer, &answer).await?;
+                    }
+                    continue;
+                }
+                trust_boundary::Admission::Refused(refusal) => {
+                    warn!("refusing a TCP connection that did not present the launch token");
+                    write_json_line(&mut writer, &refusal).await?;
+                    break;
+                }
+            }
         }
 
         // Enforce per-connection request limit (0 = unlimited)
@@ -529,6 +849,7 @@ async fn handle_connection(
 }
 
 /// Response type (single, batch, or none for notifications)
+#[cfg(not(target_arch = "wasm32"))]
 enum MessageResponse {
     Single(Response),
     Batch(BatchResponse),
@@ -536,6 +857,7 @@ enum MessageResponse {
 }
 
 /// Process a JSON-RPC message
+#[cfg(not(target_arch = "wasm32"))]
 async fn process_message(json: &str, state: &ServerState) -> MessageResponse {
     match parse_message(json) {
         Ok(ParsedMessage::Single(request)) => {
@@ -604,9 +926,29 @@ pub enum ServerError {
     /// An I/O error occurred during server operation.
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+    /// No launch token could be made, or a token's text is not one.
+    #[error("launch token: {0}")]
+    LaunchToken(String),
+    /// The workspace root the file methods are confined to is unusable.
+    #[error("workspace root `{path}`: {reason}")]
+    WorkspaceRoot {
+        /// The root as configured.
+        path: String,
+        /// Why it cannot be used.
+        reason: String,
+    },
+    /// A token file could not be written or read.
+    #[error("token file `{path}`: {reason}")]
+    TokenFile {
+        /// The file.
+        path: String,
+        /// What went wrong.
+        reason: String,
+    },
 }
 
 // Re-export key types for external consumers
+#[cfg(not(target_arch = "wasm32"))]
 pub use handlers::{
     ArchiveCertParams, ArchiveCertResult, ArchiveCertWithDictParams, ArchiveCertWithDictResult,
     BatchCheckItemResult, BatchCheckParams, BatchCheckResult, BatchGetPremisesItem,
@@ -629,6 +971,7 @@ pub use handlers::{
     VerifyProofResult,
 };
 pub use proof_state::StateId;
+#[cfg(not(target_arch = "wasm32"))]
 pub use websocket::{
     serve_websocket, ProgressNotification, ProgressParams, WebSocketConfig, WebSocketError,
     WebSocketHandle,
@@ -640,12 +983,44 @@ mod tests {
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
     use tokio::net::TcpStream;
 
+    /// The launch token every test server here requires.
+    fn test_token() -> &'static LaunchToken {
+        static TOKEN: std::sync::OnceLock<LaunchToken> = std::sync::OnceLock::new();
+        TOKEN.get_or_init(|| LaunchToken::generate().expect("test launch token"))
+    }
+
+    /// A server configuration that requires [`test_token`].
+    fn test_config() -> ServerConfig {
+        ServerConfig::default().with_launch_token(test_token().clone())
+    }
+
+    /// The line a connection sends first to present [`test_token`].
+    fn authenticate_line() -> String {
+        format!(
+            r#"{{"jsonrpc":"2.0","method":"authenticate","params":{{"token":"{}"}},"id":0}}"#,
+            test_token().as_str()
+        )
+    }
+
+    /// Send `request` on a new connection that has presented the test token,
+    /// and read one answer line.
     async fn send_request(addr: SocketAddr, request: &str) -> String {
         let mut stream = TcpStream::connect(addr).await.unwrap();
+        stream
+            .write_all(format!("{}\n", authenticate_line()).as_bytes())
+            .await
+            .unwrap();
         stream.write_all(request.as_bytes()).await.unwrap();
         stream.write_all(b"\n").await.unwrap();
 
         let mut reader = BufReader::new(stream);
+        let mut admitted = String::new();
+        reader.read_line(&mut admitted).await.unwrap();
+        assert_eq!(
+            admitted.trim_end(),
+            r#"{"jsonrpc":"2.0","result":{"authenticated":true},"id":0}"#,
+            "the test token admits the connection"
+        );
         let mut response = String::new();
         reader.read_line(&mut response).await.unwrap();
         response
@@ -691,7 +1066,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_check() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -707,7 +1082,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_info() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -722,7 +1097,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_method_not_found() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -737,7 +1112,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_request() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -753,7 +1128,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_request_with_invalid_item() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -795,7 +1170,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_request_with_invalid_jsonrpc_version() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -822,7 +1197,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_request_with_primitive_items() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -862,7 +1237,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_invalid_json() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -877,7 +1252,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_verify_c() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -899,7 +1274,7 @@ mod tests {
         use clean_kernel::cert::ProofCert;
         use clean_kernel::{Expr, Level};
 
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -941,7 +1316,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_info_includes_get_premises() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -958,7 +1333,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_get_premises_basic() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -996,7 +1371,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_get_premises_mepo() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1026,7 +1401,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_get_premises_mash() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1056,7 +1431,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_get_premises_with_defaults() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1077,7 +1452,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_get_premises_basic() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1128,7 +1503,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_get_premises_mepo() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1161,7 +1536,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_get_premises_mash() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1194,7 +1569,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_get_premises_with_invalid_goal() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1239,7 +1614,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_server_batch_get_premises_with_defaults() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1292,7 +1667,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_farkas_certificate_camelcase_alias() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1315,7 +1690,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_entailment_certificate_camelcase_alias() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1339,7 +1714,7 @@ mod tests {
     #[cfg(feature = "carcara-verify")]
     #[tokio::test]
     async fn test_verify_alethe_certificate_holey_proof_over_tcp() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1381,7 +1756,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_verify_certificates_batch_camelcase_alias() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1408,7 +1783,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_batch_verify_external_cert_alias() {
-        let config = ServerConfig::default().with_addr("127.0.0.1:0".parse().unwrap());
+        let config = test_config().with_addr("127.0.0.1:0".parse().unwrap());
         let handle = serve(config).await.unwrap();
         let addr = handle.local_addr();
 
@@ -1436,7 +1811,7 @@ mod tests {
     async fn test_server_preloaded_env_check_nat() {
         let env =
             clean_kernel::Environment::try_with_prelude().expect("try_with_prelude should succeed");
-        let config = ServerConfig::default()
+        let config = test_config()
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_environment(env);
         let handle = serve(config).await.unwrap();
@@ -1492,7 +1867,7 @@ mod tests {
     async fn test_server_preloaded_env_unknown_name_fails() {
         let env =
             clean_kernel::Environment::try_with_prelude().expect("try_with_prelude should succeed");
-        let config = ServerConfig::default()
+        let config = test_config()
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_environment(env);
         let handle = serve(config).await.unwrap();
@@ -1516,7 +1891,7 @@ mod tests {
     #[tokio::test]
     async fn test_tcp_per_connection_request_limit_enforced() {
         // Set a low limit so the test is fast
-        let config = ServerConfig::default()
+        let config = test_config()
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_max_requests_per_connection(3);
         let handle = serve(config).await.unwrap();
@@ -1525,6 +1900,15 @@ mod tests {
         let mut stream = TcpStream::connect(addr).await.unwrap();
         let (reader, mut writer) = stream.split();
         let mut reader = BufReader::new(reader);
+
+        // Presenting the token is not a request: it does not count.
+        writer
+            .write_all(format!("{}\n", authenticate_line()).as_bytes())
+            .await
+            .unwrap();
+        let mut admitted = String::new();
+        reader.read_line(&mut admitted).await.unwrap();
+        assert!(admitted.contains(r#""authenticated":true"#), "{admitted}");
 
         let request = r#"{"jsonrpc": "2.0", "method": "serverInfo", "id": 1}"#;
 
@@ -1580,7 +1964,7 @@ mod tests {
     #[tokio::test]
     async fn test_tcp_unlimited_requests_when_limit_zero() {
         // 0 = unlimited
-        let config = ServerConfig::default()
+        let config = test_config()
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_max_requests_per_connection(0);
         let handle = serve(config).await.unwrap();
@@ -1635,7 +2019,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_shutdown_drains_inflight_connections() {
-        let config = ServerConfig::default()
+        let config = test_config()
             .with_addr("127.0.0.1:0".parse().unwrap())
             .with_drain_timeout_secs(5);
         let handle = serve(config).await.unwrap();
@@ -1651,6 +2035,43 @@ mod tests {
 
         // Shutdown should complete cleanly (drain has nothing to wait for since
         // the request above already completed)
+        handle.shutdown();
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Trust boundary: the controls beside `tests/trust_boundary_tests.rs`
+    // ════════════════════════════════════════════════════════════════════════
+
+    #[tokio::test]
+    async fn test_tcp_authenticate_again_after_admission_is_answered() {
+        let handle = serve(test_config().with_addr("127.0.0.1:0".parse().unwrap()))
+            .await
+            .unwrap();
+        assert_eq!(handle.launch_token().as_str(), test_token().as_str());
+        let response = send_request(handle.local_addr(), &authenticate_line()).await;
+        assert_eq!(
+            response.trim_end(),
+            r#"{"jsonrpc":"2.0","result":{"authenticated":true},"id":0}"#
+        );
+        handle.shutdown();
+    }
+
+    #[tokio::test]
+    async fn test_tcp_server_info_lists_the_destructive_methods() {
+        let handle = serve(test_config().with_addr("127.0.0.1:0".parse().unwrap()))
+            .await
+            .unwrap();
+        let response = send_request(
+            handle.local_addr(),
+            r#"{"jsonrpc":"2.0","method":"serverInfo","id":1}"#,
+        )
+        .await;
+        let value: serde_json::Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(
+            value["result"]["destructive_methods"],
+            serde_json::json!(["saveEnvironment", "loadEnvironment", "importModule"]),
+            "{response}"
+        );
         handle.shutdown();
     }
 }

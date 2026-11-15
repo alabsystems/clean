@@ -1,0 +1,3 @@
+(assume a1 (not false))
+(step t1 (cl true) :rule true)
+(step t2 (cl) :rule resolution :premises (a1 t1))

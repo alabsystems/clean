@@ -6,6 +6,7 @@
 
 use super::*;
 use clean_kernel::sorry::with_sorry_location_key;
+use clean_parser::{Span, SurfaceTactic};
 use serial_test::serial;
 
 // =========================================================================
@@ -85,7 +86,7 @@ fn test_sorry_with_custom_type() {
     env.add_decl(Declaration::Axiom {
         name: Name::from_string("MyClass"),
         level_params: vec![],
-        type_: Expr::pi(BinderInfo::Implicit, Expr::type_(), Expr::prop()),
+        type_: Expr::pi(BinderInfo::Default, Expr::type_(), Expr::prop()),
     })
     .unwrap();
 
@@ -293,13 +294,20 @@ fn test_parser_recovery_sorry_stays_synthetic_after_bool() {
 /// still works — it closes the goal at eval time via close_goal.
 #[test]
 fn test_elab_by_tactic_rejects_unsolved_goals() {
-    // Call elab_by_tactic directly with an empty tactic list.
-    // No tactics → goal stays open → error returned (no sorry auto-fill).
+    // A block whose script RAN and closed nothing — `by skip`. (An EMPTY
+    // script is no longer a way to write this: `elab_by_tactic` refuses one
+    // outright, because the only producer of an empty script is the lossy
+    // surface→syntax roundtrip discarding a `ByTactic`'s children, and a
+    // dropped script must be distinguishable from a failed one.)
     let env = Environment::new();
     let mut ctx = ElabCtx::new(&env);
     ctx.set_expected_type(Some(Expr::prop()));
 
-    let result = ctx.elab_by_tactic(&[]);
+    let result = ctx.elab_by_tactic(&[SurfaceTactic::Named {
+        span: Span::dummy(),
+        name: "skip".into(),
+        args: vec![],
+    }]);
 
     assert!(
         result.is_err(),
@@ -315,6 +323,37 @@ fn test_elab_by_tactic_rejects_unsolved_goals() {
     );
 }
 
+/// An EMPTY tactic script is refused, loudly, rather than reported as
+/// `unsolved goals`.
+///
+/// `by` with no tactics never comes from a well-formed source file — Clean's
+/// own parse recovery yields `SyntheticSorry`, not an empty block — so the one
+/// producer is the lossy `surface → syntax → surface` roundtrip, whose
+/// `surface_to_syntax` discards a `ByTactic`'s children. Running zero tactics
+/// left the goal open and read as `unsolved goals` on a correctly instantiated
+/// goal, which is indistinguishable from a script that ran and failed: in the
+/// dropped shape `by sorry`, `by skip` and `by unknown_tactic_xyz` all produced
+/// the identical message. See `tests_by_block_head_shapes`.
+#[test]
+fn test_elab_by_tactic_refuses_an_empty_script() {
+    let env = Environment::new();
+    let mut ctx = ElabCtx::new(&env);
+    ctx.set_expected_type(Some(Expr::prop()));
+
+    let err = ctx
+        .elab_by_tactic(&[])
+        .expect_err("an empty tactic script must be refused");
+    let msg = format!("{err}");
+    assert!(
+        msg.contains("empty tactic script"),
+        "the refusal must name the dropped script, got: {msg}"
+    );
+    assert!(
+        !msg.contains("unsolved goal"),
+        "a dropped script must not be reported as unsolved goals, got: {msg}"
+    );
+}
+
 /// Test that unsolved goals error includes the goal target type (#1801).
 ///
 /// The error message should show the remaining goal types so users can see
@@ -325,7 +364,11 @@ fn test_elab_by_tactic_unsolved_goals_includes_target_type() {
     let mut ctx = ElabCtx::new(&env);
     ctx.set_expected_type(Some(Expr::prop()));
 
-    let result = ctx.elab_by_tactic(&[]);
+    let result = ctx.elab_by_tactic(&[SurfaceTactic::Named {
+        span: Span::dummy(),
+        name: "skip".into(),
+        args: vec![],
+    }]);
     assert!(result.is_err());
 
     let err_msg = format!("{}", result.unwrap_err());

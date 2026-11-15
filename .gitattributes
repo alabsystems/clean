@@ -4,3 +4,45 @@
 # git. The small test fixtures under crates/clean-mathverse/tests/fixtures/ are
 # kept as plain binary blobs (no LFS smudge).
 crates/clean-mathverse/tests/fixtures/**/*.mathverse binary
+
+# Q6 retains hashed terminal output byte-for-byte, including its final blank line.
+reports/self-proof-q6-2026-11-13/*/default.log whitespace=-blank-at-eof
+reports/self-proof-q6-2026-11-13/*/export.log whitespace=-blank-at-eof
+
+# Q6 follow-up retains hashed terminal output and Git patch data verbatim.
+reports/self-proof-q6-wide-2026-11-13/kcheck-spec-current-main/test.log whitespace=-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/production-candidate/live-main/local-worktrees.txt whitespace=-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/production-candidate/**/*.patch whitespace=-blank-at-eol,-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/production-candidate/**/*.diff whitespace=-blank-at-eol,-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/production-candidate/preparation-commit.txt whitespace=-blank-at-eol,-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/production-candidate/lock-delta/clean-runtime-removal-commit.txt whitespace=-blank-at-eol,-blank-at-eof
+
+# Refreshed Q6 build logs are also retained byte-for-byte.
+reports/self-proof-q6-current-2026-11-13/*/default.log whitespace=-blank-at-eof
+reports/self-proof-q6-current-2026-11-13/*/export.log whitespace=-blank-at-eof
+# Captured Git-show indentation and truncated diagnostic fragments are data.
+reports/self-proof-q6-wide-2026-11-13/intake-current-main/upstream-regressions.log whitespace=-blank-at-eol,-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/script-replay/current-full-local-gate.log whitespace=-blank-at-eol,-blank-at-eof
+# Exact official-seed installer transcripts retain their final blank line.
+reports/self-proof-q6-wide-2026-11-13/production-candidate/seed013-production/*-install.log whitespace=-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/script-replay/expanded-final-local-gate.log whitespace=-blank-at-eol,-blank-at-eof
+reports/self-proof-q6-wide-2026-11-13/script-replay/final-full-local-gate.log whitespace=-blank-at-eol,-blank-at-eof
+
+# Q6 primary-source stdout is hashed evidence, retained byte-for-byte.
+reports/self-proof-q6-capture-2026-11-14/availability/mrustc-linux190-compiler-builtins-override.stdout whitespace=-blank-at-eof
+reports/self-proof-q6-capture-2026-11-14/availability/mrustc-minicargo-makefile.stdout whitespace=-blank-at-eol,-blank-at-eof
+
+# Endpoint-qualified Rust test logs retain their hashed final blank line.
+reports/self-proof-q6-capture-2026-11-14/**/default.log whitespace=-blank-at-eof
+reports/self-proof-q6-capture-2026-11-14/**/export.log whitespace=-blank-at-eof
+
+# Q6 measured compiler transcripts are hashed data, including preserved cohorts.
+reports/self-proof-q6-measurement-2026-11-14/**/default.log whitespace=-blank-at-eof
+reports/self-proof-q6-measurement-2026-11-14/**/export.log whitespace=-blank-at-eof
+
+# The historical generator's failed probe left an intentionally empty field.
+reports/self-proof-q6-genesis-entrypoints-2026-11-14/history/old-generator-failed-version-accepted.manifest-after whitespace=-blank-at-eol
+reports/self-proof-q6-recapture-2026-11-14/captures/stock/default.log whitespace=-blank-at-eof
+reports/self-proof-q6-recapture-2026-11-14/captures/stock/export.log whitespace=-blank-at-eof
+reports/self-proof-q6-recapture-2026-11-14/captures/trust/default.log whitespace=-blank-at-eof
+reports/self-proof-q6-recapture-2026-11-14/captures/trust/export.log whitespace=-blank-at-eof

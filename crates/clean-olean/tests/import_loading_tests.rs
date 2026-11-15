@@ -16,8 +16,12 @@ use clean_kernel::env::{Environment, TrustedEnvExt};
 use clean_kernel::name::Name;
 use clean_olean::{
     load_module_with_deps, load_module_with_deps_cached, load_module_with_deps_parallel,
-    load_olean_file, parse_module_file, pinned_lean_lib_path, ModuleCache, ParsedExtensionEntry,
+    load_olean_file, parse_module_file, pinned_lean_lib_path, DeferredRecursorStatus, ModuleCache,
+    ParsedExtensionEntry,
 };
+
+#[path = "support/skipped_constants.rs"]
+mod skipped_constants;
 
 fn get_lean_lib_path() -> Option<std::path::PathBuf> {
     pinned_lean_lib_path()
@@ -39,31 +43,6 @@ fn require_olean_lean() -> Option<std::path::PathBuf> {
         return None;
     }
     get_lean_lib_path()
-}
-
-fn find_module_with_extension_entries(
-    lib_path: &std::path::Path,
-) -> Option<(std::path::PathBuf, clean_olean::module::ParsedModule)> {
-    let candidates = [
-        "Init/Prelude.olean",
-        "Init/Meta.olean",
-        "Init/Core.olean",
-        "Init/Util.olean",
-    ];
-
-    for rel_path in candidates {
-        let path = lib_path.join(rel_path);
-        if !path.exists() {
-            continue;
-        }
-        if let Ok(module) = parse_module_file(&path) {
-            if !module.entries.is_empty() {
-                return Some((path, module));
-            }
-        }
-    }
-
-    None
 }
 
 #[test]
@@ -115,10 +94,12 @@ fn test_load_persistent_extension_entries() {
         return;
     };
 
-    let Some((module_path, module)) = find_module_with_extension_entries(&lib_path) else {
-        eprintln!("Skipping test: no extension entries found in candidate modules");
-        return;
-    };
+    let module_path = lib_path.join("Init/Prelude.olean");
+    let module = parse_module_file(&module_path).expect("parse pinned Init.Prelude");
+    assert!(
+        !module.entries.is_empty(),
+        "pinned Prelude extension roster"
+    );
 
     // Module index is computed from imports.len() at load time
     let module_idx = module.imports.len();
@@ -133,40 +114,102 @@ fn test_load_persistent_extension_entries() {
         module_path
     );
 
+    assert_eq!(summary.extension_accounting.len(), module.entries.len());
     let mut checked = 0usize;
-    for extension in module.entries.iter().filter(|ext| !ext.entries.is_empty()) {
+    let mut opaque_aux_rows = 0;
+    for extension in &module.entries {
         let extension_name = Name::interned(&extension.extension_name);
+        let matching: Vec<_> = summary
+            .extension_accounting
+            .iter()
+            .filter(|row| row.extension_name == extension_name)
+            .collect();
+        assert_eq!(
+            matching.len(),
+            1,
+            "exact accounting identity: {extension_name}"
+        );
+        let accounting = matching[0];
+        let projected_rows = extension.entries.len() + extension.undecoded_entries;
+        let source_rows = accounting
+            .source_rows
+            .expect("direct loader measured the raw array");
+        // ParsedModule is lossy even at the population level for some unsupported tables.
+        // It cannot supply an exact modern denominator. Keep every direct raw row instead,
+        // and never let its legacy projection invent rows absent from that array.
+        assert!(
+            projected_rows <= source_rows,
+            "legacy projection expanded {extension_name}"
+        );
+        assert_eq!(
+            accounting.decoded_rows + accounting.undecoded_rows,
+            source_rows
+        );
+        assert_eq!(
+            accounting.undecoded_reasons.len(),
+            accounting.undecoded_rows
+        );
         let state = env
             .get_persistent_extension_state(&extension_name)
             .expect("Expected extension state to be registered");
 
-        assert!(
-            state.imported_entries.len() > module_idx,
-            "Expected imported entries for module index {module_idx} in {:?}",
-            extension.extension_name
-        );
-        let loaded = &state.imported_entries[module_idx];
-        // Count only Named entries - RawScalar entries are opaque sentinel values
-        // preserved for roundtrip fidelity but not loaded into the environment.
+        if source_rows > 0 {
+            assert!(
+                state.imported_entries.len() > module_idx,
+                "Expected imported entries for module index {module_idx} in {:?}",
+                extension.extension_name
+            );
+        }
+        let loaded = state
+            .imported_entries
+            .get(module_idx)
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+        // ParsedModule's legacy Name/payload projection guesses at modern opaque rows.
+        // The direct typed loader must retain their exact population and reasons, never
+        // register these guesses as generic Named metadata. Recognized modern tables
+        // have dedicated registrars, covered by their typed metadata tests.
         let named_count = extension
             .entries
             .iter()
             .filter(|e| matches!(e, ParsedExtensionEntry::Named { .. }))
             .count();
-        assert_eq!(
-            loaded.len(),
-            named_count,
-            "Expected exactly {} Named entries for {:?}, got {}",
-            named_count,
-            extension.extension_name,
+        assert!(
+            loaded.is_empty(),
+            "lossy Named fallback registered for {extension_name}"
+        );
+        println!(
+            "{extension_name}: {source_rows} source rows, {} decoded, {} unmeasured; \
+            {projected_rows} legacy projected rows ({named_count} Named), {} registered Named rows",
+            accounting.decoded_rows,
+            accounting.undecoded_rows,
             loaded.len()
         );
+        if extension.extension_name == "Lean.auxRecExt" {
+            // This is a TagDeclarationExtension (Name rows), not Name × payload.
+            // Its payload ABI is still unmeasured by the direct loader.
+            assert_eq!(accounting.decoded_rows, 0);
+            assert_eq!(accounting.undecoded_rows, source_rows);
+            opaque_aux_rows = source_rows;
+        }
         checked += 1;
     }
 
     assert!(
         checked > 0,
         "Expected at least one persistent extension entry to validate"
+    );
+    assert!(
+        opaque_aux_rows > 0,
+        "actual pinned opaque auxiliary-recursion rows retained"
+    );
+    assert_eq!(
+        summary.extension_undecoded_entries,
+        summary
+            .extension_accounting
+            .iter()
+            .map(|row| row.undecoded_rows + row.unresolved_targets)
+            .sum::<usize>()
     );
 }
 
@@ -269,6 +312,7 @@ fn test_load_multiple_init_modules() {
 
     let mut total_added = 0;
     let mut total_skipped = 0;
+    let mut total_replay_refusals = 0;
     let mut total_modules = 0;
     let mut failures: Vec<(String, String)> = Vec::new();
 
@@ -278,6 +322,28 @@ fn test_load_multiple_init_modules() {
             Ok(summaries) => {
                 let added: usize = summaries.iter().map(|s| s.added_constants).sum();
                 let skipped: usize = summaries.iter().map(|s| s.skipped_constants.len()).sum();
+                let audit = skipped_constants::audit_skipped_constants(&summaries);
+                assert!(
+                    audit.accounting_errors.is_empty(),
+                    "{module}: {:?}",
+                    audit.accounting_errors
+                );
+                assert_eq!(audit.rows.len(), skipped, "every original skip retained");
+                total_replay_refusals += audit.failure_count();
+                for summary in &summaries {
+                    for deferred in &summary.deferred_recursors {
+                        assert_eq!(
+                            deferred.status,
+                            DeferredRecursorStatus::Resolved,
+                            "{module}: unresolved original recursor occurrence {deferred:?}"
+                        );
+                    }
+                }
+                println!(
+                    "{module}: {} compiler-artifact exclusions, {} genuine replay refusals",
+                    audit.excluded_count(),
+                    audit.failure_count()
+                );
                 total_added += added;
                 total_skipped += skipped;
                 total_modules += summaries.len();
@@ -323,14 +389,18 @@ fn test_load_multiple_init_modules() {
         "Expected at least 1000 constants, got {total_added}"
     );
 
-    // Skipped constants should be minimal
+    // Keep the full raw denominator visible. Excluded compiler artifacts are not proofs;
+    // every genuine conversion/kernel refusal must now be zero, rather than below 1%.
     let skip_ratio = total_skipped as f64 / (total_added + total_skipped) as f64;
-    assert!(
-        skip_ratio < 0.01,
-        "Skip ratio too high: {:.2}% ({} skipped / {} total)",
+    println!(
+        "Raw skip ratio: {:.2}% ({} skipped / {} total)",
         skip_ratio * 100.0,
         total_skipped,
         total_added + total_skipped
+    );
+    assert_eq!(
+        total_replay_refusals, 0,
+        "genuine replay refusals are not compiler artifacts"
     );
 }
 

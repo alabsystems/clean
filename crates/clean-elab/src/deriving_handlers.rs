@@ -27,7 +27,7 @@ pub type UserDerivingHandler =
 /// Independent of the builtin deriving dispatch in [`crate::infer`]; this is the
 /// Phase 3 extension point for `deriving MyClass`.
 #[derive(Clone, Default)]
-pub struct UserDerivingRegistry {
+pub(crate) struct UserDerivingRegistry {
     handlers: HashMap<String, UserDerivingHandler>,
 }
 
@@ -42,37 +42,37 @@ impl std::fmt::Debug for UserDerivingRegistry {
 impl UserDerivingRegistry {
     /// Create an empty registry.
     #[must_use]
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
     /// Register a handler for `deriving <class>`. A later registration for the
     /// same class replaces the earlier one (last-wins, as in Lean).
-    pub fn register(&mut self, class: impl Into<String>, handler: UserDerivingHandler) {
+    pub(crate) fn register(&mut self, class: impl Into<String>, handler: UserDerivingHandler) {
         self.handlers.insert(class.into(), handler);
     }
 
     /// Whether a handler is registered for `deriving <class>`.
     #[must_use]
-    pub fn is_registered(&self, class: &str) -> bool {
+    pub(crate) fn is_registered(&self, class: &str) -> bool {
         self.handlers.contains_key(class)
     }
 
     /// Number of registered deriving classes.
     #[must_use]
-    pub fn registered_count(&self) -> usize {
+    pub(crate) fn registered_count(&self) -> usize {
         self.handlers.len()
     }
 
     /// Names of all registered deriving classes.
-    pub fn class_names(&self) -> impl Iterator<Item = &str> {
+    pub(crate) fn class_names(&self) -> impl Iterator<Item = &str> {
         self.handlers.keys().map(String::as_str)
     }
 
     /// Generate the instance declaration(s) for `deriving <class>` on `target`.
     /// Fails with [`ElabError::Unsupported`] if no handler is registered for
     /// `class`; otherwise propagates the handler's own result.
-    pub fn derive(
+    pub(crate) fn derive(
         &self,
         class: &str,
         target: &Name,

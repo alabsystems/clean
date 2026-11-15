@@ -23,7 +23,8 @@ impl Parser {
     /// multi-discriminant match fails loud here rather than mis-binding.
     pub(super) fn match_body(&mut self, start_span: Span) -> Result<SurfaceExpr, ParseError> {
         let hyp_name = self.match_discr_hyp_name();
-        let mut scrutinees = vec![self.expr()?];
+        let first_scrutinee = self.expr()?;
+        let mut rest_scrutinees = Vec::new();
         while self.eat(&TokenKind::Comma) {
             if hyp_name.is_some() || self.match_discr_hyp_name().is_some() {
                 return Err(ParseError::UnexpectedToken {
@@ -34,7 +35,7 @@ impl Parser {
                         .to_string(),
                 });
             }
-            scrutinees.push(self.expr()?);
+            rest_scrutinees.push(self.expr()?);
         }
         self.expect(&TokenKind::With)?;
 
@@ -46,18 +47,17 @@ impl Parser {
         // scrutinee (`c : Nat`) met the pattern's nested `Prod.mk (p2, p3)`
         // and every ≥3-discriminant match failed loud (brick B05,
         // docs/plans/GAP_SWEEP_2026-07-09.md — 3-discriminant diagonal).
-        let scrutinee = scrutinees
-            .into_iter()
-            .rev()
-            .reduce(|acc, expr| {
-                let span = expr.span().merge(acc.span());
-                SurfaceExpr::App(
+        let scrutinee = fold_right_nonempty(first_scrutinee, rest_scrutinees, |expr, acc| {
+            let span = expr.span().merge(acc.span());
+            SurfaceExpr::App(
+                span,
+                Box::new(SurfaceExpr::Ident(
                     span,
-                    Box::new(SurfaceExpr::Ident(span, "Prod.mk".to_string())),
-                    vec![SurfaceArg::positional(expr), SurfaceArg::positional(acc)],
-                )
-            })
-            .expect("expected at least one scrutinee");
+                    SurfaceName::global_path("Prod.mk"),
+                )),
+                vec![SurfaceArg::positional(expr), SurfaceArg::positional(acc)],
+            )
+        });
 
         // Column of this match's first arm `|`. A later `|` that begins a new
         // line at a *smaller* column belongs to an enclosing match and must
@@ -72,9 +72,10 @@ impl Parser {
             && !(self.current().preceded_by_newline && self.current().col < arm_col)
         {
             self.advance(); // consume the `|`
-            let mut patterns = vec![self.pattern_with_or()?];
+            let first_pattern = self.pattern_with_or()?;
+            let mut rest_patterns = Vec::new();
             while self.eat(&TokenKind::Comma) {
-                patterns.push(self.pattern_with_or()?);
+                rest_patterns.push(self.pattern_with_or()?);
             }
             self.expect(&TokenKind::FatArrow)?;
             // Parse the arm body under a layout guard pinned at the arm `|`
@@ -96,15 +97,9 @@ impl Parser {
             self.pop_indent();
             let body = body_result?;
             // Combine multiple patterns into a tuple pattern
-            let pattern = if patterns.len() == 1 {
-                patterns.pop().expect("patterns is non-empty")
-            } else {
-                patterns
-                    .into_iter()
-                    .rev()
-                    .reduce(|acc, pat| SurfacePattern::Ctor("Prod.mk".to_string(), vec![pat, acc]))
-                    .expect("patterns.len() > 1 in else branch")
-            };
+            let pattern = fold_right_nonempty(first_pattern, rest_patterns, |pat, acc| {
+                SurfacePattern::Ctor(SurfaceName::generated_path("Prod.mk"), vec![pat, acc])
+            });
             arms.push(SurfaceMatchArm {
                 span: pattern.span(),
                 pattern,
@@ -128,10 +123,13 @@ impl Parser {
     /// IMMEDIATELY followed by a single `:` token — otherwise nothing is
     /// consumed and the discriminant parses as an ordinary term (`::`, `.`,
     /// parenthesized ascriptions, applications, … all fall through).
-    fn match_discr_hyp_name(&mut self) -> Option<String> {
+    fn match_discr_hyp_name(&mut self) -> Option<SurfaceName> {
         let name = match self.current_kind() {
-            TokenKind::Ident(name) => name.clone(),
-            TokenKind::Underscore => "_".to_string(),
+            // A Lean keyword is no `binderIdent`: nothing is consumed.
+            TokenKind::Ident(name) if !self.current().lean_keyword => {
+                SurfaceName::component(name, self.current().ident_escaped)
+            }
+            TokenKind::Underscore => SurfaceName::generated_path("_"),
             _ => return None,
         };
         if self.peek_kind(1) != Some(&TokenKind::Colon) {
@@ -184,7 +182,7 @@ impl Parser {
         if self.eat(&TokenKind::ColonColon) {
             let right = self.pattern_with_cons()?; // Right associative
             Ok(SurfacePattern::Ctor(
-                "List.cons".to_string(),
+                SurfaceName::generated_path("List.cons"),
                 vec![left, right],
             ))
         } else {
@@ -254,6 +252,7 @@ impl Parser {
 
         match self.current_kind().clone() {
             TokenKind::Ident(name) => {
+                let name = self.name_token(&name)?;
                 self.advance();
                 // Handle dotted names like T.t, Option.none, etc.
                 //
@@ -266,8 +265,10 @@ impl Parser {
                 while self.dot_is_contiguous_qualifier() {
                     self.advance(); // consume dot
                     if let TokenKind::Ident(next_name) = self.current_kind().clone() {
-                        full_name.push('.');
-                        full_name.push_str(&next_name);
+                        full_name = full_name.append(&SurfaceName::component(
+                            next_name,
+                            self.current().ident_escaped,
+                        ));
                         self.advance(); // consume ident
                     }
                 }
@@ -334,7 +335,10 @@ impl Parser {
                 // PARAMETERS), hence the empty argument vector. HEq keeps
                 // needing its own `HEq.refl` spelling, exactly as in Lean.
                 self.advance();
-                Ok(SurfacePattern::Ctor("Eq.refl".to_string(), Vec::new()))
+                Ok(SurfacePattern::Ctor(
+                    SurfaceName::generated_path("Eq.refl"),
+                    Vec::new(),
+                ))
             }
             TokenKind::Underscore => {
                 self.advance();
@@ -379,31 +383,29 @@ impl Parser {
                 // Handle empty tuple pattern ()
                 if self.check(&TokenKind::RParen) {
                     self.advance();
-                    return Ok(SurfacePattern::Ctor("Unit.unit".to_string(), vec![]));
+                    return Ok(SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Unit.unit"),
+                        vec![],
+                    ));
                 }
                 let first = self.pattern_with_cons()?;
                 // Check for tuple pattern (p1, p2, ...)
                 if self.eat(&TokenKind::Comma) {
-                    let mut pats = vec![first];
+                    let mut rest = Vec::new();
                     if !self.check(&TokenKind::RParen) {
-                        pats.push(self.pattern_with_cons()?);
+                        rest.push(self.pattern_with_cons()?);
                         while self.eat(&TokenKind::Comma) {
                             if self.check(&TokenKind::RParen) {
                                 break;
                             }
-                            pats.push(self.pattern_with_cons()?);
+                            rest.push(self.pattern_with_cons()?);
                         }
                     }
                     self.expect(&TokenKind::RParen)?;
                     // Build nested Prod.mk pattern
-                    let result = pats
-                        .into_iter()
-                        .rev()
-                        .reduce(|acc, pat| {
-                            SurfacePattern::Ctor("Prod.mk".to_string(), vec![pat, acc])
-                        })
-                        .expect("tuple pattern must have elements");
-                    Ok(result)
+                    Ok(fold_right_nonempty(first, rest, |pat, acc| {
+                        SurfacePattern::Ctor(SurfaceName::generated_path("Prod.mk"), vec![pat, acc])
+                    }))
                 } else {
                     self.expect(&TokenKind::RParen)?;
                     Ok(first)
@@ -420,7 +422,10 @@ impl Parser {
                 // Handle empty anonymous constructor ⟨⟩
                 if self.check(&TokenKind::RAngle) {
                     self.advance();
-                    return Ok(SurfacePattern::Ctor("Unit.unit".to_string(), vec![]));
+                    return Ok(SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Unit.unit"),
+                        vec![],
+                    ));
                 }
                 let mut pats = vec![self.pattern_with_cons()?];
                 while self.eat(&TokenKind::Comma) {
@@ -430,12 +435,7 @@ impl Parser {
                     pats.push(self.pattern_with_cons()?);
                 }
                 self.expect(&TokenKind::RAngle)?;
-                let result = pats
-                    .into_iter()
-                    .rev()
-                    .reduce(|acc, pat| SurfacePattern::Ctor("Prod.mk".to_string(), vec![pat, acc]))
-                    .expect("anonymous-constructor pattern must have elements");
-                Ok(result)
+                Ok(Self::anonymous_ctor_pattern(pats))
             }
             TokenKind::LBracket => {
                 // List pattern: [] or [p1, p2, ...]
@@ -443,7 +443,10 @@ impl Parser {
                 if self.check(&TokenKind::RBracket) {
                     self.advance();
                     // Empty list pattern: []
-                    return Ok(SurfacePattern::Ctor("List.nil".to_string(), vec![]));
+                    return Ok(SurfacePattern::Ctor(
+                        SurfaceName::generated_path("List.nil"),
+                        vec![],
+                    ));
                 }
                 // Non-empty list pattern: [p1, p2, ...]
                 let mut pats = vec![self.pattern_with_cons()?];
@@ -456,11 +459,17 @@ impl Parser {
                 self.expect(&TokenKind::RBracket)?;
                 // Build List.cons chain: [a, b, c] => List.cons a (List.cons b (List.cons c List.nil))
                 let result = pats.into_iter().rev().fold(
-                    SurfacePattern::Ctor("List.nil".to_string(), vec![]),
-                    |acc, pat| SurfacePattern::Ctor("List.cons".to_string(), vec![pat, acc]),
+                    SurfacePattern::Ctor(SurfaceName::generated_path("List.nil"), vec![]),
+                    |acc, pat| {
+                        SurfacePattern::Ctor(
+                            SurfaceName::generated_path("List.cons"),
+                            vec![pat, acc],
+                        )
+                    },
                 );
                 Ok(result)
             }
+            TokenKind::LBrace => self.struct_instance_pattern(),
             _ => Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
                 col: self.current_span().start,
@@ -469,7 +478,97 @@ impl Parser {
         }
     }
 
+    /// Parse a structure-instance pattern: `{ f := p, g := q, .. }`, optionally
+    /// `{ f := p : S }`.
+    ///
+    /// Lean parses `Lean.Parser.Term.structInst` in pattern position with no
+    /// extra grammar (patterns ARE terms there) and `Lean/Elab/PatternVar.lean`
+    /// walks the fields — :304-313 is the `structInst` arm of `collect`, and
+    /// :306-307 is the refusal this mirrors. The `optEllipsis` and the optional
+    /// `: ty` are preserved; a `with` SOURCE is refused.
+    ///
+    /// PIN FOR THE FUTURE: Lean has to disambiguate `{a, b}` set notation from a
+    /// structure instance in pattern position, and does it with a `choiceKind`
+    /// filter at `Lean/Elab/PatternVar.lean:280-290`. Clean has no set notation
+    /// in PATTERN position today (the term-level `{a, b}` collection literal is
+    /// parsed by a different entry point and is untouched here), so `{` in
+    /// pattern position is unconditionally a structure instance. The day a
+    /// collection pattern is added, that filter becomes necessary here.
+    fn struct_instance_pattern(&mut self) -> Result<SurfacePattern, ParseError> {
+        let start_line = self.current_line();
+        let start_col = self.current_span().start;
+        self.advance(); // consume '{'
+
+        // Lean: "Invalid struct instance pattern: `with` is not allowed in
+        // patterns" (Lean/Elab/PatternVar.lean:306-307).
+        if self.find_struct_update_with().is_some() {
+            return Err(ParseError::UnexpectedToken {
+                line: start_line,
+                col: start_col,
+                message: "invalid struct instance pattern: `with` is not allowed in patterns"
+                    .to_string(),
+            });
+        }
+
+        let mut fields: Vec<(SurfaceName, SurfacePattern)> = Vec::new();
+        let mut ellipsis = false;
+        loop {
+            // `..` and `: ty` are the last two elements of Lean's `structInst`
+            // before the closing brace, so either ends the field list.
+            if self.check(&TokenKind::RBrace) || self.check(&TokenKind::Colon) {
+                break;
+            }
+            if self.eat(&TokenKind::DotDot) {
+                ellipsis = true;
+                break;
+            }
+            let name = self.ident()?;
+            let value = if self.eat(&TokenKind::ColonEq) {
+                // Bound the value so the NEXT field's name is not eaten as a
+                // constructor argument; see `in_struct_pattern_field`.
+                let saved = self.in_struct_pattern_field;
+                self.in_struct_pattern_field = true;
+                let value = self.pattern_with_cons();
+                self.in_struct_pattern_field = saved;
+                value?
+            } else {
+                // Bare-ident abbreviation `{ x }` ≡ `{ x := x }`, as in terms.
+                SurfacePattern::Var(name.clone())
+            };
+            fields.push((name, value));
+            // The separator is OPTIONAL, exactly as it is for a term-level
+            // structure literal (`parse_struct_literal_fields`): Lean's
+            // `structInstFields` is a `sepByIndent`, so a field may end at a
+            // NEWLINE with no comma. `Mathlib/Order/Basic.lean:455-459` --
+            // `LinearOrder.toPartialOrder_injective`, one of the two
+            // declarations this arm exists for -- is written that way, so
+            // requiring a comma here would refuse it.
+            self.eat(&TokenKind::Comma);
+        }
+        let ty = if self.eat(&TokenKind::Colon) {
+            Some(Box::new(self.expr()?))
+        } else {
+            None
+        };
+        self.expect(&TokenKind::RBrace)?;
+        Ok(SurfacePattern::StructInst {
+            fields,
+            ellipsis,
+            ty,
+        })
+    }
+
     pub(super) fn is_pattern_arg_start(&self) -> bool {
+        // Inside a structure-instance pattern's field VALUE, `name :=` starts
+        // the next field and is never an argument of the value's constructor.
+        // Scoped to that flag on purpose: `let Foo.mk x := e` legitimately has
+        // an identifier argument immediately followed by `:=`.
+        if self.in_struct_pattern_field
+            && matches!(self.current_kind(), TokenKind::Ident(_))
+            && self.peek_kind(1) == Some(&TokenKind::ColonEq)
+        {
+            return false;
+        }
         matches!(
             self.current_kind(),
             TokenKind::Ident(_)
@@ -480,7 +579,9 @@ impl Parser {
                 | TokenKind::Rfl
                 | TokenKind::Dot
                 | TokenKind::LParen
+                | TokenKind::LAngle
                 | TokenKind::LBracket
+                | TokenKind::LBrace
         )
     }
 
@@ -493,18 +594,62 @@ impl Parser {
     ///
     /// `.red` is dotted constructor notation; the nullary case would otherwise
     /// arrive as `Var("red")` — a binder — so a typo'd constructor became a
-    /// silent catch-all. Only the nullary shape needs it: `.cons h t` already
-    /// parses as `Ctor`.
+    /// silent catch-all. Both nullary and applied source heads retain the
+    /// leading-dot selector. Canonical generated desugarings such as the
+    /// keyword `rfl` → `Eq.refl` already select their exact constructor.
     fn retag_leading_dot_ctor(pat: SurfacePattern) -> SurfacePattern {
         match pat {
-            SurfacePattern::Var(name) => SurfacePattern::Ctor(name, Vec::new()),
+            SurfacePattern::Var(name) => {
+                SurfacePattern::Ctor(name.with_relative_constructor(), Vec::new())
+            }
+            SurfacePattern::Ctor(name, args) => {
+                let name = if name
+                    .component_syntax()
+                    .iter()
+                    .all(|origin| matches!(origin, NameComponentSyntax::Generated))
+                {
+                    name
+                } else {
+                    name.with_relative_constructor()
+                };
+                SurfacePattern::Ctor(name, args)
+            }
             other => other,
         }
+    }
+
+    /// The anonymous-constructor pattern `⟨p₁, …, pₙ⟩` (n ≥ 1): the parser's
+    /// `Prod.mk` placeholder, which the elaborator resolves against the
+    /// scrutinee's sole constructor (`remap_anonymous_tuple_ctor`,
+    /// `remap_anon_tuple_to_structure`). Several elements right-nest as binary
+    /// `Prod.mk` nodes.
+    ///
+    /// ONE element stays a ONE-field placeholder, never the bare `p₁`: Lean
+    /// keeps `⟨u⟩` an `anonymousCtor` node in a pattern
+    /// (`Lean/Elab/PatternVar.lean:215`) and `elabAnonymousCtor` turns it into
+    /// `C.mk u` for a sole constructor `C.mk` with one explicit field
+    /// (`Lean/Elab/BuiltinNotation.lean:43-100`); a one-element `⟨u⟩` is never
+    /// a parenthesis. Collapsing it bound `u` to the whole scrutinee:
+    /// `fun ⟨u⟩ ↦ ⟨u.default, …⟩` against `Nonempty (Unique α) → …` resolved
+    /// `u.default` as `Nonempty.default` (`unique_iff_existsUnique`,
+    /// Mathlib `Logic/Unique.lean`), and `let ⟨x⟩ := ‹Nonempty α›` handed the
+    /// `Nonempty` proof to a slot expecting an `α` (`Function.const_injective`).
+    pub(super) fn anonymous_ctor_pattern(mut pats: Vec<SurfacePattern>) -> SurfacePattern {
+        if pats.len() == 1 {
+            return SurfacePattern::Ctor(SurfaceName::generated_path("Prod.mk"), pats);
+        }
+        let Some(last) = pats.pop() else {
+            return SurfacePattern::Ctor(SurfaceName::generated_path("Unit.unit"), Vec::new());
+        };
+        pats.into_iter().rev().fold(last, |acc, pat| {
+            SurfacePattern::Ctor(SurfaceName::generated_path("Prod.mk"), vec![pat, acc])
+        })
     }
 
     pub(super) fn atomic_pattern(&mut self) -> Result<SurfacePattern, ParseError> {
         match self.current_kind().clone() {
             TokenKind::Ident(name) => {
+                let name = self.name_token(&name)?;
                 self.advance();
                 // Handle dotted names like T.t, Option.none, etc. Only a
                 // *contiguous* dot (no surrounding whitespace) continues the
@@ -513,10 +658,23 @@ impl Parser {
                 while self.dot_is_contiguous_qualifier() {
                     self.advance(); // consume dot
                     if let TokenKind::Ident(next_name) = self.current_kind().clone() {
-                        full_name.push('.');
-                        full_name.push_str(&next_name);
+                        full_name = full_name.append(&SurfaceName::component(
+                            next_name,
+                            self.current().ident_escaped,
+                        ));
                         self.advance(); // consume ident
                     }
+                }
+                // Named pattern `c@p` in ARGUMENT position (`| .Const ty
+                // c@(.aggregate _) =>`, trust-ir `Eval.lean`). Lean's
+                // `namedPattern` is a trailing parser on the identifier,
+                // `checkNoWsBefore "@" … termParser maxPrec`, so `@` must be
+                // glued to the name and the sub-pattern is one argument-level
+                // pattern. The head position (`pattern`) already reads it.
+                if self.check(&TokenKind::At) && self.at_token_glued_to_previous() {
+                    self.advance(); // consume `@`
+                    let inner = self.atomic_pattern()?;
+                    return Ok(SurfacePattern::As(full_name, Box::new(inner)));
                 }
                 // Atomic pattern: no arguments collected
                 Ok(SurfacePattern::Var(full_name))
@@ -545,7 +703,10 @@ impl Parser {
                 // PARAMETERS), hence the empty argument vector. HEq keeps
                 // needing its own `HEq.refl` spelling, exactly as in Lean.
                 self.advance();
-                Ok(SurfacePattern::Ctor("Eq.refl".to_string(), Vec::new()))
+                Ok(SurfacePattern::Ctor(
+                    SurfaceName::generated_path("Eq.refl"),
+                    Vec::new(),
+                ))
             }
             TokenKind::Underscore => {
                 self.advance();
@@ -595,38 +756,38 @@ impl Parser {
                 if self.check(&TokenKind::RParen) {
                     // () is Unit.unit
                     self.advance();
-                    return Ok(SurfacePattern::Ctor("Unit.unit".to_string(), vec![]));
+                    return Ok(SurfacePattern::Ctor(
+                        SurfaceName::generated_path("Unit.unit"),
+                        vec![],
+                    ));
                 }
                 let first = self.pattern_with_cons()?;
                 if self.eat(&TokenKind::Comma) {
-                    let mut pats = vec![first];
+                    let mut rest = Vec::new();
                     if !self.check(&TokenKind::RParen) {
-                        pats.push(self.pattern_with_cons()?);
+                        rest.push(self.pattern_with_cons()?);
                         while self.eat(&TokenKind::Comma) {
                             if self.check(&TokenKind::RParen) {
                                 break;
                             }
-                            pats.push(self.pattern_with_cons()?);
+                            rest.push(self.pattern_with_cons()?);
                         }
                     }
                     self.expect(&TokenKind::RParen)?;
-                    let result = pats
-                        .into_iter()
-                        .rev()
-                        .reduce(|acc, pat| {
-                            SurfacePattern::Ctor("Prod.mk".to_string(), vec![pat, acc])
-                        })
-                        .expect("tuple pattern must have elements");
-                    Ok(result)
+                    Ok(fold_right_nonempty(first, rest, |pat, acc| {
+                        SurfacePattern::Ctor(SurfaceName::generated_path("Prod.mk"), vec![pat, acc])
+                    }))
                 } else {
                     self.expect(&TokenKind::RParen)?;
                     Ok(first)
                 }
             }
-            TokenKind::LBracket => {
-                // List pattern - delegate to full pattern parser
+            TokenKind::LAngle | TokenKind::LBracket => {
+                // Delimited anonymous-constructor and list patterns are one
+                // argument, including when nested under a named constructor.
                 self.pattern()
             }
+            TokenKind::LBrace => self.struct_instance_pattern(),
             _ => Err(ParseError::UnexpectedToken {
                 line: self.current_line(),
                 col: self.current_span().start,
@@ -634,4 +795,23 @@ impl Parser {
             }),
         }
     }
+}
+
+/// Right-nested fold of the non-empty sequence `first, rest…`:
+/// `combine(x₁, combine(x₂, … combine(xₙ₋₁, xₙ)))`, combining innermost first.
+/// The same calls, in the same order, as `rev().reduce(|acc, x| combine(x,
+/// acc))` over the whole sequence, but total: the sequence has a first element
+/// by construction, so there is no empty case to reject.
+pub(super) fn fold_right_nonempty<T>(
+    first: T,
+    mut rest: Vec<T>,
+    mut combine: impl FnMut(T, T) -> T,
+) -> T {
+    let Some(mut acc) = rest.pop() else {
+        return first;
+    };
+    while let Some(item) = rest.pop() {
+        acc = combine(item, acc);
+    }
+    combine(first, acc)
 }

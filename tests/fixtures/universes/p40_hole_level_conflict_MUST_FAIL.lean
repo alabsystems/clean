@@ -9,7 +9,11 @@
 -- hole with `β` needs `Sort 1 ≤ Sort 0`, which cumulativity does not grant, so
 -- `unify_meta`'s concrete-level branch must reject:
 --
---     universe level conflict: Zero vs Succ(Zero)
+--     universe level conflict: 0 vs 1
+--
+-- Rendering-only update, 2026-09-10: 954a9ea94e (2026-08-31) switched this
+-- diagnostic from Debug levels (Zero, Succ(Zero)) to Display levels (0, 1).
+-- The concrete-level conflict and its ordered expected/inferred levels remain.
 --
 -- Cumulativity in the licensed direction is still allowed and is covered by
 -- p37's `polyProp` row (a `Sort 0` value in a `Sort 1` position passes).

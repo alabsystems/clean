@@ -257,7 +257,13 @@ fn itauto_search(state: &mut ProofState, depth: usize) -> TacticResult {
     // Rule 4: If goal is P -> Q, use intro
     if is_pi_expr(&target) {
         let mut new_state = state.clone();
-        if intro(&mut new_state, "h").is_ok() && itauto_search(&mut new_state, depth - 1).is_ok() {
+        if intro(
+            &mut new_state,
+            &clean_parser::SurfaceName::generated_path("h"),
+        )
+        .is_ok()
+            && itauto_search(&mut new_state, depth - 1).is_ok()
+        {
             *state = new_state;
             return Ok(());
         }

@@ -31,8 +31,8 @@ fn lit_token(kind: TokenKind) -> Token {
     Token::new(kind, Span::new(0, 0), false, 0, 1)
 }
 
-fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::new(0, 0), name.to_owned())
+fn ident(name: SurfaceName) -> SurfaceExpr {
+    SurfaceExpr::Ident(Span::new(0, 0), name)
 }
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ fn test_extract_leading_literal_from_literal() {
 fn test_extract_leading_literal_skips_variable() {
     let pat = vec![
         SyntaxPatternItem::Variable {
-            name: "x".to_owned(),
+            name: SurfaceName::generated_path("x"),
             category: None,
         },
         SyntaxPatternItem::Literal("+".to_owned()),
@@ -146,12 +146,12 @@ fn test_registry_register_and_lookup() {
         category: SyntaxCategory::Term,
         pattern: vec![
             SyntaxPatternItem::Variable {
-                name: "a".to_owned(),
+                name: SurfaceName::generated_path("a"),
                 category: Some("term".to_owned()),
             },
             SyntaxPatternItem::Literal("+".to_owned()),
             SyntaxPatternItem::Variable {
-                name: "b".to_owned(),
+                name: SurfaceName::generated_path("b"),
                 category: Some("term".to_owned()),
             },
         ],
@@ -252,7 +252,7 @@ fn test_registry_match_syntax_literal() {
         pattern: vec![
             SyntaxPatternItem::Literal("if".to_owned()),
             SyntaxPatternItem::Variable {
-                name: "c".to_owned(),
+                name: SurfaceName::generated_path("c"),
                 category: Some("term".to_owned()),
             },
         ],
@@ -350,8 +350,8 @@ fn test_macro_rules_registry_register_and_lookup() {
     reg.register(MacroRulesEntry {
         name: "myMacro".to_owned(),
         arms: vec![MacroRulesArm {
-            pattern: ident("_"),
-            expansion: ident("expanded"),
+            pattern: ident(SurfaceName::generated_path("_")),
+            expansion: ident(SurfaceName::generated_path("expanded")),
         }],
     });
 
@@ -366,15 +366,17 @@ fn test_macro_rules_registry_expand_stub() {
     reg.register(MacroRulesEntry {
         name: "m".to_owned(),
         arms: vec![MacroRulesArm {
-            pattern: ident("_"),
-            expansion: ident("result"),
+            pattern: ident(SurfaceName::generated_path("_")),
+            expansion: ident(SurfaceName::generated_path("result")),
         }],
     });
 
-    let result = reg.expand("m", &ident("input"));
+    let result = reg.expand("m", &ident(SurfaceName::generated_path("input")));
     assert!(result.is_some());
     match result.unwrap() {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "result"),
+        SurfaceExpr::Ident(_, name) => {
+            assert_eq!(name, SurfaceName::generated_path("result"))
+        }
         other => panic!("expected Ident, got {other:?}"),
     }
 }
@@ -382,7 +384,9 @@ fn test_macro_rules_registry_expand_stub() {
 #[test]
 fn test_macro_rules_registry_expand_unknown() {
     let reg = MacroRulesRegistry::new();
-    assert!(reg.expand("unknown", &ident("x")).is_none());
+    assert!(reg
+        .expand("unknown", &ident(SurfaceName::generated_path("x")))
+        .is_none());
 }
 
 #[test]
@@ -391,21 +395,25 @@ fn test_macro_rules_registry_replaces_on_reregister() {
     reg.register(MacroRulesEntry {
         name: "m".to_owned(),
         arms: vec![MacroRulesArm {
-            pattern: ident("_"),
-            expansion: ident("old"),
+            pattern: ident(SurfaceName::generated_path("_")),
+            expansion: ident(SurfaceName::generated_path("old")),
         }],
     });
     reg.register(MacroRulesEntry {
         name: "m".to_owned(),
         arms: vec![MacroRulesArm {
-            pattern: ident("_"),
-            expansion: ident("new"),
+            pattern: ident(SurfaceName::generated_path("_")),
+            expansion: ident(SurfaceName::generated_path("new")),
         }],
     });
 
-    let result = reg.expand("m", &ident("input")).unwrap();
+    let result = reg
+        .expand("m", &ident(SurfaceName::generated_path("input")))
+        .unwrap();
     match result {
-        SurfaceExpr::Ident(_, name) => assert_eq!(name, "new"),
+        SurfaceExpr::Ident(_, name) => {
+            assert_eq!(name, SurfaceName::generated_path("new"))
+        }
         other => panic!("expected Ident, got {other:?}"),
     }
 }

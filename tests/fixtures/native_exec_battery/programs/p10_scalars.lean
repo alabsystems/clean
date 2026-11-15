@@ -1,0 +1,11 @@
+def main : IO Unit := do
+  IO.println ((255 : UInt8) + 1)
+  IO.println ((0 : UInt32) - 1)
+  IO.println (Char.ofNat 65)
+  IO.println ('z'.toNat)
+  IO.println ((2.5 : Float) * 2)
+  IO.println (Float.sqrt 2.0)
+  IO.println ((10 : Int) / 3)
+  IO.println ((-7 : Int) % 3)
+  IO.println ((-7 : Int) / 2)
+  IO.println ((1 : Float) / 3)

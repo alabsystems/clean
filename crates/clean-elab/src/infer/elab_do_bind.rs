@@ -17,12 +17,67 @@
 use super::*;
 
 impl<'a> ElabCtx<'a> {
+    /// A do-block `let`/`let mut` (`let x := e; rest`). An unannotated
+    /// numeral's type waits for the continuation, as in a term `let`
+    /// (`elab_let_binding`): `let k := 5` followed by `Tag.tag (k : Int)`
+    /// makes `k : Int` in Lean. A bare numeral value is postponed whole; any
+    /// other value with a numeral in it is elaborated first with its open
+    /// numerals waiting. Either runs as a transaction (or joins an enclosing
+    /// postponing scope), and the eager order stands if it fails.
+    pub(super) fn elab_do_let_dispatch(
+        &mut self,
+        binder: &SurfaceBinder,
+        val: &SurfaceExpr,
+        rest: &[DoElem],
+        nondep: bool,
+    ) -> Result<Expr, ElabError> {
+        if binder.ty.is_none()
+            && Self::let_value_is_bare_numeral(val)
+            && self.default_instances.is_empty()
+            && self.postponing_let_depth == 0
+        {
+            if let Some(term) = self.lean_order_let_attempt(|this| {
+                this.with_postponing_let_scope(|this| {
+                    this.elab_do_let_numeral_postponed(binder, val, rest, nondep)
+                })
+            })? {
+                return Ok(term);
+            }
+        } else if Self::let_value_numerals_may_wait(binder, val) {
+            if self.postponing_let_depth > 0 {
+                return self.with_postponing_let_scope(|this| {
+                    this.elab_do_let_ordered(binder, val, rest, true, nondep)
+                });
+            }
+            if let Some(term) = self.lean_order_let_attempt(|this| {
+                this.with_postponing_let_scope(|this| {
+                    this.elab_do_let_ordered(binder, val, rest, true, nondep)
+                })
+            })? {
+                return Ok(term);
+            }
+        }
+        self.elab_do_let(binder, val, rest, nondep)
+    }
+
     /// Desugar `let x <- action; rest` to `@Bind.bind.{u,v} m α β action (fun x => rest)`
     pub(super) fn elab_do_bind(
         &mut self,
         binder: &SurfaceBinder,
         action: &SurfaceExpr,
         rest: &[DoElem],
+    ) -> Result<Expr, ElabError> {
+        self.elab_do_bind_ordered(binder, action, rest, false)
+    }
+
+    /// [`Self::elab_do_bind`], with the action's open numerals waiting for
+    /// the continuation when `numerals_wait` (see `elab_do_let_dispatch`).
+    pub(super) fn elab_do_bind_ordered(
+        &mut self,
+        binder: &SurfaceBinder,
+        action: &SurfaceExpr,
+        rest: &[DoElem],
+        numerals_wait: bool,
     ) -> Result<Expr, ElabError> {
         // Elaborate the monadic action, then resolve implicit args (#3419).
         //
@@ -75,7 +130,14 @@ impl<'a> ElabCtx<'a> {
             });
         let saved_expected = self.current_expected_type.take();
         self.current_expected_type = action_expected_ty;
-        let action_result = self.elaborate(action);
+        let action_result = if numerals_wait {
+            self.numeral_postpone_depth += 1;
+            let result = self.elaborate(action);
+            self.numeral_postpone_depth -= 1;
+            result
+        } else {
+            self.elaborate(action)
+        };
         self.current_expected_type = saved_expected;
         let mut action_expr = action_result?;
         if let Some(info) = &self.do_monad_info {
@@ -133,6 +195,20 @@ impl<'a> ElabCtx<'a> {
         binder: &SurfaceBinder,
         val: &SurfaceExpr,
         rest: &[DoElem],
+        nondep: bool,
+    ) -> Result<Expr, ElabError> {
+        self.elab_do_let_ordered(binder, val, rest, false, nondep)
+    }
+
+    /// [`Self::elab_do_let`], with the value's open numerals waiting for the
+    /// continuation when `numerals_wait` (see `elab_do_let_dispatch`).
+    pub(super) fn elab_do_let_ordered(
+        &mut self,
+        binder: &SurfaceBinder,
+        val: &SurfaceExpr,
+        rest: &[DoElem],
+        numerals_wait: bool,
+        nondep: bool,
     ) -> Result<Expr, ElabError> {
         // The do-block's expected monad type `m β` (`current_expected_type`)
         // belongs to the CONTINUATION (`rest`), NOT to this plain let's bound
@@ -155,10 +231,19 @@ impl<'a> ElabCtx<'a> {
         // Elaborate type and value, avoiding double elaboration when inferred.
         let (ty, val_expr) = if let Some(ty_surface) = &binder.ty {
             let ty_expr = self.elaborate(ty_surface)?;
-            let val_expr = self.elaborate_with_expected_type(val, Some(ty_expr.clone()))?;
+            let val_expr = if numerals_wait {
+                self.elab_value_with_waiting_numerals(val, Some(ty_expr.clone()))?
+            } else {
+                self.elaborate_with_expected_type(val, Some(ty_expr.clone()))?
+            };
+            self.check_annotated_value_in_scope(&val_expr, &ty_expr)?;
             (ty_expr, val_expr)
         } else {
-            let val_expr = self.elaborate_with_expected_type(val, None)?;
+            let val_expr = if numerals_wait {
+                self.elab_value_with_waiting_numerals(val, None)?
+            } else {
+                self.elaborate_with_expected_type(val, None)?
+            };
             let ty = self.infer_type(&val_expr)?;
             (ty, val_expr)
         };
@@ -167,20 +252,67 @@ impl<'a> ElabCtx<'a> {
         self.current_expected_type = body_expected;
 
         // Push local so rest elements can reference this binding
-        let fvar = self.push_local(binder.name.clone(), ty.clone());
-        let rest_expr = self.elab_do_elems(rest)?;
+        let fvar = self.fresh_fvar();
+        let stored_value = if nondep {
+            crate::tactic::have_value(val_expr.clone())
+        } else {
+            val_expr.clone()
+        };
+        self.push_local_let_with_fvar(binder.name.clone(), fvar, ty.clone(), stored_value);
+        self.capture_binder_info(binder, fvar);
+        let rest_expr = self.elab_do_elems(rest);
         self.pop_local();
+        let rest_expr = rest_expr?;
 
         // Fix #3409: Instantiate metas BEFORE abstracting FVars (same as bind).
         let rest_inst = self.metas.instantiate(&rest_expr);
         let body_abs = rest_inst.abstract_fvar(fvar);
 
         Ok(Expr::let_named(
-            Name::from_string(&binder.name),
+            binder.name.name().clone(),
             ty,
             val_expr,
             body_abs,
-            false,
+            nondep,
+        ))
+    }
+
+    /// [`Self::elab_do_let`] for an unannotated numeral, with the value
+    /// elaborated after the continuation has had the chance to pin its type
+    /// (see `elab_let_binding`).
+    pub(super) fn elab_do_let_numeral_postponed(
+        &mut self,
+        binder: &SurfaceBinder,
+        val: &SurfaceExpr,
+        rest: &[DoElem],
+        nondep: bool,
+    ) -> Result<Expr, ElabError> {
+        let body_expected = self.current_expected_type.clone();
+        let (ty, placeholder) = self.postponed_let_value_placeholder();
+        self.current_expected_type = body_expected;
+        let fvar = self.fresh_fvar();
+        let stored_value = if nondep {
+            crate::tactic::have_value(placeholder.clone())
+        } else {
+            placeholder.clone()
+        };
+        self.push_local_let_with_fvar(binder.name.clone(), fvar, ty.clone(), stored_value);
+        self.capture_binder_info(binder, fvar);
+        self.open_numeral_let_types.push(ty.clone());
+        let rest_expr = self.elab_do_elems(rest);
+        self.open_numeral_let_types.pop();
+        self.pop_local();
+        let rest_expr = rest_expr?;
+        let (ty, val_expr) =
+            self.resume_postponed_let_value(val, &ty, &placeholder, ElabError::CannotInfer)?;
+        let rest_inst = self.metas.instantiate(&rest_expr);
+        let body_abs = rest_inst.abstract_fvar(fvar);
+        Ok(Expr::let_named(
+            binder.name.name().clone(),
+            ty,
+            val_expr,
+            body_abs,
+            nondep,
         ))
     }
 

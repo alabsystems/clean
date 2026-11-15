@@ -38,6 +38,20 @@ fn infer_axiom_deps() -> HashSet<String> {
     // inferred type R inside KernelCheckAccepts.mk / CheckDecomp. The only
     // residual named leaf is the DerivedPending infer dispatcher
     // kernel_infer_returns_well_typed.
+    //
+    // TWO THINGS THAT SENTENCE DOES NOT SAY, and both matter to a reader
+    // deciding what this rule is worth:
+    //
+    //  * "no longer an axiom leaf" is not "discharged". The residual leaf is
+    //    DerivedPending, which types.rs defines as a proof that depends on
+    //    HelperAxiom definitions -- so this rule's closure is not zero-axiom in
+    //    the sense the proof-soundness rules use the word.
+    //  * "faithful inductive" describes the TRANSCRIPTION of KernelInferAccepts,
+    //    not what its arms establish. Three of its five arms are pinned as
+    //    genuinely vacuous by tests/vacuity_firewall.rs, and the relation is the
+    //    one CLAUDE.md calls RETIRED in favour of ImplInfer -- a retirement (M7)
+    //    that has not landed, so this rule still quantifies over it. The long
+    //    note at the inductive's own registration site has the detail.
     deps(["kernel_infer_returns_well_typed"])
 }
 

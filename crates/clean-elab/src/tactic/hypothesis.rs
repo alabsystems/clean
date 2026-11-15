@@ -17,7 +17,11 @@
 //! - `replace` - Replace a hypothesis with a new one (creates proof obligation)
 //! - `replace_hyp` - Replace a hypothesis with a new one (with explicit proof)
 
+use super::pattern::names::local_name_matches;
+use clean_parser::SurfaceName;
+
 mod apply_fun_goal_impl;
+mod clear_dependents;
 mod proof_carry;
 
 use std::collections::HashSet;
@@ -34,20 +38,60 @@ use proof_carry::{infer_sort_level, replace_local_hyp_with_proof};
 // Clear Tactic
 // ============================================================================
 
-/// Removes a hypothesis from the local context.
+/// Removes a hypothesis from the local context — Lean's `MVarId.clear`,
+/// which refuses when a later local or the target depends on it ("variable
+/// 'hp' depends on 'h'", "target depends on 'h'"; measured on pinned Lean
+/// 4.8.0). Until 2026-10-16 Clean removed the local whatever depended on it,
+/// so `clear a; exact h` with `h : a = 1` was accepted.
 ///
 /// # Arguments
 /// * `state` - The proof state
 /// * `hyp_name` - Name of the hypothesis to remove
-pub fn clear(state: &mut ProofState, hyp_name: &str) -> TacticResult {
-    let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
+pub fn clear(state: &mut ProofState, hyp_name: &SurfaceName) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "clear")?;
+    let fvar = hypothesis_fvar(state, hyp_name)?;
+    clear_fvar(state, fvar)
+}
 
+/// The fvar of the LAST local named `hyp_name` in the current goal.
+pub(crate) fn hypothesis_fvar(
+    state: &ProofState,
+    hyp_name: &SurfaceName,
+) -> Result<FVarId, TacticError> {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
+    goal.local_ctx
+        .iter()
+        .rev()
+        .find(|decl| local_name_matches(&decl.name, hyp_name))
+        .map(|decl| decl.fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))
+}
+
+/// [`clear`] of the local `fvar`, with Lean's dependency refusals.
+pub(crate) fn clear_fvar(state: &mut ProofState, fvar: FVarId) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let idx = goal
         .local_ctx
         .iter()
-        .position(|decl| decl.name == hyp_name)
-        .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
+        .position(|decl| decl.fvar == fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(crate::error_render::fvar(fvar, None)))?;
+    clear_dependents::refuse_if_depended_on(state, goal, idx)?;
+    let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
+    goal.local_ctx.remove(idx);
+    Ok(())
+}
 
+/// Remove a hypothesis WITHOUT Lean's dependency check — for Clean's own
+/// automation (aesop's `destruct`, tauto's preprocessing), whose Lean
+/// counterparts use `tryClear` or never clear at all; the surface `clear`
+/// tactic is [`clear`].
+pub(crate) fn clear_fvar_unchecked(state: &mut ProofState, fvar: FVarId) -> TacticResult {
+    let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
+    let idx = goal
+        .local_ctx
+        .iter()
+        .position(|decl| decl.fvar == fvar)
+        .ok_or_else(|| TacticError::HypothesisNotFound(crate::error_render::fvar(fvar, None)))?;
     goal.local_ctx.remove(idx);
     Ok(())
 }
@@ -62,16 +106,23 @@ pub fn clear(state: &mut ProofState, hyp_name: &str) -> TacticResult {
 /// * `state` - The proof state
 /// * `old_name` - Current name of the hypothesis
 /// * `new_name` - New name to assign
-pub fn rename(state: &mut ProofState, old_name: &str, new_name: &str) -> TacticResult {
+pub fn rename(
+    state: &mut ProofState,
+    old_name: &SurfaceName,
+    new_name: &SurfaceName,
+) -> TacticResult {
+    super::pattern::names::require_binding_name(old_name, "rename")?;
+    super::pattern::names::require_binding_name(new_name, "rename")?;
     let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
 
     let decl = goal
         .local_ctx
         .iter_mut()
-        .find(|d| d.name == old_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, old_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(old_name.to_string()))?;
 
-    decl.name = new_name.to_string();
+    decl.name = new_name.clone();
     Ok(())
 }
 
@@ -85,18 +136,26 @@ pub fn rename(state: &mut ProofState, old_name: &str, new_name: &str) -> TacticR
 /// * `state` - The proof state
 /// * `hyp_name` - Name of the hypothesis to duplicate
 /// * `new_name` - Name for the duplicate
-pub fn duplicate(state: &mut ProofState, hyp_name: &str, new_name: &str) -> TacticResult {
+pub fn duplicate(
+    state: &mut ProofState,
+    hyp_name: &SurfaceName,
+    new_name: &SurfaceName,
+) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "duplicate")?;
+    super::pattern::names::require_binding_name(new_name, "duplicate")?;
     let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
 
     let decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?
         .clone();
 
     let new_decl = LocalDecl {
-        name: new_name.to_string(),
+        binder_info: decl.binder_info,
+        name: new_name.clone(),
         fvar: decl.fvar, // Share the same fvar (both refer to same value)
         ty: decl.ty,
         value: decl.value,
@@ -140,7 +199,8 @@ pub fn duplicate(state: &mut ProofState, hyp_name: &str, new_name: &str) -> Tact
 ///   state unchanged
 /// ENSURES: Never panics — a missing hypothesis, a non-∀/non-function `h`, or an
 ///   ill-typed application returns a `TacticError`.
-pub fn specialize(state: &mut ProofState, hyp_name: &str, arg: Expr) -> TacticResult {
+pub fn specialize(state: &mut ProofState, hyp_name: &SurfaceName, arg: Expr) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "specialize")?;
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
     // Find the hypothesis (graceful error if absent — never panic). Use the
@@ -150,7 +210,7 @@ pub fn specialize(state: &mut ProofState, hyp_name: &str, arg: Expr) -> TacticRe
         .local_ctx
         .iter()
         .rev()
-        .find(|d| d.name == hyp_name)
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?
         .clone();
 
@@ -185,7 +245,8 @@ pub fn specialize(state: &mut ProofState, hyp_name: &str, arg: Expr) -> TacticRe
             super::have_(state, hyp_name, specialized_ty, Some(specialized_value))
         }
         _ => Err(TacticError::GoalMismatch(format!(
-            "specialize: hypothesis '{hyp_name}' has type {hyp_ty:?}, expected ∀ or →"
+            "specialize: hypothesis '{hyp_name}' has type {}, expected ∀ or →",
+            crate::error_render::term(&hyp_ty)
         ))),
     }
 }
@@ -288,7 +349,10 @@ pub(crate) fn collect_fvars(expr: &Expr) -> HashSet<FVarId> {
 /// # Errors
 /// - `NoGoals` if there are no goals
 /// - `HypothesisNotFound` if any source name doesn't exist
-pub fn rename_all(state: &mut ProofState, renames: Vec<(&str, &str)>) -> TacticResult {
+pub fn rename_all(
+    state: &mut ProofState,
+    renames: Vec<(&SurfaceName, &SurfaceName)>,
+) -> TacticResult {
     for (old_name, new_name) in renames {
         rename(state, old_name, new_name)?;
     }
@@ -300,12 +364,13 @@ pub fn rename_all(state: &mut ProofState, renames: Vec<(&str, &str)>) -> TacticR
 // ============================================================================
 
 /// Tactic: apply_fun - Applies a function to both sides of an equality hypothesis.
-pub fn apply_fun(state: &mut ProofState, func: Expr, hyp_name: &str) -> TacticResult {
+pub fn apply_fun(state: &mut ProofState, func: Expr, hyp_name: &SurfaceName) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "apply_fun")?;
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let hyp_idx = goal
         .local_ctx
         .iter()
-        .position(|d| d.name == hyp_name)
+        .rposition(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     let hyp_decl = goal.local_ctx[hyp_idx].clone();
 
@@ -354,6 +419,17 @@ pub fn apply_fun(state: &mut ProofState, func: Expr, hyp_name: &str) -> TacticRe
         h: Expr::fvar(hyp_decl.fvar),
     });
 
+    // Mathlib's `applyFunHyp` CLEARS `h` and then `note`s the new
+    // hypothesis (`g.clear h; g.note …`), so it fails with `MVarId.clear`'s
+    // error whenever a later local or the target depends on `h`. The shared
+    // replacement below keeps the old local for dependents instead (Lean's
+    // `replaceLocalDecl`, right for `rw … at h`), which would accept what
+    // Mathlib refuses. The state is left as it was, with no checker cache
+    // kept from the type inference above.
+    if let Err(refusal) = clear_dependents::refuse_if_depended_on(state, &goal, hyp_idx) {
+        state.invalidate_tc_cache();
+        return Err(refusal);
+    }
     replace_local_hyp_with_proof(state, &goal, hyp_idx, new_eq, eq_proof)
 }
 
@@ -367,12 +443,20 @@ pub fn apply_fun_goal(state: &mut ProofState, func: Expr) -> TacticResult {
 // ============================================================================
 
 /// Tactic: clear_except - Clears all hypotheses except the specified ones.
-pub fn clear_except(state: &mut ProofState, keep: &[&str]) -> TacticResult {
+pub fn clear_except(state: &mut ProofState, keep: &[SurfaceName]) -> TacticResult {
+    for name in keep {
+        super::pattern::names::require_binding_name(name, "clear_except")?;
+    }
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let mut fvars_to_keep: HashSet<FVarId> = HashSet::new();
 
     for name in keep {
-        if let Some(decl) = goal.local_ctx.iter().find(|d| d.name == *name) {
+        if let Some(decl) = goal
+            .local_ctx
+            .iter()
+            .rev()
+            .find(|d| local_name_matches(&d.name, name))
+        {
             fvars_to_keep.insert(decl.fvar);
         }
     }
@@ -412,12 +496,14 @@ pub fn clear_except(state: &mut ProofState, keep: &[&str]) -> TacticResult {
 /// Tactic: replace - Replaces a hypothesis with a new one.
 ///
 /// Creates a new goal to prove the replacement type.
-pub fn replace(state: &mut ProofState, hyp_name: &str, new_type: Expr) -> TacticResult {
+pub fn replace(state: &mut ProofState, hyp_name: &SurfaceName, new_type: Expr) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "replace")?;
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
     let hyp_decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     let hyp_decl = hyp_decl.clone();
 
@@ -439,6 +525,7 @@ pub fn replace(state: &mut ProofState, hyp_name: &str, new_type: Expr) -> Tactic
     }
 
     let new_goal = Goal {
+        case_binders: goal.case_binders.clone(),
         meta_id: proof_meta_id,
         target: new_type,
         local_ctx: goal.local_ctx,
@@ -452,15 +539,17 @@ pub fn replace(state: &mut ProofState, hyp_name: &str, new_type: Expr) -> Tactic
 /// Tactic: replace_hyp - Replaces a hypothesis with explicit proof term.
 pub fn replace_hyp(
     state: &mut ProofState,
-    hyp_name: &str,
+    hyp_name: &SurfaceName,
     new_type: Expr,
     proof: Expr,
 ) -> TacticResult {
+    super::pattern::names::require_binding_name(hyp_name, "replace_hyp")?;
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
     let hyp_fvar = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| local_name_matches(&d.name, hyp_name))
         .map(|decl| decl.fvar)
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
     state

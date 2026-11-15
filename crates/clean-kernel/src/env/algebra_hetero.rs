@@ -130,7 +130,6 @@ const HAPPEND_FLAVOR: HeteroOpFlavor = HeteroOpFlavor {
 };
 
 #[derive(Clone, Copy)]
-#[cfg(test)]
 struct BinaryOpFlavor {
     class_name: &'static str,
     ctor_name: &'static str,
@@ -138,7 +137,6 @@ struct BinaryOpFlavor {
     projection_name: &'static str,
 }
 
-#[cfg(test)]
 const DIV_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
     class_name: "Div",
     ctor_name: "Div.mk",
@@ -146,12 +144,25 @@ const DIV_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
     projection_name: "Div.div",
 };
 
-#[cfg(test)]
 const MOD_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
     class_name: "Mod",
     ctor_name: "Mod.mk",
     field_name: "mod",
     projection_name: "Mod.mod",
+};
+
+const SHIFT_LEFT_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
+    class_name: "ShiftLeft",
+    ctor_name: "ShiftLeft.mk",
+    field_name: "shiftLeft",
+    projection_name: "ShiftLeft.shiftLeft",
+};
+
+const SHIFT_RIGHT_FLAVOR: BinaryOpFlavor = BinaryOpFlavor {
+    class_name: "ShiftRight",
+    ctor_name: "ShiftRight.mk",
+    field_name: "shiftRight",
+    projection_name: "ShiftRight.shiftRight",
 };
 
 /// Build the projection type and value for a 3-universe heterogeneous op class.
@@ -225,7 +236,6 @@ fn build_hetero_projection(
 
 /// Build the projection type and value for a 1-universe binary op class (Div, Mod).
 /// Returns `(projection_type, projection_value)`.
-#[cfg(test)]
 fn build_binary_projection(
     class_name: &Name,
     class_const: impl Fn(Level) -> Expr,
@@ -446,7 +456,6 @@ impl Environment {
         Ok(())
     }
 
-    #[cfg(test)]
     fn init_binary_op_with_flavor(&mut self, flavor: BinaryOpFlavor) -> Result<(), EnvError> {
         let class_name = Name::from_string(flavor.class_name);
         let ctor_name = Name::from_string(flavor.ctor_name);
@@ -504,6 +513,131 @@ impl Environment {
             is_reducible: true,
         })?;
 
+        Ok(())
+    }
+
+    /// Lean's homogeneous shift class and its default heterogeneous bridge.
+    /// The bridge carries a real instance premise; heterogeneous-only carriers
+    /// cannot use it to change the type of a numeral shift amount.
+    fn init_shift_bridge(
+        &mut self,
+        flavor: BinaryOpFlavor,
+        hetero: HeteroOpFlavor,
+        instance_name: &str,
+    ) -> Result<(), EnvError> {
+        self.init_binary_op_with_flavor(flavor)?;
+        self.register_class(KernelClassInfo {
+            name: Name::from_string(flavor.class_name),
+            num_params: 1,
+            out_params: vec![],
+            semi_out_params: vec![],
+        });
+        let u = Name::from_string("u");
+        let level = Level::param(u.clone());
+        let type_u = Expr::sort(Level::succ(level.clone()));
+        let mut b = EnvDeclBuilder::new();
+        let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+        let premise = Expr::app(
+            Expr::const_(Name::from_string(flavor.class_name), vec![level.clone()]),
+            alpha.clone(),
+        );
+        let (inst_id, _) = b.fresh_local(premise.clone());
+        let levels = vec![level.clone(), level.clone(), level.clone()];
+        let result = Expr::app(
+            Expr::app(
+                Expr::app(
+                    Expr::const_(Name::from_string(hetero.class_name), levels.clone()),
+                    alpha.clone(),
+                ),
+                alpha.clone(),
+            ),
+            alpha.clone(),
+        );
+        let ty = b.mk_pi(inst_id, BinderInfo::InstImplicit, premise.clone(), result);
+        let ty = b.mk_pi(alpha_id, BinderInfo::Implicit, type_u.clone(), ty);
+        let ty = b.finish(ty);
+
+        let mut b = EnvDeclBuilder::new();
+        let (alpha_id, alpha) = b.fresh_local(type_u.clone());
+        let premise = Expr::app(
+            Expr::const_(Name::from_string(flavor.class_name), vec![level.clone()]),
+            alpha.clone(),
+        );
+        let (inst_id, inst) = b.fresh_local(premise.clone());
+        let operation = Expr::app(
+            Expr::app(
+                Expr::const_(Name::from_string(flavor.projection_name), vec![level]),
+                alpha.clone(),
+            ),
+            inst,
+        );
+        let value = Expr::app(
+            Expr::app(
+                Expr::app(
+                    Expr::app(
+                        Expr::const_(Name::from_string(hetero.ctor_name), levels),
+                        alpha.clone(),
+                    ),
+                    alpha.clone(),
+                ),
+                alpha,
+            ),
+            operation,
+        );
+        let value = b.mk_lam(inst_id, BinderInfo::InstImplicit, premise, value);
+        let value = b.mk_lam(alpha_id, BinderInfo::Implicit, type_u, value);
+        self.ensure_exact_checked_decl(Declaration::Definition {
+            name: Name::from_string(instance_name),
+            level_params: vec![u],
+            type_: ty,
+            value: b.finish(value),
+            is_reducible: true,
+        })?;
+        self.register_instance(KernelInstanceInfo {
+            name: Name::from_string(instance_name),
+            class_name: Name::from_string(hetero.class_name),
+            priority: DEFAULT_INSTANCE_PRIORITY,
+            type_: None,
+            value: None,
+        });
+        self.register_default_instance(Name::from_string(instance_name));
+        Ok(())
+    }
+
+    pub(crate) fn add_homogeneous_shift_instance(
+        &mut self,
+        class: &str,
+        carrier: &str,
+        operation: &str,
+    ) -> Result<(), EnvError> {
+        let carrier_ty = Expr::const_(Name::from_string(carrier), vec![]);
+        let instance_name = Name::from_string(&format!("inst{class}{carrier}"));
+        self.ensure_exact_checked_decl(Declaration::Definition {
+            name: instance_name.clone(),
+            level_params: vec![],
+            type_: Expr::app(
+                Expr::const_(Name::from_string(class), vec![Level::zero()]),
+                carrier_ty.clone(),
+            ),
+            value: Expr::app(
+                Expr::app(
+                    Expr::const_(
+                        Name::from_string(&format!("{class}.mk")),
+                        vec![Level::zero()],
+                    ),
+                    carrier_ty,
+                ),
+                Expr::const_(Name::from_string(operation), vec![]),
+            ),
+            is_reducible: true,
+        })?;
+        self.ensure_exact_instance(KernelInstanceInfo {
+            name: instance_name,
+            class_name: Name::from_string(class),
+            priority: DEFAULT_INSTANCE_PRIORITY,
+            type_: None,
+            value: None,
+        })?;
         Ok(())
     }
 
@@ -918,7 +1052,6 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.div_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
-    #[cfg(test)]
     pub(crate) fn init_div(&mut self) -> Result<(), EnvError> {
         if self.div_init {
             return Ok(());
@@ -987,7 +1120,6 @@ impl Environment {
     /// REQUIRES: `self` is a valid Environment instance
     /// ENSURES: On success, `self.mod_init == true`
     /// ENSURES: Idempotent - calling multiple times returns `Ok(())` without duplication
-    #[cfg(test)]
     pub(crate) fn init_mod(&mut self) -> Result<(), EnvError> {
         if self.mod_init {
             return Ok(());
@@ -1562,9 +1694,8 @@ impl Environment {
 
     /// Initialize the `instHDivInt : HDiv Int Int Int` instance.
     ///
-    /// Backs the `/` notation over `Int` with the `Int.div` constant (registered
-    /// as an `Opaque` data declaration by `init_int_arith`, evaluated by the
-    /// `Int.div` native reducer). Mirrors `init_nat_hdiv_inst`. Idempotent via
+    /// Backs the `/` notation over `Int` with the checked `Int.ediv` definition,
+    /// following Lean's Euclidean convention. Mirrors `init_nat_hdiv_inst`. Idempotent via
     /// the constant-presence guard (no dedicated init flag). (Track PP)
     pub(crate) fn init_int_hdiv_inst(&mut self) -> Result<(), EnvError> {
         // IMPORT MODE (`suppress_lossy_structure_stubs`, residual-to-zero
@@ -1587,7 +1718,7 @@ impl Environment {
         }
         self.init_hdiv()?;
         self.init_int_arith()?;
-        self.add_homogeneous_hetero_instance("instHDivInt", "HDiv", "HDiv.mk", "Int", "Int.div")?;
+        self.add_homogeneous_hetero_instance("instHDivInt", "HDiv", "HDiv.mk", "Int", "Int.ediv")?;
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instHDivInt"),
             class_name: Name::from_string("HDiv"),
@@ -1600,7 +1731,7 @@ impl Environment {
 
     /// Initialize the `instHModInt : HMod Int Int Int` instance.
     ///
-    /// Backs the `%` notation over `Int` with the `Int.mod` constant. See
+    /// Backs the `%` notation over `Int` with the checked `Int.emod` definition. See
     /// `init_int_hdiv_inst` for the rationale. Mirrors `init_nat_hmod_inst`.
     /// (Track PP)
     pub(crate) fn init_int_hmod_inst(&mut self) -> Result<(), EnvError> {
@@ -1624,7 +1755,7 @@ impl Environment {
         }
         self.init_hmod()?;
         self.init_int_arith()?;
-        self.add_homogeneous_hetero_instance("instHModInt", "HMod", "HMod.mk", "Int", "Int.mod")?;
+        self.add_homogeneous_hetero_instance("instHModInt", "HMod", "HMod.mk", "Int", "Int.emod")?;
         self.register_instance(KernelInstanceInfo {
             name: Name::from_string("instHModInt"),
             class_name: Name::from_string("HMod"),
@@ -2230,6 +2361,7 @@ impl Environment {
             return Ok(());
         }
         self.init_hetero_op_with_flavor(HSHIFTLEFT_FLAVOR)?;
+        self.init_shift_bridge(SHIFT_LEFT_FLAVOR, HSHIFTLEFT_FLAVOR, "instHShiftLeft")?;
         self.hshiftleft_init = true;
         Ok(())
     }
@@ -2257,6 +2389,7 @@ impl Environment {
             return Ok(());
         }
         self.init_hetero_op_with_flavor(HSHIFTRIGHT_FLAVOR)?;
+        self.init_shift_bridge(SHIFT_RIGHT_FLAVOR, HSHIFTRIGHT_FLAVOR, "instHShiftRight")?;
         self.hshiftright_init = true;
         Ok(())
     }
@@ -2280,14 +2413,24 @@ impl Environment {
         }
         self.init_hand()?;
         self.init_nat()?;
-        self.add_homogeneous_hetero_instance("instHAndNat", "HAnd", "HAnd.mk", "Nat", "Nat.land")?;
-        self.register_instance(KernelInstanceInfo {
-            name: Name::from_string("instHAndNat"),
-            class_name: Name::from_string("HAnd"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
-            type_: None,
-            value: None,
-        });
+        // The import base omits the underlying operation; real imports supply
+        // its definition and Nat instance together.
+        if !self.suppress_lossy_structure_stubs {
+            self.add_homogeneous_hetero_instance(
+                "instHAndNat",
+                "HAnd",
+                "HAnd.mk",
+                "Nat",
+                "Nat.land",
+            )?;
+            self.register_instance(KernelInstanceInfo {
+                name: Name::from_string("instHAndNat"),
+                class_name: Name::from_string("HAnd"),
+                priority: DEFAULT_INSTANCE_PRIORITY,
+                type_: None,
+                value: None,
+            });
+        }
         self.nat_hand_inst_init = true;
         Ok(())
     }
@@ -2311,14 +2454,18 @@ impl Environment {
         }
         self.init_hor()?;
         self.init_nat()?;
-        self.add_homogeneous_hetero_instance("instHOrNat", "HOr", "HOr.mk", "Nat", "Nat.lor")?;
-        self.register_instance(KernelInstanceInfo {
-            name: Name::from_string("instHOrNat"),
-            class_name: Name::from_string("HOr"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
-            type_: None,
-            value: None,
-        });
+        // The import base omits the underlying operation; real imports supply
+        // its definition and Nat instance together.
+        if !self.suppress_lossy_structure_stubs {
+            self.add_homogeneous_hetero_instance("instHOrNat", "HOr", "HOr.mk", "Nat", "Nat.lor")?;
+            self.register_instance(KernelInstanceInfo {
+                name: Name::from_string("instHOrNat"),
+                class_name: Name::from_string("HOr"),
+                priority: DEFAULT_INSTANCE_PRIORITY,
+                type_: None,
+                value: None,
+            });
+        }
         self.nat_hor_inst_init = true;
         Ok(())
     }
@@ -2342,14 +2489,24 @@ impl Environment {
         }
         self.init_hxor()?;
         self.init_nat()?;
-        self.add_homogeneous_hetero_instance("instHXorNat", "HXor", "HXor.mk", "Nat", "Nat.xor")?;
-        self.register_instance(KernelInstanceInfo {
-            name: Name::from_string("instHXorNat"),
-            class_name: Name::from_string("HXor"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
-            type_: None,
-            value: None,
-        });
+        // The import base omits the underlying operation; real imports supply
+        // its definition and Nat instance together.
+        if !self.suppress_lossy_structure_stubs {
+            self.add_homogeneous_hetero_instance(
+                "instHXorNat",
+                "HXor",
+                "HXor.mk",
+                "Nat",
+                "Nat.xor",
+            )?;
+            self.register_instance(KernelInstanceInfo {
+                name: Name::from_string("instHXorNat"),
+                class_name: Name::from_string("HXor"),
+                priority: DEFAULT_INSTANCE_PRIORITY,
+                type_: None,
+                value: None,
+            });
+        }
         self.nat_hxor_inst_init = true;
         Ok(())
     }
@@ -2382,6 +2539,7 @@ impl Environment {
         // The `HShiftLeft` class itself stays in both lanes; imported oleans
         // carry Lean's own genuine Nat shift instances.
         if !self.suppress_lossy_structure_stubs {
+            self.add_homogeneous_shift_instance("ShiftLeft", "Nat", "Nat.shiftLeft")?;
             self.add_homogeneous_hetero_instance(
                 "instHShiftLeftNat",
                 "HShiftLeft",
@@ -2421,20 +2579,25 @@ impl Environment {
         }
         self.init_hshiftright()?;
         self.init_nat()?;
-        self.add_homogeneous_hetero_instance(
-            "instHShiftRightNat",
-            "HShiftRight",
-            "HShiftRight.mk",
-            "Nat",
-            "Nat.shiftRight",
-        )?;
-        self.register_instance(KernelInstanceInfo {
-            name: Name::from_string("instHShiftRightNat"),
-            class_name: Name::from_string("HShiftRight"),
-            priority: DEFAULT_INSTANCE_PRIORITY,
-            type_: None,
-            value: None,
-        });
+        // The import base omits the underlying operation; real imports supply
+        // its definition and Nat instance together.
+        if !self.suppress_lossy_structure_stubs {
+            self.add_homogeneous_shift_instance("ShiftRight", "Nat", "Nat.shiftRight")?;
+            self.add_homogeneous_hetero_instance(
+                "instHShiftRightNat",
+                "HShiftRight",
+                "HShiftRight.mk",
+                "Nat",
+                "Nat.shiftRight",
+            )?;
+            self.register_instance(KernelInstanceInfo {
+                name: Name::from_string("instHShiftRightNat"),
+                class_name: Name::from_string("HShiftRight"),
+                priority: DEFAULT_INSTANCE_PRIORITY,
+                type_: None,
+                value: None,
+            });
+        }
         self.nat_hshiftright_inst_init = true;
         Ok(())
     }

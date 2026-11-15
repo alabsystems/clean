@@ -40,7 +40,7 @@
   "rule_followed": "A verdict is written here only if a committed record carries it.  Readings that exist only in docs/CRYSTAL_STATUS.md prose are listed under `not_established_by_any_committed_record` and are NOT scored.  No digest, DefId or sha in this file was composed by hand.",
   "supersedes_the_disagreement": "docs/CRYSTAL_STATUS.md previously said this probe 'has not been re-minted, so the probe and this page disagree on purpose until it is'.  That sentence is retired by this file."
  },
- "headline": "A0 is 5-of-6 and A6 is 4-of-4 for level::Level::is_zero on the DEPLOYED body, transcribed from committed records measured at trust 3495e42c456f489802805cd9f041c71cf38b945a x clean f21d6336bf778eca692b616258d13828b3dec6e7 (2026-08-25) and corroborated at three earlier bases.  Both of the 2026-08-11 FAILs -- A0's flip event and A6's flip-fires -- are now PASS, with the event's lineage equal to its coverage row's at every base.  A0's single remaining FAIL is `bodyful reachable closure`, and it is architecturally blocked: rustc has no cross-crate THIR.  This is a re-mint by transcription, not a fresh measurement.",
+ "headline": "A0 is 5-of-6 and A6 is 4-of-4 for level::Level::is_zero on the DEPLOYED body, transcribed from committed records measured at trust 3495e42c456f489802805cd9f041c71cf38b945a x clean f21d6336bf778eca692b616258d13828b3dec6e7 (2026-08-25) and corroborated at three earlier bases.  Both of the 2026-08-11 FAILs -- A0's flip event and A6's flip-fires -- are now PASS, with the event's lineage equal to its coverage row's at every base.  A0's single remaining SYNTACTIC-criterion FAIL is `bodyful reachable closure` -- and the THIR-API reading of that FAIL was REFUTED and retracted (designs/2026-08-26-cross-crate-lowering-for-a0.md; owner ruling: under the ratified semantic criterion is_zero is A0 6-of-6, record data/crystal_a0_census_2026-08-27.json); what the syntactic cell still needs is cross-crate instances in the module's spliced prefix, a build item (audit r7 minor 9).  This is a re-mint by transcription, not a fresh measurement.",
  "current": {
   "A0_score": "5-of-6",
   "A6_score": "4-of-4",
@@ -379,13 +379,13 @@
       },
       {
        "record": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
-       "field": "current_source_bound_pin.flip_event (verbatim INFO line; source record data/crystal_fixture_rebaseline_2026-08-21_lane18.json)",
+       "field": "current_source_bound_pin.flip_event (verbatim INFO line; source record data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json)",
        "value": {
         "fired": true,
         "seam": "codegen",
-        "lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+        "lineage": "sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97",
         "matches_artifact_lineage": true,
-        "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17152 ~ clean_kernel[89dd]::level::{impl#18}::is_zero), asserts=0, lineage=sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60, flipped_so_far=62"
+        "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18802 ~ clean_kernel[69ae]::level::{impl#18}::is_zero), asserts=0, lineage=sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97, flipped_so_far=74"
        }
       }
      ]
@@ -494,13 +494,13 @@
       },
       {
        "record": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
-       "field": "current_source_bound_pin.flip_event (verbatim INFO line; source record data/crystal_fixture_rebaseline_2026-08-21_lane18.json)",
+       "field": "current_source_bound_pin.flip_event (verbatim INFO line; source record data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json)",
        "value": {
         "fired": true,
         "seam": "codegen",
-        "lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+        "lineage": "sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97",
         "matches_artifact_lineage": true,
-        "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:17152 ~ clean_kernel[89dd]::level::{impl#18}::is_zero), asserts=0, lineage=sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60, flipped_so_far=62"
+        "raw": "INFO rustc_mir_transform::trust_ir_flip trust-ir-flip: compiled from trust-ir, did=DefId(0:18802 ~ clean_kernel[69ae]::level::{impl#18}::is_zero), asserts=0, lineage=sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97, flipped_so_far=74"
        }
       }
      ]
@@ -537,7 +537,7 @@
        "trust_rev": "c4e667ca51a4b6bd0bc3790e540cdabc707c45a1",
        "clean_rev": "c6388730ed3a6f3c4169e7228218d68ab9b7582d",
        "lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
-       "event_lineage": "sha256:926f0fab974fe85579b36dc9e9a041c84acb76d7f6aef2711f50c0ea1f3fde60",
+       "event_lineage": "sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97",
        "EQUAL_event_row": true
       },
       {
@@ -570,7 +570,7 @@
       },
       {
        "record": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
-       "field": "current_source_bound_pin.flip_event.matches_artifact_lineage (source record data/crystal_fixture_rebaseline_2026-08-21_lane18.json)",
+       "field": "current_source_bound_pin.flip_event.matches_artifact_lineage (source record data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json)",
        "value": true
       },
       {
@@ -1025,7 +1025,7 @@
    "consequence_for_this_probe": "A6.fail_closed is scored PASS on the CONSUMER-perturbation criterion the ten-criteria scorecard actually names (`fail_closed_perturbation_reaching`), and the source-level gap is written into that criterion rather than hidden by it."
   },
   {
-   "claim": "The reason A0's bodyful reachable closure cannot be closed. CORRECTED 2026-08-26: it is NOT `thir_body` taking a `LocalDefId` -- that is one of two BUILD ITEMS. The FLOOR is that the closure ends at `panic_impl`, which has no body anywhere in core and is supplied at link time by std.",
+   "claim": "The reason A0's bodyful reachable closure cannot be closed. CORRECTED 2026-08-26: it is NOT `thir_body` taking a `LocalDefId` -- that is one of two BUILD ITEMS. CORRECTED AGAIN 2026-09-01 (audit r8 m5): it is NOT `panic_impl` having no body either -- that reading is RETRACTED and was contradicted by this file's own STAYS_FAIL_BY_A_FLOOR field and by CLAUDE.md; std's `#[panic_handler]` IS a four-instruction body. The floor is `_Unwind_RaiseException`, an `unsafe extern \"C-unwind\"` symbol with no Rust body on this target.",
    "status": "The FAIL VERDICT is committed and measured (two independent records). The REASON is prose in this repo -- BOTH the rustc query signature and core/std's panicking sources live in the trust repo, which is not committed here. What changed is which wall the prose names, not its evidential status.",
    "what_IS_committed": [
     "data/crystal_a0_census_2026-08-22.json: the target is in one_short_missing_closure_bodies",

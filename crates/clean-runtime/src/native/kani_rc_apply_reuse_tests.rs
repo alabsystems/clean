@@ -7,92 +7,156 @@
 //! Verifies correctness of reference counting transitions, closure application
 //! case handling and termination, and reset/reuse lifecycle invariants.
 //!
-//! Run with: `cargo kani --features kani -p clean-runtime`
+//! Run with: `cargo kani -p clean-runtime` (`cargo kani` sets `cfg(kani)`;
+//! the crate has no `kani` feature), or `--harness verify_rc_sticky` for the
+//! sticky-count harnesses of section 3.
+//! STOCK EXCEPTION (Trust lacks kani; measured `targo kani` -> `error: no such command`; kani drives its own pinned nightly).
 //!
 //! Part of #1144
 
+use std::sync::atomic::{AtomicU32, Ordering};
+
 use super::{closure_layout, ctor_layout};
+use crate::rc_core::{
+    check_drop_property, check_inc_property, drop_cell, inc_cell, is_exclusive_cell, DropOutcome,
+    RC_INC_MAX, RC_STICKY, RC_STICKY_DROP,
+};
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 // 3. Reference counting state machine model
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-/// Verify the dec() dealloc boundary: fetch_sub(1) returns the OLD value.
+/// Verify the drop boundary on the real cell (`rc_core::drop_cell`).
 ///
-/// Property: dec() triggers dealloc iff the old ref_count is 0 (uniquely owned).
-/// For any starting rc, after fetch_sub(1), old == 0 iff the object should be freed.
-/// This is the critical correctness property — getting this wrong causes
-/// use-after-free (old > 0 treated as 0) or memory leak (old == 0 not freed).
+/// Property: below the sticky band a drop reports `Last` (the caller frees)
+/// iff the count was 0 (uniquely owned), and otherwise lowers it by exactly 1.
+/// Getting this wrong causes use-after-free (a shared drop treated as last)
+/// or a leak (the last drop not reported).
 #[kani::proof]
 #[kani::unwind(1)]
 fn verify_rc_dec_dealloc_boundary() {
     let rc: u32 = kani::any();
     kani::assume(rc <= 1000); // bounded for tractability
 
-    // Model fetch_sub(1, Release) — returns old value
-    let old = rc;
-    let new_rc = rc.wrapping_sub(1);
-
-    if old == 0 {
-        // Was uniquely owned → dealloc. After wrapping_sub, new value is u32::MAX.
-        // This is expected — the object is freed so the wrapped value is never read.
-        assert_eq!(new_rc, u32::MAX, "wrapping_sub(1) on 0 produces MAX");
+    let cell = AtomicU32::new(rc);
+    let outcome = drop_cell(&cell);
+    if rc == 0 {
+        assert_eq!(outcome, DropOutcome::Last, "the last reference frees");
+        // The cell is freed, so the wrapped value is never read.
+        assert_eq!(cell.load(Ordering::Relaxed), u32::MAX);
     } else {
-        // Was shared → no dealloc. New ref_count is old - 1.
-        assert_eq!(new_rc, old - 1, "shared dec must decrement by exactly 1");
+        assert_eq!(outcome, DropOutcome::Live, "a shared drop does not free");
+        assert_eq!(cell.load(Ordering::Relaxed), rc - 1);
     }
 }
 
-/// Verify inc_n followed by n dec operations returns to unique.
+/// Verify inc_n followed by n drops returns to unique, on the real cells.
 ///
-/// Property: inc_n(n) followed by n individual dec operations returns rc to 0.
+/// Property: `inc_cell(n)` followed by n `drop_cell` calls returns rc to 0,
+/// and no intermediate drop reports `Last`.
 #[kani::proof]
-#[kani::unwind(10)]
+#[kani::unwind(18)]
 fn verify_rc_inc_n_dec_n() {
     let n: u32 = kani::any();
-    kani::assume(n > 0 && n <= 8);
+    kani::assume(n > 0 && n <= 16);
 
-    let mut rc: u32 = 0;
-
-    // inc_n
-    rc = rc.wrapping_add(n);
-    assert_eq!(rc, n);
-
-    // n individual dec operations
+    let cell = AtomicU32::new(0);
+    inc_cell(&cell, n as usize);
+    assert_eq!(cell.load(Ordering::Relaxed), n);
     for _ in 0..n {
-        let old = rc;
-        rc = rc.wrapping_sub(1);
-        assert!(old != 0, "intermediate decs should not trigger dealloc");
+        assert_eq!(
+            drop_cell(&cell),
+            DropOutcome::Live,
+            "intermediate drops do not free"
+        );
     }
-
-    assert_eq!(rc, 0, "after n decs, should be unique");
+    assert!(is_exclusive_cell(&cell), "after n drops, unique again");
 }
 
-/// Verify RC overflow would cause false dealloc — documents why bounded RC matters.
-///
-/// Property: If ref_count reaches u32::MAX and inc() is called, wrapping_add(1)
-/// produces 0 — the "uniquely owned" sentinel. A subsequent dec() would trigger
-/// dealloc despite ~4 billion live references. This is a known limitation of
-/// wrapping reference counting (same as Lean 4 C runtime).
-///
-/// This harness documents the overflow behavior rather than preventing it.
-/// Prevention is via the practical bound: 4 billion simultaneous references
-/// to one object is infeasible.
+/// Sticky counts (Lean v4.35.0 lean4#14838): an inline increment (n <=
+/// RC_INC_MAX) never wraps. Below RC_STICKY it is exact; at or above it the
+/// count is unchanged. Replaces the harness that documented the wrap from
+/// u32::MAX to 0 ("exclusive") this contract removes.
+#[kani::proof]
+#[kani::unwind(2)]
+fn verify_rc_sticky_inc_n_inline_never_wraps() {
+    let rc: u32 = kani::any();
+    let n: usize = kani::any();
+    kani::assume(n <= RC_INC_MAX);
+    check_inc_property(rc, n);
+}
+
+/// The cold path (Lean `lean_inc_ref_huge_n`) on a slice near the band: at or
+/// above RC_STICKY unchanged; otherwise exactly `rc + n`, or frozen in
+/// `[RC_STICKY, RC_STICKY + RC_INC_MAX)`. Never wraps.
+#[kani::proof]
+#[kani::unwind(6)]
+fn verify_rc_sticky_inc_huge_slice() {
+    let rc: u32 = kani::any();
+    let n: usize = kani::any();
+    kani::assume(rc >= RC_STICKY - 3 * RC_INC_MAX as u32);
+    kani::assume(n > RC_INC_MAX && n <= 4 * RC_INC_MAX);
+    check_inc_property(rc, n);
+}
+
+/// A drop at or above RC_STICKY_DROP is absorbed: `Frozen`, count unchanged
+/// (Lean `lean_is_never_freed`, lean4#15241). u32::MAX is excluded: there the
+/// debug-build heuristic for a second drop of a freed cell asserts.
 #[kani::proof]
 #[kani::unwind(1)]
-fn verify_rc_overflow_wraps_to_zero() {
+fn verify_rc_sticky_drop_band_absorbing() {
     let rc: u32 = kani::any();
-    kani::assume(rc >= u32::MAX - 10); // near overflow boundary
+    kani::assume(rc >= RC_STICKY_DROP && rc != u32::MAX);
+    check_drop_property(rc);
+}
 
-    let after_inc = rc.wrapping_add(1);
+/// Below the band a drop is exact: `Last` iff the count was 0, else `Live`
+/// one lower.
+#[kani::proof]
+#[kani::unwind(1)]
+fn verify_rc_sticky_drop_below_band() {
+    let rc: u32 = kani::any();
+    kani::assume(rc < RC_STICKY_DROP);
+    check_drop_property(rc);
+}
 
-    if rc == u32::MAX {
-        // Overflow: wrapping to 0 makes it look "uniquely owned"
-        assert_eq!(after_inc, 0, "overflow wraps to dealloc sentinel");
-    } else {
-        // No overflow: normal increment
-        assert_eq!(after_inc, rc + 1);
-        assert_ne!(after_inc, 0, "non-overflow inc must not hit sentinel");
+/// Exclusive iff the count is 0, so a frozen cell is never exclusive and
+/// reset never reuses it.
+#[kani::proof]
+#[kani::unwind(1)]
+fn verify_rc_sticky_exclusive_iff_zero() {
+    let rc: u32 = kani::any();
+    let cell = AtomicU32::new(rc);
+    assert_eq!(is_exclusive_cell(&cell), rc == 0);
+}
+
+/// Lean `run_never_frees` (tests/elab/rc_model.lean), in Clean's encoding:
+/// from a frozen count, any three increments, inline increments or drops
+/// never free and leave the count frozen.
+#[kani::proof]
+#[kani::unwind(4)]
+fn verify_rc_sticky_never_freed_sequence() {
+    let rc: u32 = kani::any();
+    kani::assume(rc >= RC_STICKY_DROP && rc != u32::MAX);
+    let cell = AtomicU32::new(rc);
+    for _ in 0..3 {
+        let op: u8 = kani::any();
+        match op % 3 {
+            0 => inc_cell(&cell, 1),
+            1 => {
+                let n: usize = kani::any();
+                kani::assume(n <= RC_INC_MAX);
+                inc_cell(&cell, n);
+            }
+            _ => assert_ne!(
+                drop_cell(&cell),
+                DropOutcome::Last,
+                "a frozen object is never freed"
+            ),
+        }
+        let now = cell.load(Ordering::Relaxed);
+        assert!(now >= RC_STICKY_DROP, "a frozen count stays frozen");
+        assert_ne!(now, u32::MAX, "increments stop below u32::MAX");
     }
 }
 

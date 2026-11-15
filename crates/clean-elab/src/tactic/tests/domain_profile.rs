@@ -185,6 +185,8 @@ fn add_candidate_definition(env: &mut Environment, name: &str) {
     .unwrap();
 }
 
-fn contains_name(names: &[String], needle: &str) -> bool {
-    names.iter().any(|name| name == needle)
+fn contains_name(names: &[clean_parser::SurfaceName], needle: &'static str) -> bool {
+    names
+        .iter()
+        .any(|name| name.name() == &Name::from_string(needle))
 }

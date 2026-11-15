@@ -104,7 +104,7 @@ fn extract_const_refs(expr: &ParsedExpr, out: &mut Vec<String>) {
             extract_const_refs(val, out);
             extract_const_refs(body, out);
         }
-        ParsedExpr::MData(inner) => {
+        ParsedExpr::MData(_, inner) => {
             extract_const_refs(inner, out);
         }
         ParsedExpr::Proj(_name, _field, inner) => {

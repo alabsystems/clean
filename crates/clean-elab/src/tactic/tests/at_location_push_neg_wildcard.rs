@@ -16,10 +16,10 @@ fn run_push_neg_wildcard(state: &mut ProofState) -> TacticResult {
     (push_neg.handler)(state, &[Expr::const_(Name::from_string("*"), vec![])])
 }
 
-fn find_local_decl<'a>(goal: &'a Goal, name: &str) -> &'a LocalDecl {
+fn find_local_decl<'a>(goal: &'a Goal, name: &'static str) -> &'a LocalDecl {
     goal.local_ctx
         .iter()
-        .find(|decl| decl.name == name)
+        .find(|decl| decl.name.name() == &Name::from_string(name))
         .unwrap_or_else(|| panic!("expected local declaration '{name}'"))
 }
 
@@ -37,14 +37,16 @@ fn wildcard_push_neg_rollback_state() -> (ProofState, Expr, Expr, Expr, FVarId, 
         q.clone(),
         vec![
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_bad_fvar,
-                name: "h_bad".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_bad"),
                 ty: h_bad_ty.clone(),
                 value: None,
             },
             LocalDecl {
+                binder_info: Default::default(),
                 fvar: h_ok_fvar,
-                name: "h_ok".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h_ok"),
                 ty: h_ok_ty.clone(),
                 value: None,
             },
@@ -65,8 +67,9 @@ fn test_push_neg_wildcard_dispatch_succeeds_when_only_hypotheses_rewrite() {
         env,
         target.clone(),
         vec![LocalDecl {
+            binder_info: Default::default(),
             fvar: h_fvar,
-            name: "h".to_string(),
+            name: clean_parser::SurfaceName::generated_path("h"),
             ty: make_not(&make_not(&p)),
             value: None,
         }],

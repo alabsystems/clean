@@ -13,8 +13,8 @@ use clean_parser::{
     DoElem, Projection, Span, SurfaceArg, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr,
 };
 
-fn ident(name: &str) -> SurfaceExpr {
-    SurfaceExpr::Ident(Span::dummy(), name.to_owned())
+fn ident(name: &'static str) -> SurfaceExpr {
+    SurfaceExpr::Ident(Span::dummy(), SurfaceName::generated_path(name))
 }
 
 fn binder(name: &str) -> SurfaceBinder {
@@ -26,7 +26,7 @@ fn test_as_infer_type_call_recognizes_bare_head() {
     let call = infer_type_call(ident("x"));
     let arg = as_infer_type_call(&call).expect("`inferType x` should be recognized");
     assert!(
-        matches!(arg, SurfaceExpr::Ident(_, n) if n == "x"),
+        matches!(arg, SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("x")),
         "argument should be `x`, got {arg:?}"
     );
 }
@@ -37,7 +37,7 @@ fn test_as_infer_type_call_recognizes_qualified_head() {
     let head = SurfaceExpr::Proj(
         Span::dummy(),
         Box::new(ident("Expr")),
-        Projection::Named("inferType".to_owned()),
+        Projection::Named(SurfaceName::generated_path("inferType")),
     );
     let call = SurfaceExpr::App(
         Span::dummy(),
@@ -137,7 +137,7 @@ fn test_as_whnf_call_recognizes_bare_head() {
     let call = whnf_call(ident("x"));
     let arg = as_whnf_call(&call).expect("`whnf x` should be recognized");
     assert!(
-        matches!(arg, SurfaceExpr::Ident(_, n) if n == "x"),
+        matches!(arg, SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("x")),
         "argument should be `x`, got {arg:?}"
     );
 }
@@ -148,7 +148,7 @@ fn test_as_whnf_call_recognizes_qualified_head() {
     let head = SurfaceExpr::Proj(
         Span::dummy(),
         Box::new(ident("Expr")),
-        Projection::Named("whnf".to_owned()),
+        Projection::Named(SurfaceName::generated_path("whnf")),
     );
     let call = SurfaceExpr::App(
         Span::dummy(),
@@ -182,11 +182,11 @@ fn test_as_check_type_call_recognizes_bare_head() {
     let call = check_type_call(ident("e"), ident("Nat"));
     let (e, ty) = as_check_type_call(&call).expect("`checkType e Nat` should be recognized");
     assert!(
-        matches!(e, SurfaceExpr::Ident(_, n) if n == "e"),
+        matches!(e, SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("e")),
         "first argument should be `e`, got {e:?}"
     );
     assert!(
-        matches!(ty, SurfaceExpr::Ident(_, n) if n == "Nat"),
+        matches!(ty, SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("Nat")),
         "second argument should be `Nat`, got {ty:?}"
     );
 }
@@ -197,7 +197,7 @@ fn test_as_check_type_call_recognizes_qualified_head() {
     let head = SurfaceExpr::Proj(
         Span::dummy(),
         Box::new(ident("Expr")),
-        Projection::Named("checkType".to_owned()),
+        Projection::Named(SurfaceName::generated_path("checkType")),
     );
     let call = SurfaceExpr::App(
         Span::dummy(),

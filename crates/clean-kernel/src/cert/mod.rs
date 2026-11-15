@@ -40,6 +40,7 @@
 
 // Core submodules
 pub mod bundle;
+pub mod bundle_recheck;
 mod cross_project;
 mod def_eq;
 mod expr_eq;
@@ -62,9 +63,10 @@ pub mod trace;
 
 // Re-export bundle types
 pub use bundle::{
-    BundleInspectEntry, BundleInspectIssue, BundleInspectReport, BundleVerifyResult, CertBundle,
-    CertBundleEntry, CertBundleError, CertBundleManifest,
+    BundleAxiomDisclosure, BundleInspectEntry, BundleInspectIssue, BundleInspectReport,
+    BundleVerifyResult, CertBundle, CertBundleEntry, CertBundleError, CertBundleManifest,
 };
+pub use bundle_recheck::{BundleEnvironmentRecheck, KERNEL_BY_NAME_CONSTANTS};
 
 // Re-export core types
 pub use cross_project::{
@@ -99,8 +101,6 @@ pub use batch::{
     batch_verify_sequential,
     batch_verify_sequential_with_stats,
     batch_verify_with_stats,
-    batch_verify_with_stats_progress,
-    batch_verify_with_stats_threads,
     batch_verify_with_threads,
     // Types
     BatchBuildInput,
@@ -114,6 +114,9 @@ pub use batch::{
     BatchVerifyStats,
     BuilderFn,
 };
+
+#[cfg(test)]
+pub(crate) use batch::{batch_verify_with_stats_progress, batch_verify_with_stats_threads};
 
 // Re-export compression API
 pub use compression::{

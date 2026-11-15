@@ -72,6 +72,16 @@ pub(crate) fn commit_kzg(
     }
 
     // Setup KZG scheme
+    // `max_degree` is the log2 EXPONENT (the clap doc says so, and the
+    // verbose line below prints `2^{max_degree}`). A value >= 64 would
+    // overflow the shift and panic in debug — refuse it with the grammar
+    // instead of a backtrace.
+    if max_degree >= 64 {
+        anyhow::bail!(
+            "--max-degree {max_degree} is the log2 exponent and must be < 64 \
+             (degree = 2^max_degree; the default 16 means degree 65536)"
+        );
+    }
     let degree = 1usize << max_degree;
     if verbose {
         println!("Setting up KZG with max degree 2^{max_degree} = {degree}...");
@@ -142,6 +152,16 @@ pub(crate) fn commit_ipa(
     }
 
     // Setup IPA scheme
+    // `max_degree` is the log2 EXPONENT (the clap doc says so, and the
+    // verbose line below prints `2^{max_degree}`). A value >= 64 would
+    // overflow the shift and panic in debug — refuse it with the grammar
+    // instead of a backtrace.
+    if max_degree >= 64 {
+        anyhow::bail!(
+            "--max-degree {max_degree} is the log2 exponent and must be < 64 \
+             (degree = 2^max_degree; the default 16 means degree 65536)"
+        );
+    }
     let degree = 1usize << max_degree;
     if verbose {
         println!("Setting up IPA with max degree 2^{max_degree} = {degree}...");

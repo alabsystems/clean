@@ -76,9 +76,9 @@ fn format_suggestions(suggestions: &[String]) -> String {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum OpenDirective {
     /// Import all names except those in the hiding set.
-    Hiding(HashSet<String>),
+    Hiding(HashSet<Name>),
     /// Import only the listed names.
-    Selective(Vec<String>),
+    Selective(Vec<Name>),
     /// Import all names (no filtering).
     All,
 }
@@ -86,8 +86,8 @@ pub(crate) enum OpenDirective {
 /// A renaming rule: `from -> to`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct RenameRule {
-    pub(crate) from: String,
-    pub(crate) to: String,
+    pub(crate) from: Name,
+    pub(crate) to: Name,
 }
 
 /// An export filter specifying which names to re-export.
@@ -96,9 +96,9 @@ pub(crate) enum ExportFilter {
     /// Re-export all names from the source namespace.
     All,
     /// Re-export only the listed names.
-    Selected(Vec<String>),
+    Selected(Vec<Name>),
     /// Re-export all names except those in the hiding set.
-    Hiding(HashSet<String>),
+    Hiding(HashSet<Name>),
 }
 
 /// Extended namespace state layered on top of [`NamespaceState`].
@@ -150,17 +150,16 @@ impl NamespaceExt {
     #[must_use]
     pub(crate) fn check_protected_access(
         &self,
-        short: &str,
+        short: &Name,
         state: &NamespaceState,
     ) -> Option<NamespaceExtError> {
         // Check each open namespace for a protected name matching `short`
         for open_ns in state.open_namespaces() {
-            let qualified_str = format!("{}.{}", open_ns, short);
-            let qualified = Name::from_string(&qualified_str);
+            let qualified = crate::namespace::append_names(open_ns, short);
             if self.protected_names.contains(&qualified) {
                 return Some(NamespaceExtError::ProtectedAccess {
                     name: short.to_string(),
-                    qualified: qualified_str,
+                    qualified: qualified.to_string(),
                 });
             }
         }
@@ -216,29 +215,26 @@ impl NamespaceExt {
     pub(crate) fn process_open_ext(
         &self,
         env: &Environment,
-        namespace: &str,
+        namespace: &Name,
         directive: &OpenDirective,
         renamings: &[RenameRule],
         state: &mut NamespaceState,
     ) -> Result<(), NamespaceExtError> {
-        let ns_name = Name::from_string(namespace);
-        let prefix_dot = format!("{}.", namespace);
+        let ns_name = namespace.clone();
 
         let mut found_any = false;
         for ci in env.constants() {
-            let ci_str = ci.name.to_string();
-            if let Some(suffix) = ci_str.strip_prefix(&prefix_dot) {
-                // Only import direct children
-                if suffix.contains('.') {
-                    continue;
-                }
+            let _ci_str = ci.name.to_string();
+            let child = clean_parser::SurfaceName::from_name(ci.name.clone());
+            if child.parent().name() == &ns_name {
+                let suffix = child.last_component().into_name();
                 found_any = true;
 
                 // Apply directive filter
                 let include = match directive {
                     OpenDirective::All => true,
-                    OpenDirective::Hiding(hidden) => !hidden.contains(suffix),
-                    OpenDirective::Selective(names) => names.iter().any(|n| n == suffix),
+                    OpenDirective::Hiding(hidden) => !hidden.contains(&suffix),
+                    OpenDirective::Selective(names) => names.iter().any(|n| n == &suffix),
                 };
                 if !include {
                     continue;
@@ -249,7 +245,7 @@ impl NamespaceExt {
                     continue;
                 }
 
-                let alias = apply_rename_rules(suffix, renamings);
+                let alias = apply_rename_rules(&suffix, renamings);
                 state.insert_alias_pub(alias, ci.name.clone());
             }
         }
@@ -265,26 +261,24 @@ impl NamespaceExt {
     pub(crate) fn process_export_ext(
         &self,
         env: &Environment,
-        source_ns: &str,
+        source_ns: &Name,
         filter: &ExportFilter,
-        current_ns: Option<&str>,
+        current_ns: Option<&Name>,
         state: &mut NamespaceState,
     ) -> Result<(), NamespaceExtError> {
-        let ns_name = Name::from_string(source_ns);
-        let prefix_dot = format!("{}.", source_ns);
+        let ns_name = source_ns.clone();
 
         for ci in env.constants() {
             let ci_str = ci.name.to_string();
-            if let Some(suffix) = ci_str.strip_prefix(&prefix_dot) {
-                if suffix.contains('.') {
-                    continue;
-                }
+            let child = clean_parser::SurfaceName::from_name(ci.name.clone());
+            if child.parent().name() == &ns_name {
+                let suffix = child.last_component().into_name();
 
                 // Apply export filter
                 let include = match filter {
                     ExportFilter::All => true,
-                    ExportFilter::Selected(names) => names.iter().any(|n| n == suffix),
-                    ExportFilter::Hiding(hidden) => !hidden.contains(suffix),
+                    ExportFilter::Selected(names) => names.iter().any(|n| n == &suffix),
+                    ExportFilter::Hiding(hidden) => !hidden.contains(&suffix),
                 };
                 if !include {
                     continue;
@@ -297,13 +291,13 @@ impl NamespaceExt {
                 }
 
                 // Add alias
-                state.insert_alias_pub(suffix.to_string(), ci.name.clone());
+                state.insert_alias_pub(suffix.clone(), ci.name.clone());
 
                 // Record export
                 let export_short = if let Some(ns) = current_ns {
-                    format!("{}.{}", ns, suffix)
+                    crate::namespace::append_names(ns, &suffix)
                 } else {
-                    suffix.to_string()
+                    suffix.clone()
                 };
                 state.push_export(Alias {
                     short: export_short,
@@ -315,7 +309,7 @@ impl NamespaceExt {
         // Handle selective export when names don't exist as direct children
         if let ExportFilter::Selected(names) = filter {
             for name in names {
-                let qualified = Name::append(&ns_name, name);
+                let qualified = crate::namespace::append_names(&ns_name, name);
                 if env.get_const(&qualified).is_some() {
                     // Already handled in the loop above via prefix scanning
                     continue;
@@ -330,7 +324,7 @@ impl NamespaceExt {
     /// Resolve a name, returning fuzzy suggestions on failure.
     pub(crate) fn resolve_with_suggestions(
         &self,
-        short: &str,
+        short: &Name,
         state: &NamespaceState,
         env: &Environment,
     ) -> Result<Name, NamespaceExtError> {
@@ -345,7 +339,7 @@ impl NamespaceExt {
         }
 
         // Try fully qualified
-        let name = Name::from_string(short);
+        let name = short.clone();
         if env.get_const(&name).is_some() {
             return Ok(name);
         }
@@ -353,8 +347,7 @@ impl NamespaceExt {
         // Try current namespace qualification
         let current_ns = state.current_namespace();
         if !current_ns.is_anon() {
-            let qualified_str = format!("{}.{}", current_ns, short);
-            let qualified = Name::from_string(&qualified_str);
+            let qualified = crate::namespace::append_names(current_ns, short);
             if env.get_const(&qualified).is_some() {
                 return Ok(qualified);
             }
@@ -362,15 +355,14 @@ impl NamespaceExt {
 
         // Try open namespaces
         for open_ns in state.open_namespaces() {
-            let qualified_str = format!("{}.{}", open_ns, short);
-            let qualified = Name::from_string(&qualified_str);
+            let qualified = crate::namespace::append_names(open_ns, short);
             if env.get_const(&qualified).is_some() {
                 return Ok(qualified);
             }
         }
 
         // Resolution failed — compute suggestions
-        let suggestions = self.compute_suggestions(short, state, env);
+        let suggestions = self.compute_suggestions(&short.to_string(), state, env);
         Err(NamespaceExtError::UnresolvedWithSuggestions {
             name: short.to_string(),
             suggestions,
@@ -389,9 +381,9 @@ impl NamespaceExt {
         let max_dist = self.config.max_edit_distance;
 
         for alias in state.aliases().keys() {
-            let dist = edit_distance(query, alias);
+            let dist = edit_distance(query, &alias.to_string());
             if dist <= max_dist {
-                candidates.push((dist, alias.clone()));
+                candidates.push((dist, alias.to_string()));
             }
         }
 
@@ -443,13 +435,13 @@ impl NamespaceExt {
     }
 }
 
-fn apply_rename_rules(short: &str, rules: &[RenameRule]) -> String {
+fn apply_rename_rules(short: &Name, rules: &[RenameRule]) -> Name {
     for rule in rules {
-        if rule.from == short {
+        if &rule.from == short {
             return rule.to.clone();
         }
     }
-    short.to_string()
+    short.clone()
 }
 
 /// Levenshtein edit distance for fuzzy name matching.

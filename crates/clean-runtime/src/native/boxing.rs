@@ -223,7 +223,7 @@ pub unsafe fn string_data(o: *const LeanObj) -> *const u8 {
 // Panic
 // ============================================================================
 
-/// Abort with an error message.
+/// Stop the process with an error message (exit status 1).
 ///
 /// Delegates to `crate::object_model::lean_panic` — the canonical panic
 /// implementation shared by both `native` and `runtime` facades. Part of #2827.

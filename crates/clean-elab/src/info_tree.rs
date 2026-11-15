@@ -179,25 +179,17 @@ impl InfoTreeBuilder {
             self.pop_node();
         }
 
-        match self.roots.len() {
-            0 => InfoTree::Node {
+        // Exactly one root is returned as is; none or several are wrapped.
+        match <[InfoTree; 1]>::try_from(self.roots) {
+            Ok([root]) => root,
+            Err(roots) => InfoTree::Node {
                 node: InfoNode {
                     span: Span::dummy(),
                     kind: InfoKind::CommandInfo {
                         command_name: String::new(),
                     },
                 },
-                children: Vec::new(),
-            },
-            1 => self.roots.pop().expect("invariant: len checked"),
-            _ => InfoTree::Node {
-                node: InfoNode {
-                    span: Span::dummy(),
-                    kind: InfoKind::CommandInfo {
-                        command_name: String::new(),
-                    },
-                },
-                children: self.roots,
+                children: roots,
             },
         }
     }

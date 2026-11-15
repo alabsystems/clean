@@ -24,6 +24,8 @@ fn abstract_fvar_in_expr_impl(e: Expr, fvar_id: FVarId, depth: u32) -> Expr {
     if !e.has_fvar_quick() && depth >= e.loose_bvar_range() {
         return e;
     }
+    // One unit per node rebuilt past the guard (`crate::work_meter`).
+    crate::work_meter::charge(crate::work_meter::Walk::Fold, 1);
     match &e.kind {
         ExprKind::FVar(id) if *id == fvar_id => Expr::from_kind(ExprKind::BVar(depth)),
         ExprKind::BVar(idx) => {

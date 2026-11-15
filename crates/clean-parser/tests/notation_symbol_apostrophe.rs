@@ -24,7 +24,11 @@ use clean_parser::{parse_file, Projection, SurfaceArg, SurfaceDecl, SurfaceExpr}
 fn def_value<'a>(decls: &'a [SurfaceDecl], name: &str) -> &'a SurfaceExpr {
     for d in decls {
         match d {
-            SurfaceDecl::Def { name: n, val, .. } if n == name => return val,
+            SurfaceDecl::Def { name: n, val, .. }
+                if n.name() == clean_parser::SurfaceName::generated_path(name).name() =>
+            {
+                return val
+            }
             SurfaceDecl::RawDecl { content, .. } if content.contains(name) => {
                 panic!("`def {name}` fell into error recovery as RawDecl: {content:?}")
             }
@@ -36,12 +40,20 @@ fn def_value<'a>(decls: &'a [SurfaceDecl], name: &str) -> &'a SurfaceExpr {
 
 fn render(e: &SurfaceExpr) -> String {
     match e {
-        SurfaceExpr::Ident(_, s) => s.clone(),
+        SurfaceExpr::Ident(_, s) => s
+            .source_spelling()
+            .expect("fixture identifier has exact source spelling"),
         // A dotted expansion head (`Set.preimage`) parses as a projection on
         // `Set`; print it back as the dotted name so the notations here can be
         // spelled exactly as Mathlib spells them.
         SurfaceExpr::Proj(_, base, Projection::Named(field)) => {
-            format!("{}.{field}", render(base))
+            format!(
+                "{}.{}",
+                render(base),
+                field
+                    .source_spelling()
+                    .expect("fixture projection has exact source spelling")
+            )
         }
         SurfaceExpr::Paren(_, inner) => render(inner),
         SurfaceExpr::App(_, f, args) => {
@@ -148,7 +160,7 @@ fn test_a_malformed_char_literal_still_does_not_swallow_the_next_declaration() {
     assert!(
         decls
             .iter()
-            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name == "after")),
+            .any(|d| matches!(d, SurfaceDecl::Def { name, .. } if name.name() == clean_parser::SurfaceName::generated_path("after").name())),
         "the declaration after a malformed literal must survive: {decls:#?}",
     );
 }

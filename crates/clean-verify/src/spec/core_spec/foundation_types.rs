@@ -8,6 +8,7 @@ use std::collections::HashSet;
 use crate::proofs::builder::ProofBuilder;
 use crate::spec::definition::SpecDefinition;
 use crate::spec::error::SpecError;
+use crate::spec::model_units::ModelUnit;
 use crate::spec::types::{AxiomCategory, ProofStatus};
 use crate::spec::Specification;
 use clean_kernel::{Expr, Level};
@@ -184,7 +185,7 @@ impl Specification {
         })
     }
 
-    pub(super) fn add_foundation_types(&mut self) -> Result<(), SpecError> {
+    fn add_foundation_equality(&mut self) -> Result<(), SpecError> {
         // =========================================================
         // PART 1: Equality type (Eq, rfl)
         // =========================================================
@@ -193,11 +194,7 @@ impl Specification {
         // Constructor: rfl : Eq a a
 
         // Eq inductive type
-        self.add_inductive(
-            r"inductive Eq (α : Sort u) : α → α → Prop
-| refl : forall (a : α), Eq α a a",
-            "Propositional equality: Eq α a b means a and b are provably equal.",
-        )?;
+        self.register_model_unit(ModelUnit::FoundationEq)?;
 
         // Eq.symm: symmetry of equality — PROVED from Eq.rec (based Martin-Löf J).
         // Based path induction on h at the base point a: motive M b _ := Eq α b a,
@@ -210,8 +207,8 @@ impl Specification {
             type_src: "forall (α : Sort u) (a : α) (b : α), Eq α a b -> Eq α b a".to_string(),
             value_src: Some(
                 "fun (α : Sort u) (a : α) (b : α) (h : Eq α a b) => \
-                 Eq.rec α a (fun (b1 : α) (_h : Eq α a b1) => Eq α b1 a) \
-                 (Eq.refl α a) b h"
+                 @Eq.rec α a (fun (b1 : α) (_h : Eq α a b1) => Eq α b1 a) \
+                 (@Eq.refl α a) b h"
                     .to_string(),
             ),
             is_axiom: false,
@@ -243,7 +240,7 @@ impl Specification {
                     .to_string(),
             value_src: Some(
                 "fun (α : Sort u) (a : α) (b : α) (c : α) (hab : Eq α a b) (hbc : Eq α b c) => \
-                 Eq.rec α b (fun (x : α) (_h : Eq α b x) => Eq α a x) hab c hbc"
+                 @Eq.rec α b (fun (x : α) (_h : Eq α b x) => Eq α a x) hab c hbc"
                     .to_string(),
             ),
             is_axiom: false,
@@ -268,8 +265,8 @@ impl Specification {
             type_src: "forall (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α), Eq α a b -> Eq β (f a) (f b)".to_string(),
             value_src: Some(
                 "fun (α : Sort u) (β : Sort v) (f : α -> β) (a : α) (b : α) (h : Eq α a b) => \
-                 Eq.rec α a (fun (x : α) (_h : Eq α a x) => Eq β (f a) (f x)) \
-                 (Eq.refl β (f a)) b h"
+                 @Eq.rec α a (fun (x : α) (_h : Eq α a x) => Eq β (f a) (f x)) \
+                 (@Eq.refl β (f a)) b h"
                     .to_string(),
             ),
             is_axiom: false,
@@ -312,7 +309,7 @@ impl Specification {
                 .to_string(),
             value_src: Some(
                 "fun (α : Sort u) (P : α -> Prop) (a : α) (b : α) (h : Eq α a b) (pa : P a) => \
-                 Eq.rec α a (fun (x : α) (_h : Eq α a x) => P x) pa b h"
+                 @Eq.rec α a (fun (x : α) (_h : Eq α a x) => P x) pa b h"
                     .to_string(),
             ),
             is_axiom: false,
@@ -353,7 +350,7 @@ impl Specification {
                     .to_string(),
             value_src: Some(
                 "fun (α : Sort u) (P : α -> Sort w) (a : α) (b : α) (h : Eq α a b) (pa : P a) => \
-                 Eq.rec α a (fun (x : α) (_h : Eq α a x) => P x) pa b h"
+                 @Eq.rec α a (fun (x : α) (_h : Eq α a x) => P x) pa b h"
                     .to_string(),
             ),
             is_axiom: false,
@@ -370,17 +367,19 @@ impl Specification {
             axiom_deps: HashSet::new(),
         })?;
 
+        Ok(())
+    }
+
+    pub(super) fn add_foundation_types(&mut self) -> Result<(), SpecError> {
+        self.add_foundation_equality()?;
+
         // =========================================================
         // PART 1.5: Product Types
         // =========================================================
         // ProdType, AndType, and basic structural types needed for proof terms.
 
         // ProdType type (pair/product)
-        self.add_inductive(
-            r"inductive ProdType (α : Type) (β : Type) : Type
-| mk : α → β → ProdType α β",
-            "Product type: ProdType α β is a pair of α and β.",
-        )?;
+        self.register_model_unit(ModelUnit::FoundationProd)?;
 
         // ProdType.mk constructor and ProdType.rec recursor are auto-registered by add_inductive.
 
@@ -410,7 +409,7 @@ impl Specification {
             type_src: "forall (α : Type) (β : Type), ProdType α β -> α".to_string(),
             value_src: Some(
                 "fun (α : Type) (β : Type) (p : ProdType α β) => \
-                 ProdType.rec α β (fun (_p : ProdType α β) => α) \
+                 @ProdType.rec α β (fun (_p : ProdType α β) => α) \
                  (fun (a : α) (b : β) => a) p"
                     .to_string(),
             ),
@@ -437,7 +436,7 @@ impl Specification {
             type_src: "forall (α : Type) (β : Type), ProdType α β -> β".to_string(),
             value_src: Some(
                 "fun (α : Type) (β : Type) (p : ProdType α β) => \
-                 ProdType.rec α β (fun (_p : ProdType α β) => β) \
+                 @ProdType.rec α β (fun (_p : ProdType α β) => β) \
                  (fun (a : α) (b : β) => b) p"
                     .to_string(),
             ),
@@ -463,9 +462,9 @@ impl Specification {
         // sides are definitionally equal and Eq.refl α a checks. Zero axiom_deps.
         self.add_definition(SpecDefinition {
             name: "ProdType.fst_beta".to_string(),
-            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), Eq α (ProdType.fst α β (ProdType.mk α β a b)) a".to_string(),
+            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), Eq α (ProdType.fst α β (@ProdType.mk α β a b)) a".to_string(),
             value_src: Some(
-                "fun (α : Type) (β : Type) (a : α) (b : β) => Eq.refl α a".to_string(),
+                "fun (α : Type) (β : Type) (a : α) (b : β) => @Eq.refl α a".to_string(),
             ),
             is_axiom: false,
             description: "fst (mk a b) = a. PROVED via Eq.refl: ProdType.fst iota-reduces on \
@@ -487,9 +486,9 @@ impl Specification {
         // fst_beta via Eq.refl (ProdType.snd iota-reduces on mk to the second field).
         self.add_definition(SpecDefinition {
             name: "ProdType.snd_beta".to_string(),
-            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), Eq β (ProdType.snd α β (ProdType.mk α β a b)) b".to_string(),
+            type_src: "forall (α : Type) (β : Type) (a : α) (b : β), Eq β (ProdType.snd α β (@ProdType.mk α β a b)) b".to_string(),
             value_src: Some(
-                "fun (α : Type) (β : Type) (a : α) (b : β) => Eq.refl β b".to_string(),
+                "fun (α : Type) (β : Type) (a : α) (b : β) => @Eq.refl β b".to_string(),
             ),
             is_axiom: false,
             description: "snd (mk a b) = b. PROVED via Eq.refl: ProdType.snd iota-reduces on \
@@ -513,36 +512,7 @@ impl Specification {
         // Nat type is used for universe levels, de Bruijn indices, etc.
 
         // Nat inductive type
-        self.add_inductive(
-            r"inductive Nat : Type
-| zero : Nat
-| succ : Nat → Nat",
-            "Natural numbers. Used for universe levels, de Bruijn indices, and arithmetic.",
-        )?;
-
-        // Nat.add (recursive definition)
-        self.add_recursive_def(
-            r"def Nat.add (n : Nat) (m : Nat) : Nat := match m with
-| Nat.zero => n
-| Nat.succ m' => Nat.succ (Nat.add n m')",
-            "Addition on natural numbers.",
-        )?;
-
-        // Nat.pred. Use explicit Nat.rec rather than match/casesOn so checked
-        // arithmetic proofs normalize through the same recursor constant.
-        self.add_recursive_def(
-            r"def Nat.pred (n : Nat) : Nat := Nat.rec (fun (_ : Nat) => Nat) Nat.zero (fun (m : Nat) (_ : Nat) => m) n",
-            "Predecessor on natural numbers.",
-        )?;
-
-        // Nat.sub (recursive definition)
-        // a - b: recurse on the right argument and peel the left with Nat.pred.
-        self.add_recursive_def(
-            r"def Nat.sub (a : Nat) (b : Nat) : Nat := match b with
-| Nat.zero => a
-| Nat.succ b' => Nat.pred (Nat.sub a b')",
-            "Subtraction on natural numbers (truncated to zero).",
-        )?;
+        self.register_model_unit(ModelUnit::FoundationNat)?;
 
         // nat_add_zero: 0 + n = n
         // Derived using Nat.rec: match on m with zero -> refl, succ m' -> cong succ IH
@@ -552,7 +522,7 @@ impl Specification {
             name: "nat_add_zero".to_string(),
             type_src: "forall (n : Nat), Eq Nat (Nat.add Nat.zero n) n".to_string(),
             value_src: Some(
-                "fun (n : Nat) => Nat.rec (fun (m : Nat) => Eq Nat (Nat.add Nat.zero m) m) (Eq.refl Nat Nat.zero) (fun (m : Nat) (ih : Eq Nat (Nat.add Nat.zero m) m) => Eq.cong Nat Nat Nat.succ (Nat.add Nat.zero m) m ih) n"
+                "fun (n : Nat) => @Nat.rec (fun (m : Nat) => Eq Nat (Nat.add Nat.zero m) m) (@Eq.refl Nat Nat.zero) (fun (m : Nat) (ih : Eq Nat (Nat.add Nat.zero m) m) => Eq.cong Nat Nat Nat.succ (Nat.add Nat.zero m) m ih) n"
                     .to_string(),
             ),
             is_axiom: false,
@@ -578,9 +548,9 @@ impl Specification {
             name: "nat_sub_succ_succ".to_string(),
             type_src: "forall (a : Nat) (b : Nat), Eq Nat (Nat.sub (Nat.succ a) (Nat.succ b)) (Nat.sub a b)".to_string(),
             value_src: Some(concat!(
-                "fun (a : Nat) (b : Nat) => Nat.rec ",
+                "fun (a : Nat) (b : Nat) => @Nat.rec ",
                 "(fun (k : Nat) => Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) ",
-                "(Eq.refl Nat a) ",
+                "(@Eq.refl Nat a) ",
                 "(fun (k : Nat) (ih : Eq Nat (Nat.sub (Nat.succ a) (Nat.succ k)) (Nat.sub a k)) => ",
                 "Eq.cong Nat Nat Nat.pred ",
                 "(Nat.sub (Nat.succ a) (Nat.succ k)) ",
@@ -614,9 +584,9 @@ impl Specification {
             name: "nat_sub_self".to_string(),
             type_src: "forall (a : Nat), Eq Nat (Nat.sub a a) Nat.zero".to_string(),
             value_src: Some(concat!(
-                "fun (a : Nat) => Nat.rec ",
+                "fun (a : Nat) => @Nat.rec ",
                 "(fun (n : Nat) => Eq Nat (Nat.sub n n) Nat.zero) ",
-                "(Eq.refl Nat Nat.zero) ",
+                "(@Eq.refl Nat Nat.zero) ",
                 "(fun (n : Nat) (ih : Eq Nat (Nat.sub n n) Nat.zero) => ",
                 "Eq.trans Nat ",
                 "(Nat.sub (Nat.succ n) (Nat.succ n)) ",
@@ -642,21 +612,7 @@ impl Specification {
         })?;
 
         // Lt: strict less-than on naturals
-        self.add_inductive(
-            r"inductive Lt : Nat → Nat → Type
-| zero_lt_succ : forall (n : Nat), Lt Nat.zero (Nat.succ n)
-| succ_lt_succ : forall (n : Nat) (m : Nat), Lt n m → Lt (Nat.succ n) (Nat.succ m)",
-            "Strict ordering on Nat. Lt n m means n < m. Inductive definition \
-             enables structural induction on ordering proofs.",
-        )?;
-
-        // Le: inductive less-than-or-equal relation with constructor surface.
-        self.add_inductive(
-            r"inductive Le : Nat → Nat → Prop
-| refl : forall (n : Nat), Le n n
-| step : forall (n : Nat) (m : Nat), Le n m → Le n (Nat.succ m)",
-            "Less-than-or-equal on natural numbers as an inductive relation.",
-        )?;
+        self.register_model_unit(ModelUnit::FoundationOrder)?;
 
         // =========================================================
         // PART 3: Boolean type
@@ -688,22 +644,13 @@ impl Specification {
         // motive). Empty.rec : (motive : Empty -> Sort u) -> (t : Empty) -> motive t.
         // Part of #464: Phase 4A constructive derivation.
 
-        self.add_inductive(
-            r"inductive Empty : Type",
-            "Uninhabited type. Used for constructor discrimination via large elimination.",
-        )?;
-
-        // =========================================================
-        // PART 3.5: Conjunction (AndType) type
-        // =========================================================
-        // AndType is a proof-relevant conjunction used in bidirectional proofs.
-
-        // AndType type (proof-relevant conjunction)
-        self.add_inductive(
-            r"inductive AndType (A : Type) (B : Type) : Type
-| intro : A → B → AndType A B",
-            "Proof-relevant conjunction: AndType A B holds when both A and B hold.",
-        )?;
+        self.register_model_unit(ModelUnit::FoundationEmptyAnd)?;
+        // The agreement equations reference Nat/Nat.add/Nat.pred/Nat.sub, Eq, Empty
+        // and the kernel's Bool, so they register AFTER all of them. They are in the
+        // LIVE spec so the independent Lean replay re-checks them: the exporter roots
+        // at registered spec definitions, so a unit outside the spec is invisible to
+        // Lean. The same text is decided over the compiler prelude as an island.
+        self.register_model_unit(ModelUnit::FoundationAgreement)?;
 
         // AndType.left: extract left conjunct.
         //
@@ -721,7 +668,7 @@ impl Specification {
             type_src: "forall (A : Type) (B : Type), AndType A B -> A".to_string(),
             value_src: Some(
                 "fun (A : Type) (B : Type) (p : AndType A B) => \
-                 AndType.rec A B (fun (_p : AndType A B) => A) \
+                 @AndType.rec A B (fun (_p : AndType A B) => A) \
                  (fun (a : A) (b : B) => a) p"
                     .to_string(),
             ),
@@ -748,7 +695,7 @@ impl Specification {
             type_src: "forall (A : Type) (B : Type), AndType A B -> B".to_string(),
             value_src: Some(
                 "fun (A : Type) (B : Type) (p : AndType A B) => \
-                 AndType.rec A B (fun (_p : AndType A B) => B) \
+                 @AndType.rec A B (fun (_p : AndType A B) => B) \
                  (fun (a : A) (b : B) => b) p"
                     .to_string(),
             ),
@@ -785,5 +732,106 @@ mod tests {
                 "full core spec should register {name}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod equality_helpers_tests {
+    use super::*;
+
+    #[test]
+    fn equality_helpers_register_and_recheck_without_axioms() {
+        let mut spec = Specification::new_empty();
+        spec.add_foundation_equality()
+            .expect("the unchanged equality model and all five helper proofs register");
+        for name in ["Eq.symm", "Eq.trans", "Eq.cong", "Eq.subst", "Eq.substType"] {
+            let definition = spec.get_definition(name).expect("registered helper");
+            assert!(!definition.is_axiom, "{name} must carry a proof value");
+            assert!(
+                definition.axiom_deps.is_empty(),
+                "{name} has axiom dependencies"
+            );
+            let value = definition
+                .elaborated_value
+                .as_ref()
+                .expect("actual proof term");
+            let type_ = definition
+                .elaborated_type
+                .as_ref()
+                .expect("actual statement");
+            clean_kernel::TypeChecker::new(spec.env())
+                .check_type(value, type_)
+                .unwrap_or_else(|error| panic!("{name} fails a fresh kernel check: {error}"));
+        }
+    }
+}
+
+#[cfg(test)]
+mod projection_tests {
+    use super::*;
+    use clean_kernel::{Name, TypeChecker};
+
+    #[test]
+    fn foundation_projections_recheck_without_axioms_and_compute_both_fields() {
+        crate::test_utils::run_with_stack(|| {
+            for source in [
+                crate::spec::model_units::ModelUnitSource::CleanFiles,
+                crate::spec::model_units::ModelUnitSource::RetainedLiterals,
+            ] {
+                let mut spec = Specification::new_empty();
+                spec.set_model_unit_source(source);
+                spec.add_foundation_types()
+                    .expect("real foundation initializer");
+                for name in [
+                    "ProdType.fst",
+                    "ProdType.snd",
+                    "ProdType.fst_beta",
+                    "ProdType.snd_beta",
+                    "AndType.left",
+                    "AndType.right",
+                ] {
+                    let definition = spec.get_definition(name).expect("registered projection");
+                    let value = definition.elaborated_value.as_ref().expect("actual value");
+                    let ty = definition.elaborated_type.as_ref().expect("actual type");
+                    TypeChecker::new(spec.env())
+                        .check_type(value, ty)
+                        .unwrap_or_else(|error| panic!("{name} fails fresh kernel check: {error}"));
+                    let root = Name::from_string(name);
+                    assert!(
+                        spec.env()
+                            .axiom_deps(&root)
+                            .expect("root exists")
+                            .is_empty(),
+                        "{name} has axioms"
+                    );
+                    assert!(
+                        spec.env()
+                            .trust_marker_deps(&root)
+                            .expect("root exists")
+                            .is_empty(),
+                        "{name} has trust markers"
+                    );
+                }
+                let nat = Expr::const_str("Nat");
+                let bool_ = Expr::const_str("Bool");
+                let two = Expr::nat_lit(2);
+                let false_ = Expr::const_str("Bool.false");
+                let pair = Expr::apps(
+                    Expr::const_str("ProdType.mk"),
+                    [nat.clone(), bool_.clone(), two.clone(), false_.clone()],
+                );
+                let first = Expr::apps(
+                    Expr::const_str("ProdType.fst"),
+                    [nat.clone(), bool_.clone(), pair.clone()],
+                );
+                let second = Expr::apps(Expr::const_str("ProdType.snd"), [nat, bool_, pair]);
+                let tc = TypeChecker::new(spec.env());
+                assert!(tc.is_def_eq(&first, &two));
+                assert!(!tc.is_def_eq(&first, &Expr::nat_lit(3)));
+                assert!(tc.is_def_eq(&second, &false_));
+                assert!(!tc.is_def_eq(&second, &Expr::const_str("Bool.true")));
+            }
+            println!("FOUNDATION_PROJECTIONS sources=2 checked_roots=12 field_controls=8");
+        });
     }
 }

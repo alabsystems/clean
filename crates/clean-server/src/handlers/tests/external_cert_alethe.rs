@@ -122,3 +122,61 @@ async fn test_verify_external_certificates_batch_alethe_holey_proof() {
         Some("proof was holey or not fully verified")
     );
 }
+
+/// A certificate whose check no step budget bounds: `refl` over two chains of conjunctions of two
+/// quantifiers over the level below, named apart, where level `i`'s two quantifiers bind `x(i-1)`
+/// at different indices and the leaves read every `xi`, compares every path with that path's
+/// bindings, `2^40` times (`third-party/carcara/DOWNSTREAM.md`, "The checker stops at a deadline").
+fn alpha_chain_alethe_cert() -> ExternalAletheCert {
+    let declarations: String = (0..=40)
+        .map(|i| format!("(declare-const x{i} Int)"))
+        .collect();
+    let leaves: String = (0..=40).map(|i| format!(" (= x{i} 0)")).collect();
+    // The levels are defined in the proof, where the binders they are used under capture the names
+    // `xi` their definitions read (a problem's definitions may not be captured).
+    let mut proof =
+        format!("(define-fun a0 () Bool (and{leaves}))(define-fun b0 () Bool (and{leaves}))");
+    for i in 1..=40 {
+        let j = i - 1;
+        proof += &format!(
+            "(define-fun a{i} () Bool \
+               (and (forall ((x{j} Int)) a{j}) (forall ((y Int) (x{j} Int)) a{j})))\
+             (define-fun b{i} () Bool \
+               (and (forall ((x{j} Int)) b{j}) (forall ((w Int) (x{j} Int)) b{j})))"
+        );
+    }
+    proof += "(step t1 (cl (= (forall ((x40 Int)) a40) (forall ((x40 Int)) b40))) :rule refl)\
+        (assume h1 p)(assume h2 (not p))(step t2 (cl) :rule resolution :premises (h1 h2))";
+    ExternalAletheCert {
+        version: "1.0".to_string(),
+        problem: format!(
+            "(set-logic ALL)(declare-const p Bool){declarations}(assert p)(assert (not p))"
+        ),
+        proof,
+    }
+}
+
+/// The request's timeout bounds the check: the checker runs off the runtime's worker, so the
+/// timeout can fire, and it is handed the deadline, so it stops there too rather than run on.
+#[tokio::test]
+async fn test_verify_alethe_certificate_stops_at_its_timeout() {
+    let state = ServerState::new();
+    let params = VerifyExternalCertParams {
+        certificate: ExternalCertificate::Alethe(alpha_chain_alethe_cert()),
+        timeout_ms: Some(200),
+    };
+    let started = std::time::Instant::now();
+    let response = handle_verify_alethe_certificate(&state, RequestId::Number(1), params).await;
+    let error = response.error.expect("the check must time out");
+    assert_eq!(error.code, -32004); // TIMEOUT
+    assert!(started.elapsed() < Duration::from_secs(60));
+
+    // The certificate's own check, given the deadline directly, stops there and says so.
+    let deadline = std::time::Instant::now() + Duration::from_millis(200);
+    let refused = clean_elab::cert::external::verify_alethe_certificate_until(
+        &alpha_chain_alethe_cert(),
+        Some(deadline),
+    )
+    .expect_err("the check must stop at its deadline");
+    assert_eq!(refused.code.as_str(), "timeout");
+}

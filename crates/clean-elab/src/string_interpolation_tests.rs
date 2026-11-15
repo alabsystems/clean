@@ -150,7 +150,7 @@ fn test_desugar_s_single_expr_wraps_to_string() {
     match &expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "toString"),
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("toString")),
                 "expected toString wrapper, got {func:?}"
             );
             assert_eq!(args.len(), 1);
@@ -171,7 +171,7 @@ fn test_desugar_s_mixed_produces_string_append_chain() {
     match &expr {
         SurfaceExpr::App(_, func, _) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "String.append"),
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("String.append")),
                 "expected String.append at root, got {func:?}"
             );
         }
@@ -205,12 +205,12 @@ fn test_desugar_by_kind_string_matches_s_desugar() {
     assert!(matches!(
         &s_result,
         SurfaceExpr::App(_, func, _)
-            if matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "String.append")
+            if matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("String.append"))
     ));
     assert!(matches!(
         &kind_result,
         SurfaceExpr::App(_, func, _)
-            if matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "String.append")
+            if matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("String.append"))
     ));
 }
 
@@ -224,7 +224,7 @@ fn test_desugar_by_kind_format_uses_format_append() {
     match &expr {
         SurfaceExpr::App(_, func, _) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "Format.append"),
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("Format.append")),
                 "expected Format.append at root, got {func:?}"
             );
         }
@@ -233,17 +233,26 @@ fn test_desugar_by_kind_format_uses_format_append() {
 }
 
 #[test]
-fn test_desugar_by_kind_message_data_wraps_in_of_format() {
+fn test_desugar_by_kind_message_data_is_leans_expansion() {
+    // `m!"{msg}"` is `(toMessageData msg : MessageData)` in Lean's macro, with
+    // the names hygienic in namespace `Lean`.
     let parts = vec![InterpolationPart::Expr(SurfaceExpr::ident("msg"))];
     let expr = desugar_by_kind(InterpolatedStringKind::MessageData, &parts);
     match &expr {
-        SurfaceExpr::App(_, func, _) => {
+        SurfaceExpr::Ascription(_, body, ty) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "MessageData.ofFormat"),
-                "expected MessageData.ofFormat wrapper, got {func:?}"
+                matches!(ty.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("Lean.MessageData")),
+                "expected the `Lean.MessageData` ascription, got {ty:?}"
+            );
+            assert!(
+                matches!(body.as_ref(), SurfaceExpr::App(_, func, _)
+                    if matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("Lean.ToMessageData.toMessageData"))),
+                "expected `Lean.ToMessageData.toMessageData msg`, got {body:?}"
             );
         }
-        other => panic!("expected MessageData.ofFormat application, got {other:?}"),
+        other => {
+            panic!("expected an ascribed `Lean.ToMessageData.toMessageData` chain, got {other:?}")
+        }
     }
 }
 
@@ -255,7 +264,7 @@ fn test_desugar_by_kind_format_literal_uses_format_text() {
     match &expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "Format.text"),
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("Format.text")),
                 "expected Format.text, got {func:?}"
             );
             assert_eq!(args.len(), 1);
@@ -298,7 +307,7 @@ fn test_desugar_s_adjacent_exprs() {
     match &expr {
         SurfaceExpr::App(_, func, args) => {
             assert!(
-                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n == "String.append"),
+                matches!(func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("String.append")),
                 "expected String.append, got {func:?}"
             );
             assert_eq!(args.len(), 2);
@@ -306,7 +315,7 @@ fn test_desugar_s_adjacent_exprs() {
             for (i, arg) in args.iter().enumerate() {
                 assert!(
                     matches!(&arg.expr, SurfaceExpr::App(_, inner_func, _)
-                        if matches!(inner_func.as_ref(), SurfaceExpr::Ident(_, n) if n == "toString")),
+                        if matches!(inner_func.as_ref(), SurfaceExpr::Ident(_, n) if n.name() == &clean_kernel::Name::from_string("toString"))),
                     "arg {i} should be toString application, got {:?}",
                     arg.expr
                 );

@@ -19,6 +19,9 @@
 use clean_kernel::name::Name;
 use clean_kernel::{Expr, ExprKind};
 
+pub use super::division_semantics::{
+    integer_quotient, integer_remainder, IntDivisionRounding, IntegerDivisionOps,
+};
 use super::expr_classifier::{classify_expr, LogicalForm};
 
 /// Public classifier result for the proof-producing SMT translation lane.
@@ -93,11 +96,15 @@ pub enum SmtLogicalForm {
         ty: Expr,
         lhs: Expr,
         rhs: Expr,
+        /// Present for an explicit Int operation; never inferred from a dictionary's carrier.
+        int_rounding: Option<IntDivisionRounding>,
     },
     Mod {
         ty: Expr,
         lhs: Expr,
         rhs: Expr,
+        /// Present for an explicit Int operation; never inferred from a dictionary's carrier.
+        int_rounding: Option<IntDivisionRounding>,
     },
     Neg {
         ty: Expr,
@@ -142,8 +149,8 @@ pub fn classify_for_proof_translation(expr: &Expr) -> SmtLogicalForm {
     match internal {
         // Int.negSucc is classified as Neg by the shared classifier, but it is
         // a constructor (-(n+1)), not standard negation (-(n)). The
-        // proof-producing lane does not support it — return Atom to preserve
-        // the current fail-closed behavior.
+        // constructor codec owns its -(n+1) semantics — return Atom instead
+        // of sending it through generic unary-negation lowering.
         LogicalForm::Neg { .. } => {
             let head = expr.strip_mdata().get_app_fn().strip_mdata();
             if let ExprKind::Const(name, _) = head.kind() {
@@ -204,8 +211,30 @@ fn from_internal(form: LogicalForm) -> SmtLogicalForm {
         LogicalForm::Add { ty, lhs, rhs, .. } => SmtLogicalForm::Add { ty, lhs, rhs },
         LogicalForm::Sub { ty, lhs, rhs, .. } => SmtLogicalForm::Sub { ty, lhs, rhs },
         LogicalForm::Mul { ty, lhs, rhs, .. } => SmtLogicalForm::Mul { ty, lhs, rhs },
-        LogicalForm::Div { ty, lhs, rhs, .. } => SmtLogicalForm::Div { ty, lhs, rhs },
-        LogicalForm::Mod { ty, lhs, rhs, .. } => SmtLogicalForm::Mod { ty, lhs, rhs },
+        LogicalForm::Div {
+            ty,
+            lhs,
+            rhs,
+            int_rounding,
+            ..
+        } => SmtLogicalForm::Div {
+            ty,
+            lhs,
+            rhs,
+            int_rounding,
+        },
+        LogicalForm::Mod {
+            ty,
+            lhs,
+            rhs,
+            int_rounding,
+            ..
+        } => SmtLogicalForm::Mod {
+            ty,
+            lhs,
+            rhs,
+            int_rounding,
+        },
         LogicalForm::Neg { ty, inner, .. } => SmtLogicalForm::Neg { ty, inner },
         LogicalForm::Forall { binder_type, body } => SmtLogicalForm::Forall { binder_type, body },
         // Exists handled specially in classify_for_proof_translation

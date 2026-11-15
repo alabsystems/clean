@@ -52,6 +52,13 @@ code, honoring the five non-negotiable gate properties (§7.2):
      recorded (data/tactic_family_baselines/<family>.json, written only by
      --update-baseline from a real run), any baseline-pass row that stops
      passing fails the gate.
+  6. Two-way (item 17, 2026-10-27) — every declared row also carries PINNED
+     LEAN's verdict, from the sealed LEAN_VERDICTS.json beside its fixture
+     (lean_verdicts.py: what --static refuses, and what it cannot see;
+     family_two_way.py: the cross, the in-world subset, the unwaivable
+     NEW-FALSE-ACCEPT ratchet, --strict, --check-artifact). A measured run
+     reports clean_accepts_lean_rejects; --strict, off by default, also
+     fails on any false acceptance at all.
 
 Exit codes:
   0  measured (artifact written; verdict line printed)
@@ -59,6 +66,8 @@ Exit codes:
      breach, or zero passing probes)
   2  SKIPPED — no prebuilt release binary (never invokes cargo; the machine's
      build capacity belongs to the central verifier)
+  3  UNKNOWN (--check-artifact only) — a minted fixture the saved artifact
+     does not measure, or one whose bytes moved since; never a soft green
 
 The gate NEVER invokes cargo in any form. It drives the prebuilt release
 binary (default target/release/clean, override CLEAN_BIN) and reads its JSON
@@ -70,6 +79,14 @@ Usage:
   scripts/tactic_parity/family_gate.py --family g_simp --static   # fixture
         integrity only (no binary needed; wired into local_gate.sh fast path)
   scripts/tactic_parity/family_gate.py --family g_auto --update-baseline
+  scripts/tactic_parity/family_gate.py --family g_auto --strict   # measure;
+        also fail on any row Clean accepts and pinned Lean rejects
+  scripts/tactic_parity/family_gate.py --family g_auto --check-artifact [PATH]
+        re-check a saved artifact offline (default the family's -latest.json;
+        a v1 artifact is refused, one stale against the committed verdicts is
+        UNKNOWN). At most one of --static / --canary-check / --check-artifact.
+  scripts/tactic_parity/family_gate.py --pinned-inputs   # the first-party
+        files its verdict depends on besides itself (check_gate_registry R7)
 """
 
 from __future__ import annotations
@@ -84,6 +101,24 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+
+# The two-way half (pinned Lean's verdict per row, minted offline into each
+# family's LEAN_VERDICTS.json: lean_verdicts.py owns the file, family_two_way.py
+# the cross) and the `clean check --json` reader live beside this file and run
+# no process. Tests reach them as `family_gate.lv` / `family_gate.ftw`, so only
+# one copy of each module is ever loaded.
+if str(Path(__file__).resolve().parent) not in sys.path:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+import family_two_way as ftw  # noqa: E402
+import lean_verdicts as lv  # noqa: E402
+from clean_report import (  # noqa: E402,F401  (re-exported: the gate's report reader)
+    attribute_diverged, attribute_failures, classify_file_verdicts, extract_json_report,
+)
+
+# R7 (scripts/check_gate_registry.py): the verdict also depends on the
+# first-party modules this file imports and on the test files its arms run;
+# `--pinned-inputs` names them, derived by ftw.first_party_inputs().
+ANSWERS_PINNED_INPUTS = True
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 FIXTURE_ROOT = REPO_ROOT / "tests" / "fixtures" / "tactic_families"
@@ -140,10 +175,17 @@ CANARY_CHECK_TIMEOUT_SECS = 60
 # the margin is gone and this value must be re-measured, not raised by feel.
 DECL_BUDGET = 50_000_000
 
-DECL_RE = re.compile(
-    r"^(?:@\[[^\]]+\]\s*)?(?:theorem|def|lemma)\s+([A-Za-z_][A-Za-z0-9_']*)",
-    re.MULTILINE,
-)
+# The row grammar, shared with the sealed sidecar and its minter.
+DECL_RE = lv.DECL_RE
+
+
+def _rel(path: Path) -> str:
+    """`path` repo-relative when it is inside the repo (tests point the report
+    and baseline directories elsewhere)."""
+    try:
+        return str(path.relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
 
 
 def fail(gate: str, reason: str) -> "int":
@@ -195,7 +237,7 @@ def static_check(family: str, manifest: dict) -> list[str]:
         if re.search(r"\bsorry\b|\badmit\b", text):
             problems.append(f"{entry['file']}: fixtures must not contain sorry/admit")
 
-        expected = [entry["canary"], *entry.get("helpers", []), *entry["probes"]]
+        expected = lv.declared_names(entry)
         for name in expected:
             if name in seen:
                 problems.append(f"duplicate declaration name across family: {name}")
@@ -282,152 +324,25 @@ def canary_is_disarmed(
     return False, f"canary {canary}: refuted on the builtin prelude (discriminates)"
 
 
-def extract_json_report(stdout: str) -> dict | None:
-    lines = stdout.splitlines()
-    for i, line in enumerate(lines):
-        if line.strip() == "{" or line.startswith('{"'):
-            try:
-                return json.loads("\n".join(lines[i:]))
-            except json.JSONDecodeError:
-                return None
-    return None
+def record_blockers(
+    gate_failures: list[str], regression_failure: str | None, allow_regression: bool
+) -> list[str]:
+    """The gate failures that refuse `--update-baseline`.
 
-
-def attribute_failures(report: dict, names: list[str], fixture_text: str) -> tuple[set[str], list[str]]:
-    """Attribute the report's failures to declarations. Returns (failed
-    names, unattributable failure strings). Attribution uses (a) the
-    `NAME:`-prefixed trust/kernel failure rows, (b) proof_state_feedback's
-    declaration field, (c) `at line L` positions mapped through the fixture's
-    declaration start lines, (d) a whole-word name scan — for ATTRIBUTION
-    only, never for success."""
-    failed: set[str] = set()
-    unattributed: list[str] = []
-    name_set = set(names)
-
-    # Declaration start lines (1-indexed) for positional attribution.
-    decl_lines: list[tuple[int, str]] = []
-    for m in DECL_RE.finditer(fixture_text):
-        line_no = fixture_text.count("\n", 0, m.start()) + 1
-        decl_lines.append((line_no, m.group(1)))
-    decl_lines.sort()
-
-    def decl_at_line(line_no: int) -> str | None:
-        best = None
-        for start, name in decl_lines:
-            if start <= line_no:
-                best = name
-            else:
+    With the documented escape hatch open (CLEAN_FAMILY_BASELINE_ALLOW_REGRESSION=1)
+    exactly ONE entry is waived: the baseline-regression failure this run
+    recorded, matched by identity, never by its text. A canary, a required row,
+    a timeout, an unreadable baseline, or another failure that happens to read
+    like a regression still refuses the record. Without the hatch nothing is
+    waived. Pinned by scripts/test_family_gate.py's RecordBlockersTests.
+    """
+    blockers = list(gate_failures)
+    if allow_regression and regression_failure is not None:
+        for i, gf in enumerate(blockers):
+            if gf is regression_failure:
+                del blockers[i]
                 break
-        return best
-
-    for row in report.get("trust_failures", []) + report.get("kernel_failures", []):
-        name = row.split(":", 1)[0].strip()
-        if name in name_set:
-            failed.add(name)
-        else:
-            unattributed.append(row)
-
-    for fb in report.get("proof_state_feedback", []):
-        decl = fb.get("declaration")
-        if decl in name_set:
-            failed.add(decl)
-
-    line_re = re.compile(r"at line (\d+)")
-    for err in report.get("errors", []):
-        m = line_re.search(err)
-        if m:
-            name = decl_at_line(int(m.group(1)))
-            if name in name_set:
-                failed.add(name)
-                continue
-        hits = [n for n in names if re.search(rf"\b{re.escape(n)}\b", err)]
-        if hits:
-            failed.update(hits)
-        else:
-            unattributed.append(err)
-
-    return failed, unattributed
-
-
-def attribute_diverged(report: dict, names: list[str]) -> tuple[set[str], list[str]]:
-    """Attribute the report's `diverged` rows to declarations.
-
-    A diverged declaration spent its whole `--decl-budget` without finishing.
-    It is NEITHER a pass (nothing was proved) NOR a fail (nothing was refuted),
-    so it gets its own bucket here and its own row verdict; the caller must not
-    fold it into either. `clean check` writes each row as
-    `NAME: did not finish at line L — spent the whole per-declaration budget
-    of N kernel operations (...)`, the same `NAME:` prefix convention as the
-    trust/kernel failure rows.
-
-    Returns (diverged names, unattributable rows). An unattributable row fails
-    the gate upstream exactly like an unattributable failure: a verdict that
-    cannot be read back to a declaration is not a verdict.
-    """
-    diverged: set[str] = set()
-    unattributed: list[str] = []
-    name_set = set(names)
-    for row in report.get("diverged", []):
-        name = row.split(":", 1)[0].strip()
-        if name in name_set:
-            diverged.add(name)
-        else:
-            unattributed.append(row)
-    return diverged, unattributed
-
-
-def classify_file_verdicts(
-    report: dict, names: list[str], fixture_text: str, label: str
-) -> tuple[dict[str, str], list[str]]:
-    """The three-way per-declaration verdict for one fixture file.
-
-    Returns `({name: "pass"|"fail"|"diverged"}, problems)`. A non-empty
-    `problems` means the file produced NO usable verdicts — the caller must
-    record the problems as gate failures and skip the file's rows entirely,
-    never fall back to a partial reading.
-
-    This is the arithmetic that keeps `diverged` honest, and it is a separate
-    function so it can be exercised without a binary (scripts/test_family_gate.py):
-
-      * `fail` and `diverged` must be disjoint. `clean check` rolls a diverged
-        declaration's errors back before recording it (`rollback_as_diverged`),
-        so an overlap means the report contradicts itself.
-      * the names left over — neither failed nor diverged — must number
-        EXACTLY `success_count`. This is the load-bearing check: it is what
-        makes folding `diverged` into `pass` (or dropping it on the floor)
-        impossible to do quietly, because the binary's own success count then
-        stops matching.
-    """
-    problems: list[str] = []
-    failed, unattributed = attribute_failures(report, names, fixture_text)
-    diverged, diverged_unattributed = attribute_diverged(report, names)
-    unattributed = unattributed + diverged_unattributed
-
-    both = sorted(failed & diverged)
-    if both:
-        problems.append(
-            f"{label}: report lists {both} as BOTH failed and diverged — "
-            f"contradictory verdicts, so neither is a measurement"
-        )
-        return {}, problems
-
-    passed = [n for n in names if n not in failed and n not in diverged]
-    success_count = report.get("success_count")
-    if len(passed) != success_count:
-        problems.append(
-            f"{label}: verdict attribution mismatch — binary reports "
-            f"success_count={success_count} but {len(passed)} declarations have no "
-            f"attributed failure or divergence (unattributable: {unattributed[:3]}). A "
-            f"verdict that cannot be read from the declaration fails the gate "
-            f"(§7.2 property 5)."
-        )
-        return {}, problems
-
-    verdicts = {
-        n: ("fail" if n in failed else "diverged" if n in diverged else "pass")
-        for n in names
-    }
-    return verdicts, problems
+    return blockers
 
 
 def run_canary_checks(family: str, manifest: dict, clean_bin: Path) -> tuple[list[str], dict]:
@@ -445,7 +360,12 @@ def run_canary_checks(family: str, manifest: dict, clean_bin: Path) -> tuple[lis
     return failures, verdicts
 
 
-def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bool) -> int:
+def run_family(
+    family: str, manifest: dict, clean_bin: Path, update_baseline: bool, lean_doc: dict,
+    strict: bool = False,
+) -> int:
+    """One measured run. `lean_doc` is the sidecar `main` validated (one read,
+    lv.load_checked): every cross below is against it, never a re-read."""
     gate = GATE_NAMES[family]
     fam_dir = FIXTURE_ROOT / family
     rows: list[dict] = []
@@ -455,11 +375,21 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
     # before the ten-minute import run so a disarmed canary is reported even if
     # the measurement itself goes sideways.
     gate_failures, canary_discriminates = run_canary_checks(family, manifest, clean_bin)
-
+    # Pinned Lean's verdicts, minted offline over exact fixture bytes. Each file
+    # is hashed before AND after Clean measures it: a verdict is of the bytes the
+    # sidecar was minted over, or it is not crossed at all.
     for entry in manifest["files"]:
         fpath = fam_dir / entry["file"]
-        fixture_text = fpath.read_text(encoding="utf-8")
-        all_names = [entry["canary"], *entry.get("helpers", []), *entry["probes"]]
+        fixture_bytes = fpath.read_bytes()
+        digest = lv.sha256_bytes(fixture_bytes)
+        if digest != lean_doc.get("files", {}).get(entry["file"], {}).get("fixture_sha256"):
+            gate_failures.append(
+                f"{entry['file']}: edited without a re-mint of pinned Lean's verdicts; run "
+                f"{lv.mint_command(family)}"
+            )
+            continue
+        fixture_text = fixture_bytes.decode("utf-8")
+        all_names = lv.declared_names(entry)
         expected_decls = len(all_names)
 
         try:
@@ -478,6 +408,12 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
             )
         except subprocess.TimeoutExpired:
             gate_failures.append(f"{entry['file']}: timed out after {PER_FILE_TIMEOUT_SECS}s")
+            continue
+        if lv.sha256_bytes(fpath.read_bytes()) != digest:
+            gate_failures.append(
+                f"{entry['file']}: the fixture changed while Clean measured it -- the verdict is "
+                f"of bytes that are no longer there"
+            )
             continue
 
         report = extract_json_report(proc.stdout)
@@ -534,27 +470,23 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
                     f"{DECL_BUDGET} kernel-operation per-declaration budget"
                 )
 
+        controls = {n["name"]: n.get("control") for n in entry.get("negatives", [])}
         for name in all_names:
-            kind = (
-                "canary"
-                if name == entry["canary"]
-                else "helper"
-                if name in entry.get("helpers", [])
-                else "probe"
-            )
-            rows.append(
-                {
-                    "name": name,
-                    "file": entry["file"],
-                    "label": entry["label"],
-                    "kind": kind,
-                    "verdict": verdicts[name],
-                    "required": name in entry.get("required", []),
-                }
-            )
+            row = {
+                "name": name,
+                "file": entry["file"],
+                "label": entry["label"],
+                "kind": lv.row_kind(entry, name),
+                "verdict": verdicts[name],
+                "required": name in entry.get("required", []),
+            }
+            if name in controls:
+                row["control"] = controls[name]
+            rows.append(row)
         file_reports.append(
             {
                 "file": entry["file"],
+                "fixture_sha256": digest,
                 "exit_code": proc.returncode,
                 "decl_count": decl_count,
                 "success_count": success_count,
@@ -581,9 +513,17 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
             "zero probes passed — a binary or environment defect, not a plausible measurement"
         )
 
+    # Two-way: every row, of every kind, crossed with pinned Lean's verdict.
+    ftw.cross(rows, lean_doc)
+    two_way_totals = ftw.totals(rows)
+
     # Baseline ratchet: once recorded, pass rows may only be added.
     baseline_path = BASELINE_DIR / f"{family}.json"
     baseline_state = "none"
+    baseline = None
+    # The baseline-regression failure, kept apart: it is the one failure the
+    # documented escape hatch (CLEAN_FAMILY_BASELINE_ALLOW_REGRESSION) answers.
+    regression_failure: str | None = None
     if baseline_path.is_file():
         try:
             baseline = json.loads(baseline_path.read_text())
@@ -604,11 +544,20 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
                     if now_diverged
                     else ""
                 )
-                gate_failures.append(
+                regression_failure = (
                     f"baseline regression — rows recorded passing now fail: {regressions}{detail}"
                 )
+                gate_failures.append(regression_failure)
             else:
                 baseline_state = "ok"
+
+    # The two-way ratchet, armed whenever a baseline exists. Its failures are
+    # their own entries, never `regression_failure`, so the escape hatch above
+    # cannot waive a new false acceptance into the record.
+    ratchet_failures, ratchet_reports = ftw.ratchet(rows, baseline)
+    gate_failures.extend(ratchet_failures)
+    if strict:
+        gate_failures.extend(ftw.strict_failure(two_way_totals, rows))
 
     commit = "unknown"
     git = subprocess.run(
@@ -623,7 +572,7 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
     gate_verdict = "failed" if gate_failures else "measured"
 
     artifact = {
-        "schema_version": "tactic-family-gate-v1",
+        "schema_version": ftw.GATE_SCHEMA,
         "gate": gate,
         "family": family,
         "generated_by": f"scripts/tactic_parity/{family}.sh (scripts/tactic_parity/family_gate.py)",
@@ -652,15 +601,20 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
         ),
         "gate_verdict": gate_verdict,
         "gate_failures": gate_failures,
-        "totals": {
-            "probes": len(probe_rows),
-            "plan_family_total": manifest["plan_family_total"],
-            "passed": len(passed),
-            "failed": len(failed),
-            "diverged": len(diverged_probes),
+        "lean_mint": {
+            "path": _rel(fam_dir / lv.VERDICTS_FILE),
+            "seal": lean_doc.get("seal"),
+            "rule": lean_doc.get("rule"),
+            "lean_world": (lean_doc.get("lean_world") or {}).get("id"),
         },
+        "strict": strict,
+        # probes/passed/failed/diverged count PROBES only (the pinned
+        # denominator); every two-way count covers every row kind.
+        "totals": {"plan_family_total": manifest["plan_family_total"], **two_way_totals},
+        "two_way_rows": ftw.two_way_rows(rows),
+        "two_way_ratchet": {"failures": ratchet_failures, "reports": ratchet_reports},
         "diverged_probes": diverged_probes,
-        "baseline": {"path": str(baseline_path.relative_to(REPO_ROOT)), "state": baseline_state},
+        "baseline": {"path": _rel(baseline_path), "state": baseline_state},
         "files": file_reports,
         "rows": rows,
     }
@@ -672,9 +626,24 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
     (REPORT_DIR / f"{family}-latest.json").write_text(json.dumps(artifact, indent=2) + "\n")
 
     if update_baseline:
-        if gate_failures:
+        # Until 2026-10-18 the escape hatch below was unreachable: the regression
+        # it names is itself a gate failure, and ANY gate failure refused the
+        # record first. It now waives exactly that one failure; a canary, a
+        # required row, a timeout or any other failure still refuses the record.
+        allow_regression = os.environ.get("CLEAN_FAMILY_BASELINE_ALLOW_REGRESSION") == "1"
+        blocking = record_blockers(gate_failures, regression_failure, allow_regression)
+        # A false acceptance enters the record by name or not at all: the ratchet
+        # watches only rows a baseline records, so a renamed row, a new negative
+        # or a deleted baseline would otherwise record one as a plain pass.
+        blocking += [
+            f"two-way record -- {n} is an in-world row Clean accepts and pinned Lean rejects that "
+            f"the baseline does not record; it enters the record only by name, with a reason, in "
+            f"MANIFEST.json {lv.EXEMPTIONS_KEY}"
+            for n in ftw.unrecorded_false_accepts(rows, baseline, lv.exemptions(manifest))
+        ]
+        if blocking:
             print(f"{gate}=failed reason=refusing-to-record-baseline-from-a-failed-run", flush=True)
-            for gf in gate_failures:
+            for gf in blocking:
                 print(f"  FAIL: {gf}", flush=True)
             return 1
         if baseline_path.is_file():
@@ -703,6 +672,9 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
                     # tell "still does not finish" from "stopped finishing".
                     # Only `pass` is ratcheted.
                     "diverged": diverged_probes,
+                    # v2: every row's Clean and Lean verdict, so the two-way
+                    # ratchet can see a negative/control/canary row too.
+                    **ftw.baseline_fields(rows, lean_doc),
                 },
                 indent=2,
             )
@@ -710,38 +682,69 @@ def run_family(family: str, manifest: dict, clean_bin: Path, update_baseline: bo
         )
         print(f"  recorded baseline {baseline_path} (pass={len(passed)})", flush=True)
 
+    for note in ratchet_reports:
+        print(f"  NOTE: {note}", flush=True)
     for gf in gate_failures:
         print(f"  FAIL: {gf}", flush=True)
     print(
         f"{gate}={gate_verdict} pass={len(passed)}/{manifest['plan_family_total']} "
+        f"clean_accepts_lean_rejects={two_way_totals['clean_accepts_lean_rejects']} "
+        f"in_world={two_way_totals['clean_accepts_lean_rejects_in_world']} "
         f"diverged={len(diverged_probes)} decl_budget={DECL_BUDGET} "
         f"files={len(manifest['files'])} baseline={baseline_state} "
-        f"basis=family-count-level-vs-2026-07-29 artifact={artifact_path.relative_to(REPO_ROOT)}",
+        f"basis=family-count-level-vs-2026-07-29 artifact={_rel(artifact_path)}",
         flush=True,
     )
     return 1 if gate_failures else 0
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    if "--pinned-inputs" in argv:
+        # Answered before argparse: R7 asks without a --family.
+        print("\n".join(ftw.first_party_inputs()))
+        return 0
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--family", required=True, choices=sorted(GATE_NAMES))
-    ap.add_argument(
+    # One mode at most; with none, measure. A second mode used to be dropped in
+    # silence (`--static --check-artifact` ran --static and exited 0).
+    mode = ap.add_mutually_exclusive_group()
+    mode.add_argument(
         "--static",
         action="store_true",
         help="fixture/manifest integrity only (no binary, no measurement)",
     )
-    ap.add_argument(
+    mode.add_argument(
         "--canary-check",
         action="store_true",
         help="prove every fixture canary still FAILS on `--prelude builtin` and exit "
         "(needs the binary, ~5 s; the same check runs inside every measured run)",
+    )
+    mode.add_argument(
+        "--check-artifact",
+        nargs="?",
+        const="",
+        default=None,
+        metavar="PATH",
+        help="re-cross a saved v2 artifact (default reports/tactic-families/<family>-latest.json) "
+        "against LEAN_VERDICTS.json and the baseline; needs no binary and no Lean",
     )
     ap.add_argument(
         "--update-baseline",
         action="store_true",
         help="record data/tactic_family_baselines/<family>.json from this run (ratchet: refuses to drop passing rows)",
     )
-    args = ap.parse_args()
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="also fail on any row Clean accepts and pinned Lean rejects, any row with no "
+        "pinned-Lean verdict, or any unconfirmed negative (off by default: measured-only)",
+    )
+    args = ap.parse_args(argv)
+    if args.strict and (args.static or args.canary_check):
+        ap.error("--strict judges a measurement or a saved artifact; --static and --canary-check measure none")
+    if args.update_baseline and (args.static or args.canary_check or args.check_artifact is not None):
+        ap.error("--update-baseline records a measured run; --static, --canary-check and --check-artifact make none")
 
     gate = GATE_NAMES[args.family]
     manifest = load_manifest(args.family)
@@ -751,15 +754,33 @@ def main() -> int:
         for p in problems:
             print(f"  FAIL: {p}", flush=True)
         return fail(gate, "fixture-manifest-integrity")
+    lean_doc, problems, notes = lv.load_checked(args.family, manifest, FIXTURE_ROOT / args.family)
+    for note in notes:
+        print(f"  NOTE: {note}", flush=True)
+    if problems or lean_doc is None:
+        for p in problems:
+            print(f"  FAIL: {p}", flush=True)
+        return fail(gate, "lean-verdicts")
 
     if args.static:
         total = sum(len(e["probes"]) for e in manifest["files"])
+        minted = sum(len(f["rows"]) for f in lean_doc["files"].values())
         print(
             f"{gate}=fixtures-ok probes={total} files={len(manifest['files'])} "
+            f"lean_verdicts=sealed:{lean_doc['seal'][:12]} rows={minted} "
             f"(static integrity only — run scripts/tactic_parity/{args.family}.sh for the measured verdict)",
             flush=True,
         )
         return 0
+    if args.check_artifact is not None:
+        path = Path(args.check_artifact) if args.check_artifact else (
+            REPORT_DIR / f"{args.family}-latest.json"
+        )
+        rc, lines = ftw.check_saved_artifact(
+            gate, args.family, path, lean_doc, BASELINE_DIR / f"{args.family}.json", args.strict
+        )
+        print("\n".join(lines), flush=True)
+        return rc
 
     clean_bin = Path(os.environ.get("CLEAN_BIN", REPO_ROOT / "target" / "release" / "clean"))
     if not (clean_bin.is_file() and os.access(clean_bin, os.X_OK)):
@@ -785,7 +806,7 @@ def main() -> int:
         )
         return 0
 
-    return run_family(args.family, manifest, clean_bin, args.update_baseline)
+    return run_family(args.family, manifest, clean_bin, args.update_baseline, lean_doc, args.strict)
 
 
 if __name__ == "__main__":

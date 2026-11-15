@@ -17,6 +17,7 @@ mod conv_witness;
 mod error;
 mod factory;
 mod goal_ops;
+mod local_ctx_memo;
 mod local_ops;
 mod trust;
 mod type_check;
@@ -27,6 +28,7 @@ pub(crate) use self::type_check::set_speculative_tc_budget;
 pub(crate) use conv_focus_tree::{ConvFocus, ConvNav};
 pub(crate) use conv_witness::ConvFocusWitness;
 pub use error::{RewriteCandidate, TacticError, TacticResult};
+pub(crate) use local_ops::{have_value, local_value_for_reduction};
 pub use trust::{
     ProofTrustLedger, SmtRecoveryLedger, TrustedArithProvenanceLedger, TrustedAyProvenanceLedger,
 };
@@ -63,16 +65,31 @@ pub struct Goal {
     /// Local context (hypotheses available)
     pub local_ctx: Vec<LocalDecl>,
     /// Optional tag for goal focusing (e.g., constructor name from `cases`/`induction`)
-    pub tag: Option<String>,
+    pub tag: Option<clean_parser::SurfaceName>,
+    /// Ordered constructor field and induction-hypothesis identities introduced
+    /// by the current case. Ordinary successor goals retain these IDs; naming
+    /// operations intersect them with the current local context, never a prefix.
+    pub case_binders: Vec<FVarId>,
 }
+
+#[cfg(test)]
+mod binder_metadata_tests;
+#[cfg(test)]
+mod case_metadata_tests;
+#[cfg(test)]
+mod mdata_let_intro_tests;
+#[cfg(test)]
+mod typed_global_resolution_tests;
 
 /// A local declaration in the goal context
 #[derive(Debug, Clone)]
 pub struct LocalDecl {
+    /// Original binder annotation, retained when reverting and reintroducing locals.
+    pub binder_info: clean_kernel::BinderData,
     /// Free variable id
     pub fvar: FVarId,
-    /// Name for display
-    pub name: String,
+    /// Exact source/local identity, including independent lexical wildcard metadata.
+    pub name: clean_parser::SurfaceName,
     /// Type of this hypothesis
     pub ty: Expr,
     /// Optional value (for let-bindings)
@@ -96,7 +113,7 @@ pub struct ProofState {
     /// Instance table for typeclass resolution (None → sorry fallback).
     pub(crate) instances: Option<InstanceTable>,
     /// Universe parameter names from `fresh_universe_param` (#1828).
-    pub(crate) universe_params: Vec<String>,
+    pub(crate) universe_params: Vec<clean_parser::SurfaceName>,
     /// Fresh universe-parameter id source (#1828; U2 stage 3,
     /// `crate::level_mint`).
     ///
@@ -149,6 +166,71 @@ pub struct ProofState {
     /// trying the literal name. `None` when no enclosing namespace context is
     /// available (lemma names then resolve by literal name only).
     pub(crate) namespace_state: Option<crate::namespace::NamespaceState>,
+    /// The enclosing elaborator's instance visibility (ended `local
+    /// instance`s, `scoped instance` namespaces), inherited at the tactic
+    /// entry point so an instance query a tactic makes — simp's
+    /// `synthesizeArgs` — answers exactly as the elaborator's would. `None`
+    /// outside the bridge: only the environment's imported scoping applies.
+    pub(crate) instance_visibility: Option<std::sync::Arc<crate::infer::InstanceVisibility>>,
+}
+
+/// Resolve a user-written global name the way the TERM elaborator does.
+///
+/// Lean's `resolveGlobalName` order — current namespace outward, then each open
+/// namespace, then the literal (root) name — via
+/// [`crate::name_resolution::resolve_identifier`]. Falls back to the literal
+/// name when no namespace context was threaded, so behavior is unchanged for
+/// already-qualified names.
+///
+/// # Why this is shared rather than per-tactic
+///
+/// `simp` grew its own copy of this (`simp::lemmas::resolve_extra_lemma_name`)
+/// when `simp [add_zero]` after `open Nat` could not reach `Nat.add_zero`. Its
+/// siblings never got it: `rw [not_injective_iff]` inside `namespace Function`
+/// still failed on a lemma the term elaborator resolves without trouble, and
+/// reported it as `hypothesis not found` — measured in the 2026-08-25
+/// source-elab corpus, where `Function.not_injective_iff` is the immediately
+/// PRECEDING declaration in the same file
+/// (`docs/analysis/srcelab-bucket-decomposition-2026-08-28.md` §3.2).
+///
+/// SOUNDNESS: resolution succeeds only for a name that `env.get_const` already
+/// finds; this widens which SPELLINGS reach a constant, never which constants
+/// exist. The caller's own lookup still governs whether the constant is used.
+// No `#[must_use]`: the return type is `Result`, which already carries it, and
+// clippy's `double_must_use` rejects the redundant attribute. The obligation on
+// callers is unchanged.
+pub(crate) fn resolve_global_name(
+    state: &ProofState,
+    name: &clean_parser::SurfaceName,
+) -> Result<clean_kernel::name::Name, TacticError> {
+    if name.is_anonymous() || name.is_relative_constructor() {
+        return Err(TacticError::InvalidTarget {
+            tactic: "resolve_ident".into(),
+            detail: "expected an ordinary global name, not an anonymous or relative selector"
+                .into(),
+        });
+    }
+    let literal = name
+        .qualify_under(&clean_parser::SurfaceName::default())
+        .into_name();
+    // A notation or macro template's free name resolves as it did where the
+    // template was declared (`name_resolution::resolve_identifier`); when it
+    // named no global there it names none here either (the term elaborator's
+    // `IdentTarget::Unresolved`), never the use site's global of its spelling.
+    if let (Some(site), Some(ns_state)) = (
+        name.template_origin().and_then(|origin| origin.site),
+        state.namespace_state(),
+    ) {
+        if ns_state.template_resolution(site, name.name()).is_some() {
+            return crate::name_resolution::resolve_identifier(name, ns_state, &state.env)
+                .ok_or_else(|| TacticError::UnknownIdent(name.to_string()));
+        }
+    }
+    Ok(match state.namespace_state() {
+        Some(ns_state) => crate::name_resolution::resolve_identifier(name, ns_state, &state.env)
+            .unwrap_or(literal),
+        None => literal,
+    })
 }
 
 impl Clone for ProofState {
@@ -173,6 +255,7 @@ impl Clone for ProofState {
             in_conv_body: self.in_conv_body,
             options: self.options.clone(),
             namespace_state: self.namespace_state.clone(),
+            instance_visibility: self.instance_visibility.clone(),
         }
     }
 }
@@ -202,6 +285,7 @@ impl ProofState {
             meta_id,
             target,
             local_ctx: Vec::new(),
+            case_binders: Vec::new(),
             tag: None,
         };
 
@@ -225,6 +309,7 @@ impl ProofState {
             in_conv_body: false,
             options: ProofOptions::default(),
             namespace_state: None,
+            instance_visibility: None,
         }
     }
 
@@ -245,6 +330,7 @@ impl ProofState {
             meta_id,
             target,
             local_ctx: Vec::new(),
+            case_binders: Vec::new(),
             tag: None,
         };
 
@@ -268,6 +354,7 @@ impl ProofState {
             in_conv_body: false,
             options: ProofOptions::default(),
             namespace_state: None,
+            instance_visibility: None,
         }
     }
 
@@ -298,6 +385,7 @@ impl ProofState {
             meta_id,
             target,
             local_ctx: ctx,
+            case_binders: Vec::new(),
             tag: None,
         };
 
@@ -321,6 +409,7 @@ impl ProofState {
             in_conv_body: false,
             options: ProofOptions::default(),
             namespace_state: None,
+            instance_visibility: None,
         }
     }
 
@@ -393,7 +482,7 @@ impl ProofState {
     /// assignments are refused loudly, never what solves.
     pub(crate) fn seed_universe_world(
         &mut self,
-        universe_params: Vec<String>,
+        universe_params: Vec<clean_parser::SurfaceName>,
         level_mint: crate::level_mint::LevelMint,
         rigid_level_params: std::collections::HashSet<clean_kernel::name::Name>,
     ) {
@@ -436,6 +525,12 @@ impl ProofState {
     /// ENSURES: `self.namespace_state().is_some()` after call.
     pub(crate) fn set_namespace_state(&mut self, ns_state: crate::namespace::NamespaceState) {
         self.namespace_state = Some(ns_state);
+    }
+
+    /// Inherit the enclosing elaborator's instance visibility (see
+    /// [`Self::instance_visibility`]).
+    pub(crate) fn set_instance_visibility(&mut self, visibility: crate::infer::InstanceVisibility) {
+        self.instance_visibility = Some(std::sync::Arc::new(visibility));
     }
 
     /// Get the local proof options.
@@ -642,7 +737,7 @@ impl ProofState {
     /// Get mutable metavariable state
     ///
     /// ENSURES: Mutations to the returned `MetaState` are reflected in this proof state
-    pub fn metas_mut(&mut self) -> &mut MetaState {
+    pub(crate) fn metas_mut(&mut self) -> &mut MetaState {
         &mut self.metas
     }
 
@@ -667,7 +762,7 @@ impl ProofState {
     /// This helper avoids borrow conflicts when calling `Unifier::with_env`.
     ///
     /// ENSURES: The returned MetaState and Environment are consistent with each other
-    pub fn metas_and_env(&mut self) -> (&mut MetaState, &Environment) {
+    pub(crate) fn metas_and_env(&mut self) -> (&mut MetaState, &Environment) {
         (&mut self.metas, &self.env)
     }
 }

@@ -16,6 +16,7 @@
 use super::elab_do_control::{has_top_level_non_terminal_return, infer_control_info_seq};
 use super::*;
 use clean_parser::SurfaceBinderInfo;
+use std::collections::HashSet;
 
 /// Cached monad information for a single do-block (#1814).
 ///
@@ -42,25 +43,38 @@ pub(crate) struct DoMonadInfo {
 impl<'a> ElabCtx<'a> {
     /// Create `DoMonadInfo` for the current do-block.
     ///
-    /// Matches Lean 4's `extractMonadInfo` (`Do/Basic.lean:601-634`) dual-branch
+    /// Matches Lean4.35's `extractMonadInfo` (`Do/Basic.lean:827-855`) dual-branch
     /// design:
     /// - When `current_expected_type` is set and has the form `m α` (e.g. `Id Nat`),
     ///   extracts concrete `(u, v, m)` from it. This avoids rigid `Level::Param`
     ///   that can't unify with concrete `Level::Zero` from prelude types.
-    /// - Otherwise, falls back to fresh universe params + fresh monad metavar
-    ///   (`mkUnknownMonadResult` branch).
-    fn mk_do_monad_info(&mut self) -> DoMonadInfo {
+    /// - An unknown expected-type head, or no expected type, gets fresh monad
+    ///   and result metavariables. A known non-monadic result is rejected.
+    fn mk_do_monad_info(&mut self) -> Result<DoMonadInfo, ElabError> {
         // Branch 1: extract concrete (u, v, m) from expected type
         if let Some((u, v, m, _alpha)) = self.expected_do_result_components() {
             let cached_punit = Expr::const_(Name::from_string("PUnit"), vec![u.clone()]);
             let cached_punit_unit = Expr::const_(Name::from_string("PUnit.unit"), vec![u.clone()]);
-            return DoMonadInfo {
+            return Ok(DoMonadInfo {
                 m,
                 u,
                 v,
                 cached_punit,
                 cached_punit_unit,
-            };
+            });
+        }
+
+        // A concrete non-monadic expected type is an error. Only an absent
+        // expected type or an unassigned metavariable head may be inferred.
+        if let Some(expected) = self.current_expected_type.as_ref() {
+            let expected = self.whnf(&self.metas.instantiate(expected));
+            let open_head = matches!(expected.get_app_fn().kind(), ExprKind::FVar(id)
+                if MetaState::from_fvar(*id).is_some_and(|id| !self.metas.is_assigned(id)));
+            if !open_head {
+                return Err(ElabError::InvalidDoExpectedType {
+                    type_: crate::error_render::term(&expected),
+                });
+            }
         }
 
         // Branch 2: no expected type — fresh params (mkUnknownMonadResult)
@@ -71,15 +85,25 @@ impl<'a> ElabCtx<'a> {
             Expr::sort(Level::succ(v.clone())),
         );
         let m = self.fresh_meta(m_ty);
+        let alpha = self.fresh_meta(Expr::sort(Level::succ(u.clone())));
+        let result_ty = Expr::app(m.clone(), alpha);
+        if let Some(expected) = self.current_expected_type.clone() {
+            if !self.try_unify(&expected, &result_ty) {
+                return Err(ElabError::InvalidDoExpectedType {
+                    type_: crate::error_render::term(&expected),
+                });
+            }
+        }
+        self.current_expected_type = Some(result_ty);
         let cached_punit = Expr::const_(Name::from_string("PUnit"), vec![u.clone()]);
         let cached_punit_unit = Expr::const_(Name::from_string("PUnit.unit"), vec![u.clone()]);
-        DoMonadInfo {
+        Ok(DoMonadInfo {
             m,
             u,
             v,
             cached_punit,
             cached_punit_unit,
-        }
+        })
     }
 
     /// Elaborate a do-notation block by desugaring to Bind.bind / Pure.pure chains.
@@ -111,6 +135,7 @@ impl<'a> ElabCtx<'a> {
         let outer_wrapped_monad = self.do_wrapped_monad.take();
         let outer_loop_ctx = self.do_loop_ctx.take();
         let outer_mut_vars = std::mem::take(&mut self.do_mut_vars);
+        let outer_active_mut_vars = std::mem::take(&mut self.do_active_mut_vars);
         let outer_pure_state = self.do_pure_state;
         self.do_pure_state = false;
 
@@ -121,10 +146,23 @@ impl<'a> ElabCtx<'a> {
         // state in the reusable ElabCtx.
         let result = (|| -> Result<Expr, ElabError> {
             // Create fresh monad info for this do-block
-            self.do_monad_info = Some(self.mk_do_monad_info());
+            let info = self.mk_do_monad_info()?;
+            // Lean requires Pure even for a terminal action whose emitted
+            // term needs no pure projection. Keep the real synthesis goal in
+            // the transactional instance queue, without adding dummy terms.
+            let pure_obligation = self.do_instance_arg(
+                "Pure",
+                vec![info.u.clone(), info.v.clone()],
+                std::slice::from_ref(&info.m),
+            );
+            if instance::bare_unassigned_meta(&self.metas, &pure_obligation).is_some() {
+                self.do_pure_obligations.push(pure_obligation);
+            }
+            self.do_monad_info = Some(info);
 
-            // Pre-pass: expand nested actions (`<- expr`) in all elements
-            let expanded = self.expand_all_nested_actions(elems);
+            // Pre-pass: expand nested actions (`<- expr`) in every element of
+            // every sequence of the block (`elab_do_actions_seq.rs`).
+            let expanded = Self::expand_seq_nested_actions(elems, &mut 0)?;
 
             // Pre-pass: infer control info (#1818 Phase 3)
             // Determines which control effects (break, continue, early return, mutable
@@ -209,7 +247,7 @@ impl<'a> ElabCtx<'a> {
                 // Resolve mut_var_types: fresh metavars for each reassigned variable.
                 // During elaboration of `let mut x := e`, the metavar will be unified
                 // with x's actual type via the local binding.
-                let mut_var_types: Vec<(String, Expr)> = control_info
+                let mut_var_types: Vec<(SurfaceName, Expr)> = control_info
                     .reassigns
                     .iter()
                     .map(|name| (name.clone(), self.fresh_meta(Expr::type_())))
@@ -265,21 +303,9 @@ impl<'a> ElabCtx<'a> {
         self.do_wrapped_monad = outer_wrapped_monad;
         self.do_loop_ctx = outer_loop_ctx;
         self.do_mut_vars = outer_mut_vars;
+        self.do_active_mut_vars = outer_active_mut_vars;
         self.do_pure_state = outer_pure_state;
 
-        result
-    }
-
-    /// Expand nested actions across all do-elements, flattening lifted bindings
-    /// into the element sequence.
-    fn expand_all_nested_actions(&self, elems: &[DoElem]) -> Vec<DoElem> {
-        let mut counter = 0usize;
-        let mut result = Vec::with_capacity(elems.len());
-        for elem in elems {
-            let (lifted, new_elem) = self.expand_do_elem_actions(elem, &mut counter);
-            result.extend(lifted);
-            result.push(new_elem);
-        }
         result
     }
 
@@ -287,6 +313,23 @@ impl<'a> ElabCtx<'a> {
     ///
     /// Processes left-to-right, threading the monadic context through each element.
     pub(super) fn elab_do_elems(&mut self, elems: &[DoElem]) -> Result<Expr, ElabError> {
+        let saved = self.do_active_mut_vars.clone();
+        let result = (|| {
+            if let Some(elem) = elems.first() {
+                elab_do_shadow::check_do_head_shadowing(elem, &self.do_active_mut_vars)?;
+                if let DoElem::LetMut(_, binder, _) = elem {
+                    if !binder.name.is_unescaped_component("_") {
+                        self.do_active_mut_vars.push(binder.name.clone());
+                    }
+                }
+            }
+            self.elab_do_elems_inner(elems)
+        })();
+        self.do_active_mut_vars = saved;
+        result
+    }
+
+    fn elab_do_elems_inner(&mut self, elems: &[DoElem]) -> Result<Expr, ElabError> {
         stack_safe(|| match elems {
             [] => Err(ElabError::NotImplemented(
                 "empty do element sequence".into(),
@@ -309,11 +352,12 @@ impl<'a> ElabCtx<'a> {
                 self.elab_pure(expr)
             }
 
-            [DoElem::Let(_, _, _)] | [DoElem::LetMut(_, _, _)] | [DoElem::LetRec(_, _)] => {
-                Err(ElabError::NotImplemented(
-                    "do block cannot end with a let binding (no continuation)".into(),
-                ))
-            }
+            [DoElem::Let(_, _, _)]
+            | [DoElem::Have(_, _, _)]
+            | [DoElem::LetMut(_, _, _)]
+            | [DoElem::LetRec(_, _)] => Err(ElabError::NotImplemented(
+                "do block cannot end with a let binding (no continuation)".into(),
+            )),
 
             [DoElem::Bind(_, _, _)] => Err(ElabError::NotImplemented(
                 "do block cannot end with a bind (no continuation)".into(),
@@ -322,15 +366,42 @@ impl<'a> ElabCtx<'a> {
             // === Compound (multi-element) sequences ===
             [DoElem::Bind(_, binder, action), rest @ ..] => {
                 // let x <- e; rest  →  Bind.bind e (fun x => rest_desugared)
+                //
+                // A numeral in the action (`let k ← pure 5`) leaves `k`'s type
+                // open for the continuation, as a `let` value's does.
+                if Self::let_value_numerals_may_wait(binder, action) {
+                    if self.postponing_let_depth > 0 {
+                        return self.with_postponing_let_scope(|this| {
+                            this.elab_do_bind_ordered(binder, action, rest, true)
+                        });
+                    }
+                    if let Some(term) = self.lean_order_let_attempt(|this| {
+                        this.with_postponing_let_scope(|this| {
+                            this.elab_do_bind_ordered(binder, action, rest, true)
+                        })
+                    })? {
+                        return Ok(term);
+                    }
+                }
                 self.elab_do_bind(binder, action, rest)
             }
 
             [DoElem::Let(_, binder, val), rest @ ..] => {
                 // let x := e; rest  →  let x := e in rest_desugared
-                self.elab_do_let(binder, val, rest)
+                //
+                // An unannotated numeral's type waits for the continuation,
+                // as in a term `let` (`elab_let_binding`): `let k := 5`
+                // followed by `Tag.tag (k : Int)` makes `k : Int` in Lean.
+                self.elab_do_let_dispatch(binder, val, rest, false)
             }
 
-            [DoElem::LetMut(_, binder, val), rest @ ..] => self.elab_do_let(binder, val, rest),
+            [DoElem::Have(_, binder, val), rest @ ..] => {
+                self.elab_do_let_dispatch(binder, val, rest, true)
+            }
+
+            [DoElem::LetMut(_, binder, val), rest @ ..] => {
+                self.elab_do_let_dispatch(binder, val, rest, true)
+            }
             [DoElem::LetRec(_, decls), rest @ ..] => self.elab_do_let_rec_elem(decls, rest),
 
             [DoElem::Return(_, expr), ..] => {
@@ -442,6 +513,19 @@ impl<'a> ElabCtx<'a> {
             // === Match as do-element (terminal or compound) ===
             // Branches call elab_do_elems recursively; terminals in branches
             // get yield wrapping via the do_loop_ctx check above.
+            // A match shape the `casesOn` lowering does not compile, with arms
+            // that thread no control flow, goes through the term `match`
+            // compiler as Lean's `doMatch` does (`elab_do_match_term.rs`).
+            [DoElem::Match(_, discrs, arms)] if self.do_match_term_route_applies(discrs, arms) => {
+                self.elab_do_match_term_route(discrs, arms, false)
+            }
+            [DoElem::Match(_, discrs, arms), rest @ ..]
+                if self.do_match_term_route_applies(discrs, arms) =>
+            {
+                let match_expr = self.elab_do_match_term_route(discrs, arms, true)?;
+                let discard_binder = SurfaceBinder::new("_", None, SurfaceBinderInfo::Explicit);
+                self.elab_do_bind_expr(&discard_binder, match_expr, rest)
+            }
             [DoElem::Match(_, discrs, arms)] => self.elab_do_match(discrs, arms),
             [DoElem::Match(_, discrs, arms), rest @ ..] => {
                 let match_expr = self.elab_do_match(discrs, arms)?;
@@ -576,13 +660,9 @@ impl<'a> ElabCtx<'a> {
         })
     }
 
-    /// Build the full `@Bind.bind.{u,v} m α β action continuation` application.
-    ///
-    /// Kernel decl (data_monad.rs): `Bind.bind.{u,v} : {m : Type u → Type v} → {α β : Type u} → m α → (α → m β) → m β`
-    /// 5 args total: m (implicit), α (implicit), β (implicit), action (explicit), continuation (explicit)
-    ///
-    /// Note: The kernel declaration omits the [Bind m] instance arg (simplified axiom).
-    /// We match the kernel's 5-arg form: @Bind.bind.{u,v} m α β action continuation
+    /// Build the full `@Bind.bind.{u,v} m ?inst α β action continuation`
+    /// application — Lean's `Bind.bind` projection with its `[Bind m]`
+    /// instance (`mk_bind_term`).
     ///
     /// Uses cached `DoMonadInfo` when inside a do-block (#1814), matching Lean 4's
     /// pattern of reusing `info.m`, `info.u`, `info.v` from `(← read).monadInfo`.
@@ -593,28 +673,16 @@ impl<'a> ElabCtx<'a> {
             (base_u, base_v, base_m, self.fresh_meta(type_u))
         });
 
-        let bind_const = Expr::const_(Name::from_string("Bind.bind"), vec![u.clone(), v.clone()]);
-
         // α : Type u, β : Type u (Type u = Sort(u+1))
         let alpha = self
             .try_extract_bind_inner_type(&action)
             .unwrap_or_else(|| self.fresh_meta(Expr::sort(Level::succ(u.clone()))));
 
-        // @Bind.bind.{u,v} m α β action continuation
-        let e = Expr::app(bind_const, m);
-        let e = Expr::app(e, alpha);
-        let e = Expr::app(e, beta);
-        let e = Expr::app(e, action);
-        Expr::app(e, continuation)
+        self.mk_bind_term(u, v, m, alpha, beta, action, continuation)
     }
 
-    /// Build the full `@Pure.pure.{u,v} m α val` application.
-    ///
-    /// Lean 4 signature: `Pure.pure.{u,v} : {m : Type u → Type v} → {α : Type u} → α → m α`
-    /// Kernel decl (data_monad.rs): `Pure.pure` with level_params [u, v], 3 args (m implicit, α implicit, val explicit)
-    ///
-    /// Note: The kernel declaration omits the [Pure m] instance arg (simplified axiom).
-    /// We match the kernel's 3-arg form: @Pure.pure.{u,v} m α val
+    /// Build the full `@Pure.pure.{u,v} m ?inst α val` application — Lean's
+    /// `Pure.pure` projection with its `[Pure m]` instance (`mk_pure_term`).
     ///
     /// Uses cached `DoMonadInfo` when inside a do-block (#1814).
     pub(super) fn mk_pure_app(&mut self, val: Expr) -> Expr {
@@ -623,17 +691,11 @@ impl<'a> ElabCtx<'a> {
             let type_u = Expr::sort(Level::succ(base_u.clone()));
             (base_u, base_v, base_m, self.fresh_meta(type_u))
         });
-
-        let pure_const = Expr::const_(Name::from_string("Pure.pure"), vec![u.clone(), v.clone()]);
-
-        // @Pure.pure.{u,v} m α val
-        let e = Expr::app(pure_const, m);
-        let e = Expr::app(e, alpha);
-        Expr::app(e, val)
+        self.mk_pure_term(u, v, m, alpha, val)
     }
 
-    /// Build `@Pure.pure.{u,v} m α val` with an **explicitly supplied** value
-    /// type `α`, rather than reading the do-block's expected inner type.
+    /// Build `@Pure.pure.{u,v} m ?inst α val` with an **explicitly supplied**
+    /// value type `α`, rather than reading the do-block's expected inner type.
     ///
     /// The do-block's `α` (from `expected_do_result_components`) is the type of
     /// the *whole block's* result, which is wrong for a `pure` whose value type
@@ -646,11 +708,7 @@ impl<'a> ElabCtx<'a> {
             .expected_do_result_components()
             .map(|(u, v, m, _alpha)| (u, v, m))
             .unwrap_or((base_u, base_v, base_m));
-
-        let pure_const = Expr::const_(Name::from_string("Pure.pure"), vec![u, v]);
-        let e = Expr::app(pure_const, m);
-        let e = Expr::app(e, alpha);
-        Expr::app(e, val)
+        self.mk_pure_term(u, v, m, alpha, val)
     }
 
     /// The inner result type `α` of the `do`-block's expected monad type `m α`,
@@ -668,26 +726,29 @@ impl<'a> ElabCtx<'a> {
         let expected_ty = self.metas.instantiate(&expected_ty);
         let expected_ty = self.metas.instantiate_levels(&expected_ty);
 
-        // Try the App(m, α) decomposition BEFORE whnf reduction (#3419).
-        // Monad abbreviations like `MySem Nat` = `App(MySem, Nat)` should be
-        // matched as `m = MySem, α = Nat` without unfolding the abbreviation.
-        // Full whnf would unfold `StateT MyState (Except MyError) Nat` to a Pi
-        // type `MyState → Except MyError (Prod Nat MyState)`, destroying the
-        // monadic structure and causing `expected_do_result_components` to fail.
-        // This causes fresh monad metas to be created that are never resolved,
-        // leaking FVars into the kernel term.
-        //
-        // We try unreduced first, then fall through to whnf for cases where the
-        // expected type needs head reduction to expose the App form (e.g., let
-        // bindings or meta-variable solutions).
-        if let Some(result) = self.try_decompose_monad_app(&expected_ty) {
-            return Some(result);
+        // Stop at each alias boundary before reducing Id/transformers away.
+        // A cycle is refused; well-founded alias chains have no length cap.
+        let mut current = expected_ty;
+        let mut seen = HashSet::new();
+        while seen.insert(current.clone()) {
+            if let Some(result) = self.try_decompose_monad_app(&current) {
+                return Some(result);
+            }
+            if let ExprKind::Let(_, _, value, body, _) = current.kind() {
+                current = body.instantiate(value);
+                continue;
+            }
+            if let Some(next) = self.unfold_definition_step(&current) {
+                current = next;
+                continue;
+            }
+            let next = self.whnf(&current);
+            if next == current {
+                break;
+            }
+            current = next;
         }
-
-        // Fallback: whnf reduce and try again. This handles cases like
-        // `let m := Id in m Nat` where the App form only appears after reduction.
-        let expected_ty = self.whnf(&expected_ty);
-        self.try_decompose_monad_app(&expected_ty)
+        None
     }
 
     /// Try to decompose an expression of the form `App(m, α)` into `(u, v, m, α)`
@@ -711,7 +772,6 @@ impl<'a> ElabCtx<'a> {
         };
         match level {
             Level::Succ(inner) => Some(inner.as_ref().clone()),
-            Level::Zero => Some(Level::zero()),
             _ => None,
         }
     }

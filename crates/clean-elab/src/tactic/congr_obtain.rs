@@ -10,11 +10,10 @@
 
 use crate::unify::MetaState;
 use clean_kernel::name::Name;
-use clean_kernel::{BinderInfo, Expr, ExprKind, FVarId};
+use clean_kernel::{Expr, ExprKind, FVarId};
 
-use super::core::{Goal, ProofState, TacticError, TacticResult};
+use super::core::{ProofState, TacticError, TacticResult};
 use super::proof_manipulation::cases;
-use super::proof_term::rfl;
 
 /// Apply congruence to break down an equality goal.
 ///
@@ -32,162 +31,8 @@ use super::proof_term::rfl;
 ///   subgoals `aᵢ = bᵢ` (or closed via `rfl` if no arguments).
 /// ENSURES: On `Err`, the proof state is unchanged.
 pub fn congr(state: &mut ProofState) -> TacticResult {
-    let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-
-    let target = state.whnf(&goal, &goal.target);
-
-    // Check if target is an Eq application
-    let head = target.get_app_fn();
-    let args: Vec<Expr> = target.get_app_args().into_iter().cloned().collect();
-
-    match head.kind() {
-        ExprKind::Const(name, levels) if *name == Name::from_string("Eq") => {
-            // Eq takes 3 args: type, lhs, rhs
-            if args.len() != 3 {
-                return Err(TacticError::GoalMismatch(
-                    "congr: expected Eq with 3 arguments".to_string(),
-                ));
-            }
-
-            let _eq_ty = args[0].clone();
-            let lhs = args[1].clone();
-            let rhs = args[2].clone();
-
-            // Get the function and args of lhs and rhs
-            let lhs_fn = lhs.get_app_fn();
-            let rhs_fn = rhs.get_app_fn();
-            let lhs_args: Vec<Expr> = lhs.get_app_args().into_iter().cloned().collect();
-            let rhs_args: Vec<Expr> = rhs.get_app_args().into_iter().cloned().collect();
-
-            // Check same function
-            if !state.is_def_eq(&goal, lhs_fn, rhs_fn) {
-                return Err(TacticError::GoalMismatch(
-                    "congr: functions on both sides must be equal".to_string(),
-                ));
-            }
-
-            // Check same number of args
-            if lhs_args.len() != rhs_args.len() {
-                return Err(TacticError::GoalMismatch(
-                    "congr: argument counts must match".to_string(),
-                ));
-            }
-
-            if lhs_args.is_empty() {
-                // No arguments - just need reflexivity
-                return rfl(state);
-            }
-
-            // For a single argument, use congrArg
-            if lhs_args.len() == 1 {
-                // Build proof: congrArg f ?h where ?h : a = b
-                let arg_ty = state.infer_type(&goal, &lhs_args[0])?;
-                let eq_goal_ty = Expr::app(
-                    Expr::app(
-                        Expr::app(
-                            Expr::const_(Name::from_string("Eq"), levels.clone()),
-                            arg_ty,
-                        ),
-                        lhs_args[0].clone(),
-                    ),
-                    rhs_args[0].clone(),
-                );
-
-                let arg_eq_meta_id = state.fresh_meta(eq_goal_ty.clone());
-                let arg_eq_meta =
-                    Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(arg_eq_meta_id)));
-
-                // Try to find congrArg in environment
-                let congr_arg = Name::from_string("congrArg");
-                if state.env.get_const(&congr_arg).is_some() {
-                    // congrArg : ∀ {α β} (f : α → β) {a₁ a₂ : α}, a₁ = a₂ → f a₁ = f a₂
-                    let mut proof = Expr::const_(congr_arg, levels.clone());
-                    proof = Expr::app(proof, lhs_fn.clone()); // f
-                    proof = Expr::app(proof, arg_eq_meta.clone()); // h : a₁ = a₂
-
-                    state.close_goal(&goal, proof)?;
-
-                    let new_goal = Goal {
-                        meta_id: arg_eq_meta_id,
-                        target: eq_goal_ty,
-                        local_ctx: goal.local_ctx.clone(),
-                        tag: None,
-                    };
-                    state.goals.push_front(new_goal);
-
-                    return Ok(());
-                }
-            }
-
-            // For multiple arguments or no congrArg, fall back to recursive approach
-            // Create a subgoal for each argument pair
-            let mut new_goals = Vec::new();
-            let mut proofs = Vec::new();
-
-            for (la, ra) in lhs_args.iter().zip(rhs_args.iter()) {
-                let arg_ty = state.infer_type(&goal, la)?;
-                let eq_goal_ty = Expr::app(
-                    Expr::app(
-                        Expr::app(
-                            Expr::const_(Name::from_string("Eq"), levels.clone()),
-                            arg_ty,
-                        ),
-                        la.clone(),
-                    ),
-                    ra.clone(),
-                );
-
-                let meta_id = state.fresh_meta(eq_goal_ty.clone());
-                proofs.push(Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(meta_id))));
-
-                new_goals.push(Goal {
-                    meta_id,
-                    target: eq_goal_ty,
-                    local_ctx: goal.local_ctx.clone(),
-                    tag: None,
-                });
-            }
-
-            // Build the combined proof using Eq.subst repeatedly
-            // Start with rfl for f = f, then substitute each argument
-            let eq_refl = Name::from_string("Eq.refl");
-            let eq_subst = Name::from_string("Eq.subst");
-
-            // If we have Eq.refl and Eq.subst, build a chain
-            if state.env.get_const(&eq_refl).is_some() && state.env.get_const(&eq_subst).is_some() {
-                // For now, just create subgoals - a full implementation would build
-                // the proof term properly. This is a simplification.
-                let full_eq_meta_id = state.fresh_meta(goal.target.clone());
-                let full_eq_meta =
-                    Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(full_eq_meta_id)));
-                state.close_goal(&goal, full_eq_meta)?;
-
-                // Replace with a single goal that the user must prove
-                // (proper congruence proof building is complex)
-                let final_goal = Goal {
-                    meta_id: full_eq_meta_id,
-                    target: goal.target.clone(),
-                    local_ctx: goal.local_ctx.clone(),
-                    tag: None,
-                };
-                state.goals.push_front(final_goal);
-
-                // Also add the argument equality goals as hints
-                for ng in new_goals.into_iter().rev() {
-                    state.goals.push_front(ng);
-                }
-
-                Ok(())
-            } else {
-                Err(TacticError::EnvironmentMissing {
-                    constant: "Eq.refl/Eq.subst".to_string(),
-                })
-            }
-        }
-        _ => Err(TacticError::GoalMismatch(
-            "congr: goal must be an equality".to_string(),
-        )),
-    }
+    // Lean's `congr` with no depth (`evalCongr`): see `congr_n`.
+    super::congr_n::congr_n(state, super::congr_n::CONGR_DEFAULT_DEPTH)
 }
 
 /// Obtain (destructure) a hypothesis with an existential or sigma type.
@@ -213,9 +58,9 @@ pub fn congr(state: &mut ProofState) -> TacticResult {
 /// ENSURES: The goal target is unchanged; only the local context is modified.
 pub fn obtain(
     state: &mut ProofState,
-    hyp_name: &str,
-    var_name: &str,
-    new_hyp_name: &str,
+    hyp_name: &clean_parser::SurfaceName,
+    var_name: &clean_parser::SurfaceName,
+    new_hyp_name: &clean_parser::SurfaceName,
 ) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
 
@@ -223,7 +68,8 @@ pub fn obtain(
     let decl = goal
         .local_ctx
         .iter()
-        .find(|d| d.name == hyp_name)
+        .rev()
+        .find(|d| crate::tactic::pattern::names::hypothesis_named(&d.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?
         .clone();
 
@@ -233,7 +79,8 @@ pub fn obtain(
         if *name == Name::from_string("Exists") || *name == Name::from_string("Sigma"));
     if !is_existsy {
         return Err(TacticError::GoalMismatch(format!(
-            "obtain: hypothesis '{hyp_name}' has type {hyp_ty:?}, expected ∃ or Σ"
+            "obtain: hypothesis '{hyp_name}' has type {}, expected ∃ or Σ",
+            crate::error_render::term(&hyp_ty)
         )));
     }
 
@@ -300,12 +147,12 @@ pub fn obtain(
 fn rename_field_by_fvar(
     state: &mut ProofState,
     field_fvar: FVarId,
-    new_name: &str,
+    new_name: &clean_parser::SurfaceName,
 ) -> TacticResult {
     let goal = state.current_goal_mut().ok_or(TacticError::NoGoals)?;
     for decl in &mut goal.local_ctx {
         if decl.fvar == field_fvar {
-            decl.name = new_name.to_string();
+            decl.name = new_name.clone();
             return Ok(());
         }
     }
@@ -317,7 +164,8 @@ fn rename_field_by_fvar(
 /// Revert a hypothesis back into the goal.
 ///
 /// For a hypothesis `h : A` and goal `⊢ B`, this changes the goal to `⊢ A → B`
-/// and removes `h` from the context. This is the inverse of `intro`.
+/// and removes `h` from the context together with its forward dependencies.
+/// A local definition retains a let binder and its value. This is the inverse of `intro`.
 ///
 /// # Arguments
 /// * `state` - The proof state
@@ -329,49 +177,28 @@ fn rename_field_by_fvar(
 /// REQUIRES: At least one goal exists in `state`.
 /// REQUIRES: `hyp_name` names a hypothesis in the current goal's local context.
 /// ENSURES: On `Ok`, the original goal is closed and replaced by a new goal
-///   whose target is `hyp_ty → old_target` (with the hypothesis's fvar abstracted).
+///   whose target abstracts the selected locals in declaration order, preserving definitions.
 /// ENSURES: The hypothesis is removed from the new goal's local context.
-pub fn revert(state: &mut ProofState, hyp_name: &str) -> TacticResult {
+pub fn revert(state: &mut ProofState, hyp_name: &clean_parser::SurfaceName) -> TacticResult {
     let goal = state.current_goal().ok_or(TacticError::NoGoals)?.clone();
-
-    // Find the hypothesis
-    let (idx, decl) = goal
+    let decl = goal
         .local_ctx
         .iter()
-        .enumerate()
-        .find(|(_, d)| d.name == hyp_name)
+        .rev()
+        .find(|decl| crate::tactic::pattern::names::hypothesis_named(&decl.name, hyp_name))
         .ok_or_else(|| TacticError::HypothesisNotFound(hyp_name.to_string()))?;
-    let decl = decl.clone();
+    super::specialize_generalize::revert_fvar_with_deps(state, decl.fvar).map(|_| ())
+}
 
-    // Create new target: hyp_ty → old_target
-    let new_target = Expr::pi(
-        BinderInfo::Default,
-        decl.ty.clone(),
-        goal.target.abstract_fvar(decl.fvar),
-    );
-
-    // The reverted hypothesis is bound inside `new_target`, not available as
-    // a free local in the replacement goal.
-    let mut new_ctx = goal.local_ctx.clone();
-    new_ctx.remove(idx);
-
-    // Create new metavariable for the new goal
-    let new_meta_id = state.fresh_meta_in_context(new_target.clone(), &new_ctx);
-    let new_meta = Expr::from_kind(ExprKind::FVar(MetaState::to_fvar(new_meta_id)));
-
-    // The proof of the old goal is: new_proof h
-    let proof = Expr::app(new_meta, Expr::fvar(decl.fvar));
-    state.close_goal(&goal, proof)?;
-
-    let new_goal = Goal {
-        meta_id: new_meta_id,
-        target: new_target,
-        local_ctx: new_ctx,
-        tag: None,
-    };
-
-    state.goals.push_front(new_goal);
-    Ok(())
+/// Revert one selected identity after its dependents have been removed.
+/// Internal callers walk their dependency list in reverse declaration order.
+/// Use the same typed telescope construction, including let values.
+pub(crate) fn revert_fvar(state: &mut ProofState, fvar: FVarId) -> TacticResult {
+    let goal = state.current_goal().ok_or(TacticError::NoGoals)?;
+    if !goal.local_ctx.iter().any(|decl| decl.fvar == fvar) {
+        return Err(TacticError::HypothesisNotFound(format!("{fvar:?}")));
+    }
+    super::major_dependents::revert_fvars(state, &[fvar]).map(|_| ())
 }
 
 /// Whether `expr` contains a leaked *unassigned* metavariable (an `FVar` whose id

@@ -6,7 +6,7 @@
 //!
 //! Subcommands:
 //! - `clean-native`: Export to clean native kernel format
-//! - `arxiv`: Import and export arXiv papers
+//! - `arxiv`: Print the manual arXiv import recipe
 //! - `all`: Export all eligible constants
 
 use std::path::PathBuf;
@@ -296,12 +296,16 @@ fn print_export_usage() {
     eprintln!();
     eprintln!("Subcommands:");
     eprintln!("  clean-native   Export to clean native kernel format");
-    eprintln!("  arxiv          Import an arXiv paper into mathverse format");
+    eprintln!(
+        "  arxiv          Print the manual import recipe for --paper <id> (reads and writes no file)"
+    );
     eprintln!("  all            Export all library data (JSONL/JSON)");
     eprintln!();
     eprintln!("clean-native options:");
     eprintln!("  --output <DIR>     Output directory (default: data/mathverse-native-export)");
-    eprintln!("  --domain <NAME>    Filter by content domain (e.g. nn-verification)");
+    eprintln!(
+        "  --domain <NAME>    Accepted and echoed; the exported set is fixed (nn-verification), so it narrows nothing yet"
+    );
     eprintln!();
     eprintln!("arxiv options:");
     eprintln!("  --paper <ID>       arXiv paper ID (required, e.g. 2301.13868)");

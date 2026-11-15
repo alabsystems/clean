@@ -35,7 +35,7 @@ impl<'a> ElabCtx<'a> {
         fields: &[SurfaceField],
         field_names: &[Name],
     ) -> Result<DerivedInstance, ElabError> {
-        let instance_name = Name::from_string(&format!("inst{struct_name}BEq"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "BEq");
         let class_name = Name::from_string("BEq");
         let num_params = binders.len();
         let is_monomorphic = num_params == 0;
@@ -356,19 +356,19 @@ impl<'a> ElabCtx<'a> {
     /// Emits the equivalent of:
     /// ```lean
     /// instance : Repr StructName where
-    ///   reprPrec _ _ := "StructName"
+    ///   reprPrec := @Clean.Repr.render StructName
     /// ```
     /// against Clean's String-valued `Repr` class (`reprPrec : α → Nat →
-    /// String`; see clean-kernel `data_typeclasses_repr`). The body is
-    /// minimal-but-type-correct — it mirrors the shipped inductive-Repr
-    /// bootstrap (`derive_repr_inductive`), and the everyday `structure …
-    /// deriving Repr` pattern only needs the instance to *synthesize and
-    /// kernel-check*, not to render a particular string.
+    /// String`; see clean-kernel `data_typeclasses_repr`). Lean's derived body
+    /// is a `Std.Format` (`{ f := … }`) this model cannot state, so the
+    /// rendering is the OPAQUE `Clean.Repr.render`
+    /// (`data_typeclasses_repr_compound`): never Lean's text, but never a
+    /// constant either. The earlier `fun _ _ => "StructName"` body made
+    /// `repr (S.mk 1) = repr (S.mk 2) := rfl` check, which Lean 4.8 refuses.
     ///
-    /// Fidelity: every field's `Repr fieldTy` instance is still resolved (and
-    /// then discarded — the minimal body does not consume it) so deriving fails
-    /// LOUD, exactly like Lean, when a field type has no `Repr` (e.g. a bare
-    /// `Nat → Nat`) rather than silently minting a bogus instance.
+    /// Fidelity: every field's `Repr fieldTy` instance is still resolved so
+    /// deriving fails LOUD, exactly like Lean, when a field type has no `Repr`
+    /// (e.g. a bare `Nat → Nat`) rather than silently minting a bogus instance.
     ///
     /// Parametric structures gain `[Repr αᵢ]` constraints via
     /// `build_parametric_instance_type`, mirroring `derive_inhabited`/
@@ -381,7 +381,7 @@ impl<'a> ElabCtx<'a> {
         binders: &[SurfaceBinder],
         fields: &[SurfaceField],
     ) -> Result<DerivedInstance, ElabError> {
-        let instance_name = Name::from_string(&format!("inst{struct_name}Repr"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "Repr");
         let class_name = Name::from_string("Repr");
         let num_params = binders.len();
 
@@ -408,18 +408,18 @@ impl<'a> ElabCtx<'a> {
 
     /// Resolve a field's `Repr fieldTy` instance, failing LOUD (never silently
     /// minting a bogus instance) when the field type has no `Repr`. The
-    /// resolved instance is intentionally discarded — the minimal `reprPrec`
-    /// body does not consume it; this is the Lean-faithful requirement that
-    /// every field of a `deriving Repr` type be representable.
+    /// resolved instance is discarded — the opaque `reprPrec` body does not
+    /// consume it; this is the Lean-faithful requirement that every field of a
+    /// `deriving Repr` type be representable.
     fn ensure_field_repr(
         &mut self,
         struct_name: &Name,
-        field_name: &str,
+        field_name: &impl std::fmt::Display,
         class_name: &Name,
         field_ty: &Expr,
     ) -> Result<(), ElabError> {
         let repr_field_ty = Expr::app(self.mk_const(class_name), field_ty.clone());
-        // The resolved instance is intentionally discarded (the minimal body
+        // The resolved instance is intentionally discarded (the opaque body
         // does not consume it); resolution runs purely as the fail-loud gate.
         let _resolved =
             self.resolve_instance(&repr_field_ty)
@@ -431,9 +431,52 @@ impl<'a> ElabCtx<'a> {
         Ok(())
     }
 
-    /// Build `Repr.mk S (fun (_ : S) (_ : Nat) => "S")` for a monomorphic
-    /// struct, resolving every field's `Repr` instance first so a
-    /// non-representable field fails loud (see `ensure_field_repr`).
+    /// The opaque renderer every derived `Repr` body routes through, or a
+    /// typed refusal when the environment's `Repr` is not Clean's
+    /// String-valued model (under `.olean` import Lean's `Std.Format`-valued
+    /// class arrives instead, and this handler has no body to give it).
+    fn repr_render_const(&mut self, struct_name: &Name) -> Result<Expr, ElabError> {
+        let render = Name::from_string("Clean.Repr.render");
+        if self.env.get_const(&render).is_none() {
+            return Err(ElabError::Unsupported {
+                feature: format!(
+                    "deriving Repr for `{struct_name}` needs the default prelude's String-valued \
+                     `Repr` (`Clean.Repr.render` is not in this environment)"
+                ),
+            });
+        }
+        Ok(self.mk_const(&render))
+    }
+
+    /// `(Prod a_ty b_ty, Prod.mk a_ty b_ty a b)` with fresh universe levels
+    /// (collapsed with the instance's other levels by the caller's
+    /// `concretize_monomorphic_instance`).
+    fn mk_pair(&mut self, a_ty: Expr, b_ty: Expr, a: Expr, b: Expr) -> (Expr, Expr) {
+        let ty = Expr::apps(self.mk_const_str("Prod"), [a_ty.clone(), b_ty.clone()]);
+        let val = Expr::apps(self.mk_const_str("Prod.mk"), [a_ty, b_ty, a, b]);
+        (ty, val)
+    }
+
+    /// Pack the instance binders `vᵢ : tᵢ` right-nested:
+    /// `(t₁ × (t₂ × … × tₙ), (v₁, (v₂, …, vₙ)))`, or `(t₁, v₁)` for one
+    /// binder. `None` when there are none.
+    fn pack_right_nested(
+        &mut self,
+        tys: &[Expr],
+        fvars: &[clean_kernel::FVarId],
+    ) -> Option<(Expr, Expr)> {
+        let mut pairs = tys.iter().zip(fvars).rev();
+        let (last_ty, last_fvar) = pairs.next()?;
+        let mut acc = (last_ty.clone(), Expr::fvar(*last_fvar));
+        for (ty, fvar) in pairs {
+            acc = self.mk_pair(ty.clone(), acc.0, Expr::fvar(*fvar), acc.1);
+        }
+        Some(acc)
+    }
+
+    /// Build `Repr.mk S (@Clean.Repr.render S)` for a monomorphic struct,
+    /// resolving every field's `Repr` instance first so a non-representable
+    /// field fails loud (see `ensure_field_repr`).
     fn build_repr_value_monomorphic(
         &mut self,
         struct_name: &Name,
@@ -446,17 +489,8 @@ impl<'a> ElabCtx<'a> {
         }
 
         let struct_type = self.mk_const(struct_name);
-        let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-        // reprPrec := fun (_ : S) (_ : Nat) => "S"
-        let repr_fn = Expr::lam(
-            BinderInfo::Default,
-            struct_type.clone(),
-            Expr::lam(
-                BinderInfo::Default,
-                nat_ty,
-                Expr::str_lit(struct_name.to_string()),
-            ),
-        );
+        // reprPrec := @Clean.Repr.render S
+        let repr_fn = Expr::app(self.repr_render_const(struct_name)?, struct_type.clone());
         // `Repr.mk : {α : Type u} → (α → Nat → String) → Repr α` — supply the
         // implicit `α := S` explicitly (the value is committed to the kernel
         // verbatim; no implicit-arg insertion runs at registration).
@@ -472,10 +506,14 @@ impl<'a> ElabCtx<'a> {
     /// `build_parametric_instance_type`:
     /// ```text
     /// fun {α₁ … αₙ} [inst₁ : Repr α₁] … [instₙ : Repr αₙ] =>
-    ///   Repr.mk (S α₁ … αₙ) (fun (_ : S α₁ … αₙ) (_ : Nat) => "S")
+    ///   Repr.mk (S α₁ … αₙ)
+    ///     (fun (x : S α₁ … αₙ) => Clean.Repr.render ((inst₁, …, instₙ), x))
     /// ```
-    /// Each field's `[Repr fieldTy]` instance is resolved against the opened
-    /// `[Repr αᵢ]` constraint binders (fail-loud) before the body is built.
+    /// The constraint instances ride INTO the opaque renderer with the value,
+    /// so `S Nat` rendered through two different `[Repr Nat]` instances is two
+    /// renderings, as in Lean. Each field's `[Repr fieldTy]` instance is
+    /// resolved against the opened `[Repr αᵢ]` constraint binders (fail-loud)
+    /// before the body is built.
     fn build_repr_value_parametric(
         &mut self,
         struct_name: &Name,
@@ -528,17 +566,21 @@ impl<'a> ElabCtx<'a> {
         }
         resolve_result?;
 
-        // reprPrec := fun (_ : S α…) (_ : Nat) => "S" — minimal, closed body.
-        let nat_ty = Expr::const_(Name::from_string("Nat"), vec![]);
-        let repr_fn = Expr::lam(
-            BinderInfo::Default,
-            struct_type.clone(),
-            Expr::lam(
-                BinderInfo::Default,
-                nat_ty,
-                Expr::str_lit(struct_name.to_string()),
-            ),
-        );
+        // reprPrec := fun (x : S α…) => Clean.Repr.render ((inst₁, …), x)
+        let render = self.repr_render_const(struct_name)?;
+        let repr_fn = match self.pack_right_nested(&constraint_tys, &constraint_fvars) {
+            Some((insts_ty, insts)) => {
+                let x_fvar = self.fresh_fvar();
+                let (packed_ty, packed) =
+                    self.mk_pair(insts_ty, struct_type.clone(), insts, Expr::fvar(x_fvar));
+                Expr::lam(
+                    BinderInfo::Default,
+                    struct_type.clone(),
+                    Expr::app(Expr::app(render, packed_ty), packed).abstract_fvar(x_fvar),
+                )
+            }
+            None => Expr::app(render, struct_type.clone()),
+        };
 
         // Repr.mk (S α₁ … αₙ) reprPrec — supply the implicit `α := S …`.
         let mut value = Expr::app(
@@ -578,7 +620,7 @@ impl<'a> ElabCtx<'a> {
         binders: &[SurfaceBinder],
         fields: &[SurfaceField],
     ) -> Result<DerivedInstance, ElabError> {
-        let instance_name = Name::from_string(&format!("inst{struct_name}Inhabited"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "Inhabited");
         let class_name = Name::from_string("Inhabited");
         let num_params = binders.len();
 
@@ -623,8 +665,8 @@ impl<'a> ElabCtx<'a> {
         class_name: &Name,
         fields: &[SurfaceField],
     ) -> Result<Expr, ElabError> {
-        let ctor_name_str = format!("{struct_name}.mk");
-        let mut ctor_app = self.mk_const_str(&ctor_name_str);
+        let ctor_name = struct_name.clone().str("mk");
+        let mut ctor_app = self.mk_const(&ctor_name);
 
         for field in fields {
             let field_ty = self.elaborate(&field.ty)?;
@@ -687,8 +729,8 @@ impl<'a> ElabCtx<'a> {
         }
 
         // S.mk applied to the type-parameter fvars.
-        let ctor_name_str = format!("{struct_name}.mk");
-        let mut ctor_app = self.mk_const_str(&ctor_name_str);
+        let ctor_name = struct_name.clone().str("mk");
+        let mut ctor_app = self.mk_const(&ctor_name);
         for fv in &param_fvars {
             ctor_app = Expr::app(ctor_app, Expr::fvar(*fv));
         }
@@ -773,7 +815,7 @@ impl<'a> ElabCtx<'a> {
     fn field_inhabited_default(
         &mut self,
         struct_name: &Name,
-        field_name: &str,
+        field_name: &impl std::fmt::Display,
         class_name: &Name,
         field_ty: Expr,
     ) -> Result<Expr, ElabError> {
@@ -808,7 +850,7 @@ impl<'a> ElabCtx<'a> {
         fields: &[SurfaceField],
         _field_names: &[Name],
     ) -> Result<DerivedInstance, ElabError> {
-        let instance_name = Name::from_string(&format!("inst{struct_name}DecidableEq"));
+        let instance_name = crate::derive::builtin_instance_name(struct_name, "DecidableEq");
         let class_name = Name::from_string("DecidableEq");
         let num_params = binders.len();
 
@@ -882,14 +924,25 @@ impl<'a> ElabCtx<'a> {
         };
 
         // Elaborate each field's type; bail if any fails to elaborate.
+        //
+        // `instantiate_levels` is not cosmetic here. `ElabCtx::mk_const` mints a
+        // FRESH level param per universe-polymorphic constant reference and lets
+        // unification solve it, so an APPLIED field type comes back as
+        // `@List.{u_3} Nat` with `u_3` solved in the meta state but not yet
+        // written into the expression. The field type is embedded verbatim in the
+        // derived term (the `congrArg` domain, the field binder, and — new — the
+        // level the composed `instDecidableEqList` is instantiated at), and a
+        // stray `u_3` there is exactly #3393's `UndefinedLevelParam`. Substituting
+        // the solved levels first keeps the resolver reading a closed level.
         let mut ctor_fields: Vec<(Name, Expr)> = Vec::with_capacity(fields.len());
         for field in fields {
             let field_ty = self.elaborate(&field.ty).ok()?;
-            ctor_fields.push((Name::from_string(&field.name), field_ty));
+            let field_ty = self.metas.instantiate_levels(&field_ty);
+            ctor_fields.push((field.name.name().clone(), field_ty));
         }
 
         let ctor = CtorInfo2 {
-            name: Name::from_string(&format!("{struct_name}.mk")),
+            name: struct_name.clone().str("mk"),
             fields: ctor_fields,
             is_recursive: false,
         };

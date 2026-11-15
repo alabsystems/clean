@@ -12,9 +12,13 @@
 //! remaining 7 verbs (`find`/`graph`/`diff`/`verify`/`download`/`export`/
 //! `release`) via `PassthroughArgs` delegation after a regression between
 //! `ae3772027` (original passthrough absorption) and `f43429751` (partial
-//! re-type) dropped them. All verbs call the library-hosted functions in
-//! [`crate::mathverse_bin_cmds::commands`] so `clean mathverse <verb>` and the
-//! standalone `mathverse` binary stay byte-for-byte identical by construction.
+//! re-type) dropped them. Only those passthrough verbs (plus `upload`/`serve`)
+//! call the library-hosted functions in [`crate::mathverse_bin_cmds::commands`]
+//! and so share code with the standalone `mathverse` binary; `search`/`info`/
+//! `stats`/`systems` go through [`dispatch`] (mirroring the retired
+//! `mathverse_search` output, which differs from the standalone table),
+//! `list`/`sample`/`deps`/`version` through [`browse_dispatch`], and every other
+//! verb through its own `cli::*_dispatch` module.
 
 mod browse_common;
 mod browse_dispatch;
@@ -46,6 +50,7 @@ mod per_constant_load;
 /// truth for the `min(cpus, max(1, ram_gib / PER_WORKER_GIB))` clamp).
 pub mod ram_budget;
 mod replay_dispatch;
+mod stamp_family_audit;
 mod stamp_verified_dispatch;
 mod trust_receipt_cmd;
 
@@ -122,7 +127,7 @@ pub enum MathverseCommands {
     Release(PassthroughArgs),
     /// Graduate kernel-verified project theorems (with carried definition
     /// dependencies) into a Cake-tagged shard with a digest-bound
-    /// `mathverse-graduation-v2` record.
+    /// `mathverse-graduation-v3.2` record (v3.1 and older are read as legacy).
     Graduate(GraduateArgs),
     /// Build a persistent novelty-baseline index (`MVBIDX01`) over a
     /// release's `.mathverse` shards so `graduate --baseline-index` can pin
@@ -145,7 +150,8 @@ pub enum MathverseCommands {
     ValidateReplayReport(ValidateReplayReportArgs),
     /// Convert `.olean` input(s) to `.mathverse` shards, re-verify the corpus
     /// in Clean's kernel, and stamp every genuinely kernel-verified constant
-    /// into the shard bytes on disk (`KernelVerified`). Prints a JSON summary.
+    /// into the shard bytes on disk (`KernelVerified`). Prints a human-readable
+    /// summary (`--json` for JSON).
     StampVerified(StampVerifiedArgs),
     /// Assemble raw Isabelle zproof exports (the capture hook's per-theory
     /// `.jsonl` files) into ONE serial-sorted deduplicated corpus, then replay
@@ -629,9 +635,11 @@ pub struct SystemsArgs {
 pub struct ListArgs {
     /// Filter by source-system name (case-insensitive, e.g. `lean4`).
     ///
-    /// Accepts the canonical `SourceSystem` display label or its numeric id.
-    /// Unknown values return zero rows rather than erroring, matching the
-    /// standalone binary's "no entries" behaviour.
+    /// Accepts one of the 16 labels `parse_source_system` knows (lean4, coq, agda,
+    /// idris2, fstar, cedille, isabelle, hollight, hol4, metamath, mizar, dafny,
+    /// why3, clean, gammacrown, arxiv) or a numeric id. An unrecognised value
+    /// applies NO filter — every declaration is listed, up to `--limit` — where
+    /// the standalone binary exits 1 with `Unknown system`.
     #[arg(long)]
     pub system: Option<String>,
     /// Maximum number of rows to emit.
@@ -814,8 +822,9 @@ pub struct StampVerifiedArgs {
     /// in one invocation. SOUNDNESS-NEUTRAL: every constant is still installed
     /// through the same checked `verify_corpus_incremental` (`add_decl`) path;
     /// rolling elision can only make a later proof FAIL to verify (a completeness
-    /// cost governed by `--closure-elide`), never falsely accept one. Requires
-    /// `--closure-root`.
+    /// cost governed by `--closure-elide`), never falsely accept one. With no
+    /// `--closure-root` the inputs are verified in the given order against the
+    /// bare prelude environment (`--parallel` refuses instead).
     #[arg(long)]
     pub single_pass: bool,
     /// PARALLEL mode (PARAGON): build ONE shared, immutable base `Environment`
@@ -834,7 +843,9 @@ pub struct StampVerifiedArgs {
     #[arg(long)]
     pub parallel: bool,
     /// Worker-thread count for `--parallel` (the rayon pool size). Defaults to
-    /// the number of available CPU cores. Ignored unless `--parallel` is set.
+    /// `ram_aware_default_jobs()`: the CPU count clamped by physical RAM (one
+    /// worker per `PER_WORKER_GIB`, at most 4 when RAM is unknown). Ignored
+    /// unless `--parallel` is set.
     #[arg(long)]
     pub jobs: Option<usize>,
     /// Enable the content-addressed incremental cache (paragon "import again and
@@ -1560,7 +1571,11 @@ pub enum MathverseCliError {
     #[error("trust-receipt: {0}")]
     TrustReceipt(String),
     /// Requested shard directory does not exist.
-    #[error("shard directory `{0}` does not exist — run ./scripts/download_mathverse_library.sh")]
+    #[error(
+        "shard directory `{0}` does not exist — run \
+         ./scripts/download_mathverse_library.sh --output-dir={0} (its default \
+         destination is data/mathverse-library/)"
+    )]
     ShardDirMissing(PathBuf),
     /// Failed to read an entry from the shard directory.
     #[error("failed to read shard directory `{path}`: {source}")]
@@ -1650,6 +1665,29 @@ pub enum MathverseCliError {
         /// Module whose closure failed to load.
         module: String,
         /// Underlying loader failure.
+        reason: String,
+    },
+    /// `clean mathverse stamp-verified` refuses the run at import: the `.olean`
+    /// loader's module-trust rules refused an artifact of the trusted base
+    /// (`clean_olean::ImportError::is_inconsistent_artifact`: one name, one
+    /// declaration; closed over its imports; no declaration depends on
+    /// itself), so nothing of the run was checked or stamped. The stamp lanes
+    /// keep those rules (they do not load under
+    /// `OleanImportPolicy::with_replay_refusals`): `--parallel` checks every
+    /// target against ONE base holding all of them, where a reference from one
+    /// target to a name only another declares resolves, and the sequential
+    /// lanes' base is nothing but trusted imports, replayed by nobody.
+    #[error(
+        "stamp-verified: the import for `{module}` is refused, naming {}: {reason}",
+        names.join(", ")
+    )]
+    StampImportRefused {
+        /// Module whose closure (or base) was being loaded.
+        module: String,
+        /// The declarations the refusal is about
+        /// (`clean_olean::ImportError::declaration_names`).
+        names: Vec<String>,
+        /// The loader's refusal.
         reason: String,
     },
     /// `CLEAN_LAZY_CLOSURE=1` was requested but the closure `.mathverse` shards
@@ -1755,9 +1793,11 @@ pub enum MathverseCliError {
 /// Callers (the top-level `clean-cli` binary) construct the clap args via
 /// their own parser and pass the resulting [`MathverseArgs`] here. No shelling
 /// out to the deprecated `mathverse_search` or standalone `mathverse` binaries — the
-/// Search/Info/Stats/Systems verbs call the library directly, and every
-/// other verb calls the library-hosted `cmd_*` functions in
-/// [`crate::mathverse_bin_cmds::commands`].
+/// Search/Info/Stats/Systems verbs call the library directly (`dispatch`),
+/// List/Sample/Deps/Version go through `browse_dispatch`, the passthrough verbs
+/// (Find/Graph/Diff/Verify/Download/Upload/Serve/Export/Release) call the
+/// library-hosted `cmd_*` functions in [`crate::mathverse_bin_cmds::commands`],
+/// and every other verb has its own `cli::*_dispatch` module.
 pub fn run(args: MathverseArgs) -> Result<(), MathverseCliError> {
     match args.command {
         MathverseCommands::Search(a) => dispatch::cmd_search(a),
@@ -1868,8 +1908,21 @@ where
 }
 
 // Parse tests for every `clean mathverse <verb>` variant live in a sibling file
-// so this module stays under the 500-line file-size cap. Same pattern as
+// so they do not add to a module already far past the 500-line guideline (the
+// split kept it under when the module was 386 lines, 2026-05). Same pattern as
 // `browse_dispatch.rs` ↔ `browse_dispatch_tests.rs`.
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod tests;
+
+// The re-check lanes against `.olean`s Lean's kernel never admitted (P0_SOUND).
+#[cfg(test)]
+mod replay_forged_lane_tests;
+// The same lanes on universe-level equalities (DECISIONS R150).
+#[cfg(test)]
+mod replay_forged_level_lane_tests;
+
+// The same lanes on kernel-fidelity fixtures (dependent-container nested blocks,
+// the `Nat.pow` exponent cap, Lean's level equivalence; DECISIONS R139-R141).
+#[cfg(test)]
+mod kernel_fidelity_lane_tests;

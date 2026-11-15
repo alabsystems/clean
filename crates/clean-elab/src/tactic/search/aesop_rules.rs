@@ -4,7 +4,7 @@
 
 //! Aesop rule candidate generation and builder support.
 
-use crate::tactic::{apply, cases, left_, right_, use_single, Goal, ProofState};
+use crate::tactic::{apply, left_, right_, use_single, Goal, ProofState};
 use clean_kernel::name::Name;
 use clean_kernel::{AesopRuleBuilder, AesopRulePhase, Expr, ExprKind, Level};
 
@@ -47,7 +47,7 @@ fn make_rule_candidate(
         .level_params
         .iter()
         .enumerate()
-        .map(|(i, _)| Level::param(Name::from_string(&format!("_u{i}"))))
+        .map(|(i, _)| Level::param(Name::anon().str(format!("_u{i}"))))
         .collect();
 
     let const_type = if levels.is_empty() {
@@ -180,7 +180,7 @@ pub(super) fn aesop_get_candidates(
 
     // Candidate: left/right for Or
     if let ExprKind::Const(name, _) = target_head.kind() {
-        if name.to_string() == "Or" {
+        if name == &Name::from_string("Or") {
             candidates.push(AesopCandidate {
                 priority: 50,
                 apply: Box::new(left_),
@@ -192,7 +192,7 @@ pub(super) fn aesop_get_candidates(
         }
 
         // Candidate: existsi for Exists with intelligent witness enumeration
-        if name.to_string() == "Exists" {
+        if name == &Name::from_string("Exists") {
             // Extract the witness type from the existential
             if let Some(witness_type) = extract_exists_witness_type(&target) {
                 // Enumerate candidate witnesses for this type
@@ -336,7 +336,7 @@ pub(super) fn aesop_get_candidates(
                 .level_params
                 .iter()
                 .enumerate()
-                .map(|(i, _)| Level::param(Name::from_string(&format!("_u{i}"))))
+                .map(|(i, _)| Level::param(Name::anon().str(format!("_u{i}"))))
                 .collect();
 
             let const_type = if levels.is_empty() {
@@ -409,10 +409,12 @@ pub(super) fn aesop_get_candidates(
         let decl_ty_head = decl.ty.get_app_fn();
         if let ExprKind::Const(name, _) = decl_ty_head.kind() {
             if let Some(priority) = cases_type_priorities.get(name) {
-                let hyp_name = decl.name.clone();
+                let hyp_fvar = decl.fvar;
                 candidates.push(AesopCandidate {
                     priority: *priority,
-                    apply: Box::new(move |s| cases(s, &hyp_name)),
+                    apply: Box::new(move |s| {
+                        crate::tactic::proof_manipulation::cases_fvar(s, hyp_fvar)
+                    }),
                 });
             }
         }
@@ -468,7 +470,7 @@ pub(super) fn aesop_get_candidates(
                             .level_params
                             .iter()
                             .enumerate()
-                            .map(|(i, _)| Level::param(Name::from_string(&format!("_u{i}"))))
+                            .map(|(i, _)| Level::param(Name::anon().str(format!("_u{i}"))))
                             .collect();
                         let lvls = levels.clone();
                         candidates.push(AesopCandidate {

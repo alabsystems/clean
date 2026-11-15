@@ -32,23 +32,23 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
     );
     assert_eq!(
         record["provenance"]["clean_source_rev"].as_str(),
-        Some("c6388730ed3a6f3c4169e7228218d68ab9b7582d")
+        Some("047ebd0512cd5b1fd9146edb8506a182b09de2ec")
     );
     assert_eq!(
         record["supersedes_for_current_source_scope"].as_str(),
-        Some("data/crystal_chain_revalidation_2026-08-21_b03937e74.json")
+        Some("data/crystal_chain_revalidation_2026-08-21_lane18.json")
     );
     assert_eq!(
         record["provenance"]["trust_worktree_rev"].as_str(),
-        Some("c4e667ca51a4b6bd0bc3790e540cdabc707c45a1")
+        Some("321aaeda75478038420d97830f14724c33c8dc39")
     );
     assert_eq!(
         record["provenance"]["trustc_sha256"].as_str(),
-        Some("044fb2df5ac0c18f795139f121e15094eea62135be81396aca62142004f9ba1f")
+        Some("6c513314d5c99778345a2c2a60feef521b2ece2952149095bc9beded93b1206e")
     );
     assert_eq!(
         record["provenance"]["librustc_driver_sha256"].as_str(),
-        Some("4e2a161f6e0d9f6ddf184d5d744c6f46fa9defba52028addfe31b4885fde510c")
+        Some("13997326c927b73e5768c42844564d18d7828ab83be55112a8ca62ebc98f446f")
     );
     assert_eq!(
         record["generator"]["script"].as_str(),
@@ -85,45 +85,65 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
     );
     assert_eq!(
         rebaseline["supersedes_for_current_source_scope"].as_str(),
-        Some("data/crystal_fixture_rebaseline_2026-08-21_b03937e74.json")
+        Some("data/crystal_fixture_rebaseline_2026-08-21_lane18.json")
     );
+    // The 2026-10-07 event is a NUMBERING RE-PIN, not a successor: the live
+    // dump (trustc 321aaeda7) renumbered every chained body, so the reviewed
+    // manifest states each load-bearing delta explicitly instead of inheriting
+    // the lane18 bindings, and no chain entered the body set.
     assert_eq!(
         bindings["binding_mode"].as_str(),
-        Some("chain-addition-successor"),
-        "chain 18 entered the comparator body set through the explicit reviewed \
-         chain-addition mode, never as a silent expansion"
+        Some("numbering-repin"),
+        "a renumbered fixture set must re-pin its bindings explicitly, never inherit them"
     );
     assert_eq!(
-        bindings["chain_additions"],
-        serde_json::json!(["has_loose_bvars", "loose_bvar_range_callee"]),
-        "the addition event names exactly the two chain-18 fixtures"
+        rebaseline["chain_additions"],
+        serde_json::json!([]),
+        "no chain entered the comparator body set in this event"
+    );
+    let stated = bindings["bindings"]
+        .as_array()
+        .expect("the manifest must carry its bindings");
+    assert_eq!(
+        stated.len(),
+        36,
+        "every moved functy/type-table/callee/global token of the 20 renumbered bodies"
     );
     assert_eq!(
-        rebaseline["chain_additions"], bindings["chain_additions"],
-        "the append-only ledger records the same reviewed addition set"
+        rebaseline["bindings"], bindings["bindings"],
+        "the append-only ledger records exactly the reviewed binding set"
     );
-    assert_eq!(
-        bindings["prior_rebaseline_record"].as_str(),
-        rebaseline["supersedes_for_current_source_scope"].as_str()
-    );
-    assert_eq!(
-        bindings["prior_binding_manifest"].as_str(),
-        Some("data/crystal_fixture_rebaseline_bindings_2026-08-21_b03937e74.json")
-    );
-    assert!(
-        bindings["bindings"].as_array().is_some_and(Vec::is_empty),
-        "byte-identical fixtures inherit the authenticated predecessor bindings; a new numeric \
-         delta here would require an explicit proof/spec/tag re-pin"
-    );
-    for predecessor in [
-        bindings["prior_rebaseline_record"].as_str().unwrap_or(""),
-        bindings["prior_binding_manifest"].as_str().unwrap_or(""),
-    ] {
+    for b in stated {
+        let stem = b["stem"].as_str().expect("a binding names its stem");
+        let pairs = rebaseline["fixtures"][stem]["token_pairs"]
+            .as_array()
+            .unwrap_or_else(|| panic!("{CURRENT_REBASELINE} has no token pairs for {stem}"));
         assert!(
-            repo_root().join(predecessor).is_file(),
-            "the current successor names missing append-only predecessor {predecessor}"
+            pairs
+                .iter()
+                .any(|p| p["class"] == b["class"] && p["old"] == b["old"] && p["new"] == b["new"]),
+            "{stem}: binding {} {} -> {} is not in the ledger's exact live delta",
+            b["class"],
+            b["old"],
+            b["new"]
+        );
+        assert!(
+            b["anchors"].as_array().is_some_and(|a| !a.is_empty()),
+            "{stem}: a binding with no consumer anchor binds nothing"
         );
     }
+    assert_eq!(
+        rebaseline["fixtures"]["strict_monads"]["verdict_before"].as_str(),
+        Some("IDENTICAL"),
+        "strict_monads was RE-DERIVED (047ebd051) before this re-pin, never re-recorded by it"
+    );
+    let predecessor = rebaseline["supersedes_for_current_source_scope"]
+        .as_str()
+        .unwrap_or("");
+    assert!(
+        repo_root().join(predecessor).is_file(),
+        "the current rebaseline names missing append-only predecessor {predecessor}"
+    );
     let binary_sha = rebaseline["provenance"]["dump_binary_sha256"]
         .as_str()
         .expect("the rebaseline must bind the binary TrustIR artifact");
@@ -153,30 +173,42 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
         Some(expected_driver_sha),
         "the chain and rebaseline records hash different measurement drivers"
     );
-    let driver_path = repo_root().join(measurement_driver);
-    let hash = std::process::Command::new("python3")
-        .args([
-            "-c",
-            "import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],'rb').read()).hexdigest())",
-        ])
-        .arg(&driver_path)
-        .output()
-        .unwrap_or_else(|e| {
-            panic!(
-                "could not hash {} with python3 ({e})",
-                driver_path.display()
-            )
-        });
-    assert!(
-        hash.status.success(),
-        "could not hash {}: {}",
-        driver_path.display(),
-        String::from_utf8_lossy(&hash.stderr)
-    );
+    // Two checks where there was one, because the one stopped being true for
+    // a reason that was not a defect. This record hashed the driver as it stood
+    // at its own `clean_source_rev`; `7e173b8a8` (2026-09-20) then changed the
+    // committed driver (`--lib`: build the subject library only), and the
+    // at-head successor minted minutes later (`b93219f90`) was measured WITH
+    // the changed driver and hashes it. Comparing this record's hash to the
+    // committed driver therefore went red on a driver change the newer record
+    // already covers. So: this record's hash must be the driver at the rev it
+    // names (its own claim, re-derived from history), and the NEWEST live dump
+    // bound to the scope must hash the driver committed now — which still
+    // fails the moment the driver moves without a new dump.
+    let record_rev = record["provenance"]["clean_source_rev"]
+        .as_str()
+        .expect("the chain record names the clean rev it measured");
     assert_eq!(
-        String::from_utf8_lossy(&hash.stdout).trim(),
+        sha256_hex(&git_show(record_rev, measurement_driver)),
         expected_driver_sha,
-        "the committed measurement driver moved after the live dump was taken"
+        "{CURRENT_RECORD} hashes a measurement driver that is not {measurement_driver} as \
+         committed at the rev it names ({record_rev})"
+    );
+    let scope = read_json("data/crystal_freshness_scope.json");
+    let newest = scope["record"]
+        .as_str()
+        .expect("the scope names the newest revalidation record");
+    let newest_record = read_json(newest);
+    assert_eq!(
+        newest_record["provenance"]["measurement_driver"].as_str(),
+        Some(measurement_driver),
+        "{newest} names a different measurement driver than {CURRENT_RECORD}"
+    );
+    let committed = std::fs::read(repo_root().join(measurement_driver))
+        .unwrap_or_else(|e| panic!("{measurement_driver} is unreadable ({e})"));
+    assert_eq!(
+        Some(sha256_hex(&committed).as_str()),
+        newest_record["provenance"]["measurement_driver_sha256"].as_str(),
+        "the committed measurement driver moved after the newest live dump ({newest}) was taken"
     );
 
     let invariants = record["fatal_invariants"]
@@ -209,7 +241,7 @@ fn enum_tag_stage2_revalidation_covers_every_chain_and_all_links() {
             .as_object()
             .unwrap_or_else(|| {
                 panic!(
-                    "{file}: current fixture text was source-bound to the Clean-0.4 dump, but the evidence has no \
+                    "{file}: current fixture text was source-bound to the 047ebd051 dump, but the evidence has no \
                  complete current_source_bound_pin"
             )
             });
@@ -414,4 +446,45 @@ fn source_bound_rebaseline_fail_closed_controls_pass() {
         String::from_utf8_lossy(&output.stdout).contains("8 fail-closed controls"),
         "the selftest exited without running the complete control set"
     );
+}
+
+/// `git show <rev>:<path>` in this repository, as bytes. Fails closed: a
+/// history this checkout does not carry (a shallow clone) is not evidence.
+pub(super) fn git_show(rev: &str, path: &str) -> Vec<u8> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(repo_root())
+        .args(["show", &format!("{rev}:{path}")])
+        .output()
+        .unwrap_or_else(|e| panic!("could not run git to read {path} at {rev} ({e})"));
+    assert!(
+        out.status.success(),
+        "git cannot read {path} at {rev}: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    out.stdout
+}
+
+/// SHA-256 of `bytes` as lowercase hex, via `python3` (as this module's other
+/// digests are), fed on stdin.
+pub(super) fn sha256_hex(bytes: &[u8]) -> String {
+    use std::io::Write as _;
+    let mut child = std::process::Command::new("python3")
+        .args([
+            "-c",
+            "import hashlib,sys; print(hashlib.sha256(sys.stdin.buffer.read()).hexdigest())",
+        ])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn()
+        .unwrap_or_else(|e| panic!("could not run python3 to hash ({e})"));
+    child
+        .stdin
+        .take()
+        .expect("piped stdin")
+        .write_all(bytes)
+        .expect("write the bytes to hash");
+    let out = child.wait_with_output().expect("python3 finishes");
+    assert!(out.status.success(), "python3 could not hash");
+    String::from_utf8_lossy(&out.stdout).trim().to_string()
 }

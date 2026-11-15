@@ -26,7 +26,7 @@ TEST_THREADS = 1
 INITIAL_LIST_TIMEOUT_SECONDS = 1800
 SELECTOR_LIST_TIMEOUT_SECONDS = 60
 SHARD_TIMEOUT_SECONDS = 900
-CARGO_TEST = ["cargo", "test", "--locked", "--lib", "-p", "clean-auto"]
+CARGO_TEST = ["targo", "--unverified", "test", "--locked", "--lib", "-p", "clean-auto"]
 
 
 @dataclass

@@ -1,0 +1,6129 @@
+{
+ "schema": "clean.crystal.fixture_rebaseline/v1",
+ "measured_utc": "2026-10-07T12:20:00Z",
+ "reason": "Source-bound numbering re-pin after the strict_monads field-83 re-derivation (047ebd051). Live dump at clean 047ebd051 with trustc 321aaeda7 (aterm package store trust/9192), byte-identical to the 612be4626 dump in bin, txt and coverage: 20 bodies NUMBERING-ONLY (functy/type-table/callee/global/loc indices only, zero instructions moved), strict_monads IDENTICAL. Every reader-A core re-projected from this dump byte-identical to its committed core. 36 load-bearing bindings re-pinned through the tag tables and the minter before this run; see docs/DECISIONS.md.",
+ "supersedes_for_current_source_scope": "data/crystal_fixture_rebaseline_2026-08-21_lane18.json",
+ "provenance": {
+  "clean_source_rev": "047ebd0512cd5b1fd9146edb8506a182b09de2ec",
+  "clean_source_tree": "75d71f523ef49a3dd3ced6d56f1ad87a0c85831a",
+  "clean_kernel_src_sha256": "0bf6d530ac72c6883a444dfe1d88772f5c430c80be9214f8bdd1e996b2a8d78b",
+  "trust_worktree_rev": "321aaeda75478038420d97830f14724c33c8dc39",
+  "trustc_sha256": "6c513314d5c99778345a2c2a60feef521b2ece2952149095bc9beded93b1206e",
+  "librustc_driver_sha256": "13997326c927b73e5768c42844564d18d7828ab83be55112a8ca62ebc98f446f",
+  "dump_binary_sha256": "052660686e2114573d429f8446a9cba9dc8bdb48308840119e0d3354e3483b3b",
+  "dump_ir_sha256": "d3eee57ad5d17a4e1e4dff3127abf24b99994961a2c6b8fa40b3c4678f1a8292",
+  "coverage_sha256": "5e16957b863616f5ca6bd099d3511c0f9caaaa9f03530a5c9d7ae9cf5be52932",
+  "pre_report": "crystal_fixture_freshness_2026-10-07_047ebd051.json",
+  "pre_report_sha256": "23f0591fa7f79656dab29ecc347e77f9ae1cbcc9fb77613529e5d1ac112e100e",
+  "binding_manifest": "crystal_fixture_rebaseline_bindings_2026-10-07_047ebd051.json",
+  "binding_manifest_sha256": "eb7c4e9a47b2da6dcf31c86b5386a06d85b0c9761b5493dbdce8e8c16d53d8fd",
+  "measurement_driver": "scripts/trust_ir_build.sh",
+  "measurement_driver_sha256": "05ad4c7973545496f8aefa22ec361a9b64470c9c41314801f849ab31090d8315"
+ },
+ "complete_body_set": [
+  "bvar_in_range",
+  "expr_path_step_clone",
+  "flat_flags_contains",
+  "flat_flags_with",
+  "float_add",
+  "float_div",
+  "float_mul",
+  "float_sub",
+  "from_source_system",
+  "get_char_val_trunc",
+  "has_cubical_layer",
+  "has_loose_bvars",
+  "is_valid_char",
+  "level_is_zero",
+  "level_is_zero_deref_callee",
+  "level_kind_ord",
+  "loose_bvar_range_callee",
+  "meta_tag_shl",
+  "node_id_index",
+  "simp_priority_value",
+  "strict_monads"
+ ],
+ "chain_additions": [],
+ "primary_body_count": 19,
+ "helper_body_count": 2,
+ "bindings": [
+  {
+   "stem": "bvar_in_range",
+   "class": "functy-index",
+   "old": "functy.467",
+   "new": "functy.435",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_br.tags.json",
+     "must_contain": "\"functy\": 435",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "expr_path_step_clone",
+   "class": "functy-index",
+   "old": "functy.859",
+   "new": "functy.903",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ep.tags.json",
+     "must_contain": "\"functy\": 903",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "expr_path_step_clone",
+   "class": "type-table-index",
+   "old": "enum.184",
+   "new": "enum.225",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ep.tags.json",
+     "must_contain": "\"crate_id\": 225",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ep.defs.txt",
+     "must_contain": "IRTy.enum_ 225",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_contains",
+   "class": "functy-index",
+   "old": "functy.488",
+   "new": "functy.459",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fc.tags.json",
+     "must_contain": "\"functy\": 459",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_contains",
+   "class": "type-table-index",
+   "old": "struct.1017",
+   "new": "struct.815",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fc.tags.json",
+     "must_contain": "\"crate_id\": 815",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fc.defs.txt",
+     "must_contain": "IRTy.struct_ 815",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_with",
+   "class": "functy-index",
+   "old": "functy.489",
+   "new": "functy.460",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fw.tags.json",
+     "must_contain": "\"functy\": 460",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "flat_flags_with",
+   "class": "type-table-index",
+   "old": "struct.1017",
+   "new": "struct.815",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fw.tags.json",
+     "must_contain": "\"crate_id\": 815",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fw.defs.txt",
+     "must_contain": "IRTy.struct_ 815",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_add",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fa.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_div",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fd.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_mul",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fm.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "float_sub",
+   "class": "functy-index",
+   "old": "functy.381",
+   "new": "functy.363",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs2.tags.json",
+     "must_contain": "\"functy\": 363",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "from_source_system",
+   "class": "functy-index",
+   "old": "functy.554",
+   "new": "functy.518",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.tags.json",
+     "must_contain": "\"functy\": 518",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "from_source_system",
+   "class": "type-table-index",
+   "old": "enum.13",
+   "new": "enum.17",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.tags.json",
+     "must_contain": "\"crate_id\": 17",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.defs.txt",
+     "must_contain": "IRTy.enum_ 17",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "from_source_system",
+   "class": "type-table-index",
+   "old": "enum.178",
+   "new": "enum.211",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.tags.json",
+     "must_contain": "\"crate_id\": 211",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_fs.defs.txt",
+     "must_contain": "IRTy.enum_ 211",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "get_char_val_trunc",
+   "class": "functy-index",
+   "old": "functy.370",
+   "new": "functy.352",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_gc.tags.json",
+     "must_contain": "\"functy\": 352",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_cubical_layer",
+   "class": "type-table-index",
+   "old": "enum.13",
+   "new": "enum.17",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_h2.tags.json",
+     "must_contain": "\"crate_id\": 17",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_h2.defs.txt",
+     "must_contain": "IRTy.enum_ 17",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_loose_bvars",
+   "class": "callee-index",
+   "old": "@func.3657",
+   "new": "@func.1729",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"crate_id\": 1729",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_loose_bvars",
+   "class": "functy-index",
+   "old": "functy.435",
+   "new": "functy.410",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"functy\": 410",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "has_loose_bvars",
+   "class": "type-table-index",
+   "old": "struct.29",
+   "new": "struct.765",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"crate_id\": 765",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.defs.txt",
+     "must_contain": "IRTy.struct_ 765",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "is_valid_char",
+   "class": "functy-index",
+   "old": "functy.377",
+   "new": "functy.359",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_vc.tags.json",
+     "must_contain": "\"functy\": 359",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "callee-index",
+   "old": "@func.3894",
+   "new": "@func.1947",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 1947",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 1947",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/tests/crystal_a2_mint/callee_identity.rs",
+     "must_contain": "@func.1947",
+     "count": 2
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "callee-index",
+   "old": "@func.3905",
+   "new": "@func.1961",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 1961",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 1961",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/tests/crystal_a2_mint/callee_identity.rs",
+     "must_contain": "@func.1961",
+     "count": 2
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero",
+   "class": "type-table-index",
+   "old": "enum.2",
+   "new": "enum.3",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.tags.json",
+     "must_contain": "\"crate_id\": 3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lz.defs.txt",
+     "must_contain": "IRTy.enum_ ir_d3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.defs.txt",
+     "must_contain": "IRTy.enum_ ir_d3",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "callee-index",
+   "old": "@func.6516",
+   "new": "@func.4925",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 4925",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "callee-index",
+   "old": "@func.7211",
+   "new": "@func.4924",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 4924",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "functy-index",
+   "old": "functy.45",
+   "new": "functy.22",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"functy\": 22",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_is_zero_deref_callee",
+   "class": "global-index",
+   "old": "@global.4557",
+   "new": "@global.1135",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"crate_id\": 1135",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_lzc.tags.json",
+     "must_contain": "\"name\": \"__trust_promoted_1135\"",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_kind_ord",
+   "class": "functy-index",
+   "old": "functy.306",
+   "new": "functy.278",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ko.tags.json",
+     "must_contain": "\"functy\": 278",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "level_kind_ord",
+   "class": "type-table-index",
+   "old": "enum.2",
+   "new": "enum.3",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ko.tags.json",
+     "must_contain": "\"crate_id\": 3",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ko.defs.txt",
+     "must_contain": "IRTy.enum_ ir_d3",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "loose_bvar_range_callee",
+   "class": "functy-index",
+   "old": "functy.433",
+   "new": "functy.408",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"functy\": 408",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "loose_bvar_range_callee",
+   "class": "type-table-index",
+   "old": "struct.29",
+   "new": "struct.765",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.tags.json",
+     "must_contain": "\"crate_id\": 765",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_hlb.defs.txt",
+     "must_contain": "IRTy.struct_ 765",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "meta_tag_shl",
+   "class": "functy-index",
+   "old": "functy.118",
+   "new": "functy.116",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_mt.tags.json",
+     "must_contain": "\"functy\": 116",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "node_id_index",
+   "class": "functy-index",
+   "old": "functy.97",
+   "new": "functy.85",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ni.tags.json",
+     "must_contain": "\"functy\": 85",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "node_id_index",
+   "class": "type-table-index",
+   "old": "struct.323",
+   "new": "struct.210",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ni.tags.json",
+     "must_contain": "\"crate_id\": 210",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_ni.defs.txt",
+     "must_contain": "IRTy.struct_ 210",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "simp_priority_value",
+   "class": "functy-index",
+   "old": "functy.147",
+   "new": "functy.149",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_pv.tags.json",
+     "must_contain": "\"functy\": 149",
+     "count": 1
+    }
+   ]
+  },
+  {
+   "stem": "simp_priority_value",
+   "class": "type-table-index",
+   "old": "enum.127",
+   "new": "enum.135",
+   "anchors": [
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_pv.tags.json",
+     "must_contain": "\"crate_id\": 135",
+     "count": 1
+    },
+    {
+     "file": "crates/clean-verify/src/spec/core_spec/generated/ir_pv.defs.txt",
+     "must_contain": "IRTy.enum_ 135",
+     "count": 1
+    }
+   ]
+  }
+ ],
+ "fixtures": {
+  "has_cubical_layer": {
+   "def_path": "mode::CleanMode::has_cubical_layer",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 10,
+   "changed_lines": [
+    {
+     "line": 5,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %2 = load enum.13, ptr %0  ; #loc: 401 337 8",
+     "new": "    %2 = load enum.17, ptr %0  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = extractfield u8 %2, 0  ; #loc: 401 337 8",
+     "new": "    %3 = extractfield u8 %2, 0  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 401 337 8",
+     "new": "    switch %3 [ 2: bb1 3: bb2 default: bb3 ]  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = const bool true  ; #loc: 401 337 8",
+     "new": "    %4 = const bool true  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb4(%4)  ; #loc: 401 337 8",
+     "new": "    br bb4(%4)  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %5 = const bool true  ; #loc: 401 337 8",
+     "new": "    %5 = const bool true  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb4(%5)  ; #loc: 401 337 8",
+     "new": "    br bb4(%5)  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 15,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = const bool false  ; #loc: 401 337 8",
+     "new": "    %6 = const bool false  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 16,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb4(%6)  ; #loc: 401 337 8",
+     "new": "    br bb4(%6)  ; #loc: 214 337 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 337 8",
+       "new": "#loc: 214 337 8"
+      }
+     ]
+    },
+    {
+     "line": 18,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %1  ; #loc: 401 338 5",
+     "new": "    ret %1  ; #loc: 214 338 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 338 5",
+       "new": "#loc: 214 338 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 337 8",
+     "new": "#loc: 214 337 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 338 5",
+     "new": "#loc: 214 338 5"
+    }
+   ],
+   "old_sha256": "800aa4040fcb5a8afec8fe5ed5002f8f3983feb27788c1cda12736a07f2db19b",
+   "new_sha256": "8fb61c0361e7747a8c892a100f657686dc8f5be78916b26c58efe0b0dd048343",
+   "old_bytes": 579,
+   "new_bytes": 579
+  },
+  "level_kind_ord": {
+   "def_path": "level::Level::kind_ord",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 15,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @level::Level::kind_ord(functy.306) {",
+     "new": "rustcc fn @level::Level::kind_ord(functy.278) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.306",
+       "new": "functy.278"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %2 = load enum.2, ptr %0  ; #loc: 391 619 8",
+     "new": "    %2 = load enum.3, ptr %0  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.2",
+       "new": "enum.3"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = extractfield u8 %2, 0  ; #loc: 391 619 8",
+     "new": "    %3 = extractfield u8 %2, 0  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 391 619 8",
+     "new": "    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 default: bb5 ]  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = const u8 0  ; #loc: 391 620 27",
+     "new": "    %4 = const u8 0  ; #loc: 204 620 27",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 620 27",
+       "new": "#loc: 204 620 27"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%4)  ; #loc: 391 619 8",
+     "new": "    br bb6(%4)  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %5 = const u8 1  ; #loc: 391 621 30",
+     "new": "    %5 = const u8 1  ; #loc: 204 621 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 621 30",
+       "new": "#loc: 204 621 30"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%5)  ; #loc: 391 619 8",
+     "new": "    br bb6(%5)  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 15,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = const u8 2  ; #loc: 391 622 32",
+     "new": "    %6 = const u8 2  ; #loc: 204 622 32",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 622 32",
+       "new": "#loc: 204 622 32"
+      }
+     ]
+    },
+    {
+     "line": 16,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%6)  ; #loc: 391 619 8",
+     "new": "    br bb6(%6)  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 18,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %7 = const u8 3  ; #loc: 391 623 33",
+     "new": "    %7 = const u8 3  ; #loc: 204 623 33",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 623 33",
+       "new": "#loc: 204 623 33"
+      }
+     ]
+    },
+    {
+     "line": 19,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%7)  ; #loc: 391 619 8",
+     "new": "    br bb6(%7)  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 21,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %8 = const u8 4  ; #loc: 391 624 31",
+     "new": "    %8 = const u8 4  ; #loc: 204 624 31",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 624 31",
+       "new": "#loc: 204 624 31"
+      }
+     ]
+    },
+    {
+     "line": 22,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%8)  ; #loc: 391 619 8",
+     "new": "    br bb6(%8)  ; #loc: 204 619 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 619 8",
+       "new": "#loc: 204 619 8"
+      }
+     ]
+    },
+    {
+     "line": 24,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %1  ; #loc: 391 626 5",
+     "new": "    ret %1  ; #loc: 204 626 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 626 5",
+       "new": "#loc: 204 626 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.306",
+     "new": "functy.278"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.2",
+     "new": "enum.3"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 620 27",
+     "new": "#loc: 204 620 27"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 621 30",
+     "new": "#loc: 204 621 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 622 32",
+     "new": "#loc: 204 622 32"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 623 33",
+     "new": "#loc: 204 623 33"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 624 31",
+     "new": "#loc: 204 624 31"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 619 8",
+     "new": "#loc: 204 619 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 626 5",
+     "new": "#loc: 204 626 5"
+    }
+   ],
+   "old_sha256": "48bb0520a03f39729e44d63ac35024fa39c675f57b3ded84c80a06ce5ca1f582",
+   "new_sha256": "c9603f20e2a044e1db5913c51eb203b75fd686bbfccf9a6db0f16897e0dde700",
+   "old_bytes": 725,
+   "new_bytes": 725
+  },
+  "from_source_system": {
+   "def_path": "mode::CleanMode::from_source_system",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 30,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @mode::CleanMode::from_source_system(functy.554) {",
+     "new": "rustcc fn @mode::CleanMode::from_source_system(functy.518) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.554",
+       "new": "functy.518"
+      }
+     ]
+    },
+    {
+     "line": 4,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb0(%0: enum.178):",
+     "new": "bb0(%0: enum.211):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.178",
+       "new": "enum.211"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %2 = extractfield u8 %0, 0  ; #loc: 401 211 8",
+     "new": "    %2 = extractfield u8 %0, 0  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 401 211 8",
+     "new": "    switch %2 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 11: bb11 default: bb12 ]  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 8,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %3 = const enum.13 { 0 }  ; #loc: 401 212 21",
+     "new": "    %3 = const enum.17 { 0 }  ; #loc: 214 212 21",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 212 21",
+       "new": "#loc: 214 212 21"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%3)  ; #loc: 401 211 8",
+     "new": "    br bb13(%3)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 11,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %4 = const enum.13 { 1 }  ; #loc: 401 213 19",
+     "new": "    %4 = const enum.17 { 1 }  ; #loc: 214 213 19",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 213 19",
+       "new": "#loc: 214 213 19"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%4)  ; #loc: 401 211 8",
+     "new": "    br bb13(%4)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 14,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %5 = const enum.13 { 0 }  ; #loc: 401 214 20",
+     "new": "    %5 = const enum.17 { 0 }  ; #loc: 214 214 20",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 214 20",
+       "new": "#loc: 214 214 20"
+      }
+     ]
+    },
+    {
+     "line": 15,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%5)  ; #loc: 401 211 8",
+     "new": "    br bb13(%5)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 17,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %6 = const enum.13 { 2 }  ; #loc: 401 215 27",
+     "new": "    %6 = const enum.17 { 2 }  ; #loc: 214 215 27",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 215 27",
+       "new": "#loc: 214 215 27"
+      }
+     ]
+    },
+    {
+     "line": 18,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%6)  ; #loc: 401 211 8",
+     "new": "    br bb13(%6)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 20,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %7 = const enum.13 { 4 }  ; #loc: 401 216 45",
+     "new": "    %7 = const enum.17 { 4 }  ; #loc: 214 216 45",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 216 45",
+       "new": "#loc: 214 216 45"
+      }
+     ]
+    },
+    {
+     "line": 21,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%7)  ; #loc: 401 211 8",
+     "new": "    br bb13(%7)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 23,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %8 = const enum.13 { 4 }  ; #loc: 401 216 45",
+     "new": "    %8 = const enum.17 { 4 }  ; #loc: 214 216 45",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 216 45",
+       "new": "#loc: 214 216 45"
+      }
+     ]
+    },
+    {
+     "line": 24,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%8)  ; #loc: 401 211 8",
+     "new": "    br bb13(%8)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 26,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %9 = const enum.13 { 4 }  ; #loc: 401 216 45",
+     "new": "    %9 = const enum.17 { 4 }  ; #loc: 214 216 45",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 216 45",
+       "new": "#loc: 214 216 45"
+      }
+     ]
+    },
+    {
+     "line": 27,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%9)  ; #loc: 401 211 8",
+     "new": "    br bb13(%9)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 29,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %10 = const enum.13 { 5 }  ; #loc: 401 217 35",
+     "new": "    %10 = const enum.17 { 5 }  ; #loc: 214 217 35",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 217 35",
+       "new": "#loc: 214 217 35"
+      }
+     ]
+    },
+    {
+     "line": 30,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%10)  ; #loc: 401 211 8",
+     "new": "    br bb13(%10)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 32,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %11 = const enum.13 { 5 }  ; #loc: 401 217 35",
+     "new": "    %11 = const enum.17 { 5 }  ; #loc: 214 217 35",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 217 35",
+       "new": "#loc: 214 217 35"
+      }
+     ]
+    },
+    {
+     "line": 33,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%11)  ; #loc: 401 211 8",
+     "new": "    br bb13(%11)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 35,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %12 = const enum.13 { 4 }  ; #loc: 401 218 34",
+     "new": "    %12 = const enum.17 { 4 }  ; #loc: 214 218 34",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 218 34",
+       "new": "#loc: 214 218 34"
+      }
+     ]
+    },
+    {
+     "line": 36,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%12)  ; #loc: 401 211 8",
+     "new": "    br bb13(%12)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 38,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %13 = const enum.13 { 4 }  ; #loc: 401 218 34",
+     "new": "    %13 = const enum.17 { 4 }  ; #loc: 214 218 34",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 218 34",
+       "new": "#loc: 214 218 34"
+      }
+     ]
+    },
+    {
+     "line": 39,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%13)  ; #loc: 401 211 8",
+     "new": "    br bb13(%13)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 41,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %14 = const enum.13 { 4 }  ; #loc: 401 219 19",
+     "new": "    %14 = const enum.17 { 4 }  ; #loc: 214 219 19",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 219 19",
+       "new": "#loc: 214 219 19"
+      }
+     ]
+    },
+    {
+     "line": 42,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb13(%14)  ; #loc: 401 211 8",
+     "new": "    br bb13(%14)  ; #loc: 214 211 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 211 8",
+       "new": "#loc: 214 211 8"
+      }
+     ]
+    },
+    {
+     "line": 43,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb13(%1: enum.13):",
+     "new": "bb13(%1: enum.17):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.13",
+       "new": "enum.17"
+      }
+     ]
+    },
+    {
+     "line": 44,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %1  ; #loc: 401 221 5",
+     "new": "    ret %1  ; #loc: 214 221 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 401 221 5",
+       "new": "#loc: 214 221 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.554",
+     "new": "functy.518"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.178",
+     "new": "enum.211"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 212 21",
+     "new": "#loc: 214 212 21"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 213 19",
+     "new": "#loc: 214 213 19"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 214 20",
+     "new": "#loc: 214 214 20"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 215 27",
+     "new": "#loc: 214 215 27"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 216 45",
+     "new": "#loc: 214 216 45"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 216 45",
+     "new": "#loc: 214 216 45"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 216 45",
+     "new": "#loc: 214 216 45"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 217 35",
+     "new": "#loc: 214 217 35"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 217 35",
+     "new": "#loc: 214 217 35"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 218 34",
+     "new": "#loc: 214 218 34"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 218 34",
+     "new": "#loc: 214 218 34"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 219 19",
+     "new": "#loc: 214 219 19"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 211 8",
+     "new": "#loc: 214 211 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.13",
+     "new": "enum.17"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 401 221 5",
+     "new": "#loc: 214 221 5"
+    }
+   ],
+   "old_sha256": "4ae2cec8477962ba9ba39565bf674ddd61ff79ff81f420ab3fc345376ebb703d",
+   "new_sha256": "78fbaa38febbd6d2acfb6158e308e2f261f3e33283c3c6b6357152c3942d5e05",
+   "old_bytes": 1442,
+   "new_bytes": 1442
+  },
+  "flat_flags_contains": {
+   "def_path": "flat::types::FlatFlags::contains",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 8,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @flat::types::FlatFlags::contains(functy.488) {",
+     "new": "rustcc fn @flat::types::FlatFlags::contains(functy.459) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.488",
+       "new": "functy.459"
+      }
+     ]
+    },
+    {
+     "line": 4,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb0(%0: struct.1017, %1: struct.1017):",
+     "new": "bb0(%0: struct.815, %1: struct.815):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "struct.1017",
+       "new": "struct.815"
+      },
+      {
+       "class": "type-table-index",
+       "old": "struct.1017",
+       "new": "struct.815"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %2 = extractfield u8 %0, 0  ; #loc: 388 90 9",
+     "new": "    %2 = extractfield u8 %0, 0  ; #loc: 201 90 9",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 90 9",
+       "new": "#loc: 201 90 9"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = extractfield u8 %1, 0  ; #loc: 388 90 18",
+     "new": "    %3 = extractfield u8 %1, 0  ; #loc: 201 90 18",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 90 18",
+       "new": "#loc: 201 90 18"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = and u8 %2, %3  ; #loc: 388 90 8",
+     "new": "    %4 = and u8 %2, %3  ; #loc: 201 90 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 90 8",
+       "new": "#loc: 201 90 8"
+      }
+     ]
+    },
+    {
+     "line": 8,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %5 = extractfield u8 %1, 0  ; #loc: 388 90 30",
+     "new": "    %5 = extractfield u8 %1, 0  ; #loc: 201 90 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 90 30",
+       "new": "#loc: 201 90 30"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = icmp eq u8 %4, %5  ; #loc: 388 90 8",
+     "new": "    %6 = icmp eq u8 %4, %5  ; #loc: 201 90 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 90 8",
+       "new": "#loc: 201 90 8"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %6  ; #loc: 388 91 5",
+     "new": "    ret %6  ; #loc: 201 91 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 91 5",
+       "new": "#loc: 201 91 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.488",
+     "new": "functy.459"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.1017",
+     "new": "struct.815"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.1017",
+     "new": "struct.815"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 90 9",
+     "new": "#loc: 201 90 9"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 90 18",
+     "new": "#loc: 201 90 18"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 90 8",
+     "new": "#loc: 201 90 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 90 30",
+     "new": "#loc: 201 90 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 90 8",
+     "new": "#loc: 201 90 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 91 5",
+     "new": "#loc: 201 91 5"
+    }
+   ],
+   "old_sha256": "4ab0ad079e45d8a0010c283e66d03a953729106923c77215452de0e59eabc719",
+   "new_sha256": "f69674749f36b4c3bd89b5741a803e0bc96f4005d24084cd4543711ec434798e",
+   "old_bytes": 422,
+   "new_bytes": 420
+  },
+  "bvar_in_range": {
+   "def_path": "expr::bvar_in_range",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 14,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @expr::bvar_in_range(functy.467) {",
+     "new": "rustcc fn @expr::bvar_in_range(functy.435) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.467",
+       "new": "functy.435"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %5 = const u32 4294967295  ; #loc: 380 103 14",
+     "new": "    %5 = const u32 4294967295  ; #loc: 192 109 14",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 103 14",
+       "new": "#loc: 192 109 14"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = icmp eq u32 %2, %5  ; #loc: 380 103 7",
+     "new": "    %6 = icmp eq u32 %2, %5  ; #loc: 192 109 7",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 103 7",
+       "new": "#loc: 192 109 7"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    condbr %6, bb1, bb2  ; #loc: 380 103 4",
+     "new": "    condbr %6, bb1, bb2  ; #loc: 192 109 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 103 4",
+       "new": "#loc: 192 109 4"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %7 = icmp uge u32 %0, %1  ; #loc: 380 104 8",
+     "new": "    %7 = icmp uge u32 %0, %1  ; #loc: 192 110 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 104 8",
+       "new": "#loc: 192 110 8"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb3(%7)  ; #loc: 380 103 4",
+     "new": "    br bb3(%7)  ; #loc: 192 109 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 103 4",
+       "new": "#loc: 192 109 4"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %8 = icmp uge u32 %0, %1  ; #loc: 380 106 8",
+     "new": "    %8 = icmp uge u32 %0, %1  ; #loc: 192 112 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 106 8",
+       "new": "#loc: 192 112 8"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    condbr %8, bb4, bb5  ; #loc: 380 106 8",
+     "new": "    condbr %8, bb4, bb5  ; #loc: 192 112 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 106 8",
+       "new": "#loc: 192 112 8"
+      }
+     ]
+    },
+    {
+     "line": 15,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %3  ; #loc: 380 108 1",
+     "new": "    ret %3  ; #loc: 192 114 1",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 108 1",
+       "new": "#loc: 192 114 1"
+      }
+     ]
+    },
+    {
+     "line": 17,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %9 = icmp ult u32 %0, %2  ; #loc: 380 106 24",
+     "new": "    %9 = icmp ult u32 %0, %2  ; #loc: 192 112 24",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 106 24",
+       "new": "#loc: 192 112 24"
+      }
+     ]
+    },
+    {
+     "line": 18,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%9)  ; #loc: 380 106 8",
+     "new": "    br bb6(%9)  ; #loc: 192 112 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 106 8",
+       "new": "#loc: 192 112 8"
+      }
+     ]
+    },
+    {
+     "line": 20,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %10 = const bool false  ; #loc: 380 106 8",
+     "new": "    %10 = const bool false  ; #loc: 192 112 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 106 8",
+       "new": "#loc: 192 112 8"
+      }
+     ]
+    },
+    {
+     "line": 21,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%10)  ; #loc: 380 106 8",
+     "new": "    br bb6(%10)  ; #loc: 192 112 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 106 8",
+       "new": "#loc: 192 112 8"
+      }
+     ]
+    },
+    {
+     "line": 23,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb3(%4)  ; #loc: 380 103 4",
+     "new": "    br bb3(%4)  ; #loc: 192 109 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 380 103 4",
+       "new": "#loc: 192 109 4"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.467",
+     "new": "functy.435"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 103 14",
+     "new": "#loc: 192 109 14"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 103 7",
+     "new": "#loc: 192 109 7"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 103 4",
+     "new": "#loc: 192 109 4"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 104 8",
+     "new": "#loc: 192 110 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 103 4",
+     "new": "#loc: 192 109 4"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 106 8",
+     "new": "#loc: 192 112 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 106 8",
+     "new": "#loc: 192 112 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 108 1",
+     "new": "#loc: 192 114 1"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 106 24",
+     "new": "#loc: 192 112 24"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 106 8",
+     "new": "#loc: 192 112 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 106 8",
+     "new": "#loc: 192 112 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 106 8",
+     "new": "#loc: 192 112 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 380 103 4",
+     "new": "#loc: 192 109 4"
+    }
+   ],
+   "old_sha256": "e13de5e21e5fd3a5e52cbf6e6bb319202d45d39dd136604746ce9b26932e8826",
+   "new_sha256": "85f54e5dd64725882494129177464f0061316c03aba3b77accfcfbc2ac7f25c4",
+   "old_bytes": 738,
+   "new_bytes": 738
+  },
+  "is_valid_char": {
+   "def_path": "env::native_reducers_char::is_valid_char",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 16,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @env::native_reducers_char::is_valid_char(functy.377) {",
+     "new": "rustcc fn @env::native_reducers_char::is_valid_char(functy.359) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.377",
+       "new": "functy.359"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = const u64 55296  ; #loc: 352 112 8",
+     "new": "    %3 = const u64 55296  ; #loc: 164 112 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 8",
+       "new": "#loc: 164 112 8"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = icmp ult u64 %0, %3  ; #loc: 352 112 4",
+     "new": "    %4 = icmp ult u64 %0, %3  ; #loc: 164 112 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 4",
+       "new": "#loc: 164 112 4"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    condbr %4, bb2, bb1  ; #loc: 352 112 4",
+     "new": "    condbr %4, bb2, bb1  ; #loc: 164 112 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 4",
+       "new": "#loc: 164 112 4"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %5 = const u64 57343  ; #loc: 352 112 19",
+     "new": "    %5 = const u64 57343  ; #loc: 164 112 19",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 19",
+       "new": "#loc: 164 112 19"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = icmp ult u64 %5, %0  ; #loc: 352 112 19",
+     "new": "    %6 = icmp ult u64 %5, %0  ; #loc: 164 112 19",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 19",
+       "new": "#loc: 164 112 19"
+      }
+     ]
+    },
+    {
+     "line": 11,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    condbr %6, bb4, bb5  ; #loc: 352 112 18",
+     "new": "    condbr %6, bb4, bb5  ; #loc: 164 112 18",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 18",
+       "new": "#loc: 164 112 18"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %7 = const bool true  ; #loc: 352 112 4",
+     "new": "    %7 = const bool true  ; #loc: 164 112 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 4",
+       "new": "#loc: 164 112 4"
+      }
+     ]
+    },
+    {
+     "line": 14,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb3(%7)  ; #loc: 352 112 4",
+     "new": "    br bb3(%7)  ; #loc: 164 112 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 4",
+       "new": "#loc: 164 112 4"
+      }
+     ]
+    },
+    {
+     "line": 16,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %1  ; #loc: 352 113 1",
+     "new": "    ret %1  ; #loc: 164 113 1",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 113 1",
+       "new": "#loc: 164 113 1"
+      }
+     ]
+    },
+    {
+     "line": 18,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %8 = const u64 1114112  ; #loc: 352 112 37",
+     "new": "    %8 = const u64 1114112  ; #loc: 164 112 37",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 37",
+       "new": "#loc: 164 112 37"
+      }
+     ]
+    },
+    {
+     "line": 19,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %9 = icmp ult u64 %0, %8  ; #loc: 352 112 33",
+     "new": "    %9 = icmp ult u64 %0, %8  ; #loc: 164 112 33",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 33",
+       "new": "#loc: 164 112 33"
+      }
+     ]
+    },
+    {
+     "line": 20,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%9)  ; #loc: 352 112 18",
+     "new": "    br bb6(%9)  ; #loc: 164 112 18",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 18",
+       "new": "#loc: 164 112 18"
+      }
+     ]
+    },
+    {
+     "line": 22,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %10 = const bool false  ; #loc: 352 112 18",
+     "new": "    %10 = const bool false  ; #loc: 164 112 18",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 18",
+       "new": "#loc: 164 112 18"
+      }
+     ]
+    },
+    {
+     "line": 23,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%10)  ; #loc: 352 112 18",
+     "new": "    br bb6(%10)  ; #loc: 164 112 18",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 18",
+       "new": "#loc: 164 112 18"
+      }
+     ]
+    },
+    {
+     "line": 25,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb3(%2)  ; #loc: 352 112 4",
+     "new": "    br bb3(%2)  ; #loc: 164 112 4",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 352 112 4",
+       "new": "#loc: 164 112 4"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.377",
+     "new": "functy.359"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 8",
+     "new": "#loc: 164 112 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 4",
+     "new": "#loc: 164 112 4"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 4",
+     "new": "#loc: 164 112 4"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 19",
+     "new": "#loc: 164 112 19"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 19",
+     "new": "#loc: 164 112 19"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 18",
+     "new": "#loc: 164 112 18"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 4",
+     "new": "#loc: 164 112 4"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 4",
+     "new": "#loc: 164 112 4"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 113 1",
+     "new": "#loc: 164 113 1"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 37",
+     "new": "#loc: 164 112 37"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 33",
+     "new": "#loc: 164 112 33"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 18",
+     "new": "#loc: 164 112 18"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 18",
+     "new": "#loc: 164 112 18"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 18",
+     "new": "#loc: 164 112 18"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 352 112 4",
+     "new": "#loc: 164 112 4"
+    }
+   ],
+   "old_sha256": "37052aa471626a37e37ebfe33a436fb810945a331a3b1cb7d01958fd7de8fbf5",
+   "new_sha256": "03ed467ebb2ca8cb3f1699b5f54650b941b8897654c1d66c1d9334b2e5e4c01c",
+   "old_bytes": 805,
+   "new_bytes": 805
+  },
+  "expr_path_step_clone": {
+   "def_path": "<tc::expr_location::ExprPathStep as std::clone::Clone>::clone",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 28,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.859) {",
+     "new": "rustcc fn @<tc::expr_location::ExprPathStep as std::clone::Clone>::clone(functy.903) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.859",
+       "new": "functy.903"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %2 = load enum.184, ptr %0  ; #loc: 427 28 16",
+     "new": "    %2 = load enum.225, ptr %0  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = extractfield u8 %2, 0  ; #loc: 427 28 16",
+     "new": "    %3 = extractfield u8 %2, 0  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 427 28 16",
+     "new": "    switch %3 [ 0: bb1 1: bb2 2: bb3 3: bb4 4: bb5 5: bb6 6: bb7 7: bb8 8: bb9 9: bb10 default: bb11 ]  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %4 = const enum.184 { 0 }  ; #loc: 427 28 16",
+     "new": "    %4 = const enum.225 { 0 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%4)  ; #loc: 427 28 16",
+     "new": "    br bb12(%4)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %5 = const enum.184 { 1 }  ; #loc: 427 28 16",
+     "new": "    %5 = const enum.225 { 1 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%5)  ; #loc: 427 28 16",
+     "new": "    br bb12(%5)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 15,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %6 = const enum.184 { 2 }  ; #loc: 427 28 16",
+     "new": "    %6 = const enum.225 { 2 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 16,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%6)  ; #loc: 427 28 16",
+     "new": "    br bb12(%6)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 18,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %7 = const enum.184 { 3 }  ; #loc: 427 28 16",
+     "new": "    %7 = const enum.225 { 3 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 19,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%7)  ; #loc: 427 28 16",
+     "new": "    br bb12(%7)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 21,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %8 = const enum.184 { 4 }  ; #loc: 427 28 16",
+     "new": "    %8 = const enum.225 { 4 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 22,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%8)  ; #loc: 427 28 16",
+     "new": "    br bb12(%8)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 24,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %9 = const enum.184 { 5 }  ; #loc: 427 28 16",
+     "new": "    %9 = const enum.225 { 5 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 25,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%9)  ; #loc: 427 28 16",
+     "new": "    br bb12(%9)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 27,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %10 = const enum.184 { 6 }  ; #loc: 427 28 16",
+     "new": "    %10 = const enum.225 { 6 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 28,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%10)  ; #loc: 427 28 16",
+     "new": "    br bb12(%10)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 30,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %11 = const enum.184 { 7 }  ; #loc: 427 28 16",
+     "new": "    %11 = const enum.225 { 7 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 31,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%11)  ; #loc: 427 28 16",
+     "new": "    br bb12(%11)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 33,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %12 = const enum.184 { 8 }  ; #loc: 427 28 16",
+     "new": "    %12 = const enum.225 { 8 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 34,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%12)  ; #loc: 427 28 16",
+     "new": "    br bb12(%12)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 36,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %13 = const enum.184 { 9 }  ; #loc: 427 28 16",
+     "new": "    %13 = const enum.225 { 9 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 37,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%13)  ; #loc: 427 28 16",
+     "new": "    br bb12(%13)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 39,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %14 = const enum.184 { 10 }  ; #loc: 427 28 16",
+     "new": "    %14 = const enum.225 { 10 }  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 40,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb12(%14)  ; #loc: 427 28 16",
+     "new": "    br bb12(%14)  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    },
+    {
+     "line": 41,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb12(%1: enum.184):",
+     "new": "bb12(%1: enum.225):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.184",
+       "new": "enum.225"
+      }
+     ]
+    },
+    {
+     "line": 42,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %1  ; #loc: 427 28 16",
+     "new": "    ret %1  ; #loc: 243 28 16",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 427 28 16",
+       "new": "#loc: 243 28 16"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.859",
+     "new": "functy.903"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.184",
+     "new": "enum.225"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 427 28 16",
+     "new": "#loc: 243 28 16"
+    }
+   ],
+   "old_sha256": "e3cf82765e4a81c3d1d1dd9b482e3235619c55a992a490e978e34ae096fc7452",
+   "new_sha256": "910c7869f3069377967508fb53e0176a714dbccd0a897ce87a1249c6429ab970",
+   "old_bytes": 1414,
+   "new_bytes": 1414
+  },
+  "float_div": {
+   "def_path": "env::native_reducers_float::reduce_float_div::{closure#0}",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 3,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.381) {",
+     "new": "rustcc fn @env::native_reducers_float::reduce_float_div::{closure#0}(functy.363) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.381",
+       "new": "functy.363"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = fdiv f64 %1, %2  ; #loc: 356 222 33",
+     "new": "    %3 = fdiv f64 %1, %2  ; #loc: 168 222 33",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 222 33",
+       "new": "#loc: 168 222 33"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %3  ; #loc: 356 222 38",
+     "new": "    ret %3  ; #loc: 168 222 38",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 222 38",
+       "new": "#loc: 168 222 38"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.381",
+     "new": "functy.363"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 222 33",
+     "new": "#loc: 168 222 33"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 222 38",
+     "new": "#loc: 168 222 38"
+    }
+   ],
+   "old_sha256": "83305365aab1588948537a2224944f1ba65a6cb0d0f3707e9311b4ef1f3759a6",
+   "new_sha256": "4e36e89aa928663e58e413fd5faf55325af6115d8fcb838b166e5ef8cf5385ee",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "get_char_val_trunc": {
+   "def_path": "env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 3,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.370) {",
+     "new": "rustcc fn @env::native_reducers_beq_shortcircuit::get_char_val::{closure#0}(functy.352) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.370",
+       "new": "functy.352"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %2 = trunc u64 %1 to u32  ; #loc: 349 120 60",
+     "new": "    %2 = trunc u64 %1 to u32  ; #loc: 161 120 60",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 349 120 60",
+       "new": "#loc: 161 120 60"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %2  ; #loc: 349 120 68",
+     "new": "    ret %2  ; #loc: 161 120 68",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 349 120 68",
+       "new": "#loc: 161 120 68"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.370",
+     "new": "functy.352"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 349 120 60",
+     "new": "#loc: 161 120 60"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 349 120 68",
+     "new": "#loc: 161 120 68"
+    }
+   ],
+   "old_sha256": "a6057e889bc7562ab9690f5a8c30a6768b4bbc287e04e4ca3cd0989fc8806f3b",
+   "new_sha256": "849732d20c1b6e6bb031cb0ece78f8d167b23e758bff1f7dbde43f3e31c3397c",
+   "old_bytes": 238,
+   "new_bytes": 238
+  },
+  "meta_tag_shl": {
+   "def_path": "tc::local_context::LocalContext::push_low_local::META_TAG",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 9,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.118) {",
+     "new": "rustcc fn @tc::local_context::LocalContext::push_low_local::META_TAG::{const-init}(functy.116) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.118",
+       "new": "functy.116"
+      }
+     ]
+    },
+    {
+     "line": 4,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %0 = const u64 1  ; #loc: 437 157 30",
+     "new": "    %0 = const u64 1  ; #loc: 254 157 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 30",
+       "new": "#loc: 254 157 30"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %1 = const i32 63  ; #loc: 437 157 38",
+     "new": "    %1 = const i32 63  ; #loc: 254 157 38",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 38",
+       "new": "#loc: 254 157 38"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %2 = bitcast i32 %1 to u32  ; #loc: 437 157 30",
+     "new": "    %2 = bitcast i32 %1 to u32  ; #loc: 254 157 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 30",
+       "new": "#loc: 254 157 30"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = const u32 64  ; #loc: 437 157 30",
+     "new": "    %3 = const u32 64  ; #loc: 254 157 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 30",
+       "new": "#loc: 254 157 30"
+      }
+     ]
+    },
+    {
+     "line": 8,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = icmp ult u32 %2, %3  ; #loc: 437 157 30",
+     "new": "    %4 = icmp ult u32 %2, %3  ; #loc: 254 157 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 30",
+       "new": "#loc: 254 157 30"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    assert %4  ; #proof: shift_in_range  ; #loc: 437 157 30",
+     "new": "    assert %4  ; #proof: shift_in_range  ; #loc: 254 157 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 30",
+       "new": "#loc: 254 157 30"
+      }
+     ]
+    },
+    {
+     "line": 11,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = shl u64 %0, %5  ; #loc: 437 157 30",
+     "new": "    %6 = shl u64 %0, %5  ; #loc: 254 157 30",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 30",
+       "new": "#loc: 254 157 30"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %6  ; #loc: 437 157 40",
+     "new": "    ret %6  ; #loc: 254 157 40",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 437 157 40",
+       "new": "#loc: 254 157 40"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.118",
+     "new": "functy.116"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 30",
+     "new": "#loc: 254 157 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 38",
+     "new": "#loc: 254 157 38"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 30",
+     "new": "#loc: 254 157 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 30",
+     "new": "#loc: 254 157 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 30",
+     "new": "#loc: 254 157 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 30",
+     "new": "#loc: 254 157 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 30",
+     "new": "#loc: 254 157 30"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 437 157 40",
+     "new": "#loc: 254 157 40"
+    }
+   ],
+   "old_sha256": "e0b1c891839276fd931ff821e212e8c48bfa8d3b71641d96ae5935147fb05629",
+   "new_sha256": "d0eba72a228252069b4826123e391b4ff40e9b50bad5467a5ff71506c5fe27b9",
+   "old_bytes": 515,
+   "new_bytes": 515
+  },
+  "level_is_zero": {
+   "def_path": "level::Level::is_zero",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "callee-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 28,
+   "changed_lines": [
+    {
+     "line": 5,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %3 = load enum.2, ptr %0  ; #loc: 391 545 8",
+     "new": "    %3 = load enum.3, ptr %0  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.2",
+       "new": "enum.3"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = extractfield u8 %3, 0  ; #loc: 391 545 8",
+     "new": "    %4 = extractfield u8 %3, 0  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]  ; #loc: 391 545 8",
+     "new": "    switch %4 [ 0: bb1 1: bb2 4: bb3 2: bb4 default: bb5 ]  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %5 = const bool true  ; #loc: 391 546 27",
+     "new": "    %5 = const bool true  ; #loc: 204 546 27",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 546 27",
+       "new": "#loc: 204 546 27"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%5)  ; #loc: 391 545 8",
+     "new": "    br bb6(%5)  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = const bool false  ; #loc: 391 547 48",
+     "new": "    %6 = const bool false  ; #loc: 204 547 48",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 547 48",
+       "new": "#loc: 204 547 48"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%6)  ; #loc: 391 545 8",
+     "new": "    br bb6(%6)  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 15,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %7 = const bool false  ; #loc: 391 547 48",
+     "new": "    %7 = const bool false  ; #loc: 204 547 48",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 547 48",
+       "new": "#loc: 204 547 48"
+      }
+     ]
+    },
+    {
+     "line": 16,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%7)  ; #loc: 391 545 8",
+     "new": "    br bb6(%7)  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 18,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %8 = const i64 8  ; #loc: 391 545 8",
+     "new": "    %8 = const i64 8  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 19,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %9 = gep inbounds i8, ptr %0, %8  ; #loc: 391 545 8",
+     "new": "    %9 = gep inbounds i8, ptr %0, %8  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 20,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %10 = const i64 16  ; #loc: 391 545 8",
+     "new": "    %10 = const i64 16  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 21,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %11 = gep inbounds i8, ptr %0, %10  ; #loc: 391 545 8",
+     "new": "    %11 = gep inbounds i8, ptr %0, %10  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 22,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %12 = call @func.3894(%9)  ; #loc: 391 548 34",
+     "new": "    %12 = call @func.1947(%9)  ; #loc: 204 548 34",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.3894",
+       "new": "@func.1947"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 34",
+       "new": "#loc: 204 548 34"
+      }
+     ]
+    },
+    {
+     "line": 23,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %13 = call @func.3905(%12)  ; #loc: 391 548 37",
+     "new": "    %13 = call @func.1961(%12)  ; #loc: 204 548 37",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.3905",
+       "new": "@func.1961"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 37",
+       "new": "#loc: 204 548 37"
+      }
+     ]
+    },
+    {
+     "line": 24,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    condbr %13, bb7, bb8  ; #loc: 391 548 34",
+     "new": "    condbr %13, bb7, bb8  ; #loc: 204 548 34",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 34",
+       "new": "#loc: 204 548 34"
+      }
+     ]
+    },
+    {
+     "line": 26,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %14 = const i64 16  ; #loc: 391 545 8",
+     "new": "    %14 = const i64 16  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 27,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %15 = gep inbounds i8, ptr %0, %14  ; #loc: 391 545 8",
+     "new": "    %15 = gep inbounds i8, ptr %0, %14  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 28,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %16 = call @func.3894(%15)  ; #loc: 391 549 34",
+     "new": "    %16 = call @func.1947(%15)  ; #loc: 204 549 34",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.3894",
+       "new": "@func.1947"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 549 34",
+       "new": "#loc: 204 549 34"
+      }
+     ]
+    },
+    {
+     "line": 29,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %17 = call @func.3905(%16)  ; #loc: 391 549 37",
+     "new": "    %17 = call @func.1961(%16)  ; #loc: 204 549 37",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.3905",
+       "new": "@func.1961"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 549 37",
+       "new": "#loc: 204 549 37"
+      }
+     ]
+    },
+    {
+     "line": 30,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%17)  ; #loc: 391 545 8",
+     "new": "    br bb6(%17)  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    },
+    {
+     "line": 32,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %1  ; #loc: 391 551 5",
+     "new": "    ret %1  ; #loc: 204 551 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 551 5",
+       "new": "#loc: 204 551 5"
+      }
+     ]
+    },
+    {
+     "line": 34,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %18 = call @func.3894(%11)  ; #loc: 391 548 50",
+     "new": "    %18 = call @func.1947(%11)  ; #loc: 204 548 50",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.3894",
+       "new": "@func.1947"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 50",
+       "new": "#loc: 204 548 50"
+      }
+     ]
+    },
+    {
+     "line": 35,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %19 = call @func.3905(%18)  ; #loc: 391 548 53",
+     "new": "    %19 = call @func.1961(%18)  ; #loc: 204 548 53",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.3905",
+       "new": "@func.1961"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 53",
+       "new": "#loc: 204 548 53"
+      }
+     ]
+    },
+    {
+     "line": 36,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb9(%19)  ; #loc: 391 548 34",
+     "new": "    br bb9(%19)  ; #loc: 204 548 34",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 34",
+       "new": "#loc: 204 548 34"
+      }
+     ]
+    },
+    {
+     "line": 38,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %20 = const bool false  ; #loc: 391 548 34",
+     "new": "    %20 = const bool false  ; #loc: 204 548 34",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 34",
+       "new": "#loc: 204 548 34"
+      }
+     ]
+    },
+    {
+     "line": 39,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb9(%20)  ; #loc: 391 548 34",
+     "new": "    br bb9(%20)  ; #loc: 204 548 34",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 548 34",
+       "new": "#loc: 204 548 34"
+      }
+     ]
+    },
+    {
+     "line": 41,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb6(%2)  ; #loc: 391 545 8",
+     "new": "    br bb6(%2)  ; #loc: 204 545 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 545 8",
+       "new": "#loc: 204 545 8"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "type-table-index",
+     "old": "enum.2",
+     "new": "enum.3"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 546 27",
+     "new": "#loc: 204 546 27"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 547 48",
+     "new": "#loc: 204 547 48"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 547 48",
+     "new": "#loc: 204 547 48"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.3894",
+     "new": "@func.1947"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 34",
+     "new": "#loc: 204 548 34"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.3905",
+     "new": "@func.1961"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 37",
+     "new": "#loc: 204 548 37"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 34",
+     "new": "#loc: 204 548 34"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.3894",
+     "new": "@func.1947"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 549 34",
+     "new": "#loc: 204 549 34"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.3905",
+     "new": "@func.1961"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 549 37",
+     "new": "#loc: 204 549 37"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 551 5",
+     "new": "#loc: 204 551 5"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.3894",
+     "new": "@func.1947"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 50",
+     "new": "#loc: 204 548 50"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.3905",
+     "new": "@func.1961"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 53",
+     "new": "#loc: 204 548 53"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 34",
+     "new": "#loc: 204 548 34"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 34",
+     "new": "#loc: 204 548 34"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 548 34",
+     "new": "#loc: 204 548 34"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 545 8",
+     "new": "#loc: 204 545 8"
+    }
+   ],
+   "old_sha256": "eaff18d50c8b6ecbdb5771d5aa1001345baa5408ccbd9d306529bce4b719ad3a",
+   "new_sha256": "b4e6fdbfc52051e9be67f1e9e2abcbba363a13e0df07ffe74257078d6d46bce0",
+   "old_bytes": 1452,
+   "new_bytes": 1452
+  },
+  "float_add": {
+   "def_path": "env::native_reducers_float::reduce_float_add::{closure#0}",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 3,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @env::native_reducers_float::reduce_float_add::{closure#0}(functy.381) {",
+     "new": "rustcc fn @env::native_reducers_float::reduce_float_add::{closure#0}(functy.363) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.381",
+       "new": "functy.363"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = fadd f64 %1, %2  ; #loc: 356 210 33",
+     "new": "    %3 = fadd f64 %1, %2  ; #loc: 168 210 33",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 210 33",
+       "new": "#loc: 168 210 33"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %3  ; #loc: 356 210 38",
+     "new": "    ret %3  ; #loc: 168 210 38",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 210 38",
+       "new": "#loc: 168 210 38"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.381",
+     "new": "functy.363"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 210 33",
+     "new": "#loc: 168 210 33"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 210 38",
+     "new": "#loc: 168 210 38"
+    }
+   ],
+   "old_sha256": "2bfd0da0328ab8b243f7d39983bd6deb20347379aef35f736732771fabb2c0fc",
+   "new_sha256": "c467b6fe57b7e54d84bed184f85fbe1a4f895ba25165131480369be32c8e8083",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "float_sub": {
+   "def_path": "env::native_reducers_float::reduce_float_sub::{closure#0}",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 3,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @env::native_reducers_float::reduce_float_sub::{closure#0}(functy.381) {",
+     "new": "rustcc fn @env::native_reducers_float::reduce_float_sub::{closure#0}(functy.363) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.381",
+       "new": "functy.363"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = fsub f64 %1, %2  ; #loc: 356 214 33",
+     "new": "    %3 = fsub f64 %1, %2  ; #loc: 168 214 33",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 214 33",
+       "new": "#loc: 168 214 33"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %3  ; #loc: 356 214 38",
+     "new": "    ret %3  ; #loc: 168 214 38",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 214 38",
+       "new": "#loc: 168 214 38"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.381",
+     "new": "functy.363"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 214 33",
+     "new": "#loc: 168 214 33"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 214 38",
+     "new": "#loc: 168 214 38"
+    }
+   ],
+   "old_sha256": "632f07a00e57025d751026328f8ab0d0e3bd086d08db29cb506f0c2021a58bf4",
+   "new_sha256": "fa342fdedf205e39048de4682e50ffab7af94e76073e01b8dfd8bdd5d9abbb01",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "float_mul": {
+   "def_path": "env::native_reducers_float::reduce_float_mul::{closure#0}",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 3,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.381) {",
+     "new": "rustcc fn @env::native_reducers_float::reduce_float_mul::{closure#0}(functy.363) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.381",
+       "new": "functy.363"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = fmul f64 %1, %2  ; #loc: 356 218 33",
+     "new": "    %3 = fmul f64 %1, %2  ; #loc: 168 218 33",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 218 33",
+       "new": "#loc: 168 218 33"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %3  ; #loc: 356 218 38",
+     "new": "    ret %3  ; #loc: 168 218 38",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 356 218 38",
+       "new": "#loc: 168 218 38"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.381",
+     "new": "functy.363"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 218 33",
+     "new": "#loc: 168 218 33"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 356 218 38",
+     "new": "#loc: 168 218 38"
+    }
+   ],
+   "old_sha256": "3be2c3118f971a3dfa197832baac9fd81e34369fe38b614b06069a60edcb0b03",
+   "new_sha256": "32f99a919b53325d3d5ea7729b7e9300bbc91f8da6070f05e28e4757953d6aa2",
+   "old_bytes": 245,
+   "new_bytes": 245
+  },
+  "strict_monads": {
+   "def_path": "env::Environment::set_lean4_core_strict_monads",
+   "verdict_before": "IDENTICAL",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [],
+   "changed_line_count": 0,
+   "changed_lines": [],
+   "token_pairs": [],
+   "old_sha256": "e3c3e4330039fb08847333f3b3e5e32d65bd4f424b52c5ee2687c0d1d696141f",
+   "new_sha256": "e3c3e4330039fb08847333f3b3e5e32d65bd4f424b52c5ee2687c0d1d696141f",
+   "old_bytes": 354,
+   "new_bytes": 354
+  },
+  "flat_flags_with": {
+   "def_path": "flat::types::FlatFlags::with",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 8,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @flat::types::FlatFlags::with(functy.489) {",
+     "new": "rustcc fn @flat::types::FlatFlags::with(functy.460) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.489",
+       "new": "functy.460"
+      }
+     ]
+    },
+    {
+     "line": 4,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb0(%0: struct.1017, %1: struct.1017):",
+     "new": "bb0(%0: struct.815, %1: struct.815):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "struct.1017",
+       "new": "struct.815"
+      },
+      {
+       "class": "type-table-index",
+       "old": "struct.1017",
+       "new": "struct.815"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %2 = extractfield u8 %0, 0  ; #loc: 388 96 18",
+     "new": "    %2 = extractfield u8 %0, 0  ; #loc: 201 96 18",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 96 18",
+       "new": "#loc: 201 96 18"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = extractfield u8 %1, 0  ; #loc: 388 96 27",
+     "new": "    %3 = extractfield u8 %1, 0  ; #loc: 201 96 27",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 96 27",
+       "new": "#loc: 201 96 27"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = or u8 %2, %3  ; #loc: 388 96 18",
+     "new": "    %4 = or u8 %2, %3  ; #loc: 201 96 18",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 96 18",
+       "new": "#loc: 201 96 18"
+      }
+     ]
+    },
+    {
+     "line": 8,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %5 = const struct.1017 { 0 }  ; #loc: 388 96 8",
+     "new": "    %5 = const struct.815 { 0 }  ; #loc: 201 96 8",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "struct.1017",
+       "new": "struct.815"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 96 8",
+       "new": "#loc: 201 96 8"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %6 = insertfield struct.1017 %5, 0, %4  ; #loc: 388 96 8",
+     "new": "    %6 = insertfield struct.815 %5, 0, %4  ; #loc: 201 96 8",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "struct.1017",
+       "new": "struct.815"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 96 8",
+       "new": "#loc: 201 96 8"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %6  ; #loc: 388 97 5",
+     "new": "    ret %6  ; #loc: 201 97 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 388 97 5",
+       "new": "#loc: 201 97 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.489",
+     "new": "functy.460"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.1017",
+     "new": "struct.815"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.1017",
+     "new": "struct.815"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 96 18",
+     "new": "#loc: 201 96 18"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 96 27",
+     "new": "#loc: 201 96 27"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 96 18",
+     "new": "#loc: 201 96 18"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.1017",
+     "new": "struct.815"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 96 8",
+     "new": "#loc: 201 96 8"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.1017",
+     "new": "struct.815"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 96 8",
+     "new": "#loc: 201 96 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 388 97 5",
+     "new": "#loc: 201 97 5"
+    }
+   ],
+   "old_sha256": "b37b23eb1a4fb110727991354dc0f3ab153e3f671618a9f28fea7deace22d945",
+   "new_sha256": "882af77be8e7910b4a20d8d4d8685e3be426d456c0faa188595a4b40dbc075be",
+   "old_bytes": 436,
+   "new_bytes": 432
+  },
+  "node_id_index": {
+   "def_path": "cert::builder::state::NodeId::index",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 2,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @cert::builder::state::NodeId::index(functy.97) {",
+     "new": "rustcc fn @cert::builder::state::NodeId::index(functy.85) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.97",
+       "new": "functy.85"
+      }
+     ]
+    },
+    {
+     "line": 4,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb0(%0: struct.323):",
+     "new": "bb0(%0: struct.210):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "struct.323",
+       "new": "struct.210"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.97",
+     "new": "functy.85"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.323",
+     "new": "struct.210"
+    }
+   ],
+   "old_sha256": "96cb10495939dbf23ae3f368145048e8d810abd9dad6b634ad1444b832102b9e",
+   "new_sha256": "ec093d08c4352e9cac9416393fa67deac801a2a984997ac7fe3c48a5d7bc7d8c",
+   "old_bytes": 254,
+   "new_bytes": 254
+  },
+  "has_loose_bvars": {
+   "def_path": "expr::meta::ExprMeta::has_loose_bvars",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "callee-index",
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 6,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.435) {",
+     "new": "rustcc fn @expr::meta::ExprMeta::has_loose_bvars(functy.410) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.435",
+       "new": "functy.410"
+      }
+     ]
+    },
+    {
+     "line": 4,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb0(%0: struct.29):",
+     "new": "bb0(%0: struct.765):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "struct.29",
+       "new": "struct.765"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %1 = call @func.3657(%0)  ; #loc: 374 137 13",
+     "new": "    %1 = call @func.1729(%0)  ; #loc: 187 137 13",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.3657",
+       "new": "@func.1729"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 137 13",
+       "new": "#loc: 187 137 13"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %2 = const u32 0  ; #loc: 374 137 34",
+     "new": "    %2 = const u32 0  ; #loc: 187 137 34",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 137 34",
+       "new": "#loc: 187 137 34"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = icmp ugt u32 %1, %2  ; #loc: 374 137 8",
+     "new": "    %3 = icmp ugt u32 %1, %2  ; #loc: 187 137 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 137 8",
+       "new": "#loc: 187 137 8"
+      }
+     ]
+    },
+    {
+     "line": 8,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %3  ; #loc: 374 138 5",
+     "new": "    ret %3  ; #loc: 187 138 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 138 5",
+       "new": "#loc: 187 138 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.435",
+     "new": "functy.410"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.29",
+     "new": "struct.765"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.3657",
+     "new": "@func.1729"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 137 13",
+     "new": "#loc: 187 137 13"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 137 34",
+     "new": "#loc: 187 137 34"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 137 8",
+     "new": "#loc: 187 137 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 138 5",
+     "new": "#loc: 187 138 5"
+    }
+   ],
+   "old_sha256": "0aac8c18fafc1ca42051e568c358a17acc351ddd6390871960423d04ea4a8227",
+   "new_sha256": "df6cd2c4a21fd211b37d5c4c05d970bdf2769b876a01339da0121ce9dd42002c",
+   "old_bytes": 300,
+   "new_bytes": 301
+  },
+  "simp_priority_value": {
+   "def_path": "env::types::SimpPriority::value",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 11,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @env::types::SimpPriority::value(functy.147) {",
+     "new": "rustcc fn @env::types::SimpPriority::value(functy.149) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.147",
+       "new": "functy.149"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "type-table-index",
+      "loc-file-index"
+     ],
+     "old": "    %2 = load enum.127, ptr %0  ; #loc: 322 229 8",
+     "new": "    %2 = load enum.135, ptr %0  ; #loc: 127 229 8",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "enum.127",
+       "new": "enum.135"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 229 8",
+       "new": "#loc: 127 229 8"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = extractfield u32 %2, 0  ; #loc: 322 229 8",
+     "new": "    %3 = extractfield u32 %2, 0  ; #loc: 127 229 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 229 8",
+       "new": "#loc: 127 229 8"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 322 229 8",
+     "new": "    switch %3 [ 0: bb1 default: bb2 ]  ; #loc: 127 229 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 229 8",
+       "new": "#loc: 127 229 8"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = const u32 1000  ; #loc: 322 230 37",
+     "new": "    %4 = const u32 1000  ; #loc: 127 230 37",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 230 37",
+       "new": "#loc: 127 230 37"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb3(%4)  ; #loc: 322 229 8",
+     "new": "    br bb3(%4)  ; #loc: 127 229 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 229 8",
+       "new": "#loc: 127 229 8"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %5 = const i64 4  ; #loc: 322 229 8",
+     "new": "    %5 = const i64 4  ; #loc: 127 229 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 229 8",
+       "new": "#loc: 127 229 8"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = gep inbounds i8, ptr %0, %5  ; #loc: 322 229 8",
+     "new": "    %6 = gep inbounds i8, ptr %0, %5  ; #loc: 127 229 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 229 8",
+       "new": "#loc: 127 229 8"
+      }
+     ]
+    },
+    {
+     "line": 14,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %7 = load u32, ptr %6  ; #loc: 322 231 39",
+     "new": "    %7 = load u32, ptr %6  ; #loc: 127 231 39",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 231 39",
+       "new": "#loc: 127 231 39"
+      }
+     ]
+    },
+    {
+     "line": 15,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    br bb3(%7)  ; #loc: 322 229 8",
+     "new": "    br bb3(%7)  ; #loc: 127 229 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 229 8",
+       "new": "#loc: 127 229 8"
+      }
+     ]
+    },
+    {
+     "line": 17,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %1  ; #loc: 322 233 5",
+     "new": "    ret %1  ; #loc: 127 233 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 322 233 5",
+       "new": "#loc: 127 233 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.147",
+     "new": "functy.149"
+    },
+    {
+     "class": "type-table-index",
+     "old": "enum.127",
+     "new": "enum.135"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 229 8",
+     "new": "#loc: 127 229 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 229 8",
+     "new": "#loc: 127 229 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 229 8",
+     "new": "#loc: 127 229 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 230 37",
+     "new": "#loc: 127 230 37"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 229 8",
+     "new": "#loc: 127 229 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 229 8",
+     "new": "#loc: 127 229 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 229 8",
+     "new": "#loc: 127 229 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 231 39",
+     "new": "#loc: 127 231 39"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 229 8",
+     "new": "#loc: 127 229 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 322 233 5",
+     "new": "#loc: 127 233 5"
+    }
+   ],
+   "old_sha256": "c47bcdab045f1640b69410600accb43172f41ed3dcd16b30fcac0eb3b19a0203",
+   "new_sha256": "0f1ede77a4d3bb383f620a75163f7687eaaceb872bf4209cad9f7b927ee85b6c",
+   "old_bytes": 586,
+   "new_bytes": 586
+  },
+  "level_is_zero_deref_callee": {
+   "def_path": "<level::LevelArc as std::ops::Deref>::deref",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "callee-index",
+    "functy-index",
+    "global-index",
+    "loc-file-index"
+   ],
+   "changed_line_count": 7,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.45) {",
+     "new": "rustcc fn @<level::LevelArc as std::ops::Deref>::deref(functy.22) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.45",
+       "new": "functy.22"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %1 = call @func.7211(%0)  ; #loc: 391 60 13",
+     "new": "    %1 = call @func.4924(%0)  ; #loc: 204 60 13",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.7211",
+       "new": "@func.4924"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 60 13",
+       "new": "#loc: 204 60 13"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "global-index",
+      "loc-file-index"
+     ],
+     "old": "    %2 = global_addr @global.4557  ; #loc: 391 61 20",
+     "new": "    %2 = global_addr @global.1135  ; #loc: 204 61 20",
+     "token_pairs": [
+      {
+       "class": "global-index",
+       "old": "@global.4557",
+       "new": "@global.1135"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 61 20",
+       "new": "#loc: 204 61 20"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = const u64 34  ; #loc: 391 61 20",
+     "new": "    %3 = const u64 34  ; #loc: 204 61 20",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 61 20",
+       "new": "#loc: 204 61 20"
+      }
+     ]
+    },
+    {
+     "line": 8,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 391 61 20",
+     "new": "    %4 = ptr_from_parts fatptr<str> ptr %2, u64 %3  ; #loc: 204 61 20",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 61 20",
+       "new": "#loc: 204 61 20"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "callee-index",
+      "loc-file-index"
+     ],
+     "old": "    %5 = call @func.6516(%1, %4)  ; #loc: 391 61 13",
+     "new": "    %5 = call @func.4925(%1, %4)  ; #loc: 204 61 13",
+     "token_pairs": [
+      {
+       "class": "callee-index",
+       "old": "@func.6516",
+       "new": "@func.4925"
+      },
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 61 13",
+       "new": "#loc: 204 61 13"
+      }
+     ]
+    },
+    {
+     "line": 10,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %5  ; #loc: 391 62 5",
+     "new": "    ret %5  ; #loc: 204 62 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 391 62 5",
+       "new": "#loc: 204 62 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.45",
+     "new": "functy.22"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.7211",
+     "new": "@func.4924"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 60 13",
+     "new": "#loc: 204 60 13"
+    },
+    {
+     "class": "global-index",
+     "old": "@global.4557",
+     "new": "@global.1135"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 61 20",
+     "new": "#loc: 204 61 20"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 61 20",
+     "new": "#loc: 204 61 20"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 61 20",
+     "new": "#loc: 204 61 20"
+    },
+    {
+     "class": "callee-index",
+     "old": "@func.6516",
+     "new": "@func.4925"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 61 13",
+     "new": "#loc: 204 61 13"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 391 62 5",
+     "new": "#loc: 204 62 5"
+    }
+   ],
+   "old_sha256": "16cbe21d8a638862a6100a9ec1ce6810a2014769a2bed27871b08fd9c8c63bac",
+   "new_sha256": "13ec20bc46c0e40b5a5b3f570ff1645830363d172948dac4e99b5b14a561850b",
+   "old_bytes": 424,
+   "new_bytes": 424
+  },
+  "loose_bvar_range_callee": {
+   "def_path": "expr::meta::ExprMeta::loose_bvar_range",
+   "verdict_before": "NUMBERING-ONLY",
+   "verdict_after_expected": "IDENTICAL",
+   "classes": [
+    "functy-index",
+    "loc-file-index",
+    "type-table-index"
+   ],
+   "changed_line_count": 10,
+   "changed_lines": [
+    {
+     "line": 1,
+     "classes": [
+      "functy-index"
+     ],
+     "old": "rustcc fn @expr::meta::ExprMeta::loose_bvar_range(functy.433) {",
+     "new": "rustcc fn @expr::meta::ExprMeta::loose_bvar_range(functy.408) {",
+     "token_pairs": [
+      {
+       "class": "functy-index",
+       "old": "functy.433",
+       "new": "functy.408"
+      }
+     ]
+    },
+    {
+     "line": 4,
+     "classes": [
+      "type-table-index"
+     ],
+     "old": "bb0(%0: struct.29):",
+     "new": "bb0(%0: struct.765):",
+     "token_pairs": [
+      {
+       "class": "type-table-index",
+       "old": "struct.29",
+       "new": "struct.765"
+      }
+     ]
+    },
+    {
+     "line": 5,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %1 = extractfield u64 %0, 0  ; #loc: 374 131 9",
+     "new": "    %1 = extractfield u64 %0, 0  ; #loc: 187 131 9",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 131 9",
+       "new": "#loc: 187 131 9"
+      }
+     ]
+    },
+    {
+     "line": 6,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %2 = const u32 44  ; #loc: 374 131 19",
+     "new": "    %2 = const u32 44  ; #loc: 187 131 19",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 131 19",
+       "new": "#loc: 187 131 19"
+      }
+     ]
+    },
+    {
+     "line": 7,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %3 = const u32 64  ; #loc: 374 131 8",
+     "new": "    %3 = const u32 64  ; #loc: 187 131 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 131 8",
+       "new": "#loc: 187 131 8"
+      }
+     ]
+    },
+    {
+     "line": 8,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %4 = icmp ult u32 %2, %3  ; #loc: 374 131 8",
+     "new": "    %4 = icmp ult u32 %2, %3  ; #loc: 187 131 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 131 8",
+       "new": "#loc: 187 131 8"
+      }
+     ]
+    },
+    {
+     "line": 9,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    assert %4  ; #proof: shift_in_range  ; #loc: 374 131 8",
+     "new": "    assert %4  ; #proof: shift_in_range  ; #loc: 187 131 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 131 8",
+       "new": "#loc: 187 131 8"
+      }
+     ]
+    },
+    {
+     "line": 11,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %6 = lshr u64 %1, %5  ; #loc: 374 131 8",
+     "new": "    %6 = lshr u64 %1, %5  ; #loc: 187 131 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 131 8",
+       "new": "#loc: 187 131 8"
+      }
+     ]
+    },
+    {
+     "line": 12,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    %7 = trunc u64 %6 to u32  ; #loc: 374 131 8",
+     "new": "    %7 = trunc u64 %6 to u32  ; #loc: 187 131 8",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 131 8",
+       "new": "#loc: 187 131 8"
+      }
+     ]
+    },
+    {
+     "line": 13,
+     "classes": [
+      "loc-file-index"
+     ],
+     "old": "    ret %7  ; #loc: 374 132 5",
+     "new": "    ret %7  ; #loc: 187 132 5",
+     "token_pairs": [
+      {
+       "class": "loc-file-index",
+       "old": "#loc: 374 132 5",
+       "new": "#loc: 187 132 5"
+      }
+     ]
+    }
+   ],
+   "token_pairs": [
+    {
+     "class": "functy-index",
+     "old": "functy.433",
+     "new": "functy.408"
+    },
+    {
+     "class": "type-table-index",
+     "old": "struct.29",
+     "new": "struct.765"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 131 9",
+     "new": "#loc: 187 131 9"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 131 19",
+     "new": "#loc: 187 131 19"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 131 8",
+     "new": "#loc: 187 131 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 131 8",
+     "new": "#loc: 187 131 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 131 8",
+     "new": "#loc: 187 131 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 131 8",
+     "new": "#loc: 187 131 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 131 8",
+     "new": "#loc: 187 131 8"
+    },
+    {
+     "class": "loc-file-index",
+     "old": "#loc: 374 132 5",
+     "new": "#loc: 187 132 5"
+    }
+   ],
+   "old_sha256": "693b26d4a42671d12887c063802986e4f668fbdadfa7847b4623e58f5a92970e",
+   "new_sha256": "79bde22a40bb0831c4385b058ba16d0b69577bb40cd217dbb283372b24983b1a",
+   "old_bytes": 524,
+   "new_bytes": 525
+  }
+ },
+ "lineage_evidence": {
+  "has_cubical_layer": {
+   "file": "crates/clean-verify/tests/fixtures/has_cubical_layer.lineage.json",
+   "old_sha256": "da289fdee21902ba3f8db0128668c148289193454bba5dafc2a139f37130beb1",
+   "new_sha256": "8a906bf15460a165c88fce624b1cb94604f0e8c1b7ba49af41fd8e1c0f01563d",
+   "historical_top_level_lineage": "sha256:d7204f9596ddaec27faf86abb798ad7eb974cf9c586af43e69e7b05823dee22a",
+   "current_lineage": "sha256:2654a8b2d6f53f3d1e206b59c90f0ceb6c1da1664632b7f04bbde6fb1b56613d",
+   "historical_top_level_def_index": 17971,
+   "current_def_index": 19695,
+   "current_func_id": 2090,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "7 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "level_kind_ord": {
+   "file": "crates/clean-verify/tests/fixtures/level_kind_ord.lineage.json",
+   "old_sha256": "4c445f7bba0eefea0cc497687c338d47f660c3ca909b099adae10da1ab3e995f",
+   "new_sha256": "91d6448afcdd1baba66e5accc0fac9094544ff3777bddb9cd27aa32b5ca0fd47",
+   "historical_top_level_lineage": "sha256:c2d6ef14a416ae797875e23c48f280060ab8a0f6978f2e4fea09a5f3040a419c",
+   "current_lineage": "sha256:f1b3086e88ef8f79095b468a3e38ac76d02d0bf198608480f4f1ba1ce67606ba",
+   "historical_top_level_def_index": 17084,
+   "current_def_index": 18808,
+   "current_func_id": 1964,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "10 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "from_source_system": {
+   "file": "crates/clean-verify/tests/fixtures/from_source_system.lineage.json",
+   "old_sha256": "9da066d5adf483048bd02efbb6c987701fa44b08903f9a2eed7ef26fe8047d62",
+   "new_sha256": "64b2c54dcb6a0c1c2b591bebb7bce812994885e75694ea75733525c0c4f3c031",
+   "historical_top_level_lineage": "sha256:119b253d3aa6a24626021f621f0c8e0ce00b396467f55761bdd51deab3e6f135",
+   "current_lineage": "sha256:4a27f6a167ef2ec5aee35a1741d307045032a9139cdc406552cf752558529a35",
+   "historical_top_level_def_index": 17966,
+   "current_def_index": 19690,
+   "current_func_id": 2087,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "17 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "flat_flags_contains": {
+   "file": "crates/clean-verify/tests/fixtures/flat_flags_contains.lineage.json",
+   "old_sha256": "5c952b138af2ccafbf6f50f7fddc16feb491bd2d4a2d393595aaa2c1369509eb",
+   "new_sha256": "2c7fd43fa7ec896f7f396c638f7dccf183c4446b96ada04cef93b2e78eab0aa0",
+   "historical_top_level_lineage": "sha256:1afb2dc3d56c0feb14ebdfa487474aed27ece83dabb93ef9c24f465af7f0de0f",
+   "current_lineage": "sha256:a4d7670bf5b1fefac2714ceb7a5d2a4843905f3ddcfba812f0889a13db1b7f6b",
+   "historical_top_level_def_index": 16836,
+   "current_def_index": 18558,
+   "current_func_id": 1896,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "8 marker line(s) identical"
+   }
+  },
+  "bvar_in_range": {
+   "file": "crates/clean-verify/tests/fixtures/bvar_in_range.lineage.json",
+   "old_sha256": "88a59ef1ab18029b75915275f5e3cdef85a8270b5125d8551606d4bb506d7270",
+   "new_sha256": "699e11f66ea47cf63d9a3e3809d6a0ed7ab53a879f582e938ddddb1bcef59a24",
+   "historical_top_level_lineage": "sha256:2b2d0f246983429cbe978c36cf22975101824f610b0ea35b8152251a1bbc0c2a",
+   "current_lineage": "sha256:3b2faceae49b1afe0bc4e3e03f44ad764685330578a7ae429599bb28699b6026",
+   "historical_top_level_def_index": 16566,
+   "current_def_index": 18282,
+   "current_func_id": 1820,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "10 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "21 marker line(s) identical"
+   }
+  },
+  "is_valid_char": {
+   "file": "crates/clean-verify/tests/fixtures/is_valid_char.lineage.json",
+   "old_sha256": "7b28de81c964afa429ddf03085b5f4437d0c268b2a95b5b0922d4de784e0d34f",
+   "new_sha256": "f40dc4b9cc2478065a59aecb125a33a59a0b9acd230ded3e6acd6bd1e384cadb",
+   "historical_top_level_lineage": "sha256:2f956ee9513cd6245a388d58176dd87f0a19ad6d70b00fae4d464e0e0875ce7b",
+   "current_lineage": "sha256:da935567c5724781faa6452e47cfad70f384d98e8af6e60444280c219ee4512a",
+   "historical_top_level_def_index": 15081,
+   "current_def_index": 16674,
+   "current_func_id": 1447,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "8 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "12 marker line(s) identical"
+   }
+  },
+  "expr_path_step_clone": {
+   "file": "crates/clean-verify/tests/fixtures/expr_path_step_clone.lineage.json",
+   "old_sha256": "e851643d5f77339377445f7e4183a5bafdc7441c110bf7268635766941dada67",
+   "new_sha256": "d0adb1af7d056734913310b19078d7a3beab63a3cbbc0a3f1cd1e48e1c1418e4",
+   "historical_top_level_lineage": "sha256:f02dcc4ba1ef39f69e8a902f086307be9652adbf50daf27b7797b66c0b3a5745",
+   "current_lineage": "sha256:f1787a2586d3874cf46f599e3967cf5002c5f6eda44c053775e253f710089271",
+   "historical_top_level_def_index": 35579,
+   "current_def_index": 38656,
+   "current_func_id": 4113,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "16 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "float_div": {
+   "file": "crates/clean-verify/tests/fixtures/float_div.lineage.json",
+   "old_sha256": "1ae9b104f64cd445325b719c8e4593fef752f2b2a5aced172cfe4abd039bec07",
+   "new_sha256": "5061e0eb585f6d9b909dc706d6c45fc8960c369a73999ea60948a7fc878965c8",
+   "historical_top_level_lineage": "sha256:a457b9c0197a8edba9e8ade5749f0f78a263feccd13bd190f52c23399f21f238",
+   "current_lineage": "sha256:2c2b7aaa8d93e8ca7353080e0ea4e6c019fbde01ef1412d14ba0dca8a225d5f0",
+   "historical_top_level_def_index": 15288,
+   "current_def_index": 16882,
+   "current_func_id": 1503,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "get_char_val_trunc": {
+   "file": "crates/clean-verify/tests/fixtures/get_char_val_trunc.lineage.json",
+   "old_sha256": "589c8ed11b09a1a6f73acec95a84f6a182d66e7646cd6db15122529eb0993848",
+   "new_sha256": "3ee0c3512254baf9c069c066e0ed0d193a84193fd3752c050885ac200b505ecd",
+   "historical_top_level_lineage": "sha256:607c1d96f6bbe7856a4f2221a9eb577cdc4b58259b8c04586871cb590eb84589",
+   "current_lineage": "sha256:2bc788de73894ba42da5eea9e28a3ce9782c8acfc9c9d3c307784ce1aa9d5933",
+   "historical_top_level_def_index": 14930,
+   "current_def_index": 16507,
+   "current_func_id": 1414,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "meta_tag_shl": {
+   "file": "crates/clean-verify/tests/fixtures/meta_tag_shl.lineage.json",
+   "old_sha256": "1ac4ea5ddfcb15a7df9a3980622de5c9adb7d15f16b2c9897bc84cc73a35f03f",
+   "new_sha256": "a954cb3830787746718aa2435cb47840b0c2fa12fc0f1aa3d4b8398abbc0a9cf",
+   "historical_top_level_lineage": "sha256:501b50e5b23d48782bf35cc40cf42cb3ab4ad216a3ace71165984887426ca738",
+   "current_lineage": "sha256:63a448e3459cecaa6bad428c8e4abc19bdcd45a4911f27062b3b882ed82dccbd",
+   "historical_top_level_def_index": 19642,
+   "current_def_index": 21628,
+   "current_func_id": 2436,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "4 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "0 marker line(s) identical"
+   }
+  },
+  "level_is_zero": {
+   "file": "crates/clean-verify/tests/fixtures/level_is_zero.a0.json",
+   "old_sha256": "49958a7eb61da988311c2ac218254c600f9c317305159b342c2b11e5c0e4714d",
+   "new_sha256": "f4cece0c48e8d1375f261239874b7544755acc712ef8f529c66f802481e3bf67",
+   "historical_top_level_lineage": "sha256:b378d4d331a545e4e89fa617817725b05ff525a957bc1ba4eed9eb0bfae1f712",
+   "current_lineage": "sha256:72bace631bad67e0cee6c76802b0697d0af3c3e882507c1e73b71fd2a5f94c97",
+   "historical_top_level_def_index": 17078,
+   "current_def_index": 18802,
+   "current_func_id": 1961,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "18 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "28 marker line(s) identical"
+   }
+  },
+  "float_add": {
+   "file": "crates/clean-verify/tests/fixtures/float_add.lineage.json",
+   "old_sha256": "0801113b3e37f34592a0397ca6adf4c261b458b30d1cbd3baffd9f5c4604cbef",
+   "new_sha256": "c882c6c45a6a41e9afbd14895584e4accacff8e90112436a1f072f5b25ac6dbb",
+   "historical_top_level_lineage": "sha256:6bd2bc9cef88cbc0d17326d26cc4b9ca175ef6666d8053b6b10c4f2fb8857883",
+   "current_lineage": "sha256:6ea882530d7228e4995bb57437266c86d8264f2a88cdc1135b271b4de7d6171b",
+   "historical_top_level_def_index": 15296,
+   "current_def_index": 16876,
+   "current_func_id": 1500,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "float_sub": {
+   "file": "crates/clean-verify/tests/fixtures/float_sub.lineage.json",
+   "old_sha256": "9d8e35c12fce8632410443fe5c23e07af9eec7afcffdd4201e3edc6f462eb4e7",
+   "new_sha256": "5240976b563b13213a3fe4b2f2af94deaea1961bd8ba50edf52c4bc512072412",
+   "historical_top_level_lineage": "sha256:daf0d0176b8b5467f5c0edf11dafbb67c49b2182533b8c617654d5d3427a7204",
+   "current_lineage": "sha256:9bee539bf3dc9990f2eb9c353d73aef8f04fa9b67395de580ab6ffeeee6ca351",
+   "historical_top_level_def_index": 15298,
+   "current_def_index": 16878,
+   "current_func_id": 1501,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "float_mul": {
+   "file": "crates/clean-verify/tests/fixtures/float_mul.lineage.json",
+   "old_sha256": "f48062ebe0311e4c81a96e6315c399b4b99deabb7bff571e485b5a2bc5297601",
+   "new_sha256": "5cb3cc0d073f42ff5443477b12c9ad77e50ccd1c6d1dd4d732b7f5aa3df8c06f",
+   "historical_top_level_lineage": "sha256:feb0c246cba5179adbd3f6812ffff0371f00cb37c69e3655034d94f8f50ac806",
+   "current_lineage": "sha256:e2f0153fbae5987d381bf26a753b140b52eb07c4e796664ef99ee0846a6789d0",
+   "historical_top_level_def_index": 15300,
+   "current_def_index": 16880,
+   "current_func_id": 1502,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "6 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  },
+  "strict_monads": {
+   "file": "crates/clean-verify/tests/fixtures/strict_monads.lineage.json",
+   "old_sha256": "2e57205b4b8b5912fdfa0ed57c88d8bf2dacedf5466e94a5547fd3b77a5eefea",
+   "new_sha256": "366f377dc08552fd9de11d50ba4f06541208d01a21ed0174a741e6f1b91333b3",
+   "historical_top_level_lineage": "sha256:7f10c087e235bd56f34cf1b5e847e201f3964899a5d2a466d20286554b5cb2fe",
+   "current_lineage": "sha256:c2ef759ef3b24431ca65eb7dd1679a9d50e65d697083b180caefc38374d4440b",
+   "historical_top_level_def_index": 15917,
+   "current_def_index": 17525,
+   "current_func_id": 1640,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "flat_flags_with": {
+   "file": "crates/clean-verify/tests/fixtures/flat_flags_with.lineage.json",
+   "old_sha256": "268de60f4740cc55801db0978007ed1160d6a1a3d6ffa1785b799b5c603b6b81",
+   "new_sha256": "4171a3825017e6040eadc290fea939b3291e684496eed68b64b8ef307755c29b",
+   "historical_top_level_lineage": "sha256:ad70b2ae9f56fa52a7be294ce5c324e927d1e18ce04cb608c58706b0b27998d3",
+   "current_lineage": "sha256:e9ffc1768651272207f777e45be49449ff07a35f1ab2e7cd46208f1e7daf39ed",
+   "historical_top_level_def_index": 16851,
+   "current_def_index": 18559,
+   "current_func_id": 1897,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "6 marker line(s) identical"
+   }
+  },
+  "node_id_index": {
+   "file": "crates/clean-verify/tests/fixtures/node_id_index.lineage.json",
+   "old_sha256": "ebfb247d4fc59066b178020d5d58615a4e57c98f42ad9248dc0964b30487094b",
+   "new_sha256": "04376cf71493a291e1552b5161d8fd035044894c64f47e2210dcdf4abfbad26e",
+   "historical_top_level_lineage": "sha256:8403edf59060750d9c3299911b5b437c895b9cfee4c64ff2885c213a77e87717",
+   "current_lineage": "sha256:e4d331e09f028b6c08d01c569699ea9757245ad8f9c7538008c03e947734ca73",
+   "historical_top_level_def_index": 1787,
+   "current_def_index": 1925,
+   "current_func_id": 334,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "4 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "simp_priority_value": {
+   "file": "crates/clean-verify/tests/fixtures/simp_priority_value.lineage.json",
+   "old_sha256": "9bdc56a0b8679abb11f5659adf4e141c234c9e5c7efa6be353483acb719222d5",
+   "new_sha256": "dd19eb586fdd3b8786e77395c737d44b32daa810e5867d360f3dd7b2278265bc",
+   "historical_top_level_lineage": "sha256:e4940c327949501a23907f34a213793406f9ca9e932ae1db8d85d855f6fadb71",
+   "current_lineage": "sha256:88cbd3c53f5338595d41875b66e0f54fa6eb62dc9878935a8c4579e014354982",
+   "historical_top_level_def_index": 13411,
+   "current_def_index": 14490,
+   "current_func_id": 1080,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "7 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "2 marker line(s) identical"
+   }
+  },
+  "has_loose_bvars": {
+   "file": "crates/clean-verify/tests/fixtures/has_loose_bvars.lineage.json",
+   "old_sha256": "0ae32e95982b117d8f3577924b3389869a5dd81d2049ec9237f1435061a841a7",
+   "new_sha256": "c21a57698a90118bdb3750195b6fcb5924ff9829d01dab110d533866e3afe93a",
+   "historical_top_level_lineage": "sha256:db25d4f69a3edca7f02dd743f3e2c0156f6e686d60c10b656fdc81bfb8c7ecfb",
+   "current_lineage": "sha256:11b479743e4383464de6f566026adfab0c9847e2916029cff7495fd85d531c97",
+   "historical_top_level_def_index": 16234,
+   "current_def_index": 17842,
+   "current_func_id": 1730,
+   "current_flip_fired": true,
+   "current_derived_mir": {
+    "verdict": "agreed",
+    "detail": "5 canonical line(s) identical",
+    "markers_exact": true,
+    "markers_detail": "4 marker line(s) identical"
+   }
+  }
+ },
+ "postcondition": "Every committed trust-ir fixture is byte-identical to its unique body in the exact live dump; crystal_fixture_freshness.py --strict must exit zero.",
+ "append_only": true,
+ "generator": "scripts/crystal_fixture_rebaseline.py"
+}

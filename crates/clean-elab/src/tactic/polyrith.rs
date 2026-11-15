@@ -21,7 +21,7 @@ pub use super::polynomial::Polynomial;
 #[derive(Debug, Clone)]
 pub struct PolyrithCertificate {
     /// Coefficients for linear combination of hypotheses
-    pub coefficients: Vec<(String, Polynomial)>,
+    pub coefficients: Vec<(clean_parser::SurfaceName, Polynomial)>,
     /// Whether the certificate was verified
     pub verified: bool,
     /// Human-readable explanation
@@ -72,7 +72,7 @@ pub fn polyrith_with_config(state: &mut ProofState, config: PolyrithConfig) -> T
         .map_err(|_| TacticError::GoalMismatch("polyrith: goal must be an equality".to_string()))?;
 
     // Check that it's a numeric type
-    let ty_str = format!("{ty:?}");
+    let ty_str = crate::error_render::term(&ty);
     if !ty_str.contains("Nat")
         && !ty_str.contains("Int")
         && !ty_str.contains("Rat")
@@ -158,7 +158,7 @@ fn collect_hyp_polynomials(
     ctx: &[super::LocalDecl],
     var_map: &mut VarMap,
     max_hyps: usize,
-) -> Vec<(String, Polynomial)> {
+) -> Vec<(clean_parser::SurfaceName, Polynomial)> {
     let mut hyp_polys = Vec::new();
     for decl in ctx {
         if hyp_polys.len() >= max_hyps {
@@ -181,7 +181,7 @@ fn collect_hyp_polynomials(
 /// ENSURES: On None, no certificate was found within search bounds
 fn find_polynomial_certificate(
     goal: &Polynomial,
-    hyps: &[(String, Polynomial)],
+    hyps: &[(clean_parser::SurfaceName, Polynomial)],
     config: &PolyrithConfig,
 ) -> Option<PolyrithCertificate> {
     // Simple strategy: try small integer coefficients
@@ -228,7 +228,7 @@ fn find_polynomial_certificate(
 /// ENSURES: On None, no tested two-hypothesis combination matched `goal`
 fn try_two_hyp_combinations(
     goal: &Polynomial,
-    hyps: &[(String, Polynomial)],
+    hyps: &[(clean_parser::SurfaceName, Polynomial)],
 ) -> Option<PolyrithCertificate> {
     for c1 in -3i64..=3 {
         for c2 in -3i64..=3 {
@@ -348,7 +348,10 @@ mod tests {
     #[test]
     fn test_verified_certificate_missing_proof_returns_arithmetic_failed() {
         let cert = PolyrithCertificate {
-            coefficients: vec![("h".to_string(), Polynomial::constant(1, 2))],
+            coefficients: vec![(
+                clean_parser::SurfaceName::generated_path("h"),
+                Polynomial::constant(1, 2),
+            )],
             verified: true,
             explanation: "test missing proof".to_string(),
         };
@@ -359,8 +362,9 @@ mod tests {
             env,
             make_eq_n(y.clone(), x.clone()),
             vec![LocalDecl {
+                binder_info: Default::default(),
                 fvar: FVarId::new(0),
-                name: "h".to_string(),
+                name: clean_parser::SurfaceName::generated_path("h"),
                 ty: make_eq_n(x, y),
                 value: None,
             }],

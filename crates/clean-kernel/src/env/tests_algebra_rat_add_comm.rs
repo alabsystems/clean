@@ -2,19 +2,12 @@
 // Author: Andrew Yates <andrewyates.name@gmail.com>
 // SPDX-License-Identifier: Apache-2.0
 
-//! Guard tests for `Rat.add_comm` — pins the Phase-2 (#3572) outcome:
-//! `Declaration::Theorem` with a real `Eq.trans ∘ congrArg × 2` proof term
-//! over `Int.add_comm + Nat.mul_comm`, transitive closure bounded by the
-//! allowed foundational set, and no residual `FOUNDATIONAL_AXIOMS`
-//! whitelist entry.
-//!
-//! Lives alongside `algebra_rat_add_comm_proof.rs` (per-phase companion
-//! test file, mirrors the Phase-1 inline tests but pulled out so that
-//! future audits can extend the guard suite without growing the proof
-//! module).
+//! Guards for the live quotient proof of `Rat.add_comm`: full kernel
+//! validation, a genuine `Quot.ind` body, no domain-specific axioms, and
+//! positive evidence that the proof reaches foundational `Quot.sound`.
 
 use super::axiom_audit::{is_foundational_axiom, ProofQuality};
-use super::{ConstantKind, Environment};
+use super::{ConstantKind, DeclarationVerification, Environment};
 use crate::expr::ExprKind;
 use crate::name::Name;
 
@@ -25,12 +18,6 @@ fn env_with_rat_add_comm() -> Environment {
     env.init_rat_field_inst()
         .expect("init_rat_field_inst should succeed");
     env
-}
-
-fn try_env_with_rat_add_comm() -> Option<Environment> {
-    let mut env = Environment::new();
-    env.init_rat_field_inst().ok()?;
-    Some(env)
 }
 
 #[test]
@@ -44,6 +31,11 @@ fn test_rat_add_comm_is_theorem_not_axiom() {
         ConstantKind::Theorem,
         "Rat.add_comm should be Declaration::Theorem (post-#3572 Phase 2), got {:?}",
         info.kind
+    );
+    assert_eq!(
+        env.declaration_verification(&info.name),
+        Some(DeclarationVerification::FullKernelCheck),
+        "Rat.add_comm must pass the full kernel gate, not only a structural check",
     );
 }
 
@@ -101,73 +93,33 @@ fn test_rat_add_comm_proof_body_is_not_axiom_ref() {
 
 #[test]
 fn test_rat_add_comm_transitive_axiom_closure_is_foundational_only() {
-    // Explicit closure check: every axiom reached by the transitive
-    // closure of `Rat.add_comm` must be either (a) in the allowed Phase-2
-    // set `{Int.add_comm, Nat.mul_comm}`, or (b) in `FOUNDATIONAL_AXIOMS`.
-    // Also guards against self-reference (axiom_wrapper masquerade).
-    let Some(env) = try_env_with_rat_add_comm() else {
-        eprintln!("SKIP: init_rat_field_inst failed upstream");
-        return;
-    };
-    let Some(deps) = env.axiom_deps(&Name::from_string("Rat.add_comm")) else {
-        eprintln!("SKIP: Rat.add_comm not in env");
-        return;
-    };
-    let allowed: std::collections::HashSet<&str> =
-        ["Int.add_comm", "Nat.mul_comm"].iter().copied().collect();
-    for dep in &deps {
-        let name = dep.to_string();
-        assert!(
-            allowed.contains(name.as_str()) || is_foundational_axiom(dep),
-            "Rat.add_comm transitive closure contains unexpected axiom {name}; \
-             expected only {{Int.add_comm, Nat.mul_comm}} ∪ FOUNDATIONAL_AXIOMS \
-             (#3572 Phase 2)"
-        );
-        assert_ne!(
-            name, "Rat.add_comm",
-            "Rat.add_comm must not self-reference in its own transitive \
-             axiom closure (axiom_wrapper masquerade — #3572)"
-        );
-    }
+    let env = env_with_rat_add_comm();
+    let name = Name::from_string("Rat.add_comm");
+    let deps = env
+        .axiom_deps(&name)
+        .expect("Rat.add_comm should have an axiom-deps closure");
+    assert!(
+        deps.is_empty(),
+        "Rat.add_comm must have no domain-specific or self-referential axiom dependencies: {deps:?}",
+    );
 
-    // Positive containment: both Int.add_comm and Nat.mul_comm should
-    // typically appear in the closure. When upstream proof construction
-    // hasn't fully attached them yet (the closure is empty or partial),
-    // skip rather than fail.
-    let dep_names: std::collections::HashSet<String> = deps.iter().map(|d| d.to_string()).collect();
-    let missing: Vec<&&str> = ["Int.add_comm", "Nat.mul_comm"]
-        .iter()
-        .filter(|n| !dep_names.contains(**n))
-        .collect();
-    if !missing.is_empty() {
-        eprintln!("SKIP: Rat.add_comm closure missing {missing:?}; got {dep_names:?}");
-        return;
-    }
-
-    // And for extra observability, pin the proof_quality classification
-    // to either `Constructive` (if the two Int/Nat axioms happen to be
-    // whitelisted) or `AxiomDependent` with those exact deps.
-    let quality = env
-        .proof_quality(&Name::from_string("Rat.add_comm"))
-        .expect("Rat.add_comm should have a proof quality");
-    match quality {
-        ProofQuality::Constructive => {
-            // Acceptable when Int.add_comm / Nat.mul_comm are promoted.
-        }
-        ProofQuality::AxiomDependent { axioms, .. } => {
-            for expected in ["Int.add_comm", "Nat.mul_comm"] {
-                assert!(
-                    axioms.iter().any(|a| a.to_string() == expected),
-                    "Rat.add_comm AxiomDependent closure should contain {expected}",
-                );
-            }
-        }
-        other => panic!(
-            "unexpected proof quality for Rat.add_comm: {:?}; expected \
-             Constructive or AxiomDependent",
-            other
-        ),
-    }
+    // Pin the actual quotient foundation rather than the obsolete Phase-2
+    // Int/Nat domain axioms. Missing declarations and initialization failures
+    // must fail these guards, not skip their assertions.
+    let foundational_deps = env
+        .foundational_axiom_deps(&name)
+        .expect("Rat.add_comm should have a foundational axiom-deps closure");
+    assert!(
+        foundational_deps.contains(&Name::from_string("Quot.sound")),
+        "Rat.add_comm quotient proof must reach Quot.sound; got {foundational_deps:?}",
+    );
+    assert!(foundational_deps.iter().all(is_foundational_axiom));
+    // This variant means foundational-axiom-only, not constructive logic.
+    assert_eq!(
+        env.proof_quality(&name),
+        Some(ProofQuality::Constructive),
+        "Rat.add_comm must be fully proved without domain-specific axioms",
+    );
 }
 
 #[test]

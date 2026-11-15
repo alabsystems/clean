@@ -15,6 +15,7 @@ async fn test_train_dict_basic() {
         samples,
         max_size: None,
         level: None,
+        timeout_ms: None,
     };
 
     let response = handle_train_dict(&state, RequestId::Number(1), params).await;
@@ -44,6 +45,7 @@ async fn test_train_dict_custom_params() {
         samples,
         max_size: Some(16 * 1024), // 16KB
         level: Some(5),
+        timeout_ms: None,
     };
 
     let response = handle_train_dict(&state, RequestId::Number(1), params).await;
@@ -70,6 +72,7 @@ async fn test_train_dict_not_enough_samples() {
         samples,
         max_size: None,
         level: None,
+        timeout_ms: None,
     };
 
     let response = handle_train_dict(&state, RequestId::Number(1), params).await;
@@ -95,6 +98,7 @@ async fn test_archive_cert_with_dict_basic() {
         samples,
         max_size: None,
         level: None,
+        timeout_ms: None,
     };
     let train_response = handle_train_dict(&state, RequestId::Number(1), train_params).await;
     assert!(
@@ -116,6 +120,7 @@ async fn test_archive_cert_with_dict_basic() {
         dictionary: train_result.dictionary,
         level: None,
         include_stats: false,
+        timeout_ms: None,
     };
 
     let archive_response =
@@ -147,6 +152,7 @@ async fn test_archive_cert_with_dict_with_stats() {
         samples,
         max_size: None,
         level: None,
+        timeout_ms: None,
     };
     let train_response = handle_train_dict(&state, RequestId::Number(1), train_params).await;
     let train_result: TrainDictResult =
@@ -163,6 +169,7 @@ async fn test_archive_cert_with_dict_with_stats() {
         dictionary: train_result.dictionary,
         level: Some(5),
         include_stats: true,
+        timeout_ms: None,
     };
 
     let archive_response =
@@ -194,6 +201,7 @@ async fn test_unarchive_cert_with_dict_roundtrip() {
         samples,
         max_size: None,
         level: None,
+        timeout_ms: None,
     };
     let train_response = handle_train_dict(&state, RequestId::Number(1), train_params).await;
     let train_result: TrainDictResult =
@@ -210,6 +218,7 @@ async fn test_unarchive_cert_with_dict_roundtrip() {
         dictionary: train_result.dictionary.clone(),
         level: None,
         include_stats: false,
+        timeout_ms: None,
     };
 
     let archive_response =
@@ -221,6 +230,7 @@ async fn test_unarchive_cert_with_dict_roundtrip() {
     let unarchive_params = UnarchiveCertWithDictParams {
         archive: archive_result.archive,
         dictionary: train_result.dictionary,
+        timeout_ms: None,
     };
 
     let unarchive_response =
@@ -254,6 +264,7 @@ async fn test_unarchive_cert_with_dict_invalid_dict() {
     let params = UnarchiveCertWithDictParams {
         archive: "SGVsbG8gV29ybGQ=".to_string(), // "Hello World" in base64
         dictionary: "bm90IGEgcmVhbCBkaWN0".to_string(), // Invalid dictionary
+        timeout_ms: None,
     };
 
     let response = handle_unarchive_cert_with_dict(&state, RequestId::Number(1), params).await;
@@ -281,6 +292,7 @@ async fn test_unarchive_cert_with_dict_wrong_dict() {
         samples: samples1,
         max_size: Some(8 * 1024),
         level: Some(1),
+        timeout_ms: None,
     };
     let train_response1 = handle_train_dict(&state, RequestId::Number(1), train_params1).await;
     let train_result1: TrainDictResult =
@@ -290,6 +302,7 @@ async fn test_unarchive_cert_with_dict_wrong_dict() {
         samples: samples2,
         max_size: Some(16 * 1024),
         level: Some(9),
+        timeout_ms: None,
     };
     let train_response2 = handle_train_dict(&state, RequestId::Number(2), train_params2).await;
     let train_result2: TrainDictResult =
@@ -304,6 +317,7 @@ async fn test_unarchive_cert_with_dict_wrong_dict() {
         dictionary: train_result1.dictionary,
         level: None,
         include_stats: false,
+        timeout_ms: None,
     };
 
     let archive_response =
@@ -315,6 +329,7 @@ async fn test_unarchive_cert_with_dict_wrong_dict() {
     let unarchive_params = UnarchiveCertWithDictParams {
         archive: archive_result.archive,
         dictionary: train_result2.dictionary,
+        timeout_ms: None,
     };
 
     let unarchive_response =
@@ -337,6 +352,7 @@ async fn test_dict_json_serialization() {
         samples,
         max_size: None,
         level: None,
+        timeout_ms: None,
     };
 
     // Verify TrainDictParams can be serialized (for API usage)
@@ -370,6 +386,7 @@ async fn test_dict_json_serialization() {
         dictionary: train_result.dictionary.clone(),
         level: Some(5),
         include_stats: true,
+        timeout_ms: None,
     };
 
     let archive_params_json = serde_json::to_value(&archive_params).unwrap();

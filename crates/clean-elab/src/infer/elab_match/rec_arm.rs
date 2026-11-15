@@ -14,6 +14,108 @@ use super::{
 };
 
 impl<'a> ElabCtx<'a> {
+    /// Apply the current recursive motive to a real constructor or child.
+    /// Unlike the nonrecursive convenience view, malformed index spines cannot
+    /// fall back to an unspecialized expected type here.
+    fn recursive_motive_at(
+        &mut self,
+        default: &Expr,
+        subject: &Expr,
+        subject_ty: &Expr,
+        family: &Name,
+        num_params: usize,
+        num_indices: usize,
+    ) -> Result<Expr, ElabError> {
+        let ty = self.whnf(subject_ty);
+        if let ExprKind::Pi(binder, domain, codomain) = ty.kind() {
+            // A strictly positive function field has one IH for every index:
+            // (i : A) -> motive (children i). Keep that telescope outside the
+            // motive's generalized recursive parameters.
+            return self.with_temporary_local_scope(|this| {
+                let index = this.push_local(
+                    SurfaceName::generated_path("_recursiveIndex"),
+                    domain.as_ref().clone(),
+                );
+                let value = Expr::fvar(index);
+                let result = this.recursive_motive_at(
+                    default,
+                    &Expr::app(subject.clone(), value.clone()),
+                    &codomain.instantiate(&value),
+                    family,
+                    num_params,
+                    num_indices,
+                )?;
+                Ok(Expr::pi(
+                    *binder,
+                    domain.as_ref().clone(),
+                    result.abstract_fvar(index),
+                ))
+            });
+        }
+        let Some(body) = &self.match_dependent_motive else {
+            return Ok(default.clone());
+        };
+        if self.match_dependent_motive_indices != num_indices {
+            return Err(ElabError::InternalInvariant(
+                "recursive motive index arity disagrees with its family".into(),
+            ));
+        }
+        let args = ty.get_app_args();
+        if !matches!(ty.get_app_fn().kind(), ExprKind::Const(name, _) if name == family)
+            || args.len() != num_params + num_indices
+        {
+            return Err(ElabError::InternalInvariant(
+                "recursive motive requires an exact family/index spine".into(),
+            ));
+        }
+        let mut values = vec![subject.clone()];
+        values.extend(args.iter().skip(num_params).rev().map(|e| (*e).clone()));
+        Ok(body.instantiate_rev(&values))
+    }
+
+    /// Alpha-rename an original telescope binder in the scoped recursive-call
+    /// context. New identifiers are fresh, so this is capture-free; actual
+    /// recursive arguments are still checked against the complete telescope.
+    fn rename_recursive_parameter(&mut self, old: FVarId, new: FVarId) {
+        if let Some(ctx) = &mut self.recursive_def_ctx {
+            for param in &mut ctx.parameters {
+                param.type_ = param.type_.subst_fvar(old, &Expr::fvar(new));
+                if param.fvar == old {
+                    param.fvar = new;
+                }
+            }
+        }
+    }
+
+    fn recursive_parameter_name(&self, original: FVarId, fallback: &'static str) -> SurfaceName {
+        if let Some(name) = self
+            .recursive_def_ctx
+            .as_ref()
+            .and_then(|ctx| ctx.parameters.iter().find(|p| p.fvar == original))
+            .filter(|p| {
+                self.lookup_local(&p.name)
+                    .is_some_and(|(id, _)| id == original)
+            })
+            .map(|p| p.name.clone())
+        {
+            return name;
+        }
+        // Numeric components cannot be spelled by a source identifier, even
+        // with quoting. These internal aliases therefore cannot shadow a
+        // source local or global; actual uses retain captured FVar identity.
+        let base = Name::anon()
+            .num(u64::MAX)
+            .str("recursive-parameter")
+            .str(fallback);
+        let mut index = 0u64;
+        let mut name = SurfaceName::from_name(base.clone().num(index));
+        while self.lookup_local(&name).is_some() {
+            index += 1;
+            name = SurfaceName::from_name(base.clone().num(index));
+        }
+        name
+    }
+
     /// Elaborate a match arm for a recursor application (#381)
     ///
     /// When using `T.rec` instead of `T.casesOn`, constructor arguments that are
@@ -33,7 +135,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(in crate::infer) fn elaborate_rec_arm(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         body: &SurfaceExpr,
         scrutinee_ty: &Expr,
@@ -67,7 +169,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(in crate::infer) fn elaborate_rec_arm_with_fallback(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         body: &SurfaceExpr,
         scrutinee_ty: &Expr,
@@ -93,7 +195,7 @@ impl<'a> ElabCtx<'a> {
     #[allow(clippy::too_many_arguments)]
     fn elaborate_rec_arm_with_fallback_inner(
         &mut self,
-        ctor_name: &str,
+        ctor_name: &SurfaceName,
         sub_pats: &[SurfacePattern],
         body: &SurfaceExpr,
         scrutinee_ty: &Expr,
@@ -174,21 +276,9 @@ impl<'a> ElabCtx<'a> {
             });
         }
 
-        let ctor_full_name = if ctor_name.contains('.') {
-            Name::from_string(ctor_name)
-        } else {
-            ind_info
-                .constructor_names
-                .iter()
-                .find(|name| {
-                    name.to_string()
-                        .rsplit('.')
-                        .next()
-                        .is_some_and(|short| short == ctor_name)
-                })
-                .cloned()
-                .unwrap_or_else(|| Name::from_string(ctor_name))
-        };
+        let ctor_full_name = self
+            .ctor_pattern_full_name(ctor_name, &SurfaceName::from_name(ind_name.clone()))
+            .into_name();
 
         let ctor_info_value = self
             .env
@@ -220,12 +310,12 @@ impl<'a> ElabCtx<'a> {
         }
         ensure_ctor_pattern_arity(
             "match arm pattern",
-            &ctor_full_name.to_string(),
+            &SurfaceName::from_name(ctor_full_name.clone()),
             Some(ctor_info_value.num_fields as usize),
             sub_pats.len(),
         )?;
 
-        let rec_name = Name::from_string(&format!("{ind_name}.rec"));
+        let rec_name = ind_name.clone().str("rec");
         let rec_info = self.env.get_recursor(&rec_name).ok_or_else(|| {
             ElabError::InternalInvariant(format!(
                 "recursive match lowering selected `{rec_name}` without recursor metadata"
@@ -256,8 +346,8 @@ impl<'a> ElabCtx<'a> {
         // Track all binders (both pattern vars and IHs) in the order they appear.
         // Each entry is (fvar_id, type, is_ih, associated_var_name).
         // For IHs, associated_var_name is the pattern var this IH corresponds to.
-        let mut all_binders: Vec<(FVarId, Expr, bool, Option<String>)> = Vec::new();
-        let mut ih_map: HashMap<String, FVarId> = HashMap::new();
+        let mut all_binders: Vec<(FVarId, Expr, bool, Option<SurfaceName>)> = Vec::new();
+        let mut ih_map: HashMap<FVarId, FVarId> = HashMap::new();
         let mut first_ih_fvar: Option<FVarId> = None;
 
         // Instantiate the constructor telescope exactly. Universe/parameter
@@ -287,15 +377,15 @@ impl<'a> ElabCtx<'a> {
         // This matches build_minor_premise_type in the kernel (#643).
         //
         // Phase 1: Push all fields
-        let mut field_var_names: Vec<String> = Vec::new();
+        let mut field_var_names: Vec<SurfaceName> = Vec::new();
         // (fvar, field_ty) per field, in field order — reused below to collect
         // nested-constructor sub-pattern plans (Track G3) keyed by field.
         let mut field_fvar_tys: Vec<(FVarId, Expr)> = Vec::new();
         for (idx, pat) in pats.iter().enumerate() {
             let var_name = match pat {
                 SurfacePattern::Var(name) => name.clone(),
-                SurfacePattern::Wildcard => "_".to_string(),
-                _ => "_".to_string(),
+                SurfacePattern::Wildcard => SurfaceName::generated_path("_"),
+                _ => SurfaceName::generated_path("_"),
             };
             field_var_names.push(var_name.clone());
 
@@ -318,8 +408,9 @@ impl<'a> ElabCtx<'a> {
         let ctor_result = self.whnf(&ctor_ty);
         let ExprKind::Const(result_ind, result_levels) = ctor_result.get_app_fn().kind() else {
             return Err(ElabError::InternalInvariant(format!(
-                "constructor `{ctor_full_name}` field telescope does not return an inductive application: {ctor_result:?}"
-            )));
+                "constructor `{ctor_full_name}` field telescope does not return an inductive application: {}"
+            ,
+                crate::error_render::term(&ctor_result))));
         };
         let result_args: Vec<Expr> = ctor_result.get_app_args().into_iter().cloned().collect();
         if result_ind != &ind_name
@@ -327,7 +418,8 @@ impl<'a> ElabCtx<'a> {
             || result_args.len() != (ind_info.num_params as usize + ind_info.num_indices as usize)
         {
             return Err(ElabError::InternalInvariant(format!(
-                "constructor `{ctor_full_name}` returns malformed family application `{ctor_result:?}`"
+                "constructor `{ctor_full_name}` returns malformed family application `{}`",
+                crate::error_render::term(&ctor_result)
             )));
         }
         for (actual, expected) in result_args
@@ -343,6 +435,15 @@ impl<'a> ElabCtx<'a> {
             }
         }
 
+        let generalized_result = generalize_with_extra_params(result_ty.clone(), extra_param_info);
+        let mut ctor_value = Expr::const_(ctor_full_name.clone(), scrutinee_levels.clone());
+        for param in scrutinee_args.iter().take(ind_info.num_params as usize) {
+            ctor_value = Expr::app(ctor_value, param.clone());
+        }
+        for (field, _) in &field_fvar_tys {
+            ctor_value = Expr::app(ctor_value, Expr::fvar(*field));
+        }
+
         // Phase 2: Push IHs in field order to match the recursor minor premise:
         // all fields first, then IHs for recursive fields from left to right.
         let recursive_indices: Vec<usize> = recursive_fields
@@ -355,17 +456,31 @@ impl<'a> ElabCtx<'a> {
             let var_name = field_var_names
                 .get(idx)
                 .cloned()
-                .unwrap_or_else(|| "_".to_string());
-            // Generalize IH type with extra params (#1386):
-            // IH type becomes P1_ty → P2_ty → ... → result_ty
-            // so IH can be applied with different param values.
-            let ih_type = generalize_with_extra_params(result_ty.clone(), extra_param_info);
-            let ih_fvar = self.push_local(format!("ih_{}", var_name), ih_type.clone());
+                .unwrap_or_else(|| SurfaceName::generated_path("_"));
+            let (field, field_ty) = field_fvar_tys.get(idx).ok_or_else(|| {
+                ElabError::InternalInvariant("recursive field position is out of bounds".into())
+            })?;
+            // The IH is M(childIndices, child), not M(outerIndices, major).
+            // This also specializes domains inside the generalized telescope.
+            let ih_type = self.recursive_motive_at(
+                &generalized_result,
+                &Expr::fvar(*field),
+                field_ty,
+                &ind_name,
+                ind_info.num_params as usize,
+                ind_info.num_indices as usize,
+            )?;
+            let ih_fvar = self.push_local(
+                super::generated_prefixed_name("ih_", &var_name),
+                ih_type.clone(),
+            );
             all_binders.push((ih_fvar, ih_type, true, Some(var_name.clone())));
 
             // Track in ih_map for recursive call replacement
-            if var_name != "_" {
-                ih_map.insert(var_name, ih_fvar);
+            if !var_name.is_unescaped_component("_") {
+                if let Some((field, _)) = field_fvar_tys.get(idx) {
+                    ih_map.insert(*field, ih_fvar);
+                }
             }
             if first_ih_fvar.is_none() {
                 first_ih_fvar = Some(ih_fvar);
@@ -379,6 +494,89 @@ impl<'a> ElabCtx<'a> {
             ctx.ih_type = Some(result_ty.clone());
             ctx.ih_map = ih_map;
         }
+
+        let mut specialized_result = self.recursive_motive_at(
+            &generalized_result,
+            &ctor_value,
+            &ctor_result,
+            &ind_name,
+            ind_info.num_params as usize,
+            ind_info.num_indices as usize,
+        )?;
+        let mut index_aliases: Vec<(FVarId, Expr)> = Vec::new();
+        let mut specialized_extras = Vec::new();
+        if ind_info.num_indices > 0 {
+            // Surface occurrences of the outer index must denote THIS
+            // constructor's index, too. A type-only specialization would leave
+            // `nil => n` computing the original vector's length under recursion.
+            for (original, value) in scrutinee_args
+                .iter()
+                .skip(ind_info.num_params as usize)
+                .zip(result_args.iter().skip(ind_info.num_params as usize))
+            {
+                if let ExprKind::FVar(old) = original.kind() {
+                    let name = self.recursive_parameter_name(*old, "_recursive_index");
+                    let ty = self.infer_type(value)?;
+                    let alias = self.fresh_fvar();
+                    self.push_local_let_with_fvar(name, alias, ty, value.clone());
+                    self.rename_recursive_parameter(*old, alias);
+                    index_aliases.push((alias, value.clone()));
+                }
+            }
+        }
+        // A source reference to the major similarly denotes this branch's
+        // constructor; keep a same-named pattern field shadowing it.
+        let original_major = self.recursive_def_ctx.as_ref().and_then(|ctx| {
+            ctx.decreasing_binder_index()
+                .and_then(|index| ctx.parameters.get(index))
+                .map(|p| p.fvar)
+        });
+        if let Some(old) = original_major {
+            let name = self.recursive_parameter_name(old, "_recursive_major");
+            let alias = self.fresh_fvar();
+            self.push_local_let_with_fvar(name, alias, ctor_result.clone(), ctor_value.clone());
+            self.rename_recursive_parameter(old, alias);
+            index_aliases.push((alias, ctor_value));
+        }
+        let specialize_extras = ind_info.num_indices > 0 || self.match_dependent_motive.is_some();
+        if specialize_extras {
+            // Open the actual specialized Pi telescope in dependency order.
+            // Reusing the outer locals here would mis-type an extra parameter
+            // whose domain mentions an index (e.g. x : Vec A n).
+            for (old, bi, _) in extra_param_info {
+                let ty = self.whnf(&specialized_result);
+                let ExprKind::Pi(_, domain, codomain) = ty.kind() else {
+                    return Err(ElabError::InternalInvariant(
+                        "recursive motive lost a generalized parameter binder".into(),
+                    ));
+                };
+                let name = self.recursive_parameter_name(*old, "_recursive_parameter");
+                let fresh = self.push_local(name, domain.as_ref().clone());
+                if *bi == BinderInfo::InstImplicit {
+                    self.push_local_instance(fresh, domain.as_ref().clone());
+                }
+                self.rename_recursive_parameter(*old, fresh);
+                specialized_extras.push((fresh, *bi, domain.as_ref().clone()));
+                specialized_result = codomain.instantiate(&Expr::fvar(fresh));
+            }
+        } else {
+            // Non-indexed motives keep the existing outer parameter locals.
+            for (fvar, _, _) in extra_param_info {
+                let ty = self.whnf(&specialized_result);
+                let ExprKind::Pi(_, _, codomain) = ty.kind() else {
+                    return Err(ElabError::InternalInvariant(
+                        "recursive motive lost a generalized parameter binder".into(),
+                    ));
+                };
+                specialized_result = codomain.instantiate(&Expr::fvar(*fvar));
+            }
+        }
+        let result_ty = &specialized_result;
+        let extra_param_info = if specialize_extras {
+            specialized_extras.as_slice()
+        } else {
+            extra_param_info
+        };
 
         // Nested-constructor sub-pattern plans (Track G3). With fields + IHs now
         // bound (and the IH for each recursive field installed in `ih_map`),
@@ -445,16 +643,15 @@ impl<'a> ElabCtx<'a> {
                         .fold(fallback_body, |acc, (fvar, _, _)| {
                             Expr::app(acc, Expr::fvar(*fvar))
                         });
-                    let mut result = arm_body;
-                    for plan in nested_plans.iter().rev() {
-                        result = self.apply_nested_pattern_plan(
-                            result,
-                            plan,
-                            result_ty,
-                            Some(&fallback_body),
-                        )?;
-                    }
-                    result
+                    // One arm-scope binding of the fallback, not one inlined
+                    // copy per nested `casesOn` level (see
+                    // `apply_nested_plans_with_fallback`).
+                    self.apply_nested_plans_with_fallback(
+                        &nested_plans,
+                        arm_body,
+                        result_ty,
+                        &fallback_body,
+                    )?
                 }
                 None => self.apply_nested_field_plans(&nested_plans, arm_body, result_ty)?,
             }
@@ -466,14 +663,24 @@ impl<'a> ElabCtx<'a> {
         self.set_expected_type(saved_expected);
         self.recursive_def_ctx = saved_ctx;
 
+        // Close generalized binders, then zeta-eliminate the scoped aliases:
+        // merely popping their local definitions would leave dangling FVars.
+        let mut arm_body = wrap_with_extra_params(arm_body, extra_param_info);
+        for (_, bi, _) in specialized_extras.iter().rev() {
+            if *bi == BinderInfo::InstImplicit {
+                self.pop_local_instance();
+            }
+            self.pop_local();
+        }
+        for (alias, value) in index_aliases.iter().rev() {
+            arm_body = arm_body.subst_fvar(*alias, value);
+            self.pop_local();
+        }
+
         // Pop all locals (in reverse order)
         for _ in &all_binders {
             self.pop_local();
         }
-
-        // Wrap body with extra param lambdas BEFORE field/IH abstraction (#1386).
-        // This converts body from type ResultType to P1 → P2 → ... → ResultType.
-        let arm_body = wrap_with_extra_params(arm_body, extra_param_info);
 
         // Build the lambda structure by abstracting in reverse order.
         // This produces: fun (field1) (field2) ... (ih1) (ih2) ... => body
@@ -510,5 +717,45 @@ impl<'a> ElabCtx<'a> {
             });
         }
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod typed_recursive_parameter_tests {
+    use super::*;
+    use clean_kernel::Environment;
+    use clean_parser::{parse_name, NameComponentSyntax};
+
+    #[test]
+    fn generated_recursive_alias_cannot_capture_quoted_root_source_local() {
+        let env = Environment::new();
+        let mut ctx = ElabCtx::new(&env);
+        let authored = parse_name("«_root_»._recursive_major").unwrap();
+        let source_fvar = ctx.push_local(authored.clone(), Expr::type_());
+        let alias = ctx.recursive_parameter_name(source_fvar, "_recursive_major");
+        assert!(alias.source_spelling().is_none());
+        assert!(alias
+            .component_syntax()
+            .iter()
+            .all(|origin| *origin == NameComponentSyntax::Generated));
+        assert_ne!(alias.name(), authored.name());
+        let alias_fvar = ctx.push_local(alias, Expr::type_());
+        assert_ne!(alias_fvar, source_fvar);
+        assert_eq!(ctx.elab_ident(&authored).unwrap(), Expr::fvar(source_fvar));
+    }
+
+    #[test]
+    fn generated_recursive_aliases_are_fresh_in_the_actual_local_context() {
+        let env = Environment::new();
+        let mut ctx = ElabCtx::new(&env);
+        let original = ctx.fresh_fvar();
+        let first = ctx.recursive_parameter_name(original, "_recursive_parameter");
+        let first_fvar = ctx.push_local(first.clone(), Expr::type_());
+        let second = ctx.recursive_parameter_name(original, "_recursive_parameter");
+        assert_ne!(first.name(), second.name());
+        assert_eq!(ctx.lookup_local(&first).map(|(id, _)| id), Some(first_fvar));
+        assert!(ctx.lookup_local(&second).is_none());
+        assert!(first.source_spelling().is_none());
+        assert!(second.source_spelling().is_none());
     }
 }

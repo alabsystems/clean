@@ -29,12 +29,14 @@ use std::collections::HashSet;
 
 use clean_kernel::expr::BinderInfo;
 use clean_kernel::Expr;
-use clean_parser::{LevelExpr, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, UniverseExpr};
+use clean_parser::{
+    LevelExpr, SurfaceBinder, SurfaceBinderInfo, SurfaceExpr, SurfaceName, UniverseExpr,
+};
 
 /// An auto-bound variable discovered during pre-elaboration scanning.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AutoBoundVar {
-    pub name: String,
+    pub name: SurfaceName,
     pub kind: AutoBoundKind,
     pub binder_info: BinderInfo,
 }
@@ -43,11 +45,11 @@ pub(crate) struct AutoBoundVar {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum AutoBoundKind {
     /// Type variable: `α`, `β`, etc. -- bound as `{α : Type u}`.
-    TypeVar { universe: Option<String> },
+    TypeVar { universe: Option<SurfaceName> },
     /// Universe variable: `u`, `v`, etc. -- added as universe parameter.
     UniverseVar,
     /// Instance variable: `[Inhabited α]` etc.
-    InstanceVar { class_name: String },
+    InstanceVar { class_name: SurfaceName },
 }
 
 /// Well-known type names that should never be auto-bound.
@@ -131,17 +133,17 @@ const STANDARD_NAMES: &[&str] = &[
 
 /// Collector that scans surface expressions for free variables to auto-bind.
 pub(crate) struct AutoBoundCollector {
-    bound_names: HashSet<String>,
+    bound_names: HashSet<SurfaceName>,
     found_vars: Vec<AutoBoundVar>,
-    seen_names: HashSet<String>,
-    universe_vars: Vec<String>,
-    seen_universes: HashSet<String>,
+    seen_names: HashSet<SurfaceName>,
+    universe_vars: Vec<SurfaceName>,
+    seen_universes: HashSet<SurfaceName>,
 }
 
 impl AutoBoundCollector {
     /// Create a new collector with the given set of already-bound names.
     #[must_use]
-    pub(crate) fn new(bound_names: HashSet<String>) -> Self {
+    pub(crate) fn new(bound_names: HashSet<SurfaceName>) -> Self {
         Self {
             bound_names,
             found_vars: Vec::new(),
@@ -171,7 +173,9 @@ impl AutoBoundCollector {
                 self.collect_from_expr(from);
                 self.collect_from_expr(to);
             }
-            SurfaceExpr::Let(_, binder, val, body) | SurfaceExpr::LetRec(_, binder, val, body) => {
+            SurfaceExpr::Let(_, binder, val, body)
+            | SurfaceExpr::Have(_, binder, val, body)
+            | SurfaceExpr::LetRec(_, binder, val, body) => {
                 self.collect_from_let(binder, val, body);
             }
             SurfaceExpr::Paren(_, inner)
@@ -197,7 +201,7 @@ impl AutoBoundCollector {
                 // auto-bound candidate there. Same push/pop scoping as
                 // `collect_from_binders_and_body`.
                 let added_hyp = match hyp {
-                    Some(h) if h != "_" && !self.bound_names.contains(h) => {
+                    Some(h) if !h.is_unescaped_component("_") && !self.bound_names.contains(h) => {
                         self.bound_names.insert(h.clone());
                         Some(h.clone())
                     }
@@ -263,7 +267,7 @@ impl AutoBoundCollector {
 
     /// Return discovered auto-bound variables and universe variables (first-occurrence order).
     #[must_use]
-    pub(crate) fn finish(self) -> (Vec<AutoBoundVar>, Vec<String>) {
+    pub(crate) fn finish(self) -> (Vec<AutoBoundVar>, Vec<SurfaceName>) {
         (self.found_vars, self.universe_vars)
     }
 
@@ -281,7 +285,7 @@ impl AutoBoundCollector {
                 }
                 AutoBoundKind::InstanceVar { class_name } => {
                     // Bind as `[inst : ClassName]`
-                    let ty = Expr::const_str(class_name);
+                    let ty = Expr::const_(class_name.name().clone(), vec![]);
                     result = Expr::pi(BinderInfo::InstImplicit, ty, result);
                 }
                 AutoBoundKind::UniverseVar => {
@@ -294,7 +298,7 @@ impl AutoBoundCollector {
     }
 
     /// Append discovered universe parameters, skipping duplicates.
-    pub(crate) fn add_universe_params(levels: &mut Vec<String>, univs: &[String]) {
+    pub(crate) fn add_universe_params(levels: &mut Vec<SurfaceName>, univs: &[SurfaceName]) {
         for u in univs {
             if !levels.contains(u) {
                 levels.push(u.clone());
@@ -305,16 +309,16 @@ impl AutoBoundCollector {
     // ---- Private helpers ----
 
     /// Try to add a name as an auto-bound variable if it qualifies.
-    fn try_add_name(&mut self, name: &str) {
+    fn try_add_name(&mut self, name: &SurfaceName) {
         // Skip if already bound, already seen, or a standard name
         if self.bound_names.contains(name)
             || self.seen_names.contains(name)
-            || is_standard_name(name)
+            || name.component_text().is_none_or(is_standard_name)
         {
             return;
         }
 
-        if is_universe_var_name(name) {
+        if name.component_text().is_some_and(is_universe_var_name) {
             if !self.seen_universes.contains(name) {
                 self.seen_universes.insert(name.to_owned());
                 self.universe_vars.push(name.to_owned());
@@ -325,7 +329,7 @@ impl AutoBoundCollector {
                     binder_info: BinderInfo::Implicit,
                 });
             }
-        } else if is_type_var_name(name) {
+        } else if name.component_text().is_some_and(is_type_var_name) {
             self.seen_names.insert(name.to_owned());
             self.found_vars.push(AutoBoundVar {
                 name: name.to_owned(),
@@ -347,7 +351,8 @@ impl AutoBoundCollector {
         // Add binder names to scope for the body
         let mut added = Vec::new();
         for binder in binders {
-            if binder.name != "_" && !self.bound_names.contains(&binder.name) {
+            if !binder.name.is_unescaped_component("_") && !self.bound_names.contains(&binder.name)
+            {
                 self.bound_names.insert(binder.name.clone());
                 added.push(binder.name.clone());
             }
@@ -470,15 +475,10 @@ pub(crate) fn is_universe_var_name(name: &str) -> bool {
 
     // Pattern: u_N, v_N, w_N where N is one or more digits
     let bytes = name.as_bytes();
-    if bytes.len() >= 3
-        && matches!(bytes[0], b'u' | b'v' | b'w')
+    bytes.len() >= 3
+        && matches!(bytes[0], b'u'..=b'w')
         && bytes[1] == b'_'
         && bytes[2..].iter().all(|b| b.is_ascii_digit())
-    {
-        return true;
-    }
-
-    false
 }
 
 /// Check whether a character is a Greek letter (U+0391..U+03A9 or U+03B1..U+03C9).
@@ -497,14 +497,17 @@ fn is_standard_name(name: &str) -> bool {
 pub(crate) fn auto_bound_surface_binders(vars: &[AutoBoundVar]) -> Vec<SurfaceBinder> {
     vars.iter()
         .filter_map(|var| match &var.kind {
-            AutoBoundKind::TypeVar { .. } => Some(SurfaceBinder::new(
-                &var.name,
+            AutoBoundKind::TypeVar { .. } => Some(SurfaceBinder::new_typed(
+                var.name.clone(),
                 Some(SurfaceExpr::type_()),
                 SurfaceBinderInfo::Implicit,
             )),
-            AutoBoundKind::InstanceVar { class_name } => Some(SurfaceBinder::new(
-                &var.name,
-                Some(SurfaceExpr::ident(class_name)),
+            AutoBoundKind::InstanceVar { class_name } => Some(SurfaceBinder::new_typed(
+                var.name.clone(),
+                Some(SurfaceExpr::Ident(
+                    clean_parser::Span::dummy(),
+                    class_name.clone(),
+                )),
                 SurfaceBinderInfo::Instance,
             )),
             AutoBoundKind::UniverseVar => None,

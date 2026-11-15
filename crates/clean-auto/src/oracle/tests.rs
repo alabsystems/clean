@@ -7,20 +7,20 @@
 use super::*;
 
 /// Mock oracle for testing that returns predefined candidates.
-pub struct MockOracle {
+pub(crate) struct MockOracle {
     candidates: Vec<OracleCandidate>,
     available: bool,
 }
 
 impl MockOracle {
-    pub fn new(candidates: Vec<OracleCandidate>) -> Self {
+    pub(crate) fn new(candidates: Vec<OracleCandidate>) -> Self {
         Self {
             candidates,
             available: true,
         }
     }
 
-    pub fn unavailable() -> Self {
+    pub(crate) fn unavailable() -> Self {
         Self {
             candidates: Vec::new(),
             available: false,

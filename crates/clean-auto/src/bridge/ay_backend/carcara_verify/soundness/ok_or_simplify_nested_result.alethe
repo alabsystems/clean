@@ -1,0 +1,3 @@
+(assume nc (not (= (or (or p q) false) (or p q))))
+(step s (cl (= (or (or p q) false) (or p q))) :rule or_simplify)
+(step done (cl) :rule resolution :premises (nc s))

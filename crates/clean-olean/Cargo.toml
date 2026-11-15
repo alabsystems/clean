@@ -16,13 +16,18 @@ thiserror.workspace = true
 rayon = { workspace = true }
 libc = { workspace = true }
 hashbrown = { workspace = true }
+# The NDJSON front door's sub-quadratic `natVal` conversion (`ndjson/natval.rs`).
+num-bigint = { workspace = true }
 smallvec = { workspace = true }
 ahash = { workspace = true }
 mimalloc = { workspace = true, optional = true }
 serde = { workspace = true }
-serde_json = { workspace = true }
+# Metric fractions must survive our own JSON read/write bit-exactly; the
+# default approximate float parser can differ by one ULP on real Init counts.
+serde_json = { workspace = true, features = ["float_roundtrip"] }
 bincode = { workspace = true }
 blake3 = { workspace = true }
+sha2 = { workspace = true }
 # Explicit pin on blake3's transitive dep so cargo resolution cannot pick
 # constant_time_eq 0.4.3 (which requires rustc 1.95). See issue #3535.
 constant_time_eq = { workspace = true }
@@ -36,6 +41,9 @@ clean-features = { workspace = true, optional = true }
 clap = { workspace = true, optional = true }
 
 [features]
+# C4 diagnostic only: a separate observing replay target.
+kcheck-trace = ["clean-kernel/kcheck-trace"]
+
 default = []
 mimalloc = ["dep:mimalloc"]
 math-overlays = ["clean-kernel/math-overlays"]
@@ -48,6 +56,12 @@ debug-def-eq = ["clean-kernel/debug-def-eq"]
 # that `cli::overlay::generate_namespace_overlay` can call the kernel's
 # `init_topology_manifold` / `init_topology_lie_group` helpers (#3442).
 cli = ["dep:clap", "dep:clean-features", "math-overlays"]
+# Test-only door: compiles `clean_olean::test_support` — cfg(any(test,
+# feature = "test-support")) — the fail-closed pinned-Lean compile helper and
+# oracle runner behind the real-fixture tests. Enabled ONLY through the
+# self dev-dependency below (the pattern clean-elab / clean-verify use for
+# their `test-utils`); a production dependency edge must never turn it on.
+test-support = []
 
 [[bin]]
 name = "generate_namespace_overlay"
@@ -59,7 +73,40 @@ required-features = ["cli"]
 [[bin]]
 name = "verify_olean_batch"
 
+[[bin]]
+# The NDJSON front door as a standalone checker (`<export.ndjson>` last, exit
+# 0/1/2): what the arena battery spawns per test. Not named with "noda" (Lake's
+# `isNanodaKernel` heuristic keys on it).
+name = "clean_export_check"
+
+[[bin]]
+# The export writer as a command (`clean_olean::ndjson::write_export`): a
+# module closure's cone as a lean4export NDJSON 3.1.0 file, read back before
+# it is published. Unit Q1 of the self-proof plan.
+name = "clean_export_write"
+
+[build-dependencies]
+# The build script records the BLAKE3 digest of every `.olean` part of the
+# pinned Lean toolchain: that manifest, not a file name, is what identifies a
+# toolchain module at import time (`toolchain_identity.rs`).
+blake3 = { workspace = true }
+
 [dev-dependencies]
+toml = { workspace = true }
+# VF4's quorum re-check (`tests/vf4_chk_lia_quorum.rs`, R162): ck0 is the diverse
+# re-checker of Q, and `num-bigint` carries Nat literals into its raw syntax.
+clean-ck0 = { workspace = true }
+num-bigint = { workspace = true }
 clean-kernel = { workspace = true, features = ["math-overlays", "test-utils", "test-fixtures"] }
 proptest = { workspace = true }
 tempfile = { workspace = true }
+# The vendored Kernel Arena archive (tests/support/kernel_arena.rs): its gzip
+# stream, and the sha256 it is pinned by.
+flate2 = { workspace = true }
+# Self-dependency so integration tests under tests/ see
+# `clean_olean::test_support` (feature `test-support` above).
+clean-olean = { path = ".", features = ["test-support"] }
+
+[[bin]]
+name = "kcheck_trace_experiment"
+required-features = ["kcheck-trace"]

@@ -98,6 +98,7 @@ fn replacement_status_accounts_launch_blockers_without_green_claims() {
         accounting.blocked_required_row_count
             + accounting.pending_evidence_required_row_count
             + accounting.in_progress_required_row_count
+            + accounting.unknown_required_row_count
     );
     assert!(accounting
         .launch_blocking_row_ids

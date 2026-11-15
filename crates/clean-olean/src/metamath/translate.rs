@@ -170,12 +170,15 @@ fn translate_proof(
         };
         last_result = Some(entry);
     }
-    if stack.len() != 1 {
-        return Err(MetamathError::FinalResultMismatch {
-            theorem: assertion.label.clone(),
-        });
-    }
-    let result = stack.pop().expect("stack length checked");
+    // Exactly one entry must be left: the proof's conclusion.
+    let result = match (stack.pop(), stack.is_empty()) {
+        (Some(result), true) => result,
+        _ => {
+            return Err(MetamathError::FinalResultMismatch {
+                theorem: assertion.label.clone(),
+            })
+        }
+    };
     if result.formula != assertion.formula {
         return Err(MetamathError::FinalResultMismatch {
             theorem: assertion.label.clone(),

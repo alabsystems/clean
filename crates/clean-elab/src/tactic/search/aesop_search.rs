@@ -467,7 +467,8 @@ fn try_prove_goal_in_tree(
                     meta_id: fresh_meta,
                     target: subgoal.target.clone(),
                     local_ctx: subgoal.local_ctx.clone(),
-                    tag: None,
+                    case_binders: subgoal.case_binders.clone(),
+                    tag: subgoal.tag.clone(),
                 };
                 let priority = Percent::from_f64(candidate.priority as f64 / 100.0);
                 let subgoal_id = tree.add_goal(rapp_id, remapped_subgoal);

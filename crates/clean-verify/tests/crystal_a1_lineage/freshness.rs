@@ -94,17 +94,19 @@ pub(crate) const RECORD: &str = "data/crystal_chain_revalidation_2026-08-19.json
 pub(crate) const RECORD_2: &str = "data/crystal_chain_revalidation_2026-08-19_ccf52b40c3.json";
 /// The newest current-source revalidation. It is append-only: older records
 /// remain the evidence for the exact builds they measured. The lane18 record
-/// is the chain-18 addition event: 19 chains, the c4e667ca51 producer, and
-/// the first call-bearing body.
-pub(crate) const CURRENT_RECORD: &str = "data/crystal_chain_revalidation_2026-08-21_lane18.json";
+/// (`data/crystal_chain_revalidation_2026-08-21_lane18.json`) was the chain-18
+/// addition event; the 2026-10-07 record is the field-83 re-derivation of
+/// strict_monads plus the source-bound numbering re-pin of every fixture, at
+/// clean 047ebd051 with the 321aaeda7 producer.
+pub(crate) const CURRENT_RECORD: &str = "data/crystal_chain_revalidation_2026-10-07_047ebd051.json";
 /// The append-only old->new ledger produced by the source-bound fixture
 /// rebaseline that makes strict freshness derivably green.
 pub(crate) const CURRENT_REBASELINE: &str =
-    "data/crystal_fixture_rebaseline_2026-08-21_lane18.json";
+    "data/crystal_fixture_rebaseline_2026-10-07_047ebd051.json";
 /// The reviewed load-bearing proof/spec/tag bindings required before the
 /// rebaseline tool will move any fixture.
 pub(crate) const CURRENT_REBASELINE_BINDINGS: &str =
-    "data/crystal_fixture_rebaseline_bindings_2026-08-21_lane18.json";
+    "data/crystal_fixture_rebaseline_bindings_2026-10-07_047ebd051.json";
 /// The mechanism that produces it.
 pub(crate) const SCRIPT: &str = "scripts/crystal_fixture_freshness.py";
 
@@ -379,8 +381,10 @@ fn the_live_dump_driver_cleans_with_the_measured_compiler_and_fails_closed() {
         source.contains("if ! RUSTC=\"$TRUSTC_BIN\" CARGO_TARGET_DIR=\"$TDIR\""),
         "{rel} must make Cargo's cleanup query the same sealed compiler as the measured build"
     );
+    // `targo`, not `cargo`, since 75ab2ef31 (every script drives the Trust
+    // toolchain through targo); the eviction it must perform is the same.
     assert!(
-        source.contains("cargo clean --locked --release -p clean-kernel"),
+        source.contains("targo clean --locked --release -p clean-kernel"),
         "{rel} must evict the measured clean-kernel package before rebuilding it"
     );
     assert!(
@@ -390,7 +394,7 @@ fn the_live_dump_driver_cleans_with_the_measured_compiler_and_fails_closed() {
         "{rel} must fail closed when subject eviction fails"
     );
     assert!(
-        !source.contains("cargo clean --locked --release -p clean-kernel >/dev/null 2>&1 || true"),
+        !source.contains("clean --locked --release -p clean-kernel >/dev/null 2>&1 || true"),
         "{rel} silently ignores a failed subject eviction"
     );
 }
@@ -541,3 +545,5 @@ fn the_second_revalidation_records_no_structural_drift() {
 mod enum_tag_stage2;
 #[path = "freshness_head.rs"]
 mod head_measurement;
+#[path = "freshness_newest_rev.rs"]
+mod newest_rev;

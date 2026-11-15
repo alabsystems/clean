@@ -34,7 +34,7 @@ echo "Running tactic tests with sorry tracking..."
 output_file="$(mktemp "${TMPDIR:-/tmp}/Clean-sorry-census.XXXXXX")"
 trap 'rm -f "$output_file"' EXIT
 
-CARGO_ALLOW_FULL_SUITE=1 cargo test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-elab --lib -- tactic --nocapture >"$output_file" 2>&1 || true
+CARGO_ALLOW_FULL_SUITE=1 targo --unverified test --locked --message-format=short -j "$CARGO_BUILD_JOBS" -p clean-elab --lib -- tactic --nocapture >"$output_file" 2>&1 || true
 
 # Extract the sorry count from census output
 census_line=$(grep "Cumulative sorry terms" "$output_file" | tail -1 || true)
@@ -46,7 +46,7 @@ else
     echo "--- cargo output tail ---"
     tail -200 "$output_file" || true
     echo "--- end cargo output tail ---"
-    echo "Debug with: debug_log=\"\${TMPDIR:-/tmp}/Clean-sorry-census-debug.log\"; cargo test --locked --message-format=short -j \"\$CARGO_BUILD_JOBS\" -p clean-elab --lib -- sorry_census --nocapture >\"\$debug_log\" 2>&1; tail -200 \"\$debug_log\""
+    echo "Debug with: debug_log=\"\${TMPDIR:-/tmp}/Clean-sorry-census-debug.log\"; targo --unverified test --locked --message-format=short -j \"\$CARGO_BUILD_JOBS\" -p clean-elab --lib -- sorry_census --nocapture >\"\$debug_log\" 2>&1; tail -200 \"\$debug_log\""
     exit 1
 fi
 
